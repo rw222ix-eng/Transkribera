@@ -20,7 +20,8 @@
 | `app/hardware.py` | `HardwareInfo` dataclass + `scan_hardware()` |
 | `app/models_catalog.py` | `WhisperModelSpec`, `LLMModelSpec` + static catalogs |
 | `app/recommend.py` | `Fit` enum + fit/recommendation logic (pure) |
-| `app/transcriber.py` | `Segment`, SRT/VTT/TXT formatters (pure), `transcribe()` runner |
+| `app/transcriber.py` | `Segment`, SRT/VTT/TXT formatters (pure), `write_outputs`, `build_transcribe_cmd` |
+| `app/transcribe_cli.py` | Isolated subprocess that loads the model, writes outputs, `os._exit(0)` (avoids CTranslate2 teardown abort) |
 | `app/media.py` | ffprobe duration parse (pure) + `probe_duration()`, `ffmpeg_available()` |
 | `app/youtube.py` | `build_ytdlp_command()` (pure) + `download()` |
 | `app/whisper_manager.py` | model dir / install detection / `download_whisper()` |
@@ -1217,11 +1218,175 @@ python -c "from pathlib import Path; from app.transcriber import transcribe, wri
 ```
 Expected: progress percentages print, then `[WindowsPath('smoketest.srt'), WindowsPath('smoketest.txt')]`. (Downloads the model on first run.)
 
-- [ ] **Step 4: Commit (if any fixes were needed)**
+### FINDING (2026-06-14 integration run)
+
+Hardware scan + recommendation verified on the real machine (RTX 4090, 24 GB → all
+Whisper models green, best = KB-Whisper large). Real transcription of the 223 s sample
+produced correct Swedish segments. **BUT** the process aborts (`Fatal Python error:
+Aborted`) when the `WhisperModel` (CTranslate2) is deallocated *mid-program* — i.e. when
+it goes out of scope or is `del`-eted while the interpreter keeps running. When the model
+is kept alive until the process exits naturally (as the original `transcribe_kb.py` did),
+it exits cleanly and the output files are written correctly.
+
+**Consequence:** a long-running GUI must NEVER deallocate a `WhisperModel` mid-life, or the
+first transcription kills the whole window. **Decision:** run each transcription in a
+short-lived **subprocess** (`app/transcribe_cli.py`). The child keeps the model alive and
+calls `os._exit(0)` after writing outputs, so no native destructor ever runs. The parent
+(a QThread worker) streams progress from the child's stdout and reads the written files.
+This isolates ALL native crashes from the GUI and mirrors the existing yt-dlp subprocess
+pattern.
+
+- [ ] **Step 4: Commit (document the finding)**
 
 ```bash
 git add -A
-git commit -m "test: verify logic layer end-to-end" --allow-empty
+git commit -m "test: verify logic layer; document CTranslate2 teardown finding" --allow-empty
+```
+
+---
+
+## Task 11b: Subprocess transcription CLI + command builder
+
+**Files:**
+- Create: `app/transcribe_cli.py`
+- Modify: `app/transcriber.py` (add pure `build_transcribe_cmd`)
+- Test: `tests/test_transcribe_cmd.py`
+
+The command builder is pure and TDD'd (mirrors `youtube.build_ytdlp_command`). The CLI
+runtime is verified by the integration run, not unit tests.
+
+- [ ] **Step 1: Write the failing test** → `tests/test_transcribe_cmd.py`:
+
+```python
+import sys
+from pathlib import Path
+from app.transcriber import build_transcribe_cmd
+
+def test_cmd_has_module_and_args(tmp_path: Path):
+    cmd = build_transcribe_cmd(
+        audio=tmp_path / "a.wav", model_dir="m", device="cuda",
+        compute_type="float16", language="sv",
+        out_base=tmp_path / "out", formats=["srt", "txt"])
+    assert cmd[0] == sys.executable
+    assert cmd[1:3] == ["-m", "app.transcribe_cli"]
+    assert "--device" in cmd and "cuda" in cmd
+    assert "--formats" in cmd and "srt,txt" in cmd
+    assert str(tmp_path / "a.wav") in cmd
+
+def test_cmd_empty_language_passed_as_empty(tmp_path: Path):
+    cmd = build_transcribe_cmd(
+        audio=tmp_path / "a.wav", model_dir="m", device="cpu",
+        compute_type="int8", language="",
+        out_base=tmp_path / "out", formats=["srt"])
+    i = cmd.index("--language")
+    assert cmd[i + 1] == ""
+```
+
+- [ ] **Step 2: Run `python -m pytest tests/test_transcribe_cmd.py -v`; confirm FAIL (ImportError on build_transcribe_cmd).**
+
+- [ ] **Step 3a: Add `build_transcribe_cmd` to the END of `app/transcriber.py`:**
+
+```python
+import sys
+
+
+def build_transcribe_cmd(audio: Path, model_dir: str, device: str, compute_type: str,
+                         language: str, out_base: Path, formats: list[str]) -> list[str]:
+    """Build the argv to run one transcription in an isolated subprocess."""
+    return [
+        sys.executable, "-m", "app.transcribe_cli",
+        "--audio", str(audio),
+        "--model-dir", model_dir,
+        "--device", device,
+        "--compute-type", compute_type,
+        "--language", language or "",
+        "--out-base", str(out_base),
+        "--formats", ",".join(formats),
+    ]
+```
+
+- [ ] **Step 3b: Create `app/transcribe_cli.py`:**
+
+```python
+"""Run ONE transcription in an isolated process, then exit hard.
+
+Why isolated: the CTranslate2 WhisperModel destructor can abort the process on
+Windows/CUDA when deallocated mid-program. This short-lived process writes its
+outputs, prints a `DONE` line, then calls os._exit(0) so no native destructor
+ever runs. The parent GUI worker streams progress from stdout and reads the files.
+
+Protocol on stdout (one per line):
+  LOG <text>        human-readable log line
+  PROGRESS <int>    percent complete
+  FILE <path>       a written output file
+  DONE              success sentinel (parent keys success off this, not exit code)
+"""
+from __future__ import annotations
+import argparse
+import os
+import sys
+from pathlib import Path
+
+from faster_whisper import WhisperModel
+from app.transcriber import Segment, write_outputs
+
+
+def main() -> None:
+    p = argparse.ArgumentParser()
+    p.add_argument("--audio", required=True)
+    p.add_argument("--model-dir", required=True)
+    p.add_argument("--device", required=True)
+    p.add_argument("--compute-type", required=True)
+    p.add_argument("--language", default="")
+    p.add_argument("--out-base", required=True)
+    p.add_argument("--formats", required=True)
+    args = p.parse_args()
+
+    print(f"LOG Laddar modell ({args.device}/{args.compute_type})...", flush=True)
+    model = WhisperModel(args.model_dir, device=args.device, compute_type=args.compute_type)
+    seg_iter, info = model.transcribe(args.audio, language=args.language or None)
+    duration = getattr(info, "duration", 0) or 0
+
+    segs: list[Segment] = []
+    last = -1
+    for s in seg_iter:
+        segs.append(Segment(s.start, s.end, s.text.strip()))
+        if duration:
+            pct = min(100, int(s.end / duration * 100))
+            if pct != last:
+                last = pct
+                print(f"PROGRESS {pct}", flush=True)
+    print("PROGRESS 100", flush=True)
+
+    formats = [f for f in args.formats.split(",") if f]
+    for w in write_outputs(segs, Path(args.out_base), formats):
+        print(f"FILE {w}", flush=True)
+    print("DONE", flush=True)
+
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(0)  # skip all native teardown — guarantees no CTranslate2 abort
+
+
+if __name__ == "__main__":
+    main()
+```
+
+- [ ] **Step 4: Run `python -m pytest tests/test_transcribe_cmd.py -v`; confirm 2 PASS.**
+
+- [ ] **Step 5: Integration-verify the CLI writes outputs and exits 0** (model already cached):
+
+Run:
+```bash
+python -m app.transcribe_cli --audio "Mamma waw isolerad.wav" --model-dir "KBLab/kb-whisper-large" --device cuda --compute-type float16 --language sv --out-base smoketest --formats srt,txt
+```
+Expected: streams `LOG`/`PROGRESS n`/`FILE smoketest.srt`/`FILE smoketest.txt`/`DONE`, exit code 0, and `smoketest.srt` + `smoketest.txt` exist with Swedish text. Then delete smoketest.srt/smoketest.txt.
+
+- [ ] **Step 6: Commit:**
+
+```bash
+git add app/transcribe_cli.py app/transcriber.py tests/test_transcribe_cmd.py
+git commit -m "feat: isolated subprocess transcription to avoid CTranslate2 teardown abort"
 ```
 
 ---
@@ -1268,12 +1433,15 @@ Expected: FAIL with `ModuleNotFoundError`.
 # app/workers.py
 """QThread workers that run long operations off the UI thread."""
 from __future__ import annotations
+import subprocess
 from pathlib import Path
 
 from PySide6.QtCore import QThread, Signal
 
 from app import transcriber, whisper_manager, ollama_client, postprocess, youtube
 from app.models_catalog import WhisperModelSpec
+
+REPO_ROOT = Path(__file__).resolve().parent.parent  # so `-m app.transcribe_cli` resolves
 
 
 class TranscribeWorker(QThread):
@@ -1294,11 +1462,35 @@ class TranscribeWorker(QThread):
         self.formats = formats
 
     def run(self):
+        # Runs transcription in an isolated subprocess (see app/transcribe_cli.py):
+        # the CTranslate2 model destructor can abort the process on Windows/CUDA, so we
+        # never load the model in this GUI process. Success is keyed off the DONE line,
+        # not the exit code (the child os._exit(0)s, but we stay robust either way).
         try:
-            segs = transcriber.transcribe(
+            cmd = transcriber.build_transcribe_cmd(
                 self.audio_path, self.model_dir, self.device, self.compute_type,
-                self.language, self.progress.emit, self.log.emit)
-            written = transcriber.write_outputs(segs, self.out_base, self.formats)
+                self.language, self.out_base, self.formats)
+            proc = subprocess.Popen(
+                cmd, cwd=str(REPO_ROOT), stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace")
+            assert proc.stdout is not None
+            written: list[Path] = []
+            done = False
+            for line in proc.stdout:
+                line = line.rstrip("\n")
+                if line.startswith("PROGRESS "):
+                    self.progress.emit(int(line[9:]))
+                elif line.startswith("FILE "):
+                    written.append(Path(line[5:]))
+                elif line.startswith("LOG "):
+                    self.log.emit(line[4:])
+                elif line == "DONE":
+                    done = True
+                elif line:
+                    self.log.emit(line)
+            proc.wait()
+            if not done:
+                raise RuntimeError("Transkriberingen avslutades utan resultat")
             self.done.emit(written)
         except Exception as exc:  # surfaced to UI log
             self.failed.emit(str(exc))
