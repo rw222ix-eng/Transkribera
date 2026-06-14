@@ -33,6 +33,22 @@ python -m app.main
    klicka **Starta**.
 3. (Valfritt) Fäll ut **Efterbearbeta med LLM**, välj operation och Ollama-modell, klicka **Kör**.
 
+## Bygga en dubbelklickbar .exe (Windows)
+
+```powershell
+python -m pip install pyinstaller
+pyinstaller Transkribera.spec --noconfirm
+```
+
+Resultatet hamnar i `dist\Transkribera\` — dubbelklicka `Transkribera.exe`. Mappen är stor
+(~5 GB) eftersom torch/CUDA/cuDNN/PyAV följer med. Modeller du laddar ner och `cookies.txt`
+hamnar bredvid exe:n (i `dist\Transkribera\`). Tips: högerklicka exe:n → *Skapa genväg* och
+lägg genvägen på skrivbordet.
+
+Den frusna exe:n är **återinträdande**: GUI:t startar transkribering genom att köra sin egen
+exe med subkommandot `transcribe-cli` (`transkribera.py` dirigerar dit utan att ladda Qt),
+eftersom `python -m app.transcribe_cli` inte finns i ett fryst bygge.
+
 ## Arkitektur
 
 Logiken i `app/` är GUI-oberoende och testbar (`python -m pytest`). Transkribering körs i en
