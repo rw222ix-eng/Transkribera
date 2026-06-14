@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# Känsligt — får ALDRIG checkas in
+cookies.txt
+
+# Nedladdade modeller / cache
+models/
+*.bin
+*.gguf
+
+# Media (in- och utdata)
+*.wav
+*.mp3
+*.m4a
+*.mkv
+*.mp4
+*.webm
+*.png
+
+# Genererade transkript
+*.srt
+*.vtt
+
+# Diverse
+nul
+*.log
