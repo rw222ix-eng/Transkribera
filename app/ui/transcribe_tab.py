@@ -2,6 +2,7 @@
 from __future__ import annotations
 from pathlib import Path
 
+from PySide6.QtGui import QTextCursor
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
     QComboBox, QCheckBox, QProgressBar, QPlainTextEdit, QFileDialog, QGroupBox,
@@ -109,17 +110,26 @@ class TranscribeTab(QWidget):
         if self.fmt_vtt.isChecked(): out.append("vtt")
         return out
 
+    def _set_running(self, running: bool):
+        # "knappar låses under körning" — keep Starta disabled while a run is active.
+        self.start_btn.setEnabled(not running)
+
+    def _on_run_failed(self, msg: str):
+        self._append(msg)
+        self._set_running(False)
+
     def _start(self):
         source = self.path_edit.text().strip()
         if not source:
             self._append("Ange en fil eller URL först.")
             return
+        self._set_running(True)
         if source.startswith("http"):
             self._append("Laddar ner video...")
             dl = DownloadWorker(source, self.models_root.parent / "downloads",
                                 self.cookies_file)
             dl.log.connect(self._append)
-            dl.failed.connect(self._append)
+            dl.failed.connect(self._on_run_failed)
             dl.done.connect(self._transcribe_file)
             self._run(dl)
         else:
@@ -129,6 +139,7 @@ class TranscribeTab(QWidget):
         spec = self.model_combo.currentData()
         if spec is None:
             self._append("Ingen modell installerad. Öppna Modeller-fliken.")
+            self._set_running(False)
             return
         ev = evaluate_whisper(spec, self.hw)
         audio = Path(path_str)
@@ -141,7 +152,7 @@ class TranscribeTab(QWidget):
                              self._formats())
         w.progress.connect(self.progress.setValue)
         w.log.connect(self._append)
-        w.failed.connect(self._append)
+        w.failed.connect(self._on_run_failed)
         w.done.connect(self._on_transcribed)
         self._run(w)
 
@@ -150,6 +161,7 @@ class TranscribeTab(QWidget):
         for p in written:
             if str(p).endswith(".txt"):
                 self._segments_text = Path(p).read_text(encoding="utf-8")
+        self._set_running(False)
 
     def _postprocess(self):
         if not self._segments_text:
@@ -171,5 +183,5 @@ class TranscribeTab(QWidget):
         self.log.appendPlainText(text)
 
     def _append_inline(self, text: str):
-        self.log.moveCursor(self.log.textCursor().End)
+        self.log.moveCursor(QTextCursor.MoveOperation.End)
         self.log.insertPlainText(text)

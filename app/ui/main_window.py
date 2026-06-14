@@ -18,9 +18,15 @@ class MainWindow(QMainWindow):
         cookies = base_dir / "cookies.txt"
         cookies_file = cookies if cookies.exists() else None
 
+        transcribe_tab = TranscribeTab(models_root, cookies_file)
+        models_tab = ModelsTab(models_root)
+        # When a Whisper model finishes downloading on the Models tab, refresh the
+        # model dropdown on the Transcribe tab so it appears without a restart.
+        models_tab.whisper_downloaded.connect(transcribe_tab._refresh_models)
+
         tabs = QTabWidget()
-        tabs.addTab(TranscribeTab(models_root, cookies_file), "Transkribera")
-        tabs.addTab(ModelsTab(models_root), "Modeller")
+        tabs.addTab(transcribe_tab, "Transkribera")
+        tabs.addTab(models_tab, "Modeller")
         self.setCentralWidget(tabs)
 
         if not ffmpeg_available():

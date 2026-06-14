@@ -1,8 +1,8 @@
 """Transcription core: data model, output formatters, and the faster-whisper runner."""
 from __future__ import annotations
+import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
 
 
 @dataclass
@@ -71,38 +71,10 @@ def write_outputs(segments: list[Segment], base_path: Path, formats: list[str]) 
     return written
 
 
-def transcribe(
-    audio_path: Path,
-    model_dir: str,
-    device: str,
-    compute_type: str,
-    language: str | None,
-    progress_cb: Callable[[int], None] | None = None,
-    log_cb: Callable[[str], None] | None = None,
-) -> list[Segment]:
-    """Run faster-whisper. `model_dir` is a local path or HF id; faster-whisper
-    decodes the audio track of both video and audio files via PyAV."""
-    from faster_whisper import WhisperModel
-
-    if log_cb:
-        log_cb(f"Laddar modell ({device}/{compute_type})...")
-    model = WhisperModel(model_dir, device=device, compute_type=compute_type)
-
-    segments_iter, info = model.transcribe(str(audio_path), language=language or None)
-    duration = getattr(info, "duration", 0) or 0
-    out: list[Segment] = []
-    for seg in segments_iter:
-        out.append(Segment(seg.start, seg.end, seg.text.strip()))
-        if progress_cb and duration:
-            progress_cb(min(100, int(seg.end / duration * 100)))
-    if progress_cb:
-        progress_cb(100)
-    return out
-
-
-import sys
-
-
+# NOTE: transcription deliberately does NOT run in-process. The CTranslate2
+# WhisperModel destructor can abort the process on Windows/CUDA when deallocated
+# mid-program, so the model is loaded only inside the isolated subprocess
+# `app.transcribe_cli`, launched via the argv built below.
 def build_transcribe_cmd(audio: Path, model_dir: str, device: str, compute_type: str,
                          language: str, out_base: Path, formats: list[str]) -> list[str]:
     """Build the argv to run one transcription in an isolated subprocess."""

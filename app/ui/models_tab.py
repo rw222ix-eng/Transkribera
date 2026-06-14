@@ -2,6 +2,7 @@
 from __future__ import annotations
 from pathlib import Path
 
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QGroupBox, QPushButton,
     QProgressBar,
@@ -17,6 +18,8 @@ FIT_ICON = {Fit.GREEN: "🟢", Fit.YELLOW: "🟡", Fit.RED: "🔴"}
 
 
 class ModelsTab(QWidget):
+    whisper_downloaded = Signal()  # emitted after a Whisper model finishes downloading
+
     def __init__(self, models_root: Path):
         super().__init__()
         self.models_root = models_root
@@ -97,7 +100,9 @@ class ModelsTab(QWidget):
         worker.start()
 
     def _download_whisper(self, spec):
-        self._start(PullWorker(whisper_spec=spec, models_root=self.models_root))
+        worker = PullWorker(whisper_spec=spec, models_root=self.models_root)
+        worker.done.connect(lambda _=None: self.whisper_downloaded.emit())
+        self._start(worker)
 
     def _pull_llm(self, name):
         self._start(PullWorker(ollama_name=name))
