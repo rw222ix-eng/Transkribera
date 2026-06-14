@@ -21,7 +21,9 @@ from faster_whisper import WhisperModel
 from app.transcriber import Segment, write_outputs
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
+    # argv lets the frozen exe dispatch a "transcribe-cli" subcommand (it passes the
+    # args AFTER the subcommand). When None, argparse reads sys.argv[1:] as usual.
     p = argparse.ArgumentParser()
     p.add_argument("--audio", required=True)
     p.add_argument("--model-dir", required=True)
@@ -30,7 +32,7 @@ def main() -> None:
     p.add_argument("--language", default="")
     p.add_argument("--out-base", required=True)
     p.add_argument("--formats", required=True)
-    args = p.parse_args()
+    args = p.parse_args(argv)
 
     print(f"LOG Laddar modell ({args.device}/{args.compute_type})...", flush=True)
     model = WhisperModel(args.model_dir, device=args.device, compute_type=args.compute_type)

@@ -7,7 +7,16 @@ from PySide6.QtWidgets import QApplication
 
 from app.ui.main_window import MainWindow
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+
+def _base_dir() -> Path:
+    # Frozen (PyInstaller): user-facing files (models/, cookies.txt, downloads/) live
+    # next to the .exe. Source runs: the repo root (parent of the app package).
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parent.parent
+
+
+BASE_DIR = _base_dir()
 
 
 def main() -> int:

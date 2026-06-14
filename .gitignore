@@ -29,3 +29,8 @@ models/
 # Diverse
 nul
 *.log
+
+# PyInstaller
+/build/
+/dist/
+*.manifest

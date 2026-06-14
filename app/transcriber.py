@@ -77,9 +77,17 @@ def write_outputs(segments: list[Segment], base_path: Path, formats: list[str]) 
 # `app.transcribe_cli`, launched via the argv built below.
 def build_transcribe_cmd(audio: Path, model_dir: str, device: str, compute_type: str,
                          language: str, out_base: Path, formats: list[str]) -> list[str]:
-    """Build the argv to run one transcription in an isolated subprocess."""
-    return [
-        sys.executable, "-m", "app.transcribe_cli",
+    """Build the argv to run one transcription in an isolated subprocess.
+
+    Frozen (PyInstaller): re-invoke our own exe with the `transcribe-cli` subcommand,
+    since `-m app.transcribe_cli` does not exist in a frozen build. Source runs use
+    the normal module form.
+    """
+    if getattr(sys, "frozen", False):
+        head = [sys.executable, "transcribe-cli"]
+    else:
+        head = [sys.executable, "-m", "app.transcribe_cli"]
+    return head + [
         "--audio", str(audio),
         "--model-dir", model_dir,
         "--device", device,

@@ -1,6 +1,7 @@
 """QThread workers that run long operations off the UI thread."""
 from __future__ import annotations
 import subprocess
+import sys
 from pathlib import Path
 
 from PySide6.QtCore import QThread, Signal
@@ -8,7 +9,13 @@ from PySide6.QtCore import QThread, Signal
 from app import transcriber, whisper_manager, ollama_client, postprocess, youtube
 from app.models_catalog import WhisperModelSpec
 
-REPO_ROOT = Path(__file__).resolve().parent.parent  # so `-m app.transcribe_cli` resolves
+
+def _child_cwd() -> Path:
+    # Frozen exe: run the child from the exe's folder. Source: repo root (so the
+    # `-m app.transcribe_cli` module form resolves).
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parent.parent
 
 
 class TranscribeWorker(QThread):
@@ -37,7 +44,7 @@ class TranscribeWorker(QThread):
                 self.audio_path, self.model_dir, self.device, self.compute_type,
                 self.language, self.out_base, self.formats)
             proc = subprocess.Popen(
-                cmd, cwd=str(REPO_ROOT), stdout=subprocess.PIPE,
+                cmd, cwd=str(_child_cwd()), stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace")
             assert proc.stdout is not None
             written: list[Path] = []
@@ -55,9 +62,15 @@ class TranscribeWorker(QThread):
                 elif line:
                     self.log.emit(line)
             proc.wait()
+            # Fallback: a windowed (--noconsole) frozen build may not deliver the child's
+            # stdout. If the expected output files exist on disk, treat the run as a success.
+            expected = [self.out_base.with_suffix(transcriber.WRITERS[f][1])
+                        for f in self.formats]
+            if not done and expected and all(p.exists() for p in expected):
+                written, done = written or expected, True
             if not done:
                 raise RuntimeError("Transkriberingen avslutades utan resultat")
-            self.done.emit(written)
+            self.done.emit(written or expected)
         except Exception as exc:  # surfaced to UI log
             self.failed.emit(str(exc))
 
