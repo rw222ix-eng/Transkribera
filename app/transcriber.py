@@ -98,3 +98,21 @@ def transcribe(
     if progress_cb:
         progress_cb(100)
     return out
+
+
+import sys
+
+
+def build_transcribe_cmd(audio: Path, model_dir: str, device: str, compute_type: str,
+                         language: str, out_base: Path, formats: list[str]) -> list[str]:
+    """Build the argv to run one transcription in an isolated subprocess."""
+    return [
+        sys.executable, "-m", "app.transcribe_cli",
+        "--audio", str(audio),
+        "--model-dir", model_dir,
+        "--device", device,
+        "--compute-type", compute_type,
+        "--language", language or "",
+        "--out-base", str(out_base),
+        "--formats", ",".join(formats),
+    ]
