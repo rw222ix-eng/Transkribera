@@ -2027,3 +2027,15 @@ git commit -m "docs: usage notes" --allow-empty
 - **Signal naming:** `done`/`failed`/`progress`/`log` used consistently across `workers.py` and both tabs (not `finished`, which clashes with QThread).
 - **Type consistency:** `model_dir_for`, `is_installed`, `download_whisper`, `installed_specs` names match between Task 8 and Tasks 12–14. `Fit`, `evaluate_whisper`, `recommend_whisper`, `evaluate_llm`, `recommend_llm` match between Task 4 and Task 13. `Segment`, `write_outputs`, `transcribe` match between Task 5 and Task 12.
 - **Estimates:** VRAM/RAM/size numbers in the catalog are explicitly approximate; they drive only fit coloring and are safe to tune later.
+
+
+---
+
+## Tillägg 2026-06-15: GUI migrerat till webb-UI (Qt borttaget)
+
+Fas 4 (GUI med PySide6) är **ersatt**. Gränssnittet är nu ett lokalt webb-UI: FastAPI-server
+(`app/web/server.py`) + HTML/CSS/JS (`app/web/static/`) i ett pywebview-fönster
+(`app/web/desktop.py`), entry `transkribera_web.py`, spec `Transkribera_web.spec`. Qt-filerna
+(`app/ui/`, `app/main.py`, `app/workers.py`, `transkribera.py`, `Transkribera.spec`,
+`tests/test_workers.py`) är borttagna. `app/`-kärnlogiken och den isolerade
+transkriberings-subprocessen är oförändrade. Se designspecens "Tillägg 2026-06-15 (del 2)".

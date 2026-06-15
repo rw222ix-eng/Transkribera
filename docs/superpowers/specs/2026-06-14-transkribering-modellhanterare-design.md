@@ -1,7 +1,7 @@
 # Transkribering + Modellhanterare — Designspec
 
 **Datum:** 2026-06-14
-**Status:** Godkänd design, redo för implementationsplan
+**Status:** Implementerad. GUI migrerat från PySide6 till lokalt webb-UI 2026-06-15 (se tillägg del 2 nedan).
 **Plats:** `E:\Transkribera\`
 
 ## Mål
@@ -184,3 +184,35 @@ fungerar fortfarande helt utan nät.
 ### Tester
 - Nya: `tests/test_online_catalog.py`, `tests/test_debug_log.py`,
   `tests/test_whisper_progress.py`. Hela sviten: **55 godkända**.
+
+
+---
+
+## Tillägg 2026-06-15 (del 2): Qt ersatt med lokalt webb-UI (FastAPI + pywebview)
+
+**Status:** Implementerad och committad. Detta **ersätter** avsnittet
+"GUI (PySide6) & trådmodell" samt Qt-delarna i modulindelningen ovan.
+
+**Beslut:** Gränssnittet bytt från **PySide6/Qt** till ett **lokalt webb-UI**: en
+FastAPI-server (`app/web/server.py`) serverar HTML/CSS/JS (`app/web/static/`), som visas i
+ett eget fönster via **pywebview** (`app/web/desktop.py`). Skäl: gränssnittet blir designbart
+i externa webb-designverktyg, funktionerna är oförändrade, och eftersom `app/`-logiken redan
+var GUI-oberoende blev bytet litet.
+
+**Borttaget (redundant Qt):** `app/ui/`, `app/main.py`, `app/workers.py`, `transkribera.py`,
+`Transkribera.spec`, `tests/test_workers.py`. `PySide6` ur `requirements.txt`.
+
+**Tillagt:** `app/web/server.py` (FastAPI-endpoints: hardware, models, downloads, transcribe,
+postprocess — långa jobb streamar progress via **SSE**), `app/web/desktop.py` (pywebview-fönster
+över en uvicorn-server i bakgrundstråd), `app/web/__main__.py` (`python -m app.web`),
+`app/web/static/` (frontend), `transkribera_web.py` (fryst entry som även dirigerar
+`transcribe-cli`), `Transkribera_web.spec`, `tests/test_web_server.py`. Nya beroenden:
+`fastapi`, `uvicorn`, `pywebview`, `httpx`.
+
+**Oförändrat:** all `app/`-kärnlogik (hardware/recommend/whisper_manager/ollama_client/
+online_catalog/youtube/postprocess/transcriber) och den **isolerade
+transkriberings-subprocessen** (`app/transcribe_cli.py`). QThread-workers ersätts av
+FastAPI-bakgrundsjobb + SSE.
+
+**Bygge:** `python -m PyInstaller Transkribera_web.spec --noconfirm` -> `dist\Transkribera_web\`.
+Kör fran kallkod: `python -m app.web`.
