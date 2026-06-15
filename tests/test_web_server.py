@@ -1,0 +1,52 @@
+import pytest
+
+from app.web import server
+
+
+@pytest.fixture
+def client(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    class HW:
+        gpu_name = "Test GPU"; vram_mb = 24000; has_cuda = True
+        ram_mb = 64000; cpu_cores = 16; free_disk_mb = 500000
+
+    # Stub out heavy / external calls so the endpoints are unit-testable.
+    monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: HW())
+    monkeypatch.setattr(server.ollama_client, "is_running", lambda *a, **k: False)
+    monkeypatch.setattr(server.ollama_client, "list_models", lambda *a, **k: [])
+    monkeypatch.setattr(server.online_catalog, "fetch_ollama_library",
+                        lambda *a, **k: ["mistral", "llama3.1"])
+    monkeypatch.setattr(server.whisper_manager, "is_installed", lambda *a, **k: False)
+    return TestClient(server.create_app(base_dir=tmp_path))
+
+
+def test_index_served(client):
+    r = client.get("/")
+    assert r.status_code == 200
+    assert "Transkribera" in r.text
+
+
+def test_hardware_endpoint(client):
+    r = client.get("/api/hardware")
+    assert r.status_code == 200
+    assert r.json()["gpu_name"] == "Test GPU"
+
+
+def test_models_endpoint_structure(client):
+    r = client.get("/api/models")
+    assert r.status_code == 200
+    data = r.json()
+    assert {"hardware", "whisper", "llm", "ollama_running", "llm_online_extra"} <= data.keys()
+    assert len(data["whisper"]) == len(server.WHISPER_MODELS)
+    assert "mistral" in data["llm_online_extra"]
+
+
+def test_transcribe_requires_fields(client):
+    r = client.post("/api/transcribe", json={"source": "", "model_id": "", "formats": []})
+    assert r.status_code == 400
+
+
+def test_postprocess_requires_fields(client):
+    r = client.post("/api/postprocess", json={"transcript": "", "model": ""})
+    assert r.status_code == 400

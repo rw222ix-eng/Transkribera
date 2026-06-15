@@ -1,8 +1,11 @@
-PySide6>=6.7
 faster-whisper>=1.2
 torch
 huggingface_hub
 psutil
 requests
 yt-dlp
+fastapi
+uvicorn
+pywebview
 pytest
+httpx

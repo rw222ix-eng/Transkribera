@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Transkribera</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>Transkribera</h1>
+    <nav class="tabs">
+      <button class="tab active" data-tab="transcribe">Transkribera</button>
+      <button class="tab" data-tab="models">Modeller</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- ── Transkribera ─────────────────────────────────────────── -->
+    <section id="tab-transcribe" class="tab-panel active">
+      <div class="row">
+        <input id="source" type="text" class="grow"
+               placeholder="Sökväg till video/ljud-fil, eller YouTube-URL">
+      </div>
+      <p class="hint">Klistra in en fullständig filsökväg (t.ex. C:\Filmer\foo.mkv) eller en YouTube-länk.</p>
+
+      <div class="row">
+        <label>Modell
+          <select id="model"></select>
+        </label>
+        <label>Språk
+          <select id="language">
+            <option value="">Auto</option>
+            <option value="sv" selected>Svenska</option>
+            <option value="en">Engelska</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="row">
+        <label class="chk"><input type="checkbox" class="fmt" value="srt" checked> SRT</label>
+        <label class="chk"><input type="checkbox" class="fmt" value="txt" checked> TXT</label>
+        <label class="chk"><input type="checkbox" class="fmt" value="vtt"> VTT</label>
+        <button id="start" class="primary">Starta</button>
+      </div>
+
+      <div class="progress"><div id="transcribe-bar" class="bar"></div></div>
+      <pre id="transcribe-log" class="log"></pre>
+      <div id="transcribe-results" class="results"></div>
+
+      <details class="post">
+        <summary>Efterbearbeta med LLM (valfritt)</summary>
+        <div class="row">
+          <label>Operation
+            <select id="pp-op">
+              <option value="summary">Sammanfatta</option>
+              <option value="clean">Städa upp</option>
+              <option value="bullets">Punktlista</option>
+            </select>
+          </label>
+          <label>Modell
+            <select id="pp-model"></select>
+          </label>
+          <button id="pp-run">Kör</button>
+        </div>
+        <pre id="pp-output" class="log"></pre>
+      </details>
+    </section>
+
+    <!-- ── Modeller ─────────────────────────────────────────────── -->
+    <section id="tab-models" class="tab-panel">
+      <div id="hardware" class="card">Skannar hårdvara …</div>
+
+      <div class="progress"><div id="download-bar" class="bar"></div></div>
+      <pre id="download-log" class="log small"></pre>
+
+      <h2>Whisper-modeller (transkribering)</h2>
+      <div id="whisper-list" class="card"></div>
+
+      <h2>LLM-modeller (efterbearbetning via Ollama)</h2>
+      <div id="llm-list" class="card"></div>
+
+      <h2>Fler modeller (online) <span class="muted">— hårdvarupassning okänd</span></h2>
+      <input id="online-search" type="text" placeholder="Sök bland online-modeller …">
+      <div id="online-list" class="card"></div>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

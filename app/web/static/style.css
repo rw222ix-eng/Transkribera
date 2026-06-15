@@ -1,0 +1,103 @@
+/* Transkribera – local web UI. Theme via the variables below. */
+:root {
+  --bg: #1e1f22;
+  --panel: #26282c;
+  --panel-2: #2e3137;
+  --border: #3a3d44;
+  --text: #e6e7ea;
+  --muted: #9aa0a8;
+  --accent: #6aa3ff;
+  --accent-press: #4d86e6;
+  --green: #46c463;
+  --yellow: #e6b450;
+  --red: #e06a6a;
+  --radius: 10px;
+  --gap: 12px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 15px/1.5 "Segoe UI", system-ui, sans-serif;
+}
+
+.topbar {
+  display: flex; align-items: center; gap: 24px;
+  padding: 12px 20px; border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; background: var(--bg); z-index: 5;
+}
+.topbar h1 { font-size: 18px; margin: 0; font-weight: 600; }
+.tabs { display: flex; gap: 6px; }
+.tab {
+  background: transparent; color: var(--muted); border: 0;
+  padding: 8px 16px; border-radius: var(--radius); cursor: pointer; font-size: 15px;
+}
+.tab.active { background: var(--panel-2); color: var(--text); }
+.tab:hover { color: var(--text); }
+
+main { max-width: 920px; margin: 0 auto; padding: 20px; }
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+.row { display: flex; align-items: center; gap: var(--gap); margin: 10px 0; flex-wrap: wrap; }
+.grow { flex: 1; }
+.hint, .muted { color: var(--muted); font-size: 13px; }
+.hint { margin: -4px 0 8px; }
+
+label { display: inline-flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+label.chk { flex-direction: row; align-items: center; gap: 6px; color: var(--text); font-size: 15px; }
+
+input[type=text], select {
+  background: var(--panel); color: var(--text);
+  border: 1px solid var(--border); border-radius: 8px; padding: 9px 11px; font-size: 15px;
+}
+input[type=text]:focus, select:focus { outline: none; border-color: var(--accent); }
+#online-search { width: 100%; margin: 8px 0; }
+
+button {
+  background: var(--panel-2); color: var(--text);
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 9px 16px; font-size: 15px; cursor: pointer;
+}
+button:hover { border-color: var(--accent); }
+button.primary { background: var(--accent); border-color: var(--accent); color: #06122a; font-weight: 600; }
+button.primary:hover { background: var(--accent-press); }
+button:disabled { opacity: .5; cursor: default; }
+
+.card {
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 14px; margin: 8px 0 18px;
+}
+h2 { font-size: 15px; margin: 22px 0 6px; font-weight: 600; }
+
+.progress { height: 6px; background: var(--panel-2); border-radius: 4px; overflow: hidden; margin: 12px 0; }
+.bar { height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+
+.log {
+  background: #15171a; border: 1px solid var(--border); border-radius: 8px;
+  padding: 10px; min-height: 60px; max-height: 280px; overflow: auto;
+  font: 13px/1.45 "Cascadia Code", Consolas, monospace; color: var(--muted);
+  white-space: pre-wrap; margin: 8px 0;
+}
+.log.small { min-height: 0; max-height: 120px; }
+.results a { display: block; color: var(--accent); margin: 2px 0; }
+
+.model-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 4px; border-bottom: 1px solid var(--border);
+}
+.model-row:last-child { border-bottom: 0; }
+.model-row .label { flex: 1; }
+.model-row .meta { color: var(--muted); font-size: 13px; }
+.dot { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto; }
+.dot.green { background: var(--green); }
+.dot.yellow { background: var(--yellow); }
+.dot.red { background: var(--red); }
+.dot.unknown { background: var(--muted); }
+.star { color: var(--yellow); }
+
+.post { margin-top: 18px; border-top: 1px solid var(--border); padding-top: 10px; }
+.post summary { cursor: pointer; color: var(--muted); }
