@@ -149,3 +149,38 @@ sektionen med en "Ollama körs inte"-notis; resten av programmet fungerar.
 - Ingen finjustering/träning av modeller — bara nedladdning/installation/körning.
 - Ingen redigering av undertexter i programmet — endast generering och export.
 - LLM-runtime begränsas till Ollama (ingen inbyggd llama.cpp i denna version).
+
+
+---
+
+## Tillägg 2026-06-15: Online-modellista + debug-logg
+
+**Status:** Implementerad (55 tester gröna, exe ombyggd).
+
+Detta ändrar medvetet den tidigare YAGNI-avgränsningen *"ingen webb-/fjärråtkomst"*:
+på användarens begäran ska modell-listan verifieras mot en online-källa vid varje
+start. Lösningen är **offline-tålig** (online → cache → kurerad reserv), så appen
+fungerar fortfarande helt utan nät.
+
+### Online-modellista (Ollama)
+- Ny modul `app/online_catalog.py` (GUI-fri, testad): `fetch_ollama_library()` hämtar
+  aktuella modellnamn från `https://ollama.com/library`, cachar till
+  `models/online_catalog.json` och faller tillbaka till cachen vid fel.
+  `extra_online_models()` filtrerar fram namn som inte redan är kurerade/installerade.
+- `app/workers.py`: ny `OnlineCatalogWorker` (QThread) som hämtar i bakgrunden.
+- `app/ui/models_tab.py`: ny grupp **"Fler modeller (online)"** + knapp **"Uppdatera lista"**.
+- Whisper lämnas kurerat — faster-whisper kräver Whisper-arkitektur och den kurerade
+  katalogen bär VRAM/storlek som driver färgkodningen (🟢/🟡/🔴).
+
+### Debug-logg + fix av 0%-nedladdning
+- Ny modul `app/debug_log.py`: roterande loggfil `transkribera.log` bredvid exe:n +
+  global excepthook. Aktiveras i `app/main.py`. Rör **inte** stdout (subprocessens
+  PROGRESS-protokoll är beroende av sin riktiga pipe).
+- `app/whisper_manager.download_whisper()` rapporterar nu **riktig progress**:
+  `snapshot_download` saknar hook, så mappstorleken pollas mot `download_mb` i en
+  bakgrundstråd → progressbaren rör sig istället för att stå kvar på 0%.
+- `app/ui/models_tab.py`: knappar **"Visa logg"** / **"Öppna loggmapp"**.
+
+### Tester
+- Nya: `tests/test_online_catalog.py`, `tests/test_debug_log.py`,
+  `tests/test_whisper_progress.py`. Hela sviten: **55 godkända**.

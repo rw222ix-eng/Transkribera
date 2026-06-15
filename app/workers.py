@@ -6,7 +6,8 @@ from pathlib import Path
 
 from PySide6.QtCore import QThread, Signal
 
-from app import transcriber, whisper_manager, ollama_client, postprocess, youtube
+from app import (transcriber, whisper_manager, ollama_client, postprocess,
+                 youtube, online_catalog, debug_log)
 from app.models_catalog import WhisperModelSpec
 
 
@@ -72,6 +73,7 @@ class TranscribeWorker(QThread):
                 raise RuntimeError("Transkriberingen avslutades utan resultat")
             self.done.emit(written or expected)
         except Exception as exc:  # surfaced to UI log
+            debug_log.get_logger().exception("Transkribering misslyckades")
             self.failed.emit(str(exc))
 
 
@@ -110,19 +112,43 @@ class PullWorker(QThread):
         self.ollama_name = ollama_name
 
     def run(self):
+        log = debug_log.get_logger()
         try:
             if self.whisper_spec is not None:
+                log.info("Laddar ner Whisper-modell %s", self.whisper_spec.id)
                 path = whisper_manager.download_whisper(
-                    self.whisper_spec, self.models_root, self.log.emit)
+                    self.whisper_spec, self.models_root, self.log.emit,
+                    progress_cb=self.progress.emit)
+                log.info("Whisper-modell klar: %s", path)
                 self.done.emit(str(path))
             else:
+                log.info("Pullar Ollama-modell %s", self.ollama_name)
                 ollama_client.pull(
                     self.ollama_name,
                     progress_cb=lambda pct, status: (self.progress.emit(pct),
                                                      self.log.emit(status)))
+                log.info("Ollama-modell klar: %s", self.ollama_name)
                 self.done.emit(self.ollama_name)
         except Exception as exc:
+            log.exception("Nedladdning misslyckades")
             self.failed.emit(str(exc))
+
+
+class OnlineCatalogWorker(QThread):
+    """Fetches the online Ollama model catalog off the UI thread."""
+    result = Signal(list)   # list[str] of online model family names
+
+    def __init__(self, models_root: Path):
+        super().__init__()
+        self.models_root = models_root
+
+    def run(self):
+        try:
+            names = online_catalog.fetch_ollama_library(self.models_root)
+        except Exception:
+            debug_log.get_logger().exception("Online-katalog misslyckades")
+            names = []
+        self.result.emit(names)
 
 
 class PostProcessWorker(QThread):

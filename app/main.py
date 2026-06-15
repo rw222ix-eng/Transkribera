@@ -5,6 +5,7 @@ from pathlib import Path
 
 from PySide6.QtWidgets import QApplication
 
+from app import debug_log
 from app.ui.main_window import MainWindow
 
 
@@ -20,6 +21,7 @@ BASE_DIR = _base_dir()
 
 
 def main() -> int:
+    debug_log.setup(BASE_DIR, tag="gui")
     app = QApplication(sys.argv)
     win = MainWindow(BASE_DIR)
     win.show()
