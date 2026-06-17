@@ -6,6 +6,8 @@ import queue
 import subprocess
 import sys
 import threading
+import time
+from datetime import datetime
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -13,8 +15,30 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from app import (debug_log, hardware, recommend, whisper_manager, ollama_client,
-                 online_catalog, youtube, postprocess, transcriber)
+                 online_catalog, youtube, postprocess, transcriber, history_store)
 from app.models_catalog import WHISPER_MODELS, LLM_MODELS
+
+_MONTHS_SV = ["jan", "feb", "mar", "apr", "maj", "jun", "jul", "aug", "sep", "okt", "nov", "dec"]
+
+
+def _date_label(ts_iso: str) -> str:
+    try:
+        dt = datetime.fromisoformat(ts_iso)
+    except Exception:
+        return ""
+    now = datetime.now()
+    if dt.date() == now.date():
+        return "Idag · " + dt.strftime("%H:%M")
+    if (now.date() - dt.date()).days == 1:
+        return "Igår · " + dt.strftime("%H:%M")
+    return f"{dt.day} {_MONTHS_SV[dt.month - 1]}"
+
+
+def _clock(seconds: float) -> str:
+    s = int(seconds or 0)
+    h, rem = divmod(s, 3600)
+    m, sec = divmod(rem, 60)
+    return f"{h}:{m:02d}:{sec:02d}" if h else f"{m:02d}:{sec:02d}"
 
 def _static_dir() -> Path:
     # Frozen: PyInstaller unpacks bundled data under sys._MEIPASS.
@@ -145,6 +169,7 @@ def _sse_response(job) -> StreamingResponse:
 def create_app(base_dir: Path | None = None) -> FastAPI:
     base = base_dir or _base_dir()
     models_root = base / "models"
+    history_file = base / "history.json"
     cookies = base / "cookies.txt"
     cookies_file = cookies if cookies.exists() else None
     debug_log.setup(base, "web")
@@ -266,8 +291,32 @@ def create_app(base_dir: Path | None = None) -> FastAPI:
             files = [{"path": p, "name": Path(p).name,
                       "ext": Path(p).suffix.lstrip("."), "size": _file_size_str(p)}
                      for p in written]
+            spec_label = next((s.label for s in WHISPER_MODELS if s.id == model_id), model_id)
+            lang_label = {"en": "Engelska", "sv": "Svenska"}.get(language, "Auto")
+            dur = segments[-1]["end"] if segments else 0
+            words = sum(len((sg.get("text") or "").split()) for sg in segments)
+            history_store.add_history(history_file, {
+                "id": "h" + str(int(time.time() * 1000)),
+                "ts": datetime.now().isoformat(timespec="seconds"),
+                "name": media.name, "source": source,
+                "dur": _clock(dur), "model": spec_label, "lang": lang_label,
+                "formats": [f.upper() for f in formats], "speakers": 1,
+                "words": words, "files": files, "transcript": segments,
+            })
             return {"files": files, "transcript": segments}
         return _sse_response(job)
+
+    @app.get("/api/history")
+    def api_history():
+        items = history_store.load_history(history_file)
+        for it in items:
+            it["date"] = _date_label(it.get("ts", ""))
+        return items
+
+    @app.delete("/api/history/{entry_id}")
+    def api_history_delete(entry_id: str):
+        history_store.delete_history(history_file, entry_id)
+        return {"ok": True}
 
     @app.post("/api/postprocess")
     async def api_postprocess(req: Request):

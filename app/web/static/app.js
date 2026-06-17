@@ -420,7 +420,8 @@
       setState(function (s) { var installed = Object.assign({}, s.installed); delete installed[c.id]; return { installed: installed, confirm: null }; });
       if (S.model === c.id) { var fb = WHISPER.find(function (m) { return m.id !== c.id && S.installed[m.id]; }); if (fb) setState({ model: fb.id }); }
     } else if (c.kind === 'history') {
-      setState(function (s) { return { history: s.history.filter(function (h) { return h.id !== c.id; }), confirm: null }; });
+      setState({ confirm: null });
+      fetch('/api/history/' + encodeURIComponent(c.id), { method: 'DELETE' }).then(function () { loadHistory(); }).catch(function () {});
     } else if (c.kind === 'rerun') {
       var h = S.history.find(function (x) { return x.id === c.id; });
       setState({ confirm: null });
@@ -428,8 +429,8 @@
     } else setState({ confirm: null });
   }
   function confirmNo() { setState({ confirm: null }); }
-  function openHistory(h) { setState({ transcriptOpen: true, histViewing: h.id }); }
-  function reRunHistory(h) { var id = 'q' + Date.now(); setState({ tab: 'transcribe', step: 'config', queue: [{ id: id, name: h.name }], qStatus: {}, qProgress: {}, run: 'idle', progress: 0, elapsed: 0, activeId: id, source: h.name, fileError: '', runError: null, openDD: null }); }
+  function openHistory(h) { setState({ transcriptOpen: true, histViewing: h.id, transcript: (h.transcript || []).map(function (g) { return { time: fmtTime(g.start), spk: 0, text: g.text }; }) }); }
+  function reRunHistory(h) { var id = 'q' + Date.now(); setState({ tab: 'transcribe', step: 'config', queue: [{ id: id, name: h.name, path: h.source || h.name }], qStatus: {}, qProgress: {}, run: 'idle', progress: 0, elapsed: 0, activeId: id, source: h.source || h.name, fileError: '', runError: null, openDD: null }); }
 
   function togglePlay() {
     if (S.audioPlaying) { clearInterval(_au); setState({ audioPlaying: false }); return; }
@@ -521,7 +522,7 @@
           var r = ev.result || {};
           var segs = (r.transcript || []).map(function (g) { return { time: fmtTime(g.start), spk: 0, text: g.text }; });
           setState(function (s) { return { run: 'done', progress: 100, transcript: segs, resultFilesReal: r.files || [], qStatus: Object.assign({}, s.qStatus, kv(active.id, 'done')), qProgress: Object.assign({}, s.qProgress, kv(active.id, 100)), log: s.log.concat(['[klar] Färdig på ' + fmtTime(s.elapsed)]) }; });
-          _archive(active, S.elapsed);
+          loadHistory();   // server archived this run; refresh from disk
           var next = _nextPending(active.id);
           if (next) { setTimeout(function () { setState({ run: 'idle', activeId: next, source: qName(S.queue, next), audioT: 0 }, function () { _runActive(); }); }, 800); }
           else { setTimeout(function () { afterDone(); }, 450); }
@@ -698,6 +699,10 @@
       }
       setState(patch);
     }).catch(function () { /* dev/offline: keep mock catalog */ });
+  }
+
+  function loadHistory() {
+    return getJSON('/api/history').then(function (h) { if (Array.isArray(h)) setState({ history: h }); }).catch(function () {});
   }
 
   function addFilesObjs(items) {
@@ -2319,6 +2324,7 @@ function viewModals(v){ return `
     _prevTab = S.tab; _prevStep = S.step; _prevOp = S.ppOp;
     render();
     loadModels();   // swap mock catalog for real /api/models data
+    loadHistory();  // load persisted transcription history
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 

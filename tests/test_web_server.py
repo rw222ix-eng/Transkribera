@@ -55,3 +55,15 @@ def test_transcribe_requires_fields(client):
 def test_postprocess_requires_fields(client):
     r = client.post("/api/postprocess", json={"transcript": "", "model": ""})
     assert r.status_code == 400
+
+
+def test_history_endpoint_empty(client):
+    r = client.get("/api/history")
+    assert r.status_code == 200
+    assert r.json() == []
+
+
+def test_history_delete_ok(client):
+    r = client.delete("/api/history/nope")
+    assert r.status_code == 200
+    assert r.json() == {"ok": True}
