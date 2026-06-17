@@ -25,6 +25,7 @@
     tab: 'transcribe',
     source: 'intervju_lund.mkv',
     dragging: false,
+    urlInput: '',
     step: 'config',
     model: 'KB-Whisper large',
     language: 'sv',
@@ -361,6 +362,16 @@
   function onDragLeave(e) { e.preventDefault(); setState({ dragging: false }); }
   function onDrop(e) { e.preventDefault(); var fs = (e.dataTransfer && e.dataTransfer.files) ? Array.from(e.dataTransfer.files).map(function (f) { return { name: f.name, path: f.path || f.name }; }) : []; if (fs.length) addFilesObjs(fs); else setState({ dragging: false }); }
   function goSource() { setState({ step: 'source', openDD: null, fileError: '' }); }
+  // YouTube/URL source: backend /api/transcribe already downloads http(s) via yt-dlp.
+  function onUrlInput(e) { setState({ urlInput: e.target.value }); }
+  function onUrlKey(e) { if (e.key === 'Enter') addUrl(); }
+  function urlName(u) { if (/youtu/i.test(u)) return 'YouTube-länk'; try { return new URL(u).hostname.replace(/^www\./, '') + '-länk'; } catch (e) { return 'Länk'; } }
+  function addUrl() {
+    var u = (S.urlInput || '').trim();
+    if (!/^https?:\/\//i.test(u)) { setState({ fileError: 'Klistra in en giltig länk (måste börja med http:// eller https://).' }); return; }
+    addFilesObjs([{ name: urlName(u), path: u }]);
+    setState({ urlInput: '' });
+  }
   function restart() {
     clearInterval(_t); clearTimeout(_pp); clearInterval(_ppIv); clearTimeout(_chat); clearInterval(_au);
     Object.values(_dl || {}).forEach(clearInterval);
@@ -986,7 +997,7 @@
       var pct = st.qProgress[qq.id] || 0;
       var isActive = qq.id === st.activeId && st.step === 'process';
       return {
-        id: qq.id, name: qq.name, ext: (extOf(qq.name) || 'fil').toUpperCase(), status: status, statusLabel: statusWord[status], pct: pct,
+        id: qq.id, name: qq.name, ext: (/^https?:/i.test(qq.path || '') ? 'URL' : (extOf(qq.name) || 'fil').toUpperCase()), status: status, statusLabel: statusWord[status], pct: pct,
         dotStyle: 'width:9px;height:9px;border-radius:50%;flex:0 0 auto;background:' + statusCol[status] + (status === 'running' ? ';animation:pulse 1.4s ease infinite' : ''),
         statusStyle: 'font-size:12.5px;font-weight:600;color:' + statusCol[status] + ';font-variant-numeric:tabular-nums;flex:0 0 auto',
         barStyle: 'height:100%;width:' + (status === 'done' ? 100 : status === 'running' ? pct : 0) + '%;background:' + statusCol[status] + ';border-radius:99px;transition:width .3s ease',
@@ -1073,6 +1084,7 @@
       stepSource: st.step === 'source', stepConfig: st.step === 'config', stepProcess: st.step === 'process',
       stepItems: stepItems, restart: restart, goSource: goSource, sourceLabel: st.source || 'okänd källa',
       openPicker: openPicker, fileRef: fileRef, onPickFile: onPickFile, onDragOver: onDragOver, onDragLeave: onDragLeave, onDrop: onDrop,
+      urlInput: st.urlInput, onUrlInput: onUrlInput, onAddUrl: addUrl, onUrlKey: onUrlKey,
       dropzoneStyle: 'position:relative;border:1.5px dashed ' + (st.dragging ? 'var(--accent)' : 'var(--line-2)') + ';border-radius:20px;background:' + (st.dragging ? 'var(--accent-weak)' : 'var(--surface)') + ';flex:1 1 auto;min-height:200px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 24px;text-align:center;box-shadow:var(--shadow-sm);cursor:pointer;user-select:none;-webkit-user-select:none;transition:border-color .12s,background .12s',
       curModelName: curModel.label || curModel.id, curModelMeta: curModel.size + ' · ' + (curModel.id === recommendModel(st.language) ? 'matchar språket' : 'installerad'), curModelDot: curFit.dot,
       toggleModelDD: toggleModelDD, modelDDOpen: st.openDD === 'model', modelOptions: modelOptions,
@@ -1290,6 +1302,15 @@ function viewTranscribe(v){ return `
           <div style="position:relative">
             <div style="font-size:19px;font-weight:500;margin-bottom:6px;color:var(--ink)">Dra in filer — eller klicka för att välja</div>
             <div style="font-size:14.5px;color:var(--ink-2)">MP4 · MKV · MOV · MP3 · WAV · M4A — flera filer går bra</div>
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:10px;margin-top:12px">
+          <span style="font-size:11.5px;text-transform:uppercase;letter-spacing:0.05em;color:var(--ink-2);font-weight:600;flex:0 0 auto">Eller länk</span>
+          <div style="flex:1;display:flex;align-items:center;gap:8px;min-width:0;background:var(--surface);border:1px solid var(--line);border-radius:11px;padding:7px 7px 7px 13px;box-shadow:var(--shadow-sm)">
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="var(--ink-3)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto"><path d="M6.8 9.2a3 3 0 0 0 4.3 0l1.7-1.7a3 3 0 0 0-4.3-4.3l-1 1"></path><path d="M9.2 6.8a3 3 0 0 0-4.3 0L3.2 8.5a3 3 0 0 0 4.3 4.3l1-1"></path></svg>
+            <input value="${esc(v.urlInput)}" data-input="${on(v.onUrlInput)}" data-keydown="${on(v.onUrlKey)}" placeholder="Klistra in en YouTube-länk …" style="flex:1;min-width:0;border:none;outline:none;background:transparent;font-size:15px;color:var(--ink);font-family:inherit">
+            <button data-click="${on(v.onAddUrl)}" style="flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:8px;padding:8px 15px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit" data-sh="background:color-mix(in srgb, var(--btn-bg) 78%, var(--accent)) !important">Lägg till</button>
           </div>
         </div>
 
