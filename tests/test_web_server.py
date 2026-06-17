@@ -10,6 +10,9 @@ def client(tmp_path, monkeypatch):
     class HW:
         gpu_name = "Test GPU"; vram_mb = 24000; has_cuda = True
         ram_mb = 64000; cpu_cores = 16; free_disk_mb = 500000
+        cpu_name = "Test CPU"; vram_free_mb = 20000; ram_free_mb = 40000
+        total_disk_mb = 1000000; cuda_version = "12.1"
+        compute_capability = "8.9"; gpu_arch = "Ada Lovelace"; disks = []
 
     # Stub out heavy / external calls so the endpoints are unit-testable.
     monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: HW())
@@ -30,16 +33,18 @@ def test_index_served(client):
 def test_hardware_endpoint(client):
     r = client.get("/api/hardware")
     assert r.status_code == 200
-    assert r.json()["gpu_name"] == "Test GPU"
+    data = r.json()
+    assert data["gpu"] == "Test GPU"
+    assert data["vram"]["total"] > 0
 
 
 def test_models_endpoint_structure(client):
     r = client.get("/api/models")
     assert r.status_code == 200
     data = r.json()
-    assert {"hardware", "whisper", "llm", "ollama_running", "llm_online_extra"} <= data.keys()
+    assert {"hardware", "whisper", "llm", "ollama_running", "online"} <= data.keys()
     assert len(data["whisper"]) == len(server.WHISPER_MODELS)
-    assert "mistral" in data["llm_online_extra"]
+    assert any(o["id"] == "mistral" for o in data["online"])
 
 
 def test_transcribe_requires_fields(client):

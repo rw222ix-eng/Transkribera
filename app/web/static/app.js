@@ -84,24 +84,29 @@
     histViewing: null,
     confirm: null,
     diskWarn: null,
+    transcript: null,
+    resultFilesReal: null,
+    catalogReady: false,
   };
 
   /* instance (non-state) fields */
-  var _t, _pp, _ppIv, _chat, _au, _toastIv, _toastT2, _glideRAF, _lastStart;
+  var _t, _pp, _ppIv, _chat, _au, _toastIv, _toastT2, _glideRAF, _lastStart, _runToken = 0;
   var _dl = {}, _inst = {}, _editBuf = {}, _wave = null;
   var _file, _seek, _searchRef, _scrollRef, _procScroll, _chatThread;
   var _prevTab, _prevStep, _prevRun, _prevPP, _prevOp, _prevChatLen, _wasEditing, _wasOpen, _pyWas, _scrollKey;
 
   /* ----------------------------------------------------------------- data -- */
+  // Catalogs are `let` so loadModels() can reassign them to real data from /api/models;
+  // the values below are the dev/offline fallback. Item shape mirrors the API.
   // vram = beräknat VRAM-behov (GB) · rtf = hastighet (× realtid) · toks = tokens/s · score = kapacitet/precision
-  var WHISPER = [
+  let WHISPER = [
     { id: 'KB-Whisper large',     size: '3.1 GB', vram: 4.7, rtf: 4,  score: 5.5, lang: 'sv',    recommended: true, useFor: 'Svenska — bäst precision (KB-Labb). Körs även via easytranscriber' },
     { id: 'Canary-Qwen-2.5B',     size: '5.0 GB', vram: 6.5, rtf: 9,  score: 5,   lang: 'en',    useFor: 'Engelska — toppresultat, marginellt tyngre' },
     { id: 'Whisper large-v3',     size: '3.1 GB', vram: 4.7, rtf: 4,  score: 4.5, lang: 'multi', useFor: 'Flerspråkigt allround — robust på de flesta språk' },
     { id: 'Canary 1B v2',         size: '2.0 GB', vram: 3.2, rtf: 13, score: 4,   lang: 'multi', useFor: 'Flerspråkigt och snabbt — bra balans kvalitet/fart' },
     { id: 'Parakeet TDT 0.6B v3', size: '1.2 GB', vram: 2.0, rtf: 25, score: 3.5, lang: 'multi', useFor: 'Snabbast — realtid och stora batchar' },
   ];
-  var LLM = [
+  let LLM = [
     { id: 'Qwen3 30B-A3B',      size: '18 GB',  vram: 17, toks: 95,  ctx: '256k', score: 5.5, recommended: true, uses: ['text','sv'],      useFor: 'Textresonemang & svenska — MoE, snabb och stark vid 24 GB', caps: { vision: false, files: ['PDF','TXT','Markdown','DOCX','CSV'] } },
     { id: 'Qwen3 32B',          size: '20 GB',  vram: 20, toks: 22,  ctx: '128k', score: 5.3, uses: ['text','sv'],      useFor: 'Tätt resonemang — högsta kvalitet när tid finns', caps: { vision: false, files: ['PDF','TXT','Markdown','DOCX','CSV'] } },
     { id: 'Gemma 3 27B',        size: '17 GB',  vram: 17, toks: 28,  ctx: '128k', score: 5,   uses: ['text','sv'],      useFor: 'Stark flerspråkig — verifiera svenska mot ScandEval', caps: { vision: false, files: ['PDF','TXT','Markdown','DOCX'] } },
@@ -123,13 +128,13 @@
     { id: 'int8', label: 'int8', mult: 0.62, note: '8-bit · mindre och snabbare, minimal kvalitetsskillnad' },
     { id: 'fp16', label: 'fp16', mult: 1.00, sweet: true, note: '16-bit · full precision (standard för Whisper)' },
   ];
-  var ONLINE = [
+  let ONLINE = [
     { id: 'deepseek-r1:8b', size: '4.9 GB', tag: 'Resonemang', uses: ['reason','code'] },
     { id: 'phi4:14b', size: '9.1 GB', tag: 'Kompakt, kraftfull', uses: ['reason','chat','code'] },
     { id: 'command-r:35b', size: '20 GB', tag: 'Lång kontext', uses: ['rag','chat'] },
     { id: 'nemotron-mini', size: '2.7 GB', tag: 'Lättviktig', uses: ['speed','chat'] },
   ];
-  var HW = {
+  let HW = {
     gpu: 'RTX 4090', arch: 'Ada Lovelace', cc: '8.9', cuda: '12.4',
     precisions: 'fp16 · int8 · int4', cpu: 'Ryzen 9 7900X · 12 kärnor',
     vram: { total: 24, free: 22.5 },
@@ -177,7 +182,7 @@
   function extOf(n) { var m = /\.([^.]+)$/.exec(n || ''); return m ? m[1].toLowerCase() : ''; }
   function isMedia(n) { return ALLOWED.indexOf(extOf(n)) !== -1; }
   function qName(queue, id) { var q = (queue || S.queue).find(function (x) { return x.id === id; }); return q ? q.name : ''; }
-  function lineText(i) { var e = S.edits; return (e && e[i] != null) ? e[i] : TRANSCRIPT[i].text; }
+  function lineText(i) { var e = S.edits; return (e && e[i] != null) ? e[i] : getTranscript()[i].text; }
   function spkName(i) { var n = (S.spkNames[i] || '').trim(); return n || SPEAKERS[i] || ('Talare ' + (i + 1)); }
   function speakerColor(i) { var hues = [264, 150, 52]; return 'oklch(0.62 0.13 ' + hues[i % 3] + ')'; }
   function speakerWeak(i) { var hues = [264, 150, 52]; return 'oklch(0.95 0.03 ' + hues[i % 3] + ')'; }
@@ -186,17 +191,16 @@
   function pyInstalled() { return !!S.installed[PYANNOTE_ID]; }
   function pyBusy() { return !!(S.downloading[PYANNOTE_ID] || S.installing[PYANNOTE_ID]); }
   function bestDisk() { return HW.disks.slice().sort(function (a, b) { return b.free - a.free; })[0]; }
-  function modelNeedGB(id) { var m = WHISPER.concat(LLM).find(function (x) { return x.id === id; }); return m ? Math.ceil(parseFloat(m.size) * 1.6) : 0; }
+  function modelNeedGB(id) { var m = WHISPER.concat(LLM).find(function (x) { return x.id === id; }); if (!m) return 0; var gb = m.download_mb ? m.download_mb / 1024 : (parseFloat(m.size) || 0); return Math.ceil(gb * 1.6); }
   function parseSize(s) { var m = /([\d.]+)\s*(GB|MB)/i.exec(s || ''); return m ? { n: parseFloat(m[1]), u: m[2].toUpperCase() } : null; }
   function recommendModel(l) {
-    var has = function (id) { return S.installed[id]; };
-    if (l === 'en') { if (has('Canary-Qwen-2.5B')) return 'Canary-Qwen-2.5B'; if (has('Whisper large-v3')) return 'Whisper large-v3'; }
-    if (l === 'sv' && has('KB-Whisper large')) return 'KB-Whisper large';
-    if (has('KB-Whisper large')) return 'KB-Whisper large';
-    if (has('Whisper large-v3')) return 'Whisper large-v3';
-    return S.model;
+    var inst = S.installed;
+    var pick = function (pred) { var m = WHISPER.find(function (x) { return inst[x.id] && pred(x); }); return m ? m.id : null; };
+    if (l === 'en') return pick(function (m) { return m.lang === 'en'; }) || pick(function (m) { return m.lang === 'multi'; }) || S.model;
+    if (l === 'sv') return pick(function (m) { return m.lang === 'sv'; }) || pick(function (m) { return m.lang === 'multi'; }) || S.model;
+    return pick(function (m) { return m.lang === 'sv'; }) || pick(function (m) { return m.lang === 'multi'; }) || pick(function () { return true; }) || S.model;
   }
-  function countMatches() { var q = S.searchQuery.trim().toLowerCase(); if (!q) return 0; var n = 0; for (var k = 0; k < TRANSCRIPT.length; k++) { var pos = 0, i, t = lineText(k).toLowerCase(); while ((i = t.indexOf(q, pos)) !== -1) { n++; pos = i + q.length; } } return n; }
+  function countMatches() { var q = S.searchQuery.trim().toLowerCase(); if (!q) return 0; var n = 0; for (var k = 0; k < getTranscript().length; k++) { var pos = 0, i, t = lineText(k).toLowerCase(); while ((i = t.indexOf(q, pos)) !== -1) { n++; pos = i + q.length; } } return n; }
   function pickQuant(model, kind) {
     var free = HW.vram.free, margin = 1.2;
     var ladder = kind === 'whisper' ? WQUANTS : LQUANTS;
@@ -335,20 +339,14 @@
   function setTab(t) { setState({ tab: t, openDD: null }); }
   function onSource(e) { setState({ source: e.target.value }); }
   function fileRef(el) { _file = el; }
-  function openPicker() { setState({ fileError: '' }); if (_file) _file.click(); }
-  // BACKEND: addFiles will validate against the server; here it just queues names.
-  function addFiles(names) {
-    var good = names.filter(isMedia);
-    var bad = names.filter(function (n) { return !isMedia(n); });
-    if (!good.length) { setState({ fileError: 'Filformatet stöds inte — välj ljud eller video (MP4, MKV, MOV, MP3, WAV, M4A …).', dragging: false }); return; }
-    setState(function (s) {
-      var existing = new Set(s.queue.map(function (q) { return q.name; }));
-      var adds = good.filter(function (g) { return !existing.has(g); }).map(function (g, k) { return { id: 'q' + Date.now() + '_' + k, name: g }; });
-      var queue = s.queue.concat(adds);
-      var activeId = s.activeId || (queue[0] && queue[0].id) || null;
-      return { queue: queue, dragging: false, step: 'config', activeId: activeId, source: qName(queue, activeId) || s.source, fileError: bad.length ? ('Hoppade över ' + bad.length + ' fil(er) — formatet stöds inte.') : '' };
-    });
+  function openPicker() {
+    setState({ fileError: '' });
+    var api = window.pywebview && window.pywebview.api;
+    if (api && api.pick_files) { api.pick_files().then(function (files) { if (files && files.length) addFilesObjs(files); }); return; }
+    if (_file) _file.click();   // browser fallback (names only — transcription needs pywebview paths)
   }
+  // BACKEND: addFiles will validate against the server; here it just queues names.
+  function addFiles(names) { addFilesObjs(names.map(function (n) { return { name: n, path: n }; })); }
   function removeQ(id) {
     setState(function (s) {
       var queue = s.queue.filter(function (q) { return q.id !== id; });
@@ -358,10 +356,10 @@
     });
   }
   function addSample(name) { setState({ fileError: '' }); addFiles([name]); }
-  function onPickFile(e) { var fs = e.target.files ? Array.from(e.target.files).map(function (f) { return f.name; }) : []; if (fs.length) addFiles(fs); if (e.target) e.target.value = ''; }
+  function onPickFile(e) { var fs = e.target.files ? Array.from(e.target.files).map(function (f) { return { name: f.name, path: f.path || f.name }; }) : []; if (fs.length) addFilesObjs(fs); if (e.target) e.target.value = ''; }
   function onDragOver(e) { e.preventDefault(); if (!S.dragging) setState({ dragging: true }); }
   function onDragLeave(e) { e.preventDefault(); setState({ dragging: false }); }
-  function onDrop(e) { e.preventDefault(); var fs = (e.dataTransfer && e.dataTransfer.files) ? Array.from(e.dataTransfer.files).map(function (f) { return f.name; }) : []; if (fs.length) addFiles(fs); else setState({ dragging: false }); }
+  function onDrop(e) { e.preventDefault(); var fs = (e.dataTransfer && e.dataTransfer.files) ? Array.from(e.dataTransfer.files).map(function (f) { return { name: f.name, path: f.path || f.name }; }) : []; if (fs.length) addFilesObjs(fs); else setState({ dragging: false }); }
   function goSource() { setState({ step: 'source', openDD: null, fileError: '' }); }
   function restart() {
     clearInterval(_t); clearTimeout(_pp); clearInterval(_ppIv); clearTimeout(_chat); clearInterval(_au);
@@ -431,7 +429,7 @@
   }
   function seekTrackRef(el) { _seek = el; }
   function onSeekClick(e) { var el = _seek; if (!el) return; var r = el.getBoundingClientRect(); var f = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)); setState({ audioT: f * AUDIO_DUR }); }
-  function jumpToLine(i) { setState({ audioT: parseTS(TRANSCRIPT[i].time) }); if (!S.audioPlaying) togglePlay(); }
+  function jumpToLine(i) { setState({ audioT: parseTS(getTranscript()[i].time) }); if (!S.audioPlaying) togglePlay(); }
 
   function toggleEdit() {
     if (S.editing) { _commitEdits(); setState({ editing: false }); }
@@ -477,91 +475,66 @@
   function _archive(file, secs) {
     var fmts = ['srt', 'txt', 'vtt'].filter(function (f) { return S.formats[f]; }).map(function (f) { return f.toUpperCase(); });
     var langLabel = S.language === 'en' ? 'Engelska' : S.language === 'sv' ? 'Svenska' : 'Auto';
-    var entry = { id: 'h' + Date.now() + Math.floor(Math.random() * 99), name: file.name, date: 'Just nu', dur: fmtTime(secs), model: S.model, lang: langLabel, formats: fmts.length ? fmts : ['TXT'], speakers: S.diarize ? 3 : 1, words: 2800 + Math.floor(Math.random() * 500) };
+    var entry = { id: 'h' + Date.now() + Math.floor(Math.random() * 99), name: file.name, date: 'Just nu', dur: fmtTime(secs), model: modelLabel(S.model), lang: langLabel, formats: fmts.length ? fmts : ['TXT'], speakers: S.diarize ? 3 : 1, words: 2800 + Math.floor(Math.random() * 500) };
     setState(function (s) { return { history: [entry].concat(s.history.filter(function (h) { return !(h.name === file.name && h.date === 'Just nu'); })) }; });
   }
+  // BACKEND: real transcription via /api/transcribe SSE (one request per queue item).
   function _runActive() {
     if (S.run === 'running') return;
     clearInterval(_t);
     var active = S.queue.find(function (q) { return q.id === S.activeId; });
     if (!active) return;
+    var token = ++_runToken;
     var src = baseNameOf(active.name);
-    var corrupt = /skadad|corrupt/i.test(active.name);
-    var dia = S.diarize;
-    var named = S.spkNames.map(function (n) { return (n || '').trim(); }).filter(Boolean);
-    var nspk = S.numSpeakers;
-    var script = [
-      '[00:01] GPU: RTX 4090 · CUDA 12.4',
-      '[00:02] Extraherar ljudspår (ffmpeg) …',
-      '[00:04] Ljud: 24:18, 16 kHz mono',
-      '[00:05] VAD: 142 talsegment funna',
-    ];
-    if (dia) script.push('[00:06] Diarisering (pyannote): separerar röster' + (nspk !== 'auto' ? ', antal talare = ' + nspk : ''));
-    if (dia) script.push('[00:07] Diarisering: 3 talare funna' + (named.length ? ' → märkta ' + named.join(', ') : ''));
-    script.push('[00:08] Segment   1/142  ›  "Hej och välkomna till …"');
-    script.push('[00:12] Segment  38/142  ›  "… det vi pratade om förra veckan"');
-    script.push('[00:17] Segment  77/142  ›  "Precis, och då blir nästa steg …"');
-    script.push('[00:22] Segment 119/142  ›  "Tack för att ni lyssnade."');
-    script.push('[00:24] Sammanfogar segment …');
-    script.push('[00:25] Skriver utdata-filer …');
     setState({
-      run: 'running', step: 'process', progress: 0, elapsed: 0, pp: 'idle', ppOut: '', chat: [], chatTyping: false, runError: null,
+      run: 'running', step: 'process', progress: 0, elapsed: 0, pp: 'idle', ppOut: '',
+      chat: [], chatTyping: false, runError: null, transcript: null, resultFilesReal: null,
       source: active.name,
-      qStatus: Object.assign({}, S.qStatus, (function () { var o = {}; o[active.id] = 'running'; return o; })()),
-      log: ['› transkribera "' + src + '" --model ' + S.model + (dia ? ' --diarize pyannote' : '') + (dia && nspk !== 'auto' ? ' --num-speakers ' + nspk : ''), '[00:00] Laddar modell ' + S.model + ' …'],
+      qStatus: Object.assign({}, S.qStatus, kv(active.id, 'running')),
+      log: ['› transkribera "' + src + '" --model ' + modelLabel(S.model), '[00:00] Startar transkribering …'],
     });
-    var i = 0;
-    _t = setInterval(function () {
-      var s = S;
-      var p = Math.min(100, s.progress + 5 + Math.random() * 8);
-      var el = s.elapsed + 0.45;
-      var log = s.log.slice();
-      if (i < script.length && Math.random() < 0.85) log.push(script[i++]);
-      if (corrupt && p >= 26) {
-        clearInterval(_t);
-        log.push('[00:04] Extraherar ljudspår (ffmpeg) …');
-        log.push('[fel] ffmpeg: invalid data — kunde inte läsa ström 0:1');
-        setState({
-          progress: Math.round(p), elapsed: el, log: log, run: 'error',
-          runError: { title: 'Kunde inte läsa ljudet', detail: 'Filen "' + active.name + '" verkar skadad eller saknar ett giltigt ljudspår. Prova en annan fil, eller konvertera om den till WAV och försök igen.', where: 'extract' },
-          qStatus: Object.assign({}, s.qStatus, (function () { var o = {}; o[active.id] = 'error'; return o; })()),
-          qProgress: Object.assign({}, s.qProgress, (function () { var o = {}; o[active.id] = Math.round(p); return o; })()),
-        });
-        return;
-      }
-      if (p >= 100) {
-        clearInterval(_t);
-        while (i < script.length) log.push(script[i++]);
-        log.push('[klar] Färdig på ' + fmtTime(el));
-        setState({ progress: 100, elapsed: el, log: log, run: 'done', qStatus: Object.assign({}, s.qStatus, (function () { var o = {}; o[active.id] = 'done'; return o; })()), qProgress: Object.assign({}, s.qProgress, (function () { var o = {}; o[active.id] = 100; return o; })()) });
-        _archive(active, el);
-        var next = _nextPending(active.id);
-        if (next) {
-          setTimeout(function () { setState({ run: 'idle', activeId: next, source: qName(S.queue, next), audioT: 0 }, function () { _runActive(); }); }, 800);
-        } else {
-          setTimeout(function () { afterDone(); }, 450);
+    var t0 = Date.now();
+    _t = setInterval(function () { if (token === _runToken) setState({ elapsed: (Date.now() - t0) / 1000 }); }, 250);
+    var formats = ['srt', 'txt', 'vtt'].filter(function (f) { return S.formats[f]; });
+    streamPost('/api/transcribe',
+      { source: active.path || active.name, model_id: S.model, language: S.language, formats: formats },
+      function (ev) {
+        if (token !== _runToken) return;
+        if (ev.type === 'progress') { setState({ progress: ev.pct || 0 }); }
+        else if (ev.type === 'log') { setState(function (s) { return { log: s.log.concat(['[' + fmtTime(s.elapsed) + '] ' + ev.msg]) }; }); }
+        else if (ev.type === 'error') {
+          clearInterval(_t);
+          setState(function (s) { return { run: 'error', runError: { title: 'Transkriberingen misslyckades', detail: ev.message || 'Okänt fel', where: 'run' }, qStatus: Object.assign({}, s.qStatus, kv(active.id, 'error')), qProgress: Object.assign({}, s.qProgress, kv(active.id, Math.round(s.progress))) }; });
+        } else if (ev.type === 'done') {
+          clearInterval(_t);
+          var r = ev.result || {};
+          var segs = (r.transcript || []).map(function (g) { return { time: fmtTime(g.start), spk: 0, text: g.text }; });
+          setState(function (s) { return { run: 'done', progress: 100, transcript: segs, resultFilesReal: r.files || [], qStatus: Object.assign({}, s.qStatus, kv(active.id, 'done')), qProgress: Object.assign({}, s.qProgress, kv(active.id, 100)), log: s.log.concat(['[klar] Färdig på ' + fmtTime(s.elapsed)]) }; });
+          _archive(active, S.elapsed);
+          var next = _nextPending(active.id);
+          if (next) { setTimeout(function () { setState({ run: 'idle', activeId: next, source: qName(S.queue, next), audioT: 0 }, function () { _runActive(); }); }, 800); }
+          else { setTimeout(function () { afterDone(); }, 450); }
         }
-      } else {
-        setState({ progress: p, elapsed: el, log: log, qProgress: Object.assign({}, s.qProgress, (function () { var o = {}; o[active.id] = Math.round(p); return o; })()) });
-      }
-    }, 420);
+      });
   }
-  function cancelRun() { clearInterval(_t); setState(function (s) { return { run: 'cancelled', qStatus: Object.assign({}, s.qStatus, (function () { var o = {}; o[s.activeId] = 'pending'; return o; })()) }; }); }
+  function cancelRun() { _runToken++; clearInterval(_t); setState(function (s) { return { run: 'cancelled', qStatus: Object.assign({}, s.qStatus, kv(s.activeId, 'pending')) }; }); }
   function resumeRun() { setState({ run: 'idle' }); _runActive(); }
   function retryRun() { setState({ run: 'idle', runError: null, progress: 0, elapsed: 0 }); _runActive(); }
 
-  // BACKEND: runPP simulates LLM post-process; replace with /api/postprocess SSE token stream.
+  // BACKEND: real LLM post-process via /api/postprocess SSE token stream (Ollama).
   function runPP() {
     if (S.pp === 'running') return;
     clearTimeout(_pp); clearInterval(_ppIv);
-    setState({ pp: 'running', ppPct: 0 });
-    _ppIv = setInterval(function () {
-      setState(function (s) {
-        var nv = Math.min(100, (s.ppPct || 0) + (4 + Math.random() * 7));
-        if (nv >= 100) { clearInterval(_ppIv); _pp = setTimeout(function () { setState({ pp: 'done', ppOut: ppText(), ppPct: 100 }); }, 220); return { ppPct: 100 }; }
-        return { ppPct: nv };
-      });
-    }, 130);
+    setState({ pp: 'running', ppPct: 0, ppOut: '' });
+    _ppIv = setInterval(function () { setState(function (s) { return { ppPct: Math.min(95, (s.ppPct || 0) + (3 + Math.random() * 5)) }; }); }, 200);
+    var op = { clean: 'cleanup', summary: 'summary' }[S.ppOp] || 'summary';
+    var text = getTranscript().map(function (l) { return l.text; }).join(' ');
+    var acc = '';
+    streamPost('/api/postprocess', { operation: op, transcript: text, model: S.ppModel }, function (ev) {
+      if (ev.type === 'token') { acc += ev.text; setState({ ppOut: acc }); }
+      else if (ev.type === 'error') { clearInterval(_ppIv); setState({ pp: 'done', ppPct: 100, ppOut: acc || ('Fel: ' + (ev.message || 'okänt')) }); }
+      else if (ev.type === 'done') { clearInterval(_ppIv); var r = ev.result || {}; setState({ pp: 'done', ppPct: 100, ppOut: r.text || acc }); }
+    });
   }
   function togglePPEnabled() { var next = !S.ppEnabled; setState({ ppEnabled: next }); if (next && S.run === 'done') { if (S.ppOp === 'chat') seedChat(); else runPP(); } }
   function afterDone() { if (!S.ppEnabled) return; if (S.ppOp === 'chat') seedChat(); else runPP(); }
@@ -592,7 +565,7 @@
     var op = S.ppOp;
     if (op === 'summary') return 'Samtalet inleds med en återkoppling till föregående veckas diskussion och övergår sedan till nästa steg i projektet. Deltagarna är överens om tidsplanen och fördelar ansvaret för de kommande uppgifterna. Avsnittet avslutas med en kort sammanfattning och tack till lyssnarna.';
     if (op === 'analyze') return 'Teman:  projektuppföljning · ansvarsfördelning · tidsplan\nTon:  konstruktiv och samstämmig\n\nÅtgärdspunkter\n•  Fördela ansvaret inför nästa steg\n•  Bekräfta tidsplanen\n•  Boka nästa möte';
-    return TRANSCRIPT.map(function (l) { return l.text; }).join(' ');
+    return getTranscript().map(function (l) { return l.text; }).join(' ');
   }
 
   // BACKEND: model download/install simulate; replace with /api/download/* SSE.
@@ -612,21 +585,17 @@
     setState(function (s) { return { downloading: Object.assign({}, s.downloading, kv(id, false)), installing: Object.assign({}, s.installing, kv(id, false)), dlFailed: Object.assign({}, s.dlFailed, kv(id, true)) }; });
   }
   function retryDownload(id) { setState(function (s) { return { dlFailed: Object.assign({}, s.dlFailed, kv(id, false)) }; }); _startDownload(id); }
+  // BACKEND: real model download via /api/download/{whisper,llm} SSE.
   function _startDownload(id) {
-    _dl = _dl || {};
     setState(function (s) { return { diskWarn: null, dlFailed: Object.assign({}, s.dlFailed, kv(id, false)), downloading: Object.assign({}, s.downloading, kv(id, true)), dlProg: Object.assign({}, s.dlProg, kv(id, 0)) }; });
-    _dl[id] = setInterval(function () {
-      setState(function (s) {
-        var cur = (s.dlProg && s.dlProg[id]) || 0;
-        var nv = Math.min(100, cur + (5 + Math.random() * 9));
-        if (nv >= 100) {
-          clearInterval(_dl[id]);
-          setTimeout(function () { runInstallTimer(id); }, 0);
-          return { downloading: Object.assign({}, s.downloading, kv(id, false)), dlProg: Object.assign({}, s.dlProg, kv(id, 100)), installing: Object.assign({}, s.installing, kv(id, true)), instProg: Object.assign({}, s.instProg, kv(id, 0)) };
-        }
-        return { dlProg: Object.assign({}, s.dlProg, kv(id, nv)) };
-      });
-    }, 190);
+    var isW = WHISPER.some(function (m) { return m.id === id; });
+    var url = isW ? '/api/download/whisper' : '/api/download/llm';
+    var body = isW ? { id: id } : { name: id };
+    streamPost(url, body, function (ev) {
+      if (ev.type === 'progress') { setState(function (s) { return { dlProg: Object.assign({}, s.dlProg, kv(id, ev.pct || 0)) }; }); }
+      else if (ev.type === 'error') { setState(function (s) { return { downloading: Object.assign({}, s.downloading, kv(id, false)), dlFailed: Object.assign({}, s.dlFailed, kv(id, true)) }; }); }
+      else if (ev.type === 'done') { setState(function (s) { return { downloading: Object.assign({}, s.downloading, kv(id, false)), installing: Object.assign({}, s.installing, kv(id, false)) }; }); loadModels(); }
+    });
   }
   function runInstallTimer(id) {
     _inst = _inst || {};
@@ -669,6 +638,76 @@
   function hideTip() { if (S.tip) setState({ tip: null }); }
 
   function kv(k, v) { var o = {}; o[k] = v; return o; }
+
+  /* ----------------------------------------------------------- backend API -- */
+  function modelLabel(id) { var m = WHISPER.concat(LLM).find(function (x) { return x.id === id; }); return (m && (m.label || m.id)) || id; }
+  function getTranscript() { return (S.transcript && S.transcript.length) ? S.transcript : TRANSCRIPT; }
+  function getJSON(url) { return fetch(url).then(function (r) { return r.json(); }); }
+
+  function streamPost(url, body, onEvent) {
+    return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      .then(function (resp) {
+        if (!resp.ok) {
+          return resp.json().then(function (j) { onEvent({ type: 'error', message: (j && j.error) || ('HTTP ' + resp.status) }); })
+            .catch(function () { onEvent({ type: 'error', message: 'HTTP ' + resp.status }); });
+        }
+        var reader = resp.body.getReader(), dec = new TextDecoder(), buf = '';
+        function pump() {
+          return reader.read().then(function (res) {
+            if (res.done) return;
+            buf += dec.decode(res.value, { stream: true });
+            var parts = buf.split('\n\n'); buf = parts.pop();
+            parts.forEach(function (chunk) {
+              var line = chunk.split('\n').filter(function (l) { return l.indexOf('data:') === 0; })[0];
+              if (line) { try { onEvent(JSON.parse(line.slice(5).trim())); } catch (e) {} }
+            });
+            return pump();
+          });
+        }
+        return pump();
+      })
+      .catch(function (e) { onEvent({ type: 'error', message: String((e && e.message) || e) }); });
+  }
+
+  function loadModels() {
+    return getJSON('/api/models').then(function (d) {
+      if (!d || !d.whisper) return;
+      WHISPER = d.whisper; LLM = d.llm || []; ONLINE = d.online || []; HW = d.hardware || HW;
+      var inst = {};
+      WHISPER.concat(LLM).forEach(function (m) { if (m.installed) inst[m.id] = true; });
+      if (S.installed[PYANNOTE_ID]) inst[PYANNOTE_ID] = true;
+      var patch = { catalogReady: true, installed: inst };
+      var instW = WHISPER.filter(function (m) { return inst[m.id]; });
+      if (instW.length && !inst[S.model]) {
+        patch.model = (WHISPER.find(function (m) { return m.recommended && inst[m.id]; }) || instW[0]).id;
+      }
+      var instL = LLM.filter(function (m) { return inst[m.id]; });
+      if (instL.length && !inst[S.ppModel]) {
+        patch.ppModel = (LLM.find(function (m) { return m.recommended && inst[m.id]; }) || instL[0]).id;
+      }
+      setState(patch);
+    }).catch(function () { /* dev/offline: keep mock catalog */ });
+  }
+
+  function addFilesObjs(items) {
+    var good = items.filter(function (it) { return isMedia(it.name) || /^https?:/i.test(it.path || ''); });
+    var skipped = items.length - good.length;
+    if (!good.length) { setState({ fileError: 'Filformatet stöds inte — välj ljud eller video (MP4, MKV, MOV, MP3, WAV, M4A …).', dragging: false }); return; }
+    setState(function (s) {
+      var existing = new Set(s.queue.map(function (q) { return q.path || q.name; }));
+      var adds = good.filter(function (g) { return !existing.has(g.path || g.name); })
+        .map(function (g, k) { return { id: 'q' + Date.now() + '_' + k, name: g.name, path: g.path || g.name }; });
+      var queue = s.queue.concat(adds);
+      var activeId = s.activeId || (queue[0] && queue[0].id) || null;
+      return { queue: queue, dragging: false, step: 'config', activeId: activeId, source: qName(queue, activeId) || s.source, fileError: skipped ? ('Hoppade över ' + skipped + ' fil(er) — formatet stöds inte.') : '' };
+    });
+  }
+
+  function saveResult(f) {
+    var api = window.pywebview && window.pywebview.api;
+    if (api && api.save_file) { try { api.save_file(f.name, f.path); } catch (e) {} }
+    downloadFile(f.name, f.size);   // toast confirmation
+  }
 
   /* --------------------------------------------------------- side-effects -- */
   function syncTheme() { document.documentElement.dataset.theme = S.theme; }
@@ -765,7 +804,7 @@
     var fitWord = function (t) { return t === 'ok' ? 'passar bra' : t === 'warn' ? 'tungt' : 'för stort'; };
     var modelOptions = rankedInstalled.map(function (o, i) {
       var m = o.m, f = o.f;
-      return { rank: i + 1, name: m.id, meta: m.size + ' · ' + fitWord(f.tier), dot: f.dot, style: ddItem(m.id === st.model), checkStyle: 'color:var(--accent);font-size:14.5px;opacity:' + (m.id === st.model ? '1' : '0'), onPick: function () { pickModel(m.id); } };
+      return { rank: i + 1, name: m.label || m.id, meta: m.size + ' · ' + fitWord(f.tier), dot: f.dot, style: ddItem(m.id === st.model), checkStyle: 'color:var(--accent);font-size:14.5px;opacity:' + (m.id === st.model ? '1' : '0'), onPick: function () { pickModel(m.id); } };
     });
 
     var langs = [['', 'Auto'], ['sv', 'Svenska'], ['en', 'Engelska']];
@@ -784,7 +823,9 @@
 
     var base = baseName();
     var fmtMeta = { srt: ['SRT', '38 KB'], txt: ['TXT', '21 KB'], vtt: ['VTT', '40 KB'] };
-    var resultFiles = ['srt', 'txt', 'vtt'].filter(function (f) { return st.formats[f]; }).map(function (f) { return { type: fmtMeta[f][0], name: base + '.' + f, size: fmtMeta[f][1], onDownload: function () { downloadFile(base + '.' + f, fmtMeta[f][1]); } }; });
+    var resultFiles = (st.resultFilesReal && st.resultFilesReal.length)
+      ? st.resultFilesReal.map(function (f) { return { type: (f.ext || '').toUpperCase(), name: f.name, size: f.size, onDownload: function () { saveResult(f); } }; })
+      : ['srt', 'txt', 'vtt'].filter(function (f) { return st.formats[f]; }).map(function (f) { return { type: fmtMeta[f][0], name: base + '.' + f, size: fmtMeta[f][1], onDownload: function () { downloadFile(base + '.' + f, fmtMeta[f][1]); } }; });
 
     var hw = hardwareView();
     var stepOrder = ['source', 'config', 'process'];
@@ -806,7 +847,7 @@
       var pct = ing ? (st.instProg[m.id] || 0) : (st.dlProg[m.id] || 0);
       var phase = dl ? 'downloading' : ing ? 'installing' : failed ? 'failed' : inst ? 'installed' : 'idle';
       return {
-        rank: i + 1, name: m.id, size: m.size, dot: f.dot, recommended: !!m.recommended, verdict: f.verdict, verdictStyle: verdictPill(f.tier), useFor: m.useFor, chips: f.chips,
+        rank: i + 1, name: m.label || m.id, size: m.size, dot: f.dot, recommended: !!m.recommended, verdict: f.verdict, verdictStyle: verdictPill(f.tier), useFor: m.useFor, chips: f.chips,
         rowStyle: rowStyleRich(i === rankedWhisper.length - 1),
         phase: phase, pct: pct, detail: ing ? instDetail(pct) : dlDetail(m.size, pct),
         onAction: function () { if (failed) retryDownload(m.id); else if (!inst && !dl && !ing) modelAction(m.id); },
@@ -824,7 +865,7 @@
       var pct = ing ? (st.instProg[m.id] || 0) : (st.dlProg[m.id] || 0);
       var phase = dl ? 'downloading' : ing ? 'installing' : disabled ? 'incompatible' : failed ? 'failed' : inst ? 'installed' : 'idle';
       return {
-        rank: i + 1, name: m.id, size: m.size, dot: f.dot, recommended: !!m.recommended, verdict: f.verdict, verdictStyle: verdictPill(f.tier), useFor: m.useFor, chips: f.chips,
+        rank: i + 1, name: m.label || m.id, size: m.size, dot: f.dot, recommended: !!m.recommended, verdict: f.verdict, verdictStyle: verdictPill(f.tier), useFor: m.useFor, chips: f.chips,
         rowStyle: rowStyleRich(i === rankedLLM.length - 1),
         phase: phase, pct: pct, detail: ing ? instDetail(pct) : dlDetail(m.size, pct),
         onAction: function () { if (failed) retryDownload(m.id); else if (!disabled && !inst && !dl && !ing) modelAction(m.id); },
@@ -852,7 +893,7 @@
       var inst = st.installed[m.id], dl = st.downloading[m.id], ing = st.installing[m.id];
       var pct = ing ? (st.instProg[m.id] || 0) : (st.dlProg[m.id] || 0);
       var phase = dl ? 'downloading' : ing ? 'installing' : inst ? 'installed' : 'idle';
-      return { rank: i + 1, name: m.id, size: m.size, tag: m.tag, dot: f.dot, verdict: f.verdict, verdictStyle: verdictPill(f.tier), rowStyle: rowStyleRich(i === onlinePool.length - 1), phase: phase, pct: pct, detail: ing ? instDetail(pct) : dlDetail(m.size, pct), onAction: function () { if (!inst && !dl && !ing) modelAction(m.id); } };
+      return { rank: i + 1, name: m.label || m.id, size: m.size, tag: m.tag, dot: f.dot, verdict: f.verdict, verdictStyle: verdictPill(f.tier), rowStyle: rowStyleRich(i === onlinePool.length - 1), phase: phase, pct: pct, detail: ing ? instDetail(pct) : dlDetail(m.size, pct), onAction: function () { if (!inst && !dl && !ing) modelAction(m.id); } };
     });
     var onlineSortOptions = [['fit', 'Passar din dator'], ['size', 'Storlek']].map(function (p) { return { label: p[1], style: segBtn(sortMode === p[0], '34px'), onPick: function () { setState({ onlineSort: p[0] }); } }; });
     var USECASES = [['all', 'Alla'], ['text', 'Textresonemang'], ['sv', 'Svensk text'], ['vision', 'Videoanalys · bild'], ['omni', 'Videoanalys · bild + tal']];
@@ -860,7 +901,7 @@
 
     var OPS = [['clean', 'Korrekturläs', 'Rättar stavfel & småfel — skriver inte om'], ['summary', 'Summera', 'Korta ner till det viktiga'], ['chat', 'Chatta', 'Ställ frågor om innehållet']];
     var ppOps = OPS.map(function (p) { return { key: p[0], label: p[1], sub: p[2], onPick: function () { pickOp(p[0]); }, selected: st.ppOp === p[0], unselected: st.ppOp !== p[0] }; });
-    var ppModelOptions = LLM.filter(function (m) { return m.fit !== 'bad'; }).map(function (m) { return { name: m.id, size: m.size, style: ddItem(m.id === st.ppModel), onPick: function () { pickPPModel(m.id); } }; });
+    var ppModelOptions = LLM.filter(function (m) { return m.fit !== 'bad'; }).map(function (m) { return { name: m.label || m.id, size: m.size, style: ddItem(m.id === st.ppModel), onPick: function () { pickPPModel(m.id); } }; });
     var ppOutTitles = { summary: 'Sammanfattning', clean: 'Korrekturläst text', analyze: 'Analys' };
     var ppOpLabel = (ppOps.find(function (o) { return o.key === st.ppOp; }) || {}).label;
     var chat = st.chat.map(function (m) {
@@ -883,7 +924,7 @@
       { label: caps.files.length + ' filformat', style: neutralChip },
     ];
     var chatModelOptions = LLM.map(function (m) {
-      return { name: m.id, size: m.size, visionStyle: 'font-size:10px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--accent);background:var(--accent-weak);border-radius:5px;padding:1px 6px;flex:0 0 auto;' + ((m.caps && m.caps.vision) ? '' : 'display:none'), style: ddItem(m.id === st.ppModel), checkStyle: 'color:var(--accent);font-size:14.5px;opacity:' + (m.id === st.ppModel ? '1' : '0'), onPick: function () { pickChatModel(m.id); } };
+      return { name: m.label || m.id, size: m.size, visionStyle: 'font-size:10px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--accent);background:var(--accent-weak);border-radius:5px;padding:1px 6px;flex:0 0 auto;' + ((m.caps && m.caps.vision) ? '' : 'display:none'), style: ddItem(m.id === st.ppModel), checkStyle: 'color:var(--accent);font-size:14.5px;opacity:' + (m.id === st.ppModel ? '1' : '0'), onPick: function () { pickChatModel(m.id); } };
     });
     var chatFileChips = caps.files.map(function (f) { return { label: f, onPick: function () { attachFile(f); } }; });
     var chatAttachments = st.chatAttach.map(function (a, i) { return { label: a.label, dotStyle: 'width:7px;height:7px;border-radius:2px;flex:0 0 auto;background:' + (a.kind === 'image' ? 'var(--accent)' : 'var(--ink-3)'), onRemove: function () { removeAttach(i); } }; });
@@ -904,10 +945,10 @@
     var transcriptFileName = viewingHist ? viewingHist.name : (baseName() + '.txt');
     var aT = st.audioT;
     var curLine = -1;
-    for (var k2 = 0; k2 < TRANSCRIPT.length; k2++) { if (parseTS(TRANSCRIPT[k2].time) <= aT) curLine = k2; else break; }
+    for (var k2 = 0; k2 < getTranscript().length; k2++) { if (parseTS(getTranscript()[k2].time) <= aT) curLine = k2; else break; }
     var q0 = st.searchQuery.trim();
     var mIdx = 0, prevSpk = -1;
-    var tLines = TRANSCRIPT.map(function (ln, idx) {
+    var tLines = getTranscript().map(function (ln, idx) {
       var text = lineText(idx);
       var isCurrent = idx === curLine && (st.audioPlaying || aT > 0);
       var showSpk = showSpeakers && ln.spk !== prevSpk;
@@ -1033,7 +1074,7 @@
       stepItems: stepItems, restart: restart, goSource: goSource, sourceLabel: st.source || 'okänd källa',
       openPicker: openPicker, fileRef: fileRef, onPickFile: onPickFile, onDragOver: onDragOver, onDragLeave: onDragLeave, onDrop: onDrop,
       dropzoneStyle: 'position:relative;border:1.5px dashed ' + (st.dragging ? 'var(--accent)' : 'var(--line-2)') + ';border-radius:20px;background:' + (st.dragging ? 'var(--accent-weak)' : 'var(--surface)') + ';flex:1 1 auto;min-height:200px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 24px;text-align:center;box-shadow:var(--shadow-sm);cursor:pointer;user-select:none;-webkit-user-select:none;transition:border-color .12s,background .12s',
-      curModelName: curModel.id, curModelMeta: curModel.size + ' · ' + (curModel.id === recommendModel(st.language) ? 'matchar språket' : 'installerad'), curModelDot: curFit.dot,
+      curModelName: curModel.label || curModel.id, curModelMeta: curModel.size + ' · ' + (curModel.id === recommendModel(st.language) ? 'matchar språket' : 'installerad'), curModelDot: curFit.dot,
       toggleModelDD: toggleModelDD, modelDDOpen: st.openDD === 'model', modelOptions: modelOptions,
       langOptions: langOptions, formatChips: formatChips,
 
@@ -1057,7 +1098,7 @@
       nextMatch: nextMatch, prevMatch: prevMatch, matchLabel: matchLabel, tLines: tLines,
 
       showResults: isDone, resultCount: resultFiles.length, resultDuration: fmtTime(st.elapsed), resultFiles: resultFiles,
-      transcript: TRANSCRIPT.slice(0, 3).map(function (ln, idx) { return { time: ln.time, text: lineText(idx), showSpk: st.diarize, spk: spkName(ln.spk), spkStyle: 'font-size:12.5px;font-weight:600;color:' + speakerColor(ln.spk) + ';flex:0 0 auto;width:62px;padding-top:2px' }; }),
+      transcript: getTranscript().slice(0, 3).map(function (ln, idx) { return { time: ln.time, text: lineText(idx), showSpk: st.diarize, spk: spkName(ln.spk), spkStyle: 'font-size:12.5px;font-weight:600;color:' + speakerColor(ln.spk) + ';flex:0 0 auto;width:62px;padding-top:2px' }; }),
 
       ppEnabled: st.ppEnabled, ppOff: !st.ppEnabled, togglePPEnabled: togglePPEnabled,
       ppSwitchTrack: 'position:relative;width:42px;height:25px;border-radius:999px;flex:0 0 auto;background:' + (st.ppEnabled ? 'var(--ink)' : 'var(--line-2)') + ';transition:background .15s',
@@ -1067,12 +1108,12 @@
       ppRunBtnStyle: primaryBtn(st.pp === 'running') + ';min-width:152px', ppRunIdle: st.pp !== 'running', ppPct: Math.round(st.ppPct || 0),
       ppRingStyle: 'position:relative;width:22px;height:22px;border-radius:50%;flex:0 0 auto;background:conic-gradient(var(--accent) ' + (Math.round(st.ppPct || 0) * 3.6) + 'deg, rgba(255,255,255,.2) 0);animation:ppglow 1.6s ease-in-out infinite;transition:background .13s linear',
       ppShowText: st.ppOp !== 'chat' && st.pp !== 'idle', ppShowChat: st.ppOp === 'chat', ppRunning: st.pp === 'running', ppShowOut: st.pp === 'done',
-      ppTextDone: st.pp === 'done' && st.ppOp !== 'clean', ppCleanDone: st.pp === 'done' && st.ppOp === 'clean',
-      ppCleanLines: TRANSCRIPT.map(function (ln, idx) { return { time: ln.time, text: lineText(idx), showSpk: st.diarize, spk: spkName(ln.spk), spkStyle: 'font-size:12.5px;font-weight:600;color:' + speakerColor(ln.spk) + ';flex:0 0 auto;width:62px;padding-top:2px' }; }),
+      ppTextDone: st.pp === 'done' && st.ppOp !== 'chat', ppCleanDone: false,
+      ppCleanLines: getTranscript().map(function (ln, idx) { return { time: ln.time, text: lineText(idx), showSpk: st.diarize, spk: spkName(ln.spk), spkStyle: 'font-size:12.5px;font-weight:600;color:' + speakerColor(ln.spk) + ';flex:0 0 auto;width:62px;padding-top:2px' }; }),
       ppCleanFiles: resultFiles, ppOut: st.ppOut, ppOutTitle: ppOutTitles[st.ppOp],
       chat: chat, chatTyping: st.chatTyping, chatInput: st.chatInput, onChatInput: onChatInput, onChatKey: onChatKey, onChatSend: sendChat, chatSendStyle: primaryBtn(false),
       chatModalOpen: st.chatModalOpen, openChatModal: openChatModal, closeChatModal: closeChatModal, stop: stopProp, chatThreadRef: chatThreadRef, chatOpenBtnStyle: primaryBtn(false),
-      chatModelName: cm.id, chatModelDesc: cm.useFor,
+      chatModelName: cm.label || cm.id, chatModelDesc: cm.useFor,
       chatKind: caps.vision ? (caps.files.some(function (f) { return /ljud|wav|mp3/i.test(f); }) ? 'bild + tal' : 'bildanalys') : 'textmodell',
       chatCtx: cm.ctx, chatPlusAttach: caps.vision ? attachImage : function () { attachFile((caps.files && caps.files[0]) || 'TXT'); },
       chatHasVision: caps.vision, chatNoVision: !caps.vision, chatCaps: chatCaps, chatModelOptions: chatModelOptions, chatModelDDOpen: st.openDD === 'chatmodel', toggleChatModelDD: toggleChatModelDD,
@@ -2256,6 +2297,7 @@ function viewModals(v){ return `
     syncTheme();
     _prevTab = S.tab; _prevStep = S.step; _prevOp = S.ppOp;
     render();
+    loadModels();   // swap mock catalog for real /api/models data
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 

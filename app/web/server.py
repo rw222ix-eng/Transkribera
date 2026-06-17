@@ -33,10 +33,48 @@ def _base_dir() -> Path:
     return Path(__file__).resolve().parent.parent.parent
 
 
-def _hw_dict(hw) -> dict:
-    return {"gpu_name": hw.gpu_name, "vram_mb": hw.vram_mb, "has_cuda": hw.has_cuda,
-            "ram_mb": hw.ram_mb, "cpu_cores": hw.cpu_cores,
-            "free_disk_mb": hw.free_disk_mb}
+def _gb(mb) -> float:
+    return round((mb or 0) / 1024, 1)
+
+
+def _size_str(mb: int) -> str:
+    return f"{mb / 1024:.1f} GB" if mb >= 1000 else f"{mb} MB"
+
+
+def _file_size_str(path) -> str:
+    try:
+        b = Path(path).stat().st_size
+    except OSError:
+        return ""
+    if b >= 1024 * 1024:
+        return f"{b / (1024 * 1024):.1f} MB"
+    return f"{max(1, b // 1024)} KB"
+
+
+def _hw_view(hw) -> dict:
+    """Hardware in the shape the redesigned panel expects (GB units + disks)."""
+    disks = [{"id": d.id, "drive": d.drive, "name": d.name,
+              "total": _gb(d.total_mb), "free": _gb(d.free_mb)}
+             for d in getattr(hw, "disks", [])]
+    if not disks:
+        disks = [{"id": "d", "drive": "Disk", "name": "Lokal disk",
+                  "total": _gb(getattr(hw, "total_disk_mb", 0)), "free": _gb(hw.free_disk_mb)}]
+    cpu = hw.cpu_name or "CPU"
+    if hw.cpu_cores:
+        cpu = f"{cpu} · {hw.cpu_cores} kärnor"
+    vfree = getattr(hw, "vram_free_mb", 0) or hw.vram_mb
+    rfree = getattr(hw, "ram_free_mb", 0) or hw.ram_mb
+    return {
+        "gpu": hw.gpu_name or "Ingen GPU",
+        "arch": getattr(hw, "gpu_arch", "") or ("GPU" if hw.has_cuda else "CPU"),
+        "cc": getattr(hw, "compute_capability", "") or "",
+        "cuda": getattr(hw, "cuda_version", "") or ("ja" if hw.has_cuda else "—"),
+        "precisions": "fp16 · int8 · int4" if hw.has_cuda else "int8",
+        "cpu": cpu, "cores": hw.cpu_cores, "has_cuda": hw.has_cuda,
+        "vram": {"total": _gb(hw.vram_mb), "free": _gb(vfree)},
+        "ram": {"total": _gb(hw.ram_mb), "free": _gb(rfree)},
+        "disks": disks,
+    }
 
 
 def _child_cwd(base: Path) -> Path:
@@ -51,6 +89,7 @@ def _run_transcribe_subprocess(cmd, base: Path, emit) -> list[str]:
         cmd, cwd=str(_child_cwd(base)), stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace")
     written: list[str] = []
+    segments: list[dict] = []
     assert proc.stdout is not None
     for line in proc.stdout:
         line = line.rstrip("\n")
@@ -59,6 +98,13 @@ def _run_transcribe_subprocess(cmd, base: Path, emit) -> list[str]:
         elif line.startswith("FILE "):
             written.append(line[5:])
             emit({"type": "log", "msg": "Skrev " + line[5:]})
+        elif line.startswith("SEG "):
+            bits = line[4:].split(" ", 2)
+            try:
+                segments.append({"start": float(bits[0]), "end": float(bits[1]),
+                                 "text": bits[2] if len(bits) > 2 else ""})
+            except (ValueError, IndexError):
+                pass
         elif line.startswith("LOG "):
             emit({"type": "log", "msg": line[4:]})
         elif line == "DONE":
@@ -66,7 +112,7 @@ def _run_transcribe_subprocess(cmd, base: Path, emit) -> list[str]:
         elif line:
             emit({"type": "log", "msg": line})
     proc.wait()
-    return written
+    return written, segments
 
 
 def _sse_response(job) -> StreamingResponse:
@@ -112,16 +158,18 @@ def create_app(base_dir: Path | None = None) -> FastAPI:
 
     @app.get("/api/hardware")
     def api_hardware():
-        return _hw_dict(hardware.scan_hardware(models_root))
+        return _hw_view(hardware.scan_hardware(models_root))
 
     @app.get("/api/models")
     def api_models():
         hw = hardware.scan_hardware(models_root)
         wevals, wbest = recommend.recommend_whisper(WHISPER_MODELS, hw)
         whisper = [{
-            "id": e.spec.id, "label": e.spec.label, "download_mb": e.spec.download_mb,
-            "fit": e.fit.value, "device": e.device, "compute_type": e.compute_type,
-            "reason": e.reason,
+            "id": e.spec.id, "label": e.spec.label, "size": _size_str(e.spec.download_mb),
+            "download_mb": e.spec.download_mb, "vram": e.spec.vram_gb, "rtf": e.spec.rtf,
+            "score": e.spec.score or e.spec.rank, "lang": e.spec.languages,
+            "fit": e.fit.value, "reason": e.reason, "device": e.device,
+            "compute_type": e.compute_type, "useFor": e.spec.note or e.spec.label,
             "installed": whisper_manager.is_installed(e.spec, models_root),
             "recommended": bool(wbest and e.spec.id == wbest.id),
         } for e in wevals]
@@ -130,17 +178,22 @@ def create_app(base_dir: Path | None = None) -> FastAPI:
         installed = ollama_client.list_models() if running else []
         levals, lbest = recommend.recommend_llm(LLM_MODELS, hw)
         llm = [{
-            "name": e.spec.name, "label": e.spec.label, "download_mb": e.spec.download_mb,
-            "fit": e.fit.value, "device": e.device, "reason": e.reason,
+            "id": e.spec.name, "name": e.spec.name, "label": e.spec.label,
+            "size": _size_str(e.spec.download_mb), "download_mb": e.spec.download_mb,
+            "vram": e.spec.vram_gb, "toks": e.spec.toks, "ctx": e.spec.ctx,
+            "uses": list(e.spec.uses), "caps": {"vision": e.spec.vision, "files": list(e.spec.files)},
+            "score": e.spec.rank, "fit": e.fit.value, "reason": e.reason,
+            "useFor": e.spec.note or e.spec.label,
             "installed": e.spec.name in installed,
             "recommended": bool(lbest and e.spec.name == lbest.name),
         } for e in levals]
 
-        online = online_catalog.fetch_ollama_library(models_root)
+        extras = online_catalog.extra_online_models(
+            online_catalog.fetch_ollama_library(models_root), installed=installed)
+        online = [{"id": n, "size": "", "tag": "Ollama-bibliotek", "uses": []} for n in extras]
         return {
-            "hardware": _hw_dict(hw), "ollama_running": running,
-            "whisper": whisper, "llm": llm,
-            "llm_online_extra": online_catalog.extra_online_models(online, installed=installed),
+            "hardware": _hw_view(hw), "ollama_running": running,
+            "whisper": whisper, "llm": llm, "online": online,
         }
 
     @app.post("/api/download/whisper")
@@ -203,14 +256,17 @@ def create_app(base_dir: Path | None = None) -> FastAPI:
             out_base = media.with_suffix("")
             cmd = transcriber.build_transcribe_cmd(
                 media, model_dir, rec.device, rec.compute_type, language, out_base, formats)
-            written = _run_transcribe_subprocess(cmd, base, emit)
+            written, segments = _run_transcribe_subprocess(cmd, base, emit)
             if not written:
                 expected = [str(out_base.with_suffix(transcriber.WRITERS[f][1])) for f in formats]
                 if all(Path(p).exists() for p in expected):
                     written = expected
                 else:
                     raise RuntimeError("Transkriberingen gav inget resultat")
-            return {"files": written}
+            files = [{"path": p, "name": Path(p).name,
+                      "ext": Path(p).suffix.lstrip("."), "size": _file_size_str(p)}
+                     for p in written]
+            return {"files": files, "transcript": segments}
         return _sse_response(job)
 
     @app.post("/api/postprocess")
