@@ -553,16 +553,25 @@
   function seedChat() { if (S.chat.length) return; setState({ chat: [{ role: 'assistant', text: 'Transkriptet är klart. Fråga mig vad som helst — t.ex. "Vad var besluten?" eller "Sammanfatta på en mening."' }] }); }
   function onChatInput(e) { setState({ chatInput: e.target.value }); }
   function onChatKey(e) { if (e.key === 'Enter') sendChat(); }
+  // BACKEND: real conversational chat via /api/chat (Ollama /api/chat) over the transcript.
   function sendChat() {
     var q = S.chatInput.trim();
     var att = S.chatAttach;
     if (!q && !att.length) return;
-    clearTimeout(_chat);
     var attNote = att.length ? att.map(function (a) { return a.label; }).join(', ') : '';
     var userText = q || (att.length ? 'Titta på det bifogade.' : '');
-    var hadImage = att.some(function (a) { return a.kind === 'image'; });
-    setState(function (s) { return { chat: s.chat.concat([{ role: 'user', text: userText, attach: attNote }]), chatInput: '', chatAttach: [], chatTyping: true }; });
-    _chat = setTimeout(function () { setState(function (s) { return { chat: s.chat.concat([{ role: 'assistant', text: hadImage ? imageReply() : chatReply(q) }]), chatTyping: false }; }); }, 950);
+    // push the user turn + an empty assistant placeholder we stream into
+    setState(function (s) { return { chat: s.chat.concat([{ role: 'user', text: userText, attach: attNote }, { role: 'assistant', text: '' }]), chatInput: '', chatAttach: [], chatTyping: true }; });
+    var msgs = S.chat.filter(function (m) { return !(m.role === 'assistant' && !m.text); })
+      .map(function (m) { return { role: m.role, content: m.text + (m.attach ? ' [bifogat: ' + m.attach + ']' : '') }; });
+    var transcript = getTranscript().map(function (l) { return l.text; }).join(' ');
+    var acc = '';
+    var setLast = function (text, typing) { setState(function (s) { var c = s.chat.slice(); if (c.length) c[c.length - 1] = { role: 'assistant', text: text }; return { chat: c, chatTyping: !!typing }; }); };
+    streamPost('/api/chat', { messages: msgs, transcript: transcript, model: S.ppModel }, function (ev) {
+      if (ev.type === 'token') { acc += ev.text; setLast(acc, false); }
+      else if (ev.type === 'error') { setLast(acc || ('Fel: ' + (ev.message || 'okänt')), false); }
+      else if (ev.type === 'done') { var r = ev.result || {}; setLast(r.text || acc, false); }
+    });
   }
   function imageReply() { return 'Jag ser bilden. Den verkar visa en skärmdump kopplad till mötet — vill du att jag beskriver innehållet, läser av text i den (OCR) eller jämför den mot transkriptet?'; }
   function chatReply(q) {

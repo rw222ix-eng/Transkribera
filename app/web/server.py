@@ -333,4 +333,19 @@ def create_app(base_dir: Path | None = None) -> FastAPI:
             return {"text": text}
         return _sse_response(job)
 
+    @app.post("/api/chat")
+    async def api_chat(req: Request):
+        body = await req.json()
+        messages = body.get("messages") or []
+        transcript = body.get("transcript", "")
+        model = body.get("model", "")
+        if not model or not messages:
+            return JSONResponse({"error": "modell och meddelande krävs"}, status_code=400)
+
+        def job(emit):
+            text = ollama_client.chat(model, messages, transcript=transcript,
+                                      token_cb=lambda t: emit({"type": "token", "text": t}))
+            return {"text": text}
+        return _sse_response(job)
+
     return app

@@ -38,6 +38,40 @@ def pull(name: str, progress_cb: Callable[[int, str], None] | None = None,
                 progress_cb(pct, status)
 
 
+_CHAT_SYSTEM = (
+    "Du är en hjälpsam svensk assistent som svarar på frågor om ett transkript. "
+    "Svara ALLTID på svenska och använd aldrig något annat språk. Grunda dina svar "
+    "i transkriptet nedan; säg till om något inte framgår av det.\n\nTRANSKRIPT:\n"
+)
+
+
+def chat(model: str, messages: list[dict], transcript: str = "",
+         token_cb: Callable[[str], None] | None = None,
+         base_url: str = BASE_URL) -> str:
+    """Conversational turn via Ollama /api/chat. `messages` is the prior dialogue
+    ([{role, content}, …]); the transcript is injected as a Swedish system message."""
+    msgs = [{"role": "system", "content": _CHAT_SYSTEM + (transcript or "(tomt)")}]
+    msgs += [{"role": m.get("role", "user"), "content": m.get("content", "")} for m in messages]
+    text = []
+    with requests.post(f"{base_url}/api/chat",
+                       json={"model": model, "messages": msgs, "stream": True,
+                             "options": {"temperature": 0.3}},
+                       stream=True, timeout=None) as r:
+        r.raise_for_status()
+        for line in r.iter_lines():
+            if not line:
+                continue
+            data = json.loads(line)
+            chunk = (data.get("message") or {}).get("content", "")
+            if chunk:
+                text.append(chunk)
+                if token_cb:
+                    token_cb(chunk)
+            if data.get("done"):
+                break
+    return "".join(text)
+
+
 def generate(model: str, prompt: str,
              token_cb: Callable[[str], None] | None = None,
              base_url: str = BASE_URL,
