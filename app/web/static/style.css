@@ -1,103 +1,74 @@
-/* Transkribera – local web UI. Theme via the variables below. */
-:root {
-  --bg: #1e1f22;
-  --panel: #26282c;
-  --panel-2: #2e3137;
-  --border: #3a3d44;
-  --text: #e6e7ea;
-  --muted: #9aa0a8;
-  --accent: #6aa3ff;
-  --accent-press: #4d86e6;
-  --green: #46c463;
-  --yellow: #e6b450;
-  --red: #e06a6a;
-  --radius: 10px;
-  --gap: 12px;
+/* ============================================================
+   Transkribera — design system
+   Tokens, @font-face, globals and all keyframes are reproduced
+   verbatim from the Claude Design handoff (Transkribera.dc.html).
+   Everything else is styled inline in the rendered markup (app.js),
+   exactly as in the prototype.
+   ============================================================ */
+
+/* ---- Local Geist (offline; no Google Fonts) ---- */
+@font-face{font-family:'Geist';font-style:normal;font-weight:400;font-display:swap;src:url('/static/fonts/geist-400.woff2') format('woff2')}
+@font-face{font-family:'Geist';font-style:normal;font-weight:500;font-display:swap;src:url('/static/fonts/geist-500.woff2') format('woff2')}
+@font-face{font-family:'Geist';font-style:normal;font-weight:600;font-display:swap;src:url('/static/fonts/geist-600.woff2') format('woff2')}
+
+:root{
+  --canvas:#F7F7F4; --surface:#FFFFFF; --sunken:#F0F0EB;
+  --ink:#0B0B0D; --ink-2:#0B0B0D; --ink-3:#2C2C30;
+  --line:#E7E7E1; --line-2:#DBDBD4;
+  --accent:#3B5BDB; --accent-weak:#EDF0FC;
+  --ok:#2E9E6A; --warn:#BD831C; --bad:#CF5A52;
+  --btn-bg:#17171B; --btn-fg:#FFFFFF;
+  --track:#EFEFEA;
+  --shadow-sm:0 1px 2px rgba(20,20,30,.06);
+  --shadow:0 2px 4px rgba(20,20,30,.04),0 14px 34px -20px rgba(20,20,30,.22);
 }
-
-* { box-sizing: border-box; }
-
-body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--text);
-  font: 15px/1.5 "Segoe UI", system-ui, sans-serif;
+[data-theme="dark"]{
+  --canvas:#0D0D10; --surface:#16161A; --sunken:#1D1D22;
+  --ink:#FFFFFF; --ink-2:#FFFFFF; --ink-3:#D6D6DA;
+  --line:#26262E; --line-2:#313139;
+  --accent:#8298FF; --accent-weak:#1A1E2E;
+  --ok:#48BE8A; --warn:#D7A24A; --bad:#E0746C;
+  --btn-bg:#F3F3F4; --btn-fg:#141419;
+  --track:#1D1D23;
+  --shadow-sm:0 1px 2px rgba(0,0,0,.5);
+  --shadow:0 2px 6px rgba(0,0,0,.35),0 18px 44px -22px rgba(0,0,0,.8);
 }
+*{box-sizing:border-box}
+html{scrollbar-gutter:stable}
+html,body{margin:0}
+body{background:var(--canvas)}
+*:focus-visible{outline:none}
+[data-hidescroll]{scrollbar-width:none}
+[data-hidescroll]::-webkit-scrollbar{display:none}
+::selection{background:var(--accent-weak);color:var(--ink)}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:99px;border:3px solid transparent;background-clip:content-box}
 
-.topbar {
-  display: flex; align-items: center; gap: 24px;
-  padding: 12px 20px; border-bottom: 1px solid var(--border);
-  position: sticky; top: 0; background: var(--bg); z-index: 5;
-}
-.topbar h1 { font-size: 18px; margin: 0; font-weight: 600; }
-.tabs { display: flex; gap: 6px; }
-.tab {
-  background: transparent; color: var(--muted); border: 0;
-  padding: 8px 16px; border-radius: var(--radius); cursor: pointer; font-size: 15px;
-}
-.tab.active { background: var(--panel-2); color: var(--text); }
-.tab:hover { color: var(--text); }
+/* themed wrapper — the prototype's outer <div data-theme> is our #root */
+#root{min-height:100vh;background:var(--canvas);color:var(--ink);font-family:'Geist',system-ui,-apple-system,sans-serif;font-size:16.5px;line-height:1.55;-webkit-font-smoothing:antialiased;letter-spacing:-0.01em}
 
-main { max-width: 920px; margin: 0 auto; padding: 20px; }
-.tab-panel { display: none; }
-.tab-panel.active { display: block; }
-
-.row { display: flex; align-items: center; gap: var(--gap); margin: 10px 0; flex-wrap: wrap; }
-.grow { flex: 1; }
-.hint, .muted { color: var(--muted); font-size: 13px; }
-.hint { margin: -4px 0 8px; }
-
-label { display: inline-flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
-label.chk { flex-direction: row; align-items: center; gap: 6px; color: var(--text); font-size: 15px; }
-
-input[type=text], select {
-  background: var(--panel); color: var(--text);
-  border: 1px solid var(--border); border-radius: 8px; padding: 9px 11px; font-size: 15px;
-}
-input[type=text]:focus, select:focus { outline: none; border-color: var(--accent); }
-#online-search { width: 100%; margin: 8px 0; }
-
-button {
-  background: var(--panel-2); color: var(--text);
-  border: 1px solid var(--border); border-radius: 8px;
-  padding: 9px 16px; font-size: 15px; cursor: pointer;
-}
-button:hover { border-color: var(--accent); }
-button.primary { background: var(--accent); border-color: var(--accent); color: #06122a; font-weight: 600; }
-button.primary:hover { background: var(--accent-press); }
-button:disabled { opacity: .5; cursor: default; }
-
-.card {
-  background: var(--panel); border: 1px solid var(--border);
-  border-radius: var(--radius); padding: 14px; margin: 8px 0 18px;
-}
-h2 { font-size: 15px; margin: 22px 0 6px; font-weight: 600; }
-
-.progress { height: 6px; background: var(--panel-2); border-radius: 4px; overflow: hidden; margin: 12px 0; }
-.bar { height: 100%; width: 0; background: var(--accent); transition: width .2s; }
-
-.log {
-  background: #15171a; border: 1px solid var(--border); border-radius: 8px;
-  padding: 10px; min-height: 60px; max-height: 280px; overflow: auto;
-  font: 13px/1.45 "Cascadia Code", Consolas, monospace; color: var(--muted);
-  white-space: pre-wrap; margin: 8px 0;
-}
-.log.small { min-height: 0; max-height: 120px; }
-.results a { display: block; color: var(--accent); margin: 2px 0; }
-
-.model-row {
-  display: flex; align-items: center; gap: 10px;
-  padding: 8px 4px; border-bottom: 1px solid var(--border);
-}
-.model-row:last-child { border-bottom: 0; }
-.model-row .label { flex: 1; }
-.model-row .meta { color: var(--muted); font-size: 13px; }
-.dot { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto; }
-.dot.green { background: var(--green); }
-.dot.yellow { background: var(--yellow); }
-.dot.red { background: var(--red); }
-.dot.unknown { background: var(--muted); }
-.star { color: var(--yellow); }
-
-.post { margin-top: 18px; border-top: 1px solid var(--border); padding-top: 10px; }
-.post summary { cursor: pointer; color: var(--muted); }
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes flow{0%{background-position:0 0}100%{background-position:28px 0}}
+@keyframes fadeup{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes ppglow{0%,100%{box-shadow:0 0 0 0 rgba(59,91,219,.5)}50%{box-shadow:0 0 0 5px rgba(59,91,219,0)}}
+@keyframes modalback{from{opacity:0}to{opacity:1}}
+@keyframes modalpop{0%{opacity:0;transform:translateY(26px) scale(.93);filter:blur(7px)}55%{filter:blur(0)}100%{opacity:1;transform:translateY(0) scale(1);filter:blur(0)}}
+/* Tooltip-intoning som bevarar centreringen translate(-50%,-100%) så den inte hoppar */
+@keyframes tipin{from{opacity:0;transform:translate(-50%,-100%) translateY(5px)}to{opacity:1;transform:translate(-50%,-100%) translateY(0)}}
+@keyframes wave{0%,100%{transform:scaleY(.4)}50%{transform:scaleY(1)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
+@keyframes tabin{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}
+@keyframes toastin{from{opacity:0;transform:translate(-50%,18px)}to{opacity:1;transform:translate(-50%,0)}}
+@keyframes dlbounce{0%,100%{transform:translateY(-1.5px)}50%{transform:translateY(2px)}}
+/* Streckgubbe på Starta-knappen */
+.korbtn [data-anim]{animation-play-state:paused !important}
+.korbtn:hover [data-anim]{animation-play-state:running !important}
+@keyframes choreoBody{0%,26%{transform:translateX(0)}52%{transform:translateX(9px)}60%{transform:translateX(12px)}66%{transform:translateX(13px)}74%{transform:translateX(12px)}100%{transform:translateX(0)}}
+@keyframes choreoArmR{0%{transform:rotate(20deg)}5%{transform:rotate(-148deg)}11%{transform:rotate(-118deg)}17%{transform:rotate(-148deg)}23%{transform:rotate(-118deg)}27%{transform:rotate(20deg)}37%{transform:rotate(-32deg)}45%{transform:rotate(26deg)}52%{transform:rotate(-32deg)}63%{transform:rotate(-52deg)}69%{transform:rotate(8deg)}80%{transform:rotate(26deg)}88%{transform:rotate(-32deg)}96%{transform:rotate(26deg)}100%{transform:rotate(20deg)}}
+@keyframes choreoArmL{0%,27%{transform:rotate(-20deg)}37%{transform:rotate(26deg)}45%{transform:rotate(-32deg)}52%{transform:rotate(26deg)}63%{transform:rotate(42deg)}69%{transform:rotate(-12deg)}80%{transform:rotate(-32deg)}88%{transform:rotate(26deg)}96%{transform:rotate(-32deg)}100%{transform:rotate(-20deg)}}
+@keyframes choreoLegR{0%,27%{transform:rotate(11deg)}37%{transform:rotate(-26deg)}45%{transform:rotate(24deg)}53%{transform:rotate(-10deg)}59%{transform:rotate(48deg)}65%{transform:rotate(-72deg)}71%{transform:rotate(-40deg)}77%{transform:rotate(11deg)}86%{transform:rotate(24deg)}94%{transform:rotate(-26deg)}100%{transform:rotate(11deg)}}
+@keyframes choreoLegL{0%,27%{transform:rotate(-11deg)}37%{transform:rotate(24deg)}45%{transform:rotate(-26deg)}53%{transform:rotate(8deg)}65%{transform:rotate(6deg)}71%{transform:rotate(8deg)}77%{transform:rotate(-11deg)}86%{transform:rotate(-26deg)}94%{transform:rotate(24deg)}100%{transform:rotate(-11deg)}}
+@keyframes startaShake{0%,62%{transform:translate(0,0) rotate(0)}63.5%{transform:translate(3px,-1px) rotate(2deg)}65.5%{transform:translate(-3px,1px) rotate(-2deg)}67.5%{transform:translate(2px,1px) rotate(1.2deg)}69.5%{transform:translate(-2px,0) rotate(-1deg)}71.5%{transform:translate(1px,0) rotate(.5deg)}73%,100%{transform:translate(0,0) rotate(0)}}
+@keyframes bubbleLife{0%{opacity:0;transform:translate(-50%,10px) scale(.5)}5%{opacity:1;transform:translate(-50%,0) scale(1)}23%{opacity:1;transform:translate(-50%,0) scale(1)}28%{opacity:0;transform:translate(-50%,7px) scale(.55)}100%{opacity:0;transform:translate(-50%,7px) scale(.55)}}
+/* Nedladdningsknappens stripe-overlay (ModelDLButton, installing) */
+@keyframes dlstripe{from{background-position:0 0}to{background-position:16px 0}}
