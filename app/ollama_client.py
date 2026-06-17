@@ -40,11 +40,17 @@ def pull(name: str, progress_cb: Callable[[int, str], None] | None = None,
 
 def generate(model: str, prompt: str,
              token_cb: Callable[[str], None] | None = None,
-             base_url: str = BASE_URL) -> str:
+             base_url: str = BASE_URL,
+             system: str | None = None,
+             options: dict | None = None) -> str:
     text = []
+    payload = {"model": model, "prompt": prompt, "stream": True}
+    if system:
+        payload["system"] = system
+    if options:
+        payload["options"] = options
     with requests.post(f"{base_url}/api/generate",
-                       json={"model": model, "prompt": prompt, "stream": True},
-                       stream=True, timeout=None) as r:
+                       json=payload, stream=True, timeout=None) as r:
         r.raise_for_status()
         for line in r.iter_lines():
             if not line:
