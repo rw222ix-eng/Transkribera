@@ -8,6 +8,9 @@ venv/
 # Känsligt — får ALDRIG checkas in
 cookies.txt
 
+# Runtime-data (skapas bredvid exe:n)
+history.json
+
 # Nedladdade modeller / cache
 models/
 *.bin
