@@ -300,7 +300,7 @@ def create_app(base_dir: Path | None = None) -> FastAPI:
                 "ts": datetime.now().isoformat(timespec="seconds"),
                 "name": media.name, "source": source,
                 "dur": _clock(dur), "model": spec_label, "lang": lang_label,
-                "formats": [f.upper() for f in formats], "speakers": 1,
+                "formats": [f.upper() for f in formats],
                 "words": words, "files": files, "transcript": segments,
             })
             return {"files": files, "transcript": segments}

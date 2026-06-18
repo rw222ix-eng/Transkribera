@@ -66,10 +66,6 @@
     qProgress: {},
     activeId: 'f1',
     fileError: '',
-    diarize: false,
-    spkNames: ['', '', ''],
-    numSpeakers: 'auto',
-    diaInstallPrompt: false,
     runError: null,
     dlFailed: {},
     editing: false,
@@ -78,9 +74,9 @@
     audioPlaying: false,
     audioT: 0,
     history: [
-      { id: 'h1', name: 'styrgruppsmöte_q1.mp3', date: 'Idag · 09:14', dur: '18:42', model: 'KB-Whisper large', lang: 'Svenska', formats: ['SRT', 'TXT'], speakers: 3, words: 2940 },
-      { id: 'h2', name: 'kundintervju_03.wav', date: 'Igår · 16:30', dur: '42:11', model: 'KB-Whisper large', lang: 'Svenska', formats: ['TXT'], speakers: 2, words: 6810 },
-      { id: 'h3', name: 'webinar_inspelning.mp4', date: '12 jun', dur: '01:03:20', model: 'Whisper large-v3', lang: 'Flerspråkig', formats: ['SRT', 'VTT', 'TXT'], speakers: 1, words: 9120 },
+      { id: 'h1', name: 'styrgruppsmöte_q1.mp3', date: 'Idag · 09:14', dur: '18:42', model: 'KB-Whisper large', lang: 'Svenska', formats: ['SRT', 'TXT'], words: 2940 },
+      { id: 'h2', name: 'kundintervju_03.wav', date: 'Igår · 16:30', dur: '42:11', model: 'KB-Whisper large', lang: 'Svenska', formats: ['TXT'], words: 6810 },
+      { id: 'h3', name: 'webinar_inspelning.mp4', date: '12 jun', dur: '01:03:20', model: 'Whisper large-v3', lang: 'Flerspråkig', formats: ['SRT', 'VTT', 'TXT'], words: 9120 },
     ],
     histViewing: null,
     confirm: null,
@@ -94,7 +90,7 @@
   var _t, _pp, _ppIv, _chat, _au, _toastIv, _toastT2, _glideRAF, _lastStart, _runToken = 0;
   var _dl = {}, _inst = {}, _editBuf = {}, _wave = null;
   var _file, _seek, _searchRef, _scrollRef, _procScroll, _chatThread;
-  var _prevTab, _prevStep, _prevRun, _prevPP, _prevOp, _prevChatLen, _wasEditing, _wasOpen, _pyWas, _scrollKey;
+  var _prevTab, _prevStep, _prevRun, _prevPP, _prevOp, _prevChatLen, _wasEditing, _wasOpen, _scrollKey;
 
   /* ----------------------------------------------------------------- data -- */
   // Catalogs are `let` so loadModels() can reassign them to real data from /api/models;
@@ -147,10 +143,8 @@
     ],
   };
   var STEPS = ['Förbereder', 'Extraherar ljud', 'Transkriberar', 'Färdigställer'];
-  var SPEAKERS = ['Talare 1', 'Talare 2', 'Talare 3'];
   var AUDIO_DUR = 150;
   var ALLOWED = ['mp4', 'mkv', 'mov', 'webm', 'avi', 'm4v', 'mp3', 'wav', 'm4a', 'flac', 'aac', 'ogg', 'opus', 'wma'];
-  var PYANNOTE_ID = 'pyannote community-1';
   var TRANSCRIPT = [
     { time: '00:00', spk: 0, text: 'Hej och välkomna till veckans avsnitt av vårt uppföljningsmöte.' },
     { time: '00:06', spk: 0, text: 'Idag fortsätter vi på det vi pratade om förra veckan.' },
@@ -184,13 +178,8 @@
   function isMedia(n) { return ALLOWED.indexOf(extOf(n)) !== -1; }
   function qName(queue, id) { var q = (queue || S.queue).find(function (x) { return x.id === id; }); return q ? q.name : ''; }
   function lineText(i) { var e = S.edits; return (e && e[i] != null) ? e[i] : getTranscript()[i].text; }
-  function spkName(i) { var n = (S.spkNames[i] || '').trim(); return n || SPEAKERS[i] || ('Talare ' + (i + 1)); }
-  function speakerColor(i) { var hues = [264, 150, 52]; return 'oklch(0.62 0.13 ' + hues[i % 3] + ')'; }
-  function speakerWeak(i) { var hues = [264, 150, 52]; return 'oklch(0.95 0.03 ' + hues[i % 3] + ')'; }
   function fitColor(f) { return f === 'ok' ? 'var(--ok)' : f === 'warn' ? 'var(--warn)' : f === 'bad' ? 'var(--bad)' : 'var(--ink-3)'; }
   function fitText(f) { return f === 'ok' ? 'Passar din hårdvara' : f === 'warn' ? 'Tungt för din hårdvara' : 'För stort för din hårdvara'; }
-  function pyInstalled() { return !!S.installed[PYANNOTE_ID]; }
-  function pyBusy() { return !!(S.downloading[PYANNOTE_ID] || S.installing[PYANNOTE_ID]); }
   function bestDisk() { return HW.disks.slice().sort(function (a, b) { return b.free - a.free; })[0]; }
   function modelNeedGB(id) { var m = WHISPER.concat(LLM).find(function (x) { return x.id === id; }); if (!m) return 0; var gb = m.download_mb ? m.download_mb / 1024 : (parseFloat(m.size) || 0); return Math.ceil(gb * 1.6); }
   function parseSize(s) { var m = /([\d.]+)\s*(GB|MB)/i.exec(s || ''); return m ? { n: parseFloat(m[1]), u: m[2].toUpperCase() } : null; }
@@ -375,7 +364,7 @@
   function restart() {
     clearInterval(_t); clearTimeout(_pp); clearInterval(_ppIv); clearTimeout(_chat); clearInterval(_au);
     Object.values(_dl || {}).forEach(clearInterval);
-    setState({ source: '', queue: [], qStatus: {}, qProgress: {}, activeId: null, fileError: '', step: 'source', run: 'idle', progress: 0, elapsed: 0, log: [], pp: 'idle', ppOp: 'summary', ppOut: '', ppEnabled: false, chat: [], chatInput: '', chatTyping: false, chatModalOpen: false, chatAttach: [], openDD: null, transcriptOpen: false, runError: null, editing: false, edits: {}, edited: false, audioPlaying: false, audioT: 0, histViewing: null, diaInstallPrompt: false, numSpeakers: 'auto' });
+    setState({ source: '', queue: [], qStatus: {}, qProgress: {}, activeId: null, fileError: '', step: 'source', run: 'idle', progress: 0, elapsed: 0, log: [], pp: 'idle', ppOp: 'summary', ppOut: '', ppEnabled: false, chat: [], chatInput: '', chatTyping: false, chatModalOpen: false, chatAttach: [], openDD: null, transcriptOpen: false, runError: null, editing: false, edits: {}, edited: false, audioPlaying: false, audioT: 0, histViewing: null });
   }
   function onSearch(e) { setState({ search: e.target.value }); }
   function toggleFmt(f) { setState(function (s) { var formats = Object.assign({}, s.formats); formats[f] = !formats[f]; return { formats: formats }; }); }
@@ -398,17 +387,6 @@
   function pickDisk(id) { setState({ diskTarget: id, openDD: null }); }
   function toggleDiskDD() { setState(function (s) { return { openDD: s.openDD === 'disk' ? null : 'disk' }; }); }
   function closeDD() { setState({ openDD: null }); }
-  function toggleDiarize() {
-    if (S.diarize) { setState({ diarize: false, diaInstallPrompt: false }); return; }
-    if (!pyInstalled()) { setState({ diaInstallPrompt: true }); return; }
-    setState({ diarize: true });
-  }
-  function installPyannote() { if (!pyBusy() && !pyInstalled()) _startDownload(PYANNOTE_ID); }
-  function dismissDiaPrompt() { setState({ diaInstallPrompt: false }); }
-  function setSpkName(i, v) { setState(function (s) { var a = s.spkNames.slice(); a[i] = v; return { spkNames: a }; }); }
-  function addSpeaker() { setState(function (s) { return s.spkNames.length < 6 ? { spkNames: s.spkNames.concat(['']) } : null; }); }
-  function removeSpeaker(i) { setState(function (s) { return s.spkNames.length > 1 ? { spkNames: s.spkNames.filter(function (_, k) { return k !== i; }) } : null; }); }
-  function setNumSpeakers(n) { setState({ numSpeakers: n }); }
   function setUseCase(k) { setState({ useCase: k }); }
 
   function askUninstall(id) { setState({ confirm: { kind: 'uninstall', id: id, title: 'Ta bort ' + id + '?', body: 'Modellen raderas från disken (' + ((HW.disks.find(function (d) { return d.id === S.diskTarget; }) || {}).drive || '') + '). Du kan ladda ner den igen när som helst.', label: 'Ta bort', danger: true } }); }
@@ -429,7 +407,7 @@
     } else setState({ confirm: null });
   }
   function confirmNo() { setState({ confirm: null }); }
-  function openHistory(h) { setState({ transcriptOpen: true, histViewing: h.id, transcript: (h.transcript || []).map(function (g) { return { time: fmtTime(g.start), spk: 0, text: g.text }; }) }); }
+  function openHistory(h) { setState({ transcriptOpen: true, histViewing: h.id, transcript: (h.transcript || []).map(function (g) { return { time: fmtTime(g.start), text: g.text }; }) }); }
   function reRunHistory(h) { var id = 'q' + Date.now(); setState({ tab: 'transcribe', step: 'config', queue: [{ id: id, name: h.name, path: h.source || h.name }], qStatus: {}, qProgress: {}, run: 'idle', progress: 0, elapsed: 0, activeId: id, source: h.source || h.name, fileError: '', runError: null, openDD: null }); }
 
   function togglePlay() {
@@ -462,7 +440,6 @@
   function start() {
     if (S.run === 'running') return;
     if (!S.queue.length) return;
-    if (S.diarize && !pyInstalled()) { setState({ diaInstallPrompt: true }); return; }
     var now = Date.now();
     if (_lastStart && now - _lastStart < 400) return;
     _lastStart = now;
@@ -487,7 +464,7 @@
   function _archive(file, secs) {
     var fmts = ['srt', 'txt', 'vtt'].filter(function (f) { return S.formats[f]; }).map(function (f) { return f.toUpperCase(); });
     var langLabel = S.language === 'en' ? 'Engelska' : S.language === 'sv' ? 'Svenska' : 'Auto';
-    var entry = { id: 'h' + Date.now() + Math.floor(Math.random() * 99), name: file.name, date: 'Just nu', dur: fmtTime(secs), model: modelLabel(S.model), lang: langLabel, formats: fmts.length ? fmts : ['TXT'], speakers: S.diarize ? 3 : 1, words: 2800 + Math.floor(Math.random() * 500) };
+    var entry = { id: 'h' + Date.now() + Math.floor(Math.random() * 99), name: file.name, date: 'Just nu', dur: fmtTime(secs), model: modelLabel(S.model), lang: langLabel, formats: fmts.length ? fmts : ['TXT'], words: 2800 + Math.floor(Math.random() * 500) };
     setState(function (s) { return { history: [entry].concat(s.history.filter(function (h) { return !(h.name === file.name && h.date === 'Just nu'); })) }; });
   }
   // BACKEND: real transcription via /api/transcribe SSE (one request per queue item).
@@ -520,7 +497,7 @@
         } else if (ev.type === 'done') {
           clearInterval(_t);
           var r = ev.result || {};
-          var segs = (r.transcript || []).map(function (g) { return { time: fmtTime(g.start), spk: 0, text: g.text }; });
+          var segs = (r.transcript || []).map(function (g) { return { time: fmtTime(g.start), text: g.text }; });
           setState(function (s) { return { run: 'done', progress: 100, transcript: segs, resultFilesReal: r.files || [], qStatus: Object.assign({}, s.qStatus, kv(active.id, 'done')), qProgress: Object.assign({}, s.qProgress, kv(active.id, 100)), log: s.log.concat(['[klar] Färdig på ' + fmtTime(s.elapsed)]) }; });
           loadHistory();   // server archived this run; refresh from disk
           var next = _nextPending(active.id);
@@ -696,7 +673,6 @@
       WHISPER = d.whisper; LLM = d.llm || []; ONLINE = d.online || []; HW = d.hardware || HW;
       var inst = {};
       WHISPER.concat(LLM).forEach(function (m) { if (m.installed) inst[m.id] = true; });
-      if (S.installed[PYANNOTE_ID]) inst[PYANNOTE_ID] = true;
       var patch = { catalogReady: true, installed: inst };
       var instW = WHISPER.filter(function (m) { return inst[m.id]; });
       if (instW.length && !inst[S.model]) {
@@ -779,9 +755,6 @@
     syncTheme();
     if (S.editing && !_wasEditing) { _editBuf = {}; requestAnimationFrame(function () { document.querySelectorAll('[data-eline]').forEach(function (el) { var i = el.getAttribute('data-eline'); el.textContent = lineText(+i); }); }); }
     _wasEditing = S.editing;
-    var pyNow = !!S.installed[PYANNOTE_ID];
-    if (pyNow && !_pyWas && S.diaInstallPrompt) setState({ diarize: true, diaInstallPrompt: false });
-    _pyWas = pyNow;
     if (S.tab !== _prevTab) { _prevTab = S.tab; playTabIn(); }
     if (S.step !== _prevStep) { var to = S.step; _prevStep = to; if (to === 'process') playPaneIn(); }
     var open = S.transcriptOpen;
@@ -966,18 +939,15 @@
     });
 
     var viewingHist = st.histViewing ? st.history.find(function (h) { return h.id === st.histViewing; }) : null;
-    var showSpeakers = viewingHist ? viewingHist.speakers > 1 : st.diarize;
     var transcriptFileName = viewingHist ? viewingHist.name : (baseName() + '.txt');
     var aT = st.audioT;
     var curLine = -1;
     for (var k2 = 0; k2 < getTranscript().length; k2++) { if (parseTS(getTranscript()[k2].time) <= aT) curLine = k2; else break; }
     var q0 = st.searchQuery.trim();
-    var mIdx = 0, prevSpk = -1;
+    var mIdx = 0;
     var tLines = getTranscript().map(function (ln, idx) {
       var text = lineText(idx);
       var isCurrent = idx === curLine && (st.audioPlaying || aT > 0);
-      var showSpk = showSpeakers && ln.spk !== prevSpk;
-      prevSpk = ln.spk;
       var segments;
       if (!q0 || st.editing) { segments = [{ text: text, plain: true, match: false, current: false }]; }
       else {
@@ -988,9 +958,7 @@
         if (!segments.length) segments.push({ text: t, plain: true, match: false, current: false });
       }
       return {
-        idx: idx, time: ln.time, text: text, segments: segments, showSpk: showSpk, spkLabel: spkName(ln.spk), spkColor: speakerColor(ln.spk),
-        spkDotStyle: 'width:9px;height:9px;border-radius:50%;flex:0 0 auto;background:' + speakerColor(ln.spk),
-        spkLabelStyle: 'font-size:13px;font-weight:600;letter-spacing:.01em;color:' + speakerColor(ln.spk),
+        idx: idx, time: ln.time, text: text, segments: segments,
         current: isCurrent,
         rowStyle: 'display:flex;gap:18px;padding:7px 12px;border-radius:11px;scroll-margin-top:90px;transition:background .2s;' + (isCurrent ? 'background:var(--accent-weak)' : ''),
         timeStyle: 'font-size:13px;width:50px;flex:0 0 auto;padding-top:6px;font-variant-numeric:tabular-nums;cursor:pointer;color:' + (isCurrent ? 'var(--accent)' : 'var(--ink-3)') + ';font-weight:' + (isCurrent ? '600' : '400'),
@@ -1022,14 +990,10 @@
     });
     var doneCount = st.queue.filter(function (qq) { return st.qStatus[qq.id] === 'done'; }).length;
     var noWhisper = !WHISPER.some(function (m) { return st.installed[m.id]; });
-    var pid = PYANNOTE_ID;
-    var pyInst = st.installed[pid], pyDl = st.downloading[pid], pyIng = st.installing[pid], pyFail = st.dlFailed[pid];
-    var pyPct = pyIng ? (st.instProg[pid] || 0) : (st.dlProg[pid] || 0);
-    var diaPhase = pyDl ? 'downloading' : pyIng ? 'installing' : pyFail ? 'failed' : pyInst ? 'installed' : 'idle';
     var historyItems = st.history.map(function (h) {
       return {
         id: h.id, name: h.name, date: h.date,
-        meta: h.dur + ' · ' + h.model + ' · ' + h.lang + (h.speakers > 1 ? ' · ' + h.speakers + ' talare' : ' · 1 talare'),
+        meta: h.dur + ' · ' + h.model + ' · ' + h.lang,
         formats: (h.formats || []).map(function (f) { return { label: f }; }),
         onOpen: function () { openHistory(h); }, onRerun: function () { askRerun(h); }, onDelete: function () { askDeleteHistory(h.id, h.name); },
         onDownload: function () { downloadFile(baseNameOf(h.name) + '.' + ((h.formats && h.formats[0]) || 'TXT').toLowerCase(), Math.max(9, Math.round((h.words || 3000) / 140)) + ' KB'); },
@@ -1051,25 +1015,6 @@
       noWhisper: noWhisper, hasWhisper: !noWhisper,
       gotoModels: function () { setTab('models'); }, getRecommended: function () { setTab('models'); modelAction('KB-Whisper large'); },
 
-      diarize: st.diarize, toggleDiarize: toggleDiarize,
-      diaTrack: 'position:relative;width:42px;height:25px;border-radius:999px;flex:0 0 auto;cursor:pointer;border:none;padding:0;background:' + (st.diarize ? 'var(--ink)' : 'var(--line-2)') + ';transition:background .15s',
-      diaKnob: 'position:absolute;top:3px;left:3px;width:19px;height:19px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.2);transition:transform .15s;transform:translateX(' + (st.diarize ? '17px' : '0') + ')',
-      speakerRows: st.spkNames.map(function (name, idx) {
-        return { idx: idx, name: name, placeholder: 'Namn på Talare ' + (idx + 1), badge: 'Talare ' + (idx + 1),
-          dotStyle: 'width:10px;height:10px;border-radius:50%;flex:0 0 auto;background:' + speakerColor(idx),
-          onInput: function (e) { setSpkName(idx, e.target.value); }, onRemove: function () { removeSpeaker(idx); }, canRemove: st.spkNames.length > 1 };
-      }),
-      canAddSpeaker: st.spkNames.length < 6, onAddSpeaker: addSpeaker,
-      numSpeakerOptions: ['auto', '2', '3', '4', '5', '6'].map(function (n) { return { label: n === 'auto' ? 'Auto' : n, active: st.numSpeakers === n, style: segBtn(st.numSpeakers === n, '32px') + ';flex:0 0 auto;min-width:46px;font-size:14px', onPick: function () { setNumSpeakers(n); } }; }),
-      pyInstalled: pyInst, diaInstallPrompt: st.diaInstallPrompt && !pyInst,
-      diaPromptBusy: !!(pyDl || pyIng), diaPromptIdle: !(pyDl || pyIng),
-      diaPromptStatus: pyDl ? ('Laddar ner … ' + Math.round(pyPct) + '%') : pyIng ? ('Installerar … ' + Math.round(pyPct) + '%') : '',
-      diaPromptBar: 'height:100%;width:' + Math.round(pyPct) + '%;background:var(--accent);border-radius:99px;transition:width .14s linear',
-      onInstallPyannote: installPyannote, onDismissDiaPrompt: dismissDiaPrompt,
-      diaModelName: pid, diaPhase: diaPhase, diaPct: Math.round(pyPct), diaDetail: pyIng ? instDetail(pyPct) : dlDetail('90 MB', pyPct),
-      diaOnAction: function () { if (pyFail) retryDownload(pid); else if (!pyInst && !pyDl && !pyIng) installPyannote(); },
-      diaOnCancel: function () { cancelDownload(pid); }, diaRemovable: !!pyInst, diaNotRemovable: !pyInst, diaOnRemove: function () { askUninstall(pid); },
-
       isError: st.run === 'error', isCancelled: st.run === 'cancelled', notErrorState: st.run !== 'error' && st.run !== 'cancelled',
       runErrorTitle: st.runError ? st.runError.title : '', runErrorDetail: st.runError ? st.runError.detail : '',
       onCancelRun: cancelRun, onResumeRun: resumeRun, onRetryRun: retryRun,
@@ -1080,7 +1025,7 @@
       audioCur: fmtTime(st.audioT), audioDur: fmtTime(AUDIO_DUR),
       onTogglePlay: togglePlay, onSeekClick: onSeekClick, seekTrackRef: seekTrackRef,
       editing: st.editing, notEditing: !st.editing, onToggleEdit: toggleEdit, onEditInput: onEditInput,
-      editBtnLabel: st.editing ? '✓ Klar' : 'Redigera', transcriptEdited: st.edited, showSpeakers: showSpeakers,
+      editBtnLabel: st.editing ? '✓ Klar' : 'Redigera', transcriptEdited: st.edited,
       editBtnStyle: st.editing ? 'flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:10px;padding:8px 15px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit' : 'flex:0 0 auto;display:inline-flex;align-items:center;gap:7px;background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:8px 15px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit',
       transcriptFileName: transcriptFileName,
 
@@ -1124,7 +1069,7 @@
       nextMatch: nextMatch, prevMatch: prevMatch, matchLabel: matchLabel, tLines: tLines,
 
       showResults: isDone, resultCount: resultFiles.length, resultDuration: fmtTime(st.elapsed), resultFiles: resultFiles,
-      transcript: getTranscript().slice(0, 3).map(function (ln, idx) { return { time: ln.time, text: lineText(idx), showSpk: st.diarize, spk: spkName(ln.spk), spkStyle: 'font-size:12.5px;font-weight:600;color:' + speakerColor(ln.spk) + ';flex:0 0 auto;width:62px;padding-top:2px' }; }),
+      transcript: getTranscript().slice(0, 3).map(function (ln, idx) { return { time: ln.time, text: lineText(idx) }; }),
 
       ppEnabled: st.ppEnabled, ppOff: !st.ppEnabled, togglePPEnabled: togglePPEnabled,
       ppSwitchTrack: 'position:relative;width:42px;height:25px;border-radius:999px;flex:0 0 auto;background:' + (st.ppEnabled ? 'var(--ink)' : 'var(--line-2)') + ';transition:background .15s',
@@ -1135,7 +1080,7 @@
       ppRingStyle: 'position:relative;width:22px;height:22px;border-radius:50%;flex:0 0 auto;background:conic-gradient(var(--accent) ' + (Math.round(st.ppPct || 0) * 3.6) + 'deg, rgba(255,255,255,.2) 0);animation:ppglow 1.6s ease-in-out infinite;transition:background .13s linear',
       ppShowText: st.ppOp !== 'chat' && st.pp !== 'idle', ppShowChat: st.ppOp === 'chat', ppRunning: st.pp === 'running', ppShowOut: st.pp === 'done',
       ppTextDone: st.pp === 'done' && st.ppOp !== 'chat', ppCleanDone: false,
-      ppCleanLines: getTranscript().map(function (ln, idx) { return { time: ln.time, text: lineText(idx), showSpk: st.diarize, spk: spkName(ln.spk), spkStyle: 'font-size:12.5px;font-weight:600;color:' + speakerColor(ln.spk) + ';flex:0 0 auto;width:62px;padding-top:2px' }; }),
+      ppCleanLines: getTranscript().map(function (ln, idx) { return { time: ln.time, text: lineText(idx) }; }),
       ppCleanFiles: resultFiles, ppOut: st.ppOut, ppOutTitle: ppOutTitles[st.ppOp],
       chat: chat, chatTyping: st.chatTyping, chatInput: st.chatInput, onChatInput: onChatInput, onChatKey: onChatKey, onChatSend: sendChat, chatSendStyle: primaryBtn(false),
       chatModalOpen: st.chatModalOpen, openChatModal: openChatModal, closeChatModal: closeChatModal, stop: stopProp, chatThreadRef: chatThreadRef, chatOpenBtnStyle: primaryBtn(false),
@@ -1416,79 +1361,6 @@ function viewTranscribe(v){ return `
         </div>
         </div>
 
-        <div style="background:var(--surface);border:1px solid var(--line);border-radius:16px;margin-top:10px;box-shadow:var(--shadow-sm);overflow:hidden">
-          <div style="display:flex;align-items:center;gap:14px;padding:14px 16px">
-            <span style="width:40px;height:40px;border-radius:11px;background:var(--sunken);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;flex:0 0 auto">
-              <svg width="19" height="19" viewBox="0 0 20 20" fill="none" stroke="var(--ink-3)" stroke-width="1.5"><circle cx="7" cy="7.5" r="2.6"></circle><circle cx="14" cy="8.2" r="2.1"></circle><path d="M2.5 16c0-2.4 2-4 4.5-4s4.5 1.6 4.5 4"></path><path d="M12.5 15.6c.2-1.9 1.6-3.1 3.4-3.1 1 0 1.9.4 1.9.4"></path></svg>
-            </span>
-            <div style="flex:1;min-width:0">
-              <div style="font-size:15.5px;font-weight:500;color:var(--ink)">Diarisering <span style="font-weight:400;color:var(--ink-3)">· vem talar när</span></div>
-              <div style="font-size:13px;color:var(--ink-2);margin-top:2px;line-height:1.4">Separerar rösterna och märker Talare 1, 2, 3 … Körs som ett separat steg ovanpå Whisper (pyannote). Av som standard — tar extra tid och VRAM.</div>
-            </div>
-            <button data-click="${on(v.toggleDiarize)}" role="switch" aria-checked="${esc(v.diarize)}" aria-label="Diarisering" style="${v.diaTrack}"><span style="${v.diaKnob}"></span></button>
-          </div>
-
-          ${ v.diaInstallPrompt ? `
-          <div style="border-top:1px solid var(--line);background:var(--accent-weak);padding:15px 16px;animation:tabin .2s ease">
-            <div style="display:flex;align-items:flex-start;gap:12px">
-              <span style="width:30px;height:30px;border-radius:9px;flex:0 0 auto;background:var(--surface);border:1px solid color-mix(in srgb,var(--accent) 28%,transparent);color:var(--accent);display:flex;align-items:center;justify-content:center"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.5v7.5"></path><path d="M4.5 6.5 8 10l3.5-3.5"></path><path d="M3 13.5h10"></path></svg></span>
-              <div style="flex:1;min-width:0">
-                <div style="font-size:14.5px;font-weight:600;color:var(--ink)">Talarseparation kräver en extra modell</div>
-                <div style="font-size:13px;color:var(--ink-2);margin-top:3px;line-height:1.45">Diarisering görs av <strong style="color:var(--ink);font-weight:600">pyannote community‑1</strong> (~90 MB) — en separat modell som körs ovanpå transkriberingen. Den hämtas en gång.</div>
-                ${ v.diaPromptBusy ? `
-                  <div style="margin-top:12px">
-                    <div style="height:6px;border-radius:99px;background:var(--track);overflow:hidden"><div style="${v.diaPromptBar}"></div></div>
-                    <div style="font-size:12.5px;color:var(--ink-2);font-variant-numeric:tabular-nums;margin-top:6px">${esc(v.diaPromptStatus)}</div>
-                  </div>
-                ` : '' }
-                ${ v.diaPromptIdle ? `
-                  <div style="display:flex;gap:9px;margin-top:13px;flex-wrap:wrap">
-                    <button data-click="${on(v.onInstallPyannote)}" style="display:inline-flex;align-items:center;gap:7px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:10px;padding:9px 16px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit" data-sh="background:color-mix(in srgb, var(--btn-bg) 78%, var(--accent)) !important">Installera</button>
-                    <button data-click="${on(v.onDismissDiaPrompt)}" style="background:transparent;border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:9px 16px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit" data-sh="border-color:var(--line-2) !important;background:var(--surface) !important">Senare</button>
-                    <button data-click="${on(v.gotoModels)}" style="background:transparent;border:none;color:var(--ink-2);border-radius:10px;padding:9px 8px;font-size:13.5px;font-weight:500;cursor:pointer;font-family:inherit" data-sh="color:var(--ink) !important">Visa i Modeller</button>
-                  </div>
-                ` : '' }
-              </div>
-            </div>
-          </div>
-          ` : '' }
-
-          ${ v.diarize ? `
-          <div style="border-top:1px solid var(--line);background:var(--sunken);padding:16px;animation:tabin .2s ease">
-            <div style="font-size:12px;text-transform:uppercase;letter-spacing:0.04em;color:var(--ink-2);margin-bottom:9px">Förväntat antal talare <span style="color:var(--ink-3);text-transform:none;letter-spacing:0">· hjälper modellen</span></div>
-            <div style="display:flex;gap:3px;padding:4px;background:var(--track);border:1px solid var(--line);border-radius:11px;margin-bottom:18px;width:max-content;max-width:100%;flex-wrap:wrap">
-              ${ v.numSpeakerOptions.map(function(n){ return `
-                <button data-click="${on(n.onPick)}" style="${n.style}" data-sh="background:var(--surface) !important;color:var(--ink) !important;box-shadow:var(--shadow-sm) !important">${esc(n.label)}</button>
-              `; }).join('') }
-            </div>
-            <div style="font-size:12px;text-transform:uppercase;letter-spacing:0.04em;color:var(--ink-2);margin-bottom:10px">Namnge talarna <span style="color:var(--ink-3);text-transform:none;letter-spacing:0">· valfritt — du märker upp rösterna efteråt</span></div>
-            <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:13px">
-              ${ v.speakerRows.map(function(s){ return `
-                <div data-key="${esc(s.idx)}" style="display:flex;align-items:center;gap:11px;background:var(--surface);border:1px solid var(--line);border-radius:11px;padding:8px 10px 8px 13px">
-                  <span style="${s.dotStyle}"></span>
-                  <span style="font-size:12px;font-weight:600;color:var(--ink-2);flex:0 0 auto;width:58px;font-variant-numeric:tabular-nums">${esc(s.badge)}</span>
-                  <input value="${esc(s.name)}" data-input="${on(s.onInput)}" placeholder="${esc(s.placeholder)}" style="flex:1;min-width:0;border:none;outline:none;background:transparent;font-size:15px;color:var(--ink);font-family:inherit">
-                  ${ s.canRemove ? `
-                    <button data-click="${on(s.onRemove)}" aria-label="Ta bort talare" style="width:28px;height:28px;flex:0 0 auto;border:1px solid var(--line);background:var(--surface);border-radius:8px;cursor:pointer;color:var(--ink-3);display:flex;align-items:center;justify-content:center" data-sh="border-color:var(--bad) !important;color:var(--bad) !important">
-                      <svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 3l8 8M11 3l-8 8"></path></svg>
-                    </button>
-                  ` : '' }
-                </div>
-              `; }).join('') }
-            </div>
-            ${ v.canAddSpeaker ? `
-              <button data-click="${on(v.onAddSpeaker)}" style="display:inline-flex;align-items:center;gap:7px;background:transparent;border:1px dashed var(--line-2);color:var(--ink-2);border-radius:10px;padding:9px 14px;font-size:13.5px;font-weight:500;cursor:pointer;font-family:inherit;margin-bottom:14px" data-sh="border-color:var(--ink-3) !important;color:var(--ink) !important">
-                <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 3v10M3 8h10"></path></svg>Lägg till talare
-              </button>
-            ` : '' }
-            <div style="display:flex;align-items:flex-start;gap:8px;font-size:12.5px;color:var(--ink-3);line-height:1.45;border-top:1px solid var(--line);padding-top:12px">
-              <span style="flex:0 0 auto;margin-top:1px">ⓘ</span>
-              <span>Fungerar bäst på rena inspelningar med 2–4 talare. Vid mycket överlappande tal eller många röster blir tilldelningen osäkrare.</span>
-            </div>
-          </div>
-          ` : '' }
-        </div>
-
         <div style="flex:0 0 auto;height:46px"></div>
 
         <button data-click="${on(v.onStart)}" class="korbtn" style="position:relative;overflow:visible;display:flex;align-items:center;justify-content:center;gap:13px;width:100%;height:60px;border:1.5px solid var(--ink);border-radius:14px;background:var(--surface);cursor:pointer;font-family:inherit;padding:0" data-sh="box-shadow:var(--shadow) !important;transform:translateY(-1px) !important">
@@ -1659,9 +1531,6 @@ function viewTranscribe(v){ return `
           ${ v.transcript.map(function(t, idx){ return `
             <div data-key="${esc(idx)}" style="display:flex;gap:14px;padding:5px 0">
               <span style="font-family:'Geist',system-ui,sans-serif;font-variant-numeric:tabular-nums;font-size:13.5px;color:var(--ink-3);flex:0 0 auto;width:46px;padding-top:2px">${esc(t.time)}</span>
-              ${ t.showSpk ? `
-                <span style="${t.spkStyle}">${esc(t.spk)}</span>
-              ` : '' }
               <span style="font-size:16px;color:var(--ink);line-height:1.5">${esc(t.text)}</span>
             </div>
           `; }).join('') }
@@ -1751,9 +1620,6 @@ function viewTranscribe(v){ return `
               ${ v.ppCleanLines.map(function(c, idx){ return `
                 <div data-key="${esc(idx)}" style="display:flex;gap:14px;padding:5px 0">
                   <span style="font-family:'Geist',system-ui,sans-serif;font-variant-numeric:tabular-nums;font-size:13px;color:var(--ink-3);flex:0 0 auto;width:44px;padding-top:2px">${esc(c.time)}</span>
-                  ${ c.showSpk ? `
-                    <span style="${c.spkStyle}">${esc(c.spk)}</span>
-                  ` : '' }
                   <span style="font-size:15.5px;line-height:1.5;color:var(--ink)">${esc(c.text)}</span>
                 </div>
               `; }).join('') }
@@ -1939,44 +1805,6 @@ function viewModels(v){
         </div>
         <div style="background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:var(--shadow-sm)">
           ${ v.whisperRows.map(function(w){ return modelRow(w); }).join('') }
-        </div>
-      </div>
-
-      <!-- Diariseringsmodell -->
-      <div style="margin-bottom:30px">
-        <div style="display:flex;align-items:baseline;gap:9px;margin-bottom:12px">
-          <h2 style="font-size:17.5px;font-weight:600;letter-spacing:-0.01em;margin:0">Diariseringsmodell</h2>
-          <span style="color:var(--ink);font-size:15px;font-weight:500">talarseparation · vem talar när</span>
-        </div>
-        <p style="margin:-4px 0 12px;font-size:13.5px;color:var(--ink-2);max-width:620px">Whisper transkriberar men skiljer inte på talare — det är ett separat steg. Installera <span style="color:var(--accent);font-weight:600">pyannote</span> för att märka Talare 1, 2, 3 … (WhisperX-mönstret). Språkoberoende, så det fungerar lika bra på svenska.</p>
-        <div style="background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:var(--shadow-sm)">
-          <div style="display:flex;align-items:flex-start;gap:14px;padding:17px 18px">
-            <span style="width:24px;height:24px;border-radius:50%;flex:0 0 auto;margin-top:1px;display:flex;align-items:center;justify-content:center;background:var(--sunken);border:1px solid var(--line)"><svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="var(--ink-3)" stroke-width="1.6"><circle cx="7" cy="7.5" r="2.4"></circle><circle cx="14" cy="8.2" r="2"></circle><path d="M2.5 16c0-2.3 2-3.8 4.5-3.8s4.5 1.5 4.5 3.8"></path></svg></span>
-            <span style="width:9px;height:9px;border-radius:50%;flex:0 0 auto;margin-top:7px;background:var(--ok)"></span>
-            <div style="flex:1;min-width:0">
-              <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
-                <span style="font-size:16px;font-weight:500;color:var(--ink);font-variant-numeric:tabular-nums">${esc(v.diaModelName)}</span>
-                <span style="font-size:12px;font-weight:500;color:var(--accent);background:var(--accent-weak);padding:2px 7px;border-radius:5px">Rekommenderad</span>
-                <span style="display:inline-flex;align-items:center;font-size:12.5px;font-weight:500;color:var(--ok);background:color-mix(in srgb,var(--ok) 13%,transparent);border-radius:6px;padding:3px 9px;white-space:nowrap">Lätt — får plats vid sidan av Whisper</span>
-              </div>
-              <div style="font-size:14px;color:var(--ink-2);margin-top:4px">Diariserar lokalt på GPU. Separerar rösterna och tilldelar talaretiketter som slås ihop med transkriptet på tidsstämplarna.</div>
-              <div style="display:flex;gap:7px;margin-top:9px;flex-wrap:wrap">
-                <span style="display:inline-flex;align-items:center;gap:5px;font-size:12.5px;color:var(--ink-2);background:var(--sunken);border:1px solid var(--line);border-radius:7px;padding:3px 9px">Språkoberoende</span>
-                <span style="display:inline-flex;align-items:center;gap:5px;font-size:12.5px;color:var(--ink-2);background:var(--sunken);border:1px solid var(--line);border-radius:7px;padding:3px 9px;font-variant-numeric:tabular-nums">~0,9 GB VRAM</span>
-                <span style="display:inline-flex;align-items:center;gap:5px;font-size:12.5px;color:var(--ink-2);background:var(--sunken);border:1px solid var(--line);border-radius:7px;padding:3px 9px">2–4 talare optimalt</span>
-              </div>
-            </div>
-            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:9px;flex:0 0 auto">
-              <span style="font-size:13px;color:var(--ink-2);font-variant-numeric:tabular-nums">90 MB</span>
-              <div style="display:flex;align-items:center;gap:7px">
-                ${ v.diaRemovable ? `<button data-click="${on(v.diaOnRemove)}" aria-label="Ta bort modell" style="width:38px;height:38px;flex:0 0 auto;border:1px solid var(--line);background:var(--surface);border-radius:9px;cursor:pointer;color:var(--ink-3);display:flex;align-items:center;justify-content:center" data-sh="border-color:var(--bad) !important;color:var(--bad) !important">
-                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.5 8.5h6l.5-8.5"></path></svg>
-                  </button>` : '' }
-                ${ v.diaNotRemovable ? `<span style="width:38px;flex:0 0 auto"></span>` : '' }
-                ${ dlbtn({ phase: v.diaPhase, pct: v.diaPct, detail: v.diaDetail, onAction: v.diaOnAction, onCancel: v.diaOnCancel }) }
-              </div>
-            </div>
-          </div>
         </div>
       </div>
 
@@ -2189,12 +2017,6 @@ function viewModals(v){ return `
     <div data-ref="${on(v.scrollRef)}" data-hidescroll="1" style="flex:1;overflow-y:auto;padding:26px 32px 90px">
       <div style="max-width:760px;margin:0 auto">
         ${ v.tLines.map(function(ln){ return `
-          ${ ln.showSpk ? `
-            <div style="display:flex;align-items:center;gap:8px;margin:18px 0 4px;padding:0 12px">
-              <span style="${ln.spkDotStyle}"></span>
-              <span style="${ln.spkLabelStyle}">${esc(ln.spkLabel)}</span>
-            </div>
-          ` : '' }
           <div data-key="${esc(ln.idx)}" style="${ln.rowStyle}">
             <span data-click="${on(ln.onJump)}" style="${ln.timeStyle}" data-sh="color:var(--accent) !important">${esc(ln.time)}</span>
             ${ v.editing ? `
