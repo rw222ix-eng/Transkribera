@@ -29,6 +29,7 @@
     step: 'config',
     model: 'KB-Whisper large',
     language: 'sv',
+    targetLanguage: 'sv',
     formats: { srt: true },
     run: 'idle',
     progress: 0,
@@ -293,7 +294,7 @@
     };
     // Glide the row out before dropping it from state (same animate-then-proceed pattern as start()).
     var row = document.querySelector('[data-pane="config"] [data-key="' + _cssId(id) + '"]');
-    if (!row || !row.animate || _reduceMotion()) { doRemove(); return; }
+    if (!row || !row.animate) { doRemove(); return; }
     var done = false, go = function () { if (done) return; done = true; doRemove(); };
     try {
       var a = row.animate(
@@ -325,7 +326,8 @@
     setState({ source: '', queue: [], qStatus: {}, qProgress: {}, activeId: null, fileError: '', step: 'source', run: 'idle', progress: 0, elapsed: 0, log: [], pp: 'idle', ppOp: 'summary', ppOut: '', ppEnabled: false, chat: [], chatInput: '', chatTyping: false, chatModalOpen: false, ppModalOpen: false, chatAttach: [], openDD: null, transcriptOpen: false, runError: null, editing: false, edits: {}, edited: false, audioPlaying: false, audioT: 0, histViewing: null, ac: 'idle', acPct: 0, acSeg: 0, acAwaitingModel: false, acTranscript: null, acFilesReal: null, resultMediaReal: null, resultTranscriptReal: null });
   }
   function pickModel(id) { setState({ model: id, openDD: null }); }
-  function pickLang(l) { setState({ language: l, model: recommendModel(l) }); }
+  function pickLang(l) { setState({ language: l, targetLanguage: l, model: recommendModel(l) }); }
+  function pickTargetLang(l) { setState({ targetLanguage: l }); }
   function pickOp(o) { setState({ ppOp: o, pp: 'idle', ppOut: '' }); if (o === 'chat') { seedChat(); openChatModal(); } else closeChatModal(); }
   function openChatModal() { setState({ chatModalOpen: true }); }
   function closeChatModal() { setState({ chatModalOpen: false }); }
@@ -349,7 +351,19 @@
       setState(function (s) { var installed = Object.assign({}, s.installed); delete installed[c.id]; return { installed: installed, confirm: null }; });
       if (S.model === c.id) { var fb = WHISPER.find(function (m) { return m.id !== c.id && S.installed[m.id]; }); if (fb) setState({ model: fb.id }); }
     } else if (c.kind === 'history') {
+      // If the deleted entry is the file currently loaded in the Transkribera flow,
+      // wipe that flow back to the source step (restart) so it isn't left showing a
+      // transcription that no longer exists. A non-loaded entry leaves the flow alone.
+      var del = S.history.find(function (x) { return x.id === c.id; });
+      var active = S.queue.find(function (q) { return q.id === S.activeId; });
+      var loadedName = (active && active.name) || S.source;
+      var loadedPath = active && active.path;
+      var matchesLoaded = del && (
+        (loadedName && del.name === loadedName) ||
+        (loadedPath && (loadedPath === del.source || (del.video && loadedPath === del.video.path)))
+      );
       setState({ confirm: null });
+      if (matchesLoaded) restart();   // clears queue/source/run, sets step:'source'; keeps tab + model/lang/format
       fetch('/api/history/' + encodeURIComponent(c.id), { method: 'DELETE' }).then(function () { loadHistory(); }).catch(function () {});
     } else if (c.kind === 'rerun') {
       var h = S.history.find(function (x) { return x.id === c.id; });
@@ -463,6 +477,7 @@
     var formats = ['srt'];
     streamPost('/api/transcribe',
       { source: active.path || active.name, model_id: S.model, language: S.language,
+        target_language: S.targetLanguage,
         formats: formats, sub_mode: S.subtitleMode,
         embed_kind: S.subtitleMode === 'embed' ? S.embedKind : null },
       function (ev) {
@@ -848,6 +863,10 @@
 
     var langs = [['sv', 'Svenska'], ['en', 'Engelska']];
     var langOptions = langs.map(function (p) { return { label: p[1], style: segBtn(st.language === p[0], '38px'), onPick: function () { pickLang(p[0]); } }; });
+    var targetLangOptions = langs.map(function (p) { return { label: p[1], style: segBtn(st.targetLanguage === p[0], '38px'), onPick: function () { pickTargetLang(p[0]); } }; });
+    var translateNote = (st.targetLanguage && st.targetLanguage !== st.language)
+      ? ('Översätts till ' + (st.targetLanguage === 'sv' ? 'svenska' : 'engelska') + ' mot ljudet — tar längre tid.')
+      : '';
     var subtitleOptions = [['separate', 'Spara separat'], ['embed', 'Bädda in']].map(function (p) { return { label: p[1], style: segBtn(st.subtitleMode === p[0], '38px'), onPick: function () { setState({ subtitleMode: p[0] }); } }; });
     var embedOptions = [['soft', 'Mjukt sub-spår'], ['burn', 'Hård inbränning']].map(function (p) { return { label: p[1], style: segBtn(st.embedKind === p[0], '38px'), onPick: function () { setState({ embedKind: p[0] }); } }; });
     var _activeQ = st.queue.find(function (q) { return q.id === st.activeId; }) || st.queue[0] || {};
@@ -1066,7 +1085,8 @@
       onCurModelAction: function () { if (st.dlFailed[curModel.id]) retryDownload(curModel.id); else if (!curInstalled && !st.downloading[curModel.id] && !st.installing[curModel.id]) modelAction(curModel.id); },
       onCurModelCancel: function () { cancelDownload(curModel.id); },
       toggleModelDD: toggleModelDD, modelDDOpen: st.openDD === 'model', modelOptions: modelOptions,
-      langOptions: langOptions, subtitleOptions: subtitleOptions,
+      langOptions: langOptions, targetLangOptions: targetLangOptions, translateNote: translateNote,
+      subtitleOptions: subtitleOptions,
       embedOptions: embedOptions, showEmbed: st.subtitleMode === 'embed' && _activeIsVideo,
       showMoveNote: _activeIsLocal && _activeIsVideo,
 
@@ -1128,30 +1148,33 @@
   var H = [];                // per-render handler/ref registry
   var pendingCbs = [];
   var _raf = false;
-  var _prevStep = null, _prevQueueIds = null;  // queue-flow enter/stagger transition tracking
+  var _qInit = false;        // becomes true after the first render (no entrance anim on initial paint)
 
-  function _reduceMotion() {
-    try { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); } catch (e) { return false; }
-  }
   function _cssId(id) { return (window.CSS && CSS.escape) ? CSS.escape(id) : String(id).replace(/["\\]/g, '\\$&'); }
+  function _markSeen(pane) {
+    pane.__qEntered = true;
+    pane.querySelectorAll('[data-key]').forEach(function (r) { r.__qSeen = true; });
+  }
 
-  // Smooth motion for the queue flow. Runs at the END of render() (DOM already patched
-  // by morphdom, so freshly-created nodes exist): glide the config pane in when arriving
-  // from another step, and stagger only the queue rows whose id is new since last render.
-  // Row removal is animated separately in removeQ(). Mirrors the app's existing motion
-  // language (WAAPI + cubic-bezier(.16,1,.3,1), like the process pane / [data-reveal]).
+  // Smooth motion for the queue flow. Runs at the END of render(), AFTER morphdom has
+  // patched the DOM. We key off DOM-node identity rather than state diffs: morphdom
+  // creates a fresh [data-pane="config"] node when arriving at the config step (and reuses
+  // it while you stay there), so a pane without our __qEntered flag is newly arrived →
+  // glide it in. Likewise a [data-key] row without __qSeen is a newly added queue item →
+  // stagger it in (but only when the pane itself isn't new, so rows ride in WITH the pane
+  // on first arrival rather than double-animating). Row removal is handled in removeQ().
+  // Mirrors the app's motion language (WAAPI + cubic-bezier(.16,1,.3,1), like the process
+  // pane / [data-reveal]). Robust to coalesced/throttled renders since it never compares
+  // across renders.
   function runQueueTransitions() {
-    var step = S.step;
-    var ids = (S.queue || []).map(function (q) { return q.id; });
-    var firstPaint = (_prevStep === null);
-    var prevStep = _prevStep, prevIds = _prevQueueIds || [];
-    _prevStep = step; _prevQueueIds = ids;          // commit for next render before any early return
-    try { (window.__rqtLog = window.__rqtLog || []).push({ prevStep: prevStep, step: step, firstPaint: firstPaint, ids: ids.slice() }); } catch (e) {}
-    if (firstPaint || _reduceMotion() || step !== 'config') return;
-
-    var pane = document.querySelector('[data-pane="config"]');
+    var pane = (S.step === 'config') ? document.querySelector('[data-pane="config"]') : null;
+    if (!_qInit) { _qInit = true; if (pane) _markSeen(pane); return; }   // adopt initial DOM as baseline
     if (!pane) return;
-    if (prevStep !== 'config' && pane.animate) {     // entered config from another step → glide the pane in
+    if (!pane.animate) { _markSeen(pane); return; }
+
+    var paneNew = !pane.__qEntered;
+    if (paneNew) {
+      pane.__qEntered = true;
       try {
         pane.animate(
           [{ opacity: 0, transform: 'translateY(16px) scale(0.99)' }, { opacity: 1, transform: 'translateY(0) scale(1)' }],
@@ -1159,19 +1182,18 @@
         );
       } catch (e) {}
     }
-    var prevSet = {}; prevIds.forEach(function (id) { prevSet[id] = 1; });
     var i = 0;
-    ids.forEach(function (id) {
-      if (prevSet[id]) return;                        // existing item — ride in with the pane, don't re-animate
-      var row = pane.querySelector('[data-key="' + _cssId(id) + '"]');
-      if (!row || !row.animate) return;
-      try {
-        row.animate(
-          [{ opacity: 0, transform: 'translateY(10px)' }, { opacity: 1, transform: 'translateY(0)' }],
-          { duration: 360, delay: i * 55, easing: 'cubic-bezier(.16,1,.3,1)', fill: 'backwards' }
-        );
-      } catch (e) {}
-      i++;
+    pane.querySelectorAll('[data-key]').forEach(function (row) {
+      var isNew = !row.__qSeen;
+      row.__qSeen = true;
+      if (isNew && !paneNew && row.animate) {        // row added while the pane stayed put → stagger it in
+        try {
+          row.animate(
+            [{ opacity: 0, transform: 'translateY(10px)' }, { opacity: 1, transform: 'translateY(0)' }],
+            { duration: 360, delay: (i++) * 55, easing: 'cubic-bezier(.16,1,.3,1)', fill: 'backwards' }
+          );
+        } catch (e) {}
+      }
     });
   }
 
@@ -1462,10 +1484,24 @@ function viewTranscribe(v){ return `
             ` : '' }
           </div>
 
-        <div style="display:flex;gap:3px;padding:4px;background:var(--track);border:1px solid var(--line);border-radius:11px;flex:0 0 auto">
-          ${ v.langOptions.map(function(l){ return `
-            <button data-click="${on(l.onPick)}" style="${l.style}" data-sh="background:var(--surface) !important;color:var(--ink) !important;box-shadow:var(--shadow-sm) !important">${esc(l.label)}</button>
-          `; }).join('') }
+        <div style="display:flex;flex-direction:column;gap:6px;flex:0 0 auto">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:12px;color:var(--ink-3);width:62px">Talat</span>
+            <div style="display:flex;gap:3px;padding:4px;background:var(--track);border:1px solid var(--line);border-radius:11px">
+              ${ v.langOptions.map(function(l){ return `
+                <button data-click="${on(l.onPick)}" style="${l.style}" data-sh="background:var(--surface) !important;color:var(--ink) !important;box-shadow:var(--shadow-sm) !important">${esc(l.label)}</button>
+              `; }).join('') }
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:12px;color:var(--ink-3);width:62px">Resultat</span>
+            <div style="display:flex;gap:3px;padding:4px;background:var(--track);border:1px solid var(--line);border-radius:11px">
+              ${ v.targetLangOptions.map(function(l){ return `
+                <button data-click="${on(l.onPick)}" style="${l.style}" data-sh="background:var(--surface) !important;color:var(--ink) !important;box-shadow:var(--shadow-sm) !important">${esc(l.label)}</button>
+              `; }).join('') }
+            </div>
+          </div>
+          ${ v.translateNote ? `<div style="font-size:12px;color:var(--ink-2);max-width:230px;line-height:1.35">${esc(v.translateNote)}</div>` : '' }
         </div>
 
         <div style="flex:1 1 auto"></div>
