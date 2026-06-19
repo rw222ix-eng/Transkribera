@@ -78,7 +78,12 @@ def _run_ffmpeg(cmd: list[str], cwd: str):
     return proc.returncode, (proc.stderr or "")
 
 
-def embed_subtitles(media: Path, srt: Path, kind: str) -> Path:
+_ISO3 = {"sv": "swe", "en": "eng"}
+
+
+def embed_subtitles(media: Path, srt: Path, kind: str,
+                    ref_srt: Path | None = None,
+                    sub_lang: str | None = None, ref_lang: str | None = None) -> Path:
     """Bädda in `srt` i `media`. Returnerar den färdiga videofilens sökväg.
     Mjukt = muxat sub-spår (stream-copy). Hård = inbränt (NVENC, fallback libx264)."""
     media = Path(media)
@@ -101,8 +106,12 @@ def embed_subtitles(media: Path, srt: Path, kind: str) -> Path:
         sub_name = safe_srt.name
 
     tmp = folder / f"{stem}__textad{out_ext}"
+    ref_name = ref_srt.name if (kind == "soft" and ref_srt is not None) else None
     cmd = build_embed_cmd(media.name, sub_name, kind, tmp.name,
-                          sub_codec=sub_codec, encoder="h264_nvenc")
+                          sub_codec=sub_codec, encoder="h264_nvenc",
+                          ref_srt_name=ref_name,
+                          sub_lang=_ISO3.get(sub_lang or "", sub_lang),
+                          ref_lang=_ISO3.get(ref_lang or "", ref_lang))
     rc, err = _run_ffmpeg(cmd, str(folder))
     if rc != 0 and kind == "burn":
         # NVENC saknas/fel — fallback till CPU-encoder
@@ -140,8 +149,12 @@ def _file_entry(path: Path, kind: str) -> dict:
 
 def assemble_output(media: Path, srt: Path | None, base_dir: Path, date_str: str,
                     sub_mode: str, embed_kind: str | None,
-                    emit_log: Callable[[str], None] | None = None) -> dict:
-    """Flytta media (+ ev. SRT) till en ny resultatmapp; bädda in vid behov.
+                    emit_log: Callable[[str], None] | None = None,
+                    ref_srt: Path | None = None,
+                    sub_lang: str | None = None, ref_lang: str | None = None) -> dict:
+    """Flytta media (+ ev. huvud-SRT + ev. referens-SRT) till en ny resultatmapp;
+    bädda in vid behov. `ref_srt` är t.ex. den korrekta engelskan vid översättning —
+    den läggs som referensfil och (vid mjuk inbäddning) som andra undertextspår.
     Returnerar {folder, files:[{path,name,ext,kind,size}], video:{...}|None}."""
     def log(msg):
         if emit_log:
@@ -152,13 +165,16 @@ def assemble_output(media: Path, srt: Path | None, base_dir: Path, date_str: str
     media = move_into(media, folder)
     if srt is not None:
         srt = move_into(Path(srt), folder)
+    if ref_srt is not None:
+        ref_srt = move_into(Path(ref_srt), folder)
 
     is_video = media.suffix.lower() in VIDEO_EXTS
     embedded = False
     if sub_mode == "embed" and embed_kind and is_video and srt is not None:
         log("Bäddar in undertexter i videon …")
         try:
-            media = embed_subtitles(media, srt, embed_kind)
+            media = embed_subtitles(media, srt, embed_kind,
+                                    ref_srt=ref_srt, sub_lang=sub_lang, ref_lang=ref_lang)
             embedded = True
         except Exception as e:
             log("Inbäddningen misslyckades: " + str(e)
@@ -167,6 +183,8 @@ def assemble_output(media: Path, srt: Path | None, base_dir: Path, date_str: str
     files = [_file_entry(media, "video" if is_video else "audio")]
     if srt is not None and srt.exists():
         files.append(_file_entry(srt, "subtitle"))
+    if ref_srt is not None and ref_srt.exists():
+        files.append(_file_entry(ref_srt, "subtitle-ref"))
 
     video = {"path": str(media), "name": media.name, "ext": media.suffix.lstrip("."),
              "embedded": embedded, "embed_kind": embed_kind if embedded else None}

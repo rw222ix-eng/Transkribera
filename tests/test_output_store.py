@@ -107,7 +107,7 @@ def test_assemble_output_embed_calls_embed(tmp_path, monkeypatch):
 
     calls = {}
 
-    def fake_embed(m, s, kind):
+    def fake_embed(m, s, kind, **kwargs):
         calls["kind"] = kind
         return m
     monkeypatch.setattr(output_store, "embed_subtitles", fake_embed)
@@ -175,3 +175,20 @@ def test_build_embed_cmd_burn_ignores_ref():
                           ref_srt_name="v.en.srt", sub_lang="swe", ref_lang="eng")
     assert "v.en.srt" not in cmd
     assert "subtitles=v.srt" in cmd
+
+
+def test_assemble_output_includes_reference_subtitle(tmp_path):
+    from app import output_store
+    media = tmp_path / "clip.mp3"
+    media.write_bytes(b"x")
+    sv = tmp_path / "clip.srt"
+    sv.write_text("1\n00:00:00,000 --> 00:00:01,000\nHej\n\n", encoding="utf-8")
+    en = tmp_path / "clip.en.srt"
+    en.write_text("1\n00:00:00,000 --> 00:00:01,000\nHi\n\n", encoding="utf-8")
+    res = output_store.assemble_output(
+        media, sv, tmp_path, "2026-06-19", "separate", None,
+        ref_srt=en, sub_lang="sv", ref_lang="en")
+    kinds = sorted(f["kind"] for f in res["files"])
+    assert kinds == ["audio", "subtitle", "subtitle-ref"]
+    names = {f["name"] for f in res["files"]}
+    assert "clip.srt" in names and "clip.en.srt" in names
