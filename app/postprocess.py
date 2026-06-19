@@ -52,8 +52,8 @@ def should_translate(language: str, target_language: str) -> bool:
 def _translate_batch(texts: list[str], source_lang: str, target_lang: str,
                      model: str) -> list[str] | None:
     """Translate cue texts in ONE LLM call via a numbered list (the batch itself is
-    the context window). Returns aligned translations, or None if the response does
-    not contain exactly one numbered line per input cue."""
+    the context window). Returns aligned translations, or None if the response is
+    missing a numbered line for any input cue (extra lines are ignored)."""
     src, tgt = _lang_name(source_lang), _lang_name(target_lang)
     numbered = "\n".join(f"{i}. {t}" for i, t in enumerate(texts, 1))
     prompt = (
@@ -101,8 +101,11 @@ def translate_segments(segments: list[dict], source_lang: str, target_lang: str,
                 except Exception:
                     tt = ""
                 translated.append(tt or t)   # keep source on failure
-        for s, tt in zip(chunk, translated):
-            text = tt or (s.get("text") or "")
+        for s, translated_text in zip(chunk, translated):
+            # translated_text is already source-backed by the fallback above and
+            # never empty on the batch-success path (the regex requires \S); the
+            # explicit guard keeps the source text only when we genuinely have none.
+            text = translated_text if translated_text else (s.get("text") or "")
             out.append({"start": s.get("start", 0.0), "end": s.get("end", 0.0), "text": text})
             if token_cb:
                 token_cb(text + "\n")

@@ -50,3 +50,13 @@ def test_translate_segments_keeps_source_when_empty(monkeypatch):
 
 def test_translate_segments_empty_input():
     assert postprocess.translate_segments([], "en", "sv", "m") == []
+
+
+def test_translate_segments_streams_via_token_cb(monkeypatch):
+    monkeypatch.setattr(postprocess.ollama_client, "generate",
+                        lambda model, prompt, **kw: "1. Hej\n2. Världen")
+    segs = [{"start": 0.0, "end": 1.0, "text": "Hello"},
+            {"start": 1.0, "end": 2.0, "text": "World"}]
+    streamed = []
+    postprocess.translate_segments(segs, "en", "sv", "m", token_cb=streamed.append)
+    assert streamed == ["Hej\n", "Världen\n"]
