@@ -421,8 +421,18 @@ def create_app(base_dir: Path | None = None) -> FastAPI:
 
     @app.delete("/api/history/{entry_id}")
     def api_history_delete(entry_id: str):
+        items = history_store.load_history(history_file)
+        entry = next((e for e in items if e.get("id") == entry_id), None)
+        folder_removed = False
+        if entry and entry.get("folder"):
+            try:
+                folder_removed = output_store.delete_result_folder(base, entry["folder"])
+            except OSError:
+                return JSONResponse(
+                    {"error": "kunde inte radera mappen — en fil kan vara öppen"},
+                    status_code=409)
         history_store.delete_history(history_file, entry_id)
-        return {"ok": True}
+        return {"ok": True, "folder_removed": folder_removed}
 
     @app.post("/api/postprocess")
     async def api_postprocess(req: Request):

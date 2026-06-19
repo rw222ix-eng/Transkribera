@@ -71,4 +71,51 @@ def test_history_endpoint_empty(client):
 def test_history_delete_ok(client):
     r = client.delete("/api/history/nope")
     assert r.status_code == 200
-    assert r.json() == {"ok": True}
+    assert r.json() == {"ok": True, "folder_removed": False}
+
+
+def test_history_delete_removes_folder(client, tmp_path):
+    import json
+    folder = tmp_path / "Transkriberingar" / "2026-06-19 · klipp"
+    folder.mkdir(parents=True)
+    (folder / "klipp.mp4").write_text("v", encoding="utf-8")
+    (tmp_path / "history.json").write_text(
+        json.dumps([{"id": "h1", "name": "klipp.mp4", "folder": str(folder)}]),
+        encoding="utf-8")
+    r = client.delete("/api/history/h1")
+    assert r.status_code == 200
+    assert r.json() == {"ok": True, "folder_removed": True}
+    assert not folder.exists()
+    assert client.get("/api/history").json() == []
+
+
+def test_history_delete_refuses_folder_outside_root(client, tmp_path):
+    import json
+    outside = tmp_path / "inte_transkriberingar"
+    outside.mkdir()
+    (outside / "f.txt").write_text("x", encoding="utf-8")
+    (tmp_path / "history.json").write_text(
+        json.dumps([{"id": "h2", "name": "x", "folder": str(outside)}]),
+        encoding="utf-8")
+    r = client.delete("/api/history/h2")
+    assert r.status_code == 200
+    assert r.json() == {"ok": True, "folder_removed": False}
+    assert outside.exists()                       # disk untouched
+    assert client.get("/api/history").json() == []  # entry still removed
+
+
+def test_history_delete_locked_folder_keeps_entry(client, tmp_path, monkeypatch):
+    import json
+    folder = tmp_path / "Transkriberingar" / "2026-06-19 · last"
+    folder.mkdir(parents=True)
+    (tmp_path / "history.json").write_text(
+        json.dumps([{"id": "h3", "name": "x", "folder": str(folder)}]),
+        encoding="utf-8")
+
+    def boom(*a, **k):
+        raise OSError("locked")
+    monkeypatch.setattr(server.output_store, "delete_result_folder", boom)
+
+    r = client.delete("/api/history/h3")
+    assert r.status_code == 409
+    assert [e["id"] for e in client.get("/api/history").json()] == ["h3"]
