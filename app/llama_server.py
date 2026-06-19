@@ -13,6 +13,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from typing import Callable
 
 import requests
 
@@ -32,8 +33,8 @@ def server_binary() -> Path:
     return root / "bin" / "llamacpp" / "llama-server.exe"
 
 
-def build_args(model_path, *, port: int = DEFAULT_PORT, ctx: int = DEFAULT_CTX,
-               profile: str = "balanced", binary=None) -> list[str]:
+def build_args(model_path: str | Path, *, port: int = DEFAULT_PORT, ctx: int = DEFAULT_CTX,
+               profile: str = "balanced", binary: str | Path | None = None) -> list[str]:
     k, v = CACHE_PROFILES[profile]
     return [
         str(binary or server_binary()),
@@ -77,7 +78,7 @@ class LlamaServer:
     """Owns the llama-server child process. start() is idempotent — a healthy
     server already on the port (e.g. left running) is reused rather than respawned."""
 
-    def __init__(self, model_path, port: int = DEFAULT_PORT,
+    def __init__(self, model_path: str | Path, port: int = DEFAULT_PORT,
                  ctx: int = DEFAULT_CTX, profile: str = "balanced"):
         self.model_path = Path(model_path)
         self.port = port
@@ -89,7 +90,7 @@ class LlamaServer:
     def base_url(self) -> str:
         return f"http://127.0.0.1:{self.port}"
 
-    def start(self, timeout: int = 120, log_cb=None) -> None:
+    def start(self, timeout: int = 120, log_cb: Callable[[str], None] | None = None) -> None:
         if is_healthy(self.port):
             if log_cb:
                 log_cb("llama-server körs redan.")
@@ -121,4 +122,5 @@ class LlamaServer:
                 self.proc.wait(timeout=10)
             except subprocess.TimeoutExpired:
                 self.proc.kill()
+                self.proc.wait()
         self.proc = None

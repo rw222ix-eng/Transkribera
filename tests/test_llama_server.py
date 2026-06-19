@@ -72,3 +72,29 @@ def test_start_raises_if_process_dies(monkeypatch):
 class _Reader:
     def __init__(self, text): self._text = text
     def read(self): return self._text
+
+def test_stop_is_safe_when_never_started():
+    srv = ls.LlamaServer("m.gguf", port=8170)
+    srv.stop()                      # must not raise
+    assert srv.proc is None
+
+def test_start_times_out_and_stops(monkeypatch):
+    monkeypatch.setattr(ls, "is_healthy", lambda *a, **k: False)
+    class LiveProc:
+        def __init__(self, *a, **k): self.stdout = _Reader("")
+        def poll(self): return None             # running, but never becomes healthy
+        def terminate(self): pass
+        def wait(self, timeout=None): return 0
+        def kill(self): pass
+    monkeypatch.setattr(ls.subprocess, "Popen", LiveProc)
+    srv = ls.LlamaServer("m.gguf", port=8170)
+    try:
+        srv.start(timeout=1)
+        assert False, "expected RuntimeError"
+    except RuntimeError as e:
+        assert "tidsgränsen" in str(e)
+    assert srv.proc is None                     # stop() ran on timeout
+
+def test_build_args_uses_default_binary_when_none():
+    args = ls.build_args("m.gguf")
+    assert args[0].endswith("llama-server.exe")
