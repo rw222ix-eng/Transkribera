@@ -19,8 +19,8 @@ def test_run_calls_generate(monkeypatch):
         captured["model"] = model
         captured["prompt"] = prompt
         return "resultat"
-    monkeypatch.setattr(pp.ollama_client, "generate", fake_generate)
-    out = pp.run("summary", "transkript", model="gemma2:2b")
+    monkeypatch.setattr(pp.llm_client, "generate", fake_generate)
+    out = pp.run("summary", "transkript", model="Qwen3-14B-Q8_0.gguf")
     assert out == "resultat"
-    assert captured["model"] == "gemma2:2b"
+    assert captured["model"] == "Qwen3-14B-Q8_0.gguf"
     assert "transkript" in captured["prompt"]

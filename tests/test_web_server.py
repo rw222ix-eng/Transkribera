@@ -16,8 +16,8 @@ def client(tmp_path, monkeypatch):
 
     # Stub out heavy / external calls so the endpoints are unit-testable.
     monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: HW())
-    monkeypatch.setattr(server.ollama_client, "is_running", lambda *a, **k: False)
-    monkeypatch.setattr(server.ollama_client, "list_models", lambda *a, **k: [])
+    monkeypatch.setattr(server.llm_client, "is_running", lambda *a, **k: False)
+    monkeypatch.setattr(server.llm_manager, "is_installed", lambda *a, **k: False)
     monkeypatch.setattr(server.online_catalog, "fetch_ollama_library",
                         lambda *a, **k: ["mistral", "llama3.1"])
     monkeypatch.setattr(server.whisper_manager, "is_installed", lambda *a, **k: False)

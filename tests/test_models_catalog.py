@@ -11,9 +11,11 @@ def test_whisper_catalog_is_well_formed():
         assert m.rank > 0
 
 def test_llm_catalog_is_well_formed():
-    assert len(LLM_MODELS) >= 3
+    # Locked to exactly one local GGUF served by the bundled llama.cpp server.
+    assert len(LLM_MODELS) == 1
     names = [m.name for m in LLM_MODELS]
     assert len(names) == len(set(names)), "duplicate LLM names"
+    assert names == ["Qwen3-14B-Q8_0.gguf"]
     for m in LLM_MODELS:
         assert isinstance(m, LLMModelSpec)
         assert m.download_mb > 0 and m.vram_mb > 0 and m.ram_mb > 0

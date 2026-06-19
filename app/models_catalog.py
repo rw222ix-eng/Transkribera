@@ -62,15 +62,10 @@ WHISPER_MODELS: list[WhisperModelSpec] = [
                      "Bäst för svenska", rtf=7, score=5.5),
 ]
 
+# Locked: a single local GGUF served by the bundled llama.cpp server (Phase 0 spike).
 LLM_MODELS: list[LLMModelSpec] = [
-    LLMModelSpec("gemma2:2b", "Gemma 2 (2B)", 1600, 4000, 8000, 1,
-                 toks=95, ctx="8k", uses=("text",), files=("PDF", "TXT", "Markdown")),
-    LLMModelSpec("llama3.2:3b", "Llama 3.2 (3B)", 2000, 5000, 8000, 2,
-                 toks=85, ctx="128k", uses=("text",), files=("PDF", "TXT", "Markdown")),
-    LLMModelSpec("qwen2.5:7b", "Qwen 2.5 (7B)", 4700, 8000, 16000, 3,
-                 toks=75, ctx="128k", uses=("text", "sv"), files=("PDF", "TXT", "Markdown", "DOCX", "CSV")),
-    LLMModelSpec("llama3.1:8b", "Llama 3.1 (8B)", 4900, 8000, 16000, 4,
-                 toks=65, ctx="128k", uses=("text",), files=("PDF", "TXT", "Markdown")),
-    LLMModelSpec("qwen2.5:14b", "Qwen 2.5 (14B)", 9000, 16000, 32000, 5,
-                 toks=40, ctx="128k", uses=("text", "sv"), files=("PDF", "TXT", "Markdown", "DOCX", "CSV")),
+    LLMModelSpec("Qwen3-14B-Q8_0.gguf", "Qwen3 14B (Q8_0)", 14971, 16000, 24000, 6,
+                 "Korrigering & analys (llama.cpp)", toks=55, ctx="40k",
+                 uses=("text", "sv"),
+                 files=("PDF", "TXT", "Markdown", "DOCX")),
 ]
