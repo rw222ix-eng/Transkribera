@@ -41,6 +41,9 @@ nul
 # llama.cpp-binärer + spike-artefakter (stora; byggs/laddas separat)
 bin/
 _spike/
+/bin/llamacpp/
+/models/llm/
+/_spike/
 
 # Lokala Claude Code-inställningar
 .claude/
