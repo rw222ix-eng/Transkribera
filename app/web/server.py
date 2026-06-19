@@ -307,6 +307,7 @@ def create_app(base_dir: Path | None = None) -> FastAPI:
         source = (body.get("source") or "").strip()
         model_id = body.get("model_id")
         language = body.get("language") or ""
+        target_language = body.get("target_language") or language
         sub_mode = body.get("sub_mode") or "separate"
         embed_kind = body.get("embed_kind")  # "soft" | "burn" | None
         formats = [f for f in (body.get("formats") or ["srt"]) if f in transcriber.WRITERS]
@@ -347,14 +348,51 @@ def create_app(base_dir: Path | None = None) -> FastAPI:
                 else:
                     raise RuntimeError("Transkriberingen gav inget resultat")
             srt_path = next((Path(p) for p in written if str(p).lower().endswith(".srt")), None)
+
+            ref_srt = sub_lang = ref_lang = None
+            if postprocess.should_translate(language, target_language):
+                if not audio_model.is_audio_model_installed(models_root):
+                    raise RuntimeError("Ljudmodellen krävs för översättning men är inte nedladdad.")
+                if not ollama_client.is_running():
+                    raise RuntimeError("Text-LLM:en (Ollama) körs inte — kan inte översätta.")
+                emit({"type": "log", "msg": "Rättar källtexten mot ljudet …"})
+                corr_base = media.with_name(media.stem + "_korr")
+                seg_json = media.with_name(media.stem + ".segments.json")
+                seg_json.write_text(json.dumps(segments, ensure_ascii=False), encoding="utf-8")
+                ac_written = []
+                try:
+                    ac_cmd = transcriber.build_audio_correct_cmd(
+                        media, str(audio_model.audio_model_dir(models_root)),
+                        str(seg_json), corr_base, ["srt"], language)
+                    ac_written, corrected = _run_transcribe_subprocess(ac_cmd, base, emit)
+                finally:
+                    for p in [seg_json] + [Path(x) for x in ac_written]:
+                        try:
+                            p.unlink()
+                        except OSError:
+                            pass
+                corrected = transcriber.clean_caption_dicts(corrected, group=False) or segments
+                emit({"type": "log", "msg": "Översätter mot ljudet …"})
+                sv_dicts = postprocess.translate_segments(
+                    corrected, language, target_language, LLM_MODELS[0].name)
+                sv_segs = [transcriber.Segment(d["start"], d["end"], d["text"]) for d in sv_dicts]
+                en_segs = [transcriber.Segment(d["start"], d["end"], d["text"]) for d in corrected]
+                srt_path = transcriber.write_outputs(sv_segs, out_base, ["srt"])[0]
+                ref_srt = transcriber.write_outputs(
+                    en_segs, out_base.with_name(out_base.stem + "." + language), ["srt"])[0]
+                sub_lang, ref_lang = target_language, language
+                segments = sv_dicts
+
             date_str = datetime.now().strftime("%Y-%m-%d")
             assembled = output_store.assemble_output(
                 media, srt_path, base, date_str, sub_mode, embed_kind,
-                emit_log=lambda m: emit({"type": "log", "msg": m}))
+                emit_log=lambda m: emit({"type": "log", "msg": m}),
+                ref_srt=ref_srt, sub_lang=sub_lang, ref_lang=ref_lang)
             files = assembled["files"]
             video = assembled["video"]
             spec_label = next((s.label for s in WHISPER_MODELS if s.id == model_id), model_id)
             lang_label = {"en": "Engelska", "sv": "Svenska"}.get(language, "Auto")
+            target_label = {"en": "Engelska", "sv": "Svenska"}.get(target_language, lang_label)
             dur = segments[-1]["end"] if segments else 0
             words = sum(len((sg.get("text") or "").split()) for sg in segments)
             history_store.add_history(history_file, {
@@ -363,6 +401,7 @@ def create_app(base_dir: Path | None = None) -> FastAPI:
                 "name": media.name,
                 "source": source if _is_url(source) else (video["path"] if video else str(media)),
                 "dur": _clock(dur), "model": spec_label, "lang": lang_label,
+                "target_lang": target_label,
                 "formats": ["SRT"],
                 "words": words, "files": files, "transcript": segments,
                 "folder": assembled["folder"], "video": video,
