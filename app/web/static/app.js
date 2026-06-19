@@ -72,6 +72,7 @@
     transcriptOpen: false,
     logOpen: false,
     toast: null,
+    histNotice: null,
     searchQuery: '',
     currentMatch: 0,
     queue: [{ id: 'f1', name: 'intervju_lund.mkv' }],
@@ -344,7 +345,7 @@
 
   function askUninstall(id) { setState({ confirm: { kind: 'uninstall', id: id, title: 'Ta bort ' + id + '?', body: 'Modellen raderas från disken (' + ((HW.disks.find(function (d) { return d.id === S.diskTarget; }) || {}).drive || '') + '). Du kan ladda ner den igen när som helst.', label: 'Ta bort', danger: true } }); }
   function askRerun(h) { setState({ confirm: { kind: 'rerun', id: h.id, title: 'Transkribera om?', body: '"' + h.name + '" körs igenom på nytt med dina nuvarande inställningar (modell, språk och format). Den läggs i kön på Transkribera-fliken.', label: 'Kör om', danger: false } }); }
-  function askDeleteHistory(id, name) { setState({ confirm: { kind: 'history', id: id, title: 'Ta bort transkriberingen?', body: '"' + name + '" tas bort ur historiken. Filer du redan sparat på disken påverkas inte.', label: 'Ta bort', danger: true } }); }
+  function askDeleteHistory(id, name) { setState({ confirm: { kind: 'history', id: id, title: 'Ta bort transkriberingen?', body: '"' + name + '" och hela dess mapp (video/ljud + undertexter) raderas permanent från disken. Det går inte att ångra.', label: 'Ta bort', danger: true } }); }
   function confirmYes() {
     var c = S.confirm; if (!c) return;
     if (c.kind === 'uninstall') {
@@ -364,7 +365,11 @@
       );
       setState({ confirm: null });
       if (matchesLoaded) restart();   // clears queue/source/run, sets step:'source'; keeps tab + model/lang/format
-      fetch('/api/history/' + encodeURIComponent(c.id), { method: 'DELETE' }).then(function () { loadHistory(); }).catch(function () {});
+      stopAudio();
+      fetch('/api/history/' + encodeURIComponent(c.id), { method: 'DELETE' }).then(function (r) {
+        if (!r.ok) { r.json().then(function (b) { showHistNotice((b && b.error) || 'Kunde inte radera mappen.'); }).catch(function () { showHistNotice('Kunde inte radera mappen.'); }); }
+        loadHistory();
+      }).catch(function () { loadHistory(); });
     } else if (c.kind === 'rerun') {
       var h = S.history.find(function (x) { return x.id === c.id; });
       setState({ confirm: null });
@@ -372,6 +377,8 @@
     } else setState({ confirm: null });
   }
   function confirmNo() { setState({ confirm: null }); }
+  var _histNoticeT;
+  function showHistNotice(msg) { clearTimeout(_histNoticeT); setState({ histNotice: msg }); _histNoticeT = setTimeout(function () { setState({ histNotice: null }); }, 6000); }
   function openHistory(h) { stopAudio(); setState({ transcriptOpen: true, histViewing: h.id, audioT: 0, audioDur: 0, audioPlaying: false, transcript: (h.transcript || []).map(function (g) { return { time: fmtTime(g.start), text: g.text }; }) }); }
   function reRunHistory(h) { var id = 'q' + Date.now(); setState({ tab: 'transcribe', step: 'config', queue: [{ id: id, name: h.name, path: h.source || h.name }], qStatus: {}, qProgress: {}, run: 'idle', progress: 0, elapsed: 0, activeId: id, source: h.source || h.name, fileError: '', runError: null, openDD: null }); }
 
@@ -1067,6 +1074,7 @@
       diskWarnBestLabel: st.diskWarn ? ('Ladda ner till ' + bestDisk().drive + ' · ' + fmtStorage(bestDisk().free) + ' ledigt') : '',
       onDiskWarnUseBest: diskWarnUseBest, onDiskWarnCancel: diskWarnCancel,
 
+      histNotice: st.histNotice,
       confirmOpen: !!st.confirm, confirmTitle: st.confirm ? st.confirm.title : '', confirmBody: st.confirm ? st.confirm.body : '', confirmLabel: st.confirm ? st.confirm.label : 'OK',
       confirmBtnStyle: (st.confirm && st.confirm.danger) ? 'display:inline-flex;align-items:center;justify-content:center;background:var(--bad);color:#fff;border:none;border-radius:11px;padding:11px 20px;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit' : primaryBtn(false),
       onConfirmYes: confirmYes, onConfirmNo: confirmNo,
@@ -1844,6 +1852,13 @@ function viewHistory(v){ return `
 
       ${ v.historyEmpty ? `
         <div style="text-align:center;padding:60px 24px;background:var(--surface);border:1px solid var(--line);border-radius:16px;color:var(--ink-2);font-size:16px">Inga transkriberingar än. När du kört klart en fil dyker den upp här.</div>
+      ` : '' }
+
+      ${ v.histNotice ? `
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;background:color-mix(in srgb,var(--bad) 7%,var(--surface));border:1px solid color-mix(in srgb,var(--bad) 30%,transparent);border-radius:12px;padding:12px 15px">
+          <span style="width:20px;height:20px;border-radius:50%;flex:0 0 auto;background:color-mix(in srgb,var(--bad) 16%,transparent);color:var(--bad);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700">!</span>
+          <span style="font-size:14.5px;color:var(--ink)">${esc(v.histNotice)}</span>
+        </div>
       ` : '' }
 
       <div style="display:flex;flex-direction:column;gap:10px">
