@@ -74,3 +74,10 @@ def test_base_url_resolved_at_call_time(monkeypatch):
     monkeypatch.setattr(lc.requests, "post", fake_post)
     lc.generate("ignored", "p")
     assert captured["url"] == "http://127.0.0.1:9999/v1/chat/completions"
+
+def test_skips_malformed_and_blank_sse_lines(monkeypatch):
+    # Blank lines, non-data lines (keepalives), and unparseable JSON must be ignored.
+    lines = ["", "ping: keepalive", "data: not-json",
+             'data: {"choices":[{"delta":{"content":"ok"}}]}', "data: [DONE]"]
+    monkeypatch.setattr(lc.requests, "post", lambda *a, **k: FakeResp(lines=lines))
+    assert lc.generate("ignored", "p") == "ok"
