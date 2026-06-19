@@ -24,3 +24,17 @@ def test_active_llm_is_a_spec():
     assert isinstance(lm.ACTIVE_LLM, lm.GGUFModelSpec)
     assert lm.ACTIVE_LLM.filename.endswith(".gguf")
     assert lm.ACTIVE_LLM.repo_id == "Qwen/Qwen3-14B-GGUF"
+
+def test_download_calls_hf_hub(monkeypatch, tmp_path):
+    called = {}
+    def fake_dl(repo_id, filename, local_dir, **kw):
+        called["repo_id"] = repo_id
+        p = Path(local_dir) / filename
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(b"x")
+        return str(p)
+    monkeypatch.setattr(lm, "hf_hub_download", fake_dl)
+    path = lm.download_gguf(SPEC, tmp_path)
+    assert called["repo_id"] == "Qwen/Qwen3-14B-GGUF"
+    assert lm.is_installed(SPEC, tmp_path)
+    assert path == lm.model_path_for(SPEC, tmp_path)

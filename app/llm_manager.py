@@ -59,6 +59,14 @@ def _dir_size(path: Path) -> int:
     return total
 
 
+def _progress_percent(downloaded_bytes: int, total_mb: int) -> int:
+    """Percent of an expected download, capped at 99 until verified complete."""
+    if total_mb <= 0:
+        return 0
+    total = total_mb * 1024 * 1024
+    return max(0, min(int(downloaded_bytes / total * 100), 99))
+
+
 def download_gguf(spec: GGUFModelSpec, models_root: Path,
                   log_cb: Callable[[str], None] | None = None,
                   progress_cb: Callable[[int], None] | None = None) -> Path:
@@ -69,11 +77,9 @@ def download_gguf(spec: GGUFModelSpec, models_root: Path,
 
     stop = {"v": False}
     if progress_cb is not None:
-        total = spec.download_mb * 1024 * 1024
-
         def monitor():
             while not stop["v"]:
-                progress_cb(max(0, min(int(_dir_size(target) / total * 100), 99)))
+                progress_cb(_progress_percent(_dir_size(target), spec.download_mb))
                 time.sleep(0.5)
         threading.Thread(target=monitor, daemon=True).start()
 
