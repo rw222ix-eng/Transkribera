@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from app.web import server
@@ -75,7 +77,8 @@ def test_history_delete_ok(client):
 
 
 def test_history_delete_removes_folder(client, tmp_path):
-    import json
+    # tmp_path is the same dir pytest injected into the `client` fixture's base_dir,
+    # so history.json + Transkriberingar/ written here are what the running app sees.
     folder = tmp_path / "Transkriberingar" / "2026-06-19 · klipp"
     folder.mkdir(parents=True)
     (folder / "klipp.mp4").write_text("v", encoding="utf-8")
@@ -90,7 +93,8 @@ def test_history_delete_removes_folder(client, tmp_path):
 
 
 def test_history_delete_refuses_folder_outside_root(client, tmp_path):
-    import json
+    # tmp_path is the same dir pytest injected into the `client` fixture's base_dir,
+    # so history.json + Transkriberingar/ written here are what the running app sees.
     outside = tmp_path / "inte_transkriberingar"
     outside.mkdir()
     (outside / "f.txt").write_text("x", encoding="utf-8")
@@ -105,7 +109,6 @@ def test_history_delete_refuses_folder_outside_root(client, tmp_path):
 
 
 def test_history_delete_locked_folder_keeps_entry(client, tmp_path, monkeypatch):
-    import json
     folder = tmp_path / "Transkriberingar" / "2026-06-19 · last"
     folder.mkdir(parents=True)
     (tmp_path / "history.json").write_text(
