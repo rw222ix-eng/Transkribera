@@ -49,10 +49,23 @@ def move_into(path: Path, folder: Path) -> Path:
 
 
 def build_embed_cmd(video_name: str, srt_name: str, kind: str, out_name: str,
-                    sub_codec: str = "mov_text", encoder: str = "h264_nvenc") -> list[str]:
+                    sub_codec: str = "mov_text", encoder: str = "h264_nvenc",
+                    ref_srt_name: str | None = None,
+                    sub_lang: str | None = None, ref_lang: str | None = None) -> list[str]:
     """Bygg ffmpeg-argv. Körs med cwd = mappen och endast filnamn (inte sökvägar)
-    för att slippa Windows-escaping i subtitles-filtret."""
+    för att slippa Windows-escaping i subtitles-filtret. Vid `ref_srt_name` (endast
+    mjukt läge) muxas ett andra undertextspår med språk-metadata; huvudspåret blir
+    default. Inbränning ignorerar referensspåret (bara ett språk får plats)."""
     if kind == "soft":
+        if ref_srt_name:
+            cmd = ["ffmpeg", "-y", "-i", video_name, "-i", srt_name, "-i", ref_srt_name,
+                   "-map", "0", "-map", "1", "-map", "2", "-c", "copy", "-c:s", sub_codec]
+            if sub_lang:
+                cmd += ["-metadata:s:s:0", "language=" + sub_lang]
+            if ref_lang:
+                cmd += ["-metadata:s:s:1", "language=" + ref_lang]
+            cmd += ["-disposition:s:0", "default", out_name]
+            return cmd
         return ["ffmpeg", "-y", "-i", video_name, "-i", srt_name,
                 "-map", "0", "-map", "1", "-c", "copy", "-c:s", sub_codec, out_name]
     return ["ffmpeg", "-y", "-i", video_name, "-vf", f"subtitles={srt_name}",

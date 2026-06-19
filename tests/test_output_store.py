@@ -147,3 +147,31 @@ def test_assemble_output_embed_failure_falls_back_to_separate(tmp_path, monkeypa
     assert (folder / "klipp.mp4").exists()
     assert (folder / "klipp.srt").exists()
     assert {f["kind"] for f in res["files"]} == {"video", "subtitle"}
+
+
+def test_build_embed_cmd_soft_single_unchanged():
+    from app.output_store import build_embed_cmd
+    cmd = build_embed_cmd("v.mp4", "v.srt", "soft", "out.mp4")
+    assert cmd.count("-map") == 2
+    assert "-metadata:s:s:1" not in cmd
+
+
+def test_build_embed_cmd_soft_dual_track():
+    from app.output_store import build_embed_cmd
+    cmd = build_embed_cmd("v.mp4", "v.srt", "soft", "out.mp4",
+                          ref_srt_name="v.en.srt", sub_lang="swe", ref_lang="eng")
+    assert cmd.count("-map") == 3
+    assert "v.en.srt" in cmd
+    assert "-metadata:s:s:0" in cmd and "language=swe" in cmd
+    assert "-metadata:s:s:1" in cmd and "language=eng" in cmd
+    # main track is the default disposition
+    di = cmd.index("-disposition:s:0")
+    assert cmd[di + 1] == "default"
+
+
+def test_build_embed_cmd_burn_ignores_ref():
+    from app.output_store import build_embed_cmd
+    cmd = build_embed_cmd("v.mp4", "v.srt", "burn", "out.mp4",
+                          ref_srt_name="v.en.srt", sub_lang="swe", ref_lang="eng")
+    assert "v.en.srt" not in cmd
+    assert "subtitles=v.srt" in cmd
