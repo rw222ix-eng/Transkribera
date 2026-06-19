@@ -8,12 +8,15 @@ import os
 import shutil
 import socket
 import subprocess
+import sys
 import threading
 import time
+from pathlib import Path
 
 import uvicorn
 import webview
 
+from app import llm_manager, llama_server, llm_client
 from app.web.server import create_app
 
 _MEDIA_TYPES = (
@@ -99,10 +102,30 @@ def main() -> None:
             break
         time.sleep(0.05)
 
+    # Bring up the local LLM server if its GGUF is present (non-fatal if not —
+    # transcription works without it). Pick a free port and point the client at it.
+    if getattr(sys, "frozen", False):
+        models_root = Path(sys.executable).resolve().parent / "models"
+    else:
+        models_root = Path(__file__).resolve().parent.parent.parent / "models"
+    llm = None
+    if llm_manager.is_installed(llm_manager.ACTIVE_LLM, models_root):
+        llm_port = llama_server.find_free_port()
+        llm_client.BASE_URL = f"http://127.0.0.1:{llm_port}"
+        llm = llama_server.LlamaServer(
+            llm_manager.model_path_for(llm_manager.ACTIVE_LLM, models_root),
+            port=llm_port)
+        try:
+            threading.Thread(target=lambda: llm.start(log_cb=print), daemon=True).start()
+        except Exception as e:  # never block the UI / transcription on the LLM
+            print(f"Kunde inte starta llama-server: {e}")
+
     webview.create_window("Transkribera", f"http://127.0.0.1:{port}",
                           width=1040, height=780, min_size=(820, 600),
                           js_api=Api())
     webview.start()                      # blocks until the window is closed
+    if llm is not None:
+        llm.stop()
     server.should_exit = True
     time.sleep(0.2)
 
