@@ -322,9 +322,9 @@
     setState({ urlInput: '' });
   }
   function restart() {
-    clearInterval(_t); clearTimeout(_pp); clearInterval(_ppIv); clearTimeout(_chat); clearInterval(_au);
+    clearInterval(_t); clearTimeout(_pp); clearInterval(_ppIv); clearTimeout(_chat); clearInterval(_au); clearTimeout(_histNoticeT);
     Object.values(_dl || {}).forEach(clearInterval);
-    setState({ source: '', queue: [], qStatus: {}, qProgress: {}, activeId: null, fileError: '', step: 'source', run: 'idle', progress: 0, elapsed: 0, log: [], pp: 'idle', ppOp: 'summary', ppOut: '', ppEnabled: false, chat: [], chatInput: '', chatTyping: false, chatModalOpen: false, ppModalOpen: false, chatAttach: [], openDD: null, transcriptOpen: false, runError: null, editing: false, edits: {}, edited: false, audioPlaying: false, audioT: 0, histViewing: null, ac: 'idle', acPct: 0, acSeg: 0, acAwaitingModel: false, acTranscript: null, acFilesReal: null, resultMediaReal: null, resultTranscriptReal: null });
+    setState({ source: '', queue: [], qStatus: {}, qProgress: {}, activeId: null, histNotice: null, fileError: '', step: 'source', run: 'idle', progress: 0, elapsed: 0, log: [], pp: 'idle', ppOp: 'summary', ppOut: '', ppEnabled: false, chat: [], chatInput: '', chatTyping: false, chatModalOpen: false, ppModalOpen: false, chatAttach: [], openDD: null, transcriptOpen: false, runError: null, editing: false, edits: {}, edited: false, audioPlaying: false, audioT: 0, histViewing: null, ac: 'idle', acPct: 0, acSeg: 0, acAwaitingModel: false, acTranscript: null, acFilesReal: null, resultMediaReal: null, resultTranscriptReal: null });
   }
   function pickModel(id) { setState({ model: id, openDD: null }); }
   function pickLang(l) { setState({ language: l, targetLanguage: l, model: recommendModel(l) }); }
