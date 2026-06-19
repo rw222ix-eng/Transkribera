@@ -192,3 +192,39 @@ def test_assemble_output_includes_reference_subtitle(tmp_path):
     assert kinds == ["audio", "subtitle", "subtitle-ref"]
     names = {f["name"] for f in res["files"]}
     assert "clip.srt" in names and "clip.en.srt" in names
+
+
+# ---- delete_result_folder ----
+
+def test_delete_result_folder_removes_valid(tmp_path):
+    folder = tmp_path / "Transkriberingar" / "2026-06-19 · klipp"
+    folder.mkdir(parents=True)
+    (folder / "klipp.mp4").write_text("v", encoding="utf-8")
+    (folder / "klipp.srt").write_text("1\n", encoding="utf-8")
+    assert output_store.delete_result_folder(tmp_path, folder) is True
+    assert not folder.exists()
+
+
+def test_delete_result_folder_refuses_outside_root(tmp_path):
+    outside = tmp_path / "inte_transkriberingar"
+    outside.mkdir()
+    (outside / "f.txt").write_text("x", encoding="utf-8")
+    assert output_store.delete_result_folder(tmp_path, outside) is False
+    assert outside.exists()
+
+
+def test_delete_result_folder_refuses_the_root_itself(tmp_path):
+    root = tmp_path / "Transkriberingar"
+    root.mkdir()
+    assert output_store.delete_result_folder(tmp_path, root) is False
+    assert root.exists()
+
+
+def test_delete_result_folder_missing_is_ok(tmp_path):
+    folder = tmp_path / "Transkriberingar" / "saknas"
+    assert output_store.delete_result_folder(tmp_path, folder) is True
+
+
+def test_delete_result_folder_empty_returns_false(tmp_path):
+    assert output_store.delete_result_folder(tmp_path, None) is False
+    assert output_store.delete_result_folder(tmp_path, "") is False

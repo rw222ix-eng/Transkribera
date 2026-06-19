@@ -41,6 +41,23 @@ def create_result_folder(base_dir: Path, date_str: str, media_name: str) -> Path
     return folder
 
 
+def delete_result_folder(base_dir: Path, folder: str | Path | None) -> bool:
+    """Radera en resultatmapp permanent. Returnerar True om mappen togs bort (eller
+    redan saknades), False om sökvägen är tom eller inte ligger strikt under
+    base_dir/Transkriberingar (säkerhetsvägran — ingen radering). Kastar OSError
+    vidare vid t.ex. låst fil så anroparen kan hantera det."""
+    if not folder:
+        return False
+    root = (Path(base_dir) / "Transkriberingar").resolve()
+    target = Path(folder).resolve()
+    if root not in target.parents:   # refuses outside-root AND the root itself
+        return False
+    if not target.exists():
+        return True
+    shutil.rmtree(target)
+    return True
+
+
 def move_into(path: Path, folder: Path) -> Path:
     path = Path(path)
     dest = Path(folder) / path.name
