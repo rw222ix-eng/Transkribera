@@ -29,14 +29,14 @@
     step: 'config',
     model: 'KB-Whisper large',
     language: 'sv',
-    formats: { srt: true, txt: true, vtt: false },
+    formats: { srt: true },
     run: 'idle',
     progress: 0,
     elapsed: 0,
     log: [],
     pp: 'idle',
     ppOp: 'summary',
-    ppModel: 'Qwen3 30B-A3B',
+    ppModel: 'Gemma 4 26B-A4B',
     ppOut: '',
     ppPct: 0,
     ppEnabled: false,
@@ -44,14 +44,26 @@
     chatInput: '',
     chatTyping: false,
     chatModalOpen: false,
+    ppModalOpen: false,
     chatAttach: [],
+    subtitleMode: 'separate',
+    embedKind: 'soft',
+    ac: 'idle',
+    acPct: 0,
+    acSeg: 0,
+    acAwaitingModel: false,
+    acTranscript: null,
+    acFilesReal: null,
+    acChanged: null,
+    resultMediaReal: null,
+    resultTranscriptReal: null,
     openDD: null,
     search: '',
     diskTarget: 'd',
     onlineSort: 'fit',
     useCase: 'all',
     tip: null,
-    installed: { 'KB-Whisper large': true, 'Whisper large-v3': true, 'Qwen3 30B-A3B': true, 'Gemma 3 27B': true },
+    installed: { 'KB-Whisper large': true, 'Gemma 4 26B-A4B': true },
     downloading: {},
     dlProg: {},
     installing: {},
@@ -73,6 +85,7 @@
     edited: false,
     audioPlaying: false,
     audioT: 0,
+    audioDur: 0,
     history: [
       { id: 'h1', name: 'styrgruppsmöte_q1.mp3', date: 'Idag · 09:14', dur: '18:42', model: 'KB-Whisper large', lang: 'Svenska', formats: ['SRT', 'TXT'], words: 2940 },
       { id: 'h2', name: 'kundintervju_03.wav', date: 'Igår · 16:30', dur: '42:11', model: 'KB-Whisper large', lang: 'Svenska', formats: ['TXT'], words: 6810 },
@@ -87,31 +100,20 @@
   };
 
   /* instance (non-state) fields */
-  var _t, _pp, _ppIv, _chat, _au, _toastIv, _toastT2, _glideRAF, _lastStart, _runToken = 0;
+  var _t, _pp, _ppIv, _chat, _au, _toastIv, _toastT2, _glideRAF, _lastStart, _audio, _runToken = 0;
   var _dl = {}, _inst = {}, _editBuf = {}, _wave = null;
   var _file, _seek, _searchRef, _scrollRef, _procScroll, _chatThread;
-  var _prevTab, _prevStep, _prevRun, _prevPP, _prevOp, _prevChatLen, _wasEditing, _wasOpen, _scrollKey;
+  var _prevTab, _prevStep, _prevRun, _prevPP, _prevOp, _prevChatLen, _wasEditing, _wasOpen, _scrollKey, _prevAC;
 
   /* ----------------------------------------------------------------- data -- */
   // Catalogs are `let` so loadModels() can reassign them to real data from /api/models;
   // the values below are the dev/offline fallback. Item shape mirrors the API.
   // vram = beräknat VRAM-behov (GB) · rtf = hastighet (× realtid) · toks = tokens/s · score = kapacitet/precision
   let WHISPER = [
-    { id: 'KB-Whisper large',     size: '3.1 GB', vram: 4.7, rtf: 4,  score: 5.5, lang: 'sv',    recommended: true, useFor: 'Svenska — bäst precision (KB-Labb). Körs även via easytranscriber' },
-    { id: 'Canary-Qwen-2.5B',     size: '5.0 GB', vram: 6.5, rtf: 9,  score: 5,   lang: 'en',    useFor: 'Engelska — toppresultat, marginellt tyngre' },
-    { id: 'Whisper large-v3',     size: '3.1 GB', vram: 4.7, rtf: 4,  score: 4.5, lang: 'multi', useFor: 'Flerspråkigt allround — robust på de flesta språk' },
-    { id: 'Canary 1B v2',         size: '2.0 GB', vram: 3.2, rtf: 13, score: 4,   lang: 'multi', useFor: 'Flerspråkigt och snabbt — bra balans kvalitet/fart' },
-    { id: 'Parakeet TDT 0.6B v3', size: '1.2 GB', vram: 2.0, rtf: 25, score: 3.5, lang: 'multi', useFor: 'Snabbast — realtid och stora batchar' },
+    { id: 'KB-Whisper large', size: '3.1 GB', vram: 9.8, rtf: 7, score: 5.5, lang: 'sv', recommended: true, useFor: 'Svenska — bäst precision (KB-Labb)' },
   ];
   let LLM = [
-    { id: 'Qwen3 30B-A3B',      size: '18 GB',  vram: 17, toks: 95,  ctx: '256k', score: 5.5, recommended: true, uses: ['text','sv'],      useFor: 'Textresonemang & svenska — MoE, snabb och stark vid 24 GB', caps: { vision: false, files: ['PDF','TXT','Markdown','DOCX','CSV'] } },
-    { id: 'Qwen3 32B',          size: '20 GB',  vram: 20, toks: 22,  ctx: '128k', score: 5.3, uses: ['text','sv'],      useFor: 'Tätt resonemang — högsta kvalitet när tid finns', caps: { vision: false, files: ['PDF','TXT','Markdown','DOCX','CSV'] } },
-    { id: 'Gemma 3 27B',        size: '17 GB',  vram: 17, toks: 28,  ctx: '128k', score: 5,   uses: ['text','sv'],      useFor: 'Stark flerspråkig — verifiera svenska mot ScandEval', caps: { vision: false, files: ['PDF','TXT','Markdown','DOCX'] } },
-    { id: 'gpt-oss 20B',        size: '12 GB',  vram: 13, toks: 70,  ctx: '128k', score: 4.5, uses: ['text'],           useFor: 'Lättare textmodell — snabb allround', caps: { vision: false, files: ['PDF','TXT','Markdown'] } },
-    { id: 'Qwen3-VL-30B-A3B',   size: '18 GB',  vram: 17, toks: 90,  ctx: '256k', score: 5.2, uses: ['vision'],         modality: 'Bildanalys', useFor: 'Videoanalys (bild) — MoE, snabb på bildrutor', caps: { vision: true, files: ['Bilder (PNG/JPG)','Video (MP4)','PDF','TXT'] } },
-    { id: 'Qwen3-VL-32B',       size: '21 GB',  vram: 20, toks: 20,  ctx: '256k', score: 5,   uses: ['vision'],         modality: 'Bildanalys', useFor: 'Videoanalys (bild) — högsta visuella precisionen', caps: { vision: true, files: ['Bilder (PNG/JPG)','Video (MP4)','PDF','TXT'] } },
-    { id: 'Qwen3-VL-8B',        size: '5.5 GB', vram: 6,  toks: 110, ctx: '256k', score: 4,   uses: ['vision'],         modality: 'Bildanalys', useFor: 'Videoanalys (bild) — lättvikt, lämnar gott om VRAM över', caps: { vision: true, files: ['Bilder (PNG/JPG)','Video (MP4)','TXT'] } },
-    { id: 'Qwen3-Omni-30B-A3B', size: '19 GB',  vram: 17, toks: 85,  ctx: '64k',  score: 5,   uses: ['vision','omni'], modality: 'Bild + tal', useFor: 'Videoanalys (bild + tal) — ser bild och hör ljud i ett', caps: { vision: true, files: ['Bilder (PNG/JPG)','Video (MP4)','Ljud (WAV/MP3)','TXT'] } },
+    { id: 'Gemma 4 26B-A4B', size: '15 GB', vram: 16, toks: 140, ctx: '256k', score: 5.5, recommended: true, uses: ['text','sv'], useFor: 'Korrigering & analys', caps: { vision: false, files: ['PDF','TXT','Markdown','DOCX'] } },
   ];
   var LQUANTS = [
     { id: 'Q2_K',   label: 'Q2_K',   mult: 0.58, note: '~2-bit · minst, märkbart lägre kvalitet — bara för svag hårdvara' },
@@ -125,12 +127,7 @@
     { id: 'int8', label: 'int8', mult: 0.62, note: '8-bit · mindre och snabbare, minimal kvalitetsskillnad' },
     { id: 'fp16', label: 'fp16', mult: 1.00, sweet: true, note: '16-bit · full precision (standard för Whisper)' },
   ];
-  let ONLINE = [
-    { id: 'deepseek-r1:8b', size: '4.9 GB', tag: 'Resonemang', uses: ['reason','code'] },
-    { id: 'phi4:14b', size: '9.1 GB', tag: 'Kompakt, kraftfull', uses: ['reason','chat','code'] },
-    { id: 'command-r:35b', size: '20 GB', tag: 'Lång kontext', uses: ['rag','chat'] },
-    { id: 'nemotron-mini', size: '2.7 GB', tag: 'Lättviktig', uses: ['speed','chat'] },
-  ];
+  let ONLINE = [];
   let HW = {
     gpu: 'RTX 4090', arch: 'Ada Lovelace', cc: '8.9', cuda: '12.4',
     precisions: 'fp16 · int8 · int4', cpu: 'Ryzen 9 7900X · 12 kärnor',
@@ -142,6 +139,10 @@
       { id: 'x', drive: 'X:', name: 'Extern · USB-C SSD', total: 4096, free: 3720 },
     ],
   };
+  // Audio-correction model — id/size read from /api/models d.audio_model in loadModels().
+  var AUDIO_MODEL_ID = 'audio-correct';
+  var AUDIO_MODEL_SIZE = '16 GB';
+  var _audioWas = false;
   var STEPS = ['Förbereder', 'Extraherar ljud', 'Transkriberar', 'Färdigställer'];
   var AUDIO_DUR = 150;
   var ALLOWED = ['mp4', 'mkv', 'mov', 'webm', 'avi', 'm4v', 'mp3', 'wav', 'm4a', 'flac', 'aac', 'ogg', 'opus', 'wma'];
@@ -184,12 +185,12 @@
   function modelNeedGB(id) { var m = WHISPER.concat(LLM).find(function (x) { return x.id === id; }); if (!m) return 0; var gb = m.download_mb ? m.download_mb / 1024 : (parseFloat(m.size) || 0); return Math.ceil(gb * 1.6); }
   function parseSize(s) { var m = /([\d.]+)\s*(GB|MB)/i.exec(s || ''); return m ? { n: parseFloat(m[1]), u: m[2].toUpperCase() } : null; }
   function recommendModel(l) {
-    var inst = S.installed;
-    var pick = function (pred) { var m = WHISPER.find(function (x) { return inst[x.id] && pred(x); }); return m ? m.id : null; };
-    if (l === 'en') return pick(function (m) { return m.lang === 'en'; }) || pick(function (m) { return m.lang === 'multi'; }) || S.model;
-    if (l === 'sv') return pick(function (m) { return m.lang === 'sv'; }) || pick(function (m) { return m.lang === 'multi'; }) || S.model;
-    return pick(function (m) { return m.lang === 'sv'; }) || pick(function (m) { return m.lang === 'multi'; }) || pick(function () { return true; }) || S.model;
+    var parakeet = WHISPER.find(function (x) { return x.engine === 'parakeet' || x.lang === 'en'; });
+    var kb = WHISPER.find(function (x) { return x.lang === 'sv'; });
+    if (l === 'en') return (parakeet && parakeet.id) || (kb && kb.id) || S.model;
+    return (kb && kb.id) || (parakeet && parakeet.id) || (WHISPER[0] && WHISPER[0].id) || S.model;
   }
+  function langLabelOf(lang) { return lang === 'sv' ? 'Svenska' : lang === 'en' ? 'Engelska' : 'Flerspråkig'; }
   function countMatches() { var q = S.searchQuery.trim().toLowerCase(); if (!q) return 0; var n = 0; for (var k = 0; k < getTranscript().length; k++) { var pos = 0, i, t = lineText(k).toLowerCase(); while ((i = t.indexOf(q, pos)) !== -1) { n++; pos = i + q.length; } } return n; }
   function pickQuant(model, kind) {
     var free = HW.vram.free, margin = 1.2;
@@ -200,17 +201,6 @@
     if (!chosen) { for (var b = 0; b < rungs.length; b++) { if (free - rungs[b].vram >= 0) { chosen = rungs[b]; break; } } }
     if (!chosen) chosen = rungs[0];
     return chosen;
-  }
-  function estFit(m) {
-    var free = HW.vram.free;
-    var sizeGB = parseFloat(m.size) || 0;
-    var estVram = Math.round(sizeGB * 1.3 * 10) / 10;
-    var head = Math.round((free - estVram) * 10) / 10;
-    var tier, verdict;
-    if (head < 0) { tier = 'bad'; verdict = '~' + Math.abs(head) + ' GB över'; }
-    else if (head < 1.5) { tier = 'warn'; verdict = 'tight · ~' + head + ' GB'; }
-    else { tier = 'ok'; verdict = '~' + head + ' GB kvar'; }
-    return { tier: tier, dot: fitColor(tier), estVram: estVram, head: head, verdict: verdict };
   }
   function fitFor(spec, kind) {
     var free = HW.vram.free;
@@ -242,48 +232,6 @@
     }
     return { tier: tier, dot: fitColor(tier), verdict: verdict, chips: chips, quant: quant, vram: vram, head: head };
   }
-  function rankModels(arr, kind) {
-    var w = { ok: 2, warn: 1, bad: 0 };
-    return arr.map(function (m) { return { m: m, f: fitFor(m, kind) }; })
-      .sort(function (a, b) { return (w[b.f.tier] * 1000 + b.m.score) - (w[a.f.tier] * 1000 + a.m.score); });
-  }
-  function hardwareView() {
-    var cap = function (label, o, note, tip) {
-      var used = Math.max(0, o.total - o.free);
-      var frac = Math.min(1, used / o.total);
-      var pct = Math.max(3, Math.round(frac * 100));
-      var col = 'oklch(0.63 0.15 ' + Math.round(150 - 130 * frac) + ')';
-      var t = { label: label, free: fmtStorage(o.free), total: fmtStorage(o.total), note: note,
-        barStyle: 'height:100%;width:' + pct + '%;background:' + col + ';border-radius:99px;transition:width .3s ease,background .3s ease' };
-      if (tip) { t.onEnter = function (e) { showTip(e, tip); }; t.onLeave = hideTip; t.badgeStyle = infoBadgeStyle(); }
-      else { t.badgeStyle = 'display:none'; }
-      return t;
-    };
-    var h = HW;
-    var selDisk = h.disks.find(function (d) { return d.id === S.diskTarget; }) || h.disks[0];
-    var diskOptions = h.disks.map(function (d) {
-      return { drive: d.drive, name: d.name, free: fmtStorage(d.free) + ' ledigt',
-        style: ddItem(d.id === selDisk.id),
-        checkStyle: 'color:var(--accent);font-size:14.5px;opacity:' + (d.id === selDisk.id ? '1' : '0'),
-        onPick: function () { pickDisk(d.id); } };
-    });
-    return {
-      tiles: [
-        cap('VRAM ledigt', h.vram, 'avgör största modell', 'Grafikminnet avgör hur stor modell som kan köras helt på GPU:n — den enskilt viktigaste faktorn för hastighet. Får modellen inte plats avlastas lager till system-RAM/CPU, vilket är betydligt långsammare.'),
-        cap('System-RAM ledigt', h.ram, 'för laddning och CPU-avlastning', 'Tumregel: minst lika mycket system-RAM som VRAM, helst 1,5–2×. Används vid modelladdning och när lager avlastas från GPU:n till CPU:n.'),
-        cap('Ledig disk', selDisk, 'modeller sparas på ' + selDisk.drive, 'Varje modell tar 2–40+ GB på disken. Välj en disk med gott om plats — kvantisering krymper filen rejält jämfört med full precision (fp16).'),
-      ],
-      specs: [
-        { k: 'GPU', v: h.gpu },
-        { k: 'Beräkning', v: h.arch + ' · cc ' + h.cc },
-        { k: 'CUDA', v: h.cuda },
-        { k: 'Precision', v: h.precisions },
-        { k: 'CPU', v: h.cpu },
-      ],
-      ready: 'Kör modeller upp till ~' + h.vram.free + ' GB',
-      selDisk: selDisk, diskOptions: diskOptions,
-    };
-  }
   function toastDetail(size, pct) {
     var m = /([\d.]+)\s*(KB|MB|GB)/i.exec(size || '');
     if (!m) return Math.round(pct) + '%';
@@ -294,10 +242,9 @@
   }
   function dlDetail(sizeStr, pct) {
     var ps = parseSize(sizeStr);
-    var speed = (11 + Math.sin(pct / 6) * 4.5 + (pct % 5) * 0.6).toFixed(1) + ' MB/s';
-    if (!ps) return speed;
+    if (!ps) return '';
     var dn = ps.n * pct / 100;
-    return dn.toFixed(ps.u === 'GB' ? 1 : 0) + ' / ' + ps.n + ' ' + ps.u + ' · ' + speed;
+    return dn.toFixed(ps.u === 'GB' ? 1 : 0) + ' / ' + ps.n + ' ' + ps.u;
   }
   function instDetail(pct) { if (pct < 55) return 'Packar upp filer…'; if (pct < 90) return 'Verifierar kontrollsumma…'; return 'Slutför…'; }
 
@@ -308,10 +255,8 @@
   function tabBtn(active) { return 'border:none;background:' + (active ? 'var(--surface)' : 'transparent') + ';color:' + (active ? 'var(--ink)' : 'var(--ink-2)') + ';border-radius:9px;padding:8px 18px;font-size:15.5px;font-weight:500;cursor:pointer;font-family:inherit;box-shadow:' + (active ? 'var(--shadow-sm)' : 'none') + ';transition:background .12s,color .12s,box-shadow .12s'; }
   function rowStyle(last) { return 'display:flex;align-items:center;gap:13px;padding:15px 18px;' + (last ? '' : 'border-bottom:1px solid var(--line);'); }
   function rowStyleRich(last) { return 'display:flex;align-items:flex-start;gap:14px;padding:17px 18px;' + (last ? '' : 'border-bottom:1px solid var(--line);'); }
-  function verdictPill(tier) { var c = tier === 'ok' ? 'var(--ok)' : tier === 'warn' ? 'var(--warn)' : 'var(--bad)'; return 'display:inline-flex;align-items:center;font-size:12.5px;font-weight:500;color:' + c + ';background:color-mix(in srgb,' + c + ' 13%,transparent);border-radius:6px;padding:3px 9px;white-space:nowrap;font-variant-numeric:tabular-nums'; }
   function chipStyle() { return "display:inline-flex;align-items:center;gap:5px;font-size:12.5px;color:var(--ink-2);background:var(--sunken);border:1px solid var(--line);border-radius:7px;padding:3px 9px;font-variant-numeric:tabular-nums;white-space:nowrap"; }
   function quantChipStyle() { return "display:inline-flex;align-items:center;gap:5px;font-size:12.5px;font-weight:600;color:var(--accent);background:var(--accent-weak);border:1px solid color-mix(in srgb,var(--accent) 24%,transparent);border-radius:7px;padding:3px 9px;font-variant-numeric:tabular-nums;font-family:'Geist',system-ui,sans-serif;cursor:help"; }
-  function infoBadgeStyle() { return "display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;border-radius:50%;font-size:12px;font-weight:700;color:var(--ink);background:var(--sunken);border:1px solid var(--line);cursor:help;font-family:'Geist',system-ui,sans-serif;flex:0 0 auto"; }
   function infoBadge(text) { return { onEnter: function (e) { showTip(e, text); }, onLeave: hideTip }; }
   function tipStyleFor() {
     var t = S.tip;
@@ -338,14 +283,27 @@
   // BACKEND: addFiles will validate against the server; here it just queues names.
   function addFiles(names) { addFilesObjs(names.map(function (n) { return { name: n, path: n }; })); }
   function removeQ(id) {
-    setState(function (s) {
-      var queue = s.queue.filter(function (q) { return q.id !== id; });
-      var qStatus = Object.assign({}, s.qStatus); delete qStatus[id];
-      var activeId = (s.activeId === id) ? ((queue[0] && queue[0].id) || null) : s.activeId;
-      return { queue: queue, qStatus: qStatus, activeId: activeId, source: qName(queue, activeId) || '', step: queue.length ? s.step : 'source' };
-    });
+    var doRemove = function () {
+      setState(function (s) {
+        var queue = s.queue.filter(function (q) { return q.id !== id; });
+        var qStatus = Object.assign({}, s.qStatus); delete qStatus[id];
+        var activeId = (s.activeId === id) ? ((queue[0] && queue[0].id) || null) : s.activeId;
+        return { queue: queue, qStatus: qStatus, activeId: activeId, source: qName(queue, activeId) || '', step: queue.length ? s.step : 'source' };
+      });
+    };
+    // Glide the row out before dropping it from state (same animate-then-proceed pattern as start()).
+    var row = document.querySelector('[data-pane="config"] [data-key="' + _cssId(id) + '"]');
+    if (!row || !row.animate || _reduceMotion()) { doRemove(); return; }
+    var done = false, go = function () { if (done) return; done = true; doRemove(); };
+    try {
+      var a = row.animate(
+        [{ opacity: 1, transform: 'translateX(0) scale(1)' }, { opacity: 0, transform: 'translateX(8px) scale(0.97)' }],
+        { duration: 240, easing: 'cubic-bezier(.5,0,.78,.12)', fill: 'forwards' }
+      );
+      a.onfinish = go; a.oncancel = go;
+      setTimeout(go, 320);
+    } catch (e) { go(); }
   }
-  function addSample(name) { setState({ fileError: '' }); addFiles([name]); }
   function onPickFile(e) { var fs = e.target.files ? Array.from(e.target.files).map(function (f) { return { name: f.name, path: f.path || f.name }; }) : []; if (fs.length) addFilesObjs(fs); if (e.target) e.target.value = ''; }
   function onDragOver(e) { e.preventDefault(); if (!S.dragging) setState({ dragging: true }); }
   function onDragLeave(e) { e.preventDefault(); setState({ dragging: false }); }
@@ -364,10 +322,8 @@
   function restart() {
     clearInterval(_t); clearTimeout(_pp); clearInterval(_ppIv); clearTimeout(_chat); clearInterval(_au);
     Object.values(_dl || {}).forEach(clearInterval);
-    setState({ source: '', queue: [], qStatus: {}, qProgress: {}, activeId: null, fileError: '', step: 'source', run: 'idle', progress: 0, elapsed: 0, log: [], pp: 'idle', ppOp: 'summary', ppOut: '', ppEnabled: false, chat: [], chatInput: '', chatTyping: false, chatModalOpen: false, chatAttach: [], openDD: null, transcriptOpen: false, runError: null, editing: false, edits: {}, edited: false, audioPlaying: false, audioT: 0, histViewing: null });
+    setState({ source: '', queue: [], qStatus: {}, qProgress: {}, activeId: null, fileError: '', step: 'source', run: 'idle', progress: 0, elapsed: 0, log: [], pp: 'idle', ppOp: 'summary', ppOut: '', ppEnabled: false, chat: [], chatInput: '', chatTyping: false, chatModalOpen: false, ppModalOpen: false, chatAttach: [], openDD: null, transcriptOpen: false, runError: null, editing: false, edits: {}, edited: false, audioPlaying: false, audioT: 0, histViewing: null, ac: 'idle', acPct: 0, acSeg: 0, acAwaitingModel: false, acTranscript: null, acFilesReal: null, resultMediaReal: null, resultTranscriptReal: null });
   }
-  function onSearch(e) { setState({ search: e.target.value }); }
-  function toggleFmt(f) { setState(function (s) { var formats = Object.assign({}, s.formats); formats[f] = !formats[f]; return { formats: formats }; }); }
   function pickModel(id) { setState({ model: id, openDD: null }); }
   function pickLang(l) { setState({ language: l, model: recommendModel(l) }); }
   function pickOp(o) { setState({ ppOp: o, pp: 'idle', ppOut: '' }); if (o === 'chat') { seedChat(); openChatModal(); } else closeChatModal(); }
@@ -381,13 +337,8 @@
   function attachImage() { setState(function (s) { return { chatAttach: s.chatAttach.concat([{ kind: 'image', label: 'skärmbild-' + (s.chatAttach.length + 1) + '.png' }]) }; }); }
   function attachFile(fmt) { var ext = (fmt.match(/png|jpg|pdf|txt|csv|docx|md/i) || ['fil'])[0].toLowerCase(); setState(function (s) { return { chatAttach: s.chatAttach.concat([{ kind: 'file', label: 'dokument.' + (ext === 'markdown' ? 'md' : ext) }]) }; }); }
   function removeAttach(i) { setState(function (s) { return { chatAttach: s.chatAttach.filter(function (_, k) { return k !== i; }) }; }); }
-  function pickPPModel(id) { setState({ ppModel: id, openDD: null }); }
   function toggleModelDD() { setState(function (s) { return { openDD: s.openDD === 'model' ? null : 'model' }; }); }
-  function togglePPDD() { setState(function (s) { return { openDD: s.openDD === 'ppmodel' ? null : 'ppmodel' }; }); }
-  function pickDisk(id) { setState({ diskTarget: id, openDD: null }); }
-  function toggleDiskDD() { setState(function (s) { return { openDD: s.openDD === 'disk' ? null : 'disk' }; }); }
   function closeDD() { setState({ openDD: null }); }
-  function setUseCase(k) { setState({ useCase: k }); }
 
   function askUninstall(id) { setState({ confirm: { kind: 'uninstall', id: id, title: 'Ta bort ' + id + '?', body: 'Modellen raderas från disken (' + ((HW.disks.find(function (d) { return d.id === S.diskTarget; }) || {}).drive || '') + '). Du kan ladda ner den igen när som helst.', label: 'Ta bort', danger: true } }); }
   function askRerun(h) { setState({ confirm: { kind: 'rerun', id: h.id, title: 'Transkribera om?', body: '"' + h.name + '" körs igenom på nytt med dina nuvarande inställningar (modell, språk och format). Den läggs i kön på Transkribera-fliken.', label: 'Kör om', danger: false } }); }
@@ -407,19 +358,43 @@
     } else setState({ confirm: null });
   }
   function confirmNo() { setState({ confirm: null }); }
-  function openHistory(h) { setState({ transcriptOpen: true, histViewing: h.id, transcript: (h.transcript || []).map(function (g) { return { time: fmtTime(g.start), text: g.text }; }) }); }
+  function openHistory(h) { stopAudio(); setState({ transcriptOpen: true, histViewing: h.id, audioT: 0, audioDur: 0, audioPlaying: false, transcript: (h.transcript || []).map(function (g) { return { time: fmtTime(g.start), text: g.text }; }) }); }
   function reRunHistory(h) { var id = 'q' + Date.now(); setState({ tab: 'transcribe', step: 'config', queue: [{ id: id, name: h.name, path: h.source || h.name }], qStatus: {}, qProgress: {}, run: 'idle', progress: 0, elapsed: 0, activeId: id, source: h.source || h.name, fileError: '', runError: null, openDD: null }); }
 
+  function _mediaPath() {
+    if (S.histViewing) { var h = (S.history || []).find(function (x) { return x.id === S.histViewing; }); return h && ((h.video && h.video.path) || h.source); }
+    return S.resultMediaReal;
+  }
+  function _ensureAudio() {
+    if (_audio) return _audio;
+    var a = document.createElement('audio');
+    a.preload = 'metadata';
+    a.addEventListener('timeupdate', function () { setState({ audioT: a.currentTime }); });
+    a.addEventListener('loadedmetadata', function () { if (isFinite(a.duration)) setState({ audioDur: a.duration }); });
+    a.addEventListener('durationchange', function () { if (isFinite(a.duration)) setState({ audioDur: a.duration }); });
+    a.addEventListener('play', function () { setState({ audioPlaying: true }); });
+    a.addEventListener('pause', function () { setState({ audioPlaying: false }); });
+    a.addEventListener('ended', function () { setState({ audioPlaying: false }); });
+    document.body.appendChild(a);
+    _audio = a;
+    return a;
+  }
+  function _loadAudio() {
+    var p = _mediaPath();
+    if (!p) return null;
+    var a = _ensureAudio();
+    if (a.getAttribute('data-src') !== p) { a.src = '/api/media?path=' + encodeURIComponent(p); a.setAttribute('data-src', p); setState({ audioDur: 0, audioT: 0 }); }
+    return a;
+  }
+  function stopAudio() { if (_audio) _audio.pause(); }
   function togglePlay() {
-    if (S.audioPlaying) { clearInterval(_au); setState({ audioPlaying: false }); return; }
-    if (S.audioT >= AUDIO_DUR) setState({ audioT: 0 });
-    setState({ audioPlaying: true });
-    clearInterval(_au);
-    _au = setInterval(function () { setState(function (s) { var t = s.audioT + 0.2; if (t >= AUDIO_DUR) { clearInterval(_au); return { audioT: AUDIO_DUR, audioPlaying: false }; } return { audioT: t }; }); }, 200);
+    var a = _loadAudio();
+    if (!a) return;
+    if (a.paused) { a.play().catch(function () {}); } else { a.pause(); }
   }
   function seekTrackRef(el) { _seek = el; }
-  function onSeekClick(e) { var el = _seek; if (!el) return; var r = el.getBoundingClientRect(); var f = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)); setState({ audioT: f * AUDIO_DUR }); }
-  function jumpToLine(i) { setState({ audioT: parseTS(getTranscript()[i].time) }); if (!S.audioPlaying) togglePlay(); }
+  function onSeekClick(e) { var el = _seek; if (!el) return; var r = el.getBoundingClientRect(); var f = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)); var a = _loadAudio(); var t = f * (S.audioDur || (a && a.duration) || 0); if (a) a.currentTime = t; setState({ audioT: t }); }
+  function jumpToLine(i) { var t = parseTS(getTranscript()[i].time); var a = _loadAudio(); if (a) { a.currentTime = t; a.play().catch(function () {}); } setState({ audioT: t }); }
 
   function toggleEdit() {
     if (S.editing) { _commitEdits(); setState({ editing: false }); }
@@ -462,7 +437,7 @@
   }
   function _nextPending(excludeId) { for (var k = 0; k < S.queue.length; k++) { var q = S.queue[k]; if (q.id !== excludeId && (S.qStatus[q.id] || 'pending') === 'pending') return q.id; } return null; }
   function _archive(file, secs) {
-    var fmts = ['srt', 'txt', 'vtt'].filter(function (f) { return S.formats[f]; }).map(function (f) { return f.toUpperCase(); });
+    var fmts = ['SRT'];
     var langLabel = S.language === 'en' ? 'Engelska' : S.language === 'sv' ? 'Svenska' : 'Auto';
     var entry = { id: 'h' + Date.now() + Math.floor(Math.random() * 99), name: file.name, date: 'Just nu', dur: fmtTime(secs), model: modelLabel(S.model), lang: langLabel, formats: fmts.length ? fmts : ['TXT'], words: 2800 + Math.floor(Math.random() * 500) };
     setState(function (s) { return { history: [entry].concat(s.history.filter(function (h) { return !(h.name === file.name && h.date === 'Just nu'); })) }; });
@@ -478,15 +453,18 @@
     setState({
       run: 'running', step: 'process', progress: 0, elapsed: 0, pp: 'idle', ppOut: '',
       chat: [], chatTyping: false, runError: null, transcript: null, resultFilesReal: null,
+      ac: 'idle', acPct: 0, acSeg: 0, acAwaitingModel: false, acTranscript: null, acFilesReal: null, ppModalOpen: false,
       source: active.name,
       qStatus: Object.assign({}, S.qStatus, kv(active.id, 'running')),
       log: ['› transkribera "' + src + '" --model ' + modelLabel(S.model), '[00:00] Startar transkribering …'],
     });
     var t0 = Date.now();
     _t = setInterval(function () { if (token === _runToken) setState({ elapsed: (Date.now() - t0) / 1000 }); }, 250);
-    var formats = ['srt', 'txt', 'vtt'].filter(function (f) { return S.formats[f]; });
+    var formats = ['srt'];
     streamPost('/api/transcribe',
-      { source: active.path || active.name, model_id: S.model, language: S.language, formats: formats },
+      { source: active.path || active.name, model_id: S.model, language: S.language,
+        formats: formats, sub_mode: S.subtitleMode,
+        embed_kind: S.subtitleMode === 'embed' ? S.embedKind : null },
       function (ev) {
         if (token !== _runToken) return;
         if (ev.type === 'progress') { setState({ progress: ev.pct || 0 }); }
@@ -498,7 +476,7 @@
           clearInterval(_t);
           var r = ev.result || {};
           var segs = (r.transcript || []).map(function (g) { return { time: fmtTime(g.start), text: g.text }; });
-          setState(function (s) { return { run: 'done', progress: 100, transcript: segs, resultFilesReal: r.files || [], qStatus: Object.assign({}, s.qStatus, kv(active.id, 'done')), qProgress: Object.assign({}, s.qProgress, kv(active.id, 100)), log: s.log.concat(['[klar] Färdig på ' + fmtTime(s.elapsed)]) }; });
+          setState(function (s) { return { run: 'done', progress: 100, transcript: segs, resultFilesReal: r.files || [], resultMediaReal: r.media || (active.path || active.name), resultTranscriptReal: r.transcript || [], qStatus: Object.assign({}, s.qStatus, kv(active.id, 'done')), qProgress: Object.assign({}, s.qProgress, kv(active.id, 100)), log: s.log.concat(['[klar] Färdig på ' + fmtTime(s.elapsed)]) }; });
           loadHistory();   // server archived this run; refresh from disk
           var next = _nextPending(active.id);
           if (next) { setTimeout(function () { setState({ run: 'idle', activeId: next, source: qName(S.queue, next), audioT: 0 }, function () { _runActive(); }); }, 800); }
@@ -516,7 +494,7 @@
     clearTimeout(_pp); clearInterval(_ppIv);
     setState({ pp: 'running', ppPct: 0, ppOut: '' });
     _ppIv = setInterval(function () { setState(function (s) { return { ppPct: Math.min(95, (s.ppPct || 0) + (3 + Math.random() * 5)) }; }); }, 200);
-    var op = { clean: 'cleanup', summary: 'summary' }[S.ppOp] || 'summary';
+    var op = { summary: 'summary', bullets: 'bullets' }[S.ppOp] || 'summary';
     var text = getTranscript().map(function (l) { return l.text; }).join(' ');
     var acc = '';
     streamPost('/api/postprocess', { operation: op, transcript: text, model: S.ppModel }, function (ev) {
@@ -583,6 +561,40 @@
     setState(function (s) { return { downloading: Object.assign({}, s.downloading, kv(id, false)), installing: Object.assign({}, s.installing, kv(id, false)), dlFailed: Object.assign({}, s.dlFailed, kv(id, true)) }; });
   }
   function retryDownload(id) { setState(function (s) { return { dlFailed: Object.assign({}, s.dlFailed, kv(id, false)) }; }); _startDownload(id); }
+
+  /* ---- "Rätta mot ljudet" — ljud-grundat korrigeringspass ---- */
+  function openPPModal() { setState({ ppModalOpen: true }); }
+  function closePPModal() { setState({ ppModalOpen: false }); }
+  function startAudioCorrect() {
+    if (!S.installed[AUDIO_MODEL_ID]) { setState({ ac: 'gate' }); return; }
+    runAudioCorrect();
+  }
+  function downloadAudioModel() {
+    setState(function (s) { return { acAwaitingModel: true, downloading: Object.assign({}, s.downloading, kv(AUDIO_MODEL_ID, true)), dlProg: Object.assign({}, s.dlProg, kv(AUDIO_MODEL_ID, 0)), dlFailed: Object.assign({}, s.dlFailed, kv(AUDIO_MODEL_ID, false)) }; });
+    streamPost('/api/download/audio_model', {}, function (ev) {
+      if (ev.type === 'progress') { setState(function (s) { return { dlProg: Object.assign({}, s.dlProg, kv(AUDIO_MODEL_ID, ev.pct || 0)) }; }); }
+      else if (ev.type === 'error') { setState(function (s) { return { downloading: Object.assign({}, s.downloading, kv(AUDIO_MODEL_ID, false)), dlFailed: Object.assign({}, s.dlFailed, kv(AUDIO_MODEL_ID, true)), acAwaitingModel: false }; }); }
+      else if (ev.type === 'done') { setState(function (s) { return { downloading: Object.assign({}, s.downloading, kv(AUDIO_MODEL_ID, false)), installed: Object.assign({}, s.installed, kv(AUDIO_MODEL_ID, true)) }; }); }
+    });
+  }
+  function runAudioCorrect() {
+    setState({ ac: 'running', acPct: 0, acSeg: 0, acAwaitingModel: false });
+    var segs = S.resultTranscriptReal || [];
+    streamPost('/api/audio_correct', { source: S.resultMediaReal, segments: segs, formats: _chosenFormats(), language: S.language }, function (ev) {
+      if (ev.type === 'progress') { setState({ acPct: ev.pct || 0 }); }
+      else if (ev.type === 'log') { /* logg ignoreras i denna vy */ }
+      else if (ev.type === 'error') { setState({ ac: 'error' }); }
+      else if (ev.type === 'done') {
+        var r = ev.result || {};
+        setState({ ac: 'done', acPct: 100, acTranscript: r.transcript || segs, acFilesReal: r.files || [] });
+        loadHistory();
+      }
+    });
+  }
+  function retryAudioCorrect() { runAudioCorrect(); }
+  function cancelAudioGate() { setState({ ac: 'idle', acAwaitingModel: false }); }
+  function cancelAudioDownload() { setState({ acAwaitingModel: false }); cancelDownload(AUDIO_MODEL_ID); }
+  function _chosenFormats() { return ['srt']; }
   // BACKEND: real model download via /api/download/{whisper,llm} SSE.
   function _startDownload(id) {
     setState(function (s) { return { diskWarn: null, dlFailed: Object.assign({}, s.dlFailed, kv(id, false)), downloading: Object.assign({}, s.downloading, kv(id, true)), dlProg: Object.assign({}, s.dlProg, kv(id, 0)) }; });
@@ -622,7 +634,7 @@
   function closeToast() { clearInterval(_toastIv); clearTimeout(_toastT2); setState({ toast: null }); }
 
   function openTranscript() { setState({ transcriptOpen: true, histViewing: null }); }
-  function closeTranscript() { if (S.editing) _commitEdits(); clearInterval(_au); setState({ transcriptOpen: false, editing: false, audioPlaying: false }); }
+  function closeTranscript() { if (S.editing) _commitEdits(); clearInterval(_au); stopAudio(); setState({ transcriptOpen: false, editing: false, audioPlaying: false }); }
   function openLog() { setState({ logOpen: true }); }
   function closeLog() { setState({ logOpen: false }); }
   function onTSearch(e) { setState({ searchQuery: e.target.value, currentMatch: 0 }); }
@@ -641,6 +653,7 @@
   function modelLabel(id) { var m = WHISPER.concat(LLM).find(function (x) { return x.id === id; }); return (m && (m.label || m.id)) || id; }
   function getTranscript() { return (S.transcript && S.transcript.length) ? S.transcript : TRANSCRIPT; }
   function getJSON(url) { return fetch(url).then(function (r) { return r.json(); }); }
+  function apiOpen(url, path) { if (!path) return; fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: path }) }).catch(function () {}); }
 
   function streamPost(url, body, onEvent) {
     return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
@@ -673,6 +686,11 @@
       WHISPER = d.whisper; LLM = d.llm || []; ONLINE = d.online || []; HW = d.hardware || HW;
       var inst = {};
       WHISPER.concat(LLM).forEach(function (m) { if (m.installed) inst[m.id] = true; });
+      if (d.audio_model && d.audio_model.id) {
+        AUDIO_MODEL_ID = d.audio_model.id;
+        if (d.audio_model.size) AUDIO_MODEL_SIZE = d.audio_model.size;
+        if (d.audio_model.installed) inst[AUDIO_MODEL_ID] = true;
+      }
       var patch = { catalogReady: true, installed: inst };
       var instW = WHISPER.filter(function (m) { return inst[m.id]; });
       if (instW.length && !inst[S.model]) {
@@ -769,19 +787,24 @@
         _scrollKey = key;
       }
     }
+    // Auto-run the audio pass once the audio model finishes downloading.
+    if (S.installed[AUDIO_MODEL_ID] && S.acAwaitingModel && !_audioWas) { _audioWas = true; runAudioCorrect(); }
+    if (!S.acAwaitingModel) _audioWas = false;
     if (S.step === 'process') {
-      var run = S.run, pp = S.pp, op = S.ppOp, chatLen = S.chat.length;
+      var run = S.run, pp = S.pp, op = S.ppOp, chatLen = S.chat.length, ac = S.ac;
       if (run === 'done' && _prevRun !== 'done') { playResultsIn(); smoothScrollProc('[data-sec="results"]'); }
-      else if (pp !== _prevPP && pp !== 'idle') smoothScrollProc('[data-sec="ppout"]');
+      else if (pp !== _prevPP && pp !== 'idle' && !S.ppModalOpen) smoothScrollProc('[data-sec="ppout"]');
+      if (ac === 'done' && _prevAC !== 'done') { playResultsIn(); smoothScrollProc('[data-sec="audiocorrect"]'); }
       if (chatLen > (_prevChatLen || 0)) scrollChatBottom();
-      _prevRun = run; _prevPP = pp; _prevOp = op; _prevChatLen = chatLen;
+      _prevRun = run; _prevPP = pp; _prevOp = op; _prevChatLen = chatLen; _prevAC = ac;
     } else {
-      _prevRun = S.run; _prevPP = S.pp; _prevOp = S.ppOp; _prevChatLen = S.chat.length;
+      _prevRun = S.run; _prevPP = S.pp; _prevOp = S.ppOp; _prevChatLen = S.chat.length; _prevAC = S.ac;
     }
   }
 
   function onKeyDown(e) {
     if (S.chatModalOpen && e.key === 'Escape') { closeChatModal(); return; }
+    if (S.ppModalOpen && e.key === 'Escape') { closePPModal(); return; }
     if (S.logOpen && e.key === 'Escape') { closeLog(); return; }
     if (!S.transcriptOpen) return;
     if ((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'F')) { e.preventDefault(); var inp = document.querySelector('[data-tsearch]'); if (inp) inp.focus(); }
@@ -795,19 +818,42 @@
     var isDone = st.run === 'done';
     var cur = isDone ? STEPS.length : (st.progress < 12 ? 0 : st.progress < 28 ? 1 : st.progress < 92 ? 2 : 3);
 
-    var installedWhisper = WHISPER.filter(function (m) { return st.installed[m.id]; });
-    var rankedInstalled = rankModels(installedWhisper, 'whisper');
-    var curModel = WHISPER.find(function (m) { return m.id === st.model; }) || WHISPER[0];
+    var curModel = WHISPER.find(function (m) { return m.id === st.model; }) || WHISPER[0] || {};
     var curFit = fitFor(curModel, 'whisper');
-    var fitWord = function (t) { return t === 'ok' ? 'passar bra' : t === 'warn' ? 'tungt' : 'för stort'; };
-    var modelOptions = rankedInstalled.map(function (o, i) {
-      var m = o.m, f = o.f;
-      return { rank: i + 1, name: m.label || m.id, meta: m.size + ' · ' + fitWord(f.tier), dot: f.dot, style: ddItem(m.id === st.model), checkStyle: 'color:var(--accent);font-size:14.5px;opacity:' + (m.id === st.model ? '1' : '0'), onPick: function () { pickModel(m.id); } };
+    var recId = recommendModel(st.language);
+    var modelPhase = function (m) {
+      var inst = st.installed[m.id], dl = st.downloading[m.id], ing = st.installing[m.id], failed = st.dlFailed[m.id];
+      return dl ? 'downloading' : ing ? 'installing' : failed ? 'failed' : inst ? 'installed' : 'idle';
+    };
+    var modelOptions = WHISPER.map(function (m) {
+      var f = fitFor(m, 'whisper');
+      var inst = !!st.installed[m.id], dl = st.downloading[m.id], ing = st.installing[m.id];
+      var failed = st.dlFailed[m.id];
+      var pct = ing ? (st.instProg[m.id] || 0) : (st.dlProg[m.id] || 0);
+      var phase = modelPhase(m);
+      return {
+        name: m.label || m.id, lang: langLabelOf(m.lang), hint: m.useFor || f.verdict, dot: f.dot,
+        recommended: m.id === recId, selected: m.id === st.model, installed: inst, notInstalled: !inst,
+        phase: phase, pct: pct, detail: ing ? instDetail(pct) : dlDetail(m.size, pct),
+        style: ddItem(m.id === st.model) + ';align-items:flex-start',
+        checkStyle: 'color:var(--accent);font-size:14.5px;opacity:' + (m.id === st.model ? '1' : '0'),
+        onPick: function () { pickModel(m.id); },
+        onAction: function () { if (failed) retryDownload(m.id); else if (!inst && !dl && !ing) modelAction(m.id); },
+        onCancel: function () { cancelDownload(m.id); },
+      };
     });
+    var curInstalled = !!st.installed[curModel.id];
+    var curPhaseV = modelPhase(curModel);
+    var curPctV = st.installing[curModel.id] ? (st.instProg[curModel.id] || 0) : (st.dlProg[curModel.id] || 0);
 
-    var langs = [['', 'Auto'], ['sv', 'Svenska'], ['en', 'Engelska']];
+    var langs = [['sv', 'Svenska'], ['en', 'Engelska']];
     var langOptions = langs.map(function (p) { return { label: p[1], style: segBtn(st.language === p[0], '38px'), onPick: function () { pickLang(p[0]); } }; });
-    var formatChips = ['srt', 'txt', 'vtt'].map(function (f) { return { label: f.toUpperCase(), style: chip(st.formats[f]), onToggle: function () { toggleFmt(f); } }; });
+    var subtitleOptions = [['separate', 'Spara separat'], ['embed', 'Bädda in']].map(function (p) { return { label: p[1], style: segBtn(st.subtitleMode === p[0], '38px'), onPick: function () { setState({ subtitleMode: p[0] }); } }; });
+    var embedOptions = [['soft', 'Mjukt sub-spår'], ['burn', 'Hård inbränning']].map(function (p) { return { label: p[1], style: segBtn(st.embedKind === p[0], '38px'), onPick: function () { setState({ embedKind: p[0] }); } }; });
+    var _activeQ = st.queue.find(function (q) { return q.id === st.activeId; }) || st.queue[0] || {};
+    var _activeIsUrl = /^https?:/i.test(_activeQ.path || '');
+    var _activeIsVideo = _activeIsUrl || /\.(mp4|mkv|mov|webm|avi|m4v)$/i.test(_activeQ.name || '');
+    var _activeIsLocal = !!(_activeQ.path && !_activeIsUrl);
 
     var steps = STEPS.map(function (label, idx) {
       var done = idx < cur, active = idx === cur && !isDone;
@@ -823,9 +869,8 @@
     var fmtMeta = { srt: ['SRT', '38 KB'], txt: ['TXT', '21 KB'], vtt: ['VTT', '40 KB'] };
     var resultFiles = (st.resultFilesReal && st.resultFilesReal.length)
       ? st.resultFilesReal.map(function (f) { return { type: (f.ext || '').toUpperCase(), name: f.name, size: f.size, onDownload: function () { saveResult(f); } }; })
-      : ['srt', 'txt', 'vtt'].filter(function (f) { return st.formats[f]; }).map(function (f) { return { type: fmtMeta[f][0], name: base + '.' + f, size: fmtMeta[f][1], onDownload: function () { downloadFile(base + '.' + f, fmtMeta[f][1]); } }; });
+      : ['srt'].map(function (f) { return { type: fmtMeta[f][0], name: base + '.' + f, size: fmtMeta[f][1], onDownload: function () { downloadFile(base + '.' + f, fmtMeta[f][1]); } }; });
 
-    var hw = hardwareView();
     var stepOrder = ['source', 'config', 'process'];
     var stepDefs = [['source', 'Källa'], ['config', 'Inställningar'], ['process', 'Resultat']];
     var curStepIdx = stepOrder.indexOf(st.step);
@@ -838,69 +883,9 @@
         lineStyle: i === stepDefs.length - 1 ? 'display:none' : 'flex:1;height:1.5px;background:var(--line);min-width:16px;margin:0 4px',
       };
     });
-    var rankedWhisper = rankModels(WHISPER, 'whisper');
-    var whisperRows = rankedWhisper.map(function (o, i) {
-      var m = o.m, f = o.f;
-      var inst = st.installed[m.id], dl = st.downloading[m.id], ing = st.installing[m.id], failed = st.dlFailed[m.id];
-      var pct = ing ? (st.instProg[m.id] || 0) : (st.dlProg[m.id] || 0);
-      var phase = dl ? 'downloading' : ing ? 'installing' : failed ? 'failed' : inst ? 'installed' : 'idle';
-      return {
-        rank: i + 1, name: m.label || m.id, size: m.size, dot: f.dot, recommended: !!m.recommended, verdict: f.verdict, verdictStyle: verdictPill(f.tier), useFor: m.useFor, chips: f.chips,
-        rowStyle: rowStyleRich(i === rankedWhisper.length - 1),
-        phase: phase, pct: pct, detail: ing ? instDetail(pct) : dlDetail(m.size, pct),
-        onAction: function () { if (failed) retryDownload(m.id); else if (!inst && !dl && !ing) modelAction(m.id); },
-        onCancel: function () { cancelDownload(m.id); }, removable: !!inst, notRemovable: !inst, onRemove: function () { askUninstall(m.id); },
-      };
-    });
-    var uc = st.useCase || 'all';
-    var llmPool = uc === 'all' ? LLM : LLM.filter(function (m) { return (m.uses || []).indexOf(uc) !== -1; });
-    var rankedLLM = rankModels(llmPool, 'llm');
-    var llmEmpty = rankedLLM.length === 0;
-    var llmRows = rankedLLM.map(function (o, i) {
-      var m = o.m, f = o.f;
-      var inst = st.installed[m.id], dl = st.downloading[m.id], ing = st.installing[m.id], failed = st.dlFailed[m.id];
-      var disabled = f.tier === 'bad';
-      var pct = ing ? (st.instProg[m.id] || 0) : (st.dlProg[m.id] || 0);
-      var phase = dl ? 'downloading' : ing ? 'installing' : disabled ? 'incompatible' : failed ? 'failed' : inst ? 'installed' : 'idle';
-      return {
-        rank: i + 1, name: m.label || m.id, size: m.size, dot: f.dot, recommended: !!m.recommended, verdict: f.verdict, verdictStyle: verdictPill(f.tier), useFor: m.useFor, chips: f.chips,
-        rowStyle: rowStyleRich(i === rankedLLM.length - 1),
-        phase: phase, pct: pct, detail: ing ? instDetail(pct) : dlDetail(m.size, pct),
-        onAction: function () { if (failed) retryDownload(m.id); else if (!disabled && !inst && !dl && !ing) modelAction(m.id); },
-        onCancel: function () { cancelDownload(m.id); }, removable: !!inst, notRemovable: !inst, onRemove: function () { askUninstall(m.id); },
-      };
-    });
-    var q = st.search.trim().toLowerCase();
-    var sortMode = st.onlineSort || 'fit';
-    var tierW = { ok: 2, warn: 1, bad: 0 };
-    var onlinePool = ONLINE.map(function (m) { return { m: m, f: estFit(m) }; });
-    onlinePool = onlinePool.filter(function (o) {
-      var m = o.m, f = o.f;
-      if (uc !== 'all' && (m.uses || []).indexOf(uc) === -1) return false;
-      if (!q) return true;
-      var fw = f.tier === 'ok' ? 'passar bra lätt grön' : f.tier === 'warn' ? 'tight gul marginal' : 'över för stor röd';
-      return [m.id, m.tag, m.size, fw].join(' ').toLowerCase().indexOf(q) !== -1;
-    });
-    onlinePool.sort(function (a, b) {
-      if (sortMode === 'size') return parseFloat(a.m.size) - parseFloat(b.m.size);
-      if (sortMode === 'name') return a.m.id.localeCompare(b.m.id);
-      return (tierW[b.f.tier] * 1000 + b.f.head) - (tierW[a.f.tier] * 1000 + a.f.head);
-    });
-    var onlineRows = onlinePool.map(function (o, i) {
-      var m = o.m, f = o.f;
-      var inst = st.installed[m.id], dl = st.downloading[m.id], ing = st.installing[m.id];
-      var pct = ing ? (st.instProg[m.id] || 0) : (st.dlProg[m.id] || 0);
-      var phase = dl ? 'downloading' : ing ? 'installing' : inst ? 'installed' : 'idle';
-      return { rank: i + 1, name: m.label || m.id, size: m.size, tag: m.tag, dot: f.dot, verdict: f.verdict, verdictStyle: verdictPill(f.tier), rowStyle: rowStyleRich(i === onlinePool.length - 1), phase: phase, pct: pct, detail: ing ? instDetail(pct) : dlDetail(m.size, pct), onAction: function () { if (!inst && !dl && !ing) modelAction(m.id); } };
-    });
-    var onlineSortOptions = [['fit', 'Passar din dator'], ['size', 'Storlek']].map(function (p) { return { label: p[1], style: segBtn(sortMode === p[0], '34px'), onPick: function () { setState({ onlineSort: p[0] }); } }; });
-    var USECASES = [['all', 'Alla'], ['text', 'Textresonemang'], ['sv', 'Svensk text'], ['vision', 'Videoanalys · bild'], ['omni', 'Videoanalys · bild + tal']];
-    var useCaseOptions = USECASES.map(function (p) { return { label: p[1], style: segBtn(uc === p[0], '30px') + ';flex:0 0 auto;font-size:13.5px;font-weight:500', onPick: function () { setUseCase(p[0]); } }; });
-
-    var OPS = [['clean', 'Korrekturläs', 'Rättar stavfel & småfel — skriver inte om'], ['summary', 'Summera', 'Korta ner till det viktiga'], ['chat', 'Chatta', 'Ställ frågor om innehållet']];
+    var OPS = [['summary', 'Summera', 'Korta ner till det viktiga'], ['chat', 'Chatta', 'Ställ frågor om innehållet']];
     var ppOps = OPS.map(function (p) { return { key: p[0], label: p[1], sub: p[2], onPick: function () { pickOp(p[0]); }, selected: st.ppOp === p[0], unselected: st.ppOp !== p[0] }; });
-    var ppModelOptions = LLM.filter(function (m) { return m.fit !== 'bad'; }).map(function (m) { return { name: m.label || m.id, size: m.size, style: ddItem(m.id === st.ppModel), onPick: function () { pickPPModel(m.id); } }; });
-    var ppOutTitles = { summary: 'Sammanfattning', clean: 'Korrekturläst text', analyze: 'Analys' };
+    var ppOutTitles = { summary: 'Sammanfattning', bullets: 'Punkter' };
     var ppOpLabel = (ppOps.find(function (o) { return o.key === st.ppOp; }) || {}).label;
     var chat = st.chat.map(function (m) {
       return {
@@ -969,8 +954,32 @@
     var totalM = mIdx;
     var matchLabel = !q0 ? '' : totalM ? (st.currentMatch + 1) + '/' + totalM : '0/0';
     if (!_wave) _wave = Array.from({ length: 72 }, function (_, k) { return 16 + Math.round((Math.abs(Math.sin(k * 1.7) + Math.sin(k * 0.55) * 0.7) / 1.7) * 78); });
-    var aPct = Math.max(0, Math.min(100, (st.audioT / AUDIO_DUR) * 100));
+    var aPct = Math.max(0, Math.min(100, (st.audioT / (st.audioDur || 1)) * 100));
     var waveBars = _wave.map(function (h, k) { return { style: 'flex:1;height:' + h + '%;border-radius:2px;min-width:2px;align-self:center;background:' + (((k / _wave.length) * 100) <= aPct ? 'var(--accent)' : 'var(--line-2)') + ';transition:background .15s' }; });
+
+    // "Rätta mot ljudet" — ljud-grundat korrigeringspass
+    var acIdle = st.ac === 'idle', acGate = st.ac === 'gate', acRunning = st.ac === 'running', acDone = st.ac === 'done', acError = st.ac === 'error';
+    var acPctV = Math.round(st.acPct || 0);
+    var acRingStyle = 'position:relative;width:22px;height:22px;border-radius:50%;flex:0 0 auto;background:conic-gradient(var(--accent) ' + (acPctV * 3.6) + 'deg, rgba(255,255,255,.2) 0);animation:ppglow 1.6s ease-in-out infinite;transition:background .13s linear';
+    var origSegs = st.resultTranscriptReal || [];
+    var acSource = (st.acTranscript && st.acTranscript.length) ? st.acTranscript : (st.transcript || []);
+    var acChangedCount = 0;
+    var acLines = acSource.map(function (g, idx) {
+      var time = (g.time != null) ? g.time : fmtTime(g.start || 0);
+      var text = g.text || '';
+      var orig = origSegs[idx] ? (origSegs[idx].text || '') : null;
+      var changed = orig != null && orig !== text;
+      if (changed) acChangedCount++;
+      return { idx: idx, time: time, text: text, changed: changed,
+        textStyle: 'font-size:15.5px;line-height:1.5;' + (changed ? 'color:var(--ok);background:color-mix(in srgb,var(--ok) 10%,transparent);border-radius:5px;padding:0 5px;margin:0 -5px' : 'color:var(--ink)') };
+    });
+    var acFiles = (st.acFilesReal || []).map(function (f) { return { type: (f.ext || extOf(f.name) || '').toUpperCase(), name: f.name, size: f.size, onDownload: function () { saveResult(f); } }; });
+    var acFixLabel = acChangedCount === 1 ? '1 rad ändrad' : acChangedCount + ' rader ändrade';
+    var acSegLabel = 'Segment ' + Math.min(acSource.length || 0, Math.max(1, Math.round((acPctV / 100) * (acSource.length || 1)))) + ' / ' + (acSource.length || 0);
+    var audioInstalled = !!st.installed[AUDIO_MODEL_ID];
+    var audioDl = st.downloading[AUDIO_MODEL_ID], audioFailed = st.dlFailed[AUDIO_MODEL_ID];
+    var audioPct = Math.round(st.dlProg[AUDIO_MODEL_ID] || 0);
+    var audioPhase = audioDl ? 'downloading' : audioFailed ? 'failed' : audioInstalled ? 'installed' : 'idle';
 
     var statusWord = { pending: 'Väntar', running: 'Kör', done: 'Klar', error: 'Fel' };
     var statusCol = { pending: 'var(--ink-3)', running: 'var(--accent)', done: 'var(--ok)', error: 'var(--bad)' };
@@ -991,29 +1000,34 @@
     var doneCount = st.queue.filter(function (qq) { return st.qStatus[qq.id] === 'done'; }).length;
     var noWhisper = !WHISPER.some(function (m) { return st.installed[m.id]; });
     var historyItems = st.history.map(function (h) {
+      var vid = h.video || null;
+      var vidIsVideo = !!(vid && /\.(mp4|mkv|mov|webm|avi|m4v)$/i.test(vid.name || ''));
       return {
         id: h.id, name: h.name, date: h.date,
         meta: h.dur + ' · ' + h.model + ' · ' + h.lang,
         formats: (h.formats || []).map(function (f) { return { label: f }; }),
+        hasFolder: !!h.folder, hasVideo: !!(vid && vid.path),
+        videoLabel: vidIsVideo ? 'Öppna video' : 'Öppna ljud',
+        onReveal: function () { apiOpen('/api/reveal', h.folder); },
+        onOpenVideo: function () { apiOpen('/api/open', vid && vid.path); },
         onOpen: function () { openHistory(h); }, onRerun: function () { askRerun(h); }, onDelete: function () { askDeleteHistory(h.id, h.name); },
-        onDownload: function () { downloadFile(baseNameOf(h.name) + '.' + ((h.formats && h.formats[0]) || 'TXT').toLowerCase(), Math.max(9, Math.round((h.words || 3000) / 140)) + ' KB'); },
+        onDownload: function () { downloadFile(baseNameOf(h.name) + '.' + ((h.formats && h.formats[0]) || 'srt').toLowerCase(), Math.max(9, Math.round((h.words || 3000) / 140)) + ' KB'); },
       };
     });
 
     return {
       theme: st.theme,
-      tabTranscribe: st.tab === 'transcribe', tabModels: st.tab === 'models', tabHistory: st.tab === 'history',
-      onTabT: function () { setTab('transcribe'); }, onTabM: function () { setTab('models'); }, onTabH: function () { setTab('history'); },
-      tabTStyle: tabBtn(st.tab === 'transcribe'), tabMStyle: tabBtn(st.tab === 'models'), tabHStyle: tabBtn(st.tab === 'history'),
+      tabTranscribe: st.tab === 'transcribe', tabModels: false, tabHistory: st.tab === 'history',
+      onTabT: function () { setTab('transcribe'); }, onTabH: function () { setTab('history'); },
+      tabTStyle: tabBtn(st.tab === 'transcribe'), tabHStyle: tabBtn(st.tab === 'history'),
       toggleTheme: toggleTheme,
 
       queueItems: queueItems, queueCount: st.queue.length, multiQueue: st.queue.length > 1, hasQueue: st.queue.length > 0,
       queueDoneCount: doneCount, queueSummary: doneCount + ' av ' + st.queue.length + ' klara',
       fileError: st.fileError, hasFileError: !!st.fileError,
-      addSampleNormal: function () { addSample('mötesinspelning.mp3'); }, addSampleCorrupt: function () { addSample('skadad_inspelning.m4a'); },
 
       noWhisper: noWhisper, hasWhisper: !noWhisper,
-      gotoModels: function () { setTab('models'); }, getRecommended: function () { setTab('models'); modelAction('KB-Whisper large'); },
+      getRecommended: function () { var id = recommendModel('sv'); if (id) modelAction(id); },
 
       isError: st.run === 'error', isCancelled: st.run === 'cancelled', notErrorState: st.run !== 'error' && st.run !== 'cancelled',
       runErrorTitle: st.runError ? st.runError.title : '', runErrorDetail: st.runError ? st.runError.detail : '',
@@ -1022,7 +1036,7 @@
       historyItems: historyItems, historyEmpty: st.history.length === 0, historyCount: st.history.length,
 
       waveBars: waveBars, audioPlaying: st.audioPlaying, audioPaused: !st.audioPlaying,
-      audioCur: fmtTime(st.audioT), audioDur: fmtTime(AUDIO_DUR),
+      audioCur: fmtTime(st.audioT), audioDur: fmtTime(st.audioDur),
       onTogglePlay: togglePlay, onSeekClick: onSeekClick, seekTrackRef: seekTrackRef,
       editing: st.editing, notEditing: !st.editing, onToggleEdit: toggleEdit, onEditInput: onEditInput,
       editBtnLabel: st.editing ? '✓ Klar' : 'Redigera', transcriptEdited: st.edited,
@@ -1045,9 +1059,16 @@
       openPicker: openPicker, fileRef: fileRef, onPickFile: onPickFile, onDragOver: onDragOver, onDragLeave: onDragLeave, onDrop: onDrop,
       urlInput: st.urlInput, onUrlInput: onUrlInput, onAddUrl: addUrl, onUrlKey: onUrlKey,
       dropzoneStyle: 'position:relative;border:1.5px dashed ' + (st.dragging ? 'var(--accent)' : 'var(--line-2)') + ';border-radius:20px;background:' + (st.dragging ? 'var(--accent-weak)' : 'var(--surface)') + ';flex:1 1 auto;min-height:200px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 24px;text-align:center;box-shadow:var(--shadow-sm);cursor:pointer;user-select:none;-webkit-user-select:none;transition:border-color .12s,background .12s',
-      curModelName: curModel.label || curModel.id, curModelMeta: curModel.size + ' · ' + (curModel.id === recommendModel(st.language) ? 'matchar språket' : 'installerad'), curModelDot: curFit.dot,
+      curModelName: curModel.label || curModel.id, curModelLang: langLabelOf(curModel.lang),
+      curModelHint: curModel.useFor || curFit.verdict, curModelDot: curFit.dot, curModelSize: curModel.size || AUDIO_MODEL_SIZE,
+      curModelSuggested: curModel.id === recId, curModelInstalled: curInstalled, curModelNotInstalled: !curInstalled,
+      curModelPhase: curPhaseV, curModelPct: curPctV, curModelDetail: st.installing[curModel.id] ? instDetail(curPctV) : dlDetail(curModel.size, curPctV),
+      onCurModelAction: function () { if (st.dlFailed[curModel.id]) retryDownload(curModel.id); else if (!curInstalled && !st.downloading[curModel.id] && !st.installing[curModel.id]) modelAction(curModel.id); },
+      onCurModelCancel: function () { cancelDownload(curModel.id); },
       toggleModelDD: toggleModelDD, modelDDOpen: st.openDD === 'model', modelOptions: modelOptions,
-      langOptions: langOptions, formatChips: formatChips,
+      langOptions: langOptions, subtitleOptions: subtitleOptions,
+      embedOptions: embedOptions, showEmbed: st.subtitleMode === 'embed' && _activeIsVideo,
+      showMoveNote: _activeIsLocal && _activeIsVideo,
 
       onStart: start, isRunning: isRunning, notRunning: !isRunning,
       startBtnLabel: isRunning ? 'Transkriberar…' : isDone ? 'Kör igen' : (st.queue.length > 1 ? 'Starta · ' + st.queue.length + ' filer' : 'Starta'),
@@ -1071,11 +1092,17 @@
       showResults: isDone, resultCount: resultFiles.length, resultDuration: fmtTime(st.elapsed), resultFiles: resultFiles,
       transcript: getTranscript().slice(0, 3).map(function (ln, idx) { return { time: ln.time, text: lineText(idx) }; }),
 
-      ppEnabled: st.ppEnabled, ppOff: !st.ppEnabled, togglePPEnabled: togglePPEnabled,
-      ppSwitchTrack: 'position:relative;width:42px;height:25px;border-radius:999px;flex:0 0 auto;background:' + (st.ppEnabled ? 'var(--ink)' : 'var(--line-2)') + ';transition:background .15s',
-      ppSwitchKnob: 'position:absolute;top:3px;left:3px;width:19px;height:19px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.2);transition:transform .15s;transform:translateX(' + (st.ppEnabled ? '17px' : '0') + ')',
-      ppOps: ppOps, ppModel: st.ppModel, togglePPDD: togglePPDD, ppDDOpen: st.openDD === 'ppmodel', ppModelOptions: ppModelOptions,
-      showPP: isDone, ppOpLabel: ppOpLabel, ppShowRun: st.ppOp !== 'chat', onRunPP: runPP, ppRunLabel: 'Kör',
+      // Rätta mot ljudet
+      acIdle: acIdle, acGate: acGate, acRunning: acRunning, acDone: acDone, acError: acError,
+      acPct: acPctV, acRingStyle: acRingStyle, acSegLabel: acSegLabel, acLines: acLines, acFiles: acFiles, acFixLabel: acFixLabel,
+      audioModelSize: AUDIO_MODEL_SIZE, audioPhase: audioPhase, audioPct: audioPct, audioDetail: audioDl ? dlDetail(AUDIO_MODEL_SIZE, audioPct) : '',
+      onStartAudioCorrect: startAudioCorrect, onRetryAudioCorrect: retryAudioCorrect, onCancelAudioGate: cancelAudioGate,
+      onDownloadAudioModel: downloadAudioModel, onCancelAudioDownload: cancelAudioDownload,
+
+      // Efterbearbeta (LLM) — trigger + modal
+      ppModalOpen: st.ppModalOpen, openPPModal: openPPModal, closePPModal: closePPModal,
+      ppOps: ppOps, ppModel: st.ppModel,
+      ppOpLabel: ppOpLabel, ppShowRun: st.ppOp !== 'chat', onRunPP: runPP, ppRunLabel: 'Kör',
       ppRunBtnStyle: primaryBtn(st.pp === 'running') + ';min-width:152px', ppRunIdle: st.pp !== 'running', ppPct: Math.round(st.ppPct || 0),
       ppRingStyle: 'position:relative;width:22px;height:22px;border-radius:50%;flex:0 0 auto;background:conic-gradient(var(--accent) ' + (Math.round(st.ppPct || 0) * 3.6) + 'deg, rgba(255,255,255,.2) 0);animation:ppglow 1.6s ease-in-out infinite;transition:background .13s linear',
       ppShowText: st.ppOp !== 'chat' && st.pp !== 'idle', ppShowChat: st.ppOp === 'chat', ppRunning: st.pp === 'running', ppShowOut: st.pp === 'done',
@@ -1087,16 +1114,8 @@
       chatModelName: cm.label || cm.id, chatModelDesc: cm.useFor,
       chatKind: caps.vision ? (caps.files.some(function (f) { return /ljud|wav|mp3/i.test(f); }) ? 'bild + tal' : 'bildanalys') : 'textmodell',
       chatCtx: cm.ctx, chatPlusAttach: caps.vision ? attachImage : function () { attachFile((caps.files && caps.files[0]) || 'TXT'); },
-      chatHasVision: caps.vision, chatNoVision: !caps.vision, chatCaps: chatCaps, chatModelOptions: chatModelOptions, chatModelDDOpen: st.openDD === 'chatmodel', toggleChatModelDD: toggleChatModelDD,
+      chatHasVision: caps.vision, chatNoVision: false, chatCaps: chatCaps, chatModelOptions: chatModelOptions, chatModelDDOpen: st.openDD === 'chatmodel', toggleChatModelDD: toggleChatModelDD,
       chatFileChips: chatFileChips, chatAttachments: chatAttachments, hasAttach: st.chatAttach.length > 0, attachImage: attachImage,
-
-      hwTiles: hw.tiles, hwSpecs: hw.specs, hwReady: hw.ready,
-      diskOptions: hw.diskOptions, diskDDOpen: st.openDD === 'disk', toggleDiskDD: toggleDiskDD,
-      curDiskDrive: hw.selDisk.drive, curDiskName: hw.selDisk.name, curDiskFree: fmtStorage(hw.selDisk.free) + ' ledigt',
-      whisperRows: whisperRows, llmRows: llmRows, onlineRows: onlineRows, onlineSortOptions: onlineSortOptions,
-      onlineEmpty: onlineRows.length === 0, llmEmpty: llmEmpty,
-      search: st.search, onSearch: onSearch, useCaseOptions: useCaseOptions, infoBadgeStyle: infoBadgeStyle(),
-      useCaseTip: infoBadge('Filtrerar och rangordnar språk- och videomodellerna efter uppgift — textresonemang, svensk text, videoanalys på bild eller bild + tal. Transkriberingsmodellerna ovan påverkas inte.'),
 
       tipOpen: !!st.tip, tipText: st.tip ? st.tip.text : '', tipStyle: tipStyleFor(),
       tipFullscreen: infoBadge('Klicka för helskärm'),
@@ -1109,6 +1128,52 @@
   var H = [];                // per-render handler/ref registry
   var pendingCbs = [];
   var _raf = false;
+  var _prevStep = null, _prevQueueIds = null;  // queue-flow enter/stagger transition tracking
+
+  function _reduceMotion() {
+    try { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); } catch (e) { return false; }
+  }
+  function _cssId(id) { return (window.CSS && CSS.escape) ? CSS.escape(id) : String(id).replace(/["\\]/g, '\\$&'); }
+
+  // Smooth motion for the queue flow. Runs at the END of render() (DOM already patched
+  // by morphdom, so freshly-created nodes exist): glide the config pane in when arriving
+  // from another step, and stagger only the queue rows whose id is new since last render.
+  // Row removal is animated separately in removeQ(). Mirrors the app's existing motion
+  // language (WAAPI + cubic-bezier(.16,1,.3,1), like the process pane / [data-reveal]).
+  function runQueueTransitions() {
+    var step = S.step;
+    var ids = (S.queue || []).map(function (q) { return q.id; });
+    var firstPaint = (_prevStep === null);
+    var prevStep = _prevStep, prevIds = _prevQueueIds || [];
+    _prevStep = step; _prevQueueIds = ids;          // commit for next render before any early return
+    try { (window.__rqtLog = window.__rqtLog || []).push({ prevStep: prevStep, step: step, firstPaint: firstPaint, ids: ids.slice() }); } catch (e) {}
+    if (firstPaint || _reduceMotion() || step !== 'config') return;
+
+    var pane = document.querySelector('[data-pane="config"]');
+    if (!pane) return;
+    if (prevStep !== 'config' && pane.animate) {     // entered config from another step → glide the pane in
+      try {
+        pane.animate(
+          [{ opacity: 0, transform: 'translateY(16px) scale(0.99)' }, { opacity: 1, transform: 'translateY(0) scale(1)' }],
+          { duration: 440, easing: 'cubic-bezier(.16,1,.3,1)', fill: 'none' }
+        );
+      } catch (e) {}
+    }
+    var prevSet = {}; prevIds.forEach(function (id) { prevSet[id] = 1; });
+    var i = 0;
+    ids.forEach(function (id) {
+      if (prevSet[id]) return;                        // existing item — ride in with the pane, don't re-animate
+      var row = pane.querySelector('[data-key="' + _cssId(id) + '"]');
+      if (!row || !row.animate) return;
+      try {
+        row.animate(
+          [{ opacity: 0, transform: 'translateY(10px)' }, { opacity: 1, transform: 'translateY(0)' }],
+          { duration: 360, delay: i * 55, easing: 'cubic-bezier(.16,1,.3,1)', fill: 'backwards' }
+        );
+      } catch (e) {}
+      i++;
+    });
+  }
 
   function on(fn) { if (typeof fn !== 'function') return '-1'; return String(H.push(fn) - 1); }
   window.__tr_on = on;       // exposed so view modules can register handlers
@@ -1136,11 +1201,17 @@
       getNodeKey: function (node) { return node.nodeType === 1 ? (node.getAttribute('data-key') || node.getAttribute('data-pane') || node.id || null) : null; },
       onBeforeElUpdated: function (from, to) {
         if (from.nodeType === 1 && from.hasAttribute('data-eline') && S.editing) return false;
+        // If this element is mid-hover, the hover system saved its pre-hover style in
+        // _shBase to restore on pointerout. A re-render here changes the real base
+        // style (e.g. a toggle button just became selected), so keep _shBase in sync —
+        // otherwise pointerout would restore the STALE style and revert the selection.
+        if (from._shBase !== undefined) from._shBase = (to.getAttribute('style') || '');
         return true;
       },
     });
     root.querySelectorAll('[data-ref]').forEach(function (el) { var f = H[+el.dataset.ref]; if (typeof f === 'function') f(el); });
     applySideEffects();
+    runQueueTransitions();
     var cbs = pendingCbs; pendingCbs = []; cbs.forEach(function (cb) { try { cb(); } catch (e) {} });
   }
 
@@ -1179,6 +1250,54 @@
   }
 
   /* ----------------------------------------------------------------- views -- */
+  // Shared "Ladda ner"-knapp (extraherad från forna Modeller-fliken; används av
+  // modell-dropdownen, "vald modell ej nedladdad"-kortet och ljudmodell-grinden).
+  function dlbtn(r) {
+    var p = r.phase || 'idle';
+    var pct = Math.round(r.pct || 0);
+    var detail = r.detail || '';
+    var progressing = p === 'downloading' || p === 'installing';
+    var base = 'position:relative;overflow:hidden;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;gap:6px;width:154px;height:40px;border-radius:9px;padding:7px 14px;font-size:14.5px;font-weight:500;font-family:inherit;white-space:nowrap;transition:border-color .15s,background .15s;';
+    var btnStyle, btnHover = '';
+    if (progressing) {
+      btnStyle = base + 'background:var(--surface);border:1px solid var(--accent);color:var(--ink);cursor:default;padding-right:26px';
+    } else if (p === 'installed') {
+      btnStyle = base + 'background:transparent;border:1px solid transparent;color:var(--ok);cursor:default';
+    } else if (p === 'incompatible') {
+      btnStyle = base + 'background:transparent;border:1px solid transparent;color:var(--ink-3);cursor:default';
+    } else if (p === 'failed') {
+      btnStyle = base + 'background:transparent;border:1px solid var(--bad);color:var(--bad);cursor:pointer';
+      btnHover = 'background:color-mix(in srgb,var(--bad) 8%,transparent) !important';
+    } else {
+      btnStyle = base + 'background:transparent;border:1px solid var(--line-2);color:var(--ink);cursor:pointer';
+      btnHover = 'background:var(--sunken) !important;border-color:var(--ink-3) !important;box-shadow:var(--shadow-sm) !important';
+    }
+    var fillStyle = p === 'installing'
+      ? 'position:absolute;left:0;top:0;bottom:0;z-index:0;width:' + pct + '%;background-color:var(--accent);background-image:repeating-linear-gradient(135deg, rgba(255,255,255,0.3) 0, rgba(255,255,255,0.3) 4px, transparent 4px, transparent 8px);background-size:16px 16px;animation:dlstripe .6s linear infinite;transition:width .22s ease'
+      : 'position:absolute;left:0;top:0;bottom:0;z-index:0;width:' + pct + '%;background:var(--accent);transition:width .22s ease';
+    var progLabel = p === 'installing' ? 'Installerar' : 'Laddar ner';
+    if (progressing) {
+      return `<div style="${btnStyle}">
+    <div style="${fillStyle}"></div>
+    <span style="position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;line-height:1.1;padding-right:16px;max-width:100%;overflow:hidden">
+      <span style="font-size:13.5px;font-weight:600;white-space:nowrap">${esc(progLabel)} ${esc(pct)}%</span>
+      <span style="font-size:10.5px;font-weight:500;color:var(--ink-2);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px">${esc(detail)}</span>
+    </span>
+    <button data-click="${on(r.onCancel)}" aria-label="Avbryt nedladdning" style="position:absolute;right:5px;top:50%;transform:translateY(-50%);z-index:2;width:22px;height:22px;border:none;background:var(--surface);border-radius:6px;cursor:pointer;color:var(--ink-2);display:flex;align-items:center;justify-content:center" data-sh="color:var(--bad) !important;background:var(--sunken) !important">
+      <svg width="10" height="10" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3l8 8M11 3l-8 8"></path></svg>
+    </button>
+  </div>`;
+    }
+    return `<button data-click="${on(r.onAction)}" style="${btnStyle}" data-sh="${btnHover}">
+    ${ p === 'idle' ? `<span style="position:relative;z-index:1;display:inline-flex;align-items:center;gap:6px">
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.5v7.5"></path><path d="M4.5 6.5 8 10l3.5-3.5"></path><path d="M3 13.5h10"></path></svg>Ladda ner
+      </span>` : '' }
+    ${ p === 'failed' ? `<span style="position:relative;z-index:1;display:inline-flex;align-items:center;gap:6px"><span style="font-size:14px;line-height:1">↻</span>Försök igen</span>` : '' }
+    ${ p === 'installed' ? `<span style="position:relative;z-index:1;display:inline-flex;align-items:center;gap:5px;color:var(--ok)">✓ Installerad</span>` : '' }
+    ${ p === 'incompatible' ? `<span style="position:relative;z-index:1;color:var(--ink-3)">Ej kompatibel</span>` : '' }
+  </button>`;
+  }
+
   function viewHeader(v) {
     return '' +
     '<header style="position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:24px;padding:16px 32px;border-bottom:1px solid var(--line);background:color-mix(in srgb, var(--canvas) 82%, transparent);backdrop-filter:saturate(1.4) blur(14px)">' +
@@ -1196,7 +1315,6 @@
         '<div style="display:inline-flex;gap:3px;padding:4px;background:var(--track);border-radius:12px;border:1px solid var(--line)">' +
           '<button data-click="' + on(v.onTabT) + '" style="' + v.tabTStyle + '" data-sh="background:var(--surface) !important;color:var(--ink) !important;box-shadow:var(--shadow-sm) !important">Transkribera</button>' +
           '<button data-click="' + on(v.onTabH) + '" style="' + v.tabHStyle + '" data-sh="background:var(--surface) !important;color:var(--ink) !important;box-shadow:var(--shadow-sm) !important">Historik</button>' +
-          '<button data-click="' + on(v.onTabM) + '" style="' + v.tabMStyle + '" data-sh="background:var(--surface) !important;color:var(--ink) !important;box-shadow:var(--shadow-sm) !important">Modeller</button>' +
         '</div>' +
       '</nav>' +
       '<div style="min-width:200px;display:flex;justify-content:flex-end;align-items:center;gap:12px">' +
@@ -1232,7 +1350,6 @@ function viewTranscribe(v){ return `
         <button data-click="${on(v.getRecommended)}" style="display:inline-flex;align-items:center;gap:9px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:12px;padding:13px 22px;font-size:15.5px;font-weight:500;cursor:pointer;font-family:inherit;box-shadow:var(--shadow-sm)" data-sh="background:color-mix(in srgb, var(--btn-bg) 78%, var(--accent)) !important">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.5v7.5"></path><path d="M4.5 6.5 8 10l3.5-3.5"></path><path d="M3 13.5h10"></path></svg>Ladda ner KB-Whisper large
         </button>
-        <button data-click="${on(v.gotoModels)}" style="background:transparent;border:1px solid var(--line);color:var(--ink);border-radius:12px;padding:13px 22px;font-size:15.5px;font-weight:500;cursor:pointer;font-family:inherit" data-sh="border-color:var(--line-2) !important;background:var(--sunken) !important">Bläddra bland modeller</button>
       </div>
     </section>
     ` : '' }
@@ -1279,16 +1396,6 @@ function viewTranscribe(v){ return `
             <span style="font-size:14.5px;color:var(--ink)">${esc(v.fileError)}</span>
           </div>
         ` : '' }
-
-        <div style="display:flex;align-items:center;gap:9px;margin-top:18px;flex-wrap:wrap">
-          <span style="font-size:11.5px;text-transform:uppercase;letter-spacing:0.05em;color:var(--ink-2);font-weight:600">Eller prova med</span>
-          <button data-click="${on(v.addSampleNormal)}" style="display:inline-flex;align-items:center;gap:7px;font-size:13.5px;font-weight:500;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:7px 12px;cursor:pointer;font-family:inherit;font-variant-numeric:tabular-nums" data-sh="border-color:var(--ink-3) !important">
-            <span style="width:7px;height:7px;border-radius:2px;background:var(--ok);flex:0 0 auto"></span>mötesinspelning.mp3
-          </button>
-          <button data-click="${on(v.addSampleCorrupt)}" style="display:inline-flex;align-items:center;gap:7px;font-size:13.5px;font-weight:500;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:7px 12px;cursor:pointer;font-family:inherit;font-variant-numeric:tabular-nums" data-sh="border-color:var(--ink-3) !important">
-            <span style="width:7px;height:7px;border-radius:2px;background:var(--bad);flex:0 0 auto"></span>skadad_inspelning.m4a
-          </button>
-        </div>
       </div>
       ` : '' }
 
@@ -1320,31 +1427,40 @@ function viewTranscribe(v){ return `
         <h2 style="font-size:22px;font-weight:600;letter-spacing:-0.02em;margin:0 0 14px">Inställningar</h2>
 
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:12px;box-shadow:var(--shadow-sm)">
-          <div style="position:relative;flex:1 1 210px;min-width:200px">
-          <button data-click="${on(v.toggleModelDD)}" style="width:100%;display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:11px;padding:10px 13px;cursor:pointer;text-align:left;box-shadow:var(--shadow-sm)" data-sh="border-color:var(--line-2) !important">
-            <span style="width:8px;height:8px;border-radius:50%;flex:0 0 auto;background:${v.curModelDot}"></span>
-            <span style="flex:1;min-width:0">
-              <span style="display:block;font-size:15px;font-weight:500;color:var(--ink)">${esc(v.curModelName)}</span>
-              <span style="display:block;font-size:12.5px;color:var(--ink-2);font-variant-numeric:tabular-nums">${esc(v.curModelMeta)}</span>
-            </span>
-            <span style="width:7px;height:7px;border-right:1.6px solid var(--ink-3);border-bottom:1.6px solid var(--ink-3);transform:rotate(45deg);margin:-3px 4px 0 0"></span>
-          </button>
-          ${ v.modelDDOpen ? `
-          <div style="position:absolute;bottom:calc(100% + 6px);left:0;right:0;z-index:30;background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:6px;animation:fadeup .14s ease">
-            ${ v.modelOptions.map(function(m){ return `
-              <button data-key="${esc(m.name)}" data-click="${on(m.onPick)}" style="${m.style}" data-sh="background:var(--sunken) !important">
-                <span style="width:20px;height:20px;border-radius:50%;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:var(--ink-2);background:var(--sunken);border:1px solid var(--line);font-variant-numeric:tabular-nums">${esc(m.rank)}</span>
-                <span style="width:8px;height:8px;border-radius:50%;flex:0 0 auto;background:${m.dot}"></span>
-                <span style="flex:1;min-width:0">
-                  <span style="display:block;font-size:15.5px;font-weight:500;color:var(--ink)">${esc(m.name)}</span>
-                  <span style="display:block;font-size:13px;color:var(--ink-2);font-variant-numeric:tabular-nums">${esc(m.meta)}</span>
+          <div style="position:relative;flex:1 1 240px;min-width:220px">
+            <button data-click="${on(v.toggleModelDD)}" style="width:100%;display:flex;align-items:center;gap:10px;background:var(--sunken);border:1px solid var(--line);border-radius:11px;padding:10px 13px;cursor:pointer;font-family:inherit;text-align:left" data-sh="border-color:var(--line-2) !important">
+              <span style="width:8px;height:8px;border-radius:50%;flex:0 0 auto;background:${v.curModelDot}"></span>
+              <span style="flex:1;min-width:0">
+                <span style="display:flex;align-items:center;gap:7px">
+                  <span style="font-size:15px;font-weight:500;color:var(--ink);font-variant-numeric:tabular-nums;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(v.curModelName)}</span>
+                  ${ v.curModelSuggested ? `<span style="font-size:10.5px;font-weight:600;color:var(--accent);background:var(--accent-weak);border-radius:5px;padding:1px 6px;flex:0 0 auto;white-space:nowrap">Föreslås</span>` : '' }
                 </span>
-                <span style="${m.checkStyle}">✓</span>
-              </button>
-            `; }).join('') }
+                <span style="display:block;font-size:12.5px;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(v.curModelLang)} · ${esc(v.curModelHint)}</span>
+              </span>
+              <span style="width:6px;height:6px;border-right:1.6px solid var(--ink-3);border-bottom:1.6px solid var(--ink-3);transform:rotate(45deg);margin-top:-3px;flex:0 0 auto"></span>
+            </button>
+            ${ v.modelDDOpen ? `
+            <div style="position:absolute;top:calc(100% + 8px);left:0;width:360px;max-width:90vw;z-index:40;background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:6px;animation:fadeup .14s ease">
+              ${ v.modelOptions.map(function(m){ return `
+                <div data-key="${esc(m.name)}" data-click="${on(m.onPick)}" style="${m.style}">
+                  <span style="width:9px;height:9px;border-radius:50%;flex:0 0 auto;background:${m.dot};margin-top:3px"></span>
+                  <span style="flex:1;min-width:0">
+                    <span style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
+                      <span style="font-size:14.5px;font-weight:500;color:var(--ink);font-variant-numeric:tabular-nums">${esc(m.name)}</span>
+                      <span style="font-size:11px;color:var(--ink-2);background:var(--sunken);border:1px solid var(--line);border-radius:5px;padding:1px 6px">${esc(m.lang)}</span>
+                      ${ m.recommended ? `<span style="font-size:10.5px;font-weight:600;color:var(--accent);background:var(--accent-weak);border-radius:5px;padding:1px 6px">Rekommenderad</span>` : '' }
+                    </span>
+                    <span style="display:block;font-size:12px;color:var(--ink-2);margin-top:3px;line-height:1.4">${esc(m.hint)}</span>
+                  </span>
+                  <span style="flex:0 0 auto;display:flex;align-items:center;align-self:center">
+                    ${ m.installed ? `<span style="${m.checkStyle}">✓</span>` : '' }
+                    ${ m.notInstalled ? dlbtn({ phase: m.phase, pct: m.pct, detail: m.detail, onAction: m.onAction, onCancel: m.onCancel }) : '' }
+                  </span>
+                </div>
+              `; }).join('') }
+            </div>
+            ` : '' }
           </div>
-          ` : '' }
-        </div>
 
         <div style="display:flex;gap:3px;padding:4px;background:var(--track);border:1px solid var(--line);border-radius:11px;flex:0 0 auto">
           ${ v.langOptions.map(function(l){ return `
@@ -1353,13 +1469,48 @@ function viewTranscribe(v){ return `
         </div>
 
         <div style="flex:1 1 auto"></div>
+        </div>
 
-        <div style="display:flex;gap:6px;flex:0 0 auto">
-          ${ v.formatChips.map(function(f){ return `
-            <button data-click="${on(f.onToggle)}" style="${f.style}" data-sh="border-color:var(--line-2) !important;box-shadow:var(--shadow-sm) !important">${esc(f.label)}</button>
-          `; }).join('') }
+        ${ v.curModelNotInstalled ? `
+        <div style="display:flex;align-items:center;gap:14px;background:var(--surface);border:1px solid color-mix(in srgb,var(--warn) 30%,var(--line));border-radius:16px;margin-top:10px;padding:14px 16px;box-shadow:var(--shadow-sm)">
+          <span style="width:40px;height:40px;border-radius:11px;background:color-mix(in srgb,var(--warn) 14%,transparent);color:var(--warn);display:flex;align-items:center;justify-content:center;flex:0 0 auto">
+            <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.5v7.5"></path><path d="M4.5 6.5 8 10l3.5-3.5"></path><path d="M3 13.5h10"></path></svg>
+          </span>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:15.5px;font-weight:500;color:var(--ink)"><span style="font-variant-numeric:tabular-nums">${esc(v.curModelName)}</span> är inte nedladdad</div>
+            <div style="font-size:13px;color:var(--ink-2);margin-top:2px;line-height:1.4">Ladda ner modellen (${esc(v.curModelSize)}) för att transkribera på ${esc(v.curModelLang)}.</div>
+          </div>
+          ${ dlbtn({ phase: v.curModelPhase, pct: v.curModelPct, detail: v.curModelDetail, onAction: v.onCurModelAction, onCancel: v.onCurModelCancel }) }
         </div>
+        ` : '' }
+
+        <div style="display:flex;align-items:center;gap:14px;background:var(--surface);border:1px solid var(--line);border-radius:16px;margin-top:10px;padding:14px 16px;box-shadow:var(--shadow-sm)">
+          <span style="width:40px;height:40px;border-radius:11px;background:var(--sunken);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;flex:0 0 auto">
+            <svg width="19" height="19" viewBox="0 0 20 20" fill="none" stroke="var(--ink-3)" stroke-width="1.5"><rect x="2.5" y="4" width="15" height="12" rx="2.5"></rect><path d="M5 12.5h4.5M11.5 12.5h3.5M5 9.5h2.5M9.5 9.5h5.5" stroke-linecap="round"></path></svg>
+          </span>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:15.5px;font-weight:500;color:var(--ink)">Undertexter <span style="font-weight:400;color:var(--ink-3)">· hur de sparas</span></div>
+            <div style="font-size:13px;color:var(--ink-2);margin-top:2px;line-height:1.4">Spara videon med en separat .srt-fil i en mapp, eller bädda in undertexterna direkt i videon. Allt sparas i historiken.</div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:8px;flex:0 0 auto;align-items:stretch;width:280px">
+            <div style="display:flex;gap:3px;padding:4px;background:var(--track);border:1px solid var(--line);border-radius:11px">
+              ${ v.subtitleOptions.map(function(o){ return `
+                <button data-click="${on(o.onPick)}" style="${o.style}" data-sh="background:var(--surface) !important;color:var(--ink) !important;box-shadow:var(--shadow-sm) !important">${esc(o.label)}</button>
+              `; }).join('') }
+            </div>
+            ${ v.showEmbed ? `
+            <div style="display:flex;gap:3px;padding:4px;background:var(--track);border:1px solid var(--line);border-radius:11px">
+              ${ v.embedOptions.map(function(o){ return `
+                <button data-click="${on(o.onPick)}" style="${o.style}" data-sh="background:var(--surface) !important;color:var(--ink) !important;box-shadow:var(--shadow-sm) !important">${esc(o.label)}</button>
+              `; }).join('') }
+            </div>
+            ` : '' }
+          </div>
         </div>
+
+        ${ v.showMoveNote ? `
+        <div style="font-size:12.5px;color:var(--ink-3);margin-top:8px;padding-left:4px">Originalfilen flyttas in i historik-mappen.</div>
+        ` : '' }
 
         <div style="flex:0 0 auto;height:46px"></div>
 
@@ -1504,22 +1655,11 @@ function viewTranscribe(v){ return `
       <div data-sec="results" style="margin-top:24px;scroll-margin-top:8px">
         <div data-reveal style="display:flex;align-items:center;gap:9px;margin-bottom:14px">
           <span style="width:18px;height:18px;border-radius:50%;background:var(--ok);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12.5px;flex:0 0 auto">✓</span>
-          <h2 style="font-size:20px;font-weight:600;letter-spacing:-0.02em;margin:0">Klar</h2>
-          <span style="color:var(--ink-2);font-size:15.5px">· ${esc(v.resultCount)} filer · ${esc(v.resultDuration)}</span>
+          <h2 style="font-size:20px;font-weight:600;letter-spacing:-0.02em;margin:0">Transkriberat</h2>
+          <span style="color:var(--ink-2);font-size:15.5px">· ${esc(v.resultDuration)}</span>
         </div>
 
-        <div style="display:grid;gap:10px;margin-bottom:18px">
-          ${ v.resultFiles.map(function(r){ return `
-            <div data-key="${esc(r.name)}" data-reveal style="display:flex;align-items:center;gap:14px;background:var(--surface);border:1px solid var(--line);border-radius:13px;padding:14px 16px;box-shadow:var(--shadow-sm)">
-              <span style="font-family:'Geist',system-ui,sans-serif;font-variant-numeric:tabular-nums;font-size:12.5px;font-weight:500;color:var(--accent);background:var(--accent-weak);padding:5px 9px;border-radius:7px;letter-spacing:0.03em">${esc(r.type)}</span>
-              <span style="flex:1;min-width:0;font-size:16px;font-family:'Geist',system-ui,sans-serif;font-variant-numeric:tabular-nums;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.name)}</span>
-              <span style="font-size:14px;color:var(--ink-2);font-family:'Geist',system-ui,sans-serif;font-variant-numeric:tabular-nums">${esc(r.size)}</span>
-              <button data-click="${on(r.onDownload)}" style="display:inline-flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:8px 14px 8px 12px;font-size:14.5px;font-weight:500;cursor:pointer;font-family:inherit;transition:background .14s,border-color .14s,color .14s" data-sh="border-color:var(--ink) !important;background:var(--ink) !important;color:var(--btn-fg) !important">
-                <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.5v7.5"></path><path d="M4.5 6.5 8 10l3.5-3.5"></path><path d="M3 13.5h10"></path></svg>Ladda ner
-              </button>
-            </div>
-          `; }).join('') }
-        </div>
+        <p data-reveal style="margin:0 0 16px;color:var(--ink-2);font-size:15px;line-height:1.55">Granska transkriptet nedan. Kör <strong style="color:var(--ink);font-weight:600">Rätta mot ljudet</strong> för att ladda ner undertexterna och spara i historiken.</p>
 
         <div data-reveal data-click="${on(v.openTranscript)}" style="background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px 20px;box-shadow:var(--shadow-sm);cursor:pointer;transition:border-color .12s,box-shadow .12s" data-sh="border-color:var(--line-2) !important;box-shadow:var(--shadow) !important">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
@@ -1538,115 +1678,115 @@ function viewTranscribe(v){ return `
       </div>
       ` : '' }
 
-      ${ v.showPP ? `
-      <div data-sec="pp" data-reveal style="margin-top:28px;background:var(--surface);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow)">
-        <div style="padding:22px 24px 20px">
-          <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
-            <span style="font-family:'Geist',system-ui,sans-serif;font-variant-numeric:tabular-nums;font-size:12px;font-weight:500;color:var(--accent);background:var(--accent-weak);padding:3px 9px;border-radius:6px">LLM</span>
-            <h2 style="font-size:19px;font-weight:600;letter-spacing:-0.02em;margin:0">Efterbearbeta transkriptet</h2>
-          </div>
-          <p style="margin:0 0 18px;color:var(--ink-2);font-size:15px">Valfritt — förfina resultatet lokalt med en språkmodell.</p>
-          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px">
-            ${ v.ppOps.map(function(o){ return `
-              ${ o.selected ? `
-                <button data-key="${esc(o.key)}" data-click="${on(o.onPick)}" style="display:flex;flex-direction:column;gap:3px;align-items:flex-start;text-align:left;padding:13px 14px;border-radius:12px;cursor:pointer;font-family:inherit;color:var(--ink);width:100%;border:1.5px solid var(--ink);background:var(--sunken);transition:border-color .12s,background .12s,box-shadow .12s" data-sh="box-shadow:var(--shadow-sm) !important">
-                  <span style="font-size:14.5px;font-weight:500">${esc(o.label)}</span>
-                  <span style="font-size:12.5px;color:var(--ink-2);line-height:1.3">${esc(o.sub)}</span>
-                </button>
-              ` : '' }
-              ${ o.unselected ? `
-                <button data-key="${esc(o.key)}" data-click="${on(o.onPick)}" style="display:flex;flex-direction:column;gap:3px;align-items:flex-start;text-align:left;padding:13px 14px;border-radius:12px;cursor:pointer;font-family:inherit;color:var(--ink);width:100%;border:1.5px solid var(--line);background:var(--surface);transition:border-color .12s,background .12s,box-shadow .12s" data-sh="border-color:var(--ink-3) !important;background:var(--sunken) !important;box-shadow:var(--shadow-sm) !important">
-                  <span style="font-size:14.5px;font-weight:500">${esc(o.label)}</span>
-                  <span style="font-size:12.5px;color:var(--ink-2);line-height:1.3">${esc(o.sub)}</span>
-                </button>
-              ` : '' }
-            `; }).join('') }
-          </div>
-          <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
-            <div style="position:relative;flex:1;min-width:200px">
-              <div style="font-size:14px;font-weight:500;color:var(--ink-2);margin-bottom:8px">LLM-modell</div>
-              <button data-click="${on(v.togglePPDD)}" style="width:100%;max-width:320px;display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;cursor:pointer;text-align:left" data-sh="border-color:var(--line-2) !important">
-                <span style="width:7px;height:7px;border-radius:50%;flex:0 0 auto;background:var(--ok)"></span>
-                <span style="flex:1;font-size:15.5px;font-family:'Geist',system-ui,sans-serif;font-variant-numeric:tabular-nums;color:var(--ink)">${esc(v.ppModel)}</span>
-                <span style="width:6px;height:6px;border-right:1.6px solid var(--ink-3);border-bottom:1.6px solid var(--ink-3);transform:rotate(45deg);margin:-3px 2px 0 0"></span>
-              </button>
-              ${ v.ppDDOpen ? `
-              <div style="position:absolute;bottom:calc(100% + 6px);left:0;width:100%;max-width:320px;z-index:30;background:var(--surface);border:1px solid var(--line);border-radius:13px;box-shadow:var(--shadow);padding:6px;animation:fadeup .14s ease">
-                ${ v.ppModelOptions.map(function(m){ return `
-                  <button data-key="${esc(m.name)}" data-click="${on(m.onPick)}" style="${m.style}" data-sh="background:var(--sunken) !important">
-                    <span style="flex:1;font-size:15px;font-family:'Geist',system-ui,sans-serif;font-variant-numeric:tabular-nums;color:var(--ink)">${esc(m.name)}</span>
-                    <span style="font-size:13px;color:var(--ink-2)">${esc(m.size)}</span>
-                  </button>
-                `; }).join('') }
+      ${ v.showResults ? `
+      <div data-sec="audiocorrect" data-reveal style="margin-top:28px;background:var(--surface);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);overflow:hidden">
+        <div style="padding:22px 24px 22px">
+          <div style="display:flex;align-items:flex-start;gap:14px">
+            <span style="width:42px;height:42px;border-radius:12px;background:var(--accent-weak);border:1px solid color-mix(in srgb,var(--accent) 20%,transparent);display:flex;align-items:center;justify-content:center;flex:0 0 auto">
+              <span style="display:flex;align-items:flex-end;gap:2.5px;height:18px">
+                <span style="width:3px;height:7px;border-radius:2px;background:var(--accent)"></span>
+                <span style="width:3px;height:14px;border-radius:2px;background:var(--accent)"></span>
+                <span style="width:3px;height:18px;border-radius:2px;background:var(--accent)"></span>
+                <span style="width:3px;height:10px;border-radius:2px;background:var(--accent)"></span>
+                <span style="width:3px;height:15px;border-radius:2px;background:var(--accent)"></span>
+              </span>
+            </span>
+            <div style="flex:1;min-width:0">
+              <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+                <h2 style="font-size:19px;font-weight:600;letter-spacing:-0.02em;margin:0">Rätta mot ljudet</h2>
+                <span style="font-size:11px;font-weight:600;color:var(--accent);background:var(--accent-weak);border:1px solid color-mix(in srgb,var(--accent) 22%,transparent);border-radius:6px;padding:3px 9px;white-space:nowrap">Mest noggrant · ljud + korrektur</span>
               </div>
-              ` : '' }
+              <p style="margin:6px 0 0;color:var(--ink-2);font-size:15px;line-height:1.5">Ett pass i två steg: rättar först texten mot <strong style="color:var(--ink);font-weight:600">själva ljudet</strong> och korrekturläser sedan stav- och småfel. Fångar mer än en ren textkorrigering — rättar bara fel, hittar inte på, behåller betydelsen.</p>
             </div>
-            ${ v.ppShowRun ? `
-              <button data-click="${on(v.onRunPP)}" style="${v.ppRunBtnStyle}" data-sh="background:color-mix(in srgb, var(--btn-bg) 72%, var(--accent)) !important">
-                ${ v.ppRunning ? `
-                  <span style="display:flex;align-items:center;gap:11px">
-                    <span style="${v.ppRingStyle}"><span style="position:absolute;inset:3px;border-radius:50%;background:var(--btn-bg)"></span></span>
-                    <span style="font-variant-numeric:tabular-nums">Bearbetar ${esc(v.ppPct)}%</span>
-                  </span>
-                ` : '' }
-                ${ v.ppRunIdle ? `
-                  <span>${esc(v.ppRunLabel)}</span>
-                ` : '' }
-              </button>
-            ` : '' }
           </div>
-        </div>
 
-        ${ v.ppShowText ? `
-        <div data-sec="ppout" style="border-top:1px solid var(--line);background:var(--sunken);padding:20px 24px;border-radius:0 0 18px 18px">
-          ${ v.ppRunning ? `
-            <div style="display:flex;align-items:center;gap:10px;color:var(--ink-2);font-size:15px">
-              <span style="width:15px;height:15px;border-radius:50%;border:2px solid var(--line-2);border-top-color:var(--accent);animation:spin .7s linear infinite;display:inline-block"></span>Kör ${esc(v.ppOpLabel)} …
-            </div>
+          ${ v.acIdle ? `
+          <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:18px">
+            <button data-click="${on(v.onStartAudioCorrect)}" style="display:inline-flex;align-items:center;gap:9px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:11px;padding:12px 20px;font-size:15px;font-weight:500;cursor:pointer;font-family:inherit;box-shadow:var(--shadow-sm)" data-sh="background:color-mix(in srgb,var(--btn-bg) 72%,var(--accent)) !important">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.5a2 2 0 0 1 2 2v3.5a2 2 0 0 1-4 0V4.5a2 2 0 0 1 2-2z"></path><path d="M4 7.5a4 4 0 0 0 8 0"></path><path d="M8 11.5V14"></path></svg>Rätta mot ljudet
+            </button>
+            <span style="font-size:13.5px;color:var(--ink-2);line-height:1.45">Skapar en korrigerad version <span style="font-variant-numeric:tabular-nums;color:var(--ink-3)">(_rattad.srt)</span> — originalet rörs inte.</span>
+          </div>
           ` : '' }
-          ${ v.ppTextDone ? `
-            <div style="font-size:12.5px;text-transform:uppercase;letter-spacing:0.04em;color:var(--ink-2);margin-bottom:10px;font-family:'Geist',system-ui,sans-serif;font-variant-numeric:tabular-nums">${esc(v.ppOutTitle)}</div>
-            <div style="font-size:16px;line-height:1.65;color:var(--ink);white-space:pre-wrap">${esc(v.ppOut)}</div>
-          ` : '' }
-          ${ v.ppCleanDone ? `
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap">
-              <div style="display:flex;align-items:center;gap:9px">
-                <span style="width:18px;height:18px;border-radius:50%;background:var(--ok);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;flex:0 0 auto">✓</span>
-                <span style="font-size:12.5px;text-transform:uppercase;letter-spacing:0.04em;color:var(--ink-2);font-family:'Geist',system-ui,sans-serif">Korrekturläst transkript</span>
+
+          ${ v.acGate ? `
+          <div style="margin-top:18px;background:var(--sunken);border:1px solid var(--line);border-radius:14px;padding:16px 18px">
+            <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+              <span style="width:40px;height:40px;border-radius:11px;background:var(--surface);border:1px solid var(--line);color:var(--accent);display:flex;align-items:center;justify-content:center;flex:0 0 auto">
+                <svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.5v7.5"></path><path d="M4.5 6.5 8 10l3.5-3.5"></path><path d="M3 13.5h10"></path></svg>
+              </span>
+              <div style="flex:1;min-width:180px">
+                <div style="font-size:15.5px;font-weight:500;color:var(--ink)">Ladda ner ljudmodellen (~${esc(v.audioModelSize)})</div>
+                <div style="font-size:13px;color:var(--ink-2);margin-top:2px;line-height:1.45">Ljud-passet kräver en intern modell som laddas ner en gång. Sedan körs rättningen automatiskt.</div>
               </div>
-              <span style="font-size:13px;color:var(--ink-2)">Samma transkript — stavfel och småfel rättade</span>
+              ${ dlbtn({ phase: v.audioPhase, pct: v.audioPct, detail: v.audioDetail, onAction: v.onDownloadAudioModel, onCancel: v.onCancelAudioDownload }) }
+            </div>
+            <button data-click="${on(v.onCancelAudioGate)}" style="margin-top:12px;background:transparent;border:none;color:var(--ink-2);font-size:13.5px;font-weight:500;cursor:pointer;font-family:inherit;padding:0" data-sh="color:var(--ink) !important">Inte nu</button>
+          </div>
+          ` : '' }
+
+          ${ v.acRunning ? `
+          <div style="margin-top:18px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;background:var(--sunken);border:1px solid var(--line);border-radius:14px;padding:15px 18px">
+            <div style="display:flex;align-items:center;gap:12px;min-width:0">
+              <span style="${v.acRingStyle}"><span style="position:absolute;inset:3px;border-radius:50%;background:var(--sunken)"></span></span>
+              <span style="font-size:15px;font-weight:500;color:var(--ink)">Lyssnar, rättar och korrekturläser … <span style="color:var(--accent);font-variant-numeric:tabular-nums">${esc(v.acPct)}%</span></span>
+            </div>
+            <span style="font-size:13.5px;color:var(--ink-2);font-variant-numeric:tabular-nums;flex:0 0 auto">${esc(v.acSegLabel)}</span>
+          </div>
+          ` : '' }
+
+          ${ v.acDone ? `
+          <div style="margin-top:18px">
+            <div style="display:flex;align-items:center;gap:9px;margin-bottom:12px;flex-wrap:wrap">
+              <span style="width:18px;height:18px;border-radius:50%;background:var(--ok);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;flex:0 0 auto">✓</span>
+              <span style="font-size:12.5px;text-transform:uppercase;letter-spacing:0.04em;color:var(--ink-2);font-family:'Geist',system-ui,sans-serif">Rättat mot ljudet</span>
+              <span style="font-size:13px;color:var(--ink-2)">· ${esc(v.acFixLabel)} <span style="color:var(--ink-3)">— grönmarkerade rader ändrades</span></span>
             </div>
             <div style="background:var(--surface);border:1px solid var(--line);border-radius:13px;padding:16px 18px;margin-bottom:14px;max-height:320px;overflow-y:auto" data-hidescroll="1">
-              ${ v.ppCleanLines.map(function(c, idx){ return `
-                <div data-key="${esc(idx)}" style="display:flex;gap:14px;padding:5px 0">
+              ${ v.acLines.map(function(c){ return `
+                <div data-key="${esc(c.idx)}" style="display:flex;gap:14px;padding:5px 0">
                   <span style="font-family:'Geist',system-ui,sans-serif;font-variant-numeric:tabular-nums;font-size:13px;color:var(--ink-3);flex:0 0 auto;width:44px;padding-top:2px">${esc(c.time)}</span>
-                  <span style="font-size:15.5px;line-height:1.5;color:var(--ink)">${esc(c.text)}</span>
+                  <span style="${c.textStyle}">${esc(c.text)}</span>
                 </div>
               `; }).join('') }
             </div>
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-              <span style="font-size:13px;color:var(--ink-2);margin-right:4px">Ladda ner korrigerad:</span>
-              ${ v.ppCleanFiles.map(function(f){ return `
+              <span style="font-size:13px;color:var(--ink-2);margin-right:4px">Ladda ner ljud-rättad:</span>
+              ${ v.acFiles.map(function(f){ return `
                 <button data-key="${esc(f.type)}" data-click="${on(f.onDownload)}" style="display:inline-flex;align-items:center;gap:7px;background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:8px 14px 8px 12px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;transition:background .14s,border-color .14s,color .14s" data-sh="border-color:var(--ink) !important;background:var(--ink) !important;color:var(--btn-fg) !important">
                   <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.5v7.5"></path><path d="M4.5 6.5 8 10l3.5-3.5"></path><path d="M3 13.5h10"></path></svg>${esc(f.type)}
                 </button>
               `; }).join('') }
             </div>
+          </div>
+          ` : '' }
+
+          ${ v.acError ? `
+          <div style="margin-top:18px;display:flex;gap:13px;align-items:flex-start;background:color-mix(in srgb,var(--bad) 7%,var(--surface));border:1px solid color-mix(in srgb,var(--bad) 30%,transparent);border-radius:14px;padding:16px 18px">
+            <span style="width:30px;height:30px;border-radius:50%;flex:0 0 auto;background:color-mix(in srgb,var(--bad) 16%,transparent);color:var(--bad);display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:700;margin-top:1px">!</span>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:16px;font-weight:600;color:var(--ink)">Ljud-rättningen avbröts</div>
+              <div style="font-size:14px;color:var(--ink-2);margin-top:5px;line-height:1.55">Något gick fel under passet. Transkriptet är oförändrat — försök igen.</div>
+              <button data-click="${on(v.onRetryAudioCorrect)}" style="display:inline-flex;align-items:center;gap:7px;margin-top:14px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:10px;padding:9px 16px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit" data-sh="background:color-mix(in srgb,var(--btn-bg) 78%,var(--accent)) !important"><span style="font-size:15px;line-height:1">↻</span>Försök igen</button>
+            </div>
+          </div>
           ` : '' }
         </div>
-        ` : '' }
+      </div>
+      ` : '' }
 
-        ${ v.ppShowChat ? `
-        <div data-sec="chat" style="border-top:1px solid var(--line);background:var(--sunken);border-radius:0 0 18px 18px;padding:18px 24px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
-          <div style="flex:1;min-width:200px">
-            <div style="font-size:15px;font-weight:600;color:var(--ink)">Chatta med transkriptet</div>
-            <div style="font-size:13.5px;color:var(--ink-2);margin-top:2px">Öppnas i ett fönster — gränssnittet anpassas efter modellens förmågor.</div>
+      ${ v.acDone ? `
+      <div data-sec="pptrigger" data-reveal style="margin-top:28px;background:var(--surface);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);padding:20px 24px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+        <div style="flex:1;min-width:200px">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:3px">
+            <span style="font-family:'Geist',system-ui,sans-serif;font-variant-numeric:tabular-nums;font-size:12px;font-weight:500;color:var(--accent);background:var(--accent-weak);padding:3px 9px;border-radius:6px">LLM</span>
+            <h2 style="font-size:19px;font-weight:600;letter-spacing:-0.02em;margin:0">Efterbearbeta transkriptet</h2>
           </div>
-          <button data-click="${on(v.openChatModal)}" style="${v.chatOpenBtnStyle}" data-sh="background:color-mix(in srgb, var(--btn-bg) 72%, var(--accent)) !important">
-            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 3.5h11v8h-7l-3 2.5z"></path></svg>Öppna chatt
-          </button>
+          <p style="margin:0;color:var(--ink-2);font-size:15px">Summera eller chatta om transkriptet — lokalt med Gemma.</p>
         </div>
-        ` : '' }
+        <button data-click="${on(v.openPPModal)}" style="display:inline-flex;align-items:center;gap:9px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:11px;padding:12px 18px;font-size:15px;font-weight:500;cursor:pointer;font-family:inherit;box-shadow:var(--shadow-sm);flex:0 0 auto" data-sh="background:color-mix(in srgb,var(--btn-bg) 72%,var(--accent)) !important">
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 3.5h11v8h-7l-3 2.5z"></path></svg>Öppna efterbearbetning
+        </button>
       </div>
       ` : '' }
         </div>
@@ -1658,180 +1798,6 @@ function viewTranscribe(v){ return `
     </section>
     ` : '' }
 `; }
-
-function viewModels(v){
-  function dlbtn(r){
-    var p = r.phase || 'idle';
-    var pct = Math.round(r.pct || 0);
-    var detail = r.detail || '';
-    var progressing = p === 'downloading' || p === 'installing';
-    var base = 'position:relative;overflow:hidden;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;gap:6px;width:154px;height:40px;border-radius:9px;padding:7px 14px;font-size:14.5px;font-weight:500;font-family:inherit;white-space:nowrap;transition:border-color .15s,background .15s;';
-    var btnStyle, btnHover = '';
-    if (progressing) {
-      btnStyle = base + 'background:var(--surface);border:1px solid var(--accent);color:var(--ink);cursor:default;padding-right:26px';
-    } else if (p === 'installed') {
-      btnStyle = base + 'background:transparent;border:1px solid transparent;color:var(--ok);cursor:default';
-    } else if (p === 'incompatible') {
-      btnStyle = base + 'background:transparent;border:1px solid transparent;color:var(--ink-3);cursor:default';
-    } else if (p === 'failed') {
-      btnStyle = base + 'background:transparent;border:1px solid var(--bad);color:var(--bad);cursor:pointer';
-      btnHover = 'background:color-mix(in srgb,var(--bad) 8%,transparent) !important';
-    } else {
-      btnStyle = base + 'background:transparent;border:1px solid var(--line-2);color:var(--ink);cursor:pointer';
-      btnHover = 'background:var(--sunken) !important;border-color:var(--ink-3) !important;box-shadow:var(--shadow-sm) !important';
-    }
-    var fillStyle = p === 'installing'
-      ? 'position:absolute;left:0;top:0;bottom:0;z-index:0;width:' + pct + '%;background-color:var(--accent);background-image:repeating-linear-gradient(135deg, rgba(255,255,255,0.3) 0, rgba(255,255,255,0.3) 4px, transparent 4px, transparent 8px);background-size:16px 16px;animation:dlstripe .6s linear infinite;transition:width .22s ease'
-      : 'position:absolute;left:0;top:0;bottom:0;z-index:0;width:' + pct + '%;background:var(--accent);transition:width .22s ease';
-    var progLabel = p === 'installing' ? 'Installerar' : 'Laddar ner';
-    if (progressing) {
-      return `<div style="${btnStyle}">
-    <div style="${fillStyle}"></div>
-    <span style="position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;line-height:1.1;padding-right:16px;max-width:100%;overflow:hidden">
-      <span style="font-size:13.5px;font-weight:600;white-space:nowrap">${esc(progLabel)} ${esc(pct)}%</span>
-      <span style="font-size:10.5px;font-weight:500;color:var(--ink-2);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px">${esc(detail)}</span>
-    </span>
-    <button data-click="${on(r.onCancel)}" aria-label="Avbryt nedladdning" style="position:absolute;right:5px;top:50%;transform:translateY(-50%);z-index:2;width:22px;height:22px;border:none;background:var(--surface);border-radius:6px;cursor:pointer;color:var(--ink-2);display:flex;align-items:center;justify-content:center" data-sh="color:var(--bad) !important;background:var(--sunken) !important">
-      <svg width="10" height="10" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3l8 8M11 3l-8 8"></path></svg>
-    </button>
-  </div>`;
-    }
-    return `<button data-click="${on(r.onAction)}" style="${btnStyle}" data-sh="${btnHover}">
-    ${ p === 'idle' ? `<span style="position:relative;z-index:1;display:inline-flex;align-items:center;gap:6px">
-        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.5v7.5"></path><path d="M4.5 6.5 8 10l3.5-3.5"></path><path d="M3 13.5h10"></path></svg>Ladda ner
-      </span>` : '' }
-    ${ p === 'failed' ? `<span style="position:relative;z-index:1;display:inline-flex;align-items:center;gap:6px"><span style="font-size:14px;line-height:1">↻</span>Försök igen</span>` : '' }
-    ${ p === 'installed' ? `<span style="position:relative;z-index:1;display:inline-flex;align-items:center;gap:5px;color:var(--ok)">✓ Installerad</span>` : '' }
-    ${ p === 'incompatible' ? `<span style="position:relative;z-index:1;color:var(--ink-3)">Ej kompatibel</span>` : '' }
-  </button>`;
-  }
-  function modelRow(x, last){
-    return `<div data-key="${esc(x.name)}" style="${x.rowStyle}">
-              <span style="width:24px;height:24px;border-radius:50%;flex:0 0 auto;margin-top:1px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;color:var(--ink-2);background:var(--sunken);border:1px solid var(--line);font-variant-numeric:tabular-nums">${esc(x.rank)}</span>
-              <span style="width:9px;height:9px;border-radius:50%;flex:0 0 auto;margin-top:7px;background:${x.dot}"></span>
-              <div style="flex:1;min-width:0">
-                <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
-                  <span style="font-size:16px;font-weight:500;color:var(--ink);font-variant-numeric:tabular-nums">${esc(x.name)}</span>
-                  ${ x.recommended ? `<span style="font-size:12px;font-weight:500;color:var(--accent);background:var(--accent-weak);padding:2px 7px;border-radius:5px">Rekommenderad</span>` : '' }
-                  <span style="${x.verdictStyle}">${esc(x.verdict)}</span>
-                </div>
-                <div style="font-size:14px;color:var(--ink-2);margin-top:4px">${esc(x.useFor)}</div>
-                <div style="display:flex;gap:7px;margin-top:9px;flex-wrap:wrap">
-                  ${ x.chips.map(function(c){ return `<span style="${c.style}" data-enter="${on(c.onEnter)}" data-leave="${on(c.onLeave)}">${esc(c.label)}</span>`; }).join('') }
-                </div>
-              </div>
-              <div style="display:flex;flex-direction:column;align-items:flex-end;gap:9px;flex:0 0 auto">
-                <span style="font-size:13px;color:var(--ink-2);font-variant-numeric:tabular-nums">${esc(x.size)}</span>
-                <div style="display:flex;align-items:center;gap:7px">
-                  ${ x.removable ? `<button data-click="${on(x.onRemove)}" aria-label="Ta bort modell" style="width:38px;height:38px;flex:0 0 auto;border:1px solid var(--line);background:var(--surface);border-radius:9px;cursor:pointer;color:var(--ink-3);display:flex;align-items:center;justify-content:center" data-sh="border-color:var(--bad) !important;color:var(--bad) !important">
-                      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.5 8.5h6l.5-8.5"></path></svg>
-                    </button>` : '' }
-                  ${ x.notRemovable ? `<span style="width:38px;flex:0 0 auto"></span>` : '' }
-                  ${ dlbtn(x) }
-                </div>
-              </div>
-            </div>`;
-  }
-  return `<section style="padding:44px 0 96px">
-      <div style="text-align:center;max-width:640px;margin:0 auto 24px">
-        <h1 style="font-size:34px;font-weight:600;letter-spacing:-0.03em;margin:0 0 6px">Modeller</h1>
-        <p style="margin:0;color:var(--ink-2);font-size:17px">Hantera lokala modeller. Märkningen visar hur väl varje modell passar din hårdvara.</p>
-      </div>
-
-      <!-- Hårdvara -->
-      <div style="background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:20px 22px;margin-bottom:32px;box-shadow:var(--shadow-sm)">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px">
-          <span style="display:inline-flex;align-items:center;gap:8px;background:color-mix(in srgb,var(--ok) 13%,transparent);color:var(--ink);border-radius:999px;padding:5px 13px 5px 10px;font-size:13.5px;font-weight:500">
-            <span style="width:7px;height:7px;border-radius:50%;background:var(--ok)"></span>Hårdvara identifierad
-          </span>
-          <span style="font-size:13px;color:var(--ink);font-variant-numeric:tabular-nums">${esc(v.hwReady)}</span>
-        </div>
-        <div style="display:flex;flex-direction:column;gap:16px;margin-bottom:18px">
-          ${ v.hwTiles.map(function(t){ return `<div>
-              <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:7px">
-                <span style="display:inline-flex;align-items:center;gap:6px">
-                  <span style="font-size:14px;font-weight:500;color:var(--ink)">${esc(t.label)}</span>
-                  <span style="font-size:12px;color:var(--ink)">· ${esc(t.note)}</span>
-                  <span data-enter="${on(t.onEnter)}" data-leave="${on(t.onLeave)}" style="${t.badgeStyle}">?</span>
-                </span>
-                <span style="font-size:13.5px;color:var(--ink-2);font-variant-numeric:tabular-nums;flex:0 0 auto">
-                  <strong style="color:var(--ink);font-size:15.5px;font-weight:600">${esc(t.free)}</strong> / ${esc(t.total)}
-                </span>
-              </div>
-              <div style="height:8px;border-radius:99px;background:var(--track);overflow:hidden">
-                <div style="${t.barStyle}"></div>
-              </div>
-            </div>`; }).join('') }
-        </div>
-        <div style="border-top:1px solid var(--line);padding-top:14px;margin-bottom:14px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
-          <div style="display:flex;align-items:center;gap:9px;flex:0 0 auto">
-            <span style="width:30px;height:30px;border-radius:8px;background:var(--sunken);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;flex:0 0 auto">
-              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="var(--ink-3)" stroke-width="1.5"><rect x="2" y="3.5" width="12" height="9" rx="2"></rect><circle cx="11" cy="8" r="1.3" fill="var(--ink-3)" stroke="none"></circle></svg>
-            </span>
-            <span style="font-size:12px;text-transform:uppercase;letter-spacing:0.04em;color:var(--ink)">Nedladdningsdisk</span>
-          </div>
-          <div style="position:relative;flex:1 1 240px;min-width:230px;max-width:380px">
-            <button data-click="${on(v.toggleDiskDD)}" style="width:100%;display:flex;align-items:center;gap:11px;background:var(--surface);border:1px solid var(--line);border-radius:11px;padding:9px 13px;cursor:pointer;text-align:left;box-shadow:var(--shadow-sm)" data-sh="border-color:var(--line-2) !important">
-              <span style="font-family:'Geist',system-ui,sans-serif;font-size:13px;font-weight:600;color:var(--ink);background:var(--sunken);border:1px solid var(--line);border-radius:6px;padding:2px 7px;flex:0 0 auto;font-variant-numeric:tabular-nums">${esc(v.curDiskDrive)}</span>
-              <span style="flex:1;min-width:0;font-size:14.5px;font-weight:500;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(v.curDiskName)}</span>
-              <span style="font-size:13px;color:var(--ink);font-variant-numeric:tabular-nums;flex:0 0 auto">${esc(v.curDiskFree)}</span>
-              <span style="width:7px;height:7px;border-right:1.6px solid var(--ink-3);border-bottom:1.6px solid var(--ink-3);transform:rotate(45deg);margin:-3px 2px 0 0;flex:0 0 auto"></span>
-            </button>
-            ${ v.diskDDOpen ? `<div style="position:absolute;top:calc(100% + 6px);left:0;right:0;z-index:30;background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:6px;animation:fadeup .14s ease">
-              ${ v.diskOptions.map(function(d){ return `<button data-click="${on(d.onPick)}" style="${d.style}" data-sh="background:var(--sunken) !important">
-                  <span style="font-family:'Geist',system-ui,sans-serif;font-size:13px;font-weight:600;color:var(--ink);background:var(--sunken);border:1px solid var(--line);border-radius:6px;padding:2px 7px;flex:0 0 auto;font-variant-numeric:tabular-nums">${esc(d.drive)}</span>
-                  <span style="flex:1;min-width:0">
-                    <span style="display:block;font-size:15px;font-weight:500;color:var(--ink)">${esc(d.name)}</span>
-                    <span style="display:block;font-size:12.5px;color:var(--ink-2);font-variant-numeric:tabular-nums">${esc(d.free)}</span>
-                  </span>
-                  <span style="${d.checkStyle}">✓</span>
-                </button>`; }).join('') }
-            </div>` : '' }
-          </div>
-        </div>
-        <div style="border-top:1px solid var(--line);padding-top:14px;display:flex;flex-wrap:wrap;gap:14px 28px">
-          ${ v.hwSpecs.map(function(s){ return `<span style="display:inline-flex;flex-direction:column;gap:3px">
-              <span style="font-size:11.5px;text-transform:uppercase;letter-spacing:0.06em;font-weight:700;color:var(--ink)">${esc(s.k)}</span>
-              <span style="font-size:14px;font-weight:500;color:var(--ink);font-variant-numeric:tabular-nums">${esc(s.v)}</span>
-            </span>`; }).join('') }
-        </div>
-      </div>
-
-      <!-- Whisper -->
-      <div style="margin-bottom:30px">
-        <div style="display:flex;align-items:baseline;gap:9px;margin-bottom:12px">
-          <h2 style="font-size:17.5px;font-weight:600;letter-spacing:-0.01em;margin:0">Transkriberingsmodeller</h2>
-          <span style="color:var(--ink);font-size:15px;font-weight:500">tal till text · svenska & flerspråkigt</span>
-        </div>
-        <div style="background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:var(--shadow-sm)">
-          ${ v.whisperRows.map(function(w){ return modelRow(w); }).join('') }
-        </div>
-      </div>
-
-      <!-- LLM -->
-      <div style="margin-bottom:30px">
-        <div style="display:flex;align-items:baseline;gap:9px;margin-bottom:12px">
-          <h2 style="font-size:17.5px;font-weight:600;letter-spacing:-0.01em;margin:0">Språk- och videomodeller</h2>
-          <span style="color:var(--ink);font-size:15px;font-weight:500">efterbearbetning & analys · lokalt via Ollama</span>
-        </div>
-        <p style="margin:-4px 0 12px;font-size:13.5px;color:var(--ink-2);max-width:620px">Kvantiseringsnivån väljs automatiskt efter din lediga VRAM — håll muspekaren över den <span style="color:var(--accent);font-weight:600">blå Q-taggen</span> för att se vilken nivå och vad den innebär.</p>
-
-        <!-- Användningsfall -->
-        <div style="display:flex;align-items:center;gap:11px;flex-wrap:wrap;margin-bottom:14px">
-          <span style="font-size:11.5px;text-transform:uppercase;letter-spacing:0.05em;color:var(--ink-2);font-weight:600">Användningsfall</span>
-          <div style="display:flex;gap:3px;padding:4px;background:var(--track);border:1px solid var(--line);border-radius:12px;flex-wrap:wrap">
-            ${ v.useCaseOptions.map(function(u){ return `<button data-click="${on(u.onPick)}" style="${u.style}" data-sh="background:var(--surface) !important;color:var(--ink) !important;box-shadow:var(--shadow-sm) !important">${esc(u.label)}</button>`; }).join('') }
-          </div>
-          <span data-enter="${on(v.useCaseTip.onEnter)}" data-leave="${on(v.useCaseTip.onLeave)}" style="${v.infoBadgeStyle}">?</span>
-        </div>
-        <div style="background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:var(--shadow-sm)">
-          ${ v.llmRows.map(function(l){ return modelRow(l); }).join('') }
-          ${ v.llmEmpty ? `<div style="padding:26px;text-align:center;color:var(--ink-2);font-size:15px">Ingen LLM-modell matchar det valda användningsfallet.</div>` : '' }
-        </div>
-      </div>
-
-    </section>`;
-}
 
 function viewHistory(v){ return `
     <section style="padding:44px 0 96px">
@@ -1868,6 +1834,12 @@ function viewHistory(v){ return `
               </div>
             </div>
             <div style="display:flex;align-items:center;gap:7px;flex:0 0 auto">
+              ${ h.hasVideo ? `
+              <button data-click="${on(h.onOpenVideo)}" style="background:var(--surface);border:1px solid var(--line);color:var(--ink-2);border-radius:9px;padding:8px 12px;font-size:13.5px;font-weight:500;cursor:pointer;font-family:inherit" data-sh="border-color:var(--accent) !important;color:var(--accent) !important;background:var(--accent-weak) !important">${esc(h.videoLabel)}</button>
+              ` : '' }
+              ${ h.hasFolder ? `
+              <button data-click="${on(h.onReveal)}" style="background:var(--surface);border:1px solid var(--line);color:var(--ink-2);border-radius:9px;padding:8px 12px;font-size:13.5px;font-weight:500;cursor:pointer;font-family:inherit" data-sh="border-color:var(--accent) !important;color:var(--accent) !important;background:var(--accent-weak) !important">Öppna mapp</button>
+              ` : '' }
               <button data-click="${on(h.onOpen)}" style="background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:9px;padding:8px 14px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit" data-sh="border-color:var(--ink) !important;background:var(--ink) !important;color:var(--btn-fg) !important">Öppna</button>
               <button data-click="${on(h.onDownload)}" aria-label="Ladda ner" style="width:38px;height:38px;border:1px solid var(--line);background:var(--surface);border-radius:9px;cursor:pointer;color:var(--ink-2);display:flex;align-items:center;justify-content:center;transition:border-color .12s,color .12s,background .12s" data-sh="border-color:var(--accent) !important;color:var(--accent) !important;background:var(--accent-weak) !important">
                 <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.5v7.5"></path><path d="M4.5 6.5 8 10l3.5-3.5"></path><path d="M3 13.5h10"></path></svg>
@@ -1888,6 +1860,88 @@ function viewHistory(v){ return `
 function viewModals(v){ return `
   ${ v.anyDDOpen ? `
     <div data-click="${on(v.closeDD)}" style="position:fixed;inset:0;z-index:25"></div>
+  ` : '' }
+
+  ${ v.ppModalOpen ? `
+  <div data-click="${on(v.closePPModal)}" style="position:fixed;inset:0;z-index:120;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(11,11,13,.42);backdrop-filter:blur(3px);animation:modalback .3s ease">
+    <div data-click="${on(v.stop)}" data-hidescroll="1" style="width:100%;max-width:560px;max-height:88vh;overflow-y:auto;background:var(--surface);border:1px solid var(--line);border-radius:24px;box-shadow:var(--shadow);animation:modalpop .48s cubic-bezier(.16,1,.3,1)">
+      <div style="padding:20px 24px 20px">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:4px">
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="font-family:'Geist',system-ui,sans-serif;font-variant-numeric:tabular-nums;font-size:12px;font-weight:500;color:var(--accent);background:var(--accent-weak);padding:3px 9px;border-radius:6px">LLM</span>
+            <h2 style="font-size:19px;font-weight:600;letter-spacing:-0.02em;margin:0">Efterbearbeta transkriptet</h2>
+          </div>
+          <button data-click="${on(v.closePPModal)}" aria-label="Stäng" style="width:34px;height:34px;flex:0 0 auto;border:1px solid var(--line);background:var(--surface);border-radius:50%;cursor:pointer;color:var(--ink);display:flex;align-items:center;justify-content:center" data-sh="background:var(--sunken) !important;border-color:var(--line-2) !important"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 3l8 8M11 3l-8 8"></path></svg></button>
+        </div>
+        <p style="margin:0 0 18px;color:var(--ink-2);font-size:15px">Förfina det ljud-rättade transkriptet lokalt med Gemma.</p>
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:16px">
+          ${ v.ppOps.map(function(o){ return `
+            ${ o.selected ? `
+              <button data-key="${esc(o.key)}" data-click="${on(o.onPick)}" style="display:flex;flex-direction:column;gap:3px;align-items:flex-start;text-align:left;padding:13px 14px;border-radius:12px;cursor:pointer;font-family:inherit;color:var(--ink);width:100%;border:1.5px solid var(--ink);background:var(--sunken);transition:border-color .12s,background .12s,box-shadow .12s" data-sh="box-shadow:var(--shadow-sm) !important">
+                <span style="font-size:14.5px;font-weight:500">${esc(o.label)}</span>
+                <span style="font-size:12.5px;color:var(--ink-2);line-height:1.3">${esc(o.sub)}</span>
+              </button>
+            ` : '' }
+            ${ o.unselected ? `
+              <button data-key="${esc(o.key)}" data-click="${on(o.onPick)}" style="display:flex;flex-direction:column;gap:3px;align-items:flex-start;text-align:left;padding:13px 14px;border-radius:12px;cursor:pointer;font-family:inherit;color:var(--ink);width:100%;border:1.5px solid var(--line);background:var(--surface);transition:border-color .12s,background .12s,box-shadow .12s" data-sh="border-color:var(--ink-3) !important;background:var(--sunken) !important;box-shadow:var(--shadow-sm) !important">
+                <span style="font-size:14.5px;font-weight:500">${esc(o.label)}</span>
+                <span style="font-size:12.5px;color:var(--ink-2);line-height:1.3">${esc(o.sub)}</span>
+              </button>
+            ` : '' }
+          `; }).join('') }
+        </div>
+        <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+          <div style="flex:1;min-width:200px">
+            <div style="font-size:14px;font-weight:500;color:var(--ink-2);margin-bottom:8px">Modell</div>
+            <div style="width:100%;max-width:320px;display:flex;align-items:center;gap:10px;background:var(--sunken);border:1px solid var(--line);border-radius:12px;padding:12px 14px">
+              <span style="width:7px;height:7px;border-radius:50%;flex:0 0 auto;background:var(--ok)"></span>
+              <span style="flex:1;min-width:0;font-size:15.5px;font-family:'Geist',system-ui,sans-serif;font-variant-numeric:tabular-nums;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">gemma4:26b-a4b-it-qat</span>
+              <span style="display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;color:var(--ink-2);background:var(--surface);border:1px solid var(--line);border-radius:7px;padding:3px 8px;flex:0 0 auto">
+                <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="7" width="9" height="6" rx="1.5"></rect><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"></path></svg>Låst
+              </span>
+            </div>
+          </div>
+          ${ v.ppShowRun ? `
+            <button data-click="${on(v.onRunPP)}" style="${v.ppRunBtnStyle}" data-sh="background:color-mix(in srgb, var(--btn-bg) 72%, var(--accent)) !important">
+              ${ v.ppRunning ? `
+                <span style="display:flex;align-items:center;gap:11px">
+                  <span style="${v.ppRingStyle}"><span style="position:absolute;inset:3px;border-radius:50%;background:var(--btn-bg)"></span></span>
+                  <span style="font-variant-numeric:tabular-nums">Bearbetar ${esc(v.ppPct)}%</span>
+                </span>
+              ` : '' }
+              ${ v.ppRunIdle ? `<span>${esc(v.ppRunLabel)}</span>` : '' }
+            </button>
+          ` : '' }
+        </div>
+      </div>
+
+      ${ v.ppShowText ? `
+      <div data-sec="ppout" style="border-top:1px solid var(--line);background:var(--sunken);padding:20px 24px;border-radius:0 0 18px 18px">
+        ${ v.ppRunning ? `
+          <div style="display:flex;align-items:center;gap:10px;color:var(--ink-2);font-size:15px">
+            <span style="width:15px;height:15px;border-radius:50%;border:2px solid var(--line-2);border-top-color:var(--accent);animation:spin .7s linear infinite;display:inline-block"></span>Kör ${esc(v.ppOpLabel)} …
+          </div>
+        ` : '' }
+        ${ v.ppTextDone ? `
+          <div style="font-size:12.5px;text-transform:uppercase;letter-spacing:0.04em;color:var(--ink-2);margin-bottom:10px;font-family:'Geist',system-ui,sans-serif;font-variant-numeric:tabular-nums">${esc(v.ppOutTitle)}</div>
+          <div style="font-size:16px;line-height:1.65;color:var(--ink);white-space:pre-wrap">${esc(v.ppOut)}</div>
+        ` : '' }
+      </div>
+      ` : '' }
+
+      ${ v.ppShowChat ? `
+      <div data-sec="chat" style="border-top:1px solid var(--line);background:var(--sunken);border-radius:0 0 18px 18px;padding:18px 24px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+        <div style="flex:1;min-width:200px">
+          <div style="font-size:15px;font-weight:600;color:var(--ink)">Chatta med transkriptet</div>
+          <div style="font-size:13.5px;color:var(--ink-2);margin-top:2px">Öppnas i ett fönster — gränssnittet anpassas efter modellens förmågor.</div>
+        </div>
+        <button data-click="${on(v.openChatModal)}" style="${v.chatOpenBtnStyle}" data-sh="background:color-mix(in srgb, var(--btn-bg) 72%, var(--accent)) !important">
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 3.5h11v8h-7l-3 2.5z"></path></svg>Öppna chatt
+        </button>
+      </div>
+      ` : '' }
+    </div>
+  </div>
   ` : '' }
 
   ${ v.chatModalOpen ? `
@@ -2139,7 +2193,6 @@ function viewModals(v){ return `
     return viewHeader(v) +
       '<main style="max-width:780px;margin:0 auto;padding:0 32px">' +
       (v.tabTranscribe ? viewTranscribe(v) : '') +
-      (v.tabModels ? viewModels(v) : '') +
       (v.tabHistory ? viewHistory(v) : '') +
       '</main>' +
       viewModals(v);

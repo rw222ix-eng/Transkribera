@@ -19,7 +19,7 @@ import sys
 from pathlib import Path
 
 from faster_whisper import WhisperModel
-from app.transcriber import Segment, write_outputs
+from app.transcriber import Segment, write_outputs, clean_caption_segments
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -41,6 +41,11 @@ def main(argv: list[str] | None = None) -> None:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     except Exception:
         pass
+    try:
+        from app.gpu_dll import english_os_messages
+        english_os_messages()  # so a Swedish onnxruntime (VAD) error can't crash the decode
+    except Exception:
+        pass
 
     print(f"LOG Laddar modell ({args.device}/{args.compute_type})...", flush=True)
     model = WhisperModel(args.model_dir, device=args.device, compute_type=args.compute_type)
@@ -57,6 +62,8 @@ def main(argv: list[str] | None = None) -> None:
                 last = pct
                 print(f"PROGRESS {pct}", flush=True)
     print("PROGRESS 100", flush=True)
+
+    segs = clean_caption_segments(segs)
 
     # Emit the transcript so the parent can show it / feed post-process, regardless
     # of which output formats were chosen. Text is single-line (stripped above).

@@ -37,3 +37,13 @@ nul
 /build/
 /dist/
 *.manifest
+
+# llama.cpp-binärer + spike-artefakter (stora; byggs/laddas separat)
+bin/
+_spike/
+
+# Lokala Claude Code-inställningar
+.claude/
+
+# Körningsutdata (transkriberingar sparas bredvid appen)
+Transkriberingar/

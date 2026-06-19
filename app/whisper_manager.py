@@ -16,7 +16,11 @@ def model_dir_for(spec: WhisperModelSpec, models_root: Path) -> Path:
 
 
 def is_installed(spec: WhisperModelSpec, models_root: Path) -> bool:
-    return (model_dir_for(spec, models_root) / "model.bin").exists()
+    d = model_dir_for(spec, models_root)
+    # Parakeet (onnx-asr) ships .onnx files, not a CTranslate2 model.bin.
+    if getattr(spec, "engine", "faster-whisper") == "parakeet":
+        return d.is_dir() and any(d.rglob("*.onnx"))
+    return (d / "model.bin").exists()
 
 
 def _dir_size(path: Path) -> int:
@@ -63,8 +67,16 @@ def download_whisper(spec: WhisperModelSpec, models_root: Path,
                 time.sleep(0.5)
         threading.Thread(target=monitor, daemon=True).start()
 
+    # faster-whisper (CTranslate2) only needs model.bin + the small config/tokenizer
+    # files. Multi-format repos like KBLab/kb-whisper-large ALSO ship HF safetensors,
+    # a full ONNX export and ggml weights (~50 GB total vs ~3 GB for the CT2 files),
+    # so skip those. Parakeet (onnx-asr) keeps its .onnx files.
+    ignore = None
+    if getattr(spec, "engine", "faster-whisper") != "parakeet":
+        ignore = ["onnx/*", "*.safetensors", "ggml-*", "*.h5", "*.msgpack",
+                  "flax_model*", "tf_model*", "*.pt", "pytorch_model*"]
     try:
-        snapshot_download(repo_id=spec.id, local_dir=str(target))
+        snapshot_download(repo_id=spec.id, local_dir=str(target), ignore_patterns=ignore)
     finally:
         stop["v"] = True
 

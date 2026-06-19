@@ -3,13 +3,21 @@
 VRAM/RAM/size figures are approximate working estimates used for the
 green/yellow/red fit logic and for the redesigned Models tab's chips
 (speed, context, capabilities). Tune freely as real numbers are observed.
+
+LOCKED CATALOG: transcription is restricted to two engines — KB-Whisper large
+(Swedish, faster-whisper / CTranslate2) and Parakeet TDT 0.6B v3 (English, an
+NVIDIA NeMo transducer run via ONNX / onnx-asr, always on the GPU) — plus a
+single LLM, Gemma 4 26B-A4B (for both correction and analysis). Do not add other
+models here — the UI is driven by these lists, so extra entries would become
+user-selectable again. The ``engine`` field on WhisperModelSpec selects the
+inference backend ("faster-whisper" vs "parakeet"); /api/transcribe dispatches on it.
 """
 from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
 class WhisperModelSpec:
-    id: str            # HuggingFace repo id (CTranslate2 / faster-whisper format)
+    id: str            # HuggingFace repo id (CTranslate2/faster-whisper, or ONNX repo for parakeet)
     label: str         # display name
     download_mb: int
     vram_fp16_mb: int  # approx VRAM for float16 on GPU
@@ -20,6 +28,8 @@ class WhisperModelSpec:
     # ---- presentation (Models tab chips) ----
     rtf: float = 0.0   # speed, × realtime on a recent GPU (estimate)
     score: float = 0.0 # capability/precision score (defaults to rank if 0)
+    # ---- inference backend ----
+    engine: str = "faster-whisper"  # "faster-whisper" (CTranslate2) | "parakeet" (onnx-asr, GPU)
 
     @property
     def vram_gb(self) -> float:
@@ -47,30 +57,22 @@ class LLMModelSpec:
         return round(self.vram_mb / 1024, 1)
 
 
+# Locked transcription engines:
+#  - KB-Whisper large  : Swedish, faster-whisper/CTranslate2 (CUDA float16).
+#  - Parakeet TDT 0.6B v3 : English, NVIDIA NeMo transducer run via onnx-asr on the
+#    GPU (CUDA/TensorRT execution provider). NOT a Whisper model — separate engine.
 WHISPER_MODELS: list[WhisperModelSpec] = [
-    WhisperModelSpec("Systran/faster-whisper-tiny", "Whisper tiny", 75, 1000, 500, "multi", 1, rtf=50, score=1),
-    WhisperModelSpec("Systran/faster-whisper-base", "Whisper base", 145, 1200, 600, "multi", 2, rtf=40, score=2),
-    WhisperModelSpec("Systran/faster-whisper-small", "Whisper small", 480, 2000, 1000, "multi", 3, rtf=30, score=3),
-    WhisperModelSpec("Systran/faster-whisper-medium", "Whisper medium", 1500, 5000, 2500, "multi", 4, rtf=12, score=4),
-    WhisperModelSpec("Systran/faster-whisper-large-v3", "Whisper large-v3", 3000, 10000, 5000, "multi", 5, rtf=7, score=4.5),
-    WhisperModelSpec("Systran/faster-distil-whisper-large-v3", "Distil large-v3 (snabb)", 1500, 6000, 3000, "multi", 4,
-                     "Snabbare, något lägre noggrannhet", rtf=14, score=4),
-    WhisperModelSpec("KBLab/kb-whisper-tiny", "KB-Whisper tiny (sv)", 75, 1000, 500, "sv", 3, rtf=50, score=3),
-    WhisperModelSpec("KBLab/kb-whisper-small", "KB-Whisper small (sv)", 480, 2000, 1000, "sv", 4, rtf=30, score=4),
-    WhisperModelSpec("KBLab/kb-whisper-medium", "KB-Whisper medium (sv)", 1500, 5000, 2500, "sv", 5, rtf=12, score=5),
     WhisperModelSpec("KBLab/kb-whisper-large", "KB-Whisper large (sv)", 3000, 10000, 5000, "sv", 6,
                      "Bäst för svenska", rtf=7, score=5.5),
+    WhisperModelSpec("istupakov/parakeet-tdt-0.6b-v3-onnx", "Parakeet TDT 0.6B v3 (en)",
+                     3000, 2500, 1200, "en", 5,
+                     "Engelska, NVIDIA Parakeet (ONNX, GPU)", rtf=30, score=5.0,
+                     engine="parakeet"),
 ]
 
+# Locked: only Gemma 4 26B-A4B (used for both correction and analysis, reasoning off).
 LLM_MODELS: list[LLMModelSpec] = [
-    LLMModelSpec("gemma2:2b", "Gemma 2 (2B)", 1600, 4000, 8000, 1,
-                 toks=95, ctx="8k", uses=("text",), files=("PDF", "TXT", "Markdown")),
-    LLMModelSpec("llama3.2:3b", "Llama 3.2 (3B)", 2000, 5000, 8000, 2,
-                 toks=85, ctx="128k", uses=("text",), files=("PDF", "TXT", "Markdown")),
-    LLMModelSpec("qwen2.5:7b", "Qwen 2.5 (7B)", 4700, 8000, 16000, 3,
-                 toks=75, ctx="128k", uses=("text", "sv"), files=("PDF", "TXT", "Markdown", "DOCX", "CSV")),
-    LLMModelSpec("llama3.1:8b", "Llama 3.1 (8B)", 4900, 8000, 16000, 4,
-                 toks=65, ctx="128k", uses=("text",), files=("PDF", "TXT", "Markdown")),
-    LLMModelSpec("qwen2.5:14b", "Qwen 2.5 (14B)", 9000, 16000, 32000, 5,
-                 toks=40, ctx="128k", uses=("text", "sv"), files=("PDF", "TXT", "Markdown", "DOCX", "CSV")),
+    LLMModelSpec("gemma4:26b-a4b-it-qat", "Gemma 4 26B-A4B", 15000, 16000, 24000, 6,
+                 "Korrigering & analys", toks=140, ctx="256k", uses=("text", "sv"),
+                 files=("PDF", "TXT", "Markdown", "DOCX")),
 ]

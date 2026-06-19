@@ -47,7 +47,7 @@ _CHAT_SYSTEM = (
 
 def chat(model: str, messages: list[dict], transcript: str = "",
          token_cb: Callable[[str], None] | None = None,
-         base_url: str = BASE_URL) -> str:
+         base_url: str = BASE_URL, think: bool = False) -> str:
     """Conversational turn via Ollama /api/chat. `messages` is the prior dialogue
     ([{role, content}, …]); the transcript is injected as a Swedish system message."""
     msgs = [{"role": "system", "content": _CHAT_SYSTEM + (transcript or "(tomt)")}]
@@ -55,7 +55,7 @@ def chat(model: str, messages: list[dict], transcript: str = "",
     text = []
     with requests.post(f"{base_url}/api/chat",
                        json={"model": model, "messages": msgs, "stream": True,
-                             "options": {"temperature": 0.3}},
+                             "think": think, "options": {"temperature": 0.3}},
                        stream=True, timeout=None) as r:
         r.raise_for_status()
         for line in r.iter_lines():
@@ -76,9 +76,10 @@ def generate(model: str, prompt: str,
              token_cb: Callable[[str], None] | None = None,
              base_url: str = BASE_URL,
              system: str | None = None,
-             options: dict | None = None) -> str:
+             options: dict | None = None,
+             think: bool = False) -> str:
     text = []
-    payload = {"model": model, "prompt": prompt, "stream": True}
+    payload = {"model": model, "prompt": prompt, "stream": True, "think": think}
     if system:
         payload["system"] = system
     if options:

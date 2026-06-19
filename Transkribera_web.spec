@@ -14,10 +14,10 @@ import importlib.util
 datas, binaries, hiddenimports = [], [], []
 
 _PKGS = [
-    "torch", "ctranslate2", "faster_whisper", "av",
-    "huggingface_hub", "tokenizers", "onnxruntime",
+    "torch", "torchvision", "torchaudio", "ctranslate2", "faster_whisper", "av",
+    "huggingface_hub", "tokenizers", "safetensors", "onnxruntime", "onnx_asr",
+    "transformers", "accelerate",
     "fastapi", "starlette", "uvicorn", "anyio", "h11", "click", "sniffio",
-    "webview", "clr_loader", "pythonnet",
 ]
 for pkg in _PKGS:
     if importlib.util.find_spec(pkg) is None:
@@ -27,9 +27,31 @@ for pkg in _PKGS:
     binaries += b
     hiddenimports += h
 
+# onnxruntime-gpu's CUDA provider DLL depends on the nvidia-*-cu12 wheels' DLLs
+# (cublasLt64_12.dll, cudnn64_9.dll, ...). Collect those packages so they ship under
+# nvidia/<pkg>/bin/, where app.gpu_dll.ensure_cuda_dll_path() puts them on PATH at runtime.
+import glob as _glob, os as _os, site as _site
+_NV = ["nvidia.cublas", "nvidia.cudnn", "nvidia.cufft", "nvidia.curand",
+       "nvidia.cuda_runtime", "nvidia.cuda_nvrtc", "nvidia.nvjitlink"]
+for _nvpkg in _NV:
+    if importlib.util.find_spec(_nvpkg) is not None:
+        d, b, h = collect_all(_nvpkg)
+        datas += d
+        binaries += b
+        hiddenimports += h
+# Belt-and-suspenders: add the bin/*.dll explicitly under nvidia/<pkg>/bin.
+for _sp in _site.getsitepackages() + [_site.getusersitepackages()]:
+    _nvbase = _os.path.join(_sp, "nvidia")
+    if _os.path.isdir(_nvbase):
+        for _dll in _glob.glob(_os.path.join(_nvbase, "*", "bin", "*.dll")):
+            binaries.append((_dll, _os.path.relpath(_os.path.dirname(_dll), _sp)))
+        break
+
 # uvicorn picks protocol/loop/lifespan implementations dynamically at runtime.
 hiddenimports += collect_submodules("uvicorn")
-hiddenimports += ["clr"]
+# transformers lazy-loads model classes (Gemma 4 / multimodal audio); ensure present.
+hiddenimports += collect_submodules("transformers.models.gemma4")
+hiddenimports += collect_submodules("transformers.models.gemma4_unified")
 
 # Bundle the web frontend where server._static_dir() looks for it when frozen.
 datas += [("app/web/static", "app/web/static")]
@@ -43,7 +65,8 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=["tkinter", "matplotlib", "PyQt5", "PyQt6", "PySide6"],
+    excludes=["tkinter", "matplotlib", "PyQt5", "PyQt6", "PySide6",
+              "webview", "pywebview", "pythonnet", "clr", "clr_loader"],
     noarchive=False,
 )
 
@@ -59,7 +82,7 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=False,
-    console=False,
+    console=True,
     disable_windowed_traceback=False,
     target_arch=None,
     codesign_identity=None,

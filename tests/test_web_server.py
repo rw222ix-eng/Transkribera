@@ -44,7 +44,12 @@ def test_models_endpoint_structure(client):
     data = r.json()
     assert {"hardware", "whisper", "llm", "ollama_running", "online"} <= data.keys()
     assert len(data["whisper"]) == len(server.WHISPER_MODELS)
-    assert any(o["id"] == "mistral" for o in data["online"])
+    assert len(data["llm"]) == len(server.LLM_MODELS)
+    # Locked app: kb-whisper + Parakeet for transcription, one LLM, no online extras.
+    assert [m["id"] for m in data["whisper"]] == [
+        "KBLab/kb-whisper-large", "istupakov/parakeet-tdt-0.6b-v3-onnx"]
+    assert [m["id"] for m in data["llm"]] == ["gemma4:26b-a4b-it-qat"]
+    assert data["online"] == []
 
 
 def test_transcribe_requires_fields(client):
