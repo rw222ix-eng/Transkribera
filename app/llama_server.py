@@ -11,6 +11,7 @@ from __future__ import annotations
 import socket
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import Callable
@@ -64,6 +65,29 @@ def find_free_port(candidates=(DEFAULT_PORT, DEFAULT_PORT + 1, DEFAULT_PORT + 2,
         finally:
             s.close()
     return DEFAULT_PORT
+
+
+def default_models_root() -> Path:
+    """The app's models/ dir — next to the exe when frozen, repo root in source."""
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent / "models"
+    return Path(__file__).resolve().parent.parent / "models"  # app/llama_server.py -> repo root
+
+
+def autostart(models_root=None, on_log: "Callable[[str], None] | None" = None) -> "LlamaServer | None":
+    """Pick a free port, point llm_client at it, and start the LLM server on a
+    daemon thread — but only if the GGUF is installed. Returns the LlamaServer (so
+    the caller can .stop() it) or None. Shared by every app entrypoint so the LLM
+    works whether launched via the desktop window or `python -m app.web`."""
+    from app import llm_client, llm_manager  # local import keeps this module's top-level deps minimal
+    root = Path(models_root) if models_root else default_models_root()
+    if not llm_manager.is_installed(llm_manager.ACTIVE_LLM, root):
+        return None
+    port = find_free_port()
+    llm_client.BASE_URL = f"http://127.0.0.1:{port}"
+    srv = LlamaServer(llm_manager.model_path_for(llm_manager.ACTIVE_LLM, root), port=port)
+    threading.Thread(target=lambda: srv.start(log_cb=on_log), daemon=True).start()
+    return srv
 
 
 def is_healthy(port: int = DEFAULT_PORT, base_url: str | None = None) -> bool:

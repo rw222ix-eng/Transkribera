@@ -98,3 +98,29 @@ def test_start_times_out_and_stops(monkeypatch):
 def test_build_args_uses_default_binary_when_none():
     args = ls.build_args("m.gguf")
     assert args[0].endswith("llama-server.exe")
+
+def test_default_models_root_source_is_repo_root_models():
+    root = ls.default_models_root()
+    assert root.name == "models"
+
+def test_autostart_returns_none_when_not_installed(monkeypatch, tmp_path):
+    from app import llm_manager
+    monkeypatch.setattr(llm_manager, "is_installed", lambda *a, **k: False)
+    assert ls.autostart(models_root=tmp_path) is None
+
+def test_autostart_sets_base_url_and_returns_server(monkeypatch, tmp_path):
+    from app import llm_manager, llm_client
+    monkeypatch.setattr(llm_manager, "is_installed", lambda *a, **k: True)
+    monkeypatch.setattr(ls, "find_free_port", lambda *a, **k: 8200)
+    class FakeSrv:
+        def __init__(self, *a, **k): self.started = False
+        def start(self, *a, **k): self.started = True
+        def stop(self): pass
+    monkeypatch.setattr(ls, "LlamaServer", FakeSrv)
+    # run the daemon thread's target synchronously for determinism
+    monkeypatch.setattr(ls.threading, "Thread",
+                        lambda target=None, **k: type("T", (), {"start": lambda self: target()})())
+    srv = ls.autostart(models_root=tmp_path)
+    assert isinstance(srv, FakeSrv)
+    assert srv.started is True
+    assert llm_client.BASE_URL == "http://127.0.0.1:8200"
