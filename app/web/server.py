@@ -360,6 +360,7 @@ def create_app(base_dir: Path | None = None) -> FastAPI:
                 seg_json = media.with_name(media.stem + ".segments.json")
                 seg_json.write_text(json.dumps(segments, ensure_ascii=False), encoding="utf-8")
                 ac_written = []
+                corrected = segments  # default to the source if correction yields nothing
                 try:
                     ac_cmd = transcriber.build_audio_correct_cmd(
                         media, str(audio_model.audio_model_dir(models_root)),
