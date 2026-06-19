@@ -37,3 +37,13 @@ nul
 /build/
 /dist/
 *.manifest
+
+# llama.cpp-binärer + spike-artefakter (stora; byggs/laddas separat)
+/bin/llamacpp/
+/_spike/
+
+# Lokala Claude Code-inställningar
+.claude/
+
+# Worktrees
+/.worktrees/

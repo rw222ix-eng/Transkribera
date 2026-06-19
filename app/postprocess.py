@@ -1,8 +1,8 @@
-"""Post-process a transcript with a local LLM via Ollama."""
+"""Post-process a transcript with a local LLM via llama.cpp."""
 from __future__ import annotations
 from typing import Callable
 
-from app import ollama_client
+from app import llm_client
 
 # Hard language lock: some capable models (e.g. Qwen) drift into other languages
 # when the transcript is noisy/mixed. A firm system prompt keeps the answer Swedish.
@@ -29,5 +29,5 @@ def build_prompt(operation: str, transcript: str) -> str:
 def run(operation: str, transcript: str, model: str,
         token_cb: Callable[[str], None] | None = None) -> str:
     prompt = build_prompt(operation, transcript)
-    return ollama_client.generate(model, prompt, token_cb=token_cb,
-                                  system=SYSTEM_SV, options={"temperature": 0.2})
+    return llm_client.generate(model, prompt, token_cb=token_cb,
+                               system=SYSTEM_SV, options={"temperature": 0.2})

@@ -14,8 +14,9 @@ from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from app import (debug_log, hardware, recommend, whisper_manager, ollama_client,
-                 online_catalog, youtube, postprocess, transcriber, history_store)
+from app import (debug_log, hardware, recommend, whisper_manager, llm_client,
+                 llm_manager, online_catalog, youtube, postprocess, transcriber,
+                 history_store)
 from app.models_catalog import WHISPER_MODELS, LLM_MODELS
 
 _MONTHS_SV = ["jan", "feb", "mar", "apr", "maj", "jun", "jul", "aug", "sep", "okt", "nov", "dec"]
@@ -199,8 +200,9 @@ def create_app(base_dir: Path | None = None) -> FastAPI:
             "recommended": bool(wbest and e.spec.id == wbest.id),
         } for e in wevals]
 
-        running = ollama_client.is_running()
-        installed = ollama_client.list_models() if running else []
+        running = llm_client.is_running()                 # llama-server /health
+        installed = ([llm_manager.ACTIVE_LLM.filename]
+                     if llm_manager.is_installed(llm_manager.ACTIVE_LLM, models_root) else [])
         levals, lbest = recommend.recommend_llm(LLM_MODELS, hw)
         llm = [{
             "id": e.spec.name, "name": e.spec.name, "label": e.spec.label,
@@ -244,9 +246,11 @@ def create_app(base_dir: Path | None = None) -> FastAPI:
             return JSONResponse({"error": "namn saknas"}, status_code=400)
 
         def job(emit):
-            ollama_client.pull(name, progress_cb=lambda pct, status: emit(
-                {"type": "progress", "pct": pct, "msg": status}))
-            return {"installed": name}
+            llm_manager.download_gguf(
+                llm_manager.ACTIVE_LLM, models_root,
+                log_cb=lambda m: emit({"type": "log", "msg": m}),
+                progress_cb=lambda p: emit({"type": "progress", "pct": p}))
+            return {"installed": llm_manager.ACTIVE_LLM.filename}
         return _sse_response(job)
 
     @app.post("/api/transcribe")
@@ -343,8 +347,8 @@ def create_app(base_dir: Path | None = None) -> FastAPI:
             return JSONResponse({"error": "modell och meddelande krävs"}, status_code=400)
 
         def job(emit):
-            text = ollama_client.chat(model, messages, transcript=transcript,
-                                      token_cb=lambda t: emit({"type": "token", "text": t}))
+            text = llm_client.chat(model, messages, transcript=transcript,
+                                   token_cb=lambda t: emit({"type": "token", "text": t}))
             return {"text": text}
         return _sse_response(job)
 
