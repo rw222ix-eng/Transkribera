@@ -28,7 +28,7 @@ class WhisperModelSpec:
 
 @dataclass(frozen=True)
 class LLMModelSpec:
-    name: str          # Ollama model name, e.g. "llama3.1:8b"
+    name: str          # GGUF filename served by llama.cpp, e.g. "Qwen3-14B-Q8_0.gguf"
     label: str
     download_mb: int
     vram_mb: int       # recommended VRAM to run on GPU

@@ -34,6 +34,11 @@ hiddenimports += ["clr"]
 # Bundle the web frontend where server._static_dir() looks for it when frozen.
 datas += [("app/web/static", "app/web/static")]
 
+# Bundle the llama.cpp server binary + CUDA DLLs where llama_server.server_binary()
+# looks for it when frozen (sys._MEIPASS/bin/llamacpp/llama-server.exe). The GGUF
+# model itself is downloaded into models/ at runtime, not bundled.
+datas += [("bin/llamacpp", "bin/llamacpp")]
+
 a = Analysis(
     ["transkribera_web.py"],
     pathex=[],
