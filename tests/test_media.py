@@ -1,4 +1,7 @@
+import os
+import time
 from pathlib import Path
+
 from app import media
 from app.media import parse_duration
 
@@ -42,8 +45,11 @@ def test_make_thumbnail_video_generates_jpg(tmp_path, monkeypatch):
 def test_make_thumbnail_audio_generates_png(tmp_path, monkeypatch):
     a = tmp_path / "talk.mp3"
     a.write_text("audio", encoding="utf-8")
-    monkeypatch.setattr(media, "_run", lambda cmd, cwd:
-                        ((Path(cwd) / cmd[-1]).write_text("png", encoding="utf-8"), 0, "")[1:])
+
+    def fake_run(cmd, cwd):
+        (Path(cwd) / cmd[-1]).write_text("png", encoding="utf-8")
+        return 0, ""
+    monkeypatch.setattr(media, "_run", fake_run)
 
     out = media.make_thumbnail(a)
     assert out == tmp_path / "talk.thumb.png"
@@ -55,7 +61,6 @@ def test_make_thumbnail_returns_cache_when_fresh(tmp_path, monkeypatch):
     v.write_text("video", encoding="utf-8")
     cached = tmp_path / "clip.thumb.jpg"
     cached.write_text("old", encoding="utf-8")
-    import os, time
     os.utime(cached, (time.time() + 10, time.time() + 10))
 
     def boom(*a, **k):
