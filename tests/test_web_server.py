@@ -159,6 +159,59 @@ def test_history_delete_locked_folder_keeps_entry(client, tmp_path, monkeypatch)
     assert [e["id"] for e in client.get("/api/history").json()] == ["h3"]
 
 
+def test_save_transcript_rewrites_srt_and_updates_entry(client, tmp_path):
+    folder = tmp_path / "Transkriberingar" / "2026-06-20 · m"
+    folder.mkdir(parents=True)
+    srt = folder / "m.srt"
+    srt.write_text("1\n00:00:00,000 --> 00:00:02,000\nfel text\n\n", encoding="utf-8")
+    (tmp_path / "history.json").write_text(json.dumps([{
+        "id": "h1", "name": "m.mp4", "folder": str(folder), "words": 2,
+        "transcript": [{"start": 0.0, "end": 2.0, "text": "fel text"}],
+        "files": [{"path": str(srt), "kind": "subtitle", "ext": "srt"}],
+    }]), encoding="utf-8")
+    r = client.post("/api/history/transcript", json={
+        "folder": str(folder),
+        "segments": [{"start": 0.0, "end": 2.0, "text": "rättad text här"}]})
+    assert r.status_code == 200 and r.json()["ok"] is True
+    assert "rättad text här" in srt.read_text(encoding="utf-8")
+    assert "fel text" not in srt.read_text(encoding="utf-8")
+    entry = client.get("/api/history").json()[0]
+    assert entry["transcript"][0]["text"] == "rättad text här"
+    assert entry["words"] == 3
+
+
+def test_save_transcript_leaves_reference_track_untouched(client, tmp_path):
+    folder = tmp_path / "Transkriberingar" / "2026-06-20 · ref"
+    folder.mkdir(parents=True)
+    main = folder / "m.srt"
+    main.write_text("orig", encoding="utf-8")
+    ref = folder / "m.en.srt"
+    ref.write_text("english reference", encoding="utf-8")
+    (tmp_path / "history.json").write_text(json.dumps([{
+        "id": "h1", "name": "m.mp4", "folder": str(folder),
+        "files": [{"path": str(main), "kind": "subtitle", "ext": "srt"},
+                  {"path": str(ref), "kind": "subtitle-ref", "ext": "srt"}],
+    }]), encoding="utf-8")
+    r = client.post("/api/history/transcript", json={
+        "folder": str(folder),
+        "segments": [{"start": 0.0, "end": 1.0, "text": "ny svensk"}]})
+    assert r.status_code == 200
+    assert "ny svensk" in main.read_text(encoding="utf-8")
+    assert ref.read_text(encoding="utf-8") == "english reference"   # untouched
+
+
+def test_save_transcript_unknown_folder_404(client):
+    r = client.post("/api/history/transcript",
+                    json={"folder": "/nope", "segments": []})
+    assert r.status_code == 404
+
+
+def test_save_transcript_requires_folder_and_segments(client):
+    assert client.post("/api/history/transcript", json={"segments": []}).status_code == 400
+    assert client.post("/api/history/transcript",
+                       json={"folder": "x"}).status_code == 400
+
+
 def test_thumb_serves_generated_image(client, tmp_path, monkeypatch):
     media_file = tmp_path / "Transkriberingar" / "x" / "clip.mp4"
     media_file.parent.mkdir(parents=True)

@@ -457,6 +457,54 @@ def create_app(base_dir: Path | None = None,
         history_store.delete_history(history_file, entry_id)
         return {"ok": True, "folder_removed": folder_removed}
 
+    @app.post("/api/history/transcript")
+    async def api_history_save_transcript(req: Request):
+        """Persist edited transcript text: rewrite the tracked subtitle file(s) in
+        place and update the stored transcript. Keyed by result folder (stable
+        across re-opens, and known for both fresh runs and history entries)."""
+        body = await req.json()
+        folder = body.get("folder") or ""
+        segs_in = body.get("segments")
+        if not folder or not isinstance(segs_in, list):
+            return JSONResponse({"error": "folder och segments krävs"}, status_code=400)
+        items = history_store.load_history(history_file)
+        entry = next((e for e in items if e.get("folder") == folder), None)
+        if entry is None:
+            return JSONResponse({"error": "posten finns inte"}, status_code=404)
+        # The client keeps the original start/end and only swaps in edited text,
+        # so cue timing is preserved here.
+        segs = []
+        for s in segs_in:
+            try:
+                segs.append(transcriber.Segment(
+                    float(s.get("start") or 0), float(s.get("end") or 0),
+                    str(s.get("text") or "")))
+            except (TypeError, ValueError):
+                continue
+        # Rewrite the main subtitle file(s), validated under base_dir. The
+        # reference-language track (kind "subtitle-ref") is left untouched.
+        rewritten = []
+        for f in entry.get("files") or []:
+            if f.get("kind") != "subtitle":
+                continue
+            p = _under_base(f.get("path") or "")
+            if p is None or not p.exists():
+                continue
+            render = transcriber.WRITERS.get(p.suffix.lstrip(".").lower())
+            if not render:
+                continue
+            try:
+                p.write_text(render[0](segs), encoding="utf-8")
+                rewritten.append(str(p))
+            except OSError:
+                return JSONResponse(
+                    {"error": "kunde inte skriva undertextfilen — den kan vara öppen"},
+                    status_code=409)
+        entry["transcript"] = [{"start": s.start, "end": s.end, "text": s.text} for s in segs]
+        entry["words"] = sum(len((s.text or "").split()) for s in segs)
+        history_store.update_history(history_file, entry)
+        return {"ok": True, "rewritten": rewritten}
+
     @app.post("/api/postprocess")
     async def api_postprocess(req: Request):
         body = await req.json()
