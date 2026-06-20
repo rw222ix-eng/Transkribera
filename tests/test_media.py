@@ -77,3 +77,55 @@ def test_make_thumbnail_returns_none_when_ffmpeg_fails(tmp_path, monkeypatch):
     monkeypatch.setattr(media, "probe_duration", lambda p: None)
     monkeypatch.setattr(media, "_run", lambda cmd, cwd: (1, "boom"))
     assert media.make_thumbnail(v) is None
+
+
+def test_build_web_video_copy_cmd():
+    assert media.build_web_video_copy_cmd("in.mkv", "out.mp4") == [
+        "ffmpeg", "-y", "-i", "in.mkv", "-c", "copy",
+        "-movflags", "+faststart", "out.mp4"]
+
+
+def test_build_web_video_encode_cmd():
+    assert media.build_web_video_encode_cmd("in.mkv", "out.mp4", "h264_nvenc") == [
+        "ffmpeg", "-y", "-i", "in.mkv", "-c:v", "h264_nvenc", "-c:a", "aac",
+        "-movflags", "+faststart", "out.mp4"]
+
+
+def test_ensure_web_video_returns_input_for_web_format(tmp_path, monkeypatch):
+    v = tmp_path / "clip.mp4"
+    v.write_text("v", encoding="utf-8")
+    monkeypatch.setattr(media, "_run", lambda *a, **k:
+                        (_ for _ in ()).throw(AssertionError("no ffmpeg for web format")))
+    assert media.ensure_web_video(v) == v
+
+
+def test_ensure_web_video_copies_mkv(tmp_path, monkeypatch):
+    v = tmp_path / "clip.mkv"
+    v.write_text("v", encoding="utf-8")
+
+    def fake_run(cmd, cwd):
+        (Path(cwd) / cmd[-1]).write_text("mp4", encoding="utf-8")
+        return 0, ""
+    monkeypatch.setattr(media, "_run", fake_run)
+
+    out = media.ensure_web_video(v)
+    assert out == tmp_path / "clip.web.mp4"
+    assert out.exists()
+
+
+def test_ensure_web_video_falls_back_to_encode(tmp_path, monkeypatch):
+    v = tmp_path / "clip.mkv"
+    v.write_text("v", encoding="utf-8")
+    calls = []
+
+    def fake_run(cmd, cwd):
+        calls.append(cmd)
+        if "copy" in cmd:
+            return 1, "incompatible"          # copy fails
+        (Path(cwd) / cmd[-1]).write_text("mp4", encoding="utf-8")  # encode succeeds
+        return 0, ""
+    monkeypatch.setattr(media, "_run", fake_run)
+
+    out = media.ensure_web_video(v)
+    assert out == tmp_path / "clip.web.mp4"
+    assert any("copy" in c for c in calls) and any("-c:v" in c for c in calls)

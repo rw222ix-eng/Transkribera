@@ -78,3 +78,38 @@ def make_thumbnail(media: Path) -> Path | None:
     cmd = build_thumbnail_cmd(media.name, out.name, kind, seek)
     rc, _err = _run(cmd, str(media.parent))
     return out if rc == 0 and out.exists() else None
+
+
+def build_web_video_copy_cmd(media_name: str, out_name: str) -> list[str]:
+    return ["ffmpeg", "-y", "-i", media_name, "-c", "copy",
+            "-movflags", "+faststart", out_name]
+
+
+def build_web_video_encode_cmd(media_name: str, out_name: str,
+                               encoder: str = "h264_nvenc") -> list[str]:
+    return ["ffmpeg", "-y", "-i", media_name, "-c:v", encoder, "-c:a", "aac",
+            "-movflags", "+faststart", out_name]
+
+
+def ensure_web_video(media: Path) -> Path:
+    """Returnera en webbspelbar video. Webbformat returneras oförändrat; annars
+    skapas (eller återanvänds) en cachad <stem>.web.mp4 — stream-copy först,
+    omkodning (NVENC→libx264) som fallback. Kastar RuntimeError om inget lyckas."""
+    media = Path(media)
+    if media.suffix.lower() in WEB_VIDEO_EXTS:
+        return media
+    out = media.with_name(media.stem + ".web.mp4")
+    try:
+        if out.exists() and out.stat().st_mtime >= media.stat().st_mtime:
+            return out
+    except OSError:
+        pass
+    cwd = str(media.parent)
+    rc, err = _run(build_web_video_copy_cmd(media.name, out.name), cwd)
+    if rc != 0 or not out.exists():
+        rc, err = _run(build_web_video_encode_cmd(media.name, out.name, "h264_nvenc"), cwd)
+    if rc != 0 or not out.exists():
+        rc, err = _run(build_web_video_encode_cmd(media.name, out.name, "libx264"), cwd)
+    if rc != 0 or not out.exists():
+        raise RuntimeError("ffmpeg kunde inte göra videon webbspelbar: " + err.strip()[-300:])
+    return out
