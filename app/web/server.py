@@ -17,7 +17,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app import (debug_log, hardware, recommend, whisper_manager, ollama_client,
                  online_catalog, youtube, postprocess, transcriber, history_store,
-                 audio_model, output_store)
+                 audio_model, output_store, media)
 from app.models_catalog import WHISPER_MODELS, LLM_MODELS
 
 _MONTHS_SV = ["jan", "feb", "mar", "apr", "maj", "jun", "jul", "aug", "sep", "okt", "nov", "dec"]
@@ -558,5 +558,18 @@ def create_app(base_dir: Path | None = None) -> FastAPI:
         if cached.exists():
             return FileResponse(str(cached))
         return JSONResponse({"error": "kunde inte läsa ljud"}, status_code=500)
+
+    @app.get("/api/thumb")
+    def api_thumb(path: str = ""):
+        try:
+            p = Path(path).resolve()
+        except Exception:
+            return JSONResponse({"error": "ogiltig sökväg"}, status_code=400)
+        if not str(p).startswith(str(base.resolve())):
+            return JSONResponse({"error": "ogiltig sökväg"}, status_code=404)
+        thumb = media.make_thumbnail(p)
+        if not thumb or not Path(thumb).exists():
+            return JSONResponse({"error": "ingen miniatyr"}, status_code=404)
+        return FileResponse(str(thumb))
 
     return app

@@ -122,3 +122,31 @@ def test_history_delete_locked_folder_keeps_entry(client, tmp_path, monkeypatch)
     r = client.delete("/api/history/h3")
     assert r.status_code == 409
     assert [e["id"] for e in client.get("/api/history").json()] == ["h3"]
+
+
+def test_thumb_serves_generated_image(client, tmp_path, monkeypatch):
+    media_file = tmp_path / "Transkriberingar" / "x" / "clip.mp4"
+    media_file.parent.mkdir(parents=True)
+    media_file.write_text("v", encoding="utf-8")
+    thumb = media_file.with_name("clip.thumb.jpg")
+    thumb.write_bytes(b"\xff\xd8\xff")
+    monkeypatch.setattr(server.media, "make_thumbnail", lambda p: thumb)
+
+    r = client.get("/api/thumb", params={"path": str(media_file)})
+    assert r.status_code == 200
+    assert r.content == b"\xff\xd8\xff"
+
+
+def test_thumb_404_when_none(client, tmp_path, monkeypatch):
+    media_file = tmp_path / "Transkriberingar" / "x" / "clip.mp4"
+    media_file.parent.mkdir(parents=True)
+    media_file.write_text("v", encoding="utf-8")
+    monkeypatch.setattr(server.media, "make_thumbnail", lambda p: None)
+    r = client.get("/api/thumb", params={"path": str(media_file)})
+    assert r.status_code == 404
+
+
+def test_thumb_rejects_path_outside_base(client, tmp_path):
+    outside = tmp_path.parent / "evil.png"
+    r = client.get("/api/thumb", params={"path": str(outside)})
+    assert r.status_code in (400, 404)
