@@ -539,7 +539,7 @@ def create_app(base_dir: Path | None = None) -> FastAPI:
         return _open_under_base(base, body.get("path") or "")
 
     @app.get("/api/media")
-    def api_media(path: str = ""):
+    def api_media(path: str = "", want: str = ""):
         """Servera media för uppspelning i previewn. Webbvänliga format serveras
         direkt (med range/seek); övriga (t.ex. .mkv) får ljudet extraherat till en
         cachad .m4a en gång. Endast filer under base_dir."""
@@ -549,6 +549,12 @@ def create_app(base_dir: Path | None = None) -> FastAPI:
             return JSONResponse({"error": "ogiltig sökväg"}, status_code=400)
         if not str(p).startswith(str(base.resolve())) or not p.exists():
             return JSONResponse({"error": "finns inte"}, status_code=404)
+        if want == "video":
+            try:
+                web = media.ensure_web_video(p)
+            except Exception as e:
+                return JSONResponse({"error": str(e)}, status_code=500)
+            return FileResponse(str(web))
         if p.suffix.lower() in _WEB_MEDIA:
             return FileResponse(str(p))
         cached = p.with_name(p.stem + ".preview.m4a")

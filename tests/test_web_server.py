@@ -150,3 +150,25 @@ def test_thumb_rejects_path_outside_base(client, tmp_path):
     outside = tmp_path.parent / "evil.png"
     r = client.get("/api/thumb", params={"path": str(outside)})
     assert r.status_code in (400, 404)
+
+
+def test_media_want_video_serves_web_format_directly(client, tmp_path):
+    v = tmp_path / "Transkriberingar" / "x" / "clip.mp4"
+    v.parent.mkdir(parents=True)
+    v.write_text("mp4bytes", encoding="utf-8")
+    r = client.get("/api/media", params={"path": str(v), "want": "video"})
+    assert r.status_code == 200
+    assert r.text == "mp4bytes"
+
+
+def test_media_want_video_remuxes_mkv(client, tmp_path, monkeypatch):
+    v = tmp_path / "Transkriberingar" / "x" / "clip.mkv"
+    v.parent.mkdir(parents=True)
+    v.write_text("mkv", encoding="utf-8")
+    web = v.with_name("clip.web.mp4")
+    web.write_text("remuxed", encoding="utf-8")
+    monkeypatch.setattr(server.media, "ensure_web_video", lambda p: web)
+
+    r = client.get("/api/media", params={"path": str(v), "want": "video"})
+    assert r.status_code == 200
+    assert r.text == "remuxed"
