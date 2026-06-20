@@ -23,6 +23,10 @@ def run() -> None:
         from app.transcribe_cli import main as cli_main
         cli_main(sys.argv[2:])  # calls os._exit(0); never returns
         return
+    if len(sys.argv) > 1 and sys.argv[1] == "audio-correct-cli":
+        from app.audio_correct_cli import main as cli_main
+        cli_main(sys.argv[2:])  # calls os._exit(0); never returns
+        return
     from app.web.desktop import main as desktop_main
     desktop_main()
 

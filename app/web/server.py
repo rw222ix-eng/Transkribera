@@ -17,7 +17,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app import (debug_log, hardware, recommend, whisper_manager, llm_client,
                  llm_manager, online_catalog, youtube, postprocess, transcriber,
-                 history_store, gpu_arbiter, output_store, media)
+                 history_store, gpu_arbiter, output_store, media, audio_model)
 from app.models_catalog import WHISPER_MODELS, LLM_MODELS
 
 _MONTHS_SV = ["jan", "feb", "mar", "apr", "maj", "jun", "jul", "aug", "sep", "okt", "nov", "dec"]
@@ -270,6 +270,22 @@ def create_app(base_dir: Path | None = None,
             return {"installed": llm_manager.ACTIVE_LLM.filename}
         return _sse_response(job)
 
+    @app.get("/api/audio-model")
+    def api_audio_model():
+        return {"id": audio_model.AUDIO_MODEL_ID,
+                "installed": audio_model.is_audio_model_installed(models_root),
+                "download_mb": audio_model.AUDIO_MODEL_DOWNLOAD_MB}
+
+    @app.post("/api/download/audio-model")
+    async def api_download_audio_model(req: Request):
+        def job(emit):
+            audio_model.download_audio_model(
+                models_root,
+                log_cb=lambda m: emit({"type": "log", "msg": m}),
+                progress_cb=lambda p: emit({"type": "progress", "pct": p}))
+            return {"installed": audio_model.AUDIO_MODEL_ID}
+        return _sse_response(job)
+
     @app.post("/api/transcribe")
     async def api_transcribe(req: Request):
         body = await req.json()
@@ -277,6 +293,7 @@ def create_app(base_dir: Path | None = None,
         model_id = body.get("model_id")
         language = body.get("language") or ""
         target_language = body.get("target_language") or language   # subtitle output language
+        audio_correct = bool(body.get("audio_correct"))   # 2nd pass: fix text vs the audio
         sub_mode = body.get("sub_mode") or "separate"     # "separate" | "embed"
         embed_kind = body.get("embed_kind")               # "soft" | "burn" | None
         formats = [f for f in (body.get("formats") or ["srt"]) if f in transcriber.WRITERS]
@@ -329,6 +346,35 @@ def create_app(base_dir: Path | None = None,
                 else:
                     raise RuntimeError("Transkriberingen gav inget resultat")
             srt_path = next((Path(p) for p in written if str(p).lower().endswith(".srt")), None)
+
+            # Optional second pass: correct the draft text against the actual audio
+            # (Gemma 3n E4B via transformers). Best effort — skipped if not installed.
+            if audio_correct:
+                if not audio_model.is_audio_model_installed(models_root):
+                    emit({"type": "log", "msg": "Hoppar över ljudkorrigering — ljudmodellen "
+                                                "(Gemma 3n) är inte nedladdad."})
+                else:
+                    emit({"type": "log", "msg": "Rättar transkriptet mot ljudet ..."})
+                    seg_json = media.with_name(media.stem + ".segments.json")
+                    seg_json.write_text(json.dumps(segments, ensure_ascii=False), encoding="utf-8")
+                    corr_base = media.with_name(media.stem + "_korr")
+                    ac_written = []
+                    try:
+                        ac_cmd = transcriber.build_audio_correct_cmd(
+                            media, str(audio_model.audio_model_dir(models_root)),
+                            str(seg_json), corr_base, ["srt"], language)
+                        ac_written, corrected = _run_transcribe_subprocess(ac_cmd, base, emit)
+                        if corrected:
+                            segments = corrected
+                            srt_path = transcriber.write_outputs(
+                                [transcriber.Segment(d["start"], d["end"], d["text"])
+                                 for d in corrected], out_base, ["srt"])[0]
+                    finally:
+                        for p in [seg_json] + [Path(x) for x in ac_written]:
+                            try:
+                                p.unlink()
+                            except OSError:
+                                pass
 
             # Optional translation to a different result language. The text model
             # is reloaded here (Whisper has exited and freed its VRAM); the
