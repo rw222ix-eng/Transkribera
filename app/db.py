@@ -335,3 +335,43 @@ def delete_insights_by_source(conn: sqlite3.Connection, lesson_id: int, source: 
                        (lesson_id, source))
     conn.commit()
     return cur.rowcount
+
+
+# ----------------------------------------------------------- carry-forward (Fas 3) --
+
+_CARRY_TYPER = ("åtgärd", "grupprum", "material")
+
+
+def next_prep(conn: sqlite3.Connection, group_id: int) -> dict:
+    """Everything to glance at before the next lesson with a class:
+    still-open actions/group-room/material carried over from earlier lessons,
+    plus the *most recent* lesson's difficulties to revisit."""
+    grow = conn.execute("SELECT namn FROM groups WHERE id = ?", (group_id,)).fetchone()
+
+    placeholders = ", ".join("?" for _ in _CARRY_TYPER)
+    open_rows = conn.execute(
+        "SELECT i.*, l.datum AS lesson_datum, l.name AS lesson_name "
+        "FROM insights i JOIN lessons l ON l.id = i.lesson_id "
+        f"WHERE l.group_id = ? AND i.status = 'öppen' AND i.typ IN ({placeholders}) "
+        "ORDER BY COALESCE(l.datum, l.ts) DESC, i.id",
+        (group_id, *_CARRY_TYPER)).fetchall()
+
+    last = conn.execute(
+        "SELECT id, datum, name FROM lessons WHERE group_id = ? "
+        "ORDER BY COALESCE(datum, ts) DESC, id DESC LIMIT 1",
+        (group_id,)).fetchone()
+    difficulties: list[dict] = []
+    last_lesson = None
+    if last:
+        last_lesson = dict(last)
+        difficulties = [dict(r) for r in conn.execute(
+            "SELECT * FROM insights WHERE lesson_id = ? AND typ = 'svårighet' ORDER BY id",
+            (last["id"],)).fetchall()]
+
+    return {
+        "group_id": group_id,
+        "group": grow["namn"] if grow else None,
+        "open_actions": [dict(r) for r in open_rows],
+        "last_lesson": last_lesson,
+        "difficulties": difficulties,
+    }

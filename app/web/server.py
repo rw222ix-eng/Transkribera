@@ -694,6 +694,16 @@ def create_app(base_dir: Path | None = None,
             conn.close()
         return {"ok": True}
 
+    # ---- Nästa lektion: carry-forward per klass (Fas 3) ----------------------
+
+    @app.get("/api/next-prep")
+    def api_next_prep(group_id: int):
+        conn = _db()
+        try:
+            return db.next_prep(conn, group_id)
+        finally:
+            conn.close()
+
     @app.post("/api/postprocess")
     async def api_postprocess(req: Request):
         body = await req.json()

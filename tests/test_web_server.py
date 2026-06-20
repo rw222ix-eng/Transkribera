@@ -535,3 +535,18 @@ def test_extract_llm_not_installed_streams_error(tmp_path, monkeypatch):
     r = c.post(f"/api/lessons/{lid}/extract")
     assert r.status_code == 200                       # SSE — error is in the stream
     assert "inte installerad" in r.text
+
+
+# ---- Nästa lektion-vy: carry-forward (Fas 3) --------------------------------
+
+def test_next_prep_endpoint(tmp_path, monkeypatch):
+    c = _lesson_client(tmp_path, monkeypatch)
+    lid = c.get("/api/lessons").json()[0]["id"]
+    gid = c.patch(f"/api/lessons/{lid}", json={"group_name": "NA21"}).json()["group_id"]
+    c.post(f"/api/lessons/{lid}/insights", json={"typ": "åtgärd", "text": "ta med facit"})
+    c.post(f"/api/lessons/{lid}/insights", json={"typ": "svårighet", "text": "derivata"})
+    prep = c.get(f"/api/next-prep?group_id={gid}").json()
+    assert prep["group"] == "NA21"
+    assert [a["text"] for a in prep["open_actions"]] == ["ta med facit"]
+    assert [d["text"] for d in prep["difficulties"]] == ["derivata"]
+    assert prep["last_lesson"]["id"] == lid

@@ -151,3 +151,45 @@ def test_update_insight_and_delete_by_source(tmp_path):
     assert db.delete_insights_by_source(conn, les["id"], "llm") == 1
     left = db.list_insights(conn, les["id"])
     assert [i["source"] for i in left] == ["manuell"]   # manual survived
+
+
+def test_next_prep_carry_forward(tmp_path):
+    conn = _conn(tmp_path)
+    na = db.get_or_create_group(conn, "NA21")
+    te = db.get_or_create_group(conn, "TE22")
+    old = db.create_lesson(conn, history_id="h1", ts="2026-06-10T09:00:00", name="förra")
+    new = db.create_lesson(conn, history_id="h2", ts="2026-06-17T09:00:00", name="senaste")
+    other = db.create_lesson(conn, history_id="h3", ts="2026-06-12T09:00:00", name="annan klass")
+    db.update_lesson(conn, old["id"], group_id=na)
+    db.update_lesson(conn, new["id"], group_id=na)
+    db.update_lesson(conn, other["id"], group_id=te)
+
+    # open actions across the class's lessons (one already klar -> excluded)
+    db.add_insight(conn, old["id"], "åtgärd", "ta med arbetsblad")
+    klar = db.add_insight(conn, old["id"], "material", "facit")
+    db.update_insight(conn, klar["id"], status="klar")
+    db.add_insight(conn, new["id"], "grupprum", "A+B i grupprummet")
+    # non-carry types must NOT appear among open actions
+    db.add_insight(conn, new["id"], "kalender", "prov v.21")
+    db.add_insight(conn, new["id"], "övrigt", "diverse")
+    # difficulties live on each lesson; only the latest lesson's should surface
+    db.add_insight(conn, old["id"], "svårighet", "gammal svårighet")
+    db.add_insight(conn, new["id"], "svårighet", "pq-formeln")
+    # other class must not leak in
+    db.add_insight(conn, other["id"], "åtgärd", "annan klass åtgärd")
+
+    prep = db.next_prep(conn, na)
+    assert prep["group"] == "NA21"
+    assert prep["last_lesson"]["name"] == "senaste"
+    action_texts = {a["text"] for a in prep["open_actions"]}
+    assert action_texts == {"ta med arbetsblad", "A+B i grupprummet"}   # not 'facit' (klar),
+    #   not 'prov v.21'/'diverse' (kalender/övrigt), not the other class
+    assert [d["text"] for d in prep["difficulties"]] == ["pq-formeln"]  # only latest lesson
+
+
+def test_next_prep_empty_group(tmp_path):
+    conn = _conn(tmp_path)
+    gid = db.get_or_create_group(conn, "NA21")
+    prep = db.next_prep(conn, gid)
+    assert prep["open_actions"] == [] and prep["difficulties"] == []
+    assert prep["last_lesson"] is None

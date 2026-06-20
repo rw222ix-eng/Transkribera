@@ -100,6 +100,7 @@
     insightEdits: {},
     manualTyp: 'svårighet',
     manualText: '',
+    nextPrep: null,
     confirm: null,
     diskWarn: null,
     transcript: null,
@@ -349,7 +350,7 @@
   /* -------------------------------------------------------------- actions -- */
   // BACKEND: theme/tab are pure UI.
   function toggleTheme() { setState(function (s) { return { theme: s.theme === 'light' ? 'dark' : 'light' }; }); }
-  function setTab(t) { setState({ tab: t, openDD: null }); if (t === 'lessons') { loadLessons(); loadOrg(); } }
+  function setTab(t) { setState({ tab: t, openDD: null }); if (t === 'lessons') { loadLessons(); loadOrg(); loadPrep(); } }
   function onSource(e) { setState({ source: e.target.value }); }
   function fileRef(el) { _file = el; }
   function openPicker() {
@@ -483,7 +484,21 @@
   }
   function setLessonFilter(which, val) {
     var patch = {}; patch[which] = val;
-    setState(patch, function () { loadLessons(); });
+    setState(patch, function () { loadLessons(); loadPrep(); });
+  }
+  function loadPrep() {
+    if (!S.lessonFilterGroup) { setState({ nextPrep: null }); return Promise.resolve(); }
+    return getJSON('/api/next-prep?group_id=' + encodeURIComponent(S.lessonFilterGroup))
+      .then(function (p) { setState({ nextPrep: p && p.group_id ? p : null }); })
+      .catch(function () { setState({ nextPrep: null }); });
+  }
+  function markPrepDone(insightId) {
+    fetch('/api/insights/' + encodeURIComponent(insightId), {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'klar' })
+    }).then(function () {
+      loadPrep();
+      if (S.expandedLesson) loadInsights(S.expandedLesson);
+    }).catch(function () {});
   }
   function startEditLesson(l) {
     setState({ editingLesson: l.id, lessonEdits: { group: l.group || '', course: l.course || '', sal: l.sal || '', datum: l.datum || '' } });
@@ -515,7 +530,7 @@
   }
   function deleteLesson(id) {
     fetch('/api/lessons/' + encodeURIComponent(id), { method: 'DELETE' })
-      .then(function () { loadLessons(); loadHistory(); }).catch(function () {});
+      .then(function () { loadLessons(); loadHistory(); loadPrep(); }).catch(function () {});
   }
 
   /* ------------------------------------------------------ insikter (Fas 2) -- */
@@ -533,7 +548,7 @@
   function runExtract(lessonId) {
     setState({ extractingLesson: lessonId });
     streamPost('/api/lessons/' + encodeURIComponent(lessonId) + '/extract', {}, function (ev) {
-      if (ev.type === 'done') { setState({ extractingLesson: null }, function () { loadInsights(lessonId); }); }
+      if (ev.type === 'done') { setState({ extractingLesson: null }, function () { loadInsights(lessonId); loadPrep(); }); }
       else if (ev.type === 'error') { setState({ extractingLesson: null, toast: { title: 'Analys misslyckades', name: '', detail: ev.message || '', kind: 'error' } }); }
     });
   }
@@ -556,11 +571,11 @@
     var next = ins.status === 'klar' ? 'öppen' : 'klar';
     fetch('/api/insights/' + encodeURIComponent(ins.id), {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: next })
-    }).then(function () { loadInsights(lessonId); }).catch(function () {});
+    }).then(function () { loadInsights(lessonId); loadPrep(); }).catch(function () {});
   }
   function deleteInsight(id, lessonId) {
     fetch('/api/insights/' + encodeURIComponent(id), { method: 'DELETE' })
-      .then(function () { loadInsights(lessonId); }).catch(function () {});
+      .then(function () { loadInsights(lessonId); loadPrep(); }).catch(function () {});
   }
   function addManualInsight(lessonId) {
     var text = (S.manualText || '').trim();
@@ -579,6 +594,7 @@
     { typ: 'material', label: 'Material' },
     { typ: 'övrigt', label: 'Övrigt' },
   ];
+  var TYP_LABEL = { kalender: 'Kalender', 'svårighet': 'Svårighet', 'åtgärd': 'Åtgärd', grupprum: 'Grupprum', material: 'Material', 'övrigt': 'Övrigt' };
   function buildInsightGroups(list, lessonId) {
     var ed = S.insightEdits || {};
     return INSIGHT_TYPES.map(function (t) {
@@ -1279,6 +1295,16 @@
       lessonFilterGroup: st.lessonFilterGroup, lessonFilterCourse: st.lessonFilterCourse,
       onFilterGroup: function (e) { setLessonFilter('lessonFilterGroup', e.target.value); },
       onFilterCourse: function (e) { setLessonFilter('lessonFilterCourse', e.target.value); },
+      prep: st.nextPrep ? {
+        group: st.nextPrep.group,
+        lastDate: st.nextPrep.last_lesson ? (st.nextPrep.last_lesson.datum || '') : '',
+        actions: (st.nextPrep.open_actions || []).map(function (a) {
+          return { id: a.id, text: a.text, typLabel: TYP_LABEL[a.typ] || a.typ,
+                   ref: a.ref || '', date: a.lesson_datum || '', onDone: function () { markPrepDone(a.id); } };
+        }),
+        difficulties: (st.nextPrep.difficulties || []).map(function (d) { return { text: d.text, ref: d.ref || '' }; }),
+        empty: (st.nextPrep.open_actions || []).length === 0 && (st.nextPrep.difficulties || []).length === 0,
+      } : null,
 
       waveBars: waveBars, audioPlaying: st.audioPlaying, audioPaused: !st.audioPlaying,
       audioCur: fmtTime(st.audioT), audioDur: fmtTime(AUDIO_DUR),
@@ -2201,6 +2227,8 @@ function viewLessons(v){
         <select data-change="${on(v.onFilterCourse)}" style="${selStyle}">${ opts(v.lessonCourses, v.lessonFilterCourse) }</select>
       </div>
 
+      ${ v.prep ? prepPanel(v.prep) : '' }
+
       ${ v.lessonsEmpty ? `
         <div style="text-align:center;padding:60px 24px;background:var(--surface);border:1px solid var(--line);border-radius:16px;color:var(--ink-2);font-size:16px">Inga lektioner än. Transkribera en inspelning så dyker den upp här — tilldela den sedan klass och kurs.</div>
       ` : '' }
@@ -2311,6 +2339,45 @@ function insightsPanel(h){
         <input value="${esc(h.manualText)}" data-input="${on(h.onManualText)}" placeholder="Lägg till en egen anteckning …" style="${inStyle}">
         <button data-click="${on(h.onAddManual)}" style="background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:9px;padding:7px 15px;font-size:13.5px;font-weight:500;cursor:pointer;font-family:inherit" data-sh="border-color:var(--ink) !important;background:var(--ink) !important;color:var(--btn-fg) !important">Lägg till</button>
       </div>
+    </div>`;
+}
+
+function prepPanel(p){ return `
+    <div style="background:var(--accent-weak);border:1px solid var(--accent);border-radius:16px;padding:18px 20px;margin-bottom:22px">
+      <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:14px">
+        <span style="font-size:18px">📋</span>
+        <h2 style="font-size:18px;font-weight:600;color:var(--ink);margin:0">Inför nästa lektion${ p.group ? ' · ' + esc(p.group) : '' }</h2>
+      </div>
+
+      ${ p.empty ? `
+        <div style="font-size:14px;color:var(--ink-2)">Inget att bära med sig ännu — öppna åtgärder och förra lektionens svårigheter dyker upp här när du analyserat lektioner för den här klassen.</div>
+      ` : '' }
+
+      ${ p.actions.length ? `
+        <div style="font-size:12px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:7px">Att göra (öppna)</div>
+        <div style="display:flex;flex-direction:column;gap:7px;margin-bottom:${ p.difficulties.length ? '16px' : '0' }">
+          ${ p.actions.map(function(a){ return `
+            <div style="display:flex;align-items:flex-start;gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:9px 11px">
+              <button data-click="${on(a.onDone)}" aria-label="Markera klar" title="Markera klar" style="flex:0 0 auto;width:18px;height:18px;margin-top:1px;border-radius:5px;border:1.5px solid var(--line-2);background:transparent;cursor:pointer" data-sh="border-color:var(--ok) !important;background:var(--ok) !important"></button>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:14px;color:var(--ink)">${esc(a.text)}</div>
+                <div style="font-size:12px;color:var(--ink-3);margin-top:2px">${esc(a.typLabel)}${ a.ref ? ' · ' + esc(a.ref) : '' }${ a.date ? ' · ' + esc(a.date) : '' }</div>
+              </div>
+            </div>
+          `; }).join('') }
+        </div>
+      ` : '' }
+
+      ${ p.difficulties.length ? `
+        <div style="font-size:12px;font-weight:600;color:var(--accent);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:7px">Repetera — förra lektionens svårigheter${ p.lastDate ? ' (' + esc(p.lastDate) + ')' : '' }</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          ${ p.difficulties.map(function(d){ return `
+            <div style="font-size:14px;color:var(--ink);padding-left:14px;position:relative">
+              <span style="position:absolute;left:0;color:var(--accent)">•</span>${esc(d.text)}${ d.ref ? ` <span style="color:var(--ink-3);font-size:12.5px">(${esc(d.ref)})</span>` : '' }
+            </div>
+          `; }).join('') }
+        </div>
+      ` : '' }
     </div>`;
 }
 
