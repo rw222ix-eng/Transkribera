@@ -75,6 +75,27 @@ def test_base_url_resolved_at_call_time(monkeypatch):
     lc.generate("ignored", "p")
     assert captured["url"] == "http://127.0.0.1:9999/v1/chat/completions"
 
+def test_response_format_forwarded_to_payload(monkeypatch):
+    captured = {}
+    def fake_post(url, json=None, **k):
+        captured["json"] = json
+        return FakeResp(lines=_sse(["ok"]))
+    monkeypatch.setattr(lc.requests, "post", fake_post)
+    rf = {"type": "json_schema", "json_schema": {"name": "x", "schema": {}}}
+    lc.generate("ignored", "p", response_format=rf)
+    assert captured["json"]["response_format"] == rf
+
+
+def test_response_format_absent_by_default(monkeypatch):
+    captured = {}
+    def fake_post(url, json=None, **k):
+        captured["json"] = json
+        return FakeResp(lines=_sse(["ok"]))
+    monkeypatch.setattr(lc.requests, "post", fake_post)
+    lc.generate("ignored", "p")
+    assert "response_format" not in captured["json"]
+
+
 def test_skips_malformed_and_blank_sse_lines(monkeypatch):
     # Blank lines, non-data lines (keepalives), and unparseable JSON must be ignored.
     lines = ["", "ping: keepalive", "data: not-json",

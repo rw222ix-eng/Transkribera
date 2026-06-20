@@ -141,7 +141,8 @@ def _stream_chat(messages: list[dict], *, temperature: float,
                  token_cb: Callable[[str], None] | None,
                  reason_cb: Callable[[str], None] | None = None,
                  base_url: str | None = None,
-                 template_kwargs: dict | None = None) -> str:
+                 template_kwargs: dict | None = None,
+                 response_format: dict | None = None) -> str:
     payload = {
         "messages": messages,
         "stream": True,
@@ -152,6 +153,10 @@ def _stream_chat(messages: list[dict], *, temperature: float,
         # on; correction/analysis keep it off). Omitted for vision (Gemma), whose
         # template has no such option. Any leaked reasoning is split out below.
         payload["chat_template_kwargs"] = template_kwargs
+    if response_format is not None:
+        # llama.cpp constrains output to the JSON schema (grammar-backed), so the
+        # extraction result always parses. See postprocess.extract.
+        payload["response_format"] = response_format
     splitter = _ReasoningSplitter(token_cb, reason_cb)
     with requests.post(f"{base_url or BASE_URL}/v1/chat/completions", json=payload,
                        stream=True, timeout=None) as r:
@@ -208,7 +213,8 @@ def chat(model: str, messages: list[dict], transcript: str = "",
 def generate(model: str, prompt: str,
              token_cb: Callable[[str], None] | None = None,
              base_url: str | None = None, system: str | None = None,
-             options: dict | None = None, think: bool = False) -> str:
+             options: dict | None = None, think: bool = False,
+             response_format: dict | None = None) -> str:
     msgs: list[dict] = []
     if system:
         msgs.append({"role": "system", "content": system})
@@ -216,4 +222,5 @@ def generate(model: str, prompt: str,
     temperature = (options or {}).get("temperature", 0.2)
     # Correction/analysis is mechanical -> thinking stays off.
     return _stream_chat(msgs, temperature=temperature, token_cb=token_cb, base_url=base_url,
-                        template_kwargs={"enable_thinking": False})
+                        template_kwargs={"enable_thinking": False},
+                        response_format=response_format)
