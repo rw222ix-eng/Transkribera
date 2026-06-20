@@ -1,3 +1,4 @@
+import json
 import pytest
 
 from app.web import server
@@ -66,7 +67,99 @@ def test_history_endpoint_empty(client):
 def test_history_delete_ok(client):
     r = client.delete("/api/history/nope")
     assert r.status_code == 200
-    assert r.json() == {"ok": True}
+    assert r.json() == {"ok": True, "folder_removed": False}
+
+
+def test_history_delete_removes_folder(client, tmp_path):
+    # The `client` fixture builds create_app(base_dir=tmp_path), so files written
+    # under tmp_path/Transkriberingar are what the running app sees.
+    folder = tmp_path / "Transkriberingar" / "2026-06-19 · klipp"
+    folder.mkdir(parents=True)
+    (folder / "klipp.mp4").write_text("v", encoding="utf-8")
+    (tmp_path / "history.json").write_text(
+        json.dumps([{"id": "h1", "name": "klipp.mp4", "folder": str(folder)}]),
+        encoding="utf-8")
+    r = client.delete("/api/history/h1")
+    assert r.status_code == 200
+    assert r.json() == {"ok": True, "folder_removed": True}
+    assert not folder.exists()
+    assert client.get("/api/history").json() == []
+
+
+def test_history_delete_refuses_folder_outside_root(client, tmp_path):
+    outside = tmp_path / "annan" / "mapp"
+    outside.mkdir(parents=True)
+    (tmp_path / "history.json").write_text(
+        json.dumps([{"id": "h2", "name": "x", "folder": str(outside)}]),
+        encoding="utf-8")
+    r = client.delete("/api/history/h2")
+    assert r.status_code == 200
+    assert r.json() == {"ok": True, "folder_removed": False}
+    assert outside.exists()                          # untouched
+    assert client.get("/api/history").json() == []   # entry still removed
+
+
+def test_history_delete_locked_folder_keeps_entry(client, tmp_path, monkeypatch):
+    folder = tmp_path / "Transkriberingar" / "2026-06-19 · last"
+    folder.mkdir(parents=True)
+    (tmp_path / "history.json").write_text(
+        json.dumps([{"id": "h3", "name": "x", "folder": str(folder)}]),
+        encoding="utf-8")
+
+    def boom(*a, **k):
+        raise OSError("file in use")
+    monkeypatch.setattr(server.output_store, "delete_result_folder", boom)
+    r = client.delete("/api/history/h3")
+    assert r.status_code == 409
+    assert [e["id"] for e in client.get("/api/history").json()] == ["h3"]
+
+
+def test_thumb_serves_generated_image(client, tmp_path, monkeypatch):
+    media_file = tmp_path / "Transkriberingar" / "x" / "clip.mp4"
+    media_file.parent.mkdir(parents=True)
+    media_file.write_text("v", encoding="utf-8")
+    thumb = media_file.with_name("clip.thumb.jpg")
+    thumb.write_bytes(b"\xff\xd8\xff")
+    monkeypatch.setattr(server.media, "make_thumbnail", lambda p: thumb)
+    r = client.get("/api/thumb", params={"path": str(media_file)})
+    assert r.status_code == 200
+    assert r.content == b"\xff\xd8\xff"
+
+
+def test_thumb_404_when_none(client, tmp_path, monkeypatch):
+    media_file = tmp_path / "Transkriberingar" / "x" / "clip.mp4"
+    media_file.parent.mkdir(parents=True)
+    media_file.write_text("v", encoding="utf-8")
+    monkeypatch.setattr(server.media, "make_thumbnail", lambda p: None)
+    r = client.get("/api/thumb", params={"path": str(media_file)})
+    assert r.status_code == 404
+
+
+def test_thumb_rejects_path_outside_base(client, tmp_path):
+    outside = tmp_path.parent / "evil.png"
+    r = client.get("/api/thumb", params={"path": str(outside)})
+    assert r.status_code in (400, 404)
+
+
+def test_media_want_video_serves_web_format_directly(client, tmp_path):
+    v = tmp_path / "Transkriberingar" / "x" / "clip.mp4"
+    v.parent.mkdir(parents=True)
+    v.write_text("mp4bytes", encoding="utf-8")
+    r = client.get("/api/media", params={"path": str(v), "want": "video"})
+    assert r.status_code == 200
+    assert r.text == "mp4bytes"
+
+
+def test_media_want_video_remuxes_mkv(client, tmp_path, monkeypatch):
+    v = tmp_path / "Transkriberingar" / "x" / "clip.mkv"
+    v.parent.mkdir(parents=True)
+    v.write_text("mkv", encoding="utf-8")
+    web = v.with_name("clip.web.mp4")
+    web.write_text("remuxed", encoding="utf-8")
+    monkeypatch.setattr(server.media, "ensure_web_video", lambda p: web)
+    r = client.get("/api/media", params={"path": str(v), "want": "video"})
+    assert r.status_code == 200
+    assert r.text == "remuxed"
 
 
 # ---- GPU coexistence: LLM requests are rejected while the GPU is busy --------

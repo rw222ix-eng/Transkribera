@@ -29,7 +29,13 @@
     step: 'config',
     model: 'KB-Whisper large',
     language: 'sv',
+    targetLanguage: 'sv',       // resultatspråk; skiljer det sig från language översätts undertexterna
     formats: { srt: true, txt: true, vtt: false },
+    subtitleMode: 'separate',   // 'separate' = media + SRT i mappen | 'embed' = bädda in i videon
+    embedKind: 'soft',          // 'soft' = muxat sub-spår | 'burn' = inbränt
+    audioCorrect: false,        // andra passet: rätta texten mot ljudet (Gemma 3n)
+    audioModelInstalled: false, // status från /api/audio-model
+    audioModelDownloading: false,
     run: 'idle',
     progress: 0,
     elapsed: 0,
@@ -371,7 +377,20 @@
   function onSearch(e) { setState({ search: e.target.value }); }
   function toggleFmt(f) { setState(function (s) { var formats = Object.assign({}, s.formats); formats[f] = !formats[f]; return { formats: formats }; }); }
   function pickModel(id) { setState({ model: id, openDD: null }); }
-  function pickLang(l) { setState({ language: l, model: recommendModel(l) }); }
+  function pickLang(l) { setState({ language: l, targetLanguage: l, model: recommendModel(l) }); }
+  function pickTargetLang(l) { setState({ targetLanguage: l }); }
+  function toggleAudioCorrect() { setState(function (s) { return { audioCorrect: !s.audioCorrect }; }); }
+  function loadAudioModel() {
+    return getJSON('/api/audio-model').then(function (d) { if (d) setState({ audioModelInstalled: !!d.installed }); }).catch(function () {});
+  }
+  function downloadAudioModel() {
+    if (S.audioModelDownloading) return;
+    setState({ audioModelDownloading: true });
+    streamPost('/api/download/audio-model', {}, function (ev) {
+      if (ev.type === 'done') { setState({ audioModelDownloading: false, audioModelInstalled: true }); }
+      else if (ev.type === 'error') { setState({ audioModelDownloading: false }); }
+    });
+  }
   function pickOp(o) { setState({ ppOp: o, pp: 'idle', ppOut: '' }); if (o === 'chat') { seedChat(); openChatModal(); } else closeChatModal(); }
   function openChatModal() { setState({ chatModalOpen: true }); }
   function closeChatModal() { setState({ chatModalOpen: false }); }
@@ -500,7 +519,9 @@
     _t = setInterval(function () { if (token === _runToken) setState({ elapsed: (Date.now() - t0) / 1000 }); }, 250);
     var formats = ['srt', 'txt', 'vtt'].filter(function (f) { return S.formats[f]; });
     streamPost('/api/transcribe',
-      { source: active.path || active.name, model_id: S.model, language: S.language, formats: formats },
+      { source: active.path || active.name, model_id: S.model, language: S.language,
+        target_language: S.targetLanguage, formats: formats, audio_correct: S.audioCorrect,
+        sub_mode: S.subtitleMode, embed_kind: S.subtitleMode === 'embed' ? S.embedKind : null },
       function (ev) {
         if (token !== _runToken) return;
         if (ev.type === 'progress') { setState({ progress: ev.pct || 0 }); }
@@ -824,7 +845,20 @@
 
     var langs = [['sv', 'Svenska'], ['en', 'Engelska']];
     var langOptions = langs.map(function (p) { return { label: p[1], style: segBtn(st.language === p[0], '38px'), onPick: function () { pickLang(p[0]); } }; });
+    // Result language: pick sv/en; if it differs from the source language the
+    // subtitles are translated by the local text model.
+    var targetLangs = [['sv', 'Svenska'], ['en', 'Engelska']];
+    var targetLangOptions = targetLangs.map(function (p) { return { label: p[1], style: segBtn(st.targetLanguage === p[0], '34px'), onPick: function () { pickTargetLang(p[0]); } }; });
+    var translateNote = (st.targetLanguage && st.language && st.targetLanguage !== st.language)
+      ? ('Översätts till ' + (st.targetLanguage === 'sv' ? 'svenska' : 'engelska') + ' av språkmodellen.')
+      : '';
     var formatChips = ['srt', 'txt', 'vtt'].map(function (f) { return { label: f.toUpperCase(), style: chip(st.formats[f]), onToggle: function () { toggleFmt(f); } }; });
+    // Subtitle delivery for video sources: keep media + SRT side by side, or embed
+    // the subtitles into the video (soft mux or hard burn). Only shown for video.
+    var _activeQ = st.queue.find(function (q) { return q.id === st.activeId; }) || st.queue[0];
+    var _activeIsVideo = !!(_activeQ && /\.(mp4|mkv|mov|webm|avi|m4v)$/i.test(_activeQ.name || ''));
+    var subtitleOptions = [['separate', 'Spara separat'], ['embed', 'Bädda in']].map(function (p) { return { label: p[1], style: segBtn(st.subtitleMode === p[0], '34px'), onPick: function () { setState({ subtitleMode: p[0] }); } }; });
+    var embedOptions = [['soft', 'Mjukt sub-spår'], ['burn', 'Hård inbränning']].map(function (p) { return { label: p[1], style: segBtn(st.embedKind === p[0], '34px'), onPick: function () { setState({ embedKind: p[0] }); } }; });
 
     var steps = STEPS.map(function (label, idx) {
       var done = idx < cur, active = idx === cur && !isDone;
@@ -1013,6 +1047,7 @@
         formats: (h.formats || []).map(function (f) { return { label: f }; }),
         onOpen: function () { openHistory(h); }, onRerun: function () { askRerun(h); }, onDelete: function () { askDeleteHistory(h.id, h.name); },
         onDownload: function () { downloadFile(baseNameOf(h.name) + '.' + ((h.formats && h.formats[0]) || 'TXT').toLowerCase(), Math.max(9, Math.round((h.words || 3000) / 140)) + ' KB'); },
+        thumbUrl: (h.video && h.video.path) ? ('/api/thumb?path=' + encodeURIComponent(h.video.path)) : null,
       };
     });
 
@@ -1065,6 +1100,14 @@
       curModelMeta: 'Väljs automatiskt · ' + (st.language === 'en' ? 'Engelska' : 'Svenska'),
       curModelDot: curFit.dot,
       langOptions: langOptions, formatChips: formatChips,
+      targetLangOptions: targetLangOptions, translateNote: translateNote,
+      subtitleOptions: subtitleOptions, embedOptions: embedOptions,
+      showSubtitleMode: _activeIsVideo, showEmbed: st.subtitleMode === 'embed' && _activeIsVideo,
+      audioCorrect: st.audioCorrect, onToggleAudioCorrect: toggleAudioCorrect,
+      audioModelInstalled: st.audioModelInstalled, audioModelDownloading: st.audioModelDownloading,
+      onDownloadAudioModel: downloadAudioModel,
+      acSwitchTrack: 'position:relative;width:42px;height:25px;border-radius:999px;flex:0 0 auto;background:' + (st.audioCorrect ? 'var(--ink)' : 'var(--line-2)') + ';transition:background .15s;cursor:pointer',
+      acSwitchKnob: 'position:absolute;top:3px;left:3px;width:19px;height:19px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.2);transition:transform .15s;transform:translateX(' + (st.audioCorrect ? '17px' : '0') + ')',
 
       onStart: start, isRunning: isRunning, notRunning: !isRunning,
       startBtnLabel: isRunning ? 'Transkriberar…' : isDone ? 'Kör igen' : (st.queue.length > 1 ? 'Starta · ' + st.queue.length + ' filer' : 'Starta'),
@@ -1359,6 +1402,39 @@ function viewTranscribe(v){ return `
           `; }).join('') }
         </div>
         </div>
+
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:12px;box-shadow:var(--shadow-sm)">
+          <span style="font-size:14px;color:var(--ink-2);font-weight:500">Resultatspråk</span>
+          <div style="display:flex;gap:3px;padding:4px;background:var(--track);border:1px solid var(--line);border-radius:11px">
+            ${ v.targetLangOptions.map(function(o){ return `<button data-click="${on(o.onPick)}" style="${o.style}" data-sh="background:var(--surface) !important;color:var(--ink) !important;box-shadow:var(--shadow-sm) !important">${esc(o.label)}</button>`; }).join('') }
+          </div>
+          ${ v.translateNote ? `<span style="font-size:13px;color:var(--accent)">${esc(v.translateNote)}</span>` : '' }
+        </div>
+
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:12px 14px;box-shadow:var(--shadow-sm)">
+          <div data-click="${on(v.onToggleAudioCorrect)}" style="${v.acSwitchTrack}"><span style="${v.acSwitchKnob}"></span></div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:14.5px;font-weight:500;color:var(--ink)">Rätta mot ljudet <span style="font-size:12px;color:var(--ink-3)">· Gemma 3n (experimentell)</span></div>
+            <div style="font-size:12.5px;color:var(--ink-2)">Ett andra pass som rättar transkriptet mot vad som faktiskt sägs.</div>
+          </div>
+          ${ v.audioModelInstalled ? '' : `
+            <button data-click="${on(v.onDownloadAudioModel)}" style="flex:0 0 auto;background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:9px;padding:7px 13px;font-size:13.5px;font-weight:500;cursor:pointer;font-family:inherit" data-sh="border-color:var(--ink) !important">${ v.audioModelDownloading ? 'Laddar ner …' : 'Ladda ner modell' }</button>
+          ` }
+        </div>
+
+        ${ v.showSubtitleMode ? `
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:12px;box-shadow:var(--shadow-sm)">
+          <span style="font-size:14px;color:var(--ink-2);font-weight:500">Undertext i video</span>
+          <div style="display:flex;gap:3px;padding:4px;background:var(--track);border:1px solid var(--line);border-radius:11px">
+            ${ v.subtitleOptions.map(function(o){ return `<button data-click="${on(o.onPick)}" style="${o.style}" data-sh="background:var(--surface) !important;color:var(--ink) !important;box-shadow:var(--shadow-sm) !important">${esc(o.label)}</button>`; }).join('') }
+          </div>
+          ${ v.showEmbed ? `
+          <div style="display:flex;gap:3px;padding:4px;background:var(--track);border:1px solid var(--line);border-radius:11px">
+            ${ v.embedOptions.map(function(o){ return `<button data-click="${on(o.onPick)}" style="${o.style}" data-sh="background:var(--surface) !important;color:var(--ink) !important;box-shadow:var(--shadow-sm) !important">${esc(o.label)}</button>`; }).join('') }
+          </div>
+          ` : '' }
+        </div>
+        ` : '' }
 
         <div style="flex:0 0 auto;height:46px"></div>
 
@@ -1846,13 +1922,23 @@ function viewHistory(v){ return `
       <div style="display:flex;flex-direction:column;gap:10px">
         ${ v.historyItems.map(function(h){ return `
           <div data-key="${esc(h.id)}" style="display:flex;align-items:center;gap:15px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:15px 18px;box-shadow:var(--shadow-sm)">
-            <span style="width:42px;height:42px;border-radius:11px;background:var(--sunken);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;flex:0 0 auto">
-              <span style="display:flex;align-items:flex-end;gap:2px;height:16px">
-                <span style="width:2.5px;height:6px;border-radius:2px;background:var(--ink-3)"></span>
-                <span style="width:2.5px;height:13px;border-radius:2px;background:var(--ink-3)"></span>
-                <span style="width:2.5px;height:16px;border-radius:2px;background:var(--accent)"></span>
-                <span style="width:2.5px;height:9px;border-radius:2px;background:var(--ink-3)"></span>
-              </span>
+            <span style="width:64px;height:40px;border-radius:9px;background:var(--sunken);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;flex:0 0 auto;overflow:hidden">
+              ${ h.thumbUrl ? `
+                <img src="${h.thumbUrl}" loading="lazy" alt="" style="width:100%;height:100%;object-fit:cover" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+                <span style="display:none;align-items:flex-end;gap:2px;height:16px">
+                  <span style="width:2.5px;height:6px;border-radius:2px;background:var(--ink-3)"></span>
+                  <span style="width:2.5px;height:13px;border-radius:2px;background:var(--ink-3)"></span>
+                  <span style="width:2.5px;height:16px;border-radius:2px;background:var(--accent)"></span>
+                  <span style="width:2.5px;height:9px;border-radius:2px;background:var(--ink-3)"></span>
+                </span>
+              ` : `
+                <span style="display:flex;align-items:flex-end;gap:2px;height:16px">
+                  <span style="width:2.5px;height:6px;border-radius:2px;background:var(--ink-3)"></span>
+                  <span style="width:2.5px;height:13px;border-radius:2px;background:var(--ink-3)"></span>
+                  <span style="width:2.5px;height:16px;border-radius:2px;background:var(--accent)"></span>
+                  <span style="width:2.5px;height:9px;border-radius:2px;background:var(--ink-3)"></span>
+                </span>
+              ` }
             </span>
             <div style="flex:1;min-width:0">
               <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
@@ -2148,6 +2234,7 @@ function viewModals(v){ return `
     render();
     loadModels();   // swap mock catalog for real /api/models data
     loadHistory();  // load persisted transcription history
+    loadAudioModel();  // audio-correction model install status
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 

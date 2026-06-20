@@ -3,6 +3,8 @@ onnx-asr>=0.6
 onnxruntime-gpu
 numpy
 torch
+transformers>=4.53
+numpy
 huggingface_hub
 psutil
 requests
