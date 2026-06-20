@@ -50,6 +50,7 @@
     chatInput: '',
     chatTyping: false,
     chatModalOpen: false,
+    chatThink: false,           // Qwen3 "tänk djupare" — bara i chatten, default av
     chatAttach: [],
     openDD: null,
     search: '',
@@ -372,7 +373,7 @@
   function restart() {
     clearInterval(_t); clearTimeout(_pp); clearInterval(_ppIv); clearTimeout(_chat); clearInterval(_au);
     Object.values(_dl || {}).forEach(clearInterval);
-    setState({ source: '', queue: [], qStatus: {}, qProgress: {}, activeId: null, fileError: '', step: 'source', run: 'idle', progress: 0, elapsed: 0, log: [], pp: 'idle', ppOp: 'summary', ppOut: '', ppEnabled: false, chat: [], chatInput: '', chatTyping: false, chatModalOpen: false, chatAttach: [], openDD: null, transcriptOpen: false, runError: null, editing: false, edits: {}, edited: false, audioPlaying: false, audioT: 0, histViewing: null });
+    setState({ source: '', queue: [], qStatus: {}, qProgress: {}, activeId: null, fileError: '', step: 'source', run: 'idle', progress: 0, elapsed: 0, log: [], pp: 'idle', ppOp: 'summary', ppOut: '', ppEnabled: false, chat: [], chatInput: '', chatTyping: false, chatModalOpen: false, chatThink: false, chatAttach: [], openDD: null, transcriptOpen: false, runError: null, editing: false, edits: {}, edited: false, audioPlaying: false, audioT: 0, histViewing: null });
   }
   function onSearch(e) { setState({ search: e.target.value }); }
   function toggleFmt(f) { setState(function (s) { var formats = Object.assign({}, s.formats); formats[f] = !formats[f]; return { formats: formats }; }); }
@@ -394,6 +395,9 @@
   function pickOp(o) { setState({ ppOp: o, pp: 'idle', ppOut: '' }); if (o === 'chat') { seedChat(); openChatModal(); } else closeChatModal(); }
   function openChatModal() { setState({ chatModalOpen: true }); }
   function closeChatModal() { setState({ chatModalOpen: false }); }
+  // Qwen3 "thinking": off by default (fast, no English chain-of-thought leak); on only
+  // for hard multi-step chat questions. Correction/summary never think.
+  function toggleChatThink() { setState(function (s) { return { chatThink: !s.chatThink }; }); }
   function stopProp(e) { e.stopPropagation(); }
   function chatThreadRef(el) { _chatThread = el; }
   function scrollChatBottom() { requestAnimationFrame(function () { var el = _chatThread; if (el) el.scrollTop = el.scrollHeight; }); }
@@ -574,16 +578,17 @@
     var images = att.filter(function (a) { return a.kind === 'image' && a.data; }).map(function (a) { return a.data; });
     var userText = q || (att.length ? 'Titta på det bifogade.' : '');
     // push the user turn + an empty assistant placeholder we stream into
-    setState(function (s) { return { chat: s.chat.concat([{ role: 'user', text: userText, attach: attNote }, { role: 'assistant', text: '' }]), chatInput: '', chatAttach: [], chatTyping: true }; });
+    setState(function (s) { return { chat: s.chat.concat([{ role: 'user', text: userText, attach: attNote }, { role: 'assistant', text: '', reason: '' }]), chatInput: '', chatAttach: [], chatTyping: true }; });
     var msgs = S.chat.filter(function (m) { return !(m.role === 'assistant' && !m.text); })
       .map(function (m) { return { role: m.role, content: m.text + (m.attach ? ' [bifogat: ' + m.attach + ']' : '') }; });
     var transcript = getTranscript().map(function (l) { return l.text; }).join(' ');
-    var acc = '';
-    var setLast = function (text, typing) { setState(function (s) { var c = s.chat.slice(); if (c.length) c[c.length - 1] = { role: 'assistant', text: text }; return { chat: c, chatTyping: !!typing }; }); };
-    streamPost('/api/chat', { messages: msgs, transcript: transcript, model: S.ppModel, images: images }, function (ev) {
-      if (ev.type === 'token') { acc += ev.text; setLast(acc, false); }
-      else if (ev.type === 'error') { setLast(acc || ('Fel: ' + (ev.message || 'okänt')), false); }
-      else if (ev.type === 'done') { var r = ev.result || {}; setLast(r.text || acc, false); }
+    var acc = '', accReason = '';
+    var setLast = function (text, reason, typing) { setState(function (s) { var c = s.chat.slice(); if (c.length) c[c.length - 1] = { role: 'assistant', text: text, reason: reason }; return { chat: c, chatTyping: !!typing }; }); };
+    streamPost('/api/chat', { messages: msgs, transcript: transcript, model: S.ppModel, images: images, think: S.chatThink }, function (ev) {
+      if (ev.type === 'reasoning') { accReason += ev.text; setLast(acc, accReason, true); }
+      else if (ev.type === 'token') { acc += ev.text; setLast(acc, accReason, false); }
+      else if (ev.type === 'error') { setLast(acc || ('Fel: ' + (ev.message || 'okänt')), accReason, false); }
+      else if (ev.type === 'done') { var r = ev.result || {}; setLast(r.text || acc, accReason, false); }
     });
   }
   function imageReply() { return 'Jag ser bilden. Den verkar visa en skärmdump kopplad till mötet — vill du att jag beskriver innehållet, läser av text i den (OCR) eller jämför den mot transkriptet?'; }
@@ -956,9 +961,11 @@
     var chat = st.chat.map(function (m) {
       return {
         text: m.text, hasAttach: !!m.attach, attach: m.attach || '',
+        reason: m.reason || '', hasReason: !!(m.reason && m.reason.length),
         rowStyle: 'display:flex;flex-direction:column;gap:5px;align-items:' + (m.role === 'user' ? 'flex-end' : 'flex-start'),
         bubbleStyle: m.role === 'user' ? 'max-width:82%;background:var(--btn-bg);color:var(--btn-fg);border-radius:15px 15px 4px 15px;padding:11px 15px;font-size:15.5px;line-height:1.5' : 'max-width:82%;background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:15px 15px 15px 4px;padding:11px 15px;font-size:15.5px;line-height:1.5',
         attachStyle: 'display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2);background:var(--sunken);border:1px solid var(--line);border-radius:8px;padding:4px 9px;font-variant-numeric:tabular-nums',
+        reasonStyle: 'max-width:82%;background:var(--sunken);border:1px dashed var(--line-2);color:var(--ink-2);border-radius:13px;padding:9px 13px;font-size:13px;line-height:1.5;white-space:pre-wrap',
       };
     });
 
@@ -1144,6 +1151,9 @@
       ppCleanFiles: resultFiles, ppOut: st.ppOut, ppOutTitle: ppOutTitles[st.ppOp],
       chat: chat, chatTyping: st.chatTyping, chatInput: st.chatInput, onChatInput: onChatInput, onChatKey: onChatKey, onChatSend: sendChat, chatSendStyle: primaryBtn(false),
       chatModalOpen: st.chatModalOpen, openChatModal: openChatModal, closeChatModal: closeChatModal, stop: stopProp, chatThreadRef: chatThreadRef, chatOpenBtnStyle: primaryBtn(false),
+      chatThink: st.chatThink, onToggleChatThink: toggleChatThink,
+      chatThinkBtnStyle: 'display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;font-family:inherit;cursor:pointer;border-radius:99px;padding:6px 12px;border:1px solid ' + (st.chatThink ? 'color-mix(in srgb,var(--accent) 40%,transparent);background:var(--accent-weak);color:var(--accent)' : 'var(--line);background:var(--surface);color:var(--ink-2)'),
+      chatThinkHint: st.chatThink ? 'Tänker djupare före svar — bättre på svåra flerstegsfrågor, men något långsammare.' : 'Snabbt svar utan synligt resonemang. Slå på för svåra flerstegsfrågor.',
       chatModelName: cm.label || cm.id, chatModelDesc: cm.useFor,
       chatKind: 'text + bild',
       chatCtx: cm.ctx, chatPlusAttach: attachImage, imgInputRef: imgInputRef, onPickImage: onPickImage,
@@ -2021,6 +2031,9 @@ function viewModals(v){ return `
             ${ m.hasAttach ? `
               <span style="${m.attachStyle}"><span style="width:8px;height:8px;border-radius:2px;background:var(--accent);flex:0 0 auto"></span>${esc(m.attach)}</span>
             ` : '' }
+            ${ m.hasReason ? `
+              <div style="${m.reasonStyle}"><span style="display:block;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-3);margin-bottom:4px">Resonemang</span>${esc(m.reason)}</div>
+            ` : '' }
             <div style="${m.bubbleStyle}">${esc(m.text)}</div>
           </div>
         `; }).join('') }
@@ -2051,6 +2064,13 @@ function viewModals(v){ return `
           <button data-click="${on(v.onChatSend)}" aria-label="Skicka" style="width:40px;height:40px;flex:0 0 auto;border:none;border-radius:50%;background:var(--btn-bg);color:var(--btn-fg);cursor:pointer;display:flex;align-items:center;justify-content:center" data-sh="background:color-mix(in srgb, var(--btn-bg) 72%, var(--accent)) !important">
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"></path></svg>
           </button>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:11px;flex-wrap:wrap;padding:0 2px">
+          <button data-click="${on(v.onToggleChatThink)}" style="${v.chatThinkBtnStyle}" aria-pressed="${v.chatThink ? 'true' : 'false'}" data-sh="border-color:var(--ink-3) !important">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.5a4.5 4.5 0 0 0-2.6 8.2c.4.3.6.6.6 1v.8h4v-.8c0-.4.2-.7.6-1A4.5 4.5 0 0 0 8 1.5z"></path><path d="M6 14.5h4"></path></svg>
+            Tänk djupare
+          </button>
+          <span style="font-size:12px;color:var(--ink-3);flex:1;min-width:120px">${esc(v.chatThinkHint)}</span>
         </div>
         <div style="font-size:12px;color:var(--ink-2);line-height:1.45;padding:9px 6px 0">Bifoga en bild (📎) så svarar <strong style="color:var(--ink);font-weight:600">Gemma 3 (vision)</strong> på frågor om den — modellen växlas in automatiskt.</div>
       </div>

@@ -58,6 +58,51 @@ def test_postprocess_requires_fields(client):
     assert r.status_code == 400
 
 
+def test_chat_requires_fields(client):
+    r = client.post("/api/chat", json={"messages": [], "model": ""})
+    assert r.status_code == 400
+
+
+def test_chat_forwards_think_and_streams_reasoning(client, monkeypatch):
+    captured = {}
+
+    def fake_chat(model, messages, transcript="", token_cb=None,
+                  reason_cb=None, think=False, **k):
+        captured["think"] = think
+        if reason_cb:
+            reason_cb("internt resonemang")
+        if token_cb:
+            token_cb("Svar.")
+        return "Svar."
+
+    monkeypatch.setattr(client.app.state.arbiter, "ensure_model", lambda spec: "http://x")
+    monkeypatch.setattr(server.llm_client, "chat", fake_chat)
+    r = client.post("/api/chat", json={
+        "messages": [{"role": "user", "content": "fråga"}],
+        "model": "Qwen3-14B-Q8_0.gguf", "transcript": "T", "think": True})
+    assert r.status_code == 200
+    assert captured["think"] is True
+    body = r.text
+    assert '"type": "reasoning"' in body and "internt resonemang" in body
+    assert '"type": "token"' in body and "Svar." in body
+
+
+def test_chat_think_defaults_off(client, monkeypatch):
+    captured = {}
+
+    def fake_chat(model, messages, transcript="", token_cb=None,
+                  reason_cb=None, think=False, **k):
+        captured["think"] = think
+        return ""
+
+    monkeypatch.setattr(client.app.state.arbiter, "ensure_model", lambda spec: "http://x")
+    monkeypatch.setattr(server.llm_client, "chat", fake_chat)
+    r = client.post("/api/chat", json={
+        "messages": [{"role": "user", "content": "q"}], "model": "m"})
+    assert r.status_code == 200
+    assert captured["think"] is False
+
+
 def test_history_endpoint_empty(client):
     r = client.get("/api/history")
     assert r.status_code == 200

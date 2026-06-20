@@ -488,6 +488,7 @@ def create_app(base_dir: Path | None = None,
         transcript = body.get("transcript", "")
         model = body.get("model", "")
         images = body.get("images") or []
+        think = bool(body.get("think", False))   # only the (text) chat may turn on Qwen3 thinking
         if not model or not messages:
             return JSONResponse({"error": "modell och meddelande krävs"}, status_code=400)
         if not arb.try_acquire_gpu():
@@ -503,8 +504,11 @@ def create_app(base_dir: Path | None = None,
                 spec = llm_manager.VISION_LLM if images else llm_manager.ACTIVE_LLM
                 if arb.ensure_model(spec) is None:
                     raise RuntimeError(f"{spec.label} är inte installerad.")
-                text = llm_client.chat(model, messages, transcript=transcript, images=images,
-                                       token_cb=lambda t: emit({"type": "token", "text": t}))
+                # think/reason_cb apply to the text model; the vision path ignores them.
+                text = llm_client.chat(
+                    model, messages, transcript=transcript, images=images, think=think,
+                    token_cb=lambda t: emit({"type": "token", "text": t}),
+                    reason_cb=lambda t: emit({"type": "reasoning", "text": t}))
                 return {"text": text}
             finally:
                 arb.release_gpu()
