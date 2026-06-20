@@ -80,6 +80,11 @@
     edited: false,
     audioPlaying: false,
     audioT: 0,
+    audioDur: 0,                // verklig medialängd (s); 0 = okänd → fall tillbaka på AUDIO_DUR
+    mediaUrl: null,             // /api/media-URL för den öppna transkriptvyn (null = ingen media)
+    runMedia: null,             // mediasökväg från senaste körningens resultat
+    transcriptRaw: null,        // ursprungliga segment {start,end,text} bakom transkriptvyn (för att spara)
+    transcriptFolder: null,     // resultatmapp som identifierar posten vid sparning
     history: [
       { id: 'h1', name: 'styrgruppsmöte_q1.mp3', date: 'Idag · 09:14', dur: '18:42', model: 'KB-Whisper large', lang: 'Svenska', formats: ['SRT', 'TXT'], words: 2940 },
       { id: 'h2', name: 'kundintervju_03.wav', date: 'Igår · 16:30', dur: '42:11', model: 'KB-Whisper large', lang: 'Svenska', formats: ['TXT'], words: 6810 },
@@ -96,7 +101,7 @@
   /* instance (non-state) fields */
   var _t, _pp, _ppIv, _chat, _au, _toastIv, _toastT2, _glideRAF, _lastStart, _runToken = 0;
   var _dl = {}, _inst = {}, _editBuf = {}, _wave = null;
-  var _file, _seek, _searchRef, _scrollRef, _procScroll, _chatThread, _imgInput;
+  var _file, _seek, _searchRef, _scrollRef, _procScroll, _chatThread, _imgInput, _media;
   var _prevTab, _prevStep, _prevRun, _prevPP, _prevOp, _prevChatLen, _wasEditing, _wasOpen, _scrollKey;
 
   /* ----------------------------------------------------------------- data -- */
@@ -373,7 +378,7 @@
   function restart() {
     clearInterval(_t); clearTimeout(_pp); clearInterval(_ppIv); clearTimeout(_chat); clearInterval(_au);
     Object.values(_dl || {}).forEach(clearInterval);
-    setState({ source: '', queue: [], qStatus: {}, qProgress: {}, activeId: null, fileError: '', step: 'source', run: 'idle', progress: 0, elapsed: 0, log: [], pp: 'idle', ppOp: 'summary', ppOut: '', ppEnabled: false, chat: [], chatInput: '', chatTyping: false, chatModalOpen: false, chatThink: false, chatAttach: [], openDD: null, transcriptOpen: false, runError: null, editing: false, edits: {}, edited: false, audioPlaying: false, audioT: 0, histViewing: null });
+    setState({ source: '', queue: [], qStatus: {}, qProgress: {}, activeId: null, fileError: '', step: 'source', run: 'idle', progress: 0, elapsed: 0, log: [], pp: 'idle', ppOp: 'summary', ppOut: '', ppEnabled: false, chat: [], chatInput: '', chatTyping: false, chatModalOpen: false, chatThink: false, chatAttach: [], openDD: null, transcriptOpen: false, runError: null, editing: false, edits: {}, edited: false, audioPlaying: false, audioT: 0, audioDur: 0, mediaUrl: null, runMedia: null, transcriptRaw: null, transcriptFolder: null, histViewing: null });
   }
   function onSearch(e) { setState({ search: e.target.value }); }
   function toggleFmt(f) { setState(function (s) { var formats = Object.assign({}, s.formats); formats[f] = !formats[f]; return { formats: formats }; }); }
@@ -444,10 +449,44 @@
     } else setState({ confirm: null });
   }
   function confirmNo() { setState({ confirm: null }); }
-  function openHistory(h) { setState({ transcriptOpen: true, histViewing: h.id, transcript: (h.transcript || []).map(function (g) { return { time: fmtTime(g.start), text: g.text }; }) }); }
+  function openHistory(h) {
+    setState({
+      transcriptOpen: true, histViewing: h.id,
+      transcript: (h.transcript || []).map(function (g) { return { time: fmtTime(g.start), text: g.text }; }),
+      transcriptRaw: h.transcript || [], transcriptFolder: h.folder || null,
+      mediaUrl: mediaUrlFor(h), audioT: 0, audioDur: 0, audioPlaying: false, edits: {}, edited: false,
+    });
+  }
   function reRunHistory(h) { var id = 'q' + Date.now(); setState({ tab: 'transcribe', step: 'config', queue: [{ id: id, name: h.name, path: h.source || h.name }], qStatus: {}, qProgress: {}, run: 'idle', progress: 0, elapsed: 0, activeId: id, source: h.source || h.name, fileError: '', runError: null, openDD: null }); }
 
+  // The transcript player is backed by a real <audio> element (served from
+  // /api/media) when the result media is on disk; it falls back to a simulated
+  // clock for demo/seed data with no media. curDur() is the playable length.
+  function curDur() { return S.audioDur > 0 ? S.audioDur : AUDIO_DUR; }
+  function hasMedia() { return !!(_media && S.mediaUrl); }
+  function mediaUrlFor(h) {
+    var p = (h && h.video && h.video.path) || (h && h.media) ||
+            (h && h.source && !/^https?:/i.test(h.source) ? h.source : null);
+    return p ? ('/api/media?path=' + encodeURIComponent(p)) : null;
+  }
+  // Wire the media element once; its events are the single source of truth for
+  // position/duration/play-state (morphdom preserves the node across renders).
+  function mediaRef(el) {
+    _media = el;
+    if (!el || el._wired) return;
+    el._wired = true;
+    el.addEventListener('timeupdate', function () { setState({ audioT: el.currentTime || 0 }); });
+    el.addEventListener('durationchange', function () { if (isFinite(el.duration) && el.duration > 0) setState({ audioDur: el.duration }); });
+    el.addEventListener('play', function () { if (!S.audioPlaying) setState({ audioPlaying: true }); });
+    el.addEventListener('pause', function () { if (S.audioPlaying) setState({ audioPlaying: false }); });
+    el.addEventListener('ended', function () { setState({ audioPlaying: false }); });
+  }
   function togglePlay() {
+    if (hasMedia()) {
+      if (_media.paused) { if (S.audioT >= curDur() - 0.15) _media.currentTime = 0; _media.play().catch(function () {}); }
+      else { _media.pause(); }
+      return;
+    }
     if (S.audioPlaying) { clearInterval(_au); setState({ audioPlaying: false }); return; }
     if (S.audioT >= AUDIO_DUR) setState({ audioT: 0 });
     setState({ audioPlaying: true });
@@ -455,22 +494,62 @@
     _au = setInterval(function () { setState(function (s) { var t = s.audioT + 0.2; if (t >= AUDIO_DUR) { clearInterval(_au); return { audioT: AUDIO_DUR, audioPlaying: false }; } return { audioT: t }; }); }, 200);
   }
   function seekTrackRef(el) { _seek = el; }
-  function onSeekClick(e) { var el = _seek; if (!el) return; var r = el.getBoundingClientRect(); var f = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)); setState({ audioT: f * AUDIO_DUR }); }
-  function jumpToLine(i) { setState({ audioT: parseTS(getTranscript()[i].time) }); if (!S.audioPlaying) togglePlay(); }
+  function onSeekClick(e) {
+    var el = _seek; if (!el) return;
+    var r = el.getBoundingClientRect();
+    var f = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+    if (hasMedia()) { _media.currentTime = f * curDur(); setState({ audioT: _media.currentTime }); }
+    else { setState({ audioT: f * AUDIO_DUR }); }
+  }
+  function jumpToLine(i) {
+    var t = parseTS(getTranscript()[i].time);
+    if (hasMedia()) { _media.currentTime = t; setState({ audioT: t }); _media.play().catch(function () {}); }
+    else { setState({ audioT: t }); if (!S.audioPlaying) togglePlay(); }
+  }
 
   function toggleEdit() {
-    if (S.editing) { _commitEdits(); setState({ editing: false }); }
-    else { _editBuf = {}; clearInterval(_au); setState({ editing: true, audioPlaying: false }); }
+    if (S.editing) { _commitEdits(); setState({ editing: false }); persistEdits(); }
+    else { _editBuf = {}; clearInterval(_au); if (_media) { try { _media.pause(); } catch (e) {} } setState({ editing: true, audioPlaying: false }); }
   }
   function onEditInput(e) { var i = e.currentTarget.getAttribute('data-eline'); _editBuf = _editBuf || {}; _editBuf[i] = e.currentTarget.textContent; }
   function _commitEdits() {
     var buf = _editBuf || {}; var keys = Object.keys(buf); if (!keys.length) return;
+    var orig = getTranscript();   // diff against the real (or demo) transcript, not the seed
     setState(function (s) {
       var edits = Object.assign({}, s.edits); var changed = false;
-      keys.forEach(function (k) { var v = buf[k]; if (v != null && v.trim() !== TRANSCRIPT[k].text) { edits[k] = v.trim(); changed = true; } else { if (edits[k] != null) changed = true; delete edits[k]; } });
+      keys.forEach(function (k) { var v = buf[k]; var base = orig[k] ? orig[k].text : ''; if (v != null && v.trim() !== base) { edits[k] = v.trim(); changed = true; } else { if (edits[k] != null) changed = true; delete edits[k]; } });
       return { edits: edits, edited: s.edited || changed };
     });
     _editBuf = {};
+  }
+  // Persist edited transcript text to disk: merge edits into the original
+  // segments (keeping start/end) and POST so the server rewrites the SRT.
+  // Demo data has no result folder, so it stays local-only.
+  function persistEdits() {
+    var raw = S.transcriptRaw || [];
+    if (!S.transcriptFolder || !S.edited || !raw.length) return;
+    var segs = raw.map(function (seg, i) {
+      return { start: seg.start, end: seg.end, text: (S.edits && S.edits[i] != null) ? S.edits[i] : seg.text };
+    });
+    fetch('/api/history/transcript', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ folder: S.transcriptFolder, segments: segs }),
+    }).then(function (r) { return r.ok ? r.json() : r.json().then(function (j) { throw new Error((j && j.error) || ('HTTP ' + r.status)); }); })
+      .then(function () {
+        // Saved text becomes the new baseline so further edits diff cleanly.
+        setState({
+          transcriptRaw: segs, edits: {}, edited: false,
+          transcript: segs.map(function (g) { return { time: fmtTime(g.start), text: g.text }; }),
+        });
+        flashToast('Ändringar sparade', 'Undertextfilen uppdaterad');
+        loadHistory();
+      })
+      .catch(function (e) { flashToast('Kunde inte spara', (e && e.message) || 'Försök igen'); });
+  }
+  function flashToast(title, detail) {
+    clearInterval(_toastIv); clearTimeout(_toastT2);
+    setState({ toast: { title: title, detail: detail || '', name: '', size: '', pct: 100, done: true } });
+    _toastT2 = setTimeout(function () { setState({ toast: null }); }, 2400);
   }
 
   // BACKEND: start()/_runActive() simulate transcription; replace with /api/transcribe SSE (streamPost).
@@ -537,7 +616,7 @@
           clearInterval(_t);
           var r = ev.result || {};
           var segs = (r.transcript || []).map(function (g) { return { time: fmtTime(g.start), text: g.text }; });
-          setState(function (s) { return { run: 'done', progress: 100, transcript: segs, resultFilesReal: r.files || [], qStatus: Object.assign({}, s.qStatus, kv(active.id, 'done')), qProgress: Object.assign({}, s.qProgress, kv(active.id, 100)), log: s.log.concat(['[klar] Färdig på ' + fmtTime(s.elapsed)]) }; });
+          setState(function (s) { return { run: 'done', progress: 100, transcript: segs, transcriptRaw: r.transcript || [], transcriptFolder: r.folder || null, runMedia: r.media || null, resultFilesReal: r.files || [], qStatus: Object.assign({}, s.qStatus, kv(active.id, 'done')), qProgress: Object.assign({}, s.qProgress, kv(active.id, 100)), log: s.log.concat(['[klar] Färdig på ' + fmtTime(s.elapsed)]) }; });
           loadHistory();   // server archived this run; refresh from disk
           var next = _nextPending(active.id);
           if (next) { setTimeout(function () { setState({ run: 'idle', activeId: next, source: qName(S.queue, next), audioT: 0 }, function () { _runActive(); }); }, 800); }
@@ -661,8 +740,14 @@
   }
   function closeToast() { clearInterval(_toastIv); clearTimeout(_toastT2); setState({ toast: null }); }
 
-  function openTranscript() { setState({ transcriptOpen: true, histViewing: null }); }
-  function closeTranscript() { if (S.editing) _commitEdits(); clearInterval(_au); setState({ transcriptOpen: false, editing: false, audioPlaying: false }); }
+  function openTranscript() {
+    setState({
+      transcriptOpen: true, histViewing: null,
+      mediaUrl: S.runMedia ? ('/api/media?path=' + encodeURIComponent(S.runMedia)) : null,
+      audioT: 0, audioDur: 0, audioPlaying: false,
+    });
+  }
+  function closeTranscript() { if (S.editing) { _commitEdits(); persistEdits(); } if (_media) { try { _media.pause(); } catch (e) {} } clearInterval(_au); setState({ transcriptOpen: false, editing: false, audioPlaying: false }); }
   function openLog() { setState({ logOpen: true }); }
   function closeLog() { setState({ logOpen: false }); }
   function onTSearch(e) { setState({ searchQuery: e.target.value, currentMatch: 0 }); }
@@ -998,6 +1083,7 @@
     var viewingHist = st.histViewing ? st.history.find(function (h) { return h.id === st.histViewing; }) : null;
     var transcriptFileName = viewingHist ? viewingHist.name : (baseName() + '.txt');
     var aT = st.audioT;
+    var dur = st.audioDur > 0 ? st.audioDur : AUDIO_DUR;
     var curLine = -1;
     for (var k2 = 0; k2 < getTranscript().length; k2++) { if (parseTS(getTranscript()[k2].time) <= aT) curLine = k2; else break; }
     var q0 = st.searchQuery.trim();
@@ -1026,7 +1112,7 @@
     var totalM = mIdx;
     var matchLabel = !q0 ? '' : totalM ? (st.currentMatch + 1) + '/' + totalM : '0/0';
     if (!_wave) _wave = Array.from({ length: 72 }, function (_, k) { return 16 + Math.round((Math.abs(Math.sin(k * 1.7) + Math.sin(k * 0.55) * 0.7) / 1.7) * 78); });
-    var aPct = Math.max(0, Math.min(100, (st.audioT / AUDIO_DUR) * 100));
+    var aPct = Math.max(0, Math.min(100, (st.audioT / dur) * 100));
     var waveBars = _wave.map(function (h, k) { return { style: 'flex:1;height:' + h + '%;border-radius:2px;min-width:2px;align-self:center;background:' + (((k / _wave.length) * 100) <= aPct ? 'var(--accent)' : 'var(--line-2)') + ';transition:background .15s' }; });
 
     var statusWord = { pending: 'Väntar', running: 'Kör', done: 'Klar', error: 'Fel' };
@@ -1080,7 +1166,8 @@
       historyItems: historyItems, historyEmpty: st.history.length === 0, historyCount: st.history.length,
 
       waveBars: waveBars, audioPlaying: st.audioPlaying, audioPaused: !st.audioPlaying,
-      audioCur: fmtTime(st.audioT), audioDur: fmtTime(AUDIO_DUR),
+      audioCur: fmtTime(st.audioT), audioDur: fmtTime(dur),
+      mediaUrl: st.mediaUrl, hasMediaEl: !!st.mediaUrl, mediaRef: mediaRef,
       onTogglePlay: togglePlay, onSeekClick: onSeekClick, seekTrackRef: seekTrackRef,
       editing: st.editing, notEditing: !st.editing, onToggleEdit: toggleEdit, onEditInput: onEditInput,
       editBtnLabel: st.editing ? '✓ Klar' : 'Redigera', transcriptEdited: st.edited,
@@ -1128,8 +1215,8 @@
       logText: st.log.join('\n'), logRows: logRows, logClipped: logRows.length > 3,
       logOpen: st.logOpen, openLog: openLog, closeLog: closeLog,
       hasToast: !!st.toast, toastName: st.toast && st.toast.name, toastLoading: !!st.toast && !st.toast.done, toastDone: !!st.toast && st.toast.done,
-      toastTitle: st.toast && st.toast.done ? 'Nedladdning klar' : 'Laddar ner …', closeToast: closeToast,
-      toastPct: st.toast ? Math.round(st.toast.pct || 0) : 0, toastDetail: st.toast ? toastDetail(st.toast.size, st.toast.pct || 0) : '',
+      toastTitle: st.toast ? (st.toast.title || (st.toast.done ? 'Nedladdning klar' : 'Laddar ner …')) : '', closeToast: closeToast,
+      toastPct: st.toast ? Math.round(st.toast.pct || 0) : 0, toastDetail: st.toast ? (st.toast.detail != null ? st.toast.detail : toastDetail(st.toast.size, st.toast.pct || 0)) : '',
       toastBarStyle: 'height:100%;width:' + (st.toast ? Math.round(st.toast.pct || 0) : 0) + '%;background:var(--accent);border-radius:99px;transition:width .14s linear',
       transcriptOpen: st.transcriptOpen, openTranscript: openTranscript, closeTranscript: closeTranscript, transcriptFile: baseName() + '.txt',
       searchQuery: st.searchQuery, onTSearch: onTSearch, onSearchKey: onSearchKey, searchRef: searchRef, scrollRef: scrollRef,
@@ -2134,6 +2221,7 @@ function viewModals(v){ return `
       </div>
     </div>
 
+    ${ v.hasMediaEl ? `<audio data-ref="${on(v.mediaRef)}" src="${esc(v.mediaUrl)}" preload="metadata" style="display:none"></audio>` : '' }
     <div style="flex:0 0 auto;border-top:1px solid var(--line);background:color-mix(in srgb,var(--surface) 72%,transparent);backdrop-filter:saturate(1.3) blur(14px);padding:13px 28px;display:flex;align-items:center;gap:18px">
       <button data-click="${on(v.onTogglePlay)}" aria-label="Spela eller pausa" style="width:46px;height:46px;flex:0 0 auto;border-radius:50%;border:none;background:var(--btn-bg);color:var(--btn-fg);cursor:pointer;display:flex;align-items:center;justify-content:center" data-sh="background:color-mix(in srgb, var(--btn-bg) 78%, var(--accent)) !important">
         ${ v.audioPaused ? `<svg width="17" height="17" viewBox="0 0 16 16" fill="currentColor"><path d="M4.5 3.2v9.6c0 .5.5.8 1 .5l7.3-4.8c.4-.3.4-.8 0-1.1L5.5 2.7c-.5-.3-1 0-1 .5z"></path></svg>` : '' }
