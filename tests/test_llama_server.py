@@ -124,3 +124,16 @@ def test_autostart_sets_base_url_and_returns_server(monkeypatch, tmp_path):
     assert isinstance(srv, FakeSrv)
     assert srv.started is True
     assert llm_client.BASE_URL == "http://127.0.0.1:8200"
+
+
+def test_build_args_includes_mmproj_when_given():
+    args = ls.build_args("m.gguf", mmproj="proj.gguf", binary="b")
+    assert args[args.index("--mmproj") + 1] == "proj.gguf"
+
+
+def test_build_args_omits_mmproj_by_default():
+    assert "--mmproj" not in ls.build_args("m.gguf", binary="b")
+
+
+def test_vision_ctx_is_smaller_than_default():
+    assert ls.VISION_CTX < ls.DEFAULT_CTX

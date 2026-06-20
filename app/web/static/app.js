@@ -95,7 +95,7 @@
   /* instance (non-state) fields */
   var _t, _pp, _ppIv, _chat, _au, _toastIv, _toastT2, _glideRAF, _lastStart, _runToken = 0;
   var _dl = {}, _inst = {}, _editBuf = {}, _wave = null;
-  var _file, _seek, _searchRef, _scrollRef, _procScroll, _chatThread;
+  var _file, _seek, _searchRef, _scrollRef, _procScroll, _chatThread, _imgInput;
   var _prevTab, _prevStep, _prevRun, _prevPP, _prevOp, _prevChatLen, _wasEditing, _wasOpen, _scrollKey;
 
   /* ----------------------------------------------------------------- data -- */
@@ -189,11 +189,13 @@
   function bestDisk() { return HW.disks.slice().sort(function (a, b) { return b.free - a.free; })[0]; }
   function modelNeedGB(id) { var m = WHISPER.concat(LLM).find(function (x) { return x.id === id; }); if (!m) return 0; var gb = m.download_mb ? m.download_mb / 1024 : (parseFloat(m.size) || 0); return Math.ceil(gb * 1.6); }
   function parseSize(s) { var m = /([\d.]+)\s*(GB|MB)/i.exec(s || ''); return m ? { n: parseFloat(m[1]), u: m[2].toUpperCase() } : null; }
-  function recommendModel(l) {
-    var inst = S.installed;
+  // Language drives the transcription model: Svenska -> KB-Whisper (lang 'sv'),
+  // Engelska -> the multilingual Whisper (lang 'multi'/'en'). No manual model
+  // picker any more; we resolve the best INSTALLED model for the language.
+  function recommendModel(l, instMap) {
+    var inst = instMap || S.installed;
     var pick = function (pred) { var m = WHISPER.find(function (x) { return inst[x.id] && pred(x); }); return m ? m.id : null; };
     if (l === 'en') return pick(function (m) { return m.lang === 'en'; }) || pick(function (m) { return m.lang === 'multi'; }) || S.model;
-    if (l === 'sv') return pick(function (m) { return m.lang === 'sv'; }) || pick(function (m) { return m.lang === 'multi'; }) || S.model;
     return pick(function (m) { return m.lang === 'sv'; }) || pick(function (m) { return m.lang === 'multi'; }) || pick(function () { return true; }) || S.model;
   }
   function countMatches() { var q = S.searchQuery.trim().toLowerCase(); if (!q) return 0; var n = 0; for (var k = 0; k < getTranscript().length; k++) { var pos = 0, i, t = lineText(k).toLowerCase(); while ((i = t.indexOf(q, pos)) !== -1) { n++; pos = i + q.length; } } return n; }
@@ -397,8 +399,20 @@
   function scrollChatBottom() { requestAnimationFrame(function () { var el = _chatThread; if (el) el.scrollTop = el.scrollHeight; }); }
   function pickChatModel(id) { setState({ ppModel: id, openDD: null }); }
   function toggleChatModelDD() { setState(function (s) { return { openDD: s.openDD === 'chatmodel' ? null : 'chatmodel' }; }); }
-  function attachImage() { setState(function (s) { return { chatAttach: s.chatAttach.concat([{ kind: 'image', label: 'skärmbild-' + (s.chatAttach.length + 1) + '.png' }]) }; }); }
-  function attachFile(fmt) { var ext = (fmt.match(/png|jpg|pdf|txt|csv|docx|md/i) || ['fil'])[0].toLowerCase(); setState(function (s) { return { chatAttach: s.chatAttach.concat([{ kind: 'file', label: 'dokument.' + (ext === 'markdown' ? 'md' : ext) }]) }; }); }
+  // Real image attachment: open a native picker, read each file as a base64 data
+  // URL, and stash it on chatAttach. sendChat() forwards data URLs to /api/chat,
+  // where the server switches the LLM to the Gemma vision model (llama.cpp --mmproj).
+  function imgInputRef(el) { _imgInput = el; }
+  function attachImage() { if (_imgInput) _imgInput.click(); }
+  function onPickImage(e) {
+    var files = e.target.files ? Array.prototype.slice.call(e.target.files) : [];
+    files.forEach(function (f) {
+      var r = new FileReader();
+      r.onload = function () { setState(function (s) { return { chatAttach: s.chatAttach.concat([{ kind: 'image', label: f.name || 'bild.png', data: r.result }]) }; }); };
+      r.readAsDataURL(f);
+    });
+    if (e.target) e.target.value = '';
+  }
   function removeAttach(i) { setState(function (s) { return { chatAttach: s.chatAttach.filter(function (_, k) { return k !== i; }) }; }); }
   function pickPPModel(id) { setState({ ppModel: id, openDD: null }); }
   function toggleModelDD() { setState(function (s) { return { openDD: s.openDD === 'model' ? null : 'model' }; }); }
@@ -482,7 +496,7 @@
   function _nextPending(excludeId) { for (var k = 0; k < S.queue.length; k++) { var q = S.queue[k]; if (q.id !== excludeId && (S.qStatus[q.id] || 'pending') === 'pending') return q.id; } return null; }
   function _archive(file, secs) {
     var fmts = ['srt', 'txt', 'vtt'].filter(function (f) { return S.formats[f]; }).map(function (f) { return f.toUpperCase(); });
-    var langLabel = S.language === 'en' ? 'Engelska' : S.language === 'sv' ? 'Svenska' : 'Auto';
+    var langLabel = S.language === 'en' ? 'Engelska' : 'Svenska';
     var entry = { id: 'h' + Date.now() + Math.floor(Math.random() * 99), name: file.name, date: 'Just nu', dur: fmtTime(secs), model: modelLabel(S.model), lang: langLabel, formats: fmts.length ? fmts : ['TXT'], words: 2800 + Math.floor(Math.random() * 500) };
     setState(function (s) { return { history: [entry].concat(s.history.filter(function (h) { return !(h.name === file.name && h.date === 'Just nu'); })) }; });
   }
@@ -557,6 +571,7 @@
     var att = S.chatAttach;
     if (!q && !att.length) return;
     var attNote = att.length ? att.map(function (a) { return a.label; }).join(', ') : '';
+    var images = att.filter(function (a) { return a.kind === 'image' && a.data; }).map(function (a) { return a.data; });
     var userText = q || (att.length ? 'Titta på det bifogade.' : '');
     // push the user turn + an empty assistant placeholder we stream into
     setState(function (s) { return { chat: s.chat.concat([{ role: 'user', text: userText, attach: attNote }, { role: 'assistant', text: '' }]), chatInput: '', chatAttach: [], chatTyping: true }; });
@@ -565,7 +580,7 @@
     var transcript = getTranscript().map(function (l) { return l.text; }).join(' ');
     var acc = '';
     var setLast = function (text, typing) { setState(function (s) { var c = s.chat.slice(); if (c.length) c[c.length - 1] = { role: 'assistant', text: text }; return { chat: c, chatTyping: !!typing }; }); };
-    streamPost('/api/chat', { messages: msgs, transcript: transcript, model: S.ppModel }, function (ev) {
+    streamPost('/api/chat', { messages: msgs, transcript: transcript, model: S.ppModel, images: images }, function (ev) {
       if (ev.type === 'token') { acc += ev.text; setLast(acc, false); }
       else if (ev.type === 'error') { setLast(acc || ('Fel: ' + (ev.message || 'okänt')), false); }
       else if (ev.type === 'done') { var r = ev.result || {}; setLast(r.text || acc, false); }
@@ -583,7 +598,6 @@
   function ppText() {
     var op = S.ppOp;
     if (op === 'summary') return 'Samtalet inleds med en återkoppling till föregående veckas diskussion och övergår sedan till nästa steg i projektet. Deltagarna är överens om tidsplanen och fördelar ansvaret för de kommande uppgifterna. Avsnittet avslutas med en kort sammanfattning och tack till lyssnarna.';
-    if (op === 'analyze') return 'Teman:  projektuppföljning · ansvarsfördelning · tidsplan\nTon:  konstruktiv och samstämmig\n\nÅtgärdspunkter\n•  Fördela ansvaret inför nästa steg\n•  Bekräfta tidsplanen\n•  Boka nästa möte';
     return getTranscript().map(function (l) { return l.text; }).join(' ');
   }
 
@@ -696,8 +710,11 @@
       WHISPER.concat(LLM).forEach(function (m) { if (m.installed) inst[m.id] = true; });
       var patch = { catalogReady: true, installed: inst };
       var instW = WHISPER.filter(function (m) { return inst[m.id]; });
-      if (instW.length && !inst[S.model]) {
-        patch.model = (WHISPER.find(function (m) { return m.recommended && inst[m.id]; }) || instW[0]).id;
+      if (instW.length) {
+        // Keep the model in sync with the chosen language (Svenska/Engelska).
+        var byLang = recommendModel(S.language, inst);
+        patch.model = (byLang && inst[byLang]) ? byLang
+          : (WHISPER.find(function (m) { return m.recommended && inst[m.id]; }) || instW[0]).id;
       }
       var instL = LLM.filter(function (m) { return inst[m.id]; });
       if (instL.length && !inst[S.ppModel]) {
@@ -826,7 +843,7 @@
       return { rank: i + 1, name: m.label || m.id, meta: m.size + ' · ' + fitWord(f.tier), dot: f.dot, style: ddItem(m.id === st.model), checkStyle: 'color:var(--accent);font-size:14.5px;opacity:' + (m.id === st.model ? '1' : '0'), onPick: function () { pickModel(m.id); } };
     });
 
-    var langs = [['', 'Auto'], ['sv', 'Svenska'], ['en', 'Engelska']];
+    var langs = [['sv', 'Svenska'], ['en', 'Engelska']];
     var langOptions = langs.map(function (p) { return { label: p[1], style: segBtn(st.language === p[0], '38px'), onPick: function () { pickLang(p[0]); } }; });
     // Result language: pick sv/en; if it differs from the source language the
     // subtitles are translated by the local text model.
@@ -934,7 +951,7 @@
     var OPS = [['clean', 'Korrekturläs', 'Rättar stavfel & småfel — skriver inte om'], ['summary', 'Summera', 'Korta ner till det viktiga'], ['chat', 'Chatta', 'Ställ frågor om innehållet']];
     var ppOps = OPS.map(function (p) { return { key: p[0], label: p[1], sub: p[2], onPick: function () { pickOp(p[0]); }, selected: st.ppOp === p[0], unselected: st.ppOp !== p[0] }; });
     var ppModelOptions = LLM.filter(function (m) { return m.fit !== 'bad'; }).map(function (m) { return { name: m.label || m.id, size: m.size, style: ddItem(m.id === st.ppModel), onPick: function () { pickPPModel(m.id); } }; });
-    var ppOutTitles = { summary: 'Sammanfattning', clean: 'Korrekturläst text', analyze: 'Analys' };
+    var ppOutTitles = { summary: 'Sammanfattning', clean: 'Korrekturläst text' };
     var ppOpLabel = (ppOps.find(function (o) { return o.key === st.ppOp; }) || {}).label;
     var chat = st.chat.map(function (m) {
       return {
@@ -958,8 +975,7 @@
     var chatModelOptions = LLM.map(function (m) {
       return { name: m.label || m.id, size: m.size, visionStyle: 'font-size:10px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--accent);background:var(--accent-weak);border-radius:5px;padding:1px 6px;flex:0 0 auto;' + ((m.caps && m.caps.vision) ? '' : 'display:none'), style: ddItem(m.id === st.ppModel), checkStyle: 'color:var(--accent);font-size:14.5px;opacity:' + (m.id === st.ppModel ? '1' : '0'), onPick: function () { pickChatModel(m.id); } };
     });
-    var chatFileChips = caps.files.map(function (f) { return { label: f, onPick: function () { attachFile(f); } }; });
-    var chatAttachments = st.chatAttach.map(function (a, i) { return { label: a.label, dotStyle: 'width:7px;height:7px;border-radius:2px;flex:0 0 auto;background:' + (a.kind === 'image' ? 'var(--accent)' : 'var(--ink-3)'), onRemove: function () { removeAttach(i); } }; });
+    var chatAttachments = st.chatAttach.map(function (a, i) { return { label: a.label, thumb: a.data || '', dotStyle: 'width:7px;height:7px;border-radius:2px;flex:0 0 auto;background:' + (a.kind === 'image' ? 'var(--accent)' : 'var(--ink-3)'), onRemove: function () { removeAttach(i); } }; });
 
     var lastIdx = st.log.length - 1;
     var logRows = st.log.map(function (line, i) {
@@ -1080,8 +1096,9 @@
       openPicker: openPicker, fileRef: fileRef, onPickFile: onPickFile, onDragOver: onDragOver, onDragLeave: onDragLeave, onDrop: onDrop,
       urlInput: st.urlInput, onUrlInput: onUrlInput, onAddUrl: addUrl, onUrlKey: onUrlKey,
       dropzoneStyle: 'position:relative;border:1.5px dashed ' + (st.dragging ? 'var(--accent)' : 'var(--line-2)') + ';border-radius:20px;background:' + (st.dragging ? 'var(--accent-weak)' : 'var(--surface)') + ';flex:1 1 auto;min-height:200px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 24px;text-align:center;box-shadow:var(--shadow-sm);cursor:pointer;user-select:none;-webkit-user-select:none;transition:border-color .12s,background .12s',
-      curModelName: curModel.label || curModel.id, curModelMeta: curModel.size + ' · ' + (curModel.id === recommendModel(st.language) ? 'matchar språket' : 'installerad'), curModelDot: curFit.dot,
-      toggleModelDD: toggleModelDD, modelDDOpen: st.openDD === 'model', modelOptions: modelOptions,
+      curModelName: curModel.label || curModel.id,
+      curModelMeta: 'Väljs automatiskt · ' + (st.language === 'en' ? 'Engelska' : 'Svenska'),
+      curModelDot: curFit.dot,
       langOptions: langOptions, formatChips: formatChips,
       targetLangOptions: targetLangOptions, translateNote: translateNote,
       subtitleOptions: subtitleOptions, embedOptions: embedOptions,
@@ -1128,10 +1145,10 @@
       chat: chat, chatTyping: st.chatTyping, chatInput: st.chatInput, onChatInput: onChatInput, onChatKey: onChatKey, onChatSend: sendChat, chatSendStyle: primaryBtn(false),
       chatModalOpen: st.chatModalOpen, openChatModal: openChatModal, closeChatModal: closeChatModal, stop: stopProp, chatThreadRef: chatThreadRef, chatOpenBtnStyle: primaryBtn(false),
       chatModelName: cm.label || cm.id, chatModelDesc: cm.useFor,
-      chatKind: caps.vision ? (caps.files.some(function (f) { return /ljud|wav|mp3/i.test(f); }) ? 'bild + tal' : 'bildanalys') : 'textmodell',
-      chatCtx: cm.ctx, chatPlusAttach: caps.vision ? attachImage : function () { attachFile((caps.files && caps.files[0]) || 'TXT'); },
-      chatHasVision: caps.vision, chatNoVision: !caps.vision, chatCaps: chatCaps, chatModelOptions: chatModelOptions, chatModelDDOpen: st.openDD === 'chatmodel', toggleChatModelDD: toggleChatModelDD,
-      chatFileChips: chatFileChips, chatAttachments: chatAttachments, hasAttach: st.chatAttach.length > 0, attachImage: attachImage,
+      chatKind: 'text + bild',
+      chatCtx: cm.ctx, chatPlusAttach: attachImage, imgInputRef: imgInputRef, onPickImage: onPickImage,
+      chatCaps: chatCaps, chatModelOptions: chatModelOptions, chatModelDDOpen: st.openDD === 'chatmodel', toggleChatModelDD: toggleChatModelDD,
+      chatAttachments: chatAttachments, hasAttach: st.chatAttach.length > 0, attachImage: attachImage,
 
       hwTiles: hw.tiles, hwSpecs: hw.specs, hwReady: hw.ready,
       diskOptions: hw.diskOptions, diskDDOpen: st.openDD === 'disk', toggleDiskDD: toggleDiskDD,
@@ -1363,37 +1380,19 @@ function viewTranscribe(v){ return `
         <h2 style="font-size:22px;font-weight:600;letter-spacing:-0.02em;margin:0 0 14px">Inställningar</h2>
 
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:12px;box-shadow:var(--shadow-sm)">
-          <div style="position:relative;flex:1 1 210px;min-width:200px">
-          <button data-click="${on(v.toggleModelDD)}" style="width:100%;display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:11px;padding:10px 13px;cursor:pointer;text-align:left;box-shadow:var(--shadow-sm)" data-sh="border-color:var(--line-2) !important">
-            <span style="width:8px;height:8px;border-radius:50%;flex:0 0 auto;background:${v.curModelDot}"></span>
-            <span style="flex:1;min-width:0">
-              <span style="display:block;font-size:15px;font-weight:500;color:var(--ink)">${esc(v.curModelName)}</span>
-              <span style="display:block;font-size:12.5px;color:var(--ink-2);font-variant-numeric:tabular-nums">${esc(v.curModelMeta)}</span>
-            </span>
-            <span style="width:7px;height:7px;border-right:1.6px solid var(--ink-3);border-bottom:1.6px solid var(--ink-3);transform:rotate(45deg);margin:-3px 4px 0 0"></span>
-          </button>
-          ${ v.modelDDOpen ? `
-          <div style="position:absolute;bottom:calc(100% + 6px);left:0;right:0;z-index:30;background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:6px;animation:fadeup .14s ease">
-            ${ v.modelOptions.map(function(m){ return `
-              <button data-key="${esc(m.name)}" data-click="${on(m.onPick)}" style="${m.style}" data-sh="background:var(--sunken) !important">
-                <span style="width:20px;height:20px;border-radius:50%;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:var(--ink-2);background:var(--sunken);border:1px solid var(--line);font-variant-numeric:tabular-nums">${esc(m.rank)}</span>
-                <span style="width:8px;height:8px;border-radius:50%;flex:0 0 auto;background:${m.dot}"></span>
-                <span style="flex:1;min-width:0">
-                  <span style="display:block;font-size:15.5px;font-weight:500;color:var(--ink)">${esc(m.name)}</span>
-                  <span style="display:block;font-size:13px;color:var(--ink-2);font-variant-numeric:tabular-nums">${esc(m.meta)}</span>
-                </span>
-                <span style="${m.checkStyle}">✓</span>
-              </button>
+          <div style="display:flex;gap:3px;padding:4px;background:var(--track);border:1px solid var(--line);border-radius:11px;flex:0 0 auto">
+            ${ v.langOptions.map(function(l){ return `
+              <button data-click="${on(l.onPick)}" style="${l.style}" data-sh="background:var(--surface) !important;color:var(--ink) !important;box-shadow:var(--shadow-sm) !important">${esc(l.label)}</button>
             `; }).join('') }
           </div>
-          ` : '' }
-        </div>
 
-        <div style="display:flex;gap:3px;padding:4px;background:var(--track);border:1px solid var(--line);border-radius:11px;flex:0 0 auto">
-          ${ v.langOptions.map(function(l){ return `
-            <button data-click="${on(l.onPick)}" style="${l.style}" data-sh="background:var(--surface) !important;color:var(--ink) !important;box-shadow:var(--shadow-sm) !important">${esc(l.label)}</button>
-          `; }).join('') }
-        </div>
+          <div style="display:flex;align-items:center;gap:10px;flex:1 1 210px;min-width:200px;background:var(--sunken);border:1px solid var(--line);border-radius:11px;padding:9px 13px">
+            <span style="width:8px;height:8px;border-radius:50%;flex:0 0 auto;background:${v.curModelDot}"></span>
+            <span style="flex:1;min-width:0">
+              <span style="display:block;font-size:14.5px;font-weight:500;color:var(--ink)">${esc(v.curModelName)}</span>
+              <span style="display:block;font-size:12px;color:var(--ink-2);font-variant-numeric:tabular-nums">${esc(v.curModelMeta)}</span>
+            </span>
+          </div>
 
         <div style="flex:1 1 auto"></div>
 
@@ -2031,14 +2030,12 @@ function viewModals(v){ return `
       </div>
 
       <div style="padding:8px 20px 20px;flex:0 0 auto">
-        ${ v.chatNoVision ? `
-          <div style="font-size:12.5px;color:var(--ink-2);line-height:1.45;padding:0 6px 9px">Textmodell — kan inte se bilder. Byt till <strong style="color:var(--ink);font-weight:600">Qwen3-VL-30B-A3B</strong> för bildanalys.</div>
-        ` : '' }
+        <input data-ref="${on(v.imgInputRef)}" type="file" accept="image/*" multiple="true" data-change="${on(v.onPickImage)}" style="display:none">
         ${ v.hasAttach ? `
           <div style="display:flex;gap:7px;flex-wrap:wrap;padding:0 4px 10px">
             ${ v.chatAttachments.map(function(a){ return `
-              <span style="display:inline-flex;align-items:center;gap:7px;font-size:13px;color:var(--ink);background:var(--accent-weak);border:1px solid color-mix(in srgb,var(--accent) 22%,transparent);border-radius:8px;padding:5px 8px 5px 10px">
-                <span style="${a.dotStyle}"></span>${esc(a.label)}
+              <span style="display:inline-flex;align-items:center;gap:7px;font-size:13px;color:var(--ink);background:var(--accent-weak);border:1px solid color-mix(in srgb,var(--accent) 22%,transparent);border-radius:8px;padding:4px 8px 4px ${a.thumb ? '4px' : '10px'}">
+                ${ a.thumb ? `<img src="${esc(a.thumb)}" alt="" style="width:26px;height:26px;border-radius:5px;object-fit:cover;flex:0 0 auto;display:block">` : `<span style="${a.dotStyle}"></span>` }${esc(a.label)}
                 <button data-click="${on(a.onRemove)}" aria-label="Ta bort" style="width:17px;height:17px;border:none;background:transparent;color:var(--ink-2);cursor:pointer;display:flex;align-items:center;justify-content:center;font-family:inherit" data-sh="color:var(--ink) !important">
                   <svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3l8 8M11 3l-8 8"></path></svg>
                 </button>
@@ -2047,7 +2044,7 @@ function viewModals(v){ return `
           </div>
         ` : '' }
         <div style="display:flex;align-items:center;gap:8px;background:var(--sunken);border:1px solid var(--line);border-radius:99px;padding:6px">
-          <button data-click="${on(v.chatPlusAttach)}" aria-label="Bifoga" style="width:34px;height:34px;flex:0 0 auto;border:1px solid var(--line);border-radius:50%;background:var(--surface);cursor:pointer;color:var(--ink-2);display:flex;align-items:center;justify-content:center" data-sh="color:var(--ink) !important;border-color:var(--line-2) !important">
+          <button data-click="${on(v.chatPlusAttach)}" aria-label="Bifoga bild" style="width:34px;height:34px;flex:0 0 auto;border:1px solid var(--line);border-radius:50%;background:var(--surface);cursor:pointer;color:var(--ink-2);display:flex;align-items:center;justify-content:center" data-sh="color:var(--ink) !important;border-color:var(--line-2) !important">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M8 3v10M3 8h10"></path></svg>
           </button>
           <input value="${esc(v.chatInput)}" data-input="${on(v.onChatInput)}" data-keydown="${on(v.onChatKey)}" placeholder="Fråga om transkriptet …" style="flex:1;min-width:0;background:transparent;border:none;outline:none;font-size:15.5px;color:var(--ink);font-family:inherit;padding:0 4px">
@@ -2055,12 +2052,7 @@ function viewModals(v){ return `
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"></path></svg>
           </button>
         </div>
-        <div style="display:flex;align-items:center;gap:7px;margin-top:11px;flex-wrap:wrap;padding:0 4px">
-          <span style="font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-2);font-weight:600">Bifoga</span>
-          ${ v.chatFileChips.map(function(f){ return `
-            <button data-click="${on(f.onPick)}" style="font-size:13px;font-weight:500;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:5px 11px;cursor:pointer;font-family:inherit" data-sh="border-color:var(--ink-3) !important">${esc(f.label)}</button>
-          `; }).join('') }
-        </div>
+        <div style="font-size:12px;color:var(--ink-2);line-height:1.45;padding:9px 6px 0">Bifoga en bild (📎) så svarar <strong style="color:var(--ink);font-weight:600">Gemma 3 (vision)</strong> på frågor om den — modellen växlas in automatiskt.</div>
       </div>
 
     </div>

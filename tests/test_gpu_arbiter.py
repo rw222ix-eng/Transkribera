@@ -118,3 +118,69 @@ def test_prewarm_async_swallows_start_failure(tmp_path, monkeypatch):
     monkeypatch.setattr(ga.threading, "Thread",
                         lambda target=None, **k: type("T", (), {"start": lambda self: target()})())
     arb.prewarm_async()                         # best effort — no exception escapes
+
+
+# ---- ensure_model: text <-> vision switching on the single GPU ---------------
+
+def test_ensure_model_none_when_not_installed(tmp_path, monkeypatch):
+    arb = _arb(tmp_path)
+    monkeypatch.setattr(ga.llm_manager, "is_installed", lambda *a, **k: False)
+    assert arb.ensure_model(ga.llm_manager.VISION_LLM) is None
+
+
+def test_ensure_model_vision_passes_mmproj_and_ctx(tmp_path, monkeypatch):
+    arb = _arb(tmp_path)
+    monkeypatch.setattr(ga.llm_manager, "is_installed", lambda *a, **k: True)
+    monkeypatch.setattr(ga, "find_free_port", lambda *a, **k: 8201)
+    monkeypatch.setattr(ga, "is_healthy", lambda *a, **k: False)
+    cap = {}
+    class FakeSrv:
+        def __init__(self, *a, **k): cap.update(k); self.port = 8201
+        @property
+        def base_url(self): return "http://127.0.0.1:8201"
+        def start(self, *a, **k): pass
+        def stop(self): pass
+    monkeypatch.setattr(ga, "LlamaServer", FakeSrv)
+    arb.ensure_model(ga.llm_manager.VISION_LLM)
+    assert cap.get("mmproj") is not None          # vision -> projector passed
+    assert cap.get("ctx") == ga.VISION_CTX
+    assert arb._spec is ga.llm_manager.VISION_LLM
+
+
+def test_ensure_model_switches_and_stops_previous(tmp_path, monkeypatch):
+    arb = _arb(tmp_path)
+    monkeypatch.setattr(ga.llm_manager, "is_installed", lambda *a, **k: True)
+    monkeypatch.setattr(ga, "find_free_port", lambda *a, **k: 8202)
+    monkeypatch.setattr(ga, "is_healthy", lambda *a, **k: False)
+    stops = {"n": 0}
+    class FakeSrv:
+        def __init__(self, *a, **k): self.port = 8202
+        @property
+        def base_url(self): return "http://127.0.0.1:8202"
+        def start(self, *a, **k): pass
+        def stop(self): stops["n"] += 1
+    monkeypatch.setattr(ga, "LlamaServer", FakeSrv)
+    arb.ensure_model(ga.llm_manager.ACTIVE_LLM)   # text first
+    arb.ensure_model(ga.llm_manager.VISION_LLM)   # switch -> stops the text server
+    assert stops["n"] == 1
+    assert arb._spec is ga.llm_manager.VISION_LLM
+
+
+def test_ensure_model_noop_when_same_spec_healthy(tmp_path, monkeypatch):
+    arb = _arb(tmp_path)
+    monkeypatch.setattr(ga.llm_manager, "is_installed", lambda *a, **k: True)
+    monkeypatch.setattr(ga, "find_free_port", lambda *a, **k: 8203)
+    healthy = {"v": False}
+    monkeypatch.setattr(ga, "is_healthy", lambda *a, **k: healthy["v"])
+    builds = {"n": 0}
+    class FakeSrv:
+        def __init__(self, *a, **k): builds["n"] += 1; self.port = 8203
+        @property
+        def base_url(self): return "http://127.0.0.1:8203"
+        def start(self, *a, **k): pass
+        def stop(self): pass
+    monkeypatch.setattr(ga, "LlamaServer", FakeSrv)
+    arb.ensure_model(ga.llm_manager.ACTIVE_LLM)   # cold start -> builds once
+    healthy["v"] = True
+    arb.ensure_model(ga.llm_manager.ACTIVE_LLM)   # same model, healthy -> reuse
+    assert builds["n"] == 1

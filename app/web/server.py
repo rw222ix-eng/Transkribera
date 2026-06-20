@@ -218,8 +218,8 @@ def create_app(base_dir: Path | None = None,
         } for e in wevals]
 
         running = llm_client.is_running()                 # llama-server /health
-        installed = ([llm_manager.ACTIVE_LLM.filename]
-                     if llm_manager.is_installed(llm_manager.ACTIVE_LLM, models_root) else [])
+        installed = [s.filename for s in llm_manager.ALL_LLMS
+                     if llm_manager.is_installed(s, models_root)]
         levals, lbest = recommend.recommend_llm(LLM_MODELS, hw)
         llm = [{
             "id": e.spec.name, "name": e.spec.name, "label": e.spec.label,
@@ -261,13 +261,16 @@ def create_app(base_dir: Path | None = None,
         name = body.get("name")
         if not name:
             return JSONResponse({"error": "namn saknas"}, status_code=400)
+        spec = llm_manager.spec_by_name(name)
+        if spec is None:
+            return JSONResponse({"error": "okänd modell"}, status_code=404)
 
         def job(emit):
             llm_manager.download_gguf(
-                llm_manager.ACTIVE_LLM, models_root,
+                spec, models_root,
                 log_cb=lambda m: emit({"type": "log", "msg": m}),
                 progress_cb=lambda p: emit({"type": "progress", "pct": p}))
-            return {"installed": llm_manager.ACTIVE_LLM.filename}
+            return {"installed": spec.filename}
         return _sse_response(job)
 
     @app.get("/api/audio-model")
@@ -337,7 +340,8 @@ def create_app(base_dir: Path | None = None,
                     raise RuntimeError(f"Filen finns inte: {media}")
             out_base = media.with_suffix("")
             cmd = transcriber.build_transcribe_cmd(
-                media, model_dir, rec.device, rec.compute_type, language, out_base, formats)
+                media, model_dir, rec.device, rec.compute_type, language, out_base, formats,
+                engine=spec.engine, runtime=spec.runtime)
             written, segments = _run_transcribe_subprocess(cmd, base, emit)
             if not written:
                 expected = [str(out_base.with_suffix(transcriber.WRITERS[f][1])) for f in formats]
@@ -483,6 +487,7 @@ def create_app(base_dir: Path | None = None,
         messages = body.get("messages") or []
         transcript = body.get("transcript", "")
         model = body.get("model", "")
+        images = body.get("images") or []
         if not model or not messages:
             return JSONResponse({"error": "modell och meddelande krävs"}, status_code=400)
         if not arb.try_acquire_gpu():
@@ -492,9 +497,13 @@ def create_app(base_dir: Path | None = None,
 
         def job(emit):
             try:
-                if arb.ensure_llm() is None:
-                    raise RuntimeError("Språkmodellen är inte installerad.")
-                text = llm_client.chat(model, messages, transcript=transcript,
+                # An image needs the multimodal model; otherwise the long-context
+                # text model answers grounded in the transcript. The arbiter
+                # switches the served model (they can't coexist in 24 GB VRAM).
+                spec = llm_manager.VISION_LLM if images else llm_manager.ACTIVE_LLM
+                if arb.ensure_model(spec) is None:
+                    raise RuntimeError(f"{spec.label} är inte installerad.")
+                text = llm_client.chat(model, messages, transcript=transcript, images=images,
                                        token_cb=lambda t: emit({"type": "token", "text": t}))
                 return {"text": text}
             finally:

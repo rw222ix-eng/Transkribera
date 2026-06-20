@@ -26,6 +26,14 @@ _CHAT_SYSTEM = (
     "i transkriptet nedan; säg till om något inte framgår av det.\n\nTRANSKRIPT:\n"
 )
 
+# Vision chat runs on Gemma (not Qwen), and the transcript is usually irrelevant to
+# an image question — so we keep the system prompt short to leave room in the
+# smaller vision context for the image tokens themselves.
+_VISION_SYSTEM = (
+    "Du är en hjälpsam svensk assistent som beskriver och svarar på frågor om "
+    "bifogade bilder. Svara ALLTID på svenska och använd aldrig något annat språk."
+)
+
 
 def is_running(base_url: str | None = None) -> bool:
     try:
@@ -36,14 +44,17 @@ def is_running(base_url: str | None = None) -> bool:
 
 def _stream_chat(messages: list[dict], *, temperature: float,
                  token_cb: Callable[[str], None] | None,
-                 base_url: str | None = None) -> str:
+                 base_url: str | None = None,
+                 template_kwargs: dict | None = None) -> str:
     payload = {
         "messages": messages,
         "stream": True,
         "temperature": temperature,
-        # Qwen3: suppress the English chain-of-thought before the Swedish answer.
-        "chat_template_kwargs": {"enable_thinking": False},
     }
+    if template_kwargs:
+        # Qwen3: suppress the English chain-of-thought before the Swedish answer.
+        # Omitted for vision (Gemma), whose template has no such option.
+        payload["chat_template_kwargs"] = template_kwargs
     text: list[str] = []
     with requests.post(f"{base_url or BASE_URL}/v1/chat/completions", json=payload,
                        stream=True, timeout=None) as r:
@@ -70,13 +81,37 @@ def _stream_chat(messages: list[dict], *, temperature: float,
     return "".join(text)
 
 
+def _image_parts(images: list[str]) -> list[dict]:
+    """OpenAI-compatible image content parts. Each entry is a data URL
+    ('data:image/png;base64,...') or a bare base64 string we wrap into one."""
+    parts = []
+    for img in images:
+        url = img if img.startswith("data:") else f"data:image/png;base64,{img}"
+        parts.append({"type": "image_url", "image_url": {"url": url}})
+    return parts
+
+
 def chat(model: str, messages: list[dict], transcript: str = "",
          token_cb: Callable[[str], None] | None = None,
-         base_url: str | None = None, think: bool = False) -> str:
+         base_url: str | None = None, think: bool = False,
+         images: list[str] | None = None) -> str:
+    if images:
+        # Vision turn (Gemma): attach the images to the latest user message as
+        # multimodal content parts and skip the long transcript system prompt.
+        msgs = [{"role": "system", "content": _VISION_SYSTEM}]
+        msgs += [{"role": m.get("role", "user"), "content": m.get("content", "")}
+                 for m in messages[:-1]]
+        last = messages[-1] if messages else {"role": "user", "content": ""}
+        content = [{"type": "text", "text": last.get("content", "") or "Beskriv bilden."}]
+        content += _image_parts(images)
+        msgs.append({"role": last.get("role", "user"), "content": content})
+        return _stream_chat(msgs, temperature=0.3, token_cb=token_cb, base_url=base_url)
+
     msgs = [{"role": "system", "content": _CHAT_SYSTEM + (transcript or "(tomt)")}]
     msgs += [{"role": m.get("role", "user"), "content": m.get("content", "")}
              for m in messages]
-    return _stream_chat(msgs, temperature=0.3, token_cb=token_cb, base_url=base_url)
+    return _stream_chat(msgs, temperature=0.3, token_cb=token_cb, base_url=base_url,
+                        template_kwargs={"enable_thinking": False})
 
 
 def generate(model: str, prompt: str,
@@ -88,4 +123,5 @@ def generate(model: str, prompt: str,
         msgs.append({"role": "system", "content": system})
     msgs.append({"role": "user", "content": prompt})
     temperature = (options or {}).get("temperature", 0.2)
-    return _stream_chat(msgs, temperature=temperature, token_cb=token_cb, base_url=base_url)
+    return _stream_chat(msgs, temperature=temperature, token_cb=token_cb, base_url=base_url,
+                        template_kwargs={"enable_thinking": False})
