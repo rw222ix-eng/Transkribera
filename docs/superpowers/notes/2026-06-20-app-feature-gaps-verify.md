@@ -57,3 +57,34 @@ Nytt: `llm_manager.VISION_LLM` (Gemma 3 4B GGUF + mmproj, laddas vid behov),
 - Gemma kör med `-c 8192` (`VISION_CTX`) — gott om plats för några bilder + fråga.
 - Överlappar PR #2 (gpu_arbiter): `switch_to` är byggd på `main`. Vid merge av
   PR #2 bör de två GPU-ägarna konsolideras (arbitern kan äga `switch_to`).
+
+## #7b — Engelsk transkribering via Parakeet (KRÄVER GPU/live-verifiering)
+Tidigare mappade #7 Engelska → vanlig Whisper. Nu går **Engelska → NVIDIA
+Parakeet** (parakeet-tdt-0.6b-v2) via **onnx-asr / ONNX Runtime** — en helt annan
+ASR-körtid än faster-whisper (CTranslate2 kan inte köra Parakeet).
+
+Mekanik: `WhisperModelSpec` fick `engine`/`runtime`-fält. Parakeet-posten har
+`languages="en"`, så språkväljaren plockar den automatiskt för Engelska (samma
+logik som Svenska → KB-Whisper). `transcribe_cli` grenar på `--engine`:
+`whisper` → faster-whisper, `parakeet` → nya `app/parakeet_asr.py` (ffmpeg →
+16 kHz WAV → onnx-asr → tidsstämplade segment grupperade till undertext-cues).
+Nya beroenden: `onnx-asr`, `onnxruntime-gpu` (requirements + `.spec`).
+
+### Att verifiera live (Windows + RTX 4090):
+1. `python -m pip install -r requirements.txt` (drar in onnx-asr + onnxruntime-gpu).
+2. **Ladda ner** "Parakeet TDT 0.6B (en)" i Modeller-fliken → onnx-filer hamnar i
+   `models/istupakov__parakeet-tdt-0.6b-v2-onnx/`; visas som installerad.
+3. Välj **Engelska** → modellraden ska visa "Parakeet TDT 0.6B (en)"
+   (Svenska ska fortfarande visa KB-Whisper).
+4. Transkribera en kort **engelsk** klipp → SRT/TXT/VTT med rimliga tidsstämplar,
+   CUDA-provider används (kolla att GPU lastas via `nvidia-smi`).
+5. Transkribera en **svensk** klipp → går via KB-Whisper som förut.
+
+### API-caveat att dubbelkolla
+- `onnx_asr.load_model(runtime, path=..., providers=...)` och
+  `model.recognize(wav, timestamps=True)` är byggda mot onnx-asr ≥0.6. Stämmer
+  inte signaturen/timestamp-formatet i den installerade versionen faller koden
+  tillbaka (utan tidsstämplar → en enda cue över hela klippet); justera
+  `parakeet_asr._word_tuples` / `transcribe` efter den faktiska API:n.
+- parakeet-tdt-0.6b-**v2** är engelsk-only (inget språk-argument behövs). Vill man
+  ha fler språk: byt till v3 (`nemo-parakeet-tdt-0.6b-v3`) och skicka språk.

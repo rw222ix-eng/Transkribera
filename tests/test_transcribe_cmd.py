@@ -20,3 +20,17 @@ def test_cmd_empty_language_passed_as_empty(tmp_path: Path):
         out_base=tmp_path / "out", formats=["srt"])
     i = cmd.index("--language")
     assert cmd[i + 1] == ""
+
+def test_cmd_includes_engine_and_runtime(tmp_path: Path):
+    cmd = build_transcribe_cmd(
+        audio=tmp_path / "a.wav", model_dir="m", device="cuda",
+        compute_type="float16", language="en", out_base=tmp_path / "out",
+        formats=["srt"], engine="parakeet", runtime="nemo-parakeet-tdt-0.6b-v2")
+    assert cmd[cmd.index("--engine") + 1] == "parakeet"
+    assert cmd[cmd.index("--runtime") + 1] == "nemo-parakeet-tdt-0.6b-v2"
+
+def test_cmd_defaults_to_whisper_engine(tmp_path: Path):
+    cmd = build_transcribe_cmd(
+        audio=tmp_path / "a.wav", model_dir="m", device="cpu",
+        compute_type="int8", language="", out_base=tmp_path / "out", formats=["srt"])
+    assert cmd[cmd.index("--engine") + 1] == "whisper"

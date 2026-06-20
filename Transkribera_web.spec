@@ -15,7 +15,7 @@ datas, binaries, hiddenimports = [], [], []
 
 _PKGS = [
     "torch", "ctranslate2", "faster_whisper", "av",
-    "huggingface_hub", "tokenizers", "onnxruntime",
+    "huggingface_hub", "tokenizers", "onnxruntime", "onnx_asr",
     "fastapi", "starlette", "uvicorn", "anyio", "h11", "click", "sniffio",
     "webview", "clr_loader", "pythonnet",
 ]

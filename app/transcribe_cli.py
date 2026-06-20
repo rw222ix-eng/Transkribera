@@ -18,31 +18,12 @@ import os
 import sys
 from pathlib import Path
 
-from faster_whisper import WhisperModel
 from app.transcriber import Segment, write_outputs
 
 
-def main(argv: list[str] | None = None) -> None:
-    # argv lets the frozen exe dispatch a "transcribe-cli" subcommand (it passes the
-    # args AFTER the subcommand). When None, argparse reads sys.argv[1:] as usual.
-    p = argparse.ArgumentParser()
-    p.add_argument("--audio", required=True)
-    p.add_argument("--model-dir", required=True)
-    p.add_argument("--device", required=True)
-    p.add_argument("--compute-type", required=True)
-    p.add_argument("--language", default="")
-    p.add_argument("--out-base", required=True)
-    p.add_argument("--formats", required=True)
-    args = p.parse_args(argv)
-
-    # Force UTF-8 stdout so åäö in the transcript survive the pipe to the parent
-    # (the server decodes this stream as UTF-8). Windows consoles default to cp1252.
-    try:
-        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    except Exception:
-        pass
-
-    print(f"LOG Laddar modell ({args.device}/{args.compute_type})...", flush=True)
+def _transcribe_whisper(args) -> list[Segment]:
+    from faster_whisper import WhisperModel
+    print(f"LOG Laddar Whisper ({args.device}/{args.compute_type})...", flush=True)
     model = WhisperModel(args.model_dir, device=args.device, compute_type=args.compute_type)
     seg_iter, info = model.transcribe(args.audio, language=args.language or None)
     duration = getattr(info, "duration", 0) or 0
@@ -56,6 +37,43 @@ def main(argv: list[str] | None = None) -> None:
             if pct != last:
                 last = pct
                 print(f"PROGRESS {pct}", flush=True)
+    return segs
+
+
+def _transcribe_parakeet(args) -> list[Segment]:
+    # Parakeet (English) runs via onnx-asr, a different runtime than faster-whisper.
+    from app import parakeet_asr
+    return parakeet_asr.transcribe(
+        args.audio, args.model_dir, args.runtime, args.device,
+        log_cb=lambda m: print("LOG " + m, flush=True))
+
+
+def main(argv: list[str] | None = None) -> None:
+    # argv lets the frozen exe dispatch a "transcribe-cli" subcommand (it passes the
+    # args AFTER the subcommand). When None, argparse reads sys.argv[1:] as usual.
+    p = argparse.ArgumentParser()
+    p.add_argument("--audio", required=True)
+    p.add_argument("--model-dir", required=True)
+    p.add_argument("--device", required=True)
+    p.add_argument("--compute-type", required=True)
+    p.add_argument("--language", default="")
+    p.add_argument("--out-base", required=True)
+    p.add_argument("--formats", required=True)
+    p.add_argument("--engine", default="whisper")
+    p.add_argument("--runtime", default="")
+    args = p.parse_args(argv)
+
+    # Force UTF-8 stdout so åäö in the transcript survive the pipe to the parent
+    # (the server decodes this stream as UTF-8). Windows consoles default to cp1252.
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
+    if args.engine == "parakeet":
+        segs = _transcribe_parakeet(args)
+    else:
+        segs = _transcribe_whisper(args)
     print("PROGRESS 100", flush=True)
 
     # Emit the transcript so the parent can show it / feed post-process, regardless

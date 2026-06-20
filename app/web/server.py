@@ -287,7 +287,8 @@ def create_app(base_dir: Path | None = None) -> FastAPI:
                     raise RuntimeError(f"Filen finns inte: {media}")
             out_base = media.with_suffix("")
             cmd = transcriber.build_transcribe_cmd(
-                media, model_dir, rec.device, rec.compute_type, language, out_base, formats)
+                media, model_dir, rec.device, rec.compute_type, language, out_base, formats,
+                engine=spec.engine, runtime=spec.runtime)
             written, segments = _run_transcribe_subprocess(cmd, base, emit)
             if not written:
                 expected = [str(out_base.with_suffix(transcriber.WRITERS[f][1])) for f in formats]

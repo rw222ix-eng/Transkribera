@@ -30,3 +30,13 @@ def test_download_calls_snapshot(monkeypatch, tmp_path: Path):
     assert called["repo_id"] == "KBLab/kb-whisper-large"
     assert wm.is_installed(SPEC, tmp_path)
     assert (path / "model.bin").exists()
+
+
+def test_is_installed_parakeet_detects_onnx_files(tmp_path):
+    from app.models_catalog import WHISPER_MODELS
+    spec = next(m for m in WHISPER_MODELS if m.engine == "parakeet")
+    d = wm.model_dir_for(spec, tmp_path)
+    d.mkdir(parents=True)
+    assert wm.is_installed(spec, tmp_path) is False        # empty dir
+    (d / "encoder-model.onnx").write_bytes(b"x")
+    assert wm.is_installed(spec, tmp_path) is True          # any .onnx -> installed

@@ -28,3 +28,10 @@ def test_llm_catalog_has_a_vision_model():
 def test_kb_whisper_large_present_for_swedish():
     sv = [m for m in WHISPER_MODELS if m.id == "KBLab/kb-whisper-large"]
     assert sv and sv[0].languages == "sv"
+
+
+def test_parakeet_present_for_english_transcription():
+    en = [m for m in WHISPER_MODELS if m.engine == "parakeet"]
+    assert en, "expected a Parakeet (onnx-asr) model for English"
+    assert en[0].languages == "en"
+    assert en[0].runtime, "parakeet spec needs an onnx-asr runtime key"

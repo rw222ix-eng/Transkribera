@@ -20,6 +20,9 @@ class WhisperModelSpec:
     # ---- presentation (Models tab chips) ----
     rtf: float = 0.0   # speed, × realtime on a recent GPU (estimate)
     score: float = 0.0 # capability/precision score (defaults to rank if 0)
+    # ---- transcription backend ----
+    engine: str = "whisper"   # "whisper" (faster-whisper/CT2) | "parakeet" (onnx-asr)
+    runtime: str = ""         # onnx-asr model key for the parakeet engine
 
     @property
     def vram_gb(self) -> float:
@@ -60,6 +63,13 @@ WHISPER_MODELS: list[WhisperModelSpec] = [
     WhisperModelSpec("KBLab/kb-whisper-medium", "KB-Whisper medium (sv)", 1500, 5000, 2500, "sv", 5, rtf=12, score=5),
     WhisperModelSpec("KBLab/kb-whisper-large", "KB-Whisper large (sv)", 3000, 10000, 5000, "sv", 6,
                      "Bäst för svenska", rtf=7, score=5.5),
+    # English uses NVIDIA Parakeet (a different ASR architecture than Whisper),
+    # run via onnx-asr / ONNX Runtime. languages="en" makes the language picker
+    # auto-select it for Engelska. id = HF repo to download; runtime = onnx-asr key.
+    WhisperModelSpec("istupakov/parakeet-tdt-0.6b-v2-onnx", "Parakeet TDT 0.6B (en)",
+                     2500, 2500, 1300, "en", 4, "Engelska — snabb (NVIDIA Parakeet)",
+                     rtf=25, score=3.5,
+                     engine="parakeet", runtime="nemo-parakeet-tdt-0.6b-v2"),
 ]
 
 # Local GGUFs served by the bundled llama.cpp server (Phase 0 spike). The text
