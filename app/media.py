@@ -81,7 +81,7 @@ def make_thumbnail(media: Path) -> Path | None:
 
 
 def build_web_video_copy_cmd(media_name: str, out_name: str) -> list[str]:
-    return ["ffmpeg", "-y", "-i", media_name, "-c", "copy",
+    return ["ffmpeg", "-y", "-i", media_name, "-c:v", "copy", "-c:a", "aac",
             "-movflags", "+faststart", out_name]
 
 

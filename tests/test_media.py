@@ -2,6 +2,8 @@ import os
 import time
 from pathlib import Path
 
+import pytest
+
 from app import media
 from app.media import parse_duration
 
@@ -81,7 +83,7 @@ def test_make_thumbnail_returns_none_when_ffmpeg_fails(tmp_path, monkeypatch):
 
 def test_build_web_video_copy_cmd():
     assert media.build_web_video_copy_cmd("in.mkv", "out.mp4") == [
-        "ffmpeg", "-y", "-i", "in.mkv", "-c", "copy",
+        "ffmpeg", "-y", "-i", "in.mkv", "-c:v", "copy", "-c:a", "aac",
         "-movflags", "+faststart", "out.mp4"]
 
 
@@ -129,3 +131,11 @@ def test_ensure_web_video_falls_back_to_encode(tmp_path, monkeypatch):
     out = media.ensure_web_video(v)
     assert out == tmp_path / "clip.web.mp4"
     assert any("copy" in c for c in calls) and any("-c:v" in c for c in calls)
+
+
+def test_ensure_web_video_raises_when_all_fail(tmp_path, monkeypatch):
+    v = tmp_path / "clip.mkv"
+    v.write_text("v", encoding="utf-8")
+    monkeypatch.setattr(media, "_run", lambda cmd, cwd: (1, "fail"))
+    with pytest.raises(RuntimeError):
+        media.ensure_web_video(v)
