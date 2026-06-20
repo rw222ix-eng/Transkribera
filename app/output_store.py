@@ -67,6 +67,15 @@ def move_into(path: Path, folder: Path) -> Path:
     return dest
 
 
+def copy_into(path: Path, folder: Path) -> Path:
+    """Som move_into men behåller originalet — används för användarens egna
+    indatafiler (som inte ska försvinna från sin ursprungsplats)."""
+    path = Path(path)
+    dest = Path(folder) / path.name
+    shutil.copy2(str(path), str(dest))
+    return dest
+
+
 def build_embed_cmd(video_name: str, srt_name: str, kind: str, out_name: str,
                     sub_codec: str = "mov_text", encoder: str = "h264_nvenc",
                     ref_srt_name: str | None = None,
@@ -170,10 +179,14 @@ def assemble_output(media: Path, srt: Path | None, base_dir: Path, date_str: str
                     sub_mode: str, embed_kind: str | None,
                     emit_log: Callable[[str], None] | None = None,
                     ref_srt: Path | None = None,
-                    sub_lang: str | None = None, ref_lang: str | None = None) -> dict:
+                    sub_lang: str | None = None, ref_lang: str | None = None,
+                    keep_source: bool = False) -> dict:
     """Flytta media (+ ev. huvud-SRT + ev. referens-SRT) till en ny resultatmapp;
     bädda in vid behov. `ref_srt` är t.ex. den korrekta engelskan vid översättning —
     den läggs som referensfil och (vid mjuk inbäddning) som andra undertextspår.
+    `keep_source=True` kopierar median i stället för att flytta den, så användarens
+    egen indatafil ligger kvar på sin ursprungsplats (URL-/inspelningskällor i
+    downloads/ flyttas däremot, eftersom de är tillfälliga).
     Returnerar {folder, files:[{path,name,ext,kind,size}], video:{...}|None}."""
     def log(msg):
         if emit_log:
@@ -181,7 +194,7 @@ def assemble_output(media: Path, srt: Path | None, base_dir: Path, date_str: str
 
     media = Path(media)
     folder = create_result_folder(base_dir, date_str, media.name)
-    media = move_into(media, folder)
+    media = copy_into(media, folder) if keep_source else move_into(media, folder)
     if srt is not None:
         srt = move_into(Path(srt), folder)
     if ref_srt is not None:
