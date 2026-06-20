@@ -343,12 +343,15 @@ def create_app(base_dir: Path | None = None) -> FastAPI:
         messages = body.get("messages") or []
         transcript = body.get("transcript", "")
         model = body.get("model", "")
+        think = bool(body.get("think", False))   # only the chat may turn on Qwen3 thinking
         if not model or not messages:
             return JSONResponse({"error": "modell och meddelande krävs"}, status_code=400)
 
         def job(emit):
-            text = llm_client.chat(model, messages, transcript=transcript,
-                                   token_cb=lambda t: emit({"type": "token", "text": t}))
+            text = llm_client.chat(
+                model, messages, transcript=transcript, think=think,
+                token_cb=lambda t: emit({"type": "token", "text": t}),
+                reason_cb=lambda t: emit({"type": "reasoning", "text": t}))
             return {"text": text}
         return _sse_response(job)
 

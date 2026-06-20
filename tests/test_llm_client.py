@@ -20,6 +20,12 @@ def _sse(chunks):
     out.append("data: [DONE]")
     return out
 
+def _sse_deltas(deltas):
+    """SSE lines from raw delta dicts (lets a test emit reasoning_content too)."""
+    out = ["data: " + json.dumps({"choices": [{"delta": d}]}) for d in deltas]
+    out.append("data: [DONE]")
+    return out
+
 def test_is_running_true(monkeypatch):
     class R:
         status_code = 200
@@ -81,3 +87,72 @@ def test_skips_malformed_and_blank_sse_lines(monkeypatch):
              'data: {"choices":[{"delta":{"content":"ok"}}]}', "data: [DONE]"]
     monkeypatch.setattr(lc.requests, "post", lambda *a, **k: FakeResp(lines=lines))
     assert lc.generate("ignored", "p") == "ok"
+
+# ---- Qwen3 thinking toggle ----
+
+def test_chat_thinking_off_by_default(monkeypatch):
+    captured = {}
+    def fake_post(url, json=None, **k):
+        captured["json"] = json
+        return FakeResp(lines=_sse(["svar"]))
+    monkeypatch.setattr(lc.requests, "post", fake_post)
+    lc.chat("ignored", [{"role": "user", "content": "fråga"}], transcript="T")
+    assert captured["json"]["chat_template_kwargs"] == {"enable_thinking": False}
+
+def test_chat_enables_thinking_when_requested(monkeypatch):
+    captured = {}
+    def fake_post(url, json=None, **k):
+        captured["json"] = json
+        return FakeResp(lines=_sse(["svar"]))
+    monkeypatch.setattr(lc.requests, "post", fake_post)
+    lc.chat("ignored", [{"role": "user", "content": "fråga"}], transcript="T", think=True)
+    assert captured["json"]["chat_template_kwargs"] == {"enable_thinking": True}
+
+def test_generate_can_enable_thinking_but_postprocess_keeps_it_off(monkeypatch):
+    # generate defaults to OFF (correction is mechanical); the flag still works if asked.
+    captured = {}
+    def fake_post(url, json=None, **k):
+        captured["json"] = json
+        return FakeResp(lines=_sse(["ok"]))
+    monkeypatch.setattr(lc.requests, "post", fake_post)
+    lc.generate("ignored", "p")
+    assert captured["json"]["chat_template_kwargs"] == {"enable_thinking": False}
+    lc.generate("ignored", "p", think=True)
+    assert captured["json"]["chat_template_kwargs"] == {"enable_thinking": True}
+
+# ---- reasoning is split out of the answer ----
+
+def test_reasoning_content_field_routed_to_reason_cb(monkeypatch):
+    # When the server exposes a separate reasoning_content delta, it must NOT
+    # appear in the answer or token_cb; only the content does.
+    deltas = [{"reasoning_content": "Let me think... "},
+              {"reasoning_content": "in English."},
+              {"content": "Det "}, {"content": "är bra."}]
+    monkeypatch.setattr(lc.requests, "post", lambda *a, **k: FakeResp(lines=_sse_deltas(deltas)))
+    answer_tokens, reason_tokens = [], []
+    out = lc.chat("ignored", [{"role": "user", "content": "q"}], think=True,
+                  token_cb=answer_tokens.append, reason_cb=reason_tokens.append)
+    assert out == "Det är bra."
+    assert "".join(answer_tokens) == "Det är bra."
+    assert "".join(reason_tokens) == "Let me think... in English."
+
+def test_inline_think_tags_stripped_from_answer(monkeypatch):
+    # Older/other reasoning-format: <think>...</think> arrives inline in content.
+    chunks = ["<think>", "internal english reasoning", "</think>", "Det ", "är bra."]
+    monkeypatch.setattr(lc.requests, "post", lambda *a, **k: FakeResp(lines=_sse(chunks)))
+    answer_tokens, reason_tokens = [], []
+    out = lc.chat("ignored", [{"role": "user", "content": "q"}], think=True,
+                  token_cb=answer_tokens.append, reason_cb=reason_tokens.append)
+    assert out == "Det är bra."
+    assert "<think>" not in out and "reasoning" not in out
+    assert "".join(reason_tokens) == "internal english reasoning"
+
+def test_inline_think_tag_split_across_chunks(monkeypatch):
+    # The literal markers may be torn across streamed chunks; still must not leak.
+    chunks = ["<th", "ink>secret", "</thi", "nk>Svar"]
+    monkeypatch.setattr(lc.requests, "post", lambda *a, **k: FakeResp(lines=_sse(chunks)))
+    answer_tokens = []
+    out = lc.chat("ignored", [{"role": "user", "content": "q"}], think=True,
+                  token_cb=answer_tokens.append)
+    assert out == "Svar"
+    assert "".join(answer_tokens) == "Svar"
