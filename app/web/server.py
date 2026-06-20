@@ -276,6 +276,8 @@ def create_app(base_dir: Path | None = None,
         source = (body.get("source") or "").strip()
         model_id = body.get("model_id")
         language = body.get("language") or ""
+        sub_mode = body.get("sub_mode") or "separate"     # "separate" | "embed"
+        embed_kind = body.get("embed_kind")               # "soft" | "burn" | None
         formats = [f for f in (body.get("formats") or ["srt"]) if f in transcriber.WRITERS]
         if not source or not model_id or not formats:
             return JSONResponse({"error": "källa, modell och minst ett format krävs"},
@@ -331,7 +333,7 @@ def create_app(base_dir: Path | None = None,
             # Transkriberingar/ and pre-generate a thumbnail (best effort).
             date_str = datetime.now().strftime("%Y-%m-%d")
             assembled = output_store.assemble_output(
-                media, srt_path, base, date_str, "separate", None,
+                media, srt_path, base, date_str, sub_mode, embed_kind,
                 emit_log=lambda m: emit({"type": "log", "msg": m}))
             files = assembled["files"]
             video = assembled["video"]

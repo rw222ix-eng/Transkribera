@@ -30,6 +30,8 @@
     model: 'KB-Whisper large',
     language: 'sv',
     formats: { srt: true, txt: true, vtt: false },
+    subtitleMode: 'separate',   // 'separate' = media + SRT i mappen | 'embed' = bädda in i videon
+    embedKind: 'soft',          // 'soft' = muxat sub-spår | 'burn' = inbränt
     run: 'idle',
     progress: 0,
     elapsed: 0,
@@ -486,7 +488,8 @@
     _t = setInterval(function () { if (token === _runToken) setState({ elapsed: (Date.now() - t0) / 1000 }); }, 250);
     var formats = ['srt', 'txt', 'vtt'].filter(function (f) { return S.formats[f]; });
     streamPost('/api/transcribe',
-      { source: active.path || active.name, model_id: S.model, language: S.language, formats: formats },
+      { source: active.path || active.name, model_id: S.model, language: S.language, formats: formats,
+        sub_mode: S.subtitleMode, embed_kind: S.subtitleMode === 'embed' ? S.embedKind : null },
       function (ev) {
         if (token !== _runToken) return;
         if (ev.type === 'progress') { setState({ progress: ev.pct || 0 }); }
@@ -808,6 +811,12 @@
     var langs = [['', 'Auto'], ['sv', 'Svenska'], ['en', 'Engelska']];
     var langOptions = langs.map(function (p) { return { label: p[1], style: segBtn(st.language === p[0], '38px'), onPick: function () { pickLang(p[0]); } }; });
     var formatChips = ['srt', 'txt', 'vtt'].map(function (f) { return { label: f.toUpperCase(), style: chip(st.formats[f]), onToggle: function () { toggleFmt(f); } }; });
+    // Subtitle delivery for video sources: keep media + SRT side by side, or embed
+    // the subtitles into the video (soft mux or hard burn). Only shown for video.
+    var _activeQ = st.queue.find(function (q) { return q.id === st.activeId; }) || st.queue[0];
+    var _activeIsVideo = !!(_activeQ && /\.(mp4|mkv|mov|webm|avi|m4v)$/i.test(_activeQ.name || ''));
+    var subtitleOptions = [['separate', 'Spara separat'], ['embed', 'Bädda in']].map(function (p) { return { label: p[1], style: segBtn(st.subtitleMode === p[0], '34px'), onPick: function () { setState({ subtitleMode: p[0] }); } }; });
+    var embedOptions = [['soft', 'Mjukt sub-spår'], ['burn', 'Hård inbränning']].map(function (p) { return { label: p[1], style: segBtn(st.embedKind === p[0], '34px'), onPick: function () { setState({ embedKind: p[0] }); } }; });
 
     var steps = STEPS.map(function (label, idx) {
       var done = idx < cur, active = idx === cur && !isDone;
@@ -1049,6 +1058,8 @@
       curModelName: curModel.label || curModel.id, curModelMeta: curModel.size + ' · ' + (curModel.id === recommendModel(st.language) ? 'matchar språket' : 'installerad'), curModelDot: curFit.dot,
       toggleModelDD: toggleModelDD, modelDDOpen: st.openDD === 'model', modelOptions: modelOptions,
       langOptions: langOptions, formatChips: formatChips,
+      subtitleOptions: subtitleOptions, embedOptions: embedOptions,
+      showSubtitleMode: _activeIsVideo, showEmbed: st.subtitleMode === 'embed' && _activeIsVideo,
 
       onStart: start, isRunning: isRunning, notRunning: !isRunning,
       startBtnLabel: isRunning ? 'Transkriberar…' : isDone ? 'Kör igen' : (st.queue.length > 1 ? 'Starta · ' + st.queue.length + ' filer' : 'Starta'),
@@ -1361,6 +1372,20 @@ function viewTranscribe(v){ return `
           `; }).join('') }
         </div>
         </div>
+
+        ${ v.showSubtitleMode ? `
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:12px;box-shadow:var(--shadow-sm)">
+          <span style="font-size:14px;color:var(--ink-2);font-weight:500">Undertext i video</span>
+          <div style="display:flex;gap:3px;padding:4px;background:var(--track);border:1px solid var(--line);border-radius:11px">
+            ${ v.subtitleOptions.map(function(o){ return `<button data-click="${on(o.onPick)}" style="${o.style}" data-sh="background:var(--surface) !important;color:var(--ink) !important;box-shadow:var(--shadow-sm) !important">${esc(o.label)}</button>`; }).join('') }
+          </div>
+          ${ v.showEmbed ? `
+          <div style="display:flex;gap:3px;padding:4px;background:var(--track);border:1px solid var(--line);border-radius:11px">
+            ${ v.embedOptions.map(function(o){ return `<button data-click="${on(o.onPick)}" style="${o.style}" data-sh="background:var(--surface) !important;color:var(--ink) !important;box-shadow:var(--shadow-sm) !important">${esc(o.label)}</button>`; }).join('') }
+          </div>
+          ` : '' }
+        </div>
+        ` : '' }
 
         <div style="flex:0 0 auto;height:46px"></div>
 
