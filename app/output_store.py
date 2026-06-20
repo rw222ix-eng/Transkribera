@@ -8,6 +8,8 @@ import subprocess
 from pathlib import Path
 from typing import Callable
 
+from app import media as media_tools
+
 _INVALID = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 
 VIDEO_EXTS = {".mp4", ".mkv", ".mov", ".webm", ".avi", ".m4v"}
@@ -205,4 +207,10 @@ def assemble_output(media: Path, srt: Path | None, base_dir: Path, date_str: str
 
     video = {"path": str(media), "name": media.name, "ext": media.suffix.lstrip("."),
              "embedded": embedded, "embed_kind": embed_kind if embedded else None}
+
+    try:
+        media_tools.make_thumbnail(Path(media))
+    except Exception as e:
+        log("Kunde inte skapa miniatyr: " + str(e))
+
     return {"folder": str(folder), "files": files, "video": video}

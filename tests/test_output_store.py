@@ -228,3 +228,19 @@ def test_delete_result_folder_missing_is_ok(tmp_path):
 def test_delete_result_folder_empty_returns_false(tmp_path):
     assert output_store.delete_result_folder(tmp_path, None) is False
     assert output_store.delete_result_folder(tmp_path, "") is False
+
+
+def test_assemble_output_generates_thumbnail(tmp_path, monkeypatch):
+    from app import output_store
+    m = tmp_path / "klipp.mp4"
+    m.write_text("v", encoding="utf-8")
+    srt = tmp_path / "klipp.srt"
+    srt.write_text("1\n", encoding="utf-8")
+    called = {}
+    monkeypatch.setattr("app.output_store.media_tools.make_thumbnail",
+                        lambda p: called.setdefault("path", str(p)))
+
+    output_store.assemble_output(m, srt, tmp_path, "2026-06-19", "separate", None)
+    # make_thumbnail was called with the media now living in the result folder
+    assert called.get("path", "").endswith("klipp.mp4")
+    assert "Transkriberingar" in called["path"]
