@@ -605,6 +605,95 @@ def create_app(base_dir: Path | None = None,
             return JSONResponse({"error": "namn krävs"}, status_code=400)
         return {"id": gid, "namn": body.get("namn", "").strip()}
 
+    # ---- Insikter: LLM-extraktion + redigerbara kort (Fas 2) ------------------
+
+    @app.get("/api/lessons/{lesson_id}/insights")
+    def api_insights(lesson_id: int):
+        conn = _db()
+        try:
+            return db.list_insights(conn, lesson_id)
+        finally:
+            conn.close()
+
+    @app.post("/api/lessons/{lesson_id}/extract")
+    async def api_extract(lesson_id: int):
+        conn = _db()
+        try:
+            les = db.get_lesson(conn, lesson_id)
+            transcript = db.lesson_transcript(conn, lesson_id) if les else ""
+        finally:
+            conn.close()
+        if les is None:
+            return JSONResponse({"error": "lektionen finns inte"}, status_code=404)
+        if not transcript:
+            return JSONResponse(
+                {"error": "lektionen saknar transkript att analysera"}, status_code=400)
+        if not arb.try_acquire_gpu():
+            return JSONResponse(
+                {"error": "GPU upptagen med transkribering – försök igen strax."},
+                status_code=409)
+
+        def job(emit):
+            try:
+                if arb.ensure_llm() is None:
+                    raise RuntimeError("Språkmodellen är inte installerad.")
+                emit({"type": "log", "msg": "Analyserar lektionen ..."})
+                found = postprocess.extract(transcript, llm_manager.ACTIVE_LLM.filename)
+                conn = _db()
+                try:
+                    # Replace the previous LLM run; keep the teacher's manual notes.
+                    db.delete_insights_by_source(conn, lesson_id, "llm")
+                    saved = [db.add_insight(conn, lesson_id, f["typ"], f["text"],
+                                            due_date=f["due_date"], ref=f["ref"],
+                                            source="llm")
+                             for f in found]
+                finally:
+                    conn.close()
+                return {"insights": saved, "count": len(saved)}
+            finally:
+                arb.release_gpu()
+        return _sse_response(job)
+
+    @app.post("/api/lessons/{lesson_id}/insights")
+    async def api_insight_add(lesson_id: int, req: Request):
+        body = await req.json()
+        text = (body.get("text") or "").strip()
+        if not text:
+            return JSONResponse({"error": "text krävs"}, status_code=400)
+        conn = _db()
+        try:
+            if db.get_lesson(conn, lesson_id) is None:
+                return JSONResponse({"error": "lektionen finns inte"}, status_code=404)
+            ins = db.add_insight(conn, lesson_id, body.get("typ", "övrigt"), text,
+                                 due_date=body.get("due_date") or None,
+                                 ref=body.get("ref") or None, source="manuell")
+        finally:
+            conn.close()
+        return ins
+
+    @app.patch("/api/insights/{insight_id}")
+    async def api_insight_patch(insight_id: int, req: Request):
+        body = await req.json()
+        conn = _db()
+        try:
+            if db.get_insight(conn, insight_id) is None:
+                return JSONResponse({"error": "insikten finns inte"}, status_code=404)
+            fields = {k: body[k] for k in ("typ", "text", "due_date", "ref", "status")
+                      if k in body}
+            ins = db.update_insight(conn, insight_id, **fields)
+        finally:
+            conn.close()
+        return ins
+
+    @app.delete("/api/insights/{insight_id}")
+    def api_insight_delete(insight_id: int):
+        conn = _db()
+        try:
+            db.delete_insight(conn, insight_id)
+        finally:
+            conn.close()
+        return {"ok": True}
+
     @app.post("/api/postprocess")
     async def api_postprocess(req: Request):
         body = await req.json()

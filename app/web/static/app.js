@@ -93,6 +93,13 @@
     lessonFilterCourse: '',
     editingLesson: null,
     lessonEdits: {},
+    expandedLesson: null,
+    insightsByLesson: {},
+    extractingLesson: null,
+    editingInsight: null,
+    insightEdits: {},
+    manualTyp: 'svårighet',
+    manualText: '',
     confirm: null,
     diskWarn: null,
     transcript: null,
@@ -509,6 +516,91 @@
   function deleteLesson(id) {
     fetch('/api/lessons/' + encodeURIComponent(id), { method: 'DELETE' })
       .then(function () { loadLessons(); loadHistory(); }).catch(function () {});
+  }
+
+  /* ------------------------------------------------------ insikter (Fas 2) -- */
+  function loadInsights(lessonId) {
+    return getJSON('/api/lessons/' + encodeURIComponent(lessonId) + '/insights')
+      .then(function (list) {
+        if (!Array.isArray(list)) return;
+        setState(function (s) { var m = Object.assign({}, s.insightsByLesson); m[lessonId] = list; return { insightsByLesson: m }; });
+      }).catch(function () {});
+  }
+  function toggleInsights(lessonId) {
+    if (S.expandedLesson === lessonId) { setState({ expandedLesson: null, editingInsight: null }); return; }
+    setState({ expandedLesson: lessonId, editingLesson: null, editingInsight: null }, function () { loadInsights(lessonId); });
+  }
+  function runExtract(lessonId) {
+    setState({ extractingLesson: lessonId });
+    streamPost('/api/lessons/' + encodeURIComponent(lessonId) + '/extract', {}, function (ev) {
+      if (ev.type === 'done') { setState({ extractingLesson: null }, function () { loadInsights(lessonId); }); }
+      else if (ev.type === 'error') { setState({ extractingLesson: null, toast: { title: 'Analys misslyckades', name: '', detail: ev.message || '', kind: 'error' } }); }
+    });
+  }
+  function startEditInsight(ins) {
+    setState({ editingInsight: ins.id, insightEdits: { text: ins.text || '', ref: ins.ref || '', due_date: ins.due_date || '' } });
+  }
+  function cancelEditInsight() { setState({ editingInsight: null, insightEdits: {} }); }
+  function onInsightField(field, val) {
+    setState(function (s) { var e = Object.assign({}, s.insightEdits); e[field] = val; return { insightEdits: e }; });
+  }
+  function saveInsight(id, lessonId) {
+    var e = S.insightEdits || {};
+    fetch('/api/insights/' + encodeURIComponent(id), {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: e.text || '', ref: e.ref || '', due_date: e.due_date || '' })
+    }).then(function () { setState({ editingInsight: null, insightEdits: {} }, function () { loadInsights(lessonId); }); })
+      .catch(function () { setState({ editingInsight: null, insightEdits: {} }); });
+  }
+  function toggleInsightStatus(ins, lessonId) {
+    var next = ins.status === 'klar' ? 'öppen' : 'klar';
+    fetch('/api/insights/' + encodeURIComponent(ins.id), {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: next })
+    }).then(function () { loadInsights(lessonId); }).catch(function () {});
+  }
+  function deleteInsight(id, lessonId) {
+    fetch('/api/insights/' + encodeURIComponent(id), { method: 'DELETE' })
+      .then(function () { loadInsights(lessonId); }).catch(function () {});
+  }
+  function addManualInsight(lessonId) {
+    var text = (S.manualText || '').trim();
+    if (!text) return;
+    fetch('/api/lessons/' + encodeURIComponent(lessonId) + '/insights', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ typ: S.manualTyp || 'övrigt', text: text })
+    }).then(function () { setState({ manualText: '' }, function () { loadInsights(lessonId); }); }).catch(function () {});
+  }
+
+  var INSIGHT_TYPES = [
+    { typ: 'kalender', label: 'Kalender' },
+    { typ: 'svårighet', label: 'Svårigheter' },
+    { typ: 'åtgärd', label: 'Åtgärder' },
+    { typ: 'grupprum', label: 'Grupprum' },
+    { typ: 'material', label: 'Material' },
+    { typ: 'övrigt', label: 'Övrigt' },
+  ];
+  function buildInsightGroups(list, lessonId) {
+    var ed = S.insightEdits || {};
+    return INSIGHT_TYPES.map(function (t) {
+      var items = (list || []).filter(function (i) { return i.typ === t.typ; }).map(function (ins) {
+        var editing = S.editingInsight === ins.id;
+        return {
+          id: ins.id, text: ins.text || '', ref: ins.ref || '', due_date: ins.due_date || '',
+          done: ins.status === 'klar', isLlm: ins.source === 'llm',
+          editing: editing,
+          edText: editing ? (ed.text || '') : '', edRef: editing ? (ed.ref || '') : '', edDue: editing ? (ed.due_date || '') : '',
+          onEdit: function () { startEditInsight(ins); },
+          onCancel: cancelEditInsight,
+          onSave: function () { saveInsight(ins.id, lessonId); },
+          onToggle: function () { toggleInsightStatus(ins, lessonId); },
+          onDelete: function () { deleteInsight(ins.id, lessonId); },
+          onText: function (e) { onInsightField('text', e.target.value); },
+          onRef: function (e) { onInsightField('ref', e.target.value); },
+          onDue: function (e) { onInsightField('due_date', e.target.value); },
+        };
+      });
+      return { typ: t.typ, label: t.label, items: items, count: items.length };
+    }).filter(function (g) { return g.count > 0; });
   }
 
   function togglePlay() {
@@ -1129,6 +1221,8 @@
       if (l.group) tags.push({ label: l.group });
       if (l.course) tags.push({ label: l.course });
       if (l.sal) tags.push({ label: 'Sal ' + l.sal });
+      var insightsOpen = st.expandedLesson === l.id;
+      var insightGroups = insightsOpen ? buildInsightGroups(st.insightsByLesson[l.id], l.id) : [];
       return {
         id: l.id, name: l.name || '(namnlös)', date: l.date || l.datum || '',
         meta: [l.dur, l.model, l.lang].filter(Boolean).join(' · '),
@@ -1146,6 +1240,16 @@
         onCourse: function (e) { onLessonField('course', e.target.value); },
         onSal: function (e) { onLessonField('sal', e.target.value); },
         onDatum: function (e) { onLessonField('datum', e.target.value); },
+        insightsOpen: insightsOpen,
+        insightGroups: insightGroups,
+        insightsEmpty: insightsOpen && insightGroups.length === 0,
+        extracting: st.extractingLesson === l.id,
+        manualTyp: st.manualTyp, manualText: st.manualText,
+        onToggleInsights: function () { toggleInsights(l.id); },
+        onExtract: function () { runExtract(l.id); },
+        onManualTyp: function (e) { setState({ manualTyp: e.target.value }); },
+        onManualText: function (e) { setState({ manualText: e.target.value }); },
+        onAddManual: function () { addManualInsight(l.id); },
       };
     });
 
@@ -2119,6 +2223,7 @@ function viewLessons(v){
               <div style="display:flex;align-items:center;gap:7px;flex:0 0 auto">
                 <button data-click="${on(h.onOpen)}" style="background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:9px;padding:8px 14px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit" data-sh="border-color:var(--ink) !important;background:var(--ink) !important;color:var(--btn-fg) !important">Öppna</button>
                 <button data-click="${on(h.onEdit)}" style="background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:9px;padding:8px 14px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit" data-sh="border-color:var(--accent) !important;color:var(--accent) !important">${ h.editing ? 'Tilldelar …' : 'Tilldela' }</button>
+                <button data-click="${on(h.onToggleInsights)}" style="background:${h.insightsOpen?'var(--accent-weak)':'var(--surface)'};border:1px solid ${h.insightsOpen?'var(--accent)':'var(--line)'};color:${h.insightsOpen?'var(--accent)':'var(--ink)'};border-radius:9px;padding:8px 14px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit" data-sh="border-color:var(--accent) !important;color:var(--accent) !important">Insikter</button>
                 <button data-click="${on(h.onDelete)}" aria-label="Ta bort" style="width:38px;height:38px;border:1px solid var(--line);background:var(--surface);border-radius:9px;cursor:pointer;color:var(--ink-2);display:flex;align-items:center;justify-content:center" data-sh="border-color:var(--bad) !important;color:var(--bad) !important">
                   <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5h10"></path><path d="M6.5 4.5V3h3v1.5"></path><path d="M4.5 4.5 5 13h6l.5-8.5"></path></svg>
                 </button>
@@ -2140,10 +2245,73 @@ function viewLessons(v){
                 </div>
               </div>
             ` : '' }
+            ${ h.insightsOpen ? insightsPanel(h) : '' }
           </div>
         `; }).join('') }
       </div>
     </section>`;
+}
+
+function insightsPanel(h){
+  var inStyle = 'background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:9px;padding:7px 10px;font-size:13.5px;font-family:inherit;min-width:0;width:100%;box-sizing:border-box';
+  var typOpts = INSIGHT_TYPES.map(function(t){ return '<option value="'+t.typ+'"'+(h.manualTyp===t.typ?' selected':'')+'>'+esc(t.label)+'</option>'; }).join('');
+  return `
+    <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line)">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px">
+        <span style="font-size:13px;font-weight:600;color:var(--ink-2);letter-spacing:0.02em">INSIKTER</span>
+        <button data-click="${on(h.onExtract)}" ${h.extracting?'disabled':''} style="display:inline-flex;align-items:center;gap:7px;background:var(--accent-weak);color:var(--accent);border:1px solid var(--accent);border-radius:9px;padding:7px 14px;font-size:13.5px;font-weight:600;cursor:${h.extracting?'default':'pointer'};font-family:inherit;opacity:${h.extracting?'0.7':'1'}">
+          ${ h.extracting ? 'Analyserar …' : '✨ Analysera lektion' }
+        </button>
+      </div>
+
+      ${ (h.insightsEmpty && !h.extracting) ? `
+        <div style="font-size:13.5px;color:var(--ink-3);padding:8px 0 14px">Inga insikter än. Kör "Analysera lektion" för att låta språkmodellen plocka ut kalenderposter, svårigheter, åtgärder, grupprum och material — eller lägg till en egen anteckning nedan.</div>
+      ` : '' }
+
+      <div style="display:flex;flex-direction:column;gap:14px">
+        ${ h.insightGroups.map(function(g){ return `
+          <div data-key="grp-${esc(g.typ)}">
+            <div style="font-size:12px;font-weight:600;color:var(--ink-3);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:6px">${esc(g.label)}</div>
+            <div style="display:flex;flex-direction:column;gap:7px">
+              ${ g.items.map(function(it){ return it.editing ? `
+                <div data-key="ins-${esc(it.id)}" style="border:1px solid var(--line-2);border-radius:10px;padding:10px;background:var(--sunken);display:grid;gap:7px">
+                  <input value="${esc(it.edText)}" data-input="${on(it.onText)}" placeholder="Text" style="${inStyle}">
+                  <div style="display:grid;grid-template-columns:1fr 150px;gap:7px">
+                    <input value="${esc(it.edRef)}" data-input="${on(it.onRef)}" placeholder="Uppgift/ämne/plats (valfritt)" style="${inStyle}">
+                    <input type="date" value="${esc(it.edDue)}" data-input="${on(it.onDue)}" style="${inStyle}">
+                  </div>
+                  <div style="display:flex;gap:7px;justify-content:flex-end">
+                    <button data-click="${on(it.onCancel)}" style="background:var(--surface);border:1px solid var(--line);color:var(--ink-2);border-radius:8px;padding:6px 13px;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit">Avbryt</button>
+                    <button data-click="${on(it.onSave)}" style="background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:8px;padding:6px 15px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Spara</button>
+                  </div>
+                </div>
+              ` : `
+                <div data-key="ins-${esc(it.id)}" style="display:flex;align-items:flex-start;gap:10px;border:1px solid var(--line);border-radius:10px;padding:9px 11px;background:var(--surface)">
+                  <button data-click="${on(it.onToggle)}" aria-label="Markera klar" title="Markera klar/öppen" style="flex:0 0 auto;width:18px;height:18px;margin-top:1px;border-radius:5px;border:1.5px solid ${it.done?'var(--ok)':'var(--line-2)'};background:${it.done?'var(--ok)':'transparent'};cursor:pointer;display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px">${it.done?'✓':''}</button>
+                  <div style="flex:1;min-width:0">
+                    <div style="font-size:14px;color:${it.done?'var(--ink-3)':'var(--ink)'};${it.done?'text-decoration:line-through':''}">${esc(it.text)}</div>
+                    ${ (it.ref || it.due_date) ? `<div style="font-size:12px;color:var(--ink-3);margin-top:2px">${ it.ref?esc(it.ref):'' }${ (it.ref&&it.due_date)?' · ':'' }${ it.due_date?('📅 '+esc(it.due_date)):'' }</div>` : '' }
+                  </div>
+                  ${ it.isLlm ? `<span title="Föreslagen av språkmodellen" style="flex:0 0 auto;font-size:10.5px;font-weight:600;color:var(--accent);background:var(--accent-weak);border-radius:5px;padding:1px 6px;margin-top:1px">AI</span>` : '' }
+                  <button data-click="${on(it.onEdit)}" aria-label="Redigera" style="flex:0 0 auto;width:30px;height:30px;border:1px solid var(--line);background:var(--surface);border-radius:8px;cursor:pointer;color:var(--ink-2);display:flex;align-items:center;justify-content:center" data-sh="border-color:var(--accent) !important;color:var(--accent) !important">
+                    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M11.5 2.5l2 2L6 12l-3 1 1-3z"></path></svg>
+                  </button>
+                  <button data-click="${on(it.onDelete)}" aria-label="Ta bort" style="flex:0 0 auto;width:30px;height:30px;border:1px solid var(--line);background:var(--surface);border-radius:8px;cursor:pointer;color:var(--ink-2);display:flex;align-items:center;justify-content:center" data-sh="border-color:var(--bad) !important;color:var(--bad) !important">
+                    <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5h10"></path><path d="M4.5 4.5 5 13h6l.5-8.5"></path></svg>
+                  </button>
+                </div>
+              `; }).join('') }
+            </div>
+          </div>
+        `; }).join('') }
+      </div>
+
+      <div style="display:grid;grid-template-columns:150px 1fr auto;gap:7px;margin-top:14px;padding-top:12px;border-top:1px solid var(--line)">
+        <select data-change="${on(h.onManualTyp)}" style="${inStyle};appearance:none;cursor:pointer">${typOpts}</select>
+        <input value="${esc(h.manualText)}" data-input="${on(h.onManualText)}" placeholder="Lägg till en egen anteckning …" style="${inStyle}">
+        <button data-click="${on(h.onAddManual)}" style="background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:9px;padding:7px 15px;font-size:13.5px;font-weight:500;cursor:pointer;font-family:inherit" data-sh="border-color:var(--ink) !important;background:var(--ink) !important;color:var(--btn-fg) !important">Lägg till</button>
+      </div>
+    </div>`;
 }
 
 function viewModals(v){ return `

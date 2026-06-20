@@ -406,3 +406,132 @@ def test_history_one_endpoint(tmp_path, monkeypatch):
     c = TestClient(server.create_app(base_dir=tmp_path))
     assert c.get("/api/history/h1").json()["name"] == "lektion.mp3"
     assert c.get("/api/history/nope").status_code == 404
+
+
+# ---- Insikter: LLM-extraktion + redigerbara kort (Fas 2) --------------------
+
+class _ReadyArbiter:
+    """GPU free, LLM installed — lets extraction run end-to-end in tests."""
+    def try_acquire_gpu(self): return True
+    def release_gpu(self): pass
+    def ensure_llm(self): return "http://x"
+    def stop_llm(self): return False
+    def prewarm_async(self): pass
+    def llm_installed(self): return True
+
+
+class _NoLlmArbiter(_ReadyArbiter):
+    """GPU free but the GGUF is not installed."""
+    def ensure_llm(self): return None
+
+
+def _lesson_client(tmp_path, monkeypatch, *, transcript=True, arbiter=None):
+    from fastapi.testclient import TestClient
+    entry = {"id": "h1", "ts": "2026-06-20T09:14:00", "name": "lektion.mp3",
+             "formats": ["TXT"], "words": 10}
+    if transcript:
+        entry["transcript"] = [{"start": 0, "end": 2, "text": "vi gick igenom derivata"}]
+    (tmp_path / "history.json").write_text(json.dumps([entry]), encoding="utf-8")
+    monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: _HW())
+    return TestClient(server.create_app(base_dir=tmp_path, arbiter=arbiter or _ReadyArbiter()))
+
+
+def test_extract_writes_llm_insights(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        server.postprocess, "extract",
+        lambda transcript, model, token_cb=None: [
+            {"typ": "svårighet", "text": "derivata", "due_date": None, "ref": "uppg 3"}])
+    c = _lesson_client(tmp_path, monkeypatch)
+    lid = c.get("/api/lessons").json()[0]["id"]
+    assert c.post(f"/api/lessons/{lid}/extract").status_code == 200
+    ins = c.get(f"/api/lessons/{lid}/insights").json()
+    assert len(ins) == 1
+    assert ins[0]["text"] == "derivata" and ins[0]["source"] == "llm"
+    assert ins[0]["status"] == "öppen" and ins[0]["ref"] == "uppg 3"
+
+
+def test_extract_replaces_llm_keeps_manual(tmp_path, monkeypatch):
+    c = _lesson_client(tmp_path, monkeypatch)
+    lid = c.get("/api/lessons").json()[0]["id"]
+    c.post(f"/api/lessons/{lid}/insights", json={"typ": "material", "text": "egen anteckning"})
+    monkeypatch.setattr(server.postprocess, "extract",
+                        lambda *a, **k: [{"typ": "kalender", "text": "prov", "due_date": None, "ref": None}])
+    c.post(f"/api/lessons/{lid}/extract")
+    monkeypatch.setattr(server.postprocess, "extract",
+                        lambda *a, **k: [{"typ": "åtgärd", "text": "ny", "due_date": None, "ref": None}])
+    c.post(f"/api/lessons/{lid}/extract")          # re-run replaces the old LLM ones
+    texts = sorted(i["text"] for i in c.get(f"/api/lessons/{lid}/insights").json())
+    assert texts == ["egen anteckning", "ny"]      # manual survived, old LLM "prov" gone
+
+
+def test_extract_no_transcript_400(tmp_path, monkeypatch):
+    c = _lesson_client(tmp_path, monkeypatch, transcript=False)
+    lid = c.get("/api/lessons").json()[0]["id"]
+    assert c.post(f"/api/lessons/{lid}/extract").status_code == 400
+
+
+def test_extract_busy_returns_409(tmp_path, monkeypatch):
+    (tmp_path / "history.json").write_text(json.dumps([
+        {"id": "h1", "ts": "2026-06-20T09:14:00", "name": "l.mp3", "formats": ["TXT"],
+         "transcript": [{"start": 0, "end": 1, "text": "x"}]}]), encoding="utf-8")
+    monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: _HW())
+    c = _busy_client(tmp_path)
+    lid = c.get("/api/lessons").json()[0]["id"]
+    assert c.post(f"/api/lessons/{lid}/extract").status_code == 409
+
+
+def test_insight_manual_crud(tmp_path, monkeypatch):
+    c = _lesson_client(tmp_path, monkeypatch)
+    lid = c.get("/api/lessons").json()[0]["id"]
+    r = c.post(f"/api/lessons/{lid}/insights", json={"typ": "material", "text": "facit"})
+    assert r.status_code == 200 and r.json()["source"] == "manuell"
+    iid = r.json()["id"]
+    pr = c.patch(f"/api/insights/{iid}", json={"status": "klar", "text": "facit kap 3"})
+    assert pr.json()["status"] == "klar" and pr.json()["text"] == "facit kap 3"
+    assert c.delete(f"/api/insights/{iid}").json() == {"ok": True}
+    assert c.get(f"/api/lessons/{lid}/insights").json() == []
+
+
+def test_insight_manual_requires_text(tmp_path, monkeypatch):
+    c = _lesson_client(tmp_path, monkeypatch)
+    lid = c.get("/api/lessons").json()[0]["id"]
+    assert c.post(f"/api/lessons/{lid}/insights", json={"text": "  "}).status_code == 400
+
+
+def test_insight_patch_empty_is_noop(tmp_path, monkeypatch):
+    c = _lesson_client(tmp_path, monkeypatch)
+    lid = c.get("/api/lessons").json()[0]["id"]
+    iid = c.post(f"/api/lessons/{lid}/insights", json={"text": "facit"}).json()["id"]
+    r = c.patch(f"/api/insights/{iid}", json={})     # no editable fields -> unchanged row
+    assert r.status_code == 200 and r.json()["text"] == "facit"
+
+
+def test_insight_patch_404(tmp_path, monkeypatch):
+    c = _lesson_client(tmp_path, monkeypatch)
+    assert c.patch("/api/insights/999", json={"text": "x"}).status_code == 404
+
+
+def test_extract_uses_stored_transcript(tmp_path, monkeypatch):
+    """Extraction reads the transcript from the DB (mirrored at migrate/transcribe
+    time), not by scanning history.json."""
+    captured = {}
+    def fake_extract(transcript, model, token_cb=None):
+        captured["transcript"] = transcript
+        return []
+    monkeypatch.setattr(server.postprocess, "extract", fake_extract)
+    c = _lesson_client(tmp_path, monkeypatch)        # startup migration reads history once
+    lid = c.get("/api/lessons").json()[0]["id"]      # GET /api/lessons reads the DB, not history
+    # From here on, any history-file scan must blow up — extract must not need it.
+    monkeypatch.setattr(server.history_store, "load_history",
+                        lambda *a, **k: (_ for _ in ()).throw(AssertionError("scanned history")))
+    assert c.post(f"/api/lessons/{lid}/extract").status_code == 200
+    assert captured["transcript"] == "vi gick igenom derivata"
+
+
+def test_extract_llm_not_installed_streams_error(tmp_path, monkeypatch):
+    monkeypatch.setattr(server.postprocess, "extract", lambda *a, **k: [])
+    c = _lesson_client(tmp_path, monkeypatch, arbiter=_NoLlmArbiter())
+    lid = c.get("/api/lessons").json()[0]["id"]
+    r = c.post(f"/api/lessons/{lid}/extract")
+    assert r.status_code == 200                       # SSE — error is in the stream
+    assert "inte installerad" in r.text
