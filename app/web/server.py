@@ -15,8 +15,8 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from app import (debug_log, hardware, recommend, whisper_manager, llm_client,
-                 llm_manager, llama_server, online_catalog, youtube, postprocess,
-                 transcriber, history_store)
+                 llm_manager, online_catalog, youtube, postprocess, transcriber,
+                 history_store, gpu_arbiter)
 from app.models_catalog import WHISPER_MODELS, LLM_MODELS
 
 _MONTHS_SV = ["jan", "feb", "mar", "apr", "maj", "jun", "jul", "aug", "sep", "okt", "nov", "dec"]
@@ -167,7 +167,8 @@ def _sse_response(job) -> StreamingResponse:
     return StreamingResponse(gen(), media_type="text/event-stream")
 
 
-def create_app(base_dir: Path | None = None) -> FastAPI:
+def create_app(base_dir: Path | None = None,
+               arbiter: "gpu_arbiter.GpuArbiter | None" = None) -> FastAPI:
     base = base_dir or _base_dir()
     models_root = base / "models"
     history_file = base / "history.json"
@@ -177,6 +178,13 @@ def create_app(base_dir: Path | None = None) -> FastAPI:
 
     app = FastAPI(title="Transkribera Web")
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+    # Single owner of the LLM process + GPU exclusivity. The LLM is NOT started
+    # here — it starts lazily on the first correction/chat (see /api/postprocess,
+    # /api/chat); a transcription unloads it to free VRAM (see /api/transcribe).
+    # Entrypoints stop it on exit via app.state.arbiter.
+    arb = arbiter if arbiter is not None else gpu_arbiter.GpuArbiter(models_root, on_log=print)
+    app.state.arbiter = arb
 
     @app.get("/")
     def index():
@@ -273,7 +281,23 @@ def create_app(base_dir: Path | None = None) -> FastAPI:
         rec = recommend.evaluate_whisper(spec, hw)
         model_dir = str(whisper_manager.model_dir_for(spec, models_root))
 
+        # Take the GPU exclusively for this job. Whisper (~10 GB) cannot share the
+        # 24 GB card with the resident LLM (~21 GB), so we stop the LLM first.
+        if not arb.try_acquire_gpu():
+            return JSONResponse(
+                {"error": "GPU upptagen – vänta tills pågående jobb är klart."},
+                status_code=409)
+
         def job(emit):
+            try:
+                if arb.stop_llm():
+                    emit({"type": "log", "msg": "Frigör GPU-minne (stoppar språkmodellen) ..."})
+                return _transcribe(emit)
+            finally:
+                arb.release_gpu()
+                arb.prewarm_async()   # restart the LLM in the background for the next correction
+
+        def _transcribe(emit):
             if source.startswith("http://") or source.startswith("https://"):
                 emit({"type": "log", "msg": "Laddar ner från URL ..."})
                 out_dir = base / "downloads"
@@ -334,14 +358,20 @@ def create_app(base_dir: Path | None = None) -> FastAPI:
         model = body.get("model", "")
         if not transcript or not model:
             return JSONResponse({"error": "text och modell krävs"}, status_code=400)
+        if not arb.try_acquire_gpu():
+            return JSONResponse(
+                {"error": "GPU upptagen med transkribering – försök igen strax."},
+                status_code=409)
 
         def job(emit):
-            # Correction/summary always runs on the long-context text model.
-            llama_server.switch_to(llm_manager.ACTIVE_LLM, models_root,
-                                   on_log=lambda m: emit({"type": "log", "msg": m}))
-            text = postprocess.run(operation, transcript, model,
-                                   token_cb=lambda t: emit({"type": "token", "text": t}))
-            return {"text": text}
+            try:
+                if arb.ensure_llm() is None:
+                    raise RuntimeError("Språkmodellen är inte installerad.")
+                text = postprocess.run(operation, transcript, model,
+                                       token_cb=lambda t: emit({"type": "token", "text": t}))
+                return {"text": text}
+            finally:
+                arb.release_gpu()
         return _sse_response(job)
 
     @app.post("/api/chat")
@@ -353,16 +383,24 @@ def create_app(base_dir: Path | None = None) -> FastAPI:
         images = body.get("images") or []
         if not model or not messages:
             return JSONResponse({"error": "modell och meddelande krävs"}, status_code=400)
+        if not arb.try_acquire_gpu():
+            return JSONResponse(
+                {"error": "GPU upptagen med transkribering – försök igen strax."},
+                status_code=409)
 
         def job(emit):
-            # An image in the turn needs the multimodal model; otherwise the
-            # long-context text model handles grounded Q&A over the transcript.
-            spec = llm_manager.VISION_LLM if images else llm_manager.ACTIVE_LLM
-            llama_server.switch_to(spec, models_root,
-                                   on_log=lambda m: emit({"type": "log", "msg": m}))
-            text = llm_client.chat(model, messages, transcript=transcript, images=images,
-                                   token_cb=lambda t: emit({"type": "token", "text": t}))
-            return {"text": text}
+            try:
+                # An image needs the multimodal model; otherwise the long-context
+                # text model answers grounded in the transcript. The arbiter
+                # switches the served model (they can't coexist in 24 GB VRAM).
+                spec = llm_manager.VISION_LLM if images else llm_manager.ACTIVE_LLM
+                if arb.ensure_model(spec) is None:
+                    raise RuntimeError(f"{spec.label} är inte installerad.")
+                text = llm_client.chat(model, messages, transcript=transcript, images=images,
+                                       token_cb=lambda t: emit({"type": "token", "text": t}))
+                return {"text": text}
+            finally:
+                arb.release_gpu()
         return _sse_response(job)
 
     return app

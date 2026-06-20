@@ -69,37 +69,106 @@ def test_history_delete_ok(client):
     assert r.json() == {"ok": True}
 
 
-def test_chat_with_image_switches_to_vision_model(client, monkeypatch):
+# ---- GPU coexistence: LLM requests are rejected while the GPU is busy --------
+
+class _BusyArbiter:
+    """Stands in for GpuArbiter with the GPU already taken (e.g. by a running
+    transcription) so try_acquire_gpu() always fails."""
+    def try_acquire_gpu(self): return False
+    def release_gpu(self): pass
+    def ensure_llm(self): return "http://x"
+    def ensure_model(self, spec): return "http://x"
+    def stop_llm(self): return False
+    def prewarm_async(self): pass
+    def llm_installed(self): return False
+
+
+class _HW:
+    gpu_name = "Test GPU"; vram_mb = 24000; has_cuda = True
+    ram_mb = 64000; cpu_cores = 16; free_disk_mb = 500000
+    cpu_name = "Test CPU"; vram_free_mb = 20000; ram_free_mb = 40000
+    total_disk_mb = 1000000; cuda_version = "12.1"
+    compute_capability = "8.9"; gpu_arch = "Ada Lovelace"; disks = []
+
+
+def _busy_client(tmp_path):
+    from fastapi.testclient import TestClient
+    return TestClient(server.create_app(base_dir=tmp_path, arbiter=_BusyArbiter()))
+
+
+def test_postprocess_busy_returns_409(tmp_path):
+    r = _busy_client(tmp_path).post("/api/postprocess",
+                                    json={"transcript": "hej", "model": "m"})
+    assert r.status_code == 409
+    assert "upptagen" in r.json()["error"]
+
+
+def test_chat_busy_returns_409(tmp_path):
+    r = _busy_client(tmp_path).post(
+        "/api/chat", json={"model": "m", "messages": [{"role": "user", "content": "hej"}]})
+    assert r.status_code == 409
+    assert "upptagen" in r.json()["error"]
+
+
+def test_transcribe_busy_returns_409(tmp_path, monkeypatch):
+    monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: _HW())
+    monkeypatch.setattr(server.whisper_manager, "is_installed", lambda *a, **k: True)
+    mid = server.WHISPER_MODELS[0].id
+    r = _busy_client(tmp_path).post(
+        "/api/transcribe", json={"source": "/tmp/a.mp3", "model_id": mid, "formats": ["srt"]})
+    assert r.status_code == 409
+    assert "upptagen" in r.json()["error"]
+
+
+def test_app_exposes_arbiter_on_state(client):
+    assert hasattr(client.app.state, "arbiter")
+
+
+# ---- model routing: image chat -> vision model, text chat/correction -> Qwen --
+
+class _RecordingArbiter:
+    """Grants the GPU and records which model the endpoint asked the arbiter for."""
+    def __init__(self): self.model = None
+    def try_acquire_gpu(self): return True
+    def release_gpu(self): pass
+    def ensure_model(self, spec): self.model = spec; return "http://x"
+    def ensure_llm(self): return self.ensure_model(server.llm_manager.ACTIVE_LLM)
+    def stop_llm(self): return False
+    def prewarm_async(self): pass
+    def llm_installed(self): return True
+
+
+def _recording_client(tmp_path, arb):
+    from fastapi.testclient import TestClient
+    return TestClient(server.create_app(base_dir=tmp_path, arbiter=arb))
+
+
+def test_chat_with_image_switches_to_vision_model(tmp_path, monkeypatch):
+    arb = _RecordingArbiter()
     captured = {}
-    monkeypatch.setattr(server.llama_server, "switch_to",
-                        lambda spec, *a, **k: captured.update(spec=spec))
     monkeypatch.setattr(server.llm_client, "chat",
                         lambda *a, **k: captured.update(images=k.get("images")) or "svar")
-    r = client.post("/api/chat", json={
+    r = _recording_client(tmp_path, arb).post("/api/chat", json={
         "model": "m", "messages": [{"role": "user", "content": "vad är detta"}],
         "images": ["data:image/png;base64,AAAA"]})
     assert r.status_code == 200
-    assert captured["spec"] is server.llm_manager.VISION_LLM
+    assert arb.model is server.llm_manager.VISION_LLM
     assert captured["images"] == ["data:image/png;base64,AAAA"]
 
 
-def test_chat_without_image_uses_text_model(client, monkeypatch):
-    captured = {}
-    monkeypatch.setattr(server.llama_server, "switch_to",
-                        lambda spec, *a, **k: captured.update(spec=spec))
+def test_chat_without_image_uses_text_model(tmp_path, monkeypatch):
+    arb = _RecordingArbiter()
     monkeypatch.setattr(server.llm_client, "chat", lambda *a, **k: "svar")
-    r = client.post("/api/chat", json={
+    r = _recording_client(tmp_path, arb).post("/api/chat", json={
         "model": "m", "messages": [{"role": "user", "content": "hej"}]})
     assert r.status_code == 200
-    assert captured["spec"] is server.llm_manager.ACTIVE_LLM
+    assert arb.model is server.llm_manager.ACTIVE_LLM
 
 
-def test_postprocess_switches_to_text_model(client, monkeypatch):
-    captured = {}
-    monkeypatch.setattr(server.llama_server, "switch_to",
-                        lambda spec, *a, **k: captured.update(spec=spec))
+def test_postprocess_uses_text_model(tmp_path, monkeypatch):
+    arb = _RecordingArbiter()
     monkeypatch.setattr(server.postprocess, "run", lambda *a, **k: "sammanfattning")
-    r = client.post("/api/postprocess", json={
+    r = _recording_client(tmp_path, arb).post("/api/postprocess", json={
         "operation": "summary", "transcript": "lång text", "model": "m"})
     assert r.status_code == 200
-    assert captured["spec"] is server.llm_manager.ACTIVE_LLM
+    assert arb.model is server.llm_manager.ACTIVE_LLM

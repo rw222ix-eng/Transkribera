@@ -74,7 +74,7 @@ WHISPER_MODELS: list[WhisperModelSpec] = [
 
 # Local GGUFs served by the bundled llama.cpp server (Phase 0 spike). The text
 # model is the default; the vision model is loaded on demand for image chat
-# (see llama_server.switch_to / llm_manager.VISION_LLM).
+# (see gpu_arbiter.ensure_model / llm_manager.VISION_LLM).
 LLM_MODELS: list[LLMModelSpec] = [
     LLMModelSpec("Qwen3-14B-Q8_0.gguf", "Qwen3 14B (Q8_0)", 14971, 16000, 24000, 6,
                  "Korrigering & sammanfattning (llama.cpp)", toks=55, ctx="40k",

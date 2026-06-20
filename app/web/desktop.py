@@ -14,7 +14,6 @@ import time
 import uvicorn
 import webview
 
-from app import llama_server
 from app.web.server import create_app
 
 _MEDIA_TYPES = (
@@ -90,7 +89,8 @@ class _ThreadedServer(uvicorn.Server):
 
 def main() -> None:
     port = _free_port()
-    config = uvicorn.Config(create_app(), host="127.0.0.1", port=port,
+    app = create_app()
+    config = uvicorn.Config(app, host="127.0.0.1", port=port,
                             log_level="warning")
     server = _ThreadedServer(config)
     threading.Thread(target=server.run, daemon=True).start()
@@ -100,16 +100,14 @@ def main() -> None:
             break
         time.sleep(0.05)
 
-    # Bring up the local LLM server if its GGUF is present (non-fatal if not —
-    # transcription works without it). Shared helper picks a free port, points
-    # llm_client at it, and starts the server on a daemon thread.
-    llama_server.autostart(on_log=print)   # no-op if the GGUF isn't downloaded yet
-
+    # The LLM is NOT started here — it starts lazily on the first correction/chat
+    # (the GPU arbiter owns it; a transcription unloads it to free VRAM). This
+    # keeps launch instant and the first transcription needs no unload.
     webview.create_window("Transkribera", f"http://127.0.0.1:{port}",
                           width=1040, height=780, min_size=(820, 600),
                           js_api=Api())
     webview.start()                      # blocks until the window is closed
-    llama_server.shutdown()              # stops whichever model the server ended on
+    app.state.arbiter.stop_llm()         # no orphan llama-server on exit
     server.should_exit = True
     time.sleep(0.2)
 

@@ -42,7 +42,7 @@ ACTIVE_LLM = GGUFModelSpec(
 # Multimodal model for image chat. Gemma 3 4B (vision) is small enough to load
 # after the text model is unloaded on the 24 GB card, and ships an mmproj
 # projector (SigLIP) in the same repo. llama-server is switched to this model
-# on demand whenever the chat carries an image (see llama_server.switch_to).
+# on demand whenever the chat carries an image (see gpu_arbiter.ensure_model).
 VISION_LLM = GGUFModelSpec(
     repo_id="ggml-org/gemma-3-4b-it-GGUF",
     filename="gemma-3-4b-it-Q4_K_M.gguf",

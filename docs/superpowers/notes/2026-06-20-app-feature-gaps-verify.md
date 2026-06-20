@@ -29,11 +29,11 @@ engelsk fil och bekräfta rätt modell i historikposten.
 > Modeller-fliken för full täckning.
 
 ## #6 — Gemma-vision i chatten (KRÄVER GPU-verifiering)
-Arkitektur: en GPU, en serverad modell i taget. `llama_server.switch_to()` lämnar
-över GPU:n — stoppar textmodellen (Qwen 14B Q8 ≈ 21 GB) och startar Gemma 3 4B
-(+ `--mmproj`) på **samma port** när ett chattmeddelande bär en bild, och växlar
-tillbaka till Qwen för text. Bilder skickas som base64 `image_url`-delar (OpenAI-
-kompatibelt) via `/api/chat`.
+Arkitektur: en GPU, en serverad modell i taget. Modellbytet ligger i **GPU-arbitern**
+(`gpu_arbiter.ensure_model(spec)`, hopslagen med PR #2 vid merge mot main) — stoppar
+textmodellen (Qwen 14B Q8 ≈ 21 GB) och startar Gemma 3 4B (+ `--mmproj`) när ett
+chattmeddelande bär en bild, och växlar tillbaka till Qwen för text. Bilder skickas
+som base64 `image_url`-delar (OpenAI-kompatibelt) via `/api/chat`.
 
 Nytt: `llm_manager.VISION_LLM` (Gemma 3 4B GGUF + mmproj, laddas vid behov),
 `models_catalog` vision-post, `/api/download/llm` laddar valfri modell + projector.
@@ -55,8 +55,9 @@ Nytt: `llm_manager.VISION_LLM` (Gemma 3 4B GGUF + mmproj, laddas vid behov),
 - Modellbytet tar ~10–20 s (urladdning + laddning) eftersom modellerna inte ryms
   samtidigt i 24 GB. Acceptabelt för enanvändar-appen.
 - Gemma kör med `-c 8192` (`VISION_CTX`) — gott om plats för några bilder + fråga.
-- Överlappar PR #2 (gpu_arbiter): `switch_to` är byggd på `main`. Vid merge av
-  PR #2 bör de två GPU-ägarna konsolideras (arbitern kan äga `switch_to`).
+- Slogs ihop med PR #2: modellbytet ägs nu av arbitern (`ensure_model`), så det
+  finns bara en GPU-ägare. Bild → `ensure_model(VISION_LLM)`, text/korrigering →
+  `ensure_llm()` (= `ensure_model(ACTIVE_LLM)`); 409 vid pågående transkribering.
 
 ## #7b — Engelsk transkribering via Parakeet (KRÄVER GPU/live-verifiering)
 Tidigare mappade #7 Engelska → vanlig Whisper. Nu går **Engelska → NVIDIA
