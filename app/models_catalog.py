@@ -62,10 +62,16 @@ WHISPER_MODELS: list[WhisperModelSpec] = [
                      "Bäst för svenska", rtf=7, score=5.5),
 ]
 
-# Locked: a single local GGUF served by the bundled llama.cpp server (Phase 0 spike).
+# Local GGUFs served by the bundled llama.cpp server (Phase 0 spike). The text
+# model is the default; the vision model is loaded on demand for image chat
+# (see llama_server.switch_to / llm_manager.VISION_LLM).
 LLM_MODELS: list[LLMModelSpec] = [
     LLMModelSpec("Qwen3-14B-Q8_0.gguf", "Qwen3 14B (Q8_0)", 14971, 16000, 24000, 6,
-                 "Korrigering & analys (llama.cpp)", toks=55, ctx="40k",
+                 "Korrigering & sammanfattning (llama.cpp)", toks=55, ctx="40k",
                  uses=("text", "sv"),
                  files=("PDF", "TXT", "Markdown", "DOCX")),
+    LLMModelSpec("gemma-3-4b-it-Q4_K_M.gguf", "Gemma 3 4B (vision)", 3341, 6000, 9000, 4,
+                 "Bildanalys i chatten (llama.cpp)", toks=70, ctx="8k",
+                 uses=("text", "vision"), vision=True,
+                 files=()),
 ]

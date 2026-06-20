@@ -67,3 +67,39 @@ def test_history_delete_ok(client):
     r = client.delete("/api/history/nope")
     assert r.status_code == 200
     assert r.json() == {"ok": True}
+
+
+def test_chat_with_image_switches_to_vision_model(client, monkeypatch):
+    captured = {}
+    monkeypatch.setattr(server.llama_server, "switch_to",
+                        lambda spec, *a, **k: captured.update(spec=spec))
+    monkeypatch.setattr(server.llm_client, "chat",
+                        lambda *a, **k: captured.update(images=k.get("images")) or "svar")
+    r = client.post("/api/chat", json={
+        "model": "m", "messages": [{"role": "user", "content": "vad är detta"}],
+        "images": ["data:image/png;base64,AAAA"]})
+    assert r.status_code == 200
+    assert captured["spec"] is server.llm_manager.VISION_LLM
+    assert captured["images"] == ["data:image/png;base64,AAAA"]
+
+
+def test_chat_without_image_uses_text_model(client, monkeypatch):
+    captured = {}
+    monkeypatch.setattr(server.llama_server, "switch_to",
+                        lambda spec, *a, **k: captured.update(spec=spec))
+    monkeypatch.setattr(server.llm_client, "chat", lambda *a, **k: "svar")
+    r = client.post("/api/chat", json={
+        "model": "m", "messages": [{"role": "user", "content": "hej"}]})
+    assert r.status_code == 200
+    assert captured["spec"] is server.llm_manager.ACTIVE_LLM
+
+
+def test_postprocess_switches_to_text_model(client, monkeypatch):
+    captured = {}
+    monkeypatch.setattr(server.llama_server, "switch_to",
+                        lambda spec, *a, **k: captured.update(spec=spec))
+    monkeypatch.setattr(server.postprocess, "run", lambda *a, **k: "sammanfattning")
+    r = client.post("/api/postprocess", json={
+        "operation": "summary", "transcript": "lång text", "model": "m"})
+    assert r.status_code == 200
+    assert captured["spec"] is server.llm_manager.ACTIVE_LLM

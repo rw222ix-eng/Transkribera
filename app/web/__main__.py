@@ -35,12 +35,11 @@ def main() -> None:
 
     threading.Thread(target=open_browser, daemon=True).start()
     print(f"Transkribera web: {url}  (Ctrl+C för att stänga)")
-    llm = llama_server.autostart(on_log=print)
+    llama_server.autostart(on_log=print)
     try:
         uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")
     finally:
-        if llm is not None:
-            llm.stop()
+        llama_server.shutdown()   # stops whichever model the server ended on
 
 
 if __name__ == "__main__":

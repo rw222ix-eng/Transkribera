@@ -15,8 +15,8 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from app import (debug_log, hardware, recommend, whisper_manager, llm_client,
-                 llm_manager, online_catalog, youtube, postprocess, transcriber,
-                 history_store)
+                 llm_manager, llama_server, online_catalog, youtube, postprocess,
+                 transcriber, history_store)
 from app.models_catalog import WHISPER_MODELS, LLM_MODELS
 
 _MONTHS_SV = ["jan", "feb", "mar", "apr", "maj", "jun", "jul", "aug", "sep", "okt", "nov", "dec"]
@@ -201,8 +201,8 @@ def create_app(base_dir: Path | None = None) -> FastAPI:
         } for e in wevals]
 
         running = llm_client.is_running()                 # llama-server /health
-        installed = ([llm_manager.ACTIVE_LLM.filename]
-                     if llm_manager.is_installed(llm_manager.ACTIVE_LLM, models_root) else [])
+        installed = [s.filename for s in llm_manager.ALL_LLMS
+                     if llm_manager.is_installed(s, models_root)]
         levals, lbest = recommend.recommend_llm(LLM_MODELS, hw)
         llm = [{
             "id": e.spec.name, "name": e.spec.name, "label": e.spec.label,
@@ -244,13 +244,16 @@ def create_app(base_dir: Path | None = None) -> FastAPI:
         name = body.get("name")
         if not name:
             return JSONResponse({"error": "namn saknas"}, status_code=400)
+        spec = llm_manager.spec_by_name(name)
+        if spec is None:
+            return JSONResponse({"error": "okänd modell"}, status_code=404)
 
         def job(emit):
             llm_manager.download_gguf(
-                llm_manager.ACTIVE_LLM, models_root,
+                spec, models_root,
                 log_cb=lambda m: emit({"type": "log", "msg": m}),
                 progress_cb=lambda p: emit({"type": "progress", "pct": p}))
-            return {"installed": llm_manager.ACTIVE_LLM.filename}
+            return {"installed": spec.filename}
         return _sse_response(job)
 
     @app.post("/api/transcribe")
@@ -332,6 +335,9 @@ def create_app(base_dir: Path | None = None) -> FastAPI:
             return JSONResponse({"error": "text och modell krävs"}, status_code=400)
 
         def job(emit):
+            # Correction/summary always runs on the long-context text model.
+            llama_server.switch_to(llm_manager.ACTIVE_LLM, models_root,
+                                   on_log=lambda m: emit({"type": "log", "msg": m}))
             text = postprocess.run(operation, transcript, model,
                                    token_cb=lambda t: emit({"type": "token", "text": t}))
             return {"text": text}
@@ -343,11 +349,17 @@ def create_app(base_dir: Path | None = None) -> FastAPI:
         messages = body.get("messages") or []
         transcript = body.get("transcript", "")
         model = body.get("model", "")
+        images = body.get("images") or []
         if not model or not messages:
             return JSONResponse({"error": "modell och meddelande krävs"}, status_code=400)
 
         def job(emit):
-            text = llm_client.chat(model, messages, transcript=transcript,
+            # An image in the turn needs the multimodal model; otherwise the
+            # long-context text model handles grounded Q&A over the transcript.
+            spec = llm_manager.VISION_LLM if images else llm_manager.ACTIVE_LLM
+            llama_server.switch_to(spec, models_root,
+                                   on_log=lambda m: emit({"type": "log", "msg": m}))
+            text = llm_client.chat(model, messages, transcript=transcript, images=images,
                                    token_cb=lambda t: emit({"type": "token", "text": t}))
             return {"text": text}
         return _sse_response(job)

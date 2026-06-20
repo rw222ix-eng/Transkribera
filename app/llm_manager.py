@@ -20,9 +20,16 @@ class GGUFModelSpec:
     filename: str      # GGUF file within the repo, e.g. "Qwen3-14B-Q8_0.gguf"
     label: str
     download_mb: int
+    # Vision models need a separate multimodal projector (mmproj) GGUF alongside
+    # the weights; llama-server loads it via --mmproj. None for text-only models.
+    mmproj_filename: str | None = None
+
+    @property
+    def is_vision(self) -> bool:
+        return self.mmproj_filename is not None
 
 
-# Locked active model — values from the Phase 0 spike
+# Locked text model — values from the Phase 0 spike
 # (docs/superpowers/notes/2026-06-19-llamacpp-spike.md).
 # Phase 3 may swap this after the Swedish benchmark.
 ACTIVE_LLM = GGUFModelSpec(
@@ -31,6 +38,26 @@ ACTIVE_LLM = GGUFModelSpec(
     label="Qwen3 14B (Q8_0)",
     download_mb=14971,
 )
+
+# Multimodal model for image chat. Gemma 3 4B (vision) is small enough to load
+# after the text model is unloaded on the 24 GB card, and ships an mmproj
+# projector (SigLIP) in the same repo. llama-server is switched to this model
+# on demand whenever the chat carries an image (see llama_server.switch_to).
+VISION_LLM = GGUFModelSpec(
+    repo_id="ggml-org/gemma-3-4b-it-GGUF",
+    filename="gemma-3-4b-it-Q4_K_M.gguf",
+    label="Gemma 3 4B (vision)",
+    download_mb=3341,                       # weights ~2.5 GB + mmproj ~0.85 GB
+    mmproj_filename="mmproj-model-f16.gguf",
+)
+
+# Every GGUF the app can manage; the text model stays first so it remains the default.
+ALL_LLMS: list[GGUFModelSpec] = [ACTIVE_LLM, VISION_LLM]
+
+
+def spec_by_name(name: str) -> GGUFModelSpec | None:
+    """Resolve a GGUF filename (the catalog 'name') to its spec."""
+    return next((s for s in ALL_LLMS if s.filename == name), None)
 
 
 def model_dir_for(spec: GGUFModelSpec, models_root: Path) -> Path:
@@ -41,8 +68,17 @@ def model_path_for(spec: GGUFModelSpec, models_root: Path) -> Path:
     return model_dir_for(spec, models_root) / spec.filename
 
 
+def mmproj_path_for(spec: GGUFModelSpec, models_root: Path) -> Path | None:
+    if not spec.mmproj_filename:
+        return None
+    return model_dir_for(spec, models_root) / spec.mmproj_filename
+
+
 def is_installed(spec: GGUFModelSpec, models_root: Path) -> bool:
-    return model_path_for(spec, models_root).exists()
+    if not model_path_for(spec, models_root).exists():
+        return False
+    mmproj = mmproj_path_for(spec, models_root)
+    return mmproj is None or mmproj.exists()
 
 
 def _dir_size(path: Path) -> int:
@@ -86,6 +122,11 @@ def download_gguf(spec: GGUFModelSpec, models_root: Path,
     try:
         hf_hub_download(repo_id=spec.repo_id, filename=spec.filename,
                         local_dir=str(target))
+        if spec.mmproj_filename:               # vision projector lives in the same repo
+            if log_cb:
+                log_cb(f"Laddar ner {spec.mmproj_filename} (vision) ...")
+            hf_hub_download(repo_id=spec.repo_id, filename=spec.mmproj_filename,
+                            local_dir=str(target))
     finally:
         stop["v"] = True
 

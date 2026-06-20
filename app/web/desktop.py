@@ -103,14 +103,13 @@ def main() -> None:
     # Bring up the local LLM server if its GGUF is present (non-fatal if not —
     # transcription works without it). Shared helper picks a free port, points
     # llm_client at it, and starts the server on a daemon thread.
-    llm = llama_server.autostart(on_log=print)   # None if the GGUF isn't downloaded yet
+    llama_server.autostart(on_log=print)   # no-op if the GGUF isn't downloaded yet
 
     webview.create_window("Transkribera", f"http://127.0.0.1:{port}",
                           width=1040, height=780, min_size=(820, 600),
                           js_api=Api())
     webview.start()                      # blocks until the window is closed
-    if llm is not None:
-        llm.stop()
+    llama_server.shutdown()              # stops whichever model the server ended on
     server.should_exit = True
     time.sleep(0.2)
 
