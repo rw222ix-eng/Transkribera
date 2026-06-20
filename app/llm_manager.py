@@ -5,6 +5,7 @@ at runtime (the ~15 GB GGUF is far too large to bundle in the exe), progress
 reported by polling the target folder size (huggingface_hub exposes no hook).
 """
 from __future__ import annotations
+import shutil
 import threading
 import time
 from dataclasses import dataclass
@@ -135,3 +136,16 @@ def download_gguf(spec: GGUFModelSpec, models_root: Path,
     if progress_cb is not None:
         progress_cb(100)
     return model_path_for(spec, models_root)
+
+
+def delete_gguf(spec: GGUFModelSpec, models_root: Path) -> bool:
+    """Radera GGUF-modellens katalog (vikter + ev. mmproj) från disk. Returnerar
+    True om något togs bort. Vägrar (False) utanför models_root/llm/."""
+    root = Path(models_root).resolve()
+    target = model_dir_for(spec, models_root).resolve()
+    if root not in target.parents:
+        return False
+    if target.exists():
+        shutil.rmtree(target)
+        return True
+    return False
