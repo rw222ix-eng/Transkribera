@@ -76,12 +76,14 @@ def write_outputs(segments: list[Segment], base_path: Path, formats: list[str]) 
 # mid-program, so the model is loaded only inside the isolated subprocess
 # `app.transcribe_cli`, launched via the argv built below.
 def build_transcribe_cmd(audio: Path, model_dir: str, device: str, compute_type: str,
-                         language: str, out_base: Path, formats: list[str]) -> list[str]:
+                         language: str, out_base: Path, formats: list[str],
+                         engine: str = "whisper", runtime: str = "") -> list[str]:
     """Build the argv to run one transcription in an isolated subprocess.
 
     Frozen (PyInstaller): re-invoke our own exe with the `transcribe-cli` subcommand,
     since `-m app.transcribe_cli` does not exist in a frozen build. Source runs use
-    the normal module form.
+    the normal module form. `engine` selects the ASR backend ("whisper" via
+    faster-whisper, "parakeet" via onnx-asr); `runtime` is the onnx-asr model key.
     """
     if getattr(sys, "frozen", False):
         head = [sys.executable, "transcribe-cli"]
@@ -95,4 +97,6 @@ def build_transcribe_cmd(audio: Path, model_dir: str, device: str, compute_type:
         "--language", language or "",
         "--out-base", str(out_base),
         "--formats", ",".join(formats),
+        "--engine", engine,
+        "--runtime", runtime or "",
     ]

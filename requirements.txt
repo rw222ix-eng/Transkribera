@@ -1,4 +1,7 @@
 faster-whisper>=1.2
+onnx-asr>=0.6
+onnxruntime-gpu
+numpy
 torch
 huggingface_hub
 psutil

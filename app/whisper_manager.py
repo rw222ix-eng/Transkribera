@@ -16,7 +16,11 @@ def model_dir_for(spec: WhisperModelSpec, models_root: Path) -> Path:
 
 
 def is_installed(spec: WhisperModelSpec, models_root: Path) -> bool:
-    return (model_dir_for(spec, models_root) / "model.bin").exists()
+    d = model_dir_for(spec, models_root)
+    if getattr(spec, "engine", "whisper") == "parakeet":
+        # onnx-asr models ship one or more .onnx graphs instead of a CT2 model.bin.
+        return d.is_dir() and any(d.glob("*.onnx"))
+    return (d / "model.bin").exists()
 
 
 def _dir_size(path: Path) -> int:
@@ -69,7 +73,7 @@ def download_whisper(spec: WhisperModelSpec, models_root: Path,
         stop["v"] = True
 
     if not is_installed(spec, models_root):
-        raise RuntimeError(f"Nedladdning ofullständig: {spec.id} (model.bin saknas)")
+        raise RuntimeError(f"Nedladdning ofullständig: {spec.id} (modellfiler saknas)")
     if progress_cb is not None:
         progress_cb(100)
     return target

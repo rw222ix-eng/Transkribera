@@ -20,6 +20,7 @@ import requests
 
 DEFAULT_PORT = 8170           # Windows reserves 8048-8147 (Hyper-V/WSL); 8080/8090 fail to bind
 DEFAULT_CTX = 40960           # spike: model n_ctx_train; no RoPE extrapolation, ~22 GB VRAM at q8_0 KV
+VISION_CTX = 8192             # image chat (Gemma): a few images + a question fit; keeps VRAM low
 CACHE_PROFILES = {            # profile -> (k-type, v-type); never q4 on V
     "quality": ("f16", "f16"),
     "balanced": ("q8_0", "q8_0"),
@@ -35,9 +36,10 @@ def server_binary() -> Path:
 
 
 def build_args(model_path: str | Path, *, port: int = DEFAULT_PORT, ctx: int = DEFAULT_CTX,
-               profile: str = "balanced", binary: str | Path | None = None) -> list[str]:
+               profile: str = "balanced", binary: str | Path | None = None,
+               mmproj: str | Path | None = None) -> list[str]:
     k, v = CACHE_PROFILES[profile]
-    return [
+    args = [
         str(binary or server_binary()),
         "-m", str(model_path),
         "-ngl", "99",
@@ -50,6 +52,9 @@ def build_args(model_path: str | Path, *, port: int = DEFAULT_PORT, ctx: int = D
         "--port", str(port),
         "--jinja",
     ]
+    if mmproj:                       # multimodal projector — enables image input
+        args += ["--mmproj", str(mmproj)]
+    return args
 
 
 def find_free_port(candidates=(DEFAULT_PORT, DEFAULT_PORT + 1, DEFAULT_PORT + 2, 0)) -> int:
@@ -103,11 +108,13 @@ class LlamaServer:
     server already on the port (e.g. left running) is reused rather than respawned."""
 
     def __init__(self, model_path: str | Path, port: int = DEFAULT_PORT,
-                 ctx: int = DEFAULT_CTX, profile: str = "balanced"):
+                 ctx: int = DEFAULT_CTX, profile: str = "balanced",
+                 mmproj: str | Path | None = None):
         self.model_path = Path(model_path)
         self.port = port
         self.ctx = ctx
         self.profile = profile
+        self.mmproj = mmproj
         self.proc = None
 
     @property
@@ -120,7 +127,7 @@ class LlamaServer:
                 log_cb("llama-server körs redan.")
             return
         args = build_args(self.model_path, port=self.port, ctx=self.ctx,
-                          profile=self.profile)
+                          profile=self.profile, mmproj=self.mmproj)
         if log_cb:
             log_cb("Startar llama-server ...")
         self.proc = subprocess.Popen(

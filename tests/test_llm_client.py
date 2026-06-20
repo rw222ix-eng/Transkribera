@@ -81,3 +81,44 @@ def test_skips_malformed_and_blank_sse_lines(monkeypatch):
              'data: {"choices":[{"delta":{"content":"ok"}}]}', "data: [DONE]"]
     monkeypatch.setattr(lc.requests, "post", lambda *a, **k: FakeResp(lines=lines))
     assert lc.generate("ignored", "p") == "ok"
+
+
+def test_chat_with_images_builds_multimodal_parts(monkeypatch):
+    captured = {}
+    def fake_post(url, json=None, **k):
+        captured["json"] = json
+        return FakeResp(lines=_sse(["ser bild"]))
+    monkeypatch.setattr(lc.requests, "post", fake_post)
+    out = lc.chat("m", [{"role": "user", "content": "vad är detta"}],
+                  images=["data:image/png;base64,AAAA"])
+    assert out == "ser bild"
+    last = captured["json"]["messages"][-1]
+    assert isinstance(last["content"], list)
+    kinds = [p["type"] for p in last["content"]]
+    assert "text" in kinds and "image_url" in kinds
+    img = [p for p in last["content"] if p["type"] == "image_url"][0]
+    assert img["image_url"]["url"] == "data:image/png;base64,AAAA"
+    # Vision (Gemma) must NOT carry Qwen's enable_thinking template kwarg.
+    assert "chat_template_kwargs" not in captured["json"]
+
+
+def test_chat_wraps_bare_base64_into_data_url(monkeypatch):
+    captured = {}
+    def fake_post(url, json=None, **k):
+        captured["json"] = json
+        return FakeResp(lines=_sse(["x"]))
+    monkeypatch.setattr(lc.requests, "post", fake_post)
+    lc.chat("m", [{"role": "user", "content": "q"}], images=["AAAA"])
+    img = [p for p in captured["json"]["messages"][-1]["content"]
+           if p["type"] == "image_url"][0]
+    assert img["image_url"]["url"] == "data:image/png;base64,AAAA"
+
+
+def test_text_chat_still_disables_thinking(monkeypatch):
+    captured = {}
+    def fake_post(url, json=None, **k):
+        captured["json"] = json
+        return FakeResp(lines=_sse(["svar"]))
+    monkeypatch.setattr(lc.requests, "post", fake_post)
+    lc.chat("m", [{"role": "user", "content": "fråga"}], transcript="T")
+    assert captured["json"]["chat_template_kwargs"] == {"enable_thinking": False}
