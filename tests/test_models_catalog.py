@@ -11,15 +11,27 @@ def test_whisper_catalog_is_well_formed():
         assert m.rank > 0
 
 def test_llm_catalog_is_well_formed():
-    # Locked to exactly one local GGUF served by the bundled llama.cpp server.
-    assert len(LLM_MODELS) == 1
+    # A long-context text model (default) plus an on-demand vision model.
     names = [m.name for m in LLM_MODELS]
     assert len(names) == len(set(names)), "duplicate LLM names"
-    assert names == ["Qwen3-14B-Q8_0.gguf"]
+    assert "Qwen3-14B-Q8_0.gguf" in names
     for m in LLM_MODELS:
         assert isinstance(m, LLMModelSpec)
         assert m.download_mb > 0 and m.vram_mb > 0 and m.ram_mb > 0
 
+
+def test_llm_catalog_has_a_vision_model():
+    vision = [m for m in LLM_MODELS if m.vision]
+    assert vision, "expected a vision-capable LLM in the catalog"
+    assert vision[0].name == "gemma-3-4b-it-Q4_K_M.gguf"
+
 def test_kb_whisper_large_present_for_swedish():
     sv = [m for m in WHISPER_MODELS if m.id == "KBLab/kb-whisper-large"]
     assert sv and sv[0].languages == "sv"
+
+
+def test_parakeet_present_for_english_transcription():
+    en = [m for m in WHISPER_MODELS if m.engine == "parakeet"]
+    assert en, "expected a Parakeet (onnx-asr) model for English"
+    assert en[0].languages == "en"
+    assert en[0].runtime, "parakeet spec needs an onnx-asr runtime key"

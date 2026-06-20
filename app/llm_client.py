@@ -1,22 +1,21 @@
 """Streaming client for the local llama.cpp server (OpenAI-compatible API).
 
-Drop-in replacement for app/ollama_client.py's chat/generate: same call
-signatures (the `model` arg is accepted for compatibility and ignored — the
-server loads a single model). Context size is owned by the server (-c flag),
-so the old num_ctx truncation bug cannot recur here.
+Drop-in replacement for app/ollama_client.py's chat/generate. Context size is
+owned by the server (-c flag), so the old num_ctx truncation bug cannot recur.
 
-Qwen3 ships with "thinking" ON by default, which prepends an English
-chain-of-thought to the (Swedish) answer. The toggle is per request via
-`think` -> chat_template_kwargs.enable_thinking. Correction/analysis keep it
-OFF (mechanical task, pure latency overhead); the chat may turn it ON for hard
-multi-step questions. Whether ON or OFF, any reasoning that does come back is
-split out of the answer (via the `reasoning_content` delta field AND/OR inline
-`<think>...</think>` tags) and routed to `reason_cb`, so the English chain of
-thought never leaks into the Swedish answer bubble.
+Two capabilities live here:
+- **Vision chat** (Gemma, when images are attached): images are sent as
+  OpenAI-compatible `image_url` content parts and the long transcript system
+  prompt is skipped to leave room in the smaller vision context.
+- **Qwen3 thinking** (text chat): OFF by default; the chat may turn it ON via
+  `think` for hard multi-step questions, while correction/analysis keep it OFF
+  (mechanical task, pure latency overhead). Whatever reasoning comes back is
+  split out of the answer — via the `reasoning_content` delta field AND/OR inline
+  `<think>...</think>` tags — and routed to `reason_cb`, so the English chain of
+  thought never leaks into the Swedish answer bubble.
 
 base_url is resolved at CALL time (not at import) so the desktop launcher can
-point the client at whatever port the server actually bound (see
-app/llama_server.find_free_port)."""
+point the client at whatever port the server bound (see llama_server.find_free_port)."""
 from __future__ import annotations
 import json
 from typing import Callable
@@ -31,6 +30,14 @@ _CHAT_SYSTEM = (
     "Du är en hjälpsam svensk assistent som svarar på frågor om ett transkript. "
     "Svara ALLTID på svenska och använd aldrig något annat språk. Grunda dina svar "
     "i transkriptet nedan; säg till om något inte framgår av det.\n\nTRANSKRIPT:\n"
+)
+
+# Vision chat runs on Gemma (not Qwen), and the transcript is usually irrelevant to
+# an image question — so we keep the system prompt short to leave room in the
+# smaller vision context for the image tokens themselves.
+_VISION_SYSTEM = (
+    "Du är en hjälpsam svensk assistent som beskriver och svarar på frågor om "
+    "bifogade bilder. Svara ALLTID på svenska och använd aldrig något annat språk."
 )
 
 _THINK_OPEN = "<think>"
@@ -120,18 +127,31 @@ class _ReasoningSplitter:
             self._buf = ""
 
 
-def _stream_chat(messages: list[dict], *, temperature: float, think: bool,
+def _image_parts(images: list[str]) -> list[dict]:
+    """OpenAI-compatible image content parts. Each entry is a data URL
+    ('data:image/png;base64,...') or a bare base64 string we wrap into one."""
+    parts = []
+    for img in images:
+        url = img if img.startswith("data:") else f"data:image/png;base64,{img}"
+        parts.append({"type": "image_url", "image_url": {"url": url}})
+    return parts
+
+
+def _stream_chat(messages: list[dict], *, temperature: float,
                  token_cb: Callable[[str], None] | None,
                  reason_cb: Callable[[str], None] | None = None,
-                 base_url: str | None = None) -> str:
+                 base_url: str | None = None,
+                 template_kwargs: dict | None = None) -> str:
     payload = {
         "messages": messages,
         "stream": True,
         "temperature": temperature,
-        # Qwen3 thinking: ON only when the caller asks for it (hard chat questions);
-        # OFF for correction/analysis. Any leaked reasoning is split out below.
-        "chat_template_kwargs": {"enable_thinking": think},
     }
+    if template_kwargs:
+        # Qwen3 thinking: enable_thinking is set by the caller (chat may turn it
+        # on; correction/analysis keep it off). Omitted for vision (Gemma), whose
+        # template has no such option. Any leaked reasoning is split out below.
+        payload["chat_template_kwargs"] = template_kwargs
     splitter = _ReasoningSplitter(token_cb, reason_cb)
     with requests.post(f"{base_url or BASE_URL}/v1/chat/completions", json=payload,
                        stream=True, timeout=None) as r:
@@ -163,12 +183,26 @@ def _stream_chat(messages: list[dict], *, temperature: float, think: bool,
 def chat(model: str, messages: list[dict], transcript: str = "",
          token_cb: Callable[[str], None] | None = None,
          base_url: str | None = None, think: bool = False,
+         images: list[str] | None = None,
          reason_cb: Callable[[str], None] | None = None) -> str:
+    if images:
+        # Vision turn (Gemma): attach the images to the latest user message as
+        # multimodal content parts and skip the long transcript system prompt.
+        # No thinking on the vision model.
+        msgs = [{"role": "system", "content": _VISION_SYSTEM}]
+        msgs += [{"role": m.get("role", "user"), "content": m.get("content", "")}
+                 for m in messages[:-1]]
+        last = messages[-1] if messages else {"role": "user", "content": ""}
+        content = [{"type": "text", "text": last.get("content", "") or "Beskriv bilden."}]
+        content += _image_parts(images)
+        msgs.append({"role": last.get("role", "user"), "content": content})
+        return _stream_chat(msgs, temperature=0.3, token_cb=token_cb, base_url=base_url)
+
     msgs = [{"role": "system", "content": _CHAT_SYSTEM + (transcript or "(tomt)")}]
     msgs += [{"role": m.get("role", "user"), "content": m.get("content", "")}
              for m in messages]
-    return _stream_chat(msgs, temperature=0.3, think=think, token_cb=token_cb,
-                        reason_cb=reason_cb, base_url=base_url)
+    return _stream_chat(msgs, temperature=0.3, token_cb=token_cb, reason_cb=reason_cb,
+                        base_url=base_url, template_kwargs={"enable_thinking": think})
 
 
 def generate(model: str, prompt: str,
@@ -180,5 +214,6 @@ def generate(model: str, prompt: str,
         msgs.append({"role": "system", "content": system})
     msgs.append({"role": "user", "content": prompt})
     temperature = (options or {}).get("temperature", 0.2)
-    return _stream_chat(msgs, temperature=temperature, think=think,
-                        token_cb=token_cb, base_url=base_url)
+    # Correction/analysis is mechanical -> thinking stays off.
+    return _stream_chat(msgs, temperature=temperature, token_cb=token_cb, base_url=base_url,
+                        template_kwargs={"enable_thinking": False})

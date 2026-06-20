@@ -2,6 +2,7 @@
 stream progress as Server-Sent Events (SSE). No PySide6 import here."""
 from __future__ import annotations
 import json
+import os
 import queue
 import subprocess
 import sys
@@ -16,10 +17,18 @@ from fastapi.staticfiles import StaticFiles
 
 from app import (debug_log, hardware, recommend, whisper_manager, llm_client,
                  llm_manager, online_catalog, youtube, postprocess, transcriber,
-                 history_store)
+                 history_store, gpu_arbiter, output_store, media, audio_model)
 from app.models_catalog import WHISPER_MODELS, LLM_MODELS
 
 _MONTHS_SV = ["jan", "feb", "mar", "apr", "maj", "jun", "jul", "aug", "sep", "okt", "nov", "dec"]
+
+# Web-playable media containers served straight to the preview player.
+_WEB_MEDIA = {".mp3", ".m4a", ".aac", ".wav", ".ogg", ".oga", ".opus",
+              ".webm", ".mp4", ".m4v", ".mov", ".flac"}
+
+
+def _is_url(s: str) -> bool:
+    return s.startswith("http://") or s.startswith("https://")
 
 
 def _date_label(ts_iso: str) -> str:
@@ -167,7 +176,8 @@ def _sse_response(job) -> StreamingResponse:
     return StreamingResponse(gen(), media_type="text/event-stream")
 
 
-def create_app(base_dir: Path | None = None) -> FastAPI:
+def create_app(base_dir: Path | None = None,
+               arbiter: "gpu_arbiter.GpuArbiter | None" = None) -> FastAPI:
     base = base_dir or _base_dir()
     models_root = base / "models"
     history_file = base / "history.json"
@@ -177,6 +187,13 @@ def create_app(base_dir: Path | None = None) -> FastAPI:
 
     app = FastAPI(title="Transkribera Web")
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+    # Single owner of the LLM process + GPU exclusivity. The LLM is NOT started
+    # here — it starts lazily on the first correction/chat (see /api/postprocess,
+    # /api/chat); a transcription unloads it to free VRAM (see /api/transcribe).
+    # Entrypoints stop it on exit via app.state.arbiter.
+    arb = arbiter if arbiter is not None else gpu_arbiter.GpuArbiter(models_root, on_log=print)
+    app.state.arbiter = arb
 
     @app.get("/")
     def index():
@@ -201,8 +218,8 @@ def create_app(base_dir: Path | None = None) -> FastAPI:
         } for e in wevals]
 
         running = llm_client.is_running()                 # llama-server /health
-        installed = ([llm_manager.ACTIVE_LLM.filename]
-                     if llm_manager.is_installed(llm_manager.ACTIVE_LLM, models_root) else [])
+        installed = [s.filename for s in llm_manager.ALL_LLMS
+                     if llm_manager.is_installed(s, models_root)]
         levals, lbest = recommend.recommend_llm(LLM_MODELS, hw)
         llm = [{
             "id": e.spec.name, "name": e.spec.name, "label": e.spec.label,
@@ -244,13 +261,32 @@ def create_app(base_dir: Path | None = None) -> FastAPI:
         name = body.get("name")
         if not name:
             return JSONResponse({"error": "namn saknas"}, status_code=400)
+        spec = llm_manager.spec_by_name(name)
+        if spec is None:
+            return JSONResponse({"error": "okänd modell"}, status_code=404)
 
         def job(emit):
             llm_manager.download_gguf(
-                llm_manager.ACTIVE_LLM, models_root,
+                spec, models_root,
                 log_cb=lambda m: emit({"type": "log", "msg": m}),
                 progress_cb=lambda p: emit({"type": "progress", "pct": p}))
-            return {"installed": llm_manager.ACTIVE_LLM.filename}
+            return {"installed": spec.filename}
+        return _sse_response(job)
+
+    @app.get("/api/audio-model")
+    def api_audio_model():
+        return {"id": audio_model.AUDIO_MODEL_ID,
+                "installed": audio_model.is_audio_model_installed(models_root),
+                "download_mb": audio_model.AUDIO_MODEL_DOWNLOAD_MB}
+
+    @app.post("/api/download/audio-model")
+    async def api_download_audio_model(req: Request):
+        def job(emit):
+            audio_model.download_audio_model(
+                models_root,
+                log_cb=lambda m: emit({"type": "log", "msg": m}),
+                progress_cb=lambda p: emit({"type": "progress", "pct": p}))
+            return {"installed": audio_model.AUDIO_MODEL_ID}
         return _sse_response(job)
 
     @app.post("/api/transcribe")
@@ -259,6 +295,10 @@ def create_app(base_dir: Path | None = None) -> FastAPI:
         source = (body.get("source") or "").strip()
         model_id = body.get("model_id")
         language = body.get("language") or ""
+        target_language = body.get("target_language") or language   # subtitle output language
+        audio_correct = bool(body.get("audio_correct"))   # 2nd pass: fix text vs the audio
+        sub_mode = body.get("sub_mode") or "separate"     # "separate" | "embed"
+        embed_kind = body.get("embed_kind")               # "soft" | "burn" | None
         formats = [f for f in (body.get("formats") or ["srt"]) if f in transcriber.WRITERS]
         if not source or not model_id or not formats:
             return JSONResponse({"error": "källa, modell och minst ett format krävs"},
@@ -270,7 +310,23 @@ def create_app(base_dir: Path | None = None) -> FastAPI:
         rec = recommend.evaluate_whisper(spec, hw)
         model_dir = str(whisper_manager.model_dir_for(spec, models_root))
 
+        # Take the GPU exclusively for this job. Whisper (~10 GB) cannot share the
+        # 24 GB card with the resident LLM (~21 GB), so we stop the LLM first.
+        if not arb.try_acquire_gpu():
+            return JSONResponse(
+                {"error": "GPU upptagen – vänta tills pågående jobb är klart."},
+                status_code=409)
+
         def job(emit):
+            try:
+                if arb.stop_llm():
+                    emit({"type": "log", "msg": "Frigör GPU-minne (stoppar språkmodellen) ..."})
+                return _transcribe(emit)
+            finally:
+                arb.release_gpu()
+                arb.prewarm_async()   # restart the LLM in the background for the next correction
+
+        def _transcribe(emit):
             if source.startswith("http://") or source.startswith("https://"):
                 emit({"type": "log", "msg": "Laddar ner från URL ..."})
                 out_dir = base / "downloads"
@@ -284,7 +340,8 @@ def create_app(base_dir: Path | None = None) -> FastAPI:
                     raise RuntimeError(f"Filen finns inte: {media}")
             out_base = media.with_suffix("")
             cmd = transcriber.build_transcribe_cmd(
-                media, model_dir, rec.device, rec.compute_type, language, out_base, formats)
+                media, model_dir, rec.device, rec.compute_type, language, out_base, formats,
+                engine=spec.engine, runtime=spec.runtime)
             written, segments = _run_transcribe_subprocess(cmd, base, emit)
             if not written:
                 expected = [str(out_base.with_suffix(transcriber.WRITERS[f][1])) for f in formats]
@@ -292,22 +349,87 @@ def create_app(base_dir: Path | None = None) -> FastAPI:
                     written = expected
                 else:
                     raise RuntimeError("Transkriberingen gav inget resultat")
-            files = [{"path": p, "name": Path(p).name,
-                      "ext": Path(p).suffix.lstrip("."), "size": _file_size_str(p)}
-                     for p in written]
+            srt_path = next((Path(p) for p in written if str(p).lower().endswith(".srt")), None)
+
+            # Optional second pass: correct the draft text against the actual audio
+            # (Gemma 3n E4B via transformers). Best effort — skipped if not installed.
+            if audio_correct:
+                if not audio_model.is_audio_model_installed(models_root):
+                    emit({"type": "log", "msg": "Hoppar över ljudkorrigering — ljudmodellen "
+                                                "(Gemma 3n) är inte nedladdad."})
+                else:
+                    emit({"type": "log", "msg": "Rättar transkriptet mot ljudet ..."})
+                    seg_json = media.with_name(media.stem + ".segments.json")
+                    seg_json.write_text(json.dumps(segments, ensure_ascii=False), encoding="utf-8")
+                    corr_base = media.with_name(media.stem + "_korr")
+                    ac_written = []
+                    try:
+                        ac_cmd = transcriber.build_audio_correct_cmd(
+                            media, str(audio_model.audio_model_dir(models_root)),
+                            str(seg_json), corr_base, ["srt"], language)
+                        ac_written, corrected = _run_transcribe_subprocess(ac_cmd, base, emit)
+                        if corrected:
+                            segments = corrected
+                            srt_path = transcriber.write_outputs(
+                                [transcriber.Segment(d["start"], d["end"], d["text"])
+                                 for d in corrected], out_base, ["srt"])[0]
+                    finally:
+                        for p in [seg_json] + [Path(x) for x in ac_written]:
+                            try:
+                                p.unlink()
+                            except OSError:
+                                pass
+
+            # Optional translation to a different result language. The text model
+            # is reloaded here (Whisper has exited and freed its VRAM); the
+            # original-language SRT is kept alongside as a reference track.
+            ref_srt = sub_lang = ref_lang = None
+            if postprocess.should_translate(language, target_language):
+                if arb.ensure_llm() is None:
+                    emit({"type": "log", "msg": "Hoppar över översättning — språkmodellen är "
+                                                "inte nedladdad. Behåller originalspråket."})
+                else:
+                    emit({"type": "log", "msg": "Översätter undertexterna ..."})
+                    sv_dicts = postprocess.translate_segments(
+                        segments, language, target_language, LLM_MODELS[0].name)
+                    sv_segs = [transcriber.Segment(d["start"], d["end"], d["text"]) for d in sv_dicts]
+                    orig_segs = [transcriber.Segment(s["start"], s["end"], s["text"]) for s in segments]
+                    srt_path = transcriber.write_outputs(sv_segs, out_base, ["srt"])[0]
+                    ref_srt = transcriber.write_outputs(
+                        orig_segs, out_base.with_name(out_base.stem + "." + language), ["srt"])[0]
+                    sub_lang, ref_lang = target_language, language
+                    segments = sv_dicts
+
+            # Collect media + subtitle into a dated result folder under
+            # Transkriberingar/ and pre-generate a thumbnail (best effort).
+            date_str = datetime.now().strftime("%Y-%m-%d")
+            assembled = output_store.assemble_output(
+                media, srt_path, base, date_str, sub_mode, embed_kind,
+                emit_log=lambda m: emit({"type": "log", "msg": m}),
+                ref_srt=ref_srt, sub_lang=sub_lang, ref_lang=ref_lang)
+            files = assembled["files"]
+            video = assembled["video"]
+
             spec_label = next((s.label for s in WHISPER_MODELS if s.id == model_id), model_id)
-            lang_label = {"en": "Engelska", "sv": "Svenska"}.get(language, "Auto")
+            _lang_lbl = {"en": "Engelska", "sv": "Svenska"}
+            lang_label = _lang_lbl.get(language, "Auto")
+            target_label = _lang_lbl.get(target_language, lang_label)
             dur = segments[-1]["end"] if segments else 0
             words = sum(len((sg.get("text") or "").split()) for sg in segments)
             history_store.add_history(history_file, {
                 "id": "h" + str(int(time.time() * 1000)),
                 "ts": datetime.now().isoformat(timespec="seconds"),
-                "name": media.name, "source": source,
+                "name": Path(media).name,
+                "source": source if _is_url(source) else (video["path"] if video else str(media)),
                 "dur": _clock(dur), "model": spec_label, "lang": lang_label,
+                "target_lang": target_label,
                 "formats": [f.upper() for f in formats],
                 "words": words, "files": files, "transcript": segments,
+                "folder": assembled["folder"], "video": video,
             })
-            return {"files": files, "transcript": segments}
+            return {"files": files, "transcript": segments,
+                    "media": video["path"] if video else str(media),
+                    "folder": assembled["folder"]}
         return _sse_response(job)
 
     @app.get("/api/history")
@@ -319,8 +441,21 @@ def create_app(base_dir: Path | None = None) -> FastAPI:
 
     @app.delete("/api/history/{entry_id}")
     def api_history_delete(entry_id: str):
+        # Delete the result folder from disk too (validated to live strictly under
+        # base/Transkriberingar/). All-or-nothing: keep the entry + 409 if a file
+        # is locked, so the user can close the player and retry.
+        items = history_store.load_history(history_file)
+        entry = next((e for e in items if e.get("id") == entry_id), None)
+        folder_removed = False
+        if entry and entry.get("folder"):
+            try:
+                folder_removed = output_store.delete_result_folder(base, entry["folder"])
+            except OSError:
+                return JSONResponse(
+                    {"error": "kunde inte radera mappen — en fil kan vara öppen"},
+                    status_code=409)
         history_store.delete_history(history_file, entry_id)
-        return {"ok": True}
+        return {"ok": True, "folder_removed": folder_removed}
 
     @app.post("/api/postprocess")
     async def api_postprocess(req: Request):
@@ -330,11 +465,20 @@ def create_app(base_dir: Path | None = None) -> FastAPI:
         model = body.get("model", "")
         if not transcript or not model:
             return JSONResponse({"error": "text och modell krävs"}, status_code=400)
+        if not arb.try_acquire_gpu():
+            return JSONResponse(
+                {"error": "GPU upptagen med transkribering – försök igen strax."},
+                status_code=409)
 
         def job(emit):
-            text = postprocess.run(operation, transcript, model,
-                                   token_cb=lambda t: emit({"type": "token", "text": t}))
-            return {"text": text}
+            try:
+                if arb.ensure_llm() is None:
+                    raise RuntimeError("Språkmodellen är inte installerad.")
+                text = postprocess.run(operation, transcript, model,
+                                       token_cb=lambda t: emit({"type": "token", "text": t}))
+                return {"text": text}
+            finally:
+                arb.release_gpu()
         return _sse_response(job)
 
     @app.post("/api/chat")
@@ -343,16 +487,95 @@ def create_app(base_dir: Path | None = None) -> FastAPI:
         messages = body.get("messages") or []
         transcript = body.get("transcript", "")
         model = body.get("model", "")
-        think = bool(body.get("think", False))   # only the chat may turn on Qwen3 thinking
+        images = body.get("images") or []
+        think = bool(body.get("think", False))   # only the (text) chat may turn on Qwen3 thinking
         if not model or not messages:
             return JSONResponse({"error": "modell och meddelande krävs"}, status_code=400)
+        if not arb.try_acquire_gpu():
+            return JSONResponse(
+                {"error": "GPU upptagen med transkribering – försök igen strax."},
+                status_code=409)
 
         def job(emit):
-            text = llm_client.chat(
-                model, messages, transcript=transcript, think=think,
-                token_cb=lambda t: emit({"type": "token", "text": t}),
-                reason_cb=lambda t: emit({"type": "reasoning", "text": t}))
-            return {"text": text}
+            try:
+                # An image needs the multimodal model; otherwise the long-context
+                # text model answers grounded in the transcript. The arbiter
+                # switches the served model (they can't coexist in 24 GB VRAM).
+                spec = llm_manager.VISION_LLM if images else llm_manager.ACTIVE_LLM
+                if arb.ensure_model(spec) is None:
+                    raise RuntimeError(f"{spec.label} är inte installerad.")
+                # think/reason_cb apply to the text model; the vision path ignores them.
+                text = llm_client.chat(
+                    model, messages, transcript=transcript, images=images, think=think,
+                    token_cb=lambda t: emit({"type": "token", "text": t}),
+                    reason_cb=lambda t: emit({"type": "reasoning", "text": t}))
+                return {"text": text}
+            finally:
+                arb.release_gpu()
         return _sse_response(job)
+
+    def _under_base(path: str) -> Path | None:
+        """Resolve `path` only if it lives under base_dir (local app; blocks
+        arbitrary filesystem reads). Returns the resolved Path or None."""
+        try:
+            p = Path(path).resolve()
+        except Exception:
+            return None
+        return p if str(p).startswith(str(base.resolve())) else None
+
+    @app.get("/api/thumb")
+    def api_thumb(path: str = ""):
+        p = _under_base(path)
+        if p is None:
+            return JSONResponse({"error": "ogiltig sökväg"}, status_code=404)
+        thumb = media.make_thumbnail(p)
+        if not thumb or not Path(thumb).exists():
+            return JSONResponse({"error": "ingen miniatyr"}, status_code=404)
+        return FileResponse(str(thumb))
+
+    @app.get("/api/media")
+    def api_media(path: str = "", want: str = ""):
+        """Serve media for the in-app player. Web formats stream directly; others
+        (e.g. .mkv) get a cached web copy (video) or extracted .m4a (audio)."""
+        p = _under_base(path)
+        if p is None or not p.exists():
+            return JSONResponse({"error": "finns inte"}, status_code=404)
+        if want == "video":
+            try:
+                return FileResponse(str(media.ensure_web_video(p)))
+            except Exception as e:
+                return JSONResponse({"error": str(e)}, status_code=500)
+        if p.suffix.lower() in _WEB_MEDIA:
+            return FileResponse(str(p))
+        cached = p.with_name(p.stem + ".preview.m4a")
+        if not cached.exists() or cached.stat().st_mtime < p.stat().st_mtime:
+            subprocess.run(["ffmpeg", "-y", "-i", str(p), "-vn", "-c:a", "aac",
+                            "-b:a", "128k", str(cached)], capture_output=True)
+        if cached.exists():
+            return FileResponse(str(cached))
+        return JSONResponse({"error": "kunde inte läsa ljud"}, status_code=500)
+
+    def _open_path(raw: str):
+        """Open a file/folder in the OS file manager, only if under base_dir."""
+        p = _under_base(raw or "")
+        if p is None:
+            return JSONResponse({"error": "otillåten sökväg"}, status_code=403)
+        if not p.exists():
+            return JSONResponse({"error": "finns inte"}, status_code=404)
+        try:
+            os.startfile(str(p))  # noqa: S606 — local Windows desktop app
+            return {"ok": True}
+        except Exception as e:
+            return JSONResponse({"error": str(e)}, status_code=500)
+
+    @app.post("/api/open")
+    async def api_open(req: Request):
+        """Open a result file/folder in the OS file manager (Windows desktop app)."""
+        return _open_path((await req.json()).get("path") or "")
+
+    @app.post("/api/reveal")
+    async def api_reveal(req: Request):
+        """Reveal a result folder/file in the OS file manager."""
+        return _open_path((await req.json()).get("path") or "")
 
     return app

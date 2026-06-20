@@ -20,12 +20,6 @@ def _sse(chunks):
     out.append("data: [DONE]")
     return out
 
-def _sse_deltas(deltas):
-    """SSE lines from raw delta dicts (lets a test emit reasoning_content too)."""
-    out = ["data: " + json.dumps({"choices": [{"delta": d}]}) for d in deltas]
-    out.append("data: [DONE]")
-    return out
-
 def test_is_running_true(monkeypatch):
     class R:
         status_code = 200
@@ -88,16 +82,56 @@ def test_skips_malformed_and_blank_sse_lines(monkeypatch):
     monkeypatch.setattr(lc.requests, "post", lambda *a, **k: FakeResp(lines=lines))
     assert lc.generate("ignored", "p") == "ok"
 
-# ---- Qwen3 thinking toggle ----
 
-def test_chat_thinking_off_by_default(monkeypatch):
+def test_chat_with_images_builds_multimodal_parts(monkeypatch):
+    captured = {}
+    def fake_post(url, json=None, **k):
+        captured["json"] = json
+        return FakeResp(lines=_sse(["ser bild"]))
+    monkeypatch.setattr(lc.requests, "post", fake_post)
+    out = lc.chat("m", [{"role": "user", "content": "vad är detta"}],
+                  images=["data:image/png;base64,AAAA"])
+    assert out == "ser bild"
+    last = captured["json"]["messages"][-1]
+    assert isinstance(last["content"], list)
+    kinds = [p["type"] for p in last["content"]]
+    assert "text" in kinds and "image_url" in kinds
+    img = [p for p in last["content"] if p["type"] == "image_url"][0]
+    assert img["image_url"]["url"] == "data:image/png;base64,AAAA"
+    # Vision (Gemma) must NOT carry Qwen's enable_thinking template kwarg.
+    assert "chat_template_kwargs" not in captured["json"]
+
+
+def test_chat_wraps_bare_base64_into_data_url(monkeypatch):
+    captured = {}
+    def fake_post(url, json=None, **k):
+        captured["json"] = json
+        return FakeResp(lines=_sse(["x"]))
+    monkeypatch.setattr(lc.requests, "post", fake_post)
+    lc.chat("m", [{"role": "user", "content": "q"}], images=["AAAA"])
+    img = [p for p in captured["json"]["messages"][-1]["content"]
+           if p["type"] == "image_url"][0]
+    assert img["image_url"]["url"] == "data:image/png;base64,AAAA"
+
+
+def test_text_chat_still_disables_thinking(monkeypatch):
     captured = {}
     def fake_post(url, json=None, **k):
         captured["json"] = json
         return FakeResp(lines=_sse(["svar"]))
     monkeypatch.setattr(lc.requests, "post", fake_post)
-    lc.chat("ignored", [{"role": "user", "content": "fråga"}], transcript="T")
+    lc.chat("m", [{"role": "user", "content": "fråga"}], transcript="T")
     assert captured["json"]["chat_template_kwargs"] == {"enable_thinking": False}
+
+
+def _sse_deltas(deltas):
+    """SSE lines from raw delta dicts (lets a test emit reasoning_content too)."""
+    out = ["data: " + json.dumps({"choices": [{"delta": d}]}) for d in deltas]
+    out.append("data: [DONE]")
+    return out
+
+
+# ---- Qwen3 thinking toggle (text chat only) ----
 
 def test_chat_enables_thinking_when_requested(monkeypatch):
     captured = {}
@@ -108,23 +142,21 @@ def test_chat_enables_thinking_when_requested(monkeypatch):
     lc.chat("ignored", [{"role": "user", "content": "fråga"}], transcript="T", think=True)
     assert captured["json"]["chat_template_kwargs"] == {"enable_thinking": True}
 
-def test_generate_can_enable_thinking_but_postprocess_keeps_it_off(monkeypatch):
-    # generate defaults to OFF (correction is mechanical); the flag still works if asked.
+
+def test_generate_keeps_thinking_off_even_when_asked(monkeypatch):
+    # Correction/summary is mechanical -> generate() never thinks (ignores think).
     captured = {}
     def fake_post(url, json=None, **k):
         captured["json"] = json
         return FakeResp(lines=_sse(["ok"]))
     monkeypatch.setattr(lc.requests, "post", fake_post)
-    lc.generate("ignored", "p")
-    assert captured["json"]["chat_template_kwargs"] == {"enable_thinking": False}
     lc.generate("ignored", "p", think=True)
-    assert captured["json"]["chat_template_kwargs"] == {"enable_thinking": True}
+    assert captured["json"]["chat_template_kwargs"] == {"enable_thinking": False}
+
 
 # ---- reasoning is split out of the answer ----
 
 def test_reasoning_content_field_routed_to_reason_cb(monkeypatch):
-    # When the server exposes a separate reasoning_content delta, it must NOT
-    # appear in the answer or token_cb; only the content does.
     deltas = [{"reasoning_content": "Let me think... "},
               {"reasoning_content": "in English."},
               {"content": "Det "}, {"content": "är bra."}]
@@ -136,8 +168,8 @@ def test_reasoning_content_field_routed_to_reason_cb(monkeypatch):
     assert "".join(answer_tokens) == "Det är bra."
     assert "".join(reason_tokens) == "Let me think... in English."
 
+
 def test_inline_think_tags_stripped_from_answer(monkeypatch):
-    # Older/other reasoning-format: <think>...</think> arrives inline in content.
     chunks = ["<think>", "internal english reasoning", "</think>", "Det ", "är bra."]
     monkeypatch.setattr(lc.requests, "post", lambda *a, **k: FakeResp(lines=_sse(chunks)))
     answer_tokens, reason_tokens = [], []
@@ -147,8 +179,8 @@ def test_inline_think_tags_stripped_from_answer(monkeypatch):
     assert "<think>" not in out and "reasoning" not in out
     assert "".join(reason_tokens) == "internal english reasoning"
 
+
 def test_inline_think_tag_split_across_chunks(monkeypatch):
-    # The literal markers may be torn across streamed chunks; still must not leak.
     chunks = ["<th", "ink>secret", "</thi", "nk>Svar"]
     monkeypatch.setattr(lc.requests, "post", lambda *a, **k: FakeResp(lines=_sse(chunks)))
     answer_tokens = []

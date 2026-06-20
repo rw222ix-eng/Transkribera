@@ -7,7 +7,6 @@ import webbrowser
 
 import uvicorn
 
-from app import llama_server
 from app.web.server import create_app
 
 
@@ -35,12 +34,12 @@ def main() -> None:
 
     threading.Thread(target=open_browser, daemon=True).start()
     print(f"Transkribera web: {url}  (Ctrl+C för att stänga)")
-    llm = llama_server.autostart(on_log=print)
+    # The LLM starts lazily on the first correction/chat (the GPU arbiter owns it,
+    # see app/gpu_arbiter.py). Stop it on exit so no llama-server is left orphaned.
     try:
         uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")
     finally:
-        if llm is not None:
-            llm.stop()
+        app.state.arbiter.stop_llm()
 
 
 if __name__ == "__main__":
