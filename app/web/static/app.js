@@ -997,6 +997,7 @@
         formats: (h.formats || []).map(function (f) { return { label: f }; }),
         onOpen: function () { openHistory(h); }, onRerun: function () { askRerun(h); }, onDelete: function () { askDeleteHistory(h.id, h.name); },
         onDownload: function () { downloadFile(baseNameOf(h.name) + '.' + ((h.formats && h.formats[0]) || 'TXT').toLowerCase(), Math.max(9, Math.round((h.words || 3000) / 140)) + ' KB'); },
+        thumbUrl: (h.video && h.video.path) ? ('/api/thumb?path=' + encodeURIComponent(h.video.path)) : null,
       };
     });
 
@@ -1847,13 +1848,23 @@ function viewHistory(v){ return `
       <div style="display:flex;flex-direction:column;gap:10px">
         ${ v.historyItems.map(function(h){ return `
           <div data-key="${esc(h.id)}" style="display:flex;align-items:center;gap:15px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:15px 18px;box-shadow:var(--shadow-sm)">
-            <span style="width:42px;height:42px;border-radius:11px;background:var(--sunken);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;flex:0 0 auto">
-              <span style="display:flex;align-items:flex-end;gap:2px;height:16px">
-                <span style="width:2.5px;height:6px;border-radius:2px;background:var(--ink-3)"></span>
-                <span style="width:2.5px;height:13px;border-radius:2px;background:var(--ink-3)"></span>
-                <span style="width:2.5px;height:16px;border-radius:2px;background:var(--accent)"></span>
-                <span style="width:2.5px;height:9px;border-radius:2px;background:var(--ink-3)"></span>
-              </span>
+            <span style="width:64px;height:40px;border-radius:9px;background:var(--sunken);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;flex:0 0 auto;overflow:hidden">
+              ${ h.thumbUrl ? `
+                <img src="${h.thumbUrl}" loading="lazy" alt="" style="width:100%;height:100%;object-fit:cover" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+                <span style="display:none;align-items:flex-end;gap:2px;height:16px">
+                  <span style="width:2.5px;height:6px;border-radius:2px;background:var(--ink-3)"></span>
+                  <span style="width:2.5px;height:13px;border-radius:2px;background:var(--ink-3)"></span>
+                  <span style="width:2.5px;height:16px;border-radius:2px;background:var(--accent)"></span>
+                  <span style="width:2.5px;height:9px;border-radius:2px;background:var(--ink-3)"></span>
+                </span>
+              ` : `
+                <span style="display:flex;align-items:flex-end;gap:2px;height:16px">
+                  <span style="width:2.5px;height:6px;border-radius:2px;background:var(--ink-3)"></span>
+                  <span style="width:2.5px;height:13px;border-radius:2px;background:var(--ink-3)"></span>
+                  <span style="width:2.5px;height:16px;border-radius:2px;background:var(--accent)"></span>
+                  <span style="width:2.5px;height:9px;border-radius:2px;background:var(--ink-3)"></span>
+                </span>
+              ` }
             </span>
             <div style="flex:1;min-width:0">
               <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">

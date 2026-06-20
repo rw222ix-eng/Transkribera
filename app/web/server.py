@@ -2,6 +2,7 @@
 stream progress as Server-Sent Events (SSE). No PySide6 import here."""
 from __future__ import annotations
 import json
+import os
 import queue
 import subprocess
 import sys
@@ -16,10 +17,18 @@ from fastapi.staticfiles import StaticFiles
 
 from app import (debug_log, hardware, recommend, whisper_manager, llm_client,
                  llm_manager, online_catalog, youtube, postprocess, transcriber,
-                 history_store, gpu_arbiter)
+                 history_store, gpu_arbiter, output_store, media)
 from app.models_catalog import WHISPER_MODELS, LLM_MODELS
 
 _MONTHS_SV = ["jan", "feb", "mar", "apr", "maj", "jun", "jul", "aug", "sep", "okt", "nov", "dec"]
+
+# Web-playable media containers served straight to the preview player.
+_WEB_MEDIA = {".mp3", ".m4a", ".aac", ".wav", ".ogg", ".oga", ".opus",
+              ".webm", ".mp4", ".m4v", ".mov", ".flac"}
+
+
+def _is_url(s: str) -> bool:
+    return s.startswith("http://") or s.startswith("https://")
 
 
 def _date_label(ts_iso: str) -> str:
@@ -316,9 +325,17 @@ def create_app(base_dir: Path | None = None,
                     written = expected
                 else:
                     raise RuntimeError("Transkriberingen gav inget resultat")
-            files = [{"path": p, "name": Path(p).name,
-                      "ext": Path(p).suffix.lstrip("."), "size": _file_size_str(p)}
-                     for p in written]
+            srt_path = next((Path(p) for p in written if str(p).lower().endswith(".srt")), None)
+
+            # Collect media + subtitle into a dated result folder under
+            # Transkriberingar/ and pre-generate a thumbnail (best effort).
+            date_str = datetime.now().strftime("%Y-%m-%d")
+            assembled = output_store.assemble_output(
+                media, srt_path, base, date_str, "separate", None,
+                emit_log=lambda m: emit({"type": "log", "msg": m}))
+            files = assembled["files"]
+            video = assembled["video"]
+
             spec_label = next((s.label for s in WHISPER_MODELS if s.id == model_id), model_id)
             lang_label = {"en": "Engelska", "sv": "Svenska"}.get(language, "Auto")
             dur = segments[-1]["end"] if segments else 0
@@ -326,12 +343,16 @@ def create_app(base_dir: Path | None = None,
             history_store.add_history(history_file, {
                 "id": "h" + str(int(time.time() * 1000)),
                 "ts": datetime.now().isoformat(timespec="seconds"),
-                "name": media.name, "source": source,
+                "name": Path(media).name,
+                "source": source if _is_url(source) else (video["path"] if video else str(media)),
                 "dur": _clock(dur), "model": spec_label, "lang": lang_label,
                 "formats": [f.upper() for f in formats],
                 "words": words, "files": files, "transcript": segments,
+                "folder": assembled["folder"], "video": video,
             })
-            return {"files": files, "transcript": segments}
+            return {"files": files, "transcript": segments,
+                    "media": video["path"] if video else str(media),
+                    "folder": assembled["folder"]}
         return _sse_response(job)
 
     @app.get("/api/history")
@@ -343,8 +364,21 @@ def create_app(base_dir: Path | None = None,
 
     @app.delete("/api/history/{entry_id}")
     def api_history_delete(entry_id: str):
+        # Delete the result folder from disk too (validated to live strictly under
+        # base/Transkriberingar/). All-or-nothing: keep the entry + 409 if a file
+        # is locked, so the user can close the player and retry.
+        items = history_store.load_history(history_file)
+        entry = next((e for e in items if e.get("id") == entry_id), None)
+        folder_removed = False
+        if entry and entry.get("folder"):
+            try:
+                folder_removed = output_store.delete_result_folder(base, entry["folder"])
+            except OSError:
+                return JSONResponse(
+                    {"error": "kunde inte radera mappen — en fil kan vara öppen"},
+                    status_code=409)
         history_store.delete_history(history_file, entry_id)
-        return {"ok": True}
+        return {"ok": True, "folder_removed": folder_removed}
 
     @app.post("/api/postprocess")
     async def api_postprocess(req: Request):
@@ -393,5 +427,69 @@ def create_app(base_dir: Path | None = None,
             finally:
                 arb.release_gpu()
         return _sse_response(job)
+
+    def _under_base(path: str) -> Path | None:
+        """Resolve `path` only if it lives under base_dir (local app; blocks
+        arbitrary filesystem reads). Returns the resolved Path or None."""
+        try:
+            p = Path(path).resolve()
+        except Exception:
+            return None
+        return p if str(p).startswith(str(base.resolve())) else None
+
+    @app.get("/api/thumb")
+    def api_thumb(path: str = ""):
+        p = _under_base(path)
+        if p is None:
+            return JSONResponse({"error": "ogiltig sökväg"}, status_code=404)
+        thumb = media.make_thumbnail(p)
+        if not thumb or not Path(thumb).exists():
+            return JSONResponse({"error": "ingen miniatyr"}, status_code=404)
+        return FileResponse(str(thumb))
+
+    @app.get("/api/media")
+    def api_media(path: str = "", want: str = ""):
+        """Serve media for the in-app player. Web formats stream directly; others
+        (e.g. .mkv) get a cached web copy (video) or extracted .m4a (audio)."""
+        p = _under_base(path)
+        if p is None or not p.exists():
+            return JSONResponse({"error": "finns inte"}, status_code=404)
+        if want == "video":
+            try:
+                return FileResponse(str(media.ensure_web_video(p)))
+            except Exception as e:
+                return JSONResponse({"error": str(e)}, status_code=500)
+        if p.suffix.lower() in _WEB_MEDIA:
+            return FileResponse(str(p))
+        cached = p.with_name(p.stem + ".preview.m4a")
+        if not cached.exists() or cached.stat().st_mtime < p.stat().st_mtime:
+            subprocess.run(["ffmpeg", "-y", "-i", str(p), "-vn", "-c:a", "aac",
+                            "-b:a", "128k", str(cached)], capture_output=True)
+        if cached.exists():
+            return FileResponse(str(cached))
+        return JSONResponse({"error": "kunde inte läsa ljud"}, status_code=500)
+
+    def _open_path(raw: str):
+        """Open a file/folder in the OS file manager, only if under base_dir."""
+        p = _under_base(raw or "")
+        if p is None:
+            return JSONResponse({"error": "otillåten sökväg"}, status_code=403)
+        if not p.exists():
+            return JSONResponse({"error": "finns inte"}, status_code=404)
+        try:
+            os.startfile(str(p))  # noqa: S606 — local Windows desktop app
+            return {"ok": True}
+        except Exception as e:
+            return JSONResponse({"error": str(e)}, status_code=500)
+
+    @app.post("/api/open")
+    async def api_open(req: Request):
+        """Open a result file/folder in the OS file manager (Windows desktop app)."""
+        return _open_path((await req.json()).get("path") or "")
+
+    @app.post("/api/reveal")
+    async def api_reveal(req: Request):
+        """Reveal a result folder/file in the OS file manager."""
+        return _open_path((await req.json()).get("path") or "")
 
     return app
