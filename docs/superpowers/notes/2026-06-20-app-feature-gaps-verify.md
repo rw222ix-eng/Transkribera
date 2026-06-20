@@ -67,9 +67,13 @@ ASR-körtid än faster-whisper (CTranslate2 kan inte köra Parakeet).
 Mekanik: `WhisperModelSpec` fick `engine`/`runtime`-fält. Parakeet-posten har
 `languages="en"`, så språkväljaren plockar den automatiskt för Engelska (samma
 logik som Svenska → KB-Whisper). `transcribe_cli` grenar på `--engine`:
-`whisper` → faster-whisper, `parakeet` → nya `app/parakeet_asr.py` (ffmpeg →
-16 kHz WAV → onnx-asr → tidsstämplade segment grupperade till undertext-cues).
-Nya beroenden: `onnx-asr`, `onnxruntime-gpu` (requirements + `.spec`).
+`whisper` → faster-whisper, `parakeet` → `app/parakeet_asr.py` (ffmpeg → 16 kHz
+mono numpy-PCM → onnx-asr). onnx-asr chunkar inte långt ljud, så vi kör i
+**30 s-fönster med 2 s överlapp**, behåller varje fönsters tokens mellan
+överlapps­mitterna (inga dubbletter/tapp), och grupperar token-tidsstämplar till
+undertext-cues. `app/gpu_dll.py` lägger NVIDIA-CUDA-wheelarnas DLL:er på
+sökvägen så onnxruntime-gpu:s CUDA-provider laddas på Windows (annars tyst
+CPU-fallback). Nya beroenden: `onnx-asr`, `onnxruntime-gpu`, `numpy`.
 
 ### Att verifiera live (Windows + RTX 4090):
 1. `python -m pip install -r requirements.txt` (drar in onnx-asr + onnxruntime-gpu).
@@ -82,10 +86,10 @@ Nya beroenden: `onnx-asr`, `onnxruntime-gpu` (requirements + `.spec`).
 5. Transkribera en **svensk** klipp → går via KB-Whisper som förut.
 
 ### API-caveat att dubbelkolla
-- `onnx_asr.load_model(runtime, path=..., providers=...)` och
-  `model.recognize(wav, timestamps=True)` är byggda mot onnx-asr ≥0.6. Stämmer
-  inte signaturen/timestamp-formatet i den installerade versionen faller koden
-  tillbaka (utan tidsstämplar → en enda cue över hela klippet); justera
-  `parakeet_asr._word_tuples` / `transcribe` efter den faktiska API:n.
+- Koden använder onnx-asr ≥0.6: `load_model(runtime, path=..., providers=[(p,{})...]).with_timestamps()`
+  och `model.recognize(wav_np, sample_rate=16000)` → `res.tokens` + `res.timestamps`.
+  Stämmer inte signaturen i den installerade versionen, justera `parakeet_asr.transcribe`.
 - parakeet-tdt-0.6b-**v2** är engelsk-only (inget språk-argument behövs). Vill man
-  ha fler språk: byt till v3 (`nemo-parakeet-tdt-0.6b-v3`) och skicka språk.
+  ha fler språk: byt katalogens `runtime` till `nemo-parakeet-tdt-0.6b-v3`.
+- Verifiera att CUDA-providern faktiskt laddas (inte tyst CPU): `gpu_dll.ensure_cuda_dll_path()`
+  körs före `import onnx_asr`; kontrollera GPU-last i `nvidia-smi` under en lång fil.

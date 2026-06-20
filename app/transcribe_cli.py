@@ -45,7 +45,8 @@ def _transcribe_parakeet(args) -> list[Segment]:
     from app import parakeet_asr
     return parakeet_asr.transcribe(
         args.audio, args.model_dir, args.runtime, args.device,
-        log_cb=lambda m: print("LOG " + m, flush=True))
+        log_cb=lambda m: print("LOG " + m, flush=True),
+        progress_cb=lambda pct: print(f"PROGRESS {pct}", flush=True))
 
 
 def main(argv: list[str] | None = None) -> None:
