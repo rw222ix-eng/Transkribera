@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import queue
+import sqlite3
 import subprocess
 import sys
 import threading
@@ -17,7 +18,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app import (debug_log, hardware, recommend, whisper_manager, llm_client,
                  llm_manager, online_catalog, youtube, postprocess, transcriber,
-                 history_store, gpu_arbiter, output_store, media, audio_model)
+                 history_store, gpu_arbiter, output_store, media, audio_model, db)
 from app.models_catalog import WHISPER_MODELS, LLM_MODELS
 
 _MONTHS_SV = ["jan", "feb", "mar", "apr", "maj", "jun", "jul", "aug", "sep", "okt", "nov", "dec"]
@@ -181,9 +182,23 @@ def create_app(base_dir: Path | None = None,
     base = base_dir or _base_dir()
     models_root = base / "models"
     history_file = base / "history.json"
+    db_file = base / "transkribera.db"
     cookies = base / "cookies.txt"
     cookies_file = cookies if cookies.exists() else None
     debug_log.setup(base, "web")
+
+    def _db():
+        return db.connect(db_file)
+
+    # One-time import of any existing history into the lesson DB (idempotent).
+    try:
+        _conn = _db()
+        try:
+            db.migrate_from_history(_conn, history_store.load_history(history_file))
+        finally:
+            _conn.close()
+    except Exception:
+        debug_log.get_logger().exception("Migrering av historik till lektions-DB misslyckades")
 
     app = FastAPI(title="Transkribera Web")
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
@@ -416,7 +431,7 @@ def create_app(base_dir: Path | None = None,
             target_label = _lang_lbl.get(target_language, lang_label)
             dur = segments[-1]["end"] if segments else 0
             words = sum(len((sg.get("text") or "").split()) for sg in segments)
-            history_store.add_history(history_file, {
+            entry = {
                 "id": "h" + str(int(time.time() * 1000)),
                 "ts": datetime.now().isoformat(timespec="seconds"),
                 "name": Path(media).name,
@@ -426,7 +441,25 @@ def create_app(base_dir: Path | None = None,
                 "formats": [f.upper() for f in formats],
                 "words": words, "files": files, "transcript": segments,
                 "folder": assembled["folder"], "video": video,
-            })
+            }
+            history_store.add_history(history_file, entry)
+            # Mirror into the lesson DB so the recording can be organised by
+            # date/class/course. Never let this break a successful transcription.
+            try:
+                conn = _db()
+                try:
+                    db.create_lesson(
+                        conn, history_id=entry["id"], ts=entry["ts"],
+                        name=entry["name"], source=source, dur=entry["dur"],
+                        model=spec_label, lang=lang_label,
+                        formats=entry["formats"], words=words,
+                        transcript_folder=assembled["folder"],
+                        recording_path=str(media), created_at=entry["ts"],
+                        transcript_text=db.segments_text(segments))
+                finally:
+                    conn.close()
+            except Exception:
+                debug_log.get_logger().exception("Kunde inte spara lektion i DB")
             return {"files": files, "transcript": segments,
                     "media": video["path"] if video else str(media),
                     "folder": assembled["folder"]}
@@ -438,6 +471,14 @@ def create_app(base_dir: Path | None = None,
         for it in items:
             it["date"] = _date_label(it.get("ts", ""))
         return items
+
+    @app.get("/api/history/{entry_id}")
+    def api_history_one(entry_id: str):
+        for it in history_store.load_history(history_file):
+            if it.get("id") == entry_id:
+                it["date"] = _date_label(it.get("ts", ""))
+                return it
+        return JSONResponse({"error": "finns inte"}, status_code=404)
 
     @app.delete("/api/history/{entry_id}")
     def api_history_delete(entry_id: str):
@@ -456,6 +497,113 @@ def create_app(base_dir: Path | None = None,
                     status_code=409)
         history_store.delete_history(history_file, entry_id)
         return {"ok": True, "folder_removed": folder_removed}
+
+    # ---- Lektioner: organisera transkriberingar per datum/klass/kurs ----------
+
+    def _lesson_view(les: dict) -> dict:
+        les = dict(les)
+        les["date"] = _date_label(les.get("ts", ""))
+        return les
+
+    @app.get("/api/lessons")
+    def api_lessons(group_id: int | None = None, course_id: int | None = None,
+                    date_from: str | None = None, date_to: str | None = None):
+        conn = _db()
+        try:
+            items = db.list_lessons(conn, group_id=group_id, course_id=course_id,
+                                    date_from=date_from, date_to=date_to)
+        finally:
+            conn.close()
+        return [_lesson_view(it) for it in items]
+
+    @app.get("/api/lessons/{lesson_id}")
+    def api_lesson_get(lesson_id: int):
+        conn = _db()
+        try:
+            les = db.get_lesson(conn, lesson_id)
+        finally:
+            conn.close()
+        if les is None:
+            return JSONResponse({"error": "lektionen finns inte"}, status_code=404)
+        return _lesson_view(les)
+
+    @app.patch("/api/lessons/{lesson_id}")
+    async def api_lesson_patch(lesson_id: int, req: Request):
+        body = await req.json()
+        conn = _db()
+        try:
+            if db.get_lesson(conn, lesson_id) is None:
+                return JSONResponse({"error": "lektionen finns inte"}, status_code=404)
+            fields = {}
+            for k in ("datum", "starttid", "sal", "summary"):
+                if k in body:
+                    fields[k] = body[k]
+            if "group_name" in body:
+                fields["group_id"] = db.get_or_create_group(conn, body["group_name"])
+            elif "group_id" in body:
+                fields["group_id"] = body["group_id"]
+            if "course_name" in body:
+                fields["course_id"] = db.get_or_create_course(conn, body["course_name"])
+            elif "course_id" in body:
+                fields["course_id"] = body["course_id"]
+            try:
+                les = db.update_lesson(conn, lesson_id, **fields)
+            except sqlite3.IntegrityError:               # unknown group_id/course_id
+                return JSONResponse({"error": "okänd klass/kurs"}, status_code=400)
+        finally:
+            conn.close()
+        return _lesson_view(les)
+
+    @app.delete("/api/lessons/{lesson_id}")
+    def api_lesson_delete(lesson_id: int):
+        conn = _db()
+        try:
+            history_id = db.delete_lesson(conn, lesson_id)
+        finally:
+            conn.close()
+        if history_id:
+            history_store.delete_history(history_file, history_id)
+        return {"ok": True}
+
+    @app.get("/api/courses")
+    def api_courses():
+        conn = _db()
+        try:
+            return db.list_courses(conn)
+        finally:
+            conn.close()
+
+    @app.post("/api/courses")
+    async def api_course_create(req: Request):
+        body = await req.json()
+        conn = _db()
+        try:
+            cid = db.get_or_create_course(conn, body.get("namn", ""))
+        finally:
+            conn.close()
+        if cid is None:
+            return JSONResponse({"error": "namn krävs"}, status_code=400)
+        return {"id": cid, "namn": body.get("namn", "").strip()}
+
+    @app.get("/api/groups")
+    def api_groups():
+        conn = _db()
+        try:
+            return db.list_groups(conn)
+        finally:
+            conn.close()
+
+    @app.post("/api/groups")
+    async def api_group_create(req: Request):
+        body = await req.json()
+        conn = _db()
+        try:
+            gid = db.get_or_create_group(conn, body.get("namn", ""))
+        finally:
+            conn.close()
+        if gid is None:
+            return JSONResponse({"error": "namn krävs"}, status_code=400)
+        return {"id": gid, "namn": body.get("namn", "").strip()}
 
     @app.post("/api/postprocess")
     async def api_postprocess(req: Request):

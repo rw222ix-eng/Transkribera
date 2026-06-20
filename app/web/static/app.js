@@ -86,6 +86,13 @@
       { id: 'h3', name: 'webinar_inspelning.mp4', date: '12 jun', dur: '01:03:20', model: 'Whisper large-v3', lang: 'Flerspråkig', formats: ['SRT', 'VTT', 'TXT'], words: 9120 },
     ],
     histViewing: null,
+    lessons: [],
+    groups: [],
+    courses: [],
+    lessonFilterGroup: '',
+    lessonFilterCourse: '',
+    editingLesson: null,
+    lessonEdits: {},
     confirm: null,
     diskWarn: null,
     transcript: null,
@@ -335,7 +342,7 @@
   /* -------------------------------------------------------------- actions -- */
   // BACKEND: theme/tab are pure UI.
   function toggleTheme() { setState(function (s) { return { theme: s.theme === 'light' ? 'dark' : 'light' }; }); }
-  function setTab(t) { setState({ tab: t, openDD: null }); }
+  function setTab(t) { setState({ tab: t, openDD: null }); if (t === 'lessons') { loadLessons(); loadOrg(); } }
   function onSource(e) { setState({ source: e.target.value }); }
   function fileRef(el) { _file = el; }
   function openPicker() {
@@ -437,6 +444,9 @@
     } else if (c.kind === 'history') {
       setState({ confirm: null });
       fetch('/api/history/' + encodeURIComponent(c.id), { method: 'DELETE' }).then(function () { loadHistory(); }).catch(function () {});
+    } else if (c.kind === 'lesson') {
+      setState({ confirm: null });
+      deleteLesson(c.id);
     } else if (c.kind === 'rerun') {
       var h = S.history.find(function (x) { return x.id === c.id; });
       setState({ confirm: null });
@@ -446,6 +456,60 @@
   function confirmNo() { setState({ confirm: null }); }
   function openHistory(h) { setState({ transcriptOpen: true, histViewing: h.id, transcript: (h.transcript || []).map(function (g) { return { time: fmtTime(g.start), text: g.text }; }) }); }
   function reRunHistory(h) { var id = 'q' + Date.now(); setState({ tab: 'transcribe', step: 'config', queue: [{ id: id, name: h.name, path: h.source || h.name }], qStatus: {}, qProgress: {}, run: 'idle', progress: 0, elapsed: 0, activeId: id, source: h.source || h.name, fileError: '', runError: null, openDD: null }); }
+
+  /* ----------------------------------------------------------- lessons (Fas 1) -- */
+  function lessonQuery() {
+    var p = [];
+    if (S.lessonFilterGroup) p.push('group_id=' + encodeURIComponent(S.lessonFilterGroup));
+    if (S.lessonFilterCourse) p.push('course_id=' + encodeURIComponent(S.lessonFilterCourse));
+    return p.length ? '?' + p.join('&') : '';
+  }
+  function loadLessons() {
+    return getJSON('/api/lessons' + lessonQuery())
+      .then(function (l) { if (Array.isArray(l)) setState({ lessons: l }); }).catch(function () {});
+  }
+  function loadOrg() {
+    return Promise.all([getJSON('/api/groups'), getJSON('/api/courses')])
+      .then(function (r) {
+        setState({ groups: Array.isArray(r[0]) ? r[0] : [], courses: Array.isArray(r[1]) ? r[1] : [] });
+      }).catch(function () {});
+  }
+  function setLessonFilter(which, val) {
+    var patch = {}; patch[which] = val;
+    setState(patch, function () { loadLessons(); });
+  }
+  function startEditLesson(l) {
+    setState({ editingLesson: l.id, lessonEdits: { group: l.group || '', course: l.course || '', sal: l.sal || '', datum: l.datum || '' } });
+  }
+  function cancelEditLesson() { setState({ editingLesson: null, lessonEdits: {} }); }
+  function onLessonField(field, val) {
+    setState(function (s) { var e = Object.assign({}, s.lessonEdits); e[field] = val; return { lessonEdits: e }; });
+  }
+  function saveLesson(id) {
+    var e = S.lessonEdits || {};
+    fetch('/api/lessons/' + encodeURIComponent(id), {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ group_name: e.group || '', course_name: e.course || '', sal: e.sal || '', datum: e.datum || '' })
+    }).then(function () {
+      setState({ editingLesson: null, lessonEdits: {} }, function () { loadLessons(); loadOrg(); });
+    }).catch(function () { setState({ editingLesson: null, lessonEdits: {} }); });
+  }
+  function openLesson(l) {
+    var h = S.history.find(function (x) { return x.id === l.history_id; });
+    if (h) { openHistory(h); return; }
+    if (l.history_id) {
+      getJSON('/api/history/' + encodeURIComponent(l.history_id)).then(function (hit) {
+        if (hit && hit.id) { setState(function (s) { return { history: s.history.concat([hit]) }; }); openHistory(hit); }
+      }).catch(function () {});
+    }
+  }
+  function askDeleteLesson(id, name) {
+    setState({ confirm: { kind: 'lesson', id: id, title: 'Ta bort lektionen?', body: '"' + name + '" tas bort ur lektionsdatabasen och historiken. Filer du redan sparat på disken påverkas inte.', label: 'Ta bort', danger: true } });
+  }
+  function deleteLesson(id) {
+    fetch('/api/lessons/' + encodeURIComponent(id), { method: 'DELETE' })
+      .then(function () { loadLessons(); loadHistory(); }).catch(function () {});
+  }
 
   function togglePlay() {
     if (S.audioPlaying) { clearInterval(_au); setState({ audioPlaying: false }); return; }
@@ -1058,11 +1122,38 @@
       };
     });
 
+    var lessonItems = st.lessons.map(function (l) {
+      var editing = st.editingLesson === l.id;
+      var ed = st.lessonEdits || {};
+      var tags = [];
+      if (l.group) tags.push({ label: l.group });
+      if (l.course) tags.push({ label: l.course });
+      if (l.sal) tags.push({ label: 'Sal ' + l.sal });
+      return {
+        id: l.id, name: l.name || '(namnlös)', date: l.date || l.datum || '',
+        meta: [l.dur, l.model, l.lang].filter(Boolean).join(' · '),
+        unassigned: !l.group && !l.course,
+        tags: tags,
+        editing: editing,
+        edGroup: editing ? (ed.group || '') : '', edCourse: editing ? (ed.course || '') : '',
+        edSal: editing ? (ed.sal || '') : '', edDatum: editing ? (ed.datum || '') : '',
+        onOpen: function () { openLesson(l); },
+        onEdit: function () { startEditLesson(l); },
+        onCancel: cancelEditLesson,
+        onSave: function () { saveLesson(l.id); },
+        onDelete: function () { askDeleteLesson(l.id, l.name || '(namnlös)'); },
+        onGroup: function (e) { onLessonField('group', e.target.value); },
+        onCourse: function (e) { onLessonField('course', e.target.value); },
+        onSal: function (e) { onLessonField('sal', e.target.value); },
+        onDatum: function (e) { onLessonField('datum', e.target.value); },
+      };
+    });
+
     return {
       theme: st.theme,
-      tabTranscribe: st.tab === 'transcribe', tabModels: st.tab === 'models', tabHistory: st.tab === 'history',
-      onTabT: function () { setTab('transcribe'); }, onTabM: function () { setTab('models'); }, onTabH: function () { setTab('history'); },
-      tabTStyle: tabBtn(st.tab === 'transcribe'), tabMStyle: tabBtn(st.tab === 'models'), tabHStyle: tabBtn(st.tab === 'history'),
+      tabTranscribe: st.tab === 'transcribe', tabModels: st.tab === 'models', tabHistory: st.tab === 'history', tabLessons: st.tab === 'lessons',
+      onTabT: function () { setTab('transcribe'); }, onTabM: function () { setTab('models'); }, onTabH: function () { setTab('history'); }, onTabL: function () { setTab('lessons'); },
+      tabTStyle: tabBtn(st.tab === 'transcribe'), tabMStyle: tabBtn(st.tab === 'models'), tabHStyle: tabBtn(st.tab === 'history'), tabLStyle: tabBtn(st.tab === 'lessons'),
       toggleTheme: toggleTheme,
 
       queueItems: queueItems, queueCount: st.queue.length, multiQueue: st.queue.length > 1, hasQueue: st.queue.length > 0,
@@ -1078,6 +1169,12 @@
       onCancelRun: cancelRun, onResumeRun: resumeRun, onRetryRun: retryRun,
 
       historyItems: historyItems, historyEmpty: st.history.length === 0, historyCount: st.history.length,
+
+      lessonItems: lessonItems, lessonsEmpty: st.lessons.length === 0,
+      lessonGroups: st.groups, lessonCourses: st.courses,
+      lessonFilterGroup: st.lessonFilterGroup, lessonFilterCourse: st.lessonFilterCourse,
+      onFilterGroup: function (e) { setLessonFilter('lessonFilterGroup', e.target.value); },
+      onFilterCourse: function (e) { setLessonFilter('lessonFilterCourse', e.target.value); },
 
       waveBars: waveBars, audioPlaying: st.audioPlaying, audioPaused: !st.audioPlaying,
       audioCur: fmtTime(st.audioT), audioDur: fmtTime(AUDIO_DUR),
@@ -1266,6 +1363,7 @@
         '<div style="display:inline-flex;gap:3px;padding:4px;background:var(--track);border-radius:12px;border:1px solid var(--line)">' +
           '<button data-click="' + on(v.onTabT) + '" style="' + v.tabTStyle + '" data-sh="background:var(--surface) !important;color:var(--ink) !important;box-shadow:var(--shadow-sm) !important">Transkribera</button>' +
           '<button data-click="' + on(v.onTabH) + '" style="' + v.tabHStyle + '" data-sh="background:var(--surface) !important;color:var(--ink) !important;box-shadow:var(--shadow-sm) !important">Historik</button>' +
+          '<button data-click="' + on(v.onTabL) + '" style="' + v.tabLStyle + '" data-sh="background:var(--surface) !important;color:var(--ink) !important;box-shadow:var(--shadow-sm) !important">Lektioner</button>' +
           '<button data-click="' + on(v.onTabM) + '" style="' + v.tabMStyle + '" data-sh="background:var(--surface) !important;color:var(--ink) !important;box-shadow:var(--shadow-sm) !important">Modeller</button>' +
         '</div>' +
       '</nav>' +
@@ -1980,6 +2078,74 @@ function viewHistory(v){ return `
     </section>
 `; }
 
+function viewLessons(v){
+  var selStyle = 'appearance:none;background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:8px 32px 8px 12px;font-size:14px;font-family:inherit;cursor:pointer';
+  var inStyle = 'background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:9px;padding:8px 11px;font-size:14px;font-family:inherit;min-width:0;width:100%;box-sizing:border-box';
+  function opts(list, cur){ return '<option value="">Alla</option>' + list.map(function(o){ return '<option value="'+o.id+'"'+(String(cur)===String(o.id)?' selected':'')+'>'+esc(o.namn)+'</option>'; }).join(''); }
+  return `
+    <section style="padding:44px 0 96px">
+      <div style="text-align:center;max-width:640px;margin:0 auto 22px">
+        <h1 style="font-size:34px;font-weight:600;letter-spacing:-0.03em;margin:0 0 6px">Lektioner</h1>
+        <p style="margin:0;color:var(--ink-2);font-size:17px">Dina inspelade lektioner — organisera per datum, klass och kurs. Allt ligger kvar lokalt.</p>
+      </div>
+
+      <datalist id="dl-klass">${ v.lessonGroups.map(function(g){ return '<option value="'+esc(g.namn)+'">'; }).join('') }</datalist>
+      <datalist id="dl-kurs">${ v.lessonCourses.map(function(c){ return '<option value="'+esc(c.namn)+'">'; }).join('') }</datalist>
+
+      <div style="display:flex;gap:10px;justify-content:center;margin-bottom:20px;flex-wrap:wrap">
+        <select data-change="${on(v.onFilterGroup)}" style="${selStyle}">${ opts(v.lessonGroups, v.lessonFilterGroup) }</select>
+        <select data-change="${on(v.onFilterCourse)}" style="${selStyle}">${ opts(v.lessonCourses, v.lessonFilterCourse) }</select>
+      </div>
+
+      ${ v.lessonsEmpty ? `
+        <div style="text-align:center;padding:60px 24px;background:var(--surface);border:1px solid var(--line);border-radius:16px;color:var(--ink-2);font-size:16px">Inga lektioner än. Transkribera en inspelning så dyker den upp här — tilldela den sedan klass och kurs.</div>
+      ` : '' }
+
+      <div style="display:flex;flex-direction:column;gap:10px">
+        ${ v.lessonItems.map(function(h){ return `
+          <div data-key="les-${esc(h.id)}" style="background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:15px 18px;box-shadow:var(--shadow-sm)">
+            <div style="display:flex;align-items:center;gap:15px">
+              <div style="flex:1;min-width:0">
+                <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+                  <span style="font-size:16px;font-weight:500;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(h.name)}</span>
+                  <span style="font-size:13px;color:var(--ink-3);font-variant-numeric:tabular-nums">${esc(h.date)}</span>
+                </div>
+                <div style="font-size:13.5px;color:var(--ink-2);margin-top:3px;font-variant-numeric:tabular-nums">${esc(h.meta)}</div>
+                <div style="display:flex;gap:6px;margin-top:9px;flex-wrap:wrap">
+                  ${ h.unassigned ? `<span style="font-size:11.5px;font-weight:500;color:var(--ink-3);background:var(--sunken);border:1px solid var(--line);border-radius:5px;padding:2px 8px">Ej tilldelad</span>`
+                    : h.tags.map(function(t){ return `<span style="font-size:11.5px;font-weight:500;color:var(--accent);background:var(--accent-weak);border-radius:5px;padding:2px 8px;letter-spacing:0.03em">${esc(t.label)}</span>`; }).join('') }
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;gap:7px;flex:0 0 auto">
+                <button data-click="${on(h.onOpen)}" style="background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:9px;padding:8px 14px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit" data-sh="border-color:var(--ink) !important;background:var(--ink) !important;color:var(--btn-fg) !important">Öppna</button>
+                <button data-click="${on(h.onEdit)}" style="background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:9px;padding:8px 14px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit" data-sh="border-color:var(--accent) !important;color:var(--accent) !important">${ h.editing ? 'Tilldelar …' : 'Tilldela' }</button>
+                <button data-click="${on(h.onDelete)}" aria-label="Ta bort" style="width:38px;height:38px;border:1px solid var(--line);background:var(--surface);border-radius:9px;cursor:pointer;color:var(--ink-2);display:flex;align-items:center;justify-content:center" data-sh="border-color:var(--bad) !important;color:var(--bad) !important">
+                  <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5h10"></path><path d="M6.5 4.5V3h3v1.5"></path><path d="M4.5 4.5 5 13h6l.5-8.5"></path></svg>
+                </button>
+              </div>
+            </div>
+            ${ h.editing ? `
+              <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line);display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                <label style="display:flex;flex-direction:column;gap:5px;font-size:12.5px;color:var(--ink-2)">Klass
+                  <input value="${esc(h.edGroup)}" list="dl-klass" data-input="${on(h.onGroup)}" placeholder="t.ex. NA21" style="${inStyle}"></label>
+                <label style="display:flex;flex-direction:column;gap:5px;font-size:12.5px;color:var(--ink-2)">Kurs
+                  <input value="${esc(h.edCourse)}" list="dl-kurs" data-input="${on(h.onCourse)}" placeholder="t.ex. Matematik 2b" style="${inStyle}"></label>
+                <label style="display:flex;flex-direction:column;gap:5px;font-size:12.5px;color:var(--ink-2)">Sal
+                  <input value="${esc(h.edSal)}" data-input="${on(h.onSal)}" placeholder="t.ex. B214" style="${inStyle}"></label>
+                <label style="display:flex;flex-direction:column;gap:5px;font-size:12.5px;color:var(--ink-2)">Datum
+                  <input type="date" value="${esc(h.edDatum)}" data-input="${on(h.onDatum)}" style="${inStyle}"></label>
+                <div style="grid-column:1/3;display:flex;gap:8px;justify-content:flex-end;margin-top:2px">
+                  <button data-click="${on(h.onCancel)}" style="background:var(--surface);border:1px solid var(--line);color:var(--ink-2);border-radius:9px;padding:8px 16px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit">Avbryt</button>
+                  <button data-click="${on(h.onSave)}" style="background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:9px;padding:8px 18px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">Spara</button>
+                </div>
+              </div>
+            ` : '' }
+          </div>
+        `; }).join('') }
+      </div>
+    </section>`;
+}
+
 function viewModals(v){ return `
   ${ v.anyDDOpen ? `
     <div data-click="${on(v.closeDD)}" style="position:fixed;inset:0;z-index:25"></div>
@@ -2239,6 +2405,7 @@ function viewModals(v){ return `
       (v.tabTranscribe ? viewTranscribe(v) : '') +
       (v.tabModels ? viewModels(v) : '') +
       (v.tabHistory ? viewHistory(v) : '') +
+      (v.tabLessons ? viewLessons(v) : '') +
       '</main>' +
       viewModals(v);
   }

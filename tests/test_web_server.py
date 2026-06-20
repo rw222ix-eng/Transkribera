@@ -310,3 +310,99 @@ def test_postprocess_uses_text_model(tmp_path, monkeypatch):
         "operation": "summary", "transcript": "lång text", "model": "m"})
     assert r.status_code == 200
     assert arb.model is server.llm_manager.ACTIVE_LLM
+
+
+# ---- Lektioner: organisation per datum/klass/kurs (Fas 1) -------------------
+
+def test_lessons_empty(client):
+    r = client.get("/api/lessons")
+    assert r.status_code == 200
+    assert r.json() == []
+
+
+def test_courses_and_groups_get_or_create(client):
+    assert client.post("/api/groups", json={"namn": "NA21"}).status_code == 200
+    assert client.post("/api/groups", json={"namn": "NA21"}).status_code == 200  # idempotent
+    assert client.post("/api/courses", json={"namn": "Matematik 2b"}).status_code == 200
+    groups = client.get("/api/groups").json()
+    courses = client.get("/api/courses").json()
+    assert [g["namn"] for g in groups] == ["NA21"]
+    assert [c["namn"] for c in courses] == ["Matematik 2b"]
+    assert client.post("/api/groups", json={"namn": "  "}).status_code == 400
+
+
+def test_lesson_migrated_from_history(tmp_path, monkeypatch):
+    """A history.json present at startup is mirrored into /api/lessons."""
+    from fastapi.testclient import TestClient
+    (tmp_path / "history.json").write_text(json.dumps([
+        {"id": "h1", "ts": "2026-06-20T09:14:00", "name": "lektion.mp3",
+         "dur": "18:42", "model": "KB-Whisper large", "lang": "Svenska",
+         "formats": ["SRT", "TXT"], "words": 2940},
+    ]), encoding="utf-8")
+    monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: _HW())
+    c = TestClient(server.create_app(base_dir=tmp_path))
+    lessons = c.get("/api/lessons").json()
+    assert len(lessons) == 1
+    assert lessons[0]["name"] == "lektion.mp3"
+    assert lessons[0]["formats"] == ["SRT", "TXT"]
+
+
+def test_lesson_patch_assigns_class_and_course(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+    (tmp_path / "history.json").write_text(json.dumps([
+        {"id": "h1", "ts": "2026-06-20T09:14:00", "name": "lektion.mp3",
+         "formats": ["TXT"], "words": 10},
+    ]), encoding="utf-8")
+    monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: _HW())
+    c = TestClient(server.create_app(base_dir=tmp_path))
+    lid = c.get("/api/lessons").json()[0]["id"]
+    r = c.patch(f"/api/lessons/{lid}",
+                json={"group_name": "NA21", "course_name": "Matematik 2b", "sal": "B214"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["group"] == "NA21" and body["course"] == "Matematik 2b" and body["sal"] == "B214"
+    # filtering by the new group id returns it
+    gid = next(g["id"] for g in c.get("/api/groups").json() if g["namn"] == "NA21")
+    assert len(c.get(f"/api/lessons?group_id={gid}").json()) == 1
+
+
+def test_lesson_patch_unknown_group_returns_400(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+    (tmp_path / "history.json").write_text(json.dumps([
+        {"id": "h1", "ts": "2026-06-20T09:14:00", "name": "lektion.mp3",
+         "formats": ["TXT"], "words": 10},
+    ]), encoding="utf-8")
+    monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: _HW())
+    c = TestClient(server.create_app(base_dir=tmp_path))
+    lid = c.get("/api/lessons").json()[0]["id"]
+    r = c.patch(f"/api/lessons/{lid}", json={"group_id": 999})   # no such group
+    assert r.status_code == 400
+
+
+def test_lesson_patch_404(client):
+    assert client.patch("/api/lessons/999", json={"sal": "x"}).status_code == 404
+
+
+def test_lesson_delete_also_drops_history(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+    (tmp_path / "history.json").write_text(json.dumps([
+        {"id": "h1", "ts": "2026-06-20T09:14:00", "name": "lektion.mp3",
+         "formats": ["TXT"], "words": 10},
+    ]), encoding="utf-8")
+    monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: _HW())
+    c = TestClient(server.create_app(base_dir=tmp_path))
+    lid = c.get("/api/lessons").json()[0]["id"]
+    assert c.delete(f"/api/lessons/{lid}").json() == {"ok": True}
+    assert c.get("/api/lessons").json() == []
+    assert c.get("/api/history").json() == []
+
+
+def test_history_one_endpoint(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+    (tmp_path / "history.json").write_text(json.dumps([
+        {"id": "h1", "ts": "2026-06-20T09:14:00", "name": "lektion.mp3", "formats": ["TXT"]},
+    ]), encoding="utf-8")
+    monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: _HW())
+    c = TestClient(server.create_app(base_dir=tmp_path))
+    assert c.get("/api/history/h1").json()["name"] == "lektion.mp3"
+    assert c.get("/api/history/nope").status_code == 404

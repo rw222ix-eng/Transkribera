@@ -10,6 +10,9 @@ cookies.txt
 
 # Runtime-data (skapas bredvid exe:n)
 history.json
+transkribera.db
+transkribera.db-wal
+transkribera.db-shm
 
 # Nedladdade modeller / cache
 models/
