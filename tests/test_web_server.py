@@ -67,3 +67,57 @@ def test_history_delete_ok(client):
     r = client.delete("/api/history/nope")
     assert r.status_code == 200
     assert r.json() == {"ok": True}
+
+
+# ---- GPU coexistence: LLM requests are rejected while the GPU is busy --------
+
+class _BusyArbiter:
+    """Stands in for GpuArbiter with the GPU already taken (e.g. by a running
+    transcription) so try_acquire_gpu() always fails."""
+    def try_acquire_gpu(self): return False
+    def release_gpu(self): pass
+    def ensure_llm(self): return "http://x"
+    def stop_llm(self): return False
+    def prewarm_async(self): pass
+    def llm_installed(self): return False
+
+
+class _HW:
+    gpu_name = "Test GPU"; vram_mb = 24000; has_cuda = True
+    ram_mb = 64000; cpu_cores = 16; free_disk_mb = 500000
+    cpu_name = "Test CPU"; vram_free_mb = 20000; ram_free_mb = 40000
+    total_disk_mb = 1000000; cuda_version = "12.1"
+    compute_capability = "8.9"; gpu_arch = "Ada Lovelace"; disks = []
+
+
+def _busy_client(tmp_path):
+    from fastapi.testclient import TestClient
+    return TestClient(server.create_app(base_dir=tmp_path, arbiter=_BusyArbiter()))
+
+
+def test_postprocess_busy_returns_409(tmp_path):
+    r = _busy_client(tmp_path).post("/api/postprocess",
+                                    json={"transcript": "hej", "model": "m"})
+    assert r.status_code == 409
+    assert "upptagen" in r.json()["error"]
+
+
+def test_chat_busy_returns_409(tmp_path):
+    r = _busy_client(tmp_path).post(
+        "/api/chat", json={"model": "m", "messages": [{"role": "user", "content": "hej"}]})
+    assert r.status_code == 409
+    assert "upptagen" in r.json()["error"]
+
+
+def test_transcribe_busy_returns_409(tmp_path, monkeypatch):
+    monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: _HW())
+    monkeypatch.setattr(server.whisper_manager, "is_installed", lambda *a, **k: True)
+    mid = server.WHISPER_MODELS[0].id
+    r = _busy_client(tmp_path).post(
+        "/api/transcribe", json={"source": "/tmp/a.mp3", "model_id": mid, "formats": ["srt"]})
+    assert r.status_code == 409
+    assert "upptagen" in r.json()["error"]
+
+
+def test_app_exposes_arbiter_on_state(client):
+    assert hasattr(client.app.state, "arbiter")
