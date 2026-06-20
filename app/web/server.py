@@ -9,6 +9,7 @@ import subprocess
 import sys
 import threading
 import time
+import uuid
 from datetime import datetime
 from pathlib import Path
 
@@ -464,6 +465,25 @@ def create_app(base_dir: Path | None = None,
                     "media": video["path"] if video else str(media),
                     "folder": assembled["folder"]}
         return _sse_response(job)
+
+    @app.post("/api/upload")
+    async def api_upload(req: Request, name: str = "inspelning.webm"):
+        """Save an in-app recording (raw audio bytes in the body) under
+        downloads/ and hand the path back so it enters the normal transcribe
+        flow. No multipart dependency: the browser POSTs the Blob directly."""
+        data = await req.body()
+        if not data:
+            return JSONResponse({"error": "tom uppladdning"}, status_code=400)
+        safe = Path(name).name                          # strip any directory parts
+        if safe in (".", "..", ""):                     # never a directory ref
+            safe = "inspelning.webm"
+        out_dir = base / "downloads"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        dest = out_dir / safe
+        if dest.exists():                               # unique suffix; uuid avoids
+            dest = out_dir / f"{dest.stem}-{uuid.uuid4().hex[:8]}{dest.suffix}"  # same-second clobber
+        dest.write_bytes(data)
+        return {"path": str(dest), "name": dest.name}
 
     @app.get("/api/history")
     def api_history():

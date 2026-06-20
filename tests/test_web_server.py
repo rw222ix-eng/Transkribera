@@ -1,4 +1,6 @@
 import json
+from pathlib import Path
+
 import pytest
 
 from app.web import server
@@ -550,3 +552,48 @@ def test_next_prep_endpoint(tmp_path, monkeypatch):
     assert [a["text"] for a in prep["open_actions"]] == ["ta med facit"]
     assert [d["text"] for d in prep["difficulties"]] == ["derivata"]
     assert prep["last_lesson"]["id"] == lid
+
+
+# ---- Inbyggd inspelning: /api/upload (Fas 4) --------------------------------
+
+def test_upload_saves_recording(tmp_path):
+    from fastapi.testclient import TestClient
+    c = TestClient(server.create_app(base_dir=tmp_path))
+    r = c.post("/api/upload?name=lektion_2026-06-20_0914.webm", content=b"RIFFfake-audio")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["name"] == "lektion_2026-06-20_0914.webm"
+    saved = Path(body["path"])
+    assert saved.exists() and saved.read_bytes() == b"RIFFfake-audio"
+    assert saved.parent == tmp_path / "downloads"
+
+
+def test_upload_rejects_empty(tmp_path):
+    from fastapi.testclient import TestClient
+    c = TestClient(server.create_app(base_dir=tmp_path))
+    assert c.post("/api/upload?name=x.webm", content=b"").status_code == 400
+
+
+def test_upload_strips_directory_traversal(tmp_path):
+    from fastapi.testclient import TestClient
+    c = TestClient(server.create_app(base_dir=tmp_path))
+    r = c.post("/api/upload?name=../../evil.webm", content=b"data")
+    saved = Path(r.json()["path"])
+    assert saved.parent == tmp_path / "downloads"   # name flattened, never escapes
+    assert saved.name == "evil.webm"
+
+
+def test_upload_empty_name_falls_back(tmp_path):
+    from fastapi.testclient import TestClient
+    c = TestClient(server.create_app(base_dir=tmp_path))
+    r = c.post("/api/upload?name=..", content=b"data")   # pure directory ref -> default
+    assert Path(r.json()["path"]).name == "inspelning.webm"
+
+
+def test_upload_collision_keeps_both(tmp_path):
+    from fastapi.testclient import TestClient
+    c = TestClient(server.create_app(base_dir=tmp_path))
+    p1 = c.post("/api/upload?name=lektion.webm", content=b"one").json()["path"]
+    p2 = c.post("/api/upload?name=lektion.webm", content=b"two").json()["path"]
+    assert p1 != p2                                 # uuid suffix, robust to same-second
+    assert Path(p1).read_bytes() == b"one" and Path(p2).read_bytes() == b"two"

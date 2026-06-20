@@ -106,12 +106,16 @@
     transcript: null,
     resultFilesReal: null,
     catalogReady: false,
+    recording: false,
+    recElapsed: 0,
+    recError: '',
   };
 
   /* instance (non-state) fields */
   var _t, _pp, _ppIv, _chat, _au, _toastIv, _toastT2, _glideRAF, _lastStart, _runToken = 0;
   var _dl = {}, _inst = {}, _editBuf = {}, _wave = null;
   var _file, _seek, _searchRef, _scrollRef, _procScroll, _chatThread, _imgInput;
+  var _rec = null, _recChunks = [], _recStream = null, _recTimer = null;
   var _prevTab, _prevStep, _prevRun, _prevPP, _prevOp, _prevChatLen, _wasEditing, _wasOpen, _scrollKey;
 
   /* ----------------------------------------------------------------- data -- */
@@ -385,6 +389,55 @@
     addFilesObjs([{ name: urlName(u), path: u }]);
     setState({ urlInput: '' });
   }
+  /* ----------------------------------------------- inbyggd inspelning (Fas 4) -- */
+  function recSupported() { return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder); }
+  function recStamp() {
+    var d = new Date(); function p(n) { return (n < 10 ? '0' : '') + n; }
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + '_' + p(d.getHours()) + p(d.getMinutes());
+  }
+  function _stopStream() { if (_recStream) { try { _recStream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {} _recStream = null; } }
+  function startRecording() {
+    if (!recSupported()) { setState({ recError: 'Inspelning stöds inte i den här vyn.' }); return; }
+    setState({ recError: '', fileError: '' });
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+      _recStream = stream; _recChunks = [];
+      _rec = new MediaRecorder(stream);
+      _rec.ondataavailable = function (e) { if (e.data && e.data.size) _recChunks.push(e.data); };
+      _rec.onstop = function () { finishRecording(_rec ? _rec.mimeType : ''); };
+      _rec.start();
+      setState({ recording: true, recElapsed: 0 });
+      clearInterval(_recTimer);
+      _recTimer = setInterval(function () { setState(function (s) { return { recElapsed: s.recElapsed + 1 }; }); }, 1000);
+    }).catch(function () {
+      setState({ recError: 'Kunde inte komma åt mikrofonen. Tillåt mikrofon och försök igen.' });
+    });
+  }
+  function stopRecording() {
+    clearInterval(_recTimer);
+    try { if (_rec && _rec.state !== 'inactive') _rec.stop(); } catch (e) {}
+    setState({ recording: false });   // finishRecording runs on the 'stop' event
+  }
+  function cancelRecording() {
+    clearInterval(_recTimer); _recChunks = [];
+    try { if (_rec && _rec.state !== 'inactive') { _rec.onstop = null; _rec.stop(); } } catch (e) {}
+    _stopStream();
+    setState({ recording: false, recElapsed: 0, recError: '' });
+  }
+  function finishRecording(mime) {
+    _stopStream();
+    var chunks = _recChunks; _recChunks = [];
+    if (!chunks.length) { setState({ recElapsed: 0 }); return; }
+    var type = (mime && mime.indexOf('audio') === 0) ? mime : 'audio/webm';
+    var ext = type.indexOf('ogg') !== -1 ? 'ogg' : 'webm';
+    var name = 'lektion_' + recStamp() + '.' + ext;
+    fetch('/api/upload?name=' + encodeURIComponent(name), {
+      method: 'POST', headers: { 'Content-Type': type }, body: new Blob(chunks, { type: type })
+    }).then(function (r) { return r.json(); }).then(function (res) {
+      if (res && res.path) { addFilesObjs([{ name: res.name || name, path: res.path }]); setState({ recElapsed: 0 }); }
+      else { setState({ recError: (res && res.error) || 'Uppladdning misslyckades.' }); }
+    }).catch(function () { setState({ recError: 'Uppladdning misslyckades.' }); });
+  }
+
   function restart() {
     clearInterval(_t); clearTimeout(_pp); clearInterval(_ppIv); clearTimeout(_chat); clearInterval(_au);
     Object.values(_dl || {}).forEach(clearInterval);
@@ -1329,6 +1382,9 @@
       stepItems: stepItems, restart: restart, goSource: goSource, sourceLabel: st.source || 'okänd källa',
       openPicker: openPicker, fileRef: fileRef, onPickFile: onPickFile, onDragOver: onDragOver, onDragLeave: onDragLeave, onDrop: onDrop,
       urlInput: st.urlInput, onUrlInput: onUrlInput, onAddUrl: addUrl, onUrlKey: onUrlKey,
+      recording: st.recording, recElapsedFmt: fmtTime(st.recElapsed), recSupported: recSupported(),
+      recError: st.recError, hasRecError: !!st.recError,
+      onStartRec: startRecording, onStopRec: stopRecording, onCancelRec: cancelRecording,
       dropzoneStyle: 'position:relative;border:1.5px dashed ' + (st.dragging ? 'var(--accent)' : 'var(--line-2)') + ';border-radius:20px;background:' + (st.dragging ? 'var(--accent-weak)' : 'var(--surface)') + ';flex:1 1 auto;min-height:200px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 24px;text-align:center;box-shadow:var(--shadow-sm);cursor:pointer;user-select:none;-webkit-user-select:none;transition:border-color .12s,background .12s',
       curModelName: curModel.label || curModel.id,
       curModelMeta: 'Väljs automatiskt · ' + (st.language === 'en' ? 'Engelska' : 'Svenska'),
@@ -1570,6 +1626,32 @@ function viewTranscribe(v){ return `
             <button data-click="${on(v.onAddUrl)}" style="flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:8px;padding:8px 15px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit" data-sh="background:color-mix(in srgb, var(--btn-bg) 78%, var(--accent)) !important">Lägg till</button>
           </div>
         </div>
+
+        <div style="display:flex;align-items:center;gap:10px;margin-top:12px">
+          <span style="font-size:11.5px;text-transform:uppercase;letter-spacing:0.05em;color:var(--ink-2);font-weight:600;flex:0 0 auto">Eller spela in</span>
+          <div style="flex:1;display:flex;align-items:center;gap:10px;min-width:0;background:var(--surface);border:1px solid ${ v.recording ? 'color-mix(in srgb,var(--bad) 45%,var(--line))' : 'var(--line)' };border-radius:11px;padding:7px 7px 7px 13px;box-shadow:var(--shadow-sm)">
+            ${ v.recording ? `
+              <span style="width:9px;height:9px;border-radius:50%;background:var(--bad);flex:0 0 auto;animation:pulse 1.4s ease infinite"></span>
+              <span style="font-size:14.5px;color:var(--ink);font-weight:500">Spelar in</span>
+              <span style="font-size:14.5px;color:var(--ink-2);font-variant-numeric:tabular-nums">${esc(v.recElapsedFmt)}</span>
+              <div style="flex:1"></div>
+              <button data-click="${on(v.onCancelRec)}" style="flex:0 0 auto;background:var(--surface);border:1px solid var(--line);color:var(--ink-2);border-radius:8px;padding:8px 13px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit" data-sh="border-color:var(--ink-3) !important;color:var(--ink) !important">Avbryt</button>
+              <button data-click="${on(v.onStopRec)}" style="flex:0 0 auto;display:inline-flex;align-items:center;gap:7px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:8px;padding:8px 15px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit">Stoppa &amp; lägg till</button>
+            ` : `
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="var(--ink-3)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto"><rect x="5.5" y="1.5" width="5" height="8.5" rx="2.5"></rect><path d="M3.5 7.5a4.5 4.5 0 0 0 9 0"></path><path d="M8 12v2.5"></path></svg>
+              <span style="font-size:15px;color:${ v.recSupported ? 'var(--ink-2)' : 'var(--ink-3)' };min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${ v.recSupported ? 'Spela in lektionen direkt — ljudet sparas lokalt' : 'Inspelning kräver mikrofonåtkomst i webbläsaren' }</span>
+              <div style="flex:1"></div>
+              <button data-click="${on(v.onStartRec)}" ${ v.recSupported ? '' : 'disabled' } style="flex:0 0 auto;display:inline-flex;align-items:center;gap:7px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:8px;padding:8px 15px;font-size:14px;font-weight:500;cursor:${ v.recSupported ? 'pointer' : 'default' };font-family:inherit;opacity:${ v.recSupported ? '1' : '0.55' }" data-sh="background:color-mix(in srgb, var(--btn-bg) 78%, var(--accent)) !important">Starta inspelning</button>
+            ` }
+          </div>
+        </div>
+
+        ${ v.hasRecError ? `
+          <div style="display:flex;align-items:center;gap:10px;margin-top:14px;background:color-mix(in srgb,var(--bad) 7%,var(--surface));border:1px solid color-mix(in srgb,var(--bad) 30%,transparent);border-radius:12px;padding:12px 15px">
+            <span style="width:20px;height:20px;border-radius:50%;flex:0 0 auto;background:color-mix(in srgb,var(--bad) 16%,transparent);color:var(--bad);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700">!</span>
+            <span style="font-size:14.5px;color:var(--ink)">${esc(v.recError)}</span>
+          </div>
+        ` : '' }
 
         ${ v.hasFileError ? `
           <div style="display:flex;align-items:center;gap:10px;margin-top:14px;background:color-mix(in srgb,var(--bad) 7%,var(--surface));border:1px solid color-mix(in srgb,var(--bad) 30%,transparent);border-radius:12px;padding:12px 15px">
