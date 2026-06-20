@@ -29,6 +29,7 @@
     step: 'config',
     model: 'KB-Whisper large',
     language: 'sv',
+    targetLanguage: 'sv',       // resultatspråk; skiljer det sig från language översätts undertexterna
     formats: { srt: true, txt: true, vtt: false },
     subtitleMode: 'separate',   // 'separate' = media + SRT i mappen | 'embed' = bädda in i videon
     embedKind: 'soft',          // 'soft' = muxat sub-spår | 'burn' = inbränt
@@ -371,7 +372,8 @@
   function onSearch(e) { setState({ search: e.target.value }); }
   function toggleFmt(f) { setState(function (s) { var formats = Object.assign({}, s.formats); formats[f] = !formats[f]; return { formats: formats }; }); }
   function pickModel(id) { setState({ model: id, openDD: null }); }
-  function pickLang(l) { setState({ language: l, model: recommendModel(l) }); }
+  function pickLang(l) { setState({ language: l, targetLanguage: l, model: recommendModel(l) }); }
+  function pickTargetLang(l) { setState({ targetLanguage: l }); }
   function pickOp(o) { setState({ ppOp: o, pp: 'idle', ppOut: '' }); if (o === 'chat') { seedChat(); openChatModal(); } else closeChatModal(); }
   function openChatModal() { setState({ chatModalOpen: true }); }
   function closeChatModal() { setState({ chatModalOpen: false }); }
@@ -488,7 +490,8 @@
     _t = setInterval(function () { if (token === _runToken) setState({ elapsed: (Date.now() - t0) / 1000 }); }, 250);
     var formats = ['srt', 'txt', 'vtt'].filter(function (f) { return S.formats[f]; });
     streamPost('/api/transcribe',
-      { source: active.path || active.name, model_id: S.model, language: S.language, formats: formats,
+      { source: active.path || active.name, model_id: S.model, language: S.language,
+        target_language: S.targetLanguage, formats: formats,
         sub_mode: S.subtitleMode, embed_kind: S.subtitleMode === 'embed' ? S.embedKind : null },
       function (ev) {
         if (token !== _runToken) return;
@@ -810,6 +813,13 @@
 
     var langs = [['', 'Auto'], ['sv', 'Svenska'], ['en', 'Engelska']];
     var langOptions = langs.map(function (p) { return { label: p[1], style: segBtn(st.language === p[0], '38px'), onPick: function () { pickLang(p[0]); } }; });
+    // Result language: pick sv/en; if it differs from the source language the
+    // subtitles are translated by the local text model.
+    var targetLangs = [['sv', 'Svenska'], ['en', 'Engelska']];
+    var targetLangOptions = targetLangs.map(function (p) { return { label: p[1], style: segBtn(st.targetLanguage === p[0], '34px'), onPick: function () { pickTargetLang(p[0]); } }; });
+    var translateNote = (st.targetLanguage && st.language && st.targetLanguage !== st.language)
+      ? ('Översätts till ' + (st.targetLanguage === 'sv' ? 'svenska' : 'engelska') + ' av språkmodellen.')
+      : '';
     var formatChips = ['srt', 'txt', 'vtt'].map(function (f) { return { label: f.toUpperCase(), style: chip(st.formats[f]), onToggle: function () { toggleFmt(f); } }; });
     // Subtitle delivery for video sources: keep media + SRT side by side, or embed
     // the subtitles into the video (soft mux or hard burn). Only shown for video.
@@ -1058,6 +1068,7 @@
       curModelName: curModel.label || curModel.id, curModelMeta: curModel.size + ' · ' + (curModel.id === recommendModel(st.language) ? 'matchar språket' : 'installerad'), curModelDot: curFit.dot,
       toggleModelDD: toggleModelDD, modelDDOpen: st.openDD === 'model', modelOptions: modelOptions,
       langOptions: langOptions, formatChips: formatChips,
+      targetLangOptions: targetLangOptions, translateNote: translateNote,
       subtitleOptions: subtitleOptions, embedOptions: embedOptions,
       showSubtitleMode: _activeIsVideo, showEmbed: st.subtitleMode === 'embed' && _activeIsVideo,
 
@@ -1371,6 +1382,14 @@ function viewTranscribe(v){ return `
             <button data-click="${on(f.onToggle)}" style="${f.style}" data-sh="border-color:var(--line-2) !important;box-shadow:var(--shadow-sm) !important">${esc(f.label)}</button>
           `; }).join('') }
         </div>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:12px;box-shadow:var(--shadow-sm)">
+          <span style="font-size:14px;color:var(--ink-2);font-weight:500">Resultatspråk</span>
+          <div style="display:flex;gap:3px;padding:4px;background:var(--track);border:1px solid var(--line);border-radius:11px">
+            ${ v.targetLangOptions.map(function(o){ return `<button data-click="${on(o.onPick)}" style="${o.style}" data-sh="background:var(--surface) !important;color:var(--ink) !important;box-shadow:var(--shadow-sm) !important">${esc(o.label)}</button>`; }).join('') }
+          </div>
+          ${ v.translateNote ? `<span style="font-size:13px;color:var(--accent)">${esc(v.translateNote)}</span>` : '' }
         </div>
 
         ${ v.showSubtitleMode ? `

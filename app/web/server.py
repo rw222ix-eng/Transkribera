@@ -276,6 +276,7 @@ def create_app(base_dir: Path | None = None,
         source = (body.get("source") or "").strip()
         model_id = body.get("model_id")
         language = body.get("language") or ""
+        target_language = body.get("target_language") or language   # subtitle output language
         sub_mode = body.get("sub_mode") or "separate"     # "separate" | "embed"
         embed_kind = body.get("embed_kind")               # "soft" | "burn" | None
         formats = [f for f in (body.get("formats") or ["srt"]) if f in transcriber.WRITERS]
@@ -329,17 +330,40 @@ def create_app(base_dir: Path | None = None,
                     raise RuntimeError("Transkriberingen gav inget resultat")
             srt_path = next((Path(p) for p in written if str(p).lower().endswith(".srt")), None)
 
+            # Optional translation to a different result language. The text model
+            # is reloaded here (Whisper has exited and freed its VRAM); the
+            # original-language SRT is kept alongside as a reference track.
+            ref_srt = sub_lang = ref_lang = None
+            if postprocess.should_translate(language, target_language):
+                if arb.ensure_llm() is None:
+                    emit({"type": "log", "msg": "Hoppar över översättning — språkmodellen är "
+                                                "inte nedladdad. Behåller originalspråket."})
+                else:
+                    emit({"type": "log", "msg": "Översätter undertexterna ..."})
+                    sv_dicts = postprocess.translate_segments(
+                        segments, language, target_language, LLM_MODELS[0].name)
+                    sv_segs = [transcriber.Segment(d["start"], d["end"], d["text"]) for d in sv_dicts]
+                    orig_segs = [transcriber.Segment(s["start"], s["end"], s["text"]) for s in segments]
+                    srt_path = transcriber.write_outputs(sv_segs, out_base, ["srt"])[0]
+                    ref_srt = transcriber.write_outputs(
+                        orig_segs, out_base.with_name(out_base.stem + "." + language), ["srt"])[0]
+                    sub_lang, ref_lang = target_language, language
+                    segments = sv_dicts
+
             # Collect media + subtitle into a dated result folder under
             # Transkriberingar/ and pre-generate a thumbnail (best effort).
             date_str = datetime.now().strftime("%Y-%m-%d")
             assembled = output_store.assemble_output(
                 media, srt_path, base, date_str, sub_mode, embed_kind,
-                emit_log=lambda m: emit({"type": "log", "msg": m}))
+                emit_log=lambda m: emit({"type": "log", "msg": m}),
+                ref_srt=ref_srt, sub_lang=sub_lang, ref_lang=ref_lang)
             files = assembled["files"]
             video = assembled["video"]
 
             spec_label = next((s.label for s in WHISPER_MODELS if s.id == model_id), model_id)
-            lang_label = {"en": "Engelska", "sv": "Svenska"}.get(language, "Auto")
+            _lang_lbl = {"en": "Engelska", "sv": "Svenska"}
+            lang_label = _lang_lbl.get(language, "Auto")
+            target_label = _lang_lbl.get(target_language, lang_label)
             dur = segments[-1]["end"] if segments else 0
             words = sum(len((sg.get("text") or "").split()) for sg in segments)
             history_store.add_history(history_file, {
@@ -348,6 +372,7 @@ def create_app(base_dir: Path | None = None,
                 "name": Path(media).name,
                 "source": source if _is_url(source) else (video["path"] if video else str(media)),
                 "dur": _clock(dur), "model": spec_label, "lang": lang_label,
+                "target_lang": target_label,
                 "formats": [f.upper() for f in formats],
                 "words": words, "files": files, "transcript": segments,
                 "folder": assembled["folder"], "video": video,
