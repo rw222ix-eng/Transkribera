@@ -401,7 +401,12 @@
     setState({ recError: '', fileError: '' });
     navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
       _recStream = stream; _recChunks = [];
-      _rec = new MediaRecorder(stream);
+      // Välj ett format webbläsaren/WebView2 faktiskt stöder (Chromium → webm/opus,
+      // Safari/WebView → mp4). Faller tillbaka till standardformatet om inget matchar.
+      var prefer = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'];
+      var mt = (window.MediaRecorder && MediaRecorder.isTypeSupported)
+        ? prefer.filter(function (t) { return MediaRecorder.isTypeSupported(t); })[0] : null;
+      _rec = mt ? new MediaRecorder(stream, { mimeType: mt }) : new MediaRecorder(stream);
       _rec.ondataavailable = function (e) { if (e.data && e.data.size) _recChunks.push(e.data); };
       _rec.onstop = function () { finishRecording(_rec ? _rec.mimeType : ''); };
       _rec.start();
@@ -428,7 +433,11 @@
     var chunks = _recChunks; _recChunks = [];
     if (!chunks.length) { setState({ recElapsed: 0 }); return; }
     var type = (mime && mime.indexOf('audio') === 0) ? mime : 'audio/webm';
-    var ext = type.indexOf('ogg') !== -1 ? 'ogg' : 'webm';
+    // Härled filändelsen ur det verkliga formatet (mp4/ogg/mpeg), inte alltid webm.
+    var ext = type.indexOf('ogg') !== -1 ? 'ogg'
+      : type.indexOf('mp4') !== -1 ? 'm4a'
+      : type.indexOf('mpeg') !== -1 ? 'mp3'
+      : type.indexOf('wav') !== -1 ? 'wav' : 'webm';
     var name = 'lektion_' + recStamp() + '.' + ext;
     fetch('/api/upload?name=' + encodeURIComponent(name), {
       method: 'POST', headers: { 'Content-Type': type }, body: new Blob(chunks, { type: type })
