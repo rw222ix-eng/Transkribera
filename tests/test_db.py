@@ -193,3 +193,65 @@ def test_next_prep_empty_group(tmp_path):
     prep = db.next_prep(conn, gid)
     assert prep["open_actions"] == [] and prep["difficulties"] == []
     assert prep["last_lesson"] is None
+
+
+# ---- Hink B: delete-sync, transactional re-extract, schema migration ----------
+
+def test_delete_lesson_by_history_id_cascades(tmp_path):
+    conn = _conn(tmp_path)
+    les = db.create_lesson(conn, history_id="hX", name="a.mp3")
+    db.add_insight(conn, les["id"], "åtgärd", "fixa", source="llm")
+    assert db.delete_lesson_by_history_id(conn, "hX") is True
+    assert db.get_lesson(conn, les["id"]) is None
+    assert db.list_insights(conn, les["id"]) == []       # cascade
+    assert db.delete_lesson_by_history_id(conn, "hX") is False   # already gone
+    assert db.delete_lesson_by_history_id(conn, "") is False
+
+
+def test_lesson_paths_returns_disk_refs(tmp_path):
+    conn = _conn(tmp_path)
+    les = db.create_lesson(conn, history_id="hP", name="a.mp3",
+                           transcript_folder="/x/Transkriberingar/m",
+                           recording_path="/x/downloads/a.webm")
+    paths = db.lesson_paths(conn, les["id"])
+    assert paths["history_id"] == "hP"
+    assert paths["transcript_folder"] == "/x/Transkriberingar/m"
+    assert paths["recording_path"] == "/x/downloads/a.webm"
+    assert db.lesson_paths(conn, 9999) is None
+
+
+def test_replace_insights_keeps_manual_and_swaps_llm(tmp_path):
+    conn = _conn(tmp_path)
+    les = db.create_lesson(conn, history_id="hR", name="a.mp3")
+    db.add_insight(conn, les["id"], "övrigt", "manuell-anteckning", source="manuell")
+    db.add_insight(conn, les["id"], "åtgärd", "gammal-llm", source="llm")
+    saved = db.replace_insights_by_source(conn, les["id"], "llm", [
+        {"typ": "svårighet", "text": "ny", "due_date": None, "ref": None}])
+    assert [s["text"] for s in saved] == ["ny"]
+    texts = {i["text"] for i in db.list_insights(conn, les["id"])}
+    assert texts == {"manuell-anteckning", "ny"}          # manual kept, old llm gone
+
+
+def test_replace_insights_empty_clears_source(tmp_path):
+    conn = _conn(tmp_path)
+    les = db.create_lesson(conn, history_id="hR2", name="a.mp3")
+    db.add_insight(conn, les["id"], "åtgärd", "x", source="llm")
+    assert db.replace_insights_by_source(conn, les["id"], "llm", []) == []
+
+
+def test_schema_migration_runs_for_older_db(tmp_path, monkeypatch):
+    # A DB stamped at an older user_version must have pending migrations applied.
+    p = tmp_path / "old.db"
+    conn = db.connect(p)
+    conn.execute("PRAGMA user_version=0")
+    conn.commit()
+    conn.close()
+    db._initialized.discard(str(p.resolve()))            # force re-init this process
+    ran = {}
+    monkeypatch.setitem(db._MIGRATIONS, db.SCHEMA_VERSION,
+                        "CREATE TABLE IF NOT EXISTS _mig_marker (x INTEGER);")
+    conn = db.connect(p)
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == db.SCHEMA_VERSION
+    tables = {r[0] for r in conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+    assert "_mig_marker" in tables                       # the pending migration ran

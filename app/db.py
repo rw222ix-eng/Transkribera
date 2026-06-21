@@ -68,6 +68,13 @@ CREATE INDEX IF NOT EXISTS idx_lessons_course ON lessons(course_id);
 CREATE INDEX IF NOT EXISTS idx_insights_lesson ON insights(lesson_id);
 """
 
+# Ordered schema upgrades, keyed by the version they BRING THE DB TO (i.e. the
+# SQL to go from version-1 to version). Empty today (v1 is the base schema); when
+# the schema changes, bump SCHEMA_VERSION and add the ALTER/CREATE here. connect()
+# applies every migration whose key is > the file's stored PRAGMA user_version, so
+# an existing .db is upgraded in place instead of silently keeping the old schema.
+_MIGRATIONS: dict[int, str] = {}
+
 _LESSON_SELECT = """
 SELECT l.*, g.namn AS group_namn, c.namn AS course_namn
 FROM lessons l
@@ -89,8 +96,26 @@ def segments_text(segments: list[dict] | None) -> str:
     return "\n".join((s.get("text") or "") for s in (segments or [])).strip()
 
 
+def _apply_migrations(conn: sqlite3.Connection) -> None:
+    """Bring the DB up to SCHEMA_VERSION. Runs the base DDL (IF NOT EXISTS, so it's
+    safe on both fresh and existing files), then every registered migration whose
+    target version is above the file's stored user_version, and records the new
+    version. Authoritative version lives in the file (PRAGMA user_version), so this
+    is correct even when another process created the file first."""
+    conn.executescript(_SCHEMA)
+    current = conn.execute("PRAGMA user_version").fetchone()[0]
+    if current < SCHEMA_VERSION:
+        for version in range(current + 1, SCHEMA_VERSION + 1):
+            sql = _MIGRATIONS.get(version)
+            if sql:
+                conn.executescript(sql)
+        conn.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
+    conn.commit()
+
+
 def connect(db_path: Path) -> sqlite3.Connection:
-    """Open the database. Safe to call per request; schema init runs once."""
+    """Open the database. Safe to call per request; schema init/migration runs once
+    per path per process (the version lives in the file, so this is idempotent)."""
     Path(db_path).parent.mkdir(parents=True, exist_ok=True)
     key = str(Path(db_path).resolve())
     conn = sqlite3.connect(str(db_path), check_same_thread=False)
@@ -98,9 +123,7 @@ def connect(db_path: Path) -> sqlite3.Connection:
     conn.execute("PRAGMA foreign_keys=ON")                 # per-connection, always
     if key not in _initialized:
         conn.execute("PRAGMA journal_mode=WAL")            # persists in the file
-        conn.executescript(_SCHEMA)
-        conn.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
-        conn.commit()
+        _apply_migrations(conn)
         _initialized.add(key)
     return conn
 
@@ -241,6 +264,15 @@ def update_lesson(conn: sqlite3.Connection, lesson_id: int, **fields) -> dict | 
     return get_lesson(conn, lesson_id)
 
 
+def lesson_paths(conn: sqlite3.Connection, lesson_id: int) -> dict | None:
+    """The on-disk artifacts tied to a lesson, so a delete can clean them up:
+    {history_id, transcript_folder, recording_path}. None if no such lesson."""
+    row = conn.execute(
+        "SELECT history_id, transcript_folder, recording_path "
+        "FROM lessons WHERE id = ?", (lesson_id,)).fetchone()
+    return dict(row) if row else None
+
+
 def delete_lesson(conn: sqlite3.Connection, lesson_id: int) -> str | None:
     """Delete a lesson; return its history_id so the caller can also drop the
     matching history.json entry."""
@@ -249,6 +281,17 @@ def delete_lesson(conn: sqlite3.Connection, lesson_id: int) -> str | None:
     conn.execute("DELETE FROM lessons WHERE id = ?", (lesson_id,))
     conn.commit()
     return row["history_id"] if row else None
+
+
+def delete_lesson_by_history_id(conn: sqlite3.Connection, history_id: str) -> bool:
+    """Drop the lesson row (and its insights, via cascade) for a history entry.
+    Lets the legacy Historik-delete keep the lesson DB in sync instead of leaving
+    an orphan row. Returns True if a row was deleted."""
+    if not history_id:
+        return False
+    cur = conn.execute("DELETE FROM lessons WHERE history_id = ?", (history_id,))
+    conn.commit()
+    return cur.rowcount > 0
 
 
 def migrate_from_history(conn: sqlite3.Connection, items: list[dict]) -> int:
@@ -335,6 +378,36 @@ def delete_insights_by_source(conn: sqlite3.Connection, lesson_id: int, source: 
                        (lesson_id, source))
     conn.commit()
     return cur.rowcount
+
+
+def replace_insights_by_source(conn: sqlite3.Connection, lesson_id: int, source: str,
+                               items: list[dict]) -> list[dict]:
+    """Atomically replace a lesson's insights from `source` with `items` (one
+    transaction). Either the old set is swapped for the new one or nothing
+    changes — a crash mid-way can't leave the lesson with the old ones gone and
+    no new ones. Manual insights are untouched. Returns the inserted rows."""
+    try:
+        conn.execute("BEGIN")
+        conn.execute("DELETE FROM insights WHERE lesson_id = ? AND source = ?",
+                     (lesson_id, source))
+        new_ids = []
+        for it in items:
+            cur = conn.execute(
+                "INSERT INTO insights (lesson_id, typ, text, due_date, ref, status, source) "
+                "VALUES (?, ?, ?, ?, ?, 'öppen', ?)",
+                (lesson_id, it.get("typ"), it.get("text"),
+                 it.get("due_date"), it.get("ref"), source))
+            new_ids.append(cur.lastrowid)
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    if not new_ids:
+        return []
+    rows = conn.execute(
+        f"SELECT * FROM insights WHERE id IN ({', '.join('?' for _ in new_ids)}) ORDER BY id",
+        new_ids).fetchall()
+    return [dict(r) for r in rows]
 
 
 # ----------------------------------------------------------- carry-forward (Fas 3) --
