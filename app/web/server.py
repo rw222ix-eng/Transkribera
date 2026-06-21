@@ -18,7 +18,7 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from app import (debug_log, hardware, recommend, whisper_manager, llm_client,
-                 llm_manager, online_catalog, youtube, postprocess, transcriber,
+                 llm_manager, youtube, postprocess, transcriber,
                  history_store, gpu_arbiter, output_store, media, audio_model, db,
                  paths)
 from app.models_catalog import WHISPER_MODELS, LLM_MODELS
@@ -253,12 +253,13 @@ def create_app(base_dir: Path | None = None,
             "recommended": bool(lbest and e.spec.name == lbest.name),
         } for e in levals]
 
-        extras = online_catalog.extra_online_models(
-            online_catalog.fetch_ollama_library(models_root), installed=installed)
-        online = [{"id": n, "size": "", "tag": "Ollama-bibliotek", "uses": []} for n in extras]
+        # NOTE: the app serves local GGUFs via the bundled llama.cpp server, not
+        # Ollama. The old ollama.com online catalog is intentionally NOT surfaced
+        # any more — those tags can't be installed through /api/download/llm
+        # (spec_by_name only knows the bundled GGUFs) so listing them was a dead end.
         return {
             "hardware": _hw_view(hw), "ollama_running": running,
-            "whisper": whisper, "llm": llm, "online": online,
+            "whisper": whisper, "llm": llm, "online": [],
         }
 
     @app.post("/api/download/whisper")

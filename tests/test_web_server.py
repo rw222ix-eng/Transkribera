@@ -21,8 +21,6 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: HW())
     monkeypatch.setattr(server.llm_client, "is_running", lambda *a, **k: False)
     monkeypatch.setattr(server.llm_manager, "is_installed", lambda *a, **k: False)
-    monkeypatch.setattr(server.online_catalog, "fetch_ollama_library",
-                        lambda *a, **k: ["mistral", "llama3.1"])
     monkeypatch.setattr(server.whisper_manager, "is_installed", lambda *a, **k: False)
     return TestClient(server.create_app(base_dir=tmp_path))
 
@@ -47,7 +45,8 @@ def test_models_endpoint_structure(client):
     data = r.json()
     assert {"hardware", "whisper", "llm", "ollama_running", "online"} <= data.keys()
     assert len(data["whisper"]) == len(server.WHISPER_MODELS)
-    assert any(o["id"] == "mistral" for o in data["online"])
+    # The dead Ollama online catalog is no longer surfaced.
+    assert data["online"] == []
 
 
 def test_transcribe_requires_fields(client):
