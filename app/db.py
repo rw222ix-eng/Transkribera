@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
 from pathlib import Path
 
 SCHEMA_VERSION = 1
@@ -87,6 +88,9 @@ LEFT JOIN courses c ON c.id = l.course_id
 # per-connection PRAGMA. Keeps the hot read path (parallel /api/lessons,
 # /api/groups, /api/courses) from re-running DDL + a write+commit.
 _initialized: set[str] = set()
+# SSE job threads and async handlers both call connect(); guard the check-then-set
+# so two concurrent first-calls on the same path can't both run the migration.
+_init_lock = threading.Lock()
 
 
 def segments_text(segments: list[dict] | None) -> str:
@@ -122,9 +126,11 @@ def connect(db_path: Path) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys=ON")                 # per-connection, always
     if key not in _initialized:
-        conn.execute("PRAGMA journal_mode=WAL")            # persists in the file
-        _apply_migrations(conn)
-        _initialized.add(key)
+        with _init_lock:
+            if key not in _initialized:                    # double-check under lock
+                conn.execute("PRAGMA journal_mode=WAL")    # persists in the file
+                _apply_migrations(conn)
+                _initialized.add(key)
     return conn
 
 
