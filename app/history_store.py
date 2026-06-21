@@ -40,3 +40,17 @@ def add_history(path: Path, entry: dict) -> dict:
 
 def delete_history(path: Path, entry_id: str) -> None:
     _write(path, [e for e in _read(path) if e.get("id") != entry_id])
+
+
+def update_history(path: Path, entry_id: str, patch: dict) -> dict | None:
+    """Merge `patch` into the entry with `entry_id`, preserving its position in
+    the list (unlike add_history, which moves it to the top). Returns the updated
+    entry, or None if no such id exists."""
+    items = _read(path)
+    for i, e in enumerate(items):
+        if e.get("id") == entry_id:
+            e.update(patch)
+            items[i] = e
+            _write(path, items)
+            return e
+    return None
