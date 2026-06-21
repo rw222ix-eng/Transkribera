@@ -859,7 +859,10 @@ def create_app(base_dir: Path | None = None,
             p = relocated.resolve()
         except Exception:
             return None
-        return p if str(p).startswith(str(base.resolve())) else None
+        # Parent-set containment, not a string prefix: a sibling like `<base>_evil`
+        # must NOT pass just because its name starts with base's.
+        root = base.resolve()
+        return p if (p == root or root in p.parents) else None
 
     @app.get("/api/thumb")
     def api_thumb(path: str = ""):

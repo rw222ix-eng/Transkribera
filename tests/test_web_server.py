@@ -188,6 +188,16 @@ def test_thumb_rejects_path_outside_base(client, tmp_path):
     assert r.status_code in (400, 404)
 
 
+def test_under_base_rejects_prefix_sibling(client, tmp_path):
+    # A sibling dir whose name merely starts with base's (e.g. `<base>_evil`) must
+    # not pass containment — the old str.startswith check would have accepted it.
+    sibling = tmp_path.parent / (tmp_path.name + "_evil") / "clip.mp4"
+    sibling.parent.mkdir(parents=True, exist_ok=True)
+    sibling.write_text("x", encoding="utf-8")
+    r = client.get("/api/thumb", params={"path": str(sibling)})
+    assert r.status_code == 404
+
+
 def test_media_want_video_serves_web_format_directly(client, tmp_path):
     v = tmp_path / "Transkriberingar" / "x" / "clip.mp4"
     v.parent.mkdir(parents=True)
