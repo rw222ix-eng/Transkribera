@@ -1,4 +1,6 @@
 import json
+from pathlib import Path
+
 import pytest
 
 from app.web import server
@@ -19,8 +21,6 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: HW())
     monkeypatch.setattr(server.llm_client, "is_running", lambda *a, **k: False)
     monkeypatch.setattr(server.llm_manager, "is_installed", lambda *a, **k: False)
-    monkeypatch.setattr(server.online_catalog, "fetch_ollama_library",
-                        lambda *a, **k: ["mistral", "llama3.1"])
     monkeypatch.setattr(server.whisper_manager, "is_installed", lambda *a, **k: False)
     return TestClient(server.create_app(base_dir=tmp_path))
 
@@ -45,7 +45,8 @@ def test_models_endpoint_structure(client):
     data = r.json()
     assert {"hardware", "whisper", "llm", "ollama_running", "online"} <= data.keys()
     assert len(data["whisper"]) == len(server.WHISPER_MODELS)
-    assert any(o["id"] == "mistral" for o in data["online"])
+    # The dead Ollama online catalog is no longer surfaced.
+    assert data["online"] == []
 
 
 def test_transcribe_requires_fields(client):
@@ -186,6 +187,16 @@ def test_thumb_rejects_path_outside_base(client, tmp_path):
     assert r.status_code in (400, 404)
 
 
+def test_under_base_rejects_prefix_sibling(client, tmp_path):
+    # A sibling dir whose name merely starts with base's (e.g. `<base>_evil`) must
+    # not pass containment — the old str.startswith check would have accepted it.
+    sibling = tmp_path.parent / (tmp_path.name + "_evil") / "clip.mp4"
+    sibling.parent.mkdir(parents=True, exist_ok=True)
+    sibling.write_text("x", encoding="utf-8")
+    r = client.get("/api/thumb", params={"path": str(sibling)})
+    assert r.status_code == 404
+
+
 def test_media_want_video_serves_web_format_directly(client, tmp_path):
     v = tmp_path / "Transkriberingar" / "x" / "clip.mp4"
     v.parent.mkdir(parents=True)
@@ -310,3 +321,431 @@ def test_postprocess_uses_text_model(tmp_path, monkeypatch):
         "operation": "summary", "transcript": "lång text", "model": "m"})
     assert r.status_code == 200
     assert arb.model is server.llm_manager.ACTIVE_LLM
+
+
+# ---- Lektioner: organisation per datum/klass/kurs (Fas 1) -------------------
+
+def test_lessons_empty(client):
+    r = client.get("/api/lessons")
+    assert r.status_code == 200
+    assert r.json() == []
+
+
+def test_courses_and_groups_get_or_create(client):
+    assert client.post("/api/groups", json={"namn": "NA21"}).status_code == 200
+    assert client.post("/api/groups", json={"namn": "NA21"}).status_code == 200  # idempotent
+    assert client.post("/api/courses", json={"namn": "Matematik 2b"}).status_code == 200
+    groups = client.get("/api/groups").json()
+    courses = client.get("/api/courses").json()
+    assert [g["namn"] for g in groups] == ["NA21"]
+    assert [c["namn"] for c in courses] == ["Matematik 2b"]
+    assert client.post("/api/groups", json={"namn": "  "}).status_code == 400
+
+
+def test_lesson_migrated_from_history(tmp_path, monkeypatch):
+    """A history.json present at startup is mirrored into /api/lessons."""
+    from fastapi.testclient import TestClient
+    (tmp_path / "history.json").write_text(json.dumps([
+        {"id": "h1", "ts": "2026-06-20T09:14:00", "name": "lektion.mp3",
+         "dur": "18:42", "model": "KB-Whisper large", "lang": "Svenska",
+         "formats": ["SRT", "TXT"], "words": 2940},
+    ]), encoding="utf-8")
+    monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: _HW())
+    c = TestClient(server.create_app(base_dir=tmp_path))
+    lessons = c.get("/api/lessons").json()
+    assert len(lessons) == 1
+    assert lessons[0]["name"] == "lektion.mp3"
+    assert lessons[0]["formats"] == ["SRT", "TXT"]
+
+
+def test_lesson_patch_assigns_class_and_course(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+    (tmp_path / "history.json").write_text(json.dumps([
+        {"id": "h1", "ts": "2026-06-20T09:14:00", "name": "lektion.mp3",
+         "formats": ["TXT"], "words": 10},
+    ]), encoding="utf-8")
+    monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: _HW())
+    c = TestClient(server.create_app(base_dir=tmp_path))
+    lid = c.get("/api/lessons").json()[0]["id"]
+    r = c.patch(f"/api/lessons/{lid}",
+                json={"group_name": "NA21", "course_name": "Matematik 2b", "sal": "B214"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["group"] == "NA21" and body["course"] == "Matematik 2b" and body["sal"] == "B214"
+    # filtering by the new group id returns it
+    gid = next(g["id"] for g in c.get("/api/groups").json() if g["namn"] == "NA21")
+    assert len(c.get(f"/api/lessons?group_id={gid}").json()) == 1
+
+
+def test_lesson_patch_unknown_group_returns_400(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+    (tmp_path / "history.json").write_text(json.dumps([
+        {"id": "h1", "ts": "2026-06-20T09:14:00", "name": "lektion.mp3",
+         "formats": ["TXT"], "words": 10},
+    ]), encoding="utf-8")
+    monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: _HW())
+    c = TestClient(server.create_app(base_dir=tmp_path))
+    lid = c.get("/api/lessons").json()[0]["id"]
+    r = c.patch(f"/api/lessons/{lid}", json={"group_id": 999})   # no such group
+    assert r.status_code == 400
+
+
+def test_lesson_patch_404(client):
+    assert client.patch("/api/lessons/999", json={"sal": "x"}).status_code == 404
+
+
+def test_lesson_delete_also_drops_history(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+    (tmp_path / "history.json").write_text(json.dumps([
+        {"id": "h1", "ts": "2026-06-20T09:14:00", "name": "lektion.mp3",
+         "formats": ["TXT"], "words": 10},
+    ]), encoding="utf-8")
+    monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: _HW())
+    c = TestClient(server.create_app(base_dir=tmp_path))
+    lid = c.get("/api/lessons").json()[0]["id"]
+    assert c.delete(f"/api/lessons/{lid}").json()["ok"] is True
+    assert c.get("/api/lessons").json() == []
+    assert c.get("/api/history").json() == []
+
+
+def test_lesson_get_404(client):
+    assert client.get("/api/lessons/999").status_code == 404
+
+
+def test_lesson_delete_locked_folder_returns_409(tmp_path, monkeypatch):
+    # A result folder that can't be removed (file open) must surface 409 and keep
+    # the lesson + history entry, mirroring the Historik-delete behaviour.
+    from fastapi.testclient import TestClient
+    folder = tmp_path / "Transkriberingar" / "2026-06-20 · lektion"
+    folder.mkdir(parents=True)
+    (tmp_path / "history.json").write_text(json.dumps([
+        {"id": "h1", "ts": "2026-06-20T09:14:00", "name": "lektion.mp3",
+         "formats": ["TXT"], "words": 10, "folder": str(folder)},
+    ]), encoding="utf-8")
+    monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: _HW())
+    c = TestClient(server.create_app(base_dir=tmp_path))
+    lid = c.get("/api/lessons").json()[0]["id"]
+
+    def boom(*a, **k):
+        raise OSError("file in use")
+    monkeypatch.setattr(server.output_store, "delete_result_folder", boom)
+    assert c.delete(f"/api/lessons/{lid}").status_code == 409
+    assert len(c.get("/api/lessons").json()) == 1          # lesson kept
+    assert [e["id"] for e in c.get("/api/history").json()] == ["h1"]
+
+
+def test_lesson_delete_skips_recording_outside_downloads(tmp_path, monkeypatch):
+    # A recording stored outside downloads/ (e.g. a file on the desktop) must NOT
+    # be deleted when the lesson is removed — the guard only unlinks under downloads/.
+    from fastapi.testclient import TestClient
+    import sqlite3
+    outside = tmp_path / "skrivbord" / "inspelning.mp3"
+    outside.parent.mkdir(parents=True)
+    outside.write_text("audio", encoding="utf-8")
+    (tmp_path / "history.json").write_text(json.dumps([
+        {"id": "h1", "ts": "2026-06-20T09:14:00", "name": "inspelning.mp3",
+         "formats": ["TXT"], "words": 10},
+    ]), encoding="utf-8")
+    monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: _HW())
+    c = TestClient(server.create_app(base_dir=tmp_path))
+    lid = c.get("/api/lessons").json()[0]["id"]
+    # Point the lesson's recording at the out-of-downloads file (the in-app record
+    # flow is the only thing that sets recording_path, so seed it directly).
+    conn = sqlite3.connect(str(tmp_path / "transkribera.db"))
+    conn.execute("UPDATE lessons SET recording_path = ? WHERE id = ?", (str(outside), lid))
+    conn.commit()
+    conn.close()
+    assert c.delete(f"/api/lessons/{lid}").json()["ok"] is True
+    assert outside.exists()                                # outside downloads/ → not touched
+
+
+def test_history_one_endpoint(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+    (tmp_path / "history.json").write_text(json.dumps([
+        {"id": "h1", "ts": "2026-06-20T09:14:00", "name": "lektion.mp3", "formats": ["TXT"]},
+    ]), encoding="utf-8")
+    monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: _HW())
+    c = TestClient(server.create_app(base_dir=tmp_path))
+    assert c.get("/api/history/h1").json()["name"] == "lektion.mp3"
+    assert c.get("/api/history/nope").status_code == 404
+
+
+# ---- Insikter: LLM-extraktion + redigerbara kort (Fas 2) --------------------
+
+class _ReadyArbiter:
+    """GPU free, LLM installed — lets extraction run end-to-end in tests."""
+    def try_acquire_gpu(self): return True
+    def release_gpu(self): pass
+    def ensure_llm(self): return "http://x"
+    def stop_llm(self): return False
+    def prewarm_async(self): pass
+    def llm_installed(self): return True
+
+
+class _NoLlmArbiter(_ReadyArbiter):
+    """GPU free but the GGUF is not installed."""
+    def ensure_llm(self): return None
+
+
+def _lesson_client(tmp_path, monkeypatch, *, transcript=True, arbiter=None):
+    from fastapi.testclient import TestClient
+    entry = {"id": "h1", "ts": "2026-06-20T09:14:00", "name": "lektion.mp3",
+             "formats": ["TXT"], "words": 10}
+    if transcript:
+        entry["transcript"] = [{"start": 0, "end": 2, "text": "vi gick igenom derivata"}]
+    (tmp_path / "history.json").write_text(json.dumps([entry]), encoding="utf-8")
+    monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: _HW())
+    return TestClient(server.create_app(base_dir=tmp_path, arbiter=arbiter or _ReadyArbiter()))
+
+
+def test_extract_writes_llm_insights(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        server.postprocess, "extract",
+        lambda transcript, model, token_cb=None: [
+            {"typ": "svårighet", "text": "derivata", "due_date": None, "ref": "uppg 3"}])
+    c = _lesson_client(tmp_path, monkeypatch)
+    lid = c.get("/api/lessons").json()[0]["id"]
+    assert c.post(f"/api/lessons/{lid}/extract").status_code == 200
+    ins = c.get(f"/api/lessons/{lid}/insights").json()
+    assert len(ins) == 1
+    assert ins[0]["text"] == "derivata" and ins[0]["source"] == "llm"
+    assert ins[0]["status"] == "öppen" and ins[0]["ref"] == "uppg 3"
+
+
+def test_extract_replaces_llm_keeps_manual(tmp_path, monkeypatch):
+    c = _lesson_client(tmp_path, monkeypatch)
+    lid = c.get("/api/lessons").json()[0]["id"]
+    c.post(f"/api/lessons/{lid}/insights", json={"typ": "material", "text": "egen anteckning"})
+    monkeypatch.setattr(server.postprocess, "extract",
+                        lambda *a, **k: [{"typ": "kalender", "text": "prov", "due_date": None, "ref": None}])
+    c.post(f"/api/lessons/{lid}/extract")
+    monkeypatch.setattr(server.postprocess, "extract",
+                        lambda *a, **k: [{"typ": "åtgärd", "text": "ny", "due_date": None, "ref": None}])
+    c.post(f"/api/lessons/{lid}/extract")          # re-run replaces the old LLM ones
+    texts = sorted(i["text"] for i in c.get(f"/api/lessons/{lid}/insights").json())
+    assert texts == ["egen anteckning", "ny"]      # manual survived, old LLM "prov" gone
+
+
+def test_extract_no_transcript_400(tmp_path, monkeypatch):
+    c = _lesson_client(tmp_path, monkeypatch, transcript=False)
+    lid = c.get("/api/lessons").json()[0]["id"]
+    assert c.post(f"/api/lessons/{lid}/extract").status_code == 400
+
+
+def test_extract_busy_returns_409(tmp_path, monkeypatch):
+    (tmp_path / "history.json").write_text(json.dumps([
+        {"id": "h1", "ts": "2026-06-20T09:14:00", "name": "l.mp3", "formats": ["TXT"],
+         "transcript": [{"start": 0, "end": 1, "text": "x"}]}]), encoding="utf-8")
+    monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: _HW())
+    c = _busy_client(tmp_path)
+    lid = c.get("/api/lessons").json()[0]["id"]
+    assert c.post(f"/api/lessons/{lid}/extract").status_code == 409
+
+
+def test_insight_manual_crud(tmp_path, monkeypatch):
+    c = _lesson_client(tmp_path, monkeypatch)
+    lid = c.get("/api/lessons").json()[0]["id"]
+    r = c.post(f"/api/lessons/{lid}/insights", json={"typ": "material", "text": "facit"})
+    assert r.status_code == 200 and r.json()["source"] == "manuell"
+    iid = r.json()["id"]
+    pr = c.patch(f"/api/insights/{iid}", json={"status": "klar", "text": "facit kap 3"})
+    assert pr.json()["status"] == "klar" and pr.json()["text"] == "facit kap 3"
+    assert c.delete(f"/api/insights/{iid}").json() == {"ok": True}
+    assert c.get(f"/api/lessons/{lid}/insights").json() == []
+
+
+def test_insight_manual_requires_text(tmp_path, monkeypatch):
+    c = _lesson_client(tmp_path, monkeypatch)
+    lid = c.get("/api/lessons").json()[0]["id"]
+    assert c.post(f"/api/lessons/{lid}/insights", json={"text": "  "}).status_code == 400
+
+
+def test_insight_patch_empty_is_noop(tmp_path, monkeypatch):
+    c = _lesson_client(tmp_path, monkeypatch)
+    lid = c.get("/api/lessons").json()[0]["id"]
+    iid = c.post(f"/api/lessons/{lid}/insights", json={"text": "facit"}).json()["id"]
+    r = c.patch(f"/api/insights/{iid}", json={})     # no editable fields -> unchanged row
+    assert r.status_code == 200 and r.json()["text"] == "facit"
+
+
+def test_insight_patch_404(tmp_path, monkeypatch):
+    c = _lesson_client(tmp_path, monkeypatch)
+    assert c.patch("/api/insights/999", json={"text": "x"}).status_code == 404
+
+
+def test_extract_uses_stored_transcript(tmp_path, monkeypatch):
+    """Extraction reads the transcript from the DB (mirrored at migrate/transcribe
+    time), not by scanning history.json."""
+    captured = {}
+    def fake_extract(transcript, model, token_cb=None):
+        captured["transcript"] = transcript
+        return []
+    monkeypatch.setattr(server.postprocess, "extract", fake_extract)
+    c = _lesson_client(tmp_path, monkeypatch)        # startup migration reads history once
+    lid = c.get("/api/lessons").json()[0]["id"]      # GET /api/lessons reads the DB, not history
+    # From here on, any history-file scan must blow up — extract must not need it.
+    monkeypatch.setattr(server.history_store, "load_history",
+                        lambda *a, **k: (_ for _ in ()).throw(AssertionError("scanned history")))
+    assert c.post(f"/api/lessons/{lid}/extract").status_code == 200
+    assert captured["transcript"] == "vi gick igenom derivata"
+
+
+def test_extract_llm_not_installed_streams_error(tmp_path, monkeypatch):
+    monkeypatch.setattr(server.postprocess, "extract", lambda *a, **k: [])
+    c = _lesson_client(tmp_path, monkeypatch, arbiter=_NoLlmArbiter())
+    lid = c.get("/api/lessons").json()[0]["id"]
+    r = c.post(f"/api/lessons/{lid}/extract")
+    assert r.status_code == 200                       # SSE — error is in the stream
+    assert "inte installerad" in r.text
+
+
+# ---- Nästa lektion-vy: carry-forward (Fas 3) --------------------------------
+
+def test_next_prep_endpoint(tmp_path, monkeypatch):
+    c = _lesson_client(tmp_path, monkeypatch)
+    lid = c.get("/api/lessons").json()[0]["id"]
+    gid = c.patch(f"/api/lessons/{lid}", json={"group_name": "NA21"}).json()["group_id"]
+    c.post(f"/api/lessons/{lid}/insights", json={"typ": "åtgärd", "text": "ta med facit"})
+    c.post(f"/api/lessons/{lid}/insights", json={"typ": "svårighet", "text": "derivata"})
+    prep = c.get(f"/api/next-prep?group_id={gid}").json()
+    assert prep["group"] == "NA21"
+    assert [a["text"] for a in prep["open_actions"]] == ["ta med facit"]
+    assert [d["text"] for d in prep["difficulties"]] == ["derivata"]
+    assert prep["last_lesson"]["id"] == lid
+
+
+# ---- Inbyggd inspelning: /api/upload (Fas 4) --------------------------------
+
+def test_upload_saves_recording(tmp_path):
+    from fastapi.testclient import TestClient
+    c = TestClient(server.create_app(base_dir=tmp_path))
+    r = c.post("/api/upload?name=lektion_2026-06-20_0914.webm", content=b"RIFFfake-audio")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["name"] == "lektion_2026-06-20_0914.webm"
+    saved = Path(body["path"])
+    assert saved.exists() and saved.read_bytes() == b"RIFFfake-audio"
+    assert saved.parent == tmp_path / "downloads"
+
+
+def test_upload_rejects_empty(tmp_path):
+    from fastapi.testclient import TestClient
+    c = TestClient(server.create_app(base_dir=tmp_path))
+    assert c.post("/api/upload?name=x.webm", content=b"").status_code == 400
+
+
+def test_upload_strips_directory_traversal(tmp_path):
+    from fastapi.testclient import TestClient
+    c = TestClient(server.create_app(base_dir=tmp_path))
+    r = c.post("/api/upload?name=../../evil.webm", content=b"data")
+    saved = Path(r.json()["path"])
+    assert saved.parent == tmp_path / "downloads"   # name flattened, never escapes
+    assert saved.name == "evil.webm"
+
+
+def test_upload_empty_name_falls_back(tmp_path):
+    from fastapi.testclient import TestClient
+    c = TestClient(server.create_app(base_dir=tmp_path))
+    r = c.post("/api/upload?name=..", content=b"data")   # pure directory ref -> default
+    assert Path(r.json()["path"]).name == "inspelning.webm"
+
+
+def test_upload_collision_keeps_both(tmp_path):
+    from fastapi.testclient import TestClient
+    c = TestClient(server.create_app(base_dir=tmp_path))
+    p1 = c.post("/api/upload?name=lektion.webm", content=b"one").json()["path"]
+    p2 = c.post("/api/upload?name=lektion.webm", content=b"two").json()["path"]
+    assert p1 != p2                                 # uuid suffix, robust to same-second
+    assert Path(p1).read_bytes() == b"one" and Path(p2).read_bytes() == b"two"
+
+
+# ---- Hink B: delete-sync (DB <-> history), re-extract guard, upload cap ------
+
+def test_history_delete_also_drops_lesson(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+    (tmp_path / "history.json").write_text(json.dumps([
+        {"id": "h1", "ts": "2026-06-20T09:14:00", "name": "lektion.mp3",
+         "formats": ["TXT"], "words": 10}]), encoding="utf-8")
+    monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: _HW())
+    c = TestClient(server.create_app(base_dir=tmp_path))
+    assert len(c.get("/api/lessons").json()) == 1
+    assert c.delete("/api/history/h1").status_code == 200
+    assert c.get("/api/lessons").json() == []        # lesson row gone too, no orphan
+    assert c.get("/api/history").json() == []
+
+
+def test_lesson_delete_removes_folder_and_recording(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+    folder = tmp_path / "Transkriberingar" / "2026-06-20 · lektion"
+    folder.mkdir(parents=True)
+    (folder / "lektion.srt").write_text("1\n", encoding="utf-8")
+    rec = tmp_path / "downloads" / "lektion.webm"
+    rec.parent.mkdir(parents=True)
+    rec.write_bytes(b"audio")
+    (tmp_path / "history.json").write_text(json.dumps([
+        {"id": "h1", "ts": "2026-06-20T09:14:00", "name": "lektion.mp3",
+         "formats": ["TXT"], "folder": str(folder)}]), encoding="utf-8")
+    monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: _HW())
+    c = TestClient(server.create_app(base_dir=tmp_path))
+    lid = c.get("/api/lessons").json()[0]["id"]
+    # the migrated lesson has the folder; set its recording_path via the DB
+    conn = server.db.connect(tmp_path / "transkribera.db")
+    conn.execute("UPDATE lessons SET recording_path = ? WHERE id = ?", (str(rec), lid))
+    conn.commit(); conn.close()
+    r = c.delete(f"/api/lessons/{lid}")
+    assert r.status_code == 200 and r.json()["folder_removed"] is True
+    assert not folder.exists()
+    assert not rec.exists()
+
+
+def test_extract_empty_keeps_previous_insights(tmp_path, monkeypatch):
+    c = _lesson_client(tmp_path, monkeypatch)
+    lid = c.get("/api/lessons").json()[0]["id"]
+    monkeypatch.setattr(server.postprocess, "extract",
+                        lambda *a, **k: [{"typ": "kalender", "text": "prov", "due_date": None, "ref": None}])
+    c.post(f"/api/lessons/{lid}/extract")
+    monkeypatch.setattr(server.postprocess, "extract", lambda *a, **k: [])   # model finds nothing
+    r = c.post(f"/api/lessons/{lid}/extract")
+    assert r.status_code == 200
+    texts = [i["text"] for i in c.get(f"/api/lessons/{lid}/insights").json()]
+    assert texts == ["prov"]                          # previous LLM insight NOT wiped
+
+
+def test_upload_rejects_too_large(client, monkeypatch):
+    monkeypatch.setattr(server, "MAX_UPLOAD_BYTES", 4)
+    r = client.post("/api/upload?name=lektion.webm", content=b"way too long")
+    assert r.status_code == 413
+
+
+def test_upload_saves_recording_via_client(client, tmp_path):
+    r = client.post("/api/upload?name=lektion.webm", content=b"audio-bytes")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["name"].endswith(".webm")
+    assert (tmp_path / "downloads" / body["name"]).exists()
+
+
+# ---- Sökvägs-omrotning: filer hittas efter att app-mappen flyttats ----------
+
+def test_media_reroots_stored_path_after_move(client, tmp_path):
+    # The real file lives under the current base; history stored an old-base path.
+    real = tmp_path / "Transkriberingar" / "m" / "clip.mp4"
+    real.parent.mkdir(parents=True)
+    real.write_text("mp4bytes", encoding="utf-8")
+    stale = "/gammal/plats/Transkriberingar/m/clip.mp4"
+    r = client.get("/api/media", params={"path": stale, "want": "video"})
+    assert r.status_code == 200
+    assert r.text == "mp4bytes"                       # re-rooted under current base
+
+
+def test_history_delete_reroots_moved_folder(client, tmp_path):
+    folder = tmp_path / "Transkriberingar" / "2026 · m"
+    folder.mkdir(parents=True)
+    (folder / "a.srt").write_text("1", encoding="utf-8")
+    stale = "/gammal/plats/Transkriberingar/2026 · m"      # stored before a move
+    (tmp_path / "history.json").write_text(
+        json.dumps([{"id": "h1", "name": "a", "folder": stale}]), encoding="utf-8")
+    r = client.delete("/api/history/h1")
+    assert r.status_code == 200
+    assert r.json()["folder_removed"] is True
+    assert not folder.exists()                        # the real (moved) folder went

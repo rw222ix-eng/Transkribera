@@ -4,10 +4,12 @@ from __future__ import annotations
 import json
 import os
 import queue
+import sqlite3
 import subprocess
 import sys
 import threading
 import time
+import uuid
 from datetime import datetime
 from pathlib import Path
 
@@ -16,8 +18,9 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from app import (debug_log, hardware, recommend, whisper_manager, llm_client,
-                 llm_manager, online_catalog, youtube, postprocess, transcriber,
-                 history_store, gpu_arbiter, output_store, media, audio_model)
+                 llm_manager, youtube, postprocess, transcriber,
+                 history_store, gpu_arbiter, output_store, media, audio_model, db,
+                 paths)
 from app.models_catalog import WHISPER_MODELS, LLM_MODELS
 
 _MONTHS_SV = ["jan", "feb", "mar", "apr", "maj", "jun", "jul", "aug", "sep", "okt", "nov", "dec"]
@@ -25,6 +28,10 @@ _MONTHS_SV = ["jan", "feb", "mar", "apr", "maj", "jun", "jul", "aug", "sep", "ok
 # Web-playable media containers served straight to the preview player.
 _WEB_MEDIA = {".mp3", ".m4a", ".aac", ".wav", ".ogg", ".oga", ".opus",
               ".webm", ".mp4", ".m4v", ".mov", ".flac"}
+
+# Upper bound for an in-app recording upload (read fully into memory). A ~2 GB cap
+# is far above any realistic lesson-length Opus recording but rejects runaways.
+MAX_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024
 
 
 def _is_url(s: str) -> bool:
@@ -181,9 +188,23 @@ def create_app(base_dir: Path | None = None,
     base = base_dir or _base_dir()
     models_root = base / "models"
     history_file = base / "history.json"
+    db_file = base / "transkribera.db"
     cookies = base / "cookies.txt"
     cookies_file = cookies if cookies.exists() else None
     debug_log.setup(base, "web")
+
+    def _db():
+        return db.connect(db_file)
+
+    # One-time import of any existing history into the lesson DB (idempotent).
+    try:
+        _conn = _db()
+        try:
+            db.migrate_from_history(_conn, history_store.load_history(history_file))
+        finally:
+            _conn.close()
+    except Exception:
+        debug_log.get_logger().exception("Migrering av historik till lektions-DB misslyckades")
 
     app = FastAPI(title="Transkribera Web")
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
@@ -232,12 +253,13 @@ def create_app(base_dir: Path | None = None,
             "recommended": bool(lbest and e.spec.name == lbest.name),
         } for e in levals]
 
-        extras = online_catalog.extra_online_models(
-            online_catalog.fetch_ollama_library(models_root), installed=installed)
-        online = [{"id": n, "size": "", "tag": "Ollama-bibliotek", "uses": []} for n in extras]
+        # NOTE: the app serves local GGUFs via the bundled llama.cpp server, not
+        # Ollama. The old ollama.com online catalog is intentionally NOT surfaced
+        # any more — those tags can't be installed through /api/download/llm
+        # (spec_by_name only knows the bundled GGUFs) so listing them was a dead end.
         return {
             "hardware": _hw_view(hw), "ollama_running": running,
-            "whisper": whisper, "llm": llm, "online": online,
+            "whisper": whisper, "llm": llm, "online": [],
         }
 
     @app.post("/api/download/whisper")
@@ -416,7 +438,7 @@ def create_app(base_dir: Path | None = None,
             target_label = _lang_lbl.get(target_language, lang_label)
             dur = segments[-1]["end"] if segments else 0
             words = sum(len((sg.get("text") or "").split()) for sg in segments)
-            history_store.add_history(history_file, {
+            entry = {
                 "id": "h" + str(int(time.time() * 1000)),
                 "ts": datetime.now().isoformat(timespec="seconds"),
                 "name": Path(media).name,
@@ -426,11 +448,60 @@ def create_app(base_dir: Path | None = None,
                 "formats": [f.upper() for f in formats],
                 "words": words, "files": files, "transcript": segments,
                 "folder": assembled["folder"], "video": video,
-            })
+            }
+            history_store.add_history(history_file, entry)
+            # Mirror into the lesson DB so the recording can be organised by
+            # date/class/course. Never let this break a successful transcription.
+            try:
+                conn = _db()
+                try:
+                    db.create_lesson(
+                        conn, history_id=entry["id"], ts=entry["ts"],
+                        name=entry["name"], source=source, dur=entry["dur"],
+                        model=spec_label, lang=lang_label,
+                        formats=entry["formats"], words=words,
+                        transcript_folder=assembled["folder"],
+                        recording_path=str(media), created_at=entry["ts"],
+                        transcript_text=db.segments_text(segments))
+                finally:
+                    conn.close()
+            except Exception:
+                debug_log.get_logger().exception("Kunde inte spara lektion i DB")
             return {"files": files, "transcript": segments,
                     "media": video["path"] if video else str(media),
                     "folder": assembled["folder"]}
         return _sse_response(job)
+
+    @app.post("/api/upload")
+    async def api_upload(req: Request, name: str = "inspelning.webm"):
+        """Save an in-app recording (raw audio bytes in the body) under
+        downloads/ and hand the path back so it enters the normal transcribe
+        flow. No multipart dependency: the browser POSTs the Blob directly."""
+        # Reject an oversized upload from the declared Content-Length *before*
+        # buffering the whole body in RAM (a runaway recording would otherwise
+        # allocate up to MAX_UPLOAD_BYTES alongside Whisper/LLM in VRAM).
+        declared = req.headers.get("content-length", "")
+        if declared.isdigit() and int(declared) > MAX_UPLOAD_BYTES:
+            return JSONResponse(
+                {"error": "Inspelningen är för stor för att laddas upp."},
+                status_code=413)
+        data = await req.body()
+        if not data:
+            return JSONResponse({"error": "tom uppladdning"}, status_code=400)
+        if len(data) > MAX_UPLOAD_BYTES:                # fallback when no header
+            return JSONResponse(
+                {"error": "Inspelningen är för stor för att laddas upp."},
+                status_code=413)
+        safe = Path(name).name                          # strip any directory parts
+        if safe in (".", "..", ""):                     # never a directory ref
+            safe = "inspelning.webm"
+        out_dir = base / "downloads"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        dest = out_dir / safe
+        if dest.exists():                               # unique suffix; uuid avoids
+            dest = out_dir / f"{dest.stem}-{uuid.uuid4().hex[:8]}{dest.suffix}"  # same-second clobber
+        dest.write_bytes(data)
+        return {"path": str(dest), "name": dest.name}
 
     @app.get("/api/history")
     def api_history():
@@ -438,6 +509,14 @@ def create_app(base_dir: Path | None = None,
         for it in items:
             it["date"] = _date_label(it.get("ts", ""))
         return items
+
+    @app.get("/api/history/{entry_id}")
+    def api_history_one(entry_id: str):
+        for it in history_store.load_history(history_file):
+            if it.get("id") == entry_id:
+                it["date"] = _date_label(it.get("ts", ""))
+                return it
+        return JSONResponse({"error": "finns inte"}, status_code=404)
 
     @app.delete("/api/history/{entry_id}")
     def api_history_delete(entry_id: str):
@@ -448,14 +527,274 @@ def create_app(base_dir: Path | None = None,
         entry = next((e for e in items if e.get("id") == entry_id), None)
         folder_removed = False
         if entry and entry.get("folder"):
+            # Re-root the stored folder under the current base in case the app
+            # folder has moved since the run (otherwise delete would refuse it).
+            folder = paths.relocate(base, entry["folder"])
             try:
-                folder_removed = output_store.delete_result_folder(base, entry["folder"])
+                folder_removed = output_store.delete_result_folder(base, folder)
             except OSError:
                 return JSONResponse(
                     {"error": "kunde inte radera mappen — en fil kan vara öppen"},
                     status_code=409)
         history_store.delete_history(history_file, entry_id)
+        # Keep the lesson DB in sync: drop the matching lesson row (+ its insights
+        # via cascade) so deleting from Historik doesn't leave an orphan lesson.
+        try:
+            conn = _db()
+            try:
+                db.delete_lesson_by_history_id(conn, entry_id)
+            finally:
+                conn.close()
+        except Exception:
+            debug_log.get_logger().exception("Kunde inte synka lektions-DB vid radering")
         return {"ok": True, "folder_removed": folder_removed}
+
+    # ---- Lektioner: organisera transkriberingar per datum/klass/kurs ----------
+
+    def _lesson_view(les: dict) -> dict:
+        les = dict(les)
+        les["date"] = _date_label(les.get("ts", ""))
+        return les
+
+    @app.get("/api/lessons")
+    def api_lessons(group_id: int | None = None, course_id: int | None = None,
+                    date_from: str | None = None, date_to: str | None = None):
+        conn = _db()
+        try:
+            items = db.list_lessons(conn, group_id=group_id, course_id=course_id,
+                                    date_from=date_from, date_to=date_to)
+        finally:
+            conn.close()
+        return [_lesson_view(it) for it in items]
+
+    @app.get("/api/lessons/{lesson_id}")
+    def api_lesson_get(lesson_id: int):
+        conn = _db()
+        try:
+            les = db.get_lesson(conn, lesson_id)
+        finally:
+            conn.close()
+        if les is None:
+            return JSONResponse({"error": "lektionen finns inte"}, status_code=404)
+        return _lesson_view(les)
+
+    @app.patch("/api/lessons/{lesson_id}")
+    async def api_lesson_patch(lesson_id: int, req: Request):
+        body = await req.json()
+        conn = _db()
+        try:
+            if db.get_lesson(conn, lesson_id) is None:
+                return JSONResponse({"error": "lektionen finns inte"}, status_code=404)
+            fields = {}
+            for k in ("datum", "starttid", "sal", "summary"):
+                if k in body:
+                    fields[k] = body[k]
+            if "group_name" in body:
+                fields["group_id"] = db.get_or_create_group(conn, body["group_name"])
+            elif "group_id" in body:
+                fields["group_id"] = body["group_id"]
+            if "course_name" in body:
+                fields["course_id"] = db.get_or_create_course(conn, body["course_name"])
+            elif "course_id" in body:
+                fields["course_id"] = body["course_id"]
+            try:
+                les = db.update_lesson(conn, lesson_id, **fields)
+            except sqlite3.IntegrityError:               # unknown group_id/course_id
+                return JSONResponse({"error": "okänd klass/kurs"}, status_code=400)
+        finally:
+            conn.close()
+        return _lesson_view(les)
+
+    def _delete_recording(path: str | Path | None) -> None:
+        """Remove an in-app recording from downloads/ (validated under base).
+        The path is re-rooted under the current base first (moved app folder)."""
+        relocated = paths.relocate(base, path)
+        if relocated is None:
+            return
+        try:
+            p = relocated.resolve()
+            downloads = (base / "downloads").resolve()
+            if downloads in p.parents and p.is_file():
+                p.unlink()
+        except OSError:
+            pass
+
+    @app.delete("/api/lessons/{lesson_id}")
+    def api_lesson_delete(lesson_id: int):
+        conn = _db()
+        try:
+            lp = db.lesson_paths(conn, lesson_id)
+        finally:
+            conn.close()
+        folder_removed = False
+        if lp:
+            # Mirror Historik-delete: drop the result folder on disk and the source
+            # recording FIRST, so a locked folder (409) leaves the lesson + history
+            # entry intact instead of deleting the DB row and leaking the files.
+            # Both paths are re-rooted under the current base in case the app moved.
+            if lp.get("transcript_folder"):
+                folder = paths.relocate(base, lp["transcript_folder"])
+                try:
+                    folder_removed = output_store.delete_result_folder(base, folder)
+                except OSError:
+                    return JSONResponse(
+                        {"error": "kunde inte radera mappen — en fil kan vara öppen"},
+                        status_code=409)
+            _delete_recording(lp.get("recording_path"))
+        conn = _db()
+        try:
+            history_id = db.delete_lesson(conn, lesson_id)
+        finally:
+            conn.close()
+        if history_id:
+            history_store.delete_history(history_file, history_id)
+        return {"ok": True, "folder_removed": folder_removed}
+
+    @app.get("/api/courses")
+    def api_courses():
+        conn = _db()
+        try:
+            return db.list_courses(conn)
+        finally:
+            conn.close()
+
+    @app.post("/api/courses")
+    async def api_course_create(req: Request):
+        body = await req.json()
+        conn = _db()
+        try:
+            cid = db.get_or_create_course(conn, body.get("namn", ""))
+        finally:
+            conn.close()
+        if cid is None:
+            return JSONResponse({"error": "namn krävs"}, status_code=400)
+        return {"id": cid, "namn": body.get("namn", "").strip()}
+
+    @app.get("/api/groups")
+    def api_groups():
+        conn = _db()
+        try:
+            return db.list_groups(conn)
+        finally:
+            conn.close()
+
+    @app.post("/api/groups")
+    async def api_group_create(req: Request):
+        body = await req.json()
+        conn = _db()
+        try:
+            gid = db.get_or_create_group(conn, body.get("namn", ""))
+        finally:
+            conn.close()
+        if gid is None:
+            return JSONResponse({"error": "namn krävs"}, status_code=400)
+        return {"id": gid, "namn": body.get("namn", "").strip()}
+
+    # ---- Insikter: LLM-extraktion + redigerbara kort (Fas 2) ------------------
+
+    @app.get("/api/lessons/{lesson_id}/insights")
+    def api_insights(lesson_id: int):
+        conn = _db()
+        try:
+            return db.list_insights(conn, lesson_id)
+        finally:
+            conn.close()
+
+    @app.post("/api/lessons/{lesson_id}/extract")
+    async def api_extract(lesson_id: int):
+        conn = _db()
+        try:
+            les = db.get_lesson(conn, lesson_id)
+            transcript = db.lesson_transcript(conn, lesson_id) if les else ""
+        finally:
+            conn.close()
+        if les is None:
+            return JSONResponse({"error": "lektionen finns inte"}, status_code=404)
+        if not transcript:
+            return JSONResponse(
+                {"error": "lektionen saknar transkript att analysera"}, status_code=400)
+        if not arb.try_acquire_gpu():
+            return JSONResponse(
+                {"error": "GPU upptagen med transkribering – försök igen strax."},
+                status_code=409)
+
+        def job(emit):
+            try:
+                if arb.ensure_llm() is None:
+                    raise RuntimeError("Språkmodellen är inte installerad.")
+                emit({"type": "log", "msg": "Analyserar lektionen ..."})
+                found = postprocess.extract(transcript, llm_manager.ACTIVE_LLM.filename)
+                conn = _db()
+                try:
+                    if found:
+                        # Atomically swap the previous LLM run; manual notes untouched.
+                        saved = db.replace_insights_by_source(conn, lesson_id, "llm", found)
+                        kept_previous = False
+                    else:
+                        # Nothing extracted (model declined / empty) — KEEP the previous
+                        # LLM insights instead of silently wiping them.
+                        emit({"type": "log", "msg": "Inga nya insikter hittades — "
+                                                    "behåller tidigare."})
+                        saved = [i for i in db.list_insights(conn, lesson_id)
+                                 if i.get("source") == "llm"]
+                        kept_previous = True
+                finally:
+                    conn.close()
+                return {"insights": saved, "count": len(saved),
+                        "kept_previous": kept_previous}
+            finally:
+                arb.release_gpu()
+        return _sse_response(job)
+
+    @app.post("/api/lessons/{lesson_id}/insights")
+    async def api_insight_add(lesson_id: int, req: Request):
+        body = await req.json()
+        text = (body.get("text") or "").strip()
+        if not text:
+            return JSONResponse({"error": "text krävs"}, status_code=400)
+        conn = _db()
+        try:
+            if db.get_lesson(conn, lesson_id) is None:
+                return JSONResponse({"error": "lektionen finns inte"}, status_code=404)
+            ins = db.add_insight(conn, lesson_id, body.get("typ", "övrigt"), text,
+                                 due_date=body.get("due_date") or None,
+                                 ref=body.get("ref") or None, source="manuell")
+        finally:
+            conn.close()
+        return ins
+
+    @app.patch("/api/insights/{insight_id}")
+    async def api_insight_patch(insight_id: int, req: Request):
+        body = await req.json()
+        conn = _db()
+        try:
+            if db.get_insight(conn, insight_id) is None:
+                return JSONResponse({"error": "insikten finns inte"}, status_code=404)
+            fields = {k: body[k] for k in ("typ", "text", "due_date", "ref", "status")
+                      if k in body}
+            ins = db.update_insight(conn, insight_id, **fields)
+        finally:
+            conn.close()
+        return ins
+
+    @app.delete("/api/insights/{insight_id}")
+    def api_insight_delete(insight_id: int):
+        conn = _db()
+        try:
+            db.delete_insight(conn, insight_id)
+        finally:
+            conn.close()
+        return {"ok": True}
+
+    # ---- Nästa lektion: carry-forward per klass (Fas 3) ----------------------
+
+    @app.get("/api/next-prep")
+    def api_next_prep(group_id: int):
+        conn = _db()
+        try:
+            return db.next_prep(conn, group_id)
+        finally:
+            conn.close()
 
     @app.post("/api/postprocess")
     async def api_postprocess(req: Request):
@@ -516,12 +855,20 @@ def create_app(base_dir: Path | None = None,
 
     def _under_base(path: str) -> Path | None:
         """Resolve `path` only if it lives under base_dir (local app; blocks
-        arbitrary filesystem reads). Returns the resolved Path or None."""
+        arbitrary filesystem reads). A stored path from before the app folder was
+        moved is re-rooted under the current base first (see app.paths.relocate).
+        Returns the resolved Path or None."""
+        relocated = paths.relocate(base, path)
+        if relocated is None:
+            return None
         try:
-            p = Path(path).resolve()
+            p = relocated.resolve()
         except Exception:
             return None
-        return p if str(p).startswith(str(base.resolve())) else None
+        # Parent-set containment, not a string prefix: a sibling like `<base>_evil`
+        # must NOT pass just because its name starts with base's.
+        root = base.resolve()
+        return p if (p == root or root in p.parents) else None
 
     @app.get("/api/thumb")
     def api_thumb(path: str = ""):
