@@ -476,10 +476,18 @@ def create_app(base_dir: Path | None = None,
         """Save an in-app recording (raw audio bytes in the body) under
         downloads/ and hand the path back so it enters the normal transcribe
         flow. No multipart dependency: the browser POSTs the Blob directly."""
+        # Reject an oversized upload from the declared Content-Length *before*
+        # buffering the whole body in RAM (a runaway recording would otherwise
+        # allocate up to MAX_UPLOAD_BYTES alongside Whisper/LLM in VRAM).
+        declared = req.headers.get("content-length", "")
+        if declared.isdigit() and int(declared) > MAX_UPLOAD_BYTES:
+            return JSONResponse(
+                {"error": "Inspelningen är för stor för att laddas upp."},
+                status_code=413)
         data = await req.body()
         if not data:
             return JSONResponse({"error": "tom uppladdning"}, status_code=400)
-        if len(data) > MAX_UPLOAD_BYTES:                # guard a runaway recording
+        if len(data) > MAX_UPLOAD_BYTES:                # fallback when no header
             return JSONResponse(
                 {"error": "Inspelningen är för stor för att laddas upp."},
                 status_code=413)
