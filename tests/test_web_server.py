@@ -657,7 +657,7 @@ def test_upload_rejects_too_large(client, monkeypatch):
     assert r.status_code == 413
 
 
-def test_upload_saves_recording(client, tmp_path):
+def test_upload_saves_recording_via_client(client, tmp_path):
     r = client.post("/api/upload?name=lektion.webm", content=b"audio-bytes")
     assert r.status_code == 200
     body = r.json()
