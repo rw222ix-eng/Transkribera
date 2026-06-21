@@ -701,7 +701,7 @@
     var buf = _editBuf || {}; var keys = Object.keys(buf); if (!keys.length) return;
     setState(function (s) {
       var edits = Object.assign({}, s.edits); var changed = false;
-      keys.forEach(function (k) { var v = buf[k]; if (v != null && v.trim() !== TRANSCRIPT[k].text) { edits[k] = v.trim(); changed = true; } else { if (edits[k] != null) changed = true; delete edits[k]; } });
+      keys.forEach(function (k) { var v = buf[k]; var base = (getTranscript()[k] || {}).text; if (v != null && v.trim() !== base) { edits[k] = v.trim(); changed = true; } else { if (edits[k] != null) changed = true; delete edits[k]; } });
       return { edits: edits, edited: s.edited || changed };
     });
     _editBuf = {};
