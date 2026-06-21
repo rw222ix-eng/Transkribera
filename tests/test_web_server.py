@@ -436,6 +436,14 @@ def test_download_whisper_blocked_when_disk_full(client, monkeypatch):
     assert r.status_code == 507
 
 
+def test_download_llm_blocked_when_disk_full(client, monkeypatch):
+    import types
+    monkeypatch.setattr(server.shutil, "disk_usage",
+                        lambda p: types.SimpleNamespace(free=0))
+    r = client.post("/api/download/llm", json={"name": server.LLM_MODELS[0].name})
+    assert r.status_code == 507
+
+
 # ---- #2 + #11: history stores the ORIGINAL source; prewarm skipped if queued -
 
 class _TransArbiter:
@@ -483,6 +491,35 @@ def test_prewarm_skipped_when_more_pending(tmp_path, monkeypatch):
     arb = _TransArbiter()
     _run_one_transcribe(tmp_path, monkeypatch, arb, more_pending=True)
     assert arb.prewarmed == 0                                  # queue draining → no reload
+
+
+def test_cancel_skips_prewarm(tmp_path, monkeypatch):
+    # A cancel arriving mid-run must NOT trigger the ~21 GB LLM prewarm in the
+    # job's finally block (the user stopped; don't pay the reload).
+    from fastapi.testclient import TestClient
+    arb = _TransArbiter()
+    monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: _HW())
+    monkeypatch.setattr(server.whisper_manager, "is_installed", lambda *a, **k: True)
+    folder = tmp_path / "Transkriberingar" / "r"
+    monkeypatch.setattr(server.output_store, "assemble_output", lambda *a, **k: {
+        "folder": str(folder),
+        "files": [{"path": str(folder / "lektion.srt"), "name": "lektion.srt",
+                   "ext": "srt", "kind": "subtitle"}],
+        "video": {"path": str(folder / "lektion.mp4"), "name": "lektion.mp4"}})
+    media = tmp_path / "lektion.mp3"
+    media.write_text("a", encoding="utf-8")
+    c = TestClient(server.create_app(base_dir=tmp_path, arbiter=arb))
+
+    def fake_sub(*a, **k):                                     # cancel flips mid-run
+        c.app.state.transcribe_job["cancelled"] = True
+        return (["/x/lektion.srt"], [{"start": 0.0, "end": 1.0, "text": "hej"}])
+    monkeypatch.setattr(server, "_run_transcribe_subprocess", fake_sub)
+
+    r = c.post("/api/transcribe", json={
+        "source": str(media), "model_id": server.WHISPER_MODELS[0].id,
+        "language": "sv", "formats": ["srt"], "more_pending": False})
+    assert r.status_code == 200
+    assert arb.prewarmed == 0                                  # cancelled → no reload
 
 
 # ---- Modelldisk-val (#6): persistent modellrot ------------------------------
