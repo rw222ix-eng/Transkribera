@@ -158,7 +158,10 @@ EXTRACT_SYSTEM = (
     "transkript från en lektion och plockar ut konkreta saker läraren behöver "
     "minnas. Du svarar ALLTID på svenska och endast med giltig JSON enligt "
     "schemat. Hitta ALDRIG på – om något inte tydligt framgår av transkriptet "
-    "utelämnar du det och lämnar listan tom. Var kortfattad och konkret."
+    "utelämnar du det och lämnar listan tom. Var kortfattad och konkret. "
+    "INTEGRITET: skriv ALDRIG ut elevers fullständiga namn. Använd alltid "
+    "enbart initialer (t.ex. 'A.L.') eller en plats/grupp i stället – detta "
+    "gäller i alla fält, även 'ref'."
 )
 
 EXTRACT_INSTRUCTION = (
