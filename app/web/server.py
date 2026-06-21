@@ -28,6 +28,10 @@ _MONTHS_SV = ["jan", "feb", "mar", "apr", "maj", "jun", "jul", "aug", "sep", "ok
 _WEB_MEDIA = {".mp3", ".m4a", ".aac", ".wav", ".ogg", ".oga", ".opus",
               ".webm", ".mp4", ".m4v", ".mov", ".flac"}
 
+# Upper bound for an in-app recording upload (read fully into memory). A ~2 GB cap
+# is far above any realistic lesson-length Opus recording but rejects runaways.
+MAX_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024
+
 
 def _is_url(s: str) -> bool:
     return s.startswith("http://") or s.startswith("https://")
@@ -474,6 +478,10 @@ def create_app(base_dir: Path | None = None,
         data = await req.body()
         if not data:
             return JSONResponse({"error": "tom uppladdning"}, status_code=400)
+        if len(data) > MAX_UPLOAD_BYTES:                # guard a runaway recording
+            return JSONResponse(
+                {"error": "Inspelningen är för stor för att laddas upp."},
+                status_code=413)
         safe = Path(name).name                          # strip any directory parts
         if safe in (".", "..", ""):                     # never a directory ref
             safe = "inspelning.webm"
@@ -516,6 +524,16 @@ def create_app(base_dir: Path | None = None,
                     {"error": "kunde inte radera mappen — en fil kan vara öppen"},
                     status_code=409)
         history_store.delete_history(history_file, entry_id)
+        # Keep the lesson DB in sync: drop the matching lesson row (+ its insights
+        # via cascade) so deleting from Historik doesn't leave an orphan lesson.
+        try:
+            conn = _db()
+            try:
+                db.delete_lesson_by_history_id(conn, entry_id)
+            finally:
+                conn.close()
+        except Exception:
+            debug_log.get_logger().exception("Kunde inte synka lektions-DB vid radering")
         return {"ok": True, "folder_removed": folder_removed}
 
     # ---- Lektioner: organisera transkriberingar per datum/klass/kurs ----------
@@ -574,16 +592,42 @@ def create_app(base_dir: Path | None = None,
             conn.close()
         return _lesson_view(les)
 
+    def _delete_recording(path: str | None) -> None:
+        """Remove an in-app recording from downloads/ (validated under base)."""
+        if not path:
+            return
+        try:
+            p = Path(path).resolve()
+            downloads = (base / "downloads").resolve()
+            if downloads in p.parents and p.is_file():
+                p.unlink()
+        except OSError:
+            pass
+
     @app.delete("/api/lessons/{lesson_id}")
     def api_lesson_delete(lesson_id: int):
         conn = _db()
         try:
+            paths = db.lesson_paths(conn, lesson_id)
             history_id = db.delete_lesson(conn, lesson_id)
         finally:
             conn.close()
+        folder_removed = False
+        if paths:
+            # Mirror Historik-delete: also drop the result folder on disk and the
+            # source recording, so deleting a lesson doesn't leak files.
+            if paths.get("transcript_folder"):
+                try:
+                    folder_removed = output_store.delete_result_folder(
+                        base, paths["transcript_folder"])
+                except OSError:
+                    return JSONResponse(
+                        {"error": "kunde inte radera mappen — en fil kan vara öppen"},
+                        status_code=409)
+            _delete_recording(paths.get("recording_path"))
         if history_id:
             history_store.delete_history(history_file, history_id)
-        return {"ok": True}
+        return {"ok": True, "folder_removed": folder_removed}
 
     @app.get("/api/courses")
     def api_courses():
@@ -661,15 +705,22 @@ def create_app(base_dir: Path | None = None,
                 found = postprocess.extract(transcript, llm_manager.ACTIVE_LLM.filename)
                 conn = _db()
                 try:
-                    # Replace the previous LLM run; keep the teacher's manual notes.
-                    db.delete_insights_by_source(conn, lesson_id, "llm")
-                    saved = [db.add_insight(conn, lesson_id, f["typ"], f["text"],
-                                            due_date=f["due_date"], ref=f["ref"],
-                                            source="llm")
-                             for f in found]
+                    if found:
+                        # Atomically swap the previous LLM run; manual notes untouched.
+                        saved = db.replace_insights_by_source(conn, lesson_id, "llm", found)
+                        kept_previous = False
+                    else:
+                        # Nothing extracted (model declined / empty) — KEEP the previous
+                        # LLM insights instead of silently wiping them.
+                        emit({"type": "log", "msg": "Inga nya insikter hittades — "
+                                                    "behåller tidigare."})
+                        saved = [i for i in db.list_insights(conn, lesson_id)
+                                 if i.get("source") == "llm"]
+                        kept_previous = True
                 finally:
                     conn.close()
-                return {"insights": saved, "count": len(saved)}
+                return {"insights": saved, "count": len(saved),
+                        "kept_previous": kept_previous}
             finally:
                 arb.release_gpu()
         return _sse_response(job)

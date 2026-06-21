@@ -394,7 +394,7 @@ def test_lesson_delete_also_drops_history(tmp_path, monkeypatch):
     monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: _HW())
     c = TestClient(server.create_app(base_dir=tmp_path))
     lid = c.get("/api/lessons").json()[0]["id"]
-    assert c.delete(f"/api/lessons/{lid}").json() == {"ok": True}
+    assert c.delete(f"/api/lessons/{lid}").json()["ok"] is True
     assert c.get("/api/lessons").json() == []
     assert c.get("/api/history").json() == []
 
@@ -597,3 +597,69 @@ def test_upload_collision_keeps_both(tmp_path):
     p2 = c.post("/api/upload?name=lektion.webm", content=b"two").json()["path"]
     assert p1 != p2                                 # uuid suffix, robust to same-second
     assert Path(p1).read_bytes() == b"one" and Path(p2).read_bytes() == b"two"
+
+
+# ---- Hink B: delete-sync (DB <-> history), re-extract guard, upload cap ------
+
+def test_history_delete_also_drops_lesson(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+    (tmp_path / "history.json").write_text(json.dumps([
+        {"id": "h1", "ts": "2026-06-20T09:14:00", "name": "lektion.mp3",
+         "formats": ["TXT"], "words": 10}]), encoding="utf-8")
+    monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: _HW())
+    c = TestClient(server.create_app(base_dir=tmp_path))
+    assert len(c.get("/api/lessons").json()) == 1
+    assert c.delete("/api/history/h1").status_code == 200
+    assert c.get("/api/lessons").json() == []        # lesson row gone too, no orphan
+    assert c.get("/api/history").json() == []
+
+
+def test_lesson_delete_removes_folder_and_recording(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+    folder = tmp_path / "Transkriberingar" / "2026-06-20 · lektion"
+    folder.mkdir(parents=True)
+    (folder / "lektion.srt").write_text("1\n", encoding="utf-8")
+    rec = tmp_path / "downloads" / "lektion.webm"
+    rec.parent.mkdir(parents=True)
+    rec.write_bytes(b"audio")
+    (tmp_path / "history.json").write_text(json.dumps([
+        {"id": "h1", "ts": "2026-06-20T09:14:00", "name": "lektion.mp3",
+         "formats": ["TXT"], "folder": str(folder)}]), encoding="utf-8")
+    monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: _HW())
+    c = TestClient(server.create_app(base_dir=tmp_path))
+    lid = c.get("/api/lessons").json()[0]["id"]
+    # the migrated lesson has the folder; set its recording_path via the DB
+    conn = server.db.connect(tmp_path / "transkribera.db")
+    conn.execute("UPDATE lessons SET recording_path = ? WHERE id = ?", (str(rec), lid))
+    conn.commit(); conn.close()
+    r = c.delete(f"/api/lessons/{lid}")
+    assert r.status_code == 200 and r.json()["folder_removed"] is True
+    assert not folder.exists()
+    assert not rec.exists()
+
+
+def test_extract_empty_keeps_previous_insights(tmp_path, monkeypatch):
+    c = _lesson_client(tmp_path, monkeypatch)
+    lid = c.get("/api/lessons").json()[0]["id"]
+    monkeypatch.setattr(server.postprocess, "extract",
+                        lambda *a, **k: [{"typ": "kalender", "text": "prov", "due_date": None, "ref": None}])
+    c.post(f"/api/lessons/{lid}/extract")
+    monkeypatch.setattr(server.postprocess, "extract", lambda *a, **k: [])   # model finds nothing
+    r = c.post(f"/api/lessons/{lid}/extract")
+    assert r.status_code == 200
+    texts = [i["text"] for i in c.get(f"/api/lessons/{lid}/insights").json()]
+    assert texts == ["prov"]                          # previous LLM insight NOT wiped
+
+
+def test_upload_rejects_too_large(client, monkeypatch):
+    monkeypatch.setattr(server, "MAX_UPLOAD_BYTES", 4)
+    r = client.post("/api/upload?name=lektion.webm", content=b"way too long")
+    assert r.status_code == 413
+
+
+def test_upload_saves_recording(client, tmp_path):
+    r = client.post("/api/upload?name=lektion.webm", content=b"audio-bytes")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["name"].endswith(".webm")
+    assert (tmp_path / "downloads" / body["name"]).exists()
