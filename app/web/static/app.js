@@ -423,7 +423,29 @@
   function pickPPModel(id) { setState({ ppModel: id, openDD: null }); }
   function toggleModelDD() { setState(function (s) { return { openDD: s.openDD === 'model' ? null : 'model' }; }); }
   function togglePPDD() { setState(function (s) { return { openDD: s.openDD === 'ppmodel' ? null : 'ppmodel' }; }); }
-  function pickDisk(id) { setState({ diskTarget: id, openDD: null }); }
+  function diskDirFor(d) {
+    // Modellerna bor i <enhet>\Transkribera\models på vald disk (Windows).
+    var drv = String(d.drive || '').replace(/[\\/]+$/, '');
+    return drv + '\\Transkribera\\models';
+  }
+  function pickDisk(id) {
+    setState({ diskTarget: id, openDD: null });
+    var d = (HW.disks || []).find(function (x) { return x.id === id; });
+    if (!d) return;
+    fetch('/api/settings/models-disk', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dir: diskDirFor(d) })
+    }).then(function () { loadModels(); }).catch(function () {});
+  }
+  function loadSettings() {
+    // Spegla vald modelldisk efter omstart (matcha enhetsbokstaven i sökvägen).
+    return getJSON('/api/settings').then(function (s) {
+      if (!s || !s.models_dir) return;
+      var drv = String(s.models_dir).slice(0, 2).toUpperCase();
+      var d = (HW.disks || []).find(function (x) { return String(x.drive || '').toUpperCase().indexOf(drv) === 0; });
+      if (d) setState({ diskTarget: d.id });
+    }).catch(function () {});
+  }
   function toggleDiskDD() { setState(function (s) { return { openDD: s.openDD === 'disk' ? null : 'disk' }; }); }
   function closeDD() { setState({ openDD: null }); }
   function setUseCase(k) { setState({ useCase: k }); }
@@ -2285,7 +2307,7 @@ function viewModals(v){ return `
     syncTheme();
     _prevTab = S.tab; _prevStep = S.step; _prevOp = S.ppOp;
     render();
-    loadModels();   // swap mock catalog for real /api/models data
+    loadModels().then(loadSettings);   // real catalog, then reflect chosen models disk
     loadHistory();  // load persisted transcription history
     loadAudioModel();  // audio-correction model install status
   }

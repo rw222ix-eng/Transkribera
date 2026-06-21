@@ -483,3 +483,38 @@ def test_prewarm_skipped_when_more_pending(tmp_path, monkeypatch):
     arb = _TransArbiter()
     _run_one_transcribe(tmp_path, monkeypatch, arb, more_pending=True)
     assert arb.prewarmed == 0                                  # queue draining → no reload
+
+
+# ---- Modelldisk-val (#6): persistent modellrot ------------------------------
+
+def test_settings_reports_default_models_dir(client, tmp_path):
+    r = client.get("/api/settings")
+    assert r.status_code == 200
+    assert r.json()["models_dir"] == str(tmp_path / "models")
+
+
+def test_set_models_disk_persists_and_applies_live(client, tmp_path):
+    target = tmp_path / "diskD" / "Transkribera" / "models"
+    r = client.post("/api/settings/models-disk", json={"dir": str(target)})
+    assert r.status_code == 200
+    assert r.json()["models_dir"] == str(target)
+    assert target.is_dir()
+    # Lever direkt: GET speglar nya roten och GPU-arbitern pekar om.
+    assert client.get("/api/settings").json()["models_dir"] == str(target)
+    assert str(client.app.state.arbiter.models_root) == str(target)
+    # Kvarstår över en ny app-instans (sparat i settings.json).
+    from fastapi.testclient import TestClient
+    c2 = TestClient(server.create_app(base_dir=tmp_path))
+    assert c2.get("/api/settings").json()["models_dir"] == str(target)
+
+
+def test_set_models_disk_reset(client, tmp_path):
+    client.post("/api/settings/models-disk", json={"dir": str(tmp_path / "x" / "models")})
+    r = client.post("/api/settings/models-disk", json={"reset": True})
+    assert r.status_code == 200
+    assert r.json()["models_dir"] == str(tmp_path / "models")
+
+
+def test_set_models_disk_rejects_relative_and_empty(client):
+    assert client.post("/api/settings/models-disk", json={"dir": "relativ/sökväg"}).status_code == 400
+    assert client.post("/api/settings/models-disk", json={"dir": ""}).status_code == 400

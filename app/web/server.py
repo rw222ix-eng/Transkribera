@@ -18,7 +18,8 @@ from fastapi.staticfiles import StaticFiles
 
 from app import (debug_log, hardware, recommend, whisper_manager, llm_client,
                  llm_manager, youtube, postprocess, transcriber,
-                 history_store, gpu_arbiter, output_store, media, audio_model)
+                 history_store, gpu_arbiter, output_store, media, audio_model,
+                 settings_store)
 from app.models_catalog import WHISPER_MODELS, LLM_MODELS
 
 _MONTHS_SV = ["jan", "feb", "mar", "apr", "maj", "jun", "jul", "aug", "sep", "okt", "nov", "dec"]
@@ -186,7 +187,10 @@ def _sse_response(job) -> StreamingResponse:
 def create_app(base_dir: Path | None = None,
                arbiter: "gpu_arbiter.GpuArbiter | None" = None) -> FastAPI:
     base = base_dir or _base_dir()
-    models_root = base / "models"
+    # Where downloaded models live. The user can move this onto another disk via
+    # the "Nedladdningsdisk"-väljaren (POST /api/settings/models-disk); the choice
+    # is persisted in settings.json and reapplied here on every launch.
+    models_root = settings_store.get_models_root(base)
     history_file = base / "history.json"
     cookies = base / "cookies.txt"
     cookies_file = cookies if cookies.exists() else None
@@ -259,12 +263,43 @@ def create_app(base_dir: Path | None = None,
 
     def _enough_disk(need_mb: int) -> bool:
         """True if the model-storage drive has room for a `need_mb` download plus a
-        500 MB headroom. Returns True if free space can't be read (never blocks blindly)."""
+        500 MB headroom. Checks the drive `models_root` lives on (which may differ
+        from base after a disk switch). Returns True if free space can't be read."""
+        target = models_root
+        while not target.exists() and target != target.parent:
+            target = target.parent
         try:
-            free = shutil.disk_usage(str(base)).free
+            free = shutil.disk_usage(str(target)).free
         except Exception:
             return True
         return free >= (need_mb + 500) * 1024 * 1024
+
+    @app.get("/api/settings")
+    def api_settings():
+        return {"models_dir": str(models_root)}
+
+    @app.post("/api/settings/models-disk")
+    async def api_set_models_disk(req: Request):
+        """Flytta modell-lagringen till en annan disk. Body: {"dir": "<abs sökväg>"}
+        eller {"reset": true} för standard (base/models). Träder i kraft direkt för
+        nya nedladdningar, inläsning och språkmodellen (uppdaterar GPU-arbitern)."""
+        nonlocal models_root
+        body = await req.json()
+        if body.get("reset"):
+            new_dir = None
+        else:
+            new_dir = (body.get("dir") or "").strip()
+            if not new_dir:
+                return JSONResponse({"error": "sökväg saknas"}, status_code=400)
+            if not Path(new_dir).is_absolute():
+                return JSONResponse({"error": "sökvägen måste vara absolut"}, status_code=400)
+        try:
+            models_root = settings_store.set_models_root(base, new_dir)
+        except OSError:
+            return JSONResponse(
+                {"error": "kunde inte skapa modellmappen på den disken"}, status_code=400)
+        arb.models_root = models_root                  # språkmodellen hittar nya roten
+        return {"models_dir": str(models_root)}
 
     @app.post("/api/download/whisper")
     async def api_download_whisper(req: Request):
