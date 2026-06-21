@@ -663,3 +663,29 @@ def test_upload_saves_recording(client, tmp_path):
     body = r.json()
     assert body["name"].endswith(".webm")
     assert (tmp_path / "downloads" / body["name"]).exists()
+
+
+# ---- Sökvägs-omrotning: filer hittas efter att app-mappen flyttats ----------
+
+def test_media_reroots_stored_path_after_move(client, tmp_path):
+    # The real file lives under the current base; history stored an old-base path.
+    real = tmp_path / "Transkriberingar" / "m" / "clip.mp4"
+    real.parent.mkdir(parents=True)
+    real.write_text("mp4bytes", encoding="utf-8")
+    stale = "/gammal/plats/Transkriberingar/m/clip.mp4"
+    r = client.get("/api/media", params={"path": stale, "want": "video"})
+    assert r.status_code == 200
+    assert r.text == "mp4bytes"                       # re-rooted under current base
+
+
+def test_history_delete_reroots_moved_folder(client, tmp_path):
+    folder = tmp_path / "Transkriberingar" / "2026 · m"
+    folder.mkdir(parents=True)
+    (folder / "a.srt").write_text("1", encoding="utf-8")
+    stale = "/gammal/plats/Transkriberingar/2026 · m"      # stored before a move
+    (tmp_path / "history.json").write_text(
+        json.dumps([{"id": "h1", "name": "a", "folder": stale}]), encoding="utf-8")
+    r = client.delete("/api/history/h1")
+    assert r.status_code == 200
+    assert r.json()["folder_removed"] is True
+    assert not folder.exists()                        # the real (moved) folder went

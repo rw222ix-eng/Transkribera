@@ -19,7 +19,8 @@ from fastapi.staticfiles import StaticFiles
 
 from app import (debug_log, hardware, recommend, whisper_manager, llm_client,
                  llm_manager, online_catalog, youtube, postprocess, transcriber,
-                 history_store, gpu_arbiter, output_store, media, audio_model, db)
+                 history_store, gpu_arbiter, output_store, media, audio_model, db,
+                 paths)
 from app.models_catalog import WHISPER_MODELS, LLM_MODELS
 
 _MONTHS_SV = ["jan", "feb", "mar", "apr", "maj", "jun", "jul", "aug", "sep", "okt", "nov", "dec"]
@@ -517,8 +518,11 @@ def create_app(base_dir: Path | None = None,
         entry = next((e for e in items if e.get("id") == entry_id), None)
         folder_removed = False
         if entry and entry.get("folder"):
+            # Re-root the stored folder under the current base in case the app
+            # folder has moved since the run (otherwise delete would refuse it).
+            folder = paths.relocate(base, entry["folder"])
             try:
-                folder_removed = output_store.delete_result_folder(base, entry["folder"])
+                folder_removed = output_store.delete_result_folder(base, folder)
             except OSError:
                 return JSONResponse(
                     {"error": "kunde inte radera mappen — en fil kan vara öppen"},
@@ -592,12 +596,14 @@ def create_app(base_dir: Path | None = None,
             conn.close()
         return _lesson_view(les)
 
-    def _delete_recording(path: str | None) -> None:
-        """Remove an in-app recording from downloads/ (validated under base)."""
-        if not path:
+    def _delete_recording(path: str | Path | None) -> None:
+        """Remove an in-app recording from downloads/ (validated under base).
+        The path is re-rooted under the current base first (moved app folder)."""
+        relocated = paths.relocate(base, path)
+        if relocated is None:
             return
         try:
-            p = Path(path).resolve()
+            p = relocated.resolve()
             downloads = (base / "downloads").resolve()
             if downloads in p.parents and p.is_file():
                 p.unlink()
@@ -608,23 +614,24 @@ def create_app(base_dir: Path | None = None,
     def api_lesson_delete(lesson_id: int):
         conn = _db()
         try:
-            paths = db.lesson_paths(conn, lesson_id)
+            lp = db.lesson_paths(conn, lesson_id)
             history_id = db.delete_lesson(conn, lesson_id)
         finally:
             conn.close()
         folder_removed = False
-        if paths:
+        if lp:
             # Mirror Historik-delete: also drop the result folder on disk and the
-            # source recording, so deleting a lesson doesn't leak files.
-            if paths.get("transcript_folder"):
+            # source recording, so deleting a lesson doesn't leak files. Both paths
+            # are re-rooted under the current base in case the app folder moved.
+            if lp.get("transcript_folder"):
+                folder = paths.relocate(base, lp["transcript_folder"])
                 try:
-                    folder_removed = output_store.delete_result_folder(
-                        base, paths["transcript_folder"])
+                    folder_removed = output_store.delete_result_folder(base, folder)
                 except OSError:
                     return JSONResponse(
                         {"error": "kunde inte radera mappen — en fil kan vara öppen"},
                         status_code=409)
-            _delete_recording(paths.get("recording_path"))
+            _delete_recording(lp.get("recording_path"))
         if history_id:
             history_store.delete_history(history_file, history_id)
         return {"ok": True, "folder_removed": folder_removed}
@@ -834,9 +841,14 @@ def create_app(base_dir: Path | None = None,
 
     def _under_base(path: str) -> Path | None:
         """Resolve `path` only if it lives under base_dir (local app; blocks
-        arbitrary filesystem reads). Returns the resolved Path or None."""
+        arbitrary filesystem reads). A stored path from before the app folder was
+        moved is re-rooted under the current base first (see app.paths.relocate).
+        Returns the resolved Path or None."""
+        relocated = paths.relocate(base, path)
+        if relocated is None:
+            return None
         try:
-            p = Path(path).resolve()
+            p = relocated.resolve()
         except Exception:
             return None
         return p if str(p).startswith(str(base.resolve())) else None
