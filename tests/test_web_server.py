@@ -434,6 +434,31 @@ def test_lesson_delete_locked_folder_returns_409(tmp_path, monkeypatch):
     assert [e["id"] for e in c.get("/api/history").json()] == ["h1"]
 
 
+def test_lesson_delete_skips_recording_outside_downloads(tmp_path, monkeypatch):
+    # A recording stored outside downloads/ (e.g. a file on the desktop) must NOT
+    # be deleted when the lesson is removed — the guard only unlinks under downloads/.
+    from fastapi.testclient import TestClient
+    import sqlite3
+    outside = tmp_path / "skrivbord" / "inspelning.mp3"
+    outside.parent.mkdir(parents=True)
+    outside.write_text("audio", encoding="utf-8")
+    (tmp_path / "history.json").write_text(json.dumps([
+        {"id": "h1", "ts": "2026-06-20T09:14:00", "name": "inspelning.mp3",
+         "formats": ["TXT"], "words": 10},
+    ]), encoding="utf-8")
+    monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: _HW())
+    c = TestClient(server.create_app(base_dir=tmp_path))
+    lid = c.get("/api/lessons").json()[0]["id"]
+    # Point the lesson's recording at the out-of-downloads file (the in-app record
+    # flow is the only thing that sets recording_path, so seed it directly).
+    conn = sqlite3.connect(str(tmp_path / "transkribera.db"))
+    conn.execute("UPDATE lessons SET recording_path = ? WHERE id = ?", (str(outside), lid))
+    conn.commit()
+    conn.close()
+    assert c.delete(f"/api/lessons/{lid}").json()["ok"] is True
+    assert outside.exists()                                # outside downloads/ → not touched
+
+
 def test_history_one_endpoint(tmp_path, monkeypatch):
     from fastapi.testclient import TestClient
     (tmp_path / "history.json").write_text(json.dumps([
