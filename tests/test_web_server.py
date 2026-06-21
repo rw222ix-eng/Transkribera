@@ -408,6 +408,32 @@ def test_lesson_delete_also_drops_history(tmp_path, monkeypatch):
     assert c.get("/api/history").json() == []
 
 
+def test_lesson_get_404(client):
+    assert client.get("/api/lessons/999").status_code == 404
+
+
+def test_lesson_delete_locked_folder_returns_409(tmp_path, monkeypatch):
+    # A result folder that can't be removed (file open) must surface 409 and keep
+    # the lesson + history entry, mirroring the Historik-delete behaviour.
+    from fastapi.testclient import TestClient
+    folder = tmp_path / "Transkriberingar" / "2026-06-20 · lektion"
+    folder.mkdir(parents=True)
+    (tmp_path / "history.json").write_text(json.dumps([
+        {"id": "h1", "ts": "2026-06-20T09:14:00", "name": "lektion.mp3",
+         "formats": ["TXT"], "words": 10, "folder": str(folder)},
+    ]), encoding="utf-8")
+    monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: _HW())
+    c = TestClient(server.create_app(base_dir=tmp_path))
+    lid = c.get("/api/lessons").json()[0]["id"]
+
+    def boom(*a, **k):
+        raise OSError("file in use")
+    monkeypatch.setattr(server.output_store, "delete_result_folder", boom)
+    assert c.delete(f"/api/lessons/{lid}").status_code == 409
+    assert len(c.get("/api/lessons").json()) == 1          # lesson kept
+    assert [e["id"] for e in c.get("/api/history").json()] == ["h1"]
+
+
 def test_history_one_endpoint(tmp_path, monkeypatch):
     from fastapi.testclient import TestClient
     (tmp_path / "history.json").write_text(json.dumps([

@@ -624,14 +624,14 @@ def create_app(base_dir: Path | None = None,
         conn = _db()
         try:
             lp = db.lesson_paths(conn, lesson_id)
-            history_id = db.delete_lesson(conn, lesson_id)
         finally:
             conn.close()
         folder_removed = False
         if lp:
-            # Mirror Historik-delete: also drop the result folder on disk and the
-            # source recording, so deleting a lesson doesn't leak files. Both paths
-            # are re-rooted under the current base in case the app folder moved.
+            # Mirror Historik-delete: drop the result folder on disk and the source
+            # recording FIRST, so a locked folder (409) leaves the lesson + history
+            # entry intact instead of deleting the DB row and leaking the files.
+            # Both paths are re-rooted under the current base in case the app moved.
             if lp.get("transcript_folder"):
                 folder = paths.relocate(base, lp["transcript_folder"])
                 try:
@@ -641,6 +641,11 @@ def create_app(base_dir: Path | None = None,
                         {"error": "kunde inte radera mappen — en fil kan vara öppen"},
                         status_code=409)
             _delete_recording(lp.get("recording_path"))
+        conn = _db()
+        try:
+            history_id = db.delete_lesson(conn, lesson_id)
+        finally:
+            conn.close()
         if history_id:
             history_store.delete_history(history_file, history_id)
         return {"ok": True, "folder_removed": folder_removed}
