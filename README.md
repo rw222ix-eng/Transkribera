@@ -12,8 +12,9 @@ visas i ett eget fönster via **pywebview** — ingen molntjänst, allt körs lo
 - Modellhanterare: skannar GPU/VRAM/RAM/disk, färgmarkerar modeller 🟢/🟡/🔴 och föreslår
   en rekommenderad. Ett klick laddar ner. Listan kompletteras med **online-katalogen** från
   ollama.com (cachas lokalt, fungerar offline).
-- Valfri efterbearbetning av transkript med en lokal LLM via **Ollama**
-  (sammanfatta / städa / punktlista).
+- Valfri efterbearbetning av transkript med en lokal LLM via en **app-hanterad
+  llama.cpp-server** (Qwen3) — sammanfatta / korrekturläs / chatta. Modellen laddas
+  och stoppas automatiskt; ingen extern tjänst behövs.
 - Debug-logg till `transkribera.log` bredvid exe:n.
 
 ## Installation
@@ -22,8 +23,9 @@ visas i ett eget fönster via **pywebview** — ingen molntjänst, allt körs lo
 python -m pip install -r requirements.txt
 ```
 
-Kräver även **ffmpeg/ffprobe** i PATH. För LLM-efterbearbetning: en körande **Ollama**
-(`http://localhost:11434`). Det egna fönstret (pywebview) använder **Edge WebView2** (finns på Win11).
+Kräver även **ffmpeg/ffprobe** i PATH. LLM-efterbearbetningen körs via den medföljande
+**llama.cpp**-servern som appen startar/stoppar själv (ingen Ollama). Det egna fönstret
+(pywebview) använder **Edge WebView2** (finns på Win11).
 
 ## Köra (från källkod)
 
@@ -51,7 +53,8 @@ egen exe med subkommandot `transcribe-cli` (`transkribera_web.py` dirigerar dit)
 ## Arkitektur
 
 Logiken i `app/` är **GUI-oberoende** och testbar (`python -m pytest`): `hardware`, `recommend`,
-`whisper_manager`, `ollama_client`, `online_catalog`, `youtube`, `postprocess`, `transcriber`.
+`whisper_manager`, `llm_manager`, `llm_client`, `llama_server`, `gpu_arbiter`, `output_store`,
+`youtube`, `postprocess`, `transcriber`.
 Webb-lagret `app/web/` (FastAPI-server + HTML/CSS/JS i `app/web/static/` + pywebview-fönster) är
 ett tunt skal ovanpå. Transkribering körs i en **isolerad subprocess** (`app/transcribe_cli.py`)
 eftersom CTranslate2:s modell-destruktor kan abortera processen vid GPU-teardown på Windows —

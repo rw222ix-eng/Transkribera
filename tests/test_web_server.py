@@ -19,8 +19,6 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: HW())
     monkeypatch.setattr(server.llm_client, "is_running", lambda *a, **k: False)
     monkeypatch.setattr(server.llm_manager, "is_installed", lambda *a, **k: False)
-    monkeypatch.setattr(server.online_catalog, "fetch_ollama_library",
-                        lambda *a, **k: ["mistral", "llama3.1"])
     monkeypatch.setattr(server.whisper_manager, "is_installed", lambda *a, **k: False)
     return TestClient(server.create_app(base_dir=tmp_path))
 
@@ -45,7 +43,9 @@ def test_models_endpoint_structure(client):
     data = r.json()
     assert {"hardware", "whisper", "llm", "ollama_running", "online"} <= data.keys()
     assert len(data["whisper"]) == len(server.WHISPER_MODELS)
-    assert any(o["id"] == "mistral" for o in data["online"])
+    # The dead Ollama online catalog is no longer surfaced (can't be installed
+    # through the llama.cpp GGUF path).
+    assert data["online"] == []
 
 
 def test_transcribe_requires_fields(client):
@@ -157,59 +157,6 @@ def test_history_delete_locked_folder_keeps_entry(client, tmp_path, monkeypatch)
     r = client.delete("/api/history/h3")
     assert r.status_code == 409
     assert [e["id"] for e in client.get("/api/history").json()] == ["h3"]
-
-
-def test_save_transcript_rewrites_srt_and_updates_entry(client, tmp_path):
-    folder = tmp_path / "Transkriberingar" / "2026-06-20 · m"
-    folder.mkdir(parents=True)
-    srt = folder / "m.srt"
-    srt.write_text("1\n00:00:00,000 --> 00:00:02,000\nfel text\n\n", encoding="utf-8")
-    (tmp_path / "history.json").write_text(json.dumps([{
-        "id": "h1", "name": "m.mp4", "folder": str(folder), "words": 2,
-        "transcript": [{"start": 0.0, "end": 2.0, "text": "fel text"}],
-        "files": [{"path": str(srt), "kind": "subtitle", "ext": "srt"}],
-    }]), encoding="utf-8")
-    r = client.post("/api/history/transcript", json={
-        "folder": str(folder),
-        "segments": [{"start": 0.0, "end": 2.0, "text": "rättad text här"}]})
-    assert r.status_code == 200 and r.json()["ok"] is True
-    assert "rättad text här" in srt.read_text(encoding="utf-8")
-    assert "fel text" not in srt.read_text(encoding="utf-8")
-    entry = client.get("/api/history").json()[0]
-    assert entry["transcript"][0]["text"] == "rättad text här"
-    assert entry["words"] == 3
-
-
-def test_save_transcript_leaves_reference_track_untouched(client, tmp_path):
-    folder = tmp_path / "Transkriberingar" / "2026-06-20 · ref"
-    folder.mkdir(parents=True)
-    main = folder / "m.srt"
-    main.write_text("orig", encoding="utf-8")
-    ref = folder / "m.en.srt"
-    ref.write_text("english reference", encoding="utf-8")
-    (tmp_path / "history.json").write_text(json.dumps([{
-        "id": "h1", "name": "m.mp4", "folder": str(folder),
-        "files": [{"path": str(main), "kind": "subtitle", "ext": "srt"},
-                  {"path": str(ref), "kind": "subtitle-ref", "ext": "srt"}],
-    }]), encoding="utf-8")
-    r = client.post("/api/history/transcript", json={
-        "folder": str(folder),
-        "segments": [{"start": 0.0, "end": 1.0, "text": "ny svensk"}]})
-    assert r.status_code == 200
-    assert "ny svensk" in main.read_text(encoding="utf-8")
-    assert ref.read_text(encoding="utf-8") == "english reference"   # untouched
-
-
-def test_save_transcript_unknown_folder_404(client):
-    r = client.post("/api/history/transcript",
-                    json={"folder": "/nope", "segments": []})
-    assert r.status_code == 404
-
-
-def test_save_transcript_requires_folder_and_segments(client):
-    assert client.post("/api/history/transcript", json={"segments": []}).status_code == 400
-    assert client.post("/api/history/transcript",
-                       json={"folder": "x"}).status_code == 400
 
 
 def test_thumb_serves_generated_image(client, tmp_path, monkeypatch):
@@ -363,3 +310,211 @@ def test_postprocess_uses_text_model(tmp_path, monkeypatch):
         "operation": "summary", "transcript": "lång text", "model": "m"})
     assert r.status_code == 200
     assert arb.model is server.llm_manager.ACTIVE_LLM
+
+
+# ---- #16: path validation rejects a sibling whose name starts with base's ----
+
+def test_under_base_rejects_prefix_sibling(client, tmp_path):
+    sibling = tmp_path.parent / (tmp_path.name + "_evil")
+    sibling.mkdir(parents=True, exist_ok=True)
+    f = sibling / "clip.thumb.jpg"
+    f.write_bytes(b"\xff\xd8\xff")
+    # Old prefix check (startswith) would have served this; parent-set check rejects it.
+    r = client.get("/api/thumb", params={"path": str(f)})
+    assert r.status_code == 404
+
+
+# ---- #3: server-side cancel terminates the running subprocess + frees GPU -----
+
+class _FakeProc:
+    def __init__(self): self.terminated = False; self._alive = True
+    def poll(self): return None if self._alive else 0
+    def terminate(self): self.terminated = True; self._alive = False
+
+
+def test_transcribe_cancel_terminates_proc(client):
+    proc = _FakeProc()
+    client.app.state.transcribe_job["proc"] = proc
+    r = client.post("/api/transcribe/cancel")
+    assert r.status_code == 200 and r.json() == {"cancelled": True}
+    assert proc.terminated is True
+    assert client.app.state.transcribe_job["cancelled"] is True
+
+
+def test_transcribe_cancel_noop_when_idle(client):
+    client.app.state.transcribe_job["proc"] = None
+    r = client.post("/api/transcribe/cancel")
+    assert r.status_code == 200 and r.json() == {"cancelled": False}
+
+
+# ---- #5: uninstall removes model files from disk ----------------------------
+
+def test_uninstall_whisper_removes_dir(client, tmp_path):
+    spec = server.WHISPER_MODELS[0]
+    d = server.whisper_manager.model_dir_for(spec, tmp_path / "models")
+    d.mkdir(parents=True)
+    (d / "model.bin").write_bytes(b"x")
+    r = client.post("/api/uninstall/whisper", json={"id": spec.id})
+    assert r.status_code == 200 and r.json() == {"ok": True}
+    assert not d.exists()
+
+
+def test_uninstall_whisper_unknown_404(client):
+    r = client.post("/api/uninstall/whisper", json={"id": "nope"})
+    assert r.status_code == 404
+
+
+def test_uninstall_llm_removes_dir(client, tmp_path):
+    spec = server.llm_manager.ACTIVE_LLM
+    d = server.llm_manager.model_dir_for(spec, tmp_path / "models")
+    d.mkdir(parents=True)
+    server.llm_manager.model_path_for(spec, tmp_path / "models").write_bytes(b"x")
+    r = client.post("/api/uninstall/llm", json={"name": spec.filename})
+    assert r.status_code == 200 and r.json() == {"ok": True}
+    assert not d.exists()
+
+
+def test_uninstall_llm_busy_returns_409(tmp_path):
+    spec = server.llm_manager.ACTIVE_LLM
+    d = server.llm_manager.model_dir_for(spec, tmp_path / "models")
+    d.mkdir(parents=True)
+    server.llm_manager.model_path_for(spec, tmp_path / "models").write_bytes(b"x")
+    r = _busy_client(tmp_path).post("/api/uninstall/llm", json={"name": spec.filename})
+    assert r.status_code == 409
+    assert d.exists()                                # not deleted while GPU busy
+
+
+# ---- #8/#9: persist edited transcript + saved summary -----------------------
+
+def _seed_history_with_srt(tmp_path):
+    folder = tmp_path / "Transkriberingar" / "2026-06-20 · lektion"
+    folder.mkdir(parents=True)
+    srt = folder / "lektion.srt"
+    srt.write_text("1\n00:00:00,000 --> 00:00:01,000\nfel text\n\n", encoding="utf-8")
+    (tmp_path / "history.json").write_text(json.dumps([{
+        "id": "h1", "name": "lektion.mp4", "folder": str(folder), "words": 2,
+        "files": [{"path": str(srt), "name": "lektion.srt", "ext": "srt", "kind": "subtitle"}],
+        "transcript": [{"start": 0.0, "end": 1.0, "text": "fel text"}],
+    }]), encoding="utf-8")
+    return folder, srt
+
+
+def test_patch_history_rewrites_transcript_and_srt(client, tmp_path):
+    folder, srt = _seed_history_with_srt(tmp_path)
+    r = client.patch("/api/history/h1", json={
+        "transcript": [{"start": 0.0, "end": 1.0, "text": "rättad text"}]})
+    assert r.status_code == 200
+    assert "rättad text" in srt.read_text(encoding="utf-8")
+    entry = client.get("/api/history").json()[0]
+    assert entry["transcript"][0]["text"] == "rättad text"
+    assert entry["words"] == 2
+
+
+def test_patch_history_saves_summary(client, tmp_path):
+    _seed_history_with_srt(tmp_path)
+    r = client.patch("/api/history/h1", json={"summary": "kort sammanfattning"})
+    assert r.status_code == 200
+    assert client.get("/api/history").json()[0]["summary"] == "kort sammanfattning"
+
+
+def test_patch_history_unknown_404(client):
+    assert client.patch("/api/history/nope", json={"summary": "x"}).status_code == 404
+
+
+def test_patch_history_empty_400(client, tmp_path):
+    _seed_history_with_srt(tmp_path)
+    assert client.patch("/api/history/h1", json={}).status_code == 400
+
+
+# ---- disk-space guard before downloads --------------------------------------
+
+def test_download_whisper_blocked_when_disk_full(client, monkeypatch):
+    import types
+    monkeypatch.setattr(server.shutil, "disk_usage",
+                        lambda p: types.SimpleNamespace(free=0))
+    r = client.post("/api/download/whisper", json={"id": server.WHISPER_MODELS[0].id})
+    assert r.status_code == 507
+
+
+# ---- #2 + #11: history stores the ORIGINAL source; prewarm skipped if queued -
+
+class _TransArbiter:
+    def __init__(self): self.prewarmed = 0
+    def try_acquire_gpu(self): return True
+    def release_gpu(self): pass
+    def stop_llm(self): return False
+    def ensure_llm(self): return "http://x"
+    def ensure_model(self, spec): return "http://x"
+    def prewarm_async(self): self.prewarmed += 1
+    def llm_installed(self): return True
+
+
+def _run_one_transcribe(tmp_path, monkeypatch, arb, more_pending):
+    from fastapi.testclient import TestClient
+    monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: _HW())
+    monkeypatch.setattr(server.whisper_manager, "is_installed", lambda *a, **k: True)
+    monkeypatch.setattr(server, "_run_transcribe_subprocess",
+                        lambda *a, **k: (["/x/lektion.srt"], [{"start": 0.0, "end": 1.0, "text": "hej"}]))
+    folder = tmp_path / "Transkriberingar" / "r"
+    monkeypatch.setattr(server.output_store, "assemble_output", lambda *a, **k: {
+        "folder": str(folder),
+        "files": [{"path": str(folder / "lektion.srt"), "name": "lektion.srt",
+                   "ext": "srt", "kind": "subtitle"}],
+        "video": {"path": str(folder / "lektion.mp4"), "name": "lektion.mp4"}})
+    media = tmp_path / "lektion.mp3"
+    media.write_text("a", encoding="utf-8")
+    c = TestClient(server.create_app(base_dir=tmp_path, arbiter=arb))
+    r = c.post("/api/transcribe", json={
+        "source": str(media), "model_id": server.WHISPER_MODELS[0].id,
+        "language": "sv", "formats": ["srt"], "more_pending": more_pending})
+    assert r.status_code == 200
+    return c
+
+
+def test_history_stores_original_source(tmp_path, monkeypatch):
+    arb = _TransArbiter()
+    c = _run_one_transcribe(tmp_path, monkeypatch, arb, more_pending=False)
+    entry = c.get("/api/history").json()[0]
+    assert entry["source"] == str(tmp_path / "lektion.mp3")   # original, not result path
+    assert arb.prewarmed == 1                                  # last item → prewarm
+
+
+def test_prewarm_skipped_when_more_pending(tmp_path, monkeypatch):
+    arb = _TransArbiter()
+    _run_one_transcribe(tmp_path, monkeypatch, arb, more_pending=True)
+    assert arb.prewarmed == 0                                  # queue draining → no reload
+
+
+# ---- Modelldisk-val (#6): persistent modellrot ------------------------------
+
+def test_settings_reports_default_models_dir(client, tmp_path):
+    r = client.get("/api/settings")
+    assert r.status_code == 200
+    assert r.json()["models_dir"] == str(tmp_path / "models")
+
+
+def test_set_models_disk_persists_and_applies_live(client, tmp_path):
+    target = tmp_path / "diskD" / "Transkribera" / "models"
+    r = client.post("/api/settings/models-disk", json={"dir": str(target)})
+    assert r.status_code == 200
+    assert r.json()["models_dir"] == str(target)
+    assert target.is_dir()
+    # Lever direkt: GET speglar nya roten och GPU-arbitern pekar om.
+    assert client.get("/api/settings").json()["models_dir"] == str(target)
+    assert str(client.app.state.arbiter.models_root) == str(target)
+    # Kvarstår över en ny app-instans (sparat i settings.json).
+    from fastapi.testclient import TestClient
+    c2 = TestClient(server.create_app(base_dir=tmp_path))
+    assert c2.get("/api/settings").json()["models_dir"] == str(target)
+
+
+def test_set_models_disk_reset(client, tmp_path):
+    client.post("/api/settings/models-disk", json={"dir": str(tmp_path / "x" / "models")})
+    r = client.post("/api/settings/models-disk", json={"reset": True})
+    assert r.status_code == 200
+    assert r.json()["models_dir"] == str(tmp_path / "models")
+
+
+def test_set_models_disk_rejects_relative_and_empty(client):
+    assert client.post("/api/settings/models-disk", json={"dir": "relativ/sökväg"}).status_code == 400
+    assert client.post("/api/settings/models-disk", json={"dir": ""}).status_code == 400

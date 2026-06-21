@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import queue
+import shutil
 import subprocess
 import sys
 import threading
@@ -16,8 +17,9 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from app import (debug_log, hardware, recommend, whisper_manager, llm_client,
-                 llm_manager, online_catalog, youtube, postprocess, transcriber,
-                 history_store, gpu_arbiter, output_store, media, audio_model)
+                 llm_manager, youtube, postprocess, transcriber,
+                 history_store, gpu_arbiter, output_store, media, audio_model,
+                 settings_store)
 from app.models_catalog import WHISPER_MODELS, LLM_MODELS
 
 _MONTHS_SV = ["jan", "feb", "mar", "apr", "maj", "jun", "jul", "aug", "sep", "okt", "nov", "dec"]
@@ -117,11 +119,15 @@ def _child_cwd(base: Path) -> Path:
     return base
 
 
-def _run_transcribe_subprocess(cmd, base: Path, emit) -> list[str]:
-    """Run the isolated transcribe-cli subprocess; emit its stdout protocol lines."""
+def _run_transcribe_subprocess(cmd, base: Path, emit, on_proc=None) -> list[str]:
+    """Run the isolated transcribe-cli subprocess; emit its stdout protocol lines.
+    `on_proc(proc)` is called with the live Popen (and with None when it exits) so
+    a cancel endpoint can terminate it and free the GPU mid-run."""
     proc = subprocess.Popen(
         cmd, cwd=str(_child_cwd(base)), stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace")
+    if on_proc is not None:
+        on_proc(proc)
     written: list[str] = []
     segments: list[dict] = []
     assert proc.stdout is not None
@@ -146,6 +152,8 @@ def _run_transcribe_subprocess(cmd, base: Path, emit) -> list[str]:
         elif line:
             emit({"type": "log", "msg": line})
     proc.wait()
+    if on_proc is not None:
+        on_proc(None)
     return written, segments
 
 
@@ -179,7 +187,10 @@ def _sse_response(job) -> StreamingResponse:
 def create_app(base_dir: Path | None = None,
                arbiter: "gpu_arbiter.GpuArbiter | None" = None) -> FastAPI:
     base = base_dir or _base_dir()
-    models_root = base / "models"
+    # Where downloaded models live. The user can move this onto another disk via
+    # the "Nedladdningsdisk"-väljaren (POST /api/settings/models-disk); the choice
+    # is persisted in settings.json and reapplied here on every launch.
+    models_root = settings_store.get_models_root(base)
     history_file = base / "history.json"
     cookies = base / "cookies.txt"
     cookies_file = cookies if cookies.exists() else None
@@ -194,6 +205,15 @@ def create_app(base_dir: Path | None = None,
     # Entrypoints stop it on exit via app.state.arbiter.
     arb = arbiter if arbiter is not None else gpu_arbiter.GpuArbiter(models_root, on_log=print)
     app.state.arbiter = arb
+
+    # Tracks the live transcription subprocess so /api/transcribe/cancel can
+    # terminate it and free the GPU mid-run (otherwise "Avbryt" only stopped the
+    # browser from listening while the job ran to completion holding the GPU lock).
+    job_state: dict = {"proc": None, "cancelled": False}
+    app.state.transcribe_job = job_state
+
+    def _set_proc(proc):
+        job_state["proc"] = proc
 
     @app.get("/")
     def index():
@@ -232,13 +252,54 @@ def create_app(base_dir: Path | None = None,
             "recommended": bool(lbest and e.spec.name == lbest.name),
         } for e in levals]
 
-        extras = online_catalog.extra_online_models(
-            online_catalog.fetch_ollama_library(models_root), installed=installed)
-        online = [{"id": n, "size": "", "tag": "Ollama-bibliotek", "uses": []} for n in extras]
+        # NOTE: the app serves local GGUFs via the bundled llama.cpp server, not
+        # Ollama. The old ollama.com online catalog is intentionally NOT surfaced
+        # any more — those tags can't be installed through /api/download/llm
+        # (spec_by_name only knows the bundled GGUFs) so listing them was a dead end.
         return {
             "hardware": _hw_view(hw), "ollama_running": running,
-            "whisper": whisper, "llm": llm, "online": online,
+            "whisper": whisper, "llm": llm, "online": [],
         }
+
+    def _enough_disk(need_mb: int) -> bool:
+        """True if the model-storage drive has room for a `need_mb` download plus a
+        500 MB headroom. Checks the drive `models_root` lives on (which may differ
+        from base after a disk switch). Returns True if free space can't be read."""
+        target = models_root
+        while not target.exists() and target != target.parent:
+            target = target.parent
+        try:
+            free = shutil.disk_usage(str(target)).free
+        except Exception:
+            return True
+        return free >= (need_mb + 500) * 1024 * 1024
+
+    @app.get("/api/settings")
+    def api_settings():
+        return {"models_dir": str(models_root)}
+
+    @app.post("/api/settings/models-disk")
+    async def api_set_models_disk(req: Request):
+        """Flytta modell-lagringen till en annan disk. Body: {"dir": "<abs sökväg>"}
+        eller {"reset": true} för standard (base/models). Träder i kraft direkt för
+        nya nedladdningar, inläsning och språkmodellen (uppdaterar GPU-arbitern)."""
+        nonlocal models_root
+        body = await req.json()
+        if body.get("reset"):
+            new_dir = None
+        else:
+            new_dir = (body.get("dir") or "").strip()
+            if not new_dir:
+                return JSONResponse({"error": "sökväg saknas"}, status_code=400)
+            if not Path(new_dir).is_absolute():
+                return JSONResponse({"error": "sökvägen måste vara absolut"}, status_code=400)
+        try:
+            models_root = settings_store.set_models_root(base, new_dir)
+        except OSError:
+            return JSONResponse(
+                {"error": "kunde inte skapa modellmappen på den disken"}, status_code=400)
+        arb.models_root = models_root                  # språkmodellen hittar nya roten
+        return {"models_dir": str(models_root)}
 
     @app.post("/api/download/whisper")
     async def api_download_whisper(req: Request):
@@ -246,6 +307,10 @@ def create_app(base_dir: Path | None = None,
         spec = next((s for s in WHISPER_MODELS if s.id == body.get("id")), None)
         if spec is None:
             return JSONResponse({"error": "okänd modell"}, status_code=404)
+        if not _enough_disk(spec.download_mb):
+            return JSONResponse(
+                {"error": "För lite ledigt diskutrymme för nedladdningen."},
+                status_code=507)
 
         def job(emit):
             whisper_manager.download_whisper(
@@ -264,6 +329,10 @@ def create_app(base_dir: Path | None = None,
         spec = llm_manager.spec_by_name(name)
         if spec is None:
             return JSONResponse({"error": "okänd modell"}, status_code=404)
+        if not _enough_disk(spec.download_mb):
+            return JSONResponse(
+                {"error": "För lite ledigt diskutrymme för nedladdningen."},
+                status_code=507)
 
         def job(emit):
             llm_manager.download_gguf(
@@ -272,6 +341,31 @@ def create_app(base_dir: Path | None = None,
                 progress_cb=lambda p: emit({"type": "progress", "pct": p}))
             return {"installed": spec.filename}
         return _sse_response(job)
+
+    @app.post("/api/uninstall/whisper")
+    async def api_uninstall_whisper(req: Request):
+        model_id = (await req.json()).get("id")
+        spec = next((s for s in WHISPER_MODELS if s.id == model_id), None)
+        if spec is None:
+            return JSONResponse({"error": "okänd modell"}, status_code=404)
+        return {"ok": whisper_manager.delete_whisper(spec, models_root)}
+
+    @app.post("/api/uninstall/llm")
+    async def api_uninstall_llm(req: Request):
+        spec = llm_manager.spec_by_name((await req.json()).get("name"))
+        if spec is None:
+            return JSONResponse({"error": "okänd modell"}, status_code=404)
+        # Free the GPU/handle if the model being removed is the one loaded now.
+        if arb.try_acquire_gpu():
+            try:
+                arb.stop_llm()
+            finally:
+                arb.release_gpu()
+        else:
+            return JSONResponse(
+                {"error": "GPU upptagen – vänta tills pågående jobb är klart."},
+                status_code=409)
+        return {"ok": llm_manager.delete_gguf(spec, models_root)}
 
     @app.get("/api/audio-model")
     def api_audio_model():
@@ -299,6 +393,7 @@ def create_app(base_dir: Path | None = None,
         audio_correct = bool(body.get("audio_correct"))   # 2nd pass: fix text vs the audio
         sub_mode = body.get("sub_mode") or "separate"     # "separate" | "embed"
         embed_kind = body.get("embed_kind")               # "soft" | "burn" | None
+        more_pending = bool(body.get("more_pending"))     # more queue items follow → skip prewarm
         formats = [f for f in (body.get("formats") or ["srt"]) if f in transcriber.WRITERS]
         if not source or not model_id or not formats:
             return JSONResponse({"error": "källa, modell och minst ett format krävs"},
@@ -317,17 +412,24 @@ def create_app(base_dir: Path | None = None,
                 {"error": "GPU upptagen – vänta tills pågående jobb är klart."},
                 status_code=409)
 
+        job_state["cancelled"] = False
+
         def job(emit):
             try:
                 if arb.stop_llm():
                     emit({"type": "log", "msg": "Frigör GPU-minne (stoppar språkmodellen) ..."})
                 return _transcribe(emit)
             finally:
+                job_state["proc"] = None
                 arb.release_gpu()
-                arb.prewarm_async()   # restart the LLM in the background for the next correction
+                # Skip the costly ~21 GB LLM reload while a queue is still draining
+                # (the next file would immediately unload it again) or after a cancel.
+                if not job_state["cancelled"] and not more_pending:
+                    arb.prewarm_async()   # restart the LLM in the background for the next correction
 
         def _transcribe(emit):
-            if source.startswith("http://") or source.startswith("https://"):
+            source_is_url = _is_url(source)
+            if source_is_url:
                 emit({"type": "log", "msg": "Laddar ner från URL ..."})
                 out_dir = base / "downloads"
                 out_dir.mkdir(parents=True, exist_ok=True)
@@ -342,7 +444,9 @@ def create_app(base_dir: Path | None = None,
             cmd = transcriber.build_transcribe_cmd(
                 media, model_dir, rec.device, rec.compute_type, language, out_base, formats,
                 engine=spec.engine, runtime=spec.runtime)
-            written, segments = _run_transcribe_subprocess(cmd, base, emit)
+            written, segments = _run_transcribe_subprocess(cmd, base, emit, on_proc=_set_proc)
+            if job_state["cancelled"]:
+                raise RuntimeError("Transkriberingen avbröts.")
             if not written:
                 expected = [str(out_base.with_suffix(transcriber.WRITERS[f][1])) for f in formats]
                 if all(Path(p).exists() for p in expected):
@@ -367,7 +471,8 @@ def create_app(base_dir: Path | None = None,
                         ac_cmd = transcriber.build_audio_correct_cmd(
                             media, str(audio_model.audio_model_dir(models_root)),
                             str(seg_json), corr_base, ["srt"], language)
-                        ac_written, corrected = _run_transcribe_subprocess(ac_cmd, base, emit)
+                        ac_written, corrected = _run_transcribe_subprocess(
+                            ac_cmd, base, emit, on_proc=_set_proc)
                         if corrected:
                             segments = corrected
                             srt_path = transcriber.write_outputs(
@@ -406,7 +511,8 @@ def create_app(base_dir: Path | None = None,
             assembled = output_store.assemble_output(
                 media, srt_path, base, date_str, sub_mode, embed_kind,
                 emit_log=lambda m: emit({"type": "log", "msg": m}),
-                ref_srt=ref_srt, sub_lang=sub_lang, ref_lang=ref_lang)
+                ref_srt=ref_srt, sub_lang=sub_lang, ref_lang=ref_lang,
+                keep_source=not source_is_url)
             files = assembled["files"]
             video = assembled["video"]
 
@@ -416,21 +522,40 @@ def create_app(base_dir: Path | None = None,
             target_label = _lang_lbl.get(target_language, lang_label)
             dur = segments[-1]["end"] if segments else 0
             words = sum(len((sg.get("text") or "").split()) for sg in segments)
+            entry_id = "h" + str(int(time.time() * 1000))
             history_store.add_history(history_file, {
-                "id": "h" + str(int(time.time() * 1000)),
+                "id": entry_id,
                 "ts": datetime.now().isoformat(timespec="seconds"),
                 "name": Path(media).name,
-                "source": source if _is_url(source) else (video["path"] if video else str(media)),
+                # `source` is the ORIGINAL input (URL or the user's own file path) so
+                # "Kör om" re-transcribes the source instead of the result artifact
+                # (which would move/duplicate it out of this entry's folder). The
+                # playable result lives in `video`/`files`.
+                "source": source,
                 "dur": _clock(dur), "model": spec_label, "lang": lang_label,
                 "target_lang": target_label,
                 "formats": [f.upper() for f in formats],
                 "words": words, "files": files, "transcript": segments,
                 "folder": assembled["folder"], "video": video,
             })
-            return {"files": files, "transcript": segments,
+            return {"id": entry_id, "files": files, "transcript": segments,
                     "media": video["path"] if video else str(media),
                     "folder": assembled["folder"]}
         return _sse_response(job)
+
+    @app.post("/api/transcribe/cancel")
+    def api_transcribe_cancel():
+        """Terminate the running transcription subprocess so the GPU is freed at
+        once. Idempotent: returns {cancelled: False} when nothing is running."""
+        proc = job_state.get("proc")
+        if proc is not None and proc.poll() is None:
+            job_state["cancelled"] = True
+            try:
+                proc.terminate()
+            except Exception:
+                pass
+            return {"cancelled": True}
+        return {"cancelled": False}
 
     @app.get("/api/history")
     def api_history():
@@ -438,6 +563,47 @@ def create_app(base_dir: Path | None = None,
         for it in items:
             it["date"] = _date_label(it.get("ts", ""))
         return items
+
+    def _rewrite_sidecar_outputs(entry: dict, segments: list[dict]) -> None:
+        """Re-render the entry's sidecar SRT/VTT/TXT files from edited segments.
+        Only files that live under base_dir are touched; a burned-in subtitle track
+        inside a video can't be rewritten and is left as-is."""
+        segs = [transcriber.Segment(float(s.get("start", 0.0)), float(s.get("end", 0.0)),
+                                    s.get("text") or "") for s in segments]
+        for f in entry.get("files", []):
+            ext = (f.get("ext") or "").lower()
+            if ext not in transcriber.WRITERS:
+                continue
+            p = _under_base(f.get("path") or "")
+            if p is None or not p.exists():
+                continue
+            render, _suffix = transcriber.WRITERS[ext]
+            try:
+                p.write_text(render(segs), encoding="utf-8")
+            except OSError:
+                pass
+
+    @app.patch("/api/history/{entry_id}")
+    async def api_history_update(entry_id: str, req: Request):
+        """Persist edits to a saved transcription: an edited `transcript` (rewrites
+        the sidecar files + recomputes the word count) and/or a saved `summary`."""
+        body = await req.json()
+        items = history_store.load_history(history_file)
+        entry = next((e for e in items if e.get("id") == entry_id), None)
+        if entry is None:
+            return JSONResponse({"error": "okänd post"}, status_code=404)
+        patch: dict = {}
+        segments = body.get("transcript")
+        if isinstance(segments, list):
+            _rewrite_sidecar_outputs(entry, segments)
+            patch["transcript"] = segments
+            patch["words"] = sum(len((s.get("text") or "").split()) for s in segments)
+        if "summary" in body:
+            patch["summary"] = body.get("summary") or ""
+        if not patch:
+            return JSONResponse({"error": "inget att uppdatera"}, status_code=400)
+        history_store.update_history(history_file, entry_id, patch)
+        return {"ok": True, "words": patch.get("words", entry.get("words"))}
 
     @app.delete("/api/history/{entry_id}")
     def api_history_delete(entry_id: str):
@@ -456,54 +622,6 @@ def create_app(base_dir: Path | None = None,
                     status_code=409)
         history_store.delete_history(history_file, entry_id)
         return {"ok": True, "folder_removed": folder_removed}
-
-    @app.post("/api/history/transcript")
-    async def api_history_save_transcript(req: Request):
-        """Persist edited transcript text: rewrite the tracked subtitle file(s) in
-        place and update the stored transcript. Keyed by result folder (stable
-        across re-opens, and known for both fresh runs and history entries)."""
-        body = await req.json()
-        folder = body.get("folder") or ""
-        segs_in = body.get("segments")
-        if not folder or not isinstance(segs_in, list):
-            return JSONResponse({"error": "folder och segments krävs"}, status_code=400)
-        items = history_store.load_history(history_file)
-        entry = next((e for e in items if e.get("folder") == folder), None)
-        if entry is None:
-            return JSONResponse({"error": "posten finns inte"}, status_code=404)
-        # The client keeps the original start/end and only swaps in edited text,
-        # so cue timing is preserved here.
-        segs = []
-        for s in segs_in:
-            try:
-                segs.append(transcriber.Segment(
-                    float(s.get("start") or 0), float(s.get("end") or 0),
-                    str(s.get("text") or "")))
-            except (TypeError, ValueError):
-                continue
-        # Rewrite the main subtitle file(s), validated under base_dir. The
-        # reference-language track (kind "subtitle-ref") is left untouched.
-        rewritten = []
-        for f in entry.get("files") or []:
-            if f.get("kind") != "subtitle":
-                continue
-            p = _under_base(f.get("path") or "")
-            if p is None or not p.exists():
-                continue
-            render = transcriber.WRITERS.get(p.suffix.lstrip(".").lower())
-            if not render:
-                continue
-            try:
-                p.write_text(render[0](segs), encoding="utf-8")
-                rewritten.append(str(p))
-            except OSError:
-                return JSONResponse(
-                    {"error": "kunde inte skriva undertextfilen — den kan vara öppen"},
-                    status_code=409)
-        entry["transcript"] = [{"start": s.start, "end": s.end, "text": s.text} for s in segs]
-        entry["words"] = sum(len((s.text or "").split()) for s in segs)
-        history_store.update_history(history_file, entry)
-        return {"ok": True, "rewritten": rewritten}
 
     @app.post("/api/postprocess")
     async def api_postprocess(req: Request):
@@ -564,12 +682,16 @@ def create_app(base_dir: Path | None = None,
 
     def _under_base(path: str) -> Path | None:
         """Resolve `path` only if it lives under base_dir (local app; blocks
-        arbitrary filesystem reads). Returns the resolved Path or None."""
+        arbitrary filesystem reads). Returns the resolved Path or None.
+
+        Uses parent-set containment, not a string prefix: a sibling like
+        `<base>_evil` must NOT pass just because its name starts with base's."""
         try:
             p = Path(path).resolve()
         except Exception:
             return None
-        return p if str(p).startswith(str(base.resolve())) else None
+        root = base.resolve()
+        return p if (p == root or root in p.parents) else None
 
     @app.get("/api/thumb")
     def api_thumb(path: str = ""):

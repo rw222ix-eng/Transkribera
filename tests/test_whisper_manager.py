@@ -32,6 +32,28 @@ def test_download_calls_snapshot(monkeypatch, tmp_path: Path):
     assert (path / "model.bin").exists()
 
 
+def test_delete_whisper_removes_dir(tmp_path: Path):
+    d = wm.model_dir_for(SPEC, tmp_path)
+    d.mkdir(parents=True)
+    (d / "model.bin").write_bytes(b"x")
+    assert wm.delete_whisper(SPEC, tmp_path) is True
+    assert not d.exists()
+    assert wm.is_installed(SPEC, tmp_path) is False
+
+
+def test_delete_whisper_missing_returns_false(tmp_path: Path):
+    assert wm.delete_whisper(SPEC, tmp_path) is False
+
+
+def test_delete_whisper_refuses_outside_root(tmp_path: Path, monkeypatch):
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "model.bin").write_bytes(b"x")
+    monkeypatch.setattr(wm, "model_dir_for", lambda spec, root: outside)
+    assert wm.delete_whisper(SPEC, tmp_path / "models") is False
+    assert outside.exists()
+
+
 def test_is_installed_parakeet_detects_onnx_files(tmp_path):
     from app.models_catalog import WHISPER_MODELS
     spec = next(m for m in WHISPER_MODELS if m.engine == "parakeet")

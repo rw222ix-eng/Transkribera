@@ -1,5 +1,6 @@
 """Download and detect locally-installed faster-whisper models."""
 from __future__ import annotations
+import shutil
 import threading
 import time
 from pathlib import Path
@@ -81,3 +82,16 @@ def download_whisper(spec: WhisperModelSpec, models_root: Path,
 
 def installed_specs(models_root: Path) -> list[WhisperModelSpec]:
     return [s for s in WHISPER_MODELS if is_installed(s, models_root)]
+
+
+def delete_whisper(spec: WhisperModelSpec, models_root: Path) -> bool:
+    """Radera modellens katalog från disk. Returnerar True om något togs bort.
+    Vägrar (False) om katalogen inte ligger strikt under models_root."""
+    root = Path(models_root).resolve()
+    target = model_dir_for(spec, models_root).resolve()
+    if root not in target.parents:
+        return False
+    if target.exists():
+        shutil.rmtree(target)
+        return True
+    return False

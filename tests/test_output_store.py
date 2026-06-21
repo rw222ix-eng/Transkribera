@@ -41,6 +41,30 @@ def test_move_into_moves_file_and_returns_new_path(tmp_path):
     assert not src.exists()
 
 
+def test_copy_into_keeps_original(tmp_path):
+    src = tmp_path / "video.mp4"
+    src.write_text("data", encoding="utf-8")
+    dest_dir = tmp_path / "out"
+    dest_dir.mkdir()
+    new = output_store.copy_into(src, dest_dir)
+    assert new == dest_dir / "video.mp4"
+    assert new.read_text(encoding="utf-8") == "data"
+    assert src.exists()                              # original left in place
+
+
+def test_assemble_output_keep_source_copies_media(tmp_path):
+    media = tmp_path / "lektion.mp4"
+    media.write_text("v", encoding="utf-8")
+    srt = tmp_path / "lektion.srt"
+    srt.write_text("1\n", encoding="utf-8")
+    res = output_store.assemble_output(media, srt, tmp_path, "2026-06-20",
+                                       "separate", None, keep_source=True)
+    folder = tmp_path / "Transkriberingar" / "2026-06-20 · lektion"
+    assert (folder / "lektion.mp4").exists()         # copied into result folder
+    assert media.exists()                            # AND original still on disk
+    assert not srt.exists()                          # sidecar SRT is still moved
+
+
 # ---- build_embed_cmd ----
 
 def test_build_embed_cmd_soft_mp4_uses_mov_text():

@@ -69,6 +69,29 @@ def test_vision_is_installed_requires_both_weights_and_mmproj(tmp_path):
     assert lm.is_installed(lm.VISION_LLM, tmp_path) is True
 
 
+def test_delete_gguf_removes_weights_and_mmproj(tmp_path):
+    d = lm.model_dir_for(lm.VISION_LLM, tmp_path)
+    d.mkdir(parents=True)
+    lm.model_path_for(lm.VISION_LLM, tmp_path).write_bytes(b"x")
+    lm.mmproj_path_for(lm.VISION_LLM, tmp_path).write_bytes(b"y")
+    assert lm.delete_gguf(lm.VISION_LLM, tmp_path) is True
+    assert not d.exists()
+    assert lm.is_installed(lm.VISION_LLM, tmp_path) is False
+
+
+def test_delete_gguf_missing_returns_false(tmp_path):
+    assert lm.delete_gguf(SPEC, tmp_path) is False
+
+
+def test_delete_gguf_refuses_outside_root(tmp_path, monkeypatch):
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "m.gguf").write_bytes(b"x")
+    monkeypatch.setattr(lm, "model_dir_for", lambda spec, root: outside)
+    assert lm.delete_gguf(SPEC, tmp_path / "models") is False
+    assert outside.exists()
+
+
 def test_download_vision_fetches_weights_and_mmproj(monkeypatch, tmp_path):
     got = []
     def fake_dl(repo_id, filename, local_dir, **kw):

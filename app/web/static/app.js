@@ -84,13 +84,14 @@
     mediaUrl: null,             // /api/media-URL för den öppna transkriptvyn (null = ingen media)
     runMedia: null,             // mediasökväg från senaste körningens resultat
     transcriptRaw: null,        // ursprungliga segment {start,end,text} bakom transkriptvyn (för att spara)
-    transcriptFolder: null,     // resultatmapp som identifierar posten vid sparning
     history: [
       { id: 'h1', name: 'styrgruppsmöte_q1.mp3', date: 'Idag · 09:14', dur: '18:42', model: 'KB-Whisper large', lang: 'Svenska', formats: ['SRT', 'TXT'], words: 2940 },
       { id: 'h2', name: 'kundintervju_03.wav', date: 'Igår · 16:30', dur: '42:11', model: 'KB-Whisper large', lang: 'Svenska', formats: ['TXT'], words: 6810 },
       { id: 'h3', name: 'webinar_inspelning.mp4', date: '12 jun', dur: '01:03:20', model: 'Whisper large-v3', lang: 'Flerspråkig', formats: ['SRT', 'VTT', 'TXT'], words: 9120 },
     ],
     histViewing: null,
+    resultId: null,            // history-id för den öppna transkriberingen (för att spara redigering/sammanfattning)
+    transcriptRaw: null,       // segmenten med start/end (display-arrayen tappar dem)
     confirm: null,
     diskWarn: null,
     transcript: null,
@@ -378,7 +379,7 @@
   function restart() {
     clearInterval(_t); clearTimeout(_pp); clearInterval(_ppIv); clearTimeout(_chat); clearInterval(_au);
     Object.values(_dl || {}).forEach(clearInterval);
-    setState({ source: '', queue: [], qStatus: {}, qProgress: {}, activeId: null, fileError: '', step: 'source', run: 'idle', progress: 0, elapsed: 0, log: [], pp: 'idle', ppOp: 'summary', ppOut: '', ppEnabled: false, chat: [], chatInput: '', chatTyping: false, chatModalOpen: false, chatThink: false, chatAttach: [], openDD: null, transcriptOpen: false, runError: null, editing: false, edits: {}, edited: false, audioPlaying: false, audioT: 0, audioDur: 0, mediaUrl: null, runMedia: null, transcriptRaw: null, transcriptFolder: null, histViewing: null });
+    setState({ source: '', queue: [], qStatus: {}, qProgress: {}, activeId: null, fileError: '', step: 'source', run: 'idle', progress: 0, elapsed: 0, log: [], pp: 'idle', ppOp: 'summary', ppOut: '', ppEnabled: false, chat: [], chatInput: '', chatTyping: false, chatModalOpen: false, chatThink: false, chatAttach: [], openDD: null, transcriptOpen: false, runError: null, editing: false, edits: {}, edited: false, audioPlaying: false, audioT: 0, audioDur: 0, mediaUrl: null, runMedia: null, histViewing: null, resultId: null, transcriptRaw: null });
   }
   function onSearch(e) { setState({ search: e.target.value }); }
   function toggleFmt(f) { setState(function (s) { var formats = Object.assign({}, s.formats); formats[f] = !formats[f]; return { formats: formats }; }); }
@@ -426,7 +427,29 @@
   function pickPPModel(id) { setState({ ppModel: id, openDD: null }); }
   function toggleModelDD() { setState(function (s) { return { openDD: s.openDD === 'model' ? null : 'model' }; }); }
   function togglePPDD() { setState(function (s) { return { openDD: s.openDD === 'ppmodel' ? null : 'ppmodel' }; }); }
-  function pickDisk(id) { setState({ diskTarget: id, openDD: null }); }
+  function diskDirFor(d) {
+    // Modellerna bor i <enhet>\Transkribera\models på vald disk (Windows).
+    var drv = String(d.drive || '').replace(/[\\/]+$/, '');
+    return drv + '\\Transkribera\\models';
+  }
+  function pickDisk(id) {
+    setState({ diskTarget: id, openDD: null });
+    var d = (HW.disks || []).find(function (x) { return x.id === id; });
+    if (!d) return;
+    fetch('/api/settings/models-disk', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dir: diskDirFor(d) })
+    }).then(function () { loadModels(); }).catch(function () {});
+  }
+  function loadSettings() {
+    // Spegla vald modelldisk efter omstart (matcha enhetsbokstaven i sökvägen).
+    return getJSON('/api/settings').then(function (s) {
+      if (!s || !s.models_dir) return;
+      var drv = String(s.models_dir).slice(0, 2).toUpperCase();
+      var d = (HW.disks || []).find(function (x) { return String(x.drive || '').toUpperCase().indexOf(drv) === 0; });
+      if (d) setState({ diskTarget: d.id });
+    }).catch(function () {});
+  }
   function toggleDiskDD() { setState(function (s) { return { openDD: s.openDD === 'disk' ? null : 'disk' }; }); }
   function closeDD() { setState({ openDD: null }); }
   function setUseCase(k) { setState({ useCase: k }); }
@@ -437,8 +460,14 @@
   function confirmYes() {
     var c = S.confirm; if (!c) return;
     if (c.kind === 'uninstall') {
+      var isW = WHISPER.some(function (m) { return m.id === c.id; });
+      var url = isW ? '/api/uninstall/whisper' : '/api/uninstall/llm';
+      var body = isW ? { id: c.id } : { name: c.id };
       setState(function (s) { var installed = Object.assign({}, s.installed); delete installed[c.id]; return { installed: installed, confirm: null }; });
       if (S.model === c.id) { var fb = WHISPER.find(function (m) { return m.id !== c.id && S.installed[m.id]; }); if (fb) setState({ model: fb.id }); }
+      // Faktiskt radera modellen från disk; loadModels() stämmer av mot verkligt läge.
+      fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+        .then(function () { loadModels(); }).catch(function () {});
     } else if (c.kind === 'history') {
       setState({ confirm: null });
       fetch('/api/history/' + encodeURIComponent(c.id), { method: 'DELETE' }).then(function () { loadHistory(); }).catch(function () {});
@@ -451,11 +480,21 @@
   function confirmNo() { setState({ confirm: null }); }
   function openHistory(h) {
     setState({
-      transcriptOpen: true, histViewing: h.id,
+      transcriptOpen: true, histViewing: h.id, resultId: h.id,
       transcript: (h.transcript || []).map(function (g) { return { time: fmtTime(g.start), text: g.text }; }),
-      transcriptRaw: h.transcript || [], transcriptFolder: h.folder || null,
+      transcriptRaw: h.transcript || [],
       mediaUrl: mediaUrlFor(h), audioT: 0, audioDur: 0, audioPlaying: false, edits: {}, edited: false,
     });
+  }
+  // Spara redigerad transkripttext till disk (skriver om SRT/TXT/VTT i resultatmappen
+  // och uppdaterar historiken). No-op om inget redigerats eller ingen post är öppen.
+  function saveTranscriptEdits() {
+    var id = S.resultId; if (!id) return;
+    var raw = S.transcriptRaw || []; if (!raw.length) return;
+    if (!Object.keys(S.edits || {}).length) return;
+    var segs = raw.map(function (g, i) { return { start: g.start, end: g.end, text: lineText(i) }; });
+    fetch('/api/history/' + encodeURIComponent(id), { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ transcript: segs }) })
+      .then(function () { loadHistory(); }).catch(function () {});
   }
   function reRunHistory(h) { var id = 'q' + Date.now(); setState({ tab: 'transcribe', step: 'config', queue: [{ id: id, name: h.name, path: h.source || h.name }], qStatus: {}, qProgress: {}, run: 'idle', progress: 0, elapsed: 0, activeId: id, source: h.source || h.name, fileError: '', runError: null, openDD: null }); }
 
@@ -508,7 +547,7 @@
   }
 
   function toggleEdit() {
-    if (S.editing) { _commitEdits(); setState({ editing: false }); persistEdits(); }
+    if (S.editing) { _commitEdits(); saveTranscriptEdits(); setState({ editing: false }); }
     else { _editBuf = {}; clearInterval(_au); if (_media) { try { _media.pause(); } catch (e) {} } setState({ editing: true, audioPlaying: false }); }
   }
   function onEditInput(e) { var i = e.currentTarget.getAttribute('data-eline'); _editBuf = _editBuf || {}; _editBuf[i] = e.currentTarget.textContent; }
@@ -522,36 +561,6 @@
     });
     _editBuf = {};
   }
-  // Persist edited transcript text to disk: merge edits into the original
-  // segments (keeping start/end) and POST so the server rewrites the SRT.
-  // Demo data has no result folder, so it stays local-only.
-  function persistEdits() {
-    var raw = S.transcriptRaw || [];
-    if (!S.transcriptFolder || !S.edited || !raw.length) return;
-    var segs = raw.map(function (seg, i) {
-      return { start: seg.start, end: seg.end, text: (S.edits && S.edits[i] != null) ? S.edits[i] : seg.text };
-    });
-    fetch('/api/history/transcript', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ folder: S.transcriptFolder, segments: segs }),
-    }).then(function (r) { return r.ok ? r.json() : r.json().then(function (j) { throw new Error((j && j.error) || ('HTTP ' + r.status)); }); })
-      .then(function () {
-        // Saved text becomes the new baseline so further edits diff cleanly.
-        setState({
-          transcriptRaw: segs, edits: {}, edited: false,
-          transcript: segs.map(function (g) { return { time: fmtTime(g.start), text: g.text }; }),
-        });
-        flashToast('Ändringar sparade', 'Undertextfilen uppdaterad');
-        loadHistory();
-      })
-      .catch(function (e) { flashToast('Kunde inte spara', (e && e.message) || 'Försök igen'); });
-  }
-  function flashToast(title, detail) {
-    clearInterval(_toastIv); clearTimeout(_toastT2);
-    setState({ toast: { title: title, detail: detail || '', name: '', size: '', pct: 100, done: true } });
-    _toastT2 = setTimeout(function () { setState({ toast: null }); }, 2400);
-  }
-
   // BACKEND: start()/_runActive() simulate transcription; replace with /api/transcribe SSE (streamPost).
   function start() {
     if (S.run === 'running') return;
@@ -604,7 +613,8 @@
     streamPost('/api/transcribe',
       { source: active.path || active.name, model_id: S.model, language: S.language,
         target_language: S.targetLanguage, formats: formats, audio_correct: S.audioCorrect,
-        sub_mode: S.subtitleMode, embed_kind: S.subtitleMode === 'embed' ? S.embedKind : null },
+        sub_mode: S.subtitleMode, embed_kind: S.subtitleMode === 'embed' ? S.embedKind : null,
+        more_pending: !!_nextPending(active.id) },
       function (ev) {
         if (token !== _runToken) return;
         if (ev.type === 'progress') { setState({ progress: ev.pct || 0 }); }
@@ -616,7 +626,7 @@
           clearInterval(_t);
           var r = ev.result || {};
           var segs = (r.transcript || []).map(function (g) { return { time: fmtTime(g.start), text: g.text }; });
-          setState(function (s) { return { run: 'done', progress: 100, transcript: segs, transcriptRaw: r.transcript || [], transcriptFolder: r.folder || null, runMedia: r.media || null, resultFilesReal: r.files || [], qStatus: Object.assign({}, s.qStatus, kv(active.id, 'done')), qProgress: Object.assign({}, s.qProgress, kv(active.id, 100)), log: s.log.concat(['[klar] Färdig på ' + fmtTime(s.elapsed)]) }; });
+          setState(function (s) { return { run: 'done', progress: 100, transcript: segs, transcriptRaw: r.transcript || [], resultId: r.id || null, runMedia: r.media || null, edits: {}, edited: false, resultFilesReal: r.files || [], qStatus: Object.assign({}, s.qStatus, kv(active.id, 'done')), qProgress: Object.assign({}, s.qProgress, kv(active.id, 100)), log: s.log.concat(['[klar] Färdig på ' + fmtTime(s.elapsed)]) }; });
           loadHistory();   // server archived this run; refresh from disk
           var next = _nextPending(active.id);
           if (next) { setTimeout(function () { setState({ run: 'idle', activeId: next, source: qName(S.queue, next), audioT: 0 }, function () { _runActive(); }); }, 800); }
@@ -624,7 +634,13 @@
         }
       });
   }
-  function cancelRun() { _runToken++; clearInterval(_t); setState(function (s) { return { run: 'cancelled', qStatus: Object.assign({}, s.qStatus, kv(s.activeId, 'pending')) }; }); }
+  function cancelRun() {
+    _runToken++; clearInterval(_t);
+    // Faktiskt avbryta jobbet på servern (avslutar subprocessen och frigör GPU:n),
+    // inte bara sluta lyssna på strömmen.
+    fetch('/api/transcribe/cancel', { method: 'POST' }).catch(function () {});
+    setState(function (s) { return { run: 'cancelled', qStatus: Object.assign({}, s.qStatus, kv(s.activeId, 'pending')) }; });
+  }
   function resumeRun() { setState({ run: 'idle' }); _runActive(); }
   function retryRun() { setState({ run: 'idle', runError: null, progress: 0, elapsed: 0 }); _runActive(); }
 
@@ -640,7 +656,15 @@
     streamPost('/api/postprocess', { operation: op, transcript: text, model: S.ppModel }, function (ev) {
       if (ev.type === 'token') { acc += ev.text; setState({ ppOut: acc }); }
       else if (ev.type === 'error') { clearInterval(_ppIv); setState({ pp: 'done', ppPct: 100, ppOut: acc || ('Fel: ' + (ev.message || 'okänt')) }); }
-      else if (ev.type === 'done') { clearInterval(_ppIv); var r = ev.result || {}; setState({ pp: 'done', ppPct: 100, ppOut: r.text || acc }); }
+      else if (ev.type === 'done') {
+        clearInterval(_ppIv); var r = ev.result || {}; var out = r.text || acc;
+        setState({ pp: 'done', ppPct: 100, ppOut: out });
+        // Spara sammanfattningen till den öppna transkriberingen så den finns kvar.
+        if (S.resultId && out && S.ppOp === 'summary') {
+          fetch('/api/history/' + encodeURIComponent(S.resultId), { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ summary: out }) })
+            .then(function () { loadHistory(); }).catch(function () {});
+        }
+      }
     });
   }
   function togglePPEnabled() { var next = !S.ppEnabled; setState({ ppEnabled: next }); if (next && S.run === 'done') { if (S.ppOp === 'chat') seedChat(); else runPP(); } }
@@ -747,7 +771,7 @@
       audioT: 0, audioDur: 0, audioPlaying: false,
     });
   }
-  function closeTranscript() { if (S.editing) { _commitEdits(); persistEdits(); } if (_media) { try { _media.pause(); } catch (e) {} } clearInterval(_au); setState({ transcriptOpen: false, editing: false, audioPlaying: false }); }
+  function closeTranscript() { if (S.editing) { _commitEdits(); saveTranscriptEdits(); } if (_media) { try { _media.pause(); } catch (e) {} } clearInterval(_au); setState({ transcriptOpen: false, editing: false, audioPlaying: false }); }
   function openLog() { setState({ logOpen: true }); }
   function closeLog() { setState({ logOpen: false }); }
   function onTSearch(e) { setState({ searchQuery: e.target.value, currentMatch: 0 }); }
@@ -2340,7 +2364,7 @@ function viewModals(v){ return `
     syncTheme();
     _prevTab = S.tab; _prevStep = S.step; _prevOp = S.ppOp;
     render();
-    loadModels();   // swap mock catalog for real /api/models data
+    loadModels().then(loadSettings);   // real catalog, then reflect chosen models disk
     loadHistory();  // load persisted transcription history
     loadAudioModel();  // audio-correction model install status
   }
