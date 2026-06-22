@@ -188,8 +188,24 @@ def connect(db_path: Path) -> sqlite3.Connection:
             if key not in _initialized:                    # double-check under lock
                 conn.execute("PRAGMA journal_mode=WAL")    # persists in the file
                 _apply_migrations(conn)
+                _ensure_fts(conn)
                 _initialized.add(key)
     return conn
+
+
+def _ensure_fts(conn: sqlite3.Connection) -> None:
+    """Build the FTS index if it's missing — independent of user_version. The v2
+    migration may have been skipped on a build without FTS5 (then user_version
+    advanced past it); this retries so the index is created if the same .db is
+    later opened on an FTS5-capable build. No-op when it already exists or FTS5 is
+    still unavailable (search degrades to LIKE)."""
+    if has_fts(conn):
+        return
+    try:
+        conn.executescript(_FTS_MIGRATION)
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass                                               # no FTS5 → LIKE fallback
 
 
 # ---------------------------------------------------------------- courses / groups --

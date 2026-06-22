@@ -438,3 +438,21 @@ def test_add_markers_for_history_resolves_lesson(tmp_path):
     assert len(saved) == 2
     assert db.lesson_id_by_history(conn, "h7") == les["id"]
     assert db.add_markers_for_history(conn, "okänd", [{"t": 1}]) == []
+
+
+def test_fts_rebuilt_if_missing_on_reconnect(tmp_path):
+    # Simulate a DB stamped past v2 but missing the FTS table (e.g. created on a
+    # build without FTS5): _ensure_fts must rebuild it on the next connect.
+    p = tmp_path / "t.db"
+    conn = db.connect(p)
+    conn.execute("DROP TABLE lesson_fts")
+    conn.execute("DROP TRIGGER IF EXISTS lessons_fts_ai")
+    conn.execute("DROP TRIGGER IF EXISTS lessons_fts_ad")
+    conn.execute("DROP TRIGGER IF EXISTS lessons_fts_au")
+    conn.commit(); conn.close()
+    assert p.exists()
+    db._initialized.discard(str(p.resolve()))             # force re-init this process
+    conn = db.connect(p)
+    assert db.has_fts(conn)                                # rebuilt despite user_version
+    _lesson_with_text(conn, "h1", "rekonstruerad sökindex om vektorer")
+    assert len(db.search_transcripts(conn, "vektorer")) == 1
