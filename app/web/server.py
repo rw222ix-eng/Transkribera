@@ -887,7 +887,9 @@ def create_app(base_dir: Path | None = None,
                 if arb.ensure_llm() is None:
                     raise RuntimeError("Språkmodellen är inte installerad.")
                 emit({"type": "log", "msg": "Analyserar lektionen ..."})
-                found = postprocess.extract(transcript, llm_manager.ACTIVE_LLM.filename)
+                found = postprocess.extract(
+                    transcript, llm_manager.ACTIVE_LLM.filename,
+                    log_cb=lambda m: emit({"type": "log", "msg": m}))
                 conn = _db()
                 try:
                     if found:
@@ -977,8 +979,10 @@ def create_app(base_dir: Path | None = None,
             try:
                 if arb.ensure_llm() is None:
                     raise RuntimeError("Språkmodellen är inte installerad.")
-                text = postprocess.run(operation, transcript, model,
-                                       token_cb=lambda t: emit({"type": "token", "text": t}))
+                text = postprocess.run(
+                    operation, transcript, model,
+                    token_cb=lambda t: emit({"type": "token", "text": t}),
+                    log_cb=lambda m: emit({"type": "log", "msg": m}))
                 return {"text": text}
             finally:
                 arb.release_gpu()

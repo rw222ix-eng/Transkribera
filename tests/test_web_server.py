@@ -502,7 +502,7 @@ def _lesson_client(tmp_path, monkeypatch, *, transcript=True, arbiter=None):
 def test_extract_writes_llm_insights(tmp_path, monkeypatch):
     monkeypatch.setattr(
         server.postprocess, "extract",
-        lambda transcript, model, token_cb=None: [
+        lambda transcript, model, token_cb=None, log_cb=None: [
             {"typ": "svårighet", "text": "derivata", "due_date": None, "ref": "uppg 3"}])
     c = _lesson_client(tmp_path, monkeypatch)
     lid = c.get("/api/lessons").json()[0]["id"]
@@ -578,7 +578,7 @@ def test_extract_uses_stored_transcript(tmp_path, monkeypatch):
     """Extraction reads the transcript from the DB (mirrored at migrate/transcribe
     time), not by scanning history.json."""
     captured = {}
-    def fake_extract(transcript, model, token_cb=None):
+    def fake_extract(transcript, model, token_cb=None, log_cb=None):
         captured["transcript"] = transcript
         return []
     monkeypatch.setattr(server.postprocess, "extract", fake_extract)
