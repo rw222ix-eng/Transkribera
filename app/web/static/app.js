@@ -116,6 +116,7 @@
     agendaOpen: false,         // utfälld agenda-panel
     agendaExporting: false,
     trends: null,              // terminstrender för vald klass
+    backingUp: false,          // säkerhetskopiering pågår
     resultId: null,            // history-id för den öppna transkriberingen (för att spara redigering/sammanfattning)
     transcriptRaw: null,       // segmenten med start/end (display-arrayen tappar dem)
     confirm: null,
@@ -796,6 +797,29 @@
     });
   }
   function openSearchHit(hit) { openLesson({ id: hit.lesson_id, history_id: hit.history_id }); }
+
+  /* --------------------------------- säkerhetskopiering + lektionsrapport -- */
+  function _openContainingFolder(path) {
+    var dir = String(path || '').replace(/[\/\\][^\/\\]*$/, '');
+    if (dir) fetch('/api/open', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: dir }) }).catch(function () {});
+  }
+  function backupNow() {
+    setState({ backingUp: true });
+    fetch('/api/backup', { method: 'POST' }).then(function (r) { return r.json(); }).then(function (res) {
+      setState({ backingUp: false });
+      if (res && res.path) {
+        _openContainingFolder(res.path);
+        setState({ toast: { title: 'Säkerhetskopia skapad', name: (res.files || []).length + ' filer', done: true } });
+        clearTimeout(_toastT2); _toastT2 = setTimeout(function () { setState({ toast: null }); }, 3200);
+      }
+    }).catch(function () { setState({ backingUp: false }); });
+  }
+  function exportReport(lessonId, fmt) {
+    fetch('/api/lessons/' + encodeURIComponent(lessonId) + '/report?format=' + encodeURIComponent(fmt))
+      .then(function (r) { return r.json(); }).then(function (res) {
+        if (res && res.path) { fetch('/api/open', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: res.path }) }).catch(function () {}); }
+      }).catch(function () {});
+  }
 
   /* ----------------------------------- agenda: daterade poster tvärs klasser -- */
   function loadAgenda() {
@@ -1625,6 +1649,8 @@
         onManualTyp: function (e) { setState({ manualTyp: e.target.value }); },
         onManualText: function (e) { setState({ manualText: e.target.value }); },
         onAddManual: function () { addManualInsight(l.id); },
+        onReportHtml: function () { exportReport(l.id, 'html'); },
+        onReportMd: function () { exportReport(l.id, 'md'); },
       };
     });
 
@@ -1687,6 +1713,8 @@
           empty: t.lessons === 0,
         };
       })() : null,
+
+      backup: { busy: st.backingUp, onRun: backupNow },
 
       agenda: (function () {
         var items = st.agenda || [];
@@ -2714,9 +2742,10 @@ function viewLessons(v){
       <datalist id="dl-klass">${ v.lessonGroups.map(function(g){ return '<option value="'+esc(g.namn)+'">'; }).join('') }</datalist>
       <datalist id="dl-kurs">${ v.lessonCourses.map(function(c){ return '<option value="'+esc(c.namn)+'">'; }).join('') }</datalist>
 
-      <div style="display:flex;gap:10px;justify-content:center;margin-bottom:20px;flex-wrap:wrap">
+      <div style="display:flex;gap:10px;justify-content:center;align-items:center;margin-bottom:20px;flex-wrap:wrap">
         <select data-change="${on(v.onFilterGroup)}" style="${selStyle}">${ opts(v.lessonGroups, v.lessonFilterGroup) }</select>
         <select data-change="${on(v.onFilterCourse)}" style="${selStyle}">${ opts(v.lessonCourses, v.lessonFilterCourse) }</select>
+        <button data-click="${on(v.backup.onRun)}" ${v.backup.busy?'disabled':''} title="Säkerhetskopiera lektionsdatabasen + historiken" style="background:var(--surface);border:1px solid var(--line);color:var(--ink-2);border-radius:10px;padding:8px 14px;font-size:14px;font-weight:500;cursor:${v.backup.busy?'default':'pointer'};font-family:inherit;opacity:${v.backup.busy?'0.7':'1'}" data-sh="border-color:var(--ink) !important;color:var(--ink) !important">${ v.backup.busy ? 'Säkerhetskopierar …' : '💾 Säkerhetskopiera' }</button>
       </div>
 
       ${ v.prep ? prepPanel(v.prep) : '' }
@@ -2908,6 +2937,8 @@ function insightsPanel(h){
     <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line)">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px">
         <span style="font-size:13px;font-weight:600;color:var(--ink-2);letter-spacing:0.02em">INSIKTER</span>
+        <div style="flex:1"></div>
+        <button data-click="${on(h.onReportHtml)}" title="Exportera rapport (öppnas i webbläsaren, skriv ut som PDF)" style="display:inline-flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--line);color:var(--ink-2);border-radius:9px;padding:7px 12px;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;margin-right:8px" data-sh="border-color:var(--ink) !important;color:var(--ink) !important">📄 Rapport</button>
         <button data-click="${on(h.onExtract)}" ${h.extracting?'disabled':''} style="display:inline-flex;align-items:center;gap:7px;background:var(--accent-weak);color:var(--accent);border:1px solid var(--accent);border-radius:9px;padding:7px 14px;font-size:13.5px;font-weight:600;cursor:${h.extracting?'default':'pointer'};font-family:inherit;opacity:${h.extracting?'0.7':'1'}">
           ${ h.extracting ? 'Analyserar …' : '✨ Analysera lektion' }
         </button>

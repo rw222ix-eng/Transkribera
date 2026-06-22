@@ -21,7 +21,7 @@ from fastapi.staticfiles import StaticFiles
 from app import (debug_log, hardware, recommend, whisper_manager, llm_client,
                  llm_manager, youtube, postprocess, transcriber,
                  history_store, gpu_arbiter, output_store, media, audio_model, db,
-                 paths, settings_store, ics_export)
+                 paths, settings_store, ics_export, backup, report)
 from app.models_catalog import WHISPER_MODELS, LLM_MODELS
 
 _MONTHS_SV = ["jan", "feb", "mar", "apr", "maj", "jun", "jul", "aug", "sep", "okt", "nov", "dec"]
@@ -1115,6 +1115,36 @@ def create_app(base_dir: Path | None = None,
             return db.next_prep(conn, group_id)
         finally:
             conn.close()
+
+    @app.post("/api/backup")
+    def api_backup():
+        """Back up the knowledge base (DB + history + settings) to a zip under
+        base/exports/ and return its path so the UI can open the folder."""
+        return backup.create_backup(base)
+
+    @app.get("/api/lessons/{lesson_id}/report")
+    def api_lesson_report(lesson_id: int, format: str = "html"):
+        """Export a lesson (summary + insights + markers) as a shareable report.
+        Written under base/exports/ and openable via /api/open."""
+        fmt = "md" if format == "md" else "html"
+        conn = _db()
+        try:
+            les = db.get_lesson(conn, lesson_id)
+            if les is None:
+                return JSONResponse({"error": "lektionen finns inte"}, status_code=404)
+            insights = db.list_insights(conn, lesson_id)
+            markers = db.list_markers(conn, lesson_id)
+        finally:
+            conn.close()
+        content = (report.lesson_markdown(les, insights, markers) if fmt == "md"
+                   else report.lesson_html(les, insights, markers))
+        out_dir = base / "exports"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        stem = "".join(ch for ch in (les.get("name") or "lektion")
+                       if ch.isalnum() or ch in " -_").strip() or "lektion"
+        dest = out_dir / f"{stem}.{fmt}"
+        dest.write_text(content, encoding="utf-8")
+        return {"path": str(dest), "format": fmt}
 
     @app.get("/api/trends")
     def api_trends(group_id: int):

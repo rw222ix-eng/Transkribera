@@ -1180,3 +1180,30 @@ def test_recording_finish_unique_name(client, tmp_path):
     res = client.post("/api/recording/finish", params={"session": "rec_dup", "name": "lektion.webm"}).json()
     assert Path(res["path"]).name != "lektion.webm"      # uuid-suffix, behåller den gamla
     assert (tmp_path / "downloads" / "lektion.webm").read_bytes() == b"old"
+
+
+# ---- Säkerhetskopiering + lektionsrapport -----------------------------------
+
+def test_backup_endpoint_writes_zip(tmp_path, monkeypatch):
+    c = _lesson_client(tmp_path, monkeypatch)            # creates transkribera.db + history.json
+    res = c.post("/api/backup").json()
+    p = Path(res["path"])
+    assert p.exists() and p.suffix == ".zip" and p.parent == tmp_path / "exports"
+    assert "transkribera.db" in res["files"]
+
+
+def test_lesson_report_md_and_html(tmp_path, monkeypatch):
+    c = _lesson_client(tmp_path, monkeypatch)
+    lid = c.get("/api/lessons").json()[0]["id"]
+    c.post(f"/api/lessons/{lid}/insights", json={"typ": "kalender", "text": "prov", "due_date": "2026-05-21"})
+    md = c.get(f"/api/lessons/{lid}/report", params={"format": "md"}).json()
+    assert Path(md["path"]).suffix == ".md" and md["format"] == "md"
+    assert "prov" in Path(md["path"]).read_text(encoding="utf-8")
+    htm = c.get(f"/api/lessons/{lid}/report").json()
+    assert Path(htm["path"]).suffix == ".html"
+    assert "<!doctype html>" in Path(htm["path"]).read_text(encoding="utf-8")
+
+
+def test_lesson_report_missing_404(tmp_path, monkeypatch):
+    c = _lesson_client(tmp_path, monkeypatch)
+    assert c.get("/api/lessons/9999/report").status_code == 404
