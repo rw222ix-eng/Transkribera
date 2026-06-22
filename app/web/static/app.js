@@ -112,6 +112,9 @@
     askAnswer: '',             // strömmat LLM-svar i "Fråga"-läget
     askSources: null,          // lektioner svaret bygger på
     asking: false,
+    agenda: null,              // daterade poster tvärs alla klasser
+    agendaOpen: false,         // utfälld agenda-panel
+    agendaExporting: false,
     resultId: null,            // history-id för den öppna transkriberingen (för att spara redigering/sammanfattning)
     transcriptRaw: null,       // segmenten med start/end (display-arrayen tappar dem)
     confirm: null,
@@ -370,7 +373,7 @@
   /* -------------------------------------------------------------- actions -- */
   // BACKEND: theme/tab are pure UI.
   function toggleTheme() { setState(function (s) { return { theme: s.theme === 'light' ? 'dark' : 'light' }; }); }
-  function setTab(t) { setState({ tab: t, openDD: null }); if (t === 'lessons') { loadLessons(); loadOrg(); loadPrep(); } }
+  function setTab(t) { setState({ tab: t, openDD: null }); if (t === 'lessons') { loadLessons(); loadOrg(); loadPrep(); loadAgenda(); } }
   function onSource(e) { setState({ source: e.target.value }); }
   function fileRef(el) { _file = el; }
   function openPicker() {
@@ -684,6 +687,33 @@
     });
   }
   function openSearchHit(hit) { openLesson({ id: hit.lesson_id, history_id: hit.history_id }); }
+
+  /* ----------------------------------- agenda: daterade poster tvärs klasser -- */
+  function loadAgenda() {
+    return getJSON('/api/agenda')
+      .then(function (a) { setState({ agenda: Array.isArray(a) ? a : [] }); })
+      .catch(function () { setState({ agenda: [] }); });
+  }
+  function toggleAgenda() { setState(function (s) { return { agendaOpen: !s.agendaOpen }; }); }
+  function markAgendaDone(insightId) {
+    fetch('/api/insights/' + encodeURIComponent(insightId), {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'klar' })
+    }).then(function () { loadAgenda(); loadPrep(); if (S.expandedLesson) loadInsights(S.expandedLesson); }).catch(function () {});
+  }
+  function exportAgendaIcs() {
+    setState({ agendaExporting: true });
+    fetch('/api/agenda/ics', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+      .then(function (r) { return r.json(); })
+      .then(function (res) {
+        setState({ agendaExporting: false });
+        if (res && res.path) {
+          fetch('/api/open', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: res.path }) }).catch(function () {});
+          setState({ toast: { title: 'Kalenderfil sparad', name: (res.count || 0) + ' poster', done: true } });
+          clearTimeout(_toastT2); _toastT2 = setTimeout(function () { setState({ toast: null }); }, 3200);
+        }
+      })
+      .catch(function () { setState({ agendaExporting: false }); });
+  }
 
   /* ------------------------------------------------------ insikter (Fas 2) -- */
   function loadInsights(lessonId) {
@@ -1516,6 +1546,26 @@
         difficulties: (st.nextPrep.difficulties || []).map(function (d) { return { text: d.text, ref: d.ref || '' }; }),
         empty: (st.nextPrep.open_actions || []).length === 0 && (st.nextPrep.difficulties || []).length === 0,
       } : null,
+
+      agenda: (function () {
+        var items = st.agenda || [];
+        var open = items.filter(function (a) { return a.status !== 'klar'; });
+        return {
+          loaded: Array.isArray(st.agenda), count: open.length, total: items.length,
+          overdueCount: open.filter(function (a) { return a.overdue; }).length,
+          isOpen: st.agendaOpen, onToggle: toggleAgenda,
+          exporting: st.agendaExporting, onExport: exportAgendaIcs,
+          items: items.map(function (a) {
+            return {
+              text: a.text || '',
+              meta: [a.group, a.course, a.lesson_name].filter(Boolean).join(' · '),
+              due: a.due_date || '', overdue: !!a.overdue, today: !!a.today,
+              done: a.status === 'klar', typLabel: TYP_LABEL[a.typ] || a.typ,
+              onDone: function () { markAgendaDone(a.id); },
+            };
+          }),
+        };
+      })(),
 
       search: {
         query: st.lessonSearch, mode: st.searchMode,
@@ -2485,6 +2535,8 @@ function viewLessons(v){
         <p style="margin:0;color:var(--ink-2);font-size:17px">Dina inspelade lektioner — organisera per datum, klass och kurs. Allt ligger kvar lokalt.</p>
       </div>
 
+      ${ agendaPanel(v.agenda) }
+
       ${ searchPanel(v.search) }
 
       <datalist id="dl-klass">${ v.lessonGroups.map(function(g){ return '<option value="'+esc(g.namn)+'">'; }).join('') }</datalist>
@@ -2546,6 +2598,38 @@ function viewLessons(v){
         `; }).join('') }
       </div>
     </section>`;
+}
+
+function agendaPanel(a){
+  if (!a.loaded || a.total === 0) return '';
+  return `
+    <div style="max-width:760px;margin:0 auto 16px;background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow-sm);overflow:hidden">
+      <button data-click="${on(a.onToggle)}" style="width:100%;display:flex;align-items:center;gap:11px;background:transparent;border:none;padding:14px 18px;cursor:pointer;font-family:inherit;text-align:left">
+        <span style="font-size:17px">📅</span>
+        <span style="font-size:14.5px;font-weight:600;color:var(--ink)">Kommande</span>
+        <span style="font-size:13px;color:var(--ink-3)">${a.count} öppna${ a.overdueCount ? ` · <span style="color:var(--bad);font-weight:600">${a.overdueCount} försenade</span>` : '' }</span>
+        <span style="margin-left:auto;color:var(--ink-3);font-size:13px;transform:rotate(${a.isOpen?'180':'0'}deg);transition:transform .2s">▾</span>
+      </button>
+      ${ a.isOpen ? `
+        <div style="padding:0 18px 16px">
+          <div style="display:flex;flex-direction:column;gap:7px">
+            ${ a.items.map(function(it){ return `
+              <div style="display:flex;align-items:flex-start;gap:10px;background:${it.overdue?'color-mix(in srgb,var(--bad) 8%,var(--sunken))':'var(--sunken)'};border:1px solid ${it.overdue?'color-mix(in srgb,var(--bad) 35%,var(--line))':'var(--line)'};border-radius:10px;padding:9px 11px">
+                <button data-click="${on(it.onDone)}" aria-label="Markera klar" title="Markera klar" style="flex:0 0 auto;width:18px;height:18px;margin-top:1px;border-radius:5px;border:1.5px solid ${it.done?'var(--ok)':'var(--line-2)'};background:${it.done?'var(--ok)':'transparent'};cursor:pointer;color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center">${it.done?'✓':''}</button>
+                <div style="flex:1;min-width:0">
+                  <div style="font-size:14px;color:${it.done?'var(--ink-3)':'var(--ink)'};${it.done?'text-decoration:line-through':''}">${esc(it.text)}</div>
+                  <div style="font-size:12px;color:var(--ink-3);margin-top:2px">${esc(it.meta)}</div>
+                </div>
+                <span style="flex:0 0 auto;font-size:12px;font-weight:600;font-variant-numeric:tabular-nums;color:${it.overdue?'var(--bad)':(it.today?'var(--accent)':'var(--ink-3)')}">${ it.today ? 'Idag' : esc(it.due) }</span>
+              </div>
+            `; }).join('') }
+          </div>
+          <div style="display:flex;justify-content:flex-end;margin-top:12px">
+            <button data-click="${on(a.onExport)}" ${a.exporting?'disabled':''} style="display:inline-flex;align-items:center;gap:7px;background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:9px;padding:8px 14px;font-size:13.5px;font-weight:500;cursor:${a.exporting?'default':'pointer'};font-family:inherit;opacity:${a.exporting?'0.7':'1'}" data-sh="border-color:var(--ink) !important">${ a.exporting ? 'Exporterar …' : '📆 Exportera till kalender (.ics)' }</button>
+          </div>
+        </div>
+      ` : '' }
+    </div>`;
 }
 
 function searchPanel(s){

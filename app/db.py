@@ -500,6 +500,34 @@ def next_prep(conn: sqlite3.Connection, group_id: int) -> dict:
     }
 
 
+# ------------------------------------------------------------- agenda (kalender) --
+
+def agenda(conn: sqlite3.Connection, *, only_open: bool = False) -> list[dict]:
+    """Every dated insight (kalender/åtgärd m.fl. med due_date) across ALL classes,
+    ordered by due date — the cross-class "vad är på gång"-vy the per-class
+    next_prep can't give. Carries the lesson/class/course context so the UI (and
+    the .ics export) can show where each item comes from."""
+    sql = (
+        "SELECT i.id, i.typ, i.text, i.due_date, i.ref, i.status, i.source, "
+        "       l.id AS lesson_id, l.history_id, l.name AS lesson_name, "
+        "       l.datum AS lesson_datum, g.namn AS group_namn, c.namn AS course_namn "
+        "FROM insights i JOIN lessons l ON l.id = i.lesson_id "
+        "LEFT JOIN groups  g ON g.id = l.group_id "
+        "LEFT JOIN courses c ON c.id = l.course_id "
+        "WHERE i.due_date IS NOT NULL AND i.due_date != ''")
+    if only_open:
+        sql += " AND i.status = 'öppen'"
+    sql += " ORDER BY i.due_date, i.id"
+    rows = conn.execute(sql).fetchall()
+    out = []
+    for r in rows:
+        d = dict(r)
+        d["group"] = d.pop("group_namn", None)
+        d["course"] = d.pop("course_namn", None)
+        out.append(d)
+    return out
+
+
 # ------------------------------------------------------ fritextsök (FTS5) --
 import re as _re  # noqa: E402  (kept local to the search section)
 

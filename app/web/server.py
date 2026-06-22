@@ -21,7 +21,7 @@ from fastapi.staticfiles import StaticFiles
 from app import (debug_log, hardware, recommend, whisper_manager, llm_client,
                  llm_manager, youtube, postprocess, transcriber,
                  history_store, gpu_arbiter, output_store, media, audio_model, db,
-                 paths, settings_store)
+                 paths, settings_store, ics_export)
 from app.models_catalog import WHISPER_MODELS, LLM_MODELS
 
 _MONTHS_SV = ["jan", "feb", "mar", "apr", "maj", "jun", "jul", "aug", "sep", "okt", "nov", "dec"]
@@ -971,6 +971,48 @@ def create_app(base_dir: Path | None = None,
             return db.next_prep(conn, group_id)
         finally:
             conn.close()
+
+    # ---- Agenda: daterade poster tvärs alla klasser + .ics-export ------------
+
+    def _agenda_view(items: list[dict]) -> list[dict]:
+        today = datetime.now().date().isoformat()
+        for it in items:
+            due = (it.get("due_date") or "")[:10]
+            it["overdue"] = bool(due and due < today and it.get("status") != "klar")
+            it["today"] = bool(due == today)
+        return items
+
+    @app.get("/api/agenda")
+    def api_agenda(only_open: bool = False):
+        """Every dated insight across all classes, ordered by due date — the
+        cross-class 'vad är på gång'-vy. Flags overdue/today for the UI."""
+        conn = _db()
+        try:
+            return _agenda_view(db.agenda(conn, only_open=only_open))
+        finally:
+            conn.close()
+
+    @app.post("/api/agenda/ics")
+    async def api_agenda_ics(req: Request):
+        """Export the agenda to a local .ics file under base/exports/ (offline —
+        no cloud calendar) and return its path so the UI can open it. Body may set
+        {"only_open": true} to export just the still-open items."""
+        body = {}
+        try:
+            body = await req.json()
+        except Exception:
+            pass
+        conn = _db()
+        try:
+            items = db.agenda(conn, only_open=bool(body.get("only_open")))
+        finally:
+            conn.close()
+        cal = ics_export.build_calendar(items)
+        out_dir = base / "exports"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        dest = out_dir / "lektionsagenda.ics"
+        dest.write_text(cal, encoding="utf-8")
+        return {"path": str(dest), "count": cal.count("BEGIN:VEVENT")}
 
     # ---- Fritextsök över alla lektioner --------------------------------------
 

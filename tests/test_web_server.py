@@ -1056,3 +1056,40 @@ def test_history_edit_syncs_search_index(tmp_path, monkeypatch):
         {"start": 0, "end": 2, "text": "nu pratar vi om sannolikhet"}]})
     assert c.get("/api/search", params={"q": "derivata"}).json()["hits"] == []
     assert len(c.get("/api/search", params={"q": "sannolikhet"}).json()["hits"]) == 1
+
+
+# ---- Agenda + .ics-export ---------------------------------------------------
+
+def _client_with_lesson_insight(tmp_path, monkeypatch, due="2026-05-21", status="öppen"):
+    c = _lesson_client(tmp_path, monkeypatch)
+    lid = c.get("/api/lessons").json()[0]["id"]
+    ins = c.post(f"/api/lessons/{lid}/insights",
+                 json={"typ": "kalender", "text": "prov", "due_date": due}).json()
+    if status != "öppen":
+        c.patch(f"/api/insights/{ins['id']}", json={"status": status})
+    return c
+
+
+def test_agenda_endpoint_flags_overdue(tmp_path, monkeypatch):
+    c = _client_with_lesson_insight(tmp_path, monkeypatch, due="2000-01-01")
+    ag = c.get("/api/agenda").json()
+    assert len(ag) == 1
+    assert ag[0]["text"] == "prov"
+    assert ag[0]["overdue"] is True
+
+
+def test_agenda_only_open_filter(tmp_path, monkeypatch):
+    c = _client_with_lesson_insight(tmp_path, monkeypatch, status="klar")
+    assert c.get("/api/agenda").json()[0]["status"] == "klar"
+    assert c.get("/api/agenda", params={"only_open": True}).json() == []
+
+
+def test_agenda_ics_writes_file(tmp_path, monkeypatch):
+    c = _client_with_lesson_insight(tmp_path, monkeypatch)
+    r = c.post("/api/agenda/ics", json={})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["count"] == 1
+    p = Path(body["path"])
+    assert p.exists() and p.parent == tmp_path / "exports"
+    assert "BEGIN:VCALENDAR" in p.read_text(encoding="utf-8")

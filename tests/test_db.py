@@ -338,3 +338,31 @@ def test_excerpts_for_rag_have_headers(tmp_path):
     assert len(ex) == 1
     assert ex[0]["group"] == "NA21"
     assert "derivata" in ex[0]["excerpt"]
+
+
+# ---- agenda (kalender tvärs klasser) ----------------------------------------
+
+def test_agenda_collects_dated_insights_across_classes(tmp_path):
+    conn = _conn(tmp_path)
+    g1 = db.get_or_create_group(conn, "NA21")
+    g2 = db.get_or_create_group(conn, "TE22")
+    l1 = db.create_lesson(conn, history_id="h1", ts="2026-05-01T09:00:00", name="a")
+    l2 = db.create_lesson(conn, history_id="h2", ts="2026-05-02T09:00:00", name="b")
+    db.update_lesson(conn, l1["id"], group_id=g1)
+    db.update_lesson(conn, l2["id"], group_id=g2)
+    db.add_insight(conn, l1["id"], "kalender", "prov", due_date="2026-05-21")
+    db.add_insight(conn, l2["id"], "åtgärd", "ta med blad", due_date="2026-05-10")
+    db.add_insight(conn, l1["id"], "svårighet", "derivata")        # ingen due_date
+
+    ag = db.agenda(conn)
+    assert [a["text"] for a in ag] == ["ta med blad", "prov"]      # sorterat på datum
+    assert ag[0]["group"] == "TE22" and ag[1]["group"] == "NA21"
+
+
+def test_agenda_only_open(tmp_path):
+    conn = _conn(tmp_path)
+    les = db.create_lesson(conn, history_id="h1", ts="2026-05-01T09:00:00", name="a")
+    i1 = db.add_insight(conn, les["id"], "åtgärd", "klar sak", due_date="2026-05-05")
+    db.add_insight(conn, les["id"], "åtgärd", "öppen sak", due_date="2026-05-06")
+    db.update_insight(conn, i1["id"], status="klar")
+    assert [a["text"] for a in db.agenda(conn, only_open=True)] == ["öppen sak"]
