@@ -115,6 +115,7 @@
     agenda: null,              // daterade poster tvärs alla klasser
     agendaOpen: false,         // utfälld agenda-panel
     agendaExporting: false,
+    trends: null,              // terminstrender för vald klass
     resultId: null,            // history-id för den öppna transkriberingen (för att spara redigering/sammanfattning)
     transcriptRaw: null,       // segmenten med start/end (display-arrayen tappar dem)
     confirm: null,
@@ -373,7 +374,7 @@
   /* -------------------------------------------------------------- actions -- */
   // BACKEND: theme/tab are pure UI.
   function toggleTheme() { setState(function (s) { return { theme: s.theme === 'light' ? 'dark' : 'light' }; }); }
-  function setTab(t) { setState({ tab: t, openDD: null }); if (t === 'lessons') { loadLessons(); loadOrg(); loadPrep(); loadAgenda(); } }
+  function setTab(t) { setState({ tab: t, openDD: null }); if (t === 'lessons') { loadLessons(); loadOrg(); loadPrep(); loadAgenda(); loadTrends(); } }
   function onSource(e) { setState({ source: e.target.value }); }
   function fileRef(el) { _file = el; }
   function openPicker() {
@@ -610,13 +611,19 @@
   }
   function setLessonFilter(which, val) {
     var patch = {}; patch[which] = val;
-    setState(patch, function () { loadLessons(); loadPrep(); });
+    setState(patch, function () { loadLessons(); loadPrep(); loadTrends(); });
   }
   function loadPrep() {
     if (!S.lessonFilterGroup) { setState({ nextPrep: null }); return Promise.resolve(); }
     return getJSON('/api/next-prep?group_id=' + encodeURIComponent(S.lessonFilterGroup))
       .then(function (p) { setState({ nextPrep: p && p.group_id ? p : null }); })
       .catch(function () { setState({ nextPrep: null }); });
+  }
+  function loadTrends() {
+    if (!S.lessonFilterGroup) { setState({ trends: null }); return Promise.resolve(); }
+    return getJSON('/api/trends?group_id=' + encodeURIComponent(S.lessonFilterGroup))
+      .then(function (t) { setState({ trends: t && t.group_id ? t : null }); })
+      .catch(function () { setState({ trends: null }); });
   }
   function markPrepDone(insightId) {
     fetch('/api/insights/' + encodeURIComponent(insightId), {
@@ -1546,6 +1553,29 @@
         difficulties: (st.nextPrep.difficulties || []).map(function (d) { return { text: d.text, ref: d.ref || '' }; }),
         empty: (st.nextPrep.open_actions || []).length === 0 && (st.nextPrep.difficulties || []).length === 0,
       } : null,
+
+      trends: st.trends ? (function () {
+        var t = st.trends;
+        var act = t.actions || { open: 0, done: 0 };
+        var actTotal = act.open + act.done;
+        return {
+          group: t.group, lessons: t.lessons, analysed: t.analysed,
+          counts: [
+            { label: 'Svårigheter', n: t.counts['svårighet'] || 0 },
+            { label: 'Åtgärder', n: t.counts['åtgärd'] || 0 },
+            { label: 'Kalender', n: t.counts['kalender'] || 0 },
+            { label: 'Grupprum', n: t.counts['grupprum'] || 0 },
+            { label: 'Material', n: t.counts['material'] || 0 },
+          ],
+          actOpen: act.open, actDone: act.done, actTotal: actTotal,
+          actPct: actTotal ? Math.round(act.done / actTotal * 100) : 0,
+          difficulties: (t.top_difficulties || []).map(function (d) {
+            return { text: d.text, count: d.count, recurring: d.count > 1,
+                     refs: (d.refs || []).join(', ') };
+          }),
+          empty: t.lessons === 0,
+        };
+      })() : null,
 
       agenda: (function () {
         var items = st.agenda || [];
@@ -2549,6 +2579,8 @@ function viewLessons(v){
 
       ${ v.prep ? prepPanel(v.prep) : '' }
 
+      ${ v.trends ? trendsPanel(v.trends) : '' }
+
       ${ v.lessonsEmpty ? `
         <div style="text-align:center;padding:60px 24px;background:var(--surface);border:1px solid var(--line);border-radius:16px;color:var(--ink-2);font-size:16px">Inga lektioner än. Transkribera en inspelning så dyker den upp här — tilldela den sedan klass och kurs.</div>
       ` : '' }
@@ -2598,6 +2630,48 @@ function viewLessons(v){
         `; }).join('') }
       </div>
     </section>`;
+}
+
+function trendsPanel(t){
+  if (t.empty) return '';
+  return `
+    <div style="max-width:760px;margin:0 auto 22px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px 20px;box-shadow:var(--shadow-sm)">
+      <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:15px">
+        <span style="font-size:17px">📈</span>
+        <h2 style="font-size:17px;font-weight:600;color:var(--ink);margin:0">Terminstrender${ t.group ? ' · ' + esc(t.group) : '' }</h2>
+        <span style="font-size:13px;color:var(--ink-3);margin-left:auto">${t.analysed} av ${t.lessons} lektioner analyserade</span>
+      </div>
+
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
+        ${ t.counts.map(function(c){ return `
+          <div style="flex:1;min-width:90px;background:var(--sunken);border:1px solid var(--line);border-radius:11px;padding:11px 12px;text-align:center">
+            <div style="font-size:22px;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums">${c.n}</div>
+            <div style="font-size:12px;color:var(--ink-3);margin-top:2px">${esc(c.label)}</div>
+          </div>
+        `; }).join('') }
+      </div>
+
+      ${ t.actTotal ? `
+        <div style="margin-bottom:16px">
+          <div style="display:flex;justify-content:space-between;font-size:12.5px;color:var(--ink-2);margin-bottom:6px">
+            <span>Avklarade åtgärder</span><span style="font-variant-numeric:tabular-nums">${t.actDone}/${t.actTotal} · ${t.actPct}%</span>
+          </div>
+          <div style="height:8px;border-radius:99px;background:var(--track);overflow:hidden"><div style="height:100%;width:${t.actPct}%;background:var(--ok);border-radius:99px"></div></div>
+        </div>
+      ` : '' }
+
+      ${ t.difficulties.length ? `
+        <div style="font-size:12px;font-weight:600;color:var(--ink-3);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:8px">Återkommande svårigheter</div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          ${ t.difficulties.map(function(d){ return `
+            <div style="display:flex;align-items:center;gap:10px;font-size:14px;color:var(--ink)">
+              <span style="flex:0 0 auto;min-width:26px;height:22px;display:inline-flex;align-items:center;justify-content:center;border-radius:6px;font-size:12px;font-weight:600;font-variant-numeric:tabular-nums;background:${d.recurring?'var(--accent-weak)':'var(--sunken)'};color:${d.recurring?'var(--accent)':'var(--ink-3)'}">${d.count}×</span>
+              <span style="flex:1;min-width:0">${esc(d.text)}${ d.refs ? ` <span style="color:var(--ink-3);font-size:12.5px">(${esc(d.refs)})</span>` : '' }</span>
+            </div>
+          `; }).join('') }
+        </div>
+      ` : `<div style="font-size:13.5px;color:var(--ink-3)">Inga svårigheter registrerade än — analysera lektioner för att se mönster över terminen.</div>` }
+    </div>`;
 }
 
 function agendaPanel(a){

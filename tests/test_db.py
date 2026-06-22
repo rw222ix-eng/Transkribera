@@ -366,3 +366,45 @@ def test_agenda_only_open(tmp_path):
     db.add_insight(conn, les["id"], "åtgärd", "öppen sak", due_date="2026-05-06")
     db.update_insight(conn, i1["id"], status="klar")
     assert [a["text"] for a in db.agenda(conn, only_open=True)] == ["öppen sak"]
+
+
+# ---- terminstrender (per klass) ---------------------------------------------
+
+def test_term_trends_aggregates(tmp_path):
+    conn = _conn(tmp_path)
+    g = db.get_or_create_group(conn, "NA21")
+    other = db.get_or_create_group(conn, "TE22")
+    l1 = db.create_lesson(conn, history_id="h1", ts="2026-05-01T09:00:00", name="a")
+    l2 = db.create_lesson(conn, history_id="h2", ts="2026-05-08T09:00:00", name="b")
+    l3 = db.create_lesson(conn, history_id="h3", ts="2026-05-09T09:00:00", name="c")
+    db.update_lesson(conn, l1["id"], group_id=g)
+    db.update_lesson(conn, l2["id"], group_id=g)
+    db.update_lesson(conn, l3["id"], group_id=other)
+    # NA21: derivata svår två gånger (olika skiftläge), pq en gång
+    db.add_insight(conn, l1["id"], "svårighet", "Derivata", ref="uppg 3")
+    db.add_insight(conn, l2["id"], "svårighet", "derivata")
+    db.add_insight(conn, l2["id"], "svårighet", "pq-formeln")
+    a1 = db.add_insight(conn, l1["id"], "åtgärd", "ta med blad")
+    db.add_insight(conn, l2["id"], "åtgärd", "öppen kvar")
+    db.update_insight(conn, a1["id"], status="klar")
+    # annan klass ska inte läcka in
+    db.add_insight(conn, l3["id"], "svårighet", "ska ej synas")
+
+    t = db.term_trends(conn, g)
+    assert t["group"] == "NA21"
+    assert t["lessons"] == 2 and t["analysed"] == 2
+    assert t["counts"]["svårighet"] == 3 and t["counts"]["åtgärd"] == 2
+    assert t["actions"] == {"open": 1, "done": 1}
+    top = t["top_difficulties"]
+    assert top[0]["text"] == "Derivata" and top[0]["count"] == 2   # längsta varianten, grupperad
+    assert top[0]["refs"] == ["uppg 3"]
+    assert all(d["text"] != "ska ej synas" for d in top)            # ingen läcka
+
+
+def test_term_trends_empty_class(tmp_path):
+    conn = _conn(tmp_path)
+    g = db.get_or_create_group(conn, "NA21")
+    t = db.term_trends(conn, g)
+    assert t["lessons"] == 0 and t["analysed"] == 0
+    assert t["top_difficulties"] == []
+    assert t["actions"] == {"open": 0, "done": 0}

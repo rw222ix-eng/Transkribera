@@ -1093,3 +1093,20 @@ def test_agenda_ics_writes_file(tmp_path, monkeypatch):
     p = Path(body["path"])
     assert p.exists() and p.parent == tmp_path / "exports"
     assert "BEGIN:VCALENDAR" in p.read_text(encoding="utf-8")
+
+
+# ---- Terminstrender ---------------------------------------------------------
+
+def test_trends_endpoint(tmp_path, monkeypatch):
+    c = _lesson_client(tmp_path, monkeypatch)
+    lid = c.get("/api/lessons").json()[0]["id"]
+    # assign the lesson to a class, then add insights
+    c.patch(f"/api/lessons/{lid}", json={"group_name": "NA21"})
+    gid = next(g["id"] for g in c.get("/api/groups").json() if g["namn"] == "NA21")
+    c.post(f"/api/lessons/{lid}/insights", json={"typ": "svårighet", "text": "derivata"})
+    c.post(f"/api/lessons/{lid}/insights", json={"typ": "åtgärd", "text": "blad"})
+    t = c.get("/api/trends", params={"group_id": gid}).json()
+    assert t["group"] == "NA21"
+    assert t["counts"]["svårighet"] == 1
+    assert t["actions"] == {"open": 1, "done": 0}
+    assert t["top_difficulties"][0]["text"] == "derivata"

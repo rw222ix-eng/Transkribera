@@ -500,6 +500,72 @@ def next_prep(conn: sqlite3.Connection, group_id: int) -> dict:
     }
 
 
+# ------------------------------------------------------- terminstrender (per klass) --
+
+def term_trends(conn: sqlite3.Connection, group_id: int) -> dict:
+    """Longitudinal view of one class: how many lessons, how many analysed, the
+    insight counts by type, open vs done actions, and the recurring difficulties
+    (grouped case-insensitively so literal repeats float to the top). Drives the
+    'egen utveckling'-dashboard; aggregation only, no LLM, no schema change."""
+    grow = conn.execute("SELECT namn FROM groups WHERE id = ?", (group_id,)).fetchone()
+
+    lessons_total = conn.execute(
+        "SELECT COUNT(*) AS n FROM lessons WHERE group_id = ?", (group_id,)
+    ).fetchone()["n"]
+    analysed = conn.execute(
+        "SELECT COUNT(DISTINCT l.id) AS n FROM lessons l "
+        "JOIN insights i ON i.lesson_id = l.id WHERE l.group_id = ?", (group_id,)
+    ).fetchone()["n"]
+
+    counts = {t: 0 for t in ("kalender", "svårighet", "åtgärd",
+                             "grupprum", "material", "övrigt")}
+    for r in conn.execute(
+            "SELECT i.typ AS typ, COUNT(*) AS n FROM insights i "
+            "JOIN lessons l ON l.id = i.lesson_id "
+            "WHERE l.group_id = ? GROUP BY i.typ", (group_id,)).fetchall():
+        if r["typ"] in counts:
+            counts[r["typ"]] = r["n"]
+
+    arow = conn.execute(
+        "SELECT i.status AS status, COUNT(*) AS n FROM insights i "
+        "JOIN lessons l ON l.id = i.lesson_id "
+        "WHERE l.group_id = ? AND i.typ = 'åtgärd' GROUP BY i.status", (group_id,)
+    ).fetchall()
+    actions = {"öppen": 0, "klar": 0}
+    for r in arow:
+        if r["status"] in actions:
+            actions[r["status"]] = r["n"]
+
+    # Recurring difficulties: group on normalised text, keep the count and a
+    # representative (longest) phrasing + any refs.
+    grouped: dict[str, dict] = {}
+    for r in conn.execute(
+            "SELECT i.text AS text, i.ref AS ref FROM insights i "
+            "JOIN lessons l ON l.id = i.lesson_id "
+            "WHERE l.group_id = ? AND i.typ = 'svårighet' "
+            "AND i.text IS NOT NULL AND i.text != ''", (group_id,)).fetchall():
+        key = (r["text"] or "").strip().lower()
+        if not key:
+            continue
+        g = grouped.setdefault(key, {"text": r["text"].strip(), "count": 0, "refs": []})
+        g["count"] += 1
+        if len(r["text"].strip()) > len(g["text"]):
+            g["text"] = r["text"].strip()
+        if r["ref"] and r["ref"] not in g["refs"]:
+            g["refs"].append(r["ref"])
+    top = sorted(grouped.values(), key=lambda d: (-d["count"], d["text"]))[:15]
+
+    return {
+        "group_id": group_id,
+        "group": grow["namn"] if grow else None,
+        "lessons": lessons_total,
+        "analysed": analysed,
+        "counts": counts,
+        "actions": {"open": actions["öppen"], "done": actions["klar"]},
+        "top_difficulties": top,
+    }
+
+
 # ------------------------------------------------------------- agenda (kalender) --
 
 def agenda(conn: sqlite3.Connection, *, only_open: bool = False) -> list[dict]:

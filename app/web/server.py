@@ -972,6 +972,16 @@ def create_app(base_dir: Path | None = None,
         finally:
             conn.close()
 
+    @app.get("/api/trends")
+    def api_trends(group_id: int):
+        """Longitudinal class dashboard: lesson/insight counts, action completion
+        and recurring difficulties over the term."""
+        conn = _db()
+        try:
+            return db.term_trends(conn, group_id)
+        finally:
+            conn.close()
+
     # ---- Agenda: daterade poster tvärs alla klasser + .ics-export ------------
 
     def _agenda_view(items: list[dict]) -> list[dict]:
