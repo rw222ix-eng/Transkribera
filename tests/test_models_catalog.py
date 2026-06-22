@@ -35,3 +35,15 @@ def test_parakeet_present_for_english_transcription():
     assert en, "expected a Parakeet (onnx-asr) model for English"
     assert en[0].languages == "en"
     assert en[0].runtime, "parakeet spec needs an onnx-asr runtime key"
+
+
+def test_parakeet_catalog_matches_installed_v3():
+    """The Parakeet entry must point at the v3 model that is actually downloadable
+    (and what ships on disk: istupakov__parakeet-tdt-0.6b-v3-onnx). The v2 onnx-asr
+    runtime key cannot load the v3 graphs, so a v2/v3 mismatch makes English ASR
+    silently fall back to a Swedish Whisper model."""
+    par = [m for m in WHISPER_MODELS if m.engine == "parakeet"]
+    assert par, "expected a Parakeet model"
+    spec = par[0]
+    assert spec.id == "istupakov/parakeet-tdt-0.6b-v3-onnx", spec.id
+    assert spec.runtime == "nemo-parakeet-tdt-0.6b-v3", spec.runtime

@@ -66,10 +66,10 @@ WHISPER_MODELS: list[WhisperModelSpec] = [
     # English uses NVIDIA Parakeet (a different ASR architecture than Whisper),
     # run via onnx-asr / ONNX Runtime. languages="en" makes the language picker
     # auto-select it for Engelska. id = HF repo to download; runtime = onnx-asr key.
-    WhisperModelSpec("istupakov/parakeet-tdt-0.6b-v2-onnx", "Parakeet TDT 0.6B (en)",
+    WhisperModelSpec("istupakov/parakeet-tdt-0.6b-v3-onnx", "Parakeet TDT 0.6B v3 (en)",
                      2500, 2500, 1300, "en", 4, "Engelska — snabb (NVIDIA Parakeet)",
                      rtf=25, score=3.5,
-                     engine="parakeet", runtime="nemo-parakeet-tdt-0.6b-v2"),
+                     engine="parakeet", runtime="nemo-parakeet-tdt-0.6b-v3"),
 ]
 
 # Local GGUFs served by the bundled llama.cpp server (Phase 0 spike). The text
