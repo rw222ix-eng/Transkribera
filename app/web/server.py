@@ -962,6 +962,63 @@ def create_app(base_dir: Path | None = None,
             conn.close()
         return {"ok": True}
 
+    # ---- Markörer: viktiga ögonblick (under inspelning / uppspelning) ---------
+
+    @app.get("/api/lessons/{lesson_id}/markers")
+    def api_markers(lesson_id: int):
+        conn = _db()
+        try:
+            return db.list_markers(conn, lesson_id)
+        finally:
+            conn.close()
+
+    @app.post("/api/lessons/{lesson_id}/markers")
+    async def api_marker_add(lesson_id: int, req: Request):
+        body = await req.json()
+        conn = _db()
+        try:
+            if db.get_lesson(conn, lesson_id) is None:
+                return JSONResponse({"error": "lektionen finns inte"}, status_code=404)
+            m = db.add_marker(conn, lesson_id, body.get("t", 0.0),
+                              label=(body.get("label") or "").strip() or None,
+                              created_at=datetime.now().isoformat(timespec="seconds"))
+        finally:
+            conn.close()
+        return m
+
+    @app.delete("/api/markers/{marker_id}")
+    def api_marker_delete(marker_id: int):
+        conn = _db()
+        try:
+            db.delete_marker(conn, marker_id)
+        finally:
+            conn.close()
+        return {"ok": True}
+
+    @app.get("/api/recordings/{history_id}/markers")
+    def api_recording_markers_get(history_id: str):
+        """Markers for a recording, resolved via its history_id (what the transcript
+        view knows). Empty list if the recording isn't organised as a lesson yet."""
+        conn = _db()
+        try:
+            lid = db.lesson_id_by_history(conn, history_id)
+            return db.list_markers(conn, lid) if lid is not None else []
+        finally:
+            conn.close()
+
+    @app.post("/api/recordings/{history_id}/markers")
+    async def api_recording_markers(history_id: str, req: Request):
+        """Attach markers captured live during an in-app recording to the lesson
+        once it has been transcribed (resolved via history_id)."""
+        body = await req.json()
+        markers = body.get("markers") or []
+        conn = _db()
+        try:
+            saved = db.add_markers_for_history(conn, history_id, markers)
+        finally:
+            conn.close()
+        return {"markers": saved, "count": len(saved)}
+
     # ---- Nästa lektion: carry-forward per klass (Fas 3) ----------------------
 
     @app.get("/api/next-prep")

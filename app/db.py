@@ -21,7 +21,7 @@ import sqlite3
 import threading
 from pathlib import Path
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS courses (
@@ -98,11 +98,25 @@ CREATE TRIGGER IF NOT EXISTS lessons_fts_au AFTER UPDATE ON lessons BEGIN
 END;
 """
 
+# Live markers a teacher drops during recording / playback (v3): a timestamp into
+# the recording with an optional label, so important moments are findable without
+# speaker diarisation (which was removed). Cascade-deleted with the lesson.
+_MARKERS_MIGRATION = """
+CREATE TABLE IF NOT EXISTS markers (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    lesson_id  INTEGER REFERENCES lessons(id) ON DELETE CASCADE,
+    t          REAL,              -- sekunder från start
+    label      TEXT,
+    created_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_markers_lesson ON markers(lesson_id);
+"""
+
 # Ordered schema upgrades, keyed by the version they BRING THE DB TO. connect()
 # applies every migration whose key is > the file's stored PRAGMA user_version, so
 # an existing .db is upgraded in place instead of silently keeping the old schema.
 # When the schema changes, bump SCHEMA_VERSION and add the ALTER/CREATE here.
-_MIGRATIONS: dict[int, str] = {2: _FTS_MIGRATION}
+_MIGRATIONS: dict[int, str] = {2: _FTS_MIGRATION, 3: _MARKERS_MIGRATION}
 
 _LESSON_SELECT = """
 SELECT l.*, g.namn AS group_namn, c.namn AS course_namn
@@ -498,6 +512,60 @@ def next_prep(conn: sqlite3.Connection, group_id: int) -> dict:
         "last_lesson": last_lesson,
         "difficulties": difficulties,
     }
+
+
+# ------------------------------------------------------------- markörer (v3) --
+
+def lesson_id_by_history(conn: sqlite3.Connection, history_id: str) -> int | None:
+    if not history_id:
+        return None
+    row = conn.execute("SELECT id FROM lessons WHERE history_id = ?",
+                       (history_id,)).fetchone()
+    return row["id"] if row else None
+
+
+def add_marker(conn: sqlite3.Connection, lesson_id: int, t: float,
+               label: str | None = None, created_at: str | None = None) -> dict:
+    conn.execute(
+        "INSERT INTO markers (lesson_id, t, label, created_at) VALUES (?, ?, ?, ?)",
+        (lesson_id, float(t or 0.0), (label or None), created_at))
+    conn.commit()
+    new_id = conn.execute("SELECT last_insert_rowid() AS id").fetchone()["id"]
+    return dict(conn.execute("SELECT * FROM markers WHERE id = ?", (new_id,)).fetchone())
+
+
+def list_markers(conn: sqlite3.Connection, lesson_id: int) -> list[dict]:
+    rows = conn.execute(
+        "SELECT * FROM markers WHERE lesson_id = ? ORDER BY t, id", (lesson_id,)
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_marker(conn: sqlite3.Connection, marker_id: int) -> dict | None:
+    row = conn.execute("SELECT * FROM markers WHERE id = ?", (marker_id,)).fetchone()
+    return dict(row) if row else None
+
+
+def delete_marker(conn: sqlite3.Connection, marker_id: int) -> None:
+    conn.execute("DELETE FROM markers WHERE id = ?", (marker_id,))
+    conn.commit()
+
+
+def add_markers_for_history(conn: sqlite3.Connection, history_id: str,
+                            markers: list[dict]) -> list[dict]:
+    """Attach markers captured during an in-app recording to the lesson once it
+    exists (resolved via history_id, set when the recording is transcribed).
+    Returns the inserted rows; [] if the lesson isn't found or there's nothing."""
+    lesson_id = lesson_id_by_history(conn, history_id)
+    if lesson_id is None or not markers:
+        return []
+    rows = [(lesson_id, float(m.get("t") or 0.0), (m.get("label") or None),
+             m.get("created_at")) for m in markers]
+    conn.executemany(
+        "INSERT INTO markers (lesson_id, t, label, created_at) VALUES (?, ?, ?, ?)",
+        rows)
+    conn.commit()
+    return list_markers(conn, lesson_id)
 
 
 # ------------------------------------------------------- terminstrender (per klass) --

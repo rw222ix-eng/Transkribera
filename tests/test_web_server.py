@@ -1110,3 +1110,33 @@ def test_trends_endpoint(tmp_path, monkeypatch):
     assert t["counts"]["svårighet"] == 1
     assert t["actions"] == {"open": 1, "done": 0}
     assert t["top_difficulties"][0]["text"] == "derivata"
+
+
+# ---- Markörer ---------------------------------------------------------------
+
+def test_markers_add_list_delete(tmp_path, monkeypatch):
+    c = _lesson_client(tmp_path, monkeypatch)
+    lid = c.get("/api/lessons").json()[0]["id"]
+    m = c.post(f"/api/lessons/{lid}/markers", json={"t": 42.5, "label": "förklaring"}).json()
+    assert m["t"] == 42.5
+    lst = c.get(f"/api/lessons/{lid}/markers").json()
+    assert len(lst) == 1 and lst[0]["label"] == "förklaring"
+    assert c.delete(f"/api/markers/{m['id']}").json() == {"ok": True}
+    assert c.get(f"/api/lessons/{lid}/markers").json() == []
+
+
+def test_markers_add_to_missing_lesson_404(tmp_path, monkeypatch):
+    c = _lesson_client(tmp_path, monkeypatch)
+    assert c.post("/api/lessons/9999/markers", json={"t": 1}).status_code == 404
+
+
+def test_recording_markers_by_history(tmp_path, monkeypatch):
+    c = _lesson_client(tmp_path, monkeypatch)             # lesson migrated from history "h1"
+    r = c.post("/api/recordings/h1/markers",
+               json={"markers": [{"t": 10}, {"t": 25, "label": "viktigt"}]})
+    assert r.json()["count"] == 2
+    got = c.get("/api/recordings/h1/markers").json()
+    assert [m["t"] for m in got] == [10.0, 25.0]
+    # unknown recording → no markers, no crash
+    assert c.post("/api/recordings/nope/markers", json={"markers": [{"t": 1}]}).json()["count"] == 0
+    assert c.get("/api/recordings/nope/markers").json() == []

@@ -408,3 +408,33 @@ def test_term_trends_empty_class(tmp_path):
     assert t["lessons"] == 0 and t["analysed"] == 0
     assert t["top_difficulties"] == []
     assert t["actions"] == {"open": 0, "done": 0}
+
+
+# ---- markörer (v3) ----------------------------------------------------------
+
+def test_markers_crud_and_order(tmp_path):
+    conn = _conn(tmp_path)
+    les = db.create_lesson(conn, history_id="h1", ts="2026-05-01T09:00:00", name="a")
+    db.add_marker(conn, les["id"], 30.0, "förklaring")
+    m_early = db.add_marker(conn, les["id"], 5.0)
+    rows = db.list_markers(conn, les["id"])
+    assert [r["t"] for r in rows] == [5.0, 30.0]                # sorterat på tid
+    db.delete_marker(conn, m_early["id"])
+    assert [r["t"] for r in db.list_markers(conn, les["id"])] == [30.0]
+
+
+def test_markers_cascade_on_lesson_delete(tmp_path):
+    conn = _conn(tmp_path)
+    les = db.create_lesson(conn, history_id="h1", ts="2026-05-01T09:00:00", name="a")
+    db.add_marker(conn, les["id"], 10.0)
+    db.delete_lesson(conn, les["id"])
+    assert db.list_markers(conn, les["id"]) == []              # cascade
+
+
+def test_add_markers_for_history_resolves_lesson(tmp_path):
+    conn = _conn(tmp_path)
+    les = db.create_lesson(conn, history_id="h7", ts="2026-05-01T09:00:00", name="a")
+    saved = db.add_markers_for_history(conn, "h7", [{"t": 12.0, "label": "x"}, {"t": 40.0}])
+    assert len(saved) == 2
+    assert db.lesson_id_by_history(conn, "h7") == les["id"]
+    assert db.add_markers_for_history(conn, "okänd", [{"t": 1}]) == []

@@ -126,6 +126,8 @@
     recording: false,
     recElapsed: 0,
     recError: '',
+    recMarkerCount: 0,         // antal markörer satta under pågående inspelning
+    markers: [],               // markörer för den öppna transkriptvyn
   };
 
   /* instance (non-state) fields */
@@ -133,6 +135,7 @@
   var _dl = {}, _inst = {}, _editBuf = {}, _wave = null;
   var _file, _seek, _searchRef, _scrollRef, _procScroll, _chatThread, _imgInput, _media;
   var _rec = null, _recChunks = [], _recStream = null, _recTimer = null;
+  var _recMarkers = [], _recMarkersByPath = {};   // live-markörer under inspelning
   var _prevTab, _prevStep, _prevRun, _prevPP, _prevOp, _prevChatLen, _wasEditing, _wasOpen, _scrollKey;
 
   /* ----------------------------------------------------------------- data -- */
@@ -430,7 +433,8 @@
       _rec.ondataavailable = function (e) { if (e.data && e.data.size) _recChunks.push(e.data); };
       _rec.onstop = function () { finishRecording(_rec ? _rec.mimeType : ''); };
       _rec.start();
-      setState({ recording: true, recElapsed: 0 });
+      _recMarkers = [];
+      setState({ recording: true, recElapsed: 0, recMarkerCount: 0 });
       clearInterval(_recTimer);
       _recTimer = setInterval(function () { setState(function (s) { return { recElapsed: s.recElapsed + 1 }; }); }, 1000);
     }).catch(function () {
@@ -443,10 +447,16 @@
     setState({ recording: false });   // finishRecording runs on the 'stop' event
   }
   function cancelRecording() {
-    clearInterval(_recTimer); _recChunks = [];
+    clearInterval(_recTimer); _recChunks = []; _recMarkers = [];
     try { if (_rec && _rec.state !== 'inactive') { _rec.onstop = null; _rec.stop(); } } catch (e) {}
     _stopStream();
-    setState({ recording: false, recElapsed: 0, recError: '' });
+    setState({ recording: false, recElapsed: 0, recError: '', recMarkerCount: 0 });
+  }
+  // Markera ett viktigt ögonblick live — hittas igen utan talarseparation.
+  function addRecMarker() {
+    if (!S.recording) return;
+    _recMarkers.push({ t: S.recElapsed });
+    setState({ recMarkerCount: _recMarkers.length });
   }
   function finishRecording(mime) {
     _stopStream();
@@ -462,7 +472,12 @@
     fetch('/api/upload?name=' + encodeURIComponent(name), {
       method: 'POST', headers: { 'Content-Type': type }, body: new Blob(chunks, { type: type })
     }).then(function (r) { return r.json(); }).then(function (res) {
-      if (res && res.path) { addFilesObjs([{ name: res.name || name, path: res.path }]); setState({ recElapsed: 0 }); }
+      if (res && res.path) {
+        if (_recMarkers.length) { _recMarkersByPath[res.path] = _recMarkers; }
+        _recMarkers = [];
+        addFilesObjs([{ name: res.name || name, path: res.path }]);
+        setState({ recElapsed: 0, recMarkerCount: 0 });
+      }
       else { setState({ recError: (res && res.error) || 'Uppladdning misslyckades.' }); }
     }).catch(function () { setState({ recError: 'Uppladdning misslyckades.' }); });
   }
@@ -578,7 +593,31 @@
       transcript: (h.transcript || []).map(function (g) { return { time: fmtTime(g.start), text: g.text }; }),
       transcriptRaw: h.transcript || [],
       mediaUrl: mediaUrlFor(h), audioT: 0, audioDur: 0, audioPlaying: false, edits: {}, edited: false,
+      markers: [],
     });
+    loadMarkers(h.id);
+  }
+  /* ----------------------------------------- markörer i transkriptvyn -- */
+  function loadMarkers(historyId) {
+    if (!historyId) { setState({ markers: [] }); return; }
+    getJSON('/api/recordings/' + encodeURIComponent(historyId) + '/markers')
+      .then(function (m) { setState({ markers: Array.isArray(m) ? m : [] }); })
+      .catch(function () { setState({ markers: [] }); });
+  }
+  function seekToTime(t) {
+    if (hasMedia()) { _media.currentTime = t; setState({ audioT: t }); _media.play().catch(function () {}); }
+    else { setState({ audioT: t }); }
+  }
+  function addPlaybackMarker() {
+    var id = S.resultId; if (!id) return;
+    fetch('/api/recordings/' + encodeURIComponent(id) + '/markers', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ markers: [{ t: S.audioT || 0 }] })
+    }).then(function () { loadMarkers(id); }).catch(function () {});
+  }
+  function deleteMarker(markerId) {
+    fetch('/api/markers/' + encodeURIComponent(markerId), { method: 'DELETE' })
+      .then(function () { loadMarkers(S.resultId); }).catch(function () {});
   }
   // Spara redigerad transkripttext till disk (skriver om SRT/TXT/VTT i resultatmappen
   // och uppdaterar historiken). No-op om inget redigerats eller ingen post är öppen.
@@ -938,6 +977,15 @@
           var segs = (r.transcript || []).map(function (g) { return { time: fmtTime(g.start), text: g.text }; });
           setState(function (s) { return { run: 'done', progress: 100, transcript: segs, transcriptRaw: r.transcript || [], resultId: r.id || null, runMedia: r.media || null, edits: {}, edited: false, resultFilesReal: r.files || [], qStatus: Object.assign({}, s.qStatus, kv(active.id, 'done')), qProgress: Object.assign({}, s.qProgress, kv(active.id, 100)), log: s.log.concat(['[klar] Färdig på ' + fmtTime(s.elapsed)]) }; });
           loadHistory();   // server archived this run; refresh from disk
+          // Attach any live markers captured while recording this file.
+          var marks = _recMarkersByPath[active.path];
+          if (marks && marks.length && r.id) {
+            fetch('/api/recordings/' + encodeURIComponent(r.id) + '/markers', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ markers: marks })
+            }).catch(function () {});
+            delete _recMarkersByPath[active.path];
+          }
           var next = _nextPending(active.id);
           if (next) { setTimeout(function () { setState({ run: 'idle', activeId: next, source: qName(S.queue, next), audioT: 0 }, function () { _runActive(); }); }, 800); }
           else { setTimeout(function () { afterDone(); }, 450); }
@@ -1626,6 +1674,12 @@
       audioCur: fmtTime(st.audioT), audioDur: fmtTime(dur),
       mediaUrl: st.mediaUrl, hasMediaEl: !!st.mediaUrl, mediaRef: mediaRef,
       onTogglePlay: togglePlay, onSeekClick: onSeekClick, seekTrackRef: seekTrackRef,
+      markers: (st.markers || []).map(function (m) {
+        return { id: m.id, t: m.t || 0, label: fmtTime(m.t || 0),
+                 onSeek: function () { seekToTime(m.t || 0); },
+                 onDelete: function () { deleteMarker(m.id); } };
+      }),
+      hasMarkers: (st.markers || []).length > 0, onAddMarker: addPlaybackMarker,
       editing: st.editing, notEditing: !st.editing, onToggleEdit: toggleEdit, onEditInput: onEditInput,
       editBtnLabel: st.editing ? '✓ Klar' : 'Redigera', transcriptEdited: st.edited,
       editBtnStyle: st.editing ? 'flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:10px;padding:8px 15px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit' : 'flex:0 0 auto;display:inline-flex;align-items:center;gap:7px;background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:8px 15px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit',
@@ -1647,8 +1701,8 @@
       openPicker: openPicker, fileRef: fileRef, onPickFile: onPickFile, onDragOver: onDragOver, onDragLeave: onDragLeave, onDrop: onDrop,
       urlInput: st.urlInput, onUrlInput: onUrlInput, onAddUrl: addUrl, onUrlKey: onUrlKey,
       recording: st.recording, recElapsedFmt: fmtTime(st.recElapsed), recSupported: recSupported(),
-      recError: st.recError, hasRecError: !!st.recError,
-      onStartRec: startRecording, onStopRec: stopRecording, onCancelRec: cancelRecording,
+      recError: st.recError, hasRecError: !!st.recError, recMarkerCount: st.recMarkerCount,
+      onStartRec: startRecording, onStopRec: stopRecording, onCancelRec: cancelRecording, onMarkRec: addRecMarker,
       dropzoneStyle: 'position:relative;border:1.5px dashed ' + (st.dragging ? 'var(--accent)' : 'var(--line-2)') + ';border-radius:20px;background:' + (st.dragging ? 'var(--accent-weak)' : 'var(--surface)') + ';flex:1 1 auto;min-height:200px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 24px;text-align:center;box-shadow:var(--shadow-sm);cursor:pointer;user-select:none;-webkit-user-select:none;transition:border-color .12s,background .12s',
       curModelName: curModel.label || curModel.id,
       curModelMeta: 'Väljs automatiskt · ' + (st.language === 'en' ? 'Engelska' : 'Svenska'),
@@ -1899,6 +1953,7 @@ function viewTranscribe(v){ return `
               <span style="font-size:14.5px;color:var(--ink);font-weight:500">Spelar in</span>
               <span style="font-size:14.5px;color:var(--ink-2);font-variant-numeric:tabular-nums">${esc(v.recElapsedFmt)}</span>
               <div style="flex:1"></div>
+              <button data-click="${on(v.onMarkRec)}" title="Markera ett viktigt ögonblick" style="flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:8px 13px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit" data-sh="border-color:var(--accent) !important;color:var(--accent) !important">🔖 Markera${ v.recMarkerCount ? ' (' + v.recMarkerCount + ')' : '' }</button>
               <button data-click="${on(v.onCancelRec)}" style="flex:0 0 auto;background:var(--surface);border:1px solid var(--line);color:var(--ink-2);border-radius:8px;padding:8px 13px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit" data-sh="border-color:var(--ink-3) !important;color:var(--ink) !important">Avbryt</button>
               <button data-click="${on(v.onStopRec)}" style="flex:0 0 auto;display:inline-flex;align-items:center;gap:7px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:8px;padding:8px 15px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit">Stoppa &amp; lägg till</button>
             ` : `
@@ -3015,6 +3070,17 @@ function viewModals(v){ return `
     </div>
 
     ${ v.hasMediaEl ? `<audio data-ref="${on(v.mediaRef)}" src="${esc(v.mediaUrl)}" preload="metadata" style="display:none"></audio>` : '' }
+    ${ v.hasMarkers ? `
+    <div style="flex:0 0 auto;border-top:1px solid var(--line);background:color-mix(in srgb,var(--surface) 72%,transparent);padding:9px 28px;display:flex;align-items:center;gap:8px;overflow-x:auto">
+      <span style="font-size:12px;font-weight:600;color:var(--ink-3);flex:0 0 auto">🔖 Markörer</span>
+      ${ v.markers.map(function(m){ return `
+        <span style="flex:0 0 auto;display:inline-flex;align-items:center;gap:5px;background:var(--accent-weak);border:1px solid var(--accent);border-radius:8px;padding:3px 4px 3px 9px">
+          <button data-click="${on(m.onSeek)}" title="Hoppa hit" style="background:none;border:none;color:var(--accent);font-size:12.5px;font-weight:600;font-variant-numeric:tabular-nums;cursor:pointer;font-family:inherit;padding:0">${esc(m.label)}</button>
+          <button data-click="${on(m.onDelete)}" aria-label="Ta bort markör" style="background:none;border:none;color:var(--accent);opacity:.6;cursor:pointer;font-size:12px;line-height:1;padding:0 2px">✕</button>
+        </span>
+      `; }).join('') }
+    </div>
+    ` : '' }
     <div style="flex:0 0 auto;border-top:1px solid var(--line);background:color-mix(in srgb,var(--surface) 72%,transparent);backdrop-filter:saturate(1.3) blur(14px);padding:13px 28px;display:flex;align-items:center;gap:18px">
       <button data-click="${on(v.onTogglePlay)}" aria-label="Spela eller pausa" style="width:46px;height:46px;flex:0 0 auto;border-radius:50%;border:none;background:var(--btn-bg);color:var(--btn-fg);cursor:pointer;display:flex;align-items:center;justify-content:center" data-sh="background:color-mix(in srgb, var(--btn-bg) 78%, var(--accent)) !important">
         ${ v.audioPaused ? `<svg width="17" height="17" viewBox="0 0 16 16" fill="currentColor"><path d="M4.5 3.2v9.6c0 .5.5.8 1 .5l7.3-4.8c.4-.3.4-.8 0-1.1L5.5 2.7c-.5-.3-1 0-1 .5z"></path></svg>` : '' }
@@ -3025,6 +3091,7 @@ function viewModals(v){ return `
         ${ v.waveBars.map(function(b){ return `<span style="${b.style}"></span>`; }).join('') }
       </div>
       <span style="font-size:13.5px;color:var(--ink-2);font-variant-numeric:tabular-nums;flex:0 0 auto;width:42px;text-align:right">${esc(v.audioDur)}</span>
+      <button data-click="${on(v.onAddMarker)}" title="Markera den här punkten" style="flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:9px;padding:8px 12px;font-size:13.5px;font-weight:500;cursor:pointer;font-family:inherit" data-sh="border-color:var(--accent) !important;color:var(--accent) !important">🔖 Markera</button>
     </div>
   </div>
   ` : '' }
