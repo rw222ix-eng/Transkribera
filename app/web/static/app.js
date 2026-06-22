@@ -1650,7 +1650,6 @@
         onManualText: function (e) { setState({ manualText: e.target.value }); },
         onAddManual: function () { addManualInsight(l.id); },
         onReportHtml: function () { exportReport(l.id, 'html'); },
-        onReportMd: function () { exportReport(l.id, 'md'); },
       };
     });
 
