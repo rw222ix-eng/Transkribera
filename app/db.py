@@ -21,7 +21,7 @@ import sqlite3
 import threading
 from pathlib import Path
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS courses (
@@ -69,12 +69,40 @@ CREATE INDEX IF NOT EXISTS idx_lessons_course ON lessons(course_id);
 CREATE INDEX IF NOT EXISTS idx_insights_lesson ON insights(lesson_id);
 """
 
-# Ordered schema upgrades, keyed by the version they BRING THE DB TO (i.e. the
-# SQL to go from version-1 to version). Empty today (v1 is the base schema); when
-# the schema changes, bump SCHEMA_VERSION and add the ALTER/CREATE here. connect()
+# Full-text index over lesson transcripts (v2). External-content FTS5: the text
+# stays in `lessons`, the index just points at it (content_rowid='id'), kept in
+# sync by triggers. remove_diacritics 0 keeps å/ä/ö distinct — they are Swedish
+# letters, not accented a/o, so folding them would mismatch. Backfilled with
+# 'rebuild'. FTS5 ships with Python's sqlite3, but if a build lacks it the
+# migration degrades gracefully (see _apply_migrations) and search falls back to
+# LIKE (see search_transcripts).
+_FTS_MIGRATION = """
+CREATE VIRTUAL TABLE IF NOT EXISTS lesson_fts USING fts5(
+    transcript_text,
+    content='lessons',
+    content_rowid='id',
+    tokenize='unicode61 remove_diacritics 0'
+);
+INSERT INTO lesson_fts(lesson_fts) VALUES('rebuild');
+CREATE TRIGGER IF NOT EXISTS lessons_fts_ai AFTER INSERT ON lessons BEGIN
+    INSERT INTO lesson_fts(rowid, transcript_text) VALUES (new.id, new.transcript_text);
+END;
+CREATE TRIGGER IF NOT EXISTS lessons_fts_ad AFTER DELETE ON lessons BEGIN
+    INSERT INTO lesson_fts(lesson_fts, rowid, transcript_text)
+        VALUES('delete', old.id, old.transcript_text);
+END;
+CREATE TRIGGER IF NOT EXISTS lessons_fts_au AFTER UPDATE ON lessons BEGIN
+    INSERT INTO lesson_fts(lesson_fts, rowid, transcript_text)
+        VALUES('delete', old.id, old.transcript_text);
+    INSERT INTO lesson_fts(rowid, transcript_text) VALUES (new.id, new.transcript_text);
+END;
+"""
+
+# Ordered schema upgrades, keyed by the version they BRING THE DB TO. connect()
 # applies every migration whose key is > the file's stored PRAGMA user_version, so
 # an existing .db is upgraded in place instead of silently keeping the old schema.
-_MIGRATIONS: dict[int, str] = {}
+# When the schema changes, bump SCHEMA_VERSION and add the ALTER/CREATE here.
+_MIGRATIONS: dict[int, str] = {2: _FTS_MIGRATION}
 
 _LESSON_SELECT = """
 SELECT l.*, g.namn AS group_namn, c.namn AS course_namn
@@ -111,10 +139,26 @@ def _apply_migrations(conn: sqlite3.Connection) -> None:
     if current < SCHEMA_VERSION:
         for version in range(current + 1, SCHEMA_VERSION + 1):
             sql = _MIGRATIONS.get(version)
-            if sql:
+            if not sql:
+                continue
+            try:
                 conn.executescript(sql)
+            except sqlite3.OperationalError:
+                # A sqlite build without FTS5 (v2) must not brick the app — the
+                # rest of the schema is fine and search degrades to LIKE. Other
+                # migrations are plain DDL and should surface, so re-raise those.
+                if version != 2:
+                    raise
         conn.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
     conn.commit()
+
+
+def has_fts(conn: sqlite3.Connection) -> bool:
+    """Whether the full-text index exists (it won't on a sqlite build lacking
+    FTS5). Search falls back to LIKE when this is False."""
+    return conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='lesson_fts'"
+    ).fetchone() is not None
 
 
 def connect(db_path: Path) -> sqlite3.Connection:
@@ -454,3 +498,127 @@ def next_prep(conn: sqlite3.Connection, group_id: int) -> dict:
         "last_lesson": last_lesson,
         "difficulties": difficulties,
     }
+
+
+# ------------------------------------------------------ fritextsök (FTS5) --
+import re as _re  # noqa: E402  (kept local to the search section)
+
+_TOKEN_RE = _re.compile(r"[^\W_]+", _re.UNICODE)   # letters/digits, drops punctuation
+
+
+def _fts_query(text: str, *, match_all: bool = True) -> str | None:
+    """Turn free-text into a safe FTS5 MATCH string: each word becomes a prefix
+    term ("derivat*") so it tolerates Swedish inflection, and raw user input can
+    never inject FTS operators. match_all AND-s the terms (precise keyword
+    search); match_all=False OR-s them (a natural-language question, where bm25
+    still floats the lessons that contain the rare/meaningful words). None if the
+    query has no usable token."""
+    tokens = _TOKEN_RE.findall(text or "")
+    if not tokens:
+        return None
+    joiner = " " if match_all else " OR "
+    return joiner.join(f'"{t}"*' for t in tokens)
+
+
+def _snippet_like(text: str, terms: list[str], width: int = 160) -> str:
+    """A context window around the first matching term, for the LIKE fallback."""
+    low = text.lower()
+    pos = min((low.find(t.lower()) for t in terms if t.lower() in low), default=-1)
+    if pos < 0:
+        return text[:width].strip()
+    start = max(0, pos - width // 2)
+    end = min(len(text), pos + width // 2)
+    snip = text[start:end].strip().replace("\n", " ")
+    return ("… " if start > 0 else "") + snip + (" …" if end < len(text) else "")
+
+
+_SEARCH_META = (
+    "l.id AS lesson_id, l.history_id, l.name, l.datum, l.ts, "
+    "g.namn AS group_namn, c.namn AS course_namn")
+
+
+def search_transcripts(conn: sqlite3.Connection, query: str, *, limit: int = 50,
+                       snippet_tokens: int = 14, match_all: bool = True) -> list[dict]:
+    """Search every lesson transcript at once. Returns ranked hits with a context
+    snippet (what was said) and which lesson/class/course/date it belongs to.
+    Uses FTS5 + bm25 ranking + snippet(); falls back to LIKE when FTS is absent.
+    match_all=False (OR) is used for the natural-language RAG retrieval."""
+    terms = _TOKEN_RE.findall(query or "")
+    if not terms:
+        return []
+    if has_fts(conn):
+        match = _fts_query(query, match_all=match_all)
+        rows = conn.execute(
+            f"SELECT {_SEARCH_META}, "
+            f"  snippet(lesson_fts, 0, '\x02', '\x03', ' … ', ?) AS snippet, "
+            f"  bm25(lesson_fts) AS score "
+            f"FROM lesson_fts "
+            f"JOIN lessons l ON l.id = lesson_fts.rowid "
+            f"LEFT JOIN groups  g ON g.id = l.group_id "
+            f"LEFT JOIN courses c ON c.id = l.course_id "
+            f"WHERE lesson_fts MATCH ? "
+            f"ORDER BY score LIMIT ?",
+            (snippet_tokens, match, limit)).fetchall()
+        return [_search_row(r) for r in rows]
+    # LIKE fallback (no FTS5 in this sqlite build).
+    glue = " AND " if match_all else " OR "
+    where = glue.join("l.transcript_text LIKE ?" for _ in terms)
+    params = [f"%{t}%" for t in terms]
+    rows = conn.execute(
+        f"SELECT {_SEARCH_META}, l.transcript_text AS _full "
+        f"FROM lessons l "
+        f"LEFT JOIN groups  g ON g.id = l.group_id "
+        f"LEFT JOIN courses c ON c.id = l.course_id "
+        f"WHERE l.transcript_text IS NOT NULL AND {where} "
+        f"ORDER BY COALESCE(l.datum, l.ts) DESC LIMIT ?",
+        (*params, limit)).fetchall()
+    out = []
+    for r in rows:
+        d = _search_row(r)
+        d["snippet"] = _snippet_like(r["_full"] or "", terms)
+        out.append(d)
+    return out
+
+
+def _search_row(row: sqlite3.Row) -> dict:
+    d = dict(row)
+    d.pop("_full", None)
+    d["group"] = d.pop("group_namn", None)
+    d["course"] = d.pop("course_namn", None)
+    return d
+
+
+def lessons_excerpts_for(conn: sqlite3.Connection, lesson_ids: list[int],
+                         query: str, *, window: int = 1200) -> list[dict]:
+    """For the RAG 'ask across all lessons' answer: a bounded transcript excerpt
+    around the query terms for each given lesson, with its class/course/date
+    header — so the LLM is grounded without overflowing the context window."""
+    out: list[dict] = []
+    terms = _TOKEN_RE.findall(query or "")
+    for lid in lesson_ids:
+        row = conn.execute(
+            _LESSON_SELECT + " WHERE l.id = ?", (lid,)).fetchone()
+        if not row:
+            continue
+        full = (row["transcript_text"] or "")
+        excerpt = _snippet_like(full, terms, width=window) if terms else full[:window]
+        out.append({
+            "lesson_id": lid, "history_id": row["history_id"], "name": row["name"],
+            "datum": row["datum"], "group": row["group_namn"],
+            "course": row["course_namn"], "excerpt": excerpt,
+        })
+    return out
+
+
+def update_lesson_transcript(conn: sqlite3.Connection, history_id: str,
+                             transcript_text: str) -> bool:
+    """Keep the stored transcript (and thus the FTS index, via trigger) in sync
+    when a transcription is edited in the Historik view. Returns True if a lesson
+    row matched."""
+    if not history_id:
+        return False
+    cur = conn.execute(
+        "UPDATE lessons SET transcript_text = ? WHERE history_id = ?",
+        (transcript_text, history_id))
+    conn.commit()
+    return cur.rowcount > 0

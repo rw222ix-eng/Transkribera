@@ -993,3 +993,66 @@ def test_set_models_disk_reset(client, tmp_path):
 def test_set_models_disk_rejects_relative_and_empty(client):
     assert client.post("/api/settings/models-disk", json={"dir": "relativ/sökväg"}).status_code == 400
     assert client.post("/api/settings/models-disk", json={"dir": ""}).status_code == 400
+
+
+# ---- Fritextsök över alla lektioner -----------------------------------------
+
+def test_search_endpoint_returns_hits(tmp_path, monkeypatch):
+    c = _lesson_client(tmp_path, monkeypatch)            # h1 transcript: "vi gick igenom derivata"
+    r = c.get("/api/search", params={"q": "derivata"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["query"] == "derivata"
+    assert len(body["hits"]) == 1
+    h = body["hits"][0]
+    assert h["name"] == "lektion.mp3"
+    assert "derivata" in h["snippet"]
+    assert "date" in h
+
+
+def test_search_empty_query_is_empty(tmp_path, monkeypatch):
+    c = _lesson_client(tmp_path, monkeypatch)
+    assert c.get("/api/search", params={"q": "  "}).json()["hits"] == []
+
+
+def test_search_no_match(tmp_path, monkeypatch):
+    c = _lesson_client(tmp_path, monkeypatch)
+    assert c.get("/api/search", params={"q": "integraler"}).json()["hits"] == []
+
+
+def test_search_ask_streams_answer(tmp_path, monkeypatch):
+    captured = {}
+    def fake_answer(query, excerpts, model, token_cb=None):
+        captured["query"] = query
+        captured["n"] = len(excerpts)
+        if token_cb:
+            token_cb("Derivata togs upp")
+        return "Derivata togs upp [NA21]"
+    monkeypatch.setattr(server.postprocess, "answer_over_lessons", fake_answer)
+    c = _lesson_client(tmp_path, monkeypatch)
+    r = c.post("/api/search/ask", json={"q": "vad sades om derivata"})
+    assert r.status_code == 200
+    assert "Derivata togs upp" in r.text
+    assert captured["query"] == "vad sades om derivata"
+    assert captured["n"] == 1
+
+
+def test_search_ask_no_match_404(tmp_path, monkeypatch):
+    c = _lesson_client(tmp_path, monkeypatch)
+    assert c.post("/api/search/ask", json={"q": "integraler"}).status_code == 404
+
+
+def test_search_ask_busy_gpu_409(tmp_path, monkeypatch):
+    class Busy(_ReadyArbiter):
+        def try_acquire_gpu(self): return False
+    c = _lesson_client(tmp_path, monkeypatch, arbiter=Busy())
+    assert c.post("/api/search/ask", json={"q": "derivata"}).status_code == 409
+
+
+def test_history_edit_syncs_search_index(tmp_path, monkeypatch):
+    c = _lesson_client(tmp_path, monkeypatch)
+    assert len(c.get("/api/search", params={"q": "derivata"}).json()["hits"]) == 1
+    c.patch("/api/history/h1", json={"transcript": [
+        {"start": 0, "end": 2, "text": "nu pratar vi om sannolikhet"}]})
+    assert c.get("/api/search", params={"q": "derivata"}).json()["hits"] == []
+    assert len(c.get("/api/search", params={"q": "sannolikhet"}).json()["hits"]) == 1

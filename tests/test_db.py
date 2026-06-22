@@ -255,3 +255,86 @@ def test_schema_migration_runs_for_older_db(tmp_path, monkeypatch):
     tables = {r[0] for r in conn.execute(
         "SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
     assert "_mig_marker" in tables                       # the pending migration ran
+
+
+# ---- fritextsök (FTS5) ------------------------------------------------------
+
+def _lesson_with_text(conn, hid, text, **f):
+    return db.create_lesson(conn, history_id=hid, ts="2026-05-12T09:00:00",
+                            transcript_text=text, **f)
+
+
+def test_fts_index_created(tmp_path):
+    conn = _conn(tmp_path)
+    assert db.has_fts(conn)                              # FTS5 ships with sqlite3
+    assert conn.execute("PRAGMA user_version").fetchone()[0] >= 2
+
+
+def test_search_finds_term_with_snippet_and_meta(tmp_path):
+    conn = _conn(tmp_path)
+    gid = db.get_or_create_group(conn, "NA21")
+    cid = db.get_or_create_course(conn, "Matematik 2b")
+    les = _lesson_with_text(conn, "h1", "idag gick vi igenom derivata och kedjeregeln",
+                            name="lektion.mp3")
+    db.update_lesson(conn, les["id"], group_id=gid, course_id=cid)
+    _lesson_with_text(conn, "h2", "vi pratade om integraler", name="annan.mp3")
+
+    hits = db.search_transcripts(conn, "derivata")
+    assert len(hits) == 1
+    h = hits[0]
+    assert h["name"] == "lektion.mp3"
+    assert h["group"] == "NA21" and h["course"] == "Matematik 2b"
+    assert h["datum"] == "2026-05-12"
+    assert "derivata" in h["snippet"]
+    assert "\x02" in h["snippet"] and "\x03" in h["snippet"]   # highlight markers
+
+
+def test_search_prefix_matches_inflection(tmp_path):
+    conn = _conn(tmp_path)
+    _lesson_with_text(conn, "h1", "vi övade på derivatan av en funktion")
+    assert len(db.search_transcripts(conn, "derivat")) == 1    # prefix
+
+
+def test_search_keeps_swedish_letters_distinct(tmp_path):
+    conn = _conn(tmp_path)
+    _lesson_with_text(conn, "h1", "vi diskuterade förändring")
+    assert len(db.search_transcripts(conn, "förändring")) == 1
+
+
+def test_search_and_semantics_multiword(tmp_path):
+    conn = _conn(tmp_path)
+    _lesson_with_text(conn, "h1", "derivata och integraler")
+    _lesson_with_text(conn, "h2", "bara derivata här")
+    hits = db.search_transcripts(conn, "derivata integraler")
+    assert [h["history_id"] for h in hits] == ["h1"]           # both terms required
+
+
+def test_search_empty_or_punctuation_returns_nothing(tmp_path):
+    conn = _conn(tmp_path)
+    _lesson_with_text(conn, "h1", "innehåll")
+    assert db.search_transcripts(conn, "   ") == []
+    assert db.search_transcripts(conn, "!!!") == []
+    assert db._fts_query("???") is None
+
+
+def test_search_index_updates_on_edit_and_delete(tmp_path):
+    conn = _conn(tmp_path)
+    les = _lesson_with_text(conn, "h1", "ursprunglig text om vektorer")
+    assert len(db.search_transcripts(conn, "vektorer")) == 1
+    db.update_lesson_transcript(conn, "h1", "ny text om matriser")
+    assert db.search_transcripts(conn, "vektorer") == []      # trigger refreshed FTS
+    assert len(db.search_transcripts(conn, "matriser")) == 1
+    db.delete_lesson(conn, les["id"])
+    assert db.search_transcripts(conn, "matriser") == []      # delete trigger fired
+
+
+def test_excerpts_for_rag_have_headers(tmp_path):
+    conn = _conn(tmp_path)
+    gid = db.get_or_create_group(conn, "NA21")
+    les = _lesson_with_text(conn, "h1", "lång lektion " * 50 + "om derivata mitt i",
+                            name="l.mp3")
+    db.update_lesson(conn, les["id"], group_id=gid)
+    ex = db.lessons_excerpts_for(conn, [les["id"]], "derivata")
+    assert len(ex) == 1
+    assert ex[0]["group"] == "NA21"
+    assert "derivata" in ex[0]["excerpt"]

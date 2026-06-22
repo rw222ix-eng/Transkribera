@@ -675,6 +675,16 @@ def create_app(base_dir: Path | None = None,
             _rewrite_sidecar_outputs(entry, segments)
             patch["transcript"] = segments
             patch["words"] = sum(len((s.get("text") or "").split()) for s in segments)
+            # Keep the lesson DB's transcript (and the FTS index, via trigger) in
+            # sync so search reflects the edit. Never let this break the save.
+            try:
+                conn = _db()
+                try:
+                    db.update_lesson_transcript(conn, entry_id, db.segments_text(segments))
+                finally:
+                    conn.close()
+            except Exception:
+                debug_log.get_logger().exception("Kunde inte synka transkript till lektions-DB")
         if "summary" in body:
             patch["summary"] = body.get("summary") or ""
         if not patch:
@@ -961,6 +971,66 @@ def create_app(base_dir: Path | None = None,
             return db.next_prep(conn, group_id)
         finally:
             conn.close()
+
+    # ---- Fritextsök över alla lektioner --------------------------------------
+
+    @app.get("/api/search")
+    def api_search(q: str = "", limit: int = 50):
+        """Search every lesson transcript at once. Returns ranked hits with a
+        context snippet and which lesson/class/course/date each came from. The
+        snippet wraps matches in \\x02..\\x03 so the UI can highlight them."""
+        query = (q or "").strip()
+        if not query:
+            return {"query": query, "hits": []}
+        conn = _db()
+        try:
+            hits = db.search_transcripts(conn, query, limit=max(1, min(limit, 200)))
+        finally:
+            conn.close()
+        for h in hits:
+            h["date"] = _date_label(h.get("ts", ""))
+        return {"query": query, "hits": hits}
+
+    @app.post("/api/search/ask")
+    async def api_search_ask(req: Request):
+        """Answer a free-text question across all recorded lessons (RAG): retrieve
+        the most relevant lessons via FTS, feed bounded excerpts to the LLM, and
+        stream a Swedish answer that cites which lesson/class/date it came from."""
+        body = await req.json()
+        query = (body.get("q") or body.get("query") or "").strip()
+        if not query:
+            return JSONResponse({"error": "fråga krävs"}, status_code=400)
+        conn = _db()
+        try:
+            hits = db.search_transcripts(conn, query, limit=5, match_all=False)
+            ids = [h["lesson_id"] for h in hits]
+            excerpts = db.lessons_excerpts_for(conn, ids, query)
+        finally:
+            conn.close()
+        if not excerpts:
+            return JSONResponse(
+                {"error": "Inga lektioner matchar sökningen."}, status_code=404)
+        if not arb.try_acquire_gpu():
+            return JSONResponse(
+                {"error": "GPU upptagen med transkribering – försök igen strax."},
+                status_code=409)
+
+        def job(emit):
+            try:
+                if arb.ensure_llm() is None:
+                    raise RuntimeError("Språkmodellen är inte installerad.")
+                emit({"type": "log", "msg": f"Söker i {len(excerpts)} lektioner ..."})
+                text = postprocess.answer_over_lessons(
+                    query, excerpts, llm_manager.ACTIVE_LLM.filename,
+                    token_cb=lambda t: emit({"type": "token", "text": t}))
+                return {"text": text, "sources": [
+                    {"lesson_id": e["lesson_id"], "history_id": e["history_id"],
+                     "name": e["name"], "group": e["group"], "course": e["course"],
+                     "datum": e["datum"]}
+                    for e in excerpts]}
+            finally:
+                arb.release_gpu()
+        return _sse_response(job)
 
     @app.post("/api/postprocess")
     async def api_postprocess(req: Request):

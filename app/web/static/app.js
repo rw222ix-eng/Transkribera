@@ -105,6 +105,13 @@
     manualTyp: 'svårighet',
     manualText: '',
     nextPrep: null,
+    lessonSearch: '',          // fritextsök över alla lektioner
+    searchMode: 'keyword',     // 'keyword' = träfflista | 'ask' = LLM-svar (RAG)
+    searchHits: null,          // null = ingen sökning gjord; [] = inga träffar
+    searching: false,
+    askAnswer: '',             // strömmat LLM-svar i "Fråga"-läget
+    askSources: null,          // lektioner svaret bygger på
+    asking: false,
     resultId: null,            // history-id för den öppna transkriberingen (för att spara redigering/sammanfattning)
     transcriptRaw: null,       // segmenten med start/end (display-arrayen tappar dem)
     confirm: null,
@@ -201,6 +208,9 @@
 
   /* -------------------------------------------------------------- helpers -- */
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  // Render a search snippet: escape first (XSS-safe), then turn the backend's
+  // \x02..\x03 match markers into highlighted <mark> spans.
+  function hl(s) { return esc(s).replace(/\x02/g, '<mark style="background:var(--accent-weak);color:var(--accent);border-radius:3px;padding:0 2px">').replace(/\x03/g, '</mark>'); }
   function fmtStorage(g) { return g >= 1000 ? (g / 1024).toFixed(1).replace('.', ',') + ' TB' : g + ' GB'; }
   function fmtTime(s) { var m = Math.floor(s / 60), r = Math.floor(s % 60); return (m < 10 ? '0' : '') + m + ':' + (r < 10 ? '0' : '') + r; }
   function parseTS(t) { var p = (t || '00:00').split(':').map(Number); return p.length === 3 ? p[0] * 3600 + p[1] * 60 + p[2] : p[0] * 60 + p[1]; }
@@ -645,6 +655,35 @@
     fetch('/api/lessons/' + encodeURIComponent(id), { method: 'DELETE' })
       .then(function () { loadLessons(); loadHistory(); loadPrep(); }).catch(function () {});
   }
+
+  /* ------------------------------------------ fritextsök över alla lektioner -- */
+  function setSearchMode(mode) { setState({ searchMode: mode }); }
+  function onSearchInput(e) { setState({ lessonSearch: e.target.value }); }
+  function clearSearch() {
+    setState({ lessonSearch: '', searchHits: null, askAnswer: '', askSources: null });
+  }
+  function runSearch() {
+    var q = (S.lessonSearch || '').trim();
+    if (!q) { setState({ searchHits: null }); return; }
+    if (S.searchMode === 'ask') { runAsk(q); return; }
+    setState({ searching: true, askAnswer: '', askSources: null });
+    getJSON('/api/search?q=' + encodeURIComponent(q))
+      .then(function (r) { setState({ searchHits: (r && r.hits) || [], searching: false }); })
+      .catch(function () { setState({ searchHits: [], searching: false }); });
+  }
+  function runAsk(q) {
+    setState({ asking: true, askAnswer: '', askSources: null, searchHits: null });
+    streamPost('/api/search/ask', { q: q }, function (ev) {
+      if (ev.type === 'token') {
+        setState(function (s) { return { askAnswer: s.askAnswer + ev.text }; });
+      } else if (ev.type === 'done') {
+        setState({ asking: false, askSources: (ev.result && ev.result.sources) || [] });
+      } else if (ev.type === 'error') {
+        setState({ asking: false, askAnswer: 'Kunde inte söka: ' + (ev.message || 'okänt fel') });
+      }
+    });
+  }
+  function openSearchHit(hit) { openLesson({ id: hit.lesson_id, history_id: hit.history_id }); }
 
   /* ------------------------------------------------------ insikter (Fas 2) -- */
   function loadInsights(lessonId) {
@@ -1477,6 +1516,31 @@
         difficulties: (st.nextPrep.difficulties || []).map(function (d) { return { text: d.text, ref: d.ref || '' }; }),
         empty: (st.nextPrep.open_actions || []).length === 0 && (st.nextPrep.difficulties || []).length === 0,
       } : null,
+
+      search: {
+        query: st.lessonSearch, mode: st.searchMode,
+        modeKeyword: st.searchMode === 'keyword', modeAsk: st.searchMode === 'ask',
+        busy: st.searching || st.asking,
+        onInput: onSearchInput, onClear: clearSearch, onRun: runSearch,
+        onKey: function (e) { if (e.key === 'Enter') { e.preventDefault(); runSearch(); } },
+        onKeyword: function () { setSearchMode('keyword'); },
+        onAsk: function () { setSearchMode('ask'); },
+        hasQuery: !!(st.lessonSearch || '').trim(),
+        // keyword-läge
+        hits: (st.searchHits || []).map(function (h) {
+          return { snippet: hl(h.snippet || ''),
+                   meta: [h.group, h.course, h.date || h.datum].filter(Boolean).join(' · ') || 'Ej tilldelad',
+                   name: h.name || '(namnlös)', onOpen: function () { openSearchHit(h); } };
+        }),
+        showNoHits: st.searchMode === 'keyword' && Array.isArray(st.searchHits) && st.searchHits.length === 0 && !st.searching,
+        searched: Array.isArray(st.searchHits),
+        // fråga-läge (RAG)
+        answer: st.askAnswer, asking: st.asking, hasAnswer: !!st.askAnswer,
+        sources: (st.askSources || []).map(function (s2) {
+          return { label: [s2.group, s2.course, s2.datum, s2.name].filter(Boolean).join(' · '),
+                   onOpen: function () { openSearchHit(s2); } };
+        }),
+      },
 
       waveBars: waveBars, audioPlaying: st.audioPlaying, audioPaused: !st.audioPlaying,
       audioCur: fmtTime(st.audioT), audioDur: fmtTime(dur),
@@ -2421,6 +2485,8 @@ function viewLessons(v){
         <p style="margin:0;color:var(--ink-2);font-size:17px">Dina inspelade lektioner — organisera per datum, klass och kurs. Allt ligger kvar lokalt.</p>
       </div>
 
+      ${ searchPanel(v.search) }
+
       <datalist id="dl-klass">${ v.lessonGroups.map(function(g){ return '<option value="'+esc(g.namn)+'">'; }).join('') }</datalist>
       <datalist id="dl-kurs">${ v.lessonCourses.map(function(c){ return '<option value="'+esc(c.namn)+'">'; }).join('') }</datalist>
 
@@ -2480,6 +2546,59 @@ function viewLessons(v){
         `; }).join('') }
       </div>
     </section>`;
+}
+
+function searchPanel(s){
+  var segBtn = function(active){ return 'border:none;background:'+(active?'var(--surface)':'transparent')+';color:'+(active?'var(--ink)':'var(--ink-3)')+';border-radius:9px;padding:6px 13px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit'+(active?';box-shadow:var(--shadow-sm)':''); };
+  return `
+    <div style="max-width:760px;margin:0 auto 22px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:16px 18px;box-shadow:var(--shadow-sm)">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:11px;flex-wrap:wrap">
+        <span style="font-size:13.5px;font-weight:600;color:var(--ink-2)">🔎 Sök i alla lektioner</span>
+        <div style="margin-left:auto;display:inline-flex;gap:3px;padding:3px;background:var(--track);border-radius:11px;border:1px solid var(--line)">
+          <button data-click="${on(s.onKeyword)}" style="${segBtn(s.modeKeyword)}">Sök ord</button>
+          <button data-click="${on(s.onAsk)}" style="${segBtn(s.modeAsk)}">Fråga (AI)</button>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <input value="${esc(s.query)}" data-input="${on(s.onInput)}" data-keydown="${on(s.onKey)}"
+          placeholder="${ s.modeAsk ? 'Ställ en fråga, t.ex. När hade vi prov om derivata?' : 'Sök efter vad som sades, t.ex. pythagoras sats' }"
+          style="flex:1;min-width:0;background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:10px 12px;font-size:14px;font-family:inherit;box-sizing:border-box">
+        ${ s.hasQuery ? `<button data-click="${on(s.onClear)}" aria-label="Rensa" style="flex:0 0 auto;width:42px;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:10px;cursor:pointer;font-family:inherit">✕</button>` : '' }
+        <button data-click="${on(s.onRun)}" ${s.busy?'disabled':''} style="flex:0 0 auto;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:10px;padding:10px 18px;font-size:14px;font-weight:600;cursor:${s.busy?'default':'pointer'};font-family:inherit;opacity:${s.busy?'0.7':'1'}">${ s.busy ? 'Söker …' : (s.modeAsk ? 'Fråga' : 'Sök') }</button>
+      </div>
+
+      ${ s.modeAsk ? `
+        ${ (s.hasAnswer || s.asking) ? `
+          <div style="margin-top:14px;border-top:1px solid var(--line);padding-top:13px">
+            <div style="font-size:14.5px;color:var(--ink);line-height:1.6;white-space:pre-wrap">${esc(s.answer)}${ s.asking ? '<span style="opacity:.5">▍</span>' : '' }</div>
+            ${ s.sources.length ? `
+              <div style="font-size:12px;font-weight:600;color:var(--ink-3);text-transform:uppercase;letter-spacing:0.04em;margin:13px 0 7px">Källor</div>
+              <div style="display:flex;flex-direction:column;gap:6px">
+                ${ s.sources.map(function(src){ return `<button data-click="${on(src.onOpen)}" style="text-align:left;background:var(--sunken);border:1px solid var(--line);color:var(--ink-2);border-radius:9px;padding:8px 11px;font-size:13px;cursor:pointer;font-family:inherit" data-sh="border-color:var(--accent) !important;color:var(--accent) !important">${esc(src.label)}</button>`; }).join('') }
+              </div>
+            ` : '' }
+          </div>
+        ` : '' }
+      ` : `
+        ${ s.searched ? `
+          <div style="margin-top:14px;border-top:1px solid var(--line);padding-top:13px">
+            ${ s.showNoHits ? `<div style="font-size:13.5px;color:var(--ink-3)">Inga lektioner matchade din sökning.</div>` : `
+              <div style="display:flex;flex-direction:column;gap:8px">
+                ${ s.hits.map(function(hit){ return `
+                  <button data-click="${on(hit.onOpen)}" style="text-align:left;background:var(--sunken);border:1px solid var(--line);border-radius:11px;padding:11px 13px;cursor:pointer;font-family:inherit;display:block;width:100%" data-sh="border-color:var(--accent) !important">
+                    <div style="display:flex;align-items:baseline;gap:9px;margin-bottom:4px">
+                      <span style="font-size:14px;font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(hit.name)}</span>
+                      <span style="font-size:12px;color:var(--ink-3)">${esc(hit.meta)}</span>
+                    </div>
+                    <div style="font-size:13px;color:var(--ink-2);line-height:1.5">${hit.snippet}</div>
+                  </button>
+                `; }).join('') }
+              </div>
+            ` }
+          </div>
+        ` : '' }
+      ` }
+    </div>`;
 }
 
 function insightsPanel(h){

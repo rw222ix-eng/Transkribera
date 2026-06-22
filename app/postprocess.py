@@ -217,6 +217,41 @@ def translate_segments(segments: list[dict], source_lang: str, target_lang: str,
     return out
 
 
+# ------------------------------------------------- smart sök: svar över lektioner --
+# RAG: feed bounded transcript excerpts (retrieved via FTS) to the LLM so it can
+# answer a free-text question across ALL recorded lessons and cite which lesson.
+
+ANSWER_SYSTEM = (
+    "Du är en assistent åt en mattelärare som söker i sina egna inspelade "
+    "lektioner. Svara ALLTID på svenska. Svara ENDAST utifrån de lektionsutdrag "
+    "du får — hitta inte på. Om svaret inte finns i utdragen säger du att du inte "
+    "hittar det. Hänvisa till vilken lektion uppgiften kommer från med klass och "
+    "datum inom hakparenteser, t.ex. [NA21 · 2026-05-12]."
+)
+
+
+def build_answer_prompt(query: str, excerpts: list[dict]) -> str:
+    blocks = []
+    for e in excerpts:
+        head = " · ".join(x for x in (e.get("group"), e.get("course"),
+                                      e.get("datum"), e.get("name")) if x)
+        blocks.append(f"[{head}]\n{(e.get('excerpt') or '').strip()}")
+    context = "\n\n".join(blocks) if blocks else "(inga träffar)"
+    return (f"Fråga: {query}\n\n"
+            f"Lektionsutdrag att svara utifrån:\n---\n{context}\n---\n\n"
+            f"Svara koncist på svenska och ange vilken/vilka lektioner svaret bygger på.")
+
+
+def answer_over_lessons(query: str, excerpts: list[dict], model: str,
+                        token_cb: Callable[[str], None] | None = None) -> str:
+    """Answer a question grounded in the given lesson excerpts (citing lessons)."""
+    if not excerpts:
+        return "Jag hittade inga lektioner som matchar din sökning."
+    return llm_client.generate(
+        model, build_answer_prompt(query, excerpts), token_cb=token_cb,
+        system=ANSWER_SYSTEM, options={"temperature": 0.2})
+
+
 # --------------------------------------------------------------- extraktion (Fas 2) --
 # Plocka ut strukturerade insikter ur en lektion. Resultatet skrivs som
 # redigerbara kort (källa 'llm') – läraren bekräftar; aldrig auto-sanning.
