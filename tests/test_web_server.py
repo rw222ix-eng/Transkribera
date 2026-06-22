@@ -1140,3 +1140,43 @@ def test_recording_markers_by_history(tmp_path, monkeypatch):
     # unknown recording → no markers, no crash
     assert c.post("/api/recordings/nope/markers", json={"markers": [{"t": 1}]}).json()["count"] == 0
     assert c.get("/api/recordings/nope/markers").json() == []
+
+
+# ---- Krasch-säker inspelning ------------------------------------------------
+
+def test_recording_append_finish_flow(client, tmp_path):
+    s = "rec_test123"
+    assert client.post("/api/recording/append", params={"session": s}, content=b"abc").json()["bytes"] == 3
+    assert client.post("/api/recording/append", params={"session": s}, content=b"def").json()["bytes"] == 6
+    part = tmp_path / "downloads" / (s + ".part")
+    assert part.exists() and part.read_bytes() == b"abcdef"
+    res = client.post("/api/recording/finish", params={"session": s, "name": "lektion.webm"}).json()
+    p = Path(res["path"])
+    assert p.exists() and p.read_bytes() == b"abcdef" and not part.exists()
+
+
+def test_recording_append_rejects_bad_session(client):
+    assert client.post("/api/recording/append", params={"session": "../evil"}, content=b"x").status_code == 400
+    assert client.post("/api/recording/finish", params={"session": "a/b"}).status_code == 400
+
+
+def test_recording_finish_missing_404(client):
+    assert client.post("/api/recording/finish", params={"session": "rec_none"}).status_code == 404
+
+
+def test_recording_incomplete_and_discard(client, tmp_path):
+    s = "rec_orphan"
+    client.post("/api/recording/append", params={"session": s}, content=b"partialdata")
+    inc = client.get("/api/recordings/incomplete").json()
+    assert any(r["session"] == s for r in inc)
+    assert client.post("/api/recording/discard", params={"session": s}).json() == {"ok": True}
+    assert client.get("/api/recordings/incomplete").json() == []
+
+
+def test_recording_finish_unique_name(client, tmp_path):
+    (tmp_path / "downloads").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "downloads" / "lektion.webm").write_bytes(b"old")
+    client.post("/api/recording/append", params={"session": "rec_dup"}, content=b"new")
+    res = client.post("/api/recording/finish", params={"session": "rec_dup", "name": "lektion.webm"}).json()
+    assert Path(res["path"]).name != "lektion.webm"      # uuid-suffix, behåller den gamla
+    assert (tmp_path / "downloads" / "lektion.webm").read_bytes() == b"old"

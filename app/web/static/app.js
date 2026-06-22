@@ -128,6 +128,9 @@
     recError: '',
     recMarkerCount: 0,         // antal markörer satta under pågående inspelning
     markers: [],               // markörer för den öppna transkriptvyn
+    recLevel: 0,               // mikrofon-nivå 0..1 (nivåmätare)
+    recSilent: false,          // varning: tyst/ingen signal en längre stund
+    incompleteRecs: [],        // oavslutade inspelningar att återställa (krasch)
   };
 
   /* instance (non-state) fields */
@@ -136,6 +139,8 @@
   var _file, _seek, _searchRef, _scrollRef, _procScroll, _chatThread, _imgInput, _media;
   var _rec = null, _recChunks = [], _recStream = null, _recTimer = null;
   var _recMarkers = [], _recMarkersByPath = {};   // live-markörer under inspelning
+  var _recSession = null, _recUploadChain = null; // inkrementell flush till disk
+  var _recAudioCtx = null, _recAnalyser = null, _recLevelTimer = null, _recSilenceSecs = 0;
   var _prevTab, _prevStep, _prevRun, _prevPP, _prevOp, _prevChatLen, _wasEditing, _wasOpen, _scrollKey;
 
   /* ----------------------------------------------------------------- data -- */
@@ -419,22 +424,61 @@
     return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + '_' + p(d.getHours()) + p(d.getMinutes());
   }
   function _stopStream() { if (_recStream) { try { _recStream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {} _recStream = null; } }
+  function _stopLevelMeter() {
+    clearInterval(_recLevelTimer); _recLevelTimer = null; _recSilenceSecs = 0;
+    if (_recAudioCtx) { try { _recAudioCtx.close(); } catch (e) {} _recAudioCtx = null; }
+    _recAnalyser = null;
+  }
+  function _startLevelMeter(stream) {
+    try {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      _recAudioCtx = new AC();
+      var src = _recAudioCtx.createMediaStreamSource(stream);
+      _recAnalyser = _recAudioCtx.createAnalyser();
+      _recAnalyser.fftSize = 1024;
+      src.connect(_recAnalyser);
+      var buf = new Uint8Array(_recAnalyser.fftSize);
+      _recLevelTimer = setInterval(function () {
+        if (!_recAnalyser) return;
+        _recAnalyser.getByteTimeDomainData(buf);
+        var sum = 0;
+        for (var i = 0; i < buf.length; i++) { var d = (buf[i] - 128) / 128; sum += d * d; }
+        var rms = Math.sqrt(sum / buf.length);            // 0..~1
+        var level = Math.min(1, rms * 4);
+        if (level < 0.02) { _recSilenceSecs += 0.2; } else { _recSilenceSecs = 0; }
+        setState({ recLevel: level, recSilent: _recSilenceSecs > 4 });
+      }, 200);
+    } catch (e) { /* nivåmätaren är bonus — fortsätt utan den */ }
+  }
+  // Ladda upp en inspelad bit direkt till disk (krasch-säkert), i ordning.
+  function _appendChunk(blob) {
+    _recUploadChain = (_recUploadChain || Promise.resolve()).then(function () {
+      return fetch('/api/recording/append?session=' + encodeURIComponent(_recSession), {
+        method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: blob
+      }).then(function (r) { if (!r.ok) { return r.json().then(function (j) { setState({ recError: (j && j.error) || 'Kunde inte spara inspelningen.' }); }); } })
+        .catch(function () { /* nästa bit försöker igen; .part behåller det som hann skrivas */ });
+    });
+    return _recUploadChain;
+  }
   function startRecording() {
     if (!recSupported()) { setState({ recError: 'Inspelning stöds inte i den här vyn.' }); return; }
     setState({ recError: '', fileError: '' });
     navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
       _recStream = stream; _recChunks = [];
-      // Välj ett format webbläsaren/WebView2 faktiskt stöder (Chromium → webm/opus,
-      // Safari/WebView → mp4). Faller tillbaka till standardformatet om inget matchar.
+      _recSession = 'rec_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+      _recUploadChain = Promise.resolve();
       var prefer = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'];
       var mt = (window.MediaRecorder && MediaRecorder.isTypeSupported)
         ? prefer.filter(function (t) { return MediaRecorder.isTypeSupported(t); })[0] : null;
       _rec = mt ? new MediaRecorder(stream, { mimeType: mt }) : new MediaRecorder(stream);
-      _rec.ondataavailable = function (e) { if (e.data && e.data.size) _recChunks.push(e.data); };
+      // Flush each chunk straight to disk so a crash mid-lesson is recoverable.
+      _rec.ondataavailable = function (e) { if (e.data && e.data.size) _appendChunk(e.data); };
       _rec.onstop = function () { finishRecording(_rec ? _rec.mimeType : ''); };
-      _rec.start();
+      _rec.start(4000);                                   // timeslice → periodisk flush
       _recMarkers = [];
-      setState({ recording: true, recElapsed: 0, recMarkerCount: 0 });
+      _startLevelMeter(stream);
+      setState({ recording: true, recElapsed: 0, recMarkerCount: 0, recLevel: 0, recSilent: false });
       clearInterval(_recTimer);
       _recTimer = setInterval(function () { setState(function (s) { return { recElapsed: s.recElapsed + 1 }; }); }, 1000);
     }).catch(function () {
@@ -442,15 +486,17 @@
     });
   }
   function stopRecording() {
-    clearInterval(_recTimer);
+    clearInterval(_recTimer); _stopLevelMeter();
     try { if (_rec && _rec.state !== 'inactive') _rec.stop(); } catch (e) {}
-    setState({ recording: false });   // finishRecording runs on the 'stop' event
+    setState({ recording: false, recLevel: 0, recSilent: false });   // finishRecording runs on 'stop'
   }
   function cancelRecording() {
-    clearInterval(_recTimer); _recChunks = []; _recMarkers = [];
+    clearInterval(_recTimer); _stopLevelMeter(); _recChunks = []; _recMarkers = [];
     try { if (_rec && _rec.state !== 'inactive') { _rec.onstop = null; _rec.stop(); } } catch (e) {}
     _stopStream();
-    setState({ recording: false, recElapsed: 0, recError: '', recMarkerCount: 0 });
+    var session = _recSession; _recSession = null;
+    if (session) { fetch('/api/recording/discard?session=' + encodeURIComponent(session), { method: 'POST' }).catch(function () {}); }
+    setState({ recording: false, recElapsed: 0, recError: '', recMarkerCount: 0, recLevel: 0, recSilent: false });
   }
   // Markera ett viktigt ögonblick live — hittas igen utan talarseparation.
   function addRecMarker() {
@@ -459,27 +505,44 @@
     setState({ recMarkerCount: _recMarkers.length });
   }
   function finishRecording(mime) {
-    _stopStream();
-    var chunks = _recChunks; _recChunks = [];
-    if (!chunks.length) { setState({ recElapsed: 0 }); return; }
+    _stopStream(); _stopLevelMeter();
+    var session = _recSession; _recSession = null;
+    if (!session) { setState({ recElapsed: 0 }); return; }
     var type = (mime && mime.indexOf('audio') === 0) ? mime : 'audio/webm';
-    // Härled filändelsen ur det verkliga formatet (mp4/ogg/mpeg), inte alltid webm.
     var ext = type.indexOf('ogg') !== -1 ? 'ogg'
       : type.indexOf('mp4') !== -1 ? 'm4a'
       : type.indexOf('mpeg') !== -1 ? 'mp3'
       : type.indexOf('wav') !== -1 ? 'wav' : 'webm';
     var name = 'lektion_' + recStamp() + '.' + ext;
-    fetch('/api/upload?name=' + encodeURIComponent(name), {
-      method: 'POST', headers: { 'Content-Type': type }, body: new Blob(chunks, { type: type })
+    var markers = _recMarkers; _recMarkers = [];
+    // Wait for every flushed chunk to land, THEN finalise the .part on disk.
+    (_recUploadChain || Promise.resolve()).then(function () {
+      return fetch('/api/recording/finish?session=' + encodeURIComponent(session) + '&name=' + encodeURIComponent(name), { method: 'POST' });
     }).then(function (r) { return r.json(); }).then(function (res) {
       if (res && res.path) {
-        if (_recMarkers.length) { _recMarkersByPath[res.path] = _recMarkers; }
-        _recMarkers = [];
+        if (markers.length) { _recMarkersByPath[res.path] = markers; }
         addFilesObjs([{ name: res.name || name, path: res.path }]);
         setState({ recElapsed: 0, recMarkerCount: 0 });
-      }
-      else { setState({ recError: (res && res.error) || 'Uppladdning misslyckades.' }); }
-    }).catch(function () { setState({ recError: 'Uppladdning misslyckades.' }); });
+      } else { setState({ recError: (res && res.error) || 'Kunde inte slutföra inspelningen.' }); }
+    }).catch(function () { setState({ recError: 'Kunde inte slutföra inspelningen.' }); });
+  }
+  /* ------------------------------- återställ oavslutad inspelning (krasch) -- */
+  function loadIncompleteRecs() {
+    return getJSON('/api/recordings/incomplete')
+      .then(function (l) { setState({ incompleteRecs: Array.isArray(l) ? l : [] }); })
+      .catch(function () { setState({ incompleteRecs: [] }); });
+  }
+  function recoverIncomplete(session) {
+    var name = 'återställd_' + session + '.webm';
+    fetch('/api/recording/finish?session=' + encodeURIComponent(session) + '&name=' + encodeURIComponent(name), { method: 'POST' })
+      .then(function (r) { return r.json(); }).then(function (res) {
+        if (res && res.path) { addFilesObjs([{ name: res.name || name, path: res.path }]); }
+        loadIncompleteRecs();
+      }).catch(function () {});
+  }
+  function discardIncomplete(session) {
+    fetch('/api/recording/discard?session=' + encodeURIComponent(session), { method: 'POST' })
+      .then(function () { loadIncompleteRecs(); }).catch(function () {});
   }
 
   function restart() {
@@ -1702,7 +1765,14 @@
       urlInput: st.urlInput, onUrlInput: onUrlInput, onAddUrl: addUrl, onUrlKey: onUrlKey,
       recording: st.recording, recElapsedFmt: fmtTime(st.recElapsed), recSupported: recSupported(),
       recError: st.recError, hasRecError: !!st.recError, recMarkerCount: st.recMarkerCount,
+      recLevelPct: Math.round((st.recLevel || 0) * 100), recSilent: st.recSilent,
       onStartRec: startRecording, onStopRec: stopRecording, onCancelRec: cancelRecording, onMarkRec: addRecMarker,
+      incompleteRecs: (st.incompleteRecs || []).map(function (r) {
+        return { session: r.session, label: (r.size || '') + (r.modified ? ' · ' + r.modified : ''),
+                 onRecover: function () { recoverIncomplete(r.session); },
+                 onDiscard: function () { discardIncomplete(r.session); } };
+      }),
+      hasIncompleteRecs: (st.incompleteRecs || []).length > 0,
       dropzoneStyle: 'position:relative;border:1.5px dashed ' + (st.dragging ? 'var(--accent)' : 'var(--line-2)') + ';border-radius:20px;background:' + (st.dragging ? 'var(--accent-weak)' : 'var(--surface)') + ';flex:1 1 auto;min-height:200px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 24px;text-align:center;box-shadow:var(--shadow-sm);cursor:pointer;user-select:none;-webkit-user-select:none;transition:border-color .12s,background .12s',
       curModelName: curModel.label || curModel.id,
       curModelMeta: 'Väljs automatiskt · ' + (st.language === 'en' ? 'Engelska' : 'Svenska'),
@@ -1945,6 +2015,21 @@ function viewTranscribe(v){ return `
           </div>
         </div>
 
+        ${ v.hasIncompleteRecs ? `
+          <div style="margin-top:14px;background:color-mix(in srgb,var(--accent) 7%,var(--surface));border:1px solid color-mix(in srgb,var(--accent) 30%,transparent);border-radius:12px;padding:13px 15px">
+            <div style="font-size:13.5px;font-weight:600;color:var(--ink);margin-bottom:9px">⚠️ Oavslutad inspelning hittad</div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              ${ v.incompleteRecs.map(function(r){ return `
+                <div style="display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px 11px">
+                  <span style="flex:1;min-width:0;font-size:13.5px;color:var(--ink-2)">${esc(r.label)}</span>
+                  <button data-click="${on(r.onRecover)}" style="flex:0 0 auto;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:8px;padding:7px 13px;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit">Återställ</button>
+                  <button data-click="${on(r.onDiscard)}" style="flex:0 0 auto;background:var(--surface);border:1px solid var(--line);color:var(--ink-2);border-radius:8px;padding:7px 11px;font-size:13px;cursor:pointer;font-family:inherit" data-sh="border-color:var(--bad) !important;color:var(--bad) !important">Släng</button>
+                </div>
+              `; }).join('') }
+            </div>
+          </div>
+        ` : '' }
+
         <div style="display:flex;align-items:center;gap:10px;margin-top:12px">
           <span style="font-size:11.5px;text-transform:uppercase;letter-spacing:0.05em;color:var(--ink-2);font-weight:600;flex:0 0 auto">Eller spela in</span>
           <div style="flex:1;display:flex;align-items:center;gap:10px;min-width:0;background:var(--surface);border:1px solid ${ v.recording ? 'color-mix(in srgb,var(--bad) 45%,var(--line))' : 'var(--line)' };border-radius:11px;padding:7px 7px 7px 13px;box-shadow:var(--shadow-sm)">
@@ -1952,6 +2037,8 @@ function viewTranscribe(v){ return `
               <span style="width:9px;height:9px;border-radius:50%;background:var(--bad);flex:0 0 auto;animation:pulse 1.4s ease infinite"></span>
               <span style="font-size:14.5px;color:var(--ink);font-weight:500">Spelar in</span>
               <span style="font-size:14.5px;color:var(--ink-2);font-variant-numeric:tabular-nums">${esc(v.recElapsedFmt)}</span>
+              <div style="flex:0 0 70px;height:6px;border-radius:99px;background:var(--track);overflow:hidden" title="Mikrofonnivå"><div style="height:100%;width:${v.recLevelPct}%;background:${ v.recSilent ? 'var(--bad)' : 'var(--ok)' };border-radius:99px;transition:width .12s"></div></div>
+              ${ v.recSilent ? `<span style="font-size:12.5px;color:var(--bad);font-weight:500;flex:0 0 auto">Ingen signal?</span>` : '' }
               <div style="flex:1"></div>
               <button data-click="${on(v.onMarkRec)}" title="Markera ett viktigt ögonblick" style="flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:8px 13px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit" data-sh="border-color:var(--accent) !important;color:var(--accent) !important">🔖 Markera${ v.recMarkerCount ? ' (' + v.recMarkerCount + ')' : '' }</button>
               <button data-click="${on(v.onCancelRec)}" style="flex:0 0 auto;background:var(--surface);border:1px solid var(--line);color:var(--ink-2);border-radius:8px;padding:8px 13px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit" data-sh="border-color:var(--ink-3) !important;color:var(--ink) !important">Avbryt</button>
@@ -3204,6 +3291,7 @@ function viewModals(v){ return `
     loadModels().then(loadSettings);   // real catalog, then reflect chosen models disk
     loadHistory();  // load persisted transcription history
     loadAudioModel();  // audio-correction model install status
+    loadIncompleteRecs();  // offer to recover a recording that never finished (crash)
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 

@@ -612,6 +612,93 @@ def create_app(base_dir: Path | None = None,
         dest.write_bytes(data)
         return {"path": str(dest), "name": dest.name}
 
+    # ---- Krasch-säker inspelning: inkrementell flush till disk ----------------
+    # En lektion går inte att spela in igen. MediaRecorder håller annars allt i
+    # minnet tills man stoppar — kraschar appen mitt i ett 70-min-pass är allt
+    # borta. Här flushas varje bit löpande till downloads/<session>.part, så ett
+    # avbrott lämnar en återställbar fil.
+
+    import re as _re_mod
+    _SESSION_RE = _re_mod.compile(r"^[A-Za-z0-9_-]{1,64}$")
+
+    def _session_part(session: str) -> Path | None:
+        if not _SESSION_RE.match(session or ""):
+            return None
+        return base / "downloads" / (session + ".part")
+
+    @app.post("/api/recording/append")
+    async def api_recording_append(req: Request, session: str = ""):
+        """Append one recorded chunk to the session's .part file on disk."""
+        part = _session_part(session)
+        if part is None:
+            return JSONResponse({"error": "ogiltig session"}, status_code=400)
+        data = await req.body()
+        if not data:
+            return {"bytes": part.stat().st_size if part.exists() else 0}
+        part.parent.mkdir(parents=True, exist_ok=True)
+        existing = part.stat().st_size if part.exists() else 0
+        if existing + len(data) > MAX_UPLOAD_BYTES:
+            return JSONResponse(
+                {"error": "Inspelningen är för stor."}, status_code=413)
+        try:
+            with open(part, "ab") as fh:
+                fh.write(data)
+        except OSError:
+            return JSONResponse(
+                {"error": "Kunde inte skriva till disk — kontrollera ledigt utrymme."},
+                status_code=507)
+        return {"bytes": existing + len(data)}
+
+    @app.post("/api/recording/finish")
+    def api_recording_finish(session: str = "", name: str = "inspelning.webm"):
+        """Finalise a flushed recording: move <session>.part to its real filename
+        under downloads/ and return the path so it enters the transcribe flow."""
+        part = _session_part(session)
+        if part is None:
+            return JSONResponse({"error": "ogiltig session"}, status_code=400)
+        if not part.exists() or part.stat().st_size == 0:
+            return JSONResponse({"error": "ingen inspelning att slutföra"}, status_code=404)
+        safe = Path(name).name
+        if safe in (".", "..", ""):
+            safe = "inspelning.webm"
+        dest = part.with_name(safe)
+        if dest.exists():
+            dest = part.with_name(f"{dest.stem}-{uuid.uuid4().hex[:8]}{dest.suffix}")
+        part.replace(dest)
+        return {"path": str(dest), "name": dest.name}
+
+    @app.get("/api/recordings/incomplete")
+    def api_recordings_incomplete():
+        """Leftover .part files from a recording that never finished (e.g. a crash)
+        — surfaced so the teacher can recover or discard them."""
+        out = []
+        d = base / "downloads"
+        if d.exists():
+            for p in sorted(d.glob("*.part")):
+                try:
+                    st = p.stat()
+                except OSError:
+                    continue
+                if st.st_size == 0:
+                    continue
+                out.append({"session": p.stem, "bytes": st.st_size,
+                            "size": _file_size_str(p),
+                            "modified": _date_label(
+                                datetime.fromtimestamp(st.st_mtime).isoformat())})
+        return out
+
+    @app.post("/api/recording/discard")
+    def api_recording_discard(session: str = ""):
+        part = _session_part(session)
+        if part is None:
+            return JSONResponse({"error": "ogiltig session"}, status_code=400)
+        try:
+            if part.exists():
+                part.unlink()
+        except OSError:
+            pass
+        return {"ok": True}
+
     @app.post("/api/transcribe/cancel")
     def api_transcribe_cancel():
         """Terminate the running transcription subprocess so the GPU is freed at
