@@ -243,9 +243,20 @@
   // picker any more; we resolve the best INSTALLED model for the language.
   function recommendModel(l, instMap) {
     var inst = instMap || S.installed;
-    var pick = function (pred) { var m = WHISPER.find(function (x) { return inst[x.id] && pred(x); }); return m ? m.id : null; };
-    if (l === 'en') return pick(function (m) { return m.lang === 'en'; }) || pick(function (m) { return m.lang === 'multi'; }) || S.model;
-    return pick(function (m) { return m.lang === 'sv'; }) || pick(function (m) { return m.lang === 'multi'; }) || pick(function () { return true; }) || S.model;
+    // Pick the BEST installed match (highest score), not the first in catalog
+    // order — otherwise sv would resolve to kb-whisper-tiny over kb-whisper-large.
+    var pick = function (pred) {
+      var best = null;
+      WHISPER.forEach(function (x) {
+        if (inst[x.id] && pred(x) && (!best || (x.score || 0) > (best.score || 0))) best = x;
+      });
+      return best ? best.id : null;
+    };
+    // No cross-language fallback: never auto-select a Swedish-only model for English
+    // (or vice versa). Return '' when no language-appropriate model is installed so the
+    // UI prompts for a download instead of silently transcribing with the wrong model.
+    if (l === 'en') return pick(function (m) { return m.lang === 'en'; }) || pick(function (m) { return m.lang === 'multi'; }) || '';
+    return pick(function (m) { return m.lang === 'sv'; }) || pick(function (m) { return m.lang === 'multi'; }) || '';
   }
   function countMatches() { var q = S.searchQuery.trim().toLowerCase(); if (!q) return 0; var n = 0; for (var k = 0; k < getTranscript().length; k++) { var pos = 0, i, t = lineText(k).toLowerCase(); while ((i = t.indexOf(q, pos)) !== -1) { n++; pos = i + q.length; } } return n; }
   function pickQuant(model, kind) {
@@ -1001,6 +1012,9 @@
   function start() {
     if (S.run === 'running') return;
     if (!S.queue.length) return;
+    // No language-appropriate model installed — send the user to download one
+    // rather than transcribe with the wrong (or no) model.
+    if (!S.model) { setState({ tab: 'models' }); return; }
     var now = Date.now();
     if (_lastStart && now - _lastStart < 400) return;
     _lastStart = now;
@@ -1270,10 +1284,10 @@
       var patch = { catalogReady: true, installed: inst };
       var instW = WHISPER.filter(function (m) { return inst[m.id]; });
       if (instW.length) {
-        // Keep the model in sync with the chosen language (Svenska/Engelska).
-        var byLang = recommendModel(S.language, inst);
-        patch.model = (byLang && inst[byLang]) ? byLang
-          : (WHISPER.find(function (m) { return m.recommended && inst[m.id]; }) || instW[0]).id;
+        // Keep the model in sync with the chosen language. '' when no language-
+        // appropriate model is installed — never cross-select (e.g. a Swedish model
+        // for English); the UI then prompts for a download instead.
+        patch.model = recommendModel(S.language, inst);
       }
       var instL = LLM.filter(function (m) { return inst[m.id]; });
       if (instL.length && !inst[S.ppModel]) {
@@ -1801,9 +1815,9 @@
       }),
       hasIncompleteRecs: (st.incompleteRecs || []).length > 0,
       dropzoneStyle: 'position:relative;border:1.5px dashed ' + (st.dragging ? 'var(--accent)' : 'var(--line-2)') + ';border-radius:20px;background:' + (st.dragging ? 'var(--accent-weak)' : 'var(--surface)') + ';flex:1 1 auto;min-height:200px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 24px;text-align:center;box-shadow:var(--shadow-sm);cursor:pointer;user-select:none;-webkit-user-select:none;transition:border-color .12s,background .12s',
-      curModelName: curModel.label || curModel.id,
-      curModelMeta: 'Väljs automatiskt · ' + (st.language === 'en' ? 'Engelska' : 'Svenska'),
-      curModelDot: curFit.dot,
+      curModelName: st.model ? (curModel.label || curModel.id) : ('Ingen modell för ' + (st.language === 'en' ? 'engelska' : 'svenska')),
+      curModelMeta: st.model ? ('Väljs automatiskt · ' + (st.language === 'en' ? 'Engelska' : 'Svenska')) : 'Ladda ner en lämplig modell på Modeller-fliken',
+      curModelDot: st.model ? curFit.dot : 'var(--bad)',
       langOptions: langOptions, formatChips: formatChips,
       targetLangOptions: targetLangOptions, translateNote: translateNote,
       subtitleOptions: subtitleOptions, embedOptions: embedOptions,
@@ -1815,7 +1829,7 @@
       acSwitchKnob: 'position:absolute;top:3px;left:3px;width:19px;height:19px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.2);transition:transform .15s;transform:translateX(' + (st.audioCorrect ? '17px' : '0') + ')',
 
       onStart: start, isRunning: isRunning, notRunning: !isRunning,
-      startBtnLabel: isRunning ? 'Transkriberar…' : isDone ? 'Kör igen' : (st.queue.length > 1 ? 'Starta · ' + st.queue.length + ' filer' : 'Starta'),
+      startBtnLabel: (st.catalogReady && !st.model) ? 'Ladda ner en modell först' : isRunning ? 'Transkriberar…' : isDone ? 'Kör igen' : (st.queue.length > 1 ? 'Starta · ' + st.queue.length + ' filer' : 'Starta'),
       startBtnStyle: coralBtn(isRunning) + ';width:100%;padding:16px 24px;font-size:16.5px',
       startBtnStyleBar: primaryBtn(isRunning) + ';padding:12px 22px;font-size:15px;border-radius:11px;flex:0 0 auto',
 
