@@ -105,6 +105,18 @@
     manualTyp: 'svårighet',
     manualText: '',
     nextPrep: null,
+    lessonSearch: '',          // fritextsök över alla lektioner
+    searchMode: 'keyword',     // 'keyword' = träfflista | 'ask' = LLM-svar (RAG)
+    searchHits: null,          // null = ingen sökning gjord; [] = inga träffar
+    searching: false,
+    askAnswer: '',             // strömmat LLM-svar i "Fråga"-läget
+    askSources: null,          // lektioner svaret bygger på
+    asking: false,
+    agenda: null,              // daterade poster tvärs alla klasser
+    agendaOpen: false,         // utfälld agenda-panel
+    agendaExporting: false,
+    trends: null,              // terminstrender för vald klass
+    backingUp: false,          // säkerhetskopiering pågår
     resultId: null,            // history-id för den öppna transkriberingen (för att spara redigering/sammanfattning)
     transcriptRaw: null,       // segmenten med start/end (display-arrayen tappar dem)
     confirm: null,
@@ -115,6 +127,11 @@
     recording: false,
     recElapsed: 0,
     recError: '',
+    recMarkerCount: 0,         // antal markörer satta under pågående inspelning
+    markers: [],               // markörer för den öppna transkriptvyn
+    recLevel: 0,               // mikrofon-nivå 0..1 (nivåmätare)
+    recSilent: false,          // varning: tyst/ingen signal en längre stund
+    incompleteRecs: [],        // oavslutade inspelningar att återställa (krasch)
   };
 
   /* instance (non-state) fields */
@@ -122,6 +139,9 @@
   var _dl = {}, _inst = {}, _editBuf = {}, _wave = null;
   var _file, _seek, _searchRef, _scrollRef, _procScroll, _chatThread, _imgInput, _media;
   var _rec = null, _recChunks = [], _recStream = null, _recTimer = null;
+  var _recMarkers = [], _recMarkersByPath = {};   // live-markörer under inspelning
+  var _recSession = null, _recUploadChain = null; // inkrementell flush till disk
+  var _recAudioCtx = null, _recAnalyser = null, _recLevelTimer = null, _recSilenceSecs = 0;
   var _prevTab, _prevStep, _prevRun, _prevPP, _prevOp, _prevChatLen, _wasEditing, _wasOpen, _scrollKey;
 
   /* ----------------------------------------------------------------- data -- */
@@ -201,6 +221,9 @@
 
   /* -------------------------------------------------------------- helpers -- */
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+  // Render a search snippet: escape first (XSS-safe), then turn the backend's
+  // \x02..\x03 match markers into highlighted <mark> spans.
+  function hl(s) { return esc(s).replace(/\x02/g, '<mark style="background:var(--accent-weak);color:var(--accent);border-radius:3px;padding:0 2px">').replace(/\x03/g, '</mark>'); }
   function fmtStorage(g) { return g >= 1000 ? (g / 1024).toFixed(1).replace('.', ',') + ' TB' : g + ' GB'; }
   function fmtTime(s) { var m = Math.floor(s / 60), r = Math.floor(s % 60); return (m < 10 ? '0' : '') + m + ':' + (r < 10 ? '0' : '') + r; }
   function parseTS(t) { var p = (t || '00:00').split(':').map(Number); return p.length === 3 ? p[0] * 3600 + p[1] * 60 + p[2] : p[0] * 60 + p[1]; }
@@ -360,7 +383,7 @@
   /* -------------------------------------------------------------- actions -- */
   // BACKEND: theme/tab are pure UI.
   function toggleTheme() { setState(function (s) { return { theme: s.theme === 'light' ? 'dark' : 'light' }; }); }
-  function setTab(t) { setState({ tab: t, openDD: null }); if (t === 'lessons') { loadLessons(); loadOrg(); loadPrep(); } }
+  function setTab(t) { setState({ tab: t, openDD: null }); if (t === 'lessons') { loadLessons(); loadOrg(); loadPrep(); loadAgenda(); loadTrends(); } }
   function onSource(e) { setState({ source: e.target.value }); }
   function fileRef(el) { _file = el; }
   function openPicker() {
@@ -402,21 +425,61 @@
     return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + '_' + p(d.getHours()) + p(d.getMinutes());
   }
   function _stopStream() { if (_recStream) { try { _recStream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {} _recStream = null; } }
+  function _stopLevelMeter() {
+    clearInterval(_recLevelTimer); _recLevelTimer = null; _recSilenceSecs = 0;
+    if (_recAudioCtx) { try { _recAudioCtx.close(); } catch (e) {} _recAudioCtx = null; }
+    _recAnalyser = null;
+  }
+  function _startLevelMeter(stream) {
+    try {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      _recAudioCtx = new AC();
+      var src = _recAudioCtx.createMediaStreamSource(stream);
+      _recAnalyser = _recAudioCtx.createAnalyser();
+      _recAnalyser.fftSize = 1024;
+      src.connect(_recAnalyser);
+      var buf = new Uint8Array(_recAnalyser.fftSize);
+      _recLevelTimer = setInterval(function () {
+        if (!_recAnalyser) return;
+        _recAnalyser.getByteTimeDomainData(buf);
+        var sum = 0;
+        for (var i = 0; i < buf.length; i++) { var d = (buf[i] - 128) / 128; sum += d * d; }
+        var rms = Math.sqrt(sum / buf.length);            // 0..~1
+        var level = Math.min(1, rms * 4);
+        if (level < 0.02) { _recSilenceSecs += 0.2; } else { _recSilenceSecs = 0; }
+        setState({ recLevel: level, recSilent: _recSilenceSecs > 4 });
+      }, 200);
+    } catch (e) { /* nivåmätaren är bonus — fortsätt utan den */ }
+  }
+  // Ladda upp en inspelad bit direkt till disk (krasch-säkert), i ordning.
+  function _appendChunk(blob) {
+    _recUploadChain = (_recUploadChain || Promise.resolve()).then(function () {
+      return fetch('/api/recording/append?session=' + encodeURIComponent(_recSession), {
+        method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: blob
+      }).then(function (r) { if (!r.ok) { return r.json().then(function (j) { setState({ recError: (j && j.error) || 'Kunde inte spara inspelningen.' }); }); } })
+        .catch(function () { /* nästa bit försöker igen; .part behåller det som hann skrivas */ });
+    });
+    return _recUploadChain;
+  }
   function startRecording() {
     if (!recSupported()) { setState({ recError: 'Inspelning stöds inte i den här vyn.' }); return; }
     setState({ recError: '', fileError: '' });
     navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
       _recStream = stream; _recChunks = [];
-      // Välj ett format webbläsaren/WebView2 faktiskt stöder (Chromium → webm/opus,
-      // Safari/WebView → mp4). Faller tillbaka till standardformatet om inget matchar.
+      _recSession = 'rec_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+      _recUploadChain = Promise.resolve();
       var prefer = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'];
       var mt = (window.MediaRecorder && MediaRecorder.isTypeSupported)
         ? prefer.filter(function (t) { return MediaRecorder.isTypeSupported(t); })[0] : null;
       _rec = mt ? new MediaRecorder(stream, { mimeType: mt }) : new MediaRecorder(stream);
-      _rec.ondataavailable = function (e) { if (e.data && e.data.size) _recChunks.push(e.data); };
+      // Flush each chunk straight to disk so a crash mid-lesson is recoverable.
+      _rec.ondataavailable = function (e) { if (e.data && e.data.size) _appendChunk(e.data); };
       _rec.onstop = function () { finishRecording(_rec ? _rec.mimeType : ''); };
-      _rec.start();
-      setState({ recording: true, recElapsed: 0 });
+      _rec.start(4000);                                   // timeslice → periodisk flush
+      _recMarkers = [];
+      _startLevelMeter(stream);
+      setState({ recording: true, recElapsed: 0, recMarkerCount: 0, recLevel: 0, recSilent: false });
       clearInterval(_recTimer);
       _recTimer = setInterval(function () { setState(function (s) { return { recElapsed: s.recElapsed + 1 }; }); }, 1000);
     }).catch(function () {
@@ -424,33 +487,63 @@
     });
   }
   function stopRecording() {
-    clearInterval(_recTimer);
+    clearInterval(_recTimer); _stopLevelMeter();
     try { if (_rec && _rec.state !== 'inactive') _rec.stop(); } catch (e) {}
-    setState({ recording: false });   // finishRecording runs on the 'stop' event
+    setState({ recording: false, recLevel: 0, recSilent: false });   // finishRecording runs on 'stop'
   }
   function cancelRecording() {
-    clearInterval(_recTimer); _recChunks = [];
+    clearInterval(_recTimer); _stopLevelMeter(); _recChunks = []; _recMarkers = [];
     try { if (_rec && _rec.state !== 'inactive') { _rec.onstop = null; _rec.stop(); } } catch (e) {}
     _stopStream();
-    setState({ recording: false, recElapsed: 0, recError: '' });
+    var session = _recSession; _recSession = null;
+    if (session) { fetch('/api/recording/discard?session=' + encodeURIComponent(session), { method: 'POST' }).catch(function () {}); }
+    setState({ recording: false, recElapsed: 0, recError: '', recMarkerCount: 0, recLevel: 0, recSilent: false });
+  }
+  // Markera ett viktigt ögonblick live — hittas igen utan talarseparation.
+  function addRecMarker() {
+    if (!S.recording) return;
+    _recMarkers.push({ t: S.recElapsed });
+    setState({ recMarkerCount: _recMarkers.length });
   }
   function finishRecording(mime) {
-    _stopStream();
-    var chunks = _recChunks; _recChunks = [];
-    if (!chunks.length) { setState({ recElapsed: 0 }); return; }
+    _stopStream(); _stopLevelMeter();
+    var session = _recSession; _recSession = null;
+    if (!session) { setState({ recElapsed: 0 }); return; }
     var type = (mime && mime.indexOf('audio') === 0) ? mime : 'audio/webm';
-    // Härled filändelsen ur det verkliga formatet (mp4/ogg/mpeg), inte alltid webm.
     var ext = type.indexOf('ogg') !== -1 ? 'ogg'
       : type.indexOf('mp4') !== -1 ? 'm4a'
       : type.indexOf('mpeg') !== -1 ? 'mp3'
       : type.indexOf('wav') !== -1 ? 'wav' : 'webm';
     var name = 'lektion_' + recStamp() + '.' + ext;
-    fetch('/api/upload?name=' + encodeURIComponent(name), {
-      method: 'POST', headers: { 'Content-Type': type }, body: new Blob(chunks, { type: type })
+    var markers = _recMarkers; _recMarkers = [];
+    // Wait for every flushed chunk to land, THEN finalise the .part on disk.
+    (_recUploadChain || Promise.resolve()).then(function () {
+      return fetch('/api/recording/finish?session=' + encodeURIComponent(session) + '&name=' + encodeURIComponent(name), { method: 'POST' });
     }).then(function (r) { return r.json(); }).then(function (res) {
-      if (res && res.path) { addFilesObjs([{ name: res.name || name, path: res.path }]); setState({ recElapsed: 0 }); }
-      else { setState({ recError: (res && res.error) || 'Uppladdning misslyckades.' }); }
-    }).catch(function () { setState({ recError: 'Uppladdning misslyckades.' }); });
+      if (res && res.path) {
+        if (markers.length) { _recMarkersByPath[res.path] = markers; }
+        addFilesObjs([{ name: res.name || name, path: res.path }]);
+        setState({ recElapsed: 0, recMarkerCount: 0 });
+      } else { setState({ recError: (res && res.error) || 'Kunde inte slutföra inspelningen.' }); }
+    }).catch(function () { setState({ recError: 'Kunde inte slutföra inspelningen.' }); });
+  }
+  /* ------------------------------- återställ oavslutad inspelning (krasch) -- */
+  function loadIncompleteRecs() {
+    return getJSON('/api/recordings/incomplete')
+      .then(function (l) { setState({ incompleteRecs: Array.isArray(l) ? l : [] }); })
+      .catch(function () { setState({ incompleteRecs: [] }); });
+  }
+  function recoverIncomplete(session) {
+    var name = 'återställd_' + session + '.webm';
+    fetch('/api/recording/finish?session=' + encodeURIComponent(session) + '&name=' + encodeURIComponent(name), { method: 'POST' })
+      .then(function (r) { return r.json(); }).then(function (res) {
+        if (res && res.path) { addFilesObjs([{ name: res.name || name, path: res.path }]); }
+        loadIncompleteRecs();
+      }).catch(function () {});
+  }
+  function discardIncomplete(session) {
+    fetch('/api/recording/discard?session=' + encodeURIComponent(session), { method: 'POST' })
+      .then(function () { loadIncompleteRecs(); }).catch(function () {});
   }
 
   function restart() {
@@ -564,7 +657,31 @@
       transcript: (h.transcript || []).map(function (g) { return { time: fmtTime(g.start), text: g.text }; }),
       transcriptRaw: h.transcript || [],
       mediaUrl: mediaUrlFor(h), audioT: 0, audioDur: 0, audioPlaying: false, edits: {}, edited: false,
+      markers: [],
     });
+    loadMarkers(h.id);
+  }
+  /* ----------------------------------------- markörer i transkriptvyn -- */
+  function loadMarkers(historyId) {
+    if (!historyId) { setState({ markers: [] }); return; }
+    getJSON('/api/recordings/' + encodeURIComponent(historyId) + '/markers')
+      .then(function (m) { setState({ markers: Array.isArray(m) ? m : [] }); })
+      .catch(function () { setState({ markers: [] }); });
+  }
+  function seekToTime(t) {
+    if (hasMedia()) { _media.currentTime = t; setState({ audioT: t }); _media.play().catch(function () {}); }
+    else { setState({ audioT: t }); }
+  }
+  function addPlaybackMarker() {
+    var id = S.resultId; if (!id) return;
+    fetch('/api/recordings/' + encodeURIComponent(id) + '/markers', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ markers: [{ t: S.audioT || 0 }] })
+    }).then(function () { loadMarkers(id); }).catch(function () {});
+  }
+  function deleteMarker(markerId) {
+    fetch('/api/markers/' + encodeURIComponent(markerId), { method: 'DELETE' })
+      .then(function () { loadMarkers(S.resultId); }).catch(function () {});
   }
   // Spara redigerad transkripttext till disk (skriver om SRT/TXT/VTT i resultatmappen
   // och uppdaterar historiken). No-op om inget redigerats eller ingen post är öppen.
@@ -597,13 +714,19 @@
   }
   function setLessonFilter(which, val) {
     var patch = {}; patch[which] = val;
-    setState(patch, function () { loadLessons(); loadPrep(); });
+    setState(patch, function () { loadLessons(); loadPrep(); loadTrends(); });
   }
   function loadPrep() {
     if (!S.lessonFilterGroup) { setState({ nextPrep: null }); return Promise.resolve(); }
     return getJSON('/api/next-prep?group_id=' + encodeURIComponent(S.lessonFilterGroup))
       .then(function (p) { setState({ nextPrep: p && p.group_id ? p : null }); })
       .catch(function () { setState({ nextPrep: null }); });
+  }
+  function loadTrends() {
+    if (!S.lessonFilterGroup) { setState({ trends: null }); return Promise.resolve(); }
+    return getJSON('/api/trends?group_id=' + encodeURIComponent(S.lessonFilterGroup))
+      .then(function (t) { setState({ trends: t && t.group_id ? t : null }); })
+      .catch(function () { setState({ trends: null }); });
   }
   function markPrepDone(insightId) {
     fetch('/api/insights/' + encodeURIComponent(insightId), {
@@ -644,6 +767,85 @@
   function deleteLesson(id) {
     fetch('/api/lessons/' + encodeURIComponent(id), { method: 'DELETE' })
       .then(function () { loadLessons(); loadHistory(); loadPrep(); }).catch(function () {});
+  }
+
+  /* ------------------------------------------ fritextsök över alla lektioner -- */
+  function setSearchMode(mode) { setState({ searchMode: mode }); }
+  function onSearchInput(e) { setState({ lessonSearch: e.target.value }); }
+  function clearSearch() {
+    setState({ lessonSearch: '', searchHits: null, askAnswer: '', askSources: null });
+  }
+  function runSearch() {
+    var q = (S.lessonSearch || '').trim();
+    if (!q) { setState({ searchHits: null }); return; }
+    if (S.searchMode === 'ask') { runAsk(q); return; }
+    setState({ searching: true, askAnswer: '', askSources: null });
+    getJSON('/api/search?q=' + encodeURIComponent(q))
+      .then(function (r) { setState({ searchHits: (r && r.hits) || [], searching: false }); })
+      .catch(function () { setState({ searchHits: [], searching: false }); });
+  }
+  function runAsk(q) {
+    setState({ asking: true, askAnswer: '', askSources: null, searchHits: null });
+    streamPost('/api/search/ask', { q: q }, function (ev) {
+      if (ev.type === 'token') {
+        setState(function (s) { return { askAnswer: s.askAnswer + ev.text }; });
+      } else if (ev.type === 'done') {
+        setState({ asking: false, askSources: (ev.result && ev.result.sources) || [] });
+      } else if (ev.type === 'error') {
+        setState({ asking: false, askAnswer: 'Kunde inte söka: ' + (ev.message || 'okänt fel') });
+      }
+    });
+  }
+  function openSearchHit(hit) { openLesson({ id: hit.lesson_id, history_id: hit.history_id }); }
+
+  /* --------------------------------- säkerhetskopiering + lektionsrapport -- */
+  function _openContainingFolder(path) {
+    var dir = String(path || '').replace(/[\/\\][^\/\\]*$/, '');
+    if (dir) fetch('/api/open', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: dir }) }).catch(function () {});
+  }
+  function backupNow() {
+    setState({ backingUp: true });
+    fetch('/api/backup', { method: 'POST' }).then(function (r) { return r.json(); }).then(function (res) {
+      setState({ backingUp: false });
+      if (res && res.path) {
+        _openContainingFolder(res.path);
+        setState({ toast: { title: 'Säkerhetskopia skapad', name: (res.files || []).length + ' filer', done: true } });
+        clearTimeout(_toastT2); _toastT2 = setTimeout(function () { setState({ toast: null }); }, 3200);
+      }
+    }).catch(function () { setState({ backingUp: false }); });
+  }
+  function exportReport(lessonId, fmt) {
+    fetch('/api/lessons/' + encodeURIComponent(lessonId) + '/report?format=' + encodeURIComponent(fmt))
+      .then(function (r) { return r.json(); }).then(function (res) {
+        if (res && res.path) { fetch('/api/open', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: res.path }) }).catch(function () {}); }
+      }).catch(function () {});
+  }
+
+  /* ----------------------------------- agenda: daterade poster tvärs klasser -- */
+  function loadAgenda() {
+    return getJSON('/api/agenda')
+      .then(function (a) { setState({ agenda: Array.isArray(a) ? a : [] }); })
+      .catch(function () { setState({ agenda: [] }); });
+  }
+  function toggleAgenda() { setState(function (s) { return { agendaOpen: !s.agendaOpen }; }); }
+  function markAgendaDone(insightId) {
+    fetch('/api/insights/' + encodeURIComponent(insightId), {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'klar' })
+    }).then(function () { loadAgenda(); loadPrep(); if (S.expandedLesson) loadInsights(S.expandedLesson); }).catch(function () {});
+  }
+  function exportAgendaIcs() {
+    setState({ agendaExporting: true });
+    fetch('/api/agenda/ics', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+      .then(function (r) { return r.json(); })
+      .then(function (res) {
+        setState({ agendaExporting: false });
+        if (res && res.path) {
+          fetch('/api/open', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: res.path }) }).catch(function () {});
+          setState({ toast: { title: 'Kalenderfil sparad', name: (res.count || 0) + ' poster', done: true } });
+          clearTimeout(_toastT2); _toastT2 = setTimeout(function () { setState({ toast: null }); }, 3200);
+        }
+      })
+      .catch(function () { setState({ agendaExporting: false }); });
   }
 
   /* ------------------------------------------------------ insikter (Fas 2) -- */
@@ -862,6 +1064,15 @@
           var segs = (r.transcript || []).map(function (g) { return { time: fmtTime(g.start), text: g.text }; });
           setState(function (s) { return { run: 'done', progress: 100, transcript: segs, transcriptRaw: r.transcript || [], resultId: r.id || null, runMedia: r.media || null, edits: {}, edited: false, resultFilesReal: r.files || [], qStatus: Object.assign({}, s.qStatus, kv(active.id, 'done')), qProgress: Object.assign({}, s.qProgress, kv(active.id, 100)), log: s.log.concat(['[klar] Färdig på ' + fmtTime(s.elapsed)]) }; });
           loadHistory();   // server archived this run; refresh from disk
+          // Attach any live markers captured while recording this file.
+          var marks = _recMarkersByPath[active.path];
+          if (marks && marks.length && r.id) {
+            fetch('/api/recordings/' + encodeURIComponent(r.id) + '/markers', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ markers: marks })
+            }).catch(function () {});
+            delete _recMarkersByPath[active.path];
+          }
           var next = _nextPending(active.id);
           if (next) { setTimeout(function () { setState({ run: 'idle', activeId: next, source: qName(S.queue, next), audioT: 0 }, function () { _runActive(); }); }, 800); }
           else { setTimeout(function () { afterDone(); }, 450); }
@@ -1438,6 +1649,7 @@
         onManualTyp: function (e) { setState({ manualTyp: e.target.value }); },
         onManualText: function (e) { setState({ manualText: e.target.value }); },
         onAddManual: function () { addManualInsight(l.id); },
+        onReportHtml: function () { exportReport(l.id, 'html'); },
       };
     });
 
@@ -1478,10 +1690,86 @@
         empty: (st.nextPrep.open_actions || []).length === 0 && (st.nextPrep.difficulties || []).length === 0,
       } : null,
 
+      trends: st.trends ? (function () {
+        var t = st.trends;
+        var act = t.actions || { open: 0, done: 0 };
+        var actTotal = act.open + act.done;
+        return {
+          group: t.group, lessons: t.lessons, analysed: t.analysed,
+          counts: [
+            { label: 'Svårigheter', n: t.counts['svårighet'] || 0 },
+            { label: 'Åtgärder', n: t.counts['åtgärd'] || 0 },
+            { label: 'Kalender', n: t.counts['kalender'] || 0 },
+            { label: 'Grupprum', n: t.counts['grupprum'] || 0 },
+            { label: 'Material', n: t.counts['material'] || 0 },
+          ],
+          actOpen: act.open, actDone: act.done, actTotal: actTotal,
+          actPct: actTotal ? Math.round(act.done / actTotal * 100) : 0,
+          difficulties: (t.top_difficulties || []).map(function (d) {
+            return { text: d.text, count: d.count, recurring: d.count > 1,
+                     refs: (d.refs || []).join(', ') };
+          }),
+          empty: t.lessons === 0,
+        };
+      })() : null,
+
+      backup: { busy: st.backingUp, onRun: backupNow },
+
+      agenda: (function () {
+        var items = st.agenda || [];
+        var open = items.filter(function (a) { return a.status !== 'klar'; });
+        return {
+          loaded: Array.isArray(st.agenda), count: open.length, total: items.length,
+          overdueCount: open.filter(function (a) { return a.overdue; }).length,
+          isOpen: st.agendaOpen, onToggle: toggleAgenda,
+          exporting: st.agendaExporting, onExport: exportAgendaIcs,
+          items: items.map(function (a) {
+            return {
+              text: a.text || '',
+              meta: [a.group, a.course, a.lesson_name].filter(Boolean).join(' · '),
+              due: a.due_date || '', overdue: !!a.overdue, today: !!a.today,
+              done: a.status === 'klar', typLabel: TYP_LABEL[a.typ] || a.typ,
+              onDone: function () { markAgendaDone(a.id); },
+            };
+          }),
+        };
+      })(),
+
+      search: {
+        query: st.lessonSearch, mode: st.searchMode,
+        modeKeyword: st.searchMode === 'keyword', modeAsk: st.searchMode === 'ask',
+        busy: st.searching || st.asking,
+        onInput: onSearchInput, onClear: clearSearch, onRun: runSearch,
+        onKey: function (e) { if (e.key === 'Enter') { e.preventDefault(); runSearch(); } },
+        onKeyword: function () { setSearchMode('keyword'); },
+        onAsk: function () { setSearchMode('ask'); },
+        hasQuery: !!(st.lessonSearch || '').trim(),
+        // keyword-läge
+        hits: (st.searchHits || []).map(function (h) {
+          return { snippet: hl(h.snippet || ''),
+                   meta: [h.group, h.course, h.date || h.datum].filter(Boolean).join(' · ') || 'Ej tilldelad',
+                   name: h.name || '(namnlös)', onOpen: function () { openSearchHit(h); } };
+        }),
+        showNoHits: st.searchMode === 'keyword' && Array.isArray(st.searchHits) && st.searchHits.length === 0 && !st.searching,
+        searched: Array.isArray(st.searchHits),
+        // fråga-läge (RAG)
+        answer: st.askAnswer, asking: st.asking, hasAnswer: !!st.askAnswer,
+        sources: (st.askSources || []).map(function (s2) {
+          return { label: [s2.group, s2.course, s2.datum, s2.name].filter(Boolean).join(' · '),
+                   onOpen: function () { openSearchHit(s2); } };
+        }),
+      },
+
       waveBars: waveBars, audioPlaying: st.audioPlaying, audioPaused: !st.audioPlaying,
       audioCur: fmtTime(st.audioT), audioDur: fmtTime(dur),
       mediaUrl: st.mediaUrl, hasMediaEl: !!st.mediaUrl, mediaRef: mediaRef,
       onTogglePlay: togglePlay, onSeekClick: onSeekClick, seekTrackRef: seekTrackRef,
+      markers: (st.markers || []).map(function (m) {
+        return { id: m.id, t: m.t || 0, label: fmtTime(m.t || 0),
+                 onSeek: function () { seekToTime(m.t || 0); },
+                 onDelete: function () { deleteMarker(m.id); } };
+      }),
+      hasMarkers: (st.markers || []).length > 0, onAddMarker: addPlaybackMarker,
       editing: st.editing, notEditing: !st.editing, onToggleEdit: toggleEdit, onEditInput: onEditInput,
       editBtnLabel: st.editing ? '✓ Klar' : 'Redigera', transcriptEdited: st.edited,
       editBtnStyle: st.editing ? 'flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:10px;padding:8px 15px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit' : 'flex:0 0 auto;display:inline-flex;align-items:center;gap:7px;background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:8px 15px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit',
@@ -1503,8 +1791,15 @@
       openPicker: openPicker, fileRef: fileRef, onPickFile: onPickFile, onDragOver: onDragOver, onDragLeave: onDragLeave, onDrop: onDrop,
       urlInput: st.urlInput, onUrlInput: onUrlInput, onAddUrl: addUrl, onUrlKey: onUrlKey,
       recording: st.recording, recElapsedFmt: fmtTime(st.recElapsed), recSupported: recSupported(),
-      recError: st.recError, hasRecError: !!st.recError,
-      onStartRec: startRecording, onStopRec: stopRecording, onCancelRec: cancelRecording,
+      recError: st.recError, hasRecError: !!st.recError, recMarkerCount: st.recMarkerCount,
+      recLevelPct: Math.round((st.recLevel || 0) * 100), recSilent: st.recSilent,
+      onStartRec: startRecording, onStopRec: stopRecording, onCancelRec: cancelRecording, onMarkRec: addRecMarker,
+      incompleteRecs: (st.incompleteRecs || []).map(function (r) {
+        return { session: r.session, label: (r.size || '') + (r.modified ? ' · ' + r.modified : ''),
+                 onRecover: function () { recoverIncomplete(r.session); },
+                 onDiscard: function () { discardIncomplete(r.session); } };
+      }),
+      hasIncompleteRecs: (st.incompleteRecs || []).length > 0,
       dropzoneStyle: 'position:relative;border:1.5px dashed ' + (st.dragging ? 'var(--accent)' : 'var(--line-2)') + ';border-radius:20px;background:' + (st.dragging ? 'var(--accent-weak)' : 'var(--surface)') + ';flex:1 1 auto;min-height:200px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 24px;text-align:center;box-shadow:var(--shadow-sm);cursor:pointer;user-select:none;-webkit-user-select:none;transition:border-color .12s,background .12s',
       curModelName: curModel.label || curModel.id,
       curModelMeta: 'Väljs automatiskt · ' + (st.language === 'en' ? 'Engelska' : 'Svenska'),
@@ -1747,6 +2042,21 @@ function viewTranscribe(v){ return `
           </div>
         </div>
 
+        ${ v.hasIncompleteRecs ? `
+          <div style="margin-top:14px;background:color-mix(in srgb,var(--accent) 7%,var(--surface));border:1px solid color-mix(in srgb,var(--accent) 30%,transparent);border-radius:12px;padding:13px 15px">
+            <div style="font-size:13.5px;font-weight:600;color:var(--ink);margin-bottom:9px">⚠️ Oavslutad inspelning hittad</div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              ${ v.incompleteRecs.map(function(r){ return `
+                <div style="display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px 11px">
+                  <span style="flex:1;min-width:0;font-size:13.5px;color:var(--ink-2)">${esc(r.label)}</span>
+                  <button data-click="${on(r.onRecover)}" style="flex:0 0 auto;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:8px;padding:7px 13px;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit">Återställ</button>
+                  <button data-click="${on(r.onDiscard)}" style="flex:0 0 auto;background:var(--surface);border:1px solid var(--line);color:var(--ink-2);border-radius:8px;padding:7px 11px;font-size:13px;cursor:pointer;font-family:inherit" data-sh="border-color:var(--bad) !important;color:var(--bad) !important">Släng</button>
+                </div>
+              `; }).join('') }
+            </div>
+          </div>
+        ` : '' }
+
         <div style="display:flex;align-items:center;gap:10px;margin-top:12px">
           <span style="font-size:11.5px;text-transform:uppercase;letter-spacing:0.05em;color:var(--ink-2);font-weight:600;flex:0 0 auto">Eller spela in</span>
           <div style="flex:1;display:flex;align-items:center;gap:10px;min-width:0;background:var(--surface);border:1px solid ${ v.recording ? 'color-mix(in srgb,var(--bad) 45%,var(--line))' : 'var(--line)' };border-radius:11px;padding:7px 7px 7px 13px;box-shadow:var(--shadow-sm)">
@@ -1754,7 +2064,10 @@ function viewTranscribe(v){ return `
               <span style="width:9px;height:9px;border-radius:50%;background:var(--bad);flex:0 0 auto;animation:pulse 1.4s ease infinite"></span>
               <span style="font-size:14.5px;color:var(--ink);font-weight:500">Spelar in</span>
               <span style="font-size:14.5px;color:var(--ink-2);font-variant-numeric:tabular-nums">${esc(v.recElapsedFmt)}</span>
+              <div style="flex:0 0 70px;height:6px;border-radius:99px;background:var(--track);overflow:hidden" title="Mikrofonnivå"><div style="height:100%;width:${v.recLevelPct}%;background:${ v.recSilent ? 'var(--bad)' : 'var(--ok)' };border-radius:99px;transition:width .12s"></div></div>
+              ${ v.recSilent ? `<span style="font-size:12.5px;color:var(--bad);font-weight:500;flex:0 0 auto">Ingen signal?</span>` : '' }
               <div style="flex:1"></div>
+              <button data-click="${on(v.onMarkRec)}" title="Markera ett viktigt ögonblick" style="flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:8px 13px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit" data-sh="border-color:var(--accent) !important;color:var(--accent) !important">🔖 Markera${ v.recMarkerCount ? ' (' + v.recMarkerCount + ')' : '' }</button>
               <button data-click="${on(v.onCancelRec)}" style="flex:0 0 auto;background:var(--surface);border:1px solid var(--line);color:var(--ink-2);border-radius:8px;padding:8px 13px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit" data-sh="border-color:var(--ink-3) !important;color:var(--ink) !important">Avbryt</button>
               <button data-click="${on(v.onStopRec)}" style="flex:0 0 auto;display:inline-flex;align-items:center;gap:7px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:8px;padding:8px 15px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit">Stoppa &amp; lägg till</button>
             ` : `
@@ -2421,15 +2734,22 @@ function viewLessons(v){
         <p style="margin:0;color:var(--ink-2);font-size:17px">Dina inspelade lektioner — organisera per datum, klass och kurs. Allt ligger kvar lokalt.</p>
       </div>
 
+      ${ agendaPanel(v.agenda) }
+
+      ${ searchPanel(v.search) }
+
       <datalist id="dl-klass">${ v.lessonGroups.map(function(g){ return '<option value="'+esc(g.namn)+'">'; }).join('') }</datalist>
       <datalist id="dl-kurs">${ v.lessonCourses.map(function(c){ return '<option value="'+esc(c.namn)+'">'; }).join('') }</datalist>
 
-      <div style="display:flex;gap:10px;justify-content:center;margin-bottom:20px;flex-wrap:wrap">
+      <div style="display:flex;gap:10px;justify-content:center;align-items:center;margin-bottom:20px;flex-wrap:wrap">
         <select data-change="${on(v.onFilterGroup)}" style="${selStyle}">${ opts(v.lessonGroups, v.lessonFilterGroup) }</select>
         <select data-change="${on(v.onFilterCourse)}" style="${selStyle}">${ opts(v.lessonCourses, v.lessonFilterCourse) }</select>
+        <button data-click="${on(v.backup.onRun)}" ${v.backup.busy?'disabled':''} title="Säkerhetskopiera lektionsdatabasen + historiken" style="background:var(--surface);border:1px solid var(--line);color:var(--ink-2);border-radius:10px;padding:8px 14px;font-size:14px;font-weight:500;cursor:${v.backup.busy?'default':'pointer'};font-family:inherit;opacity:${v.backup.busy?'0.7':'1'}" data-sh="border-color:var(--ink) !important;color:var(--ink) !important">${ v.backup.busy ? 'Säkerhetskopierar …' : '💾 Säkerhetskopiera' }</button>
       </div>
 
       ${ v.prep ? prepPanel(v.prep) : '' }
+
+      ${ v.trends ? trendsPanel(v.trends) : '' }
 
       ${ v.lessonsEmpty ? `
         <div style="text-align:center;padding:60px 24px;background:var(--surface);border:1px solid var(--line);border-radius:16px;color:var(--ink-2);font-size:16px">Inga lektioner än. Transkribera en inspelning så dyker den upp här — tilldela den sedan klass och kurs.</div>
@@ -2482,6 +2802,133 @@ function viewLessons(v){
     </section>`;
 }
 
+function trendsPanel(t){
+  if (t.empty) return '';
+  return `
+    <div style="max-width:760px;margin:0 auto 22px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px 20px;box-shadow:var(--shadow-sm)">
+      <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:15px">
+        <span style="font-size:17px">📈</span>
+        <h2 style="font-size:17px;font-weight:600;color:var(--ink);margin:0">Terminstrender${ t.group ? ' · ' + esc(t.group) : '' }</h2>
+        <span style="font-size:13px;color:var(--ink-3);margin-left:auto">${t.analysed} av ${t.lessons} lektioner analyserade</span>
+      </div>
+
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
+        ${ t.counts.map(function(c){ return `
+          <div style="flex:1;min-width:90px;background:var(--sunken);border:1px solid var(--line);border-radius:11px;padding:11px 12px;text-align:center">
+            <div style="font-size:22px;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums">${c.n}</div>
+            <div style="font-size:12px;color:var(--ink-3);margin-top:2px">${esc(c.label)}</div>
+          </div>
+        `; }).join('') }
+      </div>
+
+      ${ t.actTotal ? `
+        <div style="margin-bottom:16px">
+          <div style="display:flex;justify-content:space-between;font-size:12.5px;color:var(--ink-2);margin-bottom:6px">
+            <span>Avklarade åtgärder</span><span style="font-variant-numeric:tabular-nums">${t.actDone}/${t.actTotal} · ${t.actPct}%</span>
+          </div>
+          <div style="height:8px;border-radius:99px;background:var(--track);overflow:hidden"><div style="height:100%;width:${t.actPct}%;background:var(--ok);border-radius:99px"></div></div>
+        </div>
+      ` : '' }
+
+      ${ t.difficulties.length ? `
+        <div style="font-size:12px;font-weight:600;color:var(--ink-3);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:8px">Återkommande svårigheter</div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          ${ t.difficulties.map(function(d){ return `
+            <div style="display:flex;align-items:center;gap:10px;font-size:14px;color:var(--ink)">
+              <span style="flex:0 0 auto;min-width:26px;height:22px;display:inline-flex;align-items:center;justify-content:center;border-radius:6px;font-size:12px;font-weight:600;font-variant-numeric:tabular-nums;background:${d.recurring?'var(--accent-weak)':'var(--sunken)'};color:${d.recurring?'var(--accent)':'var(--ink-3)'}">${d.count}×</span>
+              <span style="flex:1;min-width:0">${esc(d.text)}${ d.refs ? ` <span style="color:var(--ink-3);font-size:12.5px">(${esc(d.refs)})</span>` : '' }</span>
+            </div>
+          `; }).join('') }
+        </div>
+      ` : `<div style="font-size:13.5px;color:var(--ink-3)">Inga svårigheter registrerade än — analysera lektioner för att se mönster över terminen.</div>` }
+    </div>`;
+}
+
+function agendaPanel(a){
+  if (!a.loaded || a.total === 0) return '';
+  return `
+    <div style="max-width:760px;margin:0 auto 16px;background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow-sm);overflow:hidden">
+      <button data-click="${on(a.onToggle)}" style="width:100%;display:flex;align-items:center;gap:11px;background:transparent;border:none;padding:14px 18px;cursor:pointer;font-family:inherit;text-align:left">
+        <span style="font-size:17px">📅</span>
+        <span style="font-size:14.5px;font-weight:600;color:var(--ink)">Kommande</span>
+        <span style="font-size:13px;color:var(--ink-3)">${a.count} öppna${ a.overdueCount ? ` · <span style="color:var(--bad);font-weight:600">${a.overdueCount} försenade</span>` : '' }</span>
+        <span style="margin-left:auto;color:var(--ink-3);font-size:13px;transform:rotate(${a.isOpen?'180':'0'}deg);transition:transform .2s">▾</span>
+      </button>
+      ${ a.isOpen ? `
+        <div style="padding:0 18px 16px">
+          <div style="display:flex;flex-direction:column;gap:7px">
+            ${ a.items.map(function(it){ return `
+              <div style="display:flex;align-items:flex-start;gap:10px;background:${it.overdue?'color-mix(in srgb,var(--bad) 8%,var(--sunken))':'var(--sunken)'};border:1px solid ${it.overdue?'color-mix(in srgb,var(--bad) 35%,var(--line))':'var(--line)'};border-radius:10px;padding:9px 11px">
+                <button data-click="${on(it.onDone)}" aria-label="Markera klar" title="Markera klar" style="flex:0 0 auto;width:18px;height:18px;margin-top:1px;border-radius:5px;border:1.5px solid ${it.done?'var(--ok)':'var(--line-2)'};background:${it.done?'var(--ok)':'transparent'};cursor:pointer;color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center">${it.done?'✓':''}</button>
+                <div style="flex:1;min-width:0">
+                  <div style="font-size:14px;color:${it.done?'var(--ink-3)':'var(--ink)'};${it.done?'text-decoration:line-through':''}">${esc(it.text)}</div>
+                  <div style="font-size:12px;color:var(--ink-3);margin-top:2px">${esc(it.meta)}</div>
+                </div>
+                <span style="flex:0 0 auto;font-size:12px;font-weight:600;font-variant-numeric:tabular-nums;color:${it.overdue?'var(--bad)':(it.today?'var(--accent)':'var(--ink-3)')}">${ it.today ? 'Idag' : esc(it.due) }</span>
+              </div>
+            `; }).join('') }
+          </div>
+          <div style="display:flex;justify-content:flex-end;margin-top:12px">
+            <button data-click="${on(a.onExport)}" ${a.exporting?'disabled':''} style="display:inline-flex;align-items:center;gap:7px;background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:9px;padding:8px 14px;font-size:13.5px;font-weight:500;cursor:${a.exporting?'default':'pointer'};font-family:inherit;opacity:${a.exporting?'0.7':'1'}" data-sh="border-color:var(--ink) !important">${ a.exporting ? 'Exporterar …' : '📆 Exportera till kalender (.ics)' }</button>
+          </div>
+        </div>
+      ` : '' }
+    </div>`;
+}
+
+function searchPanel(s){
+  var segBtn = function(active){ return 'border:none;background:'+(active?'var(--surface)':'transparent')+';color:'+(active?'var(--ink)':'var(--ink-3)')+';border-radius:9px;padding:6px 13px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit'+(active?';box-shadow:var(--shadow-sm)':''); };
+  return `
+    <div style="max-width:760px;margin:0 auto 22px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:16px 18px;box-shadow:var(--shadow-sm)">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:11px;flex-wrap:wrap">
+        <span style="font-size:13.5px;font-weight:600;color:var(--ink-2)">🔎 Sök i alla lektioner</span>
+        <div style="margin-left:auto;display:inline-flex;gap:3px;padding:3px;background:var(--track);border-radius:11px;border:1px solid var(--line)">
+          <button data-click="${on(s.onKeyword)}" style="${segBtn(s.modeKeyword)}">Sök ord</button>
+          <button data-click="${on(s.onAsk)}" style="${segBtn(s.modeAsk)}">Fråga (AI)</button>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <input value="${esc(s.query)}" data-input="${on(s.onInput)}" data-keydown="${on(s.onKey)}"
+          placeholder="${ s.modeAsk ? 'Ställ en fråga, t.ex. När hade vi prov om derivata?' : 'Sök efter vad som sades, t.ex. pythagoras sats' }"
+          style="flex:1;min-width:0;background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:10px 12px;font-size:14px;font-family:inherit;box-sizing:border-box">
+        ${ s.hasQuery ? `<button data-click="${on(s.onClear)}" aria-label="Rensa" style="flex:0 0 auto;width:42px;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:10px;cursor:pointer;font-family:inherit">✕</button>` : '' }
+        <button data-click="${on(s.onRun)}" ${s.busy?'disabled':''} style="flex:0 0 auto;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:10px;padding:10px 18px;font-size:14px;font-weight:600;cursor:${s.busy?'default':'pointer'};font-family:inherit;opacity:${s.busy?'0.7':'1'}">${ s.busy ? 'Söker …' : (s.modeAsk ? 'Fråga' : 'Sök') }</button>
+      </div>
+
+      ${ s.modeAsk ? `
+        ${ (s.hasAnswer || s.asking) ? `
+          <div style="margin-top:14px;border-top:1px solid var(--line);padding-top:13px">
+            <div style="font-size:14.5px;color:var(--ink);line-height:1.6;white-space:pre-wrap">${esc(s.answer)}${ s.asking ? '<span style="opacity:.5">▍</span>' : '' }</div>
+            ${ s.sources.length ? `
+              <div style="font-size:12px;font-weight:600;color:var(--ink-3);text-transform:uppercase;letter-spacing:0.04em;margin:13px 0 7px">Källor</div>
+              <div style="display:flex;flex-direction:column;gap:6px">
+                ${ s.sources.map(function(src){ return `<button data-click="${on(src.onOpen)}" style="text-align:left;background:var(--sunken);border:1px solid var(--line);color:var(--ink-2);border-radius:9px;padding:8px 11px;font-size:13px;cursor:pointer;font-family:inherit" data-sh="border-color:var(--accent) !important;color:var(--accent) !important">${esc(src.label)}</button>`; }).join('') }
+              </div>
+            ` : '' }
+          </div>
+        ` : '' }
+      ` : `
+        ${ s.searched ? `
+          <div style="margin-top:14px;border-top:1px solid var(--line);padding-top:13px">
+            ${ s.showNoHits ? `<div style="font-size:13.5px;color:var(--ink-3)">Inga lektioner matchade din sökning.</div>` : `
+              <div style="display:flex;flex-direction:column;gap:8px">
+                ${ s.hits.map(function(hit){ return `
+                  <button data-click="${on(hit.onOpen)}" style="text-align:left;background:var(--sunken);border:1px solid var(--line);border-radius:11px;padding:11px 13px;cursor:pointer;font-family:inherit;display:block;width:100%" data-sh="border-color:var(--accent) !important">
+                    <div style="display:flex;align-items:baseline;gap:9px;margin-bottom:4px">
+                      <span style="font-size:14px;font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(hit.name)}</span>
+                      <span style="font-size:12px;color:var(--ink-3)">${esc(hit.meta)}</span>
+                    </div>
+                    <div style="font-size:13px;color:var(--ink-2);line-height:1.5">${hit.snippet}</div>
+                  </button>
+                `; }).join('') }
+              </div>
+            ` }
+          </div>
+        ` : '' }
+      ` }
+    </div>`;
+}
+
 function insightsPanel(h){
   var inStyle = 'background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:9px;padding:7px 10px;font-size:13.5px;font-family:inherit;min-width:0;width:100%;box-sizing:border-box';
   var typOpts = INSIGHT_TYPES.map(function(t){ return '<option value="'+t.typ+'"'+(h.manualTyp===t.typ?' selected':'')+'>'+esc(t.label)+'</option>'; }).join('');
@@ -2489,6 +2936,8 @@ function insightsPanel(h){
     <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line)">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px">
         <span style="font-size:13px;font-weight:600;color:var(--ink-2);letter-spacing:0.02em">INSIKTER</span>
+        <div style="flex:1"></div>
+        <button data-click="${on(h.onReportHtml)}" title="Exportera rapport (öppnas i webbläsaren, skriv ut som PDF)" style="display:inline-flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--line);color:var(--ink-2);border-radius:9px;padding:7px 12px;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;margin-right:8px" data-sh="border-color:var(--ink) !important;color:var(--ink) !important">📄 Rapport</button>
         <button data-click="${on(h.onExtract)}" ${h.extracting?'disabled':''} style="display:inline-flex;align-items:center;gap:7px;background:var(--accent-weak);color:var(--accent);border:1px solid var(--accent);border-radius:9px;padding:7px 14px;font-size:13.5px;font-weight:600;cursor:${h.extracting?'default':'pointer'};font-family:inherit;opacity:${h.extracting?'0.7':'1'}">
           ${ h.extracting ? 'Analyserar …' : '✨ Analysera lektion' }
         </button>
@@ -2738,6 +3187,17 @@ function viewModals(v){ return `
     </div>
 
     ${ v.hasMediaEl ? `<audio data-ref="${on(v.mediaRef)}" src="${esc(v.mediaUrl)}" preload="metadata" style="display:none"></audio>` : '' }
+    ${ v.hasMarkers ? `
+    <div style="flex:0 0 auto;border-top:1px solid var(--line);background:color-mix(in srgb,var(--surface) 72%,transparent);padding:9px 28px;display:flex;align-items:center;gap:8px;overflow-x:auto">
+      <span style="font-size:12px;font-weight:600;color:var(--ink-3);flex:0 0 auto">🔖 Markörer</span>
+      ${ v.markers.map(function(m){ return `
+        <span style="flex:0 0 auto;display:inline-flex;align-items:center;gap:5px;background:var(--accent-weak);border:1px solid var(--accent);border-radius:8px;padding:3px 4px 3px 9px">
+          <button data-click="${on(m.onSeek)}" title="Hoppa hit" style="background:none;border:none;color:var(--accent);font-size:12.5px;font-weight:600;font-variant-numeric:tabular-nums;cursor:pointer;font-family:inherit;padding:0">${esc(m.label)}</button>
+          <button data-click="${on(m.onDelete)}" aria-label="Ta bort markör" style="background:none;border:none;color:var(--accent);opacity:.6;cursor:pointer;font-size:12px;line-height:1;padding:0 2px">✕</button>
+        </span>
+      `; }).join('') }
+    </div>
+    ` : '' }
     <div style="flex:0 0 auto;border-top:1px solid var(--line);background:color-mix(in srgb,var(--surface) 72%,transparent);backdrop-filter:saturate(1.3) blur(14px);padding:13px 28px;display:flex;align-items:center;gap:18px">
       <button data-click="${on(v.onTogglePlay)}" aria-label="Spela eller pausa" style="width:46px;height:46px;flex:0 0 auto;border-radius:50%;border:none;background:var(--btn-bg);color:var(--btn-fg);cursor:pointer;display:flex;align-items:center;justify-content:center" data-sh="background:color-mix(in srgb, var(--btn-bg) 78%, var(--accent)) !important">
         ${ v.audioPaused ? `<svg width="17" height="17" viewBox="0 0 16 16" fill="currentColor"><path d="M4.5 3.2v9.6c0 .5.5.8 1 .5l7.3-4.8c.4-.3.4-.8 0-1.1L5.5 2.7c-.5-.3-1 0-1 .5z"></path></svg>` : '' }
@@ -2748,6 +3208,7 @@ function viewModals(v){ return `
         ${ v.waveBars.map(function(b){ return `<span style="${b.style}"></span>`; }).join('') }
       </div>
       <span style="font-size:13.5px;color:var(--ink-2);font-variant-numeric:tabular-nums;flex:0 0 auto;width:42px;text-align:right">${esc(v.audioDur)}</span>
+      <button data-click="${on(v.onAddMarker)}" title="Markera den här punkten" style="flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:9px;padding:8px 12px;font-size:13.5px;font-weight:500;cursor:pointer;font-family:inherit" data-sh="border-color:var(--accent) !important;color:var(--accent) !important">🔖 Markera</button>
     </div>
   </div>
   ` : '' }
@@ -2860,6 +3321,7 @@ function viewModals(v){ return `
     loadModels().then(loadSettings);   // real catalog, then reflect chosen models disk
     loadHistory();  // load persisted transcription history
     loadAudioModel();  // audio-correction model install status
+    loadIncompleteRecs();  // offer to recover a recording that never finished (crash)
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 

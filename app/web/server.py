@@ -21,7 +21,7 @@ from fastapi.staticfiles import StaticFiles
 from app import (debug_log, hardware, recommend, whisper_manager, llm_client,
                  llm_manager, youtube, postprocess, transcriber,
                  history_store, gpu_arbiter, output_store, media, audio_model, db,
-                 paths, settings_store)
+                 paths, settings_store, ics_export, backup, report)
 from app.models_catalog import WHISPER_MODELS, LLM_MODELS
 
 _MONTHS_SV = ["jan", "feb", "mar", "apr", "maj", "jun", "jul", "aug", "sep", "okt", "nov", "dec"]
@@ -612,6 +612,93 @@ def create_app(base_dir: Path | None = None,
         dest.write_bytes(data)
         return {"path": str(dest), "name": dest.name}
 
+    # ---- Krasch-säker inspelning: inkrementell flush till disk ----------------
+    # En lektion går inte att spela in igen. MediaRecorder håller annars allt i
+    # minnet tills man stoppar — kraschar appen mitt i ett 70-min-pass är allt
+    # borta. Här flushas varje bit löpande till downloads/<session>.part, så ett
+    # avbrott lämnar en återställbar fil.
+
+    import re as _re_mod
+    _SESSION_RE = _re_mod.compile(r"^[A-Za-z0-9_-]{1,64}$")
+
+    def _session_part(session: str) -> Path | None:
+        if not _SESSION_RE.match(session or ""):
+            return None
+        return base / "downloads" / (session + ".part")
+
+    @app.post("/api/recording/append")
+    async def api_recording_append(req: Request, session: str = ""):
+        """Append one recorded chunk to the session's .part file on disk."""
+        part = _session_part(session)
+        if part is None:
+            return JSONResponse({"error": "ogiltig session"}, status_code=400)
+        data = await req.body()
+        if not data:
+            return {"bytes": part.stat().st_size if part.exists() else 0}
+        part.parent.mkdir(parents=True, exist_ok=True)
+        existing = part.stat().st_size if part.exists() else 0
+        if existing + len(data) > MAX_UPLOAD_BYTES:
+            return JSONResponse(
+                {"error": "Inspelningen är för stor."}, status_code=413)
+        try:
+            with open(part, "ab") as fh:
+                fh.write(data)
+        except OSError:
+            return JSONResponse(
+                {"error": "Kunde inte skriva till disk — kontrollera ledigt utrymme."},
+                status_code=507)
+        return {"bytes": existing + len(data)}
+
+    @app.post("/api/recording/finish")
+    def api_recording_finish(session: str = "", name: str = "inspelning.webm"):
+        """Finalise a flushed recording: move <session>.part to its real filename
+        under downloads/ and return the path so it enters the transcribe flow."""
+        part = _session_part(session)
+        if part is None:
+            return JSONResponse({"error": "ogiltig session"}, status_code=400)
+        if not part.exists() or part.stat().st_size == 0:
+            return JSONResponse({"error": "ingen inspelning att slutföra"}, status_code=404)
+        safe = Path(name).name
+        if safe in (".", "..", ""):
+            safe = "inspelning.webm"
+        dest = part.with_name(safe)
+        if dest.exists():
+            dest = part.with_name(f"{dest.stem}-{uuid.uuid4().hex[:8]}{dest.suffix}")
+        part.replace(dest)
+        return {"path": str(dest), "name": dest.name}
+
+    @app.get("/api/recordings/incomplete")
+    def api_recordings_incomplete():
+        """Leftover .part files from a recording that never finished (e.g. a crash)
+        — surfaced so the teacher can recover or discard them."""
+        out = []
+        d = base / "downloads"
+        if d.exists():
+            for p in sorted(d.glob("*.part")):
+                try:
+                    st = p.stat()
+                except OSError:
+                    continue
+                if st.st_size == 0:
+                    continue
+                out.append({"session": p.stem, "bytes": st.st_size,
+                            "size": _file_size_str(p),
+                            "modified": _date_label(
+                                datetime.fromtimestamp(st.st_mtime).isoformat())})
+        return out
+
+    @app.post("/api/recording/discard")
+    def api_recording_discard(session: str = ""):
+        part = _session_part(session)
+        if part is None:
+            return JSONResponse({"error": "ogiltig session"}, status_code=400)
+        try:
+            if part.exists():
+                part.unlink()
+        except OSError:
+            pass
+        return {"ok": True}
+
     @app.post("/api/transcribe/cancel")
     def api_transcribe_cancel():
         """Terminate the running transcription subprocess so the GPU is freed at
@@ -675,6 +762,16 @@ def create_app(base_dir: Path | None = None,
             _rewrite_sidecar_outputs(entry, segments)
             patch["transcript"] = segments
             patch["words"] = sum(len((s.get("text") or "").split()) for s in segments)
+            # Keep the lesson DB's transcript (and the FTS index, via trigger) in
+            # sync so search reflects the edit. Never let this break the save.
+            try:
+                conn = _db()
+                try:
+                    db.update_lesson_transcript(conn, entry_id, db.segments_text(segments))
+                finally:
+                    conn.close()
+            except Exception:
+                debug_log.get_logger().exception("Kunde inte synka transkript till lektions-DB")
         if "summary" in body:
             patch["summary"] = body.get("summary") or ""
         if not patch:
@@ -887,7 +984,9 @@ def create_app(base_dir: Path | None = None,
                 if arb.ensure_llm() is None:
                     raise RuntimeError("Språkmodellen är inte installerad.")
                 emit({"type": "log", "msg": "Analyserar lektionen ..."})
-                found = postprocess.extract(transcript, llm_manager.ACTIVE_LLM.filename)
+                found = postprocess.extract(
+                    transcript, llm_manager.ACTIVE_LLM.filename,
+                    log_cb=lambda m: emit({"type": "log", "msg": m}))
                 conn = _db()
                 try:
                     if found:
@@ -950,6 +1049,63 @@ def create_app(base_dir: Path | None = None,
             conn.close()
         return {"ok": True}
 
+    # ---- Markörer: viktiga ögonblick (under inspelning / uppspelning) ---------
+
+    @app.get("/api/lessons/{lesson_id}/markers")
+    def api_markers(lesson_id: int):
+        conn = _db()
+        try:
+            return db.list_markers(conn, lesson_id)
+        finally:
+            conn.close()
+
+    @app.post("/api/lessons/{lesson_id}/markers")
+    async def api_marker_add(lesson_id: int, req: Request):
+        body = await req.json()
+        conn = _db()
+        try:
+            if db.get_lesson(conn, lesson_id) is None:
+                return JSONResponse({"error": "lektionen finns inte"}, status_code=404)
+            m = db.add_marker(conn, lesson_id, body.get("t", 0.0),
+                              label=(body.get("label") or "").strip() or None,
+                              created_at=datetime.now().isoformat(timespec="seconds"))
+        finally:
+            conn.close()
+        return m
+
+    @app.delete("/api/markers/{marker_id}")
+    def api_marker_delete(marker_id: int):
+        conn = _db()
+        try:
+            db.delete_marker(conn, marker_id)
+        finally:
+            conn.close()
+        return {"ok": True}
+
+    @app.get("/api/recordings/{history_id}/markers")
+    def api_recording_markers_get(history_id: str):
+        """Markers for a recording, resolved via its history_id (what the transcript
+        view knows). Empty list if the recording isn't organised as a lesson yet."""
+        conn = _db()
+        try:
+            lid = db.lesson_id_by_history(conn, history_id)
+            return db.list_markers(conn, lid) if lid is not None else []
+        finally:
+            conn.close()
+
+    @app.post("/api/recordings/{history_id}/markers")
+    async def api_recording_markers(history_id: str, req: Request):
+        """Attach markers captured live during an in-app recording to the lesson
+        once it has been transcribed (resolved via history_id)."""
+        body = await req.json()
+        markers = body.get("markers") or []
+        conn = _db()
+        try:
+            saved = db.add_markers_for_history(conn, history_id, markers)
+        finally:
+            conn.close()
+        return {"markers": saved, "count": len(saved)}
+
     # ---- Nästa lektion: carry-forward per klass (Fas 3) ----------------------
 
     @app.get("/api/next-prep")
@@ -959,6 +1115,148 @@ def create_app(base_dir: Path | None = None,
             return db.next_prep(conn, group_id)
         finally:
             conn.close()
+
+    @app.post("/api/backup")
+    def api_backup():
+        """Back up the knowledge base (DB + history + settings) to a zip under
+        base/exports/ and return its path so the UI can open the folder."""
+        return backup.create_backup(base)
+
+    @app.get("/api/lessons/{lesson_id}/report")
+    def api_lesson_report(lesson_id: int, format: str = "html"):
+        """Export a lesson (summary + insights + markers) as a shareable report.
+        Written under base/exports/ and openable via /api/open."""
+        fmt = "md" if format == "md" else "html"
+        conn = _db()
+        try:
+            les = db.get_lesson(conn, lesson_id)
+            if les is None:
+                return JSONResponse({"error": "lektionen finns inte"}, status_code=404)
+            insights = db.list_insights(conn, lesson_id)
+            markers = db.list_markers(conn, lesson_id)
+        finally:
+            conn.close()
+        content = (report.lesson_markdown(les, insights, markers) if fmt == "md"
+                   else report.lesson_html(les, insights, markers))
+        out_dir = base / "exports"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        stem = "".join(ch for ch in (les.get("name") or "lektion")
+                       if ch.isalnum() or ch in " -_").strip() or "lektion"
+        dest = out_dir / f"{stem}.{fmt}"
+        dest.write_text(content, encoding="utf-8")
+        return {"path": str(dest), "format": fmt}
+
+    @app.get("/api/trends")
+    def api_trends(group_id: int):
+        """Longitudinal class dashboard: lesson/insight counts, action completion
+        and recurring difficulties over the term."""
+        conn = _db()
+        try:
+            return db.term_trends(conn, group_id)
+        finally:
+            conn.close()
+
+    # ---- Agenda: daterade poster tvärs alla klasser + .ics-export ------------
+
+    def _agenda_view(items: list[dict]) -> list[dict]:
+        today = datetime.now().date().isoformat()
+        for it in items:
+            due = (it.get("due_date") or "")[:10]
+            it["overdue"] = bool(due and due < today and it.get("status") != "klar")
+            it["today"] = bool(due == today)
+        return items
+
+    @app.get("/api/agenda")
+    def api_agenda(only_open: bool = False):
+        """Every dated insight across all classes, ordered by due date — the
+        cross-class 'vad är på gång'-vy. Flags overdue/today for the UI."""
+        conn = _db()
+        try:
+            return _agenda_view(db.agenda(conn, only_open=only_open))
+        finally:
+            conn.close()
+
+    @app.post("/api/agenda/ics")
+    async def api_agenda_ics(req: Request):
+        """Export the agenda to a local .ics file under base/exports/ (offline —
+        no cloud calendar) and return its path so the UI can open it. Body may set
+        {"only_open": true} to export just the still-open items."""
+        body = {}
+        try:
+            body = await req.json()
+        except Exception:
+            pass
+        conn = _db()
+        try:
+            items = db.agenda(conn, only_open=bool(body.get("only_open")))
+        finally:
+            conn.close()
+        cal = ics_export.build_calendar(items)
+        out_dir = base / "exports"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        dest = out_dir / "lektionsagenda.ics"
+        dest.write_text(cal, encoding="utf-8")
+        return {"path": str(dest), "count": cal.count("BEGIN:VEVENT")}
+
+    # ---- Fritextsök över alla lektioner --------------------------------------
+
+    @app.get("/api/search")
+    def api_search(q: str = "", limit: int = 50):
+        """Search every lesson transcript at once. Returns ranked hits with a
+        context snippet and which lesson/class/course/date each came from. The
+        snippet wraps matches in \\x02..\\x03 so the UI can highlight them."""
+        query = (q or "").strip()
+        if not query:
+            return {"query": query, "hits": []}
+        conn = _db()
+        try:
+            hits = db.search_transcripts(conn, query, limit=max(1, min(limit, 200)))
+        finally:
+            conn.close()
+        for h in hits:
+            h["date"] = _date_label(h.get("ts", ""))
+        return {"query": query, "hits": hits}
+
+    @app.post("/api/search/ask")
+    async def api_search_ask(req: Request):
+        """Answer a free-text question across all recorded lessons (RAG): retrieve
+        the most relevant lessons via FTS, feed bounded excerpts to the LLM, and
+        stream a Swedish answer that cites which lesson/class/date it came from."""
+        body = await req.json()
+        query = (body.get("q") or body.get("query") or "").strip()
+        if not query:
+            return JSONResponse({"error": "fråga krävs"}, status_code=400)
+        conn = _db()
+        try:
+            hits = db.search_transcripts(conn, query, limit=5, match_all=False)
+            ids = [h["lesson_id"] for h in hits]
+            excerpts = db.lessons_excerpts_for(conn, ids, query)
+        finally:
+            conn.close()
+        if not excerpts:
+            return JSONResponse(
+                {"error": "Inga lektioner matchar sökningen."}, status_code=404)
+        if not arb.try_acquire_gpu():
+            return JSONResponse(
+                {"error": "GPU upptagen med transkribering – försök igen strax."},
+                status_code=409)
+
+        def job(emit):
+            try:
+                if arb.ensure_llm() is None:
+                    raise RuntimeError("Språkmodellen är inte installerad.")
+                emit({"type": "log", "msg": f"Söker i {len(excerpts)} lektioner ..."})
+                text = postprocess.answer_over_lessons(
+                    query, excerpts, llm_manager.ACTIVE_LLM.filename,
+                    token_cb=lambda t: emit({"type": "token", "text": t}))
+                return {"text": text, "sources": [
+                    {"lesson_id": e["lesson_id"], "history_id": e["history_id"],
+                     "name": e["name"], "group": e["group"], "course": e["course"],
+                     "datum": e["datum"]}
+                    for e in excerpts]}
+            finally:
+                arb.release_gpu()
+        return _sse_response(job)
 
     @app.post("/api/postprocess")
     async def api_postprocess(req: Request):
@@ -977,8 +1275,10 @@ def create_app(base_dir: Path | None = None,
             try:
                 if arb.ensure_llm() is None:
                     raise RuntimeError("Språkmodellen är inte installerad.")
-                text = postprocess.run(operation, transcript, model,
-                                       token_cb=lambda t: emit({"type": "token", "text": t}))
+                text = postprocess.run(
+                    operation, transcript, model,
+                    token_cb=lambda t: emit({"type": "token", "text": t}),
+                    log_cb=lambda m: emit({"type": "log", "msg": m}))
                 return {"text": text}
             finally:
                 arb.release_gpu()

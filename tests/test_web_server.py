@@ -502,7 +502,7 @@ def _lesson_client(tmp_path, monkeypatch, *, transcript=True, arbiter=None):
 def test_extract_writes_llm_insights(tmp_path, monkeypatch):
     monkeypatch.setattr(
         server.postprocess, "extract",
-        lambda transcript, model, token_cb=None: [
+        lambda transcript, model, token_cb=None, log_cb=None: [
             {"typ": "svårighet", "text": "derivata", "due_date": None, "ref": "uppg 3"}])
     c = _lesson_client(tmp_path, monkeypatch)
     lid = c.get("/api/lessons").json()[0]["id"]
@@ -578,7 +578,7 @@ def test_extract_uses_stored_transcript(tmp_path, monkeypatch):
     """Extraction reads the transcript from the DB (mirrored at migrate/transcribe
     time), not by scanning history.json."""
     captured = {}
-    def fake_extract(transcript, model, token_cb=None):
+    def fake_extract(transcript, model, token_cb=None, log_cb=None):
         captured["transcript"] = transcript
         return []
     monkeypatch.setattr(server.postprocess, "extract", fake_extract)
@@ -993,3 +993,217 @@ def test_set_models_disk_reset(client, tmp_path):
 def test_set_models_disk_rejects_relative_and_empty(client):
     assert client.post("/api/settings/models-disk", json={"dir": "relativ/sökväg"}).status_code == 400
     assert client.post("/api/settings/models-disk", json={"dir": ""}).status_code == 400
+
+
+# ---- Fritextsök över alla lektioner -----------------------------------------
+
+def test_search_endpoint_returns_hits(tmp_path, monkeypatch):
+    c = _lesson_client(tmp_path, monkeypatch)            # h1 transcript: "vi gick igenom derivata"
+    r = c.get("/api/search", params={"q": "derivata"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["query"] == "derivata"
+    assert len(body["hits"]) == 1
+    h = body["hits"][0]
+    assert h["name"] == "lektion.mp3"
+    assert "derivata" in h["snippet"]
+    assert "date" in h
+
+
+def test_search_empty_query_is_empty(tmp_path, monkeypatch):
+    c = _lesson_client(tmp_path, monkeypatch)
+    assert c.get("/api/search", params={"q": "  "}).json()["hits"] == []
+
+
+def test_search_no_match(tmp_path, monkeypatch):
+    c = _lesson_client(tmp_path, monkeypatch)
+    assert c.get("/api/search", params={"q": "integraler"}).json()["hits"] == []
+
+
+def test_search_ask_streams_answer(tmp_path, monkeypatch):
+    captured = {}
+    def fake_answer(query, excerpts, model, token_cb=None):
+        captured["query"] = query
+        captured["n"] = len(excerpts)
+        if token_cb:
+            token_cb("Derivata togs upp")
+        return "Derivata togs upp [NA21]"
+    monkeypatch.setattr(server.postprocess, "answer_over_lessons", fake_answer)
+    c = _lesson_client(tmp_path, monkeypatch)
+    r = c.post("/api/search/ask", json={"q": "vad sades om derivata"})
+    assert r.status_code == 200
+    assert "Derivata togs upp" in r.text
+    assert captured["query"] == "vad sades om derivata"
+    assert captured["n"] == 1
+
+
+def test_search_ask_no_match_404(tmp_path, monkeypatch):
+    c = _lesson_client(tmp_path, monkeypatch)
+    assert c.post("/api/search/ask", json={"q": "integraler"}).status_code == 404
+
+
+def test_search_ask_busy_gpu_409(tmp_path, monkeypatch):
+    class Busy(_ReadyArbiter):
+        def try_acquire_gpu(self): return False
+    c = _lesson_client(tmp_path, monkeypatch, arbiter=Busy())
+    assert c.post("/api/search/ask", json={"q": "derivata"}).status_code == 409
+
+
+def test_history_edit_syncs_search_index(tmp_path, monkeypatch):
+    c = _lesson_client(tmp_path, monkeypatch)
+    assert len(c.get("/api/search", params={"q": "derivata"}).json()["hits"]) == 1
+    c.patch("/api/history/h1", json={"transcript": [
+        {"start": 0, "end": 2, "text": "nu pratar vi om sannolikhet"}]})
+    assert c.get("/api/search", params={"q": "derivata"}).json()["hits"] == []
+    assert len(c.get("/api/search", params={"q": "sannolikhet"}).json()["hits"]) == 1
+
+
+# ---- Agenda + .ics-export ---------------------------------------------------
+
+def _client_with_lesson_insight(tmp_path, monkeypatch, due="2026-05-21", status="öppen"):
+    c = _lesson_client(tmp_path, monkeypatch)
+    lid = c.get("/api/lessons").json()[0]["id"]
+    ins = c.post(f"/api/lessons/{lid}/insights",
+                 json={"typ": "kalender", "text": "prov", "due_date": due}).json()
+    if status != "öppen":
+        c.patch(f"/api/insights/{ins['id']}", json={"status": status})
+    return c
+
+
+def test_agenda_endpoint_flags_overdue(tmp_path, monkeypatch):
+    c = _client_with_lesson_insight(tmp_path, monkeypatch, due="2000-01-01")
+    ag = c.get("/api/agenda").json()
+    assert len(ag) == 1
+    assert ag[0]["text"] == "prov"
+    assert ag[0]["overdue"] is True
+
+
+def test_agenda_only_open_filter(tmp_path, monkeypatch):
+    c = _client_with_lesson_insight(tmp_path, monkeypatch, status="klar")
+    assert c.get("/api/agenda").json()[0]["status"] == "klar"
+    assert c.get("/api/agenda", params={"only_open": True}).json() == []
+
+
+def test_agenda_ics_writes_file(tmp_path, monkeypatch):
+    c = _client_with_lesson_insight(tmp_path, monkeypatch)
+    r = c.post("/api/agenda/ics", json={})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["count"] == 1
+    p = Path(body["path"])
+    assert p.exists() and p.parent == tmp_path / "exports"
+    assert "BEGIN:VCALENDAR" in p.read_text(encoding="utf-8")
+
+
+# ---- Terminstrender ---------------------------------------------------------
+
+def test_trends_endpoint(tmp_path, monkeypatch):
+    c = _lesson_client(tmp_path, monkeypatch)
+    lid = c.get("/api/lessons").json()[0]["id"]
+    # assign the lesson to a class, then add insights
+    c.patch(f"/api/lessons/{lid}", json={"group_name": "NA21"})
+    gid = next(g["id"] for g in c.get("/api/groups").json() if g["namn"] == "NA21")
+    c.post(f"/api/lessons/{lid}/insights", json={"typ": "svårighet", "text": "derivata"})
+    c.post(f"/api/lessons/{lid}/insights", json={"typ": "åtgärd", "text": "blad"})
+    t = c.get("/api/trends", params={"group_id": gid}).json()
+    assert t["group"] == "NA21"
+    assert t["counts"]["svårighet"] == 1
+    assert t["actions"] == {"open": 1, "done": 0}
+    assert t["top_difficulties"][0]["text"] == "derivata"
+
+
+# ---- Markörer ---------------------------------------------------------------
+
+def test_markers_add_list_delete(tmp_path, monkeypatch):
+    c = _lesson_client(tmp_path, monkeypatch)
+    lid = c.get("/api/lessons").json()[0]["id"]
+    m = c.post(f"/api/lessons/{lid}/markers", json={"t": 42.5, "label": "förklaring"}).json()
+    assert m["t"] == 42.5
+    lst = c.get(f"/api/lessons/{lid}/markers").json()
+    assert len(lst) == 1 and lst[0]["label"] == "förklaring"
+    assert c.delete(f"/api/markers/{m['id']}").json() == {"ok": True}
+    assert c.get(f"/api/lessons/{lid}/markers").json() == []
+
+
+def test_markers_add_to_missing_lesson_404(tmp_path, monkeypatch):
+    c = _lesson_client(tmp_path, monkeypatch)
+    assert c.post("/api/lessons/9999/markers", json={"t": 1}).status_code == 404
+
+
+def test_recording_markers_by_history(tmp_path, monkeypatch):
+    c = _lesson_client(tmp_path, monkeypatch)             # lesson migrated from history "h1"
+    r = c.post("/api/recordings/h1/markers",
+               json={"markers": [{"t": 10}, {"t": 25, "label": "viktigt"}]})
+    assert r.json()["count"] == 2
+    got = c.get("/api/recordings/h1/markers").json()
+    assert [m["t"] for m in got] == [10.0, 25.0]
+    # unknown recording → no markers, no crash
+    assert c.post("/api/recordings/nope/markers", json={"markers": [{"t": 1}]}).json()["count"] == 0
+    assert c.get("/api/recordings/nope/markers").json() == []
+
+
+# ---- Krasch-säker inspelning ------------------------------------------------
+
+def test_recording_append_finish_flow(client, tmp_path):
+    s = "rec_test123"
+    assert client.post("/api/recording/append", params={"session": s}, content=b"abc").json()["bytes"] == 3
+    assert client.post("/api/recording/append", params={"session": s}, content=b"def").json()["bytes"] == 6
+    part = tmp_path / "downloads" / (s + ".part")
+    assert part.exists() and part.read_bytes() == b"abcdef"
+    res = client.post("/api/recording/finish", params={"session": s, "name": "lektion.webm"}).json()
+    p = Path(res["path"])
+    assert p.exists() and p.read_bytes() == b"abcdef" and not part.exists()
+
+
+def test_recording_append_rejects_bad_session(client):
+    assert client.post("/api/recording/append", params={"session": "../evil"}, content=b"x").status_code == 400
+    assert client.post("/api/recording/finish", params={"session": "a/b"}).status_code == 400
+
+
+def test_recording_finish_missing_404(client):
+    assert client.post("/api/recording/finish", params={"session": "rec_none"}).status_code == 404
+
+
+def test_recording_incomplete_and_discard(client, tmp_path):
+    s = "rec_orphan"
+    client.post("/api/recording/append", params={"session": s}, content=b"partialdata")
+    inc = client.get("/api/recordings/incomplete").json()
+    assert any(r["session"] == s for r in inc)
+    assert client.post("/api/recording/discard", params={"session": s}).json() == {"ok": True}
+    assert client.get("/api/recordings/incomplete").json() == []
+
+
+def test_recording_finish_unique_name(client, tmp_path):
+    (tmp_path / "downloads").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "downloads" / "lektion.webm").write_bytes(b"old")
+    client.post("/api/recording/append", params={"session": "rec_dup"}, content=b"new")
+    res = client.post("/api/recording/finish", params={"session": "rec_dup", "name": "lektion.webm"}).json()
+    assert Path(res["path"]).name != "lektion.webm"      # uuid-suffix, behåller den gamla
+    assert (tmp_path / "downloads" / "lektion.webm").read_bytes() == b"old"
+
+
+# ---- Säkerhetskopiering + lektionsrapport -----------------------------------
+
+def test_backup_endpoint_writes_zip(tmp_path, monkeypatch):
+    c = _lesson_client(tmp_path, monkeypatch)            # creates transkribera.db + history.json
+    res = c.post("/api/backup").json()
+    p = Path(res["path"])
+    assert p.exists() and p.suffix == ".zip" and p.parent == tmp_path / "exports"
+    assert "transkribera.db" in res["files"]
+
+
+def test_lesson_report_md_and_html(tmp_path, monkeypatch):
+    c = _lesson_client(tmp_path, monkeypatch)
+    lid = c.get("/api/lessons").json()[0]["id"]
+    c.post(f"/api/lessons/{lid}/insights", json={"typ": "kalender", "text": "prov", "due_date": "2026-05-21"})
+    md = c.get(f"/api/lessons/{lid}/report", params={"format": "md"}).json()
+    assert Path(md["path"]).suffix == ".md" and md["format"] == "md"
+    assert "prov" in Path(md["path"]).read_text(encoding="utf-8")
+    htm = c.get(f"/api/lessons/{lid}/report").json()
+    assert Path(htm["path"]).suffix == ".html"
+    assert "<!doctype html>" in Path(htm["path"]).read_text(encoding="utf-8")
+
+
+def test_lesson_report_missing_404(tmp_path, monkeypatch):
+    c = _lesson_client(tmp_path, monkeypatch)
+    assert c.get("/api/lessons/9999/report").status_code == 404

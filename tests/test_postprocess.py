@@ -79,3 +79,75 @@ def test_extract_handles_garbage_then_json(monkeypatch):
 def test_extract_unparseable_returns_empty(monkeypatch):
     monkeypatch.setattr(pp.llm_client, "generate", lambda *a, **k: "ingen json här")
     assert pp.extract("x", "m") == []
+
+
+# ---- långa transkript: map-reduce (mot tyst trunkering) ---------------------
+
+def test_split_text_respects_line_boundaries():
+    text = "\n".join("rad" + str(i) for i in range(100))
+    chunks = pp._split_text(text, 40)
+    assert len(chunks) > 1
+    assert all(len(c) <= 40 for c in chunks)
+    # inga rader tappas eller delas på mitten
+    assert "\n".join(chunks).split("\n") == text.split("\n")
+
+
+def test_split_text_hard_splits_overlong_line():
+    chunks = pp._split_text("x" * 100, 30)
+    assert all(len(c) <= 30 for c in chunks)
+    assert "".join(chunks) == "x" * 100
+
+
+def test_run_summary_long_maps_then_reduces(monkeypatch):
+    long = ("mening.\n" * 20000)              # well over SINGLE_PASS_CHARS
+    assert pp._is_long(long)
+    calls = []
+    def fake_generate(model, prompt, token_cb=None, **kw):
+        calls.append(prompt)
+        if token_cb:
+            token_cb("slutlig sammanfattning")
+        return "del" if pp._MAP_SUMMARY in prompt else "slutlig sammanfattning"
+    monkeypatch.setattr(pp.llm_client, "generate", fake_generate)
+    logs = []
+    out = pp.run("summary", long, "m", log_cb=logs.append)
+    # flera map-anrop + ett reduce-anrop
+    assert sum(1 for p in calls if pp._MAP_SUMMARY in p) >= 2
+    assert any(pp._REDUCE_INSTRUCTION["summary"] in p for p in calls)
+    assert out == "slutlig sammanfattning"
+    assert any("Sammanfattar del" in m for m in logs)
+
+
+def test_run_short_summary_is_single_pass(monkeypatch):
+    calls = []
+    monkeypatch.setattr(pp.llm_client, "generate",
+                        lambda model, prompt, token_cb=None, **kw: calls.append(prompt) or "kort")
+    out = pp.run("summary", "kort transkript", "m")
+    assert out == "kort"
+    assert len(calls) == 1
+    assert pp._MAP_SUMMARY not in calls[0]
+
+
+def test_extract_long_merges_and_dedupes(monkeypatch):
+    long = ("derivata var svårt.\n" * 20000)
+    assert pp._is_long(long)
+    raw = ('{"kalender":[],"svarigheter":[{"text":"derivata"}],'
+           '"atgarder":[],"grupprum":[],"material":[]}')
+    n = {"calls": 0}
+    def fake_generate(*a, **k):
+        n["calls"] += 1
+        return raw
+    monkeypatch.setattr(pp.llm_client, "generate", fake_generate)
+    out = pp.extract(long, "m")
+    assert n["calls"] >= 2                    # map över flera delar
+    # samma svårighet i varje del slås ihop till en
+    assert out == [{"typ": "svårighet", "text": "derivata", "due_date": None, "ref": None}]
+
+
+def test_merge_insights_keeps_first_with_metadata():
+    merged = pp._merge_insights([
+        {"typ": "kalender", "text": "Prov", "due_date": "2026-05-21", "ref": None},
+        {"typ": "kalender", "text": "prov", "due_date": None, "ref": None},
+        {"typ": "svårighet", "text": "pq", "due_date": None, "ref": "u3"},
+    ])
+    assert len(merged) == 2
+    assert merged[0]["due_date"] == "2026-05-21"   # första (med datum) behålls

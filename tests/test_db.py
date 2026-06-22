@@ -255,3 +255,204 @@ def test_schema_migration_runs_for_older_db(tmp_path, monkeypatch):
     tables = {r[0] for r in conn.execute(
         "SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
     assert "_mig_marker" in tables                       # the pending migration ran
+
+
+# ---- fritextsök (FTS5) ------------------------------------------------------
+
+def _lesson_with_text(conn, hid, text, **f):
+    return db.create_lesson(conn, history_id=hid, ts="2026-05-12T09:00:00",
+                            transcript_text=text, **f)
+
+
+def test_fts_index_created(tmp_path):
+    conn = _conn(tmp_path)
+    assert db.has_fts(conn)                              # FTS5 ships with sqlite3
+    assert conn.execute("PRAGMA user_version").fetchone()[0] >= 2
+
+
+def test_search_finds_term_with_snippet_and_meta(tmp_path):
+    conn = _conn(tmp_path)
+    gid = db.get_or_create_group(conn, "NA21")
+    cid = db.get_or_create_course(conn, "Matematik 2b")
+    les = _lesson_with_text(conn, "h1", "idag gick vi igenom derivata och kedjeregeln",
+                            name="lektion.mp3")
+    db.update_lesson(conn, les["id"], group_id=gid, course_id=cid)
+    _lesson_with_text(conn, "h2", "vi pratade om integraler", name="annan.mp3")
+
+    hits = db.search_transcripts(conn, "derivata")
+    assert len(hits) == 1
+    h = hits[0]
+    assert h["name"] == "lektion.mp3"
+    assert h["group"] == "NA21" and h["course"] == "Matematik 2b"
+    assert h["datum"] == "2026-05-12"
+    assert "derivata" in h["snippet"]
+    assert "\x02" in h["snippet"] and "\x03" in h["snippet"]   # highlight markers
+
+
+def test_search_prefix_matches_inflection(tmp_path):
+    conn = _conn(tmp_path)
+    _lesson_with_text(conn, "h1", "vi övade på derivatan av en funktion")
+    assert len(db.search_transcripts(conn, "derivat")) == 1    # prefix
+
+
+def test_search_keeps_swedish_letters_distinct(tmp_path):
+    conn = _conn(tmp_path)
+    _lesson_with_text(conn, "h1", "vi diskuterade förändring")
+    assert len(db.search_transcripts(conn, "förändring")) == 1
+
+
+def test_search_and_semantics_multiword(tmp_path):
+    conn = _conn(tmp_path)
+    _lesson_with_text(conn, "h1", "derivata och integraler")
+    _lesson_with_text(conn, "h2", "bara derivata här")
+    hits = db.search_transcripts(conn, "derivata integraler")
+    assert [h["history_id"] for h in hits] == ["h1"]           # both terms required
+
+
+def test_search_empty_or_punctuation_returns_nothing(tmp_path):
+    conn = _conn(tmp_path)
+    _lesson_with_text(conn, "h1", "innehåll")
+    assert db.search_transcripts(conn, "   ") == []
+    assert db.search_transcripts(conn, "!!!") == []
+    assert db._fts_query("???") is None
+
+
+def test_search_index_updates_on_edit_and_delete(tmp_path):
+    conn = _conn(tmp_path)
+    les = _lesson_with_text(conn, "h1", "ursprunglig text om vektorer")
+    assert len(db.search_transcripts(conn, "vektorer")) == 1
+    db.update_lesson_transcript(conn, "h1", "ny text om matriser")
+    assert db.search_transcripts(conn, "vektorer") == []      # trigger refreshed FTS
+    assert len(db.search_transcripts(conn, "matriser")) == 1
+    db.delete_lesson(conn, les["id"])
+    assert db.search_transcripts(conn, "matriser") == []      # delete trigger fired
+
+
+def test_excerpts_for_rag_have_headers(tmp_path):
+    conn = _conn(tmp_path)
+    gid = db.get_or_create_group(conn, "NA21")
+    les = _lesson_with_text(conn, "h1", "lång lektion " * 50 + "om derivata mitt i",
+                            name="l.mp3")
+    db.update_lesson(conn, les["id"], group_id=gid)
+    ex = db.lessons_excerpts_for(conn, [les["id"]], "derivata")
+    assert len(ex) == 1
+    assert ex[0]["group"] == "NA21"
+    assert "derivata" in ex[0]["excerpt"]
+
+
+# ---- agenda (kalender tvärs klasser) ----------------------------------------
+
+def test_agenda_collects_dated_insights_across_classes(tmp_path):
+    conn = _conn(tmp_path)
+    g1 = db.get_or_create_group(conn, "NA21")
+    g2 = db.get_or_create_group(conn, "TE22")
+    l1 = db.create_lesson(conn, history_id="h1", ts="2026-05-01T09:00:00", name="a")
+    l2 = db.create_lesson(conn, history_id="h2", ts="2026-05-02T09:00:00", name="b")
+    db.update_lesson(conn, l1["id"], group_id=g1)
+    db.update_lesson(conn, l2["id"], group_id=g2)
+    db.add_insight(conn, l1["id"], "kalender", "prov", due_date="2026-05-21")
+    db.add_insight(conn, l2["id"], "åtgärd", "ta med blad", due_date="2026-05-10")
+    db.add_insight(conn, l1["id"], "svårighet", "derivata")        # ingen due_date
+
+    ag = db.agenda(conn)
+    assert [a["text"] for a in ag] == ["ta med blad", "prov"]      # sorterat på datum
+    assert ag[0]["group"] == "TE22" and ag[1]["group"] == "NA21"
+
+
+def test_agenda_only_open(tmp_path):
+    conn = _conn(tmp_path)
+    les = db.create_lesson(conn, history_id="h1", ts="2026-05-01T09:00:00", name="a")
+    i1 = db.add_insight(conn, les["id"], "åtgärd", "klar sak", due_date="2026-05-05")
+    db.add_insight(conn, les["id"], "åtgärd", "öppen sak", due_date="2026-05-06")
+    db.update_insight(conn, i1["id"], status="klar")
+    assert [a["text"] for a in db.agenda(conn, only_open=True)] == ["öppen sak"]
+
+
+# ---- terminstrender (per klass) ---------------------------------------------
+
+def test_term_trends_aggregates(tmp_path):
+    conn = _conn(tmp_path)
+    g = db.get_or_create_group(conn, "NA21")
+    other = db.get_or_create_group(conn, "TE22")
+    l1 = db.create_lesson(conn, history_id="h1", ts="2026-05-01T09:00:00", name="a")
+    l2 = db.create_lesson(conn, history_id="h2", ts="2026-05-08T09:00:00", name="b")
+    l3 = db.create_lesson(conn, history_id="h3", ts="2026-05-09T09:00:00", name="c")
+    db.update_lesson(conn, l1["id"], group_id=g)
+    db.update_lesson(conn, l2["id"], group_id=g)
+    db.update_lesson(conn, l3["id"], group_id=other)
+    # NA21: derivata svår två gånger (olika skiftläge), pq en gång
+    db.add_insight(conn, l1["id"], "svårighet", "Derivata", ref="uppg 3")
+    db.add_insight(conn, l2["id"], "svårighet", "derivata")
+    db.add_insight(conn, l2["id"], "svårighet", "pq-formeln")
+    a1 = db.add_insight(conn, l1["id"], "åtgärd", "ta med blad")
+    db.add_insight(conn, l2["id"], "åtgärd", "öppen kvar")
+    db.update_insight(conn, a1["id"], status="klar")
+    # annan klass ska inte läcka in
+    db.add_insight(conn, l3["id"], "svårighet", "ska ej synas")
+
+    t = db.term_trends(conn, g)
+    assert t["group"] == "NA21"
+    assert t["lessons"] == 2 and t["analysed"] == 2
+    assert t["counts"]["svårighet"] == 3 and t["counts"]["åtgärd"] == 2
+    assert t["actions"] == {"open": 1, "done": 1}
+    top = t["top_difficulties"]
+    assert top[0]["text"] == "Derivata" and top[0]["count"] == 2   # längsta varianten, grupperad
+    assert top[0]["refs"] == ["uppg 3"]
+    assert all(d["text"] != "ska ej synas" for d in top)            # ingen läcka
+
+
+def test_term_trends_empty_class(tmp_path):
+    conn = _conn(tmp_path)
+    g = db.get_or_create_group(conn, "NA21")
+    t = db.term_trends(conn, g)
+    assert t["lessons"] == 0 and t["analysed"] == 0
+    assert t["top_difficulties"] == []
+    assert t["actions"] == {"open": 0, "done": 0}
+
+
+# ---- markörer (v3) ----------------------------------------------------------
+
+def test_markers_crud_and_order(tmp_path):
+    conn = _conn(tmp_path)
+    les = db.create_lesson(conn, history_id="h1", ts="2026-05-01T09:00:00", name="a")
+    db.add_marker(conn, les["id"], 30.0, "förklaring")
+    m_early = db.add_marker(conn, les["id"], 5.0)
+    rows = db.list_markers(conn, les["id"])
+    assert [r["t"] for r in rows] == [5.0, 30.0]                # sorterat på tid
+    db.delete_marker(conn, m_early["id"])
+    assert [r["t"] for r in db.list_markers(conn, les["id"])] == [30.0]
+
+
+def test_markers_cascade_on_lesson_delete(tmp_path):
+    conn = _conn(tmp_path)
+    les = db.create_lesson(conn, history_id="h1", ts="2026-05-01T09:00:00", name="a")
+    db.add_marker(conn, les["id"], 10.0)
+    db.delete_lesson(conn, les["id"])
+    assert db.list_markers(conn, les["id"]) == []              # cascade
+
+
+def test_add_markers_for_history_resolves_lesson(tmp_path):
+    conn = _conn(tmp_path)
+    les = db.create_lesson(conn, history_id="h7", ts="2026-05-01T09:00:00", name="a")
+    saved = db.add_markers_for_history(conn, "h7", [{"t": 12.0, "label": "x"}, {"t": 40.0}])
+    assert len(saved) == 2
+    assert db.lesson_id_by_history(conn, "h7") == les["id"]
+    assert db.add_markers_for_history(conn, "okänd", [{"t": 1}]) == []
+
+
+def test_fts_rebuilt_if_missing_on_reconnect(tmp_path):
+    # Simulate a DB stamped past v2 but missing the FTS table (e.g. created on a
+    # build without FTS5): _ensure_fts must rebuild it on the next connect.
+    p = tmp_path / "t.db"
+    conn = db.connect(p)
+    conn.execute("DROP TABLE lesson_fts")
+    conn.execute("DROP TRIGGER IF EXISTS lessons_fts_ai")
+    conn.execute("DROP TRIGGER IF EXISTS lessons_fts_ad")
+    conn.execute("DROP TRIGGER IF EXISTS lessons_fts_au")
+    conn.commit(); conn.close()
+    assert p.exists()
+    db._initialized.discard(str(p.resolve()))             # force re-init this process
+    conn = db.connect(p)
+    assert db.has_fts(conn)                                # rebuilt despite user_version
+    _lesson_with_text(conn, "h1", "rekonstruerad sökindex om vektorer")
+    assert len(db.search_transcripts(conn, "vektorer")) == 1
