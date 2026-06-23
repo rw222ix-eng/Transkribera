@@ -68,7 +68,7 @@ def _install_fakes() -> None:
         return text
 
     def fake_extract(transcript, filename, log_cb=None):
-        return [{"typ": "läxa", "text": "Räkna uppgift 5 till nästa gång.",
+        return [{"typ": "åtgärd", "text": "Räkna uppgift 5 till nästa gång.",
                  "due_date": None, "ref": None}]
 
     def fake_answer(query, excerpts, filename, token_cb=None):

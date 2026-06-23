@@ -30,4 +30,18 @@ export function failOnConsoleError(page: Page, errors: string[]) {
   page.on("pageerror", (e) => errors.push(String(e)));
 }
 
+// Drive the full file-pick -> transcribe flow with the faked ASR, leaving the
+// page in the "done" result view. Shared setup for post-processing tests.
+export async function transcribeSample(page: Page) {
+  await installFakePywebview(page, samplePath());
+  await page.goto("/");
+  const removeBtns = page.getByRole("button", { name: "Ta bort från kön" });
+  for (let i = await removeBtns.count(); i > 0; i--) await removeBtns.first().click();
+  await page.getByText("klicka för att välja").click();
+  await expect(page.getByText("Mamma waw isolerad").first()).toBeVisible({ timeout: 8000 });
+  await expect(page.getByText("KB-Whisper large (sv)")).toBeVisible({ timeout: 15000 });
+  await page.getByRole("button", { name: /Starta/ }).click();
+  await expect(page.getByText("bråk och procent")).toBeVisible({ timeout: 20000 });
+}
+
 export { test, expect };

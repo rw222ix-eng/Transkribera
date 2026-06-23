@@ -5,6 +5,16 @@ Löpande lista över buggar/observationer som e2e-sveptet hittar. Åtgärdas i f
 
 ## Funktionella
 
+- **[CRITICAL — ÅTGÄRDAD] Dubbel `search:`-nyckel slog ut hela lektionssöket** —
+  `app/web/static/app.js`
+  - vm-returobjektet hade två `search:`-nycklar: den rika lektionssök-/Fråga(AI)-
+    vymodellen (med alla handlers) och senare `search: st.search` (modellvyns
+    filtersträng). JS behåller sista dubbletten → `v.search` blev tomma strängen,
+    så hela sökpanelen i Lektioner renderades med döda handlers (`data-click="-1"`):
+    man kunde varken söka, byta till Fråga(AI) eller skriva en fråga.
+  - **Fix:** döpte om lektionsnyckeln till `lessonsSearch` (+ `searchPanel(v.lessonsSearch)`).
+    `node --check` grön; e2e `03-postprocess` grön.
+
 - **[MEDIUM] Prototyp-/demodata i produktions-state** — `app/web/static/app.js`
   - Initialt state innehåller en fejkad kö-post `intervju_lund.mkv`
     (`queue: [{id:'f1', name:'intervju_lund.mkv'}]`, rad ~71) och `source:
