@@ -38,23 +38,21 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"] },
     },
     {
+      // The real smoke runs against the REAL backend. Playwright's webServer is
+      // top-level only, so start the real server yourself before this project:
+      //   TRANSKRIBERA_BASE_DIR=e2e/.test-data-real python e2e/serve_test_app.py --real
+      // (npm run test:real reuses whatever is already listening on the port).
       name: "real",
       testMatch: /real-smoke\.spec\.ts/,
+      // The CTranslate2 transcription subprocess can abort natively on
+      // Windows/CUDA (see CLAUDE.md); retry the genuine run so a transient
+      // teardown abort doesn't fail the smoke.
+      retries: 3,
       use: { ...devices["Desktop Chrome"], viewport: { width: 1040, height: 780 } },
-      webServer: {
-        command: `python e2e/serve_test_app.py --real`,
-        cwd: REPO,
-        url: BASE_URL,
-        timeout: 60_000,
-        reuseExistingServer: false,
-        env: {
-          TRANSKRIBERA_PORT: String(PORT),
-          TRANSKRIBERA_BASE_DIR: TEST_DATA_REAL,
-        },
-      },
     },
   ],
-  // Default server (fake) for the fake + visual projects.
+  // Default server (fake) for the fake + visual projects. reuseExistingServer
+  // lets the real smoke reuse a manually-started --real server on the same port.
   webServer: {
     command: `python e2e/serve_test_app.py`,
     cwd: REPO,

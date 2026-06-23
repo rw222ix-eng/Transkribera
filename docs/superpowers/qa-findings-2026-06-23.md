@@ -32,6 +32,17 @@ Löpande lista över buggar/observationer som e2e-sveptet hittar. Åtgärdas i f
   - **Förslag:** avaktivera/markera Starta som "laddar modeller…" tills
     `catalogReady` är sant (state finns redan).
 
+## Verkligt rök-test (äkta transkribering på GPU)
+
+- **[KÄNT — plattformsskörhet, ej regression] Transkriberings-subprocessen
+  aborterar ibland nativt på Windows/CUDA.** Det verkliga rök-testet (KB-Whisper
+  large på 4090) producerar korrekt svenskt transkript + historikpost, men
+  subprocessen (`app/transcribe_cli.py`, CTranslate2) avbryts ibland vid teardown
+  innan den skrivit filerna — exakt den skörhet `CLAUDE.md` varnar för. Verifierat
+  via direktkörning (lyckas ~2 av 3). Hanteras i e2e med `retries: 3` på
+  `real`-projektet; testet är "flaky" men grönt. **Inte** åtgärdat i koden
+  (hard-stop: subprocessen får inte brytas).
+
 ## Visuella
 
 - **[HIGH — ÅTGÄRDAD] Header svämmade över i sidled vid minsta fönsterbredd** —

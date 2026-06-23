@@ -31,6 +31,12 @@ REAL_MODELS = REPO / "models"
 if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
+# The transcription runs in an isolated `python -m app.transcribe_cli` subprocess
+# with cwd set to base_dir. In production base_dir is the repo root (so `app` is
+# importable); here base_dir is a temp dir, so put the repo on PYTHONPATH for the
+# child to find the `app` package.
+os.environ["PYTHONPATH"] = str(REPO) + os.pathsep + os.environ.get("PYTHONPATH", "")
+
 
 def _fake_segments() -> list[dict]:
     return [
