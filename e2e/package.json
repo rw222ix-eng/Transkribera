@@ -1,0 +1,16 @@
+{
+  "name": "transkribera-e2e",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "test": "playwright test",
+    "test:fake": "playwright test --project=fake",
+    "test:visual": "playwright test --project=visual",
+    "test:real": "playwright test --project=real",
+    "codegen": "playwright codegen http://127.0.0.1:8731",
+    "report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0"
+  }
+}
