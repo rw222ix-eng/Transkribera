@@ -34,4 +34,17 @@ Löpande lista över buggar/observationer som e2e-sveptet hittar. Åtgärdas i f
 
 ## Visuella
 
-(fylls i under fas 7)
+- **[HIGH — ÅTGÄRDAD] Header svämmade över i sidled vid minsta fönsterbredd** —
+  `app/web/static/app.js` (viewHeader)
+  - Vid appens min-bredd (820 px, `desktop.py` `min_size`) var headerns tre
+    sektioner (logo · 4-flikspill · status+temaknapp) ihop ~930 px → 110 px
+    horisontellt överflöd (scrollbar + temaknappen sköts ut). Alla vyer drabbades
+    vid 820×600; 1040×780 var ok.
+  - **Fix:** sidosektionerna `flex:1 1 0; min-width:0` (krymper men behåller
+    centrerad nav), nav `flex:0 1 auto`, header `gap:24→16`, `padding:32→20`,
+    flik-padding `18→15` + `white-space:nowrap`. Inget överflöd vid 800/820/1040 px;
+    e2e visuellt svep (16 kombinationer vy×bredd×tema) grönt.
+
+- Svep körde alla fyra vyer × {1040×780, 820×600} × {ljust, mörkt} med
+  horisontell-överflöds-assertion. Skärmdumpar i `e2e/visual-screens/` (gitignored).
+  Inga övriga layout-/kontrast-/överflödsfel hittades.
