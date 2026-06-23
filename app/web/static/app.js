@@ -1749,7 +1749,7 @@
         };
       })(),
 
-      search: {
+      lessonsSearch: {
         query: st.lessonSearch, mode: st.searchMode,
         modeKeyword: st.searchMode === 'keyword', modeAsk: st.searchMode === 'ask',
         busy: st.searching || st.asking,
@@ -2750,7 +2750,7 @@ function viewLessons(v){
 
       ${ agendaPanel(v.agenda) }
 
-      ${ searchPanel(v.search) }
+      ${ searchPanel(v.lessonsSearch) }
 
       <datalist id="dl-klass">${ v.lessonGroups.map(function(g){ return '<option value="'+esc(g.namn)+'">'; }).join('') }</datalist>
       <datalist id="dl-kurs">${ v.lessonCourses.map(function(c){ return '<option value="'+esc(c.namn)+'">'; }).join('') }</datalist>
