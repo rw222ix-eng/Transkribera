@@ -1,0 +1,63 @@
+<!-- @dsCard group="Foundations" -->
+<!DOCTYPE html>
+<html lang="sv" data-theme="light">
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --canvas:#F7F7F4; --surface:#FFFFFF; --sunken:#F0F0EB;
+    --ink:#0B0B0D; --ink-2:#0B0B0D; --ink-3:#2C2C30;
+    --line:#E7E7E1; --line-2:#DBDBD4;
+    --accent:#3B5BDB; --accent-weak:#EDF0FC;
+    --ok:#2E9E6A; --warn:#BD831C; --bad:#CF5A52;
+    --btn-bg:#17171B; --btn-fg:#FFFFFF;
+    --track:#EFEFEA;
+  }
+  [data-theme="dark"]{
+    --canvas:#0D0D10; --surface:#16161A; --sunken:#1D1D22;
+    --ink:#FFFFFF; --ink-2:#FFFFFF; --ink-3:#D6D6DA;
+    --line:#26262E; --line-2:#313139;
+    --accent:#8298FF; --accent-weak:#1A1E2E;
+    --ok:#48BE8A; --warn:#D7A24A; --bad:#E0746C;
+    --btn-bg:#F3F3F4; --btn-fg:#141419;
+    --track:#1D1D23;
+  }
+  body{margin:0;background:var(--canvas);color:var(--ink);font-family:'Geist',system-ui,-apple-system,sans-serif;letter-spacing:-.01em;padding:28px}
+  h1{font-size:22px;font-weight:600;letter-spacing:-.02em;margin:0 0 4px}
+  .sub{color:var(--ink-3);font-size:13px;margin:0 0 22px}
+  h2{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-3);margin:26px 0 12px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:12px}
+  .sw{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--surface)}
+  .chip{height:52px}
+  .meta{padding:8px 11px;font-size:12px}
+  .name{font-weight:600}
+  .val{color:var(--ink-3);font-variant-numeric:tabular-nums}
+  .type div{margin-bottom:6px}
+</style>
+</head>
+<body>
+  <h1>Transkribera — Foundations</h1>
+  <p class="sub">Designtokens (1:1 med <code>app/web/static/style.css</code>). Växla <code>data-theme="dark"</code> för mörkt tema.</p>
+
+  <h2>Färg</h2>
+  <div class="grid">
+    <div class="sw"><div class="chip" style="background:var(--accent)"></div><div class="meta"><div class="name">--accent</div><div class="val">#3B5BDB</div></div></div>
+    <div class="sw"><div class="chip" style="background:var(--ink)"></div><div class="meta"><div class="name">--ink</div><div class="val">#0B0B0D</div></div></div>
+    <div class="sw"><div class="chip" style="background:var(--surface);box-shadow:inset 0 0 0 1px var(--line)"></div><div class="meta"><div class="name">--surface</div><div class="val">#FFFFFF</div></div></div>
+    <div class="sw"><div class="chip" style="background:var(--canvas);box-shadow:inset 0 0 0 1px var(--line)"></div><div class="meta"><div class="name">--canvas</div><div class="val">#F7F7F4</div></div></div>
+    <div class="sw"><div class="chip" style="background:var(--ok)"></div><div class="meta"><div class="name">--ok</div><div class="val">#2E9E6A</div></div></div>
+    <div class="sw"><div class="chip" style="background:var(--warn)"></div><div class="meta"><div class="name">--warn</div><div class="val">#BD831C</div></div></div>
+    <div class="sw"><div class="chip" style="background:var(--bad)"></div><div class="meta"><div class="name">--bad</div><div class="val">#CF5A52</div></div></div>
+    <div class="sw"><div class="chip" style="background:var(--track)"></div><div class="meta"><div class="name">--track</div><div class="val">#EFEFEA</div></div></div>
+  </div>
+
+  <h2>Typografi — Geist</h2>
+  <div class="type" style="background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px 20px">
+    <div style="font-size:30px;font-weight:600;letter-spacing:-.03em">Vad vill du transkribera?</div>
+    <div style="font-size:22px;font-weight:600;letter-spacing:-.02em">Inställningar</div>
+    <div style="font-size:16.5px;font-weight:500">Brödtext / kontroller (15–16.5px)</div>
+    <div style="font-size:13px;color:var(--ink-3)">Sekundär / metadata (12–13px)</div>
+  </div>
+</body>
+</html>

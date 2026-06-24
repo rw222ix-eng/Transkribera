@@ -1,0 +1,51 @@
+<!-- @dsCard group="Components" -->
+<!DOCTYPE html>
+<html lang="sv" data-theme="light">
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --canvas:#F7F7F4; --surface:#FFFFFF; --sunken:#F0F0EB;
+    --ink:#0B0B0D; --ink-2:#0B0B0D; --ink-3:#2C2C30;
+    --line:#E7E7E1; --line-2:#DBDBD4; --accent:#3B5BDB;
+    --btn-bg:#17171B; --btn-fg:#FFFFFF; --track:#EFEFEA;
+    --shadow-sm:0 1px 2px rgba(20,20,30,.06);
+  }
+  [data-theme="dark"]{
+    --canvas:#0D0D10; --surface:#16161A; --sunken:#1D1D22;
+    --ink:#FFFFFF; --ink-2:#FFFFFF; --ink-3:#D6D6DA;
+    --line:#26262E; --line-2:#313139; --accent:#8298FF;
+    --btn-bg:#F3F3F4; --btn-fg:#141419; --track:#1D1D23;
+    --shadow-sm:0 1px 2px rgba(0,0,0,.5);
+  }
+  body{margin:0;background:var(--canvas);color:var(--ink);font-family:'Geist',system-ui,sans-serif;letter-spacing:-.01em;padding:28px}
+  h1{font-size:22px;font-weight:600;letter-spacing:-.02em;margin:0 0 4px}
+  .sub{color:var(--ink-3);font-size:13px;margin:0 0 22px}
+  .row{display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:14px}
+  .lbl{width:100%;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-3);margin-top:14px}
+  button{font-family:inherit}
+  .coral{display:inline-flex;align-items:center;justify-content:center;gap:9px;color:#fff;border:none;border-radius:12px;padding:14px 24px;font-size:16px;font-weight:600;cursor:pointer;letter-spacing:.01em;background-image:linear-gradient(115deg,#d24a37 0%,#ef5f46 38%,#ff8567 68%,#ffb39c 100%);box-shadow:0 7px 20px -7px rgba(226,80,58,.6),0 1px 2px rgba(0,0,0,.1)}
+  .primary{display:inline-flex;align-items:center;gap:9px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:12px;padding:14px 24px;font-size:16px;font-weight:500;cursor:pointer;box-shadow:var(--shadow-sm)}
+  .secondary{background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:9px;padding:9px 14px;font-size:13.5px;font-weight:500;cursor:pointer}
+  .korbtn{display:flex;align-items:center;justify-content:center;gap:13px;height:60px;min-width:280px;border:1.5px solid var(--ink);border-radius:14px;background:var(--surface);color:var(--ink);font-size:16.5px;font-weight:600;cursor:pointer}
+</style>
+</head>
+<body>
+  <h1>Knappar</h1>
+  <p class="sub">Speglar <code>coralBtn()</code> / <code>primaryBtn()</code> + "Starta"-knappen (korbtn) i app.js.</p>
+
+  <div class="lbl">Primär CTA — "Starta" (korbtn)</div>
+  <div class="row"><button class="korbtn">Starta</button></div>
+
+  <div class="lbl">Coral CTA</div>
+  <div class="row"><button class="coral">Kör igång</button></div>
+
+  <div class="lbl">Primär / sekundär</div>
+  <div class="row">
+    <button class="primary">Kör</button>
+    <button class="secondary">Ladda ner modell</button>
+    <button class="secondary">Byt fil</button>
+  </div>
+</body>
+</html>
