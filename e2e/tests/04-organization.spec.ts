@@ -60,7 +60,7 @@ test("export a lesson report", async ({ page }) => {
 test("agenda exports an .ics calendar (API)", async ({ request }) => {
   // The agenda panel only renders when dated insights exist; verify the export
   // endpoint that powers it directly.
-  const resp = await request.post("http://127.0.0.1:8731/api/agenda/ics", { data: {} });
+  const resp = await request.post("/api/agenda/ics", { data: {} });
   expect(resp.status()).toBe(200);
   const body = await resp.json();
   expect(String(body.path)).toContain(".ics");
