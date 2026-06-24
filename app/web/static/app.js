@@ -1422,21 +1422,21 @@
     });
 
     var langs = [['sv', 'Svenska'], ['en', 'Engelska']];
-    var langOptions = langs.map(function (p) { return { label: p[1], style: segBtn(st.language === p[0], '38px'), onPick: function () { pickLang(p[0]); } }; });
+    var langOptions = langs.map(function (p) { return { label: p[1], active: st.language === p[0], style: segBtn(st.language === p[0], '38px'), onPick: function () { pickLang(p[0]); } }; });
     // Result language: pick sv/en; if it differs from the source language the
     // subtitles are translated by the local text model.
     var targetLangs = [['sv', 'Svenska'], ['en', 'Engelska']];
-    var targetLangOptions = targetLangs.map(function (p) { return { label: p[1], style: segBtn(st.targetLanguage === p[0], '34px'), onPick: function () { pickTargetLang(p[0]); } }; });
+    var targetLangOptions = targetLangs.map(function (p) { return { label: p[1], active: st.targetLanguage === p[0], style: segBtn(st.targetLanguage === p[0], '34px'), onPick: function () { pickTargetLang(p[0]); } }; });
     var translateNote = (st.targetLanguage && st.language && st.targetLanguage !== st.language)
       ? ('Översätts till ' + (st.targetLanguage === 'sv' ? 'svenska' : 'engelska') + ' av språkmodellen.')
       : '';
-    var formatChips = ['srt', 'txt', 'vtt'].map(function (f) { return { label: f.toUpperCase(), style: chip(st.formats[f]), onToggle: function () { toggleFmt(f); } }; });
+    var formatChips = ['srt', 'txt', 'vtt'].map(function (f) { return { label: f.toUpperCase(), active: st.formats[f], style: chip(st.formats[f]), onToggle: function () { toggleFmt(f); } }; });
     // Subtitle delivery for video sources: keep media + SRT side by side, or embed
     // the subtitles into the video (soft mux or hard burn). Only shown for video.
     var _activeQ = st.queue.find(function (q) { return q.id === st.activeId; }) || st.queue[0];
     var _activeIsVideo = !!(_activeQ && /\.(mp4|mkv|mov|webm|avi|m4v)$/i.test(_activeQ.name || ''));
-    var subtitleOptions = [['separate', 'Spara separat'], ['embed', 'Bädda in']].map(function (p) { return { label: p[1], style: segBtn(st.subtitleMode === p[0], '34px'), onPick: function () { setState({ subtitleMode: p[0] }); } }; });
-    var embedOptions = [['soft', 'Mjukt sub-spår'], ['burn', 'Hård inbränning']].map(function (p) { return { label: p[1], style: segBtn(st.embedKind === p[0], '34px'), onPick: function () { setState({ embedKind: p[0] }); } }; });
+    var subtitleOptions = [['separate', 'Spara separat'], ['embed', 'Bädda in']].map(function (p) { return { label: p[1], active: st.subtitleMode === p[0], style: segBtn(st.subtitleMode === p[0], '34px'), onPick: function () { setState({ subtitleMode: p[0] }); } }; });
+    var embedOptions = [['soft', 'Mjukt sub-spår'], ['burn', 'Hård inbränning']].map(function (p) { return { label: p[1], active: st.embedKind === p[0], style: segBtn(st.embedKind === p[0], '34px'), onPick: function () { setState({ embedKind: p[0] }); } }; });
 
     var steps = STEPS.map(function (label, idx) {
       var done = idx < cur, active = idx === cur && !isDone;
@@ -1678,6 +1678,7 @@
       tabTranscribe: st.tab === 'transcribe', tabModels: st.tab === 'models', tabHistory: st.tab === 'history', tabLessons: st.tab === 'lessons',
       onTabT: function () { setTab('transcribe'); }, onTabM: function () { setTab('models'); }, onTabH: function () { setTab('history'); }, onTabL: function () { setTab('lessons'); },
       tabTStyle: tabBtn(st.tab === 'transcribe'), tabMStyle: tabBtn(st.tab === 'models'), tabHStyle: tabBtn(st.tab === 'history'), tabLStyle: tabBtn(st.tab === 'lessons'),
+      tabTOn: st.tab === 'transcribe', tabMOn: st.tab === 'models', tabHOn: st.tab === 'history', tabLOn: st.tab === 'lessons',
       toggleTheme: toggleTheme,
 
       queueItems: queueItems, queueCount: st.queue.length, multiQueue: st.queue.length > 1, hasQueue: st.queue.length > 0,
@@ -1982,10 +1983,10 @@
       '</div>' +
       '<nav style="flex:0 1 auto;min-width:0;display:flex;justify-content:center">' +
         '<div style="display:inline-flex;gap:3px;padding:4px;background:var(--track);border-radius:12px;border:1px solid var(--line)">' +
-          '<button data-click="' + on(v.onTabT) + '" style="' + v.tabTStyle + '" data-sh="background:var(--surface) !important;color:var(--ink) !important;box-shadow:var(--shadow-sm) !important">Transkribera</button>' +
-          '<button data-click="' + on(v.onTabH) + '" style="' + v.tabHStyle + '" data-sh="background:var(--surface) !important;color:var(--ink) !important;box-shadow:var(--shadow-sm) !important">Historik</button>' +
-          '<button data-click="' + on(v.onTabL) + '" style="' + v.tabLStyle + '" data-sh="background:var(--surface) !important;color:var(--ink) !important;box-shadow:var(--shadow-sm) !important">Lektioner</button>' +
-          '<button data-click="' + on(v.onTabM) + '" style="' + v.tabMStyle + '" data-sh="background:var(--surface) !important;color:var(--ink) !important;box-shadow:var(--shadow-sm) !important">Modeller</button>' +
+          '<button data-click="' + on(v.onTabT) + '" aria-pressed="' + v.tabTOn + '" style="' + v.tabTStyle + '" data-sh="background:var(--surface) !important;color:var(--ink) !important;box-shadow:var(--shadow-sm) !important">Transkribera</button>' +
+          '<button data-click="' + on(v.onTabH) + '" aria-pressed="' + v.tabHOn + '" style="' + v.tabHStyle + '" data-sh="background:var(--surface) !important;color:var(--ink) !important;box-shadow:var(--shadow-sm) !important">Historik</button>' +
+          '<button data-click="' + on(v.onTabL) + '" aria-pressed="' + v.tabLOn + '" style="' + v.tabLStyle + '" data-sh="background:var(--surface) !important;color:var(--ink) !important;box-shadow:var(--shadow-sm) !important">Lektioner</button>' +
+          '<button data-click="' + on(v.onTabM) + '" aria-pressed="' + v.tabMOn + '" style="' + v.tabMStyle + '" data-sh="background:var(--surface) !important;color:var(--ink) !important;box-shadow:var(--shadow-sm) !important">Modeller</button>' +
         '</div>' +
       '</nav>' +
       '<div style="flex:1 1 0;min-width:0;display:flex;justify-content:flex-end;align-items:center;gap:12px">' +
@@ -2154,7 +2155,7 @@ function viewTranscribe(v){ return `
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:12px;box-shadow:var(--shadow-sm)">
           <div style="display:flex;gap:3px;padding:4px;background:var(--track);border:1px solid var(--line);border-radius:11px;flex:0 0 auto">
             ${ v.langOptions.map(function(l){ return `
-              <button data-click="${on(l.onPick)}" style="${l.style}" data-sh="background:var(--surface) !important;color:var(--ink) !important;box-shadow:var(--shadow-sm) !important">${esc(l.label)}</button>
+              <button data-click="${on(l.onPick)}" aria-pressed="${l.active}" style="${l.style}" data-sh="background:var(--surface) !important;color:var(--ink) !important;box-shadow:var(--shadow-sm) !important">${esc(l.label)}</button>
             `; }).join('') }
           </div>
 
@@ -2170,7 +2171,7 @@ function viewTranscribe(v){ return `
 
         <div style="display:flex;gap:6px;flex:0 0 auto">
           ${ v.formatChips.map(function(f){ return `
-            <button data-click="${on(f.onToggle)}" style="${f.style}" data-sh="border-color:var(--line-2) !important;box-shadow:var(--shadow-sm) !important">${esc(f.label)}</button>
+            <button data-click="${on(f.onToggle)}" aria-pressed="${f.active}" style="${f.style}" data-sh="border-color:var(--line-2) !important;box-shadow:var(--shadow-sm) !important">${esc(f.label)}</button>
           `; }).join('') }
         </div>
         </div>
@@ -2178,7 +2179,7 @@ function viewTranscribe(v){ return `
         <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:12px;box-shadow:var(--shadow-sm)">
           <span style="font-size:14px;color:var(--ink-2);font-weight:500">Resultatspråk</span>
           <div style="display:flex;gap:3px;padding:4px;background:var(--track);border:1px solid var(--line);border-radius:11px">
-            ${ v.targetLangOptions.map(function(o){ return `<button data-click="${on(o.onPick)}" style="${o.style}" data-sh="background:var(--surface) !important;color:var(--ink) !important;box-shadow:var(--shadow-sm) !important">${esc(o.label)}</button>`; }).join('') }
+            ${ v.targetLangOptions.map(function(o){ return `<button data-click="${on(o.onPick)}" aria-pressed="${o.active}" style="${o.style}" data-sh="background:var(--surface) !important;color:var(--ink) !important;box-shadow:var(--shadow-sm) !important">${esc(o.label)}</button>`; }).join('') }
           </div>
           ${ v.translateNote ? `<span style="font-size:13px;color:var(--accent)">${esc(v.translateNote)}</span>` : '' }
         </div>
@@ -2198,11 +2199,11 @@ function viewTranscribe(v){ return `
         <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:12px;box-shadow:var(--shadow-sm)">
           <span style="font-size:14px;color:var(--ink-2);font-weight:500">Undertext i video</span>
           <div style="display:flex;gap:3px;padding:4px;background:var(--track);border:1px solid var(--line);border-radius:11px">
-            ${ v.subtitleOptions.map(function(o){ return `<button data-click="${on(o.onPick)}" style="${o.style}" data-sh="background:var(--surface) !important;color:var(--ink) !important;box-shadow:var(--shadow-sm) !important">${esc(o.label)}</button>`; }).join('') }
+            ${ v.subtitleOptions.map(function(o){ return `<button data-click="${on(o.onPick)}" aria-pressed="${o.active}" style="${o.style}" data-sh="background:var(--surface) !important;color:var(--ink) !important;box-shadow:var(--shadow-sm) !important">${esc(o.label)}</button>`; }).join('') }
           </div>
           ${ v.showEmbed ? `
           <div style="display:flex;gap:3px;padding:4px;background:var(--track);border:1px solid var(--line);border-radius:11px">
-            ${ v.embedOptions.map(function(o){ return `<button data-click="${on(o.onPick)}" style="${o.style}" data-sh="background:var(--surface) !important;color:var(--ink) !important;box-shadow:var(--shadow-sm) !important">${esc(o.label)}</button>`; }).join('') }
+            ${ v.embedOptions.map(function(o){ return `<button data-click="${on(o.onPick)}" aria-pressed="${o.active}" style="${o.style}" data-sh="background:var(--surface) !important;color:var(--ink) !important;box-shadow:var(--shadow-sm) !important">${esc(o.label)}</button>`; }).join('') }
           </div>
           ` : '' }
         </div>
@@ -2396,13 +2397,13 @@ function viewTranscribe(v){ return `
           <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px">
             ${ v.ppOps.map(function(o){ return `
               ${ o.selected ? `
-                <button data-key="${esc(o.key)}" data-click="${on(o.onPick)}" style="display:flex;flex-direction:column;gap:3px;align-items:flex-start;text-align:left;padding:13px 14px;border-radius:12px;cursor:pointer;font-family:inherit;color:var(--ink);width:100%;border:1.5px solid var(--ink);background:var(--sunken);transition:border-color .12s,background .12s,box-shadow .12s" data-sh="box-shadow:var(--shadow-sm) !important">
+                <button data-key="${esc(o.key)}" data-click="${on(o.onPick)}" aria-pressed="true" style="display:flex;flex-direction:column;gap:3px;align-items:flex-start;text-align:left;padding:13px 14px;border-radius:12px;cursor:pointer;font-family:inherit;color:var(--ink);width:100%;border:1.5px solid var(--ink);background:var(--sunken);transition:border-color .12s,background .12s,box-shadow .12s" data-sh="box-shadow:var(--shadow-sm) !important">
                   <span style="font-size:14.5px;font-weight:500">${esc(o.label)}</span>
                   <span style="font-size:12.5px;color:var(--ink-2);line-height:1.3">${esc(o.sub)}</span>
                 </button>
               ` : '' }
               ${ o.unselected ? `
-                <button data-key="${esc(o.key)}" data-click="${on(o.onPick)}" style="display:flex;flex-direction:column;gap:3px;align-items:flex-start;text-align:left;padding:13px 14px;border-radius:12px;cursor:pointer;font-family:inherit;color:var(--ink);width:100%;border:1.5px solid var(--line);background:var(--surface);transition:border-color .12s,background .12s,box-shadow .12s" data-sh="border-color:var(--ink-3) !important;background:var(--sunken) !important;box-shadow:var(--shadow-sm) !important">
+                <button data-key="${esc(o.key)}" data-click="${on(o.onPick)}" aria-pressed="false" style="display:flex;flex-direction:column;gap:3px;align-items:flex-start;text-align:left;padding:13px 14px;border-radius:12px;cursor:pointer;font-family:inherit;color:var(--ink);width:100%;border:1.5px solid var(--line);background:var(--surface);transition:border-color .12s,background .12s,box-shadow .12s" data-sh="border-color:var(--ink-3) !important;background:var(--sunken) !important;box-shadow:var(--shadow-sm) !important">
                   <span style="font-size:14.5px;font-weight:500">${esc(o.label)}</span>
                   <span style="font-size:12.5px;color:var(--ink-2);line-height:1.3">${esc(o.sub)}</span>
                 </button>
@@ -2902,8 +2903,8 @@ function searchPanel(s){
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:11px;flex-wrap:wrap">
         <span style="font-size:13.5px;font-weight:600;color:var(--ink-2)">🔎 Sök i alla lektioner</span>
         <div style="margin-left:auto;display:inline-flex;gap:3px;padding:3px;background:var(--track);border-radius:11px;border:1px solid var(--line)">
-          <button data-click="${on(s.onKeyword)}" style="${segBtn(s.modeKeyword)}">Sök ord</button>
-          <button data-click="${on(s.onAsk)}" style="${segBtn(s.modeAsk)}">Fråga (AI)</button>
+          <button data-click="${on(s.onKeyword)}" aria-pressed="${s.modeKeyword}" style="${segBtn(s.modeKeyword)}">Sök ord</button>
+          <button data-click="${on(s.onAsk)}" aria-pressed="${s.modeAsk}" style="${segBtn(s.modeAsk)}">Fråga (AI)</button>
         </div>
       </div>
       <div style="display:flex;gap:8px">
