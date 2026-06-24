@@ -37,7 +37,7 @@
 html{scrollbar-gutter:stable}
 html,body{margin:0}
 body{background:var(--canvas)}
-*:focus-visible{outline:none}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 [data-hidescroll]{scrollbar-width:none}
 [data-hidescroll]::-webkit-scrollbar{display:none}
 ::selection{background:var(--accent-weak);color:var(--ink)}
