@@ -23,10 +23,10 @@
   var S = {
     theme: 'light',
     tab: 'transcribe',
-    source: 'intervju_lund.mkv',
+    source: '',
     dragging: false,
     urlInput: '',
-    step: 'config',
+    step: 'source',
     model: 'KB-Whisper large',
     language: 'sv',
     targetLanguage: 'sv',       // resultatspråk; skiljer det sig från language översätts undertexterna
@@ -68,10 +68,10 @@
     toast: null,
     searchQuery: '',
     currentMatch: 0,
-    queue: [{ id: 'f1', name: 'intervju_lund.mkv' }],
+    queue: [],
     qStatus: {},
     qProgress: {},
-    activeId: 'f1',
+    activeId: null,
     fileError: '',
     runError: null,
     dlFailed: {},
@@ -84,11 +84,7 @@
     mediaUrl: null,             // /api/media-URL för den öppna transkriptvyn (null = ingen media)
     runMedia: null,             // mediasökväg från senaste körningens resultat
     transcriptRaw: null,        // ursprungliga segment {start,end,text} bakom transkriptvyn (för att spara)
-    history: [
-      { id: 'h1', name: 'styrgruppsmöte_q1.mp3', date: 'Idag · 09:14', dur: '18:42', model: 'KB-Whisper large', lang: 'Svenska', formats: ['SRT', 'TXT'], words: 2940 },
-      { id: 'h2', name: 'kundintervju_03.wav', date: 'Igår · 16:30', dur: '42:11', model: 'KB-Whisper large', lang: 'Svenska', formats: ['TXT'], words: 6810 },
-      { id: 'h3', name: 'webinar_inspelning.mp4', date: '12 jun', dur: '01:03:20', model: 'Whisper large-v3', lang: 'Flerspråkig', formats: ['SRT', 'VTT', 'TXT'], words: 9120 },
-    ],
+    history: [],
     histViewing: null,
     lessons: [],
     groups: [],
@@ -100,6 +96,7 @@
     expandedLesson: null,
     insightsByLesson: {},
     extractingLesson: null,
+    reportExportingLesson: null,
     editingInsight: null,
     insightEdits: {},
     manualTyp: 'svårighet',
@@ -826,10 +823,12 @@
     }).catch(function () { setState({ backingUp: false }); });
   }
   function exportReport(lessonId, fmt) {
+    setState({ reportExportingLesson: lessonId });
     fetch('/api/lessons/' + encodeURIComponent(lessonId) + '/report?format=' + encodeURIComponent(fmt))
       .then(function (r) { return r.json(); }).then(function (res) {
+        setState({ reportExportingLesson: null });
         if (res && res.path) { fetch('/api/open', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: res.path }) }).catch(function () {}); }
-      }).catch(function () {});
+      }).catch(function () { setState({ reportExportingLesson: null }); });
   }
 
   /* ----------------------------------- agenda: daterade poster tvärs klasser -- */
@@ -1012,6 +1011,9 @@
   function start() {
     if (S.run === 'running') return;
     if (!S.queue.length) return;
+    // Modellkatalogen (/api/models) inte klar än — vänta hellre än att skicka
+    // det stale prototyp-id:t som servern avvisar med 400.
+    if (!S.catalogReady) return;
     // No language-appropriate model installed — send the user to download one
     // rather than transcribe with the wrong (or no) model.
     if (!S.model) { setState({ tab: 'models' }); return; }
@@ -1133,6 +1135,9 @@
   function onChatKey(e) { if (e.key === 'Enter') sendChat(); }
   // BACKEND: real conversational chat via /api/chat (Ollama /api/chat) over the transcript.
   function sendChat() {
+    // Blockera ny sändning medan ett svar strömmar — annars skrivs den pågående
+    // assistent-turen över och en andra /api/chat-förfrågan skickas.
+    if (S.chatTyping) return;
     var q = S.chatInput.trim();
     var att = S.chatAttach;
     if (!q && !att.length) return;
@@ -1657,6 +1662,7 @@
         insightGroups: insightGroups,
         insightsEmpty: insightsOpen && insightGroups.length === 0,
         extracting: st.extractingLesson === l.id,
+        reportExporting: st.reportExportingLesson === l.id,
         manualTyp: st.manualTyp, manualText: st.manualText,
         onToggleInsights: function () { toggleInsights(l.id); },
         onExtract: function () { runExtract(l.id); },
@@ -1826,10 +1832,10 @@
       audioModelInstalled: st.audioModelInstalled, audioModelDownloading: st.audioModelDownloading,
       onDownloadAudioModel: downloadAudioModel,
       acSwitchTrack: 'position:relative;width:42px;height:25px;border-radius:999px;flex:0 0 auto;background:' + (st.audioCorrect ? 'var(--ink)' : 'var(--line-2)') + ';transition:background .15s;cursor:pointer',
-      acSwitchKnob: 'position:absolute;top:3px;left:3px;width:19px;height:19px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.2);transition:transform .15s;transform:translateX(' + (st.audioCorrect ? '17px' : '0') + ')',
+      acSwitchKnob: 'position:absolute;top:3px;left:3px;width:19px;height:19px;border-radius:50%;background:#fff;border:1px solid var(--line);box-shadow:0 1px 2px rgba(0,0,0,.2);transition:transform .15s;transform:translateX(' + (st.audioCorrect ? '17px' : '0') + ')',
 
-      onStart: start, isRunning: isRunning, notRunning: !isRunning,
-      startBtnLabel: (st.catalogReady && !st.model) ? 'Ladda ner en modell först' : isRunning ? 'Transkriberar…' : isDone ? 'Kör igen' : (st.queue.length > 1 ? 'Starta · ' + st.queue.length + ' filer' : 'Starta'),
+      onStart: start, isRunning: isRunning, notRunning: !isRunning, startReady: st.catalogReady,
+      startBtnLabel: !st.catalogReady ? 'Laddar modeller…' : (st.catalogReady && !st.model) ? 'Ladda ner en modell först' : isRunning ? 'Transkriberar…' : isDone ? 'Kör igen' : (st.queue.length > 1 ? 'Starta · ' + st.queue.length + ' filer' : 'Starta'),
       startBtnStyle: coralBtn(isRunning) + ';width:100%;padding:16px 24px;font-size:16.5px',
       startBtnStyleBar: primaryBtn(isRunning) + ';padding:12px 22px;font-size:15px;border-radius:11px;flex:0 0 auto',
 
@@ -1852,11 +1858,11 @@
 
       ppEnabled: st.ppEnabled, ppOff: !st.ppEnabled, togglePPEnabled: togglePPEnabled,
       ppSwitchTrack: 'position:relative;width:42px;height:25px;border-radius:999px;flex:0 0 auto;background:' + (st.ppEnabled ? 'var(--ink)' : 'var(--line-2)') + ';transition:background .15s',
-      ppSwitchKnob: 'position:absolute;top:3px;left:3px;width:19px;height:19px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.2);transition:transform .15s;transform:translateX(' + (st.ppEnabled ? '17px' : '0') + ')',
+      ppSwitchKnob: 'position:absolute;top:3px;left:3px;width:19px;height:19px;border-radius:50%;background:#fff;border:1px solid var(--line);box-shadow:0 1px 2px rgba(0,0,0,.2);transition:transform .15s;transform:translateX(' + (st.ppEnabled ? '17px' : '0') + ')',
       ppOps: ppOps, ppModel: st.ppModel, togglePPDD: togglePPDD, ppDDOpen: st.openDD === 'ppmodel', ppModelOptions: ppModelOptions,
       showPP: isDone, ppOpLabel: ppOpLabel, ppShowRun: st.ppOp !== 'chat', onRunPP: runPP, ppRunLabel: 'Kör',
       ppRunBtnStyle: primaryBtn(st.pp === 'running') + ';min-width:152px', ppRunIdle: st.pp !== 'running', ppPct: Math.round(st.ppPct || 0),
-      ppRingStyle: 'position:relative;width:22px;height:22px;border-radius:50%;flex:0 0 auto;background:conic-gradient(var(--accent) ' + (Math.round(st.ppPct || 0) * 3.6) + 'deg, rgba(255,255,255,.2) 0);animation:ppglow 1.6s ease-in-out infinite;transition:background .13s linear',
+      ppRingStyle: 'position:relative;width:22px;height:22px;border-radius:50%;flex:0 0 auto;background:conic-gradient(var(--accent) ' + (Math.round(st.ppPct || 0) * 3.6) + 'deg, color-mix(in srgb,var(--ink-3) 18%,transparent) 0);animation:ppglow 1.6s ease-in-out infinite;transition:background .13s linear',
       ppShowText: st.ppOp !== 'chat' && st.pp !== 'idle', ppShowChat: st.ppOp === 'chat', ppRunning: st.pp === 'running', ppShowOut: st.pp === 'done',
       ppTextDone: st.pp === 'done' && st.ppOp !== 'chat', ppCleanDone: false,
       ppCleanLines: getTranscript().map(function (ln, idx) { return { time: ln.time, text: lineText(idx) }; }),
@@ -1995,7 +2001,6 @@
     '</header>';
   }
 
-  function stub(title) { return '<section style="min-height:calc(100vh - 80px);display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--ink-3);font-size:15px;gap:8px"><div style="font-size:22px;font-weight:600;color:var(--ink);letter-spacing:-0.02em">' + esc(title) + '</div><div>Vyn byggs i fas 2.</div></section>'; }
   // <<<VIEWS_START>>> (Phase-2 views — ported verbatim from prototype, verified)
 function viewTranscribe(v){ return `
     ${ v.noWhisper ? `
@@ -2205,7 +2210,7 @@ function viewTranscribe(v){ return `
 
         <div style="flex:0 0 auto;height:46px"></div>
 
-        <button data-click="${on(v.onStart)}" class="korbtn" style="position:relative;overflow:visible;display:flex;align-items:center;justify-content:center;gap:13px;width:100%;height:60px;border:1.5px solid var(--ink);border-radius:14px;background:var(--surface);cursor:pointer;font-family:inherit;padding:0" data-sh="box-shadow:var(--shadow) !important;transform:translateY(-1px) !important">
+        <button data-click="${on(v.onStart)}" class="korbtn" ${v.startReady ? '' : 'aria-disabled="true"'} style="position:relative;overflow:visible;display:flex;align-items:center;justify-content:center;gap:13px;width:100%;height:60px;border:1.5px solid var(--ink);border-radius:14px;background:var(--surface);cursor:${v.startReady ? 'pointer' : 'progress'};opacity:${v.startReady ? '1' : '.6'};font-family:inherit;padding:0" data-sh="box-shadow:var(--shadow) !important;transform:translateY(-1px) !important">
           ${ v.isRunning ? `
             <span style="width:16px;height:16px;border-radius:50%;border:2px solid color-mix(in srgb,var(--ink) 28%,transparent);border-top-color:var(--ink);animation:spin .7s linear infinite;display:inline-block"></span>
             <span style="font-size:16.5px;font-weight:600;letter-spacing:-0.01em;color:var(--ink)">${esc(v.startBtnLabel)}</span>
@@ -2951,7 +2956,7 @@ function insightsPanel(h){
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px">
         <span style="font-size:13px;font-weight:600;color:var(--ink-2);letter-spacing:0.02em">INSIKTER</span>
         <div style="flex:1"></div>
-        <button data-click="${on(h.onReportHtml)}" title="Exportera rapport (öppnas i webbläsaren, skriv ut som PDF)" style="display:inline-flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--line);color:var(--ink-2);border-radius:9px;padding:7px 12px;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;margin-right:8px" data-sh="border-color:var(--ink) !important;color:var(--ink) !important">📄 Rapport</button>
+        <button data-click="${on(h.onReportHtml)}" ${h.reportExporting?'disabled':''} title="Exportera rapport (öppnas i webbläsaren, skriv ut som PDF)" style="display:inline-flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--line);color:var(--ink-2);border-radius:9px;padding:7px 12px;font-size:13px;font-weight:500;cursor:${h.reportExporting?'default':'pointer'};font-family:inherit;margin-right:8px;opacity:${h.reportExporting?'0.7':'1'}" data-sh="border-color:var(--ink) !important;color:var(--ink) !important">${h.reportExporting ? 'Exporterar …' : '📄 Rapport'}</button>
         <button data-click="${on(h.onExtract)}" ${h.extracting?'disabled':''} style="display:inline-flex;align-items:center;gap:7px;background:var(--accent-weak);color:var(--accent);border:1px solid var(--accent);border-radius:9px;padding:7px 14px;font-size:13.5px;font-weight:600;cursor:${h.extracting?'default':'pointer'};font-family:inherit;opacity:${h.extracting?'0.7':'1'}">
           ${ h.extracting ? 'Analyserar …' : '✨ Analysera lektion' }
         </button>
@@ -3127,7 +3132,7 @@ function viewModals(v){ return `
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M8 3v10M3 8h10"></path></svg>
           </button>
           <input value="${esc(v.chatInput)}" data-input="${on(v.onChatInput)}" data-keydown="${on(v.onChatKey)}" placeholder="Fråga om transkriptet …" style="flex:1;min-width:0;background:transparent;border:none;outline:none;font-size:15.5px;color:var(--ink);font-family:inherit;padding:0 4px">
-          <button data-click="${on(v.onChatSend)}" aria-label="Skicka" style="width:40px;height:40px;flex:0 0 auto;border:none;border-radius:50%;background:var(--btn-bg);color:var(--btn-fg);cursor:pointer;display:flex;align-items:center;justify-content:center" data-sh="background:color-mix(in srgb, var(--btn-bg) 72%, var(--accent)) !important">
+          <button data-click="${on(v.onChatSend)}" aria-label="Skicka" ${v.chatTyping ? 'disabled' : ''} style="width:40px;height:40px;flex:0 0 auto;border:none;border-radius:50%;background:var(--btn-bg);color:var(--btn-fg);cursor:${v.chatTyping ? 'default' : 'pointer'};opacity:${v.chatTyping ? '.5' : '1'};display:flex;align-items:center;justify-content:center" data-sh="background:color-mix(in srgb, var(--btn-bg) 72%, var(--accent)) !important">
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"></path></svg>
           </button>
         </div>

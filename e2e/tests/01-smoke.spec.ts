@@ -2,7 +2,7 @@ import { test, expect, failOnConsoleError } from "../helpers/app";
 
 // One stable landmark per top-level view (discovered against the live app).
 const VIEWS: { tab: string; landmark: (page: import("@playwright/test").Page) => import("@playwright/test").Locator }[] = [
-  { tab: "Transkribera", landmark: (p) => p.getByRole("button", { name: "Lägg till fler" }) },
+  { tab: "Transkribera", landmark: (p) => p.getByRole("heading", { name: "Vad vill du transkribera?" }) },
   { tab: "Historik", landmark: (p) => p.getByRole("heading", { name: "Historik" }) },
   { tab: "Lektioner", landmark: (p) => p.getByRole("heading", { name: "Lektioner" }) },
   { tab: "Modeller", landmark: (p) => p.getByRole("heading", { name: "Transkriberingsmodeller" }) },
@@ -13,8 +13,8 @@ test("app boots without console errors", async ({ page }) => {
   failOnConsoleError(page, errors);
   await page.goto("/");
   await expect(page.locator("#root")).not.toBeEmpty();
-  // Transcribe is the default view.
-  await expect(page.getByRole("button", { name: "Lägg till fler" })).toBeVisible();
+  // Transcribe is the default view; a clean start opens on the source step.
+  await expect(page.getByRole("heading", { name: "Vad vill du transkribera?" })).toBeVisible();
   expect(errors, errors.join("\n")).toEqual([]);
 });
 
