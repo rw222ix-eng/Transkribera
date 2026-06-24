@@ -1,0 +1,6 @@
+{
+  "projectId": "c5f72bf7-c335-4e12-8eb1-f937290b451c",
+  "projectName": "Transkribera Design System",
+  "lastSyncedUpdatedAt": "2026-06-24T19:46:01.684543Z",
+  "_note": "Uppdateras varje gång design-systemet synkas. SessionStart-hooken jämför projektets updatedAt mot detta för att upptäcka ändringar gjorda i Claude Design."
+}

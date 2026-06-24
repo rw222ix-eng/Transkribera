@@ -1,0 +1,54 @@
+<!-- @dsCard group="Views" -->
+<!DOCTYPE html>
+<html lang="sv" data-theme="light">
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{--canvas:#F7F7F4;--surface:#FFFFFF;--sunken:#F0F0EB;--ink:#0B0B0D;--ink-2:#0B0B0D;--ink-3:#2C2C30;--line:#E7E7E1;--line-2:#DBDBD4;--accent:#3B5BDB;--ok:#2E9E6A;--bad:#CF5A52;--btn-bg:#17171B;--btn-fg:#FFFFFF;--track:#EFEFEA}
+  [data-theme="dark"]{--canvas:#0D0D10;--surface:#16161A;--sunken:#1D1D22;--ink:#FFFFFF;--ink-2:#FFFFFF;--ink-3:#D6D6DA;--line:#26262E;--line-2:#313139;--accent:#8298FF;--ok:#48BE8A;--bad:#E0746C;--btn-bg:#F3F3F4;--btn-fg:#141419;--track:#1D1D23}
+  body{margin:0;background:var(--canvas);color:var(--ink);font-family:'Geist',system-ui,sans-serif;letter-spacing:-.01em;padding:28px}
+  .wrap{max-width:760px;margin:0 auto}
+  .lbl{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-3);margin:18px 0 10px}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:16px 18px;box-shadow:0 1px 2px rgba(20,20,30,.06)}
+  .head{display:flex;align-items:center;gap:10px;font-size:15px;font-weight:500}
+  .badge{font-size:12px;font-weight:500;padding:3px 9px;border-radius:6px;letter-spacing:.05em}
+  .bKor{color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,transparent)}
+  .bKlar{color:var(--ok);background:color-mix(in srgb,var(--ok) 14%,transparent)}
+  .bFel{color:var(--bad);background:color-mix(in srgb,var(--bad) 14%,transparent)}
+  .bar{height:6px;border-radius:99px;background:var(--track);margin-top:12px;overflow:hidden}
+  .bar i{display:block;height:100%;width:40%;background:var(--accent);border-radius:99px}
+  .err{background:color-mix(in srgb,var(--bad) 8%,var(--surface));border:1px solid color-mix(in srgb,var(--bad) 30%,transparent);border-radius:12px;padding:14px;margin-top:14px}
+  .btn{background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:9px;padding:8px 14px;font-size:13.5px;font-weight:500;font-family:inherit;cursor:pointer}
+  .btn.ghost{background:var(--surface);color:var(--ink);border:1px solid var(--line)}
+  .log{font-family:ui-monospace,Menlo,monospace;font-size:12.5px;color:var(--ink-2);background:var(--sunken);border-radius:10px;padding:12px 14px;margin-top:14px;white-space:pre-line}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="lbl">Status — pågår</div>
+    <div class="card">
+      <div class="head"><span class="badge bKor">KÖR</span> mötesinspelning.mp3 <span style="margin-left:auto;color:var(--ink-3);font-variant-numeric:tabular-nums">00:19 · 40%</span></div>
+      <div class="bar"><i></i></div>
+    </div>
+
+    <div class="lbl">Status — klar</div>
+    <div class="card"><div class="head"><span class="badge bKlar">KLAR</span> mötesinspelning.mp3 <span style="margin-left:auto;color:var(--ink-3)">3 filer · SRT, TXT</span></div></div>
+
+    <div class="lbl">Status — fel</div>
+    <div class="card">
+      <div class="head"><span class="badge bFel">FEL</span> intervju_lund.mkv</div>
+      <div class="err">
+        <div style="font-weight:600;margin-bottom:4px">Transkriberingen misslyckades</div>
+        <div style="font-size:13px;color:var(--ink-2);margin-bottom:10px">GPU upptagen – vänta tills pågående jobb är klart.</div>
+        <button class="btn">↻ Försök igen</button> <button class="btn ghost">Byt fil</button> <button class="btn ghost">Visa logg</button>
+      </div>
+    </div>
+
+    <div class="log">› transkribera "mötesinspelning" --model KB-Whisper large (sv)
+[00:00] Startar transkribering …
+[00:07] Frigör GPU-minne (stoppar språkmodellen) …
+[00:10] Laddar Whisper (cuda/float16) …</div>
+  </div>
+</body>
+</html>

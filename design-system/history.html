@@ -1,0 +1,37 @@
+<!-- @dsCard group="Views" -->
+<!DOCTYPE html>
+<html lang="sv" data-theme="light">
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{--canvas:#F7F7F4;--surface:#FFFFFF;--sunken:#F0F0EB;--ink:#0B0B0D;--ink-2:#0B0B0D;--ink-3:#2C2C30;--line:#E7E7E1;--line-2:#DBDBD4;--accent:#3B5BDB;--track:#EFEFEA}
+  [data-theme="dark"]{--canvas:#0D0D10;--surface:#16161A;--sunken:#1D1D22;--ink:#FFFFFF;--ink-2:#FFFFFF;--ink-3:#D6D6DA;--line:#26262E;--line-2:#313139;--accent:#8298FF;--track:#1D1D23}
+  body{margin:0;background:var(--canvas);color:var(--ink);font-family:'Geist',system-ui,sans-serif;letter-spacing:-.01em;padding:28px}
+  .wrap{max-width:760px;margin:0 auto}
+  h1{font-size:22px;font-weight:600;letter-spacing:-.02em;margin:0 0 4px}
+  .sub{color:var(--ink-3);font-size:13px;margin:0 0 20px}
+  .row{display:flex;align-items:center;gap:14px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:10px}
+  .nm{font-size:15px;font-weight:600}
+  .meta{font-size:12.5px;color:var(--ink-3);margin-top:2px}
+  .pill{font-size:11px;font-weight:600;background:var(--sunken);border-radius:6px;padding:3px 8px;color:var(--ink-2)}
+  .date{margin-left:auto;font-size:12.5px;color:var(--ink-3);white-space:nowrap}
+  .empty{text-align:center;color:var(--ink-3);font-size:14px;padding:50px 0;border:1px dashed var(--line-2);border-radius:14px}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Historik</h1>
+    <p class="sub">Dina tidigare transkriberingar. Öppna, kör om eller ladda ner igen — allt ligger kvar lokalt.</p>
+    <div class="row">
+      <div style="flex:1"><div class="nm">styrgruppsmöte_q1.mp3</div><div class="meta">KB-Whisper large · Svenska · 18:42 · 2940 ord</div></div>
+      <span class="pill">SRT</span><span class="pill">TXT</span><span class="date">Idag · 09:14</span>
+    </div>
+    <div class="row">
+      <div style="flex:1"><div class="nm">kundintervju_03.wav</div><div class="meta">KB-Whisper large · Svenska · 42:11 · 6810 ord</div></div>
+      <span class="pill">TXT</span><span class="date">Igår · 16:30</span>
+    </div>
+    <div style="margin-top:22px" class="empty">Inga transkriberingar än. När du kört klart en fil dyker den upp här.</div>
+  </div>
+</body>
+</html>
