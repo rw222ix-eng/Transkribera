@@ -2044,9 +2044,12 @@ function viewTranscribe(v){ return `
 
       ${ v.stepSource ? `
       <div style="flex:1;display:flex;flex-direction:column;min-height:0">
-        <div style="text-align:center;margin-bottom:18px">
-          <h1 style="font-size:30px;font-weight:600;letter-spacing:-0.03em;margin:0 0 6px">Vad vill du transkribera?</h1>
-          <p style="margin:0;color:var(--ink-2);font-size:16.5px">Dra in en eller flera filer, eller välj från datorn — allt körs på din egen dator.</p>
+        <div class="ehead">
+          <div>
+            <div class="eyebrow" style="margin-bottom:18px">Steg 1 — Källa</div>
+            <h1 class="disp" style="font-size:clamp(34px,5.2vw,52px);margin:0">Vad vill du <span class="ser">transkribera?</span></h1>
+          </div>
+          <p class="ehead_lede">Dra in en eller flera filer, eller välj från datorn — allt körs på din egen dator.</p>
         </div>
         <div data-click="${on(v.openPicker)}" data-dragover="${on(v.onDragOver)}" data-dragleave="${on(v.onDragLeave)}" data-drop="${on(v.onDrop)}" style="${v.dropzoneStyle}">
           <input data-ref="${on(v.fileRef)}" type="file" accept="audio/*,video/*" multiple="true" data-change="${on(v.onPickFile)}" style="display:none">
@@ -2130,6 +2133,13 @@ function viewTranscribe(v){ return `
 
       ${ v.stepConfig ? `
       <div data-pane="config" style="flex:1;display:flex;flex-direction:column;min-height:0">
+        <div class="ehead">
+          <div>
+            <div class="eyebrow" style="margin-bottom:18px">Steg 2 — Inställningar</div>
+            <h1 class="disp" style="font-size:clamp(30px,4.4vw,44px);margin:0">Så ska det <span class="ser">låta</span></h1>
+          </div>
+          <p class="ehead_lede">Välj språk och format — rätt modell väljs automatiskt, allt körs lokalt på din dator.</p>
+        </div>
         <div style="margin-bottom:22px">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px">
             <div style="display:flex;align-items:baseline;gap:9px">
@@ -2228,6 +2238,13 @@ function viewTranscribe(v){ return `
 
       ${ v.stepProcess ? `
       <div data-pane="process" style="flex:1;display:flex;flex-direction:column;min-height:0">
+        <div class="ehead">
+          <div>
+            <div class="eyebrow" style="margin-bottom:18px">Steg 3 — Resultat</div>
+            <h1 class="disp" style="font-size:clamp(30px,4.4vw,44px);margin:0">Ditt <span class="ser">transkript</span></h1>
+          </div>
+          <p class="ehead_lede">Bearbetas lokalt i steg. Korrekturläs, städa språket och ställ frågor — när du är klar.</p>
+        </div>
         <div data-ref="${on(v.procScrollRef)}" data-procscroll="1" style="display:flex;flex-direction:column">
           <div style="height:2px"></div>
 
@@ -3312,7 +3329,7 @@ function viewModals(v){ return `
 
   function view(v) {
     return viewHeader(v) +
-      '<main style="max-width:780px;margin:0 auto;padding:0 32px">' +
+      '<main style="max-width:1120px;margin:0 auto;padding:0 24px">' +
       (v.tabTranscribe ? viewTranscribe(v) : '') +
       (v.tabModels ? viewModels(v) : '') +
       (v.tabHistory ? viewHistory(v) : '') +
