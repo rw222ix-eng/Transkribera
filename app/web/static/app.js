@@ -1430,6 +1430,12 @@
     var translateNote = (st.targetLanguage && st.language && st.targetLanguage !== st.language)
       ? ('Översätts till ' + (st.targetLanguage === 'sv' ? 'svenska' : 'engelska') + ' av språkmodellen.')
       : '';
+    // Språk-flödet (design): talat -> resultat med live-status för översättning.
+    var _langName = function (c) { return c === 'en' ? 'engelska' : 'svenska'; };
+    var isTranslating = !!(st.targetLanguage && st.language && st.targetLanguage !== st.language);
+    var transHint = isTranslating
+      ? ('Översätts från ' + _langName(st.language) + ' till ' + _langName(st.targetLanguage) + '.')
+      : ('Resultatet blir på ' + _langName(st.targetLanguage || st.language) + ' — samma som det talade språket.');
     var formatChips = ['srt', 'txt', 'vtt'].map(function (f) { return { label: f.toUpperCase(), active: st.formats[f], style: chip(st.formats[f]), onToggle: function () { toggleFmt(f); } }; });
     // Subtitle delivery for video sources: keep media + SRT side by side, or embed
     // the subtitles into the video (soft mux or hard burn). Only shown for video.
@@ -1827,6 +1833,9 @@
       curModelDot: st.model ? curFit.dot : 'var(--bad)',
       langOptions: langOptions, formatChips: formatChips,
       targetLangOptions: targetLangOptions, translateNote: translateNote,
+      isTranslating: isTranslating, transTag: isTranslating ? 'Översätter' : 'Samma språk',
+      transHint: transHint,
+      modelFootMeta: st.model ? 'väljs automatiskt' : 'ladda ner en lämplig modell på Modeller-fliken',
       subtitleOptions: subtitleOptions, embedOptions: embedOptions,
       showSubtitleMode: _activeIsVideo, showEmbed: st.subtitleMode === 'embed' && _activeIsVideo,
       audioCorrect: st.audioCorrect, onToggleAudioCorrect: toggleAudioCorrect,
@@ -2140,22 +2149,22 @@ function viewTranscribe(v){ return `
           </div>
           <p class="ehead_lede">Välj språk och format — rätt modell väljs automatiskt, allt körs lokalt på din dator.</p>
         </div>
-        <div style="margin-bottom:22px">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px">
-            <div style="display:flex;align-items:baseline;gap:9px">
-              <span style="font-size:12px;text-transform:uppercase;letter-spacing:0.04em;color:var(--ink-2)">Filer i kö</span>
-              <span style="font-size:13px;color:var(--ink-3);font-variant-numeric:tabular-nums">${esc(v.queueCount)}</span>
+        <div class="win" style="margin-bottom:26px">
+          <div class="win_top">
+            <div style="display:flex;align-items:baseline;gap:10px">
+              <span class="win_lbl">Filer i kö</span>
+              <span class="fig" style="font-size:16px;color:var(--ink);font-variant-numeric:tabular-nums">${esc(v.queueCount)}</span>
             </div>
-            <button data-click="${on(v.goSource)}" style="display:inline-flex;align-items:center;gap:6px;background:transparent;border:1px solid var(--line);color:var(--ink);border-radius:9px;padding:7px 13px;font-size:13.5px;font-weight:500;cursor:pointer;font-family:inherit;flex:0 0 auto" data-sh="border-color:var(--line-2) !important;background:var(--sunken) !important">
+            <button data-click="${on(v.goSource)}" style="display:inline-flex;align-items:center;gap:6px;background:transparent;border:1px solid var(--line);color:var(--ink);border-radius:9px;padding:6px 12px;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;flex:0 0 auto;transition:border-color .14s,background .14s">
               <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 3v10M3 8h10"></path></svg>Lägg till fler
             </button>
           </div>
-          <div style="display:flex;flex-direction:column;gap:8px">
+          <div style="display:flex;flex-direction:column">
             ${ v.queueItems.map(function(q){ return `
-              <div data-key="${esc(q.id)}" style="${q.rowStyle}">
-                <span style="font-size:11px;font-weight:600;color:var(--ink-2);background:var(--sunken);border:1px solid var(--line);border-radius:6px;padding:3px 7px;flex:0 0 auto;font-variant-numeric:tabular-nums">${esc(q.ext)}</span>
-                <span style="flex:1;min-width:0;font-size:15.5px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-variant-numeric:tabular-nums">${esc(q.name)}</span>
-                <button data-click="${on(q.onRemove)}" aria-label="Ta bort från kön" style="width:30px;height:30px;flex:0 0 auto;border:1px solid var(--line);background:var(--surface);border-radius:8px;cursor:pointer;color:var(--ink-3);display:flex;align-items:center;justify-content:center" data-sh="border-color:var(--bad) !important;color:var(--bad) !important">
+              <div data-key="${esc(q.id)}" style="display:flex;align-items:center;gap:12px;padding:13px 20px;border-bottom:1px solid var(--line);background:var(--surface)">
+                <span style="font-family:var(--mono);font-size:10px;font-weight:500;letter-spacing:0.06em;color:var(--ink-2);background:var(--sunken);border:1px solid var(--line);border-radius:4px;padding:3px 7px;flex:0 0 auto">${esc(q.ext)}</span>
+                <span style="flex:1;min-width:0;font-size:15.5px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(q.name)}</span>
+                <button data-click="${on(q.onRemove)}" aria-label="Ta bort från kön" style="width:30px;height:30px;flex:0 0 auto;border:1px solid var(--line);background:var(--surface);border-radius:8px;cursor:pointer;color:var(--ink-3);display:flex;align-items:center;justify-content:center;transition:border-color .14s,color .14s">
                   <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 3l8 8M11 3l-8 8"></path></svg>
                 </button>
               </div>
@@ -2163,38 +2172,45 @@ function viewTranscribe(v){ return `
           </div>
         </div>
 
-        <h2 style="font-size:22px;font-weight:600;letter-spacing:-0.02em;margin:0 0 14px">Inställningar</h2>
+        <div style="font-family:var(--mono);font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-3);margin:2px 0 14px">Inställningar</div>
 
-        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:12px;box-shadow:var(--shadow-sm)">
-          <div style="display:flex;gap:3px;padding:4px;background:var(--track);border:1px solid var(--line);border-radius:11px;flex:0 0 auto">
-            ${ v.langOptions.map(function(l){ return `
-              <button data-click="${on(l.onPick)}" aria-pressed="${l.active}" style="${l.style}" data-sh="background:var(--surface) !important;color:var(--ink) !important;box-shadow:var(--shadow-sm) !important">${esc(l.label)}</button>
+        <div style="background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:17px 19px;box-shadow:var(--shadow-sm)">
+          <div style="font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);margin-bottom:15px">Språk</div>
+          <div style="display:flex;align-items:flex-end;gap:14px">
+            <div style="flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:9px">
+              <span style="font-size:13px;font-weight:600;color:var(--ink-2)">Talat språk</span>
+              <div style="display:flex;gap:3px;padding:4px;background:var(--track);border:1px solid var(--line);border-radius:11px">
+                ${ v.langOptions.map(function(l){ return `
+                  <button data-click="${on(l.onPick)}" aria-pressed="${l.active}" data-seg="${l.active ? 'on' : 'off'}" style="flex:1 1 0;min-width:0;border:none;border-radius:8px;height:38px;font-size:15px;font-weight:500;white-space:nowrap;cursor:pointer;font-family:inherit;background:transparent;color:var(--ink-2);transition:background .12s,color .12s,box-shadow .12s">${esc(l.label)}</button>
+                `; }).join('') }
+              </div>
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:center;gap:7px;flex:0 0 auto;padding-bottom:5px">
+              <span style="display:flex;color:${v.isTranslating ? 'var(--accent)' : 'var(--ink-3)'};transition:color .25s"><svg width="24" height="14" viewBox="0 0 24 14" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M1 7h20M15 2l6 5-6 5"></path></svg></span>
+              <span data-q="${v.isTranslating ? '1' : '0'}" style="font-size:10.5px;font-weight:600;border-radius:6px;padding:3px 9px;white-space:nowrap;color:var(--ink-3);background:var(--sunken);border:1px solid var(--line)">${esc(v.transTag)}</span>
+            </div>
+            <div style="flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:9px">
+              <span style="font-size:13px;font-weight:600;color:var(--ink-2)">Resultatspråk</span>
+              <div style="display:flex;gap:3px;padding:4px;background:var(--track);border:1px solid var(--line);border-radius:11px">
+                ${ v.targetLangOptions.map(function(o){ return `
+                  <button data-click="${on(o.onPick)}" aria-pressed="${o.active}" data-seg="${o.active ? 'on' : 'off'}" style="flex:1 1 0;min-width:0;border:none;border-radius:8px;height:38px;font-size:15px;font-weight:500;white-space:nowrap;cursor:pointer;font-family:inherit;background:transparent;color:var(--ink-2);transition:background .12s,color .12s,box-shadow .12s">${esc(o.label)}</button>
+                `; }).join('') }
+              </div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px 16px;margin-top:16px;padding-top:14px;border-top:1px solid var(--line);flex-wrap:wrap">
+            <span style="display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-2)"><span style="width:8px;height:8px;border-radius:50%;background:${v.curModelDot};flex:0 0 auto"></span><span><b style="color:var(--ink);font-weight:600">${esc(v.curModelName)}</b> · ${esc(v.modelFootMeta)}</span></span>
+            <span style="margin-left:auto;font-size:13px;color:var(--ink-2);text-align:right;min-width:0">${esc(v.transHint)}</span>
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:12px 16px;box-shadow:var(--shadow-sm)">
+          <span style="font-size:14px;color:var(--ink-2);font-weight:500">Filformat</span>
+          <div style="display:flex;gap:6px">
+            ${ v.formatChips.map(function(f){ return `
+              <button data-click="${on(f.onToggle)}" aria-pressed="${f.active}" data-chip="${f.active ? 'on' : 'off'}" style="border:1px solid var(--line);background:transparent;color:var(--ink-2);border-radius:9px;padding:8px 13px;font-size:14.5px;font-weight:500;cursor:pointer;font-family:inherit;transition:all .12s">${esc(f.label)}</button>
             `; }).join('') }
           </div>
-
-          <div style="display:flex;align-items:center;gap:10px;flex:1 1 210px;min-width:200px;background:var(--sunken);border:1px solid var(--line);border-radius:11px;padding:9px 13px">
-            <span style="width:8px;height:8px;border-radius:50%;flex:0 0 auto;background:${v.curModelDot}"></span>
-            <span style="flex:1;min-width:0">
-              <span style="display:block;font-size:14.5px;font-weight:500;color:var(--ink)">${esc(v.curModelName)}</span>
-              <span style="display:block;font-size:12px;color:var(--ink-2);font-variant-numeric:tabular-nums">${esc(v.curModelMeta)}</span>
-            </span>
-          </div>
-
-        <div style="flex:1 1 auto"></div>
-
-        <div style="display:flex;gap:6px;flex:0 0 auto">
-          ${ v.formatChips.map(function(f){ return `
-            <button data-click="${on(f.onToggle)}" aria-pressed="${f.active}" style="${f.style}" data-sh="border-color:var(--line-2) !important;box-shadow:var(--shadow-sm) !important">${esc(f.label)}</button>
-          `; }).join('') }
-        </div>
-        </div>
-
-        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:12px;box-shadow:var(--shadow-sm)">
-          <span style="font-size:14px;color:var(--ink-2);font-weight:500">Resultatspråk</span>
-          <div style="display:flex;gap:3px;padding:4px;background:var(--track);border:1px solid var(--line);border-radius:11px">
-            ${ v.targetLangOptions.map(function(o){ return `<button data-click="${on(o.onPick)}" aria-pressed="${o.active}" style="${o.style}" data-sh="background:var(--surface) !important;color:var(--ink) !important;box-shadow:var(--shadow-sm) !important">${esc(o.label)}</button>`; }).join('') }
-          </div>
-          ${ v.translateNote ? `<span style="font-size:13px;color:var(--accent)">${esc(v.translateNote)}</span>` : '' }
         </div>
 
         <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:12px 14px;box-shadow:var(--shadow-sm)">
