@@ -1,0 +1,110 @@
+{
+  "plugins": [
+    "react",
+    "import"
+  ],
+  "rules": {
+    "react/forbid-elements": [
+      "warn",
+      {
+        "forbid": []
+      }
+    ],
+    "no-restricted-imports": [
+      "warn",
+      {
+        "patterns": [
+          {
+            "group": [
+              "bedomning/**"
+            ],
+            "message": "Import design-system components from 'index.js', not component internals."
+          }
+        ]
+      }
+    ],
+    "no-restricted-syntax": [
+      "warn",
+      {
+        "selector": "Literal[value=/#[0-9a-fA-F]{3,8}\\b/]",
+        "message": "Raw hex color — use a design-system color token via var()."
+      },
+      {
+        "selector": "Literal[value=/font-family\\s*:\\s*(?!['\\\"]?(?:Inter Tight|Instrument Serif|JetBrains Mono))/i]",
+        "message": "Font not provided by the design system. Available: Inter Tight, Instrument Serif, JetBrains Mono."
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": [
+        "**/index.js"
+      ],
+      "rules": {
+        "no-restricted-imports": "off"
+      }
+    }
+  ],
+  "x-omelette": {
+    "components": {},
+    "tokens": [
+      "--accent",
+      "--accent-weak",
+      "--bad",
+      "--btn-bg",
+      "--btn-fg",
+      "--c-mustard",
+      "--c-plum",
+      "--c-sage",
+      "--c-sky",
+      "--canvas",
+      "--ink",
+      "--ink-2",
+      "--ink-3",
+      "--line",
+      "--line-2",
+      "--mono",
+      "--ok",
+      "--sans",
+      "--serif",
+      "--shadow",
+      "--shadow-sm",
+      "--sunken",
+      "--surface",
+      "--track",
+      "--warn"
+    ],
+    "tokenKinds": {
+      "--canvas": "color",
+      "--surface": "color",
+      "--sunken": "color",
+      "--ink": "color",
+      "--ink-2": "color",
+      "--ink-3": "color",
+      "--line": "color",
+      "--line-2": "color",
+      "--accent": "color",
+      "--accent-weak": "color",
+      "--ok": "color",
+      "--warn": "color",
+      "--bad": "color",
+      "--c-plum": "color",
+      "--c-sky": "color",
+      "--c-sage": "color",
+      "--c-mustard": "color",
+      "--btn-bg": "color",
+      "--btn-fg": "color",
+      "--track": "color",
+      "--sans": "font",
+      "--serif": "font",
+      "--mono": "font",
+      "--shadow-sm": "shadow",
+      "--shadow": "shadow"
+    },
+    "fontFamilies": [
+      "Instrument Serif",
+      "Inter Tight",
+      "JetBrains Mono"
+    ]
+  }
+}

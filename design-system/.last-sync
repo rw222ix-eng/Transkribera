@@ -1,6 +1,10 @@
 {
   "projectId": "c5f72bf7-c335-4e12-8eb1-f937290b451c",
   "projectName": "Transkribera Design System",
-  "lastSyncedUpdatedAt": "2026-06-24T19:46:01.684543Z",
-  "_note": "Uppdateras varje gång design-systemet synkas. SessionStart-hooken jämför projektets updatedAt mot detta för att upptäcka ändringar gjorda i Claude Design."
+  "lastSyncedUpdatedAt": "2026-07-01T17:41:32.964385Z",
+  "_note": "Uppdateras varje gång design-systemet synkas. SessionStart-hooken jämför projektets updatedAt mot detta för att upptäcka ändringar gjorda i Claude Design.",
+  "_notMirrored": [
+    "scraps/*.png och templates/transkribera-app/.thumbnail (binära referens-/förhandsvisningsbilder, hämtas vid behov)",
+    "bedomning/bedomning.html (större än get_file-taket 256 KiB — trunkeras vid hämtning; övriga bedomning/-filer är speglade)"
+  ]
 }

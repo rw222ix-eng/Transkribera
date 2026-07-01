@@ -1,0 +1,505 @@
+/* ============================================================
+   MinaLektioner — shared site styles
+   Used by all subpages under /pages/
+   Header, footer, typography, layout primitives, ticker, etc.
+   ============================================================ */
+
+:root {
+  --bg: #F1F2ED;
+  --bg-2: #E2E3DD;
+  --bg-3: #D7D9D1;
+  --ink: #161A14;
+  --coral: #E5634D;
+  --mustard: #E8B83A;
+  --sage: #6B8F4E;
+  --sky: #6CA3C7;
+  --plum: #5B3A6E;
+  --gray-1: #3D3F3B;
+  --gray-2: #34362F;
+  --gray-3: #565850;
+  --gray-4: #6C6F68;
+  --gray-5: #74766F;
+  --line: #D9D9D9;
+  --line-2: #C7C9C2;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; outline: none; }
+*::after, *::before { box-sizing: border-box; }
+/* Hide scrollbars app-wide — scroll still works on hover/wheel inside any scrollable area */
+* { scrollbar-width: none; -ms-overflow-style: none; }
+*::-webkit-scrollbar { width: 0; height: 0; display: none; }
+html { font-size: 62.5%; }
+@media (min-width: 1920px) { html { font-size: 72.5%; } }
+html, body { background: var(--bg); color: var(--ink); }
+body {
+  font-family: "Inter Tight", "TT Commons", system-ui, sans-serif;
+  font-weight: 400;
+  font-size: 1.6rem;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow-x: clip;
+}
+a, button { color: inherit; background: none; border: 0; cursor: pointer; font: inherit; text-decoration: none; }
+ul { list-style: none; }
+img, picture { display: block; max-width: 100%; }
+input, textarea, select { font: inherit; color: inherit; }
+
+.ttuc { text-transform: uppercase; }
+.container { padding-left: 10.972vw; padding-right: 10.972vw; }
+.container-wide { padding-left: 2.986vw; padding-right: 2.986vw; }
+
+.serif-i {
+  font-family: "GT Sectra", "Instrument Serif", "Times New Roman", serif;
+  font-style: italic; font-weight: 400;
+}
+
+/* —— HEADER —————————————————————————— */
+.header {
+  position: fixed; top: 0; left: 0;
+  width: 100vw; height: 95px;
+  background: var(--bg);
+  z-index: 100;
+  border-bottom: 1px solid transparent;
+  transition: border-color .3s ease;
+}
+.header.scrolled { border-bottom-color: var(--line); }
+.header_inner {
+  position: relative;
+  display: flex; align-items: center; justify-content: space-between;
+  height: 100%;
+  padding: 0 0 0 2.986vw;
+}
+.header_logo {
+  display: inline-flex; align-items: center; gap: 12px;
+  padding: 16px;
+  margin-left: -16px;
+}
+.header_logo_mark {
+  width: 26px; height: 26px;
+  color: var(--ink);
+  flex-shrink: 0;
+  transition: transform .6s cubic-bezier(.2,.8,.2,1);
+}
+.header_logo:hover .header_logo_mark { transform: rotate(-12deg); }
+.header_logo_text {
+  font-family: "Inter Tight", sans-serif;
+  font-size: 17px; font-weight: 500;
+  letter-spacing: -0.01em;
+  text-transform: lowercase;
+}
+.header_logo_text em {
+  font-family: "GT Sectra", "Instrument Serif", serif;
+  font-style: italic; font-weight: 400;
+  margin-left: 1px;
+}
+.header_center {
+  position: absolute; left: 0; right: 0; top: 50%;
+  transform: translateY(-50%);
+  display: flex; justify-content: center;
+  pointer-events: none;
+}
+.header_list { display: flex; pointer-events: auto; }
+.header_list_link {
+  position: relative;
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 16px 12px;
+  font-size: 14px; line-height: 1;
+  letter-spacing: 0.075em; text-transform: uppercase;
+  transition: color .6s linear;
+}
+.header_list_link::after {
+  content: ""; position: absolute;
+  left: 12px; right: 12px; bottom: 14px;
+  height: 1px; background: currentColor;
+  transform: scaleX(0); transform-origin: right center;
+  transition: transform .5s cubic-bezier(.2,.8,.2,1);
+}
+.header_list_link:hover::after { transform: scaleX(1); transform-origin: left center; }
+.header_list_link.is-current::after { transform: scaleX(1); transform-origin: left center; }
+.header_list_link.is-current { color: var(--gray-4); }
+.header_list_link:hover { color: var(--gray-3); }
+.header_right { display: flex; align-items: center; }
+.header_right_login {
+  position: relative;
+  display: inline-flex; align-items: center;
+  padding: 0 16px;
+  height: 95px;
+  font-size: 13px; letter-spacing: 0.075em; text-transform: uppercase;
+  color: var(--ink);
+  transition: color .3s ease;
+}
+.header_right_login::after {
+  content: ""; position: absolute;
+  left: 16px; right: 16px; bottom: 38px;
+  height: 1px; background: var(--ink);
+  transform: scaleX(0); transform-origin: left center;
+  transition: transform .5s cubic-bezier(.7,0,.2,1);
+}
+.header_right_login:hover::after { transform: scaleX(1); }
+.header_right_link {
+  position: relative;
+  display: inline-flex; align-items: center; justify-content: center;
+  height: 95px; padding: 0 20px;
+  gap: 12px;
+  font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--bg);
+  background: var(--ink);
+  overflow: hidden;
+  isolation: isolate;
+}
+.header_right_link::before {
+  content: ""; position: absolute; inset: 0;
+  background: var(--coral);
+  transform: translateY(101%);
+  transition: transform .55s cubic-bezier(.7,0,.2,1);
+  z-index: -1;
+}
+.header_right_link:hover::before { transform: translateY(0); }
+.header_right_link_arrow {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: var(--bg); color: var(--ink);
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: transform .55s cubic-bezier(.7,0,.2,1);
+  flex-shrink: 0;
+}
+.header_right_link_arrow svg { width: 12px; height: 12px; }
+.header_right_link:hover .header_right_link_arrow { transform: rotate(-45deg); }
+
+/* —— HERO (subpage) ——————————————————— */
+.page-hero { padding-top: calc(95px + 6.4rem); padding-bottom: 8rem; position: relative; }
+.page-hero_eyebrow {
+  margin-bottom: 4rem;
+  font-size: 15px; line-height: 1; letter-spacing: 0.08em;
+  text-transform: uppercase;
+  display: flex; align-items: center; gap: 14px;
+  color: var(--gray-1);
+}
+.page-hero_eyebrow_dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--coral);
+  box-shadow: 0 0 0 4px rgba(229,99,77,0.18);
+}
+.page-hero_eyebrow_num { margin-left: auto; color: var(--gray-1); }
+.page-hero_copy {
+  font-family: "Inter Tight", sans-serif;
+  font-weight: 400;
+  font-size: 11.5rem; line-height: 0.92;
+  letter-spacing: -0.015em;
+  text-transform: uppercase;
+}
+.page-hero_copy em {
+  font-family: "GT Sectra", "Instrument Serif", "Times New Roman", serif;
+  font-style: italic; font-weight: 400;
+  text-transform: lowercase;
+  letter-spacing: -0.01em;
+  color: var(--gray-3);
+}
+.page-hero_copy_line { display: block; }
+.page-hero_copy_line.-indent { padding-left: 14rem; }
+.page-hero_lede {
+  margin-top: 4.4rem;
+  padding-top: 3rem;
+  border-top: 1px solid var(--line);
+  display: grid;
+  grid-template-columns: 1fr 1.4fr;
+  gap: 4rem;
+  font-size: 17px;
+}
+/* When meta is absent (single centered lede paragraph), collapse to one column
+   and let the body's inline max-width + margin auto center it. */
+.page-hero_lede:not(:has(.page-hero_lede_meta)) {
+  grid-template-columns: 1fr;
+}
+.page-hero_lede_meta {
+  font-size: 14px; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--gray-1);
+}
+.page-hero_lede_body { max-width: 56rem; line-height: 1.5; }
+
+@media screen and (max-width: 1280px) {
+  .page-hero_copy { font-size: 8.4rem; }
+  .page-hero_copy_line.-indent { padding-left: 10rem; }
+  .header_list_link { padding: 16px 10px; font-size: 13px; letter-spacing: 0.06em; }
+  .header_list_link::after { left: 10px; right: 10px; }
+}
+@media screen and (max-width: 1140px) {
+  .header_center { display: none; }
+}
+@media screen and (max-width: 980px) {
+  .container { padding-left: 6vw; padding-right: 6vw; }
+  .page-hero_copy { font-size: 5.6rem; }
+  .page-hero_copy_line.-indent { padding-left: 6rem; }
+  .page-hero_lede { grid-template-columns: 1fr; gap: 2rem; }
+  .header_center { display: none; }
+  .header_right_login, .header_right_link { font-size: 14px; }
+  .header_right_link { width: 140px; height: 60px; }
+  .header { height: 60px; }
+  .header_inner { padding-left: 6vw; }
+  .page-hero { padding-top: calc(60px + 3rem); }
+}
+
+/* —— TICKER ——————————————————— */
+.ticker {
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  overflow: hidden;
+  padding: 2.8rem 0;
+  background: var(--bg-2);
+}
+.ticker_track {
+  display: flex;
+  align-items: center;
+  width: max-content;
+  animation: ticker-scroll 50s linear infinite;
+  will-change: transform;
+}
+/* Ticker keeps scrolling on hover */
+.ticker_item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 1.6rem;
+  padding: 0 4rem;
+  font-size: 18px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  position: relative;
+  font-weight: 500;
+}
+.ticker_item::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  top: 50%;
+  width: 1px;
+  height: 18px;
+  background: var(--line);
+  transform: translateY(-50%);
+}
+.ticker_item em {
+  font-family: "GT Sectra", "Instrument Serif", serif;
+  font-style: italic;
+  font-weight: 400;
+  text-transform: lowercase;
+  letter-spacing: 0;
+  color: var(--gray-3);
+  font-size: 18px;
+}
+.ticker_dot { display: none; }
+@keyframes ticker-scroll { from { transform: translate3d(0,0,0); } to { transform: translate3d(-50%,0,0); } }
+
+/* —— FOOTER MAIN ———————————————————————— */
+.footer-main {
+  background: var(--bg);
+  color: var(--ink);
+  overflow: clip;
+}
+.footer-main a, .footer-main button { color: var(--ink); }
+.footer-main_inner {
+  display: flex; flex-direction: column; align-items: center; text-align: center;
+  padding-top: 7vw; padding-bottom: 5vw;
+  gap: 3.5vw;
+}
+.footer-main_logo {
+  display: inline-flex; align-items: center; gap: 12px;
+}
+.footer-main_logo_mark {
+  width: 26px; height: 26px;
+  color: var(--ink);
+  flex-shrink: 0;
+  transition: transform .6s cubic-bezier(.2,.8,.2,1);
+}
+.footer-main_logo:hover .footer-main_logo_mark { transform: rotate(-6deg) translateY(-2px); }
+.footer-main_logo_text { font-size: 22px; letter-spacing: 0.01em; text-transform: lowercase; }
+.footer-main_logo_text em { font-family: "GT Sectra", "Instrument Serif", serif; font-style: italic; font-weight: 400; }
+.footer-main_body { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 3vw; }
+.footer-main_body_top {
+  display: flex; justify-content: center; align-items: center;
+  width: 100%;
+  padding: 2.5vw 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.footer-main_list-global {
+  display: flex; flex-wrap: wrap; justify-content: center; align-items: center;
+  gap: 3.5vw;
+}
+.footer-main_list-global_text {
+  display: inline-block;
+  font-size: 18px; letter-spacing: 0.12em; text-transform: uppercase;
+  line-height: 1;
+  transition: opacity .25s ease;
+}
+.footer-main_list-global_text:hover { opacity: 0.6; }
+.footer-main_list-global_text.is-current { opacity: 0.3; }
+.footer-main_body_bottom_inner {
+  display: flex; flex-direction: column; align-items: center; gap: 2.6rem;
+}
+.footer-main_list-sub { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 0; }
+.footer-main_list-sub_text {
+  display: inline-block;
+  padding: 0.6rem 1.4rem;
+  font-size: 15px; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--ink);
+  opacity: 0.8;
+  transition: opacity .25s ease;
+}
+.footer-main_list-sub_text:hover { opacity: 1; }
+.footer-main_list-lang { display: flex; justify-content: center; }
+.footer-main_list-lang_text { display: inline-block; padding: 0.6rem 0.9rem; font-size: 14px; letter-spacing: 0.08em; }
+.footer-main_list-lang_text.is-current { opacity: 0.3; pointer-events: none; }
+.footer-main_copy { font-size: 15px; letter-spacing: 0.08em; color: var(--ink); opacity: 0.85; margin-top: 4rem; }
+
+/* Hover line on footer links — same animation as header */
+.footer-main_list-global_text,
+.footer-main_list-sub_text,
+.footer-main_list-lang_text { position: relative; }
+.footer-main_list-global_text::after {
+  content: "";
+  position: absolute;
+  left: 0; right: 0; bottom: -4px;
+  height: 1px; background: currentColor;
+  transform: scaleX(0); transform-origin: right center;
+  transition: transform .5s cubic-bezier(.2,.8,.2,1);
+}
+.footer-main_list-sub_text::after {
+  content: "";
+  position: absolute;
+  left: 1.4rem; right: 1.4rem; bottom: 0.2rem;
+  height: 1px; background: currentColor;
+  transform: scaleX(0); transform-origin: right center;
+  transition: transform .5s cubic-bezier(.2,.8,.2,1);
+}
+.footer-main_list-lang_text::after {
+  content: "";
+  position: absolute;
+  left: 0.9rem; right: 0.9rem; bottom: 0.2rem;
+  height: 1px; background: currentColor;
+  transform: scaleX(0); transform-origin: right center;
+  transition: transform .5s cubic-bezier(.2,.8,.2,1);
+}
+.footer-main_list-global_text:hover::after,
+.footer-main_list-sub_text:hover::after,
+.footer-main_list-lang_text:hover::after { transform: scaleX(1); transform-origin: left center; }
+.footer-main_list-global_text.is-current::after { transform: scaleX(1); transform-origin: left center; }
+/* Reset opacity hover — the underline does the work */
+.footer-main_list-global_text:hover { opacity: 1; }
+.footer-main_list-sub_text { opacity: 0.65; }
+
+/* —— GENERAL SECTION ——————————————————— */
+section { position: relative; }
+.section { padding-top: 8rem; padding-bottom: 8rem; }
+.section + .section { border-top: 1px solid var(--line); }
+.section_eyebrow {
+  font-size: 14px; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--gray-1);
+  margin-bottom: 2.4rem;
+  display: flex; align-items: center; gap: 1.2rem;
+}
+.section_eyebrow::before {
+  content: ""; width: 24px; height: 1px; background: var(--ink);
+}
+.section_title {
+  font-size: 6.4rem; line-height: 1; letter-spacing: -0.015em;
+  text-transform: uppercase;
+  margin-bottom: 3.6rem;
+}
+.section_title em { font-family: "GT Sectra", "Instrument Serif", serif; font-style: italic; font-weight: 400; text-transform: lowercase; color: var(--gray-3); }
+.section_text { font-size: 18px; line-height: 1.5; color: var(--ink); max-width: 56rem; }
+
+/* —— BUTTONS ——————————————————— */
+.btn-primary {
+  display: inline-flex; align-items: center; gap: 14px;
+  height: 56px; padding: 0 28px;
+  background: var(--ink); color: var(--bg);
+  font-size: 14px; letter-spacing: 0.06em; text-transform: uppercase;
+  position: relative; overflow: hidden; isolation: isolate;
+  transition: transform .3s ease;
+}
+.btn-primary::before {
+  content: ""; position: absolute; inset: 0;
+  background: var(--coral);
+  transform: translateY(101%);
+  transition: transform .55s cubic-bezier(.7,0,.2,1);
+  z-index: -1;
+}
+.btn-primary:hover::before { transform: translateY(0); }
+.btn-primary_arrow {
+  width: 24px; height: 24px; border-radius: 50%;
+  background: var(--bg); color: var(--ink);
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: transform .5s cubic-bezier(.7,0,.2,1);
+}
+.btn-primary_arrow svg { width: 11px; height: 11px; }
+.btn-primary:hover .btn-primary_arrow { transform: rotate(-45deg); }
+
+.btn-ghost {
+  display: inline-flex; align-items: center; gap: 12px;
+  height: 56px; padding: 0 24px;
+  background: transparent; color: var(--ink);
+  border: 1px solid var(--ink);
+  font-size: 14px; letter-spacing: 0.06em; text-transform: uppercase;
+  transition: background .25s ease, color .25s ease;
+}
+.btn-ghost:hover { background: var(--ink); color: var(--bg); }
+
+.btn-link {
+  display: inline-flex; align-items: center; gap: 10px;
+  font-size: 14px; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--ink);
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--ink);
+  transition: gap .3s ease;
+}
+.btn-link:hover { gap: 16px; }
+
+/* —— ANIMATIONS ———————————————————————— */
+@keyframes ml-rise { from { transform: translateY(105%); } to { transform: translateY(0); } }
+.reveal-mask { display: inline-flex; overflow: clip; padding: 0.12em 0 0.18em; margin: -0.12em 0 -0.18em; }
+.reveal-mask > span {
+  display: inline-block;
+  transform: translateY(105%);
+  animation: ml-rise 1.1s cubic-bezier(.2,.8,.2,1) forwards;
+}
+.reveal-mask.d-1 > span { animation-delay: .05s; }
+.reveal-mask.d-2 > span { animation-delay: .12s; }
+.reveal-mask.d-3 > span { animation-delay: .19s; }
+.reveal-mask.d-4 > span { animation-delay: .26s; }
+.reveal-mask.d-5 > span { animation-delay: .33s; }
+@keyframes ml-fade-up { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+.fade-up { animation: ml-fade-up 1.2s cubic-bezier(.2,.8,.2,1) both; }
+.fade-up.d-1 { animation-delay: .4s; } .fade-up.d-2 { animation-delay: .6s; } .fade-up.d-3 { animation-delay: .8s; }
+
+.in-view-mask { display: inline-flex; overflow: clip; padding: 0.12em 0 0.18em; margin: -0.12em 0 -0.18em; }
+.in-view-mask > span { display: inline-block; transform: translateY(105%); transition: transform 1.1s cubic-bezier(.2,.8,.2,1); }
+.in-view-mask.is-in > span { transform: translateY(0); }
+.in-view-fade { opacity: 0; transform: translateY(20px); transition: opacity 1.1s, transform 1.1s cubic-bezier(.2,.8,.2,1); }
+.in-view-fade.is-in { opacity: 1; transform: translateY(0); }
+
+/* —— FORM BASICS ————————————————————— */
+.field { display: flex; flex-direction: column; gap: 1rem; }
+.field_label {
+  font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--gray-1);
+}
+.field_input, .field_textarea, .field_select {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  padding: 1.4rem 0;
+  font-size: 18px;
+  color: var(--ink);
+  transition: border-color .25s ease;
+}
+.field_input:focus, .field_textarea:focus, .field_select:focus {
+  border-bottom-color: var(--ink);
+}
+.field_input::placeholder, .field_textarea::placeholder { color: var(--gray-4); }
+.field_textarea { resize: vertical; min-height: 12rem; font-family: inherit; }
+
+/* —— ARTIFACT VISUALS (shared) —————————————— */
+.artwell {
+  position: relative;
+  background: var(--bg-2);
+  overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+}

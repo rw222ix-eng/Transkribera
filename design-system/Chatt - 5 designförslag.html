@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chatt – 5 designförslag</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;450;500;600;700&display=swap');
+  :root{
+    --canvas:#F7F7F4; --surface:#FFFFFF; --sunken:#F0F0EB;
+    --ink:#0B0B0D; --ink-2:#42424A; --ink-3:#74747C;
+    --line:#E7E7E1; --line-2:#DBDBD4;
+    --accent:#3B5BDB; --accent-weak:#EDF0FC;
+    --ok:#2E9E6A; --ok-weak:#E6F4ED; --warn:#BD831C; --bad:#CF5A52;
+    --btn-bg:#17171B; --btn-fg:#FFFFFF;
+    --track:#EFEFEA;
+    --shadow-sm:0 1px 2px rgba(20,20,30,.06);
+    --shadow:0 2px 4px rgba(20,20,30,.04),0 14px 34px -20px rgba(20,20,30,.22);
+    --mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:'Geist',system-ui,sans-serif;color:var(--ink);-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;background:#E8E8E2;padding:44px 24px 96px}
+  body>div{position:static !important;left:auto !important;top:auto !important;margin:0 auto 56px !important}
+  [data-hide]::-webkit-scrollbar{width:0;height:0;display:none}
+  [data-hide]{scrollbar-width:none}
+
+  /* ---- frame label ---- */
+  .lbl{display:flex;flex-direction:column;gap:5px;margin-bottom:14px;cursor:grab;max-width:560px}
+  .lbl-top{display:flex;align-items:center;gap:10px}
+  .lbl-num{font-variant-numeric:tabular-nums;font-size:12px;font-weight:600;color:#fff;background:var(--ink);width:23px;height:23px;border-radius:7px;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+  .lbl-name{font-size:17px;font-weight:600;letter-spacing:-0.01em}
+  .lbl-sub{font-size:13.5px;line-height:1.5;color:var(--ink-2)}
+
+  /* ---- panel shell ---- */
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);display:flex;flex-direction:column;overflow:hidden}
+  .ph{padding:18px 22px 16px;border-bottom:1px solid var(--line);flex:0 0 auto}
+  .ph-row{display:flex;align-items:center;gap:11px}
+  .tag{font-size:10.5px;font-weight:600;letter-spacing:0.05em;color:var(--ink-2);background:var(--sunken);border:1px solid var(--line);padding:3px 8px;border-radius:6px}
+  .ph-title{font-size:18px;font-weight:600;letter-spacing:-0.02em;margin:0}
+  .ph-sub{font-size:13px;line-height:1.5;color:var(--ink-2);margin:8px 0 0}
+  .model{margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:500;color:var(--ink-2);background:var(--sunken);border:1px solid var(--line);border-radius:99px;padding:5px 10px}
+  .model .dot{width:6px;height:6px;border-radius:50%;background:var(--ok)}
+  .scroll{flex:1;overflow:auto;padding:18px 20px;display:flex;flex-direction:column;min-height:0}
+
+  /* ---- bubbles ---- */
+  .b-u{align-self:flex-end;max-width:82%;background:var(--btn-bg);color:#fff;border-radius:15px 15px 5px 15px;padding:11px 15px;font-size:14px;line-height:1.5}
+  .b-a{align-self:flex-start;max-width:90%;background:var(--surface);border:1px solid var(--line);border-radius:15px 15px 15px 5px;padding:12px 15px;font-size:14px;line-height:1.6;color:var(--ink);box-shadow:var(--shadow-sm)}
+
+  /* ---- composer ---- */
+  .composer{flex:0 0 auto;padding:14px 16px;border-top:1px solid var(--line);display:flex;gap:10px;align-items:center;background:var(--surface)}
+  .field{flex:1;min-width:0;background:var(--sunken);border:1px solid var(--line);border-radius:12px;padding:12px 14px;font-size:14px;font-family:inherit;color:var(--ink);outline:none;transition:border-color .14s,background .14s}
+  .field:focus-within,.field.foc{border-color:var(--accent);background:var(--surface)}
+  .send{flex:0 0 auto;width:42px;height:42px;border-radius:12px;border:none;background:var(--btn-bg);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer}
+  .send.wide{width:auto;padding:0 18px;gap:8px;font-size:14px;font-weight:500;font-family:inherit}
+
+  /* ---- chips ---- */
+  .chips{display:flex;gap:7px;flex-wrap:wrap}
+  .chip{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:500;color:var(--ink-2);background:var(--surface);border:1px solid var(--line);border-radius:99px;padding:7px 12px;cursor:pointer;transition:all .13s;white-space:nowrap}
+  .chip:hover{border-color:var(--ink-3);color:var(--ink);background:var(--sunken)}
+  .chip svg{color:var(--accent)}
+
+  /* ---- task cards (D1) ---- */
+  .tasks{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+  .task{display:flex;gap:11px;align-items:flex-start;text-align:left;padding:13px 14px;border:1px solid var(--line);border-radius:13px;background:var(--surface);cursor:pointer;transition:all .14s;box-shadow:var(--shadow-sm)}
+  .task:hover{border-color:var(--ink-3);transform:translateY(-1px);box-shadow:var(--shadow)}
+  .task .ico{flex:0 0 auto;width:32px;height:32px;border-radius:9px;background:var(--accent-weak);color:var(--accent);display:flex;align-items:center;justify-content:center}
+  .task .t{font-size:13.5px;font-weight:600;color:var(--ink)}
+  .task .d{font-size:12px;line-height:1.4;color:var(--ink-2);margin-top:2px}
+  .eyebrow{font-size:11px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--ink-3)}
+
+  /* ---- citation (D2) ---- */
+  .cite{display:inline-flex;align-items:center;gap:4px;font-variant-numeric:tabular-nums;font-size:11.5px;font-weight:600;color:var(--accent);background:var(--accent-weak);border:1px solid color-mix(in srgb,var(--accent) 22%,transparent);border-radius:6px;padding:1px 6px;cursor:pointer;vertical-align:1px;text-decoration:none}
+  .cite:hover{background:color-mix(in srgb,var(--accent) 16%,transparent)}
+  .srcbar{margin-top:11px;padding-top:11px;border-top:1px dashed var(--line-2);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .trust{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;color:var(--ok);background:var(--ok-weak);border-radius:99px;padding:4px 10px}
+
+  /* ---- avatars (D3) ---- */
+  .row3{display:flex;gap:11px;align-items:flex-start;margin-bottom:18px}
+  .row3.me{flex-direction:row-reverse}
+  .av{flex:0 0 auto;width:30px;height:30px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:11.5px;font-weight:600}
+  .av.bot{background:var(--ink);gap:1.5px}
+  .av.bot span{width:2.5px;border-radius:2px;background:#fff}
+  .av.me{background:var(--accent-weak);color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 25%,transparent)}
+  .bigcomposer{flex:0 0 auto;margin:0 16px 16px;border:1px solid var(--line-2);border-radius:16px;background:var(--surface);box-shadow:var(--shadow-sm);padding:12px 14px;display:flex;flex-direction:column;gap:10px}
+  .bigcomposer.foc{border-color:var(--accent)}
+  .iconbtn{width:34px;height:34px;border-radius:9px;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);display:flex;align-items:center;justify-content:center;cursor:pointer}
+  .iconbtn:hover{color:var(--ink);border-color:var(--ink-3)}
+
+  /* ---- workspace (D4) ---- */
+  .rail{flex:0 0 248px;border-right:1px solid var(--line);background:var(--canvas);display:flex;flex-direction:column;padding:14px 12px;gap:5px;overflow:auto}
+  .thread{display:flex;align-items:center;gap:9px;padding:9px 11px;border-radius:10px;cursor:pointer;font-size:13px;color:var(--ink-2);transition:background .12s}
+  .thread:hover{background:var(--sunken)}
+  .thread.active{background:var(--surface);color:var(--ink);font-weight:500;box-shadow:var(--shadow-sm);border:1px solid var(--line)}
+  .thread .tt{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .saved{display:flex;gap:9px;padding:9px 11px;border-radius:10px;cursor:pointer;transition:background .12s}
+  .saved:hover{background:var(--sunken)}
+  .saved .st{font-size:12.5px;line-height:1.4;color:var(--ink-2)}
+  .ans-actions{display:flex;gap:6px;margin-top:10px}
+  .miniact{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:500;color:var(--ink-2);background:var(--sunken);border:1px solid var(--line);border-radius:8px;padding:5px 9px;cursor:pointer}
+  .miniact:hover{color:var(--ink);border-color:var(--ink-3)}
+  .miniact.on{color:var(--warn);background:color-mix(in srgb,var(--warn) 12%,transparent);border-color:color-mix(in srgb,var(--warn) 35%,transparent)}
+
+  /* ---- command (D5) ---- */
+  .cmdbar{flex:0 0 auto;margin:16px;border:1.5px solid var(--accent);border-radius:13px;background:var(--surface);box-shadow:0 0 0 4px var(--accent-weak);padding:12px 14px;display:flex;align-items:center;gap:10px}
+  .cmdbar .slash{font-family:var(--mono);font-size:14px;color:var(--accent);font-weight:600}
+  .cmdbar input{flex:1;border:none;outline:none;font-family:var(--mono);font-size:14px;color:var(--ink);background:transparent}
+  .palette{margin:-4px 16px 0;border:1px solid var(--line);border-radius:13px;background:var(--surface);box-shadow:var(--shadow);overflow:hidden}
+  .cmd{display:flex;align-items:center;gap:11px;padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--line)}
+  .cmd:last-child{border-bottom:none}
+  .cmd.sel{background:var(--accent-weak)}
+  .cmd:hover{background:var(--sunken)}
+  .cmd .cico{width:28px;height:28px;border-radius:8px;background:var(--sunken);color:var(--ink-2);display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+  .cmd.sel .cico{background:var(--surface);color:var(--accent)}
+  .cmd .cn{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--ink)}
+  .cmd .cd{font-size:12px;color:var(--ink-2);margin-left:auto}
+  .kbd{font-family:var(--mono);font-size:11px;color:var(--ink-3);background:var(--sunken);border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;padding:1px 6px}
+  .msg-c{display:flex;gap:9px;padding:11px 0;border-bottom:1px solid var(--line)}
+  .msg-c .lead{flex:0 0 auto;font-family:var(--mono);font-size:11px;font-weight:600;color:var(--accent);padding-top:2px;width:64px}
+  .msg-c .body{font-size:13px;line-height:1.55;color:var(--ink)}
+</style>
+</head>
+<body>
+
+<!-- ============ INTRO / LEGEND ============ -->
+<div style="position:absolute;left:80px;top:96px;width:316px">
+  <div class="lbl" data-drags-parent="1">
+    <div class="lbl-top"><span class="lbl-name" style="font-size:19px">Chatt — 5 designförslag</span></div>
+    <div class="lbl-sub">Fem riktningar för chatt-funktionen i Resultat-steget. Välj en så bygger jag den i appen.</div>
+  </div>
+  <div class="card" data-screen-label="Översikt" style="padding:20px 22px;gap:2px">
+    <p style="margin:0 0 16px;font-size:13.5px;line-height:1.6;color:var(--ink-2)">Alla bygger på Transkriberas befintliga färger, typsnitt och kort — men utforskar olika sätt att göra chatten <strong style="color:var(--ink);font-weight:600">effektiv för lärare</strong>.</p>
+    <div style="display:flex;flex-direction:column;gap:13px">
+      <div style="display:flex;gap:12px"><span class="lbl-num">1</span><div><div style="font-size:14px;font-weight:600">Guidad</div><div style="font-size:12.5px;color:var(--ink-2);line-height:1.45">Uppgiftskort & snabbåtgärder</div></div></div>
+      <div style="display:flex;gap:12px"><span class="lbl-num">2</span><div><div style="font-size:14px;font-weight:600">Källhänvisad</div><div style="font-size:12.5px;color:var(--ink-2);line-height:1.45">Svar med klickbara tidsstämplar</div></div></div>
+      <div style="display:flex;gap:12px"><span class="lbl-num">3</span><div><div style="font-size:14px;font-weight:600">Fokuserat samtal</div><div style="font-size:12.5px;color:var(--ink-2);line-height:1.45">Rent, luftigt chattfönster</div></div></div>
+      <div style="display:flex;gap:12px"><span class="lbl-num">4</span><div><div style="font-size:14px;font-weight:600">Arbetsyta</div><div style="font-size:12.5px;color:var(--ink-2);line-height:1.45">Trådar & sparade svar i sidopanel</div></div></div>
+      <div style="display:flex;gap:12px"><span class="lbl-num">5</span><div><div style="font-size:14px;font-weight:600">Kompakt assistent</div><div style="font-size:12.5px;color:var(--ink-2);line-height:1.45">Kommandofält med snedstreck</div></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 01 · GUIDAD ============ -->
+<div style="position:absolute;left:476px;top:96px;width:640px">
+  <div class="lbl" data-drags-parent="1">
+    <div class="lbl-top"><span class="lbl-num">1</span><span class="lbl-name">Guidad</span></div>
+    <div class="lbl-sub">Uppgiftskort & snabbåtgärder — tar bort tomma-sidan-känslan. Läraren ser direkt vad chatten kan göra.</div>
+  </div>
+  <div class="card" data-screen-label="01 Guidad" style="height:772px">
+    <div class="ph">
+      <div class="ph-row">
+        <span class="tag">CHATT</span>
+        <h2 class="ph-title">Fråga om lektionen</h2>
+        <span class="model"><span class="dot"></span>Qwen3 14B · lokalt</span>
+      </div>
+    </div>
+    <div class="scroll" data-hide style="gap:0">
+      <div class="eyebrow" style="margin-bottom:11px">Vad vill du göra med transkriptet?</div>
+      <div class="tasks">
+        <div class="task">
+          <span class="ico"><svg width="17" height="17" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 5h8"></path><path d="M8 10h8"></path><path d="M8 15h8"></path><path d="M3.4 5l.7.7 1.3-1.5"></path><path d="M3.4 10l.7.7 1.3-1.5"></path><path d="M3.4 15l.7.7 1.3-1.5"></path></svg></span>
+          <div><div class="t">Skapa quizfrågor</div><div class="d">3 frågor med facit</div></div>
+        </div>
+        <div class="task">
+          <span class="ico"><svg width="17" height="17" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h5l4 4v9a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"></path><path d="M11 3v4h4"></path><path d="M7.5 11.5h5"></path><path d="M7.5 14.5h3"></path></svg></span>
+          <div><div class="t">Gör en lektionsplan</div><div class="d">Nästa steg utifrån lektionen</div></div>
+        </div>
+        <div class="task">
+          <span class="ico"><svg width="17" height="17" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M10 3.2c.45 3 1.35 3.9 4.3 4.3-2.95.4-3.85 1.3-4.3 4.3-.45-3-1.35-3.9-4.3-4.3 2.95-.4 3.85-1.3 4.3-4.3z"></path><path d="M15.2 12.5c.2 1.3.6 1.7 1.9 1.9-1.3.2-1.7.6-1.9 1.9-.2-1.3-.6-1.7-1.9-1.9 1.3-.2 1.7-.6 1.9-1.9z"></path></svg></span>
+          <div><div class="t">Förklara enklare</div><div class="d">För elever som kör fast</div></div>
+        </div>
+        <div class="task">
+          <span class="ico"><svg width="17" height="17" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 9.2l5.6-5.6H16v6.9l-5.6 5.6a1.5 1.5 0 0 1-2.1 0L3.5 11.3a1.5 1.5 0 0 1 0-2.1z"></path><circle cx="12.4" cy="7.6" r="1.1"></circle></svg></span>
+          <div><div class="t">Lista nyckelbegrepp</div><div class="d">Med korta förklaringar</div></div>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:12px;margin:20px 0 14px"><div style="flex:1;height:1px;background:var(--line)"></div><span style="font-size:11.5px;color:var(--ink-3)">eller fortsätt samtalet</span><div style="flex:1;height:1px;background:var(--line)"></div></div>
+
+      <div class="b-u" style="margin-bottom:12px">Lista nyckelbegrepp i lektionen</div>
+      <div class="b-a">
+        <div style="font-weight:600;margin-bottom:6px">Tre centrala begrepp</div>
+        <div style="display:flex;flex-direction:column;gap:7px">
+          <div><strong style="color:var(--accent)">Bråk</strong> — en del av en helhet, skrivet som täljare över nämnare.</div>
+          <div><strong style="color:var(--accent)">Procent</strong> — hundradelar; 50 % = 50 av 100.</div>
+          <div><strong style="color:var(--accent)">Samband</strong> — varje bråk kan skrivas som procent och tvärtom.</div>
+        </div>
+        <div class="chips" style="margin-top:12px">
+          <span class="chip"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="8" height="10" rx="1.5"></rect><path d="M3 5v8a1.5 1.5 0 0 0 1.5 1.5H11"></path></svg>Kopiera</span>
+          <span class="chip">Spara svar</span>
+          <span class="chip">Gör quiz på detta</span>
+        </div>
+      </div>
+    </div>
+    <div class="composer">
+      <div class="field" style="display:flex;align-items:center;color:var(--ink-3)">Skriv en fråga om lektionen …</div>
+      <button class="send"><svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8 13V4"></path><path d="M4 7.5 8 3.5l4 4"></path></svg></button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 02 · KÄLLHÄNVISAD ============ -->
+<div style="position:absolute;left:1196px;top:96px;width:640px">
+  <div class="lbl" data-drags-parent="1">
+    <div class="lbl-top"><span class="lbl-num">2</span><span class="lbl-name">Källhänvisad</span></div>
+    <div class="lbl-sub">Varje svar pekar tillbaka på transkriptet med klickbara tidsstämplar — läraren kan verifiera mot ljudet.</div>
+  </div>
+  <div class="card" data-screen-label="02 Källhänvisad" style="height:772px">
+    <div class="ph">
+      <div class="ph-row">
+        <span class="tag">CHATT</span>
+        <h2 class="ph-title">Fråga om lektionen</h2>
+        <span class="trust"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5 6.5 11.5 12.5 5"></path></svg>Bara från transkriptet</span>
+      </div>
+      <p class="ph-sub">Svaren bygger på det korrekturlästa transkriptet. Klicka på en tidsstämpel för att hoppa dit i ljudet.</p>
+    </div>
+    <div class="scroll" data-hide style="gap:16px">
+      <div class="b-u">Hur förklarar läraren procent?</div>
+      <div class="b-a">
+        Läraren beskriver procent som <strong>hundradelar</strong> <a class="cite"><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="8" cy="8" r="6"></circle><path d="M8 4.6V8l2.3 1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>12:04</a> och kopplar det till bråk, där täljaren visar hur många delar av hundra man tar <a class="cite"><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="8" cy="8" r="6"></circle><path d="M8 4.6V8l2.3 1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>13:20</a>. Exemplet <strong>50 % = ½</strong> används för att visa sambandet konkret.
+        <div class="srcbar">
+          <span style="font-size:11.5px;font-weight:600;color:var(--ink-3)">KÄLLOR</span>
+          <a class="cite">12:04 · ”procent betyder hundradelar”</a>
+          <a class="cite">13:20 · ”täljaren visar antalet”</a>
+        </div>
+      </div>
+      <div class="b-u">Och vad är skillnaden mot bråk?</div>
+      <div class="b-a">
+        Bråk och procent beskriver samma sak på olika sätt — ett bråk är <strong>antal delar av en helhet</strong>, procent är samma andel uttryckt per hundra <a class="cite"><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="8" cy="8" r="6"></circle><path d="M8 4.6V8l2.3 1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>08:30</a>.
+        <div class="srcbar">
+          <span style="font-size:11.5px;font-weight:600;color:var(--ink-3)">KÄLLOR</span>
+          <a class="cite">08:30 · ”en del av en helhet”</a>
+        </div>
+      </div>
+    </div>
+    <div class="composer" style="flex-direction:column;align-items:stretch;gap:10px">
+      <div style="display:flex;gap:10px;align-items:center">
+        <div class="field" style="display:flex;align-items:center;color:var(--ink-3)">Skriv en fråga …</div>
+        <button class="send"><svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8 13V4"></path><path d="M4 7.5 8 3.5l4 4"></path></svg></button>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--ink-2)"><span style="width:30px;height:18px;border-radius:99px;background:var(--ink);position:relative;flex:0 0 auto"><span style="position:absolute;top:2px;left:14px;width:14px;height:14px;border-radius:50%;background:#fff"></span></span>Svara bara utifrån transkriptet (inga gissningar)</div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 03 · FOKUSERAT SAMTAL ============ -->
+<div style="position:absolute;left:1916px;top:96px;width:660px">
+  <div class="lbl" data-drags-parent="1">
+    <div class="lbl-top"><span class="lbl-num">3</span><span class="lbl-name">Fokuserat samtal</span></div>
+    <div class="lbl-sub">Rent, luftigt chattfönster i full höjd med avatarer och en pinnad skrivruta. Känns som ett eget arbetsläge.</div>
+  </div>
+  <div class="card" data-screen-label="03 Fokuserat samtal" style="height:772px">
+    <div class="ph" style="display:flex;align-items:center;gap:11px;padding:14px 18px">
+      <span class="av bot" style="width:32px;height:32px"><span style="height:9px"></span><span style="height:14px"></span><span style="height:7px"></span></span>
+      <div style="line-height:1.25"><div style="font-size:15px;font-weight:600">Lektionsassistent</div><div style="font-size:11.5px;color:var(--ink-3)">Svarar utifrån transkriptet</div></div>
+      <span class="model" style="margin-left:auto"><span class="dot"></span>Qwen3 14B</span>
+      <button class="iconbtn" title="Rensa"><svg width="16" height="16" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h10"></path><path d="M7 5V3.5h4V5"></path><path d="M6 5l.6 9h4.8L12 5"></path></svg></button>
+    </div>
+    <div class="scroll" data-hide style="padding:22px 22px 8px">
+      <div class="row3 me">
+        <span class="av me">LM</span>
+        <div class="b-u" style="font-size:14.5px">Vilka begrepp tas upp i lektionen?</div>
+      </div>
+      <div class="row3">
+        <span class="av bot"><span style="height:8px"></span><span style="height:13px"></span><span style="height:6px"></span></span>
+        <div class="b-a" style="font-size:14.5px;max-width:84%">Lektionen tar upp tre centrala begrepp: <strong>bråk</strong> (täljare och nämnare), <strong>procent</strong> som hundradelar, och <strong>sambandet</strong> mellan dem. Läraren börjar konkret med pizzaexemplet innan de generaliserar.</div>
+      </div>
+      <div class="row3 me">
+        <span class="av me">LM</span>
+        <div class="b-u" style="font-size:14.5px">Ge ett exempel jag kan ta i klassen.</div>
+      </div>
+      <div class="row3">
+        <span class="av bot"><span style="height:8px"></span><span style="height:13px"></span><span style="height:6px"></span></span>
+        <div class="b-a" style="font-size:14.5px;max-width:84%">Dela en pizza i 4 lika delar — varje bit är ¼, alltså 25 %. Tar man 2 bitar är det ²⁄₄ = ½ = 50 %.<span style="display:inline-block;width:2px;height:15px;background:var(--accent);vertical-align:-3px;margin-left:2px;animation:none"></span></div>
+      </div>
+    </div>
+    <div class="bigcomposer foc">
+      <div style="font-size:14.5px;color:var(--ink-3);min-height:22px">Skriv ett meddelande …</div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <button class="iconbtn" title="Bifoga"><svg width="16" height="16" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4v10"></path><path d="M4 9h10"></path></svg></button>
+        <button class="iconbtn" title="Diktera"><svg width="16" height="16" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="6.5" y="3" width="5" height="8" rx="2.5"></rect><path d="M4.5 9a4.5 4.5 0 0 0 9 0"></path><path d="M9 13.5V15.5"></path></svg></button>
+        <span style="margin-left:auto;font-size:11.5px;color:var(--ink-3)">Enter skickar · Shift+Enter ny rad</span>
+        <button class="send" style="width:38px;height:38px;border-radius:11px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8 13V4"></path><path d="M4 7.5 8 3.5l4 4"></path></svg></button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 04 · ARBETSYTA ============ -->
+<div style="position:absolute;left:2656px;top:96px;width:940px">
+  <div class="lbl" data-drags-parent="1">
+    <div class="lbl-top"><span class="lbl-num">4</span><span class="lbl-name">Arbetsyta</span></div>
+    <div class="lbl-sub">Trådar och sparade svar i en sidopanel — läraren organiserar frågor per ämne och plockar fram svar inför provet.</div>
+  </div>
+  <div class="card" data-screen-label="04 Arbetsyta" style="height:772px;flex-direction:row">
+    <!-- rail -->
+    <div class="rail" data-hide>
+      <button class="send wide" style="height:38px;justify-content:center;margin-bottom:8px"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M8 3.5v9"></path><path d="M3.5 8h9"></path></svg>Ny fråga</button>
+      <div class="eyebrow" style="padding:6px 11px 4px">Trådar</div>
+      <div class="thread active"><span style="width:7px;height:7px;border-radius:50%;background:var(--accent);flex:0 0 auto"></span><span class="tt">Procent &amp; bråk</span><span style="font-size:11px;color:var(--ink-3)">4</span></div>
+      <div class="thread"><span style="width:7px;height:7px;border-radius:50%;background:var(--line-2);flex:0 0 auto"></span><span class="tt">Centrala begrepp</span><span style="font-size:11px;color:var(--ink-3)">2</span></div>
+      <div class="thread"><span style="width:7px;height:7px;border-radius:50%;background:var(--line-2);flex:0 0 auto"></span><span class="tt">Quizfrågor till provet</span><span style="font-size:11px;color:var(--ink-3)">6</span></div>
+      <div class="eyebrow" style="padding:16px 11px 4px">Sparade svar</div>
+      <div class="saved"><svg width="15" height="15" viewBox="0 0 20 20" fill="var(--warn)" stroke="var(--warn)" stroke-width="1.2" style="flex:0 0 auto;margin-top:1px"><path d="M10 3l2 4.3 4.6.5-3.4 3.2.9 4.5L10 13.2 5.9 15.5l.9-4.5L3.4 7.8 8 7.3z"></path></svg><div class="st">”Procent = hundradelar, 50 % = ½ …”</div></div>
+      <div class="saved"><svg width="15" height="15" viewBox="0 0 20 20" fill="var(--warn)" stroke="var(--warn)" stroke-width="1.2" style="flex:0 0 auto;margin-top:1px"><path d="M10 3l2 4.3 4.6.5-3.4 3.2.9 4.5L10 13.2 5.9 15.5l.9-4.5L3.4 7.8 8 7.3z"></path></svg><div class="st">”3 quizfrågor på bråk med facit”</div></div>
+    </div>
+    <!-- main -->
+    <div style="flex:1;display:flex;flex-direction:column;min-width:0">
+      <div class="ph" style="display:flex;align-items:center;gap:10px">
+        <h2 class="ph-title" style="font-size:16px">Procent &amp; bråk</h2>
+        <span style="font-size:12px;color:var(--ink-3)">4 frågor</span>
+        <div style="margin-left:auto;display:flex;gap:6px">
+          <button class="iconbtn" title="Byt namn"><svg width="15" height="15" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4l3 3"></path><path d="M3.5 14.5 4 11.5 11.5 4l3 3L7 14.5z"></path></svg></button>
+          <button class="iconbtn" title="Exportera"><svg width="15" height="15" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3v8"></path><path d="M6 8l3 3 3-3"></path><path d="M4 13.5h10"></path></svg></button>
+        </div>
+      </div>
+      <div class="scroll" data-hide style="gap:14px">
+        <div class="b-u">Förklara skillnaden mellan täljare och nämnare.</div>
+        <div class="b-a" style="max-width:94%">I bråket ¾ är <strong>3 täljaren</strong> (hur många delar du har) och <strong>4 nämnaren</strong> (hur många lika delar helheten är delad i). Nämnaren står alltid under bråkstrecket.
+          <div class="ans-actions">
+            <span class="miniact on"><svg width="13" height="13" viewBox="0 0 20 20" fill="currentColor"><path d="M10 3l2 4.3 4.6.5-3.4 3.2.9 4.5L10 13.2 5.9 15.5l.9-4.5L3.4 7.8 8 7.3z"></path></svg>Sparat</span>
+            <span class="miniact"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="8" height="10" rx="1.5"></rect><path d="M3 5v8a1.5 1.5 0 0 0 1.5 1.5H11"></path></svg>Kopiera</span>
+            <span class="miniact">Gör quiz</span>
+          </div>
+        </div>
+        <div class="b-u">Och hur skriver jag det som procent?</div>
+        <div class="b-a" style="max-width:94%">¾ = 75 %. Du delar täljaren med nämnaren (3 ÷ 4 = 0,75) och multiplicerar med 100.
+          <div class="ans-actions">
+            <span class="miniact"><svg width="13" height="13" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M10 3l2 4.3 4.6.5-3.4 3.2.9 4.5L10 13.2 5.9 15.5l.9-4.5L3.4 7.8 8 7.3z"></path></svg>Spara</span>
+            <span class="miniact"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="8" height="10" rx="1.5"></rect><path d="M3 5v8a1.5 1.5 0 0 0 1.5 1.5H11"></path></svg>Kopiera</span>
+            <span class="miniact">Gör quiz</span>
+          </div>
+        </div>
+      </div>
+      <div class="composer">
+        <div class="field" style="display:flex;align-items:center;color:var(--ink-3)">Fortsätt tråden …</div>
+        <button class="send"><svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8 13V4"></path><path d="M4 7.5 8 3.5l4 4"></path></svg></button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 05 · KOMPAKT ASSISTENT ============ -->
+<div style="position:absolute;left:3676px;top:96px;width:620px">
+  <div class="lbl" data-drags-parent="1">
+    <div class="lbl-top"><span class="lbl-num">5</span><span class="lbl-name">Kompakt assistent</span></div>
+    <div class="lbl-sub">Kommandofält med snedstreck-kommandon (/quiz, /förklara). Snabbt, tangentbordsdrivet och tätt — för vana lärare.</div>
+  </div>
+  <div class="card" data-screen-label="05 Kompakt assistent" style="height:772px">
+    <div class="ph" style="display:flex;align-items:center;gap:10px;padding:14px 18px">
+      <span class="tag">ASSISTENT</span>
+      <h2 class="ph-title" style="font-size:15px">Snabbfrågor om lektionen</h2>
+      <span style="margin-left:auto;display:inline-flex;align-items:center;gap:5px;font-size:11.5px;color:var(--ink-3)">Tryck <span class="kbd">/</span> för kommandon</span>
+    </div>
+    <div class="cmdbar">
+      <span class="slash">/</span>
+      <input value="" placeholder="quiz" readonly>
+      <span class="kbd">↵</span>
+    </div>
+    <div class="palette">
+      <div class="cmd sel"><span class="cico"><svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 5h8"></path><path d="M8 10h8"></path><path d="M8 15h8"></path><path d="M3.6 5l.7.7 1.2-1.4"></path><path d="M3.6 10l.7.7 1.2-1.4"></path></svg></span><span class="cn">/quiz</span><span class="cd">Skapa quizfrågor</span></div>
+      <div class="cmd"><span class="cico"><svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h12"></path><path d="M4 10h12"></path><path d="M4 14h7"></path></svg></span><span class="cn">/sammanfatta</span><span class="cd">Korta ner lektionen</span></div>
+      <div class="cmd"><span class="cico"><svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M10 3.5c.45 3 1.35 3.9 4.3 4.3-2.95.4-3.85 1.3-4.3 4.3-.45-3-1.35-3.9-4.3-4.3 2.95-.4 3.85-1.3 4.3-4.3z"></path></svg></span><span class="cn">/förklara</span><span class="cd">Enklare ord</span></div>
+      <div class="cmd"><span class="cico"><svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 9.2l5.6-5.6H16v6.9l-5.6 5.6a1.5 1.5 0 0 1-2.1 0L3.5 11.3a1.5 1.5 0 0 1 0-2.1z"></path><circle cx="12.4" cy="7.6" r="1"></circle></svg></span><span class="cn">/begrepp</span><span class="cd">Lista nyckelord</span></div>
+    </div>
+    <div class="scroll" data-hide style="padding:16px 18px 8px;gap:0">
+      <div class="eyebrow" style="margin-bottom:6px">Tidigare</div>
+      <div class="msg-c">
+        <span class="lead">/sammanfatta</span>
+        <div class="body">Lektionen handlar om bråk och procent. Läraren introducerar täljare/nämnare, definierar procent som hundradelar och visar sambandet 50 % = ½ med ett pizzaexempel.</div>
+      </div>
+      <div class="msg-c" style="border-bottom:none">
+        <span class="lead">/quiz</span>
+        <div class="body">
+          <div style="margin-bottom:6px"><strong>1.</strong> Vad kallas talet under bråkstrecket? <span style="color:var(--ink-3)">(nämnaren)</span></div>
+          <div style="margin-bottom:6px"><strong>2.</strong> Skriv ½ som procent. <span style="color:var(--ink-3)">(50 %)</span></div>
+          <div><strong>3.</strong> Hur många hundradelar är 25 %? <span style="color:var(--ink-3)">(25)</span></div>
+        </div>
+      </div>
+    </div>
+    <div style="flex:0 0 auto;padding:9px 18px;border-top:1px solid var(--line);font-size:11.5px;color:var(--ink-3);display:flex;align-items:center;gap:8px">
+      <span class="kbd">↑</span><span class="kbd">↓</span> bläddra · <span class="kbd">↵</span> kör · Qwen3 14B lokalt
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

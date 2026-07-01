@@ -1,0 +1,282 @@
+/* ============================================================
+   Transkribera — design system foundation (EDITORIAL)
+   Warm paper + coral, Inter Tight / Instrument Serif italic /
+   JetBrains Mono, sharp corners, mask-reveal motion.
+   Adapted from the MinaLektioner / Bedömning art direction.
+   Tokens, globals, keyframes + a set of structural overrides
+   that re-skin the inline-styled markup wholesale (corners,
+   mono eyebrows, mono figures). Everything else stays inline.
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter+Tight:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root,[data-theme="light"]{
+  /* paper + ink */
+  --canvas:#F1F2ED; --surface:#FFFFFF; --sunken:#F3F4EE;
+  --ink:#161A14; --ink-2:#4F514D; --ink-3:#6A6C68;
+  --line:#D9D9D5; --line-2:#C7C9C2;
+  /* primary = editorial sky-blue (non-coral); plum/sage/mustard = grade palette */
+  --accent:#2C6E9E; --accent-weak:#E3ECF2;
+  --ok:#5C7E40; --warn:#9A7416; --bad:#C8463A;
+  /* editorial palette spread (text-safe on paper) */
+  --c-plum:#5B3A6E; --c-sky:#2C6E9E; --c-sage:#5C7E40; --c-mustard:#9A7416;
+  /* buttons */
+  --btn-bg:#161A14; --btn-fg:#F1F2ED;
+  --track:#E8E9E2;
+  /* type */
+  --sans:"Inter Tight","Helvetica Neue",system-ui,sans-serif; /* @kind font */
+  --serif:"Instrument Serif","GT Sectra",Georgia,"Times New Roman",serif; /* @kind font */
+  --mono:"JetBrains Mono",ui-monospace,"SFMono-Regular",monospace; /* @kind font */
+  /* flat, editorial shadows */
+  --shadow-sm:0 1px 2px rgba(22,26,20,.05);
+  --shadow:0 26px 60px -34px rgba(22,26,20,.40),0 6px 18px -14px rgba(22,26,20,.14);
+}
+[data-theme="dark"]{
+  --canvas:#14150E; --surface:#1C1D15; --sunken:#23241A;
+  --ink:#F1F2ED; --ink-2:#C4C6BC; --ink-3:#9A9C92;
+  --line:#2E2F26; --line-2:#3B3C30;
+  --accent:#7FB4DA; --accent-weak:#1E2A33;
+  --ok:#8FB06A; --warn:#D6A53F; --bad:#E0796A;
+  --c-plum:#B79ECB; --c-sky:#7FB4DA; --c-sage:#8FB06A; --c-mustard:#D9AC45;
+  --btn-bg:#F1F2ED; --btn-fg:#14150E;
+  --track:#23241A;
+  --shadow-sm:0 1px 2px rgba(0,0,0,.5);
+  --shadow:0 26px 60px -32px rgba(0,0,0,.78),0 8px 20px -14px rgba(0,0,0,.6);
+}
+
+*{box-sizing:border-box}
+html{scrollbar-gutter:stable}
+html,body{margin:0}
+body{background:var(--canvas)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+[data-hidescroll]{scrollbar-width:none}
+[data-hidescroll]::-webkit-scrollbar{display:none}
+::selection{background:var(--accent-weak);color:var(--ink)}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:0;border:3px solid transparent;background-clip:content-box}
+
+/* ============================================================
+   WHOLESALE RE-SKIN — flips the inline-styled markup to the
+   editorial system without touching every line.
+   ============================================================ */
+
+/* Base typeface: override the root inline font-family, children inherit. */
+[data-theme]{font-family:var(--sans) !important;letter-spacing:-0.011em}
+
+/* Mono for every uppercase micro-label / eyebrow (authentic editorial). */
+[style*="text-transform: uppercase"]{
+  font-family:var(--mono) !important;
+  letter-spacing:0.08em !important;
+}
+/* keep big display caps out of mono — re-assert sans on headings */
+h1[style*="text-transform: uppercase"],h2[style*="text-transform: uppercase"]{font-family:var(--sans) !important;letter-spacing:-0.02em !important}
+/* All figures use the readable sans (Inter Tight), tabular alignment kept.
+   Mono is reserved for the small uppercase micro-labels only. */
+[style*="tabular-nums"]{
+  font-family:var(--sans) !important;
+}
+
+/* Sharp corners — map the soft inline radii down to editorial 2–4px.
+   border-radius:50% (dots/avatars/spinners) is deliberately untouched. */
+[style*="border-radius: 24px"],[style*="border-radius: 22px"],
+[style*="border-radius: 20px"],[style*="border-radius: 18px"],
+[style*="border-radius: 16px"]{border-radius:5px !important}
+[style*="border-radius: 14px"],[style*="border-radius: 13px"],
+[style*="border-radius: 12px"],[style*="border-radius: 11px"],
+[style*="border-radius: 10px"]{border-radius:4px !important}
+[style*="border-radius: 9px"],[style*="border-radius: 8px"],
+[style*="border-radius: 7px"],[style*="border-radius: 6px"],
+[style*="border-radius: 5px"]{border-radius:3px !important}
+[style*="border-radius: 99px"]{border-radius:2px !important}
+
+/* Editorial serif-italic accent helper (used in targeted heading edits). */
+.ser{font-family:var(--serif) !important;font-style:italic;font-weight:400;letter-spacing:0 !important;text-transform:none !important}
+
+/* ---- Keyframes (referenced by inline animation: + classes) ---- */
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes fadeup{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes ppglow{0%,100%{box-shadow:0 0 0 0 rgba(229,99,77,.5)}50%{box-shadow:0 0 0 5px rgba(229,99,77,0)}}
+@keyframes tabin{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}
+@keyframes toastin{from{opacity:0;transform:translate(-50%,18px)}to{opacity:1;transform:translate(-50%,0)}}
+@keyframes wave{0%,100%{transform:scaleY(.4)}50%{transform:scaleY(1)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
+@keyframes prog{from{width:18%}to{width:86%}}
+
+/* Editorial motion: mask-rise reveal + fade-up + the AI heartbeat dot. */
+@keyframes ml-rise{from{transform:translateY(110%)}to{transform:translateY(0)}}
+.reveal-mask{display:inline-flex;overflow:clip;padding:0.1em 0 0.16em;margin:-0.1em 0 -0.16em}
+.reveal-mask>span{display:inline-block;transform:translateY(110%);animation:ml-rise 1s cubic-bezier(.2,.8,.2,1) forwards}
+.reveal-mask.d-1>span{animation-delay:.06s}
+.reveal-mask.d-2>span{animation-delay:.13s}
+.reveal-mask.d-3>span{animation-delay:.2s}
+@keyframes ai-blink{0%,100%{opacity:1}50%{opacity:.35}}
+.ai-blink{animation:ai-blink 1.6s ease-in-out infinite}
+
+/* ---- Editorial CTA (the Starta button) — ink fill, coral wipes up ---- */
+.cta{position:relative;isolation:isolate;overflow:hidden}
+.cta::before{content:"";position:absolute;inset:0;z-index:-1;background:var(--accent);transform:translateY(101%);transition:transform .5s cubic-bezier(.7,0,.2,1)}
+.cta:hover::before{transform:translateY(0)}
+.cta_arrow{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:50%;background:var(--btn-fg);color:var(--btn-bg);flex:0 0 auto;transition:transform .5s cubic-bezier(.7,0,.2,1)}
+.cta:hover .cta_arrow{transform:rotate(-45deg)}
+
+/* ---- Active-state overrides (data-* driven, from the logic class) ---- */
+[data-seg="on"]{background:var(--surface) !important;color:var(--ink) !important;box-shadow:var(--shadow-sm) !important}
+[data-segtxt]{transition:color .22s ease}
+[data-segtxt="on"]{color:var(--ink) !important}
+[data-chip="on"]{background:var(--ink) !important;color:var(--btn-fg) !important;border-color:var(--ink) !important}
+[data-pp="on"]{border-color:var(--ink) !important;background:var(--sunken) !important;box-shadow:var(--shadow-sm) !important}
+[data-dot="cur"]{background:var(--ink) !important;color:var(--btn-fg) !important;border-color:var(--ink) !important}
+[data-dot="done"]{background:var(--ok) !important;color:#fff !important;border-color:var(--ok) !important}
+[data-lbl="cur"]{font-weight:600 !important;color:var(--ink) !important}
+[data-lbl="done"]{color:var(--ink-2) !important}
+[data-switch="on"]{background:var(--ink) !important}
+[data-switch="on"]>span{transform:translateX(17px) !important}
+[data-q="1"]{color:var(--accent) !important;background:var(--accent-weak) !important;border-color:color-mix(in srgb,var(--accent) 24%,transparent) !important;font-weight:600 !important}
+/* Källförankrad chatt: numrerade citat <-> käll-rad highlight */
+[data-csup="on"]{background:var(--accent) !important;color:#fff !important;border-color:var(--accent) !important}
+[data-csup]:not([data-csup="on"]):hover{background:color-mix(in srgb,var(--accent) 16%,transparent) !important;border-color:color-mix(in srgb,var(--accent) 45%,transparent) !important}
+[data-crow="on"]{background:var(--surface) !important;border-color:color-mix(in srgb,var(--accent) 50%,var(--line)) !important;box-shadow:0 6px 16px -10px color-mix(in srgb,var(--accent) 60%,transparent) !important}
+[data-crow]:not([data-crow="on"]):hover{background:var(--surface) !important}
+[data-crow="on"] [data-rownum]{background:var(--accent) !important;color:#fff !important}
+
+/* ---- Modal in/out + unlock animations ---- */
+@keyframes modalBackIn{from{opacity:0}to{opacity:1}}
+@keyframes modalBackOut{from{opacity:1}to{opacity:0}}
+@keyframes modalCardIn{0%{opacity:0;transform:translateY(54px) scale(.8)}55%{opacity:1}100%{opacity:1;transform:none}}
+@keyframes modalCardOut{0%{opacity:1;transform:none}40%{opacity:.72}100%{opacity:0;transform:translateY(44px) scale(.86)}}
+@keyframes unlockIn{from{opacity:0;transform:translateY(10px) scale(.985)}to{opacity:1;transform:none}}
+[data-modal-back]{animation:modalBackIn .5s ease both}
+[data-modal-back="closing"]{animation:modalBackOut .44s ease both}
+[data-modal-card]{animation:modalCardIn .64s cubic-bezier(.16,1,.3,1) both}
+[data-modal-card="closing"]{animation:modalCardOut .44s cubic-bezier(.45,0,.55,1) both}
+
+@media (prefers-reduced-motion:reduce){
+  [style*="animation:tabin"],[style*="animation:fadeup"]{animation:none !important}
+  .reveal-mask>span{animation:none !important;transform:none !important}
+  [style*="animation:unlockIn"]{animation:modalBackIn .26s ease both !important}
+  [data-modal-card]{animation:modalBackIn .4s ease both !important}
+  [data-modal-card="closing"]{animation:modalBackOut .34s ease both !important}
+}
+
+/* ---- Inspelningar: Scen-koreografi (data-driven card states) ---- */
+[data-stage]{transition:transform .5s cubic-bezier(.2,.8,.25,1),opacity .42s ease,box-shadow .42s ease,filter .42s ease,border-color .3s ease}
+[data-stage="dim"]{opacity:.34 !important;filter:saturate(.5) !important;transform:scale(.965) !important}
+[data-stage="fly"]{opacity:.1 !important;transform:scale(.9) translateY(-12px) rotate(-3deg) !important;pointer-events:none}
+[data-stage="lift"]{border-color:var(--accent) !important;box-shadow:0 0 0 3px var(--accent-weak),var(--shadow) !important;z-index:4;animation:floaty 3.2s ease-in-out infinite}
+@keyframes floaty{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}
+@keyframes dotpulse{0%,100%{opacity:.3;transform:translateY(0)}50%{opacity:1;transform:translateY(-2px)}}
+.insp-dots{display:inline-flex;gap:3px;align-items:center}
+.insp-dots i{width:5px;height:5px;border-radius:50%;background:currentColor;animation:dotpulse 1.05s infinite}
+.insp-dots i:nth-child(2){animation-delay:.16s}
+.insp-dots i:nth-child(3){animation-delay:.32s}
+@media (prefers-reduced-motion:reduce){
+  [data-stage="lift"]{animation:none !important}
+  .insp-dots i{animation:none !important}
+}
+
+/* ---- Unified button language (editorial) ----
+   Outline/surface/icon buttons fill solid ink on hover (paper text).
+   Filled (near-black) primary buttons flip to coral.
+   Segmented + chip toggles in tracks get an accent wash, no lift.
+   No vertical lift anywhere — corners stay put, like the reference. */
+button:not(:disabled){cursor:pointer}
+button:disabled{cursor:default}
+button:not(:disabled):hover{
+  background:var(--ink) !important;color:var(--btn-fg) !important;
+  border-color:var(--ink) !important;box-shadow:none !important;
+}
+button[style*="--btn-bg"]:not(:disabled):hover{
+  background:var(--accent) !important;border-color:var(--accent) !important;color:#fff !important;
+}
+button[data-opt]:not(:disabled):hover{background:var(--accent) !important;color:#fff !important;border-color:transparent !important}
+button[data-seg]:not(:disabled):hover,button[data-chip]:not(:disabled):hover{
+  background:var(--accent-weak) !important;color:var(--accent) !important;border-color:var(--accent) !important;
+}
+/* Destructive (remove / delete) buttons go red on hover, not ink. */
+button[aria-label*="Ta bort"]:not(:disabled):hover,button[aria-label*="ta bort"]:not(:disabled):hover{
+  background:color-mix(in srgb,var(--bad) 12%,transparent) !important;color:var(--bad) !important;border-color:var(--bad) !important;
+}
+/* The CTA manages its own coral wipe — don't let the generic rule paint over it. */
+button.cta:not(:disabled):hover{background:var(--btn-bg) !important;color:var(--btn-fg) !important;border-color:var(--ink) !important}
+
+/* ============================================================
+   BEDÖMNING PARITY — exact motion + figure treatment lifted
+   from the assessment page so the app reads identically:
+   · serif-italic DISPLAY figures (big "tal" set like the matrix
+     stat/summary numbers) — inline data stays tabular sans
+   · expo-out zoom card choreography (hovered card surges, the
+     neighbours frost + recede) — from .flow_step
+   · spring pop-in for menus/popovers — from the fb-pop reveal
+   ============================================================ */
+.fig{
+  font-family:var(--serif) !important;font-style:italic;font-weight:400;
+  letter-spacing:-0.01em;font-variant-numeric:tabular-nums;
+}
+.fig-unit{font-family:var(--sans) !important;font-style:normal;color:var(--ink-3);letter-spacing:0}
+
+.zoomstage .zoomcard{
+  transform-origin:center center;will-change:transform;
+  transition:transform .9s cubic-bezier(.16,1,.3,1),
+             border-color .55s cubic-bezier(.16,1,.3,1),
+             box-shadow .9s cubic-bezier(.16,1,.3,1),
+             filter .9s cubic-bezier(.16,1,.3,1),
+             opacity .9s cubic-bezier(.16,1,.3,1) !important;
+}
+.zoomstage .zoomcard:hover{
+  z-index:6;
+  transform:translateY(-12px) scale(1.2) !important;
+  border-color:var(--ink) !important;
+  box-shadow:0 60px 120px -34px rgba(22,26,20,.42),
+             0 34px 64px -30px rgba(22,26,20,.24),
+             0 12px 26px -18px rgba(22,26,20,.16) !important;
+}
+.zoomstage:hover .zoomcard:not(:hover){
+  filter:blur(5px) saturate(.82) brightness(.99);opacity:.34;transform:scale(.955);
+}
+
+@keyframes ml-popin{from{opacity:0;transform:scale(.97) translateY(-4px)}to{opacity:1;transform:none}}
+
+@media (prefers-reduced-motion:reduce){
+  .zoomstage .zoomcard{transition:transform .5s cubic-bezier(.16,1,.3,1),box-shadow .5s,opacity .5s !important}
+  .zoomstage .zoomcard:hover{transform:translateY(-5px) scale(1.06) !important}
+  .zoomstage:hover .zoomcard:not(:hover){filter:none;opacity:.55;transform:none}
+}
+
+/* ============================================================
+   EDITORIAL STRUCTURE — the bedömning "type of design":
+   mono eyebrow w/ accent leading line → serif-italic display
+   title → lede, over a hairline rule; bordered window cards
+   with a mono top-bar; column-divider rule grids.
+   ============================================================ */
+.eyebrow{display:inline-flex;align-items:center;gap:12px;margin:0;
+  font-family:var(--mono) !important;font-size:11px;letter-spacing:0.14em !important;
+  text-transform:uppercase;color:var(--accent)}
+.eyebrow::before{content:"";width:24px;height:1px;background:var(--accent);flex:0 0 auto}
+
+.disp{font-weight:400;line-height:0.98;letter-spacing:-0.022em;color:var(--ink)}
+.disp .ser,.disp em{font-family:var(--serif) !important;font-style:italic;font-weight:400;color:var(--ink-3);letter-spacing:0}
+
+.ehead{display:grid;grid-template-columns:1.15fr 1fr;gap:48px;align-items:end;
+  padding-bottom:26px;border-bottom:1px solid var(--line);margin-bottom:34px}
+.ehead_lede{font-size:15px;line-height:1.6;color:var(--ink-2);max-width:44ch;margin:0}
+@media(max-width:760px){.ehead{grid-template-columns:1fr;gap:18px;align-items:start}}
+
+.win{background:var(--surface);border:1px solid var(--line);overflow:hidden}
+.win_top{display:flex;align-items:center;justify-content:space-between;gap:20px;
+  padding:13px 20px;border-bottom:1px solid var(--line);background:var(--sunken)}
+.win_meta{display:flex;gap:24px;align-items:baseline}
+.win_meta>span{display:inline-flex;align-items:baseline;gap:8px;font-size:14px;font-weight:500;color:var(--ink)}
+.win_lbl{font-family:var(--mono) !important;font-size:10px;letter-spacing:0.08em;
+  text-transform:uppercase;color:var(--ink-3);font-weight:400}
+
+/* Robust reduced-motion guard: redefine the entrance keyframes to no-ops
+   when motion is reduced, so re-mounted content is never stuck at
+   opacity:0 (inline-style attribute serialisation makes [style*=…]
+   selectors unreliable — the keyframe override always wins). */
+@media (prefers-reduced-motion:reduce){
+  @keyframes fadeup{from{opacity:1;transform:none}to{opacity:1;transform:none}}
+  @keyframes tabin{from{opacity:1;transform:none}to{opacity:1;transform:none}}
+  @keyframes unlockIn{from{opacity:1;transform:none}to{opacity:1;transform:none}}
+  @keyframes ml-popin{from{opacity:1;transform:none}to{opacity:1;transform:none}}
+  @keyframes modalCardIn{from{opacity:1;transform:none}to{opacity:1;transform:none}}
+}

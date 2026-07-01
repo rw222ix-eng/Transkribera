@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fråga om lektionen – 5 designförslag</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;450;500;600;700&display=swap');
+  :root{
+    --canvas:#F7F7F4; --surface:#FFFFFF; --sunken:#F0F0EB;
+    --ink:#0B0B0D; --ink-2:#42424A; --ink-3:#74747C;
+    --line:#E7E7E1; --line-2:#DBDBD4;
+    --accent:#3B5BDB; --accent-weak:#EDF0FC; --accent-2:#2A6FDB;
+    --ok:#2E9E6A; --ok-weak:#E6F4ED;
+    --btn-bg:#17171B; --btn-fg:#FFFFFF; --track:#EFEFEA;
+    --shadow-sm:0 1px 2px rgba(20,20,30,.06);
+    --shadow:0 2px 4px rgba(20,20,30,.04),0 14px 34px -20px rgba(20,20,30,.22);
+    --shadow-lg:0 10px 22px -10px rgba(20,20,30,.2),0 34px 64px -30px rgba(20,20,30,.42);
+    --spring:cubic-bezier(.34,1.56,.64,1);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:'Geist',system-ui,sans-serif;color:var(--ink);-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;background:#E8E8E2;padding:46px 26px 130px;letter-spacing:-0.01em}
+  body>section{position:static !important;left:auto !important;top:auto !important;margin:0 auto 60px !important;width:680px;max-width:100%}
+
+  .lbl{display:flex;flex-direction:column;gap:6px;margin-bottom:16px;max-width:680px}
+  .lbl-top{display:flex;align-items:center;gap:11px}
+  .lbl-num{font-size:12px;font-weight:600;color:#fff;background:var(--ink);width:24px;height:24px;border-radius:7px;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+  .lbl-name{font-size:18px;font-weight:600;letter-spacing:-0.02em}
+  .lbl-sub{font-size:13.5px;line-height:1.55;color:var(--ink-2)}
+
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);padding:24px 26px 22px}
+
+  /* shared section header */
+  .sec-head{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+  .sec-tag{font-variant-numeric:tabular-nums;font-size:12px;font-weight:600;color:var(--accent);background:var(--accent-weak);padding:3px 9px;border-radius:6px;letter-spacing:.02em}
+  .sec-h{font-size:19px;font-weight:600;letter-spacing:-0.02em;margin:0}
+  .sec-p{margin:0 0 18px;color:var(--ink-2);font-size:14.5px;line-height:1.5}
+
+  /* shared bits */
+  .ts{font-variant-numeric:tabular-nums}
+  .qtext{font-weight:600}
+  .ans{font-size:15px;line-height:1.7;color:var(--ink)}
+
+  /* citation pill (inline) */
+  .cite{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;color:var(--accent);background:var(--accent-weak);border:1px solid color-mix(in srgb,var(--accent) 22%,transparent);border-radius:7px;padding:1px 7px;margin:0 1px;cursor:pointer;vertical-align:1px;font-family:inherit;transition:background .14s,border-color .14s,transform .08s,color .14s}
+  .cite:hover{background:color-mix(in srgb,var(--accent) 18%,transparent);border-color:color-mix(in srgb,var(--accent) 45%,transparent)}
+  .cite:active{transform:scale(.93)}
+  .cite.on{background:var(--accent);color:#fff;border-color:var(--accent);box-shadow:0 3px 10px -4px color-mix(in srgb,var(--accent) 65%,transparent)}
+  .cite svg{width:11px;height:11px}
+
+  /* source card (reusable) */
+  .srccard{margin-top:13px;border:1px solid color-mix(in srgb,var(--accent) 30%,var(--line));border-radius:13px;overflow:hidden;background:var(--surface);box-shadow:0 10px 26px -16px color-mix(in srgb,var(--accent) 55%,transparent)}
+  .srccard-head{display:flex;align-items:center;gap:9px;padding:9px 9px 9px 13px;background:var(--accent-weak);border-bottom:1px solid color-mix(in srgb,var(--accent) 18%,transparent)}
+  .srcicon{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;background:var(--accent);color:#fff;flex:0 0 auto}
+  .srclabel{display:flex;flex-direction:column;flex:1;min-width:0}
+  .srclabel b{font-size:10px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--accent)}
+  .srclabel span{font-size:13px;font-weight:600;color:var(--ink)}
+  .xbtn{flex:0 0 auto;width:28px;height:28px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--ink-2);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .12s,color .12s}
+  .xbtn:hover{background:var(--surface);color:var(--accent);border-color:var(--line)}
+  .srcbody{padding:11px 14px 13px;font-size:14px;line-height:1.55;color:var(--ink)}
+
+  /* input row (shared base) */
+  .inrow{display:flex;gap:10px;align-items:center;margin-top:16px}
+  .infield{flex:1;min-width:0;background:var(--sunken);border:1px solid var(--line);color:var(--ink);border-radius:12px;padding:12px 15px;font-size:15px;font-family:inherit;outline:none;transition:border-color .15s,background .15s,box-shadow .15s}
+  .infield:focus{border-color:var(--accent);background:var(--surface);box-shadow:0 0 0 3px var(--accent-weak)}
+  .send{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:12px;padding:12px 20px;font-size:15px;font-weight:500;cursor:pointer;font-family:inherit;box-shadow:var(--shadow-sm);transition:background .16s,transform .08s,box-shadow .16s}
+  .send:hover{background:var(--accent);box-shadow:0 7px 18px -7px color-mix(in srgb,var(--accent) 60%,transparent)}
+  .send:active{transform:scale(.97)}
+  .model{font-size:12.5px;color:var(--ink-3);margin-top:10px}
+  .model b{color:var(--ink-2);font-weight:500}
+
+  /* suggestion chips */
+  .chips{display:flex;flex-wrap:wrap;gap:8px}
+  .chip{display:inline-flex;align-items:center;gap:7px;font-size:13.5px;font-weight:500;color:var(--ink-2);background:var(--surface);border:1px solid var(--line);border-radius:99px;padding:8px 14px;cursor:pointer;font-family:inherit;transition:border-color .15s,color .15s,background .15s,transform .1s var(--spring),box-shadow .15s}
+  .chip:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-weak);transform:translateY(-2px);box-shadow:0 7px 16px -8px color-mix(in srgb,var(--accent) 42%,transparent)}
+  .chip:active{transform:translateY(0) scale(.97)}
+  .chip svg{width:14px;height:14px;color:var(--accent)}
+
+  /* ===== A — KONVERSATION ===== */
+  .a-thread{display:flex;flex-direction:column;gap:13px;margin-bottom:4px}
+  .a-user{align-self:flex-end;max-width:80%;background:var(--btn-bg);color:var(--btn-fg);border-radius:15px 15px 5px 15px;padding:10px 15px;font-size:14.5px;line-height:1.5}
+  .a-ai{align-self:flex-start;max-width:96%;background:var(--surface);border:1px solid var(--line);border-radius:15px 15px 15px 5px;padding:14px 16px;box-shadow:var(--shadow-sm)}
+  .a-sugg{margin:14px 0 0}
+  .a-sugg .lab{font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3);margin-bottom:9px}
+
+  /* ===== B — FRÅGEKORT ===== */
+  .b-qa{border:1px solid var(--line);border-radius:15px;overflow:hidden;background:var(--surface);box-shadow:var(--shadow-sm)}
+  .b-qa + .b-qa{margin-top:12px}
+  .b-q{display:flex;align-items:center;gap:11px;padding:13px 16px;background:var(--sunken);border-bottom:1px solid var(--line)}
+  .b-qmark{flex:0 0 auto;width:24px;height:24px;border-radius:7px;background:var(--ink);color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center}
+  .b-qtext{font-size:15px;font-weight:600;color:var(--ink)}
+  .b-a{padding:14px 16px 4px}
+  .b-foot{display:flex;align-items:center;gap:9px;padding:11px 16px 13px;flex-wrap:wrap;border-top:1px dashed var(--line)}
+  .b-srclabel{font-size:11.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-3)}
+  .b-drawer{display:none;padding:0 16px 14px}
+  .b-drawer.open{display:block;animation:fade .22s ease both}
+  .b-srcrow{display:flex;gap:12px;padding:9px 11px;border-radius:9px;margin-bottom:6px;background:var(--sunken);border:1px solid var(--line);transition:background .18s,border-color .18s}
+  .b-srcrow.hit{background:var(--accent-weak);border-color:color-mix(in srgb,var(--accent) 35%,transparent)}
+  .b-srcrow .ts{flex:0 0 auto;width:46px;font-size:12.5px;font-weight:600;color:var(--accent)}
+  .b-srcrow .s{font-size:13.5px;line-height:1.5;color:var(--ink)}
+
+  /* ===== C — KÄLLFÖRANKRAD (split) ===== */
+  .c-grid{display:grid;grid-template-columns:1fr 256px;gap:18px;align-items:start}
+  .c-ans{font-size:15px;line-height:1.75;color:var(--ink)}
+  .c-sup{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;font-size:11px;font-weight:700;color:var(--accent);background:var(--accent-weak);border:1px solid color-mix(in srgb,var(--accent) 28%,transparent);border-radius:6px;cursor:pointer;vertical-align:2px;margin:0 1px;font-family:inherit;transition:all .14s}
+  .c-sup:hover{background:var(--accent);color:#fff;border-color:var(--accent);transform:translateY(-1px)}
+  .c-sup.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .c-rail{background:var(--sunken);border:1px solid var(--line);border-radius:14px;padding:13px}
+  .c-rail .lab{display:flex;align-items:center;gap:7px;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px}
+  .c-row{display:flex;flex-direction:column;gap:3px;padding:10px 11px;border-radius:10px;cursor:pointer;border:1px solid transparent;transition:background .18s,border-color .18s,box-shadow .18s}
+  .c-row + .c-row{margin-top:6px}
+  .c-row:hover{background:var(--surface)}
+  .c-row.on{background:var(--surface);border-color:color-mix(in srgb,var(--accent) 40%,transparent);box-shadow:0 6px 16px -10px color-mix(in srgb,var(--accent) 60%,transparent)}
+  .c-row .rt{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;color:var(--accent);font-variant-numeric:tabular-nums}
+  .c-row .rn{width:16px;height:16px;border-radius:5px;background:var(--accent-weak);color:var(--accent);font-size:10px;display:flex;align-items:center;justify-content:center;font-weight:700}
+  .c-row.on .rn{background:var(--accent);color:#fff}
+  .c-row .rs{font-size:12.5px;line-height:1.45;color:var(--ink-2)}
+
+  /* ===== D — FRÅGA VAD SOM HELST (hero) ===== */
+  .d-hero{position:relative;background:linear-gradient(180deg,var(--accent-weak),var(--surface) 70%);border:1px solid color-mix(in srgb,var(--accent) 26%,var(--line));border-radius:16px;padding:18px 18px 16px}
+  .d-bar{display:flex;align-items:center;gap:11px;background:var(--surface);border:1.5px solid var(--line-2);border-radius:13px;padding:6px 6px 6px 16px;box-shadow:var(--shadow-sm);transition:border-color .15s,box-shadow .15s}
+  .d-bar:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-weak)}
+  .d-bar .ico{color:var(--accent);flex:0 0 auto;display:flex}
+  .d-bar input{flex:1;min-width:0;border:none;background:transparent;font-size:15.5px;font-family:inherit;outline:none;color:var(--ink);padding:9px 0}
+  .d-go{flex:0 0 auto;width:40px;height:40px;border-radius:10px;background:var(--btn-bg);color:#fff;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .16s,transform .08s}
+  .d-go:hover{background:var(--accent)}
+  .d-go:active{transform:scale(.94)}
+  .d-quick{display:flex;flex-wrap:wrap;gap:8px;margin-top:13px}
+  .d-ans-wrap{margin-top:16px}
+  .d-ans{font-size:15.5px;line-height:1.75;color:var(--ink)}
+  .d-srcbtns{display:flex;gap:9px;flex-wrap:wrap;margin-top:15px}
+  .d-srcbtn{display:flex;align-items:center;gap:9px;background:var(--surface);border:1px solid var(--line);border-radius:11px;padding:9px 13px;cursor:pointer;font-family:inherit;text-align:left;transition:border-color .15s,box-shadow .15s,transform .1s var(--spring)}
+  .d-srcbtn:hover{border-color:var(--accent);box-shadow:0 7px 16px -9px color-mix(in srgb,var(--accent) 45%,transparent);transform:translateY(-2px)}
+  .d-srcbtn:active{transform:translateY(0) scale(.98)}
+  .d-srcbtn.on{border-color:var(--accent);background:var(--accent-weak)}
+  .d-srcbtn .n{width:22px;height:22px;border-radius:6px;background:var(--accent-weak);color:var(--accent);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+  .d-srcbtn.on .n{background:var(--accent);color:#fff}
+  .d-srcbtn .t{font-size:13px;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums}
+  .d-srcbtn .h{font-size:11.5px;color:var(--ink-3)}
+
+  /* ===== E — GUIDAD ===== */
+  .e-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+  .e-act{display:flex;align-items:center;gap:11px;background:var(--surface);border:1px solid var(--line);border-radius:13px;padding:13px 14px;cursor:pointer;font-family:inherit;text-align:left;transition:border-color .15s,box-shadow .15s,transform .1s var(--spring),background .15s}
+  .e-act:hover{border-color:var(--accent);box-shadow:0 8px 18px -10px color-mix(in srgb,var(--accent) 45%,transparent);transform:translateY(-2px)}
+  .e-act:active{transform:translateY(0) scale(.98)}
+  .e-act.on{border-color:var(--accent);background:var(--accent-weak)}
+  .e-ico{width:34px;height:34px;border-radius:9px;background:var(--accent-weak);color:var(--accent);display:flex;align-items:center;justify-content:center;flex:0 0 auto;transition:background .15s,color .15s}
+  .e-act.on .e-ico,.e-act:hover .e-ico{background:var(--accent);color:#fff}
+  .e-act>span:last-child{display:flex;flex-direction:column;min-width:0}
+  .e-act .et{font-size:14px;font-weight:600;color:var(--ink)}
+  .e-act .es{font-size:12px;color:var(--ink-3);margin-top:1px}
+  .e-answer{border:1px solid var(--line);border-radius:14px;padding:16px 18px;background:var(--sunken);animation:fade .25s ease both}
+  .e-answer .eh{display:flex;align-items:center;gap:9px;margin-bottom:11px}
+  .e-answer .eh .d{width:7px;height:7px;border-radius:50%;background:var(--ok)}
+  .e-answer .eh b{font-size:13.5px;font-weight:600;color:var(--ink)}
+  .e-srclist{margin-top:13px;display:flex;flex-direction:column;gap:7px}
+  .e-srcitem{display:flex;gap:11px;align-items:flex-start;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:9px 12px;transition:border-color .15s,box-shadow .15s}
+  .e-srcitem:hover{border-color:color-mix(in srgb,var(--accent) 40%,transparent);box-shadow:var(--shadow-sm)}
+  .e-srcitem .ts{flex:0 0 auto;width:44px;font-size:12px;font-weight:600;color:var(--accent)}
+  .e-srcitem .s{font-size:13px;line-height:1.5;color:var(--ink-2)}
+
+  @keyframes fade{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+  @media (prefers-reduced-motion:reduce){*{transition-duration:.01ms !important;animation:none !important}}
+</style>
+</head>
+<body>
+
+<!-- INTRO -->
+<section style="width:680px;max-width:100%">
+  <div class="lbl">
+    <div class="lbl-top"><span class="lbl-name" style="font-size:20px">”Fråga om lektionen” — 5 förslag</span></div>
+    <div class="lbl-sub">Fem riktningar för LLM-sektionen där läraren ställer frågor om transkriptet. Varje förslag löser samma kärna — fråga + svar + tydlig källa i transkriptet — men på olika sätt. Allt är klickbart: testa citaten/källorna, hover och tryck. Säg vilken du gillar så bygger jag in den.</div>
+  </div>
+</section>
+
+<!-- A — KONVERSATION -->
+<section id="a">
+  <div class="lbl">
+    <div class="lbl-top"><span class="lbl-num">A</span><span class="lbl-name">Konversation</span></div>
+    <div class="lbl-sub">Modern chatt. Rena bubblor, citat som klickbara pillar, och förslagschips ovanför fältet. Klicka ett citat → källkort fälls ut med kryss.</div>
+  </div>
+  <div class="card opt" data-design="a">
+    <div class="sec-head"><span class="sec-tag">LLM</span><h2 class="sec-h">Fråga om lektionen</h2></div>
+    <p class="sec-p">Svaren bygger på det korrekturlästa transkriptet. Klicka på en tidsstämpel för att se källan.</p>
+    <div class="a-thread">
+      <div class="a-user">Vad är skillnaden på täljare och nämnare?</div>
+      <div class="a-ai">
+        <div class="ans">Täljaren är talet som står överst i ett bråk <button class="cite" data-d="a" data-i="0"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="8" cy="8" r="6"></circle><path d="M8 4.6V8l2.3 1.5" stroke-linecap="round"></path></svg>02:14</button>, medan nämnaren står underst och visar i hur många lika delar helheten delas <button class="cite" data-d="a" data-i="1"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="8" cy="8" r="6"></circle><path d="M8 4.6V8l2.3 1.5" stroke-linecap="round"></path></svg>02:31</button>. I tre fjärdedelar är alltså tre täljaren och fyra nämnaren <button class="cite" data-d="a" data-i="2"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="8" cy="8" r="6"></circle><path d="M8 4.6V8l2.3 1.5" stroke-linecap="round"></path></svg>03:02</button>.</div>
+        <div data-srcslot></div>
+      </div>
+    </div>
+    <div class="a-sugg">
+      <div class="lab">Föreslagna frågor</div>
+      <div class="chips">
+        <button class="chip" data-fill="a">Hur förkortar man ett bråk?</button>
+        <button class="chip" data-fill="a">Vad betyder procent?</button>
+        <button class="chip" data-fill="a">Ge ett exempel</button>
+      </div>
+    </div>
+    <div class="inrow">
+      <input class="infield" data-in="a" placeholder="Skriv en fråga …">
+      <button class="send">Skicka</button>
+    </div>
+    <div class="model">Lokalt med <b>Qwen3 14B (Q8_0)</b></div>
+  </div>
+</section>
+
+<!-- B — FRÅGEKORT -->
+<section id="b">
+  <div class="lbl">
+    <div class="lbl-top"><span class="lbl-num">B</span><span class="lbl-name">Frågekort</span></div>
+    <div class="lbl-sub">Varje fråga blir ett eget kort — fråga överst, svar, och en källrad som fälls ut. Skannbart och bra för att gå igenom flera frågor. Klicka ”Källor (3)”.</div>
+  </div>
+  <div class="card opt" data-design="b">
+    <div class="sec-head"><span class="sec-tag">LLM</span><h2 class="sec-h">Fråga om lektionen</h2></div>
+    <p class="sec-p">Svaren bygger på det korrekturlästa transkriptet — varje kort visar sina källor.</p>
+    <div class="b-qa">
+      <div class="b-q"><span class="b-qmark">F</span><span class="b-qtext">Vad är skillnaden på täljare och nämnare?</span></div>
+      <div class="b-a"><div class="ans">Täljaren är talet överst i ett bråk, medan nämnaren står underst och visar i hur många lika delar helheten delas. I tre fjärdedelar är tre täljaren och fyra nämnaren.</div></div>
+      <div class="b-foot">
+        <span class="b-srclabel">Källor</span>
+        <button class="chip" data-bsrc="0" style="padding:5px 11px;font-size:12.5px"><span class="ts">02:14</span></button>
+        <button class="chip" data-bsrc="1" style="padding:5px 11px;font-size:12.5px"><span class="ts">02:31</span></button>
+        <button class="chip" data-bsrc="2" style="padding:5px 11px;font-size:12.5px"><span class="ts">03:02</span></button>
+      </div>
+      <div class="b-drawer" data-bdrawer>
+        <div class="b-srcrow" data-brow="0"><span class="ts">02:14</span><span class="s">Täljaren är talet som står överst i ett bråk.</span></div>
+        <div class="b-srcrow" data-brow="1"><span class="ts">02:31</span><span class="s">Nämnaren står underst och visar i hur många lika delar helheten delas.</span></div>
+        <div class="b-srcrow" data-brow="2"><span class="ts">03:02</span><span class="s">I tre fjärdedelar är alltså tre täljaren och fyra nämnaren.</span></div>
+      </div>
+    </div>
+    <div class="inrow">
+      <input class="infield" placeholder="Ställ en ny fråga …">
+      <button class="send">Fråga</button>
+    </div>
+    <div class="model">Lokalt med <b>Qwen3 14B (Q8_0)</b></div>
+  </div>
+</section>
+
+<!-- C — KÄLLFÖRANKRAD -->
+<section id="c">
+  <div class="lbl">
+    <div class="lbl-top"><span class="lbl-num">C</span><span class="lbl-name">Källförankrad</span></div>
+    <div class="lbl-sub">Svaret till vänster, en stående käll-panel till höger. Hovra/klicka en upphöjd siffra → matchande källa lyser upp. Maximal spårbarhet, inget öppna/stänga.</div>
+  </div>
+  <div class="card opt" data-design="c">
+    <div class="sec-head"><span class="sec-tag">LLM</span><h2 class="sec-h">Fråga om lektionen</h2></div>
+    <p class="sec-p">Varje påstående är förankrat i transkriptet — källorna ligger alltid synliga bredvid.</p>
+    <div class="c-grid">
+      <div>
+        <div style="font-size:12.5px;font-weight:600;color:var(--ink-3);margin-bottom:9px">Vad är skillnaden på täljare och nämnare?</div>
+        <div class="c-ans">Täljaren är talet som står överst i ett bråk<button class="c-sup" data-csup="0">1</button>, medan nämnaren står underst och visar i hur många lika delar helheten delas<button class="c-sup" data-csup="1">2</button>. I tre fjärdedelar är alltså tre täljaren och fyra nämnaren<button class="c-sup" data-csup="2">3</button>.</div>
+      </div>
+      <div class="c-rail">
+        <div class="lab"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 3h10v10H3z" stroke-linejoin="round"></path><path d="M6 6.5h4M6 9.5h4" stroke-linecap="round"></path></svg>Källor i transkriptet</div>
+        <div class="c-row" data-crow="0"><span class="rt"><span class="rn">1</span><span class="ts">02:14</span></span><span class="rs">Täljaren är talet som står överst i ett bråk.</span></div>
+        <div class="c-row" data-crow="1"><span class="rt"><span class="rn">2</span><span class="ts">02:31</span></span><span class="rs">Nämnaren står underst och visar i hur många lika delar helheten delas.</span></div>
+        <div class="c-row" data-crow="2"><span class="rt"><span class="rn">3</span><span class="ts">03:02</span></span><span class="rs">I tre fjärdedelar är tre täljaren och fyra nämnaren.</span></div>
+      </div>
+    </div>
+    <div class="inrow">
+      <input class="infield" placeholder="Skriv en fråga …">
+      <button class="send">Skicka</button>
+    </div>
+  </div>
+</section>
+
+<!-- D — FRÅGA VAD SOM HELST -->
+<section id="d">
+  <div class="lbl">
+    <div class="lbl-top"><span class="lbl-num">D</span><span class="lbl-name">Fråga vad som helst</span></div>
+    <div class="lbl-sub">Ett stort, inbjudande fält som hjälte med snabbåtgärder (Sammanfatta, Nyckelbegrepp …). Ett fokuserat svar i taget med stora, tydliga källknappar. Snabbt och rent.</div>
+  </div>
+  <div class="card opt" data-design="d">
+    <div class="d-hero">
+      <div class="d-bar">
+        <span class="ico"><svg width="19" height="19" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M10 2.5l1.8 4.2 4.2 1.8-4.2 1.8L10 14.5 8.2 10.3 4 8.5l4.2-1.8z" stroke-linejoin="round"></path></svg></span>
+        <input data-in="d" placeholder="Fråga vad som helst om lektionen …">
+        <button class="d-go"><svg width="17" height="17" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9h11M9.5 4.5 14 9l-4.5 4.5"></path></svg></button>
+      </div>
+      <div class="d-quick">
+        <button class="chip" data-fill="d"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 4h10M3 8h10M3 12h6" stroke-linecap="round"></path></svg>Sammanfatta</button>
+        <button class="chip" data-fill="d"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M8 2l1.6 3.8L13.5 7l-3.9 1.2L8 12 6.4 8.2 2.5 7l3.9-1.2z" stroke-linejoin="round"></path></svg>Nyckelbegrepp</button>
+        <button class="chip" data-fill="d"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="8" cy="8" r="6"></circle><path d="M8 11v-3M8 5.4h.01" stroke-linecap="round"></path></svg>Förklara enkelt</button>
+      </div>
+    </div>
+    <div class="d-ans-wrap">
+      <div class="d-ans">Täljaren är talet som står överst i ett bråk och nämnaren står underst — nämnaren visar i hur många lika delar helheten delas. I tre fjärdedelar är tre täljaren och fyra nämnaren.</div>
+      <div class="d-srcbtns">
+        <button class="d-srcbtn" data-dsrc="0"><span class="n">1</span><span style="display:flex;flex-direction:column"><span class="t">02:14</span><span class="h">Täljaren</span></span></button>
+        <button class="d-srcbtn" data-dsrc="1"><span class="n">2</span><span style="display:flex;flex-direction:column"><span class="t">02:31</span><span class="h">Nämnaren</span></span></button>
+        <button class="d-srcbtn" data-dsrc="2"><span class="n">3</span><span style="display:flex;flex-direction:column"><span class="t">03:02</span><span class="h">Exempel</span></span></button>
+      </div>
+      <div data-srcslot></div>
+    </div>
+    <div class="model" style="margin-top:14px">Lokalt med <b>Qwen3 14B (Q8_0)</b></div>
+  </div>
+</section>
+
+<!-- E — GUIDAD -->
+<section id="e">
+  <div class="lbl">
+    <div class="lbl-top"><span class="lbl-num">E</span><span class="lbl-name">Guidad</span></div>
+    <div class="lbl-sub">Leder med snabbåtgärder och färdiga frågor — läraren slipper fundera på vad som går att fråga. Svaret visar sina källor direkt under, alltid synliga.</div>
+  </div>
+  <div class="card opt" data-design="e">
+    <div class="sec-head"><span class="sec-tag">LLM</span><h2 class="sec-h">Fråga om lektionen</h2></div>
+    <p class="sec-p">Börja med ett förslag — eller skriv en egen fråga.</p>
+    <div class="e-actions">
+      <button class="e-act on" data-eact="0"><span class="e-ico"><svg width="17" height="17" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 4h12M3 9h12M3 14h7" stroke-linecap="round"></path></svg></span><span><span class="et">Sammanfatta lektionen</span><span class="es">5 punkter</span></span></button>
+      <button class="e-act" data-eact="1"><span class="e-ico"><svg width="17" height="17" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M9 2l2 4.5 4.5 1.5-4.5 1.5L9 14l-2-4.5L2.5 8 7 6.5z" stroke-linejoin="round"></path></svg></span><span><span class="et">Förklara täljare &amp; nämnare</span><span class="es">Med exempel</span></span></button>
+      <button class="e-act" data-eact="2"><span class="e-ico"><svg width="17" height="17" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M6 7a3 3 0 1 1 3 3v2" stroke-linecap="round"></path><path d="M9 15h.01" stroke-linecap="round"></path></svg></span><span><span class="et">Skapa övningsfrågor</span><span class="es">3 frågor</span></span></button>
+      <button class="e-act" data-eact="3"><span class="e-ico"><svg width="17" height="17" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 14V7M9 14V4M14 14v-5" stroke-linecap="round"></path></svg></span><span><span class="et">Svårighetsnivå</span><span class="es">Bedöm innehållet</span></span></button>
+    </div>
+    <div class="e-answer" data-eanswer>
+      <div class="eh"><span class="d"></span><b data-etitle>Sammanfattning</b></div>
+      <div class="ans" data-ebody>Lektionen introducerar bråk och procent. Ett bråk har en täljare överst och en nämnare underst. Bråk förkortas genom att dividera täljare och nämnare med samma tal. Procent betyder hundradelar — 50 % motsvarar hälften.</div>
+      <div class="e-srclist" data-eslist>
+        <div class="e-srcitem"><span class="ts">02:14</span><span class="s">Täljaren är talet som står överst i ett bråk.</span></div>
+        <div class="e-srcitem"><span class="ts">02:31</span><span class="s">Nämnaren står underst och visar i hur många lika delar helheten delas.</span></div>
+        <div class="e-srcitem"><span class="ts">03:02</span><span class="s">I tre fjärdedelar är alltså tre täljaren och fyra nämnaren.</span></div>
+      </div>
+    </div>
+    <div class="inrow">
+      <input class="infield" placeholder="… eller skriv en egen fråga">
+      <button class="send">Skicka</button>
+    </div>
+  </div>
+</section>
+
+<script>
+(function(){
+  var SRC = [
+    { t:'02:14', s:'Täljaren är talet som står överst i ett bråk.' },
+    { t:'02:31', s:'Nämnaren står underst och visar i hur många lika delar helheten delas.' },
+    { t:'03:02', s:'I tre fjärdedelar är alltså tre täljaren och fyra nämnaren.' }
+  ];
+  var ICON = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="8" cy="8" r="6"></circle><path d="M8 4.6V8l2.3 1.5" stroke-linecap="round"></path></svg>';
+
+  function srcCard(i, onClose){
+    var w = document.createElement('div');
+    w.className = 'srccard';
+    w.innerHTML = '<div class="srccard-head"><span class="srcicon"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="8" cy="8" r="6"></circle><path d="M8 4.6V8l2.3 1.5" stroke-linecap="round"></path></svg></span><span class="srclabel"><b>Källa i transkriptet</b><span>'+SRC[i].t+'</span></span><button class="xbtn" aria-label="Stäng"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"></path></svg></button></div><div class="srcbody">'+SRC[i].s+'</div>';
+    w.querySelector('.xbtn').addEventListener('click', onClose);
+    return w;
+  }
+
+  // ---- A: citation -> inline source card (toggle) ----
+  // ---- D: source button -> inline source card (toggle) ----
+  document.querySelectorAll('.opt[data-design="a"], .opt[data-design="d"]').forEach(function(opt){
+    var slot = opt.querySelector('[data-srcslot]');
+    var cites = opt.querySelectorAll('.cite, .d-srcbtn');
+    var openIdx = null;
+    function clear(){ cites.forEach(function(c){ c.classList.remove('on'); }); slot.innerHTML=''; openIdx=null; }
+    cites.forEach(function(c){
+      c.addEventListener('click', function(){
+        var i = +(c.dataset.i!=null?c.dataset.i:c.dataset.dsrc);
+        if(openIdx===i){ clear(); return; }
+        cites.forEach(function(x){ x.classList.remove('on'); });
+        c.classList.add('on');
+        slot.innerHTML='';
+        slot.appendChild(srcCard(i, clear));
+        openIdx=i;
+      });
+    });
+  });
+
+  // ---- B: source chips -> drawer with highlight ----
+  document.querySelectorAll('.opt[data-design="b"]').forEach(function(opt){
+    var drawer = opt.querySelector('[data-bdrawer]');
+    var rows = opt.querySelectorAll('[data-brow]');
+    opt.querySelectorAll('[data-bsrc]').forEach(function(chip){
+      chip.addEventListener('click', function(){
+        var i = +chip.dataset.bsrc;
+        drawer.classList.add('open');
+        rows.forEach(function(r){ r.classList.toggle('hit', +r.dataset.brow===i); });
+        opt.querySelectorAll('[data-bsrc]').forEach(function(x){ x.classList.toggle('on', x===chip); });
+      });
+    });
+  });
+
+  // ---- C: superscript <-> rail highlight ----
+  document.querySelectorAll('.opt[data-design="c"]').forEach(function(opt){
+    var sups = opt.querySelectorAll('[data-csup]');
+    var rows = opt.querySelectorAll('[data-crow]');
+    function activate(i){
+      sups.forEach(function(s){ s.classList.toggle('on', +s.dataset.csup===i); });
+      rows.forEach(function(r){ r.classList.toggle('on', +r.dataset.crow===i); });
+    }
+    sups.forEach(function(s){
+      s.addEventListener('click', function(){ activate(+s.dataset.csup); });
+      s.addEventListener('mouseenter', function(){ activate(+s.dataset.csup); });
+    });
+    rows.forEach(function(r){
+      r.addEventListener('click', function(){ activate(+r.dataset.crow); });
+      r.addEventListener('mouseenter', function(){ activate(+r.dataset.crow); });
+    });
+  });
+
+  // ---- E: action cards swap answer ----
+  var EDATA = [
+    { title:'Sammanfattning', body:'Lektionen introducerar bråk och procent. Ett bråk har en täljare överst och en nämnare underst. Bråk förkortas genom att dividera täljare och nämnare med samma tal. Procent betyder hundradelar — 50 % motsvarar hälften.', src:[0,1,2] },
+    { title:'Täljare & nämnare', body:'Täljaren är talet överst i ett bråk och nämnaren är talet underst. Nämnaren visar i hur många lika delar helheten delas, täljaren hur många delar vi tar. I tre fjärdedelar är tre täljaren och fyra nämnaren.', src:[0,1,2] },
+    { title:'Övningsfrågor', body:'1. Vilket tal är täljaren i 2/5? 2. Förkorta 6/8 så långt som möjligt. 3. Hur många procent är 3/4?', src:[1,2] },
+    { title:'Svårighetsnivå', body:'Innehållet ligger på årskurs 9-nivå: grundläggande bråkbegrepp och kopplingen till procent. Lämpligt för repetition eller introduktion.', src:[0] }
+  ];
+  document.querySelectorAll('.opt[data-design="e"]').forEach(function(opt){
+    var acts = opt.querySelectorAll('[data-eact]');
+    var titleEl = opt.querySelector('[data-etitle]');
+    var bodyEl = opt.querySelector('[data-ebody]');
+    var listEl = opt.querySelector('[data-eslist]');
+    var ansEl = opt.querySelector('[data-eanswer]');
+    acts.forEach(function(a){
+      a.addEventListener('click', function(){
+        acts.forEach(function(x){ x.classList.toggle('on', x===a); });
+        var d = EDATA[+a.dataset.eact];
+        titleEl.textContent = d.title;
+        bodyEl.textContent = d.body;
+        listEl.innerHTML = d.src.map(function(i){ return '<div class="e-srcitem"><span class="ts">'+SRC[i].t+'</span><span class="s">'+SRC[i].s+'</span></div>'; }).join('');
+        ansEl.style.animation='none'; void ansEl.offsetWidth; ansEl.style.animation='';
+      });
+    });
+  });
+
+  // ---- suggestion chips fill the input ----
+  document.querySelectorAll('[data-fill]').forEach(function(ch){
+    ch.addEventListener('click', function(){
+      var opt = ch.closest('.opt');
+      var inp = opt.querySelector('input');
+      if(inp){ inp.value = ch.textContent.trim(); inp.focus(); }
+    });
+  });
+})();
+</script>
+</body>
+</html>

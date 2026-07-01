@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Inspelningar – 3 designriktningar</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;450;500;600;700&display=swap');
+  :root{
+    --canvas:#F7F7F4; --surface:#FFFFFF; --sunken:#F0F0EB;
+    --ink:#0B0B0D; --ink-2:#42424A; --ink-3:#74747C;
+    --line:#E7E7E1; --line-2:#DBDBD4;
+    --accent:#3B5BDB; --accent-weak:#EDF0FC;
+    --ok:#2E9E6A; --ok-weak:#E6F4ED; --warn:#BD831C; --bad:#CF5A52;
+    --btn-bg:#17171B; --btn-fg:#FFFFFF; --track:#EFEFEA;
+    --shadow-sm:0 1px 2px rgba(20,20,30,.06);
+    --shadow:0 2px 4px rgba(20,20,30,.04),0 14px 34px -20px rgba(20,20,30,.22);
+    --shadow-lg:0 8px 18px -8px rgba(20,20,30,.18),0 30px 60px -28px rgba(20,20,30,.4);
+    --mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:'Geist',system-ui,sans-serif;color:var(--ink);-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;background:#E8E8E2;padding:44px 24px 96px}
+  body>div{position:static !important;left:auto !important;top:auto !important;margin:0 auto 56px !important}
+  [data-hide]::-webkit-scrollbar{width:0;height:0;display:none}
+  [data-hide]{scrollbar-width:none}
+
+  .lbl{display:flex;flex-direction:column;gap:5px;margin-bottom:14px;cursor:grab;max-width:600px}
+  .lbl-top{display:flex;align-items:center;gap:10px}
+  .lbl-num{font-size:12px;font-weight:600;color:#fff;background:var(--ink);width:23px;height:23px;border-radius:7px;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+  .lbl-name{font-size:17px;font-weight:600;letter-spacing:-0.01em}
+  .lbl-sub{font-size:13.5px;line-height:1.5;color:var(--ink-2)}
+  .badge-row{display:flex;gap:6px;margin-top:3px;flex-wrap:wrap}
+  .tagm{font-size:11px;font-weight:500;color:var(--ink-2);background:var(--sunken);border:1px solid var(--line);border-radius:6px;padding:2px 7px}
+
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);display:flex;flex-direction:column;overflow:hidden}
+  .ph{padding:18px 20px 0;flex:0 0 auto}
+  .h1{font-size:23px;font-weight:600;letter-spacing:-0.025em;margin:0}
+  .sub{font-size:13px;color:var(--ink-2);margin:3px 0 0}
+
+  /* search + segmented */
+  .searchwrap{display:flex;gap:9px;align-items:center;margin:15px 0 12px}
+  .search{flex:1;min-width:0;display:flex;align-items:center;gap:9px;background:var(--sunken);border:1px solid var(--line);border-radius:12px;padding:11px 13px}
+  .search.ai{border-color:var(--accent);background:var(--surface);box-shadow:0 0 0 3px var(--accent-weak)}
+  .search input,.search .ph-txt{flex:1;border:none;background:transparent;outline:none;font-size:14px;font-family:inherit;color:var(--ink);min-width:0}
+  .ph-txt{color:var(--ink-3)}
+  .seg{display:inline-flex;gap:2px;padding:3px;background:var(--track);border-radius:10px;border:1px solid var(--line);flex:0 0 auto}
+  .seg button{border:none;background:transparent;border-radius:8px;padding:7px 12px;font-size:12.5px;font-weight:600;color:var(--ink-2);font-family:inherit;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+  .seg button.on{background:var(--surface);color:var(--ink);box-shadow:var(--shadow-sm)}
+  .seg button.on.aiseg{color:var(--accent)}
+
+  .filts{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+  .filt{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:500;color:var(--ink-2);background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:7px 11px;cursor:pointer}
+  .filt b{color:var(--ink);font-weight:600}
+  .filt .car{width:6px;height:6px;border-right:1.5px solid var(--ink-3);border-bottom:1.5px solid var(--ink-3);transform:rotate(45deg);margin:-3px 0 0 1px}
+  .filt.active{border-color:var(--ink);background:var(--sunken)}
+
+  /* recording row */
+  .scroll{flex:1;overflow:auto;padding:6px 20px 18px;min-height:0}
+  .rec{display:flex;align-items:center;gap:14px;padding:13px 14px;border:1px solid var(--line);border-radius:14px;background:var(--surface);margin-bottom:9px;cursor:pointer;transition:border-color .14s,box-shadow .14s,transform .14s}
+  .rec:hover{border-color:var(--line-2);box-shadow:var(--shadow);transform:translateY(-1px)}
+  .wf{width:62px;height:40px;border-radius:9px;background:var(--sunken);border:1px solid var(--line);display:flex;align-items:flex-end;justify-content:center;gap:2px;flex:0 0 auto;padding-bottom:10px}
+  .wf span{width:2.5px;border-radius:2px;background:var(--ink-3)}
+  .wf span.a{background:var(--accent)}
+  .rec-main{flex:1;min-width:0}
+  .rec-title{display:flex;align-items:center;gap:8px;min-width:0}
+  .rec-title .t{font-size:15.5px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ai-badge{flex:0 0 auto;display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:600;color:var(--accent);background:var(--accent-weak);border-radius:6px;padding:2px 6px}
+  .renamed{flex:0 0 auto;font-size:10.5px;font-weight:500;color:var(--ink-3);background:var(--sunken);border:1px solid var(--line);border-radius:6px;padding:2px 6px}
+  .meta{display:flex;align-items:center;gap:7px;margin-top:6px;flex-wrap:wrap}
+  .mchip{font-size:12px;color:var(--ink-2);font-variant-numeric:tabular-nums}
+  .mdot{width:3px;height:3px;border-radius:50%;background:var(--line-2)}
+  .pill{font-size:11.5px;font-weight:600;color:var(--ink-2);background:var(--sunken);border:1px solid var(--line);border-radius:99px;padding:2px 9px}
+  .pill.klass{color:var(--accent);background:var(--accent-weak);border-color:transparent}
+  .rec-act{flex:0 0 auto;display:flex;gap:6px;opacity:.85}
+  .iconbtn{width:32px;height:32px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink-3);display:flex;align-items:center;justify-content:center;cursor:pointer}
+  .iconbtn:hover{color:var(--ink);border-color:var(--ink-3)}
+
+  /* citations */
+  .cite{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;color:var(--accent);background:var(--accent-weak);border:1px solid color-mix(in srgb,var(--accent) 22%,transparent);border-radius:7px;padding:2px 7px;cursor:pointer;vertical-align:1px;white-space:nowrap}
+  .cite:hover{background:color-mix(in srgb,var(--accent) 15%,transparent)}
+  .cite .rn{max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .cite .ts{font-variant-numeric:tabular-nums;opacity:.85}
+  .trust{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;color:var(--ok);background:var(--ok-weak);border-radius:99px;padding:4px 10px}
+
+  /* generic ask-AI answer block */
+  .qbar{display:flex;align-items:center;gap:9px;background:var(--ink);color:#fff;border-radius:13px;padding:11px 15px;font-size:14.5px}
+  .ans{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:15px 17px;font-size:14.5px;line-height:1.65;box-shadow:var(--shadow-sm)}
+  .src{margin-top:13px;padding-top:13px;border-top:1px dashed var(--line-2)}
+  .src-h{font-size:11px;font-weight:600;letter-spacing:.05em;color:var(--ink-3);margin-bottom:9px}
+  .srcrow{display:flex;align-items:center;gap:11px;padding:9px 11px;border:1px solid var(--line);border-radius:11px;margin-bottom:7px;cursor:pointer;background:var(--surface);transition:border-color .12s}
+  .srcrow:hover{border-color:var(--accent)}
+  .srcrow.open{border-color:var(--accent);background:var(--accent-weak)}
+  .srcrow .tt{flex:1;min-width:0;font-size:13.5px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .excerpt{background:var(--sunken);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:0 11px 11px 0;padding:13px 15px;margin:2px 0 9px}
+  .ex-line{display:flex;gap:13px;padding:3px 0;font-size:13.5px;line-height:1.5}
+  .ex-line .ts2{font-variant-numeric:tabular-nums;font-size:12.5px;color:var(--ink-3);flex:0 0 auto;width:42px}
+  .ex-line.hit{background:color-mix(in srgb,var(--accent) 10%,transparent);border-radius:6px;margin:0 -6px;padding:3px 6px}
+  .back{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;color:var(--accent);cursor:pointer}
+
+  /* B — stage */
+  .stage{flex:1;position:relative;overflow:hidden;padding:18px 20px;min-height:0}
+  .scard{position:absolute;width:178px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:12px 13px;box-shadow:var(--shadow-sm);transition:all .5s cubic-bezier(.2,.8,.25,1)}
+  .scard .st{font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .scard .sm{font-size:11.5px;color:var(--ink-2);margin-top:3px}
+  .scard.dim{opacity:.32;filter:saturate(.6)}
+  .scard.fly{opacity:.16}
+  .scard.lift{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-weak),var(--shadow-lg);z-index:5;animation:floaty 3s ease-in-out infinite}
+  .scard .relevant{margin-top:8px;display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:600;color:var(--ok);background:var(--ok-weak);border-radius:6px;padding:2px 7px}
+  @keyframes floaty{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+  .think{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:230px;background:var(--ink);color:#fff;border-radius:16px;padding:15px 16px;box-shadow:var(--shadow-lg);z-index:8}
+  .think-h{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;margin-bottom:11px}
+  .dots{display:inline-flex;gap:3px}
+  .dots i{width:5px;height:5px;border-radius:50%;background:#fff;opacity:.5;animation:blink 1.2s infinite}
+  .dots i:nth-child(2){animation-delay:.2s}.dots i:nth-child(3){animation-delay:.4s}
+  @keyframes blink{0%,100%{opacity:.3}50%{opacity:1}}
+  .step{display:flex;align-items:center;gap:8px;font-size:12px;color:rgba(255,255,255,.78);padding:4px 0}
+  .step.done{color:#fff}
+  .step .sd{width:14px;height:14px;border-radius:50%;border:1.5px solid rgba(255,255,255,.4);flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-size:9px}
+  .step.done .sd{background:var(--ok);border-color:var(--ok)}
+  .conn{position:absolute;height:2px;background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--accent) 55%,transparent));transform-origin:left center;z-index:1;opacity:.7}
+
+  /* C — split */
+  .split{flex:1;display:flex;min-height:0}
+  .libcol{flex:0 0 270px;border-right:1px solid var(--line);background:var(--canvas);display:flex;flex-direction:column;min-height:0}
+  .libcol .lhead{padding:13px 14px 9px;flex:0 0 auto}
+  .liblist{flex:1;overflow:auto;padding:0 12px 12px}
+  .lrec{display:flex;gap:10px;align-items:center;padding:10px 11px;border-radius:11px;margin-bottom:6px;cursor:pointer;transition:all .35s cubic-bezier(.2,.8,.25,1);border:1px solid transparent}
+  .lrec:hover{background:var(--sunken)}
+  .lrec.lift{background:var(--surface);border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-weak),var(--shadow-sm)}
+  .lrec.dim{opacity:.4}
+  .lrec .lt{flex:1;min-width:0;font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .lrec .lrank{flex:0 0 auto;font-size:10.5px;font-weight:700;color:var(--accent);background:var(--accent-weak);border-radius:5px;padding:1px 6px}
+  .chatcol{flex:1;display:flex;flex-direction:column;min-width:0}
+  .chatscroll{flex:1;overflow:auto;padding:16px 18px;display:flex;flex-direction:column;gap:13px;min-height:0}
+  .b-u{align-self:flex-end;max-width:84%;background:var(--btn-bg);color:#fff;border-radius:14px 14px 5px 14px;padding:10px 14px;font-size:14px;line-height:1.5}
+  .composer{flex:0 0 auto;border-top:1px solid var(--line);padding:12px 14px;display:flex;gap:9px;align-items:center}
+  .field{flex:1;min-width:0;background:var(--sunken);border:1px solid var(--line);border-radius:11px;padding:11px 13px;font-size:14px;color:var(--ink-3)}
+  .send{width:40px;height:40px;border-radius:11px;border:none;background:var(--btn-bg);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;flex:0 0 auto}
+  .eyebrow{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
+</style>
+</head>
+<body>
+
+<!-- ================= INTRO ================= -->
+<div style="position:absolute;left:80px;top:96px;width:316px">
+  <div class="lbl" data-drags-parent="1">
+    <div class="lbl-top"><span class="lbl-name" style="font-size:19px">Inspelningar — 3 riktningar</span></div>
+    <div class="lbl-sub">Historik + Lektioner sammanslagna till en flik. Välj en riktning så bygger jag den i appen.</div>
+  </div>
+  <div class="card" data-screen-label="Översikt" style="padding:20px 22px">
+    <p style="margin:0 0 15px;font-size:13.5px;line-height:1.6;color:var(--ink-2)">Alla tre har samma <strong style="color:var(--ink)">byggstenar</strong> — bara olika sätt att visa dem.</p>
+    <div style="display:flex;flex-direction:column;gap:9px;margin-bottom:18px">
+      <div style="display:flex;gap:9px;align-items:center;font-size:13px;color:var(--ink-2)"><span style="width:18px;height:18px;border-radius:5px;background:var(--accent-weak);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:11px;flex:0 0 auto">✦</span>Tyst AI-namngivning + liten markering</div>
+      <div style="display:flex;gap:9px;align-items:center;font-size:13px;color:var(--ink-2)"><span style="width:18px;height:18px;border-radius:5px;background:var(--sunken);display:flex;align-items:center;justify-content:center;font-size:11px;flex:0 0 auto">⌕</span>Sök + filter: klass, ämne, datum</div>
+      <div style="display:flex;gap:9px;align-items:center;font-size:13px;color:var(--ink-2)"><span style="width:18px;height:18px;border-radius:5px;background:var(--sunken);display:flex;align-items:center;justify-content:center;font-size:11px;flex:0 0 auto">✻</span>Fråga AI över alla lektioner</div>
+      <div style="display:flex;gap:9px;align-items:center;font-size:13px;color:var(--ink-2)"><span style="width:18px;height:18px;border-radius:5px;background:var(--sunken);display:flex;align-items:center;justify-content:center;font-size:11px;flex:0 0 auto">⟲</span>Koreografi + klickbara referenser</div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:13px;border-top:1px solid var(--line);padding-top:16px">
+      <div style="display:flex;gap:12px"><span class="lbl-num">A</span><div><div style="font-size:14px;font-weight:600">Listfokus</div><div style="font-size:12.5px;color:var(--ink-2);line-height:1.45">Tät lista · svar i referens-modal</div></div></div>
+      <div style="display:flex;gap:12px"><span class="lbl-num">B</span><div><div style="font-size:14px;font-weight:600">Scen</div><div style="font-size:12.5px;color:var(--ink-2);line-height:1.45">Korten flyger & lyfts fram live</div></div></div>
+      <div style="display:flex;gap:12px"><span class="lbl-num">C</span><div><div style="font-size:14px;font-weight:600">Delad vy</div><div style="font-size:12.5px;color:var(--ink-2);line-height:1.45">Bibliotek + samtal sida vid sida</div></div></div>
+    </div>
+    <div style="margin-top:16px;font-size:12px;color:var(--ink-3);line-height:1.5;border-top:1px solid var(--line);padding-top:14px">Övre raden = bläddra-läget. Nedre raden = Fråga AI-läget.</div>
+  </div>
+</div>
+
+<!-- ================= A1 — LISTFOKUS, bibliotek ================= -->
+<div style="position:absolute;left:432px;top:96px;width:680px">
+  <div class="lbl" data-drags-parent="1">
+    <div class="lbl-top"><span class="lbl-num">A</span><span class="lbl-name">Listfokus — bläddra</span></div>
+    <div class="lbl-sub">Tät, skannbar lista. Sök och Fråga AI bor i samma fält. Filter som lugna rullgardiner.</div>
+  </div>
+  <div class="card" data-screen-label="A1 Listfokus bibliotek" style="height:612px">
+    <div class="ph">
+      <div style="display:flex;align-items:baseline;gap:10px"><h1 class="h1">Inspelningar</h1><span class="sub" style="margin:0">24 st · 6 ej tilldelade</span></div>
+      <div class="searchwrap">
+        <div class="search"><svg width="16" height="16" viewBox="0 0 18 18" fill="none" stroke="var(--ink-3)" stroke-width="1.8" stroke-linecap="round"><circle cx="8" cy="8" r="5.5"></circle><path d="m12.5 12.5 3 3"></path></svg><span class="ph-txt">Sök i titlar och transkript …</span></div>
+        <div class="seg"><button class="on">Sök</button><button class="aiseg">✻ Fråga AI</button></div>
+      </div>
+      <div class="filts">
+        <span class="filt active"><b>Klass</b><span style="color:var(--ink-3)">9A</span><span class="car"></span></span>
+        <span class="filt"><b>Ämne</b> Alla<span class="car"></span></span>
+        <span class="filt"><b>Datum</b> Senaste 30 dgr<span class="car"></span></span>
+      </div>
+    </div>
+    <div class="scroll" data-hide>
+      <div class="rec">
+        <span class="wf"><span style="height:9px"></span><span style="height:16px"></span><span class="a" style="height:22px"></span><span style="height:12px"></span><span style="height:18px"></span></span>
+        <div class="rec-main">
+          <div class="rec-title"><span class="t">Bråk och procent</span><span class="ai-badge" title="Namngiven av Qwen">✦ AI-namngiven</span></div>
+          <div class="meta"><span class="pill klass">9B</span><span class="mchip">Matematik</span><span class="mdot"></span><span class="mchip">Idag 10:05</span><span class="mdot"></span><span class="mchip">38:20</span></div>
+        </div>
+        <div class="rec-act"><span class="iconbtn" title="Döp om"><svg width="14" height="14" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4l3 3"></path><path d="M3.5 14.5 4 11.5 11.5 4l3 3L7 14.5z"></path></svg></span></div>
+      </div>
+      <div class="rec">
+        <span class="wf"><span style="height:14px"></span><span class="a" style="height:20px"></span><span style="height:10px"></span><span style="height:17px"></span><span style="height:8px"></span></span>
+        <div class="rec-main">
+          <div class="rec-title"><span class="t">Mellankrigstiden</span><span class="ai-badge">✦ AI-namngiven</span></div>
+          <div class="meta"><span class="pill klass">9A</span><span class="mchip">Historia</span><span class="mdot"></span><span class="mchip">Igår 13:40</span><span class="mdot"></span><span class="mchip">41:55</span></div>
+        </div>
+        <div class="rec-act"><span class="iconbtn"><svg width="14" height="14" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4l3 3"></path><path d="M3.5 14.5 4 11.5 11.5 4l3 3L7 14.5z"></path></svg></span></div>
+      </div>
+      <div class="rec">
+        <span class="wf"><span style="height:11px"></span><span style="height:18px"></span><span class="a" style="height:14px"></span><span style="height:21px"></span><span style="height:10px"></span></span>
+        <div class="rec-main">
+          <div class="rec-title"><span class="t">Ekvationer och uttryck</span><span class="ai-badge">✦ AI-namngiven</span></div>
+          <div class="meta"><span class="pill klass">8A</span><span class="mchip">Matematik</span><span class="mdot"></span><span class="mchip">2 dgr sedan</span><span class="mdot"></span><span class="mchip">33:12</span></div>
+        </div>
+        <div class="rec-act"><span class="iconbtn"><svg width="14" height="14" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4l3 3"></path><path d="M3.5 14.5 4 11.5 11.5 4l3 3L7 14.5z"></path></svg></span></div>
+      </div>
+      <div class="rec">
+        <span class="wf"><span style="height:8px"></span><span style="height:15px"></span><span class="a" style="height:19px"></span><span style="height:11px"></span><span style="height:16px"></span></span>
+        <div class="rec-main">
+          <div class="rec-title"><span class="t">Fotosyntes – repetition</span><span class="renamed" title="Omdöpt av läraren">döpt om</span></div>
+          <div class="meta"><span class="pill klass">7B</span><span class="mchip">Biologi</span><span class="mdot"></span><span class="mchip">3 dgr sedan</span><span class="mdot"></span><span class="mchip">22:15</span></div>
+        </div>
+        <div class="rec-act"><span class="iconbtn"><svg width="14" height="14" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4l3 3"></path><path d="M3.5 14.5 4 11.5 11.5 4l3 3L7 14.5z"></path></svg></span></div>
+      </div>
+      <div class="rec">
+        <span class="wf"><span style="height:13px"></span><span style="height:9px"></span><span style="height:17px"></span><span style="height:12px"></span><span style="height:7px"></span></span>
+        <div class="rec-main">
+          <div class="rec-title"><span class="t">Styrgruppsmöte Q1</span></div>
+          <div class="meta"><span class="pill">Ej tilldelad</span><span class="mchip">Möte</span><span class="mdot"></span><span class="mchip">Förra veckan</span><span class="mdot"></span><span class="mchip">18:42</span></div>
+        </div>
+        <div class="rec-act"><span class="iconbtn"><svg width="14" height="14" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4l3 3"></path><path d="M3.5 14.5 4 11.5 11.5 4l3 3L7 14.5z"></path></svg></span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= A2 — LISTFOKUS, referens-modal ================= -->
+<div style="position:absolute;left:432px;top:856px;width:680px">
+  <div class="lbl" data-drags-parent="1">
+    <div class="lbl-top"><span class="lbl-num">A</span><span class="lbl-name">Listfokus — svar & referenser</span></div>
+    <div class="lbl-sub">Svaret kommer i en ren modal. Varje källa öppnas på plats i transkriptet — tillbaka med ett klick.</div>
+  </div>
+  <div class="card" data-screen-label="A2 Listfokus referensmodal" style="height:636px;background:var(--canvas)">
+    <div style="flex:1;display:flex;align-items:center;justify-content:center;padding:22px;min-height:0">
+      <div class="card" style="width:100%;height:100%;box-shadow:var(--shadow-lg)">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:18px 20px 14px;border-bottom:1px solid var(--line)">
+          <div>
+            <div style="display:flex;align-items:center;gap:9px;margin-bottom:7px"><span style="font-size:11px;font-weight:600;letter-spacing:.05em;color:var(--accent);background:var(--accent-weak);padding:3px 8px;border-radius:6px">AI-SVAR</span><span class="trust">3 lektioner · bara från transkript</span></div>
+            <div style="font-size:15px;font-weight:600;color:var(--ink)">”Var går jag igenom täljare och nämnare?”</div>
+          </div>
+          <span class="iconbtn" style="border-radius:9px">✕</span>
+        </div>
+        <div class="scroll" data-hide style="padding:16px 20px">
+          <div class="ans" style="border:none;box-shadow:none;padding:0">
+            Du förklarar begreppen tydligast i <span class="cite"><span class="rn">Bråk och procent</span><span class="ts">00:21</span></span>, där du säger att täljaren står överst och nämnaren underst. Du återkommer till dem när klassen förkortar bråk <span class="cite"><span class="rn">Bråk och procent</span><span class="ts">00:57</span></span>, och de dyker upp igen i <span class="cite"><span class="rn">Ekvationer och uttryck</span><span class="ts">12:30</span></span> när ni löser ekvationer med bråk.
+            <div class="src">
+              <div class="src-h">KÄLLOR — klicka för att läsa i transkriptet</div>
+              <div class="srcrow open"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="var(--accent)" stroke-width="1.8"><circle cx="8" cy="8" r="6"></circle><path d="M8 4.6V8l2.3 1.5" stroke-linecap="round"></path></svg><span class="tt">Bråk och procent</span><span style="font-variant-numeric:tabular-nums;font-size:12.5px;color:var(--accent);font-weight:600">00:21</span></div>
+              <div class="excerpt">
+                <div class="ex-line"><span class="ts2">00:16</span><span>Ett bråk består av en täljare och en nämnare.</span></div>
+                <div class="ex-line hit"><span class="ts2">00:21</span><span>Täljaren står överst och nämnaren underst.</span></div>
+                <div class="ex-line"><span class="ts2">00:26</span><span>Nämnaren talar om hur många lika delar helheten delas i.</span></div>
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-top:9px;padding-top:9px;border-top:1px dashed var(--line-2)">
+                  <span class="back"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3.5 5.5 8l4.5 4.5"></path></svg>Tillbaka till svaret</span>
+                  <span style="font-size:12.5px;font-weight:600;color:var(--ink-2);display:inline-flex;align-items:center;gap:5px">Öppna hela transkriptet<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5 10.5 8 6 12.5"></path></svg></span>
+                </div>
+              </div>
+              <div class="srcrow"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="var(--ink-3)" stroke-width="1.8"><circle cx="8" cy="8" r="6"></circle><path d="M8 4.6V8l2.3 1.5" stroke-linecap="round"></path></svg><span class="tt">Ekvationer och uttryck</span><span style="font-variant-numeric:tabular-nums;font-size:12.5px;color:var(--ink-3);font-weight:600">12:30</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= B1 — SCEN, bibliotek ================= -->
+<div style="position:absolute;left:1152px;top:96px;width:680px">
+  <div class="lbl" data-drags-parent="1">
+    <div class="lbl-top"><span class="lbl-num">B</span><span class="lbl-name">Scen — bläddra</span></div>
+    <div class="lbl-sub">Inspelningar som kort i ett galleri. Luftigt och visuellt, byggt för att animeras.</div>
+  </div>
+  <div class="card" data-screen-label="B1 Scen bibliotek" style="height:612px">
+    <div class="ph">
+      <div style="display:flex;align-items:baseline;gap:10px"><h1 class="h1">Inspelningar</h1></div>
+      <div class="searchwrap">
+        <div class="search ai"><span style="color:var(--accent);font-weight:600">✻</span><span class="ph-txt" style="color:var(--ink)">Fråga om alla dina lektioner …</span><span class="seg" style="margin-left:auto"><button>Sök</button><button class="on aiseg">Fråga AI</button></span></div>
+      </div>
+      <div class="filts">
+        <span class="filt"><b>Klass</b> Alla<span class="car"></span></span>
+        <span class="filt active"><b>Ämne</b><span style="color:var(--ink-3)">Matematik</span><span class="car"></span></span>
+        <span class="filt"><b>Datum</b> Alla<span class="car"></span></span>
+      </div>
+    </div>
+    <div class="scroll" data-hide style="display:grid;grid-template-columns:1fr 1fr;gap:11px;align-content:start">
+      <div class="rec" style="flex-direction:column;align-items:stretch;gap:11px;margin:0;cursor:pointer">
+        <div style="display:flex;align-items:center;justify-content:space-between"><span class="wf" style="width:54px;height:34px"><span style="height:8px"></span><span class="a" style="height:18px"></span><span style="height:12px"></span><span style="height:15px"></span></span><span class="ai-badge">✦ AI</span></div>
+        <div><div style="font-size:15px;font-weight:600">Bråk och procent</div><div class="meta" style="margin-top:7px"><span class="pill klass">9B</span><span class="mchip">38:20</span></div></div>
+      </div>
+      <div class="rec" style="flex-direction:column;align-items:stretch;gap:11px;margin:0;cursor:pointer">
+        <div style="display:flex;align-items:center;justify-content:space-between"><span class="wf" style="width:54px;height:34px"><span style="height:14px"></span><span style="height:9px"></span><span class="a" style="height:19px"></span><span style="height:11px"></span></span><span class="ai-badge">✦ AI</span></div>
+        <div><div style="font-size:15px;font-weight:600">Ekvationer och uttryck</div><div class="meta" style="margin-top:7px"><span class="pill klass">8A</span><span class="mchip">33:12</span></div></div>
+      </div>
+      <div class="rec" style="flex-direction:column;align-items:stretch;gap:11px;margin:0;cursor:pointer">
+        <div style="display:flex;align-items:center;justify-content:space-between"><span class="wf" style="width:54px;height:34px"><span style="height:10px"></span><span style="height:16px"></span><span class="a" style="height:13px"></span><span style="height:20px"></span></span><span class="ai-badge">✦ AI</span></div>
+        <div><div style="font-size:15px;font-weight:600">Geometri – area</div><div class="meta" style="margin-top:7px"><span class="pill klass">8A</span><span class="mchip">29:40</span></div></div>
+      </div>
+      <div class="rec" style="flex-direction:column;align-items:stretch;gap:11px;margin:0;cursor:pointer">
+        <div style="display:flex;align-items:center;justify-content:space-between"><span class="wf" style="width:54px;height:34px"><span style="height:12px"></span><span class="a" style="height:18px"></span><span style="height:8px"></span><span style="height:15px"></span></span><span class="ai-badge">✦ AI</span></div>
+        <div><div style="font-size:15px;font-weight:600">Sannolikhet</div><div class="meta" style="margin-top:7px"><span class="pill klass">9B</span><span class="mchip">31:05</span></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= B2 — SCEN, koreografi ================= -->
+<div style="position:absolute;left:1152px;top:856px;width:680px">
+  <div class="lbl" data-drags-parent="1">
+    <div class="lbl-top"><span class="lbl-num">B</span><span class="lbl-name">Scen — AI tänker</span></div>
+    <div class="lbl-sub">När du frågar tar scenen över: irrelevanta kort dimmas och flyger undan, de relevanta lyfts fram steg för steg medan modellen resonerar live.</div>
+  </div>
+  <div class="card" data-screen-label="B2 Scen koreografi" style="height:636px">
+    <div class="ph" style="padding-bottom:14px;border-bottom:1px solid var(--line)">
+      <div class="qbar"><span style="color:#fff;opacity:.7">✻</span>Vilka lektioner tar upp procent — och hur förklarar jag det?</div>
+    </div>
+    <div class="stage">
+      <!-- connectors -->
+      <div class="conn" style="left:calc(50% - 8px);top:calc(50% - 6px);width:150px;transform:rotate(204deg)"></div>
+      <div class="conn" style="left:calc(50% + 8px);top:calc(50% + 4px);width:165px;transform:rotate(-22deg)"></div>
+      <!-- flying / dimmed -->
+      <div class="scard fly" style="left:24px;top:18px;transform:rotate(-7deg)"><div class="st">Geometri – area</div><div class="sm">8A · 29:40</div></div>
+      <div class="scard dim" style="right:26px;top:14px;transform:rotate(6deg)"><div class="st">Sannolikhet</div><div class="sm">9B · 31:05</div></div>
+      <div class="scard fly" style="left:30px;bottom:20px;transform:rotate(5deg)"><div class="st">Mellankrigstiden</div><div class="sm">9A · 41:55</div></div>
+      <div class="scard dim" style="right:30px;bottom:16px;transform:rotate(-5deg)"><div class="st">Cellens uppbyggnad</div><div class="sm">8C · 27:48</div></div>
+      <!-- lifted / relevant -->
+      <div class="scard lift" style="left:34px;top:calc(50% - 40px)"><div class="st">Bråk och procent</div><div class="sm">9B · 38:20</div><span class="relevant">✓ procent · 4 träffar</span></div>
+      <div class="scard lift" style="right:36px;top:calc(50% - 34px);animation-delay:.6s"><div class="st">Ekvationer och uttryck</div><div class="sm">8A · 33:12</div><span class="relevant">✓ procent · 2 träffar</span></div>
+      <!-- thinking core -->
+      <div class="think">
+        <div class="think-h"><span style="width:8px;height:8px;border-radius:50%;background:var(--ok)"></span>Tänker<span class="dots"><i></i><i></i><i></i></span></div>
+        <div class="step done"><span class="sd">✓</span>Sökte igenom 24 inspelningar</div>
+        <div class="step done"><span class="sd">✓</span>Hittade ”procent” i 2 lektioner</div>
+        <div class="step"><span class="sd"></span>Sammanställer svar med källor …</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= C1 — DELAD VY, bibliotek+samtal ================= -->
+<div style="position:absolute;left:1872px;top:96px;width:680px">
+  <div class="lbl" data-drags-parent="1">
+    <div class="lbl-top"><span class="lbl-num">C</span><span class="lbl-name">Delad vy — bläddra</span></div>
+    <div class="lbl-sub">Bibliotek till vänster, AI-samtal alltid till höger. Du ser listan och frågar samtidigt.</div>
+  </div>
+  <div class="card" data-screen-label="C1 Delad vy bibliotek" style="height:612px">
+    <div class="split">
+      <div class="libcol">
+        <div class="lhead">
+          <div class="search" style="padding:9px 11px;margin-bottom:9px"><svg width="15" height="15" viewBox="0 0 18 18" fill="none" stroke="var(--ink-3)" stroke-width="1.8" stroke-linecap="round"><circle cx="8" cy="8" r="5.5"></circle><path d="m12.5 12.5 3 3"></path></svg><span class="ph-txt" style="font-size:13px">Sök …</span></div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap"><span class="filt" style="padding:5px 9px;font-size:11.5px"><b>9A</b><span class="car"></span></span><span class="filt" style="padding:5px 9px;font-size:11.5px"><b>Ämne</b><span class="car"></span></span><span class="filt" style="padding:5px 9px;font-size:11.5px"><b>Datum</b><span class="car"></span></span></div>
+        </div>
+        <div class="liblist" data-hide>
+          <div class="lrec"><span class="wf" style="width:34px;height:26px;padding-bottom:6px"><span style="height:7px"></span><span class="a" style="height:13px"></span><span style="height:9px"></span></span><div style="min-width:0"><div class="lt">Bråk och procent</div><div style="font-size:11px;color:var(--ink-3);margin-top:2px">9B · 38:20</div></div></div>
+          <div class="lrec"><span class="wf" style="width:34px;height:26px;padding-bottom:6px"><span style="height:11px"></span><span style="height:7px"></span><span class="a" style="height:14px"></span></span><div style="min-width:0"><div class="lt">Mellankrigstiden</div><div style="font-size:11px;color:var(--ink-3);margin-top:2px">9A · 41:55</div></div></div>
+          <div class="lrec"><span class="wf" style="width:34px;height:26px;padding-bottom:6px"><span style="height:8px"></span><span class="a" style="height:13px"></span><span style="height:10px"></span></span><div style="min-width:0"><div class="lt">Ekvationer och uttryck</div><div style="font-size:11px;color:var(--ink-3);margin-top:2px">8A · 33:12</div></div></div>
+          <div class="lrec"><span class="wf" style="width:34px;height:26px;padding-bottom:6px"><span style="height:12px"></span><span style="height:9px"></span><span class="a" style="height:15px"></span></span><div style="min-width:0"><div class="lt">Cellens uppbyggnad</div><div style="font-size:11px;color:var(--ink-3);margin-top:2px">8C · 27:48</div></div></div>
+          <div class="lrec"><span class="wf" style="width:34px;height:26px;padding-bottom:6px"><span style="height:9px"></span><span class="a" style="height:12px"></span><span style="height:7px"></span></span><div style="min-width:0"><div class="lt">Fotosyntes</div><div style="font-size:11px;color:var(--ink-3);margin-top:2px">7B · 22:15</div></div></div>
+        </div>
+      </div>
+      <div class="chatcol">
+        <div style="padding:13px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:9px"><span style="width:26px;height:26px;border-radius:8px;background:var(--ink);display:flex;align-items:flex-end;justify-content:center;gap:1.5px;padding-bottom:6px"><span style="width:2px;height:7px;background:#fff;border-radius:2px"></span><span style="width:2px;height:11px;background:#fff;border-radius:2px"></span><span style="width:2px;height:5px;background:#fff;border-radius:2px"></span></span><div style="font-size:14px;font-weight:600">Fråga dina lektioner</div></div>
+        <div class="chatscroll" data-hide>
+          <div style="text-align:center;color:var(--ink-3);font-size:13px;margin:auto 0;padding:0 18px;line-height:1.6">Ställ en fråga så söker AI:n genom <strong style="color:var(--ink-2)">alla inspelningar</strong> och svarar med klickbara referenser.</div>
+          <div style="display:flex;flex-direction:column;gap:7px">
+            <div class="eyebrow" style="text-align:center">Förslag</div>
+            <div class="filt" style="justify-content:center">Var förklarar jag täljare och nämnare?</div>
+            <div class="filt" style="justify-content:center">Sammanfatta 9A:s historielektioner</div>
+          </div>
+        </div>
+        <div class="composer"><span class="field">Fråga om alla lektioner …</span><button class="send"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8 13V4"></path><path d="M4 7.5 8 3.5l4 4"></path></svg></button></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= C2 — DELAD VY, svar + live-koreografi ================= -->
+<div style="position:absolute;left:1872px;top:856px;width:680px">
+  <div class="lbl" data-drags-parent="1">
+    <div class="lbl-top"><span class="lbl-num">C</span><span class="lbl-name">Delad vy — svar live</span></div>
+    <div class="lbl-sub">Medan AI:n svarar rangordnas listan live till vänster. Referenser i svaret hoppar rakt in i transkriptet — utan att lämna vyn.</div>
+  </div>
+  <div class="card" data-screen-label="C2 Delad vy svar" style="height:636px">
+    <div class="split">
+      <div class="libcol">
+        <div class="lhead"><div class="eyebrow">Relevanta nu</div></div>
+        <div class="liblist" data-hide>
+          <div class="lrec lift"><span class="lrank">1</span><div style="min-width:0"><div class="lt">Bråk och procent</div><div style="font-size:11px;color:var(--accent);margin-top:2px">2 källor</div></div></div>
+          <div class="lrec lift"><span class="lrank">2</span><div style="min-width:0"><div class="lt">Ekvationer och uttryck</div><div style="font-size:11px;color:var(--accent);margin-top:2px">1 källa</div></div></div>
+          <div class="lrec dim"><span class="wf" style="width:30px;height:22px;padding-bottom:5px"><span style="height:8px"></span><span style="height:11px"></span></span><div style="min-width:0"><div class="lt">Mellankrigstiden</div></div></div>
+          <div class="lrec dim"><span class="wf" style="width:30px;height:22px;padding-bottom:5px"><span style="height:9px"></span><span style="height:7px"></span></span><div style="min-width:0"><div class="lt">Cellens uppbyggnad</div></div></div>
+          <div class="lrec dim"><span class="wf" style="width:30px;height:22px;padding-bottom:5px"><span style="height:7px"></span><span style="height:12px"></span></span><div style="min-width:0"><div class="lt">Fotosyntes</div></div></div>
+        </div>
+      </div>
+      <div class="chatcol">
+        <div class="chatscroll" data-hide>
+          <div class="b-u">Var förklarar jag täljare och nämnare?</div>
+          <div class="ans">
+            Tydligast i <span class="cite"><span class="rn">Bråk och procent</span><span class="ts">00:21</span></span> — du säger att täljaren står överst och nämnaren underst. Begreppen återkommer i <span class="cite"><span class="rn">Ekvationer och uttryck</span><span class="ts">12:30</span></span>.
+            <div class="src" style="margin-top:11px;padding-top:11px">
+              <div class="excerpt" style="margin:0">
+                <div style="display:flex;align-items:center;gap:7px;margin-bottom:7px;font-size:12px;font-weight:600;color:var(--accent)"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="8" cy="8" r="6"></circle><path d="M8 4.6V8l2.3 1.5" stroke-linecap="round"></path></svg>Bråk och procent · 00:21</div>
+                <div class="ex-line hit"><span class="ts2">00:21</span><span>Täljaren står överst och nämnaren underst.</span></div>
+                <span class="back" style="margin-top:7px"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3.5 5.5 8l4.5 4.5"></path></svg>Tillbaka till svaret</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="composer"><span class="field">Följdfråga …</span><button class="send"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8 13V4"></path><path d="M4 7.5 8 3.5l4 4"></path></svg></button></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

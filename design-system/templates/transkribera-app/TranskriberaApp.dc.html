@@ -1,0 +1,1867 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<!-- @template name="Transkribera — app" description="Komplett lokal transkriberings-app: wizard (Källa/Inställningar/Resultat), Historik, Lektioner. Ljust/mörkt tema." -->
+<helmet>
+<script src="./ds-base.js"></script>
+</helmet>
+<div data-theme="{{ theme }}" style="min-height:100vh;background:var(--canvas);color:var(--ink);font-family:'Geist',system-ui,-apple-system,sans-serif;font-size:16.5px;line-height:1.55;-webkit-font-smoothing:antialiased;letter-spacing:-0.01em">
+
+  <header style="position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:16px;padding:16px 20px;border-bottom:1px solid var(--line);background:color-mix(in srgb, var(--canvas) 82%, transparent);backdrop-filter:saturate(1.4) blur(14px)">
+    <div style="display:flex;align-items:center;gap:11px;flex:1 1 0;min-width:0;overflow:hidden">
+      <div style="display:flex;align-items:flex-end;gap:2.5px;height:20px">
+        <div style="width:3px;height:7px;border-radius:2px;background:var(--ink)"></div>
+        <div style="width:3px;height:14px;border-radius:2px;background:var(--ink)"></div>
+        <div style="width:3px;height:20px;border-radius:2px;background:var(--accent)"></div>
+        <div style="width:3px;height:11px;border-radius:2px;background:var(--ink)"></div>
+        <div style="width:3px;height:16px;border-radius:2px;background:var(--ink)"></div>
+      </div>
+      <span style="font-size:18.5px;font-weight:500;letter-spacing:-0.01em;text-transform:lowercase">transkrib<span class="ser" style="font-size:20px;color:var(--ink)">era</span></span>
+    </div>
+    <nav style="flex:0 1 auto;min-width:0;display:flex;justify-content:center">
+      <div style="display:inline-flex;gap:3px;padding:4px;background:var(--track);border-radius:12px;border:1px solid var(--line)">
+        <button onClick="{{ setTabTr }}" data-seg="{{ navTrOn }}" style="border:none;border-radius:9px;padding:8px 15px;font-size:15.5px;font-weight:500;cursor:pointer;font-family:inherit;white-space:nowrap;background:transparent;color:var(--ink-2);transition:background .12s,color .12s,box-shadow .12s" style-hover="color:var(--ink)">Transkribera</button>
+        <button onClick="{{ setTabIn }}" data-seg="{{ navInOn }}" style="border:none;border-radius:9px;padding:8px 15px;font-size:15.5px;font-weight:500;cursor:pointer;font-family:inherit;white-space:nowrap;background:transparent;color:var(--ink-2);transition:background .12s,color .12s,box-shadow .12s" style-hover="color:var(--ink)">Inspelningar</button>
+      </div>
+    </nav>
+    <div style="flex:1 1 0;display:flex;justify-content:flex-end">
+      <button onClick="{{ toggleTheme }}" aria-label="Växla tema" title="Växla tema" style="width:38px;height:38px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;transition:background .12s" style-hover="background:var(--sunken)"><sc-if value="{{ isLight }}" hint-placeholder-val="{{ true }}"><svg width="17" height="17" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15.5 11.2A6.2 6.2 0 0 1 6.8 2.5 6.2 6.2 0 1 0 15.5 11.2z"></path></svg></sc-if><sc-if value="{{ isDark }}" hint-placeholder-val="{{ false }}"><svg width="17" height="17" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="9" r="3.4"></circle><path d="M9 1.7v1.6M9 14.7v1.6M16.3 9h-1.6M3.3 9H1.7M14.16 3.84l-1.13 1.13M4.97 13.03l-1.13 1.13M14.16 14.16l-1.13-1.13M4.97 4.97 3.84 3.84"></path></svg></sc-if></button>
+    </div>
+  </header>
+
+  <main style="max-width:1120px;margin:0 auto;padding:0 24px">
+
+    <!-- ============ TRANSKRIBERA ============ -->
+    <sc-if value="{{ isTr }}" hint-placeholder-val="{{ true }}">
+    <section data-screen-label="Transkribera" style="min-height:calc(100vh - 73px);display:flex;flex-direction:column;padding:16px 0 28px;animation:tabin .28s ease">
+
+      <div style="display:flex;align-items:center;gap:9px;flex:0 0 auto;margin-bottom:22px">
+        <div style="display:flex;align-items:center;gap:9px;flex:0 0 auto">
+          <span data-dot="{{ d1dot }}" style="width:24px;height:24px;border-radius:50%;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;background:transparent;border:1.5px solid var(--line-2);color:var(--ink-3)">{{ d1t }}</span>
+          <span data-lbl="{{ d1lbl }}" style="white-space:nowrap;font-size:14px;font-weight:500;color:var(--ink-3)">Källa</span>
+        </div>
+        <div style="flex:1;height:1.5px;background:var(--line);min-width:16px;margin:0 4px"></div>
+        <div style="display:flex;align-items:center;gap:9px;flex:0 0 auto">
+          <span data-dot="{{ d2dot }}" style="width:24px;height:24px;border-radius:50%;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;background:transparent;border:1.5px solid var(--line-2);color:var(--ink-3)">{{ d2t }}</span>
+          <span data-lbl="{{ d2lbl }}" style="white-space:nowrap;font-size:14px;font-weight:500;color:var(--ink-3)">Inställningar</span>
+        </div>
+        <div style="flex:1;height:1.5px;background:var(--line);min-width:16px;margin:0 4px"></div>
+        <div style="display:flex;align-items:center;gap:9px;flex:0 0 auto">
+          <span data-dot="{{ d3dot }}" style="width:24px;height:24px;border-radius:50%;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;background:transparent;border:1.5px solid var(--line-2);color:var(--ink-3)">{{ d3t }}</span>
+          <span data-lbl="{{ d3lbl }}" style="white-space:nowrap;font-size:14px;font-weight:500;color:var(--ink-3)">Resultat</span>
+        </div>
+      </div>
+
+      <!-- step 1: Källa -->
+      <sc-if value="{{ isStep0 }}" hint-placeholder-val="{{ true }}">
+      <div style="display:flex;flex-direction:column;flex:1;min-height:0;animation:fadeup .3s ease both">
+        <div class="ehead">
+          <div>
+            <div class="eyebrow" style="margin-bottom:18px">Steg 1 — Källa</div>
+            <h1 class="disp" style="font-size:clamp(34px,5.2vw,52px);margin:0">Vad vill du <span class="ser">transkribera?</span></h1>
+          </div>
+          <p class="ehead_lede">Dra in en eller flera filer, eller välj från datorn — allt körs på din egen dator.</p>
+        </div>
+        <div onClick="{{ openPicker }}" onDrop="{{ onDrop }}" onDragOver="{{ onDragOver }}" style="position:relative;border:1.5px dashed var(--line-2);border-radius:20px;background:var(--surface);flex:1 1 auto;min-height:200px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 24px;text-align:center;box-shadow:var(--shadow-sm);cursor:pointer;user-select:none;transition:border-color .14s,background .14s" style-hover="border-color:var(--accent);background:var(--accent-weak)">
+          <div style="font-size:19px;font-weight:500;margin-bottom:6px;color:var(--ink)">Dra in filer — eller klicka för att välja</div>
+          <div style="font-size:14.5px;color:var(--ink-2)">MP4 · MKV · MOV · MP3 · WAV · M4A — flera filer går bra</div>
+        </div>
+        <input id="tk-file-input" type="file" multiple onChange="{{ onFiles }}" style="display:none">
+
+        <div style="display:flex;align-items:center;gap:10px;margin-top:12px">
+          <span style="font-size:11.5px;text-transform:uppercase;letter-spacing:0.05em;color:var(--ink-2);font-weight:600;flex:0 0 auto">Eller länk</span>
+          <div style="flex:1;display:flex;align-items:center;gap:8px;min-width:0;background:var(--surface);border:1px solid var(--line);border-radius:11px;padding:7px 7px 7px 13px;box-shadow:var(--shadow-sm)">
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="var(--ink-3)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto"><path d="M6.8 9.2a3 3 0 0 0 4.3 0l1.7-1.7a3 3 0 0 0-4.3-4.3l-1 1"></path><path d="M9.2 6.8a3 3 0 0 0-4.3 0L3.2 8.5a3 3 0 0 0 4.3 4.3l1-1"></path></svg>
+            <input value="{{ linkInput }}" onChange="{{ setLink }}" placeholder="Klistra in en YouTube-länk …" style="flex:1;min-width:0;border:none;outline:none;background:transparent;font-size:15px;color:var(--ink);font-family:inherit">
+            <button onClick="{{ addLink }}" style="flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:8px;padding:8px 15px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;transition:background .15s" style-hover="background:var(--accent);box-shadow:0 6px 16px -6px color-mix(in srgb,var(--accent) 55%,transparent)">Lägg till</button>
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:10px;margin-top:12px">
+          <span style="font-size:11.5px;text-transform:uppercase;letter-spacing:0.05em;color:var(--ink-2);font-weight:600;flex:0 0 auto">Eller spela in</span>
+          <div style="flex:1;display:flex;align-items:center;gap:10px;min-width:0;background:var(--surface);border:1px solid var(--line);border-radius:11px;padding:7px 7px 7px 13px;box-shadow:var(--shadow-sm)">
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="var(--ink-3)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto"><rect x="5.5" y="1.5" width="5" height="8.5" rx="2.5"></rect><path d="M3.5 7.5a4.5 4.5 0 0 0 9 0"></path><path d="M8 12v2.5"></path></svg>
+            <span style="font-size:15px;color:var(--ink-2);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Spela in lektionen direkt — ljudet sparas lokalt</span>
+            <div style="flex:1"></div>
+            <button onClick="{{ startRecording }}" style="flex:0 0 auto;display:inline-flex;align-items:center;gap:7px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:8px;padding:8px 15px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;transition:background .15s" style-hover="background:var(--accent);box-shadow:0 6px 16px -6px color-mix(in srgb,var(--accent) 55%,transparent)">Starta inspelning</button>
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:9px;margin-top:18px;flex-wrap:wrap">
+          <span style="font-size:11.5px;text-transform:uppercase;letter-spacing:0.05em;color:var(--ink-2);font-weight:600">Eller prova med</span>
+          <button onClick="{{ addSampleOk }}" style="display:inline-flex;align-items:center;gap:7px;font-size:13.5px;font-weight:500;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:7px 12px;cursor:pointer;font-family:inherit;font-variant-numeric:tabular-nums;transition:border-color .14s" style-hover="border-color:var(--ink-3)">
+            <span style="width:7px;height:7px;border-radius:2px;background:var(--ok);flex:0 0 auto"></span>mötesinspelning.mp3
+          </button>
+          <button onClick="{{ addSampleBad }}" style="display:inline-flex;align-items:center;gap:7px;font-size:13.5px;font-weight:500;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:7px 12px;cursor:pointer;font-family:inherit;font-variant-numeric:tabular-nums;transition:border-color .14s" style-hover="border-color:var(--ink-3)">
+            <span style="width:7px;height:7px;border-radius:2px;background:var(--bad);flex:0 0 auto"></span>skadad_inspelning.m4a
+          </button>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- step 2: Inställningar -->
+      <sc-if value="{{ isStep1 }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;flex-direction:column;animation:fadeup .3s ease both">
+        <div class="ehead">
+          <div>
+            <div class="eyebrow" style="margin-bottom:18px">Steg 2 — Inställningar</div>
+            <h1 class="disp" style="font-size:clamp(30px,4.4vw,44px);margin:0">Så ska det <span class="ser">låta</span></h1>
+          </div>
+          <p class="ehead_lede">Välj språk och format — rätt modell väljs automatiskt, allt körs lokalt på din dator.</p>
+        </div>
+        <div class="win" style="margin-bottom:26px">
+          <div class="win_top">
+            <div style="display:flex;align-items:baseline;gap:10px">
+              <span class="win_lbl">Filer i kö</span>
+              <span class="{{ figCls }}" style="font-size:16px;color:var(--ink);font-variant-numeric:tabular-nums">{{ queueCount }}</span>
+            </div>
+            <button onClick="{{ goStep0 }}" style="display:inline-flex;align-items:center;gap:6px;background:transparent;border:1px solid var(--line);color:var(--ink);border-radius:9px;padding:6px 12px;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;flex:0 0 auto;transition:border-color .14s,background .14s" style-hover="border-color:var(--line-2);background:var(--sunken)">
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 3v10M3 8h10"></path></svg>Lägg till fler
+            </button>
+          </div>
+          <div style="display:flex;flex-direction:column">
+            <sc-for list="{{ queue }}" as="f" hint-placeholder-count="1">
+              <div style="display:flex;align-items:center;gap:12px;padding:13px 20px;border-bottom:1px solid var(--line);background:var(--surface)">
+                <span style="font-family:var(--mono);font-size:10px;font-weight:500;letter-spacing:0.06em;color:var(--ink-2);background:var(--sunken);border:1px solid var(--line);border-radius:4px;padding:3px 7px;flex:0 0 auto">{{ f.ext }}</span>
+                <span style="flex:1;min-width:0;font-size:15.5px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ f.name }}</span>
+                <button onClick="{{ f.onRemove }}" aria-label="Ta bort från kön" style="width:30px;height:30px;flex:0 0 auto;border:1px solid var(--line);background:var(--surface);border-radius:8px;cursor:pointer;color:var(--ink-3);display:flex;align-items:center;justify-content:center;transition:border-color .14s,color .14s" style-hover="border-color:var(--bad);color:var(--bad)">
+                  <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 3l8 8M11 3l-8 8"></path></svg>
+                </button>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="font-family:var(--mono);font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-3);margin:2px 0 14px">Inställningar</div>
+
+        <!-- Språk-flöde: talat → resultat, med live översättning -->
+        <div style="background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:17px 19px;box-shadow:var(--shadow-sm)">
+          <div style="font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);margin-bottom:15px">Språk</div>
+          <div style="display:flex;align-items:flex-end;gap:14px">
+
+            <div style="flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:9px">
+              <span style="font-size:13px;font-weight:600;color:var(--ink-2)">Talat språk</span>
+              <div style="display:flex;gap:3px;padding:4px;background:var(--track);border:1px solid var(--line);border-radius:11px">
+                <button onClick="{{ setLangSv }}" data-seg="{{ langSvOn }}" style="flex:1 1 0;min-width:0;border:none;border-radius:8px;height:38px;font-size:15px;font-weight:500;white-space:nowrap;cursor:pointer;font-family:inherit;background:transparent;color:var(--ink-2);transition:background .12s,color .12s,box-shadow .12s">Svenska</button>
+                <button onClick="{{ setLangEn }}" data-seg="{{ langEnOn }}" style="flex:1 1 0;min-width:0;border:none;border-radius:8px;height:38px;font-size:15px;font-weight:500;white-space:nowrap;cursor:pointer;font-family:inherit;background:transparent;color:var(--ink-2);transition:background .12s,color .12s,box-shadow .12s">Engelska</button>
+              </div>
+            </div>
+
+            <div style="display:flex;flex-direction:column;align-items:center;gap:7px;flex:0 0 auto;padding-bottom:5px">
+              <span style="display:flex">{{ arrowEl }}</span>
+              <span data-q="{{ transQ }}" style="font-size:10.5px;font-weight:600;border-radius:6px;padding:3px 9px;white-space:nowrap;color:var(--ink-3);background:var(--sunken);border:1px solid var(--line)">{{ transTag }}</span>
+            </div>
+
+            <div style="flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:9px">
+              <span style="font-size:13px;font-weight:600;color:var(--ink-2)">Resultatspråk</span>
+              <div style="display:flex;gap:3px;padding:4px;background:var(--track);border:1px solid var(--line);border-radius:11px">
+                <button onClick="{{ setResSv }}" data-seg="{{ resSvOn }}" style="flex:1 1 0;min-width:0;border:none;border-radius:8px;height:38px;font-size:15px;font-weight:500;white-space:nowrap;cursor:pointer;font-family:inherit;background:transparent;color:var(--ink-2);transition:background .12s,color .12s,box-shadow .12s">Svenska</button>
+                <button onClick="{{ setResEn }}" data-seg="{{ resEnOn }}" style="flex:1 1 0;min-width:0;border:none;border-radius:8px;height:38px;font-size:15px;font-weight:500;white-space:nowrap;cursor:pointer;font-family:inherit;background:transparent;color:var(--ink-2);transition:background .12s,color .12s,box-shadow .12s">Engelska</button>
+              </div>
+            </div>
+
+          </div>
+          <div style="display:flex;align-items:center;gap:10px 16px;margin-top:16px;padding-top:14px;border-top:1px solid var(--line);flex-wrap:wrap">
+            <span style="display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-2)"><span style="width:8px;height:8px;border-radius:50%;background:var(--ok);flex:0 0 auto"></span><span><b style="color:var(--ink);font-weight:600">{{ autoModel }}</b> · väljs automatiskt</span></span>
+            <span style="margin-left:auto;font-size:13px;color:var(--ink-2);text-align:right;min-width:0">{{ transHint }}</span>
+          </div>
+        </div>
+
+        <!-- Filformat -->
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:12px 16px;box-shadow:var(--shadow-sm)">
+          <span style="font-size:14px;color:var(--ink-2);font-weight:500">Filformat</span>
+          <div style="display:flex;gap:6px">
+            <button onClick="{{ toggleSrt }}" data-chip="{{ srtOn }}" style="border:1px solid var(--line);background:transparent;color:var(--ink-2);border-radius:9px;padding:8px 13px;font-size:14.5px;font-weight:500;cursor:pointer;font-family:inherit;transition:all .12s">SRT</button>
+            <button onClick="{{ toggleTxt }}" data-chip="{{ txtOn }}" style="border:1px solid var(--line);background:transparent;color:var(--ink-2);border-radius:9px;padding:8px 13px;font-size:14.5px;font-weight:500;cursor:pointer;font-family:inherit;transition:all .12s">TXT</button>
+            <button onClick="{{ toggleVtt }}" data-chip="{{ vttOn }}" style="border:1px solid var(--line);background:transparent;color:var(--ink-2);border-radius:9px;padding:8px 13px;font-size:14.5px;font-weight:500;cursor:pointer;font-family:inherit;transition:all .12s">VTT</button>
+          </div>
+        </div>
+
+        <div style="flex:0 0 auto;height:46px"></div>
+
+        <div>
+          <button onClick="{{ startTranscribe }}" class="cta" style="display:flex;align-items:center;justify-content:space-between;gap:16px;width:100%;height:64px;border:1px solid var(--ink);background:var(--btn-bg);color:var(--btn-fg);cursor:pointer;font-family:inherit;padding:0 14px 0 24px">
+            <span style="font-size:13px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase">Starta transkribering</span>
+            <span class="cta_arrow"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h10"></path><path d="M8.5 3.5 13 8l-4.5 4.5"></path></svg></span>
+          </button>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- step 3: Resultat -->
+      <sc-if value="{{ isStep2 }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;flex-direction:column;animation:fadeup .3s ease both">
+        <div class="ehead">
+          <div>
+            <div class="eyebrow" style="margin-bottom:18px">Steg 3 — Resultat</div>
+            <h1 class="disp" style="font-size:clamp(30px,4.4vw,44px);margin:0">Ditt <span class="ser">transkript</span></h1>
+          </div>
+          <p class="ehead_lede">Bearbetas lokalt i steg. Korrekturläs, städa språket och ställ frågor med källor — när du är klar.</p>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);overflow:hidden">
+          <div style="padding:22px 24px 20px">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px">
+              <div style="display:flex;align-items:center;gap:10px;min-width:0">
+                <sc-if value="{{ tRunning }}" hint-placeholder-val="{{ false }}"><span style="font-size:12px;font-weight:500;color:var(--accent);background:var(--accent-weak);padding:3px 9px;border-radius:6px;letter-spacing:0.05em">{{ tStatusLabel }}</span></sc-if>
+                <sc-if value="{{ tDone }}" hint-placeholder-val="{{ true }}"><span style="font-size:12px;font-weight:500;color:var(--ok);background:color-mix(in srgb,var(--ok) 14%,transparent);padding:3px 9px;border-radius:6px;letter-spacing:0.05em">KLAR</span></sc-if>
+                <span style="font-size:15.5px;color:var(--ink-2);font-variant-numeric:tabular-nums;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ firstName }}</span>
+              </div>
+              <div style="display:flex;align-items:baseline;gap:18px;flex:0 0 auto">
+                <span style="display:inline-flex;align-items:baseline;gap:7px"><span class="win_lbl">Tid</span><span style="font-size:14.5px;color:var(--ink-2);font-variant-numeric:tabular-nums">{{ tElapsedLabel }}</span></span>
+                <span style="display:inline-flex;align-items:baseline;gap:7px"><span class="win_lbl">Klart</span><span class="{{ figCls }}" style="font-size:21px;color:var(--ink);font-variant-numeric:tabular-nums">{{ tPctLabel }}</span></span>
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;margin-bottom:4px">
+              <sc-for list="{{ stages }}" as="st" hint-placeholder-count="4">
+                <div style="flex:1;display:flex;flex-direction:column;gap:8px">
+                  <div style="height:4px;border-radius:99px;background:var(--track);overflow:hidden">{{ st.bar }}</div>
+                  <div style="display:flex;align-items:center;gap:6px">
+                    <sc-if value="{{ st.isDone }}" hint-placeholder-val="{{ true }}"><span style="width:18px;height:18px;border-radius:50%;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;background:var(--ok);color:#fff">✓</span></sc-if>
+                    <sc-if value="{{ st.isCur }}" hint-placeholder-val="{{ false }}"><span style="width:18px;height:18px;border-radius:50%;flex:0 0 auto;border:2px solid var(--accent);border-top-color:transparent;animation:spin .7s linear infinite"></span></sc-if>
+                    <sc-if value="{{ st.isTodo }}" hint-placeholder-val="{{ false }}"><span style="width:18px;height:18px;border-radius:50%;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;background:var(--sunken);border:1px solid var(--line);color:var(--ink-3)">{{ st.num }}</span></sc-if>
+                    <span style="font-size:13.5px;font-weight:500;color:var(--ink)">{{ st.name }}</span>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+          <div onClick="{{ toggleLog }}" style="border-top:1px solid var(--line);background:var(--surface);cursor:pointer;border-radius:0 0 18px 18px;transition:background .12s" style-hover="background:var(--sunken)">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:11px 24px;font-size:13.5px;color:var(--ink-2)">
+              <span style="display:flex;align-items:center;gap:8px">
+                <span style="width:6px;height:6px;border-radius:50%;background:var(--ink-3)"></span>
+                <span style="font-variant-numeric:tabular-nums;letter-spacing:0.02em;text-transform:uppercase;font-size:12.5px">Logg</span>
+              </span>
+              <span style="display:inline-flex;align-items:center;gap:7px;color:var(--ink);font-size:13px;font-weight:500">{{ logToggleLabel }}
+                <span style="width:7px;height:7px;border-right:1.6px solid var(--ink-3);border-bottom:1.6px solid var(--ink-3);transform:rotate(45deg);margin-top:-3px"></span>
+              </span>
+            </div>
+            <sc-if value="{{ logOpen }}" hint-placeholder-val="{{ true }}">
+            <div style="position:relative;padding:6px 24px 16px">
+              <sc-for list="{{ logLines }}" as="ln" hint-placeholder-count="4">
+                <div style="display:flex;gap:14px">
+                  <span style="font-variant-numeric:tabular-nums;font-size:12.5px;color:var(--ink-3);width:42px;flex:0 0 auto;text-align:right;padding-top:1px">{{ ln.t }}</span>
+                  <div style="position:relative;display:flex;flex-direction:column;align-items:center;flex:0 0 auto">
+                    <span style="width:13px;height:13px;border-radius:50%;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;color:#fff;background:var(--ok)">{{ ln.mark }}</span>
+                    <span style="width:2px;flex:1;min-height:12px;margin-top:2px;background:var(--line)"></span>
+                  </div>
+                  <span style="font-variant-numeric:tabular-nums;font-size:13px;color:var(--ink);padding-bottom:13px;line-height:1.45;min-width:0">{{ ln.msg }}</span>
+                </div>
+              </sc-for>
+            </div>
+            </sc-if>
+          </div>
+        </div>
+
+        <sc-if value="{{ tRunning }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;align-items:center;justify-content:center;gap:11px;margin-top:24px;color:var(--ink-2);font-size:14.5px">
+            <span style="width:15px;height:15px;border-radius:50%;border:2px solid var(--line-2);border-top-color:var(--accent);animation:spin .7s linear infinite"></span>
+            Transkriberar … resultatet visas när det är klart
+          </div>
+        </sc-if>
+        <sc-if value="{{ tDone }}" hint-placeholder-val="{{ true }}">
+        <div data-follow="done" style="margin-top:24px">
+          <div style="display:flex;align-items:center;gap:9px;margin-bottom:14px">
+            <span style="width:18px;height:18px;border-radius:50%;background:var(--ok);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12.5px;flex:0 0 auto">✓</span>
+            <h2 style="font-size:20px;font-weight:600;letter-spacing:-0.02em;margin:0">Klar</h2>
+            <span style="color:var(--ink-2);font-size:15.5px">· {{ resultCount }} filer · 00:07</span>
+            <sc-if value="{{ resultBad }}" hint-placeholder-val="{{ false }}"><span style="font-size:12.5px;font-weight:500;color:var(--bad);background:color-mix(in srgb,var(--bad) 13%,transparent);padding:3px 9px;border-radius:6px">{{ resultBadNote }}</span></sc-if>
+          </div>
+          <div style="display:grid;gap:10px;margin-bottom:18px">
+            <sc-for list="{{ results }}" as="r" hint-placeholder-count="2">
+              <sc-if value="{{ r.ok }}" hint-placeholder-val="{{ true }}">
+              <div style="display:flex;align-items:center;gap:14px;background:var(--surface);border:1px solid var(--line);border-radius:13px;padding:14px 16px;box-shadow:var(--shadow-sm)">
+                <span style="font-variant-numeric:tabular-nums;font-size:12.5px;font-weight:500;color:var(--accent);background:var(--accent-weak);padding:5px 9px;border-radius:7px;letter-spacing:0.03em">{{ r.ext }}</span>
+                <span style="flex:1;min-width:0;font-size:16px;font-variant-numeric:tabular-nums;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.name }}</span>
+                <span style="font-size:14px;color:var(--ink-2);font-variant-numeric:tabular-nums">{{ r.size }}</span>
+                <button onClick="{{ r.onDownload }}" style="display:inline-flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:8px 14px 8px 12px;font-size:14.5px;font-weight:500;cursor:pointer;font-family:inherit;transition:background .14s,border-color .14s,color .14s" style-hover="border-color:var(--ink);background:var(--ink);color:var(--btn-fg)">
+                  <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.5v7.5"></path><path d="M4.5 6.5 8 10l3.5-3.5"></path><path d="M3 13.5h10"></path></svg>Ladda ner
+                </button>
+              </div>
+              </sc-if>
+              <sc-if value="{{ r.error }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;align-items:center;gap:14px;background:color-mix(in srgb,var(--bad) 7%,var(--surface));border:1px solid color-mix(in srgb,var(--bad) 32%,var(--line));border-radius:13px;padding:14px 16px">
+                <span style="font-variant-numeric:tabular-nums;font-size:12.5px;font-weight:500;color:var(--bad);background:color-mix(in srgb,var(--bad) 14%,transparent);padding:5px 9px;border-radius:7px;letter-spacing:0.03em">{{ r.ext }}</span>
+                <span style="flex:1;min-width:0;font-size:16px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.name }}</span>
+                <span style="display:inline-flex;align-items:center;gap:7px;font-size:13.5px;font-weight:500;color:var(--bad)"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.5"></circle><path d="M8 4.5v4"></path><path d="M8 11h.01"></path></svg>Kunde inte läsas — skadad fil</span>
+              </div>
+              </sc-if>
+            </sc-for>
+          </div>
+
+          <div onClick="{{ openTranscript }}" style="background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px 20px;box-shadow:var(--shadow-sm);cursor:pointer;transition:border-color .14s,box-shadow .14s" style-hover="border-color:var(--line-2);box-shadow:var(--shadow)">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px">
+              <span style="font-size:12.5px;text-transform:uppercase;letter-spacing:0.04em;color:var(--ink-2)">Förhandsvisning</span>
+              <span style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;color:var(--accent)">Visa hela transkriptet<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5 10.5 8 6 12.5"></path></svg></span>
+            </div>
+            <sc-for list="{{ preview }}" as="p" hint-placeholder-count="3">
+              <div style="display:flex;gap:14px;padding:5px 0">
+                <span style="font-variant-numeric:tabular-nums;font-size:13.5px;color:var(--ink-3);flex:0 0 auto;width:46px;padding-top:2px">{{ p.t }}</span>
+                <span style="font-size:16px;color:var(--ink);line-height:1.5">{{ p.txt }}</span>
+              </div>
+            </sc-for>
+            <div style="margin-top:9px;font-size:13px;color:var(--ink-3)">… klicka för att läsa hela transkriptet</div>
+          </div>
+        </div>
+
+        <div data-follow="clean" style="margin-top:28px;background:var(--surface);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);padding:22px 24px 20px">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+            <span style="font-family:var(--mono);font-size:10.5px;font-weight:500;letter-spacing:0.08em;color:var(--c-mustard);background:color-mix(in srgb,var(--c-mustard) 13%,transparent);border:1px solid color-mix(in srgb,var(--c-mustard) 30%,transparent);padding:3px 9px;border-radius:6px">KORREKTUR</span>
+            <h2 style="font-size:19px;font-weight:600;letter-spacing:-0.02em;margin:0">Korrekturläs transkriptet</h2>
+          </div>
+          <p style="margin:0 0 18px;color:var(--ink-2);font-size:15px">Rättar mot ljudet med Gemma 3n och städar språket — skiljetecken och meningslängd — med {{ activeLlmShort }}. Görs innan du summerar eller chattar.</p>
+          <sc-if value="{{ ppCleanHasSegs }}" hint-placeholder-val="{{ false }}">
+          <div onClick="{{ openClean }}" style="background:var(--sunken);border:1px solid var(--line);border-radius:13px;padding:16px 18px;margin-bottom:14px;cursor:pointer;transition:border-color .14s,box-shadow .14s" style-hover="border-color:var(--line-2);box-shadow:var(--shadow-sm)">
+            <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px;flex-wrap:wrap">
+              <span style="font-size:11.5px;text-transform:uppercase;letter-spacing:0.05em;color:var(--accent);font-weight:600">Korrekturläst</span>
+              <span style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2)"><span style="width:12px;height:12px;border-radius:4px;background:color-mix(in srgb,var(--ok) 20%,transparent);border:1px solid color-mix(in srgb,var(--ok) 45%,transparent)"></span>mot ljudet</span>
+              <span style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2)"><span style="width:12px;height:12px;border-radius:4px;background:color-mix(in srgb,var(--accent) 16%,transparent);border:1px solid color-mix(in srgb,var(--accent) 45%,transparent)"></span>språk &amp; skiljetecken</span>
+              <span style="margin-left:auto;display:inline-flex;align-items:center;gap:5px;font-size:13px;font-weight:500;color:var(--accent)">Visa hela<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5 10.5 8 6 12.5"></path></svg></span>
+            </div>
+            <sc-for list="{{ ppCleanSegs }}" as="seg" hint-placeholder-count="3">
+              <div style="display:flex;gap:14px;padding:5px 0">
+                <span style="font-variant-numeric:tabular-nums;font-size:13.5px;color:var(--ink-3);flex:0 0 auto;width:46px;padding-top:2px">{{ seg.t }}</span>
+                <span style="font-size:15px;color:var(--ink);line-height:1.55">
+                  <sc-for list="{{ seg.parts }}" as="pt" hint-placeholder-count="3">
+                    <sc-if value="{{ pt.fixed }}" hint-placeholder-val="{{ false }}"><span style="background:color-mix(in srgb,var(--ok) 18%,transparent);color:var(--ok);border-radius:4px;padding:0 3px;font-weight:500">{{ pt.s }}</span></sc-if>
+                    <sc-if value="{{ pt.lang }}" hint-placeholder-val="{{ false }}"><span style="background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent);border-radius:4px;padding:0 3px;font-weight:500">{{ pt.s }}</span></sc-if>
+                    <sc-if value="{{ pt.norm }}" hint-placeholder-val="{{ true }}"><span>{{ pt.s }}</span></sc-if>
+                  </sc-for>
+                </span>
+              </div>
+            </sc-for>
+            <div style="margin-top:9px;font-size:13px;color:var(--ink-3)">… klicka för att öppna hela i helskärm</div>
+          </div>
+          </sc-if>
+          <sc-if value="{{ ppCleanRunning }}" hint-placeholder-val="{{ false }}">
+          <div style="background:var(--sunken);border:1px solid var(--line);border-radius:13px;padding:15px 17px">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:11px">
+              <span style="display:inline-flex;align-items:center;gap:9px;font-size:14px;font-weight:600;color:var(--ink)"><span style="width:14px;height:14px;border-radius:50%;border:2px solid var(--line-2);border-top-color:var(--accent);animation:spin .7s linear infinite;flex:0 0 auto"></span>Korrekturläser …</span>
+              <span style="color:var(--ink);letter-spacing:-0.01em"><span class="{{ figCls }}" style="font-size:30px;font-variant-numeric:tabular-nums">{{ ppCleanPct }}</span><span class="fig-unit" style="font-size:16px;margin-left:1px">%</span></span>
+            </div>
+            <div style="height:9px;border-radius:99px;background:var(--track);overflow:hidden;margin-bottom:11px">{{ ppCleanBar }}</div>
+            <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-2)"><span style="width:7px;height:7px;border-radius:50%;background:var(--accent);animation:pulse 1.2s ease-in-out infinite;flex:0 0 auto"></span>{{ ppCleanPhase }}</div>
+          </div>
+          </sc-if>
+          <sc-if value="{{ ppCleanNotRunning }}" hint-placeholder-val="{{ true }}">
+          <div style="display:flex;align-items:center;gap:13px;flex-wrap:wrap">
+            <button onClick="{{ runClean }}" style="display:inline-flex;align-items:center;justify-content:center;gap:9px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:11px;padding:12px 22px;font-size:15px;font-weight:500;cursor:pointer;font-family:inherit;box-shadow:var(--shadow-sm);min-width:220px;transition:background .15s" style-hover="background:var(--accent);box-shadow:0 6px 16px -6px color-mix(in srgb,var(--accent) 55%,transparent)">
+              <sc-if value="{{ ppCleanIdle }}" hint-placeholder-val="{{ true }}"><span>Korrekturläs transkriptet</span></sc-if>
+              <sc-if value="{{ ppCleanDone }}" hint-placeholder-val="{{ false }}"><span>↻ Kör igen</span></sc-if>
+            </button>
+            <span style="font-size:12.5px;color:var(--ink-3)">{{ cleanModelInfo }}</span>
+          </div>
+          </sc-if>
+        </div>
+
+        <div data-follow="llm" style="margin-top:16px;background:var(--surface);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);padding:22px 24px 20px">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+            <span style="font-family:var(--mono);font-size:10.5px;font-weight:500;letter-spacing:0.08em;color:var(--c-sky);background:color-mix(in srgb,var(--c-sky) 13%,transparent);border:1px solid color-mix(in srgb,var(--c-sky) 28%,transparent);padding:3px 9px;border-radius:6px">LLM</span>
+            <h2 style="font-size:19px;font-weight:600;letter-spacing:-0.02em;margin:0">Fråga om lektionen</h2>
+          </div>
+          <sc-if value="{{ ppLocked }}" hint-placeholder-val="{{ true }}">
+          <div style="display:flex;flex-direction:column;align-items:center;text-align:center;gap:13px;padding:28px 22px;border:1.5px dashed var(--line-2);border-radius:14px;background:var(--sunken);margin-top:14px">
+            <span style="width:46px;height:46px;border-radius:50%;background:var(--surface);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;color:var(--ink-3);flex:0 0 auto"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="4" y="9" width="12" height="8" rx="2"></rect><path d="M7 9V6.5a3 3 0 0 1 6 0V9"></path></svg></span>
+            <div>
+              <div style="font-size:15.5px;font-weight:600;color:var(--ink)">Korrekturläs först</div>
+              <div style="font-size:13.5px;color:var(--ink-2);margin-top:4px;max-width:360px;line-height:1.5">Summering och chatt arbetar på det korrekturlästa transkriptet. Kör korrekturläsningen ovan så låses de upp.</div>
+            </div>
+            <button onClick="{{ runClean }}" style="display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:11px;padding:11px 20px;font-size:14.5px;font-weight:500;cursor:pointer;font-family:inherit;box-shadow:var(--shadow-sm);transition:background .15s" style-hover="background:var(--accent);box-shadow:0 6px 16px -6px color-mix(in srgb,var(--accent) 55%,transparent)">Korrekturläs nu</button>
+          </div>
+          </sc-if>
+          <sc-if value="{{ ppUnlocked }}" hint-placeholder-val="{{ false }}">
+          <div style="animation:unlockIn .4s cubic-bezier(.2,.8,.25,1) both">
+          <p style="margin:0 0 16px;color:var(--ink-2);font-size:15px">Svaren bygger på det korrekturlästa transkriptet. Källorna ligger numrerade bredvid varje svar — klicka en siffra så lyser dess ställe upp.</p>
+          <div>
+            <sc-if value="{{ ppChatEmpty }}" hint-placeholder-val="{{ true }}">
+              <div style="background:var(--sunken);border:1px solid var(--line);border-radius:13px;padding:15px 18px;margin-bottom:12px;color:var(--ink-2);font-size:14px;line-height:1.5">Ställ en fråga om innehållet — t.ex. ”Var förklaras täljare och nämnare?”. Varje påstående i svaret förankras i numrerade källor som visas bredvid.</div>
+            </sc-if>
+            <sc-if value="{{ ppChatHasMsgs }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;gap:11px;margin-bottom:14px">
+              <sc-for list="{{ ppChatMsgs }}" as="m" hint-placeholder-count="2">
+                <sc-if value="{{ m.isUser }}" hint-placeholder-val="{{ true }}">
+                  <div style="align-self:flex-end;max-width:86%;background:var(--btn-bg);color:var(--btn-fg);border-radius:14px 14px 4px 14px;padding:10px 14px;font-size:14.5px;line-height:1.5">{{ m.text }}</div>
+                </sc-if>
+                <sc-if value="{{ m.isAi }}" hint-placeholder-val="{{ false }}">
+                  <div style="align-self:stretch;background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:5px 14px 14px 14px;padding:15px 17px;font-size:14.5px;box-shadow:var(--shadow-sm)">
+                    <div style="display:grid;grid-template-columns:1fr 244px;gap:18px;align-items:start">
+                      <div style="font-size:15px;line-height:1.78;color:var(--ink);min-width:0"><sc-for list="{{ m.tokens }}" as="tk" hint-placeholder-count="6"><sc-if value="{{ tk.isText }}" hint-placeholder-val="{{ true }}"><span>{{ tk.text }}</span></sc-if><sc-if value="{{ tk.isCite }}" hint-placeholder-val="{{ false }}"><button onClick="{{ tk.onCite }}" data-csup="{{ tk.supFlag }}" title="Visa källa {{ tk.num }} i transkriptet" style="display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;font-size:11px;font-weight:700;color:var(--accent);background:var(--accent-weak);border:1px solid color-mix(in srgb,var(--accent) 28%,transparent);border-radius:6px;cursor:pointer;vertical-align:2px;margin:0 1.5px;font-family:inherit;transition:transform .1s">{{ tk.num }}</button></sc-if></sc-for></div>
+                      <sc-if value="{{ m.hasSources }}" hint-placeholder-val="{{ false }}">
+                      <div style="background:var(--sunken);border:1px solid var(--line);border-radius:13px;padding:12px">
+                        <div style="display:flex;align-items:center;gap:7px;font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 3h10v10H3z" stroke-linejoin="round"></path><path d="M6 6.5h4M6 9.5h4" stroke-linecap="round"></path></svg>Källor i transkriptet</div>
+                        <sc-for list="{{ m.sources }}" as="src" hint-placeholder-count="3">
+                          <div onClick="{{ src.onPick }}" data-crow="{{ src.rowFlag }}" style="display:flex;flex-direction:column;gap:3px;padding:9px 10px;border-radius:9px;cursor:pointer;border:1px solid transparent;margin-bottom:5px;transition:box-shadow .18s,border-color .18s">
+                            <span style="display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;color:var(--accent);font-variant-numeric:tabular-nums"><span data-rownum style="width:16px;height:16px;border-radius:5px;background:var(--accent-weak);color:var(--accent);font-size:10px;display:flex;align-items:center;justify-content:center;font-weight:700;flex:0 0 auto">{{ src.num }}</span>{{ src.t }}</span>
+                            <span style="font-size:12.5px;line-height:1.45;color:var(--ink-2)">{{ src.text }}</span>
+                          </div>
+                        </sc-for>
+                        <span onClick="{{ openTranscript }}" style="display:inline-flex;align-items:center;gap:5px;margin-top:3px;color:var(--accent);font-size:12px;font-weight:600;cursor:pointer" style-hover="text-decoration:underline">Hela transkriptet<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5 10.5 8 6 12.5"></path></svg></span>
+                      </div>
+                      </sc-if>
+                    </div>
+                  </div>
+                </sc-if>
+              </sc-for>
+              <sc-if value="{{ ppChatThinking }}" hint-placeholder-val="{{ false }}">
+                <div style="align-self:flex-start;display:flex;align-items:center;gap:9px;color:var(--ink-2);font-size:13.5px;padding:4px 6px;background:var(--surface);border:1px solid var(--line);border-radius:14px 14px 14px 4px"><span style="width:13px;height:13px;border-radius:50%;border:2px solid var(--line-2);border-top-color:var(--accent);animation:spin .7s linear infinite"></span>Söker i transkriptet<span class="insp-dots" style="color:var(--ink-3)"><i></i><i></i><i></i></span></div>
+              </sc-if>
+            </div>
+            </sc-if>
+            <div style="display:flex;gap:10px;align-items:center">
+              <input value="{{ ppQuestion }}" onChange="{{ setPpQuestion }}" placeholder="Skriv en fråga …" style="flex:1;min-width:0;background:var(--sunken);border:1px solid var(--line);color:var(--ink);border-radius:11px;padding:12px 14px;font-size:15px;font-family:inherit;outline:none">
+              <button onClick="{{ sendChat }}" style="flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:11px;padding:12px 20px;font-size:15px;font-weight:500;cursor:pointer;font-family:inherit;box-shadow:var(--shadow-sm);transition:background .15s" style-hover="background:var(--accent);box-shadow:0 6px 16px -6px color-mix(in srgb,var(--accent) 55%,transparent)">Skicka</button>
+            </div>
+            <div style="font-size:12.5px;color:var(--ink-3);margin-top:9px">{{ llmModelInfo }}</div>
+            <div data-follow="chatend" style="height:1px"></div>
+          </div>
+          </div>
+          </sc-if>
+        </div>
+
+        <button onClick="{{ resetWizard }}" style="margin-top:18px;align-self:center;display:inline-flex;align-items:center;justify-content:center;gap:8px;background:transparent;border:1px solid var(--line);color:var(--ink);border-radius:11px;padding:11px 22px;font-size:15px;font-weight:500;cursor:pointer;font-family:inherit;transition:border-color .14s,background .14s" style-hover="border-color:var(--line-2);background:var(--sunken)">
+          <span style="font-size:16px;line-height:1">↺</span>Ny transkribering — börja om
+        </button>
+        </sc-if>
+      </div>
+      </sc-if>
+
+    </section>
+    </sc-if>
+
+    <!-- ============ INSPELNINGAR (Historik + Lektioner) ============ -->
+    <sc-if value="{{ isIn }}" hint-placeholder-val="{{ false }}">
+    <section data-screen-label="Inspelningar" style="padding:32px 0 96px;animation:tabin .28s ease">
+      <div class="ehead">
+        <div>
+          <div class="eyebrow" style="margin-bottom:16px">Arkiv</div>
+          <h1 class="disp" style="font-size:clamp(38px,5.4vw,58px);margin:0">Inspelningar</h1>
+        </div>
+        <p class="ehead_lede" style="max-width:56ch">Alla dina lektioner och inspelningar på ett ställe. Sök, filtrera eller fråga AI:n om innehållet — allt ligger lokalt.</p>
+      </div>
+
+      <!-- sök / fråga AI -->
+      <div style="max-width:780px;margin:0 auto 14px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:14px 16px;box-shadow:var(--shadow-sm)">
+        <div style="display:flex;align-items:center;gap:9px;margin-bottom:11px">
+          <span style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:7px;background:var(--accent-weak);color:var(--accent);font-size:13px;flex:0 0 auto">✻</span>
+          <span style="font-size:14px;font-weight:600;color:var(--ink)">Fråga AI om alla dina lektioner</span>
+        </div>
+        <div style="display:flex;gap:8px">
+          <input value="{{ inspQuery }}" onChange="{{ setInspQuery }}" onKeyDown="{{ onInspKey }}" placeholder="{{ inspPlaceholder }}" style="flex:1;min-width:0;background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:11px 13px;font-size:14.5px;font-family:inherit;outline:none">
+          <sc-if value="{{ inspAiOn }}" hint-placeholder-val="{{ false }}">
+            <button onClick="{{ askAI }}" style="flex:0 0 auto;display:inline-flex;align-items:center;gap:8px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:10px;padding:11px 18px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .15s;animation:fadeup .25s ease both" style-hover="background:var(--accent);box-shadow:0 6px 16px -6px color-mix(in srgb,var(--accent) 55%,transparent)">{{ askBtnLabel }}</button>
+          </sc-if>
+        </div>
+        <sc-if value="{{ inspShowSuggest }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:11px">
+            <sc-for list="{{ askSuggestions }}" as="sg" hint-placeholder-count="2">
+              <button onClick="{{ sg.onClick }}" style="display:inline-flex;align-items:center;gap:7px;font-size:13px;color:var(--ink-2);background:var(--sunken);border:1px solid var(--line);border-radius:99px;padding:7px 13px;cursor:pointer;font-family:inherit;transition:border-color .12s,color .12s" style-hover="border-color:var(--accent);color:var(--accent)"><span style="color:var(--accent)">✻</span>{{ sg.label }}</button>
+            </sc-for>
+          </div>
+        </sc-if>
+      </div>
+
+      <!-- tänk- / svar-banner -->
+      <sc-if value="{{ inspIsAsk }}" hint-placeholder-val="{{ false }}">
+      <div style="max-width:780px;margin:0 auto 18px;background:#1E221A;color:#fff;border:1px solid rgba(255,255,255,0.09);border-radius:16px;padding:16px 18px;box-shadow:var(--shadow);animation:fadeup .3s ease">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:13px">
+          <sc-if value="{{ askThinking }}" hint-placeholder-val="{{ true }}">
+            <span style="display:inline-flex;align-items:center;gap:9px;font-size:14px;font-weight:600">Tänker<span class="insp-dots"><i></i><i></i><i></i></span></span>
+          </sc-if>
+          <sc-if value="{{ askDone }}" hint-placeholder-val="{{ false }}">
+            <span style="display:inline-flex;align-items:center;gap:8px;font-size:14px;font-weight:600"><span style="width:18px;height:18px;border-radius:50%;background:var(--ok);display:flex;align-items:center;justify-content:center;font-size:11px">✓</span>Svar klart</span>
+          </sc-if>
+          <span style="margin-left:auto;font-size:13px;color:rgba(255,255,255,.6);max-width:55%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ askQ }}</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:7px">
+          <sc-if value="{{ askStep1 }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:9px;font-size:13px;color:rgba(255,255,255,.85)"><span style="width:15px;height:15px;border-radius:50%;background:var(--ok);display:flex;align-items:center;justify-content:center;font-size:9px;flex:0 0 auto">✓</span>{{ askScanLabel }}</div></sc-if>
+          <sc-if value="{{ askStep2 }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:9px;font-size:13px;color:rgba(255,255,255,.85)"><span style="width:15px;height:15px;border-radius:50%;background:var(--ok);display:flex;align-items:center;justify-content:center;font-size:9px;flex:0 0 auto">✓</span>{{ askHitLabel }}</div></sc-if>
+          <sc-if value="{{ askStep3 }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:9px;font-size:13px;color:rgba(255,255,255,.6)"><span style="width:15px;height:15px;border-radius:50%;border:1.5px solid rgba(255,255,255,.4);flex:0 0 auto"></span>Sammanställer svar med källor …</div></sc-if>
+        </div>
+        <sc-if value="{{ askDone }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;gap:9px;margin-top:14px">
+            <button onClick="{{ reopenAnswer }}" style="display:inline-flex;align-items:center;gap:7px;background:#fff;color:var(--ink);border:none;border-radius:10px;padding:9px 16px;font-size:13.5px;font-weight:600;cursor:pointer;font-family:inherit">Visa svaret</button>
+            <button onClick="{{ newAsk }}" style="background:transparent;border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:10px;padding:9px 16px;font-size:13.5px;font-weight:500;cursor:pointer;font-family:inherit">Ny fråga</button>
+          </div>
+        </sc-if>
+      </div>
+      </sc-if>
+
+      <!-- filter -->
+      <div style="display:flex;gap:10px;justify-content:center;align-items:center;margin-bottom:18px;flex-wrap:wrap">
+        <div style="position:relative" onMouseLeave="{{ closeFilter }}">
+          <button onClick="{{ toggleFilterKlass }}" data-pp="{{ filterKlassOpenSeg }}" style="display:inline-flex;align-items:center;gap:9px;background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:9px 14px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;transition:border-color .14s,background .14s,box-shadow .14s" style-hover="border-color:var(--accent);background:var(--accent-weak);color:var(--accent);box-shadow:0 5px 15px -5px color-mix(in srgb,var(--accent) 42%,transparent)">{{ filterClassLabel }}<span style="width:6px;height:6px;border-right:1.6px solid var(--ink-3);border-bottom:1.6px solid var(--ink-3);transform:rotate(45deg);margin:-3px 0 0 1px"></span></button>
+          <sc-if value="{{ filterKlassOpen }}" hint-placeholder-val="{{ false }}">
+            <div style="position:absolute;left:0;top:100%;z-index:41;min-width:190px;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:5px;transform-origin:top left;animation:ml-popin .2s cubic-bezier(.2,.8,.2,1) both">
+              <sc-for list="{{ klassOpts }}" as="o" hint-placeholder-count="4">
+                <button onClick="{{ o.onSelect }}" data-opt="1" style="width:100%;display:flex;align-items:center;gap:9px;background:transparent;border:none;border-radius:8px;padding:9px 11px;cursor:pointer;text-align:left;font-family:inherit;font-size:14px;color:var(--ink);transition:background .12s,color .12s" style-hover="background:var(--accent);color:#fff"><span style="width:15px;flex:0 0 auto;color:var(--accent);display:inline-flex"><sc-if value="{{ o.selected }}" hint-placeholder-val="{{ false }}"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5 6.5 11.5 12.5 5"></path></svg></sc-if></span>{{ o.label }}</button>
+              </sc-for>
+            </div>
+          </sc-if>
+        </div>
+        <div style="position:relative" onMouseLeave="{{ closeFilter }}">
+          <button onClick="{{ toggleFilterKurs }}" data-pp="{{ filterKursOpenSeg }}" style="display:inline-flex;align-items:center;gap:9px;background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:9px 14px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;transition:border-color .14s,background .14s,box-shadow .14s" style-hover="border-color:var(--accent);background:var(--accent-weak);color:var(--accent);box-shadow:0 5px 15px -5px color-mix(in srgb,var(--accent) 42%,transparent)">{{ filterCourseLabel }}<span style="width:6px;height:6px;border-right:1.6px solid var(--ink-3);border-bottom:1.6px solid var(--ink-3);transform:rotate(45deg);margin:-3px 0 0 1px"></span></button>
+          <sc-if value="{{ filterKursOpen }}" hint-placeholder-val="{{ false }}">
+            <div style="position:absolute;left:0;top:100%;z-index:41;min-width:190px;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:5px;transform-origin:top left;animation:ml-popin .2s cubic-bezier(.2,.8,.2,1) both">
+              <sc-for list="{{ kursOpts }}" as="o" hint-placeholder-count="4">
+                <button onClick="{{ o.onSelect }}" data-opt="1" style="width:100%;display:flex;align-items:center;gap:9px;background:transparent;border:none;border-radius:8px;padding:9px 11px;cursor:pointer;text-align:left;font-family:inherit;font-size:14px;color:var(--ink);transition:background .12s,color .12s" style-hover="background:var(--accent);color:#fff"><span style="width:15px;flex:0 0 auto;color:var(--accent);display:inline-flex"><sc-if value="{{ o.selected }}" hint-placeholder-val="{{ false }}"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5 6.5 11.5 12.5 5"></path></svg></sc-if></span>{{ o.label }}</button>
+              </sc-for>
+            </div>
+          </sc-if>
+        </div>
+        <div style="position:relative" onMouseLeave="{{ closeFilter }}">
+          <button onClick="{{ toggleFilterDatum }}" data-pp="{{ filterDatumOpenSeg }}" style="display:inline-flex;align-items:center;gap:9px;background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:9px 14px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;transition:border-color .14s,background .14s,box-shadow .14s" style-hover="border-color:var(--accent);background:var(--accent-weak);color:var(--accent);box-shadow:0 5px 15px -5px color-mix(in srgb,var(--accent) 42%,transparent)">{{ filterDateLabel }}<span style="width:6px;height:6px;border-right:1.6px solid var(--ink-3);border-bottom:1.6px solid var(--ink-3);transform:rotate(45deg);margin:-3px 0 0 1px"></span></button>
+          <sc-if value="{{ filterDatumOpen }}" hint-placeholder-val="{{ false }}">
+            <div style="position:absolute;left:0;top:100%;z-index:41;min-width:190px;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow);padding:5px;transform-origin:top left;animation:ml-popin .2s cubic-bezier(.2,.8,.2,1) both">
+              <sc-for list="{{ datumOpts }}" as="o" hint-placeholder-count="4">
+                <button onClick="{{ o.onSelect }}" data-opt="1" style="width:100%;display:flex;align-items:center;gap:9px;background:transparent;border:none;border-radius:8px;padding:9px 11px;cursor:pointer;text-align:left;font-family:inherit;font-size:14px;color:var(--ink);transition:background .12s,color .12s" style-hover="background:var(--accent);color:#fff"><span style="width:15px;flex:0 0 auto;color:var(--accent);display:inline-flex"><sc-if value="{{ o.selected }}" hint-placeholder-val="{{ false }}"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5 6.5 11.5 12.5 5"></path></svg></sc-if></span>{{ o.label }}</button>
+              </sc-for>
+            </div>
+          </sc-if>
+        </div>
+      </div>
+
+      <!-- kort-scen -->
+      <div style="max-width:1000px;margin:0 auto">
+        <div style="display:flex;align-items:center;gap:9px;margin-bottom:13px;padding:0 2px">
+          <span style="font-size:12px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:var(--ink-3)">{{ recCountLabel }}</span>
+          <sc-if value="{{ inspIsAsk }}" hint-placeholder-val="{{ false }}"><span style="font-size:12.5px;color:var(--accent);display:inline-flex;align-items:center;gap:6px"><span style="width:6px;height:6px;border-radius:50%;background:var(--accent)"></span>Ordnas efter relevans</span></sc-if>
+        </div>
+        <div class="{{ zoomStageCls }}" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(224px,1fr));gap:12px">
+          <sc-for list="{{ recCards }}" as="r" hint-placeholder-count="6">
+            <div class="{{ zoomCardCls }}" data-stage="{{ r.stage }}" onClick="{{ r.onOpen }}" style="background:var(--surface);border:1px solid var(--line);border-radius:15px;padding:14px 15px;box-shadow:var(--shadow-sm);cursor:pointer;display:flex;flex-direction:column;gap:11px" style-hover="border-color:var(--line-2);box-shadow:var(--shadow)">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+                <span style="width:50px;height:32px;border-radius:8px;background:var(--sunken);border:1px solid var(--line);display:flex;align-items:flex-end;justify-content:center;gap:2px;flex:0 0 auto;padding-bottom:8px">
+                  <span style="width:2.5px;height:8px;border-radius:2px;background:var(--ink-3)"></span><span style="width:2.5px;height:15px;border-radius:2px;background:var(--accent)"></span><span style="width:2.5px;height:11px;border-radius:2px;background:var(--ink-3)"></span><span style="width:2.5px;height:6px;border-radius:2px;background:var(--ink-3)"></span>
+                </span>
+                <sc-if value="{{ r.ai }}" hint-placeholder-val="{{ true }}"><span title="Namngiven av Qwen" style="display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:600;color:var(--accent);background:var(--accent-weak);border-radius:6px;padding:3px 7px">✦ AI-namngiven</span></sc-if>
+                <sc-if value="{{ r.manual }}" hint-placeholder-val="{{ false }}"><span title="Egen titel" style="font-size:10.5px;font-weight:500;color:var(--ink-3);background:var(--sunken);border:1px solid var(--line);border-radius:6px;padding:3px 7px">Egen titel</span></sc-if>
+              </div>
+              <div>
+                <div style="font-size:15.5px;font-weight:600;color:var(--ink);line-height:1.3">{{ r.title }}</div>
+                <div style="display:flex;align-items:center;gap:7px;margin-top:8px;flex-wrap:wrap">
+                  <sc-if value="{{ r.hasKlass }}" hint-placeholder-val="{{ true }}"><span style="font-size:11.5px;font-weight:600;color:var(--accent);background:var(--accent-weak);border-radius:99px;padding:2px 9px">{{ r.klass }}</span></sc-if>
+                  <span style="font-size:12px;color:var(--ink-2)">{{ r.kursLabel }}</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:7px;margin-top:6px">
+                  <span style="font-size:12px;color:var(--ink-3);font-variant-numeric:tabular-nums">{{ r.date }}</span><span style="width:3px;height:3px;border-radius:50%;background:var(--line-2)"></span><span style="font-size:12px;color:var(--ink-3);font-variant-numeric:tabular-nums">{{ r.dur }}</span>
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;gap:7px;border-top:1px solid var(--line);padding-top:11px;margin-top:1px">
+                <button onClick="{{ r.onRename }}" style="display:inline-flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--line);color:var(--ink-2);border-radius:8px;padding:6px 11px;font-size:12.5px;font-weight:500;cursor:pointer;font-family:inherit;transition:border-color .12s,color .12s" style-hover="border-color:var(--ink-3);color:var(--ink)"><svg width="13" height="13" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4l3 3"></path><path d="M3.5 14.5 4 11.5 11.5 4l3 3L7 14.5z"></path></svg>Döp om</button>
+                <span style="flex:1"></span>
+                <button onClick="{{ r.onDelete }}" aria-label="Ta bort" style="width:30px;height:30px;border:1px solid var(--line);background:var(--surface);border-radius:8px;cursor:pointer;color:var(--ink-3);display:flex;align-items:center;justify-content:center;transition:border-color .12s,color .12s" style-hover="border-color:var(--bad);color:var(--bad)"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.5 8.5h6l.5-8.5"></path></svg></button>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+        <sc-if value="{{ recEmpty }}" hint-placeholder-val="{{ false }}">
+          <div style="text-align:center;color:var(--ink-2);font-size:15px;padding:46px 0;background:var(--surface);border:1px dashed var(--line-2);border-radius:14px">Inga inspelningar matchar dina filter.</div>
+        </sc-if>
+      </div>
+    </section>
+    </sc-if>
+
+  </main>
+
+  <!-- ============ TOAST ============ -->
+  <sc-if value="{{ toast }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;left:50%;bottom:26px;z-index:80;transform:translateX(-50%);display:flex;align-items:center;gap:14px;background:var(--ink);color:var(--canvas);border-radius:12px;padding:12px 14px 12px 18px;box-shadow:var(--shadow);font-size:14.5px;max-width:min(92vw,520px);animation:toastin .22s ease">
+      <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ toastMsg }}</span>
+      <sc-if value="{{ toastHasUndo }}" hint-placeholder-val="{{ false }}">
+        <button onClick="{{ onUndo }}" style="flex:0 0 auto;background:transparent;border:1px solid color-mix(in srgb,var(--canvas) 40%,transparent);color:var(--canvas);border-radius:8px;padding:6px 12px;font-size:13.5px;font-weight:600;cursor:pointer;font-family:inherit">Ångra</button>
+      </sc-if>
+      <button onClick="{{ dismissToast }}" aria-label="Stäng" style="flex:0 0 auto;width:26px;height:26px;display:flex;align-items:center;justify-content:center;background:transparent;border:none;color:color-mix(in srgb,var(--canvas) 70%,transparent);cursor:pointer;font-size:15px;border-radius:7px">✕</button>
+    </div>
+  </sc-if>
+
+  <!-- ============ INSPELNING ============ -->
+  <sc-if value="{{ recording }}" hint-placeholder-val="{{ false }}">
+    <div data-modal-back="{{ recAnim }}" style="position:fixed;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--canvas) 68%,transparent);backdrop-filter:blur(8px);padding:24px">
+      <div data-modal-card="{{ recAnim }}" style="width:min(92vw,460px);background:var(--surface);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);padding:30px 28px;text-align:center">
+        <div style="display:inline-flex;align-items:center;gap:9px;font-size:13px;font-weight:600;color:var(--bad);letter-spacing:0.05em;margin-bottom:18px">
+          <span style="width:10px;height:10px;border-radius:50%;background:var(--bad);animation:pulse 1.2s ease-in-out infinite"></span>SPELAR IN
+        </div>
+        <div class="{{ figCls }}" style="font-variant-numeric:tabular-nums;font-size:56px;letter-spacing:-0.01em;color:var(--ink);margin-bottom:22px">{{ recLabel }}</div>
+        <div style="display:flex;align-items:center;justify-content:center;gap:3px;height:54px;margin-bottom:26px">
+          <span style="width:3px;height:100%;border-radius:2px;background:var(--accent);animation:wave .9s ease-in-out infinite;animation-delay:0s"></span>
+          <span style="width:3px;height:100%;border-radius:2px;background:var(--accent);animation:wave .9s ease-in-out infinite;animation-delay:.05s"></span>
+          <span style="width:3px;height:100%;border-radius:2px;background:var(--accent);animation:wave .9s ease-in-out infinite;animation-delay:.1s"></span>
+          <span style="width:3px;height:100%;border-radius:2px;background:var(--accent);animation:wave .9s ease-in-out infinite;animation-delay:.15s"></span>
+          <span style="width:3px;height:100%;border-radius:2px;background:var(--accent);animation:wave .9s ease-in-out infinite;animation-delay:.2s"></span>
+          <span style="width:3px;height:100%;border-radius:2px;background:var(--accent);animation:wave .9s ease-in-out infinite;animation-delay:.25s"></span>
+          <span style="width:3px;height:100%;border-radius:2px;background:var(--accent);animation:wave .9s ease-in-out infinite;animation-delay:.3s"></span>
+          <span style="width:3px;height:100%;border-radius:2px;background:var(--accent);animation:wave .9s ease-in-out infinite;animation-delay:.35s"></span>
+          <span style="width:3px;height:100%;border-radius:2px;background:var(--accent);animation:wave .9s ease-in-out infinite;animation-delay:.4s"></span>
+          <span style="width:3px;height:100%;border-radius:2px;background:var(--accent);animation:wave .9s ease-in-out infinite;animation-delay:.45s"></span>
+          <span style="width:3px;height:100%;border-radius:2px;background:var(--accent);animation:wave .9s ease-in-out infinite;animation-delay:.5s"></span>
+          <span style="width:3px;height:100%;border-radius:2px;background:var(--accent);animation:wave .9s ease-in-out infinite;animation-delay:.55s"></span>
+          <span style="width:3px;height:100%;border-radius:2px;background:var(--accent);animation:wave .9s ease-in-out infinite;animation-delay:.6s"></span>
+          <span style="width:3px;height:100%;border-radius:2px;background:var(--accent);animation:wave .9s ease-in-out infinite;animation-delay:.55s"></span>
+          <span style="width:3px;height:100%;border-radius:2px;background:var(--accent);animation:wave .9s ease-in-out infinite;animation-delay:.5s"></span>
+          <span style="width:3px;height:100%;border-radius:2px;background:var(--accent);animation:wave .9s ease-in-out infinite;animation-delay:.45s"></span>
+          <span style="width:3px;height:100%;border-radius:2px;background:var(--accent);animation:wave .9s ease-in-out infinite;animation-delay:.4s"></span>
+          <span style="width:3px;height:100%;border-radius:2px;background:var(--accent);animation:wave .9s ease-in-out infinite;animation-delay:.35s"></span>
+          <span style="width:3px;height:100%;border-radius:2px;background:var(--accent);animation:wave .9s ease-in-out infinite;animation-delay:.3s"></span>
+          <span style="width:3px;height:100%;border-radius:2px;background:var(--accent);animation:wave .9s ease-in-out infinite;animation-delay:.25s"></span>
+          <span style="width:3px;height:100%;border-radius:2px;background:var(--accent);animation:wave .9s ease-in-out infinite;animation-delay:.2s"></span>
+          <span style="width:3px;height:100%;border-radius:2px;background:var(--accent);animation:wave .9s ease-in-out infinite;animation-delay:.15s"></span>
+          <span style="width:3px;height:100%;border-radius:2px;background:var(--accent);animation:wave .9s ease-in-out infinite;animation-delay:.1s"></span>
+          <span style="width:3px;height:100%;border-radius:2px;background:var(--accent);animation:wave .9s ease-in-out infinite;animation-delay:.2s"></span>
+          <span style="width:3px;height:100%;border-radius:2px;background:var(--accent);animation:wave .9s ease-in-out infinite;animation-delay:.3s"></span>
+          <span style="width:3px;height:100%;border-radius:2px;background:var(--accent);animation:wave .9s ease-in-out infinite;animation-delay:.4s"></span>
+          <span style="width:3px;height:100%;border-radius:2px;background:var(--accent);animation:wave .9s ease-in-out infinite;animation-delay:.5s"></span>
+          <span style="width:3px;height:100%;border-radius:2px;background:var(--accent);animation:wave .9s ease-in-out infinite;animation-delay:.6s"></span>
+          <span style="width:3px;height:100%;border-radius:2px;background:var(--accent);animation:wave .9s ease-in-out infinite;animation-delay:.35s"></span>
+          <span style="width:3px;height:100%;border-radius:2px;background:var(--accent);animation:wave .9s ease-in-out infinite;animation-delay:.15s"></span>
+        </div>
+        <div style="display:flex;gap:10px;justify-content:center">
+          <button onClick="{{ cancelRecording }}" style="background:transparent;border:1px solid var(--line);color:var(--ink);border-radius:11px;padding:12px 22px;font-size:15px;font-weight:500;cursor:pointer;font-family:inherit;transition:border-color .14s" style-hover="border-color:var(--line-2)">Avbryt</button>
+          <button onClick="{{ stopRecording }}" style="display:inline-flex;align-items:center;gap:9px;background:var(--bad);color:#fff;border:none;border-radius:11px;padding:12px 24px;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit"><span style="width:12px;height:12px;border-radius:3px;background:#fff"></span>Stoppa</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ============ DETALJ ============ -->
+  <sc-if value="{{ modalDetailOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closeModal }}" data-modal-back="{{ modalAnim }}" style="position:fixed;inset:0;z-index:85;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--canvas) 64%,transparent);backdrop-filter:blur(7px);padding:24px">
+      <div onClick="{{ stopProp }}" data-modal-card="{{ modalAnim }}" style="width:min(94vw,620px);max-height:86vh;overflow:auto;background:var(--surface);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);padding:26px 28px">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:14px">
+          <div style="min-width:0">
+            <div class="eyebrow" style="margin-bottom:12px">Inspelning</div>
+            <h2 class="disp" style="font-size:26px;margin:0;overflow:hidden;text-overflow:ellipsis">{{ modalName }}</h2>
+          </div>
+          <button onClick="{{ closeModal }}" aria-label="Stäng" style="flex:0 0 auto;width:34px;height:34px;display:flex;align-items:center;justify-content:center;background:var(--surface);border:1px solid var(--line);border-radius:9px;color:var(--ink-2);cursor:pointer;font-size:15px">✕</button>
+        </div>
+        <div style="display:flex;gap:24px;align-items:baseline;margin-bottom:18px;flex-wrap:wrap">
+          <span style="display:inline-flex;align-items:baseline;gap:8px"><span class="win_lbl">Datum</span><span style="font-size:14px;color:var(--ink-2);font-variant-numeric:tabular-nums">{{ modalDate }}</span></span>
+          <span style="display:inline-flex;align-items:baseline;gap:8px"><span class="win_lbl">Info</span><span style="font-size:14px;color:var(--ink-2);font-variant-numeric:tabular-nums">{{ modalMeta }}</span></span>
+        </div>
+        <div style="background:var(--sunken);border:1px solid var(--line);border-radius:13px;padding:16px 18px;margin-bottom:18px">
+          <div style="font-size:11.5px;text-transform:uppercase;letter-spacing:0.04em;color:var(--ink-2);margin-bottom:12px">Transkript</div>
+          <sc-for list="{{ modalPreview }}" as="p" hint-placeholder-count="6">
+            <div style="display:flex;gap:14px;padding:4px 0">
+              <span style="font-variant-numeric:tabular-nums;font-size:13px;color:var(--ink-3);flex:0 0 auto;width:46px;padding-top:2px">{{ p.t }}</span>
+              <span style="font-size:15px;color:var(--ink);line-height:1.5">{{ p.txt }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <span style="font-size:13px;color:var(--ink-2);font-weight:500">Ladda ner:</span>
+          <sc-for list="{{ modalDownloads }}" as="d" hint-placeholder-count="2">
+            <button onClick="{{ d.onClick }}" style="display:inline-flex;align-items:center;gap:7px;background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:9px;padding:8px 13px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;transition:border-color .14s,color .14s" style-hover="border-color:var(--accent);color:var(--accent)">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.5v7.5"></path><path d="M4.5 6.5 8 10l3.5-3.5"></path><path d="M3 13.5h10"></path></svg>{{ d.ext }}
+            </button>
+          </sc-for>
+          <div style="flex:1"></div>
+          <sc-if value="{{ modalIsHistory }}" hint-placeholder-val="{{ false }}">
+            <button onClick="{{ modalRerun }}" style="display:inline-flex;align-items:center;gap:8px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:9px;padding:9px 16px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit">↻ Kör om</button>
+          </sc-if>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ============ TILLDELA ============ -->
+  <sc-if value="{{ assignOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ cancelAssign }}" data-modal-back="{{ assignAnim }}" style="position:fixed;inset:0;z-index:88;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--canvas) 64%,transparent);backdrop-filter:blur(7px);padding:24px">
+      <div onClick="{{ stopProp }}" data-modal-card="{{ assignAnim }}" style="width:min(92vw,440px);background:var(--surface);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);padding:24px 26px">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:4px">
+          <h2 style="font-size:20px;font-weight:600;letter-spacing:-0.02em;margin:0">Tilldela lektion</h2>
+          <button onClick="{{ cancelAssign }}" aria-label="Stäng" style="flex:0 0 auto;width:32px;height:32px;display:flex;align-items:center;justify-content:center;background:var(--surface);border:1px solid var(--line);border-radius:9px;color:var(--ink-2);cursor:pointer;font-size:15px">✕</button>
+        </div>
+        <p style="margin:0 0 18px;color:var(--ink-2);font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ assignName }}</p>
+        <div style="display:flex;flex-direction:column;gap:14px;margin-bottom:22px">
+          <label style="display:flex;flex-direction:column;gap:7px">
+            <span style="font-size:13px;font-weight:500;color:var(--ink-2)">Klass</span>
+            <select value="{{ assignClass }}" onChange="{{ setAssignClass }}" style="appearance:none;background:var(--sunken);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:11px 13px;font-size:15px;font-family:inherit;cursor:pointer">
+              <option value="">Välj klass …</option>
+              <sc-for list="{{ assignClassOptions }}" as="c" hint-placeholder-count="3"><option>{{ c }}</option></sc-for>
+            </select>
+          </label>
+          <label style="display:flex;flex-direction:column;gap:7px">
+            <span style="font-size:13px;font-weight:500;color:var(--ink-2)">Kurs</span>
+            <select value="{{ assignCourse }}" onChange="{{ setAssignCourse }}" style="appearance:none;background:var(--sunken);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:11px 13px;font-size:15px;font-family:inherit;cursor:pointer">
+              <option value="">Välj kurs …</option>
+              <sc-for list="{{ assignCourseOptions }}" as="c" hint-placeholder-count="3"><option>{{ c }}</option></sc-for>
+            </select>
+          </label>
+        </div>
+        <div style="display:flex;gap:10px;justify-content:flex-end">
+          <button onClick="{{ cancelAssign }}" style="background:transparent;border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:10px 18px;font-size:14.5px;font-weight:500;cursor:pointer;font-family:inherit">Avbryt</button>
+          <button onClick="{{ saveAssign }}" style="background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:10px;padding:10px 20px;font-size:14.5px;font-weight:600;cursor:pointer;font-family:inherit">Spara</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ============ INSIKTER ============ -->
+  <sc-if value="{{ modalInsightsOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closeModal }}" data-modal-back="{{ modalAnim }}" style="position:fixed;inset:0;z-index:85;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--canvas) 64%,transparent);backdrop-filter:blur(7px);padding:24px">
+      <div onClick="{{ stopProp }}" data-modal-card="{{ modalAnim }}" style="width:min(94vw,560px);max-height:86vh;overflow:auto;background:var(--surface);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);padding:26px 28px">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:5px">
+          <div style="min-width:0">
+            <div class="eyebrow" style="margin-bottom:11px">Insikter</div>
+            <h2 class="disp" style="font-size:24px;margin:0;overflow:hidden;text-overflow:ellipsis">{{ modalName }}</h2>
+          </div>
+          <button onClick="{{ closeModal }}" aria-label="Stäng" style="flex:0 0 auto;width:34px;height:34px;display:flex;align-items:center;justify-content:center;background:var(--surface);border:1px solid var(--line);border-radius:9px;color:var(--ink-2);cursor:pointer;font-size:15px">✕</button>
+        </div>
+        <div style="font-size:14px;color:var(--ink-2);margin-bottom:18px">{{ modalDate }} · {{ modalTag }}</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px">
+          <div style="background:var(--sunken);border:1px solid var(--line);border-radius:12px;padding:14px 15px">
+            <div style="font-size:12px;color:var(--ink-2);margin-bottom:5px">Längd</div>
+            <div style="font-size:22px;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums">{{ insMins }} min</div>
+          </div>
+          <div style="background:var(--sunken);border:1px solid var(--line);border-radius:12px;padding:14px 15px">
+            <div style="font-size:12px;color:var(--ink-2);margin-bottom:5px">Talade ord</div>
+            <div style="font-size:22px;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums">{{ insWordCount }}</div>
+          </div>
+          <div style="background:var(--sunken);border:1px solid var(--line);border-radius:12px;padding:14px 15px">
+            <div style="font-size:12px;color:var(--ink-2);margin-bottom:5px">Elevfrågor</div>
+            <div style="font-size:22px;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums">{{ insQuestions }}</div>
+          </div>
+        </div>
+        <div style="margin-bottom:20px">
+          <div style="font-size:11.5px;text-transform:uppercase;letter-spacing:0.04em;color:var(--ink-2);margin-bottom:10px">Talfördelning</div>
+          <div style="height:12px;border-radius:99px;background:var(--track);overflow:hidden;margin-bottom:8px">{{ insTeacherBar }}</div>
+          <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--ink-2)">
+            <span style="display:inline-flex;align-items:center;gap:6px"><span style="width:9px;height:9px;border-radius:3px;background:var(--accent)"></span>Lärare {{ insTeacher }}%</span>
+            <span>Elever {{ insStudents }}%</span>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:11.5px;text-transform:uppercase;letter-spacing:0.04em;color:var(--ink-2);margin-bottom:10px">Nyckelord</div>
+          <div style="display:flex;flex-wrap:wrap;gap:7px">
+            <sc-for list="{{ insKeywords }}" as="k" hint-placeholder-count="6">
+              <span style="font-size:13.5px;color:var(--ink);background:var(--sunken);border:1px solid var(--line);border-radius:8px;padding:5px 11px">{{ k }}</span>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ============ TRANSKRIPT ============ -->
+  <sc-if value="{{ transcriptOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closeTranscript }}" data-modal-back="{{ transcriptAnim }}" style="position:fixed;inset:0;z-index:87;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--canvas) 64%,transparent);backdrop-filter:blur(7px);padding:24px">
+      <div onClick="{{ stopProp }}" data-modal-card="{{ transcriptAnim }}" style="width:min(94vw,640px);max-height:84vh;display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);overflow:hidden">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:24px 26px 14px;border-bottom:1px solid var(--line);flex:0 0 auto">
+          <div style="min-width:0">
+            <span style="font-family:var(--mono);font-size:10.5px;font-weight:500;letter-spacing:0.08em;color:var(--c-sage);background:color-mix(in srgb,var(--c-sage) 13%,transparent);border:1px solid color-mix(in srgb,var(--c-sage) 28%,transparent);padding:3px 9px;border-radius:6px;display:inline-block;margin-bottom:8px">TRANSKRIPT</span>
+            <h2 style="font-size:20px;font-weight:600;letter-spacing:-0.02em;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ transcriptName }}</h2>
+          </div>
+          <button onClick="{{ closeTranscript }}" aria-label="Stäng" style="flex:0 0 auto;width:34px;height:34px;display:flex;align-items:center;justify-content:center;background:var(--surface);border:1px solid var(--line);border-radius:9px;color:var(--ink-2);cursor:pointer;font-size:15px">✕</button>
+        </div>
+        <div data-hidescroll style="overflow:auto;overscroll-behavior:contain;padding:14px 26px 24px;min-height:0">
+          <sc-for list="{{ fullTranscript }}" as="p" hint-placeholder-count="8">
+            <div style="display:flex;gap:16px;padding:8px 0;border-bottom:1px solid color-mix(in srgb,var(--line) 60%,transparent)">
+              <span style="font-variant-numeric:tabular-nums;font-size:13.5px;color:var(--ink-3);flex:0 0 auto;width:52px;padding-top:2px">{{ p.t }}</span>
+              <span style="font-size:16px;color:var(--ink);line-height:1.55">{{ p.txt }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ============ KORREKTURLÄST (modal) ============ -->
+  <sc-if value="{{ cleanOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closeClean }}" data-modal-back="{{ cleanAnim }}" style="position:fixed;inset:0;z-index:87;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--canvas) 64%,transparent);backdrop-filter:blur(7px);padding:24px">
+      <div onClick="{{ stopProp }}" data-modal-card="{{ cleanAnim }}" style="width:min(94vw,680px);max-height:84vh;display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);overflow:hidden">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:24px 26px 14px;border-bottom:1px solid var(--line);flex:0 0 auto">
+          <div style="min-width:0">
+            <span style="font-size:11.5px;font-weight:600;letter-spacing:0.05em;color:var(--accent);background:var(--accent-weak);padding:3px 9px;border-radius:6px;display:inline-block;margin-bottom:9px">KORREKTURLÄST</span>
+            <h2 style="font-size:20px;font-weight:600;letter-spacing:-0.02em;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ transcriptName }}</h2>
+            <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:11px">
+              <span style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2)"><span style="width:12px;height:12px;border-radius:4px;background:color-mix(in srgb,var(--ok) 20%,transparent);border:1px solid color-mix(in srgb,var(--ok) 45%,transparent)"></span>mot ljudet</span>
+              <span style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2)"><span style="width:12px;height:12px;border-radius:4px;background:color-mix(in srgb,var(--accent) 16%,transparent);border:1px solid color-mix(in srgb,var(--accent) 45%,transparent)"></span>språk &amp; skiljetecken</span>
+            </div>
+          </div>
+          <button onClick="{{ closeClean }}" aria-label="Stäng" style="flex:0 0 auto;width:34px;height:34px;display:flex;align-items:center;justify-content:center;background:var(--surface);border:1px solid var(--line);border-radius:9px;color:var(--ink-2);cursor:pointer;font-size:15px">✕</button>
+        </div>
+        <div data-hidescroll style="overflow:auto;overscroll-behavior:contain;padding:14px 26px 24px;min-height:0">
+          <sc-for list="{{ fullCleanSegs }}" as="seg" hint-placeholder-count="12">
+            <div style="display:flex;gap:16px;padding:8px 0;border-bottom:1px solid color-mix(in srgb,var(--line) 60%,transparent)">
+              <span style="font-variant-numeric:tabular-nums;font-size:13.5px;color:var(--ink-3);flex:0 0 auto;width:52px;padding-top:2px">{{ seg.t }}</span>
+              <span style="font-size:16px;color:var(--ink);line-height:1.6">
+                <sc-for list="{{ seg.parts }}" as="pt" hint-placeholder-count="3">
+                  <sc-if value="{{ pt.fixed }}" hint-placeholder-val="{{ false }}"><span style="background:color-mix(in srgb,var(--ok) 18%,transparent);color:var(--ok);border-radius:4px;padding:0 3px;font-weight:500">{{ pt.s }}</span></sc-if>
+                  <sc-if value="{{ pt.lang }}" hint-placeholder-val="{{ false }}"><span style="background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent);border-radius:4px;padding:0 3px;font-weight:500">{{ pt.s }}</span></sc-if>
+                  <sc-if value="{{ pt.norm }}" hint-placeholder-val="{{ true }}"><span>{{ pt.s }}</span></sc-if>
+                </sc-for>
+              </span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+  <!-- ============ AI-SVAR (modal, källhänvisad) ============ -->
+  <sc-if value="{{ answerOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closeAnswer }}" data-modal-back="{{ answerAnim }}" style="position:fixed;inset:0;z-index:89;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--canvas) 64%,transparent);backdrop-filter:blur(7px);padding:24px">
+      <div onClick="{{ stopProp }}" data-modal-card="{{ answerAnim }}" style="width:min(94vw,640px);max-height:84vh;display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);overflow:hidden">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:20px 24px 15px;border-bottom:1px solid var(--line);flex:0 0 auto">
+          <div style="min-width:0">
+            <div style="display:flex;align-items:center;gap:9px;margin-bottom:8px;flex-wrap:wrap">
+              <span style="font-size:11px;font-weight:600;letter-spacing:.05em;color:var(--accent);background:var(--accent-weak);padding:3px 9px;border-radius:6px">AI-SVAR</span>
+              <span style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;color:var(--ok);background:color-mix(in srgb,var(--ok) 13%,transparent);border-radius:99px;padding:4px 10px"><span style="width:6px;height:6px;border-radius:50%;background:var(--ok)"></span>{{ answerRefCount }} källor · från transkripten</span>
+            </div>
+            <div style="font-size:16px;font-weight:600;color:var(--ink);line-height:1.35">{{ askQ }}</div>
+          </div>
+          <button onClick="{{ closeAnswer }}" aria-label="Stäng" style="flex:0 0 auto;width:34px;height:34px;display:flex;align-items:center;justify-content:center;background:var(--surface);border:1px solid var(--line);border-radius:9px;color:var(--ink-2);cursor:pointer;font-size:15px">✕</button>
+        </div>
+        <div data-hidescroll style="overflow:auto;overscroll-behavior:contain;padding:18px 24px 22px;min-height:0">
+          <div style="font-size:15px;line-height:1.7;color:var(--ink)">
+            <sc-for list="{{ answerTokens }}" as="tk" hint-placeholder-count="5">
+              <sc-if value="{{ tk.isText }}" hint-placeholder-val="{{ true }}"><span>{{ tk.text }}</span></sc-if>
+              <sc-if value="{{ tk.isCite }}" hint-placeholder-val="{{ false }}"><span onClick="{{ tk.onCite }}" style="display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;color:var(--accent);background:var(--accent-weak);border:1px solid color-mix(in srgb,var(--accent) 22%,transparent);border-radius:7px;padding:1px 7px;margin:0 1px;cursor:pointer;vertical-align:1px"><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="8" cy="8" r="6"></circle><path d="M8 4.6V8l2.3 1.5" stroke-linecap="round"></path></svg>{{ tk.rec }} · {{ tk.t }}</span></sc-if>
+            </sc-for>
+          </div>
+          <div style="margin-top:18px;padding-top:15px;border-top:1px dashed var(--line-2)">
+            <div style="font-size:11px;font-weight:600;letter-spacing:.05em;color:var(--ink-3);margin-bottom:10px">KÄLLOR — klicka för att läsa i transkriptet</div>
+            <sc-for list="{{ answerRefs }}" as="rf" hint-placeholder-count="2">
+              <div onClick="{{ rf.onToggle }}" style="display:flex;align-items:center;gap:11px;padding:11px 13px;border:1px solid var(--line);border-radius:11px;margin-bottom:8px;cursor:pointer;background:var(--surface);transition:border-color .12s" style-hover="border-color:var(--accent)">
+                <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="var(--accent)" stroke-width="1.8"><circle cx="8" cy="8" r="6"></circle><path d="M8 4.6V8l2.3 1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                <span style="flex:1;min-width:0;font-size:13.5px;font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ rf.rec }}</span>
+                <span style="font-size:12px;font-weight:600;color:var(--accent);font-variant-numeric:tabular-nums">{{ rf.t }}</span>
+              </div>
+              <sc-if value="{{ rf.open }}" hint-placeholder-val="{{ false }}">
+                <div style="background:var(--sunken);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:0 11px 11px 0;padding:13px 15px;margin:-2px 0 10px;animation:unlockIn .3s ease both">
+                  <sc-for list="{{ rf.ctx }}" as="c" hint-placeholder-count="3">
+                    <sc-if value="{{ c.hit }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:13px;padding:4px 6px;margin:0 -6px 1px;background:color-mix(in srgb,var(--accent) 11%,transparent);border-radius:6px"><span style="font-variant-numeric:tabular-nums;font-size:12.5px;color:var(--accent);font-weight:600;flex:0 0 auto;width:44px">{{ c.t }}</span><span style="font-size:14px;line-height:1.5;color:var(--ink);font-weight:500">{{ c.s }}</span></div></sc-if>
+                    <sc-if value="{{ c.norm }}" hint-placeholder-val="{{ true }}"><div style="display:flex;gap:13px;padding:4px 0"><span style="font-variant-numeric:tabular-nums;font-size:12.5px;color:var(--ink-3);flex:0 0 auto;width:44px">{{ c.t }}</span><span style="font-size:14px;line-height:1.5;color:var(--ink-2)">{{ c.s }}</span></div></sc-if>
+                  </sc-for>
+                  <button onClick="{{ rf.onToggle }}" style="display:inline-flex;align-items:center;gap:6px;margin-top:10px;background:transparent;border:none;color:var(--accent);font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3.5 5.5 8l4.5 4.5"></path></svg>Tillbaka till svaret</button>
+                </div>
+              </sc-if>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ============ DÖP OM (modal) ============ -->
+  <sc-if value="{{ renameOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ cancelRename }}" data-modal-back="{{ renameAnim }}" style="position:fixed;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--canvas) 64%,transparent);backdrop-filter:blur(7px);padding:24px">
+      <div onClick="{{ stopProp }}" data-modal-card="{{ renameAnim }}" style="width:min(92vw,440px);background:var(--surface);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);padding:24px 26px">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:5px">
+          <h2 style="font-size:20px;font-weight:600;letter-spacing:-0.02em;margin:0">Döp om inspelning</h2>
+          <button onClick="{{ cancelRename }}" aria-label="Stäng" style="flex:0 0 auto;width:32px;height:32px;display:flex;align-items:center;justify-content:center;background:var(--surface);border:1px solid var(--line);border-radius:9px;color:var(--ink-2);cursor:pointer;font-size:15px">✕</button>
+        </div>
+        <p style="margin:0 0 18px;color:var(--ink-2);font-size:14px;line-height:1.5">Namnet skapades automatiskt av Qwen utifrån transkriptet. Ändra det för att koppla inspelningen till rätt lektion.</p>
+        <div style="display:flex;flex-direction:column;gap:14px;margin-bottom:22px">
+          <label style="display:flex;flex-direction:column;gap:7px">
+            <span style="font-size:13px;font-weight:500;color:var(--ink-2)">Namn</span>
+            <input value="{{ renameTitle }}" onChange="{{ setRenameTitle }}" style="background:var(--sunken);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:11px 13px;font-size:15px;font-family:inherit;outline:none">
+          </label>
+          <div style="display:flex;gap:12px">
+            <label style="flex:1;display:flex;flex-direction:column;gap:7px">
+              <span style="font-size:13px;font-weight:500;color:var(--ink-2)">Klass</span>
+              <select value="{{ renameKlass }}" onChange="{{ setRenameKlass }}" style="appearance:none;background:var(--sunken);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:11px 13px;font-size:15px;font-family:inherit;cursor:pointer"><option value="">Ej tilldelad</option><sc-for list="{{ renameClassOptions }}" as="c" hint-placeholder-count="3"><option>{{ c }}</option></sc-for></select>
+            </label>
+            <label style="flex:1;display:flex;flex-direction:column;gap:7px">
+              <span style="font-size:13px;font-weight:500;color:var(--ink-2)">Ämne</span>
+              <select value="{{ renameKurs }}" onChange="{{ setRenameKurs }}" style="appearance:none;background:var(--sunken);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:11px 13px;font-size:15px;font-family:inherit;cursor:pointer"><option value="">Ej tilldelad</option><sc-for list="{{ renameCourseOptions }}" as="c" hint-placeholder-count="3"><option>{{ c }}</option></sc-for></select>
+            </label>
+          </div>
+        </div>
+        <div style="display:flex;gap:10px;justify-content:flex-end">
+          <button onClick="{{ cancelRename }}" style="background:transparent;border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:10px 18px;font-size:14.5px;font-weight:500;cursor:pointer;font-family:inherit">Avbryt</button>
+          <button onClick="{{ saveRename }}" style="background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:10px;padding:10px 20px;font-size:14.5px;font-weight:600;cursor:pointer;font-family:inherit">Spara</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1120,&quot;height&quot;:820},&quot;accent&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#2C6E9E&quot;,&quot;options&quot;:[&quot;#2C6E9E&quot;,&quot;#5B3A6E&quot;,&quot;#5C7E40&quot;,&quot;#E5634D&quot;],&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Utseende&quot;},&quot;cardZoom&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Rörelse&quot;},&quot;serifFigures&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Typografi&quot;}}">
+class Component extends DCLogic {
+  state = {
+    theme: 'light', tab: 'transkribera', step: 0,
+    queue: [{ name: 'matematik – bråk och procent (åk 9).mp3', ext: 'MP3' }],
+    lang: 'sv', srt: true, txt: true, vtt: false,
+    resultLang: 'sv', ppMode: 'chat',
+    searchMode: 'word', logOpen: true,
+    linkInput: '',
+    // transcribe flow
+    tPhase: 'idle', tProgress: 0, tElapsed: 0, tLogN: 1,
+    // llm post-process — varje läge behåller sitt eget resultat
+    ppClean: { status: 'idle', segN: 0 },
+    ppSummary: { status: 'idle', text: '' },
+    ppChat: { msgs: [], status: 'idle' },
+    ppQuestion: '',
+    // recording
+    recording: false, recElapsed: 0,
+    // lesson search + filters
+    search: '', searching: false, searchResult: null,
+    filterClass: 'Alla klasser', filterCourse: 'Alla kurser',
+    // models
+    installed: {
+      'KB-Whisper large (sv)': true,
+      'Parakeet TDT 0.6B v3 (en)': true,
+      'Qwen3 14B (Q8_0)': true,
+      'Gemma 3n (ljud)': true,
+      'Gemma 3 4B (vision)': true
+    },
+    downloading: {},
+    disk: 'E:', diskOpen: false,
+    // history / lessons (mutable, persisted)
+    history: [
+      { id: 'h1', name: 'styrgruppsmöte_q1.mp3', date: 'Idag · 09:14', meta: '18:42 · KB-Whisper large (sv) · 2940 ord', fmts: ['SRT', 'TXT'] },
+      { id: 'h2', name: 'kundintervju_03.wav', date: 'Igår · 16:30', meta: '42:11 · KB-Whisper large (sv) · 6810 ord', fmts: ['TXT'] },
+      { id: 'h3', name: 'Mamma waw isolerad.wav', date: '2026-06-24 · 22:17', meta: '00:07 · KB-Whisper large (sv) · Svenska', fmts: ['SRT', 'TXT'] }
+    ],
+    lessons: [
+      { id: 'l1', name: 'Matematik · Bråk och procent', date: 'Idag · 10:05', meta: '38:20 · KB-Whisper large (sv) · Svenska', klass: '9B', kurs: 'Matematik', text: 'bråk procent nämnare täljare förkortning andel hälften hundradelar' },
+      { id: 'l2', name: 'Historia · Mellankrigstiden', date: 'Igår · 13:40', meta: '41:55 · KB-Whisper large (sv) · Svenska', klass: null, kurs: null, text: 'mellankrigstiden depression börskrasch versailles arbetslöshet' }
+    ],
+    // recordings — merged Historik + Lektioner (mutable, persisted)
+    recordings: [
+      { id: 'r1', title: 'Bråk och procent', klass: '9B', kurs: 'Matematik', date: 'Idag 10:05', dur: '38:20', days: 0, ai: true, terms: 'bråk procent täljare nämnare hundradelar andel förkorta hälften' },
+      { id: 'r2', title: 'Mellankrigstiden', klass: '9A', kurs: 'Historia', date: 'Igår 13:40', dur: '41:55', days: 1, ai: true, terms: 'mellankrigstiden depression börskrasch versailles arbetslöshet' },
+      { id: 'r3', title: 'Ekvationer och uttryck', klass: '8A', kurs: 'Matematik', date: '2 dgr sedan', dur: '33:12', days: 2, ai: true, terms: 'ekvation uttryck variabel förenkla procent bråk lös' },
+      { id: 'r4', title: 'Cellens uppbyggnad', klass: '8C', kurs: 'Biologi', date: '3 dgr sedan', dur: '27:48', days: 3, ai: true, terms: 'cell cellkärna mitokondrie membran organell' },
+      { id: 'r5', title: 'Andra världskriget – orsaker', klass: '9A', kurs: 'Historia', date: '4 dgr sedan', dur: '44:02', days: 4, ai: true, terms: 'andra världskriget orsaker versailles diktatur allians' },
+      { id: 'r6', title: 'Fotosyntes', klass: '7B', kurs: 'Biologi', date: 'Förra veckan', dur: '22:15', days: 7, ai: false, terms: 'fotosyntes klorofyll ljus koldioxid syre' },
+      { id: 'r7', title: 'Styrgruppsmöte Q1', klass: null, kurs: null, date: 'Förra veckan', dur: '18:42', days: 7, ai: false, terms: 'styrgrupp budget kvartal mål projekt' },
+      { id: 'r8', title: 'Kundintervju 03', klass: null, kurs: null, date: '2 veckor sedan', dur: '42:11', days: 14, ai: false, terms: 'kund intervju feedback produkt behov' }
+    ],
+    inspMode: 'ai', inspQuery: '', filterDate: 'Alla datum', chatOpen: null, filterOpen: null,
+    ask: { status: 'idle', q: '', step: 0, hits: [], openRef: null, answerTokens: [], refs: [] },
+    answerOpen: false, answerClosing: false, recRename: null,
+    // overlays
+    modal: null, modalClosing: false, assign: null, assignClosing: false, toast: null,
+    recClosing: false, renameClosing: false,
+    transcriptOpen: false, transcriptClosing: false,
+    cleanOpen: false, cleanClosing: false
+  };
+  CLASSES = ['7A', '7B', '8A', '8C', '9A', '9B'];
+  COURSES = ['Matematik', 'Historia', 'Svenska', 'Engelska', 'Fysik', 'Biologi'];
+  DISKS = [
+    { id: 'C:', label: 'System · NVMe SSD', free: '142.0 GB ledigt' },
+    { id: 'E:', label: 'Disk nr 2 · NTFS', free: '337.5 GB ledigt' }
+  ];
+  dlTimers = {};
+
+  PERSIST_KEYS = ['theme', 'tab', 'step', 'queue', 'lang', 'srt', 'txt', 'vtt', 'resultLang', 'ppMode', 'ppClean', 'ppSummary', 'ppChat', 'searchMode', 'logOpen', 'filterClass', 'filterCourse', 'recordings', 'filterDate', 'installed', 'disk', 'history', 'lessons', 'tPhase'];
+  componentDidMount() {
+    try {
+      const saved = JSON.parse(localStorage.getItem('transkribera-template') || '{}');
+      if (saved && typeof saved === 'object' && Object.keys(saved).length) {
+        const merged = { ...saved };
+        if (merged.tab === 'modeller') merged.tab = 'transkribera';
+        if (merged.tab === 'historik' || merged.tab === 'lektioner') merged.tab = 'inspelningar';
+        if (merged.tPhase === 'running') merged.tPhase = 'done';
+        this.setState(s => {
+          const ns = { ...s, ...merged, downloading: {}, recording: false, recElapsed: 0, modal: null, assign: null, toast: null, searching: false, searchResult: null, search: '', diskOpen: false, ask: { status: 'idle', q: '', step: 0, hits: [], openRef: null, answerTokens: [], refs: [] }, answerOpen: false, answerClosing: false, recRename: null, chatOpen: null, filterOpen: null, inspMode: 'ai', inspQuery: '' };
+          ns.installed = { ...s.installed, ...(merged.installed || {}) };
+          ns.lessons = (ns.lessons || []).map(le => {
+            if (le.klass === undefined && le.kurs === undefined) {
+              if (le.tag && le.tag !== 'Ej tilldelad' && le.tag.indexOf('·') >= 0) { const p = le.tag.split('·').map(x => x.trim()); return { ...le, klass: p[0] || null, kurs: p[1] || null }; }
+              return { ...le, klass: null, kurs: null };
+            }
+            return le;
+          });
+          if (!ns.ppClean || ns.ppClean.status === 'running') ns.ppClean = ns.ppClean && ns.ppClean.status === 'running' ? { status: 'done', segN: 6 } : (ns.ppClean || { status: 'idle', segN: 0 });
+          if (!ns.ppSummary) ns.ppSummary = { status: 'idle', text: '' };
+          else if (ns.ppSummary.status === 'running') ns.ppSummary = { status: 'done', text: this.ppOutputText('summary', ns.resultLang) };
+          if (!ns.ppChat) ns.ppChat = { msgs: [], status: 'idle' };
+          else ns.ppChat = { msgs: (ns.ppChat.msgs || []).filter(m => m && (m.text || m.tokens)), status: 'idle' };
+          if (ns.ppMode === 'clean' || ns.ppMode === 'summary') ns.ppMode = 'chat';
+          if (ns.tPhase === 'done') { ns.tProgress = 100; ns.tLogN = 5; ns.tElapsed = 6.2; }
+          return ns;
+        });
+      }
+    } catch (e) {}
+    this.applyAccent();
+  }
+  componentDidUpdate() { this.applyAccent(); }
+  applyAccent() {
+    try {
+      const a = (this.props && this.props.accent) ? this.props.accent : '#2C6E9E';
+      const el = document.querySelector('[data-theme]');
+      if (el) { el.style.setProperty('--accent', a); el.style.setProperty('--accent-weak', 'color-mix(in srgb, ' + a + ' 16%, var(--surface))'); }
+    } catch (e) {}
+  }
+  componentWillUnmount() {
+    [this.tTimer, this.recTimer, this.toastTimer, this.searchTimer, this.askTimer].forEach(t => t && clearInterval(t));
+    if (this._scrollStop) this._scrollStop();
+    if (this.ppTimer) { clearInterval(this.ppTimer); clearTimeout(this.ppTimer); }
+    if (this.transcriptTimer) clearTimeout(this.transcriptTimer);
+    if (this.cleanTimer) clearTimeout(this.cleanTimer);
+    if (this.answerTimer) clearTimeout(this.answerTimer);
+    [this.modalTimer, this.assignTimer, this.renameTimer, this.recCloseTimer].forEach(t => t && clearTimeout(t));
+    this.lockScroll(false);
+    Object.values(this.dlTimers || {}).forEach(t => clearInterval(t));
+  }
+  // ---------- follow-new-content: egen mjuk auto-scroll (timer-driven, ej rAF) ----------
+  scrollFollow(selector, align) {
+    let attempts = 0;
+    const start = () => {
+      const node = document.querySelector(selector);
+      if (!node || !node.getBoundingClientRect) { if (attempts++ < 18) setTimeout(start, 45); return; }
+      const scroller = document.scrollingElement || document.documentElement;
+      const cur = scroller.scrollTop || window.pageYOffset || 0;
+      const maxTop = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+      const rect = node.getBoundingClientRect();
+      let target = (align === 'bottom')
+        ? cur + rect.bottom - (scroller.clientHeight - 28)
+        : cur + rect.top - 84;
+      target = Math.max(0, Math.min(target, maxTop));
+      this.animateScroll(scroller, cur, target);
+    };
+    setTimeout(start, 0);
+  }
+  animateScroll(scroller, from, to) {
+    if (this._scrollStop) this._scrollStop();
+    const dist = to - from;
+    if (Math.abs(dist) < 2) { scroller.scrollTop = to; return; }
+    // duration scales gently with distance; capped so long jumps don't drag
+    const dur = Math.min(780, Math.max(440, Math.abs(dist) * 0.58));
+    const t0 = Date.now();
+    const ease = (p) => 1 - Math.pow(1 - p, 3); // easeOutCubic — quick start, soft settle
+    // suspend the sticky header's backdrop-blur during the scroll (re-blur per frame = jank)
+    const header = document.querySelector('header');
+    const hdr = header ? [header.style.backdropFilter, header.style.webkitBackdropFilter] : null;
+    if (header) { header.style.backdropFilter = 'none'; header.style.webkitBackdropFilter = 'none'; }
+    let raf = 0, iv = 0, done = false, last = t0;
+    const tick = () => {
+      const p = Math.min(1, (Date.now() - t0) / dur);
+      scroller.scrollTop = from + dist * ease(p);
+      last = Date.now();
+      if (p >= 1) stop();
+    };
+    const stop = () => { done = true; if (raf) cancelAnimationFrame(raf); if (iv) clearInterval(iv); if (header && hdr) { header.style.backdropFilter = hdr[0]; header.style.webkitBackdropFilter = hdr[1]; } this._scrollStop = null; };
+    const loop = () => { if (done) return; tick(); if (!done) raf = requestAnimationFrame(loop); };
+    this._scrollStop = stop;
+    // primary: requestAnimationFrame (vsync-aligned → smooth in a visible tab)
+    raf = (typeof requestAnimationFrame === 'function') ? requestAnimationFrame(loop) : 0;
+    // watchdog: only if rAF never advances (hidden/throttled tab) drive it with a timer so it still completes
+    setTimeout(() => {
+      if (done || iv) return;
+      if (!raf || Date.now() - last > 60) iv = setInterval(tick, 16);
+    }, 110);
+  }
+  persist() {
+    try {
+      const o = {};
+      this.PERSIST_KEYS.forEach(k => { o[k] = this.state[k]; });
+      localStorage.setItem('transkribera-template', JSON.stringify(o));
+    } catch (e) {}
+  }
+  saveSoon() { setTimeout(() => this.persist(), 0); }
+  set(patch) { this.setState(s => ({ ...s, ...patch })); }
+
+  // ---------- toast ----------
+  toast(msg, undo) {
+    clearTimeout(this.toastTimer);
+    this.set({ toast: { msg, undo: undo || null } });
+    this.toastTimer = setTimeout(() => this.set({ toast: null }), undo ? 6500 : 2600);
+  }
+  dismissToast() { clearTimeout(this.toastTimer); this.set({ toast: null }); }
+
+  // ---------- file helpers ----------
+  extOf(name) { const m = /\.([^.]+)$/.exec(name || ''); return m ? m[1].toUpperCase() : 'FIL'; }
+  baseOf(name) { return (name || '').replace(/\.[^.]+$/, ''); }
+  TRANSCRIPTS() {
+    return {
+      sv: [
+        [0, 4, 'Hej allihop och välkomna till matematiken.'],
+        [4, 8, 'Idag ska vi arbeta med bråk och procent.'],
+        [8, 12, 'Ta fram era anteckningsböcker och en penna.'],
+        [12, 16, 'Vi börjar med att repetera vad ett bråk är.'],
+        [16, 21, 'Ett bråk består av en täljare och en nämnare.'],
+        [21, 26, 'Täljaren står överst och nämnaren underst.'],
+        [26, 31, 'Nämnaren talar om hur många lika delar helheten delas i.'],
+        [31, 36, 'Täljaren talar om hur många av delarna vi tar.'],
+        [36, 41, 'Tänk er en pizza som delas i åtta lika stora bitar.'],
+        [41, 46, 'Tar ni tre bitar har ni ätit tre åttondelar.'],
+        [46, 52, 'Det skriver vi som tre genom åtta.'],
+        [52, 57, 'Nu ska vi förkorta bråk så de blir enklare.'],
+        [57, 63, 'Vi dividerar både täljare och nämnare med samma tal.'],
+        [63, 68, 'Fyra åttondelar blir då en halv om vi delar med fyra.'],
+        [68, 74, 'Bra, då går vi vidare till procent.'],
+        [74, 79, 'Procent betyder hundradelar, alltså andel av hundra.'],
+        [79, 85, 'Femtio procent är samma sak som hälften.'],
+        [85, 90, 'Tjugofem procent motsvarar en fjärdedel.'],
+        [90, 96, 'En femtedel blir tjugo hundradelar, alltså tjugo procent.'],
+        [96, 102, 'För att göra om ett bråk till procent förlänger vi till hundradelar.'],
+        [102, 108, 'Nu testar vi ett exempel tillsammans på tavlan.'],
+        [108, 114, 'Säg att en tröja kostar fyrahundra kronor.'],
+        [114, 120, 'Den får tjugofem procents rabatt på rean.'],
+        [120, 126, 'Tjugofem procent av fyrahundra är hundra kronor.'],
+        [126, 132, 'Då blir det nya priset trehundra kronor.'],
+        [132, 138, 'Ser ni hur procent hjälper oss i vardagen?'],
+        [138, 144, 'Nu ska ni få arbeta två och två med uppgifterna.'],
+        [144, 150, 'Gör uppgift tre till sju på sidan tjugotvå.'],
+        [150, 156, 'Räck upp handen om något känns krångligt.'],
+        [156, 162, 'Jag går runt och hjälper er under tiden.'],
+        [162, 168, 'Vi samlas igen om en kvart och går igenom svaren.'],
+        [168, 174, 'Kom ihåg att skriva tydligt och visa hur ni tänker.'],
+        [174, 180, 'Lycka till, nu sätter vi igång.']
+      ],
+      en: [
+        [0, 4, 'Hi everyone and welcome to maths.'],
+        [4, 8, 'Today we are going to work with fractions and percent.'],
+        [8, 12, 'Take out your notebooks and a pen.'],
+        [12, 16, 'We will start by reviewing what a fraction is.'],
+        [16, 21, 'A fraction consists of a numerator and a denominator.'],
+        [21, 26, 'The numerator is on top and the denominator below.'],
+        [26, 31, 'The denominator tells us how many equal parts the whole is divided into.'],
+        [31, 36, 'The numerator tells us how many of the parts we take.'],
+        [36, 41, 'Imagine a pizza divided into eight equal slices.'],
+        [41, 46, 'If you take three slices you have eaten three eighths.'],
+        [46, 52, 'We write that as three over eight.'],
+        [52, 57, 'Now we will reduce fractions to make them simpler.'],
+        [57, 63, 'We divide both the numerator and the denominator by the same number.'],
+        [63, 68, 'Four eighths becomes one half if we divide by four.'],
+        [68, 74, 'Good, then we move on to percent.'],
+        [74, 79, 'Percent means hundredths, a share of one hundred.'],
+        [79, 85, 'Fifty percent is the same as one half.'],
+        [85, 90, 'Twenty-five percent corresponds to one quarter.'],
+        [90, 96, 'One fifth becomes twenty hundredths, that is twenty percent.'],
+        [96, 102, 'To turn a fraction into percent we expand it to hundredths.'],
+        [102, 108, 'Now we will try an example together on the board.'],
+        [108, 114, 'Say that a shirt costs four hundred kronor.'],
+        [114, 120, 'It gets a twenty-five percent discount in the sale.'],
+        [120, 126, 'Twenty-five percent of four hundred is one hundred kronor.'],
+        [126, 132, 'So the new price becomes three hundred kronor.'],
+        [132, 138, 'Do you see how percent helps us in everyday life?'],
+        [138, 144, 'Now you will work in pairs on the exercises.'],
+        [144, 150, 'Do exercises three to seven on page twenty-two.'],
+        [150, 156, 'Raise your hand if something feels tricky.'],
+        [156, 162, 'I will walk around and help you in the meantime.'],
+        [162, 168, 'We will gather again in fifteen minutes and go through the answers.'],
+        [168, 174, 'Remember to write clearly and show how you think.'],
+        [174, 180, 'Good luck, let us get started.']
+      ]
+    };
+  }
+  transcript(lang) { const L = this.TRANSCRIPTS(); return L[lang || this.state.resultLang] || L.sv; }
+  stamp(sec, comma) {
+    const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), x = Math.floor(sec % 60), ms = Math.round((sec - Math.floor(sec)) * 1000);
+    const p = (n, l) => String(n).padStart(l || 2, '0');
+    return p(h) + ':' + p(m) + ':' + p(x) + (comma ? ',' : '.') + p(ms, 3);
+  }
+  contentFor(ext) {
+    const e = (ext || '').toLowerCase(), T = this.transcript(this.state.resultLang);
+    if (e === 'srt') return T.map((s, i) => (i + 1) + '\n' + this.stamp(s[0], true) + ' --> ' + this.stamp(s[1], true) + '\n' + s[2] + '\n').join('\n');
+    if (e === 'vtt') return 'WEBVTT\n\n' + T.map(s => this.stamp(s[0]) + ' --> ' + this.stamp(s[1]) + '\n' + s[2]).join('\n\n') + '\n';
+    return T.map(s => s[2]).join(' ') + '\n';
+  }
+  doDownload(filename, ext) {
+    try {
+      const blob = new Blob([this.contentFor(ext)], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = filename; document.body.appendChild(a); a.click();
+      setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 300);
+      this.toast('Laddar ner ' + filename);
+    } catch (e) { this.toast('Kunde inte ladda ner filen'); }
+  }
+
+  // ---------- source: picker / drop / link ----------
+  openPicker() { const el = document.getElementById('tk-file-input'); if (el) el.click(); }
+  addFiles(list) {
+    const files = list ? Array.from(list) : [];
+    if (!files.length) return;
+    this.set({ queue: [...this.state.queue, ...files.map(f => ({ name: f.name, ext: this.extOf(f.name) }))], step: 1 });
+    this.saveSoon();
+  }
+  onFiles(e) { this.addFiles(e.target && e.target.files); if (e.target) e.target.value = ''; }
+  onDrop(e) { e.preventDefault(); this.addFiles(e.dataTransfer && e.dataTransfer.files); }
+  addLink() {
+    const v = (this.state.linkInput || '').trim();
+    if (!v) { this.toast('Klistra in en länk först'); return; }
+    const name = 'youtube_' + Math.random().toString(36).slice(2, 7) + '.mp4';
+    this.set({ queue: [...this.state.queue, { name, ext: 'YT' }], step: 1, linkInput: '' });
+    this.saveSoon(); this.toast('Länk tillagd i kön');
+  }
+
+  // ---------- transcribe simulation ----------
+  clearT() { if (this.tTimer) { clearInterval(this.tTimer); this.tTimer = null; } }
+  startTranscribe() {
+    if (!this.state.queue.length) { this.toast('Lägg till minst en fil först'); return; }
+    this.clearT();
+    this.set({ step: 2, tPhase: 'running', tProgress: 0, tElapsed: 0, tLogN: 1, ppClean: { status: 'idle', segN: 0 }, ppSummary: { status: 'idle', text: '' }, ppChat: { msgs: [], status: 'idle' }, ppQuestion: '' });
+    const TOTAL = 6.2;
+    this.tTimer = setInterval(() => {
+      this.setState(s => {
+        const el = s.tElapsed + 0.1;
+        if (el >= TOTAL) { this.clearT(); this.saveSoon(); setTimeout(() => this.scrollFollow('[data-follow="done"]'), 120); return { tElapsed: TOTAL, tProgress: 100, tLogN: 5, tPhase: 'done' }; }
+        let n = 1;
+        if (el >= 0.4) n = 2;
+        if (el >= 1.7) n = 3;
+        if (el >= 3.4) n = 4;
+        return { tElapsed: el, tProgress: Math.min(99, (el / TOTAL) * 100), tLogN: n };
+      });
+    }, 100);
+  }
+  resetWizard() { this.clearT(); this.clearPP(); this.set({ step: 0, tPhase: 'idle', tProgress: 0, tElapsed: 0, tLogN: 1, ppClean: { status: 'idle', segN: 0 }, ppSummary: { status: 'idle', text: '' }, ppChat: { msgs: [], status: 'idle' }, ppQuestion: '' }); this.saveSoon(); }
+
+  // ---------- recording ----------
+  clearRec() { if (this.recTimer) { clearInterval(this.recTimer); this.recTimer = null; } }
+  startRecording() { this.clearRec(); if (this.recCloseTimer) clearTimeout(this.recCloseTimer); this.set({ recording: true, recClosing: false, recElapsed: 0 }); this.recTimer = setInterval(() => this.setState(s => ({ recElapsed: s.recElapsed + 0.1 })), 100); }
+  cancelRecording() { this.clearRec(); if (this.recCloseTimer) clearTimeout(this.recCloseTimer); this.set({ recClosing: true }); this.recCloseTimer = setTimeout(() => this.set({ recording: false, recClosing: false }), 460); }
+  stopRecording() {
+    this.clearRec();
+    const secs = Math.max(1, Math.round(this.state.recElapsed));
+    const mm = String(Math.floor(secs / 60)).padStart(2, '0'), ss = String(secs % 60).padStart(2, '0');
+    const d = new Date();
+    const name = 'inspelning_' + String(d.getHours()).padStart(2, '0') + String(d.getMinutes()).padStart(2, '0') + '.wav';
+    this.set({ recording: false, tab: 'transkribera', step: 1, queue: [...this.state.queue, { name, ext: 'WAV' }] });
+    this.saveSoon(); this.toast('Inspelning sparad i kön · ' + mm + ':' + ss);
+  }
+
+  // ---------- LLM post-process (ett resultat per läge — inget försvinner vid byte) ----------
+  clearPP() { if (this.ppTimer) { clearInterval(this.ppTimer); clearTimeout(this.ppTimer); this.ppTimer = null; } }
+  setPpMode(m) { this.set({ ppMode: m }); this.saveSoon(); }
+  hasLlm() { return ['Qwen3 14B (Q8_0)', 'Gemma 3 4B (vision)'].some(n => this.state.installed[n]); }
+  activeLlm() { return ['Qwen3 14B (Q8_0)', 'Gemma 3 4B (vision)'].find(n => this.state.installed[n]) || 'Qwen3 14B (Q8_0)'; }
+  ppOutputText(mode, lang) {
+    mode = mode || this.state.ppMode; lang = lang || this.state.resultLang;
+    if (mode === 'summary') {
+      return lang === 'en'
+        ? '• The lesson introduces fractions and percentages.\n• A fraction has a numerator (top) and a denominator (bottom).\n• Fractions are reduced by dividing numerator and denominator by the same number.\n• Percent means hundredths — 50 % equals one half.\n• The students work an example together and do exercises 3–5 on page 22.'
+        : '• Lektionen introducerar bråk och procent.\n• Ett bråk har en täljare (överst) och en nämnare (underst).\n• Bråk förkortas genom att dividera täljare och nämnare med samma tal.\n• Procent betyder hundradelar — 50 % motsvarar hälften.\n• Eleverna räknar ett exempel gemensamt och gör uppgift 3–5 på sidan 22.';
+    }
+    return '';
+  }
+  chatAnswer(q, lang) {
+    lang = lang || this.state.resultLang;
+    return lang === 'en'
+      ? 'Based on the transcript: the teacher explains that a fraction has a numerator and a denominator, and that percent means hundredths. On your question “' + q + '” — the key point is that 50 % equals one half, and you reduce a fraction by dividing the numerator and denominator by the same number.'
+      : 'Utifrån transkriptet: läraren förklarar att ett bråk består av en täljare och en nämnare, och att procent betyder hundradelar. Kopplat till din fråga ”' + q + '” är kärnan att 50 % motsvarar hälften, och att man förkortar ett bråk genom att dividera täljare och nämnare med samma tal.';
+  }
+  excerptAround(lang, idx) {
+    const T = this.transcript(lang);
+    const fmt = sec => String(Math.floor(sec / 60)).padStart(2, '0') + ':' + String(Math.floor(sec % 60)).padStart(2, '0');
+    const out = [];
+    for (let i = Math.max(0, idx - 1); i <= Math.min(T.length - 1, idx + 1); i++) out.push({ t: fmt(T[i][0]), s: T[i][2], hit: i === idx });
+    return out;
+  }
+  chatCited(q, lang) {
+    lang = lang || this.state.resultLang;
+    const T = this.transcript(lang);
+    const fmt = sec => String(Math.floor(sec / 60)).padStart(2, '0') + ':' + String(Math.floor(sec % 60)).padStart(2, '0');
+    const I = [4, 5, 15].filter(i => i < T.length);
+    const refs = I.map(i => ({ t: fmt(T[i][0]), ctx: this.excerptAround(lang, i) }));
+    const en = lang === 'en';
+    const tokens = en ? [
+      { text: 'From the transcript: a fraction has a numerator and a denominator ' },
+      { cite: true, t: refs[0].t, ref: 0 },
+      { text: ', where the numerator is on top and the denominator below ' },
+      { cite: true, t: refs[1].t, ref: 1 },
+      { text: '. Percent is explained as hundredths ' },
+      { cite: true, t: refs[2].t, ref: 2 },
+      { text: '. On “' + q + '”: the key point is that 50 % equals one half.' }
+    ] : [
+      { text: 'Utifrån transkriptet: ett bråk består av en täljare och en nämnare ' },
+      { cite: true, t: refs[0].t, ref: 0 },
+      { text: ', där täljaren står överst och nämnaren underst ' },
+      { cite: true, t: refs[1].t, ref: 1 },
+      { text: '. Procent förklaras som hundradelar ' },
+      { cite: true, t: refs[2].t, ref: 2 },
+      { text: '. Kopplat till ”' + q + '” är kärnan att 50 % motsvarar en halv.' }
+    ];
+    return { tokens, refs };
+  }
+  toggleChatRef(mi, ri) { this.setState(st => ({ chatOpen: (st.chatOpen && st.chatOpen.mi === mi && st.chatOpen.ri === ri) ? null : { mi, ri } })); }
+  cleanSegsData(lang) {
+    lang = lang || this.state.resultLang;
+    const fmt = sec => String(Math.floor(sec / 60)).padStart(2, '0') + ':' + String(Math.floor(sec % 60)).padStart(2, '0');
+    const KW = lang === 'en'
+      ? ['fraction', 'fractions', 'numerator', 'denominator', 'denominators', 'percent', 'hundredths', 'eighths', 'eighth', 'quarter', 'fifth', 'half', 'reduce', 'share']
+      : ['bråk', 'bråket', 'bråken', 'procent', 'procents', 'täljare', 'täljaren', 'nämnare', 'nämnaren', 'hundradelar', 'andel', 'åttondelar', 'fjärdedel', 'femtedel', 'förkorta', 'hälften'];
+    const kw = new Set(KW);
+    return this.transcript(lang).map(seg => {
+      const parts = [];
+      seg[2].split(/(\s+)/).forEach(tok => {
+        if (!tok) return;
+        if (/^\s+$/.test(tok)) { parts.push({ s: tok }); return; }
+        let core = tok, punct = '';
+        const last = tok[tok.length - 1];
+        if (last === ',' || last === ';' || last === ':') { core = tok.slice(0, -1); punct = last; }
+        const bare = core.toLowerCase().replace(/[.!?]+$/, '');
+        if (kw.has(bare)) parts.push({ s: core, fixed: true });
+        else parts.push({ s: core });
+        if (punct) parts.push({ s: punct, lang: true });
+      });
+      return { t: fmt(seg[0]), parts };
+    });
+  }
+  finalizePp() {
+    const s = this.state, patch = {};
+    if (s.ppClean.status === 'running') patch.ppClean = { status: 'done', segN: 6 };
+    if (s.ppSummary.status === 'running') patch.ppSummary = { status: 'done', text: this.ppOutputText('summary', s.resultLang) };
+    if (s.ppChat.status === 'running') {
+      const msgs = s.ppChat.msgs.slice(), lastU = msgs[msgs.length - 1];
+      const res = this.chatCited((lastU && lastU.text) || '', s.resultLang);
+      patch.ppChat = { msgs: msgs.concat([{ role: 'assistant', tokens: res.tokens, refs: res.refs }]), status: 'idle' };
+    }
+    if (Object.keys(patch).length) this.set(patch);
+  }
+  runClean() {
+    if (this.state.ppClean.status === 'running') return;
+    if (!this.state.installed['Gemma 3n (ljud)'] || !this.hasLlm()) { this.toast('Korrekturläs kräver Gemma 3n + en språkmodell'); return; }
+    this.clearPP(); this.finalizePp();
+    this.set({ ppClean: { status: 'running', segN: 0, pct: 0 } });
+    setTimeout(() => this.scrollFollow('[data-follow="clean"]'), 120);
+    this.ppTimer = setTimeout(() => {
+      let p = 0;
+      this.ppTimer = setInterval(() => {
+        p = Math.min(100, p + 4); const done = p >= 100; const segN = Math.min(6, Math.round(p / 100 * 6));
+        this.set({ ppClean: { status: done ? 'done' : 'running', segN: done ? 6 : segN, pct: p } });
+        if (done) { clearInterval(this.ppTimer); this.ppTimer = null; this.saveSoon(); setTimeout(() => this.scrollFollow('[data-follow="llm"]'), 150); }
+      }, 85);
+    }, 350);
+  }
+  runSummary() {
+    if (this.state.ppSummary.status === 'running') return;
+    if (!this.hasLlm()) { this.toast('Ladda ner en språkmodell i Modeller först'); this.set({ tab: 'modeller' }); this.saveSoon(); return; }
+    this.clearPP(); this.finalizePp();
+    this.set({ ppSummary: { status: 'running', text: '' } });
+    const full = this.ppOutputText('summary', this.state.resultLang), tokens = full.split(/(\s+)/);
+    this.ppTimer = setTimeout(() => {
+      let i = 0;
+      this.ppTimer = setInterval(() => {
+        i += 2; const done = i >= tokens.length;
+        this.set({ ppSummary: { status: done ? 'done' : 'running', text: done ? full : tokens.slice(0, i).join('') } });
+        if (done) { clearInterval(this.ppTimer); this.ppTimer = null; this.saveSoon(); }
+      }, 24);
+    }, 900);
+  }
+  sendChat() {
+    const q = (this.state.ppQuestion || '').trim();
+    if (!q) { this.toast('Skriv en fråga först'); return; }
+    if (this.state.ppChat.status === 'running') return;
+    if (!this.hasLlm()) { this.toast('Ingen språkmodell tillgänglig'); return; }
+    this.clearPP(); this.finalizePp();
+    const msgs = this.state.ppChat.msgs.concat([{ role: 'user', text: q }]);
+    this.set({ ppChat: { msgs, status: 'running' }, ppQuestion: '', chatOpen: null });
+    setTimeout(() => this.scrollFollow('[data-follow="chatend"]', 'bottom'), 120);
+    this.ppTimer = setTimeout(() => {
+      const res = this.chatCited(q, this.state.resultLang);
+      this.setState(st => ({ ppChat: { msgs: st.ppChat.msgs.concat([{ role: 'assistant', tokens: res.tokens, refs: res.refs }]), status: 'idle' } }));
+      this.ppTimer = null; this.saveSoon();
+      setTimeout(() => this.scrollFollow('[data-follow="chatend"]', 'bottom'), 130);
+    }, 1100);
+  }
+
+  // ---------- lesson search ----------
+  tagOf(le) { return (le && le.klass && le.kurs) ? (le.klass + ' · ' + le.kurs) : 'Ej tilldelad'; }
+  filteredLessons() {
+    const s = this.state;
+    let arr = s.lessons;
+    if (s.filterClass && s.filterClass !== 'Alla klasser') arr = arr.filter(l => l.klass === s.filterClass);
+    if (s.filterCourse && s.filterCourse !== 'Alla kurser') arr = arr.filter(l => l.kurs === s.filterCourse);
+    const q = (s.search || '').trim().toLowerCase();
+    if (q && s.searchMode !== 'ai') arr = arr.filter(l => (l.name + ' ' + l.meta + ' ' + this.tagOf(l) + ' ' + (l.text || '')).toLowerCase().includes(q));
+    return arr;
+  }
+  setFilterClass(v) { this.set({ filterClass: v }); this.saveSoon(); }
+  setFilterCourse(v) { this.set({ filterCourse: v }); this.saveSoon(); }
+  openAssign(le) { if (this.assignTimer) clearTimeout(this.assignTimer); this.set({ assign: { id: le.id, name: le.name, klass: le.klass || '', kurs: le.kurs || '' }, assignClosing: false }); }
+  setAssignClass(v) { this.setState(s => ({ assign: { ...s.assign, klass: v } })); }
+  setAssignCourse(v) { this.setState(s => ({ assign: { ...s.assign, kurs: v } })); }
+  cancelAssign() { this.closeAssignAnim(); }
+  closeAssignAnim() { if (this.assignTimer) clearTimeout(this.assignTimer); this.set({ assignClosing: true }); this.assignTimer = setTimeout(() => this.set({ assign: null, assignClosing: false }), 460); }
+  saveAssign() {
+    const a = this.state.assign; if (!a) return;
+    if (!a.klass || !a.kurs) { this.toast('Välj både klass och kurs'); return; }
+    this.setState(s => ({ lessons: s.lessons.map(le => le.id === a.id ? { ...le, klass: a.klass, kurs: a.kurs } : le) }));
+    this.saveSoon(); this.toast('Tilldelad: ' + a.klass + ' · ' + a.kurs); this.closeAssignAnim();
+  }
+  openInsights(le) { if (this.modalTimer) clearTimeout(this.modalTimer); this.set({ modal: { kind: 'insights', item: le }, modalClosing: false }); }
+  insightsFor(le) {
+    const words = (le.text || '').split(/\s+/).filter(Boolean);
+    const keywords = Array.from(new Set(words)).slice(0, 8);
+    const dm = /(\d+):(\d+)/.exec(le.meta || '');
+    const mins = dm ? (parseInt(dm[1], 10) + (parseInt(dm[2], 10) >= 30 ? 1 : 0)) : 30;
+    const id = le.id || 'x', seed = id.charCodeAt(id.length - 1) || 1;
+    const teacher = 68 + (seed % 17);
+    return { keywords, mins, teacher, students: 100 - teacher, wordCount: mins * 130, questions: 3 + (seed % 6) };
+  }
+  toggleDiskMenu() { this.set({ diskOpen: !this.state.diskOpen }); }
+  selectDisk(id) { this.set({ disk: id, diskOpen: false }); this.saveSoon(); this.toast('Nedladdningsdisk: ' + id); }
+  runSearch() {
+    if (this.state.searchMode === 'ai') {
+      const q = (this.state.search || '').trim() || 'pythagoras sats';
+      if (this.searchTimer) clearTimeout(this.searchTimer);
+      this.set({ searching: true, searchResult: null });
+      this.searchTimer = setTimeout(() => {
+        this.set({
+          searching: false, searchResult: {
+            q,
+            answer: 'Begreppet tas upp i två lektioner. Det förklaras tydligast i matematiklektionen om bråk och procent, där läraren går igenom hur det används i praktiska exempel.',
+            hits: [
+              { name: 'Matematik · Bråk och procent', time: '04:12', quote: '… det här hänger ihop med ' + q + ', som vi tog upp förra veckan …' },
+              { name: 'Matematik · Bråk och procent', time: '18:40', quote: '… ett typiskt exempel på ' + q + ' är när vi räknar andelar …' }
+            ]
+          }
+        });
+      }, 1500);
+    } else {
+      const n = this.filteredLessons().length;
+      this.toast(n + (n === 1 ? ' träff' : ' träffar'));
+    }
+  }
+  clearSearch() { this.set({ search: '', searchResult: null }); }
+
+  // ---------- Inspelningar (merged Historik + Lektioner) ----------
+  setInspQuery(e) { this.set({ inspQuery: e.target.value }); }
+  setInspMode(m) { if (m === 'sok') { this.clearAsk(); this.set({ inspMode: 'sok', inspQuery: '' }); } else { this.set({ inspMode: 'ai', inspQuery: '' }); } }
+  onInspKey(e) { if (e.key === 'Enter' && this.state.inspMode === 'ai') { e.preventDefault(); this.askAI(); } }
+  setFilterDate(e) { this.set({ filterDate: e.target.value }); this.saveSoon(); }
+  toggleFilter(w) { this.setState(st => ({ filterOpen: st.filterOpen === w ? null : w })); }
+  selectFilter(field, value) { this.set({ [field]: value, filterOpen: null }); this.saveSoon(); }
+  recRecencyOk(r) {
+    const f = this.state.filterDate;
+    if (!f || f === 'Alla datum') return true;
+    if (f === 'Idag') return r.days <= 0;
+    if (f === 'Senaste veckan') return r.days <= 7;
+    if (f === 'Senaste månaden') return r.days <= 31;
+    return true;
+  }
+  filteredRecordings() {
+    const s = this.state; let arr = s.recordings || [];
+    if (s.filterClass && s.filterClass !== 'Alla klasser') arr = arr.filter(r => r.klass === s.filterClass);
+    if (s.filterCourse && s.filterCourse !== 'Alla kurser') arr = arr.filter(r => r.kurs === s.filterCourse);
+    arr = arr.filter(r => this.recRecencyOk(r));
+    const q = (s.inspMode === 'sok' ? (s.inspQuery || '') : '').trim().toLowerCase();
+    if (q) arr = arr.filter(r => (r.title + ' ' + (r.klass || '') + ' ' + (r.kurs || '') + ' ' + (r.terms || '')).toLowerCase().indexOf(q) >= 0);
+    return arr;
+  }
+  relevantRecordings(q) {
+    const ql = (q || '').toLowerCase();
+    const ids = (this.state.recordings || []).filter(r => (r.terms || '').split(' ').some(w => w && ql.indexOf(w) >= 0)).map(r => r.id);
+    return (ids.length ? ids : ['r1', 'r3']).slice(0, 3);
+  }
+  askResult() {
+    return {
+      answerTokens: [
+        { text: 'Du går igenom begreppen tydligast i ' },
+        { cite: 'Bråk och procent', t: '00:16', ref: 0 },
+        { text: ' — ett bråk består av en täljare och en nämnare, och du visar att täljaren står överst ' },
+        { cite: 'Bråk och procent', t: '00:21', ref: 0 },
+        { text: '. Begreppen återkommer när klassen förkortar bråk, och de används igen i ' },
+        { cite: 'Ekvationer och uttryck', t: '12:30', ref: 1 },
+        { text: ' när ni löser ekvationer med bråk.' }
+      ],
+      refs: [
+        { rec: 'Bråk och procent', klass: '9B', t: '00:16', ctx: [
+          { t: '00:12', s: 'Vi börjar med att repetera vad ett bråk är.' },
+          { t: '00:16', s: 'Ett bråk består av en täljare och en nämnare.', hit: true },
+          { t: '00:21', s: 'Täljaren står överst och nämnaren underst.', hit: true },
+          { t: '00:26', s: 'Nämnaren talar om hur många lika delar helheten delas i.' }
+        ] },
+        { rec: 'Ekvationer och uttryck', klass: '8A', t: '12:30', ctx: [
+          { t: '12:24', s: 'Nu tar vi en ekvation som innehåller ett bråk.' },
+          { t: '12:30', s: 'Täljaren och nämnaren hjälper oss att förenkla uttrycket.', hit: true },
+          { t: '12:36', s: 'Vi multiplicerar båda led med nämnaren för att bli av med bråket.' }
+        ] }
+      ]
+    };
+  }
+  suggestAsk(q) { this.set({ inspMode: 'ai', inspQuery: q }); setTimeout(() => this.askAI(), 0); }
+  askAI() {
+    if (!this.hasLlm()) { this.toast('Ingen språkmodell tillgänglig'); return; }
+    const q = (this.state.inspQuery || '').trim() || 'Var förklarar jag täljare och nämnare?';
+    if (this.askTimer) clearInterval(this.askTimer);
+    const hits = this.relevantRecordings(q);
+    this.set({ inspMode: 'ai', ask: { status: 'thinking', q, step: 0, hits, openRef: null, answerTokens: [], refs: [] }, answerOpen: false, answerClosing: false });
+    this.askTimer = setInterval(() => {
+      this.setState(st => {
+        const step = st.ask.step + 1;
+        if (step >= 4) {
+          clearInterval(this.askTimer); this.askTimer = null;
+          this.lockScroll(true);
+          return { ask: { ...st.ask, step: 3, status: 'done', ...this.askResult() }, answerOpen: true, answerClosing: false };
+        }
+        return { ask: { ...st.ask, step } };
+      });
+    }, 800);
+  }
+  clearAsk() { if (this.askTimer) { clearInterval(this.askTimer); this.askTimer = null; } this.set({ ask: { status: 'idle', q: '', step: 0, hits: [], openRef: null, answerTokens: [], refs: [] }, answerOpen: false, answerClosing: false }); }
+  toggleRef(i) { this.setState(st => ({ ask: { ...st.ask, openRef: st.ask.openRef === i ? null : i } })); }
+  closeAnswer() { if (this.answerTimer) clearTimeout(this.answerTimer); this.set({ answerClosing: true }); this.answerTimer = setTimeout(() => { this.set({ answerOpen: false, answerClosing: false }); this.lockScroll(false); }, 460); }
+  deleteRec(r) { this.setState(st => ({ recordings: st.recordings.filter(x => x.id !== r.id) })); this.saveSoon(); this.toast('Inspelning borttagen'); }
+  openRecording(r) { if (this.modalTimer) clearTimeout(this.modalTimer); this.set({ modal: { kind: 'history', item: { name: r.title, date: r.date, meta: r.dur + ' · KB-Whisper large (sv) · ' + (r.kurs || 'Inspelning'), klass: r.klass, kurs: r.kurs, fmts: ['SRT', 'TXT'] } }, modalClosing: false }); }
+  openRename(r) { if (this.renameTimer) clearTimeout(this.renameTimer); this.lockScroll(true); this.set({ recRename: { id: r.id, title: r.title, klass: r.klass || '', kurs: r.kurs || '' }, renameClosing: false }); }
+  setRenameField(k, v) { this.setState(st => ({ recRename: { ...st.recRename, [k]: v } })); }
+  cancelRename() { this.closeRenameAnim(); }
+  closeRenameAnim() { if (this.renameTimer) clearTimeout(this.renameTimer); this.set({ renameClosing: true }); this.renameTimer = setTimeout(() => { this.set({ recRename: null, renameClosing: false }); this.lockScroll(false); }, 460); }
+  saveRename() {
+    const a = this.state.recRename; if (!a) return;
+    const title = (a.title || '').trim(); if (!title) { this.toast('Skriv ett namn'); return; }
+    this.setState(st => ({ recordings: st.recordings.map(r => r.id === a.id ? { ...r, title, klass: a.klass || null, kurs: a.kurs || null, ai: false } : r) }));
+    this.saveSoon(); this.toast('Sparat'); this.closeRenameAnim();
+  }
+
+  // ---------- destructive (history / lessons) ----------
+  deleteRow(key, id) {
+    const arr = this.state[key]; const idx = arr.findIndex(x => x.id === id); if (idx < 0) return;
+    const item = arr[idx];
+    this.set({ [key]: arr.filter(x => x.id !== id) }); this.saveSoon();
+    this.toast('Borttagen: ' + item.name, () => {
+      const cur = this.state[key].slice(); cur.splice(idx, 0, item);
+      this.set({ [key]: cur }); this.saveSoon(); this.toast('Återställd');
+    });
+  }
+  rerun(item) {
+    this.set({ tab: 'transkribera', queue: [{ name: item.name, ext: this.extOf(item.name) }], modal: null });
+    this.startTranscribe();
+  }
+
+  // ---------- modal ----------
+  openDetail(kind, item) { if (this.modalTimer) clearTimeout(this.modalTimer); this.set({ modal: { kind, item }, modalClosing: false }); }
+  closeModal() { if (this.modalTimer) clearTimeout(this.modalTimer); this.set({ modalClosing: true }); this.modalTimer = setTimeout(() => this.set({ modal: null, modalClosing: false }), 460); }
+  lockScroll(on) { try { if (on) { if (this._prevOverflow == null) this._prevOverflow = document.body.style.overflow; document.body.style.overflow = 'hidden'; } else { document.body.style.overflow = this._prevOverflow || ''; this._prevOverflow = null; } } catch (e) {} }
+  openTranscript() { this.lockScroll(true); this.set({ transcriptOpen: true, transcriptClosing: false }); }
+  closeTranscript() { if (this.transcriptTimer) clearTimeout(this.transcriptTimer); this.set({ transcriptClosing: true }); this.transcriptTimer = setTimeout(() => { this.set({ transcriptOpen: false, transcriptClosing: false }); this.lockScroll(false); }, 460); }
+  openClean() { this.lockScroll(true); this.set({ cleanOpen: true, cleanClosing: false }); }
+  closeClean() { if (this.cleanTimer) clearTimeout(this.cleanTimer); this.set({ cleanClosing: true }); this.cleanTimer = setTimeout(() => { this.set({ cleanOpen: false, cleanClosing: false }); this.lockScroll(false); }, 460); }
+
+  // ---------- models ----------
+  downloadModel(name) {
+    if (this.state.downloading[name] != null) return;
+    this.setState(s => ({ downloading: { ...s.downloading, [name]: 0 } }));
+    const t = setInterval(() => {
+      this.setState(s => {
+        const cur = (s.downloading[name] || 0) + (7 + Math.random() * 11);
+        if (cur >= 100) {
+          clearInterval(t); delete this.dlTimers[name];
+          const dl = { ...s.downloading }; delete dl[name];
+          this.saveSoon(); setTimeout(() => this.toast(name + ' installerad'), 0);
+          return { installed: { ...s.installed, [name]: true }, downloading: dl };
+        }
+        return { downloading: { ...s.downloading, [name]: cur } };
+      });
+    }, 230);
+    this.dlTimers[name] = t;
+  }
+  deleteModel(name) {
+    this.setState(s => ({ installed: { ...s.installed, [name]: false } })); this.saveSoon();
+    this.toast(name + ' borttagen', () => { this.setState(s => ({ installed: { ...s.installed, [name]: true } })); this.saveSoon(); });
+  }
+
+  renderVals() {
+    const s = this.state;
+    const on = b => b ? 'on' : '';
+    const dot = i => i < s.step ? 'done' : (i === s.step ? 'cur' : '');
+    const fmtClock = sec => String(Math.floor(sec / 60)).padStart(2, '0') + ':' + String(Math.floor(sec % 60)).padStart(2, '0');
+    const running = s.tPhase === 'running';
+    const done = s.tPhase === 'done';
+    const stages = ['Förbereder', 'Extraherar ljud', 'Transkriberar', 'Färdigställer'].map((name, i) => {
+      const f = done ? 100 : Math.max(0, Math.min(100, (s.tProgress - i * 25) / 25 * 100));
+      return { name, fill: f, isDone: f >= 100, isCur: f > 0 && f < 100, isTodo: f <= 0, num: i + 1, bar: React.createElement('div', { style: { height: '100%', borderRadius: '99px', background: 'var(--ok)', transition: 'width .2s linear', width: f + '%' } }) };
+    });
+    const visN = done ? 5 : s.tLogN;
+    const lessonList = this.filteredLessons();
+    const asking = s.ask.status === 'thinking' || s.ask.status === 'done';
+    const dateOpts = ['Idag', 'Senaste veckan', 'Senaste månaden'];
+    const recClassOpts = Array.from(new Set((s.recordings || []).map(r => r.klass).filter(Boolean))).sort();
+    const recCourseOpts = Array.from(new Set((s.recordings || []).map(r => r.kurs).filter(Boolean))).sort();
+    const mkOpts = (all, cur, field) => all.map(o => ({ key: o, label: o, selected: cur === o, onSelect: () => this.selectFilter(field, o) }));
+    const recList = this.filteredRecordings();
+    const recCards = recList.map((r, idx) => {
+      let stage = '';
+      if (asking) {
+        const hi = s.ask.hits.indexOf(r.id);
+        if (hi >= 0) stage = s.ask.step >= hi + 2 ? 'lift' : '';
+        else stage = s.ask.step >= 1 ? (idx % 3 === 0 ? 'fly' : 'dim') : '';
+      }
+      return {
+        ...r, stage, hasKlass: !!r.klass, kursLabel: r.kurs || 'Inspelning', manual: !r.ai,
+        onOpen: () => this.openRecording(r),
+        onRename: (e) => { if (e) e.stopPropagation(); this.openRename(r); },
+        onDelete: (e) => { if (e) e.stopPropagation(); this.deleteRec(r); }
+      };
+    });
+    const cleanAll = this.cleanSegsData(s.resultLang).map(seg => ({ t: seg.t, parts: seg.parts.map(p => ({ s: p.s, fixed: !!p.fixed, lang: !!p.lang, norm: !p.fixed && !p.lang })) }));
+    const ppCleanSegs = cleanAll.slice(0, Math.min(s.ppClean.segN, 3));
+    const insItem = (s.modal && s.modal.kind === 'insights') ? s.modal.item : null;
+    const ins = insItem ? this.insightsFor(insItem) : null;
+
+    const tagsOf = arr => arr.map(t => ({ text: t.t, q: t.q ? '1' : '' }));
+    const mkModel = m => {
+      const isInstalled = !!s.installed[m.name];
+      const dl = s.downloading[m.name];
+      const isDownloading = dl != null;
+      return { ...m, recommended: !!m.recommended, isInstalled, notInstalled: !isInstalled, isDownloading, canDownload: !isInstalled && !isDownloading, dlPct: Math.round(dl || 0), dlBar: React.createElement('div', { style: { height: '100%', borderRadius: '99px', background: 'var(--accent)', transition: 'width .2s linear', width: Math.round(dl || 0) + '%' } }), onDownload: () => this.downloadModel(m.name), onDelete: () => this.deleteModel(m.name) };
+    };
+    const whisperModels = [
+      { rank: 1, name: 'KB-Whisper large (sv)', recommended: true, installed: true, vramLeft: '12.7 GB VRAM kvar', desc: 'Bäst för svenska', size: '2.9 GB', tags: tagsOf([{ t: 'Svenska' }, { t: 'fp16', q: 1 }, { t: '9.8 GB VRAM' }, { t: '~7× realtid' }]) },
+      { rank: 2, name: 'KB-Whisper medium (sv)', vramLeft: '17.6 GB VRAM kvar', desc: 'Svensk, mindre fotavtryck', size: '1.5 GB', tags: tagsOf([{ t: 'Svenska' }, { t: 'fp16', q: 1 }, { t: '4.9 GB VRAM' }, { t: '~12× realtid' }]) },
+      { rank: 3, name: 'Whisper large-v3', vramLeft: '12.7 GB VRAM kvar', desc: 'Flerspråkig toppkvalitet', size: '2.9 GB', tags: tagsOf([{ t: 'Flerspråkig' }, { t: 'fp16', q: 1 }, { t: '9.8 GB VRAM' }, { t: '~7× realtid' }]) },
+      { rank: 4, name: 'Whisper medium', vramLeft: '17.6 GB VRAM kvar', desc: 'Flerspråkig, balanserad', size: '1.5 GB', tags: tagsOf([{ t: 'Flerspråkig' }, { t: 'fp16', q: 1 }, { t: '4.9 GB VRAM' }, { t: '~12× realtid' }]) },
+      { rank: 5, name: 'Distil large-v3 (snabb)', vramLeft: '16.6 GB VRAM kvar', desc: 'Snabbare, något lägre noggrannhet', size: '1.5 GB', tags: tagsOf([{ t: 'Flerspråkig' }, { t: 'fp16', q: 1 }, { t: '5.9 GB VRAM' }, { t: '~14× realtid' }]) },
+      { rank: 6, name: 'KB-Whisper small (sv)', vramLeft: '20.5 GB VRAM kvar', desc: 'Svensk, mycket snabb', size: '480 MB', tags: tagsOf([{ t: 'Svenska' }, { t: 'fp16', q: 1 }, { t: '2 GB VRAM' }, { t: '~30× realtid' }]) },
+      { rank: 7, name: 'Parakeet TDT 0.6B v3 (en)', installed: true, vramLeft: '20.1 GB VRAM kvar', desc: 'Engelska — snabb (NVIDIA Parakeet)', size: '2.4 GB', tags: tagsOf([{ t: 'Engelska' }, { t: 'fp16', q: 1 }, { t: '2.4 GB VRAM' }, { t: '~25× realtid' }]) },
+      { rank: 8, name: 'Whisper small', vramLeft: '20.5 GB VRAM kvar', desc: 'Flerspråkig, snabb', size: '480 MB', tags: tagsOf([{ t: 'Flerspråkig' }, { t: 'fp16', q: 1 }, { t: '2 GB VRAM' }, { t: '~30× realtid' }]) },
+      { rank: 9, name: 'KB-Whisper tiny (sv)', vramLeft: '21.5 GB VRAM kvar', desc: 'Svensk, blixtsnabb', size: '75 MB', tags: tagsOf([{ t: 'Svenska' }, { t: 'fp16', q: 1 }, { t: '1 GB VRAM' }, { t: '~50× realtid' }]) },
+      { rank: 10, name: 'Whisper base', vramLeft: '21.3 GB VRAM kvar', desc: 'Flerspråkig, mycket snabb', size: '145 MB', tags: tagsOf([{ t: 'Flerspråkig' }, { t: 'fp16', q: 1 }, { t: '1.2 GB VRAM' }, { t: '~40× realtid' }]) },
+      { rank: 11, name: 'Whisper tiny', vramLeft: '21.5 GB VRAM kvar', desc: 'Flerspråkig, blixtsnabb', size: '75 MB', tags: tagsOf([{ t: 'Flerspråkig' }, { t: 'fp16', q: 1 }, { t: '1 GB VRAM' }, { t: '~50× realtid' }]) }
+    ].map(mkModel);
+
+    const llmModels = [
+      { rank: 1, name: 'Qwen3 14B (Q8_0)', recommended: true, vramLeft: '4.1 GB VRAM kvar', desc: 'Korrigering & sammanfattning (llama.cpp)', size: '14.6 GB', tags: tagsOf([{ t: 'Q5_K_M', q: 1 }, { t: '18.4 GB VRAM' }, { t: '55 tok/s' }, { t: '40k kontext' }]) },
+      { rank: 2, name: 'Gemma 3n (ljud)', vramLeft: '13.2 GB VRAM kvar', desc: 'Rättar transkriptet mot ljudet (Korrekturläs)', size: '4.4 GB', tags: tagsOf([{ t: 'Ljud', q: 1 }, { t: '9.3 GB VRAM' }, { t: '45 tok/s' }, { t: 'experimentell' }]) },
+      { rank: 3, name: 'Gemma 3 4B (vision)', vramLeft: '11.9 GB VRAM kvar', desc: 'Bildanalys i chatten (llama.cpp)', size: '3.3 GB', tags: tagsOf([{ t: 'Q8_0', q: 1 }, { t: '10.6 GB VRAM' }, { t: '70 tok/s' }, { t: '8k kontext' }]) }
+    ].map(mkModel);
+
+    const goodQueue = s.queue.filter(f => !f.bad);
+    const firstGood = goodQueue[0] || null;
+    const firstName = firstGood ? firstGood.name.replace(/\.[^.]+$/, '') : 'transkription';
+    const formats = [s.srt && 'SRT', s.txt && 'TXT', s.vtt && 'VTT'].filter(Boolean);
+    const badCount = s.queue.length - goodQueue.length;
+    const sourceRows = s.queue.map((f, i) => f.bad
+      ? { key: 'src' + i, error: true, ok: false, ext: f.ext, name: f.name }
+      : { key: 'src' + i, error: false, ok: true, ext: f.ext, name: f.name, size: '18.8 MB', dlName: this.baseOf(f.name) + '.txt', dlExt: 'TXT' });
+    const outputRows = firstGood ? formats.map(f => ({ key: 'out' + f, error: false, ok: true, ext: f, name: firstName + '.' + f.toLowerCase(), size: '1 KB', dlName: firstName + '.' + f.toLowerCase(), dlExt: f })) : [];
+    const results = sourceRows.concat(outputRows).map(r => ({ ...r, onDownload: r.dlName ? (() => this.doDownload(r.dlName, r.dlExt)) : (() => {}) }));
+
+    return {
+      theme: s.theme,
+      zoomStageCls: (this.props && this.props.cardZoom === false) ? '' : 'zoomstage',
+      zoomCardCls: (this.props && this.props.cardZoom === false) ? '' : 'zoomcard',
+      figCls: (this.props && this.props.serifFigures === false) ? '' : 'fig',
+      themeIcon: s.theme === 'dark' ? '☀' : '☾', isDark: s.theme === 'dark', isLight: s.theme !== 'dark',
+      toggleTheme: () => { const next = s.theme === 'dark' ? 'light' : 'dark'; this.setState({ theme: next }, () => this.persist()); },
+
+      isTr: s.tab === 'transkribera', isIn: s.tab === 'inspelningar',
+      navTrOn: on(s.tab === 'transkribera'), navInOn: on(s.tab === 'inspelningar'),
+      setTabTr: () => { this.set({ tab: 'transkribera' }); setTimeout(() => this.persist(), 0); },
+      setTabIn: () => { this.set({ tab: 'inspelningar' }); setTimeout(() => this.persist(), 0); },
+      activeModelTr: s.resultLang === 'en' ? 'Parakeet TDT' : 'KB-Whisper large', activeModelLlm: this.activeLlm().replace(/\s*\(.*\)$/, ''),
+
+      isStep0: s.step === 0, isStep1: s.step === 1, isStep2: s.step === 2,
+      goStep0: () => this.set({ step: 0 }), goStep1: () => this.set({ step: 1 }),
+      startTranscribe: () => this.startTranscribe(),
+      resetWizard: () => this.resetWizard(),
+      d1dot: dot(0), d1lbl: dot(0), d1t: 0 < s.step ? '✓' : '1',
+      d2dot: dot(1), d2lbl: dot(1), d2t: 1 < s.step ? '✓' : '2',
+      d3dot: dot(2), d3lbl: dot(2), d3t: 2 < s.step ? '✓' : '3',
+
+      queue: s.queue.map((f, i) => ({ ...f, onRemove: () => this.set({ queue: s.queue.filter((_, j) => j !== i) }) })),
+      queueCount: s.queue.length,
+      addSampleOk: () => this.set({ queue: [...s.queue, { name: 'mötesinspelning.mp3', ext: 'MP3' }], step: 1 }),
+      addSampleBad: () => this.set({ queue: [...s.queue, { name: 'skadad_inspelning.m4a', ext: 'M4A', bad: true }], step: 1 }),
+
+      langSvOn: on(s.lang === 'sv'), langEnOn: on(s.lang === 'en'),
+      setLangSv: () => { this.set({ lang: 'sv' }); this.saveSoon(); }, setLangEn: () => { this.set({ lang: 'en' }); this.saveSoon(); },
+      langLabel: s.lang === 'sv' ? 'Svenska' : 'Engelska',
+      autoModel: s.lang === 'sv' ? 'KB-Whisper large' : 'Parakeet TDT 0.6B v3',
+      srtOn: on(s.srt), txtOn: on(s.txt), vttOn: on(s.vtt),
+      toggleSrt: () => { this.set({ srt: !s.srt }); this.saveSoon(); }, toggleTxt: () => { this.set({ txt: !s.txt }); this.saveSoon(); }, toggleVtt: () => { this.set({ vtt: !s.vtt }); this.saveSoon(); },
+      resSvOn: on(s.resultLang === 'sv'), resEnOn: on(s.resultLang === 'en'),
+      setResSv: () => { this.set({ resultLang: 'sv' }); this.saveSoon(); }, setResEn: () => { this.set({ resultLang: 'en' }); this.saveSoon(); },
+      transQ: s.lang !== s.resultLang ? '1' : '',
+      transBadge: s.lang !== s.resultLang ? 'Översätter' : 'Ingen översättning',
+      transTag: s.lang !== s.resultLang ? 'Översätter' : 'Samma språk',
+      arrowEl: React.createElement('svg', { width: 26, height: 14, viewBox: '0 0 26 14', fill: 'none', stroke: s.lang !== s.resultLang ? 'var(--accent)' : 'var(--ink-3)', strokeWidth: 1.9, strokeLinecap: 'round', strokeLinejoin: 'round', style: { display: 'block', transition: 'stroke .25s ease' } }, React.createElement('path', { d: 'M1 7h22M16 2l6 5-6 5' })),
+      transHint: s.lang === s.resultLang
+        ? ('Resultatet blir på ' + (s.resultLang === 'sv' ? 'svenska' : 'engelska') + ' — samma som det talade språket.')
+        : ('Översätts från ' + (s.lang === 'sv' ? 'svenska' : 'engelska') + ' till ' + (s.resultLang === 'sv' ? 'svenska' : 'engelska') + '.'),
+
+      firstName,
+      stages,
+      logOpen: s.logOpen, toggleLog: () => this.set({ logOpen: !s.logOpen }),
+      logToggleLabel: s.logOpen ? 'Dölj' : 'Visa',
+      logLines: [
+        { t: '', msg: 'transkribera "' + firstName + '" --model ' + (s.lang === 'sv' ? 'KB-Whisper large (sv)' : 'Parakeet TDT 0.6B v3 (en)') },
+        { t: '00:00', msg: 'Startar transkribering …' },
+        { t: '00:03', msg: 'Laddar ' + (s.lang === 'sv' ? 'KB-Whisper' : 'Parakeet') + ' (cuda/float16) …' },
+        { t: '00:06', msg: 'Transkriberar …' },
+        { t: '00:07', msg: 'Färdig på 00:07' }
+      ].slice(0, visN).map((ln, i) => ({ ...ln, mark: (done && i === 4) ? '✓' : '' })),
+      resultCount: goodQueue.length, results, resultBad: badCount > 0, resultBadNote: badCount + (badCount === 1 ? ' fil kunde inte läsas' : ' filer kunde inte läsas'),
+      preview: this.transcript(s.resultLang).slice(0, 3).map(seg => ({ t: fmtClock(seg[0]), txt: seg[2] })),
+      openTranscript: () => this.openTranscript(),
+      closeTranscript: () => this.closeTranscript(),
+      transcriptOpen: s.transcriptOpen, transcriptAnim: s.transcriptClosing ? 'closing' : 'open', transcriptName: firstName,
+      fullTranscript: this.transcript(s.resultLang).map(seg => ({ t: fmtClock(seg[0]), txt: seg[2] })),
+      cleanOpen: s.cleanOpen, cleanAnim: s.cleanClosing ? 'closing' : 'open', openClean: () => this.openClean(), closeClean: () => this.closeClean(), fullCleanSegs: cleanAll,
+      ppSummaryOn: on(s.ppMode === 'summary'), ppChatOn: on(s.ppMode === 'chat'),
+      ppIsSummary: s.ppMode === 'summary', ppIsChat: s.ppMode === 'chat',
+      setPpSummary: () => this.setPpMode('summary'),
+      setPpChat: () => this.setPpMode('chat'),
+      ppCleanIdle: s.ppClean.status === 'idle', ppCleanRunning: s.ppClean.status === 'running', ppCleanDone: s.ppClean.status === 'done', ppCleanHasSegs: s.ppClean.segN > 0,
+      ppCleanNotRunning: s.ppClean.status !== 'running', ppCleanPct: s.ppClean.pct || 0,
+      ppCleanPhase: (s.ppClean.pct || 0) < 55 ? 'Rättar mot ljudet · Gemma 3n' : 'Städar språk & skiljetecken · Qwen',
+      ppCleanBar: React.createElement('div', { style: { height: '100%', borderRadius: '99px', background: 'linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 60%, var(--ok)))', width: (s.ppClean.pct || 0) + '%', transition: 'width .18s linear', backgroundSize: '28px 28px', animation: 'flow .8s linear infinite' } }),
+      runClean: () => this.runClean(),
+      activeLlmShort: this.activeLlm().split(' ')[0],
+      cleanModelInfo: 'Gemma 3n (ljud) + ' + this.activeLlm() + ' (språk) · lokalt',
+      ppUnlocked: s.ppClean.status === 'done', ppLocked: s.ppClean.status !== 'done',
+      ppSummaryIdle: s.ppSummary.status === 'idle', ppSummaryRunning: s.ppSummary.status === 'running', ppSummaryDone: s.ppSummary.status === 'done', ppSummaryText: s.ppSummary.text, ppSummaryHasText: !!s.ppSummary.text,
+      runSummary: () => this.runSummary(),
+      ppChatMsgs: s.ppChat.msgs.map((m, mi) => {
+        if (m.role === 'user') return { key: mi, isUser: true, isAi: false, text: m.text };
+        const openRi = (s.chatOpen && s.chatOpen.mi === mi) ? s.chatOpen.ri : null;
+        const refs = m.refs || [];
+        return { key: mi, isUser: false, isAi: true,
+          tokens: (m.tokens || []).map((tk, ti) => ({ key: ti, isText: !!tk.text, isCite: !!tk.cite, text: tk.text || '', num: tk.cite ? (tk.ref + 1) : '', supFlag: (tk.cite && openRi === tk.ref) ? 'on' : '', onCite: () => this.toggleChatRef(mi, tk.ref) })),
+          hasSources: refs.length > 0,
+          sources: refs.map((rf, ri) => { const hit = (rf.ctx || []).find(c => c.hit) || (rf.ctx || [])[0] || {}; return { key: ri, num: ri + 1, t: rf.t, text: hit.s || '', rowFlag: openRi === ri ? 'on' : '', onPick: () => this.toggleChatRef(mi, ri) }; }) };
+      }),
+      ppChatEmpty: s.ppChat.msgs.length === 0, ppChatHasMsgs: s.ppChat.msgs.length > 0,
+      ppChatRunning: s.ppChat.status === 'running',
+      ppChatThinking: s.ppChat.status === 'running',
+      sendChat: () => this.sendChat(),
+      closeChatSource: () => this.set({ chatOpen: null }),
+      llmModelInfo: 'Lokalt med ' + this.activeLlm(),
+
+      searchWordOn: on(s.searchMode === 'word'), searchAiOn: on(s.searchMode === 'ai'),
+      setSearchWord: () => this.set({ searchMode: 'word' }), setSearchAi: () => this.set({ searchMode: 'ai' }),
+
+      history: s.history.map(h => ({ ...h, onOpen: () => this.openDetail('history', h), onDownload: () => this.doDownload(this.baseOf(h.name) + '.' + (h.fmts[0] || 'TXT').toLowerCase(), h.fmts[0] || 'TXT'), onRerun: () => this.rerun(h), onDelete: () => this.deleteRow('history', h.id) })),
+      lessons: lessonList.map(le => ({ ...le, tag: this.tagOf(le), onOpen: () => this.openDetail('lesson', le), onAssign: () => this.openAssign(le), onInsights: () => this.openInsights(le), onDelete: () => this.deleteRow('lessons', le.id) })),
+      specs: [
+        { k: 'GPU', v: 'NVIDIA GeForce RTX 4090' },
+        { k: 'Beräkning', v: 'Ada Lovelace · cc 8.9' },
+        { k: 'CUDA', v: '12.4' },
+        { k: 'Precision', v: 'fp16 · int8 · int4' },
+        { k: 'CPU', v: 'AMD64 · 16 kärnor' }
+      ],
+      // transcribe flow
+      tRunning: running, tDone: done,
+      tStatusLabel: running ? 'TRANSKRIBERAR' : 'KLAR',
+      tPctLabel: Math.round(s.tProgress) + '%',
+      tElapsedLabel: fmtClock(running || done ? s.tElapsed : 0),
+      // source: picker / drop / link
+      linkInput: s.linkInput,
+      setLink: e => this.set({ linkInput: e.target.value }),
+      addLink: () => this.addLink(),
+      openPicker: () => this.openPicker(),
+      onFiles: e => this.onFiles(e),
+      onDrop: e => this.onDrop(e),
+      onDragOver: e => e.preventDefault(),
+      // recording
+      recording: s.recording,
+      recLabel: fmtClock(s.recElapsed),
+      recAnim: s.recClosing ? 'closing' : 'open',
+      startRecording: () => this.startRecording(),
+      stopRecording: () => this.stopRecording(),
+      cancelRecording: () => this.cancelRecording(),
+      // llm post-process
+      ppCleanSegs, ppQuestion: s.ppQuestion,
+      setPpQuestion: e => this.set({ ppQuestion: e.target.value }),
+      // lesson search
+      search: s.search,
+      setSearch: e => this.set({ search: e.target.value }),
+      runSearch: () => this.runSearch(),
+      clearSearch: () => this.clearSearch(),
+      searchBtnLabel: s.searchMode === 'ai' ? 'Fråga' : 'Sök',
+      searching: s.searching,
+      hasSearchResult: !!s.searchResult,
+      searchHits: s.searchResult ? s.searchResult.hits : [],
+      searchAnswer: s.searchResult ? s.searchResult.answer : '',
+      searchQ: s.searchResult ? s.searchResult.q : '',
+      lessonsEmpty: lessonList.length === 0,
+      backup: () => this.toast('Säkerhetskopia skapad'),
+      // toast
+      toast: !!s.toast,
+      toastMsg: s.toast ? s.toast.msg : '',
+      toastHasUndo: !!(s.toast && s.toast.undo),
+      onUndo: () => { const u = s.toast && s.toast.undo; this.dismissToast(); if (u) u(); },
+      dismissToast: () => this.dismissToast(),
+      // detail modal (Öppna / Historik)
+      modalDetailOpen: !!(s.modal && (s.modal.kind === 'history' || s.modal.kind === 'lesson')),
+      modalAnim: s.modalClosing ? 'closing' : 'open',
+      modalIsHistory: !!(s.modal && s.modal.kind === 'history'),
+      modalName: s.modal ? s.modal.item.name : '',
+      modalMeta: s.modal ? s.modal.item.meta : '',
+      modalDate: s.modal ? s.modal.item.date : '',
+      modalTag: s.modal && s.modal.item ? this.tagOf(s.modal.item) : '',
+      modalPreview: this.transcript(s.resultLang).slice(0, 6).map(seg => ({ t: fmtClock(seg[0]), txt: seg[2] })),
+      modalDownloads: s.modal ? ((s.modal.kind === 'history' ? (s.modal.item.fmts || ['TXT']) : ['SRT', 'TXT']).map(ext => ({ ext, onClick: () => this.doDownload(this.baseOf(s.modal.item.name) + '.' + ext.toLowerCase(), ext) }))) : [],
+      modalRerun: () => { if (s.modal) this.rerun(s.modal.item); },
+      // insights modal
+      modalInsightsOpen: !!(s.modal && s.modal.kind === 'insights'),
+      insKeywords: ins ? ins.keywords : [],
+      insMins: ins ? ins.mins : 0,
+      insWordCount: ins ? ins.wordCount.toLocaleString('sv-SE') : '0',
+      insTeacher: ins ? ins.teacher : 0,
+      insStudents: ins ? ins.students : 0,
+      insQuestions: ins ? ins.questions : 0,
+      insTeacherBar: ins ? React.createElement('div', { style: { height: '100%', borderRadius: '99px', background: 'var(--accent)', width: ins.teacher + '%' } }) : null,
+      // assign modal
+      assignOpen: !!s.assign,
+      assignAnim: s.assignClosing ? 'closing' : 'open',
+      assignName: s.assign ? s.assign.name : '',
+      assignClass: s.assign ? s.assign.klass : '',
+      assignCourse: s.assign ? s.assign.kurs : '',
+      assignClassOptions: this.CLASSES,
+      assignCourseOptions: this.COURSES,
+      setAssignClass: e => this.setAssignClass(e.target.value),
+      setAssignCourse: e => this.setAssignCourse(e.target.value),
+      saveAssign: () => this.saveAssign(),
+      cancelAssign: () => this.cancelAssign(),
+      // lesson filters
+      filterClass: s.filterClass, filterCourse: s.filterCourse,
+      classOptions: Array.from(new Set(s.lessons.map(l => l.klass).filter(Boolean))),
+      courseOptions: Array.from(new Set(s.lessons.map(l => l.kurs).filter(Boolean))),
+      setFilterClass: e => this.setFilterClass(e.target.value),
+      setFilterCourse: e => this.setFilterCourse(e.target.value),
+      // ----- Inspelningar (merged) -----
+      inspMode: s.inspMode, inspSokOn: on(s.inspMode === 'sok'), inspAiOn: on(s.inspMode === 'ai'),
+      setInspSok: () => this.setInspMode('sok'), setInspAi: () => this.setInspMode('ai'),
+      inspQuery: s.inspQuery, setInspQuery: e => this.setInspQuery(e), onInspKey: e => this.onInspKey(e),
+      inspModeLabel: s.inspMode === 'ai' ? 'Fråga AI om alla lektioner' : 'Sök i alla inspelningar',
+      inspPlaceholder: s.inspMode === 'ai' ? 'Vad vill du veta? T.ex. var förklarar jag täljare och nämnare?' : 'Sök titel, klass, ämne eller innehåll …',
+      askAI: () => this.askAI(),
+      askBtnLabel: s.ask.status === 'thinking' ? 'Tänker …' : 'Fråga AI',
+      inspShowSuggest: s.inspMode === 'ai' && s.ask.status === 'idle',
+      askSuggestions: [
+        { key: 's1', label: 'Var förklarar jag täljare och nämnare?', onClick: () => this.suggestAsk('Var förklarar jag täljare och nämnare?') },
+        { key: 's2', label: 'Vilka lektioner tar upp procent?', onClick: () => this.suggestAsk('Vilka lektioner tar upp procent?') }
+      ],
+      recCards, recCountLabel: recList.length + (recList.length === 1 ? ' inspelning' : ' inspelningar'), recEmpty: recList.length === 0,
+      inspIsAsk: asking, askThinking: s.ask.status === 'thinking', askDone: s.ask.status === 'done',
+      askStep1: s.ask.step >= 1, askStep2: s.ask.step >= 2, askStep3: s.ask.step >= 3,
+      askScanLabel: 'Sökte igenom ' + (s.recordings || []).length + ' inspelningar',
+      askHitLabel: 'Hittade träffar i ' + s.ask.hits.length + (s.ask.hits.length === 1 ? ' inspelning' : ' inspelningar'),
+      askQ: s.ask.q, reopenAnswer: () => { this.lockScroll(true); this.set({ answerOpen: true, answerClosing: false }); }, newAsk: () => this.clearAsk(),
+      recClassOptions: Array.from(new Set((s.recordings || []).map(r => r.klass).filter(Boolean))).sort(),
+      recCourseOptions: Array.from(new Set((s.recordings || []).map(r => r.kurs).filter(Boolean))).sort(),
+      filterDate: s.filterDate, setFilterDate: e => this.setFilterDate(e), dateOptions: ['Idag', 'Senaste veckan', 'Senaste månaden'],
+      klassOpts: mkOpts(['Alla klasser', ...recClassOpts], s.filterClass, 'filterClass'),
+      kursOpts: mkOpts(['Alla kurser', ...recCourseOpts], s.filterCourse, 'filterCourse'),
+      datumOpts: mkOpts(['Alla datum', ...dateOpts], s.filterDate, 'filterDate'),
+      filterKlassOpen: s.filterOpen === 'klass', filterKursOpen: s.filterOpen === 'kurs', filterDatumOpen: s.filterOpen === 'datum',
+      filterKlassOpenSeg: on(s.filterOpen === 'klass'), filterKursOpenSeg: on(s.filterOpen === 'kurs'), filterDatumOpenSeg: on(s.filterOpen === 'datum'),
+      toggleFilterKlass: () => this.toggleFilter('klass'), toggleFilterKurs: () => this.toggleFilter('kurs'), toggleFilterDatum: () => this.toggleFilter('datum'),
+      closeFilter: () => this.set({ filterOpen: null }),
+      filterClassLabel: s.filterClass, filterCourseLabel: s.filterCourse, filterDateLabel: s.filterDate,
+      inspSegThumb: React.createElement('div', { style: { position: 'absolute', top: '3px', left: '3px', bottom: '3px', width: 'calc(50% - 3px)', background: 'var(--surface)', borderRadius: '9px', boxShadow: 'var(--shadow-sm)', transition: 'transform .28s cubic-bezier(.4,0,.2,1)', transform: 'translateX(' + (s.inspMode === 'ai' ? '100%' : '0%') + ')' } }),
+      answerOpen: s.answerOpen, answerAnim: s.answerClosing ? 'closing' : 'open', closeAnswer: () => this.closeAnswer(),
+      answerTokens: (s.ask.answerTokens || []).map((tk, i) => ({ key: i, isText: !!tk.text, isCite: !!tk.cite, text: tk.text || '', rec: tk.cite || '', t: tk.t || '', onCite: (e) => { if (e) e.stopPropagation(); this.toggleRef(tk.ref); } })),
+      answerRefs: (s.ask.refs || []).map((rf, i) => ({ key: i, rec: rf.rec, klass: rf.klass, t: rf.t, open: s.ask.openRef === i, onToggle: () => this.toggleRef(i), ctx: rf.ctx.map((c, j) => ({ key: j, t: c.t, s: c.s, hit: !!c.hit, norm: !c.hit })) })),
+      answerRefCount: (s.ask.refs || []).length,
+      renameAnim: s.renameClosing ? 'closing' : 'open',
+      renameOpen: !!s.recRename, renameTitle: s.recRename ? s.recRename.title : '', renameKlass: s.recRename ? s.recRename.klass : '', renameKurs: s.recRename ? s.recRename.kurs : '',
+      setRenameTitle: e => this.setRenameField('title', e.target.value), setRenameKlass: e => this.setRenameField('klass', e.target.value), setRenameKurs: e => this.setRenameField('kurs', e.target.value),
+      cancelRename: () => this.cancelRename(), saveRename: () => this.saveRename(),
+      renameClassOptions: this.CLASSES, renameCourseOptions: this.COURSES,
+      // download disk
+      disk: s.disk, diskOpen: s.diskOpen,
+      diskLabel: (this.DISKS.find(d => d.id === s.disk) || this.DISKS[1]).label,
+      diskFree: (this.DISKS.find(d => d.id === s.disk) || this.DISKS[1]).free,
+      diskList: this.DISKS.map(d => ({ ...d, active: d.id === s.disk, onSelect: () => this.selectDisk(d.id) })),
+      toggleDiskMenu: () => this.toggleDiskMenu(),
+      closeModal: () => this.closeModal(),
+      stopProp: e => e.stopPropagation(),
+      whisperModels, llmModels
+    };
+  }
+}
+</script>
+</body>
+</html>
