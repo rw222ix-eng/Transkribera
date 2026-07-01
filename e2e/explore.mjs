@@ -1,6 +1,6 @@
 import { chromium } from "@playwright/test";
 
-const TABS = ["Transkribera", "Historik", "Lektioner", "Modeller"];
+const TABS = ["Transkribera", "Inspelningar", "Modeller"];
 
 const b = await chromium.launch();
 const page = await b.newPage({ viewport: { width: 1040, height: 780 } });

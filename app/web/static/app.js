@@ -373,7 +373,6 @@
   function segBtn(active, h) { return 'flex:1;border:none;background:' + (active ? 'var(--surface)' : 'transparent') + ';color:' + (active ? 'var(--ink)' : 'var(--ink-2)') + ';border-radius:8px;padding:0 10px;' + (h ? 'height:' + h + ';' : 'padding:9px 10px;') + 'font-size:15px;font-weight:500;white-space:nowrap;cursor:pointer;font-family:inherit;box-shadow:' + (active ? 'var(--shadow-sm)' : 'none') + ';transition:background .12s,color .12s,box-shadow .12s'; }
   function chip(active) { return 'border:1px solid ' + (active ? 'var(--ink)' : 'var(--line)') + ';background:' + (active ? 'var(--ink)' : 'transparent') + ';color:' + (active ? 'var(--btn-fg)' : 'var(--ink-2)') + ';border-radius:9px;padding:8px 13px;font-size:14.5px;font-weight:500;cursor:pointer;font-family:inherit;transition:all .12s'; }
   function ddItem(active) { return 'width:100%;display:flex;align-items:center;gap:11px;background:' + (active ? 'var(--sunken)' : 'transparent') + ';border:none;border-radius:9px;padding:10px 11px;cursor:pointer;text-align:left;font-family:inherit;transition:background .12s'; }
-  function tabBtn(active) { return 'border:none;background:' + (active ? 'var(--surface)' : 'transparent') + ';color:' + (active ? 'var(--ink)' : 'var(--ink-2)') + ';border-radius:9px;padding:8px 15px;font-size:15.5px;font-weight:500;cursor:pointer;font-family:inherit;white-space:nowrap;box-shadow:' + (active ? 'var(--shadow-sm)' : 'none') + ';transition:background .12s,color .12s,box-shadow .12s'; }
   function rowStyle(last) { return 'display:flex;align-items:center;gap:13px;padding:15px 18px;' + (last ? '' : 'border-bottom:1px solid var(--line);'); }
   function rowStyleRich(last) { return 'display:flex;align-items:flex-start;gap:14px;padding:17px 18px;' + (last ? '' : 'border-bottom:1px solid var(--line);'); }
   function verdictPill(tier) { var c = tier === 'ok' ? 'var(--ok)' : tier === 'warn' ? 'var(--warn)' : 'var(--bad)'; return 'display:inline-flex;align-items:center;font-size:12.5px;font-weight:500;color:' + c + ';background:color-mix(in srgb,' + c + ' 13%,transparent);border-radius:6px;padding:3px 9px;white-space:nowrap;font-variant-numeric:tabular-nums'; }
@@ -394,7 +393,12 @@
   /* -------------------------------------------------------------- actions -- */
   // BACKEND: theme/tab are pure UI.
   function toggleTheme() { setState(function (s) { return { theme: s.theme === 'light' ? 'dark' : 'light' }; }); }
-  function setTab(t) { setState({ tab: t, openDD: null }); if (t === 'lessons') { loadLessons(); loadOrg(); loadPrep(); loadAgenda(); loadTrends(); } }
+  function setTab(t) {
+    // Historik + Lektioner är sammanslagna till Inspelningar (design).
+    if (t === 'history' || t === 'lessons') t = 'recordings';
+    setState({ tab: t, openDD: null });
+    if (t === 'recordings') { loadHistory(); loadLessons(); loadOrg(); loadPrep(); loadAgenda(); loadTrends(); }
+  }
   function onSource(e) { setState({ source: e.target.value }); }
   function fileRef(el) { _file = el; }
   function openPicker() {
@@ -1732,10 +1736,10 @@
 
     return {
       theme: st.theme,
-      tabTranscribe: st.tab === 'transcribe', tabModels: st.tab === 'models', tabHistory: st.tab === 'history', tabLessons: st.tab === 'lessons',
-      onTabT: function () { setTab('transcribe'); }, onTabM: function () { setTab('models'); }, onTabH: function () { setTab('history'); }, onTabL: function () { setTab('lessons'); },
-      tabTStyle: tabBtn(st.tab === 'transcribe'), tabMStyle: tabBtn(st.tab === 'models'), tabHStyle: tabBtn(st.tab === 'history'), tabLStyle: tabBtn(st.tab === 'lessons'),
-      tabTOn: st.tab === 'transcribe', tabMOn: st.tab === 'models', tabHOn: st.tab === 'history', tabLOn: st.tab === 'lessons',
+      tabTranscribe: st.tab === 'transcribe', tabModels: st.tab === 'models', tabRecordings: st.tab === 'recordings',
+      onTabT: function () { setTab('transcribe'); }, onTabM: function () { setTab('models'); }, onTabIn: function () { setTab('recordings'); },
+      tabTOn: st.tab === 'transcribe', tabMOn: st.tab === 'models', tabInOn: st.tab === 'recordings',
+      themeIsLight: st.theme !== 'dark',
       toggleTheme: toggleTheme,
 
       queueItems: queueItems, queueCount: st.queue.length, multiQueue: st.queue.length > 1, hasQueue: st.queue.length > 0,
@@ -2060,20 +2064,20 @@
       '</div>' +
       '<nav style="flex:0 1 auto;min-width:0;display:flex;justify-content:center">' +
         '<div style="display:inline-flex;gap:3px;padding:4px;background:var(--track);border-radius:12px;border:1px solid var(--line)">' +
-          '<button data-click="' + on(v.onTabT) + '" aria-pressed="' + v.tabTOn + '" style="' + v.tabTStyle + '" data-sh="background:var(--surface) !important;color:var(--ink) !important;box-shadow:var(--shadow-sm) !important">Transkribera</button>' +
-          '<button data-click="' + on(v.onTabH) + '" aria-pressed="' + v.tabHOn + '" style="' + v.tabHStyle + '" data-sh="background:var(--surface) !important;color:var(--ink) !important;box-shadow:var(--shadow-sm) !important">Historik</button>' +
-          '<button data-click="' + on(v.onTabL) + '" aria-pressed="' + v.tabLOn + '" style="' + v.tabLStyle + '" data-sh="background:var(--surface) !important;color:var(--ink) !important;box-shadow:var(--shadow-sm) !important">Lektioner</button>' +
-          '<button data-click="' + on(v.onTabM) + '" aria-pressed="' + v.tabMOn + '" style="' + v.tabMStyle + '" data-sh="background:var(--surface) !important;color:var(--ink) !important;box-shadow:var(--shadow-sm) !important">Modeller</button>' +
+          '<button data-click="' + on(v.onTabT) + '" aria-pressed="' + v.tabTOn + '" data-seg="' + (v.tabTOn ? 'on' : 'off') + '" style="border:none;border-radius:9px;padding:8px 15px;font-size:15.5px;font-weight:500;cursor:pointer;font-family:inherit;white-space:nowrap;background:transparent;color:var(--ink-2);transition:background .12s,color .12s,box-shadow .12s">Transkribera</button>' +
+          '<button data-click="' + on(v.onTabIn) + '" aria-pressed="' + v.tabInOn + '" data-seg="' + (v.tabInOn ? 'on' : 'off') + '" style="border:none;border-radius:9px;padding:8px 15px;font-size:15.5px;font-weight:500;cursor:pointer;font-family:inherit;white-space:nowrap;background:transparent;color:var(--ink-2);transition:background .12s,color .12s,box-shadow .12s">Inspelningar</button>' +
         '</div>' +
       '</nav>' +
-      '<div style="flex:1 1 0;min-width:0;display:flex;justify-content:flex-end;align-items:center;gap:12px">' +
-        '<span style="display:inline-flex;align-items:center;gap:8px;background:color-mix(in srgb,var(--ok) 13%,transparent);color:var(--ok);border-radius:999px;padding:5px 12px 5px 10px;font-size:13.5px;font-weight:500">' +
-          '<span style="width:7px;height:7px;border-radius:50%;background:var(--ok)"></span>Ansluten' +
-        '</span>' +
-        '<button data-click="' + on(v.toggleTheme) + '" aria-label="Växla tema" style="position:relative;width:38px;height:38px;border-radius:10px;border:1px solid var(--line);background:var(--surface);cursor:pointer;display:flex;align-items:center;justify-content:center" data-sh="border-color:var(--line-2) !important">' +
-          '<span style="position:relative;width:16px;height:16px;border-radius:50%;background:var(--ink);overflow:hidden;display:block">' +
-            '<span style="position:absolute;top:-3px;right:-4px;width:13px;height:13px;border-radius:50%;background:var(--surface)"></span>' +
-          '</span>' +
+      '<div style="flex:1 1 0;min-width:0;display:flex;justify-content:flex-end;align-items:center;gap:8px">' +
+        // Modeller ligger utanför nav i designen — behåll en diskret ingång
+        // så modellhantering (nedladdning/disk) alltid går att nå.
+        '<button data-click="' + on(v.onTabM) + '" aria-label="Modeller" title="Modeller" aria-pressed="' + v.tabMOn + '" style="width:38px;height:38px;border-radius:10px;border:1px solid ' + (v.tabMOn ? 'var(--ink)' : 'var(--line)') + ';background:' + (v.tabMOn ? 'var(--sunken)' : 'var(--surface)') + ';color:var(--ink-2);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .12s">' +
+          '<svg width="17" height="17" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5.5h12M3 9h12M3 12.5h12"></path><circle cx="6.5" cy="5.5" r="1.4" fill="var(--surface)"></circle><circle cx="11.5" cy="9" r="1.4" fill="var(--surface)"></circle><circle cx="7.5" cy="12.5" r="1.4" fill="var(--surface)"></circle></svg>' +
+        '</button>' +
+        '<button data-click="' + on(v.toggleTheme) + '" aria-label="Växla tema" title="Växla tema" style="width:38px;height:38px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;transition:background .12s">' +
+          (v.themeIsLight
+            ? '<svg width="17" height="17" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15.5 11.2A6.2 6.2 0 0 1 6.8 2.5 6.2 6.2 0 1 0 15.5 11.2z"></path></svg>'
+            : '<svg width="17" height="17" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="9" r="3.4"></circle><path d="M9 1.7v1.6M9 14.7v1.6M16.3 9h-1.6M3.3 9H1.7M14.16 3.84l-1.13 1.13M4.97 13.03l-1.13 1.13M14.16 14.16l-1.13-1.13M4.97 4.97 3.84 3.84"></path></svg>') +
         '</button>' +
       '</div>' +
     '</header>';
@@ -2761,18 +2765,12 @@ function viewModels(v){
     </section>`;
 }
 
-function viewHistory(v){ return `
-    <section style="padding:44px 0 96px">
-      <div style="text-align:center;max-width:640px;margin:0 auto 28px">
-        <h1 style="font-size:34px;font-weight:600;letter-spacing:-0.03em;margin:0 0 6px">Historik</h1>
-        <p style="margin:0;color:var(--ink-2);font-size:17px">Dina tidigare transkriberingar. Öppna, kör om eller ladda ner igen — allt ligger kvar lokalt.</p>
-      </div>
-
-      ${ v.historyEmpty ? `
-        <div style="text-align:center;padding:60px 24px;background:var(--surface);border:1px solid var(--line);border-radius:16px;color:var(--ink-2);font-size:16px">Inga transkriberingar än. När du kört klart en fil dyker den upp här.</div>
-      ` : '' }
-
-      <div style="display:flex;flex-direction:column;gap:10px">
+function historySection(v){
+  if (v.historyEmpty) return '';
+  return `
+      <div style="margin-top:36px">
+        <div style="font-family:var(--mono);font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-3);margin:0 0 12px">Tidigare körningar</div>
+        <div style="display:flex;flex-direction:column;gap:10px">
         ${ v.historyItems.map(function(h){ return `
           <div data-key="${esc(h.id)}" style="display:flex;align-items:center;gap:15px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:15px 18px;box-shadow:var(--shadow-sm)">
             <span style="width:64px;height:40px;border-radius:9px;background:var(--sunken);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;flex:0 0 auto;overflow:hidden">
@@ -2819,19 +2817,22 @@ function viewHistory(v){ return `
             </div>
           </div>
         `; }).join('') }
+        </div>
       </div>
-    </section>
 `; }
 
-function viewLessons(v){
+function viewRecordings(v){
   var selStyle = 'appearance:none;background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:8px 32px 8px 12px;font-size:14px;font-family:inherit;cursor:pointer';
   var inStyle = 'background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:9px;padding:8px 11px;font-size:14px;font-family:inherit;min-width:0;width:100%;box-sizing:border-box';
   function opts(list, cur){ return '<option value="">Alla</option>' + list.map(function(o){ return '<option value="'+o.id+'"'+(String(cur)===String(o.id)?' selected':'')+'>'+esc(o.namn)+'</option>'; }).join(''); }
   return `
-    <section style="padding:44px 0 96px">
-      <div style="text-align:center;max-width:640px;margin:0 auto 22px">
-        <h1 style="font-size:34px;font-weight:600;letter-spacing:-0.03em;margin:0 0 6px">Lektioner</h1>
-        <p style="margin:0;color:var(--ink-2);font-size:17px">Dina inspelade lektioner — organisera per datum, klass och kurs. Allt ligger kvar lokalt.</p>
+    <section style="padding:32px 0 96px;animation:tabin .28s ease">
+      <div class="ehead">
+        <div>
+          <div class="eyebrow" style="margin-bottom:16px">Arkiv</div>
+          <h1 class="disp" style="font-size:clamp(38px,5.4vw,58px);margin:0">Inspelningar</h1>
+        </div>
+        <p class="ehead_lede" style="max-width:56ch">Alla dina lektioner och inspelningar på ett ställe. Sök, filtrera eller fråga AI:n om innehållet — allt ligger lokalt.</p>
       </div>
 
       ${ agendaPanel(v.agenda) }
@@ -2852,35 +2853,41 @@ function viewLessons(v){
       ${ v.trends ? trendsPanel(v.trends) : '' }
 
       ${ v.lessonsEmpty ? `
-        <div style="text-align:center;padding:60px 24px;background:var(--surface);border:1px solid var(--line);border-radius:16px;color:var(--ink-2);font-size:16px">Inga lektioner än. Transkribera en inspelning så dyker den upp här — tilldela den sedan klass och kurs.</div>
+        <div style="text-align:center;padding:60px 24px;background:var(--surface);border:1px dashed var(--line-2);border-radius:14px;color:var(--ink-2);font-size:16px">Inga inspelningar än. Transkribera en inspelning så dyker den upp här — tilldela den sedan klass och kurs.</div>
       ` : '' }
 
-      <div style="display:flex;flex-direction:column;gap:10px">
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px;align-items:start">
         ${ v.lessonItems.map(function(h){ return `
-          <div data-key="les-${esc(h.id)}" style="background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:15px 18px;box-shadow:var(--shadow-sm)">
-            <div style="display:flex;align-items:center;gap:15px">
-              <div style="flex:1;min-width:0">
-                <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
-                  <span style="font-size:16px;font-weight:500;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(h.name)}</span>
-                  <span style="font-size:13px;color:var(--ink-3);font-variant-numeric:tabular-nums">${esc(h.date)}</span>
-                </div>
-                <div style="font-size:13.5px;color:var(--ink-2);margin-top:3px;font-variant-numeric:tabular-nums">${esc(h.meta)}</div>
-                <div style="display:flex;gap:6px;margin-top:9px;flex-wrap:wrap">
-                  ${ h.unassigned ? `<span style="font-size:11.5px;font-weight:500;color:var(--ink-3);background:var(--sunken);border:1px solid var(--line);border-radius:5px;padding:2px 8px">Ej tilldelad</span>`
-                    : h.tags.map(function(t){ return `<span style="font-size:11.5px;font-weight:500;color:var(--accent);background:var(--accent-weak);border-radius:5px;padding:2px 8px;letter-spacing:0.03em">${esc(t.label)}</span>`; }).join('') }
-                </div>
+          <div data-key="les-${esc(h.id)}" style="background:var(--surface);border:1px solid var(--line);border-radius:15px;padding:14px 15px;box-shadow:var(--shadow-sm);display:flex;flex-direction:column;gap:11px${ (h.editing || h.insightsOpen) ? ';grid-column:1/-1' : '' }">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+              <span style="width:50px;height:32px;border-radius:8px;background:var(--sunken);border:1px solid var(--line);display:flex;align-items:flex-end;justify-content:center;gap:2px;flex:0 0 auto;padding-bottom:8px">
+                <span style="width:2.5px;height:8px;border-radius:2px;background:var(--ink-3)"></span><span style="width:2.5px;height:15px;border-radius:2px;background:var(--accent)"></span><span style="width:2.5px;height:11px;border-radius:2px;background:var(--ink-3)"></span><span style="width:2.5px;height:6px;border-radius:2px;background:var(--ink-3)"></span>
+              </span>
+              ${ h.unassigned
+                ? `<span style="font-size:10.5px;font-weight:500;color:var(--ink-3);background:var(--sunken);border:1px solid var(--line);border-radius:6px;padding:3px 7px">Ej tilldelad</span>`
+                : `<span style="font-size:11.5px;font-weight:600;color:var(--accent);background:var(--accent-weak);border-radius:99px;padding:2px 9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px">${esc(h.tags[0] ? h.tags[0].label : '')}</span>` }
+            </div>
+            <div>
+              <div style="font-size:15.5px;font-weight:600;color:var(--ink);line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(h.name)}</div>
+              <div style="display:flex;align-items:center;gap:7px;margin-top:8px;flex-wrap:wrap">
+                ${ h.tags.slice(1).map(function(t){ return `<span style="font-size:12px;color:var(--ink-2)">${esc(t.label)}</span>`; }).join('<span style="width:3px;height:3px;border-radius:50%;background:var(--line-2)"></span>') }
               </div>
-              <div style="display:flex;align-items:center;gap:7px;flex:0 0 auto">
-                <button data-click="${on(h.onOpen)}" style="background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:9px;padding:8px 14px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit" data-sh="border-color:var(--ink) !important;background:var(--ink) !important;color:var(--btn-fg) !important">Öppna</button>
-                <button data-click="${on(h.onEdit)}" style="background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:9px;padding:8px 14px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit" data-sh="border-color:var(--accent) !important;color:var(--accent) !important">${ h.editing ? 'Tilldelar …' : 'Tilldela' }</button>
-                <button data-click="${on(h.onToggleInsights)}" style="background:${h.insightsOpen?'var(--accent-weak)':'var(--surface)'};border:1px solid ${h.insightsOpen?'var(--accent)':'var(--line)'};color:${h.insightsOpen?'var(--accent)':'var(--ink)'};border-radius:9px;padding:8px 14px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit" data-sh="border-color:var(--accent) !important;color:var(--accent) !important">Insikter</button>
-                <button data-click="${on(h.onDelete)}" aria-label="Ta bort" style="width:38px;height:38px;border:1px solid var(--line);background:var(--surface);border-radius:9px;cursor:pointer;color:var(--ink-2);display:flex;align-items:center;justify-content:center" data-sh="border-color:var(--bad) !important;color:var(--bad) !important">
-                  <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5h10"></path><path d="M6.5 4.5V3h3v1.5"></path><path d="M4.5 4.5 5 13h6l.5-8.5"></path></svg>
-                </button>
+              <div style="display:flex;align-items:center;gap:7px;margin-top:6px;flex-wrap:wrap">
+                <span style="font-size:12px;color:var(--ink-3);font-variant-numeric:tabular-nums">${esc(h.date)}</span>
+                ${ h.meta ? `<span style="width:3px;height:3px;border-radius:50%;background:var(--line-2)"></span><span style="font-size:12px;color:var(--ink-3);font-variant-numeric:tabular-nums">${esc(h.meta)}</span>` : '' }
               </div>
             </div>
+            <div style="display:flex;align-items:center;gap:7px;border-top:1px solid var(--line);padding-top:11px;margin-top:1px;flex-wrap:wrap">
+              <button data-click="${on(h.onOpen)}" style="display:inline-flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--line);color:var(--ink-2);border-radius:8px;padding:6px 11px;font-size:12.5px;font-weight:500;cursor:pointer;font-family:inherit;transition:border-color .12s,color .12s">Öppna</button>
+              <button data-click="${on(h.onEdit)}" style="display:inline-flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--line);color:var(--ink-2);border-radius:8px;padding:6px 11px;font-size:12.5px;font-weight:500;cursor:pointer;font-family:inherit;transition:border-color .12s,color .12s">${ h.editing ? 'Tilldelar …' : 'Tilldela' }</button>
+              <button data-click="${on(h.onToggleInsights)}" data-chip="${h.insightsOpen ? 'on' : 'off'}" style="display:inline-flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--line);color:var(--ink-2);border-radius:8px;padding:6px 11px;font-size:12.5px;font-weight:500;cursor:pointer;font-family:inherit;transition:border-color .12s,color .12s">Insikter</button>
+              <span style="flex:1"></span>
+              <button data-click="${on(h.onDelete)}" aria-label="Ta bort" style="width:30px;height:30px;border:1px solid var(--line);background:var(--surface);border-radius:8px;cursor:pointer;color:var(--ink-3);display:flex;align-items:center;justify-content:center;transition:border-color .12s,color .12s">
+                <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.5 8.5h6l.5-8.5"></path></svg>
+              </button>
+            </div>
             ${ h.editing ? `
-              <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line);display:grid;grid-template-columns:1fr 1fr;gap:10px">
+              <div style="padding-top:12px;border-top:1px solid var(--line);display:grid;grid-template-columns:1fr 1fr;gap:10px">
                 <label style="display:flex;flex-direction:column;gap:5px;font-size:12.5px;color:var(--ink-2)">Klass
                   <input value="${esc(h.edGroup)}" list="dl-klass" data-input="${on(h.onGroup)}" placeholder="t.ex. NA21" style="${inStyle}"></label>
                 <label style="display:flex;flex-direction:column;gap:5px;font-size:12.5px;color:var(--ink-2)">Kurs
@@ -2899,6 +2906,8 @@ function viewLessons(v){
           </div>
         `; }).join('') }
       </div>
+
+      ${ historySection(v) }
     </section>`;
 }
 
@@ -3427,8 +3436,7 @@ function viewModals(v){ return `
       '<main style="max-width:1120px;margin:0 auto;padding:0 24px">' +
       (v.tabTranscribe ? viewTranscribe(v) : '') +
       (v.tabModels ? viewModels(v) : '') +
-      (v.tabHistory ? viewHistory(v) : '') +
-      (v.tabLessons ? viewLessons(v) : '') +
+      (v.tabRecordings ? viewRecordings(v) : '') +
       '</main>' +
       viewModals(v);
   }

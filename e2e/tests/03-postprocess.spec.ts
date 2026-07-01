@@ -41,7 +41,7 @@ test("lesson insight extraction shows the extracted action", async ({ page }) =>
   failOnConsoleError(page, errors);
   await transcribeSample(page);
 
-  await page.getByRole("button", { name: "Lektioner", exact: true }).first().click();
+  await page.getByRole("button", { name: "Inspelningar", exact: true }).first().click();
   await page.getByRole("button", { name: "Insikter" }).first().click();
   await page.getByRole("button", { name: /Analysera lektion/ }).click();
   await expect(page.getByText("Räkna uppgift 5 till nästa gång.")).toBeVisible({ timeout: 15000 });
@@ -53,7 +53,7 @@ test("cross-lesson AI question answers over the transcripts", async ({ page }) =
   failOnConsoleError(page, errors);
   await transcribeSample(page);
 
-  await page.getByRole("button", { name: "Lektioner", exact: true }).first().click();
+  await page.getByRole("button", { name: "Inspelningar", exact: true }).first().click();
   await page.getByRole("button", { name: "Fråga (AI)" }).first().click();
   // In AI mode the input placeholder and submit button both change; wait for the
   // re-render to settle and the typed value to commit before submitting.

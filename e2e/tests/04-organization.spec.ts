@@ -12,7 +12,7 @@ test("assign a lesson to a class and course", async ({ page }) => {
   failOnConsoleError(page, errors);
   await transcribeSample(page);
 
-  await page.getByRole("button", { name: "Lektioner", exact: true }).first().click();
+  await page.getByRole("button", { name: "Inspelningar", exact: true }).first().click();
   await page.getByRole("button", { name: "Tilldela" }).first().click();
   await page.getByPlaceholder("t.ex. NA21").fill("NA21");
   await page.getByPlaceholder("t.ex. Matematik 2b").fill("Matematik 2b");
@@ -30,7 +30,7 @@ test("export the knowledge-base backup", async ({ page }) => {
   failOnConsoleError(page, errors);
   await stubOpen(page);
   await page.goto("/");
-  await page.getByRole("button", { name: "Lektioner", exact: true }).first().click();
+  await page.getByRole("button", { name: "Inspelningar", exact: true }).first().click();
 
   const [resp] = await Promise.all([
     page.waitForResponse((r) => r.url().includes("/api/backup")),
@@ -47,7 +47,7 @@ test("export a lesson report", async ({ page }) => {
   await stubOpen(page);
   await transcribeSample(page);
 
-  await page.getByRole("button", { name: "Lektioner", exact: true }).first().click();
+  await page.getByRole("button", { name: "Inspelningar", exact: true }).first().click();
   await page.getByRole("button", { name: "Insikter" }).first().click();
   const [resp] = await Promise.all([
     page.waitForResponse((r) => /\/api\/lessons\/\d+\/report/.test(r.url())),

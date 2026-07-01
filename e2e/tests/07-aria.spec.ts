@@ -12,7 +12,7 @@ test("segmented controls expose aria-pressed reflecting selection", async ({ pag
 
   // Nav tabs: exactly the active tab is pressed; it tracks navigation.
   const navT = page.getByRole("button", { name: "Transkribera", exact: true });
-  const navH = page.getByRole("button", { name: "Historik", exact: true });
+  const navH = page.getByRole("button", { name: "Inspelningar", exact: true });
   await expect(navT).toHaveAttribute("aria-pressed", "true");
   await expect(navH).toHaveAttribute("aria-pressed", "false");
   await navH.click();

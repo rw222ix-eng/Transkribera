@@ -30,10 +30,10 @@ test("real transcription of the sample produces a transcript and history entry",
 
   // Wait for the real run to finish: the post-process panel only appears once a
   // transcript exists.
-  await expect(page.getByRole("heading", { name: "Efterbearbeta transkriptet" }))
+  await expect(page.getByRole("heading", { name: "Korrekturläs transkriptet" }))
     .toBeVisible({ timeout: 280_000 });
 
   // A new history entry was persisted for the sample.
-  await page.getByRole("button", { name: "Historik", exact: true }).first().click();
+  await page.getByRole("button", { name: "Inspelningar", exact: true }).first().click();
   await expect(page.getByText("Mamma waw isolerad").first()).toBeVisible({ timeout: 10000 });
 });

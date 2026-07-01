@@ -29,8 +29,8 @@ test("transcribe a picked file produces a result and a history entry", async ({ 
   // Faked SSE finishes fast; the result transcript shows a faked segment.
   await expect(page.getByText("bråk och procent")).toBeVisible({ timeout: 20000 });
 
-  // History view shows a new entry for the sample.
-  await page.getByRole("button", { name: "Historik", exact: true }).first().click();
+  // The merged Inspelningar view shows a new entry for the sample.
+  await page.getByRole("button", { name: "Inspelningar", exact: true }).first().click();
   await expect(page.getByText("Mamma waw isolerad").first()).toBeVisible({ timeout: 10000 });
 
   expect(errors, errors.join("\n")).toEqual([]);

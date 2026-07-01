@@ -3,8 +3,7 @@ import { test, expect, failOnConsoleError } from "../helpers/app";
 // One stable landmark per top-level view (discovered against the live app).
 const VIEWS: { tab: string; landmark: (page: import("@playwright/test").Page) => import("@playwright/test").Locator }[] = [
   { tab: "Transkribera", landmark: (p) => p.getByRole("heading", { name: "Vad vill du transkribera?" }) },
-  { tab: "Historik", landmark: (p) => p.getByRole("heading", { name: "Historik" }) },
-  { tab: "Lektioner", landmark: (p) => p.getByRole("heading", { name: "Lektioner" }) },
+  { tab: "Inspelningar", landmark: (p) => p.getByRole("heading", { name: "Inspelningar" }) },
   { tab: "Modeller", landmark: (p) => p.getByRole("heading", { name: "Transkriberingsmodeller" }) },
 ];
 

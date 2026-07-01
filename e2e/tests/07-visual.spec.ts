@@ -3,8 +3,7 @@ import * as path from "path";
 
 const VIEWS = [
   { tab: "Transkribera", landmark: "Vad vill du transkribera?" },
-  { tab: "Historik", landmark: "Historik" },
-  { tab: "Lektioner", landmark: "Lektioner" },
+  { tab: "Inspelningar", landmark: "Inspelningar" },
   { tab: "Modeller", landmark: "Transkriberingsmodeller" },
 ];
 const SIZES = [
