@@ -2,7 +2,7 @@ import { test, expect, failOnConsoleError } from "../helpers/app";
 import * as path from "path";
 
 const VIEWS = [
-  { tab: "Transkribera", landmark: "Lägg till fler" },
+  { tab: "Transkribera", landmark: "Vad vill du transkribera?" },
   { tab: "Historik", landmark: "Historik" },
   { tab: "Lektioner", landmark: "Lektioner" },
   { tab: "Modeller", landmark: "Transkriberingsmodeller" },
@@ -34,11 +34,7 @@ for (const view of VIEWS) {
         if (view.tab !== "Transkribera") {
           await page.getByRole("button", { name: view.tab, exact: true }).first().click();
         }
-        await expect(
-          view.tab === "Transkribera"
-            ? page.getByRole("button", { name: view.landmark })
-            : page.getByRole("heading", { name: view.landmark })
-        ).toBeVisible();
+        await expect(page.getByRole("heading", { name: view.landmark })).toBeVisible();
 
         await page.screenshot({
           path: path.join(OUT, `${view.tab}-${size.w}x${size.h}-${theme}.png`),
