@@ -5,8 +5,7 @@ test("summary post-processing streams a result", async ({ page }) => {
   failOnConsoleError(page, errors);
   await transcribeSample(page);
 
-  await page.getByRole("button", { name: /Summera/ }).click();
-  await page.getByRole("button", { name: "Kör", exact: true }).click();
+  await page.getByRole("button", { name: "Summera", exact: true }).click();
   await expect(page.getByText("[FEJK summary]")).toBeVisible({ timeout: 15000 });
   expect(errors, errors.join("\n")).toEqual([]);
 });
@@ -16,8 +15,8 @@ test("proofreading (cleanup) post-processing streams a result", async ({ page })
   failOnConsoleError(page, errors);
   await transcribeSample(page);
 
-  await page.getByRole("button", { name: /Korrekturläs/ }).click();
-  await page.getByRole("button", { name: "Kör", exact: true }).click();
+  await page.getByRole("button", { name: "Korrekturläs transkriptet", exact: true }).click();
+  // The cleaned text renders as word-diffed spans inside the preview box.
   await expect(page.getByText("[FEJK cleanup]")).toBeVisible({ timeout: 15000 });
   expect(errors, errors.join("\n")).toEqual([]);
 });
@@ -27,7 +26,9 @@ test("chat about the transcript answers", async ({ page }) => {
   failOnConsoleError(page, errors);
   await transcribeSample(page);
 
-  await page.getByRole("button", { name: /Chatta/ }).click();
+  // Chatten är låst tills transkriptet är korrekturläst (designbeteende).
+  await page.getByRole("button", { name: "Korrekturläs nu", exact: true }).click();
+  await page.getByRole("button", { name: "Öppna chatt", exact: true }).click({ timeout: 15000 });
   const chatInput = page.getByPlaceholder("Fråga om transkriptet …");
   await chatInput.fill("Vad handlar lektionen om?");
   await chatInput.press("Enter");

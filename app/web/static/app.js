@@ -65,6 +65,9 @@
     instProg: {},
     transcriptOpen: false,
     logOpen: false,
+    logExpand: false,           // vikbar logg i statuskortet (design: Visa/Dölj)
+    cleanText: null,            // senaste korrekturlästa transkriptet (behålls även om annan pp körs)
+    cleanModalOpen: false,      // KORREKTURLÄST-modalen med markerade rättelser
     toast: null,
     searchQuery: '',
     currentMatch: 0,
@@ -557,7 +560,7 @@
   function restart() {
     clearInterval(_t); clearTimeout(_pp); clearInterval(_ppIv); clearTimeout(_chat); clearInterval(_au);
     Object.values(_dl || {}).forEach(clearInterval);
-    setState({ source: '', queue: [], qStatus: {}, qProgress: {}, activeId: null, fileError: '', step: 'source', run: 'idle', progress: 0, elapsed: 0, log: [], pp: 'idle', ppOp: 'summary', ppOut: '', ppEnabled: false, chat: [], chatInput: '', chatTyping: false, chatModalOpen: false, chatThink: false, chatAttach: [], openDD: null, transcriptOpen: false, runError: null, editing: false, edits: {}, edited: false, audioPlaying: false, audioT: 0, audioDur: 0, mediaUrl: null, runMedia: null, histViewing: null, resultId: null, transcriptRaw: null });
+    setState({ source: '', queue: [], qStatus: {}, qProgress: {}, activeId: null, fileError: '', step: 'source', run: 'idle', progress: 0, elapsed: 0, log: [], pp: 'idle', ppOp: 'summary', ppOut: '', ppEnabled: false, chat: [], chatInput: '', chatTyping: false, chatModalOpen: false, chatThink: false, chatAttach: [], openDD: null, transcriptOpen: false, runError: null, editing: false, edits: {}, edited: false, audioPlaying: false, audioT: 0, audioDur: 0, mediaUrl: null, runMedia: null, histViewing: null, resultId: null, transcriptRaw: null, logExpand: false, cleanText: null, cleanModalOpen: false });
   }
   function onSearch(e) { setState({ search: e.target.value }); }
   function toggleFmt(f) { setState(function (s) { var formats = Object.assign({}, s.formats); formats[f] = !formats[f]; return { formats: formats }; }); }
@@ -1120,6 +1123,9 @@
       else if (ev.type === 'done') {
         clearInterval(_ppIv); var r = ev.result || {}; var out = r.text || acc;
         setState({ pp: 'done', ppPct: 100, ppOut: out });
+        // Korrekturläst text behålls separat — chatten arbetar vidare på den
+        // och kortet kan visa rättelserna även om en annan pp körs efteråt.
+        if (out && S.ppOp === 'clean') setState({ cleanText: out });
         // Spara sammanfattningen till den öppna transkriberingen så den finns kvar.
         if (S.resultId && out && S.ppOp === 'summary') {
           fetch('/api/history/' + encodeURIComponent(S.resultId), { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ summary: out }) })
@@ -1127,6 +1133,49 @@
         }
       }
     });
+  }
+  function runCleanNow() { if (S.pp === 'running') return; setState({ ppOp: 'clean' }); runPP(); }
+  function runSummaryNow() { if (S.pp === 'running') return; setState({ ppOp: 'summary' }); runPP(); }
+  function toggleLogExpand() { setState(function (s) { return { logExpand: !s.logExpand }; }); }
+  function openCleanModal() { setState({ cleanModalOpen: true }); }
+  function closeCleanModal() { setState({ cleanModalOpen: false }); }
+
+  // Ord-diff original -> korrekturläst (design: markera rättelser i texten).
+  // Greedy tvåpekar-jämförelse med resynk-fönster — klarar långa transkript
+  // utan kvadratisk LCS. Ord vars normaliserade form finns kvar men vars
+  // skiljetecken/skiftläge ändrats markeras också (språk & skiljetecken).
+  function _normWord(w) { return w.toLowerCase().replace(/[.,!?;:"'»«…()\-–—]+/g, ''); }
+  function diffWords(origText, cleanedText) {
+    var A = (origText || '').split(/\s+/).filter(Boolean);
+    var B = (cleanedText || '').split(/\s+/).filter(Boolean);
+    var out = [], i = 0, j = 0, W = 14;
+    while (j < B.length) {
+      if (i < A.length && _normWord(A[i]) === _normWord(B[j])) {
+        out.push({ s: B[j], ch: A[i] !== B[j] });
+        i++; j++; continue;
+      }
+      // resynk: hitta närmaste matchning inom fönstret
+      var bi = -1, bj = -1, best = W * 2 + 1;
+      for (var dj = 0; dj <= W && j + dj < B.length; dj++) {
+        for (var di = 0; di <= W && i + di < A.length; di++) {
+          if (di + dj < best && _normWord(A[i + di]) === _normWord(B[j + dj])) { best = di + dj; bi = di; bj = dj; }
+        }
+      }
+      if (bi < 0) { out.push({ s: B[j], ch: true }); j++; i++; continue; }
+      for (var k = 0; k < bj; k++) { out.push({ s: B[j + k], ch: true }); }
+      i += bi; j += bj;
+    }
+    return out;
+  }
+  var _diffMemo = { key: null, parts: null };
+  function cleanDiffParts() {
+    if (!S.cleanText) return [];
+    var key = S.cleanText.length + ':' + S.cleanText.slice(0, 40);
+    if (_diffMemo.key !== key) {
+      var orig = getTranscript().map(function (l) { return l.text; }).join(' ');
+      _diffMemo = { key: key, parts: diffWords(orig, S.cleanText) };
+    }
+    return _diffMemo.parts;
   }
   function togglePPEnabled() { var next = !S.ppEnabled; setState({ ppEnabled: next }); if (next && S.run === 'done') { if (S.ppOp === 'chat') seedChat(); else runPP(); } }
   function afterDone() { if (!S.ppEnabled) return; if (S.ppOp === 'chat') seedChat(); else runPP(); }
@@ -1148,7 +1197,8 @@
     setState(function (s) { return { chat: s.chat.concat([{ role: 'user', text: userText, attach: attNote }, { role: 'assistant', text: '', reason: '' }]), chatInput: '', chatAttach: [], chatTyping: true }; });
     var msgs = S.chat.filter(function (m) { return !(m.role === 'assistant' && !m.text); })
       .map(function (m) { return { role: m.role, content: m.text + (m.attach ? ' [bifogat: ' + m.attach + ']' : '') }; });
-    var transcript = getTranscript().map(function (l) { return l.text; }).join(' ');
+    // Chatten arbetar på det korrekturlästa transkriptet när det finns (design).
+    var transcript = S.cleanText || getTranscript().map(function (l) { return l.text; }).join(' ');
     var acc = '', accReason = '';
     var setLast = function (text, reason, typing) { setState(function (s) { var c = s.chat.slice(); if (c.length) c[c.length - 1] = { role: 'assistant', text: text, reason: reason }; return { chat: c, chatTyping: !!typing }; }); };
     streamPost('/api/chat', { messages: msgs, transcript: transcript, model: S.ppModel, images: images, think: S.chatThink }, function (ev) {
@@ -1399,6 +1449,7 @@
   function onKeyDown(e) {
     if (S.chatModalOpen && e.key === 'Escape') { closeChatModal(); return; }
     if (S.logOpen && e.key === 'Escape') { closeLog(); return; }
+    if (S.cleanModalOpen && e.key === 'Escape') { closeCleanModal(); return; }
     if (!S.transcriptOpen) return;
     if ((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'F')) { e.preventDefault(); var inp = document.querySelector('[data-tsearch]'); if (inp) inp.focus(); }
     else if (e.key === 'Escape') { closeTranscript(); }
@@ -1874,9 +1925,23 @@
       ppRunBtnStyle: primaryBtn(st.pp === 'running') + ';min-width:152px', ppRunIdle: st.pp !== 'running', ppPct: Math.round(st.ppPct || 0),
       ppRingStyle: 'position:relative;width:22px;height:22px;border-radius:50%;flex:0 0 auto;background:conic-gradient(var(--accent) ' + (Math.round(st.ppPct || 0) * 3.6) + 'deg, color-mix(in srgb,var(--ink-3) 18%,transparent) 0);animation:ppglow 1.6s ease-in-out infinite;transition:background .13s linear',
       ppShowText: st.ppOp !== 'chat' && st.pp !== 'idle', ppShowChat: st.ppOp === 'chat', ppRunning: st.pp === 'running', ppShowOut: st.pp === 'done',
-      ppTextDone: st.pp === 'done' && st.ppOp !== 'chat', ppCleanDone: false,
-      ppCleanLines: getTranscript().map(function (ln, idx) { return { time: ln.time, text: lineText(idx) }; }),
-      ppCleanFiles: resultFiles, ppOut: st.ppOut, ppOutTitle: ppOutTitles[st.ppOp],
+      ppTextDone: st.pp === 'done' && st.ppOp === 'summary', ppOut: st.ppOut, ppOutTitle: ppOutTitles[st.ppOp],
+      // KORREKTUR-kortet (design): körning, resultat med markerade rättelser, lås för chatten
+      cleanRunning: st.pp === 'running' && st.ppOp === 'clean',
+      summaryRunning: st.pp === 'running' && st.ppOp === 'summary',
+      cleanDone: !!st.cleanText,
+      cleanBtnLabel: st.cleanText ? '↻ Kör igen' : 'Korrekturläs transkriptet',
+      cleanPct: Math.round(st.ppPct || 0),
+      cleanBarW: Math.round(st.ppPct || 0) + '%',
+      cleanLegendAudio: !!st.audioCorrect,
+      cleanPreviewParts: st.cleanText ? cleanDiffParts().slice(0, 70) : [],
+      cleanFullParts: st.cleanText ? cleanDiffParts() : [],
+      cleanChangeCount: st.cleanText ? cleanDiffParts().filter(function (p) { return p.ch; }).length : 0,
+      runClean: runCleanNow, runSummary: runSummaryNow,
+      cleanModalOpen: st.cleanModalOpen, openCleanModal: openCleanModal, closeCleanModal: closeCleanModal,
+      ppLocked: !st.cleanText, activeLlmShort: st.ppModel,
+      logExpand: st.logExpand, toggleLogExpand: toggleLogExpand,
+      logToggleLabel: st.logExpand ? 'Dölj' : 'Visa',
       chat: chat, chatTyping: st.chatTyping, chatInput: st.chatInput, onChatInput: onChatInput, onChatKey: onChatKey, onChatSend: sendChat, chatSendStyle: primaryBtn(false),
       chatModalOpen: st.chatModalOpen, openChatModal: openChatModal, closeChatModal: closeChatModal, stop: stopProp, chatThreadRef: chatThreadRef, chatOpenBtnStyle: primaryBtn(false),
       chatThink: st.chatThink, onToggleChatThink: toggleChatThink,
@@ -2291,11 +2356,11 @@ function viewTranscribe(v){ return `
               <span style="${v.statusBadgeStyle}">${esc(v.statusBadge)}</span>
               <span style="font-size:15.5px;color:var(--ink-2);font-variant-numeric:tabular-nums;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(v.statusFile)}</span>
             </div>
-            <div style="display:flex;align-items:center;gap:14px;font-size:14.5px;color:var(--ink-2);font-variant-numeric:tabular-nums;flex:0 0 auto">
-              <span>${esc(v.elapsedLabel)}</span>
-              <span style="font-weight:500;color:var(--ink);font-size:15.5px">${esc(v.progressLabel)}</span>
+            <div style="display:flex;align-items:baseline;gap:18px;flex:0 0 auto">
+              <span style="display:inline-flex;align-items:baseline;gap:7px"><span class="win_lbl">Tid</span><span style="font-size:14.5px;color:var(--ink-2);font-variant-numeric:tabular-nums">${esc(v.elapsedLabel)}</span></span>
+              <span style="display:inline-flex;align-items:baseline;gap:7px"><span class="win_lbl">Klart</span><span class="fig" style="font-size:21px;color:var(--ink);font-variant-numeric:tabular-nums">${esc(v.progressLabel)}</span></span>
               ${ v.isRunning ? `
-                <button data-click="${on(v.onCancelRun)}" style="background:transparent;border:1px solid var(--line);color:var(--ink-2);border-radius:9px;padding:6px 13px;font-size:13.5px;font-weight:500;cursor:pointer;font-family:inherit" data-sh="border-color:var(--bad) !important;color:var(--bad) !important">Avbryt</button>
+                <button data-click="${on(v.onCancelRun)}" style="background:transparent;border:1px solid var(--line);color:var(--ink-2);border-radius:9px;padding:6px 13px;font-size:13.5px;font-weight:500;cursor:pointer;font-family:inherit;align-self:center">Avbryt</button>
               ` : '' }
             </div>
           </div>
@@ -2344,17 +2409,18 @@ function viewTranscribe(v){ return `
           ` : '' }
         </div>
 
-        <div data-click="${on(v.openLog)}" style="border-top:1px solid var(--line);background:var(--surface);cursor:pointer;border-radius:0 0 18px 18px;transition:background .12s" data-sh="background:var(--sunken) !important">
+        <div data-click="${on(v.toggleLogExpand)}" style="border-top:1px solid var(--line);background:var(--surface);cursor:pointer;border-radius:0 0 18px 18px;transition:background .12s" data-sh="background:var(--sunken) !important">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:11px 24px;font-size:13.5px;color:var(--ink-2)">
             <span style="display:flex;align-items:center;gap:8px">
               <span style="width:6px;height:6px;border-radius:50%;background:var(--ink-3)"></span>
               <span style="font-variant-numeric:tabular-nums;letter-spacing:0.02em;text-transform:uppercase;font-size:12.5px">Logg</span>
             </span>
-            <span style="display:inline-flex;align-items:center;gap:7px;color:var(--ink);font-size:13px;font-weight:500;font-family:inherit">
-              <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5V2h3"></path><path d="M9 2h3v3"></path><path d="M12 9v3h-3"></path><path d="M5 12H2V9"></path></svg>Helskärm
+            <span style="display:inline-flex;align-items:center;gap:7px;color:var(--ink);font-size:13px;font-weight:500">${esc(v.logToggleLabel)}
+              <span style="width:7px;height:7px;border-right:1.6px solid var(--ink-3);border-bottom:1.6px solid var(--ink-3);transform:rotate(${v.logExpand ? '-135deg' : '45deg'});margin-top:${v.logExpand ? '3px' : '-3px'}"></span>
             </span>
           </div>
-          <div style="position:relative;padding:6px 24px 14px;max-height:96px;overflow:hidden">
+          ${ v.logExpand ? `
+          <div style="position:relative;padding:6px 24px 16px">
             ${ v.logRows.map(function(r){ return `
               <div style="display:flex;gap:14px">
                 <span style="font-variant-numeric:tabular-nums;font-size:12.5px;color:var(--ink-3);width:42px;flex:0 0 auto;text-align:right;padding-top:1px">${esc(r.time)}</span>
@@ -2365,10 +2431,8 @@ function viewTranscribe(v){ return `
                 <span style="font-variant-numeric:tabular-nums;font-size:13px;color:var(--ink);padding-bottom:13px;line-height:1.45;min-width:0">${esc(r.msg)}</span>
               </div>
             `; }).join('') }
-            ${ v.logClipped ? `
-              <div style="position:absolute;left:0;right:0;bottom:0;height:40px;background:linear-gradient(180deg,transparent,var(--surface));pointer-events:none;border-radius:0 0 18px 18px"></div>
-            ` : '' }
           </div>
+          ` : '' }
         </div>
       </div>
       ` : '' }
@@ -2395,11 +2459,9 @@ function viewTranscribe(v){ return `
         </div>
 
         <div data-reveal data-click="${on(v.openTranscript)}" style="background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px 20px;box-shadow:var(--shadow-sm);cursor:pointer;transition:border-color .12s,box-shadow .12s" data-sh="border-color:var(--line-2) !important;box-shadow:var(--shadow) !important">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-            <div style="font-size:12.5px;text-transform:uppercase;letter-spacing:0.04em;color:var(--ink-2)">Förhandsvisning</div>
-            <span style="display:inline-flex;align-items:center;gap:7px;color:var(--ink);font-size:13px;font-weight:500;font-family:inherit">
-              <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5V2h3"></path><path d="M9 2h3v3"></path><path d="M12 9v3h-3"></path><path d="M5 12H2V9"></path></svg>Helskärm
-            </span>
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px">
+            <span style="font-size:12.5px;text-transform:uppercase;letter-spacing:0.04em;color:var(--ink-2)">Förhandsvisning</span>
+            <span style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;color:var(--accent)">Visa hela transkriptet<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5 10.5 8 6 12.5"></path></svg></span>
           </div>
           ${ v.transcript.map(function(t, idx){ return `
             <div data-key="${esc(idx)}" style="display:flex;gap:14px;padding:5px 0">
@@ -2407,119 +2469,112 @@ function viewTranscribe(v){ return `
               <span style="font-size:16px;color:var(--ink);line-height:1.5">${esc(t.text)}</span>
             </div>
           `; }).join('') }
+          <div style="margin-top:9px;font-size:13px;color:var(--ink-3)">… klicka för att läsa hela transkriptet</div>
         </div>
       </div>
       ` : '' }
 
       ${ v.showPP ? `
-      <div data-sec="pp" data-reveal style="margin-top:28px;background:var(--surface);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow)">
-        <div style="padding:22px 24px 20px">
-          <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
-            <span style="font-variant-numeric:tabular-nums;font-size:12px;font-weight:500;color:var(--accent);background:var(--accent-weak);padding:3px 9px;border-radius:6px">LLM</span>
-            <h2 style="font-size:19px;font-weight:600;letter-spacing:-0.02em;margin:0">Efterbearbeta transkriptet</h2>
+      <div data-sec="pp" data-follow="clean" data-reveal style="margin-top:28px;background:var(--surface);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);padding:22px 24px 20px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+          <span style="font-family:var(--mono);font-size:10.5px;font-weight:500;letter-spacing:0.08em;color:var(--c-mustard);background:color-mix(in srgb,var(--c-mustard) 13%,transparent);border:1px solid color-mix(in srgb,var(--c-mustard) 30%,transparent);padding:3px 9px;border-radius:6px">KORREKTUR</span>
+          <h2 style="font-size:19px;font-weight:600;letter-spacing:-0.02em;margin:0">Korrekturläs transkriptet</h2>
+        </div>
+        <p style="margin:0 0 18px;color:var(--ink-2);font-size:15px">Rättar stavfel och småfel och städar språket — skiljetecken och meningslängd — med ${esc(v.activeLlmShort)}. Görs innan du summerar eller chattar.</p>
+
+        ${ v.cleanDone && !v.cleanRunning ? `
+        <div data-click="${on(v.openCleanModal)}" style="background:var(--sunken);border:1px solid var(--line);border-radius:13px;padding:16px 18px;margin-bottom:14px;cursor:pointer;transition:border-color .14s,box-shadow .14s" data-sh="border-color:var(--line-2) !important;box-shadow:var(--shadow-sm) !important">
+          <div style="display:flex;align-items:center;gap:14px;margin-bottom:12px;flex-wrap:wrap">
+            <span style="font-size:11.5px;text-transform:uppercase;letter-spacing:0.05em;color:var(--accent);font-weight:600">Korrekturläst</span>
+            ${ v.cleanLegendAudio ? `<span style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2)"><span style="width:12px;height:12px;border-radius:4px;background:color-mix(in srgb,var(--ok) 20%,transparent);border:1px solid color-mix(in srgb,var(--ok) 45%,transparent)"></span>mot ljudet</span>` : '' }
+            <span style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2)"><span style="width:12px;height:12px;border-radius:4px;background:color-mix(in srgb,var(--accent) 16%,transparent);border:1px solid color-mix(in srgb,var(--accent) 45%,transparent)"></span>språk &amp; skiljetecken</span>
+            <span style="margin-left:auto;display:inline-flex;align-items:center;gap:5px;font-size:13px;font-weight:500;color:var(--accent)">Visa hela<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5 10.5 8 6 12.5"></path></svg></span>
           </div>
-          <p style="margin:0 0 18px;color:var(--ink-2);font-size:15px">Valfritt — förfina resultatet lokalt med en språkmodell.</p>
-          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px">
-            ${ v.ppOps.map(function(o){ return `
-              ${ o.selected ? `
-                <button data-key="${esc(o.key)}" data-click="${on(o.onPick)}" aria-pressed="true" style="display:flex;flex-direction:column;gap:3px;align-items:flex-start;text-align:left;padding:13px 14px;border-radius:12px;cursor:pointer;font-family:inherit;color:var(--ink);width:100%;border:1.5px solid var(--ink);background:var(--sunken);transition:border-color .12s,background .12s,box-shadow .12s" data-sh="box-shadow:var(--shadow-sm) !important">
-                  <span style="font-size:14.5px;font-weight:500">${esc(o.label)}</span>
-                  <span style="font-size:12.5px;color:var(--ink-2);line-height:1.3">${esc(o.sub)}</span>
-                </button>
-              ` : '' }
-              ${ o.unselected ? `
-                <button data-key="${esc(o.key)}" data-click="${on(o.onPick)}" aria-pressed="false" style="display:flex;flex-direction:column;gap:3px;align-items:flex-start;text-align:left;padding:13px 14px;border-radius:12px;cursor:pointer;font-family:inherit;color:var(--ink);width:100%;border:1.5px solid var(--line);background:var(--surface);transition:border-color .12s,background .12s,box-shadow .12s" data-sh="border-color:var(--ink-3) !important;background:var(--sunken) !important;box-shadow:var(--shadow-sm) !important">
-                  <span style="font-size:14.5px;font-weight:500">${esc(o.label)}</span>
-                  <span style="font-size:12.5px;color:var(--ink-2);line-height:1.3">${esc(o.sub)}</span>
-                </button>
-              ` : '' }
-            `; }).join('') }
+          <div style="font-size:15px;color:var(--ink);line-height:1.65">
+            ${ v.cleanPreviewParts.map(function(p){ return p.ch ? `<span style="background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent);border-radius:4px;padding:0 3px;font-weight:500">${esc(p.s)}</span>` : `<span>${esc(p.s)}</span>`; }).join(' ') } …
           </div>
-          <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
-            <div style="position:relative;flex:1;min-width:200px">
-              <div style="font-size:14px;font-weight:500;color:var(--ink-2);margin-bottom:8px">LLM-modell</div>
-              <button data-click="${on(v.togglePPDD)}" style="width:100%;max-width:320px;display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;cursor:pointer;text-align:left" data-sh="border-color:var(--line-2) !important">
-                <span style="width:7px;height:7px;border-radius:50%;flex:0 0 auto;background:var(--ok)"></span>
-                <span style="flex:1;font-size:15.5px;font-variant-numeric:tabular-nums;color:var(--ink)">${esc(v.ppModel)}</span>
-                <span style="width:6px;height:6px;border-right:1.6px solid var(--ink-3);border-bottom:1.6px solid var(--ink-3);transform:rotate(45deg);margin:-3px 2px 0 0"></span>
-              </button>
-              ${ v.ppDDOpen ? `
-              <div style="position:absolute;bottom:calc(100% + 6px);left:0;width:100%;max-width:320px;z-index:30;background:var(--surface);border:1px solid var(--line);border-radius:13px;box-shadow:var(--shadow);padding:6px;animation:fadeup .14s ease">
-                ${ v.ppModelOptions.map(function(m){ return `
-                  <button data-key="${esc(m.name)}" data-click="${on(m.onPick)}" style="${m.style}" data-sh="background:var(--sunken) !important">
-                    <span style="flex:1;font-size:15px;font-variant-numeric:tabular-nums;color:var(--ink)">${esc(m.name)}</span>
-                    <span style="font-size:13px;color:var(--ink-2)">${esc(m.size)}</span>
-                  </button>
-                `; }).join('') }
-              </div>
-              ` : '' }
+          <div style="margin-top:9px;font-size:13px;color:var(--ink-3)">${esc(v.cleanChangeCount)} markerade rättelser · klicka för att öppna hela</div>
+        </div>
+        ` : '' }
+
+        ${ v.cleanRunning ? `
+        <div style="background:var(--sunken);border:1px solid var(--line);border-radius:13px;padding:15px 17px;margin-bottom:14px">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:11px">
+            <span style="display:inline-flex;align-items:center;gap:9px;font-size:14px;font-weight:600;color:var(--ink)"><span style="width:14px;height:14px;border-radius:50%;border:2px solid var(--line-2);border-top-color:var(--accent);animation:spin .7s linear infinite;flex:0 0 auto"></span>Korrekturläser …</span>
+            <span style="color:var(--ink);letter-spacing:-0.01em"><span class="fig" style="font-size:30px;font-variant-numeric:tabular-nums">${esc(v.cleanPct)}</span><span class="fig-unit" style="font-size:16px;margin-left:1px">%</span></span>
+          </div>
+          <div style="height:9px;border-radius:99px;background:var(--track);overflow:hidden;margin-bottom:11px"><div style="height:100%;width:${v.cleanBarW};background:var(--accent);transition:width .2s"></div></div>
+          <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-2)"><span style="width:7px;height:7px;border-radius:50%;background:var(--accent);animation:pulse 1.2s ease-in-out infinite;flex:0 0 auto"></span>Städar språket …</div>
+        </div>
+        ` : '' }
+
+        ${ !v.cleanRunning && !v.summaryRunning ? `
+        <div style="display:flex;align-items:flex-end;gap:13px;flex-wrap:wrap">
+          <button data-click="${on(v.runClean)}" style="display:inline-flex;align-items:center;justify-content:center;gap:9px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:11px;padding:12px 22px;font-size:15px;font-weight:500;cursor:pointer;font-family:inherit;box-shadow:var(--shadow-sm);min-width:220px;transition:background .15s">${esc(v.cleanBtnLabel)}</button>
+          <button data-click="${on(v.runSummary)}" style="display:inline-flex;align-items:center;justify-content:center;gap:8px;background:transparent;border:1px solid var(--line);color:var(--ink);border-radius:11px;padding:11px 20px;font-size:14.5px;font-weight:500;cursor:pointer;font-family:inherit;transition:border-color .14s,background .14s">Summera</button>
+          <div style="position:relative;margin-left:auto;min-width:200px">
+            <div style="font-size:12.5px;font-weight:500;color:var(--ink-3);margin-bottom:6px">LLM-modell</div>
+            <button data-click="${on(v.togglePPDD)}" style="width:100%;max-width:320px;display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 13px;cursor:pointer;text-align:left;font-family:inherit">
+              <span style="width:7px;height:7px;border-radius:50%;flex:0 0 auto;background:var(--ok)"></span>
+              <span style="flex:1;font-size:14.5px;font-variant-numeric:tabular-nums;color:var(--ink)">${esc(v.ppModel)}</span>
+              <span style="width:6px;height:6px;border-right:1.6px solid var(--ink-3);border-bottom:1.6px solid var(--ink-3);transform:rotate(45deg);margin:-3px 2px 0 0"></span>
+            </button>
+            ${ v.ppDDOpen ? `
+            <div style="position:absolute;bottom:calc(100% + 6px);left:0;width:100%;max-width:320px;z-index:30;background:var(--surface);border:1px solid var(--line);border-radius:13px;box-shadow:var(--shadow);padding:6px;animation:ml-popin .2s cubic-bezier(.2,.8,.2,1) both">
+              ${ v.ppModelOptions.map(function(m){ return `
+                <button data-key="${esc(m.name)}" data-click="${on(m.onPick)}" style="${m.style}" data-sh="background:var(--sunken) !important">
+                  <span style="flex:1;font-size:15px;font-variant-numeric:tabular-nums;color:var(--ink)">${esc(m.name)}</span>
+                  <span style="font-size:13px;color:var(--ink-2)">${esc(m.size)}</span>
+                </button>
+              `; }).join('') }
             </div>
-            ${ v.ppShowRun ? `
-              <button data-click="${on(v.onRunPP)}" style="${v.ppRunBtnStyle}" data-sh="background:color-mix(in srgb, var(--btn-bg) 72%, var(--accent)) !important">
-                ${ v.ppRunning ? `
-                  <span style="display:flex;align-items:center;gap:11px">
-                    <span style="${v.ppRingStyle}"><span style="position:absolute;inset:3px;border-radius:50%;background:var(--btn-bg)"></span></span>
-                    <span style="font-variant-numeric:tabular-nums">Bearbetar ${esc(v.ppPct)}%</span>
-                  </span>
-                ` : '' }
-                ${ v.ppRunIdle ? `
-                  <span>${esc(v.ppRunLabel)}</span>
-                ` : '' }
-              </button>
             ` : '' }
           </div>
         </div>
+        ` : '' }
 
-        ${ v.ppShowText ? `
-        <div data-sec="ppout" style="border-top:1px solid var(--line);background:var(--sunken);padding:20px 24px;border-radius:0 0 18px 18px">
-          ${ v.ppRunning ? `
-            <div style="display:flex;align-items:center;gap:10px;color:var(--ink-2);font-size:15px">
-              <span style="width:15px;height:15px;border-radius:50%;border:2px solid var(--line-2);border-top-color:var(--accent);animation:spin .7s linear infinite;display:inline-block"></span>Kör ${esc(v.ppOpLabel)} …
-            </div>
-          ` : '' }
-          ${ v.ppTextDone ? `
-            <div style="font-size:12.5px;text-transform:uppercase;letter-spacing:0.04em;color:var(--ink-2);margin-bottom:10px;font-variant-numeric:tabular-nums">${esc(v.ppOutTitle)}</div>
-            <div style="font-size:16px;line-height:1.65;color:var(--ink);white-space:pre-wrap">${esc(v.ppOut)}</div>
-          ` : '' }
-          ${ v.ppCleanDone ? `
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap">
-              <div style="display:flex;align-items:center;gap:9px">
-                <span style="width:18px;height:18px;border-radius:50%;background:var(--ok);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;flex:0 0 auto">✓</span>
-                <span style="font-size:12.5px;text-transform:uppercase;letter-spacing:0.04em;color:var(--ink-2)">Korrekturläst transkript</span>
-              </div>
-              <span style="font-size:13px;color:var(--ink-2)">Samma transkript — stavfel och småfel rättade</span>
-            </div>
-            <div style="background:var(--surface);border:1px solid var(--line);border-radius:13px;padding:16px 18px;margin-bottom:14px;max-height:320px;overflow-y:auto" data-hidescroll="1">
-              ${ v.ppCleanLines.map(function(c, idx){ return `
-                <div data-key="${esc(idx)}" style="display:flex;gap:14px;padding:5px 0">
-                  <span style="font-variant-numeric:tabular-nums;font-size:13px;color:var(--ink-3);flex:0 0 auto;width:44px;padding-top:2px">${esc(c.time)}</span>
-                  <span style="font-size:15.5px;line-height:1.5;color:var(--ink)">${esc(c.text)}</span>
-                </div>
-              `; }).join('') }
-            </div>
-            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-              <span style="font-size:13px;color:var(--ink-2);margin-right:4px">Ladda ner korrigerad:</span>
-              ${ v.ppCleanFiles.map(function(f){ return `
-                <button data-key="${esc(f.type)}" data-click="${on(f.onDownload)}" style="display:inline-flex;align-items:center;gap:7px;background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:8px 14px 8px 12px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;transition:background .14s,border-color .14s,color .14s" data-sh="border-color:var(--ink) !important;background:var(--ink) !important;color:var(--btn-fg) !important">
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.5v7.5"></path><path d="M4.5 6.5 8 10l3.5-3.5"></path><path d="M3 13.5h10"></path></svg>${esc(f.type)}
-                </button>
-              `; }).join('') }
-            </div>
-          ` : '' }
+        ${ v.summaryRunning ? `
+        <div style="background:var(--sunken);border:1px solid var(--line);border-radius:13px;padding:15px 17px">
+          <div style="display:flex;align-items:center;gap:10px;color:var(--ink-2);font-size:15px">
+            <span style="width:15px;height:15px;border-radius:50%;border:2px solid var(--line-2);border-top-color:var(--accent);animation:spin .7s linear infinite;display:inline-block"></span>Summerar …
+          </div>
+          ${ v.ppOut ? `<div style="font-size:15px;line-height:1.6;color:var(--ink);white-space:pre-wrap;margin-top:12px">${esc(v.ppOut)}</div>` : '' }
         </div>
         ` : '' }
 
-        ${ v.ppShowChat ? `
-        <div data-sec="chat" style="border-top:1px solid var(--line);background:var(--sunken);border-radius:0 0 18px 18px;padding:18px 24px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
-          <div style="flex:1;min-width:200px">
-            <div style="font-size:15px;font-weight:600;color:var(--ink)">Chatta med transkriptet</div>
-            <div style="font-size:13.5px;color:var(--ink-2);margin-top:2px">Öppnas i ett fönster — gränssnittet anpassas efter modellens förmågor.</div>
+        ${ v.ppTextDone ? `
+        <div style="background:var(--sunken);border:1px solid var(--line);border-radius:13px;padding:16px 18px;margin-top:14px">
+          <div style="font-size:12.5px;text-transform:uppercase;letter-spacing:0.04em;color:var(--ink-2);margin-bottom:10px">${esc(v.ppOutTitle)}</div>
+          <div style="font-size:16px;line-height:1.65;color:var(--ink);white-space:pre-wrap">${esc(v.ppOut)}</div>
+        </div>
+        ` : '' }
+      </div>
+
+      <div data-follow="llm" style="margin-top:16px;background:var(--surface);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);padding:22px 24px 20px">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+          <span style="font-family:var(--mono);font-size:10.5px;font-weight:500;letter-spacing:0.08em;color:var(--c-sky);background:color-mix(in srgb,var(--c-sky) 13%,transparent);border:1px solid color-mix(in srgb,var(--c-sky) 28%,transparent);padding:3px 9px;border-radius:6px">LLM</span>
+          <h2 style="font-size:19px;font-weight:600;letter-spacing:-0.02em;margin:0">Fråga om lektionen</h2>
+        </div>
+        ${ v.ppLocked ? `
+        <div style="display:flex;flex-direction:column;align-items:center;text-align:center;gap:13px;padding:28px 22px;border:1.5px dashed var(--line-2);border-radius:14px;background:var(--sunken);margin-top:14px">
+          <span style="width:46px;height:46px;border-radius:50%;background:var(--surface);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;color:var(--ink-3);flex:0 0 auto"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="4" y="9" width="12" height="8" rx="2"></rect><path d="M7 9V6.5a3 3 0 0 1 6 0V9"></path></svg></span>
+          <div>
+            <div style="font-size:15.5px;font-weight:600;color:var(--ink)">Korrekturläs först</div>
+            <div style="font-size:13.5px;color:var(--ink-2);margin-top:4px;max-width:360px;line-height:1.5">Chatten arbetar på det korrekturlästa transkriptet. Kör korrekturläsningen ovan så låses den upp.</div>
           </div>
-          <button data-click="${on(v.openChatModal)}" style="${v.chatOpenBtnStyle}" data-sh="background:color-mix(in srgb, var(--btn-bg) 72%, var(--accent)) !important">
+          <button data-click="${on(v.runClean)}" style="display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:11px;padding:11px 20px;font-size:14.5px;font-weight:500;cursor:pointer;font-family:inherit;box-shadow:var(--shadow-sm);transition:background .15s">Korrekturläs nu</button>
+        </div>
+        ` : '' }
+        ${ v.ppLocked ? '' : `
+        <div style="animation:unlockIn .4s cubic-bezier(.2,.8,.25,1) both;display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-top:12px">
+          <div style="flex:1;min-width:200px">
+            <div style="font-size:14.5px;color:var(--ink-2);line-height:1.5">Svaren bygger på det korrekturlästa transkriptet. Öppnas i ett fönster — gränssnittet anpassas efter modellens förmågor.</div>
+          </div>
+          <button data-click="${on(v.openChatModal)}" style="${v.chatOpenBtnStyle}">
             <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 3.5h11v8h-7l-3 2.5z"></path></svg>Öppna chatt
           </button>
         </div>
-        ` : '' }
+        ` }
       </div>
       ` : '' }
         </div>
@@ -3283,6 +3338,30 @@ function viewModals(v){ return `
             <span style="font-variant-numeric:tabular-nums;font-size:15px;color:var(--ink);padding-bottom:18px;line-height:1.5;min-width:0">${esc(r.msg)}</span>
           </div>
         `; }).join('') }
+      </div>
+    </div>
+  </div>
+  ` : '' }
+
+  ${ v.cleanModalOpen ? `
+  <div data-click="${on(v.closeCleanModal)}" style="position:fixed;inset:0;z-index:125;display:flex;align-items:center;justify-content:center;padding:24px;background:color-mix(in srgb,var(--canvas) 64%,transparent);backdrop-filter:blur(7px);animation:modalback .26s ease">
+    <div data-click="${on(v.stop)}" style="width:min(94vw,680px);max-height:84vh;display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);overflow:hidden;animation:modalpop .42s cubic-bezier(.16,1,.3,1)">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:24px 26px 14px;border-bottom:1px solid var(--line);flex:0 0 auto">
+        <div style="min-width:0">
+          <span style="font-size:11.5px;font-weight:600;letter-spacing:0.05em;color:var(--accent);background:var(--accent-weak);padding:3px 9px;border-radius:6px;display:inline-block;margin-bottom:9px">KORREKTURLÄST</span>
+          <h2 style="font-size:20px;font-weight:600;letter-spacing:-0.02em;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(v.statusFile)}</h2>
+          <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:11px">
+            ${ v.cleanLegendAudio ? `<span style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2)"><span style="width:12px;height:12px;border-radius:4px;background:color-mix(in srgb,var(--ok) 20%,transparent);border:1px solid color-mix(in srgb,var(--ok) 45%,transparent)"></span>mot ljudet</span>` : '' }
+            <span style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2)"><span style="width:12px;height:12px;border-radius:4px;background:color-mix(in srgb,var(--accent) 16%,transparent);border:1px solid color-mix(in srgb,var(--accent) 45%,transparent)"></span>språk &amp; skiljetecken</span>
+            <span style="font-size:12.5px;color:var(--ink-3);font-variant-numeric:tabular-nums">${esc(v.cleanChangeCount)} rättelser</span>
+          </div>
+        </div>
+        <button data-click="${on(v.closeCleanModal)}" aria-label="Stäng" style="flex:0 0 auto;width:34px;height:34px;display:flex;align-items:center;justify-content:center;background:var(--surface);border:1px solid var(--line);border-radius:9px;color:var(--ink-2);cursor:pointer;font-size:15px">✕</button>
+      </div>
+      <div data-hidescroll="1" style="overflow:auto;overscroll-behavior:contain;padding:18px 26px 24px;min-height:0">
+        <div style="font-size:16px;color:var(--ink);line-height:1.7">
+          ${ v.cleanFullParts.map(function(p){ return p.ch ? `<span style="background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent);border-radius:4px;padding:0 3px;font-weight:500">${esc(p.s)}</span>` : `<span>${esc(p.s)}</span>`; }).join(' ') }
+        </div>
       </div>
     </div>
   </div>
