@@ -375,8 +375,8 @@
   function rowStyleRich(last) { return 'display:flex;align-items:flex-start;gap:14px;padding:17px 18px;' + (last ? '' : 'border-bottom:1px solid var(--line);'); }
   function verdictPill(tier) { var c = tier === 'ok' ? 'var(--ok)' : tier === 'warn' ? 'var(--warn)' : 'var(--bad)'; return 'display:inline-flex;align-items:center;font-size:12.5px;font-weight:500;color:' + c + ';background:color-mix(in srgb,' + c + ' 13%,transparent);border-radius:6px;padding:3px 9px;white-space:nowrap;font-variant-numeric:tabular-nums'; }
   function chipStyle() { return "display:inline-flex;align-items:center;gap:5px;font-size:12.5px;color:var(--ink-2);background:var(--sunken);border:1px solid var(--line);border-radius:7px;padding:3px 9px;font-variant-numeric:tabular-nums;white-space:nowrap"; }
-  function quantChipStyle() { return "display:inline-flex;align-items:center;gap:5px;font-size:12.5px;font-weight:600;color:var(--accent);background:var(--accent-weak);border:1px solid color-mix(in srgb,var(--accent) 24%,transparent);border-radius:7px;padding:3px 9px;font-variant-numeric:tabular-nums;font-family:'Geist',system-ui,sans-serif;cursor:help"; }
-  function infoBadgeStyle() { return "display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;border-radius:50%;font-size:12px;font-weight:700;color:var(--ink);background:var(--sunken);border:1px solid var(--line);cursor:help;font-family:'Geist',system-ui,sans-serif;flex:0 0 auto"; }
+  function quantChipStyle() { return "display:inline-flex;align-items:center;gap:5px;font-size:12.5px;font-weight:600;color:var(--accent);background:var(--accent-weak);border:1px solid color-mix(in srgb,var(--accent) 24%,transparent);border-radius:7px;padding:3px 9px;font-variant-numeric:tabular-nums;cursor:help"; }
+  function infoBadgeStyle() { return "display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;border-radius:50%;font-size:12px;font-weight:700;color:var(--ink);background:var(--sunken);border:1px solid var(--line);cursor:help;flex:0 0 auto"; }
   function infoBadge(text) { return { onEnter: function (e) { showTip(e, text); }, onLeave: hideTip }; }
   function tipStyleFor() {
     var t = S.tip;
@@ -1836,13 +1836,13 @@
       acSwitchKnob: 'position:absolute;top:3px;left:3px;width:19px;height:19px;border-radius:50%;background:#fff;border:1px solid var(--line);box-shadow:0 1px 2px rgba(0,0,0,.2);transition:transform .15s;transform:translateX(' + (st.audioCorrect ? '17px' : '0') + ')',
 
       onStart: start, isRunning: isRunning, notRunning: !isRunning, startReady: st.catalogReady,
-      startBtnLabel: !st.catalogReady ? 'Laddar modeller…' : (st.catalogReady && !st.model) ? 'Ladda ner en modell först' : isRunning ? 'Transkriberar…' : isDone ? 'Kör igen' : (st.queue.length > 1 ? 'Starta · ' + st.queue.length + ' filer' : 'Starta'),
+      startBtnLabel: !st.catalogReady ? 'Laddar modeller…' : (st.catalogReady && !st.model) ? 'Ladda ner en modell först' : isRunning ? 'Transkriberar…' : isDone ? 'Kör igen' : (st.queue.length > 1 ? 'Starta · ' + st.queue.length + ' filer' : 'Starta transkribering'),
       startBtnStyle: coralBtn(isRunning) + ';width:100%;padding:16px 24px;font-size:16.5px',
       startBtnStyleBar: primaryBtn(isRunning) + ';padding:12px 22px;font-size:15px;border-radius:11px;flex:0 0 auto',
 
       showStatus: st.step === 'process',
       statusBadge: st.run === 'error' ? 'FEL' : st.run === 'cancelled' ? 'AVBRUTEN' : isDone ? 'KLAR' : 'KÖR',
-      statusBadgeStyle: (function (col) { return "font-family:'Geist',system-ui,sans-serif;font-size:12px;font-weight:500;color:" + col + ";background:color-mix(in srgb," + col + " 14%,transparent);padding:3px 9px;border-radius:6px;letter-spacing:0.05em"; })(st.run === 'error' ? 'var(--bad)' : st.run === 'cancelled' ? 'var(--ink-3)' : isDone ? 'var(--ok)' : 'var(--accent)'),
+      statusBadgeStyle: (function (col) { return "font-size:12px;font-weight:500;color:" + col + ";background:color-mix(in srgb," + col + " 14%,transparent);padding:3px 9px;border-radius:6px;letter-spacing:0.05em"; })(st.run === 'error' ? 'var(--bad)' : st.run === 'cancelled' ? 'var(--ink-3)' : isDone ? 'var(--ok)' : 'var(--accent)'),
       statusFile: baseName(), elapsedLabel: fmtTime(st.elapsed), progressLabel: Math.round(st.progress) + '%', steps: steps,
       logText: st.log.join('\n'), logRows: logRows, logClipped: logRows.length > 3,
       logOpen: st.logOpen, openLog: openLog, closeLog: closeLog,
@@ -1944,8 +1944,11 @@
     root.addEventListener('dragleave', function (e) { var el = e.target.closest('[data-dragleave]'); if (el) dispatch(el, 'dragleave', e); });
     root.addEventListener('drop', function (e) { var el = e.target.closest('[data-drop]'); if (el) dispatch(el, 'drop', e); });
     // hover: data-sh visual styles + data-enter/data-leave handlers (tooltips)
+    // <button> hoppas över: knapparnas hover ägs av det enhetliga knappspråket
+    // i style.css (editorial); inline !important skulle annars vinna över det.
     root.addEventListener('pointerover', function (e) {
       var sh = e.target.closest('[data-sh]');
+      if (sh && sh.tagName === 'BUTTON') sh = null;
       if (sh && sh._shBase === undefined) { sh._shBase = sh.getAttribute('style') || ''; applyDecls(sh, sh.getAttribute('data-sh')); }
       var en = e.target.closest('[data-enter]'); dispatch(en, 'enter', e);
     });
@@ -1979,7 +1982,7 @@
           '<div style="width:3px;height:11px;border-radius:2px;background:var(--ink)"></div>' +
           '<div style="width:3px;height:16px;border-radius:2px;background:var(--ink)"></div>' +
         '</div>' +
-        '<span style="font-size:17.5px;font-weight:600;letter-spacing:-0.02em">Transkribera</span>' +
+        '<span style="font-size:18.5px;font-weight:500;letter-spacing:-0.01em;text-transform:lowercase">transkrib<span class="ser" style="font-size:20px;color:var(--ink)">era</span></span>' +
       '</div>' +
       '<nav style="flex:0 1 auto;min-width:0;display:flex;justify-content:center">' +
         '<div style="display:inline-flex;gap:3px;padding:4px;background:var(--track);border-radius:12px;border:1px solid var(--line)">' +
@@ -2211,24 +2214,13 @@ function viewTranscribe(v){ return `
 
         <div style="flex:0 0 auto;height:46px"></div>
 
-        <button data-click="${on(v.onStart)}" class="korbtn" ${v.startReady ? '' : 'aria-disabled="true"'} style="position:relative;overflow:visible;display:flex;align-items:center;justify-content:center;gap:13px;width:100%;height:60px;border:1.5px solid var(--ink);border-radius:14px;background:var(--surface);cursor:${v.startReady ? 'pointer' : 'progress'};opacity:${v.startReady ? '1' : '.6'};font-family:inherit;padding:0" data-sh="box-shadow:var(--shadow) !important;transform:translateY(-1px) !important">
+        <button data-click="${on(v.onStart)}" class="cta" ${v.startReady ? '' : 'aria-disabled="true"'} style="display:flex;align-items:center;justify-content:space-between;gap:16px;width:100%;height:64px;border:1px solid var(--ink);background:var(--btn-bg);color:var(--btn-fg);cursor:pointer;font-family:inherit;padding:0 14px 0 24px">
           ${ v.isRunning ? `
-            <span style="width:16px;height:16px;border-radius:50%;border:2px solid color-mix(in srgb,var(--ink) 28%,transparent);border-top-color:var(--ink);animation:spin .7s linear infinite;display:inline-block"></span>
-            <span style="font-size:16.5px;font-weight:600;letter-spacing:-0.01em;color:var(--ink)">${esc(v.startBtnLabel)}</span>
+            <span style="display:inline-flex;align-items:center;gap:12px"><span style="width:15px;height:15px;border-radius:50%;border:2px solid color-mix(in srgb,var(--btn-fg) 35%,transparent);border-top-color:var(--btn-fg);animation:spin .7s linear infinite;display:inline-block"></span><span style="font-size:13px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase">${esc(v.startBtnLabel)}</span></span>
           ` : '' }
           ${ v.notRunning ? `
-            <div style="position:relative;width:30px;height:44px;flex:0 0 auto">
-              <div data-bubble data-anim style="position:absolute;left:50%;bottom:calc(100% + 12px);background:var(--surface);border:1.5px solid var(--line-2);border-radius:11px;padding:7px 12px;white-space:nowrap;font-size:14px;font-weight:600;color:var(--accent);box-shadow:var(--shadow);z-index:5;animation:bubbleLife 4s cubic-bezier(.45,.05,.3,1) infinite">Nu kör vi!<span style="position:absolute;left:50%;bottom:-6px;width:10px;height:10px;margin-left:-5px;background:var(--surface);border-right:1.5px solid var(--line-2);border-bottom:1.5px solid var(--line-2);transform:rotate(45deg)"></span></div>
-              <div data-anim style="position:absolute;inset:0;animation:choreoBody 4s cubic-bezier(.45,.05,.3,1) infinite">
-                <div style="position:absolute;left:9px;top:0;width:12px;height:12px;border-radius:50%;background:var(--ink)"></div>
-                <div style="position:absolute;left:13.5px;top:12px;width:3px;height:17px;border-radius:2px;background:var(--ink)"></div>
-                <div data-anim style="position:absolute;left:13.5px;top:14px;width:3px;height:13px;border-radius:2px;background:var(--ink);transform-origin:50% 0;animation:choreoArmR 4s cubic-bezier(.45,.05,.3,1) infinite"></div>
-                <div data-anim style="position:absolute;left:13.5px;top:14px;width:3px;height:13px;border-radius:2px;background:var(--ink);transform-origin:50% 0;animation:choreoArmL 4s cubic-bezier(.45,.05,.3,1) infinite"></div>
-                <div data-anim style="position:absolute;left:13.5px;top:28px;width:3px;height:15px;border-radius:2px;background:var(--ink);transform-origin:50% 0;animation:choreoLegR 4s cubic-bezier(.45,.05,.3,1) infinite"></div>
-                <div data-anim style="position:absolute;left:13.5px;top:28px;width:3px;height:15px;border-radius:2px;background:var(--ink);transform-origin:50% 0;animation:choreoLegL 4s cubic-bezier(.45,.05,.3,1) infinite"></div>
-              </div>
-            </div>
-            <span data-anim style="font-size:16.5px;font-weight:600;letter-spacing:-0.01em;color:var(--ink);display:inline-block;animation:startaShake 4s linear infinite">${esc(v.startBtnLabel)}</span>
+            <span style="font-size:13px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase">${esc(v.startBtnLabel)}</span>
+            <span class="cta_arrow"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h10"></path><path d="M8.5 3.5 13 8l-4.5 4.5"></path></svg></span>
           ` : '' }
         </button>
       </div>
@@ -2264,9 +2256,9 @@ function viewTranscribe(v){ return `
           <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px">
             <div style="display:flex;align-items:center;gap:10px;min-width:0">
               <span style="${v.statusBadgeStyle}">${esc(v.statusBadge)}</span>
-              <span style="font-size:15.5px;color:var(--ink-2);font-family:'Geist',system-ui,sans-serif;font-variant-numeric:tabular-nums;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(v.statusFile)}</span>
+              <span style="font-size:15.5px;color:var(--ink-2);font-variant-numeric:tabular-nums;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(v.statusFile)}</span>
             </div>
-            <div style="display:flex;align-items:center;gap:14px;font-size:14.5px;color:var(--ink-2);font-family:'Geist',system-ui,sans-serif;font-variant-numeric:tabular-nums;flex:0 0 auto">
+            <div style="display:flex;align-items:center;gap:14px;font-size:14.5px;color:var(--ink-2);font-variant-numeric:tabular-nums;flex:0 0 auto">
               <span>${esc(v.elapsedLabel)}</span>
               <span style="font-weight:500;color:var(--ink);font-size:15.5px">${esc(v.progressLabel)}</span>
               ${ v.isRunning ? `
@@ -2323,7 +2315,7 @@ function viewTranscribe(v){ return `
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:11px 24px;font-size:13.5px;color:var(--ink-2)">
             <span style="display:flex;align-items:center;gap:8px">
               <span style="width:6px;height:6px;border-radius:50%;background:var(--ink-3)"></span>
-              <span style="font-family:'Geist',system-ui,sans-serif;font-variant-numeric:tabular-nums;letter-spacing:0.02em;text-transform:uppercase;font-size:12.5px">Logg</span>
+              <span style="font-variant-numeric:tabular-nums;letter-spacing:0.02em;text-transform:uppercase;font-size:12.5px">Logg</span>
             </span>
             <span style="display:inline-flex;align-items:center;gap:7px;color:var(--ink);font-size:13px;font-weight:500;font-family:inherit">
               <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5V2h3"></path><path d="M9 2h3v3"></path><path d="M12 9v3h-3"></path><path d="M5 12H2V9"></path></svg>Helskärm
@@ -2332,12 +2324,12 @@ function viewTranscribe(v){ return `
           <div style="position:relative;padding:6px 24px 14px;max-height:96px;overflow:hidden">
             ${ v.logRows.map(function(r){ return `
               <div style="display:flex;gap:14px">
-                <span style="font-family:'Geist',system-ui,sans-serif;font-variant-numeric:tabular-nums;font-size:12.5px;color:var(--ink-3);width:42px;flex:0 0 auto;text-align:right;padding-top:1px">${esc(r.time)}</span>
+                <span style="font-variant-numeric:tabular-nums;font-size:12.5px;color:var(--ink-3);width:42px;flex:0 0 auto;text-align:right;padding-top:1px">${esc(r.time)}</span>
                 <div style="position:relative;display:flex;flex-direction:column;align-items:center;flex:0 0 auto">
                   <span style="${r.dotStyle}">${esc(r.icon)}</span>
                   <span style="${r.lineStyle}"></span>
                 </div>
-                <span style="font-family:'Geist',system-ui,sans-serif;font-variant-numeric:tabular-nums;font-size:13px;color:var(--ink);padding-bottom:13px;line-height:1.45;min-width:0">${esc(r.msg)}</span>
+                <span style="font-variant-numeric:tabular-nums;font-size:13px;color:var(--ink);padding-bottom:13px;line-height:1.45;min-width:0">${esc(r.msg)}</span>
               </div>
             `; }).join('') }
             ${ v.logClipped ? `
@@ -2359,9 +2351,9 @@ function viewTranscribe(v){ return `
         <div style="display:grid;gap:10px;margin-bottom:18px">
           ${ v.resultFiles.map(function(r){ return `
             <div data-key="${esc(r.name)}" data-reveal style="display:flex;align-items:center;gap:14px;background:var(--surface);border:1px solid var(--line);border-radius:13px;padding:14px 16px;box-shadow:var(--shadow-sm)">
-              <span style="font-family:'Geist',system-ui,sans-serif;font-variant-numeric:tabular-nums;font-size:12.5px;font-weight:500;color:var(--accent);background:var(--accent-weak);padding:5px 9px;border-radius:7px;letter-spacing:0.03em">${esc(r.type)}</span>
-              <span style="flex:1;min-width:0;font-size:16px;font-family:'Geist',system-ui,sans-serif;font-variant-numeric:tabular-nums;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.name)}</span>
-              <span style="font-size:14px;color:var(--ink-2);font-family:'Geist',system-ui,sans-serif;font-variant-numeric:tabular-nums">${esc(r.size)}</span>
+              <span style="font-variant-numeric:tabular-nums;font-size:12.5px;font-weight:500;color:var(--accent);background:var(--accent-weak);padding:5px 9px;border-radius:7px;letter-spacing:0.03em">${esc(r.type)}</span>
+              <span style="flex:1;min-width:0;font-size:16px;font-variant-numeric:tabular-nums;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.name)}</span>
+              <span style="font-size:14px;color:var(--ink-2);font-variant-numeric:tabular-nums">${esc(r.size)}</span>
               <button data-click="${on(r.onDownload)}" style="display:inline-flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:8px 14px 8px 12px;font-size:14.5px;font-weight:500;cursor:pointer;font-family:inherit;transition:background .14s,border-color .14s,color .14s" data-sh="border-color:var(--ink) !important;background:var(--ink) !important;color:var(--btn-fg) !important">
                 <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.5v7.5"></path><path d="M4.5 6.5 8 10l3.5-3.5"></path><path d="M3 13.5h10"></path></svg>Ladda ner
               </button>
@@ -2371,14 +2363,14 @@ function viewTranscribe(v){ return `
 
         <div data-reveal data-click="${on(v.openTranscript)}" style="background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px 20px;box-shadow:var(--shadow-sm);cursor:pointer;transition:border-color .12s,box-shadow .12s" data-sh="border-color:var(--line-2) !important;box-shadow:var(--shadow) !important">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-            <div style="font-size:12.5px;text-transform:uppercase;letter-spacing:0.04em;color:var(--ink-2);font-family:'Geist',system-ui,sans-serif">Förhandsvisning</div>
+            <div style="font-size:12.5px;text-transform:uppercase;letter-spacing:0.04em;color:var(--ink-2)">Förhandsvisning</div>
             <span style="display:inline-flex;align-items:center;gap:7px;color:var(--ink);font-size:13px;font-weight:500;font-family:inherit">
               <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5V2h3"></path><path d="M9 2h3v3"></path><path d="M12 9v3h-3"></path><path d="M5 12H2V9"></path></svg>Helskärm
             </span>
           </div>
           ${ v.transcript.map(function(t, idx){ return `
             <div data-key="${esc(idx)}" style="display:flex;gap:14px;padding:5px 0">
-              <span style="font-family:'Geist',system-ui,sans-serif;font-variant-numeric:tabular-nums;font-size:13.5px;color:var(--ink-3);flex:0 0 auto;width:46px;padding-top:2px">${esc(t.time)}</span>
+              <span style="font-variant-numeric:tabular-nums;font-size:13.5px;color:var(--ink-3);flex:0 0 auto;width:46px;padding-top:2px">${esc(t.time)}</span>
               <span style="font-size:16px;color:var(--ink);line-height:1.5">${esc(t.text)}</span>
             </div>
           `; }).join('') }
@@ -2390,7 +2382,7 @@ function viewTranscribe(v){ return `
       <div data-sec="pp" data-reveal style="margin-top:28px;background:var(--surface);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow)">
         <div style="padding:22px 24px 20px">
           <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
-            <span style="font-family:'Geist',system-ui,sans-serif;font-variant-numeric:tabular-nums;font-size:12px;font-weight:500;color:var(--accent);background:var(--accent-weak);padding:3px 9px;border-radius:6px">LLM</span>
+            <span style="font-variant-numeric:tabular-nums;font-size:12px;font-weight:500;color:var(--accent);background:var(--accent-weak);padding:3px 9px;border-radius:6px">LLM</span>
             <h2 style="font-size:19px;font-weight:600;letter-spacing:-0.02em;margin:0">Efterbearbeta transkriptet</h2>
           </div>
           <p style="margin:0 0 18px;color:var(--ink-2);font-size:15px">Valfritt — förfina resultatet lokalt med en språkmodell.</p>
@@ -2415,14 +2407,14 @@ function viewTranscribe(v){ return `
               <div style="font-size:14px;font-weight:500;color:var(--ink-2);margin-bottom:8px">LLM-modell</div>
               <button data-click="${on(v.togglePPDD)}" style="width:100%;max-width:320px;display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;cursor:pointer;text-align:left" data-sh="border-color:var(--line-2) !important">
                 <span style="width:7px;height:7px;border-radius:50%;flex:0 0 auto;background:var(--ok)"></span>
-                <span style="flex:1;font-size:15.5px;font-family:'Geist',system-ui,sans-serif;font-variant-numeric:tabular-nums;color:var(--ink)">${esc(v.ppModel)}</span>
+                <span style="flex:1;font-size:15.5px;font-variant-numeric:tabular-nums;color:var(--ink)">${esc(v.ppModel)}</span>
                 <span style="width:6px;height:6px;border-right:1.6px solid var(--ink-3);border-bottom:1.6px solid var(--ink-3);transform:rotate(45deg);margin:-3px 2px 0 0"></span>
               </button>
               ${ v.ppDDOpen ? `
               <div style="position:absolute;bottom:calc(100% + 6px);left:0;width:100%;max-width:320px;z-index:30;background:var(--surface);border:1px solid var(--line);border-radius:13px;box-shadow:var(--shadow);padding:6px;animation:fadeup .14s ease">
                 ${ v.ppModelOptions.map(function(m){ return `
                   <button data-key="${esc(m.name)}" data-click="${on(m.onPick)}" style="${m.style}" data-sh="background:var(--sunken) !important">
-                    <span style="flex:1;font-size:15px;font-family:'Geist',system-ui,sans-serif;font-variant-numeric:tabular-nums;color:var(--ink)">${esc(m.name)}</span>
+                    <span style="flex:1;font-size:15px;font-variant-numeric:tabular-nums;color:var(--ink)">${esc(m.name)}</span>
                     <span style="font-size:13px;color:var(--ink-2)">${esc(m.size)}</span>
                   </button>
                 `; }).join('') }
@@ -2453,21 +2445,21 @@ function viewTranscribe(v){ return `
             </div>
           ` : '' }
           ${ v.ppTextDone ? `
-            <div style="font-size:12.5px;text-transform:uppercase;letter-spacing:0.04em;color:var(--ink-2);margin-bottom:10px;font-family:'Geist',system-ui,sans-serif;font-variant-numeric:tabular-nums">${esc(v.ppOutTitle)}</div>
+            <div style="font-size:12.5px;text-transform:uppercase;letter-spacing:0.04em;color:var(--ink-2);margin-bottom:10px;font-variant-numeric:tabular-nums">${esc(v.ppOutTitle)}</div>
             <div style="font-size:16px;line-height:1.65;color:var(--ink);white-space:pre-wrap">${esc(v.ppOut)}</div>
           ` : '' }
           ${ v.ppCleanDone ? `
             <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap">
               <div style="display:flex;align-items:center;gap:9px">
                 <span style="width:18px;height:18px;border-radius:50%;background:var(--ok);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;flex:0 0 auto">✓</span>
-                <span style="font-size:12.5px;text-transform:uppercase;letter-spacing:0.04em;color:var(--ink-2);font-family:'Geist',system-ui,sans-serif">Korrekturläst transkript</span>
+                <span style="font-size:12.5px;text-transform:uppercase;letter-spacing:0.04em;color:var(--ink-2)">Korrekturläst transkript</span>
               </div>
               <span style="font-size:13px;color:var(--ink-2)">Samma transkript — stavfel och småfel rättade</span>
             </div>
             <div style="background:var(--surface);border:1px solid var(--line);border-radius:13px;padding:16px 18px;margin-bottom:14px;max-height:320px;overflow-y:auto" data-hidescroll="1">
               ${ v.ppCleanLines.map(function(c, idx){ return `
                 <div data-key="${esc(idx)}" style="display:flex;gap:14px;padding:5px 0">
-                  <span style="font-family:'Geist',system-ui,sans-serif;font-variant-numeric:tabular-nums;font-size:13px;color:var(--ink-3);flex:0 0 auto;width:44px;padding-top:2px">${esc(c.time)}</span>
+                  <span style="font-variant-numeric:tabular-nums;font-size:13px;color:var(--ink-3);flex:0 0 auto;width:44px;padding-top:2px">${esc(c.time)}</span>
                   <span style="font-size:15.5px;line-height:1.5;color:var(--ink)">${esc(c.text)}</span>
                 </div>
               `; }).join('') }
@@ -2620,14 +2612,14 @@ function viewModels(v){
           </div>
           <div style="position:relative;flex:1 1 240px;min-width:230px;max-width:380px">
             <button data-click="${on(v.toggleDiskDD)}" style="width:100%;display:flex;align-items:center;gap:11px;background:var(--surface);border:1px solid var(--line);border-radius:11px;padding:9px 13px;cursor:pointer;text-align:left;box-shadow:var(--shadow-sm)" data-sh="border-color:var(--line-2) !important">
-              <span style="font-family:'Geist',system-ui,sans-serif;font-size:13px;font-weight:600;color:var(--ink);background:var(--sunken);border:1px solid var(--line);border-radius:6px;padding:2px 7px;flex:0 0 auto;font-variant-numeric:tabular-nums">${esc(v.curDiskDrive)}</span>
+              <span style="font-size:13px;font-weight:600;color:var(--ink);background:var(--sunken);border:1px solid var(--line);border-radius:6px;padding:2px 7px;flex:0 0 auto;font-variant-numeric:tabular-nums">${esc(v.curDiskDrive)}</span>
               <span style="flex:1;min-width:0;font-size:14.5px;font-weight:500;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(v.curDiskName)}</span>
               <span style="font-size:13px;color:var(--ink);font-variant-numeric:tabular-nums;flex:0 0 auto">${esc(v.curDiskFree)}</span>
               <span style="width:7px;height:7px;border-right:1.6px solid var(--ink-3);border-bottom:1.6px solid var(--ink-3);transform:rotate(45deg);margin:-3px 2px 0 0;flex:0 0 auto"></span>
             </button>
             ${ v.diskDDOpen ? `<div style="position:absolute;top:calc(100% + 6px);left:0;right:0;z-index:30;background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:6px;animation:fadeup .14s ease">
               ${ v.diskOptions.map(function(d){ return `<button data-click="${on(d.onPick)}" style="${d.style}" data-sh="background:var(--sunken) !important">
-                  <span style="font-family:'Geist',system-ui,sans-serif;font-size:13px;font-weight:600;color:var(--ink);background:var(--sunken);border:1px solid var(--line);border-radius:6px;padding:2px 7px;flex:0 0 auto;font-variant-numeric:tabular-nums">${esc(d.drive)}</span>
+                  <span style="font-size:13px;font-weight:600;color:var(--ink);background:var(--sunken);border:1px solid var(--line);border-radius:6px;padding:2px 7px;flex:0 0 auto;font-variant-numeric:tabular-nums">${esc(d.drive)}</span>
                   <span style="flex:1;min-width:0">
                     <span style="display:block;font-size:15px;font-weight:500;color:var(--ink)">${esc(d.name)}</span>
                     <span style="display:block;font-size:12.5px;color:var(--ink-2);font-variant-numeric:tabular-nums">${esc(d.free)}</span>
@@ -3070,7 +3062,7 @@ function viewModals(v){ return `
             <div style="position:relative;margin-top:7px">
               <button data-click="${on(v.toggleChatModelDD)}" style="display:inline-flex;align-items:center;gap:8px;background:transparent;border:none;padding:0;cursor:pointer;font-family:inherit;max-width:100%;flex-wrap:wrap" data-sh="opacity:.65 !important">
                 <span style="width:7px;height:7px;border-radius:50%;flex:0 0 auto;background:var(--ok)"></span>
-                <span style="font-size:14.5px;font-weight:500;color:var(--ink);font-family:'Geist',system-ui,sans-serif">${esc(v.chatModelName)}</span>
+                <span style="font-size:14.5px;font-weight:500;color:var(--ink)">${esc(v.chatModelName)}</span>
                 <span style="font-size:14px;color:var(--ink-3)">·</span>
                 <span style="font-size:14px;color:var(--ink-2)">${esc(v.chatKind)}</span>
                 <span style="font-size:14px;color:var(--ink-3)">·</span>
@@ -3081,7 +3073,7 @@ function viewModals(v){ return `
               <div style="position:absolute;top:calc(100% + 8px);left:0;width:280px;z-index:40;background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:6px;animation:fadeup .14s ease">
                 ${ v.chatModelOptions.map(function(m){ return `
                   <button data-key="${esc(m.name)}" data-click="${on(m.onPick)}" style="${m.style}" data-sh="background:var(--sunken) !important">
-                    <span style="flex:1;min-width:0;font-size:15px;font-family:'Geist',system-ui,sans-serif;color:var(--ink)">${esc(m.name)}</span>
+                    <span style="flex:1;min-width:0;font-size:15px;color:var(--ink)">${esc(m.name)}</span>
                     <span style="${m.visionStyle}">Vision</span>
                     <span style="font-size:12.5px;color:var(--ink-2);flex:0 0 auto">${esc(m.size)}</span>
                     <span style="${m.checkStyle}">✓</span>
@@ -3250,12 +3242,12 @@ function viewModals(v){ return `
       <div style="max-width:760px;margin:0 auto">
         ${ v.logRows.map(function(r){ return `
           <div style="display:flex;gap:18px">
-            <span style="font-family:'Geist',system-ui,sans-serif;font-variant-numeric:tabular-nums;font-size:13.5px;color:var(--ink-3);width:52px;flex:0 0 auto;text-align:right;padding-top:2px">${esc(r.time)}</span>
+            <span style="font-variant-numeric:tabular-nums;font-size:13.5px;color:var(--ink-3);width:52px;flex:0 0 auto;text-align:right;padding-top:2px">${esc(r.time)}</span>
             <div style="position:relative;display:flex;flex-direction:column;align-items:center;flex:0 0 auto">
               <span style="${r.dotStyle}">${esc(r.icon)}</span>
               <span style="${r.lineStyle}"></span>
             </div>
-            <span style="font-family:'Geist',system-ui,sans-serif;font-variant-numeric:tabular-nums;font-size:15px;color:var(--ink);padding-bottom:18px;line-height:1.5;min-width:0">${esc(r.msg)}</span>
+            <span style="font-variant-numeric:tabular-nums;font-size:15px;color:var(--ink);padding-bottom:18px;line-height:1.5;min-width:0">${esc(r.msg)}</span>
           </div>
         `; }).join('') }
       </div>
