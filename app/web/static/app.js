@@ -2939,6 +2939,7 @@ function viewRecordings(v){
         ${ v.hasCourses ? `<select data-change="${on(v.onFilterCourse)}" style="${selStyleFor(v.lessonFilterCourse)}">${ opts(v.lessonCourses, v.lessonFilterCourse) }</select>` : '' }
         ${ v.hasMonths ? `<select data-change="${on(v.onFilterMonth)}" style="${selStyleFor(v.lessonFilterMonth)}"><option value="">Alla datum</option>${ v.lessonMonths.map(function(m){ return '<option value="'+esc(m)+'"'+(v.lessonFilterMonth===m?' selected':'')+'>'+esc(monthLabel(m))+'</option>'; }).join('') }</select>` : '' }
         ${ (!v.hasGroups && !v.hasCourses && v.hasMonths) ? `<span style="font-size:12.5px;color:var(--ink-3)">Tilldela klass &amp; kurs på korten för att filtrera på dem</span>` : '' }
+        <button data-click="${on(v.backup.onRun)}" ${ v.backup.busy ? 'disabled' : '' } title="Säkerhetskopiera lektionsdatabasen + historiken" style="background:var(--surface);border:1px solid var(--line);color:var(--ink-2);border-radius:10px;padding:8px 14px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;opacity:${ v.backup.busy ? '.6' : '1' }" data-sh="border-color:var(--ink) !important;color:var(--ink) !important">💾 ${ v.backup.busy ? 'Säkerhetskopierar …' : 'Säkerhetskopiera' }</button>
       </div>
       ${ v.hasActiveFilter ? `
       <div style="max-width:760px;margin:0 auto 20px;display:flex;gap:7px;justify-content:center;align-items:center;flex-wrap:wrap">
