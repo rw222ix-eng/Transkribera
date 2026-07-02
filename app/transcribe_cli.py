@@ -31,7 +31,13 @@ def _transcribe_whisper(args) -> list[Segment]:
     segs: list[Segment] = []
     last = -1
     for s in seg_iter:
-        segs.append(Segment(s.start, s.end, s.text.strip()))
+        seg = Segment(s.start, s.end, s.text.strip())
+        segs.append(seg)
+        # Strömma segmentet DIREKT: CTranslate2 kan abortera processen
+        # (0xC0000409, Windows/CUDA) efter dekodningen men före uppstädningen —
+        # skrevs SEG-raderna först efteråt gick hela transkriptet förlorat.
+        # Föräldern återskapar resultatfilerna från strömmen om vi dör sent.
+        print(f"SEG {seg.start} {seg.end} {seg.text}", flush=True)
         if duration:
             pct = min(100, int(s.end / duration * 100))
             if pct != last:
@@ -73,14 +79,14 @@ def main(argv: list[str] | None = None) -> None:
 
     if args.engine == "parakeet":
         segs = _transcribe_parakeet(args)
+        # Parakeet returnerar allt på en gång — skriv segmenten här. Whisper-vägen
+        # strömmar sina SEG-rader löpande i loopen (kraschskydd) och får inte
+        # dubbleras, annars ser föräldern varje segment två gånger.
+        for s in segs:
+            print(f"SEG {s.start} {s.end} {s.text}", flush=True)
     else:
         segs = _transcribe_whisper(args)
     print("PROGRESS 100", flush=True)
-
-    # Emit the transcript so the parent can show it / feed post-process, regardless
-    # of which output formats were chosen. Text is single-line (stripped above).
-    for s in segs:
-        print(f"SEG {s.start} {s.end} {s.text}", flush=True)
 
     formats = [f for f in args.formats.split(",") if f]
     for w in write_outputs(segs, Path(args.out_base), formats):

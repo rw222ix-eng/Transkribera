@@ -475,6 +475,17 @@ def create_app(base_dir: Path | None = None,
                 expected = [str(out_base.with_suffix(transcriber.WRITERS[f][1])) for f in formats]
                 if all(Path(p).exists() for p in expected):
                     written = expected
+                elif segments:
+                    # Subprocessen dog i slutskedet (sen CTranslate2-abort på
+                    # Windows/CUDA) efter att segmenten strömmats men innan filerna
+                    # skrevs — återskapa resultatet här i stället för att fela.
+                    emit({"type": "log",
+                          "msg": "Transkriberingsprocessen avslutades oväntat i "
+                                 "slutskedet — återskapar resultatfilerna från "
+                                 "strömmade segment."})
+                    written = [str(p) for p in transcriber.write_outputs(
+                        [transcriber.Segment(d["start"], d["end"], d["text"])
+                         for d in segments], out_base, formats)]
                 else:
                     raise RuntimeError("Transkriberingen gav inget resultat")
             srt_path = next((Path(p) for p in written if str(p).lower().endswith(".srt")), None)
