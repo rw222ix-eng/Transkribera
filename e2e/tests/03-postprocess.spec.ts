@@ -1,14 +1,7 @@
 import { test, expect, failOnConsoleError, transcribeSample } from "../helpers/app";
 
-test("summary post-processing streams a result", async ({ page }) => {
-  const errors: string[] = [];
-  failOnConsoleError(page, errors);
-  await transcribeSample(page);
-
-  await page.getByRole("button", { name: "Summera", exact: true }).click();
-  await expect(page.getByText("[FEJK summary]")).toBeVisible({ timeout: 15000 });
-  expect(errors, errors.join("\n")).toEqual([]);
-});
+// OBS: "Summera"-knappen togs bort i förenklingen (ff5f3e2) — kvarvarande
+// efterbearbetningar i UI:t är Korrekturläs och Chatta.
 
 test("proofreading (cleanup) post-processing streams a result", async ({ page }) => {
   const errors: string[] = [];
@@ -69,6 +62,9 @@ test("cross-lesson AI question answers over the transcripts", async ({ page }) =
   await expect(askInput).toBeVisible();
   await askInput.fill("bråk");
   await expect(askInput).toHaveValue("bråk");
+  // När fältet fått text renderas ✕ Rensa in bredvid Fråga-knappen och knuffar
+  // den åt höger — invänta den så att klicket inte landar på gamla koordinater.
+  await expect(page.getByRole("button", { name: "Rensa" })).toBeVisible();
   await page.getByRole("button", { name: "Fråga", exact: true }).click();
   await expect(page.getByText("[FEJK svar]")).toBeVisible({ timeout: 15000 });
   // Tänker-bannern landar i klart-läget och scen-koreografin lyfter de

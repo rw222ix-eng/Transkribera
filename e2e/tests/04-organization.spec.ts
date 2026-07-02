@@ -13,15 +13,19 @@ test("assign a lesson to a class and course", async ({ page }) => {
   await transcribeSample(page);
 
   await page.getByRole("button", { name: "Inspelningar", exact: true }).first().click();
-  await page.getByRole("button", { name: "Tilldela" }).first().click();
-  await page.getByPlaceholder("t.ex. NA21").fill("NA21");
-  await page.getByPlaceholder("t.ex. Matematik 2b").fill("Matematik 2b");
-  await expect(page.getByPlaceholder("t.ex. Matematik 2b")).toHaveValue("Matematik 2b");
-  await page.getByRole("button", { name: "Spara", exact: true }).click();
 
-  // The assigned lesson row shows class + course together (filter dropdowns also
-  // gain hidden <option>s, so match the row's combined text, not bare "NA21").
-  await expect(page.getByText(/NA21[\s\S]*Matematik 2b/).first()).toBeVisible({ timeout: 10000 });
+  // Omdesignen ersatte Tilldela-dialogen med alltid synliga, auto-sparande
+  // fält direkt på kortet (data-change sparar när fältet lämnar fokus).
+  const kort = page.locator('[data-key^="les-"]').first();
+  await expect(kort).toBeVisible({ timeout: 10000 });
+  await kort.getByPlaceholder("t.ex. NA21").fill("NA21");
+  await kort.getByPlaceholder("t.ex. NA21").press("Tab");
+  await kort.getByPlaceholder("t.ex. Matematik 2b").fill("Matematik 2b");
+  await kort.getByPlaceholder("t.ex. Matematik 2b").press("Tab");
+
+  // Kortets "Ej tilldelad"-badge ersätts av klass-taggen när sparningen gått igenom.
+  await expect(page.locator('[data-key^="les-"]').first().getByText("NA21"))
+    .toBeVisible({ timeout: 10000 });
   expect(errors, errors.join("\n")).toEqual([]);
 });
 

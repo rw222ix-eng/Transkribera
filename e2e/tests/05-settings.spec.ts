@@ -1,36 +1,26 @@
 import { test, expect, failOnConsoleError } from "../helpers/app";
 
-test("models view shows installed + downloadable models and the disk picker", async ({ page }) => {
-  const errors: string[] = [];
-  failOnConsoleError(page, errors);
-  await page.goto("/");
-  await page.getByRole("button", { name: "Modeller", exact: true }).first().click();
+// Modeller-fliken togs bort ur headern i omdesignen ("fast modelluppsättning",
+// ff5f3e2) — modellvyn går inte längre att nå via UI:t. Katalog- och
+// inställningsendpointsen som appen bygger på verifieras därför på API-nivå.
 
-  await expect(page.getByRole("heading", { name: "Transkriberingsmodeller" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Språk- och videomodeller" })).toBeVisible();
-
-  // KB-Whisper large + others are installed; uninstalled ones offer a download.
-  await expect(page.getByText("✓ Installerad").first()).toBeVisible();
-  expect(await page.getByText("✓ Installerad").count()).toBeGreaterThanOrEqual(2);
-  expect(await page.getByText("Ladda ner").count()).toBeGreaterThanOrEqual(1);
-
-  // Models-disk picker (shows free space).
-  await expect(page.getByText(/ledigt/).first()).toBeVisible();
-
-  expect(errors, errors.join("\n")).toEqual([]);
+test("modellkatalogen svarar med installerade modeller", async ({ request }) => {
+  const resp = await request.get("/api/models");
+  expect(resp.status()).toBe(200);
+  const body = await resp.json();
+  expect(Array.isArray(body.whisper)).toBe(true);
+  expect(body.whisper.length).toBeGreaterThan(0);
+  expect(body.hardware).toBeTruthy();
 });
 
-test("model use-case filter chips switch the list without errors", async ({ page }) => {
+test("inställningar svarar och appen startar utan konsolfel", async ({ page, request }) => {
   const errors: string[] = [];
   failOnConsoleError(page, errors);
+
+  const resp = await request.get("/api/settings");
+  expect(resp.status()).toBe(200);
+
   await page.goto("/");
-  await page.getByRole("button", { name: "Modeller", exact: true }).first().click();
-
-  await page.getByRole("button", { name: "Svensk text", exact: true }).click();
-  await page.getByRole("button", { name: "Videoanalys · bild", exact: true }).click();
-  await page.getByRole("button", { name: "Alla", exact: true }).first().click();
-
-  // Still rendering the catalog after filtering.
-  await expect(page.getByRole("heading", { name: "Språk- och videomodeller" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Vad vill du transkribera?" })).toBeVisible();
   expect(errors, errors.join("\n")).toEqual([]);
 });
