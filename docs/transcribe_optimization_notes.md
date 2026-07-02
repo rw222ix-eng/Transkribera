@@ -114,14 +114,18 @@ delar kortet). Ingen kodändring föreslås nu.
 | Döda UI-strängar hänvisade till borttagna "Modeller-fliken" | `fix(ui): ...` (omformulerade) |
 | Stale e2e-specs (Modeller-flik, Summera, Tilldela) efter avsiktlig omdesign | `test(e2e): synka specs ...` |
 
-## Kvarstående observationer (ej åtgärdade — beslut behövs)
+## Uppföljningsbeslut (2026-07-02, samtliga åtgärdade)
 
-1. **Modeller-vyn är död kod**: `viewModels` + nedladdnings-/diskvals-UI nås inte
-   längre (noWhisper är hårdkodat false, ingen flik). Antingen återinför en
-   ingång (t.ex. kugghjul i headern) eller ta bort vyn + `gotoModels`/
-   `getRecommended`-wiring. Berör design — inte gjort ensidigt.
-2. **Hallucinationsloop-detektion**: 45-minutersfilen fick 1 loop. Om det dyker
-   upp i riktiga lektioner: överväg `condition_on_previous_text=False` (se ovan).
-3. **Fråga-knappens layout-shift** (UX): fältets ✕ renderas in först när text
-   finns och flyttar submit-knappen ~50 px. Reservera bredden (alltid rendera
-   ✕ med `visibility:hidden` utan text) om misstryck rapporteras.
+1. **Modeller-vyn borttagen** (`refactor(ui): ta bort den onåbara Modeller-vyn`):
+   viewModels, tomläget och ingångarna (onTabM/gotoModels/getRecommended) är
+   borta. Kvarvarande nedladdnings-/diskvalshjälpare i vm delas med config-vyns
+   modellval och städas separat.
+2. **Stabilitetsparametrarna aktiverade** (`fix(transkribering): stabila
+   Whisper-parametrar ...`): `temperature=[0.0, 0.2]` +
+   `condition_on_previous_text=False` i `app/transcribe_cli.py`. Verifierat:
+   brusfilen ger nu DONE + exit 0 (abort helt borta); extremt repetitiva
+   långfiler (45 min loop) kan fortfarande aborta sent men räddas alltid av
+   återskapande-vägen.
+3. **Layout-shiften fixad** (`fix(ui): Rensa-knappen upptar alltid sin plats ...`):
+   ✕ växlar `visibility` i stället för att renderas in/ut; regressionstest i
+   `e2e/tests/09-visuell-granskning.spec.ts` mäter att Fråga-knappen står stilla.
