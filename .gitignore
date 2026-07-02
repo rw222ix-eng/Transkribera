@@ -65,3 +65,6 @@ design-system/_snapshot-verify.png
 
 # Genererade ljudtestfiler (skapas av tests/download_sv_audio.py)
 tests/audio_samples/
+
+# Lokala QA-körningsartefakter (rådata från riktiga transkriberingskörningar)
+exports/
