@@ -1718,7 +1718,6 @@
       };
     });
     var doneCount = st.queue.filter(function (qq) { return st.qStatus[qq.id] === 'done'; }).length;
-    var noWhisper = false;   // modellerna är förinstallerade — ingen "ladda ner"-prompt
     var historyItems = st.history.map(function (h) {
       return {
         id: h.id, name: h.name, date: h.date,
@@ -1801,9 +1800,9 @@
 
     return {
       theme: st.theme,
-      tabTranscribe: st.tab === 'transcribe', tabModels: st.tab === 'models', tabRecordings: st.tab === 'recordings',
-      onTabT: function () { setTab('transcribe'); }, onTabM: function () { setTab('models'); }, onTabIn: function () { setTab('recordings'); },
-      tabTOn: st.tab === 'transcribe', tabMOn: st.tab === 'models', tabInOn: st.tab === 'recordings',
+      tabTranscribe: st.tab === 'transcribe', tabRecordings: st.tab === 'recordings',
+      onTabT: function () { setTab('transcribe'); }, onTabIn: function () { setTab('recordings'); },
+      tabTOn: st.tab === 'transcribe', tabInOn: st.tab === 'recordings',
       themeIsLight: st.theme !== 'dark',
       toggleTheme: toggleTheme,
 
@@ -1818,9 +1817,6 @@
         }).catch(function () { setState({ fileError: 'Inget exempel finns på den här datorn — lägg till en egen fil.' }); });
       },
       addSampleCorrupt: function () { addSample('skadad_inspelning.m4a'); },
-
-      noWhisper: noWhisper, hasWhisper: !noWhisper,
-      gotoModels: function () { setTab('models'); }, getRecommended: function () { setTab('models'); modelAction('KB-Whisper large'); },
 
       isError: st.run === 'error', isCancelled: st.run === 'cancelled', notErrorState: st.run !== 'error' && st.run !== 'cancelled',
       runErrorTitle: st.runError ? st.runError.title : '', runErrorDetail: st.runError ? st.runError.detail : '',
@@ -2182,29 +2178,6 @@
 
   // <<<VIEWS_START>>> (Phase-2 views — ported verbatim from prototype, verified)
 function viewTranscribe(v){ return `
-    ${ v.noWhisper ? `
-    <section style="min-height:calc(100vh - 80px);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:40px 0 90px">
-      <div style="width:74px;height:74px;border-radius:20px;background:var(--surface);border:1px solid var(--line);box-shadow:var(--shadow-sm);display:flex;align-items:center;justify-content:center;margin-bottom:24px">
-        <div style="display:flex;align-items:flex-end;gap:3px;height:28px">
-          <div style="width:4px;height:10px;border-radius:2px;background:var(--line-2)"></div>
-          <div style="width:4px;height:19px;border-radius:2px;background:var(--line-2)"></div>
-          <div style="width:4px;height:28px;border-radius:2px;background:var(--accent)"></div>
-          <div style="width:4px;height:15px;border-radius:2px;background:var(--line-2)"></div>
-          <div style="width:4px;height:22px;border-radius:2px;background:var(--line-2)"></div>
-        </div>
-      </div>
-      <h1 style="font-size:28px;font-weight:600;letter-spacing:-0.03em;margin:0 0 9px">Ladda ner en modell för att börja</h1>
-      <p style="margin:0 0 28px;color:var(--ink-2);font-size:16.5px;max-width:440px;line-height:1.55">Transkriberingen körs helt lokalt med en Whisper-modell — och du har ingen installerad ännu. Hämta den rekommenderade så är du igång på någon minut.</p>
-      <div style="display:flex;gap:11px;flex-wrap:wrap;justify-content:center">
-        <button data-click="${on(v.getRecommended)}" style="display:inline-flex;align-items:center;gap:9px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:12px;padding:13px 22px;font-size:15.5px;font-weight:500;cursor:pointer;font-family:inherit;box-shadow:var(--shadow-sm)" data-sh="background:color-mix(in srgb, var(--btn-bg) 78%, var(--accent)) !important">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.5v7.5"></path><path d="M4.5 6.5 8 10l3.5-3.5"></path><path d="M3 13.5h10"></path></svg>Ladda ner KB-Whisper large
-        </button>
-        <button data-click="${on(v.gotoModels)}" style="background:transparent;border:1px solid var(--line);color:var(--ink);border-radius:12px;padding:13px 22px;font-size:15.5px;font-weight:500;cursor:pointer;font-family:inherit" data-sh="border-color:var(--line-2) !important;background:var(--sunken) !important">Bläddra bland modeller</button>
-      </div>
-    </section>
-    ` : '' }
-
-    ${ v.hasWhisper ? `
     <section style="min-height:calc(100vh - 80px);display:flex;flex-direction:column;padding:16px 0 28px">
 
       <div style="display:flex;align-items:center;gap:9px;flex:0 0 auto;margin-bottom:22px">
@@ -2648,182 +2621,7 @@ function viewTranscribe(v){ return `
       </div>
       ` : '' }
     </section>
-    ` : '' }
 `; }
-
-function viewModels(v){
-  function dlbtn(r){
-    var p = r.phase || 'idle';
-    var pct = Math.round(r.pct || 0);
-    var detail = r.detail || '';
-    var progressing = p === 'downloading' || p === 'installing';
-    var base = 'position:relative;overflow:hidden;box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;gap:6px;width:154px;height:40px;border-radius:9px;padding:7px 14px;font-size:14.5px;font-weight:500;font-family:inherit;white-space:nowrap;transition:border-color .15s,background .15s;';
-    var btnStyle, btnHover = '';
-    if (progressing) {
-      btnStyle = base + 'background:var(--surface);border:1px solid var(--accent);color:var(--ink);cursor:default;padding-right:26px';
-    } else if (p === 'installed') {
-      btnStyle = base + 'background:transparent;border:1px solid transparent;color:var(--ok);cursor:default';
-    } else if (p === 'incompatible') {
-      btnStyle = base + 'background:transparent;border:1px solid transparent;color:var(--ink-3);cursor:default';
-    } else if (p === 'failed') {
-      btnStyle = base + 'background:transparent;border:1px solid var(--bad);color:var(--bad);cursor:pointer';
-      btnHover = 'background:color-mix(in srgb,var(--bad) 8%,transparent) !important';
-    } else {
-      btnStyle = base + 'background:transparent;border:1px solid var(--line-2);color:var(--ink);cursor:pointer';
-      btnHover = 'background:var(--sunken) !important;border-color:var(--ink-3) !important;box-shadow:var(--shadow-sm) !important';
-    }
-    var fillStyle = p === 'installing'
-      ? 'position:absolute;left:0;top:0;bottom:0;z-index:0;width:' + pct + '%;background-color:var(--accent);background-image:repeating-linear-gradient(135deg, rgba(255,255,255,0.3) 0, rgba(255,255,255,0.3) 4px, transparent 4px, transparent 8px);background-size:16px 16px;animation:dlstripe .6s linear infinite;transition:width .22s ease'
-      : 'position:absolute;left:0;top:0;bottom:0;z-index:0;width:' + pct + '%;background:var(--accent);transition:width .22s ease';
-    var progLabel = p === 'installing' ? 'Installerar' : 'Laddar ner';
-    if (progressing) {
-      return `<div style="${btnStyle}">
-    <div style="${fillStyle}"></div>
-    <span style="position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;line-height:1.1;padding-right:16px;max-width:100%;overflow:hidden">
-      <span style="font-size:13.5px;font-weight:600;white-space:nowrap">${esc(progLabel)} ${esc(pct)}%</span>
-      <span style="font-size:10.5px;font-weight:500;color:var(--ink-2);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px">${esc(detail)}</span>
-    </span>
-    <button data-click="${on(r.onCancel)}" aria-label="Avbryt nedladdning" style="position:absolute;right:5px;top:50%;transform:translateY(-50%);z-index:2;width:22px;height:22px;border:none;background:var(--surface);border-radius:6px;cursor:pointer;color:var(--ink-2);display:flex;align-items:center;justify-content:center" data-sh="color:var(--bad) !important;background:var(--sunken) !important">
-      <svg width="10" height="10" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3l8 8M11 3l-8 8"></path></svg>
-    </button>
-  </div>`;
-    }
-    return `<button data-click="${on(r.onAction)}" style="${btnStyle}" data-sh="${btnHover}">
-    ${ p === 'idle' ? `<span style="position:relative;z-index:1;display:inline-flex;align-items:center;gap:6px">
-        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.5v7.5"></path><path d="M4.5 6.5 8 10l3.5-3.5"></path><path d="M3 13.5h10"></path></svg>Ladda ner
-      </span>` : '' }
-    ${ p === 'failed' ? `<span style="position:relative;z-index:1;display:inline-flex;align-items:center;gap:6px"><span style="font-size:14px;line-height:1">↻</span>Försök igen</span>` : '' }
-    ${ p === 'installed' ? `<span style="position:relative;z-index:1;display:inline-flex;align-items:center;gap:5px;color:var(--ok)">✓ Installerad</span>` : '' }
-    ${ p === 'incompatible' ? `<span style="position:relative;z-index:1;color:var(--ink-3)">Ej kompatibel</span>` : '' }
-  </button>`;
-  }
-  function modelRow(x, last){
-    return `<div data-key="${esc(x.name)}" style="${x.rowStyle}">
-              <span style="width:24px;height:24px;border-radius:50%;flex:0 0 auto;margin-top:1px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;color:var(--ink-2);background:var(--sunken);border:1px solid var(--line);font-variant-numeric:tabular-nums">${esc(x.rank)}</span>
-              <span style="width:9px;height:9px;border-radius:50%;flex:0 0 auto;margin-top:7px;background:${x.dot}"></span>
-              <div style="flex:1;min-width:0">
-                <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
-                  <span style="font-size:16px;font-weight:500;color:var(--ink);font-variant-numeric:tabular-nums">${esc(x.name)}</span>
-                  ${ x.recommended ? `<span style="font-size:12px;font-weight:500;color:var(--accent);background:var(--accent-weak);padding:2px 7px;border-radius:5px">Rekommenderad</span>` : '' }
-                  <span style="${x.verdictStyle}">${esc(x.verdict)}</span>
-                </div>
-                <div style="font-size:14px;color:var(--ink-2);margin-top:4px">${esc(x.useFor)}</div>
-                <div style="display:flex;gap:7px;margin-top:9px;flex-wrap:wrap">
-                  ${ x.chips.map(function(c){ return `<span style="${c.style}" data-enter="${on(c.onEnter)}" data-leave="${on(c.onLeave)}">${esc(c.label)}</span>`; }).join('') }
-                </div>
-              </div>
-              <div style="display:flex;flex-direction:column;align-items:flex-end;gap:9px;flex:0 0 auto">
-                <span style="font-size:13px;color:var(--ink-2);font-variant-numeric:tabular-nums">${esc(x.size)}</span>
-                <div style="display:flex;align-items:center;gap:7px">
-                  ${ x.removable ? `<button data-click="${on(x.onRemove)}" aria-label="Ta bort modell" style="width:38px;height:38px;flex:0 0 auto;border:1px solid var(--line);background:var(--surface);border-radius:9px;cursor:pointer;color:var(--ink-3);display:flex;align-items:center;justify-content:center" data-sh="border-color:var(--bad) !important;color:var(--bad) !important">
-                      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.5 8.5h6l.5-8.5"></path></svg>
-                    </button>` : '' }
-                  ${ x.notRemovable ? `<span style="width:38px;flex:0 0 auto"></span>` : '' }
-                  ${ dlbtn(x) }
-                </div>
-              </div>
-            </div>`;
-  }
-  return `<section style="padding:44px 0 96px">
-      <div style="text-align:center;max-width:640px;margin:0 auto 24px">
-        <h1 style="font-size:34px;font-weight:600;letter-spacing:-0.03em;margin:0 0 6px">Modeller</h1>
-        <p style="margin:0;color:var(--ink-2);font-size:17px">Hantera lokala modeller. Märkningen visar hur väl varje modell passar din hårdvara.</p>
-      </div>
-
-      <!-- Hårdvara -->
-      <div style="background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:20px 22px;margin-bottom:32px;box-shadow:var(--shadow-sm)">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px">
-          <span style="display:inline-flex;align-items:center;gap:8px;background:color-mix(in srgb,var(--ok) 13%,transparent);color:var(--ink);border-radius:999px;padding:5px 13px 5px 10px;font-size:13.5px;font-weight:500">
-            <span style="width:7px;height:7px;border-radius:50%;background:var(--ok)"></span>Hårdvara identifierad
-          </span>
-          <span style="font-size:13px;color:var(--ink);font-variant-numeric:tabular-nums">${esc(v.hwReady)}</span>
-        </div>
-        <div style="display:flex;flex-direction:column;gap:16px;margin-bottom:18px">
-          ${ v.hwTiles.map(function(t){ return `<div>
-              <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:7px">
-                <span style="display:inline-flex;align-items:center;gap:6px">
-                  <span style="font-size:14px;font-weight:500;color:var(--ink)">${esc(t.label)}</span>
-                  <span style="font-size:12px;color:var(--ink)">· ${esc(t.note)}</span>
-                  <span data-enter="${on(t.onEnter)}" data-leave="${on(t.onLeave)}" style="${t.badgeStyle}">?</span>
-                </span>
-                <span style="font-size:13.5px;color:var(--ink-2);font-variant-numeric:tabular-nums;flex:0 0 auto">
-                  <strong style="color:var(--ink);font-size:15.5px;font-weight:600">${esc(t.free)}</strong> / ${esc(t.total)}
-                </span>
-              </div>
-              <div style="height:8px;border-radius:99px;background:var(--track);overflow:hidden">
-                <div style="${t.barStyle}"></div>
-              </div>
-            </div>`; }).join('') }
-        </div>
-        <div style="border-top:1px solid var(--line);padding-top:14px;margin-bottom:14px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
-          <div style="display:flex;align-items:center;gap:9px;flex:0 0 auto">
-            <span style="width:30px;height:30px;border-radius:8px;background:var(--sunken);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;flex:0 0 auto">
-              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="var(--ink-3)" stroke-width="1.5"><rect x="2" y="3.5" width="12" height="9" rx="2"></rect><circle cx="11" cy="8" r="1.3" fill="var(--ink-3)" stroke="none"></circle></svg>
-            </span>
-            <span style="font-size:12px;text-transform:uppercase;letter-spacing:0.04em;color:var(--ink)">Nedladdningsdisk</span>
-          </div>
-          <div style="position:relative;flex:1 1 240px;min-width:230px;max-width:380px">
-            <button data-click="${on(v.toggleDiskDD)}" style="width:100%;display:flex;align-items:center;gap:11px;background:var(--surface);border:1px solid var(--line);border-radius:11px;padding:9px 13px;cursor:pointer;text-align:left;box-shadow:var(--shadow-sm)" data-sh="border-color:var(--line-2) !important">
-              <span style="font-size:13px;font-weight:600;color:var(--ink);background:var(--sunken);border:1px solid var(--line);border-radius:6px;padding:2px 7px;flex:0 0 auto;font-variant-numeric:tabular-nums">${esc(v.curDiskDrive)}</span>
-              <span style="flex:1;min-width:0;font-size:14.5px;font-weight:500;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(v.curDiskName)}</span>
-              <span style="font-size:13px;color:var(--ink);font-variant-numeric:tabular-nums;flex:0 0 auto">${esc(v.curDiskFree)}</span>
-              <span style="width:7px;height:7px;border-right:1.6px solid var(--ink-3);border-bottom:1.6px solid var(--ink-3);transform:rotate(45deg);margin:-3px 2px 0 0;flex:0 0 auto"></span>
-            </button>
-            ${ v.diskDDOpen ? `<div style="position:absolute;top:calc(100% + 6px);left:0;right:0;z-index:30;background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:6px;animation:fadeup .14s ease">
-              ${ v.diskOptions.map(function(d){ return `<button data-ddopt data-click="${on(d.onPick)}" style="${d.style}" data-sh="background:var(--sunken) !important">
-                  <span style="font-size:13px;font-weight:600;color:var(--ink);background:var(--sunken);border:1px solid var(--line);border-radius:6px;padding:2px 7px;flex:0 0 auto;font-variant-numeric:tabular-nums">${esc(d.drive)}</span>
-                  <span style="flex:1;min-width:0">
-                    <span style="display:block;font-size:15px;font-weight:500;color:var(--ink)">${esc(d.name)}</span>
-                    <span style="display:block;font-size:12.5px;color:var(--ink-2);font-variant-numeric:tabular-nums">${esc(d.free)}</span>
-                  </span>
-                  <span style="${d.checkStyle}">✓</span>
-                </button>`; }).join('') }
-            </div>` : '' }
-          </div>
-        </div>
-        <div style="border-top:1px solid var(--line);padding-top:14px;display:flex;flex-wrap:wrap;gap:14px 28px">
-          ${ v.hwSpecs.map(function(s){ return `<span style="display:inline-flex;flex-direction:column;gap:3px">
-              <span style="font-size:11.5px;text-transform:uppercase;letter-spacing:0.06em;font-weight:700;color:var(--ink)">${esc(s.k)}</span>
-              <span style="font-size:14px;font-weight:500;color:var(--ink);font-variant-numeric:tabular-nums">${esc(s.v)}</span>
-            </span>`; }).join('') }
-        </div>
-      </div>
-
-      <!-- Whisper -->
-      <div style="margin-bottom:30px">
-        <div style="display:flex;align-items:baseline;gap:9px;margin-bottom:12px">
-          <h2 style="font-size:17.5px;font-weight:600;letter-spacing:-0.01em;margin:0">Transkriberingsmodeller</h2>
-          <span style="color:var(--ink);font-size:15px;font-weight:500">tal till text · svenska & flerspråkigt</span>
-        </div>
-        <div style="background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:var(--shadow-sm)">
-          ${ v.whisperRows.map(function(w){ return modelRow(w); }).join('') }
-        </div>
-      </div>
-
-      <!-- LLM -->
-      <div style="margin-bottom:30px">
-        <div style="display:flex;align-items:baseline;gap:9px;margin-bottom:12px">
-          <h2 style="font-size:17.5px;font-weight:600;letter-spacing:-0.01em;margin:0">Språk- och videomodeller</h2>
-          <span style="color:var(--ink);font-size:15px;font-weight:500">efterbearbetning & analys · lokalt via Ollama</span>
-        </div>
-        <p style="margin:-4px 0 12px;font-size:13.5px;color:var(--ink-2);max-width:620px">Kvantiseringsnivån väljs automatiskt efter din lediga VRAM — håll muspekaren över den <span style="color:var(--accent);font-weight:600">blå Q-taggen</span> för att se vilken nivå och vad den innebär.</p>
-
-        <!-- Användningsfall -->
-        <div style="display:flex;align-items:center;gap:11px;flex-wrap:wrap;margin-bottom:14px">
-          <span style="font-size:11.5px;text-transform:uppercase;letter-spacing:0.05em;color:var(--ink-2);font-weight:600">Användningsfall</span>
-          <div style="display:flex;gap:3px;padding:4px;background:var(--track);border:1px solid var(--line);border-radius:12px;flex-wrap:wrap">
-            ${ v.useCaseOptions.map(function(u){ return `<button data-click="${on(u.onPick)}" style="${u.style}" data-sh="background:var(--surface) !important;color:var(--ink) !important;box-shadow:var(--shadow-sm) !important">${esc(u.label)}</button>`; }).join('') }
-          </div>
-          <span data-enter="${on(v.useCaseTip.onEnter)}" data-leave="${on(v.useCaseTip.onLeave)}" style="${v.infoBadgeStyle}">?</span>
-        </div>
-        <div style="background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:var(--shadow-sm)">
-          ${ v.llmRows.map(function(l){ return modelRow(l); }).join('') }
-          ${ v.llmEmpty ? `<div style="padding:26px;text-align:center;color:var(--ink-2);font-size:15px">Ingen LLM-modell matchar det valda användningsfallet.</div>` : '' }
-        </div>
-      </div>
-
-    </section>`;
-}
 
 function historySection(v){
   if (v.historyEmpty) return '';
