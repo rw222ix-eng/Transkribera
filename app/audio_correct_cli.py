@@ -6,10 +6,11 @@ E4B (native audio input) via transformers on the GPU. Same fidelity principle as
 the text correction — fix only clear errors, keep the language, order and meaning,
 add/remove nothing.
 
-⚠️ UNVERIFIED: the transformers audio inference below has NOT been run on a GPU —
-verify on the Windows/RTX box before relying on it. The model loads via the generic
-image-text-to-text auto class, so it follows whatever architecture the weights
-declare (google/gemma-4-E4B-it → Gemma4ForConditionalGeneration).
+Verifierad på Windows/RTX 4090 (QA 2026-07-02): 2 min ljud korrigerades på ~35 s
+inkl. modelladdning; 5/26 segment ändrades (konservativ interpunktion), alla
+tidsstämplar bevarade. The model loads via the generic image-text-to-text auto
+class, so it follows whatever architecture the weights declare
+(google/gemma-4-E4B-it → Gemma4ForConditionalGeneration).
 
 Gemma audio is limited to ~30 s per call, so we correct one segment at a time
 (each is well under 30 s), slicing the segment's audio with a little padding.
