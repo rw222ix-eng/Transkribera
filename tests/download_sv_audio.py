@@ -23,9 +23,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-# Uppskattat taltempo för svenska lektioner. Kalibreras mot verklig
-# transkribering av 2-minutersfilen (se docs/transcribe_optimization_notes.md).
-WORDS_PER_SEC = 2.0
+# Taltempo kalibrerat mot verkliga KB-Whisper-körningar på basfilen
+# (66–82 ord/min ≈ 1,1–1,4 ord/s; se docs/transcribe_optimization_notes.md).
+WORDS_PER_SEC = 1.2
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_BASE = REPO_ROOT / "Mamma waw isolerad.wav"
