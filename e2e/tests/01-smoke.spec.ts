@@ -1,10 +1,11 @@
 import { test, expect, failOnConsoleError } from "../helpers/app";
 
 // One stable landmark per top-level view (discovered against the live app).
+// Modeller-fliken togs bort ur headern i omdesignen (fast modelluppsättning);
+// kvar finns bara Transkribera och Inspelningar.
 const VIEWS: { tab: string; landmark: (page: import("@playwright/test").Page) => import("@playwright/test").Locator }[] = [
   { tab: "Transkribera", landmark: (p) => p.getByRole("heading", { name: "Vad vill du transkribera?" }) },
   { tab: "Inspelningar", landmark: (p) => p.getByRole("heading", { name: "Inspelningar" }) },
-  { tab: "Modeller", landmark: (p) => p.getByRole("heading", { name: "Transkriberingsmodeller" }) },
 ];
 
 test("app boots without console errors", async ({ page }) => {

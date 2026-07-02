@@ -3545,4 +3545,7 @@ function viewModals(v){ return `
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 
+  /* Exponera state för e2e-tester (endast med ?e2e=1 i URL:en; aldrig i normal drift). */
+  if (/[?&]e2e=1(&|$)/.test(location.search)) { window.S = S; }
+
 })();

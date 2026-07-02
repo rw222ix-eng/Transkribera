@@ -21,6 +21,12 @@ export async function installFakePywebview(page: Page, filePath: string) {
   }, filePath);
 }
 
+// Navigate to the app with the e2e flag so app.js exposes window.S (read-only
+// state access for assertions via page.evaluate).
+export async function gotoApp(page: Page) {
+  await page.goto("/?e2e=1");
+}
+
 // Collect console errors / page errors into `errors` for an assertion at the
 // end of a test. Call right after creating the page, before navigation.
 export function failOnConsoleError(page: Page, errors: string[]) {
