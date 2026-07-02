@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from app import output_store
 
 
@@ -268,3 +270,32 @@ def test_assemble_output_generates_thumbnail(tmp_path, monkeypatch):
     # make_thumbnail was called with the media now living in the result folder
     assert called.get("path", "").endswith("klipp.mp4")
     assert "Transkriberingar" in called["path"]
+
+
+def test_assemble_output_tar_med_ovriga_format(tmp_path, monkeypatch):
+    """Valda format utöver SRT (TXT/VTT) ska följa med till resultatmappen —
+    tidigare lämnades de föräldralösa bredvid källfilen."""
+    from app import output_store
+    monkeypatch.setattr("app.output_store.media_tools.make_thumbnail", lambda p: None)
+    m = tmp_path / "lektion.wav"
+    m.write_text("a", encoding="utf-8")
+    srt = tmp_path / "lektion.srt"
+    srt.write_text("1\n", encoding="utf-8")
+    txt = tmp_path / "lektion.txt"
+    txt.write_text("Hej åäö\n", encoding="utf-8")
+    vtt = tmp_path / "lektion.vtt"
+    vtt.write_text("WEBVTT\n", encoding="utf-8")
+
+    res = output_store.assemble_output(
+        m, srt, tmp_path, "2026-07-02", "separate", None,
+        extra_files=[txt, vtt, srt])   # srt redan hanterad — får inte dubbleras
+
+    folder = Path(res["folder"])
+    namn = [f["name"] for f in res["files"]]
+    assert namn.count("lektion.srt") == 1
+    assert "lektion.txt" in namn and "lektion.vtt" in namn
+    assert (folder / "lektion.txt").exists() and (folder / "lektion.vtt").exists()
+    assert not txt.exists() and not vtt.exists()   # flyttade, inte kopierade
+    kinds = {f["name"]: f["kind"] for f in res["files"]}
+    assert kinds["lektion.txt"] == "text"
+    assert kinds["lektion.vtt"] == "subtitle"

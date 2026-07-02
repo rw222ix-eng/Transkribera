@@ -180,13 +180,16 @@ def assemble_output(media: Path, srt: Path | None, base_dir: Path, date_str: str
                     emit_log: Callable[[str], None] | None = None,
                     ref_srt: Path | None = None,
                     sub_lang: str | None = None, ref_lang: str | None = None,
-                    keep_source: bool = False) -> dict:
+                    keep_source: bool = False,
+                    extra_files: "list[Path] | None" = None) -> dict:
     """Flytta media (+ ev. huvud-SRT + ev. referens-SRT) till en ny resultatmapp;
     bädda in vid behov. `ref_srt` är t.ex. den korrekta engelskan vid översättning —
     den läggs som referensfil och (vid mjuk inbäddning) som andra undertextspår.
     `keep_source=True` kopierar median i stället för att flytta den, så användarens
     egen indatafil ligger kvar på sin ursprungsplats (URL-/inspelningskällor i
     downloads/ flyttas däremot, eftersom de är tillfälliga).
+    `extra_files` är övriga skrivna format (TXT/VTT …) som ska med till mappen;
+    huvud-SRT:n filtreras bort automatiskt om den råkar ingå.
     Returnerar {folder, files:[{path,name,ext,kind,size}], video:{...}|None}."""
     def log(msg):
         if emit_log:
@@ -194,11 +197,17 @@ def assemble_output(media: Path, srt: Path | None, base_dir: Path, date_str: str
 
     media = Path(media)
     folder = create_result_folder(base_dir, date_str, media.name)
+    srt_orig = Path(srt).resolve() if srt is not None else None
     media = copy_into(media, folder) if keep_source else move_into(media, folder)
     if srt is not None:
         srt = move_into(Path(srt), folder)
     if ref_srt is not None:
         ref_srt = move_into(Path(ref_srt), folder)
+    extra: list[Path] = []
+    for f in (extra_files or []):
+        f = Path(f)
+        if f.exists() and (srt_orig is None or f.resolve() != srt_orig):
+            extra.append(move_into(f, folder))
 
     is_video = media.suffix.lower() in VIDEO_EXTS
     embedded = False
@@ -217,6 +226,8 @@ def assemble_output(media: Path, srt: Path | None, base_dir: Path, date_str: str
         files.append(_file_entry(srt, "subtitle"))
     if ref_srt is not None and ref_srt.exists():
         files.append(_file_entry(ref_srt, "subtitle-ref"))
+    for f in extra:
+        files.append(_file_entry(f, "subtitle" if f.suffix.lower() == ".vtt" else "text"))
 
     video = {"path": str(media), "name": media.name, "ext": media.suffix.lstrip("."),
              "embedded": embedded, "embed_kind": embed_kind if embedded else None}

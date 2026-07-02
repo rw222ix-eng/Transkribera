@@ -556,7 +556,10 @@ def create_app(base_dir: Path | None = None,
                 media, srt_path, base, date_str, sub_mode, embed_kind,
                 emit_log=lambda m: emit({"type": "log", "msg": m}),
                 ref_srt=ref_srt, sub_lang=sub_lang, ref_lang=ref_lang,
-                keep_source=not source_is_url)
+                keep_source=not source_is_url,
+                # Övriga valda format (TXT/VTT …) ska också med till mappen —
+                # tidigare blev de kvar föräldralösa bredvid källfilen.
+                extra_files=[Path(p) for p in written])
             files = assembled["files"]
             video = assembled["video"]
             emit({"type": "progress", "pct": 98})

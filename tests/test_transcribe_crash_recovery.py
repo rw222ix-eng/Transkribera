@@ -96,9 +96,10 @@ def test_servern_aterskapar_filer_fran_strommade_segment(tmp_path, monkeypatch):
     result = events[-1]["result"]
     assert [s["text"] for s in result["transcript"]] == [
         "Vi pratade om bråk.", "Och om procent åäö."]
-    # Filerna återskapades av föräldern och följde med till resultatmappen.
+    # Filerna återskapades av föräldern och följde med till resultatmappen —
+    # inklusive övriga valda format (TXT).
     exts = {Path(f["path"]).suffix for f in result["files"]}
-    assert ".srt" in exts
+    assert {".srt", ".txt"} <= exts
     for f in result["files"]:
         assert Path(f["path"]).exists()
     # Användaren informerades om återskapandet (svensk loggrad).
