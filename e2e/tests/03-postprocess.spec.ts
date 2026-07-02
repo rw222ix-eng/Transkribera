@@ -26,10 +26,11 @@ test("chat about the transcript answers", async ({ page }) => {
   failOnConsoleError(page, errors);
   await transcribeSample(page);
 
-  // Chatten är låst tills transkriptet är korrekturläst (designbeteende).
+  // Chatten är låst tills transkriptet är korrekturläst (designbeteende);
+  // därefter bor den inline i Fråga om lektionen-kortet.
   await page.getByRole("button", { name: "Korrekturläs nu", exact: true }).click();
-  await page.getByRole("button", { name: "Öppna chatt", exact: true }).click({ timeout: 15000 });
-  const chatInput = page.getByPlaceholder("Fråga om transkriptet …");
+  const chatInput = page.getByPlaceholder("Skriv en fråga …");
+  await expect(chatInput).toBeVisible({ timeout: 15000 });
   await chatInput.fill("Vad handlar lektionen om?");
   await chatInput.press("Enter");
   // Fejken svarar med [1]/[2]-markörer i citat-läget: svaret renderas som

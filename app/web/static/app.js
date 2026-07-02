@@ -49,7 +49,6 @@
     chat: [],
     chatInput: '',
     chatTyping: false,
-    chatModalOpen: false,
     chatThink: false,           // Qwen3 "tänk djupare" — bara i chatten, default av
     chatAttach: [],
     chatCiteSel: null,          // valt citat i chatten: "<msgIdx>:<segIdx>" eller null
@@ -138,7 +137,7 @@
   /* instance (non-state) fields */
   var _t, _pp, _ppIv, _chat, _au, _toastIv, _toastT2, _glideRAF, _lastStart, _runToken = 0;
   var _dl = {}, _inst = {}, _editBuf = {}, _wave = null;
-  var _file, _seek, _searchRef, _scrollRef, _procScroll, _chatThread, _imgInput, _media;
+  var _file, _seek, _searchRef, _scrollRef, _procScroll, _imgInput, _media;
   var _rec = null, _recChunks = [], _recStream = null, _recTimer = null;
   var _recMarkers = [], _recMarkersByPath = {};   // live-markörer under inspelning
   var _recSession = null, _recUploadChain = null; // inkrementell flush till disk
@@ -565,7 +564,7 @@
   function restart() {
     clearInterval(_t); clearTimeout(_pp); clearInterval(_ppIv); clearTimeout(_chat); clearInterval(_au);
     Object.values(_dl || {}).forEach(clearInterval);
-    setState({ source: '', queue: [], qStatus: {}, qProgress: {}, activeId: null, fileError: '', step: 'source', run: 'idle', progress: 0, elapsed: 0, log: [], pp: 'idle', ppOp: 'summary', ppOut: '', ppEnabled: false, chat: [], chatInput: '', chatTyping: false, chatModalOpen: false, chatThink: false, chatAttach: [], openDD: null, transcriptOpen: false, runError: null, editing: false, edits: {}, edited: false, audioPlaying: false, audioT: 0, audioDur: 0, mediaUrl: null, runMedia: null, histViewing: null, resultId: null, transcriptRaw: null, logExpand: false, cleanText: null, cleanModalOpen: false, chatCiteSel: null });
+    setState({ source: '', queue: [], qStatus: {}, qProgress: {}, activeId: null, fileError: '', step: 'source', run: 'idle', progress: 0, elapsed: 0, log: [], pp: 'idle', ppOp: 'summary', ppOut: '', ppEnabled: false, chat: [], chatInput: '', chatTyping: false, chatThink: false, chatAttach: [], openDD: null, transcriptOpen: false, runError: null, editing: false, edits: {}, edited: false, audioPlaying: false, audioT: 0, audioDur: 0, mediaUrl: null, runMedia: null, histViewing: null, resultId: null, transcriptRaw: null, logExpand: false, cleanText: null, cleanModalOpen: false, chatCiteSel: null });
   }
   function onSearch(e) { setState({ search: e.target.value }); }
   function toggleFmt(f) { setState(function (s) { var formats = Object.assign({}, s.formats); formats[f] = !formats[f]; return { formats: formats }; }); }
@@ -584,9 +583,7 @@
       else if (ev.type === 'error') { setState({ audioModelDownloading: false }); }
     });
   }
-  function pickOp(o) { setState({ ppOp: o, pp: 'idle', ppOut: '' }); if (o === 'chat') { seedChat(); openChatModal(); } else closeChatModal(); }
-  function openChatModal() { setState({ chatModalOpen: true }); }
-  function closeChatModal() { setState({ chatModalOpen: false }); }
+  function pickOp(o) { setState({ ppOp: o, pp: 'idle', ppOut: '' }); }
   // Qwen3 "thinking": off by default (fast, no English chain-of-thought leak); on only
   // for hard multi-step chat questions. Correction/summary never think.
   function toggleChatThink() { setState(function (s) { return { chatThink: !s.chatThink }; }); }
@@ -619,8 +616,9 @@
     return { tokens: tokens, refs: refs };
   }
   function stopProp(e) { e.stopPropagation(); }
-  function chatThreadRef(el) { _chatThread = el; }
-  function scrollChatBottom() { requestAnimationFrame(function () { var el = _chatThread; if (el) el.scrollTop = el.scrollHeight; }); }
+  // Chatten bor inline i Fråga om lektionen-kortet — följ med till slutankaret
+  // när ett nytt meddelande läggs till.
+  function scrollChatBottom() { requestAnimationFrame(function () { var el = document.querySelector('[data-follow="chatend"]'); if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'end' }); }); }
   function pickChatModel(id) { setState({ ppModel: id, openDD: null }); }
   function toggleChatModelDD() { setState(function (s) { return { openDD: s.openDD === 'chatmodel' ? null : 'chatmodel' }; }); }
   // Real image attachment: open a native picker, read each file as a base64 data
@@ -1210,9 +1208,8 @@
     }
     return _diffMemo.parts;
   }
-  function togglePPEnabled() { var next = !S.ppEnabled; setState({ ppEnabled: next }); if (next && S.run === 'done') { if (S.ppOp === 'chat') seedChat(); else runPP(); } }
-  function afterDone() { if (!S.ppEnabled) return; if (S.ppOp === 'chat') seedChat(); else runPP(); }
-  function seedChat() { if (S.chat.length) return; setState({ chat: [{ role: 'assistant', text: 'Transkriptet är klart. Fråga mig vad som helst — t.ex. "Vad var besluten?" eller "Sammanfatta på en mening."' }] }); }
+  function togglePPEnabled() { var next = !S.ppEnabled; setState({ ppEnabled: next }); if (next && S.run === 'done' && S.ppOp !== 'chat') runPP(); }
+  function afterDone() { if (!S.ppEnabled) return; if (S.ppOp !== 'chat') runPP(); }
   function onChatInput(e) { setState({ chatInput: e.target.value }); }
   function onChatKey(e) { if (e.key === 'Enter') sendChat(); }
   // BACKEND: real conversational chat via /api/chat (Ollama /api/chat) over the transcript.
@@ -1481,7 +1478,6 @@
   }
 
   function onKeyDown(e) {
-    if (S.chatModalOpen && e.key === 'Escape') { closeChatModal(); return; }
     if (S.logOpen && e.key === 'Escape') { closeLog(); return; }
     if (S.cleanModalOpen && e.key === 'Escape') { closeCleanModal(); return; }
     if (!S.transcriptOpen) return;
@@ -1654,15 +1650,6 @@
     });
 
     var cm = LLM.find(function (m) { return m.id === st.ppModel; }) || LLM[0];
-    var caps = (cm && cm.caps) || { vision: false, files: ['TXT'] };
-    var chipBase = 'display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:500;padding:5px 11px;border-radius:8px;';
-    var neutralChip = chipBase + 'color:var(--ink);background:var(--surface);border:1px solid var(--line)';
-    var chatCaps = [
-      { label: caps.vision ? 'Bildanalys' : 'Endast text', style: chipBase + (caps.vision ? 'color:var(--accent);background:var(--accent-weak);border:1px solid color-mix(in srgb,var(--accent) 22%,transparent)' : 'color:var(--ink-2);background:var(--surface);border:1px solid var(--line)') },
-      { label: 'Kontext ' + cm.ctx, style: neutralChip },
-      { label: cm.toks + ' tok/s', style: neutralChip },
-      { label: caps.files.length + ' filformat', style: neutralChip },
-    ];
     var chatModelOptions = LLM.map(function (m) {
       return { name: m.label || m.id, size: m.size, visionStyle: 'font-size:10px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--accent);background:var(--accent-weak);border-radius:5px;padding:1px 6px;flex:0 0 auto;' + ((m.caps && m.caps.vision) ? '' : 'display:none'), style: ddItem(m.id === st.ppModel), checkStyle: 'color:var(--accent);font-size:14.5px;opacity:' + (m.id === st.ppModel ? '1' : '0'), onPick: function () { pickChatModel(m.id); } };
     });
@@ -1996,15 +1983,14 @@
       ppLocked: !st.cleanText, activeLlmShort: st.ppModel,
       logExpand: st.logExpand, toggleLogExpand: toggleLogExpand,
       logToggleLabel: st.logExpand ? 'Dölj' : 'Visa',
-      chat: chat, chatTyping: st.chatTyping, chatInput: st.chatInput, onChatInput: onChatInput, onChatKey: onChatKey, onChatSend: sendChat, chatSendStyle: primaryBtn(false),
-      chatModalOpen: st.chatModalOpen, openChatModal: openChatModal, closeChatModal: closeChatModal, stop: stopProp, chatThreadRef: chatThreadRef, chatOpenBtnStyle: primaryBtn(false),
+      chat: chat, chatTyping: st.chatTyping, chatInput: st.chatInput, onChatInput: onChatInput, onChatKey: onChatKey, onChatSend: sendChat,
+      stop: stopProp, chatEmpty: st.chat.length === 0, chatHasMsgs: st.chat.length > 0,
       chatThink: st.chatThink, onToggleChatThink: toggleChatThink,
       chatThinkBtnStyle: 'display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;font-family:inherit;cursor:pointer;border-radius:99px;padding:6px 12px;border:1px solid ' + (st.chatThink ? 'color-mix(in srgb,var(--accent) 40%,transparent);background:var(--accent-weak);color:var(--accent)' : 'var(--line);background:var(--surface);color:var(--ink-2)'),
       chatThinkHint: st.chatThink ? 'Tänker djupare före svar — bättre på svåra flerstegsfrågor, men något långsammare.' : 'Snabbt svar utan synligt resonemang. Slå på för svåra flerstegsfrågor.',
-      chatModelName: cm.label || cm.id, chatModelDesc: cm.useFor,
-      chatKind: 'text + bild',
-      chatCtx: cm.ctx, chatPlusAttach: attachImage, imgInputRef: imgInputRef, onPickImage: onPickImage,
-      chatCaps: chatCaps, chatModelOptions: chatModelOptions, chatModelDDOpen: st.openDD === 'chatmodel', toggleChatModelDD: toggleChatModelDD,
+      chatModelName: cm.label || cm.id,
+      chatPlusAttach: attachImage, imgInputRef: imgInputRef, onPickImage: onPickImage,
+      chatModelOptions: chatModelOptions, chatModelDDOpen: st.openDD === 'chatmodel', toggleChatModelDD: toggleChatModelDD,
       chatAttachments: chatAttachments, hasAttach: st.chatAttach.length > 0, attachImage: attachImage,
 
       hwTiles: hw.tiles, hwSpecs: hw.specs, hwReady: hw.ready,
@@ -2620,13 +2606,106 @@ function viewTranscribe(v){ return `
         </div>
         ` : '' }
         ${ v.ppLocked ? '' : `
-        <div style="animation:unlockIn .4s cubic-bezier(.2,.8,.25,1) both;display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-top:12px">
-          <div style="flex:1;min-width:200px">
-            <div style="font-size:14.5px;color:var(--ink-2);line-height:1.5">Svaren förankras i numrerade källor med tidsstämpel — klicka en siffra i svaret så lyser dess ställe i transkriptet upp. Öppnas i ett fönster.</div>
+        <div style="animation:unlockIn .4s cubic-bezier(.2,.8,.25,1) both;margin-top:12px">
+          <p style="margin:0 0 14px;color:var(--ink-2);font-size:15px">Svaren bygger på det korrekturlästa transkriptet. Källorna ligger numrerade bredvid varje svar — klicka en siffra så lyser dess ställe upp.</p>
+
+          ${ v.chatEmpty ? `
+          <div style="background:var(--sunken);border:1px solid var(--line);border-radius:13px;padding:15px 18px;margin-bottom:12px;color:var(--ink-2);font-size:14px;line-height:1.5">Ställ en fråga om innehållet — t.ex. ”Vad var det viktigaste som togs upp?”. Varje påstående i svaret förankras i numrerade källor som visas bredvid.</div>
+          ` : '' }
+
+          ${ v.chatHasMsgs ? `
+          <div style="display:flex;flex-direction:column;gap:11px;margin-bottom:14px">
+            ${ v.chat.map(function(m){ return `
+              <div style="${m.rowStyle}">
+                ${ m.hasAttach ? `
+                  <span style="${m.attachStyle}"><span style="width:8px;height:8px;border-radius:2px;background:var(--accent);flex:0 0 auto"></span>${esc(m.attach)}</span>
+                ` : '' }
+                ${ m.hasReason ? `
+                  <div style="${m.reasonStyle}"><span style="display:block;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-3);margin-bottom:4px">Resonemang</span>${esc(m.reason)}</div>
+                ` : '' }
+                ${ m.hasCites ? `
+                <div style="align-self:stretch;background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:5px 15px 15px 15px;padding:15px 17px;box-shadow:var(--shadow-sm)">
+                  <div style="display:grid;grid-template-columns:1fr 244px;gap:18px;align-items:start">
+                    <div style="font-size:15px;line-height:1.78;color:var(--ink);min-width:0">
+                      ${ m.tokens.map(function(tk){ return tk.isText
+                        ? `<span>${esc(tk.text)}</span>`
+                        : `<button data-click="${on(tk.onCite)}" data-csup="${tk.supFlag}" aria-label="Visa källa ${esc(tk.num)} i transkriptet" style="display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;font-size:11px;font-weight:700;color:var(--accent);background:var(--accent-weak);border:1px solid color-mix(in srgb,var(--accent) 28%,transparent);border-radius:6px;cursor:pointer;vertical-align:2px;margin:0 1.5px;font-family:inherit;transition:transform .1s">${esc(tk.num)}</button>`; }).join('') }
+                    </div>
+                    <div style="background:var(--sunken);border:1px solid var(--line);border-radius:13px;padding:12px">
+                      <div style="display:flex;align-items:center;gap:7px;font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 3h10v10H3z" stroke-linejoin="round"></path><path d="M6 6.5h4M6 9.5h4" stroke-linecap="round"></path></svg>Källor i transkriptet</div>
+                      ${ m.sources.map(function(src){ return `
+                      <div data-click="${on(src.onPick)}" data-crow="${src.rowFlag}" style="display:flex;flex-direction:column;gap:3px;padding:9px 10px;border-radius:9px;cursor:pointer;border:1px solid transparent;margin-bottom:5px;transition:box-shadow .18s,border-color .18s">
+                        <span style="display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;color:var(--accent);font-variant-numeric:tabular-nums"><span data-rownum style="width:16px;height:16px;border-radius:5px;background:var(--accent-weak);color:var(--accent);font-size:10px;display:flex;align-items:center;justify-content:center;font-weight:700;flex:0 0 auto">${esc(src.num)}</span>${esc(src.time)}</span>
+                        <span style="font-size:12.5px;line-height:1.45;color:var(--ink-2)">${esc(src.text)}</span>
+                      </div>
+                      `; }).join('') }
+                      <span data-click="${on(v.openTranscript)}" style="display:inline-flex;align-items:center;gap:5px;margin-top:3px;color:var(--accent);font-size:12px;font-weight:600;cursor:pointer">Hela transkriptet<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5 10.5 8 6 12.5"></path></svg></span>
+                    </div>
+                  </div>
+                </div>
+                ` : `
+                <div style="${m.bubbleStyle}">${esc(m.text)}</div>
+                ` }
+              </div>
+            `; }).join('') }
+            ${ v.chatTyping ? `
+            <div style="align-self:flex-start;display:flex;align-items:center;gap:9px;color:var(--ink-2);font-size:13.5px;padding:8px 12px;background:var(--surface);border:1px solid var(--line);border-radius:14px 14px 14px 4px"><span style="width:13px;height:13px;border-radius:50%;border:2px solid var(--line-2);border-top-color:var(--accent);animation:spin .7s linear infinite;flex:0 0 auto"></span>Söker i transkriptet<span class="insp-dots" style="color:var(--ink-3)"><i></i><i></i><i></i></span></div>
+            ` : '' }
           </div>
-          <button data-click="${on(v.openChatModal)}" style="${v.chatOpenBtnStyle}">
-            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 3.5h11v8h-7l-3 2.5z"></path></svg>Öppna chatt
-          </button>
+          ` : '' }
+
+          <input data-ref="${on(v.imgInputRef)}" type="file" accept="image/*" multiple="true" data-change="${on(v.onPickImage)}" style="display:none">
+          ${ v.hasAttach ? `
+          <div style="display:flex;gap:7px;flex-wrap:wrap;padding:0 2px 10px">
+            ${ v.chatAttachments.map(function(a){ return `
+              <span style="display:inline-flex;align-items:center;gap:7px;font-size:13px;color:var(--ink);background:var(--accent-weak);border:1px solid color-mix(in srgb,var(--accent) 22%,transparent);border-radius:8px;padding:4px 8px 4px ${a.thumb ? '4px' : '10px'}">
+                ${ a.thumb ? `<img src="${esc(a.thumb)}" alt="" style="width:26px;height:26px;border-radius:5px;object-fit:cover;flex:0 0 auto;display:block">` : `<span style="${a.dotStyle}"></span>` }${esc(a.label)}
+                <button data-click="${on(a.onRemove)}" aria-label="Ta bort" style="width:17px;height:17px;border:none;background:transparent;color:var(--ink-2);cursor:pointer;display:flex;align-items:center;justify-content:center;font-family:inherit">
+                  <svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3l8 8M11 3l-8 8"></path></svg>
+                </button>
+              </span>
+            `; }).join('') }
+          </div>
+          ` : '' }
+
+          <div style="display:flex;gap:10px;align-items:center">
+            <button data-click="${on(v.chatPlusAttach)}" aria-label="Bifoga bild" title="Bifoga bild" style="width:42px;height:42px;flex:0 0 auto;border:1px solid var(--line);border-radius:11px;background:var(--surface);cursor:pointer;color:var(--ink-2);display:flex;align-items:center;justify-content:center">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M8 3v10M3 8h10"></path></svg>
+            </button>
+            <input value="${esc(v.chatInput)}" data-input="${on(v.onChatInput)}" data-keydown="${on(v.onChatKey)}" placeholder="Skriv en fråga …" style="flex:1;min-width:0;background:var(--sunken);border:1px solid var(--line);color:var(--ink);border-radius:11px;padding:12px 14px;font-size:15px;font-family:inherit;outline:none">
+            <button data-click="${on(v.onChatSend)}" ${v.chatTyping ? 'disabled' : ''} style="flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:11px;padding:12px 20px;font-size:15px;font-weight:500;cursor:${v.chatTyping ? 'default' : 'pointer'};opacity:${v.chatTyping ? '.5' : '1'};font-family:inherit;box-shadow:var(--shadow-sm);transition:background .15s">Skicka</button>
+          </div>
+
+          <div style="display:flex;align-items:center;gap:10px;margin-top:11px;flex-wrap:wrap;padding:0 2px">
+            <button data-click="${on(v.onToggleChatThink)}" style="${v.chatThinkBtnStyle}" aria-pressed="${v.chatThink ? 'true' : 'false'}">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.5a4.5 4.5 0 0 0-2.6 8.2c.4.3.6.6.6 1v.8h4v-.8c0-.4.2-.7.6-1A4.5 4.5 0 0 0 8 1.5z"></path><path d="M6 14.5h4"></path></svg>
+              Tänk djupare
+            </button>
+            <span style="font-size:12px;color:var(--ink-3);flex:1;min-width:120px">${esc(v.chatThinkHint)}</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:9px;padding:0 2px;flex-wrap:wrap">
+            <div style="position:relative">
+              <button data-click="${on(v.toggleChatModelDD)}" style="display:inline-flex;align-items:center;gap:8px;background:transparent;border:none;padding:0;cursor:pointer;font-family:inherit">
+                <span style="width:7px;height:7px;border-radius:50%;flex:0 0 auto;background:var(--ok)"></span>
+                <span style="font-size:12.5px;color:var(--ink-2)">Lokalt med <strong style="color:var(--ink);font-weight:600">${esc(v.chatModelName)}</strong></span>
+                <span style="width:5px;height:5px;border-right:1.5px solid var(--ink-3);border-bottom:1.5px solid var(--ink-3);transform:rotate(45deg);margin:-3px 0 0 1px;flex:0 0 auto"></span>
+              </button>
+              ${ v.chatModelDDOpen ? `
+              <div style="position:absolute;bottom:calc(100% + 8px);left:0;width:280px;z-index:40;background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:6px;animation:ml-popin .2s cubic-bezier(.2,.8,.2,1) both">
+                ${ v.chatModelOptions.map(function(m){ return `
+                  <button data-key="${esc(m.name)}" data-click="${on(m.onPick)}" style="${m.style}" data-sh="background:var(--sunken) !important">
+                    <span style="flex:1;min-width:0;font-size:15px;color:var(--ink)">${esc(m.name)}</span>
+                    <span style="${m.visionStyle}">Vision</span>
+                    <span style="font-size:12.5px;color:var(--ink-2);flex:0 0 auto">${esc(m.size)}</span>
+                    <span style="${m.checkStyle}">✓</span>
+                  </button>
+                `; }).join('') }
+              </div>
+              ` : '' }
+            </div>
+            <span style="font-size:12px;color:var(--ink-3)">· Bifoga en bild så växlas <strong style="color:var(--ink-2);font-weight:600">Gemma 3 (vision)</strong> in automatiskt</span>
+          </div>
+          <div data-follow="chatend" style="height:1px"></div>
         </div>
         ` }
       </div>
@@ -3196,121 +3275,6 @@ function viewModals(v){ return `
     <div data-click="${on(v.closeDD)}" style="position:fixed;inset:0;z-index:25"></div>
   ` : '' }
 
-  ${ v.chatModalOpen ? `
-  <div data-click="${on(v.closeChatModal)}" style="position:fixed;inset:0;z-index:120;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(11,11,13,.42);backdrop-filter:blur(3px);animation:modalback .34s ease">
-    <div data-click="${on(v.stop)}" style="width:100%;max-width:720px;max-height:88vh;display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line);border-radius:26px;box-shadow:var(--shadow);overflow:visible;animation:modalpop .52s cubic-bezier(.16,1,.3,1);transform-origin:center bottom">
-
-      <div style="padding:14px 0 0;display:flex;justify-content:center;flex:0 0 auto"><span style="width:38px;height:4px;border-radius:99px;background:var(--line-2)"></span></div>
-
-      <div style="padding:16px 26px 14px;flex:0 0 auto">
-        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
-          <div style="min-width:0">
-            <div style="font-size:23px;font-weight:600;letter-spacing:-.025em;color:var(--ink)">Chatta med transkriptet</div>
-            <div style="position:relative;margin-top:7px">
-              <button data-click="${on(v.toggleChatModelDD)}" style="display:inline-flex;align-items:center;gap:8px;background:transparent;border:none;padding:0;cursor:pointer;font-family:inherit;max-width:100%;flex-wrap:wrap" data-sh="opacity:.65 !important">
-                <span style="width:7px;height:7px;border-radius:50%;flex:0 0 auto;background:var(--ok)"></span>
-                <span style="font-size:14.5px;font-weight:500;color:var(--ink)">${esc(v.chatModelName)}</span>
-                <span style="font-size:14px;color:var(--ink-3)">·</span>
-                <span style="font-size:14px;color:var(--ink-2)">${esc(v.chatKind)}</span>
-                <span style="font-size:14px;color:var(--ink-3)">·</span>
-                <span style="font-size:14px;color:var(--ink-2);font-variant-numeric:tabular-nums">${esc(v.chatCtx)}</span>
-                <span style="width:6px;height:6px;border-right:1.6px solid var(--ink-3);border-bottom:1.6px solid var(--ink-3);transform:rotate(45deg);margin:-3px 0 0 2px;flex:0 0 auto"></span>
-              </button>
-              ${ v.chatModelDDOpen ? `
-              <div style="position:absolute;top:calc(100% + 8px);left:0;width:280px;z-index:40;background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:6px;animation:fadeup .14s ease">
-                ${ v.chatModelOptions.map(function(m){ return `
-                  <button data-key="${esc(m.name)}" data-click="${on(m.onPick)}" style="${m.style}" data-sh="background:var(--sunken) !important">
-                    <span style="flex:1;min-width:0;font-size:15px;color:var(--ink)">${esc(m.name)}</span>
-                    <span style="${m.visionStyle}">Vision</span>
-                    <span style="font-size:12.5px;color:var(--ink-2);flex:0 0 auto">${esc(m.size)}</span>
-                    <span style="${m.checkStyle}">✓</span>
-                  </button>
-                `; }).join('') }
-              </div>
-              ` : '' }
-            </div>
-          </div>
-          <button data-click="${on(v.closeChatModal)}" aria-label="Stäng" style="width:34px;height:34px;flex:0 0 auto;border:1px solid var(--line);background:var(--surface);border-radius:50%;cursor:pointer;color:var(--ink);display:flex;align-items:center;justify-content:center" data-sh="background:var(--sunken) !important;border-color:var(--line-2) !important">
-            <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 3l8 8M11 3l-8 8"></path></svg>
-          </button>
-        </div>
-      </div>
-
-      <div data-ref="${on(v.chatThreadRef)}" data-hidescroll="1" style="flex:1;overflow-y:auto;padding:4px 26px 16px;display:flex;flex-direction:column;gap:14px;min-height:150px">
-        ${ v.chat.map(function(m){ return `
-          <div style="${m.rowStyle}">
-            ${ m.hasAttach ? `
-              <span style="${m.attachStyle}"><span style="width:8px;height:8px;border-radius:2px;background:var(--accent);flex:0 0 auto"></span>${esc(m.attach)}</span>
-            ` : '' }
-            ${ m.hasReason ? `
-              <div style="${m.reasonStyle}"><span style="display:block;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-3);margin-bottom:4px">Resonemang</span>${esc(m.reason)}</div>
-            ` : '' }
-            ${ m.hasCites ? `
-            <div style="align-self:stretch;background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:5px 15px 15px 15px;padding:15px 17px;box-shadow:var(--shadow-sm)">
-              <div style="display:grid;grid-template-columns:1fr 224px;gap:16px;align-items:start">
-                <div style="font-size:15px;line-height:1.78;color:var(--ink);min-width:0">
-                  ${ m.tokens.map(function(tk){ return tk.isText
-                    ? `<span>${esc(tk.text)}</span>`
-                    : `<button data-click="${on(tk.onCite)}" data-csup="${tk.supFlag}" aria-label="Visa källa ${esc(tk.num)} i transkriptet" style="display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;font-size:11px;font-weight:700;color:var(--accent);background:var(--accent-weak);border:1px solid color-mix(in srgb,var(--accent) 28%,transparent);border-radius:6px;cursor:pointer;vertical-align:2px;margin:0 1.5px;font-family:inherit;transition:transform .1s">${esc(tk.num)}</button>`; }).join('') }
-                </div>
-                <div style="background:var(--sunken);border:1px solid var(--line);border-radius:13px;padding:12px">
-                  <div style="display:flex;align-items:center;gap:7px;font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 3h10v10H3z" stroke-linejoin="round"></path><path d="M6 6.5h4M6 9.5h4" stroke-linecap="round"></path></svg>Källor i transkriptet</div>
-                  ${ m.sources.map(function(src){ return `
-                  <div data-click="${on(src.onPick)}" data-crow="${src.rowFlag}" style="display:flex;flex-direction:column;gap:3px;padding:9px 10px;border-radius:9px;cursor:pointer;border:1px solid transparent;margin-bottom:5px;transition:box-shadow .18s,border-color .18s">
-                    <span style="display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;color:var(--accent);font-variant-numeric:tabular-nums"><span data-rownum style="width:16px;height:16px;border-radius:5px;background:var(--accent-weak);color:var(--accent);font-size:10px;display:flex;align-items:center;justify-content:center;font-weight:700;flex:0 0 auto">${esc(src.num)}</span>${esc(src.time)}</span>
-                    <span style="font-size:12.5px;line-height:1.45;color:var(--ink-2)">${esc(src.text)}</span>
-                  </div>
-                  `; }).join('') }
-                  <span data-click="${on(v.openTranscript)}" style="display:inline-flex;align-items:center;gap:5px;margin-top:3px;color:var(--accent);font-size:12px;font-weight:600;cursor:pointer">Hela transkriptet<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5 10.5 8 6 12.5"></path></svg></span>
-                </div>
-              </div>
-            </div>
-            ` : `
-            <div style="${m.bubbleStyle}">${esc(m.text)}</div>
-            ` }
-          </div>
-        `; }).join('') }
-        ${ v.chatTyping ? `
-          <div style="display:flex"><div style="background:var(--surface);border:1px solid var(--line);border-radius:15px 15px 15px 4px;padding:12px 16px;color:var(--ink-2);font-size:15px">skriver …</div></div>
-        ` : '' }
-      </div>
-
-      <div style="padding:8px 20px 20px;flex:0 0 auto">
-        <input data-ref="${on(v.imgInputRef)}" type="file" accept="image/*" multiple="true" data-change="${on(v.onPickImage)}" style="display:none">
-        ${ v.hasAttach ? `
-          <div style="display:flex;gap:7px;flex-wrap:wrap;padding:0 4px 10px">
-            ${ v.chatAttachments.map(function(a){ return `
-              <span style="display:inline-flex;align-items:center;gap:7px;font-size:13px;color:var(--ink);background:var(--accent-weak);border:1px solid color-mix(in srgb,var(--accent) 22%,transparent);border-radius:8px;padding:4px 8px 4px ${a.thumb ? '4px' : '10px'}">
-                ${ a.thumb ? `<img src="${esc(a.thumb)}" alt="" style="width:26px;height:26px;border-radius:5px;object-fit:cover;flex:0 0 auto;display:block">` : `<span style="${a.dotStyle}"></span>` }${esc(a.label)}
-                <button data-click="${on(a.onRemove)}" aria-label="Ta bort" style="width:17px;height:17px;border:none;background:transparent;color:var(--ink-2);cursor:pointer;display:flex;align-items:center;justify-content:center;font-family:inherit" data-sh="color:var(--ink) !important">
-                  <svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3l8 8M11 3l-8 8"></path></svg>
-                </button>
-              </span>
-            `; }).join('') }
-          </div>
-        ` : '' }
-        <div style="display:flex;align-items:center;gap:8px;background:var(--sunken);border:1px solid var(--line);border-radius:99px;padding:6px">
-          <button data-click="${on(v.chatPlusAttach)}" aria-label="Bifoga bild" style="width:34px;height:34px;flex:0 0 auto;border:1px solid var(--line);border-radius:50%;background:var(--surface);cursor:pointer;color:var(--ink-2);display:flex;align-items:center;justify-content:center" data-sh="color:var(--ink) !important;border-color:var(--line-2) !important">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M8 3v10M3 8h10"></path></svg>
-          </button>
-          <input value="${esc(v.chatInput)}" data-input="${on(v.onChatInput)}" data-keydown="${on(v.onChatKey)}" placeholder="Fråga om transkriptet …" style="flex:1;min-width:0;background:transparent;border:none;outline:none;font-size:15.5px;color:var(--ink);font-family:inherit;padding:0 4px">
-          <button data-click="${on(v.onChatSend)}" aria-label="Skicka" ${v.chatTyping ? 'disabled' : ''} style="width:40px;height:40px;flex:0 0 auto;border:none;border-radius:50%;background:var(--btn-bg);color:var(--btn-fg);cursor:${v.chatTyping ? 'default' : 'pointer'};opacity:${v.chatTyping ? '.5' : '1'};display:flex;align-items:center;justify-content:center" data-sh="background:color-mix(in srgb, var(--btn-bg) 72%, var(--accent)) !important">
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"></path></svg>
-          </button>
-        </div>
-        <div style="display:flex;align-items:center;gap:10px;margin-top:11px;flex-wrap:wrap;padding:0 2px">
-          <button data-click="${on(v.onToggleChatThink)}" style="${v.chatThinkBtnStyle}" aria-pressed="${v.chatThink ? 'true' : 'false'}" data-sh="border-color:var(--ink-3) !important">
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.5a4.5 4.5 0 0 0-2.6 8.2c.4.3.6.6.6 1v.8h4v-.8c0-.4.2-.7.6-1A4.5 4.5 0 0 0 8 1.5z"></path><path d="M6 14.5h4"></path></svg>
-            Tänk djupare
-          </button>
-          <span style="font-size:12px;color:var(--ink-3);flex:1;min-width:120px">${esc(v.chatThinkHint)}</span>
-        </div>
-        <div style="font-size:12px;color:var(--ink-2);line-height:1.45;padding:9px 6px 0">Bifoga en bild (📎) så svarar <strong style="color:var(--ink);font-weight:600">Gemma 3 (vision)</strong> på frågor om den — modellen växlas in automatiskt.</div>
-      </div>
-
-    </div>
-  </div>
-  ` : '' }
 
   ${ v.tipOpen ? `
     <div style="${v.tipStyle}">${esc(v.tipText)}</div>
