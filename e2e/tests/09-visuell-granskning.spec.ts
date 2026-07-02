@@ -158,6 +158,26 @@ test("dropzon: dragover/dragleave uppdaterar S.dragging", async ({ page }) => {
   expect(errors, errors.join("\n")).toEqual([]);
 });
 
+test("sökfältet: Fråga-knappen flyttar sig inte när text skrivs (ingen layout-shift)", async ({ page }) => {
+  const errors: string[] = [];
+  failOnConsoleError(page, errors);
+  await gotoApp(page);
+  await page.getByRole("button", { name: "Inspelningar", exact: true }).first().click();
+  await page.getByRole("button", { name: "Fråga (AI)" }).first().click();
+
+  const knapp = page.getByRole("button", { name: "Fråga", exact: true });
+  const fore = await knapp.boundingBox();
+  const inp = page.getByPlaceholder("Ställ en fråga, t.ex. När hade vi prov om derivata?");
+  await inp.fill("bråk");
+  // Rensa-knappen blir synlig — men den upptog redan sin plats, så submit-
+  // knappen får inte ha flyttats (klick på gamla koordinater var buggen).
+  await expect(page.getByRole("button", { name: "Rensa" })).toBeVisible();
+  const efter = await knapp.boundingBox();
+  expect(efter!.x).toBe(fore!.x);
+  expect(efter!.y).toBe(fore!.y);
+  expect(errors, errors.join("\n")).toEqual([]);
+});
+
 test("transkriptmodal: sök med åäö, matchnavigering och redigeringsläge", async ({ page }) => {
   const errors: string[] = [];
   failOnConsoleError(page, errors);

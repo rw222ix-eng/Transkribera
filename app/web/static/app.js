@@ -3099,7 +3099,10 @@ function searchPanel(s){
         <input value="${esc(s.query)}" data-input="${on(s.onInput)}" data-keydown="${on(s.onKey)}"
           placeholder="${ s.modeAsk ? 'Ställ en fråga, t.ex. När hade vi prov om derivata?' : 'Sök efter vad som sades, t.ex. pythagoras sats' }"
           style="flex:1;min-width:0;background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:10px 12px;font-size:14px;font-family:inherit;box-sizing:border-box">
-        ${ s.hasQuery ? `<button data-click="${on(s.onClear)}" aria-label="Rensa" style="flex:0 0 auto;width:42px;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:10px;cursor:pointer;font-family:inherit">✕</button>` : '' }
+        ${ /* Rensa-knappen upptar alltid sin plats (visibility) — annars knuffas
+              Sök/Fråga-knappen åt höger vid första tecknet och ett klick på
+              gamla koordinaterna träffar ✕ i stället. */ '' }
+        <button data-click="${on(s.onClear)}" aria-label="Rensa" style="flex:0 0 auto;width:42px;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:10px;cursor:pointer;font-family:inherit;visibility:${ s.hasQuery ? 'visible' : 'hidden' }">✕</button>
         <button data-click="${on(s.onRun)}" ${s.busy?'disabled':''} style="flex:0 0 auto;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:10px;padding:10px 18px;font-size:14px;font-weight:600;cursor:${s.busy?'default':'pointer'};font-family:inherit;opacity:${s.busy?'0.7':'1'}">${ s.busy ? 'Söker …' : (s.modeAsk ? 'Fråga' : 'Sök') }</button>
       </div>
 
