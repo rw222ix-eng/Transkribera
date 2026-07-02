@@ -112,6 +112,7 @@
     askAnswer: '',             // strömmat LLM-svar i "Fråga"-läget
     askSources: null,          // lektioner svaret bygger på
     asking: false,
+    askQ: '',                  // frågan som visas i tänker-bannern
     agenda: null,              // daterade poster tvärs alla klasser
     agendaOpen: false,         // utfälld agenda-panel
     agendaExporting: false,
@@ -815,7 +816,11 @@
   function setSearchMode(mode) { setState({ searchMode: mode }); }
   function onSearchInput(e) { setState({ lessonSearch: e.target.value }); }
   function clearSearch() {
-    setState({ lessonSearch: '', searchHits: null, askAnswer: '', askSources: null });
+    setState({ lessonSearch: '', searchHits: null, askAnswer: '', askSources: null, askQ: '' });
+  }
+  function showAskAnswer() {
+    var el = document.querySelector('[data-follow="askanswer"]');
+    if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
   function runSearch() {
     var q = (S.lessonSearch || '').trim();
@@ -827,7 +832,7 @@
       .catch(function () { setState({ searchHits: [], searching: false }); });
   }
   function runAsk(q) {
-    setState({ asking: true, askAnswer: '', askSources: null, searchHits: null });
+    setState({ asking: true, askAnswer: '', askSources: null, searchHits: null, askQ: q });
     streamPost('/api/search/ask', { q: q }, function (ev) {
       if (ev.type === 'token') {
         setState(function (s) { return { askAnswer: s.askAnswer + ev.text }; });
@@ -1730,6 +1735,23 @@
       };
     });
 
+    // Scen-koreografi i Inspelningar: under en AI-fråga lyfts relevanta kort och
+    // övriga dimmas. Medan modellen tänker är relevansen en preliminär
+    // nyckelordsmatch; när svaret kommit styr de riktiga källorna.
+    var askActive = st.searchMode === 'ask' && (st.asking || !!st.askAnswer);
+    var askSourceIds = null;
+    if (askActive && st.askSources && st.askSources.length) {
+      askSourceIds = {};
+      st.askSources.forEach(function (s2) { if (s2.lesson_id != null) askSourceIds[s2.lesson_id] = true; });
+    }
+    var askTerms = askActive ? (st.askQ || '').toLowerCase().split(/\s+/).filter(function (w) { return w.length >= 3; }) : [];
+    function lessonStage(l) {
+      if (!askActive) return '';
+      if (askSourceIds) return askSourceIds[l.id] ? 'lift' : 'dim';
+      var hay = ((l.name || '') + ' ' + (l.group || '') + ' ' + (l.course || '')).toLowerCase();
+      return askTerms.some(function (w) { return hay.indexOf(w) >= 0; }) ? 'lift' : 'dim';
+    }
+
     var lessonItems = st.lessons.map(function (l) {
       var editing = st.editingLesson === l.id;
       var ed = st.lessonEdits || {};
@@ -1744,6 +1766,7 @@
         meta: [l.dur, l.model, l.lang].filter(Boolean).join(' · '),
         unassigned: !l.group && !l.course,
         tags: tags,
+        stage: (editing || insightsOpen) ? '' : lessonStage(l),
         editing: editing,
         edGroup: editing ? (ed.group || '') : '', edCourse: editing ? (ed.course || '') : '',
         edSal: editing ? (ed.sal || '') : '', edDatum: editing ? (ed.datum || '') : '',
@@ -1794,6 +1817,14 @@
       historyItems: historyItems, historyEmpty: st.history.length === 0, historyCount: st.history.length,
 
       lessonItems: lessonItems, lessonsEmpty: st.lessons.length === 0,
+      recCountLabel: st.lessons.length + (st.lessons.length === 1 ? ' inspelning' : ' inspelningar'),
+      askActive: askActive,
+      askBanner: askActive ? {
+        asking: st.asking, done: !st.asking && !!st.askAnswer,
+        q: st.askQ, lessonsCount: st.lessons.length,
+        hasTokens: !!st.askAnswer, hitCount: (st.askSources || []).length,
+        onShow: showAskAnswer, onNew: clearSearch,
+      } : null,
       lessonGroups: st.groups, lessonCourses: st.courses,
       lessonFilterGroup: st.lessonFilterGroup, lessonFilterCourse: st.lessonFilterCourse,
       onFilterGroup: function (e) { setLessonFilter('lessonFilterGroup', e.target.value); },
@@ -2968,6 +2999,34 @@ function viewRecordings(v){
 
       ${ searchPanel(v.lessonsSearch) }
 
+      ${ v.askBanner ? `
+      <div style="max-width:760px;margin:0 auto 18px;background:#1E221A;color:#fff;border:1px solid rgba(255,255,255,0.09);border-radius:16px;padding:16px 18px;box-shadow:var(--shadow);animation:fadeup .3s ease">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:13px">
+          ${ v.askBanner.asking ? `
+          <span style="display:inline-flex;align-items:center;gap:9px;font-size:14px;font-weight:600">Tänker<span class="insp-dots"><i></i><i></i><i></i></span></span>
+          ` : `
+          <span style="display:inline-flex;align-items:center;gap:8px;font-size:14px;font-weight:600"><span style="width:18px;height:18px;border-radius:50%;background:var(--ok);display:flex;align-items:center;justify-content:center;font-size:11px">✓</span>Svar klart</span>
+          ` }
+          <span style="margin-left:auto;font-size:13px;color:rgba(255,255,255,.6);max-width:55%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(v.askBanner.q)}</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:7px">
+          <div style="display:flex;align-items:center;gap:9px;font-size:13px;color:rgba(255,255,255,.85)"><span style="width:15px;height:15px;border-radius:50%;background:var(--ok);display:flex;align-items:center;justify-content:center;font-size:9px;flex:0 0 auto">✓</span>Söker igenom ${esc(v.askBanner.lessonsCount)} inspelningar</div>
+          ${ v.askBanner.done ? `
+          <div style="display:flex;align-items:center;gap:9px;font-size:13px;color:rgba(255,255,255,.85)"><span style="width:15px;height:15px;border-radius:50%;background:var(--ok);display:flex;align-items:center;justify-content:center;font-size:9px;flex:0 0 auto">✓</span>Hittade relevanta avsnitt i ${esc(v.askBanner.hitCount)} ${ v.askBanner.hitCount === 1 ? 'lektion' : 'lektioner' }</div>
+          <div style="display:flex;align-items:center;gap:9px;font-size:13px;color:rgba(255,255,255,.85)"><span style="width:15px;height:15px;border-radius:50%;background:var(--ok);display:flex;align-items:center;justify-content:center;font-size:9px;flex:0 0 auto">✓</span>Svar sammanställt med källor</div>
+          ` : `
+          <div style="display:flex;align-items:center;gap:9px;font-size:13px;color:rgba(255,255,255,.6)"><span style="width:15px;height:15px;border-radius:50%;border:1.5px solid rgba(255,255,255,.4);flex:0 0 auto"></span>${ v.askBanner.hasTokens ? 'Sammanställer svar med källor …' : 'Letar relevanta avsnitt …' }</div>
+          ` }
+        </div>
+        ${ v.askBanner.done ? `
+        <div style="display:flex;gap:9px;margin-top:14px">
+          <button data-click="${on(v.askBanner.onShow)}" style="display:inline-flex;align-items:center;gap:7px;background:#fff;color:#1E221A;border:none;border-radius:10px;padding:9px 16px;font-size:13.5px;font-weight:600;cursor:pointer;font-family:inherit">Visa svaret</button>
+          <button data-click="${on(v.askBanner.onNew)}" style="background:transparent;border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:10px;padding:9px 16px;font-size:13.5px;font-weight:500;cursor:pointer;font-family:inherit">Ny fråga</button>
+        </div>
+        ` : '' }
+      </div>
+      ` : '' }
+
       <datalist id="dl-klass">${ v.lessonGroups.map(function(g){ return '<option value="'+esc(g.namn)+'">'; }).join('') }</datalist>
       <datalist id="dl-kurs">${ v.lessonCourses.map(function(c){ return '<option value="'+esc(c.namn)+'">'; }).join('') }</datalist>
 
@@ -2985,9 +3044,15 @@ function viewRecordings(v){
         <div style="text-align:center;padding:60px 24px;background:var(--surface);border:1px dashed var(--line-2);border-radius:14px;color:var(--ink-2);font-size:16px">Inga inspelningar än. Transkribera en inspelning så dyker den upp här — tilldela den sedan klass och kurs.</div>
       ` : '' }
 
+      ${ v.lessonsEmpty ? '' : `
+      <div style="display:flex;align-items:center;gap:9px;margin-bottom:13px;padding:0 2px">
+        <span style="font-size:12px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:var(--ink-3)">${esc(v.recCountLabel)}</span>
+        ${ v.askActive ? `<span style="font-size:12.5px;color:var(--accent);display:inline-flex;align-items:center;gap:6px"><span style="width:6px;height:6px;border-radius:50%;background:var(--accent)"></span>Ordnas efter relevans</span>` : '' }
+      </div>
+      ` }
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px;align-items:start">
         ${ v.lessonItems.map(function(h){ return `
-          <div data-key="les-${esc(h.id)}" style="background:var(--surface);border:1px solid var(--line);border-radius:15px;padding:14px 15px;box-shadow:var(--shadow-sm);display:flex;flex-direction:column;gap:11px${ (h.editing || h.insightsOpen) ? ';grid-column:1/-1' : '' }">
+          <div data-key="les-${esc(h.id)}" data-stage="${esc(h.stage)}" style="background:var(--surface);border:1px solid var(--line);border-radius:15px;padding:14px 15px;box-shadow:var(--shadow-sm);display:flex;flex-direction:column;gap:11px${ (h.editing || h.insightsOpen) ? ';grid-column:1/-1' : '' }">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
               <span style="width:50px;height:32px;border-radius:8px;background:var(--sunken);border:1px solid var(--line);display:flex;align-items:flex-end;justify-content:center;gap:2px;flex:0 0 auto;padding-bottom:8px">
                 <span style="width:2.5px;height:8px;border-radius:2px;background:var(--ink-3)"></span><span style="width:2.5px;height:15px;border-radius:2px;background:var(--accent)"></span><span style="width:2.5px;height:11px;border-radius:2px;background:var(--ink-3)"></span><span style="width:2.5px;height:6px;border-radius:2px;background:var(--ink-3)"></span>
@@ -3135,7 +3200,7 @@ function searchPanel(s){
 
       ${ s.modeAsk ? `
         ${ (s.hasAnswer || s.asking) ? `
-          <div style="margin-top:14px;border-top:1px solid var(--line);padding-top:13px">
+          <div data-follow="askanswer" style="margin-top:14px;border-top:1px solid var(--line);padding-top:13px">
             <div style="font-size:14.5px;color:var(--ink);line-height:1.6;white-space:pre-wrap">${esc(s.answer)}${ s.asking ? '<span style="opacity:.5">▍</span>' : '' }</div>
             ${ s.sources.length ? `
               <div style="font-size:12px;font-weight:600;color:var(--ink-3);text-transform:uppercase;letter-spacing:0.04em;margin:13px 0 7px">Källor</div>

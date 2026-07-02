@@ -71,5 +71,9 @@ test("cross-lesson AI question answers over the transcripts", async ({ page }) =
   await expect(askInput).toHaveValue("bråk");
   await page.getByRole("button", { name: "Fråga", exact: true }).click();
   await expect(page.getByText("[FEJK svar]")).toBeVisible({ timeout: 15000 });
+  // Tänker-bannern landar i klart-läget och scen-koreografin lyfter de
+  // lektionskort som svaret faktiskt bygger på (källorna från RAG-svaret).
+  await expect(page.getByText("Svar klart")).toBeVisible({ timeout: 10000 });
+  await expect(page.locator('[data-stage="lift"]').first()).toBeVisible();
   expect(errors, errors.join("\n")).toEqual([]);
 });
