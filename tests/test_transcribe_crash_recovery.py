@@ -27,12 +27,15 @@ class _FakeSeg:
 def test_cli_strommar_seg_rader_under_dekodningen(monkeypatch, capsys, tmp_path):
     """SEG-raden för segment N skrivs innan segment N+1 dekodas."""
     ordning: list[str] = []
+    anrop: dict = {}
 
     class FakeModel:
         def __init__(self, *a, **k):
             pass
 
         def transcribe(self, audio, language=None, **k):
+            anrop.update(k)
+
             def gen():
                 for i, s in enumerate([_FakeSeg(0.0, 1.0, "Hej åäö"),
                                        _FakeSeg(1.0, 2.0, "Rad två")]):
@@ -53,6 +56,12 @@ def test_cli_strommar_seg_rader_under_dekodningen(monkeypatch, capsys, tmp_path)
     assert len(seg_rader) == 2, "SEG-raderna ska strömmas från whisper-loopen"
     assert seg_rader[0] == "SEG 0.0 1.0 Hej åäö"
     assert len(segs) == 2
+
+    # Stabilitetsparametrar (QA 2026-07-02): den fulla temperaturstegen
+    # triggade den sena CUDA-abort:en på brusigt/repetitivt ljud, och
+    # condition_on_previous_text förstärker hallucinationsloopar.
+    assert anrop["temperature"] == [0.0, 0.2]
+    assert anrop["condition_on_previous_text"] is False
 
     # Ordningskrav: första SEG-utskriften får inte vänta tills loopen är klar.
     # (dekod0 -> SEG0 -> dekod1 -> SEG1; hade de skrivits efteråt hade utskriften

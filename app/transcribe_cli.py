@@ -25,7 +25,14 @@ def _transcribe_whisper(args) -> list[Segment]:
     from faster_whisper import WhisperModel
     print(f"LOG Laddar Whisper ({args.device}/{args.compute_type})...", flush=True)
     model = WhisperModel(args.model_dir, device=args.device, compute_type=args.compute_type)
-    seg_iter, info = model.transcribe(args.audio, language=args.language or None)
+    # Stabilitetsval (uppmätt i QA 2026-07-02, se docs/transcribe_optimization_notes.md):
+    # den fulla temperaturstegen [0.0 … 1.0] triggade en sen CUDA-abort
+    # (0xC0000409) på brusigt/repetitivt ljud; [0.0, 0.2] behåller en
+    # räddningsnivå utan abort. condition_on_previous_text=False bryter
+    # hallucinationsloopar där föregående (fel)text förstärker nästa segment.
+    seg_iter, info = model.transcribe(
+        args.audio, language=args.language or None,
+        temperature=[0.0, 0.2], condition_on_previous_text=False)
     duration = getattr(info, "duration", 0) or 0
 
     segs: list[Segment] = []
