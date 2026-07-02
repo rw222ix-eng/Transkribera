@@ -125,10 +125,13 @@ def _child_cwd(base: Path) -> Path:
     return base
 
 
-def _run_transcribe_subprocess(cmd, base: Path, emit, on_proc=None) -> list[str]:
+def _run_transcribe_subprocess(cmd, base: Path, emit, on_proc=None,
+                               progress_scale: float = 1.0) -> list[str]:
     """Run the isolated transcribe-cli subprocess; emit its stdout protocol lines.
     `on_proc(proc)` is called with the live Popen (and with None when it exits) so
-    a cancel endpoint can terminate it and free the GPU mid-run."""
+    a cancel endpoint can terminate it and free the GPU mid-run. `progress_scale`
+    compresses the child's 0-100 into a sub-range so the bar keeps headroom for the
+    finishing phase (files/assemble/thumbnail) — 100% then means actually done."""
     proc = subprocess.Popen(
         cmd, cwd=str(_child_cwd(base)), stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace")
@@ -140,7 +143,7 @@ def _run_transcribe_subprocess(cmd, base: Path, emit, on_proc=None) -> list[str]
     for line in proc.stdout:
         line = line.rstrip("\n")
         if line.startswith("PROGRESS "):
-            emit({"type": "progress", "pct": int(line[9:])})
+            emit({"type": "progress", "pct": int(int(line[9:]) * progress_scale)})
         elif line.startswith("FILE "):
             written.append(line[5:])
             emit({"type": "log", "msg": "Skrev " + line[5:]})
@@ -464,7 +467,8 @@ def create_app(base_dir: Path | None = None,
             cmd = transcriber.build_transcribe_cmd(
                 media, model_dir, rec.device, rec.compute_type, language, out_base, formats,
                 engine=spec.engine, runtime=spec.runtime)
-            written, segments = _run_transcribe_subprocess(cmd, base, emit, on_proc=_set_proc)
+            written, segments = _run_transcribe_subprocess(
+                cmd, base, emit, on_proc=_set_proc, progress_scale=0.9)
             if job_state["cancelled"]:
                 raise RuntimeError("Transkriberingen avbröts.")
             if not written:
@@ -533,7 +537,9 @@ def create_app(base_dir: Path | None = None,
                     segments = sv_dicts
 
             # Collect media + subtitle into a dated result folder under
-            # Transkriberingar/ and pre-generate a thumbnail (best effort).
+            # Transkriberingar/ and pre-generate a thumbnail (best effort). Nudge the
+            # bar through the finishing phase so it isn't frozen at "done" while this runs.
+            emit({"type": "progress", "pct": 93})
             date_str = datetime.now().strftime("%Y-%m-%d")
             assembled = output_store.assemble_output(
                 media, srt_path, base, date_str, sub_mode, embed_kind,
@@ -542,6 +548,7 @@ def create_app(base_dir: Path | None = None,
                 keep_source=not source_is_url)
             files = assembled["files"]
             video = assembled["video"]
+            emit({"type": "progress", "pct": 98})
 
             spec_label = next((s.label for s in WHISPER_MODELS if s.id == model_id), model_id)
             _lang_lbl = {"en": "Engelska", "sv": "Svenska"}

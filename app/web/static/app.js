@@ -41,8 +41,8 @@
     elapsed: 0,
     log: [],
     pp: 'idle',
-    ppOp: 'summary',
-    ppModel: 'Qwen3 30B-A3B',
+    ppOp: 'clean',
+    ppModel: 'Qwen3 14B (Q8_0)',   // fast intern LLM för korrektur + chatt
     ppOut: '',
     ppPct: 0,
     ppEnabled: false,
@@ -94,6 +94,7 @@
     courses: [],
     lessonFilterGroup: '',
     lessonFilterCourse: '',
+    lessonFilterMonth: '',     // klientfilter på YYYY-MM (datum)
     editingLesson: null,
     lessonEdits: {},
     expandedLesson: null,
@@ -603,26 +604,7 @@
   // Chatten bor inline i Fråga om lektionen-kortet — följ med till slutankaret
   // när ett nytt meddelande läggs till.
   function scrollChatBottom() { requestAnimationFrame(function () { var el = document.querySelector('[data-follow="chatend"]'); if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'end' }); }); }
-  function pickChatModel(id) { setState({ ppModel: id, openDD: null }); }
-  function toggleChatModelDD() { setState(function (s) { return { openDD: s.openDD === 'chatmodel' ? null : 'chatmodel' }; }); }
-  // Real image attachment: open a native picker, read each file as a base64 data
-  // URL, and stash it on chatAttach. sendChat() forwards data URLs to /api/chat,
-  // where the server switches the LLM to the Gemma vision model (llama.cpp --mmproj).
-  function imgInputRef(el) { _imgInput = el; }
-  function attachImage() { if (_imgInput) _imgInput.click(); }
-  function onPickImage(e) {
-    var files = e.target.files ? Array.prototype.slice.call(e.target.files) : [];
-    files.forEach(function (f) {
-      var r = new FileReader();
-      r.onload = function () { setState(function (s) { return { chatAttach: s.chatAttach.concat([{ kind: 'image', label: f.name || 'bild.png', data: r.result }]) }; }); };
-      r.readAsDataURL(f);
-    });
-    if (e.target) e.target.value = '';
-  }
-  function removeAttach(i) { setState(function (s) { return { chatAttach: s.chatAttach.filter(function (_, k) { return k !== i; }) }; }); }
-  function pickPPModel(id) { setState({ ppModel: id, openDD: null }); }
   function toggleModelDD() { setState(function (s) { return { openDD: s.openDD === 'model' ? null : 'model' }; }); }
-  function togglePPDD() { setState(function (s) { return { openDD: s.openDD === 'ppmodel' ? null : 'ppmodel' }; }); }
   function diskDirFor(d) {
     // Modellerna bor i <enhet>\Transkribera\models på vald disk (Windows).
     var drv = String(d.drive || '').replace(/[\\/]+$/, '');
@@ -741,6 +723,22 @@
   function setLessonFilter(which, val) {
     var patch = {}; patch[which] = val;
     setState(patch, function () { loadLessons(); loadPrep(); loadTrends(); });
+  }
+  function setMonthFilter(val) { setState({ lessonFilterMonth: val }); }   // klientsidan, ingen omladdning
+  function clearLessonFilters() {
+    setState({ lessonFilterGroup: '', lessonFilterCourse: '', lessonFilterMonth: '' },
+      function () { loadLessons(); loadPrep(); loadTrends(); });
+  }
+  // Spara ETT tilldelningsfält direkt (auto-save på blur) — inget separat redigeringsläge.
+  function saveLessonField(id, field, value) {
+    var body = {};
+    if (field === 'group') body.group_name = value;
+    else if (field === 'course') body.course_name = value;
+    else body[field] = value;   // sal | datum
+    fetch('/api/lessons/' + encodeURIComponent(id), {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    }).then(function () { loadLessons(); loadOrg(); }).catch(function () {});
   }
   function loadPrep() {
     if (!S.lessonFilterGroup) { setState({ nextPrep: null }); return Promise.resolve(); }
@@ -1036,9 +1034,8 @@
     // Modellkatalogen (/api/models) inte klar än — vänta hellre än att skicka
     // det stale prototyp-id:t som servern avvisar med 400.
     if (!S.catalogReady) return;
-    // No language-appropriate model installed — send the user to download one
-    // rather than transcribe with the wrong (or no) model.
-    if (!S.model) { setState({ tab: 'models' }); return; }
+    // Modellerna är förinstallerade; om ingen är vald (ovanligt) blockera bara start.
+    if (!S.model) { return; }
     var now = Date.now();
     if (_lastStart && now - _lastStart < 400) return;
     _lastStart = now;
@@ -1091,7 +1088,10 @@
         more_pending: !!_nextPending(active.id) },
       function (ev) {
         if (token !== _runToken) return;
-        if (ev.type === 'progress') { setState({ progress: ev.pct || 0 }); }
+        // Never show 100% until the 'done' event — 100% must mean actually finished,
+        // not "Whisper done, still assembling". Server already scales transcription to
+        // 0-90 and nudges 93/98 through the finishing phase; clamp as a safety net.
+        if (ev.type === 'progress') { setState({ progress: Math.min(ev.pct || 0, 99) }); }
         else if (ev.type === 'log') { setState(function (s) { return { log: s.log.concat(['[' + fmtTime(s.elapsed) + '] ' + ev.msg]) }; }); }
         else if (ev.type === 'error') {
           clearInterval(_t);
@@ -1133,7 +1133,7 @@
     clearTimeout(_pp); clearInterval(_ppIv);
     setState({ pp: 'running', ppPct: 0, ppOut: '' });
     _ppIv = setInterval(function () { setState(function (s) { return { ppPct: Math.min(95, (s.ppPct || 0) + (3 + Math.random() * 5)) }; }); }, 200);
-    var op = { clean: 'cleanup', summary: 'summary' }[S.ppOp] || 'summary';
+    var op = 'cleanup';
     var text = getTranscript().map(function (l) { return l.text; }).join(' ');
     var acc = '';
     streamPost('/api/postprocess', { operation: op, transcript: text, model: S.ppModel }, function (ev) {
@@ -1145,16 +1145,10 @@
         // Korrekturläst text behålls separat — chatten arbetar vidare på den
         // och kortet kan visa rättelserna även om en annan pp körs efteråt.
         if (out && S.ppOp === 'clean') setState({ cleanText: out });
-        // Spara sammanfattningen till den öppna transkriberingen så den finns kvar.
-        if (S.resultId && out && S.ppOp === 'summary') {
-          fetch('/api/history/' + encodeURIComponent(S.resultId), { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ summary: out }) })
-            .then(function () { loadHistory(); }).catch(function () {});
-        }
       }
     });
   }
   function runCleanNow() { if (S.pp === 'running') return; setState({ ppOp: 'clean' }); runPP(); }
-  function runSummaryNow() { if (S.pp === 'running') return; setState({ ppOp: 'summary' }); runPP(); }
   function toggleLogExpand() { setState(function (s) { return { logExpand: !s.logExpand }; }); }
   function openCleanModal() { setState({ cleanModalOpen: true }); }
   function closeCleanModal() { setState({ cleanModalOpen: false }); }
@@ -1206,21 +1200,17 @@
     // assistent-turen över och en andra /api/chat-förfrågan skickas.
     if (S.chatTyping) return;
     var q = S.chatInput.trim();
-    var att = S.chatAttach;
-    if (!q && !att.length) return;
-    var attNote = att.length ? att.map(function (a) { return a.label; }).join(', ') : '';
-    var images = att.filter(function (a) { return a.kind === 'image' && a.data; }).map(function (a) { return a.data; });
-    var userText = q || (att.length ? 'Titta på det bifogade.' : '');
+    if (!q) return;
     // push the user turn + an empty assistant placeholder we stream into
-    setState(function (s) { return { chat: s.chat.concat([{ role: 'user', text: userText, attach: attNote }, { role: 'assistant', text: '', reason: '' }]), chatInput: '', chatAttach: [], chatTyping: true, chatCiteSel: null }; });
+    setState(function (s) { return { chat: s.chat.concat([{ role: 'user', text: q }, { role: 'assistant', text: '', reason: '' }]), chatInput: '', chatTyping: true, chatCiteSel: null }; });
     var msgs = S.chat.filter(function (m) { return !(m.role === 'assistant' && !m.text); })
-      .map(function (m) { return { role: m.role, content: m.text + (m.attach ? ' [bifogat: ' + m.attach + ']' : '') }; });
+      .map(function (m) { return { role: m.role, content: m.text }; });
     // Källförankrat läge: transkriptet skickas som numrerade, tidsstämplade
     // segment och modellen citerar med [n]-markörer som UI:t gör klickbara.
     var transcript = getTranscript().map(function (l, i) { return '[' + (i + 1) + '] (' + (l.time || '') + ') ' + l.text; }).join('\n');
     var acc = '', accReason = '';
     var setLast = function (text, reason, typing) { setState(function (s) { var c = s.chat.slice(); if (c.length) c[c.length - 1] = { role: 'assistant', text: text, reason: reason }; return { chat: c, chatTyping: !!typing }; }); };
-    streamPost('/api/chat', { messages: msgs, transcript: transcript, model: S.ppModel, images: images, think: S.chatThink, cite: true }, function (ev) {
+    streamPost('/api/chat', { messages: msgs, transcript: transcript, model: S.ppModel, think: S.chatThink, cite: true }, function (ev) {
       if (ev.type === 'reasoning') { accReason += ev.text; setLast(acc, accReason, true); }
       else if (ev.type === 'token') { acc += ev.text; setLast(acc, accReason, false); }
       else if (ev.type === 'error') { setLast(acc || ('Fel: ' + (ev.message || 'okänt')), accReason, false); }
@@ -1587,10 +1577,8 @@
     var USECASES = [['all', 'Alla'], ['text', 'Textresonemang'], ['sv', 'Svensk text'], ['vision', 'Videoanalys · bild'], ['omni', 'Videoanalys · bild + tal']];
     var useCaseOptions = USECASES.map(function (p) { return { label: p[1], style: segBtn(uc === p[0], '30px') + ';flex:0 0 auto;font-size:13.5px;font-weight:500', onPick: function () { setUseCase(p[0]); } }; });
 
-    var OPS = [['clean', 'Korrekturläs', 'Rättar stavfel & småfel — skriver inte om'], ['summary', 'Summera', 'Korta ner till det viktiga'], ['chat', 'Chatta', 'Ställ frågor om innehållet']];
+    var OPS = [['clean', 'Korrekturläs', 'Rättar stavfel & småfel — skriver inte om'], ['chat', 'Chatta', 'Ställ frågor om innehållet']];
     var ppOps = OPS.map(function (p) { return { key: p[0], label: p[1], sub: p[2], onPick: function () { pickOp(p[0]); }, selected: st.ppOp === p[0], unselected: st.ppOp !== p[0] }; });
-    var ppModelOptions = LLM.filter(function (m) { return m.fit !== 'bad'; }).map(function (m) { return { name: m.label || m.id, size: m.size, style: ddItem(m.id === st.ppModel), onPick: function () { pickPPModel(m.id); } }; });
-    var ppOutTitles = { summary: 'Sammanfattning', clean: 'Korrekturläst text' };
     var ppOpLabel = (ppOps.find(function (o) { return o.key === st.ppOp; }) || {}).label;
     var chatSegs = getTranscript();
     var chat = st.chat.map(function (m, mi) {
@@ -1623,11 +1611,6 @@
       };
     });
 
-    var cm = LLM.find(function (m) { return m.id === st.ppModel; }) || LLM[0];
-    var chatModelOptions = LLM.map(function (m) {
-      return { name: m.label || m.id, size: m.size, visionStyle: 'font-size:10px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--accent);background:var(--accent-weak);border-radius:5px;padding:1px 6px;flex:0 0 auto;' + ((m.caps && m.caps.vision) ? '' : 'display:none'), style: ddItem(m.id === st.ppModel), checkStyle: 'color:var(--accent);font-size:14.5px;opacity:' + (m.id === st.ppModel ? '1' : '0'), onPick: function () { pickChatModel(m.id); } };
-    });
-    var chatAttachments = st.chatAttach.map(function (a, i) { return { label: a.label, thumb: a.data || '', dotStyle: 'width:7px;height:7px;border-radius:2px;flex:0 0 auto;background:' + (a.kind === 'image' ? 'var(--accent)' : 'var(--ink-3)'), onRemove: function () { removeAttach(i); } }; });
 
     var lastIdx = st.log.length - 1;
     var logRows = st.log.map(function (line, i) {
@@ -1692,7 +1675,7 @@
       };
     });
     var doneCount = st.queue.filter(function (qq) { return st.qStatus[qq.id] === 'done'; }).length;
-    var noWhisper = !WHISPER.some(function (m) { return st.installed[m.id]; });
+    var noWhisper = false;   // modellerna är förinstallerade — ingen "ladda ner"-prompt
     var historyItems = st.history.map(function (h) {
       return {
         id: h.id, name: h.name, date: h.date,
@@ -1748,6 +1731,12 @@
         onCourse: function (e) { onLessonField('course', e.target.value); },
         onSal: function (e) { onLessonField('sal', e.target.value); },
         onDatum: function (e) { onLessonField('datum', e.target.value); },
+        // Alltid synliga, auto-sparande tilldelningsfält (färre klick, ingen "Tilldela").
+        curGroup: l.group || '', curCourse: l.course || '', curSal: l.sal || '', curDatum: l.datum || l.date || '',
+        onSaveGroup: function (e) { saveLessonField(l.id, 'group', e.target.value); },
+        onSaveCourse: function (e) { saveLessonField(l.id, 'course', e.target.value); },
+        onSaveSal: function (e) { saveLessonField(l.id, 'sal', e.target.value); },
+        onSaveDatum: function (e) { saveLessonField(l.id, 'datum', e.target.value); },
         insightsOpen: insightsOpen,
         insightGroups: insightGroups,
         insightsEmpty: insightsOpen && insightGroups.length === 0,
@@ -1762,6 +1751,9 @@
         onReportHtml: function () { exportReport(l.id, 'html'); },
       };
     });
+    // Datum-filter (klientsidan): distinkta månader + filtrering av korten.
+    var lessonMonths = Array.from(new Set(st.lessons.map(function (l) { return (l.datum || l.date || '').slice(0, 7); }).filter(Boolean))).sort().reverse();
+    if (st.lessonFilterMonth) lessonItems = lessonItems.filter(function (it) { return (it.curDatum || it.date || '').slice(0, 7) === st.lessonFilterMonth; });
 
     return {
       theme: st.theme,
@@ -1805,6 +1797,16 @@
       lessonFilterGroup: st.lessonFilterGroup, lessonFilterCourse: st.lessonFilterCourse,
       onFilterGroup: function (e) { setLessonFilter('lessonFilterGroup', e.target.value); },
       onFilterCourse: function (e) { setLessonFilter('lessonFilterCourse', e.target.value); },
+      lessonMonths: lessonMonths, lessonFilterMonth: st.lessonFilterMonth,
+      onFilterMonth: function (e) { setMonthFilter(e.target.value); },
+      onClearFilters: clearLessonFilters,
+      onClearGroup: function () { setLessonFilter('lessonFilterGroup', ''); },
+      onClearCourse: function () { setLessonFilter('lessonFilterCourse', ''); },
+      onClearMonth: function () { setMonthFilter(''); },
+      hasGroups: st.groups.length > 0, hasCourses: st.courses.length > 0, hasMonths: lessonMonths.length > 0,
+      filterGroupLabel: (st.groups.find(function (g) { return String(g.id) === String(st.lessonFilterGroup); }) || {}).namn || '',
+      filterCourseLabel: (st.courses.find(function (c) { return String(c.id) === String(st.lessonFilterCourse); }) || {}).namn || '',
+      hasActiveFilter: !!(st.lessonFilterGroup || st.lessonFilterCourse || st.lessonFilterMonth),
       prep: st.nextPrep ? {
         group: st.nextPrep.group,
         lastDate: st.nextPrep.last_lesson ? (st.nextPrep.last_lesson.datum || '') : '',
@@ -1968,15 +1970,14 @@
       ppEnabled: st.ppEnabled, ppOff: !st.ppEnabled, togglePPEnabled: togglePPEnabled,
       ppSwitchTrack: 'position:relative;width:42px;height:25px;border-radius:999px;flex:0 0 auto;background:' + (st.ppEnabled ? 'var(--ink)' : 'var(--line-2)') + ';transition:background .15s',
       ppSwitchKnob: 'position:absolute;top:3px;left:3px;width:19px;height:19px;border-radius:50%;background:#fff;border:1px solid var(--line);box-shadow:0 1px 2px rgba(0,0,0,.2);transition:transform .15s;transform:translateX(' + (st.ppEnabled ? '17px' : '0') + ')',
-      ppOps: ppOps, ppModel: st.ppModel, togglePPDD: togglePPDD, ppDDOpen: st.openDD === 'ppmodel', ppModelOptions: ppModelOptions,
+      ppOps: ppOps, ppModel: st.ppModel,
       showPP: isDone, ppOpLabel: ppOpLabel, ppShowRun: st.ppOp !== 'chat', onRunPP: runPP, ppRunLabel: 'Kör',
       ppRunBtnStyle: primaryBtn(st.pp === 'running') + ';min-width:152px', ppRunIdle: st.pp !== 'running', ppPct: Math.round(st.ppPct || 0),
       ppRingStyle: 'position:relative;width:22px;height:22px;border-radius:50%;flex:0 0 auto;background:conic-gradient(var(--accent) ' + (Math.round(st.ppPct || 0) * 3.6) + 'deg, color-mix(in srgb,var(--ink-3) 18%,transparent) 0);animation:ppglow 1.6s ease-in-out infinite;transition:background .13s linear',
       ppShowText: st.ppOp !== 'chat' && st.pp !== 'idle', ppShowChat: st.ppOp === 'chat', ppRunning: st.pp === 'running', ppShowOut: st.pp === 'done',
-      ppTextDone: st.pp === 'done' && st.ppOp === 'summary', ppOut: st.ppOut, ppOutTitle: ppOutTitles[st.ppOp],
+      ppOut: st.ppOut,
       // KORREKTUR-kortet (design): körning, resultat med markerade rättelser, lås för chatten
       cleanRunning: st.pp === 'running' && st.ppOp === 'clean',
-      summaryRunning: st.pp === 'running' && st.ppOp === 'summary',
       cleanDone: !!st.cleanText,
       cleanBtnLabel: st.cleanText ? '↻ Kör igen' : 'Korrekturläs transkriptet',
       cleanPct: Math.round(st.ppPct || 0),
@@ -1985,7 +1986,7 @@
       cleanPreviewParts: st.cleanText ? cleanDiffParts().slice(0, 70) : [],
       cleanFullParts: st.cleanText ? cleanDiffParts() : [],
       cleanChangeCount: st.cleanText ? cleanDiffParts().filter(function (p) { return p.ch; }).length : 0,
-      runClean: runCleanNow, runSummary: runSummaryNow,
+      runClean: runCleanNow,
       cleanModalOpen: st.cleanModalOpen, openCleanModal: openCleanModal, closeCleanModal: closeCleanModal,
       ppLocked: !st.cleanText, activeLlmShort: st.ppModel,
       logExpand: st.logExpand, toggleLogExpand: toggleLogExpand,
@@ -1995,10 +1996,6 @@
       chatThink: st.chatThink, onToggleChatThink: toggleChatThink,
       chatThinkBtnStyle: 'display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;font-family:inherit;cursor:pointer;border-radius:99px;padding:6px 12px;border:1px solid ' + (st.chatThink ? 'color-mix(in srgb,var(--accent) 40%,transparent);background:var(--accent-weak);color:var(--accent)' : 'var(--line);background:var(--surface);color:var(--ink-2)'),
       chatThinkHint: st.chatThink ? 'Tänker djupare före svar — bättre på svåra flerstegsfrågor, men något långsammare.' : 'Snabbt svar utan synligt resonemang. Slå på för svåra flerstegsfrågor.',
-      chatModelName: cm.label || cm.id,
-      chatPlusAttach: attachImage, imgInputRef: imgInputRef, onPickImage: onPickImage,
-      chatModelOptions: chatModelOptions, chatModelDDOpen: st.openDD === 'chatmodel', toggleChatModelDD: toggleChatModelDD,
-      chatAttachments: chatAttachments, hasAttach: st.chatAttach.length > 0, attachImage: attachImage,
 
       hwTiles: hw.tiles, hwSpecs: hw.specs, hwReady: hw.ready,
       diskOptions: hw.diskOptions, diskDDOpen: st.openDD === 'disk', toggleDiskDD: toggleDiskDD,
@@ -2112,11 +2109,6 @@
         '</div>' +
       '</nav>' +
       '<div style="flex:1 1 0;min-width:0;display:flex;justify-content:flex-end;align-items:center;gap:8px">' +
-        // Modeller ligger utanför nav i designen — behåll en diskret ingång
-        // så modellhantering (nedladdning/disk) alltid går att nå.
-        '<button data-click="' + on(v.onTabM) + '" aria-label="Modeller" title="Modeller" aria-pressed="' + v.tabMOn + '" style="width:38px;height:38px;border-radius:10px;border:1px solid ' + (v.tabMOn ? 'var(--ink)' : 'var(--line)') + ';background:' + (v.tabMOn ? 'var(--sunken)' : 'var(--surface)') + ';color:var(--ink-2);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .12s">' +
-          '<svg width="17" height="17" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5.5h12M3 9h12M3 12.5h12"></path><circle cx="6.5" cy="5.5" r="1.4" fill="var(--surface)"></circle><circle cx="11.5" cy="9" r="1.4" fill="var(--surface)"></circle><circle cx="7.5" cy="12.5" r="1.4" fill="var(--surface)"></circle></svg>' +
-        '</button>' +
         '<button data-click="' + on(v.toggleTheme) + '" aria-label="Växla tema" title="Växla tema" style="width:38px;height:38px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;transition:background .12s">' +
           (v.themeIsLight
             ? '<svg width="17" height="17" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15.5 11.2A6.2 6.2 0 0 1 6.8 2.5 6.2 6.2 0 1 0 15.5 11.2z"></path></svg>'
@@ -2555,44 +2547,10 @@ function viewTranscribe(v){ return `
         </div>
         ` : '' }
 
-        ${ !v.cleanRunning && !v.summaryRunning ? `
-        <div style="display:flex;align-items:flex-end;gap:13px;flex-wrap:wrap">
+        ${ !v.cleanRunning ? `
+        <div style="display:flex;align-items:center;gap:13px;flex-wrap:wrap">
           <button data-click="${on(v.runClean)}" style="display:inline-flex;align-items:center;justify-content:center;gap:9px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:11px;padding:12px 22px;font-size:15px;font-weight:500;cursor:pointer;font-family:inherit;box-shadow:var(--shadow-sm);min-width:220px;transition:background .15s">${esc(v.cleanBtnLabel)}</button>
-          <button data-click="${on(v.runSummary)}" style="display:inline-flex;align-items:center;justify-content:center;gap:8px;background:transparent;border:1px solid var(--line);color:var(--ink);border-radius:11px;padding:11px 20px;font-size:14.5px;font-weight:500;cursor:pointer;font-family:inherit;transition:border-color .14s,background .14s">Summera</button>
-          <div style="position:relative;margin-left:auto;min-width:200px">
-            <div style="font-size:12.5px;font-weight:500;color:var(--ink-3);margin-bottom:6px">LLM-modell</div>
-            <button data-click="${on(v.togglePPDD)}" style="width:100%;max-width:320px;display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 13px;cursor:pointer;text-align:left;font-family:inherit">
-              <span style="width:7px;height:7px;border-radius:50%;flex:0 0 auto;background:var(--ok)"></span>
-              <span style="flex:1;font-size:14.5px;font-variant-numeric:tabular-nums;color:var(--ink)">${esc(v.ppModel)}</span>
-              <span style="width:6px;height:6px;border-right:1.6px solid var(--ink-3);border-bottom:1.6px solid var(--ink-3);transform:rotate(45deg);margin:-3px 2px 0 0"></span>
-            </button>
-            ${ v.ppDDOpen ? `
-            <div style="position:absolute;bottom:calc(100% + 6px);left:0;width:100%;max-width:320px;z-index:30;background:var(--surface);border:1px solid var(--line);border-radius:13px;box-shadow:var(--shadow);padding:6px;animation:ml-popin .2s cubic-bezier(.2,.8,.2,1) both">
-              ${ v.ppModelOptions.map(function(m){ return `
-                <button data-ddopt data-key="${esc(m.name)}" data-click="${on(m.onPick)}" style="${m.style}" data-sh="background:var(--sunken) !important">
-                  <span style="flex:1;font-size:15px;font-variant-numeric:tabular-nums;color:var(--ink)">${esc(m.name)}</span>
-                  <span style="font-size:13px;color:var(--ink-2)">${esc(m.size)}</span>
-                </button>
-              `; }).join('') }
-            </div>
-            ` : '' }
-          </div>
-        </div>
-        ` : '' }
-
-        ${ v.summaryRunning ? `
-        <div style="background:var(--sunken);border:1px solid var(--line);border-radius:13px;padding:15px 17px">
-          <div style="display:flex;align-items:center;gap:10px;color:var(--ink-2);font-size:15px">
-            <span style="width:15px;height:15px;border-radius:50%;border:2px solid var(--line-2);border-top-color:var(--accent);animation:spin .7s linear infinite;display:inline-block"></span>Summerar …
-          </div>
-          ${ v.ppOut ? `<div style="font-size:15px;line-height:1.6;color:var(--ink);white-space:pre-wrap;margin-top:12px">${esc(v.ppOut)}</div>` : '' }
-        </div>
-        ` : '' }
-
-        ${ v.ppTextDone ? `
-        <div style="background:var(--sunken);border:1px solid var(--line);border-radius:13px;padding:16px 18px;margin-top:14px">
-          <div style="font-size:12.5px;text-transform:uppercase;letter-spacing:0.04em;color:var(--ink-2);margin-bottom:10px">${esc(v.ppOutTitle)}</div>
-          <div style="font-size:16px;line-height:1.65;color:var(--ink);white-space:pre-wrap">${esc(v.ppOut)}</div>
+          <span style="margin-left:auto;display:inline-flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink-3)"><span style="width:7px;height:7px;border-radius:50%;flex:0 0 auto;background:var(--ok)"></span>Lokalt med <strong style="color:var(--ink-2);font-weight:600">${esc(v.ppModel)}</strong></span>
         </div>
         ` : '' }
       </div>
@@ -2661,24 +2619,7 @@ function viewTranscribe(v){ return `
           </div>
           ` : '' }
 
-          <input data-ref="${on(v.imgInputRef)}" type="file" accept="image/*" multiple="true" data-change="${on(v.onPickImage)}" style="display:none">
-          ${ v.hasAttach ? `
-          <div style="display:flex;gap:7px;flex-wrap:wrap;padding:0 2px 10px">
-            ${ v.chatAttachments.map(function(a){ return `
-              <span style="display:inline-flex;align-items:center;gap:7px;font-size:13px;color:var(--ink);background:var(--accent-weak);border:1px solid color-mix(in srgb,var(--accent) 22%,transparent);border-radius:8px;padding:4px 8px 4px ${a.thumb ? '4px' : '10px'}">
-                ${ a.thumb ? `<img src="${esc(a.thumb)}" alt="" style="width:26px;height:26px;border-radius:5px;object-fit:cover;flex:0 0 auto;display:block">` : `<span style="${a.dotStyle}"></span>` }${esc(a.label)}
-                <button data-click="${on(a.onRemove)}" aria-label="Ta bort" style="width:17px;height:17px;border:none;background:transparent;color:var(--ink-2);cursor:pointer;display:flex;align-items:center;justify-content:center;font-family:inherit">
-                  <svg width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3l8 8M11 3l-8 8"></path></svg>
-                </button>
-              </span>
-            `; }).join('') }
-          </div>
-          ` : '' }
-
           <div style="display:flex;gap:10px;align-items:center">
-            <button data-click="${on(v.chatPlusAttach)}" aria-label="Bifoga bild" title="Bifoga bild" style="width:42px;height:42px;flex:0 0 auto;border:1px solid var(--line);border-radius:11px;background:var(--surface);cursor:pointer;color:var(--ink-2);display:flex;align-items:center;justify-content:center">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M8 3v10M3 8h10"></path></svg>
-            </button>
             <input value="${esc(v.chatInput)}" data-input="${on(v.onChatInput)}" data-keydown="${on(v.onChatKey)}" placeholder="Skriv en fråga …" style="flex:1;min-width:0;background:var(--sunken);border:1px solid var(--line);color:var(--ink);border-radius:11px;padding:12px 14px;font-size:15px;font-family:inherit;outline:none">
             <button data-click="${on(v.onChatSend)}" ${v.chatTyping ? 'disabled' : ''} style="flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:11px;padding:12px 20px;font-size:15px;font-weight:500;cursor:${v.chatTyping ? 'default' : 'pointer'};opacity:${v.chatTyping ? '.5' : '1'};font-family:inherit;box-shadow:var(--shadow-sm);transition:background .15s">Skicka</button>
           </div>
@@ -2691,26 +2632,8 @@ function viewTranscribe(v){ return `
             <span style="font-size:12px;color:var(--ink-3);flex:1;min-width:120px">${esc(v.chatThinkHint)}</span>
           </div>
           <div style="display:flex;align-items:center;gap:8px;margin-top:9px;padding:0 2px;flex-wrap:wrap">
-            <div style="position:relative">
-              <button data-click="${on(v.toggleChatModelDD)}" style="display:inline-flex;align-items:center;gap:8px;background:transparent;border:none;padding:0;cursor:pointer;font-family:inherit">
-                <span style="width:7px;height:7px;border-radius:50%;flex:0 0 auto;background:var(--ok)"></span>
-                <span style="font-size:12.5px;color:var(--ink-2)">Lokalt med <strong style="color:var(--ink);font-weight:600">${esc(v.chatModelName)}</strong></span>
-                <span style="width:5px;height:5px;border-right:1.5px solid var(--ink-3);border-bottom:1.5px solid var(--ink-3);transform:rotate(45deg);margin:-3px 0 0 1px;flex:0 0 auto"></span>
-              </button>
-              ${ v.chatModelDDOpen ? `
-              <div style="position:absolute;bottom:calc(100% + 8px);left:0;width:280px;z-index:40;background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:6px;animation:ml-popin .2s cubic-bezier(.2,.8,.2,1) both">
-                ${ v.chatModelOptions.map(function(m){ return `
-                  <button data-ddopt data-key="${esc(m.name)}" data-click="${on(m.onPick)}" style="${m.style}" data-sh="background:var(--sunken) !important">
-                    <span style="flex:1;min-width:0;font-size:15px;color:var(--ink)">${esc(m.name)}</span>
-                    <span style="${m.visionStyle}">Vision</span>
-                    <span style="font-size:12.5px;color:var(--ink-2);flex:0 0 auto">${esc(m.size)}</span>
-                    <span style="${m.checkStyle}">✓</span>
-                  </button>
-                `; }).join('') }
-              </div>
-              ` : '' }
-            </div>
-            <span style="font-size:12px;color:var(--ink-3)">· Bifoga en bild så växlas <strong style="color:var(--ink-2);font-weight:600">Gemma 3 (vision)</strong> in automatiskt</span>
+            <span style="width:7px;height:7px;border-radius:50%;flex:0 0 auto;background:var(--ok)"></span>
+            <span style="font-size:12.5px;color:var(--ink-2)">Lokalt med <strong style="color:var(--ink);font-weight:600">${esc(v.ppModel)}</strong></span>
           </div>
           <div data-follow="chatend" style="height:1px"></div>
         </div>
@@ -2961,6 +2884,10 @@ function viewRecordings(v){
   var selStyle = 'appearance:none;background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:8px 32px 8px 12px;font-size:14px;font-family:inherit;cursor:pointer';
   var inStyle = 'background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:9px;padding:8px 11px;font-size:14px;font-family:inherit;min-width:0;width:100%;box-sizing:border-box';
   function opts(list, cur){ return '<option value="">Alla</option>' + list.map(function(o){ return '<option value="'+o.id+'"'+(String(cur)===String(o.id)?' selected':'')+'>'+esc(o.namn)+'</option>'; }).join(''); }
+  var MONTHS_SV = ['jan','feb','mars','apr','maj','juni','juli','aug','sep','okt','nov','dec'];
+  function monthLabel(ym){ var p = String(ym).split('-'); var mi = parseInt(p[1],10)-1; return (MONTHS_SV[mi]||p[1])+' '+p[0]; }
+  function selStyleFor(active){ return selStyle + (active ? ';border-color:var(--accent);color:var(--accent);font-weight:600' : ''); }
+  function filterChip(label, onX){ return '<span style="display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:500;color:var(--accent);background:var(--accent-weak);border:1px solid color-mix(in srgb,var(--accent) 28%,transparent);border-radius:99px;padding:4px 6px 4px 12px">'+esc(label)+'<button data-click="'+onX+'" aria-label="Ta bort filter" style="width:18px;height:18px;border:none;background:transparent;color:var(--accent);cursor:pointer;display:flex;align-items:center;justify-content:center;font-family:inherit;border-radius:50%"><svg width="10" height="10" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3l8 8M11 3l-8 8"></path></svg></button></span>'; }
   return `
     <section style="padding:32px 0 96px;animation:tabin .28s ease">
       <div class="ehead">
@@ -3006,11 +2933,20 @@ function viewRecordings(v){
       <datalist id="dl-klass">${ v.lessonGroups.map(function(g){ return '<option value="'+esc(g.namn)+'">'; }).join('') }</datalist>
       <datalist id="dl-kurs">${ v.lessonCourses.map(function(c){ return '<option value="'+esc(c.namn)+'">'; }).join('') }</datalist>
 
-      <div style="display:flex;gap:10px;justify-content:center;align-items:center;margin-bottom:20px;flex-wrap:wrap">
-        <select data-change="${on(v.onFilterGroup)}" style="${selStyle}">${ opts(v.lessonGroups, v.lessonFilterGroup) }</select>
-        <select data-change="${on(v.onFilterCourse)}" style="${selStyle}">${ opts(v.lessonCourses, v.lessonFilterCourse) }</select>
-        <button data-click="${on(v.backup.onRun)}" ${v.backup.busy?'disabled':''} title="Säkerhetskopiera lektionsdatabasen + historiken" style="background:var(--surface);border:1px solid var(--line);color:var(--ink-2);border-radius:10px;padding:8px 14px;font-size:14px;font-weight:500;cursor:${v.backup.busy?'default':'pointer'};font-family:inherit;opacity:${v.backup.busy?'0.7':'1'}" data-sh="border-color:var(--ink) !important;color:var(--ink) !important">${ v.backup.busy ? 'Säkerhetskopierar …' : '💾 Säkerhetskopiera' }</button>
+      <div style="max-width:760px;margin:0 auto 10px;display:flex;gap:9px;justify-content:center;align-items:center;flex-wrap:wrap">
+        ${ v.hasGroups ? `<select data-change="${on(v.onFilterGroup)}" style="${selStyleFor(v.lessonFilterGroup)}">${ opts(v.lessonGroups, v.lessonFilterGroup) }</select>` : '' }
+        ${ v.hasCourses ? `<select data-change="${on(v.onFilterCourse)}" style="${selStyleFor(v.lessonFilterCourse)}">${ opts(v.lessonCourses, v.lessonFilterCourse) }</select>` : '' }
+        ${ v.hasMonths ? `<select data-change="${on(v.onFilterMonth)}" style="${selStyleFor(v.lessonFilterMonth)}"><option value="">Alla datum</option>${ v.lessonMonths.map(function(m){ return '<option value="'+esc(m)+'"'+(v.lessonFilterMonth===m?' selected':'')+'>'+esc(monthLabel(m))+'</option>'; }).join('') }</select>` : '' }
+        ${ (!v.hasGroups && !v.hasCourses && v.hasMonths) ? `<span style="font-size:12.5px;color:var(--ink-3)">Tilldela klass &amp; kurs på korten för att filtrera på dem</span>` : '' }
       </div>
+      ${ v.hasActiveFilter ? `
+      <div style="max-width:760px;margin:0 auto 20px;display:flex;gap:7px;justify-content:center;align-items:center;flex-wrap:wrap">
+        ${ v.filterGroupLabel ? filterChip('Klass: ' + v.filterGroupLabel, on(v.onClearGroup)) : '' }
+        ${ v.filterCourseLabel ? filterChip('Kurs: ' + v.filterCourseLabel, on(v.onClearCourse)) : '' }
+        ${ v.lessonFilterMonth ? filterChip(monthLabel(v.lessonFilterMonth), on(v.onClearMonth)) : '' }
+        <button data-click="${on(v.onClearFilters)}" style="font-size:12.5px;color:var(--ink-2);background:transparent;border:none;cursor:pointer;font-family:inherit;text-decoration:underline;padding:4px">Rensa alla</button>
+      </div>
+      ` : '<div style="margin-bottom:20px"></div>' }
 
       ${ v.prep ? prepPanel(v.prep) : '' }
 
@@ -3028,7 +2964,7 @@ function viewRecordings(v){
       ` }
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px;align-items:start">
         ${ v.lessonItems.map(function(h){ return `
-          <div data-key="les-${esc(h.id)}" data-stage="${esc(h.stage)}" style="background:var(--surface);border:1px solid var(--line);border-radius:15px;padding:14px 15px;box-shadow:var(--shadow-sm);display:flex;flex-direction:column;gap:11px${ (h.editing || h.insightsOpen) ? ';grid-column:1/-1' : '' }">
+          <div data-key="les-${esc(h.id)}" data-stage="${esc(h.stage)}" style="background:var(--surface);border:1px solid var(--line);border-radius:15px;padding:14px 15px;box-shadow:var(--shadow-sm);display:flex;flex-direction:column;gap:11px${ h.insightsOpen ? ';grid-column:1/-1' : '' }">
             <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
               <span style="width:50px;height:32px;border-radius:8px;background:var(--sunken);border:1px solid var(--line);display:flex;align-items:flex-end;justify-content:center;gap:2px;flex:0 0 auto;padding-bottom:8px">
                 <span style="width:2.5px;height:8px;border-radius:2px;background:var(--ink-3)"></span><span style="width:2.5px;height:15px;border-radius:2px;background:var(--accent)"></span><span style="width:2.5px;height:11px;border-radius:2px;background:var(--ink-3)"></span><span style="width:2.5px;height:6px;border-radius:2px;background:var(--ink-3)"></span>
@@ -3039,39 +2975,29 @@ function viewRecordings(v){
             </div>
             <div>
               <div style="font-size:15.5px;font-weight:600;color:var(--ink);line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(h.name)}</div>
-              <div style="display:flex;align-items:center;gap:7px;margin-top:8px;flex-wrap:wrap">
-                ${ h.tags.slice(1).map(function(t){ return `<span style="font-size:12px;color:var(--ink-2)">${esc(t.label)}</span>`; }).join('<span style="width:3px;height:3px;border-radius:50%;background:var(--line-2)"></span>') }
-              </div>
               <div style="display:flex;align-items:center;gap:7px;margin-top:6px;flex-wrap:wrap">
                 <span style="font-size:12px;color:var(--ink-3);font-variant-numeric:tabular-nums">${esc(h.date)}</span>
                 ${ h.meta ? `<span style="width:3px;height:3px;border-radius:50%;background:var(--line-2)"></span><span style="font-size:12px;color:var(--ink-3);font-variant-numeric:tabular-nums">${esc(h.meta)}</span>` : '' }
               </div>
             </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+              <label style="display:flex;flex-direction:column;gap:4px;font-size:11.5px;color:var(--ink-3)">Klass
+                <input value="${esc(h.curGroup)}" list="dl-klass" data-change="${on(h.onSaveGroup)}" placeholder="t.ex. NA21" style="${inStyle}"></label>
+              <label style="display:flex;flex-direction:column;gap:4px;font-size:11.5px;color:var(--ink-3)">Kurs
+                <input value="${esc(h.curCourse)}" list="dl-kurs" data-change="${on(h.onSaveCourse)}" placeholder="t.ex. Matematik 2b" style="${inStyle}"></label>
+              <label style="display:flex;flex-direction:column;gap:4px;font-size:11.5px;color:var(--ink-3)">Sal
+                <input value="${esc(h.curSal)}" data-change="${on(h.onSaveSal)}" placeholder="t.ex. B214" style="${inStyle}"></label>
+              <label style="display:flex;flex-direction:column;gap:4px;font-size:11.5px;color:var(--ink-3)">Datum
+                <input type="date" value="${esc(h.curDatum)}" data-change="${on(h.onSaveDatum)}" style="${inStyle}"></label>
+            </div>
             <div style="display:flex;align-items:center;gap:7px;border-top:1px solid var(--line);padding-top:11px;margin-top:1px;flex-wrap:wrap">
-              <button data-click="${on(h.onOpen)}" style="display:inline-flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--line);color:var(--ink-2);border-radius:8px;padding:6px 11px;font-size:12.5px;font-weight:500;cursor:pointer;font-family:inherit;transition:border-color .12s,color .12s">Öppna</button>
-              <button data-click="${on(h.onEdit)}" style="display:inline-flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--line);color:var(--ink-2);border-radius:8px;padding:6px 11px;font-size:12.5px;font-weight:500;cursor:pointer;font-family:inherit;transition:border-color .12s,color .12s">${ h.editing ? 'Tilldelar …' : 'Tilldela' }</button>
-              <button data-click="${on(h.onToggleInsights)}" data-chip="${h.insightsOpen ? 'on' : 'off'}" style="display:inline-flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--line);color:var(--ink-2);border-radius:8px;padding:6px 11px;font-size:12.5px;font-weight:500;cursor:pointer;font-family:inherit;transition:border-color .12s,color .12s">Insikter</button>
+              <button data-click="${on(h.onOpen)}" style="display:inline-flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--line);color:var(--ink-2);border-radius:8px;padding:7px 13px;font-size:12.5px;font-weight:500;cursor:pointer;font-family:inherit;transition:border-color .12s,color .12s">Öppna</button>
+              <button data-click="${on(h.onToggleInsights)}" aria-pressed="${h.insightsOpen ? 'true' : 'false'}" style="display:inline-flex;align-items:center;gap:6px;border-radius:8px;padding:7px 13px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .12s,border-color .12s;${ h.insightsOpen ? 'background:var(--accent);border:1px solid var(--accent);color:#fff' : 'background:var(--accent-weak);border:1px solid color-mix(in srgb,var(--accent) 28%,transparent);color:var(--accent)' }">📊 Insikter</button>
               <span style="flex:1"></span>
               <button data-click="${on(h.onDelete)}" aria-label="Ta bort" style="width:30px;height:30px;border:1px solid var(--line);background:var(--surface);border-radius:8px;cursor:pointer;color:var(--ink-3);display:flex;align-items:center;justify-content:center;transition:border-color .12s,color .12s">
                 <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.5 8.5h6l.5-8.5"></path></svg>
               </button>
             </div>
-            ${ h.editing ? `
-              <div style="padding-top:12px;border-top:1px solid var(--line);display:grid;grid-template-columns:1fr 1fr;gap:10px">
-                <label style="display:flex;flex-direction:column;gap:5px;font-size:12.5px;color:var(--ink-2)">Klass
-                  <input value="${esc(h.edGroup)}" list="dl-klass" data-input="${on(h.onGroup)}" placeholder="t.ex. NA21" style="${inStyle}"></label>
-                <label style="display:flex;flex-direction:column;gap:5px;font-size:12.5px;color:var(--ink-2)">Kurs
-                  <input value="${esc(h.edCourse)}" list="dl-kurs" data-input="${on(h.onCourse)}" placeholder="t.ex. Matematik 2b" style="${inStyle}"></label>
-                <label style="display:flex;flex-direction:column;gap:5px;font-size:12.5px;color:var(--ink-2)">Sal
-                  <input value="${esc(h.edSal)}" data-input="${on(h.onSal)}" placeholder="t.ex. B214" style="${inStyle}"></label>
-                <label style="display:flex;flex-direction:column;gap:5px;font-size:12.5px;color:var(--ink-2)">Datum
-                  <input type="date" value="${esc(h.edDatum)}" data-input="${on(h.onDatum)}" style="${inStyle}"></label>
-                <div style="grid-column:1/3;display:flex;gap:8px;justify-content:flex-end;margin-top:2px">
-                  <button data-click="${on(h.onCancel)}" style="background:var(--surface);border:1px solid var(--line);color:var(--ink-2);border-radius:9px;padding:8px 16px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit">Avbryt</button>
-                  <button data-click="${on(h.onSave)}" style="background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:9px;padding:8px 18px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">Spara</button>
-                </div>
-              </div>
-            ` : '' }
             ${ h.insightsOpen ? insightsPanel(h) : '' }
           </div>
         `; }).join('') }
@@ -3512,7 +3438,6 @@ function viewModals(v){ return `
     return viewHeader(v) +
       '<main style="max-width:1120px;margin:0 auto;padding:0 24px">' +
       (v.tabTranscribe ? viewTranscribe(v) : '') +
-      (v.tabModels ? viewModels(v) : '') +
       (v.tabRecordings ? viewRecordings(v) : '') +
       '</main>' +
       viewModals(v);
