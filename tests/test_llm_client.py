@@ -64,6 +64,29 @@ def test_chat_injects_transcript_into_system(monkeypatch):
     assert sys_msg["role"] == "system"
     assert "TRANSKRIPT-X" in sys_msg["content"]
 
+def test_chat_cite_uses_citation_system_prompt(monkeypatch):
+    captured = {}
+    def fake_post(url, json=None, **k):
+        captured["json"] = json
+        return FakeResp(lines=_sse(["svar [1]"]))
+    monkeypatch.setattr(lc.requests, "post", fake_post)
+    out = lc.chat("ignored", [{"role": "user", "content": "fråga"}],
+                  transcript="[1] (00:04) Hej", cite=True)
+    assert out == "svar [1]"
+    sys_msg = captured["json"]["messages"][0]
+    assert sys_msg["role"] == "system"
+    assert "numrerade segment" in sys_msg["content"]
+    assert "[1] (00:04) Hej" in sys_msg["content"]
+
+def test_chat_without_cite_keeps_plain_system_prompt(monkeypatch):
+    captured = {}
+    def fake_post(url, json=None, **k):
+        captured["json"] = json
+        return FakeResp(lines=_sse(["svar"]))
+    monkeypatch.setattr(lc.requests, "post", fake_post)
+    lc.chat("ignored", [{"role": "user", "content": "fråga"}], transcript="X")
+    assert "numrerade segment" not in captured["json"]["messages"][0]["content"]
+
 def test_base_url_resolved_at_call_time(monkeypatch):
     # Overriding the module global after import must take effect (dynamic port wiring).
     monkeypatch.setattr(lc, "BASE_URL", "http://127.0.0.1:9999")

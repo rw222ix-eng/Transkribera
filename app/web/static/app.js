@@ -52,6 +52,7 @@
     chatModalOpen: false,
     chatThink: false,           // Qwen3 "tänk djupare" — bara i chatten, default av
     chatAttach: [],
+    chatCiteSel: null,          // valt citat i chatten: "<msgIdx>:<segIdx>" eller null
     openDD: null,
     search: '',
     diskTarget: 'd',
@@ -564,7 +565,7 @@
   function restart() {
     clearInterval(_t); clearTimeout(_pp); clearInterval(_ppIv); clearTimeout(_chat); clearInterval(_au);
     Object.values(_dl || {}).forEach(clearInterval);
-    setState({ source: '', queue: [], qStatus: {}, qProgress: {}, activeId: null, fileError: '', step: 'source', run: 'idle', progress: 0, elapsed: 0, log: [], pp: 'idle', ppOp: 'summary', ppOut: '', ppEnabled: false, chat: [], chatInput: '', chatTyping: false, chatModalOpen: false, chatThink: false, chatAttach: [], openDD: null, transcriptOpen: false, runError: null, editing: false, edits: {}, edited: false, audioPlaying: false, audioT: 0, audioDur: 0, mediaUrl: null, runMedia: null, histViewing: null, resultId: null, transcriptRaw: null, logExpand: false, cleanText: null, cleanModalOpen: false });
+    setState({ source: '', queue: [], qStatus: {}, qProgress: {}, activeId: null, fileError: '', step: 'source', run: 'idle', progress: 0, elapsed: 0, log: [], pp: 'idle', ppOp: 'summary', ppOut: '', ppEnabled: false, chat: [], chatInput: '', chatTyping: false, chatModalOpen: false, chatThink: false, chatAttach: [], openDD: null, transcriptOpen: false, runError: null, editing: false, edits: {}, edited: false, audioPlaying: false, audioT: 0, audioDur: 0, mediaUrl: null, runMedia: null, histViewing: null, resultId: null, transcriptRaw: null, logExpand: false, cleanText: null, cleanModalOpen: false, chatCiteSel: null });
   }
   function onSearch(e) { setState({ search: e.target.value }); }
   function toggleFmt(f) { setState(function (s) { var formats = Object.assign({}, s.formats); formats[f] = !formats[f]; return { formats: formats }; }); }
@@ -589,6 +590,34 @@
   // Qwen3 "thinking": off by default (fast, no English chain-of-thought leak); on only
   // for hard multi-step chat questions. Correction/summary never think.
   function toggleChatThink() { setState(function (s) { return { chatThink: !s.chatThink }; }); }
+  function selectChatCite(mi, segIdx) {
+    var key = mi + ':' + segIdx;
+    setState(function (s) { return { chatCiteSel: s.chatCiteSel === key ? null : key }; });
+  }
+  // Parsar [n]-markörer i ett assistentsvar till klickbara citat. Numren pekar på
+  // segmenten som skickades till modellen (1-baserat); visningsnumren räknas om
+  // per meddelande i citeringsordning. Ogiltiga nummer lämnas kvar som text.
+  function parseChatCites(text, segs) {
+    var tokens = [], refs = [], seen = {};
+    var re = /\[(\d{1,3})\]/g, last = 0, m;
+    while ((m = re.exec(text))) {
+      var n = parseInt(m[1], 10);
+      if (!(n >= 1 && n <= segs.length)) continue;
+      var before = text.slice(last, m.index);
+      if (before) tokens.push({ text: before });
+      var segIdx = n - 1;
+      if (!(segIdx in seen)) {
+        seen[segIdx] = refs.length + 1;
+        refs.push({ num: refs.length + 1, segIdx: segIdx, time: segs[segIdx].time || '', text: segs[segIdx].text || '' });
+      }
+      tokens.push({ cite: seen[segIdx], segIdx: segIdx });
+      last = m.index + m[0].length;
+    }
+    if (!refs.length) return null;
+    var rest = text.slice(last);
+    if (rest) tokens.push({ text: rest });
+    return { tokens: tokens, refs: refs };
+  }
   function stopProp(e) { e.stopPropagation(); }
   function chatThreadRef(el) { _chatThread = el; }
   function scrollChatBottom() { requestAnimationFrame(function () { var el = _chatThread; if (el) el.scrollTop = el.scrollHeight; }); }
@@ -1198,14 +1227,15 @@
     var images = att.filter(function (a) { return a.kind === 'image' && a.data; }).map(function (a) { return a.data; });
     var userText = q || (att.length ? 'Titta på det bifogade.' : '');
     // push the user turn + an empty assistant placeholder we stream into
-    setState(function (s) { return { chat: s.chat.concat([{ role: 'user', text: userText, attach: attNote }, { role: 'assistant', text: '', reason: '' }]), chatInput: '', chatAttach: [], chatTyping: true }; });
+    setState(function (s) { return { chat: s.chat.concat([{ role: 'user', text: userText, attach: attNote }, { role: 'assistant', text: '', reason: '' }]), chatInput: '', chatAttach: [], chatTyping: true, chatCiteSel: null }; });
     var msgs = S.chat.filter(function (m) { return !(m.role === 'assistant' && !m.text); })
       .map(function (m) { return { role: m.role, content: m.text + (m.attach ? ' [bifogat: ' + m.attach + ']' : '') }; });
-    // Chatten arbetar på det korrekturlästa transkriptet när det finns (design).
-    var transcript = S.cleanText || getTranscript().map(function (l) { return l.text; }).join(' ');
+    // Källförankrat läge: transkriptet skickas som numrerade, tidsstämplade
+    // segment och modellen citerar med [n]-markörer som UI:t gör klickbara.
+    var transcript = getTranscript().map(function (l, i) { return '[' + (i + 1) + '] (' + (l.time || '') + ') ' + l.text; }).join('\n');
     var acc = '', accReason = '';
     var setLast = function (text, reason, typing) { setState(function (s) { var c = s.chat.slice(); if (c.length) c[c.length - 1] = { role: 'assistant', text: text, reason: reason }; return { chat: c, chatTyping: !!typing }; }); };
-    streamPost('/api/chat', { messages: msgs, transcript: transcript, model: S.ppModel, images: images, think: S.chatThink }, function (ev) {
+    streamPost('/api/chat', { messages: msgs, transcript: transcript, model: S.ppModel, images: images, think: S.chatThink, cite: true }, function (ev) {
       if (ev.type === 'reasoning') { accReason += ev.text; setLast(acc, accReason, true); }
       else if (ev.type === 'token') { acc += ev.text; setLast(acc, accReason, false); }
       else if (ev.type === 'error') { setLast(acc || ('Fel: ' + (ev.message || 'okänt')), accReason, false); }
@@ -1592,7 +1622,11 @@
     var ppModelOptions = LLM.filter(function (m) { return m.fit !== 'bad'; }).map(function (m) { return { name: m.label || m.id, size: m.size, style: ddItem(m.id === st.ppModel), onPick: function () { pickPPModel(m.id); } }; });
     var ppOutTitles = { summary: 'Sammanfattning', clean: 'Korrekturläst text' };
     var ppOpLabel = (ppOps.find(function (o) { return o.key === st.ppOp; }) || {}).label;
-    var chat = st.chat.map(function (m) {
+    var chatSegs = getTranscript();
+    var chat = st.chat.map(function (m, mi) {
+      // Källförankring: assistentsvar med giltiga [n]-markörer renderas som
+      // token-lista med citat-knappar + källpanel; övriga som vanlig bubbla.
+      var cited = (m.role !== 'user' && m.text) ? parseChatCites(m.text, chatSegs) : null;
       return {
         text: m.text, hasAttach: !!m.attach, attach: m.attach || '',
         reason: m.reason || '', hasReason: !!(m.reason && m.reason.length),
@@ -1600,6 +1634,22 @@
         bubbleStyle: m.role === 'user' ? 'max-width:82%;background:var(--btn-bg);color:var(--btn-fg);border-radius:15px 15px 4px 15px;padding:11px 15px;font-size:15.5px;line-height:1.5' : 'max-width:82%;background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:15px 15px 15px 4px;padding:11px 15px;font-size:15.5px;line-height:1.5',
         attachStyle: 'display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2);background:var(--sunken);border:1px solid var(--line);border-radius:8px;padding:4px 9px;font-variant-numeric:tabular-nums',
         reasonStyle: 'max-width:82%;background:var(--sunken);border:1px dashed var(--line-2);color:var(--ink-2);border-radius:13px;padding:9px 13px;font-size:13px;line-height:1.5;white-space:pre-wrap',
+        hasCites: !!cited,
+        tokens: cited ? cited.tokens.map(function (tk) {
+          if (tk.cite === undefined) return { isText: true, text: tk.text };
+          return {
+            isCite: true, num: tk.cite,
+            supFlag: st.chatCiteSel === (mi + ':' + tk.segIdx) ? 'on' : 'off',
+            onCite: function () { selectChatCite(mi, tk.segIdx); },
+          };
+        }) : [],
+        sources: cited ? cited.refs.map(function (r) {
+          return {
+            num: r.num, time: r.time, text: r.text,
+            rowFlag: st.chatCiteSel === (mi + ':' + r.segIdx) ? 'on' : 'off',
+            onPick: function () { selectChatCite(mi, r.segIdx); },
+          };
+        }) : [],
       };
     });
 
@@ -2572,7 +2622,7 @@ function viewTranscribe(v){ return `
         ${ v.ppLocked ? '' : `
         <div style="animation:unlockIn .4s cubic-bezier(.2,.8,.25,1) both;display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-top:12px">
           <div style="flex:1;min-width:200px">
-            <div style="font-size:14.5px;color:var(--ink-2);line-height:1.5">Svaren bygger på det korrekturlästa transkriptet. Öppnas i ett fönster — gränssnittet anpassas efter modellens förmågor.</div>
+            <div style="font-size:14.5px;color:var(--ink-2);line-height:1.5">Svaren förankras i numrerade källor med tidsstämpel — klicka en siffra i svaret så lyser dess ställe i transkriptet upp. Öppnas i ett fönster.</div>
           </div>
           <button data-click="${on(v.openChatModal)}" style="${v.chatOpenBtnStyle}">
             <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 3.5h11v8h-7l-3 2.5z"></path></svg>Öppna chatt
@@ -3148,7 +3198,7 @@ function viewModals(v){ return `
 
   ${ v.chatModalOpen ? `
   <div data-click="${on(v.closeChatModal)}" style="position:fixed;inset:0;z-index:120;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(11,11,13,.42);backdrop-filter:blur(3px);animation:modalback .34s ease">
-    <div data-click="${on(v.stop)}" style="width:100%;max-width:520px;max-height:88vh;display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line);border-radius:26px;box-shadow:var(--shadow);overflow:visible;animation:modalpop .52s cubic-bezier(.16,1,.3,1);transform-origin:center bottom">
+    <div data-click="${on(v.stop)}" style="width:100%;max-width:720px;max-height:88vh;display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line);border-radius:26px;box-shadow:var(--shadow);overflow:visible;animation:modalpop .52s cubic-bezier(.16,1,.3,1);transform-origin:center bottom">
 
       <div style="padding:14px 0 0;display:flex;justify-content:center;flex:0 0 auto"><span style="width:38px;height:4px;border-radius:99px;background:var(--line-2)"></span></div>
 
@@ -3195,7 +3245,29 @@ function viewModals(v){ return `
             ${ m.hasReason ? `
               <div style="${m.reasonStyle}"><span style="display:block;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-3);margin-bottom:4px">Resonemang</span>${esc(m.reason)}</div>
             ` : '' }
+            ${ m.hasCites ? `
+            <div style="align-self:stretch;background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:5px 15px 15px 15px;padding:15px 17px;box-shadow:var(--shadow-sm)">
+              <div style="display:grid;grid-template-columns:1fr 224px;gap:16px;align-items:start">
+                <div style="font-size:15px;line-height:1.78;color:var(--ink);min-width:0">
+                  ${ m.tokens.map(function(tk){ return tk.isText
+                    ? `<span>${esc(tk.text)}</span>`
+                    : `<button data-click="${on(tk.onCite)}" data-csup="${tk.supFlag}" aria-label="Visa källa ${esc(tk.num)} i transkriptet" style="display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;font-size:11px;font-weight:700;color:var(--accent);background:var(--accent-weak);border:1px solid color-mix(in srgb,var(--accent) 28%,transparent);border-radius:6px;cursor:pointer;vertical-align:2px;margin:0 1.5px;font-family:inherit;transition:transform .1s">${esc(tk.num)}</button>`; }).join('') }
+                </div>
+                <div style="background:var(--sunken);border:1px solid var(--line);border-radius:13px;padding:12px">
+                  <div style="display:flex;align-items:center;gap:7px;font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 3h10v10H3z" stroke-linejoin="round"></path><path d="M6 6.5h4M6 9.5h4" stroke-linecap="round"></path></svg>Källor i transkriptet</div>
+                  ${ m.sources.map(function(src){ return `
+                  <div data-click="${on(src.onPick)}" data-crow="${src.rowFlag}" style="display:flex;flex-direction:column;gap:3px;padding:9px 10px;border-radius:9px;cursor:pointer;border:1px solid transparent;margin-bottom:5px;transition:box-shadow .18s,border-color .18s">
+                    <span style="display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;color:var(--accent);font-variant-numeric:tabular-nums"><span data-rownum style="width:16px;height:16px;border-radius:5px;background:var(--accent-weak);color:var(--accent);font-size:10px;display:flex;align-items:center;justify-content:center;font-weight:700;flex:0 0 auto">${esc(src.num)}</span>${esc(src.time)}</span>
+                    <span style="font-size:12.5px;line-height:1.45;color:var(--ink-2)">${esc(src.text)}</span>
+                  </div>
+                  `; }).join('') }
+                  <span data-click="${on(v.openTranscript)}" style="display:inline-flex;align-items:center;gap:5px;margin-top:3px;color:var(--accent);font-size:12px;font-weight:600;cursor:pointer">Hela transkriptet<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5 10.5 8 6 12.5"></path></svg></span>
+                </div>
+              </div>
+            </div>
+            ` : `
             <div style="${m.bubbleStyle}">${esc(m.text)}</div>
+            ` }
           </div>
         `; }).join('') }
         ${ v.chatTyping ? `

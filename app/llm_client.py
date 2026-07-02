@@ -32,6 +32,20 @@ _CHAT_SYSTEM = (
     "i transkriptet nedan; säg till om något inte framgår av det.\n\nTRANSKRIPT:\n"
 )
 
+# Källförankrat läge: transkriptet skickas som numrerade segment ("[n] (mm:ss) text")
+# och modellen instrueras att avsluta grundade påståenden med segmentnumret i
+# hakparentes. UI:t parsar markörerna till klickbara citat med källpanel.
+_CHAT_SYSTEM_CITED = (
+    "Du är en hjälpsam svensk assistent som svarar på frågor om ett transkript. "
+    "Svara ALLTID på svenska och använd aldrig något annat språk. Grunda dina svar "
+    "i transkriptet nedan; säg till om något inte framgår av det.\n"
+    "Transkriptet är uppdelat i numrerade segment på formen \"[n] (mm:ss) text\". "
+    "När ett påstående bygger på ett segment: avsluta påståendet med segmentets "
+    "nummer i hakparentes, t.ex. [3]. Använd bara nummer som finns i transkriptet, "
+    "citera sparsamt (högst ett par segment per påstående) och skriv aldrig "
+    "hakparenteser runt något annat än segmentnummer.\n\nTRANSKRIPT:\n"
+)
+
 # Vision chat runs on Gemma (not Qwen), and the transcript is usually irrelevant to
 # an image question — so we keep the system prompt short to leave room in the
 # smaller vision context for the image tokens themselves.
@@ -189,7 +203,8 @@ def chat(model: str, messages: list[dict], transcript: str = "",
          token_cb: Callable[[str], None] | None = None,
          base_url: str | None = None, think: bool = False,
          images: list[str] | None = None,
-         reason_cb: Callable[[str], None] | None = None) -> str:
+         reason_cb: Callable[[str], None] | None = None,
+         cite: bool = False) -> str:
     if images:
         # Vision turn (Gemma): attach the images to the latest user message as
         # multimodal content parts and skip the long transcript system prompt.
@@ -203,7 +218,8 @@ def chat(model: str, messages: list[dict], transcript: str = "",
         msgs.append({"role": last.get("role", "user"), "content": content})
         return _stream_chat(msgs, temperature=0.3, token_cb=token_cb, base_url=base_url)
 
-    msgs = [{"role": "system", "content": _CHAT_SYSTEM + (transcript or "(tomt)")}]
+    system = _CHAT_SYSTEM_CITED if cite else _CHAT_SYSTEM
+    msgs = [{"role": "system", "content": system + (transcript or "(tomt)")}]
     msgs += [{"role": m.get("role", "user"), "content": m.get("content", "")}
              for m in messages]
     return _stream_chat(msgs, temperature=0.3, token_cb=token_cb, reason_cb=reason_cb,

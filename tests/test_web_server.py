@@ -105,6 +105,22 @@ def test_chat_think_defaults_off(client, monkeypatch):
     assert captured["think"] is False
 
 
+def test_chat_forwards_cite_flag(client, monkeypatch):
+    captured = {}
+
+    def fake_chat(model, messages, transcript="", token_cb=None,
+                  reason_cb=None, think=False, cite=False, **k):
+        captured["cite"] = cite
+        return ""
+
+    monkeypatch.setattr(client.app.state.arbiter, "ensure_model", lambda spec: "http://x")
+    monkeypatch.setattr(server.llm_client, "chat", fake_chat)
+    r = client.post("/api/chat", json={
+        "messages": [{"role": "user", "content": "q"}], "model": "m", "cite": True})
+    assert r.status_code == 200
+    assert captured["cite"] is True
+
+
 def test_history_endpoint_empty(client):
     r = client.get("/api/history")
     assert r.status_code == 200

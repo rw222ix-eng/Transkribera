@@ -88,8 +88,11 @@ def _install_fakes() -> None:
                  "text": "[ÖV] " + (s.get("text") or "")} for s in segments]
 
     def fake_chat(model, messages, transcript="", images=None, think=False,
-                  token_cb=None, reason_cb=None):
-        text = "[FEJK chatt] Jag förstår frågan om lektionen."
+                  token_cb=None, reason_cb=None, cite=False):
+        # I citat-läget svarar fejken med segmentmarkörer så e2e kan
+        # verifiera hela parse-vägen (citat-knappar + källpanel).
+        text = ("[FEJK chatt] Lektionen handlar om bråk [1] och procent [2]."
+                if cite else "[FEJK chatt] Jag förstår frågan om lektionen.")
         if token_cb:
             token_cb(text)
         return text

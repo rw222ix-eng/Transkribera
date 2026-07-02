@@ -32,7 +32,14 @@ test("chat about the transcript answers", async ({ page }) => {
   const chatInput = page.getByPlaceholder("Fråga om transkriptet …");
   await chatInput.fill("Vad handlar lektionen om?");
   await chatInput.press("Enter");
-  await expect(page.getByText("[FEJK chatt]")).toBeVisible({ timeout: 15000 });
+  // Fejken svarar med [1]/[2]-markörer i citat-läget: svaret renderas som
+  // klickbara källciteringar + källpanel med segmentets tidsstämpel.
+  await expect(page.getByText("Lektionen handlar om bråk")).toBeVisible({ timeout: 15000 });
+  const cite = page.getByRole("button", { name: "Visa källa 1 i transkriptet" });
+  await expect(cite).toBeVisible();
+  await expect(page.getByText("Källor i transkriptet")).toBeVisible();
+  await cite.click();
+  await expect(cite).toHaveAttribute("data-csup", "on");
   expect(errors, errors.join("\n")).toEqual([]);
 });
 
