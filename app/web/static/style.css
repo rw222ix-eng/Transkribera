@@ -229,6 +229,9 @@ button[style*="--btn-bg"]:not(:disabled):hover{
   background:var(--accent) !important;border-color:var(--accent) !important;color:#fff !important;
 }
 button[data-opt]:not(:disabled):hover{background:var(--accent) !important;color:#fff !important;border-color:transparent !important}
+/* Dropdown option rows (model / disk pickers): a soft accent-weak wash keeps the
+   dark option text readable on hover — the generic ink fill would hide it. */
+button[data-ddopt]:not(:disabled):hover{background:var(--accent-weak) !important;color:var(--ink) !important;border-color:transparent !important;box-shadow:none !important}
 button[data-seg]:not(:disabled):hover,button[data-chip]:not(:disabled):hover{
   background:var(--accent-weak) !important;color:var(--accent) !important;border-color:var(--accent) !important;
 }

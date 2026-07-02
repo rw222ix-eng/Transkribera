@@ -198,28 +198,6 @@
   var STEPS = ['Förbereder', 'Extraherar ljud', 'Transkriberar', 'Färdigställer'];
   var AUDIO_DUR = 150;
   var ALLOWED = ['mp4', 'mkv', 'mov', 'webm', 'avi', 'm4v', 'mp3', 'wav', 'm4a', 'flac', 'aac', 'ogg', 'opus', 'wma'];
-  var TRANSCRIPT = [
-    { time: '00:00', spk: 0, text: 'Hej och välkomna till veckans avsnitt av vårt uppföljningsmöte.' },
-    { time: '00:06', spk: 0, text: 'Idag fortsätter vi på det vi pratade om förra veckan.' },
-    { time: '00:13', spk: 1, text: 'Precis, och då blir nästa steg att fördela ansvaret mellan oss.' },
-    { time: '00:21', spk: 0, text: 'Jag tänkte att vi börjar med att gå igenom tidsplanen tillsammans.' },
-    { time: '00:28', spk: 1, text: 'Bra idé. Vi ligger ungefär två dagar efter den ursprungliga planen.' },
-    { time: '00:36', spk: 0, text: 'Det är hanterbart om vi prioriterar rätt saker den här veckan.' },
-    { time: '00:44', spk: 1, text: 'Håller med. Vad ser ni som det viktigaste att bli klar med först?' },
-    { time: '00:52', spk: 2, text: 'Transkriberingsflödet behöver testas ordentligt innan release.' },
-    { time: '01:01', spk: 2, text: 'Och vi måste bekräfta att modellerna fungerar på all hårdvara.' },
-    { time: '01:10', spk: 1, text: 'Jag tar ansvar för testningen och återkommer med besked på fredag.' },
-    { time: '01:18', spk: 0, text: 'Perfekt. Då tar jag dokumentationen och release-noterna.' },
-    { time: '01:27', spk: 2, text: 'Ska vi boka ett kort avstämningsmöte i mitten av veckan?' },
-    { time: '01:34', spk: 0, text: 'Ja, låt oss säga onsdag klockan tio — ett kvarts möte räcker.' },
-    { time: '01:42', spk: 2, text: 'Låter bra. Då skickar jag en kalenderinbjudan direkt efter mötet.' },
-    { time: '01:50', spk: 0, text: 'Finns det något annat vi behöver ta upp innan vi avslutar?' },
-    { time: '01:57', spk: 1, text: 'Bara en sak — vi bör informera supportteamet om ändringarna.' },
-    { time: '02:05', spk: 2, text: 'Sant, jag lägger till det i mina anteckningar och hör av mig.' },
-    { time: '02:13', spk: 0, text: 'Då tror jag vi är klara för idag. Tack för ett bra möte allihop.' },
-    { time: '02:20', spk: 1, text: 'Tack själv, och tack för att ni lyssnade — vi hörs nästa vecka.' },
-  ];
-
   /* -------------------------------------------------------------- helpers -- */
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   // Render a search snippet: escape first (XSS-safe), then turn the backend's
@@ -1249,20 +1227,6 @@
       else if (ev.type === 'done') { var r = ev.result || {}; setLast(r.text || acc, accReason, false); }
     });
   }
-  function imageReply() { return 'Jag ser bilden. Den verkar visa en skärmdump kopplad till mötet — vill du att jag beskriver innehållet, läser av text i den (OCR) eller jämför den mot transkriptet?'; }
-  function chatReply(q) {
-    var t = q.toLowerCase();
-    if (/beslut|ansvar|åtgärd/.test(t)) return 'Det viktigaste beslutet var att fördela ansvaret inför nästa steg — det kommer upp kring 00:13 i transkriptet.';
-    if (/sammanfatt|en mening|kort/.test(t)) return 'Ett kort uppföljningsmöte där teamet stämde av förra veckans punkter och enades om tidsplan och ansvarsfördelning.';
-    if (/ton|känsla|stämning/.test(t)) return 'Tonen är konstruktiv och samstämmig — deltagarna är överens och avslutar positivt.';
-    if (/tid|plan|möte|när/.test(t)) return 'De bekräftar tidsplanen och nämner att nästa möte bokas inom kort.';
-    return 'Utifrån transkriptet: de återkopplar till förra veckan (00:06), fördelar ansvaret (00:13) och avslutar med tack (00:21). Vill du att jag fördjupar någon del?';
-  }
-  function ppText() {
-    var op = S.ppOp;
-    if (op === 'summary') return 'Samtalet inleds med en återkoppling till föregående veckas diskussion och övergår sedan till nästa steg i projektet. Deltagarna är överens om tidsplanen och fördelar ansvaret för de kommande uppgifterna. Avsnittet avslutas med en kort sammanfattning och tack till lyssnarna.';
-    return getTranscript().map(function (l) { return l.text; }).join(' ');
-  }
 
   // BACKEND: model download/install simulate; replace with /api/download/* SSE.
   function modelAction(id) {
@@ -1343,7 +1307,7 @@
 
   /* ----------------------------------------------------------- backend API -- */
   function modelLabel(id) { var m = WHISPER.concat(LLM).find(function (x) { return x.id === id; }); return (m && (m.label || m.id)) || id; }
-  function getTranscript() { return (S.transcript && S.transcript.length) ? S.transcript : TRANSCRIPT; }
+  function getTranscript() { return (S.transcript && S.transcript.length) ? S.transcript : []; }
   function getJSON(url) { return fetch(url).then(function (r) { return r.json(); }); }
 
   function streamPost(url, body, onEvent) {
@@ -2605,7 +2569,7 @@ function viewTranscribe(v){ return `
             ${ v.ppDDOpen ? `
             <div style="position:absolute;bottom:calc(100% + 6px);left:0;width:100%;max-width:320px;z-index:30;background:var(--surface);border:1px solid var(--line);border-radius:13px;box-shadow:var(--shadow);padding:6px;animation:ml-popin .2s cubic-bezier(.2,.8,.2,1) both">
               ${ v.ppModelOptions.map(function(m){ return `
-                <button data-key="${esc(m.name)}" data-click="${on(m.onPick)}" style="${m.style}" data-sh="background:var(--sunken) !important">
+                <button data-ddopt data-key="${esc(m.name)}" data-click="${on(m.onPick)}" style="${m.style}" data-sh="background:var(--sunken) !important">
                   <span style="flex:1;font-size:15px;font-variant-numeric:tabular-nums;color:var(--ink)">${esc(m.name)}</span>
                   <span style="font-size:13px;color:var(--ink-2)">${esc(m.size)}</span>
                 </button>
@@ -2736,7 +2700,7 @@ function viewTranscribe(v){ return `
               ${ v.chatModelDDOpen ? `
               <div style="position:absolute;bottom:calc(100% + 8px);left:0;width:280px;z-index:40;background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:6px;animation:ml-popin .2s cubic-bezier(.2,.8,.2,1) both">
                 ${ v.chatModelOptions.map(function(m){ return `
-                  <button data-key="${esc(m.name)}" data-click="${on(m.onPick)}" style="${m.style}" data-sh="background:var(--sunken) !important">
+                  <button data-ddopt data-key="${esc(m.name)}" data-click="${on(m.onPick)}" style="${m.style}" data-sh="background:var(--sunken) !important">
                     <span style="flex:1;min-width:0;font-size:15px;color:var(--ink)">${esc(m.name)}</span>
                     <span style="${m.visionStyle}">Vision</span>
                     <span style="font-size:12.5px;color:var(--ink-2);flex:0 0 auto">${esc(m.size)}</span>
@@ -2882,7 +2846,7 @@ function viewModels(v){
               <span style="width:7px;height:7px;border-right:1.6px solid var(--ink-3);border-bottom:1.6px solid var(--ink-3);transform:rotate(45deg);margin:-3px 2px 0 0;flex:0 0 auto"></span>
             </button>
             ${ v.diskDDOpen ? `<div style="position:absolute;top:calc(100% + 6px);left:0;right:0;z-index:30;background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:6px;animation:fadeup .14s ease">
-              ${ v.diskOptions.map(function(d){ return `<button data-click="${on(d.onPick)}" style="${d.style}" data-sh="background:var(--sunken) !important">
+              ${ v.diskOptions.map(function(d){ return `<button data-ddopt data-click="${on(d.onPick)}" style="${d.style}" data-sh="background:var(--sunken) !important">
                   <span style="font-size:13px;font-weight:600;color:var(--ink);background:var(--sunken);border:1px solid var(--line);border-radius:6px;padding:2px 7px;flex:0 0 auto;font-variant-numeric:tabular-nums">${esc(d.drive)}</span>
                   <span style="flex:1;min-width:0">
                     <span style="display:block;font-size:15px;font-weight:500;color:var(--ink)">${esc(d.name)}</span>

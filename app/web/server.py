@@ -475,12 +475,19 @@ def create_app(base_dir: Path | None = None,
                     raise RuntimeError("Transkriberingen gav inget resultat")
             srt_path = next((Path(p) for p in written if str(p).lower().endswith(".srt")), None)
 
+            # The isolated subprocess can abort (CTranslate2 on Windows/CUDA) after
+            # writing the subtitle but before its SEG stream reaches us. The files are
+            # recovered from disk above; recover the transcript the same way so the
+            # result (preview, history, chat/summary source) isn't blank.
+            if not segments and srt_path and srt_path.exists():
+                segments = transcriber.read_srt(srt_path)
+
             # Optional second pass: correct the draft text against the actual audio
             # (Gemma 3n E4B via transformers). Best effort — skipped if not installed.
             if audio_correct:
                 if not audio_model.is_audio_model_installed(models_root):
                     emit({"type": "log", "msg": "Hoppar över ljudkorrigering — ljudmodellen "
-                                                "(Gemma 3n) är inte nedladdad."})
+                                                "(Gemma 4) är inte nedladdad."})
                 else:
                     emit({"type": "log", "msg": "Rättar transkriptet mot ljudet ..."})
                     seg_json = media.with_name(media.stem + ".segments.json")

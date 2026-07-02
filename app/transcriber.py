@@ -55,6 +55,43 @@ def segments_to_txt(segments: list[Segment]) -> str:
     return "".join(seg.text.strip() + "\n" for seg in segments)
 
 
+_SRT_TIME = re.compile(
+    r"(\d{2}):(\d{2}):(\d{2})[.,](\d{3})\s*-->\s*(\d{2}):(\d{2}):(\d{2})[.,](\d{3})")
+
+
+def read_srt(path: "str | Path") -> list[dict]:
+    """Parse an .srt/.vtt back into ``[{start, end, text}]`` dicts.
+
+    Used to recover the transcript when the isolated subprocess wrote the
+    subtitle file but its SEG stdout stream never reached the parent (e.g. a
+    CTranslate2 abort on Windows/CUDA truncates stdout after the file is on
+    disk). Best effort: blocks without a valid timestamp line are skipped.
+    """
+    def _sec(h: str, m: str, s: str, ms: str) -> float:
+        return int(h) * 3600 + int(m) * 60 + int(s) + int(ms) / 1000
+
+    try:
+        raw = Path(path).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return []
+    segs: list[dict] = []
+    for block in re.split(r"\n\s*\n", raw.strip()):
+        lines = [ln for ln in block.splitlines() if ln.strip()]
+        ts = next((ln for ln in lines if "-->" in ln), None)
+        if ts is None:
+            continue
+        m = _SRT_TIME.search(ts)
+        if not m:
+            continue
+        body = " ".join(lines[lines.index(ts) + 1:]).strip()
+        if not body:
+            continue
+        segs.append({"start": _sec(*m.group(1, 2, 3, 4)),
+                     "end": _sec(*m.group(5, 6, 7, 8)),
+                     "text": body})
+    return segs
+
+
 WRITERS = {
     "srt": (segments_to_srt, ".srt"),
     "vtt": (segments_to_vtt, ".vtt"),
