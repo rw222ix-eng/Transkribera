@@ -21,7 +21,7 @@ test("segmented controls expose aria-pressed reflecting selection", async ({ pag
 
   // Add a sample file to reach the settings step where the format chips live.
   await navT.click();
-  await page.getByRole("button", { name: "mötesinspelning.mp3" }).click();
+  await page.getByRole("button", { name: "Prova ett exempel" }).click();
 
   // Format chips are independent toggles: SRT/TXT on by default, VTT off.
   const srt = page.getByRole("button", { name: "SRT", exact: true });

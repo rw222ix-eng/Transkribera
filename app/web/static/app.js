@@ -581,7 +581,12 @@
     setState({ audioModelDownloading: true });
     streamPost('/api/download/audio-model', {}, function (ev) {
       if (ev.type === 'done') { setState({ audioModelDownloading: false, audioModelInstalled: true }); }
-      else if (ev.type === 'error') { setState({ audioModelDownloading: false }); }
+      else if (ev.type === 'error') {
+        // Surface the failure — annars ser det ut som att knappen inte gör något.
+        // Gemma 3n är gated: 401 utan accepterad licens + HF_TOKEN.
+        setState({ audioModelDownloading: false,
+                   toast: { title: 'Kunde inte ladda ner ljudmodellen', name: '', detail: ev.message || '', kind: 'error' } });
+      }
     });
   }
   function pickOp(o) { setState({ ppOp: o, pp: 'idle', ppOut: '' }); }
@@ -1805,7 +1810,14 @@
       queueItems: queueItems, queueCount: st.queue.length, multiQueue: st.queue.length > 1, hasQueue: st.queue.length > 0,
       queueDoneCount: doneCount, queueSummary: doneCount + ' av ' + st.queue.length + ' klara',
       fileError: st.fileError, hasFileError: !!st.fileError,
-      addSampleNormal: function () { addSample('mötesinspelning.mp3'); }, addSampleCorrupt: function () { addSample('skadad_inspelning.m4a'); },
+      addSampleNormal: function () {
+        setState({ fileError: '' });
+        getJSON('/api/sample').then(function (res) {
+          if (res && res.path) addFilesObjs([{ name: res.name, path: res.path }]);
+          else setState({ fileError: 'Inget exempel finns på den här datorn — lägg till en egen fil.' });
+        }).catch(function () { setState({ fileError: 'Inget exempel finns på den här datorn — lägg till en egen fil.' }); });
+      },
+      addSampleCorrupt: function () { addSample('skadad_inspelning.m4a'); },
 
       noWhisper: noWhisper, hasWhisper: !noWhisper,
       gotoModels: function () { setTab('models'); }, getRecommended: function () { setTab('models'); modelAction('KB-Whisper large'); },
@@ -2267,7 +2279,7 @@ function viewTranscribe(v){ return `
         <div style="display:flex;align-items:center;gap:9px;margin-top:18px;flex-wrap:wrap">
           <span style="font-size:11.5px;text-transform:uppercase;letter-spacing:0.05em;color:var(--ink-2);font-weight:600">Eller prova med</span>
           <button data-click="${on(v.addSampleNormal)}" style="display:inline-flex;align-items:center;gap:7px;font-size:13.5px;font-weight:500;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:7px 12px;cursor:pointer;font-family:inherit;font-variant-numeric:tabular-nums" data-sh="border-color:var(--ink-3) !important">
-            <span style="width:7px;height:7px;border-radius:2px;background:var(--ok);flex:0 0 auto"></span>mötesinspelning.mp3
+            <span style="width:7px;height:7px;border-radius:2px;background:var(--ok);flex:0 0 auto"></span>Prova ett exempel
           </button>
           <button data-click="${on(v.addSampleCorrupt)}" style="display:inline-flex;align-items:center;gap:7px;font-size:13.5px;font-weight:500;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:9px;padding:7px 12px;cursor:pointer;font-family:inherit;font-variant-numeric:tabular-nums" data-sh="border-color:var(--ink-3) !important">
             <span style="width:7px;height:7px;border-radius:2px;background:var(--bad);flex:0 0 auto"></span>skadad_inspelning.m4a
@@ -2352,7 +2364,7 @@ function viewTranscribe(v){ return `
         <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:12px 14px;box-shadow:var(--shadow-sm)">
           <div data-click="${on(v.onToggleAudioCorrect)}" style="${v.acSwitchTrack}"><span style="${v.acSwitchKnob}"></span></div>
           <div style="flex:1;min-width:0">
-            <div style="font-size:14.5px;font-weight:500;color:var(--ink)">Rätta mot ljudet <span style="font-size:12px;color:var(--ink-3)">· Gemma 3n (experimentell)</span></div>
+            <div style="font-size:14.5px;font-weight:500;color:var(--ink)">Rätta mot ljudet <span style="font-size:12px;color:var(--ink-3)">· Gemma 4 (experimentell)</span></div>
             <div style="font-size:12.5px;color:var(--ink-2)">Ett andra pass som rättar transkriptet mot vad som faktiskt sägs.</div>
           </div>
           ${ v.audioModelInstalled ? '' : `

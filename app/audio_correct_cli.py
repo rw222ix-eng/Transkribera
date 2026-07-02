@@ -1,14 +1,15 @@
 """Audio-grounded correction pass, run in an isolated process.
 
 A SECOND correction pass after transcription (KB-Whisper or Parakeet): it fixes the
-draft transcript text against what is actually said in the AUDIO, using Gemma 3n
+draft transcript text against what is actually said in the AUDIO, using Gemma 4
 E4B (native audio input) via transformers on the GPU. Same fidelity principle as
 the text correction — fix only clear errors, keep the language, order and meaning,
 add/remove nothing.
 
-⚠️ UNVERIFIED: rebuilt against the real model + class (PR #3 used a non-existent
-"gemma-4-E4B-it" + "AutoModelForMultimodalLM"). The transformers audio inference
-below has NOT been run on a GPU — verify on the Windows/RTX box before relying on it.
+⚠️ UNVERIFIED: the transformers audio inference below has NOT been run on a GPU —
+verify on the Windows/RTX box before relying on it. The model loads via the generic
+image-text-to-text auto class, so it follows whatever architecture the weights
+declare (google/gemma-4-E4B-it → Gemma4ForConditionalGeneration).
 
 Gemma audio is limited to ~30 s per call, so we correct one segment at a time
 (each is well under 30 s), slicing the segment's audio with a little padding.
@@ -88,14 +89,12 @@ def _clean(out: str, draft: str) -> str:
 
 
 def _load_model(model_dir: str):
-    """Load the Gemma 3n multimodal model + processor. Tries the dedicated class,
-    falling back to the generic image-text-to-text auto class."""
+    """Load the Gemma multimodal model + processor. Uses the generic image-text-to-
+    text auto class so it instantiates whatever architecture the weights declare
+    (google/gemma-4-E4B-it → Gemma4ForConditionalGeneration), instead of pinning a
+    single model class."""
     import torch
-    from transformers import AutoProcessor
-    try:
-        from transformers import Gemma3nForConditionalGeneration as _Model
-    except Exception:                       # older/newer transformers naming
-        from transformers import AutoModelForImageTextToText as _Model
+    from transformers import AutoProcessor, AutoModelForImageTextToText as _Model
     processor = AutoProcessor.from_pretrained(model_dir)
     try:
         processor.tokenizer.padding_side = "left"   # left-padding for batched generate
@@ -147,7 +146,7 @@ def main(argv: list[str] | None = None) -> None:
     except Exception:
         pass
 
-    _log("Laddar ljudmodell (Gemma 3n E4B) på GPU...")
+    _log("Laddar ljudmodell (Gemma 4 E4B) på GPU...")
     processor, model = _load_model(args.model_dir)
     prompt_tmpl = _prompt_for(args.language)
 

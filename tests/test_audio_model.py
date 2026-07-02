@@ -1,13 +1,14 @@
 from app import audio_model as am
 
 
-def test_model_id_is_real_gemma3n():
-    # Must be the REAL model, not the fictional "gemma-4-E4B-it" from PR #3.
-    assert am.AUDIO_MODEL_ID == "google/gemma-3n-E4B-it"
+def test_model_id_is_open_gemma4():
+    # The audio-correction engine is the OPEN (non-gated) Gemma 4 E4B — the best
+    # model we settled on. The gated gemma-3n-E4B-it cannot download without a token.
+    assert am.AUDIO_MODEL_ID == "google/gemma-4-E4B-it"
 
 
 def test_audio_model_dir(tmp_path):
-    assert am.audio_model_dir(tmp_path) == tmp_path / "google__gemma-3n-E4B-it"
+    assert am.audio_model_dir(tmp_path) == tmp_path / "google__gemma-4-E4B-it"
 
 
 def test_is_installed_requires_weights_and_config(tmp_path):

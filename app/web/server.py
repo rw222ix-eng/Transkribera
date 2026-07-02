@@ -1368,6 +1368,25 @@ def create_app(base_dir: Path | None = None,
             return FileResponse(str(cached))
         return JSONResponse({"error": "kunde inte läsa ljud"}, status_code=500)
 
+    @app.get("/api/sample")
+    def api_sample():
+        """Absolute path to a real demo recording for the "prova ett exempel"
+        button, validated under base_dir. One click then queues a real file
+        instead of a fake name that always fails on transcribe."""
+        _MEDIA_EXT = {".wav", ".mp3", ".m4a", ".mp4", ".mkv", ".webm", ".ogg", ".flac"}
+        candidates = [base / "Mamma waw isolerad.wav"]
+        downloads = base / "downloads"
+        if downloads.is_dir():
+            candidates += sorted(
+                (f for f in downloads.iterdir()
+                 if f.is_file() and f.suffix.lower() in _MEDIA_EXT),
+                key=lambda f: f.stat().st_mtime, reverse=True)
+        for cand in candidates:
+            p = _under_base(str(cand))
+            if p is not None and p.exists():
+                return {"name": p.name, "path": str(p)}
+        return JSONResponse({"error": "inget exempel tillgängligt"}, status_code=404)
+
     def _open_path(raw: str):
         """Open a file/folder in the OS file manager, only if under base_dir."""
         p = _under_base(raw or "")
