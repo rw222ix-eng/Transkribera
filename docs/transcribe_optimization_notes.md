@@ -114,6 +114,37 @@ delar kortet). Ingen kodändring föreslås nu.
 | Döda UI-strängar hänvisade till borttagna "Modeller-fliken" | `fix(ui): ...` (omformulerade) |
 | Stale e2e-specs (Modeller-flik, Summera, Tilldela) efter avsiktlig omdesign | `test(e2e): synka specs ...` |
 
+## WER-verifiering mot facit (FLEURS sv_se, 2026-07-03)
+
+Verktyg: `tests/download_wer_referens.py` (strömmar 20 klipp + facit ur FLEURS
+test-split), `tests/wer_eval.py` (WER/CER, ren stdlib, 7 enhetstester),
+`tests/audio_correct_bench.py` (trestegsbänk: Whisper-segment → Gemma-
+korrigering → rapport; modellerna laddas en gång vardera, i separata processer).
+
+**Baslinje (pass 1, appens CLI-väg med stabilitetsparametrarna):**
+**6,9 % WER** (350 ord, 20 klipp; 9 klipp helt felfria). KBLabs publicerade
+siffra för kb-whisper-large på hela FLEURS-testsplitten är 5,4 % — vårt
+20-klippsstickprov ligger inom samplingsbrus + normaliseringsskillnader.
+Pipelinen presterar alltså som modellen ska.
+
+**Ljudkorrigeringen (pass 2, Gemma 4 E4B): hjälper — förstör inte.**
+6,9 % → **6,6 %** totalt; 2 klipp bättre, 1 "sämre", 17 orörda. Kvalitativt:
+
+| klipp | ändring | bedömning |
+|---|---|---|
+| 007 | "Our Lady **och** Fatima" → "**of** Fatima" | äkta hörfelsrättning mot ljudet |
+| 012 | "19" → "nitton" | talad form; matchar facit |
+| 014 | "6 tums" → "**sex** tums" | samma talade form — facit råkar använda siffran, WER-artefakt (ej semantiskt fel) |
+| 018 | "Usoc" → "USOC" | korrekt versalfix (normaliseras bort i WER) |
+
+Slutsats: hög precision, låg recall — 16/20 klipp lämnas orörda, **0 semantiska
+försämringar, 0 hallucinationer**, alla ingrepp är ljudgrundade eller
+formateringsmässigt korrekta. På rent studioinläst tal (FLEURS) är Whisper
+redan nära taket, så nettovinsten är liten; passet är designat för brusigare
+lektionsljud där utrymmet är större. Kostnad: ~5 s/klipp efter ~40 s
+modelladdning. Stickprovet är litet (20 klipp/350 ord) — riktningsgivande,
+inte statistiskt slutgiltigt.
+
 ## Uppföljningsbeslut (2026-07-02, samtliga åtgärdade)
 
 1. **Modeller-vyn borttagen** (`refactor(ui): ta bort den onåbara Modeller-vyn`):
