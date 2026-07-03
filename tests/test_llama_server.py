@@ -163,7 +163,13 @@ def test_start_dranerar_serverns_stdout(monkeypatch):
     import time as _t
     rader = [f"loggrad {i}" for i in range(50)]
     monkeypatch.setattr(ls.subprocess, "Popen", _fake_popen_factory(rader))
-    monkeypatch.setattr(ls, "is_healthy", lambda port: True)
+    # Första anropet är "körs redan"-checken — den måste vara False så att
+    # servern faktiskt spawna(fejka)s; därefter frisk.
+    anrop = {"n": 0}
+    def fake_healthy(port):
+        anrop["n"] += 1
+        return anrop["n"] > 1
+    monkeypatch.setattr(ls, "is_healthy", fake_healthy)
     srv = ls.LlamaServer("m.gguf", port=8199)
     srv.start(timeout=5)
     # Dräneringstråden ska konsumera stdout så att röret aldrig fylls.

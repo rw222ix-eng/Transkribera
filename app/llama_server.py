@@ -144,6 +144,13 @@ class LlamaServer:
             try:
                 for line in pipe:
                     self._log_tail.append(line.rstrip())
+            except TypeError:
+                # Icke-itererbar ström (t.ex. testfejk med enbart read()).
+                try:
+                    for line in (pipe.read() or "").splitlines():
+                        self._log_tail.append(line)
+                except Exception:
+                    pass
             except Exception:
                 pass
         threading.Thread(target=_drain, args=(self.proc.stdout,),
