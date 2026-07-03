@@ -66,7 +66,8 @@ def steg_kor(kataloger: list[Path]) -> None:
                     b = llm_client.generate(
                         spec.filename, f"{PROMPT_B}\n\n{pass1}",
                         system=postprocess.SYSTEM_SV,
-                        options={"temperature": 0.2})
+                        options={"temperature": 0.2},
+                        max_tokens=1024)
                 except Exception as e:   # timeout m.m. — hoppa, kör vidare
                     print(f"{txt_fil.name}: FEL {e} — hoppar över", flush=True)
                     continue

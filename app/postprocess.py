@@ -40,6 +40,22 @@ def build_prompt(operation: str, transcript: str) -> str:
 # inside the window and each map chunk leaves room for its partial answer.
 SINGLE_PASS_CHARS = 90_000          # ≈ a 60-min lecture; above this → map-reduce
 CHUNK_CHARS = 70_000                # per map-step transcript slice
+# Städningens SVAR är lika långt som indatan (till skillnad från en samman-
+# fattning) — prompt + svar måste tillsammans rymmas i kontextfönstret
+# (~40k tokens ≈ 2,3 tecken/token). Därför chunkas cleanup mycket tidigare.
+CLEANUP_CHUNK_CHARS = 40_000
+# Fasta svarsbudgetar (tokens) för operationer med kort utdata. Skydd mot
+# oändliga repetitionsloopar (brusiga transkript kan låsa modellen i en loop
+# som strömmar tokens för evigt — läs-timeouten triggar då aldrig).
+SUMMARY_MAX_TOKENS = 1_600
+ANSWER_MAX_TOKENS = 1_200
+EXTRACT_MAX_TOKENS = 2_000
+
+
+def _svar_budget(chars: int) -> int:
+    """Utdatatak i tokens när svaret väntas vara ungefär lika långt som indatan
+    (~2,3 tecken/token på svenska + marginal), aldrig över 20k."""
+    return min(int(chars / 1.8) + 256, 20_000)
 
 _MAP_SUMMARY = (
     "Detta är EN DEL av ett längre lektionstranskript. Sammanfatta delen koncist "
@@ -84,15 +100,22 @@ def run(operation: str, transcript: str, model: str,
         log_cb: Callable[[str], None] | None = None) -> str:
     """Run a post-process operation. Long transcripts are handled with map-reduce
     so the whole lecture is seen instead of being silently truncated to the tail."""
-    if operation in ("summary", "bullets", "cleanup") and _is_long(transcript):
+    if operation == "cleanup" and len(transcript or "") > CLEANUP_CHUNK_CHARS:
+        # Cleanup chunkas tidigare än summary: svaret är input-långt och måste
+        # rymmas i kontexten tillsammans med prompten.
+        chunks = _split_text(transcript, CLEANUP_CHUNK_CHARS)
+        if len(chunks) > 1:
+            return _run_cleanup_long(chunks, model, token_cb, log_cb)
+    if operation in ("summary", "bullets") and _is_long(transcript):
         chunks = _split_text(transcript, CHUNK_CHARS)
         if len(chunks) > 1:
-            if operation == "cleanup":
-                return _run_cleanup_long(chunks, model, token_cb, log_cb)
             return _run_summary_long(operation, chunks, model, token_cb, log_cb)
     prompt = build_prompt(operation, transcript)
+    budget = (_svar_budget(len(transcript)) if operation == "cleanup"
+              else SUMMARY_MAX_TOKENS)
     return llm_client.generate(model, prompt, token_cb=token_cb,
-                               system=SYSTEM_SV, options={"temperature": 0.2})
+                               system=SYSTEM_SV, options={"temperature": 0.2},
+                               max_tokens=budget)
 
 
 def _run_cleanup_long(chunks: list[str], model: str,
@@ -110,7 +133,8 @@ def _run_cleanup_long(chunks: list[str], model: str,
             token_cb("\n\n")
         parts.append(llm_client.generate(
             model, prompt, token_cb=token_cb, system=SYSTEM_SV,
-            options={"temperature": 0.2}) or "")
+            options={"temperature": 0.2},
+            max_tokens=_svar_budget(len(chunk))) or "")
     return "\n\n".join(p.strip() for p in parts if p.strip())
 
 
@@ -126,7 +150,8 @@ def _run_summary_long(operation: str, chunks: list[str], model: str,
             log_cb(f"Sammanfattar del {i}/{n} …")
         part = llm_client.generate(
             model, f"{_MAP_SUMMARY}\n\n---\n{chunk}\n---",
-            system=SYSTEM_SV, options={"temperature": 0.2})
+            system=SYSTEM_SV, options={"temperature": 0.2},
+            max_tokens=SUMMARY_MAX_TOKENS)
         if (part or "").strip():
             partials.append(part.strip())
     if not partials:
@@ -136,7 +161,8 @@ def _run_summary_long(operation: str, chunks: list[str], model: str,
     merged = "\n\n".join(f"Del {i}:\n{p}" for i, p in enumerate(partials, 1))
     prompt = f"{_REDUCE_INSTRUCTION[operation]}\n\n---\n{merged}\n---"
     return llm_client.generate(model, prompt, token_cb=token_cb,
-                               system=SYSTEM_SV, options={"temperature": 0.2})
+                               system=SYSTEM_SV, options={"temperature": 0.2},
+                               max_tokens=SUMMARY_MAX_TOKENS)
 
 
 # ---- subtitle translation (target-language output) --------------------------
@@ -170,7 +196,8 @@ def _translate_batch(texts: list[str], source_lang: str, target_lang: str,
         f"Översätt endast — lägg inte till, ta inte bort, slå inte ihop och dela "
         f"inte rader. Svara med ENBART de översatta numrerade raderna.\n\n{numbered}"
     )
-    out = llm_client.generate(model, prompt, options={"temperature": 0.2})
+    out = llm_client.generate(model, prompt, options={"temperature": 0.2},
+                              max_tokens=_svar_budget(len(numbered)))
     parsed: dict[int, str] = {}
     for line in (out or "").splitlines():
         m = _NUM_LINE.match(line)
@@ -187,7 +214,8 @@ def _translate_one(text: str, source_lang: str, target_lang: str, model: str) ->
         f"Översätt följande text från {src} till {tgt}. Översätt endast och behåll "
         f"betydelsen; svara med enbart översättningen.\n\n{text}"
     )
-    return (llm_client.generate(model, prompt, options={"temperature": 0.2}) or "").strip()
+    return (llm_client.generate(model, prompt, options={"temperature": 0.2},
+                                max_tokens=_svar_budget(len(text))) or "").strip()
 
 
 def translate_segments(segments: list[dict], source_lang: str, target_lang: str,
@@ -249,7 +277,8 @@ def answer_over_lessons(query: str, excerpts: list[dict], model: str,
         return "Jag hittade inga lektioner som matchar din sökning."
     return llm_client.generate(
         model, build_answer_prompt(query, excerpts), token_cb=token_cb,
-        system=ANSWER_SYSTEM, options={"temperature": 0.2})
+        system=ANSWER_SYSTEM, options={"temperature": 0.2},
+        max_tokens=ANSWER_MAX_TOKENS)
 
 
 # --------------------------------------------------------------- extraktion (Fas 2) --
@@ -354,7 +383,8 @@ def _extract_one(transcript: str, model: str,
     raw = llm_client.generate(
         model, build_extract_prompt(transcript), token_cb=token_cb,
         system=EXTRACT_SYSTEM, options={"temperature": 0.1},
-        response_format=EXTRACT_RESPONSE_FORMAT)
+        response_format=EXTRACT_RESPONSE_FORMAT,
+        max_tokens=EXTRACT_MAX_TOKENS)
     parsed = _parse_extract(raw)
     insights: list[dict] = []
     for key, typ in _EXTRACT_TYP.items():

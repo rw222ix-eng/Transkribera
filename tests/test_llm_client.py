@@ -251,3 +251,18 @@ def test_stream_chat_har_begransad_timeout(monkeypatch):
     anslut, las = timeout
     assert 0 < anslut <= 30
     assert 0 < las <= 600
+
+
+def test_generate_vidarebefordrar_max_tokens(monkeypatch):
+    fangat = {}
+    def fake_post(url, **kwargs):
+        fangat.update(kwargs)
+        return FakeResp(lines=_sse(["ok"]))
+    monkeypatch.setattr(lc.requests, "post", fake_post)
+    lc.generate("m", "hej", max_tokens=1234)
+    assert fangat["json"]["max_tokens"] == 1234
+    # Utan angiven budget skickas inget tak (server-default) — men alla
+    # produktionsanrop i postprocess sätter ett.
+    fangat.clear()
+    lc.generate("m", "hej")
+    assert "max_tokens" not in fangat["json"]

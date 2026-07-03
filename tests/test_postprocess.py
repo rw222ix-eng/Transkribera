@@ -151,3 +151,44 @@ def test_merge_insights_keeps_first_with_metadata():
     ])
     assert len(merged) == 2
     assert merged[0]["due_date"] == "2026-05-21"   # första (med datum) behålls
+
+
+# ---- utdatabudget (skydd mot oändliga repetitionsloopar, QA 2026-07-03) ----
+
+def test_run_satter_utdatabudget_for_cleanup(monkeypatch):
+    """Repetitivt/brusigt transkript kunde låsa Qwen i en oändlig
+    genereringsloop — varje anrop måste ha ett max_tokens-tak."""
+    captured = {}
+    def fake_generate(model, prompt, token_cb=None, **kw):
+        captured["max_tokens"] = kw.get("max_tokens")
+        return "städat"
+    monkeypatch.setattr(pp.llm_client, "generate", fake_generate)
+    pp.run("cleanup", "Hej på dig. " * 50, "m")
+    assert captured["max_tokens"] is not None
+    assert 0 < captured["max_tokens"] <= 20_000
+
+
+def test_run_satter_utdatabudget_for_summary(monkeypatch):
+    captured = {}
+    def fake_generate(model, prompt, token_cb=None, **kw):
+        captured["max_tokens"] = kw.get("max_tokens")
+        return "sammanfattat"
+    monkeypatch.setattr(pp.llm_client, "generate", fake_generate)
+    pp.run("summary", "Hej på dig. " * 50, "m")
+    assert captured["max_tokens"] is not None
+    assert 0 < captured["max_tokens"] <= 4_000
+
+
+def test_cleanup_chunkas_sa_att_prompt_plus_svar_ryms_i_kontexten(monkeypatch):
+    """Städningens svar är lika långt som indatan — vid 40–90k tecken rymdes
+    prompt + svar inte i kontextfönstret (40 960 tokens) och svaret
+    trunkerades tyst. Cleanup måste chunkas tidigare än summary."""
+    anrop = []
+    def fake_generate(model, prompt, token_cb=None, **kw):
+        anrop.append(prompt)
+        return "del"
+    monkeypatch.setattr(pp.llm_client, "generate", fake_generate)
+    text = "Det här är en mening i transkriptet.\n" * 1600   # ~60k tecken
+    pp.run("cleanup", text, "m")
+    assert len(anrop) >= 2, "60k tecken cleanup måste delas upp"
+    assert all(len(p) < 45_000 for p in anrop)

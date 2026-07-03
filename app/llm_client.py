@@ -156,12 +156,18 @@ def _stream_chat(messages: list[dict], *, temperature: float,
                  reason_cb: Callable[[str], None] | None = None,
                  base_url: str | None = None,
                  template_kwargs: dict | None = None,
-                 response_format: dict | None = None) -> str:
+                 response_format: dict | None = None,
+                 max_tokens: int | None = None) -> str:
     payload = {
         "messages": messages,
         "stream": True,
         "temperature": temperature,
     }
+    if max_tokens is not None:
+        # Utdatatak: repetitivt/brusigt indata kan låsa modellen i en oändlig
+        # genereringsloop — strömmen fortsätter då leverera tokens, så läs-
+        # timeouten räddar oss inte. Callers sätter en budget per operation.
+        payload["max_tokens"] = max_tokens
     if template_kwargs:
         # Qwen3 thinking: enable_thinking is set by the caller (chat may turn it
         # on; correction/analysis keep it off). Omitted for vision (Gemma), whose
@@ -234,7 +240,8 @@ def generate(model: str, prompt: str,
              token_cb: Callable[[str], None] | None = None,
              base_url: str | None = None, system: str | None = None,
              options: dict | None = None, think: bool = False,
-             response_format: dict | None = None) -> str:
+             response_format: dict | None = None,
+             max_tokens: int | None = None) -> str:
     msgs: list[dict] = []
     if system:
         msgs.append({"role": "system", "content": system})
@@ -243,4 +250,4 @@ def generate(model: str, prompt: str,
     # Correction/analysis is mechanical -> thinking stays off.
     return _stream_chat(msgs, temperature=temperature, token_cb=token_cb, base_url=base_url,
                         template_kwargs={"enable_thinking": False},
-                        response_format=response_format)
+                        response_format=response_format, max_tokens=max_tokens)
