@@ -8,6 +8,7 @@ context (the server otherwise splits it across 4 slots, silently shrinking each
 request's window). NEVER use q4 on the V-cache — it is 3-4x more sensitive than K.
 """
 from __future__ import annotations
+import collections
 import socket
 import subprocess
 import sys
@@ -133,6 +134,20 @@ class LlamaServer:
         self.proc = subprocess.Popen(
             args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             text=True, encoding="utf-8", errors="replace")
+        # Dränera stdout löpande: llama-server loggar varje förfrågan dit, och
+        # med ett oläst PIPE fylls OS-rörbufferten efter ett antal förfrågningar
+        # varpå serverprocessen BLOCKERAR mitt i en generering (uppmätt: frös
+        # efter ~30-60 anrop). Svansen behålls för felsökning/startdiagnos.
+        self._log_tail = collections.deque(maxlen=200)
+
+        def _drain(pipe):
+            try:
+                for line in pipe:
+                    self._log_tail.append(line.rstrip())
+            except Exception:
+                pass
+        threading.Thread(target=_drain, args=(self.proc.stdout,),
+                         daemon=True).start()
         deadline = time.time() + timeout
         while time.time() < deadline:
             if is_healthy(self.port):
@@ -140,7 +155,8 @@ class LlamaServer:
                     log_cb("llama-server redo.")
                 return
             if self.proc.poll() is not None:
-                out = self.proc.stdout.read() if self.proc.stdout else ""
+                time.sleep(0.2)   # låt dräneringstråden hinna läsa klart
+                out = "\n".join(self._log_tail)
                 raise RuntimeError("llama-server avslutades vid start:\n" + out[-2000:])
             time.sleep(0.5)
         self.stop()

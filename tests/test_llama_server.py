@@ -137,3 +137,49 @@ def test_build_args_omits_mmproj_by_default():
 
 def test_vision_ctx_is_smaller_than_default():
     assert ls.VISION_CTX < ls.DEFAULT_CTX
+
+
+# ---- stdout-dränering (QA 2026-07-03) ---------------------------------------
+# llama-server loggar varje förfrågan till stdout. Med subprocess.PIPE som
+# ingen läser fylls OS-rörbufferten efter ett antal förfrågningar och server-
+# processen BLOCKERAR mitt i en generering — appen fryser för evigt.
+
+def _fake_popen_factory(lines, exits_immediately=False):
+    import io
+
+    class FakeProc:
+        def __init__(self, *a, **k):
+            self.stdout = io.StringIO("".join(l + "\n" for l in lines))
+            self._exited = exits_immediately
+        def poll(self):
+            return 1 if self._exited else None
+        def terminate(self): self._exited = True
+        def kill(self): self._exited = True
+        def wait(self, timeout=None): return 0
+    return FakeProc
+
+
+def test_start_dranerar_serverns_stdout(monkeypatch):
+    import time as _t
+    rader = [f"loggrad {i}" for i in range(50)]
+    monkeypatch.setattr(ls.subprocess, "Popen", _fake_popen_factory(rader))
+    monkeypatch.setattr(ls, "is_healthy", lambda port: True)
+    srv = ls.LlamaServer("m.gguf", port=8199)
+    srv.start(timeout=5)
+    # Dräneringstråden ska konsumera stdout så att röret aldrig fylls.
+    deadline = _t.time() + 5
+    while _t.time() < deadline and len(srv._log_tail) < len(rader):
+        _t.sleep(0.05)
+    assert list(srv._log_tail)[-1] == "loggrad 49"
+
+
+def test_start_fel_visar_loggsvansen(monkeypatch):
+    import pytest
+    monkeypatch.setattr(ls.subprocess, "Popen",
+                        _fake_popen_factory(["boom: modellen kunde inte laddas"],
+                                            exits_immediately=True))
+    monkeypatch.setattr(ls, "is_healthy", lambda port: False)
+    srv = ls.LlamaServer("m.gguf", port=8199)
+    with pytest.raises(RuntimeError) as e:
+        srv.start(timeout=2)
+    assert "kunde inte laddas" in str(e.value)
