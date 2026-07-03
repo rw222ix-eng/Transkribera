@@ -17,8 +17,19 @@ SYSTEM_SV = (
 
 OPERATIONS: dict[str, str] = {
     "summary": "Sammanfatta följande transkript koncist och tydligt. Svara endast på svenska:",
-    "cleanup": "Städa upp följande transkript: rätta stavfel och interpunktion och "
-               "behåll all betydelse. Skriv inte om i onödan. Svara endast på svenska:",
+    # Formulering WER-testad mot facit (FLEURS, 4 kvalitetsnivåer, QA 2026-07-03):
+    # den tidigare "Städa upp …"-prompten övernormaliserade (t.ex. ordform
+    # "transportsystem" -> "transportsystemet") och gjorde transkriptet MINDRE
+    # ordagrant på alla nivåer; denna kontextreparations-formulering var neutral
+    # eller bättre på alla nivåer och rörde aldrig redan korrekt text.
+    "cleanup": "Detta är ett rått transkript från taligenkänning av svenskt tal. "
+               "Enstaka ord eller meningar kan vara felhörda och blir då osannolika "
+               "i sitt sammanhang. Rätta felhörda ord, stavfel och interpunktion så "
+               "att texten blir det mest sannolika som faktiskt sades, med hjälp av "
+               "sammanhanget både före och efter varje mening. Behåll ordföljd, "
+               "ordform, stil och talspråk där de redan är rimliga. Lägg inte till "
+               "ny information, ta inte bort innehåll och sammanfatta inte. "
+               "Svara med ENBART den rättade texten, på svenska:",
     "bullets": "Sammanfatta följande transkript som en kort punktlista. Svara endast på svenska:",
 }
 

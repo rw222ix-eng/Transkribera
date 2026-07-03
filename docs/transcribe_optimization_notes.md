@@ -145,6 +145,39 @@ lektionsljud där utrymmet är större. Kostnad: ~5 s/klipp efter ~40 s
 modelladdning. Stickprovet är litet (20 klipp/350 ord) — riktningsgivande,
 inte statistiskt slutgiltigt.
 
+## Svårlyssnat ljud & Qwen-korrekturens roll (2026-07-03)
+
+`tests/degradera_referens.py` skapar tre nivåer av samma 20 facit-klipp
+(rosa brus → +telefonband → +efterklang). WER mot facit, 350 ord/nivå:
+
+| nivå | pass 1 (Whisper) | + Gemma (ljud) | + Qwen "städa" (gamla prompten) | + Qwen kontextreparation |
+|---|---|---|---|---|
+| original | 6,9 % | 6,6 % | 8,6 % | 6,9 % |
+| lätt | 7,1 % | 7,1 % | 8,0 % | 8,0 % |
+| medel | 11,1 % | 10,9 % | 11,7 % | 10,9 % |
+| svår | 51,4 % | 50,9 % | 51,1 % | 51,4 % |
+
+**Slutsatser:**
+
+1. **Gemma (ljudgrundad rättning): liten men aldrig negativ nettoeffekt** på
+   alla nivåer (−0,2 à −0,5 pp; enskilda äkta hörfelsrättningar). Även på
+   svårt ljud är utrymmet begränsat — det Whisper hör fel hör ofta Gemma
+   också fel. Behåll som tillval; förvänta inga mirakel.
+2. **Qwens gamla "Städa upp"-prompt gjorde transkriptet MINDRE ordagrant på
+   alla nivåer** (+0,6 à +1,7 pp), värst på redan korrekt text — den
+   övernormaliserar (t.ex. "transportsystem" → "transportsystemet" på ett
+   felfritt klipp: 0 % → 15 % WER). Åtgärdat: cleanup-prompten är utbytt mot
+   kontextreparations-formuleringen, som var neutral/bättre på alla nivåer
+   och aldrig rörde redan korrekt text.
+3. **Textbaserad reparation kan inte återskapa vad som faktiskt sades** —
+   på svår-nivån (51 % WER) hjälper varken text- eller ljudpass nämnvärt;
+   informationen är borta i signalen. Kvalitet skapas i inspelningsledet.
+4. Bänkarna avslöjade och ledde till fix av tre frysbuggar i LLM-kedjan
+   (strömmande anrop utan timeout; ingen max_tokens-budget → oändliga
+   repetitionsloopar; llama-serverns stdout-PIPE utan läsare → serverfrys
+   efter ~30–60 anrop) samt tyst trunkering av cleanup > 40k tecken
+   (prompt + svar rymdes inte i kontextfönstret).
+
 ## Uppföljningsbeslut (2026-07-02, samtliga åtgärdade)
 
 1. **Modeller-vyn borttagen** (`refactor(ui): ta bort den onåbara Modeller-vyn`):
