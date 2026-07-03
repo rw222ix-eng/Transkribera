@@ -54,18 +54,24 @@ def steg_kor(kataloger: list[Path]) -> None:
             for txt_fil in sorted(klipp_dir.glob("*.txt")):
                 if txt_fil.name.endswith((".korr.txt", ".qwenA.txt", ".qwenB.txt")):
                     continue
+                a_fil = txt_fil.with_name(txt_fil.stem + ".qwenA.txt")
+                b_fil = txt_fil.with_name(txt_fil.stem + ".qwenB.txt")
+                if a_fil.exists() and b_fil.exists():
+                    continue   # återupptagbar körning — hoppa över redan klara
                 pass1 = txt_fil.read_text(encoding="utf-8").strip()
-                # A: appens riktiga kodväg (postprocess cleanup, inkl. map-reduce)
-                a = postprocess.run("cleanup", pass1, spec.filename)
-                # B: kontextreparation — samma system-prompt och temperatur som appen
-                b = llm_client.generate(
-                    spec.filename, f"{PROMPT_B}\n\n{pass1}",
-                    system=postprocess.SYSTEM_SV,
-                    options={"temperature": 0.2})
-                txt_fil.with_name(txt_fil.stem + ".qwenA.txt").write_text(
-                    a.strip() + "\n", encoding="utf-8")
-                txt_fil.with_name(txt_fil.stem + ".qwenB.txt").write_text(
-                    b.strip() + "\n", encoding="utf-8")
+                try:
+                    # A: appens riktiga kodväg (postprocess cleanup, inkl. map-reduce)
+                    a = postprocess.run("cleanup", pass1, spec.filename)
+                    # B: kontextreparation — samma system-prompt/temperatur som appen
+                    b = llm_client.generate(
+                        spec.filename, f"{PROMPT_B}\n\n{pass1}",
+                        system=postprocess.SYSTEM_SV,
+                        options={"temperature": 0.2})
+                except Exception as e:   # timeout m.m. — hoppa, kör vidare
+                    print(f"{txt_fil.name}: FEL {e} — hoppar över", flush=True)
+                    continue
+                a_fil.write_text(a.strip() + "\n", encoding="utf-8")
+                b_fil.write_text(b.strip() + "\n", encoding="utf-8")
             print(f"{klipp_dir.name}: klart på {time.time() - t0:.0f}s", flush=True)
     finally:
         srv.stop()

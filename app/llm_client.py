@@ -172,8 +172,12 @@ def _stream_chat(messages: list[dict], *, temperature: float,
         # extraction result always parses. See postprocess.extract.
         payload["response_format"] = response_format
     splitter = _ReasoningSplitter(token_cb, reason_cb)
+    # (anslutning, läsning): läs-timeouten gäller MELLAN chunkar i strömmen, inte
+    # totalt — 300 s rymmer prompt-bearbetning av ett fullt map-reduce-block med
+    # marginal. Utan tak hänger klienten för evigt om strömmen tystnar (uppmätt:
+    # 84 min mot en frisk men tyst llama-server innan jobbet dödades manuellt).
     with requests.post(f"{base_url or BASE_URL}/v1/chat/completions", json=payload,
-                       stream=True, timeout=None) as r:
+                       stream=True, timeout=(10, 300)) as r:
         r.raise_for_status()
         for raw in r.iter_lines():
             if not raw:

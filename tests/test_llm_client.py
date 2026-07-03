@@ -232,3 +232,22 @@ def test_inline_think_tag_split_across_chunks(monkeypatch):
                   token_cb=answer_tokens.append)
     assert out == "Svar"
     assert "".join(answer_tokens) == "Svar"
+
+
+def test_stream_chat_har_begransad_timeout(monkeypatch):
+    """timeout=None hängde appen för evigt om strömmen dog (QA 2026-07-03:
+    korrekturläsningen fastnade 84 min mot en frisk men tyst server).
+    Anslutning och läsning mellan chunkar måste ha ändliga tak."""
+    fangat = {}
+
+    def fake_post(url, **kwargs):
+        fangat.update(kwargs)
+        return FakeResp(lines=_sse(["ok"]))
+
+    monkeypatch.setattr(lc.requests, "post", fake_post)
+    lc.generate("m", "hej")
+    timeout = fangat.get("timeout")
+    assert timeout is not None, "streaming-anropet får inte sakna timeout"
+    anslut, las = timeout
+    assert 0 < anslut <= 30
+    assert 0 < las <= 600
