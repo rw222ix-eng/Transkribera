@@ -38,6 +38,9 @@ def steg_segment() -> None:
                 for s in seg_iter]
         wav.with_suffix(".segments.json").write_text(
             json.dumps(segs, ensure_ascii=False), encoding="utf-8")
+        # Pass 1-hypotesen som text — rapportsteget jämför .txt mot .korr.txt.
+        wav.with_suffix(".txt").write_text(
+            "\n".join(s["text"] for s in segs) + "\n", encoding="utf-8")
         print(f"{wav.name}: {len(segs)} segment", flush=True)
     os._exit(0)  # hoppa över CTranslate2-teardown (Windows/CUDA-abort)
 
@@ -103,7 +106,12 @@ def steg_rapport() -> None:
     print("|---|---|---|---|")
     for post in sorted(referenser, key=lambda p: p["file"]):
         stam = KLIPP_DIR / Path(post["file"]).stem
-        h1 = Path(str(stam) + ".txt").read_text(encoding="utf-8")
+        h1_fil = Path(str(stam) + ".txt")
+        if h1_fil.exists():
+            h1 = h1_fil.read_text(encoding="utf-8")
+        else:  # äldre segmentering utan .txt — bygg pass 1 ur segmenten
+            h1 = "\n".join(s["text"] for s in json.loads(
+                Path(str(stam) + ".segments.json").read_text(encoding="utf-8")))
         h2 = Path(str(stam) + ".korr.txt").read_text(encoding="utf-8")
         w1, w2 = wer(post["text"], h1), wer(post["text"], h2)
         n = len(normalisera(post["text"]).split())
@@ -125,6 +133,10 @@ def steg_rapport() -> None:
 
 if __name__ == "__main__":
     steg = sys.argv[1] if len(sys.argv) > 1 else ""
+    if len(sys.argv) > 2:
+        # Valfri klippkatalog (t.ex. degraderade varianter från
+        # tests/degradera_referens.py) — annars FLEURS-originalen.
+        KLIPP_DIR = Path(sys.argv[2]).resolve()
     if steg == "segment":
         steg_segment()
     elif steg == "korrigera":
