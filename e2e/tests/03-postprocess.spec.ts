@@ -37,15 +37,21 @@ test("chat about the transcript answers", async ({ page }) => {
   expect(errors, errors.join("\n")).toEqual([]);
 });
 
-test("lesson insight extraction shows the extracted action", async ({ page }) => {
+test("lesson insight extraction runs from the lesson overlay", async ({ page }) => {
   const errors: string[] = [];
   failOnConsoleError(page, errors);
   await transcribeSample(page);
 
+  // Kartotek-omdesignen: Insikter-panelen är borta; Analysera lektion bor i
+  // lektionsoverlayens header och matar Kommande/Terminstrender.
   await page.getByRole("button", { name: "Inspelningar", exact: true }).first().click();
-  await page.getByRole("button", { name: "Insikter" }).first().click();
-  await page.getByRole("button", { name: /Analysera lektion/ }).click();
-  await expect(page.getByText("Räkna uppgift 5 till nästa gång.")).toBeVisible({ timeout: 15000 });
+  await page.locator('[data-rec-id]').first().click();
+  const [resp] = await Promise.all([
+    page.waitForResponse((r) => /\/api\/lessons\/\d+\/extract/.test(r.url())),
+    page.getByRole("button", { name: /Analysera lektion/ }).click(),
+  ]);
+  expect(resp.status()).toBe(200);
+  await expect(page.getByText("Lektionen analyserad")).toBeVisible({ timeout: 15000 });
   expect(errors, errors.join("\n")).toEqual([]);
 });
 
@@ -55,21 +61,22 @@ test("cross-lesson AI question answers over the transcripts", async ({ page }) =
   await transcribeSample(page);
 
   await page.getByRole("button", { name: "Inspelningar", exact: true }).first().click();
-  await page.getByRole("button", { name: "Fråga (AI)" }).first().click();
+  await page.getByRole("button", { name: "Fråga AI", exact: true }).first().click();
   // In AI mode the input placeholder and submit button both change; wait for the
   // re-render to settle and the typed value to commit before submitting.
-  const askInput = page.getByPlaceholder("Ställ en fråga, t.ex. När hade vi prov om derivata?");
+  const askInput = page.getByPlaceholder("Ställ en fråga, t.ex. när hade vi prov om derivata?");
   await expect(askInput).toBeVisible();
   await askInput.fill("bråk");
   await expect(askInput).toHaveValue("bråk");
-  // När fältet fått text renderas ✕ Rensa in bredvid Fråga-knappen och knuffar
-  // den åt höger — invänta den så att klicket inte landar på gamla koordinater.
+  // När fältet fått text blir ✕ Rensa synlig (data-vis) — invänta den så att
+  // klicket inte landar på gamla koordinater.
   await expect(page.getByRole("button", { name: "Rensa" })).toBeVisible();
   await page.getByRole("button", { name: "Fråga", exact: true }).click();
+  // Svaret streamas inline i svarskortet under skannings-rutnätet.
   await expect(page.getByText("[FEJK svar]")).toBeVisible({ timeout: 15000 });
-  // Tänker-bannern landar i klart-läget och scen-koreografin lyfter de
+  // Skanningen landar i klart-läget och kartotek-koreografin lyfter de
   // lektionskort som svaret faktiskt bygger på (källorna från RAG-svaret).
-  await expect(page.getByText("Svar klart")).toBeVisible({ timeout: 10000 });
+  await expect(page.getByText(/Genomsökte \d+ inspelningar/)).toBeVisible({ timeout: 10000 });
   await expect(page.locator('[data-stage="lift"]').first()).toBeVisible();
   expect(errors, errors.join("\n")).toEqual([]);
 });

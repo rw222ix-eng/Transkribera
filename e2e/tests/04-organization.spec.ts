@@ -14,17 +14,17 @@ test("assign a lesson to a class and course", async ({ page }) => {
 
   await page.getByRole("button", { name: "Inspelningar", exact: true }).first().click();
 
-  // Omdesignen ersatte Tilldela-dialogen med alltid synliga, auto-sparande
-  // fält direkt på kortet (data-change sparar när fältet lämnar fokus).
-  const kort = page.locator('[data-key^="les-"]').first();
+  // Kartotek-omdesignen: tilldelning sker i redigeringsmodalen bakom
+  // penn-ikonen på kortet (mallens onRename, utökad med Sal + Datum).
+  const kort = page.locator('[data-rec-id]').first();
   await expect(kort).toBeVisible({ timeout: 10000 });
-  await kort.getByPlaceholder("t.ex. NA21").fill("NA21");
-  await kort.getByPlaceholder("t.ex. NA21").press("Tab");
-  await kort.getByPlaceholder("t.ex. Matematik 2b").fill("Matematik 2b");
-  await kort.getByPlaceholder("t.ex. Matematik 2b").press("Tab");
+  await kort.getByRole("button", { name: "Redigera uppgifter" }).click();
+  await page.getByPlaceholder("t.ex. NA21").fill("NA21");
+  await page.getByPlaceholder("t.ex. Matematik 2b").fill("Matematik 2b");
+  await page.getByRole("button", { name: "Spara", exact: true }).click();
 
-  // Kortets "Ej tilldelad"-badge ersätts av klass-taggen när sparningen gått igenom.
-  await expect(page.locator('[data-key^="les-"]').first().getByText("NA21"))
+  // Kortets "Ej tilldelad"-chip ersätts av klass · kurs-taggen efter sparning.
+  await expect(page.locator('[data-rec-id]').first().getByText(/NA21/))
     .toBeVisible({ timeout: 10000 });
   expect(errors, errors.join("\n")).toEqual([]);
 });
@@ -51,8 +51,9 @@ test("export a lesson report", async ({ page }) => {
   await stubOpen(page);
   await transcribeSample(page);
 
+  // Rapport-knappen bor i lektionsoverlayens header sedan Insikter togs bort.
   await page.getByRole("button", { name: "Inspelningar", exact: true }).first().click();
-  await page.getByRole("button", { name: "Insikter" }).first().click();
+  await page.locator('[data-rec-id]').first().click();
   const [resp] = await Promise.all([
     page.waitForResponse((r) => /\/api\/lessons\/\d+\/report/.test(r.url())),
     page.getByRole("button", { name: /Rapport/ }).click(),

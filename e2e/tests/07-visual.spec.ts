@@ -1,10 +1,11 @@
 import { test, expect, failOnConsoleError } from "../helpers/app";
 import * as path from "path";
 
-const VIEWS = [
+// Modeller-fliken togs bort ur navigationen; Inspelningar-rubriken är
+// "Fråga ditt arkiv." sedan kartotek-omdesignen (2026-07-05).
+const VIEWS: { tab: string; landmark: string | RegExp }[] = [
   { tab: "Transkribera", landmark: "Vad vill du transkribera?" },
-  { tab: "Inspelningar", landmark: "Inspelningar" },
-  { tab: "Modeller", landmark: "Transkriberingsmodeller" },
+  { tab: "Inspelningar", landmark: /Fråga ditt arkiv/ },
 ];
 const SIZES = [
   { w: 1040, h: 780 }, // native window size

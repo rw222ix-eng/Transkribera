@@ -163,11 +163,11 @@ test("sökfältet: Fråga-knappen flyttar sig inte när text skrivs (ingen layou
   failOnConsoleError(page, errors);
   await gotoApp(page);
   await page.getByRole("button", { name: "Inspelningar", exact: true }).first().click();
-  await page.getByRole("button", { name: "Fråga (AI)" }).first().click();
+  await page.getByRole("button", { name: "Fråga AI", exact: true }).first().click();
 
   const knapp = page.getByRole("button", { name: "Fråga", exact: true });
   const fore = await knapp.boundingBox();
-  const inp = page.getByPlaceholder("Ställ en fråga, t.ex. När hade vi prov om derivata?");
+  const inp = page.getByPlaceholder("Ställ en fråga, t.ex. när hade vi prov om derivata?");
   await inp.fill("bråk");
   // Rensa-knappen blir synlig — men den upptog redan sin plats, så submit-
   // knappen får inte ha flyttats (klick på gamla koordinater var buggen).

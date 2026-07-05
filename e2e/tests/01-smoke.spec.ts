@@ -5,7 +5,8 @@ import { test, expect, failOnConsoleError } from "../helpers/app";
 // kvar finns bara Transkribera och Inspelningar.
 const VIEWS: { tab: string; landmark: (page: import("@playwright/test").Page) => import("@playwright/test").Locator }[] = [
   { tab: "Transkribera", landmark: (p) => p.getByRole("heading", { name: "Vad vill du transkribera?" }) },
-  { tab: "Inspelningar", landmark: (p) => p.getByRole("heading", { name: "Inspelningar" }) },
+  // Kartotek-omdesignen (2026-07-05): rubriken är "Fråga ditt arkiv."
+  { tab: "Inspelningar", landmark: (p) => p.getByRole("heading", { name: /Fråga ditt arkiv/ }) },
 ];
 
 test("app boots without console errors", async ({ page }) => {
