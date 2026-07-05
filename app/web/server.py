@@ -21,7 +21,8 @@ from fastapi.staticfiles import StaticFiles
 from app import (debug_log, hardware, recommend, whisper_manager, llm_client,
                  llm_manager, youtube, postprocess, transcriber,
                  history_store, gpu_arbiter, output_store, media, audio_model, db,
-                 paths, settings_store, ics_export, backup, report)
+                 paths, settings_store, ics_export, backup, report,
+                 calendar_google)
 from app.models_catalog import WHISPER_MODELS, LLM_MODELS
 
 _MONTHS_SV = ["jan", "feb", "mar", "apr", "maj", "jun", "jul", "aug", "sep", "okt", "nov", "dec"]
@@ -1225,6 +1226,30 @@ def create_app(base_dir: Path | None = None,
         dest = out_dir / "lektionsagenda.ics"
         dest.write_text(cal, encoding="utf-8")
         return {"path": str(dest), "count": cal.count("BEGIN:VEVENT")}
+
+    # ---- Google Kalender (opt-in, se app/calendar_google.py) -----------------
+
+    @app.get("/api/calendar/status")
+    def api_calendar_status():
+        return calendar_google.status(base)
+
+    @app.post("/api/calendar/connect")
+    def api_calendar_connect():
+        # Blockerar tråden tills webbläsarens samtyckesflöde är klart —
+        # FastAPI kör sync-routes i trådpoolen så servern förblir responsiv.
+        return calendar_google.connect(base)
+
+    @app.post("/api/calendar/event")
+    async def api_calendar_event(req: Request):
+        body = await req.json()
+        res = calendar_google.create_event(
+            base,
+            title=body.get("title") or "",
+            start_iso=body.get("start") or "",
+            description=body.get("description") or "")
+        if res.get("error"):
+            return JSONResponse({"error": res["error"]}, status_code=400)
+        return res
 
     # ---- Fritextsök över alla lektioner --------------------------------------
 
