@@ -1,8 +1,9 @@
 {
   "projectId": "c5f72bf7-c335-4e12-8eb1-f937290b451c",
   "projectName": "Transkribera Design System",
-  "lastSyncedUpdatedAt": "2026-07-01T17:41:32.964385Z",
+  "lastSyncedUpdatedAt": "2026-07-05T17:41:23.564101Z",
   "_note": "Uppdateras varje gång design-systemet synkas. SessionStart-hooken jämför projektets updatedAt mot detta för att upptäcka ändringar gjorda i Claude Design.",
+  "_lastPull": "2026-07-05: Kartotek-omdesignen av Inspelningar (TranskriberaApp.dc.html + styles.css) + ny utforskningsfil 'Inspelningar v2 - 3 riktningar.html'.",
   "_lastPush": "2026-07-04: reverse-port av lokala UI-ändringar (ff5f3e2/f18507a/c3025c1/d1fef97/0a6e91e m.fl.) pushad till mallen TranskriberaApp.dc.html. OBS: write_files bumpar INTE projektets updatedAt — bara redigeringar i Claude Design-UI:t gör det.",
   "_notMirrored": [
     "scraps/*.png och templates/transkribera-app/.thumbnail (binära referens-/förhandsvisningsbilder, hämtas vid behov)",

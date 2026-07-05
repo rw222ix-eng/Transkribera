@@ -436,73 +436,141 @@
     <!-- ============ INSPELNINGAR (Historik + Lektioner) ============ -->
     <sc-if value="{{ isIn }}" hint-placeholder-val="{{ false }}">
     <section data-screen-label="Inspelningar" style="padding:32px 0 96px;animation:tabin .28s ease">
-      <div class="ehead">
-        <div>
-          <div class="eyebrow" style="margin-bottom:16px">Arkiv</div>
-          <h1 class="disp" style="font-size:clamp(38px,5.4vw,58px);margin:0">Inspelningar</h1>
-        </div>
-        <p class="ehead_lede" style="max-width:56ch">Alla dina lektioner och inspelningar på ett ställe. Sök, filtrera eller fråga AI:n om innehållet — allt ligger lokalt.</p>
+      <div style="max-width:820px;margin:10px auto 0;text-align:center">
+        <div class="eyebrow" style="margin-bottom:14px;justify-content:center">{{ archiveCountLabel }}</div>
+        <h1 class="disp" style="font-size:clamp(34px,4.8vw,48px);margin:0 0 22px">Fråga ditt <span class="ser">arkiv.</span></h1>
       </div>
 
-      <!-- sök / fråga AI -->
-      <div style="max-width:780px;margin:0 auto 14px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:16px 18px;box-shadow:var(--shadow-sm)">
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:11px;flex-wrap:wrap">
-          <span style="font-size:13.5px;font-weight:600;color:var(--ink-2)">🔎 Sök i alla lektioner</span>
-          <div style="margin-left:auto;display:inline-flex;gap:3px;padding:3px;background:var(--track);border-radius:11px;border:1px solid var(--line)">
-            <button onClick="{{ setInspSok }}" style="{{ segSokStyle }}">Sök ord</button>
-            <button onClick="{{ setInspAi }}" style="{{ segAiStyle }}">Fråga (AI)</button>
+      <!-- spotlight: fråga / sök -->
+      <div style="max-width:820px;margin:0 auto 6px">
+        <div style="display:flex;align-items:center;gap:13px;background:var(--surface);border:1.5px solid var(--ink);border-radius:14px;padding:9px 10px 9px 18px;box-shadow:var(--shadow)">
+          <span class="ai-blink" style="width:9px;height:9px;border-radius:50%;background:var(--accent);flex:0 0 auto"></span>
+          <input value="{{ inspQuery }}" onChange="{{ setInspQuery }}" onKeyDown="{{ onInspKey }}" placeholder="{{ inspPlaceholder }}" style="flex:1;min-width:0;background:transparent;border:none;color:var(--ink);padding:8px 0;font-size:16.5px;font-family:inherit;outline:none">
+          <button onClick="{{ clearInspQuery }}" aria-label="Rensa" data-vis="{{ clearVis }}" style="flex:0 0 auto;width:38px;height:38px;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:9px;cursor:pointer;font-family:inherit">✕</button>
+          <button onClick="{{ runInspSearch }}" style="flex:0 0 auto;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:9px;padding:10px 18px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .15s" style-hover="background:var(--accent)">{{ inspRunLabel }}</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap">
+          <div style="display:inline-flex;gap:3px;padding:3px;background:var(--track);border-radius:9px;border:1px solid var(--line);flex:0 0 auto">
+            <button onClick="{{ setInspAi }}" data-seg="{{ inspAiOn }}" style="border:none;background:transparent;color:var(--ink-3);border-radius:7px;padding:5px 11px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap">Fråga AI</button>
+            <button onClick="{{ setInspSok }}" data-seg="{{ inspSokOn }}" style="border:none;background:transparent;color:var(--ink-3);border-radius:7px;padding:5px 11px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap">Sök ord</button>
           </div>
-        </div>
-        <div style="display:flex;gap:8px">
-          <input value="{{ inspQuery }}" onChange="{{ setInspQuery }}" onKeyDown="{{ onInspKey }}" placeholder="{{ inspPlaceholder }}" style="flex:1;min-width:0;background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:10px 12px;font-size:14px;font-family:inherit;outline:none;box-sizing:border-box">
-          <!-- Rensa-knappen upptar alltid sin plats (visibility) — annars knuffas
-               Sök/Fråga-knappen åt höger vid första tecknet och ett klick på
-               gamla koordinaterna träffar ✕ i stället. -->
-          <button onClick="{{ clearInspQuery }}" aria-label="Rensa" style="{{ clearBtnStyle }}">✕</button>
-          <button onClick="{{ runInspSearch }}" style="flex:0 0 auto;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:10px;padding:10px 18px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .15s" style-hover="background:var(--accent);box-shadow:0 6px 16px -6px color-mix(in srgb,var(--accent) 55%,transparent)">{{ inspRunLabel }}</button>
-        </div>
-        <sc-if value="{{ inspShowSuggest }}" hint-placeholder-val="{{ false }}">
-          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:11px">
+          <span style="flex:1"></span>
+          <sc-if value="{{ inspShowSuggest }}" hint-placeholder-val="{{ false }}">
             <sc-for list="{{ askSuggestions }}" as="sg" hint-placeholder-count="2">
-              <button onClick="{{ sg.onClick }}" style="display:inline-flex;align-items:center;gap:7px;font-size:13px;color:var(--ink-2);background:var(--sunken);border:1px solid var(--line);border-radius:99px;padding:7px 13px;cursor:pointer;font-family:inherit;transition:border-color .12s,color .12s" style-hover="border-color:var(--accent);color:var(--accent)"><span style="color:var(--accent)">✻</span>{{ sg.label }}</button>
+              <button onClick="{{ sg.onClick }}" style="display:inline-flex;align-items:center;gap:7px;font-size:12.5px;color:var(--ink-2);background:var(--surface);border:1px solid var(--line);border-radius:99px;padding:6px 12px;cursor:pointer;font-family:inherit;white-space:nowrap;transition:border-color .12s,color .12s" style-hover="border-color:var(--accent);color:var(--accent)"><span style="color:var(--accent)">✻</span>{{ sg.label }}</button>
             </sc-for>
-          </div>
-        </sc-if>
+          </sc-if>
+        </div>
       </div>
 
-      <!-- tänk- / svar-banner -->
+      <!-- live-skanning + svar (Kartoteket) -->
       <sc-if value="{{ inspIsAsk }}" hint-placeholder-val="{{ false }}">
-      <div style="max-width:780px;margin:0 auto 18px;background:#1E221A;color:#fff;border:1px solid rgba(255,255,255,0.09);border-radius:16px;padding:16px 18px;box-shadow:var(--shadow);animation:fadeup .3s ease">
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:13px">
-          <sc-if value="{{ askThinking }}" hint-placeholder-val="{{ true }}">
-            <span style="display:inline-flex;align-items:center;gap:9px;font-size:14px;font-weight:600">Tänker<span class="insp-dots"><i></i><i></i><i></i></span></span>
+      <div style="max-width:960px;margin:22px auto 8px;animation:fadeup .3s ease both">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:11px">
+          <sc-if value="{{ askScanning }}" hint-placeholder-val="{{ true }}">
+            <span class="insp-dots" style="color:var(--accent);flex:0 0 auto"><i></i><i></i><i></i></span>
+            <span style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ scanTicker }}</span>
           </sc-if>
-          <sc-if value="{{ askDone }}" hint-placeholder-val="{{ false }}">
-            <span style="display:inline-flex;align-items:center;gap:8px;font-size:14px;font-weight:600"><span style="width:18px;height:18px;border-radius:50%;background:var(--ok);display:flex;align-items:center;justify-content:center;font-size:11px">✓</span>Svar klart</span>
+          <sc-if value="{{ askAfterScan }}" hint-placeholder-val="{{ false }}">
+            <span style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ok);flex:0 0 auto">✓ Genomsökte {{ scanTotal }} inspelningar</span>
           </sc-if>
-          <span style="margin-left:auto;font-size:13px;color:rgba(255,255,255,.6);max-width:55%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ askQ }}</span>
+          <div style="flex:1;height:1px;background:var(--line)"></div>
+          <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--accent);flex:0 0 auto">{{ scanHitLabel }}</span>
+          <button onClick="{{ newAsk }}" style="flex:0 0 auto;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:7px;padding:5px 10px;font-family:var(--mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;cursor:pointer">✕ Ny fråga</button>
         </div>
-        <div style="display:flex;flex-direction:column;gap:7px">
-          <sc-if value="{{ askStep1 }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:9px;font-size:13px;color:rgba(255,255,255,.85)"><span style="width:15px;height:15px;border-radius:50%;background:var(--ok);display:flex;align-items:center;justify-content:center;font-size:9px;flex:0 0 auto">✓</span>{{ askScanLabel }}</div></sc-if>
-          <sc-if value="{{ askStep2 }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:9px;font-size:13px;color:rgba(255,255,255,.85)"><span style="width:15px;height:15px;border-radius:50%;background:var(--ok);display:flex;align-items:center;justify-content:center;font-size:9px;flex:0 0 auto">✓</span>{{ askHitLabel }}</div></sc-if>
-          <sc-if value="{{ askStep3Pending }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:9px;font-size:13px;color:rgba(255,255,255,.6)"><span style="width:15px;height:15px;border-radius:50%;border:1.5px solid rgba(255,255,255,.4);flex:0 0 auto"></span>Sammanställer svar med källor …</div></sc-if>
-          <sc-if value="{{ askDone }}" hint-placeholder-val="{{ false }}"><div style="display:flex;align-items:center;gap:9px;font-size:13px;color:rgba(255,255,255,.85)"><span style="width:15px;height:15px;border-radius:50%;background:var(--ok);display:flex;align-items:center;justify-content:center;font-size:9px;flex:0 0 auto">✓</span>Svar sammanställt med källor</div></sc-if>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(108px,1fr));gap:9px">
+          <sc-for list="{{ scanCards }}" as="sc2" hint-placeholder-count="6">
+            <div data-scan="{{ sc2.st }}" style="min-width:0;border:1px solid var(--line);background:var(--surface);border-radius:9px;padding:9px 11px;transition:opacity .35s ease,box-shadow .35s ease,border-color .35s ease,background .35s ease">
+              <span style="font-family:var(--mono);font-size:8.5px;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-3);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ sc2.stLabel }}</span>
+              <div style="font-size:12px;font-weight:600;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ sc2.title }}</div>
+            </div>
+          </sc-for>
         </div>
-        <sc-if value="{{ askDone }}" hint-placeholder-val="{{ false }}">
-          <div style="display:flex;gap:9px;margin-top:14px">
-            <button onClick="{{ reopenAnswer }}" style="display:inline-flex;align-items:center;gap:7px;background:#fff;color:var(--ink);border:none;border-radius:10px;padding:9px 16px;font-size:13.5px;font-weight:600;cursor:pointer;font-family:inherit">Visa svaret</button>
-            <button onClick="{{ newAsk }}" style="background:transparent;border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:10px;padding:9px 16px;font-size:13.5px;font-weight:500;cursor:pointer;font-family:inherit">Ny fråga</button>
+        <sc-if value="{{ ansStarted }}" hint-placeholder-val="{{ false }}">
+        <div style="margin-top:14px;border:1px solid var(--line);border-radius:13px;background:var(--surface);padding:20px 24px;box-shadow:var(--shadow-sm);animation:fadeup .3s ease both">
+          <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:12px">
+            <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);flex:0 0 auto">{{ ansHeadLabel }}</span>
+            <span style="font-size:12.5px;color:var(--ink-3);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-left:auto">”{{ askQ }}”</span>
           </div>
+          <p style="margin:0;font-size:16px;line-height:2;color:var(--ink);max-width:72ch">
+            <sc-for list="{{ ansTokens }}" as="tk" hint-placeholder-count="3">
+              <sc-if value="{{ tk.isText }}" hint-placeholder-val="{{ true }}"><span>{{ tk.text }}</span></sc-if>
+              <sc-if value="{{ tk.isCite }}" hint-placeholder-val="{{ false }}"><span onClick="{{ tk.onCite }}" title="Öppna lektionen och chatta" style="display:inline-flex;align-items:center;gap:6px;vertical-align:-4px;margin:0 3px;font-size:12px;font-weight:600;color:var(--ink);white-space:nowrap;max-width:260px;overflow:hidden;text-overflow:ellipsis;background:var(--surface);border:1px solid color-mix(in srgb,var(--accent) 45%,var(--line));border-radius:8px;padding:3px 9px;cursor:pointer;transition:border-color .12s,background .12s" style-hover="background:var(--accent-weak)"><span style="width:6px;height:6px;border-radius:2px;background:var(--accent);flex:0 0 auto"></span>{{ tk.rec }}<span style="font-family:var(--mono);font-size:9.5px;color:var(--ink-3);font-variant-numeric:tabular-nums">{{ tk.t }} ↗</span></span></sc-if>
+            </sc-for>
+            <sc-if value="{{ ansTyping }}" hint-placeholder-val="{{ false }}"><span class="ai-blink" style="display:inline-block;width:9px;height:17px;background:var(--accent);vertical-align:-3px;margin-left:3px"></span></sc-if>
+          </p>
+          <sc-if value="{{ ansDone }}" hint-placeholder-val="{{ false }}">
+          <div style="margin-top:18px;border:1px dashed var(--line-2);border-radius:10px;background:var(--sunken);padding:12px 14px;animation:fadeup .3s ease both">
+            <sc-if value="{{ ansEventNotAdded }}" hint-placeholder-val="{{ true }}">
+              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-3);flex:0 0 auto">Förslag → Google Kalender</span>
+                <input value="{{ ansEventTitle }}" onChange="{{ setAnsEventTitle }}" style="flex:2 1 220px;min-width:0;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 11px;font-size:13.5px;font-weight:500;font-family:inherit;color:var(--ink)">
+                <button onClick="{{ toggleAskPick }}" title="Välj dag och tid" style="flex:1 1 160px;min-width:0;display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 11px;font-size:13px;font-family:inherit;color:var(--ink);cursor:pointer;font-variant-numeric:tabular-nums;white-space:nowrap;transition:border-color .14s" style-hover="border-color:var(--ink-3)"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="flex:0 0 auto"><rect x="2" y="3" width="12" height="11" rx="2"></rect><path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3"></path></svg><span style="min-width:0;overflow:hidden;text-overflow:ellipsis">{{ ansEventWhen }}</span><span style="flex:1"></span><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto"><path d="M4 6l4 4 4-4"></path></svg></button>
+                <button onClick="{{ addAnsEvent }}" style="flex:0 0 auto;display:inline-flex;align-items:center;gap:7px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:8px;padding:9px 15px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Lägg till ✓</button>
+              </div>
+              <sc-if value="{{ evPickAskOpen }}" hint-placeholder-val="{{ false }}">
+                <div style="display:grid;grid-template-columns:180px 1fr;margin-top:10px;border:1px solid var(--line);border-radius:9px;background:var(--surface);overflow:hidden;animation:ml-popin .2s cubic-bezier(.16,1,.3,1) both">
+                  <div data-hidescroll style="border-right:1px solid var(--line);padding:8px;display:flex;flex-direction:column;gap:1px;max-height:224px;overflow:auto">
+                    <span style="font-family:var(--mono);font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);padding:3px 8px 6px">Dag</span>
+                    <sc-for list="{{ askDayOpts }}" as="d" hint-placeholder-count="4">
+                      <button onClick="{{ d.onPick }}" data-q="{{ d.curQ }}" style="display:flex;align-items:center;gap:8px;border:1px solid transparent;background:transparent;color:var(--ink);border-radius:6px;padding:6px 8px;font-size:13px;font-family:inherit;cursor:pointer;text-align:left;white-space:nowrap"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis">{{ d.label }}</span><span style="flex:1"></span><sc-if value="{{ d.hasPre }}" hint-placeholder-val="{{ false }}"><span style="font-family:var(--mono);font-size:8.5px;letter-spacing:0.05em;text-transform:uppercase;color:var(--accent)">{{ d.pre }}</span></sc-if></button>
+                    </sc-for>
+                  </div>
+                  <div style="padding:8px">
+                    <span style="font-family:var(--mono);font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);padding:3px 8px 6px;display:block">Tid</span>
+                    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:5px">
+                      <sc-for list="{{ askTimeOpts }}" as="t2" hint-placeholder-count="8">
+                        <button onClick="{{ t2.onPick }}" data-q="{{ t2.curQ }}" style="border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:6px;padding:7px 4px;font-size:12.5px;font-family:inherit;cursor:pointer;font-variant-numeric:tabular-nums;text-align:center">{{ t2.label }}</button>
+                      </sc-for>
+                    </div>
+                    <div style="font-size:11px;color:var(--ink-3);padding:8px 8px 2px">Välj dag, sedan tid — stängs automatiskt.</div>
+                  </div>
+                </div>
+              </sc-if>
+              <div style="font-size:12px;color:var(--ink-3);margin-top:8px">Beskrivningen fylls i automatiskt med citatet och en länk till inspelningen.</div>
+            </sc-if>
+            <sc-if value="{{ ansEventAdded }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;align-items:center;gap:9px;font-size:13.5px;font-weight:500;color:var(--ok)"><span style="width:17px;height:17px;border-radius:50%;background:var(--ok);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:10px">✓</span>Tillagd i Google Kalender — {{ ansEventTitle }}</div>
+            </sc-if>
+          </div>
+          </sc-if>
+        </div>
         </sc-if>
       </div>
       </sc-if>
 
       <!-- filter — native selects + Säkerhetskopiera (ff5f3e2/c3025c1) -->
       <div style="max-width:760px;margin:0 auto 10px;display:flex;gap:9px;justify-content:center;align-items:center;flex-wrap:wrap">
-        <select value="{{ filterClassLabel }}" onChange="{{ onFilterKlassSel }}" style="{{ klassSelStyle }}"><sc-for list="{{ klassSelOpts }}" as="o" hint-placeholder-count="4"><option>{{ o }}</option></sc-for></select>
-        <select value="{{ filterCourseLabel }}" onChange="{{ onFilterKursSel }}" style="{{ kursSelStyle }}"><sc-for list="{{ kursSelOpts }}" as="o" hint-placeholder-count="4"><option>{{ o }}</option></sc-for></select>
-        <select value="{{ filterDateLabel }}" onChange="{{ onFilterDatumSel }}" style="{{ datumSelStyle }}"><sc-for list="{{ datumSelOpts }}" as="o" hint-placeholder-count="4"><option>{{ o }}</option></sc-for></select>
-        <button onClick="{{ runBackup }}" title="Säkerhetskopiera lektionsdatabasen + historiken" style="{{ backupBtnStyle }}" data-sh="border-color:var(--ink) !important;color:var(--ink) !important">💾 {{ backupLabel }}</button>
+        <div style="position:relative" onMouseEnter="{{ fEnter }}" onMouseLeave="{{ fLeave }}">
+          <button onClick="{{ fKlassToggle }}" data-filter-on="{{ klassSelOn }}" style="display:inline-flex;align-items:center;gap:9px;background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:8px 13px;font-size:14px;font-family:inherit;cursor:pointer;white-space:nowrap;transition:border-color .14s" style-hover="border-color:var(--ink-3)">{{ filterClassLabel }}<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l4 4 4-4"></path></svg></button>
+          <sc-if value="{{ fKlassOpen }}" hint-placeholder-val="{{ false }}">
+            <div data-pop="{{ fPopAnim }}" style="position:absolute;top:100%;left:0;z-index:30;padding-top:6px"><div style="min-width:172px;background:var(--surface);border:1px solid var(--line-2);border-radius:10px;box-shadow:var(--shadow);padding:5px;display:flex;flex-direction:column;gap:1px">
+              <sc-for list="{{ klassMenuOpts }}" as="o" hint-placeholder-count="4">
+                <button onClick="{{ o.onSelect }}" data-opt="" style="display:flex;align-items:center;gap:10px;border:none;background:transparent;color:var(--ink);border-radius:7px;padding:8px 11px;font-size:13.5px;font-family:inherit;cursor:pointer;text-align:left;white-space:nowrap">{{ o.label }}<span style="flex:1;min-width:14px"></span><sc-if value="{{ o.isCur }}" hint-placeholder-val="{{ false }}"><span style="font-weight:600">✓</span></sc-if></button>
+              </sc-for>
+            </div></div>
+          </sc-if>
+        </div>
+        <div style="position:relative" onMouseEnter="{{ fEnter }}" onMouseLeave="{{ fLeave }}">
+          <button onClick="{{ fKursToggle }}" data-filter-on="{{ kursSelOn }}" style="display:inline-flex;align-items:center;gap:9px;background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:8px 13px;font-size:14px;font-family:inherit;cursor:pointer;white-space:nowrap;transition:border-color .14s" style-hover="border-color:var(--ink-3)">{{ filterCourseLabel }}<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l4 4 4-4"></path></svg></button>
+          <sc-if value="{{ fKursOpen }}" hint-placeholder-val="{{ false }}">
+            <div data-pop="{{ fPopAnim }}" style="position:absolute;top:100%;left:0;z-index:30;padding-top:6px"><div style="min-width:172px;background:var(--surface);border:1px solid var(--line-2);border-radius:10px;box-shadow:var(--shadow);padding:5px;display:flex;flex-direction:column;gap:1px">
+              <sc-for list="{{ kursMenuOpts }}" as="o" hint-placeholder-count="4">
+                <button onClick="{{ o.onSelect }}" data-opt="" style="display:flex;align-items:center;gap:10px;border:none;background:transparent;color:var(--ink);border-radius:7px;padding:8px 11px;font-size:13.5px;font-family:inherit;cursor:pointer;text-align:left;white-space:nowrap">{{ o.label }}<span style="flex:1;min-width:14px"></span><sc-if value="{{ o.isCur }}" hint-placeholder-val="{{ false }}"><span style="font-weight:600">✓</span></sc-if></button>
+              </sc-for>
+            </div></div>
+          </sc-if>
+        </div>
+        <div style="position:relative" onMouseEnter="{{ fEnter }}" onMouseLeave="{{ fLeave }}">
+          <button onClick="{{ fDatumToggle }}" data-filter-on="{{ datumSelOn }}" style="display:inline-flex;align-items:center;gap:9px;background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:8px 13px;font-size:14px;font-family:inherit;cursor:pointer;white-space:nowrap;transition:border-color .14s" style-hover="border-color:var(--ink-3)">{{ filterDateLabel }}<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l4 4 4-4"></path></svg></button>
+          <sc-if value="{{ fDatumOpen }}" hint-placeholder-val="{{ false }}">
+            <div data-pop="{{ fPopAnim }}" style="position:absolute;top:100%;left:0;z-index:30;padding-top:6px"><div style="min-width:172px;background:var(--surface);border:1px solid var(--line-2);border-radius:10px;box-shadow:var(--shadow);padding:5px;display:flex;flex-direction:column;gap:1px">
+              <sc-for list="{{ datumMenuOpts }}" as="o" hint-placeholder-count="4">
+                <button onClick="{{ o.onSelect }}" data-opt="" style="display:flex;align-items:center;gap:10px;border:none;background:transparent;color:var(--ink);border-radius:7px;padding:8px 11px;font-size:13.5px;font-family:inherit;cursor:pointer;text-align:left;white-space:nowrap">{{ o.label }}<span style="flex:1;min-width:14px"></span><sc-if value="{{ o.isCur }}" hint-placeholder-val="{{ false }}"><span style="font-weight:600">✓</span></sc-if></button>
+              </sc-for>
+            </div></div>
+          </sc-if>
+        </div>
       </div>
       <sc-if value="{{ hasActiveFilter }}" hint-placeholder-val="{{ false }}">
       <div style="max-width:760px;margin:0 auto 20px;display:flex;gap:7px;justify-content:center;align-items:center;flex-wrap:wrap">
@@ -514,70 +582,44 @@
       </sc-if>
       <sc-if value="{{ noActiveFilter }}" hint-placeholder-val="{{ true }}"><div style="margin-bottom:20px"></div></sc-if>
 
-      <!-- kort-scen -->
+      <!-- kartotek: veckogrupper -->
       <div style="max-width:1000px;margin:0 auto">
-        <div style="display:flex;align-items:center;gap:9px;margin-bottom:13px;padding:0 2px">
-          <span style="font-size:12px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:var(--ink-3)">{{ recCountLabel }}</span>
-          <sc-if value="{{ inspIsAsk }}" hint-placeholder-val="{{ false }}"><span style="font-size:12.5px;color:var(--accent);display:inline-flex;align-items:center;gap:6px"><span style="width:6px;height:6px;border-radius:50%;background:var(--accent)"></span>Ordnas efter relevans</span></sc-if>
-        </div>
-        <div class="{{ zoomStageCls }}" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px;align-items:start">
-          <sc-for list="{{ recCards }}" as="r" hint-placeholder-count="6">
-            <div class="{{ zoomCardCls }}" data-stage="{{ r.stage }}" style="{{ r.cardStyle }}" style-hover="border-color:var(--line-2);box-shadow:var(--shadow)">
-              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
-                <span style="width:50px;height:32px;border-radius:8px;background:var(--sunken);border:1px solid var(--line);display:flex;align-items:flex-end;justify-content:center;gap:2px;flex:0 0 auto;padding-bottom:8px">
-                  <span style="width:2.5px;height:8px;border-radius:2px;background:var(--ink-3)"></span><span style="width:2.5px;height:15px;border-radius:2px;background:var(--accent)"></span><span style="width:2.5px;height:11px;border-radius:2px;background:var(--ink-3)"></span><span style="width:2.5px;height:6px;border-radius:2px;background:var(--ink-3)"></span>
-                </span>
-                <sc-if value="{{ r.unassigned }}" hint-placeholder-val="{{ false }}"><span style="font-size:10.5px;font-weight:500;color:var(--ink-3);background:var(--sunken);border:1px solid var(--line);border-radius:6px;padding:3px 7px">Ej tilldelad</span></sc-if>
-                <sc-if value="{{ r.hasKlass }}" hint-placeholder-val="{{ true }}"><span style="font-size:11.5px;font-weight:600;color:var(--accent);background:var(--accent-weak);border-radius:99px;padding:2px 9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px">{{ r.tagLabel }}</span></sc-if>
-              </div>
-              <div>
-                <div style="font-size:15.5px;font-weight:600;color:var(--ink);line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.title }}</div>
-                <div style="display:flex;align-items:center;gap:7px;margin-top:6px">
-                  <span style="font-size:12px;color:var(--ink-3);font-variant-numeric:tabular-nums">{{ r.date }}</span><span style="width:3px;height:3px;border-radius:50%;background:var(--line-2)"></span><span style="font-size:12px;color:var(--ink-3);font-variant-numeric:tabular-nums">{{ r.dur }}</span>
+        <sc-for list="{{ weekGroups }}" as="w" hint-placeholder-count="2">
+          <div style="display:flex;align-items:baseline;gap:18px;margin:38px 0 16px;padding-bottom:12px;border-bottom:2px solid var(--ink)">
+            <span class="disp" style="font-size:clamp(24px,2.6vw,30px);line-height:1;color:var(--ink);white-space:nowrap;flex:0 0 auto">&#8203;<span class="ser" style="color:var(--ink-3)">Vecka</span>&nbsp;{{ w.num }}</span>
+            <span style="font-family:var(--mono);font-size:11.5px;letter-spacing:0.09em;text-transform:uppercase;color:var(--ink-2)">{{ w.range }}</span>
+            <div style="flex:1"></div>
+            <sc-if value="{{ w.hasHits }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:11px;letter-spacing:0.09em;text-transform:uppercase;color:var(--accent)"><span style="width:7px;height:7px;border-radius:50%;background:var(--accent)"></span>{{ w.hitLabel }}</span></sc-if>
+            <span style="font-family:var(--mono);font-size:11px;letter-spacing:0.09em;text-transform:uppercase;color:var(--ink-3)">{{ w.count }}</span>
+          </div>
+          <div class="{{ zoomStageCls }}" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;align-items:start">
+            <sc-for list="{{ w.cards }}" as="r" hint-placeholder-count="3">
+              <div class="{{ zoomCardCls }}" data-stage="{{ r.stage }}" data-rec-id="{{ r.id }}" onClick="{{ r.onOpenChat }}" style="background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:15px 16px;box-shadow:var(--shadow-sm);display:flex;flex-direction:column;gap:10px;cursor:pointer" style-hover="border-color:var(--line-2);box-shadow:var(--shadow)">
+                <div style="display:flex;align-items:center;gap:8px">
+                  <span data-cc="{{ r.cc }}" style="border-radius:99px;padding:2px 10px;font-size:11.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:0 1 auto;min-width:0">{{ r.tagLabel }}</span>
+                  <sc-if value="{{ r.isHit }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:var(--accent);background:var(--accent-weak);border-radius:99px;padding:2px 9px;flex:0 0 auto"><span style="width:6px;height:6px;border-radius:50%;background:var(--accent)"></span>träff {{ r.hitT }}</span></sc-if>
+                  <span style="flex:1"></span>
+                  <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.05em;text-transform:uppercase;color:var(--ink-3);white-space:nowrap">{{ r.date }}</span>
                 </div>
-              </div>
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-                <label style="display:flex;flex-direction:column;gap:4px;font-size:11.5px;color:var(--ink-3)">Klass
-                  <input value="{{ r.curKlass }}" onChange="{{ r.onSaveKlass }}" placeholder="t.ex. NA21" style="background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:9px;padding:8px 11px;font-size:14px;font-family:inherit;min-width:0;width:100%;box-sizing:border-box"></label>
-                <label style="display:flex;flex-direction:column;gap:4px;font-size:11.5px;color:var(--ink-3)">Kurs
-                  <input value="{{ r.curKurs }}" onChange="{{ r.onSaveKurs }}" placeholder="t.ex. Matematik 2b" style="background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:9px;padding:8px 11px;font-size:14px;font-family:inherit;min-width:0;width:100%;box-sizing:border-box"></label>
-                <label style="display:flex;flex-direction:column;gap:4px;font-size:11.5px;color:var(--ink-3)">Sal
-                  <input value="{{ r.curSal }}" onChange="{{ r.onSaveSal }}" placeholder="t.ex. B214" style="background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:9px;padding:8px 11px;font-size:14px;font-family:inherit;min-width:0;width:100%;box-sizing:border-box"></label>
-                <label style="display:flex;flex-direction:column;gap:4px;font-size:11.5px;color:var(--ink-3)">Datum
-                  <input type="date" value="{{ r.curDatum }}" onChange="{{ r.onSaveDatum }}" style="background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:9px;padding:8px 11px;font-size:14px;font-family:inherit;min-width:0;width:100%;box-sizing:border-box"></label>
-              </div>
-              <div style="display:flex;align-items:center;gap:7px;border-top:1px solid var(--line);padding-top:11px;margin-top:1px;flex-wrap:wrap">
-                <button onClick="{{ r.onOpen }}" style="display:inline-flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--line);color:var(--ink-2);border-radius:8px;padding:7px 13px;font-size:12.5px;font-weight:500;cursor:pointer;font-family:inherit;transition:border-color .12s,color .12s" style-hover="border-color:var(--ink-3);color:var(--ink)">Öppna</button>
-                <button onClick="{{ r.onChat }}" style="display:inline-flex;align-items:center;gap:6px;border-radius:8px;padding:7px 13px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .12s,border-color .12s;background:var(--accent-weak);border:1px solid color-mix(in srgb,var(--accent) 28%,transparent);color:var(--accent)">💬 Chatta</button>
-                <button onClick="{{ r.onToggleInsights }}" style="{{ r.insightsBtnStyle }}">📊 Insikter</button>
-                <span style="flex:1"></span>
-                <button onClick="{{ r.onDelete }}" aria-label="Ta bort" style="width:30px;height:30px;border:1px solid var(--line);background:var(--surface);border-radius:8px;cursor:pointer;color:var(--ink-3);display:flex;align-items:center;justify-content:center;transition:border-color .12s,color .12s" style-hover="border-color:var(--bad);color:var(--bad)"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.5 8.5h6l.5-8.5"></path></svg></button>
-              </div>
-              <sc-if value="{{ r.insightsOpen }}" hint-placeholder-val="{{ false }}">
-              <div style="margin-top:3px;padding-top:14px;border-top:1px solid var(--line)">
-                <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px">
-                  <span style="font-size:13px;font-weight:600;color:var(--ink-2);letter-spacing:0.02em">INSIKTER</span>
-                  <button onClick="{{ r.onAnalyze }}" style="{{ r.analyzeBtnStyle }}">{{ r.analyzeLabel }}</button>
-                </div>
-                <sc-if value="{{ r.insightsEmpty }}" hint-placeholder-val="{{ true }}">
-                  <div style="font-size:13.5px;color:var(--ink-3);padding:2px 0 8px">Inga insikter än. Kör "Analysera lektion" för att låta språkmodellen plocka ut kalenderposter, svårigheter, åtgärder, grupprum och material.</div>
-                </sc-if>
-                <sc-for list="{{ r.insightRows }}" as="i" hint-placeholder-count="2">
-                  <div style="display:flex;align-items:flex-start;gap:10px;background:var(--sunken);border:1px solid var(--line);border-radius:10px;padding:9px 11px;margin-bottom:7px">
-                    <span style="flex:0 0 auto;font-size:14px">{{ i.icon }}</span>
-                    <div style="flex:1;min-width:0">
-                      <div style="font-size:13.5px;color:var(--ink)">{{ i.text }}</div>
-                      <div style="font-size:12px;color:var(--ink-3);margin-top:2px">{{ i.meta }}</div>
-                    </div>
+                <div>
+                  <div style="font-size:16px;font-weight:600;color:var(--ink);line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.title }}</div>
+                  <div style="display:flex;align-items:center;gap:12px;margin-top:6px">
+                    <span style="font-family:var(--mono);font-size:10px;color:var(--ink-3);font-variant-numeric:tabular-nums">{{ r.dur }}</span>
+                    <span style="font-family:var(--mono);font-size:10px;color:var(--ink-3);font-variant-numeric:tabular-nums">{{ r.wordLabel }}</span>
                   </div>
-                </sc-for>
+                </div>
+                <div style="display:flex;align-items:center;gap:7px;border-top:1px solid var(--line);padding-top:10px">
+                  <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:var(--accent)">Öppna &amp; chatta ↗</span>
+                  <span style="flex:1"></span>
+                  <button onClick="{{ r.onRename }}" aria-label="Redigera uppgifter" title="Redigera namn, klass och kurs" style="width:29px;height:29px;border:1px solid var(--line);background:var(--surface);border-radius:8px;cursor:pointer;color:var(--ink-3);display:flex;align-items:center;justify-content:center;transition:border-color .12s,color .12s" style-hover="border-color:var(--ink-3);color:var(--ink)"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11.3 2.2l2.5 2.5L5.5 13H3v-2.5z"></path></svg></button>
+                  <button onClick="{{ r.onDelete }}" aria-label="Ta bort" style="width:29px;height:29px;border:1px solid var(--line);background:var(--surface);border-radius:8px;cursor:pointer;color:var(--ink-3);display:flex;align-items:center;justify-content:center;transition:border-color .12s,color .12s" style-hover="border-color:var(--bad);color:var(--bad)"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.5 8.5h6l.5-8.5"></path></svg></button>
+                </div>
               </div>
-              </sc-if>
-            </div>
-          </sc-for>
-        </div>
+            </sc-for>
+          </div>
+        </sc-for>
         <sc-if value="{{ recEmpty }}" hint-placeholder-val="{{ false }}">
-          <div style="text-align:center;color:var(--ink-2);font-size:15px;padding:46px 0;background:var(--surface);border:1px dashed var(--line-2);border-radius:14px">Inga inspelningar matchar dina filter.</div>
+          <div style="text-align:center;color:var(--ink-2);font-size:15px;padding:46px 0;margin-top:24px;background:var(--surface);border:1px dashed var(--line-2);border-radius:14px">Inga inspelningar matchar dina filter.</div>
         </sc-if>
       </div>
     </section>
@@ -818,83 +860,72 @@
       </div>
     </div>
   </sc-if>
-  <!-- ============ AI-SVAR (modal, källhänvisad) ============ -->
-  <sc-if value="{{ answerOpen }}" hint-placeholder-val="{{ false }}">
-    <div onClick="{{ closeAnswer }}" data-modal-back="{{ answerAnim }}" style="position:fixed;inset:0;z-index:89;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--canvas) 64%,transparent);backdrop-filter:blur(7px);padding:24px">
-      <div onClick="{{ stopProp }}" data-modal-card="{{ answerAnim }}" style="width:min(94vw,640px);max-height:84vh;display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);overflow:hidden">
-        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:20px 24px 15px;border-bottom:1px solid var(--line);flex:0 0 auto">
-          <div style="min-width:0">
-            <div style="display:flex;align-items:center;gap:9px;margin-bottom:8px;flex-wrap:wrap">
-              <span style="font-size:11px;font-weight:600;letter-spacing:.05em;color:var(--accent);background:var(--accent-weak);padding:3px 9px;border-radius:6px">AI-SVAR</span>
-              <span style="display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;color:var(--ok);background:color-mix(in srgb,var(--ok) 13%,transparent);border-radius:99px;padding:4px 10px"><span style="width:6px;height:6px;border-radius:50%;background:var(--ok)"></span>{{ answerRefCount }} källor · från transkripten</span>
-            </div>
-            <div style="font-size:16px;font-weight:600;color:var(--ink);line-height:1.35">{{ askQ }}</div>
-          </div>
-          <button onClick="{{ closeAnswer }}" aria-label="Stäng" style="flex:0 0 auto;width:34px;height:34px;display:flex;align-items:center;justify-content:center;background:var(--surface);border:1px solid var(--line);border-radius:9px;color:var(--ink-2);cursor:pointer;font-size:15px">✕</button>
+  <!-- ============ LEKTION — fullskärms-overlay: transkript + chatt + kalender ============ -->
+  <sc-if value="{{ lessonChatOpen }}" hint-placeholder-val="{{ false }}">
+    <div data-modal-back="{{ lessonChatAnim }}" data-screen-label="Lektion (overlay)" style="position:fixed;inset:0;z-index:87;display:flex;flex-direction:column;background:var(--canvas)">
+      <div style="flex:0 0 auto;display:flex;align-items:center;gap:12px;padding:12px 20px;border-bottom:1px solid var(--line);background:var(--surface)">
+        <button onClick="{{ closeLessonChat }}" style="flex:0 0 auto;border:1px solid var(--line-2);background:var(--sunken);color:var(--ink-2);border-radius:7px;padding:6px 10px;font-family:var(--mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;cursor:pointer">Esc — Stäng</button>
+        <span data-cc="{{ ovCc }}" style="border-radius:99px;padding:2px 10px;font-size:11.5px;font-weight:600;white-space:nowrap;flex:0 0 auto">{{ ovTag }}</span>
+        <div style="min-width:0">
+          <div style="font-size:15.5px;font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ lessonChatName }}</div>
+          <div style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.06em;text-transform:uppercase;color:var(--ink-3);margin-top:1px">{{ ovMeta }}</div>
         </div>
-        <div data-hidescroll style="overflow:auto;overscroll-behavior:contain;padding:18px 24px 22px;min-height:0">
-          <div style="font-size:15px;line-height:1.7;color:var(--ink)">
-            <sc-for list="{{ answerTokens }}" as="tk" hint-placeholder-count="5">
-              <sc-if value="{{ tk.isText }}" hint-placeholder-val="{{ true }}"><span>{{ tk.text }}</span></sc-if>
-              <sc-if value="{{ tk.isCite }}" hint-placeholder-val="{{ false }}"><span onClick="{{ tk.onCite }}" style="display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;color:var(--accent);background:var(--accent-weak);border:1px solid color-mix(in srgb,var(--accent) 22%,transparent);border-radius:7px;padding:1px 7px;margin:0 1px;cursor:pointer;vertical-align:1px"><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="8" cy="8" r="6"></circle><path d="M8 4.6V8l2.3 1.5" stroke-linecap="round"></path></svg>{{ tk.rec }} · {{ tk.t }}</span></sc-if>
-            </sc-for>
+        <span style="flex:1"></span>
+        <sc-if value="{{ ovHasHit }}" hint-placeholder-val="{{ false }}">
+          <button onClick="{{ ovPlayHit }}" style="flex:0 0 auto;display:inline-flex;align-items:center;gap:7px;border:1px solid color-mix(in srgb,var(--accent) 45%,var(--line));background:var(--accent-weak);color:var(--accent);border-radius:8px;padding:7px 13px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit;font-variant-numeric:tabular-nums">▸ {{ ovHitT }}</button>
+        </sc-if>
+        <button onClick="{{ ovExport }}" style="flex:0 0 auto;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:8px;padding:7px 13px;font-size:12.5px;font-weight:500;cursor:pointer;font-family:inherit">Exportera</button>
+      </div>
+      <div data-hidescroll style="flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;padding:24px 24px 14px">
+        <div style="max-width:820px;margin:0 auto">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
+            <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3)">Transkription</span>
+            <div style="flex:1;height:1px;background:var(--line)"></div>
+            <sc-if value="{{ ovHasHit }}" hint-placeholder-val="{{ false }}"><span style="font-family:var(--mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--accent)">Källa markerad · {{ ovHitT }}</span></sc-if>
           </div>
-          <div style="margin-top:18px;padding-top:15px;border-top:1px dashed var(--line-2)">
-            <div style="font-size:11px;font-weight:600;letter-spacing:.05em;color:var(--ink-3);margin-bottom:10px">KÄLLOR — klicka för att läsa i transkriptet</div>
-            <sc-for list="{{ answerRefs }}" as="rf" hint-placeholder-count="2">
-              <div onClick="{{ rf.onToggle }}" style="display:flex;align-items:center;gap:11px;padding:11px 13px;border:1px solid var(--line);border-radius:11px;margin-bottom:8px;cursor:pointer;background:var(--surface);transition:border-color .12s" style-hover="border-color:var(--accent)">
-                <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="var(--accent)" stroke-width="1.8"><circle cx="8" cy="8" r="6"></circle><path d="M8 4.6V8l2.3 1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
-                <span style="flex:1;min-width:0;font-size:13.5px;font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ rf.rec }}</span>
-                <span style="font-size:12px;font-weight:600;color:var(--accent);font-variant-numeric:tabular-nums">{{ rf.t }}</span>
+          <sc-for list="{{ ovRows }}" as="p" hint-placeholder-count="8">
+            <sc-if value="{{ p.hit }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;gap:16px;padding:11px 14px;margin:2px -14px;background:var(--accent-weak);border:1px solid color-mix(in srgb,var(--accent) 40%,var(--line));border-radius:8px">
+                <span style="font-variant-numeric:tabular-nums;font-family:var(--mono);font-size:11px;color:var(--accent);flex:0 0 auto;width:48px;padding-top:3px;font-weight:500">{{ p.t }}</span>
+                <span style="font-size:15.5px;color:var(--ink);line-height:1.6;font-weight:500">{{ p.txt }}</span>
               </div>
-              <sc-if value="{{ rf.open }}" hint-placeholder-val="{{ false }}">
-                <div style="background:var(--sunken);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:0 11px 11px 0;padding:13px 15px;margin:-2px 0 10px;animation:unlockIn .3s ease both">
-                  <sc-for list="{{ rf.ctx }}" as="c" hint-placeholder-count="3">
-                    <sc-if value="{{ c.hit }}" hint-placeholder-val="{{ false }}"><div style="display:flex;gap:13px;padding:4px 6px;margin:0 -6px 1px;background:color-mix(in srgb,var(--accent) 11%,transparent);border-radius:6px"><span style="font-variant-numeric:tabular-nums;font-size:12.5px;color:var(--accent);font-weight:600;flex:0 0 auto;width:44px">{{ c.t }}</span><span style="font-size:14px;line-height:1.5;color:var(--ink);font-weight:500">{{ c.s }}</span></div></sc-if>
-                    <sc-if value="{{ c.norm }}" hint-placeholder-val="{{ true }}"><div style="display:flex;gap:13px;padding:4px 0"><span style="font-variant-numeric:tabular-nums;font-size:12.5px;color:var(--ink-3);flex:0 0 auto;width:44px">{{ c.t }}</span><span style="font-size:14px;line-height:1.5;color:var(--ink-2)">{{ c.s }}</span></div></sc-if>
-                  </sc-for>
-                  <button onClick="{{ rf.onToggle }}" style="display:inline-flex;align-items:center;gap:6px;margin-top:10px;background:transparent;border:none;color:var(--accent);font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3.5 5.5 8l4.5 4.5"></path></svg>Tillbaka till svaret</button>
-                </div>
-              </sc-if>
-            </sc-for>
-          </div>
+            </sc-if>
+            <sc-if value="{{ p.norm }}" hint-placeholder-val="{{ true }}">
+              <div style="display:flex;gap:16px;padding:8px 0;border-bottom:1px solid color-mix(in srgb,var(--line) 60%,transparent)">
+                <span style="font-variant-numeric:tabular-nums;font-family:var(--mono);font-size:11px;color:var(--ink-3);flex:0 0 auto;width:48px;padding-top:3px">{{ p.t }}</span>
+                <span style="font-size:15.5px;color:var(--ink-2);line-height:1.6">{{ p.txt }}</span>
+              </div>
+            </sc-if>
+          </sc-for>
         </div>
       </div>
-    </div>
-  </sc-if>
-
-  <!-- ============ CHATTA MED LEKTION (modal, f18507a) ============ -->
-  <sc-if value="{{ lessonChatOpen }}" hint-placeholder-val="{{ false }}">
-    <div onClick="{{ closeLessonChat }}" data-modal-back="{{ lessonChatAnim }}" style="position:fixed;inset:0;z-index:87;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--canvas) 64%,transparent);backdrop-filter:blur(7px);padding:24px">
-      <div onClick="{{ stopProp }}" data-modal-card="{{ lessonChatAnim }}" style="width:min(94vw,680px);max-height:86vh;display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);padding:24px 26px">
-        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:14px">
-          <div style="min-width:0">
-            <div class="eyebrow" style="margin-bottom:10px">Chatta med lektionen</div>
-            <h2 class="disp" style="font-size:24px;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ lessonChatName }}</h2>
-          </div>
-          <button onClick="{{ closeLessonChat }}" aria-label="Stäng" style="flex:0 0 auto;width:34px;height:34px;display:flex;align-items:center;justify-content:center;background:var(--surface);border:1px solid var(--line);border-radius:9px;color:var(--ink-2);cursor:pointer;font-size:15px">✕</button>
-        </div>
-        <div style="flex:1;min-height:180px;overflow:auto;display:flex;flex-direction:column;gap:12px;padding:4px 2px 12px">
+      <div data-modal-card="{{ lessonChatAnim }}" style="flex:0 0 auto;margin:0 auto 16px;width:min(880px,94vw);background:var(--surface);border:1px solid var(--ink);border-radius:13px;box-shadow:var(--shadow);overflow:hidden">
+        <div data-hidescroll style="max-height:34vh;overflow:auto;overscroll-behavior:contain;padding:14px 18px;display:flex;flex-direction:column;gap:11px">
           <sc-if value="{{ lessonChatEmpty }}" hint-placeholder-val="{{ true }}">
-            <div style="font-size:14px;color:var(--ink-3);line-height:1.6;padding:8px 2px">Fråga vad som helst om just den här lektionen — svaren förankras i transkriptet med tidsstämplade källor.</div>
+            <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center">
+              <button onClick="{{ ovAskSum }}" style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2);background:var(--sunken);border:1px solid var(--line);border-radius:99px;padding:7px 13px;cursor:pointer;font-family:inherit;transition:border-color .12s,color .12s" style-hover="border-color:var(--accent);color:var(--accent)">Sammanfatta lektionen</button>
+              <button onClick="{{ ovAskStud }}" style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2);background:var(--sunken);border:1px solid var(--line);border-radius:99px;padding:7px 13px;cursor:pointer;font-family:inherit;transition:border-color .12s,color .12s" style-hover="border-color:var(--accent);color:var(--accent)">Vilka elever nämns?</button>
+              <button onClick="{{ ovAskRemind }}" style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2);background:var(--sunken);border:1px solid var(--line);border-radius:99px;padding:7px 13px;cursor:pointer;font-family:inherit;transition:border-color .12s,color .12s" style-hover="border-color:var(--accent);color:var(--accent)">Skapa läxpåminnelse</button>
+              <button onClick="{{ proposeOvEvent }}" style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;color:var(--accent);background:var(--accent-weak);border:1px solid color-mix(in srgb,var(--accent) 40%,transparent);border-radius:99px;padding:7px 13px;cursor:pointer;font-family:inherit;transition:border-color .12s" style-hover="border-color:var(--accent)"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="flex:0 0 auto"><rect x="2" y="3" width="12" height="11" rx="2"></rect><path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3M8 9v3M6.5 10.5h3"></path></svg>Kalenderhändelse</button>
+            </div>
           </sc-if>
           <sc-for list="{{ lessonChatMsgs }}" as="m" hint-placeholder-count="2">
             <sc-if value="{{ m.isUser }}" hint-placeholder-val="{{ false }}">
-              <div style="align-self:flex-end;max-width:82%;background:var(--ink);color:var(--canvas);border-radius:14px 14px 4px 14px;padding:10px 14px;font-size:14.5px;line-height:1.55">{{ m.text }}</div>
+              <div style="align-self:flex-end;max-width:82%;background:var(--ink);color:var(--canvas);border-radius:11px 11px 3px 11px;padding:9px 13px;font-size:14px;line-height:1.55">{{ m.text }}</div>
             </sc-if>
             <sc-if value="{{ m.isAssistant }}" hint-placeholder-val="{{ true }}">
-              <div style="align-self:flex-start;max-width:88%;background:var(--sunken);border:1px solid var(--line);border-radius:14px 14px 14px 4px;padding:11px 14px;font-size:14.5px;color:var(--ink);line-height:1.6">
+              <div style="align-self:flex-start;max-width:92%;font-size:14.5px;color:var(--ink);line-height:1.65">
                 <span>{{ m.text }}</span>
                 <sc-if value="{{ m.hasSources }}" hint-placeholder-val="{{ true }}">
-                  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:9px">
+                  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
                     <sc-for list="{{ m.sources }}" as="src" hint-placeholder-count="2">
-                      <button onClick="{{ src.onToggle }}" style="display:inline-flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--line);color:var(--accent);border-radius:8px;padding:5px 10px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;font-variant-numeric:tabular-nums" style-hover="border-color:var(--accent)"><span style="width:16px;height:16px;border-radius:5px;background:var(--accent-weak);display:inline-flex;align-items:center;justify-content:center;font-size:10px">{{ src.num }}</span>{{ src.t }}</button>
+                      <button onClick="{{ src.onToggle }}" style="display:inline-flex;align-items:center;gap:6px;background:var(--surface);border:1px solid color-mix(in srgb,var(--accent) 40%,var(--line));color:var(--accent);border-radius:8px;padding:4px 10px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;font-variant-numeric:tabular-nums" style-hover="background:var(--accent-weak)"><span style="width:6px;height:6px;border-radius:2px;background:var(--accent)"></span>{{ src.t }}</button>
                     </sc-for>
                   </div>
                 </sc-if>
                 <sc-if value="{{ m.openSource }}" hint-placeholder-val="{{ false }}">
-                  <div style="margin-top:9px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px">
-                    <div style="font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3);margin-bottom:7px">Ur transkriptet · {{ m.openSourceT }}</div>
+                  <div style="margin-top:8px;background:var(--sunken);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:0 9px 9px 0;padding:9px 12px">
+                    <div style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-3);margin-bottom:6px">Ur transkriptet · {{ m.openSourceT }}</div>
                     <div style="font-size:13px;color:var(--ink-2);line-height:1.55">{{ m.openSourceText }}</div>
                   </div>
                 </sc-if>
@@ -902,14 +933,70 @@
             </sc-if>
           </sc-for>
           <sc-if value="{{ lessonChatTyping }}" hint-placeholder-val="{{ false }}">
-            <div style="align-self:flex-start;display:flex;align-items:center;gap:9px;color:var(--ink-2);font-size:13.5px;padding:6px 8px;background:var(--sunken);border:1px solid var(--line);border-radius:14px 14px 14px 4px"><span style="width:13px;height:13px;border-radius:50%;border:2px solid var(--line-2);border-top-color:var(--accent);animation:spin .7s linear infinite"></span>Söker i transkriptet<span class="insp-dots" style="color:var(--ink-3)"><i></i><i></i><i></i></span></div>
+            <div style="align-self:flex-start;display:flex;align-items:center;gap:9px;color:var(--ink-2);font-size:13px;padding:4px 0"><span style="width:13px;height:13px;border-radius:50%;border:2px solid var(--line-2);border-top-color:var(--accent);animation:spin .7s linear infinite"></span>Söker i transkriptet<span class="insp-dots" style="color:var(--ink-3)"><i></i><i></i><i></i></span></div>
+          </sc-if>
+          <sc-if value="{{ ovHasEvent }}" hint-placeholder-val="{{ false }}">
+            <div style="border:1px dashed var(--line-2);background:var(--sunken);border-radius:10px;padding:11px 13px;animation:fadeup .3s ease both">
+              <sc-if value="{{ ovEventNotAdded }}" hint-placeholder-val="{{ true }}">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:9px">
+                  <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-3)">Förslag → Google Kalender</span>
+                  <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.07em;text-transform:uppercase;color:var(--ok)">● ansluten</span>
+                </div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap">
+                  <input value="{{ ovEventTitle }}" onChange="{{ setOvEventTitle }}" style="flex:2 1 220px;min-width:0;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 11px;font-size:13.5px;font-weight:500;font-family:inherit;color:var(--ink)">
+                  <span title="Ändra dag och tid via AI-chatten nedan" style="flex:1 1 160px;min-width:0;display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--sunken);border-radius:8px;padding:8px 11px;font-size:13px;font-family:inherit;color:var(--ink);font-variant-numeric:tabular-nums;white-space:nowrap"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="flex:0 0 auto"><rect x="2" y="3" width="12" height="11" rx="2"></rect><path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3"></path></svg><span style="min-width:0;overflow:hidden;text-overflow:ellipsis">{{ ovEventWhen }}</span></span>
+                  <button onClick="{{ addOvEvent }}" style="flex:0 0 auto;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Lägg till ✓</button>
+                </div>
+                <div style="margin-top:9px">
+                  <div style="font-family:var(--mono);font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);margin-bottom:5px">Anteckning i kalenderposten</div>
+                  <textarea value="{{ ovEventDesc }}" onChange="{{ setOvEventDesc }}" rows="2" style="width:100%;box-sizing:border-box;resize:vertical;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 11px;font-size:13px;line-height:1.5;font-family:inherit;color:var(--ink);outline:none"></textarea>
+                </div>
+                <div style="margin-top:10px;border-top:1px dashed var(--line-2);padding-top:10px">
+                  <div style="display:flex;align-items:center;gap:7px;margin-bottom:8px">
+                    <span class="ai-blink" style="width:6px;height:6px;border-radius:50%;background:var(--accent);flex:0 0 auto"></span>
+                    <span style="font-family:var(--mono);font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3)">Ändra förslaget med lokal AI — tid, datum &amp; innehåll</span>
+                  </div>
+                  <sc-for list="{{ ovAiMsgs }}" as="am" hint-placeholder-count="1">
+                    <sc-if value="{{ am.isUser }}" hint-placeholder-val="{{ false }}">
+                      <div style="display:flex;justify-content:flex-end;margin-bottom:6px"><span style="max-width:82%;background:var(--ink);color:var(--canvas);border-radius:9px 9px 3px 9px;padding:6px 10px;font-size:12.5px;line-height:1.5">{{ am.text }}</span></div>
+                    </sc-if>
+                    <sc-if value="{{ am.isAi }}" hint-placeholder-val="{{ false }}">
+                      <div style="display:flex;justify-content:flex-start;margin-bottom:6px"><span style="max-width:88%;background:var(--surface);border:1px solid var(--line);border-radius:9px 9px 9px 3px;padding:6px 10px;font-size:12.5px;line-height:1.5;color:var(--ink)">{{ am.text }}</span></div>
+                    </sc-if>
+                  </sc-for>
+                  <sc-if value="{{ ovAiBusy }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;align-items:center;gap:8px;color:var(--ink-2);font-size:12px;margin-bottom:7px"><span style="width:11px;height:11px;border-radius:50%;border:2px solid var(--line-2);border-top-color:var(--accent);animation:spin .7s linear infinite;flex:0 0 auto"></span>Lokal modell läser transkriptet och uppdaterar förslaget …</div>
+                  </sc-if>
+                  <sc-if value="{{ ovAiEmpty }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+                      <button onClick="{{ ovAiChip1 }}" style="border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:99px;padding:5px 11px;font-size:12px;font-family:inherit;cursor:pointer;transition:border-color .12s,color .12s" style-hover="border-color:var(--accent);color:var(--accent)">”Flytta till fredag 10:00”</button>
+                      <button onClick="{{ ovAiChip2 }}" style="border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:99px;padding:5px 11px;font-size:12px;font-family:inherit;cursor:pointer;transition:border-color .12s,color .12s" style-hover="border-color:var(--accent);color:var(--accent)">”Lägg till läxan i anteckningen”</button>
+                      <button onClick="{{ ovAiChip3 }}" style="border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:99px;padding:5px 11px;font-size:12px;font-family:inherit;cursor:pointer;transition:border-color .12s,color .12s" style-hover="border-color:var(--accent);color:var(--accent)">”Kortare titel”</button>
+                    </div>
+                  </sc-if>
+                  <div style="display:flex;gap:7px">
+                    <input value="{{ ovAiInput }}" onChange="{{ setOvAiInput }}" onKeyDown="{{ onOvAiKey }}" placeholder="T.ex. ”flytta till onsdag 14:30” eller ”lägg till att de ska repetera bråken” …" style="flex:1;min-width:0;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 11px;font-size:13px;font-family:inherit;color:var(--ink);outline:none">
+                    <button onClick="{{ sendOvAi }}" style="flex:0 0 auto;background:var(--accent-weak);color:var(--accent);border:1px solid var(--accent);border-radius:8px;padding:8px 13px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit">Ändra ✨</button>
+                  </div>
+                </div>
+              </sc-if>
+              <sc-if value="{{ ovEventAdded }}" hint-placeholder-val="{{ false }}">
+                <div style="display:flex;align-items:center;gap:9px;font-size:13px;font-weight:500;color:var(--ok)"><span style="width:16px;height:16px;border-radius:50%;background:var(--ok);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:9px">✓</span>Tillagd i Google Kalender — {{ ovEventTitle }}</div>
+              </sc-if>
+            </div>
           </sc-if>
         </div>
-        <div style="display:flex;gap:10px;align-items:center;border-top:1px solid var(--line);padding-top:14px">
-          <input value="{{ lessonChatInput }}" onChange="{{ setLessonChatInput }}" onKeyDown="{{ onLessonChatKey }}" placeholder="Skriv en fråga om lektionen …" style="flex:1;min-width:0;background:var(--sunken);border:1px solid var(--line);color:var(--ink);border-radius:11px;padding:12px 14px;font-size:15px;font-family:inherit;outline:none">
-          <button onClick="{{ sendLessonChat }}" style="flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:11px;padding:12px 20px;font-size:15px;font-weight:500;cursor:pointer;font-family:inherit;box-shadow:var(--shadow-sm);transition:background .15s" style-hover="background:var(--accent);box-shadow:0 6px 16px -6px color-mix(in srgb,var(--accent) 55%,transparent)">Skicka</button>
+        <div style="border-top:1px solid var(--line);padding:10px 12px 7px">
+          <div style="display:flex;gap:8px;align-items:center">
+            <button onClick="{{ proposeOvEvent }}" title="Föreslå kalenderhändelse från lektionen" aria-label="Kalenderhändelse" style="flex:0 0 auto;width:42px;height:42px;display:flex;align-items:center;justify-content:center;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:9px;cursor:pointer;transition:border-color .12s,color .12s" style-hover="border-color:var(--accent);color:var(--accent)"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="2" y="3" width="12" height="11" rx="2"></rect><path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3M8 9v3M6.5 10.5h3"></path></svg></button>
+            <input value="{{ lessonChatInput }}" onChange="{{ setLessonChatInput }}" onKeyDown="{{ onLessonChatKey }}" placeholder="Fråga lektionen — svar med tidsstämplar …" style="flex:1;min-width:0;background:var(--canvas);border:1px solid var(--line);color:var(--ink);border-radius:9px;padding:11px 13px;font-size:14.5px;font-family:inherit;outline:none">
+            <button onClick="{{ sendLessonChat }}" style="flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:9px;padding:11px 18px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;transition:background .15s" style-hover="background:var(--accent)">Skicka</button>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:center;gap:7px;margin-top:6px">
+            <span class="ai-blink" style="width:5px;height:5px;border-radius:50%;background:var(--accent);flex:0 0 auto"></span>
+            <span style="font-family:var(--mono);font-size:8.5px;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-3)">Qwen3 14B · körs lokalt · svar förankras i denna lektions transkript</span>
+          </div>
         </div>
-        <div style="font-size:12.5px;color:var(--ink-3);margin-top:9px">Lokalt med Qwen3 14B (Q8_0) · bara den här lektionens transkript</div>
       </div>
     </div>
   </sc-if>
@@ -1000,10 +1087,9 @@ class Component extends DCLogic {
       { id: 'r7', title: 'Styrgruppsmöte Q1', klass: null, kurs: null, sal: '', datum: '2026-06-24', date: 'Förra veckan', dur: '18:42', days: 7, ai: false, terms: 'styrgrupp budget kvartal mål projekt', insights: [] },
       { id: 'r8', title: 'Kundintervju 03', klass: null, kurs: null, sal: '', datum: '2026-06-17', date: '2 veckor sedan', dur: '42:11', days: 14, ai: false, terms: 'kund intervju feedback produkt behov', insights: [] }
     ],
-    inspMode: 'ai', inspQuery: '', filterDate: 'Alla datum', chatOpen: null, filterOpen: null,
-    backupBusy: false, insightsOpenId: null, analyzingId: null,
+    inspMode: 'ai', inspQuery: '', filterDate: 'Alla datum', chatOpen: null, filterOpen: null, filterClosing: false, evPick: null,
     lessonChat: null, lessonChatClosing: false,
-    ask: { status: 'idle', q: '', step: 0, hits: [], openRef: null, answerTokens: [], refs: [] },
+    ask: { status: 'idle', q: '', scanIdx: 0, hits: [], tokensN: 0, event: null, answerTokens: [], refs: [] },
     answerOpen: false, answerClosing: false, recRename: null,
     // overlays
     modal: null, modalClosing: false, assign: null, assignClosing: false, toast: null,
@@ -1029,8 +1115,16 @@ class Component extends DCLogic {
         if (merged.tab === 'historik' || merged.tab === 'lektioner') merged.tab = 'inspelningar';
         if (merged.tPhase === 'running') merged.tPhase = 'done';
         this.setState(s => {
-          const ns = { ...s, ...merged, downloading: {}, recording: false, recElapsed: 0, modal: null, assign: null, toast: null, searching: false, searchResult: null, search: '', diskOpen: false, ask: { status: 'idle', q: '', step: 0, hits: [], openRef: null, answerTokens: [], refs: [] }, answerOpen: false, answerClosing: false, recRename: null, chatOpen: null, filterOpen: null, inspMode: 'ai', inspQuery: '' };
+          const ns = { ...s, ...merged, downloading: {}, recording: false, recElapsed: 0, modal: null, assign: null, toast: null, searching: false, searchResult: null, search: '', diskOpen: false, ask: { status: 'idle', q: '', scanIdx: 0, hits: [], tokensN: 0, event: null, answerTokens: [], refs: [] }, answerOpen: false, answerClosing: false, recRename: null, chatOpen: null, filterOpen: null, inspMode: 'ai', inspQuery: '' };
           ns.installed = { ...s.installed, ...(merged.installed || {}) };
+          // migrera äldre sparade inspelningar som saknar datum
+          const defRecs = {}; s.recordings.forEach(r => { defRecs[r.id] = r; });
+          ns.recordings = (ns.recordings || []).map(r => {
+            if (r.datum) return r;
+            if (defRecs[r.id] && defRecs[r.id].datum) return { ...r, datum: defRecs[r.id].datum };
+            const d = new Date(); d.setDate(d.getDate() - (r.days || 0));
+            return { ...r, datum: d.toISOString().slice(0, 10) };
+          });
           ns.lessons = (ns.lessons || []).map(le => {
             if (le.klass === undefined && le.kurs === undefined) {
               if (le.tag && le.tag !== 'Ej tilldelad' && le.tag.indexOf('·') >= 0) { const p = le.tag.split('·').map(x => x.trim()); return { ...le, klass: p[0] || null, kurs: p[1] || null }; }
@@ -1050,6 +1144,12 @@ class Component extends DCLogic {
       }
     } catch (e) {}
     this.applyAccent();
+    this._esc = (e) => {
+      if (e.key !== 'Escape') return;
+      if (this.state.lessonChat && !this.state.lessonChatClosing) { this.closeLessonChat(); return; }
+      if (this.state.tab === 'inspelningar' && this.state.ask.status !== 'idle') this.clearAsk();
+    };
+    document.addEventListener('keydown', this._esc);
   }
   componentDidUpdate() { this.applyAccent(); }
   applyAccent() {
@@ -1066,8 +1166,9 @@ class Component extends DCLogic {
     if (this.transcriptTimer) clearTimeout(this.transcriptTimer);
     if (this.cleanTimer) clearTimeout(this.cleanTimer);
     if (this.answerTimer) clearTimeout(this.answerTimer);
-    [this.modalTimer, this.assignTimer, this.renameTimer, this.recCloseTimer].forEach(t => t && clearTimeout(t));
+    [this.modalTimer, this.assignTimer, this.renameTimer, this.recCloseTimer, this.fltTimer].forEach(t => t && clearTimeout(t));
     this.lockScroll(false);
+    if (this._esc) document.removeEventListener('keydown', this._esc);
     Object.values(this.dlTimers || {}).forEach(t => clearInterval(t));
   }
   // ---------- follow-new-content: egen mjuk auto-scroll (timer-driven, ej rAF) ----------
@@ -1485,14 +1586,62 @@ class Component extends DCLogic {
   clearSearch() { this.set({ search: '', searchResult: null }); }
 
   // ---------- Inspelningar (merged Historik + Lektioner) ----------
-  setInspQuery(e) { this.set({ inspQuery: e.target.value }); }
+  setInspQuery(e) {
+    const v = e.target.value;
+    if (this.state.inspMode === 'sok') this.flipRecGrid(() => this.set({ inspQuery: v }));
+    else this.set({ inspQuery: v });
+  }
+  // FLIP-animation: kort glider mjukt till nya positioner, nya tonas in, bortsorterade tonas ut
+  flipRecGrid(apply) {
+    const els = Array.from(document.querySelectorAll('[data-rec-id]'));
+    if (!els.length) { apply(); return; }
+    const old = new Map();
+    els.forEach(el => old.set(el.getAttribute('data-rec-id'), { r: el.getBoundingClientRect(), clone: el.cloneNode(true) }));
+    apply();
+    requestAnimationFrame(() => {
+      const seen = new Set();
+      document.querySelectorAll('[data-rec-id]').forEach(el => {
+        const id = el.getAttribute('data-rec-id'); seen.add(id);
+        const o = old.get(id); const nr = el.getBoundingClientRect();
+        if (o) {
+          const dx = o.r.left - nr.left, dy = o.r.top - nr.top;
+          if (Math.abs(dx) > 1 || Math.abs(dy) > 1) el.animate([{ transform: 'translate(' + dx + 'px,' + dy + 'px)' }, { transform: 'translate(0,0)' }], { duration: 460, easing: 'cubic-bezier(.22,1,.36,1)' });
+        } else {
+          el.animate([{ opacity: 0, transform: 'translateY(16px) scale(.96)' }, { opacity: 1, transform: 'none' }], { duration: 400, easing: 'cubic-bezier(.22,1,.36,1)' });
+        }
+      });
+      old.forEach((o, id) => {
+        if (seen.has(id)) return;
+        const c = o.clone;
+        c.removeAttribute('data-rec-id');
+        c.style.position = 'fixed'; c.style.left = o.r.left + 'px'; c.style.top = o.r.top + 'px';
+        c.style.width = o.r.width + 'px'; c.style.height = o.r.height + 'px';
+        c.style.margin = '0'; c.style.boxSizing = 'border-box'; c.style.pointerEvents = 'none'; c.style.zIndex = '5';
+        document.body.appendChild(c);
+        const a = c.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateY(12px) scale(.95)' }], { duration: 240, easing: 'ease-out' });
+        a.onfinish = () => c.remove();
+        setTimeout(() => { if (c.parentNode) c.remove(); }, 450);
+      });
+    });
+  }
   setInspMode(m) { if (m === 'sok') { this.clearAsk(); this.set({ inspMode: 'sok', inspQuery: '' }); } else { this.set({ inspMode: 'ai', inspQuery: '' }); } }
   onInspKey(e) { if (e.key === 'Enter' && this.state.inspMode === 'ai') { e.preventDefault(); this.askAI(); } }
-  segBtnStyle(active) { return 'border:none;background:' + (active ? 'var(--surface)' : 'transparent') + ';color:' + (active ? 'var(--ink)' : 'var(--ink-3)') + ';border-radius:9px;padding:6px 13px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit' + (active ? ';box-shadow:var(--shadow-sm)' : ''); }
-  filterSelStyle(active) { return 'appearance:none;background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:8px 32px 8px 12px;font-size:14px;font-family:inherit;cursor:pointer' + (active ? ';border-color:var(--accent);color:var(--accent);font-weight:600' : ''); }
   setFilterDate(e) { this.set({ filterDate: e.target.value }); this.saveSoon(); }
-  toggleFilter(w) { this.setState(st => ({ filterOpen: st.filterOpen === w ? null : w })); }
-  selectFilter(field, value) { this.set({ [field]: value, filterOpen: null }); this.saveSoon(); }
+  toggleFilter(w) { if (this.fltTimer) clearTimeout(this.fltTimer); this.setState(st => ({ filterOpen: st.filterOpen === w ? null : w, filterClosing: false })); }
+  softCloseFilter() {
+    if (!this.state.filterOpen) return;
+    if (this.fltTimer) clearTimeout(this.fltTimer);
+    // liten grace-period så menyn inte hinner försvinna på vägen ner till den
+    this.fltTimer = setTimeout(() => {
+      this.set({ filterClosing: true });
+      this.fltTimer = setTimeout(() => this.set({ filterOpen: null, filterClosing: false }), 190);
+    }, 300);
+  }
+  cancelCloseFilter() {
+    if (this.fltTimer) clearTimeout(this.fltTimer);
+    if (this.state.filterClosing) this.set({ filterClosing: false });
+  }
+  selectFilter(field, value) { if (this.fltTimer) clearTimeout(this.fltTimer); this.set({ [field]: value, filterOpen: null, filterClosing: false }); this.saveSoon(); }
   recRecencyOk(r) {
     const f = this.state.filterDate;
     if (!f || f === 'Alla datum') return true;
@@ -1546,23 +1695,80 @@ class Component extends DCLogic {
     if (!this.hasLlm()) { this.toast('Ingen språkmodell tillgänglig'); return; }
     const q = (this.state.inspQuery || '').trim() || 'Var förklarar jag täljare och nämnare?';
     if (this.askTimer) clearInterval(this.askTimer);
-    const hits = this.relevantRecordings(q);
-    this.set({ inspMode: 'ai', ask: { status: 'thinking', q, step: 0, hits, openRef: null, answerTokens: [], refs: [] }, answerOpen: false, answerClosing: false });
+    const total = this.filteredRecordings().slice(0, 8).length;
+    // träffarna måste täcka svarets källor (r1 + r3) — annars pekar citaten på nedtonade kort
+    const hits = Array.from(new Set([...this.relevantRecordings(q), 'r1', 'r3']));
+    this.set({ inspMode: 'ai', ask: { status: 'scanning', q, scanIdx: 0, hits, tokensN: 0, event: null, answerTokens: [], refs: [] } });
     this.askTimer = setInterval(() => {
       this.setState(st => {
-        const step = st.ask.step + 1;
-        if (step >= 4) {
-          clearInterval(this.askTimer); this.askTimer = null;
-          this.lockScroll(true);
-          return { ask: { ...st.ask, step: 3, status: 'done', ...this.askResult() }, answerOpen: true, answerClosing: false };
+        const a = st.ask;
+        if (a.status === 'scanning') {
+          const ni = a.scanIdx + 1;
+          if (ni >= total) return { ask: { ...a, scanIdx: total, status: 'answering', ...this.askResult() } };
+          return { ask: { ...a, scanIdx: ni } };
         }
-        return { ask: { ...st.ask, step } };
+        if (a.status === 'answering') {
+          const n = a.tokensN + 1;
+          if (n >= (a.answerTokens || []).length) {
+            clearInterval(this.askTimer); this.askTimer = null;
+            return { ask: { ...a, tokensN: n, status: 'done', event: { title: '9B — Läxförhör: täljare och nämnare', when: 'mån 7 jul · 09:10', added: false } } };
+          }
+          return { ask: { ...a, tokensN: n } };
+        }
+        return {};
       });
-    }, 800);
+    }, 340);
   }
-  clearAsk() { if (this.askTimer) { clearInterval(this.askTimer); this.askTimer = null; } this.set({ ask: { status: 'idle', q: '', step: 0, hits: [], openRef: null, answerTokens: [], refs: [] }, answerOpen: false, answerClosing: false }); }
-  toggleRef(i) { this.setState(st => ({ ask: { ...st.ask, openRef: st.ask.openRef === i ? null : i } })); }
-  closeAnswer() { if (this.answerTimer) clearTimeout(this.answerTimer); this.set({ answerClosing: true }); this.answerTimer = setTimeout(() => { this.set({ answerOpen: false, answerClosing: false }); this.lockScroll(false); }, 460); }
+  clearAsk() { if (this.askTimer) { clearInterval(this.askTimer); this.askTimer = null; } this.set({ ask: { status: 'idle', q: '', scanIdx: 0, hits: [], tokensN: 0, event: null, answerTokens: [], refs: [] } }); }
+  setAskEvent(k, v) { this.setState(st => st.ask.event ? { ask: { ...st.ask, event: { ...st.ask.event, [k]: v } } } : {}); }
+  addAskEvent() { this.setState(st => st.ask.event ? { ask: { ...st.ask, event: { ...st.ask.event, added: true } }, evPick: null } : {}); this.toast('Tillagd i Google Kalender'); }
+  EV_TIMES = ['08:00', '08:30', '09:10', '10:00', '10:45', '11:30', '12:15', '13:00', '13:45', '14:30', '15:15', '16:00'];
+  evDays() {
+    const now = new Date();
+    const D = ['sön', 'mån', 'tis', 'ons', 'tors', 'fre', 'lör'];
+    const M = ['jan', 'feb', 'mar', 'apr', 'maj', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'];
+    const out = [];
+    for (let i = 0; i < 8; i++) {
+      const d = new Date(now); d.setDate(now.getDate() + i);
+      out.push({ label: D[d.getDay()] + ' ' + d.getDate() + ' ' + M[d.getMonth()], pre: i === 0 ? 'Idag' : (i === 1 ? 'Imorgon' : '') });
+    }
+    return out;
+  }
+  toggleEvPick(w) { this.setState(st => ({ evPick: st.evPick === w ? null : w })); }
+  pickEvPart(which, part, val) {
+    const ev = which === 'ask' ? this.state.ask.event : (this.state.lessonChat && this.state.lessonChat.event);
+    if (!ev) return;
+    const bits = (ev.when || ' · ').split(' · ');
+    const when = (part === 'day' ? val : (bits[0] || '')) + ' · ' + (part === 'time' ? val : (bits[1] || '09:00'));
+    if (which === 'ask') this.setAskEvent('when', when); else this.setLessonEvent('when', when);
+    if (part === 'time') this.set({ evPick: null });
+  }
+  openLessonFromRef(i) {
+    const ids = ['r1', 'r3'];
+    const r = (this.state.recordings || []).find(x => x.id === ids[i]);
+    const rf = (this.state.ask.refs || [])[i];
+    if (r) this.openLessonChat(r, rf ? rf.t : null);
+  }
+  ccOf(r) {
+    if (!r || (!r.klass && !r.kurs)) return 'none';
+    const m = { Matematik: 'sky', Historia: 'plum', Biologi: 'sage', Svenska: 'mustard', Fysik: 'sage', Engelska: 'mustard' };
+    return m[r.kurs] || 'sky';
+  }
+  weekInfo(datum) {
+    const d = new Date((datum || '') + 'T12:00:00');
+    if (isNaN(d.getTime())) return { key: 'x', label: 'Tidigare', range: '', start: 0 };
+    const day = (d.getDay() + 6) % 7;
+    const mon = new Date(d); mon.setDate(d.getDate() - day);
+    const fri = new Date(mon); fri.setDate(mon.getDate() + 4);
+    const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    const dn = (t.getUTCDay() + 6) % 7;
+    t.setUTCDate(t.getUTCDate() - dn + 3);
+    const ft = new Date(Date.UTC(t.getUTCFullYear(), 0, 4));
+    const wk = 1 + Math.round(((t - ft) / 86400000 - 3 + ((ft.getUTCDay() + 6) % 7)) / 7);
+    const M = ['jan', 'feb', 'mar', 'apr', 'maj', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'];
+    const fmt = x => x.getDate() + ' ' + M[x.getMonth()];
+    return { key: 'v' + wk + '-' + mon.getFullYear(), label: 'Vecka ' + wk, range: fmt(mon) + ' – ' + fmt(fri), start: mon.getTime() };
+  }
   deleteRec(r) { this.setState(st => ({ recordings: st.recordings.filter(x => x.id !== r.id) })); this.saveSoon(); this.toast('Inspelning borttagen'); }
   openRecording(r) { if (this.modalTimer) clearTimeout(this.modalTimer); this.set({ modal: { kind: 'history', item: { name: r.title, date: r.date, meta: r.dur + ' · KB-Whisper large (sv) · ' + (r.kurs || 'Inspelning'), klass: r.klass, kurs: r.kurs, fmts: ['SRT', 'TXT'] } }, modalClosing: false }); }
   openRename(r) { if (this.renameTimer) clearTimeout(this.renameTimer); this.lockScroll(true); this.set({ recRename: { id: r.id, title: r.title, klass: r.klass || '', kurs: r.kurs || '' }, renameClosing: false }); }
@@ -1576,50 +1782,121 @@ class Component extends DCLogic {
     this.saveSoon(); this.toast('Sparat'); this.closeRenameAnim();
   }
 
-  // ---------- Inspelningar: inline-fält, backup, insikter, per-lektion-chatt ----------
+  // ---------- Inspelningar: inline-fält, backup, per-lektion-chatt ----------
   setRecField(id, field, value) {
     const v = (value || '').trim();
     this.setState(st => ({ recordings: st.recordings.map(r => r.id === id ? { ...r, [field]: (field === 'klass' || field === 'kurs') ? (v || null) : v } : r) }));
     this.saveSoon(); this.toast('Sparat');
   }
-  runBackup() {
-    if (this.state.backupBusy) return;
-    this.set({ backupBusy: true });
-    setTimeout(() => { this.set({ backupBusy: false }); this.toast('Säkerhetskopia sparad i Transkriberingar\\_backup'); }, 1400);
+  openLessonChat(r, t) { this.lockScroll(true); this.set({ lessonChat: { id: r.id, name: r.title, klass: r.klass, kurs: r.kurs, date: r.date, dur: r.dur, terms: r.terms || '', t: t || null, msgs: [], typing: false, input: '', openCite: null, event: null }, lessonChatClosing: false }); }
+  proposeLessonEvent() {
+    this.setState(st => {
+      if (!st.lessonChat) return {};
+      const lc = st.lessonChat;
+      const terms = (lc.terms || '').split(/\s+/).filter(Boolean).slice(0, 3).join(', ');
+      return { lessonChat: { ...lc, event: {
+        title: (lc.klass ? lc.klass + ' — ' : '') + 'Uppföljning: ' + lc.name,
+        when: this.evDays()[2].label + ' · 08:00',
+        desc: 'Uppföljning av "' + lc.name + '"' + (terms ? ' — repetera: ' + terms + '.' : '.') + ' Läxförhör på begreppen som nämns i slutet av lektionen [' + (lc.t || '31:05') + '].',
+        added: false, aiInput: '', aiBusy: false, aiMsgs: []
+      } } };
+    });
   }
-  toggleInsights(id) { this.setState(st => ({ insightsOpenId: st.insightsOpenId === id ? null : id })); }
-  analyzeLesson(id) {
-    if (this.state.analyzingId) return;
-    this.set({ analyzingId: id });
+  setOvAiInput(e) { const v = e.target.value; this.setState(st => (st.lessonChat && st.lessonChat.event) ? { lessonChat: { ...st.lessonChat, event: { ...st.lessonChat.event, aiInput: v } } } : {}); }
+  onOvAiKey(e) { if (e.key === 'Enter') { e.preventDefault(); this.sendOvAi(); } }
+  sendOvAi(qArg) {
+    const lc = this.state.lessonChat; if (!lc || !lc.event || lc.event.aiBusy) return;
+    const q = (typeof qArg === 'string' && qArg) || (lc.event.aiInput || '').trim();
+    if (!q) return;
+    this.setState(st => ({ lessonChat: { ...st.lessonChat, event: { ...st.lessonChat.event, aiInput: '', aiBusy: true, aiMsgs: [...(st.lessonChat.event.aiMsgs || []), { who: 'u', text: q }] } } }));
     setTimeout(() => {
-      this.setState(st => ({
-        analyzingId: null,
-        recordings: st.recordings.map(r => (r.id === id && !(r.insights || []).length) ? { ...r, insights: [
-          { icon: '📅', text: 'Läxförhör på begreppen nästa lektion', meta: 'Kalenderpost · förslag från transkriptet' },
-          { icon: '✅', text: 'Dela ut övningsblad om ' + (r.kurs || 'ämnet').toLowerCase(), meta: 'Åtgärd · nämnd i slutet av lektionen' }
-        ] } : r)
-      }));
-      this.toast('Lektionen analyserad');
-    }, 1200);
+      this.setState(st => {
+        const ev = st.lessonChat && st.lessonChat.event; if (!ev) return {};
+        const r = this.applyEventCommand(ev, q, st.lessonChat);
+        return { lessonChat: { ...st.lessonChat, event: { ...ev, ...r.patch, aiBusy: false, aiMsgs: [...(ev.aiMsgs || []), { who: 'a', text: r.reply }] } } };
+      });
+    }, 900);
   }
-  openLessonChat(r) { this.lockScroll(true); this.set({ lessonChat: { id: r.id, name: r.title, msgs: [], typing: false, input: '', openCite: null }, lessonChatClosing: false }); }
+  applyEventCommand(ev, q, lc) {
+    const low = q.toLowerCase();
+    const patch = {}; const done = [];
+    const bits = (ev.when || ' · ').split(' · ');
+    let day = bits[0] || '', time = bits[1] || '08:00', whenChanged = false;
+    // tid — "14:30", "14.30", "kl 9", "klockan 10"
+    const tm = low.match(/(\d{1,2})[:.](\d{2})/);
+    const th = tm ? null : low.match(/(?:kl\.?|klockan)\s*(\d{1,2})(?!\d)/);
+    if (tm) { time = (tm[1].length < 2 ? '0' + tm[1] : tm[1]) + ':' + tm[2]; whenChanged = true; }
+    else if (th) { time = (th[1].length < 2 ? '0' + th[1] : th[1]) + ':00'; whenChanged = true; }
+    if (whenChanged) done.push('tiden till ' + time);
+    // dag — veckodagar, imorgon, nästa vecka
+    const days = this.evDays();
+    const W = [['måndag', 'mån'], ['tisdag', 'tis'], ['onsdag', 'ons'], ['torsdag', 'tors'], ['fredag', 'fre'], ['lördag', 'lör'], ['söndag', 'sön']];
+    let nd = null;
+    if (low.indexOf('imorgon') >= 0 || low.indexOf('i morgon') >= 0) nd = days[1];
+    else if (low.indexOf('nästa vecka') >= 0) nd = days[7];
+    else if (low.indexOf('idag') >= 0 || low.indexOf('i dag') >= 0) nd = days[0];
+    else { for (const w of W) { if (low.indexOf(w[0]) >= 0 || new RegExp('(^|\\s)' + w[1] + '(\\s|$)').test(low)) { nd = days.slice(1).find(d => d.label.indexOf(w[1] + ' ') === 0) || null; break; } } }
+    if (nd) { day = nd.label; whenChanged = true; done.push('dagen till ' + nd.label); }
+    if (whenChanged) patch.when = day + ' · ' + time;
+    // titel
+    const tt = q.match(/(?:titeln?(?:\s+till|\s+ska vara)?|kalla (?:den|det)|döp (?:den|det) till)\s+["”«']?(.+?)["”»']?$/i);
+    if (low.indexOf('kortare titel') >= 0 || low.indexOf('korta titeln') >= 0) {
+      patch.title = (lc.klass ? lc.klass + ': ' : '') + 'Läxförhör'; done.push('titeln till "' + patch.title + '"');
+    } else if (tt && tt[1] && !/^(till|ska)/i.test(tt[1])) {
+      patch.title = tt[1].charAt(0).toUpperCase() + tt[1].slice(1); done.push('titeln till "' + patch.title + '"');
+    }
+    // anteckning
+    const ad = q.match(/(?:lägg till|skriv|anteckna)(?:\s+att)?\s+(.+)$/i);
+    if (ad && /^läxan?( i anteckningen)?\.?$/i.test(ad[1].trim())) {
+      patch.desc = (ev.desc || '') + ' Läxa: repetera begreppen och räkna övningsbladet — nämns i slutet av lektionen [' + (lc.t || '31:05') + '].';
+      done.push('läxan i anteckningen');
+    } else if (ad && !tt) {
+      const txt = ad[1].trim().replace(/^i anteckningen\s+/i, '');
+      patch.desc = (ev.desc || '') + ' ' + txt.charAt(0).toUpperCase() + txt.slice(1) + (/[.!?]$/.test(txt) ? '' : '.');
+      done.push('det i anteckningen');
+    }
+    const reply = done.length
+      ? 'Klart — jag ändrade ' + done.join(' och ') + '. Allt grundat i transkriptet från "' + lc.name + '".'
+      : 'Jag kan ändra tid, datum, titel och anteckningen — t.ex. ”flytta till onsdag 14:30”, ”kalla den Läxförhör bråk” eller ”lägg till att de ska repetera bråken”.';
+    return { patch, reply };
+  }
+  setLessonEvent(k, v) { this.setState(st => (st.lessonChat && st.lessonChat.event) ? { lessonChat: { ...st.lessonChat, event: { ...st.lessonChat.event, [k]: v } } } : {}); }
+  addLessonEvent() { this.setState(st => (st.lessonChat && st.lessonChat.event) ? { lessonChat: { ...st.lessonChat, event: { ...st.lessonChat.event, added: true } }, evPick: null } : {}); this.toast('Tillagd i Google Kalender'); }
   closeLessonChat() { if (this.lessonChatTimer) clearTimeout(this.lessonChatTimer); this.set({ lessonChatClosing: true }); this.lessonChatTimer = setTimeout(() => { this.set({ lessonChat: null, lessonChatClosing: false }); this.lockScroll(false); }, 460); }
   setLessonChatInput(e) { const v = e.target.value; this.setState(st => st.lessonChat ? { lessonChat: { ...st.lessonChat, input: v } } : {}); }
   onLessonChatKey(e) { if (e.key === 'Enter') { e.preventDefault(); this.sendLessonChat(); } }
   toggleLessonCite(mi, si) { this.setState(st => st.lessonChat ? { lessonChat: { ...st.lessonChat, openCite: (st.lessonChat.openCite && st.lessonChat.openCite.m === mi && st.lessonChat.openCite.s === si) ? null : { m: mi, s: si } } } : {}); }
-  sendLessonChat() {
+  sendLessonChat(qArg) {
     const lc = this.state.lessonChat; if (!lc) return;
-    const q = (lc.input || '').trim(); if (!q || lc.typing) return;
+    const q = (typeof qArg === 'string' && qArg ? qArg : (lc.input || '')).trim(); if (!q || lc.typing) return;
     this.setState(st => ({ lessonChat: { ...st.lessonChat, msgs: [...st.lessonChat.msgs, { role: 'user', text: q }], input: '', typing: true, openCite: null } }));
     setTimeout(() => {
-      this.setState(st => st.lessonChat ? { lessonChat: { ...st.lessonChat, typing: false, msgs: [...st.lessonChat.msgs, {
-        role: 'assistant',
-        text: 'I den här lektionen tas det upp i två avsnitt — först introduceras begreppet, sedan används det i ett räkneexempel på tavlan. Öppna källorna för att se exakt var i transkriptet.',
-        sources: [
-          { num: 1, t: '04:12', text: 'Vi börjar med att titta på vad begreppet faktiskt betyder och skriver upp definitionen tillsammans.' },
-          { num: 2, t: '18:47', text: 'Här använder vi samma begrepp i ett räkneexempel och löser det steg för steg på tavlan.' }
-        ]
-      }] } } : {});
+      const wantsEvent = /påminn|kalender|prov|läx|inlämning|förhör|uppgift|imorgon/i.test(q);
+      let text, sources;
+      if (/sammanfatta/i.test(q)) {
+        text = 'Lektionen i tre punkter: begreppen täljare och nämnare introduceras med pizzaexemplet, klassen förkortar bråk gemensamt, och procent kopplas till vardagen med rea-exemplet 400 kr − 25 %.';
+        sources = [
+          { num: 1, t: '00:16', text: 'Ett bråk består av en täljare och en nämnare.' },
+          { num: 2, t: '00:52', text: 'Nu ska vi förkorta bråk så de blir enklare.' },
+          { num: 3, t: '01:48', text: 'Säg att en tröja kostar fyrahundra kronor.' }
+        ];
+      } else if (/elever/i.test(q)) {
+        text = 'Inga elever nämns vid namn i transkriptet — men du riktar dig till klassen vid parövningen och uppmanar den som tycker att det är svårt att räcka upp handen.';
+        sources = [
+          { num: 1, t: '02:18', text: 'Nu ska ni få arbeta två och två med uppgifterna.' },
+          { num: 2, t: '02:30', text: 'Räck upp handen om något känns krångligt.' }
+        ];
+      } else {
+        text = 'Det tas upp i två avsnitt — först introduceras begreppet, sedan används det i ett räkneexempel på tavlan. Tryck på tidsstämplarna för att läsa exakt var i transkriptet.';
+        sources = [
+          { num: 1, t: '00:16', text: 'Ett bråk består av en täljare och en nämnare.' },
+          { num: 2, t: '01:42', text: 'Nu testar vi ett exempel tillsammans på tavlan.' }
+        ];
+      }
+      this.setState(st => st.lessonChat ? { lessonChat: { ...st.lessonChat, typing: false,
+        msgs: [...st.lessonChat.msgs, { role: 'assistant', text, sources }],
+        event: wantsEvent ? { title: (st.lessonChat.klass ? st.lessonChat.klass + ' — ' : '') + 'Läxa: uppgift 3–7, sidan 22', when: 'mån 7 jul · 08:00', added: false } : st.lessonChat.event
+      } } : {});
     }, 1100);
   }
 
@@ -1683,41 +1960,42 @@ class Component extends DCLogic {
     });
     const visN = done ? 5 : s.tLogN;
     const lessonList = this.filteredLessons();
-    const asking = s.ask.status === 'thinking' || s.ask.status === 'done';
+    const asking = s.ask.status !== 'idle';
     const dateOpts = ['Idag', 'Senaste veckan', 'Senaste månaden'];
     const recClassOpts = Array.from(new Set((s.recordings || []).map(r => r.klass).filter(Boolean))).sort();
     const recCourseOpts = Array.from(new Set((s.recordings || []).map(r => r.kurs).filter(Boolean))).sort();
     const mkOpts = (all, cur, field) => all.map(o => ({ key: o, label: o, selected: cur === o, onSelect: () => this.selectFilter(field, o) }));
+    const mkDayOpts = (which, ev) => this.evDays().map(d => ({ key: d.label, label: d.label, pre: d.pre, hasPre: !!d.pre, curQ: (ev && (ev.when || '').indexOf(d.label) === 0) ? '1' : '', onPick: (e) => { if (e) e.stopPropagation(); this.pickEvPart(which, 'day', d.label); } }));
+    const mkTimeOpts = (which, ev) => this.EV_TIMES.map(t => ({ key: t, label: t, curQ: (ev && (ev.when || '').slice(-5) === t) ? '1' : '', onPick: (e) => { if (e) e.stopPropagation(); this.pickEvPart(which, 'time', t); } }));
     const recList = this.filteredRecordings();
-    const recCards = recList.map((r, idx) => {
+    const scanList = recList.slice(0, 8);
+    const scanning = s.ask.status === 'scanning';
+    const HIT_TS = { r1: '00:16', r3: '12:30' };
+    const scannedIds = new Set(scanList.slice(0, scanning ? s.ask.scanIdx : scanList.length).map(r => r.id));
+    const foundHits = asking ? s.ask.hits.filter(id => scannedIds.has(id)).length : 0;
+    const mkCard = (r) => {
+      const isHitRec = asking && s.ask.hits.indexOf(r.id) >= 0 && scannedIds.has(r.id);
       let stage = '';
       if (asking) {
-        const hi = s.ask.hits.indexOf(r.id);
-        if (hi >= 0) stage = s.ask.step >= hi + 2 ? 'lift' : '';
-        else stage = s.ask.step >= 1 ? (idx % 3 === 0 ? 'fly' : 'dim') : '';
+        if (isHitRec) stage = 'lift';
+        else if (scannedIds.has(r.id)) stage = 'dim';
       }
-      const insightsOpen = s.insightsOpenId === r.id;
-      const analyzing = s.analyzingId === r.id;
       return {
-        ...r, stage, hasKlass: !!r.klass, unassigned: !r.klass,
-        tagLabel: r.klass + (r.kurs ? ' · ' + r.kurs : ''),
-        curKlass: r.klass || '', curKurs: r.kurs || '', curSal: r.sal || '', curDatum: r.datum || '',
-        onSaveKlass: e => this.setRecField(r.id, 'klass', e.target.value),
-        onSaveKurs: e => this.setRecField(r.id, 'kurs', e.target.value),
-        onSaveSal: e => this.setRecField(r.id, 'sal', e.target.value),
-        onSaveDatum: e => this.setRecField(r.id, 'datum', e.target.value),
-        cardStyle: 'background:var(--surface);border:1px solid var(--line);border-radius:15px;padding:14px 15px;box-shadow:var(--shadow-sm);display:flex;flex-direction:column;gap:11px' + (insightsOpen ? ';grid-column:1/-1' : ''),
-        insightsOpen, insightsEmpty: !(r.insights || []).length && !analyzing,
-        insightRows: r.insights || [],
-        insightsBtnStyle: 'display:inline-flex;align-items:center;gap:6px;border-radius:8px;padding:7px 13px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .12s,border-color .12s;' + (insightsOpen ? 'background:var(--accent);border:1px solid var(--accent);color:#fff' : 'background:var(--surface);border:1px solid var(--line);color:var(--ink-2)'),
-        onToggleInsights: (e) => { if (e) e.stopPropagation(); this.toggleInsights(r.id); },
-        analyzeLabel: analyzing ? 'Analyserar …' : '✨ Analysera lektion',
-        analyzeBtnStyle: 'display:inline-flex;align-items:center;gap:7px;background:var(--accent-weak);color:var(--accent);border:1px solid var(--accent);border-radius:9px;padding:7px 14px;font-size:13px;font-weight:600;cursor:' + (analyzing ? 'default' : 'pointer') + ';font-family:inherit;opacity:' + (analyzing ? '0.7' : '1'),
-        onAnalyze: (e) => { if (e) e.stopPropagation(); this.analyzeLesson(r.id); },
-        onChat: (e) => { if (e) e.stopPropagation(); this.openLessonChat(r); },
-        onOpen: () => this.openRecording(r),
+        ...r, stage, cc: this.ccOf(r),
+        tagLabel: r.klass ? (r.klass + (r.kurs ? ' · ' + r.kurs : '')) : (r.kurs || 'Ej tilldelad'),
+        isHit: isHitRec, hitT: HIT_TS[r.id] || '04:12',
+        wordLabel: ((parseInt(r.dur, 10) || 30) * 140).toLocaleString('sv-SE') + ' ord',
+        onOpenChat: () => this.openLessonChat(r, isHitRec ? (HIT_TS[r.id] || null) : null),
+        onRename: (e) => { if (e) e.stopPropagation(); this.openRename(r); },
         onDelete: (e) => { if (e) e.stopPropagation(); this.deleteRec(r); }
       };
+    };
+    const recCards = recList.map(mkCard);
+    const groupsMap = {};
+    recCards.forEach(c => { const wi = this.weekInfo(c.datum); if (!groupsMap[wi.key]) groupsMap[wi.key] = { ...wi, cards: [] }; groupsMap[wi.key].cards.push(c); });
+    const weekGroups = Object.values(groupsMap).sort((a, b) => b.start - a.start).map(g => {
+      const nh = g.cards.filter(c => c.isHit).length;
+      return { key: g.key, label: g.label, num: g.label.replace(/\D+/g, ''), range: g.range, count: g.cards.length + (g.cards.length === 1 ? ' inspelning' : ' inspelningar'), cards: g.cards, hasHits: nh > 0, hitLabel: nh + (nh === 1 ? ' träff' : ' träffar') };
     });
     const cleanAll = this.cleanSegsData(s.resultLang).map(seg => ({ t: seg.t, parts: seg.parts.map(p => ({ s: p.s, fixed: !!p.fixed, lang: !!p.lang, norm: !p.fixed && !p.lang })) }));
     const ppCleanSegs = cleanAll.slice(0, Math.min(s.ppClean.segN, 3));
@@ -1948,35 +2226,69 @@ class Component extends DCLogic {
       // ----- Inspelningar (merged) -----
       inspMode: s.inspMode, inspSokOn: on(s.inspMode === 'sok'), inspAiOn: on(s.inspMode === 'ai'),
       setInspSok: () => this.setInspMode('sok'), setInspAi: () => this.setInspMode('ai'),
-      segSokStyle: this.segBtnStyle(s.inspMode === 'sok'), segAiStyle: this.segBtnStyle(s.inspMode === 'ai'),
       inspQuery: s.inspQuery, setInspQuery: e => this.setInspQuery(e), onInspKey: e => this.onInspKey(e),
-      clearInspQuery: () => this.set({ inspQuery: '' }),
-      clearBtnStyle: 'flex:0 0 auto;width:42px;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:10px;cursor:pointer;font-family:inherit;visibility:' + ((s.inspQuery || '').length ? 'visible' : 'hidden'),
+      clearInspQuery: () => { if (s.inspMode === 'sok') this.flipRecGrid(() => this.set({ inspQuery: '' })); else this.set({ inspQuery: '' }); },
+      clearVis: (s.inspQuery || '').length ? '' : 'off',
       runInspSearch: () => { if (s.inspMode === 'ai') this.askAI(); },
-      inspRunLabel: s.ask.status === 'thinking' ? 'Tänker …' : (s.inspMode === 'ai' ? 'Fråga' : 'Sök'),
+      inspRunLabel: (s.ask.status === 'scanning' || s.ask.status === 'answering') ? 'Söker …' : (s.inspMode === 'ai' ? 'Fråga' : 'Sök'),
       inspModeLabel: s.inspMode === 'ai' ? 'Fråga AI om alla lektioner' : 'Sök i alla inspelningar',
       inspPlaceholder: s.inspMode === 'ai' ? 'Ställ en fråga, t.ex. var förklarar jag täljare och nämnare?' : 'Sök efter vad som sades, t.ex. pythagoras sats',
       askAI: () => this.askAI(),
-      askBtnLabel: s.ask.status === 'thinking' ? 'Tänker …' : 'Fråga AI',
+      askBtnLabel: (s.ask.status === 'scanning' || s.ask.status === 'answering') ? 'Söker …' : 'Fråga AI',
       inspShowSuggest: s.inspMode === 'ai' && s.ask.status === 'idle',
       askSuggestions: [
         { key: 's1', label: 'Var förklarar jag täljare och nämnare?', onClick: () => this.suggestAsk('Var förklarar jag täljare och nämnare?') },
         { key: 's2', label: 'Vilka lektioner tar upp procent?', onClick: () => this.suggestAsk('Vilka lektioner tar upp procent?') }
       ],
-      recCards, recCountLabel: recList.length + (recList.length === 1 ? ' inspelning' : ' inspelningar'), recEmpty: recList.length === 0,
-      inspIsAsk: asking, askThinking: s.ask.status === 'thinking', askDone: s.ask.status === 'done',
-      askStep1: s.ask.step >= 1, askStep2: s.ask.step >= 2, askStep3Pending: s.ask.step >= 3 && s.ask.status !== 'done',
-      askScanLabel: 'Söker igenom ' + (s.recordings || []).length + ' inspelningar',
-      askHitLabel: 'Hittade relevanta avsnitt i ' + s.ask.hits.length + (s.ask.hits.length === 1 ? ' lektion' : ' lektioner'),
-      askQ: s.ask.q, reopenAnswer: () => { this.lockScroll(true); this.set({ answerOpen: true, answerClosing: false }); }, newAsk: () => this.clearAsk(),
+      recCards, weekGroups, recCountLabel: recList.length + (recList.length === 1 ? ' inspelning' : ' inspelningar'), recEmpty: recList.length === 0,
+      archiveCountLabel: 'Arkiv — ' + (s.recordings || []).length + ' inspelningar i minnet',
+      inspIsAsk: asking,
+      askScanning: scanning,
+      askAfterScan: s.ask.status === 'answering' || s.ask.status === 'done',
+      scanTotal: scanList.length,
+      scanTicker: scanList.length ? ('Läser: ' + (scanList[Math.min(s.ask.scanIdx, scanList.length - 1)] || {}).title + ' · segment ' + (8 + s.ask.scanIdx * 6) + '/58') : 'Läser …',
+      scanHitLabel: scanning ? (foundHits + (foundHits === 1 ? ' träff hittills' : ' träffar hittills')) : (s.ask.hits.length + (s.ask.hits.length === 1 ? ' träff' : ' träffar')),
+      scanCards: scanList.map((r, i) => {
+        const hit = s.ask.hits.indexOf(r.id) >= 0;
+        let st, stLabel;
+        if (scanning && i === s.ask.scanIdx) { st = 'reading'; stLabel = 'Läser …'; }
+        else if (!scanning || i < s.ask.scanIdx) { st = hit ? 'hit' : 'read'; stLabel = hit ? 'Träff ● ' + ({ r1: '00:16', r3: '12:30' }[r.id] || '04:12') : 'Läst ✓'; }
+        else { st = 'queue'; stLabel = 'I kö'; }
+        return { key: r.id, st, stLabel, title: r.title };
+      }),
+      ansStarted: s.ask.status === 'answering' || s.ask.status === 'done',
+      ansTyping: s.ask.status === 'answering',
+      ansDone: s.ask.status === 'done',
+      ansHeadLabel: s.ask.status === 'done' ? ('Svar — ' + (s.ask.refs || []).length + ' källor') : 'Svar — skrivs medan källorna läses',
+      ansTokens: (s.ask.answerTokens || []).slice(0, s.ask.tokensN).map((tk, i) => ({ key: i, isText: !!tk.text, isCite: !!tk.cite, text: tk.text || '', rec: tk.cite || '', t: tk.t || '', onCite: (e) => { if (e) e.stopPropagation(); this.openLessonFromRef(tk.ref); } })),
+      ansEventNotAdded: !!(s.ask.event && !s.ask.event.added),
+      ansEventAdded: !!(s.ask.event && s.ask.event.added),
+      ansEventTitle: s.ask.event ? s.ask.event.title : '',
+      ansEventWhen: s.ask.event ? s.ask.event.when : '',
+      setAnsEventTitle: e => this.setAskEvent('title', e.target.value),
+      setAnsEventWhen: e => this.setAskEvent('when', e.target.value),
+      addAnsEvent: () => this.addAskEvent(),
+      evPickAskOpen: s.evPick === 'ask',
+      toggleAskPick: (e) => { if (e) e.stopPropagation(); this.toggleEvPick('ask'); },
+      askDayOpts: mkDayOpts('ask', s.ask.event), askTimeOpts: mkTimeOpts('ask', s.ask.event),
+      askQ: s.ask.q, newAsk: () => this.clearAsk(),
       // filterrad: native selects + chips (ff5f3e2)
       klassSelOpts: ['Alla klasser', ...recClassOpts], kursSelOpts: ['Alla kurser', ...recCourseOpts], datumSelOpts: ['Alla datum', ...dateOpts],
       onFilterKlassSel: e => this.selectFilter('filterClass', e.target.value),
       onFilterKursSel: e => this.selectFilter('filterCourse', e.target.value),
       onFilterDatumSel: e => this.selectFilter('filterDate', e.target.value),
-      klassSelStyle: this.filterSelStyle(s.filterClass !== 'Alla klasser'),
-      kursSelStyle: this.filterSelStyle(s.filterCourse !== 'Alla kurser'),
-      datumSelStyle: this.filterSelStyle(s.filterDate !== 'Alla datum'),
+      klassSelOn: on(s.filterClass !== 'Alla klasser'),
+      kursSelOn: on(s.filterCourse !== 'Alla kurser'),
+      datumSelOn: on(s.filterDate !== 'Alla datum'),
+      // custom dropdowns (mjuk stängning vid mouseleave)
+      fPopAnim: s.filterClosing ? 'closing' : '',
+      fLeave: () => this.softCloseFilter(),
+      fEnter: () => this.cancelCloseFilter(),
+      fKlassOpen: s.filterOpen === 'klass', fKursOpen: s.filterOpen === 'kurs', fDatumOpen: s.filterOpen === 'datum',
+      fKlassToggle: () => this.toggleFilter('klass'), fKursToggle: () => this.toggleFilter('kurs'), fDatumToggle: () => this.toggleFilter('datum'),
+      klassMenuOpts: ['Alla klasser', ...recClassOpts].map(o => ({ key: o, label: o, isCur: s.filterClass === o, onSelect: () => this.selectFilter('filterClass', o) })),
+      kursMenuOpts: ['Alla kurser', ...recCourseOpts].map(o => ({ key: o, label: o, isCur: s.filterCourse === o, onSelect: () => this.selectFilter('filterCourse', o) })),
+      datumMenuOpts: ['Alla datum', ...dateOpts].map(o => ({ key: o, label: o, isCur: s.filterDate === o, onSelect: () => this.selectFilter('filterDate', o) })),
       filterClassLabel: s.filterClass, filterCourseLabel: s.filterCourse, filterDateLabel: s.filterDate,
       hasActiveFilter: s.filterClass !== 'Alla klasser' || s.filterCourse !== 'Alla kurser' || s.filterDate !== 'Alla datum',
       noActiveFilter: s.filterClass === 'Alla klasser' && s.filterCourse === 'Alla kurser' && s.filterDate === 'Alla datum',
@@ -1986,9 +2298,6 @@ class Component extends DCLogic {
         ...(s.filterDate !== 'Alla datum' ? [{ key: 'fd', label: s.filterDate, onClear: () => this.selectFilter('filterDate', 'Alla datum') }] : [])
       ],
       clearAllFilters: () => this.set({ filterClass: 'Alla klasser', filterCourse: 'Alla kurser', filterDate: 'Alla datum' }),
-      runBackup: () => this.runBackup(),
-      backupLabel: s.backupBusy ? 'Säkerhetskopierar …' : 'Säkerhetskopiera',
-      backupBtnStyle: 'background:var(--surface);border:1px solid var(--line);color:var(--ink-2);border-radius:10px;padding:8px 14px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;opacity:' + (s.backupBusy ? '.6' : '1'),
       // per-lektion-chattmodal (f18507a)
       lessonChatOpen: !!s.lessonChat, lessonChatAnim: s.lessonChatClosing ? 'closing' : 'open',
       lessonChatName: s.lessonChat ? s.lessonChat.name : '',
@@ -1997,6 +2306,37 @@ class Component extends DCLogic {
       lessonChatInput: s.lessonChat ? s.lessonChat.input : '',
       setLessonChatInput: e => this.setLessonChatInput(e), onLessonChatKey: e => this.onLessonChatKey(e),
       sendLessonChat: () => this.sendLessonChat(), closeLessonChat: () => this.closeLessonChat(),
+      ovCc: s.lessonChat ? this.ccOf(s.lessonChat) : 'none',
+      ovTag: s.lessonChat ? (s.lessonChat.klass ? (s.lessonChat.klass + (s.lessonChat.kurs ? ' · ' + s.lessonChat.kurs : '')) : (s.lessonChat.kurs || 'Ej tilldelad')) : '',
+      ovMeta: s.lessonChat ? ((s.lessonChat.date || '') + ' · ' + (s.lessonChat.dur || '') + ' · KB-Whisper large (sv)') : '',
+      ovRows: s.lessonChat ? this.transcript('sv').map(seg => { const t = fmtClock(seg[0]); const hit = s.lessonChat.t === t; return { t, txt: seg[2], hit, norm: !hit }; }) : [],
+      ovHasHit: !!(s.lessonChat && s.lessonChat.t), ovHitT: (s.lessonChat && s.lessonChat.t) || '',
+      ovPlayHit: () => this.toast('Spelar upp från ' + ((s.lessonChat && s.lessonChat.t) || '00:00')),
+      ovExport: () => { if (s.lessonChat) this.doDownload(s.lessonChat.name.toLowerCase().replace(/\s+/g, '_') + '.txt', 'TXT'); },
+      proposeOvEvent: () => this.proposeLessonEvent(),
+      ovAskSum: () => this.sendLessonChat('Sammanfatta lektionen i tre punkter'),
+      ovAskStud: () => this.sendLessonChat('Vilka elever nämns och varför?'),
+      ovAskRemind: () => this.sendLessonChat('Skapa en läxpåminnelse utifrån lektionen'),
+      ovHasEvent: !!(s.lessonChat && s.lessonChat.event),
+      ovEventNotAdded: !!(s.lessonChat && s.lessonChat.event && !s.lessonChat.event.added),
+      ovEventAdded: !!(s.lessonChat && s.lessonChat.event && s.lessonChat.event.added),
+      ovEventTitle: (s.lessonChat && s.lessonChat.event) ? s.lessonChat.event.title : '',
+      ovEventWhen: (s.lessonChat && s.lessonChat.event) ? s.lessonChat.event.when : '',
+      setOvEventTitle: e => this.setLessonEvent('title', e.target.value),
+      setOvEventWhen: e => this.setLessonEvent('when', e.target.value),
+      addOvEvent: () => this.addLessonEvent(),
+      ovEventDesc: (s.lessonChat && s.lessonChat.event) ? (s.lessonChat.event.desc || '') : '',
+      setOvEventDesc: e => this.setLessonEvent('desc', e.target.value),
+      ovAiInput: (s.lessonChat && s.lessonChat.event) ? (s.lessonChat.event.aiInput || '') : '',
+      setOvAiInput: e => this.setOvAiInput(e),
+      onOvAiKey: e => this.onOvAiKey(e),
+      sendOvAi: () => this.sendOvAi(),
+      ovAiBusy: !!(s.lessonChat && s.lessonChat.event && s.lessonChat.event.aiBusy),
+      ovAiMsgs: ((s.lessonChat && s.lessonChat.event && s.lessonChat.event.aiMsgs) || []).map(m => ({ text: m.text, isUser: m.who === 'u', isAi: m.who === 'a' })),
+      ovAiEmpty: !!(s.lessonChat && s.lessonChat.event && !(s.lessonChat.event.aiMsgs || []).length && !s.lessonChat.event.aiBusy),
+      ovAiChip1: () => this.sendOvAi('Flytta till fredag 10:00'),
+      ovAiChip2: () => this.sendOvAi('Lägg till läxan i anteckningen'),
+      ovAiChip3: () => this.sendOvAi('Kortare titel'),
       lessonChatMsgs: ((s.lessonChat && s.lessonChat.msgs) || []).map((m, mi) => {
         const oc = s.lessonChat.openCite;
         const openSrc = (m.role === 'assistant' && oc && oc.m === mi && m.sources && m.sources[oc.s]) ? m.sources[oc.s] : null;
@@ -2007,10 +2347,6 @@ class Component extends DCLogic {
           openSource: !!openSrc, openSourceT: openSrc ? openSrc.t : '', openSourceText: openSrc ? openSrc.text : ''
         };
       }),
-      answerOpen: s.answerOpen, answerAnim: s.answerClosing ? 'closing' : 'open', closeAnswer: () => this.closeAnswer(),
-      answerTokens: (s.ask.answerTokens || []).map((tk, i) => ({ key: i, isText: !!tk.text, isCite: !!tk.cite, text: tk.text || '', rec: tk.cite || '', t: tk.t || '', onCite: (e) => { if (e) e.stopPropagation(); this.toggleRef(tk.ref); } })),
-      answerRefs: (s.ask.refs || []).map((rf, i) => ({ key: i, rec: rf.rec, klass: rf.klass, t: rf.t, open: s.ask.openRef === i, onToggle: () => this.toggleRef(i), ctx: rf.ctx.map((c, j) => ({ key: j, t: c.t, s: c.s, hit: !!c.hit, norm: !c.hit })) })),
-      answerRefCount: (s.ask.refs || []).length,
       renameAnim: s.renameClosing ? 'closing' : 'open',
       renameOpen: !!s.recRename, renameTitle: s.recRename ? s.recRename.title : '', renameKlass: s.recRename ? s.recRename.klass : '', renameKurs: s.recRename ? s.recRename.kurs : '',
       setRenameTitle: e => this.setRenameField('title', e.target.value), setRenameKlass: e => this.setRenameField('klass', e.target.value), setRenameKurs: e => this.setRenameField('kurs', e.target.value),

@@ -1,4 +1,4 @@
-/* @ds-bundle: {"format":3,"namespace":"TranskriberaDesignSystem_c5f72b","components":[],"sourceHashes":{"bedomning/card-modal.js":"3d10c3bdfaed","bedomning/site.js":"119a6e62fc0b"},"inlinedExternals":[],"unexposedExports":[]} */
+/* @ds-bundle: {"format":4,"namespace":"TranskriberaDesignSystem_c5f72b","components":[],"sourceHashes":{"bedomning/card-modal.js":"3d10c3bdfaed","bedomning/site.js":"119a6e62fc0b"},"inlinedExternals":[],"unexposedExports":[]} */
 
 (() => {
 
