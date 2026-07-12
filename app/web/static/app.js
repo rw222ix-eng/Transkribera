@@ -2182,13 +2182,16 @@
       return (!scanning || scannedIds[l.id]) ? 'dim' : '';
     }
 
+    // Uppslag history-id → post EN gång (i stället för en find() per lektion per
+    // render → O(lektioner × historik)).
+    var histById = {};
+    (st.history || []).forEach(function (x) { histById[x.id] = x; });
     var lessonItems = st.lessons.map(function (l) {
       var isHit = askActive && lessonHit(l) && (!scanning || scannedIds[l.id]);
       // Videoförhandsvisning: bara VIDEO-källor får en thumbnail på kortet (h.video
       // sätts även för ljud — det är den spelbara median — så gå på filändelsen).
       // Rena ljudinspelningar (wav/mp3/m4a/webm …) visas som text, som idag.
-      var _lh = (st.history || []).find(function (x) { return x.id === l.history_id; });
-      var thumbUrl = _videoThumb(_lh);
+      var thumbUrl = _videoThumb(histById[l.history_id]);
       return {
         id: l.id, name: l.name || '(namnlös)', date: l.date || l.datum || '', thumbUrl: thumbUrl,
         datum: l.datum || l.date || '',
