@@ -1399,7 +1399,7 @@
     setState({ calConnected: null });
     fetch('/api/calendar/connect', { method: 'POST' }).then(function (r) { return r.json(); }).then(function (res) {
       setState({ calConnected: !!(res && res.connected) });
-      if (res && res.error) { setState({ toast: { title: 'Google Kalender', name: res.error, done: false } }); clearTimeout(_toastT2); _toastT2 = setTimeout(function () { setState({ toast: null }); }, 5200); }
+      if (res && res.error) { setState({ toast: { title: 'Google Kalender', detail: res.error, kind: 'error', done: false } }); clearTimeout(_toastT2); _toastT2 = setTimeout(function () { setState({ toast: null }); }, 9000); }
     }).catch(function () { setState({ calConnected: false }); });
   }
   function proposeLessonEvent() {
@@ -1443,8 +1443,8 @@
       else {
         setLessonEvent('busy', false);
         var msg = (res.j && res.j.error) || 'kunde inte skapa händelsen';
-        setState({ toast: { title: 'Google Kalender', name: msg, done: false } });
-        clearTimeout(_toastT2); _toastT2 = setTimeout(function () { setState({ toast: null }); }, 5200);
+        setState({ toast: { title: 'Google Kalender', detail: msg, kind: 'error', done: false } });
+        clearTimeout(_toastT2); _toastT2 = setTimeout(function () { setState({ toast: null }); }, 9000);
       }
     }).catch(function () { setLessonEvent('busy', false); });
   }
@@ -2302,8 +2302,11 @@
       statusFile: baseName(), elapsedLabel: fmtTime(st.elapsed), progressLabel: Math.round(isDone ? 100 : (st.dispProgress || 0)) + '%', steps: steps,
       logText: st.log.join('\n'), logRows: logRows, logClipped: logRows.length > 3,
       logOpen: st.logOpen, openLog: openLog, closeLog: closeLog,
-      hasToast: !!st.toast, toastName: st.toast && st.toast.name, toastLoading: !!st.toast && !st.toast.done, toastDone: !!st.toast && st.toast.done,
-      toastTitle: st.toast ? (st.toast.title || (st.toast.done ? 'Nedladdning klar' : 'Laddar ner …')) : '', closeToast: closeToast,
+      hasToast: !!st.toast, toastName: st.toast && st.toast.name,
+      toastError: !!(st.toast && st.toast.kind === 'error'),
+      toastLoading: !!st.toast && !st.toast.done && !(st.toast && st.toast.kind === 'error'), toastDone: !!st.toast && st.toast.done,
+      toastMessage: st.toast ? (st.toast.detail || st.toast.name || '') : '',
+      toastTitle: st.toast ? (st.toast.title || (st.toast.kind === 'error' ? 'Något gick fel' : st.toast.done ? 'Nedladdning klar' : 'Laddar ner …')) : '', closeToast: closeToast,
       toastPct: st.toast ? Math.round(st.toast.pct || 0) : 0, toastDetail: st.toast ? (st.toast.detail != null ? st.toast.detail : toastDetail(st.toast.size, st.toast.pct || 0)) : '',
       toastBarStyle: 'height:100%;width:' + (st.toast ? Math.round(st.toast.pct || 0) : 0) + '%;background:var(--accent);border-radius:99px;transition:width .14s linear',
       transcriptOpen: st.transcriptOpen, openTranscript: openTranscript, closeTranscript: closeTranscript, transcriptFile: baseName() + '.txt',
@@ -3739,6 +3742,9 @@ function viewModals(v){ return `
 
   ${ v.hasToast ? `
   <div style="position:fixed;left:50%;bottom:30px;transform:translate(-50%,0);z-index:200;display:flex;align-items:center;gap:13px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:13px 20px 13px 13px;box-shadow:var(--shadow);width:336px;animation:toastin .32s cubic-bezier(.16,1,.3,1)">
+    ${ v.toastError ? `
+      <span style="width:40px;height:40px;border-radius:12px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--bad) 15%,transparent);color:var(--bad);font-size:20px;font-weight:700">!</span>
+    ` : '' }
     ${ v.toastLoading ? `
       <span style="width:40px;height:40px;border-radius:12px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;background:var(--accent-weak);color:var(--accent)">
         <span style="display:flex;animation:dlbounce .85s ease-in-out infinite"><svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v8"></path><path d="M4.5 6.5 8 10l3.5-3.5"></path><path d="M3 13.5h10"></path></svg></span>
@@ -3747,6 +3753,12 @@ function viewModals(v){ return `
     ${ v.toastDone ? `
       <span style="width:40px;height:40px;border-radius:12px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--ok) 16%,transparent);color:var(--ok);font-size:18px">✓</span>
     ` : '' }
+    ${ v.toastError ? `
+    <div style="min-width:0;flex:1">
+      <div style="font-size:14.5px;font-weight:600;color:var(--ink);letter-spacing:-0.01em;margin-bottom:3px">${esc(v.toastTitle)}</div>
+      <div style="font-size:12.5px;color:var(--ink-2);line-height:1.5;word-break:break-word">${esc(v.toastMessage)}</div>
+    </div>
+    ` : `
     <div style="min-width:0;flex:1">
       <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
         <span style="font-size:14.5px;font-weight:600;color:var(--ink);letter-spacing:-0.01em">${esc(v.toastTitle)}</span>
@@ -3755,6 +3767,7 @@ function viewModals(v){ return `
       <div style="height:6px;border-radius:99px;background:var(--track);overflow:hidden;margin:7px 0 5px"><div style="${v.toastBarStyle}"></div></div>
       <div style="font-size:12px;color:var(--ink-2);font-variant-numeric:tabular-nums">${esc(v.toastDetail)}</div>
     </div>
+    ` }
     <button data-click="${on(v.closeToast)}" aria-label="Stäng" style="width:26px;height:26px;flex:0 0 auto;align-self:flex-start;border:none;background:transparent;border-radius:7px;cursor:pointer;color:var(--ink-3);font-size:13px;display:flex;align-items:center;justify-content:center" data-sh="background:var(--sunken) !important;color:var(--ink) !important">✕</button>
   </div>
   ` : '' }

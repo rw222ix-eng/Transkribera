@@ -7,6 +7,8 @@ venv/
 
 # Känsligt — får ALDRIG checkas in
 cookies.txt
+google_client_secret.json
+google_token.json
 
 # Runtime-data (skapas bredvid exe:n)
 history.json
