@@ -1106,7 +1106,7 @@
     var token = ++_runToken;
     var src = baseNameOf(active.name);
     setState({
-      run: 'running', step: 'process', progress: 0, dispProgress: 0, elapsed: 0, pp: 'idle', ppOut: '',
+      run: 'running', step: 'process', progress: 0, dispProgress: 0, elapsed: 0, pp: 'idle', ppOp: 'clean', ppOut: '', cleanText: null,
       chat: [], chatTyping: false, runError: null, transcript: null, resultFilesReal: null,
       source: active.name,
       qStatus: Object.assign({}, S.qStatus, kv(active.id, 'running')),
@@ -1254,7 +1254,9 @@
     return _diffMemo.parts;
   }
   function togglePPEnabled() { var next = !S.ppEnabled; setState({ ppEnabled: next }); if (next && S.run === 'done' && S.ppOp !== 'chat') runPP(); }
-  function afterDone() { if (!S.ppEnabled) return; if (S.ppOp !== 'chat') runPP(); }
+  // Korrekturläsningen är inget val — den startar tyst och automatiskt så fort
+  // transkriberingen är klar, sömlöst i bakgrunden (låser sedan upp chatten).
+  function afterDone() { if (S.pp !== 'running') { setState({ ppOp: 'clean' }); runPP(); } }
   function onChatInput(e) { setState({ chatInput: e.target.value }); }
   function onChatKey(e) { if (e.key === 'Enter') sendChat(); }
   // BACKEND: real conversational chat via /api/chat (Ollama /api/chat) over the transcript.
@@ -2309,7 +2311,9 @@
       // KORREKTUR-kortet (design): körning, resultat med markerade rättelser, lås för chatten
       cleanRunning: st.pp === 'running' && st.ppOp === 'clean',
       cleanDone: !!st.cleanText,
-      cleanBtnLabel: st.cleanText ? '↻ Kör igen' : 'Korrekturläs transkriptet',
+      cleanFailed: st.pp === 'done' && !st.cleanText,          // körde men gav inget resultat
+      cleanPending: st.pp === 'idle' && !st.cleanText,         // väntar på att auto-starta
+      cleanBtnLabel: '↻ Kör igen',
       cleanPct: Math.round(st.ppPct || 0),
       cleanBarW: Math.round(st.ppPct || 0) + '%',
       cleanLegendAudio: !!st.audioCorrect,
@@ -2905,7 +2909,7 @@ function viewTranscribe(v){ return `
           <span style="font-family:var(--mono);font-size:10.5px;font-weight:500;letter-spacing:0.08em;color:var(--c-mustard);background:color-mix(in srgb,var(--c-mustard) 13%,transparent);border:1px solid color-mix(in srgb,var(--c-mustard) 30%,transparent);padding:3px 9px;border-radius:6px">KORREKTUR</span>
           <h2 style="font-size:19px;font-weight:600;letter-spacing:-0.02em;margin:0">Korrekturläs transkriptet</h2>
         </div>
-        <p style="margin:0 0 18px;color:var(--ink-2);font-size:15px">Rättar stavfel och småfel och städar språket — skiljetecken och meningslängd — med ${esc(v.activeLlmShort)}. Görs innan du summerar eller chattar.</p>
+        <p style="margin:0 0 18px;color:var(--ink-2);font-size:15px">Körs automatiskt direkt efter transkriberingen — rättar stavfel och småfel och städar språket (skiljetecken och meningslängd) med ${esc(v.activeLlmShort)}.</p>
 
         ${ v.cleanDone && !v.cleanRunning ? `
         <div data-click="${on(v.openCleanModal)}" style="background:var(--sunken);border:1px solid var(--line);border-radius:13px;padding:16px 18px;margin-bottom:14px;cursor:pointer;transition:border-color .14s,box-shadow .14s" data-sh="border-color:var(--line-2) !important;box-shadow:var(--shadow-sm) !important">
@@ -2933,9 +2937,23 @@ function viewTranscribe(v){ return `
         </div>
         ` : '' }
 
-        ${ !v.cleanRunning ? `
+        ${ !v.cleanRunning && v.cleanDone ? `
         <div style="display:flex;align-items:center;gap:13px;flex-wrap:wrap">
-          <button data-click="${on(v.runClean)}" style="display:inline-flex;align-items:center;justify-content:center;gap:9px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:11px;padding:12px 22px;font-size:15px;font-weight:500;cursor:pointer;font-family:inherit;box-shadow:var(--shadow-sm);min-width:220px;transition:background .15s">${esc(v.cleanBtnLabel)}</button>
+          <button data-click="${on(v.runClean)}" style="display:inline-flex;align-items:center;justify-content:center;gap:8px;background:transparent;border:1px solid var(--line);color:var(--ink);border-radius:11px;padding:9px 16px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;transition:border-color .15s,background .15s" data-sh="border-color:var(--line-2) !important;background:var(--sunken) !important">${esc(v.cleanBtnLabel)}</button>
+          <span style="margin-left:auto;display:inline-flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink-3)"><span style="width:7px;height:7px;border-radius:50%;flex:0 0 auto;background:var(--ok)"></span>Lokalt med <strong style="color:var(--ink-2);font-weight:600">${esc(v.ppModel)}</strong></span>
+        </div>
+        ` : '' }
+
+        ${ !v.cleanRunning && v.cleanFailed ? `
+        <div style="display:flex;align-items:center;gap:13px;flex-wrap:wrap">
+          <span style="display:inline-flex;align-items:center;gap:8px;font-size:14px;color:var(--ink-2)"><span style="width:20px;height:20px;border-radius:50%;flex:0 0 auto;background:color-mix(in srgb,var(--bad) 16%,transparent);color:var(--bad);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px">!</span>Korrekturläsningen gick inte igenom.</span>
+          <button data-click="${on(v.runClean)}" style="display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:11px;padding:9px 18px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;box-shadow:var(--shadow-sm);transition:background .15s">↻ Försök igen</button>
+        </div>
+        ` : '' }
+
+        ${ !v.cleanRunning && v.cleanPending ? `
+        <div style="display:flex;align-items:center;gap:13px;flex-wrap:wrap;font-size:14px;color:var(--ink-2)">
+          <span style="display:inline-flex;align-items:center;gap:9px"><span style="width:14px;height:14px;border-radius:50%;border:2px solid var(--line-2);border-top-color:var(--accent);animation:spin .7s linear infinite;flex:0 0 auto"></span>Korrekturläsning startar automatiskt …</span>
           <span style="margin-left:auto;display:inline-flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink-3)"><span style="width:7px;height:7px;border-radius:50%;flex:0 0 auto;background:var(--ok)"></span>Lokalt med <strong style="color:var(--ink-2);font-weight:600">${esc(v.ppModel)}</strong></span>
         </div>
         ` : '' }
@@ -2948,12 +2966,20 @@ function viewTranscribe(v){ return `
         </div>
         ${ v.ppLocked ? `
         <div style="display:flex;flex-direction:column;align-items:center;text-align:center;gap:13px;padding:28px 22px;border:1.5px dashed var(--line-2);border-radius:14px;background:var(--sunken);margin-top:14px">
-          <span style="width:46px;height:46px;border-radius:50%;background:var(--surface);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;color:var(--ink-3);flex:0 0 auto"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="4" y="9" width="12" height="8" rx="2"></rect><path d="M7 9V6.5a3 3 0 0 1 6 0V9"></path></svg></span>
+          ${ v.cleanFailed ? `
+          <span style="width:46px;height:46px;border-radius:50%;background:var(--surface);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;color:var(--bad);flex:0 0 auto;font-size:22px;font-weight:700">!</span>
           <div>
-            <div style="font-size:15.5px;font-weight:600;color:var(--ink)">Korrekturläs först</div>
-            <div style="font-size:13.5px;color:var(--ink-2);margin-top:4px;max-width:360px;line-height:1.5">Chatten arbetar på det korrekturlästa transkriptet. Kör korrekturläsningen ovan så låses den upp.</div>
+            <div style="font-size:15.5px;font-weight:600;color:var(--ink)">Korrekturläsningen gick inte igenom</div>
+            <div style="font-size:13.5px;color:var(--ink-2);margin-top:4px;max-width:360px;line-height:1.5">Chatten arbetar på det korrekturlästa transkriptet. Försök igen så låses den upp.</div>
           </div>
-          <button data-click="${on(v.runClean)}" style="display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:11px;padding:11px 20px;font-size:14.5px;font-weight:500;cursor:pointer;font-family:inherit;box-shadow:var(--shadow-sm);transition:background .15s">Korrekturläs nu</button>
+          <button data-click="${on(v.runClean)}" style="display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:11px;padding:11px 20px;font-size:14.5px;font-weight:500;cursor:pointer;font-family:inherit;box-shadow:var(--shadow-sm);transition:background .15s">↻ Försök igen</button>
+          ` : `
+          <span style="width:46px;height:46px;border-radius:50%;background:var(--surface);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;flex:0 0 auto"><span style="width:20px;height:20px;border-radius:50%;border:2px solid var(--line-2);border-top-color:var(--accent);animation:spin .7s linear infinite"></span></span>
+          <div>
+            <div style="font-size:15.5px;font-weight:600;color:var(--ink)">Korrekturläser …</div>
+            <div style="font-size:13.5px;color:var(--ink-2);margin-top:4px;max-width:360px;line-height:1.5">Chatten arbetar på det korrekturlästa transkriptet och låses upp automatiskt när korrekturläsningen är klar.</div>
+          </div>
+          ` }
         </div>
         ` : '' }
         ${ v.ppLocked ? '' : `

@@ -3,12 +3,13 @@ import { test, expect, failOnConsoleError, transcribeSample } from "../helpers/a
 // OBS: "Summera"-knappen togs bort i förenklingen (ff5f3e2) — kvarvarande
 // efterbearbetningar i UI:t är Korrekturläs och Chatta.
 
-test("proofreading (cleanup) post-processing streams a result", async ({ page }) => {
+test("proofreading (cleanup) post-processing runs automatically and streams a result", async ({ page }) => {
   const errors: string[] = [];
   failOnConsoleError(page, errors);
   await transcribeSample(page);
 
-  await page.getByRole("button", { name: "Korrekturläs transkriptet", exact: true }).click();
+  // Korrekturläsningen är inget val — den startar tyst och automatiskt så fort
+  // transkriberingen är klar. Ingen knapp klickas; resultatet ska dyka upp självt.
   // The cleaned text renders as word-diffed spans inside the preview box.
   await expect(page.getByText("[FEJK cleanup]")).toBeVisible({ timeout: 15000 });
   expect(errors, errors.join("\n")).toEqual([]);
@@ -19,9 +20,9 @@ test("chat about the transcript answers", async ({ page }) => {
   failOnConsoleError(page, errors);
   await transcribeSample(page);
 
-  // Chatten är låst tills transkriptet är korrekturläst (designbeteende);
-  // därefter bor den inline i Fråga om lektionen-kortet.
-  await page.getByRole("button", { name: "Korrekturläs nu", exact: true }).click();
+  // Chatten är låst tills transkriptet är korrekturläst (designbeteende), men
+  // korrekturläsningen körs numera automatiskt efter transkriberingen — chatten
+  // låses därför upp av sig själv, utan att någon knapp klickas.
   const chatInput = page.getByPlaceholder("Skriv en fråga …");
   await expect(chatInput).toBeVisible({ timeout: 15000 });
   await chatInput.fill("Vad handlar lektionen om?");
