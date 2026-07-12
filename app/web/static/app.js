@@ -1305,6 +1305,20 @@
     }).catch(function () {});
   }
   function closeLessonChat() { setState({ lessonChatId: null, lessonChat: [], lessonChatInput: '', lessonChatCiteSel: null, lessonChatMeta: null, lessonChatHitT: null, lessonChatEvent: null, evPick: null }); }
+  // Resultatvyn chattar inte inline längre. Den här knappen byter till fliken
+  // Inspelningar och öppnar chatten för just den här inspelningen — precis som
+  // att klicka sig in på inspelningen och trycka "Chatta" där.
+  function chatAboutResult() {
+    var hid = S.resultId;
+    if (!hid) return;
+    var h = (S.history || []).find(function (x) { return x.id === hid; });
+    var lesson = h
+      ? { history_id: h.id, name: h.name, date: h.date || (h.ts || '').slice(0, 10),
+          dur: h.dur, model: h.model, lang: h.lang, group: h.group || '', course: h.course || '' }
+      : { history_id: hid, name: baseName() };
+    setTab('recordings');       // byt till Inspelningar (laddar om lektionslistan)
+    openLessonChat(lesson);     // öppna lektionschatten för inspelningen
+  }
   // Analysera lektion + Rapport bor i overlayens header sedan Insikter-panelen
   // togs bort med kartotek-omdesignen — extraktionen matar Kommande/Inför
   // nästa lektion/Terminstrender, rapporten öppnas i webbläsaren.
@@ -2321,6 +2335,7 @@
       cleanFullParts: st.cleanText ? cleanDiffParts() : [],
       cleanChangeCount: st.cleanText ? cleanDiffParts().filter(function (p) { return p.ch; }).length : 0,
       runClean: runCleanNow,
+      onChatInRecordings: chatAboutResult, resultReady: !!st.resultId,
       cleanModalOpen: st.cleanModalOpen, openCleanModal: openCleanModal, closeCleanModal: closeCleanModal,
       ppLocked: !st.cleanText, activeLlmShort: st.ppModel,
       logExpand: st.logExpand, toggleLogExpand: toggleLogExpand,
@@ -2964,31 +2979,12 @@ function viewTranscribe(v){ return `
           <span style="font-family:var(--mono);font-size:10.5px;font-weight:500;letter-spacing:0.08em;color:var(--c-sky);background:color-mix(in srgb,var(--c-sky) 13%,transparent);border:1px solid color-mix(in srgb,var(--c-sky) 28%,transparent);padding:3px 9px;border-radius:6px">LLM</span>
           <h2 style="font-size:19px;font-weight:600;letter-spacing:-0.02em;margin:0">Fråga om lektionen</h2>
         </div>
-        ${ v.ppLocked ? `
-        <div style="display:flex;flex-direction:column;align-items:center;text-align:center;gap:13px;padding:28px 22px;border:1.5px dashed var(--line-2);border-radius:14px;background:var(--sunken);margin-top:14px">
-          ${ v.cleanFailed ? `
-          <span style="width:46px;height:46px;border-radius:50%;background:var(--surface);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;color:var(--bad);flex:0 0 auto;font-size:22px;font-weight:700">!</span>
-          <div>
-            <div style="font-size:15.5px;font-weight:600;color:var(--ink)">Korrekturläsningen gick inte igenom</div>
-            <div style="font-size:13.5px;color:var(--ink-2);margin-top:4px;max-width:360px;line-height:1.5">Chatten arbetar på det korrekturlästa transkriptet. Försök igen så låses den upp.</div>
-          </div>
-          <button data-click="${on(v.runClean)}" style="display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:11px;padding:11px 20px;font-size:14.5px;font-weight:500;cursor:pointer;font-family:inherit;box-shadow:var(--shadow-sm);transition:background .15s">↻ Försök igen</button>
-          ` : `
-          <span style="width:46px;height:46px;border-radius:50%;background:var(--surface);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;flex:0 0 auto"><span style="width:20px;height:20px;border-radius:50%;border:2px solid var(--line-2);border-top-color:var(--accent);animation:spin .7s linear infinite"></span></span>
-          <div>
-            <div style="font-size:15.5px;font-weight:600;color:var(--ink)">Korrekturläser …</div>
-            <div style="font-size:13.5px;color:var(--ink-2);margin-top:4px;max-width:360px;line-height:1.5">Chatten arbetar på det korrekturlästa transkriptet och låses upp automatiskt när korrekturläsningen är klar.</div>
-          </div>
-          ` }
-        </div>
-        ` : '' }
-        ${ v.ppLocked ? '' : `
-        <div style="animation:unlockIn .4s cubic-bezier(.2,.8,.25,1) both;margin-top:12px">
-          <p style="margin:0 0 14px;color:var(--ink-2);font-size:15px">Svaren bygger på det korrekturlästa transkriptet. Källorna ligger numrerade bredvid varje svar — klicka en siffra så lyser dess ställe upp.</p>
-
-          ${ chatThread(v) }
-        </div>
-        ` }
+        <p style="margin:0 0 18px;color:var(--ink-2);font-size:15px">Chatten bor bland dina inspelningar. Öppna den här inspelningen under <strong style="color:var(--ink);font-weight:600">Inspelningar</strong> så kan du ställa frågor om innehållet — svaren förankras i numrerade källor i transkriptet.</p>
+        <button data-click="${on(v.onChatInRecordings)}" style="display:inline-flex;align-items:center;justify-content:center;gap:10px;width:100%;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:12px;padding:14px 22px;font-size:15px;font-weight:500;cursor:pointer;font-family:inherit;box-shadow:var(--shadow-sm);transition:background .15s" data-sh="background:color-mix(in srgb, var(--btn-bg) 82%, var(--accent)) !important">
+          <svg width="17" height="17" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4.5h12a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H8l-4 3v-3H4a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1z"></path></svg>
+          Chatta om inspelningen
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h10"></path><path d="M8.5 3.5 13 8l-4.5 4.5"></path></svg>
+        </button>
       </div>
       ` : '' }
         </div>

@@ -15,20 +15,21 @@ test("proofreading (cleanup) post-processing runs automatically and streams a re
   expect(errors, errors.join("\n")).toEqual([]);
 });
 
-test("chat about the transcript answers", async ({ page }) => {
+test("chat about the transcript happens under Inspelningar", async ({ page }) => {
   const errors: string[] = [];
   failOnConsoleError(page, errors);
   await transcribeSample(page);
 
-  // Chatten är låst tills transkriptet är korrekturläst (designbeteende), men
-  // korrekturläsningen körs numera automatiskt efter transkriberingen — chatten
-  // låses därför upp av sig själv, utan att någon knapp klickas.
+  // Resultatvyn chattar inte längre inline — en knapp tar dig till fliken
+  // Inspelningar och öppnar chatten för just den här inspelningen (samma
+  // lektionschatt som "Chatta"-knappen på inspelningskortet).
+  await page.getByRole("button", { name: "Chatta om inspelningen" }).click();
   const chatInput = page.getByPlaceholder("Skriv en fråga …");
   await expect(chatInput).toBeVisible({ timeout: 15000 });
   await chatInput.fill("Vad handlar lektionen om?");
   await chatInput.press("Enter");
   // Fejken svarar med [1]/[2]-markörer i citat-läget: svaret renderas som
-  // klickbara källciteringar + källpanel med segmentets tidsstämpel.
+  // klickbara källciteringar i lektionschatten.
   await expect(page.getByText("Lektionen handlar om bråk")).toBeVisible({ timeout: 15000 });
   const cite = page.getByRole("button", { name: "Visa källa 1 i transkriptet" });
   await expect(cite).toBeVisible();
