@@ -1305,7 +1305,10 @@
   // Frame: det glider mjukt fram mot serverns värde och "läcker" långsamt framåt
   // inom det aktiva steget mellan händelser så baren/procenten aldrig fryser.
   // Monotont — det backar aldrig och når 100 % först vid 'done'.
-  var PHASE_HI = [12, 28, 92, 100];        // övre gräns per steg (Förbereder…Färdigställer)
+  // Fasgränser för stegen (Förbereder…Färdigställer) — delas av progress-rAF:en
+  // och stegvyn nedan så indelningen bara finns på ETT ställe.
+  var STEP_BOUNDS = [0, 12, 28, 92, 100];
+  var PHASE_HI = STEP_BOUNDS.slice(1);     // övre gräns per steg
   function _progFrame() {
     _progRAF = 0;
     var run = S.run;
@@ -1315,7 +1318,7 @@
       _disp += (100 - _disp) * 0.16;                            // glid sista biten upp till 100
       if (_disp > 99.8) _disp = 100;
     } else {
-      var ph = real < 12 ? 0 : real < 28 ? 1 : real < 92 ? 2 : 3;
+      var ph = 0; while (ph < 3 && real >= STEP_BOUNDS[ph + 1]) ph++;
       var ceil = PHASE_HI[ph] - 0.5;                            // stanna inom aktuellt steg
       if (real > _disp) _disp += (Math.min(real, 99) - _disp) * 0.12;   // hinn ikapp servern
       else if (_disp < ceil) _disp += (ceil - _disp) * 0.012;           // långsam framåtläckage
@@ -1977,7 +1980,7 @@
     var subtitleOptions = [['separate', 'Spara separat'], ['embed', 'Bädda in']].map(function (p) { return { label: p[1], active: st.subtitleMode === p[0], style: segBtn(st.subtitleMode === p[0], '34px'), onPick: function () { setState({ subtitleMode: p[0] }); } }; });
     var embedOptions = [['soft', 'Mjukt sub-spår'], ['burn', 'Hård inbränning']].map(function (p) { return { label: p[1], active: st.embedKind === p[0], style: segBtn(st.embedKind === p[0], '34px'), onPick: function () { setState({ embedKind: p[0] }); } }; });
 
-    var PHASE_LO2 = [0, 12, 28, 92], PHASE_HI2 = [12, 28, 92, 100];
+    var PHASE_LO2 = STEP_BOUNDS.slice(0, 4), PHASE_HI2 = STEP_BOUNDS.slice(1);
     var steps = STEPS.map(function (label, idx) {
       var done = idx < cur, active = idx === cur && !isDone;
       // Aktivt steg fylls proportionellt mot hur långt prog kommit i just det
