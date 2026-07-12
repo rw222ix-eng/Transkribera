@@ -33,7 +33,7 @@
     formats: { srt: true, txt: true, vtt: false },
     subtitleMode: 'separate',   // 'separate' = media + SRT i mappen | 'embed' = bädda in i videon
     embedKind: 'soft',          // 'soft' = muxat sub-spår | 'burn' = inbränt
-    audioCorrect: false,        // andra passet: rätta texten mot ljudet (Gemma 3n)
+    audioCorrect: true,         // andra passet: rätta texten mot ljudet (Gemma 3n) — på som standard
     audioModelInstalled: false, // status från /api/audio-model
     audioModelDownloading: false,
     run: 'idle',
