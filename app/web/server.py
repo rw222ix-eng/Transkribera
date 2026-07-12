@@ -511,34 +511,37 @@ def create_app(base_dir: Path | None = None,
 
             # Optional second pass: correct the draft text against the actual audio
             # (Gemma 3n E4B via transformers). Best effort — skipped if not installed.
-            if audio_correct:
-                if not audio_model.is_audio_model_installed(models_root):
-                    emit({"type": "log", "msg": "Hoppar över ljudkorrigering — ljudmodellen "
-                                                "(Gemma 4) är inte nedladdad."})
-                else:
-                    emit({"type": "log", "msg": "Rättar transkriptet mot ljudet ..."})
-                    seg_json = media.with_name(media.stem + ".segments.json")
-                    seg_json.write_text(json.dumps(segments, ensure_ascii=False), encoding="utf-8")
-                    corr_base = media.with_name(media.stem + "_korr")
-                    ac_written = []
-                    try:
-                        ac_cmd = transcriber.build_audio_correct_cmd(
-                            media, str(audio_model.audio_model_dir(models_root)),
-                            str(seg_json), corr_base, ["srt"], language)
-                        ac_written, corrected = _run_transcribe_subprocess(
-                            ac_cmd, base, emit, on_proc=_set_proc,
-                            progress_scale=0.3, progress_base=60)
-                        if corrected:
-                            segments = corrected
-                            srt_path = transcriber.write_outputs(
-                                [transcriber.Segment(d["start"], d["end"], d["text"])
-                                 for d in corrected], out_base, ["srt"])[0]
-                    finally:
-                        for p in [seg_json] + [Path(x) for x in ac_written]:
-                            try:
-                                p.unlink()
-                            except OSError:
-                                pass
+            # Använd `will_correct` (utvärderad EN gång ovan) — inte en ny
+            # is_audio_model_installed-koll. Annars kan modellen hinna bli
+            # nedladdad mellan de två kollarna: pass 1 hade då tagit 0–90 %, och
+            # ett nu tillkommande pass 2 emitterar 60–90 % → baren går bakåt.
+            if will_correct:
+                emit({"type": "log", "msg": "Rättar transkriptet mot ljudet ..."})
+                seg_json = media.with_name(media.stem + ".segments.json")
+                seg_json.write_text(json.dumps(segments, ensure_ascii=False), encoding="utf-8")
+                corr_base = media.with_name(media.stem + "_korr")
+                ac_written = []
+                try:
+                    ac_cmd = transcriber.build_audio_correct_cmd(
+                        media, str(audio_model.audio_model_dir(models_root)),
+                        str(seg_json), corr_base, ["srt"], language)
+                    ac_written, corrected = _run_transcribe_subprocess(
+                        ac_cmd, base, emit, on_proc=_set_proc,
+                        progress_scale=0.3, progress_base=60)
+                    if corrected:
+                        segments = corrected
+                        srt_path = transcriber.write_outputs(
+                            [transcriber.Segment(d["start"], d["end"], d["text"])
+                             for d in corrected], out_base, ["srt"])[0]
+                finally:
+                    for p in [seg_json] + [Path(x) for x in ac_written]:
+                        try:
+                            p.unlink()
+                        except OSError:
+                            pass
+            elif audio_correct:
+                emit({"type": "log", "msg": "Hoppar över ljudkorrigering — ljudmodellen "
+                                            "(Gemma 4) är inte nedladdad."})
 
             # Optional translation to a different result language. The text model
             # is reloaded here (Whisper has exited and freed its VRAM); the
