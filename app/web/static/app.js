@@ -1188,6 +1188,10 @@
   // BACKEND: start()/_runActive() simulate transcription; replace with /api/transcribe SSE (streamPost).
   function start() {
     if (S.run === 'running') return;
+    // Korrekturen (auto efter förra körningen) håller GPU-låset — startar vi nu
+    // avvisar arbitern jobbet med 409 och körningen felar direkt. Vänta tills den
+    // är klar; knappen är blockerad under tiden (startReady/startBtnLabel nedan).
+    if (S.pp === 'running') return;
     if (!S.queue.length) return;
     // Modellkatalogen (/api/models) inte klar än — vänta hellre än att skicka
     // det stale prototyp-id:t som servern avvisar med 400.
@@ -2461,8 +2465,8 @@
       acSwitchTrack: 'position:relative;width:42px;height:25px;border-radius:999px;flex:0 0 auto;background:' + (st.audioCorrect ? 'var(--ink)' : 'var(--line-2)') + ';transition:background .15s;cursor:pointer',
       acSwitchKnob: 'position:absolute;top:3px;left:3px;width:19px;height:19px;border-radius:50%;background:#fff;border:1px solid var(--line);box-shadow:0 1px 2px rgba(0,0,0,.2);transition:transform .15s;transform:translateX(' + (st.audioCorrect ? '17px' : '0') + ')',
 
-      onStart: start, isRunning: isRunning, notRunning: !isRunning, startReady: st.catalogReady,
-      startBtnLabel: !st.catalogReady ? 'Laddar modeller…' : (st.catalogReady && !st.model) ? 'Ladda ner en modell först' : isRunning ? 'Transkriberar…' : isDone ? 'Kör igen' : (st.queue.length > 1 ? 'Starta · ' + st.queue.length + ' filer' : 'Starta transkribering'),
+      onStart: start, isRunning: isRunning, notRunning: !isRunning, startReady: st.catalogReady && st.pp !== 'running',
+      startBtnLabel: !st.catalogReady ? 'Laddar modeller…' : (st.catalogReady && !st.model) ? 'Ladda ner en modell först' : st.pp === 'running' ? 'Väntar på korrekturen…' : isRunning ? 'Transkriberar…' : isDone ? 'Kör igen' : (st.queue.length > 1 ? 'Starta · ' + st.queue.length + ' filer' : 'Starta transkribering'),
       startBtnStyle: coralBtn(isRunning) + ';width:100%;padding:16px 24px;font-size:16.5px',
       startBtnStyleBar: primaryBtn(isRunning) + ';padding:12px 22px;font-size:15px;border-radius:11px;flex:0 0 auto',
 
