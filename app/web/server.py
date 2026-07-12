@@ -127,12 +127,16 @@ def _child_cwd(base: Path) -> Path:
 
 
 def _run_transcribe_subprocess(cmd, base: Path, emit, on_proc=None,
-                               progress_scale: float = 1.0) -> list[str]:
+                               progress_scale: float = 1.0,
+                               progress_base: float = 0.0) -> list[str]:
     """Run the isolated transcribe-cli subprocess; emit its stdout protocol lines.
     `on_proc(proc)` is called with the live Popen (and with None when it exits) so
     a cancel endpoint can terminate it and free the GPU mid-run. `progress_scale`
     compresses the child's 0-100 into a sub-range so the bar keeps headroom for the
-    finishing phase (files/assemble/thumbnail) — 100% then means actually done."""
+    finishing phase (files/assemble/thumbnail) — 100% then means actually done.
+    `progress_base` offsets that sub-range so a later pass (the audio-correction
+    second pass) advances its own forward band instead of restarting the bar from
+    zero — the bar must only ever move forward, never run through twice."""
     proc = subprocess.Popen(
         cmd, cwd=str(_child_cwd(base)), stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace")
@@ -144,7 +148,8 @@ def _run_transcribe_subprocess(cmd, base: Path, emit, on_proc=None,
     for line in proc.stdout:
         line = line.rstrip("\n")
         if line.startswith("PROGRESS "):
-            emit({"type": "progress", "pct": int(int(line[9:]) * progress_scale)})
+            emit({"type": "progress",
+                  "pct": int(progress_base + int(line[9:]) * progress_scale)})
         elif line.startswith("FILE "):
             written.append(line[5:])
             emit({"type": "log", "msg": "Skrev " + line[5:]})
@@ -465,11 +470,17 @@ def create_app(base_dir: Path | None = None,
                 if not media.exists():
                     raise RuntimeError(f"Filen finns inte: {media}")
             out_base = media.with_suffix("")
+            # Will the audio-correction second pass actually run? If so, split the
+            # bar into two forward sub-bands (transcribe 0–60 %, correct 60–90 %) so
+            # progress only ever moves forward instead of restarting from zero for
+            # the 2nd pass. Otherwise the transcribe pass owns 0–90 % as before.
+            will_correct = audio_correct and audio_model.is_audio_model_installed(models_root)
             cmd = transcriber.build_transcribe_cmd(
                 media, model_dir, rec.device, rec.compute_type, language, out_base, formats,
                 engine=spec.engine, runtime=spec.runtime)
             written, segments = _run_transcribe_subprocess(
-                cmd, base, emit, on_proc=_set_proc, progress_scale=0.9)
+                cmd, base, emit, on_proc=_set_proc,
+                progress_scale=0.6 if will_correct else 0.9)
             if job_state["cancelled"]:
                 raise RuntimeError("Transkriberingen avbröts.")
             if not written:
@@ -515,7 +526,8 @@ def create_app(base_dir: Path | None = None,
                             media, str(audio_model.audio_model_dir(models_root)),
                             str(seg_json), corr_base, ["srt"], language)
                         ac_written, corrected = _run_transcribe_subprocess(
-                            ac_cmd, base, emit, on_proc=_set_proc)
+                            ac_cmd, base, emit, on_proc=_set_proc,
+                            progress_scale=0.3, progress_base=60)
                         if corrected:
                             segments = corrected
                             srt_path = transcriber.write_outputs(

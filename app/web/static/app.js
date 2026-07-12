@@ -37,7 +37,8 @@
     audioModelInstalled: false, // status från /api/audio-model
     audioModelDownloading: false,
     run: 'idle',
-    progress: 0,
+    progress: 0,        // server-rapporterad "sanning" (kliver i hopp mellan SSE-event)
+    dispProgress: 0,    // mjukt animerat visningsvärde — rör sig alltid framåt, aldrig bakåt
     elapsed: 0,
     log: [],
     pp: 'idle',
@@ -148,7 +149,7 @@
   };
 
   /* instance (non-state) fields */
-  var _t, _pp, _ppIv, _chat, _au, _toastIv, _toastT2, _glideRAF, _lastStart, _runToken = 0;
+  var _t, _pp, _ppIv, _chat, _au, _toastIv, _toastT2, _glideRAF, _progRAF, _disp, _lastStart, _runToken = 0;
   var _fltTimer = null, _scanTimer = null, _askRun = 0;
   var _dl = {}, _inst = {}, _editBuf = {}, _wave = null;
   var _file, _seek, _searchRef, _scrollRef, _procScroll, _imgInput, _media;
@@ -1105,12 +1106,13 @@
     var token = ++_runToken;
     var src = baseNameOf(active.name);
     setState({
-      run: 'running', step: 'process', progress: 0, elapsed: 0, pp: 'idle', ppOut: '',
+      run: 'running', step: 'process', progress: 0, dispProgress: 0, elapsed: 0, pp: 'idle', ppOut: '',
       chat: [], chatTyping: false, runError: null, transcript: null, resultFilesReal: null,
       source: active.name,
       qStatus: Object.assign({}, S.qStatus, kv(active.id, 'running')),
       log: ['› transkribera "' + src + '" --model ' + modelLabel(S.model), '[00:00] Startar transkribering …'],
     });
+    _startProgress();   // mjuk, kontinuerligt framåtrörelse tills 'done'
     var t0 = Date.now();
     _t = setInterval(function () { if (token === _runToken) setState({ elapsed: (Date.now() - t0) / 1000 }); }, 250);
     var formats = ['srt', 'txt', 'vtt'].filter(function (f) { return S.formats[f]; });
@@ -1158,7 +1160,35 @@
     setState(function (s) { return { run: 'cancelled', qStatus: Object.assign({}, s.qStatus, kv(s.activeId, 'pending')) }; });
   }
   function resumeRun() { setState({ run: 'idle' }); _runActive(); }
-  function retryRun() { setState({ run: 'idle', runError: null, progress: 0, elapsed: 0 }); _runActive(); }
+  function retryRun() { setState({ run: 'idle', runError: null, progress: 0, dispProgress: 0, elapsed: 0 }); _runActive(); }
+
+  // ---- Live, kontinuerligt framåtrörelse för progressbaren ------------------
+  // Servern rapporterar framsteg i glesa hopp (och inte alls under t.ex. en
+  // URL-nedladdning). Här animeras ett visningsvärde (_disp) med requestAnimation-
+  // Frame: det glider mjukt fram mot serverns värde och "läcker" långsamt framåt
+  // inom det aktiva steget mellan händelser så baren/procenten aldrig fryser.
+  // Monotont — det backar aldrig och når 100 % först vid 'done'.
+  var PHASE_HI = [12, 28, 92, 100];        // övre gräns per steg (Förbereder…Färdigställer)
+  function _progFrame() {
+    _progRAF = 0;
+    var run = S.run;
+    if (run !== 'running' && run !== 'done') return;           // avbruten/fel/idle → stoppa
+    var real = Math.max(0, Math.min(100, S.progress || 0));
+    if (run === 'done') {
+      _disp += (100 - _disp) * 0.16;                            // glid sista biten upp till 100
+      if (_disp > 99.8) _disp = 100;
+    } else {
+      var ph = real < 12 ? 0 : real < 28 ? 1 : real < 92 ? 2 : 3;
+      var ceil = PHASE_HI[ph] - 0.5;                            // stanna inom aktuellt steg
+      if (real > _disp) _disp += (Math.min(real, 99) - _disp) * 0.12;   // hinn ikapp servern
+      else if (_disp < ceil) _disp += (ceil - _disp) * 0.012;           // långsam framåtläckage
+      if (_disp > 99) _disp = 99;
+    }
+    if (Math.round(_disp) !== Math.round(S.dispProgress || 0)) setState({ dispProgress: _disp });
+    if (run === 'running' || (run === 'done' && _disp < 100)) _progRAF = requestAnimationFrame(_progFrame);
+    else if (run === 'done' && S.dispProgress !== 100) setState({ dispProgress: 100 });
+  }
+  function _startProgress() { _disp = S.dispProgress || 0; if (!_progRAF) _progRAF = requestAnimationFrame(_progFrame); }
 
   // BACKEND: real LLM post-process via /api/postprocess SSE token stream (Ollama).
   function runPP() {
@@ -1705,7 +1735,11 @@
     var st = S;
     var isRunning = st.run === 'running';
     var isDone = st.run === 'done';
-    var cur = isDone ? STEPS.length : (st.progress < 12 ? 0 : st.progress < 28 ? 1 : st.progress < 92 ? 2 : 3);
+    // Baren/stegen drivs av det mjuka visningsvärdet (dispProgress), inte de glesa
+    // serverhoppen — så de växer kontinuerligt. dispProgress ligger aldrig före
+    // servern över en stegräns, så det aktiva steget förblir ärligt.
+    var prog = isDone ? 100 : Math.max(0, Math.min(100, st.dispProgress || 0));
+    var cur = isDone ? STEPS.length : (prog < 12 ? 0 : prog < 28 ? 1 : prog < 92 ? 2 : 3);
 
     var installedWhisper = WHISPER.filter(function (m) { return st.installed[m.id]; });
     var rankedInstalled = rankModels(installedWhisper, 'whisper');
@@ -1740,11 +1774,17 @@
     var subtitleOptions = [['separate', 'Spara separat'], ['embed', 'Bädda in']].map(function (p) { return { label: p[1], active: st.subtitleMode === p[0], style: segBtn(st.subtitleMode === p[0], '34px'), onPick: function () { setState({ subtitleMode: p[0] }); } }; });
     var embedOptions = [['soft', 'Mjukt sub-spår'], ['burn', 'Hård inbränning']].map(function (p) { return { label: p[1], active: st.embedKind === p[0], style: segBtn(st.embedKind === p[0], '34px'), onPick: function () { setState({ embedKind: p[0] }); } }; });
 
+    var PHASE_LO2 = [0, 12, 28, 92], PHASE_HI2 = [12, 28, 92, 100];
     var steps = STEPS.map(function (label, idx) {
       var done = idx < cur, active = idx === cur && !isDone;
+      // Aktivt steg fylls proportionellt mot hur långt prog kommit i just det
+      // steget → baren växer mjukt och kontinuerligt istället för att blinka helt.
+      var frac = (done || isDone) ? 1 : active ? Math.max(0, Math.min(1, (prog - PHASE_LO2[idx]) / (PHASE_HI2[idx] - PHASE_LO2[idx]))) : 0;
+      var pctW = (done || isDone) ? 100 : active ? Math.max(3, frac * 100) : 0;
       return {
         label: label, icon: done || isDone ? '✓' : (idx + 1),
-        barStyle: 'height:4px;border-radius:99px;background:' + (done || isDone ? 'var(--ok)' : active ? 'var(--accent)' : 'var(--line)') + ';' + (active ? 'background-image:linear-gradient(90deg,var(--accent) 0,var(--accent) 50%,color-mix(in srgb,var(--accent) 30%,transparent) 50%,color-mix(in srgb,var(--accent) 30%,transparent));background-size:28px 100%;animation:flow .8s linear infinite;' : ''),
+        barTrackStyle: 'height:4px;border-radius:99px;background:var(--line);overflow:hidden',
+        barFillStyle: 'height:100%;border-radius:99px;background:' + (done || isDone ? 'var(--ok)' : 'var(--accent)') + ';width:' + pctW.toFixed(1) + '%;transition:width .22s linear' + (active ? ';background-image:linear-gradient(90deg,var(--accent) 0,var(--accent) 55%,color-mix(in srgb,var(--accent) 35%,#fff) 78%,var(--accent));background-size:26px 100%;animation:flow .8s linear infinite' : ''),
         dotStyle: 'width:18px;height:18px;border-radius:50%;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;' + (done || isDone ? 'background:var(--ok);color:#fff' : active ? 'background:var(--accent);color:#fff;animation:pulse 1.4s ease infinite' : 'background:transparent;border:1.5px solid var(--line-2);color:var(--ink-3)'),
         labelStyle: 'font-size:13.5px;font-weight:500;color:' + (done || isDone ? 'var(--ink)' : active ? 'var(--ink)' : 'var(--ink-3)'),
       };
@@ -2243,7 +2283,7 @@
       showStatus: st.step === 'process',
       statusBadge: st.run === 'error' ? 'FEL' : st.run === 'cancelled' ? 'AVBRUTEN' : isDone ? 'KLAR' : 'KÖR',
       statusBadgeStyle: (function (col) { return "font-size:12px;font-weight:500;color:" + col + ";background:color-mix(in srgb," + col + " 14%,transparent);padding:3px 9px;border-radius:6px;letter-spacing:0.05em"; })(st.run === 'error' ? 'var(--bad)' : st.run === 'cancelled' ? 'var(--ink-3)' : isDone ? 'var(--ok)' : 'var(--accent)'),
-      statusFile: baseName(), elapsedLabel: fmtTime(st.elapsed), progressLabel: Math.round(st.progress) + '%', steps: steps,
+      statusFile: baseName(), elapsedLabel: fmtTime(st.elapsed), progressLabel: Math.round(isDone ? 100 : (st.dispProgress || 0)) + '%', steps: steps,
       logText: st.log.join('\n'), logRows: logRows, logClipped: logRows.length > 3,
       logOpen: st.logOpen, openLog: openLog, closeLog: closeLog,
       hasToast: !!st.toast, toastName: st.toast && st.toast.name, toastLoading: !!st.toast && !st.toast.done, toastDone: !!st.toast && st.toast.done,
@@ -2783,7 +2823,7 @@ function viewTranscribe(v){ return `
           <div style="display:flex;gap:8px;margin-bottom:16px">
             ${ v.steps.map(function(s){ return `
               <div style="flex:1;display:flex;flex-direction:column;gap:8px">
-                <div style="${s.barStyle}"></div>
+                <div style="${s.barTrackStyle}"><div style="${s.barFillStyle}"></div></div>
                 <div style="display:flex;align-items:center;gap:6px">
                   <span style="${s.dotStyle}">${esc(s.icon)}</span>
                   <span style="${s.labelStyle}">${esc(s.label)}</span>

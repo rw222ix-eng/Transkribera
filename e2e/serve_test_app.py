@@ -51,18 +51,20 @@ def _install_fakes() -> None:
     from app import postprocess, llm_client, transcriber
     from app.web import server
 
-    def fake_transcribe(cmd, base, emit, on_proc=None, progress_scale=1.0):
+    def fake_transcribe(cmd, base, emit, on_proc=None, progress_scale=1.0,
+                        progress_base=0.0):
         # Håll signaturen i synk med server._run_transcribe_subprocess —
-        # progress_scale kom med "ärlig progress"-refaktorn.
+        # progress_scale/progress_base kom med "ärlig progress"-refaktorn
+        # (baren delas i framåtriktade delband; nollställs aldrig för 2:a passet).
         out_base = Path(cmd[cmd.index("--out-base") + 1])
         formats = [f for f in cmd[cmd.index("--formats") + 1].split(",") if f]
         emit({"type": "log", "msg": "Transkriberar (fejk) ..."})
-        emit({"type": "progress", "pct": int(50 * progress_scale)})
+        emit({"type": "progress", "pct": int(progress_base + 50 * progress_scale)})
         segs = _fake_segments()
         written = transcriber.write_outputs(
             [transcriber.Segment(s["start"], s["end"], s["text"]) for s in segs],
             out_base, formats or ["srt"])
-        emit({"type": "progress", "pct": int(100 * progress_scale)})
+        emit({"type": "progress", "pct": int(progress_base + 100 * progress_scale)})
         emit({"type": "log", "msg": "Klar."})
         if on_proc is not None:
             on_proc(None)
