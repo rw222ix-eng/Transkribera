@@ -7,29 +7,46 @@ ett medvetet undantag från appens offline-princip: **bara** den titel och
 anteckning du själv godkänner med **"Lägg till"** skickas till Google, aldrig
 transkript, elevdata eller annat lektionsinnehåll.
 
-## Engångsuppsättning
+## Enklaste vägen: det guidade fönstret i appen
 
-1. Öppna [Google Cloud Console](https://console.cloud.google.com/) och skapa
-   (eller välj) ett projekt.
-2. Aktivera **Google Calendar API** för projektet
-   (*APIs & Services → Enable APIs and Services → Google Calendar API*).
-3. Under *APIs & Services → OAuth consent screen*: välj **External**, fyll i det
-   som krävs och lägg till din egen Google-adress som **testanvändare**.
-4. Under *APIs & Services → Credentials → Create credentials → OAuth client ID*:
-   välj apptyp **Desktop app**. Ladda ner klient-JSON:en.
-5. Spara filen som **`google_client_secret.json`** i appens basmapp
-   (repo-roten när du kör i utvecklingsläge; bredvid exe:n i den paketerade
-   appen). Filen är gitignorerad och ska aldrig checkas in.
+Öppna en inspelning → ställ en fråga som rör tid/prov/läxa/påminnelse så dyker
+kalenderförslaget upp → klicka **"Anslut Google-konto"**. Ett fönster
+**"Koppla Google Kalender"** öppnas och tar dig igenom hela uppsättningen:
 
-## Använda den
+1. **Öppna Google Cloud Console** — knappen öppnar credentials-sidan i din
+   webbläsare. Aktivera **Google Calendar API**, sätt upp *OAuth consent screen*
+   (**External**, lägg dig själv som **testanvändare**) och skapa en
+   **OAuth client ID** av typ **Desktop app**. Ladda ner klient-JSON:en.
+2. **Välj klientfil …** — välj den nedladdade filen i appens filväljare. Appen
+   sparar den som `google_client_secret.json` på rätt plats åt dig (du behöver
+   inte leta upp basmappen). Filen är gitignorerad.
+3. **Logga in med Google** — knappen blir klickbar när klienten är på plats.
+   Din webbläsare öppnar Googles inloggning; godkänn. Token sparas lokalt i
+   `google_token.json` (också gitignorerad).
 
-1. Öppna en inspelning → ställ en fråga som rör tid/prov/läxa/påminnelse, så
-   dyker kalenderförslaget upp (eller det visas automatiskt när det är relevant).
-2. Klicka **"Anslut Google-konto"**. Din webbläsare öppnar Googles
-   samtyckesflöde — godkänn. Åtkomsttoken sparas lokalt i `google_token.json`
-   (också gitignorerad).
-3. Justera titel, datum/tid och anteckning vid behov och klicka **"Lägg till"**.
-   Händelsen skapas i din primära kalender.
+Sen justerar du titel/tid/anteckning i förslaget och klickar **"Lägg till"** —
+händelsen skapas i din primära kalender.
+
+## Äkta ett-klick: bygg in klienten
+
+Vill du att kopplingen ska vara ett rent **"Logga in med Google"** utan steg 1–2
+(t.ex. i en paketerad app), lägg in OAuth-klienten på något av dessa sätt så
+hittar appen den automatiskt (`client_ready` blir sant direkt):
+
+- **Miljövariabel** `TRANSKRIBERA_GOOGLE_CLIENT` = klientens rå-JSON. Enklast att
+  sätta i utvecklingsläge eller baka in vid bygget — ingen hemlighet i repot.
+- **Inbyggd fil**: `google_client_secret.json` bredvid appen i PyInstaller-bundlen
+  (`sys._MEIPASS`).
+
+En OAuth-klient av typ *Desktop app* har ett "client secret" som Google
+uttryckligen inte betraktar som konfidentiellt — men checka ändå aldrig in den
+i repot.
+
+## Manuellt (om du hellre gör det själv)
+
+Skapa klienten enligt steg 1 ovan och lägg filen som **`google_client_secret.json`**
+i appens basmapp (repo-roten i utvecklingsläge; bredvid exe:n i den paketerade
+appen). Starta appen och klicka **"Anslut Google-konto" → "Logga in med Google"**.
 
 ## Felsökning
 

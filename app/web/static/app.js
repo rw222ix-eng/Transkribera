@@ -67,6 +67,10 @@
     lessonChatEvent: null,      // kalenderförslag: {title,when,desc,added,busy,aiMsgs,aiInput,aiBusy}
     evPick: null,               // öppen dag/tid-väljare i kalenderförslaget
     calConnected: null,         // Google Kalender-status: null = okänd, annars bool
+    calClientReady: null,       // finns en OAuth-klient (inbyggd/installerad)?
+    calHint: '',                // senaste hjälptext från /api/calendar/status
+    calSetupOpen: false,        // guidat "Koppla Google Kalender"-fönster
+    calBusy: false,             // installation/inloggning pågår
     ovAnalyzing: false,         // Analysera lektion pågår (overlayens header)
     ovReportBusy: false,        // Rapport-export pågår (overlayens header)
     openDD: null,
@@ -152,7 +156,7 @@
   var _t, _pp, _ppIv, _chat, _au, _toastIv, _toastT2, _glideRAF, _progRAF, _disp, _lastStart, _runToken = 0;
   var _fltTimer = null, _scanTimer = null, _askRun = 0;
   var _dl = {}, _inst = {}, _editBuf = {}, _wave = null;
-  var _file, _seek, _searchRef, _scrollRef, _procScroll, _imgInput, _media;
+  var _file, _seek, _searchRef, _scrollRef, _procScroll, _imgInput, _media, _clientFile;
   var _rec = null, _recChunks = [], _recStream = null, _recTimer = null;
   var _recMarkers = [], _recMarkersByPath = {};   // live-markörer under inspelning
   var _recSession = null, _recUploadChain = null; // inkrementell flush till disk
@@ -1390,17 +1394,52 @@
     }
     return out;
   }
+  function _calErrToast(msg) {
+    setState({ toast: { title: 'Google Kalender', detail: msg, kind: 'error', done: false } });
+    clearTimeout(_toastT2); _toastT2 = setTimeout(function () { setState({ toast: null }); }, 9000);
+  }
   function loadCalStatus() {
-    getJSON('/api/calendar/status')
-      .then(function (r) { setState({ calConnected: !!(r && r.connected) }); })
-      .catch(function () { setState({ calConnected: false }); });
+    return getJSON('/api/calendar/status')
+      .then(function (r) { setState({ calConnected: !!(r && r.connected), calClientReady: !!(r && r.client_ready), calHint: (r && r.hint) || '' }); })
+      .catch(function () { setState({ calConnected: false, calClientReady: false }); });
+  }
+  // En OAuth-klient krävs alltid. Finns den redan (inbyggd/installerad) räcker
+  // ett klick "Logga in med Google"; annars öppnas det guidade fönstret.
+  function startCalConnect() { if (S.calClientReady) connectCalendar(); else openCalSetup(); }
+  function openCalSetup() { setState({ calSetupOpen: true }); loadCalStatus(); }
+  function closeCalSetup() { setState({ calSetupOpen: false }); }
+  function openGoogleConsole() { fetch('/api/calendar/open-console', { method: 'POST' }).catch(function () {}); }
+  function clientFileRef(el) { _clientFile = el; }
+  function pickClientSecret() { if (_clientFile) _clientFile.click(); }
+  function onPickClientSecret(e) {
+    var f = e.target && e.target.files && e.target.files[0];
+    if (e.target) e.target.value = '';            // tillåt att välja samma fil igen
+    if (!f) return;
+    setState({ calBusy: true });
+    var reader = new FileReader();
+    reader.onload = function () {
+      fetch('/api/calendar/client-secret', { method: 'POST', body: String(reader.result || '') })
+        .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+        .then(function (res) {
+          setState({ calBusy: false });
+          if (res.ok) {
+            loadCalStatus();
+            setState({ toast: { title: 'Google Kalender', name: 'Klientfil installerad', done: true } });
+            clearTimeout(_toastT2); _toastT2 = setTimeout(function () { setState({ toast: null }); }, 3200);
+          } else { _calErrToast((res.j && res.j.error) || 'kunde inte installera klientfilen'); }
+        }).catch(function () { setState({ calBusy: false }); });
+    };
+    reader.onerror = function () { setState({ calBusy: false }); };
+    reader.readAsText(f);
   }
   function connectCalendar() {
-    setState({ calConnected: null });
+    setState({ calBusy: true });
     fetch('/api/calendar/connect', { method: 'POST' }).then(function (r) { return r.json(); }).then(function (res) {
-      setState({ calConnected: !!(res && res.connected) });
-      if (res && res.error) { setState({ toast: { title: 'Google Kalender', detail: res.error, kind: 'error', done: false } }); clearTimeout(_toastT2); _toastT2 = setTimeout(function () { setState({ toast: null }); }, 9000); }
-    }).catch(function () { setState({ calConnected: false }); });
+      var ok = !!(res && res.connected);
+      setState({ calConnected: ok, calBusy: false });
+      if (ok) setState({ calSetupOpen: false });
+      else if (res && res.error) _calErrToast(res.error);
+    }).catch(function () { setState({ calConnected: false, calBusy: false }); });
   }
   function proposeLessonEvent() {
     var m = S.lessonChatMeta || {};
@@ -2302,6 +2341,15 @@
       statusFile: baseName(), elapsedLabel: fmtTime(st.elapsed), progressLabel: Math.round(isDone ? 100 : (st.dispProgress || 0)) + '%', steps: steps,
       logText: st.log.join('\n'), logRows: logRows, logClipped: logRows.length > 3,
       logOpen: st.logOpen, openLog: openLog, closeLog: closeLog,
+      calSetupOpen: !!st.calSetupOpen,
+      calSetup: {
+        connected: st.calConnected === true,
+        clientReady: st.calClientReady === true,
+        busy: !!st.calBusy,
+        onClose: closeCalSetup, onOpenConsole: openGoogleConsole,
+        onPickFile: pickClientSecret, onLogin: connectCalendar,
+        clientFileRef: clientFileRef, onClientFile: onPickClientSecret,
+      },
       hasToast: !!st.toast, toastName: st.toast && st.toast.name,
       toastError: !!(st.toast && st.toast.kind === 'error'),
       toastLoading: !!st.toast && !st.toast.done && !(st.toast && st.toast.kind === 'error'), toastDone: !!st.toast && st.toast.done,
@@ -2391,7 +2439,7 @@
           notAdded: !ev.added, added: ev.added, busy: ev.busy,
           title: ev.title, when: ev.when, desc: ev.desc || '',
           calKnown: st.calConnected !== null, calConnected: st.calConnected === true,
-          onConnect: connectCalendar,
+          onConnect: startCalConnect,
           setTitle: function (e) { setLessonEvent('title', e.target.value); },
           setDesc: function (e) { setLessonEvent('desc', e.target.value); },
           onAdd: addLessonEvent,
@@ -3706,6 +3754,54 @@ function viewModals(v){ return `
           ${ v.cleanFullParts.map(function(p){ return p.ch ? `<span style="background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent);border-radius:4px;padding:0 3px;font-weight:500">${esc(p.s)}</span>` : `<span>${esc(p.s)}</span>`; }).join(' ') }
         </div>
       </div>
+    </div>
+  </div>
+  ` : '' }
+
+  ${ v.calSetupOpen ? `
+  <div data-click="${on(v.calSetup.onClose)}" style="position:fixed;inset:0;z-index:135;display:flex;align-items:center;justify-content:center;padding:24px;background:color-mix(in srgb,var(--canvas) 64%,transparent);backdrop-filter:blur(7px);animation:modalback .26s ease">
+    <div data-click="${on(v.stop)}" style="width:min(94vw,560px);max-height:88vh;overflow:auto;overscroll-behavior:contain;background:var(--surface);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);animation:modalpop .42s cubic-bezier(.16,1,.3,1)">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:22px 24px 14px;border-bottom:1px solid var(--line)">
+        <div style="min-width:0">
+          <span style="font-family:var(--mono);font-size:10.5px;font-weight:500;letter-spacing:0.08em;color:var(--c-sky);background:color-mix(in srgb,var(--c-sky) 13%,transparent);border:1px solid color-mix(in srgb,var(--c-sky) 28%,transparent);padding:3px 9px;border-radius:6px">GOOGLE KALENDER</span>
+          <h2 style="font-size:20px;font-weight:600;letter-spacing:-0.02em;margin:9px 0 0">Koppla Google Kalender</h2>
+        </div>
+        <button data-click="${on(v.calSetup.onClose)}" aria-label="Stäng" style="flex:0 0 auto;width:34px;height:34px;display:flex;align-items:center;justify-content:center;background:var(--surface);border:1px solid var(--line);border-radius:9px;color:var(--ink-2);cursor:pointer;font-size:15px">✕</button>
+      </div>
+      <div style="padding:18px 24px 22px">
+        ${ v.calSetup.connected ? `
+        <div style="display:flex;align-items:center;gap:12px;background:color-mix(in srgb,var(--ok) 9%,var(--surface));border:1px solid color-mix(in srgb,var(--ok) 32%,transparent);border-radius:13px;padding:16px 18px">
+          <span style="width:36px;height:36px;border-radius:50%;flex:0 0 auto;background:color-mix(in srgb,var(--ok) 18%,transparent);color:var(--ok);display:flex;align-items:center;justify-content:center;font-size:18px">✓</span>
+          <div><div style="font-size:15.5px;font-weight:600;color:var(--ink)">Ansluten till Google Kalender</div><div style="font-size:13.5px;color:var(--ink-2);margin-top:2px">Nu kan du lägga till kalenderförslag med ett klick.</div></div>
+        </div>
+        <div style="display:flex;justify-content:flex-end;margin-top:16px"><button data-click="${on(v.calSetup.onClose)}" style="background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:11px;padding:11px 20px;font-size:14.5px;font-weight:500;cursor:pointer;font-family:inherit">Klart</button></div>
+        ` : `
+        <p style="margin:0 0 16px;color:var(--ink-2);font-size:14.5px;line-height:1.55">Händelser skapas i din egen Google Kalender. Det behövs en OAuth-klient <strong style="color:var(--ink)">en gång</strong> — sen räcker inloggningen. Bara den titel och anteckning du godkänner skickas, aldrig transkript eller elevdata.</p>
+        ${ v.calSetup.clientReady ? `
+        <div style="display:flex;align-items:center;gap:10px;background:var(--sunken);border:1px solid var(--line);border-radius:12px;padding:13px 15px;margin-bottom:14px">
+          <span style="width:24px;height:24px;border-radius:50%;flex:0 0 auto;background:color-mix(in srgb,var(--ok) 18%,transparent);color:var(--ok);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700">✓</span>
+          <span style="font-size:14px;color:var(--ink)">Google-klient klar — det enda som återstår är inloggningen.</span>
+        </div>
+        ` : `
+        <div style="border:1px solid var(--line);border-radius:13px;padding:15px 16px;margin-bottom:12px;background:var(--sunken)">
+          <div style="font-size:14.5px;font-weight:600;color:var(--ink);margin-bottom:5px">1 · Skapa en Google-klient <span style="font-weight:500;color:var(--ink-3)">(engång)</span></div>
+          <div style="font-size:13px;color:var(--ink-2);line-height:1.55;margin-bottom:11px">Aktivera <strong style="color:var(--ink-2)">Google Calendar API</strong> och skapa en OAuth-klient av typen <strong style="color:var(--ink-2)">Desktop app</strong>. Ladda sedan ner klient-JSON:en.</div>
+          <button data-click="${on(v.calSetup.onOpenConsole)}" style="display:inline-flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line-2);color:var(--ink);border-radius:10px;padding:9px 15px;font-size:13.5px;font-weight:500;cursor:pointer;font-family:inherit" data-sh="border-color:var(--ink) !important">Öppna Google Cloud Console<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h7v7"></path><path d="M13 3 6.5 9.5"></path><path d="M11 9v3.5a1 1 0 0 1-1 1H3.5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1H7"></path></svg></button>
+        </div>
+        <div style="border:1px solid var(--line);border-radius:13px;padding:15px 16px;margin-bottom:14px;background:var(--sunken)">
+          <div style="font-size:14.5px;font-weight:600;color:var(--ink);margin-bottom:5px">2 · Installera klientfilen</div>
+          <div style="font-size:13px;color:var(--ink-2);line-height:1.55;margin-bottom:11px">Välj den nedladdade JSON-filen — appen lägger den på rätt plats åt dig (inget behöver flyttas manuellt).</div>
+          <button data-click="${on(v.calSetup.onPickFile)}" ${ v.calSetup.busy ? 'disabled' : '' } style="display:inline-flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line-2);color:var(--ink);border-radius:10px;padding:9px 15px;font-size:13.5px;font-weight:500;cursor:${ v.calSetup.busy ? 'default' : 'pointer' };font-family:inherit;opacity:${ v.calSetup.busy ? '.6' : '1' }" data-sh="border-color:var(--ink) !important">${ v.calSetup.busy ? 'Installerar …' : 'Välj klientfil …' }</button>
+        </div>
+        ` }
+        <button data-click="${on(v.calSetup.onLogin)}" ${ (!v.calSetup.clientReady || v.calSetup.busy) ? 'disabled' : '' } style="display:flex;align-items:center;justify-content:center;gap:10px;width:100%;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:12px;padding:14px 22px;font-size:15px;font-weight:500;cursor:${ (!v.calSetup.clientReady || v.calSetup.busy) ? 'default' : 'pointer' };font-family:inherit;box-shadow:var(--shadow-sm);opacity:${ (!v.calSetup.clientReady || v.calSetup.busy) ? '.5' : '1' }">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.7a6.3 6.3 0 1 0 6 4.3H8v2.4h3.4A3.5 3.5 0 1 1 8 4.2c.9 0 1.7.3 2.3.9l1.7-1.7A6.3 6.3 0 0 0 8 1.7z"></path></svg>
+          ${ v.calSetup.busy ? 'Loggar in …' : 'Logga in med Google' }
+        </button>
+        ${ v.calSetup.clientReady ? '' : `<div style="font-size:12px;color:var(--ink-3);text-align:center;margin-top:9px">Knappen blir klickbar när klientfilen är installerad (steg 2).</div>` }
+        ` }
+      </div>
+      <input data-ref="${on(v.calSetup.clientFileRef)}" type="file" accept="application/json,.json" data-change="${on(v.calSetup.onClientFile)}" style="display:none">
     </div>
   </div>
   ` : '' }

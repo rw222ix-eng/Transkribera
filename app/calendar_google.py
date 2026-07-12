@@ -16,6 +16,8 @@ här med vänliga fel — resten av appen påverkas inte.
 from __future__ import annotations
 
 import json
+import os
+import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -24,6 +26,10 @@ CLIENT_SECRET_NAME = "google_client_secret.json"
 TOKEN_NAME = "google_token.json"
 TIMEZONE = "Europe/Stockholm"
 DEFAULT_DURATION_MIN = 40
+# Bygg-/körtidsväg för en inbyggd klient (bakas in vid PyInstaller-bygget eller
+# sätts i utvecklingsläge) så slutanvändaren slipper Cloud Console helt: sätt
+# variabeln till klientens rå-JSON, så blir kopplingen ett rent "logga in".
+ENV_CLIENT = "TRANSKRIBERA_GOOGLE_CLIENT"
 
 HINT_LIBS = ("Google-biblioteken saknas — installera google-api-python-client "
              "och google-auth-oauthlib.")
@@ -36,6 +42,67 @@ def _files(base_dir: Path) -> tuple[Path, Path]:
 def _hint_secret(base_dir: Path) -> str:
     return (f"Ingen OAuth-klientfil hittades — skapa en \"Desktop app\"-klient i "
             f"Google Cloud Console och lägg den som {CLIENT_SECRET_NAME} i {base_dir}.")
+
+
+def _looks_like_client(cfg) -> bool:
+    """Grov validering: en nedladdad OAuth-klient har {"installed"|"web": {client_id}}."""
+    if not isinstance(cfg, dict):
+        return False
+    root = cfg.get("installed") or cfg.get("web")
+    return isinstance(root, dict) and bool(root.get("client_id"))
+
+
+def _bundled_candidates() -> list[Path]:
+    """Platser där en inbyggd klientfil kan ligga i den paketerade appen."""
+    out: list[Path] = []
+    mei = getattr(sys, "_MEIPASS", None)          # PyInstaller-bundlens temp-rot
+    if mei:
+        out.append(Path(mei) / CLIENT_SECRET_NAME)
+    return out
+
+
+def _client_config(base_dir: Path):
+    """Lös upp OAuth-klienten: env-JSON → inbyggd fil → användarens installerade
+    fil i basmappen. Returnerar dict eller None. Ingen hemlighet checkas in."""
+    raw = os.environ.get(ENV_CLIENT)
+    if raw:
+        try:
+            cfg = json.loads(raw)
+            if _looks_like_client(cfg):
+                return cfg
+        except (ValueError, json.JSONDecodeError):
+            pass
+    for cand in _bundled_candidates() + [_files(base_dir)[0]]:
+        try:
+            if cand.exists():
+                cfg = json.loads(cand.read_text(encoding="utf-8"))
+                if _looks_like_client(cfg):
+                    return cfg
+        except (OSError, ValueError, json.JSONDecodeError):
+            pass
+    return None
+
+
+def client_ready(base_dir: Path) -> bool:
+    return _client_config(base_dir) is not None
+
+
+def install_client_secret(base_dir: Path, raw: str) -> dict:
+    """Spara en klient-JSON som användaren valt i appen som ``google_client_secret.json``
+    i basmappen (validerad). Gör filplaceringen till ett knapptryck."""
+    try:
+        cfg = json.loads(raw)
+    except (ValueError, json.JSONDecodeError):
+        return {"error": "Filen är inte giltig JSON — välj klient-JSON:en du laddade ner."}
+    if not _looks_like_client(cfg):
+        return {"error": "Det ser inte ut som en OAuth-klientfil (saknar \"installed\"/client_id). "
+                         "Välj filen från en OAuth-klient av typen \"Desktop app\"."}
+    secret, _ = _files(base_dir)
+    try:
+        secret.write_text(json.dumps(cfg, ensure_ascii=False), encoding="utf-8")
+    except OSError as exc:
+        return {"error": f"Kunde inte spara klientfilen: {exc}"}
+    return {"ok": True, "client_ready": True}
 
 
 def _load_creds(base_dir: Path):
@@ -65,15 +132,16 @@ def _load_creds(base_dir: Path):
 
 
 def status(base_dir: Path) -> dict:
-    """Anslutningsstatus för UI:t: {connected, hint?}."""
+    """Anslutningsstatus för UI:t: {connected, client_ready, hint?}.
+    ``client_ready`` = en OAuth-klient finns (inbyggd eller installerad) så det
+    som återstår bara är själva Google-inloggningen."""
     try:
         import google_auth_oauthlib  # noqa: F401  (bara närvarokoll)
     except ImportError:
-        return {"connected": False, "hint": HINT_LIBS}
-    secret, _ = _files(base_dir)
-    if not secret.exists():
-        return {"connected": False, "hint": _hint_secret(base_dir)}
-    return {"connected": _load_creds(base_dir) is not None}
+        return {"connected": False, "client_ready": False, "hint": HINT_LIBS}
+    if _client_config(base_dir) is None:
+        return {"connected": False, "client_ready": False, "hint": _hint_secret(base_dir)}
+    return {"connected": _load_creds(base_dir) is not None, "client_ready": True}
 
 
 def connect(base_dir: Path) -> dict:
@@ -83,18 +151,19 @@ def connect(base_dir: Path) -> dict:
         from google_auth_oauthlib.flow import InstalledAppFlow
     except ImportError:
         return {"connected": False, "error": HINT_LIBS}
-    secret, token = _files(base_dir)
-    if not secret.exists():
+    cfg = _client_config(base_dir)
+    if cfg is None:
         return {"connected": False, "error": _hint_secret(base_dir)}
     if _load_creds(base_dir) is not None:
         return {"connected": True}
     try:
-        flow = InstalledAppFlow.from_client_secrets_file(str(secret), SCOPES)
+        flow = InstalledAppFlow.from_client_config(cfg, SCOPES)
         creds = flow.run_local_server(
             port=0, authorization_prompt_message="",
             success_message="Klart — stäng fliken och gå tillbaka till Transkribera.")
     except Exception as exc:
         return {"connected": False, "error": f"Anslutningen misslyckades: {exc}"}
+    _, token = _files(base_dir)
     token.write_text(creds.to_json(), encoding="utf-8")
     return {"connected": True}
 

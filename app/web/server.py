@@ -1263,6 +1263,29 @@ def create_app(base_dir: Path | None = None,
             return JSONResponse({"error": res["error"]}, status_code=400)
         return res
 
+    @app.post("/api/calendar/client-secret")
+    async def api_calendar_client_secret(req: Request):
+        """Installera OAuth-klient-JSON som användaren valt i appens filväljare
+        (skrivs som google_client_secret.json i basmappen). Gör steget att lägga
+        filen på rätt plats till ett knapptryck."""
+        raw = (await req.body()).decode("utf-8", "replace")
+        res = calendar_google.install_client_secret(base, raw)
+        if res.get("error"):
+            return JSONResponse({"error": res["error"]}, status_code=400)
+        return res
+
+    @app.post("/api/calendar/open-console")
+    def api_calendar_open_console():
+        """Öppna Google Cloud Console (credentials-sidan) i användarens
+        webbläsare — hjälper till att skapa OAuth-klienten en gång."""
+        url = "https://console.cloud.google.com/apis/credentials"
+        try:
+            import webbrowser
+            webbrowser.open(url)
+        except Exception:
+            pass
+        return {"ok": True, "url": url}
+
     # ---- Fritextsök över alla lektioner --------------------------------------
 
     @app.get("/api/search")
