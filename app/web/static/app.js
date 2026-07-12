@@ -290,36 +290,45 @@
     return '<span class="math' + (display ? ' math-d' : '') + '">' + inner + '</span>';
   }
   function _mdInline(s) {
+    // Inline-kod hanteras i _stash (före matte), inte här — så $ inuti `kod` inte mattas.
     return s
-      .replace(/`([^`]+)`/g, '<code class="md-code">$1</code>')
       .replace(/\*\*([^*]+?)\*\*/g, '<strong>$1</strong>')
       .replace(/(^|[^\w*])\*([^*\n]+?)\*(?![\w*])/g, '$1<em>$2</em>');
   }
-  function _mathStash(src, math) {
-    function push(tex, d) { math.push(renderMath(tex, d)); return '\x00' + (math.length - 1) + '\x00'; }
+  // Lyft ut kod och matte till platshållare (\x00N\x00) FÖRE markdown-formatering.
+  // KOD stashas före matte, så dollartecken i `kod` aldrig tolkas som matte. Varje
+  // post har färdig, säker HTML (.h) och sin råtext (.r). All text escapas.
+  function _stash(src, store) {
+    function push(h, r) { store.push({ h: h, r: r }); return '\x00' + (store.length - 1) + '\x00'; }
     return String(src == null ? '' : src)
-      .replace(/\$\$([\s\S]+?)\$\$/g, function (_m, t) { return push(t, true); })
-      .replace(/\\\[([\s\S]+?)\\\]/g, function (_m, t) { return push(t, true); })
-      .replace(/\\\(([\s\S]+?)\\\)/g, function (_m, t) { return push(t, false); })
-      .replace(/\$(?=\S)([^\n$]+?)\$/g, function (_m, t) { return push(t, false); });
+      .replace(/`([^`\n]+)`/g, function (_m, t) { return push('<code class="md-code">' + esc(t) + '</code>', '`' + t + '`'); })
+      .replace(/\$\$([\s\S]+?)\$\$/g, function (m, t) { return push(renderMath(t, true), m); })
+      .replace(/\\\[([\s\S]+?)\\\]/g, function (m, t) { return push(renderMath(t, true), m); })
+      .replace(/\\\(([\s\S]+?)\\\)/g, function (m, t) { return push(renderMath(t, false), m); })
+      // Kräv icke-blanktecken direkt före avslutande $ så "$5 och $10" inte
+      // falskt tolkas som matte ("5 och "). Äkta matte ($x^2$) slutar på ett tecken.
+      .replace(/\$(?=\S)([^\n$]*?[^\s$])\$/g, function (m, t) { return push(renderMath(t, false), m); });
   }
-  function _mathPop(html, math) { return html.replace(/\x00(\d+)\x00/g, function (_m, k) { return math[+k] || ''; }); }
+  function _popStash(html, store) { return html.replace(/\x00(\d+)\x00/g, function (_m, k) { return (store[+k] && store[+k].h) || ''; }); }
+  // Inuti kodblock: återställ matte-/kod-platshållare till sin escapade RÅTEXT
+  // i stället för renderad HTML — annars hamnade matte-HTML inne i <code>.
+  function _popRaw(html, store) { return html.replace(/\x00(\d+)\x00/g, function (_m, k) { return store[+k] ? esc(store[+k].r) : ''; }); }
 
   // Inline-läge: flödar med citat-knapparna i källförankrade svar.
   function renderRichInline(src) {
-    var math = [], s = _mathStash(src, math);
+    var store = [], s = _stash(src, store);
     var html = _mdInline(esc(s)).replace(/^\s*[-*•]\s+/gm, '• ').replace(/\n{2,}/g, '<br><br>').replace(/\n/g, '<br>');
-    return _mathPop(html, math);
+    return _popStash(html, store);
   }
   // Block-läge: fristående svarsbubbla — stycken, listor, rubriker, kod.
   function renderRich(src) {
-    var math = [], s = _mathStash(src, math).replace(/\r/g, '');
+    var store = [], s = _stash(String(src == null ? '' : src).replace(/\r/g, ''), store);
     var lines = s.split('\n'), html = '', para = [], listType = null, items = [];
     function flushPara() { if (para.length) { html += '<p class="md-p">' + _mdInline(esc(para.join(' ').trim())) + '</p>'; para = []; } }
     function flushList() { if (listType) { html += '<' + listType + ' class="md-list">' + items.map(function (it) { return '<li>' + _mdInline(esc(it)) + '</li>'; }).join('') + '</' + listType + '>'; listType = null; items = []; } }
     for (var i = 0; i < lines.length; i++) {
       var t = lines[i].trim();
-      if (/^```/.test(t)) { flushPara(); flushList(); var code = []; i++; while (i < lines.length && !/^```/.test(lines[i].trim())) { code.push(lines[i]); i++; } html += '<pre class="md-pre"><code>' + esc(code.join('\n')) + '</code></pre>'; continue; }
+      if (/^```/.test(t)) { flushPara(); flushList(); var code = []; i++; while (i < lines.length && !/^```/.test(lines[i].trim())) { code.push(lines[i]); i++; } html += '<pre class="md-pre"><code>' + _popRaw(esc(code.join('\n')), store) + '</code></pre>'; continue; }
       var h = /^(#{1,4})\s+(.*)$/.exec(t);
       if (h) { flushPara(); flushList(); html += '<div class="md-h">' + _mdInline(esc(h[2])) + '</div>'; continue; }
       var ul = /^[-*•]\s+(.*)$/.exec(t), ol = /^\d+[.)]\s+(.*)$/.exec(t);
@@ -329,7 +338,7 @@
       flushList(); para.push(t);
     }
     flushPara(); flushList();
-    return _mathPop(html, math);
+    return _popStash(html, store);
   }
   function fmtStorage(g) { return g >= 1000 ? (g / 1024).toFixed(1).replace('.', ',') + ' TB' : g + ' GB'; }
   function fmtTime(s) { var m = Math.floor(s / 60), r = Math.floor(s % 60); return (m < 10 ? '0' : '') + m + ':' + (r < 10 ? '0' : '') + r; }
