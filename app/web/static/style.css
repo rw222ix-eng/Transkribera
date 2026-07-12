@@ -346,3 +346,29 @@ button.cta:not(:disabled):hover{background:var(--btn-bg) !important;color:var(--
   @keyframes ml-popin{from{opacity:1;transform:none}to{opacity:1;transform:none}}
   @keyframes modalCardIn{from{opacity:1;transform:none}to{opacity:1;transform:none}}
 }
+
+/* ---- Chatt-svar: Markdown + LaTeX-liknande matematik (renderas av renderRich) ---- */
+.md-p{margin:0 0 .55em}
+.md-p:last-child{margin-bottom:0}
+.md-h{font-weight:600;font-size:1.03em;letter-spacing:-.01em;margin:.55em 0 .3em;color:var(--ink)}
+.md-h:first-child{margin-top:0}
+.md-list{margin:.15em 0 .6em;padding-left:1.35em}
+.md-list:last-child{margin-bottom:0}
+.md-list li{margin:.2em 0}
+.md-list li::marker{color:var(--ink-3)}
+.md-code{font-family:var(--mono);font-size:.88em;background:var(--sunken);border:1px solid var(--line);border-radius:4px;padding:.05em .35em}
+.md-pre{background:var(--sunken);border:1px solid var(--line);border-radius:7px;padding:11px 13px;overflow:auto;margin:.5em 0}
+.md-pre code{font-family:var(--mono);font-size:.86em;white-space:pre;background:none;border:0;padding:0}
+/* Matematik: serif för elegans; variabler kursiva, funktioner/text upprätta */
+.math{font-family:var(--serif);font-style:normal;white-space:nowrap;line-height:1}
+.math .mvar{font-style:italic}
+.math .mfun,.math .mtext{font-style:normal;font-family:var(--sans)}
+.math .mfun{padding-right:.12em}
+.math sup,.math sub{font-size:.72em;line-height:0}
+.math-d{display:block;text-align:center;margin:.6em 0;font-size:1.16em;white-space:normal}
+.mfrac{display:inline-flex;flex-direction:column;vertical-align:middle;text-align:center;margin:0 .18em}
+.mfrac .mfr-n{border-bottom:1px solid currentColor;padding:0 .35em}
+.mfrac .mfr-d{padding:0 .35em}
+.msqrt{white-space:nowrap}
+.msqrt-b{border-top:1px solid currentColor;padding:0 .14em;margin-left:.03em}
+.mroot{font-size:.62em;vertical-align:.7em;margin-right:-.28em}

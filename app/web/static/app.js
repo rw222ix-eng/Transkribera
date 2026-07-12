@@ -221,6 +221,116 @@
   // Render a search snippet: escape first (XSS-safe), then turn the backend's
   // \x02..\x03 match markers into highlighted <mark> spans.
   function hl(s) { return esc(s).replace(/\x02/g, '<mark style="background:var(--accent-weak);color:var(--accent);border-radius:3px;padding:0 2px">').replace(/\x03/g, '</mark>'); }
+
+  // ---- Rikt chatt-svar: Markdown + LaTeX-liknande matematik -----------------
+  // Offline utan build → egen lätt renderare (KaTeX-fonterna går inte att bunta).
+  // Täcker det en lektionschatt ger: fetstil/kursiv/kod/listor/stycken + matte i
+  // $…$ / $$…$$ (exponent, index, bråk, rot, grekiska, operatorer). All text
+  // escapas först — modellens svar renderas aldrig som rå HTML.
+  var _GREEK = { alpha:'α',beta:'β',gamma:'γ',delta:'δ',epsilon:'ε',varepsilon:'ε',zeta:'ζ',eta:'η',theta:'θ',vartheta:'ϑ',iota:'ι',kappa:'κ',lambda:'λ',mu:'μ',nu:'ν',xi:'ξ',pi:'π',rho:'ρ',sigma:'σ',tau:'τ',upsilon:'υ',phi:'φ',varphi:'φ',chi:'χ',psi:'ψ',omega:'ω',Gamma:'Γ',Delta:'Δ',Theta:'Θ',Lambda:'Λ',Xi:'Ξ',Pi:'Π',Sigma:'Σ',Phi:'Φ',Psi:'Ψ',Omega:'Ω' };
+  var _MSYM = { cdot:'·',times:'×',div:'÷',pm:'±',mp:'∓',leq:'≤',le:'≤',geq:'≥',ge:'≥',neq:'≠',ne:'≠',approx:'≈',equiv:'≡',sim:'∼',cong:'≅',propto:'∝',to:'→',rightarrow:'→',Rightarrow:'⇒',leftarrow:'←',Leftarrow:'⇐',leftrightarrow:'↔',infty:'∞',partial:'∂',nabla:'∇',sum:'∑',prod:'∏',int:'∫',oint:'∮',angle:'∠',perp:'⊥',parallel:'∥',in:'∈',notin:'∉',forall:'∀',exists:'∃',emptyset:'∅',cup:'∪',cap:'∩',subset:'⊂',subseteq:'⊆',supset:'⊃',supseteq:'⊇',ldots:'…',cdots:'⋯',dots:'…',circ:'∘',degree:'°',deg:'°',prime:'′',ast:'∗',star:'⋆',land:'∧',lor:'∨',neg:'¬' };
+  var _MFUN = { sin:1,cos:1,tan:1,cot:1,sec:1,csc:1,arcsin:1,arccos:1,arctan:1,sinh:1,cosh:1,tanh:1,log:1,ln:1,lg:1,exp:1,lim:1,max:1,min:1,det:1,gcd:1,mod:1,dim:1 };
+
+  function _mGroup(s, i) {
+    if (s.charAt(i) === '{') {
+      var d = 1, j = i + 1;
+      while (j < s.length && d > 0) { var ch = s.charAt(j); if (ch === '{') d++; else if (ch === '}') d--; j++; }
+      return { body: s.slice(i + 1, j - 1), next: j };
+    }
+    var m = /^\\[a-zA-Z]+|^\\.|^[\s\S]/.exec(s.slice(i));
+    var tok = m ? m[0] : (s.charAt(i) || '');
+    return { body: tok, next: i + tok.length };
+  }
+  function _math(s) {
+    var out = '', i = 0, n = s.length;
+    while (i < n) {
+      var c = s.charAt(i);
+      if (c === '\\') {
+        var mm = /^\\([a-zA-Z]+)|^\\([\s\S])/.exec(s.slice(i));
+        var name = mm ? (mm[1] || mm[2]) : '';
+        var adv = mm ? mm[0].length : 1;
+        var after = i + adv;
+        if (name === 'frac' || name === 'dfrac' || name === 'tfrac') {
+          var g1 = _mGroup(s, after), g2 = _mGroup(s, g1.next);
+          out += '<span class="mfrac"><span class="mfr-n">' + _math(g1.body) + '</span><span class="mfr-d">' + _math(g2.body) + '</span></span>';
+          i = g2.next; continue;
+        }
+        if (name === 'sqrt') {
+          var k = after, root = '';
+          if (s.charAt(k) === '[') { var e = s.indexOf(']', k); if (e > -1) { root = s.slice(k + 1, e); k = e + 1; } }
+          var gs = _mGroup(s, k);
+          out += (root ? '<sup class="mroot">' + _math(root) + '</sup>' : '') + '<span class="msqrt">√<span class="msqrt-b">' + _math(gs.body) + '</span></span>';
+          i = gs.next; continue;
+        }
+        if (name === 'text' || name === 'mathrm' || name === 'operatorname' || name === 'mathbf') {
+          var gt = _mGroup(s, after); out += '<span class="mtext">' + esc(gt.body) + '</span>'; i = gt.next; continue;
+        }
+        if (_MFUN[name]) { out += '<span class="mfun">' + name + '</span>'; i = after; continue; }
+        if (_GREEK[name] != null) { out += _GREEK[name]; i = after; continue; }
+        if (_MSYM[name] != null) { out += _MSYM[name]; i = after; continue; }
+        if (name === 'sqrt') { i = after; continue; }
+        if (/^(left|right|big|Big|bigg|Bigg|displaystyle|textstyle|limits|,|;|:|!|>| )$/.test(name)) { i = after; continue; }
+        if (name === 'quad' || name === 'qquad') { out += '  '; i = after; continue; }
+        out += esc(name); i = after; continue;
+      }
+      if (c === '^' || c === '_') {
+        var g = _mGroup(s, i + 1);
+        out += (c === '^' ? '<sup>' : '<sub>') + _math(g.body) + (c === '^' ? '</sup>' : '</sub>');
+        i = g.next; continue;
+      }
+      if (c === '{') { var gb = _mGroup(s, i); out += _math(gb.body); i = gb.next; continue; }
+      if (c === '}') { i++; continue; }
+      if (/[a-zA-Z]/.test(c)) { out += '<i class="mvar">' + c + '</i>'; i++; continue; }
+      out += esc(c); i++;
+    }
+    return out;
+  }
+  function renderMath(tex, display) {
+    var inner; try { inner = _math(String(tex).trim()); } catch (e) { inner = esc(tex); }
+    return '<span class="math' + (display ? ' math-d' : '') + '">' + inner + '</span>';
+  }
+  function _mdInline(s) {
+    return s
+      .replace(/`([^`]+)`/g, '<code class="md-code">$1</code>')
+      .replace(/\*\*([^*]+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/(^|[^\w*])\*([^*\n]+?)\*(?![\w*])/g, '$1<em>$2</em>');
+  }
+  function _mathStash(src, math) {
+    function push(tex, d) { math.push(renderMath(tex, d)); return '\x00' + (math.length - 1) + '\x00'; }
+    return String(src == null ? '' : src)
+      .replace(/\$\$([\s\S]+?)\$\$/g, function (_m, t) { return push(t, true); })
+      .replace(/\\\[([\s\S]+?)\\\]/g, function (_m, t) { return push(t, true); })
+      .replace(/\\\(([\s\S]+?)\\\)/g, function (_m, t) { return push(t, false); })
+      .replace(/\$(?=\S)([^\n$]+?)\$/g, function (_m, t) { return push(t, false); });
+  }
+  function _mathPop(html, math) { return html.replace(/\x00(\d+)\x00/g, function (_m, k) { return math[+k] || ''; }); }
+
+  // Inline-läge: flödar med citat-knapparna i källförankrade svar.
+  function renderRichInline(src) {
+    var math = [], s = _mathStash(src, math);
+    var html = _mdInline(esc(s)).replace(/^\s*[-*•]\s+/gm, '• ').replace(/\n{2,}/g, '<br><br>').replace(/\n/g, '<br>');
+    return _mathPop(html, math);
+  }
+  // Block-läge: fristående svarsbubbla — stycken, listor, rubriker, kod.
+  function renderRich(src) {
+    var math = [], s = _mathStash(src, math).replace(/\r/g, '');
+    var lines = s.split('\n'), html = '', para = [], listType = null, items = [];
+    function flushPara() { if (para.length) { html += '<p class="md-p">' + _mdInline(esc(para.join(' ').trim())) + '</p>'; para = []; } }
+    function flushList() { if (listType) { html += '<' + listType + ' class="md-list">' + items.map(function (it) { return '<li>' + _mdInline(esc(it)) + '</li>'; }).join('') + '</' + listType + '>'; listType = null; items = []; } }
+    for (var i = 0; i < lines.length; i++) {
+      var t = lines[i].trim();
+      if (/^```/.test(t)) { flushPara(); flushList(); var code = []; i++; while (i < lines.length && !/^```/.test(lines[i].trim())) { code.push(lines[i]); i++; } html += '<pre class="md-pre"><code>' + esc(code.join('\n')) + '</code></pre>'; continue; }
+      var h = /^(#{1,4})\s+(.*)$/.exec(t);
+      if (h) { flushPara(); flushList(); html += '<div class="md-h">' + _mdInline(esc(h[2])) + '</div>'; continue; }
+      var ul = /^[-*•]\s+(.*)$/.exec(t), ol = /^\d+[.)]\s+(.*)$/.exec(t);
+      if (ul) { flushPara(); if (listType && listType !== 'ul') flushList(); listType = 'ul'; items.push(ul[1]); continue; }
+      if (ol) { flushPara(); if (listType && listType !== 'ol') flushList(); listType = 'ol'; items.push(ol[1]); continue; }
+      if (t === '') { flushPara(); flushList(); continue; }
+      flushList(); para.push(t);
+    }
+    flushPara(); flushList();
+    return _mathPop(html, math);
+  }
   function fmtStorage(g) { return g >= 1000 ? (g / 1024).toFixed(1).replace('.', ',') + ' TB' : g + ' GB'; }
   function fmtTime(s) { var m = Math.floor(s / 60), r = Math.floor(s % 60); return (m < 10 ? '0' : '') + m + ':' + (r < 10 ? '0' : '') + r; }
   function parseTS(t) { var p = (t || '00:00').split(':').map(Number); return p.length === 3 ? p[0] * 3600 + p[1] * 60 + p[2] : p[0] * 60 + p[1]; }
@@ -599,7 +709,7 @@
     return messages.map(function (m, mi) {
       var cited = (m.role !== 'user' && m.text) ? parseChatCites(m.text, segs) : null;
       return {
-        text: m.text, hasAttach: !!m.attach, attach: m.attach || '',
+        text: m.text, isUser: m.role === 'user', hasAttach: !!m.attach, attach: m.attach || '',
         reason: m.reason || '', hasReason: !!(m.reason && m.reason.length),
         rowStyle: 'display:flex;flex-direction:column;gap:5px;align-items:' + (m.role === 'user' ? 'flex-end' : 'flex-start'),
         bubbleStyle: m.role === 'user' ? 'max-width:82%;background:var(--btn-bg);color:var(--btn-fg);border-radius:15px 15px 4px 15px;padding:11px 15px;font-size:15.5px;line-height:1.5' : 'max-width:82%;background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:15px 15px 15px 4px;padding:11px 15px;font-size:15.5px;line-height:1.5',
@@ -3419,7 +3529,7 @@ function chatThread(c){ return `
                   <div style="display:grid;grid-template-columns:1fr 244px;gap:18px;align-items:start">
                     <div style="font-size:15px;line-height:1.78;color:var(--ink);min-width:0">
                       ${ m.tokens.map(function(tk){ return tk.isText
-                        ? `<span>${esc(tk.text)}</span>`
+                        ? `<span>${renderRichInline(tk.text)}</span>`
                         : `<button data-click="${on(tk.onCite)}" data-csup="${tk.supFlag}" aria-label="Visa källa ${esc(tk.num)} i transkriptet" style="display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;font-size:11px;font-weight:700;color:var(--accent);background:var(--accent-weak);border:1px solid color-mix(in srgb,var(--accent) 28%,transparent);border-radius:6px;cursor:pointer;vertical-align:2px;margin:0 1.5px;font-family:inherit;transition:transform .1s">${esc(tk.num)}</button>`; }).join('') }
                     </div>
                     <div style="background:var(--sunken);border:1px solid var(--line);border-radius:13px;padding:12px">
@@ -3435,7 +3545,7 @@ function chatThread(c){ return `
                   </div>
                 </div>
                 ` : `
-                <div style="${m.bubbleStyle}">${esc(m.text)}</div>
+                <div style="${m.bubbleStyle}">${ m.isUser ? esc(m.text) : renderRich(m.text) }</div>
                 ` }
               </div>
             `; }).join('') }
