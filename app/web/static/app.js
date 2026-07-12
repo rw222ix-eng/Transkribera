@@ -3542,55 +3542,57 @@ function viewModals(v){ return `
   ` : '' }
 
   ${ v.lessonChatOpen ? `
-  <div data-screen-label="Lektion (overlay)" style="position:fixed;inset:0;z-index:120;display:flex;flex-direction:column;background:var(--canvas);animation:fadeup .2s ease">
-    <div style="flex:0 0 auto;display:flex;align-items:center;gap:12px;padding:12px 20px;border-bottom:1px solid var(--line);background:var(--surface)">
-      <button data-click="${on(v.closeLessonChat)}" style="flex:0 0 auto;border:1px solid var(--line-2);background:var(--sunken);color:var(--ink-2);border-radius:7px;padding:6px 10px;font-family:var(--mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;cursor:pointer">Esc — Stäng</button>
-      <span data-cc="${esc(v.ovCc)}" style="border-radius:99px;padding:2px 10px;font-size:11.5px;font-weight:600;white-space:nowrap;flex:0 0 auto">${esc(v.ovTag)}</span>
-      <div style="min-width:0">
-        <div style="font-size:15.5px;font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(v.lessonChatName)}</div>
-        <div style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.06em;text-transform:uppercase;color:var(--ink-3);margin-top:1px">${esc(v.ovMeta)}</div>
-      </div>
-      <span style="flex:1"></span>
-      ${ v.ovHasLesson ? `
-      <button data-click="${on(v.onAnalyze)}" ${ v.ovAnalyzing ? 'disabled' : '' } title="Extrahera kalenderposter, åtgärder och svårigheter till Kommande och Terminstrender" style="flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;background:var(--accent-weak);color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 40%,transparent);border-radius:8px;padding:7px 13px;font-size:12.5px;font-weight:600;cursor:${ v.ovAnalyzing ? 'default' : 'pointer' };font-family:inherit;opacity:${ v.ovAnalyzing ? '.6' : '1' }">${ v.ovAnalyzing ? 'Analyserar …' : '✨ Analysera lektion' }</button>
-      <button data-click="${on(v.onOvReport)}" ${ v.ovReportBusy ? 'disabled' : '' } title="Exportera rapport (öppnas i webbläsaren, skriv ut som PDF)" style="flex:0 0 auto;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:8px;padding:7px 13px;font-size:12.5px;font-weight:500;cursor:${ v.ovReportBusy ? 'default' : 'pointer' };font-family:inherit;opacity:${ v.ovReportBusy ? '.6' : '1' }">${ v.ovReportBusy ? 'Exporterar …' : '📄 Rapport' }</button>
-      ` : '' }
-      <button data-click="${on(v.ovOpenFull)}" style="flex:0 0 auto;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:8px;padding:7px 13px;font-size:12.5px;font-weight:500;cursor:pointer;font-family:inherit">Öppna transkriptvyn</button>
-    </div>
-    <div data-hidescroll style="flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;padding:24px 24px 14px">
-      <div style="max-width:820px;margin:0 auto">
-        <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
-          <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3)">Transkription</span>
-          <div style="flex:1;height:1px;background:var(--line)"></div>
-          ${ v.ovHasHit ? `<span style="font-family:var(--mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--accent)">Källa markerad · ${esc(v.ovHitT)}</span>` : '' }
+  <div data-click="${on(v.closeLessonChat)}" data-screen-label="Lektion (overlay)" style="position:fixed;inset:0;z-index:120;display:flex;align-items:center;justify-content:center;padding:clamp(10px,3vw,38px);background:color-mix(in srgb,var(--canvas) 58%,transparent);backdrop-filter:blur(9px);animation:modalback .3s ease">
+    <div data-click="${on(v.stop)}" data-modal-card style="width:min(960px,96vw);height:min(88vh,880px);display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);overflow:hidden">
+      <div style="flex:0 0 auto;display:flex;align-items:center;gap:11px;padding:11px 13px 11px 11px;border-bottom:1px solid var(--line)">
+        <button data-click="${on(v.closeLessonChat)}" aria-label="Stäng (Esc)" title="Stäng · Esc" style="flex:0 0 auto;width:34px;height:34px;display:flex;align-items:center;justify-content:center;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:10px;cursor:pointer;transition:transform .14s cubic-bezier(.2,.8,.25,1),border-color .14s,background .14s,color .14s" data-sh="border-color:var(--line-2) !important;background:var(--sunken) !important;color:var(--ink) !important"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"></path></svg></button>
+        <span data-cc="${esc(v.ovCc)}" style="border-radius:99px;padding:3px 11px;font-size:11.5px;font-weight:600;white-space:nowrap;flex:0 0 auto">${esc(v.ovTag)}</span>
+        <div style="min-width:0">
+          <div style="font-size:15px;font-weight:600;color:var(--ink);letter-spacing:-.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(v.lessonChatName)}</div>
+          <div style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.06em;text-transform:uppercase;color:var(--ink-3);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(v.ovMeta)}</div>
         </div>
-        ${ v.lessonChatLoading ? `
-        <div style="display:flex;align-items:center;gap:10px;color:var(--ink-2);font-size:14px;padding:20px 0"><span style="width:15px;height:15px;border-radius:50%;border:2px solid var(--line-2);border-top-color:var(--accent);animation:spin .7s linear infinite;flex:0 0 auto"></span>Läser in transkriptet …</div>
-        ` : v.ovRows.map(function(p){ return p.hit ? `
-          <div data-key="ovr-${esc(p.t)}" style="display:flex;gap:16px;padding:11px 14px;margin:2px -14px;background:var(--accent-weak);border:1px solid color-mix(in srgb,var(--accent) 40%,var(--line));border-radius:8px">
-            <span style="font-variant-numeric:tabular-nums;font-family:var(--mono);font-size:11px;color:var(--accent);flex:0 0 auto;width:48px;padding-top:3px;font-weight:500">${esc(p.t)}</span>
-            <span style="font-size:15.5px;color:var(--ink);line-height:1.6;font-weight:500">${esc(p.txt)}</span>
-          </div>
-        ` : `
-          <div data-key="ovr-${esc(p.t)}" style="display:flex;gap:16px;padding:8px 0;border-bottom:1px solid color-mix(in srgb,var(--line) 60%,transparent)">
-            <span style="font-variant-numeric:tabular-nums;font-family:var(--mono);font-size:11px;color:var(--ink-3);flex:0 0 auto;width:48px;padding-top:3px">${esc(p.t)}</span>
-            <span style="font-size:15.5px;color:var(--ink-2);line-height:1.6">${esc(p.txt)}</span>
-          </div>
-        `; }).join('') }
-      </div>
-    </div>
-    <div style="flex:0 0 auto;margin:0 auto 16px;width:min(880px,94vw);background:var(--surface);border:1px solid var(--ink);border-radius:13px;box-shadow:var(--shadow);overflow:hidden">
-      <div data-hidescroll style="max-height:40vh;overflow:auto;overscroll-behavior:contain;padding:14px 18px">
-        ${ v.lessonChatThread.chatEmpty ? `
-        <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
-          <button data-click="${on(v.ovAskSum)}" style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2);background:var(--sunken);border:1px solid var(--line);border-radius:99px;padding:7px 13px;cursor:pointer;font-family:inherit;transition:border-color .12s,color .12s">Sammanfatta lektionen</button>
-          <button data-click="${on(v.ovAskStud)}" style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2);background:var(--sunken);border:1px solid var(--line);border-radius:99px;padding:7px 13px;cursor:pointer;font-family:inherit;transition:border-color .12s,color .12s">Vilka elever nämns?</button>
-          <button data-click="${on(v.ovAskRemind)}" style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2);background:var(--sunken);border:1px solid var(--line);border-radius:99px;padding:7px 13px;cursor:pointer;font-family:inherit;transition:border-color .12s,color .12s">Skapa läxpåminnelse</button>
-          <button data-click="${on(v.proposeOvEvent)}" style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;color:var(--accent);background:var(--accent-weak);border:1px solid color-mix(in srgb,var(--accent) 40%,transparent);border-radius:99px;padding:7px 13px;cursor:pointer;font-family:inherit;transition:border-color .12s"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="flex:0 0 auto"><rect x="2" y="3" width="12" height="11" rx="2"></rect><path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3M8 9v3M6.5 10.5h3"></path></svg>Kalenderhändelse</button>
-        </div>
+        <span style="flex:1"></span>
+        ${ v.ovHasLesson ? `
+        <button data-click="${on(v.onAnalyze)}" ${ v.ovAnalyzing ? 'disabled' : '' } title="Extrahera kalenderposter, åtgärder och svårigheter till Kommande och Terminstrender" style="flex:0 0 auto;display:inline-flex;align-items:center;gap:7px;background:var(--accent-weak);color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 38%,transparent);border-radius:9px;padding:8px 13px;font-size:12.5px;font-weight:600;cursor:${ v.ovAnalyzing ? 'default' : 'pointer' };font-family:inherit;opacity:${ v.ovAnalyzing ? '.6' : '1' };transition:transform .14s cubic-bezier(.2,.8,.25,1),border-color .14s,background .14s" data-sh="background:color-mix(in srgb,var(--accent) 15%,transparent) !important">${ v.ovAnalyzing ? `<span style="width:13px;height:13px;border-radius:50%;border:2px solid color-mix(in srgb,var(--accent) 35%,transparent);border-top-color:var(--accent);animation:spin .7s linear infinite;flex:0 0 auto"></span>Analyserar …` : `<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto"><path d="M8 1.8l1.4 3.6 3.6 1.4-3.6 1.4L8 11.8 6.6 8.2 3 6.8l3.6-1.4z"></path></svg>Analysera lektion` }</button>
+        <button data-click="${on(v.onOvReport)}" ${ v.ovReportBusy ? 'disabled' : '' } title="Exportera rapport (öppnas i webbläsaren, skriv ut som PDF)" style="flex:0 0 auto;display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:9px;padding:8px 13px;font-size:12.5px;font-weight:500;cursor:${ v.ovReportBusy ? 'default' : 'pointer' };font-family:inherit;opacity:${ v.ovReportBusy ? '.6' : '1' };transition:transform .14s cubic-bezier(.2,.8,.25,1),border-color .14s,background .14s,color .14s" data-sh="border-color:var(--line-2) !important;background:var(--sunken) !important;color:var(--ink) !important"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto"><path d="M9 2H4.5A1.5 1.5 0 0 0 3 3.5v9A1.5 1.5 0 0 0 4.5 14h7A1.5 1.5 0 0 0 13 12.5V6z"></path><path d="M9 2v4h4M6 9h4M6 11.2h4"></path></svg>${ v.ovReportBusy ? 'Exporterar …' : 'Rapport' }</button>
         ` : '' }
-        ${ v.ovEvent ? lessonEventBox(v.ovEvent) : '' }
-        ${ chatThread(v.lessonChatThread) }
+        <button data-click="${on(v.ovOpenFull)}" title="Öppna hela transkriptvyn" style="flex:0 0 auto;display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:9px;padding:8px 13px;font-size:12.5px;font-weight:500;cursor:pointer;font-family:inherit;transition:transform .14s cubic-bezier(.2,.8,.25,1),border-color .14s,background .14s,color .14s" data-sh="border-color:var(--line-2) !important;background:var(--sunken) !important;color:var(--ink) !important"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto"><path d="M6 2.5H3.5A1 1 0 0 0 2.5 3.5V6M10 2.5h2.5a1 1 0 0 1 1 1V6M13.5 10v2.5a1 1 0 0 1-1 1H10M6 13.5H3.5a1 1 0 0 1-1-1V10"></path></svg>Transkript</button>
+      </div>
+      <div data-hidescroll style="flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;padding:18px 22px 6px">
+        <div style="max-width:760px;margin:0 auto">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+            <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3)">Transkription</span>
+            <div style="flex:1;height:1px;background:var(--line)"></div>
+            ${ v.ovHasHit ? `<span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--accent)">Källa · ${esc(v.ovHitT)}</span>` : '' }
+          </div>
+          ${ v.lessonChatLoading ? `
+          <div style="display:flex;align-items:center;gap:10px;color:var(--ink-2);font-size:14px;padding:20px 0"><span style="width:15px;height:15px;border-radius:50%;border:2px solid var(--line-2);border-top-color:var(--accent);animation:spin .7s linear infinite;flex:0 0 auto"></span>Läser in transkriptet …</div>
+          ` : v.ovRows.map(function(p){ return p.hit ? `
+            <div data-key="ovr-${esc(p.t)}" style="display:flex;gap:14px;padding:10px 13px;margin:2px -13px;background:var(--accent-weak);border:1px solid color-mix(in srgb,var(--accent) 38%,var(--line));border-radius:9px">
+              <span style="font-variant-numeric:tabular-nums;font-family:var(--mono);font-size:10.5px;color:var(--accent);flex:0 0 auto;width:44px;padding-top:3px;font-weight:500">${esc(p.t)}</span>
+              <span style="font-size:14.5px;color:var(--ink);line-height:1.55;font-weight:500">${esc(p.txt)}</span>
+            </div>
+          ` : `
+            <div data-key="ovr-${esc(p.t)}" style="display:flex;gap:14px;padding:7px 0;border-bottom:1px solid color-mix(in srgb,var(--line) 55%,transparent)">
+              <span style="font-variant-numeric:tabular-nums;font-family:var(--mono);font-size:10.5px;color:var(--ink-3);flex:0 0 auto;width:44px;padding-top:2px">${esc(p.t)}</span>
+              <span style="font-size:14.5px;color:var(--ink-2);line-height:1.55">${esc(p.txt)}</span>
+            </div>
+          `; }).join('') }
+        </div>
+      </div>
+      <div style="flex:0 0 auto;border-top:1px solid var(--line);background:var(--sunken)">
+        <div data-hidescroll style="max-height:44vh;overflow:auto;overscroll-behavior:contain;padding:13px 18px 14px">
+          ${ v.lessonChatThread.chatEmpty ? `
+          <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
+            <button data-click="${on(v.ovAskSum)}" style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2);background:var(--surface);border:1px solid var(--line);border-radius:99px;padding:7px 13px;cursor:pointer;font-family:inherit;transition:transform .14s cubic-bezier(.2,.8,.25,1),border-color .14s,color .14s,background .14s" data-sh="border-color:var(--line-2) !important;color:var(--ink) !important">Sammanfatta lektionen</button>
+            <button data-click="${on(v.ovAskStud)}" style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2);background:var(--surface);border:1px solid var(--line);border-radius:99px;padding:7px 13px;cursor:pointer;font-family:inherit;transition:transform .14s cubic-bezier(.2,.8,.25,1),border-color .14s,color .14s,background .14s" data-sh="border-color:var(--line-2) !important;color:var(--ink) !important">Vilka elever nämns?</button>
+            <button data-click="${on(v.ovAskRemind)}" style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2);background:var(--surface);border:1px solid var(--line);border-radius:99px;padding:7px 13px;cursor:pointer;font-family:inherit;transition:transform .14s cubic-bezier(.2,.8,.25,1),border-color .14s,color .14s,background .14s" data-sh="border-color:var(--line-2) !important;color:var(--ink) !important">Skapa läxpåminnelse</button>
+            <button data-click="${on(v.proposeOvEvent)}" style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;color:var(--accent);background:var(--accent-weak);border:1px solid color-mix(in srgb,var(--accent) 40%,transparent);border-radius:99px;padding:7px 13px;cursor:pointer;font-family:inherit;transition:transform .14s cubic-bezier(.2,.8,.25,1),border-color .14s,background .14s" data-sh="background:color-mix(in srgb,var(--accent) 15%,transparent) !important"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="flex:0 0 auto"><rect x="2" y="3" width="12" height="11" rx="2"></rect><path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3M8 9v3M6.5 10.5h3"></path></svg>Kalenderhändelse</button>
+          </div>
+          ` : '' }
+          ${ v.ovEvent ? lessonEventBox(v.ovEvent) : '' }
+          ${ chatThread(v.lessonChatThread) }
+        </div>
       </div>
     </div>
   </div>

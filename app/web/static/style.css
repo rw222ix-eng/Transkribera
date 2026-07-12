@@ -159,6 +159,13 @@ h1[style*="text-transform: uppercase"],h2[style*="text-transform: uppercase"]{fo
 .cta[aria-disabled="true"]::before{content:none}
 .cta[aria-disabled="true"]:hover .cta_arrow{transform:none}
 
+/* ---- Mjuk taktil klick-feedback: knappar sjunker in en aning vid tryck ---- */
+button{transition:transform .14s cubic-bezier(.2,.8,.25,1)}
+button:not(:disabled):not([aria-disabled="true"]):active,[data-press]:active{transform:scale(.965)}
+@media (prefers-reduced-motion:reduce){
+  button:active,[data-press]:active{transform:none}
+}
+
 /* ---- Active-state overrides (data-* driven, from the logic class) ---- */
 [data-seg="on"]{background:var(--surface) !important;color:var(--ink) !important;box-shadow:var(--shadow-sm) !important}
 [data-segtxt]{transition:color .22s ease}
