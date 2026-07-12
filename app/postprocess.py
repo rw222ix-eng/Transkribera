@@ -45,7 +45,18 @@ def suggest_title(segments: list[dict], model: str, base_url: str | None = None)
     får ett vettigt namn i stället för filnamnet — YouTube behåller sin titel.
     Best effort: returnerar None om transkriptet är tomt eller om modellen inte
     ger något användbart, så anroparen kan falla tillbaka på filnamnet."""
-    text = " ".join((s.get("text") or "") for s in segments).strip()
+    # Bara transkriptets början behövs för en titel. Sluta samla när ~5000 tecken
+    # nåtts i stället för att bygga ihop hela en timmeslång föreläsning och slänga
+    # nästan allt.
+    parts: list[str] = []
+    total = 0
+    for s in segments:
+        t = s.get("text") or ""
+        parts.append(t)
+        total += len(t) + 1
+        if total >= 5000:
+            break
+    text = " ".join(parts).strip()
     if not text:
         return None
     prompt = (
