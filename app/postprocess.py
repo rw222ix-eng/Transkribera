@@ -39,6 +39,36 @@ def build_prompt(operation: str, transcript: str) -> str:
     return f"{instruction}\n\n---\n{transcript}\n---"
 
 
+def suggest_title(segments: list[dict], model: str, base_url: str | None = None) -> str | None:
+    """Föreslå en kort, beskrivande svensk titel utifrån transkriptet med den
+    lokala LLM:en. Används för lokala källor (inspelning/lokal video) så att de
+    får ett vettigt namn i stället för filnamnet — YouTube behåller sin titel.
+    Best effort: returnerar None om transkriptet är tomt eller om modellen inte
+    ger något användbart, så anroparen kan falla tillbaka på filnamnet."""
+    text = " ".join((s.get("text") or "") for s in segments).strip()
+    if not text:
+        return None
+    prompt = (
+        "Här är ett transkript från en inspelning. Föreslå en kort, beskrivande "
+        "titel på svenska (3–8 ord) som fångar vad inspelningen handlar om. Svara "
+        "med ENBART titeln — inga citationstecken, ingen avslutande punkt och "
+        "ingen förklaring.\n\nTRANSKRIPT:\n" + text[:5000]
+    )
+    out = (llm_client.generate(model, prompt, system=SYSTEM_SV,
+                               base_url=base_url, max_tokens=40) or "").strip()
+    if not out:
+        return None
+    title = out.splitlines()[0].strip()
+    title = re.sub(r"^\s*(titel|title|rubrik)\s*[:\-–]\s*", "", title, flags=re.I).strip()
+    # Skala bort omgivande citattecken och avslutande skiljetecken (kan ligga i
+    # valfri ordning, t.ex. "…". ) — upprepa tills det är stabilt.
+    for _ in range(3):
+        title = title.strip().strip("\"'”“„»«").rstrip(".,;:!").strip()
+    if len(title) > 90:                       # håll det som en titel, inte en mening
+        title = title[:90].rsplit(" ", 1)[0].rstrip(",;:-").strip()
+    return title or None
+
+
 # ---- long-transcript handling (map-reduce) ----------------------------------
 # The served model owns a fixed context (llama_server.DEFAULT_CTX = 40960). A
 # single pass over a long lecture would silently overflow it — the model would

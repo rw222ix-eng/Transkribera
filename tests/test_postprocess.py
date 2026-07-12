@@ -26,6 +26,47 @@ def test_run_calls_generate(monkeypatch):
     assert "transkript" in captured["prompt"]
 
 
+# ---- auto-titel (namngivning av lokala källor) ------------------------------
+
+_SEGS = [{"start": 0.0, "end": 2.0, "text": "Idag ska vi prata om bråk"},
+         {"start": 2.0, "end": 4.0, "text": "och procent i matematik."}]
+
+
+def test_suggest_title_rensar_citat_och_prefix(monkeypatch):
+    monkeypatch.setattr(pp.llm_client, "generate",
+                        lambda *a, **k: '  Titel: "Bråk och procent".\n(extra rad)')
+    assert pp.suggest_title(_SEGS, "Qwen3-14B-Q8_0.gguf") == "Bråk och procent"
+
+
+def test_suggest_title_skickar_transkriptet_till_modellen(monkeypatch):
+    seen = {}
+    def fake_generate(model, prompt, **kw):
+        seen["model"] = model
+        seen["prompt"] = prompt
+        return "Bråk och procent"
+    monkeypatch.setattr(pp.llm_client, "generate", fake_generate)
+    pp.suggest_title(_SEGS, "Qwen3-14B-Q8_0.gguf")
+    assert seen["model"] == "Qwen3-14B-Q8_0.gguf"
+    assert "bråk" in seen["prompt"].lower()
+
+
+def test_suggest_title_tomt_transkript_ger_none(monkeypatch):
+    monkeypatch.setattr(pp.llm_client, "generate", lambda *a, **k: "något")
+    assert pp.suggest_title([], "m") is None
+    assert pp.suggest_title([{"text": "   "}], "m") is None
+
+
+def test_suggest_title_tomt_modellsvar_ger_none(monkeypatch):
+    monkeypatch.setattr(pp.llm_client, "generate", lambda *a, **k: "   ")
+    assert pp.suggest_title(_SEGS, "m") is None
+
+
+def test_suggest_title_kortas_till_titel_langd(monkeypatch):
+    monkeypatch.setattr(pp.llm_client, "generate", lambda *a, **k: "ord " * 60)
+    out = pp.suggest_title(_SEGS, "m")
+    assert out and len(out) <= 90
+
+
 # ---- extraktion (Fas 2) -----------------------------------------------------
 
 _GOOD_JSON = (

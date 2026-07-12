@@ -581,13 +581,29 @@ def create_app(base_dir: Path | None = None,
             _lang_lbl = {"en": "Engelska", "sv": "Svenska"}
             lang_label = _lang_lbl.get(language, "Auto")
             target_label = _lang_lbl.get(target_language, lang_label)
+
+            # Auto-titel för LOKALA källor (inspelning eller lokal video) via den
+            # lokala LLM:en — läser transkriptet och sätter ett vettigt namn i
+            # stället för filnamnet. En YouTube-källa behåller sin titel (yt-dlp
+            # namnger redan filen efter videons titel). Best effort: filnamnet
+            # behålls om modellen inte är laddad eller inte ger något användbart.
+            display_name = Path(media).name
+            if not source_is_url and segments and arb.ensure_llm() is not None:
+                try:
+                    _title = postprocess.suggest_title(segments, LLM_MODELS[0].name)
+                    if _title:
+                        display_name = _title
+                        emit({"type": "log", "msg": "Namngav inspelningen: " + _title})
+                except Exception:
+                    debug_log.get_logger().exception("Kunde inte föreslå titel")
+
             dur = segments[-1]["end"] if segments else 0
             words = sum(len((sg.get("text") or "").split()) for sg in segments)
             entry_id = "h" + str(int(time.time() * 1000))
             entry = {
                 "id": entry_id,
                 "ts": datetime.now().isoformat(timespec="seconds"),
-                "name": Path(media).name,
+                "name": display_name,
                 # `source` is the ORIGINAL input (URL or the user's own file path) so
                 # "Kör om" re-transcribes the source instead of the result artifact
                 # (which would move/duplicate it out of this entry's folder). The

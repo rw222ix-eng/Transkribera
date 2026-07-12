@@ -92,3 +92,37 @@ def test_progress_is_monotonic_with_audio_correction(client, tmp_path):
     # Två framåtriktade delband: transkribera i 0–60 %, ljudkorrigering i (60, 92].
     assert any(p <= 60 for p in pcts), f"saknar transkriberings-band: {pcts}"
     assert any(60 < p <= 92 for p in pcts), f"saknar ljudkorrigerings-band: {pcts}"
+
+
+def _run_and_get_name(client, source, audio_correct=False):
+    model_id = server.WHISPER_MODELS[0].id
+    r = client.post("/api/transcribe", json={
+        "source": source, "model_id": model_id, "language": "sv",
+        "target_language": "sv", "formats": ["srt"], "audio_correct": audio_correct})
+    assert r.status_code == 200
+    hist = client.get("/api/history").json()
+    return hist[0]["name"] if hist else None
+
+
+def test_lokal_kalla_namnges_av_qwen(client, tmp_path, monkeypatch):
+    # Inspelning/lokal fil → titeln kommer från den lokala LLM:en, inte filnamnet.
+    monkeypatch.setattr(server.postprocess, "suggest_title",
+                        lambda segs, model, **k: "Bråk och procent")
+    src = tmp_path / "inspelning_2026-07-06.wav"
+    src.write_bytes(b"RIFF0000WAVE")
+    assert _run_and_get_name(client, str(src)) == "Bråk och procent"
+
+
+def test_youtube_kalla_behaller_sin_titel(client, tmp_path, monkeypatch):
+    # YouTube → yt-dlp har redan namngett filen; auto-titeln ska INTE köras.
+    dl = tmp_path / "Matematik 4 — dubbla vinkeln.mp4"
+    dl.write_bytes(b"video")
+    monkeypatch.setattr(server.youtube, "download", lambda *a, **k: str(dl))
+    used = {"suggest": False}
+    def _boom(*a, **k):
+        used["suggest"] = True
+        return "SKA INTE ANVÄNDAS"
+    monkeypatch.setattr(server.postprocess, "suggest_title", _boom)
+    name = _run_and_get_name(client, "https://youtu.be/abc123")
+    assert name == "Matematik 4 — dubbla vinkeln.mp4"
+    assert used["suggest"] is False

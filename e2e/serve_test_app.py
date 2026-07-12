@@ -101,11 +101,16 @@ def _install_fakes() -> None:
             token_cb(text)
         return text
 
+    def fake_suggest_title(segments, model, base_url=None):
+        # Efterliknar Qwen-namngivningen av lokala källor (inspelning/lokal video).
+        return "Bråk och procent — introduktion"
+
     server._run_transcribe_subprocess = fake_transcribe
     postprocess.run = fake_run
     postprocess.extract = fake_extract
     postprocess.answer_over_lessons = fake_answer
     postprocess.translate_segments = fake_translate
+    postprocess.suggest_title = fake_suggest_title
     llm_client.chat = fake_chat
 
 

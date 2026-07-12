@@ -338,6 +338,16 @@
   function baseName() { return baseNameOf(S.source); }
   function extOf(n) { var m = /\.([^.]+)$/.exec(n || ''); return m ? m[1].toLowerCase() : ''; }
   function isMedia(n) { return ALLOWED.indexOf(extOf(n)) !== -1; }
+  // Videoförhandsvisning på korten: bara riktiga videofiler får en thumbnail.
+  // (history-postens `video` sätts även för ljud — den är den spelbara median —
+  // och webm är appens ljudinspelningsformat, så det räknas som ljud här.)
+  var VIDEO_EXT = { mp4: 1, m4v: 1, mkv: 1, mov: 1, avi: 1, mpg: 1, mpeg: 1, wmv: 1, flv: 1, ts: 1, mts: 1 };
+  function _videoThumb(h) {
+    var v = h && h.video;
+    if (!v || !v.path) return null;
+    var ext = (v.ext || extOf(v.name || '')).toLowerCase();
+    return VIDEO_EXT[ext] ? '/api/thumb?path=' + encodeURIComponent(v.path) : null;
+  }
   function qName(queue, id) { var q = (queue || S.queue).find(function (x) { return x.id === id; }); return q ? q.name : ''; }
   function lineText(i) { var e = S.edits; return (e && e[i] != null) ? e[i] : getTranscript()[i].text; }
   function fitColor(f) { return f === 'ok' ? 'var(--ok)' : f === 'warn' ? 'var(--warn)' : f === 'bad' ? 'var(--bad)' : 'var(--ink-3)'; }
@@ -2110,7 +2120,7 @@
         formats: (h.formats || []).map(function (f) { return { label: f }; }),
         onOpen: function () { openHistory(h); }, onRerun: function () { askRerun(h); }, onDelete: function () { askDeleteHistory(h.id, h.name); },
         onDownload: function () { downloadFile(baseNameOf(h.name) + '.' + ((h.formats && h.formats[0]) || 'TXT').toLowerCase(), Math.max(9, Math.round((h.words || 3000) / 140)) + ' KB'); },
-        thumbUrl: (h.video && h.video.path) ? ('/api/thumb?path=' + encodeURIComponent(h.video.path)) : null,
+        thumbUrl: _videoThumb(h),
       };
     });
 
@@ -2146,8 +2156,13 @@
 
     var lessonItems = st.lessons.map(function (l) {
       var isHit = askActive && lessonHit(l) && (!scanning || scannedIds[l.id]);
+      // Videoförhandsvisning: bara VIDEO-källor får en thumbnail på kortet (h.video
+      // sätts även för ljud — det är den spelbara median — så gå på filändelsen).
+      // Rena ljudinspelningar (wav/mp3/m4a/webm …) visas som text, som idag.
+      var _lh = (st.history || []).find(function (x) { return x.id === l.history_id; });
+      var thumbUrl = _videoThumb(_lh);
       return {
-        id: l.id, name: l.name || '(namnlös)', date: l.date || l.datum || '',
+        id: l.id, name: l.name || '(namnlös)', date: l.date || l.datum || '', thumbUrl: thumbUrl,
         datum: l.datum || l.date || '',
         meta: [l.dur, l.model, l.lang].filter(Boolean).join(' · '),
         dur: l.dur || '', sal: l.sal || '',
@@ -3316,7 +3331,13 @@ function viewRecordings(v){
           </div>
           <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;align-items:start">
             ${ w.cards.map(function(h){ return `
-              <div data-key="les-${esc(h.id)}" data-rec-id="${esc(h.id)}" data-stage="${esc(h.stage)}" data-click="${on(h.onOpenChat)}" style="background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:15px 16px;box-shadow:var(--shadow-sm);display:flex;flex-direction:column;gap:10px;cursor:pointer" data-sh="border-color:var(--line-2);box-shadow:var(--shadow)">
+              <div data-key="les-${esc(h.id)}" data-rec-id="${esc(h.id)}" data-stage="${esc(h.stage)}" data-click="${on(h.onOpenChat)}" style="background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:15px 16px;box-shadow:var(--shadow-sm);display:flex;flex-direction:column;gap:10px;cursor:pointer;overflow:hidden" data-sh="border-color:var(--line-2);box-shadow:var(--shadow)">
+                ${ h.thumbUrl ? `
+                <div style="margin:-15px -16px 3px;aspect-ratio:16/9;background:var(--sunken);border-bottom:1px solid var(--line);position:relative">
+                  <img src="${esc(h.thumbUrl)}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;display:block">
+                  <span style="position:absolute;left:9px;bottom:8px;display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:9.5px;letter-spacing:0.06em;text-transform:uppercase;color:#fff;background:rgba(11,11,13,.55);backdrop-filter:blur(3px);border-radius:6px;padding:3px 8px"><svg width="9" height="9" viewBox="0 0 12 12" fill="currentColor"><path d="M3 2.2v7.6l6-3.8z"></path></svg>Video</span>
+                </div>
+                ` : '' }
                 <div style="display:flex;align-items:center;gap:8px">
                   <span data-cc="${esc(h.cc)}" style="border-radius:99px;padding:2px 10px;font-size:11.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:0 1 auto;min-width:0">${esc(h.tagLabel)}</span>
                   ${ h.isHit ? `<span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:var(--accent);background:var(--accent-weak);border-radius:99px;padding:2px 9px;flex:0 0 auto"><span style="width:6px;height:6px;border-radius:50%;background:var(--accent)"></span>träff</span>` : '' }
