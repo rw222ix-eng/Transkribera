@@ -1454,11 +1454,17 @@
   function chatAboutResult() {
     var hid = S.resultId;
     if (!hid) return;
-    var h = (S.history || []).find(function (x) { return x.id === hid; });
-    var lesson = h
-      ? { history_id: h.id, name: h.name, date: h.date || (h.ts || '').slice(0, 10),
-          dur: h.dur, model: h.model, lang: h.lang, group: h.group || '', course: h.course || '' }
-      : { history_id: hid, name: baseName() };
+    // Slå upp den riktiga lektionsposten (den bär lesson-id:t) så chatten får
+    // med "Analysera lektion"/"Rapport" — annars saknades de fast lektionen fanns
+    // i DB. Faller tillbaka på history-/filnamnsposten om listan inte är laddad.
+    var lesson = (S.lessons || []).find(function (x) { return x.history_id === hid; });
+    if (!lesson) {
+      var h = (S.history || []).find(function (x) { return x.id === hid; });
+      lesson = h
+        ? { history_id: h.id, name: h.name, date: h.date || (h.ts || '').slice(0, 10),
+            dur: h.dur, model: h.model, lang: h.lang, group: h.group || '', course: h.course || '' }
+        : { history_id: hid, name: baseName() };
+    }
     setTab('recordings');       // byt till Inspelningar (laddar om lektionslistan)
     openLessonChat(lesson);     // öppna lektionschatten för inspelningen
   }
