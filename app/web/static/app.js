@@ -1546,7 +1546,10 @@
   // ett klick "Logga in med Google"; annars öppnas det guidade fönstret.
   function startCalConnect() { if (S.calClientReady) connectCalendar(); else openCalSetup(); }
   function openCalSetup() { setState({ calSetupOpen: true }); loadCalStatus(); }
-  function closeCalSetup() { setState({ calSetupOpen: false }); }
+  // Nollställ calBusy här: /api/calendar/connect blockerar tills Google-flödet är
+  // klart, och överger användaren inloggningen svarar fetchen aldrig — utan detta
+  // förblir "Logga in med Google" låst tills appen startas om.
+  function closeCalSetup() { setState({ calSetupOpen: false, calBusy: false }); }
   function openGoogleConsole() { fetch('/api/calendar/open-console', { method: 'POST' }).catch(function () {}); }
   function clientFileRef(el) { _clientFile = el; }
   function pickClientSecret() { if (_clientFile) _clientFile.click(); }
