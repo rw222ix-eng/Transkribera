@@ -588,12 +588,17 @@ def create_app(base_dir: Path | None = None,
             # namnger redan filen efter videons titel). Best effort: filnamnet
             # behålls om modellen inte är laddad eller inte ger något användbart.
             display_name = Path(media).name
-            if not source_is_url and segments and arb.ensure_llm() is not None:
+            if not source_is_url and segments:
                 try:
-                    _title = postprocess.suggest_title(segments, LLM_MODELS[0].name)
-                    if _title:
-                        display_name = _title
-                        emit({"type": "log", "msg": "Namngav inspelningen: " + _title})
+                    # ensure_llm() kan kasta om llama-servern inte startar (trasig
+                    # GGUF, port, VRAM). Namngivningen är best effort och får aldrig
+                    # fälla en redan klar transkribering — därför inne i try:et, så
+                    # filnamnet behålls i stället för att hela jobbet felar.
+                    if arb.ensure_llm() is not None:
+                        _title = postprocess.suggest_title(segments, LLM_MODELS[0].name)
+                        if _title:
+                            display_name = _title
+                            emit({"type": "log", "msg": "Namngav inspelningen: " + _title})
                 except Exception:
                     debug_log.get_logger().exception("Kunde inte föreslå titel")
 
