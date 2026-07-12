@@ -14,9 +14,12 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
+from urllib.parse import urlsplit
+
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app import (debug_log, hardware, recommend, whisper_manager, llm_client,
                  llm_manager, youtube, postprocess, transcriber,
@@ -226,6 +229,35 @@ def create_app(base_dir: Path | None = None,
         debug_log.get_logger().exception("Migrering av historik till lektions-DB misslyckades")
 
     app = FastAPI(title="Transkribera Web")
+
+    # Skydd för den lokala servern (binds på 127.0.0.1 med förutsägbara portar
+    # 8731–8733, se app/web/desktop.py). Utan detta kan vilken webbsida som helst
+    # i användarens vanliga webbläsare göra state-ändrande POST hit — t.ex. skriva
+    # över google_client_secret.json med en angripares OAuth-klient (en "simple
+    # request" som inte kräver preflight) — och DNS-rebinding kan göra en
+    # angriparsida same-origin och läsa elev-/lektionsdata via GET-endpoints.
+    #
+    # 1) Host-validering (DNS-rebinding): svara bara på appens egna värdnamn.
+    #    TrustedHostMiddleware jämför hostnamnet utan port, så localhost-porten
+    #    spelar ingen roll. "testserver" är TestClients standard-Host.
+    app.add_middleware(TrustedHostMiddleware,
+                       allowed_hosts=["127.0.0.1", "localhost", "testserver"])
+
+    # 2) Origin-koll (CSRF): avvisa state-ändrande metoder vars Origin finns och
+    #    inte är appens egen (localhost). Origin saknas för same-origin GET,
+    #    native-anrop och testklienten, så appen och testerna påverkas inte.
+    _LOCAL_ORIGIN_HOSTS = {"127.0.0.1", "localhost", "testserver"}
+
+    @app.middleware("http")
+    async def _block_foreign_origin(request: Request, call_next):
+        if request.method in ("POST", "PUT", "PATCH", "DELETE"):
+            origin = request.headers.get("origin")
+            if origin and urlsplit(origin).hostname not in _LOCAL_ORIGIN_HOSTS:
+                return JSONResponse(
+                    {"error": "Blockerad: begäran kom från en annan webbplats."},
+                    status_code=403)
+        return await call_next(request)
+
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
     # Single owner of the LLM process + GPU exclusivity. The LLM is NOT started
@@ -1292,6 +1324,13 @@ def create_app(base_dir: Path | None = None,
         """Installera OAuth-klient-JSON som användaren valt i appens filväljare
         (skrivs som google_client_secret.json i basmappen). Gör steget att lägga
         filen på rätt plats till ett knapptryck."""
+        # En OAuth-klientfil är någon kB — avvisa uppenbart för stora kroppar
+        # innan de buffras i RAM (jfr MAX_UPLOAD_BYTES på /api/upload).
+        clen = req.headers.get("content-length")
+        if clen and clen.isdigit() and int(clen) > 64 * 1024:
+            return JSONResponse(
+                {"error": "Filen är för stor för att vara en OAuth-klientfil."},
+                status_code=400)
         raw = (await req.body()).decode("utf-8", "replace")
         res = calendar_google.install_client_secret(base, raw)
         if res.get("error"):
