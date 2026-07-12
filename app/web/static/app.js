@@ -1224,7 +1224,7 @@
   // BACKEND: real transcription via /api/transcribe SSE (one request per queue item).
   function _runActive() {
     if (S.run === 'running') return;
-    clearInterval(_t);
+    clearInterval(_t); clearInterval(_ppIv);   // stoppa ev. korrektur-progress från förra körningen
     var active = S.queue.find(function (q) { return q.id === S.activeId; });
     if (!active) return;
     var token = ++_runToken;
@@ -1318,12 +1318,18 @@
   function runPP() {
     if (S.pp === 'running') return;
     clearTimeout(_pp); clearInterval(_ppIv);
+    // Korrektur-strömmen hör till den AKTUELLA körningen. Startar en ny körning
+    // (som ökar _runToken) medan denna strömmar, ignoreras den gamla strömmens
+    // events — annars skrevs förra inspelningens ppOut/cleanText in i den nya
+    // körningens state. _runActive rensar dessutom _ppIv-intervallet.
+    var token = _runToken;
     setState({ pp: 'running', ppPct: 0, ppOut: '' });
     _ppIv = setInterval(function () { setState(function (s) { return { ppPct: Math.min(95, (s.ppPct || 0) + (3 + Math.random() * 5)) }; }); }, 200);
     var op = 'cleanup';
     var text = getTranscript().map(function (l) { return l.text; }).join(' ');
     var acc = '';
     streamPost('/api/postprocess', { operation: op, transcript: text, model: S.ppModel }, function (ev) {
+      if (token !== _runToken) return;   // en ny körning har startat — släpp den gamla strömmen
       if (ev.type === 'token') { acc += ev.text; setState({ ppOut: acc }); }
       else if (ev.type === 'error') { clearInterval(_ppIv); setState({ pp: 'done', ppPct: 100, ppOut: acc || ('Fel: ' + (ev.message || 'okänt')) }); }
       else if (ev.type === 'done') {
