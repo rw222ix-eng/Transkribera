@@ -283,6 +283,14 @@ button.cta:not(:disabled):hover{background:var(--btn-bg) !important;color:var(--
   padding-bottom:26px;border-bottom:1px solid var(--line);margin-bottom:34px}
 .ehead_lede{font-size:15px;line-height:1.6;color:var(--ink-2);max-width:44ch;margin:0;text-wrap:pretty}
 @media(max-width:760px){.ehead{grid-template-columns:1fr;gap:18px;align-items:start}}
+/* Steg 1 (Källa): mer utpräglad redaktionell masthead — bredare titelkolumn,
+   hårfin skiljelinje mot ingressen, tätare rytm. */
+.ehead.ehead--v1{grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);column-gap:24px;padding-bottom:13px}
+.ehead--v1 .v1-lede{max-width:34ch;padding-left:17px;border-left:1px solid var(--line);align-self:end}
+@media(max-width:760px){
+  .ehead.ehead--v1{grid-template-columns:1fr;row-gap:11px;padding-bottom:0}
+  .ehead--v1 .v1-lede{border-left:0;padding-left:0;max-width:56ch}
+}
 
 .win{background:var(--surface);border:1px solid var(--line);overflow:hidden}
 .win_top{display:flex;align-items:center;justify-content:space-between;gap:20px;
