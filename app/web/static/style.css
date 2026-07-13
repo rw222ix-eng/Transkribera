@@ -37,6 +37,9 @@
   /* buttons */
   --btn-bg:#161A14; --btn-fg:#F1F2ED;
   --track:#E8E9E2;
+  /* on-color: läsbar text/ikon PÅ accent/ok-ytor (mörknar i dark mode där tonerna
+     blir ljusare); --knob = reglageknoppens färg (syns mot båda spårlägena) */
+  --on-accent:#FFFFFF; --on-ok:#FFFFFF; --knob:#FFFFFF;
   /* type */
   --sans:"Inter Tight","Helvetica Neue",system-ui,sans-serif;
   --serif:"Instrument Serif","GT Sectra",Georgia,"Times New Roman",serif;
@@ -54,6 +57,8 @@
   --c-plum:#B79ECB; --c-sky:#7FB4DA; --c-sage:#8FB06A; --c-mustard:#D9AC45;
   --btn-bg:#F1F2ED; --btn-fg:#14150E;
   --track:#23241A;
+  /* mörk text på de ljusare dark-mode-tonerna av accent/ok; knopp = ytfärg (mörk) */
+  --on-accent:#14150E; --on-ok:#14150E; --knob:var(--surface);
   --shadow-sm:0 1px 2px rgba(0,0,0,.5);
   --shadow:0 26px 60px -32px rgba(0,0,0,.78),0 8px 20px -14px rgba(0,0,0,.6);
 }
@@ -173,18 +178,18 @@ button:not(:disabled):not([aria-disabled="true"]):active,[data-press]:active{tra
 [data-chip="on"]{background:var(--ink) !important;color:var(--btn-fg) !important;border-color:var(--ink) !important}
 [data-pp="on"]{border-color:var(--ink) !important;background:var(--sunken) !important;box-shadow:var(--shadow-sm) !important}
 [data-dot="cur"]{background:var(--ink) !important;color:var(--btn-fg) !important;border-color:var(--ink) !important}
-[data-dot="done"]{background:var(--ok) !important;color:#fff !important;border-color:var(--ok) !important}
+[data-dot="done"]{background:var(--ok) !important;color:var(--on-ok) !important;border-color:var(--ok) !important}
 [data-lbl="cur"]{font-weight:600 !important;color:var(--ink) !important}
 [data-lbl="done"]{color:var(--ink-2) !important}
 [data-switch="on"]{background:var(--ink) !important}
 [data-switch="on"]>span{transform:translateX(17px) !important}
 [data-q="1"]{color:var(--accent) !important;background:var(--accent-weak) !important;border-color:color-mix(in srgb,var(--accent) 24%,transparent) !important;font-weight:600 !important}
 /* Källförankrad chatt: numrerade citat <-> käll-rad highlight */
-[data-csup="on"]{background:var(--accent) !important;color:#fff !important;border-color:var(--accent) !important}
+[data-csup="on"]{background:var(--accent) !important;color:var(--on-accent) !important;border-color:var(--accent) !important}
 [data-csup]:not([data-csup="on"]):hover{background:color-mix(in srgb,var(--accent) 16%,transparent) !important;border-color:color-mix(in srgb,var(--accent) 45%,transparent) !important}
 [data-crow="on"]{background:var(--surface) !important;border-color:color-mix(in srgb,var(--accent) 50%,var(--line)) !important;box-shadow:0 6px 16px -10px color-mix(in srgb,var(--accent) 60%,transparent) !important}
 [data-crow]:not([data-crow="on"]):hover{background:var(--surface) !important}
-[data-crow="on"] [data-rownum]{background:var(--accent) !important;color:#fff !important}
+[data-crow="on"] [data-rownum]{background:var(--accent) !important;color:var(--on-accent) !important}
 
 /* ---- State hooks for literal-styled template elements ---- */
 [data-vis="off"]{visibility:hidden !important}
@@ -267,6 +272,9 @@ button[aria-label*="Ta bort"]:not(:disabled):hover,button[aria-label*="ta bort"]
 }
 /* The CTA manages its own accent wipe — don't let the generic rule paint over it. */
 button.cta:not(:disabled):hover{background:var(--btn-bg) !important;color:var(--btn-fg) !important;border-color:var(--ink) !important}
+/* Inline-textknappar (t.ex. kortets "Öppna & chatta") är textlänkar, inte fyllda
+   knappar — de ska understrykas på hover, inte fyllas med ink. */
+button[data-textbtn]:not(:disabled):hover{background:transparent !important;color:var(--accent) !important;border-color:transparent !important;text-decoration:underline}
 
 /* ============================================================
    BEDÖMNING PARITY — serif-italic display figures, expo-out

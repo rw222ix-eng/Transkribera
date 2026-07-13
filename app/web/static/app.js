@@ -157,7 +157,7 @@
   var _recMarkers = [], _recMarkersByPath = {};   // live-markörer under inspelning
   var _recSession = null, _recUploadChain = null; // inkrementell flush till disk
   var _recAudioCtx = null, _recAnalyser = null, _recLevelTimer = null, _recSilenceSecs = 0;
-  var _prevTab, _prevStep, _prevRun, _prevPP, _prevOp, _wasEditing, _wasOpen, _scrollKey;
+  var _prevTab, _prevStep, _prevRun, _prevPP, _prevOp, _wasEditing, _wasOpen, _scrollKey, _wasModal;
 
   /* ----------------------------------------------------------------- data -- */
   // Catalogs are `let` so loadModels() can reassign them to real data from /api/models;
@@ -444,7 +444,7 @@
       var pct = Math.max(3, Math.round(frac * 100));
       var col = 'oklch(0.63 0.15 ' + Math.round(150 - 130 * frac) + ')';
       var t = { label: label, free: fmtStorage(o.free), total: fmtStorage(o.total), note: note,
-        barStyle: 'height:100%;width:' + pct + '%;background:' + col + ';border-radius:99px;transition:width .3s ease,background .3s ease' };
+        barStyle: 'height:100%;width:100%;transform-origin:left;transform:scaleX(' + (pct / 100) + ');background:' + col + ';border-radius:99px;transition:transform .3s ease,background .3s ease' };
       if (tip) { t.onEnter = function (e) { showTip(e, tip); }; t.onLeave = hideTip; t.badgeStyle = infoBadgeStyle(); }
       else { t.badgeStyle = 'display:none'; }
       return t;
@@ -1162,6 +1162,21 @@
     if (hasMedia()) { _media.currentTime = f * curDur(); setState({ audioT: _media.currentTime }); }
     else { setState({ audioT: f * AUDIO_DUR }); }
   }
+  function seekAbs(t) {
+    var d = curDur();
+    var clamped = Math.max(0, Math.min(d, t));
+    if (hasMedia()) { _media.currentTime = clamped; }
+    setState({ audioT: clamped });
+  }
+  function onSeekKey(e) {
+    var k = e.key, d = curDur(), cur = S.audioT || 0;
+    if (k === 'ArrowRight' || k === 'ArrowUp') { e.preventDefault(); seekAbs(cur + 5); }
+    else if (k === 'ArrowLeft' || k === 'ArrowDown') { e.preventDefault(); seekAbs(cur - 5); }
+    else if (k === 'PageUp') { e.preventDefault(); seekAbs(cur + 30); }
+    else if (k === 'PageDown') { e.preventDefault(); seekAbs(cur - 30); }
+    else if (k === 'Home') { e.preventDefault(); seekAbs(0); }
+    else if (k === 'End') { e.preventDefault(); seekAbs(d); }
+  }
   function jumpToLine(i) {
     var t = parseTS(getTranscript()[i].time);
     if (hasMedia()) { _media.currentTime = t; setState({ audioT: t }); _media.play().catch(function () {}); }
@@ -1865,6 +1880,18 @@
     var open = S.transcriptOpen;
     if (open && !_wasOpen) { var inp = document.querySelector('[data-tsearch]'); if (inp) inp.focus(); }
     _wasOpen = open;
+    // Dialoger: flytta fokus in i dialogen när den öppnas (fokusfällan i onKeyDown
+    // håller det sedan kvar). En ren skärmläsar- och tangentbordsförbättring.
+    var modalNow = !!document.querySelector('[data-dialog]');
+    if (modalNow && !_wasModal) {
+      requestAnimationFrame(function () {
+        var card = document.querySelector('[data-dialog]');
+        if (!card || card.contains(document.activeElement)) return;
+        var f = card.querySelector('input:not([type=file]):not([disabled]),textarea:not([disabled]),select:not([disabled]),button:not([disabled]),[tabindex]:not([tabindex="-1"])');
+        try { (f || card).focus(); } catch (e) {}
+      });
+    }
+    _wasModal = modalNow;
     if (open) {
       var key = S.currentMatch + '|' + S.searchQuery;
       if (key !== _scrollKey) {
@@ -1885,6 +1912,21 @@
   }
 
   function onKeyDown(e) {
+    // Fokusfälla: håll Tab-fokus kvar inuti den översta öppna dialogen.
+    if (e.key === 'Tab') {
+      var dlgs = document.querySelectorAll('[data-dialog]');
+      var mc = dlgs.length ? dlgs[dlgs.length - 1] : null;
+      if (mc) {
+        var sel = 'a[href],button:not([disabled]),input:not([disabled]),textarea:not([disabled]),select:not([disabled]),[tabindex]:not([tabindex="-1"])';
+        var f = Array.prototype.filter.call(mc.querySelectorAll(sel), function (el) { return el.offsetWidth > 0 || el.offsetHeight > 0 || el === document.activeElement; });
+        if (f.length) {
+          var first = f[0], last = f[f.length - 1], a = document.activeElement;
+          if (e.shiftKey && (a === first || !mc.contains(a))) { e.preventDefault(); last.focus(); }
+          else if (!e.shiftKey && (a === last || !mc.contains(a))) { e.preventDefault(); first.focus(); }
+        }
+        return;
+      }
+    }
     if (S.editingLesson && e.key === 'Escape') { cancelEditLesson(); return; }
     if (S.lessonChatId && e.key === 'Escape') {
       if (S.evPick) { setState({ evPick: null }); return; }
@@ -1954,7 +1996,7 @@
         label: label, icon: done || isDone ? '✓' : (idx + 1),
         barTrackStyle: 'height:4px;border-radius:99px;background:var(--line);overflow:hidden',
         barFillStyle: 'height:100%;border-radius:99px;background:' + (done || isDone ? 'var(--ok)' : 'var(--accent)') + ';width:' + pctW.toFixed(1) + '%;transition:width .22s linear' + (active ? ';background-image:linear-gradient(90deg,var(--accent) 0,var(--accent) 55%,color-mix(in srgb,var(--accent) 35%,#fff) 78%,var(--accent));background-size:26px 100%;animation:flow .8s linear infinite' : ''),
-        dotStyle: 'width:18px;height:18px;border-radius:50%;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;' + (done || isDone ? 'background:var(--ok);color:#fff' : active ? 'background:var(--accent);color:#fff;animation:pulse 1.4s ease infinite' : 'background:transparent;border:1.5px solid var(--line-2);color:var(--ink-3)'),
+        dotStyle: 'width:18px;height:18px;border-radius:50%;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;' + (done || isDone ? 'background:var(--ok);color:var(--on-ok)' : active ? 'background:var(--accent);color:var(--on-accent);animation:pulse 1.4s ease infinite' : 'background:transparent;border:1.5px solid var(--line-2);color:var(--ink-3)'),
         labelStyle: 'font-size:13.5px;font-weight:500;color:' + (done || isDone ? 'var(--ink)' : active ? 'var(--ink)' : 'var(--ink-3)'),
       };
     });
@@ -1973,7 +2015,7 @@
       var state = i < curStepIdx ? 'done' : i === curStepIdx ? 'active' : 'todo';
       return {
         label: p[1], icon: state === 'done' ? '✓' : (i + 1),
-        dotStyle: 'width:24px;height:24px;border-radius:50%;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;' + (state === 'done' ? 'background:var(--ok);color:#fff' : state === 'active' ? 'background:var(--ink);color:var(--btn-fg)' : 'background:transparent;border:1.5px solid var(--line-2);color:var(--ink-3)'),
+        dotStyle: 'width:24px;height:24px;border-radius:50%;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;' + (state === 'done' ? 'background:var(--ok);color:var(--on-ok)' : state === 'active' ? 'background:var(--ink);color:var(--btn-fg)' : 'background:transparent;border:1.5px solid var(--line-2);color:var(--ink-3)'),
         labelStyle: 'font-size:14px;font-weight:' + (state === 'active' ? '600' : '500') + ';color:' + (state === 'todo' ? 'var(--ink-3)' : state === 'active' ? 'var(--ink)' : 'var(--ink-2)') + ';white-space:nowrap',
         lineStyle: i === stepDefs.length - 1 ? 'display:none' : 'flex:1;height:1.5px;background:var(--line);min-width:16px;margin:0 4px',
       };
@@ -2049,7 +2091,7 @@
       else { var mm = line.match(/^\[([^\]]+)\]\s*(.*)$/); if (mm) { time = mm[1]; msg = mm[2]; if (time === 'klar') { isKlar = true; time = ''; } } }
       var last = i === lastIdx;
       var green = st.run === 'done' || !last;
-      var dotStyle = green ? 'width:13px;height:13px;border-radius:50%;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;color:#fff;background:var(--ok)' : 'width:13px;height:13px;border-radius:50%;flex:0 0 auto;background:var(--surface);border:2px solid var(--line-2);box-sizing:border-box';
+      var dotStyle = green ? 'width:13px;height:13px;border-radius:50%;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;color:var(--on-ok);background:var(--ok)' : 'width:13px;height:13px;border-radius:50%;flex:0 0 auto;background:var(--surface);border:2px solid var(--line-2);box-sizing:border-box';
       return { time: time, msg: msg, icon: (green && isKlar) ? '✓' : '', dotStyle: dotStyle, lineStyle: 'width:2px;flex:1;min-height:12px;margin-top:2px;background:var(--line);' + (last ? 'display:none' : '') };
     });
 
@@ -2098,7 +2140,7 @@
         id: qq.id, name: qq.name, ext: (/^https?:/i.test(qq.path || '') ? 'URL' : (extOf(qq.name) || 'fil').toUpperCase()), status: status, statusLabel: statusWord[status], pct: pct,
         dotStyle: 'width:9px;height:9px;border-radius:50%;flex:0 0 auto;background:' + statusCol[status] + (status === 'running' ? ';animation:pulse 1.4s ease infinite' : ''),
         statusStyle: 'font-size:12.5px;font-weight:600;color:' + statusCol[status] + ';font-variant-numeric:tabular-nums;flex:0 0 auto',
-        barStyle: 'height:100%;width:' + (status === 'done' ? 100 : status === 'running' ? pct : 0) + '%;background:' + statusCol[status] + ';border-radius:99px;transition:width .3s ease',
+        barStyle: 'height:100%;width:100%;transform-origin:left;transform:scaleX(' + ((status === 'done' ? 100 : status === 'running' ? pct : 0) / 100) + ');background:' + statusCol[status] + ';border-radius:99px;transition:transform .3s ease',
         showBar: status === 'running' || status === 'done',
         rowStyle: 'display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:13px;border:1px solid ' + (isActive ? 'var(--line-2)' : 'var(--line)') + ';background:' + (isActive ? 'var(--sunken)' : 'var(--surface)') + ';box-shadow:var(--shadow-sm)',
         canRemove: st.step !== 'process', onRemove: function () { removeQ(qq.id); },
@@ -2396,7 +2438,8 @@
       waveBars: waveBars, audioPlaying: st.audioPlaying, audioPaused: !st.audioPlaying,
       audioCur: fmtTime(st.audioT), audioDur: fmtTime(dur),
       mediaUrl: st.mediaUrl, hasMediaEl: !!st.mediaUrl, mediaRef: mediaRef,
-      onTogglePlay: togglePlay, onSeekClick: onSeekClick, seekTrackRef: seekTrackRef,
+      onTogglePlay: togglePlay, onSeekClick: onSeekClick, onSeekKey: onSeekKey, seekTrackRef: seekTrackRef,
+      seekMax: Math.round(dur), seekNow: Math.round(st.audioT || 0),
       markers: (st.markers || []).map(function (m) {
         return { id: m.id, t: m.t || 0, label: fmtTime(m.t || 0),
                  onSeek: function () { seekToTime(m.t || 0); },
@@ -2448,7 +2491,7 @@
       audioModelInstalled: st.audioModelInstalled, audioModelDownloading: st.audioModelDownloading,
       onDownloadAudioModel: downloadAudioModel,
       acSwitchTrack: 'position:relative;width:42px;height:25px;border-radius:999px;flex:0 0 auto;background:' + (st.audioCorrect ? 'var(--ink)' : 'var(--line-2)') + ';transition:background .15s;cursor:pointer',
-      acSwitchKnob: 'position:absolute;top:3px;left:3px;width:19px;height:19px;border-radius:50%;background:#fff;border:1px solid var(--line);box-shadow:0 1px 2px rgba(0,0,0,.2);transition:transform .15s;transform:translateX(' + (st.audioCorrect ? '17px' : '0') + ')',
+      acSwitchKnob: 'position:absolute;top:3px;left:3px;width:19px;height:19px;border-radius:50%;background:var(--knob);border:1px solid var(--line);box-shadow:var(--shadow-sm);transition:transform .15s;transform:translateX(' + (st.audioCorrect ? '17px' : '0') + ')',
 
       onStart: start, isRunning: isRunning, notRunning: !isRunning, startReady: st.catalogReady && st.pp !== 'running',
       startBtnLabel: !st.catalogReady ? 'Laddar modeller…' : (st.catalogReady && !st.model) ? 'Ladda ner en modell först' : st.pp === 'running' ? 'Väntar på korrekturen…' : isRunning ? 'Transkriberar…' : isDone ? 'Kör igen' : (st.queue.length > 1 ? 'Starta · ' + st.queue.length + ' filer' : 'Starta transkribering'),
@@ -2476,7 +2519,7 @@
       toastMessage: st.toast ? (st.toast.detail || st.toast.name || '') : '',
       toastTitle: st.toast ? (st.toast.title || (st.toast.kind === 'error' ? 'Något gick fel' : st.toast.done ? 'Nedladdning klar' : 'Laddar ner …')) : '', closeToast: closeToast,
       toastPct: st.toast ? Math.round(st.toast.pct || 0) : 0, toastDetail: st.toast ? (st.toast.detail != null ? st.toast.detail : toastDetail(st.toast.size, st.toast.pct || 0)) : '',
-      toastBarStyle: 'height:100%;width:' + (st.toast ? Math.round(st.toast.pct || 0) : 0) + '%;background:var(--accent);border-radius:99px;transition:width .14s linear',
+      toastBarStyle: 'height:100%;width:100%;transform-origin:left;transform:scaleX(' + ((st.toast ? Math.round(st.toast.pct || 0) : 0) / 100) + ');background:var(--accent);border-radius:99px;transition:transform .14s linear',
       transcriptOpen: st.transcriptOpen, openTranscript: openTranscript, closeTranscript: closeTranscript, transcriptFile: baseName() + '.txt',
       searchQuery: st.searchQuery, onTSearch: onTSearch, onSearchKey: onSearchKey, searchRef: searchRef, scrollRef: scrollRef,
       nextMatch: nextMatch, prevMatch: prevMatch, matchLabel: matchLabel, tLines: tLines,
@@ -2486,7 +2529,7 @@
 
       ppEnabled: st.ppEnabled, ppOff: !st.ppEnabled, togglePPEnabled: togglePPEnabled,
       ppSwitchTrack: 'position:relative;width:42px;height:25px;border-radius:999px;flex:0 0 auto;background:' + (st.ppEnabled ? 'var(--ink)' : 'var(--line-2)') + ';transition:background .15s',
-      ppSwitchKnob: 'position:absolute;top:3px;left:3px;width:19px;height:19px;border-radius:50%;background:#fff;border:1px solid var(--line);box-shadow:0 1px 2px rgba(0,0,0,.2);transition:transform .15s;transform:translateX(' + (st.ppEnabled ? '17px' : '0') + ')',
+      ppSwitchKnob: 'position:absolute;top:3px;left:3px;width:19px;height:19px;border-radius:50%;background:var(--knob);border:1px solid var(--line);box-shadow:var(--shadow-sm);transition:transform .15s;transform:translateX(' + (st.ppEnabled ? '17px' : '0') + ')',
       ppOps: ppOps, ppModel: st.ppModel,
       showPP: isDone, ppOpLabel: ppOpLabel, ppShowRun: st.ppOp !== 'chat', onRunPP: runPP, ppRunLabel: 'Kör',
       ppRunBtnStyle: primaryBtn(st.pp === 'running') + ';min-width:152px', ppRunIdle: st.pp !== 'running', ppPct: Math.round(st.ppPct || 0),
@@ -2500,7 +2543,7 @@
       cleanPending: st.pp === 'idle' && !st.cleanText,         // väntar på att auto-starta
       cleanBtnLabel: '↻ Kör igen',
       cleanPct: Math.round(st.ppPct || 0),
-      cleanBarW: Math.round(st.ppPct || 0) + '%',
+      cleanBarW: Math.round(st.ppPct || 0) + '%', cleanBarFrac: Math.round(st.ppPct || 0) / 100,
       cleanLegendAudio: !!st.audioCorrect,
       cleanPreviewParts: st.cleanText ? cleanDiffParts().slice(0, 70) : [],
       cleanFullParts: st.cleanText ? cleanDiffParts() : [],
@@ -2655,7 +2698,22 @@
     root.addEventListener('click', function (e) { var el = e.target.closest('[data-click]'); dispatch(el, 'click', e); });
     root.addEventListener('input', function (e) { var el = e.target.closest('[data-input]'); dispatch(el, 'input', e); });
     root.addEventListener('change', function (e) { var el = e.target.closest('[data-change]'); dispatch(el, 'change', e); });
-    root.addEventListener('keydown', function (e) { var el = e.target.closest('[data-keydown]'); dispatch(el, 'keydown', e); });
+    root.addEventListener('keydown', function (e) {
+      var el = e.target.closest('[data-keydown]'); dispatch(el, 'keydown', e);
+      // Tangentbordsaktivering för egna kontroller: fokuserbara div/span med
+      // data-click aktiveras med Enter/Mellanslag, precis som en riktig <button>.
+      if (e.defaultPrevented) return;
+      if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return;
+      var t = e.target, tn = t.tagName;
+      if (tn === 'INPUT' || tn === 'TEXTAREA' || tn === 'SELECT' || t.isContentEditable) return;
+      var ck = t.closest('[data-click]');
+      if (!ck) return;
+      var ctag = ck.tagName;
+      if (ctag === 'BUTTON' || ctag === 'A') return;                 // native aktivering finns redan
+      if (ck.getAttribute('tabindex') == null || ck.getAttribute('role') === 'slider') return;
+      e.preventDefault();
+      dispatch(ck, 'click', e);
+    });
     root.addEventListener('dragover', function (e) { var el = e.target.closest('[data-dragover]'); if (el) dispatch(el, 'dragover', e); });
     root.addEventListener('dragleave', function (e) { var el = e.target.closest('[data-dragleave]'); if (el) dispatch(el, 'dragleave', e); });
     root.addEventListener('drop', function (e) { var el = e.target.closest('[data-drop]'); if (el) dispatch(el, 'drop', e); });
@@ -2739,7 +2797,7 @@ function viewTranscribe(v){ return `
           </div>
           <p class="ehead_lede">Dra in en eller flera filer, eller välj från datorn — allt körs på din egen dator.</p>
         </div>
-        <div data-click="${on(v.openPicker)}" data-dragover="${on(v.onDragOver)}" data-dragleave="${on(v.onDragLeave)}" data-drop="${on(v.onDrop)}" style="${v.dropzoneStyle}">
+        <div data-click="${on(v.openPicker)}" data-dragover="${on(v.onDragOver)}" data-dragleave="${on(v.onDragLeave)}" data-drop="${on(v.onDrop)}" role="button" tabindex="0" aria-label="Välj eller dra in ljud- eller videofiler" style="${v.dropzoneStyle}">
           <input data-ref="${on(v.fileRef)}" type="file" accept="audio/*,video/*" multiple="true" data-change="${on(v.onPickFile)}" style="display:none">
           <div style="position:relative">
             <div style="font-size:19px;font-weight:500;margin-bottom:6px;color:var(--ink)">Dra in filer — eller klicka för att välja</div>
@@ -2751,7 +2809,7 @@ function viewTranscribe(v){ return `
           <span style="font-size:11.5px;text-transform:uppercase;letter-spacing:0.05em;color:var(--ink-2);font-weight:600;flex:0 0 auto">Eller länk</span>
           <div style="flex:1;display:flex;align-items:center;gap:8px;min-width:0;background:var(--surface);border:1px solid var(--line);border-radius:11px;padding:7px 7px 7px 13px;box-shadow:var(--shadow-sm)">
             <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="var(--ink-3)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto"><path d="M6.8 9.2a3 3 0 0 0 4.3 0l1.7-1.7a3 3 0 0 0-4.3-4.3l-1 1"></path><path d="M9.2 6.8a3 3 0 0 0-4.3 0L3.2 8.5a3 3 0 0 0 4.3 4.3l1-1"></path></svg>
-            <input value="${esc(v.urlInput)}" data-input="${on(v.onUrlInput)}" data-keydown="${on(v.onUrlKey)}" placeholder="Klistra in en YouTube-länk …" style="flex:1;min-width:0;border:none;outline:none;background:transparent;font-size:15px;color:var(--ink);font-family:inherit">
+            <input value="${esc(v.urlInput)}" data-input="${on(v.onUrlInput)}" data-keydown="${on(v.onUrlKey)}" aria-label="YouTube-länk" placeholder="Klistra in en YouTube-länk …" style="flex:1;min-width:0;border:none;outline:none;background:transparent;font-size:15px;color:var(--ink);font-family:inherit">
             <button data-click="${on(v.onAddUrl)}" style="flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:8px;padding:8px 15px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit" data-sh="background:color-mix(in srgb, var(--btn-bg) 78%, var(--accent)) !important">Lägg till</button>
           </div>
         </div>
@@ -2778,7 +2836,7 @@ function viewTranscribe(v){ return `
               <span style="width:9px;height:9px;border-radius:50%;background:var(--bad);flex:0 0 auto;animation:pulse 1.4s ease infinite"></span>
               <span style="font-size:14.5px;color:var(--ink);font-weight:500">Spelar in</span>
               <span style="font-size:14.5px;color:var(--ink-2);font-variant-numeric:tabular-nums">${esc(v.recElapsedFmt)}</span>
-              <div style="flex:0 0 70px;height:6px;border-radius:99px;background:var(--track);overflow:hidden" title="Mikrofonnivå"><div style="height:100%;width:${v.recLevelPct}%;background:${ v.recSilent ? 'var(--bad)' : 'var(--ok)' };border-radius:99px;transition:width .12s"></div></div>
+              <div style="flex:0 0 70px;height:6px;border-radius:99px;background:var(--track);overflow:hidden" title="Mikrofonnivå"><div style="height:100%;width:100%;transform-origin:left;transform:scaleX(${v.recLevelPct / 100});background:${ v.recSilent ? 'var(--bad)' : 'var(--ok)' };border-radius:99px;transition:transform .12s"></div></div>
               ${ v.recSilent ? `<span style="font-size:12.5px;color:var(--bad);font-weight:500;flex:0 0 auto">Ingen signal?</span>` : '' }
               <div style="flex:1"></div>
               <button data-click="${on(v.onMarkRec)}" title="Markera ett viktigt ögonblick" style="flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:8px 13px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit" data-sh="border-color:var(--accent) !important;color:var(--accent) !important">🔖 Markera${ v.recMarkerCount ? ' (' + v.recMarkerCount + ')' : '' }</button>
@@ -2893,7 +2951,7 @@ function viewTranscribe(v){ return `
         </div>
 
         <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:12px 14px;box-shadow:var(--shadow-sm)">
-          <div data-click="${on(v.onToggleAudioCorrect)}" style="${v.acSwitchTrack}"><span style="${v.acSwitchKnob}"></span></div>
+          <div data-click="${on(v.onToggleAudioCorrect)}" role="switch" tabindex="0" aria-checked="${v.audioCorrect}" aria-label="Rätta mot ljudet" style="${v.acSwitchTrack}"><span style="${v.acSwitchKnob}"></span></div>
           <div style="flex:1;min-width:0">
             <div style="font-size:14.5px;font-weight:500;color:var(--ink)">Rätta mot ljudet <span style="font-size:12px;color:var(--ink-3)">· Gemma 4 (experimentell)</span></div>
             <div style="font-size:12.5px;color:var(--ink-2)">Ett andra pass som rättar transkriptet mot vad som faktiskt sägs.</div>
@@ -2967,7 +3025,7 @@ function viewTranscribe(v){ return `
         <div style="padding:22px 24px 20px">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px">
             <div style="display:flex;align-items:center;gap:10px;min-width:0">
-              <span style="${v.statusBadgeStyle}">${esc(v.statusBadge)}</span>
+              <span role="status" aria-live="polite" style="${v.statusBadgeStyle}">${esc(v.statusBadge)}</span>
               <span style="font-size:15.5px;color:var(--ink-2);font-variant-numeric:tabular-nums;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(v.statusFile)}</span>
             </div>
             <div style="display:flex;align-items:baseline;gap:18px;flex:0 0 auto">
@@ -3023,7 +3081,7 @@ function viewTranscribe(v){ return `
           ` : '' }
         </div>
 
-        <div data-click="${on(v.toggleLogExpand)}" style="border-top:1px solid var(--line);background:var(--surface);cursor:pointer;border-radius:0 0 18px 18px;transition:background .12s" data-sh="background:var(--sunken) !important">
+        <div data-click="${on(v.toggleLogExpand)}" role="button" tabindex="0" aria-expanded="${v.logExpand}" aria-label="Visa eller dölj logg" style="border-top:1px solid var(--line);background:var(--surface);cursor:pointer;border-radius:0 0 18px 18px;transition:background .12s" data-sh="background:var(--sunken) !important">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:11px 24px;font-size:13.5px;color:var(--ink-2)">
             <span style="display:flex;align-items:center;gap:8px">
               <span style="width:6px;height:6px;border-radius:50%;background:var(--ink-3)"></span>
@@ -3054,7 +3112,7 @@ function viewTranscribe(v){ return `
       ${ v.showResults ? `
       <div data-sec="results" style="margin-top:24px;scroll-margin-top:8px">
         <div data-reveal style="display:flex;align-items:center;gap:9px;margin-bottom:14px">
-          <span style="width:18px;height:18px;border-radius:50%;background:var(--ok);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12.5px;flex:0 0 auto">✓</span>
+          <span style="width:18px;height:18px;border-radius:50%;background:var(--ok);color:var(--on-ok);display:flex;align-items:center;justify-content:center;font-size:12.5px;flex:0 0 auto">✓</span>
           <h2 style="font-size:20px;font-weight:600;letter-spacing:-0.02em;margin:0">Klar</h2>
           <span style="color:var(--ink-2);font-size:15.5px">· ${esc(v.resultCount)} filer · ${esc(v.resultDuration)}</span>
         </div>
@@ -3072,7 +3130,7 @@ function viewTranscribe(v){ return `
           `; }).join('') }
         </div>
 
-        <div data-reveal data-click="${on(v.openTranscript)}" style="background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px 20px;box-shadow:var(--shadow-sm);cursor:pointer;transition:border-color .12s,box-shadow .12s" data-sh="border-color:var(--line-2) !important;box-shadow:var(--shadow) !important">
+        <div data-reveal data-click="${on(v.openTranscript)}" role="button" tabindex="0" aria-label="Öppna hela transkriptet" style="background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px 20px;box-shadow:var(--shadow-sm);cursor:pointer;transition:border-color .12s,box-shadow .12s" data-sh="border-color:var(--line-2) !important;box-shadow:var(--shadow) !important">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px">
             <span style="font-size:12.5px;text-transform:uppercase;letter-spacing:0.04em;color:var(--ink-2)">Förhandsvisning</span>
             <span style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;color:var(--accent)">Visa hela transkriptet<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5 10.5 8 6 12.5"></path></svg></span>
@@ -3097,7 +3155,7 @@ function viewTranscribe(v){ return `
         <p style="margin:0 0 18px;color:var(--ink-2);font-size:15px">Körs automatiskt direkt efter transkriberingen — rättar stavfel och småfel och städar språket (skiljetecken och meningslängd) med ${esc(v.activeLlmShort)}.</p>
 
         ${ v.cleanDone && !v.cleanRunning ? `
-        <div data-click="${on(v.openCleanModal)}" style="background:var(--sunken);border:1px solid var(--line);border-radius:13px;padding:16px 18px;margin-bottom:14px;cursor:pointer;transition:border-color .14s,box-shadow .14s" data-sh="border-color:var(--line-2) !important;box-shadow:var(--shadow-sm) !important">
+        <div data-click="${on(v.openCleanModal)}" role="button" tabindex="0" aria-label="Öppna korrekturläsningen" style="background:var(--sunken);border:1px solid var(--line);border-radius:13px;padding:16px 18px;margin-bottom:14px;cursor:pointer;transition:border-color .14s,box-shadow .14s" data-sh="border-color:var(--line-2) !important;box-shadow:var(--shadow-sm) !important">
           <div style="display:flex;align-items:center;gap:14px;margin-bottom:12px;flex-wrap:wrap">
             <span style="font-size:11.5px;text-transform:uppercase;letter-spacing:0.05em;color:var(--accent);font-weight:600">Korrekturläst</span>
             ${ v.cleanLegendAudio ? `<span style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2)"><span style="width:12px;height:12px;border-radius:4px;background:color-mix(in srgb,var(--ok) 20%,transparent);border:1px solid color-mix(in srgb,var(--ok) 45%,transparent)"></span>mot ljudet</span>` : '' }
@@ -3117,7 +3175,7 @@ function viewTranscribe(v){ return `
             <span style="display:inline-flex;align-items:center;gap:9px;font-size:14px;font-weight:600;color:var(--ink)"><span style="width:14px;height:14px;border-radius:50%;border:2px solid var(--line-2);border-top-color:var(--accent);animation:spin .7s linear infinite;flex:0 0 auto"></span>Korrekturläser …</span>
             <span style="color:var(--ink);letter-spacing:-0.01em"><span class="fig" style="font-size:30px;font-variant-numeric:tabular-nums">${esc(v.cleanPct)}</span><span class="fig-unit" style="font-size:16px;margin-left:1px">%</span></span>
           </div>
-          <div style="height:9px;border-radius:99px;background:var(--track);overflow:hidden;margin-bottom:11px"><div style="height:100%;width:${v.cleanBarW};background:var(--accent);transition:width .2s"></div></div>
+          <div style="height:9px;border-radius:99px;background:var(--track);overflow:hidden;margin-bottom:11px"><div style="height:100%;width:100%;transform-origin:left;transform:scaleX(${v.cleanBarFrac});background:var(--accent);transition:transform .2s"></div></div>
           <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-2)"><span style="width:7px;height:7px;border-radius:50%;background:var(--accent);animation:pulse 1.2s ease-in-out infinite;flex:0 0 auto"></span>Städar språket …</div>
         </div>
         ` : '' }
@@ -3346,7 +3404,7 @@ function viewRecordings(v){
                   </div>
                 </div>
                 <div style="display:flex;align-items:center;gap:7px;border-top:1px solid var(--line);padding-top:10px">
-                  <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:var(--accent)">Öppna &amp; chatta ↗</span>
+                  <button data-click="${on(h.onOpenChat)}" data-textbtn style="font-family:var(--mono);font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:var(--accent);background:transparent;border:none;padding:0;cursor:pointer">Öppna &amp; chatta ↗</button>
                   <span style="flex:1"></span>
                   <button data-click="${on(h.onOpen)}" aria-label="Öppna transkriptvyn" title="Öppna transkriptvyn med ljud" style="width:29px;height:29px;border:1px solid var(--line);background:var(--surface);border-radius:8px;cursor:pointer;color:var(--ink-3);display:flex;align-items:center;justify-content:center;transition:border-color .12s,color .12s"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h5l2 2v8H6z"></path><path d="M3 5v8.5h7"></path></svg></button>
                   <button data-click="${on(h.onRename)}" aria-label="Redigera uppgifter" title="Redigera klass, kurs, sal och datum" style="width:29px;height:29px;border:1px solid var(--line);background:var(--surface);border-radius:8px;cursor:pointer;color:var(--ink-3);display:flex;align-items:center;justify-content:center;transition:border-color .12s,color .12s"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11.3 2.2l2.5 2.5L5.5 13H3v-2.5z"></path></svg></button>
@@ -3422,7 +3480,7 @@ function agendaPanel(a){
           <div style="display:flex;flex-direction:column;gap:7px">
             ${ a.items.map(function(it){ return `
               <div style="display:flex;align-items:flex-start;gap:10px;background:${it.overdue?'color-mix(in srgb,var(--bad) 8%,var(--sunken))':'var(--sunken)'};border:1px solid ${it.overdue?'color-mix(in srgb,var(--bad) 35%,var(--line))':'var(--line)'};border-radius:10px;padding:9px 11px">
-                <button data-click="${on(it.onDone)}" aria-label="Markera klar" title="Markera klar" style="flex:0 0 auto;width:18px;height:18px;margin-top:1px;border-radius:5px;border:1.5px solid ${it.done?'var(--ok)':'var(--line-2)'};background:${it.done?'var(--ok)':'transparent'};cursor:pointer;color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center">${it.done?'✓':''}</button>
+                <button data-click="${on(it.onDone)}" aria-label="Markera klar" title="Markera klar" style="flex:0 0 auto;width:18px;height:18px;margin-top:1px;border-radius:5px;border:1.5px solid ${it.done?'var(--ok)':'var(--line-2)'};background:${it.done?'var(--ok)':'transparent'};cursor:pointer;color:var(--on-ok);font-size:11px;display:flex;align-items:center;justify-content:center">${it.done?'✓':''}</button>
                 <div style="flex:1;min-width:0">
                   <div style="font-size:14px;color:${it.done?'var(--ink-3)':'var(--ink)'};${it.done?'text-decoration:line-through':''}">${esc(it.text)}</div>
                   <div style="font-size:12px;color:var(--ink-3);margin-top:2px">${esc(it.meta)}</div>
@@ -3445,6 +3503,7 @@ function spotlightPanel(s){
       <div style="display:flex;align-items:center;gap:13px;background:var(--surface);border:1.5px solid var(--ink);border-radius:14px;padding:9px 10px 9px 18px;box-shadow:var(--shadow)">
         <span class="ai-blink" style="width:9px;height:9px;border-radius:50%;background:var(--accent);flex:0 0 auto"></span>
         <input value="${esc(s.query)}" data-input="${on(s.onInput)}" data-keydown="${on(s.onKey)}"
+          aria-label="Sök i arkivet"
           placeholder="${ s.modeAsk ? 'Ställ en fråga, t.ex. när hade vi prov om derivata?' : 'Sök efter vad som sades, t.ex. pythagoras sats' }"
           style="flex:1;min-width:0;background:transparent;border:none;color:var(--ink);padding:8px 0;font-size:16.5px;font-family:inherit;outline:none">
         ${ /* Rensa-knappen upptar alltid sin plats (data-vis) — annars knuffas
@@ -3550,12 +3609,12 @@ function chatThread(c){ return `
                     <div style="background:var(--sunken);border:1px solid var(--line);border-radius:13px;padding:12px">
                       <div style="display:flex;align-items:center;gap:7px;font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 3h10v10H3z" stroke-linejoin="round"></path><path d="M6 6.5h4M6 9.5h4" stroke-linecap="round"></path></svg>Källor i transkriptet</div>
                       ${ m.sources.map(function(src){ return `
-                      <div data-click="${on(src.onPick)}" data-crow="${src.rowFlag}" style="display:flex;flex-direction:column;gap:3px;padding:9px 10px;border-radius:9px;cursor:pointer;border:1px solid transparent;margin-bottom:5px;transition:box-shadow .18s,border-color .18s">
+                      <div data-click="${on(src.onPick)}" data-crow="${src.rowFlag}" role="button" tabindex="0" aria-label="Visa källa ${esc(src.num)} i transkriptet" style="display:flex;flex-direction:column;gap:3px;padding:9px 10px;border-radius:9px;cursor:pointer;border:1px solid transparent;margin-bottom:5px;transition:box-shadow .18s,border-color .18s">
                         <span style="display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;color:var(--accent);font-variant-numeric:tabular-nums"><span data-rownum style="width:16px;height:16px;border-radius:5px;background:var(--accent-weak);color:var(--accent);font-size:10px;display:flex;align-items:center;justify-content:center;font-weight:700;flex:0 0 auto">${esc(src.num)}</span>${esc(src.time)}</span>
                         <span style="font-size:12.5px;line-height:1.45;color:var(--ink-2)">${esc(src.text)}</span>
                       </div>
                       `; }).join('') }
-                      ${ c.openTranscript ? `<span data-click="${on(c.openTranscript)}" style="display:inline-flex;align-items:center;gap:5px;margin-top:3px;color:var(--accent);font-size:12px;font-weight:600;cursor:pointer">Hela transkriptet<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5 10.5 8 6 12.5"></path></svg></span>` : '' }
+                      ${ c.openTranscript ? `<span data-click="${on(c.openTranscript)}" role="button" tabindex="0" style="display:inline-flex;align-items:center;gap:5px;margin-top:3px;color:var(--accent);font-size:12px;font-weight:600;cursor:pointer">Hela transkriptet<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5 10.5 8 6 12.5"></path></svg></span>` : '' }
                     </div>
                   </div>
                 </div>
@@ -3571,7 +3630,7 @@ function chatThread(c){ return `
           ` : '' }
 
           <div style="display:flex;gap:10px;align-items:center">
-            <input value="${esc(c.chatInput)}" data-input="${on(c.onChatInput)}" data-keydown="${on(c.onChatKey)}" placeholder="Skriv en fråga …" style="flex:1;min-width:0;background:var(--sunken);border:1px solid var(--line);color:var(--ink);border-radius:11px;padding:12px 14px;font-size:15px;font-family:inherit;outline:none">
+            <input value="${esc(c.chatInput)}" data-input="${on(c.onChatInput)}" data-keydown="${on(c.onChatKey)}" aria-label="Skriv en fråga till lektionen" placeholder="Skriv en fråga …" style="flex:1;min-width:0;background:var(--sunken);border:1px solid var(--line);color:var(--ink);border-radius:11px;padding:12px 14px;font-size:15px;font-family:inherit;outline:none">
             <button data-click="${on(c.onChatSend)}" ${c.chatTyping ? 'disabled' : ''} style="flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:11px;padding:12px 20px;font-size:15px;font-weight:500;cursor:${c.chatTyping ? 'default' : 'pointer'};opacity:${c.chatTyping ? '.5' : '1'};font-family:inherit;box-shadow:var(--shadow-sm);transition:background .15s">Skicka</button>
           </div>
 
@@ -3603,7 +3662,7 @@ function lessonEventBox(ev){
           : `<span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-3)">kontrollerar anslutning …</span>` }
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <input value="${esc(ev.title)}" data-input="${on(ev.setTitle)}" style="flex:2 1 220px;min-width:0;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 11px;font-size:13.5px;font-weight:500;font-family:inherit;color:var(--ink)">
+        <input value="${esc(ev.title)}" data-input="${on(ev.setTitle)}" aria-label="Titel" style="flex:2 1 220px;min-width:0;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 11px;font-size:13.5px;font-weight:500;font-family:inherit;color:var(--ink)">
         <button data-click="${on(ev.onTogglePick)}" title="Välj dag och tid" style="flex:1 1 160px;min-width:0;display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 11px;font-size:13px;font-family:inherit;color:var(--ink);cursor:pointer;font-variant-numeric:tabular-nums;white-space:nowrap;transition:border-color .14s"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="flex:0 0 auto"><rect x="2" y="3" width="12" height="11" rx="2"></rect><path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3"></path></svg><span style="min-width:0;overflow:hidden;text-overflow:ellipsis">${esc(ev.when)}</span><span style="flex:1"></span><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto"><path d="M4 6l4 4 4-4"></path></svg></button>
         <button data-click="${on(ev.onAdd)}" ${ ev.busy ? 'disabled' : '' } style="flex:0 0 auto;display:inline-flex;align-items:center;gap:7px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:8px;padding:9px 15px;font-size:13px;font-weight:600;cursor:${ ev.busy ? 'default' : 'pointer' };font-family:inherit;opacity:${ ev.busy ? '.6' : '1' }">${ ev.busy ? 'Lägger till …' : 'Lägg till ✓' }</button>
       </div>
@@ -3628,7 +3687,7 @@ function lessonEventBox(ev){
       ` : '' }
       <div style="margin-top:9px">
         <div style="font-family:var(--mono);font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);margin-bottom:5px">Anteckning i kalenderposten</div>
-        <textarea data-input="${on(ev.setDesc)}" rows="2" style="width:100%;box-sizing:border-box;resize:vertical;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 11px;font-size:13px;line-height:1.5;font-family:inherit;color:var(--ink);outline:none">${esc(ev.desc)}</textarea>
+        <textarea data-input="${on(ev.setDesc)}" aria-label="Beskrivning" rows="2" style="width:100%;box-sizing:border-box;resize:vertical;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 11px;font-size:13px;line-height:1.5;font-family:inherit;color:var(--ink);outline:none">${esc(ev.desc)}</textarea>
       </div>
       <div style="margin-top:10px;border-top:1px dashed var(--line-2);padding-top:10px">
         <div style="display:flex;align-items:center;gap:7px;margin-bottom:8px">
@@ -3651,12 +3710,12 @@ function lessonEventBox(ev){
           </div>
         ` : '' }
         <div style="display:flex;gap:7px">
-          <input value="${esc(ev.aiInput)}" data-input="${on(ev.onAiInput)}" data-keydown="${on(ev.onAiKey)}" placeholder="T.ex. ”flytta till onsdag 14:30” eller ”lägg till att de ska repetera bråken” …" style="flex:1;min-width:0;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 11px;font-size:13px;font-family:inherit;color:var(--ink);outline:none">
+          <input value="${esc(ev.aiInput)}" data-input="${on(ev.onAiInput)}" data-keydown="${on(ev.onAiKey)}" aria-label="Instruktion till AI" placeholder="T.ex. ”flytta till onsdag 14:30” eller ”lägg till att de ska repetera bråken” …" style="flex:1;min-width:0;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 11px;font-size:13px;font-family:inherit;color:var(--ink);outline:none">
           <button data-click="${on(ev.onAiSend)}" style="flex:0 0 auto;background:var(--accent-weak);color:var(--accent);border:1px solid var(--accent);border-radius:8px;padding:8px 13px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit">Ändra ✨</button>
         </div>
       </div>
       ` : `
-      <div style="display:flex;align-items:center;gap:9px;font-size:13px;font-weight:500;color:var(--ok)"><span style="width:16px;height:16px;border-radius:50%;background:var(--ok);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:9px">✓</span>Tillagd i Google Kalender — ${esc(ev.title)}</div>
+      <div style="display:flex;align-items:center;gap:9px;font-size:13px;font-weight:500;color:var(--ok)"><span style="width:16px;height:16px;border-radius:50%;background:var(--ok);color:var(--on-ok);display:inline-flex;align-items:center;justify-content:center;font-size:9px">✓</span>Tillagd i Google Kalender — ${esc(ev.title)}</div>
       ` }
     </div>`;
 }
@@ -3668,7 +3727,7 @@ function viewModals(v){ return `
 
   ${ v.lessonChatOpen ? `
   <div data-click="${on(v.closeLessonChat)}" data-screen-label="Lektion (overlay)" style="position:fixed;inset:0;z-index:120;display:flex;align-items:center;justify-content:center;padding:clamp(10px,3vw,38px);background:color-mix(in srgb,var(--canvas) 58%,transparent);backdrop-filter:blur(9px);animation:modalback .3s ease">
-    <div data-click="${on(v.stop)}" data-modal-card style="width:min(960px,96vw);height:min(88vh,880px);display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);overflow:hidden">
+    <div data-click="${on(v.stop)}" data-modal-card role="dialog" aria-modal="true" aria-label="Lektion" data-dialog tabindex="-1" style="width:min(960px,96vw);height:min(88vh,880px);display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);overflow:hidden">
       <div style="flex:0 0 auto;display:flex;align-items:center;gap:11px;padding:11px 13px 11px 11px;border-bottom:1px solid var(--line)">
         <button data-click="${on(v.closeLessonChat)}" aria-label="Stäng (Esc)" title="Stäng · Esc" style="flex:0 0 auto;width:34px;height:34px;display:flex;align-items:center;justify-content:center;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:10px;cursor:pointer;transition:transform .14s cubic-bezier(.2,.8,.25,1),border-color .14s,background .14s,color .14s" data-sh="border-color:var(--line-2) !important;background:var(--sunken) !important;color:var(--ink) !important"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"></path></svg></button>
         <span data-cc="${esc(v.ovCc)}" style="border-radius:99px;padding:3px 11px;font-size:11.5px;font-weight:600;white-space:nowrap;flex:0 0 auto">${esc(v.ovTag)}</span>
@@ -3725,7 +3784,7 @@ function viewModals(v){ return `
 
   ${ v.renameOpen ? `
   <div data-click="${on(v.onRenameCancel)}" style="position:fixed;inset:0;z-index:130;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;padding:24px;animation:fadeup .2s ease">
-    <div data-click="${on(v.stop)}" style="width:min(94vw,460px);background:var(--canvas);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:20px 22px">
+    <div data-click="${on(v.stop)}" role="dialog" aria-modal="true" aria-label="Redigera lektionsuppgifter" data-dialog tabindex="-1" style="width:min(94vw,460px);background:var(--canvas);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:20px 22px">
       <div class="eyebrow" style="margin-bottom:10px">Redigera uppgifter</div>
       <h2 style="font-size:18px;font-weight:600;margin:0 0 14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(v.renameName)}</h2>
       <datalist id="dl-klass">${ v.lessonGroups.map(function(g){ return '<option value="'+esc(g.namn)+'">'; }).join('') }</datalist>
@@ -3764,7 +3823,7 @@ function viewModals(v){ return `
       ${ v.notEditing ? `
       <div style="display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line);border-radius:11px;padding:7px 8px 7px 13px;box-shadow:var(--shadow-sm)">
         <span style="width:13px;height:13px;border:1.6px solid var(--ink-3);border-radius:50%;flex:0 0 auto"></span>
-        <input data-tsearch="1" value="${esc(v.searchQuery)}" data-input="${on(v.onTSearch)}" data-keydown="${on(v.onSearchKey)}" placeholder="Sök i transkriptet …" style="border:none;outline:none;background:transparent;font-size:14.5px;color:var(--ink);font-family:inherit;width:200px">
+        <input data-tsearch="1" value="${esc(v.searchQuery)}" data-input="${on(v.onTSearch)}" data-keydown="${on(v.onSearchKey)}" aria-label="Sök i transkriptet" placeholder="Sök i transkriptet …" style="border:none;outline:none;background:transparent;font-size:14.5px;color:var(--ink);font-family:inherit;width:200px">
         <span style="font-size:12.5px;color:var(--ink-2);font-variant-numeric:tabular-nums;white-space:nowrap;min-width:42px;text-align:right">${esc(v.matchLabel)}</span>
         <div style="display:flex;gap:2px;border-left:1px solid var(--line);padding-left:6px">
           <button data-click="${on(v.prevMatch)}" aria-label="Föregående träff" style="width:26px;height:26px;border:none;background:transparent;border-radius:7px;cursor:pointer;color:var(--ink-2);font-size:14px;display:flex;align-items:center;justify-content:center" data-sh="background:var(--sunken) !important;color:var(--ink) !important">↑</button>
@@ -3786,7 +3845,7 @@ function viewModals(v){ return `
       <div style="max-width:760px;margin:0 auto">
         ${ v.tLines.map(function(ln){ return `
           <div data-key="${esc(ln.idx)}" style="${ln.rowStyle}">
-            <span data-click="${on(ln.onJump)}" style="${ln.timeStyle}" data-sh="color:var(--accent) !important">${esc(ln.time)}</span>
+            <span data-click="${on(ln.onJump)}" role="button" tabindex="0" aria-label="Hoppa till ${esc(ln.time)}" style="${ln.timeStyle}" data-sh="color:var(--accent) !important">${esc(ln.time)}</span>
             ${ v.editing ? `
               <div data-eline="${esc(ln.idx)}" contentEditable="true" data-input="${on(v.onEditInput)}" style="${ln.editStyle}"></div>
             ` : '' }
@@ -3795,7 +3854,7 @@ function viewModals(v){ return `
                 ${ ln.segments.map(function(seg){ return `
                   ${ seg.plain ? `<span>${esc(seg.text)}</span>` : '' }
                   ${ seg.match ? `<span style="background:var(--accent-weak);border-radius:3px;box-shadow:0 0 0 1px var(--accent-weak)">${esc(seg.text)}</span>` : '' }
-                  ${ seg.current ? `<span data-current="1" style="background:var(--accent);color:#fff;border-radius:3px;box-shadow:0 0 0 2px var(--accent)">${esc(seg.text)}</span>` : '' }
+                  ${ seg.current ? `<span data-current="1" style="background:var(--accent);color:var(--on-accent);border-radius:3px;box-shadow:0 0 0 2px var(--accent)">${esc(seg.text)}</span>` : '' }
                 `; }).join('') }
               </span>
             ` : '' }
@@ -3822,7 +3881,7 @@ function viewModals(v){ return `
         ${ v.audioPlaying ? `<svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor"><rect x="3.5" y="3" width="3.2" height="10" rx="1"></rect><rect x="9.3" y="3" width="3.2" height="10" rx="1"></rect></svg>` : '' }
       </button>
       <span style="font-size:13.5px;color:var(--ink-2);font-variant-numeric:tabular-nums;flex:0 0 auto;width:42px">${esc(v.audioCur)}</span>
-      <div data-ref="${on(v.seekTrackRef)}" data-click="${on(v.onSeekClick)}" style="flex:1;height:42px;display:flex;align-items:stretch;gap:2px;cursor:pointer">
+      <div data-ref="${on(v.seekTrackRef)}" data-click="${on(v.onSeekClick)}" data-keydown="${on(v.onSeekKey)}" role="slider" tabindex="0" aria-label="Sök i uppspelningen" aria-valuemin="0" aria-valuemax="${v.seekMax}" aria-valuenow="${v.seekNow}" aria-valuetext="${esc(v.audioCur)} av ${esc(v.audioDur)}" style="flex:1;height:42px;display:flex;align-items:stretch;gap:2px;cursor:pointer">
         ${ v.waveBars.map(function(b){ return `<span style="${b.style}"></span>`; }).join('') }
       </div>
       <span style="font-size:13.5px;color:var(--ink-2);font-variant-numeric:tabular-nums;flex:0 0 auto;width:42px;text-align:right">${esc(v.audioDur)}</span>
@@ -3863,7 +3922,7 @@ function viewModals(v){ return `
 
   ${ v.cleanModalOpen ? `
   <div data-click="${on(v.closeCleanModal)}" style="position:fixed;inset:0;z-index:125;display:flex;align-items:center;justify-content:center;padding:24px;background:color-mix(in srgb,var(--canvas) 64%,transparent);backdrop-filter:blur(7px);animation:modalback .26s ease">
-    <div data-click="${on(v.stop)}" style="width:min(94vw,680px);max-height:84vh;display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);overflow:hidden;animation:modalpop .42s cubic-bezier(.16,1,.3,1)">
+    <div data-click="${on(v.stop)}" role="dialog" aria-modal="true" aria-label="Korrekturläst transkript" data-dialog tabindex="-1" style="width:min(94vw,680px);max-height:84vh;display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);overflow:hidden;animation:modalpop .42s cubic-bezier(.16,1,.3,1)">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:24px 26px 14px;border-bottom:1px solid var(--line);flex:0 0 auto">
         <div style="min-width:0">
           <span style="font-size:11.5px;font-weight:600;letter-spacing:0.05em;color:var(--accent);background:var(--accent-weak);padding:3px 9px;border-radius:6px;display:inline-block;margin-bottom:9px">KORREKTURLÄST</span>
@@ -3887,7 +3946,7 @@ function viewModals(v){ return `
 
   ${ v.calSetupOpen ? `
   <div data-click="${on(v.calSetup.onClose)}" style="position:fixed;inset:0;z-index:135;display:flex;align-items:center;justify-content:center;padding:24px;background:color-mix(in srgb,var(--canvas) 64%,transparent);backdrop-filter:blur(7px);animation:modalback .26s ease">
-    <div data-click="${on(v.stop)}" style="width:min(94vw,560px);max-height:88vh;overflow:auto;overscroll-behavior:contain;background:var(--surface);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);animation:modalpop .42s cubic-bezier(.16,1,.3,1)">
+    <div data-click="${on(v.stop)}" role="dialog" aria-modal="true" aria-label="Google Kalender" data-dialog tabindex="-1" style="width:min(94vw,560px);max-height:88vh;overflow:auto;overscroll-behavior:contain;background:var(--surface);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);animation:modalpop .42s cubic-bezier(.16,1,.3,1)">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:22px 24px 14px;border-bottom:1px solid var(--line)">
         <div style="min-width:0">
           <span style="font-family:var(--mono);font-size:10.5px;font-weight:500;letter-spacing:0.08em;color:var(--c-sky);background:color-mix(in srgb,var(--c-sky) 13%,transparent);border:1px solid color-mix(in srgb,var(--c-sky) 28%,transparent);padding:3px 9px;border-radius:6px">GOOGLE KALENDER</span>
@@ -3935,7 +3994,7 @@ function viewModals(v){ return `
 
   ${ v.diskWarnOpen ? `
   <div data-click="${on(v.onDiskWarnCancel)}" style="position:fixed;inset:0;z-index:130;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(11,11,13,.42);backdrop-filter:blur(3px);animation:modalback .26s ease">
-    <div data-click="${on(v.stop)}" style="width:100%;max-width:440px;background:var(--surface);border:1px solid var(--line);border-radius:22px;box-shadow:var(--shadow);padding:26px 26px 22px;animation:modalpop .42s cubic-bezier(.16,1,.3,1)">
+    <div data-click="${on(v.stop)}" role="dialog" aria-modal="true" aria-label="Inte tillräckligt med diskutrymme" data-dialog tabindex="-1" style="width:100%;max-width:440px;background:var(--surface);border:1px solid var(--line);border-radius:22px;box-shadow:var(--shadow);padding:26px 26px 22px;animation:modalpop .42s cubic-bezier(.16,1,.3,1)">
       <div style="display:flex;align-items:center;gap:13px;margin-bottom:15px">
         <span style="width:42px;height:42px;border-radius:12px;flex:0 0 auto;background:color-mix(in srgb,var(--warn) 15%,transparent);color:var(--warn);display:flex;align-items:center;justify-content:center"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 1.5 21h21z"></path><path d="M12 9.5v5"></path><path d="M12 17.5h.01"></path></svg></span>
         <div style="font-size:19px;font-weight:600;letter-spacing:-0.02em;color:var(--ink)">Inte tillräckligt med diskutrymme</div>
@@ -3952,7 +4011,7 @@ function viewModals(v){ return `
 
   ${ v.confirmOpen ? `
   <div data-click="${on(v.onConfirmNo)}" style="position:fixed;inset:0;z-index:140;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(11,11,13,.42);backdrop-filter:blur(3px);animation:modalback .26s ease">
-    <div data-click="${on(v.stop)}" style="width:100%;max-width:420px;background:var(--surface);border:1px solid var(--line);border-radius:22px;box-shadow:var(--shadow);padding:26px;animation:modalpop .42s cubic-bezier(.16,1,.3,1)">
+    <div data-click="${on(v.stop)}" role="dialog" aria-modal="true" aria-label="Bekräfta" data-dialog tabindex="-1" style="width:100%;max-width:420px;background:var(--surface);border:1px solid var(--line);border-radius:22px;box-shadow:var(--shadow);padding:26px;animation:modalpop .42s cubic-bezier(.16,1,.3,1)">
       <div style="font-size:19px;font-weight:600;letter-spacing:-0.02em;color:var(--ink);margin-bottom:9px">${esc(v.confirmTitle)}</div>
       <p style="margin:0 0 22px;color:var(--ink-2);font-size:15px;line-height:1.55">${esc(v.confirmBody)}</p>
       <div style="display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap">
@@ -3964,7 +4023,7 @@ function viewModals(v){ return `
   ` : '' }
 
   ${ v.hasToast ? `
-  <div style="position:fixed;left:50%;bottom:30px;transform:translate(-50%,0);z-index:200;display:flex;align-items:center;gap:13px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:13px 20px 13px 13px;box-shadow:var(--shadow);width:336px;animation:toastin .32s cubic-bezier(.16,1,.3,1)">
+  <div role="status" aria-live="polite" aria-atomic="true" style="position:fixed;left:50%;bottom:30px;transform:translate(-50%,0);z-index:200;display:flex;align-items:center;gap:13px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:13px 20px 13px 13px;box-shadow:var(--shadow);width:336px;animation:toastin .32s cubic-bezier(.16,1,.3,1)">
     ${ v.toastError ? `
       <span style="width:40px;height:40px;border-radius:12px;flex:0 0 auto;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--bad) 15%,transparent);color:var(--bad);font-size:20px;font-weight:700">!</span>
     ` : '' }
