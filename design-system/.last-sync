@@ -4,7 +4,7 @@
   "lastSyncedUpdatedAt": "2026-07-05T17:41:23.564101Z",
   "_note": "Uppdateras varje gång design-systemet synkas. SessionStart-hooken jämför projektets updatedAt mot detta för att upptäcka ändringar gjorda i Claude Design.",
   "_lastPull": "2026-07-05: Kartotek-omdesignen av Inspelningar (TranskriberaApp.dc.html + styles.css) + ny utforskningsfil 'Inspelningar v2 - 3 riktningar.html'.",
-  "_lastPush": "2026-07-04: reverse-port av lokala UI-ändringar (ff5f3e2/f18507a/c3025c1/d1fef97/0a6e91e m.fl.) pushad till mallen TranskriberaApp.dc.html. OBS: write_files bumpar INTE projektets updatedAt — bara redigeringar i Claude Design-UI:t gör det.",
+  "_lastPush": "2026-07-13: typeset-finslip pushad till styles.css (.eyebrow-spärr 0.14→0.12em; .disp radhöjd 0.98→1.02 + text-wrap:balance + font-kerning; .ehead_lede text-wrap:pretty). Masthead (.ehead--v1) + steg 2-distill INTE pushade — app-lokala deltas, och mallen (TranskriberaApp.dc.html) redigeras just nu i Claude Design-UI:t (projektets updatedAt 2026-07-13T18:23 speglar en UI-ändring i mallen som ännu INTE är pullad). write_files bumpar inte updatedAt, så lastSyncedUpdatedAt lämnas kvar på 2026-07-05 så SessionStart-hooken fortsätter flagga att mallen behöver pullas. Tidigare push: 2026-07-04 reverse-port av Inspelningar till TranskriberaApp.dc.html.",
   "_notMirrored": [
     "scraps/*.png och templates/transkribera-app/.thumbnail (binära referens-/förhandsvisningsbilder, hämtas vid behov)",
     "bedomning/bedomning.html (större än get_file-taket 256 KiB — trunkeras vid hämtning; övriga bedomning/-filer är speglade)"
