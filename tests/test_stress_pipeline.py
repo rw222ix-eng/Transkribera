@@ -53,16 +53,16 @@ def _sse_events(text: str) -> list[dict]:
 def _fake_subprocess(segments=SEGMENT, block: "threading.Event | None" = None,
                      started: "threading.Event | None" = None):
     """Fejk med samma kontrakt som server._run_transcribe_subprocess."""
-    def fake(cmd, base, emit, on_proc=None, progress_scale=1.0):
+    def fake(cmd, base, emit, on_proc=None, progress_scale=1.0, progress_base=0.0):
         if started is not None:
             started.set()
         if block is not None:
             assert block.wait(timeout=30), "testet släppte aldrig blockeringen"
         out_base = Path(cmd[cmd.index("--out-base") + 1])
         formats = [f for f in cmd[cmd.index("--formats") + 1].split(",") if f]
-        emit({"type": "progress", "pct": int(10 * progress_scale)})
+        emit({"type": "progress", "pct": int(progress_base + 10 * progress_scale)})
         emit({"type": "log", "msg": "Transkriberar (fejk) ..."})
-        emit({"type": "progress", "pct": int(90 * progress_scale)})
+        emit({"type": "progress", "pct": int(progress_base + 90 * progress_scale)})
         written = transcriber.write_outputs(
             [transcriber.Segment(s["start"], s["end"], s["text"]) for s in segments],
             out_base, formats or ["srt"])

@@ -69,5 +69,8 @@ ok('webm-som-ljud', _videoThumb({ video: { path: 'C:/v/a.webm', ext: 'webm' } })
 ok('ingen-video', _videoThumb({}) === null);
 ok('video-utan-path', _videoThumb({ video: { ext: 'mp4' } }) === null);
 
+// --- audioCorrect på som standard (a5e8d8b) — regressionsvakt mot en tyst flip ---
+{ const m = /audioCorrect:\s*(true|false)/.exec(src); ok('audioCorrect-default-true', !!m && m[1] === 'true'); }
+
 console.log(`render.test: ${pass} passerade, ${fail} misslyckades`);
 if (fail) process.exit(1);

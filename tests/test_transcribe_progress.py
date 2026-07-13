@@ -126,3 +126,45 @@ def test_youtube_kalla_behaller_sin_titel(client, tmp_path, monkeypatch):
     name = _run_and_get_name(client, "https://youtu.be/abc123")
     assert name == "Matematik 4 — dubbla vinkeln.mp4"
     assert used["suggest"] is False
+
+
+def test_lokal_kalla_behaller_filnamnet_om_titel_kastar(client, tmp_path, monkeypatch):
+    # Namngivningen är best effort: kastar suggest_title ska jobbet INTE fela —
+    # filnamnet behålls och history-posten skrivs ändå.
+    def _boom(*a, **k):
+        raise RuntimeError("LLM nere")
+    monkeypatch.setattr(server.postprocess, "suggest_title", _boom)
+    src = tmp_path / "matte_lektion.wav"
+    src.write_bytes(b"RIFF0000WAVE")
+    assert _run_and_get_name(client, str(src)) == "matte_lektion.wav"
+
+
+def test_lokal_kalla_behaller_filnamnet_om_llm_start_kastar(client, tmp_path, monkeypatch):
+    # ensure_llm() kastar om llama-servern inte startar (trasig GGUF/port/VRAM).
+    # Det får inte fälla en redan klar transkribering — filnamnet behålls.
+    def _boom():
+        raise RuntimeError("llama-server startade inte")
+    monkeypatch.setattr(client.app.state.arbiter, "ensure_llm", _boom)
+    src = tmp_path / "fysik_lektion.wav"
+    src.write_bytes(b"RIFF0000WAVE")
+    assert _run_and_get_name(client, str(src)) == "fysik_lektion.wav"
+
+
+def test_run_subprocess_mappar_progress_med_bas_och_skala(tmp_path, monkeypatch):
+    # Direkttest av själva mappningen (server.py) — fejk-servern i fixturen ovan
+    # duplicerar formeln, så anropsplatsen testas men inte mappningsraden.
+    class _FakeProc:
+        def __init__(self, lines):
+            self.stdout = iter(lines)
+        def wait(self):
+            return 0
+    lines = ["PROGRESS 0", "PROGRESS 50", "PROGRESS 100", "SEG 0.0 1.0 hej", "DONE"]
+    monkeypatch.setattr(server.subprocess, "Popen", lambda *a, **k: _FakeProc(lines))
+    monkeypatch.setattr(server, "_child_cwd", lambda base: str(tmp_path))
+    events = []
+    written, segs = server._run_transcribe_subprocess(
+        ["x"], tmp_path, lambda ev: events.append(ev),
+        progress_scale=0.3, progress_base=60)
+    pcts = [e["pct"] for e in events if e["type"] == "progress"]
+    assert pcts == [60, 75, 90]            # 60 + {0,50,100} * 0.3
+    assert segs == [{"start": 0.0, "end": 1.0, "text": "hej"}]

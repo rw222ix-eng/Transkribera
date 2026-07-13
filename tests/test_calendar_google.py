@@ -20,6 +20,14 @@ VALID_CLIENT = json.dumps({"installed": {
     "redirect_uris": ["http://localhost"],
 }})
 
+# En "web"-klient (Google levererar även denna form) — ska också accepteras.
+VALID_CLIENT_WEB = json.dumps({"web": {
+    "client_id": "web123.apps.googleusercontent.com",
+    "client_secret": "s3cret",
+    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+    "token_uri": "https://oauth2.googleapis.com/token",
+}})
+
 
 @pytest.fixture(autouse=True)
 def _clear_env(monkeypatch):
@@ -75,6 +83,13 @@ def test_install_client_secret_giltig(tmp_path):
     res = calendar_google.install_client_secret(tmp_path, VALID_CLIENT)
     assert res == {"ok": True, "client_ready": True}
     assert (tmp_path / calendar_google.CLIENT_SECRET_NAME).exists()
+    assert calendar_google.client_ready(tmp_path) is True
+
+
+def test_install_client_secret_web_form(tmp_path):
+    # _looks_like_client accepterar även "web"-formen, inte bara "installed".
+    res = calendar_google.install_client_secret(tmp_path, VALID_CLIENT_WEB)
+    assert res == {"ok": True, "client_ready": True}
     assert calendar_google.client_ready(tmp_path) is True
 
 
@@ -140,9 +155,16 @@ def test_api_client_secret_ogiltig_ger_400(tmp_path):
     assert "error" in r.json()
 
 
-def test_api_open_console_svarar_ok(tmp_path, monkeypatch):
+def test_api_open_console_oppnar_console_url(tmp_path, monkeypatch):
+    # Meningsfull assert: verifiera att rätt URL faktiskt öppnades — inte bara att
+    # endpointen svarar ok (den returnerar ok även om webbrowser.open kastar).
     import webbrowser
-    monkeypatch.setattr(webbrowser, "open", lambda *a, **k: True)
+    opened = {}
+    monkeypatch.setattr(webbrowser, "open",
+                        lambda url, *a, **k: opened.setdefault("url", url) or True)
     r = _client(tmp_path).post("/api/calendar/open-console")
     assert r.status_code == 200
-    assert r.json()["ok"] is True
+    body = r.json()
+    assert body["ok"] is True
+    assert "console.cloud.google.com" in body["url"]
+    assert opened.get("url") == body["url"]
