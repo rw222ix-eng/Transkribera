@@ -47,12 +47,8 @@
     ppOut: '',
     ppPct: 0,
     ppEnabled: false,
-    chat: [],
-    chatInput: '',
-    chatTyping: false,
-    chatThink: false,           // Qwen3 "tänk djupare" — bara i chatten, default av
+    chatThink: false,           // Qwen3 "tänk djupare" — bara i lektionschatten, default av
     chatAttach: [],
-    chatCiteSel: null,          // valt citat i chatten: "<msgIdx>:<segIdx>" eller null
     // Per-lektion chattmodal (Chatta-knapp på inspelnings-kortet) — egen isolerad chatt
     lessonChatId: null,         // öppen lektions history-id (även "overlay öppen"-flagga)
     lessonChatName: '',
@@ -161,7 +157,7 @@
   var _recMarkers = [], _recMarkersByPath = {};   // live-markörer under inspelning
   var _recSession = null, _recUploadChain = null; // inkrementell flush till disk
   var _recAudioCtx = null, _recAnalyser = null, _recLevelTimer = null, _recSilenceSecs = 0;
-  var _prevTab, _prevStep, _prevRun, _prevPP, _prevOp, _prevChatLen, _wasEditing, _wasOpen, _scrollKey;
+  var _prevTab, _prevStep, _prevRun, _prevPP, _prevOp, _wasEditing, _wasOpen, _scrollKey;
 
   /* ----------------------------------------------------------------- data -- */
   // Catalogs are `let` so loadModels() can reassign them to real data from /api/models;
@@ -690,7 +686,7 @@
   function restart() {
     clearInterval(_t); clearTimeout(_pp); clearInterval(_ppIv); clearTimeout(_chat); clearInterval(_au);
     Object.values(_dl || {}).forEach(clearInterval);
-    setState({ source: '', queue: [], qStatus: {}, qProgress: {}, activeId: null, fileError: '', step: 'source', run: 'idle', progress: 0, elapsed: 0, log: [], pp: 'idle', ppOp: 'summary', ppOut: '', ppEnabled: false, chat: [], chatInput: '', chatTyping: false, chatThink: false, chatAttach: [], openDD: null, transcriptOpen: false, runError: null, editing: false, edits: {}, edited: false, audioPlaying: false, audioT: 0, audioDur: 0, mediaUrl: null, runMedia: null, histViewing: null, resultId: null, transcriptRaw: null, logExpand: false, cleanText: null, cleanModalOpen: false, chatCiteSel: null });
+    setState({ source: '', queue: [], qStatus: {}, qProgress: {}, activeId: null, fileError: '', step: 'source', run: 'idle', progress: 0, elapsed: 0, log: [], pp: 'idle', ppOp: 'summary', ppOut: '', ppEnabled: false, chatThink: false, chatAttach: [], openDD: null, transcriptOpen: false, runError: null, editing: false, edits: {}, edited: false, audioPlaying: false, audioT: 0, audioDur: 0, mediaUrl: null, runMedia: null, histViewing: null, resultId: null, transcriptRaw: null, logExpand: false, cleanText: null, cleanModalOpen: false });
   }
   function onSearch(e) { setState({ search: e.target.value }); }
   function toggleFmt(f) { setState(function (s) { var formats = Object.assign({}, s.formats); formats[f] = !formats[f]; return { formats: formats }; }); }
@@ -718,10 +714,6 @@
   // Qwen3 "thinking": off by default (fast, no English chain-of-thought leak); on only
   // for hard multi-step chat questions. Correction/summary never think.
   function toggleChatThink() { setState(function (s) { return { chatThink: !s.chatThink }; }); }
-  function selectChatCite(mi, segIdx) {
-    var key = mi + ':' + segIdx;
-    setState(function (s) { return { chatCiteSel: s.chatCiteSel === key ? null : key }; });
-  }
   // Bygger renderbara chatt-meddelanden (bubblor + källförankrade citat/källpanel).
   // Delas av resultatvyns "Fråga om lektionen" och per-lektion-chattmodalen.
   function buildChatMessages(messages, segs, citeSel, onCite) {
@@ -770,9 +762,6 @@
     return { tokens: tokens, refs: refs };
   }
   function stopProp(e) { e.stopPropagation(); }
-  // Chatten bor inline i Fråga om lektionen-kortet — följ med till slutankaret
-  // när ett nytt meddelande läggs till.
-  function scrollChatBottom() { requestAnimationFrame(function () { var el = document.querySelector('[data-follow="chatend"]'); if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'end' }); }); }
   function toggleModelDD() { setState(function (s) { return { openDD: s.openDD === 'model' ? null : 'model' }; }); }
   function diskDirFor(d) {
     // Modellerna bor i <enhet>\Transkribera\models på vald disk (Windows).
@@ -1244,7 +1233,7 @@
     var src = baseNameOf(active.name);
     setState({
       run: 'running', step: 'process', progress: 0, dispProgress: 0, elapsed: 0, pp: 'idle', ppOp: 'clean', ppOut: '', cleanText: null,
-      chat: [], chatTyping: false, runError: null, transcript: null, resultFilesReal: null,
+      runError: null, transcript: null, resultFilesReal: null,
       source: active.name,
       qStatus: Object.assign({}, S.qStatus, kv(active.id, 'running')),
       log: ['› transkribera "' + src + '" --model ' + modelLabel(S.model), '[00:00] Startar transkribering …'],
@@ -1403,31 +1392,6 @@
   // Korrekturläsningen är inget val — den startar tyst och automatiskt så fort
   // transkriberingen är klar, sömlöst i bakgrunden (låser sedan upp chatten).
   function afterDone() { if (S.pp !== 'running') { setState({ ppOp: 'clean' }); runPP(); } }
-  function onChatInput(e) { setState({ chatInput: e.target.value }); }
-  function onChatKey(e) { if (e.key === 'Enter') sendChat(); }
-  // BACKEND: real conversational chat via /api/chat (Ollama /api/chat) over the transcript.
-  function sendChat() {
-    // Blockera ny sändning medan ett svar strömmar — annars skrivs den pågående
-    // assistent-turen över och en andra /api/chat-förfrågan skickas.
-    if (S.chatTyping) return;
-    var q = S.chatInput.trim();
-    if (!q) return;
-    // push the user turn + an empty assistant placeholder we stream into
-    setState(function (s) { return { chat: s.chat.concat([{ role: 'user', text: q }, { role: 'assistant', text: '', reason: '' }]), chatInput: '', chatTyping: true, chatCiteSel: null }; });
-    var msgs = S.chat.filter(function (m) { return !(m.role === 'assistant' && !m.text); })
-      .map(function (m) { return { role: m.role, content: m.text }; });
-    // Källförankrat läge: transkriptet skickas som numrerade, tidsstämplade
-    // segment och modellen citerar med [n]-markörer som UI:t gör klickbara.
-    var transcript = getTranscript().map(function (l, i) { return '[' + (i + 1) + '] (' + (l.time || '') + ') ' + l.text; }).join('\n');
-    var acc = '', accReason = '';
-    var setLast = function (text, reason, typing) { setState(function (s) { var c = s.chat.slice(); if (c.length) c[c.length - 1] = { role: 'assistant', text: text, reason: reason }; return { chat: c, chatTyping: !!typing }; }); };
-    streamPost('/api/chat', { messages: msgs, transcript: transcript, model: S.ppModel, think: S.chatThink, cite: true }, function (ev) {
-      if (ev.type === 'reasoning') { accReason += ev.text; setLast(acc, accReason, true); }
-      else if (ev.type === 'token') { acc += ev.text; setLast(acc, accReason, false); }
-      else if (ev.type === 'error') { setLast(acc || ('Fel: ' + (ev.message || 'okänt')), accReason, false); }
-      else if (ev.type === 'done') { var r = ev.result || {}; setLast(r.text || acc, accReason, false); }
-    });
-  }
 
   // ---- Lektionsoverlay (fullskärm): transkript + samma källförankrade chatt
   // men mot EN lektions transkript, isolerat från resultatvyns chatt. ---------
@@ -1911,13 +1875,12 @@
       }
     }
     if (S.step === 'process') {
-      var run = S.run, pp = S.pp, op = S.ppOp, chatLen = S.chat.length;
+      var run = S.run, pp = S.pp, op = S.ppOp;
       if (run === 'done' && _prevRun !== 'done') { playResultsIn(); smoothScrollProc('[data-sec="results"]'); }
       else if (pp !== _prevPP && pp !== 'idle') smoothScrollProc('[data-sec="ppout"]');
-      if (chatLen > (_prevChatLen || 0)) scrollChatBottom();
-      _prevRun = run; _prevPP = pp; _prevOp = op; _prevChatLen = chatLen;
+      _prevRun = run; _prevPP = pp; _prevOp = op;
     } else {
-      _prevRun = S.run; _prevPP = S.pp; _prevOp = S.ppOp; _prevChatLen = S.chat.length;
+      _prevRun = S.run; _prevPP = S.pp; _prevOp = S.ppOp;
     }
   }
 
@@ -2077,8 +2040,6 @@
     var OPS = [['clean', 'Korrekturläs', 'Rättar stavfel & småfel — skriver inte om'], ['chat', 'Chatta', 'Ställ frågor om innehållet']];
     var ppOps = OPS.map(function (p) { return { key: p[0], label: p[1], sub: p[2], onPick: function () { pickOp(p[0]); }, selected: st.ppOp === p[0], unselected: st.ppOp !== p[0] }; });
     var ppOpLabel = (ppOps.find(function (o) { return o.key === st.ppOp; }) || {}).label;
-    var chatSegs = getTranscript();
-    var chat = buildChatMessages(st.chat, chatSegs, st.chatCiteSel, selectChatCite);
 
 
     var lastIdx = st.log.length - 1;
@@ -2550,8 +2511,7 @@
       ppLocked: !st.cleanText, activeLlmShort: st.ppModel,
       logExpand: st.logExpand, toggleLogExpand: toggleLogExpand,
       logToggleLabel: st.logExpand ? 'Dölj' : 'Visa',
-      chat: chat, chatTyping: st.chatTyping, chatInput: st.chatInput, onChatInput: onChatInput, onChatKey: onChatKey, onChatSend: sendChat,
-      stop: stopProp, chatEmpty: st.chat.length === 0, chatHasMsgs: st.chat.length > 0,
+      stop: stopProp,
       chatThink: st.chatThink, onToggleChatThink: toggleChatThink,
       chatThinkBtnStyle: 'display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;font-family:inherit;cursor:pointer;border-radius:99px;padding:6px 12px;border:1px solid ' + (st.chatThink ? 'color-mix(in srgb,var(--accent) 40%,transparent);background:var(--accent-weak);color:var(--accent)' : 'var(--line);background:var(--surface);color:var(--ink-2)'),
       chatThinkHint: st.chatThink ? 'Tänker djupare före svar — bättre på svåra flerstegsfrågor, men något långsammare.' : 'Snabbt svar utan synligt resonemang. Slå på för svåra flerstegsfrågor.',
