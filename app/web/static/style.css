@@ -323,17 +323,25 @@ button[data-textbtn]:not(:disabled):hover{background:transparent !important;colo
    bordered window cards with a mono top-bar.
    ============================================================ */
 .eyebrow{display:inline-flex;align-items:center;gap:12px;margin:0;
-  font-family:var(--mono) !important;font-size:11px;letter-spacing:0.14em !important;
+  font-family:var(--mono) !important;font-size:11px;letter-spacing:0.12em !important;
   text-transform:uppercase;color:var(--accent)}
 .eyebrow::before{content:"";width:24px;height:1px;background:var(--accent);flex:0 0 auto}
 
-.disp{font-weight:400;line-height:0.98;letter-spacing:-0.022em;color:var(--ink)}
+.disp{font-weight:400;line-height:1.02;letter-spacing:-0.022em;color:var(--ink);text-wrap:balance;font-kerning:normal}
 .disp .ser,.disp em{font-family:var(--serif) !important;font-style:italic;font-weight:400;color:var(--ink-3);letter-spacing:0}
 
 .ehead{display:grid;grid-template-columns:1.15fr 1fr;gap:48px;align-items:end;
   padding-bottom:26px;border-bottom:1px solid var(--line);margin-bottom:34px}
-.ehead_lede{font-size:15px;line-height:1.6;color:var(--ink-2);max-width:44ch;margin:0}
+.ehead_lede{font-size:15px;line-height:1.6;color:var(--ink-2);max-width:44ch;margin:0;text-wrap:pretty}
 @media(max-width:760px){.ehead{grid-template-columns:1fr;gap:18px;align-items:start}}
+/* Steg 1 (Källa): mer utpräglad redaktionell masthead — bredare titelkolumn,
+   hårfin skiljelinje mot ingressen, tätare rytm. Via /impeccable live (layout, density 0.6). */
+.ehead.ehead--v1{grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);column-gap:24px;padding-bottom:13px}
+.ehead--v1 .v1-lede{max-width:34ch;padding-left:17px;border-left:1px solid var(--line);align-self:end}
+@media(max-width:760px){
+  .ehead.ehead--v1{grid-template-columns:1fr;row-gap:11px;padding-bottom:0}
+  .ehead--v1 .v1-lede{border-left:0;padding-left:0;max-width:56ch}
+}
 
 .win{background:var(--surface);border:1px solid var(--line);overflow:hidden}
 .win_top{display:flex;align-items:center;justify-content:space-between;gap:20px;

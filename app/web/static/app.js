@@ -2790,12 +2790,12 @@ function viewTranscribe(v){ return `
 
       ${ v.stepSource ? `
       <div style="flex:1;display:flex;flex-direction:column;min-height:0">
-        <div class="ehead">
-          <div>
-            <div class="eyebrow" style="margin-bottom:18px">Steg 1 — Källa</div>
+        <div class="ehead ehead--v1">
+          <div class="v1-lead">
+            <div class="eyebrow" style="margin-bottom:14px">Steg 1 — Källa</div>
             <h1 class="disp" style="font-size:clamp(34px,5.2vw,52px);margin:0">Vad vill du <span class="ser">transkribera?</span></h1>
           </div>
-          <p class="ehead_lede">Dra in en eller flera filer, eller välj från datorn — allt körs på din egen dator.</p>
+          <p class="ehead_lede v1-lede">Dra in en eller flera filer, eller välj från datorn — allt körs på din egen dator.</p>
         </div>
         <div data-click="${on(v.openPicker)}" data-dragover="${on(v.onDragOver)}" data-dragleave="${on(v.onDragLeave)}" data-drop="${on(v.onDrop)}" role="button" tabindex="0" aria-label="Välj eller dra in ljud- eller videofiler" style="${v.dropzoneStyle}">
           <input data-ref="${on(v.fileRef)}" type="file" accept="audio/*,video/*" multiple="true" data-change="${on(v.onPickFile)}" style="display:none">
@@ -2909,9 +2909,7 @@ function viewTranscribe(v){ return `
           </div>
         </div>
 
-        <div style="font-family:var(--mono);font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-3);margin:2px 0 14px">Inställningar</div>
-
-        <div style="background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:17px 19px;box-shadow:var(--shadow-sm)">
+        <div style="background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:17px 19px">
           <div style="font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);margin-bottom:15px">Språk</div>
           <div style="display:flex;align-items:flex-end;gap:14px">
             <div style="flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:9px">
@@ -2941,7 +2939,7 @@ function viewTranscribe(v){ return `
           </div>
         </div>
 
-        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:12px 16px;box-shadow:var(--shadow-sm)">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:12px 16px">
           <span style="font-size:14px;color:var(--ink-2);font-weight:500">Filformat</span>
           <div style="display:flex;gap:6px">
             ${ v.formatChips.map(function(f){ return `
@@ -2950,7 +2948,7 @@ function viewTranscribe(v){ return `
           </div>
         </div>
 
-        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:12px 14px;box-shadow:var(--shadow-sm)">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:12px 14px">
           <div data-click="${on(v.onToggleAudioCorrect)}" role="switch" tabindex="0" aria-checked="${v.audioCorrect}" aria-label="Rätta mot ljudet" style="${v.acSwitchTrack}"><span style="${v.acSwitchKnob}"></span></div>
           <div style="flex:1;min-width:0">
             <div style="font-size:14.5px;font-weight:500;color:var(--ink)">Rätta mot ljudet <span style="font-size:12px;color:var(--ink-3)">· Gemma 4 (experimentell)</span></div>
@@ -2962,7 +2960,7 @@ function viewTranscribe(v){ return `
         </div>
 
         ${ v.showSubtitleMode ? `
-        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:12px;box-shadow:var(--shadow-sm)">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:12px">
           <span style="font-size:14px;color:var(--ink-2);font-weight:500">Undertext i video</span>
           <div style="display:flex;gap:3px;padding:4px;background:var(--track);border:1px solid var(--line);border-radius:11px">
             ${ v.subtitleOptions.map(function(o){ return `<button data-click="${on(o.onPick)}" aria-pressed="${o.active}" style="${o.style}" data-sh="background:var(--surface) !important;color:var(--ink) !important;box-shadow:var(--shadow-sm) !important">${esc(o.label)}</button>`; }).join('') }
