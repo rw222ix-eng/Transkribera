@@ -58,6 +58,7 @@ e2e/node_modules/
 e2e/.test-data/
 e2e/.test-data-real/
 e2e/.test-data-preview/
+e2e/.test-data-qa/
 e2e/test-results/
 
 # Impeccable live mode (durabel sessionsjournal — lokal återhämtning, ej projektkälla)
