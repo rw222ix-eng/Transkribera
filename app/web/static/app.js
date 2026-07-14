@@ -124,6 +124,8 @@
     srcBox: true,              // hopfällbar "Källor i arkivet"-panel i svaret
     askFollowups: [],          // följdfrågor i svaret: {q, a, typing}
     askFollowInput: '',
+    askEvent: null,            // kalenderförslag i arkivsvaret (samma form som lessonChatEvent)
+    descModalFor: 'lesson',    // vilket förslag anteckningsmodalen redigerar: 'lesson' | 'ask'
     agenda: null,              // daterade poster tvärs alla klasser
     agendaOpen: false,         // utfälld agenda-panel
     agendaExporting: false,
@@ -957,7 +959,7 @@
     _askRun++;                                   // ogiltigförklara ev. pågående ask-ström
     if (_scanTimer) { clearInterval(_scanTimer); _scanTimer = null; }
     clearTimeout(_askZoomT);
-    setState({ lessonSearch: '', searchHits: null, askAnswer: '', askSources: null, askQ: '', asking: false, askScanIdx: 0, askZoom: false, askZoomClosing: false, srcBox: true, askFollowups: [], askFollowInput: '' });
+    setState({ lessonSearch: '', searchHits: null, askAnswer: '', askSources: null, askQ: '', asking: false, askScanIdx: 0, askZoom: false, askZoomClosing: false, srcBox: true, askFollowups: [], askFollowInput: '', askEvent: null });
   }
   function runSearch() {
     var q = (S.lessonSearch || '').trim();
@@ -976,7 +978,9 @@
     _scanTimer = setInterval(function () {
       setState(function (s) { return s.asking ? { askScanIdx: s.askScanIdx + 1 } : null; });
     }, 340);
-    setState({ asking: true, askAnswer: '', askSources: null, searchHits: null, askQ: q, askScanIdx: 0, askZoom: false, askZoomClosing: false, srcBox: true, askFollowups: [], askFollowInput: '' });
+    setState({ asking: true, askAnswer: '', askSources: null, searchHits: null, askQ: q, askScanIdx: 0, askZoom: false, askZoomClosing: false, srcBox: true, askFollowups: [], askFollowInput: '', askEvent: null });
+    // Samma nyckelord som i lektionschatten föreslår en kalenderhändelse vid sidan av svaret.
+    if (/påminn|kalender|prov|läx|förhör|inlämning/i.test(q)) proposeAskEvent(q);
     streamPost('/api/search/ask', { q: q }, function (ev) {
       if (run !== _askRun) return;               // en nyare fråga (eller Esc) har tagit över
       if (ev.type === 'token') {
@@ -1011,6 +1015,21 @@
   function sendAskFollow() {
     var q = (S.askFollowInput || '').trim();
     if (!q || S.asking) return;
+    // Nyckelord föreslår händelse; kommandon ("flytta till onsdag 14:30" …) justerar
+    // förslaget med regex-tolken — samma beteende som lektionschatten.
+    if (/påminn|kalender|prov|läx|förhör|inlämning/i.test(q) && !S.askEvent) proposeAskEvent(q);
+    var evNow = S.askEvent;
+    var isCal = evNow && !evNow.added && (/flytta|ändra|byt|boka|döp|kalla|titel|anteckning/i.test(q) || /\d{1,2}[:.]\d{2}/.test(q) || /måndag|tisdag|onsdag|torsdag|fredag|lördag|söndag|imorgon|nästa vecka|klockan/i.test(q));
+    if (isCal) {
+      var r0 = applyEventCommand(evNow, q);
+      setState(function (s) {
+        if (!s.askEvent) return null;
+        return { askFollowInput: '',
+                 askEvent: Object.assign({}, s.askEvent, r0.patch),
+                 askFollowups: (s.askFollowups || []).concat([{ q: q, a: r0.reply, typing: false }]) };
+      }, function () { scrollAskChat(true); });
+      return;
+    }
     var run = ++_askRun;
     setState(function (s) { return { askFollowInput: '', askFollowups: (s.askFollowups || []).concat([{ q: q, a: '', typing: true }]) }; },
       function () { scrollAskChat(true); });
@@ -1576,15 +1595,32 @@
     }, evPick: null });
     if (S.calConnected === null) loadCalStatus();
   }
-  function setLessonEvent(k, v) {
-    setState(function (s) { return s.lessonChatEvent ? { lessonChatEvent: Object.assign({}, s.lessonChatEvent, kv(k, v)) } : null; });
+  // Kalenderförslag i arkivsvaret ("Fråga ditt arkiv") — samma box som i
+  // lektionsoverlayen men byggt ur arkivfrågan i stället för lektionens metadata.
+  function proposeAskEvent(q) {
+    q = (q || S.askQ || '').trim();
+    var days = evDays();
+    setState({ askEvent: {
+      title: 'Uppföljning: ' + (q.length > 52 ? q.slice(0, 52).trim() + '…' : (q || 'arkivfråga')),
+      when: days[2].label + ' · 08:00',
+      desc: q ? 'Utifrån arkivfrågan ”' + q + '”.' : '',
+      added: false, busy: false,
+    }, evPick: null });
+    if (S.calConnected === null) loadCalStatus();
   }
-  function toggleEvPick() { setState(function (s) { return { evPick: s.evPick ? null : 'lesson' }; }); }
-  function pickEvPart(part, val) {
-    var ev = S.lessonChatEvent; if (!ev) return;
+  // Förslaget finns på två ställen: lektionsoverlayen ('lesson' → lessonChatEvent)
+  // och arkivsvaret ('ask' → askEvent). Samma box, samma hjälpare.
+  var _EVKEY = { lesson: 'lessonChatEvent', ask: 'askEvent' };
+  function setEvField(which, k, v) {
+    var key = _EVKEY[which];
+    setState(function (s) { return s[key] ? kv(key, Object.assign({}, s[key], kv(k, v))) : null; });
+  }
+  function toggleEvPick(which) { setState(function (s) { return { evPick: s.evPick === which ? null : which }; }); }
+  function pickEvPart(which, part, val) {
+    var ev = S[_EVKEY[which]]; if (!ev) return;
     var bits = (ev.when || ' · ').split(' · ');
     var when = (part === 'day' ? val : (bits[0] || '')) + ' · ' + (part === 'time' ? val : (bits[1] || '09:00'));
-    setLessonEvent('when', when);
+    setEvField(which, 'when', when);
     if (part === 'time') setState({ evPick: null });
   }
   // "dag mån · HH:MM" -> ISO-start för API:t (dagens etikett slås upp mot evDays()).
@@ -1594,24 +1630,52 @@
     var time = /^\d{2}:\d{2}$/.test(bits[1] || '') ? bits[1] : '08:00';
     return (day ? day.iso : new Date().toISOString().slice(0, 10)) + 'T' + time + ':00';
   }
-  function addLessonEvent() {
-    var ev = S.lessonChatEvent; if (!ev || ev.busy || ev.added) return;
-    setLessonEvent('busy', true);
+  function addEvent(which) {
+    var key = _EVKEY[which];
+    var ev = S[key]; if (!ev || ev.busy || ev.added) return;
+    setEvField(which, 'busy', true);
     fetch('/api/calendar/event', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ title: ev.title, start: _evWhenToStart(ev.when), description: ev.desc || '' })
     }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); }).then(function (res) {
-      if (res.ok) { setState(function (s) { return s.lessonChatEvent ? { lessonChatEvent: Object.assign({}, s.lessonChatEvent, { busy: false, added: true }) } : null; }); }
+      if (res.ok) { setState(function (s) { return s[key] ? kv(key, Object.assign({}, s[key], { busy: false, added: true })) : null; }); }
       else {
-        setLessonEvent('busy', false);
+        setEvField(which, 'busy', false);
         var msg = (res.j && res.j.error) || 'kunde inte skapa händelsen';
         setState({ toast: { title: 'Google Kalender', detail: msg, kind: 'error', done: false } });
         clearTimeout(_toastT2); _toastT2 = setTimeout(function () { setState({ toast: null }); }, 9000);
       }
-    }).catch(function () { setLessonEvent('busy', false); });
+    }).catch(function () { setEvField(which, 'busy', false); });
   }
-  function dismissLessonEvent() { setState({ lessonChatEvent: null, evPick: null }); }
-  function openDescModal() { clearTimeout(_descT); setState({ descModal: true, descModalClosing: false }); }
+  function dismissEvent(which) { setState(Object.assign({ evPick: null }, kv(_EVKEY[which], null))); }
+  function openDescModal(which) { clearTimeout(_descT); setState({ descModal: true, descModalClosing: false, descModalFor: which || 'lesson' }); }
+  // Vymodell för förslags-boxen (lessonEventBox) — delas av overlayen och arkivsvaret.
+  function evBoxVM(which, st) {
+    var ev = st[_EVKEY[which]];
+    return {
+      notAdded: !ev.added, added: ev.added, busy: ev.busy,
+      title: ev.title, when: ev.when, desc: ev.desc || '',
+      calKnown: st.calConnected !== null, calConnected: st.calConnected === true,
+      onConnect: startCalConnect,
+      setTitle: function (e) { setEvField(which, 'title', e.target.value); },
+      setDesc: function (e) { setEvField(which, 'desc', e.target.value); },
+      onAdd: function () { addEvent(which); },
+      onDismiss: function (e) { if (e) e.stopPropagation(); dismissEvent(which); },
+      onTitleKey: function (e) { if (e.key === 'Enter') { e.preventDefault(); addEvent(which); } },
+      descFocusRef: function (el) { if (el && !el._descBound) { el._descBound = true; el.addEventListener('focus', function () { el.blur(); openDescModal(which); }); } },
+      pickOpen: st.evPick === which,
+      onTogglePick: function (e) { if (e) e.stopPropagation(); toggleEvPick(which); },
+      dayOpts: evDays().map(function (d) {
+        return { key: d.label, label: d.label, pre: d.pre, hasPre: !!d.pre,
+                 curQ: (ev.when || '').indexOf(d.label) === 0 ? '1' : '',
+                 onPick: function (e) { if (e) e.stopPropagation(); pickEvPart(which, 'day', d.label); } };
+      }),
+      timeOpts: EV_TIMES.map(function (t2) {
+        return { key: t2, label: t2, curQ: (ev.when || '').slice(-5) === t2 ? '1' : '',
+                 onPick: function (e) { if (e) e.stopPropagation(); pickEvPart(which, 'time', t2); } };
+      }),
+    };
+  }
   function closeDescModal() {
     if (!S.descModal || S.descModalClosing) return;
     clearTimeout(_descT);
@@ -2288,6 +2352,9 @@
         setAskFollow: function (e) { setState({ askFollowInput: e.target.value }); },
         onAskFollowKey: function (e) { if (e.key === 'Enter') { e.preventDefault(); sendAskFollow(); } },
         sendAskFollow: sendAskFollow,
+        // Kalenderförslag i arkivsvaret — knapp + samma box som i overlayen
+        proposeAskCal: function (e) { if (e) e.stopPropagation(); if (!st.askEvent) proposeAskEvent(st.askQ); },
+        askEvent: st.askEvent ? evBoxVM('ask', st) : null,
         sources: (st.askSources || []).map(function (s2) {
           return { rec: s2.name || '(namnlös)',
                    sub: [s2.group, s2.course, s2.datum].filter(Boolean).join(' · '),
@@ -2561,39 +2628,15 @@
       ovAskSum: function () { sendLessonChat('Sammanfatta lektionen i tre punkter'); },
       ovAskStud: function () { sendLessonChat('Vilka elever nämns och varför?'); },
       ovAskRemind: function () { sendLessonChat('Skapa en läxpåminnelse utifrån lektionen'); },
-      proposeOvEvent: proposeLessonEvent,
-      ovEvent: st.lessonChatEvent ? (function () {
-        var ev = st.lessonChatEvent;
-        return {
-          notAdded: !ev.added, added: ev.added, busy: ev.busy,
-          title: ev.title, when: ev.when, desc: ev.desc || '',
-          calKnown: st.calConnected !== null, calConnected: st.calConnected === true,
-          onConnect: startCalConnect,
-          setTitle: function (e) { setLessonEvent('title', e.target.value); },
-          setDesc: function (e) { setLessonEvent('desc', e.target.value); },
-          onAdd: addLessonEvent,
-          onDismiss: function (e) { if (e) e.stopPropagation(); dismissLessonEvent(); },
-          onTitleKey: function (e) { if (e.key === 'Enter') { e.preventDefault(); addLessonEvent(); } },
-          descFocusRef: function (el) { if (el && !el._descBound) { el._descBound = true; el.addEventListener('focus', function () { el.blur(); openDescModal(); }); } },
-          pickOpen: st.evPick === 'lesson',
-          onTogglePick: function (e) { if (e) e.stopPropagation(); toggleEvPick(); },
-          dayOpts: evDays().map(function (d) {
-            return { key: d.label, label: d.label, pre: d.pre, hasPre: !!d.pre,
-                     curQ: (ev.when || '').indexOf(d.label) === 0 ? '1' : '',
-                     onPick: function (e) { if (e) e.stopPropagation(); pickEvPart('day', d.label); } };
-          }),
-          timeOpts: EV_TIMES.map(function (t2) {
-            return { key: t2, label: t2, curQ: (ev.when || '').slice(-5) === t2 ? '1' : '',
-                     onPick: function (e) { if (e) e.stopPropagation(); pickEvPart('time', t2); } };
-          }),
-        };
-      })() : null,
+      // Guardad: klick när ett förslag redan finns skriver inte över användarens ändringar.
+      proposeOvEvent: function () { if (!S.lessonChatEvent) proposeLessonEvent(); },
+      ovEvent: st.lessonChatEvent ? evBoxVM('lesson', st) : null,
       // Anteckningens inzoomade redigeringsmodal (design 14 juli)
       descModalOpen: !!st.descModal,
       descModalAnim: st.descModalClosing ? 'closing' : '',
       closeDescModal: closeDescModal,
-      descModalVal: (st.lessonChatEvent && st.lessonChatEvent.desc) || '',
-      setDescModalVal: function (e) { setLessonEvent('desc', e.target.value); },
+      descModalVal: ((st.descModalFor === 'ask' ? st.askEvent : st.lessonChatEvent) || {}).desc || '',
+      setDescModalVal: function (e) { setEvField(st.descModalFor === 'ask' ? 'ask' : 'lesson', 'desc', e.target.value); },
       lessonChatThread: {
         chatEmpty: st.lessonChat.length === 0,
         chatHasMsgs: st.lessonChat.length > 0,
@@ -3218,9 +3261,15 @@ function viewRecordings(v){
           </div>
           ` : '' }
           </div>
+          ${ v.askScan.askEvent ? `
+            <div data-click="${on(v.stop)}" style="margin-top:14px">${ lessonEventBox(v.askScan.askEvent) }</div>
+          ` : '' }
           ${ v.askScan.ansDone ? `
             <div style="display:flex;gap:9px;align-items:center;margin-top:12px">
               <input value="${esc(v.askScan.askFollowInput)}" data-input="${on(v.askScan.setAskFollow)}" data-keydown="${on(v.askScan.onAskFollowKey)}" data-click="${on(v.stop)}" aria-label="Ställ en följdfråga" placeholder="Ställ en följdfråga …" style="flex:1;min-width:0;background:var(--sunken);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:11px 13px;font-size:14.5px;font-family:inherit;outline:none">
+              ${ !v.askScan.askEvent ? `
+              <button data-click="${on(v.askScan.proposeAskCal)}" title="Skapa en kalenderhändelse utifrån svaret" style="flex:0 0 auto;display:inline-flex;align-items:center;gap:7px;background:var(--accent-weak);color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 40%,transparent);border-radius:10px;padding:11px 14px;font-size:13.5px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .15s" data-sh="background:color-mix(in srgb,var(--accent) 15%,transparent) !important"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="flex:0 0 auto"><rect x="2" y="3" width="12" height="11" rx="2"></rect><path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3M8 9v3M6.5 10.5h3"></path></svg>Kalenderhändelse</button>
+              ` : '' }
               <button data-click="${on(v.askScan.sendAskFollow)}" style="flex:0 0 auto;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:10px;padding:11px 18px;font-size:14.5px;font-weight:500;cursor:pointer;font-family:inherit;transition:background .15s">Skicka</button>
             </div>
           ` : '' }
@@ -3611,6 +3660,7 @@ function viewModals(v){ return `
           <div style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.06em;text-transform:uppercase;color:var(--ink-3);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(v.ovMeta)}</div>
         </div>
         <span style="flex:1"></span>
+        <button data-click="${on(v.proposeOvEvent)}" title="Föreslå en kalenderhändelse — justera och lägg till i Google Kalender" style="flex:0 0 auto;display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:9px;padding:8px 13px;font-size:12.5px;font-weight:500;cursor:pointer;font-family:inherit;transition:transform .14s cubic-bezier(.2,.8,.25,1),border-color .14s,background .14s,color .14s" data-sh="border-color:var(--line-2) !important;background:var(--sunken) !important;color:var(--ink) !important"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="flex:0 0 auto"><rect x="2" y="3" width="12" height="11" rx="2"></rect><path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3M8 9v3M6.5 10.5h3"></path></svg>Kalenderhändelse</button>
         ${ v.ovHasLesson ? `
         <button data-click="${on(v.onAnalyze)}" ${ v.ovAnalyzing ? 'disabled' : '' } title="Extrahera kalenderposter, åtgärder och svårigheter till Kommande och Terminstrender" style="flex:0 0 auto;display:inline-flex;align-items:center;gap:7px;background:var(--accent-weak);color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 38%,transparent);border-radius:9px;padding:8px 13px;font-size:12.5px;font-weight:600;cursor:${ v.ovAnalyzing ? 'default' : 'pointer' };font-family:inherit;opacity:${ v.ovAnalyzing ? '.6' : '1' };transition:transform .14s cubic-bezier(.2,.8,.25,1),border-color .14s,background .14s" data-sh="background:color-mix(in srgb,var(--accent) 15%,transparent) !important">${ v.ovAnalyzing ? `<span style="width:13px;height:13px;border-radius:50%;border:2px solid color-mix(in srgb,var(--accent) 35%,transparent);border-top-color:var(--accent);animation:spin .7s linear infinite;flex:0 0 auto"></span>Analyserar …` : `<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto"><path d="M8 1.8l1.4 3.6 3.6 1.4-3.6 1.4L8 11.8 6.6 8.2 3 6.8l3.6-1.4z"></path></svg>Analysera lektion` }</button>
         <button data-click="${on(v.onOvReport)}" ${ v.ovReportBusy ? 'disabled' : '' } title="Exportera rapport (öppnas i webbläsaren, skriv ut som PDF)" style="flex:0 0 auto;display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:9px;padding:8px 13px;font-size:12.5px;font-weight:500;cursor:${ v.ovReportBusy ? 'default' : 'pointer' };font-family:inherit;opacity:${ v.ovReportBusy ? '.6' : '1' };transition:transform .14s cubic-bezier(.2,.8,.25,1),border-color .14s,background .14s,color .14s" data-sh="border-color:var(--line-2) !important;background:var(--sunken) !important;color:var(--ink) !important"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto"><path d="M9 2H4.5A1.5 1.5 0 0 0 3 3.5v9A1.5 1.5 0 0 0 4.5 14h7A1.5 1.5 0 0 0 13 12.5V6z"></path><path d="M9 2v4h4M6 9h4M6 11.2h4"></path></svg>${ v.ovReportBusy ? 'Exporterar …' : 'Rapport' }</button>
