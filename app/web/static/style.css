@@ -311,6 +311,54 @@ button[data-textbtn]:not(:disabled):hover{background:transparent !important;colo
 [data-pop]{transform-origin:top left;animation:ml-popin .2s cubic-bezier(.16,1,.3,1) both}
 [data-pop="closing"]{animation:ml-popout .19s ease both;pointer-events:none}
 
+/* ============================================================
+   14 JULI-OMDESIGNEN — arkivsvarets zoom + källpanel + följdfrågor
+   och lektionsoverlayns sidopanel (från design-system/styles.css).
+   ============================================================ */
+/* Token-stream + kvitto-pop */
+@keyframes tokIn{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
+@keyframes okPop{from{opacity:0;transform:scale(.55)}to{opacity:1;transform:scale(1)}}
+/* Citat-chip i arkivsvaret togglar sin källa (öppen = accentfylld) */
+[data-copen="open"]{background:var(--accent-weak) !important;border-color:var(--accent) !important}
+/* Expanderade käll-rader: aktuell rad lyser upp */
+[data-ansrow="cur"]{background:color-mix(in srgb,var(--accent-weak) 70%,var(--surface))}
+[data-ansrow="cur"] span:first-child{color:var(--accent) !important;font-weight:700}
+[data-ansrow="cur"] span:last-child{color:var(--ink) !important}
+/* Sidopanel (lektionsoverlayns chatt) glider in från höger */
+@keyframes sideIn{from{opacity:0;transform:translateX(36px)}to{opacity:1;transform:none}}
+@keyframes sideOut{from{opacity:1;transform:none}to{opacity:0;transform:translateX(36px)}}
+[data-side]{animation:sideIn .38s cubic-bezier(.22,1,.36,1) both}
+[data-side="closing"]{animation:sideOut .3s ease both;pointer-events:none}
+/* Anteckningsfältet i kalenderförslaget: kompakt, öppnas i modal vid fokus */
+textarea[data-desc]{height:64px;resize:none;overflow:hidden;transition:height .25s cubic-bezier(.22,1,.36,1);scrollbar-width:none;cursor:pointer}
+textarea[data-desc]::-webkit-scrollbar{display:none}
+textarea[data-desc="open"]{height:190px;overflow:auto}
+/* rotating chevron for collapsible boxes */
+svg[data-rot]{transition:transform .22s cubic-bezier(.22,1,.36,1)}
+svg[data-rot="open"]{transform:rotate(180deg)}
+/* SVAR-kortet zoomar till modal (data-askwrap är fullskärms-backdropen).
+   När zoomen är öppen släcks ancestor-animationer (fadeup/tabin med
+   fill-mode both skapar permanenta stacking contexts som fångar wrapperns
+   z-index) — slutläget är opacity:1/transform:none så inget ändras visuellt. */
+[data-askzoom]{transition:box-shadow .2s}
+[data-askzoom=""]:hover{box-shadow:var(--shadow)}
+[data-askwrap=""]{display:contents}
+div:has([data-askwrap="on"]),div:has([data-askwrap="closing"]){animation:none !important}
+[data-askwrap="on"],[data-askwrap="closing"]{position:fixed;inset:0;z-index:88;background:color-mix(in srgb,var(--ink) 28%,transparent);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);display:flex;align-items:center;justify-content:center;padding:28px}
+[data-askwrap="on"]{animation:modalBackIn .3s ease both}
+[data-askwrap="closing"]{animation:modalBackOut .3s ease both;pointer-events:none}
+[data-askzoom="on"]{width:min(1060px,94vw);max-height:88vh;overflow:auto;scrollbar-width:none;margin:0 !important;border-color:var(--ink);box-shadow:var(--shadow);animation:modalCardIn .44s cubic-bezier(.22,1,.36,1) both !important;cursor:default}
+[data-askzoom="on"]::-webkit-scrollbar{display:none}
+[data-askzoom="closing"]{width:min(1060px,94vw);max-height:88vh;overflow:auto;margin:0 !important;animation:modalCardOut .34s ease both !important;pointer-events:none}
+/* Kalenderboxen blinkar till när AI:n uppdaterat förslaget */
+@keyframes calFlash{0%{background:var(--accent-weak);border-color:var(--accent)}100%{background:var(--sunken)}}
+[data-calflash="on"]{animation:calFlash 1.1s ease both}
+@media (prefers-reduced-motion:reduce){
+  [data-side]{animation-duration:.01ms !important}
+  [data-side="closing"]{animation-duration:.01ms !important}
+  [data-askzoom="on"],[data-askzoom="closing"]{animation:modalBackIn .26s ease both !important}
+}
+
 @media (prefers-reduced-motion:reduce){
   .zoomstage .zoomcard{transition:transform .5s cubic-bezier(.16,1,.3,1),box-shadow .5s,opacity .5s !important}
   .zoomstage .zoomcard:hover{transform:translateY(-5px) scale(1.06) !important}
