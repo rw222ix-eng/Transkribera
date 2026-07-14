@@ -26,12 +26,11 @@ test("transcribe a picked file produces a result and a history entry", async ({ 
   await expect(startBtn).toBeVisible();
   await startBtn.click();
 
-  // Faked SSE finishes fast; the result transcript shows a faked segment.
-  await expect(page.getByText("bråk och procent")).toBeVisible({ timeout: 20000 });
-
-  // The merged Inspelningar view shows a new entry for the sample.
-  await page.getByRole("button", { name: "Inspelningar", exact: true }).first().click();
-  await expect(page.getByText("Mamma waw isolerad").first()).toBeVisible({ timeout: 10000 });
+  // Fire-and-forget: när fejk-SSE:n är klar visar wizarden Klart-raden och
+  // öppnar sedan Inspelningar automatiskt, där kortet för inspelningen ligger.
+  await expect(page.getByText(/Sparade? i Inspelningar/).first()).toBeVisible({ timeout: 25000 });
+  // Fejkservern AI-namnger inspelningen utifrån transkriptet.
+  await expect(page.getByText("Bråk och procent — introduktion").first()).toBeVisible({ timeout: 10000 });
 
   expect(errors, errors.join("\n")).toEqual([]);
 });

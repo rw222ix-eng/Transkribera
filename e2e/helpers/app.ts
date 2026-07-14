@@ -47,7 +47,11 @@ export async function transcribeSample(page: Page) {
   await expect(page.getByText("Mamma waw isolerad").first()).toBeVisible({ timeout: 8000 });
   await expect(page.getByText("KB-Whisper large (sv)")).toBeVisible({ timeout: 15000 });
   await page.getByRole("button", { name: /Starta/ }).click();
-  await expect(page.getByText("bråk och procent")).toBeVisible({ timeout: 20000 });
+  // Fire-and-forget (design 14 juli): wizarden öppnar Inspelningar själv när
+  // transkriberingen är klar — vänta in toasten och lektionskortet.
+  await expect(page.getByText(/Sparade? i Inspelningar/).first()).toBeVisible({ timeout: 25000 });
+  // Fejkservern AI-namnger inspelningen utifrån transkriptet.
+  await expect(page.getByText("Bråk och procent — introduktion").first()).toBeVisible({ timeout: 10000 });
 }
 
 export { test, expect };

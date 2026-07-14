@@ -2553,7 +2553,8 @@
         return { t: seg.time, txt: seg.text, hit: hit, norm: !hit };
       }),
       ovHasHit: !!st.lessonChatHitT, ovHitT: st.lessonChatHitT || '',
-      ovOpenFull: function () { openLesson({ history_id: st.lessonChatId }); },
+      // Stäng overlayn först — transkriptmodalen (z 100) ligger annars under overlayn (z 120).
+      ovOpenFull: function () { var hid = st.lessonChatId; closeLessonChat(); openLesson({ history_id: hid }); },
       ovHasLesson: !!(st.lessonChatMeta && st.lessonChatMeta.lessonId),
       ovAnalyzing: st.ovAnalyzing, onAnalyze: analyzeLesson,
       ovReportBusy: st.ovReportBusy, onOvReport: exportLessonReport,
