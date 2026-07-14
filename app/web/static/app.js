@@ -41,14 +41,7 @@
     dispProgress: 0,    // mjukt animerat visningsvärde — rör sig alltid framåt, aldrig bakåt
     elapsed: 0,
     log: [],
-    pp: 'idle',
-    ppOp: 'clean',
-    ppModel: 'Qwen3 14B (Q8_0)',   // fast intern LLM för korrektur + chatt
-    ppOut: '',
-    ppPct: 0,
-    ppEnabled: false,
-    chatThink: false,           // Qwen3 "tänk djupare" — bara i lektionschatten, default av
-    chatAttach: [],
+    ppModel: 'Qwen3 14B (Q8_0)',   // fast intern LLM för chatt/analys
     // Per-lektion chattmodal (Chatta-knapp på inspelnings-kortet) — egen isolerad chatt
     lessonChatId: null,         // öppen lektions history-id (även "overlay öppen"-flagga)
     lessonChatName: '',
@@ -83,8 +76,6 @@
     transcriptOpen: false,
     logOpen: false,
     logExpand: false,           // vikbar logg i statuskortet (design: Visa/Dölj)
-    cleanText: null,            // senaste korrekturlästa transkriptet (behålls även om annan pp körs)
-    cleanModalOpen: false,      // KORREKTURLÄST-modalen med markerade rättelser
     toast: null,
     searchQuery: '',
     currentMatch: 0,
@@ -149,15 +140,15 @@
   };
 
   /* instance (non-state) fields */
-  var _t, _pp, _ppIv, _chat, _au, _toastIv, _toastT2, _glideRAF, _progRAF, _disp, _lastStart, _runToken = 0;
+  var _t, _finishT, _chat, _au, _toastIv, _toastT2, _glideRAF, _progRAF, _disp, _lastStart, _runToken = 0;
   var _fltTimer = null, _scanTimer = null, _askRun = 0;
   var _dl = {}, _inst = {}, _editBuf = {}, _wave = null;
-  var _file, _seek, _searchRef, _scrollRef, _procScroll, _imgInput, _media, _clientFile;
+  var _file, _seek, _searchRef, _scrollRef, _procScroll, _media, _clientFile;
   var _rec = null, _recChunks = [], _recStream = null, _recTimer = null;
   var _recMarkers = [], _recMarkersByPath = {};   // live-markörer under inspelning
   var _recSession = null, _recUploadChain = null; // inkrementell flush till disk
   var _recAudioCtx = null, _recAnalyser = null, _recLevelTimer = null, _recSilenceSecs = 0;
-  var _prevTab, _prevStep, _prevRun, _prevPP, _prevOp, _wasEditing, _wasOpen, _scrollKey, _wasModal;
+  var _prevTab, _prevStep, _wasEditing, _wasOpen, _scrollKey, _wasModal;
 
   /* ----------------------------------------------------------------- data -- */
   // Catalogs are `let` so loadModels() can reassign them to real data from /api/models;
@@ -209,7 +200,16 @@
       { id: 'x', drive: 'X:', name: 'Extern · USB-C SSD', total: 4096, free: 3720 },
     ],
   };
-  var STEPS = ['Förbereder', 'Extraherar ljud', 'Transkriberar', 'Färdigställer'];
+  // Korrekturpasset (Gemma 3n mot ljudet) körs i serverns pipeline och tar
+  // 60–90 %-bandet av progressen när ljudmodellen finns — då visas det som ett
+  // eget steg. Utan korrektur äger transkriberingen 0–90 % som förut.
+  function willCorrect() { return !!(S.audioCorrect && S.audioModelInstalled); }
+  function stageNames() {
+    return willCorrect()
+      ? ['Förbereder', 'Extraherar ljud', 'Transkriberar', 'Korrekturläser', 'Färdigställer']
+      : ['Förbereder', 'Extraherar ljud', 'Transkriberar', 'Färdigställer'];
+  }
+  function stageBounds() { return willCorrect() ? [0, 12, 28, 60, 92, 100] : [0, 12, 28, 92, 100]; }
   var AUDIO_DUR = 150;
   var ALLOWED = ['mp4', 'mkv', 'mov', 'webm', 'avi', 'm4v', 'mp3', 'wav', 'm4a', 'flac', 'aac', 'ogg', 'opus', 'wma'];
   /* -------------------------------------------------------------- helpers -- */
@@ -684,9 +684,9 @@
   }
 
   function restart() {
-    clearInterval(_t); clearTimeout(_pp); clearInterval(_ppIv); clearTimeout(_chat); clearInterval(_au);
+    clearInterval(_t); clearTimeout(_finishT); clearTimeout(_chat); clearInterval(_au);
     Object.values(_dl || {}).forEach(clearInterval);
-    setState({ source: '', queue: [], qStatus: {}, qProgress: {}, activeId: null, fileError: '', step: 'source', run: 'idle', progress: 0, elapsed: 0, log: [], pp: 'idle', ppOp: 'summary', ppOut: '', ppEnabled: false, chatThink: false, chatAttach: [], openDD: null, transcriptOpen: false, runError: null, editing: false, edits: {}, edited: false, audioPlaying: false, audioT: 0, audioDur: 0, mediaUrl: null, runMedia: null, histViewing: null, resultId: null, transcriptRaw: null, logExpand: false, cleanText: null, cleanModalOpen: false });
+    setState({ source: '', queue: [], qStatus: {}, qProgress: {}, activeId: null, fileError: '', step: 'source', run: 'idle', progress: 0, elapsed: 0, log: [], openDD: null, transcriptOpen: false, runError: null, editing: false, edits: {}, edited: false, audioPlaying: false, audioT: 0, audioDur: 0, mediaUrl: null, runMedia: null, histViewing: null, resultId: null, transcriptRaw: null, logExpand: false });
   }
   function onSearch(e) { setState({ search: e.target.value }); }
   function toggleFmt(f) { setState(function (s) { var formats = Object.assign({}, s.formats); formats[f] = !formats[f]; return { formats: formats }; }); }
@@ -710,10 +710,8 @@
       }
     });
   }
-  function pickOp(o) { setState({ ppOp: o, pp: 'idle', ppOut: '' }); }
   // Qwen3 "thinking": off by default (fast, no English chain-of-thought leak); on only
   // for hard multi-step chat questions. Correction/summary never think.
-  function toggleChatThink() { setState(function (s) { return { chatThink: !s.chatThink }; }); }
   // Bygger renderbara chatt-meddelanden (bubblor + källförankrade citat/källpanel).
   // Delas av resultatvyns "Fråga om lektionen" och per-lektion-chattmodalen.
   function buildChatMessages(messages, segs, citeSel, onCite) {
@@ -1201,10 +1199,6 @@
   // BACKEND: start()/_runActive() simulate transcription; replace with /api/transcribe SSE (streamPost).
   function start() {
     if (S.run === 'running') return;
-    // Korrekturen (auto efter förra körningen) håller GPU-låset — startar vi nu
-    // avvisar arbitern jobbet med 409 och körningen felar direkt. Vänta tills den
-    // är klar; knappen är blockerad under tiden (startReady/startBtnLabel nedan).
-    if (S.pp === 'running') return;
     if (!S.queue.length) return;
     // Modellkatalogen (/api/models) inte klar än — vänta hellre än att skicka
     // det stale prototyp-id:t som servern avvisar med 400.
@@ -1241,13 +1235,13 @@
   // BACKEND: real transcription via /api/transcribe SSE (one request per queue item).
   function _runActive() {
     if (S.run === 'running') return;
-    clearInterval(_t); clearInterval(_ppIv);   // stoppa ev. korrektur-progress från förra körningen
+    clearInterval(_t); clearTimeout(_finishT);
     var active = S.queue.find(function (q) { return q.id === S.activeId; });
     if (!active) return;
     var token = ++_runToken;
     var src = baseNameOf(active.name);
     setState({
-      run: 'running', step: 'process', progress: 0, dispProgress: 0, elapsed: 0, pp: 'idle', ppOp: 'clean', ppOut: '', cleanText: null,
+      run: 'running', step: 'process', progress: 0, dispProgress: 0, elapsed: 0,
       runError: null, transcript: null, resultFilesReal: null,
       source: active.name,
       qStatus: Object.assign({}, S.qStatus, kv(active.id, 'running')),
@@ -1294,7 +1288,7 @@
       });
   }
   function cancelRun() {
-    _runToken++; clearInterval(_t);
+    _runToken++; clearInterval(_t); clearTimeout(_finishT);
     // Faktiskt avbryta jobbet på servern (avslutar subprocessen och frigör GPU:n),
     // inte bara sluta lyssna på strömmen.
     fetch('/api/transcribe/cancel', { method: 'POST' }).catch(function () {});
@@ -1309,10 +1303,8 @@
   // Frame: det glider mjukt fram mot serverns värde och "läcker" långsamt framåt
   // inom det aktiva steget mellan händelser så baren/procenten aldrig fryser.
   // Monotont — det backar aldrig och når 100 % först vid 'done'.
-  // Fasgränser för stegen (Förbereder…Färdigställer) — delas av progress-rAF:en
-  // och stegvyn nedan så indelningen bara finns på ETT ställe.
-  var STEP_BOUNDS = [0, 12, 28, 92, 100];
-  var PHASE_HI = STEP_BOUNDS.slice(1);     // övre gräns per steg
+  // Fasgränserna för stegen (Förbereder…Färdigställer) kommer från stageBounds()
+  // — samma indelning driver progress-rAF:en och stegvyn.
   function _progFrame() {
     _progRAF = 0;
     var run = S.run;
@@ -1322,8 +1314,9 @@
       _disp += (100 - _disp) * 0.16;                            // glid sista biten upp till 100
       if (_disp > 99.8) _disp = 100;
     } else {
-      var ph = 0; while (ph < 3 && real >= STEP_BOUNDS[ph + 1]) ph++;
-      var ceil = PHASE_HI[ph] - 0.5;                            // stanna inom aktuellt steg
+      var B = stageBounds();
+      var ph = 0; while (ph < B.length - 2 && real >= B[ph + 1]) ph++;
+      var ceil = B[ph + 1] - 0.5;                               // stanna inom aktuellt steg
       if (real > _disp) _disp += (Math.min(real, 99) - _disp) * 0.12;   // hinn ikapp servern
       else if (_disp < ceil) _disp += (ceil - _disp) * 0.012;           // långsam framåtläckage
       if (_disp > 99) _disp = 99;
@@ -1334,79 +1327,25 @@
   }
   function _startProgress() { _disp = S.dispProgress || 0; if (!_progRAF) _progRAF = requestAnimationFrame(_progFrame); }
 
-  // BACKEND: real LLM post-process via /api/postprocess SSE token stream (Ollama).
-  function runPP() {
-    if (S.pp === 'running') return;
-    clearTimeout(_pp); clearInterval(_ppIv);
-    // Korrektur-strömmen hör till den AKTUELLA körningen. Startar en ny körning
-    // (som ökar _runToken) medan denna strömmar, ignoreras den gamla strömmens
-    // events — annars skrevs förra inspelningens ppOut/cleanText in i den nya
-    // körningens state. _runActive rensar dessutom _ppIv-intervallet.
-    var token = _runToken;
-    setState({ pp: 'running', ppPct: 0, ppOut: '' });
-    _ppIv = setInterval(function () { setState(function (s) { return { ppPct: Math.min(95, (s.ppPct || 0) + (3 + Math.random() * 5)) }; }); }, 200);
-    var op = 'cleanup';
-    var text = getTranscript().map(function (l) { return l.text; }).join(' ');
-    var acc = '';
-    streamPost('/api/postprocess', { operation: op, transcript: text, model: S.ppModel }, function (ev) {
-      if (token !== _runToken) return;   // en ny körning har startat — släpp den gamla strömmen
-      if (ev.type === 'token') { acc += ev.text; setState({ ppOut: acc }); }
-      else if (ev.type === 'error') { clearInterval(_ppIv); setState({ pp: 'done', ppPct: 100, ppOut: acc || ('Fel: ' + (ev.message || 'okänt')) }); }
-      else if (ev.type === 'done') {
-        clearInterval(_ppIv); var r = ev.result || {}; var out = r.text || acc;
-        setState({ pp: 'done', ppPct: 100, ppOut: out });
-        // Korrekturläst text behålls separat — chatten arbetar vidare på den
-        // och kortet kan visa rättelserna även om en annan pp körs efteråt.
-        if (out && S.ppOp === 'clean') setState({ cleanText: out });
-      }
-    });
-  }
-  function runCleanNow() { if (S.pp === 'running') return; setState({ ppOp: 'clean' }); runPP(); }
   function toggleLogExpand() { setState(function (s) { return { logExpand: !s.logExpand }; }); }
-  function openCleanModal() { setState({ cleanModalOpen: true }); }
-  function closeCleanModal() { setState({ cleanModalOpen: false }); }
 
-  // Ord-diff original -> korrekturläst (design: markera rättelser i texten).
-  // Greedy tvåpekar-jämförelse med resynk-fönster — klarar långa transkript
-  // utan kvadratisk LCS. Ord vars normaliserade form finns kvar men vars
-  // skiljetecken/skiftläge ändrats markeras också (språk & skiljetecken).
-  function _normWord(w) { return w.toLowerCase().replace(/[.,!?;:"'»«…()\-–—]+/g, ''); }
-  function diffWords(origText, cleanedText) {
-    var A = (origText || '').split(/\s+/).filter(Boolean);
-    var B = (cleanedText || '').split(/\s+/).filter(Boolean);
-    var out = [], i = 0, j = 0, W = 14;
-    while (j < B.length) {
-      if (i < A.length && _normWord(A[i]) === _normWord(B[j])) {
-        out.push({ s: B[j], ch: A[i] !== B[j] });
-        i++; j++; continue;
-      }
-      // resynk: hitta närmaste matchning inom fönstret
-      var bi = -1, bj = -1, best = W * 2 + 1;
-      for (var dj = 0; dj <= W && j + dj < B.length; dj++) {
-        for (var di = 0; di <= W && i + di < A.length; di++) {
-          if (di + dj < best && _normWord(A[i + di]) === _normWord(B[j + dj])) { best = di + dj; bi = di; bj = dj; }
-        }
-      }
-      if (bi < 0) { out.push({ s: B[j], ch: true }); j++; i++; continue; }
-      for (var k = 0; k < bj; k++) { out.push({ s: B[j + k], ch: true }); }
-      i += bi; j += bj;
-    }
-    return out;
+  // Fire-and-forget (design 14 juli): korrekturen körs i serverns pipeline, så
+  // när sista filen är klar visas en kort "Klart"-rad och sedan öppnas
+  // Inspelningar där lektionen redan ligger sparad. Wizarden nollställs.
+  function afterDone() {
+    clearTimeout(_finishT);
+    _finishT = setTimeout(finishTranscribe, 1600);
   }
-  var _diffMemo = { key: null, parts: null };
-  function cleanDiffParts() {
-    if (!S.cleanText) return [];
-    var key = S.cleanText.length + ':' + S.cleanText.slice(0, 40);
-    if (_diffMemo.key !== key) {
-      var orig = getTranscript().map(function (l) { return l.text; }).join(' ');
-      _diffMemo = { key: key, parts: diffWords(orig, S.cleanText) };
-    }
-    return _diffMemo.parts;
+  function finishTranscribe() {
+    _finishT = null;
+    var n = S.queue.filter(function (q) { return S.qStatus[q.id] === 'done'; }).length;
+    var corrected = willCorrect();
+    restart();
+    setTab('recordings');
+    clearInterval(_toastIv); clearTimeout(_toastT2);
+    setState({ toast: { title: n > 1 ? (n + ' filer transkriberade') : (corrected ? 'Transkriberad och korrekturläst' : 'Transkriberad'), name: n > 1 ? 'Sparade i Inspelningar' : 'Sparad i Inspelningar', done: true } });
+    _toastT2 = setTimeout(function () { setState({ toast: null }); }, 4200);
   }
-  function togglePPEnabled() { var next = !S.ppEnabled; setState({ ppEnabled: next }); if (next && S.run === 'done' && S.ppOp !== 'chat') runPP(); }
-  // Korrekturläsningen är inget val — den startar tyst och automatiskt så fort
-  // transkriberingen är klar, sömlöst i bakgrunden (låser sedan upp chatten).
-  function afterDone() { if (S.pp !== 'running') { setState({ ppOp: 'clean' }); runPP(); } }
 
   // ---- Lektionsoverlay (fullskärm): transkript + samma källförankrade chatt
   // men mot EN lektions transkript, isolerat från resultatvyns chatt. ---------
@@ -1430,26 +1369,6 @@
     }).catch(function () {});
   }
   function closeLessonChat() { setState({ lessonChatId: null, lessonChat: [], lessonChatInput: '', lessonChatCiteSel: null, lessonChatMeta: null, lessonChatHitT: null, lessonChatEvent: null, evPick: null }); }
-  // Resultatvyn chattar inte inline längre. Den här knappen byter till fliken
-  // Inspelningar och öppnar chatten för just den här inspelningen — precis som
-  // att klicka sig in på inspelningen och trycka "Chatta" där.
-  function chatAboutResult() {
-    var hid = S.resultId;
-    if (!hid) return;
-    // Slå upp den riktiga lektionsposten (den bär lesson-id:t) så chatten får
-    // med "Analysera lektion"/"Rapport" — annars saknades de fast lektionen fanns
-    // i DB. Faller tillbaka på history-/filnamnsposten om listan inte är laddad.
-    var lesson = (S.lessons || []).find(function (x) { return x.history_id === hid; });
-    if (!lesson) {
-      var h = (S.history || []).find(function (x) { return x.id === hid; });
-      lesson = h
-        ? { history_id: h.id, name: h.name, date: h.date || (h.ts || '').slice(0, 10),
-            dur: h.dur, model: h.model, lang: h.lang, group: h.group || '', course: h.course || '' }
-        : { history_id: hid, name: baseName() };
-    }
-    setTab('recordings');       // byt till Inspelningar (laddar om lektionslistan)
-    openLessonChat(lesson);     // öppna lektionschatten för inspelningen
-  }
   // Analysera lektion + Rapport bor i overlayens header sedan Insikter-panelen
   // togs bort med kartotek-omdesignen — extraktionen matar Kommande/Inför
   // nästa lektion/Terminstrender, rapporten öppnas i webbläsaren.
@@ -1732,13 +1651,6 @@
   }
   function closeToast() { clearInterval(_toastIv); clearTimeout(_toastT2); setState({ toast: null }); }
 
-  function openTranscript() {
-    setState({
-      transcriptOpen: true, histViewing: null,
-      mediaUrl: S.runMedia ? ('/api/media?path=' + encodeURIComponent(S.runMedia)) : null,
-      audioT: 0, audioDur: 0, audioPlaying: false,
-    });
-  }
   function closeTranscript() { if (S.editing) { _commitEdits(); saveTranscriptEdits(); } if (_media) { try { _media.pause(); } catch (e) {} } clearInterval(_au); setState({ transcriptOpen: false, editing: false, audioPlaying: false }); }
   function openLog() { setState({ logOpen: true }); }
   function closeLog() { setState({ logOpen: false }); }
@@ -1814,20 +1726,22 @@
     var good = items.filter(function (it) { return isMedia(it.name) || /^https?:/i.test(it.path || ''); });
     var skipped = items.length - good.length;
     if (!good.length) { setState({ fileError: 'Filformatet stöds inte — välj ljud eller video (MP4, MKV, MOV, MP3, WAV, M4A …).', dragging: false }); return; }
+    var dupes = 0;
     setState(function (s) {
       var existing = new Set(s.queue.map(function (q) { return q.path || q.name; }));
       var adds = good.filter(function (g) { return !existing.has(g.path || g.name); })
         .map(function (g, k) { return { id: 'q' + Date.now() + '_' + k, name: g.name, path: g.path || g.name }; });
+      dupes = good.length - adds.length;
       var queue = s.queue.concat(adds);
       var activeId = s.activeId || (queue[0] && queue[0].id) || null;
       return { queue: queue, dragging: false, step: 'config', activeId: activeId, source: qName(queue, activeId) || s.source, fileError: skipped ? ('Hoppade över ' + skipped + ' fil(er) — formatet stöds inte.') : '' };
     });
-  }
-
-  function saveResult(f) {
-    var api = window.pywebview && window.pywebview.api;
-    if (api && api.save_file) { try { api.save_file(f.name, f.path); } catch (e) {} }
-    downloadFile(f.name, f.size);   // toast confirmation
+    // Design (14 juli): filer som redan låg i kön filtreras tyst bort — berätta det.
+    if (dupes) {
+      clearInterval(_toastIv); clearTimeout(_toastT2);
+      setState({ toast: { title: dupes === 1 ? '1 fil låg redan i kön' : dupes + ' filer låg redan i kön', name: '', done: true } });
+      _toastT2 = setTimeout(function () { setState({ toast: null }); }, 3200);
+    }
   }
 
   /* --------------------------------------------------------- side-effects -- */
@@ -1863,13 +1777,6 @@
     var step = function (now) { var p = Math.min(1, (now - t0) / duration); window.scrollTo(0, start + dist * ease(p)); if (p < 1) _glideRAF = requestAnimationFrame(step); };
     _glideRAF = requestAnimationFrame(step);
   }
-  function smoothScrollProc(sel) { setTimeout(function () { var el = document.querySelector(sel); if (!el) return; var y = el.getBoundingClientRect().top + window.scrollY - 92; glideTo(Math.max(0, y), 720); }, 70); }
-  function playResultsIn() {
-    requestAnimationFrame(function () { requestAnimationFrame(function () {
-      var items = Array.prototype.slice.call(document.querySelectorAll('[data-pane="process"] [data-reveal]'));
-      items.forEach(function (el, i) { if (!el.animate) return; try { el.animate([{ opacity: 0, transform: 'translateY(24px) scale(0.985)', filter: 'blur(7px)' }, { opacity: 1, transform: 'translateY(0) scale(1)', filter: 'blur(0)' }], { duration: 640, delay: i * 95, easing: 'cubic-bezier(.16,1,.3,1)', fill: 'backwards' }); } catch (e) {} });
-    }); });
-  }
 
   function applySideEffects() {
     syncTheme();
@@ -1901,14 +1808,6 @@
         _scrollKey = key;
       }
     }
-    if (S.step === 'process') {
-      var run = S.run, pp = S.pp, op = S.ppOp;
-      if (run === 'done' && _prevRun !== 'done') { playResultsIn(); smoothScrollProc('[data-sec="results"]'); }
-      else if (pp !== _prevPP && pp !== 'idle') smoothScrollProc('[data-sec="ppout"]');
-      _prevRun = run; _prevPP = pp; _prevOp = op;
-    } else {
-      _prevRun = S.run; _prevPP = S.pp; _prevOp = S.ppOp;
-    }
   }
 
   function onKeyDown(e) {
@@ -1933,7 +1832,6 @@
       closeLessonChat(); return;
     }
     if (S.logOpen && e.key === 'Escape') { closeLog(); return; }
-    if (S.cleanModalOpen && e.key === 'Escape') { closeCleanModal(); return; }
     if (S.filterOpen && e.key === 'Escape') { setState({ filterOpen: null, filterClosing: false }); return; }
     if (e.key === 'Escape' && S.tab === 'recordings' && S.searchMode === 'ask' && (S.asking || S.askAnswer)) { clearSearch(); return; }
     if (!S.transcriptOpen) return;
@@ -1950,7 +1848,9 @@
     // serverhoppen — så de växer kontinuerligt. dispProgress ligger aldrig före
     // servern över en stegräns, så det aktiva steget förblir ärligt.
     var prog = isDone ? 100 : Math.max(0, Math.min(100, st.dispProgress || 0));
-    var cur = isDone ? STEPS.length : (prog < 12 ? 0 : prog < 28 ? 1 : prog < 92 ? 2 : 3);
+    var STAGES = stageNames(), BOUNDS = stageBounds();
+    var cur = STAGES.length;
+    if (!isDone) { cur = 0; while (cur < STAGES.length - 1 && prog >= BOUNDS[cur + 1]) cur++; }
 
     var installedWhisper = WHISPER.filter(function (m) { return st.installed[m.id]; });
     var rankedInstalled = rankModels(installedWhisper, 'whisper');
@@ -1985,8 +1885,8 @@
     var subtitleOptions = [['separate', 'Spara separat'], ['embed', 'Bädda in']].map(function (p) { return { label: p[1], active: st.subtitleMode === p[0], style: segBtn(st.subtitleMode === p[0], '34px'), onPick: function () { setState({ subtitleMode: p[0] }); } }; });
     var embedOptions = [['soft', 'Mjukt sub-spår'], ['burn', 'Hård inbränning']].map(function (p) { return { label: p[1], active: st.embedKind === p[0], style: segBtn(st.embedKind === p[0], '34px'), onPick: function () { setState({ embedKind: p[0] }); } }; });
 
-    var PHASE_LO2 = STEP_BOUNDS.slice(0, 4), PHASE_HI2 = STEP_BOUNDS.slice(1);
-    var steps = STEPS.map(function (label, idx) {
+    var PHASE_LO2 = BOUNDS.slice(0, BOUNDS.length - 1), PHASE_HI2 = BOUNDS.slice(1);
+    var steps = STAGES.map(function (label, idx) {
       var done = idx < cur, active = idx === cur && !isDone;
       // Aktivt steg fylls proportionellt mot hur långt prog kommit i just det
       // steget → baren växer mjukt och kontinuerligt istället för att blinka helt.
@@ -2002,14 +1902,10 @@
     });
 
     var base = baseName();
-    var fmtMeta = { srt: ['SRT', '38 KB'], txt: ['TXT', '21 KB'], vtt: ['VTT', '40 KB'] };
-    var resultFiles = (st.resultFilesReal && st.resultFilesReal.length)
-      ? st.resultFilesReal.map(function (f) { return { type: (f.ext || '').toUpperCase(), name: f.name, size: f.size, onDownload: function () { saveResult(f); } }; })
-      : ['srt', 'txt', 'vtt'].filter(function (f) { return st.formats[f]; }).map(function (f) { return { type: fmtMeta[f][0], name: base + '.' + f, size: fmtMeta[f][1], onDownload: function () { downloadFile(base + '.' + f, fmtMeta[f][1]); } }; });
 
     var hw = hardwareView();
     var stepOrder = ['source', 'config', 'process'];
-    var stepDefs = [['source', 'Källa'], ['config', 'Inställningar'], ['process', 'Resultat']];
+    var stepDefs = [['source', 'Källa'], ['config', 'Inställningar'], ['process', 'Transkribering']];
     var curStepIdx = stepOrder.indexOf(st.step);
     var stepItems = stepDefs.map(function (p, i) {
       var state = i < curStepIdx ? 'done' : i === curStepIdx ? 'active' : 'todo';
@@ -2079,9 +1975,6 @@
     var USECASES = [['all', 'Alla'], ['text', 'Textresonemang'], ['sv', 'Svensk text'], ['vision', 'Videoanalys · bild'], ['omni', 'Videoanalys · bild + tal']];
     var useCaseOptions = USECASES.map(function (p) { return { label: p[1], style: segBtn(uc === p[0], '30px') + ';flex:0 0 auto;font-size:13.5px;font-weight:500', onPick: function () { setUseCase(p[0]); } }; });
 
-    var OPS = [['clean', 'Korrekturläs', 'Rättar stavfel & småfel — skriver inte om'], ['chat', 'Chatta', 'Ställ frågor om innehållet']];
-    var ppOps = OPS.map(function (p) { return { key: p[0], label: p[1], sub: p[2], onPick: function () { pickOp(p[0]); }, selected: st.ppOp === p[0], unselected: st.ppOp !== p[0] }; });
-    var ppOpLabel = (ppOps.find(function (o) { return o.key === st.ppOp; }) || {}).label;
 
 
     var lastIdx = st.log.length - 1;
@@ -2493,8 +2386,8 @@
       acSwitchTrack: 'position:relative;width:42px;height:25px;border-radius:999px;flex:0 0 auto;background:' + (st.audioCorrect ? 'var(--ink)' : 'var(--line-2)') + ';transition:background .15s;cursor:pointer',
       acSwitchKnob: 'position:absolute;top:3px;left:3px;width:19px;height:19px;border-radius:50%;background:var(--knob);border:1px solid var(--line);box-shadow:var(--shadow-sm);transition:transform .15s;transform:translateX(' + (st.audioCorrect ? '17px' : '0') + ')',
 
-      onStart: start, isRunning: isRunning, notRunning: !isRunning, startReady: st.catalogReady && st.pp !== 'running',
-      startBtnLabel: !st.catalogReady ? 'Laddar modeller…' : (st.catalogReady && !st.model) ? 'Ladda ner en modell först' : st.pp === 'running' ? 'Väntar på korrekturen…' : isRunning ? 'Transkriberar…' : isDone ? 'Kör igen' : (st.queue.length > 1 ? 'Starta · ' + st.queue.length + ' filer' : 'Starta transkribering'),
+      onStart: start, isRunning: isRunning, notRunning: !isRunning, startReady: st.catalogReady,
+      startBtnLabel: !st.catalogReady ? 'Laddar modeller…' : (st.catalogReady && !st.model) ? 'Ladda ner en modell först' : isRunning ? 'Transkriberar…' : isDone ? 'Kör igen' : (st.queue.length > 1 ? 'Starta · ' + st.queue.length + ' filer' : 'Starta transkribering'),
       startBtnStyle: coralBtn(isRunning) + ';width:100%;padding:16px 24px;font-size:16.5px',
       startBtnStyleBar: primaryBtn(isRunning) + ';padding:12px 22px;font-size:15px;border-radius:11px;flex:0 0 auto',
 
@@ -2520,44 +2413,22 @@
       toastTitle: st.toast ? (st.toast.title || (st.toast.kind === 'error' ? 'Något gick fel' : st.toast.done ? 'Nedladdning klar' : 'Laddar ner …')) : '', closeToast: closeToast,
       toastPct: st.toast ? Math.round(st.toast.pct || 0) : 0, toastDetail: st.toast ? (st.toast.detail != null ? st.toast.detail : toastDetail(st.toast.size, st.toast.pct || 0)) : '',
       toastBarStyle: 'height:100%;width:100%;transform-origin:left;transform:scaleX(' + ((st.toast ? Math.round(st.toast.pct || 0) : 0) / 100) + ');background:var(--accent);border-radius:99px;transition:transform .14s linear',
-      transcriptOpen: st.transcriptOpen, openTranscript: openTranscript, closeTranscript: closeTranscript, transcriptFile: baseName() + '.txt',
+      transcriptOpen: st.transcriptOpen, closeTranscript: closeTranscript, transcriptFile: baseName() + '.txt',
       searchQuery: st.searchQuery, onTSearch: onTSearch, onSearchKey: onSearchKey, searchRef: searchRef, scrollRef: scrollRef,
       nextMatch: nextMatch, prevMatch: prevMatch, matchLabel: matchLabel, tLines: tLines,
 
-      showResults: isDone, resultCount: resultFiles.length, resultDuration: fmtTime(st.elapsed), resultFiles: resultFiles,
-      transcript: getTranscript().slice(0, 3).map(function (ln, idx) { return { time: ln.time, text: lineText(idx) }; }),
-
-      ppEnabled: st.ppEnabled, ppOff: !st.ppEnabled, togglePPEnabled: togglePPEnabled,
-      ppSwitchTrack: 'position:relative;width:42px;height:25px;border-radius:999px;flex:0 0 auto;background:' + (st.ppEnabled ? 'var(--ink)' : 'var(--line-2)') + ';transition:background .15s',
-      ppSwitchKnob: 'position:absolute;top:3px;left:3px;width:19px;height:19px;border-radius:50%;background:var(--knob);border:1px solid var(--line);box-shadow:var(--shadow-sm);transition:transform .15s;transform:translateX(' + (st.ppEnabled ? '17px' : '0') + ')',
-      ppOps: ppOps, ppModel: st.ppModel,
-      showPP: isDone, ppOpLabel: ppOpLabel, ppShowRun: st.ppOp !== 'chat', onRunPP: runPP, ppRunLabel: 'Kör',
-      ppRunBtnStyle: primaryBtn(st.pp === 'running') + ';min-width:152px', ppRunIdle: st.pp !== 'running', ppPct: Math.round(st.ppPct || 0),
-      ppRingStyle: 'position:relative;width:22px;height:22px;border-radius:50%;flex:0 0 auto;background:conic-gradient(var(--accent) ' + (Math.round(st.ppPct || 0) * 3.6) + 'deg, color-mix(in srgb,var(--ink-3) 18%,transparent) 0);animation:ppglow 1.6s ease-in-out infinite;transition:background .13s linear',
-      ppShowText: st.ppOp !== 'chat' && st.pp !== 'idle', ppShowChat: st.ppOp === 'chat', ppRunning: st.pp === 'running', ppShowOut: st.pp === 'done',
-      ppOut: st.ppOut,
-      // KORREKTUR-kortet (design): körning, resultat med markerade rättelser, lås för chatten
-      cleanRunning: st.pp === 'running' && st.ppOp === 'clean',
-      cleanDone: !!st.cleanText,
-      cleanFailed: st.pp === 'done' && !st.cleanText,          // körde men gav inget resultat
-      cleanPending: st.pp === 'idle' && !st.cleanText,         // väntar på att auto-starta
-      cleanBtnLabel: '↻ Kör igen',
-      cleanPct: Math.round(st.ppPct || 0),
-      cleanBarW: Math.round(st.ppPct || 0) + '%', cleanBarFrac: Math.round(st.ppPct || 0) / 100,
-      cleanLegendAudio: !!st.audioCorrect,
-      cleanPreviewParts: st.cleanText ? cleanDiffParts().slice(0, 70) : [],
-      cleanFullParts: st.cleanText ? cleanDiffParts() : [],
-      cleanChangeCount: st.cleanText ? cleanDiffParts().filter(function (p) { return p.ch; }).length : 0,
-      runClean: runCleanNow,
-      onChatInRecordings: chatAboutResult, resultReady: !!st.resultId,
-      cleanModalOpen: st.cleanModalOpen, openCleanModal: openCleanModal, closeCleanModal: closeCleanModal,
-      ppLocked: !st.cleanText, activeLlmShort: st.ppModel,
+      // Fire-and-forget-avslutningen (design 14 juli): kort "Klart"-rad, sedan
+      // öppnas Inspelningar automatiskt (finishTranscribe).
+      showDone: isDone,
+      procLede: willCorrect()
+        ? 'Transkriberas och korrekturläses automatiskt mot ljudet med Gemma 3n. När allt är klart landar lektionen i Inspelningar.'
+        : 'Transkriberas lokalt på din dator. När allt är klart landar lektionen i Inspelningar.',
+      runningNote: (willCorrect() ? 'Transkriberar och korrekturläser' : 'Transkriberar') + ' … Inspelningar öppnas när det är klart',
+      doneNote: willCorrect() ? 'Klart — korrekturläst och sparad. Öppnar Inspelningar …' : 'Klart — sparad. Öppnar Inspelningar …',
+      ppModel: st.ppModel,
       logExpand: st.logExpand, toggleLogExpand: toggleLogExpand,
       logToggleLabel: st.logExpand ? 'Dölj' : 'Visa',
       stop: stopProp,
-      chatThink: st.chatThink, onToggleChatThink: toggleChatThink,
-      chatThinkBtnStyle: 'display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;font-family:inherit;cursor:pointer;border-radius:99px;padding:6px 12px;border:1px solid ' + (st.chatThink ? 'color-mix(in srgb,var(--accent) 40%,transparent);background:var(--accent-weak);color:var(--accent)' : 'var(--line);background:var(--surface);color:var(--ink-2)'),
-      chatThinkHint: st.chatThink ? 'Tänker djupare före svar — bättre på svåra flerstegsfrågor, men något långsammare.' : 'Snabbt svar utan synligt resonemang. Slå på för svåra flerstegsfrågor.',
 
       // Lektionsoverlay (fullskärm): transkript + chatt + kalenderförslag
       lessonChatOpen: !!st.lessonChatId,
@@ -2893,7 +2764,7 @@ function viewTranscribe(v){ return `
               <span class="fig" style="font-size:16px;color:var(--ink);font-variant-numeric:tabular-nums">${esc(v.queueCount)}</span>
             </div>
             <button data-click="${on(v.goSource)}" style="display:inline-flex;align-items:center;gap:6px;background:transparent;border:1px solid var(--line);color:var(--ink);border-radius:9px;padding:6px 12px;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;flex:0 0 auto;transition:border-color .14s,background .14s">
-              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 3v10M3 8h10"></path></svg>Lägg till fler
+              <span style="display:inline-flex;align-items:center;gap:6px;white-space:nowrap"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 3v10M3 8h10"></path></svg>Lägg till fler</span>
             </button>
           </div>
           <div style="display:flex;flex-direction:column">
@@ -2901,7 +2772,7 @@ function viewTranscribe(v){ return `
               <div data-key="${esc(q.id)}" style="display:flex;align-items:center;gap:12px;padding:13px 20px;border-bottom:1px solid var(--line);background:var(--surface)">
                 <span style="font-family:var(--mono);font-size:10px;font-weight:500;letter-spacing:0.06em;color:var(--ink-2);background:var(--sunken);border:1px solid var(--line);border-radius:4px;padding:3px 7px;flex:0 0 auto">${esc(q.ext)}</span>
                 <span style="flex:1;min-width:0;font-size:15.5px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(q.name)}</span>
-                <button data-click="${on(q.onRemove)}" aria-label="Ta bort från kön" style="width:30px;height:30px;flex:0 0 auto;border:1px solid var(--line);background:var(--surface);border-radius:8px;cursor:pointer;color:var(--ink-3);display:flex;align-items:center;justify-content:center;transition:border-color .14s,color .14s">
+                <button data-click="${on(q.onRemove)}" aria-label="Ta bort från kön" style="width:36px;height:36px;flex:0 0 auto;border:1px solid var(--line);background:var(--surface);border-radius:8px;cursor:pointer;color:var(--ink-3);display:flex;align-items:center;justify-content:center;transition:border-color .14s,color .14s">
                   <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 3l8 8M11 3l-8 8"></path></svg>
                 </button>
               </div>
@@ -2991,10 +2862,10 @@ function viewTranscribe(v){ return `
       <div data-pane="process" style="flex:1;display:flex;flex-direction:column;min-height:0">
         <div class="ehead">
           <div>
-            <div class="eyebrow" style="margin-bottom:18px">Steg 3 — Resultat</div>
-            <h1 class="disp" style="font-size:clamp(30px,4.4vw,44px);margin:0">Ditt <span class="ser">transkript</span></h1>
+            <div class="eyebrow" style="margin-bottom:18px">Steg 3 — Transkribering</div>
+            <h1 class="disp" style="font-size:clamp(30px,4.4vw,44px);margin:0">Bearbetar <span class="ser">lokalt</span></h1>
           </div>
-          <p class="ehead_lede">Bearbetas lokalt i steg. Korrekturläs, städa språket och ställ frågor — när du är klar.</p>
+          <p class="ehead_lede">${esc(v.procLede)}</p>
         </div>
         <div data-ref="${on(v.procScrollRef)}" data-procscroll="1" style="display:flex;flex-direction:column">
           <div style="height:2px"></div>
@@ -3029,9 +2900,6 @@ function viewTranscribe(v){ return `
             <div style="display:flex;align-items:baseline;gap:18px;flex:0 0 auto">
               <span style="display:inline-flex;align-items:baseline;gap:7px"><span class="win_lbl">Tid</span><span style="font-size:14.5px;color:var(--ink-2);font-variant-numeric:tabular-nums">${esc(v.elapsedLabel)}</span></span>
               <span style="display:inline-flex;align-items:baseline;gap:7px"><span class="win_lbl">Klart</span><span class="fig" style="font-size:21px;color:var(--ink);font-variant-numeric:tabular-nums">${esc(v.progressLabel)}</span></span>
-              ${ v.isRunning ? `
-                <button data-click="${on(v.onCancelRun)}" style="background:transparent;border:1px solid var(--line);color:var(--ink-2);border-radius:9px;padding:6px 13px;font-size:13.5px;font-weight:500;cursor:pointer;font-family:inherit;align-self:center">Avbryt</button>
-              ` : '' }
             </div>
           </div>
 
@@ -3107,116 +2975,22 @@ function viewTranscribe(v){ return `
       </div>
       ` : '' }
 
-      ${ v.showResults ? `
-      <div data-sec="results" style="margin-top:24px;scroll-margin-top:8px">
-        <div data-reveal style="display:flex;align-items:center;gap:9px;margin-bottom:14px">
-          <span style="width:18px;height:18px;border-radius:50%;background:var(--ok);color:var(--on-ok);display:flex;align-items:center;justify-content:center;font-size:12.5px;flex:0 0 auto">✓</span>
-          <h2 style="font-size:20px;font-weight:600;letter-spacing:-0.02em;margin:0">Klar</h2>
-          <span style="color:var(--ink-2);font-size:15.5px">· ${esc(v.resultCount)} filer · ${esc(v.resultDuration)}</span>
+      ${ v.isRunning ? `
+      <div style="display:flex;flex-direction:column;align-items:center;gap:14px;margin-top:24px">
+        <div style="display:flex;align-items:center;gap:11px;color:var(--ink-2);font-size:14.5px">
+          <span style="width:15px;height:15px;border-radius:50%;border:2px solid var(--line-2);border-top-color:var(--accent);animation:spin .7s linear infinite"></span>
+          ${esc(v.runningNote)}
         </div>
-
-        <div style="display:grid;gap:10px;margin-bottom:18px">
-          ${ v.resultFiles.map(function(r){ return `
-            <div data-key="${esc(r.name)}" data-reveal style="display:flex;align-items:center;gap:14px;background:var(--surface);border:1px solid var(--line);border-radius:13px;padding:14px 16px;box-shadow:var(--shadow-sm)">
-              <span style="font-variant-numeric:tabular-nums;font-size:12.5px;font-weight:500;color:var(--accent);background:var(--accent-weak);padding:5px 9px;border-radius:7px;letter-spacing:0.03em">${esc(r.type)}</span>
-              <span style="flex:1;min-width:0;font-size:16px;font-variant-numeric:tabular-nums;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.name)}</span>
-              <span style="font-size:14px;color:var(--ink-2);font-variant-numeric:tabular-nums">${esc(r.size)}</span>
-              <button data-click="${on(r.onDownload)}" style="display:inline-flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:8px 14px 8px 12px;font-size:14.5px;font-weight:500;cursor:pointer;font-family:inherit;transition:background .14s,border-color .14s,color .14s" data-sh="border-color:var(--ink) !important;background:var(--ink) !important;color:var(--btn-fg) !important">
-                <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.5v7.5"></path><path d="M4.5 6.5 8 10l3.5-3.5"></path><path d="M3 13.5h10"></path></svg>Ladda ner
-              </button>
-            </div>
-          `; }).join('') }
-        </div>
-
-        <div data-reveal data-click="${on(v.openTranscript)}" role="button" tabindex="0" aria-label="Öppna hela transkriptet" style="background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px 20px;box-shadow:var(--shadow-sm);cursor:pointer;transition:border-color .12s,box-shadow .12s" data-sh="border-color:var(--line-2) !important;box-shadow:var(--shadow) !important">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px">
-            <span style="font-size:12.5px;text-transform:uppercase;letter-spacing:0.04em;color:var(--ink-2)">Förhandsvisning</span>
-            <span style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;color:var(--accent)">Visa hela transkriptet<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5 10.5 8 6 12.5"></path></svg></span>
-          </div>
-          ${ v.transcript.map(function(t, idx){ return `
-            <div data-key="${esc(idx)}" style="display:flex;gap:14px;padding:5px 0">
-              <span style="font-variant-numeric:tabular-nums;font-size:13.5px;color:var(--ink-3);flex:0 0 auto;width:46px;padding-top:2px">${esc(t.time)}</span>
-              <span style="font-size:16px;color:var(--ink);line-height:1.5">${esc(t.text)}</span>
-            </div>
-          `; }).join('') }
-          <div style="margin-top:9px;font-size:13px;color:var(--ink-3)">… klicka för att läsa hela transkriptet</div>
-        </div>
+        <button data-click="${on(v.onCancelRun)}" style="background:transparent;border:1px solid var(--line);color:var(--ink-2);border-radius:9px;padding:7px 16px;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;transition:border-color .14s,color .14s" data-sh="border-color:var(--bad) !important;color:var(--bad) !important">Avbryt</button>
       </div>
       ` : '' }
-
-      ${ v.showPP ? `
-      <div data-sec="pp" data-follow="clean" data-reveal style="margin-top:28px;background:var(--surface);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);padding:22px 24px 20px">
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
-          <span style="font-family:var(--mono);font-size:10.5px;font-weight:500;letter-spacing:0.08em;color:var(--c-mustard);background:color-mix(in srgb,var(--c-mustard) 13%,transparent);border:1px solid color-mix(in srgb,var(--c-mustard) 30%,transparent);padding:3px 9px;border-radius:6px">KORREKTUR</span>
-          <h2 style="font-size:19px;font-weight:600;letter-spacing:-0.02em;margin:0">Korrekturläs transkriptet</h2>
-        </div>
-        <p style="margin:0 0 18px;color:var(--ink-2);font-size:15px">Körs automatiskt direkt efter transkriberingen — rättar stavfel och småfel och städar språket (skiljetecken och meningslängd) med ${esc(v.activeLlmShort)}.</p>
-
-        ${ v.cleanDone && !v.cleanRunning ? `
-        <div data-click="${on(v.openCleanModal)}" role="button" tabindex="0" aria-label="Öppna korrekturläsningen" style="background:var(--sunken);border:1px solid var(--line);border-radius:13px;padding:16px 18px;margin-bottom:14px;cursor:pointer;transition:border-color .14s,box-shadow .14s" data-sh="border-color:var(--line-2) !important;box-shadow:var(--shadow-sm) !important">
-          <div style="display:flex;align-items:center;gap:14px;margin-bottom:12px;flex-wrap:wrap">
-            <span style="font-size:11.5px;text-transform:uppercase;letter-spacing:0.05em;color:var(--accent);font-weight:600">Korrekturläst</span>
-            ${ v.cleanLegendAudio ? `<span style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2)"><span style="width:12px;height:12px;border-radius:4px;background:color-mix(in srgb,var(--ok) 20%,transparent);border:1px solid color-mix(in srgb,var(--ok) 45%,transparent)"></span>mot ljudet</span>` : '' }
-            <span style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2)"><span style="width:12px;height:12px;border-radius:4px;background:color-mix(in srgb,var(--accent) 16%,transparent);border:1px solid color-mix(in srgb,var(--accent) 45%,transparent)"></span>språk &amp; skiljetecken</span>
-            <span style="margin-left:auto;display:inline-flex;align-items:center;gap:5px;font-size:13px;font-weight:500;color:var(--accent)">Visa hela<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5 10.5 8 6 12.5"></path></svg></span>
-          </div>
-          <div style="font-size:15px;color:var(--ink);line-height:1.65">
-            ${ v.cleanPreviewParts.map(function(p){ return p.ch ? `<span style="background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent);border-radius:4px;padding:0 3px;font-weight:500">${esc(p.s)}</span>` : `<span>${esc(p.s)}</span>`; }).join(' ') } …
-          </div>
-          <div style="margin-top:9px;font-size:13px;color:var(--ink-3)">${esc(v.cleanChangeCount)} markerade rättelser · klicka för att öppna hela</div>
-        </div>
-        ` : '' }
-
-        ${ v.cleanRunning ? `
-        <div style="background:var(--sunken);border:1px solid var(--line);border-radius:13px;padding:15px 17px;margin-bottom:14px">
-          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:11px">
-            <span style="display:inline-flex;align-items:center;gap:9px;font-size:14px;font-weight:600;color:var(--ink)"><span style="width:14px;height:14px;border-radius:50%;border:2px solid var(--line-2);border-top-color:var(--accent);animation:spin .7s linear infinite;flex:0 0 auto"></span>Korrekturläser …</span>
-            <span style="color:var(--ink);letter-spacing:-0.01em"><span class="fig" style="font-size:30px;font-variant-numeric:tabular-nums">${esc(v.cleanPct)}</span><span class="fig-unit" style="font-size:16px;margin-left:1px">%</span></span>
-          </div>
-          <div style="height:9px;border-radius:99px;background:var(--track);overflow:hidden;margin-bottom:11px"><div style="height:100%;width:100%;transform-origin:left;transform:scaleX(${v.cleanBarFrac});background:var(--accent);transition:transform .2s"></div></div>
-          <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-2)"><span style="width:7px;height:7px;border-radius:50%;background:var(--accent);animation:pulse 1.2s ease-in-out infinite;flex:0 0 auto"></span>Städar språket …</div>
-        </div>
-        ` : '' }
-
-        ${ !v.cleanRunning && v.cleanDone ? `
-        <div style="display:flex;align-items:center;gap:13px;flex-wrap:wrap">
-          <button data-click="${on(v.runClean)}" style="display:inline-flex;align-items:center;justify-content:center;gap:8px;background:transparent;border:1px solid var(--line);color:var(--ink);border-radius:11px;padding:9px 16px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;transition:border-color .15s,background .15s" data-sh="border-color:var(--line-2) !important;background:var(--sunken) !important">${esc(v.cleanBtnLabel)}</button>
-          <span style="margin-left:auto;display:inline-flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink-3)"><span style="width:7px;height:7px;border-radius:50%;flex:0 0 auto;background:var(--ok)"></span>Lokalt med <strong style="color:var(--ink-2);font-weight:600">${esc(v.ppModel)}</strong></span>
-        </div>
-        ` : '' }
-
-        ${ !v.cleanRunning && v.cleanFailed ? `
-        <div style="display:flex;align-items:center;gap:13px;flex-wrap:wrap">
-          <span style="display:inline-flex;align-items:center;gap:8px;font-size:14px;color:var(--ink-2)"><span style="width:20px;height:20px;border-radius:50%;flex:0 0 auto;background:color-mix(in srgb,var(--bad) 16%,transparent);color:var(--bad);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px">!</span>Korrekturläsningen gick inte igenom.</span>
-          <button data-click="${on(v.runClean)}" style="display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:11px;padding:9px 18px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;box-shadow:var(--shadow-sm);transition:background .15s">↻ Försök igen</button>
-        </div>
-        ` : '' }
-
-        ${ !v.cleanRunning && v.cleanPending ? `
-        <div style="display:flex;align-items:center;gap:13px;flex-wrap:wrap;font-size:14px;color:var(--ink-2)">
-          <span style="display:inline-flex;align-items:center;gap:9px"><span style="width:14px;height:14px;border-radius:50%;border:2px solid var(--line-2);border-top-color:var(--accent);animation:spin .7s linear infinite;flex:0 0 auto"></span>Korrekturläsning startar automatiskt …</span>
-          <span style="margin-left:auto;display:inline-flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink-3)"><span style="width:7px;height:7px;border-radius:50%;flex:0 0 auto;background:var(--ok)"></span>Lokalt med <strong style="color:var(--ink-2);font-weight:600">${esc(v.ppModel)}</strong></span>
-        </div>
-        ` : '' }
-      </div>
-
-      <div data-follow="llm" style="margin-top:16px;background:var(--surface);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);padding:22px 24px 20px">
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
-          <span style="font-family:var(--mono);font-size:10.5px;font-weight:500;letter-spacing:0.08em;color:var(--c-sky);background:color-mix(in srgb,var(--c-sky) 13%,transparent);border:1px solid color-mix(in srgb,var(--c-sky) 28%,transparent);padding:3px 9px;border-radius:6px">LLM</span>
-          <h2 style="font-size:19px;font-weight:600;letter-spacing:-0.02em;margin:0">Fråga om lektionen</h2>
-        </div>
-        <p style="margin:0 0 18px;color:var(--ink-2);font-size:15px">Chatten bor bland dina inspelningar. Öppna den här inspelningen under <strong style="color:var(--ink);font-weight:600">Inspelningar</strong> så kan du ställa frågor om innehållet — svaren förankras i numrerade källor i transkriptet.</p>
-        <button data-click="${on(v.onChatInRecordings)}" style="display:inline-flex;align-items:center;justify-content:center;gap:10px;width:100%;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:12px;padding:14px 22px;font-size:15px;font-weight:500;cursor:pointer;font-family:inherit;box-shadow:var(--shadow-sm);transition:background .15s" data-sh="background:color-mix(in srgb, var(--btn-bg) 82%, var(--accent)) !important">
-          <svg width="17" height="17" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4.5h12a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H8l-4 3v-3H4a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1z"></path></svg>
-          Chatta om inspelningen
-          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h10"></path><path d="M8.5 3.5 13 8l-4.5 4.5"></path></svg>
-        </button>
+      ${ v.showDone ? `
+      <div style="display:flex;align-items:center;justify-content:center;gap:11px;margin-top:24px;color:var(--ink);font-size:15px;font-weight:500;animation:fadeup .3s ease both">
+        <span style="width:20px;height:20px;border-radius:50%;background:var(--ok);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;flex:0 0 auto">✓</span>
+        <span>${esc(v.doneNote)}</span>
       </div>
       ` : '' }
         </div>
-        <button data-click="${on(v.restart)}" style="margin-top:16px;flex:0 0 auto;align-self:center;display:inline-flex;align-items:center;justify-content:center;gap:8px;background:transparent;border:1px solid var(--line);color:var(--ink);border-radius:11px;padding:11px 22px;font-size:15px;font-weight:500;cursor:pointer;font-family:inherit" data-sh="border-color:var(--line-2) !important;background:var(--sunken) !important">
-          <span style="font-size:16px;line-height:1">↺</span>Ny transkribering — börja om
-        </button>
       </div>
       ` : '' }
     </section>
@@ -3918,30 +3692,6 @@ function viewModals(v){ return `
   </div>
   ` : '' }
 
-  ${ v.cleanModalOpen ? `
-  <div data-click="${on(v.closeCleanModal)}" style="position:fixed;inset:0;z-index:125;display:flex;align-items:center;justify-content:center;padding:24px;background:color-mix(in srgb,var(--canvas) 64%,transparent);backdrop-filter:blur(7px);animation:modalback .26s ease">
-    <div data-click="${on(v.stop)}" role="dialog" aria-modal="true" aria-label="Korrekturläst transkript" data-dialog tabindex="-1" style="width:min(94vw,680px);max-height:84vh;display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);overflow:hidden;animation:modalpop .42s cubic-bezier(.16,1,.3,1)">
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:24px 26px 14px;border-bottom:1px solid var(--line);flex:0 0 auto">
-        <div style="min-width:0">
-          <span style="font-size:11.5px;font-weight:600;letter-spacing:0.05em;color:var(--accent);background:var(--accent-weak);padding:3px 9px;border-radius:6px;display:inline-block;margin-bottom:9px">KORREKTURLÄST</span>
-          <h2 style="font-size:20px;font-weight:600;letter-spacing:-0.02em;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(v.statusFile)}</h2>
-          <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:11px">
-            ${ v.cleanLegendAudio ? `<span style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2)"><span style="width:12px;height:12px;border-radius:4px;background:color-mix(in srgb,var(--ok) 20%,transparent);border:1px solid color-mix(in srgb,var(--ok) 45%,transparent)"></span>mot ljudet</span>` : '' }
-            <span style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2)"><span style="width:12px;height:12px;border-radius:4px;background:color-mix(in srgb,var(--accent) 16%,transparent);border:1px solid color-mix(in srgb,var(--accent) 45%,transparent)"></span>språk &amp; skiljetecken</span>
-            <span style="font-size:12.5px;color:var(--ink-3);font-variant-numeric:tabular-nums">${esc(v.cleanChangeCount)} rättelser</span>
-          </div>
-        </div>
-        <button data-click="${on(v.closeCleanModal)}" aria-label="Stäng" style="flex:0 0 auto;width:34px;height:34px;display:flex;align-items:center;justify-content:center;background:var(--surface);border:1px solid var(--line);border-radius:9px;color:var(--ink-2);cursor:pointer;font-size:15px">✕</button>
-      </div>
-      <div data-hidescroll="1" style="overflow:auto;overscroll-behavior:contain;padding:18px 26px 24px;min-height:0">
-        <div style="font-size:16px;color:var(--ink);line-height:1.7">
-          ${ v.cleanFullParts.map(function(p){ return p.ch ? `<span style="background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent);border-radius:4px;padding:0 3px;font-weight:500">${esc(p.s)}</span>` : `<span>${esc(p.s)}</span>`; }).join(' ') }
-        </div>
-      </div>
-    </div>
-  </div>
-  ` : '' }
-
   ${ v.calSetupOpen ? `
   <div data-click="${on(v.calSetup.onClose)}" style="position:fixed;inset:0;z-index:135;display:flex;align-items:center;justify-content:center;padding:24px;background:color-mix(in srgb,var(--canvas) 64%,transparent);backdrop-filter:blur(7px);animation:modalback .26s ease">
     <div data-click="${on(v.stop)}" role="dialog" aria-modal="true" aria-label="Google Kalender" data-dialog tabindex="-1" style="width:min(94vw,560px);max-height:88vh;overflow:auto;overscroll-behavior:contain;background:var(--surface);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);animation:modalpop .42s cubic-bezier(.16,1,.3,1)">
@@ -4071,7 +3821,7 @@ function viewModals(v){ return `
     document.addEventListener('keydown', onKeyDown);
     document.addEventListener('pointerdown', onAnyPress, true);
     syncTheme();
-    _prevTab = S.tab; _prevStep = S.step; _prevOp = S.ppOp;
+    _prevTab = S.tab; _prevStep = S.step;
     render();
     loadModels().then(loadSettings);   // real catalog, then reflect chosen models disk
     loadHistory();  // load persisted transcription history
