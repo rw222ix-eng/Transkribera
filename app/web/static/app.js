@@ -2329,6 +2329,7 @@
         answer: st.askAnswer,
         // Zoom till modal (data-askwrap/data-askzoom) — klick förstorar, Esc/klick utanför stänger
         askZoomFlag: st.askZoom ? (st.askZoomClosing ? 'closing' : 'on') : '',
+        askZoomOn: !!st.askZoom && !st.askZoomClosing,
         onAskCardClick: function (e) { if (e) e.stopPropagation(); if (!st.askZoom) openAskZoom(); },
         closeAskZoom: function () { closeAskZoom(); },
         // Hopfällbar källpanel till höger; källraderna öppnar lektionen
@@ -3241,56 +3242,55 @@ function viewRecordings(v){
         </div>
         ${ v.askScan.ansStarted ? `
         <div data-askwrap="${esc(v.askScan.askZoomFlag)}" data-click="${on(v.askScan.closeAskZoom)}">
-        <div data-askzoom="${esc(v.askScan.askZoomFlag)}" data-click="${on(v.askScan.onAskCardClick)}" title="Klicka för att förstora svaret" style="margin-top:16px;border:1px solid var(--line);border-radius:13px;background:var(--surface);padding:24px 28px;box-shadow:var(--shadow-sm);animation:fadeup .3s ease both">
-          <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:12px">
-            <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);flex:0 0 auto">${esc(v.askScan.ansHeadLabel)}</span>
-            <span style="font-size:12.5px;color:var(--ink-3);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-left:auto">”${esc(v.askScan.q)}”</span>
-          </div>
-          <div style="display:grid;grid-template-columns:minmax(0,1fr)${ v.askScan.ansHasRefs ? ' 320px' : '' };gap:${ v.askScan.ansHasRefs ? '28px' : '0' };align-items:start">
-          <div style="min-width:0">
-          <div data-hidescroll="1" data-askscroll="1" style="max-height:min(52vh,520px);overflow:auto;overscroll-behavior:contain;scrollbar-width:none">
-          <p style="margin:0;font-size:16px;line-height:1.9;color:var(--ink);white-space:pre-wrap">${esc(v.askScan.answer)}${ v.askScan.ansTyping ? '<span class="ai-blink" style="display:inline-block;width:9px;height:17px;background:var(--accent);vertical-align:-3px;margin-left:3px"></span>' : '' }</p>
-          ${ v.askScan.ansDone && v.askScan.askFollowups.length ? `
-          <div style="margin-top:24px;border-top:1px solid var(--line);padding-top:16px">
-            ${ v.askScan.askFollowups.map(function(f){ return `
-              <div data-key="${esc(f.key)}" style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
-                <div style="align-self:flex-end;max-width:86%;background:var(--accent-weak);color:var(--ink);border:1px solid color-mix(in srgb,var(--accent) 25%,transparent);border-radius:14px 14px 4px 14px;padding:9px 13px;font-size:14px;line-height:1.5">${esc(f.q)}</div>
-                <div style="align-self:stretch;font-size:15px;line-height:1.75;color:var(--ink);white-space:pre-wrap">${esc(f.a)}${ f.typing ? '<span class="ai-blink" style="display:inline-block;width:8px;height:15px;background:var(--accent);vertical-align:-2px;margin-left:3px"></span>' : '' }</div>
-              </div>
-            `; }).join('') }
-          </div>
-          ` : '' }
-          </div>
-          ${ v.askScan.askEvent ? `
-            <div data-click="${on(v.stop)}" style="margin-top:14px">${ lessonEventBox(v.askScan.askEvent) }</div>
-          ` : '' }
-          ${ v.askScan.ansDone ? `
-            <div style="display:flex;gap:9px;align-items:center;margin-top:12px">
-              <input value="${esc(v.askScan.askFollowInput)}" data-input="${on(v.askScan.setAskFollow)}" data-keydown="${on(v.askScan.onAskFollowKey)}" data-click="${on(v.stop)}" aria-label="Ställ en följdfråga" placeholder="Ställ en följdfråga …" style="flex:1;min-width:0;background:var(--sunken);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:11px 13px;font-size:14.5px;font-family:inherit;outline:none">
-              ${ !v.askScan.askEvent ? `
-              <button data-click="${on(v.askScan.proposeAskCal)}" title="Skapa en kalenderhändelse utifrån svaret" style="flex:0 0 auto;display:inline-flex;align-items:center;gap:7px;background:var(--accent-weak);color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 40%,transparent);border-radius:10px;padding:11px 14px;font-size:13.5px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .15s" data-sh="background:color-mix(in srgb,var(--accent) 15%,transparent) !important"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="flex:0 0 auto"><rect x="2" y="3" width="12" height="11" rx="2"></rect><path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3M8 9v3M6.5 10.5h3"></path></svg>Kalenderhändelse</button>
-              ` : '' }
-              <button data-click="${on(v.askScan.sendAskFollow)}" style="flex:0 0 auto;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:10px;padding:11px 18px;font-size:14.5px;font-weight:500;cursor:pointer;font-family:inherit;transition:background .15s">Skicka</button>
-            </div>
-          ` : '' }
-          </div>
-          ${ v.askScan.ansHasRefs ? `
-          <div style="display:flex;flex-direction:column;gap:14px;min-width:0">
-          <div style="background:var(--sunken);border:1px solid var(--line);border-radius:13px;padding:14px;animation:fadeup .3s ease both">
-            <div data-click="${on(v.askScan.toggleSrcBox)}" role="button" tabindex="0" aria-expanded="${v.askScan.srcBoxOpen}" style="display:flex;align-items:center;gap:7px;font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3);cursor:pointer"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 3h10v10H3z" stroke-linejoin="round"></path><path d="M6 6.5h4M6 9.5h4" stroke-linecap="round"></path></svg>Källor i arkivet<span style="flex:1"></span><span style="font-family:var(--mono);font-size:10px;font-variant-numeric:tabular-nums">${esc(v.askScan.askRefCount)}</span><svg data-rot="${esc(v.askScan.srcChevFlag)}" width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto"><path d="M4 6l4 4 4-4"></path></svg></div>
-            ${ v.askScan.srcBoxOpen ? `
-            <div style="margin-top:10px">
-            ${ v.askScan.askRefs.map(function(rf){ return `
-              <div data-key="${esc(rf.key)}" data-click="${on(rf.onPick)}" role="button" tabindex="0" title="Öppna lektionen och chatta" data-crow="" style="display:flex;flex-direction:column;gap:5px;padding:11px 12px;border-radius:9px;cursor:pointer;border:1px solid transparent;margin-bottom:6px;transition:box-shadow .18s,border-color .18s,background .18s">
-                <span style="display:flex;align-items:center;gap:7px;min-width:0"><span style="width:6px;height:6px;border-radius:2px;background:var(--accent);flex:0 0 auto"></span><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13.5px;font-weight:700;color:var(--ink)">${esc(rf.rec)}</span><span style="margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--ink-3);font-variant-numeric:tabular-nums;flex:0 0 auto">${esc(rf.meta)}</span></span>
-                ${ rf.text ? `<span style="font-size:13px;line-height:1.5;color:var(--ink-2)">${esc(rf.text)}</span>` : '' }
-              </div>
-            `; }).join('') }
+        <div data-askzoom="${esc(v.askScan.askZoomFlag)}" data-click="${on(v.askScan.onAskCardClick)}" title="Klicka för att förstora svaret" style="margin-top:16px;border:1px solid var(--line);border-radius:13px;background:var(--surface);box-shadow:var(--shadow-sm);animation:fadeup .3s ease both;overflow:hidden">
+          <div style="display:grid;grid-template-columns:minmax(0,1fr) ${ v.askScan.askZoomOn ? '300px' : '224px' };align-items:stretch">
+          <div style="min-width:0;padding:${ v.askScan.askZoomOn ? '24px 28px' : '14px 17px' }">
+            <div style="font-family:var(--mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3)">${esc(v.askScan.ansHeadLabel)}</div>
+            <div style="font-size:12.5px;color:var(--ink-3);margin-top:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">”${esc(v.askScan.q)}”</div>
+            <div data-hidescroll="1" data-askscroll="1" style="max-height:min(52vh,520px);overflow:auto;overscroll-behavior:contain;scrollbar-width:none">
+            <p style="margin:8px 0 0;font-size:${ v.askScan.askZoomOn ? '16px' : '15.5px' };line-height:1.8;color:var(--ink);max-width:62ch;white-space:pre-wrap">${esc(v.askScan.answer)}${ v.askScan.ansTyping ? '<span class="ai-blink" style="display:inline-block;width:9px;height:17px;background:var(--accent);vertical-align:-3px;margin-left:3px"></span>' : '' }</p>
+            ${ v.askScan.askZoomOn && v.askScan.askFollowups.length ? `
+            <div style="margin-top:18px;border-top:1px solid var(--line);padding-top:14px">
+              ${ v.askScan.askFollowups.map(function(f){ return `
+                <div data-key="${esc(f.key)}" style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
+                  <div style="align-self:flex-end;max-width:86%;background:var(--accent-weak);color:var(--ink);border:1px solid color-mix(in srgb,var(--accent) 25%,transparent);border-radius:14px 14px 4px 14px;padding:9px 13px;font-size:14px;line-height:1.5">${esc(f.q)}</div>
+                  <div style="align-self:stretch;font-size:15px;line-height:1.75;color:var(--ink);white-space:pre-wrap">${esc(f.a)}${ f.typing ? '<span class="ai-blink" style="display:inline-block;width:8px;height:15px;background:var(--accent);vertical-align:-2px;margin-left:3px"></span>' : '' }</div>
+                </div>
+              `; }).join('') }
             </div>
             ` : '' }
+            </div>
+            ${ !v.askScan.askZoomOn && v.askScan.askFollowups.length ? `
+            <div style="margin-top:10px;font-family:var(--mono);font-size:9.5px;letter-spacing:0.06em;text-transform:uppercase;color:var(--ink-3)">${esc(String(v.askScan.askFollowups.length))} följdfråg${ v.askScan.askFollowups.length === 1 ? 'a' : 'or' } — öppna chattvyn för att fortsätta</div>
+            ` : '' }
+            ${ v.askScan.askEvent ? `
+              <div data-click="${on(v.stop)}" style="margin-top:12px">${ lessonEventBox(v.askScan.askEvent) }</div>
+            ` : '' }
+            ${ v.askScan.askZoomOn && v.askScan.ansDone ? `
+              <div style="display:flex;gap:9px;align-items:center;margin-top:12px">
+                <input value="${esc(v.askScan.askFollowInput)}" data-input="${on(v.askScan.setAskFollow)}" data-keydown="${on(v.askScan.onAskFollowKey)}" data-click="${on(v.stop)}" aria-label="Ställ en följdfråga" placeholder="Ställ en följdfråga …" style="flex:1;min-width:0;background:var(--sunken);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:11px 13px;font-size:14.5px;font-family:inherit;outline:none">
+                <button data-click="${on(v.askScan.sendAskFollow)}" style="flex:0 0 auto;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:10px;padding:11px 18px;font-size:14.5px;font-weight:500;cursor:pointer;font-family:inherit;transition:background .15s">Skicka</button>
+              </div>
+            ` : '' }
           </div>
+          <div data-click="${on(v.stop)}" style="display:flex;flex-direction:column;gap:6px;padding:12px;background:var(--sunken);border-left:1px solid var(--line);min-width:0">
+            ${ !v.askScan.askZoomOn ? `
+            <button data-click="${on(v.askScan.onAskCardClick)}" title="Öppna svaret i en fokuserad chattvy" style="display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:9px;padding:11px 16px;font-size:13.5px;font-weight:600;font-family:inherit;cursor:pointer;transition:background .15s">Öppna i chattvyn<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto"><path d="M3 8h10M9 4l4 4-4 4"></path></svg></button>
+            ` : '' }
+            ${ !v.askScan.askEvent ? `
+            <button data-click="${on(v.askScan.proposeAskCal)}" title="Skapa en kalenderhändelse utifrån svaret" style="display:inline-flex;align-items:center;justify-content:center;gap:7px;background:transparent;color:var(--ink-2);border:1px solid var(--line);border-radius:9px;padding:10px 14px;font-size:13px;font-weight:500;font-family:inherit;cursor:pointer;transition:border-color .14s,color .14s" data-sh="border-color:var(--line-2) !important;color:var(--ink) !important"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="flex:0 0 auto"><rect x="2" y="3" width="12" height="11" rx="2"></rect><path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3M8 9v3M6.5 10.5h3"></path></svg>Kalenderhändelse</button>
+            ` : '' }
+            ${ v.askScan.ansHasRefs ? `
+            <div style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-3);margin-top:5px">Käll${ v.askScan.askRefs.length === 1 ? 'a' : 'or' } · ${esc(v.askScan.askRefCount)}</div>
+            ${ v.askScan.askRefs.map(function(rf){ return `
+              <div data-key="${esc(rf.key)}" data-click="${on(rf.onPick)}" role="button" tabindex="0" title="Öppna lektionen och chatta" data-crow="" style="display:flex;flex-direction:column;gap:4px;padding:9px 10px;border-radius:8px;cursor:pointer;border:1px solid transparent;transition:box-shadow .18s,border-color .18s,background .18s">
+                <span style="display:flex;align-items:center;gap:7px;min-width:0"><span style="width:6px;height:6px;border-radius:2px;background:var(--accent);flex:0 0 auto"></span><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:700;color:var(--ink)">${esc(rf.rec)}</span></span>
+                <span style="font-family:var(--mono);font-size:10px;color:var(--ink-3);font-variant-numeric:tabular-nums">${esc(rf.meta)}</span>
+                ${ rf.text ? `<span style="font-size:12.5px;line-height:1.45;color:var(--ink-2)">${esc(rf.text)}</span>` : '' }
+              </div>
+            `; }).join('') }
+            ` : '' }
           </div>
-          ` : '' }
           </div>
         </div>
         </div>
