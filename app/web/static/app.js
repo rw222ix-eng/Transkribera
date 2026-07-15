@@ -1543,7 +1543,18 @@
       if (ev.type === 'reasoning') { accReason += ev.text; setLast(acc, accReason, true); }
       else if (ev.type === 'token') { acc += ev.text; setLast(acc, accReason, false); }
       else if (ev.type === 'error') { setLast(acc || ('Fel: ' + (ev.message || 'okänt')), accReason, false); }
-      else if (ev.type === 'done') { var r = ev.result || {}; var full = r.text || acc; setLast(full, accReason, false); applyCalTag('lesson', full); }
+      else if (ev.type === 'done') {
+        var r = ev.result || {}; var full = r.text || acc;
+        var applied = applyCalTag('lesson', full);
+        var shown = stripCalTag(full);
+        // Svarar modellen med enbart kalenderraden blir bubblan tom — sätt då en
+        // egen bekräftelse byggd ur det uppdaterade förslaget.
+        if (!shown && applied) {
+          var e2 = S.lessonChatEvent || {};
+          shown = 'Klart — kalenderförslaget är uppdaterat: ”' + (e2.title || '') + '” · ' + (e2.when || '') + (e2.endDay ? ' → ' + e2.endDay : '') + '. Justera i förslags-raden nedan eller fortsätt chatta.';
+        }
+        setLast(shown || full, accReason, false);
+      }
     });
   }
 
@@ -1704,10 +1715,10 @@
   }
   function applyCalTag(which, text) {
     var i = text.indexOf(_CAL_TAG);
-    if (i < 0) return;
+    if (i < 0) return false;
     var cal = null;
     try { cal = JSON.parse((text.slice(i + _CAL_TAG.length).match(/\{[\s\S]*\}/) || [null])[0]); } catch (e) {}
-    if (!cal || typeof cal !== 'object') return;
+    if (!cal || typeof cal !== 'object') return false;
     var key = _EVKEY[which];
     setState(function (s) {
       var ev = s[key];
@@ -1736,6 +1747,7 @@
       return kv(key, Object.assign({}, base, patch));
     });
     if (S.calConnected === null) loadCalStatus();
+    return true;
   }
   function openDescModal(which) { clearTimeout(_descT); setState({ descModal: true, descModalClosing: false, descModalFor: which || 'lesson' }); }
   // Vymodell för förslags-boxen (lessonEventBox) — delas av overlayen och arkivsvaret.
