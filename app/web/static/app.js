@@ -53,7 +53,8 @@
     lessonChatThink: false,
     lessonChatMeta: null,       // overlay-huvudets metadata: {lessonId,date,dur,model,lang,group,course,cc}
     lessonChatHitT: null,       // tidsstämpel (mm:ss) att markera i overlay-transkriptet
-    lessonChatEvent: null,      // kalenderförslag: {title,when,desc,added,busy}
+    lessonChatEvent: null,      // kalenderförslag: {title,when,desc,added,busy,endDay}
+    ovEvOpen: false,            // förslags-raden i overlayen utfälld till redigeringsboxen
     evPick: null,               // öppen dag/tid-väljare i kalenderförslaget
     descModal: false,           // anteckningens inzoomade redigeringsmodal
     descModalClosing: false,
@@ -1449,13 +1450,13 @@
                lessonChatHitT: hitT || null,
                lessonChatSegs: [], lessonChat: [], lessonChatInput: '',
                lessonChatTyping: false, lessonChatCiteSel: null,
-               lessonChatEvent: null, evPick: null });
+               lessonChatEvent: null, evPick: null, ovEvOpen: false });
     getJSON('/api/history/' + encodeURIComponent(hid)).then(function (h) {
       var segs = ((h && h.transcript) || []).map(function (g) { return { time: fmtTime(g.start), text: g.text }; });
       setState({ lessonChatSegs: segs });
     }).catch(function () {});
   }
-  function closeLessonChat() { clearTimeout(_descT); setState({ lessonChatId: null, lessonChat: [], lessonChatInput: '', lessonChatCiteSel: null, lessonChatMeta: null, lessonChatHitT: null, lessonChatEvent: null, evPick: null, descModal: false, descModalClosing: false }); }
+  function closeLessonChat() { clearTimeout(_descT); setState({ lessonChatId: null, lessonChat: [], lessonChatInput: '', lessonChatCiteSel: null, lessonChatMeta: null, lessonChatHitT: null, lessonChatEvent: null, evPick: null, ovEvOpen: false, descModal: false, descModalClosing: false }); }
   function onLessonChatInput(e) { setState({ lessonChatInput: e.target.value }); }
   function onLessonChatKey(e) { if (e.key === 'Enter') sendLessonChat(); }
   function toggleLessonChatThink() { setState(function (s) { return { lessonChatThink: !s.lessonChatThink }; }); }
@@ -1631,7 +1632,8 @@
     setEvField(which, 'busy', true);
     fetch('/api/calendar/event', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: ev.title, start: _evWhenToStart(ev.when), description: ev.desc || '' })
+      body: JSON.stringify({ title: ev.title, start: _evWhenToStart(ev.when), description: ev.desc || '',
+                             end_date: ev.endIso || null })
     }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); }).then(function (res) {
       if (res.ok) { setState(function (s) { return s[key] ? kv(key, Object.assign({}, s[key], { busy: false, added: true })) : null; }); }
       else {
@@ -1649,12 +1651,12 @@
     var ev = st[_EVKEY[which]];
     return {
       notAdded: !ev.added, added: ev.added, busy: ev.busy,
-      title: ev.title, when: ev.when, desc: ev.desc || '',
+      title: ev.title, when: ev.when + (ev.endDay ? ' → ' + ev.endDay : ''), desc: ev.desc || '',
       calKnown: st.calConnected !== null, calConnected: st.calConnected === true,
       onConnect: startCalConnect,
       setTitle: function (e) { setEvField(which, 'title', e.target.value); },
       setDesc: function (e) { setEvField(which, 'desc', e.target.value); },
-      onAdd: function () { addEvent(which); },
+      onAdd: function (e) { if (e) e.stopPropagation(); addEvent(which); },
       onDismiss: function (e) { if (e) e.stopPropagation(); dismissEvent(which); },
       onTitleKey: function (e) { if (e.key === 'Enter') { e.preventDefault(); addEvent(which); } },
       descFocusRef: function (el) { if (el && !el._descBound) { el._descBound = true; el.addEventListener('focus', function () { el.blur(); openDescModal(which); }); } },
@@ -1688,9 +1690,35 @@
     if (tm) { time = (tm[1].length < 2 ? '0' + tm[1] : tm[1]) + ':' + tm[2]; whenChanged = true; }
     else if (th) { time = (th[1].length < 2 ? '0' + th[1] : th[1]) + ':00'; whenChanged = true; }
     if (whenChanged) done.push('tiden till ' + time);
-    // dag — veckodagar, idag/imorgon, nästa vecka
+    // flera dagar — "pågå till fredag", "till och med torsdag", "t.o.m. ons",
+    // "fram till fredag"; "en dag"/"bara en dag" nollställer slutdagen.
     var days = evDays();
     var W = [['måndag', 'mån'], ['tisdag', 'tis'], ['onsdag', 'ons'], ['torsdag', 'tors'], ['fredag', 'fre'], ['lördag', 'lör'], ['söndag', 'sön']];
+    var edm = low.match(/(?:pågå(?:r)?(?:\s+till)?|till och med|t\.?o\.?m\.?|fram till)\s+(måndag|tisdag|onsdag|torsdag|fredag|lördag|söndag|mån|tis|ons|tors|fre|lör|sön)/);
+    if (edm) {
+      var ewi = -1;
+      for (var ei = 0; ei < W.length; ei++) { if (W[ei][0] === edm[1] || W[ei][1] === edm[1]) { ewi = ei; break; } }
+      if (ewi >= 0) {
+        // Första matchande veckodag STRIKT EFTER startdagen ("till fredag" när
+        // starten är en fredag = nästa fredag). Kan hamna utanför dag-väljarens
+        // fönster, därför bär förslaget även slutdatumet som ISO (endIso).
+        var sd0 = days.filter(function (d) { return d.label === day; })[0];
+        var base = new Date((sd0 ? sd0.iso : days[0].iso) + 'T12:00:00');
+        var gidx = (ewi + 1) % 7;   // W är mån..sön; Date.getDay() har sön=0
+        for (var k = 1; k <= 7; k++) {
+          var dt = new Date(base); dt.setDate(base.getDate() + k);
+          if (dt.getDay() === gidx) {
+            patch.endDay = _DAYS_SV[dt.getDay()] + ' ' + dt.getDate() + ' ' + _MON_SV[dt.getMonth()];
+            patch.endIso = dt.toISOString().slice(0, 10);
+            done.push('händelsen till att pågå till ' + patch.endDay);
+            low = low.replace(edm[0], '');   // så slutdagen inte också tolkas som ny startdag
+            break;
+          }
+        }
+      }
+    } else if (/(?:^|\s)(?:bara |endast )?en dag(?:\s|$|\.)/.test(low) && ev.endDay) {
+      patch.endDay = null; patch.endIso = null; done.push('händelsen till en enda dag');
+    }
     var nd = null;
     if (low.indexOf('imorgon') >= 0 || low.indexOf('i morgon') >= 0) nd = days[1];
     else if (low.indexOf('nästa vecka') >= 0) nd = days[7];
@@ -2622,9 +2650,11 @@
       ovAskSum: function () { sendLessonChat('Sammanfatta lektionen i tre punkter'); },
       ovAskStud: function () { sendLessonChat('Vilka elever nämns och varför?'); },
       ovAskRemind: function () { sendLessonChat('Skapa en läxpåminnelse utifrån lektionen'); },
-      // Guardad: klick när ett förslag redan finns skriver inte över användarens ändringar.
-      proposeOvEvent: function () { if (!S.lessonChatEvent) proposeLessonEvent(); },
+      // Guardad: klick när ett förslag redan finns fäller ut det i stället för att skriva över.
+      proposeOvEvent: function () { if (S.lessonChatEvent) setState({ ovEvOpen: true }); else proposeLessonEvent(); },
       ovEvent: st.lessonChatEvent ? evBoxVM('lesson', st) : null,
+      ovEvOpen: !!st.ovEvOpen,
+      toggleOvEv: function () { setState(function (s) { return { ovEvOpen: !s.ovEvOpen }; }); },
       // Anteckningens inzoomade redigeringsmodal (design 14 juli)
       descModalOpen: !!st.descModal,
       descModalAnim: st.descModalClosing ? 'closing' : '',
@@ -3629,7 +3659,7 @@ function lessonEventBox(ev){
       ` : '' }
       <div style="margin-top:8px">
         <textarea data-input="${on(ev.setDesc)}" data-ref="${on(ev.descFocusRef)}" data-desc="" placeholder="Anteckning i kalenderposten …" aria-label="Anteckning i kalenderposten" style="width:100%;box-sizing:border-box;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 11px;font-size:13px;line-height:1.5;font-family:inherit;color:var(--ink);outline:none">${esc(ev.desc)}</textarea>
-        <div style="margin-top:6px;font-size:12px;color:var(--ink-3)">Ändra via chatten — t.ex. ”flytta till onsdag 14:30” eller ”kortare titel”.</div>
+        <div style="margin-top:6px;font-size:12px;color:var(--ink-3)">Ändra via chatten — ”flytta till onsdag 14:30”, ”kortare titel” eller ”pågå till fredag” för flera dagar.</div>
       </div>
       ` : `
       <div style="display:flex;align-items:center;gap:9px;font-size:13px;font-weight:500;color:var(--ok)"><span style="width:16px;height:16px;border-radius:50%;background:var(--ok);color:var(--on-ok);display:inline-flex;align-items:center;justify-content:center;font-size:9px;animation:okPop .25s cubic-bezier(0.22,1,0.36,1) both">✓</span>Tillagd i Google Kalender — ${esc(ev.title)}</div>
@@ -3679,14 +3709,14 @@ function viewModals(v){ return `
           `; }).join('') }
         </div>
       </div>
-      <div data-side="" style="flex:0 0 clamp(330px,36vw,440px);min-width:0;display:flex;flex-direction:column;border-left:1px solid var(--line);background:var(--surface)">
-        <div style="flex:0 0 auto;display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--line)">
+      <div data-side style="flex:0 0 clamp(330px,36vw,440px);min-width:0;display:flex;flex-direction:column;border-left:1px solid var(--line);background:var(--surface)">
+        <div style="flex:0 0 auto;display:flex;align-items:center;gap:8px;padding:17px 16px;border-bottom:1px solid var(--line)">
           <span class="ai-blink" style="width:6px;height:6px;border-radius:50%;background:var(--accent);flex:0 0 auto"></span>
           <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3)">Fråga lektionen</span>
           <span style="flex:1"></span>
           <span title="${esc(v.lessonChatThread.ovModelTitle)}" style="font-family:var(--mono);font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-3);cursor:help">Körs lokalt</span>
         </div>
-        <div data-hidescroll style="flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;padding:14px 16px;display:flex;flex-direction:column;gap:11px">
+        <div data-hidescroll style="flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;padding:20px 16px;display:flex;flex-direction:column;gap:15px">
           ${ v.lessonChatThread.chatEmpty ? `
           <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
             <button data-click="${on(v.ovAskSum)}" style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2);background:var(--surface);border:1px solid var(--line);border-radius:99px;padding:7px 13px;cursor:pointer;font-family:inherit;transition:transform .14s cubic-bezier(.2,.8,.25,1),border-color .14s,color .14s,background .14s" data-sh="border-color:var(--line-2) !important;color:var(--ink) !important">Sammanfatta lektionen</button>
@@ -3695,9 +3725,19 @@ function viewModals(v){ return `
             <button data-click="${on(v.proposeOvEvent)}" style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;color:var(--accent);background:var(--accent-weak);border:1px solid color-mix(in srgb,var(--accent) 40%,transparent);border-radius:99px;padding:7px 13px;cursor:pointer;font-family:inherit;transition:transform .14s cubic-bezier(.2,.8,.25,1),border-color .14s,background .14s" data-sh="background:color-mix(in srgb,var(--accent) 15%,transparent) !important"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="flex:0 0 auto"><rect x="2" y="3" width="12" height="11" rx="2"></rect><path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3M8 9v3M6.5 10.5h3"></path></svg>Kalenderhändelse</button>
           </div>
           ` : '' }
-          ${ v.ovEvent ? lessonEventBox(v.ovEvent) : '' }
           ${ chatThread(v.lessonChatThread) }
         </div>
+        ${ v.ovEvent ? (v.ovEvent.added ? `
+        <div style="flex:0 0 auto;display:flex;align-items:center;gap:9px;margin:0 12px 8px;border:1px solid color-mix(in srgb,var(--ok) 40%,var(--line));background:var(--surface);border-radius:4px;padding:8px 11px;font-size:13px;font-weight:500;color:var(--ok)"><span style="width:16px;height:16px;border-radius:50%;background:var(--ok);color:var(--on-ok);display:inline-flex;align-items:center;justify-content:center;font-size:9px;animation:okPop .25s cubic-bezier(0.22,1,0.36,1) both;flex:0 0 auto">✓</span><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Tillagd i Google Kalender — ${esc(v.ovEvent.title)}</span><button data-click="${on(v.ovEvent.onDismiss)}" aria-label="Stäng" style="margin-left:auto;border:none;background:transparent;color:var(--ink-3);cursor:pointer;font-size:11px;padding:2px 4px;flex:0 0 auto">✕</button></div>
+        ` : `
+        ${ v.ovEvOpen ? `<div data-click="${on(v.stop)}" style="flex:0 0 auto;margin:0 12px -1px">${ lessonEventBox(v.ovEvent) }</div>` : '' }
+        <div data-click="${on(v.toggleOvEv)}" role="button" tabindex="0" title="${ v.ovEvOpen ? 'Fäll ihop förslaget' : 'Fäll ut och redigera förslaget' }" style="flex:0 0 auto;display:flex;align-items:center;gap:9px;margin:0 12px 8px;border:1px solid color-mix(in srgb,var(--accent) 32%,var(--line));background:var(--accent-weak);border-radius:4px;padding:8px 11px;cursor:pointer">
+          <span style="font-family:var(--mono);font-size:9px;letter-spacing:0.07em;text-transform:uppercase;color:var(--accent);flex:0 0 auto">Förslag</span>
+          <span style="font-size:12.5px;font-weight:600;color:var(--ink);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(v.ovEvent.title)} · ${esc(v.ovEvent.when)}</span>
+          <button data-click="${on(v.ovEvent.onAdd)}" ${ v.ovEvent.busy ? 'disabled' : '' } style="margin-left:auto;flex:0 0 auto;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:4px;padding:6px 12px;font-size:12px;font-weight:600;font-family:inherit;cursor:${ v.ovEvent.busy ? 'default' : 'pointer' };opacity:${ v.ovEvent.busy ? '.6' : '1' }">${ v.ovEvent.busy ? 'Lägger till …' : 'Lägg till' }</button>
+          <button data-click="${on(v.ovEvent.onDismiss)}" aria-label="Avvisa förslaget" title="Avvisa förslaget" style="border:none;background:transparent;color:var(--ink-3);cursor:pointer;font-size:11px;padding:2px 4px;flex:0 0 auto">✕</button>
+        </div>
+        `) : '' }
         <div style="flex:0 0 auto;border-top:1px solid var(--line);padding:10px 12px">
           ${ chatComposer(v.lessonChatThread) }
         </div>

@@ -1314,7 +1314,8 @@ def create_app(base_dir: Path | None = None,
             base,
             title=body.get("title") or "",
             start_iso=body.get("start") or "",
-            description=body.get("description") or "")
+            description=body.get("description") or "",
+            end_date=body.get("end_date") or "")
         if res.get("error"):
             return JSONResponse({"error": res["error"]}, status_code=400)
         return res

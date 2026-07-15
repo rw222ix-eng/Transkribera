@@ -170,9 +170,12 @@ def connect(base_dir: Path) -> dict:
 
 def create_event(base_dir: Path, title: str, start_iso: str,
                  description: str = "",
-                 duration_min: int = DEFAULT_DURATION_MIN) -> dict:
+                 duration_min: int = DEFAULT_DURATION_MIN,
+                 end_date: str = "") -> dict:
     """Skapa en händelse i användarens primära kalender.
-    Returnerar {ok, id, link} eller {error}."""
+    Med `end_date` (YYYY-MM-DD, senare än startdagen) skapas i stället en
+    heldagshändelse som sträcker sig från startdagen till och med slutdagen
+    ("pågå till fredag" i förslagets chatt). Returnerar {ok, id, link} eller {error}."""
     creds = _load_creds(base_dir)
     if creds is None:
         st = status(base_dir)
@@ -182,13 +185,28 @@ def create_event(base_dir: Path, title: str, start_iso: str,
         start = datetime.fromisoformat((start_iso or "").strip())
     except ValueError:
         return {"error": "Ogiltig starttid för händelsen."}
-    end = start + timedelta(minutes=max(5, int(duration_min or DEFAULT_DURATION_MIN)))
-    body = {
-        "summary": (title or "").strip() or "Händelse från Transkribera",
-        "description": description or "",
-        "start": {"dateTime": start.isoformat(), "timeZone": TIMEZONE},
-        "end": {"dateTime": end.isoformat(), "timeZone": TIMEZONE},
-    }
+    span_end = None
+    if end_date:
+        try:
+            span_end = datetime.fromisoformat(end_date.strip()).date()
+        except ValueError:
+            return {"error": "Ogiltigt slutdatum för händelsen."}
+    if span_end and span_end > start.date():
+        # Google räknar heldagshändelsers slutdatum exklusivt.
+        body = {
+            "summary": (title or "").strip() or "Händelse från Transkribera",
+            "description": description or "",
+            "start": {"date": start.date().isoformat()},
+            "end": {"date": (span_end + timedelta(days=1)).isoformat()},
+        }
+    else:
+        end = start + timedelta(minutes=max(5, int(duration_min or DEFAULT_DURATION_MIN)))
+        body = {
+            "summary": (title or "").strip() or "Händelse från Transkribera",
+            "description": description or "",
+            "start": {"dateTime": start.isoformat(), "timeZone": TIMEZONE},
+            "end": {"dateTime": end.isoformat(), "timeZone": TIMEZONE},
+        }
     try:
         from googleapiclient.discovery import build
         service = build("calendar", "v3", credentials=creds, cache_discovery=False)
