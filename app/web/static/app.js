@@ -743,9 +743,6 @@
           if (tk.cite === undefined) return { isText: true, text: tk.text };
           return { isCite: true, num: tk.cite, supFlag: citeSel === (mi + ':' + tk.segIdx) ? 'on' : 'off', onCite: function () { onCite(mi, tk.segIdx); } };
         }) : [],
-        sources: cited ? cited.refs.map(function (r) {
-          return { num: r.num, time: r.time, text: r.text, rowFlag: citeSel === (mi + ':' + r.segIdx) ? 'on' : 'off', onPick: function () { onCite(mi, r.segIdx); } };
-        }) : [],
       };
     });
   }
@@ -3613,13 +3610,6 @@ function chatThread(c){ return `
                       ? `<span>${renderRichInline(tk.text)}</span>`
                       : `<button data-click="${on(tk.onCite)}" data-csup="${tk.supFlag}" aria-label="Visa källa ${esc(tk.num)} i transkriptet" style="display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;font-size:11px;font-weight:700;color:var(--accent);background:var(--accent-weak);border:1px solid color-mix(in srgb,var(--accent) 28%,transparent);border-radius:6px;cursor:pointer;vertical-align:2px;margin:0 1.5px;font-family:inherit;transition:transform .1s">${esc(tk.num)}</button>`; }).join('') }
                   </div>
-                  ${ m.sources.length ? `
-                  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px dashed var(--line-2)">
-                    ${ m.sources.map(function(src){ return `
-                      <button data-click="${on(src.onPick)}" data-crow="${src.rowFlag}" title="Visa var i transkriptet detta kommer ifrån" style="display:inline-flex;align-items:center;gap:6px;background:var(--surface);border:1px solid color-mix(in srgb,var(--accent) 45%,var(--line));color:var(--ink);border-radius:8px;padding:4px 10px;font-family:var(--mono);font-size:11px;font-weight:600;cursor:pointer;font-variant-numeric:tabular-nums;transition:border-color .12s,background .12s,transform .1s;animation:tokIn .18s ease-out both"><span data-rownum style="width:15px;height:15px;border-radius:5px;background:var(--accent-weak);color:var(--accent);font-size:9.5px;display:flex;align-items:center;justify-content:center;font-weight:700;flex:0 0 auto">${esc(src.num)}</span>${esc(src.time)}</button>
-                    `; }).join('') }
-                  </div>
-                  ` : '' }
                 </div>
                 ` : `
                 <div style="${m.bubbleStyle}">${ m.isUser ? esc(m.text) : renderRich(m.text) }</div>

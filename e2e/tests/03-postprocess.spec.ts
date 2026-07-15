@@ -31,7 +31,8 @@ test("chat about the transcript happens under Inspelningar", async ({ page }) =>
   await expect(page.getByText("Lektionen handlar om bråk")).toBeVisible({ timeout: 15000 });
   const cite = page.getByRole("button", { name: "Visa källa 1 i transkriptet" });
   await expect(cite).toBeVisible();
-  await expect(page.getByTitle("Visa var i transkriptet detta kommer ifrån").first()).toBeVisible();
+  // Källrads-chipsen under svaret togs bort 2026-07-15 — de numrerade
+  // citatknapparna i texten är den enda (och tillräckliga) källingången.
   await cite.click();
   await expect(cite).toHaveAttribute("data-csup", "on");
   // Design 14 juli: källan scrollar transkriptet till träffraden (data-ovhit).
