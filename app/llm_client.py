@@ -18,6 +18,7 @@ base_url is resolved at CALL time (not at import) so the desktop launcher can
 point the client at whatever port the server bound (see llama_server.find_free_port)."""
 from __future__ import annotations
 import json
+from datetime import datetime
 from typing import Callable
 
 import requests
@@ -59,6 +60,32 @@ _CHAT_SYSTEM_CITED = (
     "hakparenteser runt något annat än segmentnummer." + _STYLE +
     "\n\nTRANSKRIPT:\n"
 )
+
+# Kalenderförmågan i lektionschatten: modellen skapar/ändrar kalenderförslaget
+# genom att avsluta svaret med en maskinläsbar rad som frontenden tolkar och
+# döljer. Instruktionen läggs bara på när anroparen skickar calendar=True.
+_SV_DAYS = ["måndag", "tisdag", "onsdag", "torsdag", "fredag", "lördag", "söndag"]
+
+
+def _cal_instr(cal_event: dict | None) -> str:
+    today = datetime.now()
+    s = (
+        "\n\nKALENDER: Användaren kan be dig skapa eller ändra en kalenderhändelse "
+        "(prov, läxförhör, inlämning, möte, påminnelse …). Gör då två saker: "
+        "bekräfta kort på svenska i löptexten, och avsluta HELA svaret med exakt en rad:\n"
+        '[KALENDERFÖRSLAG] {"title": "...", "date": "YYYY-MM-DD", "time": "HH:MM", '
+        '"end_date": null, "desc": "..."}\n'
+        f"Idag är {_SV_DAYS[today.weekday()]} {today:%Y-%m-%d}. Alla fält ska alltid med: "
+        "vid en ändring, utgå från det aktuella förslaget nedan och behåll oförändrade "
+        "fälts värden. end_date (YYYY-MM-DD) anges bara när händelsen sträcker sig över "
+        "flera dagar, annars null. Raden ska ligga allra sist, vara giltig JSON på en enda "
+        "rad, och du får inte nämna eller citera den i löptexten. Skriv den ENDAST när "
+        "användaren uttryckligen vill skapa eller ändra en händelse — aldrig annars."
+    )
+    if cal_event:
+        s += "\nAKTUELLT FÖRSLAG: " + json.dumps(cal_event, ensure_ascii=False)
+    return s
+
 
 # Vision chat runs on Gemma (not Qwen), and the transcript is usually irrelevant to
 # an image question — so we keep the system prompt short to leave room in the
@@ -228,7 +255,8 @@ def chat(model: str, messages: list[dict], transcript: str = "",
          base_url: str | None = None, think: bool = False,
          images: list[str] | None = None,
          reason_cb: Callable[[str], None] | None = None,
-         cite: bool = False) -> str:
+         cite: bool = False,
+         calendar: bool = False, cal_event: dict | None = None) -> str:
     if images:
         # Vision turn (Gemma): attach the images to the latest user message as
         # multimodal content parts and skip the long transcript system prompt.
@@ -243,7 +271,8 @@ def chat(model: str, messages: list[dict], transcript: str = "",
         return _stream_chat(msgs, temperature=0.3, token_cb=token_cb, base_url=base_url)
 
     system = _CHAT_SYSTEM_CITED if cite else _CHAT_SYSTEM
-    msgs = [{"role": "system", "content": system + (transcript or "(tomt)")}]
+    extra = _cal_instr(cal_event) if calendar else ""
+    msgs = [{"role": "system", "content": system + (transcript or "(tomt)") + extra}]
     msgs += [{"role": m.get("role", "user"), "content": m.get("content", "")}
              for m in messages]
     return _stream_chat(msgs, temperature=0.3, token_cb=token_cb, reason_cb=reason_cb,

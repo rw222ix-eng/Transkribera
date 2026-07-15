@@ -1531,12 +1531,19 @@
       .map(function (m) { return { role: m.role, content: m.text }; });
     var transcript = S.lessonChatSegs.map(function (l, i) { return '[' + (i + 1) + '] (' + (l.time || '') + ') ' + l.text; }).join('\n');
     var acc = '', accReason = '';
-    var setLast = function (text, reason, typing) { setState(function (s) { var c = s.lessonChat.slice(); if (c.length) c[c.length - 1] = { role: 'assistant', text: text, reason: reason }; return { lessonChat: c, lessonChatTyping: !!typing }; }); };
-    streamPost('/api/chat', { messages: msgs, transcript: transcript, model: S.ppModel, think: S.lessonChatThink, cite: true }, function (ev) {
+    var setLast = function (text, reason, typing) { setState(function (s) { var c = s.lessonChat.slice(); if (c.length) c[c.length - 1] = { role: 'assistant', text: stripCalTag(text), reason: reason }; return { lessonChat: c, lessonChatTyping: !!typing }; }); };
+    // Modellen kan skapa/ändra kalenderförslaget direkt ur samtalet: den får dagens
+    // datum + aktuellt förslag och svarar med en [KALENDERFÖRSLAG]-rad som appliceras här.
+    var calEv = S.lessonChatEvent && !S.lessonChatEvent.added ? {
+      title: S.lessonChatEvent.title, date: S.lessonChatEvent.startIso || null,
+      time: (S.lessonChatEvent.when || '').slice(-5), end_date: S.lessonChatEvent.endIso || null,
+      desc: S.lessonChatEvent.desc || '',
+    } : null;
+    streamPost('/api/chat', { messages: msgs, transcript: transcript, model: S.ppModel, think: S.lessonChatThink, cite: true, calendar: true, cal_event: calEv }, function (ev) {
       if (ev.type === 'reasoning') { accReason += ev.text; setLast(acc, accReason, true); }
       else if (ev.type === 'token') { acc += ev.text; setLast(acc, accReason, false); }
       else if (ev.type === 'error') { setLast(acc || ('Fel: ' + (ev.message || 'okänt')), accReason, false); }
-      else if (ev.type === 'done') { var r = ev.result || {}; setLast(r.text || acc, accReason, false); }
+      else if (ev.type === 'done') { var r = ev.result || {}; var full = r.text || acc; setLast(full, accReason, false); applyCalTag('lesson', full); }
     });
   }
 
@@ -1555,6 +1562,12 @@
                  pre: i === 0 ? 'Idag' : (i === 1 ? 'Imorgon' : '') });
     }
     return out;
+  }
+  // 'YYYY-MM-DD' → 'fre 17 jul' (samma etikettform som evDays).
+  function _isoLabel(iso) {
+    var d = new Date(iso + 'T12:00:00');
+    if (isNaN(d)) return null;
+    return _DAYS_SV[d.getDay()] + ' ' + d.getDate() + ' ' + _MON_SV[d.getMonth()];
   }
   function _calErrToast(msg) {
     setState({ toast: { title: 'Google Kalender', detail: msg, kind: 'error', done: false } });
@@ -1612,7 +1625,7 @@
     var terms = S.lessonChatSegs.length ? '' : '';
     setState({ lessonChatEvent: {
       title: (m.group ? m.group + ' — ' : '') + 'Uppföljning: ' + (S.lessonChatName || 'lektionen'),
-      when: days[2].label + ' · 08:00',
+      when: days[2].label + ' · 08:00', startIso: days[2].iso,
       desc: 'Uppföljning av "' + (S.lessonChatName || 'lektionen') + '"' + (m.course ? ' i ' + m.course : '') + '. Läxförhör på begreppen från lektionen.',
       added: false, busy: false,
     }, evPick: null });
@@ -1625,7 +1638,7 @@
     var days = evDays();
     setState({ askEvent: {
       title: 'Uppföljning: ' + (q.length > 52 ? q.slice(0, 52).trim() + '…' : (q || 'arkivfråga')),
-      when: days[2].label + ' · 08:00',
+      when: days[2].label + ' · 08:00', startIso: days[2].iso,
       desc: q ? 'Utifrån arkivfrågan ”' + q + '”.' : '',
       added: false, busy: false,
     }, evPick: null });
@@ -1639,11 +1652,17 @@
     setState(function (s) { return s[key] ? kv(key, Object.assign({}, s[key], kv(k, v))) : null; });
   }
   function toggleEvPick(which) { setState(function (s) { return { evPick: s.evPick === which ? null : which }; }); }
-  function pickEvPart(which, part, val) {
+  function pickEvPart(which, part, val, iso) {
     var ev = S[_EVKEY[which]]; if (!ev) return;
     var bits = (ev.when || ' · ').split(' · ');
     var when = (part === 'day' ? val : (bits[0] || '')) + ' · ' + (part === 'time' ? val : (bits[1] || '09:00'));
-    setEvField(which, 'when', when);
+    var key = _EVKEY[which];
+    setState(function (s) {
+      if (!s[key]) return null;
+      var patch = { when: when };
+      if (part === 'day' && iso) patch.startIso = iso;
+      return kv(key, Object.assign({}, s[key], patch));
+    });
     if (part === 'time') setState({ evPick: null });
   }
   // "dag mån · HH:MM" -> ISO-start för API:t (dagens etikett slås upp mot evDays()).
@@ -1657,9 +1676,12 @@
     var key = _EVKEY[which];
     var ev = S[key]; if (!ev || ev.busy || ev.added) return;
     setEvField(which, 'busy', true);
+    // startIso vinner över etikett-uppslaget: chatten kan sätta datum utanför
+    // dag-väljarens 8-dagarsfönster, där _evWhenToStart inte hittar etiketten.
+    var evTime = /^\d{2}:\d{2}$/.test((ev.when || '').slice(-5)) ? (ev.when || '').slice(-5) : '08:00';
     fetch('/api/calendar/event', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: ev.title, start: _evWhenToStart(ev.when), description: ev.desc || '',
+      body: JSON.stringify({ title: ev.title, start: ev.startIso ? ev.startIso + 'T' + evTime + ':00' : _evWhenToStart(ev.when), description: ev.desc || '',
                              end_date: ev.endIso || null })
     }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); }).then(function (res) {
       if (res.ok) { setState(function (s) { return s[key] ? kv(key, Object.assign({}, s[key], { busy: false, added: true })) : null; }); }
@@ -1672,6 +1694,49 @@
     }).catch(function () { setEvField(which, 'busy', false); });
   }
   function dismissEvent(which) { setState(Object.assign({ evPick: null }, kv(_EVKEY[which], null))); }
+  // [KALENDERFÖRSLAG] {json} — modellens maskinläsbara kalenderrad (llm_client._cal_instr).
+  // Döljs ur visningen (även halvströmmad) och appliceras på förslaget när svaret är klart.
+  var _CAL_TAG = '[KALENDERFÖRSLAG]';
+  function stripCalTag(text) {
+    var i = text.indexOf(_CAL_TAG);
+    if (i < 0) { i = text.search(/\[K[A-ZÅÄÖ]{0,15}$/); }   // halvströmmad markör i svansen
+    return i >= 0 ? text.slice(0, i).replace(/\s+$/, '') : text;
+  }
+  function applyCalTag(which, text) {
+    var i = text.indexOf(_CAL_TAG);
+    if (i < 0) return;
+    var cal = null;
+    try { cal = JSON.parse((text.slice(i + _CAL_TAG.length).match(/\{[\s\S]*\}/) || [null])[0]); } catch (e) {}
+    if (!cal || typeof cal !== 'object') return;
+    var key = _EVKEY[which];
+    setState(function (s) {
+      var ev = s[key];
+      if (ev && ev.added) ev = null;                        // redan tillagd → nytt förslag
+      var base = ev || { title: '', when: '', desc: '', added: false, busy: false };
+      var patch = {};
+      if (typeof cal.title === 'string' && cal.title) patch.title = cal.title;
+      if (typeof cal.desc === 'string' && cal.desc) patch.desc = cal.desc;
+      var time = (typeof cal.time === 'string' && /^\d{1,2}:\d{2}$/.test(cal.time))
+        ? (cal.time.length < 5 ? '0' + cal.time : cal.time)
+        : (/^\d{2}:\d{2}$/.test((base.when || '').slice(-5)) ? (base.when || '').slice(-5) : '08:00');
+      var dayLabel = null, startIso = base.startIso || null;
+      if (typeof cal.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(cal.date)) {
+        var lbl = _isoLabel(cal.date);
+        if (lbl) { dayLabel = lbl; startIso = cal.date; }
+      }
+      if (!dayLabel) dayLabel = (base.when || ' · ').split(' · ')[0] || evDays()[2].label;
+      if (!startIso) startIso = evDays()[2].iso;
+      patch.when = dayLabel + ' · ' + time;
+      patch.startIso = startIso;
+      if (typeof cal.end_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(cal.end_date) && cal.end_date > startIso) {
+        patch.endIso = cal.end_date; patch.endDay = _isoLabel(cal.end_date);
+      } else if (cal.end_date === null) {
+        patch.endIso = null; patch.endDay = null;
+      }
+      return kv(key, Object.assign({}, base, patch));
+    });
+    if (S.calConnected === null) loadCalStatus();
+  }
   function openDescModal(which) { clearTimeout(_descT); setState({ descModal: true, descModalClosing: false, descModalFor: which || 'lesson' }); }
   // Vymodell för förslags-boxen (lessonEventBox) — delas av overlayen och arkivsvaret.
   function evBoxVM(which, st) {
@@ -1692,7 +1757,7 @@
       dayOpts: evDays().map(function (d) {
         return { key: d.label, label: d.label, pre: d.pre, hasPre: !!d.pre,
                  curQ: (ev.when || '').indexOf(d.label) === 0 ? '1' : '',
-                 onPick: function (e) { if (e) e.stopPropagation(); pickEvPart(which, 'day', d.label); } };
+                 onPick: function (e) { if (e) e.stopPropagation(); pickEvPart(which, 'day', d.label, d.iso); } };
       }),
       timeOpts: EV_TIMES.map(function (t2) {
         return { key: t2, label: t2, curQ: (ev.when || '').slice(-5) === t2 ? '1' : '',
@@ -1751,7 +1816,7 @@
     else if (low.indexOf('nästa vecka') >= 0) nd = days[7];
     else if (low.indexOf('idag') >= 0 || low.indexOf('i dag') >= 0) nd = days[0];
     else { for (var wi = 0; wi < W.length; wi++) { var w = W[wi]; if (low.indexOf(w[0]) >= 0 || new RegExp('(^|\\s)' + w[1] + '(\\s|$)').test(low)) { nd = days.slice(1).filter(function (d) { return d.label.indexOf(w[1] + ' ') === 0; })[0] || null; break; } } }
-    if (nd) { day = nd.label; whenChanged = true; done.push('dagen till ' + nd.label); }
+    if (nd) { day = nd.label; whenChanged = true; patch.startIso = nd.iso; done.push('dagen till ' + nd.label); }
     if (whenChanged) patch.when = day + ' · ' + time;
     // titel
     var tt = q.match(/(?:titeln?(?:\s+till|\s+ska vara)?|kalla (?:den|det)|döp (?:den|det) till)\s+["”«']?(.+?)["”»']?$/i);
