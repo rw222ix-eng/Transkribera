@@ -744,23 +744,40 @@
       };
     });
   }
-  // Parsar [n]-markörer i ett assistentsvar till klickbara citat. Numren pekar på
+  // Parsar citatmarkörer i ett assistentsvar till klickbara citat. Numren pekar på
   // segmenten som skickades till modellen (1-baserat); visningsnumren räknas om
-  // per meddelande i citeringsordning. Ogiltiga nummer lämnas kvar som text.
+  // per meddelande i citeringsordning. Utöver [n] hanteras intervall och listor —
+  // [1–3], [1-3], [1, 2] och [1–2, 5] — eftersom modellen ofta skriver så trots
+  // instruktionen. Ogiltiga markörer lämnas kvar som text.
   function parseChatCites(text, segs) {
     var tokens = [], refs = [], seen = {};
-    var re = /\[(\d{1,3})\]/g, last = 0, m;
+    var re = /\[(\d{1,3}(?:\s*[,–—-]\s*\d{1,3})*)\]/g, last = 0, m;
     while ((m = re.exec(text))) {
-      var n = parseInt(m[1], 10);
-      if (!(n >= 1 && n <= segs.length)) continue;
+      var nums = [], ok = true;
+      var parts = m[1].split(/\s*,\s*/);
+      for (var pi = 0; pi < parts.length; pi++) {
+        var rm = parts[pi].match(/^(\d{1,3})\s*[–—-]\s*(\d{1,3})$/);
+        if (rm) {
+          var a = parseInt(rm[1], 10), b = parseInt(rm[2], 10);
+          if (!(a >= 1 && b >= a && b <= segs.length && b - a <= 30)) { ok = false; break; }
+          for (var x = a; x <= b; x++) { if (nums.indexOf(x) < 0) nums.push(x); }
+        } else if (/^\d{1,3}$/.test(parts[pi])) {
+          var n = parseInt(parts[pi], 10);
+          if (!(n >= 1 && n <= segs.length)) { ok = false; break; }
+          if (nums.indexOf(n) < 0) nums.push(n);
+        } else { ok = false; break; }
+      }
+      if (!ok || !nums.length) continue;
       var before = text.slice(last, m.index);
       if (before) tokens.push({ text: before });
-      var segIdx = n - 1;
-      if (!(segIdx in seen)) {
-        seen[segIdx] = refs.length + 1;
-        refs.push({ num: refs.length + 1, segIdx: segIdx, time: segs[segIdx].time || '', text: segs[segIdx].text || '' });
+      for (var ni = 0; ni < nums.length; ni++) {
+        var segIdx = nums[ni] - 1;
+        if (!(segIdx in seen)) {
+          seen[segIdx] = refs.length + 1;
+          refs.push({ num: refs.length + 1, segIdx: segIdx, time: segs[segIdx].time || '', text: segs[segIdx].text || '' });
+        }
+        tokens.push({ cite: seen[segIdx], segIdx: segIdx });
       }
-      tokens.push({ cite: seen[segIdx], segIdx: segIdx });
       last = m.index + m[0].length;
     }
     if (!refs.length) return null;
