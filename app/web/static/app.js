@@ -50,6 +50,7 @@
     lessonChatInput: '',
     lessonChatTyping: false,
     lessonChatCiteSel: null,
+    reasonOpen: {},             // resonemangsrutor: mi → öppen/stängd (default: öppen medan den strömmar)
     lessonChatThink: false,
     lessonChatMeta: null,       // overlay-huvudets metadata: {lessonId,date,dur,model,lang,group,course,cc}
     lessonChatHitT: null,       // tidsstämpel (mm:ss) att markera i overlay-transkriptet
@@ -723,12 +724,16 @@
   // for hard multi-step chat questions. Correction/summary never think.
   // Bygger renderbara chatt-meddelanden (bubblor + källförankrade citat/källpanel).
   // Delas av resultatvyns "Fråga om lektionen" och per-lektion-chattmodalen.
-  function buildChatMessages(messages, segs, citeSel, onCite) {
+  function buildChatMessages(messages, segs, citeSel, onCite, typing, reasonOpen, onToggleReason) {
     return messages.map(function (m, mi) {
       var cited = (m.role !== 'user' && m.text) ? parseChatCites(m.text, segs) : null;
       return {
         text: m.text, isUser: m.role === 'user', hasAttach: !!m.attach, attach: m.attach || '',
         reason: m.reason || '', hasReason: !!(m.reason && m.reason.length),
+        // Öppen medan svaret strömmar (tänker-känslan); hopfälld när det är klart.
+        // Ett klick vinner alltid över default.
+        reasonIsOpen: (reasonOpen && (mi in reasonOpen)) ? !!reasonOpen[mi] : (!!typing && mi === messages.length - 1),
+        onToggleReason: function (e) { if (e) e.stopPropagation(); if (onToggleReason) onToggleReason(mi); },
         rowStyle: 'display:flex;flex-direction:column;gap:5px;align-items:' + (m.role === 'user' ? 'flex-end' : 'flex-start'),
         bubbleStyle: m.role === 'user' ? 'max-width:82%;background:var(--accent-weak);color:var(--ink);border:1px solid color-mix(in srgb,var(--accent) 25%,transparent);border-radius:15px 15px 4px 15px;padding:11px 15px;font-size:15.5px;line-height:1.5' : 'max-width:82%;background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:15px 15px 15px 4px;padding:11px 15px;font-size:15.5px;line-height:1.5',
         attachStyle: 'display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2);background:var(--sunken);border:1px solid var(--line);border-radius:8px;padding:4px 9px;font-variant-numeric:tabular-nums',
@@ -1466,17 +1471,25 @@
                                  group: l.group || '', course: l.course || '', cc: ccOf(l) },
                lessonChatHitT: hitT || null,
                lessonChatSegs: [], lessonChat: [], lessonChatInput: '',
-               lessonChatTyping: false, lessonChatCiteSel: null,
+               lessonChatTyping: false, lessonChatCiteSel: null, reasonOpen: {},
                lessonChatEvent: null, evPick: null, ovEvOpen: false });
     getJSON('/api/history/' + encodeURIComponent(hid)).then(function (h) {
       var segs = ((h && h.transcript) || []).map(function (g) { return { time: fmtTime(g.start), text: g.text }; });
       setState({ lessonChatSegs: segs });
     }).catch(function () {});
   }
-  function closeLessonChat() { clearTimeout(_descT); setState({ lessonChatId: null, lessonChat: [], lessonChatInput: '', lessonChatCiteSel: null, lessonChatMeta: null, lessonChatHitT: null, lessonChatEvent: null, evPick: null, ovEvOpen: false, descModal: false, descModalClosing: false }); }
+  function closeLessonChat() { clearTimeout(_descT); setState({ lessonChatId: null, lessonChat: [], lessonChatInput: '', lessonChatCiteSel: null, reasonOpen: {}, lessonChatMeta: null, lessonChatHitT: null, lessonChatEvent: null, evPick: null, ovEvOpen: false, descModal: false, descModalClosing: false }); }
   function onLessonChatInput(e) { setState({ lessonChatInput: e.target.value }); }
   function onLessonChatKey(e) { if (e.key === 'Enter') sendLessonChat(); }
   function toggleLessonChatThink() { setState(function (s) { return { lessonChatThink: !s.lessonChatThink }; }); }
+  function toggleReason(mi) {
+    setState(function (s) {
+      var ro = Object.assign({}, s.reasonOpen);
+      var cur = (mi in ro) ? !!ro[mi] : (!!s.lessonChatTyping && mi === s.lessonChat.length - 1);
+      ro[mi] = !cur;
+      return { reasonOpen: ro };
+    });
+  }
   function selectLessonChatCite(mi, segIdx) {
     var key = mi + ':' + segIdx;
     var seg = S.lessonChatSegs[segIdx] || {};
@@ -2681,7 +2694,7 @@
       lessonChatThread: {
         chatEmpty: st.lessonChat.length === 0,
         chatHasMsgs: st.lessonChat.length > 0,
-        chat: buildChatMessages(st.lessonChat, st.lessonChatSegs, st.lessonChatCiteSel, selectLessonChatCite),
+        chat: buildChatMessages(st.lessonChat, st.lessonChatSegs, st.lessonChatCiteSel, selectLessonChatCite, st.lessonChatTyping, st.reasonOpen, toggleReason),
         chatTyping: st.lessonChatTyping,
         chatInput: st.lessonChatInput,
         onChatInput: onLessonChatInput, onChatKey: onLessonChatKey, onChatSend: sendLessonChat,
@@ -3587,9 +3600,12 @@ function chatThread(c){ return `
           ${ c.chatHasMsgs ? `
             ${ c.chat.map(function(m){ return `
               <div style="${m.rowStyle}">
-                ${ m.hasReason ? `
-                  <div style="${m.reasonStyle}"><span style="display:block;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-3);margin-bottom:4px">Resonemang</span>${esc(m.reason)}</div>
-                ` : '' }
+                ${ m.hasReason ? (m.reasonIsOpen ? `
+                  <div style="${m.reasonStyle}">
+                    <div data-click="${on(m.onToggleReason)}" role="button" tabindex="0" aria-expanded="true" title="Fäll ihop resonemanget" style="display:flex;align-items:center;gap:6px;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-3);margin-bottom:4px;cursor:pointer"><span>Resonemang</span><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto"><path d="M4 10l4-4 4 4"></path></svg></div>${esc(m.reason)}</div>
+                ` : `
+                  <button data-click="${on(m.onToggleReason)}" aria-expanded="false" title="Visa modellens resonemang" style="display:inline-flex;align-items:center;gap:6px;background:var(--sunken);border:1px dashed var(--line-2);border-radius:9px;padding:4px 10px;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-3);cursor:pointer;font-family:inherit">Resonemang<svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto"><path d="M4 6l4 4 4-4"></path></svg></button>
+                `) : '' }
                 ${ m.hasCites ? `
                 <div style="align-self:stretch;background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:5px 14px 14px 14px;padding:13px 14px;box-shadow:var(--shadow-sm)">
                   <div style="font-size:14px;line-height:1.7;color:var(--ink);min-width:0">
