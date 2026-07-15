@@ -39,21 +39,18 @@ test("chat about the transcript happens under Inspelningar", async ({ page }) =>
   expect(errors, errors.join("\n")).toEqual([]);
 });
 
-test("lesson insight extraction runs from the lesson overlay", async ({ page }) => {
+test("lesson insights are extracted automatically after transcription", async ({ page }) => {
   const errors: string[] = [];
   failOnConsoleError(page, errors);
-  await transcribeSample(page);
 
-  // Kartotek-omdesignen: Insikter-panelen är borta; Analysera lektion bor i
-  // lektionsoverlayens header och matar Kommande/Terminstrender.
-  await page.getByRole("button", { name: "Inspelningar", exact: true }).first().click();
-  await page.locator('[data-rec-id]').first().click();
+  // Analysera lektion-knappen är borttagen: extraktionen körs som tyst
+  // bakgrundsprocess när hela kön är klar (finishTranscribe → autoExtractLessons)
+  // och matar Kommande/Inför nästa lektion/Terminstrender utan användaråtgärd.
   const [resp] = await Promise.all([
-    page.waitForResponse((r) => /\/api\/lessons\/\d+\/extract/.test(r.url())),
-    page.getByRole("button", { name: /Analysera lektion/ }).click(),
+    page.waitForResponse((r) => /\/api\/lessons\/\d+\/extract/.test(r.url()), { timeout: 60000 }),
+    transcribeSample(page),
   ]);
   expect(resp.status()).toBe(200);
-  await expect(page.getByText("Lektionen analyserad")).toBeVisible({ timeout: 15000 });
   expect(errors, errors.join("\n")).toEqual([]);
 });
 

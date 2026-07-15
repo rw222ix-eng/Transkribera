@@ -62,8 +62,6 @@
     calHint: '',                // senaste hjälptext från /api/calendar/status
     calSetupOpen: false,        // guidat "Koppla Google Kalender"-fönster
     calBusy: false,             // installation/inloggning pågår
-    ovAnalyzing: false,         // Analysera lektion pågår (overlayens header)
-    ovReportBusy: false,        // Rapport-export pågår (overlayens header)
     openDD: null,
     search: '',
     diskTarget: 'd',
@@ -155,6 +153,7 @@
   var _file, _seek, _searchRef, _scrollRef, _procScroll, _media, _clientFile;
   var _rec = null, _recChunks = [], _recStream = null, _recTimer = null;
   var _recMarkers = [], _recMarkersByPath = {};   // live-markörer under inspelning
+  var _doneHids = [];                             // history-id:n från körningens klara filer (auto-extraktion)
   var _recSession = null, _recUploadChain = null; // inkrementell flush till disk
   var _recAudioCtx = null, _recAnalyser = null, _recLevelTimer = null, _recSilenceSecs = 0;
   var _prevTab, _prevStep, _wasEditing, _wasOpen, _scrollKey, _wasModal;
@@ -1336,6 +1335,7 @@
           var segs = (r.transcript || []).map(function (g) { return { time: fmtTime(g.start), text: g.text }; });
           setState(function (s) { return { run: 'done', progress: 100, transcript: segs, transcriptRaw: r.transcript || [], resultId: r.id || null, runMedia: r.media || null, edits: {}, edited: false, resultFilesReal: r.files || [], qStatus: Object.assign({}, s.qStatus, kv(active.id, 'done')), qProgress: Object.assign({}, s.qProgress, kv(active.id, 100)), log: s.log.concat(['[klar] Färdig på ' + fmtTime(s.elapsed)]) }; });
           loadHistory();   // server archived this run; refresh from disk
+          if (r.id) _doneHids.push(r.id);   // kom ihåg körningen till auto-extraktionen
           // Attach any live markers captured while recording this file.
           var marks = _recMarkersByPath[active.path];
           if (marks && marks.length && r.id) {
@@ -1409,6 +1409,30 @@
     clearInterval(_toastIv); clearTimeout(_toastT2);
     setState({ toast: { title: n > 1 ? (n + ' filer transkriberade') : (corrected ? 'Transkriberad och korrekturläst' : 'Transkriberad'), name: n > 1 ? 'Sparade i Inspelningar' : 'Sparad i Inspelningar', done: true } });
     _toastT2 = setTimeout(function () { setState({ toast: null }); }, 4200);
+    var hids = _doneHids.slice(); _doneHids = [];
+    autoExtractLessons(hids);
+  }
+
+  // Auto-extraktion (bakgrundsprocess): när hela kön är klar analyseras varje ny
+  // lektion med den lokala modellen — kalenderposter, åtgärder och svårigheter
+  // matas in i Kommande/Inför nästa lektion/Terminstrender utan någon knapp.
+  // Körs EFTER kön (aldrig parallellt med Whisper — GPU-arbitern serialiserar),
+  // en lektion i taget, och tyst: paneler fylls på när de är klara.
+  function autoExtractLessons(hids) {
+    if (!hids.length) return;
+    getJSON('/api/lessons').then(function (lessons) {
+      if (!Array.isArray(lessons)) return;
+      var lids = lessons.filter(function (l) { return l.history_id && hids.indexOf(l.history_id) !== -1; })
+                        .map(function (l) { return l.id; });
+      var next = function () {
+        var lid = lids.shift();
+        if (lid == null) { loadAgenda(); loadPrep(); loadTrends(); return; }
+        streamPost('/api/lessons/' + encodeURIComponent(lid) + '/extract', {}, function (ev) {
+          if (ev.type === 'done' || ev.type === 'error') next();
+        });
+      };
+      next();
+    }).catch(function () {});
   }
 
   // ---- Lektionsoverlay (fullskärm): transkript + samma källförankrade chatt
@@ -1425,42 +1449,13 @@
                lessonChatHitT: hitT || null,
                lessonChatSegs: [], lessonChat: [], lessonChatInput: '',
                lessonChatTyping: false, lessonChatCiteSel: null,
-               lessonChatEvent: null, evPick: null,
-               ovAnalyzing: false, ovReportBusy: false });
+               lessonChatEvent: null, evPick: null });
     getJSON('/api/history/' + encodeURIComponent(hid)).then(function (h) {
       var segs = ((h && h.transcript) || []).map(function (g) { return { time: fmtTime(g.start), text: g.text }; });
       setState({ lessonChatSegs: segs });
     }).catch(function () {});
   }
   function closeLessonChat() { clearTimeout(_descT); setState({ lessonChatId: null, lessonChat: [], lessonChatInput: '', lessonChatCiteSel: null, lessonChatMeta: null, lessonChatHitT: null, lessonChatEvent: null, evPick: null, descModal: false, descModalClosing: false }); }
-  // Analysera lektion + Rapport bor i overlayens header sedan Insikter-panelen
-  // togs bort med kartotek-omdesignen — extraktionen matar Kommande/Inför
-  // nästa lektion/Terminstrender, rapporten öppnas i webbläsaren.
-  function analyzeLesson() {
-    var lid = (S.lessonChatMeta || {}).lessonId;
-    if (!lid || S.ovAnalyzing) return;
-    setState({ ovAnalyzing: true });
-    streamPost('/api/lessons/' + encodeURIComponent(lid) + '/extract', {}, function (ev) {
-      if (ev.type === 'done') {
-        setState({ ovAnalyzing: false, toast: { title: 'Lektionen analyserad', name: 'Insikterna syns under Kommande och Terminstrender', done: true } });
-        loadAgenda(); loadPrep(); loadTrends();
-        clearTimeout(_toastT2); _toastT2 = setTimeout(function () { setState({ toast: null }); }, 3200);
-      } else if (ev.type === 'error') {
-        setState({ ovAnalyzing: false, toast: { title: 'Analys misslyckades', name: ev.message || '', done: false } });
-        clearTimeout(_toastT2); _toastT2 = setTimeout(function () { setState({ toast: null }); }, 5200);
-      }
-    });
-  }
-  function exportLessonReport() {
-    var lid = (S.lessonChatMeta || {}).lessonId;
-    if (!lid || S.ovReportBusy) return;
-    setState({ ovReportBusy: true });
-    fetch('/api/lessons/' + encodeURIComponent(lid) + '/report?format=html')
-      .then(function (r) { return r.json(); }).then(function (res) {
-        setState({ ovReportBusy: false });
-        if (res && res.path) { fetch('/api/open', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: res.path }) }).catch(function () {}); }
-      }).catch(function () { setState({ ovReportBusy: false }); });
-  }
   function onLessonChatInput(e) { setState({ lessonChatInput: e.target.value }); }
   function onLessonChatKey(e) { if (e.key === 'Enter') sendLessonChat(); }
   function toggleLessonChatThink() { setState(function (s) { return { lessonChatThink: !s.lessonChatThink }; }); }
@@ -2624,8 +2619,6 @@
       // Stäng overlayn först — transkriptmodalen (z 100) ligger annars under overlayn (z 120).
       ovOpenFull: function () { var hid = st.lessonChatId; closeLessonChat(); openLesson({ history_id: hid }); },
       ovHasLesson: !!(st.lessonChatMeta && st.lessonChatMeta.lessonId),
-      ovAnalyzing: st.ovAnalyzing, onAnalyze: analyzeLesson,
-      ovReportBusy: st.ovReportBusy, onOvReport: exportLessonReport,
       ovAskSum: function () { sendLessonChat('Sammanfatta lektionen i tre punkter'); },
       ovAskStud: function () { sendLessonChat('Vilka elever nämns och varför?'); },
       ovAskRemind: function () { sendLessonChat('Skapa en läxpåminnelse utifrån lektionen'); },
@@ -3661,10 +3654,6 @@ function viewModals(v){ return `
         </div>
         <span style="flex:1"></span>
         <button data-click="${on(v.proposeOvEvent)}" title="Föreslå en kalenderhändelse — justera och lägg till i Google Kalender" style="flex:0 0 auto;display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:9px;padding:8px 13px;font-size:12.5px;font-weight:500;cursor:pointer;font-family:inherit;transition:transform .14s cubic-bezier(.2,.8,.25,1),border-color .14s,background .14s,color .14s" data-sh="border-color:var(--line-2) !important;background:var(--sunken) !important;color:var(--ink) !important"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="flex:0 0 auto"><rect x="2" y="3" width="12" height="11" rx="2"></rect><path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3M8 9v3M6.5 10.5h3"></path></svg>Kalenderhändelse</button>
-        ${ v.ovHasLesson ? `
-        <button data-click="${on(v.onAnalyze)}" ${ v.ovAnalyzing ? 'disabled' : '' } title="Extrahera kalenderposter, åtgärder och svårigheter till Kommande och Terminstrender" style="flex:0 0 auto;display:inline-flex;align-items:center;gap:7px;background:var(--accent-weak);color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 38%,transparent);border-radius:9px;padding:8px 13px;font-size:12.5px;font-weight:600;cursor:${ v.ovAnalyzing ? 'default' : 'pointer' };font-family:inherit;opacity:${ v.ovAnalyzing ? '.6' : '1' };transition:transform .14s cubic-bezier(.2,.8,.25,1),border-color .14s,background .14s" data-sh="background:color-mix(in srgb,var(--accent) 15%,transparent) !important">${ v.ovAnalyzing ? `<span style="width:13px;height:13px;border-radius:50%;border:2px solid color-mix(in srgb,var(--accent) 35%,transparent);border-top-color:var(--accent);animation:spin .7s linear infinite;flex:0 0 auto"></span>Analyserar …` : `<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto"><path d="M8 1.8l1.4 3.6 3.6 1.4-3.6 1.4L8 11.8 6.6 8.2 3 6.8l3.6-1.4z"></path></svg>Analysera lektion` }</button>
-        <button data-click="${on(v.onOvReport)}" ${ v.ovReportBusy ? 'disabled' : '' } title="Exportera rapport (öppnas i webbläsaren, skriv ut som PDF)" style="flex:0 0 auto;display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:9px;padding:8px 13px;font-size:12.5px;font-weight:500;cursor:${ v.ovReportBusy ? 'default' : 'pointer' };font-family:inherit;opacity:${ v.ovReportBusy ? '.6' : '1' };transition:transform .14s cubic-bezier(.2,.8,.25,1),border-color .14s,background .14s,color .14s" data-sh="border-color:var(--line-2) !important;background:var(--sunken) !important;color:var(--ink) !important"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto"><path d="M9 2H4.5A1.5 1.5 0 0 0 3 3.5v9A1.5 1.5 0 0 0 4.5 14h7A1.5 1.5 0 0 0 13 12.5V6z"></path><path d="M9 2v4h4M6 9h4M6 11.2h4"></path></svg>${ v.ovReportBusy ? 'Exporterar …' : 'Rapport' }</button>
-        ` : '' }
         <button data-click="${on(v.ovOpenFull)}" title="Öppna hela transkriptvyn" style="flex:0 0 auto;display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:9px;padding:8px 13px;font-size:12.5px;font-weight:500;cursor:pointer;font-family:inherit;transition:transform .14s cubic-bezier(.2,.8,.25,1),border-color .14s,background .14s,color .14s" data-sh="border-color:var(--line-2) !important;background:var(--sunken) !important;color:var(--ink) !important"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto"><path d="M6 2.5H3.5A1 1 0 0 0 2.5 3.5V6M10 2.5h2.5a1 1 0 0 1 1 1V6M13.5 10v2.5a1 1 0 0 1-1 1H10M6 13.5H3.5a1 1 0 0 1-1-1V10"></path></svg>Transkript</button>
       </div>
       <div style="flex:1;min-height:0;display:flex">
