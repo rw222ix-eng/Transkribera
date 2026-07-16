@@ -68,5 +68,8 @@ design-system/_snapshot-verify.png
 # Genererade ljudtestfiler (skapas av tests/download_sv_audio.py)
 tests/audio_samples/
 
+# Whiteboard-benchens körningsartefakter (tests/bench_whiteboard.py)
+tests/bench_out/
+
 # Lokala QA-körningsartefakter (rådata från riktiga transkriberingskörningar)
 exports/
