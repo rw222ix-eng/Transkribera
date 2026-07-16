@@ -41,14 +41,7 @@
     dispProgress: 0,    // mjukt animerat visningsvärde — rör sig alltid framåt, aldrig bakåt
     elapsed: 0,
     log: [],
-    pp: 'idle',
-    ppOp: 'clean',
-    ppModel: 'Qwen3 14B (Q8_0)',   // fast intern LLM för korrektur + chatt
-    ppOut: '',
-    ppPct: 0,
-    ppEnabled: false,
-    chatThink: false,           // Qwen3 "tänk djupare" — bara i lektionschatten, default av
-    chatAttach: [],
+    ppModel: 'Qwen3 14B (Q8_0)',   // fast intern LLM för chatt/analys
     // Per-lektion chattmodal (Chatta-knapp på inspelnings-kortet) — egen isolerad chatt
     lessonChatId: null,         // öppen lektions history-id (även "overlay öppen"-flagga)
     lessonChatName: '',
@@ -57,18 +50,20 @@
     lessonChatInput: '',
     lessonChatTyping: false,
     lessonChatCiteSel: null,
+    reasonOpen: {},             // resonemangsrutor: mi → öppen/stängd (default: öppen medan den strömmar)
     lessonChatThink: false,
     lessonChatMeta: null,       // overlay-huvudets metadata: {lessonId,date,dur,model,lang,group,course,cc}
     lessonChatHitT: null,       // tidsstämpel (mm:ss) att markera i overlay-transkriptet
-    lessonChatEvent: null,      // kalenderförslag: {title,when,desc,added,busy,aiMsgs,aiInput,aiBusy}
+    lessonChatEvent: null,      // kalenderförslag: {title,when,desc,added,busy,endDay}
+    ovEvOpen: false,            // förslags-raden i overlayen utfälld till redigeringsboxen
     evPick: null,               // öppen dag/tid-väljare i kalenderförslaget
+    descModal: false,           // anteckningens inzoomade redigeringsmodal
+    descModalClosing: false,
     calConnected: null,         // Google Kalender-status: null = okänd, annars bool
     calClientReady: null,       // finns en OAuth-klient (inbyggd/installerad)?
     calHint: '',                // senaste hjälptext från /api/calendar/status
     calSetupOpen: false,        // guidat "Koppla Google Kalender"-fönster
     calBusy: false,             // installation/inloggning pågår
-    ovAnalyzing: false,         // Analysera lektion pågår (overlayens header)
-    ovReportBusy: false,        // Rapport-export pågår (overlayens header)
     openDD: null,
     search: '',
     diskTarget: 'd',
@@ -83,8 +78,6 @@
     transcriptOpen: false,
     logOpen: false,
     logExpand: false,           // vikbar logg i statuskortet (design: Visa/Dölj)
-    cleanText: null,            // senaste korrekturlästa transkriptet (behålls även om annan pp körs)
-    cleanModalOpen: false,      // KORREKTURLÄST-modalen med markerade rättelser
     toast: null,
     searchQuery: '',
     currentMatch: 0,
@@ -126,6 +119,13 @@
     askSources: null,          // lektioner svaret bygger på
     asking: false,
     askQ: '',                  // frågan som visas i tänker-bannern
+    askZoom: false,            // SVAR-kortet förstorat till modal (design 14 juli)
+    askZoomClosing: false,
+    srcBox: true,              // hopfällbar "Källor i arkivet"-panel i svaret
+    askFollowups: [],          // följdfrågor i svaret: {q, a, typing}
+    askFollowInput: '',
+    askEvent: null,            // kalenderförslag i arkivsvaret (samma form som lessonChatEvent)
+    descModalFor: 'lesson',    // vilket förslag anteckningsmodalen redigerar: 'lesson' | 'ask'
     agenda: null,              // daterade poster tvärs alla klasser
     agendaOpen: false,         // utfälld agenda-panel
     agendaExporting: false,
@@ -191,15 +191,16 @@
   };
 
   /* instance (non-state) fields */
-  var _t, _pp, _ppIv, _chat, _au, _toastIv, _toastT2, _glideRAF, _progRAF, _disp, _lastStart, _runToken = 0;
-  var _fltTimer = null, _scanTimer = null, _askRun = 0;
+  var _t, _finishT, _chat, _au, _toastIv, _toastT2, _glideRAF, _progRAF, _disp, _lastStart, _runToken = 0;
+  var _fltTimer = null, _scanTimer = null, _askRun = 0, _askZoomT = null, _descT = null;
   var _dl = {}, _inst = {}, _editBuf = {}, _wave = null;
-  var _file, _seek, _searchRef, _scrollRef, _procScroll, _imgInput, _media, _clientFile;
+  var _file, _seek, _searchRef, _scrollRef, _procScroll, _media, _clientFile;
   var _rec = null, _recChunks = [], _recStream = null, _recTimer = null;
   var _recMarkers = [], _recMarkersByPath = {};   // live-markörer under inspelning
+  var _doneHids = [];                             // history-id:n från körningens klara filer (auto-extraktion)
   var _recSession = null, _recUploadChain = null; // inkrementell flush till disk
   var _recAudioCtx = null, _recAnalyser = null, _recLevelTimer = null, _recSilenceSecs = 0;
-  var _prevTab, _prevStep, _prevRun, _prevPP, _prevOp, _wasEditing, _wasOpen, _scrollKey, _wasModal;
+  var _prevTab, _prevStep, _wasEditing, _wasOpen, _scrollKey, _wasModal;
 
   /* ----------------------------------------------------------------- data -- */
   // Catalogs are `let` so loadModels() can reassign them to real data from /api/models;
@@ -251,7 +252,16 @@
       { id: 'x', drive: 'X:', name: 'Extern · USB-C SSD', total: 4096, free: 3720 },
     ],
   };
-  var STEPS = ['Förbereder', 'Extraherar ljud', 'Transkriberar', 'Färdigställer'];
+  // Korrekturpasset (Gemma 3n mot ljudet) körs i serverns pipeline och tar
+  // 60–90 %-bandet av progressen när ljudmodellen finns — då visas det som ett
+  // eget steg. Utan korrektur äger transkriberingen 0–90 % som förut.
+  function willCorrect() { return !!(S.audioCorrect && S.audioModelInstalled); }
+  function stageNames() {
+    return willCorrect()
+      ? ['Förbereder', 'Extraherar ljud', 'Transkriberar', 'Korrekturläser', 'Färdigställer']
+      : ['Förbereder', 'Extraherar ljud', 'Transkriberar', 'Färdigställer'];
+  }
+  function stageBounds() { return willCorrect() ? [0, 12, 28, 60, 92, 100] : [0, 12, 28, 92, 100]; }
   var AUDIO_DUR = 150;
   var ALLOWED = ['mp4', 'mkv', 'mov', 'webm', 'avi', 'm4v', 'mp3', 'wav', 'm4a', 'flac', 'aac', 'ogg', 'opus', 'wma'];
   /* -------------------------------------------------------------- helpers -- */
@@ -1189,9 +1199,9 @@
   }
 
   function restart() {
-    clearInterval(_t); clearTimeout(_pp); clearInterval(_ppIv); clearTimeout(_chat); clearInterval(_au);
+    clearInterval(_t); clearTimeout(_finishT); clearTimeout(_chat); clearInterval(_au);
     Object.values(_dl || {}).forEach(clearInterval);
-    setState({ source: '', queue: [], qStatus: {}, qProgress: {}, activeId: null, fileError: '', step: 'source', run: 'idle', progress: 0, elapsed: 0, log: [], pp: 'idle', ppOp: 'summary', ppOut: '', ppEnabled: false, chatThink: false, chatAttach: [], openDD: null, transcriptOpen: false, runError: null, editing: false, edits: {}, edited: false, audioPlaying: false, audioT: 0, audioDur: 0, mediaUrl: null, runMedia: null, histViewing: null, resultId: null, transcriptRaw: null, logExpand: false, cleanText: null, cleanModalOpen: false });
+    setState({ source: '', queue: [], qStatus: {}, qProgress: {}, activeId: null, fileError: '', step: 'source', run: 'idle', progress: 0, elapsed: 0, log: [], openDD: null, transcriptOpen: false, runError: null, editing: false, edits: {}, edited: false, audioPlaying: false, audioT: 0, audioDur: 0, mediaUrl: null, runMedia: null, histViewing: null, resultId: null, transcriptRaw: null, logExpand: false });
   }
   function onSearch(e) { setState({ search: e.target.value }); }
   function toggleFmt(f) { setState(function (s) { var formats = Object.assign({}, s.formats); formats[f] = !formats[f]; return { formats: formats }; }); }
@@ -1215,20 +1225,22 @@
       }
     });
   }
-  function pickOp(o) { setState({ ppOp: o, pp: 'idle', ppOut: '' }); }
   // Qwen3 "thinking": off by default (fast, no English chain-of-thought leak); on only
   // for hard multi-step chat questions. Correction/summary never think.
-  function toggleChatThink() { setState(function (s) { return { chatThink: !s.chatThink }; }); }
   // Bygger renderbara chatt-meddelanden (bubblor + källförankrade citat/källpanel).
   // Delas av resultatvyns "Fråga om lektionen" och per-lektion-chattmodalen.
-  function buildChatMessages(messages, segs, citeSel, onCite) {
+  function buildChatMessages(messages, segs, citeSel, onCite, typing, reasonOpen, onToggleReason) {
     return messages.map(function (m, mi) {
       var cited = (m.role !== 'user' && m.text) ? parseChatCites(m.text, segs) : null;
       return {
         text: m.text, isUser: m.role === 'user', hasAttach: !!m.attach, attach: m.attach || '',
         reason: m.reason || '', hasReason: !!(m.reason && m.reason.length),
+        // Öppen medan svaret strömmar (tänker-känslan); hopfälld när det är klart.
+        // Ett klick vinner alltid över default.
+        reasonIsOpen: (reasonOpen && (mi in reasonOpen)) ? !!reasonOpen[mi] : (!!typing && mi === messages.length - 1),
+        onToggleReason: function (e) { if (e) e.stopPropagation(); if (onToggleReason) onToggleReason(mi); },
         rowStyle: 'display:flex;flex-direction:column;gap:5px;align-items:' + (m.role === 'user' ? 'flex-end' : 'flex-start'),
-        bubbleStyle: m.role === 'user' ? 'max-width:82%;background:var(--btn-bg);color:var(--btn-fg);border-radius:15px 15px 4px 15px;padding:11px 15px;font-size:15.5px;line-height:1.5' : 'max-width:82%;background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:15px 15px 15px 4px;padding:11px 15px;font-size:15.5px;line-height:1.5',
+        bubbleStyle: m.role === 'user' ? 'max-width:82%;background:var(--accent-weak);color:var(--ink);border:1px solid color-mix(in srgb,var(--accent) 25%,transparent);border-radius:15px 15px 4px 15px;padding:11px 15px;font-size:15.5px;line-height:1.5' : 'max-width:82%;background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:15px 15px 15px 4px;padding:11px 15px;font-size:15.5px;line-height:1.5',
         attachStyle: 'display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2);background:var(--sunken);border:1px solid var(--line);border-radius:8px;padding:4px 9px;font-variant-numeric:tabular-nums',
         reasonStyle: 'max-width:82%;background:var(--sunken);border:1px dashed var(--line-2);color:var(--ink-2);border-radius:13px;padding:9px 13px;font-size:13px;line-height:1.5;white-space:pre-wrap',
         hasCites: !!cited,
@@ -1236,29 +1248,43 @@
           if (tk.cite === undefined) return { isText: true, text: tk.text };
           return { isCite: true, num: tk.cite, supFlag: citeSel === (mi + ':' + tk.segIdx) ? 'on' : 'off', onCite: function () { onCite(mi, tk.segIdx); } };
         }) : [],
-        sources: cited ? cited.refs.map(function (r) {
-          return { num: r.num, time: r.time, text: r.text, rowFlag: citeSel === (mi + ':' + r.segIdx) ? 'on' : 'off', onPick: function () { onCite(mi, r.segIdx); } };
-        }) : [],
       };
     });
   }
-  // Parsar [n]-markörer i ett assistentsvar till klickbara citat. Numren pekar på
+  // Parsar citatmarkörer i ett assistentsvar till klickbara citat. Numren pekar på
   // segmenten som skickades till modellen (1-baserat); visningsnumren räknas om
-  // per meddelande i citeringsordning. Ogiltiga nummer lämnas kvar som text.
+  // per meddelande i citeringsordning. Utöver [n] hanteras intervall och listor —
+  // [1–3], [1-3], [1, 2] och [1–2, 5] — eftersom modellen ofta skriver så trots
+  // instruktionen. Ogiltiga markörer lämnas kvar som text.
   function parseChatCites(text, segs) {
     var tokens = [], refs = [], seen = {};
-    var re = /\[(\d{1,3})\]/g, last = 0, m;
+    var re = /\[(\d{1,3}(?:\s*[,–—-]\s*\d{1,3})*)\]/g, last = 0, m;
     while ((m = re.exec(text))) {
-      var n = parseInt(m[1], 10);
-      if (!(n >= 1 && n <= segs.length)) continue;
+      var nums = [], ok = true;
+      var parts = m[1].split(/\s*,\s*/);
+      for (var pi = 0; pi < parts.length; pi++) {
+        var rm = parts[pi].match(/^(\d{1,3})\s*[–—-]\s*(\d{1,3})$/);
+        if (rm) {
+          var a = parseInt(rm[1], 10), b = parseInt(rm[2], 10);
+          if (!(a >= 1 && b >= a && b <= segs.length && b - a <= 30)) { ok = false; break; }
+          for (var x = a; x <= b; x++) { if (nums.indexOf(x) < 0) nums.push(x); }
+        } else if (/^\d{1,3}$/.test(parts[pi])) {
+          var n = parseInt(parts[pi], 10);
+          if (!(n >= 1 && n <= segs.length)) { ok = false; break; }
+          if (nums.indexOf(n) < 0) nums.push(n);
+        } else { ok = false; break; }
+      }
+      if (!ok || !nums.length) continue;
       var before = text.slice(last, m.index);
       if (before) tokens.push({ text: before });
-      var segIdx = n - 1;
-      if (!(segIdx in seen)) {
-        seen[segIdx] = refs.length + 1;
-        refs.push({ num: refs.length + 1, segIdx: segIdx, time: segs[segIdx].time || '', text: segs[segIdx].text || '' });
+      for (var ni = 0; ni < nums.length; ni++) {
+        var segIdx = nums[ni] - 1;
+        if (!(segIdx in seen)) {
+          seen[segIdx] = refs.length + 1;
+          refs.push({ num: refs.length + 1, segIdx: segIdx, time: segs[segIdx].time || '', text: segs[segIdx].text || '' });
+        }
+        tokens.push({ cite: seen[segIdx], segIdx: segIdx });
       }
-      tokens.push({ cite: seen[segIdx], segIdx: segIdx });
       last = m.index + m[0].length;
     }
     if (!refs.length) return null;
@@ -1456,7 +1482,8 @@
   function clearSearch() {
     _askRun++;                                   // ogiltigförklara ev. pågående ask-ström
     if (_scanTimer) { clearInterval(_scanTimer); _scanTimer = null; }
-    setState({ lessonSearch: '', searchHits: null, askAnswer: '', askSources: null, askQ: '', asking: false, askScanIdx: 0 });
+    clearTimeout(_askZoomT);
+    setState({ lessonSearch: '', searchHits: null, askAnswer: '', askSources: null, askQ: '', asking: false, askScanIdx: 0, askZoom: false, askZoomClosing: false, srcBox: true, askFollowups: [], askFollowInput: '', askEvent: null });
   }
   function runSearch() {
     var q = (S.lessonSearch || '').trim();
@@ -1475,7 +1502,9 @@
     _scanTimer = setInterval(function () {
       setState(function (s) { return s.asking ? { askScanIdx: s.askScanIdx + 1 } : null; });
     }, 340);
-    setState({ asking: true, askAnswer: '', askSources: null, searchHits: null, askQ: q, askScanIdx: 0 });
+    setState({ asking: true, askAnswer: '', askSources: null, searchHits: null, askQ: q, askScanIdx: 0, askZoom: false, askZoomClosing: false, srcBox: true, askFollowups: [], askFollowInput: '', askEvent: null });
+    // Samma nyckelord som i lektionschatten föreslår en kalenderhändelse vid sidan av svaret.
+    if (/påminn|kalender|prov|läx|förhör|inlämning/i.test(q)) proposeAskEvent(q);
     streamPost('/api/search/ask', { q: q }, function (ev) {
       if (run !== _askRun) return;               // en nyare fråga (eller Esc) har tagit över
       if (ev.type === 'token') {
@@ -1490,6 +1519,58 @@
     });
   }
   function openSearchHit(hit) { openLesson({ id: hit.lesson_id, history_id: hit.history_id }); }
+
+  // ---- Arkivsvaret (design 14 juli): zoom till modal, hopfällbar källpanel,
+  // följdfrågor som verkliga RAG-omfrågor mot /api/search/ask. ----------------
+  function openAskZoom() { clearTimeout(_askZoomT); setState({ askZoom: true, askZoomClosing: false }); }
+  function closeAskZoom() {
+    if (!S.askZoom || S.askZoomClosing) return;
+    clearTimeout(_askZoomT);
+    setState({ askZoomClosing: true });
+    _askZoomT = setTimeout(function () { setState({ askZoom: false, askZoomClosing: false }); }, 380);
+  }
+  function toggleSrcBox() { setState(function (s) { return { srcBox: !s.srcBox }; }); }
+  function scrollAskChat(smooth) {
+    try {
+      var sc = document.querySelector('[data-askscroll]');
+      if (sc) { if (smooth) sc.scrollTo({ top: sc.scrollHeight, behavior: 'smooth' }); else sc.scrollTop = sc.scrollHeight; }
+    } catch (e) {}
+  }
+  function sendAskFollow() {
+    var q = (S.askFollowInput || '').trim();
+    if (!q || S.asking) return;
+    // Nyckelord föreslår händelse; kommandon ("flytta till onsdag 14:30" …) justerar
+    // förslaget med regex-tolken — samma beteende som lektionschatten.
+    if (/påminn|kalender|prov|läx|förhör|inlämning/i.test(q) && !S.askEvent) proposeAskEvent(q);
+    var evNow = S.askEvent;
+    var isCal = evNow && !evNow.added && (/flytta|ändra|byt|boka|döp|kalla|titel|anteckning/i.test(q) || /\d{1,2}[:.]\d{2}/.test(q) || /måndag|tisdag|onsdag|torsdag|fredag|lördag|söndag|imorgon|nästa vecka|klockan/i.test(q));
+    if (isCal) {
+      var r0 = applyEventCommand(evNow, q);
+      setState(function (s) {
+        if (!s.askEvent) return null;
+        return { askFollowInput: '',
+                 askEvent: Object.assign({}, s.askEvent, r0.patch),
+                 askFollowups: (s.askFollowups || []).concat([{ q: q, a: r0.reply, typing: false }]) };
+      }, function () { scrollAskChat(true); });
+      return;
+    }
+    var run = ++_askRun;
+    setState(function (s) { return { askFollowInput: '', askFollowups: (s.askFollowups || []).concat([{ q: q, a: '', typing: true }]) }; },
+      function () { scrollAskChat(true); });
+    streamPost('/api/search/ask', { q: q }, function (ev) {
+      if (run !== _askRun) return;               // en nyare fråga (eller Esc) har tagit över
+      var patchLast = function (fn) {
+        setState(function (s) {
+          var fs = (s.askFollowups || []).slice(); if (!fs.length) return null;
+          fs[fs.length - 1] = fn(Object.assign({}, fs[fs.length - 1]));
+          return { askFollowups: fs };
+        }, function () { scrollAskChat(false); });
+      };
+      if (ev.type === 'token') patchLast(function (f) { f.a += ev.text; return f; });
+      else if (ev.type === 'done') patchLast(function (f) { f.typing = false; return f; });
+      else if (ev.type === 'error') patchLast(function (f) { f.typing = false; f.a = f.a || ('Kunde inte söka: ' + (ev.message || 'okänt fel')); return f; });
+    });
+  }
 
   /* ---- Kartoteket: kurs-färgchips, veckogrupper, filterpopovers, FLIP ---- */
   var CC_KEYS = ['sky', 'sage', 'plum', 'mustard'];
@@ -1706,10 +1787,6 @@
   // BACKEND: start()/_runActive() simulate transcription; replace with /api/transcribe SSE (streamPost).
   function start() {
     if (S.run === 'running') return;
-    // Korrekturen (auto efter förra körningen) håller GPU-låset — startar vi nu
-    // avvisar arbitern jobbet med 409 och körningen felar direkt. Vänta tills den
-    // är klar; knappen är blockerad under tiden (startReady/startBtnLabel nedan).
-    if (S.pp === 'running') return;
     if (!S.queue.length) return;
     // Modellkatalogen (/api/models) inte klar än — vänta hellre än att skicka
     // det stale prototyp-id:t som servern avvisar med 400.
@@ -1746,13 +1823,13 @@
   // BACKEND: real transcription via /api/transcribe SSE (one request per queue item).
   function _runActive() {
     if (S.run === 'running') return;
-    clearInterval(_t); clearInterval(_ppIv);   // stoppa ev. korrektur-progress från förra körningen
+    clearInterval(_t); clearTimeout(_finishT);
     var active = S.queue.find(function (q) { return q.id === S.activeId; });
     if (!active) return;
     var token = ++_runToken;
     var src = baseNameOf(active.name);
     setState({
-      run: 'running', step: 'process', progress: 0, dispProgress: 0, elapsed: 0, pp: 'idle', ppOp: 'clean', ppOut: '', cleanText: null,
+      run: 'running', step: 'process', progress: 0, dispProgress: 0, elapsed: 0,
       runError: null, transcript: null, resultFilesReal: null,
       source: active.name,
       qStatus: Object.assign({}, S.qStatus, kv(active.id, 'running')),
@@ -1783,6 +1860,7 @@
           var segs = (r.transcript || []).map(function (g) { return { time: fmtTime(g.start), text: g.text }; });
           setState(function (s) { return { run: 'done', progress: 100, transcript: segs, transcriptRaw: r.transcript || [], resultId: r.id || null, runMedia: r.media || null, edits: {}, edited: false, resultFilesReal: r.files || [], qStatus: Object.assign({}, s.qStatus, kv(active.id, 'done')), qProgress: Object.assign({}, s.qProgress, kv(active.id, 100)), log: s.log.concat(['[klar] Färdig på ' + fmtTime(s.elapsed)]) }; });
           loadHistory();   // server archived this run; refresh from disk
+          if (r.id) _doneHids.push(r.id);   // kom ihåg körningen till auto-extraktionen
           // Attach any live markers captured while recording this file.
           var marks = _recMarkersByPath[active.path];
           if (marks && marks.length && r.id) {
@@ -1799,7 +1877,7 @@
       });
   }
   function cancelRun() {
-    _runToken++; clearInterval(_t);
+    _runToken++; clearInterval(_t); clearTimeout(_finishT);
     // Faktiskt avbryta jobbet på servern (avslutar subprocessen och frigör GPU:n),
     // inte bara sluta lyssna på strömmen.
     fetch('/api/transcribe/cancel', { method: 'POST' }).catch(function () {});
@@ -1814,10 +1892,8 @@
   // Frame: det glider mjukt fram mot serverns värde och "läcker" långsamt framåt
   // inom det aktiva steget mellan händelser så baren/procenten aldrig fryser.
   // Monotont — det backar aldrig och når 100 % först vid 'done'.
-  // Fasgränser för stegen (Förbereder…Färdigställer) — delas av progress-rAF:en
-  // och stegvyn nedan så indelningen bara finns på ETT ställe.
-  var STEP_BOUNDS = [0, 12, 28, 92, 100];
-  var PHASE_HI = STEP_BOUNDS.slice(1);     // övre gräns per steg
+  // Fasgränserna för stegen (Förbereder…Färdigställer) kommer från stageBounds()
+  // — samma indelning driver progress-rAF:en och stegvyn.
   function _progFrame() {
     _progRAF = 0;
     var run = S.run;
@@ -1827,8 +1903,9 @@
       _disp += (100 - _disp) * 0.16;                            // glid sista biten upp till 100
       if (_disp > 99.8) _disp = 100;
     } else {
-      var ph = 0; while (ph < 3 && real >= STEP_BOUNDS[ph + 1]) ph++;
-      var ceil = PHASE_HI[ph] - 0.5;                            // stanna inom aktuellt steg
+      var B = stageBounds();
+      var ph = 0; while (ph < B.length - 2 && real >= B[ph + 1]) ph++;
+      var ceil = B[ph + 1] - 0.5;                               // stanna inom aktuellt steg
       if (real > _disp) _disp += (Math.min(real, 99) - _disp) * 0.12;   // hinn ikapp servern
       else if (_disp < ceil) _disp += (ceil - _disp) * 0.012;           // långsam framåtläckage
       if (_disp > 99) _disp = 99;
@@ -1839,79 +1916,49 @@
   }
   function _startProgress() { _disp = S.dispProgress || 0; if (!_progRAF) _progRAF = requestAnimationFrame(_progFrame); }
 
-  // BACKEND: real LLM post-process via /api/postprocess SSE token stream (Ollama).
-  function runPP() {
-    if (S.pp === 'running') return;
-    clearTimeout(_pp); clearInterval(_ppIv);
-    // Korrektur-strömmen hör till den AKTUELLA körningen. Startar en ny körning
-    // (som ökar _runToken) medan denna strömmar, ignoreras den gamla strömmens
-    // events — annars skrevs förra inspelningens ppOut/cleanText in i den nya
-    // körningens state. _runActive rensar dessutom _ppIv-intervallet.
-    var token = _runToken;
-    setState({ pp: 'running', ppPct: 0, ppOut: '' });
-    _ppIv = setInterval(function () { setState(function (s) { return { ppPct: Math.min(95, (s.ppPct || 0) + (3 + Math.random() * 5)) }; }); }, 200);
-    var op = 'cleanup';
-    var text = getTranscript().map(function (l) { return l.text; }).join(' ');
-    var acc = '';
-    streamPost('/api/postprocess', { operation: op, transcript: text, model: S.ppModel }, function (ev) {
-      if (token !== _runToken) return;   // en ny körning har startat — släpp den gamla strömmen
-      if (ev.type === 'token') { acc += ev.text; setState({ ppOut: acc }); }
-      else if (ev.type === 'error') { clearInterval(_ppIv); setState({ pp: 'done', ppPct: 100, ppOut: acc || ('Fel: ' + (ev.message || 'okänt')) }); }
-      else if (ev.type === 'done') {
-        clearInterval(_ppIv); var r = ev.result || {}; var out = r.text || acc;
-        setState({ pp: 'done', ppPct: 100, ppOut: out });
-        // Korrekturläst text behålls separat — chatten arbetar vidare på den
-        // och kortet kan visa rättelserna även om en annan pp körs efteråt.
-        if (out && S.ppOp === 'clean') setState({ cleanText: out });
-      }
-    });
-  }
-  function runCleanNow() { if (S.pp === 'running') return; setState({ ppOp: 'clean' }); runPP(); }
   function toggleLogExpand() { setState(function (s) { return { logExpand: !s.logExpand }; }); }
-  function openCleanModal() { setState({ cleanModalOpen: true }); }
-  function closeCleanModal() { setState({ cleanModalOpen: false }); }
 
-  // Ord-diff original -> korrekturläst (design: markera rättelser i texten).
-  // Greedy tvåpekar-jämförelse med resynk-fönster — klarar långa transkript
-  // utan kvadratisk LCS. Ord vars normaliserade form finns kvar men vars
-  // skiljetecken/skiftläge ändrats markeras också (språk & skiljetecken).
-  function _normWord(w) { return w.toLowerCase().replace(/[.,!?;:"'»«…()\-–—]+/g, ''); }
-  function diffWords(origText, cleanedText) {
-    var A = (origText || '').split(/\s+/).filter(Boolean);
-    var B = (cleanedText || '').split(/\s+/).filter(Boolean);
-    var out = [], i = 0, j = 0, W = 14;
-    while (j < B.length) {
-      if (i < A.length && _normWord(A[i]) === _normWord(B[j])) {
-        out.push({ s: B[j], ch: A[i] !== B[j] });
-        i++; j++; continue;
-      }
-      // resynk: hitta närmaste matchning inom fönstret
-      var bi = -1, bj = -1, best = W * 2 + 1;
-      for (var dj = 0; dj <= W && j + dj < B.length; dj++) {
-        for (var di = 0; di <= W && i + di < A.length; di++) {
-          if (di + dj < best && _normWord(A[i + di]) === _normWord(B[j + dj])) { best = di + dj; bi = di; bj = dj; }
-        }
-      }
-      if (bi < 0) { out.push({ s: B[j], ch: true }); j++; i++; continue; }
-      for (var k = 0; k < bj; k++) { out.push({ s: B[j + k], ch: true }); }
-      i += bi; j += bj;
-    }
-    return out;
+  // Fire-and-forget (design 14 juli): korrekturen körs i serverns pipeline, så
+  // när sista filen är klar visas en kort "Klart"-rad och sedan öppnas
+  // Inspelningar där lektionen redan ligger sparad. Wizarden nollställs.
+  function afterDone() {
+    clearTimeout(_finishT);
+    _finishT = setTimeout(finishTranscribe, 1600);
   }
-  var _diffMemo = { key: null, parts: null };
-  function cleanDiffParts() {
-    if (!S.cleanText) return [];
-    var key = S.cleanText.length + ':' + S.cleanText.slice(0, 40);
-    if (_diffMemo.key !== key) {
-      var orig = getTranscript().map(function (l) { return l.text; }).join(' ');
-      _diffMemo = { key: key, parts: diffWords(orig, S.cleanText) };
-    }
-    return _diffMemo.parts;
+  function finishTranscribe() {
+    _finishT = null;
+    var n = S.queue.filter(function (q) { return S.qStatus[q.id] === 'done'; }).length;
+    var corrected = willCorrect();
+    restart();
+    setTab('recordings');
+    clearInterval(_toastIv); clearTimeout(_toastT2);
+    setState({ toast: { title: n > 1 ? (n + ' filer transkriberade') : (corrected ? 'Transkriberad och korrekturläst' : 'Transkriberad'), name: n > 1 ? 'Sparade i Inspelningar' : 'Sparad i Inspelningar', done: true } });
+    _toastT2 = setTimeout(function () { setState({ toast: null }); }, 4200);
+    var hids = _doneHids.slice(); _doneHids = [];
+    autoExtractLessons(hids);
   }
-  function togglePPEnabled() { var next = !S.ppEnabled; setState({ ppEnabled: next }); if (next && S.run === 'done' && S.ppOp !== 'chat') runPP(); }
-  // Korrekturläsningen är inget val — den startar tyst och automatiskt så fort
-  // transkriberingen är klar, sömlöst i bakgrunden (låser sedan upp chatten).
-  function afterDone() { if (S.pp !== 'running') { setState({ ppOp: 'clean' }); runPP(); } }
+
+  // Auto-extraktion (bakgrundsprocess): när hela kön är klar analyseras varje ny
+  // lektion med den lokala modellen — kalenderposter, åtgärder och svårigheter
+  // matas in i Kommande/Inför nästa lektion/Terminstrender utan någon knapp.
+  // Körs EFTER kön (aldrig parallellt med Whisper — GPU-arbitern serialiserar),
+  // en lektion i taget, och tyst: paneler fylls på när de är klara.
+  function autoExtractLessons(hids) {
+    if (!hids.length) return;
+    getJSON('/api/lessons').then(function (lessons) {
+      if (!Array.isArray(lessons)) return;
+      var lids = lessons.filter(function (l) { return l.history_id && hids.indexOf(l.history_id) !== -1; })
+                        .map(function (l) { return l.id; });
+      var next = function () {
+        var lid = lids.shift();
+        if (lid == null) { loadAgenda(); loadPrep(); loadTrends(); return; }
+        streamPost('/api/lessons/' + encodeURIComponent(lid) + '/extract', {}, function (ev) {
+          if (ev.type === 'done' || ev.type === 'error') next();
+        });
+      };
+      next();
+    }).catch(function () {});
+  }
 
   // ---- Lektionsoverlay (fullskärm): transkript + samma källförankrade chatt
   // men mot EN lektions transkript, isolerat från resultatvyns chatt. ---------
@@ -1926,69 +1973,43 @@
                                  group: l.group || '', course: l.course || '', cc: ccOf(l) },
                lessonChatHitT: hitT || null,
                lessonChatSegs: [], lessonChat: [], lessonChatInput: '',
-               lessonChatTyping: false, lessonChatCiteSel: null,
-               lessonChatEvent: null, evPick: null,
-               ovAnalyzing: false, ovReportBusy: false });
+               lessonChatTyping: false, lessonChatCiteSel: null, reasonOpen: {},
+               lessonChatEvent: null, evPick: null, ovEvOpen: false });
     getJSON('/api/history/' + encodeURIComponent(hid)).then(function (h) {
       var segs = ((h && h.transcript) || []).map(function (g) { return { time: fmtTime(g.start), text: g.text }; });
       setState({ lessonChatSegs: segs });
     }).catch(function () {});
   }
-  function closeLessonChat() { setState({ lessonChatId: null, lessonChat: [], lessonChatInput: '', lessonChatCiteSel: null, lessonChatMeta: null, lessonChatHitT: null, lessonChatEvent: null, evPick: null }); }
-  // Resultatvyn chattar inte inline längre. Den här knappen byter till fliken
-  // Inspelningar och öppnar chatten för just den här inspelningen — precis som
-  // att klicka sig in på inspelningen och trycka "Chatta" där.
-  function chatAboutResult() {
-    var hid = S.resultId;
-    if (!hid) return;
-    // Slå upp den riktiga lektionsposten (den bär lesson-id:t) så chatten får
-    // med "Analysera lektion"/"Rapport" — annars saknades de fast lektionen fanns
-    // i DB. Faller tillbaka på history-/filnamnsposten om listan inte är laddad.
-    var lesson = (S.lessons || []).find(function (x) { return x.history_id === hid; });
-    if (!lesson) {
-      var h = (S.history || []).find(function (x) { return x.id === hid; });
-      lesson = h
-        ? { history_id: h.id, name: h.name, date: h.date || (h.ts || '').slice(0, 10),
-            dur: h.dur, model: h.model, lang: h.lang, group: h.group || '', course: h.course || '' }
-        : { history_id: hid, name: baseName() };
-    }
-    setTab('recordings');       // byt till Inspelningar (laddar om lektionslistan)
-    openLessonChat(lesson);     // öppna lektionschatten för inspelningen
-  }
-  // Analysera lektion + Rapport bor i overlayens header sedan Insikter-panelen
-  // togs bort med kartotek-omdesignen — extraktionen matar Kommande/Inför
-  // nästa lektion/Terminstrender, rapporten öppnas i webbläsaren.
-  function analyzeLesson() {
-    var lid = (S.lessonChatMeta || {}).lessonId;
-    if (!lid || S.ovAnalyzing) return;
-    setState({ ovAnalyzing: true });
-    streamPost('/api/lessons/' + encodeURIComponent(lid) + '/extract', {}, function (ev) {
-      if (ev.type === 'done') {
-        setState({ ovAnalyzing: false, toast: { title: 'Lektionen analyserad', name: 'Insikterna syns under Kommande och Terminstrender', done: true } });
-        loadAgenda(); loadPrep(); loadTrends();
-        clearTimeout(_toastT2); _toastT2 = setTimeout(function () { setState({ toast: null }); }, 3200);
-      } else if (ev.type === 'error') {
-        setState({ ovAnalyzing: false, toast: { title: 'Analys misslyckades', name: ev.message || '', done: false } });
-        clearTimeout(_toastT2); _toastT2 = setTimeout(function () { setState({ toast: null }); }, 5200);
-      }
-    });
-  }
-  function exportLessonReport() {
-    var lid = (S.lessonChatMeta || {}).lessonId;
-    if (!lid || S.ovReportBusy) return;
-    setState({ ovReportBusy: true });
-    fetch('/api/lessons/' + encodeURIComponent(lid) + '/report?format=html')
-      .then(function (r) { return r.json(); }).then(function (res) {
-        setState({ ovReportBusy: false });
-        if (res && res.path) { fetch('/api/open', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: res.path }) }).catch(function () {}); }
-      }).catch(function () { setState({ ovReportBusy: false }); });
-  }
+  function closeLessonChat() { clearTimeout(_descT); setState({ lessonChatId: null, lessonChat: [], lessonChatInput: '', lessonChatCiteSel: null, reasonOpen: {}, lessonChatMeta: null, lessonChatHitT: null, lessonChatEvent: null, evPick: null, ovEvOpen: false, descModal: false, descModalClosing: false }); }
   function onLessonChatInput(e) { setState({ lessonChatInput: e.target.value }); }
   function onLessonChatKey(e) { if (e.key === 'Enter') sendLessonChat(); }
   function toggleLessonChatThink() { setState(function (s) { return { lessonChatThink: !s.lessonChatThink }; }); }
+  function toggleReason(mi) {
+    setState(function (s) {
+      var ro = Object.assign({}, s.reasonOpen);
+      var cur = (mi in ro) ? !!ro[mi] : (!!s.lessonChatTyping && mi === s.lessonChat.length - 1);
+      ro[mi] = !cur;
+      return { reasonOpen: ro };
+    });
+  }
   function selectLessonChatCite(mi, segIdx) {
     var key = mi + ':' + segIdx;
-    setState(function (s) { return { lessonChatCiteSel: s.lessonChatCiteSel === key ? null : key }; });
+    var seg = S.lessonChatSegs[segIdx] || {};
+    var same = S.lessonChatCiteSel === key;
+    setState({ lessonChatCiteSel: same ? null : key, lessonChatHitT: same ? null : (seg.time || null) });
+    if (!same && seg.time) jumpToSource(seg.time);
+  }
+  // Design 14 juli: en källa i chatten scrollar transkriptet till träffraden
+  // (data-ovhit i data-ovscroll) i stället för att visa ett inline-utdrag.
+  function jumpToSource(t) {
+    setState({ lessonChatHitT: t });
+    setTimeout(function () {
+      try {
+        var sc = document.querySelector('[data-ovscroll]');
+        var row = sc && sc.querySelector('[data-ovhit]');
+        if (sc && row) sc.scrollTo({ top: Math.max(0, row.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop - sc.clientHeight * 0.3), behavior: 'smooth' });
+      } catch (e) {}
+    }, 80);
   }
   function sendLessonChat(qArg) {
     if (S.lessonChatTyping) return;
@@ -1996,17 +2017,49 @@
     if (!q) return;
     // "Skapa läxpåminnelse …" o.dyl. föreslår en kalenderhändelse vid sidan av svaret.
     if (/påminn|kalender|prov|läx|förhör|inlämning/i.test(q) && !S.lessonChatEvent) proposeLessonEvent();
+    // Kalenderkommandon ("flytta till onsdag 14:30", "kortare titel" …) tolkas av
+    // regex-tolken och uppdaterar förslaget direkt — utan LLM-anrop (design 14 juli).
+    var evNow = S.lessonChatEvent;
+    var isCal = evNow && !evNow.added && (/flytta|ändra|byt|boka|döp|kalla|titel|anteckning/i.test(q) || /\d{1,2}[:.]\d{2}/.test(q) || /måndag|tisdag|onsdag|torsdag|fredag|lördag|söndag|imorgon|nästa vecka|klockan/i.test(q));
+    if (isCal) {
+      var r0 = applyEventCommand(evNow, q);
+      setState(function (s) {
+        if (!s.lessonChatEvent) return null;
+        return { lessonChatInput: '',
+                 lessonChatEvent: Object.assign({}, s.lessonChatEvent, r0.patch),
+                 lessonChat: s.lessonChat.concat([{ role: 'user', text: q }, { role: 'assistant', text: r0.reply, reason: '' }]) };
+      });
+      return;
+    }
     setState(function (s) { return { lessonChat: s.lessonChat.concat([{ role: 'user', text: q }, { role: 'assistant', text: '', reason: '' }]), lessonChatInput: '', lessonChatTyping: true, lessonChatCiteSel: null }; });
     var msgs = S.lessonChat.filter(function (m) { return !(m.role === 'assistant' && !m.text); })
       .map(function (m) { return { role: m.role, content: m.text }; });
     var transcript = S.lessonChatSegs.map(function (l, i) { return '[' + (i + 1) + '] (' + (l.time || '') + ') ' + l.text; }).join('\n');
     var acc = '', accReason = '';
-    var setLast = function (text, reason, typing) { setState(function (s) { var c = s.lessonChat.slice(); if (c.length) c[c.length - 1] = { role: 'assistant', text: text, reason: reason }; return { lessonChat: c, lessonChatTyping: !!typing }; }); };
-    streamPost('/api/chat', { messages: msgs, transcript: transcript, model: S.ppModel, think: S.lessonChatThink, cite: true }, function (ev) {
+    var setLast = function (text, reason, typing) { setState(function (s) { var c = s.lessonChat.slice(); if (c.length) c[c.length - 1] = { role: 'assistant', text: stripCalTag(text), reason: reason }; return { lessonChat: c, lessonChatTyping: !!typing }; }); };
+    // Modellen kan skapa/ändra kalenderförslaget direkt ur samtalet: den får dagens
+    // datum + aktuellt förslag och svarar med en [KALENDERFÖRSLAG]-rad som appliceras här.
+    var calEv = S.lessonChatEvent && !S.lessonChatEvent.added ? {
+      title: S.lessonChatEvent.title, date: S.lessonChatEvent.startIso || null,
+      time: (S.lessonChatEvent.when || '').slice(-5), end_date: S.lessonChatEvent.endIso || null,
+      desc: S.lessonChatEvent.desc || '',
+    } : null;
+    streamPost('/api/chat', { messages: msgs, transcript: transcript, model: S.ppModel, think: S.lessonChatThink, cite: true, calendar: true, cal_event: calEv }, function (ev) {
       if (ev.type === 'reasoning') { accReason += ev.text; setLast(acc, accReason, true); }
       else if (ev.type === 'token') { acc += ev.text; setLast(acc, accReason, false); }
       else if (ev.type === 'error') { setLast(acc || ('Fel: ' + (ev.message || 'okänt')), accReason, false); }
-      else if (ev.type === 'done') { var r = ev.result || {}; setLast(r.text || acc, accReason, false); }
+      else if (ev.type === 'done') {
+        var r = ev.result || {}; var full = r.text || acc;
+        var applied = applyCalTag('lesson', full);
+        var shown = stripCalTag(full);
+        // Svarar modellen med enbart kalenderraden blir bubblan tom — sätt då en
+        // egen bekräftelse byggd ur det uppdaterade förslaget.
+        if (!shown && applied) {
+          var e2 = S.lessonChatEvent || {};
+          shown = 'Klart — kalenderförslaget är uppdaterat: ”' + (e2.title || '') + '” · ' + (e2.when || '') + (e2.endDay ? ' → ' + e2.endDay : '') + '. Justera i förslags-raden nedan eller fortsätt chatta.';
+        }
+        setLast(shown || full, accReason, false);
+      }
     });
   }
 
@@ -2025,6 +2078,12 @@
                  pre: i === 0 ? 'Idag' : (i === 1 ? 'Imorgon' : '') });
     }
     return out;
+  }
+  // 'YYYY-MM-DD' → 'fre 17 jul' (samma etikettform som evDays).
+  function _isoLabel(iso) {
+    var d = new Date(iso + 'T12:00:00');
+    if (isNaN(d)) return null;
+    return _DAYS_SV[d.getDay()] + ' ' + d.getDate() + ' ' + _MON_SV[d.getMonth()];
   }
   function _calErrToast(msg) {
     setState({ toast: { title: 'Google Kalender', detail: msg, kind: 'error', done: false } });
@@ -2082,21 +2141,44 @@
     var terms = S.lessonChatSegs.length ? '' : '';
     setState({ lessonChatEvent: {
       title: (m.group ? m.group + ' — ' : '') + 'Uppföljning: ' + (S.lessonChatName || 'lektionen'),
-      when: days[2].label + ' · 08:00',
+      when: days[2].label + ' · 08:00', startIso: days[2].iso,
       desc: 'Uppföljning av "' + (S.lessonChatName || 'lektionen') + '"' + (m.course ? ' i ' + m.course : '') + '. Läxförhör på begreppen från lektionen.',
-      added: false, busy: false, aiMsgs: [], aiInput: '', aiBusy: false,
+      added: false, busy: false,
     }, evPick: null });
     if (S.calConnected === null) loadCalStatus();
   }
-  function setLessonEvent(k, v) {
-    setState(function (s) { return s.lessonChatEvent ? { lessonChatEvent: Object.assign({}, s.lessonChatEvent, kv(k, v)) } : null; });
+  // Kalenderförslag i arkivsvaret ("Fråga ditt arkiv") — samma box som i
+  // lektionsoverlayen men byggt ur arkivfrågan i stället för lektionens metadata.
+  function proposeAskEvent(q) {
+    q = (q || S.askQ || '').trim();
+    var days = evDays();
+    setState({ askEvent: {
+      title: 'Uppföljning: ' + (q.length > 52 ? q.slice(0, 52).trim() + '…' : (q || 'arkivfråga')),
+      when: days[2].label + ' · 08:00', startIso: days[2].iso,
+      desc: q ? 'Utifrån arkivfrågan ”' + q + '”.' : '',
+      added: false, busy: false,
+    }, evPick: null });
+    if (S.calConnected === null) loadCalStatus();
   }
-  function toggleEvPick() { setState(function (s) { return { evPick: s.evPick ? null : 'lesson' }; }); }
-  function pickEvPart(part, val) {
-    var ev = S.lessonChatEvent; if (!ev) return;
+  // Förslaget finns på två ställen: lektionsoverlayen ('lesson' → lessonChatEvent)
+  // och arkivsvaret ('ask' → askEvent). Samma box, samma hjälpare.
+  var _EVKEY = { lesson: 'lessonChatEvent', ask: 'askEvent' };
+  function setEvField(which, k, v) {
+    var key = _EVKEY[which];
+    setState(function (s) { return s[key] ? kv(key, Object.assign({}, s[key], kv(k, v))) : null; });
+  }
+  function toggleEvPick(which) { setState(function (s) { return { evPick: s.evPick === which ? null : which }; }); }
+  function pickEvPart(which, part, val, iso) {
+    var ev = S[_EVKEY[which]]; if (!ev) return;
     var bits = (ev.when || ' · ').split(' · ');
     var when = (part === 'day' ? val : (bits[0] || '')) + ' · ' + (part === 'time' ? val : (bits[1] || '09:00'));
-    setLessonEvent('when', when);
+    var key = _EVKEY[which];
+    setState(function (s) {
+      if (!s[key]) return null;
+      var patch = { when: when };
+      if (part === 'day' && iso) patch.startIso = iso;
+      return kv(key, Object.assign({}, s[key], patch));
+    });
     if (part === 'time') setState({ evPick: null });
   }
   // "dag mån · HH:MM" -> ISO-start för API:t (dagens etikett slås upp mot evDays()).
@@ -2106,36 +2188,105 @@
     var time = /^\d{2}:\d{2}$/.test(bits[1] || '') ? bits[1] : '08:00';
     return (day ? day.iso : new Date().toISOString().slice(0, 10)) + 'T' + time + ':00';
   }
-  function addLessonEvent() {
-    var ev = S.lessonChatEvent; if (!ev || ev.busy || ev.added) return;
-    setLessonEvent('busy', true);
+  function addEvent(which) {
+    var key = _EVKEY[which];
+    var ev = S[key]; if (!ev || ev.busy || ev.added) return;
+    setEvField(which, 'busy', true);
+    // startIso vinner över etikett-uppslaget: chatten kan sätta datum utanför
+    // dag-väljarens 8-dagarsfönster, där _evWhenToStart inte hittar etiketten.
+    var evTime = /^\d{2}:\d{2}$/.test((ev.when || '').slice(-5)) ? (ev.when || '').slice(-5) : '08:00';
     fetch('/api/calendar/event', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: ev.title, start: _evWhenToStart(ev.when), description: ev.desc || '' })
+      body: JSON.stringify({ title: ev.title, start: ev.startIso ? ev.startIso + 'T' + evTime + ':00' : _evWhenToStart(ev.when), description: ev.desc || '',
+                             end_date: ev.endIso || null })
     }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); }).then(function (res) {
-      if (res.ok) { setState(function (s) { return s.lessonChatEvent ? { lessonChatEvent: Object.assign({}, s.lessonChatEvent, { busy: false, added: true }) } : null; }); }
+      if (res.ok) { setState(function (s) { return s[key] ? kv(key, Object.assign({}, s[key], { busy: false, added: true })) : null; }); }
       else {
-        setLessonEvent('busy', false);
+        setEvField(which, 'busy', false);
         var msg = (res.j && res.j.error) || 'kunde inte skapa händelsen';
         setState({ toast: { title: 'Google Kalender', detail: msg, kind: 'error', done: false } });
         clearTimeout(_toastT2); _toastT2 = setTimeout(function () { setState({ toast: null }); }, 9000);
       }
-    }).catch(function () { setLessonEvent('busy', false); });
+    }).catch(function () { setEvField(which, 'busy', false); });
   }
-  function onEvAiInput(e) { setLessonEvent('aiInput', e.target.value); }
-  function onEvAiKey(e) { if (e.key === 'Enter') { e.preventDefault(); sendEvAi(); } }
-  function sendEvAi(qArg) {
-    var ev = S.lessonChatEvent; if (!ev || ev.aiBusy) return;
-    var q = (typeof qArg === 'string' && qArg) || (ev.aiInput || '').trim();
-    if (!q) return;
-    setState(function (s) { return s.lessonChatEvent ? { lessonChatEvent: Object.assign({}, s.lessonChatEvent, { aiInput: '', aiBusy: true, aiMsgs: (s.lessonChatEvent.aiMsgs || []).concat([{ who: 'u', text: q }]) }) } : null; });
-    setTimeout(function () {
-      setState(function (s) {
-        var cur = s.lessonChatEvent; if (!cur) return null;
-        var r = applyEventCommand(cur, q);
-        return { lessonChatEvent: Object.assign({}, cur, r.patch, { aiBusy: false, aiMsgs: (cur.aiMsgs || []).concat([{ who: 'a', text: r.reply }]) }) };
-      });
-    }, 350);
+  function dismissEvent(which) { setState(Object.assign({ evPick: null }, kv(_EVKEY[which], null))); }
+  // [KALENDERFÖRSLAG] {json} — modellens maskinläsbara kalenderrad (llm_client._cal_instr).
+  // Döljs ur visningen (även halvströmmad) och appliceras på förslaget när svaret är klart.
+  var _CAL_TAG = '[KALENDERFÖRSLAG]';
+  function stripCalTag(text) {
+    var i = text.indexOf(_CAL_TAG);
+    if (i < 0) { i = text.search(/\[K[A-ZÅÄÖ]{0,15}$/); }   // halvströmmad markör i svansen
+    return i >= 0 ? text.slice(0, i).replace(/\s+$/, '') : text;
+  }
+  function applyCalTag(which, text) {
+    var i = text.indexOf(_CAL_TAG);
+    if (i < 0) return false;
+    var cal = null;
+    try { cal = JSON.parse((text.slice(i + _CAL_TAG.length).match(/\{[\s\S]*\}/) || [null])[0]); } catch (e) {}
+    if (!cal || typeof cal !== 'object') return false;
+    var key = _EVKEY[which];
+    setState(function (s) {
+      var ev = s[key];
+      if (ev && ev.added) ev = null;                        // redan tillagd → nytt förslag
+      var base = ev || { title: '', when: '', desc: '', added: false, busy: false };
+      var patch = {};
+      if (typeof cal.title === 'string' && cal.title) patch.title = cal.title;
+      if (typeof cal.desc === 'string' && cal.desc) patch.desc = cal.desc;
+      var time = (typeof cal.time === 'string' && /^\d{1,2}:\d{2}$/.test(cal.time))
+        ? (cal.time.length < 5 ? '0' + cal.time : cal.time)
+        : (/^\d{2}:\d{2}$/.test((base.when || '').slice(-5)) ? (base.when || '').slice(-5) : '08:00');
+      var dayLabel = null, startIso = base.startIso || null;
+      if (typeof cal.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(cal.date)) {
+        var lbl = _isoLabel(cal.date);
+        if (lbl) { dayLabel = lbl; startIso = cal.date; }
+      }
+      if (!dayLabel) dayLabel = (base.when || ' · ').split(' · ')[0] || evDays()[2].label;
+      if (!startIso) startIso = evDays()[2].iso;
+      patch.when = dayLabel + ' · ' + time;
+      patch.startIso = startIso;
+      if (typeof cal.end_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(cal.end_date) && cal.end_date > startIso) {
+        patch.endIso = cal.end_date; patch.endDay = _isoLabel(cal.end_date);
+      } else if (cal.end_date === null) {
+        patch.endIso = null; patch.endDay = null;
+      }
+      return kv(key, Object.assign({}, base, patch));
+    });
+    if (S.calConnected === null) loadCalStatus();
+    return true;
+  }
+  function openDescModal(which) { clearTimeout(_descT); setState({ descModal: true, descModalClosing: false, descModalFor: which || 'lesson' }); }
+  // Vymodell för förslags-boxen (lessonEventBox) — delas av overlayen och arkivsvaret.
+  function evBoxVM(which, st) {
+    var ev = st[_EVKEY[which]];
+    return {
+      notAdded: !ev.added, added: ev.added, busy: ev.busy,
+      title: ev.title, when: ev.when + (ev.endDay ? ' → ' + ev.endDay : ''), desc: ev.desc || '',
+      calKnown: st.calConnected !== null, calConnected: st.calConnected === true,
+      onConnect: startCalConnect,
+      setTitle: function (e) { setEvField(which, 'title', e.target.value); },
+      setDesc: function (e) { setEvField(which, 'desc', e.target.value); },
+      onAdd: function (e) { if (e) e.stopPropagation(); addEvent(which); },
+      onDismiss: function (e) { if (e) e.stopPropagation(); dismissEvent(which); },
+      onTitleKey: function (e) { if (e.key === 'Enter') { e.preventDefault(); addEvent(which); } },
+      descFocusRef: function (el) { if (el && !el._descBound) { el._descBound = true; el.addEventListener('focus', function () { el.blur(); openDescModal(which); }); } },
+      pickOpen: st.evPick === which,
+      onTogglePick: function (e) { if (e) e.stopPropagation(); toggleEvPick(which); },
+      dayOpts: evDays().map(function (d) {
+        return { key: d.label, label: d.label, pre: d.pre, hasPre: !!d.pre,
+                 curQ: (ev.when || '').indexOf(d.label) === 0 ? '1' : '',
+                 onPick: function (e) { if (e) e.stopPropagation(); pickEvPart(which, 'day', d.label, d.iso); } };
+      }),
+      timeOpts: EV_TIMES.map(function (t2) {
+        return { key: t2, label: t2, curQ: (ev.when || '').slice(-5) === t2 ? '1' : '',
+                 onPick: function (e) { if (e) e.stopPropagation(); pickEvPart(which, 'time', t2); } };
+      }),
+    };
+  }
+  function closeDescModal() {
+    if (!S.descModal || S.descModalClosing) return;
+    clearTimeout(_descT);
+    setState({ descModalClosing: true });
+    _descT = setTimeout(function () { setState({ descModal: false, descModalClosing: false }); }, 440);
   }
   function applyEventCommand(ev, q) {
     var low = q.toLowerCase();
@@ -2148,15 +2299,41 @@
     if (tm) { time = (tm[1].length < 2 ? '0' + tm[1] : tm[1]) + ':' + tm[2]; whenChanged = true; }
     else if (th) { time = (th[1].length < 2 ? '0' + th[1] : th[1]) + ':00'; whenChanged = true; }
     if (whenChanged) done.push('tiden till ' + time);
-    // dag — veckodagar, idag/imorgon, nästa vecka
+    // flera dagar — "pågå till fredag", "till och med torsdag", "t.o.m. ons",
+    // "fram till fredag"; "en dag"/"bara en dag" nollställer slutdagen.
     var days = evDays();
     var W = [['måndag', 'mån'], ['tisdag', 'tis'], ['onsdag', 'ons'], ['torsdag', 'tors'], ['fredag', 'fre'], ['lördag', 'lör'], ['söndag', 'sön']];
+    var edm = low.match(/(?:pågå(?:r)?(?:\s+till)?|till och med|t\.?o\.?m\.?|fram till)\s+(måndag|tisdag|onsdag|torsdag|fredag|lördag|söndag|mån|tis|ons|tors|fre|lör|sön)/);
+    if (edm) {
+      var ewi = -1;
+      for (var ei = 0; ei < W.length; ei++) { if (W[ei][0] === edm[1] || W[ei][1] === edm[1]) { ewi = ei; break; } }
+      if (ewi >= 0) {
+        // Första matchande veckodag STRIKT EFTER startdagen ("till fredag" när
+        // starten är en fredag = nästa fredag). Kan hamna utanför dag-väljarens
+        // fönster, därför bär förslaget även slutdatumet som ISO (endIso).
+        var sd0 = days.filter(function (d) { return d.label === day; })[0];
+        var base = new Date((sd0 ? sd0.iso : days[0].iso) + 'T12:00:00');
+        var gidx = (ewi + 1) % 7;   // W är mån..sön; Date.getDay() har sön=0
+        for (var k = 1; k <= 7; k++) {
+          var dt = new Date(base); dt.setDate(base.getDate() + k);
+          if (dt.getDay() === gidx) {
+            patch.endDay = _DAYS_SV[dt.getDay()] + ' ' + dt.getDate() + ' ' + _MON_SV[dt.getMonth()];
+            patch.endIso = dt.toISOString().slice(0, 10);
+            done.push('händelsen till att pågå till ' + patch.endDay);
+            low = low.replace(edm[0], '');   // så slutdagen inte också tolkas som ny startdag
+            break;
+          }
+        }
+      }
+    } else if (/(?:^|\s)(?:bara |endast )?en dag(?:\s|$|\.)/.test(low) && ev.endDay) {
+      patch.endDay = null; patch.endIso = null; done.push('händelsen till en enda dag');
+    }
     var nd = null;
     if (low.indexOf('imorgon') >= 0 || low.indexOf('i morgon') >= 0) nd = days[1];
     else if (low.indexOf('nästa vecka') >= 0) nd = days[7];
     else if (low.indexOf('idag') >= 0 || low.indexOf('i dag') >= 0) nd = days[0];
     else { for (var wi = 0; wi < W.length; wi++) { var w = W[wi]; if (low.indexOf(w[0]) >= 0 || new RegExp('(^|\\s)' + w[1] + '(\\s|$)').test(low)) { nd = days.slice(1).filter(function (d) { return d.label.indexOf(w[1] + ' ') === 0; })[0] || null; break; } } }
-    if (nd) { day = nd.label; whenChanged = true; done.push('dagen till ' + nd.label); }
+    if (nd) { day = nd.label; whenChanged = true; patch.startIso = nd.iso; done.push('dagen till ' + nd.label); }
     if (whenChanged) patch.when = day + ' · ' + time;
     // titel
     var tt = q.match(/(?:titeln?(?:\s+till|\s+ska vara)?|kalla (?:den|det)|döp (?:den|det) till)\s+["”«']?(.+?)["”»']?$/i);
@@ -2237,13 +2414,6 @@
   }
   function closeToast() { clearInterval(_toastIv); clearTimeout(_toastT2); setState({ toast: null }); }
 
-  function openTranscript() {
-    setState({
-      transcriptOpen: true, histViewing: null,
-      mediaUrl: S.runMedia ? ('/api/media?path=' + encodeURIComponent(S.runMedia)) : null,
-      audioT: 0, audioDur: 0, audioPlaying: false,
-    });
-  }
   function closeTranscript() { if (S.editing) { _commitEdits(); saveTranscriptEdits(); } if (_media) { try { _media.pause(); } catch (e) {} } clearInterval(_au); setState({ transcriptOpen: false, editing: false, audioPlaying: false }); }
   function openLog() { setState({ logOpen: true }); }
   function closeLog() { setState({ logOpen: false }); }
@@ -2319,20 +2489,22 @@
     var good = items.filter(function (it) { return isMedia(it.name) || /^https?:/i.test(it.path || ''); });
     var skipped = items.length - good.length;
     if (!good.length) { setState({ fileError: 'Filformatet stöds inte — välj ljud eller video (MP4, MKV, MOV, MP3, WAV, M4A …).', dragging: false }); return; }
+    var dupes = 0;
     setState(function (s) {
       var existing = new Set(s.queue.map(function (q) { return q.path || q.name; }));
       var adds = good.filter(function (g) { return !existing.has(g.path || g.name); })
         .map(function (g, k) { return { id: 'q' + Date.now() + '_' + k, name: g.name, path: g.path || g.name }; });
+      dupes = good.length - adds.length;
       var queue = s.queue.concat(adds);
       var activeId = s.activeId || (queue[0] && queue[0].id) || null;
       return { queue: queue, dragging: false, step: 'config', activeId: activeId, source: qName(queue, activeId) || s.source, fileError: skipped ? ('Hoppade över ' + skipped + ' fil(er) — formatet stöds inte.') : '' };
     });
-  }
-
-  function saveResult(f) {
-    var api = window.pywebview && window.pywebview.api;
-    if (api && api.save_file) { try { api.save_file(f.name, f.path); } catch (e) {} }
-    downloadFile(f.name, f.size);   // toast confirmation
+    // Design (14 juli): filer som redan låg i kön filtreras tyst bort — berätta det.
+    if (dupes) {
+      clearInterval(_toastIv); clearTimeout(_toastT2);
+      setState({ toast: { title: dupes === 1 ? '1 fil låg redan i kön' : dupes + ' filer låg redan i kön', name: '', done: true } });
+      _toastT2 = setTimeout(function () { setState({ toast: null }); }, 3200);
+    }
   }
 
   /* --------------------------------------------------------- side-effects -- */
@@ -2368,13 +2540,6 @@
     var step = function (now) { var p = Math.min(1, (now - t0) / duration); window.scrollTo(0, start + dist * ease(p)); if (p < 1) _glideRAF = requestAnimationFrame(step); };
     _glideRAF = requestAnimationFrame(step);
   }
-  function smoothScrollProc(sel) { setTimeout(function () { var el = document.querySelector(sel); if (!el) return; var y = el.getBoundingClientRect().top + window.scrollY - 92; glideTo(Math.max(0, y), 720); }, 70); }
-  function playResultsIn() {
-    requestAnimationFrame(function () { requestAnimationFrame(function () {
-      var items = Array.prototype.slice.call(document.querySelectorAll('[data-pane="process"] [data-reveal]'));
-      items.forEach(function (el, i) { if (!el.animate) return; try { el.animate([{ opacity: 0, transform: 'translateY(24px) scale(0.985)', filter: 'blur(7px)' }, { opacity: 1, transform: 'translateY(0) scale(1)', filter: 'blur(0)' }], { duration: 640, delay: i * 95, easing: 'cubic-bezier(.16,1,.3,1)', fill: 'backwards' }); } catch (e) {} });
-    }); });
-  }
 
   function applySideEffects() {
     syncTheme();
@@ -2406,14 +2571,6 @@
         _scrollKey = key;
       }
     }
-    if (S.step === 'process') {
-      var run = S.run, pp = S.pp, op = S.ppOp;
-      if (run === 'done' && _prevRun !== 'done') { playResultsIn(); smoothScrollProc('[data-sec="results"]'); }
-      else if (pp !== _prevPP && pp !== 'idle') smoothScrollProc('[data-sec="ppout"]');
-      _prevRun = run; _prevPP = pp; _prevOp = op;
-    } else {
-      _prevRun = S.run; _prevPP = S.pp; _prevOp = S.ppOp;
-    }
   }
 
   function onKeyDown(e) {
@@ -2434,12 +2591,13 @@
     }
     if (S.editingLesson && e.key === 'Escape') { cancelEditLesson(); return; }
     if (S.lessonChatId && e.key === 'Escape') {
+      if (S.descModal && !S.descModalClosing) { closeDescModal(); return; }
       if (S.evPick) { setState({ evPick: null }); return; }
       closeLessonChat(); return;
     }
     if (S.logOpen && e.key === 'Escape') { closeLog(); return; }
-    if (S.cleanModalOpen && e.key === 'Escape') { closeCleanModal(); return; }
     if (S.filterOpen && e.key === 'Escape') { setState({ filterOpen: null, filterClosing: false }); return; }
+    if (S.askZoom && e.key === 'Escape') { closeAskZoom(); return; }
     if (e.key === 'Escape' && S.tab === 'recordings' && S.searchMode === 'ask' && (S.asking || S.askAnswer)) { clearSearch(); return; }
     if (!S.transcriptOpen) return;
     if ((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'F')) { e.preventDefault(); var inp = document.querySelector('[data-tsearch]'); if (inp) inp.focus(); }
@@ -2455,7 +2613,9 @@
     // serverhoppen — så de växer kontinuerligt. dispProgress ligger aldrig före
     // servern över en stegräns, så det aktiva steget förblir ärligt.
     var prog = isDone ? 100 : Math.max(0, Math.min(100, st.dispProgress || 0));
-    var cur = isDone ? STEPS.length : (prog < 12 ? 0 : prog < 28 ? 1 : prog < 92 ? 2 : 3);
+    var STAGES = stageNames(), BOUNDS = stageBounds();
+    var cur = STAGES.length;
+    if (!isDone) { cur = 0; while (cur < STAGES.length - 1 && prog >= BOUNDS[cur + 1]) cur++; }
 
     var installedWhisper = WHISPER.filter(function (m) { return st.installed[m.id]; });
     var rankedInstalled = rankModels(installedWhisper, 'whisper');
@@ -2490,8 +2650,8 @@
     var subtitleOptions = [['separate', 'Spara separat'], ['embed', 'Bädda in']].map(function (p) { return { label: p[1], active: st.subtitleMode === p[0], style: segBtn(st.subtitleMode === p[0], '34px'), onPick: function () { setState({ subtitleMode: p[0] }); } }; });
     var embedOptions = [['soft', 'Mjukt sub-spår'], ['burn', 'Hård inbränning']].map(function (p) { return { label: p[1], active: st.embedKind === p[0], style: segBtn(st.embedKind === p[0], '34px'), onPick: function () { setState({ embedKind: p[0] }); } }; });
 
-    var PHASE_LO2 = STEP_BOUNDS.slice(0, 4), PHASE_HI2 = STEP_BOUNDS.slice(1);
-    var steps = STEPS.map(function (label, idx) {
+    var PHASE_LO2 = BOUNDS.slice(0, BOUNDS.length - 1), PHASE_HI2 = BOUNDS.slice(1);
+    var steps = STAGES.map(function (label, idx) {
       var done = idx < cur, active = idx === cur && !isDone;
       // Aktivt steg fylls proportionellt mot hur långt prog kommit i just det
       // steget → baren växer mjukt och kontinuerligt istället för att blinka helt.
@@ -2507,14 +2667,10 @@
     });
 
     var base = baseName();
-    var fmtMeta = { srt: ['SRT', '38 KB'], txt: ['TXT', '21 KB'], vtt: ['VTT', '40 KB'] };
-    var resultFiles = (st.resultFilesReal && st.resultFilesReal.length)
-      ? st.resultFilesReal.map(function (f) { return { type: (f.ext || '').toUpperCase(), name: f.name, size: f.size, onDownload: function () { saveResult(f); } }; })
-      : ['srt', 'txt', 'vtt'].filter(function (f) { return st.formats[f]; }).map(function (f) { return { type: fmtMeta[f][0], name: base + '.' + f, size: fmtMeta[f][1], onDownload: function () { downloadFile(base + '.' + f, fmtMeta[f][1]); } }; });
 
     var hw = hardwareView();
     var stepOrder = ['source', 'config', 'process'];
-    var stepDefs = [['source', 'Källa'], ['config', 'Inställningar'], ['process', 'Resultat']];
+    var stepDefs = [['source', 'Källa'], ['config', 'Inställningar'], ['process', 'Transkribering']];
     var curStepIdx = stepOrder.indexOf(st.step);
     var stepItems = stepDefs.map(function (p, i) {
       var state = i < curStepIdx ? 'done' : i === curStepIdx ? 'active' : 'todo';
@@ -2584,9 +2740,6 @@
     var USECASES = [['all', 'Alla'], ['text', 'Textresonemang'], ['sv', 'Svensk text'], ['vision', 'Videoanalys · bild'], ['omni', 'Videoanalys · bild + tal']];
     var useCaseOptions = USECASES.map(function (p) { return { label: p[1], style: segBtn(uc === p[0], '30px') + ';flex:0 0 auto;font-size:13.5px;font-weight:500', onPick: function () { setUseCase(p[0]); } }; });
 
-    var OPS = [['clean', 'Korrekturläs', 'Rättar stavfel & småfel — skriver inte om'], ['chat', 'Chatta', 'Ställ frågor om innehållet']];
-    var ppOps = OPS.map(function (p) { return { key: p[0], label: p[1], sub: p[2], onPick: function () { pickOp(p[0]); }, selected: st.ppOp === p[0], unselected: st.ppOp !== p[0] }; });
-    var ppOpLabel = (ppOps.find(function (o) { return o.key === st.ppOp; }) || {}).label;
 
 
     var lastIdx = st.log.length - 1;
@@ -2710,7 +2863,8 @@
         dur: l.dur || '', sal: l.sal || '',
         unassigned: !l.group && !l.course,
         cc: ccOf(l),
-        tagLabel: l.group ? (l.group + (l.course ? ' · ' + l.course : '')) : (l.course || 'Ej tilldelad'),
+        tagLabel: l.group ? (l.group + (l.course ? ' · ' + String(l.course).slice(0, 2) : '')) : (l.course || 'Ej tilldelad'),
+        tagFull: l.group ? (l.group + (l.course ? ' · ' + l.course : '')) : (l.course || 'Ej tilldelad'),
         stage: lessonStage(l),
         isHit: isHit,
         onOpenChat: function () { openLessonChat(l); },
@@ -2908,8 +3062,37 @@
         ansDone: !st.asking && !!st.askAnswer,
         ansHeadLabel: (!st.asking && st.askAnswer)
           ? ('Svar — ' + (st.askSources || []).length + ((st.askSources || []).length === 1 ? ' källa' : ' källor'))
-          : 'Svar — skrivs medan källorna läses',
+          : 'Svar',
         answer: st.askAnswer,
+        // Zoom till modal (data-askwrap/data-askzoom) — klick förstorar, Esc/klick utanför stänger
+        askZoomFlag: st.askZoom ? (st.askZoomClosing ? 'closing' : 'on') : '',
+        askZoomOn: !!st.askZoom && !st.askZoomClosing,
+        onAskCardClick: function (e) { if (e) e.stopPropagation(); if (!st.askZoom) openAskZoom(); },
+        closeAskZoom: function () { closeAskZoom(); },
+        // Hopfällbar källpanel till höger; källraderna öppnar lektionen
+        // (RAG-svaret saknar radnivå-källor — medveten avvikelse från mallens inline-utdrag)
+        ansHasRefs: !st.asking && !!st.askAnswer && (st.askSources || []).length > 0,
+        askRefCount: String((st.askSources || []).length),
+        srcBoxOpen: !!st.srcBox,
+        srcChevFlag: st.srcBox ? 'open' : '',
+        toggleSrcBox: function (e) { if (e) e.stopPropagation(); toggleSrcBox(); },
+        askRefs: (st.askSources || []).map(function (s2, ri) {
+          return { key: 'rf' + ri, rec: s2.name || '(namnlös)',
+                   meta: s2.datum || '',
+                   text: [s2.group, s2.course].filter(Boolean).join(' · '),
+                   onPick: function (e) { if (e) e.stopPropagation(); openLessonChat(s2); } };
+        }),
+        // Följdfrågor — riktiga omfrågor mot arkivet
+        askFollowups: (st.askFollowups || []).map(function (f, i) {
+          return { key: 'f' + i, q: f.q, a: f.a, typing: !!f.typing };
+        }),
+        askFollowInput: st.askFollowInput || '',
+        setAskFollow: function (e) { setState({ askFollowInput: e.target.value }); },
+        onAskFollowKey: function (e) { if (e.key === 'Enter') { e.preventDefault(); sendAskFollow(); } },
+        sendAskFollow: sendAskFollow,
+        // Kalenderförslag i arkivsvaret — knapp + samma box som i overlayen
+        proposeAskCal: function (e) { if (e) e.stopPropagation(); if (!st.askEvent) proposeAskEvent(st.askQ); },
+        askEvent: st.askEvent ? evBoxVM('ask', st) : null,
         sources: (st.askSources || []).map(function (s2) {
           return { rec: s2.name || '(namnlös)',
                    sub: [s2.group, s2.course, s2.datum].filter(Boolean).join(' · '),
@@ -2951,10 +3134,10 @@
         return { key: 'd' + o.ym, label: o.label, isCur: (st.lessonFilterMonth || '') === o.ym,
                  onSelect: function () { pickFilter('datum', o.ym); } };
       }),
-      fKlassLabel: (st.groups.find(function (g) { return String(g.id) === String(st.lessonFilterGroup); }) || {}).namn || 'Alla klasser',
-      fKursLabel: (st.courses.find(function (c) { return String(c.id) === String(st.lessonFilterCourse); }) || {}).namn || 'Alla kurser',
+      fKlassLabel: (function () { var n = (st.groups.find(function (g) { return String(g.id) === String(st.lessonFilterGroup); }) || {}).namn; return n ? 'Klass · ' + n : 'Alla klasser'; })(),
+      fKursLabel: (function () { var n = (st.courses.find(function (c) { return String(c.id) === String(st.lessonFilterCourse); }) || {}).namn; return n ? 'Kurs · ' + n : 'Alla kurser'; })(),
       fDatumLabel: st.lessonFilterMonth
-        ? (function () { var p = st.lessonFilterMonth.split('-'); return (_MON_SV[parseInt(p[1], 10) - 1] || p[1]) + ' ' + p[0]; })()
+        ? (function () { var p = st.lessonFilterMonth.split('-'); return 'Datum · ' + (_MON_SV[parseInt(p[1], 10) - 1] || p[1]) + ' ' + p[0]; })()
         : 'Alla datum',
       prep: st.nextPrep ? {
         group: st.nextPrep.group,
@@ -3103,8 +3286,8 @@
       acSwitchTrack: 'position:relative;width:42px;height:25px;border-radius:999px;flex:0 0 auto;background:' + (st.audioCorrect ? 'var(--ink)' : 'var(--line-2)') + ';transition:background .15s;cursor:pointer',
       acSwitchKnob: 'position:absolute;top:3px;left:3px;width:19px;height:19px;border-radius:50%;background:var(--knob);border:1px solid var(--line);box-shadow:var(--shadow-sm);transition:transform .15s;transform:translateX(' + (st.audioCorrect ? '17px' : '0') + ')',
 
-      onStart: start, isRunning: isRunning, notRunning: !isRunning, startReady: st.catalogReady && st.pp !== 'running',
-      startBtnLabel: !st.catalogReady ? 'Laddar modeller…' : (st.catalogReady && !st.model) ? 'Ladda ner en modell först' : st.pp === 'running' ? 'Väntar på korrekturen…' : isRunning ? 'Transkriberar…' : isDone ? 'Kör igen' : (st.queue.length > 1 ? 'Starta · ' + st.queue.length + ' filer' : 'Starta transkribering'),
+      onStart: start, isRunning: isRunning, notRunning: !isRunning, startReady: st.catalogReady,
+      startBtnLabel: !st.catalogReady ? 'Laddar modeller…' : (st.catalogReady && !st.model) ? 'Ladda ner en modell först' : isRunning ? 'Transkriberar…' : isDone ? 'Kör igen' : (st.queue.length > 1 ? 'Starta · ' + st.queue.length + ' filer' : 'Starta transkribering'),
       startBtnStyle: coralBtn(isRunning) + ';width:100%;padding:16px 24px;font-size:16.5px',
       startBtnStyleBar: primaryBtn(isRunning) + ';padding:12px 22px;font-size:15px;border-radius:11px;flex:0 0 auto',
 
@@ -3130,44 +3313,22 @@
       toastTitle: st.toast ? (st.toast.title || (st.toast.kind === 'error' ? 'Något gick fel' : st.toast.done ? 'Nedladdning klar' : 'Laddar ner …')) : '', closeToast: closeToast,
       toastPct: st.toast ? Math.round(st.toast.pct || 0) : 0, toastDetail: st.toast ? (st.toast.detail != null ? st.toast.detail : toastDetail(st.toast.size, st.toast.pct || 0)) : '',
       toastBarStyle: 'height:100%;width:100%;transform-origin:left;transform:scaleX(' + ((st.toast ? Math.round(st.toast.pct || 0) : 0) / 100) + ');background:var(--accent);border-radius:99px;transition:transform .14s linear',
-      transcriptOpen: st.transcriptOpen, openTranscript: openTranscript, closeTranscript: closeTranscript, transcriptFile: baseName() + '.txt',
+      transcriptOpen: st.transcriptOpen, closeTranscript: closeTranscript, transcriptFile: baseName() + '.txt',
       searchQuery: st.searchQuery, onTSearch: onTSearch, onSearchKey: onSearchKey, searchRef: searchRef, scrollRef: scrollRef,
       nextMatch: nextMatch, prevMatch: prevMatch, matchLabel: matchLabel, tLines: tLines,
 
-      showResults: isDone, resultCount: resultFiles.length, resultDuration: fmtTime(st.elapsed), resultFiles: resultFiles,
-      transcript: getTranscript().slice(0, 3).map(function (ln, idx) { return { time: ln.time, text: lineText(idx) }; }),
-
-      ppEnabled: st.ppEnabled, ppOff: !st.ppEnabled, togglePPEnabled: togglePPEnabled,
-      ppSwitchTrack: 'position:relative;width:42px;height:25px;border-radius:999px;flex:0 0 auto;background:' + (st.ppEnabled ? 'var(--ink)' : 'var(--line-2)') + ';transition:background .15s',
-      ppSwitchKnob: 'position:absolute;top:3px;left:3px;width:19px;height:19px;border-radius:50%;background:var(--knob);border:1px solid var(--line);box-shadow:var(--shadow-sm);transition:transform .15s;transform:translateX(' + (st.ppEnabled ? '17px' : '0') + ')',
-      ppOps: ppOps, ppModel: st.ppModel,
-      showPP: isDone, ppOpLabel: ppOpLabel, ppShowRun: st.ppOp !== 'chat', onRunPP: runPP, ppRunLabel: 'Kör',
-      ppRunBtnStyle: primaryBtn(st.pp === 'running') + ';min-width:152px', ppRunIdle: st.pp !== 'running', ppPct: Math.round(st.ppPct || 0),
-      ppRingStyle: 'position:relative;width:22px;height:22px;border-radius:50%;flex:0 0 auto;background:conic-gradient(var(--accent) ' + (Math.round(st.ppPct || 0) * 3.6) + 'deg, color-mix(in srgb,var(--ink-3) 18%,transparent) 0);animation:ppglow 1.6s ease-in-out infinite;transition:background .13s linear',
-      ppShowText: st.ppOp !== 'chat' && st.pp !== 'idle', ppShowChat: st.ppOp === 'chat', ppRunning: st.pp === 'running', ppShowOut: st.pp === 'done',
-      ppOut: st.ppOut,
-      // KORREKTUR-kortet (design): körning, resultat med markerade rättelser, lås för chatten
-      cleanRunning: st.pp === 'running' && st.ppOp === 'clean',
-      cleanDone: !!st.cleanText,
-      cleanFailed: st.pp === 'done' && !st.cleanText,          // körde men gav inget resultat
-      cleanPending: st.pp === 'idle' && !st.cleanText,         // väntar på att auto-starta
-      cleanBtnLabel: '↻ Kör igen',
-      cleanPct: Math.round(st.ppPct || 0),
-      cleanBarW: Math.round(st.ppPct || 0) + '%', cleanBarFrac: Math.round(st.ppPct || 0) / 100,
-      cleanLegendAudio: !!st.audioCorrect,
-      cleanPreviewParts: st.cleanText ? cleanDiffParts().slice(0, 70) : [],
-      cleanFullParts: st.cleanText ? cleanDiffParts() : [],
-      cleanChangeCount: st.cleanText ? cleanDiffParts().filter(function (p) { return p.ch; }).length : 0,
-      runClean: runCleanNow,
-      onChatInRecordings: chatAboutResult, resultReady: !!st.resultId,
-      cleanModalOpen: st.cleanModalOpen, openCleanModal: openCleanModal, closeCleanModal: closeCleanModal,
-      ppLocked: !st.cleanText, activeLlmShort: st.ppModel,
+      // Fire-and-forget-avslutningen (design 14 juli): kort "Klart"-rad, sedan
+      // öppnas Inspelningar automatiskt (finishTranscribe).
+      showDone: isDone,
+      procLede: willCorrect()
+        ? 'Transkriberas och korrekturläses automatiskt mot ljudet med Gemma 3n. När allt är klart landar lektionen i Inspelningar.'
+        : 'Transkriberas lokalt på din dator. När allt är klart landar lektionen i Inspelningar.',
+      runningNote: (willCorrect() ? 'Transkriberar och korrekturläser' : 'Transkriberar') + ' … Inspelningar öppnas när det är klart',
+      doneNote: willCorrect() ? 'Klart — korrekturläst och sparad. Öppnar Inspelningar …' : 'Klart — sparad. Öppnar Inspelningar …',
+      ppModel: st.ppModel,
       logExpand: st.logExpand, toggleLogExpand: toggleLogExpand,
       logToggleLabel: st.logExpand ? 'Dölj' : 'Visa',
       stop: stopProp,
-      chatThink: st.chatThink, onToggleChatThink: toggleChatThink,
-      chatThinkBtnStyle: 'display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;font-family:inherit;cursor:pointer;border-radius:99px;padding:6px 12px;border:1px solid ' + (st.chatThink ? 'color-mix(in srgb,var(--accent) 40%,transparent);background:var(--accent-weak);color:var(--accent)' : 'var(--line);background:var(--surface);color:var(--ink-2)'),
-      chatThinkHint: st.chatThink ? 'Tänker djupare före svar — bättre på svåra flerstegsfrågor, men något långsammare.' : 'Snabbt svar utan synligt resonemang. Slå på för svåra flerstegsfrågor.',
 
       // Lektionsoverlay (fullskärm): transkript + chatt + kalenderförslag
       lessonChatOpen: !!st.lessonChatId,
@@ -3197,55 +3358,34 @@
         return { t: seg.time, txt: seg.text, hit: hit, norm: !hit };
       }),
       ovHasHit: !!st.lessonChatHitT, ovHitT: st.lessonChatHitT || '',
-      ovOpenFull: function () { openLesson({ history_id: st.lessonChatId }); },
+      // Stäng overlayn först — transkriptmodalen (z 100) ligger annars under overlayn (z 120).
+      ovOpenFull: function () { var hid = st.lessonChatId; closeLessonChat(); openLesson({ history_id: hid }); },
       ovHasLesson: !!(st.lessonChatMeta && st.lessonChatMeta.lessonId),
-      ovAnalyzing: st.ovAnalyzing, onAnalyze: analyzeLesson,
-      ovReportBusy: st.ovReportBusy, onOvReport: exportLessonReport,
       ovAskSum: function () { sendLessonChat('Sammanfatta lektionen i tre punkter'); },
       ovAskStud: function () { sendLessonChat('Vilka elever nämns och varför?'); },
       ovAskRemind: function () { sendLessonChat('Skapa en läxpåminnelse utifrån lektionen'); },
-      proposeOvEvent: proposeLessonEvent,
-      ovEvent: st.lessonChatEvent ? (function () {
-        var ev = st.lessonChatEvent;
-        return {
-          notAdded: !ev.added, added: ev.added, busy: ev.busy,
-          title: ev.title, when: ev.when, desc: ev.desc || '',
-          calKnown: st.calConnected !== null, calConnected: st.calConnected === true,
-          onConnect: startCalConnect,
-          setTitle: function (e) { setLessonEvent('title', e.target.value); },
-          setDesc: function (e) { setLessonEvent('desc', e.target.value); },
-          onAdd: addLessonEvent,
-          pickOpen: st.evPick === 'lesson',
-          onTogglePick: function (e) { if (e) e.stopPropagation(); toggleEvPick(); },
-          dayOpts: evDays().map(function (d) {
-            return { key: d.label, label: d.label, pre: d.pre, hasPre: !!d.pre,
-                     curQ: (ev.when || '').indexOf(d.label) === 0 ? '1' : '',
-                     onPick: function (e) { if (e) e.stopPropagation(); pickEvPart('day', d.label); } };
-          }),
-          timeOpts: EV_TIMES.map(function (t2) {
-            return { key: t2, label: t2, curQ: (ev.when || '').slice(-5) === t2 ? '1' : '',
-                     onPick: function (e) { if (e) e.stopPropagation(); pickEvPart('time', t2); } };
-          }),
-          aiMsgs: (ev.aiMsgs || []).map(function (m) { return { text: m.text, isUser: m.who === 'u', isAi: m.who === 'a' }; }),
-          aiEmpty: !(ev.aiMsgs || []).length && !ev.aiBusy,
-          aiBusy: ev.aiBusy, aiInput: ev.aiInput || '',
-          onAiInput: onEvAiInput, onAiKey: onEvAiKey, onAiSend: function () { sendEvAi(); },
-          aiChip1: function () { sendEvAi('Flytta till fredag 10:00'); },
-          aiChip2: function () { sendEvAi('Lägg till läxan i anteckningen'); },
-          aiChip3: function () { sendEvAi('Kortare titel'); },
-        };
-      })() : null,
+      // Guardad: klick när ett förslag redan finns fäller ut det i stället för att skriva över.
+      proposeOvEvent: function () { if (S.lessonChatEvent) setState({ ovEvOpen: true }); else proposeLessonEvent(); },
+      ovEvent: st.lessonChatEvent ? evBoxVM('lesson', st) : null,
+      ovEvOpen: !!st.ovEvOpen,
+      toggleOvEv: function () { setState(function (s) { return { ovEvOpen: !s.ovEvOpen }; }); },
+      // Anteckningens inzoomade redigeringsmodal (design 14 juli)
+      descModalOpen: !!st.descModal,
+      descModalAnim: st.descModalClosing ? 'closing' : '',
+      closeDescModal: closeDescModal,
+      descModalVal: ((st.descModalFor === 'ask' ? st.askEvent : st.lessonChatEvent) || {}).desc || '',
+      setDescModalVal: function (e) { setEvField(st.descModalFor === 'ask' ? 'ask' : 'lesson', 'desc', e.target.value); },
       lessonChatThread: {
         chatEmpty: st.lessonChat.length === 0,
         chatHasMsgs: st.lessonChat.length > 0,
-        chat: buildChatMessages(st.lessonChat, st.lessonChatSegs, st.lessonChatCiteSel, selectLessonChatCite),
+        chat: buildChatMessages(st.lessonChat, st.lessonChatSegs, st.lessonChatCiteSel, selectLessonChatCite, st.lessonChatTyping, st.reasonOpen, toggleReason),
         chatTyping: st.lessonChatTyping,
         chatInput: st.lessonChatInput,
         onChatInput: onLessonChatInput, onChatKey: onLessonChatKey, onChatSend: sendLessonChat,
         chatThink: st.lessonChatThink, onToggleChatThink: toggleLessonChatThink,
         chatThinkBtnStyle: 'display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;font-family:inherit;cursor:pointer;border-radius:99px;padding:6px 12px;border:1px solid ' + (st.lessonChatThink ? 'color-mix(in srgb,var(--accent) 40%,transparent);background:var(--accent-weak);color:var(--accent)' : 'var(--line);background:var(--surface);color:var(--ink-2)'),
         chatThinkHint: st.lessonChatThink ? 'Tänker djupare före svar — bättre på svåra flerstegsfrågor, men något långsammare.' : 'Snabbt svar utan synligt resonemang. Slå på för svåra flerstegsfrågor.',
-        ppModel: st.ppModel, openTranscript: null,
+        ppModel: st.ppModel, ovModelTitle: 'Språkmodell: ' + st.ppModel, openTranscript: null,
       },
 
       hwTiles: hw.tiles, hwSpecs: hw.specs, hwReady: hw.ready,
@@ -3404,12 +3544,12 @@ function viewTranscribe(v){ return `
 
       ${ v.stepSource ? `
       <div style="flex:1;display:flex;flex-direction:column;min-height:0">
-        <div class="ehead">
-          <div>
-            <div class="eyebrow" style="margin-bottom:18px">Steg 1 — Källa</div>
+        <div class="ehead ehead--v1">
+          <div class="v1-lead">
+            <div class="eyebrow" style="margin-bottom:14px">Steg 1 — Källa</div>
             <h1 class="disp" style="font-size:clamp(34px,5.2vw,52px);margin:0">Vad vill du <span class="ser">transkribera?</span></h1>
           </div>
-          <p class="ehead_lede">Dra in en eller flera filer, eller välj från datorn — allt körs på din egen dator.</p>
+          <p class="ehead_lede v1-lede">Dra in en eller flera filer, eller välj från datorn — allt körs på din egen dator.</p>
         </div>
         <div data-click="${on(v.openPicker)}" data-dragover="${on(v.onDragOver)}" data-dragleave="${on(v.onDragLeave)}" data-drop="${on(v.onDrop)}" role="button" tabindex="0" aria-label="Välj eller dra in ljud- eller videofiler" style="${v.dropzoneStyle}">
           <input data-ref="${on(v.fileRef)}" type="file" accept="audio/*,video/*" multiple="true" data-change="${on(v.onPickFile)}" style="display:none">
@@ -3507,7 +3647,7 @@ function viewTranscribe(v){ return `
               <span class="fig" style="font-size:16px;color:var(--ink);font-variant-numeric:tabular-nums">${esc(v.queueCount)}</span>
             </div>
             <button data-click="${on(v.goSource)}" style="display:inline-flex;align-items:center;gap:6px;background:transparent;border:1px solid var(--line);color:var(--ink);border-radius:9px;padding:6px 12px;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;flex:0 0 auto;transition:border-color .14s,background .14s">
-              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 3v10M3 8h10"></path></svg>Lägg till fler
+              <span style="display:inline-flex;align-items:center;gap:6px;white-space:nowrap"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 3v10M3 8h10"></path></svg>Lägg till fler</span>
             </button>
           </div>
           <div style="display:flex;flex-direction:column">
@@ -3515,7 +3655,7 @@ function viewTranscribe(v){ return `
               <div data-key="${esc(q.id)}" style="display:flex;align-items:center;gap:12px;padding:13px 20px;border-bottom:1px solid var(--line);background:var(--surface)">
                 <span style="font-family:var(--mono);font-size:10px;font-weight:500;letter-spacing:0.06em;color:var(--ink-2);background:var(--sunken);border:1px solid var(--line);border-radius:4px;padding:3px 7px;flex:0 0 auto">${esc(q.ext)}</span>
                 <span style="flex:1;min-width:0;font-size:15.5px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(q.name)}</span>
-                <button data-click="${on(q.onRemove)}" aria-label="Ta bort från kön" style="width:30px;height:30px;flex:0 0 auto;border:1px solid var(--line);background:var(--surface);border-radius:8px;cursor:pointer;color:var(--ink-3);display:flex;align-items:center;justify-content:center;transition:border-color .14s,color .14s">
+                <button data-click="${on(q.onRemove)}" aria-label="Ta bort från kön" style="width:36px;height:36px;flex:0 0 auto;border:1px solid var(--line);background:var(--surface);border-radius:8px;cursor:pointer;color:var(--ink-3);display:flex;align-items:center;justify-content:center;transition:border-color .14s,color .14s">
                   <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 3l8 8M11 3l-8 8"></path></svg>
                 </button>
               </div>
@@ -3523,9 +3663,7 @@ function viewTranscribe(v){ return `
           </div>
         </div>
 
-        <div style="font-family:var(--mono);font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-3);margin:2px 0 14px">Inställningar</div>
-
-        <div style="background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:17px 19px;box-shadow:var(--shadow-sm)">
+        <div style="background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:17px 19px">
           <div style="font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);margin-bottom:15px">Språk</div>
           <div style="display:flex;align-items:flex-end;gap:14px">
             <div style="flex:1 1 0;min-width:0;display:flex;flex-direction:column;gap:9px">
@@ -3555,7 +3693,7 @@ function viewTranscribe(v){ return `
           </div>
         </div>
 
-        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:12px 16px;box-shadow:var(--shadow-sm)">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:12px 16px">
           <span style="font-size:14px;color:var(--ink-2);font-weight:500">Filformat</span>
           <div style="display:flex;gap:6px">
             ${ v.formatChips.map(function(f){ return `
@@ -3564,7 +3702,7 @@ function viewTranscribe(v){ return `
           </div>
         </div>
 
-        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:12px 14px;box-shadow:var(--shadow-sm)">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:12px 14px">
           <div data-click="${on(v.onToggleAudioCorrect)}" role="switch" tabindex="0" aria-checked="${v.audioCorrect}" aria-label="Rätta mot ljudet" style="${v.acSwitchTrack}"><span style="${v.acSwitchKnob}"></span></div>
           <div style="flex:1;min-width:0">
             <div style="font-size:14.5px;font-weight:500;color:var(--ink)">Rätta mot ljudet <span style="font-size:12px;color:var(--ink-3)">· Gemma 4 (experimentell)</span></div>
@@ -3576,7 +3714,7 @@ function viewTranscribe(v){ return `
         </div>
 
         ${ v.showSubtitleMode ? `
-        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:12px;box-shadow:var(--shadow-sm)">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:12px">
           <span style="font-size:14px;color:var(--ink-2);font-weight:500">Undertext i video</span>
           <div style="display:flex;gap:3px;padding:4px;background:var(--track);border:1px solid var(--line);border-radius:11px">
             ${ v.subtitleOptions.map(function(o){ return `<button data-click="${on(o.onPick)}" aria-pressed="${o.active}" style="${o.style}" data-sh="background:var(--surface) !important;color:var(--ink) !important;box-shadow:var(--shadow-sm) !important">${esc(o.label)}</button>`; }).join('') }
@@ -3607,10 +3745,10 @@ function viewTranscribe(v){ return `
       <div data-pane="process" style="flex:1;display:flex;flex-direction:column;min-height:0">
         <div class="ehead">
           <div>
-            <div class="eyebrow" style="margin-bottom:18px">Steg 3 — Resultat</div>
-            <h1 class="disp" style="font-size:clamp(30px,4.4vw,44px);margin:0">Ditt <span class="ser">transkript</span></h1>
+            <div class="eyebrow" style="margin-bottom:18px">Steg 3 — Transkribering</div>
+            <h1 class="disp" style="font-size:clamp(30px,4.4vw,44px);margin:0">Bearbetar <span class="ser">lokalt</span></h1>
           </div>
-          <p class="ehead_lede">Bearbetas lokalt i steg. Korrekturläs, städa språket och ställ frågor — när du är klar.</p>
+          <p class="ehead_lede">${esc(v.procLede)}</p>
         </div>
         <div data-ref="${on(v.procScrollRef)}" data-procscroll="1" style="display:flex;flex-direction:column">
           <div style="height:2px"></div>
@@ -3645,9 +3783,6 @@ function viewTranscribe(v){ return `
             <div style="display:flex;align-items:baseline;gap:18px;flex:0 0 auto">
               <span style="display:inline-flex;align-items:baseline;gap:7px"><span class="win_lbl">Tid</span><span style="font-size:14.5px;color:var(--ink-2);font-variant-numeric:tabular-nums">${esc(v.elapsedLabel)}</span></span>
               <span style="display:inline-flex;align-items:baseline;gap:7px"><span class="win_lbl">Klart</span><span class="fig" style="font-size:21px;color:var(--ink);font-variant-numeric:tabular-nums">${esc(v.progressLabel)}</span></span>
-              ${ v.isRunning ? `
-                <button data-click="${on(v.onCancelRun)}" style="background:transparent;border:1px solid var(--line);color:var(--ink-2);border-radius:9px;padding:6px 13px;font-size:13.5px;font-weight:500;cursor:pointer;font-family:inherit;align-self:center">Avbryt</button>
-              ` : '' }
             </div>
           </div>
 
@@ -3723,116 +3858,22 @@ function viewTranscribe(v){ return `
       </div>
       ` : '' }
 
-      ${ v.showResults ? `
-      <div data-sec="results" style="margin-top:24px;scroll-margin-top:8px">
-        <div data-reveal style="display:flex;align-items:center;gap:9px;margin-bottom:14px">
-          <span style="width:18px;height:18px;border-radius:50%;background:var(--ok);color:var(--on-ok);display:flex;align-items:center;justify-content:center;font-size:12.5px;flex:0 0 auto">✓</span>
-          <h2 style="font-size:20px;font-weight:600;letter-spacing:-0.02em;margin:0">Klar</h2>
-          <span style="color:var(--ink-2);font-size:15.5px">· ${esc(v.resultCount)} filer · ${esc(v.resultDuration)}</span>
+      ${ v.isRunning ? `
+      <div style="display:flex;flex-direction:column;align-items:center;gap:14px;margin-top:24px">
+        <div style="display:flex;align-items:center;gap:11px;color:var(--ink-2);font-size:14.5px">
+          <span style="width:15px;height:15px;border-radius:50%;border:2px solid var(--line-2);border-top-color:var(--accent);animation:spin .7s linear infinite"></span>
+          ${esc(v.runningNote)}
         </div>
-
-        <div style="display:grid;gap:10px;margin-bottom:18px">
-          ${ v.resultFiles.map(function(r){ return `
-            <div data-key="${esc(r.name)}" data-reveal style="display:flex;align-items:center;gap:14px;background:var(--surface);border:1px solid var(--line);border-radius:13px;padding:14px 16px;box-shadow:var(--shadow-sm)">
-              <span style="font-variant-numeric:tabular-nums;font-size:12.5px;font-weight:500;color:var(--accent);background:var(--accent-weak);padding:5px 9px;border-radius:7px;letter-spacing:0.03em">${esc(r.type)}</span>
-              <span style="flex:1;min-width:0;font-size:16px;font-variant-numeric:tabular-nums;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.name)}</span>
-              <span style="font-size:14px;color:var(--ink-2);font-variant-numeric:tabular-nums">${esc(r.size)}</span>
-              <button data-click="${on(r.onDownload)}" style="display:inline-flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:8px 14px 8px 12px;font-size:14.5px;font-weight:500;cursor:pointer;font-family:inherit;transition:background .14s,border-color .14s,color .14s" data-sh="border-color:var(--ink) !important;background:var(--ink) !important;color:var(--btn-fg) !important">
-                <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.5v7.5"></path><path d="M4.5 6.5 8 10l3.5-3.5"></path><path d="M3 13.5h10"></path></svg>Ladda ner
-              </button>
-            </div>
-          `; }).join('') }
-        </div>
-
-        <div data-reveal data-click="${on(v.openTranscript)}" role="button" tabindex="0" aria-label="Öppna hela transkriptet" style="background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px 20px;box-shadow:var(--shadow-sm);cursor:pointer;transition:border-color .12s,box-shadow .12s" data-sh="border-color:var(--line-2) !important;box-shadow:var(--shadow) !important">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px">
-            <span style="font-size:12.5px;text-transform:uppercase;letter-spacing:0.04em;color:var(--ink-2)">Förhandsvisning</span>
-            <span style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;color:var(--accent)">Visa hela transkriptet<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5 10.5 8 6 12.5"></path></svg></span>
-          </div>
-          ${ v.transcript.map(function(t, idx){ return `
-            <div data-key="${esc(idx)}" style="display:flex;gap:14px;padding:5px 0">
-              <span style="font-variant-numeric:tabular-nums;font-size:13.5px;color:var(--ink-3);flex:0 0 auto;width:46px;padding-top:2px">${esc(t.time)}</span>
-              <span style="font-size:16px;color:var(--ink);line-height:1.5">${esc(t.text)}</span>
-            </div>
-          `; }).join('') }
-          <div style="margin-top:9px;font-size:13px;color:var(--ink-3)">… klicka för att läsa hela transkriptet</div>
-        </div>
+        <button data-click="${on(v.onCancelRun)}" style="background:transparent;border:1px solid var(--line);color:var(--ink-2);border-radius:9px;padding:7px 16px;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;transition:border-color .14s,color .14s" data-sh="border-color:var(--bad) !important;color:var(--bad) !important">Avbryt</button>
       </div>
       ` : '' }
-
-      ${ v.showPP ? `
-      <div data-sec="pp" data-follow="clean" data-reveal style="margin-top:28px;background:var(--surface);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);padding:22px 24px 20px">
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
-          <span style="font-family:var(--mono);font-size:10.5px;font-weight:500;letter-spacing:0.08em;color:var(--c-mustard);background:color-mix(in srgb,var(--c-mustard) 13%,transparent);border:1px solid color-mix(in srgb,var(--c-mustard) 30%,transparent);padding:3px 9px;border-radius:6px">KORREKTUR</span>
-          <h2 style="font-size:19px;font-weight:600;letter-spacing:-0.02em;margin:0">Korrekturläs transkriptet</h2>
-        </div>
-        <p style="margin:0 0 18px;color:var(--ink-2);font-size:15px">Körs automatiskt direkt efter transkriberingen — rättar stavfel och småfel och städar språket (skiljetecken och meningslängd) med ${esc(v.activeLlmShort)}.</p>
-
-        ${ v.cleanDone && !v.cleanRunning ? `
-        <div data-click="${on(v.openCleanModal)}" role="button" tabindex="0" aria-label="Öppna korrekturläsningen" style="background:var(--sunken);border:1px solid var(--line);border-radius:13px;padding:16px 18px;margin-bottom:14px;cursor:pointer;transition:border-color .14s,box-shadow .14s" data-sh="border-color:var(--line-2) !important;box-shadow:var(--shadow-sm) !important">
-          <div style="display:flex;align-items:center;gap:14px;margin-bottom:12px;flex-wrap:wrap">
-            <span style="font-size:11.5px;text-transform:uppercase;letter-spacing:0.05em;color:var(--accent);font-weight:600">Korrekturläst</span>
-            ${ v.cleanLegendAudio ? `<span style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2)"><span style="width:12px;height:12px;border-radius:4px;background:color-mix(in srgb,var(--ok) 20%,transparent);border:1px solid color-mix(in srgb,var(--ok) 45%,transparent)"></span>mot ljudet</span>` : '' }
-            <span style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2)"><span style="width:12px;height:12px;border-radius:4px;background:color-mix(in srgb,var(--accent) 16%,transparent);border:1px solid color-mix(in srgb,var(--accent) 45%,transparent)"></span>språk &amp; skiljetecken</span>
-            <span style="margin-left:auto;display:inline-flex;align-items:center;gap:5px;font-size:13px;font-weight:500;color:var(--accent)">Visa hela<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5 10.5 8 6 12.5"></path></svg></span>
-          </div>
-          <div style="font-size:15px;color:var(--ink);line-height:1.65">
-            ${ v.cleanPreviewParts.map(function(p){ return p.ch ? `<span style="background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent);border-radius:4px;padding:0 3px;font-weight:500">${esc(p.s)}</span>` : `<span>${esc(p.s)}</span>`; }).join(' ') } …
-          </div>
-          <div style="margin-top:9px;font-size:13px;color:var(--ink-3)">${esc(v.cleanChangeCount)} markerade rättelser · klicka för att öppna hela</div>
-        </div>
-        ` : '' }
-
-        ${ v.cleanRunning ? `
-        <div style="background:var(--sunken);border:1px solid var(--line);border-radius:13px;padding:15px 17px;margin-bottom:14px">
-          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:11px">
-            <span style="display:inline-flex;align-items:center;gap:9px;font-size:14px;font-weight:600;color:var(--ink)"><span style="width:14px;height:14px;border-radius:50%;border:2px solid var(--line-2);border-top-color:var(--accent);animation:spin .7s linear infinite;flex:0 0 auto"></span>Korrekturläser …</span>
-            <span style="color:var(--ink);letter-spacing:-0.01em"><span class="fig" style="font-size:30px;font-variant-numeric:tabular-nums">${esc(v.cleanPct)}</span><span class="fig-unit" style="font-size:16px;margin-left:1px">%</span></span>
-          </div>
-          <div style="height:9px;border-radius:99px;background:var(--track);overflow:hidden;margin-bottom:11px"><div style="height:100%;width:100%;transform-origin:left;transform:scaleX(${v.cleanBarFrac});background:var(--accent);transition:transform .2s"></div></div>
-          <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-2)"><span style="width:7px;height:7px;border-radius:50%;background:var(--accent);animation:pulse 1.2s ease-in-out infinite;flex:0 0 auto"></span>Städar språket …</div>
-        </div>
-        ` : '' }
-
-        ${ !v.cleanRunning && v.cleanDone ? `
-        <div style="display:flex;align-items:center;gap:13px;flex-wrap:wrap">
-          <button data-click="${on(v.runClean)}" style="display:inline-flex;align-items:center;justify-content:center;gap:8px;background:transparent;border:1px solid var(--line);color:var(--ink);border-radius:11px;padding:9px 16px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;transition:border-color .15s,background .15s" data-sh="border-color:var(--line-2) !important;background:var(--sunken) !important">${esc(v.cleanBtnLabel)}</button>
-          <span style="margin-left:auto;display:inline-flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink-3)"><span style="width:7px;height:7px;border-radius:50%;flex:0 0 auto;background:var(--ok)"></span>Lokalt med <strong style="color:var(--ink-2);font-weight:600">${esc(v.ppModel)}</strong></span>
-        </div>
-        ` : '' }
-
-        ${ !v.cleanRunning && v.cleanFailed ? `
-        <div style="display:flex;align-items:center;gap:13px;flex-wrap:wrap">
-          <span style="display:inline-flex;align-items:center;gap:8px;font-size:14px;color:var(--ink-2)"><span style="width:20px;height:20px;border-radius:50%;flex:0 0 auto;background:color-mix(in srgb,var(--bad) 16%,transparent);color:var(--bad);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px">!</span>Korrekturläsningen gick inte igenom.</span>
-          <button data-click="${on(v.runClean)}" style="display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:11px;padding:9px 18px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;box-shadow:var(--shadow-sm);transition:background .15s">↻ Försök igen</button>
-        </div>
-        ` : '' }
-
-        ${ !v.cleanRunning && v.cleanPending ? `
-        <div style="display:flex;align-items:center;gap:13px;flex-wrap:wrap;font-size:14px;color:var(--ink-2)">
-          <span style="display:inline-flex;align-items:center;gap:9px"><span style="width:14px;height:14px;border-radius:50%;border:2px solid var(--line-2);border-top-color:var(--accent);animation:spin .7s linear infinite;flex:0 0 auto"></span>Korrekturläsning startar automatiskt …</span>
-          <span style="margin-left:auto;display:inline-flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ink-3)"><span style="width:7px;height:7px;border-radius:50%;flex:0 0 auto;background:var(--ok)"></span>Lokalt med <strong style="color:var(--ink-2);font-weight:600">${esc(v.ppModel)}</strong></span>
-        </div>
-        ` : '' }
-      </div>
-
-      <div data-follow="llm" style="margin-top:16px;background:var(--surface);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);padding:22px 24px 20px">
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
-          <span style="font-family:var(--mono);font-size:10.5px;font-weight:500;letter-spacing:0.08em;color:var(--c-sky);background:color-mix(in srgb,var(--c-sky) 13%,transparent);border:1px solid color-mix(in srgb,var(--c-sky) 28%,transparent);padding:3px 9px;border-radius:6px">LLM</span>
-          <h2 style="font-size:19px;font-weight:600;letter-spacing:-0.02em;margin:0">Fråga om lektionen</h2>
-        </div>
-        <p style="margin:0 0 18px;color:var(--ink-2);font-size:15px">Chatten bor bland dina inspelningar. Öppna den här inspelningen under <strong style="color:var(--ink);font-weight:600">Inspelningar</strong> så kan du ställa frågor om innehållet — svaren förankras i numrerade källor i transkriptet.</p>
-        <button data-click="${on(v.onChatInRecordings)}" style="display:inline-flex;align-items:center;justify-content:center;gap:10px;width:100%;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:12px;padding:14px 22px;font-size:15px;font-weight:500;cursor:pointer;font-family:inherit;box-shadow:var(--shadow-sm);transition:background .15s" data-sh="background:color-mix(in srgb, var(--btn-bg) 82%, var(--accent)) !important">
-          <svg width="17" height="17" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4.5h12a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1H8l-4 3v-3H4a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1z"></path></svg>
-          Chatta om inspelningen
-          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h10"></path><path d="M8.5 3.5 13 8l-4.5 4.5"></path></svg>
-        </button>
+      ${ v.showDone ? `
+      <div style="display:flex;align-items:center;justify-content:center;gap:11px;margin-top:24px;color:var(--ink);font-size:15px;font-weight:500;animation:fadeup .3s ease both">
+        <span style="width:20px;height:20px;border-radius:50%;background:var(--ok);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;flex:0 0 auto">✓</span>
+        <span>${esc(v.doneNote)}</span>
       </div>
       ` : '' }
         </div>
-        <button data-click="${on(v.restart)}" style="margin-top:16px;flex:0 0 auto;align-self:center;display:inline-flex;align-items:center;justify-content:center;gap:8px;background:transparent;border:1px solid var(--line);color:var(--ink);border-radius:11px;padding:11px 22px;font-size:15px;font-weight:500;cursor:pointer;font-family:inherit" data-sh="border-color:var(--line-2) !important;background:var(--sunken) !important">
-          <span style="font-size:16px;line-height:1">↺</span>Ny transkribering — börja om
-        </button>
       </div>
       ` : '' }
     </section>
@@ -3897,12 +3938,12 @@ function historySection(v){
 function viewRecordings(v){
   function filterChip(label, onX){ return '<span style="display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:500;color:var(--accent);background:var(--accent-weak);border:1px solid color-mix(in srgb,var(--accent) 28%,transparent);border-radius:99px;padding:4px 6px 4px 12px">'+esc(label)+'<button data-click="'+onX+'" aria-label="Ta bort filter" style="width:18px;height:18px;border:none;background:transparent;color:var(--accent);cursor:pointer;display:flex;align-items:center;justify-content:center;font-family:inherit;border-radius:50%"><svg width="10" height="10" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3l8 8M11 3l-8 8"></path></svg></button></span>'; }
   // Filterknapp + popover-meny (mallens custom dropdown med mjuk hover-stängning)
-  function filterDrop(label, selOn, isOpen, onToggle, anim, menuOpts){
+  function filterDrop(label, selOn, isOpen, onToggle, anim, menuOpts, alignRight){
     return `
         <div style="position:relative" data-enter="${on(v.fEnter)}" data-leave="${on(v.fLeave)}">
           <button data-click="${on(onToggle)}" data-filter-on="${esc(selOn)}" style="display:inline-flex;align-items:center;gap:9px;background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:8px 13px;font-size:14px;font-family:inherit;cursor:pointer;white-space:nowrap;transition:border-color .14s">${esc(label)}<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l4 4 4-4"></path></svg></button>
           ${ isOpen ? `
-            <div data-pop="${esc(anim)}" style="position:absolute;top:100%;left:0;z-index:30;padding-top:6px"><div style="min-width:172px;background:var(--surface);border:1px solid var(--line-2);border-radius:10px;box-shadow:var(--shadow);padding:5px;display:flex;flex-direction:column;gap:1px">
+            <div data-pop="${esc(anim)}" style="position:absolute;top:100%;${ alignRight ? 'right:0' : 'left:0' };z-index:30;padding-top:6px"><div style="min-width:172px;background:var(--surface);border:1px solid var(--line-2);border-radius:10px;box-shadow:var(--shadow);padding:5px;display:flex;flex-direction:column;gap:1px">
               ${ menuOpts.map(function(o){ return `
                 <button data-key="${esc(o.key)}" data-click="${on(o.onSelect)}" data-opt="" style="display:flex;align-items:center;gap:10px;border:none;background:transparent;color:var(--ink);border-radius:7px;padding:8px 11px;font-size:13.5px;font-family:inherit;cursor:pointer;text-align:left;white-space:nowrap">${esc(o.label)}<span style="flex:1;min-width:14px"></span>${ o.isCur ? '<span style="font-weight:600">✓</span>' : '' }</button>
               `; }).join('') }
@@ -3920,8 +3961,8 @@ function viewRecordings(v){
       ${ spotlightPanel(v.lessonsSearch) }
 
       ${ v.askScan ? `
-      <div style="max-width:960px;margin:22px auto 8px;animation:fadeup .3s ease both">
-        <div style="display:flex;align-items:center;gap:12px;margin-bottom:11px">
+      <div style="max-width:960px;margin:24px auto 8px;animation:fadeup .3s ease both">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
           ${ v.askScan.scanning ? `
             <span class="insp-dots" style="color:var(--accent);flex:0 0 auto"><i></i><i></i><i></i></span>
             <span style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(v.askScan.ticker)}</span>
@@ -3932,28 +3973,67 @@ function viewRecordings(v){
           <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--accent);flex:0 0 auto">${esc(v.askScan.hitLabel)}</span>
           <button data-click="${on(v.askScan.onNew)}" style="flex:0 0 auto;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:7px;padding:5px 10px;font-family:var(--mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;cursor:pointer">✕ Ny fråga</button>
         </div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(108px,1fr));gap:9px">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(108px,1fr));gap:8px">
           ${ v.askScan.cards.map(function(sc){ return `
-            <div data-key="scan-${esc(sc.key)}" data-scan="${esc(sc.st)}" style="min-width:0;border:1px solid var(--line);background:var(--surface);border-radius:9px;padding:9px 11px;transition:opacity .35s ease,box-shadow .35s ease,border-color .35s ease,background .35s ease">
-              <span style="font-family:var(--mono);font-size:8.5px;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-3);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(sc.stLabel)}</span>
+            <div data-key="scan-${esc(sc.key)}" data-scan="${esc(sc.st)}" style="min-width:0;border:1px solid var(--line);background:var(--surface);border-radius:9px;padding:10px 12px;transition:opacity .35s ease,box-shadow .35s ease,border-color .35s ease,background .35s ease">
+              <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-3);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(sc.stLabel)}</span>
               <div style="font-size:12px;font-weight:600;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(sc.title)}</div>
             </div>
           `; }).join('') }
         </div>
         ${ v.askScan.ansStarted ? `
-        <div style="margin-top:14px;border:1px solid var(--line);border-radius:13px;background:var(--surface);padding:20px 24px;box-shadow:var(--shadow-sm);animation:fadeup .3s ease both">
-          <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:12px">
-            <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);flex:0 0 auto">${esc(v.askScan.ansHeadLabel)}</span>
-            <span style="font-size:12.5px;color:var(--ink-3);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-left:auto">”${esc(v.askScan.q)}”</span>
+        <div data-askwrap="${esc(v.askScan.askZoomFlag)}" data-click="${on(v.askScan.closeAskZoom)}">
+        <div data-askzoom="${esc(v.askScan.askZoomFlag)}" data-click="${on(v.askScan.onAskCardClick)}" title="Klicka för att förstora svaret" style="margin-top:16px;border:1px solid var(--line);border-radius:13px;background:var(--surface);box-shadow:var(--shadow-sm);animation:fadeup .3s ease both;overflow:hidden">
+          <div style="display:grid;grid-template-columns:minmax(0,1fr) ${ v.askScan.askZoomOn ? '300px' : '224px' };align-items:stretch">
+          <div style="min-width:0;padding:${ v.askScan.askZoomOn ? '24px 28px' : '14px 17px' }">
+            <div style="font-family:var(--mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3)">${esc(v.askScan.ansHeadLabel)}</div>
+            <div style="font-size:12.5px;color:var(--ink-3);margin-top:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">”${esc(v.askScan.q)}”</div>
+            <div data-hidescroll="1" data-askscroll="1" style="max-height:min(52vh,520px);overflow:auto;overscroll-behavior:contain;scrollbar-width:none">
+            <p style="margin:8px 0 0;font-size:${ v.askScan.askZoomOn ? '16px' : '15.5px' };line-height:1.8;color:var(--ink);max-width:62ch;white-space:pre-wrap">${esc(v.askScan.answer)}${ v.askScan.ansTyping ? '<span class="ai-blink" style="display:inline-block;width:9px;height:17px;background:var(--accent);vertical-align:-3px;margin-left:3px"></span>' : '' }</p>
+            ${ v.askScan.askZoomOn && v.askScan.askFollowups.length ? `
+            <div style="margin-top:18px;border-top:1px solid var(--line);padding-top:14px">
+              ${ v.askScan.askFollowups.map(function(f){ return `
+                <div data-key="${esc(f.key)}" style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
+                  <div style="align-self:flex-end;max-width:86%;background:var(--accent-weak);color:var(--ink);border:1px solid color-mix(in srgb,var(--accent) 25%,transparent);border-radius:14px 14px 4px 14px;padding:9px 13px;font-size:14px;line-height:1.5">${esc(f.q)}</div>
+                  <div style="align-self:stretch;font-size:15px;line-height:1.75;color:var(--ink);white-space:pre-wrap">${esc(f.a)}${ f.typing ? '<span class="ai-blink" style="display:inline-block;width:8px;height:15px;background:var(--accent);vertical-align:-2px;margin-left:3px"></span>' : '' }</div>
+                </div>
+              `; }).join('') }
+            </div>
+            ` : '' }
+            </div>
+            ${ !v.askScan.askZoomOn && v.askScan.askFollowups.length ? `
+            <div style="margin-top:10px;font-family:var(--mono);font-size:9.5px;letter-spacing:0.06em;text-transform:uppercase;color:var(--ink-3)">${esc(String(v.askScan.askFollowups.length))} följdfråg${ v.askScan.askFollowups.length === 1 ? 'a' : 'or' } — öppna chattvyn för att fortsätta</div>
+            ` : '' }
+            ${ v.askScan.askEvent ? `
+              <div data-click="${on(v.stop)}" style="margin-top:12px">${ lessonEventBox(v.askScan.askEvent) }</div>
+            ` : '' }
+            ${ v.askScan.askZoomOn && v.askScan.ansDone ? `
+              <div style="display:flex;gap:9px;align-items:center;margin-top:12px">
+                <input value="${esc(v.askScan.askFollowInput)}" data-input="${on(v.askScan.setAskFollow)}" data-keydown="${on(v.askScan.onAskFollowKey)}" data-click="${on(v.stop)}" aria-label="Ställ en följdfråga" placeholder="Ställ en följdfråga …" style="flex:1;min-width:0;background:var(--sunken);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:11px 13px;font-size:14.5px;font-family:inherit;outline:none">
+                <button data-click="${on(v.askScan.sendAskFollow)}" style="flex:0 0 auto;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:10px;padding:11px 18px;font-size:14.5px;font-weight:500;cursor:pointer;font-family:inherit;transition:background .15s">Skicka</button>
+              </div>
+            ` : '' }
           </div>
-          <p style="margin:0;font-size:16px;line-height:2;color:var(--ink);max-width:72ch;white-space:pre-wrap">${esc(v.askScan.answer)}${ v.askScan.ansTyping ? '<span class="ai-blink" style="display:inline-block;width:9px;height:17px;background:var(--accent);vertical-align:-3px;margin-left:3px"></span>' : '' }</p>
-          ${ v.askScan.sources.length ? `
-          <div style="display:flex;gap:9px;flex-wrap:wrap;margin-top:15px">
-            ${ v.askScan.sources.map(function(src){ return `
-              <button data-click="${on(src.onCite)}" title="Öppna lektionen och chatta" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--ink);white-space:nowrap;max-width:280px;overflow:hidden;text-overflow:ellipsis;background:var(--surface);border:1px solid color-mix(in srgb,var(--accent) 45%,var(--line));border-radius:8px;padding:5px 10px;cursor:pointer;font-family:inherit;transition:border-color .12s,background .12s"><span style="width:6px;height:6px;border-radius:2px;background:var(--accent);flex:0 0 auto"></span>${esc(src.rec)}<span style="font-family:var(--mono);font-size:9.5px;color:var(--ink-3)">${ src.sub ? esc(src.sub) + ' ' : '' }↗</span></button>
+          <div data-click="${on(v.stop)}" style="display:flex;flex-direction:column;gap:6px;padding:12px;background:var(--sunken);border-left:1px solid var(--line);min-width:0">
+            ${ !v.askScan.askZoomOn ? `
+            <button data-click="${on(v.askScan.onAskCardClick)}" title="Öppna svaret i en fokuserad chattvy" style="display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:9px;padding:11px 16px;font-size:13.5px;font-weight:600;font-family:inherit;cursor:pointer;transition:background .15s">Öppna i chattvyn<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto"><path d="M3 8h10M9 4l4 4-4 4"></path></svg></button>
+            ` : '' }
+            ${ !v.askScan.askEvent ? `
+            <button data-click="${on(v.askScan.proposeAskCal)}" title="Skapa en kalenderhändelse utifrån svaret" style="display:inline-flex;align-items:center;justify-content:center;gap:7px;background:transparent;color:var(--ink-2);border:1px solid var(--line);border-radius:9px;padding:10px 14px;font-size:13px;font-weight:500;font-family:inherit;cursor:pointer;transition:border-color .14s,color .14s" data-sh="border-color:var(--line-2) !important;color:var(--ink) !important"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="flex:0 0 auto"><rect x="2" y="3" width="12" height="11" rx="2"></rect><path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3M8 9v3M6.5 10.5h3"></path></svg>Kalenderhändelse</button>
+            ` : '' }
+            ${ v.askScan.ansHasRefs ? `
+            <div style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-3);margin-top:5px">Käll${ v.askScan.askRefs.length === 1 ? 'a' : 'or' } · ${esc(v.askScan.askRefCount)}</div>
+            ${ v.askScan.askRefs.map(function(rf){ return `
+              <div data-key="${esc(rf.key)}" data-click="${on(rf.onPick)}" role="button" tabindex="0" title="Öppna lektionen och chatta" data-crow="" style="display:flex;flex-direction:column;gap:4px;padding:9px 10px;border-radius:8px;cursor:pointer;border:1px solid transparent;transition:box-shadow .18s,border-color .18s,background .18s">
+                <span style="display:flex;align-items:center;gap:7px;min-width:0"><span style="width:6px;height:6px;border-radius:2px;background:var(--accent);flex:0 0 auto"></span><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:700;color:var(--ink)">${esc(rf.rec)}</span></span>
+                <span style="font-family:var(--mono);font-size:10px;color:var(--ink-3);font-variant-numeric:tabular-nums">${esc(rf.meta)}</span>
+                ${ rf.text ? `<span style="font-size:12.5px;line-height:1.45;color:var(--ink-2)">${esc(rf.text)}</span>` : '' }
+              </div>
             `; }).join('') }
+            ` : '' }
           </div>
-          ` : '' }
+          </div>
+        </div>
         </div>
         ` : '' }
       </div>
@@ -3962,7 +4042,7 @@ function viewRecordings(v){
       <div style="max-width:760px;margin:22px auto 10px;display:flex;gap:9px;justify-content:center;align-items:center;flex-wrap:wrap">
         ${ v.hasGroups ? filterDrop(v.fKlassLabel, v.klassSelOn, v.fKlassOpen, v.fKlassToggle, v.fPopAnim, v.klassMenuOpts) : '' }
         ${ v.hasCourses ? filterDrop(v.fKursLabel, v.kursSelOn, v.fKursOpen, v.fKursToggle, v.fPopAnim, v.kursMenuOpts) : '' }
-        ${ v.hasMonths ? filterDrop(v.fDatumLabel, v.datumSelOn, v.fDatumOpen, v.fDatumToggle, v.fPopAnim, v.datumMenuOpts) : '' }
+        ${ v.hasMonths ? filterDrop(v.fDatumLabel, v.datumSelOn, v.fDatumOpen, v.fDatumToggle, v.fPopAnim, v.datumMenuOpts, true) : '' }
         ${ (!v.hasGroups && !v.hasCourses && v.hasMonths) ? `<span style="font-size:12.5px;color:var(--ink-3)">Tilldela klass &amp; kurs på korten för att filtrera på dem</span>` : '' }
         ${ /* Säkerhetskopiera behålls som medveten avvikelse från mallen */ '' }
         <button data-click="${on(v.backup.onRun)}" ${ v.backup.busy ? 'disabled' : '' } title="Säkerhetskopiera lektionsdatabasen + historiken" style="background:var(--surface);border:1px solid var(--line);color:var(--ink-2);border-radius:10px;padding:8px 14px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;opacity:${ v.backup.busy ? '.6' : '1' }" data-sh="border-color:var(--ink) !important;color:var(--ink) !important">💾 ${ v.backup.busy ? 'Säkerhetskopierar …' : 'Säkerhetskopiera' }</button>
@@ -4005,7 +4085,7 @@ function viewRecordings(v){
                 </div>
                 ` : '' }
                 <div style="display:flex;align-items:center;gap:8px">
-                  <span data-cc="${esc(h.cc)}" style="border-radius:99px;padding:2px 10px;font-size:11.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:0 1 auto;min-width:0">${esc(h.tagLabel)}</span>
+                  <span data-cc="${esc(h.cc)}" title="${esc(h.tagFull)}" style="border-radius:99px;padding:2px 10px;font-size:11.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:0 1 auto;min-width:0">${esc(h.tagLabel)}</span>
                   ${ h.isHit ? `<span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:var(--accent);background:var(--accent-weak);border-radius:99px;padding:2px 9px;flex:0 0 auto"><span style="width:6px;height:6px;border-radius:50%;background:var(--accent)"></span>träff</span>` : '' }
                   <span style="flex:1"></span>
                   <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.05em;text-transform:uppercase;color:var(--ink-3);white-space:nowrap">${esc(h.date)}</span>
@@ -4020,9 +4100,9 @@ function viewRecordings(v){
                 <div style="display:flex;align-items:center;gap:7px;border-top:1px solid var(--line);padding-top:10px">
                   <button data-click="${on(h.onOpenChat)}" data-textbtn style="font-family:var(--mono);font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:var(--accent);background:transparent;border:none;padding:0;cursor:pointer">Öppna &amp; chatta ↗</button>
                   <span style="flex:1"></span>
-                  <button data-click="${on(h.onOpen)}" aria-label="Öppna transkriptvyn" title="Öppna transkriptvyn med ljud" style="width:29px;height:29px;border:1px solid var(--line);background:var(--surface);border-radius:8px;cursor:pointer;color:var(--ink-3);display:flex;align-items:center;justify-content:center;transition:border-color .12s,color .12s"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h5l2 2v8H6z"></path><path d="M3 5v8.5h7"></path></svg></button>
-                  <button data-click="${on(h.onRename)}" aria-label="Redigera uppgifter" title="Redigera klass, kurs, sal och datum" style="width:29px;height:29px;border:1px solid var(--line);background:var(--surface);border-radius:8px;cursor:pointer;color:var(--ink-3);display:flex;align-items:center;justify-content:center;transition:border-color .12s,color .12s"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11.3 2.2l2.5 2.5L5.5 13H3v-2.5z"></path></svg></button>
-                  <button data-click="${on(h.onDelete)}" aria-label="Ta bort" style="width:29px;height:29px;border:1px solid var(--line);background:var(--surface);border-radius:8px;cursor:pointer;color:var(--ink-3);display:flex;align-items:center;justify-content:center;transition:border-color .12s,color .12s"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.5 8.5h6l.5-8.5"></path></svg></button>
+                  <button data-click="${on(h.onOpen)}" aria-label="Öppna transkriptvyn" title="Öppna transkriptvyn med ljud" style="width:36px;height:36px;border:1px solid var(--line);background:var(--surface);border-radius:8px;cursor:pointer;color:var(--ink-3);display:flex;align-items:center;justify-content:center;transition:border-color .12s,color .12s"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h5l2 2v8H6z"></path><path d="M3 5v8.5h7"></path></svg></button>
+                  <button data-click="${on(h.onRename)}" aria-label="Redigera uppgifter" title="Redigera klass, kurs, sal och datum" style="width:36px;height:36px;border:1px solid var(--line);background:var(--surface);border-radius:8px;cursor:pointer;color:var(--ink-3);display:flex;align-items:center;justify-content:center;transition:border-color .12s,color .12s"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11.3 2.2l2.5 2.5L5.5 13H3v-2.5z"></path></svg></button>
+                  <button data-click="${on(h.onDelete)}" aria-label="Ta bort" style="width:36px;height:36px;border:1px solid var(--line);background:var(--surface);border-radius:8px;cursor:pointer;color:var(--ink-3);display:flex;align-items:center;justify-content:center;transition:border-color .12s,color .12s"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.5 8.5h6l.5-8.5"></path></svg></button>
                 </div>
               </div>
             `; }).join('') }
@@ -4131,7 +4211,7 @@ function spotlightPanel(s){
           <button data-click="${on(s.onAsk)}" data-seg="${ s.modeAsk ? 'on' : 'off' }" aria-pressed="${s.modeAsk}" style="border:none;background:transparent;color:var(--ink-3);border-radius:7px;padding:5px 11px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap">Fråga AI</button>
           <button data-click="${on(s.onKeyword)}" data-seg="${ s.modeKeyword ? 'on' : 'off' }" aria-pressed="${s.modeKeyword}" style="border:none;background:transparent;color:var(--ink-3);border-radius:7px;padding:5px 11px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap">Sök ord</button>
         </div>
-        <span style="flex:1"></span>
+        ${ s.showSuggest ? `<span style="font-family:var(--mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);margin-left:6px;flex:0 0 auto">Prova</span>` : '' }
         ${ s.showSuggest ? s.suggestions.map(function(sg){ return `
           <button data-click="${on(sg.onClick)}" style="display:inline-flex;align-items:center;gap:7px;font-size:12.5px;color:var(--ink-2);background:var(--surface);border:1px solid var(--line);border-radius:99px;padding:6px 12px;cursor:pointer;font-family:inherit;white-space:nowrap;transition:border-color .12s,color .12s"><span style="color:var(--accent)">✻</span>${esc(sg.label)}</button>
         `; }).join('') : '' }
@@ -4202,34 +4282,23 @@ function prepPanel(p){ return `
 // + modell-indikator). Används av resultatvyns "Fråga om lektionen" och per-lektion-modalen.
 function chatThread(c){ return `
           ${ c.chatEmpty ? `
-          <div style="background:var(--sunken);border:1px solid var(--line);border-radius:13px;padding:15px 18px;margin-bottom:12px;color:var(--ink-2);font-size:14px;line-height:1.5">Ställ en fråga om innehållet — t.ex. ”Vad var det viktigaste som togs upp?”. Varje påstående i svaret förankras i numrerade källor som visas bredvid.</div>
+          <div style="background:var(--sunken);border:1px solid var(--line);border-radius:13px;padding:13px 15px;color:var(--ink-2);font-size:13.5px;line-height:1.5">Ställ en fråga om innehållet — t.ex. ”Vad var det viktigaste som togs upp?”. Varje påstående i svaret förankras i numrerade källor; klicka en källa så lyser dess ställe upp i transkriptet.</div>
           ` : '' }
 
           ${ c.chatHasMsgs ? `
-          <div style="display:flex;flex-direction:column;gap:11px;margin-bottom:14px">
             ${ c.chat.map(function(m){ return `
               <div style="${m.rowStyle}">
-                ${ m.hasReason ? `
-                  <div style="${m.reasonStyle}"><span style="display:block;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-3);margin-bottom:4px">Resonemang</span>${esc(m.reason)}</div>
-                ` : '' }
+                ${ m.hasReason ? (m.reasonIsOpen ? `
+                  <div style="${m.reasonStyle}"><div data-click="${on(m.onToggleReason)}" role="button" tabindex="0" aria-expanded="true" title="Fäll ihop resonemanget" style="display:flex;align-items:center;gap:6px;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-3);margin-bottom:4px;cursor:pointer"><span>Resonemang</span><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto"><path d="M4 10l4-4 4 4"></path></svg></div>${esc(m.reason.replace(/^\s+/, ''))}</div>
+                ` : `
+                  <button data-click="${on(m.onToggleReason)}" aria-expanded="false" title="Visa modellens resonemang" style="display:inline-flex;align-items:center;gap:6px;background:var(--sunken);border:1px dashed var(--line-2);border-radius:9px;padding:4px 10px;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-3);cursor:pointer;font-family:inherit">Resonemang<svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto"><path d="M4 6l4 4 4-4"></path></svg></button>
+                `) : '' }
                 ${ m.hasCites ? `
-                <div style="align-self:stretch;background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:5px 15px 15px 15px;padding:15px 17px;box-shadow:var(--shadow-sm)">
-                  <div style="display:grid;grid-template-columns:1fr 244px;gap:18px;align-items:start">
-                    <div style="font-size:15px;line-height:1.78;color:var(--ink);min-width:0">
-                      ${ m.tokens.map(function(tk){ return tk.isText
-                        ? `<span>${renderRichInline(tk.text)}</span>`
-                        : `<button data-click="${on(tk.onCite)}" data-csup="${tk.supFlag}" aria-label="Visa källa ${esc(tk.num)} i transkriptet" style="display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;font-size:11px;font-weight:700;color:var(--accent);background:var(--accent-weak);border:1px solid color-mix(in srgb,var(--accent) 28%,transparent);border-radius:6px;cursor:pointer;vertical-align:2px;margin:0 1.5px;font-family:inherit;transition:transform .1s">${esc(tk.num)}</button>`; }).join('') }
-                    </div>
-                    <div style="background:var(--sunken);border:1px solid var(--line);border-radius:13px;padding:12px">
-                      <div style="display:flex;align-items:center;gap:7px;font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 3h10v10H3z" stroke-linejoin="round"></path><path d="M6 6.5h4M6 9.5h4" stroke-linecap="round"></path></svg>Källor i transkriptet</div>
-                      ${ m.sources.map(function(src){ return `
-                      <div data-click="${on(src.onPick)}" data-crow="${src.rowFlag}" role="button" tabindex="0" aria-label="Visa källa ${esc(src.num)} i transkriptet" style="display:flex;flex-direction:column;gap:3px;padding:9px 10px;border-radius:9px;cursor:pointer;border:1px solid transparent;margin-bottom:5px;transition:box-shadow .18s,border-color .18s">
-                        <span style="display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;color:var(--accent);font-variant-numeric:tabular-nums"><span data-rownum style="width:16px;height:16px;border-radius:5px;background:var(--accent-weak);color:var(--accent);font-size:10px;display:flex;align-items:center;justify-content:center;font-weight:700;flex:0 0 auto">${esc(src.num)}</span>${esc(src.time)}</span>
-                        <span style="font-size:12.5px;line-height:1.45;color:var(--ink-2)">${esc(src.text)}</span>
-                      </div>
-                      `; }).join('') }
-                      ${ c.openTranscript ? `<span data-click="${on(c.openTranscript)}" role="button" tabindex="0" style="display:inline-flex;align-items:center;gap:5px;margin-top:3px;color:var(--accent);font-size:12px;font-weight:600;cursor:pointer">Hela transkriptet<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5 10.5 8 6 12.5"></path></svg></span>` : '' }
-                    </div>
+                <div style="align-self:stretch;background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:5px 14px 14px 14px;padding:13px 14px;box-shadow:var(--shadow-sm)">
+                  <div style="font-size:14px;line-height:1.7;color:var(--ink);min-width:0">
+                    ${ m.tokens.map(function(tk){ return tk.isText
+                      ? `<span>${renderRichInline(tk.text)}</span>`
+                      : `<button data-click="${on(tk.onCite)}" data-csup="${tk.supFlag}" aria-label="Visa källa ${esc(tk.num)} i transkriptet" style="display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;font-size:11px;font-weight:700;color:var(--accent);background:var(--accent-weak);border:1px solid color-mix(in srgb,var(--accent) 28%,transparent);border-radius:6px;cursor:pointer;vertical-align:2px;margin:0 1.5px;font-family:inherit;transition:transform .1s">${esc(tk.num)}</button>`; }).join('') }
                   </div>
                 </div>
                 ` : `
@@ -4238,51 +4307,53 @@ function chatThread(c){ return `
               </div>
             `; }).join('') }
             ${ c.chatTyping ? `
-            <div style="align-self:flex-start;display:flex;align-items:center;gap:9px;color:var(--ink-2);font-size:13.5px;padding:8px 12px;background:var(--surface);border:1px solid var(--line);border-radius:14px 14px 14px 4px"><span style="width:13px;height:13px;border-radius:50%;border:2px solid var(--line-2);border-top-color:var(--accent);animation:spin .7s linear infinite;flex:0 0 auto"></span>Söker i transkriptet<span class="insp-dots" style="color:var(--ink-3)"><i></i><i></i><i></i></span></div>
+            <div style="align-self:flex-start;display:flex;align-items:center;gap:9px;color:var(--ink-2);font-size:13px;padding:4px 0"><span style="width:13px;height:13px;border-radius:50%;border:2px solid var(--line-2);border-top-color:var(--accent);animation:spin .7s linear infinite"></span>Söker i transkriptet …</div>
             ` : '' }
-          </div>
           ` : '' }
+          <div data-follow="chatend" style="height:1px"></div>
+`; }
 
-          <div style="display:flex;gap:10px;align-items:center">
-            <input value="${esc(c.chatInput)}" data-input="${on(c.onChatInput)}" data-keydown="${on(c.onChatKey)}" aria-label="Skriv en fråga till lektionen" placeholder="Skriv en fråga …" style="flex:1;min-width:0;background:var(--sunken);border:1px solid var(--line);color:var(--ink);border-radius:11px;padding:12px 14px;font-size:15px;font-family:inherit;outline:none">
-            <button data-click="${on(c.onChatSend)}" ${c.chatTyping ? 'disabled' : ''} style="flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:11px;padding:12px 20px;font-size:15px;font-weight:500;cursor:${c.chatTyping ? 'default' : 'pointer'};opacity:${c.chatTyping ? '.5' : '1'};font-family:inherit;box-shadow:var(--shadow-sm);transition:background .15s">Skicka</button>
+// Kompositören i sidopanelens fot — input + Skicka + kompakt "Tänk djupare".
+function chatComposer(c){ return `
+          <div style="display:flex;gap:8px;align-items:center">
+            <input value="${esc(c.chatInput)}" data-input="${on(c.onChatInput)}" data-keydown="${on(c.onChatKey)}" aria-label="Skriv en fråga till lektionen" placeholder="Skriv en fråga …" style="flex:1;min-width:0;background:var(--sunken);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:10px 12px;font-size:14px;font-family:inherit;outline:none">
+            <button data-click="${on(c.onChatSend)}" ${c.chatTyping ? 'disabled' : ''} style="flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:10px;padding:10px 16px;font-size:14px;font-weight:500;cursor:${c.chatTyping ? 'default' : 'pointer'};opacity:${c.chatTyping ? '.5' : '1'};font-family:inherit;box-shadow:var(--shadow-sm);transition:background .15s">Skicka</button>
           </div>
-
-          <div style="display:flex;align-items:center;gap:10px;margin-top:11px;flex-wrap:wrap;padding:0 2px">
-            <button data-click="${on(c.onToggleChatThink)}" style="${c.chatThinkBtnStyle}" aria-pressed="${c.chatThink ? 'true' : 'false'}">
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.5a4.5 4.5 0 0 0-2.6 8.2c.4.3.6.6.6 1v.8h4v-.8c0-.4.2-.7.6-1A4.5 4.5 0 0 0 8 1.5z"></path><path d="M6 14.5h4"></path></svg>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
+            <button data-click="${on(c.onToggleChatThink)}" style="${c.chatThinkBtnStyle}" aria-pressed="${c.chatThink ? 'true' : 'false'}" title="${esc(c.chatThinkHint)}">
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.5a4.5 4.5 0 0 0-2.6 8.2c.4.3.6.6.6 1v.8h4v-.8c0-.4.2-.7.6-1A4.5 4.5 0 0 0 8 1.5z"></path><path d="M6 14.5h4"></path></svg>
               Tänk djupare
             </button>
-            <span style="font-size:12px;color:var(--ink-3);flex:1;min-width:120px">${esc(c.chatThinkHint)}</span>
+            <span style="flex:1"></span>
+            <span style="font-family:var(--mono);font-size:8.5px;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">svar förankras i transkriptet</span>
           </div>
-          <div style="display:flex;align-items:center;gap:8px;margin-top:9px;padding:0 2px;flex-wrap:wrap">
-            <span style="width:7px;height:7px;border-radius:50%;flex:0 0 auto;background:var(--ok)"></span>
-            <span style="font-size:12.5px;color:var(--ink-2)">Lokalt med <strong style="color:var(--ink);font-weight:600">${esc(c.ppModel)}</strong></span>
-          </div>
-          <div data-follow="chatend" style="height:1px"></div>
 `; }
 
 // Kalenderförslaget i lektionsoverlayen — "Förslag → Google Kalender" med
 // dag/tid-väljare och en kommandorad som justerar tid/titel/anteckning.
+// Kalenderförslaget i lektionsoverlayen — "Förslag → Google Kalender" med
+// dag/tid-väljare; tid/titel/anteckning ändras via huvudchatten (regex-tolken).
 function lessonEventBox(ev){
   return `
-    <div style="border:1px dashed var(--line-2);background:var(--sunken);border-radius:10px;padding:11px 13px;margin-bottom:12px;animation:fadeup .3s ease both">
+    <div style="border:1px dashed var(--line-2);background:var(--sunken);border-radius:10px;padding:11px 13px;animation:fadeup .3s ease both">
       ${ ev.notAdded ? `
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:9px">
-        <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-3)">Förslag → Google Kalender</span>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:9px">
+        <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-3);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Förslag → Kalender</span>
+        <span style="flex:1"></span>
         ${ ev.calKnown ? (ev.calConnected
-          ? `<span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.07em;text-transform:uppercase;color:var(--ok)">● ansluten</span>`
-          : `<button data-click="${on(ev.onConnect)}" style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.07em;text-transform:uppercase;color:var(--accent);background:transparent;border:1px solid color-mix(in srgb,var(--accent) 40%,transparent);border-radius:6px;padding:4px 9px;cursor:pointer">Anslut Google-konto</button>`)
-          : `<span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-3)">kontrollerar anslutning …</span>` }
+          ? `<span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.07em;text-transform:uppercase;color:var(--ok);flex:0 0 auto">● ansluten</span>`
+          : `<button data-click="${on(ev.onConnect)}" style="flex:0 0 auto;font-family:var(--mono);font-size:9.5px;letter-spacing:0.07em;text-transform:uppercase;color:var(--accent);background:transparent;border:1px solid color-mix(in srgb,var(--accent) 40%,transparent);border-radius:6px;padding:4px 9px;cursor:pointer">Anslut Google-konto</button>`)
+          : `<span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-3);flex:0 0 auto">kontrollerar anslutning …</span>` }
+        <button data-click="${on(ev.onDismiss)}" aria-label="Avvisa förslaget" title="Avvisa förslaget" style="border:none;background:transparent;color:var(--ink-3);cursor:pointer;font-size:12px;padding:2px 6px;font-family:inherit;border-radius:6px;transition:color .12s;white-space:nowrap;flex:0 0 auto">✕ Avvisa</button>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <input value="${esc(ev.title)}" data-input="${on(ev.setTitle)}" aria-label="Titel" style="flex:2 1 220px;min-width:0;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 11px;font-size:13.5px;font-weight:500;font-family:inherit;color:var(--ink)">
-        <button data-click="${on(ev.onTogglePick)}" title="Välj dag och tid" style="flex:1 1 160px;min-width:0;display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 11px;font-size:13px;font-family:inherit;color:var(--ink);cursor:pointer;font-variant-numeric:tabular-nums;white-space:nowrap;transition:border-color .14s"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="flex:0 0 auto"><rect x="2" y="3" width="12" height="11" rx="2"></rect><path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3"></path></svg><span style="min-width:0;overflow:hidden;text-overflow:ellipsis">${esc(ev.when)}</span><span style="flex:1"></span><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto"><path d="M4 6l4 4 4-4"></path></svg></button>
-        <button data-click="${on(ev.onAdd)}" ${ ev.busy ? 'disabled' : '' } style="flex:0 0 auto;display:inline-flex;align-items:center;gap:7px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:8px;padding:9px 15px;font-size:13px;font-weight:600;cursor:${ ev.busy ? 'default' : 'pointer' };font-family:inherit;opacity:${ ev.busy ? '.6' : '1' }">${ ev.busy ? 'Lägger till …' : 'Lägg till ✓' }</button>
+        <input value="${esc(ev.title)}" data-input="${on(ev.setTitle)}" data-keydown="${on(ev.onTitleKey)}" aria-label="Titel" style="flex:2 1 180px;min-width:0;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 11px;font-size:13.5px;font-weight:500;font-family:inherit;color:var(--ink)">
+        <button data-click="${on(ev.onTogglePick)}" title="Välj dag och tid" style="flex:1 1 140px;min-width:0;display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 11px;font-size:13px;font-family:inherit;color:var(--ink);cursor:pointer;font-variant-numeric:tabular-nums;white-space:nowrap;transition:border-color .14s"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="flex:0 0 auto"><rect x="2" y="3" width="12" height="11" rx="2"></rect><path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3"></path></svg><span style="min-width:0;overflow:hidden;text-overflow:ellipsis">${esc(ev.when)}</span><span style="flex:1"></span><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto"><path d="M4 6l4 4 4-4"></path></svg></button>
+        <button data-click="${on(ev.onAdd)}" ${ ev.busy ? 'disabled' : '' } style="flex:0 0 auto;display:inline-flex;align-items:center;gap:7px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:8px;padding:9px 15px;font-size:13px;font-weight:600;cursor:${ ev.busy ? 'default' : 'pointer' };font-family:inherit;opacity:${ ev.busy ? '.6' : '1' };transition:background .15s">${ ev.busy ? 'Lägger till …' : 'Lägg till' }</button>
       </div>
       ${ ev.pickOpen ? `
-        <div style="display:grid;grid-template-columns:180px 1fr;margin-top:10px;border:1px solid var(--line);border-radius:9px;background:var(--surface);overflow:hidden;animation:ml-popin .2s cubic-bezier(.16,1,.3,1) both">
-          <div data-hidescroll style="border-right:1px solid var(--line);padding:8px;display:flex;flex-direction:column;gap:1px;max-height:224px;overflow:auto">
+        <div style="display:grid;grid-template-columns:1fr;margin-top:10px;border:1px solid var(--line);border-radius:9px;background:var(--surface);overflow:hidden;animation:ml-popin .2s cubic-bezier(.16,1,.3,1) both">
+          <div data-hidescroll style="border-bottom:1px solid var(--line);padding:8px;display:flex;flex-direction:column;gap:1px;max-height:148px;overflow:auto">
             <span style="font-family:var(--mono);font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);padding:3px 8px 6px">Dag</span>
             ${ ev.dayOpts.map(function(d){ return `
               <button data-key="${esc(d.key)}" data-click="${on(d.onPick)}" data-q="${esc(d.curQ)}" style="display:flex;align-items:center;gap:8px;border:1px solid transparent;background:transparent;color:var(--ink);border-radius:6px;padding:6px 8px;font-size:13px;font-family:inherit;cursor:pointer;text-align:left;white-space:nowrap"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis">${esc(d.label)}</span><span style="flex:1"></span>${ d.hasPre ? `<span style="font-family:var(--mono);font-size:8.5px;letter-spacing:0.05em;text-transform:uppercase;color:var(--accent)">${esc(d.pre)}</span>` : '' }</button>
@@ -4290,7 +4361,7 @@ function lessonEventBox(ev){
           </div>
           <div style="padding:8px">
             <span style="font-family:var(--mono);font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);padding:3px 8px 6px;display:block">Tid</span>
-            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:5px">
+            <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px">
               ${ ev.timeOpts.map(function(t2){ return `
                 <button data-key="${esc(t2.key)}" data-click="${on(t2.onPick)}" data-q="${esc(t2.curQ)}" style="border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:6px;padding:7px 4px;font-size:12.5px;font-family:inherit;cursor:pointer;font-variant-numeric:tabular-nums;text-align:center">${esc(t2.label)}</button>
               `; }).join('') }
@@ -4299,37 +4370,12 @@ function lessonEventBox(ev){
           </div>
         </div>
       ` : '' }
-      <div style="margin-top:9px">
-        <div style="font-family:var(--mono);font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);margin-bottom:5px">Anteckning i kalenderposten</div>
-        <textarea data-input="${on(ev.setDesc)}" aria-label="Beskrivning" rows="2" style="width:100%;box-sizing:border-box;resize:vertical;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 11px;font-size:13px;line-height:1.5;font-family:inherit;color:var(--ink);outline:none">${esc(ev.desc)}</textarea>
-      </div>
-      <div style="margin-top:10px;border-top:1px dashed var(--line-2);padding-top:10px">
-        <div style="display:flex;align-items:center;gap:7px;margin-bottom:8px">
-          <span class="ai-blink" style="width:6px;height:6px;border-radius:50%;background:var(--accent);flex:0 0 auto"></span>
-          <span style="font-family:var(--mono);font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3)">Ändra förslaget — tid, datum &amp; innehåll</span>
-        </div>
-        ${ ev.aiMsgs.map(function(am){ return am.isUser ? `
-          <div style="display:flex;justify-content:flex-end;margin-bottom:6px"><span style="max-width:82%;background:var(--ink);color:var(--canvas);border-radius:9px 9px 3px 9px;padding:6px 10px;font-size:12.5px;line-height:1.5">${esc(am.text)}</span></div>
-        ` : `
-          <div style="display:flex;justify-content:flex-start;margin-bottom:6px"><span style="max-width:88%;background:var(--surface);border:1px solid var(--line);border-radius:9px 9px 9px 3px;padding:6px 10px;font-size:12.5px;line-height:1.5;color:var(--ink)">${esc(am.text)}</span></div>
-        `; }).join('') }
-        ${ ev.aiBusy ? `
-          <div style="display:flex;align-items:center;gap:8px;color:var(--ink-2);font-size:12px;margin-bottom:7px"><span style="width:11px;height:11px;border-radius:50%;border:2px solid var(--line-2);border-top-color:var(--accent);animation:spin .7s linear infinite;flex:0 0 auto"></span>Uppdaterar förslaget …</div>
-        ` : '' }
-        ${ ev.aiEmpty ? `
-          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
-            <button data-click="${on(ev.aiChip1)}" style="border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:99px;padding:5px 11px;font-size:12px;font-family:inherit;cursor:pointer;transition:border-color .12s,color .12s">”Flytta till fredag 10:00”</button>
-            <button data-click="${on(ev.aiChip2)}" style="border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:99px;padding:5px 11px;font-size:12px;font-family:inherit;cursor:pointer;transition:border-color .12s,color .12s">”Lägg till läxan i anteckningen”</button>
-            <button data-click="${on(ev.aiChip3)}" style="border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:99px;padding:5px 11px;font-size:12px;font-family:inherit;cursor:pointer;transition:border-color .12s,color .12s">”Kortare titel”</button>
-          </div>
-        ` : '' }
-        <div style="display:flex;gap:7px">
-          <input value="${esc(ev.aiInput)}" data-input="${on(ev.onAiInput)}" data-keydown="${on(ev.onAiKey)}" aria-label="Instruktion till AI" placeholder="T.ex. ”flytta till onsdag 14:30” eller ”lägg till att de ska repetera bråken” …" style="flex:1;min-width:0;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 11px;font-size:13px;font-family:inherit;color:var(--ink);outline:none">
-          <button data-click="${on(ev.onAiSend)}" style="flex:0 0 auto;background:var(--accent-weak);color:var(--accent);border:1px solid var(--accent);border-radius:8px;padding:8px 13px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit">Ändra ✨</button>
-        </div>
+      <div style="margin-top:8px">
+        <textarea data-input="${on(ev.setDesc)}" data-ref="${on(ev.descFocusRef)}" data-desc="" placeholder="Anteckning i kalenderposten …" aria-label="Anteckning i kalenderposten" style="width:100%;box-sizing:border-box;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 11px;font-size:13px;line-height:1.5;font-family:inherit;color:var(--ink);outline:none">${esc(ev.desc)}</textarea>
+        <div style="margin-top:6px;font-size:12px;color:var(--ink-3)">Ändra via chatten — ”flytta till onsdag 14:30”, ”kortare titel” eller ”pågå till fredag” för flera dagar.</div>
       </div>
       ` : `
-      <div style="display:flex;align-items:center;gap:9px;font-size:13px;font-weight:500;color:var(--ok)"><span style="width:16px;height:16px;border-radius:50%;background:var(--ok);color:var(--on-ok);display:inline-flex;align-items:center;justify-content:center;font-size:9px">✓</span>Tillagd i Google Kalender — ${esc(ev.title)}</div>
+      <div style="display:flex;align-items:center;gap:9px;font-size:13px;font-weight:500;color:var(--ok)"><span style="width:16px;height:16px;border-radius:50%;background:var(--ok);color:var(--on-ok);display:inline-flex;align-items:center;justify-content:center;font-size:9px;animation:okPop .25s cubic-bezier(0.22,1,0.36,1) both">✓</span>Tillagd i Google Kalender — ${esc(ev.title)}</div>
       ` }
     </div>`;
 }
@@ -4343,20 +4389,18 @@ function viewModals(v){ return `
   <div data-click="${on(v.closeLessonChat)}" data-screen-label="Lektion (overlay)" style="position:fixed;inset:0;z-index:120;display:flex;align-items:center;justify-content:center;padding:clamp(10px,3vw,38px);background:color-mix(in srgb,var(--canvas) 58%,transparent);backdrop-filter:blur(9px);animation:modalback .3s ease">
     <div data-click="${on(v.stop)}" data-modal-card role="dialog" aria-modal="true" aria-label="Lektion" data-dialog tabindex="-1" style="width:min(960px,96vw);height:min(88vh,880px);display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);overflow:hidden">
       <div style="flex:0 0 auto;display:flex;align-items:center;gap:11px;padding:11px 13px 11px 11px;border-bottom:1px solid var(--line)">
-        <button data-click="${on(v.closeLessonChat)}" aria-label="Stäng (Esc)" title="Stäng · Esc" style="flex:0 0 auto;width:34px;height:34px;display:flex;align-items:center;justify-content:center;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:10px;cursor:pointer;transition:transform .14s cubic-bezier(.2,.8,.25,1),border-color .14s,background .14s,color .14s" data-sh="border-color:var(--line-2) !important;background:var(--sunken) !important;color:var(--ink) !important"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"></path></svg></button>
+        <button data-click="${on(v.closeLessonChat)}" aria-label="Stäng (Esc)" title="Stäng · Esc" style="flex:0 0 auto;width:36px;height:36px;display:flex;align-items:center;justify-content:center;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:10px;cursor:pointer;transition:transform .14s cubic-bezier(.2,.8,.25,1),border-color .14s,background .14s,color .14s" data-sh="border-color:var(--line-2) !important;background:var(--sunken) !important;color:var(--ink) !important"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"></path></svg></button>
         <span data-cc="${esc(v.ovCc)}" style="border-radius:99px;padding:3px 11px;font-size:11.5px;font-weight:600;white-space:nowrap;flex:0 0 auto">${esc(v.ovTag)}</span>
         <div style="min-width:0">
           <div style="font-size:15px;font-weight:600;color:var(--ink);letter-spacing:-.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(v.lessonChatName)}</div>
           <div style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.06em;text-transform:uppercase;color:var(--ink-3);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(v.ovMeta)}</div>
         </div>
         <span style="flex:1"></span>
-        ${ v.ovHasLesson ? `
-        <button data-click="${on(v.onAnalyze)}" ${ v.ovAnalyzing ? 'disabled' : '' } title="Extrahera kalenderposter, åtgärder och svårigheter till Kommande och Terminstrender" style="flex:0 0 auto;display:inline-flex;align-items:center;gap:7px;background:var(--accent-weak);color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 38%,transparent);border-radius:9px;padding:8px 13px;font-size:12.5px;font-weight:600;cursor:${ v.ovAnalyzing ? 'default' : 'pointer' };font-family:inherit;opacity:${ v.ovAnalyzing ? '.6' : '1' };transition:transform .14s cubic-bezier(.2,.8,.25,1),border-color .14s,background .14s" data-sh="background:color-mix(in srgb,var(--accent) 15%,transparent) !important">${ v.ovAnalyzing ? `<span style="width:13px;height:13px;border-radius:50%;border:2px solid color-mix(in srgb,var(--accent) 35%,transparent);border-top-color:var(--accent);animation:spin .7s linear infinite;flex:0 0 auto"></span>Analyserar …` : `<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto"><path d="M8 1.8l1.4 3.6 3.6 1.4-3.6 1.4L8 11.8 6.6 8.2 3 6.8l3.6-1.4z"></path></svg>Analysera lektion` }</button>
-        <button data-click="${on(v.onOvReport)}" ${ v.ovReportBusy ? 'disabled' : '' } title="Exportera rapport (öppnas i webbläsaren, skriv ut som PDF)" style="flex:0 0 auto;display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:9px;padding:8px 13px;font-size:12.5px;font-weight:500;cursor:${ v.ovReportBusy ? 'default' : 'pointer' };font-family:inherit;opacity:${ v.ovReportBusy ? '.6' : '1' };transition:transform .14s cubic-bezier(.2,.8,.25,1),border-color .14s,background .14s,color .14s" data-sh="border-color:var(--line-2) !important;background:var(--sunken) !important;color:var(--ink) !important"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto"><path d="M9 2H4.5A1.5 1.5 0 0 0 3 3.5v9A1.5 1.5 0 0 0 4.5 14h7A1.5 1.5 0 0 0 13 12.5V6z"></path><path d="M9 2v4h4M6 9h4M6 11.2h4"></path></svg>${ v.ovReportBusy ? 'Exporterar …' : 'Rapport' }</button>
-        ` : '' }
+        <button data-click="${on(v.proposeOvEvent)}" title="Föreslå en kalenderhändelse — justera och lägg till i Google Kalender" style="flex:0 0 auto;display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:9px;padding:8px 13px;font-size:12.5px;font-weight:500;cursor:pointer;font-family:inherit;transition:transform .14s cubic-bezier(.2,.8,.25,1),border-color .14s,background .14s,color .14s" data-sh="border-color:var(--line-2) !important;background:var(--sunken) !important;color:var(--ink) !important"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="flex:0 0 auto"><rect x="2" y="3" width="12" height="11" rx="2"></rect><path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3M8 9v3M6.5 10.5h3"></path></svg>Kalenderhändelse</button>
         <button data-click="${on(v.ovOpenFull)}" title="Öppna hela transkriptvyn" style="flex:0 0 auto;display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:9px;padding:8px 13px;font-size:12.5px;font-weight:500;cursor:pointer;font-family:inherit;transition:transform .14s cubic-bezier(.2,.8,.25,1),border-color .14s,background .14s,color .14s" data-sh="border-color:var(--line-2) !important;background:var(--sunken) !important;color:var(--ink) !important"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto"><path d="M6 2.5H3.5A1 1 0 0 0 2.5 3.5V6M10 2.5h2.5a1 1 0 0 1 1 1V6M13.5 10v2.5a1 1 0 0 1-1 1H10M6 13.5H3.5a1 1 0 0 1-1-1V10"></path></svg>Transkript</button>
       </div>
-      <div data-hidescroll style="flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;padding:18px 22px 6px">
+      <div style="flex:1;min-height:0;display:flex">
+      <div data-hidescroll data-ovscroll="1" style="flex:1;min-width:0;overflow:auto;overscroll-behavior:contain;padding:24px 28px 20px">
         <div style="max-width:760px;margin:0 auto">
           <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
             <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3)">Transkription</span>
@@ -4366,7 +4410,7 @@ function viewModals(v){ return `
           ${ v.lessonChatLoading ? `
           <div style="display:flex;align-items:center;gap:10px;color:var(--ink-2);font-size:14px;padding:20px 0"><span style="width:15px;height:15px;border-radius:50%;border:2px solid var(--line-2);border-top-color:var(--accent);animation:spin .7s linear infinite;flex:0 0 auto"></span>Läser in transkriptet …</div>
           ` : v.ovRows.map(function(p){ return p.hit ? `
-            <div data-key="ovr-${esc(p.t)}" style="display:flex;gap:14px;padding:10px 13px;margin:2px -13px;background:var(--accent-weak);border:1px solid color-mix(in srgb,var(--accent) 38%,var(--line));border-radius:9px">
+            <div data-key="ovr-${esc(p.t)}" data-ovhit="1" style="display:flex;gap:14px;padding:10px 13px;margin:2px -13px;background:var(--accent-weak);border:1px solid color-mix(in srgb,var(--accent) 38%,var(--line));border-radius:9px">
               <span style="font-variant-numeric:tabular-nums;font-family:var(--mono);font-size:10.5px;color:var(--accent);flex:0 0 auto;width:44px;padding-top:3px;font-weight:500">${esc(p.t)}</span>
               <span style="font-size:14.5px;color:var(--ink);line-height:1.55;font-weight:500">${esc(p.txt)}</span>
             </div>
@@ -4378,8 +4422,14 @@ function viewModals(v){ return `
           `; }).join('') }
         </div>
       </div>
-      <div style="flex:0 0 auto;border-top:1px solid var(--line);background:var(--sunken)">
-        <div data-hidescroll style="max-height:44vh;overflow:auto;overscroll-behavior:contain;padding:13px 18px 14px">
+      <div data-side style="flex:0 0 clamp(330px,36vw,440px);min-width:0;display:flex;flex-direction:column;border-left:1px solid var(--line);background:var(--surface)">
+        <div style="flex:0 0 auto;display:flex;align-items:center;gap:8px;padding:17px 16px;border-bottom:1px solid var(--line)">
+          <span class="ai-blink" style="width:6px;height:6px;border-radius:50%;background:var(--accent);flex:0 0 auto"></span>
+          <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3)">Fråga lektionen</span>
+          <span style="flex:1"></span>
+          <span title="${esc(v.lessonChatThread.ovModelTitle)}" style="font-family:var(--mono);font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-3);cursor:help">Körs lokalt</span>
+        </div>
+        <div data-hidescroll style="flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;padding:20px 16px;display:flex;flex-direction:column;gap:15px">
           ${ v.lessonChatThread.chatEmpty ? `
           <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
             <button data-click="${on(v.ovAskSum)}" style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2);background:var(--surface);border:1px solid var(--line);border-radius:99px;padding:7px 13px;cursor:pointer;font-family:inherit;transition:transform .14s cubic-bezier(.2,.8,.25,1),border-color .14s,color .14s,background .14s" data-sh="border-color:var(--line-2) !important;color:var(--ink) !important">Sammanfatta lektionen</button>
@@ -4388,10 +4438,37 @@ function viewModals(v){ return `
             <button data-click="${on(v.proposeOvEvent)}" style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;color:var(--accent);background:var(--accent-weak);border:1px solid color-mix(in srgb,var(--accent) 40%,transparent);border-radius:99px;padding:7px 13px;cursor:pointer;font-family:inherit;transition:transform .14s cubic-bezier(.2,.8,.25,1),border-color .14s,background .14s" data-sh="background:color-mix(in srgb,var(--accent) 15%,transparent) !important"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="flex:0 0 auto"><rect x="2" y="3" width="12" height="11" rx="2"></rect><path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3M8 9v3M6.5 10.5h3"></path></svg>Kalenderhändelse</button>
           </div>
           ` : '' }
-          ${ v.ovEvent ? lessonEventBox(v.ovEvent) : '' }
           ${ chatThread(v.lessonChatThread) }
         </div>
+        ${ v.ovEvent ? (v.ovEvent.added ? `
+        <div style="flex:0 0 auto;display:flex;align-items:center;gap:9px;margin:0 12px 8px;border:1px solid color-mix(in srgb,var(--ok) 40%,var(--line));background:var(--surface);border-radius:4px;padding:8px 11px;font-size:13px;font-weight:500;color:var(--ok)"><span style="width:16px;height:16px;border-radius:50%;background:var(--ok);color:var(--on-ok);display:inline-flex;align-items:center;justify-content:center;font-size:9px;animation:okPop .25s cubic-bezier(0.22,1,0.36,1) both;flex:0 0 auto">✓</span><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Tillagd i Google Kalender — ${esc(v.ovEvent.title)}</span><button data-click="${on(v.ovEvent.onDismiss)}" aria-label="Stäng" style="margin-left:auto;border:none;background:transparent;color:var(--ink-3);cursor:pointer;font-size:11px;padding:2px 4px;flex:0 0 auto">✕</button></div>
+        ` : `
+        ${ v.ovEvOpen ? `<div data-click="${on(v.stop)}" style="flex:0 0 auto;margin:0 12px -1px">${ lessonEventBox(v.ovEvent) }</div>` : '' }
+        <div data-click="${on(v.toggleOvEv)}" role="button" tabindex="0" title="${ v.ovEvOpen ? 'Fäll ihop förslaget' : 'Fäll ut och redigera förslaget' }" style="flex:0 0 auto;display:flex;align-items:center;gap:9px;margin:0 12px 8px;border:1px solid color-mix(in srgb,var(--accent) 32%,var(--line));background:var(--accent-weak);border-radius:4px;padding:8px 11px;cursor:pointer">
+          <span style="font-family:var(--mono);font-size:9px;letter-spacing:0.07em;text-transform:uppercase;color:var(--accent);flex:0 0 auto">Förslag</span>
+          <span style="font-size:12.5px;font-weight:600;color:var(--ink);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(v.ovEvent.title)} · ${esc(v.ovEvent.when)}</span>
+          <button data-click="${on(v.ovEvent.onAdd)}" ${ v.ovEvent.busy ? 'disabled' : '' } style="margin-left:auto;flex:0 0 auto;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:4px;padding:6px 12px;font-size:12px;font-weight:600;font-family:inherit;cursor:${ v.ovEvent.busy ? 'default' : 'pointer' };opacity:${ v.ovEvent.busy ? '.6' : '1' }">${ v.ovEvent.busy ? 'Lägger till …' : 'Lägg till' }</button>
+          <button data-click="${on(v.ovEvent.onDismiss)}" aria-label="Avvisa förslaget" title="Avvisa förslaget" style="border:none;background:transparent;color:var(--ink-3);cursor:pointer;font-size:11px;padding:2px 4px;flex:0 0 auto">✕</button>
+        </div>
+        `) : '' }
+        <div style="flex:0 0 auto;border-top:1px solid var(--line);padding:10px 12px">
+          ${ chatComposer(v.lessonChatThread) }
+        </div>
       </div>
+      </div>
+    </div>
+  </div>
+  ` : '' }
+
+  ${ v.descModalOpen ? `
+  <div data-modal-back="${esc(v.descModalAnim)}" data-click="${on(v.closeDescModal)}" style="position:fixed;inset:0;z-index:135;background:color-mix(in srgb,var(--ink) 32%,transparent);display:flex;align-items:center;justify-content:center;padding:32px">
+    <div data-modal-card="${esc(v.descModalAnim)}" data-click="${on(v.stop)}" role="dialog" aria-modal="true" aria-label="Anteckning i kalenderposten" data-dialog tabindex="-1" style="width:min(680px,92vw);height:min(64vh,520px);display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--ink);border-radius:14px;box-shadow:var(--shadow);overflow:hidden">
+      <div style="display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--line)">
+        <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3)">Anteckning i kalenderposten</span>
+        <span style="flex:1"></span>
+        <span style="font-size:12px;color:var(--ink-3)">Sparas direkt · klicka utanför för att stänga</span>
+      </div>
+      <textarea data-input="${on(v.setDescModalVal)}" data-hidescroll="1" aria-label="Anteckning i kalenderposten — redigering" style="flex:1;min-height:0;width:100%;box-sizing:border-box;border:none;background:var(--surface);padding:18px 20px;font-size:15px;line-height:1.65;font-family:inherit;color:var(--ink);outline:none;resize:none;overflow:auto;scrollbar-width:none">${esc(v.descModalVal)}</textarea>
     </div>
   </div>
   ` : '' }
@@ -4534,30 +4611,6 @@ function viewModals(v){ return `
   </div>
   ` : '' }
 
-  ${ v.cleanModalOpen ? `
-  <div data-click="${on(v.closeCleanModal)}" style="position:fixed;inset:0;z-index:125;display:flex;align-items:center;justify-content:center;padding:24px;background:color-mix(in srgb,var(--canvas) 64%,transparent);backdrop-filter:blur(7px);animation:modalback .26s ease">
-    <div data-click="${on(v.stop)}" role="dialog" aria-modal="true" aria-label="Korrekturläst transkript" data-dialog tabindex="-1" style="width:min(94vw,680px);max-height:84vh;display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);overflow:hidden;animation:modalpop .42s cubic-bezier(.16,1,.3,1)">
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:24px 26px 14px;border-bottom:1px solid var(--line);flex:0 0 auto">
-        <div style="min-width:0">
-          <span style="font-size:11.5px;font-weight:600;letter-spacing:0.05em;color:var(--accent);background:var(--accent-weak);padding:3px 9px;border-radius:6px;display:inline-block;margin-bottom:9px">KORREKTURLÄST</span>
-          <h2 style="font-size:20px;font-weight:600;letter-spacing:-0.02em;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(v.statusFile)}</h2>
-          <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:11px">
-            ${ v.cleanLegendAudio ? `<span style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2)"><span style="width:12px;height:12px;border-radius:4px;background:color-mix(in srgb,var(--ok) 20%,transparent);border:1px solid color-mix(in srgb,var(--ok) 45%,transparent)"></span>mot ljudet</span>` : '' }
-            <span style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2)"><span style="width:12px;height:12px;border-radius:4px;background:color-mix(in srgb,var(--accent) 16%,transparent);border:1px solid color-mix(in srgb,var(--accent) 45%,transparent)"></span>språk &amp; skiljetecken</span>
-            <span style="font-size:12.5px;color:var(--ink-3);font-variant-numeric:tabular-nums">${esc(v.cleanChangeCount)} rättelser</span>
-          </div>
-        </div>
-        <button data-click="${on(v.closeCleanModal)}" aria-label="Stäng" style="flex:0 0 auto;width:34px;height:34px;display:flex;align-items:center;justify-content:center;background:var(--surface);border:1px solid var(--line);border-radius:9px;color:var(--ink-2);cursor:pointer;font-size:15px">✕</button>
-      </div>
-      <div data-hidescroll="1" style="overflow:auto;overscroll-behavior:contain;padding:18px 26px 24px;min-height:0">
-        <div style="font-size:16px;color:var(--ink);line-height:1.7">
-          ${ v.cleanFullParts.map(function(p){ return p.ch ? `<span style="background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent);border-radius:4px;padding:0 3px;font-weight:500">${esc(p.s)}</span>` : `<span>${esc(p.s)}</span>`; }).join(' ') }
-        </div>
-      </div>
-    </div>
-  </div>
-  ` : '' }
-
   ${ v.calSetupOpen ? `
   <div data-click="${on(v.calSetup.onClose)}" style="position:fixed;inset:0;z-index:135;display:flex;align-items:center;justify-content:center;padding:24px;background:color-mix(in srgb,var(--canvas) 64%,transparent);backdrop-filter:blur(7px);animation:modalback .26s ease">
     <div data-click="${on(v.stop)}" role="dialog" aria-modal="true" aria-label="Google Kalender" data-dialog tabindex="-1" style="width:min(94vw,560px);max-height:88vh;overflow:auto;overscroll-behavior:contain;background:var(--surface);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);animation:modalpop .42s cubic-bezier(.16,1,.3,1)">
@@ -4566,7 +4619,7 @@ function viewModals(v){ return `
           <span style="font-family:var(--mono);font-size:10.5px;font-weight:500;letter-spacing:0.08em;color:var(--c-sky);background:color-mix(in srgb,var(--c-sky) 13%,transparent);border:1px solid color-mix(in srgb,var(--c-sky) 28%,transparent);padding:3px 9px;border-radius:6px">GOOGLE KALENDER</span>
           <h2 style="font-size:20px;font-weight:600;letter-spacing:-0.02em;margin:9px 0 0">Koppla Google Kalender</h2>
         </div>
-        <button data-click="${on(v.calSetup.onClose)}" aria-label="Stäng" style="flex:0 0 auto;width:34px;height:34px;display:flex;align-items:center;justify-content:center;background:var(--surface);border:1px solid var(--line);border-radius:9px;color:var(--ink-2);cursor:pointer;font-size:15px">✕</button>
+        <button data-click="${on(v.calSetup.onClose)}" aria-label="Stäng" style="flex:0 0 auto;width:36px;height:36px;display:flex;align-items:center;justify-content:center;background:var(--surface);border:1px solid var(--line);border-radius:9px;color:var(--ink-2);cursor:pointer;font-size:15px">✕</button>
       </div>
       <div style="padding:18px 24px 22px">
         ${ v.calSetup.connected ? `
@@ -4660,11 +4713,13 @@ function viewModals(v){ return `
         <span style="font-size:14.5px;font-weight:600;color:var(--ink);letter-spacing:-0.01em">${esc(v.toastTitle)}</span>
         <span style="font-size:12.5px;color:var(--ink-2);font-variant-numeric:tabular-nums;flex:0 0 auto">${esc(v.toastName)}</span>
       </div>
+      ${ v.toastLoading ? `
       <div style="height:6px;border-radius:99px;background:var(--track);overflow:hidden;margin:7px 0 5px"><div style="${v.toastBarStyle}"></div></div>
       <div style="font-size:12px;color:var(--ink-2);font-variant-numeric:tabular-nums">${esc(v.toastDetail)}</div>
+      ` : '' }
     </div>
     ` }
-    <button data-click="${on(v.closeToast)}" aria-label="Stäng" style="width:26px;height:26px;flex:0 0 auto;align-self:flex-start;border:none;background:transparent;border-radius:7px;cursor:pointer;color:var(--ink-3);font-size:13px;display:flex;align-items:center;justify-content:center" data-sh="background:var(--sunken) !important;color:var(--ink) !important">✕</button>
+    <button data-click="${on(v.closeToast)}" aria-label="Stäng" style="width:32px;height:32px;flex:0 0 auto;align-self:flex-start;border:none;background:transparent;border-radius:7px;cursor:pointer;color:var(--ink-3);font-size:13px;display:flex;align-items:center;justify-content:center" data-sh="background:var(--sunken) !important;color:var(--ink) !important">✕</button>
   </div>
   ` : '' }
 `; }
@@ -4944,7 +4999,7 @@ function viewPlanning(v){
     document.addEventListener('keydown', onKeyDown);
     document.addEventListener('pointerdown', onAnyPress, true);
     syncTheme();
-    _prevTab = S.tab; _prevStep = S.step; _prevOp = S.ppOp;
+    _prevTab = S.tab; _prevStep = S.step;
     render();
     loadModels().then(loadSettings);   // real catalog, then reflect chosen models disk
     loadHistory();  // load persisted transcription history

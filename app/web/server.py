@@ -1327,7 +1327,8 @@ def create_app(base_dir: Path | None = None,
             base,
             title=body.get("title") or "",
             start_iso=body.get("start") or "",
-            description=body.get("description") or "")
+            description=body.get("description") or "",
+            end_date=body.get("end_date") or "")
         if res.get("error"):
             return JSONResponse({"error": res["error"]}, status_code=400)
         return res
@@ -1457,6 +1458,8 @@ def create_app(base_dir: Path | None = None,
         images = body.get("images") or []
         think = bool(body.get("think", False))   # only the (text) chat may turn on Qwen3 thinking
         cite = bool(body.get("cite", False))     # källförankrat läge: numrerade segmentcitat
+        calendar = bool(body.get("calendar", False))  # kalenderförmåga: [KALENDERFÖRSLAG]-rad
+        cal_event = body.get("cal_event") if isinstance(body.get("cal_event"), dict) else None
         if not model or not messages:
             return JSONResponse({"error": "modell och meddelande krävs"}, status_code=400)
         if not arb.try_acquire_gpu():
@@ -1475,7 +1478,7 @@ def create_app(base_dir: Path | None = None,
                 # think/reason_cb apply to the text model; the vision path ignores them.
                 text = llm_client.chat(
                     model, messages, transcript=transcript, images=images, think=think,
-                    cite=cite,
+                    cite=cite, calendar=calendar, cal_event=cal_event,
                     token_cb=lambda t: emit({"type": "token", "text": t}),
                     reason_cb=lambda t: emit({"type": "reasoning", "text": t}))
                 return {"text": text}

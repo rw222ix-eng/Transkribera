@@ -45,22 +45,8 @@ test("export the knowledge-base backup", async ({ page }) => {
   expect(errors, errors.join("\n")).toEqual([]);
 });
 
-test("export a lesson report", async ({ page }) => {
-  const errors: string[] = [];
-  failOnConsoleError(page, errors);
-  await stubOpen(page);
-  await transcribeSample(page);
-
-  // Rapport-knappen bor i lektionsoverlayens header sedan Insikter togs bort.
-  await page.getByRole("button", { name: "Inspelningar", exact: true }).first().click();
-  await page.locator('[data-rec-id]').first().click();
-  const [resp] = await Promise.all([
-    page.waitForResponse((r) => /\/api\/lessons\/\d+\/report/.test(r.url())),
-    page.getByRole("button", { name: /Rapport/ }).click(),
-  ]);
-  expect(resp.status()).toBe(200);
-  expect(errors, errors.join("\n")).toEqual([]);
-});
+// "export a lesson report" togs bort 2026-07-15: Rapport-knappen är borttagen
+// ur lektionsoverlayen på ägarens begäran (rapportfunktionen används inte).
 
 test("agenda exports an .ics calendar (API)", async ({ request }) => {
   // The agenda panel only renders when dated insights exist; verify the export

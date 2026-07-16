@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- @generated DO NOT EDIT: skrivskyddad spegel från Claude Design (DesignSync) - riktig källa är app/web/static/app.js + style.css -->
 <html>
 <head>
 <meta charset="utf-8">
@@ -54,19 +55,19 @@
         <div style="flex:1;height:1.5px;background:var(--line);min-width:16px;margin:0 4px"></div>
         <div style="display:flex;align-items:center;gap:9px;flex:0 0 auto">
           <span data-dot="{{ d3dot }}" style="width:24px;height:24px;border-radius:50%;flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;background:transparent;border:1.5px solid var(--line-2);color:var(--ink-3)">{{ d3t }}</span>
-          <span data-lbl="{{ d3lbl }}" style="white-space:nowrap;font-size:14px;font-weight:500;color:var(--ink-3)">Resultat</span>
+          <span data-lbl="{{ d3lbl }}" style="white-space:nowrap;font-size:14px;font-weight:500;color:var(--ink-3)">Transkribering</span>
         </div>
       </div>
 
       <!-- step 1: Källa -->
       <sc-if value="{{ isStep0 }}" hint-placeholder-val="{{ true }}">
       <div style="display:flex;flex-direction:column;flex:1;min-height:0;animation:fadeup .3s ease both">
-        <div class="ehead">
-          <div>
-            <div class="eyebrow" style="margin-bottom:18px">Steg 1 — Källa</div>
+        <div class="ehead ehead--v1">
+          <div class="v1-lead">
+            <div class="eyebrow" style="margin-bottom:14px">Steg 1 — Källa</div>
             <h1 class="disp" style="font-size:clamp(34px,5.2vw,52px);margin:0">Vad vill du <span class="ser">transkribera?</span></h1>
           </div>
-          <p class="ehead_lede">Dra in en eller flera filer, eller välj från datorn — allt körs på din egen dator.</p>
+          <p class="ehead_lede v1-lede">Dra in en eller flera filer, eller välj från datorn — allt körs på din egen dator.</p>
         </div>
         <div onClick="{{ openPicker }}" onDrop="{{ onDrop }}" onDragOver="{{ onDragOver }}" style="position:relative;border:1.5px dashed var(--line-2);border-radius:20px;background:var(--surface);flex:1 1 auto;min-height:200px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 24px;text-align:center;box-shadow:var(--shadow-sm);cursor:pointer;user-select:none;transition:border-color .14s,background .14s" style-hover="border-color:var(--accent);background:var(--accent-weak)">
           <div style="font-size:19px;font-weight:500;margin-bottom:6px;color:var(--ink)">Dra in filer — eller klicka för att välja</div>
@@ -122,7 +123,7 @@
               <span class="{{ figCls }}" style="font-size:16px;color:var(--ink);font-variant-numeric:tabular-nums">{{ queueCount }}</span>
             </div>
             <button onClick="{{ goStep0 }}" style="display:inline-flex;align-items:center;gap:6px;background:transparent;border:1px solid var(--line);color:var(--ink);border-radius:9px;padding:6px 12px;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;flex:0 0 auto;transition:border-color .14s,background .14s" style-hover="border-color:var(--line-2);background:var(--sunken)">
-              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 3v10M3 8h10"></path></svg>Lägg till fler
+              <span style="display:inline-flex;align-items:center;gap:6px;white-space:nowrap"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 3v10M3 8h10"></path></svg>Lägg till fler</span>
             </button>
           </div>
           <div style="display:flex;flex-direction:column">
@@ -130,7 +131,7 @@
               <div style="display:flex;align-items:center;gap:12px;padding:13px 20px;border-bottom:1px solid var(--line);background:var(--surface)">
                 <span style="font-family:var(--mono);font-size:10px;font-weight:500;letter-spacing:0.06em;color:var(--ink-2);background:var(--sunken);border:1px solid var(--line);border-radius:4px;padding:3px 7px;flex:0 0 auto">{{ f.ext }}</span>
                 <span style="flex:1;min-width:0;font-size:15.5px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ f.name }}</span>
-                <button onClick="{{ f.onRemove }}" aria-label="Ta bort från kön" style="width:30px;height:30px;flex:0 0 auto;border:1px solid var(--line);background:var(--surface);border-radius:8px;cursor:pointer;color:var(--ink-3);display:flex;align-items:center;justify-content:center;transition:border-color .14s,color .14s" style-hover="border-color:var(--bad);color:var(--bad)">
+                <button onClick="{{ f.onRemove }}" aria-label="Ta bort från kön" style="width:36px;height:36px;flex:0 0 auto;border:1px solid var(--line);background:var(--surface);border-radius:8px;cursor:pointer;color:var(--ink-3);display:flex;align-items:center;justify-content:center;transition:border-color .14s,color .14s" style-hover="border-color:var(--bad);color:var(--bad)">
                   <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 3l8 8M11 3l-8 8"></path></svg>
                 </button>
               </div>
@@ -138,10 +139,8 @@
           </div>
         </div>
 
-        <div style="font-family:var(--mono);font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-3);margin:2px 0 14px">Inställningar</div>
-
         <!-- Språk-flöde: talat → resultat, med live översättning -->
-        <div style="background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:17px 19px;box-shadow:var(--shadow-sm)">
+        <div style="background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:17px 19px">
           <div style="font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);margin-bottom:15px">Språk</div>
           <div style="display:flex;align-items:flex-end;gap:14px">
 
@@ -174,7 +173,7 @@
         </div>
 
         <!-- Filformat -->
-        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:12px 16px;box-shadow:var(--shadow-sm)">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:12px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:12px 16px">
           <span style="font-size:14px;color:var(--ink-2);font-weight:500">Filformat</span>
           <div style="display:flex;gap:6px">
             <button onClick="{{ toggleSrt }}" data-chip="{{ srtOn }}" style="border:1px solid var(--line);background:transparent;color:var(--ink-2);border-radius:9px;padding:8px 13px;font-size:14.5px;font-weight:500;cursor:pointer;font-family:inherit;transition:all .12s">SRT</button>
@@ -199,10 +198,10 @@
       <div style="display:flex;flex-direction:column;animation:fadeup .3s ease both">
         <div class="ehead">
           <div>
-            <div class="eyebrow" style="margin-bottom:18px">Steg 3 — Resultat</div>
-            <h1 class="disp" style="font-size:clamp(30px,4.4vw,44px);margin:0">Ditt <span class="ser">transkript</span></h1>
+            <div class="eyebrow" style="margin-bottom:18px">Steg 3 — Transkribering</div>
+            <h1 class="disp" style="font-size:clamp(30px,4.4vw,44px);margin:0">Bearbetar <span class="ser">lokalt</span></h1>
           </div>
-          <p class="ehead_lede">Bearbetas lokalt i steg. Korrekturläs, städa språket och ställ frågor med källor — när du är klar.</p>
+          <p class="ehead_lede">Transkriberas och korrekturläses automatiskt mot ljudet med Gemma 3n. När allt är klart landar lektionen i Inspelningar.</p>
         </div>
         <div style="background:var(--surface);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);overflow:hidden">
           <div style="padding:22px 24px 20px">
@@ -259,173 +258,19 @@
         </div>
 
         <sc-if value="{{ tRunning }}" hint-placeholder-val="{{ false }}">
-          <div style="display:flex;align-items:center;justify-content:center;gap:11px;margin-top:24px;color:var(--ink-2);font-size:14.5px">
-            <span style="width:15px;height:15px;border-radius:50%;border:2px solid var(--line-2);border-top-color:var(--accent);animation:spin .7s linear infinite"></span>
-            Transkriberar … resultatet visas när det är klart
+          <div style="display:flex;flex-direction:column;align-items:center;gap:14px;margin-top:24px">
+            <div style="display:flex;align-items:center;gap:11px;color:var(--ink-2);font-size:14.5px">
+              <span style="width:15px;height:15px;border-radius:50%;border:2px solid var(--line-2);border-top-color:var(--accent);animation:spin .7s linear infinite"></span>
+              Transkriberar och korrekturläser … Inspelningar öppnas när det är klart
+            </div>
+            <button onClick="{{ resetWizard }}" style="background:transparent;border:1px solid var(--line);color:var(--ink-2);border-radius:9px;padding:7px 16px;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;transition:border-color .14s,color .14s" style-hover="border-color:var(--bad);color:var(--bad)">Avbryt</button>
           </div>
         </sc-if>
-        <sc-if value="{{ tDone }}" hint-placeholder-val="{{ true }}">
-        <div data-follow="done" style="margin-top:24px">
-          <div style="display:flex;align-items:center;gap:9px;margin-bottom:14px">
-            <span style="width:18px;height:18px;border-radius:50%;background:var(--ok);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12.5px;flex:0 0 auto">✓</span>
-            <h2 style="font-size:20px;font-weight:600;letter-spacing:-0.02em;margin:0">Klar</h2>
-            <span style="color:var(--ink-2);font-size:15.5px">· {{ resultCount }} filer · 00:07</span>
-            <sc-if value="{{ resultBad }}" hint-placeholder-val="{{ false }}"><span style="font-size:12.5px;font-weight:500;color:var(--bad);background:color-mix(in srgb,var(--bad) 13%,transparent);padding:3px 9px;border-radius:6px">{{ resultBadNote }}</span></sc-if>
+        <sc-if value="{{ tDone }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;align-items:center;justify-content:center;gap:11px;margin-top:24px;color:var(--ink);font-size:15px;font-weight:500;animation:fadeup .3s ease both">
+            <span style="width:20px;height:20px;border-radius:50%;background:var(--ok);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;flex:0 0 auto">✓</span>
+            <span>Klart — korrekturläst och sparad. Öppnar Inspelningar …</span>
           </div>
-          <div style="display:grid;gap:10px;margin-bottom:18px">
-            <sc-for list="{{ results }}" as="r" hint-placeholder-count="2">
-              <sc-if value="{{ r.ok }}" hint-placeholder-val="{{ true }}">
-              <div style="display:flex;align-items:center;gap:14px;background:var(--surface);border:1px solid var(--line);border-radius:13px;padding:14px 16px;box-shadow:var(--shadow-sm)">
-                <span style="font-variant-numeric:tabular-nums;font-size:12.5px;font-weight:500;color:var(--accent);background:var(--accent-weak);padding:5px 9px;border-radius:7px;letter-spacing:0.03em">{{ r.ext }}</span>
-                <span style="flex:1;min-width:0;font-size:16px;font-variant-numeric:tabular-nums;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.name }}</span>
-                <span style="font-size:14px;color:var(--ink-2);font-variant-numeric:tabular-nums">{{ r.size }}</span>
-                <button onClick="{{ r.onDownload }}" style="display:inline-flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:8px 14px 8px 12px;font-size:14.5px;font-weight:500;cursor:pointer;font-family:inherit;transition:background .14s,border-color .14s,color .14s" style-hover="border-color:var(--ink);background:var(--ink);color:var(--btn-fg)">
-                  <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.5v7.5"></path><path d="M4.5 6.5 8 10l3.5-3.5"></path><path d="M3 13.5h10"></path></svg>Ladda ner
-                </button>
-              </div>
-              </sc-if>
-              <sc-if value="{{ r.error }}" hint-placeholder-val="{{ false }}">
-              <div style="display:flex;align-items:center;gap:14px;background:color-mix(in srgb,var(--bad) 7%,var(--surface));border:1px solid color-mix(in srgb,var(--bad) 32%,var(--line));border-radius:13px;padding:14px 16px">
-                <span style="font-variant-numeric:tabular-nums;font-size:12.5px;font-weight:500;color:var(--bad);background:color-mix(in srgb,var(--bad) 14%,transparent);padding:5px 9px;border-radius:7px;letter-spacing:0.03em">{{ r.ext }}</span>
-                <span style="flex:1;min-width:0;font-size:16px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ r.name }}</span>
-                <span style="display:inline-flex;align-items:center;gap:7px;font-size:13.5px;font-weight:500;color:var(--bad)"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.5"></circle><path d="M8 4.5v4"></path><path d="M8 11h.01"></path></svg>Kunde inte läsas — skadad fil</span>
-              </div>
-              </sc-if>
-            </sc-for>
-          </div>
-
-          <div onClick="{{ openTranscript }}" style="background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px 20px;box-shadow:var(--shadow-sm);cursor:pointer;transition:border-color .14s,box-shadow .14s" style-hover="border-color:var(--line-2);box-shadow:var(--shadow)">
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px">
-              <span style="font-size:12.5px;text-transform:uppercase;letter-spacing:0.04em;color:var(--ink-2)">Förhandsvisning</span>
-              <span style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;color:var(--accent)">Visa hela transkriptet<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5 10.5 8 6 12.5"></path></svg></span>
-            </div>
-            <sc-for list="{{ preview }}" as="p" hint-placeholder-count="3">
-              <div style="display:flex;gap:14px;padding:5px 0">
-                <span style="font-variant-numeric:tabular-nums;font-size:13.5px;color:var(--ink-3);flex:0 0 auto;width:46px;padding-top:2px">{{ p.t }}</span>
-                <span style="font-size:16px;color:var(--ink);line-height:1.5">{{ p.txt }}</span>
-              </div>
-            </sc-for>
-            <div style="margin-top:9px;font-size:13px;color:var(--ink-3)">… klicka för att läsa hela transkriptet</div>
-          </div>
-        </div>
-
-        <div data-follow="clean" style="margin-top:28px;background:var(--surface);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);padding:22px 24px 20px">
-          <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
-            <span style="font-family:var(--mono);font-size:10.5px;font-weight:500;letter-spacing:0.08em;color:var(--c-mustard);background:color-mix(in srgb,var(--c-mustard) 13%,transparent);border:1px solid color-mix(in srgb,var(--c-mustard) 30%,transparent);padding:3px 9px;border-radius:6px">KORREKTUR</span>
-            <h2 style="font-size:19px;font-weight:600;letter-spacing:-0.02em;margin:0">Korrekturläs transkriptet</h2>
-          </div>
-          <p style="margin:0 0 18px;color:var(--ink-2);font-size:15px">Rättar mot ljudet med Gemma 3n och städar språket — skiljetecken och meningslängd — med {{ activeLlmShort }}. Görs innan du summerar eller chattar.</p>
-          <sc-if value="{{ ppCleanHasSegs }}" hint-placeholder-val="{{ false }}">
-          <div onClick="{{ openClean }}" style="background:var(--sunken);border:1px solid var(--line);border-radius:13px;padding:16px 18px;margin-bottom:14px;cursor:pointer;transition:border-color .14s,box-shadow .14s" style-hover="border-color:var(--line-2);box-shadow:var(--shadow-sm)">
-            <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px;flex-wrap:wrap">
-              <span style="font-size:11.5px;text-transform:uppercase;letter-spacing:0.05em;color:var(--accent);font-weight:600">Korrekturläst</span>
-              <span style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2)"><span style="width:12px;height:12px;border-radius:4px;background:color-mix(in srgb,var(--ok) 20%,transparent);border:1px solid color-mix(in srgb,var(--ok) 45%,transparent)"></span>mot ljudet</span>
-              <span style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2)"><span style="width:12px;height:12px;border-radius:4px;background:color-mix(in srgb,var(--accent) 16%,transparent);border:1px solid color-mix(in srgb,var(--accent) 45%,transparent)"></span>språk &amp; skiljetecken</span>
-              <span style="margin-left:auto;display:inline-flex;align-items:center;gap:5px;font-size:13px;font-weight:500;color:var(--accent)">Visa hela<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5 10.5 8 6 12.5"></path></svg></span>
-            </div>
-            <sc-for list="{{ ppCleanSegs }}" as="seg" hint-placeholder-count="3">
-              <div style="display:flex;gap:14px;padding:5px 0">
-                <span style="font-variant-numeric:tabular-nums;font-size:13.5px;color:var(--ink-3);flex:0 0 auto;width:46px;padding-top:2px">{{ seg.t }}</span>
-                <span style="font-size:15px;color:var(--ink);line-height:1.55">
-                  <sc-for list="{{ seg.parts }}" as="pt" hint-placeholder-count="3">
-                    <sc-if value="{{ pt.fixed }}" hint-placeholder-val="{{ false }}"><span style="background:color-mix(in srgb,var(--ok) 18%,transparent);color:var(--ok);border-radius:4px;padding:0 3px;font-weight:500">{{ pt.s }}</span></sc-if>
-                    <sc-if value="{{ pt.lang }}" hint-placeholder-val="{{ false }}"><span style="background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent);border-radius:4px;padding:0 3px;font-weight:500">{{ pt.s }}</span></sc-if>
-                    <sc-if value="{{ pt.norm }}" hint-placeholder-val="{{ true }}"><span>{{ pt.s }}</span></sc-if>
-                  </sc-for>
-                </span>
-              </div>
-            </sc-for>
-            <div style="margin-top:9px;font-size:13px;color:var(--ink-3)">… klicka för att öppna hela i helskärm</div>
-          </div>
-          </sc-if>
-          <sc-if value="{{ ppCleanRunning }}" hint-placeholder-val="{{ false }}">
-          <div style="background:var(--sunken);border:1px solid var(--line);border-radius:13px;padding:15px 17px">
-            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:11px">
-              <span style="display:inline-flex;align-items:center;gap:9px;font-size:14px;font-weight:600;color:var(--ink)"><span style="width:14px;height:14px;border-radius:50%;border:2px solid var(--line-2);border-top-color:var(--accent);animation:spin .7s linear infinite;flex:0 0 auto"></span>Korrekturläser …</span>
-              <span style="color:var(--ink);letter-spacing:-0.01em"><span class="{{ figCls }}" style="font-size:30px;font-variant-numeric:tabular-nums">{{ ppCleanPct }}</span><span class="fig-unit" style="font-size:16px;margin-left:1px">%</span></span>
-            </div>
-            <div style="height:9px;border-radius:99px;background:var(--track);overflow:hidden;margin-bottom:11px">{{ ppCleanBar }}</div>
-            <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-2)"><span style="width:7px;height:7px;border-radius:50%;background:var(--accent);animation:pulse 1.2s ease-in-out infinite;flex:0 0 auto"></span>{{ ppCleanPhase }}</div>
-          </div>
-          </sc-if>
-          <sc-if value="{{ ppCleanNotRunning }}" hint-placeholder-val="{{ true }}">
-          <div style="display:flex;align-items:center;gap:13px;flex-wrap:wrap">
-            <button onClick="{{ runClean }}" style="display:inline-flex;align-items:center;justify-content:center;gap:9px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:11px;padding:12px 22px;font-size:15px;font-weight:500;cursor:pointer;font-family:inherit;box-shadow:var(--shadow-sm);min-width:220px;transition:background .15s" style-hover="background:var(--accent);box-shadow:0 6px 16px -6px color-mix(in srgb,var(--accent) 55%,transparent)">
-              <sc-if value="{{ ppCleanIdle }}" hint-placeholder-val="{{ true }}"><span>Korrekturläs transkriptet</span></sc-if>
-              <sc-if value="{{ ppCleanDone }}" hint-placeholder-val="{{ false }}"><span>↻ Kör igen</span></sc-if>
-            </button>
-            <span style="font-size:12.5px;color:var(--ink-3)">{{ cleanModelInfo }}</span>
-          </div>
-          </sc-if>
-        </div>
-
-        <div data-follow="llm" style="margin-top:16px;background:var(--surface);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);padding:22px 24px 20px">
-          <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
-            <span style="font-family:var(--mono);font-size:10.5px;font-weight:500;letter-spacing:0.08em;color:var(--c-sky);background:color-mix(in srgb,var(--c-sky) 13%,transparent);border:1px solid color-mix(in srgb,var(--c-sky) 28%,transparent);padding:3px 9px;border-radius:6px">LLM</span>
-            <h2 style="font-size:19px;font-weight:600;letter-spacing:-0.02em;margin:0">Fråga om lektionen</h2>
-          </div>
-          <sc-if value="{{ ppLocked }}" hint-placeholder-val="{{ true }}">
-          <div style="display:flex;flex-direction:column;align-items:center;text-align:center;gap:13px;padding:28px 22px;border:1.5px dashed var(--line-2);border-radius:14px;background:var(--sunken);margin-top:14px">
-            <span style="width:46px;height:46px;border-radius:50%;background:var(--surface);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;color:var(--ink-3);flex:0 0 auto"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="4" y="9" width="12" height="8" rx="2"></rect><path d="M7 9V6.5a3 3 0 0 1 6 0V9"></path></svg></span>
-            <div>
-              <div style="font-size:15.5px;font-weight:600;color:var(--ink)">Korrekturläs först</div>
-              <div style="font-size:13.5px;color:var(--ink-2);margin-top:4px;max-width:360px;line-height:1.5">Summering och chatt arbetar på det korrekturlästa transkriptet. Kör korrekturläsningen ovan så låses de upp.</div>
-            </div>
-            <button onClick="{{ runClean }}" style="display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:11px;padding:11px 20px;font-size:14.5px;font-weight:500;cursor:pointer;font-family:inherit;box-shadow:var(--shadow-sm);transition:background .15s" style-hover="background:var(--accent);box-shadow:0 6px 16px -6px color-mix(in srgb,var(--accent) 55%,transparent)">Korrekturläs nu</button>
-          </div>
-          </sc-if>
-          <sc-if value="{{ ppUnlocked }}" hint-placeholder-val="{{ false }}">
-          <div style="animation:unlockIn .4s cubic-bezier(.2,.8,.25,1) both">
-          <p style="margin:0 0 16px;color:var(--ink-2);font-size:15px">Svaren bygger på det korrekturlästa transkriptet. Källorna ligger numrerade bredvid varje svar — klicka en siffra så lyser dess ställe upp.</p>
-          <div>
-            <sc-if value="{{ ppChatEmpty }}" hint-placeholder-val="{{ true }}">
-              <div style="background:var(--sunken);border:1px solid var(--line);border-radius:13px;padding:15px 18px;margin-bottom:12px;color:var(--ink-2);font-size:14px;line-height:1.5">Ställ en fråga om innehållet — t.ex. ”Var förklaras täljare och nämnare?”. Varje påstående i svaret förankras i numrerade källor som visas bredvid.</div>
-            </sc-if>
-            <sc-if value="{{ ppChatHasMsgs }}" hint-placeholder-val="{{ false }}">
-            <div style="display:flex;flex-direction:column;gap:11px;margin-bottom:14px">
-              <sc-for list="{{ ppChatMsgs }}" as="m" hint-placeholder-count="2">
-                <sc-if value="{{ m.isUser }}" hint-placeholder-val="{{ true }}">
-                  <div style="align-self:flex-end;max-width:86%;background:var(--btn-bg);color:var(--btn-fg);border-radius:14px 14px 4px 14px;padding:10px 14px;font-size:14.5px;line-height:1.5">{{ m.text }}</div>
-                </sc-if>
-                <sc-if value="{{ m.isAi }}" hint-placeholder-val="{{ false }}">
-                  <div style="align-self:stretch;background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:5px 14px 14px 14px;padding:15px 17px;font-size:14.5px;box-shadow:var(--shadow-sm)">
-                    <div style="display:grid;grid-template-columns:1fr 244px;gap:18px;align-items:start">
-                      <div style="font-size:15px;line-height:1.78;color:var(--ink);min-width:0"><sc-for list="{{ m.tokens }}" as="tk" hint-placeholder-count="6"><sc-if value="{{ tk.isText }}" hint-placeholder-val="{{ true }}"><span>{{ tk.text }}</span></sc-if><sc-if value="{{ tk.isCite }}" hint-placeholder-val="{{ false }}"><button onClick="{{ tk.onCite }}" data-csup="{{ tk.supFlag }}" title="Visa källa {{ tk.num }} i transkriptet" style="display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;font-size:11px;font-weight:700;color:var(--accent);background:var(--accent-weak);border:1px solid color-mix(in srgb,var(--accent) 28%,transparent);border-radius:6px;cursor:pointer;vertical-align:2px;margin:0 1.5px;font-family:inherit;transition:transform .1s">{{ tk.num }}</button></sc-if></sc-for></div>
-                      <sc-if value="{{ m.hasSources }}" hint-placeholder-val="{{ false }}">
-                      <div style="background:var(--sunken);border:1px solid var(--line);border-radius:13px;padding:12px">
-                        <div style="display:flex;align-items:center;gap:7px;font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3);margin-bottom:10px"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 3h10v10H3z" stroke-linejoin="round"></path><path d="M6 6.5h4M6 9.5h4" stroke-linecap="round"></path></svg>Källor i transkriptet</div>
-                        <sc-for list="{{ m.sources }}" as="src" hint-placeholder-count="3">
-                          <div onClick="{{ src.onPick }}" data-crow="{{ src.rowFlag }}" style="display:flex;flex-direction:column;gap:3px;padding:9px 10px;border-radius:9px;cursor:pointer;border:1px solid transparent;margin-bottom:5px;transition:box-shadow .18s,border-color .18s">
-                            <span style="display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;color:var(--accent);font-variant-numeric:tabular-nums"><span data-rownum style="width:16px;height:16px;border-radius:5px;background:var(--accent-weak);color:var(--accent);font-size:10px;display:flex;align-items:center;justify-content:center;font-weight:700;flex:0 0 auto">{{ src.num }}</span>{{ src.t }}</span>
-                            <span style="font-size:12.5px;line-height:1.45;color:var(--ink-2)">{{ src.text }}</span>
-                          </div>
-                        </sc-for>
-                        <span onClick="{{ openTranscript }}" style="display:inline-flex;align-items:center;gap:5px;margin-top:3px;color:var(--accent);font-size:12px;font-weight:600;cursor:pointer" style-hover="text-decoration:underline">Hela transkriptet<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3.5 10.5 8 6 12.5"></path></svg></span>
-                      </div>
-                      </sc-if>
-                    </div>
-                  </div>
-                </sc-if>
-              </sc-for>
-              <sc-if value="{{ ppChatThinking }}" hint-placeholder-val="{{ false }}">
-                <div style="align-self:flex-start;display:flex;align-items:center;gap:9px;color:var(--ink-2);font-size:13.5px;padding:4px 6px;background:var(--surface);border:1px solid var(--line);border-radius:14px 14px 14px 4px"><span style="width:13px;height:13px;border-radius:50%;border:2px solid var(--line-2);border-top-color:var(--accent);animation:spin .7s linear infinite"></span>Söker i transkriptet<span class="insp-dots" style="color:var(--ink-3)"><i></i><i></i><i></i></span></div>
-              </sc-if>
-            </div>
-            </sc-if>
-            <div style="display:flex;gap:10px;align-items:center">
-              <input value="{{ ppQuestion }}" onChange="{{ setPpQuestion }}" placeholder="Skriv en fråga …" style="flex:1;min-width:0;background:var(--sunken);border:1px solid var(--line);color:var(--ink);border-radius:11px;padding:12px 14px;font-size:15px;font-family:inherit;outline:none">
-              <button onClick="{{ sendChat }}" style="flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:11px;padding:12px 20px;font-size:15px;font-weight:500;cursor:pointer;font-family:inherit;box-shadow:var(--shadow-sm);transition:background .15s" style-hover="background:var(--accent);box-shadow:0 6px 16px -6px color-mix(in srgb,var(--accent) 55%,transparent)">Skicka</button>
-            </div>
-            <div style="font-size:12.5px;color:var(--ink-3);margin-top:9px">{{ llmModelInfo }}</div>
-            <div data-follow="chatend" style="height:1px"></div>
-          </div>
-          </div>
-          </sc-if>
-        </div>
-
-        <button onClick="{{ resetWizard }}" style="margin-top:18px;align-self:center;display:inline-flex;align-items:center;justify-content:center;gap:8px;background:transparent;border:1px solid var(--line);color:var(--ink);border-radius:11px;padding:11px 22px;font-size:15px;font-weight:500;cursor:pointer;font-family:inherit;transition:border-color .14s,background .14s" style-hover="border-color:var(--line-2);background:var(--sunken)">
-          <span style="font-size:16px;line-height:1">↺</span>Ny transkribering — börja om
-        </button>
         </sc-if>
       </div>
       </sc-if>
@@ -454,8 +299,8 @@
             <button onClick="{{ setInspAi }}" data-seg="{{ inspAiOn }}" style="border:none;background:transparent;color:var(--ink-3);border-radius:7px;padding:5px 11px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap">Fråga AI</button>
             <button onClick="{{ setInspSok }}" data-seg="{{ inspSokOn }}" style="border:none;background:transparent;color:var(--ink-3);border-radius:7px;padding:5px 11px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap">Sök ord</button>
           </div>
-          <span style="flex:1"></span>
           <sc-if value="{{ inspShowSuggest }}" hint-placeholder-val="{{ false }}">
+            <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);margin-left:6px;flex:0 0 auto">Prova</span>
             <sc-for list="{{ askSuggestions }}" as="sg" hint-placeholder-count="2">
               <button onClick="{{ sg.onClick }}" style="display:inline-flex;align-items:center;gap:7px;font-size:12.5px;color:var(--ink-2);background:var(--surface);border:1px solid var(--line);border-radius:99px;padding:6px 12px;cursor:pointer;font-family:inherit;white-space:nowrap;transition:border-color .12s,color .12s" style-hover="border-color:var(--accent);color:var(--accent)"><span style="color:var(--accent)">✻</span>{{ sg.label }}</button>
             </sc-for>
@@ -465,8 +310,8 @@
 
       <!-- live-skanning + svar (Kartoteket) -->
       <sc-if value="{{ inspIsAsk }}" hint-placeholder-val="{{ false }}">
-      <div style="max-width:960px;margin:22px auto 8px;animation:fadeup .3s ease both">
-        <div style="display:flex;align-items:center;gap:12px;margin-bottom:11px">
+      <div style="max-width:960px;margin:24px auto 8px;animation:fadeup .3s ease both">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
           <sc-if value="{{ askScanning }}" hint-placeholder-val="{{ true }}">
             <span class="insp-dots" style="color:var(--accent);flex:0 0 auto"><i></i><i></i><i></i></span>
             <span style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ scanTicker }}</span>
@@ -478,69 +323,131 @@
           <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--accent);flex:0 0 auto">{{ scanHitLabel }}</span>
           <button onClick="{{ newAsk }}" style="flex:0 0 auto;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:7px;padding:5px 10px;font-family:var(--mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;cursor:pointer">✕ Ny fråga</button>
         </div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(108px,1fr));gap:9px">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(108px,1fr));gap:8px">
           <sc-for list="{{ scanCards }}" as="sc2" hint-placeholder-count="6">
-            <div data-scan="{{ sc2.st }}" style="min-width:0;border:1px solid var(--line);background:var(--surface);border-radius:9px;padding:9px 11px;transition:opacity .35s ease,box-shadow .35s ease,border-color .35s ease,background .35s ease">
-              <span style="font-family:var(--mono);font-size:8.5px;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-3);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ sc2.stLabel }}</span>
+            <div data-scan="{{ sc2.st }}" style="min-width:0;border:1px solid var(--line);background:var(--surface);border-radius:9px;padding:10px 12px;transition:opacity .35s ease,box-shadow .35s ease,border-color .35s ease,background .35s ease">
+              <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-3);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ sc2.stLabel }}</span>
               <div style="font-size:12px;font-weight:600;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ sc2.title }}</div>
             </div>
           </sc-for>
         </div>
         <sc-if value="{{ ansStarted }}" hint-placeholder-val="{{ false }}">
-        <div style="margin-top:14px;border:1px solid var(--line);border-radius:13px;background:var(--surface);padding:20px 24px;box-shadow:var(--shadow-sm);animation:fadeup .3s ease both">
-          <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:12px">
-            <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);flex:0 0 auto">{{ ansHeadLabel }}</span>
-            <span style="font-size:12.5px;color:var(--ink-3);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-left:auto">”{{ askQ }}”</span>
-          </div>
-          <p style="margin:0;font-size:16px;line-height:2;color:var(--ink);max-width:72ch">
+        <div data-askwrap="{{ askZoomFlag }}" onClick="{{ closeAskZoom }}">
+        <div data-askzoom="{{ askZoomFlag }}" onClick="{{ onAskCardClick }}" title="Klicka för att förstora chatten" style="margin-top:16px;border:1px solid var(--line);border-radius:13px;background:var(--surface);padding:24px 28px;box-shadow:var(--shadow-sm);animation:fadeup .3s ease both">
+          <div style="font-family:var(--mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);margin-bottom:12px">{{ ansHeadLabel }}</div>
+          <div style="display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:28px;align-items:start">
+          <div style="min-width:0">
+          <div data-hidescroll data-askscroll style="max-height:min(52vh,520px);overflow:auto;overscroll-behavior:contain;scrollbar-width:none">
+          <p style="margin:0;font-size:16px;line-height:1.9;color:var(--ink)">
             <sc-for list="{{ ansTokens }}" as="tk" hint-placeholder-count="3">
-              <sc-if value="{{ tk.isText }}" hint-placeholder-val="{{ true }}"><span>{{ tk.text }}</span></sc-if>
-              <sc-if value="{{ tk.isCite }}" hint-placeholder-val="{{ false }}"><span onClick="{{ tk.onCite }}" title="Öppna lektionen och chatta" style="display:inline-flex;align-items:center;gap:6px;vertical-align:-4px;margin:0 3px;font-size:12px;font-weight:600;color:var(--ink);white-space:nowrap;max-width:260px;overflow:hidden;text-overflow:ellipsis;background:var(--surface);border:1px solid color-mix(in srgb,var(--accent) 45%,var(--line));border-radius:8px;padding:3px 9px;cursor:pointer;transition:border-color .12s,background .12s" style-hover="background:var(--accent-weak)"><span style="width:6px;height:6px;border-radius:2px;background:var(--accent);flex:0 0 auto"></span>{{ tk.rec }}<span style="font-family:var(--mono);font-size:9.5px;color:var(--ink-3);font-variant-numeric:tabular-nums">{{ tk.t }} ↗</span></span></sc-if>
+              <sc-if value="{{ tk.isText }}" hint-placeholder-val="{{ true }}"><span style="animation:tokIn .18s ease-out both">{{ tk.text }}</span></sc-if>
+              <sc-if value="{{ tk.isCite }}" hint-placeholder-val="{{ false }}"><span onClick="{{ tk.onCite }}" data-copen="{{ tk.openFlag }}" title="Visa var i transkriptet detta kommer ifrån" style="display:inline-flex;align-items:center;gap:6px;vertical-align:-4px;margin:0 3px;font-size:12px;font-weight:600;color:var(--ink);white-space:nowrap;max-width:260px;overflow:hidden;text-overflow:ellipsis;background:var(--surface);border:1px solid color-mix(in srgb,var(--accent) 45%,var(--line));border-radius:8px;padding:3px 9px;cursor:pointer;transition:border-color .12s,background .12s,transform .1s;animation:tokIn .18s ease-out both" style-active="transform:scale(.97)" style-hover="background:var(--accent-weak)"><span style="width:6px;height:6px;border-radius:2px;background:var(--accent);flex:0 0 auto"></span>{{ tk.rec }}<span style="font-family:var(--mono);font-size:10px;color:var(--ink-3);font-variant-numeric:tabular-nums">{{ tk.t }}</span></span></sc-if>
             </sc-for>
             <sc-if value="{{ ansTyping }}" hint-placeholder-val="{{ false }}"><span class="ai-blink" style="display:inline-block;width:9px;height:17px;background:var(--accent);vertical-align:-3px;margin-left:3px"></span></sc-if>
           </p>
           <sc-if value="{{ ansDone }}" hint-placeholder-val="{{ false }}">
-          <div style="margin-top:18px;border:1px dashed var(--line-2);border-radius:10px;background:var(--sunken);padding:12px 14px;animation:fadeup .3s ease both">
-            <sc-if value="{{ ansEventNotAdded }}" hint-placeholder-val="{{ true }}">
-              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-                <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-3);flex:0 0 auto">Förslag → Google Kalender</span>
-                <input value="{{ ansEventTitle }}" onChange="{{ setAnsEventTitle }}" style="flex:2 1 220px;min-width:0;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 11px;font-size:13.5px;font-weight:500;font-family:inherit;color:var(--ink)">
-                <button onClick="{{ toggleAskPick }}" title="Välj dag och tid" style="flex:1 1 160px;min-width:0;display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 11px;font-size:13px;font-family:inherit;color:var(--ink);cursor:pointer;font-variant-numeric:tabular-nums;white-space:nowrap;transition:border-color .14s" style-hover="border-color:var(--ink-3)"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="flex:0 0 auto"><rect x="2" y="3" width="12" height="11" rx="2"></rect><path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3"></path></svg><span style="min-width:0;overflow:hidden;text-overflow:ellipsis">{{ ansEventWhen }}</span><span style="flex:1"></span><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto"><path d="M4 6l4 4 4-4"></path></svg></button>
-                <button onClick="{{ addAnsEvent }}" style="flex:0 0 auto;display:inline-flex;align-items:center;gap:7px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:8px;padding:9px 15px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Lägg till ✓</button>
+          <div style="margin-top:24px;border-top:1px solid var(--line);padding-top:16px">
+            <sc-for list="{{ askFollowups }}" as="f" hint-placeholder-count="1">
+              <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
+                <div style="align-self:flex-end;max-width:86%;background:var(--accent-weak);color:var(--ink);border:1px solid color-mix(in srgb,var(--accent) 25%,transparent);border-radius:14px 14px 4px 14px;padding:9px 13px;font-size:14px;line-height:1.5">{{ f.q }}</div>
+                <div style="align-self:stretch;font-size:15px;line-height:1.75;color:var(--ink)">{{ f.a }}<sc-if value="{{ f.typing }}" hint-placeholder-val="{{ false }}"><span class="ai-blink" style="display:inline-block;width:8px;height:15px;background:var(--accent);vertical-align:-2px;margin-left:3px"></span></sc-if><sc-if value="{{ f.hasRef }}" hint-placeholder-val="{{ false }}"> <span onClick="{{ f.onCite }}" title="Visa var i transkriptet detta kommer ifrån" style="display:inline-flex;align-items:center;gap:6px;vertical-align:-4px;margin:0 3px;font-size:12px;font-weight:600;color:var(--ink);white-space:nowrap;max-width:260px;overflow:hidden;text-overflow:ellipsis;background:var(--surface);border:1px solid color-mix(in srgb,var(--accent) 45%,var(--line));border-radius:8px;padding:3px 9px;cursor:pointer;transition:border-color .12s,background .12s,transform .1s;animation:tokIn .18s ease-out both" style-active="transform:scale(.97)" style-hover="background:var(--accent-weak)"><span style="width:6px;height:6px;border-radius:2px;background:var(--accent);flex:0 0 auto"></span>{{ f.refRec }}<span style="font-family:var(--mono);font-size:10px;color:var(--ink-3);font-variant-numeric:tabular-nums">{{ f.refT }}</span></span></sc-if></div>
               </div>
-              <sc-if value="{{ evPickAskOpen }}" hint-placeholder-val="{{ false }}">
-                <div style="display:grid;grid-template-columns:180px 1fr;margin-top:10px;border:1px solid var(--line);border-radius:9px;background:var(--surface);overflow:hidden;animation:ml-popin .2s cubic-bezier(.16,1,.3,1) both">
-                  <div data-hidescroll style="border-right:1px solid var(--line);padding:8px;display:flex;flex-direction:column;gap:1px;max-height:224px;overflow:auto">
-                    <span style="font-family:var(--mono);font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);padding:3px 8px 6px">Dag</span>
-                    <sc-for list="{{ askDayOpts }}" as="d" hint-placeholder-count="4">
-                      <button onClick="{{ d.onPick }}" data-q="{{ d.curQ }}" style="display:flex;align-items:center;gap:8px;border:1px solid transparent;background:transparent;color:var(--ink);border-radius:6px;padding:6px 8px;font-size:13px;font-family:inherit;cursor:pointer;text-align:left;white-space:nowrap"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis">{{ d.label }}</span><span style="flex:1"></span><sc-if value="{{ d.hasPre }}" hint-placeholder-val="{{ false }}"><span style="font-family:var(--mono);font-size:8.5px;letter-spacing:0.05em;text-transform:uppercase;color:var(--accent)">{{ d.pre }}</span></sc-if></button>
-                    </sc-for>
-                  </div>
-                  <div style="padding:8px">
-                    <span style="font-family:var(--mono);font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);padding:3px 8px 6px;display:block">Tid</span>
-                    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:5px">
-                      <sc-for list="{{ askTimeOpts }}" as="t2" hint-placeholder-count="8">
-                        <button onClick="{{ t2.onPick }}" data-q="{{ t2.curQ }}" style="border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:6px;padding:7px 4px;font-size:12.5px;font-family:inherit;cursor:pointer;font-variant-numeric:tabular-nums;text-align:center">{{ t2.label }}</button>
-                      </sc-for>
+            </sc-for>
+          </div>
+          </sc-if>
+          </div>
+          <sc-if value="{{ ansDone }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;gap:9px;align-items:center;margin-top:12px">
+              <input value="{{ askFollowInput }}" onChange="{{ setAskFollow }}" onKeyDown="{{ onAskFollowKey }}" placeholder="Ställ en följdfråga eller ändra kalenderförslaget …" style="flex:1;min-width:0;background:var(--sunken);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:11px 13px;font-size:14.5px;font-family:inherit;outline:none">
+              <button onClick="{{ sendAskFollow }}" style="flex:0 0 auto;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:10px;padding:11px 18px;font-size:14.5px;font-weight:500;cursor:pointer;font-family:inherit;transition:background .15s" style-hover="background:var(--accent)">Skicka</button>
+            </div>
+          </sc-if>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:14px;min-width:0">
+          <sc-if value="{{ ansHasRefs }}" hint-placeholder-val="{{ false }}">
+          <div style="background:var(--sunken);border:1px solid var(--line);border-radius:13px;padding:14px;animation:fadeup .3s ease both">
+            <div onClick="{{ toggleSrcBox }}" style="display:flex;align-items:center;gap:7px;font-size:10.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3);cursor:pointer"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 3h10v10H3z" stroke-linejoin="round"></path><path d="M6 6.5h4M6 9.5h4" stroke-linecap="round"></path></svg>Källor i arkivet<span style="flex:1"></span><span style="font-family:var(--mono);font-size:10px;font-variant-numeric:tabular-nums">{{ askRefCount }}</span><svg data-rot="{{ srcChevFlag }}" width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto"><path d="M4 6l4 4 4-4"></path></svg></div>
+            <sc-if value="{{ srcBoxOpen }}" hint-placeholder-val="{{ true }}">
+            <div style="margin-top:10px">
+            <sc-for list="{{ askRefs }}" as="rf" hint-placeholder-count="2">
+              <div onClick="{{ rf.onPick }}" data-crow="{{ rf.rowFlag }}" style="display:flex;flex-direction:column;gap:5px;padding:11px 12px;border-radius:9px;cursor:pointer;border:1px solid transparent;margin-bottom:6px;transition:box-shadow .18s,border-color .18s,background .18s,transform .12s" style-active="transform:scale(.985)">
+                <span style="display:flex;align-items:center;gap:7px;min-width:0"><span style="width:6px;height:6px;border-radius:2px;background:var(--accent);flex:0 0 auto"></span><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13.5px;font-weight:700;color:var(--ink)">{{ rf.rec }}</span><span style="margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--ink-3);font-variant-numeric:tabular-nums;flex:0 0 auto">{{ rf.meta }}</span></span>
+                <sc-if value="{{ rf.collapsed }}" hint-placeholder-val="{{ true }}"><span style="font-size:13px;line-height:1.5;color:var(--ink-2)">{{ rf.text }}</span></sc-if>
+                <sc-if value="{{ rf.expanded }}" hint-placeholder-val="{{ false }}">
+                  <sc-for list="{{ rf.lines }}" as="cl" hint-placeholder-count="3">
+                    <div data-ansrow="{{ cl.curFlag }}" style="display:flex;gap:8px;align-items:baseline;padding:4px 6px;border-radius:6px;margin:0 -6px;animation:tokIn .18s ease-out both">
+                      <span style="font-family:var(--mono);font-size:10px;color:var(--ink-3);font-variant-numeric:tabular-nums;flex:0 0 auto">{{ cl.t }}</span>
+                      <span style="font-size:13px;line-height:1.5;color:var(--ink-2)">{{ cl.s }}</span>
                     </div>
-                    <div style="font-size:11px;color:var(--ink-3);padding:8px 8px 2px">Välj dag, sedan tid — stängs automatiskt.</div>
-                  </div>
-                </div>
-              </sc-if>
-              <div style="font-size:12px;color:var(--ink-3);margin-top:8px">Beskrivningen fylls i automatiskt med citatet och en länk till inspelningen.</div>
-            </sc-if>
-            <sc-if value="{{ ansEventAdded }}" hint-placeholder-val="{{ false }}">
-              <div style="display:flex;align-items:center;gap:9px;font-size:13.5px;font-weight:500;color:var(--ok)"><span style="width:17px;height:17px;border-radius:50%;background:var(--ok);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:10px">✓</span>Tillagd i Google Kalender — {{ ansEventTitle }}</div>
+                  </sc-for>
+                </sc-if>
+              </div>
+            </sc-for>
+            </div>
             </sc-if>
           </div>
           </sc-if>
+<sc-if value="{{ ansShowEvent }}" hint-placeholder-val="{{ false }}">
+          <div data-calflash="{{ calFlashFlag }}" style="border:1px dashed var(--line-2);border-radius:10px;background:var(--sunken);padding:14px 16px;animation:fadeup .3s ease both">
+            <div onClick="{{ toggleCalBox }}" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+              <span style="font-family:var(--mono);font-size:10.5px;font-weight:600;letter-spacing:0.05em;text-transform:uppercase;color:var(--ink-3);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Förslag → Kalender</span>
+              <span style="flex:1"></span>
+              <span style="font-family:var(--mono);font-size:10px;color:var(--ink-2);font-variant-numeric:tabular-nums;flex:0 0 auto">{{ ansEventWhen }}</span>
+              <svg data-rot="{{ calChevFlag }}" width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;color:var(--ink-3)"><path d="M4 6l4 4 4-4"></path></svg>
+            </div>
+            <sc-if value="{{ calBoxOpen }}" hint-placeholder-val="{{ true }}">
+            <div style="margin-top:10px">
+            <sc-if value="{{ ansEventNotAdded }}" hint-placeholder-val="{{ true }}">
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+                <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:var(--ok)">● Google ansluten</span>
+                <span style="flex:1"></span>
+                <button onClick="{{ dismissAnsEvent }}" aria-label="Avvisa förslaget" title="Avvisa förslaget" style="border:none;background:transparent;color:var(--ink-3);cursor:pointer;font-size:12px;padding:2px 6px;font-family:inherit;border-radius:6px;transition:color .12s;white-space:nowrap;flex:0 0 auto" style-hover="color:var(--ink)">✕ Avvisa</button>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <input value="{{ ansEventTitle }}" onChange="{{ setAnsEventTitle }}" onKeyDown="{{ onAnsTitleKey }}" style="flex:2 1 220px;min-width:0;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 12px;font-size:13.5px;font-weight:500;font-family:inherit;color:var(--ink)">
+                <button onClick="{{ toggleAskPick }}" data-q="{{ ansWhenFlash }}" title="Välj dag och tid" style="flex:1 1 160px;min-width:0;display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 12px;font-size:13px;font-family:inherit;color:var(--ink);cursor:pointer;font-variant-numeric:tabular-nums;white-space:nowrap;transition:border-color .14s" style-hover="border-color:var(--ink-3)"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="flex:0 0 auto"><rect x="2" y="3" width="12" height="11" rx="2"></rect><path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3"></path></svg><span style="min-width:0;overflow:hidden;text-overflow:ellipsis">{{ ansEventWhen }}</span><span style="flex:1"></span><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto"><path d="M4 6l4 4 4-4"></path></svg></button>
+                <button onClick="{{ addAnsEvent }}" style="flex:0 0 auto;display:inline-flex;align-items:center;gap:7px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:8px;padding:9px 16px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .15s,transform .1s" style-hover="background:var(--accent)" style-active="transform:scale(.97)">Lägg till</button>
+              </div>
+              <div style="margin-top:8px">
+                <textarea value="{{ ansEventDesc }}" onChange="{{ setAnsEventDesc }}" onFocus="{{ onAnsDescFocus }}" onBlur="{{ onAnsDescBlur }}" data-desc="{{ ansDescFlag }}" placeholder="Anteckning i kalenderposten …" aria-label="Anteckning i kalenderposten" style="width:100%;box-sizing:border-box;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 12px;font-size:13px;line-height:1.5;font-family:inherit;color:var(--ink);outline:none"></textarea>
+                <div style="margin-top:6px;font-size:12px;color:var(--ink-3)">Citat och länk till inspelningen fylls i automatiskt.</div>
+              </div>
+              <sc-if value="{{ evPickAskOpen }}" hint-placeholder-val="{{ false }}">
+                <div style="display:grid;grid-template-columns:1fr;margin-top:12px;border:1px solid var(--line);border-radius:9px;background:var(--surface);overflow:hidden;animation:ml-popin .2s cubic-bezier(.16,1,.3,1) both">
+                  <div data-hidescroll style="border-bottom:1px solid var(--line);padding:8px;display:flex;flex-direction:column;gap:1px;max-height:148px;overflow:auto">
+                    <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);padding:3px 8px 6px">Dag</span>
+                    <sc-for list="{{ askDayOpts }}" as="d" hint-placeholder-count="4">
+                      <button onClick="{{ d.onPick }}" data-q="{{ d.curQ }}" style="display:flex;align-items:center;gap:8px;border:1px solid transparent;background:transparent;color:var(--ink);border-radius:6px;padding:6px 8px;font-size:13px;font-family:inherit;cursor:pointer;text-align:left;white-space:nowrap;transition:background .12s" style-hover="background:var(--sunken)"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis">{{ d.label }}</span><span style="flex:1"></span><sc-if value="{{ d.hasPre }}" hint-placeholder-val="{{ false }}"><span style="font-family:var(--mono);font-size:10px;letter-spacing:0.05em;text-transform:uppercase;color:var(--accent)">{{ d.pre }}</span></sc-if></button>
+                    </sc-for>
+                  </div>
+                  <div style="padding:8px">
+                    <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);padding:3px 8px 6px;display:block">Tid</span>
+                    <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px">
+                      <sc-for list="{{ askTimeOpts }}" as="t2" hint-placeholder-count="8">
+                        <button onClick="{{ t2.onPick }}" data-q="{{ t2.curQ }}" style="border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:6px;padding:7px 4px;font-size:12.5px;font-family:inherit;cursor:pointer;font-variant-numeric:tabular-nums;text-align:center;transition:border-color .12s,background .12s,transform .1s" style-hover="border-color:var(--accent);background:var(--accent-weak)" style-active="transform:scale(.96)">{{ t2.label }}</button>
+                      </sc-for>
+                    </div>
+                  </div>
+                </div>
+              </sc-if>
+            </sc-if>
+            <sc-if value="{{ ansEventAdded }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;align-items:center;gap:9px;font-size:13.5px;font-weight:500;color:var(--ok)"><span style="width:17px;height:17px;border-radius:50%;background:var(--ok);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:10px;animation:okPop .25s cubic-bezier(0.22,1,0.36,1) both">✓</span>Tillagd i Google Kalender — {{ ansEventTitle }}</div>
+            </sc-if>
+            </div>
+            </sc-if>
+          </div>
+          </sc-if>
+          </div>
+          </div>
+        </div>
         </div>
         </sc-if>
       </div>
       </sc-if>
 
       <!-- filter — native selects + Säkerhetskopiera (ff5f3e2/c3025c1) -->
-      <div style="max-width:760px;margin:0 auto 10px;display:flex;gap:9px;justify-content:center;align-items:center;flex-wrap:wrap">
+      <div style="max-width:760px;margin:34px auto 10px;display:flex;gap:9px;justify-content:center;align-items:center;flex-wrap:wrap">
         <div style="position:relative" onMouseEnter="{{ fEnter }}" onMouseLeave="{{ fLeave }}">
           <button onClick="{{ fKlassToggle }}" data-filter-on="{{ klassSelOn }}" style="display:inline-flex;align-items:center;gap:9px;background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:8px 13px;font-size:14px;font-family:inherit;cursor:pointer;white-space:nowrap;transition:border-color .14s" style-hover="border-color:var(--ink-3)">{{ filterClassLabel }}<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l4 4 4-4"></path></svg></button>
           <sc-if value="{{ fKlassOpen }}" hint-placeholder-val="{{ false }}">
@@ -564,7 +471,7 @@
         <div style="position:relative" onMouseEnter="{{ fEnter }}" onMouseLeave="{{ fLeave }}">
           <button onClick="{{ fDatumToggle }}" data-filter-on="{{ datumSelOn }}" style="display:inline-flex;align-items:center;gap:9px;background:var(--surface);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:8px 13px;font-size:14px;font-family:inherit;cursor:pointer;white-space:nowrap;transition:border-color .14s" style-hover="border-color:var(--ink-3)">{{ filterDateLabel }}<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l4 4 4-4"></path></svg></button>
           <sc-if value="{{ fDatumOpen }}" hint-placeholder-val="{{ false }}">
-            <div data-pop="{{ fPopAnim }}" style="position:absolute;top:100%;left:0;z-index:30;padding-top:6px"><div style="min-width:172px;background:var(--surface);border:1px solid var(--line-2);border-radius:10px;box-shadow:var(--shadow);padding:5px;display:flex;flex-direction:column;gap:1px">
+            <div data-pop="{{ fPopAnim }}" style="position:absolute;top:100%;right:0;z-index:30;padding-top:6px"><div style="min-width:172px;background:var(--surface);border:1px solid var(--line-2);border-radius:10px;box-shadow:var(--shadow);padding:5px;display:flex;flex-direction:column;gap:1px">
               <sc-for list="{{ datumMenuOpts }}" as="o" hint-placeholder-count="4">
                 <button onClick="{{ o.onSelect }}" data-opt="" style="display:flex;align-items:center;gap:10px;border:none;background:transparent;color:var(--ink);border-radius:7px;padding:8px 11px;font-size:13.5px;font-family:inherit;cursor:pointer;text-align:left;white-space:nowrap">{{ o.label }}<span style="flex:1;min-width:14px"></span><sc-if value="{{ o.isCur }}" hint-placeholder-val="{{ false }}"><span style="font-weight:600">✓</span></sc-if></button>
               </sc-for>
@@ -596,7 +503,7 @@
             <sc-for list="{{ w.cards }}" as="r" hint-placeholder-count="3">
               <div class="{{ zoomCardCls }}" data-stage="{{ r.stage }}" data-rec-id="{{ r.id }}" onClick="{{ r.onOpenChat }}" style="background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:15px 16px;box-shadow:var(--shadow-sm);display:flex;flex-direction:column;gap:10px;cursor:pointer" style-hover="border-color:var(--line-2);box-shadow:var(--shadow)">
                 <div style="display:flex;align-items:center;gap:8px">
-                  <span data-cc="{{ r.cc }}" style="border-radius:99px;padding:2px 10px;font-size:11.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:0 1 auto;min-width:0">{{ r.tagLabel }}</span>
+                  <span data-cc="{{ r.cc }}" title="{{ r.tagFull }}" style="border-radius:99px;padding:2px 10px;font-size:11.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:0 1 auto;min-width:0">{{ r.tagLabel }}</span>
                   <sc-if value="{{ r.isHit }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:var(--accent);background:var(--accent-weak);border-radius:99px;padding:2px 9px;flex:0 0 auto"><span style="width:6px;height:6px;border-radius:50%;background:var(--accent)"></span>träff {{ r.hitT }}</span></sc-if>
                   <span style="flex:1"></span>
                   <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.05em;text-transform:uppercase;color:var(--ink-3);white-space:nowrap">{{ r.date }}</span>
@@ -611,8 +518,8 @@
                 <div style="display:flex;align-items:center;gap:7px;border-top:1px solid var(--line);padding-top:10px">
                   <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:var(--accent)">Öppna &amp; chatta ↗</span>
                   <span style="flex:1"></span>
-                  <button onClick="{{ r.onRename }}" aria-label="Redigera uppgifter" title="Redigera namn, klass och kurs" style="width:29px;height:29px;border:1px solid var(--line);background:var(--surface);border-radius:8px;cursor:pointer;color:var(--ink-3);display:flex;align-items:center;justify-content:center;transition:border-color .12s,color .12s" style-hover="border-color:var(--ink-3);color:var(--ink)"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11.3 2.2l2.5 2.5L5.5 13H3v-2.5z"></path></svg></button>
-                  <button onClick="{{ r.onDelete }}" aria-label="Ta bort" style="width:29px;height:29px;border:1px solid var(--line);background:var(--surface);border-radius:8px;cursor:pointer;color:var(--ink-3);display:flex;align-items:center;justify-content:center;transition:border-color .12s,color .12s" style-hover="border-color:var(--bad);color:var(--bad)"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.5 8.5h6l.5-8.5"></path></svg></button>
+                  <button onClick="{{ r.onRename }}" aria-label="Redigera uppgifter" title="Redigera namn, klass och kurs" style="width:36px;height:36px;border:1px solid var(--line);background:var(--surface);border-radius:8px;cursor:pointer;color:var(--ink-3);display:flex;align-items:center;justify-content:center;transition:border-color .12s,color .12s" style-hover="border-color:var(--ink-3);color:var(--ink)"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11.3 2.2l2.5 2.5L5.5 13H3v-2.5z"></path></svg></button>
+                  <button onClick="{{ r.onDelete }}" aria-label="Ta bort" style="width:36px;height:36px;border:1px solid var(--line);background:var(--surface);border-radius:8px;cursor:pointer;color:var(--ink-3);display:flex;align-items:center;justify-content:center;transition:border-color .12s,color .12s" style-hover="border-color:var(--bad);color:var(--bad)"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.5 8.5h6l.5-8.5"></path></svg></button>
                 </div>
               </div>
             </sc-for>
@@ -634,7 +541,7 @@
       <sc-if value="{{ toastHasUndo }}" hint-placeholder-val="{{ false }}">
         <button onClick="{{ onUndo }}" style="flex:0 0 auto;background:transparent;border:1px solid color-mix(in srgb,var(--canvas) 40%,transparent);color:var(--canvas);border-radius:8px;padding:6px 12px;font-size:13.5px;font-weight:600;cursor:pointer;font-family:inherit">Ångra</button>
       </sc-if>
-      <button onClick="{{ dismissToast }}" aria-label="Stäng" style="flex:0 0 auto;width:26px;height:26px;display:flex;align-items:center;justify-content:center;background:transparent;border:none;color:color-mix(in srgb,var(--canvas) 70%,transparent);cursor:pointer;font-size:15px;border-radius:7px">✕</button>
+      <button onClick="{{ dismissToast }}" aria-label="Stäng" style="flex:0 0 auto;width:32px;height:32px;display:flex;align-items:center;justify-content:center;background:transparent;border:none;color:color-mix(in srgb,var(--canvas) 70%,transparent);cursor:pointer;font-size:15px;border-radius:7px">✕</button>
     </div>
   </sc-if>
 
@@ -695,7 +602,7 @@
             <div class="eyebrow" style="margin-bottom:12px">Inspelning</div>
             <h2 class="disp" style="font-size:26px;margin:0;overflow:hidden;text-overflow:ellipsis">{{ modalName }}</h2>
           </div>
-          <button onClick="{{ closeModal }}" aria-label="Stäng" style="flex:0 0 auto;width:34px;height:34px;display:flex;align-items:center;justify-content:center;background:var(--surface);border:1px solid var(--line);border-radius:9px;color:var(--ink-2);cursor:pointer;font-size:15px">✕</button>
+          <button onClick="{{ closeModal }}" aria-label="Stäng" style="flex:0 0 auto;width:36px;height:36px;display:flex;align-items:center;justify-content:center;background:var(--surface);border:1px solid var(--line);border-radius:9px;color:var(--ink-2);cursor:pointer;font-size:15px">✕</button>
         </div>
         <div style="display:flex;gap:24px;align-items:baseline;margin-bottom:18px;flex-wrap:wrap">
           <span style="display:inline-flex;align-items:baseline;gap:8px"><span class="win_lbl">Datum</span><span style="font-size:14px;color:var(--ink-2);font-variant-numeric:tabular-nums">{{ modalDate }}</span></span>
@@ -732,7 +639,7 @@
       <div onClick="{{ stopProp }}" data-modal-card="{{ assignAnim }}" style="width:min(92vw,440px);background:var(--surface);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);padding:24px 26px">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:4px">
           <h2 style="font-size:20px;font-weight:600;letter-spacing:-0.02em;margin:0">Tilldela lektion</h2>
-          <button onClick="{{ cancelAssign }}" aria-label="Stäng" style="flex:0 0 auto;width:32px;height:32px;display:flex;align-items:center;justify-content:center;background:var(--surface);border:1px solid var(--line);border-radius:9px;color:var(--ink-2);cursor:pointer;font-size:15px">✕</button>
+          <button onClick="{{ cancelAssign }}" aria-label="Stäng" style="flex:0 0 auto;width:36px;height:36px;display:flex;align-items:center;justify-content:center;background:var(--surface);border:1px solid var(--line);border-radius:9px;color:var(--ink-2);cursor:pointer;font-size:15px">✕</button>
         </div>
         <p style="margin:0 0 18px;color:var(--ink-2);font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ assignName }}</p>
         <div style="display:flex;flex-direction:column;gap:14px;margin-bottom:22px">
@@ -768,7 +675,7 @@
             <div class="eyebrow" style="margin-bottom:11px">Insikter</div>
             <h2 class="disp" style="font-size:24px;margin:0;overflow:hidden;text-overflow:ellipsis">{{ modalName }}</h2>
           </div>
-          <button onClick="{{ closeModal }}" aria-label="Stäng" style="flex:0 0 auto;width:34px;height:34px;display:flex;align-items:center;justify-content:center;background:var(--surface);border:1px solid var(--line);border-radius:9px;color:var(--ink-2);cursor:pointer;font-size:15px">✕</button>
+          <button onClick="{{ closeModal }}" aria-label="Stäng" style="flex:0 0 auto;width:36px;height:36px;display:flex;align-items:center;justify-content:center;background:var(--surface);border:1px solid var(--line);border-radius:9px;color:var(--ink-2);cursor:pointer;font-size:15px">✕</button>
         </div>
         <div style="font-size:14px;color:var(--ink-2);margin-bottom:18px">{{ modalDate }} · {{ modalTag }}</div>
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px">
@@ -814,7 +721,7 @@
             <span style="font-family:var(--mono);font-size:10.5px;font-weight:500;letter-spacing:0.08em;color:var(--c-sage);background:color-mix(in srgb,var(--c-sage) 13%,transparent);border:1px solid color-mix(in srgb,var(--c-sage) 28%,transparent);padding:3px 9px;border-radius:6px;display:inline-block;margin-bottom:8px">TRANSKRIPT</span>
             <h2 style="font-size:20px;font-weight:600;letter-spacing:-0.02em;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ transcriptName }}</h2>
           </div>
-          <button onClick="{{ closeTranscript }}" aria-label="Stäng" style="flex:0 0 auto;width:34px;height:34px;display:flex;align-items:center;justify-content:center;background:var(--surface);border:1px solid var(--line);border-radius:9px;color:var(--ink-2);cursor:pointer;font-size:15px">✕</button>
+          <button onClick="{{ closeTranscript }}" aria-label="Stäng" style="flex:0 0 auto;width:36px;height:36px;display:flex;align-items:center;justify-content:center;background:var(--surface);border:1px solid var(--line);border-radius:9px;color:var(--ink-2);cursor:pointer;font-size:15px">✕</button>
         </div>
         <div data-hidescroll style="overflow:auto;overscroll-behavior:contain;padding:14px 26px 24px;min-height:0">
           <sc-for list="{{ fullTranscript }}" as="p" hint-placeholder-count="8">
@@ -841,7 +748,7 @@
               <span style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2)"><span style="width:12px;height:12px;border-radius:4px;background:color-mix(in srgb,var(--accent) 16%,transparent);border:1px solid color-mix(in srgb,var(--accent) 45%,transparent)"></span>språk &amp; skiljetecken</span>
             </div>
           </div>
-          <button onClick="{{ closeClean }}" aria-label="Stäng" style="flex:0 0 auto;width:34px;height:34px;display:flex;align-items:center;justify-content:center;background:var(--surface);border:1px solid var(--line);border-radius:9px;color:var(--ink-2);cursor:pointer;font-size:15px">✕</button>
+          <button onClick="{{ closeClean }}" aria-label="Stäng" style="flex:0 0 auto;width:36px;height:36px;display:flex;align-items:center;justify-content:center;background:var(--surface);border:1px solid var(--line);border-radius:9px;color:var(--ink-2);cursor:pointer;font-size:15px">✕</button>
         </div>
         <div data-hidescroll style="overflow:auto;overscroll-behavior:contain;padding:14px 26px 24px;min-height:0">
           <sc-for list="{{ fullCleanSegs }}" as="seg" hint-placeholder-count="12">
@@ -876,8 +783,9 @@
         </sc-if>
         <button onClick="{{ ovExport }}" style="flex:0 0 auto;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:8px;padding:7px 13px;font-size:12.5px;font-weight:500;cursor:pointer;font-family:inherit">Exportera</button>
       </div>
-      <div data-hidescroll style="flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;padding:24px 24px 14px">
-        <div style="max-width:820px;margin:0 auto">
+      <div style="flex:1;min-height:0;display:flex">
+      <div data-hidescroll data-ovscroll style="flex:1;min-width:0;overflow:auto;overscroll-behavior:contain;padding:24px 28px 20px">
+        <div style="max-width:760px;margin:0 auto">
           <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
             <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3)">Transkription</span>
             <div style="flex:1;height:1px;background:var(--line)"></div>
@@ -885,7 +793,7 @@
           </div>
           <sc-for list="{{ ovRows }}" as="p" hint-placeholder-count="8">
             <sc-if value="{{ p.hit }}" hint-placeholder-val="{{ false }}">
-              <div style="display:flex;gap:16px;padding:11px 14px;margin:2px -14px;background:var(--accent-weak);border:1px solid color-mix(in srgb,var(--accent) 40%,var(--line));border-radius:8px">
+              <div data-ovhit="1" style="display:flex;gap:16px;padding:11px 14px;margin:2px -14px;background:var(--accent-weak);border:1px solid color-mix(in srgb,var(--accent) 40%,var(--line));border-radius:8px">
                 <span style="font-variant-numeric:tabular-nums;font-family:var(--mono);font-size:11px;color:var(--accent);flex:0 0 auto;width:48px;padding-top:3px;font-weight:500">{{ p.t }}</span>
                 <span style="font-size:15.5px;color:var(--ink);line-height:1.6;font-weight:500">{{ p.txt }}</span>
               </div>
@@ -899,8 +807,14 @@
           </sc-for>
         </div>
       </div>
-      <div data-modal-card="{{ lessonChatAnim }}" style="flex:0 0 auto;margin:0 auto 16px;width:min(880px,94vw);background:var(--surface);border:1px solid var(--ink);border-radius:13px;box-shadow:var(--shadow);overflow:hidden">
-        <div data-hidescroll style="max-height:34vh;overflow:auto;overscroll-behavior:contain;padding:14px 18px;display:flex;flex-direction:column;gap:11px">
+      <div data-side="{{ lessonChatAnim }}" style="flex:0 0 clamp(330px,36vw,440px);min-width:0;display:flex;flex-direction:column;border-left:1px solid var(--line);background:var(--surface)">
+        <div style="flex:0 0 auto;display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--line)">
+          <span class="ai-blink" style="width:6px;height:6px;border-radius:50%;background:var(--accent);flex:0 0 auto"></span>
+          <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3)">Fråga lektionen</span>
+          <span style="flex:1"></span>
+          <span title="Språkmodell: Qwen3 14B" style="font-family:var(--mono);font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-3);cursor:help">Körs lokalt</span>
+        </div>
+        <div data-hidescroll style="flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;padding:14px 16px;display:flex;flex-direction:column;gap:11px">
           <sc-if value="{{ lessonChatEmpty }}" hint-placeholder-val="{{ true }}">
             <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center">
               <button onClick="{{ ovAskSum }}" style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2);background:var(--sunken);border:1px solid var(--line);border-radius:99px;padding:7px 13px;cursor:pointer;font-family:inherit;transition:border-color .12s,color .12s" style-hover="border-color:var(--accent);color:var(--accent)">Sammanfatta lektionen</button>
@@ -911,7 +825,7 @@
           </sc-if>
           <sc-for list="{{ lessonChatMsgs }}" as="m" hint-placeholder-count="2">
             <sc-if value="{{ m.isUser }}" hint-placeholder-val="{{ false }}">
-              <div style="align-self:flex-end;max-width:82%;background:var(--ink);color:var(--canvas);border-radius:11px 11px 3px 11px;padding:9px 13px;font-size:14px;line-height:1.55">{{ m.text }}</div>
+              <div style="align-self:flex-end;max-width:82%;background:var(--accent-weak);color:var(--ink);border:1px solid color-mix(in srgb,var(--accent) 25%,transparent);border-radius:11px 11px 3px 11px;padding:9px 13px;font-size:14px;line-height:1.55">{{ m.text }}</div>
             </sc-if>
             <sc-if value="{{ m.isAssistant }}" hint-placeholder-val="{{ true }}">
               <div style="align-self:flex-start;max-width:92%;font-size:14.5px;color:var(--ink);line-height:1.65">
@@ -919,84 +833,67 @@
                 <sc-if value="{{ m.hasSources }}" hint-placeholder-val="{{ true }}">
                   <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
                     <sc-for list="{{ m.sources }}" as="src" hint-placeholder-count="2">
-                      <button onClick="{{ src.onToggle }}" style="display:inline-flex;align-items:center;gap:6px;background:var(--surface);border:1px solid color-mix(in srgb,var(--accent) 40%,var(--line));color:var(--accent);border-radius:8px;padding:4px 10px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;font-variant-numeric:tabular-nums" style-hover="background:var(--accent-weak)"><span style="width:6px;height:6px;border-radius:2px;background:var(--accent)"></span>{{ src.t }}</button>
+                      <button onClick="{{ src.onToggle }}" title="Visa var i transkriptet detta kommer ifrån" style="display:inline-flex;align-items:center;gap:6px;background:var(--surface);border:1px solid color-mix(in srgb,var(--accent) 45%,var(--line));color:var(--ink);border-radius:8px;padding:4px 10px;font-family:var(--mono);font-size:11px;font-weight:600;cursor:pointer;font-variant-numeric:tabular-nums;transition:border-color .12s,background .12s,transform .1s;animation:tokIn .18s ease-out both" style-active="transform:scale(.97)" style-hover="background:var(--accent-weak)"><span style="width:6px;height:6px;border-radius:2px;background:var(--accent)"></span>{{ src.t }}</button>
                     </sc-for>
-                  </div>
-                </sc-if>
-                <sc-if value="{{ m.openSource }}" hint-placeholder-val="{{ false }}">
-                  <div style="margin-top:8px;background:var(--sunken);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:0 9px 9px 0;padding:9px 12px">
-                    <div style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-3);margin-bottom:6px">Ur transkriptet · {{ m.openSourceT }}</div>
-                    <div style="font-size:13px;color:var(--ink-2);line-height:1.55">{{ m.openSourceText }}</div>
                   </div>
                 </sc-if>
               </div>
             </sc-if>
           </sc-for>
           <sc-if value="{{ lessonChatTyping }}" hint-placeholder-val="{{ false }}">
-            <div style="align-self:flex-start;display:flex;align-items:center;gap:9px;color:var(--ink-2);font-size:13px;padding:4px 0"><span style="width:13px;height:13px;border-radius:50%;border:2px solid var(--line-2);border-top-color:var(--accent);animation:spin .7s linear infinite"></span>Söker i transkriptet<span class="insp-dots" style="color:var(--ink-3)"><i></i><i></i><i></i></span></div>
+            <div style="align-self:flex-start;display:flex;align-items:center;gap:9px;color:var(--ink-2);font-size:13px;padding:4px 0"><span style="width:13px;height:13px;border-radius:50%;border:2px solid var(--line-2);border-top-color:var(--accent);animation:spin .7s linear infinite"></span>Söker i transkriptet …</div>
           </sc-if>
           <sc-if value="{{ ovHasEvent }}" hint-placeholder-val="{{ false }}">
             <div style="border:1px dashed var(--line-2);background:var(--sunken);border-radius:10px;padding:11px 13px;animation:fadeup .3s ease both">
               <sc-if value="{{ ovEventNotAdded }}" hint-placeholder-val="{{ true }}">
-                <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:9px">
-                  <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-3)">Förslag → Google Kalender</span>
-                  <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.07em;text-transform:uppercase;color:var(--ok)">● ansluten</span>
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:9px">
+                  <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-3);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Förslag → Kalender</span>
+                  <span style="flex:1"></span>
+                  <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:var(--ok)">● ansluten</span>
+                  <button onClick="{{ dismissOvEvent }}" aria-label="Avvisa förslaget" title="Avvisa förslaget" style="border:none;background:transparent;color:var(--ink-3);cursor:pointer;font-size:12px;padding:2px 6px;font-family:inherit;border-radius:6px;transition:color .12s;white-space:nowrap;flex:0 0 auto" style-hover="color:var(--ink)">✕ Avvisa</button>
                 </div>
                 <div style="display:flex;gap:8px;flex-wrap:wrap">
-                  <input value="{{ ovEventTitle }}" onChange="{{ setOvEventTitle }}" style="flex:2 1 220px;min-width:0;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 11px;font-size:13.5px;font-weight:500;font-family:inherit;color:var(--ink)">
-                  <span title="Ändra dag och tid via AI-chatten nedan" style="flex:1 1 160px;min-width:0;display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--sunken);border-radius:8px;padding:8px 11px;font-size:13px;font-family:inherit;color:var(--ink);font-variant-numeric:tabular-nums;white-space:nowrap"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="flex:0 0 auto"><rect x="2" y="3" width="12" height="11" rx="2"></rect><path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3"></path></svg><span style="min-width:0;overflow:hidden;text-overflow:ellipsis">{{ ovEventWhen }}</span></span>
-                  <button onClick="{{ addOvEvent }}" style="flex:0 0 auto;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Lägg till ✓</button>
+                  <input value="{{ ovEventTitle }}" onChange="{{ setOvEventTitle }}" onKeyDown="{{ onOvTitleKey }}" style="flex:2 1 220px;min-width:0;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 12px;font-size:13.5px;font-weight:500;font-family:inherit;color:var(--ink)">
+                  <button onClick="{{ toggleOvPick }}" title="Välj dag och tid" style="flex:1 1 160px;min-width:0;display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 12px;font-size:13px;font-family:inherit;color:var(--ink);cursor:pointer;font-variant-numeric:tabular-nums;white-space:nowrap;transition:border-color .14s" style-hover="border-color:var(--ink-3)"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="flex:0 0 auto"><rect x="2" y="3" width="12" height="11" rx="2"></rect><path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3"></path></svg><span style="min-width:0;overflow:hidden;text-overflow:ellipsis">{{ ovEventWhen }}</span><span style="flex:1"></span><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto"><path d="M4 6l4 4 4-4"></path></svg></button>
+                  <button onClick="{{ addOvEvent }}" style="flex:0 0 auto;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .15s,transform .1s" style-hover="background:var(--accent)" style-active="transform:scale(.97)">Lägg till</button>
                 </div>
-                <div style="margin-top:9px">
-                  <div style="font-family:var(--mono);font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);margin-bottom:5px">Anteckning i kalenderposten</div>
-                  <textarea value="{{ ovEventDesc }}" onChange="{{ setOvEventDesc }}" rows="2" style="width:100%;box-sizing:border-box;resize:vertical;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 11px;font-size:13px;line-height:1.5;font-family:inherit;color:var(--ink);outline:none"></textarea>
-                </div>
-                <div style="margin-top:10px;border-top:1px dashed var(--line-2);padding-top:10px">
-                  <div style="display:flex;align-items:center;gap:7px;margin-bottom:8px">
-                    <span class="ai-blink" style="width:6px;height:6px;border-radius:50%;background:var(--accent);flex:0 0 auto"></span>
-                    <span style="font-family:var(--mono);font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3)">Ändra förslaget med lokal AI — tid, datum &amp; innehåll</span>
-                  </div>
-                  <sc-for list="{{ ovAiMsgs }}" as="am" hint-placeholder-count="1">
-                    <sc-if value="{{ am.isUser }}" hint-placeholder-val="{{ false }}">
-                      <div style="display:flex;justify-content:flex-end;margin-bottom:6px"><span style="max-width:82%;background:var(--ink);color:var(--canvas);border-radius:9px 9px 3px 9px;padding:6px 10px;font-size:12.5px;line-height:1.5">{{ am.text }}</span></div>
-                    </sc-if>
-                    <sc-if value="{{ am.isAi }}" hint-placeholder-val="{{ false }}">
-                      <div style="display:flex;justify-content:flex-start;margin-bottom:6px"><span style="max-width:88%;background:var(--surface);border:1px solid var(--line);border-radius:9px 9px 9px 3px;padding:6px 10px;font-size:12.5px;line-height:1.5;color:var(--ink)">{{ am.text }}</span></div>
-                    </sc-if>
-                  </sc-for>
-                  <sc-if value="{{ ovAiBusy }}" hint-placeholder-val="{{ false }}">
-                    <div style="display:flex;align-items:center;gap:8px;color:var(--ink-2);font-size:12px;margin-bottom:7px"><span style="width:11px;height:11px;border-radius:50%;border:2px solid var(--line-2);border-top-color:var(--accent);animation:spin .7s linear infinite;flex:0 0 auto"></span>Lokal modell läser transkriptet och uppdaterar förslaget …</div>
-                  </sc-if>
-                  <sc-if value="{{ ovAiEmpty }}" hint-placeholder-val="{{ false }}">
-                    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
-                      <button onClick="{{ ovAiChip1 }}" style="border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:99px;padding:5px 11px;font-size:12px;font-family:inherit;cursor:pointer;transition:border-color .12s,color .12s" style-hover="border-color:var(--accent);color:var(--accent)">”Flytta till fredag 10:00”</button>
-                      <button onClick="{{ ovAiChip2 }}" style="border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:99px;padding:5px 11px;font-size:12px;font-family:inherit;cursor:pointer;transition:border-color .12s,color .12s" style-hover="border-color:var(--accent);color:var(--accent)">”Lägg till läxan i anteckningen”</button>
-                      <button onClick="{{ ovAiChip3 }}" style="border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:99px;padding:5px 11px;font-size:12px;font-family:inherit;cursor:pointer;transition:border-color .12s,color .12s" style-hover="border-color:var(--accent);color:var(--accent)">”Kortare titel”</button>
+                <sc-if value="{{ evPickOvOpen }}" hint-placeholder-val="{{ false }}">
+                  <div style="display:grid;grid-template-columns:1fr;margin-top:12px;border:1px solid var(--line);border-radius:9px;background:var(--surface);overflow:hidden;animation:ml-popin .2s cubic-bezier(.16,1,.3,1) both">
+                    <div data-hidescroll style="border-bottom:1px solid var(--line);padding:8px;display:flex;flex-direction:column;gap:1px;max-height:148px;overflow:auto">
+                      <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);padding:3px 8px 6px">Dag</span>
+                      <sc-for list="{{ ovDayOpts }}" as="d2" hint-placeholder-count="4">
+                        <button onClick="{{ d2.onPick }}" data-q="{{ d2.curQ }}" style="display:flex;align-items:center;gap:8px;border:1px solid transparent;background:transparent;color:var(--ink);border-radius:6px;padding:6px 8px;font-size:13px;font-family:inherit;cursor:pointer;text-align:left;white-space:nowrap;transition:background .12s" style-hover="background:var(--sunken)"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis">{{ d2.label }}</span><span style="flex:1"></span><sc-if value="{{ d2.hasPre }}" hint-placeholder-val="{{ false }}"><span style="font-family:var(--mono);font-size:10px;letter-spacing:0.05em;text-transform:uppercase;color:var(--accent)">{{ d2.pre }}</span></sc-if></button>
+                      </sc-for>
                     </div>
-                  </sc-if>
-                  <div style="display:flex;gap:7px">
-                    <input value="{{ ovAiInput }}" onChange="{{ setOvAiInput }}" onKeyDown="{{ onOvAiKey }}" placeholder="T.ex. ”flytta till onsdag 14:30” eller ”lägg till att de ska repetera bråken” …" style="flex:1;min-width:0;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 11px;font-size:13px;font-family:inherit;color:var(--ink);outline:none">
-                    <button onClick="{{ sendOvAi }}" style="flex:0 0 auto;background:var(--accent-weak);color:var(--accent);border:1px solid var(--accent);border-radius:8px;padding:8px 13px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit">Ändra ✨</button>
+                    <div style="padding:8px">
+                      <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);padding:3px 8px 6px;display:block">Tid</span>
+                      <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:5px">
+                        <sc-for list="{{ ovTimeOpts }}" as="t3" hint-placeholder-count="8">
+                          <button onClick="{{ t3.onPick }}" data-q="{{ t3.curQ }}" style="border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:6px;padding:7px 4px;font-size:12.5px;font-family:inherit;cursor:pointer;font-variant-numeric:tabular-nums;text-align:center;transition:border-color .12s,background .12s,transform .1s" style-hover="border-color:var(--accent);background:var(--accent-weak)" style-active="transform:scale(.96)">{{ t3.label }}</button>
+                        </sc-for>
+                      </div>
+                    </div>
                   </div>
+                </sc-if>
+                <div style="margin-top:8px">
+                  <textarea value="{{ ovEventDesc }}" onChange="{{ setOvEventDesc }}" onFocus="{{ onOvDescFocus }}" onBlur="{{ onOvDescBlur }}" data-desc="{{ ovDescFlag }}" placeholder="Anteckning i kalenderposten …" aria-label="Anteckning i kalenderposten" style="width:100%;box-sizing:border-box;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 12px;font-size:13px;line-height:1.5;font-family:inherit;color:var(--ink);outline:none"></textarea>
+                  <div style="margin-top:6px;font-size:12px;color:var(--ink-3)">Ändra via chatten nedan — t.ex. ”flytta till onsdag 14:30”.</div>
                 </div>
               </sc-if>
               <sc-if value="{{ ovEventAdded }}" hint-placeholder-val="{{ false }}">
-                <div style="display:flex;align-items:center;gap:9px;font-size:13px;font-weight:500;color:var(--ok)"><span style="width:16px;height:16px;border-radius:50%;background:var(--ok);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:9px">✓</span>Tillagd i Google Kalender — {{ ovEventTitle }}</div>
+                <div style="display:flex;align-items:center;gap:9px;font-size:13px;font-weight:500;color:var(--ok)"><span style="width:16px;height:16px;border-radius:50%;background:var(--ok);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:9px;animation:okPop .25s cubic-bezier(0.22,1,0.36,1) both">✓</span>Tillagd i Google Kalender — {{ ovEventTitle }}</div>
               </sc-if>
             </div>
           </sc-if>
         </div>
-        <div style="border-top:1px solid var(--line);padding:10px 12px 7px">
+        <div style="border-top:1px solid var(--line);padding:10px 12px">
           <div style="display:flex;gap:8px;align-items:center">
             <button onClick="{{ proposeOvEvent }}" title="Föreslå kalenderhändelse från lektionen" aria-label="Kalenderhändelse" style="flex:0 0 auto;width:42px;height:42px;display:flex;align-items:center;justify-content:center;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:9px;cursor:pointer;transition:border-color .12s,color .12s" style-hover="border-color:var(--accent);color:var(--accent)"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="2" y="3" width="12" height="11" rx="2"></rect><path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3M8 9v3M6.5 10.5h3"></path></svg></button>
             <input value="{{ lessonChatInput }}" onChange="{{ setLessonChatInput }}" onKeyDown="{{ onLessonChatKey }}" placeholder="Fråga lektionen — svar med tidsstämplar …" style="flex:1;min-width:0;background:var(--canvas);border:1px solid var(--line);color:var(--ink);border-radius:9px;padding:11px 13px;font-size:14.5px;font-family:inherit;outline:none">
             <button onClick="{{ sendLessonChat }}" style="flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:9px;padding:11px 18px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;transition:background .15s" style-hover="background:var(--accent)">Skicka</button>
           </div>
-          <div style="display:flex;align-items:center;justify-content:center;gap:7px;margin-top:6px">
-            <span class="ai-blink" style="width:5px;height:5px;border-radius:50%;background:var(--accent);flex:0 0 auto"></span>
-            <span style="font-family:var(--mono);font-size:8.5px;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-3)">Qwen3 14B · körs lokalt · svar förankras i denna lektions transkript</span>
-          </div>
         </div>
+      </div>
       </div>
     </div>
   </sc-if>
@@ -1007,9 +904,9 @@
       <div onClick="{{ stopProp }}" data-modal-card="{{ renameAnim }}" style="width:min(92vw,440px);background:var(--surface);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);padding:24px 26px">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:5px">
           <h2 style="font-size:20px;font-weight:600;letter-spacing:-0.02em;margin:0">Döp om inspelning</h2>
-          <button onClick="{{ cancelRename }}" aria-label="Stäng" style="flex:0 0 auto;width:32px;height:32px;display:flex;align-items:center;justify-content:center;background:var(--surface);border:1px solid var(--line);border-radius:9px;color:var(--ink-2);cursor:pointer;font-size:15px">✕</button>
+          <button onClick="{{ cancelRename }}" aria-label="Stäng" style="flex:0 0 auto;width:36px;height:36px;display:flex;align-items:center;justify-content:center;background:var(--surface);border:1px solid var(--line);border-radius:9px;color:var(--ink-2);cursor:pointer;font-size:15px">✕</button>
         </div>
-        <p style="margin:0 0 18px;color:var(--ink-2);font-size:14px;line-height:1.5">Namnet skapades automatiskt av Qwen utifrån transkriptet. Ändra det för att koppla inspelningen till rätt lektion.</p>
+        <p style="margin:0 0 18px;color:var(--ink-2);font-size:14px;line-height:1.5">Namnet föreslogs automatiskt utifrån transkriptet. Ändra det för att koppla inspelningen till rätt lektion.</p>
         <div style="display:flex;flex-direction:column;gap:14px;margin-bottom:22px">
           <label style="display:flex;flex-direction:column;gap:7px">
             <span style="font-size:13px;font-weight:500;color:var(--ink-2)">Namn</span>
@@ -1034,7 +931,21 @@
     </div>
   </sc-if>
 </div>
-</x-dc>
+
+
+  <!-- Anteckning — inzoomad redigeringsmodal -->
+  <sc-if value="{{ descModalOpen }}" hint-placeholder-val="{{ false }}">
+    <div data-modal-back="{{ descModalAnim }}" onClick="{{ closeDescModal }}" style="position:fixed;inset:0;z-index:95;background:color-mix(in srgb,var(--ink) 32%,transparent);display:flex;align-items:center;justify-content:center;padding:32px">
+      <div data-modal-card="{{ descModalAnim }}" onClick="{{ stopModalProp }}" style="width:min(680px,92vw);height:min(64vh,520px);display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--ink);border-radius:14px;box-shadow:var(--shadow);overflow:hidden">
+        <div style="display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--line)">
+          <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3)">Anteckning i kalenderposten</span>
+          <span style="flex:1"></span>
+          <span style="font-size:12px;color:var(--ink-3)">Sparas direkt · klicka utanför för att stänga</span>
+        </div>
+        <textarea value="{{ descModalVal }}" onChange="{{ setDescModalVal }}" data-hidescroll aria-label="Anteckning i kalenderposten — redigering" style="flex:1;min-height:0;width:100%;box-sizing:border-box;border:none;background:var(--surface);padding:18px 20px;font-size:15px;line-height:1.65;font-family:inherit;color:var(--ink);outline:none;resize:none;overflow:auto;scrollbar-width:none"></textarea>
+      </div>
+    </div>
+  </sc-if></x-dc>
 <script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1120,&quot;height&quot;:820},&quot;accent&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#2C6E9E&quot;,&quot;options&quot;:[&quot;#2C6E9E&quot;,&quot;#5B3A6E&quot;,&quot;#5C7E40&quot;,&quot;#E5634D&quot;],&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Utseende&quot;},&quot;cardZoom&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Rörelse&quot;},&quot;serifFigures&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Typografi&quot;}}">
 class Component extends DCLogic {
   state = {
@@ -1107,13 +1018,21 @@ class Component extends DCLogic {
 
   PERSIST_KEYS = ['theme', 'tab', 'step', 'queue', 'lang', 'srt', 'txt', 'vtt', 'resultLang', 'ppMode', 'ppClean', 'ppSummary', 'ppChat', 'searchMode', 'logOpen', 'filterClass', 'filterCourse', 'recordings', 'filterDate', 'installed', 'disk', 'history', 'lessons', 'tPhase'];
   componentDidMount() {
+    this._escFn = (e) => {
+      if (e.key !== 'Escape') return;
+      if (this.state.descModal && !this.state.descModalClosing) { this.closeDescModal(); return; }
+      if (this.state.askZoom && !this.state.askZoomClosing) { this.closeAskZoom(); return; }
+      if (this.state.evPick) { this.set({ evPick: null }); return; }
+      if (this.state.lessonChat && !this.state.lessonChatClosing) this.closeLessonChat();
+    };
+    window.addEventListener('keydown', this._escFn);
     try {
       const saved = JSON.parse(localStorage.getItem('transkribera-template') || '{}');
       if (saved && typeof saved === 'object' && Object.keys(saved).length) {
         const merged = { ...saved };
         if (merged.tab === 'modeller') merged.tab = 'transkribera';
         if (merged.tab === 'historik' || merged.tab === 'lektioner') merged.tab = 'inspelningar';
-        if (merged.tPhase === 'running') merged.tPhase = 'done';
+        if (merged.tPhase === 'running' || merged.tPhase === 'done') { merged.tPhase = 'idle'; merged.step = 0; }
         this.setState(s => {
           const ns = { ...s, ...merged, downloading: {}, recording: false, recElapsed: 0, modal: null, assign: null, toast: null, searching: false, searchResult: null, search: '', diskOpen: false, ask: { status: 'idle', q: '', scanIdx: 0, hits: [], tokensN: 0, event: null, answerTokens: [], refs: [] }, answerOpen: false, answerClosing: false, recRename: null, chatOpen: null, filterOpen: null, inspMode: 'ai', inspQuery: '' };
           ns.installed = { ...s.installed, ...(merged.installed || {}) };
@@ -1138,7 +1057,6 @@ class Component extends DCLogic {
           if (!ns.ppChat) ns.ppChat = { msgs: [], status: 'idle' };
           else ns.ppChat = { msgs: (ns.ppChat.msgs || []).filter(m => m && (m.text || m.tokens)), status: 'idle' };
           if (ns.ppMode === 'clean' || ns.ppMode === 'summary') ns.ppMode = 'chat';
-          if (ns.tPhase === 'done') { ns.tProgress = 100; ns.tLogN = 5; ns.tElapsed = 6.2; }
           return ns;
         });
       }
@@ -1146,6 +1064,14 @@ class Component extends DCLogic {
     this.applyAccent();
     this._esc = (e) => {
       if (e.key !== 'Escape') return;
+      if (this.state.filterOpen) { if (this.fltTimer) clearTimeout(this.fltTimer); this.set({ filterOpen: null, filterClosing: false }); return; }
+      if (this.state.evPick) { this.set({ evPick: null }); return; }
+      if (this.state.recording && !this.state.recClosing) { this.cancelRecording(); return; }
+      if (this.state.recRename && !this.state.renameClosing) { this.cancelRename(); return; }
+      if (this.state.assign && !this.state.assignClosing) { this.cancelAssign(); return; }
+      if (this.state.cleanOpen && !this.state.cleanClosing) { this.closeClean(); return; }
+      if (this.state.transcriptOpen && !this.state.transcriptClosing) { this.closeTranscript(); return; }
+      if (this.state.modal && !this.state.modalClosing) { this.closeModal(); return; }
       if (this.state.lessonChat && !this.state.lessonChatClosing) { this.closeLessonChat(); return; }
       if (this.state.tab === 'inspelningar' && this.state.ask.status !== 'idle') this.clearAsk();
     };
@@ -1161,12 +1087,15 @@ class Component extends DCLogic {
   }
   componentWillUnmount() {
     [this.tTimer, this.recTimer, this.toastTimer, this.searchTimer, this.askTimer].forEach(t => t && clearInterval(t));
+    if (this._escFn) window.removeEventListener('keydown', this._escFn);
     if (this._scrollStop) this._scrollStop();
     if (this.ppTimer) { clearInterval(this.ppTimer); clearTimeout(this.ppTimer); }
     if (this.transcriptTimer) clearTimeout(this.transcriptTimer);
     if (this.cleanTimer) clearTimeout(this.cleanTimer);
     if (this.answerTimer) clearTimeout(this.answerTimer);
     [this.modalTimer, this.assignTimer, this.renameTimer, this.recCloseTimer, this.fltTimer].forEach(t => t && clearTimeout(t));
+    if (this.followTimer) { clearInterval(this.followTimer); this.followTimer = null; }
+    if (this.whenFlashTimer) { clearTimeout(this.whenFlashTimer); this.whenFlashTimer = null; }
     this.lockScroll(false);
     if (this._esc) document.removeEventListener('keydown', this._esc);
     Object.values(this.dlTimers || {}).forEach(t => clearInterval(t));
@@ -1342,7 +1271,10 @@ class Component extends DCLogic {
   addFiles(list) {
     const files = list ? Array.from(list) : [];
     if (!files.length) return;
-    this.set({ queue: [...this.state.queue, ...files.map(f => ({ name: f.name, ext: this.extOf(f.name) }))], step: 1 });
+    const existing = new Set(this.state.queue.map(f => f.name));
+    const fresh = files.filter(f => !existing.has(f.name));
+    if (fresh.length < files.length) this.toast((files.length - fresh.length) + (files.length - fresh.length === 1 ? ' fil låg redan i kön' : ' filer låg redan i kön'));
+    this.set({ queue: [...this.state.queue, ...fresh.map(f => ({ name: f.name, ext: this.extOf(f.name) }))], step: 1 });
     this.saveSoon();
   }
   onFiles(e) { this.addFiles(e.target && e.target.files); if (e.target) e.target.value = ''; }
@@ -1356,25 +1288,41 @@ class Component extends DCLogic {
   }
 
   // ---------- transcribe simulation ----------
-  clearT() { if (this.tTimer) { clearInterval(this.tTimer); this.tTimer = null; } }
+  clearT() { if (this.tTimer) { clearInterval(this.tTimer); this.tTimer = null; } if (this.finishTimer) { clearTimeout(this.finishTimer); this.finishTimer = null; } }
   startTranscribe() {
     if (!this.state.queue.length) { this.toast('Lägg till minst en fil först'); return; }
     this.clearT();
     this.set({ step: 2, tPhase: 'running', tProgress: 0, tElapsed: 0, tLogN: 1, ppClean: { status: 'idle', segN: 0 }, ppSummary: { status: 'idle', text: '' }, ppChat: { msgs: [], status: 'idle' }, ppQuestion: '' });
-    const TOTAL = 6.2;
+    const TOTAL = 7.6;
     this.tTimer = setInterval(() => {
       this.setState(s => {
         const el = s.tElapsed + 0.1;
-        if (el >= TOTAL) { this.clearT(); this.saveSoon(); setTimeout(() => this.scrollFollow('[data-follow="done"]'), 120); return { tElapsed: TOTAL, tProgress: 100, tLogN: 5, tPhase: 'done' }; }
+        if (el >= TOTAL) { this.clearT(); this.saveSoon(); this.finishTimer = setTimeout(() => this.finishTranscribe(), 1400); return { tElapsed: TOTAL, tProgress: 100, tLogN: 7, tPhase: 'done' }; }
         let n = 1;
         if (el >= 0.4) n = 2;
         if (el >= 1.7) n = 3;
         if (el >= 3.4) n = 4;
+        if (el >= 4.6) n = 5;
+        if (el >= 5.8) n = 6;
         return { tElapsed: el, tProgress: Math.min(99, (el / TOTAL) * 100), tLogN: n };
       });
     }, 100);
   }
-  resetWizard() { this.clearT(); this.clearPP(); this.set({ step: 0, tPhase: 'idle', tProgress: 0, tElapsed: 0, tLogN: 1, ppClean: { status: 'idle', segN: 0 }, ppSummary: { status: 'idle', text: '' }, ppChat: { msgs: [], status: 'idle' }, ppQuestion: '' }); this.saveSoon(); }
+  finishTranscribe() {
+    this.finishTimer = null;
+    const now = new Date();
+    const iso = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+    const recs = this.state.queue.filter(f => !f.bad).map((f, i) => ({ id: 'rn' + Date.now() + '_' + i, title: f.name.replace(/\.[^.]+$/, ''), klass: null, kurs: null, sal: '', datum: iso, date: 'nyss', dur: '31:20', days: 0, ai: false, terms: '' }));
+    this.setState(s => ({ recordings: [...recs, ...s.recordings], tab: 'inspelningar', step: 0, queue: [], tPhase: 'idle', tProgress: 0, tElapsed: 0, tLogN: 1 }));
+    this.saveSoon();
+    this.toast(recs.length === 1 ? 'Transkriberad och korrekturläst — sparad i Inspelningar' : recs.length + ' filer transkriberade — sparade i Inspelningar');
+  }
+  resetWizard() { this.clearT(); this.clearPP(); this.set({ step: 0, queue: [], tPhase: 'idle', tProgress: 0, tElapsed: 0, tLogN: 1, ppClean: { status: 'idle', segN: 0 }, ppSummary: { status: 'idle', text: '' }, ppChat: { msgs: [], status: 'idle' }, ppQuestion: '' }); this.saveSoon(); }
+  addToQueue(item) {
+    if (this.state.queue.some(f => f.name === item.name)) { this.toast('”' + item.name + '” ligger redan i kön'); this.set({ step: 1 }); return; }
+    this.set({ queue: [...this.state.queue, item], step: 1 }); this.saveSoon();
+  }
+  onPpKey(e) { if (e.key === 'Enter') { e.preventDefault(); this.sendChat(); } }
 
   // ---------- recording ----------
   clearRec() { if (this.recTimer) { clearInterval(this.recTimer); this.recTimer = null; } }
@@ -1711,7 +1659,8 @@ class Component extends DCLogic {
           const n = a.tokensN + 1;
           if (n >= (a.answerTokens || []).length) {
             clearInterval(this.askTimer); this.askTimer = null;
-            return { ask: { ...a, tokensN: n, status: 'done', event: { title: '9B — Läxförhör: täljare och nämnare', when: 'mån 7 jul · 09:10', added: false } } };
+            setTimeout(() => this.expandCalBox(), 250);
+            return { ask: { ...a, tokensN: n, status: 'done', event: { title: '9B — Läxförhör: täljare och nämnare', when: 'mån 7 jul · 09:10', added: false, desc: 'Läxförhör på begreppen täljare och nämnare. Citat: ”Ett bråk består av en täljare och en nämnare.” — Bråk och procent [00:16], länk till inspelningen bifogas.' } } };
           }
           return { ask: { ...a, tokensN: n } };
         }
@@ -1720,8 +1669,83 @@ class Component extends DCLogic {
     }, 340);
   }
   clearAsk() { if (this.askTimer) { clearInterval(this.askTimer); this.askTimer = null; } this.set({ ask: { status: 'idle', q: '', scanIdx: 0, hits: [], tokensN: 0, event: null, answerTokens: [], refs: [] } }); }
+  toggleAskCite(ref, t) {
+    this.setState(st => {
+      const oc = st.ask.openCite;
+      const same = oc && oc.ref === ref && oc.t === t;
+      return { ask: { ...st.ask, openCite: same ? null : { ref, t } } };
+    });
+  }
+  askCiteView() {
+    const oc = this.state.ask.openCite;
+    const ref = oc ? (this.state.ask.refs || [])[oc.ref] : null;
+    if (!ref) return { open: false, rec: '', meta: '', lines: [] };
+    return {
+      open: true, rec: ref.rec,
+      meta: (ref.klass ? ref.klass + ' · ' : '') + (oc.t || ref.t),
+      lines: (ref.ctx || []).map((c, ci) => ({ key: ci, t: c.t, s: c.s, curFlag: (oc.t ? c.t === oc.t : !!c.hit) ? 'cur' : '' }))
+    };
+  }
   setAskEvent(k, v) { this.setState(st => st.ask.event ? { ask: { ...st.ask, event: { ...st.ask.event, [k]: v } } } : {}); }
-  addAskEvent() { this.setState(st => st.ask.event ? { ask: { ...st.ask, event: { ...st.ask.event, added: true } }, evPick: null } : {}); this.toast('Tillagd i Google Kalender'); }
+  setAskFollow(e) { const v = e.target.value; this.setState(st => ({ ask: { ...st.ask, followInput: v } })); }
+  onAskFollowKey(e) { if (e.key === 'Enter') { e.preventDefault(); this.sendAskFollow(); } }
+  sendAskFollow() {
+    const q = (this.state.ask.followInput || '').trim();
+    if (!q) { this.toast('Skriv en följdfråga först'); return; }
+    const ev = this.state.ask.event;
+    let ref = null;
+    const dayM = q.match(/måndag|tisdag|onsdag|torsdag|fredag|mån|tis|ons|tors|fre/i);
+    const timeM = q.match(/(\d{1,2})[:.](\d{2})/);
+    const isCal = /flytta|ändra|byt|kalender|boka|döp|titel/i.test(q) || dayM || timeM;
+    let reply;
+    if (isCal && ev && !ev.added) {
+      const bits = (ev.when || '').split(' · ');
+      let day = bits[0] || 'mån 7 jul';
+      if (dayM) { try { const opts = this.evDays().map(d => typeof d === 'string' ? d : (d.label || d.day || '')); const hit = opts.find(o => o.toLowerCase().startsWith(dayM[0].toLowerCase().slice(0, 3))); if (hit) day = hit; } catch (err) {} }
+      const time = timeM ? (timeM[1].padStart(2, '0') + ':' + timeM[2]) : (bits[1] || '09:10');
+      this.setAskEvent('when', day + ' · ' + time);
+      reply = 'Klart — kalenderförslaget är uppdaterat till ' + day + ' · ' + time + '. Justera fritt i förslagsrutan och tryck ”Lägg till” när det ser rätt ut.';
+      if (this.whenFlashTimer) clearTimeout(this.whenFlashTimer);
+      this.setState(st => ({ ask: { ...st.ask, whenFlash: true } }));
+      this.whenFlashTimer = setTimeout(() => this.setState(st => ({ ask: { ...st.ask, whenFlash: false } })), 2200);
+      this.expandCalBox();
+    } else {
+      ref = { rec: 'Bråk och procent', t: '12:30' };
+      reply = 'Utifrån de ' + ((this.state.ask.refs || []).length || 2) + ' lektioner frågan träffade: begreppen återkommer 12:30 in i ”Bråk och procent”, där täljare och nämnare kopplas till procenträkning.';
+    }
+    this.setState(st => ({ ask: { ...st.ask, followInput: '', followups: [...(st.ask.followups || []), { q, a: '', full: reply, ref }] } }));
+    setTimeout(() => this.scrollAskChat(true), 60);
+    if (this.followTimer) clearInterval(this.followTimer);
+    this.followTimer = setInterval(() => {
+      this.setState(st => {
+        const fs = st.ask.followups || []; if (!fs.length) return {};
+        const last = fs[fs.length - 1];
+        if (last.a.length >= last.full.length) { clearInterval(this.followTimer); this.followTimer = null; return {}; }
+        return { ask: { ...st.ask, followups: fs.slice(0, -1).concat({ ...last, a: last.full.slice(0, last.a.length + 4) }) } };
+      });
+      this.scrollAskChat(false);
+    }, 30);
+  }
+  addAskEvent() {
+    const ev = this.state.ask.event;
+    if (!ev || ev.added) return;
+    if (!(ev.title || '').trim()) { this.toast('Skriv en titel först'); return; }
+    this.setState(st => st.ask.event ? { ask: { ...st.ask, event: { ...st.ask.event, added: true } }, evPick: null } : {});
+    this.toast('Tillagd i Google Kalender', () => this.setState(st => st.ask.event ? { ask: { ...st.ask, event: { ...st.ask.event, added: false } } } : {}));
+  }
+  openAskZoom() { if (this.askZoomTimer) clearTimeout(this.askZoomTimer); this.set({ askZoom: true, askZoomClosing: false }); }
+  closeAskZoom() { if (this.askZoomTimer) clearTimeout(this.askZoomTimer); this.set({ askZoomClosing: true }); this.askZoomTimer = setTimeout(() => this.set({ askZoom: false, askZoomClosing: false }), 380); }
+  expandCalBox() { this.set({ calBox: true, calFlash: true }); if (this.calFlashTimer) clearTimeout(this.calFlashTimer); this.calFlashTimer = setTimeout(() => this.set({ calFlash: false }), 1200); }
+  scrollAskChat(smooth) {
+    try {
+      const sc = document.querySelector('[data-askscroll]');
+      if (sc) { if (smooth) sc.scrollTo({ top: sc.scrollHeight, behavior: 'smooth' }); else sc.scrollTop = sc.scrollHeight; }
+    } catch (e) {}
+  }
+  dismissAskEvent() { this.setState(st => ({ ask: { ...st.ask, event: null }, evPick: null })); }
+  dismissLessonEvent() { this.setState(st => st.lessonChat ? { lessonChat: { ...st.lessonChat, event: null }, evPick: null } : {}); }
+  openDescModal(which) { if (this.descModalTimer) clearTimeout(this.descModalTimer); this.set({ descModal: which, descModalClosing: false }); }
+  closeDescModal() { if (this.descModalTimer) clearTimeout(this.descModalTimer); this.set({ descModalClosing: true }); this.descModalTimer = setTimeout(() => this.set({ descModal: null, descModalClosing: false }), 440); }
   EV_TIMES = ['08:00', '08:30', '09:10', '10:00', '10:45', '11:30', '12:15', '13:00', '13:45', '14:30', '15:15', '16:00'];
   evDays() {
     const now = new Date();
@@ -1802,21 +1826,6 @@ class Component extends DCLogic {
       } } };
     });
   }
-  setOvAiInput(e) { const v = e.target.value; this.setState(st => (st.lessonChat && st.lessonChat.event) ? { lessonChat: { ...st.lessonChat, event: { ...st.lessonChat.event, aiInput: v } } } : {}); }
-  onOvAiKey(e) { if (e.key === 'Enter') { e.preventDefault(); this.sendOvAi(); } }
-  sendOvAi(qArg) {
-    const lc = this.state.lessonChat; if (!lc || !lc.event || lc.event.aiBusy) return;
-    const q = (typeof qArg === 'string' && qArg) || (lc.event.aiInput || '').trim();
-    if (!q) return;
-    this.setState(st => ({ lessonChat: { ...st.lessonChat, event: { ...st.lessonChat.event, aiInput: '', aiBusy: true, aiMsgs: [...(st.lessonChat.event.aiMsgs || []), { who: 'u', text: q }] } } }));
-    setTimeout(() => {
-      this.setState(st => {
-        const ev = st.lessonChat && st.lessonChat.event; if (!ev) return {};
-        const r = this.applyEventCommand(ev, q, st.lessonChat);
-        return { lessonChat: { ...st.lessonChat, event: { ...ev, ...r.patch, aiBusy: false, aiMsgs: [...(ev.aiMsgs || []), { who: 'a', text: r.reply }] } } };
-      });
-    }, 900);
-  }
   applyEventCommand(ev, q, lc) {
     const low = q.toLowerCase();
     const patch = {}; const done = [];
@@ -1861,20 +1870,47 @@ class Component extends DCLogic {
     return { patch, reply };
   }
   setLessonEvent(k, v) { this.setState(st => (st.lessonChat && st.lessonChat.event) ? { lessonChat: { ...st.lessonChat, event: { ...st.lessonChat.event, [k]: v } } } : {}); }
-  addLessonEvent() { this.setState(st => (st.lessonChat && st.lessonChat.event) ? { lessonChat: { ...st.lessonChat, event: { ...st.lessonChat.event, added: true } }, evPick: null } : {}); this.toast('Tillagd i Google Kalender'); }
+  addLessonEvent() {
+    const lc = this.state.lessonChat;
+    const ev = lc && lc.event;
+    if (!ev || ev.added) return;
+    if (!(ev.title || '').trim()) { this.toast('Skriv en titel först'); return; }
+    this.setState(st => (st.lessonChat && st.lessonChat.event) ? { lessonChat: { ...st.lessonChat, event: { ...st.lessonChat.event, added: true } }, evPick: null } : {});
+    this.toast('Tillagd i Google Kalender', () => this.setState(st => (st.lessonChat && st.lessonChat.event) ? { lessonChat: { ...st.lessonChat, event: { ...st.lessonChat.event, added: false } } } : {}));
+  }
   closeLessonChat() { if (this.lessonChatTimer) clearTimeout(this.lessonChatTimer); this.set({ lessonChatClosing: true }); this.lessonChatTimer = setTimeout(() => { this.set({ lessonChat: null, lessonChatClosing: false }); this.lockScroll(false); }, 460); }
   setLessonChatInput(e) { const v = e.target.value; this.setState(st => st.lessonChat ? { lessonChat: { ...st.lessonChat, input: v } } : {}); }
   onLessonChatKey(e) { if (e.key === 'Enter') { e.preventDefault(); this.sendLessonChat(); } }
+  jumpToSource(t) {
+    this.setState(st => st.lessonChat ? { lessonChat: { ...st.lessonChat, t } } : {});
+    setTimeout(() => {
+      try {
+        const sc = document.querySelector('[data-ovscroll]');
+        const row = sc && sc.querySelector('[data-ovhit]');
+        if (sc && row) sc.scrollTo({ top: Math.max(0, row.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop - sc.clientHeight * 0.3), behavior: 'smooth' });
+      } catch (e) {}
+    }, 80);
+  }
   toggleLessonCite(mi, si) { this.setState(st => st.lessonChat ? { lessonChat: { ...st.lessonChat, openCite: (st.lessonChat.openCite && st.lessonChat.openCite.m === mi && st.lessonChat.openCite.s === si) ? null : { m: mi, s: si } } } : {}); }
   sendLessonChat(qArg) {
     const lc = this.state.lessonChat; if (!lc) return;
-    const q = (typeof qArg === 'string' && qArg ? qArg : (lc.input || '')).trim(); if (!q || lc.typing) return;
+    const q = (typeof qArg === 'string' && qArg ? qArg : (lc.input || '')).trim(); if (lc.typing) return; if (!q) { this.toast('Skriv en fråga först'); return; }
     this.setState(st => ({ lessonChat: { ...st.lessonChat, msgs: [...st.lessonChat.msgs, { role: 'user', text: q }], input: '', typing: true, openCite: null } }));
     setTimeout(() => {
+      const evNow = this.state.lessonChat && this.state.lessonChat.event;
+      const isCal = evNow && !evNow.added && (/flytta|ändra|byt|boka|döp|kalla|titel|anteckning/i.test(q) || /\d{1,2}[:.]\d{2}/.test(q) || /måndag|tisdag|onsdag|torsdag|fredag|lördag|söndag|imorgon|nästa vecka|klockan/i.test(q));
+      if (isCal) {
+        this.setState(st => {
+          const ev = st.lessonChat && st.lessonChat.event; if (!ev) return {};
+          const r = this.applyEventCommand(ev, q, st.lessonChat);
+          return { lessonChat: { ...st.lessonChat, typing: false, event: { ...ev, ...r.patch }, msgs: [...st.lessonChat.msgs, { role: 'assistant', text: r.reply, sources: [] }] } };
+        });
+        return;
+      }
       const wantsEvent = /påminn|kalender|prov|läx|inlämning|förhör|uppgift|imorgon/i.test(q);
       let text, sources;
       if (/sammanfatta/i.test(q)) {
-        text = 'Lektionen i tre punkter: begreppen täljare och nämnare introduceras med pizzaexemplet, klassen förkortar bråk gemensamt, och procent kopplas till vardagen med rea-exemplet 400 kr − 25 %.';
+        text = 'Begreppen täljare och nämnare introduceras med pizzaexemplet, klassen förkortar bråk gemensamt, och procent kopplas till vardagen med rea-exemplet 400 kr − 25 %.';
         sources = [
           { num: 1, t: '00:16', text: 'Ett bråk består av en täljare och en nämnare.' },
           { num: 2, t: '00:52', text: 'Nu ska vi förkorta bråk så de blir enklare.' },
@@ -1887,7 +1923,7 @@ class Component extends DCLogic {
           { num: 2, t: '02:30', text: 'Räck upp handen om något känns krångligt.' }
         ];
       } else {
-        text = 'Det tas upp i två avsnitt — först introduceras begreppet, sedan används det i ett räkneexempel på tavlan. Tryck på tidsstämplarna för att läsa exakt var i transkriptet.';
+        text = 'Det tas upp i två avsnitt — först introduceras begreppet, sedan används det i ett räkneexempel på tavlan.';
         sources = [
           { num: 1, t: '00:16', text: 'Ett bråk består av en täljare och en nämnare.' },
           { num: 2, t: '01:42', text: 'Nu testar vi ett exempel tillsammans på tavlan.' }
@@ -1954,11 +1990,11 @@ class Component extends DCLogic {
     const fmtClock = sec => String(Math.floor(sec / 60)).padStart(2, '0') + ':' + String(Math.floor(sec % 60)).padStart(2, '0');
     const running = s.tPhase === 'running';
     const done = s.tPhase === 'done';
-    const stages = ['Förbereder', 'Extraherar ljud', 'Transkriberar', 'Färdigställer'].map((name, i) => {
-      const f = done ? 100 : Math.max(0, Math.min(100, (s.tProgress - i * 25) / 25 * 100));
+    const stages = ['Förbereder', 'Extraherar ljud', 'Transkriberar', 'Korrekturläser', 'Färdigställer'].map((name, i) => {
+      const f = done ? 100 : Math.max(0, Math.min(100, (s.tProgress - i * 20) / 20 * 100));
       return { name, fill: f, isDone: f >= 100, isCur: f > 0 && f < 100, isTodo: f <= 0, num: i + 1, bar: React.createElement('div', { style: { height: '100%', borderRadius: '99px', background: 'var(--ok)', transition: 'width .2s linear', width: f + '%' } }) };
     });
-    const visN = done ? 5 : s.tLogN;
+    const visN = done ? 7 : s.tLogN;
     const lessonList = this.filteredLessons();
     const asking = s.ask.status !== 'idle';
     const dateOpts = ['Idag', 'Senaste veckan', 'Senaste månaden'];
@@ -1982,7 +2018,8 @@ class Component extends DCLogic {
       }
       return {
         ...r, stage, cc: this.ccOf(r),
-        tagLabel: r.klass ? (r.klass + (r.kurs ? ' · ' + r.kurs : '')) : (r.kurs || 'Ej tilldelad'),
+        tagLabel: r.klass ? (r.klass + (r.kurs ? ' · ' + r.kurs.slice(0, 2) : '')) : (r.kurs || 'Ej tilldelad'),
+        tagFull: r.klass ? (r.klass + (r.kurs ? ' · ' + r.kurs : '')) : (r.kurs || 'Ej tilldelad'),
         isHit: isHitRec, hitT: HIT_TS[r.id] || '04:12',
         wordLabel: ((parseInt(r.dur, 10) || 30) * 140).toLocaleString('sv-SE') + ' ord',
         onOpenChat: () => this.openLessonChat(r, isHitRec ? (HIT_TS[r.id] || null) : null),
@@ -2064,8 +2101,8 @@ class Component extends DCLogic {
 
       queue: s.queue.map((f, i) => ({ ...f, onRemove: () => this.set({ queue: s.queue.filter((_, j) => j !== i) }) })),
       queueCount: s.queue.length,
-      addSampleOk: () => this.set({ queue: [...s.queue, { name: 'mötesinspelning.mp3', ext: 'MP3' }], step: 1 }),
-      addSampleBad: () => this.set({ queue: [...s.queue, { name: 'skadad_inspelning.m4a', ext: 'M4A', bad: true }], step: 1 }),
+      addSampleOk: () => this.addToQueue({ name: 'mötesinspelning.mp3', ext: 'MP3' }),
+      addSampleBad: () => this.addToQueue({ name: 'skadad_inspelning.m4a', ext: 'M4A', bad: true }),
 
       langSvOn: on(s.lang === 'sv'), langEnOn: on(s.lang === 'en'),
       setLangSv: () => { this.set({ lang: 'sv' }); this.saveSoon(); }, setLangEn: () => { this.set({ lang: 'en' }); this.saveSoon(); },
@@ -2092,8 +2129,10 @@ class Component extends DCLogic {
         { t: '00:00', msg: 'Startar transkribering …' },
         { t: '00:03', msg: 'Laddar ' + (s.lang === 'sv' ? 'KB-Whisper' : 'Parakeet') + ' (cuda/float16) …' },
         { t: '00:06', msg: 'Transkriberar …' },
-        { t: '00:07', msg: 'Färdig på 00:07' }
-      ].slice(0, visN).map((ln, i) => ({ ...ln, mark: (done && i === 4) ? '✓' : '' })),
+        { t: '00:09', msg: 'Korrekturläser mot ljudet — Gemma 3n …' },
+        { t: '00:11', msg: 'Städar språk och skiljetecken …' },
+        { t: '00:12', msg: 'Färdig på 00:12 — sparas i Inspelningar' }
+      ].slice(0, visN).map((ln, i) => ({ ...ln, mark: (done && i === 6) ? '✓' : '' })),
       resultCount: goodQueue.length, results, resultBad: badCount > 0, resultBadNote: badCount + (badCount === 1 ? ' fil kunde inte läsas' : ' filer kunde inte läsas'),
       preview: this.transcript(s.resultLang).slice(0, 3).map(seg => ({ t: fmtClock(seg[0]), txt: seg[2] })),
       openTranscript: () => this.openTranscript(),
@@ -2111,7 +2150,8 @@ class Component extends DCLogic {
       ppCleanBar: React.createElement('div', { style: { height: '100%', borderRadius: '99px', background: 'linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 60%, var(--ok)))', width: (s.ppClean.pct || 0) + '%', transition: 'width .18s linear', backgroundSize: '28px 28px', animation: 'flow .8s linear infinite' } }),
       runClean: () => this.runClean(),
       activeLlmShort: this.activeLlm().split(' ')[0],
-      cleanModelInfo: 'Gemma 3n (ljud) + ' + this.activeLlm() + ' (språk) · lokalt',
+      cleanModelInfo: 'Körs lokalt på din dator',
+      cleanModelTitle: 'Gemma 3n (ljud) + ' + this.activeLlm() + ' (språk)',
       ppUnlocked: s.ppClean.status === 'done', ppLocked: s.ppClean.status !== 'done',
       ppSummaryIdle: s.ppSummary.status === 'idle', ppSummaryRunning: s.ppSummary.status === 'running', ppSummaryDone: s.ppSummary.status === 'done', ppSummaryText: s.ppSummary.text, ppSummaryHasText: !!s.ppSummary.text,
       runSummary: () => this.runSummary(),
@@ -2129,7 +2169,8 @@ class Component extends DCLogic {
       ppChatThinking: s.ppChat.status === 'running',
       sendChat: () => this.sendChat(),
       closeChatSource: () => this.set({ chatOpen: null }),
-      llmModelInfo: 'Lokalt med ' + this.activeLlm(),
+      llmModelInfo: 'Svaren genereras lokalt på din dator',
+      llmModelTitle: 'Språkmodell: ' + this.activeLlm(),
 
       searchWordOn: on(s.searchMode === 'word'), searchAiOn: on(s.searchMode === 'ai'),
       setSearchWord: () => this.set({ searchMode: 'word' }), setSearchAi: () => this.set({ searchMode: 'ai' }),
@@ -2166,6 +2207,7 @@ class Component extends DCLogic {
       // llm post-process
       ppCleanSegs, ppQuestion: s.ppQuestion,
       setPpQuestion: e => this.set({ ppQuestion: e.target.value }),
+      onPpKey: e => this.onPpKey(e),
       // lesson search
       search: s.search,
       setSearch: e => this.set({ search: e.target.value }),
@@ -2232,7 +2274,7 @@ class Component extends DCLogic {
       runInspSearch: () => { if (s.inspMode === 'ai') this.askAI(); },
       inspRunLabel: (s.ask.status === 'scanning' || s.ask.status === 'answering') ? 'Söker …' : (s.inspMode === 'ai' ? 'Fråga' : 'Sök'),
       inspModeLabel: s.inspMode === 'ai' ? 'Fråga AI om alla lektioner' : 'Sök i alla inspelningar',
-      inspPlaceholder: s.inspMode === 'ai' ? 'Ställ en fråga, t.ex. var förklarar jag täljare och nämnare?' : 'Sök efter vad som sades, t.ex. pythagoras sats',
+      inspPlaceholder: s.inspMode === 'ai' ? 'Ställ en fråga om dina lektioner …' : 'Sök efter vad som sades, t.ex. pythagoras sats',
       askAI: () => this.askAI(),
       askBtnLabel: (s.ask.status === 'scanning' || s.ask.status === 'answering') ? 'Söker …' : 'Fråga AI',
       inspShowSuggest: s.inspMode === 'ai' && s.ask.status === 'idle',
@@ -2259,19 +2301,66 @@ class Component extends DCLogic {
       ansStarted: s.ask.status === 'answering' || s.ask.status === 'done',
       ansTyping: s.ask.status === 'answering',
       ansDone: s.ask.status === 'done',
-      ansHeadLabel: s.ask.status === 'done' ? ('Svar — ' + (s.ask.refs || []).length + ' källor') : 'Svar — skrivs medan källorna läses',
-      ansTokens: (s.ask.answerTokens || []).slice(0, s.ask.tokensN).map((tk, i) => ({ key: i, isText: !!tk.text, isCite: !!tk.cite, text: tk.text || '', rec: tk.cite || '', t: tk.t || '', onCite: (e) => { if (e) e.stopPropagation(); this.openLessonFromRef(tk.ref); } })),
+      ansHeadLabel: s.ask.status === 'done' ? ('Svar — ' + (s.ask.refs || []).length + ' källor') : 'Svar',
+      ansTokens: (s.ask.answerTokens || []).slice(0, s.ask.tokensN).map((tk, i) => ({ key: i, isText: !!tk.text, isCite: !!tk.cite, text: tk.text || '', rec: tk.cite || '', t: tk.t || '', openFlag: (tk.cite && s.ask.openCite && s.ask.openCite.ref === tk.ref && s.ask.openCite.t === tk.t) ? 'open' : '', onCite: (e) => { if (e) e.stopPropagation(); this.toggleAskCite(tk.ref, tk.t); } })),
       ansEventNotAdded: !!(s.ask.event && !s.ask.event.added),
       ansEventAdded: !!(s.ask.event && s.ask.event.added),
       ansEventTitle: s.ask.event ? s.ask.event.title : '',
       ansEventWhen: s.ask.event ? s.ask.event.when : '',
       setAnsEventTitle: e => this.setAskEvent('title', e.target.value),
       setAnsEventWhen: e => this.setAskEvent('when', e.target.value),
+      ansEventDesc: s.ask.event ? (s.ask.event.desc || '') : '',
+      setAnsEventDesc: e => this.setAskEvent('desc', e.target.value),
+      ansDescFlag: '',
+      onAnsDescFocus: (e) => { if (e && e.target) e.target.blur(); this.openDescModal('ask'); },
+      onAnsDescBlur: () => {},
+      ovDescFlag: '',
+      onOvDescFocus: (e) => { if (e && e.target) e.target.blur(); this.openDescModal('ov'); },
+      onOvDescBlur: () => {},
+      descModalOpen: !!s.descModal,
+      descModalAnim: s.descModalClosing ? 'closing' : '',
+      closeDescModal: () => this.closeDescModal(),
+      stopModalProp: (e) => { if (e) e.stopPropagation(); },
+      descModalVal: s.descModal === 'ov' ? ((s.lessonChat && s.lessonChat.event && s.lessonChat.event.desc) || '') : (s.ask.event ? (s.ask.event.desc || '') : ''),
+      setDescModalVal: e => { const v = e.target.value; if (s.descModal === 'ov') this.setLessonEvent('desc', v); else this.setAskEvent('desc', v); },
       addAnsEvent: () => this.addAskEvent(),
+      dismissAnsEvent: (e) => { if (e) e.stopPropagation(); this.dismissAskEvent(); },
+      onAnsTitleKey: e => { if (e.key === 'Enter') { e.preventDefault(); this.addAskEvent(); } },
+      ansShowEvent: s.ask.status === 'done' && !!s.ask.event,
       evPickAskOpen: s.evPick === 'ask',
       toggleAskPick: (e) => { if (e) e.stopPropagation(); this.toggleEvPick('ask'); },
       askDayOpts: mkDayOpts('ask', s.ask.event), askTimeOpts: mkTimeOpts('ask', s.ask.event),
       askQ: s.ask.q, newAsk: () => this.clearAsk(),
+      askCite: this.askCiteView(),
+      ansHasRefs: s.ask.status === 'done' && (s.ask.refs || []).length > 0,
+      askRefCount: String((s.ask.refs || []).length),
+      srcBoxOpen: !!s.srcBox,
+      srcChevFlag: s.srcBox ? 'open' : '',
+      toggleSrcBox: (e) => { if (e) e.stopPropagation(); this.set({ srcBox: !s.srcBox }); },
+      calBoxOpen: !!s.calBox,
+      calChevFlag: s.calBox ? 'open' : '',
+      calFlashFlag: s.calFlash ? 'on' : '',
+      toggleCalBox: (e) => { if (e) e.stopPropagation(); this.set({ calBox: !s.calBox }); },
+      askZoomOn: !!s.askZoom,
+      askZoomFlag: s.askZoom ? (s.askZoomClosing ? 'closing' : 'on') : '',
+      askZoomBackAnim: s.askZoomClosing ? 'closing' : '',
+      onAskCardClick: (e) => { if (e) e.stopPropagation(); if (!s.askZoom) this.openAskZoom(); },
+      closeAskZoom: () => { if (s.askZoom && !s.askZoomClosing) this.closeAskZoom(); },
+      askRefs: (s.ask.refs || []).map((rf, ri) => {
+        const oc = s.ask.openCite;
+        const open = !!oc && oc.ref === ri;
+        const hit = (rf.ctx || []).find(c => c.hit) || (rf.ctx || [])[0] || {};
+        return { key: ri, rec: rf.rec, meta: (rf.klass ? rf.klass + ' · ' : '') + rf.t, text: hit.s || '', rowFlag: open ? 'on' : '', expanded: open, collapsed: !open,
+          lines: open ? (rf.ctx || []).map((c, ci) => ({ key: ci, t: c.t, s: c.s, curFlag: (oc.t ? c.t === oc.t : !!c.hit) ? 'cur' : '' })) : [],
+          onPick: (e) => { if (e) e.stopPropagation(); this.toggleAskCite(ri, null); } };
+      }),
+      closeAskCite: () => this.setState(st => ({ ask: { ...st.ask, openCite: null } })),
+      askFollowups: (s.ask.followups || []).map((f, i) => ({ key: 'f' + i, q: f.q, a: f.a, typing: f.a.length < f.full.length, hasRef: !!f.ref && f.a.length >= f.full.length, refRec: f.ref ? f.ref.rec : '', refT: f.ref ? f.ref.t : '', onCite: (e) => { if (e) e.stopPropagation(); const ri = (s.ask.refs || []).findIndex(r2 => f.ref && r2.rec === f.ref.rec); this.toggleAskCite(ri >= 0 ? ri : 0, f.ref ? f.ref.t : null); } })),
+      ansWhenFlash: s.ask.whenFlash ? '1' : '',
+      askFollowInput: s.ask.followInput || '',
+      setAskFollow: e => this.setAskFollow(e),
+      onAskFollowKey: e => this.onAskFollowKey(e),
+      sendAskFollow: () => this.sendAskFollow(),
       // filterrad: native selects + chips (ff5f3e2)
       klassSelOpts: ['Alla klasser', ...recClassOpts], kursSelOpts: ['Alla kurser', ...recCourseOpts], datumSelOpts: ['Alla datum', ...dateOpts],
       onFilterKlassSel: e => this.selectFilter('filterClass', e.target.value),
@@ -2289,7 +2378,9 @@ class Component extends DCLogic {
       klassMenuOpts: ['Alla klasser', ...recClassOpts].map(o => ({ key: o, label: o, isCur: s.filterClass === o, onSelect: () => this.selectFilter('filterClass', o) })),
       kursMenuOpts: ['Alla kurser', ...recCourseOpts].map(o => ({ key: o, label: o, isCur: s.filterCourse === o, onSelect: () => this.selectFilter('filterCourse', o) })),
       datumMenuOpts: ['Alla datum', ...dateOpts].map(o => ({ key: o, label: o, isCur: s.filterDate === o, onSelect: () => this.selectFilter('filterDate', o) })),
-      filterClassLabel: s.filterClass, filterCourseLabel: s.filterCourse, filterDateLabel: s.filterDate,
+      filterClassLabel: s.filterClass === 'Alla klasser' ? s.filterClass : 'Klass · ' + s.filterClass,
+      filterCourseLabel: s.filterCourse === 'Alla kurser' ? s.filterCourse : 'Kurs · ' + s.filterCourse,
+      filterDateLabel: s.filterDate === 'Alla datum' ? s.filterDate : 'Datum · ' + s.filterDate,
       hasActiveFilter: s.filterClass !== 'Alla klasser' || s.filterCourse !== 'Alla kurser' || s.filterDate !== 'Alla datum',
       noActiveFilter: s.filterClass === 'Alla klasser' && s.filterCourse === 'Alla kurser' && s.filterDate === 'Alla datum',
       activeFilterChips: [
@@ -2302,6 +2393,7 @@ class Component extends DCLogic {
       lessonChatOpen: !!s.lessonChat, lessonChatAnim: s.lessonChatClosing ? 'closing' : 'open',
       lessonChatName: s.lessonChat ? s.lessonChat.name : '',
       lessonChatEmpty: !!s.lessonChat && s.lessonChat.msgs.length === 0,
+      lessonChatHasMsgs: !!s.lessonChat && s.lessonChat.msgs.length > 0 && !s.lessonChat.typing,
       lessonChatTyping: !!s.lessonChat && s.lessonChat.typing,
       lessonChatInput: s.lessonChat ? s.lessonChat.input : '',
       setLessonChatInput: e => this.setLessonChatInput(e), onLessonChatKey: e => this.onLessonChatKey(e),
@@ -2325,25 +2417,21 @@ class Component extends DCLogic {
       setOvEventTitle: e => this.setLessonEvent('title', e.target.value),
       setOvEventWhen: e => this.setLessonEvent('when', e.target.value),
       addOvEvent: () => this.addLessonEvent(),
+      dismissOvEvent: (e) => { if (e) e.stopPropagation(); this.dismissLessonEvent(); },
+      onOvTitleKey: e => { if (e.key === 'Enter') { e.preventDefault(); this.addLessonEvent(); } },
+      evPickOvOpen: s.evPick === 'ov',
+      toggleOvPick: (e) => { if (e) e.stopPropagation(); this.toggleEvPick('ov'); },
+      ovDayOpts: mkDayOpts('ov', s.lessonChat && s.lessonChat.event),
+      ovTimeOpts: mkTimeOpts('ov', s.lessonChat && s.lessonChat.event),
       ovEventDesc: (s.lessonChat && s.lessonChat.event) ? (s.lessonChat.event.desc || '') : '',
       setOvEventDesc: e => this.setLessonEvent('desc', e.target.value),
-      ovAiInput: (s.lessonChat && s.lessonChat.event) ? (s.lessonChat.event.aiInput || '') : '',
-      setOvAiInput: e => this.setOvAiInput(e),
-      onOvAiKey: e => this.onOvAiKey(e),
-      sendOvAi: () => this.sendOvAi(),
-      ovAiBusy: !!(s.lessonChat && s.lessonChat.event && s.lessonChat.event.aiBusy),
-      ovAiMsgs: ((s.lessonChat && s.lessonChat.event && s.lessonChat.event.aiMsgs) || []).map(m => ({ text: m.text, isUser: m.who === 'u', isAi: m.who === 'a' })),
-      ovAiEmpty: !!(s.lessonChat && s.lessonChat.event && !(s.lessonChat.event.aiMsgs || []).length && !s.lessonChat.event.aiBusy),
-      ovAiChip1: () => this.sendOvAi('Flytta till fredag 10:00'),
-      ovAiChip2: () => this.sendOvAi('Lägg till läxan i anteckningen'),
-      ovAiChip3: () => this.sendOvAi('Kortare titel'),
       lessonChatMsgs: ((s.lessonChat && s.lessonChat.msgs) || []).map((m, mi) => {
         const oc = s.lessonChat.openCite;
         const openSrc = (m.role === 'assistant' && oc && oc.m === mi && m.sources && m.sources[oc.s]) ? m.sources[oc.s] : null;
         return {
           key: mi, isUser: m.role === 'user', isAssistant: m.role === 'assistant', text: m.text,
           hasSources: !!(m.sources && m.sources.length),
-          sources: (m.sources || []).map((src2, si) => ({ key: si, num: src2.num, t: src2.t, onToggle: (e) => { if (e) e.stopPropagation(); this.toggleLessonCite(mi, si); } })),
+          sources: (m.sources || []).map((src2, si) => ({ key: si, num: src2.num, t: src2.t, onToggle: (e) => { if (e) e.stopPropagation(); this.jumpToSource(src2.t); } })),
           openSource: !!openSrc, openSourceT: openSrc ? openSrc.t : '', openSourceText: openSrc ? openSrc.text : ''
         };
       }),

@@ -35,9 +35,11 @@ och organiserar dem per datum, klass och kurs. Allt körs **lokalt/offline**.
   - **Säker filhantering:** sökvägar som serveras/raderas måste valideras till att ligga
     under `base_dir`; radering endast strikt under `Transkriberingar/`.
   - **Svenska** i UI-strängar och användarvända texter. Design/plan ligger i `docs/superpowers/`.
-  - **Designsystem & -kontext:** `.impeccable.md` i roten är källan till sanning för visuell
-    riktning (redaktionell papper+bläck; lugn, tillbakadragen ton; undvik AI/SaaS-dashboard och
-    tät företags-UI). Faktisk CSS: `app/web/static/style.css` — de äldre `docs/design/*.md` är föråldrade.
+  - **Designsystem & -kontext:** `PRODUCT.md` (strategi: register, användare, ton,
+    anti-referenser, designprinciper) och `DESIGN.md` (visuellt: färg, typografi, komponenter,
+    motion) i roten är källan till sanning för visuell riktning (redaktionell papper+bläck;
+    lugn, tillbakadragen ton; undvik AI/SaaS-dashboard och tät företags-UI). Faktisk CSS:
+    `app/web/static/style.css` — de äldre `docs/design/*.md` är föråldrade.
   - **Inga hemligheter** i diffen (särskilt `cookies.txt`, som är gitignored).
 - **Tilldelad arbetsgren:** om sessionen fått en specifik gren tilldelad (t.ex.
   `claude/<slug>`) utvecklas och pushas där; den går före branch-namnskonventionen nedan.

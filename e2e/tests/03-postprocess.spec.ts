@@ -1,17 +1,17 @@
 import { test, expect, failOnConsoleError, transcribeSample } from "../helpers/app";
 
-// OBS: "Summera"-knappen togs bort i förenklingen (ff5f3e2) — kvarvarande
-// efterbearbetningar i UI:t är Korrekturläs och Chatta.
+// OBS (design 14 juli): wizardens KORREKTUR-kort och Qwen-språkstäd är borta —
+// korrekturen (Gemma 3n mot ljudet) körs i serverns transkriberingspipeline.
 
-test("proofreading (cleanup) post-processing runs automatically and streams a result", async ({ page }) => {
+test("wizard fire-and-forget: öppnar Inspelningar och nollställs", async ({ page }) => {
   const errors: string[] = [];
   failOnConsoleError(page, errors);
-  await transcribeSample(page);
+  await transcribeSample(page);   // slutar på Inspelningar
 
-  // Korrekturläsningen är inget val — den startar tyst och automatiskt så fort
-  // transkriberingen är klar. Ingen knapp klickas; resultatet ska dyka upp självt.
-  // The cleaned text renders as word-diffed spans inside the preview box.
-  await expect(page.getByText("[FEJK cleanup]")).toBeVisible({ timeout: 15000 });
+  // Wizarden har nollställts — tillbaka på steg 1 (Källa) med tom kö.
+  await page.getByRole("button", { name: "Transkribera", exact: true }).first().click();
+  await expect(page.getByText("klicka för att välja")).toBeVisible({ timeout: 8000 });
+  expect(await page.getByRole("button", { name: "Ta bort från kön" }).count()).toBe(0);
   expect(errors, errors.join("\n")).toEqual([]);
 });
 
@@ -20,10 +20,8 @@ test("chat about the transcript happens under Inspelningar", async ({ page }) =>
   failOnConsoleError(page, errors);
   await transcribeSample(page);
 
-  // Resultatvyn chattar inte längre inline — en knapp tar dig till fliken
-  // Inspelningar och öppnar chatten för just den här inspelningen (samma
-  // lektionschatt som "Chatta"-knappen på inspelningskortet).
-  await page.getByRole("button", { name: "Chatta om inspelningen" }).click();
+  // Chatten bor i lektionsoverlayns sidopanel — öppna kortet under Inspelningar.
+  await page.locator('[data-rec-id]').first().click();
   const chatInput = page.getByPlaceholder("Skriv en fråga …");
   await expect(chatInput).toBeVisible({ timeout: 15000 });
   await chatInput.fill("Vad handlar lektionen om?");
@@ -33,27 +31,27 @@ test("chat about the transcript happens under Inspelningar", async ({ page }) =>
   await expect(page.getByText("Lektionen handlar om bråk")).toBeVisible({ timeout: 15000 });
   const cite = page.getByRole("button", { name: "Visa källa 1 i transkriptet" });
   await expect(cite).toBeVisible();
-  await expect(page.getByText("Källor i transkriptet")).toBeVisible();
+  // Källrads-chipsen under svaret togs bort 2026-07-15 — de numrerade
+  // citatknapparna i texten är den enda (och tillräckliga) källingången.
   await cite.click();
   await expect(cite).toHaveAttribute("data-csup", "on");
+  // Design 14 juli: källan scrollar transkriptet till träffraden (data-ovhit).
+  await expect(page.locator("[data-ovhit]")).toBeVisible();
   expect(errors, errors.join("\n")).toEqual([]);
 });
 
-test("lesson insight extraction runs from the lesson overlay", async ({ page }) => {
+test("lesson insights are extracted automatically after transcription", async ({ page }) => {
   const errors: string[] = [];
   failOnConsoleError(page, errors);
-  await transcribeSample(page);
 
-  // Kartotek-omdesignen: Insikter-panelen är borta; Analysera lektion bor i
-  // lektionsoverlayens header och matar Kommande/Terminstrender.
-  await page.getByRole("button", { name: "Inspelningar", exact: true }).first().click();
-  await page.locator('[data-rec-id]').first().click();
+  // Analysera lektion-knappen är borttagen: extraktionen körs som tyst
+  // bakgrundsprocess när hela kön är klar (finishTranscribe → autoExtractLessons)
+  // och matar Kommande/Inför nästa lektion/Terminstrender utan användaråtgärd.
   const [resp] = await Promise.all([
-    page.waitForResponse((r) => /\/api\/lessons\/\d+\/extract/.test(r.url())),
-    page.getByRole("button", { name: /Analysera lektion/ }).click(),
+    page.waitForResponse((r) => /\/api\/lessons\/\d+\/extract/.test(r.url()), { timeout: 60000 }),
+    transcribeSample(page),
   ]);
   expect(resp.status()).toBe(200);
-  await expect(page.getByText("Lektionen analyserad")).toBeVisible({ timeout: 15000 });
   expect(errors, errors.join("\n")).toEqual([]);
 });
 

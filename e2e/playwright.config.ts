@@ -2,7 +2,8 @@ import { defineConfig, devices } from "@playwright/test";
 import * as path from "path";
 
 const REPO = path.resolve(__dirname, "..");
-const PORT = 8731;
+// 8731 kan hamna i Windows exkluderade portintervall (Hyper-V) — tillåt override.
+const PORT = Number(process.env.TRANSKRIBERA_PORT || 8731);
 const BASE_URL = `http://127.0.0.1:${PORT}`;
 const TEST_DATA = path.join(__dirname, ".test-data");
 const TEST_DATA_REAL = path.join(__dirname, ".test-data-real");

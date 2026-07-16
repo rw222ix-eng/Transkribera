@@ -47,7 +47,7 @@ test("morphdom: data-key/data-pane bevarar respektive ersätter noder", async ({
     configKvar: !!document.querySelector('[data-pane="config"]'),
   }))).toEqual({ processMark: null, configKvar: false });
 
-  await expect(page.getByText("bråk och procent")).toBeVisible({ timeout: 20000 });
+  await expect(page.getByText(/Sparade? i Inspelningar/).first()).toBeVisible({ timeout: 25000 });
   expect(errors, errors.join("\n")).toEqual([]);
 });
 
@@ -98,7 +98,7 @@ test("reducerad rörelse: flödet fungerar utan konsolfel", async ({ browser }) 
   failOnConsoleError(page, errors);
   await tillConfigSteg(page);
   await page.getByRole("button", { name: /Starta/ }).click();
-  await expect(page.getByText("bråk och procent")).toBeVisible({ timeout: 20000 });
+  await expect(page.getByText(/Sparade? i Inspelningar/).first()).toBeVisible({ timeout: 25000 });
   expect(errors, errors.join("\n")).toEqual([]);
   await ctx.close();
 });
@@ -112,14 +112,19 @@ test("SSE: progress rör sig, loggen når Klar och resultat visas", async ({ pag
   // Progressen ska röra sig uppåt under körningen och sluta på 100 vid done.
   await expect.poll(() => page.evaluate(() => (window as any).S.progress),
     { timeout: 15000 }).toBeGreaterThan(0);
-  await expect(page.getByText("bråk och procent")).toBeVisible({ timeout: 20000 });
-  expect(await page.evaluate(() => (window as any).S.progress)).toBe(100);
-  expect(await page.evaluate(() => (window as any).S.run)).toBe("done");
+  await expect.poll(() => page.evaluate(() => (window as any).S.run),
+    { timeout: 20000 }).toBe("done");
 
-  // Resultatsektionen och loggen.
-  await expect(page.locator('[data-sec="results"]')).toBeVisible();
-  expect(await page.evaluate(() =>
-    (window as any).S.log.some((r: string) => r.includes("Klar")))).toBe(true);
+  // Läs state direkt vid done — finishTranscribe nollställer wizarden strax efter.
+  const vidDone = await page.evaluate(() => ({
+    progress: (window as any).S.progress,
+    log: ((window as any).S.log || []).join("\n"),
+  }));
+  expect(vidDone.progress).toBe(100);
+  expect(vidDone.log).toContain("Färdig");
+
+  // Fire-and-forget: Inspelningar öppnas automatiskt med kvittens-toast.
+  await expect(page.getByText(/Sparade? i Inspelningar/).first()).toBeVisible({ timeout: 10000 });
   expect(errors, errors.join("\n")).toEqual([]);
 });
 
@@ -183,9 +188,11 @@ test("transkriptmodal: sök med åäö, matchnavigering och redigeringsläge", a
   failOnConsoleError(page, errors);
   await tillConfigSteg(page);
   await page.getByRole("button", { name: /Starta/ }).click();
-  await expect(page.getByText("bråk och procent")).toBeVisible({ timeout: 20000 });
-
-  await page.getByText("Visa hela transkriptet").click();
+  // Fire-and-forget: vänta in auto-navigeringen till Inspelningar, öppna kortet
+  // och gå in i transkriptvyn via overlayns Transkript-knapp.
+  await expect(page.getByText(/Sparade? i Inspelningar/).first()).toBeVisible({ timeout: 25000 });
+  await page.locator('[data-rec-id]').first().click();
+  await page.getByRole("button", { name: "Transkript", exact: true }).click();
   const sok = page.locator("input[data-tsearch]");
   await expect(sok).toBeVisible();
 
@@ -199,7 +206,7 @@ test("transkriptmodal: sök med åäö, matchnavigering och redigeringsläge", a
   await expect(page.locator('[data-current="1"]')).toHaveText(fore || "");
 
   // Redigeringsläge på/av utan konsolfel.
-  await page.getByRole("button", { name: "Redigera" }).click();
+  await page.getByRole("button", { name: "Redigera", exact: true }).click();
   await expect(page.getByRole("button", { name: "✓ Klar" })).toBeVisible();
   await page.getByRole("button", { name: "✓ Klar" }).click();
 
