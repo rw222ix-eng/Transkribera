@@ -92,7 +92,10 @@ def _install_fakes() -> None:
                  "text": "[ÖV] " + (s.get("text") or "")} for s in segments]
 
     def fake_chat(model, messages, transcript="", images=None, think=False,
-                  token_cb=None, reason_cb=None, cite=False):
+                  token_cb=None, reason_cb=None, cite=False,
+                  calendar=False, cal_event=None):
+        # calendar/cal_event kom med kalender-i-chatten (08cb543) — fejken tar
+        # emot men ignorerar dem (håll signaturen i synk med llm_client.chat).
         # I citat-läget svarar fejken med segmentmarkörer så e2e kan
         # verifiera hela parse-vägen (citat-knappar + källpanel).
         text = ("[FEJK chatt] Lektionen handlar om bråk [1] och procent [2]."
