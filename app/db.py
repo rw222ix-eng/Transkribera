@@ -21,7 +21,7 @@ import sqlite3
 import threading
 from pathlib import Path
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS courses (
@@ -112,11 +112,66 @@ CREATE TABLE IF NOT EXISTS markers (
 CREATE INDEX IF NOT EXISTS idx_markers_lesson ON markers(lesson_id);
 """
 
+# Lektionsminne & planering (v4, Fas 3) — ENDAST additiv: tre nya tabeller,
+# inga ändringar i befintliga. Rollback = DROP TABLE content_tags,
+# course_content, planned_lessons + PRAGMA user_version=3; befintlig data
+# rörs aldrig (se docs/superpowers/specs/2026-07-16-…-design.md §2).
+#
+# * planned_lessons — tavlor/planeringar med status planerad|hållen|inställd;
+#   lesson_id sätts när lektionen hållits (auto-länkning i org-flödet).
+# * course_content — centralt innehåll per kurs, seedat från bundlad JSON
+#   (UNIQUE(course_id, kod) gör seedningen idempotent).
+# * content_tags — N:M-koppling med EXAKT EN av lesson_id/planned_lesson_id/
+#   exam_id satt (CHECK-villkoret). exam_id är förberedd för Fas 4 och har
+#   därför ingen FK ännu (exams-tabellen finns inte).
+_PLANNING_MIGRATION = """
+CREATE TABLE IF NOT EXISTS planned_lessons (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    datum      TEXT,
+    starttid   TEXT,
+    group_id   INTEGER REFERENCES groups(id)  ON DELETE SET NULL,
+    course_id  INTEGER REFERENCES courses(id) ON DELETE SET NULL,
+    titel      TEXT,
+    moment     TEXT,
+    board_json TEXT,
+    status     TEXT DEFAULT 'planerad',
+    lesson_id  INTEGER REFERENCES lessons(id) ON DELETE SET NULL,
+    created_at TEXT,
+    updated_at TEXT
+);
+CREATE TABLE IF NOT EXISTS course_content (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    course_id     INTEGER REFERENCES courses(id) ON DELETE CASCADE,
+    kod           TEXT,
+    rubrik        TEXT,
+    text          TEXT,
+    lasar_version TEXT,
+    UNIQUE(course_id, kod)
+);
+CREATE TABLE IF NOT EXISTS content_tags (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    content_id        INTEGER NOT NULL REFERENCES course_content(id) ON DELETE CASCADE,
+    lesson_id         INTEGER REFERENCES lessons(id) ON DELETE CASCADE,
+    planned_lesson_id INTEGER REFERENCES planned_lessons(id) ON DELETE CASCADE,
+    exam_id           INTEGER,
+    CHECK ((lesson_id IS NOT NULL) + (planned_lesson_id IS NOT NULL)
+           + (exam_id IS NOT NULL) = 1)
+);
+CREATE INDEX IF NOT EXISTS idx_planned_datum   ON planned_lessons(datum);
+CREATE INDEX IF NOT EXISTS idx_planned_group   ON planned_lessons(group_id);
+CREATE INDEX IF NOT EXISTS idx_planned_lesson  ON planned_lessons(lesson_id);
+CREATE INDEX IF NOT EXISTS idx_content_course  ON course_content(course_id);
+CREATE INDEX IF NOT EXISTS idx_tags_content    ON content_tags(content_id);
+CREATE INDEX IF NOT EXISTS idx_tags_lesson     ON content_tags(lesson_id);
+CREATE INDEX IF NOT EXISTS idx_tags_planned    ON content_tags(planned_lesson_id);
+"""
+
 # Ordered schema upgrades, keyed by the version they BRING THE DB TO. connect()
 # applies every migration whose key is > the file's stored PRAGMA user_version, so
 # an existing .db is upgraded in place instead of silently keeping the old schema.
 # When the schema changes, bump SCHEMA_VERSION and add the ALTER/CREATE here.
-_MIGRATIONS: dict[int, str] = {2: _FTS_MIGRATION, 3: _MARKERS_MIGRATION}
+_MIGRATIONS: dict[int, str] = {2: _FTS_MIGRATION, 3: _MARKERS_MIGRATION,
+                               4: _PLANNING_MIGRATION}
 
 _LESSON_SELECT = """
 SELECT l.*, g.namn AS group_namn, c.namn AS course_namn
@@ -800,3 +855,332 @@ def update_lesson_transcript(conn: sqlite3.Connection, history_id: str,
         (transcript_text, history_id))
     conn.commit()
     return cur.rowcount > 0
+
+
+# ------------------------------------------- planering & lektionsminne (v4) --
+
+_PLANNED_SELECT = """
+SELECT p.*, g.namn AS group_namn, c.namn AS course_namn, l.name AS lesson_name
+FROM planned_lessons p
+LEFT JOIN groups  g ON g.id = p.group_id
+LEFT JOIN courses c ON c.id = p.course_id
+LEFT JOIN lessons l ON l.id = p.lesson_id
+"""
+
+_PLANNED_FIELDS = ("datum", "starttid", "group_id", "course_id", "titel",
+                   "moment", "board_json", "status", "lesson_id")
+
+
+def _now() -> str:
+    from datetime import datetime
+    return datetime.now().isoformat(timespec="seconds")
+
+
+def _planned_view(row) -> dict:
+    d = dict(row)
+    d["group"] = d.pop("group_namn", None)
+    d["course"] = d.pop("course_namn", None)
+    return d
+
+
+def create_planned_lesson(conn: sqlite3.Connection, *, titel: str,
+                          moment: str = "", board_json: str | None = None,
+                          datum: str | None = None, starttid: str | None = None,
+                          group_id: int | None = None,
+                          course_id: int | None = None,
+                          status: str = "planerad") -> dict:
+    now = _now()
+    cur = conn.execute(
+        "INSERT INTO planned_lessons (datum, starttid, group_id, course_id, "
+        "titel, moment, board_json, status, created_at, updated_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (datum, starttid, group_id, course_id, titel, moment, board_json,
+         status, now, now))
+    conn.commit()
+    return get_planned_lesson(conn, cur.lastrowid)
+
+
+def get_planned_lesson(conn: sqlite3.Connection, pid: int) -> dict | None:
+    row = conn.execute(_PLANNED_SELECT + " WHERE p.id = ?", (pid,)).fetchone()
+    return _planned_view(row) if row else None
+
+
+def list_planned_lessons(conn: sqlite3.Connection,
+                         year: int | None = None,
+                         month: int | None = None) -> list[dict]:
+    if year and month:
+        rows = conn.execute(
+            _PLANNED_SELECT + " WHERE p.datum LIKE ? "
+            "ORDER BY p.datum, p.starttid, p.id",
+            (f"{year:04d}-{month:02d}-%",)).fetchall()
+    else:
+        rows = conn.execute(
+            _PLANNED_SELECT + " ORDER BY p.datum, p.starttid, p.id").fetchall()
+    return [_planned_view(r) for r in rows]
+
+
+def update_planned_lesson(conn: sqlite3.Connection, pid: int,
+                          **fields) -> dict | None:
+    """PATCH-semantik: uppdatera whitelistade fält (manuell länk/av-länk sker
+    genom lesson_id + status). Okända fält ger ValueError — fel i anroparen
+    ska synas, inte tystas."""
+    unknown = set(fields) - set(_PLANNED_FIELDS)
+    if unknown:
+        raise ValueError(f"okända fält: {sorted(unknown)}")
+    if get_planned_lesson(conn, pid) is None:
+        return None
+    if fields:
+        cols = ", ".join(f"{k} = ?" for k in fields)
+        conn.execute(
+            f"UPDATE planned_lessons SET {cols}, updated_at = ? WHERE id = ?",
+            (*fields.values(), _now(), pid))
+        conn.commit()
+    return get_planned_lesson(conn, pid)
+
+
+def _minutes(hhmm: str | None) -> int | None:
+    try:
+        h, m = str(hhmm).split(":")[:2]
+        return int(h) * 60 + int(m)
+    except (ValueError, AttributeError):
+        return None
+
+
+def autolink_lesson(conn: sqlite3.Connection, lesson_id: int,
+                    tolerance_min: int = 90) -> dict | None:
+    """Auto-länka en hållen lektion till sin planering (Fas 3): när en
+    transkribering fått klass/kurs/datum i org-flödet söks en olänkad
+    planering med samma group_id + course_id + datum. Vid flera kandidater
+    väljs den med närmast starttid (inom toleransen); saknar någon sida
+    starttid räknas den som svagast giltiga träff. Idempotent — en redan
+    länkad lektion returnerar sin befintliga planering."""
+    les = conn.execute(
+        "SELECT id, group_id, course_id, datum, starttid FROM lessons "
+        "WHERE id = ?", (lesson_id,)).fetchone()
+    if not les or not (les["group_id"] and les["course_id"] and les["datum"]):
+        return None
+    existing = conn.execute(
+        "SELECT id FROM planned_lessons WHERE lesson_id = ?",
+        (lesson_id,)).fetchone()
+    if existing:
+        return get_planned_lesson(conn, existing["id"])
+
+    candidates = conn.execute(
+        "SELECT id, starttid, created_at FROM planned_lessons "
+        "WHERE group_id = ? AND course_id = ? AND datum = ? "
+        "AND lesson_id IS NULL AND status = 'planerad' "
+        "ORDER BY starttid, created_at, id",
+        (les["group_id"], les["course_id"], les["datum"])).fetchall()
+    if not candidates:
+        return None
+
+    l_min = _minutes(les["starttid"])
+    best, best_diff = None, None
+    for cand in candidates:
+        c_min = _minutes(cand["starttid"])
+        if l_min is None or c_min is None:
+            diff = tolerance_min          # okänd tid -> svagast giltiga träff
+        else:
+            diff = abs(l_min - c_min)
+            if diff > tolerance_min:
+                continue
+        if best is None or diff < best_diff:
+            best, best_diff = cand, diff
+    if best is None:
+        return None
+    return update_planned_lesson(conn, best["id"],
+                                 lesson_id=lesson_id, status="hållen")
+
+
+# ------------------------------------------------- centralt innehåll (v4) --
+
+def seed_course_content(conn: sqlite3.Connection,
+                        courses_data: list[dict]) -> int:
+    """Seeda centralt innehåll från bundlad JSON (idempotent via
+    UNIQUE(course_id, kod) — jfr migrate_from_history). Varje post:
+    {"kurs": "Ma3c", "lasar_version": "Gy11", "innehall":
+    [{"kod", "rubrik", "text"}, ...]}. Returnerar antal nya rader."""
+    added = 0
+    for course in courses_data or []:
+        cid = get_or_create_course(conn, course.get("kurs") or "")
+        if cid is None:
+            continue
+        version = course.get("lasar_version") or "Gy11"
+        for item in course.get("innehall") or []:
+            cur = conn.execute(
+                "INSERT OR IGNORE INTO course_content "
+                "(course_id, kod, rubrik, text, lasar_version) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (cid, item.get("kod"), item.get("rubrik"),
+                 item.get("text"), version))
+            added += cur.rowcount
+    conn.commit()
+    return added
+
+
+def list_course_content(conn: sqlite3.Connection, course_id: int) -> list[dict]:
+    rows = conn.execute(
+        "SELECT * FROM course_content WHERE course_id = ? ORDER BY kod, id",
+        (course_id,)).fetchall()
+    return [dict(r) for r in rows]
+
+
+def tag_content(conn: sqlite3.Connection, content_id: int, *,
+                lesson_id: int | None = None,
+                planned_lesson_id: int | None = None,
+                exam_id: int | None = None) -> bool:
+    """Koppla en innehållspunkt till exakt en av lektion/planering/prov.
+    Idempotent — en befintlig identisk koppling skapas inte om.
+    Returnerar True om en ny koppling skrevs."""
+    if (lesson_id is not None) + (planned_lesson_id is not None) \
+            + (exam_id is not None) != 1:
+        raise ValueError("exakt en av lesson_id/planned_lesson_id/exam_id krävs")
+    exists = conn.execute(
+        "SELECT 1 FROM content_tags WHERE content_id = ? "
+        "AND lesson_id IS ? AND planned_lesson_id IS ? AND exam_id IS ?",
+        (content_id, lesson_id, planned_lesson_id, exam_id)).fetchone()
+    if exists:
+        return False
+    conn.execute(
+        "INSERT INTO content_tags (content_id, lesson_id, planned_lesson_id, "
+        "exam_id) VALUES (?, ?, ?, ?)",
+        (content_id, lesson_id, planned_lesson_id, exam_id))
+    conn.commit()
+    return True
+
+
+def content_tags_for(conn: sqlite3.Connection, *,
+                     lesson_id: int | None = None,
+                     planned_lesson_id: int | None = None) -> list[dict]:
+    where, arg = ("t.lesson_id", lesson_id) if lesson_id is not None \
+        else ("t.planned_lesson_id", planned_lesson_id)
+    rows = conn.execute(
+        "SELECT t.id AS tag_id, cc.* FROM content_tags t "
+        f"JOIN course_content cc ON cc.id = t.content_id WHERE {where} = ? "
+        "ORDER BY cc.kod", (arg,)).fetchall()
+    return [dict(r) for r in rows]
+
+
+_CONTENT_WORD_RE = None
+
+
+def _content_tokens(text: str) -> set[str]:
+    """Betydelsebärande ord (>= 5 tecken, gemener) för innehållsmatchningen."""
+    global _CONTENT_WORD_RE
+    if _CONTENT_WORD_RE is None:
+        import re
+        _CONTENT_WORD_RE = re.compile(r"[a-zåäöé]{5,}")
+    return set(_CONTENT_WORD_RE.findall((text or "").lower()))
+
+
+def tag_content_from_texts(conn: sqlite3.Connection, lesson_id: int,
+                           texts: list[str]) -> list[dict]:
+    """Tagga en lektions behandlade innehåll utifrån LLM-extraktionens
+    fritextpunkter ("pq-formeln", "derivatans definition" ...). Matchning
+    mot kursens centralt innehåll sker deterministiskt via ordöverlapp —
+    konservativt (minst ett betydelsebärande ord gemensamt) så att en
+    felmatchning hellre uteblir än gissas. Returnerar taggade rader."""
+    les = conn.execute("SELECT course_id FROM lessons WHERE id = ?",
+                       (lesson_id,)).fetchone()
+    if not les or not les["course_id"]:
+        return []
+    content = list_course_content(conn, les["course_id"])
+    if not content:
+        return []
+    tagged: dict[int, dict] = {}
+    for text in texts or []:
+        toks = _content_tokens(text)
+        if not toks:
+            continue
+        best, best_score = None, 0
+        for row in content:
+            score = len(toks & _content_tokens(
+                f"{row.get('rubrik') or ''} {row.get('text') or ''}"))
+            if score > best_score:
+                best, best_score = row, score
+        if best is not None and best_score >= 1:
+            tag_content(conn, best["id"], lesson_id=lesson_id)
+            tagged[best["id"]] = best
+    return list(tagged.values())
+
+
+# --------------------------------------------------- kalender & minne (v4) --
+
+def calendar_entries(conn: sqlite3.Connection, year: int, month: int) -> list[dict]:
+    """Månadens poster för den inbyggda kalendern: planeringar (planerad/
+    hållen/inställd) + hållna lektioner som saknar planering. En lektion som
+    är länkad till en planering visas EN gång (som planeringen, med status
+    hållen). Prov läggs till i Fas 4. Ren SQLite-läsning — ingen synk."""
+    like = f"{year:04d}-{month:02d}-%"
+    entries: list[dict] = []
+    linked_lessons: set[int] = set()
+    for p in conn.execute(
+            _PLANNED_SELECT + " WHERE p.datum LIKE ? "
+            "ORDER BY p.datum, p.starttid, p.id", (like,)).fetchall():
+        d = _planned_view(p)
+        if d.get("lesson_id"):
+            linked_lessons.add(d["lesson_id"])
+        entries.append({
+            "typ": "planering", "id": d["id"], "datum": d["datum"],
+            "starttid": d["starttid"], "titel": d["titel"] or d["moment"],
+            "status": d["status"], "group": d["group"],
+            "group_id": d["group_id"], "course": d["course"],
+            "lesson_id": d["lesson_id"],
+        })
+    for row in conn.execute(
+            _LESSON_SELECT + " WHERE l.datum LIKE ? "
+            "ORDER BY l.datum, l.starttid, l.id", (like,)).fetchall():
+        if row["id"] in linked_lessons:
+            continue
+        entries.append({
+            "typ": "lektion", "id": row["id"], "datum": row["datum"],
+            "starttid": row["starttid"], "titel": row["name"],
+            "status": "hållen", "group": row["group_namn"],
+            "group_id": row["group_id"], "course": row["course_namn"],
+            "lesson_id": row["id"],
+        })
+    entries.sort(key=lambda e: (e["datum"] or "", e["starttid"] or "", e["id"]))
+    return entries
+
+
+def memory_for_prompt(conn: sqlite3.Connection, group_id: int,
+                      course_id: int | None = None,
+                      until_datum: str | None = None,
+                      max_lessons: int = 5) -> str:
+    """Kompakt minneskontext för tavel-/provprompterna (Fas 3): senaste
+    lektionerna (datum, namn, kort sammanfattning, taggade innehållspunkter),
+    öppna uppföljningar och senaste lektionens svårigheter. Bygger på samma
+    data som next_prep/lessons_excerpts_for men formaterad som text.
+    Tidigare provs uppgiftsteman läggs till i Fas 4."""
+    parts: list[str] = []
+    where = "l.group_id = ?"
+    args: list = [group_id]
+    if course_id:
+        where += " AND l.course_id = ?"
+        args.append(course_id)
+    if until_datum:
+        where += " AND l.datum <= ?"
+        args.append(until_datum)
+    rows = conn.execute(
+        _LESSON_SELECT + f" WHERE {where} "
+        "ORDER BY COALESCE(l.datum, l.ts) DESC, l.id DESC LIMIT ?",
+        (*args, max_lessons)).fetchall()
+    for row in rows:
+        line = f"{row['datum'] or '?'} — {row['name'] or 'lektion'}"
+        summary = (row["summary"] or "").strip().replace("\n", " ")
+        if summary:
+            line += f": {summary[:180]}"
+        tags = content_tags_for(conn, lesson_id=row["id"])
+        if tags:
+            line += " [innehåll: " + ", ".join(
+                t.get("rubrik") or t.get("kod") or "?" for t in tags) + "]"
+        parts.append(line)
+
+    prep = next_prep(conn, group_id)
+    for d in (prep.get("difficulties") or [])[:4]:
+        if d.get("text"):
+            parts.append(f"Svårighet att följa upp: {d['text']}")
+    for a in (prep.get("open_actions") or [])[:4]:
+        if a.get("text"):
+            parts.append(f"Öppet sedan tidigare: {a['text']}")
+    return "\n".join(parts)

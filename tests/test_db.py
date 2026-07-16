@@ -456,3 +456,267 @@ def test_fts_rebuilt_if_missing_on_reconnect(tmp_path):
     assert db.has_fts(conn)                                # rebuilt despite user_version
     _lesson_with_text(conn, "h1", "rekonstruerad sökindex om vektorer")
     assert len(db.search_transcripts(conn, "vektorer")) == 1
+
+
+# --------------------------------------------- planering & minne (v4, Fas 3) --
+
+def test_v4_migration_on_fresh_db(tmp_path):
+    conn = _conn(tmp_path)
+    tables = {r[0] for r in conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+    assert {"planned_lessons", "course_content", "content_tags"} <= tables
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 4
+
+
+def test_v4_migration_upgrades_v3_db_with_data(tmp_path):
+    """En befintlig v3-databas med data uppgraderas på plats: nya tabeller
+    tillkommer, befintliga rader rörs inte."""
+    import sqlite3 as raw_sqlite
+    path = tmp_path / "gammal.db"
+    raw = raw_sqlite.connect(str(path))
+    raw.executescript(db._SCHEMA)
+    raw.executescript(db._FTS_MIGRATION)
+    raw.executescript(db._MARKERS_MIGRATION)
+    raw.execute("INSERT INTO groups(namn) VALUES ('NA21')")
+    raw.execute("INSERT INTO lessons(history_id, name, datum) "
+                "VALUES ('h1', 'gammal lektion', '2026-06-01')")
+    raw.execute("PRAGMA user_version=3")
+    raw.commit()
+    raw.close()
+
+    conn = db.connect(path)
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 4
+    tables = {r[0] for r in conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+    assert {"planned_lessons", "course_content", "content_tags"} <= tables
+    # gammal data intakt
+    assert conn.execute("SELECT namn FROM groups").fetchone()[0] == "NA21"
+    assert conn.execute("SELECT name FROM lessons").fetchone()[0] == "gammal lektion"
+
+
+def test_v4_rollback_drops_only_new_tables(tmp_path):
+    """Dokumenterad rollback: DROP på de tre nya + user_version=3 —
+    befintliga tabeller och data lämnas orörda."""
+    conn = _conn(tmp_path)
+    db.get_or_create_group(conn, "NA21")
+    conn.executescript(
+        "DROP TABLE content_tags; DROP TABLE course_content; "
+        "DROP TABLE planned_lessons; PRAGMA user_version=3;")
+    conn.commit()
+    tables = {r[0] for r in conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+    assert "planned_lessons" not in tables
+    assert conn.execute("SELECT namn FROM groups").fetchone()[0] == "NA21"
+    # ...och en ny migrering tar tillbaka tabellerna
+    db._apply_migrations(conn)
+    tables = {r[0] for r in conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+    assert "planned_lessons" in tables
+
+
+def test_planned_lesson_crud(tmp_path):
+    conn = _conn(tmp_path)
+    gid = db.get_or_create_group(conn, "NA23")
+    cid = db.get_or_create_course(conn, "Ma3c")
+    p = db.create_planned_lesson(
+        conn, titel="Derivata", moment="derivatans definition",
+        board_json='{"title": "Derivata"}', datum="2026-08-20",
+        starttid="09:10", group_id=gid, course_id=cid)
+    assert p["id"] > 0 and p["status"] == "planerad"
+    assert p["group"] == "NA23" and p["course"] == "Ma3c"
+
+    upd = db.update_planned_lesson(conn, p["id"], status="inställd")
+    assert upd["status"] == "inställd"
+    assert db.get_planned_lesson(conn, 9999) is None
+    assert db.update_planned_lesson(conn, 9999, status="hållen") is None
+
+    import pytest
+    with pytest.raises(ValueError):
+        db.update_planned_lesson(conn, p["id"], hitta_pa="x")
+
+    assert [x["id"] for x in db.list_planned_lessons(conn, 2026, 8)] == [p["id"]]
+    assert db.list_planned_lessons(conn, 2026, 9) == []
+
+
+def test_autolink_matches_group_course_datum(tmp_path):
+    conn = _conn(tmp_path)
+    gid = db.get_or_create_group(conn, "NA23")
+    cid = db.get_or_create_course(conn, "Ma3c")
+    p = db.create_planned_lesson(conn, titel="Derivata", datum="2026-08-20",
+                                 starttid="09:10", group_id=gid, course_id=cid)
+    les = db.create_lesson(conn, history_id="h1", ts="2026-08-20T09:14:00",
+                           name="lektion")
+    db.update_lesson(conn, les["id"], group_id=gid, course_id=cid,
+                     datum="2026-08-20", starttid="09:14")
+
+    linked = db.autolink_lesson(conn, les["id"])
+    assert linked is not None and linked["id"] == p["id"]
+    assert linked["lesson_id"] == les["id"]
+    assert linked["status"] == "hållen"
+    # idempotent — andra anropet returnerar samma länk utan ny matchning
+    again = db.autolink_lesson(conn, les["id"])
+    assert again["id"] == p["id"]
+
+
+def test_autolink_requires_full_org_and_match(tmp_path):
+    conn = _conn(tmp_path)
+    gid = db.get_or_create_group(conn, "NA23")
+    cid = db.get_or_create_course(conn, "Ma3c")
+    db.create_planned_lesson(conn, titel="x", datum="2026-08-20",
+                             group_id=gid, course_id=cid)
+    les = db.create_lesson(conn, history_id="h1", ts="2026-08-20T09:00:00",
+                           name="l")
+    # utan kurs → ingen länkning
+    db.update_lesson(conn, les["id"], group_id=gid, datum="2026-08-20")
+    assert db.autolink_lesson(conn, les["id"]) is None
+    # fel datum → ingen länkning
+    db.update_lesson(conn, les["id"], course_id=cid, datum="2026-08-21")
+    assert db.autolink_lesson(conn, les["id"]) is None
+
+
+def test_autolink_respects_time_tolerance_and_picks_nearest(tmp_path):
+    conn = _conn(tmp_path)
+    gid = db.get_or_create_group(conn, "NA23")
+    cid = db.get_or_create_course(conn, "Ma3c")
+    morgon = db.create_planned_lesson(conn, titel="morgon", datum="2026-08-20",
+                                      starttid="08:10", group_id=gid, course_id=cid)
+    em = db.create_planned_lesson(conn, titel="eftermiddag", datum="2026-08-20",
+                                  starttid="13:10", group_id=gid, course_id=cid)
+    les = db.create_lesson(conn, history_id="h1", ts="2026-08-20T13:20:00", name="l")
+    db.update_lesson(conn, les["id"], group_id=gid, course_id=cid,
+                     datum="2026-08-20", starttid="13:20")
+    linked = db.autolink_lesson(conn, les["id"])
+    assert linked["id"] == em["id"]              # närmast i tid, inte första
+
+    # nästa lektion samma dag utanför toleransen (>90 min från morgon) → ingen träff
+    les2 = db.create_lesson(conn, history_id="h2", ts="2026-08-20T10:30:00", name="l2")
+    db.update_lesson(conn, les2["id"], group_id=gid, course_id=cid,
+                     datum="2026-08-20", starttid="10:30")
+    assert db.autolink_lesson(conn, les2["id"]) is None
+
+
+def test_autolink_without_starttid_still_matches(tmp_path):
+    conn = _conn(tmp_path)
+    gid = db.get_or_create_group(conn, "9A")
+    cid = db.get_or_create_course(conn, "Ma1b")
+    p = db.create_planned_lesson(conn, titel="x", datum="2026-08-20",
+                                 group_id=gid, course_id=cid)
+    les = db.create_lesson(conn, history_id="h1", ts="2026-08-20T09:00:00", name="l")
+    db.update_lesson(conn, les["id"], group_id=gid, course_id=cid, datum="2026-08-20")
+    assert db.autolink_lesson(conn, les["id"])["id"] == p["id"]
+
+
+def test_seed_course_content_idempotent(tmp_path):
+    conn = _conn(tmp_path)
+    data = [{"kurs": "Ma3c", "lasar_version": "Gy11", "innehall": [
+        {"kod": "M3C-DER-1", "rubrik": "Derivator",
+         "text": "Derivatans definition och deriveringsregler."},
+        {"kod": "M3C-ALG-1", "rubrik": "Algebra",
+         "text": "Polynomekvationer och faktorsatsen."},
+    ]}]
+    assert db.seed_course_content(conn, data) == 2
+    assert db.seed_course_content(conn, data) == 0        # idempotent
+    cid = db.get_or_create_course(conn, "Ma3c")
+    rows = db.list_course_content(conn, cid)
+    assert [r["kod"] for r in rows] == ["M3C-ALG-1", "M3C-DER-1"]
+    assert rows[0]["lasar_version"] == "Gy11"
+
+
+def test_tag_content_exactly_one_target(tmp_path):
+    conn = _conn(tmp_path)
+    cid = db.get_or_create_course(conn, "Ma3c")
+    db.seed_course_content(conn, [{"kurs": "Ma3c", "innehall": [
+        {"kod": "K1", "rubrik": "Derivator", "text": "x"}]}])
+    content_id = db.list_course_content(conn, cid)[0]["id"]
+    les = db.create_lesson(conn, history_id="h1", ts="2026-08-20T09:00:00", name="l")
+
+    import pytest
+    with pytest.raises(ValueError):
+        db.tag_content(conn, content_id)                  # ingen målreferens
+    with pytest.raises(ValueError):
+        db.tag_content(conn, content_id, lesson_id=les["id"], exam_id=1)
+
+    assert db.tag_content(conn, content_id, lesson_id=les["id"]) is True
+    assert db.tag_content(conn, content_id, lesson_id=les["id"]) is False  # dubblett
+    tags = db.content_tags_for(conn, lesson_id=les["id"])
+    assert [t["kod"] for t in tags] == ["K1"]
+
+
+def test_tag_content_from_texts_matches_conservatively(tmp_path):
+    conn = _conn(tmp_path)
+    cid = db.get_or_create_course(conn, "Ma2b")
+    db.seed_course_content(conn, [{"kurs": "Ma2b", "innehall": [
+        {"kod": "ALG-2", "rubrik": "Algebra",
+         "text": "Andragradsekvationer med pq-formeln och kvadratkomplettering."},
+        {"kod": "STA-1", "rubrik": "Statistik",
+         "text": "Lägesmått och spridningsmått, standardavvikelse."},
+    ]}])
+    les = db.create_lesson(conn, history_id="h1", ts="2026-08-20T09:00:00", name="l")
+    db.update_lesson(conn, les["id"], course_id=cid)
+
+    tagged = db.tag_content_from_texts(
+        conn, les["id"], ["pq-formeln för andragradsekvationer", "helt orelaterat"])
+    assert [t["kod"] for t in tagged] == ["ALG-2"]
+    # kort/ordlöst → inga taggar
+    assert db.tag_content_from_texts(conn, les["id"], ["x y"]) == []
+    # lektion utan kurs → tomt
+    les2 = db.create_lesson(conn, history_id="h2", ts="2026-08-20T10:00:00", name="l2")
+    assert db.tag_content_from_texts(conn, les2["id"], ["pq-formeln"]) == []
+
+
+def test_calendar_entries_merges_and_dedupes(tmp_path):
+    conn = _conn(tmp_path)
+    gid = db.get_or_create_group(conn, "NA23")
+    cid = db.get_or_create_course(conn, "Ma3c")
+    # planerad (olänkad), en länkad planering + dess lektion, en fristående lektion
+    p1 = db.create_planned_lesson(conn, titel="Kommande", datum="2026-08-25",
+                                  starttid="09:10", group_id=gid, course_id=cid)
+    p2 = db.create_planned_lesson(conn, titel="Hållen planering", datum="2026-08-20",
+                                  starttid="09:10", group_id=gid, course_id=cid)
+    les = db.create_lesson(conn, history_id="h1", ts="2026-08-20T09:12:00", name="lek")
+    db.update_lesson(conn, les["id"], group_id=gid, course_id=cid,
+                     datum="2026-08-20", starttid="09:12")
+    db.autolink_lesson(conn, les["id"])
+    fri = db.create_lesson(conn, history_id="h2", ts="2026-08-22T10:00:00",
+                           name="fristående")
+    db.update_lesson(conn, fri["id"], datum="2026-08-22")
+
+    entries = db.calendar_entries(conn, 2026, 8)
+    typer = [(e["typ"], e["titel"]) for e in entries]
+    assert ("planering", "Hållen planering") in typer
+    assert ("lektion", "fristående") in typer
+    assert ("planering", "Kommande") in typer
+    # den länkade lektionen dubbleras INTE som egen post
+    assert ("lektion", "lek") not in typer
+    assert len(entries) == 3
+    # sorterad på datum
+    assert [e["datum"] for e in entries] == ["2026-08-20", "2026-08-22", "2026-08-25"]
+    # annan månad → tomt
+    assert db.calendar_entries(conn, 2026, 9) == []
+
+
+def test_memory_for_prompt_compact(tmp_path):
+    conn = _conn(tmp_path)
+    gid = db.get_or_create_group(conn, "NA23")
+    cid = db.get_or_create_course(conn, "Ma3c")
+    db.seed_course_content(conn, [{"kurs": "Ma3c", "innehall": [
+        {"kod": "DER-1", "rubrik": "Derivator", "text": "Derivatans definition."}]}])
+    les = db.create_lesson(conn, history_id="h1", ts="2026-08-20T09:00:00",
+                           name="Derivata intro")
+    db.update_lesson(conn, les["id"], group_id=gid, course_id=cid,
+                     datum="2026-08-20", summary="Gick igenom gränsvärden.")
+    db.tag_content_from_texts(conn, les["id"], ["derivatans definition"])
+    db.add_insight(conn, les["id"], typ="svårighet",
+                   text="Många fastnade på ändringskvoten.")
+
+    mem = db.memory_for_prompt(conn, gid, cid)
+    assert "Derivata intro" in mem
+    assert "Gick igenom gränsvärden." in mem
+    assert "Derivator" in mem                     # taggat innehåll
+    assert "ändringskvoten" in mem                # svårighet att följa upp
+    # until_datum filtrerar bort senare lektioner
+    assert "Derivata intro" not in db.memory_for_prompt(
+        conn, gid, cid, until_datum="2026-08-19")
+    # fel grupp → tomt om inget finns
+    gid2 = db.get_or_create_group(conn, "9A")
+    assert db.memory_for_prompt(conn, gid2, cid) == ""
