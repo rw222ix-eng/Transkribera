@@ -84,37 +84,64 @@ utan Fas 0-ändringarna — dubblerad käll-knapp i chatten, ej relaterat).
 Mål: "Ny planering" → välj klass/kurs/moment → modellen genererar en giltig
 tavla → iterera via chatt.
 
-- [ ] `app/whiteboard_spec.py`: Pydantic-modeller för WB-JSON v1 (alla
+- [x] `app/whiteboard_spec.py`: Pydantic-modeller för WB-JSON v1 (alla
       section-kinds, board/columns/rows, annotations; `plots[].expr` i
       stället för `fn`). `to_response_format()` → json_schema för
       llama-server (mönster: `EXTRACT_RESPONSE_FORMAT`).
-- [ ] Regelvalidatorer i samma modul (det schemat inte fångar): `interior:`
+      *v1-avgränsning:* `callout`/`row`/`col` får bara löv-sektioner
+      (text/math/list/stack/divider/spacer) — ingen rekursion i schemat, så
+      grammatiktvångets grammatik är ändlig och LLM:ens felyta mindre.
+- [x] Regelvalidatorer i samma modul (det schemat inte fångar): `interior:`
       krävs på polygon-arcs, aspektkontroll för cirkelpolygoner, punkter inom
       range, grafbredd vs kolumnvikt, decimalkomma. Returnerar maskinläsbar
-      fellista.
-- [ ] Uttrycksparser i `app/web/static/whiteboard/expr.js` (whitelist-tokens,
+      fellista (`[{path, code, message}]` — `validate_board_json` slår ihop
+      schema- och regelfel i samma form).
+- [x] Uttrycksparser i `app/web/static/whiteboard/expr.js` (whitelist-tokens,
       ingen `eval`) som kompilerar `expr`-strängar till `fn` vid rendering;
       enhetstestas via Playwright-spek + serverside-spegel i
       `app/whiteboard_spec.py` för validering av syntax.
-- [ ] `app/lesson_board.py`: promptbygge (kurs/klass/moment +
-      tavelkonventioner + few-shots ur designprojektets `lessons.js` +
-      minneskontext via befintlig `next_prep`), `generate_board()` med
-      reparationsloop (max 3 rundor; input = valideringsfel +
-      klientrapporterade `[WB]`-varningar).
-- [ ] Router `app/web/routes_planning.py` (inkluderas av `create_app`):
+      AST-interpretator (inte ens `new Function`); ogiltiga uttryck blir en
+      `[WB check]`-varning och kurvan hoppas över i stället för att fälla
+      tavlan. Playwright-fallet verifierar både kurvritning och varningen.
+- [x] `app/lesson_board.py`: promptbygge (kurs/klass/moment +
+      tavelkonventioner + few-shots + minneskontext via befintlig
+      `next_prep`), `generate_board()` med reparationsloop (max 3 rundor;
+      input = valideringsfel + klientrapporterade `[WB]`-varningar).
+      *Avvikelse:* few-shots är handskrivna i modulen (validerade av
+      testerna) i stället för extraherade ur designprojektets `lessons.js` —
+      de måste ändå konverteras till v1 (expr, decimalkomma), och nu är de
+      versionerade tillsammans med schemat. En utan graf + en med graf/expr.
+      Rundbudgeten delas mellan generering och renderingsreparation
+      (`rounds_used`); refine ger färsk budget per användariteration.
+- [x] Router `app/web/routes_planning.py` (inkluderas av `create_app`):
       `POST /api/planning/generate` (SSE, GPU-arbiterns jobbmönster),
       `POST /api/planning/{id}/refine` (chatt-iteration),
-      `POST /api/planning/render-report` (klienten postar varningslistan).
-- [ ] UI-flöde i `viewPlanning()`: formulär → progress (SSE) → tavla →
+      `POST /api/planning/{id}/render-report` (klienten postar varningslistan).
+      Även `POST /api/planning/{id}/approve` — Godkänn & spara skriver
+      WB-JSON till `Transkriberingar/<lektion>/planering/` (sökvägsvaliderat;
+      Fas 3 flyttar in den i DB:n). `_sse_response` utbruten till
+      `app/web/sse.py` så routern slipper cirkulär import mot server.py.
+      Pågående planeringar hålls processlokalt (id → tavla/rundor) tills
+      DB v4 finns.
+- [x] UI-flöde i `viewPlanning()`: formulär → progress (SSE) → tavla →
       chattfält för iteration → "Godkänn & spara". Redaktionell inramning
       enligt `.impeccable.md` (mono-eyebrow, serif-titel; tavlan är
       artefakten, inte en dashboard).
-- [ ] Tester: schema/validatorer (`tests/test_whiteboard_spec.py`),
+      Klienten kör render-report-loopen automatiskt efter varje rendering
+      (max 2 klientrundor; servern håller den delade 3-rundorsbudgeten).
+      Exempellektionen visas tills något genererats. Kvarstående fel visas
+      ärligt som rader ovanför tavlan.
+- [x] Tester: schema/validatorer (`tests/test_whiteboard_spec.py`, 47 st),
       promptbygge + reparationsloop med stubbat LLM
-      (`tests/test_lesson_board.py`), rutter med stubbar
-      (`tests/test_web_server.py`-mönstret), 409-beteende under arbitern.
+      (`tests/test_lesson_board.py`), rutter med stubbar + 409-beteende och
+      GPU-släpp vid fel (`tests/test_routes_planning.py`), e2e-flöde
+      generera→iterera→godkänn med tavelfejkar i `serve_test_app.py`
+      (fejken använder few-shoten med graf/expr så expr-kedjan körs skarpt).
 
-Status: ej påbörjad.
+Status: kod klar 2026-07-16 (`python -m pytest` 530 gröna; `node --check`;
+e2e fake-sviten grön förutom det förexisterande 03-postprocess-felet).
+**Släpps inte på förrän Fas 2-benchen nått målnivån** — skarp Qwen3-körning
+med grammatiktvång är ännu inte mätt (Fas 2 är grinden).
 
 ## Fas 2 — Modellbench & iterering (GRIND för release av Fas 1)
 
