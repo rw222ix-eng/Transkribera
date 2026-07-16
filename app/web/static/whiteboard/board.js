@@ -67,14 +67,49 @@
   var WBHost = {};
   window.WBHost = WBHost;
 
+  /* WB-JSON v1 bär grafernas kurvor som uttryckssträngar (plots[].expr) —
+     motorn vill ha riktiga funktioner (fn). Kompilera med WBExpr (whitelist-
+     parser, ingen eval) på en djupkopia; ett ogiltigt uttryck blir en
+     [WB check]-varning (fångas av warn-hooken → reparationsloopen) och
+     kurvan hoppas över i stället för att fälla hela tavlan. */
+  function compileExprs(spec) {
+    spec = JSON.parse(JSON.stringify(spec));
+    var boards = spec.boards || [spec];
+    boards.forEach(function (board) {
+      var flows = [];
+      if (board.sections) flows.push(board.sections);
+      (board.columns || []).forEach(function (c) { if (c.sections) flows.push(c.sections); });
+      (board.rows || []).forEach(function (r) { if (r.sections) flows.push(r.sections); });
+      flows.forEach(function (sections) {
+        sections.forEach(function (sec) {
+          if (!sec || sec.kind !== 'graph' || !sec.plots) return;
+          sec.plots = sec.plots.filter(function (plot) {
+            if (typeof plot.fn === 'function') return true;
+            try {
+              plot.fn = WBExpr.compile(plot.expr);
+              delete plot.expr;
+              return true;
+            } catch (e) {
+              console.warn("[WB check] ogiltigt uttryck i plots[].expr: '" +
+                           plot.expr + "' — " + e.message);
+              return false;
+            }
+          });
+        });
+      });
+    });
+    return spec;
+  }
+
   /* ------------------------------------------------------------ rendering --
      spec är motorns format: { boards: [vänster, höger] } eller en enskild
-     board-spec. Fonterna inväntas FÖRE render så måtten blir rätta. */
+     board-spec; plots får bära expr-strängar (WB-JSON v1) som kompileras
+     före render. Fonterna inväntas FÖRE render så måtten blir rätta. */
   WBHost.render = function (spec) {
     return document.fonts.ready.then(function () {
       host.innerHTML = '';
       warnings = [];
-      WBLayout.renderWhiteboard(spec, host);
+      WBLayout.renderWhiteboard(compileExprs(spec), host);
       var container = host.querySelector('.boards-container');
       /* Naturlig bredd = summan av tavlornas egna bredder + mellanrum.
          Containerns egen rect duger inte: den är en flex-låda på 100 %
