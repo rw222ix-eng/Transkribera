@@ -1,0 +1,45 @@
+/* Lokala handstilsfonter för whiteboard-motorn (ersätter designprojektets
+   Google Fonts-@import — appen är helt offline). Latin-subset räcker:
+   å/ä/ö ligger i U+0000–00FF. JetBrains Mono återanvänds från appens
+   befintliga fontmapp (/static/fonts). Caveat är en variabel font som
+   täcker vikterna 400–700 i en fil. */
+
+@font-face {
+  font-family: 'Caveat';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('fonts/caveat-latin-400-700.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Gloria Hallelujah';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('fonts/gloria-hallelujah-latin-400.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Shadows Into Light Two';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('fonts/shadows-into-light-two-latin-400.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../fonts/jetbrains-mono-400.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('../fonts/jetbrains-mono-500.woff2') format('woff2');
+}
