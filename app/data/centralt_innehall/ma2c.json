@@ -1,0 +1,18 @@
+{
+  "kurs": "Ma2c",
+  "kurskod": "MATMAT02c",
+  "lasar_version": "Gy11",
+  "_not": "Kondenserad parafras av det centrala innehållet (Gy11) — inte skolverkets exakta text.",
+  "innehall": [
+    {"kod": "M2C-ALG-1", "rubrik": "Algebra", "text": "Linjära ekvationssystem med två och tre obekanta; grafiska och algebraiska lösningsmetoder."},
+    {"kod": "M2C-ALG-2", "rubrik": "Algebra", "text": "Andragradsekvationer med pq-formeln och kvadratkomplettering samt komplexa rötter."},
+    {"kod": "M2C-ALG-3", "rubrik": "Algebra", "text": "Kvadreringsreglerna, konjugatregeln, polynomdivision och faktorisering."},
+    {"kod": "M2C-ALG-4", "rubrik": "Algebra", "text": "Logaritmer, logaritmlagarna och exponentialekvationer."},
+    {"kod": "M2C-GEO-1", "rubrik": "Geometri", "text": "Klassiska geometrisatser: randvinkelsatsen, topptriangelsatsen, transversalsatsen samt likformighet med bevis."},
+    {"kod": "M2C-SAM-1", "rubrik": "Samband och förändring", "text": "Andragradsfunktioner: graf, extrempunkt, symmetrilinje och nollställen med tillämpningar."},
+    {"kod": "M2C-SAM-2", "rubrik": "Samband och förändring", "text": "Exponential- och potensfunktioner som modeller; kurvanpassning."},
+    {"kod": "M2C-STA-1", "rubrik": "Sannolikhet och statistik", "text": "Statistiska metoder, standardavvikelse och normalfördelning."},
+    {"kod": "M2C-STA-2", "rubrik": "Sannolikhet och statistik", "text": "Korrelation, kausalitet och linjär regression med digitala verktyg."},
+    {"kod": "M2C-PRO-1", "rubrik": "Problemlösning", "text": "Strategier för problemlösning, matematiska resonemang och bevisföring."}
+  ]
+}

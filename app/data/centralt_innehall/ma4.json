@@ -1,0 +1,17 @@
+{
+  "kurs": "Ma4",
+  "kurskod": "MATMAT04",
+  "lasar_version": "Gy11",
+  "_not": "Kondenserad parafras av det centrala innehållet (Gy11) — inte skolverkets exakta text.",
+  "innehall": [
+    {"kod": "M4-TRI-1", "rubrik": "Trigonometri", "text": "Trigonometriska ettan, enhetscirkeln och trigonometriska identiteter; additions- och subtraktionsformlerna."},
+    {"kod": "M4-TRI-2", "rubrik": "Trigonometri", "text": "Trigonometriska ekvationer och deras fullständiga lösningsmängder."},
+    {"kod": "M4-TRI-3", "rubrik": "Trigonometri", "text": "Trigonometriska funktioner: amplitud, period, fasförskjutning och kurvorna y = a sin(bx + c) + d."},
+    {"kod": "M4-SAM-1", "rubrik": "Samband och förändring", "text": "Derivator av trigonometriska funktioner, produkt- och kvotregeln samt kedjeregeln."},
+    {"kod": "M4-SAM-2", "rubrik": "Samband och förändring", "text": "Integraler: integrationsmetoder, areor och tillämpningar; rotationsvolymer."},
+    {"kod": "M4-SAM-3", "rubrik": "Samband och förändring", "text": "Differentialekvationer översiktligt som modeller för förändring."},
+    {"kod": "M4-KOM-1", "rubrik": "Komplexa tal", "text": "Komplexa tal i rektangulär och polär form, komplexa talplanet samt de Moivres formel."},
+    {"kod": "M4-KOM-2", "rubrik": "Komplexa tal", "text": "Polynomekvationer med komplexa rötter och faktorsatsen i det komplexa fallet."},
+    {"kod": "M4-PRO-1", "rubrik": "Problemlösning", "text": "Problemlösning, modellering och bevisföring, bland annat med trigonometriska samband."}
+  ]
+}

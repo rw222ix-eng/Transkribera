@@ -1,0 +1,15 @@
+{
+  "kurs": "Ma3b",
+  "kurskod": "MATMAT03b",
+  "lasar_version": "Gy11",
+  "_not": "Kondenserad parafras av det centrala innehållet (Gy11) — inte skolverkets exakta text.",
+  "innehall": [
+    {"kod": "M3B-ALG-1", "rubrik": "Algebra", "text": "Polynomekvationer, faktorsatsen och rationella uttryck med förenkling."},
+    {"kod": "M3B-SAM-1", "rubrik": "Samband och förändring", "text": "Ändringskvot och derivatans definition som gränsvärde; tangentens lutning."},
+    {"kod": "M3B-SAM-2", "rubrik": "Samband och förändring", "text": "Deriveringsregler för polynom-, potens- och exponentialfunktioner."},
+    {"kod": "M3B-SAM-3", "rubrik": "Samband och förändring", "text": "Extrempunkter med derivata och teckentabell; grafanalys och optimering."},
+    {"kod": "M3B-SAM-4", "rubrik": "Samband och förändring", "text": "Primitiva funktioner och bestämda integraler; area under graf med tillämpningar i ekonomi och samhälle."},
+    {"kod": "M3B-SAM-5", "rubrik": "Samband och förändring", "text": "Derivata som förändringstakt i ekonomiska och samhällsvetenskapliga tillämpningar."},
+    {"kod": "M3B-PRO-1", "rubrik": "Problemlösning", "text": "Matematisk problemlösning, modellering och utvärdering av modeller; bevisföring med relevans för samhällsvetenskap och ekonomi."}
+  ]
+}
