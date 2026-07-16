@@ -104,6 +104,39 @@ test("Planering: generera → iterera via chatt → godkänn & spara (fejk)", as
   expect(errors, errors.join("\n")).toEqual([]);
 });
 
+test("Planering: godkänd tavla hamnar i kalendern och kan öppnas (Fas 3)", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Planering", exact: true }).click();
+
+  // Datum mitt i innevarande månad så chippen syns utan månadsnavigering.
+  const now = new Date();
+  const datum = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-15`;
+  await page.getByLabel("Moment").fill("Kalendertest — trigonometri");
+  await page.getByLabel("Datum").fill(datum);
+  await page.getByLabel("Starttid").fill("09:10");
+  await page.getByRole("button", { name: "Skriv tavlan" }).click();
+
+  const approve = page.getByRole("button", { name: "Godkänn & spara" });
+  await expect(approve).toBeEnabled({ timeout: 15000 });
+  await approve.click();
+  await expect(page.getByText(/Sparad:/)).toBeVisible({ timeout: 15000 });
+
+  // Planeringen dyker upp som klassfärgad chip i månadsvyn ...
+  const chip = page.getByRole("button", { name: /Kalendertest — trigonometri/ });
+  await expect(chip.first()).toBeVisible({ timeout: 10000 });
+
+  // ... och veckoläget renderar utan fel.
+  await page.getByRole("button", { name: "Vecka", exact: true }).click();
+  await expect(page.getByText(/–/).first()).toBeVisible();
+  await page.getByRole("button", { name: "Månad", exact: true }).click();
+  await expect(chip.first()).toBeVisible();
+
+  // Klick på chippen laddar den sparade tavlan i läsläge.
+  await chip.first().click();
+  const frame = page.frameLocator("[data-wb-frame]");
+  await expect(frame.getByText("Symmetrilinjen:")).toBeVisible({ timeout: 15000 });
+});
+
 test("Planering: PNG-exporten sparar en fil under testets base_dir", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "Planering", exact: true }).click();

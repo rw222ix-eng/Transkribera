@@ -163,6 +163,13 @@
     planErrors: [],            // kvarstående valideringsfel (redovisas ärligt)
     planChatInput: '',         // chattfältet för iteration
     planSavedPath: '',         // kvitto från Godkänn & spara
+    planDatum: '',             // formulärets datum (för kalendern/minnet)
+    planStarttid: '',          // formulärets starttid
+    // Inbyggd kalender (Fas 3): lokal SQLite-läsning — ingen synk/CalDAV
+    calMode: 'manad',          // 'manad' | 'vecka'
+    calYear: 0, calMonth: 0,   // vald månad (0 = ej laddad ännu)
+    calWeekStart: '',          // veckolägets måndag (YYYY-MM-DD)
+    calEntries: [],            // poster från /api/planning/calendar
   };
 
   /* instance (non-state) fields */
@@ -537,7 +544,7 @@
     if (t === 'history' || t === 'lessons') t = 'recordings';
     setState({ tab: t, openDD: null });
     if (t === 'recordings') { loadHistory(); loadLessons(); loadOrg(); loadPrep(); loadAgenda(); loadTrends(); }
-    if (t === 'planning') loadOrg();   // klass-/kursväljarna i formuläret
+    if (t === 'planning') { loadOrg(); loadCalendar(); }   // formulär + kalender
   }
   /* ------------------------------------------------- Planering (Fas 0) -- */
   // Tavlan renderas av whiteboard-motorn (vendrad från designprojektet
@@ -692,6 +699,8 @@
       moment: moment,
       group_id: S.planGroupId ? +S.planGroupId : null,
       course_id: S.planCourseId ? +S.planCourseId : null,
+      datum: S.planDatum || null,
+      starttid: S.planStarttid || null,
     }, onPlanEvent);
   }
   function sendPlanRefine() {
@@ -712,6 +721,7 @@
       .then(function (res) {
         if (!res.ok || res.body.error) throw new Error(res.body.error || 'Kunde inte spara.');
         setState({ planSavedPath: res.body.path });
+        loadCalendar();        // planeringen syns direkt i kalendern
       })
       .catch(function (e) {
         setState({ planSavedPath: '', wbExportMsg: 'Kunde inte spara: ' + ((e && e.message) || e) });
@@ -723,6 +733,144 @@
   function onPlanMomentKey(e) { if (e.key === 'Enter') startPlanGenerate(); }
   function onPlanChatInput(e) { setState({ planChatInput: e.target.value }); }
   function onPlanChatKey(e) { if (e.key === 'Enter') sendPlanRefine(); }
+  function onPlanDatum(e) { setState({ planDatum: e.target.value }); }
+  function onPlanStarttid(e) { setState({ planStarttid: e.target.value }); }
+
+  var _MANADER = ['januari', 'februari', 'mars', 'april', 'maj', 'juni', 'juli',
+                  'augusti', 'september', 'oktober', 'november', 'december'];
+  var _VECKODAGAR = ['mån', 'tis', 'ons', 'tor', 'fre', 'lör', 'sön'];
+
+  // Kalenderns vy-modell (anropas från vm): poster grupperade per dag med
+  // klassfärg och klickhandtag; månadsgrid eller veckolista.
+  function calVm(st) {
+    var byDate = {};
+    st.calEntries.forEach(function (e) {
+      if (!e.datum) return;
+      (byDate[e.datum] = byDate[e.datum] || []).push({
+        key: e.typ + '-' + e.id,
+        titel: e.titel || '(utan titel)',
+        group: e.group || '',
+        starttid: e.starttid || '',
+        color: 'var(' + calColor(e.group_id) + ')',
+        held: e.status === 'hållen',
+        cancelled: e.status === 'inställd',
+        isPlan: e.typ === 'planering',
+        onOpen: function () { openCalEntry(e); },
+      });
+    });
+    var today = _isoDate(new Date());
+    var out = { mode: st.calMode, weeks: [], days: [] };
+    if (st.calMode === 'vecka') {
+      var start = new Date((st.calWeekStart || today) + 'T00:00:00');
+      for (var i = 0; i < 7; i++) {
+        var d = new Date(start); d.setDate(start.getDate() + i);
+        var iso = _isoDate(d);
+        out.days.push({
+          label: _VECKODAGAR[i] + ' ' + d.getDate() + '/' + (d.getMonth() + 1),
+          isToday: iso === today,
+          entries: byDate[iso] || [],
+        });
+      }
+      var end = new Date(start); end.setDate(start.getDate() + 6);
+      out.title = start.getDate() + '/' + (start.getMonth() + 1) + ' – ' +
+                  end.getDate() + '/' + (end.getMonth() + 1) + ' ' + end.getFullYear();
+    } else {
+      var y = st.calYear, m = st.calMonth;
+      out.title = (_MANADER[m - 1] || '') + ' ' + y;
+      var firstDow = (new Date(y, m - 1, 1).getDay() + 6) % 7;   // mån=0
+      var daysInMonth = new Date(y, m, 0).getDate();
+      var cells = [];
+      for (var b = 0; b < firstDow; b++) cells.push({ blank: true });
+      for (var day = 1; day <= daysInMonth; day++) {
+        var iso2 = y + '-' + String(m).padStart(2, '0') + '-' + String(day).padStart(2, '0');
+        cells.push({ day: day, isToday: iso2 === today, entries: byDate[iso2] || [] });
+      }
+      while (cells.length % 7) cells.push({ blank: true });
+      for (var w = 0; w < cells.length; w += 7) out.weeks.push(cells.slice(w, w + 7));
+    }
+    return out;
+  }
+
+  /* ------------------------------------------- inbyggd kalender (Fas 3) -- */
+  // Lokal SQLite-kalender: planerade + hållna lektioner (prov i Fas 4).
+  // Ingen synk, ingen CalDAV — Google Calendar-koden lämnas orörd.
+  function _isoDate(d) {
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') +
+           '-' + String(d.getDate()).padStart(2, '0');
+  }
+  function _mondayOf(d) {
+    var m = new Date(d);
+    m.setDate(m.getDate() - ((m.getDay() + 6) % 7));
+    return m;
+  }
+  function _fetchCalMonths(months, cb) {
+    Promise.all(months.map(function (ym) {
+      return getJSON('/api/planning/calendar?year=' + ym[0] + '&month=' + ym[1]);
+    })).then(function (results) {
+      var entries = [];
+      results.forEach(function (r) { entries = entries.concat((r && r.entries) || []); });
+      cb(entries);
+    }).catch(function () {});
+  }
+  function loadCalendar(year, month) {
+    var now = new Date();
+    var y = year || S.calYear || now.getFullYear();
+    var m = month || S.calMonth || (now.getMonth() + 1);
+    var weekStart = S.calWeekStart || _isoDate(_mondayOf(now));
+    setState({ calYear: y, calMonth: m, calWeekStart: weekStart });
+    if (S.calMode === 'vecka') {
+      // veckan kan korsa en månadsgräns — hämta båda månaderna
+      var start = new Date(weekStart + 'T00:00:00');
+      var end = new Date(start); end.setDate(start.getDate() + 6);
+      var months = [[start.getFullYear(), start.getMonth() + 1]];
+      if (end.getMonth() !== start.getMonth()) {
+        months.push([end.getFullYear(), end.getMonth() + 1]);
+      }
+      _fetchCalMonths(months, function (entries) { setState({ calEntries: entries }); });
+    } else {
+      _fetchCalMonths([[y, m]], function (entries) { setState({ calEntries: entries }); });
+    }
+  }
+  function calShift(delta) {
+    if (S.calMode === 'vecka') {
+      var start = new Date(S.calWeekStart + 'T00:00:00');
+      start.setDate(start.getDate() + delta * 7);
+      setState({ calWeekStart: _isoDate(start),
+                 calYear: start.getFullYear(), calMonth: start.getMonth() + 1 },
+                function () { loadCalendar(S.calYear, S.calMonth); });
+    } else {
+      var m = S.calMonth + delta, y = S.calYear;
+      if (m < 1) { m = 12; y -= 1; }
+      if (m > 12) { m = 1; y += 1; }
+      loadCalendar(y, m);
+    }
+  }
+  function calSetMode(mode) {
+    setState({ calMode: mode }, function () { loadCalendar(S.calYear, S.calMonth); });
+  }
+  // Klass-färgkodning: stabil färg per grupp ur den redaktionella paletten.
+  var _CAL_COLORS = ['--c-sky', '--c-plum', '--c-sage', '--c-mustard'];
+  function calColor(groupId) {
+    if (groupId == null) return '--ink-3';
+    return _CAL_COLORS[Math.abs(+groupId) % _CAL_COLORS.length];
+  }
+  function openCalEntry(entry) {
+    if (entry.typ === 'planering') {
+      // Visa den sparade tavlan i läsläge (planId null → ingen chatt/godkänn).
+      fetch('/api/planning/' + entry.id)
+        .then(function (r) { return r.json(); })
+        .then(function (p) {
+          if (p && p.board) {
+            setState({ planBoard: p.board, planId: null, planErrors: [],
+                       planSavedPath: '', wbExportMsg: '', wbRendered: false },
+                     renderCurrentBoard);
+          }
+        })
+        .catch(function () {});
+    } else {
+      setTab('recordings');    // lektioner bor bland Inspelningar
+    }
+  }
 
   function onSource(e) { setState({ source: e.target.value }); }
   function fileRef(el) { _file = el; }
@@ -2474,6 +2622,16 @@
       onPlanChatInput: onPlanChatInput, onPlanChatKey: onPlanChatKey,
       onPlanRefine: sendPlanRefine, onPlanApprove: approvePlan,
       planSavedPath: st.planSavedPath,
+      planDatum: st.planDatum, planStarttid: st.planStarttid,
+      onPlanDatum: onPlanDatum, onPlanStarttid: onPlanStarttid,
+      // Inbyggd kalender (Fas 3)
+      cal: st.tab === 'planning' ? calVm(st) : null,
+      calIsManad: st.calMode === 'manad',
+      onCalPrev: function () { calShift(-1); },
+      onCalNext: function () { calShift(1); },
+      onCalManad: function () { calSetMode('manad'); },
+      onCalVecka: function () { calSetMode('vecka'); },
+      veckodagar: _VECKODAGAR,
       themeIsLight: st.theme !== 'dark',
       toggleTheme: toggleTheme,
 
@@ -4313,6 +4471,8 @@ function viewPlanning(v){
           ${ v.planCourses.map(function(c){ return `<option value="${esc(c.id)}" ${String(c.id) === v.planCourseId ? 'selected' : ''}>${esc(c.namn)}</option>`; }).join('') }
         </select>
         <input value="${esc(v.planMoment)}" data-input="${on(v.onPlanMoment)}" data-keydown="${on(v.onPlanMomentKey)}" aria-label="Moment" placeholder="Moment — t.ex. derivatans definition" style="flex:1;min-width:220px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 13px;font-size:14.5px;font-family:inherit;color:var(--ink)">
+        <input type="date" value="${esc(v.planDatum)}" data-change="${on(v.onPlanDatum)}" aria-label="Datum" style="${selStyle};min-width:0">
+        <input type="time" value="${esc(v.planStarttid)}" data-change="${on(v.onPlanStarttid)}" aria-label="Starttid" style="${selStyle};min-width:0">
         <button data-click="${on(v.onPlanStart)}" ${v.planCanStart ? '' : 'disabled'} style="display:inline-flex;align-items:center;gap:7px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:10px;padding:10px 18px;font-size:14.5px;font-weight:500;font-family:inherit;cursor:${v.planCanStart ? 'pointer' : 'default'};opacity:${v.planCanStart ? '1' : '.55'};box-shadow:var(--shadow-sm)">${v.planRunning ? 'Skriver …' : 'Skriv tavlan'}</button>
       </div>
 
@@ -4361,6 +4521,61 @@ function viewPlanning(v){
         ${ v.planSavedPath ? `<span role="status" style="font-size:13.5px;color:var(--ink-2);font-variant-numeric:tabular-nums;word-break:break-all">Sparad: ${esc(v.planSavedPath)}</span>` : '' }
         ${ v.wbExportMsg ? `<span role="status" style="font-size:13.5px;color:${v.wbExportFailed ? 'var(--bad)' : 'var(--ink-2)'};font-variant-numeric:tabular-nums;word-break:break-all">${esc(v.wbExportMsg)}</span>` : '' }
       </div>
+
+      ${ v.cal ? `
+      <div style="margin-top:38px">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap">
+          <span class="eyebrow">Kalender</span>
+          <span style="flex:1"></span>
+          <div style="display:inline-flex;gap:3px;padding:3px;background:var(--track);border-radius:9px;border:1px solid var(--line)">
+            <button data-click="${on(v.onCalManad)}" aria-pressed="${v.calIsManad}" data-seg="${v.calIsManad ? 'on' : 'off'}" style="border:none;border-radius:7px;padding:5px 12px;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;background:transparent;color:var(--ink-2)">Månad</button>
+            <button data-click="${on(v.onCalVecka)}" aria-pressed="${!v.calIsManad}" data-seg="${!v.calIsManad ? 'on' : 'off'}" style="border:none;border-radius:7px;padding:5px 12px;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;background:transparent;color:var(--ink-2)">Vecka</button>
+          </div>
+          <div style="display:inline-flex;align-items:center;gap:8px">
+            <button data-click="${on(v.onCalPrev)}" aria-label="Föregående" style="width:30px;height:30px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);cursor:pointer;font-size:14px">‹</button>
+            <span style="font-size:14.5px;font-weight:600;color:var(--ink);min-width:130px;text-align:center;font-variant-numeric:tabular-nums">${esc(v.cal.title || '')}</span>
+            <button data-click="${on(v.onCalNext)}" aria-label="Nästa" style="width:30px;height:30px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);cursor:pointer;font-size:14px">›</button>
+          </div>
+        </div>
+
+        ${ v.cal.mode === 'vecka' ? `
+          <div style="background:var(--surface);border:1px solid var(--line);border-radius:13px;box-shadow:var(--shadow-sm);overflow:hidden">
+            ${ v.cal.days.map(function(d){ return `
+              <div style="display:flex;align-items:flex-start;gap:14px;padding:10px 14px;border-bottom:1px solid color-mix(in srgb,var(--line) 60%,transparent);${d.isToday ? 'background:var(--accent-weak)' : ''}">
+                <span style="flex:0 0 74px;font-family:var(--mono);font-size:12px;color:${d.isToday ? 'var(--accent)' : 'var(--ink-3)'};font-weight:${d.isToday ? '700' : '500'};padding-top:3px">${esc(d.label)}</span>
+                <div style="flex:1;display:flex;flex-direction:column;gap:4px;min-width:0">
+                  ${ d.entries.length ? d.entries.map(function(e2){ return `
+                    <button data-key="${esc(e2.key)}" data-click="${on(e2.onOpen)}" style="display:flex;align-items:center;gap:7px;border:1px solid color-mix(in srgb,${e2.color} 30%,transparent);background:color-mix(in srgb,${e2.color} 11%,transparent);color:${e2.color};border-radius:7px;padding:4px 9px;font-size:12.5px;font-family:inherit;cursor:pointer;text-align:left;max-width:100%;${e2.cancelled ? 'text-decoration:line-through;opacity:.55' : ''}">
+                      ${ e2.starttid ? `<span style="font-family:var(--mono);font-size:11px">${esc(e2.starttid)}</span>` : '' }
+                      <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:${e2.held ? '600' : '500'}">${e2.held ? '✓ ' : ''}${esc(e2.titel)}</span>
+                      ${ e2.group ? `<span style="font-size:11px;opacity:.75">${esc(e2.group)}</span>` : '' }
+                    </button>
+                  `; }).join('') : `<span style="font-size:12.5px;color:var(--ink-3);padding-top:3px">—</span>` }
+                </div>
+              </div>
+            `; }).join('') }
+          </div>
+        ` : `
+          <div style="background:var(--surface);border:1px solid var(--line);border-radius:13px;box-shadow:var(--shadow-sm);overflow:hidden">
+            <div style="display:grid;grid-template-columns:repeat(7,1fr)">
+              ${ v.veckodagar.map(function(d){ return `<span style="padding:7px 9px;font-family:var(--mono);font-size:10.5px;letter-spacing:0.06em;text-transform:uppercase;color:var(--ink-3);border-bottom:1px solid var(--line)">${esc(d)}</span>`; }).join('') }
+            </div>
+            ${ v.cal.weeks.map(function(week){ return `
+              <div style="display:grid;grid-template-columns:repeat(7,1fr)">
+                ${ week.map(function(c){ return c.blank
+                  ? `<div style="min-height:84px;border-bottom:1px solid color-mix(in srgb,var(--line) 55%,transparent);background:var(--sunken);opacity:.5"></div>`
+                  : `<div style="min-height:84px;padding:5px 6px;border-bottom:1px solid color-mix(in srgb,var(--line) 55%,transparent);${c.isToday ? 'background:var(--accent-weak)' : ''};overflow:hidden">
+                      <span style="font-family:var(--mono);font-size:11px;color:${c.isToday ? 'var(--accent)' : 'var(--ink-3)'};font-weight:${c.isToday ? '700' : '500'}">${esc(c.day)}</span>
+                      ${ c.entries.map(function(e2){ return `
+                        <button data-key="${esc(e2.key)}" data-click="${on(e2.onOpen)}" title="${esc(e2.titel)}${e2.group ? ' — ' + esc(e2.group) : ''}" style="display:block;width:100%;margin-top:3px;border:1px solid color-mix(in srgb,${e2.color} 30%,transparent);background:color-mix(in srgb,${e2.color} 11%,transparent);color:${e2.color};border-radius:5px;padding:2px 6px;font-size:11px;font-family:inherit;cursor:pointer;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:${e2.held ? '600' : '500'};${e2.cancelled ? 'text-decoration:line-through;opacity:.55' : ''}">${e2.held ? '✓ ' : ''}${esc(e2.titel)}</button>
+                      `; }).join('') }
+                    </div>`; }).join('') }
+              </div>
+            `; }).join('') }
+          </div>
+        ` }
+      </div>
+      ` : '' }
     </section>
 `; }
 

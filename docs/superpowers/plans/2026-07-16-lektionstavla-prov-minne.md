@@ -185,31 +185,52 @@ och enhetscirkel-som-ellips saknar deterministisk vakt (promptregel finns).
 Mål: appen minns automatiskt vilka lektioner som planerats/hållits med vilka
 klasser och vad de täckte; kalendervy i Planering-fliken.
 
-- [ ] **Migration v3 → v4** i `app/db.py` (endast additiv):
+- [x] **Migration v3 → v4** i `app/db.py` (endast additiv):
       `planned_lessons`, `course_content`, `content_tags` enligt specen §2.
       Rollback: `DROP TABLE` på de tre + `schema_version` = 3; befintliga
       tabeller rörs ej. Migrationstest i `tests/test_db.py` (tom DB + v3-DB
-      med data).
-- [ ] Bundla centralt innehåll: `app/data/centralt_innehall/*.json`
-      (matematikkurserna, fält för Gy11/Gy25-version) + seedning vid start
-      (idempotent, jfr `migrate_from_history`).
-- [ ] Auto-länkning: när en lektion får klass/kurs/datum (befintligt
+      med data + rollbacktest).
+      `content_tags` har CHECK-villkor (exakt en av lesson/planned/exam);
+      `exam_id` är förberedd utan FK (exams-tabellen kommer i Fas 4);
+      `UNIQUE(course_id, kod)` på course_content gör seedningen idempotent.
+- [x] Bundla centralt innehåll: `app/data/centralt_innehall/*.json`
+      (Ma1b–Ma4, fält för Gy11/Gy25-version) + seedning vid start
+      (idempotent, jfr `migrate_from_history`). Texterna är kondenserade
+      parafraser av Gy11-innehållet (markerat i filerna) — inte Skolverkets
+      exakta formuleringar. `app/course_data.py` laddar (fryst via
+      `sys._MEIPASS`; `app/data` tillagd i PyInstaller-spec:en).
+- [x] Auto-länkning: när en lektion får klass/kurs/datum (befintligt
       org-flöde i `server.py`) matcha `planned_lessons` på
       `group_id`+`course_id`+`datum` → sätt `lesson_id`, status `hållen`.
       Manuell länk/av-länk via `PATCH /api/planning/{id}`.
-- [ ] Innehållstaggning: utöka `EXTRACT_SCHEMA` i `app/postprocess.py` med
-      "behandlat innehåll" → skriv `content_tags` för lektionen.
-- [ ] `db.calendar_entries(year, month)`: planerade + hållna lektioner +
-      prov; `db.memory_for_prompt(group_id, course_id, until_datum)` —
-      kompakt minneskontext för tavel-/provprompter (bygger på
-      `lessons_excerpts_for`, `next_prep`).
-- [ ] Kalendervy (månad/vecka) i `viewPlanning()`: färgkodning per klass
-      (grade-paletten), klick → planering/lektion/prov. Ingen synk, ingen
-      CalDAV; Google Calendar-koden lämnas orörd.
-- [ ] Tester: migration, seed, auto-länkning (± toleranser, dubbletter),
-      `calendar_entries`, `memory_for_prompt`, nya rutter.
+      Tolerans ±90 min på starttid, närmaste kandidat vinner vid dubbletter;
+      saknad starttid räknas som svagast giltiga träff. Idempotent.
+      "Godkänn & spara" skriver nu planeringen till DB:n (status planerad,
+      datum/starttid från formuläret) + JSON-artefakt som tidigare.
+- [x] Innehållstaggning: `EXTRACT_SCHEMA` utökad med "innehall" (2–5
+      fritextpunkter om behandlat innehåll); ny `postprocess.extract_full`
+      (bakåtkompatibel `extract` kvar) → `db.tag_content_from_texts` matchar
+      deterministiskt (konservativt ordöverlapp) mot kursens centrala
+      innehåll och skriver `content_tags`.
+- [x] `db.calendar_entries(year, month)`: planerade + hållna lektioner
+      (prov i Fas 4); länkade lektioner dedupas (visas som sin planering).
+      `db.memory_for_prompt(group_id, course_id, until_datum)` — kompakt
+      minneskontext (senaste lektioner + taggat innehåll + öppna
+      uppföljningar); tavelgenereringen använder den nu i stället för rå
+      `next_prep`.
+- [x] Kalendervy (månad/vecka) i `viewPlanning()`: färgkodning per klass
+      (paletten `--c-sky/plum/sage/mustard`, stabil per group_id), klick →
+      planering laddas i läsläge / lektion → Inspelningar. Formuläret fick
+      datum + starttid. Ingen synk, ingen CalDAV; Google Calendar-koden
+      orörd. Veckoläget hämtar båda månaderna när veckan korsar månadsskifte.
+- [x] Tester: migration (tom/v3/rollback), seed, auto-länkning
+      (± toleranser, dubbletter, idempotens), `calendar_entries`,
+      `memory_for_prompt`, taggmatchning, nya rutter (kalender, PATCH,
+      approve→DB, org-flödets auto-länkning) + e2e-fall
+      generera→godkänn→kalenderchip→öppna i läsläge.
 
-Status: ej påbörjad.
+Status: klar 2026-07-16 (`python -m pytest` 566 gröna; `node --check`;
+e2e-sviten grön förutom det kända förexisterande 03-postprocess-felet).
 
 ## Fas 4 — Provgenerator (LaTeX → lokal PDF)
 
