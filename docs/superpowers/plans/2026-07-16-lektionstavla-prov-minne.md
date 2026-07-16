@@ -240,38 +240,63 @@ poäng och E/C/A-kravgränser → PDF att skriva ut → sparat i minnet.
 - [ ] **Beslutspunkt först:** utvärdera Tectonic-bundling med förseedad
       paketcache i PyInstaller-miljön mot MiKTeX Portable; dokumentera valet
       i specen innan resten av fasen byggs.
-- [ ] `app/exam_spec.py`: Pydantic-modeller (prov, del, uppgift med förmågor
+      **DELVIS — väntar på användaren:** nedladdning + körning av
+      Tectonic-binären (GitHub-release, ~20 MB) stoppades av
+      behörighetsklassificeraren och kräver användarens godkännande.
+      Allt runtomkring är byggt motoragnostiskt: `app/exam_pdf.py` hittar
+      `bin/tectonic/tectonic.exe`, sätter `TECTONIC_CACHE_DIR` till
+      `bin/tectonic/cache/` och kör `--only-cached` när cachen är förseedad;
+      PyInstaller-spec:en buntar `bin/tectonic/` om mappen finns. Kvar när
+      binären är på plats: kompilera provmallen en gång online (seedar
+      cachen), verifiera `--only-cached` offline, dokumentera i specen.
+- [x] `app/exam_spec.py`: Pydantic-modeller (prov, del, uppgift med förmågor
       B/P/PL/R/K, poäng `(e/c/a)`, typ, innehållstaggar, lösningsförslag,
-      bedömningsanvisning) + json_schema; balansvalidator mot målfördelning;
-      kravgränsberäkning (endast E/C/A, deklarerad regel, konfigurerbara
-      procentsatser med NP-typiska default).
-- [ ] `app/exam_latex.py` + `app/templates/{prov.tex.j2,bedomning.tex.j2}`:
+      bedömningsanvisning) + json_schema; balansvalidator mot målfördelning
+      (intervall per förmåga/nivå + blandningskrav); kravgränsberäkning
+      (endast E/C/A, deklarerad regel med motiveringstext, konfigurerbara
+      procentsatser med NP-typiska default: 25/45+30/65+40).
+- [x] `app/exam_latex.py` + `app/templates/{prov.tex.j2,bedomning.tex.j2}`:
       fast preamble, försättsblad med poäng/kravgränser/hjälpmedel,
-      poängrutor, svarsutrymme; LaTeX-escaping av all icke-matematisk text.
-- [ ] `app/exam_pdf.py`: kompilera via bundlad motor (subprocess, timeout,
+      poängrutor, svarsutrymme; LaTeX-escaping av all icke-matematisk text
+      ($-inline-matte bevaras som `\( \)`; kontrolltecken strippas).
+      Jinja-avgränsarna är parentesbaserade — inga LaTeX-krockar.
+- [x] `app/exam_pdf.py`: kompilera via bundlad motor (subprocess, timeout,
       loggfil vid fel — kompileringsfel går tillbaka till modellen som
-      korrigeringsprompt, max 2 rundor); artefakter under
-      `Transkriberingar/prov/<kurs>/<datum>/`.
-- [ ] DB v4-tillägg (samma migrationsfas om Fas 3 ej mergats, annars v5 —
-      additiv, samma rollback-mönster): `exams`, `exam_items`,
-      `exam_versions` (typkolumn `prov|arbetsblad`).
-- [ ] Router `app/web/routes_exam.py`: `POST /api/exams/generate` (SSE,
-      arbitermönstret), `POST /api/exams/{id}/refine` (riktad omgenerering av
-      enskild uppgift), `POST /api/exams/{id}/approve` (lås version, rendera
-      PDF, spara i minnet), `GET /api/exams/{id}/pdf|tex`,
-      "Öppna i Overleaf"-export (ren `.tex`-nedladdning + gateway-POST från
-      klienten; tydligt märkt tillval — se specens Overleaf-avgränsning).
-- [ ] UI i Planering-fliken: guide (kurs → innehållspunkter med
-      behandlat/obehandlat-markering ur minnet → längd/delar → generera),
-      balansmätare (förmågor, E/C/A), uppgiftslista med per-uppgift-chatt,
-      PDF-förhandsvisning, versionshistorik.
-- [ ] Prompten får minneskontext: behandlat innehåll + tidigare provs
-      uppgiftsteman (default: undvik upprepning).
-- [ ] Tester: exam_spec (balans, kravgränser, escaping), LaTeX-mall
-      (golden-fil), pdf-modul med stubbat kompilatoranrop, rutter med
-      stubbat LLM; PDF-kompilering end-to-end som manuellt bench-steg.
+      korrigeringsprompt, max 2 rundor via `exam_gen.fix_latex`); artefakter
+      under `Transkriberingar/prov/<kurs>/<datum>/`. `--only-cached` när
+      paketcachen är förseedad (strikt offline).
+- [x] DB v5 (additiv, samma rollback-mönster — godkänd): `exams`,
+      `exam_items`, `exam_versions` (typkolumn `prov|arbetsblad`);
+      migrations- och rollbacktest i `tests/test_db.py`.
+- [x] Router `app/web/routes_exam.py`: `POST /api/exams/generate` (SSE,
+      arbitermönstret, minneskontext + valda innehållspunkter taggas mot
+      provet), `POST /api/exams/{id}/refine` (riktad omgenerering, ny
+      version), `POST /api/exams/{id}/approve` (lås version, rendera
+      prov + bedömningsanvisning, kompilera PDF med korrigeringsloop,
+      spara i minnet — kvarstående kompileringsfel redovisas ärligt och
+      provet godkänns med enbart .tex), `GET /api/exams/{id}/pdf|tex`
+      (sökvägsvaliderat), `GET /api/exams/content-status`
+      (behandlat/obehandlat ur minnet). "Öppna i Overleaf" är klientens
+      gateway-POST av .tex-källan — tydligt märkt tillval.
+- [x] UI i Planering-fliken: guide (kurs → innehållspunkter med ✓/○ ur
+      minnet → antal/tid/delar/datum → generera), balansrad (totalpoäng
+      per nivå + förmågechips + kravgränser), uppgiftslista med
+      per-uppgift-chatt (numrering speglar mallens delordning),
+      PDF/.tex-knappar och versionsrad. Kvarstående fel visas ärligt.
+- [x] Prompten får minneskontext: `memory_for_prompt` + tidigare provs
+      uppgiftsteman via `db.exam_themes_for_prompt` (default: undvik
+      upprepning).
+- [x] Tester: exam_spec (balans, kravgränser, escaping), LaTeX-mall
+      (golden-markörer), pdf-modul med stubbat kompilatoranrop (framgång/
+      fel/timeout/saknad motor), genereringslooparna med stubbat LLM,
+      rutterna (409, versionering, approve med/utan motor, ärliga
+      kompileringsfel, innehållsstatus) + e2e-guide→PDF-flödet med fejkar.
+      PDF-kompilering end-to-end återstår som manuellt bench-steg när
+      Tectonic-binären är godkänd (se beslutspunkten).
 
-Status: ej påbörjad.
+Status: kod klar 2026-07-16 (`python -m pytest` 603 gröna; `node --check`;
+e2e-tavel/prov-specarna gröna). **Återstår:** Tectonic-nedladdningen
+(användarbeslut) + offline-verifiering + skarp PDF-körning.
 
 ## Fas 5 — Arbetsblad & progression
 

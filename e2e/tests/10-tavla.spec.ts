@@ -112,7 +112,7 @@ test("Planering: godkänd tavla hamnar i kalendern och kan öppnas (Fas 3)", asy
   const now = new Date();
   const datum = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-15`;
   await page.getByLabel("Moment").fill("Kalendertest — trigonometri");
-  await page.getByLabel("Datum").fill(datum);
+  await page.getByLabel("Datum", { exact: true }).fill(datum);
   await page.getByLabel("Starttid").fill("09:10");
   await page.getByRole("button", { name: "Skriv tavlan" }).click();
 

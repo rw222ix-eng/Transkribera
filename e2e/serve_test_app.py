@@ -50,7 +50,7 @@ def _install_fakes() -> None:
     """Monkeypatch GPU-bound inference; keep every other code path real."""
     import copy
 
-    from app import lesson_board, postprocess, llm_client, transcriber
+    from app import exam_gen, exam_pdf, lesson_board, postprocess, llm_client, transcriber
     from app.web import server
 
     def fake_transcribe(cmd, base, emit, on_proc=None, progress_scale=1.0,
@@ -143,6 +143,68 @@ def _install_fakes() -> None:
     lesson_board.generate_board = fake_generate_board
     lesson_board.refine_board = fake_refine_board
     lesson_board.repair_board = fake_repair_board
+
+    # Provgeneratorn (Fas 4) — balanserat fejkprov + fejkad PDF-motor så
+    # hela guide→generera→iterera→godkänn→PDF-flödet kan e2e-testas.
+    def _fake_exam(kurs="Ma2b", klass="klassen"):
+        return {
+            "titel": f"Prov — {kurs}", "kurs": kurs, "klass": klass,
+            "tid_min": 120, "hjalpmedel": "Del B utan räknare. Del C med räknare.",
+            "uppgifter": [
+                {"del": "B", "formaga": "B", "typ": "rutin", "poang": [2, 0, 0],
+                 "text": "Ange nollställena till $f(x) = (x-1)(x+3)$.",
+                 "innehall": ["nollställen"], "losning": "$x=1$, $x=-3$.",
+                 "bedomning": "+2 E."},
+                {"del": "B", "formaga": "P", "typ": "rutin", "poang": [2, 0, 0],
+                 "text": "Lös ekvationen $x^2 - 4x + 3 = 0$.",
+                 "innehall": ["pq-formeln"], "losning": "$x=1$ eller $x=3$.",
+                 "bedomning": "+1 E per rot."},
+                {"del": "C", "formaga": "P", "typ": "redovisning", "poang": [2, 1, 0],
+                 "text": "Lös $x^2 + 6x - 7 = 0$ med kvadratkomplettering.",
+                 "innehall": ["kvadratkomplettering"],
+                 "losning": "$(x+3)^2 = 16$.", "bedomning": "+2 E, +1 C."},
+                {"del": "C", "formaga": "PL", "typ": "problem", "poang": [1, 2, 1],
+                 "text": "Maximera arean av en hage med omkretsen 60 m.",
+                 "innehall": ["optimering"], "losning": "Kvadrat 15×15.",
+                 "bedomning": "+1 E, +2 C, +1 A."},
+                {"del": "C", "formaga": "R", "typ": "resonemang", "poang": [1, 1, 2],
+                 "text": "Motivera om $a < 0$ ger största värde.",
+                 "innehall": ["andragradsfunktioner"], "losning": "Ja.",
+                 "bedomning": "+1 E, +1 C, +2 A."},
+                {"del": "C", "formaga": "K", "typ": "redovisning", "poang": [2, 2, 1],
+                 "text": "Förklara symmetrilinjen för $f(x) = x^2 - 6x + 5$.",
+                 "innehall": ["symmetrilinje"], "losning": "$x = 3$.",
+                 "bedomning": "+2 E, +2 C, +1 A."},
+            ],
+        }
+
+    def fake_generate_exam(kurs, klass, punkter, *, model, antal=10,
+                           tid_min=120, delar=True, memory="", teman="",
+                           llm=None, max_rounds=3, log_cb=None):
+        if log_cb:
+            log_cb("[FEJK] Skriver provet …")
+        return {"exam": _fake_exam(kurs, klass), "errors": [], "rounds": 1}
+
+    def fake_refine_exam(exam, message, *, model, nummer=None, llm=None,
+                         max_rounds=3, log_cb=None):
+        import copy as _copy
+        updated = _copy.deepcopy(exam)
+        idx = (nummer - 1) if nummer else 0
+        if 0 <= idx < len(updated["uppgifter"]):
+            updated["uppgifter"][idx]["text"] += " (ändrad)"
+        return {"exam": updated, "errors": [], "rounds": 1}
+
+    def fake_compile_pdf(tex, out_dir, jobname, **kw):
+        from pathlib import Path as _P
+        out = _P(out_dir); out.mkdir(parents=True, exist_ok=True)
+        p = out / f"{jobname}.pdf"
+        p.write_bytes(b"%PDF-1.5\n% fejkad PDF for e2e\n%%EOF")
+        return p, ""
+
+    exam_gen.generate_exam = fake_generate_exam
+    exam_gen.refine_exam = fake_refine_exam
+    exam_pdf.engine_available = lambda: True
+    exam_pdf.compile_pdf = fake_compile_pdf
 
     server._run_transcribe_subprocess = fake_transcribe
     postprocess.run = fake_run
