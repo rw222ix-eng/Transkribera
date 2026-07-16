@@ -68,7 +68,6 @@
     calSetupOpen: false,        // guidat "Koppla Google Kalender"-fönster
     calBusy: false,             // installation/inloggning pågår
     ovAnalyzing: false,         // Analysera lektion pågår (overlayens header)
-    ovReportBusy: false,        // Rapport-export pågår (overlayens header)
     openDD: null,
     search: '',
     diskTarget: 'd',
@@ -1928,7 +1927,7 @@
                lessonChatSegs: [], lessonChat: [], lessonChatInput: '',
                lessonChatTyping: false, lessonChatCiteSel: null,
                lessonChatEvent: null, evPick: null,
-               ovAnalyzing: false, ovReportBusy: false });
+               ovAnalyzing: false });
     getJSON('/api/history/' + encodeURIComponent(hid)).then(function (h) {
       var segs = ((h && h.transcript) || []).map(function (g) { return { time: fmtTime(g.start), text: g.text }; });
       setState({ lessonChatSegs: segs });
@@ -1942,7 +1941,7 @@
     var hid = S.resultId;
     if (!hid) return;
     // Slå upp den riktiga lektionsposten (den bär lesson-id:t) så chatten får
-    // med "Analysera lektion"/"Rapport" — annars saknades de fast lektionen fanns
+    // med "Analysera lektion" — annars saknades den fast lektionen fanns
     // i DB. Faller tillbaka på history-/filnamnsposten om listan inte är laddad.
     var lesson = (S.lessons || []).find(function (x) { return x.history_id === hid; });
     if (!lesson) {
@@ -1955,9 +1954,9 @@
     setTab('recordings');       // byt till Inspelningar (laddar om lektionslistan)
     openLessonChat(lesson);     // öppna lektionschatten för inspelningen
   }
-  // Analysera lektion + Rapport bor i overlayens header sedan Insikter-panelen
+  // Analysera lektion bor i overlayens header sedan Insikter-panelen
   // togs bort med kartotek-omdesignen — extraktionen matar Kommande/Inför
-  // nästa lektion/Terminstrender, rapporten öppnas i webbläsaren.
+  // nästa lektion/Terminstrender.
   function analyzeLesson() {
     var lid = (S.lessonChatMeta || {}).lessonId;
     if (!lid || S.ovAnalyzing) return;
@@ -1973,16 +1972,6 @@
       }
     });
   }
-  function exportLessonReport() {
-    var lid = (S.lessonChatMeta || {}).lessonId;
-    if (!lid || S.ovReportBusy) return;
-    setState({ ovReportBusy: true });
-    fetch('/api/lessons/' + encodeURIComponent(lid) + '/report?format=html')
-      .then(function (r) { return r.json(); }).then(function (res) {
-        setState({ ovReportBusy: false });
-        if (res && res.path) { fetch('/api/open', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: res.path }) }).catch(function () {}); }
-      }).catch(function () { setState({ ovReportBusy: false }); });
-  }
   function onLessonChatInput(e) { setState({ lessonChatInput: e.target.value }); }
   function onLessonChatKey(e) { if (e.key === 'Enter') sendLessonChat(); }
   function toggleLessonChatThink() { setState(function (s) { return { lessonChatThink: !s.lessonChatThink }; }); }
@@ -1995,7 +1984,8 @@
     var q = (typeof qArg === 'string' && qArg ? qArg : S.lessonChatInput).trim();
     if (!q) return;
     // "Skapa läxpåminnelse …" o.dyl. föreslår en kalenderhändelse vid sidan av svaret.
-    if (/påminn|kalender|prov|läx|förhör|inlämning/i.test(q) && !S.lessonChatEvent) proposeLessonEvent();
+    var _EV_RE = /påminn|kalender|prov|läx|förhör|inlämning|redovisning|deadline|nationella/i;
+    if (_EV_RE.test(q) && !S.lessonChatEvent) proposeLessonEvent();
     setState(function (s) { return { lessonChat: s.lessonChat.concat([{ role: 'user', text: q }, { role: 'assistant', text: '', reason: '' }]), lessonChatInput: '', lessonChatTyping: true, lessonChatCiteSel: null }; });
     var msgs = S.lessonChat.filter(function (m) { return !(m.role === 'assistant' && !m.text); })
       .map(function (m) { return { role: m.role, content: m.text }; });
@@ -2006,7 +1996,13 @@
       if (ev.type === 'reasoning') { accReason += ev.text; setLast(acc, accReason, true); }
       else if (ev.type === 'token') { acc += ev.text; setLast(acc, accReason, false); }
       else if (ev.type === 'error') { setLast(acc || ('Fel: ' + (ev.message || 'okänt')), accReason, false); }
-      else if (ev.type === 'done') { var r = ev.result || {}; setLast(r.text || acc, accReason, false); }
+      else if (ev.type === 'done') {
+        var r = ev.result || {}; var txt = r.text || acc;
+        setLast(txt, accReason, false);
+        // Kalendern sköts automatiskt: föreslår en händelse även när det är
+        // modellens svar (inte frågan) som nämner prov/läxa/inlämning o.dyl.
+        if (_EV_RE.test(txt) && !S.lessonChatEvent) proposeLessonEvent();
+      }
     });
   }
 
@@ -3200,7 +3196,6 @@
       ovOpenFull: function () { openLesson({ history_id: st.lessonChatId }); },
       ovHasLesson: !!(st.lessonChatMeta && st.lessonChatMeta.lessonId),
       ovAnalyzing: st.ovAnalyzing, onAnalyze: analyzeLesson,
-      ovReportBusy: st.ovReportBusy, onOvReport: exportLessonReport,
       ovAskSum: function () { sendLessonChat('Sammanfatta lektionen i tre punkter'); },
       ovAskStud: function () { sendLessonChat('Vilka elever nämns och varför?'); },
       ovAskRemind: function () { sendLessonChat('Skapa en läxpåminnelse utifrån lektionen'); },
@@ -4341,7 +4336,7 @@ function viewModals(v){ return `
 
   ${ v.lessonChatOpen ? `
   <div data-click="${on(v.closeLessonChat)}" data-screen-label="Lektion (overlay)" style="position:fixed;inset:0;z-index:120;display:flex;align-items:center;justify-content:center;padding:clamp(10px,3vw,38px);background:color-mix(in srgb,var(--canvas) 58%,transparent);backdrop-filter:blur(9px);animation:modalback .3s ease">
-    <div data-click="${on(v.stop)}" data-modal-card role="dialog" aria-modal="true" aria-label="Lektion" data-dialog tabindex="-1" style="width:min(960px,96vw);height:min(88vh,880px);display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);overflow:hidden">
+    <div data-click="${on(v.stop)}" data-modal-card role="dialog" aria-modal="true" aria-label="Lektion" data-dialog tabindex="-1" style="width:min(1240px,96vw);height:min(88vh,880px);display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);overflow:hidden">
       <div style="flex:0 0 auto;display:flex;align-items:center;gap:11px;padding:11px 13px 11px 11px;border-bottom:1px solid var(--line)">
         <button data-click="${on(v.closeLessonChat)}" aria-label="Stäng (Esc)" title="Stäng · Esc" style="flex:0 0 auto;width:34px;height:34px;display:flex;align-items:center;justify-content:center;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:10px;cursor:pointer;transition:transform .14s cubic-bezier(.2,.8,.25,1),border-color .14s,background .14s,color .14s" data-sh="border-color:var(--line-2) !important;background:var(--sunken) !important;color:var(--ink) !important"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"></path></svg></button>
         <span data-cc="${esc(v.ovCc)}" style="border-radius:99px;padding:3px 11px;font-size:11.5px;font-weight:600;white-space:nowrap;flex:0 0 auto">${esc(v.ovTag)}</span>
@@ -4352,11 +4347,11 @@ function viewModals(v){ return `
         <span style="flex:1"></span>
         ${ v.ovHasLesson ? `
         <button data-click="${on(v.onAnalyze)}" ${ v.ovAnalyzing ? 'disabled' : '' } title="Extrahera kalenderposter, åtgärder och svårigheter till Kommande och Terminstrender" style="flex:0 0 auto;display:inline-flex;align-items:center;gap:7px;background:var(--accent-weak);color:var(--accent);border:1px solid color-mix(in srgb,var(--accent) 38%,transparent);border-radius:9px;padding:8px 13px;font-size:12.5px;font-weight:600;cursor:${ v.ovAnalyzing ? 'default' : 'pointer' };font-family:inherit;opacity:${ v.ovAnalyzing ? '.6' : '1' };transition:transform .14s cubic-bezier(.2,.8,.25,1),border-color .14s,background .14s" data-sh="background:color-mix(in srgb,var(--accent) 15%,transparent) !important">${ v.ovAnalyzing ? `<span style="width:13px;height:13px;border-radius:50%;border:2px solid color-mix(in srgb,var(--accent) 35%,transparent);border-top-color:var(--accent);animation:spin .7s linear infinite;flex:0 0 auto"></span>Analyserar …` : `<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto"><path d="M8 1.8l1.4 3.6 3.6 1.4-3.6 1.4L8 11.8 6.6 8.2 3 6.8l3.6-1.4z"></path></svg>Analysera lektion` }</button>
-        <button data-click="${on(v.onOvReport)}" ${ v.ovReportBusy ? 'disabled' : '' } title="Exportera rapport (öppnas i webbläsaren, skriv ut som PDF)" style="flex:0 0 auto;display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:9px;padding:8px 13px;font-size:12.5px;font-weight:500;cursor:${ v.ovReportBusy ? 'default' : 'pointer' };font-family:inherit;opacity:${ v.ovReportBusy ? '.6' : '1' };transition:transform .14s cubic-bezier(.2,.8,.25,1),border-color .14s,background .14s,color .14s" data-sh="border-color:var(--line-2) !important;background:var(--sunken) !important;color:var(--ink) !important"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto"><path d="M9 2H4.5A1.5 1.5 0 0 0 3 3.5v9A1.5 1.5 0 0 0 4.5 14h7A1.5 1.5 0 0 0 13 12.5V6z"></path><path d="M9 2v4h4M6 9h4M6 11.2h4"></path></svg>${ v.ovReportBusy ? 'Exporterar …' : 'Rapport' }</button>
         ` : '' }
         <button data-click="${on(v.ovOpenFull)}" title="Öppna hela transkriptvyn" style="flex:0 0 auto;display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:9px;padding:8px 13px;font-size:12.5px;font-weight:500;cursor:pointer;font-family:inherit;transition:transform .14s cubic-bezier(.2,.8,.25,1),border-color .14s,background .14s,color .14s" data-sh="border-color:var(--line-2) !important;background:var(--sunken) !important;color:var(--ink) !important"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto"><path d="M6 2.5H3.5A1 1 0 0 0 2.5 3.5V6M10 2.5h2.5a1 1 0 0 1 1 1V6M13.5 10v2.5a1 1 0 0 1-1 1H10M6 13.5H3.5a1 1 0 0 1-1-1V10"></path></svg>Transkript</button>
       </div>
-      <div data-hidescroll style="flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;padding:18px 22px 6px">
+      <div class="ovsplit">
+      <div data-hidescroll class="ovtrans">
         <div style="max-width:760px;margin:0 auto">
           <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
             <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3)">Transkription</span>
@@ -4378,8 +4373,12 @@ function viewModals(v){ return `
           `; }).join('') }
         </div>
       </div>
-      <div style="flex:0 0 auto;border-top:1px solid var(--line);background:var(--sunken)">
-        <div data-hidescroll style="max-height:44vh;overflow:auto;overscroll-behavior:contain;padding:13px 18px 14px">
+      <div class="ovchat">
+        <div class="ovchat-head">
+          <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3)">Chatt om lektionen</span>
+          <div style="flex:1;height:1px;background:var(--line)"></div>
+        </div>
+        <div data-hidescroll class="ovchat-scroll">
           ${ v.lessonChatThread.chatEmpty ? `
           <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
             <button data-click="${on(v.ovAskSum)}" style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2);background:var(--surface);border:1px solid var(--line);border-radius:99px;padding:7px 13px;cursor:pointer;font-family:inherit;transition:transform .14s cubic-bezier(.2,.8,.25,1),border-color .14s,color .14s,background .14s" data-sh="border-color:var(--line-2) !important;color:var(--ink) !important">Sammanfatta lektionen</button>
@@ -4391,6 +4390,7 @@ function viewModals(v){ return `
           ${ v.ovEvent ? lessonEventBox(v.ovEvent) : '' }
           ${ chatThread(v.lessonChatThread) }
         </div>
+      </div>
       </div>
     </div>
   </div>
