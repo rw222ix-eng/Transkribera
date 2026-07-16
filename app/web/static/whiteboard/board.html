@@ -1,0 +1,51 @@
+<!doctype html>
+<!-- Tavel-dokument för Planering-fliken. Lever i en egen iframe eftersom
+     motorns styles.css äger body/*-nivån (globala resets, mörk ram,
+     handstilsfont) — den får inte läcka in i appens UI. Iframen är
+     samtidigt den container som morphdom aldrig diffar: motorn äger hela
+     detta dokument. app.js pratar med window-API:t i board.js
+     (renderBoard/printBoard/exportPng — samma origin, direkta anrop).
+     Dokumentet kan även laddas fristående av Playwright-spec-runnern. -->
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<title>Lektionstavla</title>
+<link rel="stylesheet" href="../vendor/katex/katex.min.css">
+<link rel="stylesheet" href="fonts.css">
+<link rel="stylesheet" href="styles.css">
+<style>
+  /* Dokumentet fyller iframen; ingen extra marginal utanför tavlorna. */
+  html, body { min-height: 0; }
+  body { padding: 12px; overflow: hidden; }
+
+  /* Utskriftsvy (jfr designprojektets whiteboard-print.html): vit bakgrund,
+     tavlorna staplade och nedskalade så den bredaste (1800 px + ram) ryms
+     på ett A4-liggande med 8 mm marginal. zoom påverkar layouten och
+     skrivs därför ut korrekt i Chromium/WebView2. */
+  @page { size: A4 landscape; margin: 8mm; }
+  @media print {
+    body { background: #fff; padding: 0; overflow: visible; }
+    .boards-container {
+      flex-direction: column;
+      align-items: center;
+      gap: 8mm;
+      transform: none !important;
+      width: auto !important;
+    }
+    .board-wrapper {
+      break-inside: avoid;
+      page-break-inside: avoid;
+      zoom: 0.57;
+    }
+  }
+</style>
+</head>
+<body>
+<div id="host"></div>
+<script src="../vendor/katex/katex.min.js"></script>
+<script src="handwriting.js"></script>
+<script src="components.js"></script>
+<script src="layout.js"></script>
+<script src="board.js"></script>
+</body>
+</html>

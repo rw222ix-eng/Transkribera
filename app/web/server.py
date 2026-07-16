@@ -27,6 +27,7 @@ from app import (debug_log, hardware, recommend, whisper_manager, llm_client,
                  paths, settings_store, ics_export, backup, report,
                  calendar_google)
 from app.models_catalog import WHISPER_MODELS, LLM_MODELS
+from app.web import routes_planning
 
 _MONTHS_SV = ["jan", "feb", "mar", "apr", "maj", "jun", "jul", "aug", "sep", "okt", "nov", "dec"]
 
@@ -259,6 +260,10 @@ def create_app(base_dir: Path | None = None,
         return await call_next(request)
 
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+    # Planering (Fas 0): egen router — nya funktioner ska inte växa i den här
+    # filen (se planens riskavsnitt om scope-krypning i server.py).
+    app.include_router(routes_planning.create_router(base))
 
     # Single owner of the LLM process + GPU exclusivity. The LLM is NOT started
     # here — it starts lazily on the first correction/chat (see /api/postprocess,

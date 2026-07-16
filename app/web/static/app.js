@@ -146,6 +146,12 @@
     recLevel: 0,               // mikrofon-nivå 0..1 (nivåmätare)
     recSilent: false,          // varning: tyst/ingen signal en längre stund
     incompleteRecs: [],        // oavslutade inspelningar att återställa (krasch)
+    // Planering (Fas 0): whiteboard-motorn renderar en hårdkodad exempellektion
+    // i en egen iframe; LLM-generering kommer i Fas 1.
+    wbRendered: false,         // exempellektionen är färdigrenderad i iframen
+    wbWarnings: [],            // [WB]-varningar från motorns senaste rendering
+    wbExporting: false,        // PNG-export pågår
+    wbExportMsg: '',           // kvitto/fel från senaste exporten
   };
 
   /* instance (non-state) fields */
@@ -521,6 +527,111 @@
     setState({ tab: t, openDD: null });
     if (t === 'recordings') { loadHistory(); loadLessons(); loadOrg(); loadPrep(); loadAgenda(); loadTrends(); }
   }
+  /* ------------------------------------------------- Planering (Fas 0) -- */
+  // Tavlan renderas av whiteboard-motorn (vendrad från designprojektet
+  // Whiteboardtavla) i en EGEN iframe: motorns styles.css äger body-nivån i
+  // sitt dokument och får inte läcka in i appens UI, och iframen är samtidigt
+  // containern som morphdom aldrig diffar (jfr audio-elementet — motorn äger
+  // sin egen DOM). Innehållet i Fas 0 är en hårdkodad exempellektion.
+  var WB_EXAMPLE_TITLE = 'Pythagoras sats';
+  var WB_EXAMPLE = { boards: [
+    { // vänster tavla (smal, 900×780) — teori
+      width: 900, height: 780,
+      padding: { top: 30, right: 30, bottom: 30, left: 40 },
+      chrome: 'aluminium', tray: true,
+      name: 'exempel-vanster',
+      sections: [
+        { kind: 'heading', text: 'Pythagoras sats', size: 34,
+          underline: { color: 'red', amplitude: 2, thickness: 3, reserve: 14 },
+          gapAfter: 18 },
+        { kind: 'text', text: 'I en rätvinklig triangel:', size: 22, gapAfter: 8 },
+        { kind: 'math', latex: 'a^2 + b^2 = c^2', size: 30, color: 'blue', gapAfter: 18 },
+        { kind: 'text', text: 'där', size: 20, gapAfter: 4 },
+        { kind: 'list', bullet: '–', size: 19, gap: 4, indent: 22, items: [
+          'a, b = kateter (sidorna vid räta vinkeln)',
+          'c = hypotenusa (motsatt räta vinkeln)',
+        ], gapAfter: 18 },
+        { kind: 'shape', type: 'right-triangle', width: 260, height: 180,
+          labels: { left: 'a', bottom: 'b', right: 'c', inside: 'v' }, gapAfter: 14 },
+        { kind: 'callout', color: 'red', fillOpacity: 0.06, padding: 12, children: [
+          { kind: 'text', text: 'Kom ihåg:', size: 18, color: 'red', gapAfter: 4 },
+          { kind: 'text', text: 'Gäller BARA för rätvinkliga trianglar.', size: 18, color: 'red' },
+        ]},
+      ],
+    },
+    { // höger tavla (bred, 1800×780) — två exempel i kolumner
+      width: 1800, height: 780,
+      padding: { top: 30, right: 30, bottom: 30, left: 30 },
+      chrome: 'aluminium', tray: true,
+      name: 'exempel-hoger',
+      columns: [
+        { weight: 1, sections: [
+          { kind: 'heading', text: 'Exempel 1', size: 28, underline: { color: 'blue' }, gapAfter: 14 },
+          { kind: 'text', text: 'Beräkna hypotenusan c om a = 3 och b = 4.', size: 20, gapAfter: 12 },
+          { kind: 'math', latex: 'c^2 = 3^2 + 4^2', size: 22, gapAfter: 6 },
+          { kind: 'math', latex: 'c^2 = 9 + 16 = 25', size: 22, gapAfter: 6 },
+          { kind: 'math', latex: 'c = \\sqrt{25} = 5', size: 24, color: 'green', gapAfter: 18 },
+          { kind: 'shape', type: 'right-triangle', width: 220, height: 170,
+            labels: { left: 'a = 3', bottom: 'b = 4', right: 'c = 5' } },
+        ]},
+        { weight: 1, sections: [
+          { kind: 'heading', text: 'Exempel 2', size: 28, underline: { color: 'blue' }, gapAfter: 14 },
+          { kind: 'text', text: 'En stege på 5 m lutar mot en vägg. Foten är 2 m från väggen. Hur högt når stegen?', size: 19, gapAfter: 12 },
+          { kind: 'math', latex: 'h^2 + 2^2 = 5^2', size: 22, gapAfter: 6 },
+          { kind: 'math', latex: 'h^2 = 25 - 4 = 21', size: 22, gapAfter: 6 },
+          { kind: 'math', latex: 'h = \\sqrt{21} \\approx 4{,}58 \\text{ m}', size: 22, color: 'green', gapAfter: 14 },
+          { kind: 'callout', color: 'blue', fillOpacity: 0.06, padding: 10, children: [
+            { kind: 'text', text: 'Svar: stegen når ca 4,58 m upp.', size: 18, color: 'blue' },
+          ]},
+        ]},
+      ],
+    },
+  ]};
+
+  var _wbFrame = null;
+  function wbFrameRef(el) {
+    _wbFrame = el;
+    if (!el || el._wired) return;
+    el._wired = true;
+    el.addEventListener('load', renderExampleBoard);
+    // morphdom kan ge oss en redan laddad nod tillbaka (fliken lämnas/öppnas)
+    if (el.contentWindow && el.contentWindow.WBHost) renderExampleBoard();
+  }
+  function renderExampleBoard() {
+    var win = _wbFrame && _wbFrame.contentWindow;
+    if (!win || !win.WBHost) return;
+    win.WBHost.render(WB_EXAMPLE).then(function (res) {
+      setState({ wbRendered: true, wbWarnings: (res && res.warnings) || [] });
+    }).catch(function (e) {
+      setState({ wbRendered: false,
+                 wbWarnings: ['Tavlan kunde inte renderas: ' + ((e && e.message) || e)] });
+    });
+  }
+  function wbPrint() {
+    var win = _wbFrame && _wbFrame.contentWindow;
+    if (win && win.WBHost) win.WBHost.print();
+  }
+  function wbExportPng() {
+    var win = _wbFrame && _wbFrame.contentWindow;
+    if (!win || !win.WBHost || S.wbExporting) return;
+    setState({ wbExporting: true, wbExportMsg: '' });
+    win.WBHost.exportPng(2).then(function (dataUrl) {
+      return fetch('/api/planning/export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: WB_EXAMPLE_TITLE, png: dataUrl }),
+      }).then(function (r) {
+        return r.json().then(function (j) { return { ok: r.ok, body: j }; });
+      });
+    }).then(function (res) {
+      if (!res.ok || res.body.error) throw new Error(res.body.error || 'Exporten misslyckades.');
+      setState({ wbExporting: false, wbExportMsg: 'PNG sparad: ' + res.body.path });
+    }).catch(function (e) {
+      setState({ wbExporting: false,
+                 wbExportMsg: 'Kunde inte spara PNG: ' + ((e && e.message) || e) });
+    });
+  }
+
   function onSource(e) { setState({ source: e.target.value }); }
   function fileRef(el) { _file = el; }
   function openPicker() {
@@ -2242,8 +2353,19 @@
     return {
       theme: st.theme,
       tabTranscribe: st.tab === 'transcribe', tabRecordings: st.tab === 'recordings',
+      tabPlanning: st.tab === 'planning',
       onTabT: function () { setTab('transcribe'); }, onTabIn: function () { setTab('recordings'); },
+      onTabP: function () { setTab('planning'); },
       tabTOn: st.tab === 'transcribe', tabInOn: st.tab === 'recordings',
+      tabPlOn: st.tab === 'planning',
+
+      // Planering (Fas 0)
+      wbTitle: WB_EXAMPLE_TITLE,
+      wbFrameRef: wbFrameRef, wbRendered: st.wbRendered,
+      wbWarnings: st.wbWarnings, wbWarnCount: st.wbWarnings.length,
+      onWbPrint: wbPrint, onWbExport: wbExportPng,
+      wbExporting: st.wbExporting, wbExportMsg: st.wbExportMsg,
+      wbExportFailed: /^Kunde inte/.test(st.wbExportMsg),
       themeIsLight: st.theme !== 'dark',
       toggleTheme: toggleTheme,
 
@@ -2684,6 +2806,9 @@
       getNodeKey: function (node) { return node.nodeType === 1 ? (node.getAttribute('data-key') || node.getAttribute('data-pane') || node.id || null) : null; },
       onBeforeElUpdated: function (from, to) {
         if (from.nodeType === 1 && from.hasAttribute('data-eline') && S.editing) return false;
+        // Tavel-iframen ägs av whiteboard-motorn — morphdom får aldrig
+        // röra den (en diff skulle ladda om dokumentet och tömma tavlan).
+        if (from.nodeType === 1 && from.hasAttribute('data-wb-frame')) return false;
         return true;
       },
     });
@@ -2762,6 +2887,7 @@
         '<div style="display:inline-flex;gap:3px;padding:4px;background:var(--track);border-radius:12px;border:1px solid var(--line)">' +
           '<button data-click="' + on(v.onTabT) + '" aria-pressed="' + v.tabTOn + '" data-seg="' + (v.tabTOn ? 'on' : 'off') + '" style="border:none;border-radius:9px;padding:8px 15px;font-size:15.5px;font-weight:500;cursor:pointer;font-family:inherit;white-space:nowrap;background:transparent;color:var(--ink-2);transition:background .12s,color .12s,box-shadow .12s">Transkribera</button>' +
           '<button data-click="' + on(v.onTabIn) + '" aria-pressed="' + v.tabInOn + '" data-seg="' + (v.tabInOn ? 'on' : 'off') + '" style="border:none;border-radius:9px;padding:8px 15px;font-size:15.5px;font-weight:500;cursor:pointer;font-family:inherit;white-space:nowrap;background:transparent;color:var(--ink-2);transition:background .12s,color .12s,box-shadow .12s">Inspelningar</button>' +
+          '<button data-click="' + on(v.onTabP) + '" aria-pressed="' + v.tabPlOn + '" data-seg="' + (v.tabPlOn ? 'on' : 'off') + '" style="border:none;border-radius:9px;padding:8px 15px;font-size:15.5px;font-weight:500;cursor:pointer;font-family:inherit;white-space:nowrap;background:transparent;color:var(--ink-2);transition:background .12s,color .12s,box-shadow .12s">Planering</button>' +
         '</div>' +
       '</nav>' +
       '<div style="flex:1 1 0;min-width:0;display:flex;justify-content:flex-end;align-items:center;gap:8px">' +
@@ -4055,6 +4181,38 @@ function viewModals(v){ return `
   ` : '' }
 `; }
 
+// Planering (Fas 0): tavlan är artefakten — ett uppslag, ingen dashboard.
+// Iframen skyddas från morphdom via data-wb-frame (se onBeforeElUpdated).
+function viewPlanning(v){ return `
+    <section style="min-height:calc(100vh - 80px);display:flex;flex-direction:column;padding:16px 0 28px">
+      <div class="ehead">
+        <div>
+          <div class="eyebrow" style="margin-bottom:18px">Planering — exempellektion</div>
+          <h1 class="disp" style="font-size:clamp(34px,5.2vw,52px);margin:0">Dagens <span class="ser">tavla</span></h1>
+        </div>
+        <p class="ehead_lede">Så här ser en färdig lektionstavla ut — skriv ut den eller spara som bild. Att skapa egna tavlor ur dina lektioner kommer i nästa steg.</p>
+      </div>
+
+      <div data-key="wb-card" style="background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;box-shadow:var(--shadow-sm)">
+        <iframe data-wb-frame data-key="wb-frame" data-ref="${on(v.wbFrameRef)}" src="/static/whiteboard/board.html" title="Lektionstavla — ${esc(v.wbTitle)}" style="width:100%;height:420px;border:none;display:block;border-radius:8px;background:#2c2c2c"></iframe>
+      </div>
+
+      ${ v.wbWarnCount ? `
+        <div role="status" style="display:flex;flex-direction:column;gap:4px;margin-top:10px;font-size:13px;color:var(--warn)">
+          <span style="font-weight:600">Motorn flaggade ${esc(v.wbWarnCount)} ${v.wbWarnCount === 1 ? 'layoutvarning' : 'layoutvarningar'}:</span>
+          ${ v.wbWarnings.map(function(w){ return `<span style="font-family:var(--mono,monospace);font-size:12px;color:var(--ink-2)">${esc(w)}</span>`; }).join('') }
+        </div>
+      ` : '' }
+
+      <div style="display:flex;align-items:center;gap:10px;margin-top:14px;flex-wrap:wrap">
+        <button data-click="${on(v.onWbPrint)}" ${v.wbRendered ? '' : 'disabled'} style="display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:10px;padding:10px 17px;font-size:14.5px;font-weight:500;font-family:inherit;cursor:${v.wbRendered ? 'pointer' : 'default'};opacity:${v.wbRendered ? '1' : '.55'};box-shadow:var(--shadow-sm)">Skriv ut</button>
+        <button data-click="${on(v.onWbExport)}" ${v.wbRendered && !v.wbExporting ? '' : 'disabled'} style="display:inline-flex;align-items:center;gap:7px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:10px;padding:10px 17px;font-size:14.5px;font-weight:500;font-family:inherit;cursor:${v.wbRendered && !v.wbExporting ? 'pointer' : 'default'};opacity:${v.wbRendered && !v.wbExporting ? '1' : '.55'};box-shadow:var(--shadow-sm)">${v.wbExporting ? 'Sparar …' : 'Spara som PNG'}</button>
+        ${ !v.wbRendered && !v.wbWarnCount ? `<span style="font-size:13.5px;color:var(--ink-3)">Ritar tavlan …</span>` : '' }
+        ${ v.wbExportMsg ? `<span role="status" style="font-size:13.5px;color:${v.wbExportFailed ? 'var(--bad)' : 'var(--ink-2)'};font-variant-numeric:tabular-nums;word-break:break-all">${esc(v.wbExportMsg)}</span>` : '' }
+      </div>
+    </section>
+`; }
+
   // <<<VIEWS_END>>>
 
   function view(v) {
@@ -4062,6 +4220,7 @@ function viewModals(v){ return `
       '<main style="max-width:1120px;margin:0 auto;padding:0 24px">' +
       (v.tabTranscribe ? viewTranscribe(v) : '') +
       (v.tabRecordings ? viewRecordings(v) : '') +
+      (v.tabPlanning ? viewPlanning(v) : '') +
       '</main>' +
       viewModals(v);
   }
@@ -4070,6 +4229,14 @@ function viewModals(v){ return `
   function init() {
     var root = document.getElementById('root');
     bindEvents(root);
+    // Tavel-iframen rapporterar sin skalade höjd (board.js postMessage) så
+    // ramen kan följa innehållet. Endast meddelanden från vårt eget origin.
+    window.addEventListener('message', function (e) {
+      if (e.origin !== window.location.origin) return;
+      if (e.data && e.data.type === 'wb-height' && _wbFrame) {
+        _wbFrame.style.height = (+e.data.px || 420) + 'px';
+      }
+    });
     document.addEventListener('keydown', onKeyDown);
     document.addEventListener('pointerdown', onAnyPress, true);
     syncTheme();
