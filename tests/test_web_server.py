@@ -31,6 +31,47 @@ def test_index_served(client):
     assert "Transkribera" in r.text
 
 
+def test_whiteboard_static_served(client):
+    """Fas 0: whiteboard-motorn och tavel-dokumentet serveras lokalt."""
+    for path, marker in [
+        ("/static/whiteboard/board.html", "board.js"),
+        ("/static/whiteboard/board.js", "WBHost"),
+        ("/static/whiteboard/layout.js", "WBLayout"),
+        ("/static/whiteboard/components.js", "window.WB"),
+        ("/static/whiteboard/handwriting.js", "window.HW"),
+        ("/static/whiteboard/styles.css", ".whiteboard"),
+        ("/static/whiteboard/fonts.css", "Caveat"),
+    ]:
+        r = client.get(path)
+        assert r.status_code == 200, path
+        assert marker in r.text, path
+
+
+def test_whiteboard_fonts_served_locally(client):
+    """Offline-kravet: handstilsfonterna ligger lokalt och ingen fil pekar
+    mot Google Fonts (designmallens @import är ersatt)."""
+    for path in [
+        "/static/whiteboard/fonts/caveat-latin-400-700.woff2",
+        "/static/whiteboard/fonts/gloria-hallelujah-latin-400.woff2",
+        "/static/whiteboard/fonts/shadows-into-light-two-latin-400.woff2",
+    ]:
+        r = client.get(path)
+        assert r.status_code == 200, path
+        assert r.content[:4] == b"wOF2", path
+    assert "fonts.googleapis" not in client.get("/static/whiteboard/styles.css").text
+
+
+def test_katex_vendored(client):
+    """Fas 0: KaTeX serveras lokalt (js + css + woff2), ingen CDN."""
+    r = client.get("/static/vendor/katex/katex.min.js")
+    assert r.status_code == 200 and "katex" in r.text
+    r = client.get("/static/vendor/katex/katex.min.css")
+    assert r.status_code == 200 and "@font-face" in r.text
+    r = client.get("/static/vendor/katex/fonts/KaTeX_Main-Regular.woff2")
+    assert r.status_code == 200
+    assert r.content[:4] == b"wOF2"
+
+
 def test_hardware_endpoint(client):
     r = client.get("/api/hardware")
     assert r.status_code == 200
