@@ -396,7 +396,11 @@ def test_courses_and_groups_get_or_create(client):
     groups = client.get("/api/groups").json()
     courses = client.get("/api/courses").json()
     assert [g["namn"] for g in groups] == ["NA21"]
-    assert [c["namn"] for c in courses] == ["Matematik 2b"]
+    # Startseedningen (Fas 3) lägger in matematikkurserna — den nya kursen
+    # ska finnas bland dem.
+    names = [c["namn"] for c in courses]
+    assert "Matematik 2b" in names
+    assert "Ma3c" in names                     # seedad från bundlad JSON
     assert client.post("/api/groups", json={"namn": "  "}).status_code == 400
 
 
@@ -558,9 +562,11 @@ def _lesson_client(tmp_path, monkeypatch, *, transcript=True, arbiter=None):
 
 def test_extract_writes_llm_insights(tmp_path, monkeypatch):
     monkeypatch.setattr(
-        server.postprocess, "extract",
-        lambda transcript, model, token_cb=None, log_cb=None: [
-            {"typ": "svårighet", "text": "derivata", "due_date": None, "ref": "uppg 3"}])
+        server.postprocess, "extract_full",
+        lambda transcript, model, token_cb=None, log_cb=None: {
+            "insights": [{"typ": "svårighet", "text": "derivata",
+                          "due_date": None, "ref": "uppg 3"}],
+            "innehall": []})
     c = _lesson_client(tmp_path, monkeypatch)
     lid = c.get("/api/lessons").json()[0]["id"]
     assert c.post(f"/api/lessons/{lid}/extract").status_code == 200
@@ -574,11 +580,15 @@ def test_extract_replaces_llm_keeps_manual(tmp_path, monkeypatch):
     c = _lesson_client(tmp_path, monkeypatch)
     lid = c.get("/api/lessons").json()[0]["id"]
     c.post(f"/api/lessons/{lid}/insights", json={"typ": "material", "text": "egen anteckning"})
-    monkeypatch.setattr(server.postprocess, "extract",
-                        lambda *a, **k: [{"typ": "kalender", "text": "prov", "due_date": None, "ref": None}])
+    monkeypatch.setattr(server.postprocess, "extract_full",
+                        lambda *a, **k: {"insights": [{"typ": "kalender", "text": "prov",
+                                                       "due_date": None, "ref": None}],
+                                         "innehall": []})
     c.post(f"/api/lessons/{lid}/extract")
-    monkeypatch.setattr(server.postprocess, "extract",
-                        lambda *a, **k: [{"typ": "åtgärd", "text": "ny", "due_date": None, "ref": None}])
+    monkeypatch.setattr(server.postprocess, "extract_full",
+                        lambda *a, **k: {"insights": [{"typ": "åtgärd", "text": "ny",
+                                                       "due_date": None, "ref": None}],
+                                         "innehall": []})
     c.post(f"/api/lessons/{lid}/extract")          # re-run replaces the old LLM ones
     texts = sorted(i["text"] for i in c.get(f"/api/lessons/{lid}/insights").json())
     assert texts == ["egen anteckning", "ny"]      # manual survived, old LLM "prov" gone
@@ -635,10 +645,10 @@ def test_extract_uses_stored_transcript(tmp_path, monkeypatch):
     """Extraction reads the transcript from the DB (mirrored at migrate/transcribe
     time), not by scanning history.json."""
     captured = {}
-    def fake_extract(transcript, model, token_cb=None, log_cb=None):
+    def fake_extract_full(transcript, model, token_cb=None, log_cb=None):
         captured["transcript"] = transcript
-        return []
-    monkeypatch.setattr(server.postprocess, "extract", fake_extract)
+        return {"insights": [], "innehall": []}
+    monkeypatch.setattr(server.postprocess, "extract_full", fake_extract_full)
     c = _lesson_client(tmp_path, monkeypatch)        # startup migration reads history once
     lid = c.get("/api/lessons").json()[0]["id"]      # GET /api/lessons reads the DB, not history
     # From here on, any history-file scan must blow up — extract must not need it.
@@ -649,7 +659,8 @@ def test_extract_uses_stored_transcript(tmp_path, monkeypatch):
 
 
 def test_extract_llm_not_installed_streams_error(tmp_path, monkeypatch):
-    monkeypatch.setattr(server.postprocess, "extract", lambda *a, **k: [])
+    monkeypatch.setattr(server.postprocess, "extract_full",
+                        lambda *a, **k: {"insights": [], "innehall": []})
     c = _lesson_client(tmp_path, monkeypatch, arbiter=_NoLlmArbiter())
     lid = c.get("/api/lessons").json()[0]["id"]
     r = c.post(f"/api/lessons/{lid}/extract")
@@ -759,10 +770,13 @@ def test_lesson_delete_removes_folder_and_recording(tmp_path, monkeypatch):
 def test_extract_empty_keeps_previous_insights(tmp_path, monkeypatch):
     c = _lesson_client(tmp_path, monkeypatch)
     lid = c.get("/api/lessons").json()[0]["id"]
-    monkeypatch.setattr(server.postprocess, "extract",
-                        lambda *a, **k: [{"typ": "kalender", "text": "prov", "due_date": None, "ref": None}])
+    monkeypatch.setattr(server.postprocess, "extract_full",
+                        lambda *a, **k: {"insights": [{"typ": "kalender", "text": "prov",
+                                                       "due_date": None, "ref": None}],
+                                         "innehall": []})
     c.post(f"/api/lessons/{lid}/extract")
-    monkeypatch.setattr(server.postprocess, "extract", lambda *a, **k: [])   # model finds nothing
+    monkeypatch.setattr(server.postprocess, "extract_full",       # model finds nothing
+                        lambda *a, **k: {"insights": [], "innehall": []})
     r = c.post(f"/api/lessons/{lid}/extract")
     assert r.status_code == 200
     texts = [i["text"] for i in c.get(f"/api/lessons/{lid}/insights").json()]

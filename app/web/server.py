@@ -25,7 +25,7 @@ from app import (debug_log, hardware, recommend, whisper_manager, llm_client,
                  llm_manager, youtube, postprocess, transcriber,
                  history_store, gpu_arbiter, output_store, media, audio_model, db,
                  paths, settings_store, ics_export, backup, report,
-                 calendar_google)
+                 calendar_google, course_data)
 from app.models_catalog import WHISPER_MODELS, LLM_MODELS
 from app.web import routes_planning, sse
 
@@ -206,6 +206,17 @@ def create_app(base_dir: Path | None = None,
             _conn.close()
     except Exception:
         debug_log.get_logger().exception("Migrering av historik till lektions-DB misslyckades")
+
+    # Seeda centralt innehåll för matematikkurserna (Fas 3; idempotent via
+    # UNIQUE(course_id, kod) — bundlad, statisk, offline data).
+    try:
+        _conn = _db()
+        try:
+            db.seed_course_content(_conn, course_data.load_centralt_innehall())
+        finally:
+            _conn.close()
+    except Exception:
+        debug_log.get_logger().exception("Seedning av centralt innehåll misslyckades")
 
     app = FastAPI(title="Transkribera Web")
 
@@ -942,9 +953,21 @@ def create_app(base_dir: Path | None = None,
                 les = db.update_lesson(conn, lesson_id, **fields)
             except sqlite3.IntegrityError:               # unknown group_id/course_id
                 return JSONResponse({"error": "okänd klass/kurs"}, status_code=400)
+            # Fas 3: när lektionen fått klass/kurs/datum — auto-länka mot en
+            # planerad lektion (samma grupp+kurs+datum, ± starttidstolerans)
+            # så planeringen blir "hållen" utan handpåläggning.
+            linked = None
+            if fields.keys() & {"group_id", "course_id", "datum", "starttid"}:
+                try:
+                    linked = db.autolink_lesson(conn, lesson_id)
+                except Exception:
+                    debug_log.get_logger().exception("Auto-länkning misslyckades")
         finally:
             conn.close()
-        return _lesson_view(les)
+        view = _lesson_view(les)
+        if linked:
+            view["planned_lesson_id"] = linked["id"]
+        return view
 
     def _delete_recording(path: str | Path | None) -> None:
         """Remove an in-app recording from downloads/ (validated under base).
@@ -1064,9 +1087,10 @@ def create_app(base_dir: Path | None = None,
                 if arb.ensure_llm() is None:
                     raise RuntimeError("Språkmodellen är inte installerad.")
                 emit({"type": "log", "msg": "Analyserar lektionen ..."})
-                found = postprocess.extract(
+                result = postprocess.extract_full(
                     transcript, llm_manager.ACTIVE_LLM.filename,
                     log_cb=lambda m: emit({"type": "log", "msg": m}))
+                found = result["insights"]
                 conn = _db()
                 try:
                     if found:
@@ -1081,10 +1105,15 @@ def create_app(base_dir: Path | None = None,
                         saved = [i for i in db.list_insights(conn, lesson_id)
                                  if i.get("source") == "llm"]
                         kept_previous = True
+                    # Fas 3: tagga behandlat innehåll mot kursens centrala
+                    # innehåll — minnet vet då VAD lektionen täckte.
+                    tagged = db.tag_content_from_texts(
+                        conn, lesson_id, result.get("innehall") or [])
                 finally:
                     conn.close()
                 return {"insights": saved, "count": len(saved),
-                        "kept_previous": kept_previous}
+                        "kept_previous": kept_previous,
+                        "content": tagged}
             finally:
                 arb.release_gpu()
         return _sse_response(job)

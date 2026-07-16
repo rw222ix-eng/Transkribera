@@ -286,3 +286,99 @@ def test_approve_writes_board_json_under_base(llm_ready, monkeypatch):
 def test_approve_unknown_id(llm_ready):
     r = llm_ready.post("/api/planning/finns-ej/approve", json={})
     assert r.status_code == 404
+
+
+# ------------------------------------------- Fas 3: DB, kalender, PATCH --
+
+def _make_planning_with_datum(llm_ready, monkeypatch) -> dict:
+    _stub_generate(monkeypatch,
+                   {"board": _valid_board(), "errors": [], "rounds": 1})
+    r = llm_ready.post("/api/planning/generate",
+                       json={"moment": "Pythagoras sats",
+                             "datum": "2026-09-01", "starttid": "09:10"})
+    result = _done(r)
+    ra = llm_ready.post(f"/api/planning/{result['id']}/approve", json={})
+    assert ra.status_code == 200
+    return ra.json()
+
+
+def test_approve_persists_to_db(llm_ready, monkeypatch):
+    approved = _make_planning_with_datum(llm_ready, monkeypatch)
+    planned_id = approved["planned_id"]
+    r = llm_ready.get(f"/api/planning/{planned_id}")
+    assert r.status_code == 200
+    planned = r.json()
+    assert planned["status"] == "planerad"
+    assert planned["datum"] == "2026-09-01"
+    assert planned["starttid"] == "09:10"
+    assert planned["board"]["title"] == "Pythagoras sats"
+
+
+def test_get_planned_404(llm_ready):
+    assert llm_ready.get("/api/planning/99999").status_code == 404
+
+
+def test_calendar_returns_month_entries(llm_ready, monkeypatch):
+    approved = _make_planning_with_datum(llm_ready, monkeypatch)
+    r = llm_ready.get("/api/planning/calendar", params={"year": 2026, "month": 9})
+    assert r.status_code == 200
+    entries = r.json()["entries"]
+    assert [e["typ"] for e in entries] == ["planering"]
+    assert entries[0]["id"] == approved["planned_id"]
+    assert entries[0]["status"] == "planerad"
+    # tom månad + ogiltig månad
+    assert llm_ready.get("/api/planning/calendar",
+                         params={"year": 2026, "month": 10}).json()["entries"] == []
+    assert llm_ready.get("/api/planning/calendar",
+                         params={"year": 2026, "month": 13}).status_code == 400
+
+
+def test_patch_planned_status_and_link(llm_ready, monkeypatch):
+    from app import db as appdb
+    approved = _make_planning_with_datum(llm_ready, monkeypatch)
+    planned_id = approved["planned_id"]
+
+    r = llm_ready.patch(f"/api/planning/{planned_id}", json={"status": "inställd"})
+    assert r.status_code == 200 and r.json()["status"] == "inställd"
+
+    # manuell länkning till en lektion + av-länkning
+    conn = appdb.connect(llm_ready.base_dir / "transkribera.db")
+    les = appdb.create_lesson(conn, history_id="hx",
+                              ts="2026-09-01T09:00:00", name="lektion")
+    conn.close()
+    r = llm_ready.patch(f"/api/planning/{planned_id}",
+                        json={"lesson_id": les["id"], "status": "hållen"})
+    assert r.json()["lesson_id"] == les["id"]
+    r = llm_ready.patch(f"/api/planning/{planned_id}",
+                        json={"lesson_id": None, "status": "planerad"})
+    assert r.json()["lesson_id"] is None
+
+    assert llm_ready.patch(f"/api/planning/{planned_id}",
+                           json={"status": "ogiltig"}).status_code == 400
+    assert llm_ready.patch(f"/api/planning/{planned_id}",
+                           json={}).status_code == 400
+    assert llm_ready.patch("/api/planning/99999",
+                           json={"status": "hållen"}).status_code == 404
+
+
+def test_org_patch_autolinks_lesson(llm_ready, monkeypatch):
+    """Org-flödet: när lektionen får klass/kurs/datum länkas den mot en
+    matchande planering som blir 'hållen'."""
+    from app import db as appdb
+    conn = appdb.connect(llm_ready.base_dir / "transkribera.db")
+    gid = appdb.get_or_create_group(conn, "NA23")
+    cid = appdb.get_or_create_course(conn, "Ma3c")
+    p = appdb.create_planned_lesson(conn, titel="Derivata", datum="2026-09-02",
+                                    starttid="09:10", group_id=gid, course_id=cid)
+    les = appdb.create_lesson(conn, history_id="hy",
+                              ts="2026-09-02T09:12:00", name="lektion")
+    conn.close()
+
+    r = llm_ready.patch(f"/api/lessons/{les['id']}",
+                        json={"group_id": gid, "course_id": cid,
+                              "datum": "2026-09-02", "starttid": "09:12"})
+    assert r.status_code == 200
+    assert r.json()["planned_lesson_id"] == p["id"]
+    planned = llm_ready.get(f"/api/planning/{p['id']}").json()
+    assert planned["status"] == "hållen"
+    assert planned["lesson_id"] == les["id"]

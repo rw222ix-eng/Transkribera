@@ -81,13 +81,17 @@ def create_router(base: Path, arbiter) -> APIRouter:
             pass
         return group, course
 
-    def _memory(group_id) -> str:
+    def _memory(group_id, course_id=None) -> str:
         if group_id is None:
             return ""
         try:
             conn = db.connect(db_file)
             try:
-                return _memory_text(db.next_prep(conn, int(group_id)))
+                # Fas 3: kompakt minneskontext (senaste lektioner + taggat
+                # innehåll + öppna uppföljningar) i stället för bara next_prep.
+                return db.memory_for_prompt(
+                    conn, int(group_id),
+                    int(course_id) if course_id is not None else None)
             finally:
                 conn.close()
         except Exception:
@@ -110,8 +114,10 @@ def create_router(base: Path, arbiter) -> APIRouter:
                                 status_code=400)
         group_id = body.get("group_id")
         course_id = body.get("course_id")
+        datum = (body.get("datum") or "").strip() or None
+        starttid = (body.get("starttid") or "").strip() or None
         group, course = _names(group_id, course_id)
-        memory = _memory(group_id)
+        memory = _memory(group_id, course_id)
 
         if not arbiter.try_acquire_gpu():
             return JSONResponse(_GPU_BUSY, status_code=409)
@@ -128,6 +134,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 plannings[pid] = {
                     "board": res["board"], "rounds": res["rounds"],
                     "moment": moment, "group": group, "course": course,
+                    "group_id": group_id, "course_id": course_id,
+                    "datum": datum, "starttid": starttid,
                 }
                 return {"id": pid, "board": res["board"],
                         "errors": res["errors"], "rounds": res["rounds"]}
@@ -224,8 +232,9 @@ def create_router(base: Path, arbiter) -> APIRouter:
 
     @router.post("/api/planning/{pid}/approve")
     async def approve(pid: str, req: Request):
-        """Godkänn & spara: WB-JSON skrivs under
-        Transkriberingar/<lektion>/planering/ (Fas 3 lägger den i DB:n)."""
+        """Godkänn & spara: planeringen skrivs till DB:n (planned_lessons,
+        status 'planerad' — Fas 3-minnet) och WB-JSON exporteras som artefakt
+        under Transkriberingar/<lektion>/planering/."""
         st = plannings.get(pid)
         if st is None or st.get("board") is None:
             return JSONResponse({"error": "okänd planering"}, status_code=404)
@@ -234,6 +243,18 @@ def create_router(base: Path, arbiter) -> APIRouter:
         out_dir = _planning_dir(str(title))
         if out_dir is None:
             return JSONResponse({"error": "otillåten sökväg"}, status_code=400)
+
+        conn = db.connect(db_file)
+        try:
+            planned = db.create_planned_lesson(
+                conn, titel=str(title), moment=st.get("moment") or "",
+                board_json=json.dumps(st["board"], ensure_ascii=False),
+                datum=st.get("datum"), starttid=st.get("starttid"),
+                group_id=int(st["group_id"]) if st.get("group_id") else None,
+                course_id=int(st["course_id"]) if st.get("course_id") else None)
+        finally:
+            conn.close()
+
         out_dir.mkdir(parents=True, exist_ok=True)
         stamp = datetime.now().strftime("%Y-%m-%d %H.%M.%S")
         path = out_dir / f"tavla {stamp}.json"
@@ -243,13 +264,72 @@ def create_router(base: Path, arbiter) -> APIRouter:
             "moment": st.get("moment") or "",
             "klass": st.get("group") or "",
             "kurs": st.get("course") or "",
+            "datum": st.get("datum") or "",
             "godkand": datetime.now().isoformat(timespec="seconds"),
             "board": st["board"],
         }
         path.write_text(json.dumps(payload, ensure_ascii=False, indent=2),
                         encoding="utf-8")
         st["approved_path"] = str(path)
-        return {"ok": True, "path": str(path)}
+        st["planned_id"] = planned["id"]
+        return {"ok": True, "path": str(path), "planned_id": planned["id"]}
+
+    # ------------------------------------------------- kalender & minne --
+
+    @router.get("/api/planning/calendar")
+    def calendar(year: int, month: int):
+        """Månadens kalenderposter: planeringar + hållna lektioner (Fas 3).
+        Ren SQLite-läsning — ingen synk, ingen CalDAV."""
+        if not (1 <= month <= 12):
+            return JSONResponse({"error": "ogiltig månad"}, status_code=400)
+        conn = db.connect(db_file)
+        try:
+            return {"entries": db.calendar_entries(conn, year, month)}
+        finally:
+            conn.close()
+
+    @router.get("/api/planning/{planned_id:int}")
+    def get_planned(planned_id: int):
+        """Sparad planering ur DB:n (kalenderklick → visa tavlan)."""
+        conn = db.connect(db_file)
+        try:
+            planned = db.get_planned_lesson(conn, planned_id)
+        finally:
+            conn.close()
+        if planned is None:
+            return JSONResponse({"error": "okänd planering"}, status_code=404)
+        try:
+            planned["board"] = json.loads(planned.pop("board_json") or "null")
+        except (TypeError, ValueError):
+            planned["board"] = None
+        return planned
+
+    _PATCHABLE = {"status", "datum", "starttid", "titel", "lesson_id",
+                  "group_id", "course_id"}
+    _STATUSES = {"planerad", "hållen", "inställd"}
+
+    @router.patch("/api/planning/{planned_id:int}")
+    async def patch_planned(planned_id: int, req: Request):
+        """Manuell överstyrning (Fas 3): länka/av-länka lektion
+        (lesson_id: int|null), ändra status/datum/tid/titel."""
+        body = await req.json()
+        fields = {k: body[k] for k in _PATCHABLE if k in body}
+        if not fields:
+            return JSONResponse({"error": "inga fält att uppdatera"},
+                                status_code=400)
+        if "status" in fields and fields["status"] not in _STATUSES:
+            return JSONResponse(
+                {"error": "status måste vara planerad, hållen eller inställd"},
+                status_code=400)
+        conn = db.connect(db_file)
+        try:
+            planned = db.update_planned_lesson(conn, planned_id, **fields)
+        finally:
+            conn.close()
+        if planned is None:
+            return JSONResponse({"error": "okänd planering"}, status_code=404)
+        planned.pop("board_json", None)
+        return planned
 
     # ------------------------------------------------------------ png-export --
 

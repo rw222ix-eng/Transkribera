@@ -346,6 +346,12 @@ _EXTRACT_TYP = {
     "material": "material",
 }
 
+# "innehall" (Fas 3) är INTE en insikt: fritextpunkter om vilket matematiskt
+# innehåll lektionen behandlade, som taggas mot centralt innehåll
+# (db.tag_content_from_texts) — minnet vet då inte bara ATT en lektion hölls
+# utan VAD den täckte.
+_EXTRACT_KEYS = list(_EXTRACT_TYP) + ["innehall"]
+
 # Schema som tvingar llama.cpp att returnera giltig, förutsägbar JSON.
 EXTRACT_SCHEMA: dict = {
     "type": "object",
@@ -363,9 +369,9 @@ EXTRACT_SCHEMA: dict = {
                 "required": ["text"],
             },
         }
-        for key in _EXTRACT_TYP
+        for key in _EXTRACT_KEYS
     },
-    "required": list(_EXTRACT_TYP),
+    "required": _EXTRACT_KEYS,
 }
 
 EXTRACT_RESPONSE_FORMAT: dict = {
@@ -393,6 +399,8 @@ EXTRACT_INSTRUCTION = (
     "- atgarder: saker att göra till nästa lektion (t.ex. sluta tidigare, ta med något).\n"
     "- grupprum: vilka som satt i grupprummet eller bör göra det. Ange ref vid plats/grupp.\n"
     "- material: arbetsblad eller material som efterfrågades.\n"
+    "- innehall: vilket matematiskt innehåll lektionen behandlade — 2–5 korta "
+    "punkter (t.ex. 'pq-formeln', 'derivatans definition', 'linjär regression').\n"
     "Använd elevers initialer eller plats, inte fullständiga namn, om sådana nämns.\n\n"
     "TRANSKRIPT:\n"
 )
@@ -406,7 +414,7 @@ def _parse_extract(raw: str) -> dict:
     """Parse the model's JSON. The schema makes this reliable, but stay robust:
     fall back to the first {...} block, then to an empty structure."""
     def _empty() -> dict:
-        return {k: [] for k in _EXTRACT_TYP}
+        return {k: [] for k in _EXTRACT_KEYS}
 
     text = (raw or "").strip()
     data = None
@@ -422,7 +430,7 @@ def _parse_extract(raw: str) -> dict:
     if not isinstance(data, dict):
         return _empty()
     out = _empty()
-    for key in _EXTRACT_TYP:
+    for key in _EXTRACT_KEYS:
         items = data.get(key)
         if isinstance(items, list):
             out[key] = [it for it in items if isinstance(it, dict) and it.get("text")]
@@ -430,8 +438,9 @@ def _parse_extract(raw: str) -> dict:
 
 
 def _extract_one(transcript: str, model: str,
-                 token_cb: Callable[[str], None] | None = None) -> list[dict]:
-    """Single extraction pass over a transcript (or chunk)."""
+                 token_cb: Callable[[str], None] | None = None) -> tuple[list[dict], list[str]]:
+    """Single extraction pass over a transcript (or chunk).
+    Returns (insights, behandlat innehåll som fritextpunkter)."""
     raw = llm_client.generate(
         model, build_extract_prompt(transcript), token_cb=token_cb,
         system=EXTRACT_SYSTEM, options={"temperature": 0.1},
@@ -447,7 +456,9 @@ def _extract_one(transcript: str, model: str,
                 "due_date": (str(it.get("due_date")).strip() or None) if it.get("due_date") else None,
                 "ref": (str(it.get("ref")).strip() or None) if it.get("ref") else None,
             })
-    return insights
+    innehall = [str(it.get("text", "")).strip()
+                for it in parsed.get("innehall", []) if it.get("text")]
+    return insights, innehall
 
 
 def _merge_insights(insights: list[dict]) -> list[dict]:
@@ -464,22 +475,39 @@ def _merge_insights(insights: list[dict]) -> list[dict]:
     return out
 
 
-def extract(transcript: str, model: str,
-            token_cb: Callable[[str], None] | None = None,
-            log_cb: Callable[[str], None] | None = None) -> list[dict]:
-    """Extract structured insights from a transcript. A long lecture is split into
-    chunks (map) and the per-chunk insights merged + de-duplicated, so the whole
-    lesson is seen instead of only the tail that fits the context window."""
+def extract_full(transcript: str, model: str,
+                 token_cb: Callable[[str], None] | None = None,
+                 log_cb: Callable[[str], None] | None = None) -> dict:
+    """Extract structured insights + behandlat innehåll from a transcript.
+    A long lecture is split into chunks (map) and the per-chunk results
+    merged + de-duplicated, so the whole lesson is seen instead of only the
+    tail that fits the context window. Returns
+    {"insights": [...], "innehall": ["pq-formeln", ...]}."""
     if not (transcript or "").strip():
-        return []
+        return {"insights": [], "innehall": []}
     if _is_long(transcript):
         chunks = _split_text(transcript, CHUNK_CHARS)
         if len(chunks) > 1:
             collected: list[dict] = []
+            content: list[str] = []
             n = len(chunks)
             for i, chunk in enumerate(chunks, 1):
                 if log_cb:
                     log_cb(f"Analyserar del {i}/{n} …")
-                collected.extend(_extract_one(chunk, model))
-            return _merge_insights(collected)
-    return _extract_one(transcript, model, token_cb=token_cb)
+                ins, inne = _extract_one(chunk, model)
+                collected.extend(ins)
+                content.extend(inne)
+            seen: set[str] = set()
+            unique = [t for t in content
+                      if t.lower() not in seen and not seen.add(t.lower())]
+            return {"insights": _merge_insights(collected), "innehall": unique}
+    ins, inne = _extract_one(transcript, model, token_cb=token_cb)
+    return {"insights": ins, "innehall": inne}
+
+
+def extract(transcript: str, model: str,
+            token_cb: Callable[[str], None] | None = None,
+            log_cb: Callable[[str], None] | None = None) -> list[dict]:
+    """Bakåtkompatibel ingång: enbart insikterna (se extract_full)."""
+    return extract_full(transcript, model, token_cb=token_cb,
+                        log_cb=log_cb)["insights"]

@@ -83,6 +83,10 @@ def _install_fakes() -> None:
         return [{"typ": "åtgärd", "text": "Räkna uppgift 5 till nästa gång.",
                  "due_date": None, "ref": None}]
 
+    def fake_extract_full(transcript, filename, token_cb=None, log_cb=None):
+        return {"insights": fake_extract(transcript, filename),
+                "innehall": ["pq-formeln", "kvadratkomplettering"]}
+
     def fake_answer(query, excerpts, filename, token_cb=None):
         text = "[FEJK svar] Det togs upp i lektionen."
         if token_cb:
@@ -143,6 +147,7 @@ def _install_fakes() -> None:
     server._run_transcribe_subprocess = fake_transcribe
     postprocess.run = fake_run
     postprocess.extract = fake_extract
+    postprocess.extract_full = fake_extract_full
     postprocess.answer_over_lessons = fake_answer
     postprocess.translate_segments = fake_translate
     postprocess.suggest_title = fake_suggest_title
