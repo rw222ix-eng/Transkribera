@@ -27,7 +27,7 @@ from app import (debug_log, hardware, recommend, whisper_manager, llm_client,
                  paths, settings_store, ics_export, backup, report,
                  calendar_google, course_data)
 from app.models_catalog import WHISPER_MODELS, LLM_MODELS
-from app.web import routes_planning, sse
+from app.web import routes_exam, routes_planning, sse
 
 _MONTHS_SV = ["jan", "feb", "mar", "apr", "maj", "jun", "jul", "aug", "sep", "okt", "nov", "dec"]
 
@@ -257,9 +257,10 @@ def create_app(base_dir: Path | None = None,
     arb = arbiter if arbiter is not None else gpu_arbiter.GpuArbiter(models_root, on_log=print)
     app.state.arbiter = arb
 
-    # Planering (Fas 0/1): egen router — nya funktioner ska inte växa i den
-    # här filen (se planens riskavsnitt om scope-krypning i server.py).
+    # Planering (Fas 0/1) + prov (Fas 4): egna routers — nya funktioner ska
+    # inte växa i den här filen (se planens riskavsnitt om scope-krypning).
     app.include_router(routes_planning.create_router(base, arb))
+    app.include_router(routes_exam.create_router(base, arb))
 
     # Tracks the live transcription subprocess so /api/transcribe/cancel can
     # terminate it and free the GPU mid-run (otherwise "Avbryt" only stopped the

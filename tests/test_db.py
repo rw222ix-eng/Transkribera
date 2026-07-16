@@ -465,7 +465,7 @@ def test_v4_migration_on_fresh_db(tmp_path):
     tables = {r[0] for r in conn.execute(
         "SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
     assert {"planned_lessons", "course_content", "content_tags"} <= tables
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 4
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == db.SCHEMA_VERSION
 
 
 def test_v4_migration_upgrades_v3_db_with_data(tmp_path):
@@ -485,7 +485,7 @@ def test_v4_migration_upgrades_v3_db_with_data(tmp_path):
     raw.close()
 
     conn = db.connect(path)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 4
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == db.SCHEMA_VERSION
     tables = {r[0] for r in conn.execute(
         "SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
     assert {"planned_lessons", "course_content", "content_tags"} <= tables
@@ -720,3 +720,76 @@ def test_memory_for_prompt_compact(tmp_path):
     # fel grupp → tomt om inget finns
     gid2 = db.get_or_create_group(conn, "9A")
     assert db.memory_for_prompt(conn, gid2, cid) == ""
+
+
+# ------------------------------------------------------- prov (v5, Fas 4) --
+
+def _mini_exam(titel="Prov 1"):
+    return {"titel": titel, "kurs": "Ma2b", "hjalpmedel": "Räknare",
+            "uppgifter": [
+                {"del": "B", "formaga": "P", "typ": "rutin", "poang": [2, 0, 0],
+                 "text": "Lös $2x = 8$.", "losning": "$x = 4$.",
+                 "bedomning": "+2 E."},
+                {"del": "C", "formaga": "PL", "typ": "problem", "poang": [1, 2, 1],
+                 "text": "Optimera hagen.", "losning": "Kvadrat.",
+                 "bedomning": "+1 E, +2 C, +1 A."}]}
+
+
+def test_v5_migration_tables_and_rollback(tmp_path):
+    conn = _conn(tmp_path)
+    tables = {r[0] for r in conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+    assert {"exams", "exam_versions", "exam_items"} <= tables
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 5
+    # dokumenterad rollback: DROP x3 + user_version=4 — övrigt orört
+    db.get_or_create_group(conn, "NA21")
+    conn.executescript("DROP TABLE exam_items; DROP TABLE exam_versions; "
+                       "DROP TABLE exams; PRAGMA user_version=4;")
+    conn.commit()
+    assert conn.execute("SELECT namn FROM groups").fetchone()[0] == "NA21"
+    db._apply_migrations(conn)
+    tables = {r[0] for r in conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+    assert "exams" in tables
+
+
+def test_exam_create_version_and_approve(tmp_path):
+    conn = _conn(tmp_path)
+    cid = db.get_or_create_course(conn, "Ma2b")
+    ex = db.create_exam(conn, exam=_mini_exam(), datum="2026-10-05",
+                        course_id=cid)
+    assert ex["status"] == "utkast" and ex["typ"] == "prov"
+    assert len(ex["versions"]) == 1
+    assert ex["exam"]["titel"] == "Prov 1"
+    # items speglade
+    items = conn.execute("SELECT * FROM exam_items WHERE exam_id = ? ORDER BY id",
+                         (ex["id"],)).fetchall()
+    assert [i["formaga"] for i in items] == ["P", "PL"]
+    assert items[1]["poang_c"] == 2
+
+    # ny version blir aktuell och speglas
+    e2 = _mini_exam()
+    e2["uppgifter"][0]["text"] = "Lös $3x = 9$."
+    ex2 = db.add_exam_version(conn, ex["id"], e2)
+    assert len(ex2["versions"]) == 2
+    assert ex2["exam"]["uppgifter"][0]["text"] == "Lös $3x = 9$."
+    assert db.add_exam_version(conn, 9999, e2) is None
+
+    # godkänn + artefakter på aktuella versionen
+    ex3 = db.set_exam_artifacts(conn, ex["id"], tex_path="a.tex",
+                                pdf_path="a.pdf", approve=True)
+    assert ex3["status"] == "godkänt"
+    assert ex3["versions"][-1]["pdf_path"] == "a.pdf"
+    assert ex3["versions"][0]["pdf_path"] is None      # gamla versionen orörd
+
+
+def test_exam_themes_for_prompt(tmp_path):
+    conn = _conn(tmp_path)
+    cid = db.get_or_create_course(conn, "Ma2b")
+    ex = db.create_exam(conn, exam=_mini_exam("Höstprov"), datum="2026-09-01",
+                        course_id=cid)
+    # bara godkända prov räknas
+    assert db.exam_themes_for_prompt(conn, cid) == ""
+    db.set_exam_artifacts(conn, ex["id"], approve=True)
+    teman = db.exam_themes_for_prompt(conn, cid)
+    assert "Höstprov" in teman and "2x = 8" in teman

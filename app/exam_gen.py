@@ -1,0 +1,250 @@
+"""Provgenerering — promptbygge och LLM-loopar (Fas 4).
+
+Samma mönster som app/lesson_board.py: grammatiktvingad JSON
+(exam_spec.to_response_format), deterministisk validering
+(schema + balans), korrigeringsprompt i upp till :data:`MAX_ROUNDS` rundor.
+Därtill :func:`fix_latex` — kompileringsfel från exam_pdf går tillbaka till
+modellen som korrigeringsprompt i max :data:`MAX_LATEX_ROUNDS` rundor.
+
+Uppgifterna är ALLTID egenformulerade — endast nationella provets struktur
+och poängmodell efterliknas (NP-sekretess/upphovsrätt; inga NP-uppgifter
+någonstans i prompterna).
+"""
+from __future__ import annotations
+
+import json
+import re
+from typing import Callable
+
+from app import exam_spec, llm_client
+
+MAX_ROUNDS = 3          # generering + balansreparation (delad budget)
+MAX_LATEX_ROUNDS = 2    # kompileringsfel → korrigering
+EXAM_MAX_TOKENS = 12_000
+
+SYSTEM = (
+    "Du är en erfaren svensk matematiklärare som konstruerar prov i "
+    "nationella provets anda. Uppgifterna är ALLTID egenformulerade — "
+    "aldrig kopierade från nationella prov eller läromedel. Du svarar "
+    "ALLTID med giltig JSON enligt schemat, ingenting annat. All text på "
+    "svenska med decimalkomma (4{,}58 i LaTeX). "
+    "INTEGRITET: inga elevnamn någonstans."
+)
+
+INSTRUCTION = (
+    "Skriv ett matteprov som JSON enligt schemat. Fältregler:\n"
+    "- del: \"B\" (utan räknare), \"C\" eller \"D\" (med räknare) — eller null "
+    "om provet saknar delar.\n"
+    "- formaga: primär förmåga per uppgift — B Begrepp, P Procedur, "
+    "PL Problemlösning, R Resonemang, K Kommunikation.\n"
+    "- typ: rutin (endast svar), redovisning (fullständig lösning), "
+    "problem (flersteg) eller resonemang.\n"
+    "- poang: [E, C, A] enligt NP-notationen, t.ex. [2, 1, 0].\n"
+    "- text: uppgiftstexten. Matematik skrivs inom $…$ (t.ex. "
+    "$x^2 - 4x + 3 = 0$); övrig text är vanlig svenska utan LaTeX-kommandon.\n"
+    "- losning: kort lösningsförslag för läraren (samma $-regel).\n"
+    "- bedomning: bedömningsanvisning, t.ex. '+1 E korrekt ansats, "
+    "+1 C fullständig lösning med motivering'.\n"
+    "- innehall: vilka innehållspunkter uppgiften prövar (korta etiketter).\n"
+    "Balans: sprid poängen över förmågorna, ha stigande svårighet, blanda "
+    "rutinuppgifter med redovisnings- och problemuppgifter, och lägg "
+    "E-tyngden tidigt. Exempel på EN uppgift:\n"
+    '{"del": "B", "formaga": "P", "typ": "rutin", "poang": [1, 0, 0], '
+    '"text": "Lös ekvationen $2x + 7 = 19$.", "innehall": ["linjära ekvationer"], '
+    '"losning": "$2x = 12$ ger $x = 6$.", '
+    '"bedomning": "+1 E för korrekt svar."}\n'
+)
+
+
+def build_prompt(kurs: str, klass: str, punkter: list[str], *,
+                 antal: int = 10, tid_min: int = 120, delar: bool = True,
+                 memory: str = "", teman: str = "",
+                 referens: str = "") -> str:
+    """Genereringsprompt: instruktion + valda innehållspunkter +
+    minneskontext + tidigare provs teman (undvik upprepning som default)."""
+    block = [INSTRUCTION]
+    if punkter:
+        block.append("Provet ska pröva följande centrala innehåll:\n- " +
+                     "\n- ".join(punkter))
+    if memory:
+        block.append(f"Ur lektionsminnet (vad klassen arbetat med):\n{memory}")
+    if teman:
+        block.append("Tidigare provs uppgiftsteman — UNDVIK att upprepa dessa:\n"
+                     + teman)
+    if referens:
+        block.append(referens)
+    delar_txt = ("Dela provet i Del B (utan räknare) och Del C (med räknare)."
+                 if delar else "Provet har inga delar (del: null på alla uppgifter).")
+    block.append(
+        f"Uppdrag: skriv ett prov för {kurs}, klass {klass}, med ungefär "
+        f"{antal} uppgifter för {tid_min} minuters provtid. {delar_txt} "
+        "Svara med enbart JSON.")
+    return "\n\n".join(block)
+
+
+def _format_problems(problems: list) -> str:
+    lines = []
+    for p in problems:
+        if isinstance(p, dict):
+            lines.append(f"- {p.get('path', '?')}: {p.get('message', p)}")
+        else:
+            lines.append(f"- {p}")
+    return "\n".join(lines)
+
+
+def build_repair_prompt(exam: dict, problems: list) -> str:
+    return (
+        f"{INSTRUCTION}\n"
+        "Ditt förra prov har problem som måste rättas. Här är provet:\n"
+        f"{json.dumps(exam, ensure_ascii=False)}\n\n"
+        "Problem att åtgärda:\n"
+        f"{_format_problems(problems)}\n\n"
+        "Skriv om HELA provet som JSON med problemen åtgärdade — justera "
+        "poäng eller byt enstaka uppgifter, ändra så lite som möjligt i "
+        "övrigt. Svara med enbart JSON."
+    )
+
+
+def build_refine_prompt(exam: dict, instruction: str,
+                        nummer: int | None = None) -> str:
+    """Riktad omgenerering: 'byt uppgift 4', 'gör 7 svårare' …"""
+    mal = (f"Lärarens önskemål gäller uppgift {nummer}: {instruction}"
+           if nummer else f"Lärarens önskemål: {instruction}")
+    return (
+        f"{INSTRUCTION}\n"
+        "Här är det nuvarande provet:\n"
+        f"{json.dumps(exam, ensure_ascii=False)}\n\n"
+        f"{mal}\n\n"
+        "Skriv om HELA provet som JSON med önskemålet genomfört. Övriga "
+        "uppgifter lämnas oförändrade. Svara med enbart JSON."
+    )
+
+
+def build_latexfix_prompt(exam: dict, error_log: str) -> str:
+    return (
+        f"{INSTRUCTION}\n"
+        "PDF-kompileringen av provet misslyckades. Här är provet:\n"
+        f"{json.dumps(exam, ensure_ascii=False)}\n\n"
+        "Kompilatorns felmeddelande:\n"
+        f"{error_log}\n\n"
+        "Felet beror nästan alltid på trasig LaTeX-matte i något text-, "
+        "losning- eller bedomning-fält (obalanserade $, klamrar eller "
+        "okända kommandon). Rätta fälten och skriv om HELA provet som JSON. "
+        "Svara med enbart JSON."
+    )
+
+
+def _parse_exam(raw: str) -> dict | None:
+    try:
+        return json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        m = re.search(r"\{.*\}", raw or "", re.DOTALL)
+        if m:
+            try:
+                return json.loads(m.group(0))
+            except json.JSONDecodeError:
+                return None
+    return None
+
+
+def _llm_round(prompt: str, model: str, llm) -> dict | None:
+    raw = llm(
+        model, prompt,
+        system=SYSTEM,
+        options={"temperature": 0.3},
+        response_format=exam_spec.to_response_format(),
+        max_tokens=EXAM_MAX_TOKENS,
+        token_cb=None,
+    )
+    return _parse_exam(raw)
+
+
+def _repair_until_valid(exam: dict | None, errors: list, *, model: str, llm,
+                        rounds_used: int, max_rounds: int,
+                        log_cb: Callable[[str], None] | None = None) -> dict:
+    log = log_cb or (lambda _m: None)
+    while errors and rounds_used < max_rounds and exam is not None:
+        rounds_used += 1
+        log(f"Justerar provet (runda {rounds_used} av {max_rounds}) — "
+            f"{len(errors)} problem …")
+        candidate = _llm_round(build_repair_prompt(exam, errors), model, llm)
+        if candidate is None:
+            errors = [{"path": "svar", "code": "json",
+                       "message": "modellen svarade inte med giltig JSON"}]
+            continue
+        _doc, new_errors = exam_spec.validate_exam_json(candidate)
+        exam = candidate
+        errors = new_errors
+    return {"exam": exam, "errors": errors, "rounds": rounds_used}
+
+
+def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
+                  antal: int = 10, tid_min: int = 120, delar: bool = True,
+                  memory: str = "", teman: str = "",
+                  llm=llm_client.generate, max_rounds: int = MAX_ROUNDS,
+                  log_cb: Callable[[str], None] | None = None) -> dict:
+    """Generera ett prov och reparera schema-/balansfel inom rundbudgeten.
+    Returnerar {"exam": dict|None, "errors": [...], "rounds": int}."""
+    log = log_cb or (lambda _m: None)
+    log("Skriver provet …")
+    prompt = build_prompt(kurs, klass, punkter, antal=antal, tid_min=tid_min,
+                          delar=delar, memory=memory, teman=teman)
+    exam = _llm_round(prompt, model, llm)
+    rounds = 1
+    while exam is None and rounds < max_rounds:
+        rounds += 1
+        log(f"Modellen svarade inte med giltig JSON — försöker igen "
+            f"(runda {rounds} av {max_rounds}) …")
+        exam = _llm_round(prompt, model, llm)
+    if exam is None:
+        return {"exam": None,
+                "errors": [{"path": "svar", "code": "json",
+                            "message": "modellen svarade inte med giltig JSON"}],
+                "rounds": rounds}
+    _doc, errors = exam_spec.validate_exam_json(exam)
+    return _repair_until_valid(exam, errors, model=model, llm=llm,
+                               rounds_used=rounds, max_rounds=max_rounds,
+                               log_cb=log_cb)
+
+
+def refine_exam(exam: dict, instruction: str, *, model: str,
+                nummer: int | None = None, llm=llm_client.generate,
+                max_rounds: int = MAX_ROUNDS,
+                log_cb: Callable[[str], None] | None = None) -> dict:
+    """Riktad omgenerering (per-uppgift-chatt); validera + auto-reparera."""
+    log = log_cb or (lambda _m: None)
+    log("Uppdaterar provet …")
+    candidate = _llm_round(build_refine_prompt(exam, instruction, nummer),
+                           model, llm)
+    if candidate is None:
+        return {"exam": exam,
+                "errors": [{"path": "svar", "code": "json",
+                            "message": "modellen svarade inte med giltig JSON"}],
+                "rounds": 1}
+    _doc, errors = exam_spec.validate_exam_json(candidate)
+    return _repair_until_valid(candidate, errors, model=model, llm=llm,
+                               rounds_used=1, max_rounds=max_rounds,
+                               log_cb=log_cb)
+
+
+def fix_latex(exam: dict, error_log: str, *, model: str,
+              llm=llm_client.generate,
+              max_rounds: int = MAX_LATEX_ROUNDS,
+              log_cb: Callable[[str], None] | None = None,
+              rounds_used: int = 0) -> dict:
+    """Kompileringsfel → korrigeringsrunda (max 2). Returnerar nytt prov
+    (schema-/balansvaliderat) eller det gamla med felen redovisade."""
+    log = log_cb or (lambda _m: None)
+    if rounds_used >= max_rounds:
+        return {"exam": exam, "errors": [{"path": "latex", "code": "kompilering",
+                                          "message": error_log}],
+                "rounds": rounds_used}
+    log("Rättar LaTeX-fel i provet …")
+    candidate = _llm_round(build_latexfix_prompt(exam, error_log), model, llm)
+    if candidate is None:
+        return {"exam": exam, "errors": [{"path": "svar", "code": "json",
+                                          "message": "modellen svarade inte med giltig JSON"}],
+                "rounds": rounds_used + 1}
+    _doc, errors = exam_spec.validate_exam_json(candidate)
+    return {"exam": candidate if _doc is not None else exam,
+            "errors": errors, "rounds": rounds_used + 1}

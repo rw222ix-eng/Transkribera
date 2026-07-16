@@ -21,7 +21,7 @@ import sqlite3
 import threading
 from pathlib import Path
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS courses (
@@ -166,12 +166,62 @@ CREATE INDEX IF NOT EXISTS idx_tags_lesson     ON content_tags(lesson_id);
 CREATE INDEX IF NOT EXISTS idx_tags_planned    ON content_tags(planned_lesson_id);
 """
 
+# Provgeneratorn (v5, Fas 4) — ENDAST additiv, samma rollbackmönster som v4:
+# DROP TABLE exam_items, exam_versions, exams + PRAGMA user_version=4.
+#
+# * exams — prov/arbetsblad (typkolumnen) med status utkast|godkänt och
+#   pekare till aktuell version.
+# * exam_versions — fullt versionerade prov-JSON + artefaktsökvägar
+#   (.tex/.pdf) så en iteration alltid går att backa.
+# * exam_items — aktuella versionens uppgifter utplattade (metadata + text)
+#   för minneskontexten och Fas 5:s FTS-dubblettkontroll.
+_EXAMS_MIGRATION = """
+CREATE TABLE IF NOT EXISTS exams (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    typ             TEXT DEFAULT 'prov',
+    titel           TEXT,
+    datum           TEXT,
+    group_id        INTEGER REFERENCES groups(id)  ON DELETE SET NULL,
+    course_id       INTEGER REFERENCES courses(id) ON DELETE SET NULL,
+    status          TEXT DEFAULT 'utkast',
+    current_version INTEGER,
+    created_at      TEXT,
+    updated_at      TEXT
+);
+CREATE TABLE IF NOT EXISTS exam_versions (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    exam_id    INTEGER NOT NULL REFERENCES exams(id) ON DELETE CASCADE,
+    version    INTEGER NOT NULL,
+    exam_json  TEXT,
+    tex_path   TEXT,
+    pdf_path   TEXT,
+    created_at TEXT,
+    UNIQUE(exam_id, version)
+);
+CREATE TABLE IF NOT EXISTS exam_items (
+    id      INTEGER PRIMARY KEY AUTOINCREMENT,
+    exam_id INTEGER NOT NULL REFERENCES exams(id) ON DELETE CASCADE,
+    nummer  TEXT,
+    del     TEXT,
+    formaga TEXT,
+    typ     TEXT,
+    poang_e INTEGER,
+    poang_c INTEGER,
+    poang_a INTEGER,
+    text    TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_exams_datum     ON exams(datum);
+CREATE INDEX IF NOT EXISTS idx_exams_course    ON exams(course_id);
+CREATE INDEX IF NOT EXISTS idx_examver_exam    ON exam_versions(exam_id);
+CREATE INDEX IF NOT EXISTS idx_examitems_exam  ON exam_items(exam_id);
+"""
+
 # Ordered schema upgrades, keyed by the version they BRING THE DB TO. connect()
 # applies every migration whose key is > the file's stored PRAGMA user_version, so
 # an existing .db is upgraded in place instead of silently keeping the old schema.
 # When the schema changes, bump SCHEMA_VERSION and add the ALTER/CREATE here.
 _MIGRATIONS: dict[int, str] = {2: _FTS_MIGRATION, 3: _MARKERS_MIGRATION,
-                               4: _PLANNING_MIGRATION}
+                               4: _PLANNING_MIGRATION, 5: _EXAMS_MIGRATION}
 
 _LESSON_SELECT = """
 SELECT l.*, g.namn AS group_namn, c.namn AS course_namn
@@ -1184,3 +1234,150 @@ def memory_for_prompt(conn: sqlite3.Connection, group_id: int,
         if a.get("text"):
             parts.append(f"Öppet sedan tidigare: {a['text']}")
     return "\n".join(parts)
+
+
+# --------------------------------------------------------------- prov (v5) --
+
+_EXAM_SELECT = """
+SELECT e.*, g.namn AS group_namn, c.namn AS course_namn
+FROM exams e
+LEFT JOIN groups  g ON g.id = e.group_id
+LEFT JOIN courses c ON c.id = e.course_id
+"""
+
+
+def _exam_view(conn: sqlite3.Connection, row) -> dict:
+    d = dict(row)
+    d["group"] = d.pop("group_namn", None)
+    d["course"] = d.pop("course_namn", None)
+    versions = conn.execute(
+        "SELECT id, version, tex_path, pdf_path, created_at "
+        "FROM exam_versions WHERE exam_id = ? ORDER BY version",
+        (d["id"],)).fetchall()
+    d["versions"] = [dict(v) for v in versions]
+    cur = conn.execute(
+        "SELECT exam_json FROM exam_versions WHERE id = ?",
+        (d.get("current_version"),)).fetchone()
+    try:
+        d["exam"] = json.loads(cur["exam_json"]) if cur and cur["exam_json"] else None
+    except (TypeError, ValueError):
+        d["exam"] = None
+    return d
+
+
+def _sync_exam_items(conn: sqlite3.Connection, exam_id: int, exam: dict) -> None:
+    """Spegla aktuella versionens uppgifter till exam_items (utplattat för
+    minneskontexten och Fas 5:s dubblettkontroll)."""
+    conn.execute("DELETE FROM exam_items WHERE exam_id = ?", (exam_id,))
+    for i, item in enumerate(exam.get("uppgifter") or [], 1):
+        poang = item.get("poang") or [0, 0, 0]
+        conn.execute(
+            "INSERT INTO exam_items (exam_id, nummer, del, formaga, typ, "
+            "poang_e, poang_c, poang_a, text) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (exam_id, str(item.get("nummer") or i), item.get("del"),
+             item.get("formaga"), item.get("typ"),
+             int(poang[0] or 0), int(poang[1] or 0), int(poang[2] or 0),
+             item.get("text") or ""))
+
+
+def create_exam(conn: sqlite3.Connection, *, exam: dict, typ: str = "prov",
+                titel: str = "", datum: str | None = None,
+                group_id: int | None = None,
+                course_id: int | None = None) -> dict:
+    """Skapa ett prov/arbetsblad med version 1 av dess prov-JSON."""
+    now = _now()
+    cur = conn.execute(
+        "INSERT INTO exams (typ, titel, datum, group_id, course_id, status, "
+        "created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'utkast', ?, ?)",
+        (typ, titel or exam.get("titel") or "", datum, group_id, course_id,
+         now, now))
+    exam_id = cur.lastrowid
+    ver = conn.execute(
+        "INSERT INTO exam_versions (exam_id, version, exam_json, created_at) "
+        "VALUES (?, 1, ?, ?)",
+        (exam_id, json.dumps(exam, ensure_ascii=False), now))
+    conn.execute("UPDATE exams SET current_version = ? WHERE id = ?",
+                 (ver.lastrowid, exam_id))
+    _sync_exam_items(conn, exam_id, exam)
+    conn.commit()
+    return get_exam(conn, exam_id)
+
+
+def get_exam(conn: sqlite3.Connection, exam_id: int) -> dict | None:
+    row = conn.execute(_EXAM_SELECT + " WHERE e.id = ?", (exam_id,)).fetchone()
+    return _exam_view(conn, row) if row else None
+
+
+def list_exams(conn: sqlite3.Connection,
+               course_id: int | None = None) -> list[dict]:
+    if course_id:
+        rows = conn.execute(
+            _EXAM_SELECT + " WHERE e.course_id = ? "
+            "ORDER BY COALESCE(e.datum, e.created_at) DESC, e.id DESC",
+            (course_id,)).fetchall()
+    else:
+        rows = conn.execute(
+            _EXAM_SELECT +
+            " ORDER BY COALESCE(e.datum, e.created_at) DESC, e.id DESC").fetchall()
+    return [_exam_view(conn, r) for r in rows]
+
+
+def add_exam_version(conn: sqlite3.Connection, exam_id: int,
+                     exam: dict) -> dict | None:
+    """Ny version av provets JSON (fullt versionerat — lätt att backa).
+    Blir aktuell version och speglas till exam_items."""
+    if conn.execute("SELECT 1 FROM exams WHERE id = ?", (exam_id,)).fetchone() is None:
+        return None
+    nxt = conn.execute(
+        "SELECT COALESCE(MAX(version), 0) + 1 FROM exam_versions "
+        "WHERE exam_id = ?", (exam_id,)).fetchone()[0]
+    cur = conn.execute(
+        "INSERT INTO exam_versions (exam_id, version, exam_json, created_at) "
+        "VALUES (?, ?, ?, ?)",
+        (exam_id, nxt, json.dumps(exam, ensure_ascii=False), _now()))
+    conn.execute("UPDATE exams SET current_version = ?, updated_at = ? WHERE id = ?",
+                 (cur.lastrowid, _now(), exam_id))
+    _sync_exam_items(conn, exam_id, exam)
+    conn.commit()
+    return get_exam(conn, exam_id)
+
+
+def set_exam_artifacts(conn: sqlite3.Connection, exam_id: int, *,
+                       tex_path: str | None = None,
+                       pdf_path: str | None = None,
+                       approve: bool = False) -> dict | None:
+    """Skriv artefaktsökvägar på aktuella versionen; approve låser provet
+    (status 'godkänt') så det syns i minnet/kalendern."""
+    row = conn.execute("SELECT current_version FROM exams WHERE id = ?",
+                       (exam_id,)).fetchone()
+    if row is None:
+        return None
+    conn.execute(
+        "UPDATE exam_versions SET tex_path = COALESCE(?, tex_path), "
+        "pdf_path = COALESCE(?, pdf_path) WHERE id = ?",
+        (tex_path, pdf_path, row["current_version"]))
+    if approve:
+        conn.execute("UPDATE exams SET status = 'godkänt', updated_at = ? "
+                     "WHERE id = ?", (_now(), exam_id))
+    conn.commit()
+    return get_exam(conn, exam_id)
+
+
+def exam_themes_for_prompt(conn: sqlite3.Connection, course_id: int,
+                           max_exams: int = 3) -> str:
+    """Tidigare provs uppgiftsteman för prompten (default: undvik
+    upprepning). Kompakt text — en rad per prov med uppgifternas inledningar."""
+    rows = conn.execute(
+        _EXAM_SELECT + " WHERE e.course_id = ? AND e.status = 'godkänt' "
+        "ORDER BY COALESCE(e.datum, e.created_at) DESC LIMIT ?",
+        (course_id, max_exams)).fetchall()
+    lines: list[str] = []
+    for r in rows:
+        items = conn.execute(
+            "SELECT text FROM exam_items WHERE exam_id = ? ORDER BY id",
+            (r["id"],)).fetchall()
+        themes = "; ".join((it["text"] or "").replace("\n", " ")[:60]
+                           for it in items[:12] if it["text"])
+        if themes:
+            lines.append(f"{r['datum'] or '?'} — {r['titel'] or 'prov'}: {themes}")
+    return "\n".join(lines)

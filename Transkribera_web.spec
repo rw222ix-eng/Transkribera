@@ -38,6 +38,13 @@ datas += [("app/web/static", "app/web/static")]
 # när appen är fryst (Fas 3).
 datas += [("app/data", "app/data")]
 
+# LaTeX-mallarna för provgeneratorn (Fas 4) + Tectonic-motorn med förseedad
+# paketcache (offline-kompilering; se exam_pdf.engine_dir).
+datas += [("app/templates", "app/templates")]
+import os as _os
+if _os.path.isdir("bin/tectonic"):
+    datas += [("bin/tectonic", "bin/tectonic")]
+
 # Bundle the llama.cpp server binary + CUDA DLLs where llama_server.server_binary()
 # looks for it when frozen (sys._MEIPASS/bin/llamacpp/llama-server.exe). The GGUF
 # model itself is downloaded into models/ at runtime, not bundled.
