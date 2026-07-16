@@ -104,11 +104,22 @@ def test_generate_gives_up_after_max_rounds():
     assert res["board"] is not None      # senaste försöket redovisas ärligt
 
 
-def test_generate_handles_non_json():
-    llm, _ = _stub_llm(["det här är inte json"])
+def test_generate_retries_on_invalid_json_then_succeeds():
+    # Trunkerat/trasigt svar (bench Fas 2) → omkörning inom rundbudgeten.
+    llm, calls = _stub_llm(["det här är inte json", json.dumps(_valid_doc())])
+    res = lb.generate_board("Ma1b", "9A", "x", model="m", llm=llm)
+    assert res["errors"] == []
+    assert res["rounds"] == 2
+    assert len(calls) == 2
+
+
+def test_generate_handles_non_json_all_rounds():
+    llm, calls = _stub_llm(["det här är inte json"])
     res = lb.generate_board("Ma1b", "9A", "x", model="m", llm=llm)
     assert res["board"] is None
     assert res["errors"][0]["code"] == "json"
+    assert res["rounds"] == lb.MAX_ROUNDS
+    assert len(calls) == lb.MAX_ROUNDS
 
 
 def test_generate_parses_json_with_surrounding_noise():

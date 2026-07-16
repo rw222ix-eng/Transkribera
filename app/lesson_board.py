@@ -26,7 +26,8 @@ from app import llm_client
 from app import whiteboard_spec as ws
 
 MAX_ROUNDS = 3          # totalt antal LLM-rundor inkl. första genereringen
-BOARD_MAX_TOKENS = 6_000
+# Bench Fas 2: en tabelltung tavla trunkerades vid 6k tokens → ogiltig JSON.
+BOARD_MAX_TOKENS = 9_000
 
 SYSTEM = (
     "Du är en erfaren svensk matematiklärare som skriver färdiga lektionstavlor "
@@ -43,6 +44,10 @@ INSTRUCTION = (
     "\"columns\" för exempel).\n"
     "Regler:\n"
     "- Decimalkomma i all läsbar text och LaTeX (skriv 4{,}58 — aldrig 4.58).\n"
+    "- Matematik skrivs ALLTID i math-sektioner (fältet latex) — aldrig inne "
+    "i text-, list- eller tabellsträngar, och aldrig med $-tecken. Kom ihåg "
+    "att backslash måste dubbleras i JSON: skriv \\\\frac{1}{2}, \\\\sqrt{2}, "
+    "\\\\sin — annars blir kommandona trasiga.\n"
     "- Vinklar heter \\u03b1, \\u03b2, \\u03b3 eller v. Sidor får gemena namn (a, b, c), "
     "hörn versala (A, B, C) — placera hörnetiketter med points[].outward så de "
     "hamnar utanför figuren.\n"
@@ -54,12 +59,34 @@ INSTRUCTION = (
     "- En vinkelbåge (arcs) i ett polygonhörn MÅSTE ha interior: en punkt "
     "inuti figuren.\n"
     "- Vektorer ritas med arrows, aldrig som polygoner.\n"
-    "- Geometriska cirklar ritas som polygon med minst 48 parametriska punkter "
-    "och grafen måste ha kvadratisk pixel-aspekt.\n"
-    "- Håll alla punkter/texter inom grafens xRange/yRange, och grafens width "
-    "inom kolumnens bredd (~850 px vid två lika kolumner på högertavlan).\n"
-    "- Fyll tavlan lagom — hellre färre, tydliga steg än trängsel. Motorn "
-    "skalar innehållet automatiskt.\n"
+    "- Geometriska cirklar (t.ex. enhetscirkeln) ritas ALLTID som polygon med "
+    "minst 48 parametriska punkter — aldrig med plots — och grafen måste vara "
+    "kvadratisk: width = height och lika stora xRange/yRange, annars blir "
+    "cirkeln en ellips.\n"
+    "- Håll alla punkter/texter inom grafens xRange/yRange.\n"
+    "- Breddgränser (viktigt — annars ryms inte innehållet): grafer, figurer "
+    "och tabeller högst 650 px breda på vänstertavlan och högst 800 px i en "
+    "kolumn på högertavlan. Hörnetiketter på figurer sätts med "
+    "shape.labels, som ENDAST har nycklarna top, left, right, bottom, inside.\n"
+    "- Var koncis: högst ~7 sektioner per tavla/kolumn, korta math-rader "
+    "(dela långa uträkningar på flera math-sektioner), tabeller högst "
+    "4 kolumner × 5 rader. Text-sektioner max ~80 tecken och listpunkter "
+    "max ~70 — dela längre resonemang i flera sektioner. Hellre färre, "
+    "tydliga steg än trängsel — motorn skalar innehållet automatiskt.\n"
+)
+
+# Åtgärdsråd som följer med reparationsprompten — motorns varningstexter
+# säger VAD som är fel, det här säger HUR modellen brukar kunna rätta det.
+REPAIR_HINTS = (
+    "Så åtgärdar du vanliga problem:\n"
+    "- 'innehållet ryms inte (bredd …)': korta de längsta text- och "
+    "math-raderna i den tavlan/kolumnen, minska width på grafer/figurer/"
+    "tabeller (högst 650 px på vänstertavlan), eller flytta en sektion till "
+    "den andra kolumnen.\n"
+    "- 'innehållet ryms inte (höjd …)': ta bort eller korta sektioner — "
+    "hellre färre, tydliga steg.\n"
+    "- 'element-överlapp': öka gapAfter på sektionen före, korta texterna, "
+    "eller ta bort annotations som ligger ovanpå annat innehåll.\n"
 )
 
 # Few-shots — kompletta, validerade WB-JSON v1-dokument (testerna kör dem
@@ -252,6 +279,7 @@ def build_repair_prompt(board_json: dict, problems: list) -> str:
         f"{json.dumps(board_json, ensure_ascii=False)}\n\n"
         "Problem att åtgärda:\n"
         f"{_format_problems(problems)}\n\n"
+        f"{REPAIR_HINTS}\n"
         "Skriv om HELA tavlan som JSON med problemen åtgärdade. Ändra så lite "
         "som möjligt i övrigt. Svara med enbart JSON."
     )
@@ -293,7 +321,10 @@ def _llm_round(prompt: str, model: str, llm, token_cb=None) -> dict | None:
         max_tokens=BOARD_MAX_TOKENS,
         token_cb=token_cb,
     )
-    return _parse_board(raw)
+    board = _parse_board(raw)
+    # Deterministisk normalisering (radbryt långa texter, dedupa dubbletter)
+    # innan validering — se ws.normalize_board. Kostar inga LLM-rundor.
+    return ws.normalize_board(board) if board is not None else None
 
 
 def _repair_until_valid(board: dict | None, errors: list, *, model: str, llm,
@@ -328,15 +359,24 @@ def generate_board(course: str, group: str, moment: str, *, model: str,
     Anroparen (rutterna) äger GPU-arbiterlåset."""
     log = log_cb or (lambda _m: None)
     log("Genererar lektionstavlan …")
-    board = _llm_round(build_prompt(course, group, moment, memory), model, llm)
+    prompt = build_prompt(course, group, moment, memory)
+    board = _llm_round(prompt, model, llm)
+    rounds = 1
+    # Ogiltig JSON (t.ex. trunkerat svar) → kör om från början inom budgeten
+    # i stället för att ge upp (bench Fas 2: tabelltung tavla).
+    while board is None and rounds < max_rounds:
+        rounds += 1
+        log(f"Modellen svarade inte med giltig JSON — försöker igen "
+            f"(runda {rounds} av {max_rounds}) …")
+        board = _llm_round(prompt, model, llm)
     if board is None:
         return {"board": None,
                 "errors": [{"path": "svar", "code": "json",
                             "message": "modellen svarade inte med giltig JSON"}],
-                "rounds": 1}
+                "rounds": rounds}
     _doc, errors = ws.validate_board_json(board)
     return _repair_until_valid(board, errors, model=model, llm=llm,
-                               rounds_used=1, max_rounds=max_rounds,
+                               rounds_used=rounds, max_rounds=max_rounds,
                                log_cb=log_cb)
 
 

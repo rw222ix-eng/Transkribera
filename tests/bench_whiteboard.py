@@ -233,6 +233,11 @@ def rapport() -> None:
 
 
 if __name__ == "__main__":
+    # Windows-konsolen är cp1252 — rapporten innehåller → m.m.
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
     if len(sys.argv) < 2:
         print(__doc__)
         raise SystemExit(1)

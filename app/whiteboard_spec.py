@@ -27,6 +27,7 @@ Tre lager:
 """
 from __future__ import annotations
 
+import json
 import re
 from typing import Annotated, Literal, Union
 
@@ -138,13 +139,26 @@ class CircleSection(_SectionBase):
     size: float | None = None
 
 
+class ShapeLabels(_Model):
+    # Explicit modell (inte dict[Literal, str]): Pydantic gör dict-nycklar
+    # till "propertyNames" i json-schemat, vilket llama.cpp-grammatiken inte
+    # tvingar — modellen hittade då på hörnnamn (A/B/C) som nycklar.
+    # Fasta optionella fält tvingas däremot av grammatiken (bench Fas 2).
+    top: str | None = None
+    left: str | None = None
+    right: str | None = None
+    bottom: str | None = None
+    inside: str | None = None
+
+
 class ShapeSection(_SectionBase):
     kind: Literal["shape"]
     type: Literal["right-triangle", "triangle", "rect", "circle"]
     width: float
     height: float
-    labels: dict[Literal["top", "left", "right", "bottom", "inside"], str] | None = None
-    angles: dict[str, str] | None = None
+    # Motorns `angles`-prop är utelämnad ur v1 av samma grammatikskäl
+    # (fri dict) — vinkelmarkeringar görs via graph-arcs i stället.
+    labels: ShapeLabels | None = None
 
 
 # Löv-sektioner som får ligga inuti callout/row/col (ingen rekursion —
@@ -494,11 +508,23 @@ _DECIMAL_POINT_RE = re.compile(r"\d\.\d")
 # Strängfält som INTE är läsbar text och därför undantas decimalkommakollen.
 _DECIMAL_EXEMPT_KEYS = {"expr", "name", "kind", "font", "bullet", "op",
                         "anchor", "axis", "shape", "type", "flex", "justify"}
+# Bench Fas 2: modellen skrev LaTeX i text-fält ("$ A = \\frac{1}{2}ab … $")
+# och glömde dubblera backslash i JSON, så \f/\t blev kontrolltecken och
+# kommandona trasiga ("rac", "imes"). Renderar utan [WB]-varningar men ser
+# trasigt ut på tavlan — fångas därför deterministiskt här.
+_CONTROL_CHAR_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
+_LATEX_COMMAND_RE = re.compile(r"\\[a-zA-Z]+")
 
 # Kolumngap-approximation för bredd-budgeten (motorn flödar kolumner med ett
 # internt mellanrum; exakt värde spelar mindre roll än att fånga grafer som
 # är uppenbart för breda för sin kolumn).
 _COL_GAP = 24.0
+# Motorn sätter ingen bredd på fristående text-sektioner: en lång löptext
+# mäts mot hela tavelbredden men placeras i ett smalare flöde → "ryms inte
+# (bredd)" + överlapp med nästa sektion (bench Fas 2). Deterministisk gräns
+# här ger modellen ett exakt, åtgärdbart fel FÖRE rendering.
+_MAX_TEXT_CHARS = 90
+_MAX_ITEM_CHARS = 80
 _ASPECT_TOLERANCE = 0.15  # motorn varnar vid >15 % avvikelse
 _VERTEX_EPS = 1e-6
 
@@ -507,20 +533,34 @@ def _err(path: str, code: str, message: str) -> dict:
     return {"path": path, "code": code, "message": message}
 
 
-def _walk_strings(value, path: str, out: list[dict]) -> None:
+def _walk_strings(value, path: str, out: list[dict], key: str = "") -> None:
     if isinstance(value, str):
         if _DECIMAL_POINT_RE.search(value):
             out.append(_err(path, "decimalpunkt",
                             f"'{value}' innehåller decimalpunkt — använd decimalkomma "
                             "(i LaTeX: 4{,}58)."))
+        if _CONTROL_CHAR_RE.search(value):
+            out.append(_err(path, "kontrolltecken",
+                            f"'{value[:60]}' innehåller kontrolltecken — troligen en "
+                            "o-escapad backslash i JSON (\\f i \\frac blir sidmatning). "
+                            "Backslash skrivs \\\\ i JSON-strängar."))
+        if "$" in value:
+            out.append(_err(path, "latex-i-text",
+                            f"'{value[:60]}' innehåller $-tecken — matematik skrivs i "
+                            "math-sektionens latex-fält, utan dollartecken."))
+        elif key != "latex" and _LATEX_COMMAND_RE.search(value):
+            out.append(_err(path, "latex-i-text",
+                            f"'{value[:60]}' ser ut att innehålla LaTeX — matematik "
+                            "skrivs i en math-sektion (fältet latex), inte i text/"
+                            "list/tabeller."))
     elif isinstance(value, dict):
         for k, v in value.items():
             if k in _DECIMAL_EXEMPT_KEYS:
                 continue
-            _walk_strings(v, f"{path}.{k}", out)
+            _walk_strings(v, f"{path}.{k}", out, key=k)
     elif isinstance(value, (list, tuple)):
         for idx, v in enumerate(value):
-            _walk_strings(v, f"{path}[{idx}]", out)
+            _walk_strings(v, f"{path}[{idx}]", out, key=key)
 
 
 def _iter_graphs(sections: list, width: float, path: str):
@@ -528,6 +568,28 @@ def _iter_graphs(sections: list, width: float, path: str):
     for si, sec in enumerate(sections or []):
         if isinstance(sec, GraphSection):
             yield sec, width, f"{path}[{si}]"
+
+
+def _check_text_lengths(sections: list, path: str, errors: list[dict]) -> None:
+    """Flagga löptexter som är för långa för ett kolumnflöde (se
+    _MAX_TEXT_CHARS ovan). Gäller text-sektioner och list-punkter, även
+    inuti callout/row/col."""
+    for si, sec in enumerate(sections or []):
+        spath = f"{path}[{si}]"
+        if isinstance(sec, TextSection) and len(sec.text) > _MAX_TEXT_CHARS:
+            errors.append(_err(spath, "text-lang",
+                               f"texten är {len(sec.text)} tecken — dela upp i "
+                               f"flera text-sektioner eller list-punkter "
+                               f"(max ~{_MAX_TEXT_CHARS})."))
+        elif isinstance(sec, ListSection):
+            for ii, item in enumerate(sec.items):
+                if len(item) > _MAX_ITEM_CHARS:
+                    errors.append(_err(f"{spath}.items[{ii}]", "text-lang",
+                                       f"listpunkten är {len(item)} tecken — "
+                                       f"korta ner eller dela upp "
+                                       f"(max ~{_MAX_ITEM_CHARS})."))
+        elif isinstance(sec, (CalloutSection, RowSection, ColSection)):
+            _check_text_lengths(sec.children, f"{spath}.children", errors)
 
 
 def _validate_graph(g: GraphSection, col_width: float, path: str,
@@ -610,11 +672,130 @@ def validate_rules(doc: BoardDoc) -> list[dict]:
                                "tavlan saknar både sections och columns."))
 
         for sections, width, path in flows:
+            _check_text_lengths(sections, path, errors)
             for g, col_w, gpath in _iter_graphs(sections, width, path):
                 _validate_graph(g, col_w, gpath, errors)
 
     _walk_strings(doc.model_dump(exclude_none=True, by_alias=True), "doc", errors)
     return errors
+
+
+def _split_text(text: str, limit: int) -> list[str]:
+    """Radbryt vid ordgränser till bitar om högst `limit` tecken."""
+    words = text.split()
+    chunks: list[str] = []
+    cur = ""
+    for w in words:
+        if cur and len(cur) + 1 + len(w) > limit:
+            chunks.append(cur)
+            cur = w
+        else:
+            cur = f"{cur} {w}".strip()
+    if cur:
+        chunks.append(cur)
+    return chunks or [text]
+
+
+_INLINE_MATH_RE = re.compile(r"\$([^$]+)\$")
+
+
+def _explode_inline_math(sec: dict) -> list[dict] | None:
+    """text med $-inline-matte ("Svar: … $\\frac{2}{9}$.") → sekvens av
+    text- och math-delar. Motorn renderar aldrig LaTeX i text-fält, och
+    LLM-reparationer rättade inte mönstret pålitligt (bench Fas 2).
+    Returnerar del-listan (utan wrapper) eller None om inget att göra."""
+    text = sec.get("text")
+    if sec.get("kind") != "text" or not isinstance(text, str) \
+            or not _INLINE_MATH_RE.search(text):
+        return None
+    parts: list[dict] = []
+    pos = 0
+    base = {k: sec[k] for k in ("size", "color") if sec.get(k) is not None}
+    for m in _INLINE_MATH_RE.finditer(text):
+        before = text[pos:m.start()].strip()
+        if before:
+            parts.append({"kind": "text", "text": before, **base})
+        parts.append({"kind": "math", "latex": m.group(1).strip(), **base})
+        pos = m.end()
+    after = text[pos:].strip()
+    if after and after not in (".", ",", "!", "?"):
+        parts.append({"kind": "text", "text": after, **base})
+    return parts or None
+
+
+def _normalize_sections(sections: list, in_container: bool = False) -> list:
+    out: list = []
+    prev = None
+    for sec in sections or []:
+        if not isinstance(sec, dict):
+            out.append(sec)
+            prev = sec
+            continue
+        # Dedupe: identiska konsekutiva sektioner (reparationsrundor har
+        # duplicerat sektioner, vilket alltid ger element-överlapp).
+        if prev is not None and sec == prev:
+            continue
+        prev = sec
+        parts = _explode_inline_math(sec)
+        if parts is not None:
+            if in_container or (len(parts) == 1 and parts[0]["kind"] == "math"):
+                # Inuti callout/row/col är bara löv tillåtna (WB-JSON v1) —
+                # lägg delarna plant; en ren matte-text blir en math-sektion.
+                if not in_container:
+                    for k in ("gapAfter", "align", "seed", "rotate"):
+                        if sec.get(k) is not None:
+                            parts[0][k] = sec[k]
+                out.extend(parts)
+            else:
+                row = {"kind": "row", "children": parts, "gap": 8}
+                for k in ("gapAfter", "align", "seed", "rotate"):
+                    if sec.get(k) is not None:
+                        row[k] = sec[k]
+                out.append(row)
+            continue
+        if sec.get("kind") == "text" and isinstance(sec.get("text"), str) \
+                and len(sec["text"]) > _MAX_TEXT_CHARS:
+            chunks = _split_text(sec["text"], 78)
+            for i, chunk in enumerate(chunks):
+                part = dict(sec)
+                part["text"] = chunk
+                if i < len(chunks) - 1:
+                    part["gapAfter"] = 4      # radavstånd inom samma stycke
+                out.append(part)
+        elif sec.get("kind") in ("callout", "row", "col") \
+                and isinstance(sec.get("children"), list):
+            sec = dict(sec)
+            sec["children"] = _normalize_sections(sec["children"],
+                                                  in_container=True)
+            out.append(sec)
+        else:
+            out.append(sec)
+    return out
+
+
+def normalize_board(data: dict) -> dict:
+    """Deterministisk normalisering FÖRE validering/rendering (bench Fas 2):
+
+    * långa text-sektioner radbryts i flera korta (motorn sätter ingen bredd
+      på fristående text — långa löptexter spränger annars kolumnbredden,
+      och LLM-reparationer kortade dem inte pålitligt),
+    * identiska konsekutiva sektioner dedupas (reparationsrundor har
+      duplicerat sektioner).
+
+    Ren dict-transform — påverkar inte listpunkter (att korta dem är ett
+    innehållsbeslut som lämnas till modellen via text-lang-regeln)."""
+    if not isinstance(data, dict):
+        return data
+    data = json.loads(json.dumps(data))          # djupkopia, rör ej original
+    for board in data.get("boards") or []:
+        if not isinstance(board, dict):
+            continue
+        if isinstance(board.get("sections"), list):
+            board["sections"] = _normalize_sections(board["sections"])
+        for col in board.get("columns") or []:
+            if isinstance(col, dict) and isinstance(col.get("sections"), list):
+                col["sections"] = _normalize_sections(col["sections"])
+    return data
 
 
 def validate_board_json(data) -> tuple[BoardDoc | None, list[dict]]:
