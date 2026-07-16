@@ -37,14 +37,29 @@ def create_router(base: Path, arbiter) -> APIRouter:
     def _model_name() -> str:
         return llm_manager.ACTIVE_LLM.filename
 
+    def _dubbletter(view: dict) -> list[dict]:
+        """Fas 5: flagga uppgifter som liknar tidigare godkända provs
+        uppgifter i samma kurs (visas i balansmätaren)."""
+        if not view.get("course_id") or not view.get("exam"):
+            return []
+        texts = [u.get("text") or "" for u in view["exam"].get("uppgifter") or []]
+        conn = db.connect(db_file)
+        try:
+            return db.find_similar_exam_items(
+                conn, view["course_id"], texts, exclude_exam_id=view["id"])
+        finally:
+            conn.close()
+
     def _exam_result(view: dict, errors: list, rounds: int) -> dict:
         doc, _ = exam_spec.validate_exam_json(view.get("exam") or {})
         return {
             "id": view["id"], "exam": view.get("exam"),
+            "typ": view.get("typ") or "prov",
             "status": view["status"], "versions": view["versions"],
             "errors": errors, "rounds": rounds,
             "granser": exam_spec.kravgranser(doc) if doc else None,
             "summor": exam_spec.poangsummor(doc) if doc else None,
+            "dubbletter": _dubbletter(view),
         }
 
     # ---------------------------------------------------- innehållsstatus --
@@ -61,11 +76,18 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 "  JOIN lessons l ON l.id = t.lesson_id"
                 "  WHERE t.content_id = cc.id"
                 "  AND (? IS NULL OR l.group_id = ?)"
-                ") AS behandlad "
+                ") AS behandlad, EXISTS("
+                "  SELECT 1 FROM content_tags t2"
+                "  JOIN exams e ON e.id = t2.exam_id"
+                "  WHERE t2.content_id = cc.id AND e.status = 'godkänt'"
+                ") AS provad "
                 "FROM course_content cc WHERE cc.course_id = ? "
                 "ORDER BY cc.kod, cc.id",
                 (group_id, group_id, course_id)).fetchall()
-            return {"punkter": [dict(r) | {"behandlad": bool(r["behandlad"])}
+            # provad (Fas 5): innehållstäckningen över terminen — vad är
+            # beprövat på prov/arbetsblad och vad är otestat.
+            return {"punkter": [dict(r) | {"behandlad": bool(r["behandlad"]),
+                                           "provad": bool(r["provad"])}
                                 for r in rows]}
         finally:
             conn.close()
@@ -109,6 +131,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
         delar = bool(body.get("delar", True))
         datum = (body.get("datum") or "").strip() or None
         typ = "arbetsblad" if body.get("typ") == "arbetsblad" else "prov"
+        referens_id = body.get("referens_exam_id")
 
         conn = db.connect(db_file)
         try:
@@ -126,6 +149,16 @@ def create_router(base: Path, arbiter) -> APIRouter:
             memory = db.memory_for_prompt(conn, int(group_id), int(course_id)) \
                 if group_id else ""
             teman = db.exam_themes_for_prompt(conn, int(course_id))
+            # Referensläget (Fas 5): tidigare provs uppgifter in i prompten
+            # med instruktion att variera och höja svårighetsgraden.
+            referens = ""
+            if referens_id:
+                ref = db.get_exam(conn, int(referens_id))
+                if ref and ref.get("exam"):
+                    referens = exam_gen.build_referens(
+                        [u.get("text") or ""
+                         for u in ref["exam"].get("uppgifter") or []])
+                    teman = ""       # referensläget ersätter undvik-listan
         finally:
             conn.close()
 
@@ -139,7 +172,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 res = exam_gen.generate_exam(
                     kurs, klass or "klassen", punkter, model=_model_name(),
                     antal=antal, tid_min=tid_min, delar=delar,
-                    memory=memory, teman=teman,
+                    memory=memory, teman=teman, referens=referens, profil=typ,
                     log_cb=lambda m: emit({"type": "log", "msg": m}))
                 if res["exam"] is None:
                     return {"id": None, "exam": None,
@@ -188,6 +221,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 res = exam_gen.refine_exam(
                     view["exam"], message, model=_model_name(),
                     nummer=int(nummer) if nummer else None,
+                    profil=view.get("typ") or "prov",
                     log_cb=lambda m: emit({"type": "log", "msg": m}))
                 if res["exam"] is not None and res["exam"] != view["exam"]:
                     conn = db.connect(db_file)
@@ -242,20 +276,28 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 errors: list = []
                 pdf_path = None
                 tex_path = None
+                typ = view.get("typ") or "prov"
                 for round_ in range(exam_gen.MAX_LATEX_ROUNDS + 1):
-                    doc, val_errors = exam_spec.validate_exam_json(exam)
+                    doc, val_errors = exam_spec.validate_exam_json(exam, typ)
                     if doc is None:
                         errors = val_errors
                         break
                     emit({"type": "log", "msg": "Renderar LaTeX …"})
-                    tex = exam_latex.render_prov(doc)
-                    bed = exam_latex.render_bedomning(doc)
-                    slug = _safe_component(doc.titel, "prov")
+                    # Typflaggan styr mallen (Fas 5): arbetsblad får facit-
+                    # sida i samma dokument och ingen bedömningsanvisning.
+                    if typ == "arbetsblad":
+                        tex = exam_latex.render_arbetsblad(doc)
+                        bed = None
+                    else:
+                        tex = exam_latex.render_prov(doc)
+                        bed = exam_latex.render_bedomning(doc)
+                    slug = _safe_component(doc.titel, typ)
                     out_dir.mkdir(parents=True, exist_ok=True)
                     tex_path = out_dir / f"{slug}.tex"
                     tex_path.write_text(tex, encoding="utf-8")
-                    (out_dir / f"{slug} - bedomning.tex").write_text(
-                        bed, encoding="utf-8")
+                    if bed is not None:
+                        (out_dir / f"{slug} - bedomning.tex").write_text(
+                            bed, encoding="utf-8")
                     if not exam_pdf.engine_available():
                         emit({"type": "log",
                               "msg": "PDF-motorn saknas — sparar .tex utan PDF."})
@@ -263,7 +305,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     emit({"type": "log", "msg": "Kompilerar PDF …"})
                     pdf_path, log = exam_pdf.compile_pdf(tex, out_dir, slug)
                     if pdf_path is not None:
-                        exam_pdf.compile_pdf(bed, out_dir, f"{slug} - bedomning")
+                        if bed is not None:
+                            exam_pdf.compile_pdf(bed, out_dir, f"{slug} - bedomning")
                         errors = []
                         break
                     if round_ >= exam_gen.MAX_LATEX_ROUNDS:

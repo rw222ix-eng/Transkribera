@@ -309,6 +309,96 @@ def test_fix_latex_rounds_cap():
     assert len(calls) == 1
 
 
+# ------------------------------------------------------ Fas 5: arbetsblad --
+
+def _arbetsblad() -> dict:
+    """E-tungt övningsblad utan redovisningsuppgifter — ok som arbetsblad,
+    obalanserat som prov."""
+    return {
+        "titel": "Arbetsblad — pq-formeln", "kurs": "Ma2b",
+        "hjalpmedel": "Räknare",
+        "uppgifter": [
+            {"del": None, "formaga": "P", "typ": "rutin", "poang": [2, 0, 0],
+             "text": "Lös $x^2 - 5x + 6 = 0$.", "innehall": ["pq-formeln"],
+             "losning": "$x = 2$ eller $x = 3$.", "bedomning": "+2 E."},
+            {"del": None, "formaga": "P", "typ": "rutin", "poang": [2, 0, 0],
+             "text": "Lös $x^2 + 2x - 8 = 0$.", "innehall": ["pq-formeln"],
+             "losning": "$x = 2$ eller $x = -4$.", "bedomning": "+2 E."},
+            {"del": None, "formaga": "B", "typ": "rutin", "poang": [1, 1, 0],
+             "text": "Vad kallas talet under rottecknet i pq-formeln?",
+             "innehall": ["pq-formeln"], "losning": "Diskriminantuttrycket.",
+             "bedomning": "+1 E, +1 C."},
+            {"del": None, "formaga": "PL", "typ": "rutin", "poang": [1, 1, 1],
+             "text": "Hitta två tal med summan 7 och produkten 12.",
+             "innehall": ["ekvationer"], "losning": "3 och 4.",
+             "bedomning": "+1 E, +1 C, +1 A."},
+        ],
+    }
+
+
+def test_arbetsblad_profile_accepts_worksheet_balance():
+    doc, errors = exam_spec.validate_exam_json(_arbetsblad(), "arbetsblad")
+    assert doc is not None and errors == []
+    # samma dokument faller som PROV (saknar redovisning, för E-tungt)
+    _doc2, prov_errors = exam_spec.validate_exam_json(_arbetsblad(), "prov")
+    assert any(e["code"] == "blandning" for e in prov_errors)
+
+
+def test_render_arbetsblad_has_facit_no_kravgranser():
+    doc, _ = exam_spec.validate_exam_json(_arbetsblad(), "arbetsblad")
+    tex = exam_latex.render_arbetsblad(doc)
+    assert "Arbetsblad" in tex
+    assert "Facit" in tex
+    assert "Kravgränser" not in tex
+    assert r"\(x = 2\)" in tex                    # facit = lösningarna
+    assert r"\poang{" not in tex                  # poäng dolda som standard
+    tex_p = exam_latex.render_arbetsblad(doc, visa_poang=True)
+    assert r"\poang{2/0/0}" in tex_p
+
+
+def test_build_referens_numbers_and_instructs():
+    ref = exam_gen.build_referens(["Lös $x^2 = 4$.", "Optimera hagen."])
+    assert "1. Lös" in ref and "2. Optimera" in ref
+    assert "HÖJ" in ref and "ALDRIG" in ref
+
+
+def test_build_prompt_arbetsblad_profile():
+    p = exam_gen.build_prompt("Ma2b", "SA23", [], profil="arbetsblad")
+    assert "ARBETSBLAD" in p
+    assert "del: null" in p
+
+
+def test_generate_exam_respects_profile():
+    llm, _ = _stub_llm([json.dumps(_arbetsblad())])
+    res = exam_gen.generate_exam("Ma2b", "SA23", [], model="m", llm=llm,
+                                 profil="arbetsblad")
+    assert res["errors"] == [] and res["rounds"] == 1
+
+
+def test_find_similar_exam_items(tmp_path):
+    from app import db as appdb
+    conn = appdb.connect(tmp_path / "t.db")
+    cid = appdb.get_or_create_course(conn, "Ma2b")
+    gammalt = appdb.create_exam(conn, exam=_exam(), course_id=cid,
+                                datum="2026-09-01")
+    # bara godkända prov räknas
+    assert appdb.find_similar_exam_items(
+        conn, cid, ["Lös ekvationen $x^2 - 4x + 3 = 0$."]) == []
+    appdb.set_exam_artifacts(conn, gammalt["id"], approve=True)
+
+    flaggor = appdb.find_similar_exam_items(
+        conn, cid, ["Lös ekvationen $x^2 - 4x + 3 = 0$.",
+                    "Beräkna integralen av $\\sin x$ mellan 0 och pi."])
+    assert len(flaggor) == 1
+    assert flaggor[0]["index"] == 0
+    assert flaggor[0]["mot_exam_id"] == gammalt["id"]
+    assert flaggor[0]["likhet"] >= 0.9
+    # exkludering av det egna provet
+    assert appdb.find_similar_exam_items(
+        conn, cid, ["Lös ekvationen $x^2 - 4x + 3 = 0$."],
+        exclude_exam_id=gammalt["id"]) == []
+
+
 def test_prompt_includes_memory_and_themes():
     p = exam_gen.build_prompt("Ma2b", "SA23", ["pq-formeln"],
                               memory="Klassen har arbetat med kvadrering.",

@@ -1381,3 +1381,60 @@ def exam_themes_for_prompt(conn: sqlite3.Connection, course_id: int,
         if themes:
             lines.append(f"{r['datum'] or '?'} — {r['titel'] or 'prov'}: {themes}")
     return "\n".join(lines)
+
+
+_SIMILARITY_TOKEN_RE = None
+
+
+def _sim_tokens(text: str) -> set[str]:
+    """Ord OCH mattetermer (x^2, 4x, 60) — ren bokstavstokenisering skulle
+    tappa själva ekvationen och flagga alla "Lös ekvationen …" mot varandra."""
+    global _SIMILARITY_TOKEN_RE
+    if _SIMILARITY_TOKEN_RE is None:
+        import re
+        _SIMILARITY_TOKEN_RE = re.compile(r"[^\s$.,;:!?()\\{}]+")
+    return {t for t in _SIMILARITY_TOKEN_RE.findall((text or "").lower())
+            if len(t) >= 2 and any(c.isalnum() for c in t)}
+
+
+def find_similar_exam_items(conn: sqlite3.Connection, course_id: int,
+                            texts: list[str], *,
+                            exclude_exam_id: int | None = None,
+                            threshold: float = 0.55) -> list[dict]:
+    """Dubblettkontroll (Fas 5): jämför nya uppgiftstexter mot tidigare
+    godkända provs uppgifter i samma kurs. Likheten mäts som Jaccard-
+    överlapp på ordmängder (>= 3 tecken) — enkel och deterministisk;
+    tillräcklig på en lokal enanvändardatamängd (planens "FTS-likhet").
+    Returnerar en flagga per ny uppgift som liknar en tidigare:
+    {"index", "text", "mot_exam_id", "mot_titel", "mot_text", "likhet"}."""
+    rows = conn.execute(
+        "SELECT i.text, i.exam_id, e.titel FROM exam_items i "
+        "JOIN exams e ON e.id = i.exam_id "
+        "WHERE e.course_id = ? AND e.status = 'godkänt' "
+        "AND (? IS NULL OR i.exam_id != ?)",
+        (course_id, exclude_exam_id, exclude_exam_id)).fetchall()
+    if not rows:
+        return []
+    old = [(r, _sim_tokens(r["text"])) for r in rows]
+    flags: list[dict] = []
+    for idx, text in enumerate(texts or []):
+        toks = _sim_tokens(text)
+        if len(toks) < 3:
+            continue
+        best, best_sim = None, 0.0
+        for row, otoks in old:
+            if not otoks:
+                continue
+            union = len(toks | otoks)
+            sim = len(toks & otoks) / union if union else 0.0
+            if sim > best_sim:
+                best, best_sim = row, sim
+        if best is not None and best_sim >= threshold:
+            flags.append({
+                "index": idx, "text": text[:80],
+                "mot_exam_id": best["exam_id"],
+                "mot_titel": best["titel"] or "prov",
+                "mot_text": (best["text"] or "")[:80],
+                "likhet": round(best_sim, 2),
+            })
+    return flags

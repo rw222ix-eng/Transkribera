@@ -49,10 +49,11 @@ def _stub_generate(monkeypatch, result=None):
     calls = []
 
     def fake(kurs, klass, punkter, *, model, antal=10, tid_min=120,
-             delar=True, memory="", teman="", llm=None,
-             max_rounds=exam_gen.MAX_ROUNDS, log_cb=None):
+             delar=True, memory="", teman="", referens="", profil="prov",
+             llm=None, max_rounds=exam_gen.MAX_ROUNDS, log_cb=None):
         calls.append({"kurs": kurs, "punkter": punkter, "memory": memory,
-                      "teman": teman, "antal": antal})
+                      "teman": teman, "antal": antal,
+                      "referens": referens, "profil": profil})
         if log_cb:
             log_cb("Skriver provet …")
         return result or {"exam": _exam_doc(), "errors": [], "rounds": 1}
@@ -118,8 +119,8 @@ def test_refine_adds_version(client, monkeypatch):
     updated["uppgifter"][0]["text"] = "Ny uppgift $x = 2$."
     captured = {}
 
-    def fake_refine(exam, message, *, model, nummer=None, llm=None,
-                    max_rounds=exam_gen.MAX_ROUNDS, log_cb=None):
+    def fake_refine(exam, message, *, model, nummer=None, profil="prov",
+                    llm=None, max_rounds=exam_gen.MAX_ROUNDS, log_cb=None):
         captured["message"] = message
         captured["nummer"] = nummer
         return {"exam": updated, "errors": [], "rounds": 1}
@@ -191,6 +192,81 @@ def test_approve_compile_failure_reports_honestly(client, monkeypatch):
     assert res["status"] == "godkänt"                 # .tex finns — ärligt fel
     assert any(e["code"] == "kompilering" for e in res["errors"])
     assert res["pdf"] is None
+
+
+# ------------------------------------------------------ Fas 5: arbetsblad --
+
+def test_generate_arbetsblad_sets_typ_and_profile(client, monkeypatch):
+    calls = _stub_generate(monkeypatch)
+    r = client.post("/api/exams/generate",
+                    json={"course_id": _course_id(client), "typ": "arbetsblad"})
+    result = _done(r)
+    assert result["typ"] == "arbetsblad"
+    assert calls[0]["profil"] == "arbetsblad"
+    assert client.get(f"/api/exams/{result['id']}").json()["typ"] == "arbetsblad"
+
+
+def test_approve_arbetsblad_renders_facit_without_bedomning(client, monkeypatch):
+    calls = _stub_generate(monkeypatch)
+    r = client.post("/api/exams/generate",
+                    json={"course_id": _course_id(client), "typ": "arbetsblad",
+                          "datum": "2026-10-05"})
+    result = _done(r)
+    monkeypatch.setattr(exam_pdf, "engine_available", lambda: False)
+    ra = client.post(f"/api/exams/{result['id']}/approve", json={})
+    res = _done(ra)
+    from pathlib import Path
+    tex = Path(res["tex"]).read_text(encoding="utf-8")
+    assert "Facit" in tex and "Arbetsblad" in tex
+    assert "Kravgränser" not in tex
+    # ingen separat bedömningsanvisning för arbetsblad
+    assert not list(Path(res["tex"]).parent.glob("* - bedomning.tex"))
+
+
+def test_generate_with_referens_builds_reference_prompt(client, monkeypatch):
+    # skapa + godkänn ett referensprov först
+    result, _ = _make_exam(client, monkeypatch, datum="2026-09-01")
+    monkeypatch.setattr(exam_pdf, "engine_available", lambda: False)
+    _done(client.post(f"/api/exams/{result['id']}/approve", json={}))
+
+    calls = _stub_generate(monkeypatch)
+    r = client.post("/api/exams/generate",
+                    json={"course_id": _course_id(client),
+                          "referens_exam_id": result["id"]})
+    _done(r)
+    assert "HÖJ" in calls[0]["referens"]
+    assert "kvadratkomplettering" in calls[0]["referens"]
+    assert calls[0]["teman"] == ""        # referensläget ersätter undvik-listan
+
+
+def test_generate_flags_duplicates_against_previous_exam(client, monkeypatch):
+    # godkänt prov med samma uppgiftstexter → nya provet flaggas
+    result, _ = _make_exam(client, monkeypatch, datum="2026-09-01")
+    monkeypatch.setattr(exam_pdf, "engine_available", lambda: False)
+    _done(client.post(f"/api/exams/{result['id']}/approve", json={}))
+
+    _stub_generate(monkeypatch)           # returnerar identiskt prov
+    r = client.post("/api/exams/generate",
+                    json={"course_id": _course_id(client)})
+    res = _done(r)
+    assert len(res["dubbletter"]) >= 4
+    d = res["dubbletter"][0]
+    assert d["likhet"] >= 0.55 and d["mot_exam_id"] == result["id"]
+
+
+def test_content_status_provad_flag(client, monkeypatch):
+    cid = _course_id(client)
+    conn = appdb.connect(client.base_dir / "transkribera.db")
+    punkt = appdb.list_course_content(conn, cid)[0]
+    conn.close()
+    result, _ = _make_exam(client, monkeypatch, punkter=[punkt["id"]])
+    # otestat tills provet är godkänt
+    r = client.get("/api/exams/content-status", params={"course_id": cid})
+    assert {p["id"]: p["provad"] for p in r.json()["punkter"]}[punkt["id"]] is False
+    monkeypatch.setattr(exam_pdf, "engine_available", lambda: False)
+    _done(client.post(f"/api/exams/{result['id']}/approve", json={}))
+    r = client.get("/api/exams/content-status", params={"course_id": cid})
+    assert {p["id"]: p["provad"] for p in r.json()["punkter"]}[punkt["id"]] is True
 
 
 def test_content_status_marks_behandlat(client, monkeypatch):

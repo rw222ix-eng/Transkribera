@@ -185,6 +185,9 @@
     exam: null,                // serverns provresultat (id, exam, granser, …)
     exChat: {},                // per-uppgift-chattfält {nummer: text}
     exMsg: '',                 // kvitto (PDF skapad m.m.)
+    exTyp: 'prov',             // prov | arbetsblad (Fas 5)
+    exReferensId: '',          // referensläge: utgå från tidigare prov
+    exHistorik: [],            // kursens prov/arbetsblad (historik + referensval)
   };
 
   /* instance (non-state) fields */
@@ -878,8 +881,27 @@
       setState({ exContent: (r && r.punkter) || [], exPunkter: {} });
     }).catch(function () {});
   }
-  function onExCourse(e) { setState({ exCourseId: e.target.value }, loadExamContent); }
+  function loadExamHistorik() {
+    if (!S.exCourseId) { setState({ exHistorik: [], exReferensId: '' }); return; }
+    getJSON('/api/exams?course_id=' + S.exCourseId).then(function (r) {
+      setState({ exHistorik: (r && r.exams) || [], exReferensId: '' });
+    }).catch(function () {});
+  }
+  function onExCourse(e) {
+    setState({ exCourseId: e.target.value }, function () {
+      loadExamContent(); loadExamHistorik();
+    });
+  }
   function onExGroup(e) { setState({ exGroupId: e.target.value }, loadExamContent); }
+  function onExTyp(e) { setState({ exTyp: e.target.value }); }
+  function onExReferens(e) { setState({ exReferensId: e.target.value }); }
+  function openExamFromHistorik(id) {
+    return function () {
+      getJSON('/api/exams/' + id).then(function (r) {
+        if (r && r.id) setState({ exam: r, exErrors: r.errors || [], exChat: {}, exMsg: '' });
+      }).catch(function () {});
+    };
+  }
   function exTogglePunkt(id) {
     setState(function (s) {
       var p = Object.assign({}, s.exPunkter);
@@ -906,6 +928,8 @@
       else if (r.tex && r.status === 'godkänt') patch.exMsg = 'Sparad utan PDF: ' + r.tex;
       setState(patch);
       loadCalendar();
+      loadExamHistorik();      // historiken + prövad-markörerna uppdateras
+      loadExamContent();
     }
   }
   function startExamGenerate() {
@@ -919,6 +943,8 @@
       tid_min: +S.exTid || 120,
       delar: S.exDelar,
       datum: S.exDatum || null,
+      typ: S.exTyp,
+      referens_exam_id: S.exReferensId ? +S.exReferensId : null,
     }, onExamEvent);
   }
   function onExChat(nummer) {
@@ -2757,9 +2783,22 @@
       onExCourse: onExCourse, onExGroup: onExGroup,
       exContent: st.exContent.map(function (p) {
         return { id: p.id, rubrik: p.rubrik, text: p.text,
-                 behandlad: !!p.behandlad, vald: !!st.exPunkter[p.id],
+                 behandlad: !!p.behandlad, provad: !!p.provad,
+                 vald: !!st.exPunkter[p.id],
                  onToggle: function () { exTogglePunkt(p.id); } };
       }),
+      exTyp: st.exTyp, onExTyp: onExTyp,
+      exReferensId: st.exReferensId, onExReferens: onExReferens,
+      exReferensVal: st.exHistorik.filter(function (h) {
+        return h.status === 'godkänt' && (h.typ || 'prov') === 'prov';
+      }),
+      exHistorik: st.exHistorik.map(function (h) {
+        return { id: h.id, titel: h.titel || 'utan titel',
+                 typ: h.typ || 'prov', datum: h.datum || '',
+                 status: h.status,
+                 onOpen: openExamFromHistorik(h.id) };
+      }),
+      exDubbletter: (st.exam && st.exam.dubbletter) || [],
       exAntal: st.exAntal, exTid: st.exTid, exDatum: st.exDatum,
       exDelar: st.exDelar,
       onExAntal: onExAntal, onExTid: onExTid, onExDatum: onExDatum,
@@ -2778,6 +2817,7 @@
         return {
           id: ex.id,
           titel: ex.exam.titel || 'Prov',
+          typ: ex.typ || 'prov',
           status: ex.status,
           godkant: ex.status === 'godkänt',
           versionRad: 'Version ' + ((cur && cur.version) || 1) + ' av ' + (ex.versions || []).length,
@@ -4766,6 +4806,10 @@ function viewPlanning(v){
         </div>
 
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+          <select data-change="${on(v.onExTyp)}" aria-label="Dokumenttyp" style="${selStyle};min-width:118px">
+            <option value="prov" ${v.exTyp === 'prov' ? 'selected' : ''}>Prov</option>
+            <option value="arbetsblad" ${v.exTyp === 'arbetsblad' ? 'selected' : ''}>Arbetsblad</option>
+          </select>
           <select data-change="${on(v.onExCourse)}" aria-label="Provkurs" style="${selStyle}">
             <option value="">Välj kurs …</option>
             ${ v.planCourses.map(function(c){ return `<option value="${esc(c.id)}" ${String(c.id) === v.exCourseId ? 'selected' : ''}>${esc(c.namn)}</option>`; }).join('') }
@@ -4778,6 +4822,11 @@ function viewPlanning(v){
           <input type="number" min="30" max="300" step="10" value="${esc(v.exTid)}" data-change="${on(v.onExTid)}" aria-label="Provtid (minuter)" title="Provtid i minuter" style="${selStyle};min-width:84px;width:84px">
           <input type="date" value="${esc(v.exDatum)}" data-change="${on(v.onExDatum)}" aria-label="Provdatum" style="${selStyle};min-width:0">
           <label style="display:inline-flex;align-items:center;gap:7px;font-size:13.5px;color:var(--ink-2);cursor:pointer"><input type="checkbox" ${v.exDelar ? 'checked' : ''} data-change="${on(v.onExDelar)}"> Del B/C</label>
+          ${ v.exReferensVal.length ? `
+          <select data-change="${on(v.onExReferens)}" aria-label="Referensprov" title="Utgå från ett tidigare prov — variera och höj svårighetsgraden" style="${selStyle};max-width:210px">
+            <option value="">Utan referensprov</option>
+            ${ v.exReferensVal.map(function(h){ return `<option value="${esc(h.id)}" ${String(h.id) === v.exReferensId ? 'selected' : ''}>Utgå från: ${esc(h.titel || 'prov')}${h.datum ? ' (' + esc(h.datum) + ')' : ''}</option>`; }).join('') }
+          </select>` : '' }
           <button data-click="${on(v.onExStart)}" ${v.exCanStart ? '' : 'disabled'} style="display:inline-flex;align-items:center;gap:7px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:10px;padding:10px 18px;font-size:14.5px;font-weight:500;font-family:inherit;cursor:${v.exCanStart ? 'pointer' : 'default'};opacity:${v.exCanStart ? '1' : '.55'};box-shadow:var(--shadow-sm)">${v.exRunning ? 'Skriver …' : 'Skriv provet'}</button>
         </div>
 
@@ -4785,7 +4834,7 @@ function viewPlanning(v){
           <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">
             ${ v.exContent.map(function(p){ return `
               <button data-key="cc-${esc(p.id)}" data-click="${on(p.onToggle)}" title="${esc(p.text)}" aria-pressed="${p.vald}" style="display:inline-flex;align-items:center;gap:6px;border:1px solid ${p.vald ? 'var(--accent)' : 'var(--line)'};background:${p.vald ? 'var(--accent-weak)' : 'var(--surface)'};color:${p.vald ? 'var(--accent)' : 'var(--ink-2)'};border-radius:8px;padding:5px 10px;font-size:12.5px;font-family:inherit;cursor:pointer;font-weight:${p.vald ? '600' : '500'}">
-                ${esc(p.rubrik)}${ p.behandlad ? `<span title="Behandlat i undervisningen" style="font-size:11px">✓</span>` : `<span title="Ännu inte behandlat" style="font-size:11px;opacity:.6">○</span>` }
+                ${esc(p.rubrik)}${ p.behandlad ? `<span title="Behandlat i undervisningen" style="font-size:11px">✓</span>` : `<span title="Ännu inte behandlat" style="font-size:11px;opacity:.6">○</span>` }${ p.provad ? `<span title="Prövat på prov/arbetsblad" style="font-size:11px">★</span>` : '' }
               </button>`; }).join('') }
           </div>
         ` : (v.exCourseId ? '' : `<div style="font-size:13px;color:var(--ink-3);margin-bottom:12px">Välj kurs för att se innehållspunkterna — ✓ = behandlat i undervisningen.</div>`) }
@@ -4807,6 +4856,7 @@ function viewPlanning(v){
           <div style="background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px 18px;box-shadow:var(--shadow-sm)">
             <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:6px">
               <span style="font-size:16px;font-weight:600;color:var(--ink)">${esc(v.exam.titel)}</span>
+              <span style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-3)">${esc(v.exam.typ)}</span>
               <span style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.07em;text-transform:uppercase;color:${v.exam.godkant ? 'var(--ok)' : 'var(--ink-3)'}">${esc(v.exam.status)}</span>
               <span style="font-size:12.5px;color:var(--ink-3)">${esc(v.exam.versionRad)}</span>
             </div>
@@ -4815,6 +4865,12 @@ function viewPlanning(v){
             <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
               ${ v.exam.formagor.map(function(f2){ return `<span data-key="fm-${esc(f2.f)}" style="font-family:var(--mono);font-size:11px;color:var(--ink-2);background:var(--sunken);border:1px solid var(--line);border-radius:6px;padding:2px 8px">${esc(f2.f)} ${esc(f2.p)} p</span>`; }).join('') }
             </div>
+            ${ v.exDubbletter.length ? `
+              <div role="status" style="display:flex;flex-direction:column;gap:4px;margin-bottom:14px;font-size:13px;color:var(--warn)">
+                <span style="font-weight:600">${esc(v.exDubbletter.length)} uppgift${v.exDubbletter.length === 1 ? '' : 'er'} liknar tidigare prov:</span>
+                ${ v.exDubbletter.map(function(d2){ return `<span style="font-family:var(--mono,monospace);font-size:12px;color:var(--ink-2)">"${esc(d2.text)}" ≈ ${esc(d2.mot_titel)} (${esc(Math.round(d2.likhet * 100))} % likhet)</span>`; }).join('') }
+              </div>
+            ` : '' }
 
             ${ v.exam.uppgifter.map(function(u2){ return `
               <div data-key="ex-u-${esc(u2.nummer)}" style="border-top:1px solid color-mix(in srgb,var(--line) 60%,transparent);padding:11px 0">
@@ -4838,6 +4894,22 @@ function viewPlanning(v){
               ${ v.exam.hasTex ? `<button data-click="${on(v.onExTex)}" style="border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:10px;padding:10px 15px;font-size:14px;font-weight:500;font-family:inherit;cursor:pointer">.tex</button>` : '' }
               ${ v.exam.hasTex ? `<button data-click="${on(v.onExOverleaf)}" title="Tillval: öppnar källan i Overleaf (molntjänst) för manuell finputs — prov innehåller ingen elevdata" style="border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:10px;padding:10px 15px;font-size:14px;font-weight:500;font-family:inherit;cursor:pointer">Öppna i Overleaf</button>` : '' }
               ${ v.exMsg ? `<span role="status" style="font-size:13.5px;color:var(--ink-2);word-break:break-all">${esc(v.exMsg)}</span>` : '' }
+            </div>
+          </div>
+        ` : '' }
+
+        ${ v.exHistorik.length ? `
+          <div style="margin-top:16px">
+            <div style="font-size:12px;text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-3);font-weight:600;margin-bottom:7px">Historik — ${esc(v.exHistorik.length)} prov/arbetsblad i kursen</div>
+            <div style="display:flex;flex-direction:column;gap:4px">
+              ${ v.exHistorik.map(function(h2){ return `
+                <button data-key="hist-${esc(h2.id)}" data-click="${on(h2.onOpen)}" style="display:flex;align-items:baseline;gap:10px;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:9px;padding:7px 12px;font-size:13px;font-family:inherit;cursor:pointer;text-align:left">
+                  <span style="font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(h2.titel)}</span>
+                  <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.06em;text-transform:uppercase;color:var(--ink-3)">${esc(h2.typ)}</span>
+                  ${ h2.datum ? `<span style="font-family:var(--mono);font-size:11px;color:var(--ink-3)">${esc(h2.datum)}</span>` : '' }
+                  <span style="flex:1"></span>
+                  <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.06em;text-transform:uppercase;color:${h2.status === 'godkänt' ? 'var(--ok)' : 'var(--ink-3)'}">${esc(h2.status)}</span>
+                </button>`; }).join('') }
             </div>
           </div>
         ` : '' }

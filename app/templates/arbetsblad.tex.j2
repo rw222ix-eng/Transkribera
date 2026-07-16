@@ -1,0 +1,52 @@
+((# Arbetsbladsmall (Fas 5) — som provmallen men utan kravgränser, med
+    valfri poängvisning, gott om utrymme och facit på egen sida.
+    Fast preamble; Jinja-avgränsarna är parentesbaserade. #))
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=22mm,bottom=26mm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{fancyhdr}
+\usepackage{lastpage}
+\usepackage{tabularx}
+\usepackage{enumitem}
+\usepackage[swedish]{babel}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small ((( kurs ))) — ((( titel )))}
+\fancyhead[R]{\small Sida \thepage\ av \pageref{LastPage}}
+\renewcommand{\headrulewidth}{0.3pt}
+
+\newcommand{\poang}[1]{\hfill\mbox{\small(#1)}}
+\newcommand{\svarsrad}{\par\vspace{4mm}\makebox[0.6\linewidth]{Svar: \dotfill}}
+
+\begin{document}
+
+\begin{center}
+  {\LARGE\bfseries ((( titel )))}\\[2mm]
+  {\large Arbetsblad — ((( kurs )))((* if klass *)) \; · \; ((( klass )))((* endif *))((* if datum *)) \; · \; ((( datum )))((* endif *))}
+\end{center}
+
+\vspace{4mm}
+{\small Öva i egen takt — uppgifterna blir svårare längre ner. Facit finns
+på sista sidan((* if visa_poang *)); poäng anges som (E/C/A)((* endif *)).}
+
+\vspace{4mm}
+((* for del in delar *))
+((* for u in del.uppgifter *))
+\textbf{Uppgift ((( u.nummer )))}((* if visa_poang *))\poang{((( u.poang_str )))}((* endif *))\par
+((( u.text )))
+((* if u.endast_svar *))\svarsrad\par\vspace{6mm}((* else *))\par\vspace{((( u.utrymme_mm )))mm}((* endif *))
+
+((* endfor *))
+((* endfor *))
+
+\newpage
+\section*{Facit}
+((* for del in delar *))
+((* for u in del.uppgifter *))
+\textbf{((( u.nummer ))).} ((( u.losning )))\par\vspace{2mm}
+((* endfor *))
+((* endfor *))
+
+\end{document}

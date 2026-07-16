@@ -48,3 +48,26 @@ test("Prov: guide → generera → iterera → godkänn → PDF (fejk)", async (
 
   expect(errors, errors.join("\n")).toEqual([]);
 });
+
+test("Arbetsblad: typflaggan ger facit-mall och historiken visar båda (fejk)", async ({ page }) => {
+  await page.goto("/?e2e=1");
+  await page.getByRole("button", { name: "Planering", exact: true }).click();
+
+  await page.getByLabel("Dokumenttyp").selectOption("arbetsblad");
+  await page.getByLabel("Provkurs").selectOption({ label: "Ma2b" });
+  await page.getByRole("button", { name: "Skriv provet" }).click();
+  await expect(page.getByText("Arbetsblad — Ma2b")).toBeVisible({ timeout: 15000 });
+
+  await page.getByRole("button", { name: "Godkänn & skapa PDF" }).click();
+  await expect(page.getByText(/PDF skapad:/)).toBeVisible({ timeout: 15000 });
+
+  // typflaggan hela vägen: .tex är arbetsbladsmallen med facit, utan kravgränser
+  const examId = await page.evaluate(() => (window as any).S.exam.id);
+  const tex = await (await page.request.get(`/api/exams/${examId}/tex`)).text();
+  expect(tex).toContain("Facit");
+  expect(tex).not.toContain("Kravgränser");
+
+  // historiken listar dokumentet med typ + status
+  await expect(page.getByText(/Historik — /)).toBeVisible();
+  await expect(page.locator(`[data-key="hist-${examId}"]`)).toContainText("arbetsblad");
+});

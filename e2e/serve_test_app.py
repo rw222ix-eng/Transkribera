@@ -180,13 +180,17 @@ def _install_fakes() -> None:
 
     def fake_generate_exam(kurs, klass, punkter, *, model, antal=10,
                            tid_min=120, delar=True, memory="", teman="",
+                           referens="", profil="prov",
                            llm=None, max_rounds=3, log_cb=None):
         if log_cb:
             log_cb("[FEJK] Skriver provet …")
-        return {"exam": _fake_exam(kurs, klass), "errors": [], "rounds": 1}
+        exam = _fake_exam(kurs, klass)
+        if profil == "arbetsblad":
+            exam["titel"] = f"Arbetsblad — {kurs}"
+        return {"exam": exam, "errors": [], "rounds": 1}
 
-    def fake_refine_exam(exam, message, *, model, nummer=None, llm=None,
-                         max_rounds=3, log_cb=None):
+    def fake_refine_exam(exam, message, *, model, nummer=None, profil="prov",
+                         llm=None, max_rounds=3, log_cb=None):
         import copy as _copy
         updated = _copy.deepcopy(exam)
         idx = (nummer - 1) if nummer else 0

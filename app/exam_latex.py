@@ -149,3 +149,10 @@ def render_prov(doc: exam_spec.ExamDoc) -> str:
 
 def render_bedomning(doc: exam_spec.ExamDoc) -> str:
     return _environment().get_template("bedomning.tex.j2").render(**_build_view(doc))
+
+
+def render_arbetsblad(doc: exam_spec.ExamDoc, visa_poang: bool = False) -> str:
+    """Arbetsblad (Fas 5): inga kravgränser, valfri poängvisning, facit på
+    egen sida (lösningsförslagen)."""
+    return _environment().get_template("arbetsblad.tex.j2").render(
+        visa_poang=visa_poang, **_build_view(doc))

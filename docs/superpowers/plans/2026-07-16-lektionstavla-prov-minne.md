@@ -304,17 +304,32 @@ e2e-tavel/prov-specarna gröna). **Återstår:** Tectonic-nedladdningen
 Mål: arbetsblad ur samma motor; nya prov kan bygga på tidigare som
 referenspunkt.
 
-- [ ] `arbetsblad.tex.j2` + egna balansmål (inga kravgränser, valfri poäng,
+- [x] `arbetsblad.tex.j2` + egna balansmål (inga kravgränser, valfri poäng,
       facit-sida); typflagga genom hela kedjan (spec → rutter → UI).
-- [ ] Referensläge: "utgå från prov X" → tidigare provs uppgifter in i
-      prompten med instruktion *variera och höj svårighetsgrad*;
-      dubblettkontroll via FTS-likhet mot tidigare uppgiftstexter, träffar
-      flaggas i balansmätaren.
-- [ ] Minnesvyn visar prov/arbetsblad-historik per kurs/klass med
-      innehållstäckning över terminen (vad är beprövat, vad är otestat).
-- [ ] Tester: typflaggan, referensprompt, dubblettkontrollen.
+      Balansprofiler i `exam_spec.PROFILER` (arbetsblad: generösare mål,
+      inget redovisningskrav); `render_arbetsblad(visa_poang=False)`;
+      approve väljer mall per `exams.typ` och hoppar bedömningsanvisningen
+      för arbetsblad; typ-väljare i guiden.
+- [x] Referensläge: "utgå från prov X" → tidigare provs uppgifter in i
+      prompten med instruktion *variera och höj svårighetsgrad*
+      (`exam_gen.build_referens`; referensval i guiden av kursens godkända
+      prov; undvik-listan ersätts av referensen); dubblettkontroll via
+      likhet mot tidigare uppgiftstexter, träffar flaggas i balansmätaren.
+      *Avvikelse:* likheten är Jaccard-överlapp på ord + mattetermer
+      (`db.find_similar_exam_items`) i stället för en FTS-tabell — samma
+      effekt på en lokal enanvändardatamängd, deterministisk och testbar;
+      ren bokstavstokenisering förkastades (flaggade alla "Lös ekvationen …"
+      mot varandra).
+- [x] Minnesvyn visar prov/arbetsblad-historik per kurs/klass med
+      innehållstäckning över terminen: historiklista i guiden (klick →
+      öppna) och innehållspunkternas chips markerar behandlat (✓) och
+      prövat (★) via `content-status`-endpointens provad-flagga.
+- [x] Tester: typflaggan (profil + mall + rutter + e2e), referensprompt,
+      dubblettkontrollen (träff/likhet/exkludering/endast godkända) samt
+      provad-flaggan.
 
-Status: ej påbörjad.
+Status: klar 2026-07-16 (`python -m pytest` 614 gröna; `node --check`;
+e2e tavel-/prov-specarna gröna inkl. arbetsbladsflödet).
 
 ---
 

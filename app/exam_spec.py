@@ -76,6 +76,23 @@ NIVA_MAL: dict[str, tuple[float, float]] = {
     "e": (0.35, 0.60), "c": (0.25, 0.45), "a": (0.10, 0.30),
 }
 
+# Arbetsblad (Fas 5) — egna, generösare mål: övning i klassrummet/hemma
+# betyder fler rutin- och procedurpoäng, inga kravgränser och inget krav på
+# redovisningsuppgifter.
+ARBETSBLAD_FORMAGA_MAL: dict[str, tuple[float, float]] = {
+    "B": (0.00, 0.50), "P": (0.25, 0.80), "PL": (0.00, 0.45),
+    "R": (0.00, 0.35), "K": (0.00, 0.30),
+}
+ARBETSBLAD_NIVA_MAL: dict[str, tuple[float, float]] = {
+    "e": (0.40, 0.85), "c": (0.10, 0.45), "a": (0.00, 0.25),
+}
+
+# Balansprofil per dokumenttyp: (förmågemål, nivåmål, kräver redovisning).
+PROFILER: dict[str, tuple[dict, dict, bool]] = {
+    "prov": (FORMAGA_MAL, NIVA_MAL, True),
+    "arbetsblad": (ARBETSBLAD_FORMAGA_MAL, ARBETSBLAD_NIVA_MAL, False),
+}
+
 
 def _err(path: str, code: str, message: str) -> dict:
     return {"path": path, "code": code, "message": message}
@@ -94,11 +111,14 @@ def poangsummor(doc: ExamDoc) -> dict:
 
 def validate_balance(doc: ExamDoc,
                      formaga_mal: dict | None = None,
-                     niva_mal: dict | None = None) -> list[dict]:
+                     niva_mal: dict | None = None,
+                     profil: str = "prov") -> list[dict]:
     """Deterministisk balanskontroll mot målen (maskinläsbar fellista som
-    korrigeringsloopen formulerar om till en prompt)."""
-    fm = formaga_mal or FORMAGA_MAL
-    nm = niva_mal or NIVA_MAL
+    korrigeringsloopen formulerar om till en prompt). `profil` väljer
+    prov- eller arbetsbladsmålen; explicita mål-parametrar vinner."""
+    prof_fm, prof_nm, kraver_redovisning = PROFILER.get(profil, PROFILER["prov"])
+    fm = formaga_mal or prof_fm
+    nm = niva_mal or prof_nm
     errors: list[dict] = []
     s = poangsummor(doc)
     total = s["total"]
@@ -128,7 +148,7 @@ def validate_balance(doc: ExamDoc,
     if "rutin" not in typer:
         errors.append(_err("uppgifter", "blandning",
                            "provet saknar rutinuppgifter (endast svar krävs)."))
-    if not typer & {"redovisning", "problem"}:
+    if kraver_redovisning and not typer & {"redovisning", "problem"}:
         errors.append(_err("uppgifter", "blandning",
                            "provet saknar uppgifter med fullständig lösning."))
     return errors
@@ -173,7 +193,7 @@ def kravgranser(doc: ExamDoc, config: dict | None = None) -> dict:
     return granser
 
 
-def validate_exam_json(data) -> tuple[ExamDoc | None, list[dict]]:
+def validate_exam_json(data, profil: str = "prov") -> tuple[ExamDoc | None, list[dict]]:
     """Rå JSON → (ExamDoc, fellista). Schemafel och balansfel i samma
     maskinläsbara form (jfr whiteboard_spec.validate_board_json)."""
     try:
@@ -183,4 +203,4 @@ def validate_exam_json(data) -> tuple[ExamDoc | None, list[dict]]:
             _err(".".join(str(p) for p in err["loc"]), "schema", err["msg"])
             for err in e.errors()
         ]
-    return doc, validate_balance(doc)
+    return doc, validate_balance(doc, profil=profil)

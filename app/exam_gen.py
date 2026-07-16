@@ -56,15 +56,26 @@ INSTRUCTION = (
 )
 
 
+def build_referens(items: list[str]) -> str:
+    """Referensläget (Fas 5): tidigare provs uppgifter in i prompten med
+    instruktion att variera och höja svårighetsgraden — aldrig kopiera."""
+    numrerade = "\n".join(f"{i}. {t}" for i, t in enumerate(items, 1))
+    return ("Utgå från det tidigare provets uppgifter nedan: behåll samma "
+            "moment men VARIERA kontexter och siffror och HÖJ "
+            "svårighetsgraden ett snäpp. Kopiera ALDRIG en uppgift rakt av.\n"
+            f"{numrerade}")
+
+
 def build_prompt(kurs: str, klass: str, punkter: list[str], *,
                  antal: int = 10, tid_min: int = 120, delar: bool = True,
                  memory: str = "", teman: str = "",
-                 referens: str = "") -> str:
+                 referens: str = "", profil: str = "prov") -> str:
     """Genereringsprompt: instruktion + valda innehållspunkter +
-    minneskontext + tidigare provs teman (undvik upprepning som default)."""
+    minneskontext + tidigare provs teman (undvik upprepning som default).
+    `profil` växlar mellan prov och arbetsblad (Fas 5)."""
     block = [INSTRUCTION]
     if punkter:
-        block.append("Provet ska pröva följande centrala innehåll:\n- " +
+        block.append("Uppgifterna ska pröva följande centrala innehåll:\n- " +
                      "\n- ".join(punkter))
     if memory:
         block.append(f"Ur lektionsminnet (vad klassen arbetat med):\n{memory}")
@@ -73,12 +84,20 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
                      + teman)
     if referens:
         block.append(referens)
-    delar_txt = ("Dela provet i Del B (utan räknare) och Del C (med räknare)."
-                 if delar else "Provet har inga delar (del: null på alla uppgifter).")
-    block.append(
-        f"Uppdrag: skriv ett prov för {kurs}, klass {klass}, med ungefär "
-        f"{antal} uppgifter för {tid_min} minuters provtid. {delar_txt} "
-        "Svara med enbart JSON.")
+    if profil == "arbetsblad":
+        block.append(
+            f"Uppdrag: skriv ett ARBETSBLAD (övningsblad, inte prov) för "
+            f"{kurs}, klass {klass}, med ungefär {antal} uppgifter. Tyngden "
+            "ligger på rutin- och procedursuppgifter med stigande svårighet; "
+            "inga delar behövs (del: null på alla uppgifter). Lösnings-"
+            "förslagen blir facit. Svara med enbart JSON.")
+    else:
+        delar_txt = ("Dela provet i Del B (utan räknare) och Del C (med räknare)."
+                     if delar else "Provet har inga delar (del: null på alla uppgifter).")
+        block.append(
+            f"Uppdrag: skriv ett prov för {kurs}, klass {klass}, med ungefär "
+            f"{antal} uppgifter för {tid_min} minuters provtid. {delar_txt} "
+            "Svara med enbart JSON.")
     return "\n\n".join(block)
 
 
@@ -160,7 +179,7 @@ def _llm_round(prompt: str, model: str, llm) -> dict | None:
 
 
 def _repair_until_valid(exam: dict | None, errors: list, *, model: str, llm,
-                        rounds_used: int, max_rounds: int,
+                        rounds_used: int, max_rounds: int, profil: str = "prov",
                         log_cb: Callable[[str], None] | None = None) -> dict:
     log = log_cb or (lambda _m: None)
     while errors and rounds_used < max_rounds and exam is not None:
@@ -172,7 +191,7 @@ def _repair_until_valid(exam: dict | None, errors: list, *, model: str, llm,
             errors = [{"path": "svar", "code": "json",
                        "message": "modellen svarade inte med giltig JSON"}]
             continue
-        _doc, new_errors = exam_spec.validate_exam_json(candidate)
+        _doc, new_errors = exam_spec.validate_exam_json(candidate, profil)
         exam = candidate
         errors = new_errors
     return {"exam": exam, "errors": errors, "rounds": rounds_used}
@@ -180,15 +199,17 @@ def _repair_until_valid(exam: dict | None, errors: list, *, model: str, llm,
 
 def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                   antal: int = 10, tid_min: int = 120, delar: bool = True,
-                  memory: str = "", teman: str = "",
+                  memory: str = "", teman: str = "", referens: str = "",
+                  profil: str = "prov",
                   llm=llm_client.generate, max_rounds: int = MAX_ROUNDS,
                   log_cb: Callable[[str], None] | None = None) -> dict:
-    """Generera ett prov och reparera schema-/balansfel inom rundbudgeten.
-    Returnerar {"exam": dict|None, "errors": [...], "rounds": int}."""
+    """Generera ett prov/arbetsblad och reparera schema-/balansfel inom
+    rundbudgeten. Returnerar {"exam": dict|None, "errors": [...], "rounds": int}."""
     log = log_cb or (lambda _m: None)
-    log("Skriver provet …")
+    log("Skriver arbetsbladet …" if profil == "arbetsblad" else "Skriver provet …")
     prompt = build_prompt(kurs, klass, punkter, antal=antal, tid_min=tid_min,
-                          delar=delar, memory=memory, teman=teman)
+                          delar=delar, memory=memory, teman=teman,
+                          referens=referens, profil=profil)
     exam = _llm_round(prompt, model, llm)
     rounds = 1
     while exam is None and rounds < max_rounds:
@@ -201,14 +222,15 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                 "errors": [{"path": "svar", "code": "json",
                             "message": "modellen svarade inte med giltig JSON"}],
                 "rounds": rounds}
-    _doc, errors = exam_spec.validate_exam_json(exam)
+    _doc, errors = exam_spec.validate_exam_json(exam, profil)
     return _repair_until_valid(exam, errors, model=model, llm=llm,
                                rounds_used=rounds, max_rounds=max_rounds,
-                               log_cb=log_cb)
+                               profil=profil, log_cb=log_cb)
 
 
 def refine_exam(exam: dict, instruction: str, *, model: str,
-                nummer: int | None = None, llm=llm_client.generate,
+                nummer: int | None = None, profil: str = "prov",
+                llm=llm_client.generate,
                 max_rounds: int = MAX_ROUNDS,
                 log_cb: Callable[[str], None] | None = None) -> dict:
     """Riktad omgenerering (per-uppgift-chatt); validera + auto-reparera."""
@@ -221,10 +243,10 @@ def refine_exam(exam: dict, instruction: str, *, model: str,
                 "errors": [{"path": "svar", "code": "json",
                             "message": "modellen svarade inte med giltig JSON"}],
                 "rounds": 1}
-    _doc, errors = exam_spec.validate_exam_json(candidate)
+    _doc, errors = exam_spec.validate_exam_json(candidate, profil)
     return _repair_until_valid(candidate, errors, model=model, llm=llm,
                                rounds_used=1, max_rounds=max_rounds,
-                               log_cb=log_cb)
+                               profil=profil, log_cb=log_cb)
 
 
 def fix_latex(exam: dict, error_log: str, *, model: str,
