@@ -148,23 +148,37 @@ med grammatiktvång är ännu inte mätt (Fas 2 är grinden).
 Mål: mätt och belagt att Qwen3-14B följer mallen; annars itererat tills målet
 nås eller ambitionen medvetet sänkts.
 
-- [ ] `tests/bench_whiteboard.py` (manuell körning med GPU, ej pytest —
-      mönster: `qwen_korrektur_bench.py`): ~20 lektionsuppdrag över algebra,
+- [x] `tests/bench_whiteboard.py` (manuell körning med GPU, ej pytest —
+      mönster: `qwen_korrektur_bench.py`): 20 lektionsuppdrag över algebra,
       geometri, trigonometri, funktioner, statistik/regression. Rapporterar
       per uppdrag: schema-giltighet försök 1, regelfel, `[WB]`-varningar
-      före/efter loop, antal rundor, tid.
-- [ ] Playwright-spec-runner (`e2e/`): ladda godtycklig WB-JSON headless,
-      returnera konsolvarningar + skärmdump (samma metodik som
-      designprojektets `screenshots/`-iterationer).
-- [ ] Iterationsrundor på prompt/few-shots/schema tills målnivån nås:
+      före/efter loop, antal rundor, tid. Återupptagbar; artefakter i
+      gitignorerade `tests/bench_out/`.
+- [x] Playwright-spec-runner (`e2e/render-board.mjs`): laddar godtycklig
+      WB-JSON headless (egen statisk server), returnerar konsolvarningar +
+      skärmdump (samma metodik som designprojektets `screenshots/`-
+      iterationer).
+- [x] Iterationsrundor på prompt/few-shots/schema tills målnivån nås:
       **≥ 95 %** schema-giltigt försök 1, **100 %** med grammatik-tvång,
       **0** överlappsvarningar efter ≤ 3 reparationsrundor.
-- [ ] Faller målet ändå: besluta sänkt ambition (färre primitiver, alltid
-      tvåstegs-generering disposition→kolumner) och dokumentera i specen.
-- [ ] Benchresultat + valda prompter dokumenteras i
-      `docs/superpowers/notes/2026-XX-XX-whiteboard-bench.md`.
+      **UPPNÅTT på riktig RTX 4090** (2026-07-16, 6 iterationer):
+      100 % schema försök 1, 100 % giltig JSON, 0 överlapp, alla 20 tavlor
+      0 `[WB]`-varningar inom budgeten. Nyckelåtgärder: explicit
+      `ShapeLabels`-modell (llama.cpp tvingar inte `propertyNames`),
+      höjt token-tak + omkörning vid trunkerad JSON, deterministiska regler
+      för textlängd/LaTeX-i-text/kontrolltecken, `REPAIR_HINTS`, samt
+      `normalize_board` (radbryt långa texter, dedupa dubbletter,
+      explodera $-inline-matte till row/text+math) som löser felmoderna
+      utan LLM-rundor.
+- [x] Faller målet ändå: besluta sänkt ambition — **ej nödvändigt**;
+      målet nåddes med deterministisk normalisering i stället.
+- [x] Benchresultat + valda prompter dokumenterade i
+      `docs/superpowers/notes/2026-07-16-whiteboard-bench.md`.
 
-Status: ej påbörjad.
+Status: klar 2026-07-16 — **grinden passerad, Fas 1 får släppas på.**
+Kvarvarande kända begränsningar (dokumenterade i benchnoten): enstaka
+LaTeX-kommandon i löptext utan $-avgränsare (kosmetiskt, redovisas i UI:t)
+och enhetscirkel-som-ellips saknar deterministisk vakt (promptregel finns).
 
 ## Fas 3 — Lektionsminne & inbyggd kalender (DB v4)
 
