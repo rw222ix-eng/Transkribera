@@ -19,29 +19,65 @@ Varje fas är en egen mergebar PR med gröna tester (`python -m pytest` +
 Mål: motorn från designprojektet Whiteboardtavla renderar en hårdkodad
 exempellektion i appen, offline, med utskrift/PNG-export.
 
-- [ ] Vendra motorfilerna från designprojektet till
+- [x] Vendra motorfilerna från designprojektet till
       `app/web/static/whiteboard/{styles.css,handwriting.js,components.js,layout.js}`
       (oförändrade — "library code", per skillens regel; egna ändringar går
       uppströms till designprojektet).
-- [ ] Vendra KaTeX lokalt: `app/web/static/vendor/katex/` (js + css +
+      *Avvikelse (dokumenterad, ska uppströms):* `styles.css` rad 5 — Google
+      Fonts-`@import` ersatt med hänvisning till lokal `fonts.css`
+      (offline-kravet); handstilsfonterna (Caveat variabel 400–700, Gloria
+      Hallelujah, Shadows Into Light Two; latin-subset) vendrade i
+      `whiteboard/fonts/`, JetBrains Mono återanvänds från `static/fonts/`.
+- [x] Vendra KaTeX lokalt: `app/web/static/vendor/katex/` (js + css +
       woff2-fonter). Ersätt designmallens CDN-tag. Verifiera i pywebview-
       fönstret och i PyInstaller-bygget (fontsökvägar!).
-- [ ] Ny flik "Planering" i `app.js`: `setTab('planning')`, `viewPlanning()`,
+      KaTeX 0.16.9 (samma som designmallens CDN-tag) från npm-tarballen;
+      fonterna serveras statiskt, verifierat i Playwright (`.katex` renderar
+      + woff2 200). PyInstaller-verifiering: täcks av befintlig spec-rad
+      (se nedan); fullt fryst bygge körs i planens liveverifiering.
+- [x] Ny flik "Planering" i `app.js`: `setTab('planning')`, `viewPlanning()`,
       nav-knapp i `viewHeader`. Tavlan monteras i en dedikerad container som
       morphdom **inte** diffar (jfr videospelare-mönstret) eftersom motorn
       äger sin egen DOM.
-- [ ] Warn-hook: wrappa `console.warn` under rendering och samla
+      *Designval:* containern är en **iframe** (`whiteboard/board.html` +
+      `board.js` med API:t `WBHost.render/print/exportPng`) — motorns
+      `styles.css` äger `body`-nivån (globala resets) och får inte läcka in i
+      appens UI; morphdom hoppar över noden via `data-wb-frame`. Dokumentet
+      fungerar också fristående som spec-runner för Fas 2.
+      **OBS för Fas 1:** motorns `layout.js` har en intern toppnivåfunktion
+      `renderBoard` — globala namn i tavel-dokumentet måste ligga under
+      `WBHost`, annars skuggas motorn och rendern rekurserar oändligt.
+- [x] Warn-hook: wrappa `console.warn` under rendering och samla
       `[WB check]`/`[WB]`-varningar till en lista i state — visas som
       diskret varningsrad, används av Fas 1:s reparationsloop.
-- [ ] Utskriftsvy (jfr designprojektets `whiteboard-print.html`) +
+      Hooken ligger i `board.js` (permanent på tavel-dokumentets console —
+      överlappskollen kör en frame efter render); `WBHost.render` löser med
+      varningslistan efter två rAF, app.js visar den under tavlan.
+- [x] Utskriftsvy (jfr designprojektets `whiteboard-print.html`) +
       PNG-export via SVG-serialisering; filer skrivs under `base_dir`
       (`Transkriberingar/<lektion>/planering/`), sökvägsvaliderat.
-- [ ] `Transkribera_web.spec`: inkludera nya statiska resurser.
-- [ ] Tester: statiska filer serveras (`tests/test_web_server.py`),
+      Print-CSS i `board.html` (A4 liggande, tavlorna staplade, zoom 0.57);
+      PNG via foreignObject-SVG → canvas i 2× med fonter inbäddade som
+      data-URI:er. *Känd egenhet:* canvas-rasteriseringen interpolerar
+      gradienter mot `transparent` o-premultiplicerat → exporten plattar
+      papperstexturen (EXPORT_FLAT_CSS i `board.js`); skärmen påverkas inte.
+      Servern: `app/web/routes_planning.py` (`POST /api/planning/export`,
+      egen router per riskavsnittet) — PNG-magi + storleksgräns +
+      filnamnssanering + parent-set-validering mot `base_dir`.
+- [x] `Transkribera_web.spec`: inkludera nya statiska resurser.
+      Ingen ändring behövdes — spec-raden `datas += [("app/web/static", …)]`
+      buntar redan hela katalogen rekursivt (whiteboard/ + vendor/katex/).
+- [x] Tester: statiska filer serveras (`tests/test_web_server.py`),
       `node --check` på nya JS-filer, Playwright-spek `e2e/tests/10-tavla`
       som renderar exempellektionen och asserterar 0 konsolvarningar.
+      Även `tests/test_routes_planning.py` (export: lyckat fall, traversal-
+      sanering, fel innehåll, trasig base64, storleksgräns) och e2e-fall som
+      verifierar att PNG-exporten skriver en riktig PNG under base_dir.
 
-Status: ej påbörjad.
+Status: klar 2026-07-16 (`python -m pytest` 458 gröna; `node --check` på
+app.js + board.js + motorfilerna; `e2e` fake-sviten grön förutom ett
+**förexisterande** fel i `03-postprocess` som reproducerats på rent träd
+utan Fas 0-ändringarna — dubblerad käll-knapp i chatten, ej relaterat).
 
 ## Fas 1 — WB-JSON v1 + LLM-generering med auto-reparation
 
