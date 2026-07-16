@@ -50,6 +50,9 @@ def compile_pdf(tex: str, out_dir: Path, jobname: str, *,
     if exe is None:
         return None, ("PDF-motorn (Tectonic) är inte installerad — "
                       "lägg tectonic.exe i bin/tectonic/.")
+    # Absolut sökväg: --outdir tolkas relativt cwd (som är out_dir själv),
+    # så en relativ out_dir skulle annars dubbleras.
+    out_dir = Path(out_dir).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
     tex_path = out_dir / f"{jobname}.tex"
     tex_path.write_text(tex, encoding="utf-8")
@@ -58,9 +61,10 @@ def compile_pdf(tex: str, out_dir: Path, jobname: str, *,
     cache = engine_dir() / "cache"
     env["TECTONIC_CACHE_DIR"] = str(cache)
     cmd = [str(exe), "--outdir", str(out_dir)]
-    # Förseedad cache → strikt offline; utan cache (utvecklarmiljö) tillåts
-    # nätverk första gången så cachen byggs.
-    if cache.is_dir() and any(cache.iterdir()):
+    # Strikt offline (--only-cached) ENDAST när cachen är färdigseedad —
+    # markören skrivs av seedningssteget efter en lyckad kompilering. En
+    # delvis nedladdad cache får annars --only-cached att fastna för alltid.
+    if (cache / ".seeded").exists():
         cmd.append("--only-cached")
     cmd.append(str(tex_path))
 

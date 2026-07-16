@@ -237,18 +237,19 @@ e2e-sviten grön förutom det kända förexisterande 03-postprocess-felet).
 Mål: välj kurs + centralt innehåll → NP-likt prov med förmåge-/nivåbalans,
 poäng och E/C/A-kravgränser → PDF att skriva ut → sparat i minnet.
 
-- [ ] **Beslutspunkt först:** utvärdera Tectonic-bundling med förseedad
+- [x] **Beslutspunkt först:** utvärdera Tectonic-bundling med förseedad
       paketcache i PyInstaller-miljön mot MiKTeX Portable; dokumentera valet
       i specen innan resten av fasen byggs.
-      **DELVIS — väntar på användaren:** nedladdning + körning av
-      Tectonic-binären (GitHub-release, ~20 MB) stoppades av
-      behörighetsklassificeraren och kräver användarens godkännande.
-      Allt runtomkring är byggt motoragnostiskt: `app/exam_pdf.py` hittar
-      `bin/tectonic/tectonic.exe`, sätter `TECTONIC_CACHE_DIR` till
-      `bin/tectonic/cache/` och kör `--only-cached` när cachen är förseedad;
-      PyInstaller-spec:en buntar `bin/tectonic/` om mappen finns. Kvar när
-      binären är på plats: kompilera provmallen en gång online (seedar
-      cachen), verifiera `--only-cached` offline, dokumentera i specen.
+      **KLAR (användargodkänd nedladdning 2026-07-16): Tectonic 0.16.9
+      vald** — binär 20 MB + förseedad cache 43 MB i `bin/tectonic/`
+      (gitignorerat; PyInstaller buntar mappen). Offline verifierat med
+      `--only-cached` (~2 s/dokument); flaggan styrs av markören
+      `cache/.seeded` så en delvis seedad cache aldrig låser fast
+      offline-läget. Skarp kompilering avslöjade och rättade tre fel:
+      relativ `--outdir` dubblerades mot cwd, `\poang`-makrot saknades i
+      bedömningsmallen, och kravgränsregelns %-tecken kommenterade bort
+      resten av raden (escapas nu). Utvärderings-PDF:erna ligger i
+      `tests/bench_out/pdf_eval/`. Beslutet dokumenterat i specen §3.
 - [x] `app/exam_spec.py`: Pydantic-modeller (prov, del, uppgift med förmågor
       B/P/PL/R/K, poäng `(e/c/a)`, typ, innehållstaggar, lösningsförslag,
       bedömningsanvisning) + json_schema; balansvalidator mot målfördelning

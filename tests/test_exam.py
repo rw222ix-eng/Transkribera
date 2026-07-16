@@ -161,6 +161,9 @@ def test_render_prov_golden_markers():
     # försättsblad med kravgränser och poäng
     assert "Kravgränser" in tex
     assert "minst 5 poäng" in tex and "minst 13 poäng" in tex
+    # regelns %-tecken är escapade (annars kommenterar de bort resten av raden)
+    assert r"25\?" not in tex
+    assert r"25\% av totalpoängen" in tex
     assert "20 poäng (10/6/4)" in tex
     # delar + numrerade uppgifter med poängrutor
     assert "Del B" in tex and "Del C" in tex

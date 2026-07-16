@@ -130,7 +130,10 @@ def _build_view(doc: exam_spec.ExamDoc) -> dict:
         "datum": escape_latex(doc.datum) if doc.datum else None,
         "tid_min": doc.tid_min,
         "hjalpmedel": escape_mixed(doc.hjalpmedel),
-        "granser": exam_spec.kravgranser(doc),
+        # regel-texten innehåller %-tecken (LaTeX-kommentar) — escapas här;
+        # sifferfälten används råa av mallen.
+        "granser": (lambda g: {**g, "regel": escape_latex(g["regel"])})(
+            exam_spec.kravgranser(doc)),
         "summor": exam_spec.poangsummor(doc),
         # Byggd i Python: en litteral parentes intill Jinja-avgränsaren (((
         # ger TemplateSyntaxError, så raden kan inte skrivas i mallen.

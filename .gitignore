@@ -45,6 +45,7 @@ nul
 
 # llama.cpp-binärer + spike-artefakter (stora; byggs/laddas separat)
 /bin/llamacpp/
+/bin/tectonic/
 /_spike/
 
 # Lokala Claude Code-inställningar

@@ -269,8 +269,13 @@ egenformulerade (aldrig kopierade; NP-sekretess/upphovsrätt):
 - **Kompilering lokalt:** **Tectonic** (en självständig binär) bundlas i
   `bin/tectonic/` med **förseedad paketcache** (`~/.cache/Tectonic`-motsv.
   packas med installern) så att kompilering fungerar helt offline.
-  Alternativ om cache-seedningen visar sig skör i PyInstaller-miljön:
-  MiKTeX Portable. Utvärderas i planens Fas 4 innan beslutet låses.
+  **BESLUT (utvärderat 2026-07-16): Tectonic 0.16.9 vald.** Binären är
+  20 MB, den förseedade cachen för provmallens hela preamble bara 43 MB;
+  offline-kompilering med `--only-cached` verifierad (~2 s per dokument).
+  Viktig detalj: `--only-cached` aktiveras ENDAST när markören
+  `cache/.seeded` finns (skrivs efter en lyckad seedningskompilering) —
+  en delvis nedladdad cache skulle annars låsa fast strikt offline-läge
+  i ett evigt felläge. MiKTeX Portable behövdes aldrig prövas.
   PDF:n läggs i lektionsmappen och öppnas direkt — **det automatiska
   "skriv kod → få PDF"-flödet är alltså lokalt och kräver ingen tjänst.**
 - **Overleaf:** det finns inget publikt API som tar emot ett projekt och
