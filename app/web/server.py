@@ -27,7 +27,7 @@ from app import (debug_log, hardware, recommend, whisper_manager, llm_client,
                  paths, settings_store, ics_export, backup, report,
                  calendar_google)
 from app.models_catalog import WHISPER_MODELS, LLM_MODELS
-from app.web import routes_planning
+from app.web import routes_planning, sse
 
 _MONTHS_SV = ["jan", "feb", "mar", "apr", "maj", "jun", "jul", "aug", "sep", "okt", "nov", "dec"]
 
@@ -176,31 +176,9 @@ def _run_transcribe_subprocess(cmd, base: Path, emit, on_proc=None,
     return written, segments
 
 
-def _sse_response(job) -> StreamingResponse:
-    """Run job(emit) on a worker thread and stream emitted dict events as SSE."""
-    q: queue.Queue = queue.Queue()
-    end = object()
-
-    def run():
-        try:
-            result = job(lambda ev: q.put(ev))
-            q.put({"type": "done", "result": result})
-        except Exception as e:  # surfaced to the browser + log file
-            debug_log.get_logger().exception("Web-jobb misslyckades")
-            q.put({"type": "error", "message": str(e)})
-        finally:
-            q.put(end)
-
-    threading.Thread(target=run, daemon=True).start()
-
-    def gen():
-        while True:
-            ev = q.get()
-            if ev is end:
-                break
-            yield f"data: {json.dumps(ev, ensure_ascii=False)}\n\n"
-
-    return StreamingResponse(gen(), media_type="text/event-stream")
+# Utbruten till app/web/sse.py (delas med routers i egna moduler, t.ex.
+# routes_planning) — aliaset behålls så alla anrop i den här filen står kvar.
+_sse_response = sse.sse_response
 
 
 def create_app(base_dir: Path | None = None,
@@ -261,16 +239,16 @@ def create_app(base_dir: Path | None = None,
 
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
-    # Planering (Fas 0): egen router — nya funktioner ska inte växa i den här
-    # filen (se planens riskavsnitt om scope-krypning i server.py).
-    app.include_router(routes_planning.create_router(base))
-
     # Single owner of the LLM process + GPU exclusivity. The LLM is NOT started
     # here — it starts lazily on the first correction/chat (see /api/postprocess,
     # /api/chat); a transcription unloads it to free VRAM (see /api/transcribe).
     # Entrypoints stop it on exit via app.state.arbiter.
     arb = arbiter if arbiter is not None else gpu_arbiter.GpuArbiter(models_root, on_log=print)
     app.state.arbiter = arb
+
+    # Planering (Fas 0/1): egen router — nya funktioner ska inte växa i den
+    # här filen (se planens riskavsnitt om scope-krypning i server.py).
+    app.include_router(routes_planning.create_router(base, arb))
 
     # Tracks the live transcription subprocess so /api/transcribe/cancel can
     # terminate it and free the GPU mid-run (otherwise "Avbryt" only stopped the

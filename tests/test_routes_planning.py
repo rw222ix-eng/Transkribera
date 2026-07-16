@@ -1,9 +1,29 @@
-"""Planering-routern (Fas 0): PNG-export sparas säkert under base_dir."""
+"""Planering-routern (Fas 0/1): PNG-export, generering, reparation,
+iteration och godkännande — allt stubbat och säkert under base_dir."""
 import base64
+import copy
+import json
 
 import pytest
 
+from app import lesson_board
 from app.web import server
+
+
+def _events(resp) -> list[dict]:
+    """Plocka ut SSE-events ur ett StreamingResponse-svar."""
+    return [json.loads(line[len("data:"):])
+            for line in resp.text.splitlines() if line.startswith("data:")]
+
+
+def _done(resp) -> dict:
+    evs = [e for e in _events(resp) if e["type"] == "done"]
+    assert evs, _events(resp)
+    return evs[0]["result"]
+
+
+def _valid_board() -> dict:
+    return copy.deepcopy(lesson_board.FEW_SHOTS[0][1])
 
 # Minsta giltiga PNG (1×1 px) — räcker för att testa magisk signatur + skrivning.
 _PNG_1PX = base64.b64decode(
@@ -94,3 +114,175 @@ def test_export_rejects_oversized(client):
     huge = "data:image/png;base64," + "A" * (41 * 1024 * 1024)
     r = client.post("/api/planning/export", json={"title": "x", "png": huge})
     assert r.status_code == 413
+
+
+# ------------------------------------------------------- Fas 1: generate --
+
+@pytest.fixture
+def llm_ready(client, monkeypatch):
+    """Arbitern svarar som om LLM:en är installerad och startad."""
+    monkeypatch.setattr(client.app.state.arbiter, "ensure_llm",
+                        lambda: "http://127.0.0.1:8170")
+    return client
+
+
+def _stub_generate(monkeypatch, result):
+    calls = []
+
+    def fake(course, group, moment, *, model, memory="", llm=None,
+             max_rounds=lesson_board.MAX_ROUNDS, log_cb=None):
+        calls.append({"course": course, "group": group, "moment": moment,
+                      "model": model, "memory": memory})
+        if log_cb:
+            log_cb("Genererar lektionstavlan …")
+        return result
+    monkeypatch.setattr(lesson_board, "generate_board", fake)
+    return calls
+
+
+def test_generate_requires_moment(llm_ready):
+    r = llm_ready.post("/api/planning/generate", json={"moment": "  "})
+    assert r.status_code == 400
+
+
+def test_generate_streams_board_and_stores_planning(llm_ready, monkeypatch):
+    board = _valid_board()
+    calls = _stub_generate(monkeypatch,
+                           {"board": board, "errors": [], "rounds": 1})
+    r = llm_ready.post("/api/planning/generate",
+                       json={"moment": "Pythagoras sats"})
+    assert r.status_code == 200
+    result = _done(r)
+    assert result["board"]["title"] == "Pythagoras sats"
+    assert result["errors"] == [] and result["rounds"] == 1
+    assert calls[0]["moment"] == "Pythagoras sats"
+    # loggen streamas som SSE-events
+    assert any(e["type"] == "log" for e in _events(r))
+    # planeringen finns i minnet → approve fungerar
+    r2 = llm_ready.post(f"/api/planning/{result['id']}/approve", json={})
+    assert r2.status_code == 200
+
+
+def test_generate_409_when_gpu_busy(llm_ready, monkeypatch):
+    monkeypatch.setattr(llm_ready.app.state.arbiter, "try_acquire_gpu",
+                        lambda: False)
+    r = llm_ready.post("/api/planning/generate", json={"moment": "x"})
+    assert r.status_code == 409
+
+
+def test_generate_releases_gpu_on_error(llm_ready, monkeypatch):
+    # LLM ej installerad → error-event, men GPU-låset släpps (nästa anrop
+    # blockeras inte).
+    monkeypatch.setattr(llm_ready.app.state.arbiter, "ensure_llm", lambda: None)
+    r = llm_ready.post("/api/planning/generate", json={"moment": "x"})
+    assert any(e["type"] == "error" and "inte installerad" in e["message"]
+               for e in _events(r))
+    monkeypatch.setattr(llm_ready.app.state.arbiter, "ensure_llm",
+                        lambda: "http://x")
+    _stub_generate(monkeypatch,
+                   {"board": _valid_board(), "errors": [], "rounds": 1})
+    r2 = llm_ready.post("/api/planning/generate", json={"moment": "x"})
+    assert r2.status_code == 200          # inte 409 — låset släpptes
+
+
+# -------------------------------------------------- Fas 1: render-report --
+
+def _make_planning(llm_ready, monkeypatch, rounds=1) -> str:
+    _stub_generate(monkeypatch,
+                   {"board": _valid_board(), "errors": [], "rounds": rounds})
+    r = llm_ready.post("/api/planning/generate", json={"moment": "x"})
+    return _done(r)["id"]
+
+
+def test_render_report_unknown_id(llm_ready):
+    r = llm_ready.post("/api/planning/finns-ej/render-report",
+                       json={"warnings": ["[WB] x"]})
+    assert r.status_code == 404
+
+
+def test_render_report_no_warnings_is_noop(llm_ready, monkeypatch):
+    pid = _make_planning(llm_ready, monkeypatch)
+    r = llm_ready.post(f"/api/planning/{pid}/render-report",
+                       json={"warnings": []})
+    assert r.status_code == 200
+    assert r.json() == {"ok": True, "repaired": False}
+
+
+def test_render_report_triggers_repair(llm_ready, monkeypatch):
+    pid = _make_planning(llm_ready, monkeypatch, rounds=1)
+    repaired = _valid_board()
+    repaired["title"] = "Reparerad"
+    captured = {}
+
+    def fake_repair(board, warnings, *, model, llm=None, rounds_used=1,
+                    max_rounds=lesson_board.MAX_ROUNDS, log_cb=None):
+        captured["warnings"] = warnings
+        captured["rounds_used"] = rounds_used
+        return {"board": repaired, "errors": [], "rounds": rounds_used + 1}
+    monkeypatch.setattr(lesson_board, "repair_board", fake_repair)
+
+    r = llm_ready.post(f"/api/planning/{pid}/render-report",
+                       json={"warnings": ["[WB] hoger: 1 element-överlapp"]})
+    result = _done(r)
+    assert result["repaired"] is True
+    assert result["board"]["title"] == "Reparerad"
+    assert captured["warnings"] == ["[WB] hoger: 1 element-överlapp"]
+    assert captured["rounds_used"] == 1
+
+
+def test_render_report_exhausted_budget_skips_llm(llm_ready, monkeypatch):
+    pid = _make_planning(llm_ready, monkeypatch,
+                         rounds=lesson_board.MAX_ROUNDS)
+    r = llm_ready.post(f"/api/planning/{pid}/render-report",
+                       json={"warnings": ["[WB] x"]})
+    assert r.status_code == 200
+    assert r.json()["exhausted"] is True
+
+
+# --------------------------------------------------------- Fas 1: refine --
+
+def test_refine_requires_message(llm_ready, monkeypatch):
+    pid = _make_planning(llm_ready, monkeypatch)
+    r = llm_ready.post(f"/api/planning/{pid}/refine", json={"message": " "})
+    assert r.status_code == 400
+
+
+def test_refine_updates_board(llm_ready, monkeypatch):
+    pid = _make_planning(llm_ready, monkeypatch)
+    updated = _valid_board()
+    updated["title"] = "Uppdaterad"
+    captured = {}
+
+    def fake_refine(board, instruction, *, model, llm=None,
+                    max_rounds=lesson_board.MAX_ROUNDS, log_cb=None):
+        captured["instruction"] = instruction
+        return {"board": updated, "errors": [], "rounds": 1}
+    monkeypatch.setattr(lesson_board, "refine_board", fake_refine)
+
+    r = llm_ready.post(f"/api/planning/{pid}/refine",
+                       json={"message": "byt exempel 2"})
+    result = _done(r)
+    assert result["board"]["title"] == "Uppdaterad"
+    assert captured["instruction"] == "byt exempel 2"
+
+
+# -------------------------------------------------------- Fas 1: approve --
+
+def test_approve_writes_board_json_under_base(llm_ready, monkeypatch):
+    pid = _make_planning(llm_ready, monkeypatch)
+    r = llm_ready.post(f"/api/planning/{pid}/approve", json={})
+    assert r.status_code == 200
+    from pathlib import Path
+    saved = Path(r.json()["path"])
+    assert saved.exists() and saved.suffix == ".json"
+    rel = saved.relative_to(llm_ready.base_dir)
+    assert rel.parts[0] == "Transkriberingar"
+    assert rel.parts[2] == "planering"
+    payload = json.loads(saved.read_text(encoding="utf-8"))
+    assert payload["version"] == "wb-json-v1"
+    assert payload["board"]["title"] == "Pythagoras sats"
+
+
+def test_approve_unknown_id(llm_ready):
+    r = llm_ready.post("/api/planning/finns-ej/approve", json={})
+    assert r.status_code == 404
