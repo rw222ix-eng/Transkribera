@@ -48,7 +48,9 @@ def _fake_segments() -> list[dict]:
 
 def _install_fakes() -> None:
     """Monkeypatch GPU-bound inference; keep every other code path real."""
-    from app import postprocess, llm_client, transcriber
+    import copy
+
+    from app import lesson_board, postprocess, llm_client, transcriber
     from app.web import server
 
     def fake_transcribe(cmd, base, emit, on_proc=None, progress_scale=1.0,
@@ -104,6 +106,39 @@ def _install_fakes() -> None:
     def fake_suggest_title(segments, model, base_url=None):
         # Efterliknar Qwen-namngivningen av lokala källor (inspelning/lokal video).
         return "Bråk och procent — introduktion"
+
+    # Lektionstavlan (Planering, Fas 1). OBS: patcha lesson_board-funktionerna,
+    # inte llm_client.generate — llm= är ett defaultargument som binds vid
+    # import, så en senare llm_client-patch når aldrig fram.
+    def _fake_board(title: str) -> dict:
+        # Few-shot 2 har graf + plots[].expr → e2e verifierar hela
+        # expr.js-kedjan (kompilering + kurvritning) på riktigt.
+        board = copy.deepcopy(lesson_board.FEW_SHOTS[1][1])
+        board["title"] = title
+        return board
+
+    def fake_generate_board(course, group, moment, *, model, memory="",
+                            llm=None, max_rounds=3, log_cb=None):
+        if log_cb:
+            log_cb("[FEJK] Genererar lektionstavlan …")
+        return {"board": _fake_board(moment or "Lektionstavla"),
+                "errors": [], "rounds": 1}
+
+    def fake_refine_board(board, instruction, *, model, llm=None,
+                          max_rounds=3, log_cb=None):
+        if log_cb:
+            log_cb("[FEJK] Uppdaterar tavlan …")
+        updated = copy.deepcopy(board)
+        updated["title"] = (updated.get("title") or "Tavla") + " (ändrad)"
+        return {"board": updated, "errors": [], "rounds": 1}
+
+    def fake_repair_board(board, warnings, *, model, llm=None, rounds_used=1,
+                          max_rounds=3, log_cb=None):
+        return {"board": board, "errors": [], "rounds": rounds_used + 1}
+
+    lesson_board.generate_board = fake_generate_board
+    lesson_board.refine_board = fake_refine_board
+    lesson_board.repair_board = fake_repair_board
 
     server._run_transcribe_subprocess = fake_transcribe
     postprocess.run = fake_run

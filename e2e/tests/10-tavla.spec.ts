@@ -35,6 +35,75 @@ test("Planering: exempellektionen renderas utan [WB]-varningar", async ({ page }
   expect(errors, errors.join("\n")).toEqual([]);
 });
 
+test("expr.js: uttryck kompileras och ritas — ogiltiga blir [WB]-varning", async ({ page }) => {
+  await page.goto("/static/whiteboard/board.html");
+
+  const boardWith = (plots: object[]) => ({
+    boards: [{
+      width: 900, height: 780, chrome: "minimal", name: "expr-test",
+      sections: [{ kind: "graph", width: 500, height: 320,
+                   xRange: [-1, 5], yRange: [-2, 4], grid: true, axes: true,
+                   plots }],
+    }],
+  });
+
+  // Giltigt uttryck → kurvan ritas utan varningar.
+  const ok = await page.evaluate(
+    (spec) => (window as any).WBHost.render(spec).then((r: any) => r.warnings),
+    boardWith([{ expr: "x^2 - 4*x + 3", color: "red" }]));
+  expect(ok).toEqual([]);
+  expect(await page.locator(".wb-svg path").count()).toBeGreaterThan(0);
+
+  // Ogiltigt uttryck → [WB check]-varning i stället för krasch.
+  const bad = await page.evaluate(
+    (spec) => (window as any).WBHost.render(spec).then((r: any) => r.warnings),
+    boardWith([{ expr: "foo(x)", color: "red" }]));
+  expect(bad.some((w: string) => w.includes("ogiltigt uttryck"))).toBe(true);
+});
+
+test("Planering: generera → iterera via chatt → godkänn & spara (fejk)", async ({ page }) => {
+  const errors: string[] = [];
+  failOnConsoleError(page, errors);
+  await page.goto("/");
+  await page.getByRole("button", { name: "Planering", exact: true }).click();
+
+  // Exempellektionen visas tills något genererats.
+  await expect(page.getByText("Exempellektion")).toBeVisible();
+
+  // Generera: momentet blir tavlans titel i fejken.
+  await page.getByLabel("Moment").fill("Andragradsfunktioner — minimipunkt");
+  await page.getByRole("button", { name: "Skriv tavlan" }).click();
+
+  // Tavlan byts ut (fejk-boarden har graf + expr → kurvan ritas på riktigt).
+  await expect(page.getByText("Andragradsfunktioner — minimipunkt").first())
+    .toBeVisible({ timeout: 15000 });
+  await expect(page.getByText("Exempellektion")).toHaveCount(0);
+  const frame = page.frameLocator("[data-wb-frame]");
+  await expect(frame.getByText("Symmetrilinjen:")).toBeVisible({ timeout: 15000 });
+
+  // Iterera via chatten (fejken suffixar titeln).
+  const chat = page.getByLabel("Ändra tavlan");
+  await expect(chat).toBeVisible();
+  await chat.fill("byt exempel 2 mot ett med decimaltal");
+  await page.getByRole("button", { name: "Ändra", exact: true }).click();
+  await expect(page.getByText(/\(ändrad\)/).first()).toBeVisible({ timeout: 15000 });
+
+  // Godkänn & spara → WB-JSON skrivs under testets base_dir.
+  const approve = page.getByRole("button", { name: "Godkänn & spara" });
+  await expect(approve).toBeEnabled({ timeout: 15000 });
+  await approve.click();
+  const receipt = page.getByText(/Sparad:/);
+  await expect(receipt).toBeVisible({ timeout: 15000 });
+  const savedPath = (await receipt.innerText()).replace("Sparad: ", "").trim();
+  expect(savedPath.endsWith(".json")).toBe(true);
+  expect(fs.existsSync(savedPath)).toBe(true);
+  const payload = JSON.parse(fs.readFileSync(savedPath, "utf-8"));
+  expect(payload.version).toBe("wb-json-v1");
+  expect(payload.board.title).toContain("Andragradsfunktioner");
+
+  expect(errors, errors.join("\n")).toEqual([]);
+});
+
 test("Planering: PNG-exporten sparar en fil under testets base_dir", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "Planering", exact: true }).click();

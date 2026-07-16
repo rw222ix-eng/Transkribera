@@ -148,10 +148,21 @@
     incompleteRecs: [],        // oavslutade inspelningar att återställa (krasch)
     // Planering (Fas 0): whiteboard-motorn renderar en hårdkodad exempellektion
     // i en egen iframe; LLM-generering kommer i Fas 1.
-    wbRendered: false,         // exempellektionen är färdigrenderad i iframen
+    wbRendered: false,         // aktuella tavlan är färdigrenderad i iframen
     wbWarnings: [],            // [WB]-varningar från motorns senaste rendering
     wbExporting: false,        // PNG-export pågår
     wbExportMsg: '',           // kvitto/fel från senaste exporten
+    // Planering (Fas 1): generera egna tavlor via LLM:en
+    planGroupId: '',           // vald klass (''  = ingen)
+    planCourseId: '',          // vald kurs
+    planMoment: '',            // moment/ämne (fritext)
+    planPhase: 'idle',         // idle|running|done|error
+    planLog: [],               // loggrader från SSE-jobbet
+    planId: null,              // serverns planerings-id (för refine/approve)
+    planBoard: null,           // genererad WB-JSON ({title, boards})
+    planErrors: [],            // kvarstående valideringsfel (redovisas ärligt)
+    planChatInput: '',         // chattfältet för iteration
+    planSavedPath: '',         // kvitto från Godkänn & spara
   };
 
   /* instance (non-state) fields */
@@ -526,6 +537,7 @@
     if (t === 'history' || t === 'lessons') t = 'recordings';
     setState({ tab: t, openDD: null });
     if (t === 'recordings') { loadHistory(); loadLessons(); loadOrg(); loadPrep(); loadAgenda(); loadTrends(); }
+    if (t === 'planning') loadOrg();   // klass-/kursväljarna i formuläret
   }
   /* ------------------------------------------------- Planering (Fas 0) -- */
   // Tavlan renderas av whiteboard-motorn (vendrad från designprojektet
@@ -589,23 +601,44 @@
   ]};
 
   var _wbFrame = null;
+  var _wbReportRounds = 0;    // klientsidans tak på render-report-loopen
+  function wbTitle() {
+    return (S.planBoard && S.planBoard.title) || WB_EXAMPLE_TITLE;
+  }
   function wbFrameRef(el) {
     _wbFrame = el;
     if (!el || el._wired) return;
     el._wired = true;
-    el.addEventListener('load', renderExampleBoard);
+    el.addEventListener('load', renderCurrentBoard);
     // morphdom kan ge oss en redan laddad nod tillbaka (fliken lämnas/öppnas)
-    if (el.contentWindow && el.contentWindow.WBHost) renderExampleBoard();
+    if (el.contentWindow && el.contentWindow.WBHost) renderCurrentBoard();
   }
-  function renderExampleBoard() {
+  // Renderar den genererade tavlan om en finns, annars exempellektionen.
+  // Efter rendering rapporteras motorns [WB]-varningar till servern
+  // (render-report) som kan köra en reparationsrunda — andra försvarslinjen
+  // i specen. Klienten tar max 2 rapportrundor; servern håller den delade
+  // rundbudgeten (max 3 LLM-rundor totalt).
+  function renderCurrentBoard() {
     var win = _wbFrame && _wbFrame.contentWindow;
     if (!win || !win.WBHost) return;
-    win.WBHost.render(WB_EXAMPLE).then(function (res) {
-      setState({ wbRendered: true, wbWarnings: (res && res.warnings) || [] });
+    var spec = S.planBoard ? { boards: S.planBoard.boards } : WB_EXAMPLE;
+    win.WBHost.render(spec).then(function (res) {
+      var warnings = (res && res.warnings) || [];
+      setState({ wbRendered: true, wbWarnings: warnings });
+      if (S.planId && warnings.length && _wbReportRounds < 2 && S.planPhase !== 'running') {
+        _wbReportRounds += 1;
+        reportRenderWarnings(warnings);
+      }
     }).catch(function (e) {
       setState({ wbRendered: false,
                  wbWarnings: ['Tavlan kunde inte renderas: ' + ((e && e.message) || e)] });
     });
+  }
+  function reportRenderWarnings(warnings) {
+    setState({ planPhase: 'running',
+               planLog: S.planLog.concat(['Tavlan har layoutvarningar — försöker reparera …']) });
+    streamPost('/api/planning/' + S.planId + '/render-report',
+               { warnings: warnings }, onPlanEvent);
   }
   function wbPrint() {
     var win = _wbFrame && _wbFrame.contentWindow;
@@ -619,7 +652,7 @@
       return fetch('/api/planning/export', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: WB_EXAMPLE_TITLE, png: dataUrl }),
+        body: JSON.stringify({ title: wbTitle(), png: dataUrl }),
       }).then(function (r) {
         return r.json().then(function (j) { return { ok: r.ok, body: j }; });
       });
@@ -631,6 +664,65 @@
                  wbExportMsg: 'Kunde inte spara PNG: ' + ((e && e.message) || e) });
     });
   }
+
+  /* Generera/iterera tavlan (Fas 1) — SSE-jobb under GPU-arbitern. */
+  function onPlanEvent(ev) {
+    if (ev.type === 'log') {
+      setState(function (s) { return { planLog: s.planLog.concat([ev.msg]) }; });
+    } else if (ev.type === 'error') {
+      setState(function (s) {
+        return { planPhase: 'error',
+                 planLog: s.planLog.concat(['Fel: ' + ev.message]) };
+      });
+    } else if (ev.type === 'done') {
+      var r = ev.result || {};
+      var patch = { planPhase: 'done', planErrors: r.errors || [] };
+      if (r.id) patch.planId = r.id;
+      if (r.board) patch.planBoard = r.board;
+      setState(patch, function () { if (r.board) renderCurrentBoard(); });
+    }
+  }
+  function startPlanGenerate() {
+    var moment = (S.planMoment || '').trim();
+    if (!moment || S.planPhase === 'running') return;
+    _wbReportRounds = 0;
+    setState({ planPhase: 'running', planLog: [], planErrors: [],
+               planSavedPath: '', wbExportMsg: '', wbRendered: false });
+    streamPost('/api/planning/generate', {
+      moment: moment,
+      group_id: S.planGroupId ? +S.planGroupId : null,
+      course_id: S.planCourseId ? +S.planCourseId : null,
+    }, onPlanEvent);
+  }
+  function sendPlanRefine() {
+    var msg = (S.planChatInput || '').trim();
+    if (!msg || !S.planId || S.planPhase === 'running') return;
+    _wbReportRounds = 0;
+    setState({ planPhase: 'running', planChatInput: '', planLog: [],
+               planErrors: [], planSavedPath: '' });
+    streamPost('/api/planning/' + S.planId + '/refine', { message: msg }, onPlanEvent);
+  }
+  function approvePlan() {
+    if (!S.planId || S.planPhase === 'running') return;
+    fetch('/api/planning/' + S.planId + '/approve', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
+      .then(function (res) {
+        if (!res.ok || res.body.error) throw new Error(res.body.error || 'Kunde inte spara.');
+        setState({ planSavedPath: res.body.path });
+      })
+      .catch(function (e) {
+        setState({ planSavedPath: '', wbExportMsg: 'Kunde inte spara: ' + ((e && e.message) || e) });
+      });
+  }
+  function onPlanGroup(e) { setState({ planGroupId: e.target.value }); }
+  function onPlanCourse(e) { setState({ planCourseId: e.target.value }); }
+  function onPlanMoment(e) { setState({ planMoment: e.target.value }); }
+  function onPlanMomentKey(e) { if (e.key === 'Enter') startPlanGenerate(); }
+  function onPlanChatInput(e) { setState({ planChatInput: e.target.value }); }
+  function onPlanChatKey(e) { if (e.key === 'Enter') sendPlanRefine(); }
 
   function onSource(e) { setState({ source: e.target.value }); }
   function fileRef(el) { _file = el; }
@@ -2359,13 +2451,29 @@
       tabTOn: st.tab === 'transcribe', tabInOn: st.tab === 'recordings',
       tabPlOn: st.tab === 'planning',
 
-      // Planering (Fas 0)
-      wbTitle: WB_EXAMPLE_TITLE,
+      // Planering (Fas 0/1)
+      wbTitle: wbTitle(),
       wbFrameRef: wbFrameRef, wbRendered: st.wbRendered,
       wbWarnings: st.wbWarnings, wbWarnCount: st.wbWarnings.length,
       onWbPrint: wbPrint, onWbExport: wbExportPng,
       wbExporting: st.wbExporting, wbExportMsg: st.wbExportMsg,
       wbExportFailed: /^Kunde inte/.test(st.wbExportMsg),
+      planGroups: st.groups, planCourses: st.courses,
+      planGroupId: st.planGroupId, planCourseId: st.planCourseId,
+      planMoment: st.planMoment,
+      onPlanGroup: onPlanGroup, onPlanCourse: onPlanCourse,
+      onPlanMoment: onPlanMoment, onPlanMomentKey: onPlanMomentKey,
+      onPlanStart: startPlanGenerate,
+      planRunning: st.planPhase === 'running',
+      planCanStart: !!st.planMoment.trim() && st.planPhase !== 'running',
+      planLog: st.planLog, planHasLog: st.planLog.length > 0,
+      planErrors: st.planErrors, planErrCount: st.planErrors.length,
+      planHasBoard: !!st.planBoard, planId: st.planId,
+      planIsExample: !st.planBoard,
+      planChatInput: st.planChatInput,
+      onPlanChatInput: onPlanChatInput, onPlanChatKey: onPlanChatKey,
+      onPlanRefine: sendPlanRefine, onPlanApprove: approvePlan,
+      planSavedPath: st.planSavedPath,
       themeIsLight: st.theme !== 'dark',
       toggleTheme: toggleTheme,
 
@@ -4181,19 +4289,51 @@ function viewModals(v){ return `
   ` : '' }
 `; }
 
-// Planering (Fas 0): tavlan är artefakten — ett uppslag, ingen dashboard.
+// Planering (Fas 0/1): tavlan är artefakten — ett uppslag, ingen dashboard.
 // Iframen skyddas från morphdom via data-wb-frame (se onBeforeElUpdated).
-function viewPlanning(v){ return `
+function viewPlanning(v){
+  var selStyle = 'background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:14.5px;font-family:inherit;color:var(--ink);min-width:150px';
+  return `
     <section style="min-height:calc(100vh - 80px);display:flex;flex-direction:column;padding:16px 0 28px">
       <div class="ehead">
         <div>
-          <div class="eyebrow" style="margin-bottom:18px">Planering — exempellektion</div>
+          <div class="eyebrow" style="margin-bottom:18px">Planering</div>
           <h1 class="disp" style="font-size:clamp(34px,5.2vw,52px);margin:0">Dagens <span class="ser">tavla</span></h1>
         </div>
-        <p class="ehead_lede">Så här ser en färdig lektionstavla ut — skriv ut den eller spara som bild. Att skapa egna tavlor ur dina lektioner kommer i nästa steg.</p>
+        <p class="ehead_lede">Välj klass och kurs, beskriv momentet — så skrivs tavlan som du annars hade skrivit för hand vid lektionens start. Iterera via chatten tills den sitter.</p>
       </div>
 
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px">
+        <select data-change="${on(v.onPlanGroup)}" aria-label="Klass" style="${selStyle}">
+          <option value="">Ingen klass</option>
+          ${ v.planGroups.map(function(g){ return `<option value="${esc(g.id)}" ${String(g.id) === v.planGroupId ? 'selected' : ''}>${esc(g.namn)}</option>`; }).join('') }
+        </select>
+        <select data-change="${on(v.onPlanCourse)}" aria-label="Kurs" style="${selStyle}">
+          <option value="">Ingen kurs</option>
+          ${ v.planCourses.map(function(c){ return `<option value="${esc(c.id)}" ${String(c.id) === v.planCourseId ? 'selected' : ''}>${esc(c.namn)}</option>`; }).join('') }
+        </select>
+        <input value="${esc(v.planMoment)}" data-input="${on(v.onPlanMoment)}" data-keydown="${on(v.onPlanMomentKey)}" aria-label="Moment" placeholder="Moment — t.ex. derivatans definition" style="flex:1;min-width:220px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 13px;font-size:14.5px;font-family:inherit;color:var(--ink)">
+        <button data-click="${on(v.onPlanStart)}" ${v.planCanStart ? '' : 'disabled'} style="display:inline-flex;align-items:center;gap:7px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:10px;padding:10px 18px;font-size:14.5px;font-weight:500;font-family:inherit;cursor:${v.planCanStart ? 'pointer' : 'default'};opacity:${v.planCanStart ? '1' : '.55'};box-shadow:var(--shadow-sm)">${v.planRunning ? 'Skriver …' : 'Skriv tavlan'}</button>
+      </div>
+
+      ${ v.planRunning && v.planHasLog ? `
+        <div role="status" style="display:flex;flex-direction:column;gap:3px;margin-bottom:12px;font-size:13px;color:var(--ink-2)">
+          ${ v.planLog.map(function(l){ return `<span>${esc(l)}</span>`; }).join('') }
+        </div>
+      ` : '' }
+
+      ${ v.planErrCount ? `
+        <div role="status" style="display:flex;flex-direction:column;gap:4px;margin-bottom:12px;font-size:13px;color:var(--warn)">
+          <span style="font-weight:600">${esc(v.planErrCount)} problem kvarstår efter reparationsförsöken:</span>
+          ${ v.planErrors.map(function(e2){ return `<span style="font-family:var(--mono,monospace);font-size:12px;color:var(--ink-2)">${esc(typeof e2 === 'string' ? e2 : (e2.path ? e2.path + ': ' : '') + (e2.message || ''))}</span>`; }).join('') }
+        </div>
+      ` : '' }
+
       <div data-key="wb-card" style="background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;box-shadow:var(--shadow-sm)">
+        <div style="display:flex;align-items:baseline;gap:10px;margin:2px 2px 10px">
+          <span style="font-size:15px;font-weight:600;color:var(--ink)">${esc(v.wbTitle)}</span>
+          ${ v.planIsExample ? `<span style="font-size:12px;text-transform:uppercase;letter-spacing:0.05em;color:var(--ink-3);font-weight:600">Exempellektion</span>` : '' }
+        </div>
         <iframe data-wb-frame data-key="wb-frame" data-ref="${on(v.wbFrameRef)}" src="/static/whiteboard/board.html" title="Lektionstavla — ${esc(v.wbTitle)}" style="width:100%;height:420px;border:none;display:block;border-radius:8px;background:#2c2c2c"></iframe>
       </div>
 
@@ -4204,10 +4344,21 @@ function viewPlanning(v){ return `
         </div>
       ` : '' }
 
+      ${ v.planId ? `
+        <div style="display:flex;align-items:center;gap:8px;margin-top:14px">
+          <input value="${esc(v.planChatInput)}" data-input="${on(v.onPlanChatInput)}" data-keydown="${on(v.onPlanChatKey)}" aria-label="Ändra tavlan" placeholder="Ändra tavlan — t.ex. byt exempel 2 mot ett med decimaltal" style="flex:1;min-width:0;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 13px;font-size:14.5px;font-family:inherit;color:var(--ink)">
+          <button data-click="${on(v.onPlanRefine)}" ${v.planChatInput.trim() && !v.planRunning ? '' : 'disabled'} style="display:inline-flex;align-items:center;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:10px;padding:10px 16px;font-size:14.5px;font-weight:500;font-family:inherit;cursor:${v.planChatInput.trim() && !v.planRunning ? 'pointer' : 'default'};opacity:${v.planChatInput.trim() && !v.planRunning ? '1' : '.55'}">Ändra</button>
+        </div>
+      ` : '' }
+
       <div style="display:flex;align-items:center;gap:10px;margin-top:14px;flex-wrap:wrap">
+        ${ v.planId ? `
+          <button data-click="${on(v.onPlanApprove)}" ${v.wbRendered && !v.planRunning ? '' : 'disabled'} style="display:inline-flex;align-items:center;gap:7px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:10px;padding:10px 17px;font-size:14.5px;font-weight:500;font-family:inherit;cursor:${v.wbRendered && !v.planRunning ? 'pointer' : 'default'};opacity:${v.wbRendered && !v.planRunning ? '1' : '.55'};box-shadow:var(--shadow-sm)">Godkänn &amp; spara</button>
+        ` : '' }
         <button data-click="${on(v.onWbPrint)}" ${v.wbRendered ? '' : 'disabled'} style="display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:10px;padding:10px 17px;font-size:14.5px;font-weight:500;font-family:inherit;cursor:${v.wbRendered ? 'pointer' : 'default'};opacity:${v.wbRendered ? '1' : '.55'};box-shadow:var(--shadow-sm)">Skriv ut</button>
-        <button data-click="${on(v.onWbExport)}" ${v.wbRendered && !v.wbExporting ? '' : 'disabled'} style="display:inline-flex;align-items:center;gap:7px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:10px;padding:10px 17px;font-size:14.5px;font-weight:500;font-family:inherit;cursor:${v.wbRendered && !v.wbExporting ? 'pointer' : 'default'};opacity:${v.wbRendered && !v.wbExporting ? '1' : '.55'};box-shadow:var(--shadow-sm)">${v.wbExporting ? 'Sparar …' : 'Spara som PNG'}</button>
-        ${ !v.wbRendered && !v.wbWarnCount ? `<span style="font-size:13.5px;color:var(--ink-3)">Ritar tavlan …</span>` : '' }
+        <button data-click="${on(v.onWbExport)}" ${v.wbRendered && !v.wbExporting ? '' : 'disabled'} style="display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:10px;padding:10px 17px;font-size:14.5px;font-weight:500;font-family:inherit;cursor:${v.wbRendered && !v.wbExporting ? 'pointer' : 'default'};opacity:${v.wbRendered && !v.wbExporting ? '1' : '.55'};box-shadow:var(--shadow-sm)">${v.wbExporting ? 'Sparar …' : 'Spara som PNG'}</button>
+        ${ !v.wbRendered && !v.wbWarnCount && !v.planRunning ? `<span style="font-size:13.5px;color:var(--ink-3)">Ritar tavlan …</span>` : '' }
+        ${ v.planSavedPath ? `<span role="status" style="font-size:13.5px;color:var(--ink-2);font-variant-numeric:tabular-nums;word-break:break-all">Sparad: ${esc(v.planSavedPath)}</span>` : '' }
         ${ v.wbExportMsg ? `<span role="status" style="font-size:13.5px;color:${v.wbExportFailed ? 'var(--bad)' : 'var(--ink-2)'};font-variant-numeric:tabular-nums;word-break:break-all">${esc(v.wbExportMsg)}</span>` : '' }
       </div>
     </section>
