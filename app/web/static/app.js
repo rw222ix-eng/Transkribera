@@ -4430,27 +4430,37 @@ function viewModals(v){ return `
           <span title="${esc(v.lessonChatThread.ovModelTitle)}" style="font-family:var(--mono);font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-3);cursor:help">Körs lokalt</span>
         </div>
         <div data-hidescroll style="flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;padding:20px 16px;display:flex;flex-direction:column;gap:15px">
-          ${ v.lessonChatThread.chatEmpty ? `
-          <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
-            <button data-click="${on(v.ovAskSum)}" style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2);background:var(--surface);border:1px solid var(--line);border-radius:99px;padding:7px 13px;cursor:pointer;font-family:inherit;transition:transform .14s cubic-bezier(.2,.8,.25,1),border-color .14s,color .14s,background .14s" data-sh="border-color:var(--line-2) !important;color:var(--ink) !important">Sammanfatta lektionen</button>
-            <button data-click="${on(v.ovAskStud)}" style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2);background:var(--surface);border:1px solid var(--line);border-radius:99px;padding:7px 13px;cursor:pointer;font-family:inherit;transition:transform .14s cubic-bezier(.2,.8,.25,1),border-color .14s,color .14s,background .14s" data-sh="border-color:var(--line-2) !important;color:var(--ink) !important">Vilka elever nämns?</button>
-            <button data-click="${on(v.ovAskRemind)}" style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2);background:var(--surface);border:1px solid var(--line);border-radius:99px;padding:7px 13px;cursor:pointer;font-family:inherit;transition:transform .14s cubic-bezier(.2,.8,.25,1),border-color .14s,color .14s,background .14s" data-sh="border-color:var(--line-2) !important;color:var(--ink) !important">Skapa läxpåminnelse</button>
-          </div>
-          ` : '' }
           ${ chatThread(v.lessonChatThread) }
         </div>
         ${ v.ovEvent ? (v.ovEvent.added ? `
         <div style="flex:0 0 auto;display:flex;align-items:center;gap:9px;margin:0 12px 8px;border:1px solid color-mix(in srgb,var(--ok) 40%,var(--line));background:var(--surface);border-radius:4px;padding:8px 11px;font-size:13px;font-weight:500;color:var(--ok)"><span style="width:16px;height:16px;border-radius:50%;background:var(--ok);color:var(--on-ok);display:inline-flex;align-items:center;justify-content:center;font-size:9px;animation:okPop .25s cubic-bezier(0.22,1,0.36,1) both;flex:0 0 auto">✓</span><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Tillagd i Google Kalender — ${esc(v.ovEvent.title)}</span><button data-click="${on(v.ovEvent.onDismiss)}" aria-label="Stäng" style="margin-left:auto;border:none;background:transparent;color:var(--ink-3);cursor:pointer;font-size:11px;padding:2px 4px;flex:0 0 auto">✕</button></div>
         ` : `
-        <div style="position:relative;flex:0 0 auto;margin:0 12px 8px">
-          ${ v.ovEvOpen ? `<div data-click="${on(v.stop)}" style="position:absolute;bottom:calc(100% + 8px);left:0;right:0;z-index:8;background:var(--surface);border:1px solid var(--line);border-radius:5px;box-shadow:var(--shadow);padding:5px;animation:ml-popin .2s cubic-bezier(.16,1,.3,1) both">${ lessonEventBox(v.ovEvent) }</div>` : '' }
-          <div data-click="${on(v.toggleOvEv)}" role="button" tabindex="0" aria-expanded="${ v.ovEvOpen ? 'true' : 'false' }" title="${ v.ovEvOpen ? 'Fäll ihop förslaget' : 'Fäll ut och redigera förslaget' }" style="display:flex;align-items:center;gap:9px;border:1px solid color-mix(in srgb,var(--accent) 32%,var(--line));background:var(--accent-weak);border-radius:4px;padding:8px 11px;cursor:pointer">
-            <span style="font-family:var(--mono);font-size:9px;letter-spacing:0.07em;text-transform:uppercase;color:var(--accent);flex:0 0 auto">Förslag</span>
-            <span style="font-size:12.5px;font-weight:600;color:var(--ink);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(v.ovEvent.title)} · ${esc(v.ovEvent.when)}</span>
-            <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="var(--ink-3)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;transition:transform .2s cubic-bezier(.16,1,.3,1);transform:rotate(${ v.ovEvOpen ? '180deg' : '0deg' })"><path d="M4 10l4-4 4 4"></path></svg>
-            <button data-click="${on(v.ovEvent.onAdd)}" ${ v.ovEvent.busy ? 'disabled' : '' } style="margin-left:auto;flex:0 0 auto;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:4px;padding:6px 12px;font-size:12px;font-weight:600;font-family:inherit;cursor:${ v.ovEvent.busy ? 'default' : 'pointer' };opacity:${ v.ovEvent.busy ? '.6' : '1' }">${ v.ovEvent.busy ? 'Lägger till …' : 'Lägg till' }</button>
-            <button data-click="${on(v.ovEvent.onDismiss)}" aria-label="Avvisa förslaget" title="Avvisa förslaget" style="border:none;background:transparent;color:var(--ink-3);cursor:pointer;font-size:11px;padding:2px 4px;flex:0 0 auto">✕</button>
+        <div style="position:relative;flex:0 0 auto;display:flex;justify-content:flex-end;margin:0 12px 8px">
+          ${ v.ovEvOpen ? `
+          <div data-click="${on(v.stop)}" style="position:absolute;bottom:calc(100% + 9px);right:0;width:min(300px,86vw);z-index:8;background:var(--surface);border:1px solid var(--line);border-radius:5px;box-shadow:var(--shadow);padding:14px 15px;animation:ml-popin .2s cubic-bezier(.16,1,.3,1) both">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">
+              <span style="font-family:var(--mono);font-size:9px;letter-spacing:0.07em;text-transform:uppercase;color:var(--accent)">Förslag → Kalender</span>
+              <span style="flex:1"></span>
+              ${ v.ovEvent.calKnown ? (v.ovEvent.calConnected
+                ? `<span style="font-family:var(--mono);font-size:9px;letter-spacing:0.07em;text-transform:uppercase;color:var(--ok);flex:0 0 auto">● ansluten</span>`
+                : `<button data-click="${on(v.ovEvent.onConnect)}" style="flex:0 0 auto;font-family:var(--mono);font-size:9px;letter-spacing:0.07em;text-transform:uppercase;color:var(--accent);background:transparent;border:1px solid color-mix(in srgb,var(--accent) 40%,transparent);border-radius:3px;padding:3px 8px;cursor:pointer">Anslut Google-konto</button>`)
+                : `<span style="font-family:var(--mono);font-size:9px;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-3);flex:0 0 auto">kontrollerar …</span>` }
+            </div>
+            <div style="font-size:13.5px;font-weight:600;color:var(--ink);line-height:1.35">${esc(v.ovEvent.title)}</div>
+            <div style="font-family:var(--mono);font-size:10px;letter-spacing:0.04em;text-transform:uppercase;color:var(--ink-2);font-variant-numeric:tabular-nums;margin-top:3px">${esc(v.ovEvent.when)}</div>
+            ${ v.ovEvent.desc ? `<div style="font-size:12px;color:var(--ink-2);margin-top:7px;line-height:1.5;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden">${esc(v.ovEvent.desc)}</div>` : '' }
+            <div style="display:flex;align-items:center;gap:8px;margin-top:11px;padding-top:11px;border-top:1px solid var(--line)">
+              <button data-click="${on(v.ovEvent.onAdd)}" ${ v.ovEvent.busy ? 'disabled' : '' } style="flex:0 0 auto;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:4px;padding:7px 14px;font-size:12.5px;font-weight:600;font-family:inherit;cursor:${ v.ovEvent.busy ? 'default' : 'pointer' };opacity:${ v.ovEvent.busy ? '.6' : '1' }">${ v.ovEvent.busy ? 'Lägger till …' : 'Lägg till' }</button>
+              <button data-click="${on(v.ovEvent.onDismiss)}" style="flex:0 0 auto;background:transparent;border:none;color:var(--ink-3);font-size:12px;font-weight:500;font-family:inherit;cursor:pointer;padding:7px 6px">Avvisa</button>
+              <span style="flex:1"></span>
+            </div>
+            <div style="margin-top:8px;font-size:11.5px;color:var(--ink-3);line-height:1.45">Ändra titel, tid eller anteckning genom att skriva i chatten.</div>
           </div>
+          ` : '' }
+          <button data-click="${on(v.toggleOvEv)}" aria-expanded="${ v.ovEvOpen ? 'true' : 'false' }" aria-label="${ v.ovEvOpen ? 'Dölj kalenderförslaget' : 'Visa kalenderförslaget' }" title="${ v.ovEvOpen ? 'Dölj kalenderförslaget' : `Kalenderförslag: ${esc(v.ovEvent.title)} · ${esc(v.ovEvent.when)}` }" style="position:relative;width:32px;height:32px;flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;background:${ v.ovEvOpen ? 'var(--accent-weak)' : 'var(--surface)' };border:1px solid ${ v.ovEvOpen ? 'color-mix(in srgb,var(--accent) 45%,transparent)' : 'var(--line)' };border-radius:50%;color:var(--accent);cursor:pointer;transition:border-color .14s,background .14s">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="2" y="3" width="12" height="11" rx="2"></rect><path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3"></path></svg>
+            ${ v.ovEvOpen ? '' : `<span class="ai-blink" style="position:absolute;top:-1px;right:-1px;width:7px;height:7px;border-radius:50%;background:var(--accent);border:1.5px solid var(--surface)"></span>` }
+          </button>
         </div>
         `) : '' }
         <div style="flex:0 0 auto;border-top:1px solid var(--line);padding:10px 12px">
