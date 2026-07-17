@@ -622,6 +622,30 @@ def test_seed_course_content_idempotent(tmp_path):
     assert rows[0]["lasar_version"] == "Gy11"
 
 
+def test_content_version_preference_gy25_over_gy11(tmp_path):
+    """Gy25-rader vinner läsvägen när båda versionerna finns seedade; Gy11-
+    raderna finns kvar i tabellen (tagg-historik) men visas inte."""
+    conn = _conn(tmp_path)
+    db.seed_course_content(conn, [
+        {"kurs": "Ma2b", "lasar_version": "Gy11", "innehall": [
+            {"kod": "M2B-ALG-1", "rubrik": "Algebra", "text": "Gammal punkt."}]},
+        {"kurs": "Ma2b", "lasar_version": "Gy25", "innehall": [
+            {"kod": "G25-M2B-ALG-1", "rubrik": "Aritmetik, algebra och funktioner",
+             "text": "Begreppet linjärt ekvationssystem."},
+            {"kod": "G25-M2B-STA-1", "rubrik": "Statistik",
+             "text": "Begreppet normalfördelning."}]},
+    ])
+    cid = db.get_or_create_course(conn, "Ma2b")
+    assert db.preferred_content_version(conn, cid) == "Gy25"
+    rows = db.list_course_content(conn, cid)
+    assert [r["kod"] for r in rows] == ["G25-M2B-ALG-1", "G25-M2B-STA-1"]
+    assert all(r["lasar_version"] == "Gy25" for r in rows)
+    # Gy11-raden är kvar i tabellen
+    n = conn.execute("SELECT COUNT(*) FROM course_content WHERE course_id = ?",
+                     (cid,)).fetchone()[0]
+    assert n == 3
+
+
 def test_tag_content_exactly_one_target(tmp_path):
     conn = _conn(tmp_path)
     cid = db.get_or_create_course(conn, "Ma3c")

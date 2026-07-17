@@ -1,0 +1,90 @@
+{
+  "kurs": "Ma2b",
+  "kurskod": "MATE2B00X",
+  "lasar_version": "Gy25",
+  "amne": "Matematik",
+  "niva": "Matematik, nivå 2b",
+  "_not": "Skolverkets centrala innehåll (Gy25) — officiell punkttext per nivå.",
+  "innehall": [
+    {
+      "kod": "G25-M2B-ALG-1",
+      "rubrik": "Aritmetik, algebra och funktioner",
+      "text": "Begreppet linjärt ekvationssystem. Metoder för att lösa linjära ekvationssystem."
+    },
+    {
+      "kod": "G25-M2B-ALG-2",
+      "rubrik": "Aritmetik, algebra och funktioner",
+      "text": "Begreppet logaritm. Hantering av räkneregler för logaritmer i samband med lösning av exponentialekvationer. Metoder för att lösa exponentialekvationer."
+    },
+    {
+      "kod": "G25-M2B-ALG-3",
+      "rubrik": "Aritmetik, algebra och funktioner",
+      "text": "Likheter och skillnader mellan exponential- och potensekvationer."
+    },
+    {
+      "kod": "G25-M2B-ALG-4",
+      "rubrik": "Aritmetik, algebra och funktioner",
+      "text": "Motivering och hantering av konjugatregeln och kvadreringsreglerna."
+    },
+    {
+      "kod": "G25-M2B-ALG-5",
+      "rubrik": "Aritmetik, algebra och funktioner",
+      "text": "Begreppet andragradsfunktion och egenskaper hos andragradsfunktioner, däribland symmetrilinje, extrempunkt och nollställen."
+    },
+    {
+      "kod": "G25-M2B-ALG-6",
+      "rubrik": "Aritmetik, algebra och funktioner",
+      "text": "Metoder för att lösa andragradsekvationer."
+    },
+    {
+      "kod": "G25-M2B-STA-1",
+      "rubrik": "Statistik",
+      "text": "Lägesmått och spridningsmått, däribland percentiler och standardavvikelse, samt digitala metoder för att bestämma dessa."
+    },
+    {
+      "kod": "G25-M2B-STA-2",
+      "rubrik": "Statistik",
+      "text": "Begreppet normalfördelning och egenskaper hos normalfördelat material. Digitala metoder för att göra beräkningar på normalfördelat material."
+    },
+    {
+      "kod": "G25-M2B-STA-3",
+      "rubrik": "Statistik",
+      "text": "Begreppen regressionsanalys och korrelationskoefficient. Digitala metoder för regressionsanalys."
+    },
+    {
+      "kod": "G25-M2B-GEO-1",
+      "rubrik": "Logik och geometri",
+      "text": "Begreppen implikation och ekvivalens."
+    },
+    {
+      "kod": "G25-M2B-GEO-2",
+      "rubrik": "Logik och geometri",
+      "text": "Begreppen definition, sats och bevis."
+    },
+    {
+      "kod": "G25-M2B-GEO-3",
+      "rubrik": "Logik och geometri",
+      "text": "Motivering och användning av enklare geometriska satser om vinklar och likformighet samt Pythagoras sats med exempel som omfattar beräkningar i koordinatsystem."
+    },
+    {
+      "kod": "G25-M2B-DIG-1",
+      "rubrik": "Digitala verktyg",
+      "text": "Användning av digitala verktyg för att effektivisera beräkningar och komplettera metoder, till exempel vid ekvationslösning och problemlösning."
+    },
+    {
+      "kod": "G25-M2B-PRO-1",
+      "rubrik": "Problemlösning och tillämpningsområden",
+      "text": "Problemlösning med särskild utgångspunkt i utbildningens karaktär och samhällsliv, däribland frågeställningar som berör hållbar utveckling och hur matematik kan användas för kritisk granskning av fakta och påståenden."
+    },
+    {
+      "kod": "G25-M2B-PRO-2",
+      "rubrik": "Problemlösning och tillämpningsområden",
+      "text": "Tillämpning och formulering av matematiska modeller i realistiska situationer. Utvärdering av matematiska modellers egenskaper och begränsningar."
+    },
+    {
+      "kod": "G25-M2B-PRO-3",
+      "rubrik": "Problemlösning och tillämpningsområden",
+      "text": "Orientering om något ur matematikens historia, till exempel hur ett matematiskt begrepp utvecklats, matematikens roll i något historiskt skeende, en betydande person inom matematiken eller ett historiskt matematiskt problem."
+    }
+  ]
+}

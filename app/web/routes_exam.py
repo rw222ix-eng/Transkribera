@@ -70,6 +70,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
         minnet (taggade mot någon lektion — ev. filtrerat på klass)."""
         conn = db.connect(db_file)
         try:
+            version = db.preferred_content_version(conn, course_id)
             rows = conn.execute(
                 "SELECT cc.*, EXISTS("
                 "  SELECT 1 FROM content_tags t"
@@ -82,8 +83,9 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 "  WHERE t2.content_id = cc.id AND e.status = 'godkänt'"
                 ") AS provad "
                 "FROM course_content cc WHERE cc.course_id = ? "
+                "AND (cc.lasar_version = ? OR ? IS NULL) "
                 "ORDER BY cc.kod, cc.id",
-                (group_id, group_id, course_id)).fetchall()
+                (group_id, group_id, course_id, version, version)).fetchall()
             # provad (Fas 5): innehållstäckningen över terminen — vad är
             # beprövat på prov/arbetsblad och vad är otestat.
             return {"punkter": [dict(r) | {"behandlad": bool(r["behandlad"]),

@@ -1,0 +1,95 @@
+{
+  "kurs": "Ma3c",
+  "kurskod": "MATO1C00X",
+  "lasar_version": "Gy25",
+  "amne": "Matematik – fortsättning",
+  "niva": "Matematik – fortsättning, nivå 1c",
+  "_not": "Skolverkets centrala innehåll (Gy25) — officiell punkttext per nivå.",
+  "innehall": [
+    {
+      "kod": "G25-M3C-ALG-1",
+      "rubrik": "Aritmetik, algebra och funktioner",
+      "text": "Begreppet absolutbelopp."
+    },
+    {
+      "kod": "G25-M3C-ALG-2",
+      "rubrik": "Aritmetik, algebra och funktioner",
+      "text": "Begreppet rationella uttryck. Hantering av rationella uttryck."
+    },
+    {
+      "kod": "G25-M3C-ALG-3",
+      "rubrik": "Aritmetik, algebra och funktioner",
+      "text": "Begreppet gränsvärde. Begreppen sekant, tangent, förändringshastighet, ändringskvot och derivata för en funktion. Grafiska och digitala metoder för att derivera funktioner. Villkor för deriverbarhet."
+    },
+    {
+      "kod": "G25-M3C-ALG-4",
+      "rubrik": "Aritmetik, algebra och funktioner",
+      "text": "Motivering och hantering av deriveringsregler för potens- och exponentialfunktioner samt summor av dessa. Begreppen talet e och naturlig logaritm."
+    },
+    {
+      "kod": "G25-M3C-ALG-5",
+      "rubrik": "Aritmetik, algebra och funktioner",
+      "text": "Begreppet andraderivata. Metoder för att lösa extremvärdesproblem."
+    },
+    {
+      "kod": "G25-M3C-ALG-6",
+      "rubrik": "Aritmetik, algebra och funktioner",
+      "text": "Begreppet polynom och egenskaper hos polynomfunktioner. Metoder för att lösa enklare polynomekvationer."
+    },
+    {
+      "kod": "G25-M3C-ALG-7",
+      "rubrik": "Aritmetik, algebra och funktioner",
+      "text": "Begreppen bestämd integral och primitiv funktion och sambandet mellan dessa."
+    },
+    {
+      "kod": "G25-M3C-ALG-8",
+      "rubrik": "Aritmetik, algebra och funktioner",
+      "text": "Grafiska och digitala metoder för att bestämma integraler."
+    },
+    {
+      "kod": "G25-M3C-ALG-9",
+      "rubrik": "Aritmetik, algebra och funktioner",
+      "text": "Motivering och hantering av metoder för att bestämma integraler för potens- och exponentialfunktioner samt summor av dessa."
+    },
+    {
+      "kod": "G25-M3C-ALG-10",
+      "rubrik": "Aritmetik, algebra och funktioner",
+      "text": "Formulering och beräkning av integraler i enkla situationer."
+    },
+    {
+      "kod": "G25-M3C-TRI-1",
+      "rubrik": "Trigonometri",
+      "text": "Begreppet enhetscirkeln och definition av trigonometriska begrepp utifrån denna."
+    },
+    {
+      "kod": "G25-M3C-TRI-2",
+      "rubrik": "Trigonometri",
+      "text": "Bevis och användning av cosinus-, sinus- och areasatsen."
+    },
+    {
+      "kod": "G25-M3C-DIG-1",
+      "rubrik": "Digitala verktyg",
+      "text": "Användning av digitala verktyg, även symbolhanterande, för att effektivisera beräkningar och komplettera metoder, till exempel vid ekvationslösning, derivering, integrering, hantering av algebraiska uttryck och problemlösning."
+    },
+    {
+      "kod": "G25-M3C-DIG-2",
+      "rubrik": "Digitala verktyg",
+      "text": "Användning av programmering som verktyg vid problemlösning, databearbetning eller tillämpning av numeriska metoder."
+    },
+    {
+      "kod": "G25-M3C-PRO-1",
+      "rubrik": "Problemlösning och tillämpningsområden",
+      "text": "Problemlösning med särskild utgångspunkt i utbildningens karaktär och samhällsliv, däribland frågeställningar som berör hållbar utveckling och hur matematik kan användas för kritisk granskning av fakta och påståenden."
+    },
+    {
+      "kod": "G25-M3C-PRO-2",
+      "rubrik": "Problemlösning och tillämpningsområden",
+      "text": "Tillämpning och formulering av matematiska modeller i realistiska situationer. Utvärdering av matematiska modellers egenskaper och begränsningar."
+    },
+    {
+      "kod": "G25-M3C-PRO-3",
+      "rubrik": "Problemlösning och tillämpningsområden",
+      "text": "Orientering om något ur matematikens historia, till exempel hur ett matematiskt begrepp utvecklats, matematikens roll i något historiskt skeende, en betydande person inom matematiken eller ett historiskt matematiskt problem."
+    }
+  ]
+}

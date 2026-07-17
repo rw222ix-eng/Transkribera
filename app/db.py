@@ -1068,10 +1068,29 @@ def seed_course_content(conn: sqlite3.Connection,
     return added
 
 
+# Läroplansversioner kan samexistera per kurs (Gy11-rader behålls för att
+# content_tags-historiken inte ska gå förlorad). Läsvägen visar bara den
+# senaste versionen som finns seedad för kursen — Gy25 före Gy11.
+CONTENT_VERSION_ORDER = ("Gy25", "Gy11")
+
+
+def preferred_content_version(conn: sqlite3.Connection,
+                              course_id: int) -> str | None:
+    have = {r[0] for r in conn.execute(
+        "SELECT DISTINCT lasar_version FROM course_content WHERE course_id = ?",
+        (course_id,))}
+    for v in CONTENT_VERSION_ORDER:
+        if v in have:
+            return v
+    return next(iter(have), None)
+
+
 def list_course_content(conn: sqlite3.Connection, course_id: int) -> list[dict]:
+    version = preferred_content_version(conn, course_id)
     rows = conn.execute(
-        "SELECT * FROM course_content WHERE course_id = ? ORDER BY kod, id",
-        (course_id,)).fetchall()
+        "SELECT * FROM course_content WHERE course_id = ? "
+        "AND (lasar_version = ? OR ? IS NULL) ORDER BY kod, id",
+        (course_id, version, version)).fetchall()
     return [dict(r) for r in rows]
 
 
