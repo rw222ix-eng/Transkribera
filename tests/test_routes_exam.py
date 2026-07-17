@@ -61,7 +61,7 @@ def _stub_generate(monkeypatch, result=None):
     return calls
 
 
-def _course_id(client, namn="Ma2b"):
+def _course_id(client, namn="Matematik, nivå 2b"):
     for c in client.get("/api/courses").json():
         if c["namn"] == namn:
             return c["id"]
@@ -86,7 +86,7 @@ def test_generate_creates_exam_with_balance_info(client, monkeypatch):
     assert result["exam"]["titel"].startswith("Prov")
     assert result["granser"]["total"] == 20
     assert result["summor"]["e"] == 10
-    assert calls[0]["kurs"] == "Ma2b"
+    assert calls[0]["kurs"] == "Matematik, nivå 2b"
     # provet finns i DB:n
     r = client.get(f"/api/exams/{result['id']}")
     assert r.status_code == 200
@@ -154,7 +154,7 @@ def test_approve_without_engine_saves_tex(client, monkeypatch):
     assert tex.exists()
     rel = tex.relative_to(client.base_dir)
     assert rel.parts[:2] == ("Transkriberingar", "prov")
-    assert "Ma2b" in rel.parts
+    assert "Matematik, nivå 2b" in rel.parts
     # tex serveras, pdf 404
     assert client.get(f"/api/exams/{result['id']}/tex").status_code == 200
     assert client.get(f"/api/exams/{result['id']}/pdf").status_code == 404

@@ -328,7 +328,41 @@ def _get_or_create(conn: sqlite3.Connection, table: str, namn: str) -> int | Non
     return row["id"] if row else None      # already existed -> nothing to commit
 
 
+# Gy25: kursregistret bär ämnesnivånamn. Gamla Gy11-kursnamn (seedfiler,
+# historikimport, äldre history.json) normaliseras till nivånamnet så att
+# samma kursrad träffas oavsett vilken namnform anroparen använder.
+GY25_KURSNAMN = {
+    "Ma1a": "Matematik, nivå 1a",
+    "Ma1b": "Matematik, nivå 1b",
+    "Ma1c": "Matematik, nivå 1c",
+    "Ma2a": "Matematik, nivå 2a",
+    "Ma2b": "Matematik, nivå 2b",
+    "Ma2c": "Matematik, nivå 2c",
+    "Ma3b": "Matematik – fortsättning, nivå 1b",
+    "Ma3c": "Matematik – fortsättning, nivå 1c",
+    "Ma4":  "Matematik – fortsättning, nivå 2",
+    "Ma5":  "Matematik – fördjupning, nivå 1",
+}
+
+
+def apply_gy25_course_names(conn: sqlite3.Connection) -> int:
+    """Idempotent datauppdatering: döp om Gy11-benämnda kursrader till
+    Gy25-nivånamn. Hoppar över par där målnamnet redan finns (UNIQUE) —
+    då tar namnormaliseringen i get_or_create_course hand om mappningen.
+    Returnerar antal omdöpta rader. Rollback: omvänd UPDATE."""
+    renamed = 0
+    for old, new in GY25_KURSNAMN.items():
+        if conn.execute("SELECT 1 FROM courses WHERE namn = ?", (new,)).fetchone():
+            continue
+        cur = conn.execute("UPDATE courses SET namn = ? WHERE namn = ?", (new, old))
+        renamed += cur.rowcount
+    if renamed:
+        conn.commit()
+    return renamed
+
+
 def get_or_create_course(conn: sqlite3.Connection, namn: str) -> int | None:
+    namn = GY25_KURSNAMN.get((namn or "").strip(), namn)
     return _get_or_create(conn, "courses", namn)
 
 

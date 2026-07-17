@@ -208,10 +208,12 @@ def create_app(base_dir: Path | None = None,
         debug_log.get_logger().exception("Migrering av historik till lektions-DB misslyckades")
 
     # Seeda centralt innehåll för matematikkurserna (Fas 3; idempotent via
-    # UNIQUE(course_id, kod) — bundlad, statisk, offline data).
+    # UNIQUE(course_id, kod) — bundlad, statisk, offline data). Kursregistret
+    # bär Gy25-nivånamn — omdöpningen körs först så seedningen träffar rätt rad.
     try:
         _conn = _db()
         try:
+            db.apply_gy25_course_names(_conn)
             db.seed_course_content(_conn, course_data.load_centralt_innehall())
         finally:
             _conn.close()

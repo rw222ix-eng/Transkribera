@@ -523,7 +523,7 @@ def test_planned_lesson_crud(tmp_path):
         board_json='{"title": "Derivata"}', datum="2026-08-20",
         starttid="09:10", group_id=gid, course_id=cid)
     assert p["id"] > 0 and p["status"] == "planerad"
-    assert p["group"] == "NA23" and p["course"] == "Ma3c"
+    assert p["group"] == "NA23" and p["course"] == "Matematik – fortsättning, nivå 1c"
 
     upd = db.update_planned_lesson(conn, p["id"], status="inställd")
     assert upd["status"] == "inställd"
@@ -620,6 +620,22 @@ def test_seed_course_content_idempotent(tmp_path):
     rows = db.list_course_content(conn, cid)
     assert [r["kod"] for r in rows] == ["M3C-ALG-1", "M3C-DER-1"]
     assert rows[0]["lasar_version"] == "Gy11"
+
+
+def test_gy25_course_rename_and_alias(tmp_path):
+    """Omdöpningen flyttar Gy11-namnen till nivånamn med bevarat id, och
+    get_or_create_course normaliserar gamla namn till samma rad efteråt."""
+    conn = _conn(tmp_path)
+    cid = db.get_or_create_course(conn, "Matematik, nivå 2b")  # normaliserat direkt
+    assert db.get_or_create_course(conn, "Ma2b") == cid        # alias → samma rad
+    # simulera gammal databas: en rå Gy11-rad utan normalisering
+    conn.execute("INSERT INTO courses(namn) VALUES ('Ma4')"); conn.commit()
+    old_id = conn.execute("SELECT id FROM courses WHERE namn='Ma4'").fetchone()[0]
+    assert db.apply_gy25_course_names(conn) >= 1
+    row = conn.execute("SELECT namn FROM courses WHERE id=?", (old_id,)).fetchone()
+    assert row[0] == "Matematik – fortsättning, nivå 2"
+    # idempotent + krockskydd: andra körningen döper inte om något
+    assert db.apply_gy25_course_names(conn) == 0
 
 
 def test_content_version_preference_gy25_over_gy11(tmp_path):

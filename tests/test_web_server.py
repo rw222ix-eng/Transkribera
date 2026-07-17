@@ -400,7 +400,7 @@ def test_courses_and_groups_get_or_create(client):
     # ska finnas bland dem.
     names = [c["namn"] for c in courses]
     assert "Matematik 2b" in names
-    assert "Ma3c" in names                     # seedad från bundlad JSON
+    assert "Matematik – fortsättning, nivå 1c" in names  # seedad, Gy25-namn
     assert client.post("/api/groups", json={"namn": "  "}).status_code == 400
 
 
