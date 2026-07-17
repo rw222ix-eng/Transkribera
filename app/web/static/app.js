@@ -2553,6 +2553,12 @@
 
   function applySideEffects() {
     syncTheme();
+    // Tavel-iframen är morphdom-skyddad (data-wb-frame), så en data-ref-attribut
+    // på den fryser vid första rendern medan H-registret byggs om varje render —
+    // ett fruset id kan då träffa FEL handler när id-layouten skiftar. Koppla den
+    // därför direkt här i stället för via data-ref. (wbFrameRef är idempotent.)
+    var _wbEl = document.querySelector('[data-wb-frame]');
+    if (_wbEl) wbFrameRef(_wbEl); else _wbFrame = null;
     if (S.editing && !_wasEditing) { _editBuf = {}; requestAnimationFrame(function () { document.querySelectorAll('[data-eline]').forEach(function (el) { var i = el.getAttribute('data-eline'); el.textContent = lineText(+i); }); }); }
     _wasEditing = S.editing;
     if (S.tab !== _prevTab) { _prevTab = S.tab; playTabIn(); }
@@ -2926,6 +2932,16 @@
       wbExportFailed: /^Kunde inte/.test(st.wbExportMsg),
       planGroups: st.groups, planCourses: st.courses,
       planGroupId: st.planGroupId, planCourseId: st.planCourseId,
+      // Chips i stället för dropdowns: klick väljer, klick på vald avmarkerar.
+      planCourseOpts: st.courses.map(function (c) {
+        var sel = String(c.id) === String(st.planCourseId);
+        return { namn: c.namn, sel: sel, onPick: function () { setState({ planCourseId: sel ? '' : String(c.id) }); } };
+      }),
+      planGroupOpts: st.groups.map(function (g) {
+        var sel = String(g.id) === String(st.planGroupId);
+        return { namn: g.namn, sel: sel, onPick: function () { setState({ planGroupId: sel ? '' : String(g.id) }); } };
+      }),
+      planHasGroups: st.groups.length > 0,
       planMoment: st.planMoment,
       onPlanGroup: onPlanGroup, onPlanCourse: onPlanCourse,
       onPlanMoment: onPlanMoment, onPlanMomentKey: onPlanMomentKey,
@@ -4777,22 +4793,32 @@ function viewPlanning(v){
           <div class="eyebrow" style="margin-bottom:18px">Planering</div>
           <h1 class="disp" style="font-size:clamp(34px,5.2vw,52px);margin:0">Dagens <span class="ser">tavla</span></h1>
         </div>
-        <p class="ehead_lede">Välj klass och kurs, beskriv momentet — så skrivs tavlan som du annars hade skrivit för hand vid lektionens start. Iterera via chatten tills den sitter.</p>
+        <p class="ehead_lede">Beskriv momentet — och välj kurs om du vill — så skrivs tavlan som du annars hade skrivit för hand vid lektionens start. Iterera via chatten tills den sitter.</p>
       </div>
 
-      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px">
-        <select data-change="${on(v.onPlanGroup)}" aria-label="Klass" style="${selStyle}">
-          <option value="">Ingen klass</option>
-          ${ v.planGroups.map(function(g){ return `<option value="${esc(g.id)}" ${String(g.id) === v.planGroupId ? 'selected' : ''}>${esc(g.namn)}</option>`; }).join('') }
-        </select>
-        <select data-change="${on(v.onPlanCourse)}" aria-label="Kurs" style="${selStyle}">
-          <option value="">Ingen kurs</option>
-          ${ v.planCourses.map(function(c){ return `<option value="${esc(c.id)}" ${String(c.id) === v.planCourseId ? 'selected' : ''}>${esc(c.namn)}</option>`; }).join('') }
-        </select>
-        <input value="${esc(v.planMoment)}" data-input="${on(v.onPlanMoment)}" data-keydown="${on(v.onPlanMomentKey)}" aria-label="Moment" placeholder="Moment — t.ex. derivatans definition" style="flex:1;min-width:220px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 13px;font-size:14.5px;font-family:inherit;color:var(--ink)">
-        <input type="date" value="${esc(v.planDatum)}" data-change="${on(v.onPlanDatum)}" aria-label="Datum" style="${selStyle};min-width:0">
-        <input type="time" value="${esc(v.planStarttid)}" data-change="${on(v.onPlanStarttid)}" aria-label="Starttid" style="${selStyle};min-width:0">
-        <button data-click="${on(v.onPlanStart)}" ${v.planCanStart ? '' : 'disabled'} style="display:inline-flex;align-items:center;gap:7px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:10px;padding:10px 18px;font-size:14.5px;font-weight:500;font-family:inherit;cursor:${v.planCanStart ? 'pointer' : 'default'};opacity:${v.planCanStart ? '1' : '.55'};box-shadow:var(--shadow-sm)">${v.planRunning ? 'Skriver …' : 'Skriv tavlan'}</button>
+      <div style="display:flex;flex-direction:column;gap:13px;margin-bottom:18px">
+        <div style="display:flex;gap:9px;align-items:stretch;flex-wrap:wrap">
+          <input value="${esc(v.planMoment)}" data-input="${on(v.onPlanMoment)}" data-keydown="${on(v.onPlanMomentKey)}" aria-label="Moment" placeholder="Moment — t.ex. derivatans definition" style="flex:1;min-width:240px;background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:13px 15px;font-size:15.5px;font-family:inherit;color:var(--ink)">
+          <button data-click="${on(v.onPlanStart)}" ${v.planCanStart ? '' : 'disabled'} style="display:inline-flex;align-items:center;gap:7px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:4px;padding:13px 22px;font-size:14.5px;font-weight:500;font-family:inherit;cursor:${v.planCanStart ? 'pointer' : 'default'};opacity:${v.planCanStart ? '1' : '.55'}">${v.planRunning ? 'Skriver …' : 'Skriv tavlan'}</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+          <div role="group" aria-label="Kurs" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+            <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);margin-right:3px">Kurs</span>
+            ${ v.planCourseOpts.map(function(c){ return `<button data-click="${on(c.onPick)}" data-chip="${c.sel ? 'on' : 'off'}" aria-pressed="${c.sel ? 'true' : 'false'}" style="font-family:inherit;font-size:13px;font-weight:500;padding:6px 12px;border-radius:3px;background:var(--surface);color:var(--ink-2);border:1px solid var(--line);transition:border-color .14s,background .14s,color .14s">${esc(c.namn)}</button>`; }).join('') }
+          </div>
+          ${ v.planHasGroups ? `
+          <div role="group" aria-label="Klass" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+            <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);margin-right:3px">Klass</span>
+            ${ v.planGroupOpts.map(function(g){ return `<button data-click="${on(g.onPick)}" data-chip="${g.sel ? 'on' : 'off'}" aria-pressed="${g.sel ? 'true' : 'false'}" style="font-family:inherit;font-size:13px;font-weight:500;padding:6px 12px;border-radius:3px;background:var(--surface);color:var(--ink-2);border:1px solid var(--line);transition:border-color .14s,background .14s,color .14s">${esc(g.namn)}</button>`; }).join('') }
+          </div>
+          ` : '' }
+          <span style="flex:1"></span>
+          <div style="display:flex;align-items:center;gap:6px">
+            <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);margin-right:3px">När</span>
+            <input type="date" value="${esc(v.planDatum)}" data-change="${on(v.onPlanDatum)}" aria-label="Datum" style="background:var(--surface);border:1px solid var(--line);border-radius:3px;padding:6px 9px;font-size:13px;font-family:inherit;color:var(--ink-2)">
+            <input type="time" value="${esc(v.planStarttid)}" data-change="${on(v.onPlanStarttid)}" aria-label="Starttid" style="background:var(--surface);border:1px solid var(--line);border-radius:3px;padding:6px 9px;font-size:13px;font-family:inherit;color:var(--ink-2)">
+          </div>
+        </div>
       </div>
 
       ${ v.planRunning && v.planHasLog ? `
@@ -4813,7 +4839,7 @@ function viewPlanning(v){
           <span style="font-size:15px;font-weight:600;color:var(--ink)">${esc(v.wbTitle)}</span>
           ${ v.planIsExample ? `<span style="font-size:12px;text-transform:uppercase;letter-spacing:0.05em;color:var(--ink-3);font-weight:600">Exempellektion</span>` : '' }
         </div>
-        <iframe data-wb-frame data-key="wb-frame" data-ref="${on(v.wbFrameRef)}" src="/static/whiteboard/board.html" title="Lektionstavla — ${esc(v.wbTitle)}" style="width:100%;height:420px;border:none;display:block;border-radius:8px;background:#2c2c2c"></iframe>
+        <iframe data-wb-frame data-key="wb-frame" src="/static/whiteboard/board.html" title="Lektionstavla — ${esc(v.wbTitle)}" style="width:100%;height:420px;border:none;display:block;border-radius:8px;background:#2c2c2c"></iframe>
       </div>
 
       ${ v.wbWarnCount ? `
