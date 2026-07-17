@@ -129,10 +129,10 @@ def llm_ready(client, monkeypatch):
 def _stub_generate(monkeypatch, result):
     calls = []
 
-    def fake(course, group, moment, *, model, memory="", llm=None,
+    def fake(course, group, moment, *, model, memory="", underlag="", llm=None,
              max_rounds=lesson_board.MAX_ROUNDS, log_cb=None):
         calls.append({"course": course, "group": group, "moment": moment,
-                      "model": model, "memory": memory})
+                      "model": model, "memory": memory, "underlag": underlag})
         if log_cb:
             log_cb("Genererar lektionstavlan …")
         return result
@@ -382,3 +382,71 @@ def test_org_patch_autolinks_lesson(llm_ready, monkeypatch):
     planned = llm_ready.get(f"/api/planning/{p['id']}").json()
     assert planned["status"] == "hållen"
     assert planned["lesson_id"] == les["id"]
+
+
+# ---------------------------------------------------------- Fas: underlag --
+
+def _underlag_fixture(client, monkeypatch, beskrivning="Sida om andragradsfunktioner."):
+    """Stubbar visionsmodellen och laddar upp en 1×1-PNG som underlag."""
+    from app.web import routes_planning as rp
+    monkeypatch.setattr(client.app.state.arbiter, "ensure_model",
+                        lambda spec: "http://127.0.0.1:8170")
+    monkeypatch.setattr(rp.llm_client, "chat",
+                        lambda *a, **k: beskrivning)
+    r = client.post("/api/planning/underlag",
+                    json={"filer": [{"namn": "kap3.png", "data": _DATA_URL}]})
+    assert r.status_code == 200
+    return _done(r)
+
+
+def test_underlag_upload_saves_and_describes(client, monkeypatch):
+    result = _underlag_fixture(client, monkeypatch)
+    assert result["id"] and len(result["filer"]) == 1
+    assert result["filer"][0]["namn"] == "kap3.png"
+    assert "andragradsfunktioner" in result["filer"][0]["beskrivning"]
+    d = client.base_dir / "Transkriberingar" / "underlag" / result["id"]
+    assert (d / "sida-01.png").exists()
+    assert (d / "underlag.json").exists()
+
+
+def test_underlag_rejects_bad_format_and_empty(client):
+    r = client.post("/api/planning/underlag", json={"filer": []})
+    assert r.status_code == 400
+    r = client.post("/api/planning/underlag", json={
+        "filer": [{"namn": "x.txt", "data": "data:text/plain;base64,aGVq"}]})
+    assert r.status_code == 400
+
+
+def test_underlag_without_vision_model_degrades(client, monkeypatch):
+    monkeypatch.setattr(client.app.state.arbiter, "ensure_model", lambda spec: None)
+    r = client.post("/api/planning/underlag",
+                    json={"filer": [{"namn": "kap3.png", "data": _DATA_URL}]})
+    result = _done(r)
+    assert result["filer"][0]["beskrivning"] == ""
+    # loggen berättar att bildtolkningen saknas
+    assert any("bildtolkning" in (e.get("msg") or "") for e in _events(r))
+
+
+def test_generate_passes_underlag_to_prompt(client, monkeypatch):
+    result = _underlag_fixture(client, monkeypatch)
+    monkeypatch.setattr(client.app.state.arbiter, "ensure_llm",
+                        lambda: "http://127.0.0.1:8170")
+    calls = _stub_generate(monkeypatch,
+                           {"board": _valid_board(), "errors": [], "rounds": 1})
+    r = client.post("/api/planning/generate",
+                    json={"moment": "Andragradsfunktioner",
+                          "underlag": result["id"]})
+    assert r.status_code == 200
+    assert "andragradsfunktioner" in calls[0]["underlag"].lower()
+    assert "kap3.png" in calls[0]["underlag"]
+
+
+def test_generate_ignores_invalid_underlag_id(client, monkeypatch):
+    monkeypatch.setattr(client.app.state.arbiter, "ensure_llm",
+                        lambda: "http://127.0.0.1:8170")
+    calls = _stub_generate(monkeypatch,
+                           {"board": _valid_board(), "errors": [], "rounds": 1})
+    r = client.post("/api/planning/generate",
+                    json={"moment": "Bråk", "underlag": "../../etc"})
+    assert r.status_code == 200
+    assert calls[0]["underlag"] == ""

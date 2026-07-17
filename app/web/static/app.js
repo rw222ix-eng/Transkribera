@@ -157,6 +157,8 @@
     planGroupId: '',           // vald klass (''  = ingen)
     planCourseId: '',          // vald kurs
     planMoment: '',            // moment/ämne (fritext)
+    planUnderlag: null,        // uppladdat underlag: {id, filer:[{namn,beskrivning}]}
+    planUnderlagBusy: false,   // uppladdning/bildtolkning pågår
     planPhase: 'idle',         // idle|running|done|error
     planLog: [],               // loggrader från SSE-jobbet
     planId: null,              // serverns planerings-id (för refine/approve)
@@ -730,6 +732,7 @@
       course_id: S.planCourseId ? +S.planCourseId : null,
       datum: S.planDatum || null,
       starttid: S.planStarttid || null,
+      underlag: S.planUnderlag ? S.planUnderlag.id : null,
     }, onPlanEvent);
   }
   function sendPlanRefine() {
@@ -759,6 +762,45 @@
   function onPlanGroup(e) { setState({ planGroupId: e.target.value }); }
   function onPlanCourse(e) { setState({ planCourseId: e.target.value }); }
   function onPlanMoment(e) { setState({ planMoment: e.target.value }); }
+  // Underlag: bokssidor/uppgifter (PNG/JPG/WebP/PDF) som tavlan ska bygga på.
+  // Filerna läses som data-URL:er och bildtolkas lokalt av visionsmodellen.
+  function onPickUnderlag() {
+    if (S.planUnderlagBusy) return;
+    var inp = document.createElement('input');
+    inp.type = 'file'; inp.multiple = true;
+    inp.accept = '.png,.jpg,.jpeg,.webp,.pdf,image/png,image/jpeg,image/webp,application/pdf';
+    inp.onchange = function () {
+      var files = Array.prototype.slice.call(inp.files || []);
+      if (!files.length) return;
+      Promise.all(files.map(function (f) {
+        return new Promise(function (res, rej) {
+          var r = new FileReader();
+          r.onload = function () { res({ namn: f.name, data: String(r.result || '') }); };
+          r.onerror = rej;
+          r.readAsDataURL(f);
+        });
+      })).then(function (filer) {
+        setState({ planUnderlagBusy: true, planLog: [] });
+        streamPost('/api/planning/underlag', { filer: filer }, function (ev) {
+          if (ev.type === 'log') {
+            setState(function (s) { return { planLog: s.planLog.concat([ev.msg]) }; });
+          } else if (ev.type === 'error') {
+            setState({ planUnderlagBusy: false, planLog: [],
+                       toast: { title: 'Underlag', detail: ev.message || 'uppladdningen misslyckades', kind: 'error', done: false } });
+            setTimeout(function () { setState({ toast: null }); }, 7000);
+          } else if (ev.type === 'done') {
+            setState({ planUnderlagBusy: false, planLog: [], planUnderlag: ev.result || null });
+          }
+        });
+      }).catch(function () {
+        setState({ planUnderlagBusy: false,
+                   toast: { title: 'Underlag', detail: 'kunde inte läsa filerna', kind: 'error', done: false } });
+        setTimeout(function () { setState({ toast: null }); }, 7000);
+      });
+    };
+    inp.click();
+  }
+  function onClearUnderlag() { setState({ planUnderlag: null }); }
   function onPlanMomentKey(e) { if (e.key === 'Enter') startPlanGenerate(); }
   function onPlanChatInput(e) { setState({ planChatInput: e.target.value }); }
   function onPlanChatKey(e) { if (e.key === 'Enter') sendPlanRefine(); }
@@ -2933,9 +2975,24 @@
       planGroups: st.groups, planCourses: st.courses,
       planGroupId: st.planGroupId, planCourseId: st.planCourseId,
       // Chips i stället för dropdowns: klick väljer, klick på vald avmarkerar.
-      planCourseOpts: st.courses.map(function (c) {
+      // Gy25-nivånamnen är långa — chipsen visar kompakt etikett ("Nivå 2b",
+      // "Fortsättning 2") med hela namnet i title, ordnade efter progression.
+      planCourseOpts: st.courses.slice().sort(function (a, b) {
+        var rank = function (n) {
+          return n.indexOf('fördjupning') >= 0 ? 3
+               : n.indexOf('specialisering') >= 0 ? 4
+               : n.indexOf('fortsättning') >= 0 ? 2 : 1;
+        };
+        var ra = rank(a.namn), rb = rank(b.namn);
+        return ra !== rb ? ra - rb : a.namn.localeCompare(b.namn, 'sv');
+      }).map(function (c) {
         var sel = String(c.id) === String(st.planCourseId);
-        return { namn: c.namn, sel: sel, onPick: function () { setState({ planCourseId: sel ? '' : String(c.id) }); } };
+        var kort = c.namn
+          .replace(/^Matematik – fortsättning, nivå /, 'Fortsättning ')
+          .replace(/^Matematik – fördjupning, nivå /, 'Fördjupning ')
+          .replace(/^Matematik – specialisering /, 'Specialisering ')
+          .replace(/^Matematik, nivå /, 'Nivå ');
+        return { namn: c.namn, kort: kort, sel: sel, onPick: function () { setState({ planCourseId: sel ? '' : String(c.id) }); } };
       }),
       planGroupOpts: st.groups.map(function (g) {
         var sel = String(g.id) === String(st.planGroupId);
@@ -2943,6 +3000,9 @@
       }),
       planHasGroups: st.groups.length > 0,
       planMoment: st.planMoment,
+      planUnderlag: st.planUnderlag,
+      planUnderlagBusy: !!st.planUnderlagBusy,
+      onPickUnderlag: onPickUnderlag, onClearUnderlag: onClearUnderlag,
       onPlanGroup: onPlanGroup, onPlanCourse: onPlanCourse,
       onPlanMoment: onPlanMoment, onPlanMomentKey: onPlanMomentKey,
       onPlanStart: startPlanGenerate,
@@ -4804,7 +4864,7 @@ function viewPlanning(v){
         <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
           <div role="group" aria-label="Kurs" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
             <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);margin-right:3px">Kurs</span>
-            ${ v.planCourseOpts.map(function(c){ return `<button data-click="${on(c.onPick)}" data-chip="${c.sel ? 'on' : 'off'}" aria-pressed="${c.sel ? 'true' : 'false'}" style="font-family:inherit;font-size:13px;font-weight:500;padding:6px 12px;border-radius:3px;background:var(--surface);color:var(--ink-2);border:1px solid var(--line);transition:border-color .14s,background .14s,color .14s">${esc(c.namn)}</button>`; }).join('') }
+            ${ v.planCourseOpts.map(function(c){ return `<button data-click="${on(c.onPick)}" data-chip="${c.sel ? 'on' : 'off'}" aria-pressed="${c.sel ? 'true' : 'false'}" title="${esc(c.namn)}" style="font-family:inherit;font-size:13px;font-weight:500;padding:6px 12px;border-radius:3px;background:var(--surface);color:var(--ink-2);border:1px solid var(--line);transition:border-color .14s,background .14s,color .14s">${esc(c.kort)}</button>`; }).join('') }
           </div>
           ${ v.planHasGroups ? `
           <div role="group" aria-label="Klass" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
@@ -4819,9 +4879,21 @@ function viewPlanning(v){
             <input type="time" value="${esc(v.planStarttid)}" data-change="${on(v.onPlanStarttid)}" aria-label="Starttid" style="background:var(--surface);border:1px solid var(--line);border-radius:3px;padding:6px 9px;font-size:13px;font-family:inherit;color:var(--ink-2)">
           </div>
         </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);margin-right:3px">Underlag</span>
+          ${ v.planUnderlagBusy ? `
+          <span style="display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-2)"><span style="width:13px;height:13px;border-radius:50%;border:2px solid var(--line-2);border-top-color:var(--accent);animation:spin .7s linear infinite"></span>Läser och tolkar sidorna …</span>
+          ` : v.planUnderlag ? `
+          ${ v.planUnderlag.filer.map(function(f){ return `<span title="${esc(f.beskrivning || f.namn)}" style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2);background:var(--sunken);border:1px solid var(--line);border-radius:3px;padding:4px 10px;max-width:220px"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(f.namn)}</span></span>`; }).join('') }
+          <button data-click="${on(v.onClearUnderlag)}" aria-label="Ta bort underlaget" title="Ta bort underlaget" style="border:none;background:transparent;color:var(--ink-3);cursor:pointer;font-size:12px;padding:2px 6px;font-family:inherit">✕</button>
+          <button data-click="${on(v.onPickUnderlag)}" style="border:none;background:transparent;color:var(--ink-2);cursor:pointer;font-size:12.5px;font-family:inherit;padding:2px 4px;text-decoration:underline;text-underline-offset:3px">Byt</button>
+          ` : `
+          <button data-click="${on(v.onPickUnderlag)}" title="Ladda upp sidor ur läroboken eller uppgifter som lektionen ska bygga på — behandlas lokalt" style="display:inline-flex;align-items:center;gap:7px;border:1px dashed var(--line-2);background:transparent;color:var(--ink-2);border-radius:3px;padding:6px 12px;font-size:12.5px;font-family:inherit;cursor:pointer">＋ Bokssidor eller uppgifter (PNG, JPG, PDF)</button>
+          ` }
+        </div>
       </div>
 
-      ${ v.planRunning && v.planHasLog ? `
+      ${ (v.planRunning || v.planUnderlagBusy) && v.planHasLog ? `
         <div role="status" style="display:flex;flex-direction:column;gap:3px;margin-bottom:12px;font-size:13px;color:var(--ink-2)">
           ${ v.planLog.map(function(l){ return `<span>${esc(l)}</span>`; }).join('') }
         </div>

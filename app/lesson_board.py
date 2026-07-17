@@ -251,11 +251,18 @@ def _few_shot_block() -> str:
     return "\n".join(parts)
 
 
-def build_prompt(course: str, group: str, moment: str, memory: str = "") -> str:
-    """Genereringsprompt: instruktion + few-shots + minneskontext + uppdraget."""
+def build_prompt(course: str, group: str, moment: str, memory: str = "",
+                 underlag: str = "") -> str:
+    """Genereringsprompt: instruktion + few-shots + minneskontext + ev.
+    uppladdat underlag (bokssidor/uppgifter) + uppdraget."""
     mem = f"\nUr lektionsminnet (senaste lektionerna med klassen):\n{memory}\n" if memory else ""
+    und = (
+        "\nUNDERLAG — läraren har laddat upp sidor ur läroboken/uppgifter som "
+        "lektionen SKA bygga på. Utgå från dessa: använd samma begrepp, notation "
+        "och typuppgifter, och låt tavlans exempel ansluta till underlaget:\n"
+        f"{underlag}\n" if underlag else "")
     return (
-        f"{INSTRUCTION}\n{_few_shot_block()}\n{mem}\n"
+        f"{INSTRUCTION}\n{_few_shot_block()}\n{mem}{und}\n"
         f"Uppdrag: skriv lektionstavlan för {course}, klass {group} — {moment}.\n"
         "Svara med enbart JSON."
     )
@@ -350,7 +357,8 @@ def _repair_until_valid(board: dict | None, errors: list, *, model: str, llm,
 
 
 def generate_board(course: str, group: str, moment: str, *, model: str,
-                   memory: str = "", llm=llm_client.generate,
+                   memory: str = "", underlag: str = "",
+                   llm=llm_client.generate,
                    max_rounds: int = MAX_ROUNDS,
                    log_cb: Callable[[str], None] | None = None) -> dict:
     """Generera en tavla och auto-reparera valideringsfel.
@@ -359,7 +367,7 @@ def generate_board(course: str, group: str, moment: str, *, model: str,
     Anroparen (rutterna) äger GPU-arbiterlåset."""
     log = log_cb or (lambda _m: None)
     log("Genererar lektionstavlan …")
-    prompt = build_prompt(course, group, moment, memory)
+    prompt = build_prompt(course, group, moment, memory, underlag)
     board = _llm_round(prompt, model, llm)
     rounds = 1
     # Ogiltig JSON (t.ex. trunkerat svar) → kör om från början inom budgeten

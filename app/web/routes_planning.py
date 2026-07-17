@@ -18,7 +18,7 @@ from pathlib import Path
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
-from app import db, lesson_board, llm_manager
+from app import db, lesson_board, llm_client, llm_manager
 from app.web.sse import sse_response
 
 # Två tavlor i 2× blir ett par MB; 30 MB är väl tilltaget men stoppar missbruk.
@@ -27,6 +27,18 @@ _PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 _DATA_PREFIX = "data:image/png;base64,"
 _MAX_WARNINGS = 20          # klientens [WB]-lista begränsas (promptstorlek)
 _GPU_BUSY = {"error": "GPU:n är upptagen — försök igen strax."}
+
+# Underlag (bokssidor/uppgifter som lektionen ska bygga på): tillåtna format,
+# storleks- och sidbudget. Allt sparas och behandlas lokalt under base_dir.
+_UNDERLAG_MIME = {
+    "data:image/png;base64,": ".png",
+    "data:image/jpeg;base64,": ".jpg",
+    "data:image/webp;base64,": ".webp",
+    "data:application/pdf;base64,": ".pdf",
+}
+_MAX_UNDERLAG_BYTES = 25 * 1024 * 1024   # per fil
+_MAX_UNDERLAG_SIDOR = 12                 # bilder + renderade PDF-sidor totalt
+_PDF_SCALE = 2.0                         # pypdfium2-rendering (~144 dpi)
 
 
 def _safe_component(raw: str, fallback: str) -> str:
@@ -102,6 +114,144 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # (samma mönster som /api/lessons/{id}/extract i server.py).
         return llm_manager.ACTIVE_LLM.filename
 
+    # ------------------------------------------------------------ underlag --
+
+    def _underlag_dir(pid: str) -> Path | None:
+        """Katalogen för ett uppladdat underlag — pid valideras hårt så
+        sökvägen aldrig kan lämna Transkriberingar/underlag."""
+        if not re.fullmatch(r"[a-f0-9]{12}", pid or ""):
+            return None
+        return base / "Transkriberingar" / "underlag" / pid
+
+    def _underlag_text(pid: str | None) -> str:
+        """Promptblocket för ett tidigare uppladdat underlag ('' om inget)."""
+        if not pid:
+            return ""
+        d = _underlag_dir(pid)
+        meta = (d / "underlag.json") if d else None
+        if not meta or not meta.is_file():
+            return ""
+        try:
+            data = json.loads(meta.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return ""
+        lines = []
+        for i, f in enumerate(data.get("filer") or [], 1):
+            desc = (f.get("beskrivning") or "").strip()
+            lines.append(f"Sida {i} ({f.get('namn') or 'fil'}): "
+                         + (desc or "(ingen bildtolkning tillgänglig)"))
+        return "\n".join(lines)
+
+    @router.post("/api/planning/underlag")
+    async def underlag(req: Request):
+        """Ladda upp bokssidor/uppgifter (PNG/JPG/WebP/PDF som data-URL:er).
+        Sidorna sparas under base_dir och bildtolkas lokalt med visionsmodellen
+        (SSE-jobb under GPU-arbitern); beskrivningarna styr sedan tavlan."""
+        body = await req.json()
+        filer = body.get("filer") or []
+        if not isinstance(filer, list) or not filer:
+            return JSONResponse({"error": "inga filer att ladda upp"},
+                                status_code=400)
+
+        # Avkoda och validera allt INNAN gpu-lås och skrivning.
+        sidor: list[tuple[str, str, bytes]] = []   # (namn, ext, bytes)
+        for f in filer:
+            namn = _safe_component(str(f.get("namn") or ""), "fil")
+            data = str(f.get("data") or "")
+            ext = next((e for p, e in _UNDERLAG_MIME.items()
+                        if data.startswith(p)), None)
+            if ext is None:
+                return JSONResponse(
+                    {"error": f"{namn}: formatet stöds inte "
+                              "(PNG, JPG, WebP eller PDF)"}, status_code=400)
+            b64 = data.split(",", 1)[1]
+            if len(b64) > _MAX_UNDERLAG_BYTES * 4 // 3 + 4:
+                return JSONResponse({"error": f"{namn}: filen är för stor "
+                                              "(max 25 MB)"}, status_code=413)
+            try:
+                raw = base64.b64decode(b64, validate=True)
+            except Exception:
+                return JSONResponse({"error": f"{namn}: trasig fildata"},
+                                    status_code=400)
+            sidor.append((namn, ext, raw))
+
+        # PDF → sidbilder (pypdfium2, lokalt). Sidbudgeten gäller totalen.
+        pages: list[tuple[str, bytes]] = []        # (namn, png/jpg-bytes)
+        try:
+            for namn, ext, raw in sidor:
+                if ext != ".pdf":
+                    pages.append((namn, raw))
+                    continue
+                import io
+                import pypdfium2 as pdfium
+                pdf = pdfium.PdfDocument(raw)
+                try:
+                    for pi in range(len(pdf)):
+                        if len(pages) >= _MAX_UNDERLAG_SIDOR:
+                            break
+                        bitmap = pdf[pi].render(scale=_PDF_SCALE)
+                        buf = io.BytesIO()
+                        bitmap.to_pil().save(buf, format="PNG")
+                        pages.append((f"{namn} — sida {pi + 1}", buf.getvalue()))
+                finally:
+                    pdf.close()
+        except Exception as e:
+            return JSONResponse({"error": f"kunde inte läsa PDF: {e}"},
+                                status_code=400)
+        if len(pages) > _MAX_UNDERLAG_SIDOR:
+            return JSONResponse(
+                {"error": f"för många sidor — max {_MAX_UNDERLAG_SIDOR} "
+                          "bilder/PDF-sidor per underlag"}, status_code=413)
+
+        if not arbiter.try_acquire_gpu():
+            return JSONResponse(_GPU_BUSY, status_code=409)
+
+        def job(emit):
+            try:
+                pid = uuid.uuid4().hex[:12]
+                d = _underlag_dir(pid)
+                d.mkdir(parents=True, exist_ok=True)
+                meta = []
+                vision_url = arbiter.ensure_model(llm_manager.VISION_LLM) \
+                    if hasattr(arbiter, "ensure_model") else None
+                for i, (namn, raw) in enumerate(pages, 1):
+                    fil = d / f"sida-{i:02d}.png"
+                    fil.write_bytes(raw)
+                    beskrivning = ""
+                    if vision_url:
+                        emit({"type": "log",
+                              "msg": f"Tolkar sida {i} av {len(pages)} …"})
+                        try:
+                            dataurl = ("data:image/png;base64,"
+                                       + base64.b64encode(raw).decode())
+                            beskrivning = llm_client.chat(
+                                llm_manager.VISION_LLM.filename,
+                                [{"role": "user", "content":
+                                  "Beskriv sidan ur en matematikbok kort och "
+                                  "sakligt på svenska: avsnittets rubrik/moment, "
+                                  "centrala begrepp och formler (LaTeX), samt "
+                                  "vilka typuppgifter som förekommer."}],
+                                images=[dataurl])
+                        except Exception:
+                            beskrivning = ""
+                    meta.append({"namn": namn, "fil": fil.name,
+                                 "beskrivning": beskrivning})
+                if not vision_url:
+                    emit({"type": "log",
+                          "msg": "Visionsmodellen är inte installerad — "
+                                 "underlaget sparas utan bildtolkning."})
+                (d / "underlag.json").write_text(
+                    json.dumps({"filer": meta}, ensure_ascii=False, indent=1),
+                    encoding="utf-8")
+                return {"id": pid,
+                        "filer": [{"namn": m["namn"],
+                                   "beskrivning": m["beskrivning"]}
+                                  for m in meta]}
+            finally:
+                arbiter.release_gpu()
+
+        return sse_response(job)
+
     # ------------------------------------------------------------ generate --
 
     @router.post("/api/planning/generate")
@@ -118,6 +268,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
         starttid = (body.get("starttid") or "").strip() or None
         group, course = _names(group_id, course_id)
         memory = _memory(group_id, course_id)
+        underlag_txt = _underlag_text(body.get("underlag"))
 
         if not arbiter.try_acquire_gpu():
             return JSONResponse(_GPU_BUSY, status_code=409)
@@ -128,7 +279,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     raise RuntimeError("Språkmodellen är inte installerad.")
                 res = lesson_board.generate_board(
                     course or "matematik", group or "klassen", moment,
-                    model=_model_name(), memory=memory,
+                    model=_model_name(), memory=memory, underlag=underlag_txt,
                     log_cb=lambda m: emit({"type": "log", "msg": m}))
                 pid = uuid.uuid4().hex[:12]
                 plannings[pid] = {
