@@ -110,7 +110,10 @@ def _build_view(doc: exam_spec.ExamDoc) -> dict:
             nummer += 1
             vy_items.append({
                 "nummer": nummer,
-                "poang_str": f"{it.poang[0]}/{it.poang[1]}/{it.poang[2]}",
+                # Elevdokumenten visar endast totalpoäng ("4p"); E/C/A-tupeln
+                # är lärarens verktyg och hör hemma i bedömningsanvisningen.
+                "poang_str": f"{sum(it.poang)}p",
+                "poang_eca": f"{it.poang[0]}/{it.poang[1]}/{it.poang[2]}",
                 "endast_svar": it.typ == "rutin",
                 "utrymme_mm": _utrymme_mm(it),
                 "text": escape_mixed(it.text),
@@ -137,7 +140,8 @@ def _build_view(doc: exam_spec.ExamDoc) -> dict:
         "summor": exam_spec.poangsummor(doc),
         # Byggd i Python: en litteral parentes intill Jinja-avgränsaren (((
         # ger TemplateSyntaxError, så raden kan inte skrivas i mallen.
-        "poang_rad": (lambda s: f"{s['total']} poäng ({s['e']}/{s['c']}/{s['a']})")(
+        "poang_rad": f"{exam_spec.poangsummor(doc)['total']} poäng",
+        "poang_rad_eca": (lambda s: f"{s['total']} poäng ({s['e']}/{s['c']}/{s['a']})")(
             exam_spec.poangsummor(doc)),
         "delar": delar,
     }

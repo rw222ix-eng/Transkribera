@@ -164,12 +164,14 @@ def test_render_prov_golden_markers():
     # regelns %-tecken är escapade (annars kommenterar de bort resten av raden)
     assert r"25\?" not in tex
     assert r"25\% av totalpoängen" in tex
-    assert "20 poäng (10/6/4)" in tex
+    # elevens prov visar endast totalsumman — E/C/A hör till bedömningsanvisningen
+    assert "20 poäng" in tex and "(10/6/4)" not in tex
     # delar + numrerade uppgifter med poängrutor
     assert "Del B" in tex and "Del C" in tex
     assert "Uppgift 1" in tex and "Uppgift 6" in tex
-    # poängrutor via \poang-makrot (renderas som "(E/C/A)" i PDF:en)
-    assert r"\poang{2/1/0}" in tex and r"\poang{1/2/1}" in tex
+    # poängrutor via \poang-makrot — endast totalpoäng i elevens prov
+    assert r"\poang{3p}" in tex and r"\poang{4p}" in tex
+    assert r"\poang{2/1/0}" not in tex
     # matte bevarad, rutinuppgift får svarsrad
     assert r"\(x^2 - 4x + 3 = 0\)" in tex
     assert "\\svarsrad" in tex
@@ -184,6 +186,8 @@ def test_render_bedomning_contains_solutions():
     assert "Lösningsförslag" in tex
     assert "Problemlösning" in tex          # förmågenamn
     assert r"\(x = 1\)" in tex or "x = 1" in tex
+    # lärardokumentet behåller E/C/A-poängen (elevens prov visar bara totalen)
+    assert r"\poang{2/1/0}" in tex
 
 
 def test_render_escapes_model_text():
@@ -353,7 +357,7 @@ def test_render_arbetsblad_has_facit_no_kravgranser():
     assert r"\(x = 2\)" in tex                    # facit = lösningarna
     assert r"\poang{" not in tex                  # poäng dolda som standard
     tex_p = exam_latex.render_arbetsblad(doc, visa_poang=True)
-    assert r"\poang{2/0/0}" in tex_p
+    assert r"\poang{2p}" in tex_p
 
 
 def test_build_referens_numbers_and_instructs():
