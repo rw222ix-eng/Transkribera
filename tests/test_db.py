@@ -780,7 +780,7 @@ def test_v5_migration_tables_and_rollback(tmp_path):
     tables = {r[0] for r in conn.execute(
         "SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
     assert {"exams", "exam_versions", "exam_items"} <= tables
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 5
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == db.SCHEMA_VERSION
     # dokumenterad rollback: DROP x3 + user_version=4 — övrigt orört
     db.get_or_create_group(conn, "NA21")
     conn.executescript("DROP TABLE exam_items; DROP TABLE exam_versions; "
@@ -833,3 +833,49 @@ def test_exam_themes_for_prompt(tmp_path):
     db.set_exam_artifacts(conn, ex["id"], approve=True)
     teman = db.exam_themes_for_prompt(conn, cid)
     assert "Höstprov" in teman and "2x = 8" in teman
+
+
+def test_v6_gy25_migration_columns_and_amnen(tmp_path):
+    conn = _conn(tmp_path)
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(courses)")}
+    assert {"amne_id", "niva_kod", "niva_kort", "sort"} <= cols
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(exam_items)")}
+    assert "bild_path" in cols
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(exams)")}
+    assert "underlag" in cols
+    # dokumenterad rollback av v5 + omkörning får inte spricka på ALTER
+    conn.executescript("DROP TABLE exam_items; DROP TABLE exam_versions; "
+                       "DROP TABLE exams; PRAGMA user_version=4;")
+    conn.commit()
+    db._apply_migrations(conn)
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(exam_items)")}
+    assert "bild_path" in cols
+
+
+def test_ensure_amnen_backfills_and_orders(tmp_path):
+    conn = _conn(tmp_path)
+    db.get_or_create_course(conn, "Ma3b")          # → Fortsättning, nivå 1b
+    db.get_or_create_course(conn, "Ma1b")          # → Matematik, nivå 1b
+    db.get_or_create_course(conn, "Egen fritextkurs")
+    db.ensure_amnen(conn)
+    rows = db.list_courses(conn)
+    assert [r["niva_kort"] for r in rows] == ["Nivå 1b", "Fortsättning 1b", None]
+    assert rows[0]["amne_namn"] == "Matematik"
+    assert rows[1]["amne_namn"] == "Matematik – fortsättning"
+    assert rows[1]["niva_kod"] == "MATO1B00X"
+    assert rows[2]["namn"] == "Egen fritextkurs" and rows[2]["amne_namn"] is None
+
+
+def test_exam_bild_path_synced_from_underlag(tmp_path):
+    conn = _conn(tmp_path)
+    assert db.underlag_bild_path("abc123abc123", 2) == \
+        "Transkriberingar/underlag/abc123abc123/sida-02.png"
+    assert db.underlag_bild_path(None, 1) is None
+    assert db.underlag_bild_path("abc123abc123", None) is None
+    exam = _mini_exam()
+    exam["uppgifter"][0]["bild"] = 1
+    ex = db.create_exam(conn, exam=exam, underlag="abc123abc123")
+    row = conn.execute("SELECT bild_path FROM exam_items WHERE exam_id = ?",
+                       (ex["id"],)).fetchone()
+    assert row["bild_path"] == "Transkriberingar/underlag/abc123abc123/sida-01.png"
+    assert ex["underlag"] == "abc123abc123"

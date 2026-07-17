@@ -21,7 +21,7 @@ import sqlite3
 import threading
 from pathlib import Path
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS courses (
@@ -220,8 +220,30 @@ CREATE INDEX IF NOT EXISTS idx_examitems_exam  ON exam_items(exam_id);
 # applies every migration whose key is > the file's stored PRAGMA user_version, so
 # an existing .db is upgraded in place instead of silently keeping the old schema.
 # When the schema changes, bump SCHEMA_VERSION and add the ALTER/CREATE here.
+# Gy25 (v6) — ENDAST additiv; rollback: ignorera kolumnerna/tabellen och
+# sätt PRAGMA user_version=5.
+#
+# * exam_items.bild_path + exams.underlag — bildunderlag i prov (Fas 4).
+# * amnen + courses.amne_id/niva_kod/niva_kort/sort — ämnen med nivåer i
+#   stället för platta kurser (Fas 5). Backfyllnad sker i ensure_amnen().
+_GY25_MIGRATION = """
+ALTER TABLE exam_items ADD COLUMN bild_path TEXT;
+ALTER TABLE exams      ADD COLUMN underlag  TEXT;
+CREATE TABLE IF NOT EXISTS amnen (
+    id   INTEGER PRIMARY KEY AUTOINCREMENT,
+    kod  TEXT UNIQUE,
+    namn TEXT UNIQUE,
+    sort INTEGER
+);
+ALTER TABLE courses ADD COLUMN amne_id  INTEGER REFERENCES amnen(id);
+ALTER TABLE courses ADD COLUMN niva_kod TEXT;
+ALTER TABLE courses ADD COLUMN niva_kort TEXT;
+ALTER TABLE courses ADD COLUMN sort     INTEGER;
+"""
+
 _MIGRATIONS: dict[int, str] = {2: _FTS_MIGRATION, 3: _MARKERS_MIGRATION,
-                               4: _PLANNING_MIGRATION, 5: _EXAMS_MIGRATION}
+                               4: _PLANNING_MIGRATION, 5: _EXAMS_MIGRATION,
+                               6: _GY25_MIGRATION}
 
 _LESSON_SELECT = """
 SELECT l.*, g.namn AS group_namn, c.namn AS course_namn
@@ -261,7 +283,23 @@ def _apply_migrations(conn: sqlite3.Connection) -> None:
             if not sql:
                 continue
             try:
-                conn.executescript(sql)
+                if version == 6:
+                    # v6 består av ALTER-satser som inte är idempotenta i
+                    # sqlite. Efter en dokumenterad rollback av v4/v5 (som
+                    # sätter user_version bakåt) körs v6 om — kör därför
+                    # satserna en och en och hoppa över redan tillagda
+                    # kolumner i stället för att fallera hela migreringen.
+                    for stmt in sql.split(";"):
+                        stmt = stmt.strip()
+                        if not stmt:
+                            continue
+                        try:
+                            conn.execute(stmt)
+                        except sqlite3.OperationalError as e:
+                            if "duplicate column" not in str(e).lower():
+                                raise
+                else:
+                    conn.executescript(sql)
             except sqlite3.OperationalError:
                 # A sqlite build without FTS5 (v2) must not brick the app — the
                 # rest of the schema is fine and search degrades to LIKE. Other
@@ -345,6 +383,44 @@ GY25_KURSNAMN = {
 }
 
 
+# Ämnesmodellen (Gy25, Fas 5): nivånamn → (ämneskod, nivåkod, kort etikett,
+# sorteringsvikt). Vikterna ger progressionsordning över ämnesgränserna.
+GY25_AMNEN = {
+    "MATE": ("Matematik", 1),
+    "MATO": ("Matematik – fortsättning", 2),
+    "MATF": ("Matematik – fördjupning", 3),
+}
+GY25_NIVAER = {
+    "Matematik, nivå 1a": ("MATE", "MATE1A00X", "Nivå 1a", 10),
+    "Matematik, nivå 1b": ("MATE", "MATE1B00X", "Nivå 1b", 11),
+    "Matematik, nivå 1c": ("MATE", "MATE1C00X", "Nivå 1c", 12),
+    "Matematik, nivå 2a": ("MATE", "MATE2A00X", "Nivå 2a", 13),
+    "Matematik, nivå 2b": ("MATE", "MATE2B00X", "Nivå 2b", 14),
+    "Matematik, nivå 2c": ("MATE", "MATE2C00X", "Nivå 2c", 15),
+    "Matematik – fortsättning, nivå 1b": ("MATO", "MATO1B00X", "Fortsättning 1b", 20),
+    "Matematik – fortsättning, nivå 1c": ("MATO", "MATO1C00X", "Fortsättning 1c", 21),
+    "Matematik – fortsättning, nivå 2":  ("MATO", "MATO2000X", "Fortsättning 2", 22),
+    "Matematik – fördjupning, nivå 1":   ("MATF", "MATF1000X", "Fördjupning 1", 30),
+}
+
+
+def ensure_amnen(conn: sqlite3.Connection) -> None:
+    """Idempotent backfyllnad av ämnesmodellen: upsertar ämnena och sätter
+    amne_id/niva_kod/niva_kort/sort på kursrader vars namn är en känd
+    Gy25-nivå. Okända (fritextskapade) kurser lämnas orörda."""
+    for kod, (namn, sort) in GY25_AMNEN.items():
+        conn.execute("INSERT OR IGNORE INTO amnen(kod, namn, sort) VALUES (?, ?, ?)",
+                     (kod, namn, sort))
+    amne_id = {r["kod"]: r["id"]
+               for r in conn.execute("SELECT id, kod FROM amnen")}
+    for namn, (akod, nkod, kort, sort) in GY25_NIVAER.items():
+        conn.execute(
+            "UPDATE courses SET amne_id = ?, niva_kod = ?, niva_kort = ?, sort = ? "
+            "WHERE namn = ? AND (niva_kod IS NULL OR niva_kod != ?)",
+            (amne_id.get(akod), nkod, kort, sort, namn, nkod))
+    conn.commit()
+
+
 def apply_gy25_course_names(conn: sqlite3.Connection) -> int:
     """Idempotent datauppdatering: döp om Gy11-benämnda kursrader till
     Gy25-nivånamn. Hoppar över par där målnamnet redan finns (UNIQUE) —
@@ -371,7 +447,13 @@ def get_or_create_group(conn: sqlite3.Connection, namn: str) -> int | None:
 
 
 def list_courses(conn: sqlite3.Connection) -> list[dict]:
-    rows = conn.execute("SELECT id, namn FROM courses ORDER BY namn").fetchall()
+    """Kurser/nivåer med ämnesmetadata, i progressionsordning (okända
+    fritextkurser sist, alfabetiskt)."""
+    rows = conn.execute(
+        "SELECT c.id, c.namn, c.niva_kod, c.niva_kort, c.sort, "
+        "       a.kod AS amne_kod, a.namn AS amne_namn "
+        "FROM courses c LEFT JOIN amnen a ON a.id = c.amne_id "
+        "ORDER BY (c.sort IS NULL), c.sort, c.namn").fetchall()
     return [dict(r) for r in rows]
 
 
@@ -1318,7 +1400,20 @@ def _exam_view(conn: sqlite3.Connection, row) -> dict:
     return d
 
 
-def _sync_exam_items(conn: sqlite3.Connection, exam_id: int, exam: dict) -> None:
+def underlag_bild_path(underlag: str | None, bild) -> str | None:
+    """Relativ sökväg (under base_dir) för bildindex `bild` i ett underlag —
+    None när index eller underlag saknas. Enda källan till sökvägsformen."""
+    try:
+        n = int(bild)
+    except (TypeError, ValueError):
+        return None
+    if not underlag or n < 1:
+        return None
+    return f"Transkriberingar/underlag/{underlag}/sida-{n:02d}.png"
+
+
+def _sync_exam_items(conn: sqlite3.Connection, exam_id: int, exam: dict,
+                     underlag: str | None = None) -> None:
     """Spegla aktuella versionens uppgifter till exam_items (utplattat för
     minneskontexten och Fas 5:s dubblettkontroll)."""
     conn.execute("DELETE FROM exam_items WHERE exam_id = ?", (exam_id,))
@@ -1326,24 +1421,27 @@ def _sync_exam_items(conn: sqlite3.Connection, exam_id: int, exam: dict) -> None
         poang = item.get("poang") or [0, 0, 0]
         conn.execute(
             "INSERT INTO exam_items (exam_id, nummer, del, formaga, typ, "
-            "poang_e, poang_c, poang_a, text) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "poang_e, poang_c, poang_a, text, bild_path) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (exam_id, str(item.get("nummer") or i), item.get("del"),
              item.get("formaga"), item.get("typ"),
              int(poang[0] or 0), int(poang[1] or 0), int(poang[2] or 0),
-             item.get("text") or ""))
+             item.get("text") or "",
+             underlag_bild_path(underlag, item.get("bild"))))
 
 
 def create_exam(conn: sqlite3.Connection, *, exam: dict, typ: str = "prov",
                 titel: str = "", datum: str | None = None,
                 group_id: int | None = None,
-                course_id: int | None = None) -> dict:
+                course_id: int | None = None,
+                underlag: str | None = None) -> dict:
     """Skapa ett prov/arbetsblad med version 1 av dess prov-JSON."""
     now = _now()
     cur = conn.execute(
         "INSERT INTO exams (typ, titel, datum, group_id, course_id, status, "
-        "created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'utkast', ?, ?)",
+        "underlag, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'utkast', ?, ?, ?)",
         (typ, titel or exam.get("titel") or "", datum, group_id, course_id,
-         now, now))
+         underlag, now, now))
     exam_id = cur.lastrowid
     ver = conn.execute(
         "INSERT INTO exam_versions (exam_id, version, exam_json, created_at) "
@@ -1351,7 +1449,7 @@ def create_exam(conn: sqlite3.Connection, *, exam: dict, typ: str = "prov",
         (exam_id, json.dumps(exam, ensure_ascii=False), now))
     conn.execute("UPDATE exams SET current_version = ? WHERE id = ?",
                  (ver.lastrowid, exam_id))
-    _sync_exam_items(conn, exam_id, exam)
+    _sync_exam_items(conn, exam_id, exam, underlag)
     conn.commit()
     return get_exam(conn, exam_id)
 
@@ -1379,8 +1477,11 @@ def add_exam_version(conn: sqlite3.Connection, exam_id: int,
                      exam: dict) -> dict | None:
     """Ny version av provets JSON (fullt versionerat — lätt att backa).
     Blir aktuell version och speglas till exam_items."""
-    if conn.execute("SELECT 1 FROM exams WHERE id = ?", (exam_id,)).fetchone() is None:
+    row = conn.execute("SELECT underlag FROM exams WHERE id = ?",
+                       (exam_id,)).fetchone()
+    if row is None:
         return None
+    underlag = row["underlag"]
     nxt = conn.execute(
         "SELECT COALESCE(MAX(version), 0) + 1 FROM exam_versions "
         "WHERE exam_id = ?", (exam_id,)).fetchone()[0]
@@ -1390,7 +1491,7 @@ def add_exam_version(conn: sqlite3.Connection, exam_id: int,
         (exam_id, nxt, json.dumps(exam, ensure_ascii=False), _now()))
     conn.execute("UPDATE exams SET current_version = ?, updated_at = ? WHERE id = ?",
                  (cur.lastrowid, _now(), exam_id))
-    _sync_exam_items(conn, exam_id, exam)
+    _sync_exam_items(conn, exam_id, exam, underlag)
     conn.commit()
     return get_exam(conn, exam_id)
 

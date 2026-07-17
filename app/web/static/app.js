@@ -184,12 +184,16 @@
     exDatum: '',               // provdatum (kalendern/minnet)
     exPhase: 'idle',           // idle|running|done|error
     exLog: [],                 // SSE-loggrader
+    exUnderlag: null,          // bildunderlag för provet: {id, filer:[{namn,beskrivning}]}
+    exUnderlagBusy: false,     // uppladdning/bildtolkning pågår
     exErrors: [],              // kvarstående schema-/balans-/kompileringsfel
     exam: null,                // serverns provresultat (id, exam, granser, …)
     exChat: {},                // per-uppgift-chattfält {nummer: text}
     exMsg: '',                 // kvitto (PDF skapad m.m.)
     exTyp: 'prov',             // prov | arbetsblad (Fas 5)
     exReferensId: '',          // referensläge: utgå från tidigare prov
+    exRefOpen: false,          // referens-popovern (custom dropdown) är öppen
+    exRefClosing: false,       // popovern spelar sin stängningsanimation
     exHistorik: [],            // kursens prov/arbetsblad (historik + referensval)
   };
 
@@ -762,10 +766,10 @@
   function onPlanGroup(e) { setState({ planGroupId: e.target.value }); }
   function onPlanCourse(e) { setState({ planCourseId: e.target.value }); }
   function onPlanMoment(e) { setState({ planMoment: e.target.value }); }
-  // Underlag: bokssidor/uppgifter (PNG/JPG/WebP/PDF) som tavlan ska bygga på.
-  // Filerna läses som data-URL:er och bildtolkas lokalt av visionsmodellen.
-  function onPickUnderlag() {
-    if (S.planUnderlagBusy) return;
+  // Underlag: bokssidor/uppgifter (PNG/JPG/WebP/PDF). Filerna läses som
+  // data-URL:er och bildtolkas lokalt av visionsmodellen. Samma flöde
+  // används av tavlan (plan*) och provet (ex*) — cb-objektet skiljer dem.
+  function _pickUnderlagFiles(cb) {
     var inp = document.createElement('input');
     inp.type = 'file'; inp.multiple = true;
     inp.accept = '.png,.jpg,.jpeg,.webp,.pdf,image/png,image/jpeg,image/webp,application/pdf';
@@ -780,27 +784,41 @@
           r.readAsDataURL(f);
         });
       })).then(function (filer) {
-        setState({ planUnderlagBusy: true, planLog: [] });
+        cb.busy(true);
         streamPost('/api/planning/underlag', { filer: filer }, function (ev) {
-          if (ev.type === 'log') {
-            setState(function (s) { return { planLog: s.planLog.concat([ev.msg]) }; });
-          } else if (ev.type === 'error') {
-            setState({ planUnderlagBusy: false, planLog: [],
-                       toast: { title: 'Underlag', detail: ev.message || 'uppladdningen misslyckades', kind: 'error', done: false } });
+          if (ev.type === 'log') cb.log(ev.msg);
+          else if (ev.type === 'error') {
+            cb.busy(false);
+            setState({ toast: { title: 'Underlag', detail: ev.message || 'uppladdningen misslyckades', kind: 'error', done: false } });
             setTimeout(function () { setState({ toast: null }); }, 7000);
-          } else if (ev.type === 'done') {
-            setState({ planUnderlagBusy: false, planLog: [], planUnderlag: ev.result || null });
-          }
+          } else if (ev.type === 'done') cb.done(ev.result || null);
         });
       }).catch(function () {
-        setState({ planUnderlagBusy: false,
-                   toast: { title: 'Underlag', detail: 'kunde inte läsa filerna', kind: 'error', done: false } });
+        cb.busy(false);
+        setState({ toast: { title: 'Underlag', detail: 'kunde inte läsa filerna', kind: 'error', done: false } });
         setTimeout(function () { setState({ toast: null }); }, 7000);
       });
     };
     inp.click();
   }
+  function onPickUnderlag() {
+    if (S.planUnderlagBusy) return;
+    _pickUnderlagFiles({
+      busy: function (b) { setState({ planUnderlagBusy: b, planLog: [] }); },
+      log: function (m) { setState(function (s) { return { planLog: s.planLog.concat([m]) }; }); },
+      done: function (r) { setState({ planUnderlagBusy: false, planLog: [], planUnderlag: r }); },
+    });
+  }
   function onClearUnderlag() { setState({ planUnderlag: null }); }
+  function onPickExUnderlag() {
+    if (S.exUnderlagBusy) return;
+    _pickUnderlagFiles({
+      busy: function (b) { setState({ exUnderlagBusy: b, exLog: [] }); },
+      log: function (m) { setState(function (s) { return { exLog: s.exLog.concat([m]) }; }); },
+      done: function (r) { setState({ exUnderlagBusy: false, exLog: [], exUnderlag: r }); },
+    });
+  }
+  function onClearExUnderlag() { setState({ exUnderlag: null }); }
   function onPlanMomentKey(e) { if (e.key === 'Enter') startPlanGenerate(); }
   function onPlanChatInput(e) { setState({ planChatInput: e.target.value }); }
   function onPlanChatKey(e) { if (e.key === 'Enter') sendPlanRefine(); }
@@ -940,14 +958,56 @@
       setState({ exHistorik: (r && r.exams) || [], exReferensId: '' });
     }).catch(function () {});
   }
-  function onExCourse(e) {
-    setState({ exCourseId: e.target.value }, function () {
-      loadExamContent(); loadExamHistorik();
-    });
+  // Chips och segment i stället för native selects (samma vokabulär som tavlan):
+  // klick väljer, klick på vald kurs/klass avmarkerar.
+  function exPickCourse(id) {
+    setState(function (s) {
+      return { exCourseId: String(s.exCourseId) === String(id) ? '' : String(id) };
+    }, function () { loadExamContent(); loadExamHistorik(); });
   }
-  function onExGroup(e) { setState({ exGroupId: e.target.value }, loadExamContent); }
-  function onExTyp(e) { setState({ exTyp: e.target.value }); }
-  function onExReferens(e) { setState({ exReferensId: e.target.value }); }
+  function exPickGroup(id) {
+    setState(function (s) {
+      return { exGroupId: String(s.exGroupId) === String(id) ? '' : String(id) };
+    }, loadExamContent);
+  }
+  function exPickTyp(t) { setState({ exTyp: t }); }
+  // Delade kurschips för provet (samma formspråk som tavlans planCourseGroups):
+  // kompakta nivåetiketter grupperade per ämne, klick på vald avmarkerar.
+  function courseChipGroups(selId, pick) {
+    var groups = [], byAmne = {};
+    S.courses.forEach(function (c) {
+      var chip = { namn: c.namn, kort: c.niva_kort || c.namn,
+                   sel: String(c.id) === String(selId),
+                   onPick: function () { pick(c.id); } };
+      var amne = c.amne_namn || 'Övrigt';
+      if (!(amne in byAmne)) { byAmne[amne] = { amne: amne, chips: [] }; groups.push(byAmne[amne]); }
+      byAmne[amne].chips.push(chip);
+    });
+    return groups;
+  }
+  // Referensprovet är en riktig meny — custom popover med mjuk hover-stängning,
+  // samma mönster som kartotekets filterpopovers.
+  var _exRefTimer = null;
+  function exToggleRef() {
+    if (_exRefTimer) clearTimeout(_exRefTimer);
+    setState(function (s) { return { exRefOpen: !s.exRefOpen, exRefClosing: false }; });
+  }
+  function exSoftCloseRef() {
+    if (!S.exRefOpen) return;
+    if (_exRefTimer) clearTimeout(_exRefTimer);
+    _exRefTimer = setTimeout(function () {
+      setState({ exRefClosing: true });
+      _exRefTimer = setTimeout(function () { setState({ exRefOpen: false, exRefClosing: false }); }, 190);
+    }, 300);
+  }
+  function exCancelCloseRef() {
+    if (_exRefTimer) clearTimeout(_exRefTimer);
+    if (S.exRefClosing) setState({ exRefClosing: false });
+  }
+  function exPickRef(id) {
+    if (_exRefTimer) clearTimeout(_exRefTimer);
+    setState({ exReferensId: String(id), exRefOpen: false, exRefClosing: false });
+  }
   function openExamFromHistorik(id) {
     return function () {
       getJSON('/api/exams/' + id).then(function (r) {
@@ -998,6 +1058,7 @@
       datum: S.exDatum || null,
       typ: S.exTyp,
       referens_exam_id: S.exReferensId ? +S.exReferensId : null,
+      underlag: S.exUnderlag ? S.exUnderlag.id : null,
     }, onExamEvent);
   }
   function onExChat(nummer) {
@@ -2975,25 +3036,25 @@
       planGroups: st.groups, planCourses: st.courses,
       planGroupId: st.planGroupId, planCourseId: st.planCourseId,
       // Chips i stället för dropdowns: klick väljer, klick på vald avmarkerar.
-      // Gy25-nivånamnen är långa — chipsen visar kompakt etikett ("Nivå 2b",
-      // "Fortsättning 2") med hela namnet i title, ordnade efter progression.
-      planCourseOpts: st.courses.slice().sort(function (a, b) {
-        var rank = function (n) {
-          return n.indexOf('fördjupning') >= 0 ? 3
-               : n.indexOf('specialisering') >= 0 ? 4
-               : n.indexOf('fortsättning') >= 0 ? 2 : 1;
-        };
-        var ra = rank(a.namn), rb = rank(b.namn);
-        return ra !== rb ? ra - rb : a.namn.localeCompare(b.namn, 'sv');
-      }).map(function (c) {
-        var sel = String(c.id) === String(st.planCourseId);
-        var kort = c.namn
-          .replace(/^Matematik – fortsättning, nivå /, 'Fortsättning ')
-          .replace(/^Matematik – fördjupning, nivå /, 'Fördjupning ')
-          .replace(/^Matematik – specialisering /, 'Specialisering ')
-          .replace(/^Matematik, nivå /, 'Nivå ');
-        return { namn: c.namn, kort: kort, sel: sel, onPick: function () { setState({ planCourseId: sel ? '' : String(c.id) }); } };
-      }),
+      // Ämnesmodellen (Gy25): servern levererar amne_namn/niva_kort/sort —
+      // chipsen grupperas per ämne i progressionsordning. Fritextkurser utan
+      // ämne hamnar i en egen grupp sist.
+      planCourseGroups: (function () {
+        var groups = [], byAmne = {};
+        st.courses.forEach(function (c) {
+          var sel = String(c.id) === String(st.planCourseId);
+          var chip = {
+            namn: c.namn,
+            kort: c.niva_kort || c.namn,
+            sel: sel,
+            onPick: function () { setState({ planCourseId: sel ? '' : String(c.id) }); },
+          };
+          var amne = c.amne_namn || 'Övrigt';
+          if (!(amne in byAmne)) { byAmne[amne] = { amne: amne, chips: [] }; groups.push(byAmne[amne]); }
+          byAmne[amne].chips.push(chip);
+        });
+        return groups;
+      })(),
       planGroupOpts: st.groups.map(function (g) {
         var sel = String(g.id) === String(st.planGroupId);
         return { namn: g.namn, sel: sel, onPick: function () { setState({ planGroupId: sel ? '' : String(g.id) }); } };
@@ -3020,17 +3081,47 @@
       onPlanDatum: onPlanDatum, onPlanStarttid: onPlanStarttid,
       // Provgeneratorn (Fas 4)
       exCourseId: st.exCourseId, exGroupId: st.exGroupId,
-      onExCourse: onExCourse, onExGroup: onExGroup,
+      // Samma chip-vokabulär som tavlan: kurs- och klassval är chips,
+      // dokumenttypen ett segment — inga native selects.
+      exCourseGroups: courseChipGroups(st.exCourseId, exPickCourse),
+      exGroupOpts: st.groups.map(function (g) {
+        return { namn: g.namn, sel: String(g.id) === String(st.exGroupId),
+                 onPick: function () { exPickGroup(g.id); } };
+      }),
       exContent: st.exContent.map(function (p) {
         return { id: p.id, rubrik: p.rubrik, text: p.text,
                  behandlad: !!p.behandlad, provad: !!p.provad,
                  vald: !!st.exPunkter[p.id],
                  onToggle: function () { exTogglePunkt(p.id); } };
       }),
-      exTyp: st.exTyp, onExTyp: onExTyp,
-      exReferensId: st.exReferensId, onExReferens: onExReferens,
+      exTyp: st.exTyp,
+      onExTypProv: function () { exPickTyp('prov'); },
+      onExTypArbetsblad: function () { exPickTyp('arbetsblad'); },
+      exUnderlag: st.exUnderlag, exUnderlagBusy: !!st.exUnderlagBusy,
+      onPickExUnderlag: onPickExUnderlag, onClearExUnderlag: onClearExUnderlag,
+      exReferensId: st.exReferensId,
+      // Referensprovet är en custom popover-meny (samma mönster som
+      // kartotekets filterpopovers: data-pop + mjuk hover-stängning).
       exReferensVal: st.exHistorik.filter(function (h) {
         return h.status === 'godkänt' && (h.typ || 'prov') === 'prov';
+      }),
+      exRefOpen: !!st.exRefOpen,
+      exRefAnim: st.exRefClosing ? 'closing' : '',
+      exRefOn: st.exReferensId ? 'on' : '',
+      exRefToggle: exToggleRef, exRefEnter: exCancelCloseRef, exRefLeave: exSoftCloseRef,
+      exRefLabel: (function () {
+        var h = st.exHistorik.filter(function (x) { return String(x.id) === String(st.exReferensId); })[0];
+        return h ? 'Utgår från: ' + (h.titel || 'prov') : 'Utan referensprov';
+      })(),
+      exRefOpts: [{ id: '', titel: 'Utan referensprov', datum: '' }].concat(
+        st.exHistorik.filter(function (h) {
+          return h.status === 'godkänt' && (h.typ || 'prov') === 'prov';
+        })
+      ).map(function (h) {
+        var label = h.id === '' ? h.titel : (h.titel || 'prov') + (h.datum ? ' · ' + h.datum : '');
+        return { key: 'ref' + h.id, label: label,
+                 isCur: String(st.exReferensId) === String(h.id) || (!st.exReferensId && h.id === ''),
+                 onSelect: function () { exPickRef(h.id); } };
       }),
       exHistorik: st.exHistorik.map(function (h) {
         return { id: h.id, titel: h.titel || 'utan titel',
@@ -4845,7 +4936,6 @@ function viewModals(v){ return `
 // Planering (Fas 0/1): tavlan är artefakten — ett uppslag, ingen dashboard.
 // Iframen skyddas från morphdom via data-wb-frame (se onBeforeElUpdated).
 function viewPlanning(v){
-  var selStyle = 'background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:14.5px;font-family:inherit;color:var(--ink);min-width:150px';
   return `
     <section style="min-height:calc(100vh - 80px);display:flex;flex-direction:column;padding:16px 0 28px">
       <div class="ehead">
@@ -4862,10 +4952,12 @@ function viewPlanning(v){
           <button data-click="${on(v.onPlanStart)}" ${v.planCanStart ? '' : 'disabled'} style="display:inline-flex;align-items:center;gap:7px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:4px;padding:13px 22px;font-size:14.5px;font-weight:500;font-family:inherit;cursor:${v.planCanStart ? 'pointer' : 'default'};opacity:${v.planCanStart ? '1' : '.55'}">${v.planRunning ? 'Skriver …' : 'Skriv tavlan'}</button>
         </div>
         <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
-          <div role="group" aria-label="Kurs" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-            <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);margin-right:3px">Kurs</span>
-            ${ v.planCourseOpts.map(function(c){ return `<button data-click="${on(c.onPick)}" data-chip="${c.sel ? 'on' : 'off'}" aria-pressed="${c.sel ? 'true' : 'false'}" title="${esc(c.namn)}" style="font-family:inherit;font-size:13px;font-weight:500;padding:6px 12px;border-radius:3px;background:var(--surface);color:var(--ink-2);border:1px solid var(--line);transition:border-color .14s,background .14s,color .14s">${esc(c.kort)}</button>`; }).join('') }
+          ${ v.planCourseGroups.map(function(g){ return `
+          <div role="group" aria-label="${esc(g.amne)}" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+            <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);margin-right:3px">${esc(g.amne)}</span>
+            ${ g.chips.map(function(c){ return `<button data-click="${on(c.onPick)}" data-chip="${c.sel ? 'on' : 'off'}" aria-pressed="${c.sel ? 'true' : 'false'}" title="${esc(c.namn)}" style="font-family:inherit;font-size:13px;font-weight:500;padding:6px 12px;border-radius:3px;background:var(--surface);color:var(--ink-2);border:1px solid var(--line);transition:border-color .14s,background .14s,color .14s">${esc(c.kort)}</button>`; }).join('') }
           </div>
+          `; }).join('') }
           ${ v.planHasGroups ? `
           <div role="group" aria-label="Klass" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
             <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);margin-right:3px">Klass</span>
@@ -5000,41 +5092,82 @@ function viewPlanning(v){
           <span style="font-size:13.5px;color:var(--ink-3)">NP-lik struktur — uppgifterna är alltid egenformulerade</span>
         </div>
 
-        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">
-          <select data-change="${on(v.onExTyp)}" aria-label="Dokumenttyp" style="${selStyle};min-width:118px">
-            <option value="prov" ${v.exTyp === 'prov' ? 'selected' : ''}>Prov</option>
-            <option value="arbetsblad" ${v.exTyp === 'arbetsblad' ? 'selected' : ''}>Arbetsblad</option>
-          </select>
-          <select data-change="${on(v.onExCourse)}" aria-label="Provkurs" style="${selStyle}">
-            <option value="">Välj kurs …</option>
-            ${ v.planCourses.map(function(c){ return `<option value="${esc(c.id)}" ${String(c.id) === v.exCourseId ? 'selected' : ''}>${esc(c.namn)}</option>`; }).join('') }
-          </select>
-          <select data-change="${on(v.onExGroup)}" aria-label="Provklass" style="${selStyle}">
-            <option value="">Ingen klass</option>
-            ${ v.planGroups.map(function(g){ return `<option value="${esc(g.id)}" ${String(g.id) === v.exGroupId ? 'selected' : ''}>${esc(g.namn)}</option>`; }).join('') }
-          </select>
-          <input type="number" min="3" max="20" value="${esc(v.exAntal)}" data-change="${on(v.onExAntal)}" aria-label="Antal uppgifter" title="Antal uppgifter" style="${selStyle};min-width:74px;width:74px">
-          <input type="number" min="30" max="300" step="10" value="${esc(v.exTid)}" data-change="${on(v.onExTid)}" aria-label="Provtid (minuter)" title="Provtid i minuter" style="${selStyle};min-width:84px;width:84px">
-          <input type="date" value="${esc(v.exDatum)}" data-change="${on(v.onExDatum)}" aria-label="Provdatum" style="${selStyle};min-width:0">
-          <label style="display:inline-flex;align-items:center;gap:7px;font-size:13.5px;color:var(--ink-2);cursor:pointer"><input type="checkbox" ${v.exDelar ? 'checked' : ''} data-change="${on(v.onExDelar)}"> Del B/C</label>
-          ${ v.exReferensVal.length ? `
-          <select data-change="${on(v.onExReferens)}" aria-label="Referensprov" title="Utgå från ett tidigare prov — variera och höj svårighetsgraden" style="${selStyle};max-width:210px">
-            <option value="">Utan referensprov</option>
-            ${ v.exReferensVal.map(function(h){ return `<option value="${esc(h.id)}" ${String(h.id) === v.exReferensId ? 'selected' : ''}>Utgå från: ${esc(h.titel || 'prov')}${h.datum ? ' (' + esc(h.datum) + ')' : ''}</option>`; }).join('') }
-          </select>` : '' }
-          <button data-click="${on(v.onExStart)}" ${v.exCanStart ? '' : 'disabled'} style="display:inline-flex;align-items:center;gap:7px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:10px;padding:10px 18px;font-size:14.5px;font-weight:500;font-family:inherit;cursor:${v.exCanStart ? 'pointer' : 'default'};opacity:${v.exCanStart ? '1' : '.55'};box-shadow:var(--shadow-sm)">${v.exRunning ? 'Skriver …' : 'Skriv provet'}</button>
+        <div style="display:flex;flex-direction:column;gap:13px;margin-bottom:14px">
+          <div style="display:flex;gap:9px;align-items:center;flex-wrap:wrap">
+            <div role="group" aria-label="Dokumenttyp" style="display:inline-flex;gap:3px;padding:3px;background:var(--track);border-radius:4px;border:1px solid var(--line)">
+              <button data-click="${on(v.onExTypProv)}" aria-pressed="${v.exTyp === 'prov' ? 'true' : 'false'}" data-seg="${v.exTyp === 'prov' ? 'on' : 'off'}" style="border:none;border-radius:3px;padding:7px 15px;font-size:13.5px;font-weight:500;font-family:inherit;background:transparent;color:var(--ink-2);transition:color .18s ease">Prov</button>
+              <button data-click="${on(v.onExTypArbetsblad)}" aria-pressed="${v.exTyp === 'arbetsblad' ? 'true' : 'false'}" data-seg="${v.exTyp === 'arbetsblad' ? 'on' : 'off'}" style="border:none;border-radius:3px;padding:7px 15px;font-size:13.5px;font-weight:500;font-family:inherit;background:transparent;color:var(--ink-2);transition:color .18s ease">Arbetsblad</button>
+            </div>
+            <span style="flex:1"></span>
+            <button data-click="${on(v.onExStart)}" ${v.exCanStart ? '' : 'disabled'} style="display:inline-flex;align-items:center;gap:7px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:4px;padding:13px 22px;font-size:14.5px;font-weight:500;font-family:inherit;cursor:${v.exCanStart ? 'pointer' : 'default'};opacity:${v.exCanStart ? '1' : '.55'}">${v.exRunning ? 'Skriver …' : 'Skriv provet'}</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+            ${ v.exCourseGroups.map(function(g){ return `
+            <div role="group" aria-label="${esc(g.amne)}" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+              <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);margin-right:3px">${esc(g.amne)}</span>
+              ${ g.chips.map(function(c){ return `<button data-click="${on(c.onPick)}" data-chip="${c.sel ? 'on' : 'off'}" aria-pressed="${c.sel ? 'true' : 'false'}" title="${esc(c.namn)}" style="font-family:inherit;font-size:13px;font-weight:500;padding:6px 12px;border-radius:3px;background:var(--surface);color:var(--ink-2);border:1px solid var(--line);transition:border-color .14s,background .14s,color .14s">${esc(c.kort)}</button>`; }).join('') }
+            </div>
+            `; }).join('') }
+            ${ v.exGroupOpts.length ? `
+            <div role="group" aria-label="Klass" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+              <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);margin-right:3px">Klass</span>
+              ${ v.exGroupOpts.map(function(g){ return `<button data-click="${on(g.onPick)}" data-chip="${g.sel ? 'on' : 'off'}" aria-pressed="${g.sel ? 'true' : 'false'}" style="font-family:inherit;font-size:13px;font-weight:500;padding:6px 12px;border-radius:3px;background:var(--surface);color:var(--ink-2);border:1px solid var(--line);transition:border-color .14s,background .14s,color .14s">${esc(g.namn)}</button>`; }).join('') }
+            </div>
+            ` : '' }
+            <span style="flex:1"></span>
+            <div style="display:flex;align-items:center;gap:6px">
+              <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);margin-right:3px">När</span>
+              <input type="date" value="${esc(v.exDatum)}" data-change="${on(v.onExDatum)}" aria-label="Provdatum" style="background:var(--surface);border:1px solid var(--line);border-radius:3px;padding:6px 9px;font-size:13px;font-family:inherit;color:var(--ink-2)">
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+            <div role="group" aria-label="Omfång" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+              <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);margin-right:3px">Omfång</span>
+              <label style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-3)"><input type="number" min="3" max="20" value="${esc(v.exAntal)}" data-change="${on(v.onExAntal)}" aria-label="Antal uppgifter" style="background:var(--surface);border:1px solid var(--line);border-radius:3px;padding:6px 9px;font-size:13px;font-family:inherit;color:var(--ink-2);width:56px;font-variant-numeric:tabular-nums">uppgifter</label>
+              <label style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-3)"><input type="number" min="30" max="300" step="10" value="${esc(v.exTid)}" data-change="${on(v.onExTid)}" aria-label="Provtid (minuter)" style="background:var(--surface);border:1px solid var(--line);border-radius:3px;padding:6px 9px;font-size:13px;font-family:inherit;color:var(--ink-2);width:64px;font-variant-numeric:tabular-nums">min</label>
+              <button data-click="${on(v.onExDelar)}" data-chip="${v.exDelar ? 'on' : 'off'}" aria-pressed="${v.exDelar ? 'true' : 'false'}" title="Dela provet i Del B (utan räknare) och Del C (med räknare)" style="font-family:inherit;font-size:13px;font-weight:500;padding:6px 12px;border-radius:3px;background:var(--surface);color:var(--ink-2);border:1px solid var(--line);transition:border-color .14s,background .14s,color .14s">Del B/C</button>
+            </div>
+            ${ v.exReferensVal.length ? `
+            <div style="display:flex;align-items:center;gap:6px">
+              <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);margin-right:3px">Referens</span>
+              <div style="position:relative" data-enter="${on(v.exRefEnter)}" data-leave="${on(v.exRefLeave)}">
+                <button data-click="${on(v.exRefToggle)}" aria-haspopup="listbox" aria-expanded="${v.exRefOpen ? 'true' : 'false'}" data-filter-on="${esc(v.exRefOn)}" title="Utgå från ett tidigare prov — variera och höj svårighetsgraden" style="display:inline-flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line);color:var(--ink-2);border-radius:3px;padding:6px 12px;font-size:13px;font-weight:500;font-family:inherit;cursor:pointer;white-space:nowrap;max-width:280px;transition:border-color .14s"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis">${esc(v.exRefLabel)}</span><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;transition:transform .2s cubic-bezier(.16,1,.3,1);transform:${v.exRefOpen ? 'rotate(180deg)' : 'none'}"><path d="M4 6l4 4 4-4"></path></svg></button>
+                ${ v.exRefOpen ? `
+                <div data-pop="${esc(v.exRefAnim)}" style="position:absolute;top:100%;left:0;z-index:30;padding-top:6px"><div role="listbox" aria-label="Referensprov" style="min-width:210px;max-width:320px;background:var(--surface);border:1px solid var(--line-2);border-radius:5px;box-shadow:var(--shadow);padding:5px;display:flex;flex-direction:column;gap:1px">
+                  ${ v.exRefOpts.map(function(o){ return `
+                  <button data-key="${esc(o.key)}" data-click="${on(o.onSelect)}" data-opt="" role="option" aria-selected="${o.isCur ? 'true' : 'false'}" style="display:flex;align-items:center;gap:10px;border:none;background:transparent;color:var(--ink);border-radius:3px;padding:8px 11px;font-size:13.5px;font-family:inherit;cursor:pointer;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(o.label)}<span style="flex:1;min-width:14px"></span>${ o.isCur ? '<span style="font-weight:600">✓</span>' : '' }</button>
+                  `; }).join('') }
+                </div></div>
+                ` : '' }
+              </div>
+            </div>
+            ` : '' }
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+          <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);margin-right:3px">Bilder</span>
+          ${ v.exUnderlagBusy ? `
+          <span style="display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-2)"><span style="width:13px;height:13px;border-radius:50%;border:2px solid var(--line-2);border-top-color:var(--accent);animation:spin .7s linear infinite"></span>Läser och tolkar bilderna …</span>
+          ` : v.exUnderlag ? `
+          ${ v.exUnderlag.filer.map(function(f){ return `<span title="${esc(f.beskrivning || f.namn)}" style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2);background:var(--sunken);border:1px solid var(--line);border-radius:3px;padding:4px 10px;max-width:220px"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(f.namn)}</span></span>`; }).join('') }
+          <button data-click="${on(v.onClearExUnderlag)}" aria-label="Ta bort bilderna" title="Ta bort bilderna" style="border:none;background:transparent;color:var(--ink-3);cursor:pointer;font-size:12px;padding:2px 6px;font-family:inherit">✕</button>
+          <button data-click="${on(v.onPickExUnderlag)}" style="border:none;background:transparent;color:var(--ink-2);cursor:pointer;font-size:12.5px;font-family:inherit;padding:2px 4px;text-decoration:underline;text-underline-offset:3px">Byt</button>
+          ` : `
+          <button data-click="${on(v.onPickExUnderlag)}" title="Ladda upp bilder som byggs in i provuppgifterna — varje bild får en egen uppgift; behandlas lokalt" style="display:inline-flex;align-items:center;gap:7px;border:1px dashed var(--line-2);background:transparent;color:var(--ink-2);border-radius:3px;padding:6px 12px;font-size:12.5px;font-family:inherit;cursor:pointer">＋ Bilder till uppgifter (PNG, JPG, PDF)</button>
+          ` }
         </div>
 
         ${ v.exContent.length ? `
           <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">
             ${ v.exContent.map(function(p){ return `
-              <button data-key="cc-${esc(p.id)}" data-click="${on(p.onToggle)}" title="${esc(p.text)}" aria-pressed="${p.vald}" style="display:inline-flex;align-items:center;gap:6px;border:1px solid ${p.vald ? 'var(--accent)' : 'var(--line)'};background:${p.vald ? 'var(--accent-weak)' : 'var(--surface)'};color:${p.vald ? 'var(--accent)' : 'var(--ink-2)'};border-radius:8px;padding:5px 10px;font-size:12.5px;font-family:inherit;cursor:pointer;font-weight:${p.vald ? '600' : '500'}">
+              <button data-key="cc-${esc(p.id)}" data-click="${on(p.onToggle)}" title="${esc(p.text)}" aria-pressed="${p.vald}" style="display:inline-flex;align-items:center;gap:6px;border:1px solid ${p.vald ? 'var(--accent)' : 'var(--line)'};background:${p.vald ? 'var(--accent-weak)' : 'var(--surface)'};color:${p.vald ? 'var(--accent)' : 'var(--ink-2)'};border-radius:3px;padding:5px 10px;font-size:12.5px;font-family:inherit;cursor:pointer;font-weight:${p.vald ? '600' : '500'};transition:border-color .14s,background .14s,color .14s">
                 ${esc(p.rubrik)}${ p.behandlad ? `<span title="Behandlat i undervisningen" style="font-size:11px">✓</span>` : `<span title="Ännu inte behandlat" style="font-size:11px;opacity:.6">○</span>` }${ p.provad ? `<span title="Prövat på prov/arbetsblad" style="font-size:11px">★</span>` : '' }
               </button>`; }).join('') }
           </div>
         ` : (v.exCourseId ? '' : `<div style="font-size:13px;color:var(--ink-3);margin-bottom:12px">Välj kurs för att se innehållspunkterna — ✓ = behandlat i undervisningen.</div>`) }
 
-        ${ v.exRunning && v.exHasLog ? `
+        ${ (v.exRunning || v.exUnderlagBusy) && v.exHasLog ? `
           <div role="status" style="display:flex;flex-direction:column;gap:3px;margin-bottom:12px;font-size:13px;color:var(--ink-2)">
             ${ v.exLog.map(function(l){ return `<span>${esc(l)}</span>`; }).join('') }
           </div>
@@ -5048,7 +5181,7 @@ function viewPlanning(v){
         ` : '' }
 
         ${ v.exam ? `
-          <div style="background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px 18px;box-shadow:var(--shadow-sm)">
+          <div data-key="exam-card" style="background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px 18px;box-shadow:var(--shadow-sm);animation:fadeup .3s ease both">
             <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:6px">
               <span style="font-size:16px;font-weight:600;color:var(--ink)">${esc(v.exam.titel)}</span>
               <span style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-3)">${esc(v.exam.typ)}</span>

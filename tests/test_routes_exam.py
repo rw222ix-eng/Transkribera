@@ -49,11 +49,12 @@ def _stub_generate(monkeypatch, result=None):
     calls = []
 
     def fake(kurs, klass, punkter, *, model, antal=10, tid_min=120,
-             delar=True, memory="", teman="", referens="", profil="prov",
+             delar=True, memory="", teman="", referens="", bilder="",
+             profil="prov",
              llm=None, max_rounds=exam_gen.MAX_ROUNDS, log_cb=None):
         calls.append({"kurs": kurs, "punkter": punkter, "memory": memory,
                       "teman": teman, "antal": antal,
-                      "referens": referens, "profil": profil})
+                      "referens": referens, "bilder": bilder, "profil": profil})
         if log_cb:
             log_cb("Skriver provet …")
         return result or {"exam": _exam_doc(), "errors": [], "rounds": 1}
@@ -287,3 +288,69 @@ def test_content_status_marks_behandlat(client, monkeypatch):
     assert by_id[punkt["id"]]["behandlad"] is True
     others = [p for p in punkter if p["id"] != punkt["id"]]
     assert all(p["behandlad"] is False for p in others)
+
+
+# ------------------------------------------------------ Fas 4: bildunderlag --
+
+_PNG_1PX_B64 = ("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ"
+                "AAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==")
+
+
+def _upload_underlag(client, monkeypatch, beskrivning="Graf över en andragradsfunktion."):
+    from app.web import routes_planning as rp
+    monkeypatch.setattr(client.app.state.arbiter, "ensure_model",
+                        lambda spec: "http://127.0.0.1:8170")
+    monkeypatch.setattr(rp.llm_client, "chat", lambda *a, **k: beskrivning)
+    r = client.post("/api/planning/underlag", json={
+        "filer": [{"namn": "figur.png",
+                   "data": "data:image/png;base64," + _PNG_1PX_B64}]})
+    assert r.status_code == 200
+    return _done(r)
+
+
+def test_generate_with_bilder_builds_block_and_sanitizes(client, monkeypatch):
+    und = _upload_underlag(client, monkeypatch)
+    exam = _exam_doc()
+    exam["uppgifter"][0]["bild"] = 1        # giltigt index
+    exam["uppgifter"][1]["bild"] = 7        # utanför underlaget → saneras
+    calls = _stub_generate(monkeypatch,
+                           result={"exam": exam, "errors": [], "rounds": 1})
+    r = client.post("/api/exams/generate",
+                    json={"course_id": _course_id(client), "underlag": und["id"]})
+    result = _done(r)
+    assert "andragradsfunktion" in calls[0]["bilder"]
+    assert '"bild"' in calls[0]["bilder"]
+    uppg = result["exam"]["uppgifter"]
+    assert uppg[0]["bild"] == 1 and uppg[1]["bild"] is None
+    assert result["underlag"] == und["id"]
+    # exam_items speglar bildens sökväg
+    conn = appdb.connect(client.base_dir / "transkribera.db")
+    row = conn.execute("SELECT bild_path FROM exam_items WHERE nummer='1'").fetchone()
+    conn.close()
+    assert row["bild_path"].endswith("sida-01.png")
+
+
+def test_generate_ignores_unknown_underlag(client, monkeypatch):
+    calls = _stub_generate(monkeypatch)
+    r = client.post("/api/exams/generate",
+                    json={"course_id": _course_id(client), "underlag": "feedfeedfeed"})
+    result = _done(r)
+    assert calls[0]["bilder"] == ""
+    assert result["underlag"] is None
+
+
+def test_approve_copies_bilder_and_includes_graphics(client, monkeypatch):
+    und = _upload_underlag(client, monkeypatch)
+    exam = _exam_doc()
+    exam["uppgifter"][0]["bild"] = 1
+    _stub_generate(monkeypatch, result={"exam": exam, "errors": [], "rounds": 1})
+    r = client.post("/api/exams/generate",
+                    json={"course_id": _course_id(client), "underlag": und["id"]})
+    exam_id = _done(r)["id"]
+    monkeypatch.setattr(exam_pdf, "engine_available", lambda: False)
+    r2 = client.post(f"/api/exams/{exam_id}/approve", json={})
+    result = _done(r2)
+    from pathlib import Path
+    tex = Path(result["tex"]).read_text(encoding="utf-8")
+    assert "\includegraphics" in tex and "bild-01.png" in tex
+    assert (Path(result["tex"]).parent / "bild-01.png").exists()

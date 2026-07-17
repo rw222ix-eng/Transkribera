@@ -36,7 +36,7 @@ INSTRUCTION = (
     "- del: \"B\" (utan räknare), \"C\" eller \"D\" (med räknare) — eller null "
     "om provet saknar delar.\n"
     "- formaga: primär förmåga per uppgift — B Begrepp, P Procedur, "
-    "PL Problemlösning, R Resonemang, K Kommunikation.\n"
+    "PL Problemlösning, M Modellering, R Resonemang, K Kommunikation.\n"
     "- typ: rutin (endast svar), redovisning (fullständig lösning), "
     "problem (flersteg) eller resonemang.\n"
     "- poang: [E, C, A] enligt NP-notationen, t.ex. [2, 1, 0].\n"
@@ -66,10 +66,24 @@ def build_referens(items: list[str]) -> str:
             f"{numrerade}")
 
 
+def build_bilder(beskrivningar: list[str]) -> str:
+    """Bildunderlagets promptblock: numrerade beskrivningar + regler för
+    bild-fältet (1-baserat index; en uppgift per bild; null annars)."""
+    rader = "\n".join(f"Bild {i}: {t or '(ingen beskrivning)'}"
+                      for i, t in enumerate(beskrivningar, 1))
+    return ("Läraren har laddat upp bilder som ska ingå i provet. "
+            "Beskrivningar:\n" + rader + "\n"
+            'Skriv för VARJE bild exakt EN uppgift som bygger på bilden och '
+            'sätt uppgiftens fält "bild" till bildens nummer (1-baserat). '
+            'Referera bilden i uppgiftstexten (t.ex. "Figuren visar …"). '
+            'Alla andra uppgifter har "bild": null.')
+
+
 def build_prompt(kurs: str, klass: str, punkter: list[str], *,
                  antal: int = 10, tid_min: int = 120, delar: bool = True,
                  memory: str = "", teman: str = "",
-                 referens: str = "", profil: str = "prov") -> str:
+                 referens: str = "", bilder: str = "",
+                 profil: str = "prov") -> str:
     """Genereringsprompt: instruktion + valda innehållspunkter +
     minneskontext + tidigare provs teman (undvik upprepning som default).
     `profil` växlar mellan prov och arbetsblad (Fas 5)."""
@@ -84,6 +98,8 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
                      + teman)
     if referens:
         block.append(referens)
+    if bilder:
+        block.append(bilder)
     if profil == "arbetsblad":
         block.append(
             f"Uppdrag: skriv ett ARBETSBLAD (övningsblad, inte prov) för "
@@ -200,7 +216,7 @@ def _repair_until_valid(exam: dict | None, errors: list, *, model: str, llm,
 def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                   antal: int = 10, tid_min: int = 120, delar: bool = True,
                   memory: str = "", teman: str = "", referens: str = "",
-                  profil: str = "prov",
+                  bilder: str = "", profil: str = "prov",
                   llm=llm_client.generate, max_rounds: int = MAX_ROUNDS,
                   log_cb: Callable[[str], None] | None = None) -> dict:
     """Generera ett prov/arbetsblad och reparera schema-/balansfel inom
@@ -209,7 +225,7 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     log("Skriver arbetsbladet …" if profil == "arbetsblad" else "Skriver provet …")
     prompt = build_prompt(kurs, klass, punkter, antal=antal, tid_min=tid_min,
                           delar=delar, memory=memory, teman=teman,
-                          referens=referens, profil=profil)
+                          referens=referens, bilder=bilder, profil=profil)
     exam = _llm_round(prompt, model, llm)
     rounds = 1
     while exam is None and rounds < max_rounds:

@@ -94,9 +94,12 @@ def _utrymme_mm(item: exam_spec.ExamItem) -> int:
     return min(30 + total * 12, 110)
 
 
-def _build_view(doc: exam_spec.ExamDoc) -> dict:
+def _build_view(doc: exam_spec.ExamDoc,
+                bilder: dict[int, str] | None = None) -> dict:
     """Mallens vy: uppgifter numrerade löpande, grupperade per del
-    (B, C, D, sedan del-lösa)."""
+    (B, C, D, sedan del-lösa). `bilder` mappar uppgiftens bildindex
+    (1-baserat) till filnamn i utkatalogen — filnamnet, inte sökvägen,
+    eftersom Tectonic kompilerar med utkatalogen som arbetskatalog."""
     ordning: list[tuple[str | None, str | None]] = [
         ("B", "Del B"), ("C", "Del C"), ("D", "Del D"), (None, None)]
     delar = []
@@ -114,6 +117,7 @@ def _build_view(doc: exam_spec.ExamDoc) -> dict:
                 # är lärarens verktyg och hör hemma i bedömningsanvisningen.
                 "poang_str": f"{sum(it.poang)}p",
                 "poang_eca": f"{it.poang[0]}/{it.poang[1]}/{it.poang[2]}",
+                "bild_fil": (bilder or {}).get(it.bild) if it.bild else None,
                 "endast_svar": it.typ == "rutin",
                 "utrymme_mm": _utrymme_mm(it),
                 "text": escape_mixed(it.text),
@@ -147,16 +151,21 @@ def _build_view(doc: exam_spec.ExamDoc) -> dict:
     }
 
 
-def render_prov(doc: exam_spec.ExamDoc) -> str:
-    return _environment().get_template("prov.tex.j2").render(**_build_view(doc))
+def render_prov(doc: exam_spec.ExamDoc,
+                bilder: dict[int, str] | None = None) -> str:
+    return _environment().get_template("prov.tex.j2").render(
+        **_build_view(doc, bilder))
 
 
-def render_bedomning(doc: exam_spec.ExamDoc) -> str:
-    return _environment().get_template("bedomning.tex.j2").render(**_build_view(doc))
+def render_bedomning(doc: exam_spec.ExamDoc,
+                     bilder: dict[int, str] | None = None) -> str:
+    return _environment().get_template("bedomning.tex.j2").render(
+        **_build_view(doc, bilder))
 
 
-def render_arbetsblad(doc: exam_spec.ExamDoc, visa_poang: bool = False) -> str:
+def render_arbetsblad(doc: exam_spec.ExamDoc, visa_poang: bool = False,
+                      bilder: dict[int, str] | None = None) -> str:
     """Arbetsblad (Fas 5): inga kravgränser, valfri poängvisning, facit på
     egen sida (lösningsförslagen)."""
     return _environment().get_template("arbetsblad.tex.j2").render(
-        visa_poang=visa_poang, **_build_view(doc))
+        visa_poang=visa_poang, **_build_view(doc, bilder))

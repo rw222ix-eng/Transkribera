@@ -4,6 +4,7 @@
 \documentclass[11pt,a4paper]{article}
 \usepackage[margin=22mm,bottom=26mm]{geometry}
 \usepackage{amsmath,amssymb}
+\usepackage{graphicx}
 \usepackage{fancyhdr}
 \usepackage{lastpage}
 \usepackage{tabularx}
@@ -36,6 +37,7 @@ på sista sidan((* if visa_poang *)); poäng anges som totalpoäng((* endif *)).
 ((* for u in del.uppgifter *))
 \textbf{Uppgift ((( u.nummer )))}((* if visa_poang *))\poang{((( u.poang_str )))}((* endif *))\par
 ((( u.text )))
+((* if u.bild_fil *))\par\vspace{2mm}\begin{center}\includegraphics[width=0.72\linewidth,height=90mm,keepaspectratio]{((( u.bild_fil )))}\end{center}((* endif *))
 ((* if u.endast_svar *))\svarsrad\par\vspace{6mm}((* else *))\par\vspace{((( u.utrymme_mm )))mm}((* endif *))
 
 ((* endfor *))

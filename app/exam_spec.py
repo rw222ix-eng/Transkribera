@@ -4,7 +4,7 @@ Samma teknik som WB-JSON (app/whiteboard_spec.py): Pydantic-modeller vars
 json-schema grammatiktvingar llama-server, plus deterministiska validatorer
 som skickar maskinläsbara fel tillbaka till modellen i en korrigeringsloop.
 
-Uppgiftsmodellen följer specen §3: fem matematiska förmågor (B Begrepp,
+Uppgiftsmodellen följer specen §3: sex matematiska förmågor (B Begrepp,
 P Procedur, PL Problemlösning, R Resonemang, K Kommunikation), poäng i tre
 nivådimensioner enligt nationella provets notation ``(e/c/a)``, uppgiftstyp,
 innehållstaggar samt lösningsförslag + bedömningsanvisning per uppgift.
@@ -21,12 +21,12 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-Formaga = Literal["B", "P", "PL", "R", "K"]
+Formaga = Literal["B", "P", "PL", "M", "R", "K"]
 Uppgiftstyp = Literal["rutin", "redovisning", "problem", "resonemang"]
 Del = Literal["B", "C", "D"]
 
 FORMAGA_NAMN = {"B": "Begrepp", "P": "Procedur", "PL": "Problemlösning",
-                "R": "Resonemang", "K": "Kommunikation"}
+                "M": "Modellering", "R": "Resonemang", "K": "Kommunikation"}
 
 
 class _Model(BaseModel):
@@ -41,6 +41,7 @@ class ExamItem(_Model):
     poang: tuple[int, int, int]          # (E, C, A) — NP-notationen (2/1/0)
     text: str                            # uppgiftstext; matte inom $…$
     innehall: list[str] | None = None    # taggar mot centralt innehåll
+    bild: int | None = None              # 1-baserat index i provets bildunderlag
     losning: str                         # lösningsförslag (lärarens rättning)
     bedomning: str                       # bedömningsanvisning per uppgift
 
@@ -70,7 +71,7 @@ def to_response_format() -> dict:
 
 FORMAGA_MAL: dict[str, tuple[float, float]] = {
     "B": (0.10, 0.40), "P": (0.20, 0.50), "PL": (0.10, 0.40),
-    "R": (0.05, 0.30), "K": (0.00, 0.25),
+    "M": (0.00, 0.30), "R": (0.05, 0.30), "K": (0.00, 0.25),
 }
 NIVA_MAL: dict[str, tuple[float, float]] = {
     "e": (0.35, 0.60), "c": (0.25, 0.45), "a": (0.10, 0.30),
@@ -81,7 +82,7 @@ NIVA_MAL: dict[str, tuple[float, float]] = {
 # redovisningsuppgifter.
 ARBETSBLAD_FORMAGA_MAL: dict[str, tuple[float, float]] = {
     "B": (0.00, 0.50), "P": (0.25, 0.80), "PL": (0.00, 0.45),
-    "R": (0.00, 0.35), "K": (0.00, 0.30),
+    "M": (0.00, 0.35), "R": (0.00, 0.35), "K": (0.00, 0.30),
 }
 ARBETSBLAD_NIVA_MAL: dict[str, tuple[float, float]] = {
     "e": (0.40, 0.85), "c": (0.10, 0.45), "a": (0.00, 0.25),

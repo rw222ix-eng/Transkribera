@@ -20,6 +20,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import FileResponse, JSONResponse
 
 from app import db, exam_gen, exam_latex, exam_pdf, exam_spec, llm_manager
+from app.web import routes_planning
 from app.web.sse import sse_response
 
 _GPU_BUSY = {"error": "GPU:n är upptagen — försök igen strax."}
@@ -55,6 +56,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
         return {
             "id": view["id"], "exam": view.get("exam"),
             "typ": view.get("typ") or "prov",
+            "underlag": view.get("underlag"),
             "status": view["status"], "versions": view["versions"],
             "errors": errors, "rounds": rounds,
             "granser": exam_spec.kravgranser(doc) if doc else None,
@@ -134,6 +136,14 @@ def create_router(base: Path, arbiter) -> APIRouter:
         datum = (body.get("datum") or "").strip() or None
         typ = "arbetsblad" if body.get("typ") == "arbetsblad" else "prov"
         referens_id = body.get("referens_exam_id")
+        # Bildunderlag (Fas 4): samma uppladdningar som tavlans underlag.
+        underlag_pid = body.get("underlag") or None
+        underlag_filer = routes_planning.underlag_meta(base, underlag_pid)
+        if underlag_pid and not underlag_filer:
+            underlag_pid = None                    # okänt/trasigt id ignoreras
+        bilder_block = exam_gen.build_bilder(
+            [f.get("beskrivning") or "" for f in underlag_filer]) \
+            if underlag_filer else ""
 
         conn = db.connect(db_file)
         try:
@@ -174,17 +184,24 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 res = exam_gen.generate_exam(
                     kurs, klass or "klassen", punkter, model=_model_name(),
                     antal=antal, tid_min=tid_min, delar=delar,
-                    memory=memory, teman=teman, referens=referens, profil=typ,
+                    memory=memory, teman=teman, referens=referens,
+                    bilder=bilder_block, profil=typ,
                     log_cb=lambda m: emit({"type": "log", "msg": m}))
                 if res["exam"] is None:
                     return {"id": None, "exam": None,
                             "errors": res["errors"], "rounds": res["rounds"]}
+                # Sanera bildindex: utanför 1..antal sidor → null.
+                for u in res["exam"].get("uppgifter") or []:
+                    b = u.get("bild")
+                    if b is not None and not (isinstance(b, int)
+                                              and 1 <= b <= len(underlag_filer)):
+                        u["bild"] = None
                 conn = db.connect(db_file)
                 try:
                     view = db.create_exam(
                         conn, exam=res["exam"], typ=typ, datum=datum,
                         group_id=int(group_id) if group_id else None,
-                        course_id=int(course_id))
+                        course_id=int(course_id), underlag=underlag_pid)
                     for c in valda:
                         db.tag_content(conn, c["id"], exam_id=view["id"])
                 finally:
@@ -279,6 +296,22 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 pdf_path = None
                 tex_path = None
                 typ = view.get("typ") or "prov"
+                # Bildunderlag (Fas 4): kopiera refererade sidor till ut-
+                # katalogen (Tectonic kompilerar där) och bygg index→filnamn.
+                bilder_map: dict[int, str] = {}
+                und_dir = routes_planning.underlag_dir(
+                    base, view.get("underlag") or "")
+                if und_dir and und_dir.is_dir():
+                    idx = {u.get("bild")
+                           for u in (view["exam"].get("uppgifter") or [])
+                           if isinstance(u.get("bild"), int)}
+                    out_dir.mkdir(parents=True, exist_ok=True)
+                    for n in sorted(idx):
+                        src = und_dir / f"sida-{n:02d}.png"
+                        if src.is_file():
+                            dst = out_dir / f"bild-{n:02d}.png"
+                            dst.write_bytes(src.read_bytes())
+                            bilder_map[n] = dst.name
                 for round_ in range(exam_gen.MAX_LATEX_ROUNDS + 1):
                     doc, val_errors = exam_spec.validate_exam_json(exam, typ)
                     if doc is None:
@@ -288,11 +321,11 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     # Typflaggan styr mallen (Fas 5): arbetsblad får facit-
                     # sida i samma dokument och ingen bedömningsanvisning.
                     if typ == "arbetsblad":
-                        tex = exam_latex.render_arbetsblad(doc)
+                        tex = exam_latex.render_arbetsblad(doc, bilder=bilder_map)
                         bed = None
                     else:
-                        tex = exam_latex.render_prov(doc)
-                        bed = exam_latex.render_bedomning(doc)
+                        tex = exam_latex.render_prov(doc, bilder=bilder_map)
+                        bed = exam_latex.render_bedomning(doc, bilder=bilder_map)
                     slug = _safe_component(doc.titel, typ)
                     out_dir.mkdir(parents=True, exist_ok=True)
                     tex_path = out_dir / f"{slug}.tex"

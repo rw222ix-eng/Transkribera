@@ -214,6 +214,7 @@ def create_app(base_dir: Path | None = None,
         _conn = _db()
         try:
             db.apply_gy25_course_names(_conn)
+            db.ensure_amnen(_conn)
             db.seed_course_content(_conn, course_data.load_centralt_innehall())
         finally:
             _conn.close()

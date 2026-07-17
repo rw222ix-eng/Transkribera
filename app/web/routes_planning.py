@@ -48,6 +48,42 @@ def _safe_component(raw: str, fallback: str) -> str:
     return name[:80] or fallback
 
 
+# Underlagshjälpare på modulnivå — delas med provroutern (routes_exam), som
+# använder samma uppladdningar som bildunderlag i prov.
+
+def underlag_dir(base: Path, pid: str) -> Path | None:
+    """Katalogen för ett uppladdat underlag — pid valideras hårt så
+    sökvägen aldrig kan lämna Transkriberingar/underlag."""
+    if not re.fullmatch(r"[a-f0-9]{12}", pid or ""):
+        return None
+    return base / "Transkriberingar" / "underlag" / pid
+
+
+def underlag_meta(base: Path, pid: str | None) -> list[dict]:
+    """Underlagets metadata ([{namn, fil, beskrivning}]) — [] om okänt."""
+    if not pid:
+        return []
+    d = underlag_dir(base, pid)
+    meta = (d / "underlag.json") if d else None
+    if not meta or not meta.is_file():
+        return []
+    try:
+        data = json.loads(meta.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    return list(data.get("filer") or [])
+
+
+def underlag_text(base: Path, pid: str | None) -> str:
+    """Promptblocket för ett tidigare uppladdat underlag ('' om inget)."""
+    lines = []
+    for i, f in enumerate(underlag_meta(base, pid), 1):
+        desc = (f.get("beskrivning") or "").strip()
+        lines.append(f"Sida {i} ({f.get('namn') or 'fil'}): "
+                     + (desc or "(ingen bildtolkning tillgänglig)"))
+    return "\n".join(lines)
+
+
 def _memory_text(prep: dict) -> str:
     """Kompakt minneskontext ur db.next_prep — det tavelprompten behöver.
     (Fas 3 ersätter detta med db.memory_for_prompt.)"""
@@ -117,30 +153,10 @@ def create_router(base: Path, arbiter) -> APIRouter:
     # ------------------------------------------------------------ underlag --
 
     def _underlag_dir(pid: str) -> Path | None:
-        """Katalogen för ett uppladdat underlag — pid valideras hårt så
-        sökvägen aldrig kan lämna Transkriberingar/underlag."""
-        if not re.fullmatch(r"[a-f0-9]{12}", pid or ""):
-            return None
-        return base / "Transkriberingar" / "underlag" / pid
+        return underlag_dir(base, pid)
 
     def _underlag_text(pid: str | None) -> str:
-        """Promptblocket för ett tidigare uppladdat underlag ('' om inget)."""
-        if not pid:
-            return ""
-        d = _underlag_dir(pid)
-        meta = (d / "underlag.json") if d else None
-        if not meta or not meta.is_file():
-            return ""
-        try:
-            data = json.loads(meta.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            return ""
-        lines = []
-        for i, f in enumerate(data.get("filer") or [], 1):
-            desc = (f.get("beskrivning") or "").strip()
-            lines.append(f"Sida {i} ({f.get('namn') or 'fil'}): "
-                         + (desc or "(ingen bildtolkning tillgänglig)"))
-        return "\n".join(lines)
+        return underlag_text(base, pid)
 
     @router.post("/api/planning/underlag")
     async def underlag(req: Request):
