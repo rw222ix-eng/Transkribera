@@ -54,10 +54,13 @@ _CHAT_SYSTEM_CITED = (
     "Svara ALLTID på svenska och använd aldrig något annat språk. Grunda dina svar "
     "i transkriptet nedan; säg till om något inte framgår av det.\n"
     "Transkriptet är uppdelat i numrerade segment på formen \"[n] (mm:ss) text\". "
-    "När ett påstående bygger på ett segment: avsluta påståendet med segmentets "
-    "nummer i hakparentes, t.ex. [3]. Använd bara nummer som finns i transkriptet, "
-    "citera sparsamt (högst ett par segment per påstående) och skriv aldrig "
-    "hakparenteser runt något annat än segmentnummer." + _STYLE +
+    "KÄLLKRAV (obligatoriskt): varje påstående som bygger på transkriptet ska "
+    "avslutas med segmentets nummer i hakparentes, t.ex. [3] eller [3, 7]. Det "
+    "gäller även varje punkt i en punktlista eller numrerad lista — en punkt utan "
+    "källmarkör är ofullständig. Exempel: \"- Formlerna härleds ur "
+    "additionsformlerna [4]\". Använd bara nummer som finns i transkriptet, högst "
+    "ett par segment per påstående, och skriv aldrig hakparenteser runt något "
+    "annat än segmentnummer." + _STYLE +
     "\n\nTRANSKRIPT:\n"
 )
 
