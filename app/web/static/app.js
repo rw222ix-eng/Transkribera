@@ -2021,15 +2021,24 @@
     // regex-tolken och uppdaterar förslaget direkt — utan LLM-anrop (design 14 juli).
     var evNow = S.lessonChatEvent;
     var isCal = evNow && !evNow.added && (/flytta|ändra|byt|boka|döp|kalla|titel|anteckning/i.test(q) || /\d{1,2}[:.]\d{2}/.test(q) || /måndag|tisdag|onsdag|torsdag|fredag|lördag|söndag|imorgon|nästa vecka|klockan/i.test(q));
-    if (isCal) {
+    // Snabbvägen tar bara korta enradskommandon den förstår fullt ut ("flytta till
+    // onsdag 14:30"). Längre eller sammansatta önskemål ("mer detaljerad", "hela
+    // nästa vecka, varje dag 7–16") går till modellen, som kan skriva om hela
+    // förslaget — annars svarar regexen "Klart" på delar den aldrig tillämpade.
+    var calComplex = q.length > 80
+      || (q.match(/[.!?]/g) || []).length > 1
+      || /detaljerad|detaljer|mål|beskriv|utveckla|förklara|varje dag|hela (nästa )?veckan?|från kl/i.test(q);
+    if (isCal && !calComplex) {
       var r0 = applyEventCommand(evNow, q);
-      setState(function (s) {
-        if (!s.lessonChatEvent) return null;
-        return { lessonChatInput: '',
-                 lessonChatEvent: Object.assign({}, s.lessonChatEvent, r0.patch),
-                 lessonChat: s.lessonChat.concat([{ role: 'user', text: q }, { role: 'assistant', text: r0.reply, reason: '' }]) };
-      });
-      return;
+      if (Object.keys(r0.patch).length) {
+        setState(function (s) {
+          if (!s.lessonChatEvent) return null;
+          return { lessonChatInput: '',
+                   lessonChatEvent: Object.assign({}, s.lessonChatEvent, r0.patch),
+                   lessonChat: s.lessonChat.concat([{ role: 'user', text: q }, { role: 'assistant', text: r0.reply, reason: '' }]) };
+        });
+        return;
+      }
     }
     setState(function (s) { return { lessonChat: s.lessonChat.concat([{ role: 'user', text: q }, { role: 'assistant', text: '', reason: '' }]), lessonChatInput: '', lessonChatTyping: true, lessonChatCiteSel: null }; });
     var msgs = S.lessonChat.filter(function (m) { return !(m.role === 'assistant' && !m.text); })
