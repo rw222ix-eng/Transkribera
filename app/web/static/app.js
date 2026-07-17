@@ -56,6 +56,7 @@
     lessonChatHitT: null,       // tidsstämpel (mm:ss) att markera i overlay-transkriptet
     lessonChatEvent: null,      // kalenderförslag: {title,when,desc,added,busy,endDay}
     ovEvOpen: false,            // förslags-raden i overlayen utfälld till redigeringsboxen
+    ovDescView: false,          // anteckningen i snabbtitten öppnad i läsmodal
     evPick: null,               // öppen dag/tid-väljare i kalenderförslaget
     descModal: false,           // anteckningens inzoomade redigeringsmodal
     descModalClosing: false,
@@ -1980,7 +1981,7 @@
       setState({ lessonChatSegs: segs });
     }).catch(function () {});
   }
-  function closeLessonChat() { clearTimeout(_descT); setState({ lessonChatId: null, lessonChat: [], lessonChatInput: '', lessonChatCiteSel: null, reasonOpen: {}, lessonChatMeta: null, lessonChatHitT: null, lessonChatEvent: null, evPick: null, ovEvOpen: false, descModal: false, descModalClosing: false }); }
+  function closeLessonChat() { clearTimeout(_descT); setState({ lessonChatId: null, lessonChat: [], lessonChatInput: '', lessonChatCiteSel: null, reasonOpen: {}, lessonChatMeta: null, lessonChatHitT: null, lessonChatEvent: null, evPick: null, ovEvOpen: false, ovDescView: false, descModal: false, descModalClosing: false }); }
   function onLessonChatInput(e) { setState({ lessonChatInput: e.target.value }); }
   function onLessonChatKey(e) { if (e.key === 'Enter') sendLessonChat(); }
   function toggleLessonChatThink() { setState(function (s) { return { lessonChatThink: !s.lessonChatThink }; }); }
@@ -3368,6 +3369,9 @@
       }),
       ovHasHit: !!st.lessonChatHitT, ovHitT: st.lessonChatHitT || '',
       ovHitClear: function () { setState({ lessonChatHitT: null, lessonChatCiteSel: null }); },
+      ovDescView: !!st.ovDescView,
+      ovDescOpen: function () { setState({ ovDescView: true }); },
+      ovDescClose: function () { setState({ ovDescView: false }); },
       // Stäng overlayn först — transkriptmodalen (z 100) ligger annars under overlayn (z 120).
       ovOpenFull: function () { var hid = st.lessonChatId; closeLessonChat(); openLesson({ history_id: hid }); },
       ovHasLesson: !!(st.lessonChatMeta && st.lessonChatMeta.lessonId),
@@ -4460,7 +4464,7 @@ function viewModals(v){ return `
             </div>
             <div style="font-size:13.5px;font-weight:600;color:var(--ink);line-height:1.35">${esc(v.ovEvent.title)}</div>
             <div style="font-family:var(--mono);font-size:10px;letter-spacing:0.04em;text-transform:uppercase;color:var(--ink-2);font-variant-numeric:tabular-nums;margin-top:3px">${esc(v.ovEvent.when)}</div>
-            ${ v.ovEvent.desc ? `<div style="font-size:12px;color:var(--ink-2);margin-top:7px;line-height:1.5;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden">${esc(v.ovEvent.desc)}</div>` : '' }
+            ${ v.ovEvent.desc ? `<div data-click="${on(v.ovDescOpen)}" role="button" tabindex="0" title="Visa hela anteckningen" style="font-size:12px;color:var(--ink-2);margin-top:7px;line-height:1.5;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;cursor:pointer">${esc(v.ovEvent.desc)}</div>` : '' }
             <div style="display:flex;align-items:center;gap:8px;margin-top:11px;padding-top:11px;border-top:1px solid var(--line)">
               <button data-click="${on(v.ovEvent.onAdd)}" ${ v.ovEvent.busy ? 'disabled' : '' } style="flex:0 0 auto;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:4px;padding:7px 14px;font-size:12.5px;font-weight:600;font-family:inherit;cursor:${ v.ovEvent.busy ? 'default' : 'pointer' };opacity:${ v.ovEvent.busy ? '.6' : '1' }">${ v.ovEvent.busy ? 'Lägger till …' : 'Lägg till' }</button>
               <button data-click="${on(v.ovEvent.onDismiss)}" style="flex:0 0 auto;background:transparent;border:none;color:var(--ink-3);font-size:12px;font-weight:500;font-family:inherit;cursor:pointer;padding:7px 6px">Avvisa</button>
@@ -4480,6 +4484,20 @@ function viewModals(v){ return `
         </div>
       </div>
       </div>
+    </div>
+  </div>
+  ` : '' }
+
+  ${ v.ovDescView && v.ovEvent ? `
+  <div data-click="${on(v.ovDescClose)}" style="position:fixed;inset:0;z-index:135;background:color-mix(in srgb,var(--ink) 32%,transparent);display:flex;align-items:center;justify-content:center;padding:32px;animation:modalback .26s ease">
+    <div data-click="${on(v.stop)}" role="dialog" aria-modal="true" aria-label="Anteckning i kalenderförslaget" data-dialog tabindex="-1" style="width:min(560px,92vw);max-height:min(60vh,480px);display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);overflow:hidden;animation:modalpop .42s cubic-bezier(.16,1,.3,1)">
+      <div style="flex:0 0 auto;display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--line)">
+        <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3)">Anteckning · ${esc(v.ovEvent.when)}</span>
+        <span style="flex:1"></span>
+        <span style="font-size:12px;color:var(--ink-3)">Klicka utanför för att stänga</span>
+      </div>
+      <div data-hidescroll="1" style="flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;padding:18px 20px;font-size:15px;line-height:1.65;color:var(--ink);white-space:pre-wrap">${esc(v.ovEvent.desc)}</div>
+      <div style="flex:0 0 auto;border-top:1px solid var(--line);padding:10px 18px;font-size:11.5px;color:var(--ink-3)">Ändra anteckningen genom att skriva i chatten.</div>
     </div>
   </div>
   ` : '' }
