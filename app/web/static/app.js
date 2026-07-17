@@ -3358,6 +3358,7 @@
         return { t: seg.time, txt: seg.text, hit: hit, norm: !hit };
       }),
       ovHasHit: !!st.lessonChatHitT, ovHitT: st.lessonChatHitT || '',
+      ovHitClear: function () { setState({ lessonChatHitT: null, lessonChatCiteSel: null }); },
       // Stäng overlayn först — transkriptmodalen (z 100) ligger annars under overlayn (z 120).
       ovOpenFull: function () { var hid = st.lessonChatId; closeLessonChat(); openLesson({ history_id: hid }); },
       ovHasLesson: !!(st.lessonChatMeta && st.lessonChatMeta.lessonId),
@@ -4396,16 +4397,17 @@ function viewModals(v){ return `
           <div style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.06em;text-transform:uppercase;color:var(--ink-3);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(v.ovMeta)}</div>
         </div>
         <span style="flex:1"></span>
-        <button data-click="${on(v.proposeOvEvent)}" title="Föreslå en kalenderhändelse — justera och lägg till i Google Kalender" style="flex:0 0 auto;display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:9px;padding:8px 13px;font-size:12.5px;font-weight:500;cursor:pointer;font-family:inherit;transition:transform .14s cubic-bezier(.2,.8,.25,1),border-color .14s,background .14s,color .14s" data-sh="border-color:var(--line-2) !important;background:var(--sunken) !important;color:var(--ink) !important"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="flex:0 0 auto"><rect x="2" y="3" width="12" height="11" rx="2"></rect><path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3M8 9v3M6.5 10.5h3"></path></svg>Kalenderhändelse</button>
         <button data-click="${on(v.ovOpenFull)}" title="Öppna hela transkriptvyn" style="flex:0 0 auto;display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:9px;padding:8px 13px;font-size:12.5px;font-weight:500;cursor:pointer;font-family:inherit;transition:transform .14s cubic-bezier(.2,.8,.25,1),border-color .14s,background .14s,color .14s" data-sh="border-color:var(--line-2) !important;background:var(--sunken) !important;color:var(--ink) !important"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto"><path d="M6 2.5H3.5A1 1 0 0 0 2.5 3.5V6M10 2.5h2.5a1 1 0 0 1 1 1V6M13.5 10v2.5a1 1 0 0 1-1 1H10M6 13.5H3.5a1 1 0 0 1-1-1V10"></path></svg>Transkript</button>
       </div>
       <div style="flex:1;min-height:0;display:flex">
-      <div data-hidescroll data-ovscroll="1" style="flex:1;min-width:0;overflow:auto;overscroll-behavior:contain;padding:24px 28px 20px">
+      ${ v.ovHasHit ? `
+      <div data-hidescroll data-ovscroll="1" style="flex:1;min-width:0;overflow:auto;overscroll-behavior:contain;padding:24px 28px 20px;animation:fadeup .25s ease both">
         <div style="max-width:760px;margin:0 auto">
           <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
             <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3)">Transkription</span>
             <div style="flex:1;height:1px;background:var(--line)"></div>
-            ${ v.ovHasHit ? `<span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--accent)">Källa · ${esc(v.ovHitT)}</span>` : '' }
+            <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--accent)">Källa · ${esc(v.ovHitT)}</span>
+            <button data-click="${on(v.ovHitClear)}" aria-label="Dölj transkriptet" title="Dölj transkriptet" style="border:none;background:transparent;color:var(--ink-3);cursor:pointer;font-size:11px;padding:2px 5px;flex:0 0 auto;font-family:inherit">✕</button>
           </div>
           ${ v.lessonChatLoading ? `
           <div style="display:flex;align-items:center;gap:10px;color:var(--ink-2);font-size:14px;padding:20px 0"><span style="width:15px;height:15px;border-radius:50%;border:2px solid var(--line-2);border-top-color:var(--accent);animation:spin .7s linear infinite;flex:0 0 auto"></span>Läser in transkriptet …</div>
@@ -4422,20 +4424,21 @@ function viewModals(v){ return `
           `; }).join('') }
         </div>
       </div>
-      <div data-side style="flex:0 0 clamp(330px,36vw,440px);min-width:0;display:flex;flex-direction:column;border-left:1px solid var(--line);background:var(--surface)">
-        <div style="flex:0 0 auto;display:flex;align-items:center;gap:8px;padding:17px 16px;border-bottom:1px solid var(--line)">
+      ` : '' }
+      <div data-side style="flex:${ v.ovHasHit ? '0 0 clamp(330px,36vw,440px)' : '1' };min-width:0;display:flex;flex-direction:column;${ v.ovHasHit ? 'border-left:1px solid var(--line);' : '' }background:var(--surface)">
+        <div style="flex:0 0 auto;display:flex;align-items:center;gap:8px;padding:17px max(16px,calc((100% - 720px)/2));border-bottom:1px solid var(--line)">
           <span class="ai-blink" style="width:6px;height:6px;border-radius:50%;background:var(--accent);flex:0 0 auto"></span>
           <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3)">Fråga lektionen</span>
           <span style="flex:1"></span>
           <span title="${esc(v.lessonChatThread.ovModelTitle)}" style="font-family:var(--mono);font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-3);cursor:help">Körs lokalt</span>
         </div>
-        <div data-hidescroll style="flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;padding:20px 16px;display:flex;flex-direction:column;gap:15px">
+        <div data-hidescroll style="flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;padding:20px max(16px,calc((100% - 720px)/2));display:flex;flex-direction:column;gap:15px">
           ${ chatThread(v.lessonChatThread) }
         </div>
         ${ v.ovEvent ? (v.ovEvent.added ? `
-        <div style="flex:0 0 auto;display:flex;align-items:center;gap:9px;margin:0 12px 8px;border:1px solid color-mix(in srgb,var(--ok) 40%,var(--line));background:var(--surface);border-radius:4px;padding:8px 11px;font-size:13px;font-weight:500;color:var(--ok)"><span style="width:16px;height:16px;border-radius:50%;background:var(--ok);color:var(--on-ok);display:inline-flex;align-items:center;justify-content:center;font-size:9px;animation:okPop .25s cubic-bezier(0.22,1,0.36,1) both;flex:0 0 auto">✓</span><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Tillagd i Google Kalender — ${esc(v.ovEvent.title)}</span><button data-click="${on(v.ovEvent.onDismiss)}" aria-label="Stäng" style="margin-left:auto;border:none;background:transparent;color:var(--ink-3);cursor:pointer;font-size:11px;padding:2px 4px;flex:0 0 auto">✕</button></div>
+        <div style="flex:0 0 auto;display:flex;align-items:center;gap:9px;margin:0 max(12px,calc((100% - 720px)/2)) 8px;border:1px solid color-mix(in srgb,var(--ok) 40%,var(--line));background:var(--surface);border-radius:4px;padding:8px 11px;font-size:13px;font-weight:500;color:var(--ok)"><span style="width:16px;height:16px;border-radius:50%;background:var(--ok);color:var(--on-ok);display:inline-flex;align-items:center;justify-content:center;font-size:9px;animation:okPop .25s cubic-bezier(0.22,1,0.36,1) both;flex:0 0 auto">✓</span><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Tillagd i Google Kalender — ${esc(v.ovEvent.title)}</span><button data-click="${on(v.ovEvent.onDismiss)}" aria-label="Stäng" style="margin-left:auto;border:none;background:transparent;color:var(--ink-3);cursor:pointer;font-size:11px;padding:2px 4px;flex:0 0 auto">✕</button></div>
         ` : `
-        <div style="position:relative;flex:0 0 auto;display:flex;justify-content:flex-end;margin:0 12px 8px">
+        <div style="position:relative;flex:0 0 auto;display:flex;justify-content:flex-end;margin:0 max(12px,calc((100% - 720px)/2)) 8px">
           ${ v.ovEvOpen ? `
           <div data-click="${on(v.stop)}" style="position:absolute;bottom:calc(100% + 9px);right:0;width:min(300px,86vw);z-index:8;background:var(--surface);border:1px solid var(--line);border-radius:5px;box-shadow:var(--shadow);padding:14px 15px;animation:ml-popin .2s cubic-bezier(.16,1,.3,1) both">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">
@@ -4463,7 +4466,7 @@ function viewModals(v){ return `
           </button>
         </div>
         `) : '' }
-        <div style="flex:0 0 auto;border-top:1px solid var(--line);padding:10px 12px">
+        <div style="flex:0 0 auto;border-top:1px solid var(--line);padding:10px max(12px,calc((100% - 720px)/2))">
           ${ chatComposer(v.lessonChatThread) }
         </div>
       </div>
