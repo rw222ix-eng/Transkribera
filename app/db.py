@@ -1525,6 +1525,25 @@ def set_exam_artifacts(conn: sqlite3.Connection, exam_id: int, *,
     return get_exam(conn, exam_id)
 
 
+def delete_exam(conn: sqlite3.Connection, exam_id: int) -> list[str] | None:
+    """Radera ett prov/arbetsblad permanent. Returnerar versionernas
+    artefaktsökvägar (.tex/.pdf) så anroparen kan ta bort filerna, eller
+    None om provet inte finns. Raderna kaskadar (exam_versions, exam_items);
+    content_tags städas explicit — kolumnen saknar FK till exams eftersom
+    CHECK-villkoret bär exklusiviteten."""
+    if conn.execute("SELECT 1 FROM exams WHERE id = ?",
+                    (exam_id,)).fetchone() is None:
+        return None
+    rows = conn.execute(
+        "SELECT tex_path, pdf_path FROM exam_versions WHERE exam_id = ?",
+        (exam_id,)).fetchall()
+    paths = [r[k] for r in rows for k in ("tex_path", "pdf_path") if r[k]]
+    conn.execute("DELETE FROM content_tags WHERE exam_id = ?", (exam_id,))
+    conn.execute("DELETE FROM exams WHERE id = ?", (exam_id,))
+    conn.commit()
+    return paths
+
+
 def exam_themes_for_prompt(conn: sqlite3.Connection, course_id: int,
                            max_exams: int = 3) -> str:
     """Tidigare provs uppgiftsteman för prompten (default: undvik

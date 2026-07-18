@@ -204,6 +204,7 @@
     exMsg: '',                 // kvitto (PDF skapad m.m.)
     exTyp: 'prov',             // prov | arbetsblad (Fas 5)
     exCcOpen: {},              // ihopfällbara innehållsgrupper {rubrik: true/false}; osatt = auto
+    exDeleteArm: false,        // raderingsknappen är i bekräftelseläge
     exReferensId: '',          // referensläge: utgå från tidigare prov
     exRefOpen: false,          // referens-popovern (custom dropdown) är öppen
     exRefClosing: false,       // popovern spelar sin stängningsanimation
@@ -934,12 +935,32 @@
       // för att tyst ladda om samma innehåll (kändes som ett dött klick).
       if (S.exam && String(S.exam.id) === String(it.id)) { closeExam(); return; }
       getJSON('/api/exams/' + it.id).then(function (r) {
-        if (r && r.id) setState({ exam: r, exErrors: r.errors || [], exChat: {}, exMsg: '' }, scrollToExamCard);
+        if (r && r.id) setState({ exam: r, exErrors: r.errors || [], exChat: {}, exMsg: '', exDeleteArm: false }, scrollToExamCard);
       }).catch(function () {});
     }
   }
   function closeExam() {
-    setState({ exam: null, exErrors: [], exChat: {}, exMsg: '' });
+    setState({ exam: null, exErrors: [], exChat: {}, exMsg: '', exDeleteArm: false });
+  }
+  // Radering i två steg: första klicket armar en inline-bekräftelse i kortet
+  // (ingen modal), andra klicket raderar permanent — post, versioner och filer.
+  function armDeleteExam() { setState({ exDeleteArm: true }); }
+  function cancelDeleteExam() { setState({ exDeleteArm: false }); }
+  function deleteExam() {
+    var id = S.exam && S.exam.id;
+    if (!id) return;
+    fetch('/api/exams/' + id, { method: 'DELETE' })
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, j: j }; }); })
+      .then(function (res) {
+        if (res.ok && res.j && res.j.ok) {
+          setState({ exam: null, exErrors: [], exChat: {}, exMsg: '', exDeleteArm: false });
+          loadArkiv();
+          loadExamHistorik();
+        } else {
+          setState({ exMsg: 'Kunde inte radera: ' + ((res.j && res.j.error) || 'okänt fel'), exDeleteArm: false });
+        }
+      })
+      .catch(function () { setState({ exMsg: 'Kunde inte radera — försök igen.', exDeleteArm: false }); });
   }
   function scrollToExamCard() {
     try {
@@ -3280,6 +3301,9 @@
       })(),
       onExApprove: approveExam, onExPdf: openExamPdf, onExTex: openExamTex,
       onExOverleaf: openInOverleaf, onExClose: closeExam,
+      exDeleteArm: !!st.exDeleteArm,
+      onExDeleteArm: armDeleteExam, onExDeleteCancel: cancelDeleteExam,
+      onExDelete: deleteExam,
       // Planeringsarkivet (ersätter kalendern): sök/fråga + veckogrupper
       arkiv: st.tab === 'planning' ? (function () {
         var typLabel = { tavla: 'Tavla', prov: 'Prov', arbetsblad: 'Arbetsblad' };
@@ -5561,6 +5585,16 @@ function viewPlanning(v){
               ${ v.exam.hasTex ? `<button data-click="${on(v.onExTex)}" style="border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:4px;padding:10px 15px;font-size:14px;font-weight:500;font-family:inherit;cursor:pointer">.tex</button>` : '' }
               ${ v.exam.hasTex ? `<button data-click="${on(v.onExOverleaf)}" title="Tillval: öppnar källan i Overleaf (molntjänst) för manuell finputs — prov innehåller ingen elevdata" style="border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:4px;padding:10px 15px;font-size:14px;font-weight:500;font-family:inherit;cursor:pointer">Öppna i Overleaf</button>` : '' }
               ${ v.exMsg ? `<span role="status" style="font-size:13.5px;color:var(--ink-2);word-break:break-all">${esc(v.exMsg)}</span>` : '' }
+              <span style="flex:1"></span>
+              ${ v.exDeleteArm ? `
+              <span style="display:inline-flex;align-items:center;gap:8px;animation:fadeup .22s cubic-bezier(.16,1,.3,1) both">
+                <span style="font-size:13px;color:var(--bad)">Raderas permanent, även filerna.</span>
+                <button data-click="${on(v.onExDelete)}" aria-label="Ta bort ${v.exam.typ === 'arbetsblad' ? 'arbetsbladet' : 'provet'} permanent" style="border:1px solid var(--bad);background:transparent;color:var(--bad);border-radius:4px;padding:9px 14px;font-size:13.5px;font-weight:500;font-family:inherit;cursor:pointer">Ja, radera</button>
+                <button data-click="${on(v.onExDeleteCancel)}" style="border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:4px;padding:9px 14px;font-size:13.5px;font-weight:500;font-family:inherit;cursor:pointer">Avbryt</button>
+              </span>
+              ` : `
+              <button data-click="${on(v.onExDeleteArm)}" aria-label="Ta bort ${v.exam.typ === 'arbetsblad' ? 'arbetsbladet' : 'provet'}" title="Raderar ${v.exam.typ === 'arbetsblad' ? 'arbetsbladet' : 'provet'} och dess filer permanent" style="border:none;background:transparent;color:var(--ink-3);border-radius:4px;padding:9px 12px;font-size:13.5px;font-weight:500;font-family:inherit;cursor:pointer">Radera</button>
+              ` }
             </div>
           </div>
         ` : '' }

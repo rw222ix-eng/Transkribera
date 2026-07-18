@@ -339,6 +339,65 @@ def test_generate_ignores_unknown_underlag(client, monkeypatch):
     assert result["underlag"] is None
 
 
+# --------------------------------------------------------------- radering --
+
+
+def _set_tex_path(client, exam_id, path):
+    conn = appdb.connect(client.base_dir / "transkribera.db")
+    try:
+        row = conn.execute("SELECT current_version FROM exams WHERE id = ?",
+                           (exam_id,)).fetchone()
+        conn.execute("UPDATE exam_versions SET tex_path = ? WHERE id = ?",
+                     (str(path), row["current_version"]))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def test_delete_exam_removes_rows_and_files(client, monkeypatch):
+    result, _ = _make_exam(client, monkeypatch)
+    exam_id = result["id"]
+    out = client.base_dir / "Transkriberingar" / "prov" / "kurs" / "2026-01-01"
+    out.mkdir(parents=True)
+    tex = out / "Prov.tex"
+    tex.write_text("x", encoding="utf-8")
+    bed = out / "Prov - bedomning.tex"
+    bed.write_text("x", encoding="utf-8")
+    _set_tex_path(client, exam_id, tex)
+
+    r = client.delete(f"/api/exams/{exam_id}")
+    assert r.status_code == 200 and r.json()["ok"] is True
+    assert not tex.exists() and not bed.exists()
+    assert client.get(f"/api/exams/{exam_id}").status_code == 404
+    conn = appdb.connect(client.base_dir / "transkribera.db")
+    try:
+        for tabell in ("exam_versions", "exam_items"):
+            n = conn.execute(f"SELECT COUNT(*) FROM {tabell} "
+                             "WHERE exam_id = ?", (exam_id,)).fetchone()[0]
+            assert n == 0, tabell
+        n = conn.execute("SELECT COUNT(*) FROM content_tags WHERE exam_id = ?",
+                         (exam_id,)).fetchone()[0]
+        assert n == 0
+    finally:
+        conn.close()
+
+
+def test_delete_exam_unknown_404(client):
+    assert client.delete("/api/exams/99999").status_code == 404
+
+
+def test_delete_exam_never_touches_files_outside_transkriberingar(client, monkeypatch):
+    result, _ = _make_exam(client, monkeypatch)
+    exam_id = result["id"]
+    utanfor = client.base_dir / "viktig.tex"
+    utanfor.write_text("x", encoding="utf-8")
+    _set_tex_path(client, exam_id, utanfor)
+
+    r = client.delete(f"/api/exams/{exam_id}")
+    assert r.status_code == 200
+    assert utanfor.exists()
+
+
 def test_approve_copies_bilder_and_includes_graphics(client, monkeypatch):
     und = _upload_underlag(client, monkeypatch)
     exam = _exam_doc()
