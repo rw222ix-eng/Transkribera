@@ -415,4 +415,43 @@ def create_router(base: Path, arbiter) -> APIRouter:
     def get_tex(exam_id: int):
         return _serve_artifact(exam_id, "tex")
 
+    # -------------------------------------------------------------- radera --
+
+    @router.delete("/api/exams/{exam_id:int}")
+    def delete_exam(exam_id: int):
+        """Radera ett prov/arbetsblad permanent: databasraderna och de
+        sparade artefakterna (.tex/.pdf + bedömningsanvisningen bredvid).
+        Filer tas endast bort strikt under Transkriberingar/ — sökvägar
+        utanför lämnas orörda. Delade filer i utkatalogen (t.ex. kopierade
+        bildsidor) rörs inte, eftersom katalogen delas per kurs och datum."""
+        conn = db.connect(db_file)
+        try:
+            paths = db.delete_exam(conn, exam_id)
+        finally:
+            conn.close()
+        if paths is None:
+            return JSONResponse({"error": "okänt prov"}, status_code=404)
+        tr_root = (base / "Transkriberingar").resolve()
+        kandidater: set[Path] = set()
+        for raw in paths:
+            p = Path(raw)
+            kandidater.add(p)
+            # Bedömningsanvisningen ligger bredvid med samma stam.
+            kandidater.add(p.with_name(f"{p.stem} - bedomning{p.suffix}"))
+        removed = 0
+        for k in kandidater:
+            try:
+                r = k.resolve()
+            except OSError:
+                continue
+            if tr_root not in r.parents:
+                continue
+            if r.is_file():
+                try:
+                    r.unlink()
+                    removed += 1
+                except OSError:
+                    pass
+        return {"ok": True, "borttagna_filer": removed}
+
     return router
