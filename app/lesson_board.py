@@ -336,7 +336,8 @@ def _llm_round(prompt: str, model: str, llm, token_cb=None) -> dict | None:
 
 def _repair_until_valid(board: dict | None, errors: list, *, model: str, llm,
                         rounds_used: int, max_rounds: int,
-                        log_cb: Callable[[str], None] | None = None) -> dict:
+                        log_cb: Callable[[str], None] | None = None,
+                        token_cb: Callable[[str], None] | None = None) -> dict:
     """Kör korrigeringsrundor tills fellistan är tom eller rundorna är slut.
     Returnerar {"board", "errors", "rounds"} — kvarstående fel redovisas
     ärligt (UI:t visar dem i stället för att dölja dem)."""
@@ -345,7 +346,8 @@ def _repair_until_valid(board: dict | None, errors: list, *, model: str, llm,
         rounds_used += 1
         log(f"Rättar tavlan (runda {rounds_used} av {max_rounds}) — "
             f"{len(errors)} problem …")
-        candidate = _llm_round(build_repair_prompt(board, errors), model, llm)
+        candidate = _llm_round(build_repair_prompt(board, errors), model, llm,
+                               token_cb=token_cb)
         if candidate is None:
             errors = [{"path": "svar", "code": "json",
                        "message": "modellen svarade inte med giltig JSON"}]
@@ -360,15 +362,17 @@ def generate_board(course: str, group: str, moment: str, *, model: str,
                    memory: str = "", underlag: str = "",
                    llm=llm_client.generate,
                    max_rounds: int = MAX_ROUNDS,
-                   log_cb: Callable[[str], None] | None = None) -> dict:
+                   log_cb: Callable[[str], None] | None = None,
+                   token_cb: Callable[[str], None] | None = None) -> dict:
     """Generera en tavla och auto-reparera valideringsfel.
 
     Returnerar {"board": dict|None, "errors": [...], "rounds": int}.
-    Anroparen (rutterna) äger GPU-arbiterlåset."""
+    Anroparen (rutterna) äger GPU-arbiterlåset. `token_cb` får modellens
+    råa tokens medan den skriver — UI:t bygger upp tavlan live ur dem."""
     log = log_cb or (lambda _m: None)
     log("Genererar lektionstavlan …")
     prompt = build_prompt(course, group, moment, memory, underlag)
-    board = _llm_round(prompt, model, llm)
+    board = _llm_round(prompt, model, llm, token_cb=token_cb)
     rounds = 1
     # Ogiltig JSON (t.ex. trunkerat svar) → kör om från början inom budgeten
     # i stället för att ge upp (bench Fas 2: tabelltung tavla).
@@ -376,7 +380,7 @@ def generate_board(course: str, group: str, moment: str, *, model: str,
         rounds += 1
         log(f"Modellen svarade inte med giltig JSON — försöker igen "
             f"(runda {rounds} av {max_rounds}) …")
-        board = _llm_round(prompt, model, llm)
+        board = _llm_round(prompt, model, llm, token_cb=token_cb)
     if board is None:
         return {"board": None,
                 "errors": [{"path": "svar", "code": "json",
@@ -385,13 +389,14 @@ def generate_board(course: str, group: str, moment: str, *, model: str,
     _doc, errors = ws.validate_board_json(board)
     return _repair_until_valid(board, errors, model=model, llm=llm,
                                rounds_used=rounds, max_rounds=max_rounds,
-                               log_cb=log_cb)
+                               log_cb=log_cb, token_cb=token_cb)
 
 
 def repair_board(board: dict, warnings: list[str], *, model: str,
                  llm=llm_client.generate, rounds_used: int = 1,
                  max_rounds: int = MAX_ROUNDS,
-                 log_cb: Callable[[str], None] | None = None) -> dict:
+                 log_cb: Callable[[str], None] | None = None,
+                 token_cb: Callable[[str], None] | None = None) -> dict:
     """Reparera utifrån klientens renderingsvarningar ([WB] …).
 
     `rounds_used` är antalet LLM-rundor som redan förbrukats för tavlan så
@@ -399,17 +404,19 @@ def repair_board(board: dict, warnings: list[str], *, model: str,
     problems: list = list(warnings)
     return _repair_until_valid(board, problems, model=model, llm=llm,
                                rounds_used=rounds_used, max_rounds=max_rounds,
-                               log_cb=log_cb)
+                               log_cb=log_cb, token_cb=token_cb)
 
 
 def refine_board(board: dict, instruction: str, *, model: str,
                  llm=llm_client.generate,
                  max_rounds: int = MAX_ROUNDS,
-                 log_cb: Callable[[str], None] | None = None) -> dict:
+                 log_cb: Callable[[str], None] | None = None,
+                 token_cb: Callable[[str], None] | None = None) -> dict:
     """Chatt-iteration: genomför lärarens önskemål, validera, auto-reparera."""
     log = log_cb or (lambda _m: None)
     log("Uppdaterar tavlan …")
-    candidate = _llm_round(build_refine_prompt(board, instruction), model, llm)
+    candidate = _llm_round(build_refine_prompt(board, instruction), model, llm,
+                           token_cb=token_cb)
     if candidate is None:
         return {"board": board,
                 "errors": [{"path": "svar", "code": "json",
@@ -418,4 +425,4 @@ def refine_board(board: dict, instruction: str, *, model: str,
     _doc, errors = ws.validate_board_json(candidate)
     return _repair_until_valid(candidate, errors, model=model, llm=llm,
                                rounds_used=1, max_rounds=max_rounds,
-                               log_cb=log_cb)
+                               log_cb=log_cb, token_cb=token_cb)

@@ -160,6 +160,7 @@
     wbExportMsg: '',           // kvitto/fel från senaste exporten
     wbZoom: false,             // tavelkortet förstorat till modal (chatt + knappar i kortet)
     wbZoomClosing: false,
+    planLiveN: 0,              // live-uppbyggnad: antal sektioner ritade hittills
     // Planering (Fas 1): generera egna tavlor via LLM:en
     planGroupId: '',           // vald klass (''  = ingen)
     planCourseId: '',          // vald kurs
@@ -705,6 +706,75 @@
     streamPost('/api/planning/' + S.planId + '/render-report',
                { warnings: warnings }, onPlanEvent);
   }
+  /* ---- Live-uppbyggnad: modellens tokens → partiell tavla ---------------
+     SSE-strömmen bär modellens råa JSON-tokens medan tavlan skrivs. Bufferten
+     auto-stängs (klamrar/citattecken) och parsas; lyckas det renderas den
+     halvfärdiga tavlan direkt i tavelramen — läraren ser tavlan växa fram
+     sektion för sektion i stället för en grå väntan. Strypt till ~2 Hz och
+     serialiserad så två renderpass aldrig överlappar. */
+  var _wbLive = { buf: '', timer: null, n: 0, chain: Promise.resolve(), busy: false };
+  function wbLiveReset() {
+    _wbLive.buf = ''; _wbLive.n = 0;
+    if (_wbLive.timer) { clearTimeout(_wbLive.timer); _wbLive.timer = null; }
+  }
+  function tryParsePartialBoard(txt) {
+    var i = txt.indexOf('{');
+    if (i < 0) return null;
+    var s = txt.slice(i);
+    try { return JSON.parse(s); } catch (e) {}
+    // Auto-stäng öppna strängar/klamrar; klipp hängande komma/kolon.
+    var stack = [], inStr = false, escp = false;
+    for (var k = 0; k < s.length; k++) {
+      var c = s[k];
+      if (inStr) {
+        if (escp) escp = false;
+        else if (c === '\\') escp = true;
+        else if (c === '"') inStr = false;
+        continue;
+      }
+      if (c === '"') inStr = true;
+      else if (c === '{') stack.push('}');
+      else if (c === '[') stack.push(']');
+      else if (c === '}' || c === ']') stack.pop();
+    }
+    var fixed = s;
+    if (inStr) fixed += '"';
+    fixed = fixed.replace(/[,:\s]+$/, '');
+    for (var j = stack.length - 1; j >= 0; j--) fixed += stack[j];
+    try { return JSON.parse(fixed); } catch (e) { return null; }
+  }
+  function wbCountSections(board) {
+    var n = 0;
+    ((board && board.boards) || [board]).forEach(function (b) {
+      if (!b) return;
+      if (b.sections) n += b.sections.length;
+      (b.columns || []).forEach(function (c) { n += (c.sections || []).length; });
+      (b.rows || []).forEach(function (r) { n += (r.sections || []).length; });
+    });
+    return n;
+  }
+  function wbLiveTick() {
+    _wbLive.timer = null;
+    if (S.planPhase !== 'running') return;
+    var win = _wbFrame && _wbFrame.contentWindow;
+    if (!win || !win.WBHost || _wbLive.busy) return;
+    var board = tryParsePartialBoard(_wbLive.buf);
+    if (!board || !board.boards || !board.boards.length) return;
+    var n = wbCountSections(board);
+    if (n <= _wbLive.n) return;
+    _wbLive.n = n;
+    _wbLive.busy = true;
+    _wbLive.chain = _wbLive.chain
+      .then(function () { return win.WBHost.render({ boards: board.boards }); })
+      .catch(function () {})
+      .then(function () { _wbLive.busy = false; });
+    if (S.planLiveN !== n) setState({ planLiveN: n });
+  }
+  function onWbToken(text) {
+    _wbLive.buf += text;
+    if (!_wbLive.timer) _wbLive.timer = setTimeout(wbLiveTick, 450);
+  }
+
   function wbPrint() {
     var win = _wbFrame && _wbFrame.contentWindow;
     if (win && win.WBHost) win.WBHost.print();
@@ -712,10 +782,19 @@
   // Tavelkortet förstoras till modal PÅ PLATS: iframen får aldrig flyttas i
   // DOM (reparenting laddar om dokumentet och tömmer tavlan), så wrappern
   // blir backdrop och samma kort växer via data-attribut + CSS.
-  function openWbZoom() { clearTimeout(_wbZoomT); setState({ wbZoom: true, wbZoomClosing: false }); }
+  function _wbSetPanZoom(on) {
+    var win = _wbFrame && _wbFrame.contentWindow;
+    if (win && win.WBHost && win.WBHost.setPanZoom) { try { win.WBHost.setPanZoom(on); } catch (e) {} }
+  }
+  function openWbZoom() {
+    clearTimeout(_wbZoomT);
+    setState({ wbZoom: true, wbZoomClosing: false });
+    _wbSetPanZoom(true);
+  }
   function closeWbZoom() {
     if (!S.wbZoom || S.wbZoomClosing) return;
     clearTimeout(_wbZoomT);
+    _wbSetPanZoom(false);
     setState({ wbZoomClosing: true });
     _wbZoomT = setTimeout(function () { setState({ wbZoom: false, wbZoomClosing: false }); }, 340);
   }
@@ -772,16 +851,22 @@
 
   /* Generera/iterera tavlan (Fas 1) — SSE-jobb under GPU-arbitern. */
   function onPlanEvent(ev) {
-    if (ev.type === 'log') {
-      setState(function (s) { return { planLog: s.planLog.concat([ev.msg]) }; });
+    if (ev.type === 'token') {
+      onWbToken(ev.text || '');
+    } else if (ev.type === 'log') {
+      // Ny loggrad = ny LLM-runda → tokenbufferten börjar om från noll.
+      wbLiveReset();
+      setState(function (s) { return { planLog: s.planLog.concat([ev.msg]), planLiveN: 0 }; });
     } else if (ev.type === 'error') {
+      wbLiveReset();
       setState(function (s) {
-        return { planPhase: 'error',
+        return { planPhase: 'error', planLiveN: 0,
                  planLog: s.planLog.concat(['Fel: ' + ev.message]) };
       });
     } else if (ev.type === 'done') {
+      wbLiveReset();
       var r = ev.result || {};
-      var patch = { planPhase: 'done', planErrors: r.errors || [] };
+      var patch = { planPhase: 'done', planErrors: r.errors || [], planLiveN: 0 };
       if (r.id) patch.planId = r.id;
       if (r.board) patch.planBoard = r.board;
       setState(patch, function () { if (r.board) renderCurrentBoard(); });
@@ -791,8 +876,10 @@
     var moment = (S.planMoment || '').trim();
     if (!moment || S.planPhase === 'running') return;
     _wbReportRounds = 0;
+    wbLiveReset();
     setState({ planPhase: 'running', planLog: [], planErrors: [],
-               planSavedPath: '', wbExportMsg: '', wbRendered: false });
+               planSavedPath: '', wbExportMsg: '', wbRendered: false,
+               planLiveN: 0 });
     streamPost('/api/planning/generate', {
       moment: moment,
       group_id: S.planGroupId ? +S.planGroupId : null,
@@ -806,8 +893,9 @@
     var msg = (S.planChatInput || '').trim();
     if (!msg || !S.planId || S.planPhase === 'running') return;
     _wbReportRounds = 0;
+    wbLiveReset();
     setState({ planPhase: 'running', planChatInput: '', planLog: [],
-               planErrors: [], planSavedPath: '' });
+               planErrors: [], planSavedPath: '', planLiveN: 0 });
     streamPost('/api/planning/' + S.planId + '/refine', { message: msg }, onPlanEvent);
   }
   function approvePlan() {
@@ -947,8 +1035,13 @@
                    arkSources: (ev.result && ev.result.sources) || [] });
       } else if (ev.type === 'error') {
         if (_arkScanTimer) { clearInterval(_arkScanTimer); _arkScanTimer = null; }
-        setState({ arkAsking: false,
-                   arkAnswer: 'Kunde inte söka: ' + (ev.message || 'okänt fel') });
+        // Samma ärliga tomläge som kartoteket: "inga träffar" är ett svar.
+        var msg = /matchar sökningen/i.test(ev.message || '')
+          ? 'Ingen tavla och inget prov i arkivet verkar nämna det du frågar om. Prova att formulera om frågan.'
+          : /network|failed to fetch|load failed/i.test(ev.message || '')
+          ? 'Anslutningen till appen bröts mitt i sökningen. Ställ frågan igen så görs ett nytt försök.'
+          : 'Kunde inte söka: ' + (ev.message || 'okänt fel');
+        setState({ arkAsking: false, arkAnswer: msg });
       }
     });
   }
@@ -1709,8 +1802,15 @@
         setState({ asking: false, askScanShown: 9999, askSources: (ev.result && ev.result.sources) || [] });
       } else if (ev.type === 'error') {
         // Frys utrullningen där den står — felraden tar över berättelsen.
+        // "Inga träffar" är inget tekniskt fel utan ett ärligt svar: säg det
+        // naturligt i stället för "Kunde inte söka: …".
         if (_scanTimer) { clearInterval(_scanTimer); _scanTimer = null; }
-        setState({ asking: false, askAnswer: 'Kunde inte söka: ' + (ev.message || 'okänt fel') });
+        var msg = /matchar sökningen/i.test(ev.message || '')
+          ? 'Ingen inspelning i arkivet verkar nämna det du frågar om. Prova att formulera om frågan, eller sök på enstaka ord under Sök ord.'
+          : /network|failed to fetch|load failed/i.test(ev.message || '')
+          ? 'Anslutningen till appen bröts mitt i sökningen. Ställ frågan igen så görs ett nytt försök.'
+          : 'Kunde inte söka: ' + (ev.message || 'okänt fel');
+        setState({ asking: false, askAnswer: msg });
       }
     });
   }
@@ -3230,6 +3330,7 @@
       onWbZoomOpen: openWbZoom,
       onWbZoomClose: function () { closeWbZoom(); },
       onWbCardClick: function (e) { if (e) e.stopPropagation(); },
+      planLiveN: st.planLiveN || 0,
       planGroups: st.groups, planCourses: st.courses,
       planGroupId: st.planGroupId, planCourseId: st.planCourseId,
       // Chips i stället för dropdowns: klick väljer, klick på vald avmarkerar.
@@ -3483,7 +3584,7 @@
           ansStarted: !!st.arkAnswer,
           ansTyping: asking && !!st.arkAnswer,
           ansDone: !asking && !!st.arkAnswer,
-          ansHeadLabel: (!asking && st.arkAnswer)
+          ansHeadLabel: (!asking && st.arkAnswer && hitCount)
             ? ('Svar — ' + hitCount + (hitCount === 1 ? ' källa' : ' källor'))
             : 'Svar',
           answer: st.arkAnswer,
@@ -3546,7 +3647,7 @@
         ansStarted: !!st.askAnswer,
         ansTyping: st.asking && !!st.askAnswer,
         ansDone: !st.asking && !!st.askAnswer,
-        ansHeadLabel: (!st.asking && st.askAnswer)
+        ansHeadLabel: (!st.asking && st.askAnswer && (st.askSources || []).length)
           ? ('Svar — ' + (st.askSources || []).length + ((st.askSources || []).length === 1 ? ' källa' : ' källor'))
           : 'Svar',
         answer: st.askAnswer,
@@ -5464,6 +5565,7 @@ function viewPlanning(v){
           ${ v.planIsExample ? `<span style="font-size:12px;text-transform:uppercase;letter-spacing:0.05em;color:var(--ink-3);font-weight:600">Exempellektion</span>` : '' }
           <span style="flex:1"></span>
           ${ v.wbZoomFlag ? `
+          <span style="font-size:12px;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Scrolla för att zooma · dra för att panorera · dubbelklicka återställer</span>
           <button data-click="${on(v.onWbZoomClose)}" aria-label="Stäng förstoringen" title="Stäng (Esc)" style="border:none;background:transparent;color:var(--ink-3);cursor:pointer;font-size:14px;line-height:1;padding:5px 8px;border-radius:3px;font-family:inherit">✕</button>
           ` : `
           <button data-click="${on(v.onWbZoomOpen)}" ${v.wbRendered ? '' : 'disabled'} aria-label="Förstora tavlan" title="Förstora — arbeta med tavlan i helskärm" style="display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:3px;padding:6px 11px;font-size:12.5px;font-weight:500;font-family:inherit;cursor:${v.wbRendered ? 'pointer' : 'default'};opacity:${v.wbRendered ? '1' : '.55'}"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 6.5L2 2m0 0v3.5M2 2h3.5M9.5 6.5L14 2m0 0v3.5M14 2h-3.5M6.5 9.5L2 14m0 0v-3.5M2 14h3.5M9.5 9.5L14 14m0 0v-3.5M14 14h-3.5"></path></svg>Förstora</button>
@@ -5484,7 +5586,7 @@ function viewPlanning(v){
             ` : '' }
             <button data-click="${on(v.onWbPrint)}" ${v.wbRendered ? '' : 'disabled'} style="display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:4px;padding:10px 17px;font-size:14.5px;font-weight:500;font-family:inherit;cursor:${v.wbRendered ? 'pointer' : 'default'};opacity:${v.wbRendered ? '1' : '.55'}">Skriv ut</button>
             <button data-click="${on(v.onWbExport)}" ${v.wbRendered && !v.wbExporting ? '' : 'disabled'} style="display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:4px;padding:10px 17px;font-size:14.5px;font-weight:500;font-family:inherit;cursor:${v.wbRendered && !v.wbExporting ? 'pointer' : 'default'};opacity:${v.wbRendered && !v.wbExporting ? '1' : '.55'}">${v.wbExporting ? 'Sparar …' : 'Spara som PNG'}</button>
-            ${ v.planRunning ? `<span style="font-size:13.5px;color:var(--ink-2)">Skriver om tavlan …</span>` : '' }
+            ${ v.planRunning ? `<span role="status" style="display:inline-flex;align-items:center;gap:8px;font-size:13.5px;color:var(--ink-2)"><span style="width:12px;height:12px;border-radius:50%;border:2px solid var(--line-2);border-top-color:var(--accent);animation:spin .7s linear infinite"></span>${ v.planLiveN ? 'Ritar live — ' + esc(v.planLiveN) + ' sektioner hittills …' : esc((v.planLog && v.planLog.length ? v.planLog[v.planLog.length - 1] : 'Skriver om tavlan …')) }</span>` : '' }
             ${ v.planSavedPath ? `<span role="status" style="font-size:13.5px;color:var(--ink-2);word-break:break-all">Sparad: ${esc(v.planSavedPath)}</span>` : '' }
             ${ v.wbExportMsg ? `<span role="status" style="font-size:13.5px;color:${v.wbExportFailed ? 'var(--bad)' : 'var(--ink-2)'};word-break:break-all">${esc(v.wbExportMsg)}</span>` : '' }
           </div>
@@ -5514,6 +5616,7 @@ function viewPlanning(v){
         <button data-click="${on(v.onWbPrint)}" ${v.wbRendered ? '' : 'disabled'} style="display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:10px;padding:10px 17px;font-size:14.5px;font-weight:500;font-family:inherit;cursor:${v.wbRendered ? 'pointer' : 'default'};opacity:${v.wbRendered ? '1' : '.55'};box-shadow:var(--shadow-sm)">Skriv ut</button>
         <button data-click="${on(v.onWbExport)}" ${v.wbRendered && !v.wbExporting ? '' : 'disabled'} style="display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:10px;padding:10px 17px;font-size:14.5px;font-weight:500;font-family:inherit;cursor:${v.wbRendered && !v.wbExporting ? 'pointer' : 'default'};opacity:${v.wbRendered && !v.wbExporting ? '1' : '.55'};box-shadow:var(--shadow-sm)">${v.wbExporting ? 'Sparar …' : 'Spara som PNG'}</button>
         ${ !v.wbRendered && !v.wbWarnCount && !v.planRunning ? `<span style="font-size:13.5px;color:var(--ink-3)">Ritar tavlan …</span>` : '' }
+        ${ v.planRunning && v.planLiveN ? `<span role="status" style="display:inline-flex;align-items:center;gap:8px;font-size:13.5px;color:var(--ink-2)"><span style="width:12px;height:12px;border-radius:50%;border:2px solid var(--line-2);border-top-color:var(--accent);animation:spin .7s linear infinite"></span>Ritar live — ${esc(v.planLiveN)} sektioner hittills …</span>` : '' }
         ${ v.planSavedPath ? `<span role="status" style="font-size:13.5px;color:var(--ink-2);font-variant-numeric:tabular-nums;word-break:break-all">Sparad: ${esc(v.planSavedPath)}</span>` : '' }
         ${ v.wbExportMsg ? `<span role="status" style="font-size:13.5px;color:${v.wbExportFailed ? 'var(--bad)' : 'var(--ink-2)'};font-variant-numeric:tabular-nums;word-break:break-all">${esc(v.wbExportMsg)}</span>` : '' }
       </div>

@@ -1432,10 +1432,10 @@ def create_app(base_dir: Path | None = None,
 
         def job(emit):
             try:
-                if arb.ensure_llm() is None:
-                    raise RuntimeError("Språkmodellen är inte installerad.")
                 # Live-progressionens riktiga händelser (spec 2026-07-18):
                 # skanningsplan → per-lektion-resultat → vad AI:n läser djupt.
+                # Skickas FÖRE modellstarten — skanningen behöver ingen LLM,
+                # och kartoteket ska spela medan Qwen laddar (kan ta en minut).
                 emit({"type": "scan_plan", "total": len(scan), "items": [
                     {"key": s["lesson_id"], "name": s["name"]} for s in scan]})
                 for s in scan:
@@ -1446,6 +1446,8 @@ def create_app(base_dir: Path | None = None,
                      "name": e["name"], "group": e["group"], "course": e["course"],
                      "datum": e["datum"]}
                     for e in excerpts]})
+                if arb.ensure_llm() is None:
+                    raise RuntimeError("Språkmodellen är inte installerad.")
                 emit({"type": "log", "msg": f"Söker i {len(excerpts)} lektioner ..."})
                 text = postprocess.answer_over_lessons(
                     query, excerpts, llm_manager.ACTIVE_LLM.filename,
