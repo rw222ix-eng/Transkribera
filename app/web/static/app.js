@@ -203,6 +203,7 @@
     exChat: {},                // per-uppgift-chattfält {nummer: text}
     exMsg: '',                 // kvitto (PDF skapad m.m.)
     exTyp: 'prov',             // prov | arbetsblad (Fas 5)
+    exCcOpen: {},              // ihopfällbara innehållsgrupper {rubrik: true/false}; osatt = auto
     exReferensId: '',          // referensläge: utgå från tidigare prov
     exRefOpen: false,          // referens-popovern (custom dropdown) är öppen
     exRefClosing: false,       // popovern spelar sin stängningsanimation
@@ -929,10 +930,24 @@
         })
         .catch(function () {});
     } else {
+      // Toggle: klick på posten som redan är öppen stänger kortet i stället
+      // för att tyst ladda om samma innehåll (kändes som ett dött klick).
+      if (S.exam && String(S.exam.id) === String(it.id)) { closeExam(); return; }
       getJSON('/api/exams/' + it.id).then(function (r) {
-        if (r && r.id) setState({ exam: r, exErrors: r.errors || [], exChat: {}, exMsg: '' });
+        if (r && r.id) setState({ exam: r, exErrors: r.errors || [], exChat: {}, exMsg: '' }, scrollToExamCard);
       }).catch(function () {});
     }
+  }
+  function closeExam() {
+    setState({ exam: null, exErrors: [], exChat: {}, exMsg: '' });
+  }
+  function scrollToExamCard() {
+    try {
+      var el = document.querySelector('[data-key="exam-card"]');
+      if (!el) return;
+      var still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      el.scrollIntoView({ behavior: still ? 'auto' : 'smooth', block: 'start' });
+    } catch (e) {}
   }
   /* ------------------------------------------------ provgeneratorn (Fas 4) -- */
   function loadExamContent() {
@@ -999,12 +1014,15 @@
     if (_exRefTimer) clearTimeout(_exRefTimer);
     setState({ exReferensId: String(id), exRefOpen: false, exRefClosing: false });
   }
-  function openExamFromHistorik(id) {
-    return function () {
-      getJSON('/api/exams/' + id).then(function (r) {
-        if (r && r.id) setState({ exam: r, exErrors: r.errors || [], exChat: {}, exMsg: '' });
-      }).catch(function () {});
-    };
+  function exToggleGrupp(rubrik) {
+    setState(function (s) {
+      var o = Object.assign({}, s.exCcOpen);
+      // Osatt = auto (öppen om gruppen har val); toggla utifrån visat läge.
+      var shownOpen = (rubrik in o) ? !!o[rubrik]
+        : s.exContent.some(function (p) { return (p.rubrik || 'Övrigt') === rubrik && s.exPunkter[p.id]; });
+      o[rubrik] = !shownOpen;
+      return { exCcOpen: o };
+    });
   }
   function exTogglePunkt(id) {
     setState(function (s) {
@@ -3151,27 +3169,40 @@
         return { namn: g.namn, sel: String(g.id) === String(st.exGroupId),
                  onPick: function () { exPickGroup(g.id); } };
       }),
-      // Punkterna grupperas per Gy25-område så att chipetiketten kan vara
-      // punktens egen text (kortad) — områdesrubriken skrivs en gång per grupp.
+      // Punkterna grupperas per Gy25-område som ihopfällbara valgrupper:
+      // rubriken bär en räknare, varje rad är punktens egen text (kortad).
+      // Osatt öppet-läge = auto: grupper med val står öppna.
       exContentGroups: (function () {
         var groups = [];
         var byRubrik = {};
         st.exContent.forEach(function (p) {
           var r = p.rubrik || 'Övrigt';
-          if (!byRubrik[r]) { byRubrik[r] = { rubrik: r, punkter: [] }; groups.push(byRubrik[r]); }
+          if (!byRubrik[r]) {
+            byRubrik[r] = { rubrik: r, punkter: [], valda: 0 };
+            groups.push(byRubrik[r]);
+          }
           var kort = (p.text || '').replace(/\s+/g, ' ').trim();
           var mening = kort.indexOf('. ');
           if (mening > 0) kort = kort.slice(0, mening);
           kort = kort.replace(/\.$/, '');
-          if (kort.length > 64) kort = kort.slice(0, 63).replace(/\s+\S*$/, '') + ' …';
+          if (kort.length > 88) kort = kort.slice(0, 87).replace(/\s+\S*$/, '') + ' …';
+          var vald = !!st.exPunkter[p.id];
+          if (vald) byRubrik[r].valda += 1;
+          var status = p.provad ? 'redan prövat på prov' :
+                       p.behandlad ? 'behandlat i undervisningen' : 'ännu inte behandlat';
           byRubrik[r].punkter.push({
             id: p.id, kort: kort, text: p.text,
             behandlad: !!p.behandlad, provad: !!p.provad,
-            vald: !!st.exPunkter[p.id],
+            vald: vald, statusText: status,
             onToggle: function () { exTogglePunkt(p.id); } });
+        });
+        groups.forEach(function (g) {
+          g.open = (g.rubrik in st.exCcOpen) ? !!st.exCcOpen[g.rubrik] : g.valda > 0;
+          g.onToggleOpen = function () { exToggleGrupp(g.rubrik); };
         });
         return groups;
       })(),
+      exValdaTotal: Object.keys(st.exPunkter).length,
       exTyp: st.exTyp,
       onExTypProv: function () { exPickTyp('prov'); },
       onExTypArbetsblad: function () { exPickTyp('arbetsblad'); },
@@ -3200,12 +3231,6 @@
         return { key: 'ref' + h.id, label: label,
                  isCur: String(st.exReferensId) === String(h.id) || (!st.exReferensId && h.id === ''),
                  onSelect: function () { exPickRef(h.id); } };
-      }),
-      exHistorik: st.exHistorik.map(function (h) {
-        return { id: h.id, titel: h.titel || 'utan titel',
-                 typ: h.typ || 'prov', datum: h.datum || '',
-                 status: h.status,
-                 onOpen: openExamFromHistorik(h.id) };
       }),
       exDubbletter: (st.exam && st.exam.dubbletter) || [],
       exAntal: st.exAntal, exTid: st.exTid, exDatum: st.exDatum,
@@ -3254,7 +3279,7 @@
         };
       })(),
       onExApprove: approveExam, onExPdf: openExamPdf, onExTex: openExamTex,
-      onExOverleaf: openInOverleaf,
+      onExOverleaf: openInOverleaf, onExClose: closeExam,
       // Planeringsarkivet (ersätter kalendern): sök/fråga + veckogrupper
       arkiv: st.tab === 'planning' ? (function () {
         var typLabel = { tavla: 'Tavla', prov: 'Prov', arbetsblad: 'Arbetsblad' };
@@ -5374,40 +5399,71 @@ function viewPlanning(v){
           <span style="font-size:13.5px;color:var(--ink-3)">NP-lik struktur — uppgifterna är alltid egenformulerade</span>
         </div>
 
-        <div style="display:flex;flex-direction:column;gap:13px;margin-bottom:14px">
-          <div style="display:flex;gap:9px;align-items:center;flex-wrap:wrap">
+        <div style="display:flex;flex-direction:column;gap:13px;margin-bottom:15px">
+          <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+            <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);flex:0 0 68px">Typ</span>
             <div role="group" aria-label="Dokumenttyp" style="display:inline-flex;gap:3px;padding:3px;background:var(--track);border-radius:4px;border:1px solid var(--line)">
               <button data-click="${on(v.onExTypProv)}" aria-pressed="${v.exTyp === 'prov' ? 'true' : 'false'}" data-seg="${v.exTyp === 'prov' ? 'on' : 'off'}" style="border:none;border-radius:3px;padding:7px 15px;font-size:13.5px;font-weight:500;font-family:inherit;background:transparent;color:var(--ink-2);transition:color .18s ease">Prov</button>
               <button data-click="${on(v.onExTypArbetsblad)}" aria-pressed="${v.exTyp === 'arbetsblad' ? 'true' : 'false'}" data-seg="${v.exTyp === 'arbetsblad' ? 'on' : 'off'}" style="border:none;border-radius:3px;padding:7px 15px;font-size:13.5px;font-weight:500;font-family:inherit;background:transparent;color:var(--ink-2);transition:color .18s ease">Arbetsblad</button>
             </div>
-            <span style="flex:1"></span>
-            <button data-click="${on(v.onExStart)}" ${v.exCanStart ? '' : 'disabled'} style="display:inline-flex;align-items:center;gap:7px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:4px;padding:13px 22px;font-size:14.5px;font-weight:500;font-family:inherit;cursor:${v.exCanStart ? 'pointer' : 'default'};opacity:${v.exCanStart ? '1' : '.55'}">${v.exRunning ? 'Skriver …' : (v.exTyp === 'arbetsblad' ? 'Skriv arbetsbladet' : 'Skriv provet')}</button>
           </div>
-          <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
-            ${ v.exCourseGroups.map(function(g){ return `
-            <div role="group" aria-label="${esc(g.amne)}" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-              <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);margin-right:3px">${esc(g.amne)}</span>
-              ${ g.chips.map(function(c){ return `<button data-click="${on(c.onPick)}" data-chip="${c.sel ? 'on' : 'off'}" aria-pressed="${c.sel ? 'true' : 'false'}" title="${esc(c.namn)}" style="font-family:inherit;font-size:13px;font-weight:500;padding:6px 12px;border-radius:3px;background:var(--surface);color:var(--ink-2);border:1px solid var(--line);transition:border-color .14s,background .14s,color .14s">${esc(c.kort)}</button>`; }).join('') }
-            </div>
-            `; }).join('') }
-            ${ v.exGroupOpts.length ? `
-            <div role="group" aria-label="Klass" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-              <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);margin-right:3px">Klass</span>
-              ${ v.exGroupOpts.map(function(g){ return `<button data-click="${on(g.onPick)}" data-chip="${g.sel ? 'on' : 'off'}" aria-pressed="${g.sel ? 'true' : 'false'}" style="font-family:inherit;font-size:13px;font-weight:500;padding:6px 12px;border-radius:3px;background:var(--surface);color:var(--ink-2);border:1px solid var(--line);transition:border-color .14s,background .14s,color .14s">${esc(g.namn)}</button>`; }).join('') }
-            </div>
-            ` : '' }
-            <span style="flex:1"></span>
-            <div style="display:flex;align-items:center;gap:6px">
-              <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);margin-right:3px">När</span>
-              <input type="date" value="${esc(v.exDatum)}" data-change="${on(v.onExDatum)}" aria-label="Provdatum" style="background:var(--surface);border:1px solid var(--line);border-radius:3px;padding:6px 9px;font-size:13px;font-family:inherit;color:var(--ink-2)">
+          <div style="display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap">
+            <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);flex:0 0 68px;padding-top:8px">Kurs</span>
+            <div style="flex:1;min-width:260px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+              ${ v.exCourseGroups.map(function(g){ return `
+              <div role="group" aria-label="${esc(g.amne)}" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);margin-right:3px">${esc(g.amne)}</span>
+                ${ g.chips.map(function(c){ return `<button data-click="${on(c.onPick)}" data-chip="${c.sel ? 'on' : 'off'}" aria-pressed="${c.sel ? 'true' : 'false'}" title="${esc(c.namn)}" style="font-family:inherit;font-size:13px;font-weight:500;padding:6px 12px;border-radius:3px;background:var(--surface);color:var(--ink-2);border:1px solid var(--line);transition:border-color .14s,background .14s,color .14s">${esc(c.kort)}</button>`; }).join('') }
+              </div>
+              `; }).join('') }
+              ${ v.exGroupOpts.length ? `
+              <div role="group" aria-label="Klass" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);margin-right:3px">Klass</span>
+                ${ v.exGroupOpts.map(function(g){ return `<button data-click="${on(g.onPick)}" data-chip="${g.sel ? 'on' : 'off'}" aria-pressed="${g.sel ? 'true' : 'false'}" style="font-family:inherit;font-size:13px;font-weight:500;padding:6px 12px;border-radius:3px;background:var(--surface);color:var(--ink-2);border:1px solid var(--line);transition:border-color .14s,background .14s,color .14s">${esc(g.namn)}</button>`; }).join('') }
+              </div>
+              ` : '' }
             </div>
           </div>
-          <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+
+          ${ v.exContentGroups.length ? `
+          <div style="display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap">
+            <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);flex:0 0 68px;padding-top:10px">Innehåll</span>
+            <div style="flex:1;min-width:300px;display:flex;flex-direction:column;gap:7px">
+              ${ v.exContentGroups.map(function(g3){ return `
+              <div data-ccg="" data-ccg-open="${g3.open ? 'true' : 'false'}" data-key="ccg-${esc(g3.rubrik)}">
+                <button data-ccg-head="" data-click="${on(g3.onToggleOpen)}" aria-expanded="${g3.open ? 'true' : 'false'}">
+                  <svg data-ccg-caret="" width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:0 0 auto;color:var(--ink-3)"><path d="M6 4l4 4-4 4"></path></svg>
+                  <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-2);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(g3.rubrik)}</span>
+                  <span style="flex:1"></span>
+                  <span data-ccg-count="${g3.valda ? 'on' : 'off'}" style="font-family:var(--mono);font-size:10px;letter-spacing:0.05em;color:var(--ink-3);font-variant-numeric:tabular-nums;white-space:nowrap">${ g3.valda ? esc(g3.valda) + ' valda av ' + esc(g3.punkter.length) : esc(g3.punkter.length) + ' punkter' }</span>
+                </button>
+                <div data-ccg-body=""><div>
+                  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1px 18px;padding:1px 10px 9px">
+                    ${ g3.punkter.map(function(p){ return `
+                    <button data-key="cc-${esc(p.id)}" data-ccrow="" data-click="${on(p.onToggle)}" aria-pressed="${p.vald}" aria-label="${esc(p.text)} — ${esc(p.statusText)}" title="${esc(p.text)}">
+                      <span data-ck="${p.vald ? 'on' : 'off'}" aria-hidden="true"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6.5l2.4 2.4 4.6-5.3"></path></svg></span>
+                      <span style="min-width:0;flex:1;font-size:13px;line-height:1.35;color:${p.vald ? 'var(--ink)' : 'var(--ink-2)'}">${esc(p.kort)}</span>
+                      <span aria-hidden="true" title="${esc(p.statusText)}" style="flex:0 0 auto;font-size:11px;color:var(--ink-3)">${ p.provad ? '★' : p.behandlad ? '✓' : '○' }</span>
+                    </button>`; }).join('') }
+                  </div>
+                </div></div>
+              </div>
+              `; }).join('') }
+              <div style="font-size:12px;color:var(--ink-3);margin-top:2px">Valfritt — ${ v.exValdaTotal ? esc(v.exValdaTotal) + ' punkter valda, uppgifterna byggs på dem' : 'utan val väljer modellen fritt ur kursens innehåll' }. &nbsp;○ ej behandlat · ✓ behandlat · ★ redan prövat</div>
+            </div>
+          </div>
+          ` : '' }
+
+          <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+            <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);flex:0 0 68px">Omfång</span>
             <div role="group" aria-label="Omfång" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-              <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);margin-right:3px">Omfång</span>
               <label style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-3)"><input type="number" min="3" max="20" value="${esc(v.exAntal)}" data-change="${on(v.onExAntal)}" aria-label="Antal uppgifter" style="background:var(--surface);border:1px solid var(--line);border-radius:3px;padding:6px 9px;font-size:13px;font-family:inherit;color:var(--ink-2);width:56px;font-variant-numeric:tabular-nums">uppgifter</label>
               <label style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-3)"><input type="number" min="30" max="300" step="10" value="${esc(v.exTid)}" data-change="${on(v.onExTid)}" aria-label="Provtid (minuter)" style="background:var(--surface);border:1px solid var(--line);border-radius:3px;padding:6px 9px;font-size:13px;font-family:inherit;color:var(--ink-2);width:64px;font-variant-numeric:tabular-nums">min</label>
               <button data-click="${on(v.onExDelar)}" data-chip="${v.exDelar ? 'on' : 'off'}" aria-pressed="${v.exDelar ? 'true' : 'false'}" title="Dela provet i Del B (utan räknare) och Del C (med räknare)" style="font-family:inherit;font-size:13px;font-weight:500;padding:6px 12px;border-radius:3px;background:var(--surface);color:var(--ink-2);border:1px solid var(--line);transition:border-color .14s,background .14s,color .14s">Del B/C</button>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px">
+              <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);margin-right:3px">När</span>
+              <input type="date" value="${esc(v.exDatum)}" data-change="${on(v.onExDatum)}" aria-label="Provdatum" style="background:var(--surface);border:1px solid var(--line);border-radius:3px;padding:6px 9px;font-size:13px;font-family:inherit;color:var(--ink-2)">
             </div>
             ${ v.exReferensVal.length ? `
             <div style="display:flex;align-items:center;gap:6px">
@@ -5425,37 +5481,28 @@ function viewPlanning(v){
             </div>
             ` : '' }
           </div>
-        </div>
 
-        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px">
-          <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);margin-right:3px">Bilder</span>
-          ${ v.exUnderlagBusy ? `
-          <span style="display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-2)"><span style="width:13px;height:13px;border-radius:50%;border:2px solid var(--line-2);border-top-color:var(--accent);animation:spin .7s linear infinite"></span>Läser och tolkar bilderna …</span>
-          ` : v.exUnderlag ? `
-          ${ v.exUnderlag.filer.map(function(f){ return `<span title="${esc(f.beskrivning || f.namn)}" style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2);background:var(--sunken);border:1px solid var(--line);border-radius:3px;padding:4px 10px;max-width:220px"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(f.namn)}</span></span>`; }).join('') }
-          <button data-click="${on(v.onClearExUnderlag)}" aria-label="Ta bort bilderna" title="Ta bort bilderna" style="border:none;background:transparent;color:var(--ink-3);cursor:pointer;font-size:12px;padding:2px 6px;font-family:inherit">✕</button>
-          <button data-click="${on(v.onPickExUnderlag)}" style="border:none;background:transparent;color:var(--ink-2);cursor:pointer;font-size:12.5px;font-family:inherit;padding:2px 4px;text-decoration:underline;text-underline-offset:3px">Byt</button>
-          ` : `
-          <button data-click="${on(v.onPickExUnderlag)}" title="Ladda upp bilder som byggs in i provuppgifterna — varje bild får en egen uppgift; behandlas lokalt" style="display:inline-flex;align-items:center;gap:7px;border:1px dashed var(--line-2);background:transparent;color:var(--ink-2);border-radius:3px;padding:6px 12px;font-size:12.5px;font-family:inherit;cursor:pointer">＋ Bilder till uppgifter (PNG, JPG, PDF)</button>
-          ` }
-        </div>
-
-        ${ v.exContentGroups.length ? `
-          <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:6px">
-            ${ v.exContentGroups.map(function(g3){ return `
-            <div role="group" aria-label="${esc(g3.rubrik)}">
-              <div style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);margin-bottom:6px">${esc(g3.rubrik)}</div>
-              <div style="display:flex;flex-wrap:wrap;gap:6px">
-                ${ g3.punkter.map(function(p){ return `
-                <button data-key="cc-${esc(p.id)}" data-click="${on(p.onToggle)}" title="${esc(p.text)}" aria-pressed="${p.vald}" style="display:inline-flex;align-items:center;gap:6px;border:1px solid ${p.vald ? 'var(--accent)' : 'var(--line)'};background:${p.vald ? 'var(--accent-weak)' : 'var(--surface)'};color:${p.vald ? 'var(--accent)' : 'var(--ink-2)'};border-radius:3px;padding:5px 10px;font-size:12.5px;font-family:inherit;cursor:pointer;font-weight:${p.vald ? '600' : '500'};text-align:left;transition:border-color .14s,background .14s,color .14s">
-                  ${esc(p.kort)}${ p.behandlad ? `<span title="Behandlat i undervisningen" style="font-size:11px">✓</span>` : `<span title="Ännu inte behandlat" style="font-size:11px;opacity:.6">○</span>` }${ p.provad ? `<span title="Prövat på prov/arbetsblad" style="font-size:11px">★</span>` : '' }
-                </button>`; }).join('') }
-              </div>
+          <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+            <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);flex:0 0 68px">Bilder</span>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              ${ v.exUnderlagBusy ? `
+              <span style="display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-2)"><span style="width:13px;height:13px;border-radius:50%;border:2px solid var(--line-2);border-top-color:var(--accent);animation:spin .7s linear infinite"></span>Läser och tolkar bilderna …</span>
+              ` : v.exUnderlag ? `
+              ${ v.exUnderlag.filer.map(function(f){ return `<span title="${esc(f.beskrivning || f.namn)}" style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2);background:var(--sunken);border:1px solid var(--line);border-radius:3px;padding:4px 10px;max-width:220px"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(f.namn)}</span></span>`; }).join('') }
+              <button data-click="${on(v.onClearExUnderlag)}" aria-label="Ta bort bilderna" title="Ta bort bilderna" style="border:none;background:transparent;color:var(--ink-3);cursor:pointer;font-size:12px;padding:2px 6px;font-family:inherit">✕</button>
+              <button data-click="${on(v.onPickExUnderlag)}" style="border:none;background:transparent;color:var(--ink-2);cursor:pointer;font-size:12.5px;font-family:inherit;padding:2px 4px;text-decoration:underline;text-underline-offset:3px">Byt</button>
+              ` : `
+              <button data-click="${on(v.onPickExUnderlag)}" title="Ladda upp bilder som byggs in i provuppgifterna — varje bild får en egen uppgift; behandlas lokalt" style="display:inline-flex;align-items:center;gap:7px;border:1px dashed var(--line-2);background:transparent;color:var(--ink-2);border-radius:3px;padding:6px 12px;font-size:12.5px;font-family:inherit;cursor:pointer">＋ Bilder till uppgifter (PNG, JPG, PDF)</button>
+              ` }
             </div>
-            `; }).join('') }
           </div>
-          <div style="font-size:12px;color:var(--ink-3);margin-bottom:12px">Välj vilka innehållspunkter provet ska pröva — ○ ej behandlat i undervisningen · ✓ behandlat · ★ redan prövat på prov.</div>
-        ` : (v.exCourseId ? '' : `<div style="font-size:13px;color:var(--ink-3);margin-bottom:12px">Välj kurs för att se innehållspunkterna — ✓ = behandlat i undervisningen.</div>`) }
+
+          <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding-top:13px;border-top:1px solid color-mix(in srgb,var(--line) 60%,transparent)">
+            ${ v.exCanStart || v.exRunning ? '' : `<span style="font-size:13px;color:var(--ink-3)">Välj kurs ovan så kan ${v.exTyp === 'arbetsblad' ? 'arbetsbladet' : 'provet'} skrivas.</span>` }
+            <span style="flex:1"></span>
+            <button data-click="${on(v.onExStart)}" ${v.exCanStart ? '' : 'disabled'} style="display:inline-flex;align-items:center;gap:7px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:4px;padding:13px 22px;font-size:14.5px;font-weight:500;font-family:inherit;cursor:${v.exCanStart ? 'pointer' : 'default'};opacity:${v.exCanStart ? '1' : '.55'}">${v.exRunning ? 'Skriver …' : (v.exTyp === 'arbetsblad' ? 'Skriv arbetsbladet' : 'Skriv provet')}</button>
+          </div>
+        </div>
 
         ${ (v.exRunning || v.exUnderlagBusy) && v.exHasLog ? `
           <div role="status" style="display:flex;flex-direction:column;gap:3px;margin-bottom:12px;font-size:13px;color:var(--ink-2)">
@@ -5471,17 +5518,19 @@ function viewPlanning(v){
         ` : '' }
 
         ${ v.exam ? `
-          <div data-key="exam-card" style="background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px 18px;box-shadow:var(--shadow-sm);animation:fadeup .3s ease both">
+          <div data-key="exam-card" style="background:var(--surface);border:1px solid var(--line);border-radius:5px;padding:16px 18px;animation:fadeup .34s cubic-bezier(.16,1,.3,1) both">
             <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:6px">
               <span style="font-size:16px;font-weight:600;color:var(--ink)">${esc(v.exam.titel)}</span>
               <span style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-3)">${esc(v.exam.typ)}</span>
               <span style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.07em;text-transform:uppercase;color:${v.exam.godkant ? 'var(--ok)' : 'var(--ink-3)'}">${esc(v.exam.status)}</span>
               <span style="font-size:12.5px;color:var(--ink-3)">${esc(v.exam.versionRad)}</span>
+              <span style="flex:1"></span>
+              <button data-click="${on(v.onExClose)}" aria-label="Stäng ${v.exam.typ === 'arbetsblad' ? 'arbetsbladet' : 'provet'}" title="Stäng — tillbaka till inställningarna" style="align-self:center;border:none;background:transparent;color:var(--ink-3);cursor:pointer;font-size:14px;line-height:1;padding:5px 8px;border-radius:3px;font-family:inherit">✕</button>
             </div>
             <div style="font-size:13.5px;color:var(--ink-2);font-variant-numeric:tabular-nums">${esc(v.exam.balansRad)}</div>
             <div style="font-size:13px;color:var(--ink-3);font-variant-numeric:tabular-nums;margin-bottom:6px">${esc(v.exam.granserRad)}</div>
             <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
-              ${ v.exam.formagor.map(function(f2){ return `<span data-key="fm-${esc(f2.f)}" style="font-family:var(--mono);font-size:11px;color:var(--ink-2);background:var(--sunken);border:1px solid var(--line);border-radius:6px;padding:2px 8px">${esc(f2.f)} ${esc(f2.p)} p</span>`; }).join('') }
+              ${ v.exam.formagor.map(function(f2){ return `<span data-key="fm-${esc(f2.f)}" style="font-family:var(--mono);font-size:11px;color:var(--ink-2);background:var(--sunken);border:1px solid var(--line);border-radius:3px;padding:2px 8px">${esc(f2.f)} ${esc(f2.p)} p</span>`; }).join('') }
             </div>
             ${ v.exDubbletter.length ? `
               <div role="status" style="display:flex;flex-direction:column;gap:4px;margin-bottom:14px;font-size:13px;color:var(--warn)">
@@ -5500,37 +5549,22 @@ function viewPlanning(v){
                 </div>
                 <div style="font-size:14px;color:var(--ink);line-height:1.5;margin-bottom:7px">${esc(u2.text)}</div>
                 <div style="display:flex;gap:8px">
-                  <input value="${esc(u2.chatValue)}" data-input="${on(u2.onChat)}" aria-label="Ändra uppgift ${esc(u2.nummer)}" placeholder="Ändra uppgiften — t.ex. gör den svårare, byt kontext …" style="flex:1;min-width:0;background:var(--sunken);border:1px solid var(--line);border-radius:8px;padding:7px 11px;font-size:13px;font-family:inherit;color:var(--ink)">
-                  <button data-click="${on(u2.onSend)}" ${u2.canSend ? '' : 'disabled'} style="border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:8px;padding:7px 13px;font-size:13px;font-weight:500;font-family:inherit;cursor:${u2.canSend ? 'pointer' : 'default'};opacity:${u2.canSend ? '1' : '.55'}">Ändra</button>
+                  <input value="${esc(u2.chatValue)}" data-input="${on(u2.onChat)}" aria-label="Ändra uppgift ${esc(u2.nummer)}" placeholder="Ändra uppgiften — t.ex. gör den svårare, byt kontext …" style="flex:1;min-width:0;background:var(--sunken);border:1px solid var(--line);border-radius:4px;padding:7px 11px;font-size:13px;font-family:inherit;color:var(--ink)">
+                  <button data-click="${on(u2.onSend)}" ${u2.canSend ? '' : 'disabled'} style="border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:4px;padding:7px 13px;font-size:13px;font-weight:500;font-family:inherit;cursor:${u2.canSend ? 'pointer' : 'default'};opacity:${u2.canSend ? '1' : '.55'}">Ändra</button>
                 </div>
               </div>
             `; }).join('') }
 
             <div style="display:flex;align-items:center;gap:10px;margin-top:14px;flex-wrap:wrap">
-              <button data-click="${on(v.onExApprove)}" ${!v.exRunning ? '' : 'disabled'} style="display:inline-flex;align-items:center;gap:7px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:10px;padding:10px 17px;font-size:14.5px;font-weight:500;font-family:inherit;cursor:${!v.exRunning ? 'pointer' : 'default'};opacity:${!v.exRunning ? '1' : '.55'};box-shadow:var(--shadow-sm)">${v.exam.godkant ? 'Skapa PDF igen' : 'Godkänn & skapa PDF'}</button>
-              ${ v.exam.hasPdf ? `<button data-click="${on(v.onExPdf)}" style="border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:10px;padding:10px 15px;font-size:14px;font-weight:500;font-family:inherit;cursor:pointer">Öppna PDF</button>` : '' }
-              ${ v.exam.hasTex ? `<button data-click="${on(v.onExTex)}" style="border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:10px;padding:10px 15px;font-size:14px;font-weight:500;font-family:inherit;cursor:pointer">.tex</button>` : '' }
-              ${ v.exam.hasTex ? `<button data-click="${on(v.onExOverleaf)}" title="Tillval: öppnar källan i Overleaf (molntjänst) för manuell finputs — prov innehåller ingen elevdata" style="border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:10px;padding:10px 15px;font-size:14px;font-weight:500;font-family:inherit;cursor:pointer">Öppna i Overleaf</button>` : '' }
+              <button data-click="${on(v.onExApprove)}" ${!v.exRunning ? '' : 'disabled'} style="display:inline-flex;align-items:center;gap:7px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:4px;padding:10px 17px;font-size:14.5px;font-weight:500;font-family:inherit;cursor:${!v.exRunning ? 'pointer' : 'default'};opacity:${!v.exRunning ? '1' : '.55'}">${v.exam.godkant ? 'Skapa PDF igen' : 'Godkänn & skapa PDF'}</button>
+              ${ v.exam.hasPdf ? `<button data-click="${on(v.onExPdf)}" style="border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:4px;padding:10px 15px;font-size:14px;font-weight:500;font-family:inherit;cursor:pointer">Öppna PDF</button>` : '' }
+              ${ v.exam.hasTex ? `<button data-click="${on(v.onExTex)}" style="border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:4px;padding:10px 15px;font-size:14px;font-weight:500;font-family:inherit;cursor:pointer">.tex</button>` : '' }
+              ${ v.exam.hasTex ? `<button data-click="${on(v.onExOverleaf)}" title="Tillval: öppnar källan i Overleaf (molntjänst) för manuell finputs — prov innehåller ingen elevdata" style="border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:4px;padding:10px 15px;font-size:14px;font-weight:500;font-family:inherit;cursor:pointer">Öppna i Overleaf</button>` : '' }
               ${ v.exMsg ? `<span role="status" style="font-size:13.5px;color:var(--ink-2);word-break:break-all">${esc(v.exMsg)}</span>` : '' }
             </div>
           </div>
         ` : '' }
 
-        ${ v.exHistorik.length ? `
-          <div style="margin-top:16px">
-            <div style="font-size:12px;text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-3);font-weight:600;margin-bottom:7px">Historik — ${esc(v.exHistorik.length)} prov/arbetsblad i kursen</div>
-            <div style="display:flex;flex-direction:column;gap:4px">
-              ${ v.exHistorik.map(function(h2){ return `
-                <button data-key="hist-${esc(h2.id)}" data-click="${on(h2.onOpen)}" style="display:flex;align-items:baseline;gap:10px;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:9px;padding:7px 12px;font-size:13px;font-family:inherit;cursor:pointer;text-align:left">
-                  <span style="font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(h2.titel)}</span>
-                  <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.06em;text-transform:uppercase;color:var(--ink-3)">${esc(h2.typ)}</span>
-                  ${ h2.datum ? `<span style="font-family:var(--mono);font-size:11px;color:var(--ink-3)">${esc(h2.datum)}</span>` : '' }
-                  <span style="flex:1"></span>
-                  <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.06em;text-transform:uppercase;color:${h2.status === 'godkänt' ? 'var(--ok)' : 'var(--ink-3)'}">${esc(h2.status)}</span>
-                </button>`; }).join('') }
-            </div>
-          </div>
-        ` : '' }
       </div>
     </section>
 `; }

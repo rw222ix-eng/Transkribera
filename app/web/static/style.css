@@ -210,6 +210,32 @@ button:not(:disabled):not([aria-disabled="true"]):active,[data-press]:active{tra
 [data-scan="hit"] span:first-child{color:var(--accent) !important}
 [data-scan="queue"]{border-style:dashed !important;opacity:.75}
 
+/* ---- Prov: centralt innehåll — ihopfällbara valgrupper (kompakt flerval) ----
+   Höjdanimation via grid-template-rows (0fr→1fr), check ritas med dash-offset.
+   Expo-out genomgående; reduced motion stänger av allt. */
+[data-ccg]{border:1px solid var(--line);border-radius:4px;background:var(--surface)}
+button[data-ccg-head]{display:flex;align-items:center;gap:9px;width:100%;border:none;background:transparent;color:var(--ink-2);padding:9px 12px;font-family:inherit;cursor:pointer;text-align:left;border-radius:3px}
+button[data-ccg-head]:not(:disabled):hover{background:var(--sunken) !important;color:var(--ink) !important;border-color:transparent !important;box-shadow:none !important}
+[data-ccg-caret]{transition:transform .34s cubic-bezier(.16,1,.3,1)}
+[data-ccg-open="true"] [data-ccg-caret]{transform:rotate(90deg)}
+[data-ccg-body]{display:grid;grid-template-rows:0fr;transition:grid-template-rows .34s cubic-bezier(.16,1,.3,1)}
+[data-ccg-open="true"] [data-ccg-body]{grid-template-rows:1fr}
+[data-ccg-body]>div{min-height:0;overflow:hidden}
+[data-ccg-count="on"]{color:var(--accent) !important;font-weight:600}
+button[data-ccrow]{display:flex;align-items:center;gap:9px;width:100%;min-height:30px;border:none;background:transparent;border-radius:3px;padding:5px 8px;font-family:inherit;cursor:pointer;text-align:left}
+button[data-ccrow]:not(:disabled):hover{background:var(--accent-weak) !important;color:inherit !important;border-color:transparent !important;box-shadow:none !important}
+[data-ck]{width:15px;height:15px;flex:0 0 auto;border:1.5px solid var(--line-2);border-radius:3px;display:inline-flex;align-items:center;justify-content:center;color:var(--btn-fg);background:var(--surface);transition:background .18s ease,border-color .18s ease}
+[data-ck] svg{width:10px;height:10px;display:block}
+[data-ck] svg path{stroke-dasharray:14;stroke-dashoffset:14;transition:stroke-dashoffset .28s cubic-bezier(.16,1,.3,1) .05s}
+[data-ck="on"]{background:var(--ink);border-color:var(--ink);animation:ckpop .3s cubic-bezier(.16,1,.3,1)}
+[data-ck="on"] svg path{stroke-dashoffset:0}
+@keyframes ckpop{0%{transform:scale(.8)}60%{transform:scale(1.06)}100%{transform:scale(1)}}
+@media (prefers-reduced-motion:reduce){
+  [data-ccg-body],[data-ccg-caret]{transition:none !important}
+  [data-ck]{animation:none !important;transition:none !important}
+  [data-ck] svg path{transition:none !important}
+}
+
 /* ---- Modal in/out + unlock animations ---- */
 @keyframes modalBackIn{from{opacity:0}to{opacity:1}}
 @keyframes modalBackOut{from{opacity:1}to{opacity:0}}
