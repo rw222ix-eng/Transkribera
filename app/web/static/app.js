@@ -4619,18 +4619,11 @@ function viewRecordings(v){
         ${ v.askScan.note ? `
         <div role="status" style="display:flex;align-items:center;gap:9px;margin-top:13px;font-size:13.5px;color:var(--ink-2)"><span style="width:12px;height:12px;border-radius:50%;border:2px solid var(--line-2);border-top-color:var(--accent);animation:spin .7s linear infinite;flex:0 0 auto"></span>${esc(v.askScan.note)}</div>
         ` : '' }
-        ${ v.askScan.ansStarted ? `
-        <div data-askwrap="${esc(v.askScan.askZoomFlag)}" data-click="${on(v.askScan.closeAskZoom)}">
-        <div data-askzoom="${esc(v.askScan.askZoomFlag)}" data-click="${on(v.askScan.onAskCardClick)}" title="Klicka för att förstora svaret" style="margin-top:16px;border:1px solid var(--line);border-radius:13px;background:var(--surface);box-shadow:var(--shadow-sm);animation:fadeup .3s ease both;overflow:hidden">
-          <div style="display:grid;grid-template-columns:minmax(0,1fr) ${ v.askScan.askZoomOn ? '300px' : '224px' };align-items:stretch">
-          <div style="min-width:0;padding:${ v.askScan.askZoomOn ? '24px 28px' : '14px 17px' }">
-            <div style="font-family:var(--mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3)">${esc(v.askScan.ansHeadLabel)}</div>
-            <div style="font-size:12.5px;color:var(--ink-3);margin-top:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">”${esc(v.askScan.q)}”</div>
-            <div data-hidescroll="1" data-askscroll="1" style="max-height:min(52vh,520px);overflow:auto;overscroll-behavior:contain;scrollbar-width:none">
-            <p style="margin:8px 0 0;font-size:${ v.askScan.askZoomOn ? '16px' : '15.5px' };line-height:1.8;color:var(--ink);max-width:62ch;white-space:pre-wrap">${ v.askScan.ansTokens ? v.askScan.ansTokens.map(function(tk){ return tk.isText
+        ${ v.askScan.ansStarted ? (function(){
+          var svarP = `<p style="margin:8px 0 0;font-size:${ v.askScan.askZoomFlag ? '16px' : '15.5px' };line-height:1.8;color:var(--ink);max-width:62ch;white-space:pre-wrap">${ v.askScan.ansTokens ? v.askScan.ansTokens.map(function(tk){ return tk.isText
               ? `<span>${esc(tk.text)}</span>`
-              : `<button data-click="${on(tk.onCite)}" data-csup="off" title="${esc(tk.label)}" aria-label="Öppna källa ${esc(tk.num)} — ${esc(tk.label)}" style="display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;font-size:11px;font-weight:700;color:var(--accent);background:var(--accent-weak);border:1px solid color-mix(in srgb,var(--accent) 28%,transparent);border-radius:6px;cursor:pointer;vertical-align:2px;margin:0 1.5px;font-family:inherit;transition:transform .1s">${esc(tk.num)}</button>`; }).join('') : esc(v.askScan.answer) }${ v.askScan.ansTyping ? '<span class="ai-blink" style="display:inline-block;width:9px;height:17px;background:var(--accent);vertical-align:-3px;margin-left:3px"></span>' : '' }</p>
-            ${ v.askScan.askZoomOn && v.askScan.askFollowups.length ? `
+              : `<button data-click="${on(tk.onCite)}" data-csup="off" title="${esc(tk.label)}" aria-label="Öppna källa ${esc(tk.num)} — ${esc(tk.label)}" style="display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;font-size:11px;font-weight:700;color:var(--accent);background:var(--accent-weak);border:1px solid color-mix(in srgb,var(--accent) 28%,transparent);border-radius:6px;cursor:pointer;vertical-align:2px;margin:0 1.5px;font-family:inherit;transition:transform .1s">${esc(tk.num)}</button>`; }).join('') : esc(v.askScan.answer) }${ v.askScan.ansTyping ? '<span class="ai-blink" style="display:inline-block;width:9px;height:17px;background:var(--accent);vertical-align:-3px;margin-left:3px"></span>' : '' }</p>`;
+          var trad = v.askScan.askFollowups.length ? `
             <div style="margin-top:18px;border-top:1px solid var(--line);padding-top:14px">
               ${ v.askScan.askFollowups.map(function(f){ return `
                 <div data-key="${esc(f.key)}" style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
@@ -4638,36 +4631,58 @@ function viewRecordings(v){
                   <div style="align-self:stretch;font-size:15px;line-height:1.75;color:var(--ink);white-space:pre-wrap">${esc(f.a)}${ f.typing ? '<span class="ai-blink" style="display:inline-block;width:8px;height:15px;background:var(--accent);vertical-align:-2px;margin-left:3px"></span>' : '' }</div>
                 </div>
               `; }).join('') }
+            </div>` : '';
+          var kalKnapp = `<button data-click="${on(v.askScan.proposeAskCal)}" title="Skapa en kalenderhändelse utifrån svaret" style="display:inline-flex;align-items:center;justify-content:center;gap:7px;background:transparent;color:var(--ink-2);border:1px solid var(--line);border-radius:9px;padding:10px 14px;font-size:13px;font-weight:500;font-family:inherit;cursor:pointer;transition:border-color .14s,color .14s" data-sh="border-color:var(--line-2) !important;color:var(--ink) !important"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="flex:0 0 auto"><rect x="2" y="3" width="12" height="11" rx="2"></rect><path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3M8 9v3M6.5 10.5h3"></path></svg>Kalenderhändelse</button>`;
+          return `
+        <div data-askwrap="${esc(v.askScan.askZoomFlag)}" data-click="${on(v.askScan.closeAskZoom)}">
+        <div data-askzoom="${esc(v.askScan.askZoomFlag)}" data-click="${on(v.askScan.onAskCardClick)}" ${ v.askScan.askZoomFlag ? `role="dialog" aria-label="Arkivsvar — chatt"` : `title="Klicka för att förstora svaret"` } style="margin-top:16px;border:1px solid var(--line);border-radius:13px;background:var(--surface);box-shadow:var(--shadow-sm);animation:fadeup .3s ease both;overflow:hidden">
+          ${ v.askScan.askZoomFlag ? `
+          <div style="display:flex;flex-direction:column;height:100%;min-height:0;padding:18px 26px 16px">
+            <div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:6px;flex:0 0 auto">
+              <div style="min-width:0;flex:1">
+                <div style="font-family:var(--mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3)">${esc(v.askScan.ansHeadLabel)}</div>
+                <div style="font-size:12.5px;color:var(--ink-3);margin-top:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">”${esc(v.askScan.q)}”</div>
+              </div>
+              ${ !v.askScan.askEvent ? kalKnapp : '' }
+              <button data-click="${on(v.askScan.closeAskZoom)}" aria-label="Stäng svaret" title="Stäng (Esc)" style="border:none;background:transparent;color:var(--ink-3);cursor:pointer;font-size:14px;line-height:1;padding:6px 8px;border-radius:3px;font-family:inherit">✕</button>
+            </div>
+            <div data-hidescroll="1" data-askscroll="1" style="flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;scrollbar-width:none">
+              ${svarP}
+              ${trad}
+            </div>
+            ${ v.askScan.askEvent ? `
+            <div data-click="${on(v.stop)}" style="flex:0 0 auto;margin-top:12px">${ lessonEventBox(v.askScan.askEvent) }</div>
+            ` : '' }
+            ${ v.askScan.ansDone ? `
+            <div style="display:flex;gap:9px;align-items:center;margin-top:12px;flex:0 0 auto">
+              <input value="${esc(v.askScan.askFollowInput)}" data-input="${on(v.askScan.setAskFollow)}" data-keydown="${on(v.askScan.onAskFollowKey)}" data-click="${on(v.stop)}" aria-label="Fråga vidare" placeholder="${ v.askScan.askEvent ? 'Fråga vidare — eller be mig ändra kalenderhändelsen …' : 'Ställ en följdfråga …' }" style="flex:1;min-width:0;background:var(--sunken);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:11px 13px;font-size:14.5px;font-family:inherit;outline:none">
+              <button data-click="${on(v.askScan.sendAskFollow)}" style="flex:0 0 auto;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:10px;padding:11px 18px;font-size:14.5px;font-weight:500;cursor:pointer;font-family:inherit;transition:background .15s">Skicka</button>
             </div>
             ` : '' }
+          </div>
+          ` : `
+          <div style="display:grid;grid-template-columns:minmax(0,1fr) 224px;align-items:stretch">
+          <div style="min-width:0;padding:14px 17px">
+            <div style="font-family:var(--mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3)">${esc(v.askScan.ansHeadLabel)}</div>
+            <div style="font-size:12.5px;color:var(--ink-3);margin-top:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">”${esc(v.askScan.q)}”</div>
+            <div data-hidescroll="1" data-askscroll="1" style="max-height:min(52vh,520px);overflow:auto;overscroll-behavior:contain;scrollbar-width:none">
+            ${svarP}
             </div>
-            ${ !v.askScan.askZoomOn && v.askScan.askFollowups.length ? `
+            ${ v.askScan.askFollowups.length ? `
             <div style="margin-top:10px;font-family:var(--mono);font-size:9.5px;letter-spacing:0.06em;text-transform:uppercase;color:var(--ink-3)">${esc(String(v.askScan.askFollowups.length))} följdfråg${ v.askScan.askFollowups.length === 1 ? 'a' : 'or' } — öppna chattvyn för att fortsätta</div>
             ` : '' }
             ${ v.askScan.askEvent ? `
               <div data-click="${on(v.stop)}" style="margin-top:12px">${ lessonEventBox(v.askScan.askEvent) }</div>
             ` : '' }
-            ${ v.askScan.askZoomOn && v.askScan.ansDone ? `
-              <div style="display:flex;gap:9px;align-items:center;margin-top:12px">
-                <input value="${esc(v.askScan.askFollowInput)}" data-input="${on(v.askScan.setAskFollow)}" data-keydown="${on(v.askScan.onAskFollowKey)}" data-click="${on(v.stop)}" aria-label="Ställ en följdfråga" placeholder="Ställ en följdfråga …" style="flex:1;min-width:0;background:var(--sunken);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:11px 13px;font-size:14.5px;font-family:inherit;outline:none">
-                <button data-click="${on(v.askScan.sendAskFollow)}" style="flex:0 0 auto;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:10px;padding:11px 18px;font-size:14.5px;font-weight:500;cursor:pointer;font-family:inherit;transition:background .15s">Skicka</button>
-              </div>
-            ` : '' }
           </div>
           <div data-click="${on(v.stop)}" style="display:flex;flex-direction:column;gap:6px;padding:12px;background:var(--sunken);border-left:1px solid var(--line);min-width:0">
-            ${ !v.askScan.askZoomOn ? `
             <button data-click="${on(v.askScan.onAskCardClick)}" title="Öppna svaret i en fokuserad chattvy" style="display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:9px;padding:11px 16px;font-size:13.5px;font-weight:600;font-family:inherit;cursor:pointer;transition:background .15s">Öppna i chattvyn<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto"><path d="M3 8h10M9 4l4 4-4 4"></path></svg></button>
-            ` : '' }
-            ${ !v.askScan.askEvent ? `
-            <button data-click="${on(v.askScan.proposeAskCal)}" title="Skapa en kalenderhändelse utifrån svaret" style="display:inline-flex;align-items:center;justify-content:center;gap:7px;background:transparent;color:var(--ink-2);border:1px solid var(--line);border-radius:9px;padding:10px 14px;font-size:13px;font-weight:500;font-family:inherit;cursor:pointer;transition:border-color .14s,color .14s" data-sh="border-color:var(--line-2) !important;color:var(--ink) !important"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="flex:0 0 auto"><rect x="2" y="3" width="12" height="11" rx="2"></rect><path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3M8 9v3M6.5 10.5h3"></path></svg>Kalenderhändelse</button>
-            ` : '' }
-            ${ /* Källpanelen är borttagen — källorna är klickbara siffror inne i
-                  svaret (samma källförankring som lektionschatten). */ '' }
+            ${ !v.askScan.askEvent ? kalKnapp : '' }
           </div>
           </div>
+          ` }
         </div>
-        </div>
-        ` : '' }
+        </div>`; })() : '' }
       </div>
       ` : '' }
 
