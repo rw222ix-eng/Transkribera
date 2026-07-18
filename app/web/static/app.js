@@ -3642,12 +3642,30 @@
       archiveCountLabel: 'Arkiv — ' + st.lessons.length + (st.lessons.length === 1 ? ' inspelning' : ' inspelningar') + ' i minnet',
       askActive: askActive,
       // Kartotekets live-skanning + inline-svar (ersätter tänker-bannern + svarsmodalen)
-      askScan: askActive ? {
+      askScan: askActive ? (function () {
+        // När svaret är klart visas bara de källor svaret FAKTISKT citerar
+        // ([1], [2] …) som underlag — en svag ordträff i en irrelevant
+        // inspelning ska inte stå kvar som "svaret bygger på denna".
+        var citerade = null;
+        if (!st.asking && st.askAnswer && (st.askDeep || []).length) {
+          var setN = {};
+          (st.askAnswer.match(/\[(\d+)\]/g) || []).forEach(function (m2) {
+            setN[+m2.slice(1, -1)] = true;
+          });
+          if (Object.keys(setN).length) citerade = setN;
+        }
+        var deepVisade = citerade
+          ? (st.askDeep || []).filter(function (_s, i) { return citerade[i + 1]; })
+          : (st.askDeep || []);
+        return {
         theater: buildScanModel({
           plan: scanPlan, res: st.askScanRes || {}, shown: st.askScanShown,
-          scanning: scanning, deep: st.askDeep, noun: 'inspelningar',
+          scanning: scanning, deep: deepVisade, noun: 'inspelningar',
+          // Aktiv puls på progressionslinjen hela tiden modellen tänker —
+          // från skanning tills första svarstecknet kommer.
+          thinking: st.asking && !st.askAnswer,
           onNew: clearSearch,
-          deskCards: (st.askDeep || []).map(function (s2) {
+          deskCards: deepVisade.map(function (s2) {
             var clickable = !st.asking && !!st.askAnswer;
             return { key: s2.lesson_id, title: s2.name || '(namnlös)',
                      sub: [s2.group, s2.course, s2.datum].filter(Boolean).join(' · '),
@@ -3661,7 +3679,10 @@
         ansTyping: st.asking && !!st.askAnswer,
         ansDone: !st.asking && !!st.askAnswer,
         ansHeadLabel: (!st.asking && st.askAnswer && (st.askSources || []).length)
-          ? ('Svar — ' + (st.askSources || []).length + ((st.askSources || []).length === 1 ? ' källa' : ' källor'))
+          ? (function () {
+              var n = citerade ? Object.keys(citerade).length : (st.askSources || []).length;
+              return 'Svar — ' + n + (n === 1 ? ' källa' : ' källor');
+            })()
           : 'Svar',
         answer: st.askAnswer,
         // Klickbara sifferkällor i svaret (samma källförankring som lektions-
@@ -3716,7 +3737,7 @@
                    sub: [s2.group, s2.course, s2.datum].filter(Boolean).join(' · '),
                    onCite: function (e) { if (e) e.stopPropagation(); openLessonChat(s2); } };
         }),
-      } : null,
+      }; })() : null,
       lessonGroups: st.groups, lessonCourses: st.courses,
       lessonMonths: lessonMonths, lessonFilterMonth: st.lessonFilterMonth,
       onClearFilters: clearLessonFilters,
@@ -4637,7 +4658,10 @@ function viewRecordings(v){
         <div data-askwrap="${esc(v.askScan.askZoomFlag)}" data-click="${on(v.askScan.closeAskZoom)}">
         <div data-askzoom="${esc(v.askScan.askZoomFlag)}" data-click="${on(v.askScan.onAskCardClick)}" ${ v.askScan.askZoomFlag ? `role="dialog" aria-label="Arkivsvar — chatt"` : `title="Klicka för att förstora svaret"` } style="margin-top:16px;border:1px solid var(--line);border-radius:13px;background:var(--surface);box-shadow:var(--shadow-sm);animation:fadeup .3s ease both;overflow:hidden">
           ${ v.askScan.askZoomFlag ? `
-          <div style="display:flex;flex-direction:column;height:100%;min-height:0;padding:18px 26px 16px">
+          ${ /* Läsströmmen centreras i modalen: sidopaddingen växer symmetriskt
+                när modalen är bredare än läsmåttet (~700px) — texten klänger
+                inte längre vid vänsterkanten med ett dött fält till höger. */ '' }
+          <div style="display:flex;flex-direction:column;height:100%;min-height:0;padding:18px max(26px,calc((100% - 700px)/2)) 16px">
             <div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:6px;flex:0 0 auto">
               <div style="min-width:0;flex:1">
                 <div style="font-family:var(--mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3)">${esc(v.askScan.ansHeadLabel)}</div>
@@ -4661,8 +4685,10 @@ function viewRecordings(v){
             ` : '' }
           </div>
           ` : `
-          <div style="display:grid;grid-template-columns:minmax(0,1fr) 224px;align-items:stretch">
-          <div style="min-width:0;padding:14px 17px">
+          ${ /* Enkolumns läsström (layout-passet 2026-07-18): sidospalten var en
+                stretchad tomyta för två knappar — nu bär svaret hela bredden
+                och åtgärderna sitter i en tyst hårlinje-fot. */ '' }
+          <div style="min-width:0;padding:15px 17px 13px">
             <div style="font-family:var(--mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3)">${esc(v.askScan.ansHeadLabel)}</div>
             <div style="font-size:12.5px;color:var(--ink-3);margin-top:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">”${esc(v.askScan.q)}”</div>
             <div data-hidescroll="1" data-askscroll="1" style="max-height:min(52vh,520px);overflow:auto;overscroll-behavior:contain;scrollbar-width:none">
@@ -4675,10 +4701,11 @@ function viewRecordings(v){
               <div data-click="${on(v.stop)}" style="margin-top:12px">${ lessonEventBox(v.askScan.askEvent) }</div>
             ` : '' }
           </div>
-          <div data-click="${on(v.stop)}" style="display:flex;flex-direction:column;gap:6px;padding:12px;background:var(--sunken);border-left:1px solid var(--line);min-width:0">
-            <button data-click="${on(v.askScan.onAskCardClick)}" title="Öppna svaret i en fokuserad chattvy" style="display:inline-flex;align-items:center;justify-content:center;gap:8px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:9px;padding:11px 16px;font-size:13.5px;font-weight:600;font-family:inherit;cursor:pointer;transition:background .15s">Öppna i chattvyn<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto"><path d="M3 8h10M9 4l4 4-4 4"></path></svg></button>
-            ${ !v.askScan.askEvent ? kalKnapp : '' }
-          </div>
+          <div data-click="${on(v.stop)}" style="display:flex;align-items:center;gap:19px;border-top:1px solid var(--line);padding:11px 17px">
+            <button data-click="${on(v.askScan.onAskCardClick)}" data-textbtn title="Öppna svaret i en fokuserad chattvy" style="font-family:var(--mono);font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:var(--accent);background:transparent;border:none;padding:0;cursor:pointer">Öppna i chattvyn ↗</button>
+            ${ !v.askScan.askEvent ? `<button data-click="${on(v.askScan.proposeAskCal)}" data-textbtn title="Skapa en kalenderhändelse utifrån svaret" style="display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-2);background:transparent;border:none;padding:0;cursor:pointer"><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="flex:0 0 auto"><rect x="2" y="3" width="12" height="11" rx="2"></rect><path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3M8 9v3M6.5 10.5h3"></path></svg>Kalenderhändelse</button>` : '' }
+            <span style="flex:1"></span>
+            <span aria-hidden="true" style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.06em;text-transform:uppercase;color:var(--ink-3)">Klicka för att förstora</span>
           </div>
           ` }
         </div>
@@ -4869,6 +4896,9 @@ function buildScanModel(cfg){
   return {
     active: plan.length > 0,
     scanning: !!cfg.scanning && !deskOn,
+    // Aktiv puls på linjen hela tiden modellen tänker (skanning klar men
+    // inget svar ännu) — utan den ser sökningen död ut medan LLM:en laddar.
+    busy: !!cfg.thinking,
     ticker: 'Söker igenom ' + plan.length + ' ' + cfg.noun + (current && current.name ? ' — ' + current.name : ''),
     doneLabel: '✓ Genomsökte ' + plan.length + ' ' + cfg.noun,
     progress: plan.length ? effShown / plan.length : 0,
@@ -4899,8 +4929,8 @@ function scanTheater(m){
       ` : `
         <span style="${mono};font-size:10.5px;color:var(--ok);flex:0 0 auto">${esc(m.doneLabel)}</span>
       ` }
-      <div class="scan-progress" aria-hidden="true"><i style="transform:scaleX(${m.progress})"></i></div>
-      <span style="${mono};font-size:10px;color:var(--accent);flex:0 0 auto">${esc(m.hitLabel)}</span>
+      <div class="scan-progress${ m.busy && !m.scanning ? ' scan-progress--busy' : '' }" aria-hidden="true"><i style="transform:scaleX(${m.progress})"></i></div>
+      <span style="${mono};font-size:10px;color:var(--accent);flex:0 0 auto">${esc(m.hitLabel)}${ m.busy && !m.scanning ? ' · tänker …' : '' }</span>
       <button data-click="${on(m.onNew)}" style="flex:0 0 auto;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:7px;padding:5px 10px;${mono};font-size:10px;cursor:pointer">✕ Ny fråga</button>
     </div>
     ${ m.desk ? `
@@ -5669,39 +5699,42 @@ function viewPlanning(v){
 
           ${ v.arkiv.ansStarted ? `
           <div style="margin-top:16px;border:1px solid var(--line);border-radius:13px;background:var(--surface);box-shadow:var(--shadow-sm);animation:fadeup .3s ease both;overflow:hidden">
-            <div style="display:grid;grid-template-columns:minmax(0,1fr) 224px;align-items:stretch">
-              <div style="min-width:0;padding:14px 17px">
-                <div style="font-family:var(--mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3)">${esc(v.arkiv.ansHeadLabel)}</div>
-                <div style="font-size:12.5px;color:var(--ink-3);margin-top:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">”${esc(v.arkiv.q)}”</div>
-                <p style="margin:8px 0 0;font-size:15.5px;line-height:1.8;color:var(--ink);max-width:62ch;white-space:pre-wrap">${esc(v.arkiv.answer)}${ v.arkiv.ansTyping ? '<span class="ai-blink" style="display:inline-block;width:9px;height:17px;background:var(--accent);vertical-align:-3px;margin-left:3px"></span>' : '' }</p>
-                ${ v.arkiv.followups.length ? `
-                <div style="margin-top:16px;border-top:1px solid var(--line);padding-top:13px">
-                  ${ v.arkiv.followups.map(function(f){ return `
-                    <div data-key="${esc(f.key)}" style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">
-                      <div style="align-self:flex-end;max-width:86%;background:var(--accent-weak);color:var(--ink);border:1px solid color-mix(in srgb,var(--accent) 25%,transparent);border-radius:14px 14px 4px 14px;padding:9px 13px;font-size:14px;line-height:1.5">${esc(f.q)}</div>
-                      <div style="align-self:stretch;font-size:14.5px;line-height:1.75;color:var(--ink);white-space:pre-wrap">${esc(f.a)}${ f.typing ? '<span class="ai-blink" style="display:inline-block;width:8px;height:15px;background:var(--accent);vertical-align:-2px;margin-left:3px"></span>' : '' }</div>
-                    </div>
-                  `; }).join('') }
-                </div>
-                ` : '' }
-                ${ v.arkiv.ansDone ? `
-                <div style="display:flex;gap:9px;align-items:center;margin-top:12px">
-                  <input value="${esc(v.arkiv.followInput)}" data-input="${on(v.arkiv.setFollow)}" data-keydown="${on(v.arkiv.onFollowKey)}" aria-label="Ställ en följdfråga" placeholder="Ställ en följdfråga …" style="flex:1;min-width:0;background:var(--sunken);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:10px 13px;font-size:14px;font-family:inherit;outline:none">
-                  <button data-click="${on(v.arkiv.sendFollow)}" style="flex:0 0 auto;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:10px;padding:10px 17px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;transition:background .15s">Skicka</button>
-                </div>
-                ` : '' }
+            ${ /* Enkolumns läsström (layout-passet 2026-07-18): Källor-spalten
+                  var en stretchad tomyta som dessutom dubblerade läsbordet —
+                  källorna är nu diskreta chips i en hårlinje-fot, och foten
+                  finns bara när det finns källor. */ '' }
+            <div style="min-width:0;padding:15px 17px 13px">
+              <div style="font-family:var(--mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3)">${esc(v.arkiv.ansHeadLabel)}</div>
+              <div style="font-size:12.5px;color:var(--ink-3);margin-top:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">”${esc(v.arkiv.q)}”</div>
+              <p style="margin:8px 0 0;font-size:15.5px;line-height:1.8;color:var(--ink);max-width:62ch;white-space:pre-wrap">${esc(v.arkiv.answer)}${ v.arkiv.ansTyping ? '<span class="ai-blink" style="display:inline-block;width:9px;height:17px;background:var(--accent);vertical-align:-3px;margin-left:3px"></span>' : '' }</p>
+              ${ v.arkiv.followups.length ? `
+              <div style="margin-top:16px;border-top:1px solid var(--line);padding-top:13px">
+                ${ v.arkiv.followups.map(function(f){ return `
+                  <div data-key="${esc(f.key)}" style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">
+                    <div style="align-self:flex-end;max-width:86%;background:var(--accent-weak);color:var(--ink);border:1px solid color-mix(in srgb,var(--accent) 25%,transparent);border-radius:14px 14px 4px 14px;padding:9px 13px;font-size:14px;line-height:1.5">${esc(f.q)}</div>
+                    <div style="align-self:stretch;font-size:14.5px;line-height:1.75;color:var(--ink);white-space:pre-wrap">${esc(f.a)}${ f.typing ? '<span class="ai-blink" style="display:inline-block;width:8px;height:15px;background:var(--accent);vertical-align:-2px;margin-left:3px"></span>' : '' }</div>
+                  </div>
+                `; }).join('') }
               </div>
-              <div style="display:flex;flex-direction:column;gap:6px;padding:12px;background:var(--sunken);border-left:1px solid var(--line);min-width:0">
-                <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3)">Källor</span>
-                ${ v.arkiv.sources.length ? v.arkiv.sources.map(function(s2){ return `
-                  <button data-key="${esc(s2.key)}" data-click="${on(s2.onOpen)}" title="Öppna och se exakt vad den innehåller" style="text-align:left;border:1px solid var(--line);background:var(--surface);border-radius:9px;padding:8px 10px;cursor:pointer;font-family:inherit;min-width:0" data-sh="border-color:var(--accent) !important">
-                    <span style="font-family:var(--mono);font-size:9px;letter-spacing:0.07em;text-transform:uppercase;color:var(--accent);display:block">${esc(s2.typLabel)}</span>
-                    <span style="font-size:12.5px;font-weight:600;color:var(--ink);display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px">${esc(s2.titel)}</span>
-                    ${ s2.sub ? `<span style="font-size:11px;color:var(--ink-3);display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px">${esc(s2.sub)}</span>` : '' }
-                  </button>
-                `; }).join('') : `<span style="font-size:12px;color:var(--ink-3)">${ v.arkiv.ansTyping || !v.arkiv.ansDone ? 'Söker …' : 'Inga källor' }</span>` }
+              ` : '' }
+              ${ v.arkiv.ansDone ? `
+              <div style="display:flex;gap:9px;align-items:center;margin-top:12px">
+                <input value="${esc(v.arkiv.followInput)}" data-input="${on(v.arkiv.setFollow)}" data-keydown="${on(v.arkiv.onFollowKey)}" aria-label="Ställ en följdfråga" placeholder="Ställ en följdfråga …" style="flex:1;min-width:0;background:var(--sunken);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:10px 13px;font-size:14px;font-family:inherit;outline:none">
+                <button data-click="${on(v.arkiv.sendFollow)}" style="flex:0 0 auto;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:10px;padding:10px 17px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;transition:background .15s">Skicka</button>
               </div>
+              ` : '' }
             </div>
+            ${ v.arkiv.sources.length ? `
+            <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;border-top:1px solid var(--line);padding:10px 17px">
+              <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);flex:0 0 auto">Källor</span>
+              ${ v.arkiv.sources.map(function(s2){ return `
+                <button data-key="${esc(s2.key)}" data-click="${on(s2.onOpen)}" title="Öppna och se exakt vad den innehåller — ${esc(s2.sub || s2.titel)}" style="display:inline-flex;align-items:center;gap:7px;max-width:100%;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:5px 11px;cursor:pointer;font-family:inherit;min-width:0" data-sh="border-color:var(--accent) !important">
+                  <span style="font-family:var(--mono);font-size:9px;letter-spacing:0.07em;text-transform:uppercase;color:var(--accent);flex:0 0 auto">${esc(s2.typLabel)}</span>
+                  <span style="font-size:12.5px;font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(s2.titel)}</span>
+                </button>
+              `; }).join('') }
+            </div>
+            ` : '' }
           </div>
           ` : '' }
         </div>

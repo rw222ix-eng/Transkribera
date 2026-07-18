@@ -90,8 +90,13 @@ def _install_fakes() -> None:
     def fake_answer(query, excerpts, filename, token_cb=None):
         # Strömma ordvis med kort paus — annars hinner arkivsökets
         # live-progression (kartotek → läsbord) aldrig synas i fejkläget.
+        # Formen speglar det riktiga svarskontraktet: svaret först och en
+        # [1]-citering, så källfiltreringen ("svaret bygger på dessa N")
+        # går att QA:a i fejkläget. Tänkpausen före första tokenen gör
+        # busy-pulsen på progressionslinjen observerbar.
         import time
-        text = "[FEJK svar] Det togs upp i lektionen."
+        time.sleep(1.5)
+        text = "[FEJK svar] Det togs upp i lektionen [1]."
         if token_cb:
             for w in text.split(" "):
                 token_cb(w + " ")
@@ -113,6 +118,17 @@ def _install_fakes() -> None:
                 if cite else "[FEJK chatt] Jag förstår frågan om lektionen.")
         if token_cb:
             token_cb(text)
+        return text
+
+    def fake_generate(model, prompt, token_cb=None, **kw):
+        # Planeringsarkivets RAG-svar (llm_client.generate) — strömmas ordvis
+        # så svarskortets käll-fot går att verifiera i fejkläget.
+        import time
+        text = "[FEJK arkivsvar] Det gick vi igenom på tavlan Brak och andelar."
+        if token_cb:
+            for w in text.split(" "):
+                token_cb(w + " ")
+                time.sleep(0.1)
         return text
 
     def fake_suggest_title(segments, model, base_url=None):
@@ -226,6 +242,7 @@ def _install_fakes() -> None:
     postprocess.translate_segments = fake_translate
     postprocess.suggest_title = fake_suggest_title
     llm_client.chat = fake_chat
+    llm_client.generate = fake_generate
 
 
 class _FakeArbiter:
