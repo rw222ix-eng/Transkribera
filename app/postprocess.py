@@ -358,6 +358,47 @@ def answer_over_lessons(query: str, excerpts: list[dict], model: str,
         max_tokens=ANSWER_MAX_TOKENS)
 
 
+EXPAND_SYSTEM = (
+    "Du är en svensk sökassistent för en lärares arkiv av "
+    "lektionstranskript. Svara alltid enbart med det efterfrågade formatet."
+)
+
+
+def expand_search_terms(query: str, model: str) -> list[str]:
+    """Bredda en arkivfråga till närliggande svenska ämnesord när frågans
+    egna ord inte träffar något transkript — 'nämns geometri?' ska hitta
+    lektionen som pratar om trianglar, vinklar och Pythagoras utan att
+    ordet geometri sägs. Returnerar en rensad, dedupad ordlista (max 15)."""
+    raw = llm_client.generate(
+        model,
+        "En lärare söker i sitt arkiv av lektionstranskript med frågan:\n"
+        f"\"{query}\"\n\n"
+        "Frågans egna ord gav inga träffar i transkripten. Lista 8–15 "
+        "närliggande svenska sökord som ett lektionstranskript sannolikt "
+        "innehåller om det behandlar ämnet: synonymer, delbegrepp, typiska "
+        "facktermer och vardagsord (även böjda vardagsformer). "
+        "Svara med ENBART orden, kommaseparerade, utan förklaringar.",
+        system=EXPAND_SYSTEM, options={"temperature": 0.2}, max_tokens=300)
+    # Qwen3 kan inleda med ett resonemangsblock — behåll bara slutsvaret.
+    raw = (raw or "").split("</think>")[-1]
+    ut: list[str] = []
+    seen: set[str] = set()
+    for kandidat in re.split(r"[,\n;·•]+", raw):
+        w = kandidat.strip().strip(".").strip("\"'").strip()
+        if not w or len(w) < 3 or len(w.split()) > 3:
+            continue
+        if not re.fullmatch(r"[A-Za-zÅÄÖåäöÉé0-9²³ \-]+", w):
+            continue
+        lw = w.lower()
+        if lw in seen:
+            continue
+        seen.add(lw)
+        ut.append(w)
+        if len(ut) >= 15:
+            break
+    return ut
+
+
 # --------------------------------------------------------------- extraktion (Fas 2) --
 # Plocka ut strukturerade insikter ur en lektion. Resultatet skrivs som
 # redigerbara kort (källa 'llm') – läraren bekräftar; aldrig auto-sanning.

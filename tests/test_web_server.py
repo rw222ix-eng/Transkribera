@@ -1122,6 +1122,51 @@ def test_search_ask_no_match_streams_scan_and_honest_answer(tmp_path, monkeypatc
     assert "verkar inte nämna" in done["result"]["text"]
 
 
+def test_search_ask_semantic_fallback_finds_topical_lesson(tmp_path, monkeypatch):
+    """Frågans egna ord ger 0 träffar men ämnet finns i arkivet: modellen
+    breddar till närliggande begrepp, skannar om och svarar med källor
+    ('nämns geometri?' ska hitta lektionen om trianglar och Pythagoras)."""
+    monkeypatch.setattr(server.postprocess, "expand_search_terms",
+                        lambda q, m: ["derivata", "gränsvärde"])
+    captured = {}
+
+    def fake_answer(query, excerpts, model, token_cb=None):
+        captured["names"] = [e["name"] for e in excerpts]
+        if token_cb:
+            token_cb("Ja")
+        return "Ja, på mattelektionen [1]"
+    monkeypatch.setattr(server.postprocess, "answer_over_lessons", fake_answer)
+    c = _lesson_client(tmp_path, monkeypatch)
+    r = c.post("/api/search/ask", json={"q": "nämns analys?"})
+    assert r.status_code == 200
+    events = _sse_events(r.text)
+    # Två skanningar spelas: först den ordagranna (0 träffar), sedan den
+    # breddade (träff) — med statusraden emellan.
+    plans = [e for e in events if e["type"] == "scan_plan"]
+    assert len(plans) == 2
+    hits = [e["hits"] for e in events if e["type"] == "scan_result"]
+    assert hits[0] == 0 and hits[-1] > 0
+    assert any(e["type"] == "log" and "närliggande" in e["msg"] for e in events)
+    done = next(e for e in events if e["type"] == "done")
+    assert [s["name"] for s in done["result"]["sources"]] == ["lektion.mp3"]
+    assert captured["names"] == ["lektion.mp3"]
+
+
+def test_search_ask_semantic_fallback_honest_when_still_no_hits(tmp_path, monkeypatch):
+    """Ger inte heller de breddade begreppen träff redovisas de i det ärliga
+    svaret — läraren ser att sökningen faktiskt försökte."""
+    monkeypatch.setattr(server.postprocess, "expand_search_terms",
+                        lambda q, m: ["integral", "primitiv funktion"])
+    c = _lesson_client(tmp_path, monkeypatch)
+    r = c.post("/api/search/ask", json={"q": "nämns astronomi?"})
+    assert r.status_code == 200
+    events = _sse_events(r.text)
+    done = next(e for e in events if e["type"] == "done")
+    assert done["result"]["sources"] == []
+    assert "närliggande begrepp" in done["result"]["text"]
+    assert "integral" in done["result"]["text"]
+
+
 def test_search_ask_empty_archive_404(tmp_path, monkeypatch):
     c = _lesson_client(tmp_path, monkeypatch, transcript=False)
     assert c.post("/api/search/ask", json={"q": "integraler"}).status_code == 404
