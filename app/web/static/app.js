@@ -950,6 +950,8 @@
         // Samma ärliga tomläge som kartoteket: "inga träffar" är ett svar.
         var msg = /matchar sökningen/i.test(ev.message || '')
           ? 'Ingen tavla och inget prov i arkivet verkar nämna det du frågar om. Prova att formulera om frågan.'
+          : /network|failed to fetch|load failed/i.test(ev.message || '')
+          ? 'Anslutningen till appen bröts mitt i sökningen. Ställ frågan igen så görs ett nytt försök.'
           : 'Kunde inte söka: ' + (ev.message || 'okänt fel');
         setState({ arkAsking: false, arkAnswer: msg });
       }
@@ -1717,6 +1719,8 @@
         if (_scanTimer) { clearInterval(_scanTimer); _scanTimer = null; }
         var msg = /matchar sökningen/i.test(ev.message || '')
           ? 'Ingen inspelning i arkivet verkar nämna det du frågar om. Prova att formulera om frågan, eller sök på enstaka ord under Sök ord.'
+          : /network|failed to fetch|load failed/i.test(ev.message || '')
+          ? 'Anslutningen till appen bröts mitt i sökningen. Ställ frågan igen så görs ett nytt försök.'
           : 'Kunde inte söka: ' + (ev.message || 'okänt fel');
         setState({ asking: false, askAnswer: msg });
       }

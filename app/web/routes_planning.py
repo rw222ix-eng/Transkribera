@@ -611,9 +611,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
 
         def job(emit):
             try:
-                if arbiter.ensure_llm() is None:
-                    raise RuntimeError("Språkmodellen är inte installerad.")
-                # Live-progressionens riktiga händelser (spec 2026-07-18).
+                # Live-progressionens riktiga händelser (spec 2026-07-18) —
+                # före modellstarten, så kartoteket spelar medan Qwen laddar.
                 emit({"type": "scan_plan", "total": len(scan), "items": [
                     {"key": s["key"], "name": s["name"]} for s in scan]})
                 for s in scan:
@@ -623,6 +622,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     {"typ": it["typ"], "id": it["id"], "titel": it["titel"],
                      "group": it["group"], "course": it["course"],
                      "datum": it["datum"]} for it in hits]})
+                if arbiter.ensure_llm() is None:
+                    raise RuntimeError("Språkmodellen är inte installerad.")
                 emit({"type": "log",
                       "msg": f"Läser {len(hits)} tavlor/prov ..."})
                 blocks = []
