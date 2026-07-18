@@ -4902,19 +4902,30 @@ function buildScanModel(cfg){
     ticker: 'Söker igenom ' + plan.length + ' ' + cfg.noun + (current && current.name ? ' — ' + current.name : ''),
     doneLabel: '✓ Genomsökte ' + plan.length + ' ' + cfg.noun,
     progress: plan.length ? effShown / plan.length : 0,
+    // "Ordträff" (inte "träff"): skiljer ordsökningens träffbild från
+    // antalet källor svaret sedan bygger på — siffrorna ska hänga ihop:
+    // genomsökte N → M ordträffar → svaret bygger på K → la M−K åt sidan.
     hitLabel: hitsSoFar + (hitsSoFar === 1
-      ? (cfg.scanning ? ' träff hittills' : ' träff')
-      : (cfg.scanning ? ' träffar hittills' : ' träffar')),
+      ? (cfg.scanning ? ' ordträff hittills' : ' ordträff')
+      : (cfg.scanning ? ' ordträffar hittills' : ' ordträffar')),
     onNew: cfg.onNew,
     cards: cards,
-    desk: deskOn ? {
-      label: cfg.scanning ? 'AI:n läser nu dessa ' + cfg.deep.length
-                          : 'Svaret bygger på dessa ' + cfg.deep.length,
-      reading: !!cfg.scanning,
-      cards: cfg.deskCards || [],
-      aside: plan.length - cfg.deep.length > 0
-        ? '… och la ' + (plan.length - cfg.deep.length) + ' åt sidan' : '',
-    } : null,
+    desk: deskOn ? (function () {
+      var n = cfg.deep.length;
+      // Åt-sidan-räkningen utgår från ORDTRÄFFARNA (inte alla genomsökta):
+      // inspelningar utan träff lades aldrig på läsbordet.
+      var undanlagda = Math.max(0, hitsSoFar - n);
+      return {
+        label: cfg.scanning
+          ? (n === 1 ? 'AI:n läser nu denna' : 'AI:n läser nu dessa ' + n)
+          : (n === 1 ? 'Svaret bygger på denna' : 'Svaret bygger på dessa ' + n),
+        reading: !!cfg.scanning,
+        cards: cfg.deskCards || [],
+        aside: undanlagda > 0
+          ? ('… och la ' + undanlagda + ' ordträff' + (undanlagda === 1 ? '' : 'ar') + ' åt sidan')
+          : '',
+      };
+    })() : null,
   };
 }
 
