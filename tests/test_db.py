@@ -949,3 +949,17 @@ def test_scan_transcripts_reports_real_hits(tmp_path):
     by_name = {s["name"]: s for s in scan}
     assert by_name["utflykt.mp3"]["hits"] == 0     # småord räknas inte
     assert by_name["matte.mp3"]["hits"] == 3       # 2×täljare + 1×nämnare
+
+
+def test_content_terms_treats_namns_as_stopword():
+    assert db.content_terms("nämns matematik?") == ["matematik"]
+
+
+def test_scan_transcripts_counts_name_and_course(tmp_path):
+    conn = _conn(tmp_path)
+    db.create_lesson(conn, history_id="h1", ts="2026-06-20T09:00:00",
+                     name="Matematik 4 - dubbla vinkeln.mp4",
+                     formats=["TXT"], words=5,
+                     transcript_text="idag repeterar vi formler med exempel")
+    scan = db.scan_transcripts(conn, "nämns matematik?")
+    assert scan[0]["hits"] >= 1        # träff via namnet trots tyst transkript

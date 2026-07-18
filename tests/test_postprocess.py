@@ -233,3 +233,15 @@ def test_cleanup_chunkas_sa_att_prompt_plus_svar_ryms_i_kontexten(monkeypatch):
     pp.run("cleanup", text, "m")
     assert len(anrop) >= 2, "60k tecken cleanup måste delas upp"
     assert all(len(p) < 45_000 for p in anrop)
+
+
+def test_expand_search_terms_parses_and_cleans(monkeypatch):
+    """Modellsvaret städas: resonemangsblock, dubbletter, småord och skräp
+    bort — kvar blir en ren svensk ordlista för omsökningen."""
+    monkeypatch.setattr(pp.llm_client, "generate", lambda *a, **k: (
+        "<think>hm, geometri …</think>triangel, vinkel, Pythagoras sats, "
+        "area,\nomkrets, Triangel, x!, av, rätvinklig triangel"))
+    ord_ = pp.expand_search_terms("nämns geometri?", "m")
+    assert "triangel" in ord_ and "Pythagoras sats" in ord_
+    assert sum(1 for o in ord_ if o.lower() == "triangel") == 1   # dedupat
+    assert "x!" not in ord_ and "av" not in ord_                  # skräp bort

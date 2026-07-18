@@ -1416,15 +1416,113 @@ def create_app(base_dir: Path | None = None,
             hit_ids = {s["lesson_id"] for s in scan if s["hits"] > 0}
             hits = db.search_transcripts(conn, query, limit=5, match_all=False)
             ids = [h["lesson_id"] for h in hits if h["lesson_id"] in hit_ids]
+            # FTS-indexet täcker bara transkripttexten — komplettera med
+            # lektioner som träffar på namn/klass/kurs ("nämns matematik?"
+            # ska hitta inspelningen som HETER Matematik 4), bäst först.
+            for s in sorted(scan, key=lambda s: -s["hits"]):
+                if len(ids) >= 5:
+                    break
+                if s["hits"] > 0 and s["lesson_id"] not in ids:
+                    ids.append(s["lesson_id"])
             # 2600 tecken/inspelning (5 källor ≈ 13k tecken): tillräckligt med
             # sammanhang för konkreta, citatförankrade svar i stället för
             # generella referat — ryms gott i Qwen3-kontexten.
             excerpts = db.lessons_excerpts_for(conn, ids, query, window=2600)
         finally:
             conn.close()
-        if not excerpts:
+        if not scan:
             return JSONResponse(
                 {"error": "Inga inspelningar matchar sökningen."}, status_code=404)
+        if not excerpts:
+            # De ordagranna orden gav inget — men ge inte upp direkt: låt
+            # modellen brygga frågan till närliggande begrepp ("nämns
+            # geometri?" ska hitta lektionen om trianglar och Pythagoras
+            # även om ordet geometri aldrig sägs) och skanna om. Ger inte
+            # heller de breddade orden träff svarar vi ärligt, och säger
+            # vilka begrepp som prövades.
+            intro = ("Jag har läst igenom den enda inspelningen i arkivet"
+                     if len(scan) == 1 else
+                     f"Jag har läst igenom alla {len(scan)} inspelningar")
+            slut = (" — ingen av dem verkar nämna det du frågar om"
+                    if len(scan) > 1 else
+                    " — den verkar inte nämna det du frågar om")
+            rad = "Prova att formulera om frågan, eller sök på enstaka ord under Sök ord."
+
+            def _emit_scan(emit, scanbild):
+                emit({"type": "scan_plan", "total": len(scanbild), "items": [
+                    {"key": s["lesson_id"], "name": s["name"]} for s in scanbild]})
+                for s in scanbild:
+                    emit({"type": "scan_result",
+                          "key": s["lesson_id"], "hits": s["hits"]})
+
+            if not arb.try_acquire_gpu():
+                # GPU:n upptagen — leverera åtminstone det ärliga ordsvaret.
+                def no_hit_job(emit):
+                    _emit_scan(emit, scan)
+                    text = f"{intro}{slut}. {rad}"
+                    emit({"type": "token", "text": text})
+                    return {"text": text, "sources": []}
+                return _sse_response(no_hit_job)
+
+            def semantic_job(emit):
+                try:
+                    _emit_scan(emit, scan)
+                    if arb.ensure_llm() is None:
+                        text = f"{intro}{slut}. {rad}"
+                        emit({"type": "token", "text": text})
+                        return {"text": text, "sources": []}
+                    emit({"type": "log",
+                          "msg": "Inga direkta ordträffar — läser mellan "
+                                 "raderna och söker på närliggande begrepp …"})
+                    try:
+                        termer = postprocess.expand_search_terms(
+                            query, llm_manager.ACTIVE_LLM.filename)
+                    except Exception:
+                        # Breddningen är en bonus — faller den (modellen nere
+                        # mitt i) levereras det ärliga ordsvaret i stället.
+                        termer = []
+                    scan2: list = []
+                    excerpts2: list = []
+                    if termer:
+                        breddad = " ".join(termer)
+                        conn2 = _db()
+                        try:
+                            scan2 = db.scan_transcripts(conn2, breddad)
+                            ids2 = [s["lesson_id"] for s in
+                                    sorted(scan2, key=lambda s: -s["hits"])
+                                    if s["hits"] > 0][:5]
+                            excerpts2 = db.lessons_excerpts_for(
+                                conn2, ids2, breddad, window=2600)
+                        finally:
+                            conn2.close()
+                    if not excerpts2:
+                        provade = (" Jag sökte även på närliggande begrepp ("
+                                   + ", ".join(termer[:8]) + ") utan träff."
+                                   if termer else "")
+                        text = f"{intro}{slut}.{provade} {rad}"
+                        emit({"type": "token", "text": text})
+                        return {"text": text, "sources": []}
+                    # Spela om skanningen med de breddade träffarna så man
+                    # SER var de närliggande begreppen slog.
+                    _emit_scan(emit, scan2)
+                    emit({"type": "deep_read", "sources": [
+                        {"lesson_id": e["lesson_id"], "history_id": e["history_id"],
+                         "name": e["name"], "group": e["group"],
+                         "course": e["course"], "datum": e["datum"]}
+                        for e in excerpts2]})
+                    emit({"type": "log",
+                          "msg": f"Söker i {len(excerpts2)} lektioner ..."})
+                    text = postprocess.answer_over_lessons(
+                        query, excerpts2, llm_manager.ACTIVE_LLM.filename,
+                        token_cb=lambda t: emit({"type": "token", "text": t}))
+                    return {"text": text, "sources": [
+                        {"lesson_id": e["lesson_id"], "history_id": e["history_id"],
+                         "name": e["name"], "group": e["group"],
+                         "course": e["course"], "datum": e["datum"]}
+                        for e in excerpts2]}
+                finally:
+                    arb.release_gpu()
+            return _sse_response(semantic_job)
         if not arb.try_acquire_gpu():
             return JSONResponse(
                 {"error": "GPU upptagen med transkribering – försök igen strax."},
