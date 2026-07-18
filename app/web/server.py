@@ -252,6 +252,17 @@ def create_app(base_dir: Path | None = None,
                     status_code=403)
         return await call_next(request)
 
+    # 3) Ingen heuristisk cachning av UI-filerna: utan Cache-Control gissar
+    #    webbläsaren friskhet ur Last-Modified och kan köra gammal app.js länge
+    #    efter en uppdatering. no-cache = alltid omfråga (304 via ETag är
+    #    fortfarande snabbt, allt ligger på lokal disk).
+    @app.middleware("http")
+    async def _no_stale_static(request: Request, call_next):
+        response = await call_next(request)
+        if request.url.path == "/" or request.url.path.startswith("/static"):
+            response.headers["Cache-Control"] = "no-cache"
+        return response
+
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
     # Single owner of the LLM process + GPU exclusivity. The LLM is NOT started
