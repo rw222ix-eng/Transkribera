@@ -929,8 +929,10 @@ några ingen inget inga annan annat andra samma sådan sådant sådana denna
 alla allt hela mycket mer mest mindre minst många fler flest lite lika
 ganska helt precis just eller samt både bägge medan under över efter före
 mellan genom mot utan vid från hos åt ur per typ liksom exempelvis
-förklarar förklarade pratar pratade prata säger nämner nämnde nämna sades
+förklarar förklarade pratar pratade prata pratas säger sa sagt sägs sades
+nämner nämnde nämna nämns talas togs upp
 berättar berättade gick genomgick gånger gången lektion lektionen
+inspelning inspelningen
 """.split())
 
 
@@ -1030,16 +1032,24 @@ def _search_row(row: sqlite3.Row) -> dict:
 def scan_transcripts(conn: sqlite3.Connection, query: str) -> list[dict]:
     """Äkta träffbild för sökets live-skanning: varje lektion med transkript,
     i genomsökningsordning (nyaste först), med verkligt antal förekomster av
-    frågans innehållsord. Driver scan_plan/scan_result-eventen i
-    /api/search/ask — och avgör vilka lektioner som alls får bli källor."""
+    frågans innehållsord. Höstacken är transkriptet PLUS namn/klass/kurs —
+    "nämns matematik?" ska träffa en inspelning som heter Matematik 4 även om
+    ordet aldrig sägs. Driver scan_plan/scan_result-eventen i /api/search/ask
+    — och avgör vilka lektioner som alls får bli källor."""
     terms = [t.lower() for t in content_terms(query)]
     rows = conn.execute(
-        "SELECT l.id, l.history_id, l.name, l.transcript_text FROM lessons l "
+        "SELECT l.id, l.history_id, l.name, l.transcript_text, "
+        "       g.namn AS group_namn, c.namn AS course_namn "
+        "FROM lessons l "
+        "LEFT JOIN groups  g ON g.id = l.group_id "
+        "LEFT JOIN courses c ON c.id = l.course_id "
         "WHERE l.transcript_text IS NOT NULL AND l.transcript_text != '' "
         "ORDER BY COALESCE(l.datum, l.ts) DESC, l.id DESC").fetchall()
     out: list[dict] = []
     for r in rows:
-        hay = (r["transcript_text"] or "").lower()
+        hay = " ".join(x for x in (
+            r["name"], r["group_namn"], r["course_namn"],
+            r["transcript_text"]) if x).lower()
         hits = sum(hay.count(t) for t in terms) if terms else 0
         out.append({"lesson_id": r["id"], "history_id": r["history_id"],
                     "name": r["name"] or "(namnlös)", "hits": hits})

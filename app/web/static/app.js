@@ -1018,7 +1018,7 @@
       if (run !== _arkRun) return;             // en nyare fråga har tagit över
       if (ev.type === 'scan_plan') {
         if (_arkScanTimer) clearInterval(_arkScanTimer);
-        _arkScanTimer = startScanReveal((ev.items || []).length, 'arkScanShown', 'arkAsking');
+        _arkScanTimer = startScanReveal((ev.items || []).length, 'arkScanShown');
         setState({ arkScanPlan: ev.items || [] });
       } else if (ev.type === 'scan_result') {
         setState(function (s) {
@@ -1030,8 +1030,8 @@
       } else if (ev.type === 'token') {
         setState(function (s) { return { arkAnswer: s.arkAnswer + ev.text }; });
       } else if (ev.type === 'done') {
-        if (_arkScanTimer) { clearInterval(_arkScanTimer); _arkScanTimer = null; }
-        setState({ arkAsking: false, arkScanShown: 9999,
+        // Låt utrullningstimern spela klart — se kartotekets done-hantering.
+        setState({ arkAsking: false,
                    arkSources: (ev.result && ev.result.sources) || [] });
       } else if (ev.type === 'error') {
         if (_arkScanTimer) { clearInterval(_arkScanTimer); _arkScanTimer = null; }
@@ -1041,7 +1041,7 @@
           : /network|failed to fetch|load failed/i.test(ev.message || '')
           ? 'Anslutningen till appen bröts mitt i sökningen. Ställ frågan igen så görs ett nytt försök.'
           : 'Kunde inte söka: ' + (ev.message || 'okänt fel');
-        setState({ arkAsking: false, arkAnswer: msg });
+        setState({ arkAsking: false, arkScanShown: 9999, arkAnswer: msg });
       }
     });
   }
@@ -1766,11 +1766,14 @@
   // träffbilden på millisekunder, men avslöjandet pacas (~60–150 ms/kort,
   // tak ~3,5 s) så progressionen går att följa med ögat. Datat är äkta —
   // bara takten är styrd. Delas av kartoteket och planeringsarkivet.
-  function startScanReveal(planLen, shownKey, isLiveKey) {
+  function startScanReveal(planLen, shownKey) {
+    // Rullar tills alla kort avslöjats — även om svaret hinner bli klart
+    // först (t.ex. det GPU-fria 0-träffar-svaret): genomsökningen ska
+    // alltid gå att följa med ögat. Esc/fel rensar timern explicit.
     var step = Math.max(60, Math.min(150, Math.round(3500 / Math.max(1, planLen))));
     var t = setInterval(function () {
       setState(function (s) {
-        if (!s[isLiveKey] || s[shownKey] >= planLen) { clearInterval(t); return null; }
+        if (s[shownKey] >= planLen) { clearInterval(t); return null; }
         var patch = {}; patch[shownKey] = s[shownKey] + 1; return patch;
       });
     }, step);
@@ -1786,7 +1789,7 @@
       if (run !== _askRun) return;               // en nyare fråga (eller Esc) har tagit över
       if (ev.type === 'scan_plan') {             // äkta genomsökningsordning från backend
         if (_scanTimer) clearInterval(_scanTimer);
-        _scanTimer = startScanReveal((ev.items || []).length, 'askScanShown', 'asking');
+        _scanTimer = startScanReveal((ev.items || []).length, 'askScanShown');
         setState({ askScanPlan: ev.items || [] });
       } else if (ev.type === 'scan_result') {    // verkligt träffantal per inspelning
         setState(function (s) {
@@ -1798,8 +1801,9 @@
       } else if (ev.type === 'token') {
         setState(function (s) { return { askAnswer: s.askAnswer + ev.text }; });
       } else if (ev.type === 'done') {
-        if (_scanTimer) { clearInterval(_scanTimer); _scanTimer = null; }
-        setState({ asking: false, askScanShown: 9999, askSources: (ev.result && ev.result.sources) || [] });
+        // Rör inte askScanShown — utrullningstimern får spela klart så att
+        // genomsökningen syns även när svaret kom blixtsnabbt (0 träffar).
+        setState({ asking: false, askSources: (ev.result && ev.result.sources) || [] });
       } else if (ev.type === 'error') {
         // Frys utrullningen där den står — felraden tar över berättelsen.
         // "Inga träffar" är inget tekniskt fel utan ett ärligt svar: säg det
@@ -1810,7 +1814,7 @@
           : /network|failed to fetch|load failed/i.test(ev.message || '')
           ? 'Anslutningen till appen bröts mitt i sökningen. Ställ frågan igen så görs ett nytt försök.'
           : 'Kunde inte söka: ' + (ev.message || 'okänt fel');
-        setState({ asking: false, askAnswer: msg });
+        setState({ asking: false, askScanShown: 9999, askAnswer: msg });
       }
     });
   }
@@ -3245,7 +3249,9 @@
     // Live-skanningen: backend har berättat den äkta genomsökningsordningen
     // (askScanPlan); utrullningen (askScanShown) pacas av startScanReveal.
     var scanPlan = st.askScanPlan || [];
-    var scanning = st.asking;
+    // "Skannar" så länge frågan pågår ELLER utrullningen inte spelat klart —
+    // svaret kan bli klart före korten (0-träffar-svaret är omedelbart).
+    var scanning = st.asking || (scanPlan.length > 0 && st.askScanShown < scanPlan.length);
     var scanShown = Math.min(st.askScanShown, scanPlan.length);
     var scannedIds = {};
     scanPlan.slice(0, scanning ? scanShown : scanPlan.length).forEach(function (p) { scannedIds[p.key] = true; });
@@ -3569,7 +3575,8 @@
           scan: askActive ? {
             theater: buildScanModel({
               plan: st.arkScanPlan, res: st.arkScanRes || {}, shown: st.arkScanShown,
-              scanning: asking, deep: st.arkDeep, noun: 'tavlor och prov',
+              scanning: asking || ((st.arkScanPlan || []).length > 0 && st.arkScanShown < (st.arkScanPlan || []).length),
+              deep: st.arkDeep, noun: 'tavlor och prov',
               onNew: clearArkiv,
               deskCards: (st.arkDeep || []).map(function (s2) {
                 var clickable = !asking && !!st.arkAnswer;

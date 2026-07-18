@@ -603,10 +603,29 @@ def create_router(base: Path, arbiter) -> APIRouter:
             hits = _score_archive(all_items, query, content_only=True)[:5]
         finally:
             conn.close()
-        if not hits:
+        if not scan:
             return JSONResponse(
                 {"error": "Inga tavlor eller prov matchar sökningen."},
                 status_code=404)
+        if not hits:
+            # 0 träffar är ett ärligt svar — spela ändå upp genomsökningen
+            # så man ser att varje tavla/prov lästes. Ingen LLM/GPU behövs.
+            def no_hit_job(emit):
+                emit({"type": "scan_plan", "total": len(scan), "items": [
+                    {"key": s["key"], "name": s["name"]} for s in scan]})
+                for s in scan:
+                    emit({"type": "scan_result", "key": s["key"],
+                          "hits": s["hits"]})
+                text = ("Jag har läst igenom den enda posten i arkivet — den "
+                        "verkar inte nämna det du frågar om. Prova att "
+                        "formulera om frågan."
+                        if len(scan) == 1 else
+                        f"Jag har läst igenom alla {len(scan)} tavlor och "
+                        "prov — ingen av dem verkar nämna det du frågar om. "
+                        "Prova att formulera om frågan.")
+                emit({"type": "token", "text": text})
+                return {"text": text, "sources": []}
+            return sse_response(no_hit_job)
         if not arbiter.try_acquire_gpu():
             return JSONResponse(_GPU_BUSY, status_code=409)
 

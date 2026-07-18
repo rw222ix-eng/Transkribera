@@ -458,7 +458,8 @@ def test_generate_ignores_invalid_underlag_id(client, monkeypatch):
 
 def test_archive_ask_ignores_stopword_matches(client):
     """En tavla som bara matchar frågans småord ("var/jag/och") får inte bli
-    källa — utan innehållsordsträff svarar arkivfrågan 404."""
+    källa — genomsökningen spelas ändå upp och ett ärligt 0-träffar-svar
+    strömmas utan att LLM:en behövs."""
     from app import db as appdb
     conn = appdb.connect(client.base_dir / "transkribera.db")
     appdb.create_planned_lesson(conn, titel="Utflykt",
@@ -466,6 +467,16 @@ def test_archive_ask_ignores_stopword_matches(client):
     conn.close()
     r = client.post("/api/planning/ask",
                     json={"q": "Var förklarar jag täljare och nämnare?"})
+    assert r.status_code == 200
+    events = _events(r)
+    assert [e["hits"] for e in events if e["type"] == "scan_result"] == [0]
+    done = next(e for e in events if e["type"] == "done")
+    assert done["result"]["sources"] == []
+    assert "verkar inte nämna" in done["result"]["text"]
+
+
+def test_archive_ask_empty_archive_404(client):
+    r = client.post("/api/planning/ask", json={"q": "derivata"})
     assert r.status_code == 404
 
 

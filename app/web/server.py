@@ -1416,15 +1416,45 @@ def create_app(base_dir: Path | None = None,
             hit_ids = {s["lesson_id"] for s in scan if s["hits"] > 0}
             hits = db.search_transcripts(conn, query, limit=5, match_all=False)
             ids = [h["lesson_id"] for h in hits if h["lesson_id"] in hit_ids]
+            # FTS-indexet täcker bara transkripttexten — komplettera med
+            # lektioner som träffar på namn/klass/kurs ("nämns matematik?"
+            # ska hitta inspelningen som HETER Matematik 4), bäst först.
+            for s in sorted(scan, key=lambda s: -s["hits"]):
+                if len(ids) >= 5:
+                    break
+                if s["hits"] > 0 and s["lesson_id"] not in ids:
+                    ids.append(s["lesson_id"])
             # 2600 tecken/inspelning (5 källor ≈ 13k tecken): tillräckligt med
             # sammanhang för konkreta, citatförankrade svar i stället för
             # generella referat — ryms gott i Qwen3-kontexten.
             excerpts = db.lessons_excerpts_for(conn, ids, query, window=2600)
         finally:
             conn.close()
-        if not excerpts:
+        if not scan:
             return JSONResponse(
                 {"error": "Inga inspelningar matchar sökningen."}, status_code=404)
+        if not excerpts:
+            # 0 träffar är ett ärligt svar — spela ändå upp hela genomsökningen
+            # så man SER att varje inspelning lästes. Ingen LLM/GPU behövs.
+            def no_hit_job(emit):
+                emit({"type": "scan_plan", "total": len(scan), "items": [
+                    {"key": s["lesson_id"], "name": s["name"]} for s in scan]})
+                for s in scan:
+                    emit({"type": "scan_result",
+                          "key": s["lesson_id"], "hits": s["hits"]})
+                intro = ("Jag har läst igenom den enda inspelningen i arkivet"
+                         if len(scan) == 1 else
+                         f"Jag har läst igenom alla {len(scan)} inspelningar")
+                text = (f"{intro} — ingen av dem verkar nämna det du frågar "
+                        "om. Prova att formulera om frågan, eller sök på "
+                        "enstaka ord under Sök ord."
+                        if len(scan) > 1 else
+                        f"{intro} — den verkar inte nämna det du frågar om. "
+                        "Prova att formulera om frågan, eller sök på enstaka "
+                        "ord under Sök ord.")
+                emit({"type": "token", "text": text})
+                return {"text": text, "sources": []}
+            return _sse_response(no_hit_job)
         if not arb.try_acquire_gpu():
             return JSONResponse(
                 {"error": "GPU upptagen med transkribering – försök igen strax."},

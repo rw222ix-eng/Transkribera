@@ -1108,9 +1108,48 @@ def test_search_ask_streams_answer(tmp_path, monkeypatch):
     assert captured["n"] == 1
 
 
-def test_search_ask_no_match_404(tmp_path, monkeypatch):
+def test_search_ask_no_match_streams_scan_and_honest_answer(tmp_path, monkeypatch):
+    """0 träffar är ett svar, inte ett fel: genomsökningen spelas ändå upp
+    (scan_plan + scan_result) och ett naturligt besked strömmas — utan GPU."""
     c = _lesson_client(tmp_path, monkeypatch)
+    r = c.post("/api/search/ask", json={"q": "integraler"})
+    assert r.status_code == 200
+    events = _sse_events(r.text)
+    assert any(e["type"] == "scan_plan" for e in events)
+    assert [e["hits"] for e in events if e["type"] == "scan_result"] == [0]
+    done = next(e for e in events if e["type"] == "done")
+    assert done["result"]["sources"] == []
+    assert "verkar inte nämna" in done["result"]["text"]
+
+
+def test_search_ask_empty_archive_404(tmp_path, monkeypatch):
+    c = _lesson_client(tmp_path, monkeypatch, transcript=False)
     assert c.post("/api/search/ask", json={"q": "integraler"}).status_code == 404
+
+
+def test_search_ask_matches_lesson_name(tmp_path, monkeypatch):
+    """Titeln räknas: "nämns matematik?" ska träffa en inspelning som HETER
+    Matematik 4 även om ordet aldrig sägs i transkriptet ("nämns" är småord)."""
+    captured = {}
+    def fake_answer(query, excerpts, model, token_cb=None):
+        captured["names"] = [e["name"] for e in excerpts]
+        return "Ja [1]"
+    monkeypatch.setattr(server.postprocess, "answer_over_lessons", fake_answer)
+    from fastapi.testclient import TestClient
+    entry = {"id": "h1", "ts": "2026-06-20T09:14:00",
+             "name": "Matematik 4 - dubbla vinkeln.mp4",
+             "formats": ["TXT"], "words": 10,
+             "transcript": [{"start": 0, "end": 2,
+                             "text": "idag repeterar vi formler med exempel"}]}
+    (tmp_path / "history.json").write_text(json.dumps([entry]), encoding="utf-8")
+    monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: _HW())
+    c = TestClient(server.create_app(base_dir=tmp_path, arbiter=_ReadyArbiter()))
+    r = c.post("/api/search/ask", json={"q": "nämns matematik?"})
+    assert r.status_code == 200
+    events = _sse_events(r.text)
+    deep = next(e for e in events if e["type"] == "deep_read")
+    assert [s["name"] for s in deep["sources"]] == ["Matematik 4 - dubbla vinkeln.mp4"]
+    assert captured["names"] == ["Matematik 4 - dubbla vinkeln.mp4"]
 
 
 def test_search_ask_busy_gpu_409(tmp_path, monkeypatch):
