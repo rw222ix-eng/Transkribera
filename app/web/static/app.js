@@ -1578,8 +1578,8 @@
       setState(function (s) { return s.asking ? { askScanIdx: s.askScanIdx + 1 } : null; });
     }, 340);
     setState({ asking: true, askAnswer: '', askSources: null, searchHits: null, askQ: q, askScanIdx: 0, askZoom: false, askZoomClosing: false, srcBox: true, askFollowups: [], askFollowInput: '', askEvent: null });
-    // Samma nyckelord som i lektionschatten föreslår en kalenderhändelse vid sidan av svaret.
-    if (/påminn|kalender|prov|läx|förhör|inlämning/i.test(q)) proposeAskEvent(q);
+    // Inget förhandsbyggt kalenderförslag på nyckelord — förslag skapas bara
+    // uttryckligen via kalenderknappen och godkänns alltid innan de läggs in.
     streamPost('/api/search/ask', { q: q }, function (ev) {
       if (run !== _askRun) return;               // en nyare fråga (eller Esc) har tagit över
       if (ev.type === 'token') {
@@ -1614,9 +1614,8 @@
   function sendAskFollow() {
     var q = (S.askFollowInput || '').trim();
     if (!q || S.asking) return;
-    // Nyckelord föreslår händelse; kommandon ("flytta till onsdag 14:30" …) justerar
-    // förslaget med regex-tolken — samma beteende som lektionschatten.
-    if (/påminn|kalender|prov|läx|förhör|inlämning/i.test(q) && !S.askEvent) proposeAskEvent(q);
+    // Kommandon ("flytta till onsdag 14:30" …) justerar ett BEFINTLIGT förslag
+    // med regex-tolken; nya förslag skapas bara via kalenderknappen.
     var evNow = S.askEvent;
     var isCal = evNow && !evNow.added && (/flytta|ändra|byt|boka|döp|kalla|titel|anteckning/i.test(q) || /\d{1,2}[:.]\d{2}/.test(q) || /måndag|tisdag|onsdag|torsdag|fredag|lördag|söndag|imorgon|nästa vecka|klockan/i.test(q));
     if (isCal) {
@@ -2090,8 +2089,9 @@
     if (S.lessonChatTyping) return;
     var q = (typeof qArg === 'string' && qArg ? qArg : S.lessonChatInput).trim();
     if (!q) return;
-    // "Skapa läxpåminnelse …" o.dyl. föreslår en kalenderhändelse vid sidan av svaret.
-    if (/påminn|kalender|prov|läx|förhör|inlämning/i.test(q) && !S.lessonChatEvent) proposeLessonEvent();
+    // Kalenderönskemål får INGET förhandsbyggt förslag: modellen resonerar först
+    // och skapar förslaget via sin [KALENDERFÖRSLAG]-rad (applyCalTag på 'done').
+    // Läraren godkänner sedan uttryckligen med "Lägg till" — inget läggs in automatiskt.
     // Kalenderkommandon ("flytta till onsdag 14:30", "kortare titel" …) tolkas av
     // regex-tolken och uppdaterar förslaget direkt — utan LLM-anrop (design 14 juli).
     var evNow = S.lessonChatEvent;
@@ -2140,7 +2140,7 @@
         // egen bekräftelse byggd ur det uppdaterade förslaget.
         if (!shown && applied) {
           var e2 = S.lessonChatEvent || {};
-          shown = 'Klart — kalenderförslaget är uppdaterat: ”' + (e2.title || '') + '” · ' + (e2.when || '') + (e2.endDay ? ' → ' + e2.endDay : '') + '. Justera i förslags-raden nedan eller fortsätt chatta.';
+          shown = 'Här är kalenderförslaget: ”' + (e2.title || '') + '” · ' + (e2.when || '') + (e2.endDay ? ' → ' + e2.endDay : '') + '. Inget läggs in förrän du godkänner med Lägg till — justera annars i förslags-rutan eller fortsätt chatta.';
         }
         setLast(shown || full, accReason, false);
       }
@@ -2335,6 +2335,9 @@
       }
       return kv(key, Object.assign({}, base, patch));
     });
+    // Modellens förslag ska granskas direkt: fäll ut redigeringsboxen i
+    // overlayen så läraren ser exakt vad som föreslås innan hen godkänner.
+    if (which === 'lesson') setState({ ovEvOpen: true });
     if (S.calConnected === null) loadCalStatus();
     return true;
   }

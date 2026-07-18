@@ -73,11 +73,14 @@ _SV_DAYS = ["måndag", "tisdag", "onsdag", "torsdag", "fredag", "lördag", "sön
 def _cal_instr(cal_event: dict | None) -> str:
     today = datetime.now()
     s = (
-        "\n\nKALENDER: Användaren kan be dig skapa eller ändra en kalenderhändelse "
-        "(prov, läxförhör, inlämning, möte, påminnelse …). Gör då ALLTID två saker, i "
-        "denna ordning: skriv först en kort bekräftelse i vanlig löptext (minst en hel "
-        "mening, t.ex. ”Klart — jag har lagt in mötet på torsdag kl 18.”), och avsluta "
-        "därefter HELA svaret med exakt en rad:\n"
+        "\n\nKALENDER: Användaren kan be dig föreslå eller ändra en kalenderhändelse "
+        "(prov, läxförhör, inlämning, möte, påminnelse …). Du kan INTE själv lägga in "
+        "något i kalendern — du lämnar bara ett FÖRSLAG som användaren måste godkänna "
+        "med Lägg till-knappen. Påstå därför ALDRIG att något är inlagt, bokat eller "
+        "klart. Gör ALLTID två saker, i denna ordning: skriv först en kort mening i "
+        "vanlig löptext som presenterar förslaget (t.ex. ”Här är ett förslag på en "
+        "påminnelse tisdag–onsdag kl 15 — godkänn det nedan så läggs det in.”), och "
+        "avsluta därefter HELA svaret med exakt en rad:\n"
         '[KALENDERFÖRSLAG] {"title": "...", "date": "YYYY-MM-DD", "time": "HH:MM", '
         '"end_date": null, "desc": "..."}\n'
         f"Idag är {_SV_DAYS[today.weekday()]} {today:%Y-%m-%d}. Alla fält ska alltid med: "
