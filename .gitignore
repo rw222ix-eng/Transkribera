@@ -79,3 +79,6 @@ tests/bench_out/
 
 # Lokala QA-körningsartefakter (rådata från riktiga transkriberingskörningar)
 exports/
+
+# Användarens transkriberingar och exporterade dokument (lokal elevdata — får ALDRIG checkas in)
+/Transkriberingar/
