@@ -912,6 +912,36 @@ import re as _re  # noqa: E402  (kept local to the search section)
 
 _TOKEN_RE = _re.compile(r"[^\W_]+", _re.UNICODE)   # letters/digits, drops punctuation
 
+# Svenska småord som inte får räknas som träffar i en naturlig fråga ("Var
+# förklarar jag täljare och nämnare?" ska matcha på täljare/nämnare — inte på
+# var/jag/och). Används bara i AI-frågans retrieval; exakta ordsökningen rörs ej.
+_STOPWORDS_SV = frozenset("""
+och att det som en på är av för med den till i inte om så har de ett men
+jag du han hon vi ni dom han hon den det denna detta dessa min din sin mitt
+ditt sitt mina dina sina vår er våra era hans hennes dess deras man sig oss
+er dig mig vad vem vilka vilken vilket var när hur varför vart ja nej också
+bara även redan än sen sedan nu då här där hit dit alltså kanske nog väl ju
+ska skall skulle kan kunde kunna vill ville vilja får fick få måste bör
+borde blir blev bli blivit vara varit hade haft göra gör gjorde gjort säga
+säger sa sagt gick gå går gått kommer kom komma kommit tar tog ta tagit ser
+såg se sett vet visste veta vetat finns fanns finnas funnits någon något
+några ingen inget inga annan annat andra samma sådan sådant sådana denna
+alla allt hela mycket mer mest mindre minst många fler flest lite lika
+ganska helt precis just eller samt både bägge medan under över efter före
+mellan genom mot utan vid från hos åt ur per typ liksom exempelvis
+förklarar förklarade pratar pratade prata säger nämner nämnde nämna sades
+berättar berättade gick genomgick gånger gången lektion lektionen
+""".split())
+
+
+def content_terms(query: str) -> list[str]:
+    """Frågans innehållsord: tokeniserad fråga minus svenska småord. Faller
+    tillbaka till samtliga ord om inget innehållsord återstår, så en fråga
+    som bara består av småord fortfarande ger en sökning."""
+    terms = _TOKEN_RE.findall(query or "")
+    core = [t for t in terms if t.lower() not in _STOPWORDS_SV and len(t) >= 2]
+    return core or terms
+
 
 def _fts_query(text: str, *, match_all: bool = True) -> str | None:
     """Turn free-text into a safe FTS5 MATCH string: each word becomes a prefix
@@ -949,12 +979,14 @@ def search_transcripts(conn: sqlite3.Connection, query: str, *, limit: int = 50,
     """Search every lesson transcript at once. Returns ranked hits with a context
     snippet (what was said) and which lesson/class/course/date it belongs to.
     Uses FTS5 + bm25 ranking + snippet(); falls back to LIKE when FTS is absent.
-    match_all=False (OR) is used for the natural-language RAG retrieval."""
-    terms = _TOKEN_RE.findall(query or "")
+    match_all=False (OR) is used for the natural-language RAG retrieval; where
+    the query is a natural question, so only its content words (stopwords
+    stripped) may match — otherwise "var/jag/och" ranks every lesson."""
+    terms = _TOKEN_RE.findall(query or "") if match_all else content_terms(query)
     if not terms:
         return []
     if has_fts(conn):
-        match = _fts_query(query, match_all=match_all)
+        match = _fts_query(" ".join(terms), match_all=match_all)
         rows = conn.execute(
             f"SELECT {_SEARCH_META}, "
             f"  snippet(lesson_fts, 0, '\x02', '\x03', ' … ', ?) AS snippet, "
@@ -995,13 +1027,33 @@ def _search_row(row: sqlite3.Row) -> dict:
     return d
 
 
+def scan_transcripts(conn: sqlite3.Connection, query: str) -> list[dict]:
+    """Äkta träffbild för sökets live-skanning: varje lektion med transkript,
+    i genomsökningsordning (nyaste först), med verkligt antal förekomster av
+    frågans innehållsord. Driver scan_plan/scan_result-eventen i
+    /api/search/ask — och avgör vilka lektioner som alls får bli källor."""
+    terms = [t.lower() for t in content_terms(query)]
+    rows = conn.execute(
+        "SELECT l.id, l.history_id, l.name, l.transcript_text FROM lessons l "
+        "WHERE l.transcript_text IS NOT NULL AND l.transcript_text != '' "
+        "ORDER BY COALESCE(l.datum, l.ts) DESC, l.id DESC").fetchall()
+    out: list[dict] = []
+    for r in rows:
+        hay = (r["transcript_text"] or "").lower()
+        hits = sum(hay.count(t) for t in terms) if terms else 0
+        out.append({"lesson_id": r["id"], "history_id": r["history_id"],
+                    "name": r["name"] or "(namnlös)", "hits": hits})
+    return out
+
+
 def lessons_excerpts_for(conn: sqlite3.Connection, lesson_ids: list[int],
                          query: str, *, window: int = 1200) -> list[dict]:
     """For the RAG 'ask across all lessons' answer: a bounded transcript excerpt
     around the query terms for each given lesson, with its class/course/date
-    header — so the LLM is grounded without overflowing the context window."""
+    header — so the LLM is grounded without overflowing the context window.
+    Centered on the question's content words, not on stopwords."""
     out: list[dict] = []
-    terms = _TOKEN_RE.findall(query or "")
+    terms = content_terms(query)
     for lid in lesson_ids:
         row = conn.execute(
             _LESSON_SELECT + " WHERE l.id = ?", (lid,)).fetchone()

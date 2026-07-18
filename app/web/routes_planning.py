@@ -522,9 +522,13 @@ def create_router(base: Path, arbiter) -> APIRouter:
                    reverse=True)
         return items
 
-    def _score_archive(items: list[dict], query: str) -> list[dict]:
-        """Enkel termträff-rankning (any-match) över titel + innehållstext."""
-        terms = [t for t in re.split(r"\W+", query.lower()) if len(t) >= 2]
+    def _score_archive(items: list[dict], query: str,
+                       content_only: bool = False) -> list[dict]:
+        """Enkel termträff-rankning (any-match) över titel + innehållstext.
+        content_only (AI-frågan) räknar bara frågans innehållsord, så småord
+        som "var/jag/och" aldrig gör en irrelevant tavla till källa."""
+        terms = _ask_terms(query) if content_only else [
+            t for t in re.split(r"\W+", query.lower()) if len(t) >= 2]
         if not terms:
             return []
         scored = []
@@ -535,6 +539,21 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 scored.append((score, it))
         scored.sort(key=lambda s: (-s[0], s[1]["datum"] or ""), reverse=False)
         return [it for _, it in scored]
+
+    def _ask_terms(query: str) -> list[str]:
+        """AI-frågans innehållsord, gemener (delar stoppordslistan i db)."""
+        return [t.lower() for t in db.content_terms(query) if len(t) >= 2]
+
+    def _scan_archive(items: list[dict], query: str) -> list[dict]:
+        """Äkta träffbild för arkivsökets live-skanning: varje post i
+        genomsökningsordning med verkligt antal innehållsordsträffar."""
+        terms = _ask_terms(query)
+        out = []
+        for it in items:
+            hay = (it["titel"] + "\n" + (it.get("text") or "")).lower()
+            out.append({"key": f"{it['typ']}-{it['id']}", "name": it["titel"],
+                        "hits": sum(hay.count(t) for t in terms) if terms else 0})
+        return out
 
     @router.get("/api/planning/archive")
     def archive():
@@ -576,7 +595,9 @@ def create_router(base: Path, arbiter) -> APIRouter:
             return JSONResponse({"error": "fråga krävs"}, status_code=400)
         conn = db.connect(db_file)
         try:
-            hits = _score_archive(_archive_items(conn, with_text=True), query)[:5]
+            all_items = _archive_items(conn, with_text=True)
+            scan = _scan_archive(all_items, query)
+            hits = _score_archive(all_items, query, content_only=True)[:5]
         finally:
             conn.close()
         if not hits:
@@ -592,6 +613,16 @@ def create_router(base: Path, arbiter) -> APIRouter:
             try:
                 if arbiter.ensure_llm() is None:
                     raise RuntimeError("Språkmodellen är inte installerad.")
+                # Live-progressionens riktiga händelser (spec 2026-07-18).
+                emit({"type": "scan_plan", "total": len(scan), "items": [
+                    {"key": s["key"], "name": s["name"]} for s in scan]})
+                for s in scan:
+                    emit({"type": "scan_result", "key": s["key"],
+                          "hits": s["hits"]})
+                emit({"type": "deep_read", "sources": [
+                    {"typ": it["typ"], "id": it["id"], "titel": it["titel"],
+                     "group": it["group"], "course": it["course"],
+                     "datum": it["datum"]} for it in hits]})
                 emit({"type": "log",
                       "msg": f"Läser {len(hits)} tavlor/prov ..."})
                 blocks = []

@@ -1408,8 +1408,14 @@ def create_app(base_dir: Path | None = None,
             return JSONResponse({"error": "fråga krävs"}, status_code=400)
         conn = _db()
         try:
+            # Äkta skanningsbild för live-progressionen: alla transkript i
+            # genomsökningsordning med verkliga innehållsordsträffar. Bara
+            # lektioner med träff får bli källor — småord ("var/jag/och")
+            # ska aldrig ranka in en irrelevant lektion som underlag.
+            scan = db.scan_transcripts(conn, query)
+            hit_ids = {s["lesson_id"] for s in scan if s["hits"] > 0}
             hits = db.search_transcripts(conn, query, limit=5, match_all=False)
-            ids = [h["lesson_id"] for h in hits]
+            ids = [h["lesson_id"] for h in hits if h["lesson_id"] in hit_ids]
             # 2600 tecken/inspelning (5 källor ≈ 13k tecken): tillräckligt med
             # sammanhang för konkreta, citatförankrade svar i stället för
             # generella referat — ryms gott i Qwen3-kontexten.
@@ -1428,6 +1434,18 @@ def create_app(base_dir: Path | None = None,
             try:
                 if arb.ensure_llm() is None:
                     raise RuntimeError("Språkmodellen är inte installerad.")
+                # Live-progressionens riktiga händelser (spec 2026-07-18):
+                # skanningsplan → per-lektion-resultat → vad AI:n läser djupt.
+                emit({"type": "scan_plan", "total": len(scan), "items": [
+                    {"key": s["lesson_id"], "name": s["name"]} for s in scan]})
+                for s in scan:
+                    emit({"type": "scan_result",
+                          "key": s["lesson_id"], "hits": s["hits"]})
+                emit({"type": "deep_read", "sources": [
+                    {"lesson_id": e["lesson_id"], "history_id": e["history_id"],
+                     "name": e["name"], "group": e["group"], "course": e["course"],
+                     "datum": e["datum"]}
+                    for e in excerpts]})
                 emit({"type": "log", "msg": f"Söker i {len(excerpts)} lektioner ..."})
                 text = postprocess.answer_over_lessons(
                     query, excerpts, llm_manager.ACTIVE_LLM.filename,

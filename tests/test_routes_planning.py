@@ -450,3 +450,60 @@ def test_generate_ignores_invalid_underlag_id(client, monkeypatch):
                     json={"moment": "Bråk", "underlag": "../../etc"})
     assert r.status_code == 200
     assert calls[0]["underlag"] == ""
+
+
+# ---- Arkivsökets äkta relevans + live-events (spec 2026-07-18) --------------
+
+def test_archive_ask_ignores_stopword_matches(client):
+    """En tavla som bara matchar frågans småord ("var/jag/och") får inte bli
+    källa — utan innehållsordsträff svarar arkivfrågan 404."""
+    from app import db as appdb
+    conn = appdb.connect(client.base_dir / "transkribera.db")
+    appdb.create_planned_lesson(conn, titel="Utflykt",
+                                moment="var på berget och jag såg en älg")
+    conn.close()
+    r = client.post("/api/planning/ask",
+                    json={"q": "Var förklarar jag täljare och nämnare?"})
+    assert r.status_code == 404
+
+
+def test_archive_ask_emits_real_scan_events(client, monkeypatch):
+    """scan_plan → scan_result×N → deep_read före svaret; träffantalen är
+    innehållsordens verkliga förekomster och bara träffarna blir källor."""
+    from app import db as appdb
+    from app.web import routes_planning as rp
+    conn = appdb.connect(client.base_dir / "transkribera.db")
+    appdb.create_planned_lesson(conn, titel="Bråk",
+                                moment="täljare och nämnare, mer täljare",
+                                datum="2026-06-20")
+    appdb.create_planned_lesson(conn, titel="Utflykt",
+                                moment="var på berget och jag såg en älg",
+                                datum="2026-06-21")
+    conn.close()
+    monkeypatch.setattr(client.app.state.arbiter, "try_acquire_gpu", lambda: True)
+    monkeypatch.setattr(client.app.state.arbiter, "release_gpu", lambda: None)
+    monkeypatch.setattr(client.app.state.arbiter, "ensure_llm",
+                        lambda: "http://127.0.0.1:8170")
+    monkeypatch.setattr(rp.llm_client, "generate",
+                        lambda *a, **k: "Det står på tavlan Bråk")
+    monkeypatch.setattr(server.llm_manager, "is_installed", lambda *a, **k: True)
+
+    r = client.post("/api/planning/ask",
+                    json={"q": "Var förklarar jag täljare och nämnare?"})
+    assert r.status_code == 200
+    events = _events(r)
+    types = [e["type"] for e in events]
+    assert types.index("scan_plan") < types.index("scan_result") \
+        < types.index("deep_read") < types.index("done")
+
+    plan = next(e for e in events if e["type"] == "scan_plan")
+    assert plan["total"] == 2
+    assert [i["name"] for i in plan["items"]] == ["Utflykt", "Bråk"]
+
+    key_by_name = {i["name"]: i["key"] for i in plan["items"]}
+    hits = {e["key"]: e["hits"] for e in events if e["type"] == "scan_result"}
+    assert hits[key_by_name["Utflykt"]] == 0
+    assert hits[key_by_name["Bråk"]] == 3          # 2×täljare + 1×nämnare
+
+    deep = next(e for e in events if e["type"] == "deep_read")
+    assert [s["titel"] for s in deep["sources"]] == ["Bråk"]

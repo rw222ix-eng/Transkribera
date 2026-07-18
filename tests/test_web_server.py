@@ -1120,6 +1120,68 @@ def test_search_ask_busy_gpu_409(tmp_path, monkeypatch):
     assert c.post("/api/search/ask", json={"q": "derivata"}).status_code == 409
 
 
+def _sse_events(text):
+    """Alla data:-JSON-event ur en SSE-kropp, i ordning."""
+    events = []
+    for chunk in text.split("\n\n"):
+        for line in chunk.splitlines():
+            if line.startswith("data:"):
+                events.append(json.loads(line[5:].strip()))
+    return events
+
+
+def _two_lesson_client(tmp_path, monkeypatch):
+    """Två lektioner: en om täljare/nämnare och en helt irrelevant utflykt."""
+    from fastapi.testclient import TestClient
+    entries = [
+        {"id": "h1", "ts": "2026-06-20T09:14:00", "name": "mattelektion.mp3",
+         "formats": ["TXT"], "words": 10,
+         "transcript": [{"start": 0, "end": 2,
+                         "text": "idag går vi igenom täljare och nämnare i bråk"}]},
+        {"id": "h2", "ts": "2026-06-21T09:14:00", "name": "utflykt.mp3",
+         "formats": ["TXT"], "words": 10,
+         "transcript": [{"start": 0, "end": 2,
+                         "text": "var på berget och jag såg en älg"}]},
+    ]
+    (tmp_path / "history.json").write_text(json.dumps(entries), encoding="utf-8")
+    monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: _HW())
+    return TestClient(server.create_app(base_dir=tmp_path, arbiter=_ReadyArbiter()))
+
+
+def test_search_ask_emits_real_scan_events(tmp_path, monkeypatch):
+    """Live-progressionen (spec 2026-07-18): scan_plan → scan_result×N →
+    deep_read före svaret, med äkta innehållsordsträffar — småorden i
+    frågan får inte göra den irrelevanta lektionen till träff/källa."""
+    captured = {}
+    def fake_answer(query, excerpts, model, token_cb=None):
+        captured["names"] = [e["name"] for e in excerpts]
+        return "Det togs upp på mattelektionen [1]"
+    monkeypatch.setattr(server.postprocess, "answer_over_lessons", fake_answer)
+    c = _two_lesson_client(tmp_path, monkeypatch)
+    r = c.post("/api/search/ask",
+               json={"q": "Var förklarar jag täljare och nämnare?"})
+    assert r.status_code == 200
+    events = _sse_events(r.text)
+    types = [e["type"] for e in events]
+    assert types.index("scan_plan") < types.index("scan_result") \
+        < types.index("deep_read") < types.index("done")
+
+    plan = next(e for e in events if e["type"] == "scan_plan")
+    assert plan["total"] == 2
+    # Äkta genomsökningsordning: nyaste först.
+    assert [i["name"] for i in plan["items"]] == ["utflykt.mp3", "mattelektion.mp3"]
+
+    key_by_name = {i["name"]: i["key"] for i in plan["items"]}
+    hits = {e["key"]: e["hits"] for e in events if e["type"] == "scan_result"}
+    assert hits[key_by_name["utflykt.mp3"]] == 0      # småord räknas inte
+    assert hits[key_by_name["mattelektion.mp3"]] > 0  # täljare/nämnare träffar
+
+    deep = next(e for e in events if e["type"] == "deep_read")
+    assert [s["name"] for s in deep["sources"]] == ["mattelektion.mp3"]
+    # Den irrelevanta lektionen nådde aldrig LLM:en som underlag.
+    assert captured["names"] == ["mattelektion.mp3"]
+
+
 def test_history_edit_syncs_search_index(tmp_path, monkeypatch):
     c = _lesson_client(tmp_path, monkeypatch)
     assert len(c.get("/api/search", params={"q": "derivata"}).json()["hits"]) == 1

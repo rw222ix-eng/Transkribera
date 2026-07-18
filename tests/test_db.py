@@ -908,3 +908,44 @@ def test_ensure_gy25_nivaer_seeds_full_ladder(tmp_path):
     # idempotent
     db.ensure_gy25_nivaer(conn)
     assert len(db.list_courses(conn)) == 10
+
+
+# ---- Arkivsökets innehållsord + äkta skanningsbild (spec 2026-07-18) --------
+
+def test_content_terms_strips_swedish_stopwords():
+    assert db.content_terms("Var förklarar jag täljare och nämnare?") == [
+        "täljare", "nämnare"]
+
+
+def test_content_terms_falls_back_to_all_terms():
+    # En fråga med bara småord ska fortfarande ge en sökning.
+    assert db.content_terms("var och när") == ["var", "och", "när"]
+
+
+def test_ask_search_ignores_stopwords(tmp_path):
+    conn = _conn(tmp_path)
+    db.create_lesson(conn, history_id="h1", ts="2026-06-20T09:00:00",
+                     name="matte.mp3", formats=["TXT"], words=5,
+                     transcript_text="täljare och nämnare i bråk")
+    db.create_lesson(conn, history_id="h2", ts="2026-06-21T09:00:00",
+                     name="utflykt.mp3", formats=["TXT"], words=5,
+                     transcript_text="var på berget och jag såg en älg")
+    hits = db.search_transcripts(conn, "Var förklarar jag täljare och nämnare?",
+                                 match_all=False)
+    assert [h["name"] for h in hits] == ["matte.mp3"]
+
+
+def test_scan_transcripts_reports_real_hits(tmp_path):
+    conn = _conn(tmp_path)
+    db.create_lesson(conn, history_id="h1", ts="2026-06-20T09:00:00",
+                     name="matte.mp3", formats=["TXT"], words=5,
+                     transcript_text="täljare och nämnare, mer täljare")
+    db.create_lesson(conn, history_id="h2", ts="2026-06-21T09:00:00",
+                     name="utflykt.mp3", formats=["TXT"], words=5,
+                     transcript_text="var på berget och jag såg en älg")
+    scan = db.scan_transcripts(conn, "Var förklarar jag täljare och nämnare?")
+    # Nyaste först — äkta genomsökningsordning.
+    assert [s["name"] for s in scan] == ["utflykt.mp3", "matte.mp3"]
+    by_name = {s["name"]: s for s in scan}
+    assert by_name["utflykt.mp3"]["hits"] == 0     # småord räknas inte
+    assert by_name["matte.mp3"]["hits"] == 3       # 2×täljare + 1×nämnare
