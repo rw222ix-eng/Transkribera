@@ -56,6 +56,8 @@
     lessonChatHitT: null,       // tidsstämpel (mm:ss) att markera i overlay-transkriptet
     lessonChatEvent: null,      // kalenderförslag: {title,when,desc,added,busy,endDay}
     ovEvOpen: false,            // förslags-raden i overlayen utfälld till redigeringsboxen
+    citePeek: null,             // källmodal från arkivsvarets sifferkällor {src,q,name,meta,rows,…}
+    citePeekClosing: false,     // modalen spelar sin stängningsanimation
     ovDescView: false,          // anteckningen i snabbtitten öppnad i läsmodal
     evPick: null,               // öppen dag/tid-väljare i kalenderförslaget
     descModal: false,           // anteckningens inzoomade redigeringsmodal
@@ -2056,17 +2058,92 @@
       // som innehåller någon av frågans termer — så man ser var i
       // transkriptionen informationen kommer ifrån.
       if (!hitT && hitQuery) {
-        var terms = String(hitQuery).toLowerCase().split(/[^a-zåäö0-9]+/i)
-          .filter(function (t) { return t.length >= 3; });
-        var seg = segs.filter(function (sg) {
-          var low = (sg.text || '').toLowerCase();
-          return terms.some(function (t) { return low.indexOf(t) >= 0; });
-        })[0];
-        if (seg && seg.time) jumpToSource(seg.time);
+        var terms = _peekTerms(hitQuery);
+        var scores = _segScores(segs, terms);
+        var best = 0;
+        scores.forEach(function (n, i) { if (n > scores[best]) best = i; });
+        if (scores[best] > 0 && segs[best].time) jumpToSource(segs[best].time);
       }
     }).catch(function () {});
   }
   function closeLessonChat() { clearTimeout(_descT); setState({ lessonChatId: null, lessonChat: [], lessonChatInput: '', lessonChatCiteSel: null, reasonOpen: {}, lessonChatMeta: null, lessonChatHitT: null, lessonChatEvent: null, evPick: null, ovEvOpen: false, ovDescView: false, descModal: false, descModalClosing: false }); }
+
+  /* ---- Källmodal för arkivsvarets sifferkällor -----------------------------
+     Klick på [n] öppnar en liten modal som visar själva stället i
+     transkriptionen (träffraderna markerade) — chattvyn nås via knappen.
+     Matchningen använder termer ur BÅDE frågan och svaret: modellen
+     omformulerar ofta ("stereotyper" om ett klipp som säger "fördomar"),
+     så svarets egna ord är den säkraste bryggan tillbaka till källraden. */
+  var _PEEK_STOP = {};
+  ('inte alla vara finns detta denna dessa vilket vilka också eller bara mycket sina hans hennes ' +
+   'efter innan sedan under över genom fram från sägs nämns säger något någon handlar exempel ' +
+   'inspelningen lektionen klippet sketchen tavlan provet skulle kommer kanske ganska väldigt ' +
+   'samma andra olika visar samband källa källor utdrag utdragen').split(' ')
+    .forEach(function (w) { _PEEK_STOP[w] = 1; });
+  function _peekTerms(text) {
+    var seen = {}, out = [];
+    String(text || '').toLowerCase().split(/[^a-zåäö0-9]+/i).forEach(function (w) {
+      if (w.length >= 4 && !_PEEK_STOP[w] && !seen[w]) { seen[w] = 1; out.push(w); }
+    });
+    return out;
+  }
+  function _segScores(segs, terms) {
+    return segs.map(function (sg) {
+      var low = (sg.text || '').toLowerCase(), n = 0;
+      terms.forEach(function (t) { if (low.indexOf(t) >= 0) n++; });
+      return n;
+    });
+  }
+  var _peekT = null;
+  function openCitePeek(src, q, ans) {
+    clearTimeout(_peekT);
+    var hitText = (q || '') + ' ' + (ans || '');
+    setState({ citePeek: { src: src, q: q || '', hitText: hitText,
+                           name: src.name || '(namnlös)',
+                           meta: [src.group, src.course, src.datum].filter(Boolean).join(' · '),
+                           loading: true, rows: [], more: 0 },
+               citePeekClosing: false });
+    var hid = src.history_id || src.id;
+    getJSON('/api/history/' + encodeURIComponent(hid)).then(function (h) {
+      var segs = ((h && h.transcript) || []).map(function (g) { return { time: fmtTime(g.start), text: g.text }; });
+      var terms = _peekTerms(hitText);
+      var scores = _segScores(segs, terms);
+      var best = 0;
+      scores.forEach(function (n, i) { if (n > scores[best]) best = i; });
+      var hits = [];
+      segs.forEach(function (sg, i) {
+        if (scores[i] >= 2 || (i === best && scores[best] > 0)) hits.push(i);
+      });
+      var center = hits.length ? (hits.indexOf(best) >= 0 ? best : hits[0]) : 0;
+      var from = Math.max(0, center - 2), to = Math.min(segs.length, center + 5);
+      var rows = segs.slice(from, to).map(function (sg, i) {
+        return { time: sg.time, text: sg.text, hit: hits.indexOf(from + i) >= 0 };
+      });
+      setState(function (s) {
+        if (!s.citePeek) return null;
+        return { citePeek: Object.assign({}, s.citePeek, {
+          loading: false, rows: rows,
+          more: hits.filter(function (i) { return i < from || i >= to; }).length,
+        }) };
+      });
+    }).catch(function () {
+      setState(function (s) {
+        return s.citePeek ? { citePeek: Object.assign({}, s.citePeek, { loading: false }) } : null;
+      });
+    });
+  }
+  function closeCitePeek() {
+    if (!S.citePeek || S.citePeekClosing) return;
+    clearTimeout(_peekT);
+    setState({ citePeekClosing: true });
+    _peekT = setTimeout(function () { setState({ citePeek: null, citePeekClosing: false }); }, 340);
+  }
+  function citePeekOpenChat() {
+    var p = S.citePeek; if (!p) return;
+    clearTimeout(_peekT);
+    setState({ citePeek: null, citePeekClosing: false });
+    openLessonChat(p.src, null, p.hitText || p.q);
+  }
   function onLessonChatInput(e) { setState({ lessonChatInput: e.target.value }); }
   function onLessonChatKey(e) { if (e.key === 'Enter') sendLessonChat(); }
   function toggleLessonChatThink() { setState(function (s) { return { lessonChatThink: !s.lessonChatThink }; }); }
@@ -3362,7 +3439,7 @@
             var s2 = srcs[tk.segIdx];
             return { isCite: true, num: tk.cite,
                      label: [s2 && s2.name, s2 && s2.datum].filter(Boolean).join(' · '),
-                     onCite: function (e) { if (e) e.stopPropagation(); openLessonChat(s2, null, st.askQ); } };
+                     onCite: function (e) { if (e) e.stopPropagation(); openCitePeek(s2, st.askQ, st.askAnswer); } };
           });
         })(),
         // Zoom till modal (data-askwrap/data-askzoom) — klick förstorar, Esc/klick utanför stänger
@@ -3630,6 +3707,15 @@
       logExpand: st.logExpand, toggleLogExpand: toggleLogExpand,
       logToggleLabel: st.logExpand ? 'Dölj' : 'Visa',
       stop: stopProp,
+      citePeek: st.citePeek ? {
+        anim: st.citePeekClosing ? 'closing' : '',
+        name: st.citePeek.name, meta: st.citePeek.meta,
+        loading: !!st.citePeek.loading,
+        rows: st.citePeek.rows || [],
+        empty: !st.citePeek.loading && !(st.citePeek.rows || []).length,
+        more: st.citePeek.more || 0,
+        onClose: closeCitePeek, onOpenChat: citePeekOpenChat,
+      } : null,
 
       // Lektionsoverlay (fullskärm): transkript + chatt + kalenderförslag
       lessonChatOpen: !!st.lessonChatId,
@@ -4998,6 +5084,39 @@ function viewModals(v){ return `
       <div style="display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap">
         <button data-click="${on(v.onDiskWarnCancel)}" style="background:transparent;border:1px solid var(--line);color:var(--ink);border-radius:11px;padding:11px 18px;font-size:15px;font-weight:500;cursor:pointer;font-family:inherit" data-sh="border-color:var(--line-2) !important;background:var(--sunken) !important">Avbryt</button>
         <button data-click="${on(v.onDiskWarnUseBest)}" style="display:inline-flex;align-items:center;gap:8px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:11px;padding:11px 18px;font-size:15px;font-weight:500;cursor:pointer;font-family:inherit;box-shadow:var(--shadow-sm)" data-sh="background:color-mix(in srgb, var(--btn-bg) 78%, var(--accent)) !important">${esc(v.diskWarnBestLabel)}</button>
+      </div>
+    </div>
+  </div>
+  ` : '' }
+
+  ${ v.citePeek ? `
+  <div data-click="${on(v.citePeek.onClose)}" data-modal-back="${esc(v.citePeek.anim)}" style="position:fixed;inset:0;z-index:150;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(11,11,13,.42);backdrop-filter:blur(3px)">
+    <div data-click="${on(v.stop)}" role="dialog" aria-modal="true" aria-label="Källa i transkriptionen" data-modal-card="${esc(v.citePeek.anim)}" style="width:100%;max-width:560px;background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);overflow:hidden">
+      <div style="display:flex;align-items:center;gap:10px;padding:15px 18px;border-bottom:1px solid var(--line)">
+        <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3)">Källa i transkriptionen</span>
+        <span style="flex:1"></span>
+        <button data-click="${on(v.citePeek.onClose)}" aria-label="Stäng" style="width:30px;height:30px;border:none;background:transparent;border-radius:7px;cursor:pointer;color:var(--ink-3);font-size:13px;display:flex;align-items:center;justify-content:center" data-sh="background:var(--sunken) !important;color:var(--ink) !important">✕</button>
+      </div>
+      <div style="padding:14px 18px 4px">
+        <div style="font-size:15.5px;font-weight:600;color:var(--ink);letter-spacing:-0.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(v.citePeek.name)}</div>
+        ${ v.citePeek.meta ? `<div style="font-family:var(--mono);font-size:10.5px;color:var(--ink-3);font-variant-numeric:tabular-nums;margin-top:3px">${esc(v.citePeek.meta)}</div>` : '' }
+      </div>
+      <div style="padding:10px 18px 14px;max-height:min(46vh,380px);overflow:auto;overscroll-behavior:contain">
+        ${ v.citePeek.loading ? `
+        <div style="display:flex;align-items:center;gap:9px;color:var(--ink-2);font-size:13.5px;padding:10px 0"><span style="width:13px;height:13px;border-radius:50%;border:2px solid var(--line-2);border-top-color:var(--accent);animation:spin .7s linear infinite"></span>Hämtar transkriptionen …</div>
+        ` : v.citePeek.empty ? `
+        <div style="color:var(--ink-2);font-size:13.5px;padding:10px 0">Kunde inte hämta transkriptionen — öppna chattvyn för att läsa hela.</div>
+        ` : v.citePeek.rows.map(function(r2){ return `
+        <div style="display:flex;gap:12px;align-items:flex-start;padding:7px 9px;border-radius:6px;${r2.hit ? 'background:var(--accent-weak)' : ''}">
+          <span style="flex:0 0 auto;font-family:var(--mono);font-size:11px;color:${r2.hit ? 'var(--accent)' : 'var(--ink-3)'};font-weight:${r2.hit ? '700' : '500'};font-variant-numeric:tabular-nums;padding-top:2px">${esc(r2.time)}</span>
+          <span style="min-width:0;font-size:14px;line-height:1.6;color:var(--ink)">${esc(r2.text)}</span>
+        </div>
+        `; }).join('') }
+        ${ v.citePeek.more ? `<div style="font-family:var(--mono);font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-3);padding:9px 9px 0">+ ${esc(String(v.citePeek.more))} ställe${v.citePeek.more === 1 ? '' : 'n'} till — öppna chattvyn för hela transkriptionen</div>` : '' }
+      </div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;padding:13px 18px;border-top:1px solid var(--line);background:var(--sunken)">
+        <button data-click="${on(v.citePeek.onClose)}" style="background:transparent;border:1px solid var(--line);color:var(--ink);border-radius:9px;padding:9px 15px;font-size:13.5px;font-weight:500;cursor:pointer;font-family:inherit">Stäng</button>
+        <button data-click="${on(v.citePeek.onOpenChat)}" style="display:inline-flex;align-items:center;gap:7px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:9px;padding:9px 16px;font-size:13.5px;font-weight:500;cursor:pointer;font-family:inherit">Öppna i chattvyn<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h10M9 4l4 4-4 4"></path></svg></button>
       </div>
     </div>
   </div>
