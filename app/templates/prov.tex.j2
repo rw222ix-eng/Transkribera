@@ -1,0 +1,74 @@
+((# Provmall (Fas 4) — FAST preamble: modellen genererar aldrig fri LaTeX-
+    preamble, bara uppgiftsinnehåll som escapas in i den här mallen.
+    Jinja-avgränsarna är parentesbaserade (se exam_latex._environment)
+    och krockar inte med LaTeX-klamrar. #))
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=22mm,bottom=26mm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{fancyhdr}
+\usepackage{lastpage}
+\usepackage{tabularx}
+\usepackage{enumitem}
+\usepackage[swedish]{babel}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small ((( kurs ))) — ((( titel )))}
+\fancyhead[R]{\small Sida \thepage\ av \pageref{LastPage}}
+\renewcommand{\headrulewidth}{0.3pt}
+
+\newcommand{\poang}[1]{\hfill\mbox{\small(#1)}}
+\newcommand{\svarsrad}{\par\vspace{4mm}\makebox[0.6\linewidth]{Svar: \dotfill}}
+
+\begin{document}
+
+((# ------------------------------------------------ försättsblad ------ #))
+\begin{center}
+  {\LARGE\bfseries ((( titel )))}\\[2mm]
+  {\large ((( kurs )))((* if klass *)) \; · \; ((( klass )))((* endif *))((* if datum *)) \; · \; ((( datum )))((* endif *))}
+\end{center}
+
+\vspace{6mm}
+\begin{tabularx}{\linewidth}{@{}lX@{}}
+((* if tid_min *))\textbf{Provtid} & ((( tid_min ))) minuter \\((* endif *))
+\textbf{Hjälpmedel} & ((( hjalpmedel ))) \\
+\textbf{Totalpoäng} & ((( poang_rad ))) \\
+\end{tabularx}
+
+\vspace{5mm}
+\textbf{Kravgränser}
+
+\begin{tabularx}{\linewidth}{@{}lX@{}}
+E & minst ((( granser.E.minst ))) poäng \\
+C & minst ((( granser.C.minst ))) poäng, varav minst ((( granser.C.varav_ca ))) C- eller A-poäng \\
+A & minst ((( granser.A.minst ))) poäng, varav minst ((( granser.A.varav_a ))) A-poäng \\
+\end{tabularx}
+
+{\small ((( granser.regel )))}
+
+\vspace{5mm}
+{\small Poängen för varje uppgift anges som (E-poäng/C-poäng/A-poäng).
+Till uppgifter märkta \emph{Endast svar krävs} behöver du bara ge svar.
+Övriga uppgifter kräver fullständig redovisning — visa hur du löser
+uppgiften och motivera dina steg.}
+
+\newpage
+
+((# ------------------------------------------------ uppgifter --------- #))
+((* for del in delar *))
+((* if del.rubrik *))
+\section*{((( del.rubrik )))}
+((* if del.instruktion *)){\small\itshape ((( del.instruktion )))}\par\vspace{3mm}((* endif *))
+((* endif *))
+((* for u in del.uppgifter *))
+\textbf{Uppgift ((( u.nummer )))}((* if u.endast_svar *)) \; {\small\itshape (Endast svar krävs)}((* endif *))\poang{((( u.poang_str )))}\par
+((( u.text )))
+((* if u.bild_fil *))\par\vspace{2mm}\begin{center}\includegraphics[width=0.72\linewidth,height=90mm,keepaspectratio]{((( u.bild_fil )))}\end{center}((* endif *))
+((* if u.endast_svar *))\svarsrad\par\vspace{6mm}((* else *))\par\vspace{((( u.utrymme_mm )))mm}((* endif *))
+
+((* endfor *))
+((* endfor *))
+
+\end{document}

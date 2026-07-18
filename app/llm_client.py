@@ -54,10 +54,13 @@ _CHAT_SYSTEM_CITED = (
     "Svara ALLTID på svenska och använd aldrig något annat språk. Grunda dina svar "
     "i transkriptet nedan; säg till om något inte framgår av det.\n"
     "Transkriptet är uppdelat i numrerade segment på formen \"[n] (mm:ss) text\". "
-    "När ett påstående bygger på ett segment: avsluta påståendet med segmentets "
-    "nummer i hakparentes, t.ex. [3]. Använd bara nummer som finns i transkriptet, "
-    "citera sparsamt (högst ett par segment per påstående) och skriv aldrig "
-    "hakparenteser runt något annat än segmentnummer." + _STYLE +
+    "KÄLLKRAV (obligatoriskt): varje påstående som bygger på transkriptet ska "
+    "avslutas med segmentets nummer i hakparentes, t.ex. [3] eller [3, 7]. Det "
+    "gäller även varje punkt i en punktlista eller numrerad lista — en punkt utan "
+    "källmarkör är ofullständig. Exempel: \"- Formlerna härleds ur "
+    "additionsformlerna [4]\". Använd bara nummer som finns i transkriptet, högst "
+    "ett par segment per påstående, och skriv aldrig hakparenteser runt något "
+    "annat än segmentnummer." + _STYLE +
     "\n\nTRANSKRIPT:\n"
 )
 
@@ -70,11 +73,14 @@ _SV_DAYS = ["måndag", "tisdag", "onsdag", "torsdag", "fredag", "lördag", "sön
 def _cal_instr(cal_event: dict | None) -> str:
     today = datetime.now()
     s = (
-        "\n\nKALENDER: Användaren kan be dig skapa eller ändra en kalenderhändelse "
-        "(prov, läxförhör, inlämning, möte, påminnelse …). Gör då ALLTID två saker, i "
-        "denna ordning: skriv först en kort bekräftelse i vanlig löptext (minst en hel "
-        "mening, t.ex. ”Klart — jag har lagt in mötet på torsdag kl 18.”), och avsluta "
-        "därefter HELA svaret med exakt en rad:\n"
+        "\n\nKALENDER: Användaren kan be dig föreslå eller ändra en kalenderhändelse "
+        "(prov, läxförhör, inlämning, möte, påminnelse …). Du kan INTE själv lägga in "
+        "något i kalendern — du lämnar bara ett FÖRSLAG som användaren måste godkänna "
+        "med Lägg till-knappen. Påstå därför ALDRIG att något är inlagt, bokat eller "
+        "klart. Gör ALLTID två saker, i denna ordning: skriv först en kort mening i "
+        "vanlig löptext som presenterar förslaget (t.ex. ”Här är ett förslag på en "
+        "påminnelse tisdag–onsdag kl 15 — godkänn det nedan så läggs det in.”), och "
+        "avsluta därefter HELA svaret med exakt en rad:\n"
         '[KALENDERFÖRSLAG] {"title": "...", "date": "YYYY-MM-DD", "time": "HH:MM", '
         '"end_date": null, "desc": "..."}\n'
         f"Idag är {_SV_DAYS[today.weekday()]} {today:%Y-%m-%d}. Alla fält ska alltid med: "

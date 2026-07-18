@@ -25,8 +25,9 @@ from app import (debug_log, hardware, recommend, whisper_manager, llm_client,
                  llm_manager, youtube, postprocess, transcriber,
                  history_store, gpu_arbiter, output_store, media, audio_model, db,
                  paths, settings_store, ics_export, backup, report,
-                 calendar_google)
+                 calendar_google, course_data)
 from app.models_catalog import WHISPER_MODELS, LLM_MODELS
+from app.web import routes_exam, routes_planning, sse
 
 _MONTHS_SV = ["jan", "feb", "mar", "apr", "maj", "jun", "jul", "aug", "sep", "okt", "nov", "dec"]
 
@@ -175,31 +176,9 @@ def _run_transcribe_subprocess(cmd, base: Path, emit, on_proc=None,
     return written, segments
 
 
-def _sse_response(job) -> StreamingResponse:
-    """Run job(emit) on a worker thread and stream emitted dict events as SSE."""
-    q: queue.Queue = queue.Queue()
-    end = object()
-
-    def run():
-        try:
-            result = job(lambda ev: q.put(ev))
-            q.put({"type": "done", "result": result})
-        except Exception as e:  # surfaced to the browser + log file
-            debug_log.get_logger().exception("Web-jobb misslyckades")
-            q.put({"type": "error", "message": str(e)})
-        finally:
-            q.put(end)
-
-    threading.Thread(target=run, daemon=True).start()
-
-    def gen():
-        while True:
-            ev = q.get()
-            if ev is end:
-                break
-            yield f"data: {json.dumps(ev, ensure_ascii=False)}\n\n"
-
-    return StreamingResponse(gen(), media_type="text/event-stream")
+# Utbruten till app/web/sse.py (delas med routers i egna moduler, t.ex.
+# routes_planning) — aliaset behålls så alla anrop i den här filen står kvar.
+_sse_response = sse.sse_response
 
 
 def create_app(base_dir: Path | None = None,
@@ -227,6 +206,21 @@ def create_app(base_dir: Path | None = None,
             _conn.close()
     except Exception:
         debug_log.get_logger().exception("Migrering av historik till lektions-DB misslyckades")
+
+    # Seeda centralt innehåll för matematikkurserna (Fas 3; idempotent via
+    # UNIQUE(course_id, kod) — bundlad, statisk, offline data). Kursregistret
+    # bär Gy25-nivånamn — omdöpningen körs först så seedningen träffar rätt rad.
+    try:
+        _conn = _db()
+        try:
+            db.apply_gy25_course_names(_conn)
+            db.ensure_gy25_nivaer(_conn)
+            db.ensure_amnen(_conn)
+            db.seed_course_content(_conn, course_data.load_centralt_innehall())
+        finally:
+            _conn.close()
+    except Exception:
+        debug_log.get_logger().exception("Seedning av centralt innehåll misslyckades")
 
     app = FastAPI(title="Transkribera Web")
 
@@ -266,6 +260,11 @@ def create_app(base_dir: Path | None = None,
     # Entrypoints stop it on exit via app.state.arbiter.
     arb = arbiter if arbiter is not None else gpu_arbiter.GpuArbiter(models_root, on_log=print)
     app.state.arbiter = arb
+
+    # Planering (Fas 0/1) + prov (Fas 4): egna routers — nya funktioner ska
+    # inte växa i den här filen (se planens riskavsnitt om scope-krypning).
+    app.include_router(routes_planning.create_router(base, arb))
+    app.include_router(routes_exam.create_router(base, arb))
 
     # Tracks the live transcription subprocess so /api/transcribe/cancel can
     # terminate it and free the GPU mid-run (otherwise "Avbryt" only stopped the
@@ -959,9 +958,21 @@ def create_app(base_dir: Path | None = None,
                 les = db.update_lesson(conn, lesson_id, **fields)
             except sqlite3.IntegrityError:               # unknown group_id/course_id
                 return JSONResponse({"error": "okänd klass/kurs"}, status_code=400)
+            # Fas 3: när lektionen fått klass/kurs/datum — auto-länka mot en
+            # planerad lektion (samma grupp+kurs+datum, ± starttidstolerans)
+            # så planeringen blir "hållen" utan handpåläggning.
+            linked = None
+            if fields.keys() & {"group_id", "course_id", "datum", "starttid"}:
+                try:
+                    linked = db.autolink_lesson(conn, lesson_id)
+                except Exception:
+                    debug_log.get_logger().exception("Auto-länkning misslyckades")
         finally:
             conn.close()
-        return _lesson_view(les)
+        view = _lesson_view(les)
+        if linked:
+            view["planned_lesson_id"] = linked["id"]
+        return view
 
     def _delete_recording(path: str | Path | None) -> None:
         """Remove an in-app recording from downloads/ (validated under base).
@@ -1081,9 +1092,10 @@ def create_app(base_dir: Path | None = None,
                 if arb.ensure_llm() is None:
                     raise RuntimeError("Språkmodellen är inte installerad.")
                 emit({"type": "log", "msg": "Analyserar lektionen ..."})
-                found = postprocess.extract(
+                result = postprocess.extract_full(
                     transcript, llm_manager.ACTIVE_LLM.filename,
                     log_cb=lambda m: emit({"type": "log", "msg": m}))
+                found = result["insights"]
                 conn = _db()
                 try:
                     if found:
@@ -1098,10 +1110,15 @@ def create_app(base_dir: Path | None = None,
                         saved = [i for i in db.list_insights(conn, lesson_id)
                                  if i.get("source") == "llm"]
                         kept_previous = True
+                    # Fas 3: tagga behandlat innehåll mot kursens centrala
+                    # innehåll — minnet vet då VAD lektionen täckte.
+                    tagged = db.tag_content_from_texts(
+                        conn, lesson_id, result.get("innehall") or [])
                 finally:
                     conn.close()
                 return {"insights": saved, "count": len(saved),
-                        "kept_previous": kept_previous}
+                        "kept_previous": kept_previous,
+                        "content": tagged}
             finally:
                 arb.release_gpu()
         return _sse_response(job)
@@ -1382,12 +1399,15 @@ def create_app(base_dir: Path | None = None,
         try:
             hits = db.search_transcripts(conn, query, limit=5, match_all=False)
             ids = [h["lesson_id"] for h in hits]
-            excerpts = db.lessons_excerpts_for(conn, ids, query)
+            # 2600 tecken/inspelning (5 källor ≈ 13k tecken): tillräckligt med
+            # sammanhang för konkreta, citatförankrade svar i stället för
+            # generella referat — ryms gott i Qwen3-kontexten.
+            excerpts = db.lessons_excerpts_for(conn, ids, query, window=2600)
         finally:
             conn.close()
         if not excerpts:
             return JSONResponse(
-                {"error": "Inga lektioner matchar sökningen."}, status_code=404)
+                {"error": "Inga inspelningar matchar sökningen."}, status_code=404)
         if not arb.try_acquire_gpu():
             return JSONResponse(
                 {"error": "GPU upptagen med transkribering – försök igen strax."},

@@ -1,0 +1,19 @@
+{
+  "kurs": "Ma2b",
+  "kurskod": "MATMAT02b",
+  "lasar_version": "Gy11",
+  "_not": "Kondenserad parafras av det centrala innehållet (Gy11) — inte skolverkets exakta text.",
+  "innehall": [
+    {"kod": "M2B-ALG-1", "rubrik": "Algebra", "text": "Räta linjens ekvation y = kx + m samt linjära ekvationssystem med grafiska och algebraiska metoder."},
+    {"kod": "M2B-ALG-2", "rubrik": "Algebra", "text": "Andragradsekvationer: pq-formeln, kvadratkomplettering, nollproduktmetoden samt komplexa rötter översiktligt."},
+    {"kod": "M2B-ALG-3", "rubrik": "Algebra", "text": "Kvadreringsreglerna och konjugatregeln; faktorisering och förenkling av algebraiska uttryck."},
+    {"kod": "M2B-ALG-4", "rubrik": "Algebra", "text": "Logaritmbegreppet och exponentialekvationer av typen a^x = b."},
+    {"kod": "M2B-GEO-1", "rubrik": "Geometri", "text": "Klassiska satser om randvinklar, medelpunktsvinklar, likformighet och kongruens med bevisidéer."},
+    {"kod": "M2B-SAM-1", "rubrik": "Samband och förändring", "text": "Andragradsfunktioner: graf, symmetrilinje, största/minsta värde och nollställen."},
+    {"kod": "M2B-SAM-2", "rubrik": "Samband och förändring", "text": "Exponential- och potensfunktioner som modeller för verkliga förlopp."},
+    {"kod": "M2B-STA-1", "rubrik": "Sannolikhet och statistik", "text": "Statistiska metoder: lägesmått, spridningsmått och standardavvikelse för att beskriva material."},
+    {"kod": "M2B-STA-2", "rubrik": "Sannolikhet och statistik", "text": "Normalfördelningen och dess egenskaper; tumregeln för andelar inom standardavvikelser."},
+    {"kod": "M2B-STA-3", "rubrik": "Sannolikhet och statistik", "text": "Korrelation och kausalitet samt regressionsanalys med digitala verktyg."},
+    {"kod": "M2B-PRO-1", "rubrik": "Problemlösning", "text": "Problemlösningsstrategier, modellering och utvärdering av modellers giltighet."}
+  ]
+}

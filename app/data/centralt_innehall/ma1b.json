@@ -1,0 +1,19 @@
+{
+  "kurs": "Ma1b",
+  "kurskod": "MATMAT01b",
+  "lasar_version": "Gy11",
+  "_not": "Kondenserad parafras av det centrala innehållet (Gy11) — inte skolverkets exakta text.",
+  "innehall": [
+    {"kod": "M1B-TAL-1", "rubrik": "Taluppfattning", "text": "Reella tal, positionssystem, potenser med heltalsexponent och tal i grundpotensform."},
+    {"kod": "M1B-TAL-2", "rubrik": "Taluppfattning", "text": "Procent, procentenheter, förändringsfaktor och index; ränta, lån och amortering i privatekonomi."},
+    {"kod": "M1B-ALG-1", "rubrik": "Algebra", "text": "Algebraiska uttryck, formler och linjära ekvationer; balansmetoden och prövning."},
+    {"kod": "M1B-ALG-2", "rubrik": "Algebra", "text": "Linjära olikheter samt enkla potens- och exponentialekvationer."},
+    {"kod": "M1B-GEO-1", "rubrik": "Geometri", "text": "Geometriska begrepp, area och omkrets; Pythagoras sats och likformighet med tillämpningar."},
+    {"kod": "M1B-GEO-2", "rubrik": "Geometri", "text": "Symmetrier och mönster samt geometrisk problemlösning med resonemang."},
+    {"kod": "M1B-SAM-1", "rubrik": "Samband och förändring", "text": "Funktionsbegreppet: linjära funktioner och räta linjens ekvation, grafiskt och algebraiskt."},
+    {"kod": "M1B-SAM-2", "rubrik": "Samband och förändring", "text": "Exponentiell förändring och förändringsfaktor över flera perioder; jämförelse linjärt/exponentiellt."},
+    {"kod": "M1B-STA-1", "rubrik": "Sannolikhet och statistik", "text": "Sannolikhet i ett och flera steg, träddiagram, komplementhändelse samt beroende/oberoende händelser."},
+    {"kod": "M1B-STA-2", "rubrik": "Sannolikhet och statistik", "text": "Statistiska metoder: lägesmått, spridningsmått, tabeller och diagram samt granskning av statistik."},
+    {"kod": "M1B-PRO-1", "rubrik": "Problemlösning", "text": "Strategier för matematisk problemlösning, modellering av vardagsnära situationer och rimlighetsbedömning."}
+  ]
+}

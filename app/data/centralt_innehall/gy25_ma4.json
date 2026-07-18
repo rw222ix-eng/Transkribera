@@ -1,0 +1,90 @@
+{
+  "kurs": "Ma4",
+  "kurskod": "MATO2000X",
+  "lasar_version": "Gy25",
+  "amne": "Matematik – fortsättning",
+  "niva": "Matematik – fortsättning, nivå 2",
+  "_not": "Skolverkets centrala innehåll (Gy25) — officiell punkttext per nivå.",
+  "innehall": [
+    {
+      "kod": "G25-M4-ALG-1",
+      "rubrik": "Aritmetik, algebra och funktioner",
+      "text": "Begreppen imaginära enheten, komplexa tal och komplexa talplanet. Representation av komplexa tal i rektangulär och polär form. Metoder för beräkningar med komplexa tal, däribland beräkning av konjugat och absolutbelopp."
+    },
+    {
+      "kod": "G25-M4-ALG-2",
+      "rubrik": "Aritmetik, algebra och funktioner",
+      "text": "Metoder för att faktorisera polynom. Användning av faktorsatsen för att lösa polynomekvationer."
+    },
+    {
+      "kod": "G25-M4-ALG-3",
+      "rubrik": "Aritmetik, algebra och funktioner",
+      "text": "Metoder för att bestämma även komplexa lösningar till andragradsekvationer, potensekvationer och polynomekvationer."
+    },
+    {
+      "kod": "G25-M4-ALG-4",
+      "rubrik": "Aritmetik, algebra och funktioner",
+      "text": "Fördjupning av funktionsbegreppet, däribland sammansatta funktioner, logaritmfunktioner, linjära asymptoter och skissning av grafer för hand."
+    },
+    {
+      "kod": "G25-M4-ALG-5",
+      "rubrik": "Aritmetik, algebra och funktioner",
+      "text": "Motivering och hantering av deriveringsregler för logaritmfunktioner, sammansatta funktioner samt produkt och kvot av funktioner."
+    },
+    {
+      "kod": "G25-M4-ALG-6",
+      "rubrik": "Aritmetik, algebra och funktioner",
+      "text": "Användning av integraler i mer komplexa sammanhang, till exempel täthetsfunktioner, sannolikhetsfördelning, rotationsvolymer och beräkning av storheter."
+    },
+    {
+      "kod": "G25-M4-TRI-1",
+      "rubrik": "Trigonometri",
+      "text": "Hantering av trigonometriska uttryck. Bevis och hantering av trigonometriska identiteter, däribland trigonometriska ettan och additionsformler."
+    },
+    {
+      "kod": "G25-M4-TRI-2",
+      "rubrik": "Trigonometri",
+      "text": "Egenskaper hos trigonometriska funktioner, däribland period, amplitud och fasförskjutning. Metoder för att bestämma trigonometriska funktioner. Metoder för att lösa trigonometriska ekvationer."
+    },
+    {
+      "kod": "G25-M4-TRI-3",
+      "rubrik": "Trigonometri",
+      "text": "Begreppet radian."
+    },
+    {
+      "kod": "G25-M4-TRI-4",
+      "rubrik": "Trigonometri",
+      "text": "Motivering och hantering av deriveringsregler för sinus-, cosinus- och tangensfunktioner."
+    },
+    {
+      "kod": "G25-M4-TRI-5",
+      "rubrik": "Trigonometri",
+      "text": "Motivering och hantering av metoder för att bestämma integraler för sinus- och cosinusfunktioner."
+    },
+    {
+      "kod": "G25-M4-DIG-1",
+      "rubrik": "Digitala verktyg",
+      "text": "Användning av digitala verktyg, även symbolhanterande, för att effektivisera beräkningar och komplettera metoder, till exempel vid ekvationslösning, derivering, integrering, hantering av algebraiska uttryck och problemlösning."
+    },
+    {
+      "kod": "G25-M4-DIG-2",
+      "rubrik": "Digitala verktyg",
+      "text": "Användning av programmering som verktyg vid problemlösning, databearbetning eller tillämpning av numeriska metoder."
+    },
+    {
+      "kod": "G25-M4-PRO-1",
+      "rubrik": "Problemlösning och tillämpningsområden",
+      "text": "Problemlösning med särskild utgångspunkt i utbildningens karaktär och samhällsliv, däribland frågeställningar som berör hållbar utveckling och hur matematik kan användas för kritisk granskning av fakta och påståenden."
+    },
+    {
+      "kod": "G25-M4-PRO-2",
+      "rubrik": "Problemlösning och tillämpningsområden",
+      "text": "Tillämpning och formulering av matematiska modeller i realistiska situationer. Utvärdering av matematiska modellers egenskaper och begränsningar."
+    },
+    {
+      "kod": "G25-M4-PRO-3",
+      "rubrik": "Problemlösning och tillämpningsområden",
+      "text": "Orientering om något ur matematikens historia, till exempel hur ett matematiskt begrepp utvecklats, matematikens roll i något historiskt skeende, en betydande person inom matematiken eller ett historiskt matematiskt problem."
+    }
+  ]
+}

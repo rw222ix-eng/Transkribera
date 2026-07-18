@@ -1,0 +1,85 @@
+{
+  "kurs": "Ma5",
+  "kurskod": "MATF1000X",
+  "lasar_version": "Gy25",
+  "amne": "Matematik – fördjupning",
+  "niva": "Matematik – fördjupning, nivå 1",
+  "_not": "Skolverkets centrala innehåll (Gy25) — officiell punkttext per nivå.",
+  "innehall": [
+    {
+      "kod": "G25-M5-ALG-1",
+      "rubrik": "Aritmetik, algebra och funktioner",
+      "text": "Begreppet differentialekvation och exempel på tillämpningar. Verifiering av lösningar till differentialekvationer."
+    },
+    {
+      "kod": "G25-M5-ALG-2",
+      "rubrik": "Aritmetik, algebra och funktioner",
+      "text": "Strategier för att ställa upp och tolka differentialekvationer. Digitala metoder för att lösa differentialekvationer."
+    },
+    {
+      "kod": "G25-M5-ALG-3",
+      "rubrik": "Aritmetik, algebra och funktioner",
+      "text": "Metoder för att lösa enklare linjära differentialekvationer av första och andra ordningen för hand."
+    },
+    {
+      "kod": "G25-M5-LOG-1",
+      "rubrik": "Logik och diskret matematik",
+      "text": "Bevismetoder, däribland motsägelsebevis och induktionsbevis."
+    },
+    {
+      "kod": "G25-M5-LOG-2",
+      "rubrik": "Logik och diskret matematik",
+      "text": "Representation av tal i olika talbaser."
+    },
+    {
+      "kod": "G25-M5-LOG-3",
+      "rubrik": "Logik och diskret matematik",
+      "text": "Kongruens hos hela tal och metoder för kongruensräkning."
+    },
+    {
+      "kod": "G25-M5-LOG-4",
+      "rubrik": "Logik och diskret matematik",
+      "text": "Begreppen permutation och kombination. Motivering och hantering av metoder för att bestämma antal permutationer och kombinationer."
+    },
+    {
+      "kod": "G25-M5-LOG-5",
+      "rubrik": "Logik och diskret matematik",
+      "text": "Begreppet rekursion och rekursiva talföljder."
+    },
+    {
+      "kod": "G25-M5-LOG-6",
+      "rubrik": "Logik och diskret matematik",
+      "text": "Begreppet mängd. Notationer i mängdlära och hantering av operationer på mängder."
+    },
+    {
+      "kod": "G25-M5-DIG-1",
+      "rubrik": "Digitala verktyg",
+      "text": "Användning av digitala verktyg, även symbolhanterande, för att effektivisera beräkningar och komplettera metoder, till exempel vid ekvationslösning, derivering, integrering, hantering av algebraiska uttryck och problemlösning."
+    },
+    {
+      "kod": "G25-M5-DIG-2",
+      "rubrik": "Digitala verktyg",
+      "text": "Användning av programmering som verktyg vid problemlösning, databearbetning eller tillämpning av numeriska metoder."
+    },
+    {
+      "kod": "G25-M5-PRO-1",
+      "rubrik": "Problemlösning och tillämpningsområden",
+      "text": "Problemlösning med särskild utgångspunkt i utbildningens karaktär och samhällsliv."
+    },
+    {
+      "kod": "G25-M5-PRO-2",
+      "rubrik": "Problemlösning och tillämpningsområden",
+      "text": "Omfångsrika problemsituationer som är relevanta för utbildningens karaktär, däribland problem som fördjupar kunskaper om integraler och derivata."
+    },
+    {
+      "kod": "G25-M5-PRO-3",
+      "rubrik": "Problemlösning och tillämpningsområden",
+      "text": "Tillämpning och formulering av matematiska modeller i realistiska situationer. Utvärdering av matematiska modellers egenskaper och begränsningar."
+    },
+    {
+      "kod": "G25-M5-PRO-4",
+      "rubrik": "Problemlösning och tillämpningsområden",
+      "text": "Orientering om något ur matematikens historia, till exempel hur ett matematiskt begrepp utvecklats, matematikens roll i något historiskt skeende, en betydande person inom matematiken eller ett historiskt matematiskt problem."
+    }
+  ]
+}

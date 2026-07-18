@@ -1,0 +1,17 @@
+{
+  "kurs": "Ma3c",
+  "kurskod": "MATMAT03c",
+  "lasar_version": "Gy11",
+  "_not": "Kondenserad parafras av det centrala innehållet (Gy11) — inte skolverkets exakta text.",
+  "innehall": [
+    {"kod": "M3C-ALG-1", "rubrik": "Algebra", "text": "Polynomekvationer, faktorsatsen, rationella uttryck och absolutbelopp."},
+    {"kod": "M3C-GEO-1", "rubrik": "Geometri", "text": "Enhetscirkeln: sinus och cosinus för godtyckliga vinklar samt exakta värden för standardvinklar."},
+    {"kod": "M3C-GEO-2", "rubrik": "Geometri", "text": "Triangelsatserna: areasatsen, sinussatsen och cosinussatsen med tillämpningar."},
+    {"kod": "M3C-SAM-1", "rubrik": "Samband och förändring", "text": "Ändringskvot och derivatans definition som gränsvärde; sekant och tangent."},
+    {"kod": "M3C-SAM-2", "rubrik": "Samband och förändring", "text": "Deriveringsregler för polynom-, potens- och exponentialfunktioner samt naturliga logaritmen."},
+    {"kod": "M3C-SAM-3", "rubrik": "Samband och förändring", "text": "Extrempunkter, teckentabell och andraderivata; grafanalys och optimeringsproblem."},
+    {"kod": "M3C-SAM-4", "rubrik": "Samband och förändring", "text": "Grafer till sinus- och cosinusfunktioner: amplitud och period."},
+    {"kod": "M3C-SAM-5", "rubrik": "Samband och förändring", "text": "Primitiva funktioner och bestämda integraler; area mellan kurvor."},
+    {"kod": "M3C-PRO-1", "rubrik": "Problemlösning", "text": "Problemlösningsstrategier, matematisk modellering samt bevis, bland annat med geometriska och algebraiska metoder."}
+  ]
+}

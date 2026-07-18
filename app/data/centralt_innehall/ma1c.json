@@ -1,0 +1,20 @@
+{
+  "kurs": "Ma1c",
+  "kurskod": "MATMAT01c",
+  "lasar_version": "Gy11",
+  "_not": "Kondenserad parafras av det centrala innehållet (Gy11) — inte skolverkets exakta text.",
+  "innehall": [
+    {"kod": "M1C-TAL-1", "rubrik": "Taluppfattning", "text": "Reella tal, talsystem med olika baser, potenser med rationell exponent och grundpotensform."},
+    {"kod": "M1C-TAL-2", "rubrik": "Taluppfattning", "text": "Procent, förändringsfaktor och index med tillämpningar; enhetsbyten och prefix."},
+    {"kod": "M1C-ALG-1", "rubrik": "Algebra", "text": "Algebraiska uttryck, distributiva lagen, faktorisering och linjära ekvationer."},
+    {"kod": "M1C-ALG-2", "rubrik": "Algebra", "text": "Linjära olikheter, potensekvationer och enkla exponentialekvationer."},
+    {"kod": "M1C-GEO-1", "rubrik": "Geometri", "text": "Vinklar, vinkelsumma i månghörningar, Pythagoras sats, likformighet och kongruens."},
+    {"kod": "M1C-GEO-2", "rubrik": "Geometri", "text": "Trigonometri i rätvinkliga trianglar: sinus, cosinus och tangens med tillämpningar."},
+    {"kod": "M1C-GEO-3", "rubrik": "Geometri", "text": "Vektorer i planet: addition, subtraktion och multiplikation med skalär."},
+    {"kod": "M1C-SAM-1", "rubrik": "Samband och förändring", "text": "Funktionsbegreppet: linjära funktioner, räta linjens ekvation samt graf och definitionsmängd."},
+    {"kod": "M1C-SAM-2", "rubrik": "Samband och förändring", "text": "Exponentialfunktioner och exponentiell förändring; jämförelse med linjära modeller."},
+    {"kod": "M1C-STA-1", "rubrik": "Sannolikhet och statistik", "text": "Sannolikhet i flera steg, träddiagram, kombinatoriska resonemang samt beroende händelser."},
+    {"kod": "M1C-STA-2", "rubrik": "Sannolikhet och statistik", "text": "Lägesmått och spridningsmått samt granskning av statistiska undersökningar."},
+    {"kod": "M1C-PRO-1", "rubrik": "Problemlösning", "text": "Problemlösningsstrategier, matematisk modellering och bedömning av resultatens rimlighet."}
+  ]
+}

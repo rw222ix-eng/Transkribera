@@ -48,7 +48,9 @@ def _fake_segments() -> list[dict]:
 
 def _install_fakes() -> None:
     """Monkeypatch GPU-bound inference; keep every other code path real."""
-    from app import postprocess, llm_client, transcriber
+    import copy
+
+    from app import exam_gen, exam_pdf, lesson_board, postprocess, llm_client, transcriber
     from app.web import server
 
     def fake_transcribe(cmd, base, emit, on_proc=None, progress_scale=1.0,
@@ -81,6 +83,10 @@ def _install_fakes() -> None:
         return [{"typ": "åtgärd", "text": "Räkna uppgift 5 till nästa gång.",
                  "due_date": None, "ref": None}]
 
+    def fake_extract_full(transcript, filename, token_cb=None, log_cb=None):
+        return {"insights": fake_extract(transcript, filename),
+                "innehall": ["pq-formeln", "kvadratkomplettering"]}
+
     def fake_answer(query, excerpts, filename, token_cb=None):
         text = "[FEJK svar] Det togs upp i lektionen."
         if token_cb:
@@ -108,9 +114,109 @@ def _install_fakes() -> None:
         # Efterliknar Qwen-namngivningen av lokala källor (inspelning/lokal video).
         return "Bråk och procent — introduktion"
 
+    # Lektionstavlan (Planering, Fas 1). OBS: patcha lesson_board-funktionerna,
+    # inte llm_client.generate — llm= är ett defaultargument som binds vid
+    # import, så en senare llm_client-patch når aldrig fram.
+    def _fake_board(title: str) -> dict:
+        # Few-shot 2 har graf + plots[].expr → e2e verifierar hela
+        # expr.js-kedjan (kompilering + kurvritning) på riktigt.
+        board = copy.deepcopy(lesson_board.FEW_SHOTS[1][1])
+        board["title"] = title
+        return board
+
+    def fake_generate_board(course, group, moment, *, model, memory="",
+                            llm=None, max_rounds=3, log_cb=None):
+        if log_cb:
+            log_cb("[FEJK] Genererar lektionstavlan …")
+        return {"board": _fake_board(moment or "Lektionstavla"),
+                "errors": [], "rounds": 1}
+
+    def fake_refine_board(board, instruction, *, model, llm=None,
+                          max_rounds=3, log_cb=None):
+        if log_cb:
+            log_cb("[FEJK] Uppdaterar tavlan …")
+        updated = copy.deepcopy(board)
+        updated["title"] = (updated.get("title") or "Tavla") + " (ändrad)"
+        return {"board": updated, "errors": [], "rounds": 1}
+
+    def fake_repair_board(board, warnings, *, model, llm=None, rounds_used=1,
+                          max_rounds=3, log_cb=None):
+        return {"board": board, "errors": [], "rounds": rounds_used + 1}
+
+    lesson_board.generate_board = fake_generate_board
+    lesson_board.refine_board = fake_refine_board
+    lesson_board.repair_board = fake_repair_board
+
+    # Provgeneratorn (Fas 4) — balanserat fejkprov + fejkad PDF-motor så
+    # hela guide→generera→iterera→godkänn→PDF-flödet kan e2e-testas.
+    def _fake_exam(kurs="Ma2b", klass="klassen"):
+        return {
+            "titel": f"Prov — {kurs}", "kurs": kurs, "klass": klass,
+            "tid_min": 120, "hjalpmedel": "Del B utan räknare. Del C med räknare.",
+            "uppgifter": [
+                {"del": "B", "formaga": "B", "typ": "rutin", "poang": [2, 0, 0],
+                 "text": "Ange nollställena till $f(x) = (x-1)(x+3)$.",
+                 "innehall": ["nollställen"], "losning": "$x=1$, $x=-3$.",
+                 "bedomning": "+2 E."},
+                {"del": "B", "formaga": "P", "typ": "rutin", "poang": [2, 0, 0],
+                 "text": "Lös ekvationen $x^2 - 4x + 3 = 0$.",
+                 "innehall": ["pq-formeln"], "losning": "$x=1$ eller $x=3$.",
+                 "bedomning": "+1 E per rot."},
+                {"del": "C", "formaga": "P", "typ": "redovisning", "poang": [2, 1, 0],
+                 "text": "Lös $x^2 + 6x - 7 = 0$ med kvadratkomplettering.",
+                 "innehall": ["kvadratkomplettering"],
+                 "losning": "$(x+3)^2 = 16$.", "bedomning": "+2 E, +1 C."},
+                {"del": "C", "formaga": "PL", "typ": "problem", "poang": [1, 2, 1],
+                 "text": "Maximera arean av en hage med omkretsen 60 m.",
+                 "innehall": ["optimering"], "losning": "Kvadrat 15×15.",
+                 "bedomning": "+1 E, +2 C, +1 A."},
+                {"del": "C", "formaga": "R", "typ": "resonemang", "poang": [1, 1, 2],
+                 "text": "Motivera om $a < 0$ ger största värde.",
+                 "innehall": ["andragradsfunktioner"], "losning": "Ja.",
+                 "bedomning": "+1 E, +1 C, +2 A."},
+                {"del": "C", "formaga": "K", "typ": "redovisning", "poang": [2, 2, 1],
+                 "text": "Förklara symmetrilinjen för $f(x) = x^2 - 6x + 5$.",
+                 "innehall": ["symmetrilinje"], "losning": "$x = 3$.",
+                 "bedomning": "+2 E, +2 C, +1 A."},
+            ],
+        }
+
+    def fake_generate_exam(kurs, klass, punkter, *, model, antal=10,
+                           tid_min=120, delar=True, memory="", teman="",
+                           referens="", profil="prov",
+                           llm=None, max_rounds=3, log_cb=None):
+        if log_cb:
+            log_cb("[FEJK] Skriver provet …")
+        exam = _fake_exam(kurs, klass)
+        if profil == "arbetsblad":
+            exam["titel"] = f"Arbetsblad — {kurs}"
+        return {"exam": exam, "errors": [], "rounds": 1}
+
+    def fake_refine_exam(exam, message, *, model, nummer=None, profil="prov",
+                         llm=None, max_rounds=3, log_cb=None):
+        import copy as _copy
+        updated = _copy.deepcopy(exam)
+        idx = (nummer - 1) if nummer else 0
+        if 0 <= idx < len(updated["uppgifter"]):
+            updated["uppgifter"][idx]["text"] += " (ändrad)"
+        return {"exam": updated, "errors": [], "rounds": 1}
+
+    def fake_compile_pdf(tex, out_dir, jobname, **kw):
+        from pathlib import Path as _P
+        out = _P(out_dir); out.mkdir(parents=True, exist_ok=True)
+        p = out / f"{jobname}.pdf"
+        p.write_bytes(b"%PDF-1.5\n% fejkad PDF for e2e\n%%EOF")
+        return p, ""
+
+    exam_gen.generate_exam = fake_generate_exam
+    exam_gen.refine_exam = fake_refine_exam
+    exam_pdf.engine_available = lambda: True
+    exam_pdf.compile_pdf = fake_compile_pdf
+
     server._run_transcribe_subprocess = fake_transcribe
     postprocess.run = fake_run
     postprocess.extract = fake_extract
+    postprocess.extract_full = fake_extract_full
     postprocess.answer_over_lessons = fake_answer
     postprocess.translate_segments = fake_translate
     postprocess.suggest_title = fake_suggest_title

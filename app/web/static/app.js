@@ -56,6 +56,7 @@
     lessonChatHitT: null,       // tidsstämpel (mm:ss) att markera i overlay-transkriptet
     lessonChatEvent: null,      // kalenderförslag: {title,when,desc,added,busy,endDay}
     ovEvOpen: false,            // förslags-raden i overlayen utfälld till redigeringsboxen
+    ovDescView: false,          // anteckningen i snabbtitten öppnad i läsmodal
     evPick: null,               // öppen dag/tid-väljare i kalenderförslaget
     descModal: false,           // anteckningens inzoomade redigeringsmodal
     descModalClosing: false,
@@ -146,6 +147,64 @@
     recLevel: 0,               // mikrofon-nivå 0..1 (nivåmätare)
     recSilent: false,          // varning: tyst/ingen signal en längre stund
     incompleteRecs: [],        // oavslutade inspelningar att återställa (krasch)
+    // Planering (Fas 0): whiteboard-motorn renderar en hårdkodad exempellektion
+    // i en egen iframe; LLM-generering kommer i Fas 1.
+    wbRendered: false,         // aktuella tavlan är färdigrenderad i iframen
+    wbWarnings: [],            // [WB]-varningar från motorns senaste rendering
+    wbExporting: false,        // PNG-export pågår
+    wbExportMsg: '',           // kvitto/fel från senaste exporten
+    // Planering (Fas 1): generera egna tavlor via LLM:en
+    planGroupId: '',           // vald klass (''  = ingen)
+    planCourseId: '',          // vald kurs
+    planMoment: '',            // moment/ämne (fritext)
+    planUnderlag: null,        // uppladdat underlag: {id, filer:[{namn,beskrivning}]}
+    planUnderlagBusy: false,   // uppladdning/bildtolkning pågår
+    planPhase: 'idle',         // idle|running|done|error
+    planLog: [],               // loggrader från SSE-jobbet
+    planId: null,              // serverns planerings-id (för refine/approve)
+    planBoard: null,           // genererad WB-JSON ({title, boards})
+    planErrors: [],            // kvarstående valideringsfel (redovisas ärligt)
+    planChatInput: '',         // chattfältet för iteration
+    planSavedPath: '',         // kvitto från Godkänn & spara
+    planDatum: '',             // formulärets datum (för kalendern/minnet)
+    planStarttid: '',          // formulärets starttid
+    // Inbyggd kalender (Fas 3): lokal SQLite-läsning — ingen synk/CalDAV
+    // Planeringsarkivet (ersätter kalendern): tavlor + prov i veckogrupper,
+    // sök- och frågbara med samma RAG-mönster som Inspelningar-arkivet.
+    arkItems: [],              // poster från /api/planning/archive
+    arkQ: '',                  // sök-/frågefältet
+    arkMode: 'ask',            // 'ask' = LLM-svar | 'keyword' = träfflista
+    arkHits: null,             // null = ingen sökning; [] = inga träffar
+    arkSearching: false,
+    arkAsking: false,
+    arkAnswer: '',             // strömmat LLM-svar
+    arkSources: null,          // vilka tavlor/prov svaret bygger på
+    arkQAsked: '',             // frågan som svaret gäller
+    arkScanIdx: 0,             // skanningskoreografins läsposition
+    arkFollowups: [],          // följdfrågor [{q, a, typing}]
+    arkFollowInput: '',
+    // Provgeneratorn (Fas 4)
+    exCourseId: '',            // vald kurs för provet
+    exGroupId: '',             // vald klass (minneskontext + auto-koppling)
+    exContent: [],             // kursens innehållspunkter (med behandlad-flagga)
+    exPunkter: {},             // valda innehållspunkter {content_id: true}
+    exAntal: '8',              // ungefärligt antal uppgifter
+    exTid: '120',              // provtid i minuter
+    exDelar: true,             // dela i Del B/C
+    exDatum: '',               // provdatum (kalendern/minnet)
+    exPhase: 'idle',           // idle|running|done|error
+    exLog: [],                 // SSE-loggrader
+    exUnderlag: null,          // bildunderlag för provet: {id, filer:[{namn,beskrivning}]}
+    exUnderlagBusy: false,     // uppladdning/bildtolkning pågår
+    exErrors: [],              // kvarstående schema-/balans-/kompileringsfel
+    exam: null,                // serverns provresultat (id, exam, granser, …)
+    exChat: {},                // per-uppgift-chattfält {nummer: text}
+    exMsg: '',                 // kvitto (PDF skapad m.m.)
+    exTyp: 'prov',             // prov | arbetsblad (Fas 5)
+    exReferensId: '',          // referensläge: utgå från tidigare prov
+    exRefOpen: false,          // referens-popovern (custom dropdown) är öppen
+    exRefClosing: false,       // popovern spelar sin stängningsanimation
+    exHistorik: [],            // kursens prov/arbetsblad (historik + referensval)
   };
 
   /* instance (non-state) fields */
@@ -530,7 +589,528 @@
     if (t === 'history' || t === 'lessons') t = 'recordings';
     setState({ tab: t, openDD: null });
     if (t === 'recordings') { loadHistory(); loadLessons(); loadOrg(); loadPrep(); loadAgenda(); loadTrends(); }
+    if (t === 'planning') { loadOrg(); loadArkiv(); }   // formulär + arkiv
   }
+  /* ------------------------------------------------- Planering (Fas 0) -- */
+  // Tavlan renderas av whiteboard-motorn (vendrad från designprojektet
+  // Whiteboardtavla) i en EGEN iframe: motorns styles.css äger body-nivån i
+  // sitt dokument och får inte läcka in i appens UI, och iframen är samtidigt
+  // containern som morphdom aldrig diffar (jfr audio-elementet — motorn äger
+  // sin egen DOM). Innehållet i Fas 0 är en hårdkodad exempellektion.
+  var WB_EXAMPLE_TITLE = 'Pythagoras sats';
+  var WB_EXAMPLE = { boards: [
+    { // vänster tavla (smal, 900×780) — teori
+      width: 900, height: 780,
+      padding: { top: 30, right: 30, bottom: 30, left: 40 },
+      chrome: 'aluminium', tray: true,
+      name: 'exempel-vanster',
+      sections: [
+        { kind: 'heading', text: 'Pythagoras sats', size: 34,
+          underline: { color: 'red', amplitude: 2, thickness: 3, reserve: 14 },
+          gapAfter: 18 },
+        { kind: 'text', text: 'I en rätvinklig triangel:', size: 22, gapAfter: 8 },
+        { kind: 'math', latex: 'a^2 + b^2 = c^2', size: 30, color: 'blue', gapAfter: 18 },
+        { kind: 'text', text: 'där', size: 20, gapAfter: 4 },
+        { kind: 'list', bullet: '–', size: 19, gap: 4, indent: 22, items: [
+          'a, b = kateter (sidorna vid räta vinkeln)',
+          'c = hypotenusa (motsatt räta vinkeln)',
+        ], gapAfter: 18 },
+        { kind: 'shape', type: 'right-triangle', width: 260, height: 180,
+          labels: { left: 'a', bottom: 'b', right: 'c', inside: 'v' }, gapAfter: 14 },
+        { kind: 'callout', color: 'red', fillOpacity: 0.06, padding: 12, children: [
+          { kind: 'text', text: 'Kom ihåg:', size: 18, color: 'red', gapAfter: 4 },
+          { kind: 'text', text: 'Gäller BARA för rätvinkliga trianglar.', size: 18, color: 'red' },
+        ]},
+      ],
+    },
+    { // höger tavla (bred, 1800×780) — två exempel i kolumner
+      width: 1800, height: 780,
+      padding: { top: 30, right: 30, bottom: 30, left: 30 },
+      chrome: 'aluminium', tray: true,
+      name: 'exempel-hoger',
+      columns: [
+        { weight: 1, sections: [
+          { kind: 'heading', text: 'Exempel 1', size: 28, underline: { color: 'blue' }, gapAfter: 14 },
+          { kind: 'text', text: 'Beräkna hypotenusan c om a = 3 och b = 4.', size: 20, gapAfter: 12 },
+          { kind: 'math', latex: 'c^2 = 3^2 + 4^2', size: 22, gapAfter: 6 },
+          { kind: 'math', latex: 'c^2 = 9 + 16 = 25', size: 22, gapAfter: 6 },
+          { kind: 'math', latex: 'c = \\sqrt{25} = 5', size: 24, color: 'green', gapAfter: 18 },
+          { kind: 'shape', type: 'right-triangle', width: 220, height: 170,
+            labels: { left: 'a = 3', bottom: 'b = 4', right: 'c = 5' } },
+        ]},
+        { weight: 1, sections: [
+          { kind: 'heading', text: 'Exempel 2', size: 28, underline: { color: 'blue' }, gapAfter: 14 },
+          { kind: 'text', text: 'En stege på 5 m lutar mot en vägg. Foten är 2 m från väggen. Hur högt når stegen?', size: 19, gapAfter: 12 },
+          { kind: 'math', latex: 'h^2 + 2^2 = 5^2', size: 22, gapAfter: 6 },
+          { kind: 'math', latex: 'h^2 = 25 - 4 = 21', size: 22, gapAfter: 6 },
+          { kind: 'math', latex: 'h = \\sqrt{21} \\approx 4{,}58 \\text{ m}', size: 22, color: 'green', gapAfter: 14 },
+          { kind: 'callout', color: 'blue', fillOpacity: 0.06, padding: 10, children: [
+            { kind: 'text', text: 'Svar: stegen når ca 4,58 m upp.', size: 18, color: 'blue' },
+          ]},
+        ]},
+      ],
+    },
+  ]};
+
+  var _wbFrame = null;
+  var _wbReportRounds = 0;    // klientsidans tak på render-report-loopen
+  function wbTitle() {
+    return (S.planBoard && S.planBoard.title) || WB_EXAMPLE_TITLE;
+  }
+  function wbFrameRef(el) {
+    _wbFrame = el;
+    if (!el || el._wired) return;
+    el._wired = true;
+    el.addEventListener('load', renderCurrentBoard);
+    // morphdom kan ge oss en redan laddad nod tillbaka (fliken lämnas/öppnas)
+    if (el.contentWindow && el.contentWindow.WBHost) renderCurrentBoard();
+  }
+  // Renderar den genererade tavlan om en finns, annars exempellektionen.
+  // Efter rendering rapporteras motorns [WB]-varningar till servern
+  // (render-report) som kan köra en reparationsrunda — andra försvarslinjen
+  // i specen. Klienten tar max 2 rapportrundor; servern håller den delade
+  // rundbudgeten (max 3 LLM-rundor totalt).
+  function renderCurrentBoard() {
+    var win = _wbFrame && _wbFrame.contentWindow;
+    if (!win || !win.WBHost) return;
+    var spec = S.planBoard ? { boards: S.planBoard.boards } : WB_EXAMPLE;
+    win.WBHost.render(spec).then(function (res) {
+      var warnings = (res && res.warnings) || [];
+      setState({ wbRendered: true, wbWarnings: warnings });
+      if (S.planId && warnings.length && _wbReportRounds < 2 && S.planPhase !== 'running') {
+        _wbReportRounds += 1;
+        reportRenderWarnings(warnings);
+      }
+    }).catch(function (e) {
+      setState({ wbRendered: false,
+                 wbWarnings: ['Tavlan kunde inte renderas: ' + ((e && e.message) || e)] });
+    });
+  }
+  function reportRenderWarnings(warnings) {
+    setState({ planPhase: 'running',
+               planLog: S.planLog.concat(['Tavlan har layoutvarningar — försöker reparera …']) });
+    streamPost('/api/planning/' + S.planId + '/render-report',
+               { warnings: warnings }, onPlanEvent);
+  }
+  function wbPrint() {
+    var win = _wbFrame && _wbFrame.contentWindow;
+    if (win && win.WBHost) win.WBHost.print();
+  }
+  function wbExportPng() {
+    var win = _wbFrame && _wbFrame.contentWindow;
+    if (!win || !win.WBHost || S.wbExporting) return;
+    setState({ wbExporting: true, wbExportMsg: '' });
+    win.WBHost.exportPng(2).then(function (dataUrl) {
+      return fetch('/api/planning/export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: wbTitle(), png: dataUrl }),
+      }).then(function (r) {
+        return r.json().then(function (j) { return { ok: r.ok, body: j }; });
+      });
+    }).then(function (res) {
+      if (!res.ok || res.body.error) throw new Error(res.body.error || 'Exporten misslyckades.');
+      setState({ wbExporting: false, wbExportMsg: 'PNG sparad: ' + res.body.path });
+    }).catch(function (e) {
+      setState({ wbExporting: false,
+                 wbExportMsg: 'Kunde inte spara PNG: ' + ((e && e.message) || e) });
+    });
+  }
+
+  /* Generera/iterera tavlan (Fas 1) — SSE-jobb under GPU-arbitern. */
+  function onPlanEvent(ev) {
+    if (ev.type === 'log') {
+      setState(function (s) { return { planLog: s.planLog.concat([ev.msg]) }; });
+    } else if (ev.type === 'error') {
+      setState(function (s) {
+        return { planPhase: 'error',
+                 planLog: s.planLog.concat(['Fel: ' + ev.message]) };
+      });
+    } else if (ev.type === 'done') {
+      var r = ev.result || {};
+      var patch = { planPhase: 'done', planErrors: r.errors || [] };
+      if (r.id) patch.planId = r.id;
+      if (r.board) patch.planBoard = r.board;
+      setState(patch, function () { if (r.board) renderCurrentBoard(); });
+    }
+  }
+  function startPlanGenerate() {
+    var moment = (S.planMoment || '').trim();
+    if (!moment || S.planPhase === 'running') return;
+    _wbReportRounds = 0;
+    setState({ planPhase: 'running', planLog: [], planErrors: [],
+               planSavedPath: '', wbExportMsg: '', wbRendered: false });
+    streamPost('/api/planning/generate', {
+      moment: moment,
+      group_id: S.planGroupId ? +S.planGroupId : null,
+      course_id: S.planCourseId ? +S.planCourseId : null,
+      datum: S.planDatum || null,
+      starttid: S.planStarttid || null,
+      underlag: S.planUnderlag ? S.planUnderlag.id : null,
+    }, onPlanEvent);
+  }
+  function sendPlanRefine() {
+    var msg = (S.planChatInput || '').trim();
+    if (!msg || !S.planId || S.planPhase === 'running') return;
+    _wbReportRounds = 0;
+    setState({ planPhase: 'running', planChatInput: '', planLog: [],
+               planErrors: [], planSavedPath: '' });
+    streamPost('/api/planning/' + S.planId + '/refine', { message: msg }, onPlanEvent);
+  }
+  function approvePlan() {
+    if (!S.planId || S.planPhase === 'running') return;
+    fetch('/api/planning/' + S.planId + '/approve', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
+      .then(function (res) {
+        if (!res.ok || res.body.error) throw new Error(res.body.error || 'Kunde inte spara.');
+        setState({ planSavedPath: res.body.path });
+        loadArkiv();           // planeringen syns direkt i arkivet
+      })
+      .catch(function (e) {
+        setState({ planSavedPath: '', wbExportMsg: 'Kunde inte spara: ' + ((e && e.message) || e) });
+      });
+  }
+  function onPlanGroup(e) { setState({ planGroupId: e.target.value }); }
+  function onPlanCourse(e) { setState({ planCourseId: e.target.value }); }
+  function onPlanMoment(e) { setState({ planMoment: e.target.value }); }
+  // Underlag: bokssidor/uppgifter (PNG/JPG/WebP/PDF). Filerna läses som
+  // data-URL:er och bildtolkas lokalt av visionsmodellen. Samma flöde
+  // används av tavlan (plan*) och provet (ex*) — cb-objektet skiljer dem.
+  function _pickUnderlagFiles(cb) {
+    var inp = document.createElement('input');
+    inp.type = 'file'; inp.multiple = true;
+    inp.accept = '.png,.jpg,.jpeg,.webp,.pdf,image/png,image/jpeg,image/webp,application/pdf';
+    inp.onchange = function () {
+      var files = Array.prototype.slice.call(inp.files || []);
+      if (!files.length) return;
+      Promise.all(files.map(function (f) {
+        return new Promise(function (res, rej) {
+          var r = new FileReader();
+          r.onload = function () { res({ namn: f.name, data: String(r.result || '') }); };
+          r.onerror = rej;
+          r.readAsDataURL(f);
+        });
+      })).then(function (filer) {
+        cb.busy(true);
+        streamPost('/api/planning/underlag', { filer: filer }, function (ev) {
+          if (ev.type === 'log') cb.log(ev.msg);
+          else if (ev.type === 'error') {
+            cb.busy(false);
+            setState({ toast: { title: 'Underlag', detail: ev.message || 'uppladdningen misslyckades', kind: 'error', done: false } });
+            setTimeout(function () { setState({ toast: null }); }, 7000);
+          } else if (ev.type === 'done') cb.done(ev.result || null);
+        });
+      }).catch(function () {
+        cb.busy(false);
+        setState({ toast: { title: 'Underlag', detail: 'kunde inte läsa filerna', kind: 'error', done: false } });
+        setTimeout(function () { setState({ toast: null }); }, 7000);
+      });
+    };
+    inp.click();
+  }
+  function onPickUnderlag() {
+    if (S.planUnderlagBusy) return;
+    _pickUnderlagFiles({
+      busy: function (b) { setState({ planUnderlagBusy: b, planLog: [] }); },
+      log: function (m) { setState(function (s) { return { planLog: s.planLog.concat([m]) }; }); },
+      done: function (r) { setState({ planUnderlagBusy: false, planLog: [], planUnderlag: r }); },
+    });
+  }
+  function onClearUnderlag() { setState({ planUnderlag: null }); }
+  function onPickExUnderlag() {
+    if (S.exUnderlagBusy) return;
+    _pickUnderlagFiles({
+      busy: function (b) { setState({ exUnderlagBusy: b, exLog: [] }); },
+      log: function (m) { setState(function (s) { return { exLog: s.exLog.concat([m]) }; }); },
+      done: function (r) { setState({ exUnderlagBusy: false, exLog: [], exUnderlag: r }); },
+    });
+  }
+  function onClearExUnderlag() { setState({ exUnderlag: null }); }
+  function onPlanMomentKey(e) { if (e.key === 'Enter') startPlanGenerate(); }
+  function onPlanChatInput(e) { setState({ planChatInput: e.target.value }); }
+  function onPlanChatKey(e) { if (e.key === 'Enter') sendPlanRefine(); }
+  function onPlanDatum(e) { setState({ planDatum: e.target.value }); }
+  function onPlanStarttid(e) { setState({ planStarttid: e.target.value }); }
+
+  /* --------------------------------- planeringsarkivet (ersätter kalendern) --
+     Tavlor + prov/arbetsblad i veckogrupper, med fritextsök och LLM-frågor
+     över arkivet — samma RAG-mönster som Inspelningar-arkivet, men inga
+     kalenderhändelser skapas härifrån. */
+  var _arkRun = 0, _arkScanTimer = null;
+
+  function loadArkiv() {
+    getJSON('/api/planning/archive')
+      .then(function (r) { setState({ arkItems: (r && r.items) || [] }); })
+      .catch(function () {});
+  }
+  function onArkInput(e) { setState({ arkQ: e.target.value }); }
+  function setArkMode(mode) { setState({ arkMode: mode }); }
+  function clearArkiv() {
+    _arkRun++;
+    if (_arkScanTimer) { clearInterval(_arkScanTimer); _arkScanTimer = null; }
+    setState({ arkQ: '', arkHits: null, arkSearching: false, arkAsking: false,
+               arkAnswer: '', arkSources: null, arkQAsked: '', arkScanIdx: 0,
+               arkFollowups: [], arkFollowInput: '' });
+  }
+  function runArkiv() {
+    var q = (S.arkQ || '').trim();
+    if (!q) { setState({ arkHits: null }); return; }
+    if (S.arkMode === 'ask') { runArkivAsk(q); return; }
+    setState({ arkSearching: true, arkAnswer: '', arkSources: null });
+    getJSON('/api/planning/archive/search?q=' + encodeURIComponent(q))
+      .then(function (r) { setState({ arkHits: (r && r.hits) || [], arkSearching: false }); })
+      .catch(function () { setState({ arkHits: [], arkSearching: false }); });
+  }
+  function runArkivAsk(q) {
+    var run = ++_arkRun;
+    // Samma skanningskoreografi som kartoteket: kosmetisk läsposition som
+    // tickar fram medan det riktiga RAG-svaret hämtas.
+    if (_arkScanTimer) clearInterval(_arkScanTimer);
+    _arkScanTimer = setInterval(function () {
+      setState(function (s) { return s.arkAsking ? { arkScanIdx: s.arkScanIdx + 1 } : null; });
+    }, 340);
+    setState({ arkAsking: true, arkAnswer: '', arkSources: null, arkHits: null,
+               arkQAsked: q, arkScanIdx: 0, arkFollowups: [], arkFollowInput: '' });
+    streamPost('/api/planning/ask', { q: q }, function (ev) {
+      if (run !== _arkRun) return;             // en nyare fråga har tagit över
+      if (ev.type === 'token') {
+        setState(function (s) { return { arkAnswer: s.arkAnswer + ev.text }; });
+      } else if (ev.type === 'done') {
+        if (_arkScanTimer) { clearInterval(_arkScanTimer); _arkScanTimer = null; }
+        setState({ arkAsking: false, arkScanIdx: 999,
+                   arkSources: (ev.result && ev.result.sources) || [] });
+      } else if (ev.type === 'error') {
+        if (_arkScanTimer) { clearInterval(_arkScanTimer); _arkScanTimer = null; }
+        setState({ arkAsking: false, arkScanIdx: 999,
+                   arkAnswer: 'Kunde inte söka: ' + (ev.message || 'okänt fel') });
+      }
+    });
+  }
+  function sendArkivFollow() {
+    var q = (S.arkFollowInput || '').trim();
+    if (!q || S.arkAsking) return;
+    var run = ++_arkRun;
+    setState(function (s) {
+      return { arkFollowInput: '',
+               arkFollowups: (s.arkFollowups || []).concat([{ q: q, a: '', typing: true }]) };
+    });
+    streamPost('/api/planning/ask', { q: q }, function (ev) {
+      if (run !== _arkRun) return;
+      var patchLast = function (fn) {
+        setState(function (s) {
+          var fs = (s.arkFollowups || []).slice(); if (!fs.length) return null;
+          fs[fs.length - 1] = fn(Object.assign({}, fs[fs.length - 1]));
+          return { arkFollowups: fs };
+        });
+      };
+      if (ev.type === 'token') patchLast(function (f) { f.a += ev.text; return f; });
+      else if (ev.type === 'done') patchLast(function (f) { f.typing = false; return f; });
+      else if (ev.type === 'error') patchLast(function (f) { f.typing = false; f.a = f.a || ('Kunde inte söka: ' + (ev.message || 'okänt fel')); return f; });
+    });
+  }
+  // Öppna en arkivpost: tavlan laddas i läsläge i tavelkortet ovanför;
+  // prov/arbetsblad öppnas i provkortet — man ser exakt vad den innehåller.
+  function openArkivItem(it) {
+    if (it.typ === 'tavla') {
+      fetch('/api/planning/' + it.id)
+        .then(function (r) { return r.json(); })
+        .then(function (p) {
+          if (p && p.board) {
+            setState({ planBoard: p.board, planId: null, planErrors: [],
+                       planSavedPath: '', wbExportMsg: '', wbRendered: false },
+                     renderCurrentBoard);
+            try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (e) {}
+          }
+        })
+        .catch(function () {});
+    } else {
+      getJSON('/api/exams/' + it.id).then(function (r) {
+        if (r && r.id) setState({ exam: r, exErrors: r.errors || [], exChat: {}, exMsg: '' });
+      }).catch(function () {});
+    }
+  }
+  /* ------------------------------------------------ provgeneratorn (Fas 4) -- */
+  function loadExamContent() {
+    if (!S.exCourseId) { setState({ exContent: [], exPunkter: {} }); return; }
+    var q = '/api/exams/content-status?course_id=' + S.exCourseId +
+            (S.exGroupId ? '&group_id=' + S.exGroupId : '');
+    getJSON(q).then(function (r) {
+      setState({ exContent: (r && r.punkter) || [], exPunkter: {} });
+    }).catch(function () {});
+  }
+  function loadExamHistorik() {
+    if (!S.exCourseId) { setState({ exHistorik: [], exReferensId: '' }); return; }
+    getJSON('/api/exams?course_id=' + S.exCourseId).then(function (r) {
+      setState({ exHistorik: (r && r.exams) || [], exReferensId: '' });
+    }).catch(function () {});
+  }
+  // Chips och segment i stället för native selects (samma vokabulär som tavlan):
+  // klick väljer, klick på vald kurs/klass avmarkerar.
+  function exPickCourse(id) {
+    setState(function (s) {
+      return { exCourseId: String(s.exCourseId) === String(id) ? '' : String(id) };
+    }, function () { loadExamContent(); loadExamHistorik(); });
+  }
+  function exPickGroup(id) {
+    setState(function (s) {
+      return { exGroupId: String(s.exGroupId) === String(id) ? '' : String(id) };
+    }, loadExamContent);
+  }
+  function exPickTyp(t) { setState({ exTyp: t }); }
+  // Delade kurschips för provet (samma formspråk som tavlans planCourseGroups):
+  // kompakta nivåetiketter grupperade per ämne, klick på vald avmarkerar.
+  function courseChipGroups(selId, pick) {
+    var groups = [], byAmne = {};
+    S.courses.forEach(function (c) {
+      var chip = { namn: c.namn, kort: c.niva_kort || c.namn,
+                   sel: String(c.id) === String(selId),
+                   onPick: function () { pick(c.id); } };
+      var amne = c.amne_namn || 'Övrigt';
+      if (!(amne in byAmne)) { byAmne[amne] = { amne: amne, chips: [] }; groups.push(byAmne[amne]); }
+      byAmne[amne].chips.push(chip);
+    });
+    return groups;
+  }
+  // Referensprovet är en riktig meny — custom popover med mjuk hover-stängning,
+  // samma mönster som kartotekets filterpopovers.
+  var _exRefTimer = null;
+  function exToggleRef() {
+    if (_exRefTimer) clearTimeout(_exRefTimer);
+    setState(function (s) { return { exRefOpen: !s.exRefOpen, exRefClosing: false }; });
+  }
+  function exSoftCloseRef() {
+    if (!S.exRefOpen) return;
+    if (_exRefTimer) clearTimeout(_exRefTimer);
+    _exRefTimer = setTimeout(function () {
+      setState({ exRefClosing: true });
+      _exRefTimer = setTimeout(function () { setState({ exRefOpen: false, exRefClosing: false }); }, 190);
+    }, 300);
+  }
+  function exCancelCloseRef() {
+    if (_exRefTimer) clearTimeout(_exRefTimer);
+    if (S.exRefClosing) setState({ exRefClosing: false });
+  }
+  function exPickRef(id) {
+    if (_exRefTimer) clearTimeout(_exRefTimer);
+    setState({ exReferensId: String(id), exRefOpen: false, exRefClosing: false });
+  }
+  function openExamFromHistorik(id) {
+    return function () {
+      getJSON('/api/exams/' + id).then(function (r) {
+        if (r && r.id) setState({ exam: r, exErrors: r.errors || [], exChat: {}, exMsg: '' });
+      }).catch(function () {});
+    };
+  }
+  function exTogglePunkt(id) {
+    setState(function (s) {
+      var p = Object.assign({}, s.exPunkter);
+      if (p[id]) delete p[id]; else p[id] = true;
+      return { exPunkter: p };
+    });
+  }
+  function onExAntal(e) { setState({ exAntal: e.target.value }); }
+  function onExTid(e) { setState({ exTid: e.target.value }); }
+  function onExDatum(e) { setState({ exDatum: e.target.value }); }
+  function onExDelar() { setState(function (s) { return { exDelar: !s.exDelar }; }); }
+  function onExamEvent(ev) {
+    if (ev.type === 'log') {
+      setState(function (s) { return { exLog: s.exLog.concat([ev.msg]) }; });
+    } else if (ev.type === 'error') {
+      setState(function (s) {
+        return { exPhase: 'error', exLog: s.exLog.concat(['Fel: ' + ev.message]) };
+      });
+    } else if (ev.type === 'done') {
+      var r = ev.result || {};
+      var patch = { exPhase: 'done', exErrors: r.errors || [] };
+      if (r.id) { patch.exam = r; patch.exChat = {}; }
+      if (r.pdf) patch.exMsg = 'PDF skapad: ' + r.pdf;
+      else if (r.tex && r.status === 'godkänt') patch.exMsg = 'Sparad utan PDF: ' + r.tex;
+      setState(patch);
+      loadArkiv();
+      loadExamHistorik();      // historiken + prövad-markörerna uppdateras
+      loadExamContent();
+    }
+  }
+  function startExamGenerate() {
+    if (!S.exCourseId || S.exPhase === 'running') return;
+    setState({ exPhase: 'running', exLog: [], exErrors: [], exMsg: '' });
+    streamPost('/api/exams/generate', {
+      course_id: +S.exCourseId,
+      group_id: S.exGroupId ? +S.exGroupId : null,
+      punkter: Object.keys(S.exPunkter).map(Number),
+      antal: +S.exAntal || 8,
+      tid_min: +S.exTid || 120,
+      delar: S.exDelar,
+      datum: S.exDatum || null,
+      typ: S.exTyp,
+      referens_exam_id: S.exReferensId ? +S.exReferensId : null,
+      underlag: S.exUnderlag ? S.exUnderlag.id : null,
+    }, onExamEvent);
+  }
+  function onExChat(nummer) {
+    return function (e) {
+      setState(function (s) {
+        var c = Object.assign({}, s.exChat); c[nummer] = e.target.value;
+        return { exChat: c };
+      });
+    };
+  }
+  function sendExamRefine(nummer) {
+    return function () {
+      var msg = (S.exChat[nummer] || '').trim();
+      if (!msg || !S.exam || S.exPhase === 'running') return;
+      setState({ exPhase: 'running', exLog: [], exErrors: [], exMsg: '' });
+      streamPost('/api/exams/' + S.exam.id + '/refine',
+                 { message: msg, nummer: nummer }, onExamEvent);
+    };
+  }
+  function approveExam() {
+    if (!S.exam || S.exPhase === 'running') return;
+    setState({ exPhase: 'running', exLog: [], exErrors: [], exMsg: '' });
+    streamPost('/api/exams/' + S.exam.id + '/approve', {}, onExamEvent);
+  }
+  function openExamPdf() { if (S.exam) window.open('/api/exams/' + S.exam.id + '/pdf', '_blank'); }
+  function openExamTex() { if (S.exam) window.open('/api/exams/' + S.exam.id + '/tex', '_blank'); }
+  // "Öppna i Overleaf" — uttryckligt tillval (Overleafs docs-gateway tar emot
+  // en POST med källan; prov innehåller ingen elevdata). Aldrig huvudvägen.
+  function openInOverleaf() {
+    if (!S.exam) return;
+    fetch('/api/exams/' + S.exam.id + '/tex')
+      .then(function (r) { if (!r.ok) throw new Error('ingen .tex ännu — godkänn provet först'); return r.text(); })
+      .then(function (tex) {
+        var form = document.createElement('form');
+        form.method = 'POST';
+        form.action = 'https://www.overleaf.com/docs';
+        form.target = '_blank';
+        var field = document.createElement('textarea');
+        field.name = 'snip';
+        field.value = tex;
+        form.appendChild(field);
+        document.body.appendChild(form);
+        form.submit();
+        form.remove();
+      })
+      .catch(function (e) { setState({ exMsg: 'Overleaf: ' + ((e && e.message) || e) }); });
+  }
+  // Spegling av mallens numrering (Del B, C, D, del-lösa) så "uppgift N"
+  // i chatt/refine pekar på samma uppgift som på pappersprovet.
+  function examNumbered(exam) {
+    var order = ['B', 'C', 'D', null];
+    var out = [];
+    var nummer = 0;
+    order.forEach(function (del) {
+      (exam.uppgifter || []).forEach(function (u, idx) {
+        if ((u.del || null) !== del) return;
+        nummer += 1;
+        out.push({ nummer: nummer, idx: idx, u: u });
+      });
+    });
+    return out;
+  }
+
   function onSource(e) { setState({ source: e.target.value }); }
   function fileRef(el) { _file = el; }
   function openPicker() {
@@ -998,8 +1578,8 @@
       setState(function (s) { return s.asking ? { askScanIdx: s.askScanIdx + 1 } : null; });
     }, 340);
     setState({ asking: true, askAnswer: '', askSources: null, searchHits: null, askQ: q, askScanIdx: 0, askZoom: false, askZoomClosing: false, srcBox: true, askFollowups: [], askFollowInput: '', askEvent: null });
-    // Samma nyckelord som i lektionschatten föreslår en kalenderhändelse vid sidan av svaret.
-    if (/påminn|kalender|prov|läx|förhör|inlämning/i.test(q)) proposeAskEvent(q);
+    // Inget förhandsbyggt kalenderförslag på nyckelord — förslag skapas bara
+    // uttryckligen via kalenderknappen och godkänns alltid innan de läggs in.
     streamPost('/api/search/ask', { q: q }, function (ev) {
       if (run !== _askRun) return;               // en nyare fråga (eller Esc) har tagit över
       if (ev.type === 'token') {
@@ -1034,9 +1614,8 @@
   function sendAskFollow() {
     var q = (S.askFollowInput || '').trim();
     if (!q || S.asking) return;
-    // Nyckelord föreslår händelse; kommandon ("flytta till onsdag 14:30" …) justerar
-    // förslaget med regex-tolken — samma beteende som lektionschatten.
-    if (/påminn|kalender|prov|läx|förhör|inlämning/i.test(q) && !S.askEvent) proposeAskEvent(q);
+    // Kommandon ("flytta till onsdag 14:30" …) justerar ett BEFINTLIGT förslag
+    // med regex-tolken; nya förslag skapas bara via kalenderknappen.
     var evNow = S.askEvent;
     var isCal = evNow && !evNow.added && (/flytta|ändra|byt|boka|döp|kalla|titel|anteckning/i.test(q) || /\d{1,2}[:.]\d{2}/.test(q) || /måndag|tisdag|onsdag|torsdag|fredag|lördag|söndag|imorgon|nästa vecka|klockan/i.test(q));
     if (isCal) {
@@ -1457,7 +2036,7 @@
 
   // ---- Lektionsoverlay (fullskärm): transkript + samma källförankrade chatt
   // men mot EN lektions transkript, isolerat från resultatvyns chatt. ---------
-  function openLessonChat(l, hitT) {
+  function openLessonChat(l, hitT, hitQuery) {
     var hid = l.history_id || l.id;
     var lessonId = l.lesson_id != null ? l.lesson_id
       : (l.history_id && l.id !== l.history_id ? l.id : null);
@@ -1473,9 +2052,21 @@
     getJSON('/api/history/' + encodeURIComponent(hid)).then(function (h) {
       var segs = ((h && h.transcript) || []).map(function (g) { return { time: fmtTime(g.start), text: g.text }; });
       setState({ lessonChatSegs: segs });
+      // Citatklick från arkivsvaret: hoppa direkt till första transkriptraden
+      // som innehåller någon av frågans termer — så man ser var i
+      // transkriptionen informationen kommer ifrån.
+      if (!hitT && hitQuery) {
+        var terms = String(hitQuery).toLowerCase().split(/[^a-zåäö0-9]+/i)
+          .filter(function (t) { return t.length >= 3; });
+        var seg = segs.filter(function (sg) {
+          var low = (sg.text || '').toLowerCase();
+          return terms.some(function (t) { return low.indexOf(t) >= 0; });
+        })[0];
+        if (seg && seg.time) jumpToSource(seg.time);
+      }
     }).catch(function () {});
   }
-  function closeLessonChat() { clearTimeout(_descT); setState({ lessonChatId: null, lessonChat: [], lessonChatInput: '', lessonChatCiteSel: null, reasonOpen: {}, lessonChatMeta: null, lessonChatHitT: null, lessonChatEvent: null, evPick: null, ovEvOpen: false, descModal: false, descModalClosing: false }); }
+  function closeLessonChat() { clearTimeout(_descT); setState({ lessonChatId: null, lessonChat: [], lessonChatInput: '', lessonChatCiteSel: null, reasonOpen: {}, lessonChatMeta: null, lessonChatHitT: null, lessonChatEvent: null, evPick: null, ovEvOpen: false, ovDescView: false, descModal: false, descModalClosing: false }); }
   function onLessonChatInput(e) { setState({ lessonChatInput: e.target.value }); }
   function onLessonChatKey(e) { if (e.key === 'Enter') sendLessonChat(); }
   function toggleLessonChatThink() { setState(function (s) { return { lessonChatThink: !s.lessonChatThink }; }); }
@@ -1510,21 +2101,31 @@
     if (S.lessonChatTyping) return;
     var q = (typeof qArg === 'string' && qArg ? qArg : S.lessonChatInput).trim();
     if (!q) return;
-    // "Skapa läxpåminnelse …" o.dyl. föreslår en kalenderhändelse vid sidan av svaret.
-    if (/påminn|kalender|prov|läx|förhör|inlämning/i.test(q) && !S.lessonChatEvent) proposeLessonEvent();
+    // Kalenderönskemål får INGET förhandsbyggt förslag: modellen resonerar först
+    // och skapar förslaget via sin [KALENDERFÖRSLAG]-rad (applyCalTag på 'done').
+    // Läraren godkänner sedan uttryckligen med "Lägg till" — inget läggs in automatiskt.
     // Kalenderkommandon ("flytta till onsdag 14:30", "kortare titel" …) tolkas av
     // regex-tolken och uppdaterar förslaget direkt — utan LLM-anrop (design 14 juli).
     var evNow = S.lessonChatEvent;
     var isCal = evNow && !evNow.added && (/flytta|ändra|byt|boka|döp|kalla|titel|anteckning/i.test(q) || /\d{1,2}[:.]\d{2}/.test(q) || /måndag|tisdag|onsdag|torsdag|fredag|lördag|söndag|imorgon|nästa vecka|klockan/i.test(q));
-    if (isCal) {
+    // Snabbvägen tar bara korta enradskommandon den förstår fullt ut ("flytta till
+    // onsdag 14:30"). Längre eller sammansatta önskemål ("mer detaljerad", "hela
+    // nästa vecka, varje dag 7–16") går till modellen, som kan skriva om hela
+    // förslaget — annars svarar regexen "Klart" på delar den aldrig tillämpade.
+    var calComplex = q.length > 80
+      || (q.match(/[.!?]/g) || []).length > 1
+      || /detaljerad|detaljer|mål|beskriv|utveckla|förklara|varje dag|hela (nästa )?veckan?|från kl/i.test(q);
+    if (isCal && !calComplex) {
       var r0 = applyEventCommand(evNow, q);
-      setState(function (s) {
-        if (!s.lessonChatEvent) return null;
-        return { lessonChatInput: '',
-                 lessonChatEvent: Object.assign({}, s.lessonChatEvent, r0.patch),
-                 lessonChat: s.lessonChat.concat([{ role: 'user', text: q }, { role: 'assistant', text: r0.reply, reason: '' }]) };
-      });
-      return;
+      if (Object.keys(r0.patch).length) {
+        setState(function (s) {
+          if (!s.lessonChatEvent) return null;
+          return { lessonChatInput: '',
+                   lessonChatEvent: Object.assign({}, s.lessonChatEvent, r0.patch),
+                   lessonChat: s.lessonChat.concat([{ role: 'user', text: q }, { role: 'assistant', text: r0.reply, reason: '' }]) };
+        });
+        return;
+      }
     }
     setState(function (s) { return { lessonChat: s.lessonChat.concat([{ role: 'user', text: q }, { role: 'assistant', text: '', reason: '' }]), lessonChatInput: '', lessonChatTyping: true, lessonChatCiteSel: null }; });
     var msgs = S.lessonChat.filter(function (m) { return !(m.role === 'assistant' && !m.text); })
@@ -1551,7 +2152,7 @@
         // egen bekräftelse byggd ur det uppdaterade förslaget.
         if (!shown && applied) {
           var e2 = S.lessonChatEvent || {};
-          shown = 'Klart — kalenderförslaget är uppdaterat: ”' + (e2.title || '') + '” · ' + (e2.when || '') + (e2.endDay ? ' → ' + e2.endDay : '') + '. Justera i förslags-raden nedan eller fortsätt chatta.';
+          shown = 'Här är kalenderförslaget: ”' + (e2.title || '') + '” · ' + (e2.when || '') + (e2.endDay ? ' → ' + e2.endDay : '') + '. Inget läggs in förrän du godkänner med Lägg till — justera annars i förslags-rutan eller fortsätt chatta.';
         }
         setLast(shown || full, accReason, false);
       }
@@ -1746,6 +2347,9 @@
       }
       return kv(key, Object.assign({}, base, patch));
     });
+    // Modellens förslag ska granskas direkt: fäll ut redigeringsboxen i
+    // overlayen så läraren ser exakt vad som föreslås innan hen godkänner.
+    if (which === 'lesson') setState({ ovEvOpen: true });
     if (S.calConnected === null) loadCalStatus();
     return true;
   }
@@ -2038,6 +2642,12 @@
 
   function applySideEffects() {
     syncTheme();
+    // Tavel-iframen är morphdom-skyddad (data-wb-frame), så en data-ref-attribut
+    // på den fryser vid första rendern medan H-registret byggs om varje render —
+    // ett fruset id kan då träffa FEL handler när id-layouten skiftar. Koppla den
+    // därför direkt här i stället för via data-ref. (wbFrameRef är idempotent.)
+    var _wbEl = document.querySelector('[data-wb-frame]');
+    if (_wbEl) wbFrameRef(_wbEl); else _wbFrame = null;
     if (S.editing && !_wasEditing) { _editBuf = {}; requestAnimationFrame(function () { document.querySelectorAll('[data-eline]').forEach(function (el) { var i = el.getAttribute('data-eline'); el.textContent = lineText(+i); }); }); }
     _wasEditing = S.editing;
     if (S.tab !== _prevTab) { _prevTab = S.tab; playTabIn(); }
@@ -2396,8 +3006,291 @@
     return {
       theme: st.theme,
       tabTranscribe: st.tab === 'transcribe', tabRecordings: st.tab === 'recordings',
+      tabPlanning: st.tab === 'planning',
       onTabT: function () { setTab('transcribe'); }, onTabIn: function () { setTab('recordings'); },
+      onTabP: function () { setTab('planning'); },
       tabTOn: st.tab === 'transcribe', tabInOn: st.tab === 'recordings',
+      tabPlOn: st.tab === 'planning',
+
+      // Planering (Fas 0/1)
+      wbTitle: wbTitle(),
+      wbFrameRef: wbFrameRef, wbRendered: st.wbRendered,
+      wbWarnings: st.wbWarnings, wbWarnCount: st.wbWarnings.length,
+      onWbPrint: wbPrint, onWbExport: wbExportPng,
+      wbExporting: st.wbExporting, wbExportMsg: st.wbExportMsg,
+      wbExportFailed: /^Kunde inte/.test(st.wbExportMsg),
+      planGroups: st.groups, planCourses: st.courses,
+      planGroupId: st.planGroupId, planCourseId: st.planCourseId,
+      // Chips i stället för dropdowns: klick väljer, klick på vald avmarkerar.
+      // Ämnesmodellen (Gy25): servern levererar amne_namn/niva_kort/sort —
+      // chipsen grupperas per ämne i progressionsordning. Fritextkurser utan
+      // ämne hamnar i en egen grupp sist.
+      planCourseGroups: (function () {
+        var groups = [], byAmne = {};
+        st.courses.forEach(function (c) {
+          var sel = String(c.id) === String(st.planCourseId);
+          var chip = {
+            namn: c.namn,
+            kort: c.niva_kort || c.namn,
+            sel: sel,
+            onPick: function () { setState({ planCourseId: sel ? '' : String(c.id) }); },
+          };
+          var amne = c.amne_namn || 'Övrigt';
+          if (!(amne in byAmne)) { byAmne[amne] = { amne: amne, chips: [] }; groups.push(byAmne[amne]); }
+          byAmne[amne].chips.push(chip);
+        });
+        return groups;
+      })(),
+      planGroupOpts: st.groups.map(function (g) {
+        var sel = String(g.id) === String(st.planGroupId);
+        return { namn: g.namn, sel: sel, onPick: function () { setState({ planGroupId: sel ? '' : String(g.id) }); } };
+      }),
+      planHasGroups: st.groups.length > 0,
+      planMoment: st.planMoment,
+      planUnderlag: st.planUnderlag,
+      planUnderlagBusy: !!st.planUnderlagBusy,
+      onPickUnderlag: onPickUnderlag, onClearUnderlag: onClearUnderlag,
+      onPlanGroup: onPlanGroup, onPlanCourse: onPlanCourse,
+      onPlanMoment: onPlanMoment, onPlanMomentKey: onPlanMomentKey,
+      onPlanStart: startPlanGenerate,
+      planRunning: st.planPhase === 'running',
+      planCanStart: !!st.planMoment.trim() && st.planPhase !== 'running',
+      planLog: st.planLog, planHasLog: st.planLog.length > 0,
+      planErrors: st.planErrors, planErrCount: st.planErrors.length,
+      planHasBoard: !!st.planBoard, planId: st.planId,
+      planIsExample: !st.planBoard,
+      planChatInput: st.planChatInput,
+      onPlanChatInput: onPlanChatInput, onPlanChatKey: onPlanChatKey,
+      onPlanRefine: sendPlanRefine, onPlanApprove: approvePlan,
+      planSavedPath: st.planSavedPath,
+      planDatum: st.planDatum, planStarttid: st.planStarttid,
+      onPlanDatum: onPlanDatum, onPlanStarttid: onPlanStarttid,
+      // Provgeneratorn (Fas 4)
+      exCourseId: st.exCourseId, exGroupId: st.exGroupId,
+      // Samma chip-vokabulär som tavlan: kurs- och klassval är chips,
+      // dokumenttypen ett segment — inga native selects.
+      exCourseGroups: courseChipGroups(st.exCourseId, exPickCourse),
+      exGroupOpts: st.groups.map(function (g) {
+        return { namn: g.namn, sel: String(g.id) === String(st.exGroupId),
+                 onPick: function () { exPickGroup(g.id); } };
+      }),
+      // Punkterna grupperas per Gy25-område så att chipetiketten kan vara
+      // punktens egen text (kortad) — områdesrubriken skrivs en gång per grupp.
+      exContentGroups: (function () {
+        var groups = [];
+        var byRubrik = {};
+        st.exContent.forEach(function (p) {
+          var r = p.rubrik || 'Övrigt';
+          if (!byRubrik[r]) { byRubrik[r] = { rubrik: r, punkter: [] }; groups.push(byRubrik[r]); }
+          var kort = (p.text || '').replace(/\s+/g, ' ').trim();
+          var mening = kort.indexOf('. ');
+          if (mening > 0) kort = kort.slice(0, mening);
+          kort = kort.replace(/\.$/, '');
+          if (kort.length > 64) kort = kort.slice(0, 63).replace(/\s+\S*$/, '') + ' …';
+          byRubrik[r].punkter.push({
+            id: p.id, kort: kort, text: p.text,
+            behandlad: !!p.behandlad, provad: !!p.provad,
+            vald: !!st.exPunkter[p.id],
+            onToggle: function () { exTogglePunkt(p.id); } });
+        });
+        return groups;
+      })(),
+      exTyp: st.exTyp,
+      onExTypProv: function () { exPickTyp('prov'); },
+      onExTypArbetsblad: function () { exPickTyp('arbetsblad'); },
+      exUnderlag: st.exUnderlag, exUnderlagBusy: !!st.exUnderlagBusy,
+      onPickExUnderlag: onPickExUnderlag, onClearExUnderlag: onClearExUnderlag,
+      exReferensId: st.exReferensId,
+      // Referensprovet är en custom popover-meny (samma mönster som
+      // kartotekets filterpopovers: data-pop + mjuk hover-stängning).
+      exReferensVal: st.exHistorik.filter(function (h) {
+        return h.status === 'godkänt' && (h.typ || 'prov') === 'prov';
+      }),
+      exRefOpen: !!st.exRefOpen,
+      exRefAnim: st.exRefClosing ? 'closing' : '',
+      exRefOn: st.exReferensId ? 'on' : '',
+      exRefToggle: exToggleRef, exRefEnter: exCancelCloseRef, exRefLeave: exSoftCloseRef,
+      exRefLabel: (function () {
+        var h = st.exHistorik.filter(function (x) { return String(x.id) === String(st.exReferensId); })[0];
+        return h ? 'Utgår från: ' + (h.titel || 'prov') : 'Utan referensprov';
+      })(),
+      exRefOpts: [{ id: '', titel: 'Utan referensprov', datum: '' }].concat(
+        st.exHistorik.filter(function (h) {
+          return h.status === 'godkänt' && (h.typ || 'prov') === 'prov';
+        })
+      ).map(function (h) {
+        var label = h.id === '' ? h.titel : (h.titel || 'prov') + (h.datum ? ' · ' + h.datum : '');
+        return { key: 'ref' + h.id, label: label,
+                 isCur: String(st.exReferensId) === String(h.id) || (!st.exReferensId && h.id === ''),
+                 onSelect: function () { exPickRef(h.id); } };
+      }),
+      exHistorik: st.exHistorik.map(function (h) {
+        return { id: h.id, titel: h.titel || 'utan titel',
+                 typ: h.typ || 'prov', datum: h.datum || '',
+                 status: h.status,
+                 onOpen: openExamFromHistorik(h.id) };
+      }),
+      exDubbletter: (st.exam && st.exam.dubbletter) || [],
+      exAntal: st.exAntal, exTid: st.exTid, exDatum: st.exDatum,
+      exDelar: st.exDelar,
+      onExAntal: onExAntal, onExTid: onExTid, onExDatum: onExDatum,
+      onExDelar: onExDelar,
+      onExStart: startExamGenerate,
+      exRunning: st.exPhase === 'running',
+      exCanStart: !!st.exCourseId && st.exPhase !== 'running',
+      exLog: st.exLog, exHasLog: st.exLog.length > 0,
+      exErrors: st.exErrors, exErrCount: st.exErrors.length,
+      exMsg: st.exMsg,
+      exam: (function () {
+        var ex = st.exam;
+        if (!ex || !ex.exam) return null;
+        var cur = null;
+        (ex.versions || []).forEach(function (v) { if (!cur || v.version > cur.version) cur = v; });
+        return {
+          id: ex.id,
+          titel: ex.exam.titel || 'Prov',
+          typ: ex.typ || 'prov',
+          status: ex.status,
+          godkant: ex.status === 'godkänt',
+          versionRad: 'Version ' + ((cur && cur.version) || 1) + ' av ' + (ex.versions || []).length,
+          hasPdf: !!(cur && cur.pdf_path),
+          hasTex: !!(cur && cur.tex_path),
+          balansRad: ex.summor ? ('Totalt ' + ex.summor.total + ' p  ·  E ' + ex.summor.e + '  ·  C ' + ex.summor.c + '  ·  A ' + ex.summor.a) : '',
+          granserRad: ex.granser ? ('Kravgränser: E ' + ex.granser.E.minst + '  ·  C ' + ex.granser.C.minst + ' (varav ' + ex.granser.C.varav_ca + ' C/A)  ·  A ' + ex.granser.A.minst + ' (varav ' + ex.granser.A.varav_a + ' A)') : '',
+          formagor: ex.summor ? Object.keys(ex.summor.formagor).map(function (f) {
+            return { f: f, p: ex.summor.formagor[f] };
+          }) : [],
+          uppgifter: examNumbered(ex.exam).map(function (n) {
+            return {
+              nummer: n.nummer,
+              del: n.u.del || '',
+              formaga: n.u.formaga,
+              typ: n.u.typ,
+              poangStr: (n.u.poang || [0, 0, 0]).join('/'),
+              text: n.u.text || '',
+              chatValue: st.exChat[n.nummer] || '',
+              onChat: onExChat(n.nummer),
+              onSend: sendExamRefine(n.nummer),
+              canSend: !!(st.exChat[n.nummer] || '').trim() && st.exPhase !== 'running',
+            };
+          }),
+        };
+      })(),
+      onExApprove: approveExam, onExPdf: openExamPdf, onExTex: openExamTex,
+      onExOverleaf: openInOverleaf,
+      // Planeringsarkivet (ersätter kalendern): sök/fråga + veckogrupper
+      arkiv: st.tab === 'planning' ? (function () {
+        var typLabel = { tavla: 'Tavla', prov: 'Prov', arbetsblad: 'Arbetsblad' };
+        var items = (st.arkItems || []).map(function (it) {
+          return {
+            key: it.typ + '-' + it.id,
+            typ: it.typ, typLabel: typLabel[it.typ] || it.typ,
+            titel: it.titel || '(utan titel)',
+            datum: it.datum || '', starttid: it.starttid || '',
+            cc: ccOf(it),
+            tag: [it.group, it.course].filter(Boolean).join(' · ') || 'Ej tilldelad',
+            held: it.status === 'hållen', godkand: it.status === 'godkänt',
+            cancelled: it.status === 'inställd',
+            statusLabel: it.status || '',
+            onOpen: function () { openArkivItem(it); },
+          };
+        });
+        // Veckogrupper, nyaste veckan först — samma grammatik som kartoteket.
+        var wMap = {};
+        items.forEach(function (it) {
+          var wi = weekInfo(it.datum);
+          if (!wMap[wi.key]) wMap[wi.key] = { key: wi.key, num: wi.num, label: wi.label, range: wi.range, start: wi.start, rows: [] };
+          wMap[wi.key].rows.push(it);
+        });
+        var weeks = Object.keys(wMap).map(function (k) { return wMap[k]; })
+          .sort(function (a, b) { return b.start - a.start; })
+          .map(function (g) {
+            g.rows.sort(function (a, b) { return (b.datum + b.starttid).localeCompare(a.datum + a.starttid); });
+            var n = g.rows.length;
+            return { key: g.key, num: g.num, isWeek: g.num !== '·', label: g.label,
+                     range: g.range, rows: g.rows,
+                     count: n + (n === 1 ? ' post' : ' poster') };
+          });
+        var asking = !!st.arkAsking;
+        var askActive = asking || !!st.arkAnswer;
+        var scanList = (st.arkItems || []).slice(0, 24);
+        var scanIdx = Math.min(st.arkScanIdx, scanList.length);
+        var srcKeys = {};
+        (st.arkSources || []).forEach(function (s2) { srcKeys[s2.typ + '-' + s2.id] = true; });
+        var hitCount = (st.arkSources || []).length;
+        return {
+          count: (st.arkItems || []).length,
+          empty: (st.arkItems || []).length === 0,
+          weeks: weeks,
+          search: {
+            query: st.arkQ,
+            modeAsk: st.arkMode === 'ask', modeKeyword: st.arkMode === 'keyword',
+            busy: st.arkSearching || asking,
+            onInput: onArkInput, onClear: clearArkiv, onRun: runArkiv,
+            onKey: function (e) { if (e.key === 'Enter') { e.preventDefault(); runArkiv(); } },
+            onAsk: function () { setArkMode('ask'); },
+            onKeyword: function () { setArkMode('keyword'); },
+            hasQuery: !!(st.arkQ || '').trim(),
+            showSuggest: st.arkMode === 'ask' && !asking && !st.arkAnswer,
+            suggestions: [
+              'När gick vi igenom derivatans definition?',
+              'Sammanfatta vad vi har gått igenom i höst',
+              'Hitta provet om sannolikhet',
+            ].map(function (q) {
+              return { label: q, onClick: function () { setState({ arkMode: 'ask', arkQ: q }); runArkivAsk(q); } };
+            }),
+            searched: Array.isArray(st.arkHits),
+            showNoHits: st.arkMode === 'keyword' && Array.isArray(st.arkHits) && st.arkHits.length === 0 && !st.arkSearching,
+            hits: (st.arkHits || []).map(function (h) {
+              return { snippet: hl(h.snippet || ''),
+                       meta: [typLabel[h.typ] || h.typ, h.group, h.course, h.datum].filter(Boolean).join(' · '),
+                       name: h.titel || '(utan titel)',
+                       onOpen: function () { openArkivItem(h); } };
+            }),
+          },
+          scan: askActive ? {
+            scanning: asking,
+            ticker: asking && scanList[Math.min(scanIdx, scanList.length - 1)]
+              ? 'Läser: ' + (scanList[Math.min(scanIdx, scanList.length - 1)].titel || '')
+              : '',
+            total: String(scanList.length),
+            hitLabel: asking ? 'Söker …' : hitCount + (hitCount === 1 ? ' källa' : ' källor'),
+            onNew: clearArkiv,
+            cards: scanList.map(function (it, i) {
+              var hit = srcKeys[it.typ + '-' + it.id];
+              var stt, lbl;
+              if (asking && i === scanIdx) { stt = 'reading'; lbl = 'Läser …'; }
+              else if (!asking || i < scanIdx) { stt = hit ? 'hit' : 'read'; lbl = hit ? 'Träff ●' : 'Läst ✓'; }
+              else { stt = 'queue'; lbl = 'I kö'; }
+              return { key: it.typ + '-' + it.id, st: stt, stLabel: lbl,
+                       typLabel: typLabel[it.typ] || it.typ,
+                       title: it.titel || '(utan titel)' };
+            }),
+          } : null,
+          q: st.arkQAsked,
+          ansStarted: !!st.arkAnswer,
+          ansTyping: asking && !!st.arkAnswer,
+          ansDone: !asking && !!st.arkAnswer,
+          ansHeadLabel: (!asking && st.arkAnswer)
+            ? ('Svar — ' + hitCount + (hitCount === 1 ? ' källa' : ' källor'))
+            : 'Svar',
+          answer: st.arkAnswer,
+          sources: (st.arkSources || []).map(function (s2) {
+            return { key: 'as-' + s2.typ + '-' + s2.id,
+                     typLabel: typLabel[s2.typ] || s2.typ,
+                     titel: s2.titel || '(utan titel)',
+                     sub: [s2.group, s2.course, s2.datum].filter(Boolean).join(' · '),
+                     onOpen: function (e) { if (e) e.stopPropagation(); openArkivItem(s2); } };
+          }),
+          followups: (st.arkFollowups || []).map(function (f, i) {
+            return { key: 'af' + i, q: f.q, a: f.a, typing: !!f.typing };
+          }),
+          followInput: st.arkFollowInput || '',
+          setFollow: function (e) { setState({ arkFollowInput: e.target.value }); },
+          onFollowKey: function (e) { if (e.key === 'Enter') { e.preventDefault(); sendArkivFollow(); } },
+          sendFollow: sendArkivFollow,
+        };
+      })() : null,
       themeIsLight: st.theme !== 'dark',
       toggleTheme: toggleTheme,
 
@@ -2454,6 +3347,24 @@
           ? ('Svar — ' + (st.askSources || []).length + ((st.askSources || []).length === 1 ? ' källa' : ' källor'))
           : 'Svar',
         answer: st.askAnswer,
+        // Klickbara sifferkällor i svaret (samma källförankring som lektions-
+        // chatten): [n] parsas när svaret är klart; klick öppnar inspelningen
+        // och hoppar till stället i transkriptet där frågans termer förekommer.
+        ansTokens: (function () {
+          if (st.asking || !st.askAnswer) return null;
+          var srcs = st.askSources || [];
+          if (!srcs.length) return null;
+          var cited = parseChatCites(st.askAnswer,
+            srcs.map(function (s2) { return { time: '', text: s2.name || '' }; }));
+          if (!cited) return null;
+          return cited.tokens.map(function (tk) {
+            if (tk.cite === undefined) return { isText: true, text: tk.text };
+            var s2 = srcs[tk.segIdx];
+            return { isCite: true, num: tk.cite,
+                     label: [s2 && s2.name, s2 && s2.datum].filter(Boolean).join(' · '),
+                     onCite: function (e) { if (e) e.stopPropagation(); openLessonChat(s2, null, st.askQ); } };
+          });
+        })(),
         // Zoom till modal (data-askwrap/data-askzoom) — klick förstorar, Esc/klick utanför stänger
         askZoomFlag: st.askZoom ? (st.askZoomClosing ? 'closing' : 'on') : '',
         askZoomOn: !!st.askZoom && !st.askZoomClosing,
@@ -2748,6 +3659,10 @@
         return { t: seg.time, txt: seg.text, hit: hit, norm: !hit };
       }),
       ovHasHit: !!st.lessonChatHitT, ovHitT: st.lessonChatHitT || '',
+      ovHitClear: function () { setState({ lessonChatHitT: null, lessonChatCiteSel: null }); },
+      ovDescView: !!st.ovDescView,
+      ovDescOpen: function () { setState({ ovDescView: true }); },
+      ovDescClose: function () { setState({ ovDescView: false }); },
       // Stäng overlayn först — transkriptmodalen (z 100) ligger annars under overlayn (z 120).
       ovOpenFull: function () { var hid = st.lessonChatId; closeLessonChat(); openLesson({ history_id: hid }); },
       ovHasLesson: !!(st.lessonChatMeta && st.lessonChatMeta.lessonId),
@@ -2824,6 +3739,9 @@
       getNodeKey: function (node) { return node.nodeType === 1 ? (node.getAttribute('data-key') || node.getAttribute('data-pane') || node.id || null) : null; },
       onBeforeElUpdated: function (from, to) {
         if (from.nodeType === 1 && from.hasAttribute('data-eline') && S.editing) return false;
+        // Tavel-iframen ägs av whiteboard-motorn — morphdom får aldrig
+        // röra den (en diff skulle ladda om dokumentet och tömma tavlan).
+        if (from.nodeType === 1 && from.hasAttribute('data-wb-frame')) return false;
         return true;
       },
     });
@@ -2902,6 +3820,7 @@
         '<div style="display:inline-flex;gap:3px;padding:4px;background:var(--track);border-radius:12px;border:1px solid var(--line)">' +
           '<button data-click="' + on(v.onTabT) + '" aria-pressed="' + v.tabTOn + '" data-seg="' + (v.tabTOn ? 'on' : 'off') + '" style="border:none;border-radius:9px;padding:8px 15px;font-size:15.5px;font-weight:500;cursor:pointer;font-family:inherit;white-space:nowrap;background:transparent;color:var(--ink-2);transition:background .12s,color .12s,box-shadow .12s">Transkribera</button>' +
           '<button data-click="' + on(v.onTabIn) + '" aria-pressed="' + v.tabInOn + '" data-seg="' + (v.tabInOn ? 'on' : 'off') + '" style="border:none;border-radius:9px;padding:8px 15px;font-size:15.5px;font-weight:500;cursor:pointer;font-family:inherit;white-space:nowrap;background:transparent;color:var(--ink-2);transition:background .12s,color .12s,box-shadow .12s">Inspelningar</button>' +
+          '<button data-click="' + on(v.onTabP) + '" aria-pressed="' + v.tabPlOn + '" data-seg="' + (v.tabPlOn ? 'on' : 'off') + '" style="border:none;border-radius:9px;padding:8px 15px;font-size:15.5px;font-weight:500;cursor:pointer;font-family:inherit;white-space:nowrap;background:transparent;color:var(--ink-2);transition:background .12s,color .12s,box-shadow .12s">Planering</button>' +
         '</div>' +
       '</nav>' +
       '<div style="flex:1 1 0;min-width:0;display:flex;justify-content:flex-end;align-items:center;gap:8px">' +
@@ -3375,7 +4294,9 @@ function viewRecordings(v){
             <div style="font-family:var(--mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3)">${esc(v.askScan.ansHeadLabel)}</div>
             <div style="font-size:12.5px;color:var(--ink-3);margin-top:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">”${esc(v.askScan.q)}”</div>
             <div data-hidescroll="1" data-askscroll="1" style="max-height:min(52vh,520px);overflow:auto;overscroll-behavior:contain;scrollbar-width:none">
-            <p style="margin:8px 0 0;font-size:${ v.askScan.askZoomOn ? '16px' : '15.5px' };line-height:1.8;color:var(--ink);max-width:62ch;white-space:pre-wrap">${esc(v.askScan.answer)}${ v.askScan.ansTyping ? '<span class="ai-blink" style="display:inline-block;width:9px;height:17px;background:var(--accent);vertical-align:-3px;margin-left:3px"></span>' : '' }</p>
+            <p style="margin:8px 0 0;font-size:${ v.askScan.askZoomOn ? '16px' : '15.5px' };line-height:1.8;color:var(--ink);max-width:62ch;white-space:pre-wrap">${ v.askScan.ansTokens ? v.askScan.ansTokens.map(function(tk){ return tk.isText
+              ? `<span>${esc(tk.text)}</span>`
+              : `<button data-click="${on(tk.onCite)}" data-csup="off" title="${esc(tk.label)}" aria-label="Öppna källa ${esc(tk.num)} — ${esc(tk.label)}" style="display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;font-size:11px;font-weight:700;color:var(--accent);background:var(--accent-weak);border:1px solid color-mix(in srgb,var(--accent) 28%,transparent);border-radius:6px;cursor:pointer;vertical-align:2px;margin:0 1.5px;font-family:inherit;transition:transform .1s">${esc(tk.num)}</button>`; }).join('') : esc(v.askScan.answer) }${ v.askScan.ansTyping ? '<span class="ai-blink" style="display:inline-block;width:9px;height:17px;background:var(--accent);vertical-align:-3px;margin-left:3px"></span>' : '' }</p>
             ${ v.askScan.askZoomOn && v.askScan.askFollowups.length ? `
             <div style="margin-top:18px;border-top:1px solid var(--line);padding-top:14px">
               ${ v.askScan.askFollowups.map(function(f){ return `
@@ -3407,16 +4328,8 @@ function viewRecordings(v){
             ${ !v.askScan.askEvent ? `
             <button data-click="${on(v.askScan.proposeAskCal)}" title="Skapa en kalenderhändelse utifrån svaret" style="display:inline-flex;align-items:center;justify-content:center;gap:7px;background:transparent;color:var(--ink-2);border:1px solid var(--line);border-radius:9px;padding:10px 14px;font-size:13px;font-weight:500;font-family:inherit;cursor:pointer;transition:border-color .14s,color .14s" data-sh="border-color:var(--line-2) !important;color:var(--ink) !important"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="flex:0 0 auto"><rect x="2" y="3" width="12" height="11" rx="2"></rect><path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3M8 9v3M6.5 10.5h3"></path></svg>Kalenderhändelse</button>
             ` : '' }
-            ${ v.askScan.ansHasRefs ? `
-            <div style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-3);margin-top:5px">Käll${ v.askScan.askRefs.length === 1 ? 'a' : 'or' } · ${esc(v.askScan.askRefCount)}</div>
-            ${ v.askScan.askRefs.map(function(rf){ return `
-              <div data-key="${esc(rf.key)}" data-click="${on(rf.onPick)}" role="button" tabindex="0" title="Öppna lektionen och chatta" data-crow="" style="display:flex;flex-direction:column;gap:4px;padding:9px 10px;border-radius:8px;cursor:pointer;border:1px solid transparent;transition:box-shadow .18s,border-color .18s,background .18s">
-                <span style="display:flex;align-items:center;gap:7px;min-width:0"><span style="width:6px;height:6px;border-radius:2px;background:var(--accent);flex:0 0 auto"></span><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:700;color:var(--ink)">${esc(rf.rec)}</span></span>
-                <span style="font-family:var(--mono);font-size:10px;color:var(--ink-3);font-variant-numeric:tabular-nums">${esc(rf.meta)}</span>
-                ${ rf.text ? `<span style="font-size:12.5px;line-height:1.45;color:var(--ink-2)">${esc(rf.text)}</span>` : '' }
-              </div>
-            `; }).join('') }
-            ` : '' }
+            ${ /* Källpanelen är borttagen — källorna är klickbara siffror inne i
+                  svaret (samma källförankring som lektionschatten). */ '' }
           </div>
           </div>
         </div>
@@ -3782,16 +4695,17 @@ function viewModals(v){ return `
           <div style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.06em;text-transform:uppercase;color:var(--ink-3);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(v.ovMeta)}</div>
         </div>
         <span style="flex:1"></span>
-        <button data-click="${on(v.proposeOvEvent)}" title="Föreslå en kalenderhändelse — justera och lägg till i Google Kalender" style="flex:0 0 auto;display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:9px;padding:8px 13px;font-size:12.5px;font-weight:500;cursor:pointer;font-family:inherit;transition:transform .14s cubic-bezier(.2,.8,.25,1),border-color .14s,background .14s,color .14s" data-sh="border-color:var(--line-2) !important;background:var(--sunken) !important;color:var(--ink) !important"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="flex:0 0 auto"><rect x="2" y="3" width="12" height="11" rx="2"></rect><path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3M8 9v3M6.5 10.5h3"></path></svg>Kalenderhändelse</button>
         <button data-click="${on(v.ovOpenFull)}" title="Öppna hela transkriptvyn" style="flex:0 0 auto;display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:9px;padding:8px 13px;font-size:12.5px;font-weight:500;cursor:pointer;font-family:inherit;transition:transform .14s cubic-bezier(.2,.8,.25,1),border-color .14s,background .14s,color .14s" data-sh="border-color:var(--line-2) !important;background:var(--sunken) !important;color:var(--ink) !important"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto"><path d="M6 2.5H3.5A1 1 0 0 0 2.5 3.5V6M10 2.5h2.5a1 1 0 0 1 1 1V6M13.5 10v2.5a1 1 0 0 1-1 1H10M6 13.5H3.5a1 1 0 0 1-1-1V10"></path></svg>Transkript</button>
       </div>
       <div style="flex:1;min-height:0;display:flex">
-      <div data-hidescroll data-ovscroll="1" style="flex:1;min-width:0;overflow:auto;overscroll-behavior:contain;padding:24px 28px 20px">
+      ${ v.ovHasHit ? `
+      <div data-hidescroll data-ovscroll="1" style="flex:1;min-width:0;overflow:auto;overscroll-behavior:contain;padding:24px 28px 20px;animation:fadeup .25s ease both">
         <div style="max-width:760px;margin:0 auto">
           <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
             <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3)">Transkription</span>
             <div style="flex:1;height:1px;background:var(--line)"></div>
-            ${ v.ovHasHit ? `<span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--accent)">Källa · ${esc(v.ovHitT)}</span>` : '' }
+            <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--accent)">Källa · ${esc(v.ovHitT)}</span>
+            <button data-click="${on(v.ovHitClear)}" aria-label="Dölj transkriptet" title="Dölj transkriptet" style="border:none;background:transparent;color:var(--ink-3);cursor:pointer;font-size:11px;padding:2px 5px;flex:0 0 auto;font-family:inherit">✕</button>
           </div>
           ${ v.lessonChatLoading ? `
           <div style="display:flex;align-items:center;gap:10px;color:var(--ink-2);font-size:14px;padding:20px 0"><span style="width:15px;height:15px;border-radius:50%;border:2px solid var(--line-2);border-top-color:var(--accent);animation:spin .7s linear infinite;flex:0 0 auto"></span>Läser in transkriptet …</div>
@@ -3808,40 +4722,67 @@ function viewModals(v){ return `
           `; }).join('') }
         </div>
       </div>
-      <div data-side style="flex:0 0 clamp(330px,36vw,440px);min-width:0;display:flex;flex-direction:column;border-left:1px solid var(--line);background:var(--surface)">
-        <div style="flex:0 0 auto;display:flex;align-items:center;gap:8px;padding:17px 16px;border-bottom:1px solid var(--line)">
+      ` : '' }
+      <div data-side style="flex:${ v.ovHasHit ? '0 0 clamp(330px,36vw,440px)' : '1' };min-width:0;display:flex;flex-direction:column;${ v.ovHasHit ? 'border-left:1px solid var(--line);' : '' }background:var(--surface)">
+        <div style="flex:0 0 auto;display:flex;align-items:center;gap:8px;padding:17px max(16px,calc((100% - 720px)/2));border-bottom:1px solid var(--line)">
           <span class="ai-blink" style="width:6px;height:6px;border-radius:50%;background:var(--accent);flex:0 0 auto"></span>
           <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3)">Fråga lektionen</span>
           <span style="flex:1"></span>
           <span title="${esc(v.lessonChatThread.ovModelTitle)}" style="font-family:var(--mono);font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-3);cursor:help">Körs lokalt</span>
         </div>
-        <div data-hidescroll style="flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;padding:20px 16px;display:flex;flex-direction:column;gap:15px">
-          ${ v.lessonChatThread.chatEmpty ? `
-          <div style="display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
-            <button data-click="${on(v.ovAskSum)}" style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2);background:var(--surface);border:1px solid var(--line);border-radius:99px;padding:7px 13px;cursor:pointer;font-family:inherit;transition:transform .14s cubic-bezier(.2,.8,.25,1),border-color .14s,color .14s,background .14s" data-sh="border-color:var(--line-2) !important;color:var(--ink) !important">Sammanfatta lektionen</button>
-            <button data-click="${on(v.ovAskStud)}" style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2);background:var(--surface);border:1px solid var(--line);border-radius:99px;padding:7px 13px;cursor:pointer;font-family:inherit;transition:transform .14s cubic-bezier(.2,.8,.25,1),border-color .14s,color .14s,background .14s" data-sh="border-color:var(--line-2) !important;color:var(--ink) !important">Vilka elever nämns?</button>
-            <button data-click="${on(v.ovAskRemind)}" style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2);background:var(--surface);border:1px solid var(--line);border-radius:99px;padding:7px 13px;cursor:pointer;font-family:inherit;transition:transform .14s cubic-bezier(.2,.8,.25,1),border-color .14s,color .14s,background .14s" data-sh="border-color:var(--line-2) !important;color:var(--ink) !important">Skapa läxpåminnelse</button>
-            <button data-click="${on(v.proposeOvEvent)}" style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;color:var(--accent);background:var(--accent-weak);border:1px solid color-mix(in srgb,var(--accent) 40%,transparent);border-radius:99px;padding:7px 13px;cursor:pointer;font-family:inherit;transition:transform .14s cubic-bezier(.2,.8,.25,1),border-color .14s,background .14s" data-sh="background:color-mix(in srgb,var(--accent) 15%,transparent) !important"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="flex:0 0 auto"><rect x="2" y="3" width="12" height="11" rx="2"></rect><path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3M8 9v3M6.5 10.5h3"></path></svg>Kalenderhändelse</button>
-          </div>
-          ` : '' }
+        <div data-hidescroll style="flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;padding:20px max(16px,calc((100% - 720px)/2));display:flex;flex-direction:column;gap:15px">
           ${ chatThread(v.lessonChatThread) }
         </div>
         ${ v.ovEvent ? (v.ovEvent.added ? `
-        <div style="flex:0 0 auto;display:flex;align-items:center;gap:9px;margin:0 12px 8px;border:1px solid color-mix(in srgb,var(--ok) 40%,var(--line));background:var(--surface);border-radius:4px;padding:8px 11px;font-size:13px;font-weight:500;color:var(--ok)"><span style="width:16px;height:16px;border-radius:50%;background:var(--ok);color:var(--on-ok);display:inline-flex;align-items:center;justify-content:center;font-size:9px;animation:okPop .25s cubic-bezier(0.22,1,0.36,1) both;flex:0 0 auto">✓</span><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Tillagd i Google Kalender — ${esc(v.ovEvent.title)}</span><button data-click="${on(v.ovEvent.onDismiss)}" aria-label="Stäng" style="margin-left:auto;border:none;background:transparent;color:var(--ink-3);cursor:pointer;font-size:11px;padding:2px 4px;flex:0 0 auto">✕</button></div>
+        <div style="flex:0 0 auto;display:flex;align-items:center;gap:9px;margin:0 max(12px,calc((100% - 720px)/2)) 8px;border:1px solid color-mix(in srgb,var(--ok) 40%,var(--line));background:var(--surface);border-radius:4px;padding:8px 11px;font-size:13px;font-weight:500;color:var(--ok)"><span style="width:16px;height:16px;border-radius:50%;background:var(--ok);color:var(--on-ok);display:inline-flex;align-items:center;justify-content:center;font-size:9px;animation:okPop .25s cubic-bezier(0.22,1,0.36,1) both;flex:0 0 auto">✓</span><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Tillagd i Google Kalender — ${esc(v.ovEvent.title)}</span><button data-click="${on(v.ovEvent.onDismiss)}" aria-label="Stäng" style="margin-left:auto;border:none;background:transparent;color:var(--ink-3);cursor:pointer;font-size:11px;padding:2px 4px;flex:0 0 auto">✕</button></div>
         ` : `
-        ${ v.ovEvOpen ? `<div data-click="${on(v.stop)}" style="flex:0 0 auto;margin:0 12px -1px">${ lessonEventBox(v.ovEvent) }</div>` : '' }
-        <div data-click="${on(v.toggleOvEv)}" role="button" tabindex="0" title="${ v.ovEvOpen ? 'Fäll ihop förslaget' : 'Fäll ut och redigera förslaget' }" style="flex:0 0 auto;display:flex;align-items:center;gap:9px;margin:0 12px 8px;border:1px solid color-mix(in srgb,var(--accent) 32%,var(--line));background:var(--accent-weak);border-radius:4px;padding:8px 11px;cursor:pointer">
-          <span style="font-family:var(--mono);font-size:9px;letter-spacing:0.07em;text-transform:uppercase;color:var(--accent);flex:0 0 auto">Förslag</span>
-          <span style="font-size:12.5px;font-weight:600;color:var(--ink);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(v.ovEvent.title)} · ${esc(v.ovEvent.when)}</span>
-          <button data-click="${on(v.ovEvent.onAdd)}" ${ v.ovEvent.busy ? 'disabled' : '' } style="margin-left:auto;flex:0 0 auto;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:4px;padding:6px 12px;font-size:12px;font-weight:600;font-family:inherit;cursor:${ v.ovEvent.busy ? 'default' : 'pointer' };opacity:${ v.ovEvent.busy ? '.6' : '1' }">${ v.ovEvent.busy ? 'Lägger till …' : 'Lägg till' }</button>
-          <button data-click="${on(v.ovEvent.onDismiss)}" aria-label="Avvisa förslaget" title="Avvisa förslaget" style="border:none;background:transparent;color:var(--ink-3);cursor:pointer;font-size:11px;padding:2px 4px;flex:0 0 auto">✕</button>
+        <div style="position:relative;flex:0 0 auto;display:flex;justify-content:flex-end;margin:0 max(12px,calc((100% - 720px)/2)) 8px">
+          ${ v.ovEvOpen ? `
+          <div data-click="${on(v.stop)}" style="position:absolute;bottom:calc(100% + 9px);right:0;width:min(300px,86vw);z-index:8;background:var(--surface);border:1px solid var(--line);border-radius:5px;box-shadow:var(--shadow);padding:14px 15px;animation:ml-popin .2s cubic-bezier(.16,1,.3,1) both">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px">
+              <span style="font-family:var(--mono);font-size:9px;letter-spacing:0.07em;text-transform:uppercase;color:var(--accent)">Förslag → Kalender</span>
+              <span style="flex:1"></span>
+              ${ v.ovEvent.calKnown ? (v.ovEvent.calConnected
+                ? `<span style="font-family:var(--mono);font-size:9px;letter-spacing:0.07em;text-transform:uppercase;color:var(--ok);flex:0 0 auto">● ansluten</span>`
+                : `<button data-click="${on(v.ovEvent.onConnect)}" style="flex:0 0 auto;font-family:var(--mono);font-size:9px;letter-spacing:0.07em;text-transform:uppercase;color:var(--accent);background:transparent;border:1px solid color-mix(in srgb,var(--accent) 40%,transparent);border-radius:3px;padding:3px 8px;cursor:pointer">Anslut Google-konto</button>`)
+                : `<span style="font-family:var(--mono);font-size:9px;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-3);flex:0 0 auto">kontrollerar …</span>` }
+            </div>
+            <div style="font-size:13.5px;font-weight:600;color:var(--ink);line-height:1.35">${esc(v.ovEvent.title)}</div>
+            <div style="font-family:var(--mono);font-size:10px;letter-spacing:0.04em;text-transform:uppercase;color:var(--ink-2);font-variant-numeric:tabular-nums;margin-top:3px">${esc(v.ovEvent.when)}</div>
+            ${ v.ovEvent.desc ? `<div data-click="${on(v.ovDescOpen)}" role="button" tabindex="0" title="Visa hela anteckningen" style="font-size:12px;color:var(--ink-2);margin-top:7px;line-height:1.5;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;cursor:pointer">${esc(v.ovEvent.desc)}</div>` : '' }
+            <div style="display:flex;align-items:center;gap:8px;margin-top:11px;padding-top:11px;border-top:1px solid var(--line)">
+              <button data-click="${on(v.ovEvent.onAdd)}" ${ v.ovEvent.busy ? 'disabled' : '' } style="flex:0 0 auto;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:4px;padding:7px 14px;font-size:12.5px;font-weight:600;font-family:inherit;cursor:${ v.ovEvent.busy ? 'default' : 'pointer' };opacity:${ v.ovEvent.busy ? '.6' : '1' }">${ v.ovEvent.busy ? 'Lägger till …' : 'Lägg till' }</button>
+              <button data-click="${on(v.ovEvent.onDismiss)}" style="flex:0 0 auto;background:transparent;border:none;color:var(--ink-3);font-size:12px;font-weight:500;font-family:inherit;cursor:pointer;padding:7px 6px">Avvisa</button>
+              <span style="flex:1"></span>
+            </div>
+            <div style="margin-top:8px;font-size:11.5px;color:var(--ink-3);line-height:1.45">Ändra titel, tid eller anteckning genom att skriva i chatten.</div>
+          </div>
+          ` : '' }
+          <button data-click="${on(v.toggleOvEv)}" aria-expanded="${ v.ovEvOpen ? 'true' : 'false' }" aria-label="${ v.ovEvOpen ? 'Dölj kalenderförslaget' : 'Visa kalenderförslaget' }" title="${ v.ovEvOpen ? 'Dölj kalenderförslaget' : `Kalenderförslag: ${esc(v.ovEvent.title)} · ${esc(v.ovEvent.when)}` }" style="position:relative;width:32px;height:32px;flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;background:${ v.ovEvOpen ? 'var(--accent-weak)' : 'var(--surface)' };border:1px solid ${ v.ovEvOpen ? 'color-mix(in srgb,var(--accent) 45%,transparent)' : 'var(--line)' };border-radius:50%;color:var(--accent);cursor:pointer;transition:border-color .14s,background .14s">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="2" y="3" width="12" height="11" rx="2"></rect><path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3"></path></svg>
+            ${ v.ovEvOpen ? '' : `<span class="ai-blink" style="position:absolute;top:-1px;right:-1px;width:7px;height:7px;border-radius:50%;background:var(--accent);border:1.5px solid var(--surface)"></span>` }
+          </button>
         </div>
         `) : '' }
-        <div style="flex:0 0 auto;border-top:1px solid var(--line);padding:10px 12px">
+        <div style="flex:0 0 auto;border-top:1px solid var(--line);padding:10px max(12px,calc((100% - 720px)/2))">
           ${ chatComposer(v.lessonChatThread) }
         </div>
       </div>
       </div>
+    </div>
+  </div>
+  ` : '' }
+
+  ${ v.ovDescView && v.ovEvent ? `
+  <div data-click="${on(v.ovDescClose)}" style="position:fixed;inset:0;z-index:135;background:color-mix(in srgb,var(--ink) 32%,transparent);display:flex;align-items:center;justify-content:center;padding:32px;animation:modalback .26s ease">
+    <div data-click="${on(v.stop)}" role="dialog" aria-modal="true" aria-label="Anteckning i kalenderförslaget" data-dialog tabindex="-1" style="width:min(560px,92vw);max-height:min(60vh,480px);display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);overflow:hidden;animation:modalpop .42s cubic-bezier(.16,1,.3,1)">
+      <div style="flex:0 0 auto;display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--line)">
+        <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3)">Anteckning · ${esc(v.ovEvent.when)}</span>
+        <span style="flex:1"></span>
+        <span style="font-size:12px;color:var(--ink-3)">Klicka utanför för att stänga</span>
+      </div>
+      <div data-hidescroll="1" style="flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;padding:18px 20px;font-size:15px;line-height:1.65;color:var(--ink);white-space:pre-wrap">${esc(v.ovEvent.desc)}</div>
+      <div style="flex:0 0 auto;border-top:1px solid var(--line);padding:10px 18px;font-size:11.5px;color:var(--ink-3)">Ändra anteckningen genom att skriva i chatten.</div>
     </div>
   </div>
   ` : '' }
@@ -4110,6 +5051,371 @@ function viewModals(v){ return `
   ` : '' }
 `; }
 
+// Planering (Fas 0/1): tavlan är artefakten — ett uppslag, ingen dashboard.
+// Iframen skyddas från morphdom via data-wb-frame (se onBeforeElUpdated).
+function viewPlanning(v){
+  return `
+    <section style="min-height:calc(100vh - 80px);display:flex;flex-direction:column;padding:16px 0 28px">
+      <div class="ehead">
+        <div>
+          <div class="eyebrow" style="margin-bottom:18px">Planering</div>
+          <h1 class="disp" style="font-size:clamp(34px,5.2vw,52px);margin:0">Dagens <span class="ser">tavla</span></h1>
+        </div>
+        <p class="ehead_lede">Beskriv momentet — och välj kurs om du vill — så skrivs tavlan som du annars hade skrivit för hand vid lektionens start. Iterera via chatten tills den sitter.</p>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:13px;margin-bottom:18px">
+        <div style="display:flex;gap:9px;align-items:stretch;flex-wrap:wrap">
+          <input value="${esc(v.planMoment)}" data-input="${on(v.onPlanMoment)}" data-keydown="${on(v.onPlanMomentKey)}" aria-label="Moment" placeholder="Moment — t.ex. derivatans definition" style="flex:1;min-width:240px;background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:13px 15px;font-size:15.5px;font-family:inherit;color:var(--ink)">
+          <button data-click="${on(v.onPlanStart)}" ${v.planCanStart ? '' : 'disabled'} style="display:inline-flex;align-items:center;gap:7px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:4px;padding:13px 22px;font-size:14.5px;font-weight:500;font-family:inherit;cursor:${v.planCanStart ? 'pointer' : 'default'};opacity:${v.planCanStart ? '1' : '.55'}">${v.planRunning ? 'Skriver …' : 'Skriv tavlan'}</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+          ${ v.planCourseGroups.map(function(g){ return `
+          <div role="group" aria-label="${esc(g.amne)}" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+            <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);margin-right:3px">${esc(g.amne)}</span>
+            ${ g.chips.map(function(c){ return `<button data-click="${on(c.onPick)}" data-chip="${c.sel ? 'on' : 'off'}" aria-pressed="${c.sel ? 'true' : 'false'}" title="${esc(c.namn)}" style="font-family:inherit;font-size:13px;font-weight:500;padding:6px 12px;border-radius:3px;background:var(--surface);color:var(--ink-2);border:1px solid var(--line);transition:border-color .14s,background .14s,color .14s">${esc(c.kort)}</button>`; }).join('') }
+          </div>
+          `; }).join('') }
+          ${ v.planHasGroups ? `
+          <div role="group" aria-label="Klass" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+            <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);margin-right:3px">Klass</span>
+            ${ v.planGroupOpts.map(function(g){ return `<button data-click="${on(g.onPick)}" data-chip="${g.sel ? 'on' : 'off'}" aria-pressed="${g.sel ? 'true' : 'false'}" style="font-family:inherit;font-size:13px;font-weight:500;padding:6px 12px;border-radius:3px;background:var(--surface);color:var(--ink-2);border:1px solid var(--line);transition:border-color .14s,background .14s,color .14s">${esc(g.namn)}</button>`; }).join('') }
+          </div>
+          ` : '' }
+          <span style="flex:1"></span>
+          <div style="display:flex;align-items:center;gap:6px">
+            <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);margin-right:3px">När</span>
+            <input type="date" value="${esc(v.planDatum)}" data-change="${on(v.onPlanDatum)}" aria-label="Datum" style="background:var(--surface);border:1px solid var(--line);border-radius:3px;padding:6px 9px;font-size:13px;font-family:inherit;color:var(--ink-2)">
+            <input type="time" value="${esc(v.planStarttid)}" data-change="${on(v.onPlanStarttid)}" aria-label="Starttid" style="background:var(--surface);border:1px solid var(--line);border-radius:3px;padding:6px 9px;font-size:13px;font-family:inherit;color:var(--ink-2)">
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);margin-right:3px">Underlag</span>
+          ${ v.planUnderlagBusy ? `
+          <span style="display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-2)"><span style="width:13px;height:13px;border-radius:50%;border:2px solid var(--line-2);border-top-color:var(--accent);animation:spin .7s linear infinite"></span>Läser och tolkar sidorna …</span>
+          ` : v.planUnderlag ? `
+          ${ v.planUnderlag.filer.map(function(f){ return `<span title="${esc(f.beskrivning || f.namn)}" style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2);background:var(--sunken);border:1px solid var(--line);border-radius:3px;padding:4px 10px;max-width:220px"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(f.namn)}</span></span>`; }).join('') }
+          <button data-click="${on(v.onClearUnderlag)}" aria-label="Ta bort underlaget" title="Ta bort underlaget" style="border:none;background:transparent;color:var(--ink-3);cursor:pointer;font-size:12px;padding:2px 6px;font-family:inherit">✕</button>
+          <button data-click="${on(v.onPickUnderlag)}" style="border:none;background:transparent;color:var(--ink-2);cursor:pointer;font-size:12.5px;font-family:inherit;padding:2px 4px;text-decoration:underline;text-underline-offset:3px">Byt</button>
+          ` : `
+          <button data-click="${on(v.onPickUnderlag)}" title="Ladda upp sidor ur läroboken eller uppgifter som lektionen ska bygga på — behandlas lokalt" style="display:inline-flex;align-items:center;gap:7px;border:1px dashed var(--line-2);background:transparent;color:var(--ink-2);border-radius:3px;padding:6px 12px;font-size:12.5px;font-family:inherit;cursor:pointer">＋ Bokssidor eller uppgifter (PNG, JPG, PDF)</button>
+          ` }
+        </div>
+      </div>
+
+      ${ (v.planRunning || v.planUnderlagBusy) && v.planHasLog ? `
+        <div role="status" style="display:flex;flex-direction:column;gap:3px;margin-bottom:12px;font-size:13px;color:var(--ink-2)">
+          ${ v.planLog.map(function(l){ return `<span>${esc(l)}</span>`; }).join('') }
+        </div>
+      ` : '' }
+
+      ${ v.planErrCount ? `
+        <div role="status" style="display:flex;flex-direction:column;gap:4px;margin-bottom:12px;font-size:13px;color:var(--warn)">
+          <span style="font-weight:600">${esc(v.planErrCount)} problem kvarstår efter reparationsförsöken:</span>
+          ${ v.planErrors.map(function(e2){ return `<span style="font-family:var(--mono,monospace);font-size:12px;color:var(--ink-2)">${esc(typeof e2 === 'string' ? e2 : (e2.path ? e2.path + ': ' : '') + (e2.message || ''))}</span>`; }).join('') }
+        </div>
+      ` : '' }
+
+      <div data-key="wb-card" style="background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;box-shadow:var(--shadow-sm)">
+        <div style="display:flex;align-items:baseline;gap:10px;margin:2px 2px 10px">
+          <span style="font-size:15px;font-weight:600;color:var(--ink)">${esc(v.wbTitle)}</span>
+          ${ v.planIsExample ? `<span style="font-size:12px;text-transform:uppercase;letter-spacing:0.05em;color:var(--ink-3);font-weight:600">Exempellektion</span>` : '' }
+        </div>
+        <iframe data-wb-frame data-key="wb-frame" src="/static/whiteboard/board.html" title="Lektionstavla — ${esc(v.wbTitle)}" style="width:100%;height:420px;border:none;display:block;border-radius:8px;background:#2c2c2c"></iframe>
+      </div>
+
+      ${ v.wbWarnCount ? `
+        <div role="status" style="display:flex;flex-direction:column;gap:4px;margin-top:10px;font-size:13px;color:var(--warn)">
+          <span style="font-weight:600">Motorn flaggade ${esc(v.wbWarnCount)} ${v.wbWarnCount === 1 ? 'layoutvarning' : 'layoutvarningar'}:</span>
+          ${ v.wbWarnings.map(function(w){ return `<span style="font-family:var(--mono,monospace);font-size:12px;color:var(--ink-2)">${esc(w)}</span>`; }).join('') }
+        </div>
+      ` : '' }
+
+      ${ v.planId ? `
+        <div style="display:flex;align-items:center;gap:8px;margin-top:14px">
+          <input value="${esc(v.planChatInput)}" data-input="${on(v.onPlanChatInput)}" data-keydown="${on(v.onPlanChatKey)}" aria-label="Ändra tavlan" placeholder="Ändra tavlan — t.ex. byt exempel 2 mot ett med decimaltal" style="flex:1;min-width:0;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 13px;font-size:14.5px;font-family:inherit;color:var(--ink)">
+          <button data-click="${on(v.onPlanRefine)}" ${v.planChatInput.trim() && !v.planRunning ? '' : 'disabled'} style="display:inline-flex;align-items:center;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:10px;padding:10px 16px;font-size:14.5px;font-weight:500;font-family:inherit;cursor:${v.planChatInput.trim() && !v.planRunning ? 'pointer' : 'default'};opacity:${v.planChatInput.trim() && !v.planRunning ? '1' : '.55'}">Ändra</button>
+        </div>
+      ` : '' }
+
+      <div style="display:flex;align-items:center;gap:10px;margin-top:14px;flex-wrap:wrap">
+        ${ v.planId ? `
+          <button data-click="${on(v.onPlanApprove)}" ${v.wbRendered && !v.planRunning ? '' : 'disabled'} style="display:inline-flex;align-items:center;gap:7px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:10px;padding:10px 17px;font-size:14.5px;font-weight:500;font-family:inherit;cursor:${v.wbRendered && !v.planRunning ? 'pointer' : 'default'};opacity:${v.wbRendered && !v.planRunning ? '1' : '.55'};box-shadow:var(--shadow-sm)">Godkänn &amp; spara</button>
+        ` : '' }
+        <button data-click="${on(v.onWbPrint)}" ${v.wbRendered ? '' : 'disabled'} style="display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:10px;padding:10px 17px;font-size:14.5px;font-weight:500;font-family:inherit;cursor:${v.wbRendered ? 'pointer' : 'default'};opacity:${v.wbRendered ? '1' : '.55'};box-shadow:var(--shadow-sm)">Skriv ut</button>
+        <button data-click="${on(v.onWbExport)}" ${v.wbRendered && !v.wbExporting ? '' : 'disabled'} style="display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:10px;padding:10px 17px;font-size:14.5px;font-weight:500;font-family:inherit;cursor:${v.wbRendered && !v.wbExporting ? 'pointer' : 'default'};opacity:${v.wbRendered && !v.wbExporting ? '1' : '.55'};box-shadow:var(--shadow-sm)">${v.wbExporting ? 'Sparar …' : 'Spara som PNG'}</button>
+        ${ !v.wbRendered && !v.wbWarnCount && !v.planRunning ? `<span style="font-size:13.5px;color:var(--ink-3)">Ritar tavlan …</span>` : '' }
+        ${ v.planSavedPath ? `<span role="status" style="font-size:13.5px;color:var(--ink-2);font-variant-numeric:tabular-nums;word-break:break-all">Sparad: ${esc(v.planSavedPath)}</span>` : '' }
+        ${ v.wbExportMsg ? `<span role="status" style="font-size:13.5px;color:${v.wbExportFailed ? 'var(--bad)' : 'var(--ink-2)'};font-variant-numeric:tabular-nums;word-break:break-all">${esc(v.wbExportMsg)}</span>` : '' }
+      </div>
+
+      ${ v.arkiv ? `
+      <div style="margin-top:44px">
+        <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+          <span class="eyebrow">Arkiv</span>
+          <span style="font-size:13.5px;color:var(--ink-3)">Sök bland dina tavlor och prov, eller fråga AI:n vad ni gått igenom.</span>
+          <span style="flex:1"></span>
+          <span style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3)">${esc(String(v.arkiv.count))} ${v.arkiv.count === 1 ? 'post' : 'poster'}</span>
+        </div>
+
+        ${ spotlightPanel(v.arkiv.search) }
+
+        ${ v.arkiv.scan ? `
+        <div style="margin:20px 0 8px;animation:fadeup .3s ease both">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+            ${ v.arkiv.scan.scanning ? `
+              <span class="insp-dots" style="color:var(--accent);flex:0 0 auto"><i></i><i></i><i></i></span>
+              <span style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(v.arkiv.scan.ticker)}</span>
+            ` : `
+              <span style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ok);flex:0 0 auto">✓ Genomsökte ${esc(v.arkiv.scan.total)} tavlor och prov</span>
+            ` }
+            <div style="flex:1;height:1px;background:var(--line)"></div>
+            <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--accent);flex:0 0 auto">${esc(v.arkiv.scan.hitLabel)}</span>
+            <button data-click="${on(v.arkiv.scan.onNew)}" style="flex:0 0 auto;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:7px;padding:5px 10px;font-family:var(--mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;cursor:pointer">✕ Ny fråga</button>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(108px,1fr));gap:8px">
+            ${ v.arkiv.scan.cards.map(function(sc){ return `
+              <div data-key="ascan-${esc(sc.key)}" data-scan="${esc(sc.st)}" style="min-width:0;border:1px solid var(--line);background:var(--surface);border-radius:9px;padding:10px 12px;transition:opacity .35s ease,box-shadow .35s ease,border-color .35s ease,background .35s ease">
+                <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-3);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(sc.stLabel)}</span>
+                <div style="font-size:12px;font-weight:600;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(sc.title)}</div>
+                <span style="font-family:var(--mono);font-size:9px;letter-spacing:0.06em;text-transform:uppercase;color:var(--ink-3)">${esc(sc.typLabel)}</span>
+              </div>
+            `; }).join('') }
+          </div>
+
+          ${ v.arkiv.ansStarted ? `
+          <div style="margin-top:16px;border:1px solid var(--line);border-radius:13px;background:var(--surface);box-shadow:var(--shadow-sm);animation:fadeup .3s ease both;overflow:hidden">
+            <div style="display:grid;grid-template-columns:minmax(0,1fr) 224px;align-items:stretch">
+              <div style="min-width:0;padding:14px 17px">
+                <div style="font-family:var(--mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3)">${esc(v.arkiv.ansHeadLabel)}</div>
+                <div style="font-size:12.5px;color:var(--ink-3);margin-top:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">”${esc(v.arkiv.q)}”</div>
+                <p style="margin:8px 0 0;font-size:15.5px;line-height:1.8;color:var(--ink);max-width:62ch;white-space:pre-wrap">${esc(v.arkiv.answer)}${ v.arkiv.ansTyping ? '<span class="ai-blink" style="display:inline-block;width:9px;height:17px;background:var(--accent);vertical-align:-3px;margin-left:3px"></span>' : '' }</p>
+                ${ v.arkiv.followups.length ? `
+                <div style="margin-top:16px;border-top:1px solid var(--line);padding-top:13px">
+                  ${ v.arkiv.followups.map(function(f){ return `
+                    <div data-key="${esc(f.key)}" style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">
+                      <div style="align-self:flex-end;max-width:86%;background:var(--accent-weak);color:var(--ink);border:1px solid color-mix(in srgb,var(--accent) 25%,transparent);border-radius:14px 14px 4px 14px;padding:9px 13px;font-size:14px;line-height:1.5">${esc(f.q)}</div>
+                      <div style="align-self:stretch;font-size:14.5px;line-height:1.75;color:var(--ink);white-space:pre-wrap">${esc(f.a)}${ f.typing ? '<span class="ai-blink" style="display:inline-block;width:8px;height:15px;background:var(--accent);vertical-align:-2px;margin-left:3px"></span>' : '' }</div>
+                    </div>
+                  `; }).join('') }
+                </div>
+                ` : '' }
+                ${ v.arkiv.ansDone ? `
+                <div style="display:flex;gap:9px;align-items:center;margin-top:12px">
+                  <input value="${esc(v.arkiv.followInput)}" data-input="${on(v.arkiv.setFollow)}" data-keydown="${on(v.arkiv.onFollowKey)}" aria-label="Ställ en följdfråga" placeholder="Ställ en följdfråga …" style="flex:1;min-width:0;background:var(--sunken);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:10px 13px;font-size:14px;font-family:inherit;outline:none">
+                  <button data-click="${on(v.arkiv.sendFollow)}" style="flex:0 0 auto;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:10px;padding:10px 17px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;transition:background .15s">Skicka</button>
+                </div>
+                ` : '' }
+              </div>
+              <div style="display:flex;flex-direction:column;gap:6px;padding:12px;background:var(--sunken);border-left:1px solid var(--line);min-width:0">
+                <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3)">Källor</span>
+                ${ v.arkiv.sources.length ? v.arkiv.sources.map(function(s2){ return `
+                  <button data-key="${esc(s2.key)}" data-click="${on(s2.onOpen)}" title="Öppna och se exakt vad den innehåller" style="text-align:left;border:1px solid var(--line);background:var(--surface);border-radius:9px;padding:8px 10px;cursor:pointer;font-family:inherit;min-width:0" data-sh="border-color:var(--accent) !important">
+                    <span style="font-family:var(--mono);font-size:9px;letter-spacing:0.07em;text-transform:uppercase;color:var(--accent);display:block">${esc(s2.typLabel)}</span>
+                    <span style="font-size:12.5px;font-weight:600;color:var(--ink);display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px">${esc(s2.titel)}</span>
+                    ${ s2.sub ? `<span style="font-size:11px;color:var(--ink-3);display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px">${esc(s2.sub)}</span>` : '' }
+                  </button>
+                `; }).join('') : `<span style="font-size:12px;color:var(--ink-3)">${ v.arkiv.ansTyping || !v.arkiv.ansDone ? 'Söker …' : 'Inga källor' }</span>` }
+              </div>
+            </div>
+          </div>
+          ` : '' }
+        </div>
+        ` : '' }
+
+        ${ v.arkiv.empty ? `
+          <div style="margin-top:18px;text-align:center;padding:42px 24px;background:var(--surface);border:1px dashed var(--line-2);border-radius:13px;color:var(--ink-2);font-size:14.5px">Inga tavlor eller prov än — godkänn en tavla eller skriv ett prov så samlas de här, vecka för vecka.</div>
+        ` : v.arkiv.weeks.map(function(w){ return `
+          <div data-key="aw-${esc(w.key)}">
+            <div style="display:flex;align-items:baseline;gap:18px;margin:30px 0 10px;padding-bottom:10px;border-bottom:2px solid var(--ink)">
+              <span class="disp" style="font-size:clamp(21px,2.3vw,26px);line-height:1;color:var(--ink);white-space:nowrap;flex:0 0 auto">&#8203;${ w.isWeek ? `<span class="ser" style="color:var(--ink-3)">Vecka</span>&nbsp;${esc(w.num)}` : `<span class="ser" style="color:var(--ink-3)">Utan datum</span>` }</span>
+              <span style="font-family:var(--mono);font-size:11px;letter-spacing:0.09em;text-transform:uppercase;color:var(--ink-2)">${esc(w.range)}</span>
+              <span style="flex:1"></span>
+              <span style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.09em;text-transform:uppercase;color:var(--ink-3)">${esc(w.count)}</span>
+            </div>
+            <div style="display:flex;flex-direction:column">
+              ${ w.rows.map(function(r2){ return `
+                <button data-key="ark-${esc(r2.key)}" data-click="${on(r2.onOpen)}" title="Öppna ${r2.typ === 'tavla' ? 'tavlan i tavelkortet ovanför' : 'provet i provkortet nedanför'}" style="display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:transparent;border:none;border-bottom:1px solid color-mix(in srgb,var(--line) 60%,transparent);padding:10px 6px;font-family:inherit;cursor:pointer;transition:background .14s" data-sh="background:var(--surface) !important">
+                  <span style="flex:0 0 76px;font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:${r2.typ === 'tavla' ? 'var(--accent)' : 'var(--ink-2)'}">${esc(r2.typLabel)}</span>
+                  <span style="min-width:0;flex:1;font-size:14.5px;font-weight:500;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;${r2.cancelled ? 'text-decoration:line-through;opacity:.55' : ''}">${esc(r2.titel)}</span>
+                  <span data-cc="${esc(r2.cc)}" style="flex:0 1 auto;min-width:0;border-radius:99px;padding:2px 10px;font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(r2.tag)}</span>
+                  ${ r2.held || r2.godkand ? `<span style="flex:0 0 auto;font-family:var(--mono);font-size:9.5px;letter-spacing:0.07em;text-transform:uppercase;color:var(--ok)">✓ ${esc(r2.statusLabel)}</span>` : '' }
+                  <span style="flex:0 0 auto;font-family:var(--mono);font-size:10.5px;color:var(--ink-3);font-variant-numeric:tabular-nums">${esc(r2.datum)}${ r2.starttid ? ' · ' + esc(r2.starttid) : '' }</span>
+                </button>
+              `; }).join('') }
+            </div>
+          </div>
+        `; }).join('') }
+      </div>
+      ` : '' }
+
+      <div style="margin-top:38px">
+        <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:12px">
+          <span class="eyebrow">Prov</span>
+          <span style="font-size:13.5px;color:var(--ink-3)">NP-lik struktur — uppgifterna är alltid egenformulerade</span>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:13px;margin-bottom:14px">
+          <div style="display:flex;gap:9px;align-items:center;flex-wrap:wrap">
+            <div role="group" aria-label="Dokumenttyp" style="display:inline-flex;gap:3px;padding:3px;background:var(--track);border-radius:4px;border:1px solid var(--line)">
+              <button data-click="${on(v.onExTypProv)}" aria-pressed="${v.exTyp === 'prov' ? 'true' : 'false'}" data-seg="${v.exTyp === 'prov' ? 'on' : 'off'}" style="border:none;border-radius:3px;padding:7px 15px;font-size:13.5px;font-weight:500;font-family:inherit;background:transparent;color:var(--ink-2);transition:color .18s ease">Prov</button>
+              <button data-click="${on(v.onExTypArbetsblad)}" aria-pressed="${v.exTyp === 'arbetsblad' ? 'true' : 'false'}" data-seg="${v.exTyp === 'arbetsblad' ? 'on' : 'off'}" style="border:none;border-radius:3px;padding:7px 15px;font-size:13.5px;font-weight:500;font-family:inherit;background:transparent;color:var(--ink-2);transition:color .18s ease">Arbetsblad</button>
+            </div>
+            <span style="flex:1"></span>
+            <button data-click="${on(v.onExStart)}" ${v.exCanStart ? '' : 'disabled'} style="display:inline-flex;align-items:center;gap:7px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:4px;padding:13px 22px;font-size:14.5px;font-weight:500;font-family:inherit;cursor:${v.exCanStart ? 'pointer' : 'default'};opacity:${v.exCanStart ? '1' : '.55'}">${v.exRunning ? 'Skriver …' : 'Skriv provet'}</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+            ${ v.exCourseGroups.map(function(g){ return `
+            <div role="group" aria-label="${esc(g.amne)}" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+              <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);margin-right:3px">${esc(g.amne)}</span>
+              ${ g.chips.map(function(c){ return `<button data-click="${on(c.onPick)}" data-chip="${c.sel ? 'on' : 'off'}" aria-pressed="${c.sel ? 'true' : 'false'}" title="${esc(c.namn)}" style="font-family:inherit;font-size:13px;font-weight:500;padding:6px 12px;border-radius:3px;background:var(--surface);color:var(--ink-2);border:1px solid var(--line);transition:border-color .14s,background .14s,color .14s">${esc(c.kort)}</button>`; }).join('') }
+            </div>
+            `; }).join('') }
+            ${ v.exGroupOpts.length ? `
+            <div role="group" aria-label="Klass" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+              <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);margin-right:3px">Klass</span>
+              ${ v.exGroupOpts.map(function(g){ return `<button data-click="${on(g.onPick)}" data-chip="${g.sel ? 'on' : 'off'}" aria-pressed="${g.sel ? 'true' : 'false'}" style="font-family:inherit;font-size:13px;font-weight:500;padding:6px 12px;border-radius:3px;background:var(--surface);color:var(--ink-2);border:1px solid var(--line);transition:border-color .14s,background .14s,color .14s">${esc(g.namn)}</button>`; }).join('') }
+            </div>
+            ` : '' }
+            <span style="flex:1"></span>
+            <div style="display:flex;align-items:center;gap:6px">
+              <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);margin-right:3px">När</span>
+              <input type="date" value="${esc(v.exDatum)}" data-change="${on(v.onExDatum)}" aria-label="Provdatum" style="background:var(--surface);border:1px solid var(--line);border-radius:3px;padding:6px 9px;font-size:13px;font-family:inherit;color:var(--ink-2)">
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+            <div role="group" aria-label="Omfång" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+              <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);margin-right:3px">Omfång</span>
+              <label style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-3)"><input type="number" min="3" max="20" value="${esc(v.exAntal)}" data-change="${on(v.onExAntal)}" aria-label="Antal uppgifter" style="background:var(--surface);border:1px solid var(--line);border-radius:3px;padding:6px 9px;font-size:13px;font-family:inherit;color:var(--ink-2);width:56px;font-variant-numeric:tabular-nums">uppgifter</label>
+              <label style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-3)"><input type="number" min="30" max="300" step="10" value="${esc(v.exTid)}" data-change="${on(v.onExTid)}" aria-label="Provtid (minuter)" style="background:var(--surface);border:1px solid var(--line);border-radius:3px;padding:6px 9px;font-size:13px;font-family:inherit;color:var(--ink-2);width:64px;font-variant-numeric:tabular-nums">min</label>
+              <button data-click="${on(v.onExDelar)}" data-chip="${v.exDelar ? 'on' : 'off'}" aria-pressed="${v.exDelar ? 'true' : 'false'}" title="Dela provet i Del B (utan räknare) och Del C (med räknare)" style="font-family:inherit;font-size:13px;font-weight:500;padding:6px 12px;border-radius:3px;background:var(--surface);color:var(--ink-2);border:1px solid var(--line);transition:border-color .14s,background .14s,color .14s">Del B/C</button>
+            </div>
+            ${ v.exReferensVal.length ? `
+            <div style="display:flex;align-items:center;gap:6px">
+              <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);margin-right:3px">Referens</span>
+              <div style="position:relative" data-enter="${on(v.exRefEnter)}" data-leave="${on(v.exRefLeave)}">
+                <button data-click="${on(v.exRefToggle)}" aria-haspopup="listbox" aria-expanded="${v.exRefOpen ? 'true' : 'false'}" data-filter-on="${esc(v.exRefOn)}" title="Utgå från ett tidigare prov — variera och höj svårighetsgraden" style="display:inline-flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line);color:var(--ink-2);border-radius:3px;padding:6px 12px;font-size:13px;font-weight:500;font-family:inherit;cursor:pointer;white-space:nowrap;max-width:280px;transition:border-color .14s"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis">${esc(v.exRefLabel)}</span><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;transition:transform .2s cubic-bezier(.16,1,.3,1);transform:${v.exRefOpen ? 'rotate(180deg)' : 'none'}"><path d="M4 6l4 4 4-4"></path></svg></button>
+                ${ v.exRefOpen ? `
+                <div data-pop="${esc(v.exRefAnim)}" style="position:absolute;top:100%;left:0;z-index:30;padding-top:6px"><div role="listbox" aria-label="Referensprov" style="min-width:210px;max-width:320px;background:var(--surface);border:1px solid var(--line-2);border-radius:5px;box-shadow:var(--shadow);padding:5px;display:flex;flex-direction:column;gap:1px">
+                  ${ v.exRefOpts.map(function(o){ return `
+                  <button data-key="${esc(o.key)}" data-click="${on(o.onSelect)}" data-opt="" role="option" aria-selected="${o.isCur ? 'true' : 'false'}" style="display:flex;align-items:center;gap:10px;border:none;background:transparent;color:var(--ink);border-radius:3px;padding:8px 11px;font-size:13.5px;font-family:inherit;cursor:pointer;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(o.label)}<span style="flex:1;min-width:14px"></span>${ o.isCur ? '<span style="font-weight:600">✓</span>' : '' }</button>
+                  `; }).join('') }
+                </div></div>
+                ` : '' }
+              </div>
+            </div>
+            ` : '' }
+          </div>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+          <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);margin-right:3px">Bilder</span>
+          ${ v.exUnderlagBusy ? `
+          <span style="display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-2)"><span style="width:13px;height:13px;border-radius:50%;border:2px solid var(--line-2);border-top-color:var(--accent);animation:spin .7s linear infinite"></span>Läser och tolkar bilderna …</span>
+          ` : v.exUnderlag ? `
+          ${ v.exUnderlag.filer.map(function(f){ return `<span title="${esc(f.beskrivning || f.namn)}" style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2);background:var(--sunken);border:1px solid var(--line);border-radius:3px;padding:4px 10px;max-width:220px"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(f.namn)}</span></span>`; }).join('') }
+          <button data-click="${on(v.onClearExUnderlag)}" aria-label="Ta bort bilderna" title="Ta bort bilderna" style="border:none;background:transparent;color:var(--ink-3);cursor:pointer;font-size:12px;padding:2px 6px;font-family:inherit">✕</button>
+          <button data-click="${on(v.onPickExUnderlag)}" style="border:none;background:transparent;color:var(--ink-2);cursor:pointer;font-size:12.5px;font-family:inherit;padding:2px 4px;text-decoration:underline;text-underline-offset:3px">Byt</button>
+          ` : `
+          <button data-click="${on(v.onPickExUnderlag)}" title="Ladda upp bilder som byggs in i provuppgifterna — varje bild får en egen uppgift; behandlas lokalt" style="display:inline-flex;align-items:center;gap:7px;border:1px dashed var(--line-2);background:transparent;color:var(--ink-2);border-radius:3px;padding:6px 12px;font-size:12.5px;font-family:inherit;cursor:pointer">＋ Bilder till uppgifter (PNG, JPG, PDF)</button>
+          ` }
+        </div>
+
+        ${ v.exContentGroups.length ? `
+          <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:6px">
+            ${ v.exContentGroups.map(function(g3){ return `
+            <div role="group" aria-label="${esc(g3.rubrik)}">
+              <div style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);margin-bottom:6px">${esc(g3.rubrik)}</div>
+              <div style="display:flex;flex-wrap:wrap;gap:6px">
+                ${ g3.punkter.map(function(p){ return `
+                <button data-key="cc-${esc(p.id)}" data-click="${on(p.onToggle)}" title="${esc(p.text)}" aria-pressed="${p.vald}" style="display:inline-flex;align-items:center;gap:6px;border:1px solid ${p.vald ? 'var(--accent)' : 'var(--line)'};background:${p.vald ? 'var(--accent-weak)' : 'var(--surface)'};color:${p.vald ? 'var(--accent)' : 'var(--ink-2)'};border-radius:3px;padding:5px 10px;font-size:12.5px;font-family:inherit;cursor:pointer;font-weight:${p.vald ? '600' : '500'};text-align:left;transition:border-color .14s,background .14s,color .14s">
+                  ${esc(p.kort)}${ p.behandlad ? `<span title="Behandlat i undervisningen" style="font-size:11px">✓</span>` : `<span title="Ännu inte behandlat" style="font-size:11px;opacity:.6">○</span>` }${ p.provad ? `<span title="Prövat på prov/arbetsblad" style="font-size:11px">★</span>` : '' }
+                </button>`; }).join('') }
+              </div>
+            </div>
+            `; }).join('') }
+          </div>
+          <div style="font-size:12px;color:var(--ink-3);margin-bottom:12px">Välj vilka innehållspunkter provet ska pröva — ○ ej behandlat i undervisningen · ✓ behandlat · ★ redan prövat på prov.</div>
+        ` : (v.exCourseId ? '' : `<div style="font-size:13px;color:var(--ink-3);margin-bottom:12px">Välj kurs för att se innehållspunkterna — ✓ = behandlat i undervisningen.</div>`) }
+
+        ${ (v.exRunning || v.exUnderlagBusy) && v.exHasLog ? `
+          <div role="status" style="display:flex;flex-direction:column;gap:3px;margin-bottom:12px;font-size:13px;color:var(--ink-2)">
+            ${ v.exLog.map(function(l){ return `<span>${esc(l)}</span>`; }).join('') }
+          </div>
+        ` : '' }
+
+        ${ v.exErrCount ? `
+          <div role="status" style="display:flex;flex-direction:column;gap:4px;margin-bottom:12px;font-size:13px;color:var(--warn)">
+            <span style="font-weight:600">${esc(v.exErrCount)} problem kvarstår:</span>
+            ${ v.exErrors.map(function(e2){ return `<span style="font-family:var(--mono,monospace);font-size:12px;color:var(--ink-2)">${esc(typeof e2 === 'string' ? e2 : (e2.path ? e2.path + ': ' : '') + (e2.message || ''))}</span>`; }).join('') }
+          </div>
+        ` : '' }
+
+        ${ v.exam ? `
+          <div data-key="exam-card" style="background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px 18px;box-shadow:var(--shadow-sm);animation:fadeup .3s ease both">
+            <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:6px">
+              <span style="font-size:16px;font-weight:600;color:var(--ink)">${esc(v.exam.titel)}</span>
+              <span style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-3)">${esc(v.exam.typ)}</span>
+              <span style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.07em;text-transform:uppercase;color:${v.exam.godkant ? 'var(--ok)' : 'var(--ink-3)'}">${esc(v.exam.status)}</span>
+              <span style="font-size:12.5px;color:var(--ink-3)">${esc(v.exam.versionRad)}</span>
+            </div>
+            <div style="font-size:13.5px;color:var(--ink-2);font-variant-numeric:tabular-nums">${esc(v.exam.balansRad)}</div>
+            <div style="font-size:13px;color:var(--ink-3);font-variant-numeric:tabular-nums;margin-bottom:6px">${esc(v.exam.granserRad)}</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
+              ${ v.exam.formagor.map(function(f2){ return `<span data-key="fm-${esc(f2.f)}" style="font-family:var(--mono);font-size:11px;color:var(--ink-2);background:var(--sunken);border:1px solid var(--line);border-radius:6px;padding:2px 8px">${esc(f2.f)} ${esc(f2.p)} p</span>`; }).join('') }
+            </div>
+            ${ v.exDubbletter.length ? `
+              <div role="status" style="display:flex;flex-direction:column;gap:4px;margin-bottom:14px;font-size:13px;color:var(--warn)">
+                <span style="font-weight:600">${esc(v.exDubbletter.length)} uppgift${v.exDubbletter.length === 1 ? '' : 'er'} liknar tidigare prov:</span>
+                ${ v.exDubbletter.map(function(d2){ return `<span style="font-family:var(--mono,monospace);font-size:12px;color:var(--ink-2)">"${esc(d2.text)}" ≈ ${esc(d2.mot_titel)} (${esc(Math.round(d2.likhet * 100))} % likhet)</span>`; }).join('') }
+              </div>
+            ` : '' }
+
+            ${ v.exam.uppgifter.map(function(u2){ return `
+              <div data-key="ex-u-${esc(u2.nummer)}" style="border-top:1px solid color-mix(in srgb,var(--line) 60%,transparent);padding:11px 0">
+                <div style="display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;margin-bottom:4px">
+                  <span style="font-weight:600;font-size:14px;color:var(--ink)">Uppgift ${esc(u2.nummer)}</span>
+                  ${ u2.del ? `<span style="font-family:var(--mono);font-size:10.5px;color:var(--ink-3)">DEL ${esc(u2.del)}</span>` : '' }
+                  <span style="font-family:var(--mono);font-size:10.5px;color:var(--ink-3)">${esc(u2.formaga)} · ${esc(u2.typ)}</span>
+                  <span style="font-family:var(--mono);font-size:11.5px;color:var(--ink-2)">(${esc(u2.poangStr)})</span>
+                </div>
+                <div style="font-size:14px;color:var(--ink);line-height:1.5;margin-bottom:7px">${esc(u2.text)}</div>
+                <div style="display:flex;gap:8px">
+                  <input value="${esc(u2.chatValue)}" data-input="${on(u2.onChat)}" aria-label="Ändra uppgift ${esc(u2.nummer)}" placeholder="Ändra uppgiften — t.ex. gör den svårare, byt kontext …" style="flex:1;min-width:0;background:var(--sunken);border:1px solid var(--line);border-radius:8px;padding:7px 11px;font-size:13px;font-family:inherit;color:var(--ink)">
+                  <button data-click="${on(u2.onSend)}" ${u2.canSend ? '' : 'disabled'} style="border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:8px;padding:7px 13px;font-size:13px;font-weight:500;font-family:inherit;cursor:${u2.canSend ? 'pointer' : 'default'};opacity:${u2.canSend ? '1' : '.55'}">Ändra</button>
+                </div>
+              </div>
+            `; }).join('') }
+
+            <div style="display:flex;align-items:center;gap:10px;margin-top:14px;flex-wrap:wrap">
+              <button data-click="${on(v.onExApprove)}" ${!v.exRunning ? '' : 'disabled'} style="display:inline-flex;align-items:center;gap:7px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:10px;padding:10px 17px;font-size:14.5px;font-weight:500;font-family:inherit;cursor:${!v.exRunning ? 'pointer' : 'default'};opacity:${!v.exRunning ? '1' : '.55'};box-shadow:var(--shadow-sm)">${v.exam.godkant ? 'Skapa PDF igen' : 'Godkänn & skapa PDF'}</button>
+              ${ v.exam.hasPdf ? `<button data-click="${on(v.onExPdf)}" style="border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:10px;padding:10px 15px;font-size:14px;font-weight:500;font-family:inherit;cursor:pointer">Öppna PDF</button>` : '' }
+              ${ v.exam.hasTex ? `<button data-click="${on(v.onExTex)}" style="border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:10px;padding:10px 15px;font-size:14px;font-weight:500;font-family:inherit;cursor:pointer">.tex</button>` : '' }
+              ${ v.exam.hasTex ? `<button data-click="${on(v.onExOverleaf)}" title="Tillval: öppnar källan i Overleaf (molntjänst) för manuell finputs — prov innehåller ingen elevdata" style="border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:10px;padding:10px 15px;font-size:14px;font-weight:500;font-family:inherit;cursor:pointer">Öppna i Overleaf</button>` : '' }
+              ${ v.exMsg ? `<span role="status" style="font-size:13.5px;color:var(--ink-2);word-break:break-all">${esc(v.exMsg)}</span>` : '' }
+            </div>
+          </div>
+        ` : '' }
+
+        ${ v.exHistorik.length ? `
+          <div style="margin-top:16px">
+            <div style="font-size:12px;text-transform:uppercase;letter-spacing:0.06em;color:var(--ink-3);font-weight:600;margin-bottom:7px">Historik — ${esc(v.exHistorik.length)} prov/arbetsblad i kursen</div>
+            <div style="display:flex;flex-direction:column;gap:4px">
+              ${ v.exHistorik.map(function(h2){ return `
+                <button data-key="hist-${esc(h2.id)}" data-click="${on(h2.onOpen)}" style="display:flex;align-items:baseline;gap:10px;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:9px;padding:7px 12px;font-size:13px;font-family:inherit;cursor:pointer;text-align:left">
+                  <span style="font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(h2.titel)}</span>
+                  <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.06em;text-transform:uppercase;color:var(--ink-3)">${esc(h2.typ)}</span>
+                  ${ h2.datum ? `<span style="font-family:var(--mono);font-size:11px;color:var(--ink-3)">${esc(h2.datum)}</span>` : '' }
+                  <span style="flex:1"></span>
+                  <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.06em;text-transform:uppercase;color:${h2.status === 'godkänt' ? 'var(--ok)' : 'var(--ink-3)'}">${esc(h2.status)}</span>
+                </button>`; }).join('') }
+            </div>
+          </div>
+        ` : '' }
+      </div>
+    </section>
+`; }
+
   // <<<VIEWS_END>>>
 
   function view(v) {
@@ -4117,6 +5423,7 @@ function viewModals(v){ return `
       '<main style="max-width:1120px;margin:0 auto;padding:0 24px">' +
       (v.tabTranscribe ? viewTranscribe(v) : '') +
       (v.tabRecordings ? viewRecordings(v) : '') +
+      (v.tabPlanning ? viewPlanning(v) : '') +
       '</main>' +
       viewModals(v);
   }
@@ -4125,6 +5432,14 @@ function viewModals(v){ return `
   function init() {
     var root = document.getElementById('root');
     bindEvents(root);
+    // Tavel-iframen rapporterar sin skalade höjd (board.js postMessage) så
+    // ramen kan följa innehållet. Endast meddelanden från vårt eget origin.
+    window.addEventListener('message', function (e) {
+      if (e.origin !== window.location.origin) return;
+      if (e.data && e.data.type === 'wb-height' && _wbFrame) {
+        _wbFrame.style.height = (+e.data.px || 420) + 'px';
+      }
+    });
     document.addEventListener('keydown', onKeyDown);
     document.addEventListener('pointerdown', onAnyPress, true);
     syncTheme();
