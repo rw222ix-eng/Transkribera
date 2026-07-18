@@ -169,10 +169,20 @@
     planDatum: '',             // formulärets datum (för kalendern/minnet)
     planStarttid: '',          // formulärets starttid
     // Inbyggd kalender (Fas 3): lokal SQLite-läsning — ingen synk/CalDAV
-    calMode: 'manad',          // 'manad' | 'vecka'
-    calYear: 0, calMonth: 0,   // vald månad (0 = ej laddad ännu)
-    calWeekStart: '',          // veckolägets måndag (YYYY-MM-DD)
-    calEntries: [],            // poster från /api/planning/calendar
+    // Planeringsarkivet (ersätter kalendern): tavlor + prov i veckogrupper,
+    // sök- och frågbara med samma RAG-mönster som Inspelningar-arkivet.
+    arkItems: [],              // poster från /api/planning/archive
+    arkQ: '',                  // sök-/frågefältet
+    arkMode: 'ask',            // 'ask' = LLM-svar | 'keyword' = träfflista
+    arkHits: null,             // null = ingen sökning; [] = inga träffar
+    arkSearching: false,
+    arkAsking: false,
+    arkAnswer: '',             // strömmat LLM-svar
+    arkSources: null,          // vilka tavlor/prov svaret bygger på
+    arkQAsked: '',             // frågan som svaret gäller
+    arkScanIdx: 0,             // skanningskoreografins läsposition
+    arkFollowups: [],          // följdfrågor [{q, a, typing}]
+    arkFollowInput: '',
     // Provgeneratorn (Fas 4)
     exCourseId: '',            // vald kurs för provet
     exGroupId: '',             // vald klass (minneskontext + auto-koppling)
@@ -579,7 +589,7 @@
     if (t === 'history' || t === 'lessons') t = 'recordings';
     setState({ tab: t, openDD: null });
     if (t === 'recordings') { loadHistory(); loadLessons(); loadOrg(); loadPrep(); loadAgenda(); loadTrends(); }
-    if (t === 'planning') { loadOrg(); loadCalendar(); }   // formulär + kalender
+    if (t === 'planning') { loadOrg(); loadArkiv(); }   // formulär + arkiv
   }
   /* ------------------------------------------------- Planering (Fas 0) -- */
   // Tavlan renderas av whiteboard-motorn (vendrad från designprojektet
@@ -757,7 +767,7 @@
       .then(function (res) {
         if (!res.ok || res.body.error) throw new Error(res.body.error || 'Kunde inte spara.');
         setState({ planSavedPath: res.body.path });
-        loadCalendar();        // planeringen syns direkt i kalendern
+        loadArkiv();           // planeringen syns direkt i arkivet
       })
       .catch(function (e) {
         setState({ planSavedPath: '', wbExportMsg: 'Kunde inte spara: ' + ((e && e.message) || e) });
@@ -825,123 +835,102 @@
   function onPlanDatum(e) { setState({ planDatum: e.target.value }); }
   function onPlanStarttid(e) { setState({ planStarttid: e.target.value }); }
 
-  var _MANADER = ['januari', 'februari', 'mars', 'april', 'maj', 'juni', 'juli',
-                  'augusti', 'september', 'oktober', 'november', 'december'];
-  var _VECKODAGAR = ['mån', 'tis', 'ons', 'tor', 'fre', 'lör', 'sön'];
+  /* --------------------------------- planeringsarkivet (ersätter kalendern) --
+     Tavlor + prov/arbetsblad i veckogrupper, med fritextsök och LLM-frågor
+     över arkivet — samma RAG-mönster som Inspelningar-arkivet, men inga
+     kalenderhändelser skapas härifrån. */
+  var _arkRun = 0, _arkScanTimer = null;
 
-  // Kalenderns vy-modell (anropas från vm): poster grupperade per dag med
-  // klassfärg och klickhandtag; månadsgrid eller veckolista.
-  function calVm(st) {
-    var byDate = {};
-    st.calEntries.forEach(function (e) {
-      if (!e.datum) return;
-      (byDate[e.datum] = byDate[e.datum] || []).push({
-        key: e.typ + '-' + e.id,
-        titel: e.titel || '(utan titel)',
-        group: e.group || '',
-        starttid: e.starttid || '',
-        color: 'var(' + calColor(e.group_id) + ')',
-        held: e.status === 'hållen',
-        cancelled: e.status === 'inställd',
-        isPlan: e.typ === 'planering',
-        onOpen: function () { openCalEntry(e); },
-      });
+  function loadArkiv() {
+    getJSON('/api/planning/archive')
+      .then(function (r) { setState({ arkItems: (r && r.items) || [] }); })
+      .catch(function () {});
+  }
+  function onArkInput(e) { setState({ arkQ: e.target.value }); }
+  function setArkMode(mode) { setState({ arkMode: mode }); }
+  function clearArkiv() {
+    _arkRun++;
+    if (_arkScanTimer) { clearInterval(_arkScanTimer); _arkScanTimer = null; }
+    setState({ arkQ: '', arkHits: null, arkSearching: false, arkAsking: false,
+               arkAnswer: '', arkSources: null, arkQAsked: '', arkScanIdx: 0,
+               arkFollowups: [], arkFollowInput: '' });
+  }
+  function runArkiv() {
+    var q = (S.arkQ || '').trim();
+    if (!q) { setState({ arkHits: null }); return; }
+    if (S.arkMode === 'ask') { runArkivAsk(q); return; }
+    setState({ arkSearching: true, arkAnswer: '', arkSources: null });
+    getJSON('/api/planning/archive/search?q=' + encodeURIComponent(q))
+      .then(function (r) { setState({ arkHits: (r && r.hits) || [], arkSearching: false }); })
+      .catch(function () { setState({ arkHits: [], arkSearching: false }); });
+  }
+  function runArkivAsk(q) {
+    var run = ++_arkRun;
+    // Samma skanningskoreografi som kartoteket: kosmetisk läsposition som
+    // tickar fram medan det riktiga RAG-svaret hämtas.
+    if (_arkScanTimer) clearInterval(_arkScanTimer);
+    _arkScanTimer = setInterval(function () {
+      setState(function (s) { return s.arkAsking ? { arkScanIdx: s.arkScanIdx + 1 } : null; });
+    }, 340);
+    setState({ arkAsking: true, arkAnswer: '', arkSources: null, arkHits: null,
+               arkQAsked: q, arkScanIdx: 0, arkFollowups: [], arkFollowInput: '' });
+    streamPost('/api/planning/ask', { q: q }, function (ev) {
+      if (run !== _arkRun) return;             // en nyare fråga har tagit över
+      if (ev.type === 'token') {
+        setState(function (s) { return { arkAnswer: s.arkAnswer + ev.text }; });
+      } else if (ev.type === 'done') {
+        if (_arkScanTimer) { clearInterval(_arkScanTimer); _arkScanTimer = null; }
+        setState({ arkAsking: false, arkScanIdx: 999,
+                   arkSources: (ev.result && ev.result.sources) || [] });
+      } else if (ev.type === 'error') {
+        if (_arkScanTimer) { clearInterval(_arkScanTimer); _arkScanTimer = null; }
+        setState({ arkAsking: false, arkScanIdx: 999,
+                   arkAnswer: 'Kunde inte söka: ' + (ev.message || 'okänt fel') });
+      }
     });
-    var today = _isoDate(new Date());
-    var out = { mode: st.calMode, weeks: [], days: [] };
-    if (st.calMode === 'vecka') {
-      var start = new Date((st.calWeekStart || today) + 'T00:00:00');
-      for (var i = 0; i < 7; i++) {
-        var d = new Date(start); d.setDate(start.getDate() + i);
-        var iso = _isoDate(d);
-        out.days.push({
-          label: _VECKODAGAR[i] + ' ' + d.getDate() + '/' + (d.getMonth() + 1),
-          isToday: iso === today,
-          entries: byDate[iso] || [],
+  }
+  function sendArkivFollow() {
+    var q = (S.arkFollowInput || '').trim();
+    if (!q || S.arkAsking) return;
+    var run = ++_arkRun;
+    setState(function (s) {
+      return { arkFollowInput: '',
+               arkFollowups: (s.arkFollowups || []).concat([{ q: q, a: '', typing: true }]) };
+    });
+    streamPost('/api/planning/ask', { q: q }, function (ev) {
+      if (run !== _arkRun) return;
+      var patchLast = function (fn) {
+        setState(function (s) {
+          var fs = (s.arkFollowups || []).slice(); if (!fs.length) return null;
+          fs[fs.length - 1] = fn(Object.assign({}, fs[fs.length - 1]));
+          return { arkFollowups: fs };
         });
-      }
-      var end = new Date(start); end.setDate(start.getDate() + 6);
-      out.title = start.getDate() + '/' + (start.getMonth() + 1) + ' – ' +
-                  end.getDate() + '/' + (end.getMonth() + 1) + ' ' + end.getFullYear();
+      };
+      if (ev.type === 'token') patchLast(function (f) { f.a += ev.text; return f; });
+      else if (ev.type === 'done') patchLast(function (f) { f.typing = false; return f; });
+      else if (ev.type === 'error') patchLast(function (f) { f.typing = false; f.a = f.a || ('Kunde inte söka: ' + (ev.message || 'okänt fel')); return f; });
+    });
+  }
+  // Öppna en arkivpost: tavlan laddas i läsläge i tavelkortet ovanför;
+  // prov/arbetsblad öppnas i provkortet — man ser exakt vad den innehåller.
+  function openArkivItem(it) {
+    if (it.typ === 'tavla') {
+      fetch('/api/planning/' + it.id)
+        .then(function (r) { return r.json(); })
+        .then(function (p) {
+          if (p && p.board) {
+            setState({ planBoard: p.board, planId: null, planErrors: [],
+                       planSavedPath: '', wbExportMsg: '', wbRendered: false },
+                     renderCurrentBoard);
+            try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (e) {}
+          }
+        })
+        .catch(function () {});
     } else {
-      var y = st.calYear, m = st.calMonth;
-      out.title = (_MANADER[m - 1] || '') + ' ' + y;
-      var firstDow = (new Date(y, m - 1, 1).getDay() + 6) % 7;   // mån=0
-      var daysInMonth = new Date(y, m, 0).getDate();
-      var cells = [];
-      for (var b = 0; b < firstDow; b++) cells.push({ blank: true });
-      for (var day = 1; day <= daysInMonth; day++) {
-        var iso2 = y + '-' + String(m).padStart(2, '0') + '-' + String(day).padStart(2, '0');
-        cells.push({ day: day, isToday: iso2 === today, entries: byDate[iso2] || [] });
-      }
-      while (cells.length % 7) cells.push({ blank: true });
-      for (var w = 0; w < cells.length; w += 7) out.weeks.push(cells.slice(w, w + 7));
+      getJSON('/api/exams/' + it.id).then(function (r) {
+        if (r && r.id) setState({ exam: r, exErrors: r.errors || [], exChat: {}, exMsg: '' });
+      }).catch(function () {});
     }
-    return out;
-  }
-
-  /* ------------------------------------------- inbyggd kalender (Fas 3) -- */
-  // Lokal SQLite-kalender: planerade + hållna lektioner (prov i Fas 4).
-  // Ingen synk, ingen CalDAV — Google Calendar-koden lämnas orörd.
-  function _isoDate(d) {
-    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') +
-           '-' + String(d.getDate()).padStart(2, '0');
-  }
-  function _mondayOf(d) {
-    var m = new Date(d);
-    m.setDate(m.getDate() - ((m.getDay() + 6) % 7));
-    return m;
-  }
-  function _fetchCalMonths(months, cb) {
-    Promise.all(months.map(function (ym) {
-      return getJSON('/api/planning/calendar?year=' + ym[0] + '&month=' + ym[1]);
-    })).then(function (results) {
-      var entries = [];
-      results.forEach(function (r) { entries = entries.concat((r && r.entries) || []); });
-      cb(entries);
-    }).catch(function () {});
-  }
-  function loadCalendar(year, month) {
-    var now = new Date();
-    var y = year || S.calYear || now.getFullYear();
-    var m = month || S.calMonth || (now.getMonth() + 1);
-    var weekStart = S.calWeekStart || _isoDate(_mondayOf(now));
-    setState({ calYear: y, calMonth: m, calWeekStart: weekStart });
-    if (S.calMode === 'vecka') {
-      // veckan kan korsa en månadsgräns — hämta båda månaderna
-      var start = new Date(weekStart + 'T00:00:00');
-      var end = new Date(start); end.setDate(start.getDate() + 6);
-      var months = [[start.getFullYear(), start.getMonth() + 1]];
-      if (end.getMonth() !== start.getMonth()) {
-        months.push([end.getFullYear(), end.getMonth() + 1]);
-      }
-      _fetchCalMonths(months, function (entries) { setState({ calEntries: entries }); });
-    } else {
-      _fetchCalMonths([[y, m]], function (entries) { setState({ calEntries: entries }); });
-    }
-  }
-  function calShift(delta) {
-    if (S.calMode === 'vecka') {
-      var start = new Date(S.calWeekStart + 'T00:00:00');
-      start.setDate(start.getDate() + delta * 7);
-      setState({ calWeekStart: _isoDate(start),
-                 calYear: start.getFullYear(), calMonth: start.getMonth() + 1 },
-                function () { loadCalendar(S.calYear, S.calMonth); });
-    } else {
-      var m = S.calMonth + delta, y = S.calYear;
-      if (m < 1) { m = 12; y -= 1; }
-      if (m > 12) { m = 1; y += 1; }
-      loadCalendar(y, m);
-    }
-  }
-  function calSetMode(mode) {
-    setState({ calMode: mode }, function () { loadCalendar(S.calYear, S.calMonth); });
-  }
-  // Klass-färgkodning: stabil färg per grupp ur den redaktionella paletten.
-  var _CAL_COLORS = ['--c-sky', '--c-plum', '--c-sage', '--c-mustard'];
-  function calColor(groupId) {
-    if (groupId == null) return '--ink-3';
-    return _CAL_COLORS[Math.abs(+groupId) % _CAL_COLORS.length];
   }
   /* ------------------------------------------------ provgeneratorn (Fas 4) -- */
   function loadExamContent() {
@@ -1040,7 +1029,7 @@
       if (r.pdf) patch.exMsg = 'PDF skapad: ' + r.pdf;
       else if (r.tex && r.status === 'godkänt') patch.exMsg = 'Sparad utan PDF: ' + r.tex;
       setState(patch);
-      loadCalendar();
+      loadArkiv();
       loadExamHistorik();      // historiken + prövad-markörerna uppdateras
       loadExamContent();
     }
@@ -1120,24 +1109,6 @@
       });
     });
     return out;
-  }
-
-  function openCalEntry(entry) {
-    if (entry.typ === 'planering') {
-      // Visa den sparade tavlan i läsläge (planId null → ingen chatt/godkänn).
-      fetch('/api/planning/' + entry.id)
-        .then(function (r) { return r.json(); })
-        .then(function (p) {
-          if (p && p.board) {
-            setState({ planBoard: p.board, planId: null, planErrors: [],
-                       planSavedPath: '', wbExportMsg: '', wbRendered: false },
-                     renderCurrentBoard);
-          }
-        })
-        .catch(function () {});
-    } else {
-      setTab('recordings');    // lektioner bor bland Inspelningar
-    }
   }
 
   function onSource(e) { setState({ source: e.target.value }); }
@@ -3177,14 +3148,119 @@
       })(),
       onExApprove: approveExam, onExPdf: openExamPdf, onExTex: openExamTex,
       onExOverleaf: openInOverleaf,
-      // Inbyggd kalender (Fas 3)
-      cal: st.tab === 'planning' ? calVm(st) : null,
-      calIsManad: st.calMode === 'manad',
-      onCalPrev: function () { calShift(-1); },
-      onCalNext: function () { calShift(1); },
-      onCalManad: function () { calSetMode('manad'); },
-      onCalVecka: function () { calSetMode('vecka'); },
-      veckodagar: _VECKODAGAR,
+      // Planeringsarkivet (ersätter kalendern): sök/fråga + veckogrupper
+      arkiv: st.tab === 'planning' ? (function () {
+        var typLabel = { tavla: 'Tavla', prov: 'Prov', arbetsblad: 'Arbetsblad' };
+        var items = (st.arkItems || []).map(function (it) {
+          return {
+            key: it.typ + '-' + it.id,
+            typ: it.typ, typLabel: typLabel[it.typ] || it.typ,
+            titel: it.titel || '(utan titel)',
+            datum: it.datum || '', starttid: it.starttid || '',
+            cc: ccOf(it),
+            tag: [it.group, it.course].filter(Boolean).join(' · ') || 'Ej tilldelad',
+            held: it.status === 'hållen', godkand: it.status === 'godkänt',
+            cancelled: it.status === 'inställd',
+            statusLabel: it.status || '',
+            onOpen: function () { openArkivItem(it); },
+          };
+        });
+        // Veckogrupper, nyaste veckan först — samma grammatik som kartoteket.
+        var wMap = {};
+        items.forEach(function (it) {
+          var wi = weekInfo(it.datum);
+          if (!wMap[wi.key]) wMap[wi.key] = { key: wi.key, num: wi.num, label: wi.label, range: wi.range, start: wi.start, rows: [] };
+          wMap[wi.key].rows.push(it);
+        });
+        var weeks = Object.keys(wMap).map(function (k) { return wMap[k]; })
+          .sort(function (a, b) { return b.start - a.start; })
+          .map(function (g) {
+            g.rows.sort(function (a, b) { return (b.datum + b.starttid).localeCompare(a.datum + a.starttid); });
+            var n = g.rows.length;
+            return { key: g.key, num: g.num, isWeek: g.num !== '·', label: g.label,
+                     range: g.range, rows: g.rows,
+                     count: n + (n === 1 ? ' post' : ' poster') };
+          });
+        var asking = !!st.arkAsking;
+        var askActive = asking || !!st.arkAnswer;
+        var scanList = (st.arkItems || []).slice(0, 24);
+        var scanIdx = Math.min(st.arkScanIdx, scanList.length);
+        var srcKeys = {};
+        (st.arkSources || []).forEach(function (s2) { srcKeys[s2.typ + '-' + s2.id] = true; });
+        var hitCount = (st.arkSources || []).length;
+        return {
+          count: (st.arkItems || []).length,
+          empty: (st.arkItems || []).length === 0,
+          weeks: weeks,
+          search: {
+            query: st.arkQ,
+            modeAsk: st.arkMode === 'ask', modeKeyword: st.arkMode === 'keyword',
+            busy: st.arkSearching || asking,
+            onInput: onArkInput, onClear: clearArkiv, onRun: runArkiv,
+            onKey: function (e) { if (e.key === 'Enter') { e.preventDefault(); runArkiv(); } },
+            onAsk: function () { setArkMode('ask'); },
+            onKeyword: function () { setArkMode('keyword'); },
+            hasQuery: !!(st.arkQ || '').trim(),
+            showSuggest: st.arkMode === 'ask' && !asking && !st.arkAnswer,
+            suggestions: [
+              'När gick vi igenom derivatans definition?',
+              'Sammanfatta vad vi har gått igenom i höst',
+              'Hitta provet om sannolikhet',
+            ].map(function (q) {
+              return { label: q, onClick: function () { setState({ arkMode: 'ask', arkQ: q }); runArkivAsk(q); } };
+            }),
+            searched: Array.isArray(st.arkHits),
+            showNoHits: st.arkMode === 'keyword' && Array.isArray(st.arkHits) && st.arkHits.length === 0 && !st.arkSearching,
+            hits: (st.arkHits || []).map(function (h) {
+              return { snippet: hl(h.snippet || ''),
+                       meta: [typLabel[h.typ] || h.typ, h.group, h.course, h.datum].filter(Boolean).join(' · '),
+                       name: h.titel || '(utan titel)',
+                       onOpen: function () { openArkivItem(h); } };
+            }),
+          },
+          scan: askActive ? {
+            scanning: asking,
+            ticker: asking && scanList[Math.min(scanIdx, scanList.length - 1)]
+              ? 'Läser: ' + (scanList[Math.min(scanIdx, scanList.length - 1)].titel || '')
+              : '',
+            total: String(scanList.length),
+            hitLabel: asking ? 'Söker …' : hitCount + (hitCount === 1 ? ' källa' : ' källor'),
+            onNew: clearArkiv,
+            cards: scanList.map(function (it, i) {
+              var hit = srcKeys[it.typ + '-' + it.id];
+              var stt, lbl;
+              if (asking && i === scanIdx) { stt = 'reading'; lbl = 'Läser …'; }
+              else if (!asking || i < scanIdx) { stt = hit ? 'hit' : 'read'; lbl = hit ? 'Träff ●' : 'Läst ✓'; }
+              else { stt = 'queue'; lbl = 'I kö'; }
+              return { key: it.typ + '-' + it.id, st: stt, stLabel: lbl,
+                       typLabel: typLabel[it.typ] || it.typ,
+                       title: it.titel || '(utan titel)' };
+            }),
+          } : null,
+          q: st.arkQAsked,
+          ansStarted: !!st.arkAnswer,
+          ansTyping: asking && !!st.arkAnswer,
+          ansDone: !asking && !!st.arkAnswer,
+          ansHeadLabel: (!asking && st.arkAnswer)
+            ? ('Svar — ' + hitCount + (hitCount === 1 ? ' källa' : ' källor'))
+            : 'Svar',
+          answer: st.arkAnswer,
+          sources: (st.arkSources || []).map(function (s2) {
+            return { key: 'as-' + s2.typ + '-' + s2.id,
+                     typLabel: typLabel[s2.typ] || s2.typ,
+                     titel: s2.titel || '(utan titel)',
+                     sub: [s2.group, s2.course, s2.datum].filter(Boolean).join(' · '),
+                     onOpen: function (e) { if (e) e.stopPropagation(); openArkivItem(s2); } };
+          }),
+          followups: (st.arkFollowups || []).map(function (f, i) {
+            return { key: 'af' + i, q: f.q, a: f.a, typing: !!f.typing };
+          }),
+          followInput: st.arkFollowInput || '',
+          setFollow: function (e) { setState({ arkFollowInput: e.target.value }); },
+          onFollowKey: function (e) { if (e.key === 'Enter') { e.preventDefault(); sendArkivFollow(); } },
+          sendFollow: sendArkivFollow,
+        };
+      })() : null,
       themeIsLight: st.theme !== 'dark',
       toggleTheme: toggleTheme,
 
@@ -5031,58 +5107,103 @@ function viewPlanning(v){
         ${ v.wbExportMsg ? `<span role="status" style="font-size:13.5px;color:${v.wbExportFailed ? 'var(--bad)' : 'var(--ink-2)'};font-variant-numeric:tabular-nums;word-break:break-all">${esc(v.wbExportMsg)}</span>` : '' }
       </div>
 
-      ${ v.cal ? `
-      <div style="margin-top:38px">
-        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap">
-          <span class="eyebrow">Kalender</span>
+      ${ v.arkiv ? `
+      <div style="margin-top:44px">
+        <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+          <span class="eyebrow">Arkiv</span>
+          <span style="font-size:13.5px;color:var(--ink-3)">Sök bland dina tavlor och prov, eller fråga AI:n vad ni gått igenom.</span>
           <span style="flex:1"></span>
-          <div style="display:inline-flex;gap:3px;padding:3px;background:var(--track);border-radius:9px;border:1px solid var(--line)">
-            <button data-click="${on(v.onCalManad)}" aria-pressed="${v.calIsManad}" data-seg="${v.calIsManad ? 'on' : 'off'}" style="border:none;border-radius:7px;padding:5px 12px;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;background:transparent;color:var(--ink-2)">Månad</button>
-            <button data-click="${on(v.onCalVecka)}" aria-pressed="${!v.calIsManad}" data-seg="${!v.calIsManad ? 'on' : 'off'}" style="border:none;border-radius:7px;padding:5px 12px;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;background:transparent;color:var(--ink-2)">Vecka</button>
-          </div>
-          <div style="display:inline-flex;align-items:center;gap:8px">
-            <button data-click="${on(v.onCalPrev)}" aria-label="Föregående" style="width:30px;height:30px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);cursor:pointer;font-size:14px">‹</button>
-            <span style="font-size:14.5px;font-weight:600;color:var(--ink);min-width:130px;text-align:center;font-variant-numeric:tabular-nums">${esc(v.cal.title || '')}</span>
-            <button data-click="${on(v.onCalNext)}" aria-label="Nästa" style="width:30px;height:30px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);cursor:pointer;font-size:14px">›</button>
-          </div>
+          <span style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3)">${esc(String(v.arkiv.count))} ${v.arkiv.count === 1 ? 'post' : 'poster'}</span>
         </div>
 
-        ${ v.cal.mode === 'vecka' ? `
-          <div style="background:var(--surface);border:1px solid var(--line);border-radius:13px;box-shadow:var(--shadow-sm);overflow:hidden">
-            ${ v.cal.days.map(function(d){ return `
-              <div style="display:flex;align-items:flex-start;gap:14px;padding:10px 14px;border-bottom:1px solid color-mix(in srgb,var(--line) 60%,transparent);${d.isToday ? 'background:var(--accent-weak)' : ''}">
-                <span style="flex:0 0 74px;font-family:var(--mono);font-size:12px;color:${d.isToday ? 'var(--accent)' : 'var(--ink-3)'};font-weight:${d.isToday ? '700' : '500'};padding-top:3px">${esc(d.label)}</span>
-                <div style="flex:1;display:flex;flex-direction:column;gap:4px;min-width:0">
-                  ${ d.entries.length ? d.entries.map(function(e2){ return `
-                    <button data-key="${esc(e2.key)}" data-click="${on(e2.onOpen)}" style="display:flex;align-items:center;gap:7px;border:1px solid color-mix(in srgb,${e2.color} 30%,transparent);background:color-mix(in srgb,${e2.color} 11%,transparent);color:${e2.color};border-radius:7px;padding:4px 9px;font-size:12.5px;font-family:inherit;cursor:pointer;text-align:left;max-width:100%;${e2.cancelled ? 'text-decoration:line-through;opacity:.55' : ''}">
-                      ${ e2.starttid ? `<span style="font-family:var(--mono);font-size:11px">${esc(e2.starttid)}</span>` : '' }
-                      <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:${e2.held ? '600' : '500'}">${e2.held ? '✓ ' : ''}${esc(e2.titel)}</span>
-                      ${ e2.group ? `<span style="font-size:11px;opacity:.75">${esc(e2.group)}</span>` : '' }
-                    </button>
-                  `; }).join('') : `<span style="font-size:12.5px;color:var(--ink-3);padding-top:3px">—</span>` }
+        ${ spotlightPanel(v.arkiv.search) }
+
+        ${ v.arkiv.scan ? `
+        <div style="margin:20px 0 8px;animation:fadeup .3s ease both">
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+            ${ v.arkiv.scan.scanning ? `
+              <span class="insp-dots" style="color:var(--accent);flex:0 0 auto"><i></i><i></i><i></i></span>
+              <span style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(v.arkiv.scan.ticker)}</span>
+            ` : `
+              <span style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ok);flex:0 0 auto">✓ Genomsökte ${esc(v.arkiv.scan.total)} tavlor och prov</span>
+            ` }
+            <div style="flex:1;height:1px;background:var(--line)"></div>
+            <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--accent);flex:0 0 auto">${esc(v.arkiv.scan.hitLabel)}</span>
+            <button data-click="${on(v.arkiv.scan.onNew)}" style="flex:0 0 auto;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:7px;padding:5px 10px;font-family:var(--mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;cursor:pointer">✕ Ny fråga</button>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(108px,1fr));gap:8px">
+            ${ v.arkiv.scan.cards.map(function(sc){ return `
+              <div data-key="ascan-${esc(sc.key)}" data-scan="${esc(sc.st)}" style="min-width:0;border:1px solid var(--line);background:var(--surface);border-radius:9px;padding:10px 12px;transition:opacity .35s ease,box-shadow .35s ease,border-color .35s ease,background .35s ease">
+                <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-3);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(sc.stLabel)}</span>
+                <div style="font-size:12px;font-weight:600;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(sc.title)}</div>
+                <span style="font-family:var(--mono);font-size:9px;letter-spacing:0.06em;text-transform:uppercase;color:var(--ink-3)">${esc(sc.typLabel)}</span>
+              </div>
+            `; }).join('') }
+          </div>
+
+          ${ v.arkiv.ansStarted ? `
+          <div style="margin-top:16px;border:1px solid var(--line);border-radius:13px;background:var(--surface);box-shadow:var(--shadow-sm);animation:fadeup .3s ease both;overflow:hidden">
+            <div style="display:grid;grid-template-columns:minmax(0,1fr) 224px;align-items:stretch">
+              <div style="min-width:0;padding:14px 17px">
+                <div style="font-family:var(--mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3)">${esc(v.arkiv.ansHeadLabel)}</div>
+                <div style="font-size:12.5px;color:var(--ink-3);margin-top:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">”${esc(v.arkiv.q)}”</div>
+                <p style="margin:8px 0 0;font-size:15.5px;line-height:1.8;color:var(--ink);max-width:62ch;white-space:pre-wrap">${esc(v.arkiv.answer)}${ v.arkiv.ansTyping ? '<span class="ai-blink" style="display:inline-block;width:9px;height:17px;background:var(--accent);vertical-align:-3px;margin-left:3px"></span>' : '' }</p>
+                ${ v.arkiv.followups.length ? `
+                <div style="margin-top:16px;border-top:1px solid var(--line);padding-top:13px">
+                  ${ v.arkiv.followups.map(function(f){ return `
+                    <div data-key="${esc(f.key)}" style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">
+                      <div style="align-self:flex-end;max-width:86%;background:var(--accent-weak);color:var(--ink);border:1px solid color-mix(in srgb,var(--accent) 25%,transparent);border-radius:14px 14px 4px 14px;padding:9px 13px;font-size:14px;line-height:1.5">${esc(f.q)}</div>
+                      <div style="align-self:stretch;font-size:14.5px;line-height:1.75;color:var(--ink);white-space:pre-wrap">${esc(f.a)}${ f.typing ? '<span class="ai-blink" style="display:inline-block;width:8px;height:15px;background:var(--accent);vertical-align:-2px;margin-left:3px"></span>' : '' }</div>
+                    </div>
+                  `; }).join('') }
                 </div>
+                ` : '' }
+                ${ v.arkiv.ansDone ? `
+                <div style="display:flex;gap:9px;align-items:center;margin-top:12px">
+                  <input value="${esc(v.arkiv.followInput)}" data-input="${on(v.arkiv.setFollow)}" data-keydown="${on(v.arkiv.onFollowKey)}" aria-label="Ställ en följdfråga" placeholder="Ställ en följdfråga …" style="flex:1;min-width:0;background:var(--sunken);border:1px solid var(--line);color:var(--ink);border-radius:10px;padding:10px 13px;font-size:14px;font-family:inherit;outline:none">
+                  <button data-click="${on(v.arkiv.sendFollow)}" style="flex:0 0 auto;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:10px;padding:10px 17px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;transition:background .15s">Skicka</button>
+                </div>
+                ` : '' }
               </div>
-            `; }).join('') }
-          </div>
-        ` : `
-          <div style="background:var(--surface);border:1px solid var(--line);border-radius:13px;box-shadow:var(--shadow-sm);overflow:hidden">
-            <div style="display:grid;grid-template-columns:repeat(7,1fr)">
-              ${ v.veckodagar.map(function(d){ return `<span style="padding:7px 9px;font-family:var(--mono);font-size:10.5px;letter-spacing:0.06em;text-transform:uppercase;color:var(--ink-3);border-bottom:1px solid var(--line)">${esc(d)}</span>`; }).join('') }
+              <div style="display:flex;flex-direction:column;gap:6px;padding:12px;background:var(--sunken);border-left:1px solid var(--line);min-width:0">
+                <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3)">Källor</span>
+                ${ v.arkiv.sources.length ? v.arkiv.sources.map(function(s2){ return `
+                  <button data-key="${esc(s2.key)}" data-click="${on(s2.onOpen)}" title="Öppna och se exakt vad den innehåller" style="text-align:left;border:1px solid var(--line);background:var(--surface);border-radius:9px;padding:8px 10px;cursor:pointer;font-family:inherit;min-width:0" data-sh="border-color:var(--accent) !important">
+                    <span style="font-family:var(--mono);font-size:9px;letter-spacing:0.07em;text-transform:uppercase;color:var(--accent);display:block">${esc(s2.typLabel)}</span>
+                    <span style="font-size:12.5px;font-weight:600;color:var(--ink);display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px">${esc(s2.titel)}</span>
+                    ${ s2.sub ? `<span style="font-size:11px;color:var(--ink-3);display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px">${esc(s2.sub)}</span>` : '' }
+                  </button>
+                `; }).join('') : `<span style="font-size:12px;color:var(--ink-3)">${ v.arkiv.ansTyping || !v.arkiv.ansDone ? 'Söker …' : 'Inga källor' }</span>` }
+              </div>
             </div>
-            ${ v.cal.weeks.map(function(week){ return `
-              <div style="display:grid;grid-template-columns:repeat(7,1fr)">
-                ${ week.map(function(c){ return c.blank
-                  ? `<div style="min-height:84px;border-bottom:1px solid color-mix(in srgb,var(--line) 55%,transparent);background:var(--sunken);opacity:.5"></div>`
-                  : `<div style="min-height:84px;padding:5px 6px;border-bottom:1px solid color-mix(in srgb,var(--line) 55%,transparent);${c.isToday ? 'background:var(--accent-weak)' : ''};overflow:hidden">
-                      <span style="font-family:var(--mono);font-size:11px;color:${c.isToday ? 'var(--accent)' : 'var(--ink-3)'};font-weight:${c.isToday ? '700' : '500'}">${esc(c.day)}</span>
-                      ${ c.entries.map(function(e2){ return `
-                        <button data-key="${esc(e2.key)}" data-click="${on(e2.onOpen)}" title="${esc(e2.titel)}${e2.group ? ' — ' + esc(e2.group) : ''}" style="display:block;width:100%;margin-top:3px;border:1px solid color-mix(in srgb,${e2.color} 30%,transparent);background:color-mix(in srgb,${e2.color} 11%,transparent);color:${e2.color};border-radius:5px;padding:2px 6px;font-size:11px;font-family:inherit;cursor:pointer;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:${e2.held ? '600' : '500'};${e2.cancelled ? 'text-decoration:line-through;opacity:.55' : ''}">${e2.held ? '✓ ' : ''}${esc(e2.titel)}</button>
-                      `; }).join('') }
-                    </div>`; }).join('') }
-              </div>
-            `; }).join('') }
           </div>
-        ` }
+          ` : '' }
+        </div>
+        ` : '' }
+
+        ${ v.arkiv.empty ? `
+          <div style="margin-top:18px;text-align:center;padding:42px 24px;background:var(--surface);border:1px dashed var(--line-2);border-radius:13px;color:var(--ink-2);font-size:14.5px">Inga tavlor eller prov än — godkänn en tavla eller skriv ett prov så samlas de här, vecka för vecka.</div>
+        ` : v.arkiv.weeks.map(function(w){ return `
+          <div data-key="aw-${esc(w.key)}">
+            <div style="display:flex;align-items:baseline;gap:18px;margin:30px 0 10px;padding-bottom:10px;border-bottom:2px solid var(--ink)">
+              <span class="disp" style="font-size:clamp(21px,2.3vw,26px);line-height:1;color:var(--ink);white-space:nowrap;flex:0 0 auto">&#8203;${ w.isWeek ? `<span class="ser" style="color:var(--ink-3)">Vecka</span>&nbsp;${esc(w.num)}` : `<span class="ser" style="color:var(--ink-3)">Utan datum</span>` }</span>
+              <span style="font-family:var(--mono);font-size:11px;letter-spacing:0.09em;text-transform:uppercase;color:var(--ink-2)">${esc(w.range)}</span>
+              <span style="flex:1"></span>
+              <span style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.09em;text-transform:uppercase;color:var(--ink-3)">${esc(w.count)}</span>
+            </div>
+            <div style="display:flex;flex-direction:column">
+              ${ w.rows.map(function(r2){ return `
+                <button data-key="ark-${esc(r2.key)}" data-click="${on(r2.onOpen)}" title="Öppna ${r2.typ === 'tavla' ? 'tavlan i tavelkortet ovanför' : 'provet i provkortet nedanför'}" style="display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:transparent;border:none;border-bottom:1px solid color-mix(in srgb,var(--line) 60%,transparent);padding:10px 6px;font-family:inherit;cursor:pointer;transition:background .14s" data-sh="background:var(--surface) !important">
+                  <span style="flex:0 0 76px;font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:${r2.typ === 'tavla' ? 'var(--accent)' : 'var(--ink-2)'}">${esc(r2.typLabel)}</span>
+                  <span style="min-width:0;flex:1;font-size:14.5px;font-weight:500;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;${r2.cancelled ? 'text-decoration:line-through;opacity:.55' : ''}">${esc(r2.titel)}</span>
+                  <span data-cc="${esc(r2.cc)}" style="flex:0 1 auto;min-width:0;border-radius:99px;padding:2px 10px;font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(r2.tag)}</span>
+                  ${ r2.held || r2.godkand ? `<span style="flex:0 0 auto;font-family:var(--mono);font-size:9.5px;letter-spacing:0.07em;text-transform:uppercase;color:var(--ok)">✓ ${esc(r2.statusLabel)}</span>` : '' }
+                  <span style="flex:0 0 auto;font-family:var(--mono);font-size:10.5px;color:var(--ink-3);font-variant-numeric:tabular-nums">${esc(r2.datum)}${ r2.starttid ? ' · ' + esc(r2.starttid) : '' }</span>
+                </button>
+              `; }).join('') }
+            </div>
+          </div>
+        `; }).join('') }
       </div>
       ` : '' }
 

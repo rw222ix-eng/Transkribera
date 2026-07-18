@@ -441,6 +441,186 @@ def create_router(base: Path, arbiter) -> APIRouter:
         st["planned_id"] = planned["id"]
         return {"ok": True, "path": str(path), "planned_id": planned["id"]}
 
+    # ------------------------------------------------- arkiv & sök (RAG) --
+    # Planeringsarkivet: sparade tavlor + prov/arbetsblad, sökbara med
+    # fritext och frågbara med LLM:en — samma RAG-mönster som /api/search/ask
+    # men över planeringsartefakterna i stället för transkriptionerna.
+
+    _ARKIV_SYSTEM = (
+        "Du är en assistent åt en mattelärare som söker i sitt eget "
+        "planeringsarkiv: sparade lektionstavlor (\"dagens tavla\") och "
+        "prov/arbetsblad. Svara ALLTID på svenska. Svara ENDAST utifrån de "
+        "utdrag du får — hitta inte på. Om svaret inte finns i utdragen säger "
+        "du att du inte hittar det. Ange vilken tavla eller vilket prov svaret "
+        "bygger på med typ, titel och datum inom hakparenteser, "
+        "t.ex. [Tavla · Derivatans definition · 2026-05-12].")
+    _ARKIV_MAX_TOKENS = 900
+    _ARKIV_EXCERPT_CHARS = 2400   # per artefakt — tavlor/prov är korta
+
+    def _board_text(board_json: str | None) -> str:
+        """Platt text ur tavel-JSON (text/latex/rubrik i dokumentordning)."""
+        try:
+            data = json.loads(board_json or "null")
+        except (TypeError, ValueError):
+            return ""
+        out: list[str] = []
+
+        def walk(node):
+            if isinstance(node, dict):
+                for key in ("rubrik", "text", "latex"):
+                    val = node.get(key)
+                    if isinstance(val, str) and val.strip():
+                        out.append(val.strip())
+                for val in node.values():
+                    if isinstance(val, (dict, list)):
+                        walk(val)
+            elif isinstance(node, list):
+                for val in node:
+                    walk(val)
+
+        walk(data)
+        return "\n".join(out)
+
+    _EXAM_ARKIV_SQL = """
+        SELECT e.id, e.typ, e.titel, e.datum, e.status, e.group_id,
+               g.namn AS group_namn, c.namn AS course_namn
+        FROM exams e
+        LEFT JOIN groups  g ON g.id = e.group_id
+        LEFT JOIN courses c ON c.id = e.course_id
+        ORDER BY COALESCE(e.datum, e.created_at) DESC, e.id DESC"""
+
+    def _archive_items(conn, with_text: bool = False) -> list[dict]:
+        """Arkivets poster, nyaste först. with_text lägger till söktexten
+        (tavlans innehåll resp. provets uppgifter) för sök/RAG."""
+        items: list[dict] = []
+        for p in db.list_planned_lessons(conn):
+            it = {"typ": "tavla", "id": p["id"],
+                  "titel": p.get("titel") or p.get("moment") or "(utan titel)",
+                  "datum": p.get("datum") or "", "starttid": p.get("starttid") or "",
+                  "group": p.get("group") or "", "course": p.get("course") or "",
+                  "group_id": p.get("group_id"), "status": p.get("status") or ""}
+            if with_text:
+                it["text"] = "\n".join(x for x in (
+                    p.get("moment") or "", _board_text(p.get("board_json"))) if x)
+            items.append(it)
+        for row in conn.execute(_EXAM_ARKIV_SQL).fetchall():
+            e = dict(row)
+            it = {"typ": e.get("typ") or "prov", "id": e["id"],
+                  "titel": e.get("titel") or "(utan titel)",
+                  "datum": e.get("datum") or "", "starttid": "",
+                  "group": e.get("group_namn") or "", "course": e.get("course_namn") or "",
+                  "group_id": e.get("group_id"), "status": e.get("status") or ""}
+            if with_text:
+                rows = conn.execute(
+                    "SELECT nummer, text FROM exam_items WHERE exam_id = ? "
+                    "ORDER BY id", (e["id"],)).fetchall()
+                it["text"] = "\n".join(
+                    f"Uppgift {r['nummer']}: {r['text']}" for r in rows
+                    if (r["text"] or "").strip())
+            items.append(it)
+        items.sort(key=lambda x: (x["datum"] or "", x["starttid"] or ""),
+                   reverse=True)
+        return items
+
+    def _score_archive(items: list[dict], query: str) -> list[dict]:
+        """Enkel termträff-rankning (any-match) över titel + innehållstext."""
+        terms = [t for t in re.split(r"\W+", query.lower()) if len(t) >= 2]
+        if not terms:
+            return []
+        scored = []
+        for it in items:
+            hay = (it["titel"] + "\n" + (it.get("text") or "")).lower()
+            score = sum(hay.count(t) for t in terms)
+            if score > 0:
+                scored.append((score, it))
+        scored.sort(key=lambda s: (-s[0], s[1]["datum"] or ""), reverse=False)
+        return [it for _, it in scored]
+
+    @router.get("/api/planning/archive")
+    def archive():
+        """Planeringsarkivet: alla tavlor + prov/arbetsblad, nyaste först."""
+        conn = db.connect(db_file)
+        try:
+            return {"items": _archive_items(conn)}
+        finally:
+            conn.close()
+
+    @router.get("/api/planning/archive/search")
+    def archive_search(q: str = ""):
+        """Fritextsök i arkivet. Snippets markerar träffar med \\x02..\\x03
+        (samma kontrakt som /api/search)."""
+        query = (q or "").strip()
+        if not query:
+            return {"query": query, "hits": []}
+        conn = db.connect(db_file)
+        try:
+            hits = _score_archive(_archive_items(conn, with_text=True), query)
+        finally:
+            conn.close()
+        terms = [t for t in re.split(r"\W+", query.lower()) if len(t) >= 2]
+        out = []
+        for it in hits[:50]:
+            text = it.pop("text", "") or ""
+            it["snippet"] = db._snippet_like(text, terms)
+            out.append(it)
+        return {"query": query, "hits": out}
+
+    @router.post("/api/planning/ask")
+    async def archive_ask(req: Request):
+        """Fråga arkivet (RAG): hämta mest relevanta tavlor/prov, mata
+        LLM:en med begränsade utdrag och strömma ett svenskt svar som
+        anger vilken tavla/vilket prov det bygger på."""
+        body = await req.json()
+        query = (body.get("q") or "").strip()
+        if not query:
+            return JSONResponse({"error": "fråga krävs"}, status_code=400)
+        conn = db.connect(db_file)
+        try:
+            hits = _score_archive(_archive_items(conn, with_text=True), query)[:5]
+        finally:
+            conn.close()
+        if not hits:
+            return JSONResponse(
+                {"error": "Inga tavlor eller prov matchar sökningen."},
+                status_code=404)
+        if not arbiter.try_acquire_gpu():
+            return JSONResponse(_GPU_BUSY, status_code=409)
+
+        typ_label = {"tavla": "Tavla", "prov": "Prov", "arbetsblad": "Arbetsblad"}
+
+        def job(emit):
+            try:
+                if arbiter.ensure_llm() is None:
+                    raise RuntimeError("Språkmodellen är inte installerad.")
+                emit({"type": "log",
+                      "msg": f"Läser {len(hits)} tavlor/prov ..."})
+                blocks = []
+                for it in hits:
+                    head = " · ".join(x for x in (
+                        typ_label.get(it["typ"], it["typ"]), it["titel"],
+                        it["group"], it["course"], it["datum"]) if x)
+                    blocks.append(
+                        f"[{head}]\n{(it.get('text') or '')[:_ARKIV_EXCERPT_CHARS]}")
+                prompt = (
+                    f"Fråga: {query}\n\n"
+                    f"Utdrag ur planeringsarkivet att svara utifrån:\n---\n"
+                    + "\n\n".join(blocks)
+                    + "\n---\n\nSvara koncist på svenska och ange vilken tavla "
+                      "eller vilket prov svaret bygger på.")
+                text = llm_client.generate(
+                    _model_name(), prompt,
+                    token_cb=lambda t: emit({"type": "token", "text": t}),
+                    system=_ARKIV_SYSTEM, options={"temperature": 0.2},
+                    max_tokens=_ARKIV_MAX_TOKENS)
+                return {"text": text, "sources": [
+                    {"typ": it["typ"], "id": it["id"], "titel": it["titel"],
+                     "group": it["group"], "course": it["course"],
+                     "datum": it["datum"]} for it in hits]}
+            finally:
+                arbiter.release_gpu()
+
+        return sse_response(job)
+
     # ------------------------------------------------- kalender & minne --
 
     @router.get("/api/planning/calendar")
