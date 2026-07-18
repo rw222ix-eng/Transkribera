@@ -312,23 +312,26 @@ ANSWER_SYSTEM = (
     "du det rakt ut. Var konkret och specifik: återge vad som faktiskt sägs, "
     "gärna med exempel eller korta citat ur utdraget, i naturlig löpande "
     "svenska. Undvik stela referatfraser som ”I lektionen nämns …” och tomma "
-    "generaliseringar. Ange källan inom hakparenteser, t.ex. "
-    "[NA21 · 2026-05-12] eller [2026-07-09 · klippets namn]."
+    "generaliseringar. Källorna är numrerade [1], [2] …: sätt källans nummer "
+    "i hakparentes direkt efter varje påstående, t.ex. ”… och gör "
+    "människoljud [1].” Använd ENDAST sifferhänvisningarna — skriv aldrig ut "
+    "källnamn, klass eller datum inom hakparenteser."
 )
 
 
 def build_answer_prompt(query: str, excerpts: list[dict]) -> str:
     blocks = []
-    for e in excerpts:
+    for i, e in enumerate(excerpts, 1):
         head = " · ".join(x for x in (e.get("group"), e.get("course"),
                                       e.get("datum"), e.get("name")) if x)
-        blocks.append(f"[{head}]\n{(e.get('excerpt') or '').strip()}")
+        blocks.append(f"[{i}] {head}\n{(e.get('excerpt') or '').strip()}")
     context = "\n\n".join(blocks) if blocks else "(inga träffar)"
     return (f"Fråga: {query}\n\n"
-            f"Utdrag ur inspelningarna att svara utifrån:\n---\n{context}\n---\n\n"
+            f"Numrerade utdrag ur inspelningarna att svara utifrån:\n---\n"
+            f"{context}\n---\n\n"
             f"Svara konkret och naturligt på svenska, förankrat i vad som "
-            f"faktiskt sägs i utdragen, och ange vilka inspelningar svaret "
-            f"bygger på.")
+            f"faktiskt sägs i utdragen, och hänvisa med källnumren [1], [2] … "
+            f"direkt efter varje påstående.")
 
 
 def answer_over_lessons(query: str, excerpts: list[dict], model: str,

@@ -2036,7 +2036,7 @@
 
   // ---- Lektionsoverlay (fullskärm): transkript + samma källförankrade chatt
   // men mot EN lektions transkript, isolerat från resultatvyns chatt. ---------
-  function openLessonChat(l, hitT) {
+  function openLessonChat(l, hitT, hitQuery) {
     var hid = l.history_id || l.id;
     var lessonId = l.lesson_id != null ? l.lesson_id
       : (l.history_id && l.id !== l.history_id ? l.id : null);
@@ -2052,6 +2052,18 @@
     getJSON('/api/history/' + encodeURIComponent(hid)).then(function (h) {
       var segs = ((h && h.transcript) || []).map(function (g) { return { time: fmtTime(g.start), text: g.text }; });
       setState({ lessonChatSegs: segs });
+      // Citatklick från arkivsvaret: hoppa direkt till första transkriptraden
+      // som innehåller någon av frågans termer — så man ser var i
+      // transkriptionen informationen kommer ifrån.
+      if (!hitT && hitQuery) {
+        var terms = String(hitQuery).toLowerCase().split(/[^a-zåäö0-9]+/i)
+          .filter(function (t) { return t.length >= 3; });
+        var seg = segs.filter(function (sg) {
+          var low = (sg.text || '').toLowerCase();
+          return terms.some(function (t) { return low.indexOf(t) >= 0; });
+        })[0];
+        if (seg && seg.time) jumpToSource(seg.time);
+      }
     }).catch(function () {});
   }
   function closeLessonChat() { clearTimeout(_descT); setState({ lessonChatId: null, lessonChat: [], lessonChatInput: '', lessonChatCiteSel: null, reasonOpen: {}, lessonChatMeta: null, lessonChatHitT: null, lessonChatEvent: null, evPick: null, ovEvOpen: false, ovDescView: false, descModal: false, descModalClosing: false }); }
@@ -3062,12 +3074,27 @@
         return { namn: g.namn, sel: String(g.id) === String(st.exGroupId),
                  onPick: function () { exPickGroup(g.id); } };
       }),
-      exContent: st.exContent.map(function (p) {
-        return { id: p.id, rubrik: p.rubrik, text: p.text,
-                 behandlad: !!p.behandlad, provad: !!p.provad,
-                 vald: !!st.exPunkter[p.id],
-                 onToggle: function () { exTogglePunkt(p.id); } };
-      }),
+      // Punkterna grupperas per Gy25-område så att chipetiketten kan vara
+      // punktens egen text (kortad) — områdesrubriken skrivs en gång per grupp.
+      exContentGroups: (function () {
+        var groups = [];
+        var byRubrik = {};
+        st.exContent.forEach(function (p) {
+          var r = p.rubrik || 'Övrigt';
+          if (!byRubrik[r]) { byRubrik[r] = { rubrik: r, punkter: [] }; groups.push(byRubrik[r]); }
+          var kort = (p.text || '').replace(/\s+/g, ' ').trim();
+          var mening = kort.indexOf('. ');
+          if (mening > 0) kort = kort.slice(0, mening);
+          kort = kort.replace(/\.$/, '');
+          if (kort.length > 64) kort = kort.slice(0, 63).replace(/\s+\S*$/, '') + ' …';
+          byRubrik[r].punkter.push({
+            id: p.id, kort: kort, text: p.text,
+            behandlad: !!p.behandlad, provad: !!p.provad,
+            vald: !!st.exPunkter[p.id],
+            onToggle: function () { exTogglePunkt(p.id); } });
+        });
+        return groups;
+      })(),
       exTyp: st.exTyp,
       onExTypProv: function () { exPickTyp('prov'); },
       onExTypArbetsblad: function () { exPickTyp('arbetsblad'); },
@@ -3320,6 +3347,24 @@
           ? ('Svar — ' + (st.askSources || []).length + ((st.askSources || []).length === 1 ? ' källa' : ' källor'))
           : 'Svar',
         answer: st.askAnswer,
+        // Klickbara sifferkällor i svaret (samma källförankring som lektions-
+        // chatten): [n] parsas när svaret är klart; klick öppnar inspelningen
+        // och hoppar till stället i transkriptet där frågans termer förekommer.
+        ansTokens: (function () {
+          if (st.asking || !st.askAnswer) return null;
+          var srcs = st.askSources || [];
+          if (!srcs.length) return null;
+          var cited = parseChatCites(st.askAnswer,
+            srcs.map(function (s2) { return { time: '', text: s2.name || '' }; }));
+          if (!cited) return null;
+          return cited.tokens.map(function (tk) {
+            if (tk.cite === undefined) return { isText: true, text: tk.text };
+            var s2 = srcs[tk.segIdx];
+            return { isCite: true, num: tk.cite,
+                     label: [s2 && s2.name, s2 && s2.datum].filter(Boolean).join(' · '),
+                     onCite: function (e) { if (e) e.stopPropagation(); openLessonChat(s2, null, st.askQ); } };
+          });
+        })(),
         // Zoom till modal (data-askwrap/data-askzoom) — klick förstorar, Esc/klick utanför stänger
         askZoomFlag: st.askZoom ? (st.askZoomClosing ? 'closing' : 'on') : '',
         askZoomOn: !!st.askZoom && !st.askZoomClosing,
@@ -4249,7 +4294,9 @@ function viewRecordings(v){
             <div style="font-family:var(--mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3)">${esc(v.askScan.ansHeadLabel)}</div>
             <div style="font-size:12.5px;color:var(--ink-3);margin-top:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">”${esc(v.askScan.q)}”</div>
             <div data-hidescroll="1" data-askscroll="1" style="max-height:min(52vh,520px);overflow:auto;overscroll-behavior:contain;scrollbar-width:none">
-            <p style="margin:8px 0 0;font-size:${ v.askScan.askZoomOn ? '16px' : '15.5px' };line-height:1.8;color:var(--ink);max-width:62ch;white-space:pre-wrap">${esc(v.askScan.answer)}${ v.askScan.ansTyping ? '<span class="ai-blink" style="display:inline-block;width:9px;height:17px;background:var(--accent);vertical-align:-3px;margin-left:3px"></span>' : '' }</p>
+            <p style="margin:8px 0 0;font-size:${ v.askScan.askZoomOn ? '16px' : '15.5px' };line-height:1.8;color:var(--ink);max-width:62ch;white-space:pre-wrap">${ v.askScan.ansTokens ? v.askScan.ansTokens.map(function(tk){ return tk.isText
+              ? `<span>${esc(tk.text)}</span>`
+              : `<button data-click="${on(tk.onCite)}" data-csup="off" title="${esc(tk.label)}" aria-label="Öppna källa ${esc(tk.num)} — ${esc(tk.label)}" style="display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;font-size:11px;font-weight:700;color:var(--accent);background:var(--accent-weak);border:1px solid color-mix(in srgb,var(--accent) 28%,transparent);border-radius:6px;cursor:pointer;vertical-align:2px;margin:0 1.5px;font-family:inherit;transition:transform .1s">${esc(tk.num)}</button>`; }).join('') : esc(v.askScan.answer) }${ v.askScan.ansTyping ? '<span class="ai-blink" style="display:inline-block;width:9px;height:17px;background:var(--accent);vertical-align:-3px;margin-left:3px"></span>' : '' }</p>
             ${ v.askScan.askZoomOn && v.askScan.askFollowups.length ? `
             <div style="margin-top:18px;border-top:1px solid var(--line);padding-top:14px">
               ${ v.askScan.askFollowups.map(function(f){ return `
@@ -4281,16 +4328,8 @@ function viewRecordings(v){
             ${ !v.askScan.askEvent ? `
             <button data-click="${on(v.askScan.proposeAskCal)}" title="Skapa en kalenderhändelse utifrån svaret" style="display:inline-flex;align-items:center;justify-content:center;gap:7px;background:transparent;color:var(--ink-2);border:1px solid var(--line);border-radius:9px;padding:10px 14px;font-size:13px;font-weight:500;font-family:inherit;cursor:pointer;transition:border-color .14s,color .14s" data-sh="border-color:var(--line-2) !important;color:var(--ink) !important"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" style="flex:0 0 auto"><rect x="2" y="3" width="12" height="11" rx="2"></rect><path d="M2 6.5h12M5.5 1.5v3M10.5 1.5v3M8 9v3M6.5 10.5h3"></path></svg>Kalenderhändelse</button>
             ` : '' }
-            ${ v.askScan.ansHasRefs ? `
-            <div style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-3);margin-top:5px">Käll${ v.askScan.askRefs.length === 1 ? 'a' : 'or' } · ${esc(v.askScan.askRefCount)}</div>
-            ${ v.askScan.askRefs.map(function(rf){ return `
-              <div data-key="${esc(rf.key)}" data-click="${on(rf.onPick)}" role="button" tabindex="0" title="Öppna lektionen och chatta" data-crow="" style="display:flex;flex-direction:column;gap:4px;padding:9px 10px;border-radius:8px;cursor:pointer;border:1px solid transparent;transition:box-shadow .18s,border-color .18s,background .18s">
-                <span style="display:flex;align-items:center;gap:7px;min-width:0"><span style="width:6px;height:6px;border-radius:2px;background:var(--accent);flex:0 0 auto"></span><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:700;color:var(--ink)">${esc(rf.rec)}</span></span>
-                <span style="font-family:var(--mono);font-size:10px;color:var(--ink-3);font-variant-numeric:tabular-nums">${esc(rf.meta)}</span>
-                ${ rf.text ? `<span style="font-size:12.5px;line-height:1.45;color:var(--ink-2)">${esc(rf.text)}</span>` : '' }
-              </div>
-            `; }).join('') }
-            ` : '' }
+            ${ /* Källpanelen är borttagen — källorna är klickbara siffror inne i
+                  svaret (samma källförankring som lektionschatten). */ '' }
           </div>
           </div>
         </div>
@@ -5282,13 +5321,21 @@ function viewPlanning(v){
           ` }
         </div>
 
-        ${ v.exContent.length ? `
-          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">
-            ${ v.exContent.map(function(p){ return `
-              <button data-key="cc-${esc(p.id)}" data-click="${on(p.onToggle)}" title="${esc(p.text)}" aria-pressed="${p.vald}" style="display:inline-flex;align-items:center;gap:6px;border:1px solid ${p.vald ? 'var(--accent)' : 'var(--line)'};background:${p.vald ? 'var(--accent-weak)' : 'var(--surface)'};color:${p.vald ? 'var(--accent)' : 'var(--ink-2)'};border-radius:3px;padding:5px 10px;font-size:12.5px;font-family:inherit;cursor:pointer;font-weight:${p.vald ? '600' : '500'};transition:border-color .14s,background .14s,color .14s">
-                ${esc(p.rubrik)}${ p.behandlad ? `<span title="Behandlat i undervisningen" style="font-size:11px">✓</span>` : `<span title="Ännu inte behandlat" style="font-size:11px;opacity:.6">○</span>` }${ p.provad ? `<span title="Prövat på prov/arbetsblad" style="font-size:11px">★</span>` : '' }
-              </button>`; }).join('') }
+        ${ v.exContentGroups.length ? `
+          <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:6px">
+            ${ v.exContentGroups.map(function(g3){ return `
+            <div role="group" aria-label="${esc(g3.rubrik)}">
+              <div style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);margin-bottom:6px">${esc(g3.rubrik)}</div>
+              <div style="display:flex;flex-wrap:wrap;gap:6px">
+                ${ g3.punkter.map(function(p){ return `
+                <button data-key="cc-${esc(p.id)}" data-click="${on(p.onToggle)}" title="${esc(p.text)}" aria-pressed="${p.vald}" style="display:inline-flex;align-items:center;gap:6px;border:1px solid ${p.vald ? 'var(--accent)' : 'var(--line)'};background:${p.vald ? 'var(--accent-weak)' : 'var(--surface)'};color:${p.vald ? 'var(--accent)' : 'var(--ink-2)'};border-radius:3px;padding:5px 10px;font-size:12.5px;font-family:inherit;cursor:pointer;font-weight:${p.vald ? '600' : '500'};text-align:left;transition:border-color .14s,background .14s,color .14s">
+                  ${esc(p.kort)}${ p.behandlad ? `<span title="Behandlat i undervisningen" style="font-size:11px">✓</span>` : `<span title="Ännu inte behandlat" style="font-size:11px;opacity:.6">○</span>` }${ p.provad ? `<span title="Prövat på prov/arbetsblad" style="font-size:11px">★</span>` : '' }
+                </button>`; }).join('') }
+              </div>
+            </div>
+            `; }).join('') }
           </div>
+          <div style="font-size:12px;color:var(--ink-3);margin-bottom:12px">Välj vilka innehållspunkter provet ska pröva — ○ ej behandlat i undervisningen · ✓ behandlat · ★ redan prövat på prov.</div>
         ` : (v.exCourseId ? '' : `<div style="font-size:13px;color:var(--ink-3);margin-bottom:12px">Välj kurs för att se innehållspunkterna — ✓ = behandlat i undervisningen.</div>`) }
 
         ${ (v.exRunning || v.exUnderlagBusy) && v.exHasLog ? `
