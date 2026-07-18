@@ -296,7 +296,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 res = lesson_board.generate_board(
                     course or "matematik", group or "klassen", moment,
                     model=_model_name(), memory=memory, underlag=underlag_txt,
-                    log_cb=lambda m: emit({"type": "log", "msg": m}))
+                    log_cb=lambda m: emit({"type": "log", "msg": m}),
+                    token_cb=lambda t: emit({"type": "token", "text": t}))
                 pid = uuid.uuid4().hex[:12]
                 plannings[pid] = {
                     "board": res["board"], "rounds": res["rounds"],
@@ -338,7 +339,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 res = lesson_board.repair_board(
                     st["board"], warnings, model=_model_name(),
                     rounds_used=st["rounds"],
-                    log_cb=lambda m: emit({"type": "log", "msg": m}))
+                    log_cb=lambda m: emit({"type": "log", "msg": m}),
+                    token_cb=lambda t: emit({"type": "token", "text": t}))
                 st["board"] = res["board"] or st["board"]
                 st["rounds"] = res["rounds"]
                 return {"id": pid, "board": st["board"], "errors": res["errors"],
@@ -371,7 +373,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     raise RuntimeError("Språkmodellen är inte installerad.")
                 res = lesson_board.refine_board(
                     st["board"], message, model=_model_name(),
-                    log_cb=lambda m: emit({"type": "log", "msg": m}))
+                    log_cb=lambda m: emit({"type": "log", "msg": m}),
+                    token_cb=lambda t: emit({"type": "token", "text": t}))
                 if res["board"] is not None:
                     st["board"] = res["board"]
                 # Varje användariteration får en färsk reparationsbudget.

@@ -130,7 +130,7 @@ def _stub_generate(monkeypatch, result):
     calls = []
 
     def fake(course, group, moment, *, model, memory="", underlag="", llm=None,
-             max_rounds=lesson_board.MAX_ROUNDS, log_cb=None):
+             max_rounds=lesson_board.MAX_ROUNDS, log_cb=None, token_cb=None):
         calls.append({"course": course, "group": group, "moment": moment,
                       "model": model, "memory": memory, "underlag": underlag})
         if log_cb:
@@ -215,7 +215,8 @@ def test_render_report_triggers_repair(llm_ready, monkeypatch):
     captured = {}
 
     def fake_repair(board, warnings, *, model, llm=None, rounds_used=1,
-                    max_rounds=lesson_board.MAX_ROUNDS, log_cb=None):
+                    max_rounds=lesson_board.MAX_ROUNDS, log_cb=None,
+                    token_cb=None):
         captured["warnings"] = warnings
         captured["rounds_used"] = rounds_used
         return {"board": repaired, "errors": [], "rounds": rounds_used + 1}
@@ -254,7 +255,8 @@ def test_refine_updates_board(llm_ready, monkeypatch):
     captured = {}
 
     def fake_refine(board, instruction, *, model, llm=None,
-                    max_rounds=lesson_board.MAX_ROUNDS, log_cb=None):
+                    max_rounds=lesson_board.MAX_ROUNDS, log_cb=None,
+                    token_cb=None):
         captured["instruction"] = instruction
         return {"board": updated, "errors": [], "rounds": 1}
     monkeypatch.setattr(lesson_board, "refine_board", fake_refine)

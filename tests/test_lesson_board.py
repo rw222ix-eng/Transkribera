@@ -86,6 +86,25 @@ def test_generate_valid_first_try():
     assert calls[0]["system"] == lb.SYSTEM
 
 
+def test_generate_passes_token_cb_to_llm():
+    """token_cb (live-uppbyggnaden i UI:t) ska nå LLM-anropet i varje runda."""
+    seen: list = []
+
+    def llm(model, prompt, system=None, options=None, response_format=None,
+            max_tokens=None, token_cb=None):
+        seen.append(token_cb)
+        if token_cb:
+            token_cb('{"title":')
+        return json.dumps(_valid_doc())
+
+    cb_tokens: list[str] = []
+    cb = cb_tokens.append
+    res = lb.generate_board("Ma1b", "9A", "x", model="m", llm=llm, token_cb=cb)
+    assert res["errors"] == []
+    assert seen and all(c is cb for c in seen)
+    assert cb_tokens == ['{"title":']
+
+
 def test_generate_repairs_rule_error():
     llm, calls = _stub_llm([json.dumps(_broken_doc()), json.dumps(_valid_doc())])
     res = lb.generate_board("Ma1b", "9A", "x", model="m", llm=llm)

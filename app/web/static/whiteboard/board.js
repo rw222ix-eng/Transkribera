@@ -46,15 +46,26 @@
      dokumentbredden. Skalan sätts EFTER motorns egna rAF-pass så att
      överlappskollen mäter i naturlig skala. */
   var _natural = { w: 0, h: 0 };
+  var _fitZ = 1;
+  /* Användarens zoom/panorering i förstorat läge (WBHost.setPanZoom):
+     läggs OVANPÅ fit-skalan — scrollhjul zoomar mot pekaren, drag
+     panorerar som en kanvas. Utanför förstoringen är den avstängd. */
+  var _pz = { on: false, z: 1, x: 0, y: 0 };
+  function applyTransform() {
+    var container = host.querySelector('.boards-container');
+    if (!container || !_natural.w) return;
+    container.style.transformOrigin = 'top left';
+    container.style.transform = 'translate(' + _pz.x + 'px,' + _pz.y + 'px) ' +
+                                'scale(' + (_fitZ * _pz.z) + ')';
+    container.style.width = _natural.w + 'px';
+  }
   function fitToWidth() {
     var container = host.querySelector('.boards-container');
     if (!container || !_natural.w) return;
     var avail = document.documentElement.clientWidth - 24;   /* body-padding 12+12 */
-    var z = Math.min(avail / _natural.w, 1);
-    container.style.transformOrigin = 'top left';
-    container.style.transform = 'scale(' + z + ')';
-    container.style.width = _natural.w + 'px';
-    var px = Math.ceil(_natural.h * z + 24);
+    _fitZ = Math.min(avail / _natural.w, 1);
+    applyTransform();
+    var px = Math.ceil(_natural.h * _fitZ + 24);
     document.body.style.height = px + 'px';
     /* Ge föräldern (app.js) den skalade höjden så iframen kan följa med.
        Dokumentet kan också köras fristående (Playwright-spec-runner). */
@@ -66,6 +77,60 @@
 
   var WBHost = {};
   window.WBHost = WBHost;
+
+  /* ------------------------------------------------------- zoom & panorera --
+     Aktiv endast i appens förstorade tavelvy. Hjulet zoomar mot muspekaren
+     (1x–6x), drag panorerar; dubbelklick återställer. */
+  WBHost.setPanZoom = function (on) {
+    _pz.on = !!on;
+    if (!_pz.on) { _pz.z = 1; _pz.x = 0; _pz.y = 0; document.body.style.cursor = ''; }
+    else document.body.style.cursor = 'grab';
+    applyTransform();
+  };
+  function clampPan() {
+    /* Tavlan får aldrig dras helt utanför synfältet. */
+    var w = _natural.w * _fitZ * _pz.z, h = _natural.h * _fitZ * _pz.z;
+    var vw = document.documentElement.clientWidth, vh = document.documentElement.clientHeight;
+    _pz.x = Math.min(Math.max(_pz.x, Math.min(0, vw - w - 24)), Math.max(0, vw - 120));
+    _pz.y = Math.min(Math.max(_pz.y, Math.min(0, vh - h - 24)), Math.max(0, vh - 120));
+  }
+  document.addEventListener('wheel', function (e) {
+    if (!_pz.on) return;
+    e.preventDefault();
+    var faktor = Math.pow(1.0015, -e.deltaY);
+    var nz = Math.min(6, Math.max(1, _pz.z * faktor));
+    if (nz === _pz.z) return;
+    /* Zooma mot pekaren: punkten under musen ska stå still. */
+    var mx = e.clientX - 12, my = e.clientY - 12;   /* body-padding */
+    _pz.x = mx - (mx - _pz.x) * (nz / _pz.z);
+    _pz.y = my - (my - _pz.y) * (nz / _pz.z);
+    _pz.z = nz;
+    if (nz === 1) { _pz.x = 0; _pz.y = 0; }
+    clampPan();
+    applyTransform();
+  }, { passive: false });
+  var _drag = null;
+  document.addEventListener('pointerdown', function (e) {
+    if (!_pz.on || e.button !== 0) return;
+    _drag = { x: e.clientX, y: e.clientY, px: _pz.x, py: _pz.y };
+    document.body.style.cursor = 'grabbing';
+    try { e.target.setPointerCapture(e.pointerId); } catch (err) {}
+  });
+  document.addEventListener('pointermove', function (e) {
+    if (!_pz.on || !_drag) return;
+    _pz.x = _drag.px + (e.clientX - _drag.x);
+    _pz.y = _drag.py + (e.clientY - _drag.y);
+    clampPan();
+    applyTransform();
+  });
+  document.addEventListener('pointerup', function () {
+    if (_drag) { _drag = null; if (_pz.on) document.body.style.cursor = 'grab'; }
+  });
+  document.addEventListener('dblclick', function () {
+    if (!_pz.on) return;
+    _pz.z = 1; _pz.x = 0; _pz.y = 0;
+    applyTransform();
+  });
 
   /* WB-JSON v1 bär grafernas kurvor som uttryckssträngar (plots[].expr) —
      motorn vill ha riktiga funktioner (fn). Kompilera med WBExpr (whitelist-
