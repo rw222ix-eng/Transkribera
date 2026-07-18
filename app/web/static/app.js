@@ -110,7 +110,10 @@
     lessonFilterMonth: '',     // klientfilter på YYYY-MM (datum)
     filterOpen: null,          // öppen filterpopover: 'klass' | 'kurs' | 'datum'
     filterClosing: false,      // popovern spelar sin stängningsanimation
-    askScanIdx: 0,             // kartotekets skannings-koreografi (kosmetisk position)
+    askScanPlan: null,         // scan_plan-eventet: [{key, name}] i äkta genomsökningsordning
+    askScanRes: {},            // scan_result-eventen: key → verkligt träffantal
+    askScanShown: 0,           // utrullningstakt: hur många kort som avslöjats hittills
+    askDeep: null,             // deep_read-eventet: källorna AI:n läser djupt
     editingLesson: null,
     lessonEdits: {},
     nextPrep: null,
@@ -155,6 +158,8 @@
     wbWarnings: [],            // [WB]-varningar från motorns senaste rendering
     wbExporting: false,        // PNG-export pågår
     wbExportMsg: '',           // kvitto/fel från senaste exporten
+    wbZoom: false,             // tavelkortet förstorat till modal (chatt + knappar i kortet)
+    wbZoomClosing: false,
     // Planering (Fas 1): generera egna tavlor via LLM:en
     planGroupId: '',           // vald klass (''  = ingen)
     planCourseId: '',          // vald kurs
@@ -182,7 +187,10 @@
     arkAnswer: '',             // strömmat LLM-svar
     arkSources: null,          // vilka tavlor/prov svaret bygger på
     arkQAsked: '',             // frågan som svaret gäller
-    arkScanIdx: 0,             // skanningskoreografins läsposition
+    arkScanPlan: null,         // scan_plan: [{key, name}] i äkta genomsökningsordning
+    arkScanRes: {},            // scan_result: key → verkligt träffantal
+    arkScanShown: 0,           // utrullningstakt (avslöjade kort)
+    arkDeep: null,             // deep_read: källorna AI:n läser djupt
     arkFollowups: [],          // följdfrågor [{q, a, typing}]
     arkFollowInput: '',
     // Provgeneratorn (Fas 4)
@@ -214,6 +222,7 @@
   /* instance (non-state) fields */
   var _t, _finishT, _chat, _au, _toastIv, _toastT2, _glideRAF, _progRAF, _disp, _lastStart, _runToken = 0;
   var _fltTimer = null, _scanTimer = null, _askRun = 0, _askZoomT = null, _descT = null;
+  var _wbZoomT = null;
   var _dl = {}, _inst = {}, _editBuf = {}, _wave = null;
   var _file, _seek, _searchRef, _scrollRef, _procScroll, _media, _clientFile;
   var _rec = null, _recChunks = [], _recStream = null, _recTimer = null;
@@ -700,9 +709,49 @@
     var win = _wbFrame && _wbFrame.contentWindow;
     if (win && win.WBHost) win.WBHost.print();
   }
+  // Tavelkortet förstoras till modal PÅ PLATS: iframen får aldrig flyttas i
+  // DOM (reparenting laddar om dokumentet och tömmer tavlan), så wrappern
+  // blir backdrop och samma kort växer via data-attribut + CSS.
+  function openWbZoom() { clearTimeout(_wbZoomT); setState({ wbZoom: true, wbZoomClosing: false }); }
+  function closeWbZoom() {
+    if (!S.wbZoom || S.wbZoomClosing) return;
+    clearTimeout(_wbZoomT);
+    setState({ wbZoomClosing: true });
+    _wbZoomT = setTimeout(function () { setState({ wbZoom: false, wbZoomClosing: false }); }, 340);
+  }
   function wbExportPng() {
     var win = _wbFrame && _wbFrame.contentWindow;
     if (!win || !win.WBHost || S.wbExporting) return;
+    // Filväljardialog (File System Access) där den finns — användaren väljer
+    // själv plats på datorn. Dialogen måste öppnas direkt i klickgesten
+    // (före den långsamma canvas-exporten), annars nekar webbläsaren den.
+    if (window.showSaveFilePicker) {
+      var namn = (wbTitle() || 'tavla').replace(/[\\/:*?"<>|]/g, '-') + '.png';
+      window.showSaveFilePicker({
+        suggestedName: namn,
+        types: [{ description: 'PNG-bild', accept: { 'image/png': ['.png'] } }],
+      }).then(function (handle) {
+        setState({ wbExporting: true, wbExportMsg: '' });
+        return win.WBHost.exportPng(2)
+          .then(function (dataUrl) { return fetch(dataUrl); })
+          .then(function (r) { return r.blob(); })
+          .then(function (blob) {
+            return handle.createWritable().then(function (w) {
+              return w.write(blob).then(function () { return w.close(); });
+            });
+          })
+          .then(function () {
+            setState({ wbExporting: false, wbExportMsg: 'PNG sparad: ' + handle.name });
+          });
+      }).catch(function (e) {
+        if (e && e.name === 'AbortError') { setState({ wbExporting: false, wbExportMsg: '' }); return; }
+        setState({ wbExporting: false,
+                   wbExportMsg: 'Kunde inte spara PNG: ' + ((e && e.message) || e) });
+      });
+      return;
+    }
+    // Fallback (äldre motor utan File System Access): spara via servern
+    // under Transkriberingar/ som tidigare.
     setState({ wbExporting: true, wbExportMsg: '' });
     win.WBHost.exportPng(2).then(function (dataUrl) {
       return fetch('/api/planning/export', {
@@ -856,7 +905,8 @@
     _arkRun++;
     if (_arkScanTimer) { clearInterval(_arkScanTimer); _arkScanTimer = null; }
     setState({ arkQ: '', arkHits: null, arkSearching: false, arkAsking: false,
-               arkAnswer: '', arkSources: null, arkQAsked: '', arkScanIdx: 0,
+               arkAnswer: '', arkSources: null, arkQAsked: '', arkScanPlan: null,
+               arkScanRes: {}, arkScanShown: 0, arkDeep: null,
                arkFollowups: [], arkFollowInput: '' });
   }
   function runArkiv() {
@@ -870,25 +920,34 @@
   }
   function runArkivAsk(q) {
     var run = ++_arkRun;
-    // Samma skanningskoreografi som kartoteket: kosmetisk läsposition som
-    // tickar fram medan det riktiga RAG-svaret hämtas.
-    if (_arkScanTimer) clearInterval(_arkScanTimer);
-    _arkScanTimer = setInterval(function () {
-      setState(function (s) { return s.arkAsking ? { arkScanIdx: s.arkScanIdx + 1 } : null; });
-    }, 340);
+    // Samma äkta live-progression som kartoteket: backend berättar vad som
+    // genomsöks och vad som träffar; utrullningen pacas i startScanReveal.
+    if (_arkScanTimer) { clearInterval(_arkScanTimer); _arkScanTimer = null; }
     setState({ arkAsking: true, arkAnswer: '', arkSources: null, arkHits: null,
-               arkQAsked: q, arkScanIdx: 0, arkFollowups: [], arkFollowInput: '' });
+               arkQAsked: q, arkScanPlan: null, arkScanRes: {}, arkScanShown: 0,
+               arkDeep: null, arkFollowups: [], arkFollowInput: '' });
     streamPost('/api/planning/ask', { q: q }, function (ev) {
       if (run !== _arkRun) return;             // en nyare fråga har tagit över
-      if (ev.type === 'token') {
+      if (ev.type === 'scan_plan') {
+        if (_arkScanTimer) clearInterval(_arkScanTimer);
+        _arkScanTimer = startScanReveal((ev.items || []).length, 'arkScanShown', 'arkAsking');
+        setState({ arkScanPlan: ev.items || [] });
+      } else if (ev.type === 'scan_result') {
+        setState(function (s) {
+          var m = Object.assign({}, s.arkScanRes); m[ev.key] = ev.hits;
+          return { arkScanRes: m };
+        });
+      } else if (ev.type === 'deep_read') {
+        setState({ arkDeep: ev.sources || [] });
+      } else if (ev.type === 'token') {
         setState(function (s) { return { arkAnswer: s.arkAnswer + ev.text }; });
       } else if (ev.type === 'done') {
         if (_arkScanTimer) { clearInterval(_arkScanTimer); _arkScanTimer = null; }
-        setState({ arkAsking: false, arkScanIdx: 999,
+        setState({ arkAsking: false, arkScanShown: 9999,
                    arkSources: (ev.result && ev.result.sources) || [] });
       } else if (ev.type === 'error') {
         if (_arkScanTimer) { clearInterval(_arkScanTimer); _arkScanTimer = null; }
-        setState({ arkAsking: false, arkScanIdx: 999,
+        setState({ arkAsking: false,
                    arkAnswer: 'Kunde inte söka: ' + (ev.message || 'okänt fel') });
       }
     });
@@ -1599,7 +1658,7 @@
     _askRun++;                                   // ogiltigförklara ev. pågående ask-ström
     if (_scanTimer) { clearInterval(_scanTimer); _scanTimer = null; }
     clearTimeout(_askZoomT);
-    setState({ lessonSearch: '', searchHits: null, askAnswer: '', askSources: null, askQ: '', asking: false, askScanIdx: 0, askZoom: false, askZoomClosing: false, srcBox: true, askFollowups: [], askFollowInput: '', askEvent: null });
+    setState({ lessonSearch: '', searchHits: null, askAnswer: '', askSources: null, askQ: '', asking: false, askScanPlan: null, askScanRes: {}, askScanShown: 0, askDeep: null, askZoom: false, askZoomClosing: false, srcBox: true, askFollowups: [], askFollowInput: '', askEvent: null });
   }
   function runSearch() {
     var q = (S.lessonSearch || '').trim();
@@ -1610,27 +1669,48 @@
       .then(function (r) { setState({ searchHits: (r && r.hits) || [], searching: false }); })
       .catch(function () { setState({ searchHits: [], searching: false }); });
   }
+  // Utrullningstakt för skanningskorten: backend skickar hela den äkta
+  // träffbilden på millisekunder, men avslöjandet pacas (~60–150 ms/kort,
+  // tak ~3,5 s) så progressionen går att följa med ögat. Datat är äkta —
+  // bara takten är styrd. Delas av kartoteket och planeringsarkivet.
+  function startScanReveal(planLen, shownKey, isLiveKey) {
+    var step = Math.max(60, Math.min(150, Math.round(3500 / Math.max(1, planLen))));
+    var t = setInterval(function () {
+      setState(function (s) {
+        if (!s[isLiveKey] || s[shownKey] >= planLen) { clearInterval(t); return null; }
+        var patch = {}; patch[shownKey] = s[shownKey] + 1; return patch;
+      });
+    }, step);
+    return t;
+  }
   function runAsk(q) {
     var run = ++_askRun;
-    // Kartotekets skanningskoreografi: kosmetisk läsposition som tickar fram
-    // medan det riktiga RAG-svaret hämtas — korten markeras Läser/Läst/Träff.
-    if (_scanTimer) clearInterval(_scanTimer);
-    _scanTimer = setInterval(function () {
-      setState(function (s) { return s.asking ? { askScanIdx: s.askScanIdx + 1 } : null; });
-    }, 340);
-    setState({ asking: true, askAnswer: '', askSources: null, searchHits: null, askQ: q, askScanIdx: 0, askZoom: false, askZoomClosing: false, srcBox: true, askFollowups: [], askFollowInput: '', askEvent: null });
+    if (_scanTimer) { clearInterval(_scanTimer); _scanTimer = null; }
+    setState({ asking: true, askAnswer: '', askSources: null, searchHits: null, askQ: q, askScanPlan: null, askScanRes: {}, askScanShown: 0, askDeep: null, askZoom: false, askZoomClosing: false, srcBox: true, askFollowups: [], askFollowInput: '', askEvent: null });
     // Inget förhandsbyggt kalenderförslag på nyckelord — förslag skapas bara
     // uttryckligen via kalenderknappen och godkänns alltid innan de läggs in.
     streamPost('/api/search/ask', { q: q }, function (ev) {
       if (run !== _askRun) return;               // en nyare fråga (eller Esc) har tagit över
-      if (ev.type === 'token') {
+      if (ev.type === 'scan_plan') {             // äkta genomsökningsordning från backend
+        if (_scanTimer) clearInterval(_scanTimer);
+        _scanTimer = startScanReveal((ev.items || []).length, 'askScanShown', 'asking');
+        setState({ askScanPlan: ev.items || [] });
+      } else if (ev.type === 'scan_result') {    // verkligt träffantal per inspelning
+        setState(function (s) {
+          var m = Object.assign({}, s.askScanRes); m[ev.key] = ev.hits;
+          return { askScanRes: m };
+        });
+      } else if (ev.type === 'deep_read') {      // källorna AI:n faktiskt läser
+        setState({ askDeep: ev.sources || [] });
+      } else if (ev.type === 'token') {
         setState(function (s) { return { askAnswer: s.askAnswer + ev.text }; });
       } else if (ev.type === 'done') {
         if (_scanTimer) { clearInterval(_scanTimer); _scanTimer = null; }
-        setState({ asking: false, askScanIdx: 999, askSources: (ev.result && ev.result.sources) || [] });
+        setState({ asking: false, askScanShown: 9999, askSources: (ev.result && ev.result.sources) || [] });
       } else if (ev.type === 'error') {
+        // Frys utrullningen där den står — felraden tar över berättelsen.
         if (_scanTimer) { clearInterval(_scanTimer); _scanTimer = null; }
-        setState({ asking: false, askScanIdx: 999, askAnswer: 'Kunde inte söka: ' + (ev.message || 'okänt fel') });
+        setState({ asking: false, askAnswer: 'Kunde inte söka: ' + (ev.message || 'okänt fel') });
       }
     });
   }
@@ -2819,6 +2899,7 @@
     if (S.logOpen && e.key === 'Escape') { closeLog(); return; }
     if (S.filterOpen && e.key === 'Escape') { setState({ filterOpen: null, filterClosing: false }); return; }
     if (S.askZoom && e.key === 'Escape') { closeAskZoom(); return; }
+    if (S.wbZoom && e.key === 'Escape') { closeWbZoom(); return; }
     if (e.key === 'Escape' && S.tab === 'recordings' && S.searchMode === 'ask' && (S.asking || S.askAnswer)) { clearSearch(); return; }
     if (!S.transcriptOpen) return;
     if ((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'F')) { e.preventDefault(); var inp = document.querySelector('[data-tsearch]'); if (inp) inp.focus(); }
@@ -3046,20 +3127,28 @@
       askSourceIds = {};
       st.askSources.forEach(function (s2) { if (s2.lesson_id != null) askSourceIds[s2.lesson_id] = true; });
     }
-    var askTerms = askActive ? (st.askQ || '').toLowerCase().split(/\s+/).filter(function (w) { return w.length >= 3; }) : [];
-    function prelimHit(l) {
-      var hay = ((l.name || '') + ' ' + (l.group || '') + ' ' + (l.course || '')).toLowerCase();
-      return askTerms.some(function (w) { return hay.indexOf(w) >= 0; });
+    // Träff = äkta backend-data: efter svaret de riktiga källorna, under
+    // skanningen de verkliga innehållsordsträffarna (scan_result). Ingen
+    // klientmatchning på frågans ord längre — den markerade småordsträffar.
+    var askDeepIds = null;
+    if (askActive && st.askDeep && st.askDeep.length) {
+      askDeepIds = {};
+      st.askDeep.forEach(function (s2) { if (s2.lesson_id != null) askDeepIds[s2.lesson_id] = true; });
     }
-    function lessonHit(l) { return askSourceIds ? !!askSourceIds[l.id] : prelimHit(l); }
+    function lessonHit(l) {
+      if (askSourceIds) return !!askSourceIds[l.id];
+      if (askDeepIds) return !!askDeepIds[l.id];
+      if (st.askScanPlan) return (st.askScanRes[l.id] || 0) > 0;
+      return false;
+    }
 
-    // Skannings-koreografin: kosmetisk läsposition över de synliga korten medan
-    // det riktiga RAG-svaret hämtas; Läser/Läst/Träff drivs av askScanIdx.
-    var scanList = st.lessons.slice(0, 8);
+    // Live-skanningen: backend har berättat den äkta genomsökningsordningen
+    // (askScanPlan); utrullningen (askScanShown) pacas av startScanReveal.
+    var scanPlan = st.askScanPlan || [];
     var scanning = st.asking;
-    var scanIdx = Math.min(st.askScanIdx, scanList.length);
+    var scanShown = Math.min(st.askScanShown, scanPlan.length);
     var scannedIds = {};
-    scanList.slice(0, scanning ? scanIdx : scanList.length).forEach(function (l) { scannedIds[l.id] = true; });
+    scanPlan.slice(0, scanning ? scanShown : scanPlan.length).forEach(function (p) { scannedIds[p.key] = true; });
     function lessonStage(l) {
       if (!askActive) return '';
       var hit = lessonHit(l);
@@ -3135,6 +3224,12 @@
       onWbPrint: wbPrint, onWbExport: wbExportPng,
       wbExporting: st.wbExporting, wbExportMsg: st.wbExportMsg,
       wbExportFailed: /^Kunde inte/.test(st.wbExportMsg),
+      // Tavelzoomen: kortet förstoras på plats (data-wbwrap/data-wbzoom)
+      wbZoomFlag: st.wbZoom ? (st.wbZoomClosing ? 'closing' : 'on') : '',
+      wbZoomOn: !!st.wbZoom && !st.wbZoomClosing,
+      onWbZoomOpen: openWbZoom,
+      onWbZoomClose: function () { closeWbZoom(); },
+      onWbCardClick: function (e) { if (e) e.stopPropagation(); },
       planGroups: st.groups, planCourses: st.courses,
       planGroupId: st.planGroupId, planCourseId: st.planCourseId,
       // Chips i stället för dropdowns: klick väljer, klick på vald avmarkerar.
@@ -3339,10 +3434,6 @@
           });
         var asking = !!st.arkAsking;
         var askActive = asking || !!st.arkAnswer;
-        var scanList = (st.arkItems || []).slice(0, 24);
-        var scanIdx = Math.min(st.arkScanIdx, scanList.length);
-        var srcKeys = {};
-        (st.arkSources || []).forEach(function (s2) { srcKeys[s2.typ + '-' + s2.id] = true; });
         var hitCount = (st.arkSources || []).length;
         return {
           count: (st.arkItems || []).length,
@@ -3375,22 +3466,17 @@
             }),
           },
           scan: askActive ? {
-            scanning: asking,
-            ticker: asking && scanList[Math.min(scanIdx, scanList.length - 1)]
-              ? 'Läser: ' + (scanList[Math.min(scanIdx, scanList.length - 1)].titel || '')
-              : '',
-            total: String(scanList.length),
-            hitLabel: asking ? 'Söker …' : hitCount + (hitCount === 1 ? ' källa' : ' källor'),
-            onNew: clearArkiv,
-            cards: scanList.map(function (it, i) {
-              var hit = srcKeys[it.typ + '-' + it.id];
-              var stt, lbl;
-              if (asking && i === scanIdx) { stt = 'reading'; lbl = 'Läser …'; }
-              else if (!asking || i < scanIdx) { stt = hit ? 'hit' : 'read'; lbl = hit ? 'Träff ●' : 'Läst ✓'; }
-              else { stt = 'queue'; lbl = 'I kö'; }
-              return { key: it.typ + '-' + it.id, st: stt, stLabel: lbl,
-                       typLabel: typLabel[it.typ] || it.typ,
-                       title: it.titel || '(utan titel)' };
+            theater: buildScanModel({
+              plan: st.arkScanPlan, res: st.arkScanRes || {}, shown: st.arkScanShown,
+              scanning: asking, deep: st.arkDeep, noun: 'tavlor och prov',
+              onNew: clearArkiv,
+              deskCards: (st.arkDeep || []).map(function (s2) {
+                var clickable = !asking && !!st.arkAnswer;
+                return { key: s2.typ + '-' + s2.id, title: s2.titel || '(utan titel)',
+                         typLabel: typLabel[s2.typ] || s2.typ,
+                         sub: [s2.group, s2.course, s2.datum].filter(Boolean).join(' · '),
+                         onOpen: clickable ? function (e) { if (e) e.stopPropagation(); openArkivItem(s2); } : null };
+              }),
             }),
           } : null,
           q: st.arkQAsked,
@@ -3444,25 +3530,16 @@
       askActive: askActive,
       // Kartotekets live-skanning + inline-svar (ersätter tänker-bannern + svarsmodalen)
       askScan: askActive ? {
-        scanning: scanning,
-        afterScan: !scanning,
-        total: scanList.length,
-        ticker: scanList.length
-          ? ('Läser: ' + ((scanList[Math.min(scanIdx, scanList.length - 1)] || {}).name || '…'))
-          : 'Läser …',
-        hitLabel: (function () {
-          var n = scanning
-            ? lessonItems.filter(function (it) { return it.isHit; }).length
-            : (askSourceIds ? Object.keys(askSourceIds).length : 0);
-          return n + (n === 1 ? (scanning ? ' träff hittills' : ' träff') : (scanning ? ' träffar hittills' : ' träffar'));
-        })(),
-        cards: scanList.map(function (l, i) {
-          var hit = lessonHit(l);
-          var stt, lbl;
-          if (scanning && i === scanIdx) { stt = 'reading'; lbl = 'Läser …'; }
-          else if (!scanning || i < scanIdx) { stt = hit ? 'hit' : 'read'; lbl = hit ? 'Träff ●' : 'Läst ✓'; }
-          else { stt = 'queue'; lbl = 'I kö'; }
-          return { key: l.id, st: stt, stLabel: lbl, title: l.name || '(namnlös)' };
+        theater: buildScanModel({
+          plan: scanPlan, res: st.askScanRes || {}, shown: st.askScanShown,
+          scanning: scanning, deep: st.askDeep, noun: 'inspelningar',
+          onNew: clearSearch,
+          deskCards: (st.askDeep || []).map(function (s2) {
+            var clickable = !st.asking && !!st.askAnswer;
+            return { key: s2.lesson_id, title: s2.name || '(namnlös)',
+                     sub: [s2.group, s2.course, s2.datum].filter(Boolean).join(' · '),
+                     onOpen: clickable ? function (e) { if (e) e.stopPropagation(); openCitePeek(s2, st.askQ, st.askAnswer); } : null };
+          }),
         }),
         q: st.askQ,
         onNew: clearSearch,
@@ -4424,25 +4501,7 @@ function viewRecordings(v){
 
       ${ v.askScan ? `
       <div style="max-width:960px;margin:24px auto 8px;animation:fadeup .3s ease both">
-        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
-          ${ v.askScan.scanning ? `
-            <span class="insp-dots" style="color:var(--accent);flex:0 0 auto"><i></i><i></i><i></i></span>
-            <span style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(v.askScan.ticker)}</span>
-          ` : `
-            <span style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ok);flex:0 0 auto">✓ Genomsökte ${esc(v.askScan.total)} inspelningar</span>
-          ` }
-          <div style="flex:1;height:1px;background:var(--line)"></div>
-          <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--accent);flex:0 0 auto">${esc(v.askScan.hitLabel)}</span>
-          <button data-click="${on(v.askScan.onNew)}" style="flex:0 0 auto;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:7px;padding:5px 10px;font-family:var(--mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;cursor:pointer">✕ Ny fråga</button>
-        </div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(108px,1fr));gap:8px">
-          ${ v.askScan.cards.map(function(sc){ return `
-            <div data-key="scan-${esc(sc.key)}" data-scan="${esc(sc.st)}" style="min-width:0;border:1px solid var(--line);background:var(--surface);border-radius:9px;padding:10px 12px;transition:opacity .35s ease,box-shadow .35s ease,border-color .35s ease,background .35s ease">
-              <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-3);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(sc.stLabel)}</span>
-              <div style="font-size:12px;font-weight:600;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(sc.title)}</div>
-            </div>
-          `; }).join('') }
-        </div>
+        ${ scanTheater(v.askScan.theater) }
         ${ v.askScan.ansStarted ? `
         <div data-askwrap="${esc(v.askScan.askZoomFlag)}" data-click="${on(v.askScan.closeAskZoom)}">
         <div data-askzoom="${esc(v.askScan.askZoomFlag)}" data-click="${on(v.askScan.onAskCardClick)}" title="Klicka för att förstora svaret" style="margin-top:16px;border:1px solid var(--line);border-radius:13px;background:var(--surface);box-shadow:var(--shadow-sm);animation:fadeup .3s ease both;overflow:hidden">
@@ -4646,6 +4705,98 @@ function agendaPanel(a){
       ` : '' }
     </div>`;
 }
+
+// ---- Arkivsökets live-progression (spec 2026-07-18): delad modell + vy ------
+// Fas 1 (kartoteket): korten avslöjas i äkta genomsökningsordning med verkliga
+// träffantal. Fas 2 (läsbordet): källorna AI:n läser djupt reser sig till en
+// egen rad med läsindikator medan svaret streamas; resten läggs åt sidan.
+function buildScanModel(cfg){
+  var plan = cfg.plan || [];
+  var res = cfg.res || {};
+  var shown = Math.min(cfg.shown || 0, plan.length);
+  var revealDone = plan.length > 0 && shown >= plan.length;
+  var effShown = cfg.scanning ? shown : plan.length;
+  var deskOn = !!(cfg.deep && cfg.deep.length) && (revealDone || !cfg.scanning);
+  var hitsSoFar = 0;
+  plan.slice(0, effShown).forEach(function (p) { if ((res[p.key] || 0) > 0) hitsSoFar++; });
+  var current = cfg.scanning && !deskOn && plan[Math.min(shown, plan.length - 1)];
+  var MAXC = 24, extra = Math.max(0, plan.length - MAXC);
+  var cards = plan.slice(0, MAXC).map(function (p, i) {
+    var hits = res[p.key] || 0;
+    var stt, lbl;
+    if (cfg.scanning && i === shown) { stt = 'reading'; lbl = 'Läser …'; }
+    else if (!cfg.scanning || i < shown) {
+      stt = hits > 0 ? 'hit' : 'read';
+      lbl = hits > 0 ? ('● ' + hits + (hits === 1 ? ' träff' : ' träffar')) : 'Läst ✓';
+    }
+    else { stt = 'queue'; lbl = 'I kö'; }
+    return { key: p.key, st: stt, stLabel: lbl, title: p.name || '(namnlös)' };
+  });
+  if (extra > 0) cards.push({ key: '_more', st: effShown >= plan.length ? 'read' : 'queue',
+                              stLabel: '', title: '+ ' + extra + ' till' });
+  return {
+    active: plan.length > 0,
+    scanning: !!cfg.scanning && !deskOn,
+    ticker: 'Söker igenom ' + plan.length + ' ' + cfg.noun + (current && current.name ? ' — ' + current.name : ''),
+    doneLabel: '✓ Genomsökte ' + plan.length + ' ' + cfg.noun,
+    progress: plan.length ? effShown / plan.length : 0,
+    hitLabel: hitsSoFar + (hitsSoFar === 1
+      ? (cfg.scanning ? ' träff hittills' : ' träff')
+      : (cfg.scanning ? ' träffar hittills' : ' träffar')),
+    onNew: cfg.onNew,
+    cards: cards,
+    desk: deskOn ? {
+      label: cfg.scanning ? 'AI:n läser nu dessa ' + cfg.deep.length
+                          : 'Svaret bygger på dessa ' + cfg.deep.length,
+      reading: !!cfg.scanning,
+      cards: cfg.deskCards || [],
+      aside: plan.length - cfg.deep.length > 0
+        ? '… och la ' + (plan.length - cfg.deep.length) + ' åt sidan' : '',
+    } : null,
+  };
+}
+
+function scanTheater(m){
+  if (!m || !m.active) return '';
+  var mono = 'font-family:var(--mono);letter-spacing:0.08em;text-transform:uppercase';
+  return `
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+      ${ m.scanning ? `
+        <span class="insp-dots" style="color:var(--accent);flex:0 0 auto"><i></i><i></i><i></i></span>
+        <span style="${mono};font-size:10.5px;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis" aria-live="polite">${esc(m.ticker)}</span>
+      ` : `
+        <span style="${mono};font-size:10.5px;color:var(--ok);flex:0 0 auto">${esc(m.doneLabel)}</span>
+      ` }
+      <div class="scan-progress" aria-hidden="true"><i style="transform:scaleX(${m.progress})"></i></div>
+      <span style="${mono};font-size:10px;color:var(--accent);flex:0 0 auto">${esc(m.hitLabel)}</span>
+      <button data-click="${on(m.onNew)}" style="flex:0 0 auto;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:7px;padding:5px 10px;${mono};font-size:10px;cursor:pointer">✕ Ny fråga</button>
+    </div>
+    ${ m.desk ? `
+      <div>
+        <span style="${mono};font-size:10px;color:var(--ink-3);display:block;margin-bottom:8px">${esc(m.desk.label)}</span>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px">
+          ${ m.desk.cards.map(function(dc, i){ return `
+            <${ dc.onOpen ? 'button' : 'div' } data-key="desk-${esc(dc.key)}" class="scan-desk-card" ${ dc.onOpen ? `data-click="${on(dc.onOpen)}" title="Öppna källan" data-sh="border-color:var(--accent) !important"` : '' } style="animation-delay:${i * 70}ms;min-width:0;text-align:left;font-family:inherit;border:1px solid color-mix(in srgb,var(--accent) 45%,var(--line));background:color-mix(in srgb,var(--accent-weak) 45%,var(--surface));border-radius:10px;padding:11px 13px;${ dc.onOpen ? 'cursor:pointer' : '' }">
+              ${ dc.typLabel ? `<span style="${mono};font-size:9px;letter-spacing:0.07em;color:var(--accent);display:block">${esc(dc.typLabel)}</span>` : '' }
+              <div style="font-size:12.5px;font-weight:600;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--ink)">${esc(dc.title)}</div>
+              ${ dc.sub ? `<span style="font-size:11px;color:var(--ink-3);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px">${esc(dc.sub)}</span>` : '' }
+              ${ m.desk.reading ? `<span class="scan-readline" aria-hidden="true"><i></i></span>` : '' }
+            </${ dc.onOpen ? 'button' : 'div' }>
+          `; }).join('') }
+        </div>
+        ${ m.desk.aside ? `<span class="scan-aside" style="${mono};font-size:10px;color:var(--ink-3);display:block;margin-top:9px">${esc(m.desk.aside)}</span>` : '' }
+      </div>
+    ` : `
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(108px,1fr));gap:8px">
+        ${ m.cards.map(function(sc){ return `
+          <div data-key="scan-${esc(sc.key)}" data-scan="${esc(sc.st)}" style="min-width:0;border:1px solid var(--line);background:var(--surface);border-radius:9px;padding:10px 12px;transition:opacity .35s ease,box-shadow .35s ease,border-color .35s ease,background .35s ease">
+            <span style="${mono};font-size:10px;letter-spacing:0.07em;color:var(--ink-3);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(sc.stLabel)}</span>
+            <div style="font-size:12px;font-weight:600;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(sc.title)}</div>
+          </div>
+        `; }).join('') }
+      </div>
+    ` }
+`; }
 
 function spotlightPanel(s){
   return `
@@ -5306,12 +5457,40 @@ function viewPlanning(v){
         </div>
       ` : '' }
 
-      <div data-key="wb-card" style="background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;box-shadow:var(--shadow-sm)">
-        <div style="display:flex;align-items:baseline;gap:10px;margin:2px 2px 10px">
+      <div data-wbwrap="${esc(v.wbZoomFlag)}" data-click="${on(v.onWbZoomClose)}">
+      <div data-key="wb-card" data-wbzoom="${esc(v.wbZoomFlag)}" data-click="${on(v.onWbCardClick)}" role="${v.wbZoomOn ? 'dialog' : ''}" aria-label="${v.wbZoomOn ? 'Förstorad lektionstavla' : ''}" style="background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;box-shadow:var(--shadow-sm)">
+        <div style="display:flex;align-items:center;gap:10px;margin:2px 2px 10px">
           <span style="font-size:15px;font-weight:600;color:var(--ink)">${esc(v.wbTitle)}</span>
           ${ v.planIsExample ? `<span style="font-size:12px;text-transform:uppercase;letter-spacing:0.05em;color:var(--ink-3);font-weight:600">Exempellektion</span>` : '' }
+          <span style="flex:1"></span>
+          ${ v.wbZoomFlag ? `
+          <button data-click="${on(v.onWbZoomClose)}" aria-label="Stäng förstoringen" title="Stäng (Esc)" style="border:none;background:transparent;color:var(--ink-3);cursor:pointer;font-size:14px;line-height:1;padding:5px 8px;border-radius:3px;font-family:inherit">✕</button>
+          ` : `
+          <button data-click="${on(v.onWbZoomOpen)}" ${v.wbRendered ? '' : 'disabled'} aria-label="Förstora tavlan" title="Förstora — arbeta med tavlan i helskärm" style="display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:3px;padding:6px 11px;font-size:12.5px;font-weight:500;font-family:inherit;cursor:${v.wbRendered ? 'pointer' : 'default'};opacity:${v.wbRendered ? '1' : '.55'}"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 6.5L2 2m0 0v3.5M2 2h3.5M9.5 6.5L14 2m0 0v3.5M14 2h-3.5M6.5 9.5L2 14m0 0v-3.5M2 14h3.5M9.5 9.5L14 14m0 0v-3.5M14 14h-3.5"></path></svg>Förstora</button>
+          ` }
         </div>
         <iframe data-wb-frame data-key="wb-frame" src="/static/whiteboard/board.html" title="Lektionstavla — ${esc(v.wbTitle)}" style="width:100%;height:420px;border:none;display:block;border-radius:8px;background:#2c2c2c"></iframe>
+        ${ v.wbZoomFlag ? `
+        <div style="display:flex;flex-direction:column;gap:9px;margin-top:11px;flex:0 0 auto">
+          ${ v.planId ? `
+          <div style="display:flex;align-items:center;gap:8px">
+            <input value="${esc(v.planChatInput)}" data-input="${on(v.onPlanChatInput)}" data-keydown="${on(v.onPlanChatKey)}" aria-label="Ändra tavlan" placeholder="Ändra tavlan — t.ex. byt exempel 2 mot ett med decimaltal" style="flex:1;min-width:0;background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:10px 13px;font-size:14.5px;font-family:inherit;color:var(--ink)">
+            <button data-click="${on(v.onPlanRefine)}" ${v.planChatInput.trim() && !v.planRunning ? '' : 'disabled'} style="display:inline-flex;align-items:center;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:4px;padding:10px 16px;font-size:14.5px;font-weight:500;font-family:inherit;cursor:${v.planChatInput.trim() && !v.planRunning ? 'pointer' : 'default'};opacity:${v.planChatInput.trim() && !v.planRunning ? '1' : '.55'}">${v.planRunning ? 'Ändrar …' : 'Ändra'}</button>
+          </div>
+          ` : '' }
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            ${ v.planId ? `
+            <button data-click="${on(v.onPlanApprove)}" ${v.wbRendered && !v.planRunning ? '' : 'disabled'} style="display:inline-flex;align-items:center;gap:7px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:4px;padding:10px 17px;font-size:14.5px;font-weight:500;font-family:inherit;cursor:${v.wbRendered && !v.planRunning ? 'pointer' : 'default'};opacity:${v.wbRendered && !v.planRunning ? '1' : '.55'}">Godkänn &amp; spara</button>
+            ` : '' }
+            <button data-click="${on(v.onWbPrint)}" ${v.wbRendered ? '' : 'disabled'} style="display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:4px;padding:10px 17px;font-size:14.5px;font-weight:500;font-family:inherit;cursor:${v.wbRendered ? 'pointer' : 'default'};opacity:${v.wbRendered ? '1' : '.55'}">Skriv ut</button>
+            <button data-click="${on(v.onWbExport)}" ${v.wbRendered && !v.wbExporting ? '' : 'disabled'} style="display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:4px;padding:10px 17px;font-size:14.5px;font-weight:500;font-family:inherit;cursor:${v.wbRendered && !v.wbExporting ? 'pointer' : 'default'};opacity:${v.wbRendered && !v.wbExporting ? '1' : '.55'}">${v.wbExporting ? 'Sparar …' : 'Spara som PNG'}</button>
+            ${ v.planRunning ? `<span style="font-size:13.5px;color:var(--ink-2)">Skriver om tavlan …</span>` : '' }
+            ${ v.planSavedPath ? `<span role="status" style="font-size:13.5px;color:var(--ink-2);word-break:break-all">Sparad: ${esc(v.planSavedPath)}</span>` : '' }
+            ${ v.wbExportMsg ? `<span role="status" style="font-size:13.5px;color:${v.wbExportFailed ? 'var(--bad)' : 'var(--ink-2)'};word-break:break-all">${esc(v.wbExportMsg)}</span>` : '' }
+          </div>
+        </div>
+        ` : '' }
+      </div>
       </div>
 
       ${ v.wbWarnCount ? `
@@ -5352,26 +5531,7 @@ function viewPlanning(v){
 
         ${ v.arkiv.scan ? `
         <div style="margin:20px 0 8px;animation:fadeup .3s ease both">
-          <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
-            ${ v.arkiv.scan.scanning ? `
-              <span class="insp-dots" style="color:var(--accent);flex:0 0 auto"><i></i><i></i><i></i></span>
-              <span style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(v.arkiv.scan.ticker)}</span>
-            ` : `
-              <span style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ok);flex:0 0 auto">✓ Genomsökte ${esc(v.arkiv.scan.total)} tavlor och prov</span>
-            ` }
-            <div style="flex:1;height:1px;background:var(--line)"></div>
-            <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--accent);flex:0 0 auto">${esc(v.arkiv.scan.hitLabel)}</span>
-            <button data-click="${on(v.arkiv.scan.onNew)}" style="flex:0 0 auto;border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:7px;padding:5px 10px;font-family:var(--mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;cursor:pointer">✕ Ny fråga</button>
-          </div>
-          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(108px,1fr));gap:8px">
-            ${ v.arkiv.scan.cards.map(function(sc){ return `
-              <div data-key="ascan-${esc(sc.key)}" data-scan="${esc(sc.st)}" style="min-width:0;border:1px solid var(--line);background:var(--surface);border-radius:9px;padding:10px 12px;transition:opacity .35s ease,box-shadow .35s ease,border-color .35s ease,background .35s ease">
-                <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-3);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(sc.stLabel)}</span>
-                <div style="font-size:12px;font-weight:600;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(sc.title)}</div>
-                <span style="font-family:var(--mono);font-size:9px;letter-spacing:0.06em;text-transform:uppercase;color:var(--ink-3)">${esc(sc.typLabel)}</span>
-              </div>
-            `; }).join('') }
-          </div>
+          ${ scanTheater(v.arkiv.scan.theater) }
 
           ${ v.arkiv.ansStarted ? `
           <div style="margin-top:16px;border:1px solid var(--line);border-radius:13px;background:var(--surface);box-shadow:var(--shadow-sm);animation:fadeup .3s ease both;overflow:hidden">
