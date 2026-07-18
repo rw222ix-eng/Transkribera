@@ -302,11 +302,18 @@ def translate_segments(segments: list[dict], source_lang: str, target_lang: str,
 # answer a free-text question across ALL recorded lessons and cite which lesson.
 
 ANSWER_SYSTEM = (
-    "Du är en assistent åt en mattelärare som söker i sina egna inspelade "
-    "lektioner. Svara ALLTID på svenska. Svara ENDAST utifrån de lektionsutdrag "
-    "du får — hitta inte på. Om svaret inte finns i utdragen säger du att du inte "
-    "hittar det. Hänvisa till vilken lektion uppgiften kommer från med klass och "
-    "datum inom hakparenteser, t.ex. [NA21 · 2026-05-12]."
+    "Du är en påläst kollega som hjälper en lärare att hitta i hens egna "
+    "inspelningar. Arkivet innehåller inte bara lektioner — där kan också "
+    "finnas youtube-klipp, tv-sketcher, möten och annat. Anta ALDRIG att en "
+    "inspelning är en lektion eller att den som talar är läraren: avgör vad "
+    "det är utifrån namn och innehåll och benämn den därefter (klippet, "
+    "sketchen, lektionen, mötet …). Svara ALLTID på svenska och ENDAST "
+    "utifrån utdragen — hitta inte på; om svaret inte finns i utdragen säger "
+    "du det rakt ut. Var konkret och specifik: återge vad som faktiskt sägs, "
+    "gärna med exempel eller korta citat ur utdraget, i naturlig löpande "
+    "svenska. Undvik stela referatfraser som ”I lektionen nämns …” och tomma "
+    "generaliseringar. Ange källan inom hakparenteser, t.ex. "
+    "[NA21 · 2026-05-12] eller [2026-07-09 · klippets namn]."
 )
 
 
@@ -318,8 +325,10 @@ def build_answer_prompt(query: str, excerpts: list[dict]) -> str:
         blocks.append(f"[{head}]\n{(e.get('excerpt') or '').strip()}")
     context = "\n\n".join(blocks) if blocks else "(inga träffar)"
     return (f"Fråga: {query}\n\n"
-            f"Lektionsutdrag att svara utifrån:\n---\n{context}\n---\n\n"
-            f"Svara koncist på svenska och ange vilken/vilka lektioner svaret bygger på.")
+            f"Utdrag ur inspelningarna att svara utifrån:\n---\n{context}\n---\n\n"
+            f"Svara konkret och naturligt på svenska, förankrat i vad som "
+            f"faktiskt sägs i utdragen, och ange vilka inspelningar svaret "
+            f"bygger på.")
 
 
 def answer_over_lessons(query: str, excerpts: list[dict], model: str,
@@ -327,9 +336,11 @@ def answer_over_lessons(query: str, excerpts: list[dict], model: str,
     """Answer a question grounded in the given lesson excerpts (citing lessons)."""
     if not excerpts:
         return "Jag hittade inga lektioner som matchar din sökning."
+    # 0.3: tillräckligt lågt för faktatrogenhet, tillräckligt högt för att
+    # prosan inte ska stelna till robotreferat.
     return llm_client.generate(
         model, build_answer_prompt(query, excerpts), token_cb=token_cb,
-        system=ANSWER_SYSTEM, options={"temperature": 0.2},
+        system=ANSWER_SYSTEM, options={"temperature": 0.3},
         max_tokens=ANSWER_MAX_TOKENS)
 
 

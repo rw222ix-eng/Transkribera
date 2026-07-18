@@ -1399,12 +1399,15 @@ def create_app(base_dir: Path | None = None,
         try:
             hits = db.search_transcripts(conn, query, limit=5, match_all=False)
             ids = [h["lesson_id"] for h in hits]
-            excerpts = db.lessons_excerpts_for(conn, ids, query)
+            # 2600 tecken/inspelning (5 källor ≈ 13k tecken): tillräckligt med
+            # sammanhang för konkreta, citatförankrade svar i stället för
+            # generella referat — ryms gott i Qwen3-kontexten.
+            excerpts = db.lessons_excerpts_for(conn, ids, query, window=2600)
         finally:
             conn.close()
         if not excerpts:
             return JSONResponse(
-                {"error": "Inga lektioner matchar sökningen."}, status_code=404)
+                {"error": "Inga inspelningar matchar sökningen."}, status_code=404)
         if not arb.try_acquire_gpu():
             return JSONResponse(
                 {"error": "GPU upptagen med transkribering – försök igen strax."},
