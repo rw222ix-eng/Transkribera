@@ -393,9 +393,10 @@ div:has([data-askwrap="on"]),div:has([data-askwrap="closing"]){animation:none !i
 [data-askwrap="on"],[data-askwrap="closing"]{position:fixed;inset:0;z-index:88;background:color-mix(in srgb,var(--ink) 28%,transparent);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);display:flex;align-items:center;justify-content:center;padding:28px}
 [data-askwrap="on"]{animation:modalBackIn .3s ease both}
 [data-askwrap="closing"]{animation:modalBackOut .3s ease both;pointer-events:none}
-[data-askzoom="on"]{width:min(1060px,94vw);max-height:88vh;overflow:auto;scrollbar-width:none;margin:0 !important;border-color:var(--ink);box-shadow:var(--shadow);animation:modalCardIn .44s cubic-bezier(.22,1,.36,1) both !important;cursor:default}
-[data-askzoom="on"]::-webkit-scrollbar{display:none}
-[data-askzoom="closing"]{width:min(1060px,94vw);max-height:88vh;overflow:auto;margin:0 !important;animation:modalCardOut .34s ease both !important;pointer-events:none}
+/* Chattvyn är en kolumn: huvud + scrollande svar/tråd + kalenderrad +
+   inmatning — kortet själv scrollar aldrig (dubbla scroller kändes buggigt). */
+[data-askzoom="on"]{width:min(900px,94vw);height:min(820px,90vh);display:flex;flex-direction:column;overflow:hidden;margin:0 !important;border-color:var(--ink);box-shadow:var(--shadow);animation:modalCardIn .44s cubic-bezier(.22,1,.36,1) both !important;cursor:default}
+[data-askzoom="closing"]{width:min(900px,94vw);height:min(820px,90vh);display:flex;flex-direction:column;overflow:hidden;margin:0 !important;animation:modalCardOut .34s ease both !important;pointer-events:none}
 /* Tavelkortet zoomar till modal — samma mönster som SVAR-kortet, men
    iframen får ALDRIG flyttas i DOM (reparenting laddar om dokumentet och
    tömmer tavlan): wrappern blir backdrop och samma kort växer på plats.
