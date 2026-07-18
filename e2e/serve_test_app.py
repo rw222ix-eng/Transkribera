@@ -88,9 +88,14 @@ def _install_fakes() -> None:
                 "innehall": ["pq-formeln", "kvadratkomplettering"]}
 
     def fake_answer(query, excerpts, filename, token_cb=None):
+        # Strömma ordvis med kort paus — annars hinner arkivsökets
+        # live-progression (kartotek → läsbord) aldrig synas i fejkläget.
+        import time
         text = "[FEJK svar] Det togs upp i lektionen."
         if token_cb:
-            token_cb(text)
+            for w in text.split(" "):
+                token_cb(w + " ")
+                time.sleep(0.3)
         return text
 
     def fake_translate(segments, language, target_language, name):
