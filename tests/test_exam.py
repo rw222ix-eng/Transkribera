@@ -54,6 +54,22 @@ def _exam() -> dict:
     }
 
 
+# ------------------------------------------------------- JSON-parsning ----
+
+def test_parse_exam_repairs_eaten_latex_backslashes():
+    """Modellen skriver "\\times" oescapat i JSON — json.loads tolkar \\t som
+    TAB och kvar blir "2 <TAB>imes 3". Reparationen återställer kommandot
+    inuti $…$-segment men rör inte äkta radbrytningar i löptext."""
+    raw = ('{"titel": "T", "uppgifter": ['
+           '{"text": "Beräkna $2 \\times (3 + 4)$."},'
+           '{"text": "Visa att $a \\neq b$."},'
+           '{"text": "rad1\\nrad2 utanför matte lämnas orörd"}]}')
+    exam = exam_gen._parse_exam(raw)
+    assert exam["uppgifter"][0]["text"] == "Beräkna $2 \\times (3 + 4)$."
+    assert exam["uppgifter"][1]["text"] == "Visa att $a \\neq b$."
+    assert exam["uppgifter"][2]["text"] == "rad1\nrad2 utanför matte lämnas orörd"
+
+
 # ------------------------------------------------------------------ schema --
 
 def test_valid_exam_passes():

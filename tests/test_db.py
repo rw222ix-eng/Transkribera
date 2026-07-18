@@ -621,6 +621,16 @@ def test_seed_course_content_idempotent(tmp_path):
     assert [r["kod"] for r in rows] == ["M3C-ALG-1", "M3C-DER-1"]
     assert rows[0]["lasar_version"] == "Gy11"
 
+    # Rättad punkttext i bundlad JSON når en redan seedad databas —
+    # samma rad uppdateras (id:t består så content_tags överlever).
+    gammal_id = rows[1]["id"]
+    data[0]["innehall"][0]["text"] = "Derivatans definition, ordagrann lydelse."
+    assert db.seed_course_content(conn, data) == 0        # inga nya rader
+    rows = db.list_course_content(conn, cid)
+    der = [r for r in rows if r["kod"] == "M3C-DER-1"][0]
+    assert der["text"] == "Derivatans definition, ordagrann lydelse."
+    assert der["id"] == gammal_id
+
 
 def test_gy25_course_rename_and_alias(tmp_path):
     """Omdöpningen flyttar Gy11-namnen till nivånamn med bevarat id, och

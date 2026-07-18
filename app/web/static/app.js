@@ -3882,7 +3882,29 @@
     });
     root.querySelectorAll('[data-ref]').forEach(function (el) { var f = H[+el.dataset.ref]; if (typeof f === 'function') f(el); });
     applySideEffects();
+    renderMathIn(root);
     var cbs = pendingCbs; pendingCbs = []; cbs.forEach(function (cb) { try { cb(); } catch (e) {} });
+  }
+
+  /* KaTeX-rendering av $…$-segment i element märkta data-math (provkortets
+     uppgiftstexter). Körs efter varje render — morphdom återställer texten
+     från templaten, så passet är idempotent. Obalanserade $ lämnas som text. */
+  function renderMathIn(root) {
+    if (!window.katex) return;
+    root.querySelectorAll('[data-math]').forEach(function (el) {
+      var txt = el.textContent;
+      if (txt.indexOf('$') === -1) return;
+      var parts = txt.split('$');
+      if (parts.length < 3) return;
+      var html = '';
+      for (var i = 0; i < parts.length; i++) {
+        if (i % 2 === 0 || i === parts.length - 1) { html += esc(parts[i]); continue; }
+        try {
+          html += katex.renderToString(parts[i], { throwOnError: false, output: 'html' });
+        } catch (e) { html += esc('$' + parts[i] + '$'); }
+      }
+      el.innerHTML = html;
+    });
   }
 
   /* event delegation: data-click / -input / -change / -keydown / -enter / -leave / -dragover / -dragleave / -drop */
@@ -5571,7 +5593,7 @@ function viewPlanning(v){
                   <span style="font-family:var(--mono);font-size:10.5px;color:var(--ink-3)">${esc(u2.formaga)} · ${esc(u2.typ)}</span>
                   <span style="font-family:var(--mono);font-size:11.5px;color:var(--ink-2)">(${esc(u2.poangStr)})</span>
                 </div>
-                <div style="font-size:14px;color:var(--ink);line-height:1.5;margin-bottom:7px">${esc(u2.text)}</div>
+                <div data-math="" style="font-size:14px;color:var(--ink);line-height:1.5;margin-bottom:7px">${esc(u2.text)}</div>
                 <div style="display:flex;gap:8px">
                   <input value="${esc(u2.chatValue)}" data-input="${on(u2.onChat)}" aria-label="Ändra uppgift ${esc(u2.nummer)}" placeholder="Ändra uppgiften — t.ex. gör den svårare, byt kontext …" style="flex:1;min-width:0;background:var(--sunken);border:1px solid var(--line);border-radius:4px;padding:7px 11px;font-size:13px;font-family:inherit;color:var(--ink)">
                   <button data-click="${on(u2.onSend)}" ${u2.canSend ? '' : 'disabled'} style="border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:4px;padding:7px 13px;font-size:13px;font-weight:500;font-family:inherit;cursor:${u2.canSend ? 'pointer' : 'default'};opacity:${u2.canSend ? '1' : '.55'}">Ändra</button>
