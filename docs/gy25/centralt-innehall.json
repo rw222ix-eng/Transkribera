@@ -10,28 +10,74 @@
     "insamlad": "2026-07-17"
   },
   "formagor": [
-    { "id": "begrepp", "text": "använda och beskriva matematiska begrepp och samband mellan begrepp" },
-    { "id": "procedur", "text": "hantera procedurer och utföra rutinuppgifter" },
-    { "id": "problemlosning", "text": "analysera och lösa problem" },
-    { "id": "modellering", "text": "tillämpa, formulera och utvärdera matematiska modeller" },
-    { "id": "resonemang", "text": "föra och följa matematiska resonemang" },
-    { "id": "kommunikation", "text": "kommunicera matematik muntligt, skriftligt och i handling" }
+    {
+      "id": "begrepp",
+      "text": "använda och beskriva matematiska begrepp och samband mellan begrepp"
+    },
+    {
+      "id": "procedur",
+      "text": "hantera procedurer och utföra rutinuppgifter"
+    },
+    {
+      "id": "problemlosning",
+      "text": "analysera och lösa problem"
+    },
+    {
+      "id": "modellering",
+      "text": "tillämpa, formulera och utvärdera matematiska modeller"
+    },
+    {
+      "id": "resonemang",
+      "text": "föra och följa matematiska resonemang"
+    },
+    {
+      "id": "kommunikation",
+      "text": "kommunicera matematik muntligt, skriftligt och i handling"
+    }
   ],
   "np_struktur": {
     "beskrivning": "Nationella provens uppbyggnad enligt Gy25 (fr.o.m. HT 2025). Uppgifterna bedöms mot E/C/A-nivåer men Transkriberas prov anger endast totalpoäng per uppgift.",
     "niva1": {
       "delprov": [
-        { "id": "A", "innehall": "kortsvarsuppgifter", "digitala_verktyg": false },
-        { "id": "B", "innehall": "uppgifter", "digitala_verktyg": "1a: enkel räknare · 1b/1c: inga digitala verktyg" },
-        { "id": "C", "innehall": "uppgifter", "digitala_verktyg": "enkel räknare" }
+        {
+          "id": "A",
+          "innehall": "kortsvarsuppgifter",
+          "digitala_verktyg": false
+        },
+        {
+          "id": "B",
+          "innehall": "uppgifter",
+          "digitala_verktyg": "1a: enkel räknare · 1b/1c: inga digitala verktyg"
+        },
+        {
+          "id": "C",
+          "innehall": "uppgifter",
+          "digitala_verktyg": "enkel räknare"
+        }
       ]
     },
     "niva2_och_uppat": {
       "delprov": [
-        { "id": "B", "innehall": "uppgifter", "digitala_verktyg": false },
-        { "id": "C", "innehall": "uppgifter", "digitala_verktyg": false },
-        { "id": "D1", "innehall": "uppgifter", "digitala_verktyg": true },
-        { "id": "D2", "innehall": "uppgifter", "digitala_verktyg": true }
+        {
+          "id": "B",
+          "innehall": "uppgifter",
+          "digitala_verktyg": false
+        },
+        {
+          "id": "C",
+          "innehall": "uppgifter",
+          "digitala_verktyg": false
+        },
+        {
+          "id": "D1",
+          "innehall": "uppgifter",
+          "digitala_verktyg": true
+        },
+        {
+          "id": "D2",
+          "innehall": "uppgifter",
+          "digitala_verktyg": true
+        }
       ]
     }
   },
@@ -40,6 +86,43 @@
       "kod": "MATE",
       "namn": "Matematik",
       "nivaer": [
+        {
+          "kod": "MATE1A00X",
+          "namn": "Matematik, nivå 1a",
+          "kort": "Nivå 1a",
+          "poang": 100,
+          "gy11_motsvarighet": "Matematik 1a",
+          "bygger_pa": null,
+          "centralt_innehall": {
+            "Program- eller yrkesspecifikt innehåll": [
+              "Matematiska begrepp som är relevanta för arbetslivet och utbildningens karaktär, till exempel proportionalitet, skala, Pythagoras sats, procent och vektorer.",
+              "Beräkningsmetoder som är relevanta för arbetslivet, däribland uppskattningar, överslagsräkning och användning av kalkylprogram.",
+              "Hantering av formler som är relevanta för arbetslivet och utbildningens karaktär.",
+              "Mätning och hantering av storheter och enheter som är relevanta för arbetslivet.",
+              "Hjälpmedel och verktyg som är relevanta för att hantera matematik inom arbetslivet, till exempel formulär, mallar och referensverk."
+            ],
+            "Aritmetik, algebra och funktioner": [
+              "Hantering av formler och algebraiska uttryck.",
+              "Begreppet funktion och representationer av funktioner i form av ord, funktionsuttryck, tabeller och grafer.",
+              "Begreppet linjär funktion och egenskaper hos linjära funktioner. Metoder för att lösa linjära ekvationer.",
+              "Begreppet exponentialfunktion och egenskaper hos exponentialfunktioner.",
+              "Begreppet förändringsfaktor och beräkning av förändringar i flera steg."
+            ],
+            "Sannolikhet och statistik": [
+              "Begreppen oberoende och beroende händelse samt komplementhändelse. Metoder för att beräkna sannolikheter i flera steg.",
+              "Exempel på hur några statistiska begrepp används i samhälle och inom vetenskap, däribland signifikans, korrelation och kausalitet."
+            ],
+            "Digitala verktyg": [
+              "Användning av kalkylprogram för beräkning av ränta och amortering.",
+              "Användning av digitala verktyg för att effektivisera beräkningar och komplettera metoder, till exempel vid ekvationslösning och problemlösning."
+            ],
+            "Problemlösning och tillämpningsområden": [
+              "Problemlösning som omfattar att upptäcka och uttrycka generella samband.",
+              "Problemlösning med särskild utgångspunkt i arbetslivet, privatekonomi och samhällsliv, däribland frågeställningar som berör hållbar utveckling.",
+              "Tillämpning och formulering av matematiska modeller i realistiska situationer. Utvärdering av matematiska modellers egenskaper och begränsningar."
+            ]
+          }
+        },
         {
           "kod": "MATE1B00X",
           "namn": "Matematik, nivå 1b",
@@ -113,6 +196,45 @@
             "Problemlösning och tillämpningsområden": [
               "Problemlösning som omfattar att upptäcka och uttrycka generella samband.",
               "Problemlösning med särskild utgångspunkt i utbildningens karaktär, privatekonomi och samhällsliv, däribland frågeställningar som berör hållbar utveckling och hur matematik kan användas för kritisk granskning av fakta och påståenden.",
+              "Tillämpning och formulering av matematiska modeller i realistiska situationer. Utvärdering av matematiska modellers egenskaper och begränsningar.",
+              "Orientering om något ur matematikens historia, till exempel hur ett matematiskt begrepp utvecklats, matematikens roll i något historiskt skeende, en betydande person inom matematiken eller ett historiskt matematiskt problem."
+            ]
+          }
+        },
+        {
+          "kod": "MATE2A00X",
+          "namn": "Matematik, nivå 2a",
+          "kort": "Nivå 2a",
+          "poang": 100,
+          "gy11_motsvarighet": "Matematik 2a",
+          "bygger_pa": "MATE1A00X",
+          "centralt_innehall": {
+            "Program- eller yrkesspecifikt innehåll": [
+              "Breddning eller fördjupning av matematiska begrepp och metoder som är relevanta för arbetslivet och utbildningens karaktär.",
+              "Hjälpmedel och verktyg som är relevanta för att hantera matematik inom arbetslivet och utbildningens karaktär."
+            ],
+            "Aritmetik, algebra och funktioner": [
+              "Räta linjens ekvation. Metoder för att bestämma linjära funktioner.",
+              "Begreppet linjärt ekvationssystem. Metoder för att lösa linjära ekvationssystem.",
+              "Begreppet potensfunktion.",
+              "Motivering och hantering av räkneregler för potenser. Metoder för att lösa potensekvationer.",
+              "Digitala metoder för att lösa exponentialekvationer.",
+              "Motivering och hantering av konjugatregeln och kvadreringsreglerna.",
+              "Begreppet andragradsfunktion och egenskaper hos andragradsfunktioner, däribland symmetrilinje, extrempunkt och nollställen.",
+              "Metoder för att lösa andragradsekvationer."
+            ],
+            "Statistik": [
+              "Lägesmått och spridningsmått, däribland percentiler och standardavvikelse, samt digitala metoder för att bestämma dessa.",
+              "Begreppet normalfördelning och egenskaper hos normalfördelat material. Metoder för att göra enklare beräkningar på normalfördelat material."
+            ],
+            "Logik och geometri": [
+              "Användning och motivering av Pythagoras sats med exempel som omfattar beräkningar i koordinatsystem."
+            ],
+            "Digitala verktyg": [
+              "Användning av digitala verktyg för att effektivisera beräkningar och komplettera metoder, till exempel vid ekvationslösning och problemlösning."
+            ],
+            "Problemlösning och tillämpningsområden": [
+              "Problemlösning med särskild utgångspunkt i arbets- och samhällsliv, däribland frågeställningar som berör hållbar utveckling och hur matematik kan användas för kritisk granskning av fakta och påståenden.",
               "Tillämpning och formulering av matematiska modeller i realistiska situationer. Utvärdering av matematiska modellers egenskaper och begränsningar.",
               "Orientering om något ur matematikens historia, till exempel hur ett matematiskt begrepp utvecklats, matematikens roll i något historiskt skeende, en betydande person inom matematiken eller ett historiskt matematiskt problem."
             ]
@@ -294,6 +416,45 @@
             ],
             "Problemlösning och tillämpningsområden": [
               "Problemlösning med särskild utgångspunkt i utbildningens karaktär och samhällsliv, däribland frågeställningar som berör hållbar utveckling och hur matematik kan användas för kritisk granskning av fakta och påståenden.",
+              "Tillämpning och formulering av matematiska modeller i realistiska situationer. Utvärdering av matematiska modellers egenskaper och begränsningar.",
+              "Orientering om något ur matematikens historia, till exempel hur ett matematiskt begrepp utvecklats, matematikens roll i något historiskt skeende, en betydande person inom matematiken eller ett historiskt matematiskt problem."
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "kod": "MATF",
+      "namn": "Matematik – fördjupning",
+      "nivaer": [
+        {
+          "kod": "MATF1000X",
+          "namn": "Matematik – fördjupning, nivå 1",
+          "kort": "Fördjupning 1",
+          "poang": 100,
+          "gy11_motsvarighet": "Matematik 5",
+          "bygger_pa": "MATO2000X",
+          "centralt_innehall": {
+            "Aritmetik, algebra och funktioner": [
+              "Begreppet differentialekvation och exempel på tillämpningar. Verifiering av lösningar till differentialekvationer.",
+              "Strategier för att ställa upp och tolka differentialekvationer. Digitala metoder för att lösa differentialekvationer.",
+              "Metoder för att lösa enklare linjära differentialekvationer av första och andra ordningen för hand."
+            ],
+            "Logik och diskret matematik": [
+              "Bevismetoder, däribland motsägelsebevis och induktionsbevis.",
+              "Representation av tal i olika talbaser.",
+              "Kongruens hos hela tal och metoder för kongruensräkning.",
+              "Begreppen permutation och kombination. Motivering och hantering av metoder för att bestämma antal permutationer och kombinationer.",
+              "Begreppet rekursion och rekursiva talföljder.",
+              "Begreppet mängd. Notationer i mängdlära och hantering av operationer på mängder."
+            ],
+            "Digitala verktyg": [
+              "Användning av digitala verktyg, även symbolhanterande, för att effektivisera beräkningar och komplettera metoder, till exempel vid ekvationslösning, derivering, integrering, hantering av algebraiska uttryck och problemlösning.",
+              "Användning av programmering som verktyg vid problemlösning, databearbetning eller tillämpning av numeriska metoder."
+            ],
+            "Problemlösning och tillämpningsområden": [
+              "Problemlösning med särskild utgångspunkt i utbildningens karaktär och samhällsliv.",
+              "Omfångsrika problemsituationer som är relevanta för utbildningens karaktär, däribland problem som fördjupar kunskaper om integraler och derivata.",
               "Tillämpning och formulering av matematiska modeller i realistiska situationer. Utvärdering av matematiska modellers egenskaper och begränsningar.",
               "Orientering om något ur matematikens historia, till exempel hur ett matematiskt begrepp utvecklats, matematikens roll i något historiskt skeende, en betydande person inom matematiken eller ett historiskt matematiskt problem."
             ]

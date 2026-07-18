@@ -404,6 +404,14 @@ GY25_NIVAER = {
 }
 
 
+def ensure_gy25_nivaer(conn: sqlite3.Connection) -> None:
+    """Se till att HELA Gy25-stegen finns i kursregistret — även nivåer som
+    aldrig funnits som Gy11-kurser lokalt (1a/2a på yrkesprogrammen och
+    fördjupningen). Idempotent via UNIQUE(namn)."""
+    for namn in GY25_NIVAER:
+        _get_or_create(conn, "courses", namn)
+
+
 def ensure_amnen(conn: sqlite3.Connection) -> None:
     """Idempotent backfyllnad av ämnesmodellen: upsertar ämnena och sätter
     amne_id/niva_kod/niva_kort/sort på kursrader vars namn är en känd

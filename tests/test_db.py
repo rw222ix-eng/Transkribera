@@ -879,3 +879,22 @@ def test_exam_bild_path_synced_from_underlag(tmp_path):
                        (ex["id"],)).fetchone()
     assert row["bild_path"] == "Transkriberingar/underlag/abc123abc123/sida-01.png"
     assert ex["underlag"] == "abc123abc123"
+
+
+def test_ensure_gy25_nivaer_seeds_full_ladder(tmp_path):
+    """Hela Gy25-stegen (10 nivåer) skapas även i en tom databas, med
+    ämnesmetadata och progressionsordning."""
+    conn = _conn(tmp_path)
+    db.ensure_gy25_nivaer(conn)
+    db.ensure_amnen(conn)
+    rows = db.list_courses(conn)
+    assert len(rows) == 10
+    assert [r["niva_kort"] for r in rows] == [
+        "Nivå 1a", "Nivå 1b", "Nivå 1c", "Nivå 2a", "Nivå 2b", "Nivå 2c",
+        "Fortsättning 1b", "Fortsättning 1c", "Fortsättning 2",
+        "Fördjupning 1"]
+    assert rows[0]["amne_namn"] == "Matematik"
+    assert rows[-1]["amne_namn"] == "Matematik – fördjupning"
+    # idempotent
+    db.ensure_gy25_nivaer(conn)
+    assert len(db.list_courses(conn)) == 10
