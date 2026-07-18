@@ -118,6 +118,11 @@ def create_router(base: Path, arbiter) -> APIRouter:
             conn.close()
         if view is None:
             return JSONResponse({"error": "okänt prov"}, status_code=404)
+        # Äldre utkast kan bära uppätna LaTeX-backslashes ("\times" → TAB+imes,
+        # se exam_gen._repair_ctrl_chars) — reparera vid läsning så visning och
+        # senare PDF-kompilering blir rätt utan omgenerering.
+        if view.get("exam"):
+            view["exam"] = exam_gen._repair_ctrl_chars(view["exam"])
         return _exam_result(view, [], 0)
 
     # ------------------------------------------------------------ generate --
@@ -282,6 +287,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
             conn.close()
         if view is None or view.get("exam") is None:
             return JSONResponse({"error": "okänt prov"}, status_code=404)
+        view["exam"] = exam_gen._repair_ctrl_chars(view["exam"])
         out_dir = _artifact_dir(view)
         if out_dir is None:
             return JSONResponse({"error": "otillåten sökväg"}, status_code=400)

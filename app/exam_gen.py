@@ -169,14 +169,41 @@ def build_latexfix_prompt(exam: dict, error_log: str) -> str:
     )
 
 
+# Modellen skriver ofta LaTeX oescapat i JSON-strängar ("$2 \times 3$").
+# json.loads tolkar då \t, \n, \b, \f, \r som kontrolltecken och äter
+# backslashen — kvar blir "2 <TAB>imes 3". Reparationen körs enbart inuti
+# $…$-segment och enbart när kontrolltecknet följs av en bokstav, så
+# äkta radbrytningar i löptext lämnas orörda.
+_CTRL_TO_LETTER = {"\t": "t", "\n": "n", "\r": "r", "\f": "f", "\b": "b"}
+_MATH_SEG = re.compile(r"\$[^$]*\$")
+_CTRL_CMD = re.compile(r"[\t\n\r\f\b](?=[A-Za-z])")
+
+
+def _fix_math_escapes(s: str) -> str:
+    return _MATH_SEG.sub(
+        lambda m: _CTRL_CMD.sub(
+            lambda c: "\\" + _CTRL_TO_LETTER[c.group(0)], m.group(0)),
+        s)
+
+
+def _repair_ctrl_chars(x):
+    if isinstance(x, str):
+        return _fix_math_escapes(x)
+    if isinstance(x, list):
+        return [_repair_ctrl_chars(i) for i in x]
+    if isinstance(x, dict):
+        return {k: _repair_ctrl_chars(v) for k, v in x.items()}
+    return x
+
+
 def _parse_exam(raw: str) -> dict | None:
     try:
-        return json.loads(raw)
+        return _repair_ctrl_chars(json.loads(raw))
     except (json.JSONDecodeError, TypeError):
         m = re.search(r"\{.*\}", raw or "", re.DOTALL)
         if m:
             try:
-                return json.loads(m.group(0))
+                return _repair_ctrl_chars(json.loads(m.group(0)))
             except json.JSONDecodeError:
                 return None
     return None

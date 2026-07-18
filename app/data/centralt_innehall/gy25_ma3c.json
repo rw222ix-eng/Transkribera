@@ -4,7 +4,7 @@
   "lasar_version": "Gy25",
   "amne": "Matematik – fortsättning",
   "niva": "Matematik – fortsättning, nivå 1c",
-  "_not": "Skolverkets centrala innehåll (Gy25) — officiell punkttext per nivå.",
+  "_not": "Skolverkets centrala innehåll (Gy25) — ordagrann officiell punkttext per nivå, hämtad från Syllabus-API:t 2026-07-18.",
   "innehall": [
     {
       "kod": "G25-M3C-ALG-1",
@@ -59,7 +59,7 @@
     {
       "kod": "G25-M3C-TRI-1",
       "rubrik": "Trigonometri",
-      "text": "Begreppet enhetscirkeln och definition av trigonometriska begrepp utifrån denna."
+      "text": "Begreppet enhetscirkeln. Definition av trigonometriska begrepp utifrån enhetscirkeln."
     },
     {
       "kod": "G25-M3C-TRI-2",

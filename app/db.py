@@ -1173,7 +1173,10 @@ def seed_course_content(conn: sqlite3.Connection,
     """Seeda centralt innehåll från bundlad JSON (idempotent via
     UNIQUE(course_id, kod) — jfr migrate_from_history). Varje post:
     {"kurs": "Ma3c", "lasar_version": "Gy11", "innehall":
-    [{"kod", "rubrik", "text"}, ...]}. Returnerar antal nya rader."""
+    [{"kod", "rubrik", "text"}, ...]}. Befintliga rader uppdateras med
+    aktuell rubrik/text (upsert) så att rättelser i den bundlade
+    läroplanstexten når redan seedade databaser utan att raderna byter
+    id — content_tags-kopplingarna överlever. Returnerar antal nya rader."""
     added = 0
     for course in courses_data or []:
         cid = get_or_create_course(conn, course.get("kurs") or "")
@@ -1181,13 +1184,20 @@ def seed_course_content(conn: sqlite3.Connection,
             continue
         version = course.get("lasar_version") or "Gy11"
         for item in course.get("innehall") or []:
-            cur = conn.execute(
-                "INSERT OR IGNORE INTO course_content "
+            fanns = conn.execute(
+                "SELECT 1 FROM course_content WHERE course_id = ? AND kod = ?",
+                (cid, item.get("kod"))).fetchone() is not None
+            conn.execute(
+                "INSERT INTO course_content "
                 "(course_id, kod, rubrik, text, lasar_version) "
-                "VALUES (?, ?, ?, ?, ?)",
+                "VALUES (?, ?, ?, ?, ?) "
+                "ON CONFLICT(course_id, kod) DO UPDATE SET "
+                "rubrik = excluded.rubrik, text = excluded.text, "
+                "lasar_version = excluded.lasar_version",
                 (cid, item.get("kod"), item.get("rubrik"),
                  item.get("text"), version))
-            added += cur.rowcount
+            if not fanns:
+                added += 1
     conn.commit()
     return added
 

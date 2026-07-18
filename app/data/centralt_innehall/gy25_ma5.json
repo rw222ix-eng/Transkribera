@@ -4,7 +4,7 @@
   "lasar_version": "Gy25",
   "amne": "Matematik – fördjupning",
   "niva": "Matematik – fördjupning, nivå 1",
-  "_not": "Skolverkets centrala innehåll (Gy25) — officiell punkttext per nivå.",
+  "_not": "Skolverkets centrala innehåll (Gy25) — ordagrann officiell punkttext per nivå, hämtad från Syllabus-API:t 2026-07-18.",
   "innehall": [
     {
       "kod": "G25-M5-ALG-1",
@@ -54,7 +54,7 @@
     {
       "kod": "G25-M5-DIG-1",
       "rubrik": "Digitala verktyg",
-      "text": "Användning av digitala verktyg, även symbolhanterande, för att effektivisera beräkningar och komplettera metoder, till exempel vid ekvationslösning, derivering, integrering, hantering av algebraiska uttryck och problemlösning."
+      "text": "Användning av digitala verktyg, även symbolhanterande, för att effektivisera beräkningar och komplettera metoder, till exempel vid ekvationslösning, derivering, integrering hantering av algebraiska uttryck och problemlösning."
     },
     {
       "kod": "G25-M5-DIG-2",
@@ -79,7 +79,7 @@
     {
       "kod": "G25-M5-PRO-4",
       "rubrik": "Problemlösning och tillämpningsområden",
-      "text": "Orientering om något ur matematikens historia, till exempel hur ett matematiskt begrepp utvecklats, matematikens roll i något historiskt skeende, en betydande person inom matematiken eller ett historiskt matematiskt problem."
+      "text": "Orientering om något ur matematikens historia, till exempel hur ett matematiskt begrepp utvecklats, matematikens roll i något historiskt skeende, en betydande person inom matematik eller ett historiskt matematiskt problem."
     }
   ]
 }
