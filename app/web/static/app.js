@@ -947,8 +947,11 @@
                    arkSources: (ev.result && ev.result.sources) || [] });
       } else if (ev.type === 'error') {
         if (_arkScanTimer) { clearInterval(_arkScanTimer); _arkScanTimer = null; }
-        setState({ arkAsking: false,
-                   arkAnswer: 'Kunde inte söka: ' + (ev.message || 'okänt fel') });
+        // Samma ärliga tomläge som kartoteket: "inga träffar" är ett svar.
+        var msg = /matchar sökningen/i.test(ev.message || '')
+          ? 'Ingen tavla och inget prov i arkivet verkar nämna det du frågar om. Prova att formulera om frågan.'
+          : 'Kunde inte söka: ' + (ev.message || 'okänt fel');
+        setState({ arkAsking: false, arkAnswer: msg });
       }
     });
   }
@@ -1709,8 +1712,13 @@
         setState({ asking: false, askScanShown: 9999, askSources: (ev.result && ev.result.sources) || [] });
       } else if (ev.type === 'error') {
         // Frys utrullningen där den står — felraden tar över berättelsen.
+        // "Inga träffar" är inget tekniskt fel utan ett ärligt svar: säg det
+        // naturligt i stället för "Kunde inte söka: …".
         if (_scanTimer) { clearInterval(_scanTimer); _scanTimer = null; }
-        setState({ asking: false, askAnswer: 'Kunde inte söka: ' + (ev.message || 'okänt fel') });
+        var msg = /matchar sökningen/i.test(ev.message || '')
+          ? 'Ingen inspelning i arkivet verkar nämna det du frågar om. Prova att formulera om frågan, eller sök på enstaka ord under Sök ord.'
+          : 'Kunde inte söka: ' + (ev.message || 'okänt fel');
+        setState({ asking: false, askAnswer: msg });
       }
     });
   }
@@ -3483,7 +3491,7 @@
           ansStarted: !!st.arkAnswer,
           ansTyping: asking && !!st.arkAnswer,
           ansDone: !asking && !!st.arkAnswer,
-          ansHeadLabel: (!asking && st.arkAnswer)
+          ansHeadLabel: (!asking && st.arkAnswer && hitCount)
             ? ('Svar — ' + hitCount + (hitCount === 1 ? ' källa' : ' källor'))
             : 'Svar',
           answer: st.arkAnswer,
@@ -3546,7 +3554,7 @@
         ansStarted: !!st.askAnswer,
         ansTyping: st.asking && !!st.askAnswer,
         ansDone: !st.asking && !!st.askAnswer,
-        ansHeadLabel: (!st.asking && st.askAnswer)
+        ansHeadLabel: (!st.asking && st.askAnswer && (st.askSources || []).length)
           ? ('Svar — ' + (st.askSources || []).length + ((st.askSources || []).length === 1 ? ' källa' : ' källor'))
           : 'Svar',
         answer: st.askAnswer,
