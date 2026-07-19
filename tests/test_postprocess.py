@@ -67,6 +67,44 @@ def test_suggest_title_kortas_till_titel_langd(monkeypatch):
     assert out and len(out) <= 90
 
 
+# ---- kalenderförmåga i arkivsvaret ------------------------------------------
+
+_EXCERPTS = [{"name": "lektion.mp3", "excerpt": "vi gick igenom trianglar"}]
+
+
+def test_answer_over_lessons_calendar_ger_kalenderinstruktion(monkeypatch):
+    seen = {}
+    def fake_generate(model, prompt, token_cb=None, **kw):
+        seen["system"] = kw.get("system")
+        return "svar"
+    monkeypatch.setattr(pp.llm_client, "generate", fake_generate)
+    pp.answer_over_lessons("gör en kalenderhändelse av detta", _EXCERPTS, "m",
+                           calendar=True)
+    assert "[KALENDERFÖRSLAG]" in seen["system"]
+    pp.answer_over_lessons("vanlig fråga", _EXCERPTS, "m")
+    assert "[KALENDERFÖRSLAG]" not in seen["system"]
+
+
+def test_edit_calendar_suggestion_far_forslag_och_underlag(monkeypatch):
+    seen = {}
+    def fake_generate(model, prompt, token_cb=None, **kw):
+        seen["system"] = kw.get("system")
+        seen["prompt"] = prompt
+        return "Klart — anteckningen uppdaterad."
+    monkeypatch.setattr(pp.llm_client, "generate", fake_generate)
+    ev = {"title": "Uppföljning trianglar", "date": "2026-07-21",
+          "time": "08:00", "end_date": None, "desc": "x"}
+    out = pp.edit_calendar_suggestion(
+        "ändra anteckningen till en påminnelse om uppgifterna",
+        "Tidigare svar: lektionen tog upp Pythagoras sats.", ev, "m")
+    assert out.startswith("Klart")
+    assert "[KALENDERFÖRSLAG]" in seen["system"]
+    assert "AKTUELLT FÖRSLAG" in seen["system"]
+    assert "Uppföljning trianglar" in seen["system"]
+    assert "Pythagoras sats" in seen["prompt"]
+    assert "ändra anteckningen" in seen["prompt"]
+
+
 # ---- extraktion (Fas 2) -----------------------------------------------------
 
 _GOOD_JSON = (

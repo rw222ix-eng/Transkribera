@@ -1784,9 +1784,13 @@
     var run = ++_askRun;
     if (_scanTimer) { clearInterval(_scanTimer); _scanTimer = null; }
     setState({ asking: true, askAnswer: '', askNote: '', askSources: null, searchHits: null, askQ: q, askScanPlan: null, askScanRes: {}, askScanShown: 0, askDeep: null, askZoom: false, askZoomClosing: false, srcBox: true, askFollowups: [], askFollowInput: '', askEvent: null });
-    // Inget förhandsbyggt kalenderförslag på nyckelord — förslag skapas bara
-    // uttryckligen via kalenderknappen och godkänns alltid innan de läggs in.
-    streamPost('/api/search/ask', { q: q }, function (ev) {
+    // Inget förhandsbyggt kalenderförslag på nyckelord — men modellen FÅR
+    // kalenderförmågan (calendar:true): ber frågan uttryckligen om en händelse
+    // ("… gör en kalenderhändelse av detta") byggs förslaget ur källorna via
+    // [KALENDERFÖRSLAG]-raden (applyCalTag på 'done'), inte som ett eko av
+    // frågan. Godkänns alltid med Lägg till innan något läggs in.
+    var acc = '';
+    streamPost('/api/search/ask', { q: q, calendar: true }, function (ev) {
       if (run !== _askRun) return;               // en nyare fråga (eller Esc) har tagit över
       if (ev.type === 'scan_plan') {             // äkta genomsökningsordning från backend
         // Kan komma två gånger: den semantiska omsökningen spelar om
@@ -1804,11 +1808,15 @@
       } else if (ev.type === 'log') {            // t.ex. semantisk omsökning pågår
         setState({ askNote: ev.msg || '' });
       } else if (ev.type === 'token') {
-        setState(function (s) { return { askAnswer: s.askAnswer + ev.text, askNote: '' }; });
+        acc += ev.text;
+        setState({ askAnswer: stripCalTag(acc), askNote: '' });
       } else if (ev.type === 'done') {
         // Rör inte askScanShown — utrullningstimern får spela klart så att
         // genomsökningen syns även när svaret kom blixtsnabbt (0 träffar).
-        setState({ asking: false, askNote: '', askSources: (ev.result && ev.result.sources) || [] });
+        var full = (ev.result && ev.result.text) || acc;
+        applyCalTag('ask', full);
+        setState({ asking: false, askNote: '', askAnswer: stripCalTag(full),
+                   askSources: (ev.result && ev.result.sources) || [] });
       } else if (ev.type === 'error') {
         // Frys utrullningen där den står — felraden tar över berättelsen.
         // "Inga träffar" är inget tekniskt fel utan ett ärligt svar: säg det
@@ -1844,24 +1852,40 @@
   function sendAskFollow() {
     var q = (S.askFollowInput || '').trim();
     if (!q || S.asking) return;
-    // Kommandon ("flytta till onsdag 14:30" …) justerar ett BEFINTLIGT förslag
-    // med regex-tolken; nya förslag skapas bara via kalenderknappen.
+    // Korta enkla kommandon ("flytta till onsdag 14:30" …) justerar ett
+    // BEFINTLIGT förslag direkt med regex-tolken — utan LLM-anrop. Allt den
+    // inte fullt ut förstod ("ändra anteckningen till att innefatta …") går
+    // vidare till modellen med förslaget + tidigare svar som underlag, som
+    // svarar med en [KALENDERFÖRSLAG]-rad (samma mönster som lektionschatten).
     var evNow = S.askEvent;
     var isCal = evNow && !evNow.added && (/flytta|ändra|byt|boka|döp|kalla|titel|anteckning/i.test(q) || /\d{1,2}[:.]\d{2}/.test(q) || /måndag|tisdag|onsdag|torsdag|fredag|lördag|söndag|imorgon|nästa vecka|klockan/i.test(q));
-    if (isCal) {
+    var calComplex = q.length > 80
+      || (q.match(/[.!?]/g) || []).length > 1
+      || /detaljerad|detaljer|mål|beskriv|utveckla|förklara|innefatta|varje dag|hela (nästa )?veckan?|från kl/i.test(q);
+    if (isCal && !calComplex) {
       var r0 = applyEventCommand(evNow, q);
-      setState(function (s) {
-        if (!s.askEvent) return null;
-        return { askFollowInput: '',
-                 askEvent: Object.assign({}, s.askEvent, r0.patch),
-                 askFollowups: (s.askFollowups || []).concat([{ q: q, a: r0.reply, typing: false }]) };
-      }, function () { scrollAskChat(true); });
-      return;
+      if (Object.keys(r0.patch).length) {
+        setState(function (s) {
+          if (!s.askEvent) return null;
+          return { askFollowInput: '',
+                   askEvent: Object.assign({}, s.askEvent, r0.patch),
+                   askFollowups: (s.askFollowups || []).concat([{ q: q, a: r0.reply, typing: false }]) };
+        }, function () { scrollAskChat(true); });
+        return;
+      }
     }
+    // cal_event bara vid kalenderavsikt: annars skulle en vanlig arkivfråga
+    // hoppa över RAG-sökningen så fort ett förslag råkar stå öppet.
+    var calEv = isCal ? { title: evNow.title, date: evNow.startIso || null,
+                          time: (evNow.when || '').slice(-5), end_date: evNow.endIso || null,
+                          desc: evNow.desc || '' } : null;
     var run = ++_askRun;
     setState(function (s) { return { askFollowInput: '', askFollowups: (s.askFollowups || []).concat([{ q: q, a: '', typing: true }]) }; },
       function () { scrollAskChat(true); });
-    streamPost('/api/search/ask', { q: q }, function (ev) {
+    var acc = '';
+    streamPost('/api/search/ask',
+      calEv ? { q: q, calendar: true, cal_event: calEv, context: (S.askAnswer || '').slice(0, 6000) }
+            : { q: q, calendar: true }, function (ev) {
       if (run !== _askRun) return;               // en nyare fråga (eller Esc) har tagit över
       var patchLast = function (fn) {
         setState(function (s) {
@@ -1870,8 +1894,19 @@
           return { askFollowups: fs };
         }, function () { scrollAskChat(false); });
       };
-      if (ev.type === 'token') patchLast(function (f) { f.a += ev.text; return f; });
-      else if (ev.type === 'done') patchLast(function (f) { f.typing = false; return f; });
+      if (ev.type === 'token') { acc += ev.text; patchLast(function (f) { f.a = stripCalTag(acc); return f; }); }
+      else if (ev.type === 'done') {
+        var full = (ev.result && ev.result.text) || acc;
+        var applied = applyCalTag('ask', full);
+        var shown = stripCalTag(full);
+        // Svarar modellen med enbart kalenderraden blir bubblan tom — sätt då
+        // en egen bekräftelse byggd ur det uppdaterade förslaget.
+        if (!shown && applied) {
+          var e2 = S.askEvent || {};
+          shown = 'Här är kalenderförslaget: ”' + (e2.title || '') + '” · ' + (e2.when || '') + (e2.endDay ? ' → ' + e2.endDay : '') + '. Inget läggs in förrän du godkänner med Lägg till — justera annars i förslags-rutan eller fortsätt chatta.';
+        }
+        patchLast(function (f) { f.typing = false; f.a = shown || full; return f; });
+      }
       else if (ev.type === 'error') patchLast(function (f) { f.typing = false; f.a = f.a || ('Kunde inte söka: ' + (ev.message || 'okänt fel')); return f; });
     });
   }
