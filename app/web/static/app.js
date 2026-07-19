@@ -177,7 +177,7 @@
     planId: null,              // serverns planerings-id (för refine/approve)
     planBoard: null,           // genererad WB-JSON ({title, boards})
     planErrors: [],            // kvarstående valideringsfel (redovisas ärligt)
-    planChatInput: '',         // chattfältet för iteration
+    byggChatInput: '',         // den gemensamma ändringschatten (tavla/prov/arbetsblad)
     planSavedPath: '',         // kvitto från Godkänn & spara
     planStarttid: '',          // formulärets starttid (tavla)
     // Inbyggd kalender (Fas 3): lokal SQLite-läsning — ingen synk/CalDAV
@@ -208,7 +208,6 @@
     exLog: [],                 // SSE-loggrader
     exErrors: [],              // kvarstående schema-/balans-/kompileringsfel
     exam: null,                // serverns provresultat (id, exam, granser, …)
-    exChat: {},                // per-uppgift-chattfält {nummer: text}
     exMsg: '',                 // kvitto (PDF skapad m.m.)
     exCcOpen: {},              // ihopfällbara innehållsgrupper {rubrik: true/false}; osatt = auto
     exDeleteArm: false,        // raderingsknappen är i bekräftelseläge
@@ -888,13 +887,22 @@
     }, onPlanEvent);
   }
   function sendPlanRefine() {
-    var msg = (S.planChatInput || '').trim();
+    var msg = (S.byggChatInput || '').trim();
     if (!msg || !S.planId || S.planPhase === 'running') return;
     _wbReportRounds = 0;
     wbLiveReset();
-    setState({ planPhase: 'running', planChatInput: '', planLog: [],
+    setState({ planPhase: 'running', byggChatInput: '', planLog: [],
                planErrors: [], planSavedPath: '', planLiveN: 0 });
     streamPost('/api/planning/' + S.planId + '/refine', { message: msg }, onPlanEvent);
+  }
+  // Den gemensamma ändringschatten: ett fält, samma beteende för alla tre
+  // typer — ruttar till tavlans respektive provets refine-endpoint.
+  function sendByggChat() {
+    if (S.byggTyp === 'tavla') { sendPlanRefine(); return; }
+    var msg = (S.byggChatInput || '').trim();
+    if (!msg || !S.exam || S.exPhase === 'running') return;
+    setState({ byggChatInput: '', exPhase: 'running', exLog: [], exErrors: [], exMsg: '' });
+    streamPost('/api/exams/' + S.exam.id + '/refine', { message: msg }, onExamEvent);
   }
   function approvePlan() {
     if (!S.planId || S.planPhase === 'running') return;
@@ -959,8 +967,8 @@
   }
   function onClearUnderlag() { setState({ byggUnderlag: null }); }
   function onPlanMomentKey(e) { if (e.key === 'Enter') startPlanGenerate(); }
-  function onPlanChatInput(e) { setState({ planChatInput: e.target.value }); }
-  function onPlanChatKey(e) { if (e.key === 'Enter') sendPlanRefine(); }
+  function onByggChatInput(e) { setState({ byggChatInput: e.target.value }); }
+  function onByggChatKey(e) { if (e.key === 'Enter') sendByggChat(); }
   function onByggDatum(e) { setState({ byggDatum: e.target.value }); }
   function onPlanStarttid(e) { setState({ planStarttid: e.target.value }); }
   // Typväljaren: byte behåller delade fält (kurs/klass/datum/underlag).
@@ -1079,12 +1087,12 @@
       if (S.exam && String(S.exam.id) === String(it.id)) { closeExam(); return; }
       getJSON('/api/exams/' + it.id).then(function (r) {
         if (r && r.id) setState({ byggTyp: (r.typ === 'arbetsblad' ? 'arbetsblad' : 'prov'),
-                                  exam: r, exErrors: r.errors || [], exChat: {}, exMsg: '', exDeleteArm: false }, scrollToExamCard);
+                                  exam: r, exErrors: r.errors || [], exMsg: '', exDeleteArm: false }, scrollToExamCard);
       }).catch(function () {});
     }
   }
   function closeExam() {
-    setState({ exam: null, exErrors: [], exChat: {}, exMsg: '', exDeleteArm: false });
+    setState({ exam: null, exErrors: [], exMsg: '', exDeleteArm: false });
   }
   // Radering i två steg: första klicket armar en inline-bekräftelse i kortet
   // (ingen modal), andra klicket raderar permanent — post, versioner och filer.
@@ -1097,7 +1105,7 @@
       .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, j: j }; }); })
       .then(function (res) {
         if (res.ok && res.j && res.j.ok) {
-          setState({ exam: null, exErrors: [], exChat: {}, exMsg: '', exDeleteArm: false });
+          setState({ exam: null, exErrors: [], exMsg: '', exDeleteArm: false });
           loadArkiv();
           loadExamHistorik();
         } else {
@@ -1209,7 +1217,7 @@
     } else if (ev.type === 'done') {
       var r = ev.result || {};
       var patch = { exPhase: 'done', exErrors: r.errors || [] };
-      if (r.id) { patch.exam = r; patch.exChat = {}; }
+      if (r.id) { patch.exam = r; }
       if (r.pdf) patch.exMsg = 'PDF skapad: ' + r.pdf;
       else if (r.tex && r.status === 'godkänt') patch.exMsg = 'Sparad utan PDF: ' + r.tex;
       setState(patch);
@@ -1236,23 +1244,6 @@
       referens_exam_id: S.exReferensId ? +S.exReferensId : null,
       underlag: S.byggUnderlag ? S.byggUnderlag.id : null,
     }, onExamEvent);
-  }
-  function onExChat(nummer) {
-    return function (e) {
-      setState(function (s) {
-        var c = Object.assign({}, s.exChat); c[nummer] = e.target.value;
-        return { exChat: c };
-      });
-    };
-  }
-  function sendExamRefine(nummer) {
-    return function () {
-      var msg = (S.exChat[nummer] || '').trim();
-      if (!msg || !S.exam || S.exPhase === 'running') return;
-      setState({ exPhase: 'running', exLog: [], exErrors: [], exMsg: '' });
-      streamPost('/api/exams/' + S.exam.id + '/refine',
-                 { message: msg, nummer: nummer }, onExamEvent);
-    };
   }
   function approveExam() {
     if (!S.exam || S.exPhase === 'running') return;
@@ -3397,8 +3388,19 @@
       planErrors: st.planErrors, planErrCount: st.planErrors.length,
       planHasBoard: !!st.planBoard, planId: st.planId,
       planIsExample: !st.planBoard,
-      planChatInput: st.planChatInput,
-      onPlanChatInput: onPlanChatInput, onPlanChatKey: onPlanChatKey,
+      byggChatInput: st.byggChatInput,
+      onByggChatInput: onByggChatInput, onByggChatKey: onByggChatKey,
+      onByggChat: sendByggChat,
+      byggChatCan: !!st.byggChatInput.trim()
+        && (st.byggTyp === 'tavla' ? (!!st.planId && st.planPhase !== 'running')
+                                   : (!!st.exam && st.exPhase !== 'running')),
+      byggChatOn: st.byggTyp === 'tavla' ? !!st.planId : !!st.exam,
+      byggChatBusy: st.byggTyp === 'tavla' ? st.planPhase === 'running' : st.exPhase === 'running',
+      byggChatPlaceholder: st.byggTyp === 'tavla'
+        ? 'Ändra tavlan — t.ex. byt exempel 2 mot ett med decimaltal'
+        : st.byggTyp === 'arbetsblad'
+        ? 'Ändra arbetsbladet — t.ex. gör uppgift 3 svårare, byt kontext'
+        : 'Ändra provet — t.ex. gör uppgift 3 svårare, lägg till en A-uppgift',
       onPlanRefine: sendPlanRefine, onPlanApprove: approvePlan,
       planSavedPath: st.planSavedPath,
       planStarttid: st.planStarttid,
@@ -3499,10 +3501,6 @@
               typ: n.u.typ,
               poangStr: (n.u.poang || [0, 0, 0]).join('/'),
               text: n.u.text || '',
-              chatValue: st.exChat[n.nummer] || '',
-              onChat: onExChat(n.nummer),
-              onSend: sendExamRefine(n.nummer),
-              canSend: !!(st.exChat[n.nummer] || '').trim() && st.exPhase !== 'running',
             };
           }),
         };
@@ -5744,8 +5742,8 @@ function viewPlanning(v){
         <div style="display:flex;flex-direction:column;gap:9px;margin-top:11px;flex:0 0 auto">
           ${ v.planId ? `
           <div style="display:flex;align-items:center;gap:8px">
-            <input value="${esc(v.planChatInput)}" data-input="${on(v.onPlanChatInput)}" data-keydown="${on(v.onPlanChatKey)}" aria-label="Ändra tavlan" placeholder="Ändra tavlan — t.ex. byt exempel 2 mot ett med decimaltal" style="flex:1;min-width:0;background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:10px 13px;font-size:14.5px;font-family:inherit;color:var(--ink)">
-            <button data-click="${on(v.onPlanRefine)}" ${v.planChatInput.trim() && !v.planRunning ? '' : 'disabled'} style="display:inline-flex;align-items:center;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:4px;padding:10px 16px;font-size:14.5px;font-weight:500;font-family:inherit;cursor:${v.planChatInput.trim() && !v.planRunning ? 'pointer' : 'default'};opacity:${v.planChatInput.trim() && !v.planRunning ? '1' : '.55'}">${v.planRunning ? 'Ändrar …' : 'Ändra'}</button>
+            <input value="${esc(v.byggChatInput)}" data-input="${on(v.onByggChatInput)}" data-keydown="${on(v.onByggChatKey)}" aria-label="Ändra tavlan" placeholder="Ändra tavlan — t.ex. byt exempel 2 mot ett med decimaltal" style="flex:1;min-width:0;background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:10px 13px;font-size:14.5px;font-family:inherit;color:var(--ink)">
+            <button data-click="${on(v.onPlanRefine)}" ${v.byggChatInput.trim() && !v.planRunning ? '' : 'disabled'} style="display:inline-flex;align-items:center;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:4px;padding:10px 16px;font-size:14.5px;font-weight:500;font-family:inherit;cursor:${v.byggChatInput.trim() && !v.planRunning ? 'pointer' : 'default'};opacity:${v.byggChatInput.trim() && !v.planRunning ? '1' : '.55'}">${v.planRunning ? 'Ändrar …' : 'Ändra'}</button>
           </div>
           ` : '' }
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
@@ -5768,13 +5766,6 @@ function viewPlanning(v){
         <div role="status" style="display:flex;flex-direction:column;gap:4px;margin-top:10px;font-size:13px;color:var(--warn)">
           <span style="font-weight:600">Motorn flaggade ${esc(v.wbWarnCount)} ${v.wbWarnCount === 1 ? 'layoutvarning' : 'layoutvarningar'}:</span>
           ${ v.wbWarnings.map(function(w){ return `<span style="font-family:var(--mono,monospace);font-size:12px;color:var(--ink-2)">${esc(w)}</span>`; }).join('') }
-        </div>
-      ` : '' }
-
-      ${ v.planId ? `
-        <div style="display:flex;align-items:center;gap:8px;margin-top:14px">
-          <input value="${esc(v.planChatInput)}" data-input="${on(v.onPlanChatInput)}" data-keydown="${on(v.onPlanChatKey)}" aria-label="Ändra tavlan" placeholder="Ändra tavlan — t.ex. byt exempel 2 mot ett med decimaltal" style="flex:1;min-width:0;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 13px;font-size:14.5px;font-family:inherit;color:var(--ink)">
-          <button data-click="${on(v.onPlanRefine)}" ${v.planChatInput.trim() && !v.planRunning ? '' : 'disabled'} style="display:inline-flex;align-items:center;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:10px;padding:10px 16px;font-size:14.5px;font-weight:500;font-family:inherit;cursor:${v.planChatInput.trim() && !v.planRunning ? 'pointer' : 'default'};opacity:${v.planChatInput.trim() && !v.planRunning ? '1' : '.55'}">Ändra</button>
         </div>
       ` : '' }
 
@@ -5836,11 +5827,7 @@ function viewPlanning(v){
                   <span style="font-family:var(--mono);font-size:10.5px;color:var(--ink-3)">${esc(u2.formaga)} · ${esc(u2.typ)}</span>
                   <span style="font-family:var(--mono);font-size:11.5px;color:var(--ink-2)">(${esc(u2.poangStr)})</span>
                 </div>
-                <div data-math="" style="font-size:14px;color:var(--ink);line-height:1.5;margin-bottom:7px">${esc(u2.text)}</div>
-                <div style="display:flex;gap:8px">
-                  <input value="${esc(u2.chatValue)}" data-input="${on(u2.onChat)}" aria-label="Ändra uppgift ${esc(u2.nummer)}" placeholder="Ändra uppgiften — t.ex. gör den svårare, byt kontext …" style="flex:1;min-width:0;background:var(--sunken);border:1px solid var(--line);border-radius:4px;padding:7px 11px;font-size:13px;font-family:inherit;color:var(--ink)">
-                  <button data-click="${on(u2.onSend)}" ${u2.canSend ? '' : 'disabled'} style="border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:4px;padding:7px 13px;font-size:13px;font-weight:500;font-family:inherit;cursor:${u2.canSend ? 'pointer' : 'default'};opacity:${u2.canSend ? '1' : '.55'}">Ändra</button>
-                </div>
+                <div data-math="" style="font-size:14px;color:var(--ink);line-height:1.5">${esc(u2.text)}</div>
               </div>
             `; }).join('') }
 
@@ -5864,6 +5851,15 @@ function viewPlanning(v){
           </div>
         ` : '' }
       </div>
+      ` : '' }
+
+      ${ /* Den gemensamma ändringschatten: ett fält för tavla, prov och
+            arbetsblad — modellen genererar om det aktiva resultatet. */ '' }
+      ${ v.byggChatOn ? `
+        <div style="display:flex;align-items:center;gap:8px;margin-top:14px">
+          <input value="${esc(v.byggChatInput)}" data-input="${on(v.onByggChatInput)}" data-keydown="${on(v.onByggChatKey)}" aria-label="Ändra ${esc(v.byggTypLabel)}" placeholder="${esc(v.byggChatPlaceholder)}" style="flex:1;min-width:0;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 13px;font-size:14.5px;font-family:inherit;color:var(--ink)">
+          <button data-click="${on(v.onByggChat)}" ${v.byggChatCan ? '' : 'disabled'} style="display:inline-flex;align-items:center;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:10px;padding:10px 16px;font-size:14.5px;font-weight:500;font-family:inherit;cursor:${v.byggChatCan ? 'pointer' : 'default'};opacity:${v.byggChatCan ? '1' : '.55'}">${v.byggChatBusy ? 'Ändrar …' : 'Ändra'}</button>
+        </div>
       ` : '' }
 
       ${ v.arkiv ? `
