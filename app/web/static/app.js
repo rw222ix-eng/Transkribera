@@ -162,12 +162,16 @@
     wbZoom: false,             // tavelkortet förstorat till modal (chatt + knappar i kortet)
     wbZoomClosing: false,
     planLiveN: 0,              // live-uppbyggnad: antal sektioner ritade hittills
+    // Enad byggpanel (design 2026-07-19): en typväljare och delade fältvärden
+    // för tavla/prov/arbetsblad — kurs/klass/datum/underlag följer med vid typbyte.
+    byggTyp: 'tavla',          // tavla | prov | arbetsblad
+    byggGroupId: '',           // vald klass (''  = ingen)
+    byggCourseId: '',          // vald kurs
+    byggDatum: '',             // datum (kalendern/minnet)
+    byggUnderlag: null,        // uppladdat underlag: {id, filer:[{namn,beskrivning}]}
+    byggUnderlagBusy: false,   // uppladdning/bildtolkning pågår
     // Planering (Fas 1): generera egna tavlor via LLM:en
-    planGroupId: '',           // vald klass (''  = ingen)
-    planCourseId: '',          // vald kurs
     planMoment: '',            // moment/ämne (fritext)
-    planUnderlag: null,        // uppladdat underlag: {id, filer:[{namn,beskrivning}]}
-    planUnderlagBusy: false,   // uppladdning/bildtolkning pågår
     planPhase: 'idle',         // idle|running|done|error
     planLog: [],               // loggrader från SSE-jobbet
     planId: null,              // serverns planerings-id (för refine/approve)
@@ -175,8 +179,7 @@
     planErrors: [],            // kvarstående valideringsfel (redovisas ärligt)
     planChatInput: '',         // chattfältet för iteration
     planSavedPath: '',         // kvitto från Godkänn & spara
-    planDatum: '',             // formulärets datum (för kalendern/minnet)
-    planStarttid: '',          // formulärets starttid
+    planStarttid: '',          // formulärets starttid (tavla)
     // Inbyggd kalender (Fas 3): lokal SQLite-läsning — ingen synk/CalDAV
     // Planeringsarkivet (ersätter kalendern): tavlor + prov i veckogrupper,
     // sök- och frågbara med samma RAG-mönster som Inspelningar-arkivet.
@@ -195,24 +198,18 @@
     arkDeep: null,             // deep_read: källorna AI:n läser djupt
     arkFollowups: [],          // följdfrågor [{q, a, typing}]
     arkFollowInput: '',
-    // Provgeneratorn (Fas 4)
-    exCourseId: '',            // vald kurs för provet
-    exGroupId: '',             // vald klass (minneskontext + auto-koppling)
+    // Provgeneratorn (Fas 4) — kurs/klass/datum/underlag delas via bygg*-nycklarna
     exContent: [],             // kursens innehållspunkter (med behandlad-flagga)
     exPunkter: {},             // valda innehållspunkter {content_id: true}
     exAntal: '8',              // ungefärligt antal uppgifter
     exTid: '120',              // provtid i minuter
     exDelar: true,             // dela i Del B/C
-    exDatum: '',               // provdatum (kalendern/minnet)
     exPhase: 'idle',           // idle|running|done|error
     exLog: [],                 // SSE-loggrader
-    exUnderlag: null,          // bildunderlag för provet: {id, filer:[{namn,beskrivning}]}
-    exUnderlagBusy: false,     // uppladdning/bildtolkning pågår
     exErrors: [],              // kvarstående schema-/balans-/kompileringsfel
     exam: null,                // serverns provresultat (id, exam, granser, …)
     exChat: {},                // per-uppgift-chattfält {nummer: text}
     exMsg: '',                 // kvitto (PDF skapad m.m.)
-    exTyp: 'prov',             // prov | arbetsblad (Fas 5)
     exCcOpen: {},              // ihopfällbara innehållsgrupper {rubrik: true/false}; osatt = auto
     exDeleteArm: false,        // raderingsknappen är i bekräftelseläge
     exReferensId: '',          // referensläge: utgå från tidigare prov
@@ -883,11 +880,11 @@
                planLiveN: 0 });
     streamPost('/api/planning/generate', {
       moment: moment,
-      group_id: S.planGroupId ? +S.planGroupId : null,
-      course_id: S.planCourseId ? +S.planCourseId : null,
-      datum: S.planDatum || null,
+      group_id: S.byggGroupId ? +S.byggGroupId : null,
+      course_id: S.byggCourseId ? +S.byggCourseId : null,
+      datum: S.byggDatum || null,
       starttid: S.planStarttid || null,
-      underlag: S.planUnderlag ? S.planUnderlag.id : null,
+      underlag: S.byggUnderlag ? S.byggUnderlag.id : null,
     }, onPlanEvent);
   }
   function sendPlanRefine() {
@@ -915,12 +912,10 @@
         setState({ planSavedPath: '', wbExportMsg: 'Kunde inte spara: ' + ((e && e.message) || e) });
       });
   }
-  function onPlanGroup(e) { setState({ planGroupId: e.target.value }); }
-  function onPlanCourse(e) { setState({ planCourseId: e.target.value }); }
   function onPlanMoment(e) { setState({ planMoment: e.target.value }); }
   // Underlag: bokssidor/uppgifter (PNG/JPG/WebP/PDF). Filerna läses som
-  // data-URL:er och bildtolkas lokalt av visionsmodellen. Samma flöde
-  // används av tavlan (plan*) och provet (ex*) — cb-objektet skiljer dem.
+  // data-URL:er och bildtolkas lokalt av visionsmodellen. Fältet delas av
+  // tavlan och provet (byggUnderlag); loggen går till den aktiva typens logg.
   function _pickUnderlagFiles(cb) {
     var inp = document.createElement('input');
     inp.type = 'file'; inp.multiple = true;
@@ -954,28 +949,22 @@
     inp.click();
   }
   function onPickUnderlag() {
-    if (S.planUnderlagBusy) return;
+    if (S.byggUnderlagBusy) return;
+    var logKey = S.byggTyp === 'tavla' ? 'planLog' : 'exLog';
     _pickUnderlagFiles({
-      busy: function (b) { setState({ planUnderlagBusy: b, planLog: [] }); },
-      log: function (m) { setState(function (s) { return { planLog: s.planLog.concat([m]) }; }); },
-      done: function (r) { setState({ planUnderlagBusy: false, planLog: [], planUnderlag: r }); },
+      busy: function (b) { setState(Object.assign({ byggUnderlagBusy: b }, kv(logKey, []))); },
+      log: function (m) { setState(function (s) { return kv(logKey, s[logKey].concat([m])); }); },
+      done: function (r) { setState(Object.assign({ byggUnderlagBusy: false, byggUnderlag: r }, kv(logKey, []))); },
     });
   }
-  function onClearUnderlag() { setState({ planUnderlag: null }); }
-  function onPickExUnderlag() {
-    if (S.exUnderlagBusy) return;
-    _pickUnderlagFiles({
-      busy: function (b) { setState({ exUnderlagBusy: b, exLog: [] }); },
-      log: function (m) { setState(function (s) { return { exLog: s.exLog.concat([m]) }; }); },
-      done: function (r) { setState({ exUnderlagBusy: false, exLog: [], exUnderlag: r }); },
-    });
-  }
-  function onClearExUnderlag() { setState({ exUnderlag: null }); }
+  function onClearUnderlag() { setState({ byggUnderlag: null }); }
   function onPlanMomentKey(e) { if (e.key === 'Enter') startPlanGenerate(); }
   function onPlanChatInput(e) { setState({ planChatInput: e.target.value }); }
   function onPlanChatKey(e) { if (e.key === 'Enter') sendPlanRefine(); }
-  function onPlanDatum(e) { setState({ planDatum: e.target.value }); }
+  function onByggDatum(e) { setState({ byggDatum: e.target.value }); }
   function onPlanStarttid(e) { setState({ planStarttid: e.target.value }); }
+  // Typväljaren: byte behåller delade fält (kurs/klass/datum/underlag).
+  function byggPickTyp(t) { setState({ byggTyp: t }); }
 
   /* --------------------------------- planeringsarkivet (ersätter kalendern) --
      Tavlor + prov/arbetsblad i veckogrupper, med fritextsök och LLM-frågor
@@ -1076,7 +1065,8 @@
         .then(function (r) { return r.json(); })
         .then(function (p) {
           if (p && p.board) {
-            setState({ planBoard: p.board, planId: null, planErrors: [],
+            // Typväljaren följer med: en öppnad tavla visas i tavelkortet.
+            setState({ byggTyp: 'tavla', planBoard: p.board, planId: null, planErrors: [],
                        planSavedPath: '', wbExportMsg: '', wbRendered: false },
                      renderCurrentBoard);
             try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (e) {}
@@ -1088,7 +1078,8 @@
       // för att tyst ladda om samma innehåll (kändes som ett dött klick).
       if (S.exam && String(S.exam.id) === String(it.id)) { closeExam(); return; }
       getJSON('/api/exams/' + it.id).then(function (r) {
-        if (r && r.id) setState({ exam: r, exErrors: r.errors || [], exChat: {}, exMsg: '', exDeleteArm: false }, scrollToExamCard);
+        if (r && r.id) setState({ byggTyp: (r.typ === 'arbetsblad' ? 'arbetsblad' : 'prov'),
+                                  exam: r, exErrors: r.errors || [], exChat: {}, exMsg: '', exDeleteArm: false }, scrollToExamCard);
       }).catch(function () {});
     }
   }
@@ -1125,33 +1116,33 @@
   }
   /* ------------------------------------------------ provgeneratorn (Fas 4) -- */
   function loadExamContent() {
-    if (!S.exCourseId) { setState({ exContent: [], exPunkter: {} }); return; }
-    var q = '/api/exams/content-status?course_id=' + S.exCourseId +
-            (S.exGroupId ? '&group_id=' + S.exGroupId : '');
+    if (!S.byggCourseId) { setState({ exContent: [], exPunkter: {} }); return; }
+    var q = '/api/exams/content-status?course_id=' + S.byggCourseId +
+            (S.byggGroupId ? '&group_id=' + S.byggGroupId : '');
     getJSON(q).then(function (r) {
       setState({ exContent: (r && r.punkter) || [], exPunkter: {} });
     }).catch(function () {});
   }
   function loadExamHistorik() {
-    if (!S.exCourseId) { setState({ exHistorik: [], exReferensId: '' }); return; }
-    getJSON('/api/exams?course_id=' + S.exCourseId).then(function (r) {
+    if (!S.byggCourseId) { setState({ exHistorik: [], exReferensId: '' }); return; }
+    getJSON('/api/exams?course_id=' + S.byggCourseId).then(function (r) {
       setState({ exHistorik: (r && r.exams) || [], exReferensId: '' });
     }).catch(function () {});
   }
-  // Chips och segment i stället för native selects (samma vokabulär som tavlan):
-  // klick väljer, klick på vald kurs/klass avmarkerar.
-  function exPickCourse(id) {
+  // Chips och segment i stället för native selects: kurs/klass är delade
+  // fält (bygg*) — klick väljer, klick på vald avmarkerar. Provets
+  // innehålls-/historiklistor laddas om vid varje ändring (billiga GET:ar).
+  function byggPickCourse(id) {
     setState(function (s) {
-      return { exCourseId: String(s.exCourseId) === String(id) ? '' : String(id) };
+      return { byggCourseId: String(s.byggCourseId) === String(id) ? '' : String(id) };
     }, function () { loadExamContent(); loadExamHistorik(); });
   }
-  function exPickGroup(id) {
+  function byggPickGroup(id) {
     setState(function (s) {
-      return { exGroupId: String(s.exGroupId) === String(id) ? '' : String(id) };
+      return { byggGroupId: String(s.byggGroupId) === String(id) ? '' : String(id) };
     }, loadExamContent);
   }
-  function exPickTyp(t) { setState({ exTyp: t }); }
-  // Delade kurschips för provet (samma formspråk som tavlans planCourseGroups):
+  // Delade kurschips för byggpanelen (tavla/prov/arbetsblad):
   // kompakta nivåetiketter grupperade per ämne, klick på vald avmarkerar.
   function courseChipGroups(selId, pick) {
     var groups = [], byAmne = {};
@@ -1207,7 +1198,6 @@
   }
   function onExAntal(e) { setState({ exAntal: e.target.value }); }
   function onExTid(e) { setState({ exTid: e.target.value }); }
-  function onExDatum(e) { setState({ exDatum: e.target.value }); }
   function onExDelar() { setState(function (s) { return { exDelar: !s.exDelar }; }); }
   function onExamEvent(ev) {
     if (ev.type === 'log') {
@@ -1229,19 +1219,22 @@
     }
   }
   function startExamGenerate() {
-    if (!S.exCourseId || S.exPhase === 'running') return;
+    if (!S.byggCourseId || S.exPhase === 'running') return;
+    var typ = S.byggTyp === 'arbetsblad' ? 'arbetsblad' : 'prov';
     setState({ exPhase: 'running', exLog: [], exErrors: [], exMsg: '' });
     streamPost('/api/exams/generate', {
-      course_id: +S.exCourseId,
-      group_id: S.exGroupId ? +S.exGroupId : null,
+      course_id: +S.byggCourseId,
+      group_id: S.byggGroupId ? +S.byggGroupId : null,
       punkter: Object.keys(S.exPunkter).map(Number),
       antal: +S.exAntal || 8,
-      tid_min: +S.exTid || 120,
-      delar: S.exDelar,
-      datum: S.exDatum || null,
-      typ: S.exTyp,
+      // Arbetsbladet har inga tids-/delfält i panelen — backendens defaultvärden
+      // skickas så payload-formatet är oförändrat.
+      tid_min: S.byggTyp === 'arbetsblad' ? 120 : (+S.exTid || 120),
+      delar: S.byggTyp === 'arbetsblad' ? false : S.exDelar,
+      datum: S.byggDatum || null,
+      typ: typ,
       referens_exam_id: S.exReferensId ? +S.exReferensId : null,
-      underlag: S.exUnderlag ? S.exUnderlag.id : null,
+      underlag: S.byggUnderlag ? S.byggUnderlag.id : null,
     }, onExamEvent);
   }
   function onExChat(nummer) {
@@ -3377,38 +3370,25 @@
       onWbZoomClose: function () { closeWbZoom(); },
       onWbCardClick: function (e) { if (e) e.stopPropagation(); },
       planLiveN: st.planLiveN || 0,
-      planGroups: st.groups, planCourses: st.courses,
-      planGroupId: st.planGroupId, planCourseId: st.planCourseId,
-      // Chips i stället för dropdowns: klick väljer, klick på vald avmarkerar.
-      // Ämnesmodellen (Gy25): servern levererar amne_namn/niva_kort/sort —
-      // chipsen grupperas per ämne i progressionsordning. Fritextkurser utan
-      // ämne hamnar i en egen grupp sist.
-      planCourseGroups: (function () {
-        var groups = [], byAmne = {};
-        st.courses.forEach(function (c) {
-          var sel = String(c.id) === String(st.planCourseId);
-          var chip = {
-            namn: c.namn,
-            kort: c.niva_kort || c.namn,
-            sel: sel,
-            onPick: function () { setState({ planCourseId: sel ? '' : String(c.id) }); },
-          };
-          var amne = c.amne_namn || 'Övrigt';
-          if (!(amne in byAmne)) { byAmne[amne] = { amne: amne, chips: [] }; groups.push(byAmne[amne]); }
-          byAmne[amne].chips.push(chip);
-        });
-        return groups;
-      })(),
-      planGroupOpts: st.groups.map(function (g) {
-        var sel = String(g.id) === String(st.planGroupId);
-        return { namn: g.namn, sel: sel, onPick: function () { setState({ planGroupId: sel ? '' : String(g.id) }); } };
+      // Enad byggpanel: typväljare + delade fält (kurs/klass/datum/underlag).
+      // Ämnesmodellen (Gy25): chipsen grupperas per ämne i progressionsordning;
+      // klick väljer, klick på vald avmarkerar.
+      byggTyp: st.byggTyp,
+      byggTypLabel: st.byggTyp === 'tavla' ? 'tavlan' : st.byggTyp === 'arbetsblad' ? 'arbetsbladet' : 'provet',
+      onByggTypTavla: function () { byggPickTyp('tavla'); },
+      onByggTypProv: function () { byggPickTyp('prov'); },
+      onByggTypArbetsblad: function () { byggPickTyp('arbetsblad'); },
+      byggCourseGroups: courseChipGroups(st.byggCourseId, byggPickCourse),
+      byggGroupOpts: st.groups.map(function (g) {
+        return { namn: g.namn, sel: String(g.id) === String(st.byggGroupId),
+                 onPick: function () { byggPickGroup(g.id); } };
       }),
-      planHasGroups: st.groups.length > 0,
-      planMoment: st.planMoment,
-      planUnderlag: st.planUnderlag,
-      planUnderlagBusy: !!st.planUnderlagBusy,
+      byggHasGroups: st.groups.length > 0,
+      byggDatum: st.byggDatum, onByggDatum: onByggDatum,
+      byggUnderlag: st.byggUnderlag,
+      byggUnderlagBusy: !!st.byggUnderlagBusy,
       onPickUnderlag: onPickUnderlag, onClearUnderlag: onClearUnderlag,
-      onPlanGroup: onPlanGroup, onPlanCourse: onPlanCourse,
+      planMoment: st.planMoment,
       onPlanMoment: onPlanMoment, onPlanMomentKey: onPlanMomentKey,
       onPlanStart: startPlanGenerate,
       planRunning: st.planPhase === 'running',
@@ -3421,17 +3401,8 @@
       onPlanChatInput: onPlanChatInput, onPlanChatKey: onPlanChatKey,
       onPlanRefine: sendPlanRefine, onPlanApprove: approvePlan,
       planSavedPath: st.planSavedPath,
-      planDatum: st.planDatum, planStarttid: st.planStarttid,
-      onPlanDatum: onPlanDatum, onPlanStarttid: onPlanStarttid,
-      // Provgeneratorn (Fas 4)
-      exCourseId: st.exCourseId, exGroupId: st.exGroupId,
-      // Samma chip-vokabulär som tavlan: kurs- och klassval är chips,
-      // dokumenttypen ett segment — inga native selects.
-      exCourseGroups: courseChipGroups(st.exCourseId, exPickCourse),
-      exGroupOpts: st.groups.map(function (g) {
-        return { namn: g.namn, sel: String(g.id) === String(st.exGroupId),
-                 onPick: function () { exPickGroup(g.id); } };
-      }),
+      planStarttid: st.planStarttid,
+      onPlanStarttid: onPlanStarttid,
       // Punkterna grupperas per Gy25-område som ihopfällbara valgrupper:
       // rubriken bär en räknare, varje rad är punktens egen text (kortad).
       // Osatt öppet-läge = auto: grupper med val står öppna.
@@ -3466,11 +3437,6 @@
         return groups;
       })(),
       exValdaTotal: Object.keys(st.exPunkter).length,
-      exTyp: st.exTyp,
-      onExTypProv: function () { exPickTyp('prov'); },
-      onExTypArbetsblad: function () { exPickTyp('arbetsblad'); },
-      exUnderlag: st.exUnderlag, exUnderlagBusy: !!st.exUnderlagBusy,
-      onPickExUnderlag: onPickExUnderlag, onClearExUnderlag: onClearExUnderlag,
       exReferensId: st.exReferensId,
       // Referensprovet är en custom popover-meny (samma mönster som
       // kartotekets filterpopovers: data-pop + mjuk hover-stängning).
@@ -3496,13 +3462,13 @@
                  onSelect: function () { exPickRef(h.id); } };
       }),
       exDubbletter: (st.exam && st.exam.dubbletter) || [],
-      exAntal: st.exAntal, exTid: st.exTid, exDatum: st.exDatum,
+      exAntal: st.exAntal, exTid: st.exTid,
       exDelar: st.exDelar,
-      onExAntal: onExAntal, onExTid: onExTid, onExDatum: onExDatum,
+      onExAntal: onExAntal, onExTid: onExTid,
       onExDelar: onExDelar,
       onExStart: startExamGenerate,
       exRunning: st.exPhase === 'running',
-      exCanStart: !!st.exCourseId && st.exPhase !== 'running',
+      exCanStart: !!st.byggCourseId && st.exPhase !== 'running',
       exLog: st.exLog, exHasLog: st.exLog.length > 0,
       exErrors: st.exErrors, exErrCount: st.exErrors.length,
       exMsg: st.exMsg,
@@ -5608,64 +5574,159 @@ function viewPlanning(v){
       <div class="ehead">
         <div>
           <div class="eyebrow" style="margin-bottom:18px">Planering</div>
-          <h1 class="disp" style="font-size:clamp(34px,5.2vw,52px);margin:0">Dagens <span class="ser">tavla</span></h1>
+          <h1 class="disp" style="font-size:clamp(34px,5.2vw,52px);margin:0">${ v.byggTyp === 'tavla' ? `Dagens <span class="ser">tavla</span>` : v.byggTyp === 'arbetsblad' ? `Nytt <span class="ser">arbetsblad</span>` : `Nytt <span class="ser">prov</span>` }</h1>
         </div>
-        <p class="ehead_lede">Beskriv momentet — och välj kurs om du vill — så skrivs tavlan som du annars hade skrivit för hand vid lektionens start. Iterera via chatten tills den sitter.</p>
+        <p class="ehead_lede">${ v.byggTyp === 'tavla'
+          ? 'Beskriv momentet — och välj kurs om du vill — så skrivs tavlan som du annars hade skrivit för hand vid lektionens start. Iterera via chatten tills den sitter.'
+          : v.byggTyp === 'arbetsblad'
+          ? 'Välj kurs och innehåll så skrivs ett arbetsblad med facit — egenformulerade uppgifter att öva på. Iterera via chatten tills det sitter.'
+          : 'Välj kurs och innehåll så skrivs ett prov med NP-lik struktur — uppgifterna är alltid egenformulerade. Iterera via chatten tills det sitter.' }</p>
       </div>
 
       <div style="display:flex;flex-direction:column;gap:13px;margin-bottom:18px">
-        <div style="display:flex;gap:9px;align-items:stretch;flex-wrap:wrap">
-          <input value="${esc(v.planMoment)}" data-input="${on(v.onPlanMoment)}" data-keydown="${on(v.onPlanMomentKey)}" aria-label="Moment" placeholder="Moment — t.ex. derivatans definition" style="flex:1;min-width:240px;background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:13px 15px;font-size:15.5px;font-family:inherit;color:var(--ink)">
-          <button data-click="${on(v.onPlanStart)}" ${v.planCanStart ? '' : 'disabled'} style="display:inline-flex;align-items:center;gap:7px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:4px;padding:13px 22px;font-size:14.5px;font-weight:500;font-family:inherit;cursor:${v.planCanStart ? 'pointer' : 'default'};opacity:${v.planCanStart ? '1' : '.55'}">${v.planRunning ? 'Skriver …' : 'Skriv tavlan'}</button>
+        <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+          <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);flex:0 0 68px">Skriv</span>
+          <div role="group" aria-label="Dokumenttyp" style="display:inline-flex;gap:3px;padding:3px;background:var(--track);border-radius:4px;border:1px solid var(--line)">
+            <button data-click="${on(v.onByggTypTavla)}" aria-pressed="${v.byggTyp === 'tavla' ? 'true' : 'false'}" data-seg="${v.byggTyp === 'tavla' ? 'on' : 'off'}" style="border:none;border-radius:3px;padding:7px 15px;font-size:13.5px;font-weight:500;font-family:inherit;background:transparent;color:var(--ink-2);transition:color .18s ease">Tavla</button>
+            <button data-click="${on(v.onByggTypProv)}" aria-pressed="${v.byggTyp === 'prov' ? 'true' : 'false'}" data-seg="${v.byggTyp === 'prov' ? 'on' : 'off'}" style="border:none;border-radius:3px;padding:7px 15px;font-size:13.5px;font-weight:500;font-family:inherit;background:transparent;color:var(--ink-2);transition:color .18s ease">Prov</button>
+            <button data-click="${on(v.onByggTypArbetsblad)}" aria-pressed="${v.byggTyp === 'arbetsblad' ? 'true' : 'false'}" data-seg="${v.byggTyp === 'arbetsblad' ? 'on' : 'off'}" style="border:none;border-radius:3px;padding:7px 15px;font-size:13.5px;font-weight:500;font-family:inherit;background:transparent;color:var(--ink-2);transition:color .18s ease">Arbetsblad</button>
+          </div>
         </div>
-        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
-          ${ v.planCourseGroups.map(function(g){ return `
-          <div role="group" aria-label="${esc(g.amne)}" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-            <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);margin-right:3px">${esc(g.amne)}</span>
-            ${ g.chips.map(function(c){ return `<button data-click="${on(c.onPick)}" data-chip="${c.sel ? 'on' : 'off'}" aria-pressed="${c.sel ? 'true' : 'false'}" title="${esc(c.namn)}" style="font-family:inherit;font-size:13px;font-weight:500;padding:6px 12px;border-radius:3px;background:var(--surface);color:var(--ink-2);border:1px solid var(--line);transition:border-color .14s,background .14s,color .14s">${esc(c.kort)}</button>`; }).join('') }
+
+        ${ v.byggTyp === 'tavla' ? `
+        <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+          <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);flex:0 0 68px">Moment</span>
+          <input value="${esc(v.planMoment)}" data-input="${on(v.onPlanMoment)}" data-keydown="${on(v.onPlanMomentKey)}" aria-label="Moment" placeholder="Moment — t.ex. derivatans definition" style="flex:1;min-width:240px;background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:13px 15px;font-size:15.5px;font-family:inherit;color:var(--ink)">
+        </div>
+        ` : '' }
+
+        <div style="display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap">
+          <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);flex:0 0 68px;padding-top:8px">Kurs</span>
+          <div style="flex:1;min-width:260px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+            ${ v.byggCourseGroups.map(function(g){ return `
+            <div role="group" aria-label="${esc(g.amne)}" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+              <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);margin-right:3px">${esc(g.amne)}</span>
+              ${ g.chips.map(function(c){ return `<button data-click="${on(c.onPick)}" data-chip="${c.sel ? 'on' : 'off'}" aria-pressed="${c.sel ? 'true' : 'false'}" title="${esc(c.namn)}" style="font-family:inherit;font-size:13px;font-weight:500;padding:6px 12px;border-radius:3px;background:var(--surface);color:var(--ink-2);border:1px solid var(--line);transition:border-color .14s,background .14s,color .14s">${esc(c.kort)}</button>`; }).join('') }
+            </div>
+            `; }).join('') }
+            ${ v.byggHasGroups ? `
+            <div role="group" aria-label="Klass" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+              <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);margin-right:3px">Klass</span>
+              ${ v.byggGroupOpts.map(function(g){ return `<button data-click="${on(g.onPick)}" data-chip="${g.sel ? 'on' : 'off'}" aria-pressed="${g.sel ? 'true' : 'false'}" style="font-family:inherit;font-size:13px;font-weight:500;padding:6px 12px;border-radius:3px;background:var(--surface);color:var(--ink-2);border:1px solid var(--line);transition:border-color .14s,background .14s,color .14s">${esc(g.namn)}</button>`; }).join('') }
+            </div>
+            ` : '' }
           </div>
-          `; }).join('') }
-          ${ v.planHasGroups ? `
-          <div role="group" aria-label="Klass" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-            <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);margin-right:3px">Klass</span>
-            ${ v.planGroupOpts.map(function(g){ return `<button data-click="${on(g.onPick)}" data-chip="${g.sel ? 'on' : 'off'}" aria-pressed="${g.sel ? 'true' : 'false'}" style="font-family:inherit;font-size:13px;font-weight:500;padding:6px 12px;border-radius:3px;background:var(--surface);color:var(--ink-2);border:1px solid var(--line);transition:border-color .14s,background .14s,color .14s">${esc(g.namn)}</button>`; }).join('') }
+        </div>
+
+        ${ v.byggTyp !== 'tavla' && v.exContentGroups.length ? `
+        <div style="display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap">
+          <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);flex:0 0 68px;padding-top:10px">Innehåll</span>
+          <div style="flex:1;min-width:300px;display:flex;flex-direction:column;gap:7px">
+            ${ v.exContentGroups.map(function(g3){ return `
+            <div data-ccg="" data-ccg-open="${g3.open ? 'true' : 'false'}" data-key="ccg-${esc(g3.rubrik)}">
+              <button data-ccg-head="" data-click="${on(g3.onToggleOpen)}" aria-expanded="${g3.open ? 'true' : 'false'}">
+                <svg data-ccg-caret="" width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:0 0 auto;color:var(--ink-3)"><path d="M6 4l4 4-4 4"></path></svg>
+                <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-2);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(g3.rubrik)}</span>
+                <span style="flex:1"></span>
+                <span data-ccg-count="${g3.valda ? 'on' : 'off'}" style="font-family:var(--mono);font-size:10px;letter-spacing:0.05em;color:var(--ink-3);font-variant-numeric:tabular-nums;white-space:nowrap">${ g3.valda ? esc(g3.valda) + ' valda av ' + esc(g3.punkter.length) : esc(g3.punkter.length) + ' punkter' }</span>
+              </button>
+              <div data-ccg-body=""><div>
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1px 18px;padding:1px 10px 9px">
+                  ${ g3.punkter.map(function(p){ return `
+                  <button data-key="cc-${esc(p.id)}" data-ccrow="" data-click="${on(p.onToggle)}" aria-pressed="${p.vald}" aria-label="${esc(p.text)} — ${esc(p.statusText)}" title="${esc(p.text)}">
+                    <span data-ck="${p.vald ? 'on' : 'off'}" aria-hidden="true"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6.5l2.4 2.4 4.6-5.3"></path></svg></span>
+                    <span style="min-width:0;flex:1;font-size:13px;line-height:1.35;color:${p.vald ? 'var(--ink)' : 'var(--ink-2)'}">${esc(p.kort)}</span>
+                    <span aria-hidden="true" title="${esc(p.statusText)}" style="flex:0 0 auto;font-size:11px;color:var(--ink-3)">${ p.provad ? '★' : p.behandlad ? '✓' : '○' }</span>
+                  </button>`; }).join('') }
+                </div>
+              </div></div>
+            </div>
+            `; }).join('') }
+            <div style="font-size:12px;color:var(--ink-3);margin-top:2px">Valfritt — ${ v.exValdaTotal ? esc(v.exValdaTotal) + ' punkter valda, uppgifterna byggs på dem' : 'utan val väljer modellen fritt ur kursens innehåll' }. &nbsp;○ ej behandlat · ✓ behandlat · ★ redan prövat</div>
           </div>
-          ` : '' }
-          <span style="flex:1"></span>
+        </div>
+        ` : '' }
+
+        <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+          <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);flex:0 0 68px">${ v.byggTyp === 'tavla' ? 'När' : 'Omfång' }</span>
+          ${ v.byggTyp !== 'tavla' ? `
+          <div role="group" aria-label="Omfång" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+            <label style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-3)"><input type="number" min="3" max="20" value="${esc(v.exAntal)}" data-change="${on(v.onExAntal)}" aria-label="Antal uppgifter" style="background:var(--surface);border:1px solid var(--line);border-radius:3px;padding:6px 9px;font-size:13px;font-family:inherit;color:var(--ink-2);width:56px;font-variant-numeric:tabular-nums">uppgifter</label>
+            ${ v.byggTyp === 'prov' ? `
+            <label style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-3)"><input type="number" min="30" max="300" step="10" value="${esc(v.exTid)}" data-change="${on(v.onExTid)}" aria-label="Provtid (minuter)" style="background:var(--surface);border:1px solid var(--line);border-radius:3px;padding:6px 9px;font-size:13px;font-family:inherit;color:var(--ink-2);width:64px;font-variant-numeric:tabular-nums">min</label>
+            <button data-click="${on(v.onExDelar)}" data-chip="${v.exDelar ? 'on' : 'off'}" aria-pressed="${v.exDelar ? 'true' : 'false'}" title="Dela provet i Del B (utan räknare) och Del C (med räknare)" style="font-family:inherit;font-size:13px;font-weight:500;padding:6px 12px;border-radius:3px;background:var(--surface);color:var(--ink-2);border:1px solid var(--line);transition:border-color .14s,background .14s,color .14s">Del B/C</button>
+            ` : '' }
+          </div>
           <div style="display:flex;align-items:center;gap:6px">
             <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);margin-right:3px">När</span>
-            <input type="date" value="${esc(v.planDatum)}" data-change="${on(v.onPlanDatum)}" aria-label="Datum" style="background:var(--surface);border:1px solid var(--line);border-radius:3px;padding:6px 9px;font-size:13px;font-family:inherit;color:var(--ink-2)">
+            <input type="date" value="${esc(v.byggDatum)}" data-change="${on(v.onByggDatum)}" aria-label="Datum" style="background:var(--surface);border:1px solid var(--line);border-radius:3px;padding:6px 9px;font-size:13px;font-family:inherit;color:var(--ink-2)">
+          </div>
+          ` : `
+          <div style="display:flex;align-items:center;gap:6px">
+            <input type="date" value="${esc(v.byggDatum)}" data-change="${on(v.onByggDatum)}" aria-label="Datum" style="background:var(--surface);border:1px solid var(--line);border-radius:3px;padding:6px 9px;font-size:13px;font-family:inherit;color:var(--ink-2)">
             <input type="time" value="${esc(v.planStarttid)}" data-change="${on(v.onPlanStarttid)}" aria-label="Starttid" style="background:var(--surface);border:1px solid var(--line);border-radius:3px;padding:6px 9px;font-size:13px;font-family:inherit;color:var(--ink-2)">
           </div>
+          ` }
+          ${ v.byggTyp !== 'tavla' && v.exReferensVal.length ? `
+          <div style="display:flex;align-items:center;gap:6px">
+            <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);margin-right:3px">Referens</span>
+            <div style="position:relative" data-enter="${on(v.exRefEnter)}" data-leave="${on(v.exRefLeave)}">
+              <button data-click="${on(v.exRefToggle)}" aria-haspopup="listbox" aria-expanded="${v.exRefOpen ? 'true' : 'false'}" data-filter-on="${esc(v.exRefOn)}" title="Utgå från ett tidigare prov — variera och höj svårighetsgraden" style="display:inline-flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line);color:var(--ink-2);border-radius:3px;padding:6px 12px;font-size:13px;font-weight:500;font-family:inherit;cursor:pointer;white-space:nowrap;max-width:280px;transition:border-color .14s"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis">${esc(v.exRefLabel)}</span><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;transition:transform .2s cubic-bezier(.16,1,.3,1);transform:${v.exRefOpen ? 'rotate(180deg)' : 'none'}"><path d="M4 6l4 4 4-4"></path></svg></button>
+              ${ v.exRefOpen ? `
+              <div data-pop="${esc(v.exRefAnim)}" style="position:absolute;top:100%;left:0;z-index:30;padding-top:6px"><div role="listbox" aria-label="Referensprov" style="min-width:210px;max-width:320px;background:var(--surface);border:1px solid var(--line-2);border-radius:5px;box-shadow:var(--shadow);padding:5px;display:flex;flex-direction:column;gap:1px">
+                ${ v.exRefOpts.map(function(o){ return `
+                <button data-key="${esc(o.key)}" data-click="${on(o.onSelect)}" data-opt="" role="option" aria-selected="${o.isCur ? 'true' : 'false'}" style="display:flex;align-items:center;gap:10px;border:none;background:transparent;color:var(--ink);border-radius:3px;padding:8px 11px;font-size:13.5px;font-family:inherit;cursor:pointer;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(o.label)}<span style="flex:1;min-width:14px"></span>${ o.isCur ? '<span style="font-weight:600">✓</span>' : '' }</button>
+                `; }).join('') }
+              </div></div>
+              ` : '' }
+            </div>
+          </div>
+          ` : '' }
         </div>
+
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-          <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);margin-right:3px">Underlag</span>
-          ${ v.planUnderlagBusy ? `
+          <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);flex:0 0 68px">${ v.byggTyp === 'tavla' ? 'Underlag' : 'Bilder' }</span>
+          ${ v.byggUnderlagBusy ? `
           <span style="display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-2)"><span style="width:13px;height:13px;border-radius:50%;border:2px solid var(--line-2);border-top-color:var(--accent);animation:spin .7s linear infinite"></span>Läser och tolkar sidorna …</span>
-          ` : v.planUnderlag ? `
-          ${ v.planUnderlag.filer.map(function(f){ return `<span title="${esc(f.beskrivning || f.namn)}" style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2);background:var(--sunken);border:1px solid var(--line);border-radius:3px;padding:4px 10px;max-width:220px"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(f.namn)}</span></span>`; }).join('') }
+          ` : v.byggUnderlag ? `
+          ${ v.byggUnderlag.filer.map(function(f){ return `<span title="${esc(f.beskrivning || f.namn)}" style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2);background:var(--sunken);border:1px solid var(--line);border-radius:3px;padding:4px 10px;max-width:220px"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(f.namn)}</span></span>`; }).join('') }
           <button data-click="${on(v.onClearUnderlag)}" aria-label="Ta bort underlaget" title="Ta bort underlaget" style="border:none;background:transparent;color:var(--ink-3);cursor:pointer;font-size:12px;padding:2px 6px;font-family:inherit">✕</button>
           <button data-click="${on(v.onPickUnderlag)}" style="border:none;background:transparent;color:var(--ink-2);cursor:pointer;font-size:12.5px;font-family:inherit;padding:2px 4px;text-decoration:underline;text-underline-offset:3px">Byt</button>
           ` : `
-          <button data-click="${on(v.onPickUnderlag)}" title="Ladda upp sidor ur läroboken eller uppgifter som lektionen ska bygga på — behandlas lokalt" style="display:inline-flex;align-items:center;gap:7px;border:1px dashed var(--line-2);background:transparent;color:var(--ink-2);border-radius:3px;padding:6px 12px;font-size:12.5px;font-family:inherit;cursor:pointer">＋ Bokssidor eller uppgifter (PNG, JPG, PDF)</button>
+          <button data-click="${on(v.onPickUnderlag)}" title="${ v.byggTyp === 'tavla' ? 'Ladda upp sidor ur läroboken eller uppgifter som lektionen ska bygga på — behandlas lokalt' : 'Ladda upp bilder som byggs in i uppgifterna — varje bild får en egen uppgift; behandlas lokalt' }" style="display:inline-flex;align-items:center;gap:7px;border:1px dashed var(--line-2);background:transparent;color:var(--ink-2);border-radius:3px;padding:6px 12px;font-size:12.5px;font-family:inherit;cursor:pointer">＋ ${ v.byggTyp === 'tavla' ? 'Bokssidor eller uppgifter' : 'Bilder till uppgifter' } (PNG, JPG, PDF)</button>
+          ` }
+        </div>
+
+        <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding-top:13px;border-top:1px solid color-mix(in srgb,var(--line) 60%,transparent)">
+          ${ v.byggTyp === 'tavla'
+            ? (v.planCanStart || v.planRunning ? '' : `<span style="font-size:13px;color:var(--ink-3)">Beskriv momentet ovan så kan tavlan skrivas.</span>`)
+            : (v.exCanStart || v.exRunning ? '' : `<span style="font-size:13px;color:var(--ink-3)">Välj kurs ovan så kan ${esc(v.byggTypLabel)} skrivas.</span>`) }
+          <span style="flex:1"></span>
+          ${ v.byggTyp === 'tavla' ? `
+          <button data-click="${on(v.onPlanStart)}" ${v.planCanStart ? '' : 'disabled'} style="display:inline-flex;align-items:center;gap:7px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:4px;padding:13px 22px;font-size:14.5px;font-weight:500;font-family:inherit;cursor:${v.planCanStart ? 'pointer' : 'default'};opacity:${v.planCanStart ? '1' : '.55'}">${v.planRunning ? 'Skriver …' : 'Skriv tavlan'}</button>
+          ` : `
+          <button data-click="${on(v.onExStart)}" ${v.exCanStart ? '' : 'disabled'} style="display:inline-flex;align-items:center;gap:7px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:4px;padding:13px 22px;font-size:14.5px;font-weight:500;font-family:inherit;cursor:${v.exCanStart ? 'pointer' : 'default'};opacity:${v.exCanStart ? '1' : '.55'}">${v.exRunning ? 'Skriver …' : (v.byggTyp === 'arbetsblad' ? 'Skriv arbetsbladet' : 'Skriv provet')}</button>
           ` }
         </div>
       </div>
 
-      ${ (v.planRunning || v.planUnderlagBusy) && v.planHasLog ? `
+      ${ v.byggTyp === 'tavla' && (v.planRunning || v.byggUnderlagBusy) && v.planHasLog ? `
         <div role="status" style="display:flex;flex-direction:column;gap:3px;margin-bottom:12px;font-size:13px;color:var(--ink-2)">
           ${ v.planLog.map(function(l){ return `<span>${esc(l)}</span>`; }).join('') }
         </div>
       ` : '' }
 
-      ${ v.planErrCount ? `
+      ${ v.byggTyp === 'tavla' && v.planErrCount ? `
         <div role="status" style="display:flex;flex-direction:column;gap:4px;margin-bottom:12px;font-size:13px;color:var(--warn)">
           <span style="font-weight:600">${esc(v.planErrCount)} problem kvarstår efter reparationsförsöken:</span>
           ${ v.planErrors.map(function(e2){ return `<span style="font-family:var(--mono,monospace);font-size:12px;color:var(--ink-2)">${esc(typeof e2 === 'string' ? e2 : (e2.path ? e2.path + ': ' : '') + (e2.message || ''))}</span>`; }).join('') }
         </div>
       ` : '' }
 
-      <div data-wbwrap="${esc(v.wbZoomFlag)}" data-click="${on(v.onWbZoomClose)}">
+      ${ /* Tavelkortet lämnas monterat (dolt) vid typbyte: iframen är
+            morphdom-skyddad och boarden slipper ritas om när man växlar
+            tillbaka till Tavla. */ '' }
+      <div data-wbwrap="${esc(v.wbZoomFlag)}" data-click="${on(v.onWbZoomClose)}" style="${ v.byggTyp === 'tavla' ? '' : 'display:none' }">
       <div data-key="wb-card" data-wbzoom="${esc(v.wbZoomFlag)}" data-click="${on(v.onWbCardClick)}" role="${v.wbZoomOn ? 'dialog' : ''}" aria-label="${v.wbZoomOn ? 'Förstorad lektionstavla' : ''}" style="background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;box-shadow:var(--shadow-sm)">
         <div style="display:flex;align-items:center;gap:10px;margin:2px 2px 10px">
           <span style="font-size:15px;font-weight:600;color:var(--ink)">${esc(v.wbTitle)}</span>
@@ -5702,6 +5763,7 @@ function viewPlanning(v){
       </div>
       </div>
 
+      ${ v.byggTyp === 'tavla' ? `
       ${ v.wbWarnCount ? `
         <div role="status" style="display:flex;flex-direction:column;gap:4px;margin-top:10px;font-size:13px;color:var(--warn)">
           <span style="font-weight:600">Motorn flaggade ${esc(v.wbWarnCount)} ${v.wbWarnCount === 1 ? 'layoutvarning' : 'layoutvarningar'}:</span>
@@ -5727,6 +5789,82 @@ function viewPlanning(v){
         ${ v.planSavedPath ? `<span role="status" style="font-size:13.5px;color:var(--ink-2);font-variant-numeric:tabular-nums;word-break:break-all">Sparad: ${esc(v.planSavedPath)}</span>` : '' }
         ${ v.wbExportMsg ? `<span role="status" style="font-size:13.5px;color:${v.wbExportFailed ? 'var(--bad)' : 'var(--ink-2)'};font-variant-numeric:tabular-nums;word-break:break-all">${esc(v.wbExportMsg)}</span>` : '' }
       </div>
+      ` : '' }
+
+      ${ v.byggTyp !== 'tavla' ? `
+      <div style="margin-top:4px">
+        ${ (v.exRunning || v.byggUnderlagBusy) && v.exHasLog ? `
+          <div role="status" style="display:flex;flex-direction:column;gap:3px;margin-bottom:12px;font-size:13px;color:var(--ink-2)">
+            ${ v.exLog.map(function(l){ return `<span>${esc(l)}</span>`; }).join('') }
+          </div>
+        ` : '' }
+
+        ${ v.exErrCount ? `
+          <div role="status" style="display:flex;flex-direction:column;gap:4px;margin-bottom:12px;font-size:13px;color:var(--warn)">
+            <span style="font-weight:600">${esc(v.exErrCount)} problem kvarstår:</span>
+            ${ v.exErrors.map(function(e2){ return `<span style="font-family:var(--mono,monospace);font-size:12px;color:var(--ink-2)">${esc(typeof e2 === 'string' ? e2 : (e2.path ? e2.path + ': ' : '') + (e2.message || ''))}</span>`; }).join('') }
+          </div>
+        ` : '' }
+
+        ${ v.exam ? `
+          <div data-key="exam-card" style="background:var(--surface);border:1px solid var(--line);border-radius:5px;padding:16px 18px;animation:fadeup .34s cubic-bezier(.16,1,.3,1) both">
+            <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:6px">
+              <span style="font-size:16px;font-weight:600;color:var(--ink)">${esc(v.exam.titel)}</span>
+              <span style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-3)">${esc(v.exam.typ)}</span>
+              <span style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.07em;text-transform:uppercase;color:${v.exam.godkant ? 'var(--ok)' : 'var(--ink-3)'}">${esc(v.exam.status)}</span>
+              <span style="font-size:12.5px;color:var(--ink-3)">${esc(v.exam.versionRad)}</span>
+              <span style="flex:1"></span>
+              <button data-click="${on(v.onExClose)}" aria-label="Stäng ${v.exam.typ === 'arbetsblad' ? 'arbetsbladet' : 'provet'}" title="Stäng — tillbaka till inställningarna" style="align-self:center;border:none;background:transparent;color:var(--ink-3);cursor:pointer;font-size:14px;line-height:1;padding:5px 8px;border-radius:3px;font-family:inherit">✕</button>
+            </div>
+            <div style="font-size:13.5px;color:var(--ink-2);font-variant-numeric:tabular-nums">${esc(v.exam.balansRad)}</div>
+            <div style="font-size:13px;color:var(--ink-3);font-variant-numeric:tabular-nums;margin-bottom:6px">${esc(v.exam.granserRad)}</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
+              ${ v.exam.formagor.map(function(f2){ return `<span data-key="fm-${esc(f2.f)}" style="font-family:var(--mono);font-size:11px;color:var(--ink-2);background:var(--sunken);border:1px solid var(--line);border-radius:3px;padding:2px 8px">${esc(f2.f)} ${esc(f2.p)} p</span>`; }).join('') }
+            </div>
+            ${ v.exDubbletter.length ? `
+              <div role="status" style="display:flex;flex-direction:column;gap:4px;margin-bottom:14px;font-size:13px;color:var(--warn)">
+                <span style="font-weight:600">${esc(v.exDubbletter.length)} uppgift${v.exDubbletter.length === 1 ? '' : 'er'} liknar tidigare prov:</span>
+                ${ v.exDubbletter.map(function(d2){ return `<span style="font-family:var(--mono,monospace);font-size:12px;color:var(--ink-2)">"${esc(d2.text)}" ≈ ${esc(d2.mot_titel)} (${esc(Math.round(d2.likhet * 100))} % likhet)</span>`; }).join('') }
+              </div>
+            ` : '' }
+
+            ${ v.exam.uppgifter.map(function(u2){ return `
+              <div data-key="ex-u-${esc(u2.nummer)}" style="border-top:1px solid color-mix(in srgb,var(--line) 60%,transparent);padding:11px 0">
+                <div style="display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;margin-bottom:4px">
+                  <span style="font-weight:600;font-size:14px;color:var(--ink)">Uppgift ${esc(u2.nummer)}</span>
+                  ${ u2.del ? `<span style="font-family:var(--mono);font-size:10.5px;color:var(--ink-3)">DEL ${esc(u2.del)}</span>` : '' }
+                  <span style="font-family:var(--mono);font-size:10.5px;color:var(--ink-3)">${esc(u2.formaga)} · ${esc(u2.typ)}</span>
+                  <span style="font-family:var(--mono);font-size:11.5px;color:var(--ink-2)">(${esc(u2.poangStr)})</span>
+                </div>
+                <div data-math="" style="font-size:14px;color:var(--ink);line-height:1.5;margin-bottom:7px">${esc(u2.text)}</div>
+                <div style="display:flex;gap:8px">
+                  <input value="${esc(u2.chatValue)}" data-input="${on(u2.onChat)}" aria-label="Ändra uppgift ${esc(u2.nummer)}" placeholder="Ändra uppgiften — t.ex. gör den svårare, byt kontext …" style="flex:1;min-width:0;background:var(--sunken);border:1px solid var(--line);border-radius:4px;padding:7px 11px;font-size:13px;font-family:inherit;color:var(--ink)">
+                  <button data-click="${on(u2.onSend)}" ${u2.canSend ? '' : 'disabled'} style="border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:4px;padding:7px 13px;font-size:13px;font-weight:500;font-family:inherit;cursor:${u2.canSend ? 'pointer' : 'default'};opacity:${u2.canSend ? '1' : '.55'}">Ändra</button>
+                </div>
+              </div>
+            `; }).join('') }
+
+            <div style="display:flex;align-items:center;gap:10px;margin-top:14px;flex-wrap:wrap">
+              <button data-click="${on(v.onExApprove)}" ${!v.exRunning ? '' : 'disabled'} style="display:inline-flex;align-items:center;gap:7px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:4px;padding:10px 17px;font-size:14.5px;font-weight:500;font-family:inherit;cursor:${!v.exRunning ? 'pointer' : 'default'};opacity:${!v.exRunning ? '1' : '.55'}">${v.exam.godkant ? 'Skapa PDF igen' : 'Godkänn & skapa PDF'}</button>
+              ${ v.exam.hasPdf ? `<button data-click="${on(v.onExPdf)}" style="border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:4px;padding:10px 15px;font-size:14px;font-weight:500;font-family:inherit;cursor:pointer">Öppna PDF</button>` : '' }
+              ${ v.exam.hasTex ? `<button data-click="${on(v.onExTex)}" style="border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:4px;padding:10px 15px;font-size:14px;font-weight:500;font-family:inherit;cursor:pointer">.tex</button>` : '' }
+              ${ v.exam.hasTex ? `<button data-click="${on(v.onExOverleaf)}" title="Tillval: öppnar källan i Overleaf (molntjänst) för manuell finputs — prov innehåller ingen elevdata" style="border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:4px;padding:10px 15px;font-size:14px;font-weight:500;font-family:inherit;cursor:pointer">Öppna i Overleaf</button>` : '' }
+              ${ v.exMsg ? `<span role="status" style="font-size:13.5px;color:var(--ink-2);word-break:break-all">${esc(v.exMsg)}</span>` : '' }
+              <span style="flex:1"></span>
+              ${ v.exDeleteArm ? `
+              <span style="display:inline-flex;align-items:center;gap:8px;animation:fadeup .22s cubic-bezier(.16,1,.3,1) both">
+                <span style="font-size:13px;color:var(--bad)">Raderas permanent, även filerna.</span>
+                <button data-click="${on(v.onExDelete)}" aria-label="Ta bort ${v.exam.typ === 'arbetsblad' ? 'arbetsbladet' : 'provet'} permanent" style="border:1px solid var(--bad);background:transparent;color:var(--bad);border-radius:4px;padding:9px 14px;font-size:13.5px;font-weight:500;font-family:inherit;cursor:pointer">Ja, radera</button>
+                <button data-click="${on(v.onExDeleteCancel)}" style="border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:4px;padding:9px 14px;font-size:13.5px;font-weight:500;font-family:inherit;cursor:pointer">Avbryt</button>
+              </span>
+              ` : `
+              <button data-click="${on(v.onExDeleteArm)}" aria-label="Ta bort ${v.exam.typ === 'arbetsblad' ? 'arbetsbladet' : 'provet'}" title="Raderar ${v.exam.typ === 'arbetsblad' ? 'arbetsbladet' : 'provet'} och dess filer permanent" style="border:none;background:transparent;color:var(--ink-3);border-radius:4px;padding:9px 12px;font-size:13.5px;font-weight:500;font-family:inherit;cursor:pointer">Radera</button>
+              ` }
+            </div>
+          </div>
+        ` : '' }
+      </div>
+      ` : '' }
 
       ${ v.arkiv ? `
       <div style="margin-top:44px">
@@ -5812,189 +5950,6 @@ function viewPlanning(v){
       </div>
       ` : '' }
 
-      <div style="margin-top:38px">
-        <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:12px">
-          <span class="eyebrow">Prov</span>
-          <span style="font-size:13.5px;color:var(--ink-3)">NP-lik struktur — uppgifterna är alltid egenformulerade</span>
-        </div>
-
-        <div style="display:flex;flex-direction:column;gap:13px;margin-bottom:15px">
-          <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
-            <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);flex:0 0 68px">Typ</span>
-            <div role="group" aria-label="Dokumenttyp" style="display:inline-flex;gap:3px;padding:3px;background:var(--track);border-radius:4px;border:1px solid var(--line)">
-              <button data-click="${on(v.onExTypProv)}" aria-pressed="${v.exTyp === 'prov' ? 'true' : 'false'}" data-seg="${v.exTyp === 'prov' ? 'on' : 'off'}" style="border:none;border-radius:3px;padding:7px 15px;font-size:13.5px;font-weight:500;font-family:inherit;background:transparent;color:var(--ink-2);transition:color .18s ease">Prov</button>
-              <button data-click="${on(v.onExTypArbetsblad)}" aria-pressed="${v.exTyp === 'arbetsblad' ? 'true' : 'false'}" data-seg="${v.exTyp === 'arbetsblad' ? 'on' : 'off'}" style="border:none;border-radius:3px;padding:7px 15px;font-size:13.5px;font-weight:500;font-family:inherit;background:transparent;color:var(--ink-2);transition:color .18s ease">Arbetsblad</button>
-            </div>
-          </div>
-          <div style="display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap">
-            <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);flex:0 0 68px;padding-top:8px">Kurs</span>
-            <div style="flex:1;min-width:260px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
-              ${ v.exCourseGroups.map(function(g){ return `
-              <div role="group" aria-label="${esc(g.amne)}" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-                <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);margin-right:3px">${esc(g.amne)}</span>
-                ${ g.chips.map(function(c){ return `<button data-click="${on(c.onPick)}" data-chip="${c.sel ? 'on' : 'off'}" aria-pressed="${c.sel ? 'true' : 'false'}" title="${esc(c.namn)}" style="font-family:inherit;font-size:13px;font-weight:500;padding:6px 12px;border-radius:3px;background:var(--surface);color:var(--ink-2);border:1px solid var(--line);transition:border-color .14s,background .14s,color .14s">${esc(c.kort)}</button>`; }).join('') }
-              </div>
-              `; }).join('') }
-              ${ v.exGroupOpts.length ? `
-              <div role="group" aria-label="Klass" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-                <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);margin-right:3px">Klass</span>
-                ${ v.exGroupOpts.map(function(g){ return `<button data-click="${on(g.onPick)}" data-chip="${g.sel ? 'on' : 'off'}" aria-pressed="${g.sel ? 'true' : 'false'}" style="font-family:inherit;font-size:13px;font-weight:500;padding:6px 12px;border-radius:3px;background:var(--surface);color:var(--ink-2);border:1px solid var(--line);transition:border-color .14s,background .14s,color .14s">${esc(g.namn)}</button>`; }).join('') }
-              </div>
-              ` : '' }
-            </div>
-          </div>
-
-          ${ v.exContentGroups.length ? `
-          <div style="display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap">
-            <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);flex:0 0 68px;padding-top:10px">Innehåll</span>
-            <div style="flex:1;min-width:300px;display:flex;flex-direction:column;gap:7px">
-              ${ v.exContentGroups.map(function(g3){ return `
-              <div data-ccg="" data-ccg-open="${g3.open ? 'true' : 'false'}" data-key="ccg-${esc(g3.rubrik)}">
-                <button data-ccg-head="" data-click="${on(g3.onToggleOpen)}" aria-expanded="${g3.open ? 'true' : 'false'}">
-                  <svg data-ccg-caret="" width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex:0 0 auto;color:var(--ink-3)"><path d="M6 4l4 4-4 4"></path></svg>
-                  <span style="font-family:var(--mono);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-2);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(g3.rubrik)}</span>
-                  <span style="flex:1"></span>
-                  <span data-ccg-count="${g3.valda ? 'on' : 'off'}" style="font-family:var(--mono);font-size:10px;letter-spacing:0.05em;color:var(--ink-3);font-variant-numeric:tabular-nums;white-space:nowrap">${ g3.valda ? esc(g3.valda) + ' valda av ' + esc(g3.punkter.length) : esc(g3.punkter.length) + ' punkter' }</span>
-                </button>
-                <div data-ccg-body=""><div>
-                  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1px 18px;padding:1px 10px 9px">
-                    ${ g3.punkter.map(function(p){ return `
-                    <button data-key="cc-${esc(p.id)}" data-ccrow="" data-click="${on(p.onToggle)}" aria-pressed="${p.vald}" aria-label="${esc(p.text)} — ${esc(p.statusText)}" title="${esc(p.text)}">
-                      <span data-ck="${p.vald ? 'on' : 'off'}" aria-hidden="true"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6.5l2.4 2.4 4.6-5.3"></path></svg></span>
-                      <span style="min-width:0;flex:1;font-size:13px;line-height:1.35;color:${p.vald ? 'var(--ink)' : 'var(--ink-2)'}">${esc(p.kort)}</span>
-                      <span aria-hidden="true" title="${esc(p.statusText)}" style="flex:0 0 auto;font-size:11px;color:var(--ink-3)">${ p.provad ? '★' : p.behandlad ? '✓' : '○' }</span>
-                    </button>`; }).join('') }
-                  </div>
-                </div></div>
-              </div>
-              `; }).join('') }
-              <div style="font-size:12px;color:var(--ink-3);margin-top:2px">Valfritt — ${ v.exValdaTotal ? esc(v.exValdaTotal) + ' punkter valda, uppgifterna byggs på dem' : 'utan val väljer modellen fritt ur kursens innehåll' }. &nbsp;○ ej behandlat · ✓ behandlat · ★ redan prövat</div>
-            </div>
-          </div>
-          ` : '' }
-
-          <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
-            <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);flex:0 0 68px">Omfång</span>
-            <div role="group" aria-label="Omfång" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-              <label style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-3)"><input type="number" min="3" max="20" value="${esc(v.exAntal)}" data-change="${on(v.onExAntal)}" aria-label="Antal uppgifter" style="background:var(--surface);border:1px solid var(--line);border-radius:3px;padding:6px 9px;font-size:13px;font-family:inherit;color:var(--ink-2);width:56px;font-variant-numeric:tabular-nums">uppgifter</label>
-              <label style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-3)"><input type="number" min="30" max="300" step="10" value="${esc(v.exTid)}" data-change="${on(v.onExTid)}" aria-label="Provtid (minuter)" style="background:var(--surface);border:1px solid var(--line);border-radius:3px;padding:6px 9px;font-size:13px;font-family:inherit;color:var(--ink-2);width:64px;font-variant-numeric:tabular-nums">min</label>
-              <button data-click="${on(v.onExDelar)}" data-chip="${v.exDelar ? 'on' : 'off'}" aria-pressed="${v.exDelar ? 'true' : 'false'}" title="Dela provet i Del B (utan räknare) och Del C (med räknare)" style="font-family:inherit;font-size:13px;font-weight:500;padding:6px 12px;border-radius:3px;background:var(--surface);color:var(--ink-2);border:1px solid var(--line);transition:border-color .14s,background .14s,color .14s">Del B/C</button>
-            </div>
-            <div style="display:flex;align-items:center;gap:6px">
-              <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);margin-right:3px">När</span>
-              <input type="date" value="${esc(v.exDatum)}" data-change="${on(v.onExDatum)}" aria-label="Provdatum" style="background:var(--surface);border:1px solid var(--line);border-radius:3px;padding:6px 9px;font-size:13px;font-family:inherit;color:var(--ink-2)">
-            </div>
-            ${ v.exReferensVal.length ? `
-            <div style="display:flex;align-items:center;gap:6px">
-              <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);margin-right:3px">Referens</span>
-              <div style="position:relative" data-enter="${on(v.exRefEnter)}" data-leave="${on(v.exRefLeave)}">
-                <button data-click="${on(v.exRefToggle)}" aria-haspopup="listbox" aria-expanded="${v.exRefOpen ? 'true' : 'false'}" data-filter-on="${esc(v.exRefOn)}" title="Utgå från ett tidigare prov — variera och höj svårighetsgraden" style="display:inline-flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line);color:var(--ink-2);border-radius:3px;padding:6px 12px;font-size:13px;font-weight:500;font-family:inherit;cursor:pointer;white-space:nowrap;max-width:280px;transition:border-color .14s"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis">${esc(v.exRefLabel)}</span><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto;transition:transform .2s cubic-bezier(.16,1,.3,1);transform:${v.exRefOpen ? 'rotate(180deg)' : 'none'}"><path d="M4 6l4 4 4-4"></path></svg></button>
-                ${ v.exRefOpen ? `
-                <div data-pop="${esc(v.exRefAnim)}" style="position:absolute;top:100%;left:0;z-index:30;padding-top:6px"><div role="listbox" aria-label="Referensprov" style="min-width:210px;max-width:320px;background:var(--surface);border:1px solid var(--line-2);border-radius:5px;box-shadow:var(--shadow);padding:5px;display:flex;flex-direction:column;gap:1px">
-                  ${ v.exRefOpts.map(function(o){ return `
-                  <button data-key="${esc(o.key)}" data-click="${on(o.onSelect)}" data-opt="" role="option" aria-selected="${o.isCur ? 'true' : 'false'}" style="display:flex;align-items:center;gap:10px;border:none;background:transparent;color:var(--ink);border-radius:3px;padding:8px 11px;font-size:13.5px;font-family:inherit;cursor:pointer;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(o.label)}<span style="flex:1;min-width:14px"></span>${ o.isCur ? '<span style="font-weight:600">✓</span>' : '' }</button>
-                  `; }).join('') }
-                </div></div>
-                ` : '' }
-              </div>
-            </div>
-            ` : '' }
-          </div>
-
-          <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
-            <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);flex:0 0 68px">Bilder</span>
-            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-              ${ v.exUnderlagBusy ? `
-              <span style="display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-2)"><span style="width:13px;height:13px;border-radius:50%;border:2px solid var(--line-2);border-top-color:var(--accent);animation:spin .7s linear infinite"></span>Läser och tolkar bilderna …</span>
-              ` : v.exUnderlag ? `
-              ${ v.exUnderlag.filer.map(function(f){ return `<span title="${esc(f.beskrivning || f.namn)}" style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-2);background:var(--sunken);border:1px solid var(--line);border-radius:3px;padding:4px 10px;max-width:220px"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(f.namn)}</span></span>`; }).join('') }
-              <button data-click="${on(v.onClearExUnderlag)}" aria-label="Ta bort bilderna" title="Ta bort bilderna" style="border:none;background:transparent;color:var(--ink-3);cursor:pointer;font-size:12px;padding:2px 6px;font-family:inherit">✕</button>
-              <button data-click="${on(v.onPickExUnderlag)}" style="border:none;background:transparent;color:var(--ink-2);cursor:pointer;font-size:12.5px;font-family:inherit;padding:2px 4px;text-decoration:underline;text-underline-offset:3px">Byt</button>
-              ` : `
-              <button data-click="${on(v.onPickExUnderlag)}" title="Ladda upp bilder som byggs in i provuppgifterna — varje bild får en egen uppgift; behandlas lokalt" style="display:inline-flex;align-items:center;gap:7px;border:1px dashed var(--line-2);background:transparent;color:var(--ink-2);border-radius:3px;padding:6px 12px;font-size:12.5px;font-family:inherit;cursor:pointer">＋ Bilder till uppgifter (PNG, JPG, PDF)</button>
-              ` }
-            </div>
-          </div>
-
-          <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding-top:13px;border-top:1px solid color-mix(in srgb,var(--line) 60%,transparent)">
-            ${ v.exCanStart || v.exRunning ? '' : `<span style="font-size:13px;color:var(--ink-3)">Välj kurs ovan så kan ${v.exTyp === 'arbetsblad' ? 'arbetsbladet' : 'provet'} skrivas.</span>` }
-            <span style="flex:1"></span>
-            <button data-click="${on(v.onExStart)}" ${v.exCanStart ? '' : 'disabled'} style="display:inline-flex;align-items:center;gap:7px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:4px;padding:13px 22px;font-size:14.5px;font-weight:500;font-family:inherit;cursor:${v.exCanStart ? 'pointer' : 'default'};opacity:${v.exCanStart ? '1' : '.55'}">${v.exRunning ? 'Skriver …' : (v.exTyp === 'arbetsblad' ? 'Skriv arbetsbladet' : 'Skriv provet')}</button>
-          </div>
-        </div>
-
-        ${ (v.exRunning || v.exUnderlagBusy) && v.exHasLog ? `
-          <div role="status" style="display:flex;flex-direction:column;gap:3px;margin-bottom:12px;font-size:13px;color:var(--ink-2)">
-            ${ v.exLog.map(function(l){ return `<span>${esc(l)}</span>`; }).join('') }
-          </div>
-        ` : '' }
-
-        ${ v.exErrCount ? `
-          <div role="status" style="display:flex;flex-direction:column;gap:4px;margin-bottom:12px;font-size:13px;color:var(--warn)">
-            <span style="font-weight:600">${esc(v.exErrCount)} problem kvarstår:</span>
-            ${ v.exErrors.map(function(e2){ return `<span style="font-family:var(--mono,monospace);font-size:12px;color:var(--ink-2)">${esc(typeof e2 === 'string' ? e2 : (e2.path ? e2.path + ': ' : '') + (e2.message || ''))}</span>`; }).join('') }
-          </div>
-        ` : '' }
-
-        ${ v.exam ? `
-          <div data-key="exam-card" style="background:var(--surface);border:1px solid var(--line);border-radius:5px;padding:16px 18px;animation:fadeup .34s cubic-bezier(.16,1,.3,1) both">
-            <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:6px">
-              <span style="font-size:16px;font-weight:600;color:var(--ink)">${esc(v.exam.titel)}</span>
-              <span style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-3)">${esc(v.exam.typ)}</span>
-              <span style="font-family:var(--mono);font-size:10.5px;letter-spacing:0.07em;text-transform:uppercase;color:${v.exam.godkant ? 'var(--ok)' : 'var(--ink-3)'}">${esc(v.exam.status)}</span>
-              <span style="font-size:12.5px;color:var(--ink-3)">${esc(v.exam.versionRad)}</span>
-              <span style="flex:1"></span>
-              <button data-click="${on(v.onExClose)}" aria-label="Stäng ${v.exam.typ === 'arbetsblad' ? 'arbetsbladet' : 'provet'}" title="Stäng — tillbaka till inställningarna" style="align-self:center;border:none;background:transparent;color:var(--ink-3);cursor:pointer;font-size:14px;line-height:1;padding:5px 8px;border-radius:3px;font-family:inherit">✕</button>
-            </div>
-            <div style="font-size:13.5px;color:var(--ink-2);font-variant-numeric:tabular-nums">${esc(v.exam.balansRad)}</div>
-            <div style="font-size:13px;color:var(--ink-3);font-variant-numeric:tabular-nums;margin-bottom:6px">${esc(v.exam.granserRad)}</div>
-            <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
-              ${ v.exam.formagor.map(function(f2){ return `<span data-key="fm-${esc(f2.f)}" style="font-family:var(--mono);font-size:11px;color:var(--ink-2);background:var(--sunken);border:1px solid var(--line);border-radius:3px;padding:2px 8px">${esc(f2.f)} ${esc(f2.p)} p</span>`; }).join('') }
-            </div>
-            ${ v.exDubbletter.length ? `
-              <div role="status" style="display:flex;flex-direction:column;gap:4px;margin-bottom:14px;font-size:13px;color:var(--warn)">
-                <span style="font-weight:600">${esc(v.exDubbletter.length)} uppgift${v.exDubbletter.length === 1 ? '' : 'er'} liknar tidigare prov:</span>
-                ${ v.exDubbletter.map(function(d2){ return `<span style="font-family:var(--mono,monospace);font-size:12px;color:var(--ink-2)">"${esc(d2.text)}" ≈ ${esc(d2.mot_titel)} (${esc(Math.round(d2.likhet * 100))} % likhet)</span>`; }).join('') }
-              </div>
-            ` : '' }
-
-            ${ v.exam.uppgifter.map(function(u2){ return `
-              <div data-key="ex-u-${esc(u2.nummer)}" style="border-top:1px solid color-mix(in srgb,var(--line) 60%,transparent);padding:11px 0">
-                <div style="display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;margin-bottom:4px">
-                  <span style="font-weight:600;font-size:14px;color:var(--ink)">Uppgift ${esc(u2.nummer)}</span>
-                  ${ u2.del ? `<span style="font-family:var(--mono);font-size:10.5px;color:var(--ink-3)">DEL ${esc(u2.del)}</span>` : '' }
-                  <span style="font-family:var(--mono);font-size:10.5px;color:var(--ink-3)">${esc(u2.formaga)} · ${esc(u2.typ)}</span>
-                  <span style="font-family:var(--mono);font-size:11.5px;color:var(--ink-2)">(${esc(u2.poangStr)})</span>
-                </div>
-                <div data-math="" style="font-size:14px;color:var(--ink);line-height:1.5;margin-bottom:7px">${esc(u2.text)}</div>
-                <div style="display:flex;gap:8px">
-                  <input value="${esc(u2.chatValue)}" data-input="${on(u2.onChat)}" aria-label="Ändra uppgift ${esc(u2.nummer)}" placeholder="Ändra uppgiften — t.ex. gör den svårare, byt kontext …" style="flex:1;min-width:0;background:var(--sunken);border:1px solid var(--line);border-radius:4px;padding:7px 11px;font-size:13px;font-family:inherit;color:var(--ink)">
-                  <button data-click="${on(u2.onSend)}" ${u2.canSend ? '' : 'disabled'} style="border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:4px;padding:7px 13px;font-size:13px;font-weight:500;font-family:inherit;cursor:${u2.canSend ? 'pointer' : 'default'};opacity:${u2.canSend ? '1' : '.55'}">Ändra</button>
-                </div>
-              </div>
-            `; }).join('') }
-
-            <div style="display:flex;align-items:center;gap:10px;margin-top:14px;flex-wrap:wrap">
-              <button data-click="${on(v.onExApprove)}" ${!v.exRunning ? '' : 'disabled'} style="display:inline-flex;align-items:center;gap:7px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:4px;padding:10px 17px;font-size:14.5px;font-weight:500;font-family:inherit;cursor:${!v.exRunning ? 'pointer' : 'default'};opacity:${!v.exRunning ? '1' : '.55'}">${v.exam.godkant ? 'Skapa PDF igen' : 'Godkänn & skapa PDF'}</button>
-              ${ v.exam.hasPdf ? `<button data-click="${on(v.onExPdf)}" style="border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:4px;padding:10px 15px;font-size:14px;font-weight:500;font-family:inherit;cursor:pointer">Öppna PDF</button>` : '' }
-              ${ v.exam.hasTex ? `<button data-click="${on(v.onExTex)}" style="border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:4px;padding:10px 15px;font-size:14px;font-weight:500;font-family:inherit;cursor:pointer">.tex</button>` : '' }
-              ${ v.exam.hasTex ? `<button data-click="${on(v.onExOverleaf)}" title="Tillval: öppnar källan i Overleaf (molntjänst) för manuell finputs — prov innehåller ingen elevdata" style="border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:4px;padding:10px 15px;font-size:14px;font-weight:500;font-family:inherit;cursor:pointer">Öppna i Overleaf</button>` : '' }
-              ${ v.exMsg ? `<span role="status" style="font-size:13.5px;color:var(--ink-2);word-break:break-all">${esc(v.exMsg)}</span>` : '' }
-              <span style="flex:1"></span>
-              ${ v.exDeleteArm ? `
-              <span style="display:inline-flex;align-items:center;gap:8px;animation:fadeup .22s cubic-bezier(.16,1,.3,1) both">
-                <span style="font-size:13px;color:var(--bad)">Raderas permanent, även filerna.</span>
-                <button data-click="${on(v.onExDelete)}" aria-label="Ta bort ${v.exam.typ === 'arbetsblad' ? 'arbetsbladet' : 'provet'} permanent" style="border:1px solid var(--bad);background:transparent;color:var(--bad);border-radius:4px;padding:9px 14px;font-size:13.5px;font-weight:500;font-family:inherit;cursor:pointer">Ja, radera</button>
-                <button data-click="${on(v.onExDeleteCancel)}" style="border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:4px;padding:9px 14px;font-size:13.5px;font-weight:500;font-family:inherit;cursor:pointer">Avbryt</button>
-              </span>
-              ` : `
-              <button data-click="${on(v.onExDeleteArm)}" aria-label="Ta bort ${v.exam.typ === 'arbetsblad' ? 'arbetsbladet' : 'provet'}" title="Raderar ${v.exam.typ === 'arbetsblad' ? 'arbetsbladet' : 'provet'} och dess filer permanent" style="border:none;background:transparent;color:var(--ink-3);border-radius:4px;padding:9px 12px;font-size:13.5px;font-weight:500;font-family:inherit;cursor:pointer">Radera</button>
-              ` }
-            </div>
-          </div>
-        ` : '' }
-
-      </div>
     </section>
 `; }
 
