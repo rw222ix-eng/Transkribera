@@ -178,6 +178,8 @@
     planBoard: null,           // genererad WB-JSON ({title, boards})
     planErrors: [],            // kvarstående valideringsfel (redovisas ärligt)
     byggChatInput: '',         // den gemensamma ändringschatten (tavla/prov/arbetsblad)
+    byggSel: [],               // markerade element som chattändringen gäller:
+                               // {kind:'uppgift', nummer, label} | {kind:'sektion', index, label}
     planSavedPath: '',         // kvitto från Godkänn & spara
     planStarttid: '',          // formulärets starttid (tavla)
     // Inbyggd kalender (Fas 3): lokal SQLite-läsning — ingen synk/CalDAV
@@ -876,7 +878,7 @@
     wbLiveReset();
     setState({ planPhase: 'running', planLog: [], planErrors: [],
                planSavedPath: '', wbExportMsg: '', wbRendered: false,
-               planLiveN: 0 });
+               planLiveN: 0, byggSel: [] });
     streamPost('/api/planning/generate', {
       moment: moment,
       group_id: S.byggGroupId ? +S.byggGroupId : null,
@@ -895,14 +897,39 @@
                planErrors: [], planSavedPath: '', planLiveN: 0 });
     streamPost('/api/planning/' + S.planId + '/refine', { message: msg }, onPlanEvent);
   }
+  // Elementmarkering: klick i förhandsvisningen väljer vad chattändringen
+  // gäller — modellen slipper gissa. Nyckeln är kind+nummer/index.
+  function _selKey(x) { return x.kind + ':' + (x.kind === 'uppgift' ? x.nummer : x.index); }
+  function toggleByggSel(sel) {
+    setState(function (s) {
+      var cur = s.byggSel || [];
+      var hit = cur.some(function (x) { return _selKey(x) === _selKey(sel); });
+      return { byggSel: hit ? cur.filter(function (x) { return _selKey(x) !== _selKey(sel); })
+                            : cur.concat([sel]) };
+    });
+  }
+  function clearByggSel() { setState({ byggSel: [] }); }
+  // "uppgift 3, 5 och 7" — naturlig svensk uppräkning till refine-prefixet.
+  function _selLista(arr) {
+    return arr.length === 1 ? String(arr[0])
+      : arr.slice(0, -1).join(', ') + ' och ' + arr[arr.length - 1];
+  }
   // Den gemensamma ändringschatten: ett fält, samma beteende för alla tre
   // typer — ruttar till tavlans respektive provets refine-endpoint.
   function sendByggChat() {
     if (S.byggTyp === 'tavla') { sendPlanRefine(); return; }
     var msg = (S.byggChatInput || '').trim();
     if (!msg || !S.exam || S.exPhase === 'running') return;
-    setState({ byggChatInput: '', exPhase: 'running', exLog: [], exErrors: [], exMsg: '' });
-    streamPost('/api/exams/' + S.exam.id + '/refine', { message: msg }, onExamEvent);
+    var sel = (S.byggSel || []).filter(function (x) { return x.kind === 'uppgift'; });
+    var body = { message: msg };
+    // Exakt en markerad uppgift scopear via refine-endpointens nummer-fält;
+    // flera markerade vävs in i meddelandet i stället.
+    if (sel.length === 1) body.nummer = sel[0].nummer;
+    else if (sel.length > 1) {
+      body.message = '[Gäller uppgift ' + _selLista(sel.map(function (x) { return x.nummer; })) + '] ' + msg;
+    }
+    setState({ byggChatInput: '', byggSel: [], exPhase: 'running', exLog: [], exErrors: [], exMsg: '' });
+    streamPost('/api/exams/' + S.exam.id + '/refine', body, onExamEvent);
   }
   function approvePlan() {
     if (!S.planId || S.planPhase === 'running') return;
@@ -972,7 +999,7 @@
   function onByggDatum(e) { setState({ byggDatum: e.target.value }); }
   function onPlanStarttid(e) { setState({ planStarttid: e.target.value }); }
   // Typväljaren: byte behåller delade fält (kurs/klass/datum/underlag).
-  function byggPickTyp(t) { setState({ byggTyp: t }); }
+  function byggPickTyp(t) { setState({ byggTyp: t, byggSel: [] }); }
 
   /* --------------------------------- planeringsarkivet (ersätter kalendern) --
      Tavlor + prov/arbetsblad i veckogrupper, med fritextsök och LLM-frågor
@@ -1075,7 +1102,7 @@
           if (p && p.board) {
             // Typväljaren följer med: en öppnad tavla visas i tavelkortet.
             setState({ byggTyp: 'tavla', planBoard: p.board, planId: null, planErrors: [],
-                       planSavedPath: '', wbExportMsg: '', wbRendered: false },
+                       planSavedPath: '', wbExportMsg: '', wbRendered: false, byggSel: [] },
                      renderCurrentBoard);
             try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (e) {}
           }
@@ -1087,12 +1114,13 @@
       if (S.exam && String(S.exam.id) === String(it.id)) { closeExam(); return; }
       getJSON('/api/exams/' + it.id).then(function (r) {
         if (r && r.id) setState({ byggTyp: (r.typ === 'arbetsblad' ? 'arbetsblad' : 'prov'),
-                                  exam: r, exErrors: r.errors || [], exMsg: '', exDeleteArm: false }, scrollToExamCard);
+                                  exam: r, exErrors: r.errors || [], exMsg: '', exDeleteArm: false,
+                                  byggSel: [] }, scrollToExamCard);
       }).catch(function () {});
     }
   }
   function closeExam() {
-    setState({ exam: null, exErrors: [], exMsg: '', exDeleteArm: false });
+    setState({ exam: null, exErrors: [], exMsg: '', exDeleteArm: false, byggSel: [] });
   }
   // Radering i två steg: första klicket armar en inline-bekräftelse i kortet
   // (ingen modal), andra klicket raderar permanent — post, versioner och filer.
@@ -1229,7 +1257,7 @@
   function startExamGenerate() {
     if (!S.byggCourseId || S.exPhase === 'running') return;
     var typ = S.byggTyp === 'arbetsblad' ? 'arbetsblad' : 'prov';
-    setState({ exPhase: 'running', exLog: [], exErrors: [], exMsg: '' });
+    setState({ exPhase: 'running', exLog: [], exErrors: [], exMsg: '', byggSel: [] });
     streamPost('/api/exams/generate', {
       course_id: +S.byggCourseId,
       group_id: S.byggGroupId ? +S.byggGroupId : null,
@@ -3401,6 +3429,12 @@
         : st.byggTyp === 'arbetsblad'
         ? 'Ändra arbetsbladet — t.ex. gör uppgift 3 svårare, byt kontext'
         : 'Ändra provet — t.ex. gör uppgift 3 svårare, lägg till en A-uppgift',
+      // Markerade element som chips ovanför chatten — × tar bort ett val.
+      byggSelChips: (st.byggSel || []).map(function (x) {
+        return { key: _selKey(x), label: x.label,
+                 onRemove: function (e) { if (e) e.stopPropagation(); toggleByggSel(x); } };
+      }),
+      onClearByggSel: clearByggSel,
       onPlanRefine: sendPlanRefine, onPlanApprove: approvePlan,
       planSavedPath: st.planSavedPath,
       planStarttid: st.planStarttid,
@@ -3494,6 +3528,7 @@
             return { f: f, p: ex.summor.formagor[f] };
           }) : [],
           uppgifter: examNumbered(ex.exam).map(function (n) {
+            var vald = (st.byggSel || []).some(function (x) { return x.kind === 'uppgift' && x.nummer === n.nummer; });
             return {
               nummer: n.nummer,
               del: n.u.del || '',
@@ -3501,6 +3536,10 @@
               typ: n.u.typ,
               poangStr: (n.u.poang || [0, 0, 0]).join('/'),
               text: n.u.text || '',
+              sel: vald,
+              onToggleSel: function () {
+                toggleByggSel({ kind: 'uppgift', nummer: n.nummer, label: 'Uppgift ' + n.nummer });
+              },
             };
           }),
         };
@@ -5820,12 +5859,13 @@ function viewPlanning(v){
             ` : '' }
 
             ${ v.exam.uppgifter.map(function(u2){ return `
-              <div data-key="ex-u-${esc(u2.nummer)}" style="border-top:1px solid color-mix(in srgb,var(--line) 60%,transparent);padding:11px 0">
+              <div data-key="ex-u-${esc(u2.nummer)}" data-click="${on(u2.onToggleSel)}" role="button" tabindex="0" aria-pressed="${u2.sel ? 'true' : 'false'}" title="${u2.sel ? 'Klicka för att avmarkera uppgiften' : 'Klicka för att markera uppgiften — chattändringen gäller då just den'}" style="border-top:1px solid color-mix(in srgb,var(--line) 60%,transparent);padding:11px 10px;margin:0 -10px;cursor:pointer;border-radius:4px;${u2.sel ? 'box-shadow:inset 0 0 0 1.5px var(--accent);background:var(--accent-weak)' : ''}">
                 <div style="display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;margin-bottom:4px">
                   <span style="font-weight:600;font-size:14px;color:var(--ink)">Uppgift ${esc(u2.nummer)}</span>
                   ${ u2.del ? `<span style="font-family:var(--mono);font-size:10.5px;color:var(--ink-3)">DEL ${esc(u2.del)}</span>` : '' }
                   <span style="font-family:var(--mono);font-size:10.5px;color:var(--ink-3)">${esc(u2.formaga)} · ${esc(u2.typ)}</span>
                   <span style="font-family:var(--mono);font-size:11.5px;color:var(--ink-2)">(${esc(u2.poangStr)})</span>
+                  ${ u2.sel ? `<span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.07em;text-transform:uppercase;color:var(--accent)">Markerad</span>` : '' }
                 </div>
                 <div data-math="" style="font-size:14px;color:var(--ink);line-height:1.5">${esc(u2.text)}</div>
               </div>
@@ -5856,7 +5896,16 @@ function viewPlanning(v){
       ${ /* Den gemensamma ändringschatten: ett fält för tavla, prov och
             arbetsblad — modellen genererar om det aktiva resultatet. */ '' }
       ${ v.byggChatOn ? `
-        <div style="display:flex;align-items:center;gap:8px;margin-top:14px">
+        ${ v.byggSelChips.length ? `
+        <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-top:12px">
+          <span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3)">Ändringen gäller</span>
+          ${ v.byggSelChips.map(function(c2){ return `
+          <span data-key="sel-${esc(c2.key)}" style="display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:500;color:var(--ink);background:var(--accent-weak);border:1px solid color-mix(in srgb,var(--accent) 35%,transparent);border-radius:3px;padding:4px 6px 4px 10px">${esc(c2.label)}<button data-click="${on(c2.onRemove)}" aria-label="Ta bort markeringen ${esc(c2.label)}" style="border:none;background:transparent;color:var(--ink-3);cursor:pointer;font-size:11px;line-height:1;padding:2px 4px;font-family:inherit">✕</button></span>
+          `; }).join('') }
+          <button data-click="${on(v.onClearByggSel)}" style="border:none;background:transparent;color:var(--ink-3);cursor:pointer;font-size:12px;font-family:inherit;text-decoration:underline;text-underline-offset:3px;padding:2px 4px">Rensa</button>
+        </div>
+        ` : '' }
+        <div style="display:flex;align-items:center;gap:8px;margin-top:${v.byggSelChips.length ? '8' : '14'}px">
           <input value="${esc(v.byggChatInput)}" data-input="${on(v.onByggChatInput)}" data-keydown="${on(v.onByggChatKey)}" aria-label="Ändra ${esc(v.byggTypLabel)}" placeholder="${esc(v.byggChatPlaceholder)}" style="flex:1;min-width:0;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 13px;font-size:14.5px;font-family:inherit;color:var(--ink)">
           <button data-click="${on(v.onByggChat)}" ${v.byggChatCan ? '' : 'disabled'} style="display:inline-flex;align-items:center;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:10px;padding:10px 16px;font-size:14.5px;font-weight:500;font-family:inherit;cursor:${v.byggChatCan ? 'pointer' : 'default'};opacity:${v.byggChatCan ? '1' : '.55'}">${v.byggChatBusy ? 'Ändrar …' : 'Ändra'}</button>
         </div>
