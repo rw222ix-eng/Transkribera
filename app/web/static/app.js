@@ -690,6 +690,14 @@
     win.WBHost.render(spec).then(function (res) {
       var warnings = (res && res.warnings) || [];
       setState({ wbRendered: true, wbWarnings: warnings });
+      // Elementmarkering: klick på en sektion väljer vad chattändringen
+      // gäller — bara meningsfullt när tavlan går att ändra (planId finns).
+      if (win.WBHost.setSelectMode) {
+        win.WBHost.setSelectMode(!!S.planId, function (ev) {
+          toggleByggSel({ kind: 'sektion', index: ev.index, label: ev.label });
+        });
+        _wbSyncSelection();
+      }
       if (S.planId && warnings.length && _wbReportRounds < 2 && S.planPhase !== 'running') {
         _wbReportRounds += 1;
         reportRenderWarnings(warnings);
@@ -698,6 +706,15 @@
       setState({ wbRendered: false,
                  wbWarnings: ['Tavlan kunde inte renderas: ' + ((e && e.message) || e)] });
     });
+  }
+  // Speglar appens markeringsläge in i tavel-iframen (ramarna runt sektioner)
+  // — behövs när ett val tas bort via chipsens ×/Rensa utanför iframen.
+  function _wbSyncSelection() {
+    var win = _wbFrame && _wbFrame.contentWindow;
+    if (!win || !win.WBHost || !win.WBHost.applySelection) return;
+    win.WBHost.applySelection((S.byggSel || [])
+      .filter(function (x) { return x.kind === 'sektion'; })
+      .map(function (x) { return x.index; }));
   }
   function reportRenderWarnings(warnings) {
     setState({ planPhase: 'running',
@@ -891,10 +908,17 @@
   function sendPlanRefine() {
     var msg = (S.byggChatInput || '').trim();
     if (!msg || !S.planId || S.planPhase === 'running') return;
+    // Markerade sektioner vävs in i meddelandet så modellen vet exakt vilka
+    // delar av tavlan ändringen gäller (etiketterna bär rubrik/typ).
+    var sel = (S.byggSel || []).filter(function (x) { return x.kind === 'sektion'; });
+    if (sel.length) {
+      msg = '[Gäller ' + (sel.length === 1 ? sel[0].label
+        : 'sektionerna: ' + sel.map(function (x) { return x.label; }).join('; ')) + '] ' + msg;
+    }
     _wbReportRounds = 0;
     wbLiveReset();
     setState({ planPhase: 'running', byggChatInput: '', planLog: [],
-               planErrors: [], planSavedPath: '', planLiveN: 0 });
+               planErrors: [], planSavedPath: '', planLiveN: 0, byggSel: [] });
     streamPost('/api/planning/' + S.planId + '/refine', { message: msg }, onPlanEvent);
   }
   // Elementmarkering: klick i förhandsvisningen väljer vad chattändringen
@@ -906,9 +930,9 @@
       var hit = cur.some(function (x) { return _selKey(x) === _selKey(sel); });
       return { byggSel: hit ? cur.filter(function (x) { return _selKey(x) !== _selKey(sel); })
                             : cur.concat([sel]) };
-    });
+    }, _wbSyncSelection);
   }
-  function clearByggSel() { setState({ byggSel: [] }); }
+  function clearByggSel() { setState({ byggSel: [] }, _wbSyncSelection); }
   // "uppgift 3, 5 och 7" — naturlig svensk uppräkning till refine-prefixet.
   function _selLista(arr) {
     return arr.length === 1 ? String(arr[0])

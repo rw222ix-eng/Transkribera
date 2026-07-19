@@ -10,6 +10,9 @@
      WBHost.render(spec)      -> Promise<{ warnings: string[] }>
      WBHost.print()           -> öppnar utskriftsdialogen med utskriftsvyn
      WBHost.exportPng(scale?) -> Promise<dataUrl> (PNG via SVG-serialisering)
+     WBHost.setSelectMode(on, cb) -> klick på en sektion togglar markering
+                                     och anropar cb({index,label,kind,selected})
+     WBHost.applySelection(indices) / WBHost.clearSelection()
 */
 (function () {
   'use strict';
@@ -132,6 +135,60 @@
     applyTransform();
   });
 
+  /* ------------------------------------------------------ elementmarkering --
+     Appens "peka i stället för att förklara": i markeringsläge får varje
+     sektionsnod (.wb-element) ett data-wbsec-index vid render; klick togglar
+     en markörram och rapporterar valet till värden (app.js) som visar det
+     som chips vid ändringschatten. Dokumentordningen är stabil per render —
+     indexen gäller tills tavlan ritas om. */
+  var _sel = { on: false, cb: null };
+  (function () {
+    var st = document.createElement('style');
+    st.textContent =
+      '.wb-selmode .wb-element{cursor:pointer}' +
+      '.wb-selmode .wb-element:hover{outline:2px dashed rgba(96,165,250,.8);outline-offset:5px}' +
+      '.wb-element.wb-selected{outline:3px solid #60a5fa !important;outline-offset:5px}';
+    document.head.appendChild(st);
+  })();
+  function _tagSections() {
+    var els = host.querySelectorAll('.wb-element');
+    for (var i = 0; i < els.length; i++) els[i].setAttribute('data-wbsec', String(i));
+  }
+  function _secLabel(n, i) {
+    var spec = n._spec || {};
+    var txt = String(spec.title || spec.text || n.textContent || '').replace(/\s+/g, ' ').trim();
+    if (txt.length > 42) txt = txt.slice(0, 41).replace(/\s+\S*$/, '') + ' …';
+    return 'Sektion ' + (i + 1) + (spec.kind ? ' (' + spec.kind + ')' : '') + (txt ? ': ' + txt : '');
+  }
+  WBHost.setSelectMode = function (on, cb) {
+    _sel.on = !!on;
+    _sel.cb = cb || null;
+    document.body.classList.toggle('wb-selmode', _sel.on);
+    if (!_sel.on) WBHost.clearSelection();
+  };
+  WBHost.applySelection = function (indices) {
+    indices = indices || [];
+    var els = host.querySelectorAll('.wb-element');
+    for (var i = 0; i < els.length; i++) {
+      els[i].classList.toggle('wb-selected', indices.indexOf(i) >= 0);
+    }
+  };
+  WBHost.clearSelection = function () { WBHost.applySelection([]); };
+  var _pressAt = null;
+  document.addEventListener('pointerdown', function (e) { _pressAt = { x: e.clientX, y: e.clientY }; }, true);
+  document.addEventListener('click', function (e) {
+    if (!_sel.on) return;
+    /* panorering i zoomläget ska inte tolkas som markeringsklick */
+    if (_pressAt && (Math.abs(e.clientX - _pressAt.x) > 6 || Math.abs(e.clientY - _pressAt.y) > 6)) return;
+    var n = e.target && e.target.closest ? e.target.closest('.wb-element') : null;
+    if (!n || !host.contains(n)) return;
+    var i = parseInt(n.getAttribute('data-wbsec') || '-1', 10);
+    if (i < 0) return;
+    var selected = !n.classList.contains('wb-selected');
+    n.classList.toggle('wb-selected', selected);
+    if (_sel.cb) _sel.cb({ index: i, label: _secLabel(n, i), kind: (n._spec || {}).kind || '', selected: selected });
+  });
+
   /* WB-JSON v1 bär grafernas kurvor som uttryckssträngar (plots[].expr) —
      motorn vill ha riktiga funktioner (fn). Kompilera med WBExpr (whitelist-
      parser, ingen eval) på en djupkopia; ett ogiltigt uttryck blir en
@@ -188,6 +245,7 @@
       }
       w += 14 * Math.max(0, container.children.length - 1);   /* flex gap */
       _natural = { w: Math.ceil(w), h: Math.ceil(h) };
+      _tagSections();
       /* två frames: motorns överlappskoll + ev. fit-pass kör i rAF */
       return nextFrame().then(nextFrame).then(function () {
         fitToWidth();
