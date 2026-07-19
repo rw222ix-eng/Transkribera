@@ -87,7 +87,7 @@ def _install_fakes() -> None:
         return {"insights": fake_extract(transcript, filename),
                 "innehall": ["pq-formeln", "kvadratkomplettering"]}
 
-    def fake_answer(query, excerpts, filename, token_cb=None):
+    def fake_answer(query, excerpts, filename, token_cb=None, **kw):
         # Strömma ordvis med kort paus — annars hinner arkivsökets
         # live-progression (kartotek → läsbord) aldrig synas i fejkläget.
         # Formen speglar det riktiga svarskontraktet: svaret först och en
@@ -108,7 +108,7 @@ def _install_fakes() -> None:
                  "text": "[ÖV] " + (s.get("text") or "")} for s in segments]
 
     def fake_chat(model, messages, transcript="", images=None, think=False,
-                  token_cb=None, reason_cb=None, cite=False):
+                  token_cb=None, reason_cb=None, cite=False, **kw):
         # I citat-läget svarar fejken med segmentmarkörer så e2e kan
         # verifiera hela parse-vägen (citat-knappar + källpanel).
         text = ("[FEJK chatt] Lektionen handlar om bråk [1] och procent [2]."
@@ -143,14 +143,16 @@ def _install_fakes() -> None:
         return board
 
     def fake_generate_board(course, group, moment, *, model, memory="",
-                            llm=None, max_rounds=3, log_cb=None):
+                            llm=None, max_rounds=3, log_cb=None, **kw):
+        # **kw: håller fejken kompatibel när riktiga generate_board får nya
+        # nyckelord (t.ex. underlag) utan att e2e-fejken måste byggas om.
         if log_cb:
             log_cb("[FEJK] Genererar lektionstavlan …")
         return {"board": _fake_board(moment or "Lektionstavla"),
                 "errors": [], "rounds": 1}
 
     def fake_refine_board(board, instruction, *, model, llm=None,
-                          max_rounds=3, log_cb=None):
+                          max_rounds=3, log_cb=None, **kw):
         if log_cb:
             log_cb("[FEJK] Uppdaterar tavlan …")
         updated = copy.deepcopy(board)
@@ -158,7 +160,7 @@ def _install_fakes() -> None:
         return {"board": updated, "errors": [], "rounds": 1}
 
     def fake_repair_board(board, warnings, *, model, llm=None, rounds_used=1,
-                          max_rounds=3, log_cb=None):
+                          max_rounds=3, log_cb=None, **kw):
         return {"board": board, "errors": [], "rounds": rounds_used + 1}
 
     lesson_board.generate_board = fake_generate_board
@@ -202,7 +204,7 @@ def _install_fakes() -> None:
     def fake_generate_exam(kurs, klass, punkter, *, model, antal=10,
                            tid_min=120, delar=True, memory="", teman="",
                            referens="", profil="prov",
-                           llm=None, max_rounds=3, log_cb=None):
+                           llm=None, max_rounds=3, log_cb=None, **kw):
         if log_cb:
             log_cb("[FEJK] Skriver provet …")
         exam = _fake_exam(kurs, klass)
@@ -211,7 +213,7 @@ def _install_fakes() -> None:
         return {"exam": exam, "errors": [], "rounds": 1}
 
     def fake_refine_exam(exam, message, *, model, nummer=None, profil="prov",
-                         llm=None, max_rounds=3, log_cb=None):
+                         llm=None, max_rounds=3, log_cb=None, **kw):
         import copy as _copy
         updated = _copy.deepcopy(exam)
         idx = (nummer - 1) if nummer else 0

@@ -104,14 +104,13 @@ test("Planering: generera → iterera via chatt → godkänn & spara (fejk)", as
   expect(errors, errors.join("\n")).toEqual([]);
 });
 
-test("Planering: godkänd tavla hamnar i kalendern och kan öppnas (Fas 3)", async ({ page }) => {
+test("Planering: godkänd tavla hamnar i arkivet och kan öppnas", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "Planering", exact: true }).click();
 
-  // Datum mitt i innevarande månad så chippen syns utan månadsnavigering.
   const now = new Date();
   const datum = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-15`;
-  await page.getByLabel("Moment").fill("Kalendertest — trigonometri");
+  await page.getByLabel("Moment").fill("Arkivtest — trigonometri");
   await page.getByLabel("Datum", { exact: true }).fill(datum);
   await page.getByLabel("Starttid").fill("09:10");
   await page.getByRole("button", { name: "Skriv tavlan" }).click();
@@ -121,23 +120,20 @@ test("Planering: godkänd tavla hamnar i kalendern och kan öppnas (Fas 3)", asy
   await approve.click();
   await expect(page.getByText(/Sparad:/)).toBeVisible({ timeout: 15000 });
 
-  // Planeringen dyker upp som klassfärgad chip i månadsvyn ...
-  const chip = page.getByRole("button", { name: /Kalendertest — trigonometri/ });
-  await expect(chip.first()).toBeVisible({ timeout: 10000 });
+  // Planeringen dyker upp som veckogrupperad rad i arkivet ...
+  const rad = page.getByRole("button", { name: /Arkivtest — trigonometri/ });
+  await expect(rad.first()).toBeVisible({ timeout: 10000 });
 
-  // ... och veckoläget renderar utan fel.
-  await page.getByRole("button", { name: "Vecka", exact: true }).click();
-  await expect(page.getByText(/–/).first()).toBeVisible();
-  await page.getByRole("button", { name: "Månad", exact: true }).click();
-  await expect(chip.first()).toBeVisible();
-
-  // Klick på chippen laddar den sparade tavlan i läsläge.
-  await chip.first().click();
+  // ... och klick på raden laddar den sparade tavlan i läsläge.
+  await rad.first().click();
   const frame = page.frameLocator("[data-wb-frame]");
   await expect(frame.getByText("Symmetrilinjen:")).toBeVisible({ timeout: 15000 });
 });
 
 test("Planering: PNG-exporten sparar en fil under testets base_dir", async ({ page }) => {
+  // Filväljardialogen (File System Access) kan inte besvaras headless —
+  // ta bort API:t så exporten tar server-fallbacken (som testet verifierar).
+  await page.addInitScript(() => { delete (window as any).showSaveFilePicker; });
   await page.goto("/");
   await page.getByRole("button", { name: "Planering", exact: true }).click();
 
