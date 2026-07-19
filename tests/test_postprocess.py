@@ -85,6 +85,53 @@ def test_answer_over_lessons_calendar_ger_kalenderinstruktion(monkeypatch):
     assert "[KALENDERFÖRSLAG]" not in seen["system"]
 
 
+def test_cal_instr_kraver_fragor_fore_nytt_forslag():
+    """Innan ett NYTT förslag skapas ska modellen ställa klargörande frågor
+    via [KALENDERFRÅGOR]-raden (visas som alternativ-modal i UI:t); vid en
+    ändring av ett befintligt förslag ställs inga frågor."""
+    from app import llm_client
+    utan = llm_client._cal_instr(None)
+    assert "[KALENDERFRÅGOR]" in utan
+    assert '"fragor"' in utan
+    assert "DETALJERAD" in utan
+    med = llm_client._cal_instr({"title": "T", "date": "2026-07-21",
+                                 "time": "08:00", "end_date": None, "desc": ""})
+    # Med ett aktuellt förslag gäller ändringsläget — frågesteget ska uttryckligen inte upprepas.
+    assert "Ett aktuellt förslag finns alltså redan" in med
+
+
+def test_calendar_intent_och_promptkrav():
+    """Uppenbar kalenderavsikt i arkivfrågan gör frågesteget till ett absolut
+    promptkrav (Qwen3 tappar den villkorade formen vid långa utdrag); rena
+    innehållsfrågor lämnas åt modellens bedömning."""
+    assert pp.calendar_intent("gör en kalenderhändelse som passar detta")
+    assert pp.calendar_intent("skapa en påminnelse om uppgifterna")
+    assert pp.calendar_intent("lägg in det i kalendern")
+    assert not pp.calendar_intent("nämns någon inlämning i lektionen?")
+    assert not pp.calendar_intent("vad sades om derivata?")
+    ex = [{"name": "l", "excerpt": "text"}]
+    kravd = pp.build_answer_prompt("gör en kalenderhändelse av detta", ex, calendar=True)
+    assert "VIKTIGT" in kravd and "[KALENDERFRÅGOR]" in kravd
+    mild = pp.build_answer_prompt("nämns geometri?", ex, calendar=True)
+    assert "VIKTIGT" not in mild and "[KALENDERFRÅGOR]" in mild
+    utan = pp.build_answer_prompt("nämns geometri?", ex)
+    assert "KALENDERFRÅGOR" not in utan
+
+
+def test_edit_calendar_suggestion_utan_forslag_ger_fragelage(monkeypatch):
+    """cal_chat-vägen utan befintligt förslag (frågesvar → nytt förslag):
+    edit_calendar_suggestion ska tåla cal_event=None."""
+    seen = {}
+    def fake_generate(model, prompt, token_cb=None, **kw):
+        seen["system"] = kw.get("system")
+        return "ok"
+    monkeypatch.setattr(pp.llm_client, "generate", fake_generate)
+    out = pp.edit_calendar_suggestion("skapa händelsen nu", "underlag", None, "m")
+    assert out == "ok"
+    assert "[KALENDERFÖRSLAG]" in seen["system"]
+    assert "Ett aktuellt förslag finns alltså redan" not in seen["system"]
+
+
 def test_edit_calendar_suggestion_far_forslag_och_underlag(monkeypatch):
     seen = {}
     def fake_generate(model, prompt, token_cb=None, **kw):

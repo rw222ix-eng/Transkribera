@@ -1246,6 +1246,25 @@ def test_search_ask_cal_event_andring_kraver_inga_ordtraffar(tmp_path, monkeypat
     assert captured["q"].startswith("ändra anteckningen")
 
 
+def test_search_ask_cal_chat_utan_forslag_gar_till_kalendervagen(tmp_path, monkeypatch):
+    """Frågesvaren från kalendermodalen skickas med cal_chat=True men utan
+    befintligt förslag — de ska gå direkt till kalendervägen (ingen RAG)."""
+    captured = {}
+    def fake_edit(query, context, cal_event, model, token_cb=None):
+        captured.update(q=query, ev=cal_event)
+        return "Här är förslaget"
+    monkeypatch.setattr(server.postprocess, "edit_calendar_suggestion", fake_edit)
+    c = _lesson_client(tmp_path, monkeypatch)
+    r = c.post("/api/search/ask", json={
+        "q": "Svar: fredag · Övrigt: ta med formelblad. Skapa händelsen.",
+        "cal_chat": True, "context": "Tidigare svar"})
+    assert r.status_code == 200
+    done = next(e for e in _sse_events(r.text) if e["type"] == "done")
+    assert done["result"]["text"] == "Här är förslaget"
+    assert captured["ev"] is None
+    assert captured["q"].startswith("Svar: fredag")
+
+
 def test_search_ask_cal_event_busy_gpu_409(tmp_path, monkeypatch):
     class Busy(_ReadyArbiter):
         def try_acquire_gpu(self): return False

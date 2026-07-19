@@ -77,21 +77,40 @@ def _cal_instr(cal_event: dict | None) -> str:
         "(prov, läxförhör, inlämning, möte, påminnelse …). Du kan INTE själv lägga in "
         "något i kalendern — du lämnar bara ett FÖRSLAG som användaren måste godkänna "
         "med Lägg till-knappen. Påstå därför ALDRIG att något är inlagt, bokat eller "
-        "klart. Gör ALLTID två saker, i denna ordning: skriv först en kort mening i "
-        "vanlig löptext som presenterar förslaget (t.ex. ”Här är ett förslag på en "
-        "påminnelse tisdag–onsdag kl 15 — godkänn det nedan så läggs det in.”), och "
-        "avsluta därefter HELA svaret med exakt en rad:\n"
+        "klart. Arbetsgången har TVÅ steg. Välj steg så här: finns inget AKTUELLT "
+        "FÖRSLAG nedan, och användaren har inte just besvarat dina frågor eller bett "
+        "dig skapa direkt → STEG 1. Annars → STEG 2. Hoppa ALDRIG över STEG 1 för en "
+        "ny händelse — även när önskemålet verkar tydligt.\n"
+        "STEG 1 — FRÅGOR FÖRST (obligatoriskt före varje NY händelse): ställ 1–3 korta "
+        "klargörande frågor som gör händelsen träffsäker och detaljerad (t.ex. vilken "
+        "dag/tid som passar, exakt vad anteckningen ska innehålla, om den ska pågå "
+        "flera dagar). Skriv en kort mening i löptext (t.ex. ”Ett par snabba frågor "
+        "först, så blir påminnelsen rätt.”) och avsluta HELA svaret med exakt en rad:\n"
+        '[KALENDERFRÅGOR] {"fragor": [{"q": "...", "alternativ": ["...", "..."]}]}\n'
+        "2–4 korta alternativ per fråga, giltig JSON på en enda rad. Ett STEG 1-svar "
+        "får ALDRIG innehålla en [KALENDERFÖRSLAG]-rad.\n"
+        "STEG 2 — FÖRSLAGET: skriv först en kort mening i vanlig löptext som "
+        "presenterar förslaget (t.ex. ”Här är ett förslag på en påminnelse "
+        "tisdag–onsdag kl 15 — godkänn det nedan så läggs det in.”), och avsluta "
+        "därefter HELA svaret med exakt en rad:\n"
         '[KALENDERFÖRSLAG] {"title": "...", "date": "YYYY-MM-DD", "time": "HH:MM", '
         '"end_date": null, "desc": "..."}\n'
-        f"Idag är {_SV_DAYS[today.weekday()]} {today:%Y-%m-%d}. Alla fält ska alltid med: "
+        f"Idag är {_SV_DAYS[today.weekday()]} {today:%Y-%m-%d}. Datumet får ALDRIG "
+        "ligga före idag — önskas en veckodag väljer du nästa kommande förekomst. "
+        "Alla fält ska alltid med: "
         "vid en ändring, utgå från det aktuella förslaget nedan och behåll oförändrade "
         "fälts värden. end_date (YYYY-MM-DD) anges bara när händelsen sträcker sig över "
-        "flera dagar, annars null. Raden ska ligga allra sist, vara giltig JSON på en enda "
-        "rad, och du får inte nämna eller citera den i löptexten. Skriv den ENDAST när "
-        "användaren uttryckligen vill skapa eller ändra en händelse — aldrig annars."
+        "flera dagar, annars null. Anteckningen (desc) ska vara DETALJERAD och väva in "
+        "användarens svar och önskemål ordentligt.\n"
+        "För båda stegen gäller: raden ska ligga allra sist, vara giltig JSON på en "
+        "enda rad, och du får inte nämna eller citera den i löptexten. Skriv någon av "
+        "raderna ENDAST när användaren vill skapa eller ändra en händelse — aldrig "
+        "annars."
     )
     if cal_event:
-        s += "\nAKTUELLT FÖRSLAG: " + json.dumps(cal_event, ensure_ascii=False)
+        s += ("\nAKTUELLT FÖRSLAG: " + json.dumps(cal_event, ensure_ascii=False) +
+              "\nEtt aktuellt förslag finns alltså redan — ställ INGA nya frågor "
+              "(aldrig STEG 1); tillämpa användarens ändringar direkt på förslaget.")
     return s
 
 

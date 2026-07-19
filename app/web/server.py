@@ -1411,7 +1411,9 @@ def create_app(base_dir: Path | None = None,
         calendar = bool(body.get("calendar", False))
         cal_event = (body.get("cal_event")
                      if isinstance(body.get("cal_event"), dict) else None)
-        if cal_event is not None:
+        # cal_chat: svar på kalendermodalens klargörande frågor — samma väg
+        # som en förslagsändring, men utan att ett förslag hunnit skapas än.
+        if cal_event is not None or bool(body.get("cal_chat")):
             # Ändring av ett befintligt förslag ("ändra anteckningen …") gäller
             # förslaget, inte arkivet: ingen RAG-sökning — ändringens ord
             # träffar sällan transkripten. Tidigare svar följer med som

@@ -132,6 +132,8 @@
     askFollowups: [],          // följdfrågor i svaret: {q, a, typing}
     askFollowInput: '',
     askEvent: null,            // kalenderförslag i arkivsvaret (samma form som lessonChatEvent)
+    calQ: null,                // kalendermodalens klargörande frågor:
+                               // {which:'ask'|'lesson', fragor:[{q,alternativ,val}], extra}
     descModalFor: 'lesson',    // vilket förslag anteckningsmodalen redigerar: 'lesson' | 'ask'
     agenda: null,              // daterade poster tvärs alla klasser
     agendaOpen: false,         // utfälld agenda-panel
@@ -1850,7 +1852,9 @@
         // Rör inte askScanShown — utrullningstimern får spela klart så att
         // genomsökningen syns även när svaret kom blixtsnabbt (0 träffar).
         var full = (ev.result && ev.result.text) || acc;
-        applyCalTag('ask', full);
+        // Vill frågan skapa en händelse ställer modellen först klargörande
+        // frågor (modal); annars appliceras en ev. förslagsrad direkt.
+        if (!applyCalQ('ask', full)) applyCalTag('ask', full);
         setState({ asking: false, askNote: '', askAnswer: stripCalTag(full),
                    askSources: (ev.result && ev.result.sources) || [] });
       } else if (ev.type === 'error') {
@@ -1912,16 +1916,25 @@
     }
     // cal_event bara vid kalenderavsikt: annars skulle en vanlig arkivfråga
     // hoppa över RAG-sökningen så fort ett förslag råkar stå öppet.
-    var calEv = isCal ? { title: evNow.title, date: evNow.startIso || null,
-                          time: (evNow.when || '').slice(-5), end_date: evNow.endIso || null,
-                          desc: evNow.desc || '' } : null;
+    _askCalStream(q, isCal);
+  }
+  // Följdfråga/kalendersvar mot /api/search/ask — delas av chatten och
+  // kalendermodalens frågesvar (calQSubmit). calRoute=true tvingar
+  // kalendervägen (cal_chat) även utan befintligt förslag.
+  function _askCalStream(q, calRoute) {
+    setState({ askFollowInput: '' });
+    var evNow = S.askEvent;
+    var calEv = calRoute && evNow && !evNow.added
+      ? { title: evNow.title, date: evNow.startIso || null,
+          time: (evNow.when || '').slice(-5), end_date: evNow.endIso || null,
+          desc: evNow.desc || '' } : null;
     var run = ++_askRun;
-    setState(function (s) { return { askFollowInput: '', askFollowups: (s.askFollowups || []).concat([{ q: q, a: '', typing: true }]) }; },
+    setState(function (s) { return { askFollowups: (s.askFollowups || []).concat([{ q: q, a: '', typing: true }]) }; },
       function () { scrollAskChat(true); });
     var acc = '';
     streamPost('/api/search/ask',
-      calEv ? { q: q, calendar: true, cal_event: calEv, context: (S.askAnswer || '').slice(0, 6000) }
-            : { q: q, calendar: true }, function (ev) {
+      calRoute ? { q: q, calendar: true, cal_event: calEv, cal_chat: true, context: (S.askAnswer || '').slice(0, 6000) }
+               : { q: q, calendar: true }, function (ev) {
       if (run !== _askRun) return;               // en nyare fråga (eller Esc) har tagit över
       var patchLast = function (fn) {
         setState(function (s) {
@@ -1933,7 +1946,9 @@
       if (ev.type === 'token') { acc += ev.text; patchLast(function (f) { f.a = stripCalTag(acc); return f; }); }
       else if (ev.type === 'done') {
         var full = (ev.result && ev.result.text) || acc;
-        var applied = applyCalTag('ask', full);
+        // Klargörande frågor öppnar modalen; annars appliceras förslagsraden.
+        var askedQ = applyCalQ('ask', full);
+        var applied = !askedQ && applyCalTag('ask', full);
         var shown = stripCalTag(full);
         // Svarar modellen med enbart kalenderraden blir bubblan tom — sätt då
         // en egen bekräftelse byggd ur det uppdaterade förslaget.
@@ -1941,6 +1956,7 @@
           var e2 = S.askEvent || {};
           shown = 'Här är kalenderförslaget: ”' + (e2.title || '') + '” · ' + (e2.when || '') + (e2.endDay ? ' → ' + e2.endDay : '') + '. Inget läggs in förrän du godkänner med Lägg till — justera annars i förslags-rutan eller fortsätt chatta.';
         }
+        if (!shown && askedQ) shown = 'Ett par snabba frågor först — svara i rutan så blir händelsen rätt.';
         patchLast(function (f) { f.typing = false; f.a = shown || full; return f; });
       }
       else if (ev.type === 'error') patchLast(function (f) { f.typing = false; f.a = f.a || ('Kunde inte söka: ' + (ev.message || 'okänt fel')); return f; });
@@ -2522,7 +2538,9 @@
       else if (ev.type === 'error') { setLast(acc || ('Fel: ' + (ev.message || 'okänt')), accReason, false); }
       else if (ev.type === 'done') {
         var r = ev.result || {}; var full = r.text || acc;
-        var applied = applyCalTag('lesson', full);
+        // Klargörande frågor före ett nytt förslag → alternativ-modalen.
+        var askedQ = applyCalQ('lesson', full);
+        var applied = !askedQ && applyCalTag('lesson', full);
         var shown = stripCalTag(full);
         // Svarar modellen med enbart kalenderraden blir bubblan tom — sätt då en
         // egen bekräftelse byggd ur det uppdaterade förslaget.
@@ -2530,6 +2548,7 @@
           var e2 = S.lessonChatEvent || {};
           shown = 'Här är kalenderförslaget: ”' + (e2.title || '') + '” · ' + (e2.when || '') + (e2.endDay ? ' → ' + e2.endDay : '') + '. Inget läggs in förrän du godkänner med Lägg till — justera annars i förslags-rutan eller fortsätt chatta.';
         }
+        if (!shown && askedQ) shown = 'Ett par snabba frågor först — svara i rutan så blir händelsen rätt.';
         setLast(shown || full, accReason, false);
       }
     });
@@ -2685,10 +2704,64 @@
   // [KALENDERFÖRSLAG] {json} — modellens maskinläsbara kalenderrad (llm_client._cal_instr).
   // Döljs ur visningen (även halvströmmad) och appliceras på förslaget när svaret är klart.
   var _CAL_TAG = '[KALENDERFÖRSLAG]';
+  // [KALENDERFRÅGOR] {json} — modellens klargörande frågor INNAN ett nytt
+  // förslag skapas; visas som alternativ-modal (calQ) i stället för text.
+  var _CALQ_TAG = '[KALENDERFRÅGOR]';
   function stripCalTag(text) {
     var i = text.indexOf(_CAL_TAG);
+    var j = text.indexOf(_CALQ_TAG);
+    if (j >= 0 && (i < 0 || j < i)) i = j;
     if (i < 0) { i = text.search(/\[K[A-ZÅÄÖ]{0,15}$/); }   // halvströmmad markör i svansen
     return i >= 0 ? text.slice(0, i).replace(/\s+$/, '') : text;
+  }
+  // Klargörande frågor → modal med väljbara alternativ (samma idé som
+  // Claude-gränssnittets frågekort). Returnerar true när modalen öppnats.
+  function applyCalQ(which, text) {
+    var i = text.indexOf(_CALQ_TAG);
+    if (i < 0) return false;
+    var data = null;
+    try { data = JSON.parse((text.slice(i + _CALQ_TAG.length).match(/\{[\s\S]*\}/) || [null])[0]); } catch (e) {}
+    var fragor = data && Array.isArray(data.fragor) ? data.fragor : null;
+    if (!fragor || !fragor.length) return false;
+    var ok = fragor.slice(0, 3).map(function (f) {
+      return { q: String((f && f.q) || '').trim(),
+               alternativ: (Array.isArray(f && f.alternativ) ? f.alternativ : [])
+                 .map(function (a) { return String(a).trim(); })
+                 .filter(Boolean).slice(0, 4),
+               val: null };
+    }).filter(function (f) { return f.q && f.alternativ.length >= 2; });
+    if (!ok.length) return false;
+    setState({ calQ: { which: which, fragor: ok, extra: '' } });
+    return true;
+  }
+  function calQPick(qi, alt) {
+    setState(function (s) {
+      if (!s.calQ) return null;
+      var fr = s.calQ.fragor.map(function (f, i2) {
+        return i2 === qi ? Object.assign({}, f, { val: f.val === alt ? null : alt }) : f;
+      });
+      return { calQ: Object.assign({}, s.calQ, { fragor: fr }) };
+    });
+  }
+  function calQExtra(e) {
+    setState(function (s) { return s.calQ ? { calQ: Object.assign({}, s.calQ, { extra: e.target.value }) } : null; });
+  }
+  function calQClose() { setState({ calQ: null }); }
+  function calQSubmit(skip) {
+    var cq = S.calQ; if (!cq) return;
+    var text;
+    if (skip) {
+      text = 'Skapa kalenderhändelsen direkt med rimliga antaganden.';
+    } else {
+      var delar = cq.fragor.map(function (f) {
+        return f.q + ' Svar: ' + (f.val || 'inget särskilt');
+      });
+      if ((cq.extra || '').trim()) delar.push('Övrigt önskemål: ' + cq.extra.trim());
+      text = delar.join(' · ') + ' — skapa nu kalenderhändelsen med en detaljerad anteckning utifrån detta.';
+    }
+    setState({ calQ: null });
+    if (cq.which === 'lesson') { sendLessonChat(text); return; }
+    _askCalStream(text, true);
   }
   function applyCalTag(which, text) {
     var i = text.indexOf(_CAL_TAG);
@@ -3071,6 +3144,7 @@
       }
     }
     if (S.editingLesson && e.key === 'Escape') { cancelEditLesson(); return; }
+    if (S.calQ && e.key === 'Escape') { calQClose(); return; }
     if (S.lessonChatId && e.key === 'Escape') {
       if (S.descModal && !S.descModalClosing) { closeDescModal(); return; }
       if (S.evPick) { setState({ evPick: null }); return; }
@@ -4084,6 +4158,22 @@
       ovEvOpen: !!st.ovEvOpen,
       toggleOvEv: function () { setState(function (s) { return { ovEvOpen: !s.ovEvOpen }; }); },
       // Anteckningens inzoomade redigeringsmodal (design 14 juli)
+      // Kalendermodalens klargörande frågor (alternativ-kort à la Claude).
+      calQ: st.calQ ? {
+        fragor: st.calQ.fragor.map(function (f, qi) {
+          return { key: 'cq' + qi, q: f.q,
+                   alternativ: f.alternativ.map(function (a) {
+                     return { key: 'cqa' + qi + a, a: a, sel: f.val === a,
+                              onPick: function (e) { if (e) e.stopPropagation(); calQPick(qi, a); } };
+                   }) };
+        }),
+        extra: st.calQ.extra,
+        onExtra: calQExtra,
+        canSend: st.calQ.fragor.some(function (f) { return !!f.val; }) || !!(st.calQ.extra || '').trim(),
+        onSend: function (e) { if (e) e.stopPropagation(); calQSubmit(false); },
+        onSkip: function (e) { if (e) e.stopPropagation(); calQSubmit(true); },
+        onClose: function () { calQClose(); },
+      } : null,
       descModalOpen: !!st.descModal,
       descModalAnim: st.descModalClosing ? 'closing' : '',
       closeDescModal: closeDescModal,
@@ -5339,6 +5429,33 @@ function viewModals(v){ return `
         <span style="font-size:12px;color:var(--ink-3)">Sparas direkt · klicka utanför för att stänga</span>
       </div>
       <textarea data-input="${on(v.setDescModalVal)}" data-hidescroll="1" aria-label="Anteckning i kalenderposten — redigering" style="flex:1;min-height:0;width:100%;box-sizing:border-box;border:none;background:var(--surface);padding:18px 20px;font-size:15px;line-height:1.65;font-family:inherit;color:var(--ink);outline:none;resize:none;overflow:auto;scrollbar-width:none">${esc(v.descModalVal)}</textarea>
+    </div>
+  </div>
+  ` : '' }
+
+  ${ v.calQ ? `
+  <div data-click="${on(v.calQ.onClose)}" style="position:fixed;inset:0;z-index:140;background:color-mix(in srgb,var(--ink) 32%,transparent);display:flex;align-items:center;justify-content:center;padding:24px;animation:fadeup .2s ease">
+    <div data-click="${on(v.stop)}" role="dialog" aria-modal="true" aria-label="Några frågor om kalenderhändelsen" data-dialog tabindex="-1" style="width:min(94vw,560px);max-height:82vh;overflow:auto;background:var(--surface);border:1px solid var(--ink);border-radius:14px;box-shadow:var(--shadow);padding:20px 22px">
+      <div style="display:flex;align-items:flex-start;gap:10px">
+        <div class="eyebrow" style="margin-bottom:8px">Kalenderhändelsen — några frågor först</div>
+        <span style="flex:1"></span>
+        <button data-click="${on(v.calQ.onClose)}" aria-label="Stäng utan att svara" title="Stäng (Esc)" style="border:none;background:transparent;color:var(--ink-3);cursor:pointer;font-size:14px;line-height:1;padding:4px 6px;border-radius:3px;font-family:inherit">✕</button>
+      </div>
+      <p style="margin:0 0 14px;font-size:13.5px;line-height:1.6;color:var(--ink-2)">Svara på det som känns relevant så blir händelsen detaljerad och rätt — resten antar jag åt dig.</p>
+      ${ v.calQ.fragor.map(function(f){ return `
+      <div data-key="${esc(f.key)}" style="margin-bottom:13px">
+        <div style="font-size:14.5px;font-weight:600;color:var(--ink);margin-bottom:7px">${esc(f.q)}</div>
+        <div role="group" aria-label="${esc(f.q)}" style="display:flex;gap:6px;flex-wrap:wrap">
+          ${ f.alternativ.map(function(o){ return `<button data-key="${esc(o.key)}" data-click="${on(o.onPick)}" data-chip="${o.sel ? 'on' : 'off'}" aria-pressed="${o.sel ? 'true' : 'false'}" style="font-family:inherit;font-size:13px;font-weight:500;padding:7px 13px;border-radius:3px;background:var(--surface);color:var(--ink-2);border:1px solid var(--line);transition:border-color .14s,background .14s,color .14s;cursor:pointer">${esc(o.a)}</button>`; }).join('') }
+        </div>
+      </div>
+      `; }).join('') }
+      <input value="${esc(v.calQ.extra)}" data-input="${on(v.calQ.onExtra)}" aria-label="Egna önskemål" placeholder="Egna önskemål — t.ex. exakt vad anteckningen ska innehålla …" style="width:100%;box-sizing:border-box;background:var(--sunken);border:1px solid var(--line);border-radius:4px;padding:10px 13px;font-size:14px;font-family:inherit;color:var(--ink);margin:2px 0 16px">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <button data-click="${on(v.calQ.onSkip)}" style="border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:4px;padding:10px 15px;font-size:13.5px;font-weight:500;font-family:inherit;cursor:pointer">Skapa direkt utan svar</button>
+        <span style="flex:1"></span>
+        <button data-click="${on(v.calQ.onSend)}" ${v.calQ.canSend ? '' : 'disabled'} style="display:inline-flex;align-items:center;gap:7px;background:var(--btn-bg);color:var(--btn-fg);border:none;border-radius:4px;padding:10px 18px;font-size:14px;font-weight:500;font-family:inherit;cursor:${v.calQ.canSend ? 'pointer' : 'default'};opacity:${v.calQ.canSend ? '1' : '.55'}">Skapa förslaget</button>
+      </div>
     </div>
   </div>
   ` : '' }
