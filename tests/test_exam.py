@@ -179,6 +179,21 @@ def test_saknad_modellering_flaggas():
                for e in errors)
 
 
+# --------------------------------------------------------- genomförbarhet --
+
+def test_genomforbarhet_kraver_en_uppgift_per_formagegolv():
+    """Färre uppgifter än förmågor med positivt golv går inte att balansera."""
+    fel = exam_spec.genomforbarhet(4, "prov")
+    assert fel and fel[0]["code"] == "genomforbarhet"
+    assert exam_spec.genomforbarhet(6, "prov") == []
+    assert exam_spec.genomforbarhet(10, "prov") == []
+
+
+def test_genomforbarhet_arbetsblad_ar_tillatande():
+    """Arbetsbladet har inga golv > 0 utom P — korta arbetsblad är okej."""
+    assert exam_spec.genomforbarhet(3, "arbetsblad") == []
+
+
 # ------------------------------------------------------------- kravgränser --
 
 def test_kravgranser_np_model():
@@ -514,6 +529,21 @@ def test_generate_exam_gives_up_after_budget():
     res = exam_gen.generate_exam("Ma2b", "SA23", [], model="m", llm=llm)
     assert res["rounds"] == exam_gen.MAX_ROUNDS
     assert res["errors"] and res["exam"] is not None
+
+
+def test_generate_exam_avvisar_ogenomforbart_utan_llm():
+    """Förkontrollen ska stoppa före modellanropet — inget LLM-anrop alls."""
+    anrop = []
+
+    def spion_llm(*a, **kw):
+        anrop.append(1)
+        return "{}"
+
+    res = exam_gen.generate_exam("Ma2b", "SA23", [], model="x", antal=4,
+                                 llm=spion_llm)
+    assert res["exam"] is None
+    assert res["errors"][0]["code"] == "genomforbarhet"
+    assert anrop == []          # modellen anropades aldrig
 
 
 def test_refine_exam_targets_item():

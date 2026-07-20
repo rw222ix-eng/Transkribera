@@ -175,6 +175,21 @@ def validate_balance(doc: ExamDoc,
     return errors
 
 
+def genomforbarhet(antal: int, profil: str = "prov") -> list[dict]:
+    """Deterministisk förkontroll: kan ett prov med ~`antal` uppgifter alls
+    balanseras? Varje uppgift har EN primär förmåga, så färre uppgifter än
+    antalet förmågor med positivt golv kan aldrig representera dem alla.
+    Körs före generering så reparationsloopen slipper ett olösligt problem."""
+    prof_fm, _nm, _kr = PROFILER.get(profil, PROFILER["prov"])
+    golv_formagor = [f for f, (lo, _hi) in prof_fm.items() if lo > 0]
+    if antal < len(golv_formagor):
+        return [_err("antal", "genomforbarhet",
+                     f"{antal} uppgifter räcker inte för att representera alla "
+                     f"{len(golv_formagor)} förmågor som kräver poäng — "
+                     f"be om minst {len(golv_formagor)}.")]
+    return []
+
+
 # ----------------------------------------------------------- kravgränser --
 # NP-modellen: E = minst x % av totalpoängen; C = minst y % av totalen VARAV
 # minst c % av C+A-poängen; A = minst z % av totalen VARAV minst a % av

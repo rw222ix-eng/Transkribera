@@ -250,6 +250,9 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     rundbudgeten. Returnerar {"exam": dict|None, "errors": [...], "rounds": int}."""
     log = log_cb or (lambda _m: None)
     log("Skriver arbetsbladet …" if profil == "arbetsblad" else "Skriver provet …")
+    ogenomforbart = exam_spec.genomforbarhet(antal, profil)
+    if ogenomforbart:
+        return {"exam": None, "errors": ogenomforbart, "rounds": 0}
     prompt = build_prompt(kurs, klass, punkter, antal=antal, tid_min=tid_min,
                           delar=delar, memory=memory, teman=teman,
                           referens=referens, bilder=bilder, profil=profil)
