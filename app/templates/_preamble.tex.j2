@@ -1,9 +1,14 @@
 ((# Delad preamble för prov, arbetsblad och bedömningsanvisning.
     FAST — modellen genererar aldrig preamble, bara uppgiftsinnehåll.
     Variabler: sidhuvud (str), med_grafik (bool), med_svarsrad (bool). #))
-\documentclass[11pt,a4paper]{article}
-\usepackage[margin=22mm,bottom=26mm]{geometry}
+\documentclass[12pt,a4paper]{article}
+\usepackage[T1]{fontenc}
+((# amssymb FÖRE newtxmath — omvänd ordning ger
+    "Command \openbox already defined". #))
 \usepackage{amsmath,amssymb}
+\usepackage{newtxtext,newtxmath}
+\usepackage[margin=17mm,bottom=22mm]{geometry}
+\usepackage{xcolor}
 ((* if med_grafik *))
 \usepackage{graphicx}
 ((* endif *))
@@ -12,13 +17,20 @@
 \usepackage{tabularx}
 \usepackage{enumitem}
 \usepackage[swedish]{babel}
+
+((# Designsystemets bläckfärger (tokens/colors.css). #))
+\definecolor{ink900}{HTML}{1C1B19}
+\definecolor{ink700}{HTML}{3A3835}
+\definecolor{ink500}{HTML}{6B6862}
+\definecolor{ink200}{HTML}{CDC8BD}
+\color{ink900}
 \setlength{\parindent}{0pt}
 \setlength{\parskip}{4pt}
 \pagestyle{fancy}
 \fancyhf{}
-\fancyhead[L]{\small ((( sidhuvud )))}
-\fancyhead[R]{\small Sida \thepage\ av \pageref{LastPage}}
-\renewcommand{\headrulewidth}{0.3pt}
+\fancyhead[C]{\small\textcolor{ink500}{((( sidhuvud )))}}
+\fancyhead[R]{\small\textcolor{ink500}{\thepage\ av \pageref{LastPage}}}
+\renewcommand{\headrulewidth}{0pt}
 
 \newcommand{\poang}[1]{\hfill\mbox{\small(#1)}}
 ((* if med_svarsrad *))

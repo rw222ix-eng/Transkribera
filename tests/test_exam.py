@@ -172,7 +172,16 @@ def test_render_prov_golden_markers():
     doc, _ = exam_spec.validate_exam_json(_exam())
     tex = exam_latex.render_prov(doc)
     # fast preamble — modellen styr aldrig den
-    assert tex.lstrip().startswith("\\documentclass[11pt,a4paper]{article}")
+    # Designsystemet: 12 pt Times, 17 mm marginal (PR 1)
+    assert tex.lstrip().startswith("\\documentclass[12pt,a4paper]{article}")
+    assert "\\usepackage{newtxtext,newtxmath}" in tex
+    assert "margin=17mm" in tex
+    # amssymb MÅSTE ligga före newtxmath — omvänd ordning ger
+    # "Command \openbox already defined"
+    assert tex.index("amssymb") < tex.index("newtxmath")
+    # bläckfärgerna ur designsystemets colors.css
+    assert "\\definecolor{ink900}{HTML}{1C1B19}" in tex
+    assert "\\definecolor{ink700}{HTML}{3A3835}" in tex
     assert "\\usepackage[swedish]{babel}" in tex
     # försättsblad med kravgränser och poäng
     assert "Kravgränser" in tex
