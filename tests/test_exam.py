@@ -88,6 +88,29 @@ def test_valid_exam_passes():
     assert errors == []
 
 
+def test_gruppera_per_del_bevarar_elevens_ordning():
+    """Delgrupperingen måste ge exakt den sekvens eleven ser: B, C, D,
+    sedan del-lösa. Både renderingen och ordningsreglerna bygger på den."""
+    doc, _ = exam_spec.validate_exam_json(_exam())
+    grupper = exam_spec.gruppera_per_del(doc.uppgifter)
+    koder = [kod for kod, _items in grupper]
+    assert koder == ["B", "C"]                 # _exam() har bara B och C
+    # varje grupp behåller uppgifterna i inläst ordning
+    assert [it.formaga for it in grupper[0][1]] == ["B", "P"]
+    # tomma delar utelämnas (ingen D-grupp)
+    assert all(items for _kod, items in grupper)
+
+
+def test_gruppera_per_del_lagger_dellosa_sist():
+    """Uppgifter med del=None hamnar i en egen grupp sist."""
+    data = _exam()
+    data["uppgifter"][0]["del"] = None
+    doc, _ = exam_spec.validate_exam_json(data)
+    grupper = exam_spec.gruppera_per_del(doc.uppgifter)
+    assert grupper[-1][0] is None
+    assert len(grupper[-1][1]) == 1
+
+
 def test_schema_rejects_unknown_fields_and_values():
     bad = _exam()
     bad["uppgifter"][0]["formaga"] = "X"

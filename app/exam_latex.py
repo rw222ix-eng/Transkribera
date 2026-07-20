@@ -100,14 +100,13 @@ def _build_view(doc: exam_spec.ExamDoc,
     (B, C, D, sedan del-lösa). `bilder` mappar uppgiftens bildindex
     (1-baserat) till filnamn i utkatalogen — filnamnet, inte sökvägen,
     eftersom Tectonic kompilerar med utkatalogen som arbetskatalog."""
-    ordning: list[tuple[str | None, str | None]] = [
-        ("B", "Del B"), ("C", "Del C"), ("D", "Del D"), (None, None)]
+    # Delgrupperingen ligger i exam_spec (delad med balansens ordningsregler,
+    # så båda mäter samma sekvens). Rubriken härleds här — en ren vy-detalj.
+    _RUBRIK = {"B": "Del B", "C": "Del C", "D": "Del D", None: None}
     delar = []
     nummer = 0
-    for del_kod, rubrik in ordning:
-        items = [it for it in doc.uppgifter if it.del_ == del_kod]
-        if not items:
-            continue
+    for del_kod, items in exam_spec.gruppera_per_del(doc.uppgifter):
+        rubrik = _RUBRIK[del_kod]
         vy_items = []
         for it in items:
             nummer += 1

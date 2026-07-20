@@ -110,6 +110,24 @@ def poangsummor(doc: ExamDoc) -> dict:
     return {"total": e + c + a, "e": e, "c": c, "a": a, "formagor": formagor}
 
 
+# Delordning: B, C, D, sedan del-lösa (None). Elevens läsordning. En enda
+# källa så att renderingen (_build_view) och balansens ordningsregler mäter
+# SAMMA sekvens — annars kan valideraren straffa en ordning eleven aldrig ser.
+DEL_ORDNING: tuple[str | None, ...] = ("B", "C", "D", None)
+
+
+def gruppera_per_del(uppgifter: list[ExamItem]
+                     ) -> list[tuple[str | None, list[ExamItem]]]:
+    """Gruppera uppgifterna i delordning; tomma delar utelämnas. Ordningen
+    inom varje grupp är den inlästa (= renderad och numrerad ordning)."""
+    grupper: list[tuple[str | None, list[ExamItem]]] = []
+    for kod in DEL_ORDNING:
+        items = [it for it in uppgifter if it.del_ == kod]
+        if items:
+            grupper.append((kod, items))
+    return grupper
+
+
 def validate_balance(doc: ExamDoc,
                      formaga_mal: dict | None = None,
                      niva_mal: dict | None = None,
