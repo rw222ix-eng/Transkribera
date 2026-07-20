@@ -1093,7 +1093,7 @@ def test_search_no_match(tmp_path, monkeypatch):
 
 def test_search_ask_streams_answer(tmp_path, monkeypatch):
     captured = {}
-    def fake_answer(query, excerpts, model, token_cb=None):
+    def fake_answer(query, excerpts, model, token_cb=None, **kw):
         captured["query"] = query
         captured["n"] = len(excerpts)
         if token_cb:
@@ -1130,7 +1130,7 @@ def test_search_ask_semantic_fallback_finds_topical_lesson(tmp_path, monkeypatch
                         lambda q, m: ["derivata", "gränsvärde"])
     captured = {}
 
-    def fake_answer(query, excerpts, model, token_cb=None):
+    def fake_answer(query, excerpts, model, token_cb=None, **kw):
         captured["names"] = [e["name"] for e in excerpts]
         if token_cb:
             token_cb("Ja")
@@ -1176,7 +1176,7 @@ def test_search_ask_matches_lesson_name(tmp_path, monkeypatch):
     """Titeln räknas: "nämns matematik?" ska träffa en inspelning som HETER
     Matematik 4 även om ordet aldrig sägs i transkriptet ("nämns" är småord)."""
     captured = {}
-    def fake_answer(query, excerpts, model, token_cb=None):
+    def fake_answer(query, excerpts, model, token_cb=None, **kw):
         captured["names"] = [e["name"] for e in excerpts]
         return "Ja [1]"
     monkeypatch.setattr(server.postprocess, "answer_over_lessons", fake_answer)
@@ -1202,6 +1202,78 @@ def test_search_ask_busy_gpu_409(tmp_path, monkeypatch):
         def try_acquire_gpu(self): return False
     c = _lesson_client(tmp_path, monkeypatch, arbiter=Busy())
     assert c.post("/api/search/ask", json={"q": "derivata"}).status_code == 409
+
+
+def test_search_ask_calendar_flagga_nar_svarsmodellen(tmp_path, monkeypatch):
+    """calendar=True i arkivfrågan ska nå answer_over_lessons så modellen kan
+    skapa ett [KALENDERFÖRSLAG] ur det den faktiskt hittade."""
+    captured = {}
+    def fake_answer(query, excerpts, model, token_cb=None, **kw):
+        captured.update(kw)
+        return "svar"
+    monkeypatch.setattr(server.postprocess, "answer_over_lessons", fake_answer)
+    c = _lesson_client(tmp_path, monkeypatch)
+    r = c.post("/api/search/ask", json={"q": "vad sades om derivata",
+                                        "calendar": True})
+    assert r.status_code == 200
+    assert captured.get("calendar") is True
+
+
+def test_search_ask_cal_event_andring_kraver_inga_ordtraffar(tmp_path, monkeypatch):
+    """En kalenderändring i arkivchatten ("ändra anteckningen …") gäller
+    förslaget, inte arkivet: den ska gå direkt till modellen med förslaget och
+    tidigare svar som underlag — inte RAG-sökas (ändringens ord träffar sällan
+    transkripten och gav förut 'Jag kan ändra tid, datum …'-återvändsgränden)."""
+    captured = {}
+    def fake_edit(query, context, cal_event, model, token_cb=None):
+        captured.update(q=query, context=context, ev=cal_event)
+        if token_cb:
+            token_cb("Klart")
+        return "Klart"
+    monkeypatch.setattr(server.postprocess, "edit_calendar_suggestion", fake_edit)
+    c = _lesson_client(tmp_path, monkeypatch)
+    ev = {"title": "Uppföljning", "date": "2026-07-21", "time": "08:00",
+          "end_date": None, "desc": ""}
+    r = c.post("/api/search/ask", json={
+        "q": "ändra anteckningen till en påminnelse om alla uppgifter",
+        "cal_event": ev, "context": "Tidigare svar om trianglar"})
+    assert r.status_code == 200
+    events = _sse_events(r.text)
+    done = next(e for e in events if e["type"] == "done")
+    assert done["result"]["text"] == "Klart"
+    assert captured["ev"]["title"] == "Uppföljning"
+    assert captured["context"] == "Tidigare svar om trianglar"
+    assert captured["q"].startswith("ändra anteckningen")
+
+
+def test_search_ask_cal_chat_utan_forslag_gar_till_kalendervagen(tmp_path, monkeypatch):
+    """Frågesvaren från kalendermodalen skickas med cal_chat=True men utan
+    befintligt förslag — de ska gå direkt till kalendervägen (ingen RAG)."""
+    captured = {}
+    def fake_edit(query, context, cal_event, model, token_cb=None):
+        captured.update(q=query, ev=cal_event)
+        return "Här är förslaget"
+    monkeypatch.setattr(server.postprocess, "edit_calendar_suggestion", fake_edit)
+    c = _lesson_client(tmp_path, monkeypatch)
+    r = c.post("/api/search/ask", json={
+        "q": "Svar: fredag · Övrigt: ta med formelblad. Skapa händelsen.",
+        "cal_chat": True, "context": "Tidigare svar"})
+    assert r.status_code == 200
+    done = next(e for e in _sse_events(r.text) if e["type"] == "done")
+    assert done["result"]["text"] == "Här är förslaget"
+    assert captured["ev"] is None
+    assert captured["q"].startswith("Svar: fredag")
+
+
+def test_search_ask_cal_event_busy_gpu_409(tmp_path, monkeypatch):
+    class Busy(_ReadyArbiter):
+        def try_acquire_gpu(self): return False
+    c = _lesson_client(tmp_path, monkeypatch, arbiter=Busy())
+    ev = {"title": "T", "date": "2026-07-21", "time": "08:00",
+          "end_date": None, "desc": ""}
+    r = c.post("/api/search/ask", json={"q": "flytta till onsdag",
+                                        "cal_event": ev})
+    assert r.status_code == 409
 
 
 def _sse_events(text):
@@ -1237,7 +1309,7 @@ def test_search_ask_emits_real_scan_events(tmp_path, monkeypatch):
     deep_read före svaret, med äkta innehållsordsträffar — småorden i
     frågan får inte göra den irrelevanta lektionen till träff/källa."""
     captured = {}
-    def fake_answer(query, excerpts, model, token_cb=None):
+    def fake_answer(query, excerpts, model, token_cb=None, **kw):
         captured["names"] = [e["name"] for e in excerpts]
         return "Det togs upp på mattelektionen [1]"
     monkeypatch.setattr(server.postprocess, "answer_over_lessons", fake_answer)

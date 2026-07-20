@@ -1,22 +1,9 @@
 ((# Bedömningsanvisning (Fas 4) — eget dokument för lärarens rättning.
-    Fast preamble; se prov.tex.j2. #))
-\documentclass[11pt,a4paper]{article}
-\usepackage[margin=22mm,bottom=26mm]{geometry}
-\usepackage{amsmath,amssymb}
-\usepackage{fancyhdr}
-\usepackage{lastpage}
-\usepackage{tabularx}
-\usepackage{enumitem}
-\usepackage[swedish]{babel}
-\setlength{\parindent}{0pt}
-\setlength{\parskip}{4pt}
-\pagestyle{fancy}
-\fancyhf{}
-\fancyhead[L]{\small ((( kurs ))) — ((( titel ))) · Bedömningsanvisning}
-\fancyhead[R]{\small Sida \thepage\ av \pageref{LastPage}}
-\renewcommand{\headrulewidth}{0.3pt}
-
-\newcommand{\poang}[1]{\hfill\mbox{\small(#1)}}
+    Fast preamble; se _preamble.tex.j2. #))
+((* set med_grafik = false *))
+((* set med_svarsrad = false *))
+((* set sidhuvud = kurs ~ ' — ' ~ titel ~ ' · Bedömningsanvisning' *))
+((* include '_preamble.tex.j2' *))
 
 \begin{document}
 
@@ -34,13 +21,16 @@ av totalt ((( granser.total ))) poäng.}
 \vspace{4mm}
 ((* for del in delar *))
 ((* for u in del.uppgifter *))
-\textbf{Uppgift ((( u.nummer )))} \; {\small ((( u.formaga_namn )))}\poang{((( u.poang_eca )))}\par
-{\small\itshape ((( u.text )))}\par\vspace{1mm}
-((* if u.bild_fil *)){\small (Uppgiften har en bild: ((( u.bild_fil ))))}\par\vspace{1mm}((* endif *))
-\textbf{Lösningsförslag:} ((( u.losning )))\par
-\textbf{Bedömning:} ((( u.bedomning )))\par
-\vspace{5mm}
-
+((# \par avslutar ALLTID poäng-raden här — annars flyter \poangs \hfill in
+    i förmågenamnets stycke och poängen hamnar inline i stället för i
+    högermarginalen (jfr prov.tex.j2 och app/templates/_preamble.tex.j2). #))
+\begin{uppgift}{((( u.nummer )))}{((( u.poang_eca )))}\par
+{\small\textcolor{ink500}{((( u.formaga_namn )))}}\par\vspace{1mm}
+{\small\itshape ((( u.text )))}\par\vspace{2mm}
+((* if u.bild_fil *)){\small Uppgiften har en bild: ((( u.bild_fil )))}\par\vspace{1mm}((* endif *))
+\textbf{Lösningsförslag:} ((( u.losning )))\par\vspace{1mm}
+\textbf{Bedömning:} ((( u.bedomning )))
+\end{uppgift}
 ((* endfor *))
 ((* endfor *))
 

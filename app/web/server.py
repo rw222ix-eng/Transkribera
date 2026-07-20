@@ -1406,6 +1406,36 @@ def create_app(base_dir: Path | None = None,
         query = (body.get("q") or body.get("query") or "").strip()
         if not query:
             return JSONResponse({"error": "fråga krävs"}, status_code=400)
+        # Kalenderförmågan (samma [KALENDERFÖRSLAG]-rad som lektionschatten):
+        # calendar=True låter svarsmodellen föreslå en händelse ur källorna.
+        calendar = bool(body.get("calendar", False))
+        cal_event = (body.get("cal_event")
+                     if isinstance(body.get("cal_event"), dict) else None)
+        # cal_chat: svar på kalendermodalens klargörande frågor — samma väg
+        # som en förslagsändring, men utan att ett förslag hunnit skapas än.
+        if cal_event is not None or bool(body.get("cal_chat")):
+            # Ändring av ett befintligt förslag ("ändra anteckningen …") gäller
+            # förslaget, inte arkivet: ingen RAG-sökning — ändringens ord
+            # träffar sällan transkripten. Tidigare svar följer med som
+            # innehållsunderlag i stället.
+            context = str(body.get("context") or "")[:6000]
+            if not arb.try_acquire_gpu():
+                return JSONResponse(
+                    {"error": "GPU upptagen med transkribering – försök igen strax."},
+                    status_code=409)
+
+            def cal_job(emit):
+                try:
+                    if arb.ensure_llm() is None:
+                        raise RuntimeError("Språkmodellen är inte installerad.")
+                    text = postprocess.edit_calendar_suggestion(
+                        query, context, cal_event,
+                        llm_manager.ACTIVE_LLM.filename,
+                        token_cb=lambda t: emit({"type": "token", "text": t}))
+                    return {"text": text, "sources": []}
+                finally:
+                    arb.release_gpu()
+            return _sse_response(cal_job)
         conn = _db()
         try:
             # Äkta skanningsbild för live-progressionen: alla transkript i
@@ -1514,7 +1544,8 @@ def create_app(base_dir: Path | None = None,
                           "msg": f"Söker i {len(excerpts2)} lektioner ..."})
                     text = postprocess.answer_over_lessons(
                         query, excerpts2, llm_manager.ACTIVE_LLM.filename,
-                        token_cb=lambda t: emit({"type": "token", "text": t}))
+                        token_cb=lambda t: emit({"type": "token", "text": t}),
+                        calendar=calendar)
                     return {"text": text, "sources": [
                         {"lesson_id": e["lesson_id"], "history_id": e["history_id"],
                          "name": e["name"], "group": e["group"],
@@ -1549,7 +1580,8 @@ def create_app(base_dir: Path | None = None,
                 emit({"type": "log", "msg": f"Söker i {len(excerpts)} lektioner ..."})
                 text = postprocess.answer_over_lessons(
                     query, excerpts, llm_manager.ACTIVE_LLM.filename,
-                    token_cb=lambda t: emit({"type": "token", "text": t}))
+                    token_cb=lambda t: emit({"type": "token", "text": t}),
+                    calendar=calendar)
                 return {"text": text, "sources": [
                     {"lesson_id": e["lesson_id"], "history_id": e["history_id"],
                      "name": e["name"], "group": e["group"], "course": e["course"],

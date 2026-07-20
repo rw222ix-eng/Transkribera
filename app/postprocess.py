@@ -333,13 +333,45 @@ ANSWER_SYSTEM = (
 )
 
 
-def build_answer_prompt(query: str, excerpts: list[dict]) -> str:
+# Kalenderavsikt i arkivfrågan ("… gör en kalenderhändelse av detta"):
+# detekteras deterministiskt så prompten kan KRÄVA frågesteget — Qwen3
+# tappar annars den villkorade instruktionen när utdragen är långa.
+_CAL_INTENT = re.compile(
+    r"(?:gör|skapa|lägg\s+(?:in|till)|boka|schemalägg|sätt\s+upp)"
+    r"[^.!?]{0,60}(?:kalender|händelse|påminnelse|läxförhör)"
+    r"|kalenderhändelse",
+    re.IGNORECASE)
+
+
+def calendar_intent(query: str) -> bool:
+    return bool(_CAL_INTENT.search(query or ""))
+
+
+def build_answer_prompt(query: str, excerpts: list[dict],
+                        calendar: bool = False) -> str:
     blocks = []
     for i, e in enumerate(excerpts, 1):
         head = " · ".join(x for x in (e.get("group"), e.get("course"),
                                       e.get("datum"), e.get("name")) if x)
         blocks.append(f"[{i}] {head}\n{(e.get('excerpt') or '').strip()}")
     context = "\n\n".join(blocks) if blocks else "(inga träffar)"
+    # Kalenderpåminnelsen ligger SIST i användarprompten: systempromptens
+    # KALENDER-avsnitt drunknar annars under svarsinstruktionerna och
+    # modellen hoppar tyst över både frågesteget och förslagsraden. När
+    # frågan uppenbart ber om en händelse görs kravet absolut — den
+    # villkorade formen ignoreras av modellen vid långa utdrag.
+    cal = ""
+    if calendar and calendar_intent(query):
+        cal = ("\n\nVIKTIGT: Frågan ber dig skapa en kalenderhändelse. Ditt "
+               "svar SKA därför avslutas med exakt en [KALENDERFRÅGOR]-rad "
+               "enligt KALENDER-instruktionen (STEG 1 — klargörande frågor "
+               "först; aldrig en [KALENDERFÖRSLAG]-rad direkt).")
+    elif calendar:
+        cal = ("\n\nOBS: Ber frågan dig (även delvis) att skapa en "
+               "kalenderhändelse ska du dessutom följa KALENDER-instruktionen: "
+               "för en NY händelse avslutar du svaret med en [KALENDERFRÅGOR]-rad "
+               "(STEG 1 — hoppa aldrig över frågorna), aldrig med en "
+               "[KALENDERFÖRSLAG]-rad direkt.")
     return (f"Fråga: {query}\n\n"
             f"Numrerade utdrag ur inspelningarna att svara utifrån:\n---\n"
             f"{context}\n---\n\n"
@@ -349,20 +381,57 @@ def build_answer_prompt(query: str, excerpts: list[dict]) -> str:
             f"inte innehållet i övrigt. Finns svaret: bär det med korta "
             f"ordagranna citat inom citattecken, i naturlig svenska utan "
             f"referatpassiv. Källnummer [1], [2] … direkt efter varje "
-            f"påstående.")
+            f"påstående.{cal}")
 
 
 def answer_over_lessons(query: str, excerpts: list[dict], model: str,
-                        token_cb: Callable[[str], None] | None = None) -> str:
-    """Answer a question grounded in the given lesson excerpts (citing lessons)."""
+                        token_cb: Callable[[str], None] | None = None,
+                        calendar: bool = False,
+                        cal_event: dict | None = None) -> str:
+    """Answer a question grounded in the given lesson excerpts (citing lessons).
+
+    With calendar=True the model may also propose a calendar event out of what
+    it found, via the same [KALENDERFÖRSLAG] line as the lesson chat — so
+    "gör en kalenderhändelse av detta" yields a suggestion built from the
+    sources instead of an echo of the question."""
     if not excerpts:
         return "Jag hittade inga lektioner som matchar din sökning."
+    system = ANSWER_SYSTEM + (llm_client._cal_instr(cal_event) if calendar else "")
     # 0.3: tillräckligt lågt för faktatrogenhet, tillräckligt högt för att
     # prosan inte ska stelna till robotreferat.
     return llm_client.generate(
-        model, build_answer_prompt(query, excerpts), token_cb=token_cb,
-        system=ANSWER_SYSTEM, options={"temperature": 0.3},
+        model, build_answer_prompt(query, excerpts, calendar=calendar),
+        token_cb=token_cb,
+        system=system, options={"temperature": 0.3},
         max_tokens=ANSWER_MAX_TOKENS)
+
+
+CAL_EDIT_SYSTEM = (
+    "Du är en hjälpsam svensk assistent i en lärares arkivsök. Läraren har "
+    "ett kalenderförslag framme och ber dig ändra eller utveckla det via "
+    "chatten. Bygg innehållet på underlaget när det finns — hitta inte på. "
+    "Svara kort och naturligt på svenska."
+)
+
+
+def edit_calendar_suggestion(query: str, context: str, cal_event: dict | None,
+                             model: str,
+                             token_cb: Callable[[str], None] | None = None) -> str:
+    """Ändra arkivsvarets kalenderförslag ur ett chattönskemål ("ändra
+    anteckningen till en påminnelse om uppgifterna …"). Ingen RAG-sökning:
+    önskemålet gäller förslaget, inte arkivet — tidigare svar skickas med som
+    innehållsunderlag och modellen svarar med en [KALENDERFÖRSLAG]-rad.
+    cal_event=None används av frågesteget (svar på kalendermodalens frågor
+    innan något förslag hunnit skapas)."""
+    prompt = ""
+    if (context or "").strip():
+        prompt += ("Tidigare svar ur arkivet, som underlag för innehållet:\n"
+                   f"{context.strip()}\n\n")
+    prompt += f"Lärarens önskemål: {query}"
+    return llm_client.generate(
+        model, prompt, token_cb=token_cb,
+        system=CAL_EDIT_SYSTEM + llm_client._cal_instr(cal_event),
+        options={"temperature": 0.3}, max_tokens=ANSWER_MAX_TOKENS)
 
 
 EXPAND_SYSTEM = (

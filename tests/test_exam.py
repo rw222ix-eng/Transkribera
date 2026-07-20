@@ -1,12 +1,22 @@
 """Provgeneratorn (Fas 4): schema/balans/kravgränser, LaTeX-rendering,
 PDF-modul med stubbat kompilatoranrop samt genereringslooparna."""
+import base64
 import copy
 import json
+import re
 import subprocess
 
 import pytest
 
 from app import exam_gen, exam_latex, exam_pdf, exam_spec
+
+# Minimal giltig 1×1-pixels PNG (RGB, okomprimerad enda scanline) — samma
+# sond som tools/seed_tectonic_cache.py använder för att motionera
+# \includegraphics-kodvägen utan att bero på att Pillow finns installerat.
+_MINIMAL_PNG_B64 = (
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR42mM4YaMBAAL8"
+    "AS3Bfun7AAAAAElFTkSuQmCC"
+)
 
 
 def _exam() -> dict:
@@ -172,7 +182,16 @@ def test_render_prov_golden_markers():
     doc, _ = exam_spec.validate_exam_json(_exam())
     tex = exam_latex.render_prov(doc)
     # fast preamble — modellen styr aldrig den
-    assert tex.lstrip().startswith("\\documentclass[11pt,a4paper]{article}")
+    # Designsystemet: 12 pt Times, 17 mm marginal (PR 1)
+    assert tex.lstrip().startswith("\\documentclass[12pt,a4paper]{article}")
+    assert "\\usepackage{newtxtext,newtxmath}" in tex
+    assert "margin=17mm" in tex
+    # amssymb MÅSTE ligga före newtxmath — omvänd ordning ger
+    # "Command \openbox already defined"
+    assert tex.index("amssymb") < tex.index("newtxmath")
+    # bläckfärgerna ur designsystemets colors.css
+    assert "\\definecolor{ink900}{HTML}{1C1B19}" in tex
+    assert "\\definecolor{ink700}{HTML}{3A3835}" in tex
     assert "\\usepackage[swedish]{babel}" in tex
     # försättsblad med kravgränser och poäng
     assert "Kravgränser" in tex
@@ -183,16 +202,48 @@ def test_render_prov_golden_markers():
     # elevens prov visar endast totalsumman — E/C/A hör till bedömningsanvisningen
     assert "20 poäng" in tex and "(10/6/4)" not in tex
     # delar + numrerade uppgifter med poängrutor
-    assert "Del B" in tex and "Del C" in tex
-    assert "Uppgift 1" in tex and "Uppgift 6" in tex
-    # poängrutor via \poang-makrot — endast totalpoäng i elevens prov
-    assert r"\poang{3p}" in tex and r"\poang{4p}" in tex
-    assert r"\poang{2/1/0}" not in tex
+    assert r"\delprovband{Del B}" in tex and r"\delprovband{Del C}" in tex
+    # numret bärs av uppgift-miljöns hängande etikett
+    assert r"\begin{uppgift}{1}" in tex and r"\begin{uppgift}{6}" in tex
+    # poängen bärs nu av uppgift-miljöns andra argument (som i sin tur
+    # anropar \poang-makrot internt) — endast totalpoäng i elevens prov
+    assert r"\begin{uppgift}{3}{3p}" in tex and r"\begin{uppgift}{4}{4p}" in tex
+    assert r"\poang{2/1/0}" not in tex and "{2/1/0}" not in tex
     # matte bevarad, rutinuppgift får svarsrad
     assert r"\(x^2 - 4x + 3 = 0\)" in tex
     assert "\\svarsrad" in tex
     # lösningar hör INTE hemma i provet
     assert "lösningsförslag" not in tex.lower()
+
+
+def test_preamble_definierar_layoutmakron():
+    """Designsystemets layoutprimitiver ska finnas som makron, så att
+    mallarna anropar dem i stället för att upprepa formateringen."""
+    doc, _ = exam_spec.validate_exam_json(_exam())
+    tex = exam_latex.render_prov(doc)
+    assert r"\newcommand{\delprovband}" in tex
+    assert r"\newenvironment{uppgift}" in tex
+    assert r"\newcommand{\ramruta}" in tex
+    assert r"\newcommand{\elevruta}" in tex
+    # måtten ur designsystemet: 10,5 mm gutter och 8,5 mm uppgiftsrytm
+    assert "10.5mm" in tex and "8.5mm" in tex
+
+
+def test_prov_anvander_layoutmakron():
+    """Provmallen ska anropa makrona, inte upprepa formateringen."""
+    doc, _ = exam_spec.validate_exam_json(_exam())
+    tex = exam_latex.render_prov(doc)
+    # Sök i dokumentkroppen, inte i preambeln: makrodefinitionerna ligger
+    # i den delade _preamble.tex.j2, så en sökning i hela strängen skulle
+    # passera även om mallen slutade anropa dem.
+    kropp = tex.split(r"\begin{document}", 1)[1]
+    assert r"\elevruta" in kropp
+    assert r"\delprovband{Del B}" in kropp and r"\delprovband{Del C}" in kropp
+    assert r"\begin{uppgift}{1}{2p}" in tex
+    # \section* ersatt av bandet
+    assert r"\section*{Del B}" not in tex
+    # oförändrat: elevens prov visar bara totalpoäng
+    assert "20 poäng" in tex and "(10/6/4)" not in tex
 
 
 def test_render_bedomning_contains_solutions():
@@ -202,8 +253,24 @@ def test_render_bedomning_contains_solutions():
     assert "Lösningsförslag" in tex
     assert "Problemlösning" in tex          # förmågenamn
     assert r"\(x = 1\)" in tex or "x = 1" in tex
-    # lärardokumentet behåller E/C/A-poängen (elevens prov visar bara totalen)
-    assert r"\poang{2/1/0}" in tex
+    # lärardokumentet behåller E/C/A-poängen (elevens prov visar bara
+    # totalen). Uppgiftsloopen anropar numera den delade uppgift-miljön
+    # (\begin{uppgift}{n}{e/c/a}) i stället för att skriva \poang{...}
+    # direkt i mallen, så \poang{2/1/0} som RÅ SUBSTRÄNG förekommer aldrig
+    # i den Python-renderade .tex-källan (bara efter att LaTeX expanderat
+    # miljön vid kompilering) — jfr test_prov_anvander_layoutmakron.
+    assert r"\begin{uppgift}{3}{2/1/0}" in tex
+
+
+def test_bedomning_behaller_eca_och_far_makron():
+    """Lärarens dokument visar E/C/A — det är dess syfte. Elevens gör det inte."""
+    doc, _ = exam_spec.validate_exam_json(_exam())
+    tex = exam_latex.render_bedomning(doc)
+    assert r"\begin{uppgift}{1}{2/0/0}" in tex
+    assert "Lösningsförslag" in tex and "Bedömning" in tex
+    # kontrollera motsatsen på elevens prov
+    prov = exam_latex.render_prov(doc)
+    assert "2/0/0" not in prov
 
 
 def test_render_escapes_model_text():
@@ -213,6 +280,58 @@ def test_render_escapes_model_text():
     tex = exam_latex.render_prov(doc)
     assert r"25\% \& g" in tex
     assert "{alla}" not in tex
+
+
+# ------------------------------------------------------ skyddsnät: \par ----
+
+def test_par_avslutar_poangraden_dar_markor_renderas():
+    """Skyddsnät mot regressionen 2026-07-20 (668 gröna tester medan tre
+    mallar ändå klistrade ihop poängmarkören med uppgiftstexten).
+
+    \\poang använder \\hfill för att trycka markören till högermarginalen,
+    men \\hfill delar bara \\parfillskip (och skjuter alltså markören ända
+    till marginalen) om ett \\par avslutar stycket omedelbart efter
+    \\begin{uppgift}{...}{...}-raden. Saknas det \\par:et hamnar markören
+    mitt i uppgiftstexten i stället för ensam i marginalen.
+
+    Ren strängkontroll — inget PyMuPDF eller annat nytt beroende. Kravet
+    gäller bara uppgifter där en markör FAKTISKT renderas (icke-tomt andra
+    argument). Arbetsbladets \\begin{uppgift}{n}{} (visa_poang=False, och
+    alltid i facit-sektionen) ska INTE ha \\par där — det skulle flytta
+    ned uppgiftstexten även när ingen markör visas."""
+    doc, _ = exam_spec.validate_exam_json(_exam())
+
+    rad = re.compile(r"\\begin\{uppgift\}\{[^{}]*\}\{([^{}]*)\}(\\par)?")
+
+    def kontrollera(tex: str, namn: str) -> None:
+        träffar = list(rad.finditer(tex))
+        assert träffar, f"{namn}: hittade inga \\begin{{uppgift}}-rader"
+        for m in träffar:
+            markor, par = m.group(1), m.group(2)
+            if markor:
+                assert par == r"\par", (
+                    f"{namn}: uppgift med poängmarkör {markor!r} saknar "
+                    r"\par direkt efter \begin{uppgift}-raden — markören "
+                    "riskerar att glida in i uppgiftstexten i stället för "
+                    "att hamna ensam i högermarginalen"
+                )
+            else:
+                assert par is None, (
+                    f"{namn}: uppgift UTAN poängmarkör fick ändå ett "
+                    r"\par, vilket flyttar ned uppgiftstexten i onödan"
+                )
+
+    # prov: både rutinuppgifter (med "Endast svar krävs") och
+    # redovisningsuppgifter — båda bär en poängmarkör och kräver \par.
+    kontrollera(exam_latex.render_prov(doc), "prov")
+    # arbetsblad: visa_poang=True ska kräva \par, visa_poang=False (default,
+    # och alltid i facit-sektionen) ska INTE ha det.
+    kontrollera(exam_latex.render_arbetsblad(doc, visa_poang=True),
+                "arbetsblad (visa_poang=True)")
+    kontrollera(exam_latex.render_arbetsblad(doc, visa_poang=False),
+                "arbetsblad (visa_poang=False)")
+    # bedömningsanvisningen visar alltid (E/C/A) — alltid en markör.
+    kontrollera(exam_latex.render_bedomning(doc), "bedomning")
 
 
 # ------------------------------------------------------------- exam_pdf ----
@@ -261,6 +380,57 @@ def test_compile_pdf_timeout(tmp_path, monkeypatch):
     pdf, log = exam_pdf.compile_pdf("x", tmp_path / "ut", "prov",
                                     timeout=1, runner=slow_runner)
     assert pdf is None and "avbröts" in log
+
+
+def _exam_med_matte_i_bedomningen() -> dict:
+    """_exam() men med matte även i bedömningsfältet — det fältet saknar
+    annars helt $…$ (se _exam() ovan). Ofarlig extra täckning: den faktiska
+    orsaken till kraschen var matte i FÄLTET text i \\small-kontext (i
+    bedomning.tex.j2 renderas bara uppgiftens text inuti {\\small\\itshape
+    …} — losning och bedomning renderas i normal storlek, se den mallen).
+    Den handskrivna sonden i tools/seed_tectonic_cache.py hade ingen matte
+    i förminskad textstorlek, så \\small-matte-fontmetrikerna hämtades
+    aldrig ner, och --only-cached kunde då inte hämta dem i efterhand
+    (access violation i stället för ett läsbart LaTeX-fel)."""
+    data = copy.deepcopy(_exam())
+    data["uppgifter"][0]["bedomning"] = (
+        "+2 E om båda nollställena $x=1$ och $x=-3$ anges, annars 0 p "
+        "(jämför $\\alpha \\neq \\beta$).")
+    return data
+
+
+def test_compile_pdf_real_engine_produces_all_three_documents(tmp_path):
+    """Skyddsnät mot att sonden och mallarna glider isär tyst: kompilerar
+    med den RIKTIGA Tectonic-motorn (ingen stubbad runner/compile_fn) och
+    kräver att prov, arbetsblad OCH bedömningsanvisning verkligen ger en
+    PDF — inklusive bildvägen (\\includegraphics i prov.tex.j2/
+    arbetsblad.tex.j2), som annars aldrig motioneras av de stubbade
+    testerna i den här filen. Alla andra tester i den här filen stubbar
+    compile_pdf — det var just därför bugginen (bedömningsanvisningens
+    PDF gick inte att producera) kunde smyga sig förbi en grön testsvit."""
+    if not exam_pdf.engine_available():
+        pytest.skip("Tectonic-motorn saknas (bin/tectonic/tectonic.exe)")
+
+    data = _exam_med_matte_i_bedomningen()
+    data["uppgifter"][0]["bild"] = 1
+    doc, errors = exam_spec.validate_exam_json(data)
+    assert doc is not None and errors == []
+
+    bild_fil = "bild-01.png"
+    (tmp_path / bild_fil).write_bytes(base64.b64decode(_MINIMAL_PNG_B64))
+    bilder = {1: bild_fil}
+
+    for jobname, tex in (
+        ("prov", exam_latex.render_prov(doc, bilder=bilder)),
+        ("arbetsblad", exam_latex.render_arbetsblad(doc, bilder=bilder)),
+        ("bedomning", exam_latex.render_bedomning(doc, bilder=bilder)),
+    ):
+        pdf, logg = exam_pdf.compile_pdf(tex, tmp_path, jobname)
+        assert pdf is not None and pdf.exists(), f"{jobname} misslyckades: {logg}"
+        assert pdf.stat().st_size > 0
+        # bildvägen ska verkligen ha kompilerats, inte bara renderats i
+        # minnet — bildfilens namn måste finnas i den genererade .tex-källan.
+        assert bild_fil in (tmp_path / f"{jobname}.tex").read_text(encoding="utf-8")
 
 
 # ------------------------------------------------------------- exam_gen ----
@@ -371,9 +541,48 @@ def test_render_arbetsblad_has_facit_no_kravgranser():
     assert "Facit" in tex
     assert "Kravgränser" not in tex
     assert r"\(x = 2\)" in tex                    # facit = lösningarna
-    assert r"\poang{" not in tex                  # poäng dolda som standard
+    # Poäng dolda som standard. Kontrollen gäller RENDERADE poäng, inte
+    # makrots förekomst. Uppgiftsloopen anropar numera den delade
+    # uppgift-miljön (\begin{uppgift}{n}{poäng}) i stället för att skriva
+    # \poang{...} direkt i mallen — \poang{2p} som RÅ SUBSTRÄNG förekommer
+    # därför aldrig i den Python-renderade .tex-källan (bara efter att
+    # LaTeX expanderat miljön vid kompilering). Kontrollen görs i stället
+    # mot uppgift-miljöns andra argument, precis som provmallens
+    # motsvarande test (test_prov_anvander_layoutmakron).
+    assert r"\begin{uppgift}{1}{2p}" not in tex
     tex_p = exam_latex.render_arbetsblad(doc, visa_poang=True)
-    assert r"\poang{2p}" in tex_p
+    assert r"\begin{uppgift}{1}{2p}" in tex_p
+
+
+def test_arbetsblad_anvander_layoutmakron():
+    doc, _ = exam_spec.validate_exam_json(_exam())
+    tex = exam_latex.render_arbetsblad(doc)
+    assert r"\begin{uppgift}{1}" in tex
+    # Sök i dokumentkroppen, inte i preambeln: \newcommand{\elevruta} i den
+    # delade _preamble.tex.j2 innehåller alltid substrängen "\elevruta",
+    # så en sökning i hela strängen skulle träffa preambeln även om
+    # mallen aldrig anropade makrot (jfr test_prov_anvander_layoutmakron).
+    kropp = tex.split(r"\begin{document}", 1)[1]
+    assert r"\elevruta" not in kropp
+    assert "Kravgränser" not in tex
+    # facit finns kvar
+    assert "Facit" in tex
+
+
+def test_arbetsblad_utan_poang_ger_tomt_argument_inte_tom_parentes():
+    """visa_poang=False ska ge INGEN poängmarkör. Skickas \\relax eller ett
+    blanktecken skriver \\poang ut ett tomt parentespar i marginalen."""
+    doc, _ = exam_spec.validate_exam_json(_exam())
+    tex = exam_latex.render_arbetsblad(doc, visa_poang=False)
+    assert r"\begin{uppgift}{1}{}" in tex
+    # Sök i dokumentkroppen: \ramruta i preambeln innehåller alltid
+    # "...\fboxsep\relax}..." (dimexpr-uttrycket), så en sökning i hela
+    # strängen skulle träffa preambeln oavsett mallens innehåll.
+    kropp = tex.split(r"\begin{document}", 1)[1]
+    assert r"\relax}" not in kropp
+    # med poäng påslaget kommer markören tillbaka
+    med = exam_latex.render_arbetsblad(doc, visa_poang=True)
+    assert r"\begin{uppgift}{1}{2p}" in med
 
 
 def test_build_referens_numbers_and_instructs():

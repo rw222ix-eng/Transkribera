@@ -1,25 +1,9 @@
 ((# Arbetsbladsmall (Fas 5) — som provmallen men utan kravgränser, med
     valfri poängvisning, gott om utrymme och facit på egen sida.
     Fast preamble; Jinja-avgränsarna är parentesbaserade. #))
-\documentclass[11pt,a4paper]{article}
-\usepackage[margin=22mm,bottom=26mm]{geometry}
-\usepackage{amsmath,amssymb}
-\usepackage{graphicx}
-\usepackage{fancyhdr}
-\usepackage{lastpage}
-\usepackage{tabularx}
-\usepackage{enumitem}
-\usepackage[swedish]{babel}
-\setlength{\parindent}{0pt}
-\setlength{\parskip}{4pt}
-\pagestyle{fancy}
-\fancyhf{}
-\fancyhead[L]{\small ((( kurs ))) — ((( titel )))}
-\fancyhead[R]{\small Sida \thepage\ av \pageref{LastPage}}
-\renewcommand{\headrulewidth}{0.3pt}
-
-\newcommand{\poang}[1]{\hfill\mbox{\small(#1)}}
-\newcommand{\svarsrad}{\par\vspace{4mm}\makebox[0.6\linewidth]{Svar: \dotfill}}
+((* set med_grafik = true *))
+((* set med_svarsrad = true *))
+((* include '_preamble.tex.j2' *))
 
 \begin{document}
 
@@ -35,19 +19,34 @@ på sista sidan((* if visa_poang *)); poäng anges som totalpoäng((* endif *)).
 \vspace{4mm}
 ((* for del in delar *))
 ((* for u in del.uppgifter *))
-\textbf{Uppgift ((( u.nummer )))}((* if visa_poang *))\poang{((( u.poang_str )))}((* endif *))\par
+((# \par avslutar poäng-raden ENDAST när visa_poang är sant — annars
+    finns ingen markör (tomt argument) och uppgiftstexten ska stå kvar på
+    samma rad som numret, precis som idag. Ett ovillkorligt \par skulle
+    flytta ned ALL text ett steg även när ingen markör renderas.
+    De två grenarna skrivs som HELA separata \begin{uppgift}-rader (inte
+    \par inuti en villkorstagg på samma rad som (* endif *)) — annars äter
+    trim_blocks radbrytningen efter taggen och \par glider ihop med
+    uppgiftstextens första ord till en odefinierad kontrollsekvens
+    (samma fälla som tidigare kraschade prov.tex.j2/bedomning.tex.j2). #))
+((* if visa_poang *))
+\begin{uppgift}{((( u.nummer )))}{((( u.poang_str )))}\par
+((* else *))
+\begin{uppgift}{((( u.nummer )))}{}
+((* endif *))
 ((( u.text )))
 ((* if u.bild_fil *))\par\vspace{2mm}\begin{center}\includegraphics[width=0.72\linewidth,height=90mm,keepaspectratio]{((( u.bild_fil )))}\end{center}((* endif *))
-((* if u.endast_svar *))\svarsrad\par\vspace{6mm}((* else *))\par\vspace{((( u.utrymme_mm )))mm}((* endif *))
-
+((* if u.endast_svar *))\svarsrad((* else *))\par\vspace{((( u.utrymme_mm )))mm}((* endif *))
+\end{uppgift}
 ((* endfor *))
 ((* endfor *))
 
 \newpage
-\section*{Facit}
+\delprovband{Facit}
 ((* for del in delar *))
 ((* for u in del.uppgifter *))
-\textbf{((( u.nummer ))).} ((( u.losning )))\par\vspace{2mm}
+\begin{uppgift}{((( u.nummer )))}{}
+((( u.losning )))
+\end{uppgift}
 ((* endfor *))
 ((* endfor *))
 
