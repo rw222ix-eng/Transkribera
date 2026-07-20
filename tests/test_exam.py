@@ -232,8 +232,12 @@ def test_prov_anvander_layoutmakron():
     """Provmallen ska anropa makrona, inte upprepa formateringen."""
     doc, _ = exam_spec.validate_exam_json(_exam())
     tex = exam_latex.render_prov(doc)
-    assert r"\elevruta" in tex
-    assert r"\delprovband{Del B}" in tex and r"\delprovband{Del C}" in tex
+    # Sök i dokumentkroppen, inte i preambeln: makrodefinitionerna ligger
+    # i den delade _preamble.tex.j2, så en sökning i hela strängen skulle
+    # passera även om mallen slutade anropa dem.
+    kropp = tex.split(r"\begin{document}", 1)[1]
+    assert r"\elevruta" in kropp
+    assert r"\delprovband{Del B}" in kropp and r"\delprovband{Del C}" in kropp
     assert r"\begin{uppgift}{1}{2p}" in tex
     # \section* ersatt av bandet
     assert r"\section*{Del B}" not in tex
