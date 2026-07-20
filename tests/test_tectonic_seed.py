@@ -7,9 +7,9 @@ from tools import seed_tectonic_cache
 def test_probe_drar_in_alla_paket():
     """Sondens källa måste nämna varje paket cachen ska innehålla."""
     for paket in ("newtxtext", "newtxmath", "xcolor", "tikz",
-                  "pgfplots", "graphicx", "amssymb", "fontenc",
-                  "geometry", "fancyhdr", "lastpage", "tabularx",
-                  "enumitem", "swedish"):
+                  "pgfplots", "graphicx", "amsmath", "amssymb",
+                  "fontenc", "geometry", "fancyhdr", "lastpage",
+                  "tabularx", "enumitem", "swedish"):
         assert paket in seed_tectonic_cache.PROBE_TEX, f"{paket} saknas i sonden"
 
 
@@ -60,7 +60,7 @@ def test_seed_skriver_inte_markor_vid_misslyckande(tmp_path, monkeypatch):
 
 
 def test_seed_skapar_markor_fran_borjan(tmp_path, monkeypatch):
-    """Cachen börjar utan markför — seed måste skapa den efter lyckad kompilering."""
+    """Cachen börjar utan markör — seed måste skapa den efter lyckad kompilering."""
     cache = tmp_path / "cache"
     cache.mkdir()
     # Markören existerar INTE från början (detta är det vanliga läget)
