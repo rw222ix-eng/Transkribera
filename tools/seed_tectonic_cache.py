@@ -23,10 +23,19 @@ steg) och dras därför fortfarande in via en egen, oförändrad PROBE_TEX.
 """
 from __future__ import annotations
 
+import base64
 import sys
 from pathlib import Path
 
 from app import exam_latex, exam_pdf, exam_spec
+
+# Minimal giltig 1×1-pixels PNG (RGB, okomprimerad enda scanline), bäddad
+# som base64 så vi varken hittar på ett eget filformat eller behöver
+# Pillow installerat för att skriva en bildfil till seedkatalogen.
+_MINIMAL_PNG_B64 = (
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR42mM4YaMBAAL8"
+    "AS3Bfun7AAAAAElFTkSuQmCC"
+)
 
 # Sonden måste dra in VARJE paket mallarna kommer att använda — annars
 # saknas det i cachen och --only-cached faller på skarp körning.
@@ -78,7 +87,10 @@ def _representative_doc() -> exam_spec.ExamDoc:
     lösning OCH bedömning (bedömningsanvisningen visar uppgiftstexten i
     \\small-kontext — det var just den kombinationen den handskrivna
     sonden tidigare missade), en rutinuppgift som ger svarsrad, en
-    redovisningsuppgift, samt uppgifter i både Del B och Del C."""
+    redovisningsuppgift, uppgifter i både Del B och Del C, samt en
+    uppgift med bild (``bild=1``) så att \\includegraphics-kodvägen i
+    prov.tex.j2/arbetsblad.tex.j2 verkligen motioneras — annars seedas
+    aldrig de paket/fontmetriker den kodvägen kräver."""
     return exam_spec.ExamDoc(
         titel="Sondprov — cacheseedning",
         kurs="Matematik 1c",
@@ -91,6 +103,7 @@ def _representative_doc() -> exam_spec.ExamDoc:
                 del_="B", formaga="P", typ="rutin", poang=(1, 0, 0),
                 text=r"Lös ekvationen $x^2 - 4x + 3 = 0$ och ange svaret "
                      r"som $x_1$ och $x_2$.",
+                bild=1,
                 losning=r"$x = 1$ eller $x = 3$, ty $\frac{a}{b} \geq "
                         r"\sqrt{c}$ ger reella rötter.",
                 bedomning=r"+1 E om båda rötterna anges, annars 0 p "
@@ -125,11 +138,19 @@ def seed(out_dir: Path, *, compile_fn=exam_pdf.compile_pdf) -> tuple[bool, str]:
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    # Bildvägen (\includegraphics i prov.tex.j2/arbetsblad.tex.j2) motioneras
+    # bara om en riktig bildfil ligger i utkatalogen — Tectonic kompilerar
+    # med out_dir som arbetskatalog, så bilder-mappningen pekar på FILNAMNET
+    # (se exam_latex._build_view), inte hela sökvägen.
+    bild_fil = "bild-01.png"
+    (out_dir / bild_fil).write_bytes(base64.b64decode(_MINIMAL_PNG_B64))
+    bilder = {1: bild_fil}
+
     doc = _representative_doc()
     jobb = (
-        ("prov", exam_latex.render_prov(doc)),
-        ("arbetsblad", exam_latex.render_arbetsblad(doc)),
-        ("bedomning", exam_latex.render_bedomning(doc)),
+        ("prov", exam_latex.render_prov(doc, bilder=bilder)),
+        ("arbetsblad", exam_latex.render_arbetsblad(doc, bilder=bilder)),
+        ("bedomning", exam_latex.render_bedomning(doc, bilder=bilder)),
         ("sond", PROBE_TEX),
     )
 

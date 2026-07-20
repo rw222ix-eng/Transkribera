@@ -1,5 +1,6 @@
 """Provgeneratorn (Fas 4): schema/balans/kravgränser, LaTeX-rendering,
 PDF-modul med stubbat kompilatoranrop samt genereringslooparna."""
+import base64
 import copy
 import json
 import subprocess
@@ -7,6 +8,14 @@ import subprocess
 import pytest
 
 from app import exam_gen, exam_latex, exam_pdf, exam_spec
+
+# Minimal giltig 1×1-pixels PNG (RGB, okomprimerad enda scanline) — samma
+# sond som tools/seed_tectonic_cache.py använder för att motionera
+# \includegraphics-kodvägen utan att bero på att Pillow finns installerat.
+_MINIMAL_PNG_B64 = (
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR42mM4YaMBAAL8"
+    "AS3Bfun7AAAAAElFTkSuQmCC"
+)
 
 
 def _exam() -> dict:
@@ -293,23 +302,34 @@ def test_compile_pdf_real_engine_produces_all_three_documents(tmp_path):
     """Skyddsnät mot att sonden och mallarna glider isär tyst: kompilerar
     med den RIKTIGA Tectonic-motorn (ingen stubbad runner/compile_fn) och
     kräver att prov, arbetsblad OCH bedömningsanvisning verkligen ger en
-    PDF. Alla andra tester i den här filen stubbar compile_pdf — det var
-    just därför bugginen (bedömningsanvisningens PDF gick inte att
-    producera) kunde smyga sig förbi en grön testsvit."""
+    PDF — inklusive bildvägen (\\includegraphics i prov.tex.j2/
+    arbetsblad.tex.j2), som annars aldrig motioneras av de stubbade
+    testerna i den här filen. Alla andra tester i den här filen stubbar
+    compile_pdf — det var just därför bugginen (bedömningsanvisningens
+    PDF gick inte att producera) kunde smyga sig förbi en grön testsvit."""
     if not exam_pdf.engine_available():
         pytest.skip("Tectonic-motorn saknas (bin/tectonic/tectonic.exe)")
 
-    doc, errors = exam_spec.validate_exam_json(_exam_med_matte_i_bedomningen())
+    data = _exam_med_matte_i_bedomningen()
+    data["uppgifter"][0]["bild"] = 1
+    doc, errors = exam_spec.validate_exam_json(data)
     assert doc is not None and errors == []
 
+    bild_fil = "bild-01.png"
+    (tmp_path / bild_fil).write_bytes(base64.b64decode(_MINIMAL_PNG_B64))
+    bilder = {1: bild_fil}
+
     for jobname, tex in (
-        ("prov", exam_latex.render_prov(doc)),
-        ("arbetsblad", exam_latex.render_arbetsblad(doc)),
-        ("bedomning", exam_latex.render_bedomning(doc)),
+        ("prov", exam_latex.render_prov(doc, bilder=bilder)),
+        ("arbetsblad", exam_latex.render_arbetsblad(doc, bilder=bilder)),
+        ("bedomning", exam_latex.render_bedomning(doc, bilder=bilder)),
     ):
         pdf, logg = exam_pdf.compile_pdf(tex, tmp_path, jobname)
         assert pdf is not None and pdf.exists(), f"{jobname} misslyckades: {logg}"
         assert pdf.stat().st_size > 0
+        # bildvägen ska verkligen ha kompilerats, inte bara renderats i
+        # minnet — bildfilens namn måste finnas i den genererade .tex-källan.
+        assert bild_fil in (tmp_path / f"{jobname}.tex").read_text(encoding="utf-8")
 
 
 # ------------------------------------------------------------- exam_gen ----
