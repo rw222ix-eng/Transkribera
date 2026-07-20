@@ -10,9 +10,12 @@
 
 ((# ------------------------------------------------ försättsblad ------ #))
 \begin{center}
-  {\LARGE\bfseries ((( titel )))}\\[2mm]
+  {\LARGE\bfseries ((( titel )))}\\[3mm]
   {\large ((( kurs )))((* if klass *)) \; · \; ((( klass )))((* endif *))((* if datum *)) \; · \; ((( datum )))((* endif *))}
 \end{center}
+
+\vspace{8mm}
+\elevruta
 
 \vspace{6mm}
 \begin{tabularx}{\linewidth}{@{}lX@{}}
@@ -21,7 +24,7 @@
 \textbf{Totalpoäng} & ((( poang_rad ))) \\
 \end{tabularx}
 
-\vspace{5mm}
+\vspace{6mm}
 \textbf{Kravgränser}
 
 \begin{tabularx}{\linewidth}{@{}lX@{}}
@@ -30,28 +33,33 @@ C & minst ((( granser.C.minst ))) poäng, varav minst ((( granser.C.varav_ca )))
 A & minst ((( granser.A.minst ))) poäng, varav minst ((( granser.A.varav_a ))) A-poäng \\
 \end{tabularx}
 
-{\small ((( granser.regel )))}
+{\small\textcolor{ink500}{((( granser.regel )))}}
 
-\vspace{5mm}
-{\small Poängen för varje uppgift anges som (E-poäng/C-poäng/A-poäng).
-Till uppgifter märkta \emph{Endast svar krävs} behöver du bara ge svar.
-Övriga uppgifter kräver fullständig redovisning — visa hur du löser
-uppgiften och motivera dina steg.}
+\vspace{6mm}
+{\small Poängen för varje uppgift anges efter uppgiftstexten. Till uppgifter
+märkta \emph{Endast svar krävs} behöver du bara ge svar. Övriga uppgifter
+kräver fullständig redovisning — visa hur du löser uppgiften och motivera
+dina steg.}
 
 \newpage
 
 ((# ------------------------------------------------ uppgifter --------- #))
 ((* for del in delar *))
 ((* if del.rubrik *))
-\section*{((( del.rubrik )))}
+\delprovband{((( del.rubrik )))}
 ((* if del.instruktion *)){\small\itshape ((( del.instruktion )))}\par\vspace{3mm}((* endif *))
 ((* endif *))
 ((* for u in del.uppgifter *))
-\textbf{Uppgift ((( u.nummer )))}((* if u.endast_svar *)) \; {\small\itshape (Endast svar krävs)}((* endif *))\poang{((( u.poang_str )))}\par
+\begin{uppgift}{((( u.nummer )))}{((( u.poang_str )))}
+((# \par avslutar ALLTID poäng-raden här — annars flyter \poangs \hfill in
+    i uppgiftstextens stycke och poängen hamnar inline i stället för i
+    högermarginalen (syns bara på redovisningsuppgifter, som saknar den
+    villkorade "Endast svar krävs"-texten som annars tvingar fram \par). #))
+((* if u.endast_svar *)){\small\itshape Endast svar krävs.}((* endif *))\par
 ((( u.text )))
 ((* if u.bild_fil *))\par\vspace{2mm}\begin{center}\includegraphics[width=0.72\linewidth,height=90mm,keepaspectratio]{((( u.bild_fil )))}\end{center}((* endif *))
-((* if u.endast_svar *))\svarsrad\par\vspace{6mm}((* else *))\par\vspace{((( u.utrymme_mm )))mm}((* endif *))
-
+((* if u.endast_svar *))\svarsrad((* else *))\par\vspace{((( u.utrymme_mm )))mm}((* endif *))
+\end{uppgift}
 ((* endfor *))
 ((* endfor *))
 

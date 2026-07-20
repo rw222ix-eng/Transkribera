@@ -201,11 +201,13 @@ def test_render_prov_golden_markers():
     # elevens prov visar endast totalsumman — E/C/A hör till bedömningsanvisningen
     assert "20 poäng" in tex and "(10/6/4)" not in tex
     # delar + numrerade uppgifter med poängrutor
-    assert "Del B" in tex and "Del C" in tex
-    assert "Uppgift 1" in tex and "Uppgift 6" in tex
-    # poängrutor via \poang-makrot — endast totalpoäng i elevens prov
-    assert r"\poang{3p}" in tex and r"\poang{4p}" in tex
-    assert r"\poang{2/1/0}" not in tex
+    assert r"\delprovband{Del B}" in tex and r"\delprovband{Del C}" in tex
+    # numret bärs av uppgift-miljöns hängande etikett
+    assert r"\begin{uppgift}{1}" in tex and r"\begin{uppgift}{6}" in tex
+    # poängen bärs nu av uppgift-miljöns andra argument (som i sin tur
+    # anropar \poang-makrot internt) — endast totalpoäng i elevens prov
+    assert r"\begin{uppgift}{3}{3p}" in tex and r"\begin{uppgift}{4}{4p}" in tex
+    assert r"\poang{2/1/0}" not in tex and "{2/1/0}" not in tex
     # matte bevarad, rutinuppgift får svarsrad
     assert r"\(x^2 - 4x + 3 = 0\)" in tex
     assert "\\svarsrad" in tex
@@ -224,6 +226,19 @@ def test_preamble_definierar_layoutmakron():
     assert r"\newcommand{\elevruta}" in tex
     # måtten ur designsystemet: 10,5 mm gutter och 8,5 mm uppgiftsrytm
     assert "10.5mm" in tex and "8.5mm" in tex
+
+
+def test_prov_anvander_layoutmakron():
+    """Provmallen ska anropa makrona, inte upprepa formateringen."""
+    doc, _ = exam_spec.validate_exam_json(_exam())
+    tex = exam_latex.render_prov(doc)
+    assert r"\elevruta" in tex
+    assert r"\delprovband{Del B}" in tex and r"\delprovband{Del C}" in tex
+    assert r"\begin{uppgift}{1}{2p}" in tex
+    # \section* ersatt av bandet
+    assert r"\section*{Del B}" not in tex
+    # oförändrat: elevens prov visar bara totalpoäng
+    assert "20 poäng" in tex and "(10/6/4)" not in tex
 
 
 def test_render_bedomning_contains_solutions():
