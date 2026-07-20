@@ -220,6 +220,26 @@ def test_ordning_flaggar_klumpade_typer():
     assert any(e["code"] == "klumpning" for e in fel)
 
 
+def test_antiklumpning_gransen_ar_exakt_tre():
+    """Spikar tröskeln MAX_LIKA_I_RAD: exakt tre i rad tillåts, fyra
+    underkänns — så en off-by-one mellan 3 och 4 fångas."""
+    tre = _exam()
+    for i in (2, 3, 4):                          # tre redovisning i rad i Del C
+        tre["uppgifter"][i]["typ"] = "redovisning"
+    tre["uppgifter"][5]["typ"] = "resonemang"
+    tre["uppgifter"][6]["typ"] = "problem"       # bryter serien vid tre
+    doc3, _ = exam_spec.validate_exam_json(tre)
+    assert not any(e["code"] == "klumpning"
+                   for e in exam_spec.validate_ordning(doc3))
+    fyra = _exam()
+    for i in (2, 3, 4, 5):                        # fyra redovisning i rad
+        fyra["uppgifter"][i]["typ"] = "redovisning"
+    fyra["uppgifter"][6]["typ"] = "problem"
+    doc4, _ = exam_spec.validate_exam_json(fyra)
+    assert any(e["code"] == "klumpning"
+               for e in exam_spec.validate_ordning(doc4))
+
+
 def test_ordning_hoppar_over_korta_delar():
     """Delar med färre än fyra uppgifter mäts inte på svårighetsordning."""
     data = _exam()
