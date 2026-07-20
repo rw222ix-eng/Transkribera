@@ -1,0 +1,23 @@
+((# Delad preamble för prov, arbetsblad och bedömningsanvisning.
+    FAST — modellen genererar aldrig preamble, bara uppgiftsinnehåll.
+    Variabler: sidhuvud (str), med_grafik (bool). #))
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=22mm,bottom=26mm]{geometry}
+\usepackage{amsmath,amssymb}
+((* if med_grafik *))
+\usepackage{graphicx}
+((* endif *))
+\usepackage{fancyhdr}
+\usepackage{lastpage}
+\usepackage{tabularx}
+\usepackage{enumitem}
+\usepackage[swedish]{babel}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small ((( sidhuvud )))}
+\fancyhead[R]{\small Sida \thepage\ av \pageref{LastPage}}
+\renewcommand{\headrulewidth}{0.3pt}
+
+\newcommand{\poang}[1]{\hfill\mbox{\small(#1)}}

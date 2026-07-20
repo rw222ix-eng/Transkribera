@@ -1,24 +1,8 @@
 ((# Arbetsbladsmall (Fas 5) — som provmallen men utan kravgränser, med
     valfri poängvisning, gott om utrymme och facit på egen sida.
     Fast preamble; Jinja-avgränsarna är parentesbaserade. #))
-\documentclass[11pt,a4paper]{article}
-\usepackage[margin=22mm,bottom=26mm]{geometry}
-\usepackage{amsmath,amssymb}
-\usepackage{graphicx}
-\usepackage{fancyhdr}
-\usepackage{lastpage}
-\usepackage{tabularx}
-\usepackage{enumitem}
-\usepackage[swedish]{babel}
-\setlength{\parindent}{0pt}
-\setlength{\parskip}{4pt}
-\pagestyle{fancy}
-\fancyhf{}
-\fancyhead[L]{\small ((( kurs ))) — ((( titel )))}
-\fancyhead[R]{\small Sida \thepage\ av \pageref{LastPage}}
-\renewcommand{\headrulewidth}{0.3pt}
-
-\newcommand{\poang}[1]{\hfill\mbox{\small(#1)}}
+((* set med_grafik = true *))
+((* include '_preamble.tex.j2' *))
 \newcommand{\svarsrad}{\par\vspace{4mm}\makebox[0.6\linewidth]{Svar: \dotfill}}
 
 \begin{document}

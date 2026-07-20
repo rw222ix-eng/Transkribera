@@ -1,22 +1,8 @@
 ((# Bedömningsanvisning (Fas 4) — eget dokument för lärarens rättning.
     Fast preamble; se prov.tex.j2. #))
-\documentclass[11pt,a4paper]{article}
-\usepackage[margin=22mm,bottom=26mm]{geometry}
-\usepackage{amsmath,amssymb}
-\usepackage{fancyhdr}
-\usepackage{lastpage}
-\usepackage{tabularx}
-\usepackage{enumitem}
-\usepackage[swedish]{babel}
-\setlength{\parindent}{0pt}
-\setlength{\parskip}{4pt}
-\pagestyle{fancy}
-\fancyhf{}
-\fancyhead[L]{\small ((( kurs ))) — ((( titel ))) · Bedömningsanvisning}
-\fancyhead[R]{\small Sida \thepage\ av \pageref{LastPage}}
-\renewcommand{\headrulewidth}{0.3pt}
-
-\newcommand{\poang}[1]{\hfill\mbox{\small(#1)}}
+((* set med_grafik = false *))
+((* set sidhuvud = kurs ~ ' — ' ~ titel ~ ' · Bedömningsanvisning' *))
+((* include '_preamble.tex.j2' *))
 
 \begin{document}
 

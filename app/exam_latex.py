@@ -148,6 +148,9 @@ def _build_view(doc: exam_spec.ExamDoc,
         "poang_rad_eca": (lambda s: f"{s['total']} poäng ({s['e']}/{s['c']}/{s['a']})")(
             exam_spec.poangsummor(doc)),
         "delar": delar,
+        # Delad preamble (PR 1). kurs/titel escapas här på nytt ur doc —
+        # inte ur vyns redan escapade fält, som skulle dubbelescapas.
+        "sidhuvud": f"{escape_latex(doc.kurs)} — {escape_latex(doc.titel)}",
     }
 
 
