@@ -191,7 +191,10 @@ def test_ordning_flaggar_fallande_svarighet():
     """En del vars andra halva är klart lättare än första underkänns."""
     data = _exam()
     # Gör Del C fallande: flytta A-tyngden till de första uppgifterna.
-    data["uppgifter"][2]["poang"] = [0, 0, 3]   # svår först
+    # Del C:s första uppgift behåller 1 E-poäng (inte [0, 0, 3]) så att den
+    # separata "första uppgift saknar E-poäng"-regeln INTE också triggas —
+    # annars blir testet grönt oavsett om halva-jämförelsen fungerar.
+    data["uppgifter"][2]["poang"] = [1, 0, 2]   # svår men har E-poäng
     data["uppgifter"][3]["poang"] = [0, 0, 3]
     data["uppgifter"][6]["poang"] = [3, 0, 0]   # lätt sist
     doc, _ = exam_spec.validate_exam_json(data)
@@ -239,6 +242,33 @@ def test_ordning_undantar_arbetsblad():
     assert not any(e["code"] == "klumpning" for e in ab_fel)
     _pv, pv_fel = exam_spec.validate_exam_json(data, "prov")
     assert any(e["code"] == "klumpning" for e in pv_fel)
+
+
+def test_ordning_arbetsblad_kraver_stigande_svarighet():
+    """Arbetsbladet undantas bara från antiklumpning — stigande svårighet
+    gäller ÄVEN där, eftersom arbetsblad.tex.j2 lovar eleven att uppgifterna
+    blir svårare längre ner (och exam_gen ber uttryckligen om det för
+    arbetsblad). Bygg ett tydligt FALLANDE arbetsblad (A-tyngd först,
+    E-tyngd sist, alla del=None, fyra uppgifter) och kräv att det flaggas."""
+    data = {
+        "titel": "Arbetsblad — fallande svårighet", "kurs": "Ma2b",
+        "hjalpmedel": "Räknare",
+        "uppgifter": [
+            {"del": None, "formaga": "P", "typ": "rutin", "poang": [0, 0, 3],
+             "text": "Svår uppgift 1.", "losning": "...", "bedomning": "..."},
+            {"del": None, "formaga": "P", "typ": "rutin", "poang": [0, 1, 2],
+             "text": "Svår uppgift 2.", "losning": "...", "bedomning": "..."},
+            {"del": None, "formaga": "P", "typ": "rutin", "poang": [1, 1, 0],
+             "text": "Lättare uppgift 3.", "losning": "...", "bedomning": "..."},
+            {"del": None, "formaga": "P", "typ": "rutin", "poang": [3, 0, 0],
+             "text": "Lätt uppgift 4.", "losning": "...", "bedomning": "..."},
+        ],
+    }
+    _doc, fel = exam_spec.validate_exam_json(data, "arbetsblad")
+    assert any(e["code"] == "svarighet" for e in fel)
+    # antiklumpning ska fortfarande vara avstängd, trots samma typ/förmåga
+    # i alla fyra uppgifterna (skulle annars också flaggat).
+    assert not any(e["code"] == "klumpning" for e in fel)
 
 
 # --------------------------------------------------------- genomförbarhet --

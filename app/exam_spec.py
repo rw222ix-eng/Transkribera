@@ -91,12 +91,13 @@ ARBETSBLAD_NIVA_MAL: dict[str, tuple[float, float]] = {
 }
 
 # Balansprofil per dokumenttyp: (förmågemål, nivåmål, kräver redovisning,
-# kräver ordningsregler). Ordningsreglerna (stigande svårighet + antiklumpning)
-# gäller PROV. Arbetsbladet är medvetet procedurtungt och får drilla samma
-# uppgiftstyp i rad — det undantas.
-PROFILER: dict[str, tuple[dict, dict, bool, bool]] = {
-    "prov": (FORMAGA_MAL, NIVA_MAL, True, True),
-    "arbetsblad": (ARBETSBLAD_FORMAGA_MAL, ARBETSBLAD_NIVA_MAL, False, False),
+# kräver antiklumpning, kräver stigande svårighet). Antiklumpningen gäller
+# bara PROV — arbetsbladet får drilla samma uppgiftstyp i rad. Stigande
+# svårighet gäller BÅDA: arbetsbladsmallen lovar eleven att uppgifterna blir
+# svårare längre ner.
+PROFILER: dict[str, tuple[dict, dict, bool, bool, bool]] = {
+    "prov": (FORMAGA_MAL, NIVA_MAL, True, True, True),
+    "arbetsblad": (ARBETSBLAD_FORMAGA_MAL, ARBETSBLAD_NIVA_MAL, False, False, True),
 }
 
 # Ordningsregler (per del). Tröskelvärden justerbara efter utfall på
@@ -153,8 +154,8 @@ def validate_balance(doc: ExamDoc,
     """Deterministisk balanskontroll mot målen (maskinläsbar fellista som
     korrigeringsloopen formulerar om till en prompt). `profil` väljer
     prov- eller arbetsbladsmålen; explicita mål-parametrar vinner."""
-    prof_fm, prof_nm, kraver_redovisning, kraver_ordning = PROFILER.get(
-        profil, PROFILER["prov"])
+    (prof_fm, prof_nm, kraver_redovisning,
+     kraver_klump, kraver_svar) = PROFILER.get(profil, PROFILER["prov"])
     fm = formaga_mal or prof_fm
     nm = niva_mal or prof_nm
     errors: list[dict] = []
@@ -189,8 +190,9 @@ def validate_balance(doc: ExamDoc,
     if kraver_redovisning and not typer & {"redovisning", "problem"}:
         errors.append(_err("uppgifter", "blandning",
                            "provet saknar uppgifter med fullständig lösning."))
-    if kraver_ordning:
-        errors.extend(validate_ordning(doc))
+    if kraver_klump or kraver_svar:
+        errors.extend(validate_ordning(
+            doc, kolla_klumpning=kraver_klump, kolla_svarighet=kraver_svar))
     return errors
 
 
@@ -205,39 +207,38 @@ def _langsta_rad(varden: list) -> int:
     return langst
 
 
-def validate_ordning(doc: ExamDoc) -> list[dict]:
+def validate_ordning(doc: ExamDoc, *, kolla_klumpning: bool = True,
+                     kolla_svarighet: bool = True) -> list[dict]:
     """Stigande svårighet + antiklumpning, mätt per del på den sekvens
-    eleven ser. Korta delar (< MIN_DELPROV_FOR_ORDNING) hoppas över på
-    svårighet; klumpning kan ändå inte utlösas under fyra i rad."""
+    eleven ser. Flaggorna väljer vilka regler som gäller (arbetsbladet
+    undantas från klumpning men behåller svårighetsordningen)."""
     errors: list[dict] = []
     for kod, items in gruppera_per_del(doc.uppgifter):
         etikett = f"Del {kod}" if kod else "del-lösa uppgifter"
 
-        # Antiklumpning — gäller alla dellängder.
-        if _langsta_rad([it.typ for it in items]) > MAX_LIKA_I_RAD:
-            errors.append(_err(etikett, "klumpning",
-                               f"{etikett} har fler än {MAX_LIKA_I_RAD} "
-                               "uppgifter i rad av samma typ — varva dem."))
-        if _langsta_rad([it.formaga for it in items]) > MAX_LIKA_I_RAD:
-            errors.append(_err(etikett, "klumpning",
-                               f"{etikett} har fler än {MAX_LIKA_I_RAD} "
-                               "uppgifter i rad med samma förmåga — varva dem."))
+        if kolla_klumpning:
+            if _langsta_rad([it.typ for it in items]) > MAX_LIKA_I_RAD:
+                errors.append(_err(etikett, "klumpning",
+                                   f"{etikett} har fler än {MAX_LIKA_I_RAD} "
+                                   "uppgifter i rad av samma typ — varva dem."))
+            if _langsta_rad([it.formaga for it in items]) > MAX_LIKA_I_RAD:
+                errors.append(_err(etikett, "klumpning",
+                                   f"{etikett} har fler än {MAX_LIKA_I_RAD} "
+                                   "uppgifter i rad med samma förmåga — varva dem."))
 
-        # Stigande svårighet — bara för delar med tillräckligt många uppgifter.
-        if len(items) < MIN_DELPROV_FOR_ORDNING:
-            continue
-        if items[0].poang[0] < MIN_START_E:
-            errors.append(_err(etikett, "svarighet",
-                               f"{etikett}:s första uppgift saknar E-poäng — "
-                               "börja med en åtkomlig uppgift."))
-        halva = len(items) // 2
-        forsta = sum(_svarighet(it) for it in items[:halva]) / halva
-        andra = sum(_svarighet(it) for it in items[halva:]) / (len(items) - halva)
-        if andra < forsta - SVARIGHET_SLACK:
-            errors.append(_err(etikett, "svarighet",
-                               f"{etikett} blir lättare mot slutet "
-                               f"(svårighet {andra:.2f} mot {forsta:.2f}) — "
-                               "lägg de svårare uppgifterna sist."))
+        if kolla_svarighet and len(items) >= MIN_DELPROV_FOR_ORDNING:
+            if items[0].poang[0] < MIN_START_E:
+                errors.append(_err(etikett, "svarighet",
+                                   f"{etikett}:s första uppgift saknar E-poäng — "
+                                   "börja med en åtkomlig uppgift."))
+            halva = len(items) // 2
+            forsta = sum(_svarighet(it) for it in items[:halva]) / halva
+            andra = sum(_svarighet(it) for it in items[halva:]) / (len(items) - halva)
+            if andra < forsta - SVARIGHET_SLACK:
+                errors.append(_err(etikett, "svarighet",
+                                   f"{etikett} blir lättare mot slutet "
+                                   f"(svårighet {andra:.2f} mot {forsta:.2f}) — "
+                                   "lägg de svårare uppgifterna sist."))
     return errors
 
 
@@ -246,7 +247,7 @@ def genomforbarhet(antal: int, profil: str = "prov") -> list[dict]:
     balanseras? Varje uppgift har EN primär förmåga, så färre uppgifter än
     antalet förmågor med positivt golv kan aldrig representera dem alla.
     Körs före generering så reparationsloopen slipper ett olösligt problem."""
-    prof_fm, _nm, _kr, _ko = PROFILER.get(profil, PROFILER["prov"])
+    prof_fm, _nm, _kr, _kk, _ks = PROFILER.get(profil, PROFILER["prov"])
     golv_formagor = [f for f, (lo, _hi) in prof_fm.items() if lo > 0]
     if antal < len(golv_formagor):
         return [_err("antal", "genomforbarhet",
