@@ -71,7 +71,9 @@ def to_response_format() -> dict:
 
 FORMAGA_MAL: dict[str, tuple[float, float]] = {
     "B": (0.10, 0.40), "P": (0.20, 0.50), "PL": (0.10, 0.40),
-    "M": (0.00, 0.30), "R": (0.05, 0.30), "K": (0.00, 0.25),
+    # M och K har golv > 0: alla sex förmågor måste vara representerade
+    # (ägarbeslut). Endast provprofilen — arbetsbladet är procedurtungt.
+    "M": (0.05, 0.30), "R": (0.05, 0.30), "K": (0.05, 0.25),
 }
 NIVA_MAL: dict[str, tuple[float, float]] = {
     "e": (0.35, 0.60), "c": (0.25, 0.45), "a": (0.10, 0.30),

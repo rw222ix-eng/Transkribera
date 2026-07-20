@@ -20,46 +20,54 @@ _MINIMAL_PNG_B64 = (
 
 
 def _exam() -> dict:
-    """Balanserat exempelprov: 20 p totalt (10/6/4), förmågorna inom målen."""
+    """Balanserat exempelprov, 20 p (E 9 / C 6 / A 5), alla sex förmågor
+    representerade. Uppfyller golv, nivåbalans, stigande svårighet (del C)
+    och antiklumpning — den kanoniska 'giltiga' fixturen."""
     return {
         "titel": "Prov — Andragradsfunktioner",
         "kurs": "Ma2b", "klass": "SA23", "datum": "2026-10-05",
         "tid_min": 120,
         "hjalpmedel": "Del B utan räknare. Del C med räknare och formelblad.",
         "uppgifter": [
-            {"del": "B", "formaga": "B", "typ": "rutin", "poang": [2, 0, 0],
+            {"del": "B", "formaga": "B", "typ": "rutin", "poang": [3, 0, 0],
              "text": "Ange nollställena till $f(x) = (x-1)(x+3)$.",
              "innehall": ["nollställen"],
              "losning": "$x = 1$ och $x = -3$.",
-             "bedomning": "+2 E för båda nollställena."},
+             "bedomning": "+3 E för båda nollställena."},
             {"del": "B", "formaga": "P", "typ": "rutin", "poang": [2, 0, 0],
              "text": "Lös ekvationen $x^2 - 4x + 3 = 0$.",
              "innehall": ["pq-formeln"],
              "losning": "$x = 1$ eller $x = 3$.",
              "bedomning": "+1 E per korrekt rot."},
-            {"del": "C", "formaga": "P", "typ": "redovisning", "poang": [2, 1, 0],
+            {"del": "C", "formaga": "P", "typ": "redovisning", "poang": [1, 1, 1],
              "text": "Lös ekvationen $x^2 + 6x - 7 = 0$ med kvadratkomplettering.",
              "innehall": ["kvadratkomplettering"],
              "losning": "$(x+3)^2 = 16$ ger $x = 1$ eller $x = -7$.",
-             "bedomning": "+1 E ansats, +1 E svar, +1 C fullständig metod."},
-            {"del": "C", "formaga": "PL", "typ": "problem", "poang": [1, 2, 1],
+             "bedomning": "+1 E ansats, +1 C metod, +1 A generalisering."},
+            {"del": "C", "formaga": "PL", "typ": "problem", "poang": [1, 1, 1],
              "text": "En rektangulär hage har omkretsen 60 m. Bestäm de mått "
                      "som maximerar arean.",
              "innehall": ["optimering", "andragradsfunktioner"],
              "losning": "Kvadrat $15 \\times 15$ m ger max.",
-             "bedomning": "+1 E modell, +2 C lösning, +1 A motivering av max."},
-            {"del": "C", "formaga": "R", "typ": "resonemang", "poang": [1, 1, 2],
+             "bedomning": "+1 E modell, +1 C lösning, +1 A motivering av max."},
+            {"del": "C", "formaga": "M", "typ": "problem", "poang": [1, 0, 1],
+             "text": "En population beskrivs av $N(t) = 200 \\cdot 1{,}05^t$. "
+                     "Bestäm när populationen har fördubblats.",
+             "innehall": ["exponentiell modell"],
+             "losning": "$1{,}05^t = 2$ ger $t \\approx 14{,}2$ år.",
+             "bedomning": "+1 E ansats, +1 A korrekt tolkning av modellen."},
+            {"del": "C", "formaga": "R", "typ": "resonemang", "poang": [1, 1, 1],
              "text": "Avgör om påståendet stämmer: en andragradsfunktion med "
                      "$a < 0$ saknar minsta värde. Motivera.",
              "innehall": ["andragradsfunktioner"],
              "losning": "Sant — grafen är en nedåtriktad parabel.",
-             "bedomning": "+1 E ställningstagande, +1 C motivering, +2 A stringens."},
-            {"del": "C", "formaga": "K", "typ": "redovisning", "poang": [2, 2, 1],
+             "bedomning": "+1 E ställningstagande, +1 C motivering, +1 A stringens."},
+            {"del": "C", "formaga": "K", "typ": "redovisning", "poang": [0, 3, 1],
              "text": "Förklara med graf och ord hur symmetrilinjen bestäms "
                      "för $f(x) = x^2 - 6x + 5$.",
              "innehall": ["symmetrilinje"],
              "losning": "$x = 3$ via $-b/(2a)$ eller nollställenas mittpunkt.",
-             "bedomning": "+2 E korrekt linje, +2 C tydlig förklaring, +1 A flera representationer."},
+             "bedomning": "+3 C tydlig förklaring, +1 A flera representationer."},
         ],
     }
 
@@ -162,6 +170,15 @@ def test_formaga_concentration_flagged():
     assert any(e["code"] == "formagabalans" for e in errors)
 
 
+def test_saknad_modellering_flaggas():
+    """Med M-golvet höjt ska ett prov helt utan modellering underkännas."""
+    bad = _exam()
+    bad["uppgifter"][4]["formaga"] = "P"     # M-uppgiften blir procedur
+    _doc, errors = exam_spec.validate_exam_json(bad)
+    assert any(e["code"] == "formagabalans" and "M" in e["path"]
+               for e in errors)
+
+
 # ------------------------------------------------------------- kravgränser --
 
 def test_kravgranser_np_model():
@@ -170,7 +187,7 @@ def test_kravgranser_np_model():
     assert g["total"] == 20
     assert g["E"]["minst"] == 5            # ceil(20 * 0.25)
     assert g["C"]["minst"] == 9            # ceil(20 * 0.45)
-    assert g["C"]["varav_ca"] == 3         # ceil(10 * 0.30)
+    assert g["C"]["varav_ca"] == 4         # ceil((6+5) * 0.30) = ceil(3,3)
     assert g["A"]["minst"] == 13           # ceil(20 * 0.65)
     assert g["A"]["varav_a"] == 2          # ceil(4 * 0.40)
     assert "reproducerbar" not in g["regel"]   # regeln är själva texten
@@ -230,7 +247,7 @@ def test_render_prov_golden_markers():
     assert r"\begin{uppgift}{1}" in tex and r"\begin{uppgift}{6}" in tex
     # poängen bärs nu av uppgift-miljöns andra argument (som i sin tur
     # anropar \poang-makrot internt) — endast totalpoäng i elevens prov
-    assert r"\begin{uppgift}{3}{3p}" in tex and r"\begin{uppgift}{4}{4p}" in tex
+    assert r"\begin{uppgift}{3}{3p}" in tex and r"\begin{uppgift}{7}{4p}" in tex
     assert r"\poang{2/1/0}" not in tex and "{2/1/0}" not in tex
     # matte bevarad, rutinuppgift får svarsrad
     assert r"\(x^2 - 4x + 3 = 0\)" in tex
@@ -262,7 +279,7 @@ def test_prov_anvander_layoutmakron():
     kropp = tex.split(r"\begin{document}", 1)[1]
     assert r"\elevruta" in kropp
     assert r"\delprovband{Del B}" in kropp and r"\delprovband{Del C}" in kropp
-    assert r"\begin{uppgift}{1}{2p}" in tex
+    assert r"\begin{uppgift}{1}{3p}" in tex
     # \section* ersatt av bandet
     assert r"\section*{Del B}" not in tex
     # oförändrat: elevens prov visar bara totalpoäng
@@ -279,21 +296,21 @@ def test_render_bedomning_contains_solutions():
     # lärardokumentet behåller E/C/A-poängen (elevens prov visar bara
     # totalen). Uppgiftsloopen anropar numera den delade uppgift-miljön
     # (\begin{uppgift}{n}{e/c/a}) i stället för att skriva \poang{...}
-    # direkt i mallen, så \poang{2/1/0} som RÅ SUBSTRÄNG förekommer aldrig
+    # direkt i mallen, så \poang{1/1/1} som RÅ SUBSTRÄNG förekommer aldrig
     # i den Python-renderade .tex-källan (bara efter att LaTeX expanderat
     # miljön vid kompilering) — jfr test_prov_anvander_layoutmakron.
-    assert r"\begin{uppgift}{3}{2/1/0}" in tex
+    assert r"\begin{uppgift}{3}{1/1/1}" in tex
 
 
 def test_bedomning_behaller_eca_och_far_makron():
     """Lärarens dokument visar E/C/A — det är dess syfte. Elevens gör det inte."""
     doc, _ = exam_spec.validate_exam_json(_exam())
     tex = exam_latex.render_bedomning(doc)
-    assert r"\begin{uppgift}{1}{2/0/0}" in tex
+    assert r"\begin{uppgift}{1}{3/0/0}" in tex
     assert "Lösningsförslag" in tex and "Bedömning" in tex
     # kontrollera motsatsen på elevens prov
     prov = exam_latex.render_prov(doc)
-    assert "2/0/0" not in prov
+    assert "3/0/0" not in prov
 
 
 def test_render_escapes_model_text():
@@ -605,7 +622,7 @@ def test_arbetsblad_utan_poang_ger_tomt_argument_inte_tom_parentes():
     assert r"\relax}" not in kropp
     # med poäng påslaget kommer markören tillbaka
     med = exam_latex.render_arbetsblad(doc, visa_poang=True)
-    assert r"\begin{uppgift}{1}{2p}" in med
+    assert r"\begin{uppgift}{1}{3p}" in med
 
 
 def test_build_referens_numbers_and_instructs():
