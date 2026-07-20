@@ -274,13 +274,14 @@ def test_compile_pdf_timeout(tmp_path, monkeypatch):
 
 def _exam_med_matte_i_bedomningen() -> dict:
     """_exam() men med matte även i bedömningsfältet — det fältet saknar
-    annars helt $…$ (se _exam() ovan). Utan detta testar vi inte den exakta
-    kombinationen (matte i text OCH lösning OCH bedömning) som kraschade
-    Tectonic när \\small-matte-fontmetrikerna saknades i cachen: den
-    handskrivna sonden i tools/seed_tectonic_cache.py hade ingen matte i
-    förminskad textstorlek, så metrikerna hämtades aldrig ner, och
-    --only-cached kunde då inte hämta dem i efterhand (access violation i
-    stället för ett läsbart LaTeX-fel)."""
+    annars helt $…$ (se _exam() ovan). Ofarlig extra täckning: den faktiska
+    orsaken till kraschen var matte i FÄLTET text i \\small-kontext (i
+    bedomning.tex.j2 renderas bara uppgiftens text inuti {\\small\\itshape
+    …} — losning och bedomning renderas i normal storlek, se den mallen).
+    Den handskrivna sonden i tools/seed_tectonic_cache.py hade ingen matte
+    i förminskad textstorlek, så \\small-matte-fontmetrikerna hämtades
+    aldrig ner, och --only-cached kunde då inte hämta dem i efterhand
+    (access violation i stället för ett läsbart LaTeX-fel)."""
     data = copy.deepcopy(_exam())
     data["uppgifter"][0]["bedomning"] = (
         "+2 E om båda nollställena $x=1$ och $x=-3$ anges, annars 0 p "
