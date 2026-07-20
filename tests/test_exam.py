@@ -189,7 +189,7 @@ def test_kravgranser_np_model():
     assert g["C"]["minst"] == 9            # ceil(20 * 0.45)
     assert g["C"]["varav_ca"] == 4         # ceil((6+5) * 0.30) = ceil(3,3)
     assert g["A"]["minst"] == 13           # ceil(20 * 0.65)
-    assert g["A"]["varav_a"] == 2          # ceil(4 * 0.40)
+    assert g["A"]["varav_a"] == 2          # ceil(5 * 0.40)
     assert "reproducerbar" not in g["regel"]   # regeln är själva texten
     assert "25" in g["regel"] and "65" in g["regel"]
 
@@ -240,7 +240,7 @@ def test_render_prov_golden_markers():
     assert r"25\?" not in tex
     assert r"25\% av totalpoängen" in tex
     # elevens prov visar endast totalsumman — E/C/A hör till bedömningsanvisningen
-    assert "20 poäng" in tex and "(10/6/4)" not in tex
+    assert "20 poäng" in tex and "(9/6/5)" not in tex
     # delar + numrerade uppgifter med poängrutor
     assert r"\delprovband{Del B}" in tex and r"\delprovband{Del C}" in tex
     # numret bärs av uppgift-miljöns hängande etikett
@@ -248,7 +248,7 @@ def test_render_prov_golden_markers():
     # poängen bärs nu av uppgift-miljöns andra argument (som i sin tur
     # anropar \poang-makrot internt) — endast totalpoäng i elevens prov
     assert r"\begin{uppgift}{3}{3p}" in tex and r"\begin{uppgift}{7}{4p}" in tex
-    assert r"\poang{2/1/0}" not in tex and "{2/1/0}" not in tex
+    assert r"\poang{1/1/1}" not in tex and "{1/1/1}" not in tex
     # matte bevarad, rutinuppgift får svarsrad
     assert r"\(x^2 - 4x + 3 = 0\)" in tex
     assert "\\svarsrad" in tex
@@ -283,7 +283,7 @@ def test_prov_anvander_layoutmakron():
     # \section* ersatt av bandet
     assert r"\section*{Del B}" not in tex
     # oförändrat: elevens prov visar bara totalpoäng
-    assert "20 poäng" in tex and "(10/6/4)" not in tex
+    assert "20 poäng" in tex and "(9/6/5)" not in tex
 
 
 def test_render_bedomning_contains_solutions():
