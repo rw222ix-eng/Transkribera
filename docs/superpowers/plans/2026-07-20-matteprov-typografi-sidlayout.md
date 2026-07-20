@@ -252,8 +252,10 @@ Går det fel: cachen är nu omarkerad, vilket är det säkra läget. Kör om med
 
 - [ ] **Steg 6: Committa**
 
+**`bin/tectonic/` är gitignorerad** (`.gitignore:48`) — cachen versionshanteras inte och ska inte göra det. Den når produkten via PyInstaller, som läser katalogen från disk vid bygget (`Transkribera_web.spec:45`). Konsekvens: **varje maskin som bygger appen måste köra seedningsskriptet en gång.** Committa därför bara koden.
+
 ```bash
-git add tools/__init__.py tools/seed_tectonic_cache.py tests/test_tectonic_seed.py bin/tectonic/cache
+git add tools/__init__.py tools/seed_tectonic_cache.py tests/test_tectonic_seed.py
 git commit -m "build(prov): seeda Tectonic-cachen med Times, xcolor och TikZ
 
 Sonden drar in newtxtext/newtxmath, xcolor, tikz och pgfplots så att
@@ -261,8 +263,13 @@ designsystemets typografi och figurer kan kompileras helt offline.
 Markören .seeded tas bort före kompilering och skrivs tillbaka först
 vid exit 0 — en halvfärdig cache skulle annars låsa --only-cached.
 
-Cachen: 43 MB / 293 filer -> <FYLL I> MB / <FYLL I> filer."
+Cachen: 43 MB / 293 filer -> <MÄTT VÄRDE> MB / <MÄTT VÄRDE> filer.
+
+Cachen versionshanteras inte (gitignorerad); den byggs lokalt av
+skriptet och packas av PyInstaller. Varje byggmaskin kör skriptet en gång."
 ```
+
+Ersätt `<MÄTT VÄRDE>` med siffrorna från steg 5 — specen kräver att tillväxten dokumenteras, och de går inte att veta i förväg.
 
 ---
 
