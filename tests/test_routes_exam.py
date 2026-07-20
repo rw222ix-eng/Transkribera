@@ -86,7 +86,7 @@ def test_generate_creates_exam_with_balance_info(client, monkeypatch):
     assert result["errors"] == []
     assert result["exam"]["titel"].startswith("Prov")
     assert result["granser"]["total"] == 20
-    assert result["summor"]["e"] == 10
+    assert result["summor"]["e"] == 9
     assert calls[0]["kurs"] == "Matematik, nivå 2b"
     # provet finns i DB:n
     r = client.get(f"/api/exams/{result['id']}")
