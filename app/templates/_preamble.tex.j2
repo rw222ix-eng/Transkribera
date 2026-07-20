@@ -1,6 +1,6 @@
 ((# Delad preamble för prov, arbetsblad och bedömningsanvisning.
     FAST — modellen genererar aldrig preamble, bara uppgiftsinnehåll.
-    Variabler: sidhuvud (str), med_grafik (bool). #))
+    Variabler: sidhuvud (str), med_grafik (bool), med_svarsrad (bool). #))
 \documentclass[11pt,a4paper]{article}
 \usepackage[margin=22mm,bottom=26mm]{geometry}
 \usepackage{amsmath,amssymb}
@@ -21,3 +21,6 @@
 \renewcommand{\headrulewidth}{0.3pt}
 
 \newcommand{\poang}[1]{\hfill\mbox{\small(#1)}}
+((* if med_svarsrad *))
+\newcommand{\svarsrad}{\par\vspace{4mm}\makebox[0.6\linewidth]{Svar: \dotfill}}
+((* endif *))
