@@ -227,6 +227,20 @@ def test_ordning_hoppar_over_korta_delar():
     assert not any("Del B" in e["path"] for e in fel)
 
 
+def test_ordning_undantar_arbetsblad():
+    """Ordningsreglerna är en prov-kvalitet. Arbetsbladet får medvetet drilla
+    samma uppgiftstyp i rad (procedurträning) — validate_balance ska inte
+    flagga klumpning för arbetsbladsprofilen, men väl för provprofilen."""
+    data = _exam()
+    for u in data["uppgifter"]:
+        u["del"] = None
+        u["typ"] = "rutin"          # sju rutinuppgifter i rad
+    _ab, ab_fel = exam_spec.validate_exam_json(data, "arbetsblad")
+    assert not any(e["code"] == "klumpning" for e in ab_fel)
+    _pv, pv_fel = exam_spec.validate_exam_json(data, "prov")
+    assert any(e["code"] == "klumpning" for e in pv_fel)
+
+
 # --------------------------------------------------------- genomförbarhet --
 
 def test_genomforbarhet_kraver_en_uppgift_per_formagegolv():

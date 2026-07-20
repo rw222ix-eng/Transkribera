@@ -90,10 +90,13 @@ ARBETSBLAD_NIVA_MAL: dict[str, tuple[float, float]] = {
     "e": (0.40, 0.85), "c": (0.10, 0.45), "a": (0.00, 0.25),
 }
 
-# Balansprofil per dokumenttyp: (förmågemål, nivåmål, kräver redovisning).
-PROFILER: dict[str, tuple[dict, dict, bool]] = {
-    "prov": (FORMAGA_MAL, NIVA_MAL, True),
-    "arbetsblad": (ARBETSBLAD_FORMAGA_MAL, ARBETSBLAD_NIVA_MAL, False),
+# Balansprofil per dokumenttyp: (förmågemål, nivåmål, kräver redovisning,
+# kräver ordningsregler). Ordningsreglerna (stigande svårighet + antiklumpning)
+# gäller PROV. Arbetsbladet är medvetet procedurtungt och får drilla samma
+# uppgiftstyp i rad — det undantas.
+PROFILER: dict[str, tuple[dict, dict, bool, bool]] = {
+    "prov": (FORMAGA_MAL, NIVA_MAL, True, True),
+    "arbetsblad": (ARBETSBLAD_FORMAGA_MAL, ARBETSBLAD_NIVA_MAL, False, False),
 }
 
 # Ordningsregler (per del). Tröskelvärden justerbara efter utfall på
@@ -150,7 +153,8 @@ def validate_balance(doc: ExamDoc,
     """Deterministisk balanskontroll mot målen (maskinläsbar fellista som
     korrigeringsloopen formulerar om till en prompt). `profil` väljer
     prov- eller arbetsbladsmålen; explicita mål-parametrar vinner."""
-    prof_fm, prof_nm, kraver_redovisning = PROFILER.get(profil, PROFILER["prov"])
+    prof_fm, prof_nm, kraver_redovisning, kraver_ordning = PROFILER.get(
+        profil, PROFILER["prov"])
     fm = formaga_mal or prof_fm
     nm = niva_mal or prof_nm
     errors: list[dict] = []
@@ -185,7 +189,8 @@ def validate_balance(doc: ExamDoc,
     if kraver_redovisning and not typer & {"redovisning", "problem"}:
         errors.append(_err("uppgifter", "blandning",
                            "provet saknar uppgifter med fullständig lösning."))
-    errors.extend(validate_ordning(doc))
+    if kraver_ordning:
+        errors.extend(validate_ordning(doc))
     return errors
 
 
@@ -241,7 +246,7 @@ def genomforbarhet(antal: int, profil: str = "prov") -> list[dict]:
     balanseras? Varje uppgift har EN primär förmåga, så färre uppgifter än
     antalet förmågor med positivt golv kan aldrig representera dem alla.
     Körs före generering så reparationsloopen slipper ett olösligt problem."""
-    prof_fm, _nm, _kr = PROFILER.get(profil, PROFILER["prov"])
+    prof_fm, _nm, _kr, _ko = PROFILER.get(profil, PROFILER["prov"])
     golv_formagor = [f for f, (lo, _hi) in prof_fm.items() if lo > 0]
     if antal < len(golv_formagor):
         return [_err("antal", "genomforbarhet",
