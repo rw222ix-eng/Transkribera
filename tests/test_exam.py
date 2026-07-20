@@ -213,6 +213,19 @@ def test_render_prov_golden_markers():
     assert "lösningsförslag" not in tex.lower()
 
 
+def test_preamble_definierar_layoutmakron():
+    """Designsystemets layoutprimitiver ska finnas som makron, så att
+    mallarna anropar dem i stället för att upprepa formateringen."""
+    doc, _ = exam_spec.validate_exam_json(_exam())
+    tex = exam_latex.render_prov(doc)
+    assert r"\newcommand{\delprovband}" in tex
+    assert r"\newenvironment{uppgift}" in tex
+    assert r"\newcommand{\ramruta}" in tex
+    assert r"\newcommand{\elevruta}" in tex
+    # måtten ur designsystemet: 10,5 mm gutter och 8,5 mm uppgiftsrytm
+    assert "10.5mm" in tex and "8.5mm" in tex
+
+
 def test_render_bedomning_contains_solutions():
     doc, _ = exam_spec.validate_exam_json(_exam())
     tex = exam_latex.render_bedomning(doc)
