@@ -179,6 +179,54 @@ def test_saknad_modellering_flaggas():
                for e in errors)
 
 
+# --------------------------------------------------- ordning: svårighet+klump --
+
+def test_ordning_godkanner_balanserad_fixtur():
+    """Den kanoniska fixturen ska passera ordningsreglerna rent."""
+    doc, _ = exam_spec.validate_exam_json(_exam())
+    assert exam_spec.validate_ordning(doc) == []
+
+
+def test_ordning_flaggar_fallande_svarighet():
+    """En del vars andra halva är klart lättare än första underkänns."""
+    data = _exam()
+    # Gör Del C fallande: flytta A-tyngden till de första uppgifterna.
+    data["uppgifter"][2]["poang"] = [0, 0, 3]   # svår först
+    data["uppgifter"][3]["poang"] = [0, 0, 3]
+    data["uppgifter"][6]["poang"] = [3, 0, 0]   # lätt sist
+    doc, _ = exam_spec.validate_exam_json(data)
+    assert any(e["code"] == "svarighet" for e in exam_spec.validate_ordning(doc))
+
+
+def test_ordning_flaggar_forsta_uppgift_utan_e():
+    """Delens första uppgift måste ha minst 1 E-poäng."""
+    data = _exam()
+    data["uppgifter"][2]["poang"] = [0, 2, 1]   # Del C:s första saknar E
+    doc, _ = exam_spec.validate_exam_json(data)
+    assert any(e["code"] == "svarighet" and "första" in e["message"]
+               for e in exam_spec.validate_ordning(doc))
+
+
+def test_ordning_flaggar_klumpade_typer():
+    """Fler än tre uppgifter i rad med samma typ underkänns."""
+    data = _exam()
+    for i in (2, 3, 4, 5, 6):                     # hela Del C samma typ (5 i rad)
+        data["uppgifter"][i]["typ"] = "redovisning"
+    doc, _ = exam_spec.validate_exam_json(data)
+    fel = exam_spec.validate_ordning(doc)
+    assert any(e["code"] == "klumpning" for e in fel)
+
+
+def test_ordning_hoppar_over_korta_delar():
+    """Delar med färre än fyra uppgifter mäts inte på svårighetsordning."""
+    data = _exam()
+    # Del B har bara två uppgifter; gör dess första E-lös — ska INTE flaggas.
+    data["uppgifter"][0]["poang"] = [0, 1, 0]
+    doc, _ = exam_spec.validate_exam_json(data)
+    fel = exam_spec.validate_ordning(doc)
+    assert not any("Del B" in e["path"] for e in fel)
+
+
 # --------------------------------------------------------- genomförbarhet --
 
 def test_genomforbarhet_kraver_en_uppgift_per_formagegolv():

@@ -96,6 +96,19 @@ PROFILER: dict[str, tuple[dict, dict, bool]] = {
     "arbetsblad": (ARBETSBLAD_FORMAGA_MAL, ARBETSBLAD_NIVA_MAL, False),
 }
 
+# Ordningsregler (per del). Tröskelvärden justerbara efter utfall på
+# riktiga prov, i samma anda som KRAV_DEFAULT.
+SVARIGHET_SLACK = 0.15          # hur mycket andra halvan får understiga första
+MIN_START_E = 1                 # minsta E-poäng på delens första uppgift
+MAX_LIKA_I_RAD = 3              # max uppgifter i rad med samma typ/förmåga
+MIN_DELPROV_FOR_ORDNING = 4     # kortare delar mäts inte på ordning
+
+
+def _svarighet(it: "ExamItem") -> float:
+    """Svårighetsindex 0–2: (0·E + 1·C + 2·A) / totalpoäng."""
+    tot = sum(it.poang)
+    return (it.poang[1] + 2 * it.poang[2]) / tot if tot > 0 else 0.0
+
 
 def _err(path: str, code: str, message: str) -> dict:
     return {"path": path, "code": code, "message": message}
@@ -172,6 +185,54 @@ def validate_balance(doc: ExamDoc,
     if kraver_redovisning and not typer & {"redovisning", "problem"}:
         errors.append(_err("uppgifter", "blandning",
                            "provet saknar uppgifter med fullständig lösning."))
+    errors.extend(validate_ordning(doc))
+    return errors
+
+
+def _langsta_rad(varden: list) -> int:
+    """Längsta löpande sekvensen av samma värde."""
+    langst = mesta = 0
+    forra = object()
+    for v in varden:
+        mesta = mesta + 1 if v == forra else 1
+        forra = v
+        langst = max(langst, mesta)
+    return langst
+
+
+def validate_ordning(doc: ExamDoc) -> list[dict]:
+    """Stigande svårighet + antiklumpning, mätt per del på den sekvens
+    eleven ser. Korta delar (< MIN_DELPROV_FOR_ORDNING) hoppas över på
+    svårighet; klumpning kan ändå inte utlösas under fyra i rad."""
+    errors: list[dict] = []
+    for kod, items in gruppera_per_del(doc.uppgifter):
+        etikett = f"Del {kod}" if kod else "del-lösa uppgifter"
+
+        # Antiklumpning — gäller alla dellängder.
+        if _langsta_rad([it.typ for it in items]) > MAX_LIKA_I_RAD:
+            errors.append(_err(etikett, "klumpning",
+                               f"{etikett} har fler än {MAX_LIKA_I_RAD} "
+                               "uppgifter i rad av samma typ — varva dem."))
+        if _langsta_rad([it.formaga for it in items]) > MAX_LIKA_I_RAD:
+            errors.append(_err(etikett, "klumpning",
+                               f"{etikett} har fler än {MAX_LIKA_I_RAD} "
+                               "uppgifter i rad med samma förmåga — varva dem."))
+
+        # Stigande svårighet — bara för delar med tillräckligt många uppgifter.
+        if len(items) < MIN_DELPROV_FOR_ORDNING:
+            continue
+        if items[0].poang[0] < MIN_START_E:
+            errors.append(_err(etikett, "svarighet",
+                               f"{etikett}:s första uppgift saknar E-poäng — "
+                               "börja med en åtkomlig uppgift."))
+        halva = len(items) // 2
+        forsta = sum(_svarighet(it) for it in items[:halva]) / halva
+        andra = sum(_svarighet(it) for it in items[halva:]) / (len(items) - halva)
+        if andra < forsta - SVARIGHET_SLACK:
+            errors.append(_err(etikett, "svarighet",
+                               f"{etikett} blir lättare mot slutet "
+                               f"(svårighet {andra:.2f} mot {forsta:.2f}) — "
+                               "lägg de svårare uppgifterna sist."))
     return errors
 
 
