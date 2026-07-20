@@ -72,13 +72,8 @@
     \setlength{\itemsep}{0pt}}%
   ((# Tomt poängargument ska ge INGEN markör. \poang{} skulle annars
       skriva ut ett tomt parentespar i marginalen på varje uppgift —
-      arbetsbladet döljer poängen när visa_poang är falskt.
-      \csname poang\endcsname i stället för \poang: den bokstavliga
-      substrängen "\poang{" i SJÄLVA MAKRODEFINITIONEN (delad preamble)
-      skulle annars göra att test_render_arbetsblad_has_facit_no_kravgranser
-      (som letar efter just den strängen för att verifiera att poäng är
-      dolda) slår fel — även när uppgift-miljön aldrig anropas. #))
-  \item[\bfseries #1]\if\relax\detokenize{#2}\relax\else\csname poang\endcsname{#2}\fi
+      arbetsbladet döljer poängen när visa_poang är falskt. #))
+  \item[\bfseries #1]\if\relax\detokenize{#2}\relax\else\poang{#2}\fi
   \ignorespaces}%
   {\end{list}}
 

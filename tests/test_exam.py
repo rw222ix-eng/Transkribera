@@ -453,7 +453,10 @@ def test_render_arbetsblad_has_facit_no_kravgranser():
     assert "Facit" in tex
     assert "Kravgränser" not in tex
     assert r"\(x = 2\)" in tex                    # facit = lösningarna
-    assert r"\poang{" not in tex                  # poäng dolda som standard
+    # Poäng dolda som standard. Kontrollen gäller RENDERADE poäng, inte
+    # makrots förekomst — uppgift-miljön i den delade preambeln anropar
+    # \poang, så en ren substrängskontroll skulle träffa preambeln.
+    assert r"\poang{2p}" not in tex
     tex_p = exam_latex.render_arbetsblad(doc, visa_poang=True)
     assert r"\poang{2p}" in tex_p
 
