@@ -30,7 +30,7 @@ SYSTEM = (
     "RÖST: skriv i nationella provets register. Varje uppgift drivs av ett "
     "imperativt verb (Beräkna, Bestäm, Lös, Ange, Visa, Avgör, Förenkla, "
     "Motivera). Tilltala eleven med du, aldrig ni eller man. INGA emoji. "
-    "INGA utropstecken. Ingen hedging ('kanske', 'försök gärna'), "
+    "INGA utropstecken. Ingen hedging ('kanske', 'försök gärna'). Använd "
     "decimalkomma och svenska enheter (4{,}0 cm, 15,9 %), med mellanslag "
     "mellan tal och enhet respektive procenttecken.\n"
     "INTEGRITET: inga elevnamn någonstans."

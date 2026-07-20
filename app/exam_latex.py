@@ -56,12 +56,17 @@ def escape_mixed(text: str) -> str:
     text = _CONTROL_RE.sub("", str(text or ""))
     parts: list[str] = []
     pos = 0
+    # Hård space (~) mellan tal och \% appliceras ENDAST på textsegmenten,
+    # aldrig på matten inom \(…\): ett procenttecken inuti matte får inte
+    # röras. Därför per segment, inte på den hopslagna strängen.
+    def _esc_text(s: str) -> str:
+        return _HARD_PROCENT_RE.sub(r"\1~\2", escape_latex(s))
     for m in _MATH_SPLIT_RE.finditer(text):
-        parts.append(escape_latex(text[pos:m.start()]))
+        parts.append(_esc_text(text[pos:m.start()]))
         parts.append(r"\(" + m.group(1) + r"\)")
         pos = m.end()
-    parts.append(escape_latex(text[pos:]))
-    return _HARD_PROCENT_RE.sub(r"\1~\2", "".join(parts))
+    parts.append(_esc_text(text[pos:]))
+    return "".join(parts)
 
 
 _env: Environment | None = None

@@ -330,6 +330,11 @@ def test_escape_mixed_har_hard_space_fore_procent():
     assert r"15,9~\%" in out
     # ingen hård space där det inte finns någon siffra före
     assert exam_latex.escape_mixed("procent %").count("~") == 0
+    # ett procenttecken INUTI matte får inte röras — och samma sträng med
+    # både text- och matteprocent ska bara sätta ~ i texten
+    assert "~" not in exam_latex.escape_mixed(r"Sannolikheten är $4 \%$.")
+    blandat = exam_latex.escape_mixed(r"50 % men $p \le 5 \%$ i modellen.")
+    assert r"50~\%" in blandat and r"\(p \le 5 \%\)" in blandat
 
 
 # --------------------------------------------------------------- rendering --
