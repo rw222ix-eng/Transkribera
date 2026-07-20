@@ -473,11 +473,47 @@ def test_render_arbetsblad_has_facit_no_kravgranser():
     assert "Kravgränser" not in tex
     assert r"\(x = 2\)" in tex                    # facit = lösningarna
     # Poäng dolda som standard. Kontrollen gäller RENDERADE poäng, inte
-    # makrots förekomst — uppgift-miljön i den delade preambeln anropar
-    # \poang, så en ren substrängskontroll skulle träffa preambeln.
-    assert r"\poang{2p}" not in tex
+    # makrots förekomst. Uppgiftsloopen anropar numera den delade
+    # uppgift-miljön (\begin{uppgift}{n}{poäng}) i stället för att skriva
+    # \poang{...} direkt i mallen — \poang{2p} som RÅ SUBSTRÄNG förekommer
+    # därför aldrig i den Python-renderade .tex-källan (bara efter att
+    # LaTeX expanderat miljön vid kompilering). Kontrollen görs i stället
+    # mot uppgift-miljöns andra argument, precis som provmallens
+    # motsvarande test (test_prov_anvander_layoutmakron).
+    assert r"\begin{uppgift}{1}{2p}" not in tex
     tex_p = exam_latex.render_arbetsblad(doc, visa_poang=True)
-    assert r"\poang{2p}" in tex_p
+    assert r"\begin{uppgift}{1}{2p}" in tex_p
+
+
+def test_arbetsblad_anvander_layoutmakron():
+    doc, _ = exam_spec.validate_exam_json(_exam())
+    tex = exam_latex.render_arbetsblad(doc)
+    assert r"\begin{uppgift}{1}" in tex
+    # Sök i dokumentkroppen, inte i preambeln: \newcommand{\elevruta} i den
+    # delade _preamble.tex.j2 innehåller alltid substrängen "\elevruta",
+    # så en sökning i hela strängen skulle träffa preambeln även om
+    # mallen aldrig anropade makrot (jfr test_prov_anvander_layoutmakron).
+    kropp = tex.split(r"\begin{document}", 1)[1]
+    assert r"\elevruta" not in kropp
+    assert "Kravgränser" not in tex
+    # facit finns kvar
+    assert "Facit" in tex
+
+
+def test_arbetsblad_utan_poang_ger_tomt_argument_inte_tom_parentes():
+    """visa_poang=False ska ge INGEN poängmarkör. Skickas \\relax eller ett
+    blanktecken skriver \\poang ut ett tomt parentespar i marginalen."""
+    doc, _ = exam_spec.validate_exam_json(_exam())
+    tex = exam_latex.render_arbetsblad(doc, visa_poang=False)
+    assert r"\begin{uppgift}{1}{}" in tex
+    # Sök i dokumentkroppen: \ramruta i preambeln innehåller alltid
+    # "...\fboxsep\relax}..." (dimexpr-uttrycket), så en sökning i hela
+    # strängen skulle träffa preambeln oavsett mallens innehåll.
+    kropp = tex.split(r"\begin{document}", 1)[1]
+    assert r"\relax}" not in kropp
+    # med poäng påslaget kommer markören tillbaka
+    med = exam_latex.render_arbetsblad(doc, visa_poang=True)
+    assert r"\begin{uppgift}{1}{2p}" in med
 
 
 def test_build_referens_numbers_and_instructs():
