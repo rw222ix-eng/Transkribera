@@ -3,6 +3,7 @@ PDF-modul med stubbat kompilatoranrop samt genereringslooparna."""
 import base64
 import copy
 import json
+import re
 import subprocess
 
 import pytest
@@ -279,6 +280,58 @@ def test_render_escapes_model_text():
     tex = exam_latex.render_prov(doc)
     assert r"25\% \& g" in tex
     assert "{alla}" not in tex
+
+
+# ------------------------------------------------------ skyddsnät: \par ----
+
+def test_par_avslutar_poangraden_dar_markor_renderas():
+    """Skyddsnät mot regressionen 2026-07-20 (668 gröna tester medan tre
+    mallar ändå klistrade ihop poängmarkören med uppgiftstexten).
+
+    \\poang använder \\hfill för att trycka markören till högermarginalen,
+    men \\hfill delar bara \\parfillskip (och skjuter alltså markören ända
+    till marginalen) om ett \\par avslutar stycket omedelbart efter
+    \\begin{uppgift}{...}{...}-raden. Saknas det \\par:et hamnar markören
+    mitt i uppgiftstexten i stället för ensam i marginalen.
+
+    Ren strängkontroll — inget PyMuPDF eller annat nytt beroende. Kravet
+    gäller bara uppgifter där en markör FAKTISKT renderas (icke-tomt andra
+    argument). Arbetsbladets \\begin{uppgift}{n}{} (visa_poang=False, och
+    alltid i facit-sektionen) ska INTE ha \\par där — det skulle flytta
+    ned uppgiftstexten även när ingen markör visas."""
+    doc, _ = exam_spec.validate_exam_json(_exam())
+
+    rad = re.compile(r"\\begin\{uppgift\}\{[^{}]*\}\{([^{}]*)\}(\\par)?")
+
+    def kontrollera(tex: str, namn: str) -> None:
+        träffar = list(rad.finditer(tex))
+        assert träffar, f"{namn}: hittade inga \\begin{{uppgift}}-rader"
+        for m in träffar:
+            markor, par = m.group(1), m.group(2)
+            if markor:
+                assert par == r"\par", (
+                    f"{namn}: uppgift med poängmarkör {markor!r} saknar "
+                    r"\par direkt efter \begin{uppgift}-raden — markören "
+                    "riskerar att glida in i uppgiftstexten i stället för "
+                    "att hamna ensam i högermarginalen"
+                )
+            else:
+                assert par is None, (
+                    f"{namn}: uppgift UTAN poängmarkör fick ändå ett "
+                    r"\par, vilket flyttar ned uppgiftstexten i onödan"
+                )
+
+    # prov: både rutinuppgifter (med "Endast svar krävs") och
+    # redovisningsuppgifter — båda bär en poängmarkör och kräver \par.
+    kontrollera(exam_latex.render_prov(doc), "prov")
+    # arbetsblad: visa_poang=True ska kräva \par, visa_poang=False (default,
+    # och alltid i facit-sektionen) ska INTE ha det.
+    kontrollera(exam_latex.render_arbetsblad(doc, visa_poang=True),
+                "arbetsblad (visa_poang=True)")
+    kontrollera(exam_latex.render_arbetsblad(doc, visa_poang=False),
+                "arbetsblad (visa_poang=False)")
+    # bedömningsanvisningen visar alltid (E/C/A) — alltid en markör.
+    kontrollera(exam_latex.render_bedomning(doc), "bedomning")
 
 
 # ------------------------------------------------------------- exam_pdf ----

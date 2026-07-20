@@ -36,8 +36,9 @@ A & minst ((( granser.A.minst ))) poäng, varav minst ((( granser.A.varav_a ))) 
 {\small\textcolor{ink500}{((( granser.regel )))}}
 
 \vspace{6mm}
-{\small Poängen för varje uppgift anges efter uppgiftstexten. Till uppgifter
-märkta \emph{Endast svar krävs} behöver du bara ge svar. Övriga uppgifter
+{\small Poängen för varje uppgift anges i högermarginalen vid uppgiftens
+början. Till uppgifter märkta \emph{Endast svar krävs} behöver du bara ge
+svar. Övriga uppgifter
 kräver fullständig redovisning — visa hur du löser uppgiften och motivera
 dina steg.}
 
@@ -50,11 +51,15 @@ dina steg.}
 ((* if del.instruktion *)){\small\itshape ((( del.instruktion )))}\par\vspace{3mm}((* endif *))
 ((* endif *))
 ((* for u in del.uppgifter *))
-\begin{uppgift}{((( u.nummer )))}{((( u.poang_str )))}
-((# \par avslutar ALLTID poäng-raden här — annars flyter \poangs \hfill in
-    i uppgiftstextens stycke och poängen hamnar inline i stället för i
-    högermarginalen (syns bara på redovisningsuppgifter, som saknar den
-    villkorade "Endast svar krävs"-texten som annars tvingar fram \par). #))
+((# \par avslutar ALLTID poäng-raden DIREKT efter \begin{uppgift} — annars
+    flyter \poangs \hfill in i nästa stycke (den villkorade "Endast svar
+    krävs"-texten, eller uppgiftstexten) och poängen hamnar inline i
+    stället för isolerad i högermarginalen. Detta \par måste stå FÖRE
+    kursivtexten, inte efter den (det var precis den ordningen som gav
+    bugen: poängen glidande in i "Endast svar krävs"-texten). Den andra
+    \par:en nedan (efter (* endif *)) är oförändrad sedan tidigare och
+    avslutar i stället den villkorade kursivraden innan uppgiftstexten. #))
+\begin{uppgift}{((( u.nummer )))}{((( u.poang_str )))}\par
 ((* if u.endast_svar *)){\small\itshape Endast svar krävs.}((* endif *))\par
 ((( u.text )))
 ((* if u.bild_fil *))\par\vspace{2mm}\begin{center}\includegraphics[width=0.72\linewidth,height=90mm,keepaspectratio]{((( u.bild_fil )))}\end{center}((* endif *))

@@ -21,7 +21,10 @@ av totalt ((( granser.total ))) poäng.}
 \vspace{4mm}
 ((* for del in delar *))
 ((* for u in del.uppgifter *))
-\begin{uppgift}{((( u.nummer )))}{((( u.poang_eca )))}
+((# \par avslutar ALLTID poäng-raden här — annars flyter \poangs \hfill in
+    i förmågenamnets stycke och poängen hamnar inline i stället för i
+    högermarginalen (jfr prov.tex.j2 och app/templates/_preamble.tex.j2). #))
+\begin{uppgift}{((( u.nummer )))}{((( u.poang_eca )))}\par
 {\small\textcolor{ink500}{((( u.formaga_namn )))}}\par\vspace{1mm}
 {\small\itshape ((( u.text )))}\par\vspace{2mm}
 ((* if u.bild_fil *)){\small Uppgiften har en bild: ((( u.bild_fil )))}\par\vspace{1mm}((* endif *))

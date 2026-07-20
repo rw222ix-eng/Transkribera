@@ -19,7 +19,20 @@ på sista sidan((* if visa_poang *)); poäng anges som totalpoäng((* endif *)).
 \vspace{4mm}
 ((* for del in delar *))
 ((* for u in del.uppgifter *))
-\begin{uppgift}{((( u.nummer )))}{((* if visa_poang *))((( u.poang_str )))((* endif *))}
+((# \par avslutar poäng-raden ENDAST när visa_poang är sant — annars
+    finns ingen markör (tomt argument) och uppgiftstexten ska stå kvar på
+    samma rad som numret, precis som idag. Ett ovillkorligt \par skulle
+    flytta ned ALL text ett steg även när ingen markör renderas.
+    De två grenarna skrivs som HELA separata \begin{uppgift}-rader (inte
+    \par inuti en villkorstagg på samma rad som (* endif *)) — annars äter
+    trim_blocks radbrytningen efter taggen och \par glider ihop med
+    uppgiftstextens första ord till en odefinierad kontrollsekvens
+    (samma fälla som tidigare kraschade prov.tex.j2/bedomning.tex.j2). #))
+((* if visa_poang *))
+\begin{uppgift}{((( u.nummer )))}{((( u.poang_str )))}\par
+((* else *))
+\begin{uppgift}{((( u.nummer )))}{}
+((* endif *))
 ((( u.text )))
 ((* if u.bild_fil *))\par\vspace{2mm}\begin{center}\includegraphics[width=0.72\linewidth,height=90mm,keepaspectratio]{((( u.bild_fil )))}\end{center}((* endif *))
 ((* if u.endast_svar *))\svarsrad((* else *))\par\vspace{((( u.utrymme_mm )))mm}((* endif *))

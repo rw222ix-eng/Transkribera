@@ -741,10 +741,10 @@ A & minst ((( granser.A.minst ))) poäng, varav minst ((( granser.A.varav_a ))) 
 {\small\textcolor{ink500}{((( granser.regel )))}}
 
 \vspace{6mm}
-{\small Poängen för varje uppgift anges efter uppgiftstexten. Till uppgifter
-märkta \emph{Endast svar krävs} behöver du bara ge svar. Övriga uppgifter
-kräver fullständig redovisning — visa hur du löser uppgiften och motivera
-dina steg.}
+{\small Poängen för varje uppgift anges i högermarginalen vid uppgiftens
+början. Till uppgifter märkta \emph{Endast svar krävs} behöver du bara ge
+svar. Övriga uppgifter kräver fullständig redovisning — visa hur du löser
+uppgiften och motivera dina steg.}
 
 \newpage
 
@@ -755,8 +755,18 @@ dina steg.}
 ((* if del.instruktion *)){\small\itshape ((( del.instruktion )))}\par\vspace{3mm}((* endif *))
 ((* endif *))
 ((* for u in del.uppgifter *))
-\begin{uppgift}{((( u.nummer )))}{((( u.poang_str )))}
-((* if u.endast_svar *)){\small\itshape Endast svar krävs.}\par((* endif *))
+((# \par avslutar ALLTID poäng-raden DIREKT efter \begin{uppgift} — annars
+    flyter \poangs \hfill in i nästa stycke (den villkorade "Endast svar
+    krävs"-texten, eller uppgiftstexten) och poängen hamnar inline i
+    stället för isolerad i högermarginalen. Detta \par måste stå FÖRE
+    kursivtexten, inte efter den. Den andra \par:en nedan (efter
+    (* endif *)) avslutar i stället den villkorade kursivraden innan
+    uppgiftstexten — sätt aldrig \par FÖRE en (* endif *)/(* endfor *)-tagg
+    på samma rad: trim_blocks äter radbrytningen efter taggen, och \par
+    glider då ihop med nästa ords bokstäver till en odefinierad
+    kontrollsekvens (t.ex. tidigare \parAnge). #))
+\begin{uppgift}{((( u.nummer )))}{((( u.poang_str )))}\par
+((* if u.endast_svar *)){\small\itshape Endast svar krävs.}((* endif *))\par
 ((( u.text )))
 ((* if u.bild_fil *))\par\vspace{2mm}\begin{center}\includegraphics[width=0.72\linewidth,height=90mm,keepaspectratio]{((( u.bild_fil )))}\end{center}((* endif *))
 ((* if u.endast_svar *))\svarsrad((* else *))\par\vspace{((( u.utrymme_mm )))mm}((* endif *))
@@ -882,7 +892,19 @@ I `app/templates/arbetsblad.tex.j2`, ersätt uppgiftsblocket (raderna med `\text
 ```latex
 ((* for del in delar *))
 ((* for u in del.uppgifter *))
-\begin{uppgift}{((( u.nummer )))}{((* if visa_poang *))((( u.poang_str )))((* endif *))}
+((# \par avslutar poäng-raden ENDAST när visa_poang är sant — annars
+    finns ingen markör (tomt argument) och uppgiftstexten ska stå kvar på
+    samma rad som numret. Ett ovillkorligt \par skulle flytta ned ALL
+    text ett steg även när ingen markör renderas. De två grenarna skrivs
+    som HELA separata \begin{uppgift}-rader — sätt aldrig \par FÖRE en
+    (* endif *)-tagg på samma rad (trim_blocks äter radbrytningen efter
+    taggen och \par glider ihop med nästa ords bokstäver till en
+    odefinierad kontrollsekvens, samma fälla som i prov.tex.j2). #))
+((* if visa_poang *))
+\begin{uppgift}{((( u.nummer )))}{((( u.poang_str )))}\par
+((* else *))
+\begin{uppgift}{((( u.nummer )))}{}
+((* endif *))
 ((( u.text )))
 ((* if u.bild_fil *))\par\vspace{2mm}\begin{center}\includegraphics[width=0.72\linewidth,height=90mm,keepaspectratio]{((( u.bild_fil )))}\end{center}((* endif *))
 ((* if u.endast_svar *))\svarsrad((* else *))\par\vspace{((( u.utrymme_mm )))mm}((* endif *))
@@ -973,7 +995,10 @@ I `app/templates/bedomning.tex.j2`, ersätt loopen med:
 ```latex
 ((* for del in delar *))
 ((* for u in del.uppgifter *))
-\begin{uppgift}{((( u.nummer )))}{((( u.poang_eca )))}
+((# \par avslutar ALLTID poäng-raden här — annars flyter \poangs \hfill in
+    i förmågenamnets stycke och poängen hamnar inline i stället för i
+    högermarginalen (jfr prov.tex.j2). #))
+\begin{uppgift}{((( u.nummer )))}{((( u.poang_eca )))}\par
 {\small\textcolor{ink500}{((( u.formaga_namn )))}}\par\vspace{1mm}
 {\small\itshape ((( u.text )))}\par\vspace{2mm}
 ((* if u.bild_fil *)){\small Uppgiften har en bild: ((( u.bild_fil )))}\par\vspace{1mm}((* endif *))
