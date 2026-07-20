@@ -797,3 +797,14 @@ def test_prompt_includes_memory_and_themes():
     assert "kvadrering" in p
     assert "UNDVIK" in p
     assert "egenformulerade" in exam_gen.SYSTEM
+
+
+def test_prompt_har_np_rost():
+    """Prompten ska bära det nationella provets register: imperativ,
+    fasta fraser, förbud mot emoji och utropstecken, decimalkomma."""
+    txt = exam_gen.SYSTEM + exam_gen.INSTRUCTION
+    for fras in ("imperativ", "Endast svar krävs", "Motivera ditt svar",
+                 "decimalkomma", "utropstecken", "emoji"):
+        assert fras in txt, f"prompten nämner inte {fras!r}"
+    # några av NP:s imperativa verb ska nämnas som ledord
+    assert any(v in txt for v in ("Beräkna", "Bestäm", "Avgör", "Förenkla"))
