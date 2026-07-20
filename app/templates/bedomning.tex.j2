@@ -21,13 +21,13 @@ av totalt ((( granser.total ))) poäng.}
 \vspace{4mm}
 ((* for del in delar *))
 ((* for u in del.uppgifter *))
-\textbf{Uppgift ((( u.nummer )))} \; {\small ((( u.formaga_namn )))}\poang{((( u.poang_eca )))}\par
-{\small\itshape ((( u.text )))}\par\vspace{1mm}
-((* if u.bild_fil *)){\small (Uppgiften har en bild: ((( u.bild_fil ))))}\par\vspace{1mm}((* endif *))
-\textbf{Lösningsförslag:} ((( u.losning )))\par
-\textbf{Bedömning:} ((( u.bedomning )))\par
-\vspace{5mm}
-
+\begin{uppgift}{((( u.nummer )))}{((( u.poang_eca )))}
+{\small\textcolor{ink500}{((( u.formaga_namn )))}}\par\vspace{1mm}
+{\small\itshape ((( u.text )))}\par\vspace{2mm}
+((* if u.bild_fil *)){\small Uppgiften har en bild: ((( u.bild_fil )))}\par\vspace{1mm}((* endif *))
+\textbf{Lösningsförslag:} ((( u.losning )))\par\vspace{1mm}
+\textbf{Bedömning:} ((( u.bedomning )))
+\end{uppgift}
 ((* endfor *))
 ((* endfor *))
 

@@ -252,8 +252,24 @@ def test_render_bedomning_contains_solutions():
     assert "Lösningsförslag" in tex
     assert "Problemlösning" in tex          # förmågenamn
     assert r"\(x = 1\)" in tex or "x = 1" in tex
-    # lärardokumentet behåller E/C/A-poängen (elevens prov visar bara totalen)
-    assert r"\poang{2/1/0}" in tex
+    # lärardokumentet behåller E/C/A-poängen (elevens prov visar bara
+    # totalen). Uppgiftsloopen anropar numera den delade uppgift-miljön
+    # (\begin{uppgift}{n}{e/c/a}) i stället för att skriva \poang{...}
+    # direkt i mallen, så \poang{2/1/0} som RÅ SUBSTRÄNG förekommer aldrig
+    # i den Python-renderade .tex-källan (bara efter att LaTeX expanderat
+    # miljön vid kompilering) — jfr test_prov_anvander_layoutmakron.
+    assert r"\begin{uppgift}{3}{2/1/0}" in tex
+
+
+def test_bedomning_behaller_eca_och_far_makron():
+    """Lärarens dokument visar E/C/A — det är dess syfte. Elevens gör det inte."""
+    doc, _ = exam_spec.validate_exam_json(_exam())
+    tex = exam_latex.render_bedomning(doc)
+    assert r"\begin{uppgift}{1}{2/0/0}" in tex
+    assert "Lösningsförslag" in tex and "Bedömning" in tex
+    # kontrollera motsatsen på elevens prov
+    prov = exam_latex.render_prov(doc)
+    assert "2/0/0" not in prov
 
 
 def test_render_escapes_model_text():
