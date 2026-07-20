@@ -35,6 +35,10 @@ _LATEX_SPECIALS = {
 }
 _CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
 _MATH_SPLIT_RE = re.compile(r"\$([^$]*)\$")
+# Hård space mellan siffra och procenttecken: NP sätter "15,9 %" utan att
+# tal och tecken kan brytas isär. Körs EFTER escaping (% är då \%), så det
+# insatta ~ blir en icke-brytande space i LaTeX, inte \textasciitilde.
+_HARD_PROCENT_RE = re.compile(r"(\d) +(\\%)")
 
 
 def escape_latex(text: str) -> str:
@@ -57,7 +61,7 @@ def escape_mixed(text: str) -> str:
         parts.append(r"\(" + m.group(1) + r"\)")
         pos = m.end()
     parts.append(escape_latex(text[pos:]))
-    return "".join(parts)
+    return _HARD_PROCENT_RE.sub(r"\1~\2", "".join(parts))
 
 
 _env: Environment | None = None

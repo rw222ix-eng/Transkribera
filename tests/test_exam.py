@@ -323,6 +323,15 @@ def test_escape_mixed_preserves_math():
     assert "\x0c" not in exam_latex.escape_mixed("a\x0cb")
 
 
+def test_escape_mixed_har_hard_space_fore_procent():
+    """15,9 % ska sättas med icke-brytande space (~) så tal och tecken inte
+    delas över radbrytning. Vanlig text-procent, inte matte."""
+    out = exam_latex.escape_mixed("Andelen ökade med 15,9 % på ett år.")
+    assert r"15,9~\%" in out
+    # ingen hård space där det inte finns någon siffra före
+    assert exam_latex.escape_mixed("procent %").count("~") == 0
+
+
 # --------------------------------------------------------------- rendering --
 
 def test_render_prov_golden_markers():
