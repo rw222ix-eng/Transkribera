@@ -272,6 +272,45 @@ def test_compile_pdf_timeout(tmp_path, monkeypatch):
     assert pdf is None and "avbröts" in log
 
 
+def _exam_med_matte_i_bedomningen() -> dict:
+    """_exam() men med matte även i bedömningsfältet — det fältet saknar
+    annars helt $…$ (se _exam() ovan). Utan detta testar vi inte den exakta
+    kombinationen (matte i text OCH lösning OCH bedömning) som kraschade
+    Tectonic när \\small-matte-fontmetrikerna saknades i cachen: den
+    handskrivna sonden i tools/seed_tectonic_cache.py hade ingen matte i
+    förminskad textstorlek, så metrikerna hämtades aldrig ner, och
+    --only-cached kunde då inte hämta dem i efterhand (access violation i
+    stället för ett läsbart LaTeX-fel)."""
+    data = copy.deepcopy(_exam())
+    data["uppgifter"][0]["bedomning"] = (
+        "+2 E om båda nollställena $x=1$ och $x=-3$ anges, annars 0 p "
+        "(jämför $\\alpha \\neq \\beta$).")
+    return data
+
+
+def test_compile_pdf_real_engine_produces_all_three_documents(tmp_path):
+    """Skyddsnät mot att sonden och mallarna glider isär tyst: kompilerar
+    med den RIKTIGA Tectonic-motorn (ingen stubbad runner/compile_fn) och
+    kräver att prov, arbetsblad OCH bedömningsanvisning verkligen ger en
+    PDF. Alla andra tester i den här filen stubbar compile_pdf — det var
+    just därför bugginen (bedömningsanvisningens PDF gick inte att
+    producera) kunde smyga sig förbi en grön testsvit."""
+    if not exam_pdf.engine_available():
+        pytest.skip("Tectonic-motorn saknas (bin/tectonic/tectonic.exe)")
+
+    doc, errors = exam_spec.validate_exam_json(_exam_med_matte_i_bedomningen())
+    assert doc is not None and errors == []
+
+    for jobname, tex in (
+        ("prov", exam_latex.render_prov(doc)),
+        ("arbetsblad", exam_latex.render_arbetsblad(doc)),
+        ("bedomning", exam_latex.render_bedomning(doc)),
+    ):
+        pdf, logg = exam_pdf.compile_pdf(tex, tmp_path, jobname)
+        assert pdf is not None and pdf.exists(), f"{jobname} misslyckades: {logg}"
+        assert pdf.stat().st_size > 0
+
+
 # ------------------------------------------------------------- exam_gen ----
 
 def _stub_llm(responses: list[str]):
