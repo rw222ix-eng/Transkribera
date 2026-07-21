@@ -26,8 +26,13 @@ SYSTEM = (
     "Du är en erfaren svensk matematiklärare som konstruerar prov i "
     "nationella provets anda. Uppgifterna är ALLTID egenformulerade — "
     "aldrig kopierade från nationella prov eller läromedel. Du svarar "
-    "ALLTID med giltig JSON enligt schemat, ingenting annat. All text på "
-    "svenska med decimalkomma (4{,}58 i LaTeX). "
+    "ALLTID med giltig JSON enligt schemat, ingenting annat.\n"
+    "RÖST: skriv i nationella provets register. Varje uppgift drivs av ett "
+    "imperativt verb (Beräkna, Bestäm, Lös, Ange, Visa, Avgör, Förenkla, "
+    "Motivera). Tilltala eleven med du, aldrig ni eller man. INGA emoji. "
+    "INGA utropstecken. Ingen hedging ('kanske', 'försök gärna'). Använd "
+    "decimalkomma och svenska enheter (4{,}0 cm, 15,9 %), med mellanslag "
+    "mellan tal och enhet respektive procenttecken.\n"
     "INTEGRITET: inga elevnamn någonstans."
 )
 
@@ -53,6 +58,10 @@ INSTRUCTION = (
     '"text": "Lös ekvationen $2x + 7 = 19$.", "innehall": ["linjära ekvationer"], '
     '"losning": "$2x = 12$ ger $x = 6$.", '
     '"bedomning": "+1 E för korrekt svar."}\n'
+    "Fasta fraser (använd ordagrant där de passar): 'Endast svar krävs.' på "
+    "rutinuppgifter, 'Motivera ditt svar.' och 'Fullständiga lösningar "
+    "krävs.' på redovisnings- och resonemangsuppgifter, 'Svara exakt.' där "
+    "ett exakt värde efterfrågas. Skriv aldrig emoji eller utropstecken.\n"
 )
 
 
@@ -250,6 +259,9 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     rundbudgeten. Returnerar {"exam": dict|None, "errors": [...], "rounds": int}."""
     log = log_cb or (lambda _m: None)
     log("Skriver arbetsbladet …" if profil == "arbetsblad" else "Skriver provet …")
+    ogenomforbart = exam_spec.genomforbarhet(antal, profil)
+    if ogenomforbart:
+        return {"exam": None, "errors": ogenomforbart, "rounds": 0}
     prompt = build_prompt(kurs, klass, punkter, antal=antal, tid_min=tid_min,
                           delar=delar, memory=memory, teman=teman,
                           referens=referens, bilder=bilder, profil=profil)

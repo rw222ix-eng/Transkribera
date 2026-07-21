@@ -20,46 +20,54 @@ _MINIMAL_PNG_B64 = (
 
 
 def _exam() -> dict:
-    """Balanserat exempelprov: 20 p totalt (10/6/4), förmågorna inom målen."""
+    """Balanserat exempelprov, 20 p (E 9 / C 6 / A 5), alla sex förmågor
+    representerade. Uppfyller golv, nivåbalans, stigande svårighet (del C)
+    och antiklumpning — den kanoniska 'giltiga' fixturen."""
     return {
         "titel": "Prov — Andragradsfunktioner",
         "kurs": "Ma2b", "klass": "SA23", "datum": "2026-10-05",
         "tid_min": 120,
         "hjalpmedel": "Del B utan räknare. Del C med räknare och formelblad.",
         "uppgifter": [
-            {"del": "B", "formaga": "B", "typ": "rutin", "poang": [2, 0, 0],
+            {"del": "B", "formaga": "B", "typ": "rutin", "poang": [3, 0, 0],
              "text": "Ange nollställena till $f(x) = (x-1)(x+3)$.",
              "innehall": ["nollställen"],
              "losning": "$x = 1$ och $x = -3$.",
-             "bedomning": "+2 E för båda nollställena."},
+             "bedomning": "+3 E för båda nollställena."},
             {"del": "B", "formaga": "P", "typ": "rutin", "poang": [2, 0, 0],
              "text": "Lös ekvationen $x^2 - 4x + 3 = 0$.",
              "innehall": ["pq-formeln"],
              "losning": "$x = 1$ eller $x = 3$.",
              "bedomning": "+1 E per korrekt rot."},
-            {"del": "C", "formaga": "P", "typ": "redovisning", "poang": [2, 1, 0],
+            {"del": "C", "formaga": "P", "typ": "redovisning", "poang": [1, 1, 1],
              "text": "Lös ekvationen $x^2 + 6x - 7 = 0$ med kvadratkomplettering.",
              "innehall": ["kvadratkomplettering"],
              "losning": "$(x+3)^2 = 16$ ger $x = 1$ eller $x = -7$.",
-             "bedomning": "+1 E ansats, +1 E svar, +1 C fullständig metod."},
-            {"del": "C", "formaga": "PL", "typ": "problem", "poang": [1, 2, 1],
+             "bedomning": "+1 E ansats, +1 C metod, +1 A generalisering."},
+            {"del": "C", "formaga": "PL", "typ": "problem", "poang": [1, 1, 1],
              "text": "En rektangulär hage har omkretsen 60 m. Bestäm de mått "
                      "som maximerar arean.",
              "innehall": ["optimering", "andragradsfunktioner"],
              "losning": "Kvadrat $15 \\times 15$ m ger max.",
-             "bedomning": "+1 E modell, +2 C lösning, +1 A motivering av max."},
-            {"del": "C", "formaga": "R", "typ": "resonemang", "poang": [1, 1, 2],
+             "bedomning": "+1 E modell, +1 C lösning, +1 A motivering av max."},
+            {"del": "C", "formaga": "M", "typ": "problem", "poang": [1, 0, 1],
+             "text": "En population beskrivs av $N(t) = 200 \\cdot 1{,}05^t$. "
+                     "Bestäm när populationen har fördubblats.",
+             "innehall": ["exponentiell modell"],
+             "losning": "$1{,}05^t = 2$ ger $t \\approx 14{,}2$ år.",
+             "bedomning": "+1 E ansats, +1 A korrekt tolkning av modellen."},
+            {"del": "C", "formaga": "R", "typ": "resonemang", "poang": [1, 1, 1],
              "text": "Avgör om påståendet stämmer: en andragradsfunktion med "
                      "$a < 0$ saknar minsta värde. Motivera.",
              "innehall": ["andragradsfunktioner"],
              "losning": "Sant — grafen är en nedåtriktad parabel.",
-             "bedomning": "+1 E ställningstagande, +1 C motivering, +2 A stringens."},
-            {"del": "C", "formaga": "K", "typ": "redovisning", "poang": [2, 2, 1],
+             "bedomning": "+1 E ställningstagande, +1 C motivering, +1 A stringens."},
+            {"del": "C", "formaga": "K", "typ": "redovisning", "poang": [0, 3, 1],
              "text": "Förklara med graf och ord hur symmetrilinjen bestäms "
                      "för $f(x) = x^2 - 6x + 5$.",
              "innehall": ["symmetrilinje"],
              "losning": "$x = 3$ via $-b/(2a)$ eller nollställenas mittpunkt.",
-             "bedomning": "+2 E korrekt linje, +2 C tydlig förklaring, +1 A flera representationer."},
+             "bedomning": "+3 C tydlig förklaring, +1 A flera representationer."},
         ],
     }
 
@@ -86,6 +94,29 @@ def test_valid_exam_passes():
     doc, errors = exam_spec.validate_exam_json(_exam())
     assert doc is not None
     assert errors == []
+
+
+def test_gruppera_per_del_bevarar_elevens_ordning():
+    """Delgrupperingen måste ge exakt den sekvens eleven ser: B, C, D,
+    sedan del-lösa. Både renderingen och ordningsreglerna bygger på den."""
+    doc, _ = exam_spec.validate_exam_json(_exam())
+    grupper = exam_spec.gruppera_per_del(doc.uppgifter)
+    koder = [kod for kod, _items in grupper]
+    assert koder == ["B", "C"]                 # _exam() har bara B och C
+    # varje grupp behåller uppgifterna i inläst ordning
+    assert [it.formaga for it in grupper[0][1]] == ["B", "P"]
+    # tomma delar utelämnas (ingen D-grupp)
+    assert all(items for _kod, items in grupper)
+
+
+def test_gruppera_per_del_lagger_dellosa_sist():
+    """Uppgifter med del=None hamnar i en egen grupp sist."""
+    data = _exam()
+    data["uppgifter"][0]["del"] = None
+    doc, _ = exam_spec.validate_exam_json(data)
+    grupper = exam_spec.gruppera_per_del(doc.uppgifter)
+    assert grupper[-1][0] is None
+    assert len(grupper[-1][1]) == 1
 
 
 def test_schema_rejects_unknown_fields_and_values():
@@ -139,6 +170,142 @@ def test_formaga_concentration_flagged():
     assert any(e["code"] == "formagabalans" for e in errors)
 
 
+def test_saknad_modellering_flaggas():
+    """Med M-golvet höjt ska ett prov helt utan modellering underkännas."""
+    bad = _exam()
+    bad["uppgifter"][4]["formaga"] = "P"     # M-uppgiften blir procedur
+    _doc, errors = exam_spec.validate_exam_json(bad)
+    assert any(e["code"] == "formagabalans" and "M" in e["path"]
+               for e in errors)
+
+
+# --------------------------------------------------- ordning: svårighet+klump --
+
+def test_ordning_godkanner_balanserad_fixtur():
+    """Den kanoniska fixturen ska passera ordningsreglerna rent."""
+    doc, _ = exam_spec.validate_exam_json(_exam())
+    assert exam_spec.validate_ordning(doc) == []
+
+
+def test_ordning_flaggar_fallande_svarighet():
+    """En del vars andra halva är klart lättare än första underkänns."""
+    data = _exam()
+    # Gör Del C fallande: flytta A-tyngden till de första uppgifterna.
+    # Del C:s första uppgift behåller 1 E-poäng (inte [0, 0, 3]) så att den
+    # separata "första uppgift saknar E-poäng"-regeln INTE också triggas —
+    # annars blir testet grönt oavsett om halva-jämförelsen fungerar.
+    data["uppgifter"][2]["poang"] = [1, 0, 2]   # svår men har E-poäng
+    data["uppgifter"][3]["poang"] = [0, 0, 3]
+    data["uppgifter"][6]["poang"] = [3, 0, 0]   # lätt sist
+    doc, _ = exam_spec.validate_exam_json(data)
+    assert any(e["code"] == "svarighet" for e in exam_spec.validate_ordning(doc))
+
+
+def test_ordning_flaggar_forsta_uppgift_utan_e():
+    """Delens första uppgift måste ha minst 1 E-poäng."""
+    data = _exam()
+    data["uppgifter"][2]["poang"] = [0, 2, 1]   # Del C:s första saknar E
+    doc, _ = exam_spec.validate_exam_json(data)
+    assert any(e["code"] == "svarighet" and "första" in e["message"]
+               for e in exam_spec.validate_ordning(doc))
+
+
+def test_ordning_flaggar_klumpade_typer():
+    """Fler än tre uppgifter i rad med samma typ underkänns."""
+    data = _exam()
+    for i in (2, 3, 4, 5, 6):                     # hela Del C samma typ (5 i rad)
+        data["uppgifter"][i]["typ"] = "redovisning"
+    doc, _ = exam_spec.validate_exam_json(data)
+    fel = exam_spec.validate_ordning(doc)
+    assert any(e["code"] == "klumpning" for e in fel)
+
+
+def test_antiklumpning_gransen_ar_exakt_tre():
+    """Spikar tröskeln MAX_LIKA_I_RAD: exakt tre i rad tillåts, fyra
+    underkänns — så en off-by-one mellan 3 och 4 fångas."""
+    tre = _exam()
+    for i in (2, 3, 4):                          # tre redovisning i rad i Del C
+        tre["uppgifter"][i]["typ"] = "redovisning"
+    tre["uppgifter"][5]["typ"] = "resonemang"
+    tre["uppgifter"][6]["typ"] = "problem"       # bryter serien vid tre
+    doc3, _ = exam_spec.validate_exam_json(tre)
+    assert not any(e["code"] == "klumpning"
+                   for e in exam_spec.validate_ordning(doc3))
+    fyra = _exam()
+    for i in (2, 3, 4, 5):                        # fyra redovisning i rad
+        fyra["uppgifter"][i]["typ"] = "redovisning"
+    fyra["uppgifter"][6]["typ"] = "problem"
+    doc4, _ = exam_spec.validate_exam_json(fyra)
+    assert any(e["code"] == "klumpning"
+               for e in exam_spec.validate_ordning(doc4))
+
+
+def test_ordning_hoppar_over_korta_delar():
+    """Delar med färre än fyra uppgifter mäts inte på svårighetsordning."""
+    data = _exam()
+    # Del B har bara två uppgifter; gör dess första E-lös — ska INTE flaggas.
+    data["uppgifter"][0]["poang"] = [0, 1, 0]
+    doc, _ = exam_spec.validate_exam_json(data)
+    fel = exam_spec.validate_ordning(doc)
+    assert not any("Del B" in e["path"] for e in fel)
+
+
+def test_ordning_undantar_arbetsblad():
+    """Ordningsreglerna är en prov-kvalitet. Arbetsbladet får medvetet drilla
+    samma uppgiftstyp i rad (procedurträning) — validate_balance ska inte
+    flagga klumpning för arbetsbladsprofilen, men väl för provprofilen."""
+    data = _exam()
+    for u in data["uppgifter"]:
+        u["del"] = None
+        u["typ"] = "rutin"          # sju rutinuppgifter i rad
+    _ab, ab_fel = exam_spec.validate_exam_json(data, "arbetsblad")
+    assert not any(e["code"] == "klumpning" for e in ab_fel)
+    _pv, pv_fel = exam_spec.validate_exam_json(data, "prov")
+    assert any(e["code"] == "klumpning" for e in pv_fel)
+
+
+def test_ordning_arbetsblad_kraver_stigande_svarighet():
+    """Arbetsbladet undantas bara från antiklumpning — stigande svårighet
+    gäller ÄVEN där, eftersom arbetsblad.tex.j2 lovar eleven att uppgifterna
+    blir svårare längre ner (och exam_gen ber uttryckligen om det för
+    arbetsblad). Bygg ett tydligt FALLANDE arbetsblad (A-tyngd först,
+    E-tyngd sist, alla del=None, fyra uppgifter) och kräv att det flaggas."""
+    data = {
+        "titel": "Arbetsblad — fallande svårighet", "kurs": "Ma2b",
+        "hjalpmedel": "Räknare",
+        "uppgifter": [
+            {"del": None, "formaga": "P", "typ": "rutin", "poang": [0, 0, 3],
+             "text": "Svår uppgift 1.", "losning": "...", "bedomning": "..."},
+            {"del": None, "formaga": "P", "typ": "rutin", "poang": [0, 1, 2],
+             "text": "Svår uppgift 2.", "losning": "...", "bedomning": "..."},
+            {"del": None, "formaga": "P", "typ": "rutin", "poang": [1, 1, 0],
+             "text": "Lättare uppgift 3.", "losning": "...", "bedomning": "..."},
+            {"del": None, "formaga": "P", "typ": "rutin", "poang": [3, 0, 0],
+             "text": "Lätt uppgift 4.", "losning": "...", "bedomning": "..."},
+        ],
+    }
+    _doc, fel = exam_spec.validate_exam_json(data, "arbetsblad")
+    assert any(e["code"] == "svarighet" for e in fel)
+    # antiklumpning ska fortfarande vara avstängd, trots samma typ/förmåga
+    # i alla fyra uppgifterna (skulle annars också flaggat).
+    assert not any(e["code"] == "klumpning" for e in fel)
+
+
+# --------------------------------------------------------- genomförbarhet --
+
+def test_genomforbarhet_kraver_en_uppgift_per_formagegolv():
+    """Färre uppgifter än förmågor med positivt golv går inte att balansera."""
+    fel = exam_spec.genomforbarhet(4, "prov")
+    assert fel and fel[0]["code"] == "genomforbarhet"
+    assert exam_spec.genomforbarhet(6, "prov") == []
+    assert exam_spec.genomforbarhet(10, "prov") == []
+
+
+def test_genomforbarhet_arbetsblad_ar_tillatande():
+    """Arbetsbladet har inga golv > 0 utom P — korta arbetsblad är okej."""
+    assert exam_spec.genomforbarhet(3, "arbetsblad") == []
+
+
 # ------------------------------------------------------------- kravgränser --
 
 def test_kravgranser_np_model():
@@ -147,9 +314,9 @@ def test_kravgranser_np_model():
     assert g["total"] == 20
     assert g["E"]["minst"] == 5            # ceil(20 * 0.25)
     assert g["C"]["minst"] == 9            # ceil(20 * 0.45)
-    assert g["C"]["varav_ca"] == 3         # ceil(10 * 0.30)
+    assert g["C"]["varav_ca"] == 4         # ceil((6+5) * 0.30) = ceil(3,3)
     assert g["A"]["minst"] == 13           # ceil(20 * 0.65)
-    assert g["A"]["varav_a"] == 2          # ceil(4 * 0.40)
+    assert g["A"]["varav_a"] == 2          # ceil(5 * 0.40)
     assert "reproducerbar" not in g["regel"]   # regeln är själva texten
     assert "25" in g["regel"] and "65" in g["regel"]
 
@@ -176,6 +343,20 @@ def test_escape_mixed_preserves_math():
     assert "\x0c" not in exam_latex.escape_mixed("a\x0cb")
 
 
+def test_escape_mixed_har_hard_space_fore_procent():
+    """15,9 % ska sättas med icke-brytande space (~) så tal och tecken inte
+    delas över radbrytning. Vanlig text-procent, inte matte."""
+    out = exam_latex.escape_mixed("Andelen ökade med 15,9 % på ett år.")
+    assert r"15,9~\%" in out
+    # ingen hård space där det inte finns någon siffra före
+    assert exam_latex.escape_mixed("procent %").count("~") == 0
+    # ett procenttecken INUTI matte får inte röras — och samma sträng med
+    # både text- och matteprocent ska bara sätta ~ i texten
+    assert "~" not in exam_latex.escape_mixed(r"Sannolikheten är $4 \%$.")
+    blandat = exam_latex.escape_mixed(r"50 % men $p \le 5 \%$ i modellen.")
+    assert r"50~\%" in blandat and r"\(p \le 5 \%\)" in blandat
+
+
 # --------------------------------------------------------------- rendering --
 
 def test_render_prov_golden_markers():
@@ -200,15 +381,15 @@ def test_render_prov_golden_markers():
     assert r"25\?" not in tex
     assert r"25\% av totalpoängen" in tex
     # elevens prov visar endast totalsumman — E/C/A hör till bedömningsanvisningen
-    assert "20 poäng" in tex and "(10/6/4)" not in tex
+    assert "20 poäng" in tex and "(9/6/5)" not in tex
     # delar + numrerade uppgifter med poängrutor
     assert r"\delprovband{Del B}" in tex and r"\delprovband{Del C}" in tex
     # numret bärs av uppgift-miljöns hängande etikett
     assert r"\begin{uppgift}{1}" in tex and r"\begin{uppgift}{6}" in tex
     # poängen bärs nu av uppgift-miljöns andra argument (som i sin tur
     # anropar \poang-makrot internt) — endast totalpoäng i elevens prov
-    assert r"\begin{uppgift}{3}{3p}" in tex and r"\begin{uppgift}{4}{4p}" in tex
-    assert r"\poang{2/1/0}" not in tex and "{2/1/0}" not in tex
+    assert r"\begin{uppgift}{3}{3p}" in tex and r"\begin{uppgift}{7}{4p}" in tex
+    assert r"\poang{1/1/1}" not in tex and "{1/1/1}" not in tex
     # matte bevarad, rutinuppgift får svarsrad
     assert r"\(x^2 - 4x + 3 = 0\)" in tex
     assert "\\svarsrad" in tex
@@ -239,11 +420,11 @@ def test_prov_anvander_layoutmakron():
     kropp = tex.split(r"\begin{document}", 1)[1]
     assert r"\elevruta" in kropp
     assert r"\delprovband{Del B}" in kropp and r"\delprovband{Del C}" in kropp
-    assert r"\begin{uppgift}{1}{2p}" in tex
+    assert r"\begin{uppgift}{1}{3p}" in tex
     # \section* ersatt av bandet
     assert r"\section*{Del B}" not in tex
     # oförändrat: elevens prov visar bara totalpoäng
-    assert "20 poäng" in tex and "(10/6/4)" not in tex
+    assert "20 poäng" in tex and "(9/6/5)" not in tex
 
 
 def test_render_bedomning_contains_solutions():
@@ -256,21 +437,21 @@ def test_render_bedomning_contains_solutions():
     # lärardokumentet behåller E/C/A-poängen (elevens prov visar bara
     # totalen). Uppgiftsloopen anropar numera den delade uppgift-miljön
     # (\begin{uppgift}{n}{e/c/a}) i stället för att skriva \poang{...}
-    # direkt i mallen, så \poang{2/1/0} som RÅ SUBSTRÄNG förekommer aldrig
+    # direkt i mallen, så \poang{1/1/1} som RÅ SUBSTRÄNG förekommer aldrig
     # i den Python-renderade .tex-källan (bara efter att LaTeX expanderat
     # miljön vid kompilering) — jfr test_prov_anvander_layoutmakron.
-    assert r"\begin{uppgift}{3}{2/1/0}" in tex
+    assert r"\begin{uppgift}{3}{1/1/1}" in tex
 
 
 def test_bedomning_behaller_eca_och_far_makron():
     """Lärarens dokument visar E/C/A — det är dess syfte. Elevens gör det inte."""
     doc, _ = exam_spec.validate_exam_json(_exam())
     tex = exam_latex.render_bedomning(doc)
-    assert r"\begin{uppgift}{1}{2/0/0}" in tex
+    assert r"\begin{uppgift}{1}{3/0/0}" in tex
     assert "Lösningsförslag" in tex and "Bedömning" in tex
     # kontrollera motsatsen på elevens prov
     prov = exam_latex.render_prov(doc)
-    assert "2/0/0" not in prov
+    assert "3/0/0" not in prov
 
 
 def test_render_escapes_model_text():
@@ -476,6 +657,21 @@ def test_generate_exam_gives_up_after_budget():
     assert res["errors"] and res["exam"] is not None
 
 
+def test_generate_exam_avvisar_ogenomforbart_utan_llm():
+    """Förkontrollen ska stoppa före modellanropet — inget LLM-anrop alls."""
+    anrop = []
+
+    def spion_llm(*a, **kw):
+        anrop.append(1)
+        return "{}"
+
+    res = exam_gen.generate_exam("Ma2b", "SA23", [], model="x", antal=4,
+                                 llm=spion_llm)
+    assert res["exam"] is None
+    assert res["errors"][0]["code"] == "genomforbarhet"
+    assert anrop == []          # modellen anropades aldrig
+
+
 def test_refine_exam_targets_item():
     updated = _exam()
     updated["uppgifter"][3]["text"] = "Ny optimeringsuppgift med decimaltal."
@@ -582,7 +778,7 @@ def test_arbetsblad_utan_poang_ger_tomt_argument_inte_tom_parentes():
     assert r"\relax}" not in kropp
     # med poäng påslaget kommer markören tillbaka
     med = exam_latex.render_arbetsblad(doc, visa_poang=True)
-    assert r"\begin{uppgift}{1}{2p}" in med
+    assert r"\begin{uppgift}{1}{3p}" in med
 
 
 def test_build_referens_numbers_and_instructs():
@@ -635,3 +831,14 @@ def test_prompt_includes_memory_and_themes():
     assert "kvadrering" in p
     assert "UNDVIK" in p
     assert "egenformulerade" in exam_gen.SYSTEM
+
+
+def test_prompt_har_np_rost():
+    """Prompten ska bära det nationella provets register: imperativ,
+    fasta fraser, förbud mot emoji och utropstecken, decimalkomma."""
+    txt = exam_gen.SYSTEM + exam_gen.INSTRUCTION
+    for fras in ("imperativ", "Endast svar krävs", "Motivera ditt svar",
+                 "decimalkomma", "utropstecken", "emoji"):
+        assert fras in txt, f"prompten nämner inte {fras!r}"
+    # några av NP:s imperativa verb ska nämnas som ledord
+    assert any(v in txt for v in ("Beräkna", "Bestäm", "Avgör", "Förenkla"))

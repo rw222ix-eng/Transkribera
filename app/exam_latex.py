@@ -35,6 +35,10 @@ _LATEX_SPECIALS = {
 }
 _CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
 _MATH_SPLIT_RE = re.compile(r"\$([^$]*)\$")
+# Hård space mellan siffra och procenttecken: NP sätter "15,9 %" utan att
+# tal och tecken kan brytas isär. Körs EFTER escaping (% är då \%), så det
+# insatta ~ blir en icke-brytande space i LaTeX, inte \textasciitilde.
+_HARD_PROCENT_RE = re.compile(r"(\d) +(\\%)")
 
 
 def escape_latex(text: str) -> str:
@@ -52,11 +56,16 @@ def escape_mixed(text: str) -> str:
     text = _CONTROL_RE.sub("", str(text or ""))
     parts: list[str] = []
     pos = 0
+    # Hård space (~) mellan tal och \% appliceras ENDAST på textsegmenten,
+    # aldrig på matten inom \(…\): ett procenttecken inuti matte får inte
+    # röras. Därför per segment, inte på den hopslagna strängen.
+    def _esc_text(s: str) -> str:
+        return _HARD_PROCENT_RE.sub(r"\1~\2", escape_latex(s))
     for m in _MATH_SPLIT_RE.finditer(text):
-        parts.append(escape_latex(text[pos:m.start()]))
+        parts.append(_esc_text(text[pos:m.start()]))
         parts.append(r"\(" + m.group(1) + r"\)")
         pos = m.end()
-    parts.append(escape_latex(text[pos:]))
+    parts.append(_esc_text(text[pos:]))
     return "".join(parts)
 
 
@@ -100,14 +109,13 @@ def _build_view(doc: exam_spec.ExamDoc,
     (B, C, D, sedan del-lösa). `bilder` mappar uppgiftens bildindex
     (1-baserat) till filnamn i utkatalogen — filnamnet, inte sökvägen,
     eftersom Tectonic kompilerar med utkatalogen som arbetskatalog."""
-    ordning: list[tuple[str | None, str | None]] = [
-        ("B", "Del B"), ("C", "Del C"), ("D", "Del D"), (None, None)]
+    # Delgrupperingen ligger i exam_spec (delad med balansens ordningsregler,
+    # så båda mäter samma sekvens). Rubriken härleds här — en ren vy-detalj.
+    _RUBRIK = {"B": "Del B", "C": "Del C", "D": "Del D", None: None}
     delar = []
     nummer = 0
-    for del_kod, rubrik in ordning:
-        items = [it for it in doc.uppgifter if it.del_ == del_kod]
-        if not items:
-            continue
+    for del_kod, items in exam_spec.gruppera_per_del(doc.uppgifter):
+        rubrik = _RUBRIK[del_kod]
         vy_items = []
         for it in items:
             nummer += 1

@@ -90,7 +90,11 @@ def _representative_doc() -> exam_spec.ExamDoc:
     redovisningsuppgift, uppgifter i både Del B och Del C, samt en
     uppgift med bild (``bild=1``) så att \\includegraphics-kodvägen i
     prov.tex.j2/arbetsblad.tex.j2 verkligen motioneras — annars seedas
-    aldrig de paket/fontmetriker den kodvägen kräver."""
+    aldrig de paket/fontmetriker den kodvägen kräver. Redovisningsuppgiften
+    har dessutom en bokstavsexponent ($a^{t}$) och en nedsänkning ($N_0$)
+    i sitt text-fält, så att \\small-fontmetrikerna (ntxmi7/ntxmi5) för
+    exponentialmodeller — vanliga i riktiga Ma2/Ma3-prov — verkligen dras
+    in i cachen."""
     return exam_spec.ExamDoc(
         titel="Sondprov — cacheseedning",
         kurs="Matematik 1c",
@@ -111,7 +115,16 @@ def _representative_doc() -> exam_spec.ExamDoc:
             ),
             exam_spec.ExamItem(
                 del_="C", formaga="PL", typ="redovisning", poang=(0, 1, 1),
-                text=r"Visa att $\alpha \cdot \beta \leq \Sigma$ för alla "
+                # Bokstavsexponent ($a^{t}$) och nedsänkning ($N_0$) här är
+                # avsiktliga: bedomning.tex.j2 renderar text-fältet i
+                # \small-kontext, och en exponent som är en BOKSTAV (till
+                # skillnad från t.ex. $x^2$) kräver fonten ntxmi7 (newtx
+                # matte-kursiv, 7 pt) — den dras annars aldrig in i cachen.
+                # Riktiga Ma2/Ma3-prov är fulla av just sådana
+                # exponentialmodeller (a^x, 2^n), så utan denna rad seedas
+                # aldrig fonten och --only-cached kraschar på skarpa prov.
+                text=r"En population modelleras av $N(t) = N_0 \cdot a^{t}$. "
+                     r"Visa att $\alpha \cdot \beta \leq \Sigma$ för alla "
                      r"positiva reella tal, även då $x \to \pm\infty$.",
                 losning=r"Fullständig redovisning: gränsvärdet $\pm\infty$ "
                         r"hanteras separat och $\sqrt{c} \geq 0$ används i "
