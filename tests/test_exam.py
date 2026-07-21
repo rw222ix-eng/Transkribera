@@ -262,6 +262,49 @@ def test_schema_avvisar_for_manga_deluppgifter():
     assert exam_spec.validate_exam_json(bad)[0] is None
 
 
+def _exam_med_figur(figur: dict) -> dict:
+    """_exam() med en figur på uppgift 3 (poäng/förmåga oförändrade)."""
+    data = _exam()
+    data["uppgifter"][2]["figur"] = figur
+    return data
+
+
+def test_schema_godkanner_alla_figurtyper():
+    figurer = [
+        {"typ": "linjar", "k": 0.8, "m": 1},
+        {"typ": "andragrad", "a": 1, "b": -4, "c": 3},
+        {"typ": "exponential", "C": 1, "bas": 2},
+        {"typ": "normalfordelning", "mu": 0, "sigma": 1},
+        {"typ": "triangel", "a": 5, "b": 4, "c": 3},
+        {"typ": "enhetscirkel", "vinkel": 40},
+        {"typ": "stapeldiagram", "kategorier": ["A", "B", "C"], "varden": [3, 5, 2]},
+        {"typ": "ladagram", "min": 2, "q1": 5, "median": 8, "q3": 11, "max": 14},
+    ]
+    for f in figurer:
+        doc, _ = exam_spec.validate_exam_json(_exam_med_figur(f))
+        assert doc is not None, f"{f['typ']} avvisades"
+        assert doc.uppgifter[2].figur.typ == f["typ"]
+
+
+def test_schema_lasersparametrar_per_figurtyp():
+    """Diskriminerad union: linjär kräver k/m, inte a — grammatiktvånget
+    speglar detta."""
+    bad = _exam_med_figur({"typ": "linjar", "a": 1, "b": 2, "c": 3})
+    assert exam_spec.validate_exam_json(bad)[0] is None
+
+
+def test_schema_figur_och_bild_utesluter_varandra():
+    data = _exam_med_figur({"typ": "linjar", "k": 1, "m": 0})
+    data["uppgifter"][2]["bild"] = 1
+    assert exam_spec.validate_exam_json(data)[0] is None
+
+
+def test_response_format_har_figur_diskriminator():
+    import json
+    rf = exam_spec.to_response_format()
+    assert "discriminator" in json.dumps(rf["json_schema"]["schema"])
+
+
 # -------------------------------------------------------- poängsummor --
 
 def test_poangsummor_oforandrad_for_platt_prov():
