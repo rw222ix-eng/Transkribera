@@ -87,14 +87,19 @@ def _representative_doc() -> exam_spec.ExamDoc:
     lösning OCH bedömning (bedömningsanvisningen visar uppgiftstexten i
     \\small-kontext — det var just den kombinationen den handskrivna
     sonden tidigare missade), en rutinuppgift som ger svarsrad, en
-    redovisningsuppgift, uppgifter i både Del B och Del C, samt en
-    uppgift med bild (``bild=1``) så att \\includegraphics-kodvägen i
-    prov.tex.j2/arbetsblad.tex.j2 verkligen motioneras — annars seedas
-    aldrig de paket/fontmetriker den kodvägen kräver. Redovisningsuppgiften
-    har dessutom en bokstavsexponent ($a^{t}$) och en nedsänkning ($N_0$)
-    i sitt text-fält, så att \\small-fontmetrikerna (ntxmi7/ntxmi5) för
+    redovisningsuppgift, uppgifter i både Del B och Del C, en uppgift med
+    bild (``bild=1``) så att \\includegraphics-kodvägen i
+    prov.tex.j2/arbetsblad.tex.j2 verkligen motioneras, en uppgift med
+    deluppgifter (så att \\begin{deluppgift}-miljön kompileras på riktigt
+    i alla tre mallarna), en flervalsuppgift (så \\kryssruta samt
+    bedömningens "Rätt: X"-rad kompileras) och en uppgift med notis (så
+    \\notisruta kompileras) — annars seedas aldrig de paket/fontmetriker
+    dessa kodvägar kräver. Redovisningsuppgiften har dessutom en
+    bokstavsexponent ($a^{t}$) och en nedsänkning ($N_0$) i sitt text-fält,
+    och en av deluppgifterna har en EGEN bokstavsexponent ($a^n$) i sitt
+    text-fält, så att \\small-fontmetrikerna (ntxmi7/ntxmi5) för
     exponentialmodeller — vanliga i riktiga Ma2/Ma3-prov — verkligen dras
-    in i cachen."""
+    in i cachen både i uppgift- och deluppgift-miljön."""
     return exam_spec.ExamDoc(
         titel="Sondprov — cacheseedning",
         kurs="Matematik 1c",
@@ -114,7 +119,18 @@ def _representative_doc() -> exam_spec.ExamDoc:
                           r"(jämför $\alpha \neq \beta$).",
             ),
             exam_spec.ExamItem(
-                del_="C", formaga="PL", typ="redovisning", poang=(0, 1, 1),
+                # Flervalsuppgift: \kryssruta på arbetsblad/prov, och
+                # \textbf{Rätt: ...} i bedömningsanvisningen — facit får
+                # bara finnas DÄR, aldrig på elevens papper.
+                del_="B", formaga="B", typ="rutin", poang=(1, 0, 0),
+                text=r"Vilket är ett nollställe till $f(x) = x^2 - 4x + 3$?",
+                alternativ=[r"$x = 0$", r"$x = 1$", r"$x = 2$", r"$x = 4$"],
+                ratt_alternativ=1,
+                losning=r"$x = 1$ ger $f(1) = 0$.",
+                bedomning=r"+1 E för rätt alternativ (B).",
+            ),
+            exam_spec.ExamItem(
+                del_="C", formaga="PL", typ="problem", poang=(0, 0, 0),
                 # Bokstavsexponent ($a^{t}$) och nedsänkning ($N_0$) här är
                 # avsiktliga: bedomning.tex.j2 renderar text-fältet i
                 # \small-kontext, och en exponent som är en BOKSTAV (till
@@ -123,15 +139,47 @@ def _representative_doc() -> exam_spec.ExamDoc:
                 # Riktiga Ma2/Ma3-prov är fulla av just sådana
                 # exponentialmodeller (a^x, 2^n), så utan denna rad seedas
                 # aldrig fonten och --only-cached kraschar på skarpa prov.
+                # Uppgiften är nu en FÖRÄLDER med deluppgifter — poängen
+                # [0,0,0] ligger på föräldern, barnen bär poäng/lösning/
+                # bedömning (samma mönster som _exam_med_deluppgifter i
+                # tests/test_exam.py).
                 text=r"En population modelleras av $N(t) = N_0 \cdot a^{t}$. "
-                     r"Visa att $\alpha \cdot \beta \leq \Sigma$ för alla "
-                     r"positiva reella tal, även då $x \to \pm\infty$.",
-                losning=r"Fullständig redovisning: gränsvärdet $\pm\infty$ "
-                        r"hanteras separat och $\sqrt{c} \geq 0$ används i "
-                        r"sista steget.",
-                bedomning=r"+1 C om resonemanget är fullständigt och "
-                          r"$\neq$-fallet hanteras korrekt, +1 A för "
-                          r"fullständig motivering.",
+                     r"Undersök hur populationen växer.",
+                losning="", bedomning="",
+                deluppgifter=[
+                    exam_spec.SubItem(
+                        poang=(0, 1, 0),
+                        # Egen bokstavsexponent ($a^n$) i DELUPPGIFTENS eget
+                        # text-fält — deluppgift-miljön har sin egen inre
+                        # list-miljö (se _preamble.tex.j2), så \small-matte
+                        # måste motioneras där också, inte bara på föräldern.
+                        text=r"Ange ett uttryck för populationen efter $n$ "
+                             r"år, skrivet som $a^n$ multiplicerat med $N_0$.",
+                        losning=r"$N(n) = N_0 \cdot a^n$, ty tillväxtfaktorn "
+                                r"$a$ upprepas $n$ gånger.",
+                        bedomning=r"+1 C om uttrycket $a^n$ används korrekt.",
+                    ),
+                    exam_spec.SubItem(
+                        poang=(0, 0, 1),
+                        text=r"Visa att $\alpha \cdot \beta \leq \Sigma$ "
+                             r"gäller även då $x \to \pm\infty$.",
+                        losning=r"Gränsvärdet $\pm\infty$ hanteras separat "
+                                r"och $\sqrt{c} \geq 0$ används i sista "
+                                r"steget.",
+                        bedomning=r"+1 A för fullständig motivering av "
+                                  r"gränsvärdet.",
+                    ),
+                ],
+            ),
+            exam_spec.ExamItem(
+                # Notis (inramad instruktionsruta) — kompilerar \notisruta.
+                del_="C", formaga="R", typ="resonemang", poang=(0, 1, 1),
+                text=r"Avgör om påståendet stämmer: en andragradsfunktion "
+                     r"med $a < 0$ saknar minsta värde. Motivera.",
+                notis=r"Rita gärna en skiss av grafen som stöd för "
+                      r"resonemanget.",
+                losning=r"Sant — grafen är en nedåtriktad parabel.",
+                bedomning=r"+1 C ställningstagande, +1 A stringens.",
             ),
         ],
     )

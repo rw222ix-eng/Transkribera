@@ -741,6 +741,33 @@ def test_prov_renderar_notis():
     assert r"\notisruta{" in tex
 
 
+def test_bedomning_visar_deluppgifternas_facit():
+    doc, _ = exam_spec.validate_exam_json(_exam_med_deluppgifter())
+    tex = exam_latex.render_bedomning(doc)
+    assert r"\begin{deluppgift}{a}{0/2/0}" in tex   # per-deluppgift E/C/A
+    assert "symmetrilinjens ekvation" in tex        # deluppgiftstext
+    assert "Lösningsförslag" in tex
+
+
+def test_bedomning_visar_flervalsfacit():
+    doc, _ = exam_spec.validate_exam_json(_exam_med_flerval())
+    tex = exam_latex.render_bedomning(doc)
+    assert "Rätt: B" in tex                          # facit hör hemma HÄR
+
+
+def test_arbetsblad_facit_har_deluppgifternas_losningar():
+    doc, _ = exam_spec.validate_exam_json(_exam_med_deluppgifter())
+    tex = exam_latex.render_arbetsblad(doc)
+    assert r"\begin{deluppgift}{a}" in tex           # struktur på övningssidan
+    assert "Facit" in tex
+
+
+def test_bedomning_platt_oforandrad():
+    doc, _ = exam_spec.validate_exam_json(_exam())
+    tex = exam_latex.render_bedomning(doc)
+    assert r"\begin{uppgift}{1}{3/0/0}" in tex       # löv oförändrat
+
+
 # ------------------------------------------------------ skyddsnät: \par ----
 
 def test_par_avslutar_poangraden_dar_markor_renderas():
