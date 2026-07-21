@@ -173,6 +173,13 @@ def _build_view(doc: exam_spec.ExamDoc,
                     # (StrictUndefined) — föräldern måste ha dem trots att den
                     # aldrig får en egen svarsrad; barnen bär svarsutrymmet.
                     "endast_svar": False, "utrymme_mm": 0,
+                    # losning/bedomning är "" på en förälder med deluppgifter,
+                    # men de befintliga mallarna (bedomning/arbetsblad) läser
+                    # u.losning ovillkorligt för VARJE uppgift — nyckeln måste
+                    # finnas (StrictUndefined) så att föräldern har hela lövets
+                    # nyckeluppsättning.
+                    "losning": escape_mixed(it.losning),
+                    "bedomning": escape_mixed(it.bedomning),
                     "bild_fil": bild_fil,
                     "formaga_namn": exam_spec.FORMAGA_NAMN.get(it.formaga, it.formaga),
                     "deluppgifter": deluppg,

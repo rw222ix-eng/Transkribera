@@ -735,10 +735,14 @@ Ersätt uppgifts-loopen i `_build_view` (rad 119–135) med:
                     "text": escape_mixed(it.text),
                     "notis": escape_mixed(it.notis) if it.notis else None,
                     "flerval": None, "ratt_bokstav": None,
-                    # endast_svar/utrymme_mm nås av mallen för VARJE uppgift
-                    # (StrictUndefined) — föräldern måste ha dem trots att den
-                    # aldrig får en egen svarsrad; barnen bär svarsutrymmet.
+                    # Föräldern måste ha VARJE nyckel ett löv har — de
+                    # befintliga mallarna läser endast_svar/utrymme_mm/losning/
+                    # bedomning ovillkorligt per uppgift (StrictUndefined), och
+                    # föräldern får aldrig en egen svarsrad. losning/bedomning
+                    # är "" här; barnen bär det verkliga innehållet.
                     "endast_svar": False, "utrymme_mm": 0,
+                    "losning": escape_mixed(it.losning),
+                    "bedomning": escape_mixed(it.bedomning),
                     "bild_fil": bild_fil,
                     "formaga_namn": exam_spec.FORMAGA_NAMN.get(it.formaga, it.formaga),
                     "deluppgifter": deluppg,

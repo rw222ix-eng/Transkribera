@@ -580,6 +580,29 @@ def test_build_view_platt_oforandrad():
     assert "utrymme_mm" in u1 and "losning" in u1
 
 
+def test_foralder_vy_har_hela_lovets_nyckeluppsattning():
+    """En förälder med deluppgifter måste ha varje nyckel ett löv har —
+    mallarna (även de befintliga) läser dem ovillkorligt per uppgift, och
+    StrictUndefined kraschar på en saknad nyckel."""
+    doc, _ = exam_spec.validate_exam_json(_exam_med_deluppgifter())
+    vy = exam_latex._build_view(doc)
+    lov = next(u for d in vy["delar"] for u in d["uppgifter"]
+               if not u["har_deluppgifter"])
+    foralder = next(u for d in vy["delar"] for u in d["uppgifter"]
+                    if u["har_deluppgifter"])
+    saknade = set(lov) - set(foralder)
+    assert not saknade, f"föräldern saknar löv-nycklar: {saknade}"
+
+
+def test_render_alla_mallar_pa_deluppgifter_utan_krasch():
+    """Alla tre mallar ska rendera ett deluppgifts-prov utan StrictUndefined
+    (regressionsvakt: föräldern måste ha varje nyckel mallen läser)."""
+    doc, _ = exam_spec.validate_exam_json(_exam_med_deluppgifter())
+    for render in (exam_latex.render_prov, exam_latex.render_arbetsblad,
+                   exam_latex.render_bedomning):
+        assert isinstance(render(doc), str)
+
+
 # --------------------------------------------------------------- rendering --
 
 def test_render_prov_golden_markers():
