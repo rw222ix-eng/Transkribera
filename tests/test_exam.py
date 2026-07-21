@@ -267,6 +267,18 @@ def test_poangenheter_arver_foralderns_formaga():
     assert all(t == "redovisning" for _f, t, _p in enheter)
 
 
+def test_poangenheter_barnets_egna_formaga_vinner():
+    """En deluppgift med EGEN formaga/typ bidrar med sina egna, inte
+    förälderns — annars glider en regression i override-grenen igenom."""
+    data = _exam_med_deluppgifter()
+    data["uppgifter"][6]["deluppgifter"][0]["formaga"] = "R"
+    data["uppgifter"][6]["deluppgifter"][0]["typ"] = "resonemang"
+    doc, _ = exam_spec.validate_exam_json(data)
+    enheter = exam_spec.poangenheter(doc.uppgifter[6])
+    assert enheter[0][0] == "R" and enheter[0][1] == "resonemang"   # barnets egna
+    assert enheter[1][0] == "K" and enheter[1][1] == "redovisning"  # ärvt
+
+
 def test_uppg_poang_aggregerar():
     doc, _ = exam_spec.validate_exam_json(_exam_med_deluppgifter())
     assert exam_spec.uppg_poang(doc.uppgifter[6]) == (0, 3, 1)
