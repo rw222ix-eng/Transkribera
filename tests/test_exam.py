@@ -971,6 +971,39 @@ def test_compile_pdf_real_engine_produces_all_three_documents(tmp_path):
         assert bild_fil in (tmp_path / f"{jobname}.tex").read_text(encoding="utf-8")
 
 
+def test_compile_pdf_real_engine_compiles_deluppgifter_och_flerval(tmp_path):
+    """Skyddsnät mot att en STRUKTURSPECIFIK kompileringsregression aldrig
+    blir röd: test_compile_pdf_real_engine_produces_all_three_documents
+    ovan kompilerar bara det PLATTA provet — all deluppgifts-/flerval-/
+    notis-rendering testas annars bara som strängar mot en stubbad
+    compile_pdf. Kompilerar BÅDE ett deluppgifts-prov (med en notis på en
+    deluppgift, se Fynd 1) och ett flervalsprov genom alla tre mallarna
+    med den RIKTIGA Tectonic-motorn."""
+    if not exam_pdf.engine_available():
+        pytest.skip("Tectonic-motorn saknas (bin/tectonic/tectonic.exe)")
+
+    del_data = _exam_med_deluppgifter()
+    del_data["uppgifter"][6]["deluppgifter"][0]["notis"] = "Tänk på tecknet."
+    doc_del, errors_del = exam_spec.validate_exam_json(del_data)
+    assert doc_del is not None and errors_del == []
+
+    doc_flerval, errors_flerval = exam_spec.validate_exam_json(
+        _exam_med_flerval())
+    assert doc_flerval is not None and errors_flerval == []
+
+    for namn, doc in (("deluppgifter", doc_del), ("flerval", doc_flerval)):
+        for jobname, tex in (
+            ("prov", exam_latex.render_prov(doc)),
+            ("arbetsblad", exam_latex.render_arbetsblad(doc)),
+            ("bedomning", exam_latex.render_bedomning(doc)),
+        ):
+            ut = tmp_path / namn
+            pdf, logg = exam_pdf.compile_pdf(tex, ut, jobname)
+            assert pdf is not None and pdf.exists(), (
+                f"{namn}/{jobname} misslyckades: {logg}")
+            assert pdf.stat().st_size > 0
+
+
 # ------------------------------------------------------------- exam_gen ----
 
 def _stub_llm(responses: list[str]):
