@@ -544,6 +544,42 @@ def test_escape_mixed_har_hard_space_fore_procent():
     assert r"50~\%" in blandat and r"\(p \le 5 \%\)" in blandat
 
 
+# --------------------------------------------------------- _build_view -----
+
+def test_build_view_deluppgifter():
+    doc, _ = exam_spec.validate_exam_json(_exam_med_deluppgifter())
+    vy = exam_latex._build_view(doc)
+    u7 = vy["delar"][-1]["uppgifter"][-1]        # sista uppgiften (K)
+    assert u7["har_deluppgifter"] is True
+    assert u7["poang_str"] == "4p"               # aggregat 0+3+1
+    assert [d["bokstav"] for d in u7["deluppgifter"]] == ["a", "b"]
+    assert u7["deluppgifter"][0]["poang_str"] == "2p"
+
+
+def test_build_view_flerval_har_bokstaver_och_ratt():
+    doc, _ = exam_spec.validate_exam_json(_exam_med_flerval())
+    vy = exam_latex._build_view(doc)
+    u2 = vy["delar"][0]["uppgifter"][1]
+    assert [a["bokstav"] for a in u2["flerval"]] == ["A", "B", "C", "D"]
+    assert u2["ratt_bokstav"] == "B"             # ratt_alternativ = 1
+
+
+def test_build_view_notis():
+    doc, _ = exam_spec.validate_exam_json(_exam_med_notis())
+    vy = exam_latex._build_view(doc)
+    assert vy["delar"][0]["uppgifter"][0]["notis"] is not None
+
+
+def test_build_view_platt_oforandrad():
+    """Ett löv utan struktur behåller sina fält (svarsutrymme m.m.)."""
+    doc, _ = exam_spec.validate_exam_json(_exam())
+    vy = exam_latex._build_view(doc)
+    u1 = vy["delar"][0]["uppgifter"][0]
+    assert u1["har_deluppgifter"] is False
+    assert u1["flerval"] is None and u1["notis"] is None
+    assert "utrymme_mm" in u1 and "losning" in u1
+
+
 # --------------------------------------------------------------- rendering --
 
 def test_render_prov_golden_markers():
