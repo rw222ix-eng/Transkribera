@@ -160,10 +160,10 @@ MAX_LIKA_I_RAD = 3              # max uppgifter i rad med samma typ/förmåga
 MIN_DELPROV_FOR_ORDNING = 4     # kortare delar mäts inte på ordning
 
 
-def _svarighet(it: "ExamItem") -> float:
+def _svarighet(poang: tuple[int, int, int]) -> float:
     """Svårighetsindex 0–2: (0·E + 1·C + 2·A) / totalpoäng."""
-    tot = sum(it.poang)
-    return (it.poang[1] + 2 * it.poang[2]) / tot if tot > 0 else 0.0
+    tot = sum(poang)
+    return (poang[1] + 2 * poang[2]) / tot if tot > 0 else 0.0
 
 
 def _err(path: str, code: str, message: str) -> dict:
@@ -240,9 +240,11 @@ def validate_balance(doc: ExamDoc,
         return [_err("uppgifter", "poang", "provet saknar poäng.")]
 
     for it_i, it in enumerate(doc.uppgifter):
-        if sum(it.poang) <= 0:
-            errors.append(_err(f"uppgifter[{it_i}]", "poang",
-                               "uppgiften har 0 poäng — ge minst 1 poäng."))
+        for _f, _t, p in poangenheter(it):
+            if sum(p) <= 0:
+                errors.append(_err(f"uppgifter[{it_i}]", "poang",
+                                   "en poängbärande enhet har 0 poäng — "
+                                   "ge minst 1 poäng."))
 
     for niva, (lo, hi) in nm.items():
         andel = s[niva] / total
@@ -258,7 +260,7 @@ def validate_balance(doc: ExamDoc,
                                f"{FORMAGA_NAMN[f]} ({f}) har {andel:.0%} av poängen — "
                                f"målet är {lo:.0%}–{hi:.0%}."))
 
-    typer = {it.typ for it in doc.uppgifter}
+    typer = {t for it in doc.uppgifter for _f, t, _p in poangenheter(it)}
     if "rutin" not in typer:
         errors.append(_err("uppgifter", "blandning",
                            "provet saknar rutinuppgifter (endast svar krävs)."))
@@ -302,13 +304,14 @@ def validate_ordning(doc: ExamDoc, *, kolla_klumpning: bool = True,
                                    "uppgifter i rad med samma förmåga — varva dem."))
 
         if kolla_svarighet and len(items) >= MIN_DELPROV_FOR_ORDNING:
-            if items[0].poang[0] < MIN_START_E:
+            if uppg_poang(items[0])[0] < MIN_START_E:
                 errors.append(_err(etikett, "svarighet",
                                    f"{etikett}:s första uppgift saknar E-poäng — "
                                    "börja med en åtkomlig uppgift."))
             halva = len(items) // 2
-            forsta = sum(_svarighet(it) for it in items[:halva]) / halva
-            andra = sum(_svarighet(it) for it in items[halva:]) / (len(items) - halva)
+            forsta = sum(_svarighet(uppg_poang(it)) for it in items[:halva]) / halva
+            andra = (sum(_svarighet(uppg_poang(it)) for it in items[halva:])
+                     / (len(items) - halva))
             if andra < forsta - SVARIGHET_SLACK:
                 errors.append(_err(etikett, "svarighet",
                                    f"{etikett} blir lättare mot slutet "
@@ -321,7 +324,9 @@ def genomforbarhet(antal: int, profil: str = "prov") -> list[dict]:
     """Deterministisk förkontroll: kan ett prov med ~`antal` uppgifter alls
     balanseras? Varje uppgift har EN primär förmåga, så färre uppgifter än
     antalet förmågor med positivt golv kan aldrig representera dem alla.
-    Körs före generering så reparationsloopen slipper ett olösligt problem."""
+    Körs före generering så reparationsloopen slipper ett olösligt problem.
+    Deluppgifter kan bära extra förmågor men är okända före generering, så
+    golvet på toppnivåns antal står kvar (medvetet konservativt)."""
     prof_fm, _nm, _kr, _kk, _ks = PROFILER.get(profil, PROFILER["prov"])
     golv_formagor = [f for f, (lo, _hi) in prof_fm.items() if lo > 0]
     if antal < len(golv_formagor):

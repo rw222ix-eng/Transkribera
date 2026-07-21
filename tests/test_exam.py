@@ -302,12 +302,31 @@ def test_zero_point_item_flagged():
     assert any(e["code"] == "poang" for e in errors)
 
 
+def test_nastlat_prov_passerar_balans():
+    """Hela det nästlade provet ska validera rent (aggregatet är oförändrat)."""
+    _doc, errors = exam_spec.validate_exam_json(_exam_med_deluppgifter())
+    assert errors == []
+
+
+def test_deluppgift_med_noll_poang_flaggas():
+    bad = _exam_med_deluppgifter()
+    bad["uppgifter"][6]["deluppgifter"][0]["poang"] = [0, 0, 0]
+    _doc, errors = exam_spec.validate_exam_json(bad)
+    assert any(e["code"] == "poang" for e in errors)
+
+
 def test_missing_rutin_flagged():
     bad = _exam()
     for u in bad["uppgifter"]:
         u["typ"] = "redovisning"
     doc, errors = exam_spec.validate_exam_json(bad)
     assert any(e["code"] == "blandning" for e in errors)
+
+
+def test_flerval_subtyp_raknas_i_blandning():
+    """En flervalsuppgifts typ ska räknas i typ-blandningen som vanligt."""
+    doc, _ = exam_spec.validate_exam_json(_exam_med_flerval())
+    assert doc is not None      # rutin finns kvar → ingen blandningsflagga
 
 
 def test_formaga_concentration_flagged():
@@ -333,6 +352,14 @@ def test_ordning_godkanner_balanserad_fixtur():
     """Den kanoniska fixturen ska passera ordningsreglerna rent."""
     doc, _ = exam_spec.validate_exam_json(_exam())
     assert exam_spec.validate_ordning(doc) == []
+
+
+def test_svarighet_pa_aggregat():
+    """En uppgifts svårighet räknas på summan av dess deluppgifter."""
+    doc, _ = exam_spec.validate_exam_json(_exam_med_deluppgifter())
+    # uppg 7 aggregat = [0,3,1] → (3 + 2)/4 = 1.25
+    assert abs(exam_spec._svarighet(exam_spec.uppg_poang(doc.uppgifter[6]))
+               - 1.25) < 1e-9
 
 
 def test_ordning_flaggar_fallande_svarighet():
