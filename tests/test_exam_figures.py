@@ -71,3 +71,42 @@ def test_funktionsgrafer_kompilerar(d):
     finally:
         import shutil
         shutil.rmtree("_figkontroll", ignore_errors=True)
+
+
+def _sidantal(tikz: str):
+    """Antal PDF-sidor för en figur (None om fitz saknas)."""
+    try:
+        import fitz
+    except ImportError:
+        return None
+    doc = (r"\documentclass[12pt,a4paper]{article}"
+           r"\usepackage[T1]{fontenc}\usepackage{newtxtext,newtxmath}"
+           r"\usepackage{tikz}\usetikzlibrary{angles,quotes}\pagestyle{empty}"
+           r"\begin{document}" + tikz + r"\end{document}")
+    pdf, _ = exam_pdf.compile_pdf(doc, Path("_figsid"), "sid")
+    try:
+        if pdf is None:
+            return -1
+        d = fitz.open(pdf); n = d.page_count; d.close(); return n
+    finally:
+        import shutil
+        shutil.rmtree("_figsid", ignore_errors=True)
+
+
+@pytest.mark.parametrize("d", [
+    {"typ": "exponential", "C": 5, "bas": 0.5},   # avtagande — sprängde förr rutan
+    {"typ": "andragrad", "a": -1, "b": 4, "c": -3},   # nedåtvänd parabel
+    {"typ": "linjar", "k": -1.5, "m": -2},            # brant negativ linje
+])
+def test_extrema_parametrar_ryms_pa_en_sida(d):
+    if not exam_pdf.engine_available():
+        pytest.skip("Tectonic saknas")
+    tikz = exam_figures.render_figur(_bygg(d))
+    try:
+        assert _kompilera(tikz), f"{d['typ']} kompilerar inte"
+    finally:
+        import shutil
+        shutil.rmtree("_figkontroll", ignore_errors=True)
+    n = _sidantal(tikz)
+    if n is not None:
+        assert n == 1, f"{d['typ']} blev {n} sidor — kurvan klipps inte mot rutan"
