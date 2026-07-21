@@ -6017,7 +6017,7 @@ function viewPlanning(v){
                   <span style="font-weight:600;font-size:14px;color:var(--ink)">Uppgift ${esc(u2.nummer)}</span>
                   ${ u2.del ? `<span style="font-family:var(--mono);font-size:10.5px;color:var(--ink-3)">DEL ${esc(u2.del)}</span>` : '' }
                   <span style="font-family:var(--mono);font-size:10.5px;color:var(--ink-3)">${esc(u2.formaga)} · ${esc(u2.typ)}</span>
-                  ${ u2.antalDel ? `<span style="font-family:var(--mono);font-size:10.5px;color:var(--ink-3)">${esc(u2.antalDel)} deluppgifter</span>` : '' }
+                  ${ u2.antalDel ? `<span style="font-family:var(--mono);font-size:10.5px;color:var(--ink-3)">${esc(u2.antalDel)} deluppgift${u2.antalDel === 1 ? '' : 'er'}</span>` : '' }
                   <span style="font-family:var(--mono);font-size:11.5px;color:var(--ink-2)">(${esc(u2.poangStr)})</span>
                   ${ u2.sel ? `<span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.07em;text-transform:uppercase;color:var(--accent)">Markerad</span>` : '' }
                 </div>
