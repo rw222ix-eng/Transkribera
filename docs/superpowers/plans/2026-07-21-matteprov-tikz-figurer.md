@@ -382,9 +382,14 @@ from app import exam_figures, exam_pdf, exam_spec
 
 
 def _kompilera(tikz: str) -> bool:
-    """Wrappa TikZ i ett minimalt dokument och kompilera med riktig motor."""
+    """Wrappa TikZ i ett minimalt dokument och kompilera med riktig motor.
+    Använder newtxtext/newtxmath (INTE default Computer Modern) — seeden
+    cachar bara newtx-fonterna, så en bar `article` skulle krascha på cmr12
+    under --only-cached på en rent seedad maskin. \\pagestyle{empty} slipper
+    sidnummer-fonten."""
     doc = (r"\documentclass[12pt,a4paper]{article}"
-           r"\usepackage{tikz}\usetikzlibrary{angles,quotes}"
+           r"\usepackage[T1]{fontenc}\usepackage{newtxtext,newtxmath}"
+           r"\usepackage{tikz}\usetikzlibrary{angles,quotes}\pagestyle{empty}"
            r"\begin{document}" + tikz + r"\end{document}")
     pdf, _logg = exam_pdf.compile_pdf(doc, Path("_figkontroll"), "fig")
     return pdf is not None

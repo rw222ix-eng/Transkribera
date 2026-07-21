@@ -751,10 +751,15 @@ def test_preamble_laddar_tikz_villkorligt():
                                    med_svarsrad=False, med_tikz=True)
     assert r"\usepackage{tikz}" in tex_med
     assert r"\usetikzlibrary{angles,quotes}" in tex_med
+    # svensk babel gör " till ett aktivt genvägstecken som krockar med tikz
+    # quotes-biblioteket (\pic["$v$"]); shorthandoff släcker det. Måste ligga
+    # kvar — annars kraschar figur-kompileringen tyst.
+    assert r'\AtBeginDocument{\shorthandoff{"}}' in tex_med
     tex_utan = exam_latex._environment().get_template(
         "_preamble.tex.j2").render(sidhuvud="x", med_grafik=False,
                                    med_svarsrad=False, med_tikz=False)
     assert r"\usepackage{tikz}" not in tex_utan
+    assert r"\shorthandoff" not in tex_utan     # bara när tikz laddas
 
 
 def test_prov_anvander_layoutmakron():
