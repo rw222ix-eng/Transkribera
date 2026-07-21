@@ -323,10 +323,22 @@ def test_missing_rutin_flagged():
     assert any(e["code"] == "blandning" for e in errors)
 
 
-def test_flerval_subtyp_raknas_i_blandning():
-    """En flervalsuppgifts typ ska räknas i typ-blandningen som vanligt."""
-    doc, _ = exam_spec.validate_exam_json(_exam_med_flerval())
-    assert doc is not None      # rutin finns kvar → ingen blandningsflagga
+def test_deluppgifts_egen_typ_raknas_i_blandning():
+    """Typ-blandningen mäts per enhet: en deluppgifts EGEN typ (rutin)
+    ska räknas även om ingen toppnivå-uppgift är rutin."""
+    data = _exam_med_deluppgifter()
+    for u in data["uppgifter"]:            # ta bort all rutin på toppnivå
+        if u["typ"] == "rutin":
+            u["typ"] = "redovisning"
+    data["uppgifter"][6]["deluppgifter"][0]["typ"] = "rutin"   # enda rutin-källan
+    _doc, errors = exam_spec.validate_exam_json(data)
+    assert not any(e["code"] == "blandning" and "rutin" in e["message"]
+                   for e in errors)
+    # tas den enda rutin-källan bort ska blandning flaggas
+    data["uppgifter"][6]["deluppgifter"][0]["typ"] = "redovisning"
+    _doc2, errors2 = exam_spec.validate_exam_json(data)
+    assert any(e["code"] == "blandning" and "rutin" in e["message"]
+               for e in errors2)
 
 
 def test_formaga_concentration_flagged():

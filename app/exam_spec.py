@@ -240,11 +240,15 @@ def validate_balance(doc: ExamDoc,
         return [_err("uppgifter", "poang", "provet saknar poäng.")]
 
     for it_i, it in enumerate(doc.uppgifter):
-        for _f, _t, p in poangenheter(it):
-            if sum(p) <= 0:
-                errors.append(_err(f"uppgifter[{it_i}]", "poang",
-                                   "en poängbärande enhet har 0 poäng — "
-                                   "ge minst 1 poäng."))
+        if it.deluppgifter:
+            for d_i, d in enumerate(it.deluppgifter):
+                if sum(d.poang) <= 0:
+                    errors.append(_err(
+                        f"uppgifter[{it_i}].deluppgifter[{d_i}]", "poang",
+                        "deluppgiften har 0 poäng — ge minst 1 poäng."))
+        elif sum(it.poang) <= 0:
+            errors.append(_err(f"uppgifter[{it_i}]", "poang",
+                               "uppgiften har 0 poäng — ge minst 1 poäng."))
 
     for niva, (lo, hi) in nm.items():
         andel = s[niva] / total
