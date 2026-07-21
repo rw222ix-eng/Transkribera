@@ -87,14 +87,14 @@ def _representative_doc() -> exam_spec.ExamDoc:
     lösning OCH bedömning (bedömningsanvisningen visar uppgiftstexten i
     \\small-kontext — det var just den kombinationen den handskrivna
     sonden tidigare missade), en rutinuppgift som ger svarsrad, en
-    redovisningsuppgift, uppgifter i både Del B och Del C, en uppgift med
+    problemuppgift, uppgifter i både Del B och Del C, en uppgift med
     bild (``bild=1``) så att \\includegraphics-kodvägen i
     prov.tex.j2/arbetsblad.tex.j2 verkligen motioneras, en uppgift med
     deluppgifter (så att \\begin{deluppgift}-miljön kompileras på riktigt
     i alla tre mallarna), en flervalsuppgift (så \\kryssruta samt
     bedömningens "Rätt: X"-rad kompileras) och en uppgift med notis (så
     \\notisruta kompileras) — annars seedas aldrig de paket/fontmetriker
-    dessa kodvägar kräver. Redovisningsuppgiften har dessutom en
+    dessa kodvägar kräver. Problemuppgiften har dessutom en
     bokstavsexponent ($a^{t}$) och en nedsänkning ($N_0$) i sitt text-fält,
     och en av deluppgifterna har en EGEN bokstavsexponent ($a^n$) i sitt
     text-fält, så att \\small-fontmetrikerna (ntxmi7/ntxmi5) för
