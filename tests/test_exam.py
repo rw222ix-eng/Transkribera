@@ -742,6 +742,21 @@ def test_preamble_har_strukturmakron():
            r"\newcommand{\deluppgift}" in tex
 
 
+def test_preamble_laddar_tikz_villkorligt():
+    """med_tikz styr om tikz + angles/quotes-biblioteket laddas — flaggan
+    är villkorlig precis som med_grafik/med_svarsrad."""
+    from app import exam_latex
+    tex_med = exam_latex._environment().get_template(
+        "_preamble.tex.j2").render(sidhuvud="x", med_grafik=False,
+                                   med_svarsrad=False, med_tikz=True)
+    assert r"\usepackage{tikz}" in tex_med
+    assert r"\usetikzlibrary{angles,quotes}" in tex_med
+    tex_utan = exam_latex._environment().get_template(
+        "_preamble.tex.j2").render(sidhuvud="x", med_grafik=False,
+                                   med_svarsrad=False, med_tikz=False)
+    assert r"\usepackage{tikz}" not in tex_utan
+
+
 def test_prov_anvander_layoutmakron():
     """Provmallen ska anropa makrona, inte upprepa formateringen."""
     doc, _ = exam_spec.validate_exam_json(_exam())

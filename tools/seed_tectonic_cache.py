@@ -17,7 +17,10 @@ kompilera de riktiga mallarna kan sonden och mallarna aldrig glida isär
 tyst igen — vad mallarna faktiskt producerar är vad som seedas.
 
 TikZ och pgfplots används ännu inte av mallarna (kommer i ett senare
-steg) och dras därför fortfarande in via en egen, oförändrad PROBE_TEX.
+steg) och dras därför fortfarande in via en egen PROBE_TEX, som nu även
+laddar \\usetikzlibrary{angles,quotes} och kompilerar en \\pic angle-figur
+samt en exp-kurva, så att biblioteksglyferna hamnar i cachen innan
+recepten (kommande tasks) behöver dem under --only-cached.
 
     python -m tools.seed_tectonic_cache
 """
@@ -54,9 +57,17 @@ PROBE_TEX = r"""
 \usepackage{tabularx}
 \usepackage{enumitem}
 \usepackage{tikz}
+\usetikzlibrary{angles,quotes}
 \usepackage{pgfplots}
 \pgfplotsset{compat=1.18}
 \usepackage[swedish]{babel}
+% Svensk babel gör " till ett aktivt genvägstecken, vilket krockar med
+% tikz-biblioteket quotes (" i \pic-etiketter nedan) och ger felet
+% "Argument of \language@active@arg" has an extra }". \shorthandoff i
+% preambeln räcker INTE — babel återaktiverar genvägarna vid
+% \begin{document} — så anropet skjuts upp med \AtBeginDocument (se
+% motsvarande vakt i _preamble.tex.j2).
+\AtBeginDocument{\shorthandoff{"}}
 \definecolor{ink700}{HTML}{3A3835}
 \pagestyle{fancy}
 \fancyhf{}
@@ -74,6 +85,13 @@ $\frac{a}{b} \geq \sqrt{c} \neq \pm\infty$, $\alpha \cdot \beta \leq \Sigma$.
   \begin{axis}[width=6cm,height=4cm]
     \addplot[domain=-2:2,samples=30]{exp(x)};
   \end{axis}
+\end{tikzpicture}
+\begin{tikzpicture}[scale=1]
+  \coordinate (O) at (0,0); \coordinate (X) at (1,0);
+  \coordinate (P) at ({cos(40)},{sin(40)});
+  \draw (0,0) circle (1); \draw (O)--(X); \draw (O)--(P);
+  \pic["$v$",draw,angle radius=8mm,angle eccentricity=1.35]{angle=X--O--P};
+  \draw[domain=-2:2,smooth,samples=40] plot(\x,{exp(\x*ln(2))});
 \end{tikzpicture}
 \colorbox{ink700}{\textcolor{white}{Band}}
 \begin{tabularx}{\linewidth}{@{}lX@{}}A & B \\\end{tabularx}
