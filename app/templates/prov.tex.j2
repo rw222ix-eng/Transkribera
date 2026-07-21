@@ -60,10 +60,20 @@ dina steg.}
     \par:en nedan (efter (* endif *)) är oförändrad sedan tidigare och
     avslutar i stället den villkorade kursivraden innan uppgiftstexten. #))
 \begin{uppgift}{((( u.nummer )))}{((( u.poang_str )))}\par
-((* if u.endast_svar *)){\small\itshape Endast svar krävs.}((* endif *))\par
+((* if u.endast_svar and not u.har_deluppgifter and not u.flerval *)){\small\itshape Endast svar krävs.}((* endif *))\par
 ((( u.text )))
 ((* if u.bild_fil *))\par\vspace{2mm}\begin{center}\includegraphics[width=0.72\linewidth,height=90mm,keepaspectratio]{((( u.bild_fil )))}\end{center}((* endif *))
-((* if u.endast_svar *))\svarsrad((* else *))\par\vspace{((( u.utrymme_mm )))mm}((* endif *))
+((* if u.notis *))\notisruta{((( u.notis )))}((* endif *))
+((* if u.har_deluppgifter *))
+((* for d in u.deluppgifter *))
+\begin{deluppgift}{((( d.bokstav )))}{((( d.poang_str )))}\par
+((( d.text )))
+((* if d.flerval *))((* for alt in d.flerval *))\par\kryssruta\ ((( alt.bokstav ))): ((( alt.text )))((* endfor *))\par\vspace{2mm}((* elif d.endast_svar *))\svarsrad((* else *))\par\vspace{((( d.utrymme_mm )))mm}((* endif *))
+\end{deluppgift}
+((* endfor *))
+((* elif u.flerval *))
+((* for alt in u.flerval *))\par\kryssruta\ ((( alt.bokstav ))): ((( alt.text )))((* endfor *))\par\vspace{2mm}
+((* elif u.endast_svar *))\svarsrad((* else *))\par\vspace{((( u.utrymme_mm )))mm}((* endif *))
 \end{uppgift}
 ((* endfor *))
 ((* endfor *))

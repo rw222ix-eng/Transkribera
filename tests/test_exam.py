@@ -718,6 +718,29 @@ def test_render_escapes_model_text():
     assert "{alla}" not in tex
 
 
+def test_prov_renderar_deluppgifter_utan_facit():
+    doc, _ = exam_spec.validate_exam_json(_exam_med_deluppgifter())
+    tex = exam_latex.render_prov(doc)
+    assert r"\begin{deluppgift}{a}" in tex and r"\begin{deluppgift}{b}" in tex
+    # elevens prov visar aggregatet på uppgiften, aldrig E/C/A
+    assert r"\begin{uppgift}{7}{4p}" in tex
+    assert "0/3/1" not in tex
+
+
+def test_prov_renderar_flerval_utan_ratt_svar():
+    doc, _ = exam_spec.validate_exam_json(_exam_med_flerval())
+    tex = exam_latex.render_prov(doc)
+    assert r"\kryssruta" in tex
+    # facit (rätt bokstav B) FÅR INTE finnas på elevens papper
+    assert "Rätt:" not in tex and "Rätt svar" not in tex
+
+
+def test_prov_renderar_notis():
+    doc, _ = exam_spec.validate_exam_json(_exam_med_notis())
+    tex = exam_latex.render_prov(doc)
+    assert r"\notisruta{" in tex
+
+
 # ------------------------------------------------------ skyddsnät: \par ----
 
 def test_par_avslutar_poangraden_dar_markor_renderas():
