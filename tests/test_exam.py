@@ -597,6 +597,15 @@ def test_preamble_definierar_layoutmakron():
     assert "10.5mm" in tex and "8.5mm" in tex
 
 
+def test_preamble_har_strukturmakron():
+    doc, _ = exam_spec.validate_exam_json(_exam())
+    tex = exam_latex.render_prov(doc)
+    assert r"\newcommand{\kryssruta}" in tex
+    assert r"\newcommand{\notisruta}" in tex
+    assert r"\newenvironment{deluppgift}" in tex or \
+           r"\newcommand{\deluppgift}" in tex
+
+
 def test_prov_anvander_layoutmakron():
     """Provmallen ska anropa makrona, inte upprepa formateringen."""
     doc, _ = exam_spec.validate_exam_json(_exam())
