@@ -91,6 +91,16 @@ def test_stapeldiagram_en_stapel_per_kategori():
     assert tikz.count("rectangle") == 3
 
 
+def test_stapeldiagram_escapar_kategorinamn():
+    """Kategorinamn med LaTeX-specialtecken (&, %) måste escapas — annars
+    kraschar kompileringen på ett & eller kommenterar bort raden på ett %."""
+    tikz = exam_figures.render_figur(_bygg(
+        {"typ": "stapeldiagram", "kategorier": ["A&B", "50 %", "C_1"],
+         "varden": [3, 5, 2]}))
+    assert r"A\&B" in tikz and r"50 \%" in tikz and r"C\_1" in tikz
+    assert "A&B" not in tikz            # råa specialtecken får inte läcka
+
+
 def test_ladagram_har_lada_och_morrhar():
     tikz = exam_figures.render_figur(_bygg(
         {"typ": "ladagram", "min": 2, "q1": 5, "median": 8, "q3": 11, "max": 14}))
