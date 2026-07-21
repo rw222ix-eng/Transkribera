@@ -19,7 +19,7 @@ from __future__ import annotations
 import math
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 Formaga = Literal["B", "P", "PL", "M", "R", "K"]
 Uppgiftstyp = Literal["rutin", "redovisning", "problem", "resonemang"]
@@ -33,17 +33,73 @@ class _Model(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
 
-class ExamItem(_Model):
+class _Uppgiftsbas(_Model):
+    """Delade fält för uppgifter och deluppgifter."""
+    poang: tuple[int, int, int]          # (E, C, A) — NP-notationen (2/1/0)
+    text: str                            # uppgifts-/deluppgiftstext; matte inom $…$
+    # max_length=12: _VERSAL/_BOKSTAV i exam_latex har bara 12 bokstäver
+    # (A–L) — fler alternativ skulle IndexError:a renderingen i stället för
+    # att stoppas här som ett rent valideringsfel.
+    alternativ: list[str] | None = Field(default=None, max_length=12)
+    ratt_alternativ: int | None = None   # 0-baserat index i alternativ
+    notis: str | None = None             # inramad instruktionsruta (callout)
+
+    @model_validator(mode="after")
+    def _kontrollera_flerval(self):
+        if self.alternativ is not None:
+            if len(self.alternativ) < 3:
+                raise ValueError("flervalsfråga måste ha minst tre alternativ")
+            if (self.ratt_alternativ is None
+                    or not 0 <= self.ratt_alternativ < len(self.alternativ)):
+                raise ValueError("ratt_alternativ måste vara ett giltigt "
+                                 "index i alternativ")
+        elif self.ratt_alternativ is not None:
+            raise ValueError("ratt_alternativ satt utan alternativ")
+        return self
+
+
+class SubItem(_Uppgiftsbas):
+    formaga: Formaga | None = None       # ärver förälderns när None
+    typ: Uppgiftstyp | None = None       # ärver förälderns när None
+    losning: str
+    bedomning: str
+
+    @model_validator(mode="after")
+    def _kontrollera_lov(self):
+        if not self.losning.strip() or not self.bedomning.strip():
+            raise ValueError("deluppgift måste ha lösning och bedömning")
+        return self
+
+
+class ExamItem(_Uppgiftsbas):
     del_: Del | None = Field(default=None, alias="del")
     formaga: Formaga
     sekundara: list[Formaga] | None = None
     typ: Uppgiftstyp
-    poang: tuple[int, int, int]          # (E, C, A) — NP-notationen (2/1/0)
-    text: str                            # uppgiftstext; matte inom $…$
     innehall: list[str] | None = None    # taggar mot centralt innehåll
     bild: int | None = None              # 1-baserat index i provets bildunderlag
-    losning: str                         # lösningsförslag (lärarens rättning)
-    bedomning: str                       # bedömningsanvisning per uppgift
+    losning: str = ""                    # tomt tillåtet när deluppgifter finns
+    bedomning: str = ""                  # tomt tillåtet när deluppgifter finns
+    # max_length=12: samma _BOKSTAV-gräns (a–l) som alternativ ovan.
+    deluppgifter: list[SubItem] | None = Field(default=None, max_length=12)
+
+    @model_validator(mode="after")
+    def _kontrollera_struktur(self):
+        if self.deluppgifter:
+            if any(self.poang):
+                raise ValueError("en uppgift med deluppgifter måste ha poäng "
+                                 "[0,0,0] — poängen ligger på deluppgifterna")
+            if self.alternativ is not None:
+                raise ValueError("en uppgift med deluppgifter kan inte själv "
+                                 "vara en flervalsfråga")
+        else:
+            if not self.losning.strip():
+                raise ValueError("uppgift utan deluppgifter måste ha ett "
+                                 "lösningsförslag")
+            if not self.bedomning.strip():
+                raise ValueError("uppgift utan deluppgifter måste ha en "
+                                 "bedömningsanvisning")
+        return self
 
 
 class ExamDoc(_Model):
@@ -108,24 +164,47 @@ MAX_LIKA_I_RAD = 3              # max uppgifter i rad med samma typ/förmåga
 MIN_DELPROV_FOR_ORDNING = 4     # kortare delar mäts inte på ordning
 
 
-def _svarighet(it: "ExamItem") -> float:
+def _svarighet(poang: tuple[int, int, int]) -> float:
     """Svårighetsindex 0–2: (0·E + 1·C + 2·A) / totalpoäng."""
-    tot = sum(it.poang)
-    return (it.poang[1] + 2 * it.poang[2]) / tot if tot > 0 else 0.0
+    tot = sum(poang)
+    return (poang[1] + 2 * poang[2]) / tot if tot > 0 else 0.0
 
 
 def _err(path: str, code: str, message: str) -> dict:
     return {"path": path, "code": code, "message": message}
 
 
+def poangenheter(it: ExamItem
+                 ) -> list[tuple[str, str, tuple[int, int, int]]]:
+    """(förmåga, typ, poäng) per poängbärande enhet. En uppgift med
+    deluppgifter bidrar med sina barn (som ärver förälderns förmåga/typ när
+    egna saknas); en uppgift utan deluppgifter bidrar med sig själv."""
+    if it.deluppgifter:
+        return [(d.formaga or it.formaga, d.typ or it.typ, d.poang)
+                for d in it.deluppgifter]
+    return [(it.formaga, it.typ, it.poang)]
+
+
+def uppg_poang(it: ExamItem) -> tuple[int, int, int]:
+    """Uppgiftens aggregerade (E, C, A): deluppgifternas summa om de finns,
+    annars uppgiftens egen poäng."""
+    if it.deluppgifter:
+        return (sum(d.poang[0] for d in it.deluppgifter),
+                sum(d.poang[1] for d in it.deluppgifter),
+                sum(d.poang[2] for d in it.deluppgifter))
+    return it.poang
+
+
 def poangsummor(doc: ExamDoc) -> dict:
-    """Totalpoäng + fördelning per nivå och förmåga."""
-    e = sum(it.poang[0] for it in doc.uppgifter)
-    c = sum(it.poang[1] for it in doc.uppgifter)
-    a = sum(it.poang[2] for it in doc.uppgifter)
+    """Totalpoäng + fördelning per nivå och förmåga, summerat över alla
+    poängbärande enheter (löv och deluppgifter)."""
+    enheter = [u for it in doc.uppgifter for u in poangenheter(it)]
+    e = sum(p[0] for _f, _t, p in enheter)
+    c = sum(p[1] for _f, _t, p in enheter)
+    a = sum(p[2] for _f, _t, p in enheter)
     formagor: dict[str, int] = {k: 0 for k in FORMAGA_NAMN}
-    for it in doc.uppgifter:
-        formagor[it.formaga] += sum(it.poang)
+    for f, _t, p in enheter:
+        formagor[f] += sum(p)
     return {"total": e + c + a, "e": e, "c": c, "a": a, "formagor": formagor}
 
 
@@ -165,7 +244,13 @@ def validate_balance(doc: ExamDoc,
         return [_err("uppgifter", "poang", "provet saknar poäng.")]
 
     for it_i, it in enumerate(doc.uppgifter):
-        if sum(it.poang) <= 0:
+        if it.deluppgifter:
+            for d_i, d in enumerate(it.deluppgifter):
+                if sum(d.poang) <= 0:
+                    errors.append(_err(
+                        f"uppgifter[{it_i}].deluppgifter[{d_i}]", "poang",
+                        "deluppgiften har 0 poäng — ge minst 1 poäng."))
+        elif sum(it.poang) <= 0:
             errors.append(_err(f"uppgifter[{it_i}]", "poang",
                                "uppgiften har 0 poäng — ge minst 1 poäng."))
 
@@ -183,7 +268,7 @@ def validate_balance(doc: ExamDoc,
                                f"{FORMAGA_NAMN[f]} ({f}) har {andel:.0%} av poängen — "
                                f"målet är {lo:.0%}–{hi:.0%}."))
 
-    typer = {it.typ for it in doc.uppgifter}
+    typer = {t for it in doc.uppgifter for _f, t, _p in poangenheter(it)}
     if "rutin" not in typer:
         errors.append(_err("uppgifter", "blandning",
                            "provet saknar rutinuppgifter (endast svar krävs)."))
@@ -227,13 +312,14 @@ def validate_ordning(doc: ExamDoc, *, kolla_klumpning: bool = True,
                                    "uppgifter i rad med samma förmåga — varva dem."))
 
         if kolla_svarighet and len(items) >= MIN_DELPROV_FOR_ORDNING:
-            if items[0].poang[0] < MIN_START_E:
+            if uppg_poang(items[0])[0] < MIN_START_E:
                 errors.append(_err(etikett, "svarighet",
                                    f"{etikett}:s första uppgift saknar E-poäng — "
                                    "börja med en åtkomlig uppgift."))
             halva = len(items) // 2
-            forsta = sum(_svarighet(it) for it in items[:halva]) / halva
-            andra = sum(_svarighet(it) for it in items[halva:]) / (len(items) - halva)
+            forsta = sum(_svarighet(uppg_poang(it)) for it in items[:halva]) / halva
+            andra = (sum(_svarighet(uppg_poang(it)) for it in items[halva:])
+                     / (len(items) - halva))
             if andra < forsta - SVARIGHET_SLACK:
                 errors.append(_err(etikett, "svarighet",
                                    f"{etikett} blir lättare mot slutet "
@@ -246,7 +332,9 @@ def genomforbarhet(antal: int, profil: str = "prov") -> list[dict]:
     """Deterministisk förkontroll: kan ett prov med ~`antal` uppgifter alls
     balanseras? Varje uppgift har EN primär förmåga, så färre uppgifter än
     antalet förmågor med positivt golv kan aldrig representera dem alla.
-    Körs före generering så reparationsloopen slipper ett olösligt problem."""
+    Körs före generering så reparationsloopen slipper ett olösligt problem.
+    Deluppgifter kan bära extra förmågor men är okända före generering, så
+    golvet på toppnivåns antal står kvar (medvetet konservativt)."""
     prof_fm, _nm, _kr, _kk, _ks = PROFILER.get(profil, PROFILER["prov"])
     golv_formagor = [f for f, (lo, _hi) in prof_fm.items() if lo > 0]
     if antal < len(golv_formagor):

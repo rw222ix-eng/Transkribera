@@ -3632,7 +3632,19 @@
               del: n.u.del || '',
               formaga: n.u.formaga,
               typ: n.u.typ,
-              poangStr: (n.u.poang || [0, 0, 0]).join('/'),
+              poangStr: (function (u) {
+                var d = u.deluppgifter;
+                if (d && d.length) {
+                  // förälderns egen poäng är [0,0,0] — visa barnens summa
+                  var s = d.reduce(function (acc, x) {
+                    var p = x.poang || [0, 0, 0];
+                    return [acc[0] + p[0], acc[1] + p[1], acc[2] + p[2]];
+                  }, [0, 0, 0]);
+                  return s.join('/');
+                }
+                return (u.poang || [0, 0, 0]).join('/');
+              })(n.u),
+              antalDel: (n.u.deluppgifter || []).length,
               text: n.u.text || '',
               sel: vald,
               onToggleSel: function () {
@@ -6005,6 +6017,7 @@ function viewPlanning(v){
                   <span style="font-weight:600;font-size:14px;color:var(--ink)">Uppgift ${esc(u2.nummer)}</span>
                   ${ u2.del ? `<span style="font-family:var(--mono);font-size:10.5px;color:var(--ink-3)">DEL ${esc(u2.del)}</span>` : '' }
                   <span style="font-family:var(--mono);font-size:10.5px;color:var(--ink-3)">${esc(u2.formaga)} · ${esc(u2.typ)}</span>
+                  ${ u2.antalDel ? `<span style="font-family:var(--mono);font-size:10.5px;color:var(--ink-3)">${esc(u2.antalDel)} deluppgift${u2.antalDel === 1 ? '' : 'er'}</span>` : '' }
                   <span style="font-family:var(--mono);font-size:11.5px;color:var(--ink-2)">(${esc(u2.poangStr)})</span>
                   ${ u2.sel ? `<span style="font-family:var(--mono);font-size:9.5px;letter-spacing:0.07em;text-transform:uppercase;color:var(--accent)">Markerad</span>` : '' }
                 </div>

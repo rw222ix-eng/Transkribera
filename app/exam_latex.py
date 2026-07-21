@@ -95,12 +95,44 @@ _DEL_INSTRUKTION = {
 }
 
 
-def _utrymme_mm(item: exam_spec.ExamItem) -> int:
-    """Svarsutrymme efter uppgiften — växer med poängen."""
-    total = sum(item.poang)
-    if item.typ == "rutin":
+def _utrymme_mm(poang: tuple[int, int, int], typ: str) -> int:
+    """Svarsutrymme efter en enhet — växer med poängen; rutin får minimalt."""
+    if typ == "rutin":
         return 8
-    return min(30 + total * 12, 110)
+    return min(30 + sum(poang) * 12, 110)
+
+
+_BOKSTAV = "abcdefghijkl"
+_VERSAL = "ABCDEFGHIJKL"
+
+
+def _flerval_vy(alternativ, ratt):
+    """Flervalsalternativ som [{bokstav, text}], A/B/C… i ordning."""
+    if alternativ is None:
+        return None, None
+    rader = [{"bokstav": _VERSAL[i], "text": escape_mixed(alt)}
+             for i, alt in enumerate(alternativ)]
+    return rader, (_VERSAL[ratt] if ratt is not None else None)
+
+
+def _enhet_vy(*, poang, typ, formaga, text, losning, bedomning,
+             alternativ, ratt_alternativ, notis, bild_fil):
+    """Delad vy för ett löv och för en deluppgift."""
+    flerval, ratt_bokstav = _flerval_vy(alternativ, ratt_alternativ)
+    return {
+        "poang_str": f"{sum(poang)}p",
+        "poang_eca": f"{poang[0]}/{poang[1]}/{poang[2]}",
+        "endast_svar": typ == "rutin",
+        "flerval": flerval,
+        "ratt_bokstav": ratt_bokstav,
+        "notis": escape_mixed(notis) if notis else None,
+        "utrymme_mm": _utrymme_mm(poang, typ),
+        "text": escape_mixed(text),
+        "losning": escape_mixed(losning),
+        "bedomning": escape_mixed(bedomning),
+        "formaga_namn": exam_spec.FORMAGA_NAMN.get(formaga, formaga),
+        "bild_fil": bild_fil,
+    }
 
 
 def _build_view(doc: exam_spec.ExamDoc,
@@ -119,20 +151,51 @@ def _build_view(doc: exam_spec.ExamDoc,
         vy_items = []
         for it in items:
             nummer += 1
-            vy_items.append({
-                "nummer": nummer,
-                # Elevdokumenten visar endast totalpoäng ("4p"); E/C/A-tupeln
-                # är lärarens verktyg och hör hemma i bedömningsanvisningen.
-                "poang_str": f"{sum(it.poang)}p",
-                "poang_eca": f"{it.poang[0]}/{it.poang[1]}/{it.poang[2]}",
-                "bild_fil": (bilder or {}).get(it.bild) if it.bild else None,
-                "endast_svar": it.typ == "rutin",
-                "utrymme_mm": _utrymme_mm(it),
-                "text": escape_mixed(it.text),
-                "losning": escape_mixed(it.losning),
-                "bedomning": escape_mixed(it.bedomning),
-                "formaga_namn": exam_spec.FORMAGA_NAMN.get(it.formaga, it.formaga),
-            })
+            agg = exam_spec.uppg_poang(it)
+            bild_fil = (bilder or {}).get(it.bild) if it.bild else None
+            if it.deluppgifter:
+                deluppg = []
+                for j, d in enumerate(it.deluppgifter):
+                    ev = _enhet_vy(
+                        poang=d.poang, typ=d.typ or it.typ,
+                        formaga=d.formaga or it.formaga, text=d.text,
+                        losning=d.losning, bedomning=d.bedomning,
+                        alternativ=d.alternativ, ratt_alternativ=d.ratt_alternativ,
+                        notis=d.notis, bild_fil=None)
+                    ev["bokstav"] = _BOKSTAV[j]
+                    deluppg.append(ev)
+                item_vy = {
+                    "har_deluppgifter": True,
+                    "text": escape_mixed(it.text),
+                    "notis": escape_mixed(it.notis) if it.notis else None,
+                    "flerval": None, "ratt_bokstav": None,
+                    # endast_svar/utrymme_mm nås av mallen för VARJE uppgift
+                    # (StrictUndefined) — föräldern måste ha dem trots att den
+                    # aldrig får en egen svarsrad; barnen bär svarsutrymmet.
+                    "endast_svar": False, "utrymme_mm": 0,
+                    # losning/bedomning är "" på en förälder med deluppgifter,
+                    # men de befintliga mallarna (bedomning/arbetsblad) läser
+                    # u.losning ovillkorligt för VARJE uppgift — nyckeln måste
+                    # finnas (StrictUndefined) så att föräldern har hela lövets
+                    # nyckeluppsättning.
+                    "losning": escape_mixed(it.losning),
+                    "bedomning": escape_mixed(it.bedomning),
+                    "bild_fil": bild_fil,
+                    "formaga_namn": exam_spec.FORMAGA_NAMN.get(it.formaga, it.formaga),
+                    "deluppgifter": deluppg,
+                }
+            else:
+                item_vy = _enhet_vy(
+                    poang=it.poang, typ=it.typ, formaga=it.formaga,
+                    text=it.text, losning=it.losning, bedomning=it.bedomning,
+                    alternativ=it.alternativ, ratt_alternativ=it.ratt_alternativ,
+                    notis=it.notis, bild_fil=bild_fil)
+                item_vy["har_deluppgifter"] = False
+                item_vy["deluppgifter"] = None
+            item_vy["nummer"] = nummer
+            item_vy["poang_str"] = f"{sum(agg)}p"
+            item_vy["poang_eca"] = f"{agg[0]}/{agg[1]}/{agg[2]}"
+            vy_items.append(item_vy)
         delar.append({
             "rubrik": escape_latex(rubrik) if rubrik else None,
             "instruktion": escape_latex(_DEL_INSTRUKTION.get(del_kod or "", "")) or None,

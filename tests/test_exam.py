@@ -72,6 +72,50 @@ def _exam() -> dict:
     }
 
 
+def _exam_med_deluppgifter() -> dict:
+    """_exam() med uppgift 7 (K) uppdelad i två deluppgifter som ärver
+    K/redovisning och summerar till [0,3,1] — aggregatet är oförändrat, så
+    hela provet ska fortfarande passera alla balansregler."""
+    data = _exam()
+    data["uppgifter"][6] = {
+        "del": "C", "formaga": "K", "typ": "redovisning", "poang": [0, 0, 0],
+        "text": "Undersök symmetrilinjen för $f(x) = x^2 - 6x + 5$.",
+        "innehall": ["symmetrilinje"], "losning": "", "bedomning": "",
+        "deluppgifter": [
+            {"poang": [0, 2, 0],
+             "text": "Bestäm symmetrilinjens ekvation.",
+             "losning": "$x = 3$ via $-b/(2a)$.",
+             "bedomning": "+2 C korrekt linje med metod."},
+            {"poang": [0, 1, 1],
+             "text": "Förklara med graf och ord varför den ligger där.",
+             "losning": "Mittpunkt mellan nollställena; grafen är symmetrisk.",
+             "bedomning": "+1 C förklaring, +1 A flera representationer."},
+        ],
+    }
+    return data
+
+
+def _exam_med_flerval() -> dict:
+    """_exam() med uppgift 2 som flervalsfråga (oförändrad poäng/förmåga)."""
+    data = _exam()
+    data["uppgifter"][1] = {
+        "del": "B", "formaga": "P", "typ": "rutin", "poang": [2, 0, 0],
+        "text": "Vilket är ett nollställe till $f(x) = x^2 - 4x + 3$?",
+        "innehall": ["nollställen"],
+        "alternativ": ["$x = 0$", "$x = 1$", "$x = 2$", "$x = 4$"],
+        "ratt_alternativ": 1,
+        "losning": "$x = 1$ ger $f(1) = 0$.",
+        "bedomning": "+2 E för rätt alternativ (B)."}
+    return data
+
+
+def _exam_med_notis() -> dict:
+    """_exam() med en notis (inramad instruktionsruta) på uppgift 1."""
+    data = _exam()
+    data["uppgifter"][0]["notis"] = "Rita gärna en teckenrad som stöd."
+    return data
+
+
 # ------------------------------------------------------- JSON-parsning ----
 
 def test_parse_exam_repairs_eaten_latex_backslashes():
@@ -137,6 +181,129 @@ def test_response_format_shape():
     assert "uppgifter" in rf["json_schema"]["schema"]["properties"]
 
 
+def test_schema_godkanner_deluppgifter():
+    # Schema-acceptans; att provet BALANSERAR (errors == []) kräver den
+    # rekursiva poangsummor/balansen som landar i Task 2–3
+    # (test_nastlat_prov_passerar_balans).
+    doc, _errors = exam_spec.validate_exam_json(_exam_med_deluppgifter())
+    assert doc is not None
+    assert doc.uppgifter[6].deluppgifter is not None
+    assert len(doc.uppgifter[6].deluppgifter) == 2
+
+
+def test_schema_kraver_noll_poang_pa_foralder_med_deluppgifter():
+    bad = _exam_med_deluppgifter()
+    bad["uppgifter"][6]["poang"] = [1, 0, 0]      # förälder får inte ha poäng
+    doc, errors = exam_spec.validate_exam_json(bad)
+    assert doc is None and any(e["code"] == "schema" for e in errors)
+
+
+def test_schema_kraver_losning_pa_lov():
+    bad = _exam()
+    bad["uppgifter"][0]["losning"] = ""           # löv utan lösning
+    doc, errors = exam_spec.validate_exam_json(bad)
+    assert doc is None and any(e["code"] == "schema" for e in errors)
+
+
+def test_schema_flerval_kraver_minst_tre_alternativ_och_giltigt_index():
+    bad = _exam_med_flerval()
+    bad["uppgifter"][1]["alternativ"] = ["$x=1$", "$x=2$"]   # bara två
+    assert exam_spec.validate_exam_json(bad)[0] is None
+    bad2 = _exam_med_flerval()
+    bad2["uppgifter"][1]["ratt_alternativ"] = 9              # utanför intervall
+    assert exam_spec.validate_exam_json(bad2)[0] is None
+
+
+def test_schema_godkanner_flerval_och_notis():
+    assert exam_spec.validate_exam_json(_exam_med_flerval())[0] is not None
+    assert exam_spec.validate_exam_json(_exam_med_notis())[0] is not None
+
+
+def test_schema_kraver_losning_pa_deluppgift():
+    """Regressionsskydd: SubItem saknade tidigare motsvarigheten till
+    ExamItems _kontrollera_struktur — en deluppgift med tom lösning
+    kunde smyga sig förbi schemat trots att det är just DÄR lösningarna
+    hör hemma."""
+    bad = _exam_med_deluppgifter()
+    bad["uppgifter"][6]["deluppgifter"][0]["losning"] = ""
+    assert exam_spec.validate_exam_json(bad)[0] is None
+
+
+def test_schema_avvisar_ratt_alternativ_utan_alternativ():
+    bad = _exam()
+    bad["uppgifter"][1]["ratt_alternativ"] = 0    # utan alternativ
+    assert exam_spec.validate_exam_json(bad)[0] is None
+
+
+def test_schema_avvisar_nastlade_deluppgifter():
+    """Deluppgifter får inte själva ha deluppgifter (en nivå djupt)."""
+    bad = _exam_med_deluppgifter()
+    bad["uppgifter"][6]["deluppgifter"][0]["deluppgifter"] = [
+        {"poang": [0, 1, 0], "text": "x", "losning": "y", "bedomning": "z"}]
+    assert exam_spec.validate_exam_json(bad)[0] is None
+
+
+def test_schema_avvisar_for_manga_alternativ():
+    """_VERSAL/_BOKSTAV i exam_latex har bara 12 bokstäver (A–L). 13
+    flervalsalternativ är annars schema-giltigt men kraschar renderingen
+    med IndexError — gränsen ska stoppa det som ett rent valideringsfel."""
+    bad = _exam_med_flerval()
+    bad["uppgifter"][1]["alternativ"] = [f"${'x'}={i}$" for i in range(13)]
+    bad["uppgifter"][1]["ratt_alternativ"] = 0
+    assert exam_spec.validate_exam_json(bad)[0] is None
+
+
+def test_schema_avvisar_for_manga_deluppgifter():
+    """Samma _BOKSTAV-gräns (12 bokstäver) gäller deluppgifter."""
+    bad = _exam_med_deluppgifter()
+    lov = bad["uppgifter"][6]["deluppgifter"][0]
+    bad["uppgifter"][6]["deluppgifter"] = [
+        {**lov, "poang": [0, 1, 0]} for _ in range(13)]
+    assert exam_spec.validate_exam_json(bad)[0] is None
+
+
+# -------------------------------------------------------- poängsummor --
+
+def test_poangsummor_oforandrad_for_platt_prov():
+    """Rekursionen får inte ändra summan för ett prov utan deluppgifter."""
+    doc, _ = exam_spec.validate_exam_json(_exam())
+    s = exam_spec.poangsummor(doc)
+    assert s["total"] == 20 and s["e"] == 9 and s["c"] == 6 and s["a"] == 5
+
+
+def test_poangsummor_summerar_deluppgifter():
+    """Nästlad och platt variant ger samma summa (uppg 7 = [0,3,1] i båda)."""
+    platt, _ = exam_spec.validate_exam_json(_exam())
+    nast, _ = exam_spec.validate_exam_json(_exam_med_deluppgifter())
+    assert exam_spec.poangsummor(nast) == exam_spec.poangsummor(platt)
+
+
+def test_poangenheter_arver_foralderns_formaga():
+    doc, _ = exam_spec.validate_exam_json(_exam_med_deluppgifter())
+    enheter = exam_spec.poangenheter(doc.uppgifter[6])
+    assert len(enheter) == 2
+    assert all(f == "K" for f, _t, _p in enheter)     # ärvt från föräldern
+    assert all(t == "redovisning" for _f, t, _p in enheter)
+
+
+def test_poangenheter_barnets_egna_formaga_vinner():
+    """En deluppgift med EGEN formaga/typ bidrar med sina egna, inte
+    förälderns — annars glider en regression i override-grenen igenom."""
+    data = _exam_med_deluppgifter()
+    data["uppgifter"][6]["deluppgifter"][0]["formaga"] = "R"
+    data["uppgifter"][6]["deluppgifter"][0]["typ"] = "resonemang"
+    doc, _ = exam_spec.validate_exam_json(data)
+    enheter = exam_spec.poangenheter(doc.uppgifter[6])
+    assert enheter[0][0] == "R" and enheter[0][1] == "resonemang"   # barnets egna
+    assert enheter[1][0] == "K" and enheter[1][1] == "redovisning"  # ärvt
+
+
+def test_uppg_poang_aggregerar():
+    doc, _ = exam_spec.validate_exam_json(_exam_med_deluppgifter())
+    assert exam_spec.uppg_poang(doc.uppgifter[6]) == (0, 3, 1)
+    assert exam_spec.uppg_poang(doc.uppgifter[0]) == (3, 0, 0)   # löv
+
+
 # ------------------------------------------------------------------ balans --
 
 def test_all_e_points_flagged():
@@ -154,12 +321,43 @@ def test_zero_point_item_flagged():
     assert any(e["code"] == "poang" for e in errors)
 
 
+def test_nastlat_prov_passerar_balans():
+    """Hela det nästlade provet ska validera rent (aggregatet är oförändrat)."""
+    _doc, errors = exam_spec.validate_exam_json(_exam_med_deluppgifter())
+    assert errors == []
+
+
+def test_deluppgift_med_noll_poang_flaggas():
+    bad = _exam_med_deluppgifter()
+    bad["uppgifter"][6]["deluppgifter"][0]["poang"] = [0, 0, 0]
+    _doc, errors = exam_spec.validate_exam_json(bad)
+    assert any(e["code"] == "poang" for e in errors)
+
+
 def test_missing_rutin_flagged():
     bad = _exam()
     for u in bad["uppgifter"]:
         u["typ"] = "redovisning"
     doc, errors = exam_spec.validate_exam_json(bad)
     assert any(e["code"] == "blandning" for e in errors)
+
+
+def test_deluppgifts_egen_typ_raknas_i_blandning():
+    """Typ-blandningen mäts per enhet: en deluppgifts EGEN typ (rutin)
+    ska räknas även om ingen toppnivå-uppgift är rutin."""
+    data = _exam_med_deluppgifter()
+    for u in data["uppgifter"]:            # ta bort all rutin på toppnivå
+        if u["typ"] == "rutin":
+            u["typ"] = "redovisning"
+    data["uppgifter"][6]["deluppgifter"][0]["typ"] = "rutin"   # enda rutin-källan
+    _doc, errors = exam_spec.validate_exam_json(data)
+    assert not any(e["code"] == "blandning" and "rutin" in e["message"]
+                   for e in errors)
+    # tas den enda rutin-källan bort ska blandning flaggas
+    data["uppgifter"][6]["deluppgifter"][0]["typ"] = "redovisning"
+    _doc2, errors2 = exam_spec.validate_exam_json(data)
+    assert any(e["code"] == "blandning" and "rutin" in e["message"]
+               for e in errors2)
 
 
 def test_formaga_concentration_flagged():
@@ -185,6 +383,14 @@ def test_ordning_godkanner_balanserad_fixtur():
     """Den kanoniska fixturen ska passera ordningsreglerna rent."""
     doc, _ = exam_spec.validate_exam_json(_exam())
     assert exam_spec.validate_ordning(doc) == []
+
+
+def test_svarighet_pa_aggregat():
+    """En uppgifts svårighet räknas på summan av dess deluppgifter."""
+    doc, _ = exam_spec.validate_exam_json(_exam_med_deluppgifter())
+    # uppg 7 aggregat = [0,3,1] → (3 + 2)/4 = 1.25
+    assert abs(exam_spec._svarighet(exam_spec.uppg_poang(doc.uppgifter[6]))
+               - 1.25) < 1e-9
 
 
 def test_ordning_flaggar_fallande_svarighet():
@@ -357,6 +563,65 @@ def test_escape_mixed_har_hard_space_fore_procent():
     assert r"50~\%" in blandat and r"\(p \le 5 \%\)" in blandat
 
 
+# --------------------------------------------------------- _build_view -----
+
+def test_build_view_deluppgifter():
+    doc, _ = exam_spec.validate_exam_json(_exam_med_deluppgifter())
+    vy = exam_latex._build_view(doc)
+    u7 = vy["delar"][-1]["uppgifter"][-1]        # sista uppgiften (K)
+    assert u7["har_deluppgifter"] is True
+    assert u7["poang_str"] == "4p"               # aggregat 0+3+1
+    assert [d["bokstav"] for d in u7["deluppgifter"]] == ["a", "b"]
+    assert u7["deluppgifter"][0]["poang_str"] == "2p"
+
+
+def test_build_view_flerval_har_bokstaver_och_ratt():
+    doc, _ = exam_spec.validate_exam_json(_exam_med_flerval())
+    vy = exam_latex._build_view(doc)
+    u2 = vy["delar"][0]["uppgifter"][1]
+    assert [a["bokstav"] for a in u2["flerval"]] == ["A", "B", "C", "D"]
+    assert u2["ratt_bokstav"] == "B"             # ratt_alternativ = 1
+
+
+def test_build_view_notis():
+    doc, _ = exam_spec.validate_exam_json(_exam_med_notis())
+    vy = exam_latex._build_view(doc)
+    assert vy["delar"][0]["uppgifter"][0]["notis"] is not None
+
+
+def test_build_view_platt_oforandrad():
+    """Ett löv utan struktur behåller sina fält (svarsutrymme m.m.)."""
+    doc, _ = exam_spec.validate_exam_json(_exam())
+    vy = exam_latex._build_view(doc)
+    u1 = vy["delar"][0]["uppgifter"][0]
+    assert u1["har_deluppgifter"] is False
+    assert u1["flerval"] is None and u1["notis"] is None
+    assert "utrymme_mm" in u1 and "losning" in u1
+
+
+def test_foralder_vy_har_hela_lovets_nyckeluppsattning():
+    """En förälder med deluppgifter måste ha varje nyckel ett löv har —
+    mallarna (även de befintliga) läser dem ovillkorligt per uppgift, och
+    StrictUndefined kraschar på en saknad nyckel."""
+    doc, _ = exam_spec.validate_exam_json(_exam_med_deluppgifter())
+    vy = exam_latex._build_view(doc)
+    lov = next(u for d in vy["delar"] for u in d["uppgifter"]
+               if not u["har_deluppgifter"])
+    foralder = next(u for d in vy["delar"] for u in d["uppgifter"]
+                    if u["har_deluppgifter"])
+    saknade = set(lov) - set(foralder)
+    assert not saknade, f"föräldern saknar löv-nycklar: {saknade}"
+
+
+def test_render_alla_mallar_pa_deluppgifter_utan_krasch():
+    """Alla tre mallar ska rendera ett deluppgifts-prov utan StrictUndefined
+    (regressionsvakt: föräldern måste ha varje nyckel mallen läser)."""
+    doc, _ = exam_spec.validate_exam_json(_exam_med_deluppgifter())
+    for render in (exam_latex.render_prov, exam_latex.render_arbetsblad,
+                   exam_latex.render_bedomning):
+        assert isinstance(render(doc), str)
+
+
 # --------------------------------------------------------------- rendering --
 
 def test_render_prov_golden_markers():
@@ -408,6 +673,15 @@ def test_preamble_definierar_layoutmakron():
     assert r"\newcommand{\elevruta}" in tex
     # måtten ur designsystemet: 10,5 mm gutter och 8,5 mm uppgiftsrytm
     assert "10.5mm" in tex and "8.5mm" in tex
+
+
+def test_preamble_har_strukturmakron():
+    doc, _ = exam_spec.validate_exam_json(_exam())
+    tex = exam_latex.render_prov(doc)
+    assert r"\newcommand{\kryssruta}" in tex
+    assert r"\newcommand{\notisruta}" in tex
+    assert r"\newenvironment{deluppgift}" in tex or \
+           r"\newcommand{\deluppgift}" in tex
 
 
 def test_prov_anvander_layoutmakron():
@@ -463,6 +737,77 @@ def test_render_escapes_model_text():
     assert "{alla}" not in tex
 
 
+def test_prov_renderar_deluppgifter_utan_facit():
+    doc, _ = exam_spec.validate_exam_json(_exam_med_deluppgifter())
+    tex = exam_latex.render_prov(doc)
+    assert r"\begin{deluppgift}{a}" in tex and r"\begin{deluppgift}{b}" in tex
+    # elevens prov visar aggregatet på uppgiften, aldrig E/C/A
+    assert r"\begin{uppgift}{7}{4p}" in tex
+    assert "0/3/1" not in tex
+
+
+def test_prov_renderar_flerval_utan_ratt_svar():
+    doc, _ = exam_spec.validate_exam_json(_exam_med_flerval())
+    tex = exam_latex.render_prov(doc)
+    assert r"\kryssruta" in tex
+    # facit (rätt bokstav B) FÅR INTE finnas på elevens papper
+    assert "Rätt:" not in tex and "Rätt svar" not in tex
+
+
+def test_prov_renderar_notis():
+    doc, _ = exam_spec.validate_exam_json(_exam_med_notis())
+    tex = exam_latex.render_prov(doc)
+    assert r"\notisruta{" in tex
+
+
+def test_deluppgifts_notis_renderas_i_prov_och_arbetsblad():
+    """Regressionsskydd: _enhet_vy beräknar d.notis för varje deluppgift,
+    men INGEN mall renderade den (tyst dataförlust — en modellskriven
+    notis på en deluppgift försvann från både elevens papper och facit).
+    Bedömningsanvisningen ska INTE ha notisrutan (notis är en
+    elevinstruktion, inte en bedömningsanvisning) — se den separata
+    kontrollen mot render_bedomning."""
+    data = _exam_med_deluppgifter()
+    data["uppgifter"][6]["deluppgifter"][0]["notis"] = "Tänk på tecknet."
+    doc, errors = exam_spec.validate_exam_json(data)
+    assert doc is not None and errors == []
+
+    prov = exam_latex.render_prov(doc)
+    arbetsblad = exam_latex.render_arbetsblad(doc)
+    bedomning = exam_latex.render_bedomning(doc)
+    assert r"\notisruta{Tänk på tecknet.}" in prov
+    assert r"\notisruta{Tänk på tecknet.}" in arbetsblad
+    # bedömningsanvisningen ska inte innehålla notisrutan
+    assert r"\notisruta{Tänk på tecknet.}" not in bedomning
+
+
+def test_bedomning_visar_deluppgifternas_facit():
+    doc, _ = exam_spec.validate_exam_json(_exam_med_deluppgifter())
+    tex = exam_latex.render_bedomning(doc)
+    assert r"\begin{deluppgift}{a}{0/2/0}" in tex   # per-deluppgift E/C/A
+    assert "symmetrilinjens ekvation" in tex        # deluppgiftstext
+    assert "Lösningsförslag" in tex
+
+
+def test_bedomning_visar_flervalsfacit():
+    doc, _ = exam_spec.validate_exam_json(_exam_med_flerval())
+    tex = exam_latex.render_bedomning(doc)
+    assert "Rätt: B" in tex                          # facit hör hemma HÄR
+
+
+def test_arbetsblad_facit_har_deluppgifternas_losningar():
+    doc, _ = exam_spec.validate_exam_json(_exam_med_deluppgifter())
+    tex = exam_latex.render_arbetsblad(doc)
+    assert r"\begin{deluppgift}{a}" in tex           # struktur på övningssidan
+    assert "Facit" in tex
+
+
+def test_bedomning_platt_oforandrad():
+    doc, _ = exam_spec.validate_exam_json(_exam())
+    tex = exam_latex.render_bedomning(doc)
+    assert r"\begin{uppgift}{1}{3/0/0}" in tex       # löv oförändrat
+
+
 # ------------------------------------------------------ skyddsnät: \par ----
 
 def test_par_avslutar_poangraden_dar_markor_renderas():
@@ -481,8 +826,10 @@ def test_par_avslutar_poangraden_dar_markor_renderas():
     alltid i facit-sektionen) ska INTE ha \\par där — det skulle flytta
     ned uppgiftstexten även när ingen markör visas."""
     doc, _ = exam_spec.validate_exam_json(_exam())
+    doc_del, _ = exam_spec.validate_exam_json(_exam_med_deluppgifter())
 
-    rad = re.compile(r"\\begin\{uppgift\}\{[^{}]*\}\{([^{}]*)\}(\\par)?")
+    # Både \begin{uppgift} och \begin{deluppgift} bär samma \hfill-fälla.
+    rad = re.compile(r"\\begin\{(?:del)?uppgift\}\{[^{}]*\}\{([^{}]*)\}(\\par)?")
 
     def kontrollera(tex: str, namn: str) -> None:
         träffar = list(rad.finditer(tex))
@@ -513,6 +860,16 @@ def test_par_avslutar_poangraden_dar_markor_renderas():
                 "arbetsblad (visa_poang=False)")
     # bedömningsanvisningen visar alltid (E/C/A) — alltid en markör.
     kontrollera(exam_latex.render_bedomning(doc), "bedomning")
+
+    # Samma disciplin för deluppgifts-miljön — exakt den nya riskytan. Alla
+    # tre mallar renderas mot deluppgifts-fixturen så att en framtida
+    # deluppgift utan (eller med felplacerat) \par fångas.
+    kontrollera(exam_latex.render_prov(doc_del), "prov (deluppgifter)")
+    kontrollera(exam_latex.render_arbetsblad(doc_del, visa_poang=True),
+                "arbetsblad deluppg (visa_poang=True)")
+    kontrollera(exam_latex.render_arbetsblad(doc_del, visa_poang=False),
+                "arbetsblad deluppg (visa_poang=False)")
+    kontrollera(exam_latex.render_bedomning(doc_del), "bedomning (deluppgifter)")
 
 
 # ------------------------------------------------------------- exam_pdf ----
@@ -612,6 +969,39 @@ def test_compile_pdf_real_engine_produces_all_three_documents(tmp_path):
         # bildvägen ska verkligen ha kompilerats, inte bara renderats i
         # minnet — bildfilens namn måste finnas i den genererade .tex-källan.
         assert bild_fil in (tmp_path / f"{jobname}.tex").read_text(encoding="utf-8")
+
+
+def test_compile_pdf_real_engine_compiles_deluppgifter_och_flerval(tmp_path):
+    """Skyddsnät mot att en STRUKTURSPECIFIK kompileringsregression aldrig
+    blir röd: test_compile_pdf_real_engine_produces_all_three_documents
+    ovan kompilerar bara det PLATTA provet — all deluppgifts-/flerval-/
+    notis-rendering testas annars bara som strängar mot en stubbad
+    compile_pdf. Kompilerar BÅDE ett deluppgifts-prov (med en notis på en
+    deluppgift, se Fynd 1) och ett flervalsprov genom alla tre mallarna
+    med den RIKTIGA Tectonic-motorn."""
+    if not exam_pdf.engine_available():
+        pytest.skip("Tectonic-motorn saknas (bin/tectonic/tectonic.exe)")
+
+    del_data = _exam_med_deluppgifter()
+    del_data["uppgifter"][6]["deluppgifter"][0]["notis"] = "Tänk på tecknet."
+    doc_del, errors_del = exam_spec.validate_exam_json(del_data)
+    assert doc_del is not None and errors_del == []
+
+    doc_flerval, errors_flerval = exam_spec.validate_exam_json(
+        _exam_med_flerval())
+    assert doc_flerval is not None and errors_flerval == []
+
+    for namn, doc in (("deluppgifter", doc_del), ("flerval", doc_flerval)):
+        for jobname, tex in (
+            ("prov", exam_latex.render_prov(doc)),
+            ("arbetsblad", exam_latex.render_arbetsblad(doc)),
+            ("bedomning", exam_latex.render_bedomning(doc)),
+        ):
+            ut = tmp_path / namn
+            pdf, logg = exam_pdf.compile_pdf(tex, ut, jobname)
+            assert pdf is not None and pdf.exists(), (
+                f"{namn}/{jobname} misslyckades: {logg}")
+            assert pdf.stat().st_size > 0
 
 
 # ------------------------------------------------------------- exam_gen ----
@@ -842,3 +1232,19 @@ def test_prompt_har_np_rost():
         assert fras in txt, f"prompten nämner inte {fras!r}"
     # några av NP:s imperativa verb ska nämnas som ledord
     assert any(v in txt for v in ("Beräkna", "Bestäm", "Avgör", "Förenkla"))
+
+
+def test_prompt_beskriver_strukturkomponenterna():
+    """Prompten måste instruera modellen om deluppgifter, flerval och notis —
+    annars förblir strukturmaskineriet vilande (modellen använder det aldrig)."""
+    txt = exam_gen.INSTRUCTION
+    assert "deluppgifter" in txt
+    assert "alternativ" in txt and "ratt_alternativ" in txt
+    assert "notis" in txt
+    # och att de ska användas omdömesfullt, inte överallt — alla tre moderations-
+    # signaler ska finnas kvar (deluppgifter, flerval, notis)
+    assert "pedagogiskt" in txt
+    assert "sparsamt" in txt        # flerval
+    assert "sällan" in txt          # notis
+    # flerval får inte kombineras med deluppgifter — förbudet ska stå i prompten
+    assert "aldrig på en uppgift som redan har deluppgifter" in txt

@@ -95,3 +95,35 @@
     Namn: \dotfill\par\vspace{4mm}%
     Födelsedatum: \dotfill\par\vspace{4mm}%
     Gymnasieprogram: \dotfill\par\vspace{1mm}}}
+
+((# Deluppgift: lettrerad (a/b/c) hängande rad inne i uppgift-miljön, med
+    egen poängmarkör i högermarginalen. Egen inre lista så bokstaven hänger
+    som numret gör på toppnivån. Tomt poängargument → ingen markör. #))
+\newenvironment{deluppgift}[2]{%
+  \par\vspace{2.5mm}%
+  \begin{list}{}{%
+    \setlength{\leftmargin}{7mm}%
+    \setlength{\labelwidth}{7mm}%
+    \setlength{\labelsep}{0pt}%
+    \setlength{\itemindent}{0pt}%
+    \setlength{\listparindent}{0pt}%
+    \setlength{\topsep}{0pt}\setlength{\partopsep}{0pt}%
+    \setlength{\parsep}{3pt}\setlength{\itemsep}{0pt}}%
+  \item[#1)]\if\relax\detokenize{#2}\relax\else\poang{#2}\fi
+  \ignorespaces}%
+  {\end{list}}
+
+((# Kvadratisk kryssruta för flerval — tom ruta, inget typsnittsberoende
+    (bygger på \fbox + \rule, alltid tillgängligt). #))
+\newcommand{\kryssruta}{\fbox{\rule{0pt}{1.5ex}\rule{1.5ex}{0pt}}}
+
+((# Notis (callout): tunn inramad ruta med \small text under uppgiftstexten. #))
+\newcommand{\notisruta}[1]{%
+  \par\vspace{2.5mm}%
+  \begingroup
+  \setlength{\fboxrule}{0.25mm}\setlength{\fboxsep}{2.5mm}%
+  \noindent\fcolorbox{ink500}{white}{%
+    \begin{minipage}{\dimexpr\linewidth-2\fboxrule-2\fboxsep\relax}%
+      {\small #1}\end{minipage}}%
+  \endgroup
+  \par\vspace{2.5mm}}
