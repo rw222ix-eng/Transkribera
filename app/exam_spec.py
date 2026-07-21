@@ -61,6 +61,12 @@ class SubItem(_Uppgiftsbas):
     losning: str
     bedomning: str
 
+    @model_validator(mode="after")
+    def _kontrollera_lov(self):
+        if not self.losning.strip() or not self.bedomning.strip():
+            raise ValueError("deluppgift måste ha lösning och bedömning")
+        return self
+
 
 class ExamItem(_Uppgiftsbas):
     del_: Del | None = Field(default=None, alias="del")

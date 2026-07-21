@@ -219,6 +219,22 @@ def test_schema_godkanner_flerval_och_notis():
     assert exam_spec.validate_exam_json(_exam_med_notis())[0] is not None
 
 
+def test_schema_kraver_losning_pa_deluppgift():
+    """Regressionsskydd: SubItem saknade tidigare motsvarigheten till
+    ExamItems _kontrollera_struktur — en deluppgift med tom lösning
+    kunde smyga sig förbi schemat trots att det är just DÄR lösningarna
+    hör hemma."""
+    bad = _exam_med_deluppgifter()
+    bad["uppgifter"][6]["deluppgifter"][0]["losning"] = ""
+    assert exam_spec.validate_exam_json(bad)[0] is None
+
+
+def test_schema_avvisar_ratt_alternativ_utan_alternativ():
+    bad = _exam()
+    bad["uppgifter"][1]["ratt_alternativ"] = 0    # utan alternativ
+    assert exam_spec.validate_exam_json(bad)[0] is None
+
+
 def test_schema_avvisar_nastlade_deluppgifter():
     """Deluppgifter får inte själva ha deluppgifter (en nivå djupt)."""
     bad = _exam_med_deluppgifter()
