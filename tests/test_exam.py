@@ -1379,6 +1379,6 @@ def test_prompt_beskriver_figurer():
     txt = exam_gen.INSTRUCTION
     assert "figur" in txt
     # några figurtyper ska nämnas som alternativ
-    assert any(t in txt for t in ("andragrad", "normalfördelning", "enhetscirkel"))
+    assert any(t in txt for t in ("andragrad", "normalfordelning", "enhetscirkel"))
     # figur och bild utesluter varandra ska framgå
     assert "figur ELLER bild" in txt or "utesluter" in txt
