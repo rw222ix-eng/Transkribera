@@ -28,6 +28,7 @@ av totalt ((( granser.total ))) poäng.}
 ((* if not u.har_deluppgifter *)){\small\textcolor{ink500}{((( u.formaga_namn )))}}\par\vspace{1mm}((* endif *))
 {\small\itshape ((( u.text )))}\par\vspace{2mm}
 ((* if u.bild_fil *)){\small Uppgiften har en bild: ((( u.bild_fil )))}\par\vspace{1mm}((* endif *))
+((* if u.figur_tex *))\par\vspace{2mm}\begin{center}((( u.figur_tex )))\end{center}((* endif *))
 ((* if u.har_deluppgifter *))
 ((* for d in u.deluppgifter *))
 \begin{deluppgift}{((( d.bokstav )))}{((( d.poang_eca )))}\par

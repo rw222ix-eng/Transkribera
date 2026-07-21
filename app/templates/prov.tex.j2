@@ -63,6 +63,7 @@ dina steg.}
 ((* if u.endast_svar and not u.har_deluppgifter and not u.flerval *)){\small\itshape Endast svar krävs.}((* endif *))\par
 ((( u.text )))
 ((* if u.bild_fil *))\par\vspace{2mm}\begin{center}\includegraphics[width=0.72\linewidth,height=90mm,keepaspectratio]{((( u.bild_fil )))}\end{center}((* endif *))
+((* if u.figur_tex *))\par\vspace{2mm}\begin{center}((( u.figur_tex )))\end{center}((* endif *))
 ((* if u.notis *))\notisruta{((( u.notis )))}((* endif *))
 ((* if u.har_deluppgifter *))
 ((* for d in u.deluppgifter *))

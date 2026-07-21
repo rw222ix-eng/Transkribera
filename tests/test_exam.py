@@ -762,6 +762,34 @@ def test_preamble_laddar_tikz_villkorligt():
     assert r"\shorthandoff" not in tex_utan     # bara när tikz laddas
 
 
+def test_build_view_figur_tex():
+    """_build_view lägger rå TikZ (ur exam_figures.render_figur) i vyns
+    figur_tex — INTE escapad, till skillnad från text/losning/bedomning."""
+    data = _exam()
+    data["uppgifter"][2]["figur"] = {"typ": "andragrad", "a": 1, "b": -4, "c": 3}
+    doc, _ = exam_spec.validate_exam_json(data)
+    vy = exam_latex._build_view(doc)
+    u3 = vy["delar"][1]["uppgifter"][0]     # första Del C-uppgiften
+    assert u3["figur_tex"] is not None
+    assert r"\begin{tikzpicture}" in u3["figur_tex"]
+    # löv utan figur → None
+    assert vy["delar"][0]["uppgifter"][0]["figur_tex"] is None
+
+
+def test_prov_renderar_figuren():
+    data = _exam()
+    data["uppgifter"][2]["figur"] = {"typ": "linjar", "k": 1, "m": 0}
+    doc, _ = exam_spec.validate_exam_json(data)
+    tex = exam_latex.render_prov(doc)
+    assert r"\begin{tikzpicture}" in tex
+    assert r"\usetikzlibrary{angles,quotes}" in tex   # med_tikz slogs på
+
+
+def test_prov_utan_figur_laddar_inte_tikz():
+    doc, _ = exam_spec.validate_exam_json(_exam())
+    assert r"\usepackage{tikz}" not in exam_latex.render_prov(doc)
+
+
 def test_prov_anvander_layoutmakron():
     """Provmallen ska anropa makrona, inte upprepa formateringen."""
     doc, _ = exam_spec.validate_exam_json(_exam())
