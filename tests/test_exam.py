@@ -299,6 +299,21 @@ def test_schema_figur_och_bild_utesluter_varandra():
     assert exam_spec.validate_exam_json(data)[0] is None
 
 
+@pytest.mark.parametrize("figur", [
+    {"typ": "triangel", "a": 1, "b": 1, "c": 5},          # bryter triangelolikheten
+    {"typ": "ladagram", "min": 2, "q1": 8, "median": 5,   # icke-stigande
+     "q3": 11, "max": 14},
+    {"typ": "stapeldiagram", "kategorier": ["A", "B", "C"],
+     "varden": [3, 5]},                                    # olika längd
+    {"typ": "exponential", "C": 1, "bas": 0},              # bas måste vara > 0
+    {"typ": "normalfordelning", "mu": 0, "sigma": 0},      # sigma måste vara > 0
+])
+def test_schema_avvisar_ogiltiga_figurparametrar(figur):
+    """Figurmodellernas egna validatorer (triangelolikhet, stigande lådagram,
+    lika-långa serier, bas>0, sigma>0) ska avvisa ogiltiga parametrar."""
+    assert exam_spec.validate_exam_json(_exam_med_figur(figur))[0] is None
+
+
 def test_response_format_har_figur_diskriminator():
     import json
     rf = exam_spec.to_response_format()
