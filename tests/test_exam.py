@@ -1232,3 +1232,14 @@ def test_prompt_har_np_rost():
         assert fras in txt, f"prompten nämner inte {fras!r}"
     # några av NP:s imperativa verb ska nämnas som ledord
     assert any(v in txt for v in ("Beräkna", "Bestäm", "Avgör", "Förenkla"))
+
+
+def test_prompt_beskriver_strukturkomponenterna():
+    """Prompten måste instruera modellen om deluppgifter, flerval och notis —
+    annars förblir strukturmaskineriet vilande (modellen använder det aldrig)."""
+    txt = exam_gen.INSTRUCTION
+    assert "deluppgifter" in txt
+    assert "alternativ" in txt and "ratt_alternativ" in txt
+    assert "notis" in txt
+    # och att de ska användas omdömesfullt, inte överallt
+    assert "pedagogiskt" in txt or "där det passar" in txt.lower()
