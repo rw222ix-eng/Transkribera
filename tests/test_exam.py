@@ -1371,3 +1371,14 @@ def test_prompt_beskriver_strukturkomponenterna():
     assert "sällan" in txt          # notis
     # flerval får inte kombineras med deluppgifter — förbudet ska stå i prompten
     assert "aldrig på en uppgift som redan har deluppgifter" in txt
+
+
+def test_prompt_beskriver_figurer():
+    """Prompten måste instruera modellen om figurer — annars förblir
+    figurmaskineriet (schema, rendering, mallar) vilande."""
+    txt = exam_gen.INSTRUCTION
+    assert "figur" in txt
+    # några figurtyper ska nämnas som alternativ
+    assert any(t in txt for t in ("andragrad", "normalfördelning", "enhetscirkel"))
+    # figur och bild utesluter varandra ska framgå
+    assert "figur ELLER bild" in txt or "utesluter" in txt

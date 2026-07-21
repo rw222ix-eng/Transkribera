@@ -64,6 +64,13 @@ INSTRUCTION = (
     "ratt_alternativ visas bara för läraren.\n"
     "- notis: en kort inramad påminnelse/instruktion på en uppgift eller "
     "deluppgift (t.ex. 'Rita en teckenrad som stöd.'). Valfri, använd sällan.\n"
+    "- figur: lägg en matematisk figur på en uppgift genom att välja typ och "
+    "parametrar (aldrig fri kod): linjar {k, m}, andragrad {a, b, c}, "
+    "exponential {C, bas}, normalfordelning {mu, sigma}, triangel {a, b, c}, "
+    "enhetscirkel {vinkel}, stapeldiagram {kategorier, varden}, ladagram "
+    "{min, q1, median, q3, max}. En uppgift kan ha figur ELLER bild, aldrig "
+    "både. Använd figur där den prövar avläsning eller tolkning; referera den "
+    "i texten (t.ex. 'Figuren visar …').\n"
     "Exempel på en uppgift MED deluppgifter (förälderns poang är [0, 0, 0]):\n"
     '{"del": "C", "formaga": "PL", "typ": "problem", "poang": [0, 0, 0], '
     '"text": "En rektangel har omkretsen 24 cm.", "deluppgifter": ['

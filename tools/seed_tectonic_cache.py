@@ -110,9 +110,15 @@ def _representative_doc() -> exam_spec.ExamDoc:
     prov.tex.j2/arbetsblad.tex.j2 verkligen motioneras, en uppgift med
     deluppgifter (så att \\begin{deluppgift}-miljön kompileras på riktigt
     i alla tre mallarna), en flervalsuppgift (så \\kryssruta samt
-    bedömningens "Rätt: X"-rad kompileras) och en uppgift med notis (så
-    \\notisruta kompileras) — annars seedas aldrig de paket/fontmetriker
-    dessa kodvägar kräver. Problemuppgiften har dessutom en
+    bedömningens "Rätt: X"-rad kompileras), en uppgift med notis (så
+    \\notisruta kompileras) och en uppgift med figur (``figur``, en
+    enhetscirkel — det tyngsta figurfallet eftersom det renderas via
+    tikz-biblioteket angles/quotes, \\pic angle) — annars seedas aldrig de
+    paket/fontmetriker dessa kodvägar kräver. Figuren renderas genom
+    exam_figures.render_figur och de RIKTIGA mallarna, inte bara via
+    PROBE_TEX:s handskrivna \\pic-exempel, så att sonden aldrig kan glida
+    isär från vad figurmallarna faktiskt producerar. Problemuppgiften har
+    dessutom en
     bokstavsexponent ($a^{t}$) och en nedsänkning ($N_0$) i sitt text-fält,
     och en av deluppgifterna har en EGEN bokstavsexponent ($a^n$) i sitt
     text-fält, så att \\small-fontmetrikerna (ntxmi7/ntxmi5) för
@@ -198,6 +204,17 @@ def _representative_doc() -> exam_spec.ExamDoc:
                       r"resonemanget.",
                 losning=r"Sant — grafen är en nedåtriktad parabel.",
                 bedomning=r"+1 C ställningstagande, +1 A stringens.",
+            ),
+            exam_spec.ExamItem(
+                # Figur (enhetscirkel) — kompilerar exam_figures.render_figur
+                # och \pic angle genom den RIKTIGA mallkedjan (inte bara
+                # PROBE_TEX ovan). figur och bild utesluter varandra i
+                # schemat, så uppgiften får INTE ha bild=... samtidigt.
+                del_="C", formaga="B", typ="rutin", poang=(1, 0, 0),
+                text=r"Figuren visar vinkeln $v$ i enhetscirkeln.",
+                figur={"typ": "enhetscirkel", "vinkel": 40},
+                losning=r"Vinkeln är $v = 40^\circ$.",
+                bedomning=r"+1 E för korrekt avläsning av vinkeln.",
             ),
         ],
     )
