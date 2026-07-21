@@ -759,8 +759,10 @@ def test_par_avslutar_poangraden_dar_markor_renderas():
     alltid i facit-sektionen) ska INTE ha \\par där — det skulle flytta
     ned uppgiftstexten även när ingen markör visas."""
     doc, _ = exam_spec.validate_exam_json(_exam())
+    doc_del, _ = exam_spec.validate_exam_json(_exam_med_deluppgifter())
 
-    rad = re.compile(r"\\begin\{uppgift\}\{[^{}]*\}\{([^{}]*)\}(\\par)?")
+    # Både \begin{uppgift} och \begin{deluppgift} bär samma \hfill-fälla.
+    rad = re.compile(r"\\begin\{(?:del)?uppgift\}\{[^{}]*\}\{([^{}]*)\}(\\par)?")
 
     def kontrollera(tex: str, namn: str) -> None:
         träffar = list(rad.finditer(tex))
@@ -791,6 +793,16 @@ def test_par_avslutar_poangraden_dar_markor_renderas():
                 "arbetsblad (visa_poang=False)")
     # bedömningsanvisningen visar alltid (E/C/A) — alltid en markör.
     kontrollera(exam_latex.render_bedomning(doc), "bedomning")
+
+    # Samma disciplin för deluppgifts-miljön — exakt den nya riskytan. Alla
+    # tre mallar renderas mot deluppgifts-fixturen så att en framtida
+    # deluppgift utan (eller med felplacerat) \par fångas.
+    kontrollera(exam_latex.render_prov(doc_del), "prov (deluppgifter)")
+    kontrollera(exam_latex.render_arbetsblad(doc_del, visa_poang=True),
+                "arbetsblad deluppg (visa_poang=True)")
+    kontrollera(exam_latex.render_arbetsblad(doc_del, visa_poang=False),
+                "arbetsblad deluppg (visa_poang=False)")
+    kontrollera(exam_latex.render_bedomning(doc_del), "bedomning (deluppgifter)")
 
 
 # ------------------------------------------------------------- exam_pdf ----

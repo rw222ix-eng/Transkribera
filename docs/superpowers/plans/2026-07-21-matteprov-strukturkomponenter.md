@@ -967,7 +967,13 @@ I uppgifts-loopen (rad 20–41), lägg in deluppgifts-/flerval-/notis-rendering 
 ((* if u.notis *))\notisruta{((( u.notis )))}((* endif *))
 ((* if u.har_deluppgifter *))
 ((* for d in u.deluppgifter *))
-\begin{deluppgift}{((( d.bokstav )))}{((* if visa_poang *))((( d.poang_str )))((* endif *))}\par
+((# Villkorligt \par som top-nivåns uppgift: markör → \par direkt efter;
+    tom markör (visa_poang=False) → INGET \par (annars trycks texten ned). #))
+((* if visa_poang *))
+\begin{deluppgift}{((( d.bokstav )))}{((( d.poang_str )))}\par
+((* else *))
+\begin{deluppgift}{((( d.bokstav )))}{}
+((* endif *))
 ((( d.text )))
 ((* if d.flerval *))((* for alt in d.flerval *))\par\kryssruta\ ((( alt.bokstav ))): ((( alt.text )))((* endfor *))\par\vspace{2mm}((* elif d.endast_svar *))\svarsrad((* else *))\par\vspace{((( d.utrymme_mm )))mm}((* endif *))
 \end{deluppgift}
