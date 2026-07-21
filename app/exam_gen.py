@@ -59,10 +59,24 @@ INSTRUCTION = (
     "redovisnings-, problem- och resonemangsuppgifter. En nivå djupt.\n"
     "- alternativ + ratt_alternativ: gör en uppgift ELLER deluppgift till "
     "flervalsfråga med minst tre alternativ (matte inom $…$) och "
-    "ratt_alternativ som 0-baserat index på det rätta. Använd sparsamt, för "
-    "begreppskoll; ratt_alternativ visas bara för läraren.\n"
+    "ratt_alternativ som 0-baserat index på det rätta — aldrig på en uppgift "
+    "som redan har deluppgifter. Använd sparsamt, för begreppskoll; "
+    "ratt_alternativ visas bara för läraren.\n"
     "- notis: en kort inramad påminnelse/instruktion på en uppgift eller "
     "deluppgift (t.ex. 'Rita en teckenrad som stöd.'). Valfri, använd sällan.\n"
+    "Exempel på en uppgift MED deluppgifter (förälderns poang är [0, 0, 0]):\n"
+    '{"del": "C", "formaga": "PL", "typ": "problem", "poang": [0, 0, 0], '
+    '"text": "En rektangel har omkretsen 24 cm.", "deluppgifter": ['
+    '{"poang": [1, 0, 0], "text": "Teckna arean $A$ som funktion av bredden.", '
+    '"losning": "$A(b) = b(12 - b)$.", "bedomning": "+1 E korrekt uttryck."}, '
+    '{"poang": [0, 1, 1], "text": "Bestäm den största möjliga arean.", '
+    '"losning": "Max vid $b = 6$ ger $A = 36$ cm².", '
+    '"bedomning": "+1 C ansats, +1 A motiverat maximum."}]}\n'
+    "Exempel på en flervalsuppgift:\n"
+    '{"del": "B", "formaga": "B", "typ": "rutin", "poang": [1, 0, 0], '
+    '"text": "Vilket tal är ett nollställe till $f(x) = x^2 - 9$?", '
+    '"alternativ": ["$x = 0$", "$x = 3$", "$x = 9$"], "ratt_alternativ": 1, '
+    '"losning": "$f(3) = 0$.", "bedomning": "+1 E för rätt alternativ."}\n'
     "Balans: sprid poängen över förmågorna, ha stigande svårighet, blanda "
     "rutinuppgifter med redovisnings- och problemuppgifter, och lägg "
     "E-tyngden tidigt. Exempel på EN uppgift:\n"

@@ -1241,5 +1241,10 @@ def test_prompt_beskriver_strukturkomponenterna():
     assert "deluppgifter" in txt
     assert "alternativ" in txt and "ratt_alternativ" in txt
     assert "notis" in txt
-    # och att de ska användas omdömesfullt, inte överallt
-    assert "pedagogiskt" in txt or "där det passar" in txt.lower()
+    # och att de ska användas omdömesfullt, inte överallt — alla tre moderations-
+    # signaler ska finnas kvar (deluppgifter, flerval, notis)
+    assert "pedagogiskt" in txt
+    assert "sparsamt" in txt        # flerval
+    assert "sällan" in txt          # notis
+    # flerval får inte kombineras med deluppgifter — förbudet ska stå i prompten
+    assert "aldrig på en uppgift som redan har deluppgifter" in txt
