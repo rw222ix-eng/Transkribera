@@ -68,6 +68,7 @@ dina steg.}
 ((* for d in u.deluppgifter *))
 \begin{deluppgift}{((( d.bokstav )))}{((( d.poang_str )))}\par
 ((( d.text )))
+((* if d.notis *))\notisruta{((( d.notis )))}((* endif *))
 ((* if d.flerval *))((* for alt in d.flerval *))\par\kryssruta\ ((( alt.bokstav ))): ((( alt.text )))((* endfor *))\par\vspace{2mm}((* elif d.endast_svar *))\svarsrad((* else *))\par\vspace{((( d.utrymme_mm )))mm}((* endif *))
 \end{deluppgift}
 ((* endfor *))

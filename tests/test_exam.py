@@ -741,6 +741,27 @@ def test_prov_renderar_notis():
     assert r"\notisruta{" in tex
 
 
+def test_deluppgifts_notis_renderas_i_prov_och_arbetsblad():
+    """Regressionsskydd: _enhet_vy beräknar d.notis för varje deluppgift,
+    men INGEN mall renderade den (tyst dataförlust — en modellskriven
+    notis på en deluppgift försvann från både elevens papper och facit).
+    Bedömningsanvisningen ska INTE ha notisrutan (notis är en
+    elevinstruktion, inte en bedömningsanvisning) — se den separata
+    kontrollen mot render_bedomning."""
+    data = _exam_med_deluppgifter()
+    data["uppgifter"][6]["deluppgifter"][0]["notis"] = "Tänk på tecknet."
+    doc, errors = exam_spec.validate_exam_json(data)
+    assert doc is not None and errors == []
+
+    prov = exam_latex.render_prov(doc)
+    arbetsblad = exam_latex.render_arbetsblad(doc)
+    bedomning = exam_latex.render_bedomning(doc)
+    assert r"\notisruta{Tänk på tecknet.}" in prov
+    assert r"\notisruta{Tänk på tecknet.}" in arbetsblad
+    # bedömningsanvisningen ska inte innehålla notisrutan
+    assert r"\notisruta{Tänk på tecknet.}" not in bedomning
+
+
 def test_bedomning_visar_deluppgifternas_facit():
     doc, _ = exam_spec.validate_exam_json(_exam_med_deluppgifter())
     tex = exam_latex.render_bedomning(doc)

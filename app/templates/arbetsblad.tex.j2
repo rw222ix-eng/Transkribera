@@ -46,6 +46,7 @@ på sista sidan((* if visa_poang *)); poäng anges som totalpoäng((* endif *)).
 \begin{deluppgift}{((( d.bokstav )))}{}
 ((* endif *))
 ((( d.text )))
+((* if d.notis *))\notisruta{((( d.notis )))}((* endif *))
 ((* if d.flerval *))((* for alt in d.flerval *))\par\kryssruta\ ((( alt.bokstav ))): ((( alt.text )))((* endfor *))\par\vspace{2mm}((* elif d.endast_svar *))\svarsrad((* else *))\par\vspace{((( d.utrymme_mm )))mm}((* endif *))
 \end{deluppgift}
 ((* endfor *))
