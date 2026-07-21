@@ -73,6 +73,46 @@ def test_funktionsgrafer_kompilerar(d):
         shutil.rmtree("_figkontroll", ignore_errors=True)
 
 
+def test_triangel_ger_tikz_och_hornmarkeringar():
+    tikz = exam_figures.render_figur(_bygg({"typ": "triangel", "a": 5, "b": 4, "c": 3}))
+    assert r"--cycle" in tikz
+    assert "$A$" in tikz and "$B$" in tikz and "$C$" in tikz
+
+
+def test_enhetscirkel_har_vinkelbage():
+    tikz = exam_figures.render_figur(_bygg({"typ": "enhetscirkel", "vinkel": 40}))
+    assert r"\pic" in tikz and "angle=" in tikz
+    assert "circle (1)" in tikz
+
+
+def test_stapeldiagram_en_stapel_per_kategori():
+    tikz = exam_figures.render_figur(_bygg(
+        {"typ": "stapeldiagram", "kategorier": ["A", "B", "C"], "varden": [3, 5, 2]}))
+    assert tikz.count("rectangle") == 3
+
+
+def test_ladagram_har_lada_och_morrhar():
+    tikz = exam_figures.render_figur(_bygg(
+        {"typ": "ladagram", "min": 2, "q1": 5, "median": 8, "q3": 11, "max": 14}))
+    assert "rectangle" in tikz
+
+
+@pytest.mark.parametrize("d", [
+    {"typ": "triangel", "a": 5, "b": 4, "c": 3},
+    {"typ": "enhetscirkel", "vinkel": 40},
+    {"typ": "stapeldiagram", "kategorier": ["A", "B", "C"], "varden": [3, 5, 2]},
+    {"typ": "ladagram", "min": 2, "q1": 5, "median": 8, "q3": 11, "max": 14},
+])
+def test_geometri_statistik_kompilerar(d):
+    if not exam_pdf.engine_available():
+        pytest.skip("Tectonic saknas")
+    try:
+        assert _kompilera(exam_figures.render_figur(_bygg(d)))
+    finally:
+        import shutil
+        shutil.rmtree("_figkontroll", ignore_errors=True)
+
+
 def _sidantal(tikz: str):
     """Antal PDF-sidor för en figur (None om fitz saknas)."""
     try:

@@ -8,6 +8,8 @@ Kurvetiketter placeras på kurvan i den ände som har plats (designsystemets
 placeringsregel)."""
 from __future__ import annotations
 
+import math
+
 from app import exam_spec
 
 
@@ -96,11 +98,87 @@ def _normalfordelning(f: "exam_spec.FigNormalfordelning") -> str:
     ])
 
 
+def _triangel(f: "exam_spec.FigTriangel") -> str:
+    # A=(0,0), B=(c,0), C ovanför. |AC|=b, |BC|=a.
+    cx = (f.b ** 2 + f.c ** 2 - f.a ** 2) / (2 * f.c)
+    cy = math.sqrt(max(f.b ** 2 - cx ** 2, 0.0))
+    return "\n".join([
+        r"\begin{tikzpicture}[scale=0.85,line join=round]",
+        rf"\coordinate (A) at (0,0); \coordinate (B) at ({_f(f.c)},0); "
+        rf"\coordinate (C) at ({_f(cx)},{_f(cy)});",
+        r"\draw[thick] (A)--(B)--(C)--cycle;",
+        r"\node[below left] at (A) {$A$};",
+        r"\node[below right] at (B) {$B$};",
+        r"\node[above] at (C) {$C$};",
+        rf"\node[below] at ({_f(f.c / 2)},0) {{$c={_f(f.c)}$}};",
+        r"\end{tikzpicture}",
+    ])
+
+
+def _enhetscirkel(f: "exam_spec.FigEnhetscirkel") -> str:
+    v = _f(f.vinkel)
+    return "\n".join([
+        r"\begin{tikzpicture}[scale=2.1,line join=round]",
+        r"\draw[->] (-1.35,0)--(1.4,0) node[right]{$x$};",
+        r"\draw[->] (0,-1.35)--(0,1.4) node[above]{$y$};",
+        r"\draw[thick] (0,0) circle (1);",
+        rf"\coordinate (O) at (0,0); \coordinate (X) at (1,0); "
+        rf"\coordinate (P) at ({{cos({v})}},{{sin({v})}});",
+        r"\draw[thick] (O)--(P); \fill (P) circle (0.022);",
+        r"\draw[dashed] (P)--({cos(" + v + r")},0);",
+        r"\draw[dashed] (P)--(0,{sin(" + v + r")});",
+        r'\pic["$v$",draw,angle radius=8mm,angle eccentricity=1.35]{angle=X--O--P};',
+        r"\end{tikzpicture}",
+    ])
+
+
+def _stapeldiagram(f: "exam_spec.FigStapeldiagram") -> str:
+    from app.exam_latex import escape_latex
+    ymax = max(f.varden) + 1
+    ticks = ",".join(str(n) for n in range(1, int(ymax) + 1))
+    rader = [
+        r"\begin{tikzpicture}[scale=1,line join=round]",
+        rf"\draw[->] (0,0)--(0,{_f(ymax + 0.5)}) node[above]{{antal}};",
+        rf"\draw[->] (0,0)--({_f(len(f.varden) + 0.6)},0) node[right]{{ }};",
+        rf"\foreach \n in {{{ticks}}} "
+        r"\draw (0.09,\n)--(-0.09,\n) node[left]{\footnotesize \n};",
+    ]
+    for i, (kat, v) in enumerate(zip(f.kategorier, f.varden)):
+        x0, x1 = _f(0.7 + i), _f(1.3 + i)
+        rader.append(rf"\filldraw[fill=gray!20,draw=black] ({x0},0) rectangle ({x1},{_f(v)});")
+        rader.append(rf"\node[below] at ({_f(1.0 + i)},0) {{\footnotesize {escape_latex(kat)}}};")
+    rader.append(r"\end{tikzpicture}")
+    return "\n".join(rader)
+
+
+def _ladagram(f: "exam_spec.FigLadagram") -> str:
+    y = 1.0
+    lo, q1, md, q3, hi = (_f(f.min), _f(f.q1), _f(f.median), _f(f.q3), _f(f.max))
+    xmax = _f(f.max + 1)
+    return "\n".join([
+        r"\begin{tikzpicture}[scale=0.62,line join=round]",
+        rf"\draw[->] (-0.3,0)--({xmax},0) node[right]{{$x$}};",
+        rf"\draw[thick] ({lo},{_f(y)})--({q1},{_f(y)});",
+        rf"\draw[thick] ({q3},{_f(y)})--({hi},{_f(y)});",
+        rf"\draw[thick] ({q1},{_f(y - 0.5)}) rectangle ({q3},{_f(y + 0.5)});",
+        rf"\draw[very thick] ({md},{_f(y - 0.5)})--({md},{_f(y + 0.5)});",
+        rf"\draw[thick] ({lo},{_f(y - 0.3)})--({lo},{_f(y + 0.3)});",
+        rf"\draw[thick] ({hi},{_f(y - 0.3)})--({hi},{_f(y + 0.3)});",
+        rf"\foreach \x in {{{lo},{q1},{md},{q3},{hi}}} "
+        r"\draw (\x,0.14)--(\x,-0.14) node[below]{\footnotesize \x};",
+        r"\end{tikzpicture}",
+    ])
+
+
 _RENDER = {
     "linjar": _linjar,
     "andragrad": _andragrad,
     "exponential": _exponential,
     "normalfordelning": _normalfordelning,
+    "triangel": _triangel,
+    "enhetscirkel": _enhetscirkel,
+    "stapeldiagram": _stapeldiagram,
+    "ladagram": _ladagram,
 }
 
 
