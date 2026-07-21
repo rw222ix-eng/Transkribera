@@ -496,15 +496,22 @@ def _axlar(xmax: float, ymin: float, ymax: float,
     return "\n".join(rader)
 
 
+# Kurvan ritas i en \clip-scope mot rutans gränser, så en brant/avtagande
+# funktion (t.ex. exponential med bas<1) aldrig svämmar utanför rutan och
+# spränger PDF:en över flera sidor. Axlar och etikett ligger utanför scopen
+# (i rutan per konstruktion). Etiketten sitter på en fast punkt inne i rutan
+# — exakt kurvföljande placering är en uppföljning (se avgränsningen ovan).
+
 def _linjar(f: "exam_spec.FigLinjar") -> str:
     expr = rf"{_f(f.k)}*\x+{_f(f.m)}"
-    ylabel = f.k * 6.6 + f.m
     return "\n".join([
         r"\begin{tikzpicture}[scale=0.5,line join=round]",
         _GRID.format(a=-1, b=-1, c=7, d=7),
         _axlar(7.5, -1, 7.5, [2, 4, 6], [2, 4, 6]),
-        rf"\draw[very thick,domain=-0.6:6.6] plot(\x,{{{expr}}});",
-        rf"\node[anchor=south east] at (6.6,{_f(ylabel)}) {{$y=f(x)$}};",
+        r"\begin{scope}\clip (-1,-1) rectangle (7,7);",
+        rf"\draw[very thick,domain=-1:7,smooth,samples=60] plot(\x,{{{expr}}});",
+        r"\end{scope}",
+        r"\node[anchor=north east] at (6.8,6.7) {$y=f(x)$};",
         r"\end{tikzpicture}",
     ])
 
@@ -515,8 +522,10 @@ def _andragrad(f: "exam_spec.FigAndragrad") -> str:
         r"\begin{tikzpicture}[scale=0.5,line join=round]",
         _GRID.format(a=-1, b=-4, c=7, d=7),
         _axlar(7.6, -4.3, 7.6, [2, 4, 6], [-4, -2, 2, 4, 6]),
-        rf"\draw[domain=-0.3:6.3,smooth,samples=60,very thick] plot(\x,{{{expr}}});",
-        r"\node[anchor=south east] at (6.3,6.9) {$y=f(x)$};",
+        r"\begin{scope}\clip (-1,-4) rectangle (7,7);",
+        rf"\draw[domain=-1:7,smooth,samples=80,very thick] plot(\x,{{{expr}}});",
+        r"\end{scope}",
+        r"\node[anchor=north east] at (6.8,6.8) {$y=f(x)$};",
         r"\end{tikzpicture}",
     ])
 
@@ -528,8 +537,10 @@ def _exponential(f: "exam_spec.FigExponential") -> str:
         r"\begin{tikzpicture}[scale=0.62,line join=round]",
         _GRID.format(a=-3, b=-1, c=3, d=8),
         _axlar(3.4, -1, 8.3, [-2, -1, 1, 2], [2, 4, 6, 8]),
-        rf"\draw[domain=-3:2.08,smooth,samples=70,very thick] plot(\x,{{{expr}}});",
-        r"\node[anchor=west] at (2.15,4.4) {$y=f(x)$};",
+        r"\begin{scope}\clip (-3,-1) rectangle (3,8);",
+        rf"\draw[domain=-3:3,smooth,samples=70,very thick] plot(\x,{{{expr}}});",
+        r"\end{scope}",
+        r"\node[anchor=north east] at (2.9,7.8) {$y=f(x)$};",
         r"\end{tikzpicture}",
     ])
 
