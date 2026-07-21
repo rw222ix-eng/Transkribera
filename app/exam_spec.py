@@ -37,7 +37,10 @@ class _Uppgiftsbas(_Model):
     """Delade fält för uppgifter och deluppgifter."""
     poang: tuple[int, int, int]          # (E, C, A) — NP-notationen (2/1/0)
     text: str                            # uppgifts-/deluppgiftstext; matte inom $…$
-    alternativ: list[str] | None = None  # flervalsalternativ (minst tre)
+    # max_length=12: _VERSAL/_BOKSTAV i exam_latex har bara 12 bokstäver
+    # (A–L) — fler alternativ skulle IndexError:a renderingen i stället för
+    # att stoppas här som ett rent valideringsfel.
+    alternativ: list[str] | None = Field(default=None, max_length=12)
     ratt_alternativ: int | None = None   # 0-baserat index i alternativ
     notis: str | None = None             # inramad instruktionsruta (callout)
 
@@ -77,7 +80,8 @@ class ExamItem(_Uppgiftsbas):
     bild: int | None = None              # 1-baserat index i provets bildunderlag
     losning: str = ""                    # tomt tillåtet när deluppgifter finns
     bedomning: str = ""                  # tomt tillåtet när deluppgifter finns
-    deluppgifter: list[SubItem] | None = None
+    # max_length=12: samma _BOKSTAV-gräns (a–l) som alternativ ovan.
+    deluppgifter: list[SubItem] | None = Field(default=None, max_length=12)
 
     @model_validator(mode="after")
     def _kontrollera_struktur(self):

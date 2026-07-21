@@ -243,6 +243,25 @@ def test_schema_avvisar_nastlade_deluppgifter():
     assert exam_spec.validate_exam_json(bad)[0] is None
 
 
+def test_schema_avvisar_for_manga_alternativ():
+    """_VERSAL/_BOKSTAV i exam_latex har bara 12 bokstäver (A–L). 13
+    flervalsalternativ är annars schema-giltigt men kraschar renderingen
+    med IndexError — gränsen ska stoppa det som ett rent valideringsfel."""
+    bad = _exam_med_flerval()
+    bad["uppgifter"][1]["alternativ"] = [f"${'x'}={i}$" for i in range(13)]
+    bad["uppgifter"][1]["ratt_alternativ"] = 0
+    assert exam_spec.validate_exam_json(bad)[0] is None
+
+
+def test_schema_avvisar_for_manga_deluppgifter():
+    """Samma _BOKSTAV-gräns (12 bokstäver) gäller deluppgifter."""
+    bad = _exam_med_deluppgifter()
+    lov = bad["uppgifter"][6]["deluppgifter"][0]
+    bad["uppgifter"][6]["deluppgifter"] = [
+        {**lov, "poang": [0, 1, 0]} for _ in range(13)]
+    assert exam_spec.validate_exam_json(bad)[0] is None
+
+
 # -------------------------------------------------------- poängsummor --
 
 def test_poangsummor_oforandrad_for_platt_prov():
