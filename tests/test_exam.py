@@ -243,6 +243,36 @@ def test_schema_avvisar_nastlade_deluppgifter():
     assert exam_spec.validate_exam_json(bad)[0] is None
 
 
+# -------------------------------------------------------- poängsummor --
+
+def test_poangsummor_oforandrad_for_platt_prov():
+    """Rekursionen får inte ändra summan för ett prov utan deluppgifter."""
+    doc, _ = exam_spec.validate_exam_json(_exam())
+    s = exam_spec.poangsummor(doc)
+    assert s["total"] == 20 and s["e"] == 9 and s["c"] == 6 and s["a"] == 5
+
+
+def test_poangsummor_summerar_deluppgifter():
+    """Nästlad och platt variant ger samma summa (uppg 7 = [0,3,1] i båda)."""
+    platt, _ = exam_spec.validate_exam_json(_exam())
+    nast, _ = exam_spec.validate_exam_json(_exam_med_deluppgifter())
+    assert exam_spec.poangsummor(nast) == exam_spec.poangsummor(platt)
+
+
+def test_poangenheter_arver_foralderns_formaga():
+    doc, _ = exam_spec.validate_exam_json(_exam_med_deluppgifter())
+    enheter = exam_spec.poangenheter(doc.uppgifter[6])
+    assert len(enheter) == 2
+    assert all(f == "K" for f, _t, _p in enheter)     # ärvt från föräldern
+    assert all(t == "redovisning" for _f, t, _p in enheter)
+
+
+def test_uppg_poang_aggregerar():
+    doc, _ = exam_spec.validate_exam_json(_exam_med_deluppgifter())
+    assert exam_spec.uppg_poang(doc.uppgifter[6]) == (0, 3, 1)
+    assert exam_spec.uppg_poang(doc.uppgifter[0]) == (3, 0, 0)   # löv
+
+
 # ------------------------------------------------------------------ balans --
 
 def test_all_e_points_flagged():

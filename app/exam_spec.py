@@ -170,14 +170,37 @@ def _err(path: str, code: str, message: str) -> dict:
     return {"path": path, "code": code, "message": message}
 
 
+def poangenheter(it: ExamItem
+                 ) -> list[tuple[str, str, tuple[int, int, int]]]:
+    """(förmåga, typ, poäng) per poängbärande enhet. En uppgift med
+    deluppgifter bidrar med sina barn (som ärver förälderns förmåga/typ när
+    egna saknas); en uppgift utan deluppgifter bidrar med sig själv."""
+    if it.deluppgifter:
+        return [(d.formaga or it.formaga, d.typ or it.typ, d.poang)
+                for d in it.deluppgifter]
+    return [(it.formaga, it.typ, it.poang)]
+
+
+def uppg_poang(it: ExamItem) -> tuple[int, int, int]:
+    """Uppgiftens aggregerade (E, C, A): deluppgifternas summa om de finns,
+    annars uppgiftens egen poäng."""
+    if it.deluppgifter:
+        return (sum(d.poang[0] for d in it.deluppgifter),
+                sum(d.poang[1] for d in it.deluppgifter),
+                sum(d.poang[2] for d in it.deluppgifter))
+    return it.poang
+
+
 def poangsummor(doc: ExamDoc) -> dict:
-    """Totalpoäng + fördelning per nivå och förmåga."""
-    e = sum(it.poang[0] for it in doc.uppgifter)
-    c = sum(it.poang[1] for it in doc.uppgifter)
-    a = sum(it.poang[2] for it in doc.uppgifter)
+    """Totalpoäng + fördelning per nivå och förmåga, summerat över alla
+    poängbärande enheter (löv och deluppgifter)."""
+    enheter = [u for it in doc.uppgifter for u in poangenheter(it)]
+    e = sum(p[0] for _f, _t, p in enheter)
+    c = sum(p[1] for _f, _t, p in enheter)
+    a = sum(p[2] for _f, _t, p in enheter)
     formagor: dict[str, int] = {k: 0 for k in FORMAGA_NAMN}
-    for it in doc.uppgifter:
-        formagor[it.formaga] += sum(it.poang)
+    for f, _t, p in enheter:
+        formagor[f] += sum(p)
     return {"total": e + c + a, "e": e, "c": c, "a": a, "formagor": formagor}
 
 
