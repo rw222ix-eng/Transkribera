@@ -1110,6 +1110,23 @@ def test_compile_pdf_real_engine_compiles_deluppgifter_och_flerval(tmp_path):
             assert pdf.stat().st_size > 0
 
 
+def test_compile_pdf_real_engine_figur_pa_foralder_med_deluppgifter(tmp_path):
+    """Figuren ligger på uppgiftsnivå; en FÖRÄLDER med deluppgifter kan alltså
+    bära figur_tex. Just den kombinationen är StrictUndefined-risken — kompilera
+    den genom alla tre mallar med riktiga motorn (inte bara stubbad)."""
+    if not exam_pdf.engine_available():
+        pytest.skip("Tectonic-motorn saknas (bin/tectonic/tectonic.exe)")
+    data = _exam_med_deluppgifter()
+    data["uppgifter"][6]["figur"] = {"typ": "andragrad", "a": 1, "b": -4, "c": 3}
+    doc, errors = exam_spec.validate_exam_json(data)
+    assert doc is not None and errors == []
+    for jobname, tex in (("prov", exam_latex.render_prov(doc)),
+                         ("arbetsblad", exam_latex.render_arbetsblad(doc)),
+                         ("bedomning", exam_latex.render_bedomning(doc))):
+        pdf, logg = exam_pdf.compile_pdf(tex, tmp_path / jobname, jobname)
+        assert pdf is not None and pdf.exists(), f"{jobname}: {logg}"
+
+
 # ------------------------------------------------------------- exam_gen ----
 
 def _stub_llm(responses: list[str]):
