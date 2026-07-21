@@ -72,6 +72,50 @@ def _exam() -> dict:
     }
 
 
+def _exam_med_deluppgifter() -> dict:
+    """_exam() med uppgift 7 (K) uppdelad i två deluppgifter som ärver
+    K/redovisning och summerar till [0,3,1] — aggregatet är oförändrat, så
+    hela provet ska fortfarande passera alla balansregler."""
+    data = _exam()
+    data["uppgifter"][6] = {
+        "del": "C", "formaga": "K", "typ": "redovisning", "poang": [0, 0, 0],
+        "text": "Undersök symmetrilinjen för $f(x) = x^2 - 6x + 5$.",
+        "innehall": ["symmetrilinje"], "losning": "", "bedomning": "",
+        "deluppgifter": [
+            {"poang": [0, 2, 0],
+             "text": "Bestäm symmetrilinjens ekvation.",
+             "losning": "$x = 3$ via $-b/(2a)$.",
+             "bedomning": "+2 C korrekt linje med metod."},
+            {"poang": [0, 1, 1],
+             "text": "Förklara med graf och ord varför den ligger där.",
+             "losning": "Mittpunkt mellan nollställena; grafen är symmetrisk.",
+             "bedomning": "+1 C förklaring, +1 A flera representationer."},
+        ],
+    }
+    return data
+
+
+def _exam_med_flerval() -> dict:
+    """_exam() med uppgift 2 som flervalsfråga (oförändrad poäng/förmåga)."""
+    data = _exam()
+    data["uppgifter"][1] = {
+        "del": "B", "formaga": "P", "typ": "rutin", "poang": [2, 0, 0],
+        "text": "Vilket är ett nollställe till $f(x) = x^2 - 4x + 3$?",
+        "innehall": ["nollställen"],
+        "alternativ": ["$x = 0$", "$x = 1$", "$x = 2$", "$x = 4$"],
+        "ratt_alternativ": 1,
+        "losning": "$x = 1$ ger $f(1) = 0$.",
+        "bedomning": "+2 E för rätt alternativ (B)."}
+    return data
+
+
+def _exam_med_notis() -> dict:
+    """_exam() med en notis (inramad instruktionsruta) på uppgift 1."""
+    data = _exam()
+    data["uppgifter"][0]["notis"] = "Rita gärna en teckenrad som stöd."
+    return data
+
+
 # ------------------------------------------------------- JSON-parsning ----
 
 def test_parse_exam_repairs_eaten_latex_backslashes():
@@ -135,6 +179,49 @@ def test_response_format_shape():
     assert rf["type"] == "json_schema"
     assert rf["json_schema"]["name"] == "matteprov"
     assert "uppgifter" in rf["json_schema"]["schema"]["properties"]
+
+
+def test_schema_godkanner_deluppgifter():
+    doc, errors = exam_spec.validate_exam_json(_exam_med_deluppgifter())
+    assert doc is not None and errors == []
+    assert doc.uppgifter[6].deluppgifter is not None
+    assert len(doc.uppgifter[6].deluppgifter) == 2
+
+
+def test_schema_kraver_noll_poang_pa_foralder_med_deluppgifter():
+    bad = _exam_med_deluppgifter()
+    bad["uppgifter"][6]["poang"] = [1, 0, 0]      # förälder får inte ha poäng
+    doc, errors = exam_spec.validate_exam_json(bad)
+    assert doc is None and any(e["code"] == "schema" for e in errors)
+
+
+def test_schema_kraver_losning_pa_lov():
+    bad = _exam()
+    bad["uppgifter"][0]["losning"] = ""           # löv utan lösning
+    doc, errors = exam_spec.validate_exam_json(bad)
+    assert doc is None and any(e["code"] == "schema" for e in errors)
+
+
+def test_schema_flerval_kraver_minst_tre_alternativ_och_giltigt_index():
+    bad = _exam_med_flerval()
+    bad["uppgifter"][1]["alternativ"] = ["$x=1$", "$x=2$"]   # bara två
+    assert exam_spec.validate_exam_json(bad)[0] is None
+    bad2 = _exam_med_flerval()
+    bad2["uppgifter"][1]["ratt_alternativ"] = 9              # utanför intervall
+    assert exam_spec.validate_exam_json(bad2)[0] is None
+
+
+def test_schema_godkanner_flerval_och_notis():
+    assert exam_spec.validate_exam_json(_exam_med_flerval())[0] is not None
+    assert exam_spec.validate_exam_json(_exam_med_notis())[0] is not None
+
+
+def test_schema_avvisar_nastlade_deluppgifter():
+    """Deluppgifter får inte själva ha deluppgifter (en nivå djupt)."""
+    bad = _exam_med_deluppgifter()
+    bad["uppgifter"][6]["deluppgifter"][0]["deluppgifter"] = [
+        {"poang": [0, 1, 0], "text": "x", "losning": "y", "bedomning": "z"}]
+    assert exam_spec.validate_exam_json(bad)[0] is None
 
 
 # ------------------------------------------------------------------ balans --

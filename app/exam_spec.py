@@ -19,7 +19,7 @@ from __future__ import annotations
 import math
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 Formaga = Literal["B", "P", "PL", "M", "R", "K"]
 Uppgiftstyp = Literal["rutin", "redovisning", "problem", "resonemang"]
@@ -33,17 +33,63 @@ class _Model(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
 
-class ExamItem(_Model):
+class _Uppgiftsbas(_Model):
+    """Delade fält för uppgifter och deluppgifter."""
+    poang: tuple[int, int, int]          # (E, C, A) — NP-notationen (2/1/0)
+    text: str                            # uppgifts-/deluppgiftstext; matte inom $…$
+    alternativ: list[str] | None = None  # flervalsalternativ (minst tre)
+    ratt_alternativ: int | None = None   # 0-baserat index i alternativ
+    notis: str | None = None             # inramad instruktionsruta (callout)
+
+    @model_validator(mode="after")
+    def _kontrollera_flerval(self):
+        if self.alternativ is not None:
+            if len(self.alternativ) < 3:
+                raise ValueError("flervalsfråga måste ha minst tre alternativ")
+            if (self.ratt_alternativ is None
+                    or not 0 <= self.ratt_alternativ < len(self.alternativ)):
+                raise ValueError("ratt_alternativ måste vara ett giltigt "
+                                 "index i alternativ")
+        elif self.ratt_alternativ is not None:
+            raise ValueError("ratt_alternativ satt utan alternativ")
+        return self
+
+
+class SubItem(_Uppgiftsbas):
+    formaga: Formaga | None = None       # ärver förälderns när None
+    typ: Uppgiftstyp | None = None       # ärver förälderns när None
+    losning: str
+    bedomning: str
+
+
+class ExamItem(_Uppgiftsbas):
     del_: Del | None = Field(default=None, alias="del")
     formaga: Formaga
     sekundara: list[Formaga] | None = None
     typ: Uppgiftstyp
-    poang: tuple[int, int, int]          # (E, C, A) — NP-notationen (2/1/0)
-    text: str                            # uppgiftstext; matte inom $…$
     innehall: list[str] | None = None    # taggar mot centralt innehåll
     bild: int | None = None              # 1-baserat index i provets bildunderlag
-    losning: str                         # lösningsförslag (lärarens rättning)
-    bedomning: str                       # bedömningsanvisning per uppgift
+    losning: str = ""                    # tomt tillåtet när deluppgifter finns
+    bedomning: str = ""                  # tomt tillåtet när deluppgifter finns
+    deluppgifter: list[SubItem] | None = None
+
+    @model_validator(mode="after")
+    def _kontrollera_struktur(self):
+        if self.deluppgifter:
+            if any(self.poang):
+                raise ValueError("en uppgift med deluppgifter måste ha poäng "
+                                 "[0,0,0] — poängen ligger på deluppgifterna")
+            if self.alternativ is not None:
+                raise ValueError("en uppgift med deluppgifter kan inte själv "
+                                 "vara en flervalsfråga")
+        else:
+            if not self.losning.strip():
+                raise ValueError("uppgift utan deluppgifter måste ha ett "
+                                 "lösningsförslag")
+            if not self.bedomning.strip():
+                raise ValueError("uppgift utan deluppgifter måste ha en "
+                                 "bedömningsanvisning")
+        return self
 
 
 class ExamDoc(_Model):
