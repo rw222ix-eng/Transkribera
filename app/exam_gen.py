@@ -86,7 +86,9 @@ INSTRUCTION = (
     '"losning": "$f(3) = 0$.", "bedomning": "+1 E för rätt alternativ."}\n'
     "Balans: sprid poängen över förmågorna, ha stigande svårighet, blanda "
     "rutinuppgifter med redovisnings- och problemuppgifter, och lägg "
-    "E-tyngden tidigt. Exempel på EN uppgift:\n"
+    "E-tyngden tidigt. Varje uppgift ska vara DISTINKT — upprepa aldrig samma "
+    "frågeformulering eller kontext; variera moment, tal och situation. "
+    "Exempel på EN uppgift:\n"
     '{"del": "B", "formaga": "P", "typ": "rutin", "poang": [1, 0, 0], '
     '"text": "Lös ekvationen $2x + 7 = 19$.", "innehall": ["linjära ekvationer"], '
     '"losning": "$2x = 12$ ger $x = 6$.", '
@@ -145,7 +147,8 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
     if profil == "arbetsblad":
         block.append(
             f"Uppdrag: skriv ett ARBETSBLAD (övningsblad, inte prov) för "
-            f"{kurs}, klass {klass}, med ungefär {antal} uppgifter. Tyngden "
+            f"{kurs}, klass {klass}, med EXAKT {antal} uppgifter (varken fler "
+            f"eller färre). Tyngden "
             "ligger på rutin- och procedursuppgifter med stigande svårighet; "
             "inga delar behövs (del: null på alla uppgifter). Lösnings-"
             "förslagen blir facit. Svara med enbart JSON.")
@@ -153,9 +156,9 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
         delar_txt = ("Dela provet i Del B (utan räknare) och Del C (med räknare)."
                      if delar else "Provet har inga delar (del: null på alla uppgifter).")
         block.append(
-            f"Uppdrag: skriv ett prov för {kurs}, klass {klass}, med ungefär "
-            f"{antal} uppgifter för {tid_min} minuters provtid. {delar_txt} "
-            "Svara med enbart JSON.")
+            f"Uppdrag: skriv ett prov för {kurs}, klass {klass}, med EXAKT "
+            f"{antal} uppgifter (varken fler eller färre) för {tid_min} "
+            f"minuters provtid. {delar_txt} Svara med enbart JSON.")
     return "\n\n".join(block)
 
 
@@ -251,12 +254,24 @@ def _parse_exam(raw: str) -> dict | None:
     return None
 
 
-def _llm_round(prompt: str, model: str, llm) -> dict | None:
+def _validate(exam: dict, profil: str):
+    """validate_exam_json + variationskontroll (BARA prov). Repetition matas in
+    i reparationsloopen precis som balansfel; arbetsbladet undantas (det får
+    drilla samma frågetyp med flit, jfr antiklumpningen)."""
+    doc, errors = exam_spec.validate_exam_json(exam, profil)
+    if doc is not None and profil == "prov":
+        errors = errors + exam_spec.validate_variation(doc)
+    return doc, errors
+
+
+def _llm_round(prompt: str, model: str, llm, antal: int | None = None) -> dict | None:
     raw = llm(
         model, prompt,
         system=SYSTEM,
         options={"temperature": 0.3},
-        response_format=exam_spec.to_response_format(),
+        # antal → grammatik-tak (maxItems) så modellen inte kan överproducera,
+        # även i reparationsrundorna.
+        response_format=exam_spec.to_response_format(antal),
         max_tokens=EXAM_MAX_TOKENS,
         token_cb=None,
     )
@@ -265,18 +280,19 @@ def _llm_round(prompt: str, model: str, llm) -> dict | None:
 
 def _repair_until_valid(exam: dict | None, errors: list, *, model: str, llm,
                         rounds_used: int, max_rounds: int, profil: str = "prov",
+                        antal: int | None = None,
                         log_cb: Callable[[str], None] | None = None) -> dict:
     log = log_cb or (lambda _m: None)
     while errors and rounds_used < max_rounds and exam is not None:
         rounds_used += 1
         log(f"Justerar provet (runda {rounds_used} av {max_rounds}) — "
             f"{len(errors)} problem …")
-        candidate = _llm_round(build_repair_prompt(exam, errors), model, llm)
+        candidate = _llm_round(build_repair_prompt(exam, errors), model, llm, antal)
         if candidate is None:
             errors = [{"path": "svar", "code": "json",
                        "message": "modellen svarade inte med giltig JSON"}]
             continue
-        _doc, new_errors = exam_spec.validate_exam_json(candidate, profil)
+        _doc, new_errors = _validate(candidate, profil)
         exam = candidate
         errors = new_errors
     return {"exam": exam, "errors": errors, "rounds": rounds_used}
@@ -298,22 +314,22 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     prompt = build_prompt(kurs, klass, punkter, antal=antal, tid_min=tid_min,
                           delar=delar, memory=memory, teman=teman,
                           referens=referens, bilder=bilder, profil=profil)
-    exam = _llm_round(prompt, model, llm)
+    exam = _llm_round(prompt, model, llm, antal)
     rounds = 1
     while exam is None and rounds < max_rounds:
         rounds += 1
         log(f"Modellen svarade inte med giltig JSON — försöker igen "
             f"(runda {rounds} av {max_rounds}) …")
-        exam = _llm_round(prompt, model, llm)
+        exam = _llm_round(prompt, model, llm, antal)
     if exam is None:
         return {"exam": None,
                 "errors": [{"path": "svar", "code": "json",
                             "message": "modellen svarade inte med giltig JSON"}],
                 "rounds": rounds}
-    _doc, errors = exam_spec.validate_exam_json(exam, profil)
+    _doc, errors = _validate(exam, profil)
     return _repair_until_valid(exam, errors, model=model, llm=llm,
                                rounds_used=rounds, max_rounds=max_rounds,
-                               profil=profil, log_cb=log_cb)
+                               profil=profil, antal=antal, log_cb=log_cb)
 
 
 def refine_exam(exam: dict, instruction: str, *, model: str,
@@ -331,7 +347,7 @@ def refine_exam(exam: dict, instruction: str, *, model: str,
                 "errors": [{"path": "svar", "code": "json",
                             "message": "modellen svarade inte med giltig JSON"}],
                 "rounds": 1}
-    _doc, errors = exam_spec.validate_exam_json(candidate, profil)
+    _doc, errors = _validate(candidate, profil)
     return _repair_until_valid(candidate, errors, model=model, llm=llm,
                                rounds_used=1, max_rounds=max_rounds,
                                profil=profil, log_cb=log_cb)

@@ -17,6 +17,7 @@ Uppgifterna är alltid egenformulerade; endast strukturen efterliknar NP.
 from __future__ import annotations
 
 import math
+import re
 from typing import Annotated, Literal, Union
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
@@ -219,11 +220,18 @@ class ExamDoc(_Model):
     uppgifter: list[ExamItem] = Field(min_length=1)
 
 
-def to_response_format() -> dict:
-    """json_schema-objekt för llama-servers grammatiktvång."""
+def to_response_format(antal: int | None = None) -> dict:
+    """json_schema-objekt för llama-servers grammatiktvång. När `antal` anges
+    tvingar grammatiken EXAKT så många toppuppgifter (min=max) — llama.cpp:s
+    grammatik hedrar min/maxItems, så modellen kan inte överproducera (30 i
+    stället för de begärda) och slösa GPU-rundor på att sedan bantas."""
+    schema = ExamDoc.model_json_schema()
+    if antal is not None:
+        schema["properties"]["uppgifter"]["minItems"] = antal
+        schema["properties"]["uppgifter"]["maxItems"] = antal
     return {
         "type": "json_schema",
-        "json_schema": {"name": "matteprov", "schema": ExamDoc.model_json_schema()},
+        "json_schema": {"name": "matteprov", "schema": schema},
     }
 
 
@@ -489,6 +497,42 @@ def kravgranser(doc: ExamDoc, config: dict | None = None) -> dict:
         ),
     }
     return granser
+
+
+_VAR_MATH_RE = re.compile(r"\$[^$]*\$")
+_VAR_ORD_RE = re.compile(r"[^a-zåäö\s]+")
+
+
+def _skelett(text: str) -> set[str]:
+    """Ordmängd ur en uppgiftstext för dubblettjämförelse: matte ($…$), siffror
+    och skiljetecken bort, gemener — så 'medianen av 2,5,7' och 'medianen av
+    1,3,5' får samma skelett."""
+    t = _VAR_MATH_RE.sub(" ", (text or "").lower())
+    t = _VAR_ORD_RE.sub(" ", t)
+    return set(t.split())
+
+
+def validate_variation(doc: ExamDoc, troskel: float = 0.8) -> list[dict]:
+    """Flagga toppuppgifter med (nästan) identisk frågeformulering (Jaccard
+    ≥ troskel på ordskelettet) — modellen upprepar annars samma frågetyp. En
+    flagga per uppgift (mot den första den liknar). Körs bara på PROV (se
+    anroparen) — arbetsbladet får drilla samma frågetyp med flit."""
+    toks = [_skelett(u.text) for u in doc.uppgifter]
+    errors: list[dict] = []
+    for i in range(len(toks)):
+        if not toks[i]:
+            continue
+        for j in range(i):
+            if not toks[j]:
+                continue
+            union = len(toks[i] | toks[j])
+            if union and len(toks[i] & toks[j]) / union >= troskel:
+                errors.append(_err(
+                    f"uppgifter.{i}", "variation",
+                    f"uppgift {i + 1} är för lik uppgift {j + 1} — variera "
+                    f"frågan (moment, tal eller kontext)"))
+                break
+    return errors
 
 
 def validate_exam_json(data, profil: str = "prov") -> tuple[ExamDoc | None, list[dict]]:

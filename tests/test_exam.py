@@ -320,6 +320,18 @@ def test_response_format_har_figur_diskriminator():
     assert "discriminator" in json.dumps(rf["json_schema"]["schema"])
 
 
+def test_to_response_format_kapar_antal_uppgifter():
+    """Med antal satt tvingar grammatiken exakt så många toppuppgifter
+    (min=max) — llama.cpp hedrar min/maxItems, så modellen kan inte
+    överproducera. Utan antal finns ingen övre gräns."""
+    upp = exam_spec.to_response_format(6)["json_schema"]["schema"] \
+        ["properties"]["uppgifter"]
+    assert upp["maxItems"] == 6 and upp["minItems"] == 6
+    upp0 = exam_spec.to_response_format()["json_schema"]["schema"] \
+        ["properties"]["uppgifter"]
+    assert "maxItems" not in upp0
+
+
 # -------------------------------------------------------- poängsummor --
 
 def test_poangsummor_oforandrad_for_platt_prov():
@@ -1161,6 +1173,43 @@ def test_generate_exam_valid_first_try():
     assert "pq-formeln" in calls[0]["prompt"]
 
 
+def test_generate_exam_trar_antal_till_grammatiken():
+    """generate_exam(antal=N) ska sätta grammatik-taket (maxItems=N) i det
+    response_format som skickas till modellen — inte bara i prompten."""
+    llm, calls = _stub_llm([json.dumps(_exam())])
+    exam_gen.generate_exam("Ma2b", "SA23", [], model="m", antal=6, llm=llm)
+    upp = calls[0]["response_format"]["json_schema"]["schema"] \
+        ["properties"]["uppgifter"]
+    assert upp["maxItems"] == 6
+
+
+def test_validate_variation_flaggar_upprepade():
+    """Två toppuppgifter med (nästan) identisk frågeformulering ska flaggas —
+    modellen upprepar annars samma frågetyp (skarp körning)."""
+    data = _exam()
+    data["uppgifter"][1]["text"] = data["uppgifter"][0]["text"]  # exakt dubblett
+    doc, _ = exam_spec.validate_exam_json(data, "prov")
+    errs = exam_spec.validate_variation(doc)
+    assert any(e["code"] == "variation" for e in errs)
+
+
+def test_validate_variation_slapper_distinkta():
+    """Den kanoniska (distinkta) fixturen ska INTE flaggas."""
+    doc, _ = exam_spec.validate_exam_json(_exam(), "prov")
+    assert exam_spec.validate_variation(doc) == []
+
+
+def test_generate_flode_undantar_arbetsblad_fran_variation():
+    """Variationskontrollen körs bara på PROV — arbetsbladet får drilla samma
+    frågetyp i rad, precis som antiklumpningen."""
+    dup = _exam()
+    dup["uppgifter"][1]["text"] = dup["uppgifter"][0]["text"]
+    _d1, errs_prov = exam_gen._validate(dup, "prov")
+    _d2, errs_ab = exam_gen._validate(dup, "arbetsblad")
+    assert any(e["code"] == "variation" for e in errs_prov)
+    assert not any(e["code"] == "variation" for e in errs_ab)
+
+
 def test_generate_exam_repairs_imbalance():
     bad = _exam()
     for u in bad["uppgifter"]:
@@ -1393,3 +1442,19 @@ def test_prompt_beskriver_figurer():
     assert any(t in txt for t in ("andragrad", "normalfordelning", "enhetscirkel"))
     # figur och bild utesluter varandra ska framgå
     assert "figur ELLER bild" in txt or "utesluter" in txt
+
+
+def test_prompt_kraver_exakt_antal():
+    """Prompten ska kräva EXAKT antal uppgifter (inte 'ungefär') så den inte
+    förhandlar bort antalet — modellen överproducerade annars (skarp körning)."""
+    p = exam_gen.build_prompt("Ma2b", "SA23", [], antal=8, profil="prov")
+    assert "EXAKT" in p and "8" in p and "ungefär" not in p
+    pa = exam_gen.build_prompt("Ma2b", "SA23", [], antal=5, profil="arbetsblad")
+    assert "EXAKT" in pa and "ungefär" not in pa
+
+
+def test_instruction_kraver_variation():
+    """INSTRUCTION ska be modellen variera uppgifterna (mot repetitionen som
+    den skarpa körningen visade)."""
+    low = exam_gen.INSTRUCTION.lower()
+    assert "variera" in low or "distinkt" in low
