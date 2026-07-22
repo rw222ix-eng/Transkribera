@@ -97,7 +97,9 @@ class FigAndragrad(_Model):
 class FigExponential(_Model):
     typ: Literal["exponential"]
     C: float                              # startvärde (y vid x=0)
-    bas: float = Field(gt=0)              # bas > 0; y = C · bas^x
+    # bas > 0; övre gräns så bas^x över domänen [-3,3] inte ger OverflowError
+    # i receptet. 1000 är långt över alla rimliga tillväxt-/sönderfallsbaser.
+    bas: float = Field(gt=0, le=1000)     # y = C · bas^x
 
 
 class FigNormalfordelning(_Model):
@@ -122,7 +124,9 @@ class FigTriangel(_Model):
 
 class FigEnhetscirkel(_Model):
     typ: Literal["enhetscirkel"]
-    vinkel: float = Field(ge=0, le=360)   # grader
+    # gt=0, lt=360: vinkel 0/360 ger en degenererad \pic (P på X-axeln) och
+    # nollånga hjälplinjer — en meningslös figur. Vinklar däremellan är fria.
+    vinkel: float = Field(gt=0, lt=360)   # grader
 
 
 class FigStapeldiagram(_Model):

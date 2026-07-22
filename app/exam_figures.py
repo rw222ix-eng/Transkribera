@@ -149,7 +149,7 @@ def _triangel(f: "exam_spec.FigTriangel") -> str:
         r"\node[below left] at (A) {$A$};",
         r"\node[below right] at (B) {$B$};",
         r"\node[above] at (C) {$C$};",
-        rf"\node[below] at ({_f(f.c * s / 2)},0) {{$c={_f(f.c)}$}};",
+        rf"\node[below] at ({_f(f.c * s / 2)},0) {{$c={_flabel(f.c)}$}};",
         r"\end{tikzpicture}",
     ])
 

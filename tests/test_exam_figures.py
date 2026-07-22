@@ -107,6 +107,15 @@ def test_triangel_ger_tikz_och_hornmarkeringar():
     assert "$A$" in tikz and "$B$" in tikz and "$C$" in tikz
 
 
+def test_triangel_etikett_utan_e_notation():
+    """Triangelns c-etikett visar verkligt värde utan e-notation (via _flabel),
+    konsekvent med axeletiketterna — även för stora sidor (t.ex. meter)."""
+    tikz = exam_figures.render_figur(_bygg(
+        {"typ": "triangel", "a": 1200000, "b": 1300000, "c": 1500000}))
+    assert "e+" not in tikz
+    assert "1500000" in tikz
+
+
 def test_enhetscirkel_har_vinkelbage():
     tikz = exam_figures.render_figur(_bygg({"typ": "enhetscirkel", "vinkel": 40}))
     assert r"\pic" in tikz and "angle=" in tikz
@@ -148,6 +157,24 @@ def test_figur_avvisar_inf_och_nan(bad):
     from pydantic import ValidationError
     with pytest.raises(ValidationError):
         _bygg({"typ": "linjar", "k": bad, "m": 0})
+
+
+@pytest.mark.parametrize("bad", [0, 360])
+def test_enhetscirkel_avvisar_degenererad_vinkel(bad):
+    """vinkel 0/360 ger en degenererad \\pic-vinkel (P sammanfaller med X på
+    axeln) och nollånga hjälplinjer — en meningslös figur. Schemat avvisar
+    dem (gt=0, lt=360); räta/trubbiga vinklar mellan är fortsatt giltiga."""
+    from pydantic import ValidationError
+    with pytest.raises(ValidationError):
+        _bygg({"typ": "enhetscirkel", "vinkel": bad})
+
+
+def test_exponential_avvisar_orimligt_stor_bas():
+    """En orimligt stor bas skulle ge OverflowError i receptet (bas^3 över
+    domänen [-3,3]) — schemat begränsar basen till ett rimligt intervall."""
+    from pydantic import ValidationError
+    with pytest.raises(ValidationError):
+        _bygg({"typ": "exponential", "C": 1, "bas": 1e200})
 
 
 def test_stapeldiagram_escapar_kategorinamn():
