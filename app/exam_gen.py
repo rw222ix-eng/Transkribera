@@ -123,11 +123,26 @@ def build_bilder(beskrivningar: list[str]) -> str:
             'Alla andra uppgifter har "bild": null.')
 
 
+def _skelett_plan(skeleton: list[dict]) -> str:
+    """Läsbar uppgiftsplan ur det balanserade skelettet — talar om för modellen
+    vilket innehåll varje (grammatik-låst) rad ska ha."""
+    rader = [
+        f"{i}. Del {s['del']}, {exam_spec.FORMAGA_NAMN[s['formaga']]} "
+        f"({s['formaga']}), {s['typ']}, poäng {s['poang']}"
+        for i, s in enumerate(skeleton, 1)]
+    return ("Uppgiftsplan — del, förmåga, typ och poäng är LÅSTA per uppgift "
+            "(ändra dem inte); skriv en uppgift vars INNEHÅLL matchar varje rad: "
+            "en R-rad avgör/motiverar ('Avgör om … Motivera.'), en K-rad "
+            "förklarar med ord och representation ('Förklara/Redogör med ord och "
+            "graf …'), en rutin-rad kräver bara svar.\n" + "\n".join(rader))
+
+
 def build_prompt(kurs: str, klass: str, punkter: list[str], *,
                  antal: int = 10, tid_min: int = 120, delar: bool = True,
                  memory: str = "", teman: str = "",
                  referens: str = "", bilder: str = "",
-                 profil: str = "prov") -> str:
+                 profil: str = "prov",
+                 skeleton: list[dict] | None = None) -> str:
     """Genereringsprompt: instruktion + valda innehållspunkter +
     minneskontext + tidigare provs teman (undvik upprepning som default).
     `profil` växlar mellan prov och arbetsblad (Fas 5)."""
@@ -153,20 +168,13 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
             "inga delar behövs (del: null på alla uppgifter). Lösnings-"
             "förslagen blir facit. Svara med enbart JSON.")
     else:
-        # Förmågeplan: modellen fördelar inte förmågor globalt av sig själv
-        # (R och K hamnade på 0 % i skarp körning), så förmågebalansen
-        # konvergerade inte. Ge en konkret fördelning + kravet att alla sex
-        # finns, med mallar för de lätt-missade R och K.
-        plan = exam_spec.formaga_plan(antal, profil)
-        fordelning = ", ".join(f"{f} ×{plan.count(f)}"
-                               for f in exam_spec.FORMAGA_NAMN if plan.count(f))
-        block.append(
-            "Förmågefördelning — ge uppgifternas primära förmåga (formaga) "
-            f"ungefär denna fördelning: {fordelning}. ALLA sex förmågor MÅSTE "
-            "vara representerade med poäng. Glöm särskilt inte R och K: en "
-            "R-uppgift avgör/motiverar ett påstående ('Avgör om … Motivera.'), "
-            "en K-uppgift förklarar med ord och flera representationer "
-            "('Förklara/Redogör med ord och graf …').")
+        # Balanserat skelett: modellen klarar inte den flerdimensionella
+        # balansen (förmåga × nivå) själv, så appen låser del/förmåga/typ/poäng
+        # per uppgift (grammatik) och ger planen här så innehållet matchar.
+        if skeleton is None and delar:
+            skeleton = exam_spec.balanced_skeleton(antal, profil)
+        if skeleton is not None:
+            block.append(_skelett_plan(skeleton))
         delar_txt = ("Dela provet i Del B (utan räknare) och Del C (med räknare)."
                      if delar else "Provet har inga delar (del: null på alla uppgifter).")
         block.append(
@@ -278,14 +286,15 @@ def _validate(exam: dict, profil: str):
     return doc, errors
 
 
-def _llm_round(prompt: str, model: str, llm, antal: int | None = None) -> dict | None:
+def _llm_round(prompt: str, model: str, llm, antal: int | None = None,
+               skeleton: list[dict] | None = None) -> dict | None:
     raw = llm(
         model, prompt,
         system=SYSTEM,
         options={"temperature": 0.3},
-        # antal → grammatik-tak (maxItems) så modellen inte kan överproducera,
-        # även i reparationsrundorna.
-        response_format=exam_spec.to_response_format(antal),
+        # antal → grammatik-tak; skeleton → låst del/förmåga/typ/poäng per
+        # uppgift (balans garanterad). Gäller även reparationsrundorna.
+        response_format=exam_spec.to_response_format(antal, skeleton),
         max_tokens=EXAM_MAX_TOKENS,
         token_cb=None,
     )
@@ -294,14 +303,15 @@ def _llm_round(prompt: str, model: str, llm, antal: int | None = None) -> dict |
 
 def _repair_until_valid(exam: dict | None, errors: list, *, model: str, llm,
                         rounds_used: int, max_rounds: int, profil: str = "prov",
-                        antal: int | None = None,
+                        antal: int | None = None, skeleton: list[dict] | None = None,
                         log_cb: Callable[[str], None] | None = None) -> dict:
     log = log_cb or (lambda _m: None)
     while errors and rounds_used < max_rounds and exam is not None:
         rounds_used += 1
         log(f"Justerar provet (runda {rounds_used} av {max_rounds}) — "
             f"{len(errors)} problem …")
-        candidate = _llm_round(build_repair_prompt(exam, errors), model, llm, antal)
+        candidate = _llm_round(build_repair_prompt(exam, errors), model, llm,
+                               antal, skeleton)
         if candidate is None:
             errors = [{"path": "svar", "code": "json",
                        "message": "modellen svarade inte med giltig JSON"}]
@@ -325,16 +335,21 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     ogenomforbart = exam_spec.genomforbarhet(antal, profil)
     if ogenomforbart:
         return {"exam": None, "errors": ogenomforbart, "rounds": 0}
+    # Balanserat skelett (prov med delar): appen äger balansen, grammatiken
+    # låser del/förmåga/typ/poäng per uppgift, modellen skriver innehållet.
+    skeleton = (exam_spec.balanced_skeleton(antal, profil)
+                if profil == "prov" and delar else None)
     prompt = build_prompt(kurs, klass, punkter, antal=antal, tid_min=tid_min,
                           delar=delar, memory=memory, teman=teman,
-                          referens=referens, bilder=bilder, profil=profil)
-    exam = _llm_round(prompt, model, llm, antal)
+                          referens=referens, bilder=bilder, profil=profil,
+                          skeleton=skeleton)
+    exam = _llm_round(prompt, model, llm, antal, skeleton)
     rounds = 1
     while exam is None and rounds < max_rounds:
         rounds += 1
         log(f"Modellen svarade inte med giltig JSON — försöker igen "
             f"(runda {rounds} av {max_rounds}) …")
-        exam = _llm_round(prompt, model, llm, antal)
+        exam = _llm_round(prompt, model, llm, antal, skeleton)
     if exam is None:
         return {"exam": None,
                 "errors": [{"path": "svar", "code": "json",
@@ -343,7 +358,8 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     _doc, errors = _validate(exam, profil)
     return _repair_until_valid(exam, errors, model=model, llm=llm,
                                rounds_used=rounds, max_rounds=max_rounds,
-                               profil=profil, antal=antal, log_cb=log_cb)
+                               profil=profil, antal=antal, skeleton=skeleton,
+                               log_cb=log_cb)
 
 
 def refine_exam(exam: dict, instruction: str, *, model: str,

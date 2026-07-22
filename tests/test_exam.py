@@ -1462,22 +1462,45 @@ def test_instruction_kraver_variation():
     assert "variera" in low or "distinkt" in low
 
 
-def test_formaga_plan_tacker_alla_golvformagor():
-    """Förmågeplanen ska täcka alla golv-förmågor (prov: alla sex) minst en
-    gång och ha exakt `antal` poster — så modellen får en konkret fördelning
-    i stället för att skeva bort R och K (förmågebalansen konvergerade annars
-    inte inom rundbudgeten)."""
-    for antal in (6, 8, 10):
-        plan = exam_spec.formaga_plan(antal, "prov")
-        assert len(plan) == antal
-        assert set(plan) == {"B", "P", "PL", "M", "R", "K"}
+@pytest.mark.parametrize("antal", [6, 7, 8, 9, 10, 11, 12])
+def test_balanced_skeleton_validerar_rent(antal):
+    """Skelettet ska vara balanserat OCH ordnat BY CONSTRUCTION — appen
+    garanterar hela balansen (förmåga + nivå + ordning), modellen skriver bara
+    innehållet. Skelettet grammatik-tvingas, så om det validerar rent gör
+    provet det också."""
+    sk = exam_spec.balanced_skeleton(antal, "prov")
+    assert len(sk) == antal
+    doc = exam_spec.ExamDoc(
+        titel="x", kurs="Ma2b", hjalpmedel="x",
+        uppgifter=[exam_spec.ExamItem(
+            del_=s["del"], formaga=s["formaga"], typ=s["typ"],
+            poang=tuple(s["poang"]), text="Uppgift.", losning="L.", bedomning="B.")
+            for s in sk])
+    assert exam_spec.validate_balance(doc, profil="prov") == [], \
+        f"antal={antal}: balansfel"
+    assert exam_spec.validate_ordning(doc) == [], f"antal={antal}: ordningsfel"
 
 
-def test_prompt_har_formageplan_for_prov():
-    """Provprompten ska innehålla förmågefördelningen + kravet att alla sex
-    förmågor finns; arbetsbladet (procedurtungt) får ingen sådan plan."""
+def test_to_response_format_skeleton_last_per_index():
+    """Med skeleton ska del/formaga/typ/poang låsas per uppgift via prefixItems
+    (llama.cpp hedrar det — bekräftat i skarp körning)."""
+    sk = exam_spec.balanced_skeleton(8, "prov")
+    upp = exam_spec.to_response_format(skeleton=sk)["json_schema"]["schema"] \
+        ["properties"]["uppgifter"]
+    assert upp["maxItems"] == 8 and len(upp["prefixItems"]) == 8
+    it0 = upp["prefixItems"][0]["properties"]
+    assert it0["del"] == {"const": sk[0]["del"]}
+    assert it0["formaga"] == {"const": sk[0]["formaga"]}
+    assert it0["typ"] == {"const": sk[0]["typ"]}
+    assert it0["poang"]["prefixItems"] == [{"const": p} for p in sk[0]["poang"]]
+
+
+def test_prompt_har_skelettplan_for_prov():
+    """Provprompten ska innehålla den balanserade uppgiftsplanen (skelettet)
+    med alla sex förmågor; arbetsbladet får ingen sådan plan."""
     p = exam_gen.build_prompt("Ma2b", "SA23", [], antal=8, profil="prov")
-    assert "Förmågefördelning" in p and "MÅSTE" in p
-    assert "R" in p and "K" in p        # de lätt-missade förmågorna nämns
+    assert "Uppgiftsplan" in p and "LÅSTA" in p
+    for f in ("B", "P", "PL", "M", "R", "K"):
+        assert f"({f})" in p
     pa = exam_gen.build_prompt("Ma2b", "SA23", [], antal=6, profil="arbetsblad")
-    assert "Förmågefördelning" not in pa
+    assert "Uppgiftsplan" not in pa
