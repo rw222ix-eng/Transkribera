@@ -172,8 +172,10 @@ def _enhetscirkel(f: "exam_spec.FigEnhetscirkel") -> str:
 
 
 def _stapeldiagram(f: "exam_spec.FigStapeldiagram") -> str:
+    # Lokal import med flit: exam_latex importerar exam_figures på modulnivå,
+    # så en global import här skulle bli en cirkelimport.
     from app.exam_latex import escape_latex
-    H = 4.0
+    H = 4.0                       # stapeldiagrammets fasta höjd (cm)
     # Schemat garanterar max(varden) > 0, men guarda ändå mot division med
     # noll (försvar på djupet — receptet ska aldrig kunna krascha i ren Python).
     topp = max(f.varden)
@@ -198,7 +200,7 @@ def _stapeldiagram(f: "exam_spec.FigStapeldiagram") -> str:
 
 
 def _ladagram(f: "exam_spec.FigLadagram") -> str:
-    W = 13.0
+    W = 13.0                      # lådagrammets fasta bredd (cm)
     span = f.max - f.min
 
     def X(v): return (v - f.min) / span * W if span > 0 else W / 2

@@ -16,11 +16,14 @@ violation) i stället för att ge ett läsbart LaTeX-fel. Genom att
 kompilera de riktiga mallarna kan sonden och mallarna aldrig glida isär
 tyst igen — vad mallarna faktiskt producerar är vad som seedas.
 
-TikZ och pgfplots används ännu inte av mallarna (kommer i ett senare
-steg) och dras därför fortfarande in via en egen PROBE_TEX, som nu även
-laddar \\usetikzlibrary{angles,quotes} och kompilerar en \\pic angle-figur
-samt en exp-kurva, så att biblioteksglyferna hamnar i cachen innan
-recepten (kommande tasks) behöver dem under --only-cached.
+TikZ används numera av mallarna: figurrecepten (app.exam_figures) bygger
+ren tikz som renderas genom de riktiga mallarna, och det representativa
+dokumentet nedan har en figur (enhetscirkel) som seedar tikz-vägen via
+render_prov/render_arbetsblad/render_bedomning. pgfplots används däremot
+INTE av mallarna (recepten är ren tikz) — PROBE_TEX drar ändå in det
+separat (plus \\usetikzlibrary{angles,quotes}, en \\pic angle-figur och en
+exp-kurva) så att glyferna finns cachade om en framtida figurtyp behöver
+dem under --only-cached.
 
     python -m tools.seed_tectonic_cache
 """

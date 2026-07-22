@@ -1,4 +1,11 @@
-"""Figurrecept (PR 4): ren TikZ-sträng + riktig kompilering."""
+"""Figurrecept (PR 4): ren TikZ-sträng + riktig kompilering.
+
+VIKTIGT om grinden: de kompilerande testerna (kraschskyddet mot "Dimension
+too large", en-sida-kontrollerna, escapning-i-praktiken) skippar när
+exam_pdf.engine_available() är False. På en maskin UTAN seedad Tectonic går
+alltså sviten grön utan att ett enda figurpåstående verifierats — en grön
+svit utan motor bevisar ingenting om figurerna. Kör med seedad motor (och
+fitz för sidräkningen) för att faktiskt testa recepten."""
 from pathlib import Path
 
 import pytest
