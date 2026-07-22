@@ -86,7 +86,9 @@ INSTRUCTION = (
     '"losning": "$f(3) = 0$.", "bedomning": "+1 E för rätt alternativ."}\n'
     "Balans: sprid poängen över förmågorna, ha stigande svårighet, blanda "
     "rutinuppgifter med redovisnings- och problemuppgifter, och lägg "
-    "E-tyngden tidigt. Exempel på EN uppgift:\n"
+    "E-tyngden tidigt. Varje uppgift ska vara DISTINKT — upprepa aldrig samma "
+    "frågeformulering eller kontext; variera moment, tal och situation. "
+    "Exempel på EN uppgift:\n"
     '{"del": "B", "formaga": "P", "typ": "rutin", "poang": [1, 0, 0], '
     '"text": "Lös ekvationen $2x + 7 = 19$.", "innehall": ["linjära ekvationer"], '
     '"losning": "$2x = 12$ ger $x = 6$.", '
@@ -145,7 +147,8 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
     if profil == "arbetsblad":
         block.append(
             f"Uppdrag: skriv ett ARBETSBLAD (övningsblad, inte prov) för "
-            f"{kurs}, klass {klass}, med ungefär {antal} uppgifter. Tyngden "
+            f"{kurs}, klass {klass}, med EXAKT {antal} uppgifter (varken fler "
+            f"eller färre). Tyngden "
             "ligger på rutin- och procedursuppgifter med stigande svårighet; "
             "inga delar behövs (del: null på alla uppgifter). Lösnings-"
             "förslagen blir facit. Svara med enbart JSON.")
@@ -153,9 +156,9 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
         delar_txt = ("Dela provet i Del B (utan räknare) och Del C (med räknare)."
                      if delar else "Provet har inga delar (del: null på alla uppgifter).")
         block.append(
-            f"Uppdrag: skriv ett prov för {kurs}, klass {klass}, med ungefär "
-            f"{antal} uppgifter för {tid_min} minuters provtid. {delar_txt} "
-            "Svara med enbart JSON.")
+            f"Uppdrag: skriv ett prov för {kurs}, klass {klass}, med EXAKT "
+            f"{antal} uppgifter (varken fler eller färre) för {tid_min} "
+            f"minuters provtid. {delar_txt} Svara med enbart JSON.")
     return "\n\n".join(block)
 
 

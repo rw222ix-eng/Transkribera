@@ -1415,3 +1415,19 @@ def test_prompt_beskriver_figurer():
     assert any(t in txt for t in ("andragrad", "normalfordelning", "enhetscirkel"))
     # figur och bild utesluter varandra ska framgå
     assert "figur ELLER bild" in txt or "utesluter" in txt
+
+
+def test_prompt_kraver_exakt_antal():
+    """Prompten ska kräva EXAKT antal uppgifter (inte 'ungefär') så den inte
+    förhandlar bort antalet — modellen överproducerade annars (skarp körning)."""
+    p = exam_gen.build_prompt("Ma2b", "SA23", [], antal=8, profil="prov")
+    assert "EXAKT" in p and "8" in p and "ungefär" not in p
+    pa = exam_gen.build_prompt("Ma2b", "SA23", [], antal=5, profil="arbetsblad")
+    assert "EXAKT" in pa and "ungefär" not in pa
+
+
+def test_instruction_kraver_variation():
+    """INSTRUCTION ska be modellen variera uppgifterna (mot repetitionen som
+    den skarpa körningen visade)."""
+    low = exam_gen.INSTRUCTION.lower()
+    assert "variera" in low or "distinkt" in low
