@@ -23,16 +23,18 @@
 - **Testkommando:** `python -m pytest` från repo-roten.
 - **Känt testundantag:** `tests/test_hardware.py::test_scan_returns_sane_values` faller i hårdvarulös container även på ren `main`.
 
-### Känd avgränsning: fasta bildrutor
+### Skalinvarianta recept (rättat efter slutgranskning)
 
-Recepten använder designsystemets **fasta bildrutor** (samma axelintervall som
-designsystemets egna recept — verifierat att de kompilerar). Extrema parametrar
-(t.ex. `andragrad` med stor `a`, `exponential` med stor `bas`) kan därför sträcka
-kurvan utanför ramen. Prompten (Task 6) instruerar modellen att välja figurer
-vars väsentliga drag ryms i rutan. **Adaptiv ramanpassning** (räkna ut axel-
-intervall ur parametrarna) och exakt per-parameter-etikettplacering är en
-medveten uppföljning, inte denna PR — precis som designsystemet självt använder
-fasta rutor med förvalda etikettpositioner.
+FÖRSTA utkastet ritade i fasta rutor med råa datakoordinater, vilket kraschade
+kompileringen ("Dimension too large") för helt naturliga tal (ränta-på-ränta,
+lönefördelning, kronor-staplar). Recepten är nu SKALINVARIANTA: funktions-
+graferna samplar funktionen och mappar data in i en fast ritruta (koordinaten
+kan aldrig spränga TeX); normalfördelningen ritas i en fast klockram och axeln
+etiketteras med de verkliga talen; stapel- och lådagram normaliseras mot en fast
+ram med ticks på de verkliga värdena. Verifierat att både extrema och normala
+parametrar kompilerar till EN sida. (Se `slutfix`-committen — receptkoden i
+Task 3/4 nedan är det gamla fastruteutkastet, ersatt av den skalinvarianta
+versionen.)
 
 ### Talformat-hjälpare (används i varje recept)
 
