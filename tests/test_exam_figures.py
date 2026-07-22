@@ -50,6 +50,29 @@ def test_linjar_ger_tikz():
     assert "plot coordinates" in tikz
 
 
+def test_funktionsgraf_har_tydligt_rutnat_och_flyttad_etikett():
+    """Funktionsgraferna ska ha ett TYDLIGT rutnät (minor- + majorlinjer, inte
+    den gamla svaga gray!30-ramen) och y=f(x)-etiketten placeras dynamiskt (inte
+    längre hårdkodad i övre högra hörnet) så den inte tangerar kurvan."""
+    tikz = exam_figures.render_figur(_bygg({"typ": "linjar", "k": 1, "m": 0}))
+    assert "black!50" in tikz              # majorlinjer, klart synliga
+    assert "black!30" in tikz              # minorlinjer, klart synliga
+    assert "gray!30" not in tikz           # den gamla svaga ramen är borta
+    assert "$y=f(x)$" in tikz
+    # etiketten är inte längre låst till north east-hörnet
+    assert r"anchor=north east] at (6.85,4.85)" not in tikz
+
+
+def test_ickekoordinatfigur_saknar_rutnat():
+    """Figurer utan koordinatsystem (triangel, enhetscirkel, lådagram) ska INTE
+    ha rutnät — rutnätet hör bara till funktionsgraferna."""
+    for d in ({"typ": "triangel", "a": 5, "b": 4, "c": 3},
+              {"typ": "enhetscirkel", "vinkel": 40},
+              {"typ": "ladagram", "min": 2, "q1": 5, "median": 8, "q3": 11, "max": 14}):
+        tikz = exam_figures.render_figur(_bygg(d))
+        assert "black!50" not in tikz and "black!30" not in tikz
+
+
 def test_andragrad_ger_tikz():
     tikz = exam_figures.render_figur(
         _bygg({"typ": "andragrad", "a": 1, "b": -4, "c": 3}))
