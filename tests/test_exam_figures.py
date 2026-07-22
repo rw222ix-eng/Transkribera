@@ -113,6 +113,17 @@ def test_stapeldiagram_recept_kraschar_inte_pa_noll():
     assert r"\begin{tikzpicture}" in exam_figures._stapeldiagram(fig)
 
 
+@pytest.mark.parametrize("bad", [float("inf"), float("-inf"), float("nan")])
+def test_figur_avvisar_inf_och_nan(bad):
+    """inf/NaN (via json '1e400'/'Infinity'/'NaN' — json.loads accepterar dem)
+    får inte passera schemat: annars kraschar _build_view med ett OFÅNGAT
+    OverflowError/ValueError FÖRE LaTeX-reparationsloopen och SSE-jobbet dör
+    tyst utan PDF."""
+    from pydantic import ValidationError
+    with pytest.raises(ValidationError):
+        _bygg({"typ": "linjar", "k": bad, "m": 0})
+
+
 def test_stapeldiagram_escapar_kategorinamn():
     """Kategorinamn med LaTeX-specialtecken (&, %) måste escapas — annars
     kraschar kompileringen på ett & eller kommenterar bort raden på ett %."""

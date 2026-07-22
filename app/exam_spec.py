@@ -30,7 +30,12 @@ FORMAGA_NAMN = {"B": "Begrepp", "P": "Procedur", "PL": "Problemlösning",
 
 
 class _Model(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    # allow_inf_nan=False: json.loads gör "1e400"/"Infinity"/"NaN" → inf/nan,
+    # och Pydantic v2 släpper annars igenom dem. En inf/nan-figurparameter
+    # kraschar sedan _build_view (t.ex. math.floor(log10(inf))) OFÅNGAT före
+    # LaTeX-reparationsloopen. Avvisa redan vid validering i stället.
+    model_config = ConfigDict(extra="forbid", populate_by_name=True,
+                              allow_inf_nan=False)
 
 
 class _Uppgiftsbas(_Model):
