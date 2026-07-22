@@ -1,6 +1,7 @@
 ((# Delad preamble för prov, arbetsblad och bedömningsanvisning.
     FAST — modellen genererar aldrig preamble, bara uppgiftsinnehåll.
-    Variabler: sidhuvud (str), med_grafik (bool), med_svarsrad (bool). #))
+    Variabler: sidhuvud (str), med_grafik (bool), med_svarsrad (bool),
+    med_tikz (bool). #))
 \documentclass[12pt,a4paper]{article}
 \usepackage[T1]{fontenc}
 ((# amssymb FÖRE newtxmath — omvänd ordning ger
@@ -12,11 +13,29 @@
 ((* if med_grafik *))
 \usepackage{graphicx}
 ((* endif *))
+((# is defined-vakten krävs: prov.tex.j2/arbetsblad.tex.j2/bedomning.tex.j2
+    sätter ännu inte med_tikz (kommer i ett senare steg) — utan vakten
+    skulle StrictUndefined få deras befintliga include att krascha. #))
+((* if med_tikz is defined and med_tikz *))
+\usepackage{tikz}
+\usetikzlibrary{angles,quotes}
+((* endif *))
 \usepackage{fancyhdr}
 \usepackage{lastpage}
 \usepackage{tabularx}
 \usepackage{enumitem}
 \usepackage[swedish]{babel}
+((* if med_tikz is defined and med_tikz *))
+((# Svensk babel gör " till ett aktivt genvägstecken. tikz-biblioteket
+    quotes använder också " för \pic-etiketter (t.ex. "$v$") — utan att
+    stänga av babels genväg krockar de två tolkningarna och ger felet
+    "Argument of \language@active@arg" has an extra }". \shorthandoff
+    direkt i preambeln räcker INTE: babel återaktiverar genvägarna vid
+    \begin{document} (som ligger i prov.tex.j2/arbetsblad.tex.j2/
+    bedomning.tex.j2, inte här) — \AtBeginDocument skjuter upp anropet
+    till dess. #))
+\AtBeginDocument{\shorthandoff{"}}
+((* endif *))
 
 ((# Designsystemets bläckfärger (tokens/colors.css). #))
 \definecolor{ink900}{HTML}{1C1B19}

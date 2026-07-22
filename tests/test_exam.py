@@ -262,6 +262,64 @@ def test_schema_avvisar_for_manga_deluppgifter():
     assert exam_spec.validate_exam_json(bad)[0] is None
 
 
+def _exam_med_figur(figur: dict) -> dict:
+    """_exam() med en figur på uppgift 3 (poäng/förmåga oförändrade)."""
+    data = _exam()
+    data["uppgifter"][2]["figur"] = figur
+    return data
+
+
+def test_schema_godkanner_alla_figurtyper():
+    figurer = [
+        {"typ": "linjar", "k": 0.8, "m": 1},
+        {"typ": "andragrad", "a": 1, "b": -4, "c": 3},
+        {"typ": "exponential", "C": 1, "bas": 2},
+        {"typ": "normalfordelning", "mu": 0, "sigma": 1},
+        {"typ": "triangel", "a": 5, "b": 4, "c": 3},
+        {"typ": "enhetscirkel", "vinkel": 40},
+        {"typ": "stapeldiagram", "kategorier": ["A", "B", "C"], "varden": [3, 5, 2]},
+        {"typ": "ladagram", "min": 2, "q1": 5, "median": 8, "q3": 11, "max": 14},
+    ]
+    for f in figurer:
+        doc, _ = exam_spec.validate_exam_json(_exam_med_figur(f))
+        assert doc is not None, f"{f['typ']} avvisades"
+        assert doc.uppgifter[2].figur.typ == f["typ"]
+
+
+def test_schema_lasersparametrar_per_figurtyp():
+    """Diskriminerad union: linjär kräver k/m, inte a — grammatiktvånget
+    speglar detta."""
+    bad = _exam_med_figur({"typ": "linjar", "a": 1, "b": 2, "c": 3})
+    assert exam_spec.validate_exam_json(bad)[0] is None
+
+
+def test_schema_figur_och_bild_utesluter_varandra():
+    data = _exam_med_figur({"typ": "linjar", "k": 1, "m": 0})
+    data["uppgifter"][2]["bild"] = 1
+    assert exam_spec.validate_exam_json(data)[0] is None
+
+
+@pytest.mark.parametrize("figur", [
+    {"typ": "triangel", "a": 1, "b": 1, "c": 5},          # bryter triangelolikheten
+    {"typ": "ladagram", "min": 2, "q1": 8, "median": 5,   # icke-stigande
+     "q3": 11, "max": 14},
+    {"typ": "stapeldiagram", "kategorier": ["A", "B", "C"],
+     "varden": [3, 5]},                                    # olika längd
+    {"typ": "exponential", "C": 1, "bas": 0},              # bas måste vara > 0
+    {"typ": "normalfordelning", "mu": 0, "sigma": 0},      # sigma måste vara > 0
+])
+def test_schema_avvisar_ogiltiga_figurparametrar(figur):
+    """Figurmodellernas egna validatorer (triangelolikhet, stigande lådagram,
+    lika-långa serier, bas>0, sigma>0) ska avvisa ogiltiga parametrar."""
+    assert exam_spec.validate_exam_json(_exam_med_figur(figur))[0] is None
+
+
+def test_response_format_har_figur_diskriminator():
+    import json
+    rf = exam_spec.to_response_format()
+    assert "discriminator" in json.dumps(rf["json_schema"]["schema"])
+
+
 # -------------------------------------------------------- poängsummor --
 
 def test_poangsummor_oforandrad_for_platt_prov():
@@ -541,6 +599,14 @@ def test_escape_latex_specials():
     assert "textbackslash" in exam_latex.escape_latex("a\\b")
 
 
+def test_escape_latex_escapar_dubbelfnutt():
+    """Svensk babel gör " till en aktiv genväg i huvuddokumentet (ingen
+    \\shorthandoff där). Escapa " så ett citattecken i text/kategorinamn
+    renderas bokstavligt i stället för att tolkas som babel-genväg."""
+    assert exam_latex.escape_latex('säger "hej"') == \
+        r"säger \textquotedbl{}hej\textquotedbl{}"
+
+
 def test_escape_mixed_preserves_math():
     out = exam_latex.escape_mixed("Andelen är 50% eftersom $x^2 \\ge 0$ gäller.")
     assert r"50\%" in out
@@ -682,6 +748,54 @@ def test_preamble_har_strukturmakron():
     assert r"\newcommand{\notisruta}" in tex
     assert r"\newenvironment{deluppgift}" in tex or \
            r"\newcommand{\deluppgift}" in tex
+
+
+def test_preamble_laddar_tikz_villkorligt():
+    """med_tikz styr om tikz + angles/quotes-biblioteket laddas — flaggan
+    är villkorlig precis som med_grafik/med_svarsrad."""
+    from app import exam_latex
+    tex_med = exam_latex._environment().get_template(
+        "_preamble.tex.j2").render(sidhuvud="x", med_grafik=False,
+                                   med_svarsrad=False, med_tikz=True)
+    assert r"\usepackage{tikz}" in tex_med
+    assert r"\usetikzlibrary{angles,quotes}" in tex_med
+    # svensk babel gör " till ett aktivt genvägstecken som krockar med tikz
+    # quotes-biblioteket (\pic["$v$"]); shorthandoff släcker det. Måste ligga
+    # kvar — annars kraschar figur-kompileringen tyst.
+    assert r'\AtBeginDocument{\shorthandoff{"}}' in tex_med
+    tex_utan = exam_latex._environment().get_template(
+        "_preamble.tex.j2").render(sidhuvud="x", med_grafik=False,
+                                   med_svarsrad=False, med_tikz=False)
+    assert r"\usepackage{tikz}" not in tex_utan
+    assert r"\shorthandoff" not in tex_utan     # bara när tikz laddas
+
+
+def test_build_view_figur_tex():
+    """_build_view lägger rå TikZ (ur exam_figures.render_figur) i vyns
+    figur_tex — INTE escapad, till skillnad från text/losning/bedomning."""
+    data = _exam()
+    data["uppgifter"][2]["figur"] = {"typ": "andragrad", "a": 1, "b": -4, "c": 3}
+    doc, _ = exam_spec.validate_exam_json(data)
+    vy = exam_latex._build_view(doc)
+    u3 = vy["delar"][1]["uppgifter"][0]     # första Del C-uppgiften
+    assert u3["figur_tex"] is not None
+    assert r"\begin{tikzpicture}" in u3["figur_tex"]
+    # löv utan figur → None
+    assert vy["delar"][0]["uppgifter"][0]["figur_tex"] is None
+
+
+def test_prov_renderar_figuren():
+    data = _exam()
+    data["uppgifter"][2]["figur"] = {"typ": "linjar", "k": 1, "m": 0}
+    doc, _ = exam_spec.validate_exam_json(data)
+    tex = exam_latex.render_prov(doc)
+    assert r"\begin{tikzpicture}" in tex
+    assert r"\usetikzlibrary{angles,quotes}" in tex   # med_tikz slogs på
+
+
+def test_prov_utan_figur_laddar_inte_tikz():
+    doc, _ = exam_spec.validate_exam_json(_exam())
+    assert r"\usepackage{tikz}" not in exam_latex.render_prov(doc)
 
 
 def test_prov_anvander_layoutmakron():
@@ -1004,6 +1118,26 @@ def test_compile_pdf_real_engine_compiles_deluppgifter_och_flerval(tmp_path):
             assert pdf.stat().st_size > 0
 
 
+def test_compile_pdf_real_engine_figur_pa_foralder_med_deluppgifter(tmp_path):
+    """Figuren ligger på uppgiftsnivå; en FÖRÄLDER med deluppgifter kan alltså
+    bära figur_tex. Just den kombinationen är StrictUndefined-risken — kompilera
+    den genom alla tre mallar med riktiga motorn (inte bara stubbad)."""
+    if not exam_pdf.engine_available():
+        pytest.skip("Tectonic-motorn saknas (bin/tectonic/tectonic.exe)")
+    data = _exam_med_deluppgifter()
+    data["uppgifter"][6]["figur"] = {"typ": "andragrad", "a": 1, "b": -4, "c": 3}
+    doc, errors = exam_spec.validate_exam_json(data)
+    assert doc is not None and errors == []
+    for jobname, tex in (("prov", exam_latex.render_prov(doc)),
+                         ("arbetsblad", exam_latex.render_arbetsblad(doc)),
+                         ("bedomning", exam_latex.render_bedomning(doc))):
+        # figuren måste faktiskt landa i .tex:en (inte bara "kompilerar utan
+        # StrictUndefined") — annars kunde en förälder tappa figuren tyst
+        assert r"\begin{tikzpicture}" in tex, f"{jobname}: figuren saknas i .tex:en"
+        pdf, logg = exam_pdf.compile_pdf(tex, tmp_path / jobname, jobname)
+        assert pdf is not None and pdf.exists(), f"{jobname}: {logg}"
+
+
 # ------------------------------------------------------------- exam_gen ----
 
 def _stub_llm(responses: list[str]):
@@ -1248,3 +1382,14 @@ def test_prompt_beskriver_strukturkomponenterna():
     assert "sällan" in txt          # notis
     # flerval får inte kombineras med deluppgifter — förbudet ska stå i prompten
     assert "aldrig på en uppgift som redan har deluppgifter" in txt
+
+
+def test_prompt_beskriver_figurer():
+    """Prompten måste instruera modellen om figurer — annars förblir
+    figurmaskineriet (schema, rendering, mallar) vilande."""
+    txt = exam_gen.INSTRUCTION
+    assert "figur" in txt
+    # några figurtyper ska nämnas som alternativ
+    assert any(t in txt for t in ("andragrad", "normalfordelning", "enhetscirkel"))
+    # figur och bild utesluter varandra ska framgå
+    assert "figur ELLER bild" in txt or "utesluter" in txt

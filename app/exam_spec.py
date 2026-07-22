@@ -17,7 +17,7 @@ Uppgifterna är alltid egenformulerade; endast strukturen efterliknar NP.
 from __future__ import annotations
 
 import math
-from typing import Literal
+from typing import Annotated, Literal, Union
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
@@ -30,7 +30,12 @@ FORMAGA_NAMN = {"B": "Begrepp", "P": "Procedur", "PL": "Problemlösning",
 
 
 class _Model(BaseModel):
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    # allow_inf_nan=False: json.loads gör "1e400"/"Infinity"/"NaN" → inf/nan,
+    # och Pydantic v2 släpper annars igenom dem. En inf/nan-figurparameter
+    # kraschar sedan _build_view (t.ex. math.floor(log10(inf))) OFÅNGAT före
+    # LaTeX-reparationsloopen. Avvisa redan vid validering i stället.
+    model_config = ConfigDict(extra="forbid", populate_by_name=True,
+                              allow_inf_nan=False)
 
 
 class _Uppgiftsbas(_Model):
@@ -71,6 +76,97 @@ class SubItem(_Uppgiftsbas):
         return self
 
 
+# ── Figurrecept ────────────────────────────────────────────────────────
+# Diskriminerad union på "typ": llama-servers grammatiktvång låser modellen
+# till giltiga parametrar per figurtyp. Python (app/exam_figures.py) bygger
+# TikZ:en — modellen skriver aldrig fri LaTeX.
+
+class FigLinjar(_Model):
+    typ: Literal["linjar"]
+    k: float                              # riktningskoefficient
+    m: float                              # y-skärning
+
+
+class FigAndragrad(_Model):
+    typ: Literal["andragrad"]
+    a: float
+    b: float
+    c: float                              # y = a x^2 + b x + c
+
+
+class FigExponential(_Model):
+    typ: Literal["exponential"]
+    C: float                              # startvärde (y vid x=0)
+    # bas > 0; övre gräns så bas^x över domänen [-3,3] inte ger OverflowError
+    # i receptet. 1000 är långt över alla rimliga tillväxt-/sönderfallsbaser.
+    bas: float = Field(gt=0, le=1000)     # y = C · bas^x
+
+
+class FigNormalfordelning(_Model):
+    typ: Literal["normalfordelning"]
+    mu: float
+    sigma: float = Field(gt=0)
+
+
+class FigTriangel(_Model):
+    typ: Literal["triangel"]
+    a: float = Field(gt=0)               # sidlängder; a mot hörn A osv.
+    b: float = Field(gt=0)
+    c: float = Field(gt=0)
+
+    @model_validator(mode="after")
+    def _triangelolikhet(self):
+        s = sorted((self.a, self.b, self.c))
+        if s[0] + s[1] <= s[2]:
+            raise ValueError("sidorna uppfyller inte triangelolikheten")
+        return self
+
+
+class FigEnhetscirkel(_Model):
+    typ: Literal["enhetscirkel"]
+    # gt=0, lt=360: vinkel 0/360 ger en degenererad \pic (P på X-axeln) och
+    # nollånga hjälplinjer — en meningslös figur. Vinklar däremellan är fria.
+    vinkel: float = Field(gt=0, lt=360)   # grader
+
+
+class FigStapeldiagram(_Model):
+    typ: Literal["stapeldiagram"]
+    kategorier: list[str] = Field(min_length=2, max_length=8)
+    varden: list[float] = Field(min_length=2, max_length=8)
+
+    @model_validator(mode="after")
+    def _lika_langd(self):
+        if len(self.kategorier) != len(self.varden):
+            raise ValueError("kategorier och varden måste vara lika många")
+        if any(v < 0 for v in self.varden):
+            raise ValueError("stapelvärden kan inte vara negativa (antal)")
+        if max(self.varden) <= 0:
+            raise ValueError("minst en stapel måste ha ett positivt värde")
+        return self
+
+
+class FigLadagram(_Model):
+    typ: Literal["ladagram"]
+    min: float
+    q1: float
+    median: float
+    q3: float
+    max: float
+
+    @model_validator(mode="after")
+    def _stigande(self):
+        if not self.min <= self.q1 <= self.median <= self.q3 <= self.max:
+            raise ValueError("lådagrammets fem tal måste vara stigande")
+        return self
+
+
+Figur = Annotated[
+    Union[FigLinjar, FigAndragrad, FigExponential, FigNormalfordelning,
+          FigTriangel, FigEnhetscirkel, FigStapeldiagram, FigLadagram],
+    Field(discriminator="typ"),
+]
+
+
 class ExamItem(_Uppgiftsbas):
     del_: Del | None = Field(default=None, alias="del")
     formaga: Formaga
@@ -82,9 +178,12 @@ class ExamItem(_Uppgiftsbas):
     bedomning: str = ""                  # tomt tillåtet när deluppgifter finns
     # max_length=12: samma _BOKSTAV-gräns (a–l) som alternativ ovan.
     deluppgifter: list[SubItem] | None = Field(default=None, max_length=12)
+    figur: Figur | None = None
 
     @model_validator(mode="after")
     def _kontrollera_struktur(self):
+        if self.figur is not None and self.bild is not None:
+            raise ValueError("figur och bild utesluter varandra — välj en")
         if self.deluppgifter:
             if any(self.poang):
                 raise ValueError("en uppgift med deluppgifter måste ha poäng "

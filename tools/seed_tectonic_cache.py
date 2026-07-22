@@ -16,8 +16,14 @@ violation) i stället för att ge ett läsbart LaTeX-fel. Genom att
 kompilera de riktiga mallarna kan sonden och mallarna aldrig glida isär
 tyst igen — vad mallarna faktiskt producerar är vad som seedas.
 
-TikZ och pgfplots används ännu inte av mallarna (kommer i ett senare
-steg) och dras därför fortfarande in via en egen, oförändrad PROBE_TEX.
+TikZ används numera av mallarna: figurrecepten (app.exam_figures) bygger
+ren tikz som renderas genom de riktiga mallarna, och det representativa
+dokumentet nedan har en figur (enhetscirkel) som seedar tikz-vägen via
+render_prov/render_arbetsblad/render_bedomning. pgfplots används däremot
+INTE av mallarna (recepten är ren tikz) — PROBE_TEX drar ändå in det
+separat (plus \\usetikzlibrary{angles,quotes}, en \\pic angle-figur och en
+exp-kurva) så att glyferna finns cachade om en framtida figurtyp behöver
+dem under --only-cached.
 
     python -m tools.seed_tectonic_cache
 """
@@ -54,9 +60,17 @@ PROBE_TEX = r"""
 \usepackage{tabularx}
 \usepackage{enumitem}
 \usepackage{tikz}
+\usetikzlibrary{angles,quotes}
 \usepackage{pgfplots}
 \pgfplotsset{compat=1.18}
 \usepackage[swedish]{babel}
+% Svensk babel gör " till ett aktivt genvägstecken, vilket krockar med
+% tikz-biblioteket quotes (" i \pic-etiketter nedan) och ger felet
+% "Argument of \language@active@arg" has an extra }". \shorthandoff i
+% preambeln räcker INTE — babel återaktiverar genvägarna vid
+% \begin{document} — så anropet skjuts upp med \AtBeginDocument (se
+% motsvarande vakt i _preamble.tex.j2).
+\AtBeginDocument{\shorthandoff{"}}
 \definecolor{ink700}{HTML}{3A3835}
 \pagestyle{fancy}
 \fancyhf{}
@@ -75,6 +89,13 @@ $\frac{a}{b} \geq \sqrt{c} \neq \pm\infty$, $\alpha \cdot \beta \leq \Sigma$.
     \addplot[domain=-2:2,samples=30]{exp(x)};
   \end{axis}
 \end{tikzpicture}
+\begin{tikzpicture}[scale=1]
+  \coordinate (O) at (0,0); \coordinate (X) at (1,0);
+  \coordinate (P) at ({cos(40)},{sin(40)});
+  \draw (0,0) circle (1); \draw (O)--(X); \draw (O)--(P);
+  \pic["$v$",draw,angle radius=8mm,angle eccentricity=1.35]{angle=X--O--P};
+  \draw[domain=-2:2,smooth,samples=40] plot(\x,{exp(\x*ln(2))});
+\end{tikzpicture}
 \colorbox{ink700}{\textcolor{white}{Band}}
 \begin{tabularx}{\linewidth}{@{}lX@{}}A & B \\\end{tabularx}
 \end{document}
@@ -92,9 +113,15 @@ def _representative_doc() -> exam_spec.ExamDoc:
     prov.tex.j2/arbetsblad.tex.j2 verkligen motioneras, en uppgift med
     deluppgifter (så att \\begin{deluppgift}-miljön kompileras på riktigt
     i alla tre mallarna), en flervalsuppgift (så \\kryssruta samt
-    bedömningens "Rätt: X"-rad kompileras) och en uppgift med notis (så
-    \\notisruta kompileras) — annars seedas aldrig de paket/fontmetriker
-    dessa kodvägar kräver. Problemuppgiften har dessutom en
+    bedömningens "Rätt: X"-rad kompileras), en uppgift med notis (så
+    \\notisruta kompileras) och en uppgift med figur (``figur``, en
+    enhetscirkel — det tyngsta figurfallet eftersom det renderas via
+    tikz-biblioteket angles/quotes, \\pic angle) — annars seedas aldrig de
+    paket/fontmetriker dessa kodvägar kräver. Figuren renderas genom
+    exam_figures.render_figur och de RIKTIGA mallarna, inte bara via
+    PROBE_TEX:s handskrivna \\pic-exempel, så att sonden aldrig kan glida
+    isär från vad figurmallarna faktiskt producerar. Problemuppgiften har
+    dessutom en
     bokstavsexponent ($a^{t}$) och en nedsänkning ($N_0$) i sitt text-fält,
     och en av deluppgifterna har en EGEN bokstavsexponent ($a^n$) i sitt
     text-fält, så att \\small-fontmetrikerna (ntxmi7/ntxmi5) för
@@ -180,6 +207,17 @@ def _representative_doc() -> exam_spec.ExamDoc:
                       r"resonemanget.",
                 losning=r"Sant — grafen är en nedåtriktad parabel.",
                 bedomning=r"+1 C ställningstagande, +1 A stringens.",
+            ),
+            exam_spec.ExamItem(
+                # Figur (enhetscirkel) — kompilerar exam_figures.render_figur
+                # och \pic angle genom den RIKTIGA mallkedjan (inte bara
+                # PROBE_TEX ovan). figur och bild utesluter varandra i
+                # schemat, så uppgiften får INTE ha bild=... samtidigt.
+                del_="C", formaga="B", typ="rutin", poang=(1, 0, 0),
+                text=r"Figuren visar vinkeln $v$ i enhetscirkeln.",
+                figur={"typ": "enhetscirkel", "vinkel": 40},
+                losning=r"Vinkeln är $v = 40^\circ$.",
+                bedomning=r"+1 E för korrekt avläsning av vinkeln.",
             ),
         ],
     )

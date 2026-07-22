@@ -17,7 +17,7 @@ from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
-from app import exam_spec
+from app import exam_figures, exam_spec
 
 
 def templates_dir() -> Path:
@@ -32,6 +32,11 @@ _LATEX_SPECIALS = {
     "&": r"\&", "%": r"\%", "$": r"\$", "#": r"\#", "_": r"\_",
     "{": r"\{", "}": r"\}",
     "~": r"\textasciitilde{}", "^": r"\textasciicircum{}",
+    # Svensk babel gör " till en aktiv genväg i huvuddokumentet (där finns
+    # ingen \shorthandoff). Escapa till ett bokstavligt citattecken så text/
+    # kategorinamn med " inte tolkas som babel-genväg (försvar på djupet:
+    # figurpreamblen släcker " men löptexten förlitade sig annars på tur).
+    '"': r"\textquotedbl{}",
 }
 _CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
 _MATH_SPLIT_RE = re.compile(r"\$([^$]*)\$")
@@ -195,6 +200,13 @@ def _build_view(doc: exam_spec.ExamDoc,
             item_vy["nummer"] = nummer
             item_vy["poang_str"] = f"{sum(agg)}p"
             item_vy["poang_eca"] = f"{agg[0]}/{agg[1]}/{agg[2]}"
+            # Figuren ligger på uppgiftsnivå (ExamItem), inte på deluppgift/
+            # enhet — sätts sist så BÅDE löv- och förälder-grenens item_vy
+            # får nyckeln (annars StrictUndefined för en förälder med figur).
+            # Rå TikZ, inte escapad (escape_mixed/escape_latex skulle
+            # förstöra den) — mallen renderar den oescapad.
+            item_vy["figur_tex"] = (exam_figures.render_figur(it.figur)
+                                    if it.figur is not None else None)
             vy_items.append(item_vy)
         delar.append({
             "rubrik": escape_latex(rubrik) if rubrik else None,
@@ -222,6 +234,9 @@ def _build_view(doc: exam_spec.ExamDoc,
         # Delad preamble (PR 1). kurs/titel escapas här på nytt ur doc —
         # inte ur vyns redan escapade fält, som skulle dubbelescapas.
         "sidhuvud": f"{escape_latex(doc.kurs)} — {escape_latex(doc.titel)}",
+        # PR 4: tikz + angles/quotes laddas bara när provet har minst en
+        # figur (jfr med_grafik/med_svarsrad-mönstret för includegraphics).
+        "med_tikz": any(it.figur is not None for it in doc.uppgifter),
     }
 
 
