@@ -254,6 +254,16 @@ def _parse_exam(raw: str) -> dict | None:
     return None
 
 
+def _validate(exam: dict, profil: str):
+    """validate_exam_json + variationskontroll (BARA prov). Repetition matas in
+    i reparationsloopen precis som balansfel; arbetsbladet undantas (det får
+    drilla samma frågetyp med flit, jfr antiklumpningen)."""
+    doc, errors = exam_spec.validate_exam_json(exam, profil)
+    if doc is not None and profil == "prov":
+        errors = errors + exam_spec.validate_variation(doc)
+    return doc, errors
+
+
 def _llm_round(prompt: str, model: str, llm, antal: int | None = None) -> dict | None:
     raw = llm(
         model, prompt,
@@ -282,7 +292,7 @@ def _repair_until_valid(exam: dict | None, errors: list, *, model: str, llm,
             errors = [{"path": "svar", "code": "json",
                        "message": "modellen svarade inte med giltig JSON"}]
             continue
-        _doc, new_errors = exam_spec.validate_exam_json(candidate, profil)
+        _doc, new_errors = _validate(candidate, profil)
         exam = candidate
         errors = new_errors
     return {"exam": exam, "errors": errors, "rounds": rounds_used}
@@ -316,7 +326,7 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                 "errors": [{"path": "svar", "code": "json",
                             "message": "modellen svarade inte med giltig JSON"}],
                 "rounds": rounds}
-    _doc, errors = exam_spec.validate_exam_json(exam, profil)
+    _doc, errors = _validate(exam, profil)
     return _repair_until_valid(exam, errors, model=model, llm=llm,
                                rounds_used=rounds, max_rounds=max_rounds,
                                profil=profil, antal=antal, log_cb=log_cb)
@@ -337,7 +347,7 @@ def refine_exam(exam: dict, instruction: str, *, model: str,
                 "errors": [{"path": "svar", "code": "json",
                             "message": "modellen svarade inte med giltig JSON"}],
                 "rounds": 1}
-    _doc, errors = exam_spec.validate_exam_json(candidate, profil)
+    _doc, errors = _validate(candidate, profil)
     return _repair_until_valid(candidate, errors, model=model, llm=llm,
                                rounds_used=1, max_rounds=max_rounds,
                                profil=profil, log_cb=log_cb)

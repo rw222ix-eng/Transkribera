@@ -17,6 +17,7 @@ Uppgifterna är alltid egenformulerade; endast strukturen efterliknar NP.
 from __future__ import annotations
 
 import math
+import re
 from typing import Annotated, Literal, Union
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
@@ -496,6 +497,42 @@ def kravgranser(doc: ExamDoc, config: dict | None = None) -> dict:
         ),
     }
     return granser
+
+
+_VAR_MATH_RE = re.compile(r"\$[^$]*\$")
+_VAR_ORD_RE = re.compile(r"[^a-zåäö\s]+")
+
+
+def _skelett(text: str) -> set[str]:
+    """Ordmängd ur en uppgiftstext för dubblettjämförelse: matte ($…$), siffror
+    och skiljetecken bort, gemener — så 'medianen av 2,5,7' och 'medianen av
+    1,3,5' får samma skelett."""
+    t = _VAR_MATH_RE.sub(" ", (text or "").lower())
+    t = _VAR_ORD_RE.sub(" ", t)
+    return set(t.split())
+
+
+def validate_variation(doc: ExamDoc, troskel: float = 0.8) -> list[dict]:
+    """Flagga toppuppgifter med (nästan) identisk frågeformulering (Jaccard
+    ≥ troskel på ordskelettet) — modellen upprepar annars samma frågetyp. En
+    flagga per uppgift (mot den första den liknar). Körs bara på PROV (se
+    anroparen) — arbetsbladet får drilla samma frågetyp med flit."""
+    toks = [_skelett(u.text) for u in doc.uppgifter]
+    errors: list[dict] = []
+    for i in range(len(toks)):
+        if not toks[i]:
+            continue
+        for j in range(i):
+            if not toks[j]:
+                continue
+            union = len(toks[i] | toks[j])
+            if union and len(toks[i] & toks[j]) / union >= troskel:
+                errors.append(_err(
+                    f"uppgifter.{i}", "variation",
+                    f"uppgift {i + 1} är för lik uppgift {j + 1} — variera "
+                    f"frågan (moment, tal eller kontext)"))
+                break
+    return errors
 
 
 def validate_exam_json(data, profil: str = "prov") -> tuple[ExamDoc | None, list[dict]]:

@@ -1183,6 +1183,33 @@ def test_generate_exam_trar_antal_till_grammatiken():
     assert upp["maxItems"] == 6
 
 
+def test_validate_variation_flaggar_upprepade():
+    """Två toppuppgifter med (nästan) identisk frågeformulering ska flaggas —
+    modellen upprepar annars samma frågetyp (skarp körning)."""
+    data = _exam()
+    data["uppgifter"][1]["text"] = data["uppgifter"][0]["text"]  # exakt dubblett
+    doc, _ = exam_spec.validate_exam_json(data, "prov")
+    errs = exam_spec.validate_variation(doc)
+    assert any(e["code"] == "variation" for e in errs)
+
+
+def test_validate_variation_slapper_distinkta():
+    """Den kanoniska (distinkta) fixturen ska INTE flaggas."""
+    doc, _ = exam_spec.validate_exam_json(_exam(), "prov")
+    assert exam_spec.validate_variation(doc) == []
+
+
+def test_generate_flode_undantar_arbetsblad_fran_variation():
+    """Variationskontrollen körs bara på PROV — arbetsbladet får drilla samma
+    frågetyp i rad, precis som antiklumpningen."""
+    dup = _exam()
+    dup["uppgifter"][1]["text"] = dup["uppgifter"][0]["text"]
+    _d1, errs_prov = exam_gen._validate(dup, "prov")
+    _d2, errs_ab = exam_gen._validate(dup, "arbetsblad")
+    assert any(e["code"] == "variation" for e in errs_prov)
+    assert not any(e["code"] == "variation" for e in errs_ab)
+
+
 def test_generate_exam_repairs_imbalance():
     bad = _exam()
     for u in bad["uppgifter"]:
