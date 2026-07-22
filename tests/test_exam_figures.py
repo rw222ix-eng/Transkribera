@@ -95,6 +95,24 @@ def test_stapeldiagram_en_stapel_per_kategori():
     assert tikz.count("rectangle") == 3
 
 
+def test_stapeldiagram_avvisar_noll_och_negativa_varden():
+    """Ett stapeldiagram av bara nollor (division med noll i receptet) eller
+    negativa antal ska avvisas av schemat — inte krascha renderingen."""
+    from pydantic import ValidationError
+    for varden in ([0, 0, 0], [3, -1, 2]):
+        with pytest.raises(ValidationError):
+            _bygg({"typ": "stapeldiagram", "kategorier": ["A", "B", "C"],
+                   "varden": varden})
+
+
+def test_stapeldiagram_recept_kraschar_inte_pa_noll():
+    """Försvar på djupet: även om ett all-noll-värde nådde receptet får det
+    inte ge ZeroDivisionError. Anropa den privata receptfunktionen direkt."""
+    from types import SimpleNamespace
+    fig = SimpleNamespace(kategorier=["A", "B"], varden=[0, 0])
+    assert r"\begin{tikzpicture}" in exam_figures._stapeldiagram(fig)
+
+
 def test_stapeldiagram_escapar_kategorinamn():
     """Kategorinamn med LaTeX-specialtecken (&, %) måste escapas — annars
     kraschar kompileringen på ett & eller kommenterar bort raden på ett %."""

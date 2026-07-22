@@ -129,6 +129,10 @@ class FigStapeldiagram(_Model):
     def _lika_langd(self):
         if len(self.kategorier) != len(self.varden):
             raise ValueError("kategorier och varden måste vara lika många")
+        if any(v < 0 for v in self.varden):
+            raise ValueError("stapelvärden kan inte vara negativa (antal)")
+        if max(self.varden) <= 0:
+            raise ValueError("minst en stapel måste ha ett positivt värde")
         return self
 
 

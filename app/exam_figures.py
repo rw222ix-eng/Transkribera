@@ -158,7 +158,10 @@ def _enhetscirkel(f: "exam_spec.FigEnhetscirkel") -> str:
 def _stapeldiagram(f: "exam_spec.FigStapeldiagram") -> str:
     from app.exam_latex import escape_latex
     H = 4.0
-    scale = H / max(f.varden)
+    # Schemat garanterar max(varden) > 0, men guarda ändå mot division med
+    # noll (försvar på djupet — receptet ska aldrig kunna krascha i ren Python).
+    topp = max(f.varden)
+    scale = H / topp if topp > 0 else 1.0
     rader = [
         r"\begin{tikzpicture}[line join=round]",
         rf"\draw[->] (0,0)--(0,{_f(H + 0.6)}) node[above]{{antal}};",
