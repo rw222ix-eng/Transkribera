@@ -18,6 +18,16 @@ def _f(x: float) -> str:
     return f"{x:g}"
 
 
+def _flabel(x: float) -> str:
+    """Tal för en STUDENTVÄND etikett (inte en koordinat): aldrig
+    vetenskaplig notation (till skillnad från _f/{:g}, som ger '1e+06' för
+    stora tal och skulle stå så på axeln) och svenskt decimalkomma. Heltal
+    utan decimaler; nära-heltal avrundas rent."""
+    if x == int(x):
+        return str(int(x))
+    return f"{x:.4f}".rstrip("0").rstrip(".").replace(".", ",")
+
+
 BOXW, BOXH = 7.0, 5.0        # funktionsgrafernas fasta ritruta (cm)
 TRIW = 5.0                   # triangelns längsta sida normaliseras till (cm)
 
@@ -73,13 +83,13 @@ def _funktionsgraf(fn, xlo: float, xhi: float, samples: int = 80) -> str:
             continue
         rader.append(rf"\draw ({_f(X(xt))},{_f(y0 - 0.08)})--"
                      rf"({_f(X(xt))},{_f(y0 + 0.08)}) "
-                     rf"node[below]{{\footnotesize {_f(xt)}}};")
+                     rf"node[below]{{\footnotesize {_flabel(xt)}}};")
     for yt in _nice_ticks(ylo + pad, yhi - pad):
         if abs(yt) < 1e-9:
             continue
         rader.append(rf"\draw ({_f(x0 - 0.08)},{_f(Y(yt))})--"
                      rf"({_f(x0 + 0.08)},{_f(Y(yt))}) "
-                     rf"node[left]{{\footnotesize {_f(yt)}}};")
+                     rf"node[left]{{\footnotesize {_flabel(yt)}}};")
     pts = " ".join(f"({_f(X(x))},{_f(Y(y))})" for x, y in zip(xs, ys))
     rader += [
         rf"\begin{{scope}}\clip (0,0) rectangle ({_f(BOXW)},{_f(BOXH)});",
@@ -117,7 +127,7 @@ def _normalfordelning(f: "exam_spec.FigNormalfordelning") -> str:
     for t, lbl in ((-2, f.mu - 2 * f.sigma), (-1, f.mu - f.sigma),
                    (0, f.mu), (1, f.mu + f.sigma), (2, f.mu + 2 * f.sigma)):
         rader.append(rf"\draw ({t},0.08)--({t},-0.08) "
-                     rf"node[below]{{\footnotesize {_f(lbl)}}};")
+                     rf"node[below]{{\footnotesize {_flabel(lbl)}}};")
     rader.append(r"\end{tikzpicture}")
     return "\n".join(rader)
 
@@ -177,7 +187,7 @@ def _stapeldiagram(f: "exam_spec.FigStapeldiagram") -> str:
         if yt <= 0:
             continue
         rader.append(rf"\draw (0.08,{_f(yt * scale)})--(-0.08,{_f(yt * scale)}) "
-                     rf"node[left]{{\footnotesize {_f(yt)}}};")
+                     rf"node[left]{{\footnotesize {_flabel(yt)}}};")
     for i, (kat, v) in enumerate(zip(f.kategorier, f.varden)):
         rader.append(rf"\filldraw[fill=gray!20,draw=black] "
                      rf"({_f(0.7 + i)},0) rectangle ({_f(1.3 + i)},{_f(v * scale)});")
@@ -206,7 +216,7 @@ def _ladagram(f: "exam_spec.FigLadagram") -> str:
     ]
     for v in (f.min, f.q1, f.median, f.q3, f.max):
         rader.append(rf"\draw ({_f(X(v))},0.14)--({_f(X(v))},-0.14) "
-                     rf"node[below]{{\footnotesize {_f(v)}}};")
+                     rf"node[below]{{\footnotesize {_flabel(v)}}};")
     rader.append(r"\end{tikzpicture}")
     return "\n".join(rader)
 

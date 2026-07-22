@@ -61,6 +61,20 @@ def test_normalfordelning_markerar_mu():
     assert "12" in tikz
 
 
+def test_axeletiketter_utan_e_notation_och_med_svenskt_komma():
+    """Axel-ETIKETTER (inte koordinater) får aldrig hamna i vetenskaplig
+    notation (1e+06) för stora tal, och decimaler ska ha svenskt komma."""
+    # mu±2·sigma = 3 000 000 → gamla _f/{:g} gav "3e+06" i etiketten
+    stor = exam_figures.render_figur(
+        _bygg({"typ": "normalfordelning", "mu": 2000000, "sigma": 500000}))
+    assert "e+" not in stor and "e-" not in stor
+    # mu±sigma = ±0,5 → svenskt decimalkomma, aldrig "0.5"
+    dec = exam_figures.render_figur(
+        _bygg({"typ": "normalfordelning", "mu": 0, "sigma": 0.5}))
+    assert "0,5" in dec
+    assert "0.5" not in dec
+
+
 @pytest.mark.parametrize("d", [
     {"typ": "linjar", "k": 0.8, "m": 1},
     {"typ": "andragrad", "a": 1, "b": -4, "c": 3},
