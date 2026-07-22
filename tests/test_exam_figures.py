@@ -191,6 +191,10 @@ def test_extrema_parametrar_ryms_pa_en_sida(d):
     {"typ": "andragrad", "a": 30, "b": 0, "c": 0},
     {"typ": "ladagram", "min": 1000, "q1": 2000, "median": 3000, "q3": 4000, "max": 5000},
     {"typ": "ladagram", "min": 5, "q1": 5, "median": 5, "q3": 5, "max": 5},   # alla lika
+    # Stor triangel (t.ex. sidor i meter): råa sidlängder som koordinat
+    # sprängde TeX:s maxmått (~576 cm) → "Dimension too large". Receptet
+    # måste normalisera in i en fast ritruta precis som funktionsgraferna.
+    {"typ": "triangel", "a": 650, "b": 720, "c": 900},
 ])
 def test_stora_naturliga_tal_kompilerar_pa_en_sida(d):
     if not exam_pdf.engine_available():

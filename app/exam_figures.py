@@ -19,6 +19,7 @@ def _f(x: float) -> str:
 
 
 BOXW, BOXH = 7.0, 5.0        # funktionsgrafernas fasta ritruta (cm)
+TRIW = 5.0                   # triangelns längsta sida normaliseras till (cm)
 
 
 def _nice_ticks(lo: float, hi: float, n: int = 5) -> list[float]:
@@ -125,15 +126,20 @@ def _triangel(f: "exam_spec.FigTriangel") -> str:
     # A=(0,0), B=(c,0), C ovanför. |AC|=b, |BC|=a.
     cx = (f.b ** 2 + f.c ** 2 - f.a ** 2) / (2 * f.c)
     cy = math.sqrt(max(f.b ** 2 - cx ** 2, 0.0))
+    # Skalinvariant (som funktionsgraferna): sidorna kan vara stora, t.ex.
+    # i meter — normalisera in i en fast ritruta så längsta sidan blir TRIW cm.
+    # En rå sidlängd som koordinat spränger annars TeX:s maxmått (~576 cm) →
+    # "Dimension too large". Etiketten visar det VERKLIGA värdet.
+    s = TRIW / max(f.a, f.b, f.c)
     return "\n".join([
-        r"\begin{tikzpicture}[scale=0.85,line join=round]",
-        rf"\coordinate (A) at (0,0); \coordinate (B) at ({_f(f.c)},0); "
-        rf"\coordinate (C) at ({_f(cx)},{_f(cy)});",
+        r"\begin{tikzpicture}[line join=round]",
+        rf"\coordinate (A) at (0,0); \coordinate (B) at ({_f(f.c * s)},0); "
+        rf"\coordinate (C) at ({_f(cx * s)},{_f(cy * s)});",
         r"\draw[thick] (A)--(B)--(C)--cycle;",
         r"\node[below left] at (A) {$A$};",
         r"\node[below right] at (B) {$B$};",
         r"\node[above] at (C) {$C$};",
-        rf"\node[below] at ({_f(f.c / 2)},0) {{$c={_f(f.c)}$}};",
+        rf"\node[below] at ({_f(f.c * s / 2)},0) {{$c={_f(f.c)}$}};",
         r"\end{tikzpicture}",
     ])
 
