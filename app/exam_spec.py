@@ -81,22 +81,30 @@ class SubItem(_Uppgiftsbas):
 # till giltiga parametrar per figurtyp. Python (app/exam_figures.py) bygger
 # TikZ:en — modellen skriver aldrig fri LaTeX.
 
+# Generös men ÄNDLIG storleksgräns på koefficienter/sidor som når rå aritmetik
+# i recepten (k·x, a·x², C·bas^x, sida² i triangelns cx). Utan gräns kunde ett
+# ändligt men enormt tal (≳1e299) spilla över till inf/nan och krascha
+# _build_view FÖRE reparationsloopen. 1e9 är långt över alla rimliga provvärden
+# och långt under överspillsgränsen.
+_KOEFF = Annotated[float, Field(ge=-1e9, le=1e9)]
+
+
 class FigLinjar(_Model):
     typ: Literal["linjar"]
-    k: float                              # riktningskoefficient
-    m: float                              # y-skärning
+    k: _KOEFF                             # riktningskoefficient
+    m: _KOEFF                             # y-skärning
 
 
 class FigAndragrad(_Model):
     typ: Literal["andragrad"]
-    a: float
-    b: float
-    c: float                              # y = a x^2 + b x + c
+    a: _KOEFF
+    b: _KOEFF
+    c: _KOEFF                            # y = a x^2 + b x + c
 
 
 class FigExponential(_Model):
     typ: Literal["exponential"]
-    C: float                              # startvärde (y vid x=0)
+    C: _KOEFF                            # startvärde (y vid x=0)
     # bas > 0; övre gräns så bas^x över domänen [-3,3] inte ger OverflowError
     # i receptet. 1000 är långt över alla rimliga tillväxt-/sönderfallsbaser.
     bas: float = Field(gt=0, le=1000)     # y = C · bas^x
@@ -110,9 +118,9 @@ class FigNormalfordelning(_Model):
 
 class FigTriangel(_Model):
     typ: Literal["triangel"]
-    a: float = Field(gt=0)               # sidlängder; a mot hörn A osv.
-    b: float = Field(gt=0)
-    c: float = Field(gt=0)
+    a: float = Field(gt=0, le=1e9)       # sidlängder; a mot hörn A osv.
+    b: float = Field(gt=0, le=1e9)
+    c: float = Field(gt=0, le=1e9)
 
     @model_validator(mode="after")
     def _triangelolikhet(self):

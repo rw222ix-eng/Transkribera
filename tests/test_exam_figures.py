@@ -177,6 +177,22 @@ def test_exponential_avvisar_orimligt_stor_bas():
         _bygg({"typ": "exponential", "C": 1, "bas": 1e200})
 
 
+@pytest.mark.parametrize("fig", [
+    {"typ": "linjar", "k": 1e300, "m": 0},
+    {"typ": "linjar", "k": 1, "m": 1e300},
+    {"typ": "andragrad", "a": 1e300, "b": 0, "c": 0},
+    {"typ": "exponential", "C": 1e300, "bas": 2},
+    {"typ": "triangel", "a": 1e300, "b": 1e300, "c": 1e300},
+])
+def test_figur_avvisar_orimligt_stora_koefficienter(fig):
+    """Obundna koefficient-/sidfält som når rå aritmetik (C·bas^x, sida² i
+    triangelns cx) kunde spilla över till inf/nan → ofångad krasch i
+    _build_view. Schemat begränsar dem till en generös men ändlig storlek."""
+    from pydantic import ValidationError
+    with pytest.raises(ValidationError):
+        _bygg(fig)
+
+
 def test_stapeldiagram_escapar_kategorinamn():
     """Kategorinamn med LaTeX-specialtecken (&, %) måste escapas — annars
     kraschar kompileringen på ett & eller kommenterar bort raden på ett %."""
