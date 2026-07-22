@@ -245,6 +245,15 @@ def to_response_format(antal: int | None = None,
             it["properties"]["poang"] = {
                 "type": "array", "minItems": 3, "maxItems": 3,
                 "prefixItems": [{"const": p} for p in slot["poang"]]}
+            # Skelettuppgifter är platta (nonzero poäng) → text/losning/bedomning
+            # MÅSTE vara ifyllda. losning/bedomning har default "" och är därför
+            # INTE required → grammatiken lät modellen utelämna/null:a dem (föll
+            # sedan på valideringen). Gör dem required + minLength≥1 så
+            # grammatiken tvingar en icke-tom lösning och bedömning.
+            for fld in ("text", "losning", "bedomning"):
+                it["properties"][fld]["minLength"] = 1
+            it["required"] = sorted(set(it.get("required", []))
+                                    | {"losning", "bedomning"})
             prefix.append(it)
         upp.clear()
         upp.update({"type": "array", "prefixItems": prefix,

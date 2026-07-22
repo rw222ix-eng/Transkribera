@@ -1493,6 +1493,14 @@ def test_to_response_format_skeleton_last_per_index():
     assert it0["formaga"] == {"const": sk[0]["formaga"]}
     assert it0["typ"] == {"const": sk[0]["typ"]}
     assert it0["poang"]["prefixItems"] == [{"const": p} for p in sk[0]["poang"]]
+    # icke-tom text/losning/bedomning: minLength≥1 OCH required, annars kunde
+    # modellen utelämna/null:a losning (den har default "" → ej required) och
+    # falla på valideringen.
+    assert it0["text"]["minLength"] == 1
+    assert it0["losning"]["minLength"] == 1
+    assert it0["bedomning"]["minLength"] == 1
+    req = upp["prefixItems"][0].get("required", [])
+    assert "losning" in req and "bedomning" in req
 
 
 def test_prompt_har_skelettplan_for_prov():
