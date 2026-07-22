@@ -499,6 +499,23 @@ def kravgranser(doc: ExamDoc, config: dict | None = None) -> dict:
     return granser
 
 
+def formaga_plan(antal: int, profil: str = "prov") -> list[str]:
+    """Deterministisk förmågefördelning för `antal` uppgifter: täck varje
+    golv-förmåga (lo>0) minst en gång och fyll resten med de tyngsta målen.
+    Ges till modellen i prompten så alla förmågor blir representerade — den
+    fördelar annars inte förmågor globalt av sig själv (R och K hamnade på
+    0 %) och förmågebalansen konvergerade inte inom rundbudgeten."""
+    prof_fm = PROFILER.get(profil, PROFILER["prov"])[0]
+    golv = [f for f, (lo, _hi) in prof_fm.items() if lo > 0]
+    vikt = sorted(prof_fm, key=lambda f: -(sum(prof_fm[f]) / 2))
+    plan = list(golv)
+    k = 0
+    while len(plan) < antal:
+        plan.append(vikt[k % len(vikt)])
+        k += 1
+    return plan[:antal]
+
+
 _VAR_MATH_RE = re.compile(r"\$[^$]*\$")
 _VAR_ORD_RE = re.compile(r"[^a-zåäö\s]+")
 

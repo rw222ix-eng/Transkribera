@@ -153,6 +153,20 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
             "inga delar behövs (del: null på alla uppgifter). Lösnings-"
             "förslagen blir facit. Svara med enbart JSON.")
     else:
+        # Förmågeplan: modellen fördelar inte förmågor globalt av sig själv
+        # (R och K hamnade på 0 % i skarp körning), så förmågebalansen
+        # konvergerade inte. Ge en konkret fördelning + kravet att alla sex
+        # finns, med mallar för de lätt-missade R och K.
+        plan = exam_spec.formaga_plan(antal, profil)
+        fordelning = ", ".join(f"{f} ×{plan.count(f)}"
+                               for f in exam_spec.FORMAGA_NAMN if plan.count(f))
+        block.append(
+            "Förmågefördelning — ge uppgifternas primära förmåga (formaga) "
+            f"ungefär denna fördelning: {fordelning}. ALLA sex förmågor MÅSTE "
+            "vara representerade med poäng. Glöm särskilt inte R och K: en "
+            "R-uppgift avgör/motiverar ett påstående ('Avgör om … Motivera.'), "
+            "en K-uppgift förklarar med ord och flera representationer "
+            "('Förklara/Redogör med ord och graf …').")
         delar_txt = ("Dela provet i Del B (utan räknare) och Del C (med räknare)."
                      if delar else "Provet har inga delar (del: null på alla uppgifter).")
         block.append(

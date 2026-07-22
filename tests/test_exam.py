@@ -1448,9 +1448,11 @@ def test_prompt_kraver_exakt_antal():
     """Prompten ska kräva EXAKT antal uppgifter (inte 'ungefär') så den inte
     förhandlar bort antalet — modellen överproducerade annars (skarp körning)."""
     p = exam_gen.build_prompt("Ma2b", "SA23", [], antal=8, profil="prov")
-    assert "EXAKT" in p and "8" in p and "ungefär" not in p
+    # ANTALET ska vara hårt (inte "ungefär N uppgifter"). "ungefär" får däremot
+    # förekomma i förmågefördelningen — den är en riktlinje, inte ett exakt tal.
+    assert "EXAKT 8 uppgifter" in p and "ungefär 8 uppgifter" not in p
     pa = exam_gen.build_prompt("Ma2b", "SA23", [], antal=5, profil="arbetsblad")
-    assert "EXAKT" in pa and "ungefär" not in pa
+    assert "EXAKT 5 uppgifter" in pa and "ungefär" not in pa
 
 
 def test_instruction_kraver_variation():
@@ -1458,3 +1460,24 @@ def test_instruction_kraver_variation():
     den skarpa körningen visade)."""
     low = exam_gen.INSTRUCTION.lower()
     assert "variera" in low or "distinkt" in low
+
+
+def test_formaga_plan_tacker_alla_golvformagor():
+    """Förmågeplanen ska täcka alla golv-förmågor (prov: alla sex) minst en
+    gång och ha exakt `antal` poster — så modellen får en konkret fördelning
+    i stället för att skeva bort R och K (förmågebalansen konvergerade annars
+    inte inom rundbudgeten)."""
+    for antal in (6, 8, 10):
+        plan = exam_spec.formaga_plan(antal, "prov")
+        assert len(plan) == antal
+        assert set(plan) == {"B", "P", "PL", "M", "R", "K"}
+
+
+def test_prompt_har_formageplan_for_prov():
+    """Provprompten ska innehålla förmågefördelningen + kravet att alla sex
+    förmågor finns; arbetsbladet (procedurtungt) får ingen sådan plan."""
+    p = exam_gen.build_prompt("Ma2b", "SA23", [], antal=8, profil="prov")
+    assert "Förmågefördelning" in p and "MÅSTE" in p
+    assert "R" in p and "K" in p        # de lätt-missade förmågorna nämns
+    pa = exam_gen.build_prompt("Ma2b", "SA23", [], antal=6, profil="arbetsblad")
+    assert "Förmågefördelning" not in pa
