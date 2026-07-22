@@ -52,10 +52,26 @@ def _nice_ticks(lo: float, hi: float, n: int = 5) -> list[float]:
     return ticks
 
 
+def _minor(maj: list[float], box_max: float) -> list[float]:
+    """Rutnätets minorlinjer (box-koordinater): halva major-tickavståndet,
+    begränsat till [0, box_max] och exklusive major-positionerna."""
+    if len(maj) < 2:
+        return []
+    h = (maj[1] - maj[0]) / 2
+    out, v = [], maj[0] - h
+    while v <= maj[-1] + h + 1e-9:
+        if -1e-9 <= v <= box_max + 1e-9 and all(abs(v - m) > 1e-6 for m in maj):
+            out.append(round(v, 10))
+        v += h
+    return out
+
+
 def _funktionsgraf(fn, xlo: float, xhi: float, samples: int = 80) -> str:
     """Ritar en funktion i en FAST ruta (BOXW×BOXH): data mappas in, så
     koordinaten aldrig spränger TeX oavsett funktionens storlek. Kurvan
-    klipps mot rutan; ticks sätts på runda datavärden."""
+    klipps mot rutan; ticks sätts på runda datavärden. Ett TYDLIGT rutnät
+    (minor + major) ligger bakom kurvan; y=f(x)-etiketten placeras i den
+    övre kant-region som ligger längst från kurvan."""
     xs = [xlo + (xhi - xlo) * i / samples for i in range(samples + 1)]
     ys = [fn(x) for x in xs]
     ylo, yhi = min(ys), max(ys)
@@ -72,33 +88,55 @@ def _funktionsgraf(fn, xlo: float, xhi: float, samples: int = 80) -> str:
 
     x0 = X(0) if xlo <= 0 <= xhi else 0.0
     y0 = Y(0) if ylo <= 0 <= yhi else 0.0
-    rader = [
-        r"\begin{tikzpicture}[line join=round]",
-        rf"\draw[gray!30,very thin] (0,0) rectangle ({_f(BOXW)},{_f(BOXH)});",
+    xticks = _nice_ticks(xlo, xhi)
+    yticks = _nice_ticks(ylo + pad, yhi - pad)
+    xmaj = [X(t) for t in xticks]
+    ymaj = [Y(t) for t in yticks]
+
+    rader = [r"\begin{tikzpicture}[line join=round]"]
+    # Tydligt rutnät (helt synligt, ingen svag ton): minorlinjer på halva
+    # tickavståndet + majorlinjer vid de etiketterade ticksen, bakom allt annat.
+    for gx in _minor(xmaj, BOXW):
+        rader.append(rf"\draw[black!30,thin] ({_f(gx)},0)--({_f(gx)},{_f(BOXH)});")
+    for gy in _minor(ymaj, BOXH):
+        rader.append(rf"\draw[black!30,thin] (0,{_f(gy)})--({_f(BOXW)},{_f(gy)});")
+    for gx in xmaj:
+        rader.append(rf"\draw[black!50,thin] ({_f(gx)},0)--({_f(gx)},{_f(BOXH)});")
+    for gy in ymaj:
+        rader.append(rf"\draw[black!50,thin] (0,{_f(gy)})--({_f(BOXW)},{_f(gy)});")
+    rader += [
+        rf"\draw[black!65] (0,0) rectangle ({_f(BOXW)},{_f(BOXH)});",
         rf"\draw[->] (0,{_f(y0)})--({_f(BOXW + 0.3)},{_f(y0)}) node[right]{{$x$}};",
         rf"\draw[->] ({_f(x0)},0)--({_f(x0)},{_f(BOXH + 0.3)}) node[above]{{$y$}};",
     ]
-    for xt in _nice_ticks(xlo, xhi):
+    for xt, gx in zip(xticks, xmaj):
         if abs(xt) < 1e-9:
             continue
-        rader.append(rf"\draw ({_f(X(xt))},{_f(y0 - 0.08)})--"
-                     rf"({_f(X(xt))},{_f(y0 + 0.08)}) "
+        rader.append(rf"\draw ({_f(gx)},{_f(y0 - 0.08)})--({_f(gx)},{_f(y0 + 0.08)}) "
                      rf"node[below]{{\footnotesize {_flabel(xt)}}};")
-    for yt in _nice_ticks(ylo + pad, yhi - pad):
+    for yt, gy in zip(yticks, ymaj):
         if abs(yt) < 1e-9:
             continue
-        rader.append(rf"\draw ({_f(x0 - 0.08)},{_f(Y(yt))})--"
-                     rf"({_f(x0 + 0.08)},{_f(Y(yt))}) "
+        rader.append(rf"\draw ({_f(x0 - 0.08)},{_f(gy)})--({_f(x0 + 0.08)},{_f(gy)}) "
                      rf"node[left]{{\footnotesize {_flabel(yt)}}};")
     pts = " ".join(f"({_f(X(x))},{_f(Y(y))})" for x, y in zip(xs, ys))
     rader += [
         rf"\begin{{scope}}\clip (0,0) rectangle ({_f(BOXW)},{_f(BOXH)});",
         rf"\draw[very thick] plot coordinates {{{pts}}};",
         r"\end{scope}",
-        r"\node[anchor=north east] at ({0},{1}) {{$y=f(x)$}};".format(
-            _f(BOXW - 0.15), _f(BOXH - 0.15)),
-        r"\end{tikzpicture}",
     ]
+    # y=f(x)-etiketten placeras i den övre kant-region (vänster/mitt/höger) som
+    # ligger längst från kurvan, så den aldrig tangerar kurvan.
+    curve = [(X(x), Y(y)) for x, y in zip(xs, ys)]
+    ly = BOXH - 0.25
+    # vänsterkandidaten läggs strax till HÖGER om y-axeln så etiketten inte
+    # krockar med y-axelns tick-etiketter (som står till vänster om axeln).
+    lxw = min(max(0.35, x0 + 0.35), BOXW - 0.3)
+    cands = [(lxw, "north west"), (BOXW / 2, "north"), (BOXW - 0.3, "north east")]
+    lx, anchor = max(cands, key=lambda c: min((c[0] - px) ** 2 + (ly - py) ** 2
+                                              for px, py in curve))
+    rader.append(rf"\node[anchor={anchor}] at ({_f(lx)},{_f(ly)}) {{$y=f(x)$}};")
+    rader.append(r"\end{tikzpicture}")
     return "\n".join(rader)
 
 
