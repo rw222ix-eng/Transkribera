@@ -6,17 +6,22 @@ import pytest
 from app import exam_figures, exam_pdf, exam_spec
 
 
-def _kompilera(tikz: str) -> bool:
-    """Wrappa TikZ i ett minimalt dokument och kompilera med riktig motor.
-    Använder newtxtext/newtxmath (INTE default Computer Modern) — seeden
-    cachar bara newtx-fonterna, så en bar `article` skulle krascha på cmr12
-    under --only-cached på en rent seedad maskin. \\pagestyle{empty} slipper
-    sidnummer-fonten."""
-    doc = (r"\documentclass[12pt,a4paper]{article}"
-           r"\usepackage[T1]{fontenc}\usepackage{newtxtext,newtxmath}"
-           r"\usepackage{tikz}\usetikzlibrary{angles,quotes}\pagestyle{empty}"
-           r"\begin{document}" + tikz + r"\end{document}")
-    pdf, _logg = exam_pdf.compile_pdf(doc, Path("_figkontroll"), "fig")
+def _wrap(tikz: str) -> str:
+    """Minimalt kompilerbart dokument runt en TikZ-figur. newtxtext/newtxmath
+    (INTE default Computer Modern) — seeden cachar bara newtx-fonterna, så en
+    bar `article` skulle krascha på cmr12 under --only-cached på en rent seedad
+    maskin. \\pagestyle{empty} slipper sidnummer-fonten."""
+    return (r"\documentclass[12pt,a4paper]{article}"
+            r"\usepackage[T1]{fontenc}\usepackage{newtxtext,newtxmath}"
+            r"\usepackage{tikz}\usetikzlibrary{angles,quotes}\pagestyle{empty}"
+            r"\begin{document}" + tikz + r"\end{document}")
+
+
+def _kompilera(tikz: str, base: Path) -> bool:
+    """Kompilera en figur i en per-test tmp-katalog (base) — inga relativa
+    kataloger i repo-roten som kan läcka in i arbetsträdet vid avbrott eller
+    krocka mellan parametriserade fall under pytest -n."""
+    pdf, _logg = exam_pdf.compile_pdf(_wrap(tikz), base / "figkontroll", "fig")
     return pdf is not None
 
 
@@ -58,7 +63,8 @@ def test_normalfordelning_markerar_mu():
     som inte längre stämmer när mu är ett stort naturligt tal, t.ex. lön)."""
     tikz = exam_figures.render_figur(
         _bygg({"typ": "normalfordelning", "mu": 12, "sigma": 1}))
-    assert "12" in tikz
+    # exakt mu-etiketten, inte bara delsträngen "12" (som kunde matcha en koord)
+    assert r"node[below]{\footnotesize 12}" in tikz
 
 
 def test_axeletiketter_utan_e_notation_och_med_svenskt_komma():
@@ -81,14 +87,11 @@ def test_axeletiketter_utan_e_notation_och_med_svenskt_komma():
     {"typ": "exponential", "C": 1, "bas": 2},
     {"typ": "normalfordelning", "mu": 0, "sigma": 1},
 ])
-def test_funktionsgrafer_kompilerar(d):
+def test_funktionsgrafer_kompilerar(d, tmp_path):
     if not exam_pdf.engine_available():
         pytest.skip("Tectonic saknas")
-    try:
-        assert _kompilera(exam_figures.render_figur(_bygg(d))), f"{d['typ']} kompilerar inte"
-    finally:
-        import shutil
-        shutil.rmtree("_figkontroll", ignore_errors=True)
+    assert _kompilera(exam_figures.render_figur(_bygg(d)), tmp_path), \
+        f"{d['typ']} kompilerar inte"
 
 
 def test_triangel_ger_tikz_och_hornmarkeringar():
@@ -101,6 +104,8 @@ def test_enhetscirkel_har_vinkelbage():
     tikz = exam_figures.render_figur(_bygg({"typ": "enhetscirkel", "vinkel": 40}))
     assert r"\pic" in tikz and "angle=" in tikz
     assert "circle (1)" in tikz
+    # punkten P härleds ur vinkeln — annars kunde vinkeln ignoreras tyst
+    assert "cos(40)" in tikz and "sin(40)" in tikz
 
 
 def test_stapeldiagram_en_stapel_per_kategori():
@@ -151,7 +156,12 @@ def test_stapeldiagram_escapar_kategorinamn():
 def test_ladagram_har_lada_och_morrhar():
     tikz = exam_figures.render_figur(_bygg(
         {"typ": "ladagram", "min": 2, "q1": 5, "median": 8, "q3": 11, "max": 14}))
-    assert "rectangle" in tikz
+    assert "rectangle" in tikz                       # lådan
+    # morrhåren: exakt två vågräta linjer (min–q1 och q3–max), utan rectangle
+    morrhar = [r for r in tikz.splitlines()
+               if r.startswith(r"\draw[thick]") and ")--(" in r
+               and "rectangle" not in r]
+    assert len(morrhar) == 2
 
 
 @pytest.mark.parametrize("d", [
@@ -160,34 +170,24 @@ def test_ladagram_har_lada_och_morrhar():
     {"typ": "stapeldiagram", "kategorier": ["A", "B", "C"], "varden": [3, 5, 2]},
     {"typ": "ladagram", "min": 2, "q1": 5, "median": 8, "q3": 11, "max": 14},
 ])
-def test_geometri_statistik_kompilerar(d):
+def test_geometri_statistik_kompilerar(d, tmp_path):
     if not exam_pdf.engine_available():
         pytest.skip("Tectonic saknas")
-    try:
-        assert _kompilera(exam_figures.render_figur(_bygg(d)))
-    finally:
-        import shutil
-        shutil.rmtree("_figkontroll", ignore_errors=True)
+    assert _kompilera(exam_figures.render_figur(_bygg(d)), tmp_path)
 
 
-def _sidantal(tikz: str):
-    """Antal PDF-sidor för en figur (None om fitz saknas)."""
+def _sidantal(tikz: str, base: Path):
+    """Antal PDF-sidor för en figur (None om fitz saknas), kompilerad i en
+    per-test tmp-katalog (base)."""
     try:
         import fitz
     except ImportError:
         return None
-    doc = (r"\documentclass[12pt,a4paper]{article}"
-           r"\usepackage[T1]{fontenc}\usepackage{newtxtext,newtxmath}"
-           r"\usepackage{tikz}\usetikzlibrary{angles,quotes}\pagestyle{empty}"
-           r"\begin{document}" + tikz + r"\end{document}")
-    pdf, _ = exam_pdf.compile_pdf(doc, Path("_figsid"), "sid")
-    try:
-        if pdf is None:
-            return -1
-        d = fitz.open(pdf); n = d.page_count; d.close(); return n
-    finally:
-        import shutil
-        shutil.rmtree("_figsid", ignore_errors=True)
+    pdf, _ = exam_pdf.compile_pdf(_wrap(tikz), base / "figsid", "sid")
+    if pdf is None:
+        return -1
+    d = fitz.open(pdf); n = d.page_count; d.close()
+    return n
 
 
 @pytest.mark.parametrize("d", [
@@ -195,16 +195,12 @@ def _sidantal(tikz: str):
     {"typ": "andragrad", "a": -1, "b": 4, "c": -3},   # nedåtvänd parabel
     {"typ": "linjar", "k": -1.5, "m": -2},            # brant negativ linje
 ])
-def test_extrema_parametrar_ryms_pa_en_sida(d):
+def test_extrema_parametrar_ryms_pa_en_sida(d, tmp_path):
     if not exam_pdf.engine_available():
         pytest.skip("Tectonic saknas")
     tikz = exam_figures.render_figur(_bygg(d))
-    try:
-        assert _kompilera(tikz), f"{d['typ']} kompilerar inte"
-    finally:
-        import shutil
-        shutil.rmtree("_figkontroll", ignore_errors=True)
-    n = _sidantal(tikz)
+    assert _kompilera(tikz, tmp_path), f"{d['typ']} kompilerar inte"
+    n = _sidantal(tikz, tmp_path)
     if n is not None:
         assert n == 1, f"{d['typ']} blev {n} sidor — kurvan klipps inte mot rutan"
 
@@ -221,15 +217,11 @@ def test_extrema_parametrar_ryms_pa_en_sida(d):
     # måste normalisera in i en fast ritruta precis som funktionsgraferna.
     {"typ": "triangel", "a": 650, "b": 720, "c": 900},
 ])
-def test_stora_naturliga_tal_kompilerar_pa_en_sida(d):
+def test_stora_naturliga_tal_kompilerar_pa_en_sida(d, tmp_path):
     if not exam_pdf.engine_available():
         pytest.skip("Tectonic saknas")
     tikz = exam_figures.render_figur(_bygg(d))
-    try:
-        assert _kompilera(tikz), f"{d['typ']} kompilerar inte"
-    finally:
-        import shutil
-        shutil.rmtree("_figkontroll", ignore_errors=True)
-    n = _sidantal(tikz)
+    assert _kompilera(tikz, tmp_path), f"{d['typ']} kompilerar inte"
+    n = _sidantal(tikz, tmp_path)
     if n is not None:
         assert n == 1, f"{d['typ']} blev {n} sidor"

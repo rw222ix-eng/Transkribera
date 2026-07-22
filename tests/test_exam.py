@@ -1123,6 +1123,9 @@ def test_compile_pdf_real_engine_figur_pa_foralder_med_deluppgifter(tmp_path):
     for jobname, tex in (("prov", exam_latex.render_prov(doc)),
                          ("arbetsblad", exam_latex.render_arbetsblad(doc)),
                          ("bedomning", exam_latex.render_bedomning(doc))):
+        # figuren måste faktiskt landa i .tex:en (inte bara "kompilerar utan
+        # StrictUndefined") — annars kunde en förälder tappa figuren tyst
+        assert r"\begin{tikzpicture}" in tex, f"{jobname}: figuren saknas i .tex:en"
         pdf, logg = exam_pdf.compile_pdf(tex, tmp_path / jobname, jobname)
         assert pdf is not None and pdf.exists(), f"{jobname}: {logg}"
 
