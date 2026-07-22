@@ -320,6 +320,18 @@ def test_response_format_har_figur_diskriminator():
     assert "discriminator" in json.dumps(rf["json_schema"]["schema"])
 
 
+def test_to_response_format_kapar_antal_uppgifter():
+    """Med antal satt tvingar grammatiken exakt så många toppuppgifter
+    (min=max) — llama.cpp hedrar min/maxItems, så modellen kan inte
+    överproducera. Utan antal finns ingen övre gräns."""
+    upp = exam_spec.to_response_format(6)["json_schema"]["schema"] \
+        ["properties"]["uppgifter"]
+    assert upp["maxItems"] == 6 and upp["minItems"] == 6
+    upp0 = exam_spec.to_response_format()["json_schema"]["schema"] \
+        ["properties"]["uppgifter"]
+    assert "maxItems" not in upp0
+
+
 # -------------------------------------------------------- poängsummor --
 
 def test_poangsummor_oforandrad_for_platt_prov():
@@ -1159,6 +1171,16 @@ def test_generate_exam_valid_first_try():
     assert res["exam"]["titel"].startswith("Prov")
     assert calls[0]["response_format"]["json_schema"]["name"] == "matteprov"
     assert "pq-formeln" in calls[0]["prompt"]
+
+
+def test_generate_exam_trar_antal_till_grammatiken():
+    """generate_exam(antal=N) ska sätta grammatik-taket (maxItems=N) i det
+    response_format som skickas till modellen — inte bara i prompten."""
+    llm, calls = _stub_llm([json.dumps(_exam())])
+    exam_gen.generate_exam("Ma2b", "SA23", [], model="m", antal=6, llm=llm)
+    upp = calls[0]["response_format"]["json_schema"]["schema"] \
+        ["properties"]["uppgifter"]
+    assert upp["maxItems"] == 6
 
 
 def test_generate_exam_repairs_imbalance():

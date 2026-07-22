@@ -219,11 +219,18 @@ class ExamDoc(_Model):
     uppgifter: list[ExamItem] = Field(min_length=1)
 
 
-def to_response_format() -> dict:
-    """json_schema-objekt för llama-servers grammatiktvång."""
+def to_response_format(antal: int | None = None) -> dict:
+    """json_schema-objekt för llama-servers grammatiktvång. När `antal` anges
+    tvingar grammatiken EXAKT så många toppuppgifter (min=max) — llama.cpp:s
+    grammatik hedrar min/maxItems, så modellen kan inte överproducera (30 i
+    stället för de begärda) och slösa GPU-rundor på att sedan bantas."""
+    schema = ExamDoc.model_json_schema()
+    if antal is not None:
+        schema["properties"]["uppgifter"]["minItems"] = antal
+        schema["properties"]["uppgifter"]["maxItems"] = antal
     return {
         "type": "json_schema",
-        "json_schema": {"name": "matteprov", "schema": ExamDoc.model_json_schema()},
+        "json_schema": {"name": "matteprov", "schema": schema},
     }
 
 

@@ -251,12 +251,14 @@ def _parse_exam(raw: str) -> dict | None:
     return None
 
 
-def _llm_round(prompt: str, model: str, llm) -> dict | None:
+def _llm_round(prompt: str, model: str, llm, antal: int | None = None) -> dict | None:
     raw = llm(
         model, prompt,
         system=SYSTEM,
         options={"temperature": 0.3},
-        response_format=exam_spec.to_response_format(),
+        # antal → grammatik-tak (maxItems) så modellen inte kan överproducera,
+        # även i reparationsrundorna.
+        response_format=exam_spec.to_response_format(antal),
         max_tokens=EXAM_MAX_TOKENS,
         token_cb=None,
     )
@@ -265,13 +267,14 @@ def _llm_round(prompt: str, model: str, llm) -> dict | None:
 
 def _repair_until_valid(exam: dict | None, errors: list, *, model: str, llm,
                         rounds_used: int, max_rounds: int, profil: str = "prov",
+                        antal: int | None = None,
                         log_cb: Callable[[str], None] | None = None) -> dict:
     log = log_cb or (lambda _m: None)
     while errors and rounds_used < max_rounds and exam is not None:
         rounds_used += 1
         log(f"Justerar provet (runda {rounds_used} av {max_rounds}) — "
             f"{len(errors)} problem …")
-        candidate = _llm_round(build_repair_prompt(exam, errors), model, llm)
+        candidate = _llm_round(build_repair_prompt(exam, errors), model, llm, antal)
         if candidate is None:
             errors = [{"path": "svar", "code": "json",
                        "message": "modellen svarade inte med giltig JSON"}]
@@ -298,13 +301,13 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     prompt = build_prompt(kurs, klass, punkter, antal=antal, tid_min=tid_min,
                           delar=delar, memory=memory, teman=teman,
                           referens=referens, bilder=bilder, profil=profil)
-    exam = _llm_round(prompt, model, llm)
+    exam = _llm_round(prompt, model, llm, antal)
     rounds = 1
     while exam is None and rounds < max_rounds:
         rounds += 1
         log(f"Modellen svarade inte med giltig JSON — försöker igen "
             f"(runda {rounds} av {max_rounds}) …")
-        exam = _llm_round(prompt, model, llm)
+        exam = _llm_round(prompt, model, llm, antal)
     if exam is None:
         return {"exam": None,
                 "errors": [{"path": "svar", "code": "json",
@@ -313,7 +316,7 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     _doc, errors = exam_spec.validate_exam_json(exam, profil)
     return _repair_until_valid(exam, errors, model=model, llm=llm,
                                rounds_used=rounds, max_rounds=max_rounds,
-                               profil=profil, log_cb=log_cb)
+                               profil=profil, antal=antal, log_cb=log_cb)
 
 
 def refine_exam(exam: dict, instruction: str, *, model: str,
