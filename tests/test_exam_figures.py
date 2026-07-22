@@ -35,26 +35,30 @@ def test_linjar_ger_tikz():
     tikz = exam_figures.render_figur(_bygg({"typ": "linjar", "k": 0.8, "m": 1}))
     assert tikz.startswith(r"\begin{tikzpicture}")
     assert tikz.rstrip().endswith(r"\end{tikzpicture}")
-    assert r"plot(\x,{0.8*\x+1})" in tikz
+    assert "plot coordinates" in tikz
 
 
 def test_andragrad_ger_tikz():
     tikz = exam_figures.render_figur(
         _bygg({"typ": "andragrad", "a": 1, "b": -4, "c": 3}))
-    assert r"plot(\x,{1*\x*\x+-4*\x+3})" in tikz
+    assert "plot coordinates" in tikz
 
 
-def test_exponential_anvander_exp_ln():
+def test_exponential_ger_tikz_med_samplade_koordinater():
+    """Exponentialen ritas nu via samplade koordinater i en fast ritruta
+    (skalinvariant) — inget domain/exp(\\x*ln(...))-uttryck i utdatan längre."""
     tikz = exam_figures.render_figur(
         _bygg({"typ": "exponential", "C": 1, "bas": 2}))
-    # bas^x skrivs exp(x*ln(bas)) — TikZ saknar ^-operator för variabel exponent
-    assert r"exp(\x*ln(2))" in tikz
+    assert "plot coordinates" in tikz
+    assert r"exp(\x*ln" not in tikz
 
 
 def test_normalfordelning_markerar_mu():
+    """mu:s VERKLIGA tal ska stå på axeln (ersätter den gamla $\\mu$-noden,
+    som inte längre stämmer när mu är ett stort naturligt tal, t.ex. lön)."""
     tikz = exam_figures.render_figur(
-        _bygg({"typ": "normalfordelning", "mu": 0, "sigma": 1}))
-    assert r"$\mu$" in tikz
+        _bygg({"typ": "normalfordelning", "mu": 12, "sigma": 1}))
+    assert "12" in tikz
 
 
 @pytest.mark.parametrize("d", [
@@ -160,3 +164,25 @@ def test_extrema_parametrar_ryms_pa_en_sida(d):
     n = _sidantal(tikz)
     if n is not None:
         assert n == 1, f"{d['typ']} blev {n} sidor — kurvan klipps inte mot rutan"
+
+
+@pytest.mark.parametrize("d", [
+    {"typ": "exponential", "C": 1000, "bas": 1.05},        # ränta-på-ränta
+    {"typ": "normalfordelning", "mu": 30000, "sigma": 5000},   # lönefördelning
+    {"typ": "stapeldiagram", "kategorier": ["A", "B", "C"], "varden": [900, 1200, 700]},
+    {"typ": "andragrad", "a": 30, "b": 0, "c": 0},
+    {"typ": "ladagram", "min": 1000, "q1": 2000, "median": 3000, "q3": 4000, "max": 5000},
+    {"typ": "ladagram", "min": 5, "q1": 5, "median": 5, "q3": 5, "max": 5},   # alla lika
+])
+def test_stora_naturliga_tal_kompilerar_pa_en_sida(d):
+    if not exam_pdf.engine_available():
+        pytest.skip("Tectonic saknas")
+    tikz = exam_figures.render_figur(_bygg(d))
+    try:
+        assert _kompilera(tikz), f"{d['typ']} kompilerar inte"
+    finally:
+        import shutil
+        shutil.rmtree("_figkontroll", ignore_errors=True)
+    n = _sidantal(tikz)
+    if n is not None:
+        assert n == 1, f"{d['typ']} blev {n} sidor"
