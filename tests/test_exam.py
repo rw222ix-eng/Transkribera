@@ -599,6 +599,14 @@ def test_escape_latex_specials():
     assert "textbackslash" in exam_latex.escape_latex("a\\b")
 
 
+def test_escape_latex_escapar_dubbelfnutt():
+    """Svensk babel gör " till en aktiv genväg i huvuddokumentet (ingen
+    \\shorthandoff där). Escapa " så ett citattecken i text/kategorinamn
+    renderas bokstavligt i stället för att tolkas som babel-genväg."""
+    assert exam_latex.escape_latex('säger "hej"') == \
+        r"säger \textquotedbl{}hej\textquotedbl{}"
+
+
 def test_escape_mixed_preserves_math():
     out = exam_latex.escape_mixed("Andelen är 50% eftersom $x^2 \\ge 0$ gäller.")
     assert r"50\%" in out

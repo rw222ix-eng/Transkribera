@@ -32,6 +32,11 @@ _LATEX_SPECIALS = {
     "&": r"\&", "%": r"\%", "$": r"\$", "#": r"\#", "_": r"\_",
     "{": r"\{", "}": r"\}",
     "~": r"\textasciitilde{}", "^": r"\textasciicircum{}",
+    # Svensk babel gör " till en aktiv genväg i huvuddokumentet (där finns
+    # ingen \shorthandoff). Escapa till ett bokstavligt citattecken så text/
+    # kategorinamn med " inte tolkas som babel-genväg (försvar på djupet:
+    # figurpreamblen släcker " men löptexten förlitade sig annars på tur).
+    '"': r"\textquotedbl{}",
 }
 _CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
 _MATH_SPLIT_RE = re.compile(r"\$([^$]*)\$")
