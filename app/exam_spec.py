@@ -16,6 +16,7 @@ Uppgifterna är alltid egenformulerade; endast strukturen efterliknar NP.
 """
 from __future__ import annotations
 
+import copy
 import math
 import re
 from typing import Annotated, Literal, Union
@@ -220,15 +221,46 @@ class ExamDoc(_Model):
     uppgifter: list[ExamItem] = Field(min_length=1)
 
 
-def to_response_format(antal: int | None = None) -> dict:
-    """json_schema-objekt för llama-servers grammatiktvång. När `antal` anges
-    tvingar grammatiken EXAKT så många toppuppgifter (min=max) — llama.cpp:s
-    grammatik hedrar min/maxItems, så modellen kan inte överproducera (30 i
-    stället för de begärda) och slösa GPU-rundor på att sedan bantas."""
+def to_response_format(antal: int | None = None,
+                       skeleton: list[dict] | None = None) -> dict:
+    """json_schema-objekt för llama-servers grammatiktvång.
+
+    `antal` sätter ett hårt antalstak (minItems=maxItems) — llama.cpp hedrar
+    min/maxItems, så modellen kan inte överproducera.
+
+    `skeleton` går längre: varje uppgifts del, formaga, typ och poang låses per
+    index via prefixItems (samma grammatikmekanism som poang-tupeln redan
+    använder). Skelettet är balanserat BY CONSTRUCTION, så förmåge- och
+    nivåbalans blir garanterad — modellen skriver bara innehållet."""
     schema = ExamDoc.model_json_schema()
-    if antal is not None:
-        schema["properties"]["uppgifter"]["minItems"] = antal
-        schema["properties"]["uppgifter"]["maxItems"] = antal
+    upp = schema["properties"]["uppgifter"]
+    if skeleton is not None:
+        item_def = schema["$defs"]["ExamItem"]
+        prefix = []
+        for slot in skeleton:
+            it = copy.deepcopy(item_def)
+            it["properties"]["del"] = {"const": slot["del"]}
+            it["properties"]["formaga"] = {"const": slot["formaga"]}
+            it["properties"]["typ"] = {"const": slot["typ"]}
+            it["properties"]["poang"] = {
+                "type": "array", "minItems": 3, "maxItems": 3,
+                "prefixItems": [{"const": p} for p in slot["poang"]]}
+            # Skelettuppgifter är platta (nonzero poäng) → text/losning/bedomning
+            # MÅSTE vara ifyllda. losning/bedomning har default "" och är därför
+            # INTE required → grammatiken lät modellen utelämna/null:a dem (föll
+            # sedan på valideringen). Gör dem required + minLength≥1 så
+            # grammatiken tvingar en icke-tom lösning och bedömning.
+            for fld in ("text", "losning", "bedomning"):
+                it["properties"][fld]["minLength"] = 1
+            it["required"] = sorted(set(it.get("required", []))
+                                    | {"losning", "bedomning"})
+            prefix.append(it)
+        upp.clear()
+        upp.update({"type": "array", "prefixItems": prefix,
+                    "minItems": len(skeleton), "maxItems": len(skeleton)})
+    elif antal is not None:
+        upp["minItems"] = antal
+        upp["maxItems"] = antal
     return {
         "type": "json_schema",
         "json_schema": {"name": "matteprov", "schema": schema},
@@ -497,6 +529,86 @@ def kravgranser(doc: ExamDoc, config: dict | None = None) -> dict:
         ),
     }
     return granser
+
+
+def balanced_skeleton(antal: int, profil: str = "prov") -> list[dict]:
+    """Deterministiskt balanserat skelett: {del, formaga, typ, poang} per
+    uppgift, konstruerat så förmåge- OCH nivåbalans + ordningsregler uppfylls
+    BY CONSTRUCTION. Grammatiken tvingar modellen till skelettet, så modellen
+    behöver bara skriva innehållet — balansen är inte längre modellens ansvar.
+
+    Del B: E-tunga rutinuppgifter (begrepp/procedur). Del C: stigande C/A. En
+    liten sökning justerar poängen tills validate_balance/ordning är rena, så
+    varje giltigt `antal` (≥ antal golv-förmågor) ger ett balanserat skelett."""
+    golv = ["B", "P", "PL", "M", "R", "K"]
+    # Del B: en (antal<8) eller två (annars) rutinuppgifter, E-tunga.
+    slots = [{"del": "B", "formaga": "B", "typ": "rutin", "poang": [2, 0, 0]}]
+    if antal >= 8:
+        slots.append({"del": "B", "formaga": "P", "typ": "rutin", "poang": [1, 0, 0]})
+    have = {s["formaga"] for s in slots}
+    nc = antal - len(slots)
+    # Del C-förmågor: täck resterande golv, fyll med hög-mål-förmågor (P/PL/B).
+    c_form = [f for f in golv if f not in have]
+    fill = ["P", "PL", "B", "P", "PL", "B", "P", "PL", "B", "P"]
+    c_form += fill[:max(0, nc - len(c_form))]
+    c_form = c_form[:nc]
+    # Poäng: lättare (C) först, tyngre (C+A) sist → stigande svårighet.
+    m = max(1, min(nc, round(0.45 * antal)))          # antal C+A-uppgifter
+    poangs = [[1, 1, 0]] * (nc - m) + [[1, 1, 1]] * m
+
+    # Typ FÖLJER förmågan (varierar därmed som förmågorna gör) — annars blir
+    # de lättare uppgifterna en lång redovisning-svans som bryter antiklumpningen.
+    def _typ(f):
+        return ("resonemang" if f == "R"
+                else "problem" if f in ("PL", "M") else "redovisning")
+
+    for f, p in zip(c_form, poangs):
+        slots.append({"del": "C", "formaga": f, "typ": _typ(f), "poang": list(p)})
+
+    # Liten poängsökning: höj poäng på under-mål-förmågan / -nivån tills rent.
+    for _ in range(60):
+        doc = _skeleton_doc(slots)
+        errs = validate_balance(doc, profil=profil) + validate_ordning(doc)
+        if not errs:
+            break
+        if not _justera_skelett(slots, errs):
+            break
+    return slots
+
+
+def _skeleton_doc(slots: list[dict]) -> "ExamDoc":
+    return ExamDoc(
+        titel="_", kurs="_", hjalpmedel="_",
+        uppgifter=[ExamItem(del_=s["del"], formaga=s["formaga"], typ=s["typ"],
+                            poang=tuple(s["poang"]), text="_", losning="_",
+                            bedomning="_") for s in slots])
+
+
+def _justera_skelett(slots: list[dict], errs: list[dict]) -> bool:
+    """Höj en poäng för att åtgärda det första balansfelet. Returnerar False
+    när inget mer kan göras (undviker oändlig loop)."""
+    for e in errs:
+        code, path = e["code"], e["path"]
+        if code == "formagabalans":                    # "förmåga X har …"
+            f = path.split()[-1]
+            for s in slots:                            # +1 C på en X-uppgift
+                if s["formaga"] == f and s["typ"] != "rutin":
+                    s["poang"][1] += 1
+                    return True
+            for s in slots:                            # annars +1 E
+                if s["formaga"] == f:
+                    s["poang"][0] += 1
+                    return True
+        if code == "nivabalans":
+            niva = path.split()[-1].lower()            # "nivå E/C/A"
+            idx = {"e": 0, "c": 1, "a": 2}[niva]
+            # höj nivån på en lämplig Del C-uppgift (rör aldrig typ → bevarar
+            # antiklumpningen); E får höjas överallt, C/A bara på icke-rutin.
+            for s in slots:
+                if s["del"] == "C" and (idx == 0 or s["typ"] != "rutin"):
+                    s["poang"][idx] += 1
+                    return True
+    return False
 
 
 _VAR_MATH_RE = re.compile(r"\$[^$]*\$")
