@@ -1,0 +1,46 @@
+/* Transkribera designsystem (EDITORIAL) — porterad från app/web/static/style.css.
+   Fonts bundlas av Vite (offline, ingen CDN). Detta är designkällan live-läget redigerar. */
+
+@font-face{font-family:'Inter Tight';font-style:normal;font-weight:400;font-display:swap;src:url('./assets/fonts/inter-tight-400.woff2') format('woff2')}
+@font-face{font-family:'Inter Tight';font-style:normal;font-weight:500;font-display:swap;src:url('./assets/fonts/inter-tight-500.woff2') format('woff2')}
+@font-face{font-family:'Inter Tight';font-style:normal;font-weight:600;font-display:swap;src:url('./assets/fonts/inter-tight-600.woff2') format('woff2')}
+@font-face{font-family:'Inter Tight';font-style:normal;font-weight:700;font-display:swap;src:url('./assets/fonts/inter-tight-700.woff2') format('woff2')}
+@font-face{font-family:'Inter Tight';font-style:italic;font-weight:400;font-display:swap;src:url('./assets/fonts/inter-tight-italic-400.woff2') format('woff2')}
+@font-face{font-family:'Instrument Serif';font-style:normal;font-weight:400;font-display:swap;src:url('./assets/fonts/instrument-serif-400.woff2') format('woff2')}
+@font-face{font-family:'Instrument Serif';font-style:italic;font-weight:400;font-display:swap;src:url('./assets/fonts/instrument-serif-italic-400.woff2') format('woff2')}
+@font-face{font-family:'JetBrains Mono';font-style:normal;font-weight:400;font-display:swap;src:url('./assets/fonts/jetbrains-mono-400.woff2') format('woff2')}
+@font-face{font-family:'JetBrains Mono';font-style:normal;font-weight:500;font-display:swap;src:url('./assets/fonts/jetbrains-mono-500.woff2') format('woff2')}
+
+:root,[data-theme="light"]{
+  --canvas:#F1F2ED; --surface:#FFFFFF; --sunken:#F3F4EE;
+  --ink:#161A14; --ink-2:#4F514D; --ink-3:#6A6C68;
+  --line:#D9D9D5; --line-2:#C7C9C2;
+  --accent:#2C6E9E; --accent-weak:#E3ECF2;
+  --ok:#5C7E40; --warn:#9A7416; --bad:#C8463A;
+  --c-plum:#5B3A6E; --c-sky:#2C6E9E; --c-sage:#5C7E40; --c-mustard:#9A7416;
+  --btn-bg:#161A14; --btn-fg:#F1F2ED; --track:#E8E9E2;
+  --on-accent:#FFFFFF; --on-ok:#FFFFFF; --knob:#FFFFFF;
+  --sans:"Inter Tight","Helvetica Neue",system-ui,sans-serif;
+  --serif:"Instrument Serif","GT Sectra",Georgia,"Times New Roman",serif;
+  --mono:"JetBrains Mono",ui-monospace,"SFMono-Regular",monospace;
+  --shadow-sm:0 1px 2px rgba(22,26,20,.05);
+  --shadow:0 26px 60px -34px rgba(22,26,20,.40),0 6px 18px -14px rgba(22,26,20,.14);
+}
+[data-theme="dark"]{
+  --canvas:#14150E; --surface:#1C1D15; --sunken:#23241A;
+  --ink:#F1F2ED; --ink-2:#C4C6BC; --ink-3:#9A9C92;
+  --line:#2E2F26; --line-2:#3B3C30;
+  --accent:#7FB4DA; --accent-weak:#1E2A33;
+  --ok:#8FB06A; --warn:#D6A53F; --bad:#E0796A;
+  --c-plum:#B79ECB; --c-sky:#7FB4DA; --c-sage:#8FB06A; --c-mustard:#D9AC45;
+  --btn-bg:#F1F2ED; --btn-fg:#14150E; --track:#23241A;
+  --on-accent:#14150E; --on-ok:#14150E; --knob:var(--surface);
+  --shadow-sm:0 1px 2px rgba(0,0,0,.5);
+  --shadow:0 26px 60px -32px rgba(0,0,0,.78),0 8px 20px -14px rgba(0,0,0,.6);
+}
+
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--canvas);color:var(--ink);font-family:var(--sans);
+  font-size:16.5px;line-height:1.55;-webkit-font-smoothing:antialiased;letter-spacing:-0.011em}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}

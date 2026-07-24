@@ -5,11 +5,14 @@ One-folder, windowed. Reuses the heavy-dep collection from Transkribera.spec and
 adds the web stack (fastapi/uvicorn), pywebview (+ pythonnet for the EdgeChromium
 backend) and the static frontend. PySide6 is excluded — the web build has no Qt UI.
 
-Build:  pyinstaller Transkribera_web.spec
+OBS: kör `npm run build` (i repo-roten) FÖRE PyInstaller så app/web/next finns.
+
+Build:  npm run build && pyinstaller Transkribera_web.spec
 Result: dist/Transkribera_web/Transkribera_web.exe
 """
 from PyInstaller.utils.hooks import collect_all, collect_submodules
 import importlib.util
+import os as _os
 
 datas, binaries, hiddenimports = [], [], []
 
@@ -34,6 +37,17 @@ hiddenimports += ["clr"]
 # Bundle the web frontend where server._static_dir() looks for it when frozen.
 datas += [("app/web/static", "app/web/static")]
 
+# Bundla den byggda Svelte-frontenden (npm run build) så /next fungerar offline
+# i det frysta bygget. Kräver att app/web/next/ finns vid paketeringstillfället
+# (se OBS ovan) — till skillnad från bin/tectonic-guarden nedan är detta INTE en
+# valfri katalog: PyInstaller 6.x kraschar hela bygget med ett kryptiskt
+# "ERROR: Unable to find ... when adding binary and data files" om den saknas,
+# så vi kollar explicit och avbryter tidigt med ett begripligt svenskt felmeddelande.
+if not _os.path.isdir("app/web/next"):
+    raise SystemExit(
+        "app/web/next saknas — kör `npm run build` i repo-roten före PyInstaller.")
+datas += [("app/web/next", "app/web/next")]
+
 # Bundlad appdata (centralt innehåll m.m.) där course_data.data_dir() letar
 # när appen är fryst (Fas 3).
 datas += [("app/data", "app/data")]
@@ -41,7 +55,6 @@ datas += [("app/data", "app/data")]
 # LaTeX-mallarna för provgeneratorn (Fas 4) + Tectonic-motorn med förseedad
 # paketcache (offline-kompilering; se exam_pdf.engine_dir).
 datas += [("app/templates", "app/templates")]
-import os as _os
 if _os.path.isdir("bin/tectonic"):
     datas += [("bin/tectonic", "bin/tectonic")]
 

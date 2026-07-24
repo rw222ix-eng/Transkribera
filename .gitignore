@@ -82,3 +82,7 @@ exports/
 
 # Användarens transkriberingar och exporterade dokument (lokal elevdata — får ALDRIG checkas in)
 /Transkriberingar/
+
+# Byggd Svelte-frontend (byggs vid paketering, checkas inte in)
+app/web/next/
+node_modules/

@@ -256,14 +256,26 @@ def create_app(base_dir: Path | None = None,
     #    webbläsaren friskhet ur Last-Modified och kan köra gammal app.js länge
     #    efter en uppdatering. no-cache = alltid omfråga (304 via ETag är
     #    fortfarande snabbt, allt ligger på lokal disk).
+    #    "/next" och "/next/" är den ohashade Svelte-entrydokumentet (index.html) —
+    #    build.emptyOutDir rensar gamla hashade assets vid varje ombygge, så en
+    #    kvarcachad /next/index.html skulle be om en /next/assets/*-fil som redan
+    #    raderats och rendera blankt. De hashade assetsen under /next/assets/*
+    #    ska INTE träffas av detta — de är innehålls-adresserade och får cachas.
     @app.middleware("http")
     async def _no_stale_static(request: Request, call_next):
         response = await call_next(request)
-        if request.url.path == "/" or request.url.path.startswith("/static"):
+        if (request.url.path in ("/", "/next", "/next/")
+                or request.url.path.startswith("/static")):
             response.headers["Cache-Control"] = "no-cache"
         return response
 
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+    # Parallell Svelte-frontend (byggd av Vite → app/web/next). Serveras additivt;
+    # rör inte "/" eller "/static". Monteras bara om bygget finns (dev utan bygge = tyst).
+    NEXT_DIR = STATIC_DIR.parent / "next"
+    if (NEXT_DIR / "index.html").exists():
+        app.mount("/next", StaticFiles(directory=str(NEXT_DIR), html=True), name="next")
 
     # Single owner of the LLM process + GPU exclusivity. The LLM is NOT started
     # here — it starts lazily on the first correction/chat (see /api/postprocess,
