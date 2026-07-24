@@ -36,3 +36,12 @@ export async function generateBoard() {
     handlePlanEvent,
   );
 }
+
+/** Ändrar den skrivna tavlan via chatten. */
+export async function refineBoard() {
+  const message = plan.chatInput.trim();
+  if (!message || !plan.id || plan.phase === 'running') return;
+  plan.chatInput = '';
+  resetRun();
+  await streamPost(`/api/planning/${plan.id}/refine`, { message }, handlePlanEvent);
+}

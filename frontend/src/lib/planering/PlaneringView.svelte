@@ -2,6 +2,7 @@
   // Planering — tavelflödet. Delkomponenter kopplas in i senare steg.
   import BuildPanel from './BuildPanel.svelte';
   import BoardPreview from './BoardPreview.svelte';
+  import ChangeChat from './ChangeChat.svelte';
   import { plan } from './stores.svelte.js';
   import { generateBoard } from './actions.js';
 </script>
@@ -16,6 +17,7 @@
 
   <BuildPanel onGenerate={generateBoard} />
   <BoardPreview />
+  <ChangeChat />
 
   {#if plan.log.length}
     <ol class="log" aria-live="polite">
