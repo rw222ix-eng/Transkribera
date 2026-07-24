@@ -10,11 +10,14 @@
   const parts = $derived.by(() => {
     const out = [];
     const chunks = text.split(START);
-    out.push({ hit: false, s: chunks[0] ?? '' });
+    // Text före första \x02 (och en marker utan avslutande \x03) är aldrig
+    // en träff — men kan ändå råka innehålla ett löst \x03 om servern skickat
+    // trasig markering. Sådana ska aldrig läcka som råa styrtecken i DOM:en.
+    out.push({ hit: false, s: (chunks[0] ?? '').split(END).join('') });
     for (const chunk of chunks.slice(1)) {
       const cut = chunk.indexOf(END);
       if (cut < 0) {
-        out.push({ hit: true, s: chunk });
+        out.push({ hit: true, s: chunk.split(END).join('') });
       } else {
         out.push({ hit: true, s: chunk.slice(0, cut) });
         out.push({ hit: false, s: chunk.slice(cut + 1) });
