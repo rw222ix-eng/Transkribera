@@ -3,6 +3,7 @@
   import { getJSON } from '../api.js';
   import ArkivList from './ArkivList.svelte';
   import ArkivSearch from './ArkivSearch.svelte';
+  import ArkivAnswer from './ArkivAnswer.svelte';
 
   $effect(() => {
     arkiv.loading = true;
@@ -24,6 +25,7 @@
   <p class="eyebrow">ARKIV</p>
   <h2 class="rubrik">Sparade tavlor och prov</h2>
   <ArkivSearch />
+  <ArkivAnswer />
   <ArkivList />
 </section>
 

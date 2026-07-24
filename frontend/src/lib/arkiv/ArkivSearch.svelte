@@ -1,8 +1,6 @@
 <script>
   import { arkiv, resetSearch } from './stores.svelte.js';
-  import { getJSON } from '../api.js';
-
-  const canSearch = $derived(arkiv.query.trim().length > 0 && !arkiv.searching);
+  import { getJSON, streamPost } from '../api.js';
 
   async function runSearch() {
     const q = arkiv.query.trim();
@@ -21,6 +19,28 @@
     }
   }
 
+  async function runAsk() {
+    const q = arkiv.query.trim();
+    if (!q || arkiv.asking) return;
+    resetSearch();
+    arkiv.asking = true;
+    arkiv.askedFor = q;
+    await streamPost('/api/planning/ask', { q }, (ev) => {
+      if (ev.type === 'scan_plan') {
+        arkiv.scan = (ev.items ?? []).map((i) => ({ ...i, hits: null }));
+      } else if (ev.type === 'scan_result') {
+        arkiv.scan = arkiv.scan.map((s) => (s.key === ev.key ? { ...s, ...ev } : s));
+      } else if (ev.type === 'deep_read') {
+        arkiv.sources = ev.sources ?? [];
+      } else if (ev.type === 'token') {
+        arkiv.answer += ev.text ?? '';
+      } else if (ev.type === 'error') {
+        arkiv.answer = arkiv.answer || 'Kunde inte svara: ' + ev.message;
+      }
+    });
+    arkiv.asking = false;
+  }
+
   function clearSearch() {
     arkiv.query = '';
     resetSearch();
@@ -29,15 +49,31 @@
 </script>
 
 <div class="sok">
+  <div class="lagen" role="group" aria-label="Sökläge">
+    <button
+      class="seg"
+      aria-pressed={arkiv.mode === 'ask'}
+      onclick={() => (arkiv.mode = 'ask')}
+    >Fråga AI</button>
+    <button
+      class="seg"
+      aria-pressed={arkiv.mode === 'word'}
+      onclick={() => (arkiv.mode = 'word')}
+    >Sök ord</button>
+  </div>
   <input
     class="field"
     aria-label="Sök i arkivet"
     placeholder="Sök ett ord — t.ex. derivata"
     bind:value={arkiv.query}
-    onkeydown={(e) => { if (e.key === 'Enter' && canSearch) runSearch(); }}
+    onkeydown={(e) => { if (e.key === 'Enter' && arkiv.query.trim() && !arkiv.asking && !arkiv.searching) { arkiv.mode === 'ask' ? runAsk() : runSearch(); } }}
   />
-  <button class="ghost" disabled={!canSearch} onclick={() => runSearch()}>
-    {arkiv.searching ? 'Söker …' : 'Sök ord'}
+  <button
+    class="ghost"
+    disabled={!(arkiv.query.trim() && !arkiv.asking && !arkiv.searching)}
+    onclick={() => (arkiv.mode === 'ask' ? runAsk() : runSearch())}
+  >
+    {arkiv.asking || arkiv.searching ? 'Söker …' : arkiv.mode === 'ask' ? 'Fråga' : 'Sök'}
   </button>
   {#if arkiv.hits}
     <button class="ghost" onclick={clearSearch}>Rensa</button>
@@ -51,6 +87,28 @@
     gap: 12px;
     flex-wrap: wrap;
     margin-top: 16px;
+  }
+  .lagen {
+    display: inline-flex;
+    gap: 3px;
+    padding: 3px;
+    background: var(--track);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+  }
+  .seg {
+    border: none;
+    border-radius: 3px;
+    padding: 8px 14px;
+    background: transparent;
+    color: var(--ink-2);
+    font-family: inherit;
+    font-size: inherit;
+    cursor: pointer;
+  }
+  .seg[aria-pressed='true'] {
+    background: var(--surface);
+    color: var(--ink);
   }
   .field {
     flex: 1;
