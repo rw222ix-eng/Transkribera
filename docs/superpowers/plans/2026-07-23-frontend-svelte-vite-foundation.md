@@ -59,6 +59,7 @@ Every task's requirements implicitly include these (values copied from the spec)
     "@sveltejs/vite-plugin-svelte": "^5.0.0",
     "svelte": "^5.0.0",
     "svelte-check": "^4.0.0",
+    "typescript": "^5.9.3",
     "vite": "^6.0.0"
   }
 }
@@ -173,7 +174,9 @@ frontend/node_modules/
 
 - [ ] **Step 10: Add a Vite dev launch config to `.claude/launch.json`**
 
-Add this object to the `configurations` array (after the existing entries):
+Add this object to the `configurations` array (after the existing entries), preserving the existing 3 entries and valid JSON.
+
+Note: `.claude/` is gitignored in this repo, so this edit lives on disk only and is NOT committed (it is a local dev convenience). Do not force-add it.
 
 ```json
 {
@@ -187,8 +190,12 @@ Add this object to the `configurations` array (after the existing entries):
 
 - [ ] **Step 11: Install dependencies**
 
-Run: `npm install --prefix frontend`
+Run: `cd frontend && npm install`
 Expected: `node_modules` created under `frontend/`, no error exit.
+
+Note: bare `npm install --prefix frontend` does NOT work on npm 9.6.6 (it ignores `--prefix` when locating `package.json`). `npm run <script> --prefix frontend` does work, and is used below.
+
+The pinned `typescript` devDependency is required: `svelte-check@4` declares an unbounded peer `typescript: ">=5.0.0"`, which npm otherwise resolves to a 7.x that breaks it.
 
 - [ ] **Step 12: Verify the build works**
 
@@ -204,7 +211,7 @@ Expected: exit 0, "0 errors".
 - [ ] **Step 14: Commit**
 
 ```bash
-git add frontend/package.json frontend/vite.config.js frontend/svelte.config.js frontend/jsconfig.json frontend/index.html frontend/src/main.js frontend/src/App.svelte frontend/src/app.css .gitignore .claude/launch.json
+git add frontend/package.json frontend/vite.config.js frontend/svelte.config.js frontend/jsconfig.json frontend/index.html frontend/src/main.js frontend/src/App.svelte frontend/src/app.css .gitignore
 git commit -m "feat(frontend): scaffolda Svelte 5 + Vite-projekt (grund)"
 ```
 
