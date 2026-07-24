@@ -8,7 +8,6 @@ export const plan = $state({
   datum: '',
   starttid: '',
   underlag: null,        // {id, filer:[{namn, beskrivning}]}
-  underlagBusy: false,
   // körning
   phase: 'idle',         // idle | running | done | error
   log: [],               // loggrader från SSE-jobbet
@@ -18,9 +17,8 @@ export const plan = $state({
   savedPath: '',         // kvitto från Godkänn & spara
   saveError: '',
   saving: false,         // spärr mot dubbla klick på Godkänn och spara
-  // chatt + markering
+  // chatt
   chatInput: '',
-  sel: [],               // [{kind:'sektion', index, label}]
 });
 
 /** Nollställer körningen inför en ny generering/refine. */
@@ -30,5 +28,4 @@ export function resetRun() {
   plan.errors = [];
   plan.savedPath = '';
   plan.saveError = '';
-  plan.sel = [];
 }

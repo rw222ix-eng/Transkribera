@@ -9,7 +9,7 @@
 
 <section class="view">
   <p class="eyebrow">PLANERING</p>
-  <h1 class="display">Dagens <em>tavla</em></h1>
+  <h1 class="display">Dagens <span class="ser">tavla</span></h1>
   <p class="lede">
     Beskriv momentet — och välj kurs om du vill — så skrivs tavlan som du annars
     hade skrivit för hand.
@@ -71,7 +71,7 @@
     color: var(--ink);
     margin: 0 0 10px;
   }
-  .display em {
+  .display .ser {
     font-family: var(--serif);
     font-style: italic;
     font-weight: 400;
