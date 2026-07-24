@@ -6,7 +6,7 @@
   <section class="svar">
     <p class="fraga">{arkiv.askedFor}</p>
 
-    {#if arkiv.asking && arkiv.scan.length}
+    {#if arkiv.scan.length}
       <ul class="scan" aria-live="polite">
         {#each arkiv.scan as s (s.key)}
           <li>{s.name}{#if s.hits != null} — {s.hits} träffar{/if}</li>
@@ -14,13 +14,15 @@
       </ul>
     {/if}
 
-    {#if arkiv.answer}
+    {#if arkiv.askError}
+      <p class="text fel">{arkiv.askError}</p>
+    {:else if arkiv.answer}
       <p class="text">{arkiv.answer}</p>
     {:else if arkiv.asking}
       <p class="text muted">Läser arkivet …</p>
     {/if}
 
-    {#if arkiv.sources.length}
+    {#if !arkiv.askError && arkiv.sources.length}
       <p class="kallor">
         Bygger på: {arkiv.sources.map((s) => s.titel ?? s.name ?? s).join(' · ')}
       </p>
@@ -49,6 +51,7 @@
     white-space: pre-wrap;
   }
   .text.muted { color: var(--ink-3); }
+  .text.fel { color: var(--bad); }
   .scan { list-style: none; margin: 0 0 12px; padding: 0; color: var(--ink-3); }
   .kallor { margin: 12px 0 0; color: var(--ink-3); }
 </style>
