@@ -61,6 +61,7 @@ e2e/.test-data-real/
 e2e/.test-data-preview/
 e2e/.test-data-qa/
 e2e/test-results/
+e2e/_srv_*.txt
 
 # Impeccable live mode (durabel sessionsjournal — lokal återhämtning, ej projektkälla)
 .impeccable/live/sessions/
