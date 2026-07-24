@@ -211,7 +211,7 @@ Expected: exit 0, "0 errors".
 - [ ] **Step 14: Commit**
 
 ```bash
-git add frontend/package.json frontend/vite.config.js frontend/svelte.config.js frontend/jsconfig.json frontend/index.html frontend/src/main.js frontend/src/App.svelte frontend/src/app.css .gitignore
+git add frontend/package.json frontend/package-lock.json frontend/vite.config.js frontend/svelte.config.js frontend/jsconfig.json frontend/index.html frontend/src/main.js frontend/src/App.svelte frontend/src/app.css .gitignore
 git commit -m "feat(frontend): scaffolda Svelte 5 + Vite-projekt (grund)"
 ```
 
