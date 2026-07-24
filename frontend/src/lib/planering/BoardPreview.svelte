@@ -14,6 +14,34 @@
 
   const title = $derived(plan.board?.title || 'Lektionstavla');
 
+  let zoomed = $state(false);
+
+  function print() {
+    frame?.contentWindow?.WBHost?.print();
+  }
+
+  function setPanZoom(on) {
+    try {
+      frame?.contentWindow?.WBHost?.setPanZoom?.(on);
+    } catch {
+      /* motorn saknar panorering — förstoringen fungerar ändå */
+    }
+  }
+
+  function toggleZoom() {
+    zoomed = !zoomed;
+    setPanZoom(zoomed);
+  }
+
+  $effect(() => {
+    if (!zoomed) return;
+    function onKey(e) {
+      if (e.key === 'Escape') toggleZoom();
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+
   /** Ritar aktuell tavla i iframen. Tyst när motorn inte är laddad än. */
   async function renderBoard() {
     const win = frame?.contentWindow;
@@ -86,10 +114,15 @@
 </script>
 
 {#if plan.board || plan.liveSections > 0}
-  <figure class="preview">
+  <figure class="preview" class:zoomed>
     <figcaption class="cap">
       <span class="label">Förhandsvisning</span>
       <span class="title">{title}</span>
+      <span class="spacer"></span>
+      <button class="ghost" onclick={print}>Skriv ut</button>
+      <button class="ghost" onclick={toggleZoom}>
+        {zoomed ? 'Stäng' : 'Förstora'}
+      </button>
     </figcaption>
     <iframe
       bind:this={frame}
@@ -123,12 +156,44 @@
     color: var(--ink-3);
   }
   .title { color: var(--ink-2); }
+  .spacer { flex: 1; }
+  .ghost {
+    background: transparent;
+    color: var(--ink);
+    border: 1px solid var(--line-2);
+    border-radius: 4px;
+    padding: 6px 12px;
+    font-family: inherit;
+    font-size: inherit;
+    cursor: pointer;
+  }
   iframe {
     width: 100%;
     border: 1px solid var(--line);
     border-radius: 5px;
     display: block;
     background: var(--sunken);
+  }
+  /* Förstoringen växer kortet PÅ PLATS — iframen får aldrig flyttas i DOM:en,
+     då laddas dokumentet om och tavlan töms. */
+  .preview.zoomed {
+    position: fixed;
+    inset: 24px;
+    z-index: 60;
+    margin: 0;
+    background: var(--canvas);
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 20px;
+    overflow: auto;
+    box-shadow: var(--shadow);
+    transition: inset 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  .preview.zoomed iframe {
+    height: calc(100vh - 136px) !important;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .preview.zoomed { transition: none; }
   }
   /* Varningarna är hela meningar från motorn — sans, inte mono
      (DESIGN.md: mono är reserverad för små versala etiketter). */
