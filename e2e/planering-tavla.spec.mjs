@@ -5,6 +5,13 @@
 // .superpowers/sdd/task-8-brief.md. Fixtures/mönster återanvända från
 // e2e/tests/10-tavla.spec.ts (frameLocator på tavel-iframen) och
 // e2e/next-foundation.spec.mjs (failOnConsoleError, "/next/").
+//
+// Task 4 (parity): Skriv ut/Förstora/live-uppbyggnad lades till i
+// BoardPreview.svelte och PlaneringView.svelte utan egen e2e-täckning — se
+// .superpowers/sdd/task-4-brief.md. fake_generate_board/fake_refine_board
+// (e2e/serve_test_app.py) strömmar numera tavlans JSON via token_cb (med en
+// kort paus per bit) i stället för att svälja den, så live-räknaren blir
+// observerbar utan att göra testet flaky.
 import { test, expect, failOnConsoleError } from "./helpers/app";
 
 test("Planering (/next/): skriv tavlan, förhandsvisa, ändra-raden, godkänn & spara", async ({ page }) => {
@@ -30,10 +37,36 @@ test("Planering (/next/): skriv tavlan, förhandsvisa, ändra-raden, godkänn & 
   await cta.click();
   await expect(page.getByText(/Genererar lektionstavlan/)).toBeVisible({ timeout: 15000 });
 
+  // OBS: live-räknaren ("Ritar live — …", se punkt 4c nedan) kan INTE synas
+  // under just den här första körningen — BoardPreview.svelte monterar
+  // iframen först när plan.board eller plan.liveSections är satt, och
+  // liveTick() kräver att iframens contentWindow.WBHost redan finns. Vid
+  // allra första genereringen finns varken det ena eller det andra ännu, så
+  // liveTick() nollar sig självt tyst. Från och med nästa körning (refine
+  // nedan) finns iframen redan kvar (plan.board nollas inte av resetRun()),
+  // så då kan den verkligen ritas live — se 4c.
   const boardFrameEl = page.locator('iframe[title^="Lektionstavla"]');
   await expect(boardFrameEl).toBeVisible({ timeout: 15000 });
   const boardFrame = page.frameLocator('iframe[title^="Lektionstavla"]');
   await expect(boardFrame.getByText("Symmetrilinjen:")).toBeVisible({ timeout: 15000 });
+
+  // 3b) Skriv ut och Förstora syns så snart tavlan finns (BoardPreview.svelte).
+  await expect(page.getByRole("button", { name: "Skriv ut" })).toBeVisible();
+  const zoomBtn = page.getByRole("button", { name: "Förstora" });
+  await expect(zoomBtn).toBeVisible();
+
+  // 3c) Förstora byter etikett till Stäng UTAN att flytta iframen i DOM:en
+  // (CSS position: fixed på figure.preview.zoomed, inte ommontering av
+  // elementet) — annars laddas tavelmotorns dokument om och tavlan töms.
+  // Kontrollera därför att iframens innehåll fortfarande syns efter
+  // växlingen: det är regressionsvakten mot just den ommonteringsbuggen.
+  await zoomBtn.click();
+  await expect(page.getByRole("button", { name: "Stäng" })).toBeVisible();
+  await expect(boardFrame.getByText("Symmetrilinjen:")).toBeVisible();
+
+  // 3d) Escape stänger förstoringen igen och återställer etiketten.
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("button", { name: "Förstora" })).toBeVisible();
 
   // 4) Ändra-raden (chatten) visas nu när tavlan (plan.id) finns.
   await expect(page.getByText("Ändra", { exact: true })).toBeVisible();
@@ -46,6 +79,15 @@ test("Planering (/next/): skriv tavlan, förhandsvisa, ändra-raden, godkänn & 
   await changeField.fill("Lägg till ett exempel med bråk");
   await page.getByRole("button", { name: "Skicka" }).click();
   await expect(page.getByText(/Uppdaterar tavlan/)).toBeVisible({ timeout: 15000 });
+
+  // 4c) Live-uppbyggnad: den gamla tavlan är redan monterad i iframen (se
+  // OBS ovan), så nu strömmar fake_refine_board (e2e/serve_test_app.py)
+  // den uppdaterade JSON:en i bitar via token_cb och live-räknaren i
+  // PlaneringView ("Ritar live — N sektion(er) hittills …") hinner synas
+  // medan fasen fortfarande är "running" — innan done-eventet växlar
+  // tillbaka till den färdiga (ändrade) tavlan.
+  await expect(page.getByText(/Ritar live —/)).toBeVisible({ timeout: 5000 });
+
   await expect(page.locator("figure.preview .title")).toHaveText(
     "Andragradsfunktioner — minimipunkt (ändrad)",
     { timeout: 15000 },
