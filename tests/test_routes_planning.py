@@ -520,3 +520,19 @@ def test_archive_ask_emits_real_scan_events(client, monkeypatch):
 
     deep = next(e for e in events if e["type"] == "deep_read")
     assert [s["titel"] for s in deep["sources"]] == ["Bråk"]
+
+
+def test_archive_search_marks_hits_in_snippet(client):
+    """Arkivsökets snippet ska markera träffarna med \\x02..\\x03 — samma
+    kontrakt som /api/search — så att UI:t kan highlighta sökordet."""
+    from app import db as appdb
+    conn = appdb.connect(client.base_dir / "transkribera.db")
+    appdb.create_planned_lesson(conn, titel="Bråk",
+                                moment="idag går vi igenom täljare och nämnare",
+                                datum="2026-06-20")
+    conn.close()
+    r = client.get("/api/planning/archive/search", params={"q": "täljare"})
+    assert r.status_code == 200
+    hits = r.json()["hits"]
+    assert len(hits) == 1
+    assert "\x02täljare\x03" in hits[0]["snippet"]

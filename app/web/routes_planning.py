@@ -583,7 +583,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
         out = []
         for it in hits[:50]:
             text = it.pop("text", "") or ""
-            it["snippet"] = db._snippet_like(text, terms)
+            it["snippet"] = db._snippet_like(text, terms, mark=True)
             out.append(it)
         return {"query": query, "hits": out}
 
