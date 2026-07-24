@@ -1,5 +1,6 @@
 <script>
   import { arkiv } from './stores.svelte.js';
+  import Snippet from './Snippet.svelte';
 
   /** "prov"/"arbetsblad"/"tavla" → kort etikett. */
   function typLabel(typ) {
@@ -28,6 +29,9 @@
         <span class="meta">
           {[it.course, it.group, it.datum].filter(Boolean).join(' · ')}
         </span>
+        {#if it.snippet}
+          <Snippet text={it.snippet} />
+        {/if}
       </li>
     {/each}
   </ul>
@@ -55,4 +59,5 @@
   }
   .titel { flex: 1; min-width: 200px; color: var(--ink); }
   .meta { color: var(--ink-3); }
+  .row :global(.snippet) { flex: 1 0 100%; }
 </style>

@@ -2,6 +2,7 @@
   import { arkiv } from './stores.svelte.js';
   import { getJSON } from '../api.js';
   import ArkivList from './ArkivList.svelte';
+  import ArkivSearch from './ArkivSearch.svelte';
 
   $effect(() => {
     arkiv.loading = true;
@@ -22,6 +23,7 @@
 <section class="arkiv">
   <p class="eyebrow">ARKIV</p>
   <h2 class="rubrik">Sparade tavlor och prov</h2>
+  <ArkivSearch />
   <ArkivList />
 </section>
 
