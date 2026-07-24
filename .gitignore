@@ -85,4 +85,4 @@ exports/
 
 # Byggd Svelte-frontend (byggs vid paketering, checkas inte in)
 app/web/next/
-frontend/node_modules/
+node_modules/
