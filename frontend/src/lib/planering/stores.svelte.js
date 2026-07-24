@@ -11,6 +11,7 @@ export const plan = $state({
   // körning
   phase: 'idle',         // idle | running | done | error
   log: [],               // loggrader från SSE-jobbet
+  liveSections: 0,       // sektioner ritade hittills under pågående körning
   id: null,              // serverns planerings-id
   board: null,           // WB-JSON {title, boards}
   errors: [],            // valideringsfel, redovisas ärligt
@@ -28,4 +29,5 @@ export function resetRun() {
   plan.errors = [];
   plan.savedPath = '';
   plan.saveError = '';
+  plan.liveSections = 0;
 }

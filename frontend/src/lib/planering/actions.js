@@ -1,6 +1,20 @@
 import { streamPost, postJSON } from '../api.js';
 import { plan, resetRun } from './stores.svelte.js';
 
+// Prenumeranter på råa token-strömmen (BoardPreview ritar live ur den).
+const tokenListeners = new Set();
+
+/** Registrerar en lyssnare på token-texten. Returnerar en avregistrerare. */
+export function onToken(fn) {
+  tokenListeners.add(fn);
+  return () => tokenListeners.delete(fn);
+}
+
+/** Nollställer live-strömmen inför en ny körning. */
+export function resetTokens() {
+  for (const fn of tokenListeners) fn(null);
+}
+
 /** Serverns SSE-events → tillstånd. Delas av generering och refine. */
 export function handlePlanEvent(ev) {
   if (ev.type === 'log') {
@@ -14,8 +28,9 @@ export function handlePlanEvent(ev) {
     plan.errors = r.errors || [];
     if (r.id) plan.id = r.id;
     if (r.board) plan.board = r.board;
+  } else if (ev.type === 'token') {
+    for (const fn of tokenListeners) fn(ev.text || '');
   }
-  // 'token' används av live-uppbyggnaden i den gamla appen; hoppas över här.
 }
 
 /** Skriver en ny tavla ur formulärets fält. */
@@ -23,6 +38,7 @@ export async function generateBoard() {
   const moment = plan.moment.trim();
   if (!moment || plan.phase === 'running') return;
   resetRun();
+  resetTokens();
   await streamPost(
     '/api/planning/generate',
     {
@@ -43,6 +59,7 @@ export async function refineBoard() {
   if (!message || !plan.id || plan.phase === 'running') return;
   plan.chatInput = '';
   resetRun();
+  resetTokens();
   // Går ändringen inte igenom läggs texten tillbaka i fältet — annars måste
   // läraren skriva om hela sin begäran efter ett fel som inte var deras.
   await streamPost(`/api/planning/${plan.id}/refine`, { message }, (ev) => {

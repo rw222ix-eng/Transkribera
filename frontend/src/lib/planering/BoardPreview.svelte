@@ -1,9 +1,15 @@
 <script>
   import { plan } from './stores.svelte.js';
+  import { parsePartialBoard, countSections } from './boardStream.js';
+  import { onToken } from './actions.js';
 
   let frame = $state(null);
   let ready = $state(false);
   let warnings = $state([]);
+  let liveBuffer = '';
+  let liveTimer = null;
+  let liveBusy = false;
+  let liveChain = Promise.resolve();
 
   const title = $derived(plan.board?.title || 'Lektionstavla');
 
@@ -34,9 +40,40 @@
     void plan.board;
     if (ready) renderBoard();
   });
+
+  /** Ritar den halvfärdiga tavlan när tillräckligt många sektioner finns. */
+  function liveTick() {
+    liveTimer = null;
+    if (plan.phase !== 'running') return;
+    const win = frame?.contentWindow;
+    if (!win?.WBHost || liveBusy) return;
+    const board = parsePartialBoard(liveBuffer);
+    if (!board?.boards?.length) return;
+    const n = countSections(board);
+    if (n <= plan.liveSections) return;
+    plan.liveSections = n;
+    liveBusy = true;
+    liveChain = liveChain
+      .then(() => win.WBHost.render({ boards: board.boards }))
+      .catch(() => {})
+      .then(() => { liveBusy = false; });
+  }
+
+  $effect(() => {
+    // null = ny körning; annars text att lägga på bufferten.
+    return onToken((text) => {
+      if (text === null) {
+        liveBuffer = '';
+        if (liveTimer) { clearTimeout(liveTimer); liveTimer = null; }
+        return;
+      }
+      liveBuffer += text;
+      if (!liveTimer) liveTimer = setTimeout(liveTick, 450);
+    });
+  });
 </script>
 
-{#if plan.board}
+{#if plan.board || plan.liveSections > 0}
   <figure class="preview">
     <figcaption class="cap">
       <span class="label">Förhandsvisning</span>

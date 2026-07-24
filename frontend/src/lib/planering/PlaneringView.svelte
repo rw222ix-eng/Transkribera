@@ -17,6 +17,12 @@
 
   <BuildPanel onGenerate={generateBoard} />
   <BoardPreview />
+  {#if plan.phase === 'running' && plan.liveSections > 0}
+    <p class="live" aria-live="polite">
+      Ritar live — {plan.liveSections}
+      {plan.liveSections === 1 ? 'sektion' : 'sektioner'} hittills …
+    </p>
+  {/if}
   <ChangeChat />
 
   {#if plan.id && plan.phase === 'done'}
@@ -120,4 +126,8 @@
   }
   .receipt { color: var(--ink-3); }
   .receipt.error { color: var(--bad); }
+  .live {
+    margin: 10px 0 0;
+    color: var(--ink-3);
+  }
 </style>
