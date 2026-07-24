@@ -63,6 +63,13 @@ export default defineConfig({
       // board flow (skriv/förhandsvisa/ändra/godkänn) against the /next
       // mount — matched here too rather than as a separate project, per the
       // task-8 brief.
+      //
+      // OBS (stale-bundle-gaten): app/web/next/ är byggartefakter (npm run
+      // build i repo-roten), inte något Playwright bygger själv — webServer
+      // nedan är top-level och delas av alla projekt, så den kan inte bygga
+      // åt just detta ett. Kör därför alltid via `npm run test:next-foundation`
+      // (e2e/package.json), som bygger frontend FÖRST och sedan kör detta
+      // projekt — annars riskerar testerna att tyst godkänna en gammal bundle.
       name: "next-foundation",
       testDir: __dirname,
       testMatch: [/next-foundation\.spec\.mjs$/, /planering-tavla\.spec\.mjs$/],
