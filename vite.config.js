@@ -1,5 +1,10 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
+
+// __dirname finns inte i ESM.
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // Vite-roten ÄR repo-roten. Det är ett krav från Impeccables live-läge: det skriver
 // temp-variantkomponenter till <projectRoot>/node_modules/.impeccable-live/, och Vite
@@ -16,6 +21,12 @@ import { svelte } from '@sveltejs/vite-plugin-svelte';
 // rotens index.html är servbara. Servern binder dessutom bara till 127.0.0.1, och
 // filbevakningen ignorerar datamappar.
 export default defineConfig(({ command }) => ({
+  // Sätts explicit (annars defaultar root till process.cwd(), som de relativa
+  // server.fs.allow-posterna nedan råkar tolkas mot) och publicDir stängs av: en
+  // framtida <repo>/public/-mapp skulle annars auto-serveras i dev och kopieras
+  // rakt in i bygget — förbi fs.allow-allowlistan.
+  root: __dirname,
+  publicDir: false,
   base: command === 'build' ? '/next/' : '/',
   plugins: [svelte()],
   server: {
