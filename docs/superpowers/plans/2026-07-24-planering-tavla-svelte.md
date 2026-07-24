@@ -621,13 +621,12 @@ git commit -m "feat(next): byggpanelens formulär för tavlan"
     display: block;
     background: var(--sunken);
   }
+  /* Varningarna är hela meningar från motorn — sans, inte mono
+     (DESIGN.md: mono är reserverad för små versala etiketter). */
   .warnings {
     margin: 10px 0 0;
     padding-left: 18px;
     color: var(--warn);
-    font-size: 0.72rem;
-    font-family: var(--mono);
-    letter-spacing: 0.08em;
   }
 </style>
 ```
@@ -738,13 +737,15 @@ Change the BuildPanel usage to `<BuildPanel onGenerate={generateBoard} />`, and 
 with styles:
 
 ```css
+  /* Loggraderna är hela meningar, inte mikroetiketter — sans, inte mono. */
   .log {
     margin: 24px 0 0;
     padding-left: 20px;
     color: var(--ink-3);
-    font-size: 0.72rem;
-    font-family: var(--mono);
-    letter-spacing: 0.08em;
+  }
+  /* En körning som havererar ska synas, inte drunkna bland framstegsraderna. */
+  .log .failed {
+    color: var(--bad);
   }
   .errors {
     margin: 16px 0 0;
