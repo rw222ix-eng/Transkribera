@@ -61,6 +61,7 @@ export async function streamPost(url, body, onEvent) {
 
   const decoder = new TextDecoder();
   let buffer = '';
+  let sawTerminal = false;
   try {
     // getReader() ligger innanför try:t — annars kan ett saknat resp.body kasta
     // förbi anroparens enda felställe (kontraktet är att fel alltid kommer via onEvent).
@@ -74,14 +75,24 @@ export async function streamPost(url, body, onEvent) {
       for (const chunk of parts) {
         const line = chunk.split('\n').find((l) => l.startsWith('data:'));
         if (!line) continue;
+        // Endast parsningen är skyddad — ett fel som kastas inne i onEvent ska
+        // inte tystas här, annars hänger anroparen kvar i 'running' för alltid.
+        let ev;
         try {
-          onEvent(JSON.parse(line.slice(5).trim()));
+          ev = JSON.parse(line.slice(5).trim());
         } catch {
-          /* ofullständigt event — hoppa över */
+          continue; // ofullständigt event — hoppa över
         }
+        if (ev.type === 'done' || ev.type === 'error') sawTerminal = true;
+        onEvent(ev);
       }
     }
+    if (!sawTerminal) {
+      onEvent({ type: 'error', message: 'Anslutningen till servern bröts.' });
+    }
   } catch (e) {
-    onEvent({ type: 'error', message: String(e?.message || e) });
+    if (!sawTerminal) {
+      onEvent({ type: 'error', message: String(e?.message || e) });
+    }
   }
 }
