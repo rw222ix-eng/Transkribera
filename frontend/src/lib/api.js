@@ -59,10 +59,12 @@ export async function streamPost(url, body, onEvent) {
     return;
   }
 
-  const reader = resp.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
   try {
+    // getReader() ligger innanför try:t — annars kan ett saknat resp.body kasta
+    // förbi anroparens enda felställe (kontraktet är att fel alltid kommer via onEvent).
+    const reader = resp.body.getReader();
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
