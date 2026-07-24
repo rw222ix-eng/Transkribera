@@ -6,6 +6,7 @@
   let frame = $state(null);
   let ready = $state(false);
   let warnings = $state([]);
+  let frameHeight = $state(420);
   let liveBuffer = '';
   let liveTimer = null;
   let liveBusy = false;
@@ -60,6 +61,17 @@
   }
 
   $effect(() => {
+    function onMessage(e) {
+      // Bara meddelanden från samma ursprung — iframen serveras från samma
+      // origin som sidan (i dev via Vite-proxyn).
+      if (e.origin !== window.location.origin) return;
+      if (e.data?.type === 'wb-height') frameHeight = +e.data.px || 420;
+    }
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  });
+
+  $effect(() => {
     // null = ny körning; annars text att lägga på bufferten.
     return onToken((text) => {
       if (text === null) {
@@ -84,6 +96,7 @@
       onload={onLoad}
       src="/static/whiteboard/board.html"
       title={'Lektionstavla — ' + title}
+      style="height: {frameHeight}px"
     ></iframe>
     {#if warnings.length}
       <ul class="warnings">
@@ -112,7 +125,6 @@
   .title { color: var(--ink-2); }
   iframe {
     width: 100%;
-    height: 420px;
     border: 1px solid var(--line);
     border-radius: 5px;
     display: block;
