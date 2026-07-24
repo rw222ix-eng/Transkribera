@@ -1,6 +1,7 @@
 <script>
   // Planering — tavelflödet. Delkomponenter kopplas in i senare steg.
   import BuildPanel from './BuildPanel.svelte';
+  import BoardPreview from './BoardPreview.svelte';
 </script>
 
 <section class="view">
@@ -12,6 +13,7 @@
   </p>
 
   <BuildPanel />
+  <BoardPreview />
 </section>
 
 <style>
