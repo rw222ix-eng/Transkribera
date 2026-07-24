@@ -4,7 +4,7 @@
   import BoardPreview from './BoardPreview.svelte';
   import ChangeChat from './ChangeChat.svelte';
   import { plan } from './stores.svelte.js';
-  import { generateBoard } from './actions.js';
+  import { generateBoard, approveBoard } from './actions.js';
 </script>
 
 <section class="view">
@@ -18,6 +18,18 @@
   <BuildPanel onGenerate={generateBoard} />
   <BoardPreview />
   <ChangeChat />
+
+  {#if plan.id && plan.phase !== 'running'}
+    <div class="approve">
+      <button class="primary" onclick={() => approveBoard()}>Godkänn och spara</button>
+      {#if plan.savedPath}
+        <span class="receipt">Sparad: {plan.savedPath}</span>
+      {/if}
+      {#if plan.saveError}
+        <span class="receipt error">{plan.saveError}</span>
+      {/if}
+    </div>
+  {/if}
 
   {#if plan.log.length}
     <ol class="log" aria-live="polite">
@@ -86,4 +98,24 @@
     padding-left: 20px;
     color: var(--bad);
   }
+  .approve {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-top: 24px;
+  }
+  .primary {
+    background: var(--btn-bg);
+    color: var(--btn-fg);
+    border: none;
+    border-radius: 4px;
+    padding: 12px 22px;
+    font-family: inherit;
+    font-size: inherit;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .receipt { color: var(--ink-3); }
+  .receipt.error { color: var(--bad); }
 </style>

@@ -1,4 +1,4 @@
-import { streamPost } from '../api.js';
+import { streamPost, postJSON } from '../api.js';
 import { plan, resetRun } from './stores.svelte.js';
 
 /** Serverns SSE-events → tillstånd. Delas av generering och refine. */
@@ -44,4 +44,17 @@ export async function refineBoard() {
   plan.chatInput = '';
   resetRun();
   await streamPost(`/api/planning/${plan.id}/refine`, { message }, handlePlanEvent);
+}
+
+/** Godkänner och sparar tavlan. Kvittot är serverns sökväg. */
+export async function approveBoard() {
+  if (!plan.id || plan.phase === 'running') return;
+  try {
+    const res = await postJSON(`/api/planning/${plan.id}/approve`, {});
+    plan.savedPath = res?.path || '';
+    plan.saveError = '';
+  } catch (e) {
+    plan.savedPath = '';
+    plan.saveError = 'Kunde inte spara: ' + (e?.message || e);
+  }
 }
