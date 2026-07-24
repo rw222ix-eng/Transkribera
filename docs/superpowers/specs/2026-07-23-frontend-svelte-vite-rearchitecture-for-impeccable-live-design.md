@@ -7,6 +7,15 @@
 
 ---
 
+> **STRUKTUREN ÄNDRADES UNDER GENOMFÖRANDET** (se implementationsplanen
+> `docs/superpowers/plans/2026-07-23-frontend-svelte-vite-foundation.md`, efter Task 5 —
+> commit `a074c28`). Vite-projektet ligger nu vid **repo-roten**, inte i `frontend/`:
+> `package.json`, `vite.config.js`, `index.html` m.fl. i roten; Svelte-källan är kvar i
+> `frontend/src/`; `npm`-kommandon körs **utan `--prefix`** (`npm run build`, `npm run
+> check`, `npm run dev` från repo-roten); Impeccables live-config har
+> `files: ["index.html"]`. Nedanstående sektioner beskriver den *ursprungliga* planen med
+> `frontend/`-roten och är kvar som historik — de har INTE uppdaterats efter omstruktureringen.
+
 ## 1. Sammanfattning
 
 Gör frontenden möjlig att designa med **Impeccable live-läget** (peka på element i
