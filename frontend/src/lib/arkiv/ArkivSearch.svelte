@@ -25,20 +25,34 @@
     resetSearch();
     arkiv.asking = true;
     arkiv.askedFor = q;
-    await streamPost('/api/planning/ask', { q }, (ev) => {
-      if (ev.type === 'scan_plan') {
-        arkiv.scan = (ev.items ?? []).map((i) => ({ ...i, hits: null }));
-      } else if (ev.type === 'scan_result') {
-        arkiv.scan = arkiv.scan.map((s) => (s.key === ev.key ? { ...s, ...ev } : s));
-      } else if (ev.type === 'deep_read') {
-        arkiv.sources = ev.sources ?? [];
-      } else if (ev.type === 'token') {
-        arkiv.answer += ev.text ?? '';
-      } else if (ev.type === 'error') {
-        arkiv.answer = arkiv.answer || 'Kunde inte svara: ' + ev.message;
-      }
-    });
-    arkiv.asking = false;
+    try {
+      await streamPost('/api/planning/ask', { q }, (ev) => {
+        if (ev.type === 'scan_plan') {
+          arkiv.scan = (ev.items ?? []).map((i) => ({ ...i, hits: null }));
+        } else if (ev.type === 'scan_result') {
+          arkiv.scan = arkiv.scan.map((s) => (s.key === ev.key ? { ...s, ...ev } : s));
+        } else if (ev.type === 'deep_read') {
+          // deep_read anländer INNAN genereringen startar (se
+          // routes_planning.py) — källorna sätts därför inte här, utan vid
+          // done. Annars visar "Bygger på: …" som om svaret lyckats även när
+          // ett fel inträffar mitt i strömmen.
+        } else if (ev.type === 'token') {
+          arkiv.answer += ev.text ?? '';
+        } else if (ev.type === 'done') {
+          arkiv.sources = ev.result?.sources ?? [];
+        } else if (ev.type === 'error') {
+          // Samma tre fall som den gamla appen (app.js: runArkivAsk) — ett
+          // tomt arkiv ska kännas som ett ärligt svar, inte ett fel.
+          arkiv.askError = /matchar sökningen/i.test(ev.message || '')
+            ? 'Ingen tavla och inget prov i arkivet verkar nämna det du frågar om. Prova att formulera om frågan.'
+            : /network|failed to fetch|load failed/i.test(ev.message || '')
+            ? 'Anslutningen till appen bröts mitt i sökningen. Ställ frågan igen så görs ett nytt försök.'
+            : 'Kunde inte svara: ' + (ev.message || 'okänt fel');
+        }
+      });
+    } finally {
+      arkiv.asking = false;
+    }
   }
 
   function clearSearch() {
@@ -64,7 +78,7 @@
   <input
     class="field"
     aria-label="Sök i arkivet"
-    placeholder="Sök ett ord — t.ex. derivata"
+    placeholder={arkiv.mode === 'ask' ? 'Ställ en fråga — t.ex. när gick vi igenom derivata?' : 'Sök ett ord — t.ex. derivata'}
     bind:value={arkiv.query}
     onkeydown={(e) => { if (e.key === 'Enter' && arkiv.query.trim() && !arkiv.asking && !arkiv.searching) { arkiv.mode === 'ask' ? runAsk() : runSearch(); } }}
   />
@@ -75,7 +89,7 @@
   >
     {arkiv.asking || arkiv.searching ? 'Söker …' : arkiv.mode === 'ask' ? 'Fråga' : 'Sök'}
   </button>
-  {#if arkiv.hits}
+  {#if arkiv.hits || arkiv.askedFor || arkiv.query}
     <button class="ghost" onclick={clearSearch}>Rensa</button>
   {/if}
 </div>
