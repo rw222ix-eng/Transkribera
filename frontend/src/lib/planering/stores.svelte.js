@@ -17,6 +17,7 @@ export const plan = $state({
   errors: [],            // valideringsfel, redovisas ärligt
   savedPath: '',         // kvitto från Godkänn & spara
   saveError: '',
+  saving: false,         // spärr mot dubbla klick på Godkänn och spara
   // chatt + markering
   chatInput: '',
   sel: [],               // [{kind:'sektion', index, label}]

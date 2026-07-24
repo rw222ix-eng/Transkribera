@@ -19,14 +19,16 @@
   <BoardPreview />
   <ChangeChat />
 
-  {#if plan.id && plan.phase !== 'running'}
+  {#if plan.id && plan.phase === 'done'}
     <div class="approve">
-      <button class="primary" onclick={() => approveBoard()}>Godkänn och spara</button>
+      <button class="primary" disabled={plan.saving} onclick={() => approveBoard()}>
+        {plan.saving ? 'Sparar …' : 'Godkänn och spara'}
+      </button>
       {#if plan.savedPath}
-        <span class="receipt">Sparad: {plan.savedPath}</span>
+        <span class="receipt" role="status">Sparad: {plan.savedPath}</span>
       {/if}
       {#if plan.saveError}
-        <span class="receipt error">{plan.saveError}</span>
+        <span class="receipt error" role="status">{plan.saveError}</span>
       {/if}
     </div>
   {/if}

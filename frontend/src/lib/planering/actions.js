@@ -53,13 +53,21 @@ export async function refineBoard() {
 
 /** Godkänner och sparar tavlan. Kvittot är serverns sökväg. */
 export async function approveBoard() {
-  if (!plan.id || plan.phase === 'running') return;
+  if (!plan.id || plan.phase === 'running' || plan.saving) return;
+  plan.saving = true;
   try {
     const res = await postJSON(`/api/planning/${plan.id}/approve`, {});
-    plan.savedPath = res?.path || '';
-    plan.saveError = '';
+    if (res?.path) {
+      plan.savedPath = res.path;
+      plan.saveError = '';
+    } else {
+      plan.savedPath = '';
+      plan.saveError = 'Sparat, men servern angav ingen sökväg.';
+    }
   } catch (e) {
     plan.savedPath = '';
     plan.saveError = 'Kunde inte spara: ' + (e?.message || e);
+  } finally {
+    plan.saving = false;
   }
 }
