@@ -1,5 +1,6 @@
 <script>
   // Planering — tavelflödet. Delkomponenter kopplas in i senare steg.
+  import BuildPanel from './BuildPanel.svelte';
 </script>
 
 <section class="view">
@@ -9,6 +10,8 @@
     Beskriv momentet — och välj kurs om du vill — så skrivs tavlan som du annars
     hade skrivit för hand.
   </p>
+
+  <BuildPanel />
 </section>
 
 <style>
