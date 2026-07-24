@@ -1,6 +1,7 @@
 // Task 4 (Plan 3): e2e för planeringsarkivet i den nya Svelte-frontenden
-// (/next/) — bevisar att en godkänd tavla dyker upp i arkivlistan efter en
-// reload, att ordsökningen ("Sök ord") ger träff utan att läcka de råa
+// (/next/) — bevisar att en godkänd tavla dyker upp i arkivlistan direkt,
+// utan reload (approveBoard() anropar loadArkiv(), se planering/actions.js),
+// att ordsökningen ("Sök ord") ger träff utan att läcka de råa
 // \x02/\x03-styrtecknen ur snippet-kontraktet (Snippet.svelte splittrar på
 // dem och slår in träffen i <mark>), att Rensa återställer hela listan, och
 // — deterministiskt i fejkläget, se e2e/serve_test_app.py där
@@ -46,11 +47,10 @@ test("Planeringsarkiv (/next/): lista, ordsök utan styrtecken, Rensa och Fråga
   await approve.click();
   await expect(page.getByText(/Sparad:/)).toBeVisible({ timeout: 15000 });
 
-  // 3) Arkivet hämtas bara vid montering (ArkivView.svelte: $effect utan
-  // reaktiva beroenden) — en reload krävs för att den nyss godkända tavlan
-  // ska dyka upp som en rad.
-  await page.reload();
-  await expect(page.getByText("ARKIV", { exact: true })).toBeVisible();
+  // 3) approveBoard() (planering/actions.js) anropar loadArkiv() efter ett
+  // lyckat spara (samma "planeringen syns direkt i arkivet" som den gamla
+  // appen, app.js:970) — den nyss godkända tavlan ska synas direkt, utan
+  // reload.
   const row = page.locator(".arkiv .row", { hasText: TITEL });
   await expect(row).toBeVisible({ timeout: 10000 });
   const totalBefore = await page.locator(".arkiv .row").count();

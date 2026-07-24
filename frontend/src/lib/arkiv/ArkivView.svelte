@@ -1,23 +1,11 @@
 <script>
-  import { arkiv } from './stores.svelte.js';
-  import { getJSON } from '../api.js';
+  import { loadArkiv } from './stores.svelte.js';
   import ArkivList from './ArkivList.svelte';
   import ArkivSearch from './ArkivSearch.svelte';
   import ArkivAnswer from './ArkivAnswer.svelte';
 
   $effect(() => {
-    arkiv.loading = true;
-    getJSON('/api/planning/archive')
-      .then((d) => {
-        arkiv.items = d?.items ?? [];
-        arkiv.error = '';
-      })
-      .catch((e) => {
-        arkiv.error = 'Kunde inte hämta arkivet: ' + (e?.message || e);
-      })
-      .finally(() => {
-        arkiv.loading = false;
-      });
+    loadArkiv();
   });
 </script>
 

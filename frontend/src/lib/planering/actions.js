@@ -1,5 +1,6 @@
 import { streamPost, postJSON } from '../api.js';
 import { plan, resetRun } from './stores.svelte.js';
+import { loadArkiv } from '../arkiv/stores.svelte.js';
 
 // Prenumeranter på råa token-strömmen (BoardPreview ritar live ur den).
 const tokenListeners = new Set();
@@ -77,6 +78,7 @@ export async function approveBoard() {
     if (res?.path) {
       plan.savedPath = res.path;
       plan.saveError = '';
+      loadArkiv();          // planeringen syns direkt i arkivet, se app.js:970
     } else {
       plan.savedPath = '';
       plan.saveError = 'Sparat, men servern angav ingen sökväg.';
