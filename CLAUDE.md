@@ -17,14 +17,34 @@ och organiserar dem per datum, klass och kurs. Allt körs **lokalt/offline**.
   faster-whisper/CTranslate2 (KB-Whisper sv) · llama.cpp (`llama-server`) + Qwen3-14B-Q8
   för korrigering/sammanfattning/chatt/extraktion · lokal **SQLite** (`app/db.py`,
   `transkribera.db`) + `history.json` · PyInstaller-bygge. Målhårdvara: RTX 4090 / 24 GB.
-- **Test-kommando:** `python -m pytest` (kör från repo-roten). Ny JS syntaxkontrolleras
-  med `node --check app/web/static/app.js`. **Ingen** lint/typecheck är konfigurerad
-  i repot ännu — inför inte nya verktyg utan att bli ombedd.
+- **Ny frontend (Svelte 5 + Vite) — medvetet undantag från "inget byggsteg":**
+  vid sidan av den gamla appen finns en Svelte-frontend. Dess konfig (`package.json`,
+  `vite.config.js`, `svelte.config.js`, `jsconfig.json`, `index.html`) ligger i
+  **repo-roten**; källan i `frontend/src/`. Den byggs till `app/web/next/`
+  (gitignorerad) och serveras **additivt** av FastAPI på `/next` — `/` och `/static`
+  är orörda. Kommandon körs från repo-roten, **utan `--prefix`**: `npm run dev`
+  (Vite `:5173`), `npm run build`, `npm run check` (svelte-check).
+  · **Byggordning vid paketering:** `npm run build` MÅSTE köras före PyInstaller.
+  · **Varför Vite-roten är repo-roten:** Impeccables live-läge skriver temp-komponenter
+    till `<projectRoot>/node_modules/.impeccable-live/`, och Vite transformerar bara
+    filer inuti sin egen rot. Med roten i en undermapp levererades `.svelte`-filerna
+    okompilerade och varianterna kunde aldrig monteras.
+  · **Säkerhet — rör inte:** eftersom Vite-roten är repo-roten är `server.fs.allow`
+    i `vite.config.js` en **allowlist** (`frontend/src`, `node_modules`, `index.html`)
+    och dev-servern binder till `127.0.0.1`. Utan den skulle dev-servern kunna servera
+    hela repot över HTTP, inklusive `Transkriberingar/`. **Vidga den inte.**
+  Den gamla appen på `/` är oförändrad vanilla `app.js` + `style.css` **utan byggsteg**.
+- **Test-kommando:** `python -m pytest` (kör från repo-roten). Ny JS i den gamla appen
+  syntaxkontrolleras med `node --check app/web/static/app.js`. För Svelte-frontenden:
+  `npm run check` (svelte-check) + `npm run build`, båda från repo-roten. Ingen lint är
+  konfigurerad i repot — inför inte fler verktyg utan att bli ombedd.
 - **Default branch:** `main`.
 - **Build/CI-gate före merge:** ingen CI finns (`.github/` saknas). Gaten är att
   `python -m pytest` är grön. Känt undantag: `tests/test_hardware.py::test_scan_returns_sane_values`
   faller i en hårdvaru-/RAM-lös container (även på ren `main`) — det är **inte** en regression.
-  Vid behov av paketering: `python -m PyInstaller Transkribera_web.spec --noconfirm`.
+  Rör ändringen Svelte-frontenden gäller dessutom `npm run check` + `npm run build`.
+  Vid behov av paketering: `npm run build` (så `app/web/next/` finns) och därefter
+  `python -m PyInstaller Transkribera_web.spec --noconfirm`.
 - **Reviewers ska alltid kontrollera för denna kodbas:**
   - **Lokalt/offline:** ingen elev-/lektionsdata får skickas till moln (Supabase, Google
     Calendar m.fl. finns i miljön men ska inte användas för riktig data). GDPR sköts utanför appen.
