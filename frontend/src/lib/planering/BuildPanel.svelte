@@ -11,14 +11,16 @@
   const canGenerate = $derived(plan.moment.trim().length > 0 && plan.phase !== 'running');
 
   $effect(() => {
-    Promise.all([getJSON('/api/courses'), getJSON('/api/groups')])
-      .then(([c, g]) => {
-        courses = c?.courses ?? c ?? [];
-        groups = g?.groups ?? g ?? [];
-      })
-      .catch((e) => {
-        loadError = 'Kunde inte hämta kurser och klasser: ' + (e?.message || e);
-      });
+    // allSettled, inte all: faller en av endpointerna ska den andra ändå fylla
+    // sitt fält — annars försvinner kurschipsen för att klasslistan strular.
+    Promise.allSettled([getJSON('/api/courses'), getJSON('/api/groups')]).then(([c, g]) => {
+      if (c.status === 'fulfilled') courses = c.value?.courses ?? c.value ?? [];
+      if (g.status === 'fulfilled') groups = g.value?.groups ?? g.value ?? [];
+      const failed = [];
+      if (c.status === 'rejected') failed.push('kurser');
+      if (g.status === 'rejected') failed.push('klasser');
+      loadError = failed.length ? 'Kunde inte hämta ' + failed.join(' och ') + '.' : '';
+    });
   });
 
   function pickCourse(id) {
