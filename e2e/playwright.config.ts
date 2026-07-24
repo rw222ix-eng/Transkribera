@@ -51,6 +51,17 @@ export default defineConfig({
       retries: 3,
       use: { ...devices["Desktop Chrome"], viewport: { width: 1040, height: 780 } },
     },
+    {
+      // Task 6: standalone smoke for the Vite/Svelte build served at /next.
+      // Lives at e2e/next-foundation.spec.mjs (repo-root-adjacent, per the
+      // task-6 brief) rather than under testDir (./tests), so it needs its
+      // own testDir/testMatch here. Reuses the same fake webServer as
+      // "fake"/"visual" — it only asserts the /next mount renders.
+      name: "next-foundation",
+      testDir: __dirname,
+      testMatch: /next-foundation\.spec\.mjs$/,
+      use: { ...devices["Desktop Chrome"] },
+    },
   ],
   // Default server (fake) for the fake + visual projects. reuseExistingServer
   // lets the real smoke reuse a manually-started --real server on the same port.
