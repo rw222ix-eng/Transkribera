@@ -2,6 +2,8 @@
   // Planering — tavelflödet. Delkomponenter kopplas in i senare steg.
   import BuildPanel from './BuildPanel.svelte';
   import BoardPreview from './BoardPreview.svelte';
+  import { plan } from './stores.svelte.js';
+  import { generateBoard } from './actions.js';
 </script>
 
 <section class="view">
@@ -12,8 +14,20 @@
     hade skrivit för hand.
   </p>
 
-  <BuildPanel />
+  <BuildPanel onGenerate={generateBoard} />
   <BoardPreview />
+
+  {#if plan.log.length}
+    <ol class="log" aria-live="polite">
+      {#each plan.log as line}<li>{line}</li>{/each}
+    </ol>
+  {/if}
+
+  {#if plan.errors.length}
+    <ul class="errors">
+      {#each plan.errors as err}<li>{err}</li>{/each}
+    </ul>
+  {/if}
 </section>
 
 <style>
@@ -51,5 +65,18 @@
     max-width: 62ch;
     color: var(--ink-2);
     margin: 0;
+  }
+  .log {
+    margin: 24px 0 0;
+    padding-left: 20px;
+    color: var(--ink-3);
+    font-size: 0.72rem;
+    font-family: var(--mono);
+    letter-spacing: 0.08em;
+  }
+  .errors {
+    margin: 16px 0 0;
+    padding-left: 20px;
+    color: var(--bad);
   }
 </style>
