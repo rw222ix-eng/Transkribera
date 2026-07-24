@@ -57,9 +57,15 @@ export default defineConfig({
       // task-6 brief) rather than under testDir (./tests), so it needs its
       // own testDir/testMatch here. Reuses the same fake webServer as
       // "fake"/"visual" — it only asserts the /next mount renders.
+      //
+      // Task 8 adds e2e/planering-tavla.spec.mjs alongside it (same
+      // repo-root-adjacent placement, same fake webServer) covering the full
+      // board flow (skriv/förhandsvisa/ändra/godkänn) against the /next
+      // mount — matched here too rather than as a separate project, per the
+      // task-8 brief.
       name: "next-foundation",
       testDir: __dirname,
-      testMatch: /next-foundation\.spec\.mjs$/,
+      testMatch: [/next-foundation\.spec\.mjs$/, /planering-tavla\.spec\.mjs$/],
       use: { ...devices["Desktop Chrome"] },
     },
   ],
