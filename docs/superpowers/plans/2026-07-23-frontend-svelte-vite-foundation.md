@@ -178,13 +178,14 @@ Add this object to the `configurations` array (after the existing entries), pres
 
 Note: `.claude/` is gitignored in this repo, so this edit lives on disk only and is NOT committed (it is a local dev convenience). Do not force-add it.
 
+Note: do NOT add a `"url"` key pointing at `http://localhost:5173/next/`. A localhost `url` in launch.json must be origin-only (no path/query) or the preview refuses to start. Omit `url` entirely and navigate to `/next/` after the preview opens.
+
 ```json
 {
   "name": "frontend-dev",
   "runtimeExecutable": "npm",
   "runtimeArgs": ["--prefix", "frontend", "run", "dev"],
-  "port": 5173,
-  "url": "http://localhost:5173/next/"
+  "port": 5173
 }
 ```
 

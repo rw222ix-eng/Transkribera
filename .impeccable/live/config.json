@@ -1,5 +1,5 @@
 {
-  "files": ["app/web/static/index.html"],
+  "files": ["frontend/index.html"],
   "insertBefore": "</body>",
   "commentSyntax": "html",
   "cspChecked": true
