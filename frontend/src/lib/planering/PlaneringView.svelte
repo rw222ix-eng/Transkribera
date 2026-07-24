@@ -19,7 +19,9 @@
 
   {#if plan.log.length}
     <ol class="log" aria-live="polite">
-      {#each plan.log as line}<li>{line}</li>{/each}
+      {#each plan.log as line}
+        <li class:failed={line.startsWith('Fel:')}>{line}</li>
+      {/each}
     </ol>
   {/if}
 
@@ -66,13 +68,16 @@
     color: var(--ink-2);
     margin: 0;
   }
+  /* Loggraderna är hela meningar, inte mikroetiketter — därför sans, inte mono
+     (DESIGN.md: mono är reserverad för små versala etiketter). */
   .log {
     margin: 24px 0 0;
     padding-left: 20px;
     color: var(--ink-3);
-    font-size: 0.72rem;
-    font-family: var(--mono);
-    letter-spacing: 0.08em;
+  }
+  /* En körning som havererar ska synas, inte drunkna bland framstegsraderna. */
+  .log .failed {
+    color: var(--bad);
   }
   .errors {
     margin: 16px 0 0;

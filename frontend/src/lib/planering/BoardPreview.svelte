@@ -76,12 +76,11 @@
     display: block;
     background: var(--sunken);
   }
+  /* Varningarna är hela meningar från motorn — sans, inte mono
+     (DESIGN.md: mono är reserverad för små versala etiketter). */
   .warnings {
     margin: 10px 0 0;
     padding-left: 18px;
     color: var(--warn);
-    font-size: 0.72rem;
-    font-family: var(--mono);
-    letter-spacing: 0.08em;
   }
 </style>
