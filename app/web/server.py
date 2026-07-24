@@ -265,6 +265,12 @@ def create_app(base_dir: Path | None = None,
 
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
+    # Parallell Svelte-frontend (byggd av Vite → app/web/next). Serveras additivt;
+    # rör inte "/" eller "/static". Monteras bara om bygget finns (dev utan bygge = tyst).
+    NEXT_DIR = STATIC_DIR.parent / "next"
+    if (NEXT_DIR / "index.html").exists():
+        app.mount("/next", StaticFiles(directory=str(NEXT_DIR), html=True), name="next")
+
     # Single owner of the LLM process + GPU exclusivity. The LLM is NOT started
     # here — it starts lazily on the first correction/chat (see /api/postprocess,
     # /api/chat); a transcription unloads it to free VRAM (see /api/transcribe).
