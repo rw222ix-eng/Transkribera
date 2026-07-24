@@ -21,6 +21,11 @@
 
   function onLoad() {
     ready = true;
+    const win = frame?.contentWindow;
+    if (!win?.WBHost) {
+      warnings = ['Kunde inte ladda tavelmotorn.'];
+      return;
+    }
     renderBoard();
   }
 
