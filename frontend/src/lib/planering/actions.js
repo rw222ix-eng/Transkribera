@@ -43,7 +43,12 @@ export async function refineBoard() {
   if (!message || !plan.id || plan.phase === 'running') return;
   plan.chatInput = '';
   resetRun();
-  await streamPost(`/api/planning/${plan.id}/refine`, { message }, handlePlanEvent);
+  // Går ändringen inte igenom läggs texten tillbaka i fältet — annars måste
+  // läraren skriva om hela sin begäran efter ett fel som inte var deras.
+  await streamPost(`/api/planning/${plan.id}/refine`, { message }, (ev) => {
+    if (ev.type === 'error' && !plan.chatInput) plan.chatInput = message;
+    handlePlanEvent(ev);
+  });
 }
 
 /** Godkänner och sparar tavlan. Kvittot är serverns sökväg. */
