@@ -37,7 +37,19 @@ test("Planering (/next/): skriv tavlan, förhandsvisa, ändra-raden, godkänn & 
 
   // 4) Ändra-raden (chatten) visas nu när tavlan (plan.id) finns.
   await expect(page.getByText("Ändra", { exact: true })).toBeVisible();
-  await expect(page.getByLabel("Ändra tavlan")).toBeVisible();
+  const changeField = page.getByLabel("Ändra tavlan");
+  await expect(changeField).toBeVisible();
+
+  // 4b) refineBoard(): skicka en ändring och vänta på att tavlans titel får
+  // ändrings-suffixet. fake_refine_board (e2e/serve_test_app.py) lägger
+  // deterministiskt till " (ändrad)" på titeln — asserten speglar exakt det.
+  await changeField.fill("Lägg till ett exempel med bråk");
+  await page.getByRole("button", { name: "Skicka" }).click();
+  await expect(page.getByText(/Uppdaterar tavlan/)).toBeVisible({ timeout: 15000 });
+  await expect(page.locator("figure.preview .title")).toHaveText(
+    "Andragradsfunktioner — minimipunkt (ändrad)",
+    { timeout: 15000 },
+  );
 
   // 5) Godkänn och spara ger ett Sparad-kvitto.
   const approve = page.getByRole("button", { name: "Godkänn och spara" });
