@@ -9,10 +9,20 @@
 
 <section class="view">
   <p class="eyebrow">PLANERING</p>
-  <h1 class="display">Dagens <span class="ser">tavla</span></h1>
+  <h1 class="display">
+    {#if plan.typ === 'tavla'}Dagens <span class="ser">tavla</span>
+    {:else if plan.typ === 'prov'}Nytt <span class="ser">prov</span>
+    {:else}Nytt <span class="ser">arbetsblad</span>{/if}
+  </h1>
   <p class="lede">
-    Beskriv momentet — och välj kurs om du vill — så skrivs tavlan som du annars
-    hade skrivit för hand.
+    {#if plan.typ === 'tavla'}
+      Beskriv momentet — och välj kurs om du vill — så skrivs tavlan som du annars
+      hade skrivit för hand.
+    {:else if plan.typ === 'arbetsblad'}
+      Välj kurs och innehåll så skrivs ett arbetsblad med facit — uppgifter att öva på.
+    {:else}
+      Välj kurs och innehåll så skrivs ett prov med egenformulerade uppgifter.
+    {/if}
   </p>
 
   <BuildPanel onGenerate={generateBoard} />

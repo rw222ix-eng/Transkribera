@@ -8,7 +8,13 @@
   let groups = $state([]);
   let loadError = $state('');
 
-  const canGenerate = $derived(plan.moment.trim().length > 0 && plan.phase !== 'running');
+  const canGenerate = $derived(
+    plan.phase !== 'running' &&
+      (plan.typ === 'tavla' ? plan.moment.trim().length > 0 : plan.courseId !== ''),
+  );
+  const typLabel = $derived(
+    plan.typ === 'tavla' ? 'tavlan' : plan.typ === 'arbetsblad' ? 'arbetsbladet' : 'provet',
+  );
 
   $effect(() => {
     // allSettled, inte all: faller en av endpointerna ska den andra ändå fylla
@@ -30,15 +36,31 @@
 
 <div class="panel">
   <div class="row">
-    <span class="label">Moment</span>
-    <input
-      class="field"
-      aria-label="Moment"
-      placeholder="Moment — t.ex. derivatans definition"
-      bind:value={plan.moment}
-      onkeydown={(e) => { if (e.key === 'Enter' && canGenerate) onGenerate(); }}
-    />
+    <span class="label">Skriv</span>
+    <div class="typval" role="group" aria-label="Dokumenttyp">
+      {#each [['tavla', 'Tavla'], ['prov', 'Prov'], ['arbetsblad', 'Arbetsblad']] as [v, etikett]}
+        <button
+          type="button"
+          class="seg"
+          aria-pressed={plan.typ === v}
+          onclick={() => (plan.typ = v)}
+        >{etikett}</button>
+      {/each}
+    </div>
   </div>
+
+  {#if plan.typ === 'tavla'}
+    <div class="row">
+      <span class="label">Moment</span>
+      <input
+        class="field"
+        aria-label="Moment"
+        placeholder="Moment — t.ex. derivatans definition"
+        bind:value={plan.moment}
+        onkeydown={(e) => { if (e.key === 'Enter' && canGenerate) onGenerate(); }}
+      />
+    </div>
+  {/if}
 
   {#if groups.length}
     <div class="row">
@@ -80,10 +102,24 @@
 
   <div class="cta">
     <span class="note">
-      {canGenerate ? 'Klart att skriva.' : 'Beskriv momentet ovan så kan tavlan skrivas.'}
+      {#if canGenerate}
+        Klart att skriva.
+      {:else if plan.typ === 'tavla'}
+        Beskriv momentet ovan så kan tavlan skrivas.
+      {:else}
+        Välj kurs ovan så kan {typLabel} skrivas.
+      {/if}
     </span>
     <button class="primary" disabled={!canGenerate} onclick={() => onGenerate()}>
-      {plan.phase === 'running' ? 'Skriver …' : 'Skriv tavlan'}
+      {#if plan.phase === 'running'}
+        Skriver …
+      {:else if plan.typ === 'tavla'}
+        Skriv tavlan
+      {:else if plan.typ === 'arbetsblad'}
+        Skriv arbetsbladet
+      {:else}
+        Skriv provet
+      {/if}
     </button>
   </div>
 </div>
@@ -102,6 +138,25 @@
     flex-wrap: wrap;
   }
   .row.start { align-items: flex-start; }
+  .typval {
+    display: inline-flex;
+    gap: 3px;
+    padding: 3px;
+    background: var(--track);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+  }
+  .seg {
+    border: none;
+    border-radius: 3px;
+    padding: 8px 14px;
+    background: transparent;
+    color: var(--ink-2);
+    font-family: inherit;
+    font-size: inherit;
+    cursor: pointer;
+  }
+  .seg[aria-pressed='true'] { background: var(--surface); color: var(--ink); }
   .label {
     flex: 0 0 74px;
     font-family: var(--mono);

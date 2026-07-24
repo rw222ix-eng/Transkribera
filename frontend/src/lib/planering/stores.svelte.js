@@ -2,6 +2,7 @@
 // som Planering-vyn använder — inget mer.
 export const plan = $state({
   // formulär
+  typ: 'tavla',           // tavla | prov | arbetsblad — delad av byggpanelen
   moment: '',
   groupId: '',
   courseId: '',
