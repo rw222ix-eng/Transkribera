@@ -1,6 +1,7 @@
 <script>
   import { arkiv } from './stores.svelte.js';
   import Snippet from './Snippet.svelte';
+  import { groupByWeek } from './week.js';
 
   /** "prov"/"arbetsblad"/"tavla" → kort etikett. */
   function typLabel(typ) {
@@ -10,6 +11,7 @@
   }
 
   const rows = $derived(arkiv.hits ?? arkiv.items);
+  const weeks = $derived(groupByWeek(rows));
 </script>
 
 {#if arkiv.loading}
@@ -21,26 +23,52 @@
     {arkiv.hits ? 'Inga träffar.' : 'Inget sparat än — godkänn en tavla så samlas den här.'}
   </p>
 {:else}
-  <ul class="rows">
-    {#each rows as it (it.typ + ':' + it.id)}
-      <li class="row">
-        <span class="typ">{typLabel(it.typ)}</span>
-        <span class="titel">{it.titel}</span>
-        <span class="meta">
-          {[it.course, it.group, it.datum].filter(Boolean).join(' · ')}
-        </span>
-        {#if it.snippet}
-          <Snippet text={it.snippet} />
-        {/if}
-      </li>
-    {/each}
-  </ul>
+  {#each weeks as w (w.key)}
+    <section class="week">
+      <header class="whead">
+        <span class="wlabel">{w.label}</span>
+        {#if w.range}<span class="wrange">{w.range}</span>{/if}
+        <span class="wcount">{w.count}</span>
+      </header>
+      <ul class="rows">
+        {#each w.rows as it (it.typ + ':' + it.id)}
+          <li class="row">
+            <span class="typ">{typLabel(it.typ)}</span>
+            <span class="titel">{it.titel}</span>
+            <span class="meta">
+              {[it.course, it.group, it.datum].filter(Boolean).join(' · ')}
+            </span>
+            {#if it.snippet}
+              <Snippet text={it.snippet} />
+            {/if}
+          </li>
+        {/each}
+      </ul>
+    </section>
+  {/each}
 {/if}
 
 <style>
   .note { color: var(--ink-3); margin: 16px 0 0; }
   .note.error { color: var(--bad); }
-  .rows { list-style: none; margin: 16px 0 0; padding: 0; }
+  .week { margin-top: 28px; }
+  .whead {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .wlabel {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink);
+  }
+  .wrange { color: var(--ink-3); }
+  .wcount { margin-left: auto; color: var(--ink-3); }
+  .rows { list-style: none; margin: 8px 0 0; padding: 0; }
   .row {
     display: flex;
     align-items: baseline;

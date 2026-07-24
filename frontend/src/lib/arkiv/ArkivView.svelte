@@ -1,5 +1,5 @@
 <script>
-  import { loadArkiv } from './stores.svelte.js';
+  import { arkiv, loadArkiv } from './stores.svelte.js';
   import ArkivList from './ArkivList.svelte';
   import ArkivSearch from './ArkivSearch.svelte';
   import ArkivAnswer from './ArkivAnswer.svelte';
@@ -11,7 +11,12 @@
 
 <section class="arkiv">
   <p class="eyebrow">ARKIV</p>
-  <h2 class="rubrik">Sparade tavlor och prov</h2>
+  <div class="rubrikrad">
+    <h2 class="rubrik">Sparade tavlor och prov</h2>
+    {#if arkiv.items.length}
+      <span class="total">{arkiv.items.length} {arkiv.items.length === 1 ? 'post' : 'poster'}</span>
+    {/if}
+  </div>
   <ArkivSearch />
   <ArkivAnswer />
   <ArkivList />
@@ -31,6 +36,12 @@
     color: var(--ink-3);
     margin: 0 0 12px;
   }
+  .rubrikrad {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
   .rubrik {
     font-family: var(--sans);
     font-weight: 600;
@@ -39,4 +50,5 @@
     color: var(--ink);
     margin: 0;
   }
+  .total { margin-left: auto; color: var(--ink-3); }
 </style>
