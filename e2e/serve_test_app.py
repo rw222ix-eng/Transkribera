@@ -160,7 +160,11 @@ def _install_fakes() -> None:
         text = json.dumps(board, ensure_ascii=False)
         for i in range(0, len(text), 120):
             token_cb(text[i:i + 120])
-            time.sleep(0.05)
+            # 0,1 s per bit: strömmen spänner då över ett par sekunder, så
+            # klientens live-ritning hinner slå till flera gånger innan
+            # "done" kommer. Med snabbare takt hann fasen bli "done" före
+            # första ticken och live-uppbyggnaden gick aldrig att observera.
+            time.sleep(0.1)
 
     def fake_generate_board(course, group, moment, *, model, memory="",
                             llm=None, max_rounds=3, log_cb=None,

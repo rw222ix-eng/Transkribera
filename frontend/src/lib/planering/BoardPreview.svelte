@@ -70,16 +70,30 @@
     if (ready) renderBoard();
   });
 
+  /** Schemalägger nästa live-ritning så länge körningen pågår. */
+  function scheduleLiveTick(delay = 450) {
+    if (!liveTimer && plan.phase === 'running') liveTimer = setTimeout(liveTick, delay);
+  }
+
   /** Ritar den halvfärdiga tavlan när tillräckligt många sektioner finns. */
   function liveTick() {
     liveTimer = null;
     if (plan.phase !== 'running') return;
     const win = frame?.contentWindow;
-    if (!win?.WBHost || liveBusy) return;
+    // Motorn kan vara oladdad (iframen monterades nyss) eller upptagen med
+    // föregående ritning. Båda är övergående — försök igen i stället för att
+    // ge upp, annars ritas ingenting alls under den första genereringen.
+    if (!win?.WBHost || liveBusy) {
+      scheduleLiveTick(150);
+      return;
+    }
     const board = parsePartialBoard(liveBuffer);
-    if (!board?.boards?.length) return;
-    const n = countSections(board);
-    if (n <= plan.liveSections) return;
+    const n = board?.boards?.length ? countSections(board) : 0;
+    if (!n || n <= plan.liveSections) {
+      // Texten räcker ännu inte till en ny sektion — vänta in mer.
+      scheduleLiveTick();
+      return;
+    }
     plan.liveSections = n;
     liveBusy = true;
     liveChain = liveChain
@@ -108,13 +122,21 @@
         return;
       }
       liveBuffer += text;
-      if (!liveTimer) liveTimer = setTimeout(liveTick, 450);
+      // Första sektionen ritas snabbt så läraren ser att något händer; därefter
+      // lugnare takt så motorn slipper rita om vid varje token.
+      scheduleLiveTick(plan.liveSections === 0 ? 120 : 450);
     });
   });
 </script>
 
-{#if plan.board || plan.liveSections > 0}
-  <figure class="preview" class:zoomed>
+<!-- Ramen ligger alltid i DOM:en och göms bara visuellt när det inte finns något
+     att visa. Skälet är live-uppbyggnaden: tavelmotorn (KaTeX + handstilsfonter)
+     tar ett par sekunder att ladda, så monteras iframen först när körningen
+     startar hinner WBHost aldrig bli redo innan modellen är klar — och då ritas
+     ingenting live vid den FÖRSTA genereringen. Nu är motorn varm när det smäller.
+     Iframen får aldrig villkoras bort: att återskapa den laddar om dokumentet
+     och tömmer tavlan. -->
+<figure class="preview" class:zoomed class:idle={!plan.board && plan.phase !== 'running'}>
     <figcaption class="cap">
       <span class="label">Förhandsvisning</span>
       <span class="title">{title}</span>
@@ -136,11 +158,16 @@
         {#each warnings as w}<li>{w}</li>{/each}
       </ul>
     {/if}
-  </figure>
-{/if}
+</figure>
 
 <style>
   .preview { margin: 32px 0 0; }
+  /* Göms visuellt men lämnas i DOM:en så tavelmotorn hinner ladda i förväg.
+     display:none skulle spara mer, men iframen laddar sitt dokument ändå och
+     vi behöver inte layouten förrän den visas. */
+  .preview.idle {
+    display: none;
+  }
   .cap {
     display: flex;
     align-items: baseline;
