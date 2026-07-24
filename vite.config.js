@@ -34,6 +34,9 @@ export default defineConfig(({ command }) => ({
     host: '127.0.0.1',
     proxy: {
       '/api': { target: 'http://127.0.0.1:8750', changeOrigin: false },
+      // Tavel-iframen laddas från FastAPI (/static/whiteboard/board.html).
+      // Proxy — INTE fs.allow: allowlistan för repo-filer lämnas orörd.
+      '/static': { target: 'http://127.0.0.1:8750', changeOrigin: false },
     },
     fs: {
       strict: true,
