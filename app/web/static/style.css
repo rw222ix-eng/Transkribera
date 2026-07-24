@@ -13,16 +13,17 @@
    · legacy keyframes still referenced by app.js are kept below
    ============================================================ */
 
-/* ---- Local fonts (offline; no Google Fonts) ---- */
-@font-face{font-family:'Inter Tight';font-style:normal;font-weight:400;font-display:swap;src:url('/static/fonts/inter-tight-400.woff2') format('woff2')}
-@font-face{font-family:'Inter Tight';font-style:normal;font-weight:500;font-display:swap;src:url('/static/fonts/inter-tight-500.woff2') format('woff2')}
-@font-face{font-family:'Inter Tight';font-style:normal;font-weight:600;font-display:swap;src:url('/static/fonts/inter-tight-600.woff2') format('woff2')}
-@font-face{font-family:'Inter Tight';font-style:normal;font-weight:700;font-display:swap;src:url('/static/fonts/inter-tight-700.woff2') format('woff2')}
+/* ---- Local fonts (offline; no Google Fonts) ----
+   Inter Tight (wght 100–900) och JetBrains Mono (wght 400–800) är VARIABLA:
+   en fil täcker hela intervallet, så viktintervallet deklareras i @font-face
+   och webbläsaren instansierar axeln. Deklarera dem INTE som separata vikter
+   mot samma fil — det ser ut som fyra statiska snitt men är en enda.
+   Kursiverna och Instrument Serif är äkta statiska 400. */
+@font-face{font-family:'Inter Tight';font-style:normal;font-weight:100 900;font-display:swap;src:url('/static/fonts/inter-tight-var.woff2') format('woff2')}
 @font-face{font-family:'Inter Tight';font-style:italic;font-weight:400;font-display:swap;src:url('/static/fonts/inter-tight-italic-400.woff2') format('woff2')}
 @font-face{font-family:'Instrument Serif';font-style:normal;font-weight:400;font-display:swap;src:url('/static/fonts/instrument-serif-400.woff2') format('woff2')}
 @font-face{font-family:'Instrument Serif';font-style:italic;font-weight:400;font-display:swap;src:url('/static/fonts/instrument-serif-italic-400.woff2') format('woff2')}
-@font-face{font-family:'JetBrains Mono';font-style:normal;font-weight:400;font-display:swap;src:url('/static/fonts/jetbrains-mono-400.woff2') format('woff2')}
-@font-face{font-family:'JetBrains Mono';font-style:normal;font-weight:500;font-display:swap;src:url('/static/fonts/jetbrains-mono-500.woff2') format('woff2')}
+@font-face{font-family:'JetBrains Mono';font-style:normal;font-weight:400 800;font-display:swap;src:url('/static/fonts/jetbrains-mono-var.woff2') format('woff2')}
 
 :root,[data-theme="light"]{
   /* paper + ink */

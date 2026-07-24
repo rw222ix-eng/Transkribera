@@ -159,6 +159,11 @@ flourish.
 **Body Font:** Inter Tight (with Helvetica Neue, system-ui, sans-serif).
 **Label / Mono Font:** JetBrains Mono (with ui-monospace, monospace).
 
+Inter Tight (`wght` 100–900) and JetBrains Mono (`wght` 400–800) ship as **variable**
+woff2 — one file per family, declared with a weight *range* in `@font-face`. Every
+weight below is a real axis instance, not synthesised. The italics and Instrument
+Serif are static 400, so never ask for a bold italic: that one *would* be faux.
+
 **Character:** A humanist sans does the reading work while a high-contrast serif
 italic supplies editorial display accents; the two pair on a genuine contrast axis
 (serif + sans) rather than blurring together. Monospace is a third, narrow voice
