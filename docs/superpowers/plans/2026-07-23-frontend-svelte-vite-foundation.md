@@ -23,6 +23,27 @@ Every task's requirements implicitly include these (values copied from the spec)
 - **All user-facing text is natural Swedish.**
 - **Gates:** `python -m pytest` stays green (backend untouched). `npm run build` + `npx svelte-check` must pass.
 
+> **STRUCTURE CHANGED DURING EXECUTION (after Task 5 — commit `a074c28`).** The Vite
+> project now lives at the **repo root**, not in `frontend/`. Impeccable's live mode
+> writes temp variant components to `<projectRoot>/node_modules/.impeccable-live/`, and
+> Vite only transforms files inside its own root — with the root in a subdirectory the
+> `.svelte` variants were served uncompiled and could never mount.
+>
+> Current layout, which Tasks 6–8 must use:
+> - `package.json`, `package-lock.json`, `vite.config.js`, `svelte.config.js`,
+>   `jsconfig.json`, `index.html` → **repo root**
+> - Svelte source stays in `frontend/src/` (`index.html` loads `/frontend/src/main.js`)
+> - `node_modules/` at the repo root; **`npm` commands take NO `--prefix`**
+>   (`npm run build`, `npm run check`, `npm run dev`)
+> - `build.outDir` is `app/web/next` (not `../app/web/next`)
+> - `.impeccable/live/config.json` → `files: ["index.html"]`
+> - Dev URL is `http://localhost:5173/` (dev `base` is `/`; `/next/` applies to the build only)
+> - **Security:** because the Vite root is the repo root, `server.fs.allow` is an
+>   allowlist (`frontend/src`, `node_modules`, `index.html`) and the server binds to
+>   `127.0.0.1`, so the dev server cannot serve `Transkriberingar/` or other repo files.
+>   Verified: app `200`; `CLAUDE.md`, `app/web/server.py`, `app/db.py` all `403`.
+>   **Do not widen `fs.allow`.**
+
 ---
 
 ### Task 1: Scaffold the Vite + Svelte 5 project
@@ -547,8 +568,8 @@ Using the harness pattern from Step 1 (adapt import paths/helpers to match it), 
 
 - [ ] **Step 3: Ensure the build exists, then run the test to see it pass**
 
-Run: `npm run build --prefix frontend`
-Run the new spec via the same command the other `e2e/` specs use (check `package.json`/harness).
+Run: `npm run build`
+Run the new spec via the same command the other `e2e/` specs use (check `e2e/package.json`/harness).
 Expected: PASS (foundation renders with paper canvas + heading).
 
 - [ ] **Step 4: Sanity-check it fails without the build**
@@ -587,12 +608,12 @@ Following the existing pattern found in Step 1 (same relative-path style), add t
 Add a comment at the top of `Transkribera_web.spec`:
 
 ```python
-# OBS: kör `npm run build --prefix frontend` FÖRE PyInstaller så app/web/next finns.
+# OBS: kör `npm run build` (i repo-roten) FÖRE PyInstaller så app/web/next finns.
 ```
 
 - [ ] **Step 4: Verify the build order produces the bundled dir**
 
-Run: `npm run build --prefix frontend`
+Run: `npm run build`
 Verify: `app/web/next/index.html` exists (the spec now references a real directory).
 (Full `python -m PyInstaller Transkribera_web.spec --noconfirm` + launching the exe to curl `/next` is the definitive check; run it if the environment supports packaging. Record the result.)
 
@@ -615,7 +636,15 @@ git commit -m "build(frontend): bunta app/web/next i PyInstaller-bygget"
 
 - [ ] **Step 1: Update the stack + test-command notes in `CLAUDE.md`**
 
-In the "Project specifics" section, update the stack line and test-command note to record: the legacy `/` app is still vanilla `app.js` (no build), and a new **Svelte 5 + Vite** frontend lives in `frontend/`, builds to `app/web/next/`, is served at `/next`, and is checked with `npm run build --prefix frontend` + `npm run check --prefix frontend`. State that this build step is an intentional, owner-approved exception to the "inget byggsteg" rule, scoped to the new frontend.
+In the "Project specifics" section, update the stack line and test-command note to record:
+
+- The legacy app at `/` is still vanilla `app.js` + `style.css` with **no build step** — unchanged.
+- A new **Svelte 5 + Vite** frontend now exists. Its config (`package.json`, `vite.config.js`, `svelte.config.js`, `jsconfig.json`, `index.html`) lives at the **repo root**; its source lives in `frontend/src/`. It builds to `app/web/next/` (gitignored) and FastAPI serves it additively at `/next`.
+- Commands (run from the repo root, **no `--prefix`**): `npm run dev` (Vite `:5173`), `npm run build`, `npm run check` (svelte-check).
+- **Build order for packaging:** `npm run build` must run BEFORE `python -m PyInstaller Transkribera_web.spec`.
+- State that this build step is an intentional, owner-approved exception to the "inget byggsteg" rule, scoped to the new frontend — the legacy app keeps its no-build guarantee.
+- Note WHY the Vite root is the repo root: Impeccable live mode writes temp components to `<projectRoot>/node_modules/.impeccable-live/` and Vite only transforms inside its own root.
+- Note the security constraint: `server.fs.allow` is an allowlist and the dev server binds to `127.0.0.1`, so the repo (incl. `Transkriberingar/`) is not servable. **Do not widen it.**
 
 - [ ] **Step 2: Verify the edit reads correctly**
 
