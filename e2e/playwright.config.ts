@@ -64,6 +64,10 @@ export default defineConfig({
       // mount — matched here too rather than as a separate project, per the
       // task-8 brief.
       //
+      // Plan 3 Task 4 adds e2e/planering-arkiv.spec.mjs (same placement,
+      // same fake webServer) covering the archive (list/word-search/Rensa/
+      // Fråga AI) below the board view — see .superpowers/sdd/task-4-brief.md.
+      //
       // OBS (stale-bundle-gaten): app/web/next/ är byggartefakter (npm run
       // build i repo-roten), inte något Playwright bygger själv — webServer
       // nedan är top-level och delas av alla projekt, så den kan inte bygga
@@ -72,7 +76,11 @@ export default defineConfig({
       // projekt — annars riskerar testerna att tyst godkänna en gammal bundle.
       name: "next-foundation",
       testDir: __dirname,
-      testMatch: [/next-foundation\.spec\.mjs$/, /planering-tavla\.spec\.mjs$/],
+      testMatch: [
+        /next-foundation\.spec\.mjs$/,
+        /planering-tavla\.spec\.mjs$/,
+        /planering-arkiv\.spec\.mjs$/,
+      ],
       use: { ...devices["Desktop Chrome"] },
     },
   ],
