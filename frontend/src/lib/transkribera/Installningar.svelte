@@ -5,6 +5,7 @@
   import { removeFromQueue, goSource } from './actions.js';
   import Sprakval from './Sprakval.svelte';
   import Formatval from './Formatval.svelte';
+  import Undertextval from './Undertextval.svelte';
 </script>
 
 <p class="eyebrow">STEG 2 — INSTÄLLNINGAR</p>
@@ -37,6 +38,7 @@
 
 <Sprakval />
 <Formatval />
+<Undertextval />
 
 <style>
   .eyebrow {
