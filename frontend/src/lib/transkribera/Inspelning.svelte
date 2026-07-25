@@ -55,7 +55,11 @@
 {#if tr.incompleteRecs.length}
   <div class="oavslutad">
     <p class="oav-titel">Oavslutad inspelning hittad</p>
-    {#each tr.incompleteRecs as p}
+    <!-- Nyckeln är sessions-id:t: stabilt och unikt (filnamnsstammen för
+         .part-filen). Listan ersätts i dag alltid i sin helhet av
+         laddaOavslutade, så nyckeln ändrar ingenting just nu — men den kostar
+         ingenting och krävs så fort en rad får eget tillstånd. -->
+    {#each tr.incompleteRecs as p (p.session)}
       <div class="oav-rad">
         <span class="oav-namn">{p.session} — {Math.round((p.bytes || 0) / 1024)} kB</span>
         <button type="button" class="ghost" onclick={() => aterstallOavslutad(p.session)}>Återställ</button>
