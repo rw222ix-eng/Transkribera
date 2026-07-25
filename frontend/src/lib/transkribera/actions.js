@@ -1,6 +1,7 @@
 import { getJSON, streamPost } from '../api.js';
 import { tr, isMedia } from './stores.svelte.js';
 import { recommendModel } from './katalog.svelte.js';
+import { startProgressAnim, stopProgressAnim } from './korning.js';
 
 let idRakning = 0;
 
@@ -311,6 +312,7 @@ export async function startRun() {
   tr.resultId = null;
   tr.qStatus = { ...tr.qStatus, [aktiv.id]: 'running' };
   tr.log = ['[00:00] Startar transkribering …'];
+  startProgressAnim();
 
   const t0 = Date.now();
   stoppaTickare();
@@ -346,6 +348,7 @@ export async function startRun() {
         tr.log = [...tr.log, '[' + fmtTid(tr.elapsed) + '] ' + ev.msg];
       } else if (ev.type === 'error') {
         stoppaTickare();
+        stopProgressAnim();
         tr.run = 'error';
         tr.runError = {
           title: 'Transkriberingen misslyckades',
