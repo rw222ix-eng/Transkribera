@@ -60,10 +60,19 @@ export function removeFromQueue(id) {
   if (!tr.queue.length) tr.step = 'source';
 }
 
-/** Tillbaka till steg 1. Speglar goSource, app.js:1367. */
+/**
+ * Tillbaka till steg 1. Speglar goSource, app.js:1367 — utom att den INTE
+ * rensar tr.fileError. Sedan käll- och inställningsstegen blev ömsesidigt
+ * uteslutande (plan A2) sätter addFiles felraden och tr.step='config' i
+ * samma anrop, så t.ex. dubblettbeskedet hinner aldrig visas innan panelen
+ * växlar bort från källsteget. Legacy slipper det: dubblettbeskedet där går
+ * via en flytande toast (app.js:3051-3055) som är frikopplad från steget —
+ * den här porten har ingen toast-infrastruktur (se kommentaren i addFiles).
+ * Att INTE rensa här är vad som gör beskedet synligt igen när läraren går
+ * tillbaka med "Lägg till fler".
+ */
 export function goSource() {
   tr.step = 'source';
-  tr.fileError = '';
 }
 
 /**
@@ -175,4 +184,10 @@ export function addUrl() {
   }
   addFiles([{ name: lankNamn(u), path: u }]);
   tr.urlInput = '';
+}
+
+/** Vidare till inställningarna. Kön måste ha något i sig. */
+export function goConfig() {
+  if (!tr.queue.length) return;
+  tr.step = 'config';
 }

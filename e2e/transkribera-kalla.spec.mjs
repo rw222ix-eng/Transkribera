@@ -33,11 +33,17 @@ test("Transkribera (/next/): exempel i kön, dubblett, länk och borttagning", a
   const ko = page.locator("ul.ko li");
   await expect(ko).toHaveCount(0);
   await page.getByRole("button", { name: "ett exempel", exact: true }).click();
+  // Kön tar guiden vidare till steg 2 (som gamla appen) — tillbaka till
+  // källsteget för att fortsätta pröva källfälten.
+  await page.getByRole("button", { name: "Lägg till fler" }).click();
   await expect(ko).toHaveCount(1);
   await expect(page.getByText("1 fil i kön.")).toBeVisible();
 
   // 3) Samma fil igen är en dubblett — kön växer inte, och läraren får veta.
   await page.getByRole("button", { name: "ett exempel", exact: true }).click();
+  // Dubbletten går genom addFiles precis som en ny fil, så guiden hoppar
+  // återigen till steg 2 — tillbaka till källsteget igen.
+  await page.getByRole("button", { name: "Lägg till fler" }).click();
   await expect(ko).toHaveCount(1);
   await expect(page.getByText("1 fil låg redan i kön.")).toBeVisible();
 
@@ -58,6 +64,8 @@ test("Transkribera (/next/): exempel i kön, dubblett, länk och borttagning", a
   // 5) Giltig länk köas med härlett namn, och fältet töms.
   await lank.fill("https://www.youtube.com/watch?v=abc123");
   await lank.press("Enter");
+  // Ännu en lyckad köning tar guiden vidare till steg 2 igen.
+  await page.getByRole("button", { name: "Lägg till fler" }).click();
   await expect(ko).toHaveCount(2);
   await expect(page.getByText("YouTube-länk", { exact: true })).toBeVisible();
   await expect(lank).toHaveValue("");

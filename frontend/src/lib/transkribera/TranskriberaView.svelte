@@ -1,50 +1,71 @@
 <script>
   // Transkriberingsguiden, steg 1 — Källa. Speglar viewTranscribe:s
   // stepSource-gren (app/web/static/app.js:4383-4470), omstylad till
-  // designsystemet. Steg 2 och 3 kommer i plan A2 och A3.
+  // designsystemet. Steg 2 kom i plan A2. Steg 3 kommer i plan A3.
   import { tr, extOf } from './stores.svelte.js';
-  import { removeFromQueue, addSample, addSampleCorrupt } from './actions.js';
+  import { removeFromQueue, addSample, addSampleCorrupt, goConfig } from './actions.js';
   import Stegindikator from './Stegindikator.svelte';
   import Dropzone from './Dropzone.svelte';
   import LankFalt from './LankFalt.svelte';
+  import Installningar from './Installningar.svelte';
+  import { loadKatalog } from './katalog.svelte.js';
+
+  // Katalogen hämtas en gång när vyn monteras — skalet håller vyn monterad
+  // hela sessionen, så det här körs inte om vid flikbyten.
+  $effect(() => {
+    loadKatalog();
+  });
 </script>
 
 <section class="view">
   <Stegindikator />
 
-  <p class="eyebrow">STEG 1 — KÄLLA</p>
-  <h1 class="display">Vad vill du <span class="ser">transkribera?</span></h1>
-  <p class="lede">
-    Dra in en eller flera filer, eller välj från datorn — allt körs på din egen dator.
-  </p>
+  {#if tr.step === 'source'}
+    <p class="eyebrow">STEG 1 — KÄLLA</p>
+    <h1 class="display">Vad vill du <span class="ser">transkribera?</span></h1>
+    <p class="lede">
+      Dra in en eller flera filer, eller välj från datorn — allt körs på din egen dator.
+    </p>
 
-  <Dropzone />
-  <LankFalt />
+    <Dropzone />
+    <LankFalt />
 
-  <p class="prova">
-    Eller prova med
-    <button type="button" class="lank" onclick={addSample}>ett exempel</button>
-    <button type="button" class="lank" onclick={addSampleCorrupt}>skadad_inspelning.m4a</button>
-  </p>
+    <p class="prova">
+      Eller prova med
+      <button type="button" class="lank" onclick={addSample}>ett exempel</button>
+      <button type="button" class="lank" onclick={addSampleCorrupt}>skadad_inspelning.m4a</button>
+    </p>
 
-  <p class="fel" class:info={tr.fileNoteArt === 'info'} role="status">{tr.fileError}</p>
+    <p class="fel" class:info={tr.fileNoteArt === 'info'} role="status">{tr.fileError}</p>
 
-  {#if tr.queue.length}
-    <ul class="ko">
-      {#each tr.queue as q (q.id)}
-        <li>
-          <span class="ext">{(/^https?:/i).test(q.path || '') ? 'URL' : (extOf(q.name) || 'fil')}</span>
-          <span class="namn">{q.name}</span>
-          <button
-            type="button"
-            class="bort"
-            aria-label={'Ta bort ' + q.name + ' ur kön'}
-            onclick={() => removeFromQueue(q.id)}
-          >✕</button>
-        </li>
-      {/each}
-    </ul>
-    <p class="antal">{tr.queue.length} {tr.queue.length === 1 ? 'fil' : 'filer'} i kön.</p>
+    {#if tr.queue.length}
+      <ul class="ko">
+        {#each tr.queue as q (q.id)}
+          <li>
+            <span class="ext">{(/^https?:/i).test(q.path || '') ? 'URL' : (extOf(q.name) || 'fil')}</span>
+            <span class="namn">{q.name}</span>
+            <button
+              type="button"
+              class="bort"
+              aria-label={'Ta bort ' + q.name + ' ur kön'}
+              onclick={() => removeFromQueue(q.id)}
+            >✕</button>
+          </li>
+        {/each}
+      </ul>
+      <p class="antal">{tr.queue.length} {tr.queue.length === 1 ? 'fil' : 'filer'} i kön.</p>
+    {/if}
+
+    <p class="vidare">
+      <button
+        type="button"
+        class="primar"
+        disabled={!tr.queue.length}
+        onclick={goConfig}
+      >Nästa: inställningar</button>
+    </p>
+  {:else}
+    <Installningar />
   {/if}
 </section>
 
@@ -130,4 +151,17 @@
   }
   .bort:hover { border-color: var(--bad); color: var(--bad); }
   .antal { color: var(--ink-3); margin: 10px 0 0; }
+  .vidare { margin: 24px 0 0; }
+  .primar {
+    background: var(--btn-bg);
+    color: var(--btn-fg);
+    border: none;
+    border-radius: 4px;
+    padding: 12px 22px;
+    font-family: inherit;
+    font-size: inherit;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .primar:disabled { opacity: 0.55; cursor: default; }
 </style>
