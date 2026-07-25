@@ -289,12 +289,28 @@ async function slutforInspelning(mime) {
       // lektion går inte att spela in igen, filen ligger redan färdig på disk
       // (finish har döpt om .part-filen) och skulle annars försvinna ur UI:t
       // utan ett ord. Men addFiles slår om tr.step till 'config', och steg 2
-      // avmonterar <Inspelning /> — pågår en inspelning måste guiden därför
-      // hållas kvar på steg 1. tr.recording kan bara vara sant här om en NY
-      // inspelning startat, alltså om den här körningen är inaktuell.
+      // avmonterar <Inspelning /> — är den här körningen INAKTUELL måste
+      // guiden därför hållas kvar på det steg den stod på.
+      //
+      // Vakten är !aktuell, INTE tr.recording: startRecording bumpar
+      // inspelningsToken synkront på klicket men sätter tr.recording först
+      // efter await getUserMedia. I fönstret däremellan — behörighetsdialogen
+      // eller enhetsförvärvet — är körningen redan inaktuell medan
+      // tr.recording fortfarande är false. Landade den gamla slutföringen där
+      // slog tr.recording-vakten inte till: guiden hamnade på steg 2,
+      // <Inspelning /> avmonterades, och strax därefter startade inspelningen
+      // med mikrofonen på, timern tickande, bitar POSTade var fjärde sekund,
+      // beforeunload blockerande och Stoppa/Avbryt utom räckhåll. !aktuell
+      // täcker båda fallen och konsumerar den synkrona token-bumpen som
+      // kommentaren vid inspelningsToken lovar.
+      //
+      // De vägar där !aktuell är sant utan att någon inspelning pågår (nekad
+      // mikrofon, eller ett avbrott av den efterföljande sessionen) ger att
+      // filen köas men att guiden står kvar på steg 1 — ofarligt, "Nästa:
+      // inställningar" är klickbar där.
       const steg = tr.step;
       addFiles([{ name: res.name || namn, path: res.path }]);
-      if (tr.recording) tr.step = steg;
+      if (!aktuell) tr.step = steg;
       // Räknarna tillhör den inspelning som just nu visas i widgeten. Är
       // körningen inaktuell skulle de nollställa den nya inspelningens tid och
       // markörantal mitt i lektionen.
