@@ -247,6 +247,12 @@ def test_approve_bedomning_failure_surfaces_and_keeps_prov(client, monkeypatch):
     # längre lova en korrigering som aldrig sker. Tidigare rundor FÅR lova
     # det, eftersom de faktiskt följs av ett fix_latex-anrop.
     assert bed_loggar[-1] == "Bedömningsanvisningen gick inte att kompilera."
+    # Fynd 5 (granskning): bed_loggar har tre poster (två omförsök + den
+    # sista, uppgivna) — bara [-1] pinnades tidigare. En implementation som
+    # ALLTID skickade den uppgivna varianten hade ändå passerat oupptäckt.
+    # Pinna även att en icke-sista runda faktiskt lovar ett omförsök.
+    assert bed_loggar[:-1] == ["Bedömningsanvisningen gick inte att "
+                               "kompilera — försöker korrigera …"] * 2
 
 
 def test_approve_prov_fran_tidigare_runda_overlever_senare_kompileringsfel(
