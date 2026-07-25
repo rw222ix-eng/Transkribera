@@ -952,7 +952,12 @@ Create `e2e/transkribera-inspelning.spec.mjs`. Follow the style of `e2e/transkri
 3. **Markera** increments the visible counter and writes to `localStorage`;
 4. **Stoppa och lägg till** puts the file in the queue and the wizard reaches step 2;
 5. the topbar badge is visible while recording **and after switching to another tab**, and clicking it returns to step 1;
-6. a `.part` file on disk produces the banner, and **Släng** removes it.
+6. a `.part` file on disk produces the banner, and **Släng** removes it;
+7. `route.abort("failed")` on **every** `POST /api/recording/append` → the error text is visible and the lost-seconds counter **grows** between two failed chunks (4 → 8). Do not skip this: a counter that grows is the only thing separating per-chunk accounting from a single flag, and the defect Task 3 fixes is audio disappearing without anyone noticing.
+8. `route.abort("failed")` on request **number one** only, `route.continue()` for the rest → **two** requests for the *same* chunk (identical body size, milliseconds apart rather than a whole `CHUNK_MS` apart) and **no** error text. Do not skip this: without it the retry loop can be deleted without turning a single test red, and every transient network hiccup becomes four seconds of lost audio again.
+9. `route.fulfill` with status **507** and `{"error": "Kunde inte skriva till disk — kontrollera ledigt utrymme."}` → **one** request for the chunk (no retry) and the server's own wording visible to the teacher. Do not skip this: 507 is the only server error that realistically occurs (413 needs 2 GiB — `MAX_UPLOAD_BYTES`, `app/web/server.py:40`), it is *persistent* rather than transient, and retrying a response the server has already given only delays the next chunk.
+
+Cases 7–9 were proven once by hand with a scratchpad driver script (`.superpowers/sdd/a4-task-3-report.md`) that is **not** in the repo — so until they live here they have no permanent regression guard.
 
 Assert on user-visible text and ARIA, never on internal state. Never pin elapsed time or any wall-clock value.
 
