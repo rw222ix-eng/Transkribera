@@ -146,6 +146,7 @@ export async function openArkivItem(it) {
     prov.errors = [];
     prov.msg = '';
     prov.deleteArm = false;
+    prov.sel = [];
     return;
   }
   try {
@@ -159,6 +160,9 @@ export async function openArkivItem(it) {
     prov.errors = r.errors || [];
     prov.msg = '';
     prov.deleteArm = false;
+    // En markering från det förra dokumentet pekar på fel uppgifter här —
+    // gamla appen tömmer byggSel på exakt samma ställe (app.js:1144).
+    prov.sel = [];
   } catch (e) {
     arkiv.openError = 'Kunde inte öppna dokumentet: ' + (e?.message || e);
   }

@@ -8,7 +8,7 @@
   // KaTeX:en via renderMath-actionen (frontend/src/lib/math.js), precis som
   // gamla appens data-math-element. Texten står kvar i markupen, så en
   // utebliven KaTeX ger rå LaTeX i stället för ett tomt kort.
-  import { prov } from './stores.svelte.js';
+  import { prov, toggleProvSel } from './stores.svelte.js';
   import { renderMath } from '../math.js';
   import { approveExam, openPdf, openTex, deleteExam, closeExam } from './actions.js';
 
@@ -53,6 +53,10 @@
     }
     return u.poang || [0, 0, 0];
   }
+
+  // Markerade uppgiftsnummer som Set — slår upp per uppgift i listan utan att
+  // gå igenom prov.sel en gång per rad.
+  const valdaNummer = $derived(new Set(prov.sel.map((s) => s.nummer)));
 
   const summor = $derived(prov.doc?.summor || null);
   const granser = $derived(prov.doc?.granser || null);
@@ -142,13 +146,25 @@
 
     <ol class="tasks">
       {#each numbered as n (n.nummer)}
-        <li>
+        {@const vald = valdaNummer.has(n.nummer)}
+        <li class:vald>
           <div class="taskhead">
             <span class="nr">Uppgift {n.nummer}</span>
             {#if n.del}<span class="del">DEL {n.del}</span>{/if}
             {#if n.formaga || n.typ}<span class="meta">{n.formaga}{n.formaga && n.typ ? ' · ' : ''}{n.typ}</span>{/if}
             {#if n.antalDel}<span class="meta">{n.antalDel} deluppgift{n.antalDel === 1 ? '' : 'er'}</span>{/if}
             <span class="poang">E {n.poang[0]} · C {n.poang[1]} · A {n.poang[2]}</span>
+            <span class="spacer"></span>
+            <button
+              type="button"
+              class="pick"
+              aria-pressed={vald}
+              aria-label={(vald ? 'Avmarkera' : 'Markera') + ' uppgift ' + n.nummer}
+              title={vald
+                ? 'Ändringen gäller den här uppgiften — klicka för att avmarkera'
+                : 'Markera uppgiften så gäller nästa ändring bara den'}
+              onclick={() => toggleProvSel(n.nummer, 'Uppgift ' + n.nummer)}
+            >{vald ? 'Markerad' : 'Markera'}</button>
           </div>
           <div class="text" use:renderMath={n.text}>{n.text}</div>
         </li>
@@ -270,11 +286,19 @@
     display: flex;
     flex-direction: column;
   }
+  /* Full bredd plus indrag åt båda håll: markeringen kan då färga hela raden
+     utan att texten hoppar i sidled när den slås på. */
   .tasks li {
     border-top: 1px solid var(--line);
-    padding: 12px 0;
+    padding: 12px;
+    margin: 0 -12px;
+    border-radius: 3px;
   }
   .tasks li:first-child { border-top: none; }
+  .tasks li.vald {
+    background: var(--accent-weak);
+    box-shadow: inset 2px 0 0 var(--accent);
+  }
   .taskhead {
     display: flex;
     align-items: baseline;
@@ -300,6 +324,25 @@
     font-size: 0.72rem;
     color: var(--ink-3);
     font-variant-numeric: tabular-nums;
+  }
+  /* Samma chip-vokabulär som kurschipsen i BuildPanel — gemena ord, alltså
+     ingen mono (jfr .meta ovan). Vilande är den nästan osynlig; markerad
+     bär den accenten, liksom raden. */
+  .pick {
+    font-family: inherit;
+    font-size: 0.72rem;
+    background: transparent;
+    color: var(--ink-3);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 3px 9px;
+    cursor: pointer;
+  }
+  .pick:hover { border-color: var(--line-2); color: var(--ink-2); }
+  .pick[aria-pressed='true'] {
+    background: var(--surface);
+    color: var(--accent);
+    border-color: var(--accent);
   }
   .text { color: var(--ink); line-height: 1.5; }
 

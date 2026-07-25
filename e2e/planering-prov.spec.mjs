@@ -79,10 +79,10 @@ test("Planering (/next/): skriv provet, ändra via chatten, godkänn & PDF", asy
     "Ändra provet — t.ex. gör uppgift 3 svårare, lägg till en A-uppgift",
   );
 
-  // 6b) refineExam(): skicka en ändring och vänta på att uppgift 1 får
-  // ändrings-suffixet. fake_refine_exam (e2e/serve_test_app.py) lägger
-  // deterministiskt till " (ändrad)" på uppgiften (nummer saknas i den här
-  // porten -> alltid uppgift 1, se prov/actions.js: refineExam).
+  // 6b) refineExam(): skicka en ändring UTAN markerade uppgifter och vänta på
+  // att uppgift 1 får ändrings-suffixet. fake_refine_exam (e2e/serve_test_app.py)
+  // lägger deterministiskt till " (ändrad)" på uppgift `nummer` — utan
+  // markering skickas inget nummer, och fejken faller tillbaka på uppgift 1.
   const chat = changeField.locator("xpath=ancestor::div[contains(@class,'chat')]");
   await changeField.fill("Gör uppgift 1 svårare");
   await chat.getByRole("button", { name: "Skicka" }).click();
@@ -91,6 +91,30 @@ test("Planering (/next/): skriv provet, ändra via chatten, godkänn & PDF", asy
   ).toBeVisible({ timeout: 15000 });
   // Fältet töms igen efter en lyckad ändring.
   await expect(changeField).toHaveValue("");
+
+  // 6c) Elementriktad ändring (Plan 5 Task 2): markera uppgift 3 och skicka.
+  // body.nummer = 3 gör att fejken ändrar just uppgift 3, inte uppgift 1 —
+  // det är beviset för att markeringen når backenden. Raden ovanför fältet
+  // ska namnge uppgiften, och markeringen ska vara tömd efteråt.
+  const rader = card.locator(".tasks li");
+  await rader.nth(2).getByRole("button", { name: "Markera uppgift 3" }).click();
+  await expect(page.getByText("Ändringen gäller uppgift 3.")).toBeVisible();
+  await changeField.fill("Byt kontext i uppgiften");
+  await chat.getByRole("button", { name: "Skicka" }).click();
+  await expect(rader.nth(2).getByText(/\(ändrad\)$/)).toBeVisible({ timeout: 15000 });
+  await expect(page.getByText(/^Ändringen gäller uppgift/)).toHaveCount(0);
+  await expect(card.locator(".tasks li.vald")).toHaveCount(0);
+
+  // 6d) Två markerade uppgifter scopear inte via nummer — de vävs in i
+  // meddelandet i stället (app.js:951-956). Fejken ändrar då uppgift 1, och
+  // uppräkningen följer svensk grammatik ("1 och 2").
+  await rader.nth(0).getByRole("button", { name: "Markera uppgift 1" }).click();
+  await rader.nth(1).getByRole("button", { name: "Markera uppgift 2" }).click();
+  await expect(page.getByText("Ändringen gäller uppgift 1 och 2.")).toBeVisible();
+  await expect(card.locator(".tasks li.vald")).toHaveCount(2);
+  // Rensa-knappen tömmer markeringen utan att skicka något.
+  await page.getByRole("button", { name: "Rensa markeringen" }).click();
+  await expect(card.locator(".tasks li.vald")).toHaveCount(0);
 
   // 7) Godkänn och skapa PDF: fejkservern har en riktig Tectonic-binär och
   // en patchad compile_pdf som alltid ger en giltig PDF-stubbe tillbaka

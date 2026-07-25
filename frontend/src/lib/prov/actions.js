@@ -116,17 +116,35 @@ export async function approveExam() {
   await streamPost('/api/exams/' + prov.doc.id + '/approve', {}, handleExamEvent);
 }
 
+/** "1", "1 och 2", "1, 2 och 3" — samma grammatik som gamla appens _selLista
+ * (app.js:939-942). Exporterad så att ändringschattens rad och prefixet i
+ * payloaden räknar upp uppgifterna likadant. */
+export function listaSv(arr) {
+  return arr.length === 1
+    ? String(arr[0])
+    : arr.slice(0, -1).join(', ') + ' och ' + arr[arr.length - 1];
+}
+
 /** Ändrar det öppna provet/arbetsbladet via den delade ändringschatten.
- * Speglar sendByggChat:s icke-tavla-gren, app.js:945-957 (utan uppgifts-
- * markering, som inte finns i den här porten — se planeringens ChangeChat). */
+ * Speglar sendByggChat:s icke-tavla-gren, app.js:945-957. */
 export async function refineExam() {
   const message = plan.chatInput.trim();
   if (!message || !prov.doc?.id || prov.phase === 'running') return;
+  // Markeringen måste läsas FÖRE resetProvRun(), som tömmer den.
+  const valda = prov.sel.map((s) => s.nummer);
+  const body = { message };
+  // Exakt en markerad uppgift scopear via refine-endpointens nummer-fält;
+  // flera markerade vävs in i meddelandet i stället (app.js:951-956).
+  if (valda.length === 1) body.nummer = valda[0];
+  else if (valda.length > 1) {
+    body.message = '[Gäller uppgift ' + listaSv(valda) + '] ' + message;
+  }
   plan.chatInput = '';
   resetProvRun();
   // Går ändringen inte igenom läggs texten tillbaka i fältet — samma skydd
-  // som refineBoard (planering/actions.js) ger tavlan.
-  await streamPost(`/api/exams/${prov.doc.id}/refine`, { message }, (ev) => {
+  // som refineBoard (planering/actions.js) ger tavlan. Markeringen kommer
+  // inte tillbaka; texten i fältet räcker för att skicka om.
+  await streamPost(`/api/exams/${prov.doc.id}/refine`, body, (ev) => {
     if (ev.type === 'error' && !plan.chatInput) plan.chatInput = message;
     handleExamEvent(ev);
   });
@@ -181,4 +199,5 @@ export function closeExam() {
   prov.errors = [];
   prov.msg = '';
   prov.deleteArm = false;
+  prov.sel = [];
 }
