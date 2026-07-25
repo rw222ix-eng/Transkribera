@@ -9,15 +9,61 @@
     cancelRecording,
     addRecMarker,
     recSupported,
+    laddaOavslutade,
+    aterstallOavslutad,
+    slangOavslutad,
   } from './inspelning.svelte.js';
 
   const stods = recSupported();
+
+  // Hämtas när widgeten monteras.
+  //
+  // AVSTEG från briefens kodblock, som motiverar effekten med "Skalet håller
+  // vyn monterad hela sessionen, så det här körs inte om vid flikbyten eller
+  // stegväxlingar". Halva påståendet stämmer inte HÄR: flikbyten monterar
+  // mycket riktigt inte om något (App.svelte döljer vyerna med hidden), men
+  // <Inspelning /> ligger inuti {#if tr.step === 'source'} i
+  // TranskriberaView.svelte och avmonteras alltså på steg 2 — effekten körs om
+  // varje gång läraren kommer tillbaka till källsteget.
+  //
+  // Det är önskvärt (listan blir färsk i stället för att spegla sidladdningen)
+  // och ofarligt: städningen i laddaOavslutade kan inte råka svepa bort en
+  // PÅGÅENDE inspelnings post, eftersom "Nästa: inställningar" är avstängd
+  // medan tr.recording är sann — widgeten kan därför inte avmonteras och
+  // monteras om mitt i en inspelning. De väntande markörsessionerna skyddas
+  // uttryckligen, se laddaOavslutade.
+  //
+  // Effekten spårar ingenting: laddaOavslutade läser tillstånd först EFTER
+  // sitt första await, och asynkrona läsningar registreras inte som beroenden.
+  $effect(() => { laddaOavslutade(); });
 
   const tid = $derived.by(() => {
     const n = Math.max(0, Math.floor(tr.recElapsed || 0));
     return `${String(Math.floor(n / 60)).padStart(2, '0')}:${String(n % 60).padStart(2, '0')}`;
   });
 </script>
+
+<!--
+  Oavslutade inspelningar — .part-filer som aldrig slutfördes (en krasch, ett
+  strömavbrott, ett stängt fönster). Funktionen är porterad ur app.js:4409-4422,
+  stilen är det INTE: originalet är inline-CSS med 10-12px hörn, en accent-tonad
+  larmruta och en ⚠️-emoji. Här är den ett lugnt sänkt pappersskikt.
+
+  Bannern är MEDVETET ingen live-region: den enda som finns är den hoistade
+  .fel-sr i TranskriberaView.svelte, se kommentaren vid .rec-fel längre ned.
+-->
+{#if tr.incompleteRecs.length}
+  <div class="oavslutad">
+    <p class="oav-titel">Oavslutad inspelning hittad</p>
+    {#each tr.incompleteRecs as p}
+      <div class="oav-rad">
+        <span class="oav-namn">{p.session} — {Math.round((p.bytes || 0) / 1024)} kB</span>
+        <button type="button" class="ghost" onclick={() => aterstallOavslutad(p.session)}>Återställ</button>
+        <button type="button" class="ghost fara" onclick={() => slangOavslutad(p.session)}>Släng</button>
+      </div>
+    {/each}
+  </div>
+{/if}
 
 <div class="rad">
   <span class="etikett">ELLER SPELA IN</span>
@@ -68,6 +114,31 @@
 <p class="rec-fel" aria-hidden="true">{tr.recError}</p>
 
 <style>
+  /* Bannern för oavslutade inspelningar. Sänkt pappersskikt med hårfin kant,
+     samma geometri som .ruta nedan (5px hörn, 14/16px luft) — DESIGN.md vill
+     ha tonala skikt och linjer i stället för färgade larmrutor, och ett fynd
+     här är ingen katastrof: ljudet finns kvar, det är bara inte inlagt än. */
+  .oavslutad {
+    background: var(--sunken);
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 14px 16px;
+    margin: 20px 0 0;
+  }
+  /* Hel mening, alltså sans — var(--mono) är reserverat för korta versala
+     mikroetiketter som .etikett nedan. */
+  .oav-titel { color: var(--ink); font-size: 1.03rem; font-weight: 500; margin: 0 0 10px; }
+  .oav-rad { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .oav-rad + .oav-rad { margin-top: 8px; }
+  /* Sessions-id:t är långt och obrytbart (rec_<ms>_<slump>) — utan
+     overflow-wrap spränger det raden på smala fönster. */
+  .oav-namn {
+    flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    color: var(--ink-2);
+    font-size: 1.03rem;
+  }
   .rad { margin: 20px 0 0; }
   /* Mikroetiketten är den ENDA platsen mono får stå på i widgeten — versal,
      kort, en rubrik för raden under. DESIGN.md reserverar var(--mono) för
@@ -169,6 +240,9 @@
     font-size: inherit;
     cursor: pointer;
   }
+  /* Släng raderar ljudet permanent. Ingen ny knappform — samma ghost, målad i
+     var(--bad), som DESIGN.md reserverar för fel och destruktiv bekräftelse. */
+  .ghost.fara { color: var(--bad); }
   /* Inspelningens fel bär en EGEN synlig rad, inte guidens delade tr.fileError —
      ett mikrofonfel hör inte hemma i samma statusrad som filformatsfel. För
      skärmläsaren delas de däremot på en enda hoistad live-region, se markupen

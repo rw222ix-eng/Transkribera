@@ -6,7 +6,13 @@
 // aldrig i storen — samma delning som korning.js gör med sin rAF-loop.
 import { tr } from './stores.svelte.js';
 import { addFiles } from './actions.js';
-import { extAvMime, sparaSession, lasSession, glomSession } from './inspelningLagring.js';
+import {
+  extAvMime,
+  sparaSession,
+  lasSession,
+  glomSession,
+  stadaSessioner,
+} from './inspelningLagring.js';
 
 const CHUNK_MS = 4000;           // timeslice: en bit var fjärde sekund, app.js:1438
 const TYSTNADSNIVA = 0.02;       // under den här nivån räknas det som tystnad
@@ -459,4 +465,69 @@ async function slutforInspelning(mime) {
     // Samma sak här: posten i localStorage lämnas kvar åt återställningen.
     tr.recError = 'Kunde inte slutföra inspelningen.';
   }
+}
+
+/* ---------------------------------------- oavslutade inspelningar (krasch) -- */
+
+/** Hämtar oavslutade .part-filer och städar lagringen mot dem. app.js:1490-1494. */
+export async function laddaOavslutade() {
+  try {
+    const r = await fetch('/api/recordings/incomplete');
+    const lista = await r.json();
+    tr.incompleteRecs = Array.isArray(lista) ? lista : [];
+  } catch {
+    tr.incompleteRecs = [];
+  }
+  // De VÄNTANDE markörsessionerna måste räknas som levande. En SLUTFÖRD
+  // inspelning har fått sin .part omdöpt av finish och dyker därför aldrig upp
+  // i /api/recordings/incomplete — men dess localStorage-post ska leva tills
+  // markörerna postats (actions.js gör det först när transkriberingen är klar).
+  // Städade vi bara mot incompleteRecs skulle ett besök på steg 1 under
+  // pågående transkribering svepa bort posten mitt i det fönster den finns för.
+  stadaSessioner([
+    ...tr.incompleteRecs.map((p) => p.session),
+    ...Object.values(tr.recMarkersByPath).map((m) => m.session),
+  ]);
+}
+
+/**
+ * Gör en oavslutad inspelning till en fil i kön. Filändelsen hämtas ur den
+ * sparade sessionen — gamla appen hårdkodar .webm (app.js:1496) och ger alltså
+ * fel ändelse för allt som inte spelades in med webm.
+ */
+export async function aterstallOavslutad(s) {
+  const post = lasSession(s);
+  const namn = `återställd_${s}.${extAvMime(post && post.mime)}`;
+  try {
+    const r = await fetch(
+      `/api/recording/finish?session=${encodeURIComponent(s)}&name=${encodeURIComponent(namn)}`,
+      { method: 'POST' },
+    );
+    const res = await r.json();
+    if (res && res.path) {
+      if (post && post.markers && post.markers.length) {
+        tr.recMarkersByPath = {
+          ...tr.recMarkersByPath,
+          [res.path]: { session: s, markers: post.markers },
+        };
+      } else {
+        glomSession(s);
+      }
+      addFiles([{ name: res.name || namn, path: res.path }]);
+    } else {
+      tr.recError = (res && res.error) || 'Kunde inte återställa inspelningen.';
+    }
+  } catch {
+    tr.recError = 'Kunde inte återställa inspelningen.';
+  }
+  await laddaOavslutade();
+}
+
+/** Raderar en oavslutad inspelning permanent. app.js:1503-1506. */
+export async function slangOavslutad(s) {
+  glomSession(s);
+  try {
+    await fetch(`/api/recording/discard?session=${encodeURIComponent(s)}`, { method: 'POST' });
+  } catch { /* filen ligger kvar och dyker upp igen nästa gång */ }
+  await laddaOavslutade();
 }
