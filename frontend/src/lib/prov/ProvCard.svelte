@@ -160,7 +160,13 @@
         disabled={prov.phase === 'running'}
         onclick={approveExam}
       >
-        {prov.phase === 'running' ? 'Arbetar …' : 'Godkänn och skapa PDF'}
+        {#if prov.phase === 'running'}
+          Arbetar …
+        {:else if prov.doc.status === 'godkänt'}
+          Skapa PDF igen
+        {:else}
+          Godkänn och skapa PDF
+        {/if}
       </button>
       {#if hasPdf}
         <button type="button" class="ghost" onclick={openPdf}>Öppna PDF</button>
