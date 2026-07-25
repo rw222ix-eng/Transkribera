@@ -471,13 +471,29 @@ async function slutforInspelning(mime) {
 
 /** Hämtar oavslutade .part-filer och städar lagringen mot dem. app.js:1490-1494. */
 export async function laddaOavslutade() {
+  // Städningen får BARA köras när vi faktiskt fått listan. Faller fetch eller
+  // r.json(), eller svarar servern 500 (FastAPI ger då {"detail": …}, alltså
+  // ingen array), vet vi ingenting om vilka .part-filer som finns — och att
+  // städa mot en tom lista raderar då varenda sparad post för filer som
+  // ligger kvar på disk. Nästa lyckade laddning visar dem igen, men
+  // lasSession ger null → extAvMime(null) → .webm: exakt den defekt det här
+  // steget finns för, återinförd av en övergående nätverksstörning, plus att
+  // de kraschsparade markörerna är permanent borta. Posten ÄR kraschnätet
+  // (se slutforInspelning), och den får inte offras för städning.
+  let ok = false;
   try {
     const r = await fetch('/api/recordings/incomplete');
     const lista = await r.json();
-    tr.incompleteRecs = Array.isArray(lista) ? lista : [];
+    if (Array.isArray(lista)) {
+      tr.incompleteRecs = lista;
+      ok = true;
+    } else {
+      tr.incompleteRecs = [];
+    }
   } catch {
     tr.incompleteRecs = [];
   }
+  if (!ok) return;
   // De VÄNTANDE markörsessionerna måste räknas som levande. En SLUTFÖRD
   // inspelning har fått sin .part omdöpt av finish och dyker därför aldrig upp
   // i /api/recordings/incomplete — men dess localStorage-post ska leva tills
