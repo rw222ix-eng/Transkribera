@@ -61,9 +61,23 @@
       <button type="button" class="lank" onclick={addSampleCorrupt}>skadad_inspelning.m4a</button>
     </p>
 
-    <!-- Synlig kopia av live-regionen ovan, i den position raden hade före
-         hoisten till plan A2-fixrunda: direkt under källfälten. -->
-    <p class="fel" class:info={tr.fileNoteArt === 'info'} aria-hidden="true">{tr.fileError}</p>
+    <!--
+      Synlig kopia av live-regionen ovan, i den position raden hade före
+      hoisten till plan A2-fixrunda: direkt under källfälten. Texten renderas
+      via CSS (content: attr(...)) i stället för som en vanlig textnod: raden
+      är redan aria-hidden så skärmläsare struntar i den oavsett, men en
+      textnod HÄR skulle vara en andra, ordagrant identisk träff för samma
+      text som live-regionen ovan bär — och e2e-testerna letar upp texten med
+      Playwrights getByText(), som inte bryr sig om aria-hidden och kräver
+      exakt en träff. Genererat innehåll håller texten synlig för läraren
+      utan att skapa den kollisionen.
+    -->
+    <p
+      class="fel"
+      class:info={tr.fileNoteArt === 'info'}
+      aria-hidden="true"
+      data-fel={tr.fileError}
+    ></p>
 
     {#if tr.queue.length}
       <div class="ko-wrap">
@@ -127,7 +141,8 @@
   }
   .lank:hover { color: var(--ink); }
   .fel { color: var(--bad); margin: 14px 0 0; }
-  .fel:empty { display: none; }
+  .fel::before { content: attr(data-fel); }
+  .fel[data-fel=''] { display: none; }
   .fel.info { color: var(--ink-3); }
   /* Klippande teknik — noden finns kvar i tillgänglighetsträdet men upptar
      ingen synlig plats, till skillnad från display:none. */
