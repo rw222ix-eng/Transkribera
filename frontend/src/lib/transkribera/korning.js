@@ -61,8 +61,12 @@ function frame() {
     let ph = 0;
     while (ph < b.length - 2 && real >= b[ph + 1]) ph++;
     const tak = b[ph + 1] - 0.5;          // stanna inom aktuell fas
-    if (real > disp) {
-      disp += (Math.min(real, 99) - disp) * 0.12;   // hinn ikapp servern
+    if (real - disp > 0.01) {
+      // hinn ikapp servern. Tröskel istället för real > disp: den konvergerar
+      // asymptotiskt mot real underifrån och blir aldrig falsk, så läckgrenen
+      // nedan skulle annars aldrig nås. Gamla appen (app.js:2300) har
+      // medvetet kvar det ursprungliga (trasiga) beteendet.
+      disp += (Math.min(real, 99) - disp) * 0.12;
     } else if (disp < tak) {
       disp += (tak - disp) * 0.004;                 // läck framåt så inget fryser
     }
