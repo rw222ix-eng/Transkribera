@@ -83,3 +83,63 @@ test("Transkribera (/next/): exempel i kön, dubblett, länk och borttagning", a
   // 7) Inga konsolfel under hela flödet.
   expect(errors, errors.join("\n")).toEqual([]);
 });
+
+// Regressionstest för A2-fixrundan: ett misslyckat nedladdningsförsök av
+// ljudmodellen (Gemma är gated — 401 utan accepterad licens) satte tidigare
+// tr.fileError, men statusraden som visar den satt fast i källstegets
+// {#if}-gren, så felet var osynligt på steg 2 där nedladdningsknappen bor.
+// Modellen råkar vara installerad på utvecklingsmaskinen (se
+// .superpowers/sdd/a2-task-4-report.md), så felvägen mockas fram med
+// page.route i stället för att bero på maskinens faktiska modellstatus.
+test("Transkribera (/next/): misslyckad nedladdning av ljudmodellen visar fel på steg 2", async ({ page }) => {
+  const errors = [];
+  failOnConsoleError(page, errors);
+
+  // Tvinga fram "ej installerad" så nedladdningsknappen renderas, oavsett
+  // om modellen faktiskt ligger på disk här.
+  await page.route("**/api/audio-model", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ id: "google/gemma-4-E4B-it", installed: false, download_mb: 16500 }),
+    }),
+  );
+  // Samma SSE-kontrakt som backenden (app/web/sse.py:sse_response): ett
+  // undantag blir data: {"type":"error","message":...}\n\n, konsumerat av
+  // streamPost i frontend/src/lib/api.js.
+  await page.route("**/api/download/audio-model", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "text/event-stream",
+      body: 'data: {"type": "error", "message": "401 Unauthorized — modellen är gated"}\n\n',
+    }),
+  );
+
+  await page.goto("/next/");
+
+  const sample = await page.request.get("/api/sample");
+  expect(
+    sample.status(),
+    'Saknad testfixtur: "Mamma waw isolerad.wav" i repo-roten (se e2e/serve_test_app.py). ' +
+      "/api/sample svarade " + sample.status() + ".",
+  ).toBe(200);
+
+  // Exempelfilen tar guiden till steg 2, där Formatval — och dess
+  // nedladdningsknapp — renderas.
+  await page.getByRole("button", { name: "ett exempel", exact: true }).click();
+
+  const nedladdning = page.getByRole("button", { name: "Ladda ner modell" });
+  await expect(nedladdning).toBeVisible();
+  await nedladdning.click();
+
+  // Felet ska synas HÄR, direkt på steg 2 — statusraden är hoistad ovanför
+  // stegväxlingen (plan A2-fixrunda) just för att göra det här felet synligt.
+  await expect(
+    page.getByText("Kunde inte ladda ner ljudmodellen: 401 Unauthorized — modellen är gated"),
+  ).toBeVisible();
+  // Knappen ska ha återgått till sin ursprungstext, inte fastnat på "Laddar ner …".
+  await expect(page.getByRole("button", { name: "Ladda ner modell" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Laddar ner …" })).toHaveCount(0);
+
+  expect(errors, errors.join("\n")).toEqual([]);
+});
