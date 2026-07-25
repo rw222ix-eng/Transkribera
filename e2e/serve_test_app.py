@@ -146,21 +146,46 @@ def _install_fakes() -> None:
         board["title"] = title
         return board
 
+    def _stream_board_tokens(board: dict, token_cb) -> None:
+        # Efterliknar hur den riktiga modellen strömmar tavlans JSON
+        # tecken-för-tecken (lesson_board._llm_round skickar rå modelltext
+        # till token_cb) — annars finns det inga "token"-SSE-frames att
+        # verifiera live-uppbyggnaden mot i e2e (se task-4-brief.md).
+        # Kort paus per bit — annars hinner hela svaret (log + tokens + done)
+        # fram på samma nätverksläsning och klientens 450 ms-debounce för
+        # live-ritningen (BoardPreview.svelte) hinner aldrig slå till innan
+        # fasen redan bytt till "done" (samma resonemang som fake_answer/
+        # fake_generate ovan).
+        import time
+        text = json.dumps(board, ensure_ascii=False)
+        for i in range(0, len(text), 120):
+            token_cb(text[i:i + 120])
+            # 0,1 s per bit: strömmen spänner då över ett par sekunder, så
+            # klientens live-ritning hinner slå till flera gånger innan
+            # "done" kommer. Med snabbare takt hann fasen bli "done" före
+            # första ticken och live-uppbyggnaden gick aldrig att observera.
+            time.sleep(0.1)
+
     def fake_generate_board(course, group, moment, *, model, memory="",
-                            llm=None, max_rounds=3, log_cb=None, **kw):
+                            llm=None, max_rounds=3, log_cb=None,
+                            token_cb=None, **kw):
         # **kw: håller fejken kompatibel när riktiga generate_board får nya
         # nyckelord (t.ex. underlag) utan att e2e-fejken måste byggas om.
         if log_cb:
             log_cb("[FEJK] Genererar lektionstavlan …")
-        return {"board": _fake_board(moment or "Lektionstavla"),
-                "errors": [], "rounds": 1}
+        board = _fake_board(moment or "Lektionstavla")
+        if token_cb:
+            _stream_board_tokens(board, token_cb)
+        return {"board": board, "errors": [], "rounds": 1}
 
     def fake_refine_board(board, instruction, *, model, llm=None,
-                          max_rounds=3, log_cb=None, **kw):
+                          max_rounds=3, log_cb=None, token_cb=None, **kw):
         if log_cb:
             log_cb("[FEJK] Uppdaterar tavlan …")
         updated = copy.deepcopy(board)
         updated["title"] = (updated.get("title") or "Tavla") + " (ändrad)"
+        if token_cb:
+            _stream_board_tokens(updated, token_cb)
         return {"board": updated, "errors": [], "rounds": 1}
 
     def fake_repair_board(board, warnings, *, model, llm=None, rounds_used=1,

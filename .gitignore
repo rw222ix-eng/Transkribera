@@ -61,6 +61,7 @@ e2e/.test-data-real/
 e2e/.test-data-preview/
 e2e/.test-data-qa/
 e2e/test-results/
+e2e/_srv_*.txt
 
 # Impeccable live mode (durabel sessionsjournal — lokal återhämtning, ej projektkälla)
 .impeccable/live/sessions/
@@ -82,6 +83,14 @@ exports/
 
 # Användarens transkriberingar och exporterade dokument (lokal elevdata — får ALDRIG checkas in)
 /Transkriberingar/
+
+# Nedladdad föreläsningsmedia och lösa transkript i repo-roten (lokal lektionsdata
+# — får ALDRIG checkas in). Själva medie- och undertextfilerna är redan täckta
+# globalt ovan (*.mkv/*.mp4/*.webm rad 28-30, *.srt/*.vtt rad 34-35); det som
+# saknade täckning var .txt-transkripten och yt-dlp:s sidofiler (.info.json,
+# .description, miniatyrer), som reglerna nedan fångar.
+/downloads/
+/Mamma waw isolerad.txt
 
 # Byggd Svelte-frontend (byggs vid paketering, checkas inte in)
 app/web/next/

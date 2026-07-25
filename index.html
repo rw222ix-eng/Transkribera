@@ -4,6 +4,12 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Transkribera</title>
+    <!-- KaTeX, vendrad i appens egna filer (app/web/static/vendor/katex/) —
+         aldrig CDN, appen är offline. /static serveras av FastAPI i drift och
+         proxas dit av Vite i dev, så samma sökväg gäller på båda ställena.
+         Samma två taggar som gamla appen laddar (app/web/static/index.html:8,13). -->
+    <link rel="stylesheet" href="/static/vendor/katex/katex.min.css" />
+    <script src="/static/vendor/katex/katex.min.js"></script>
   </head>
   <body>
     <div id="app"></div>

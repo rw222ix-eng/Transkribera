@@ -104,10 +104,12 @@ export async function streamPost(url, body, onEvent) {
     return;
   }
 
-  const reader = resp.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
   try {
+    // getReader() ligger innanför try:t — annars kan ett saknat resp.body kasta
+    // förbi anroparens enda felställe (kontraktet är att fel alltid kommer via onEvent).
+    const reader = resp.body.getReader();
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -337,14 +339,16 @@ Courses come from `GET /api/courses` and classes from `GET /api/groups` (both al
   const canGenerate = $derived(plan.moment.trim().length > 0 && plan.phase !== 'running');
 
   $effect(() => {
-    Promise.all([getJSON('/api/courses'), getJSON('/api/groups')])
-      .then(([c, g]) => {
-        courses = c?.courses ?? c ?? [];
-        groups = g?.groups ?? g ?? [];
-      })
-      .catch((e) => {
-        loadError = 'Kunde inte hämta kurser och klasser: ' + (e?.message || e);
-      });
+    // allSettled, inte all: faller en av endpointerna ska den andra ändå fylla
+    // sitt fält — annars försvinner kurschipsen för att klasslistan strular.
+    Promise.allSettled([getJSON('/api/courses'), getJSON('/api/groups')]).then(([c, g]) => {
+      if (c.status === 'fulfilled') courses = c.value?.courses ?? c.value ?? [];
+      if (g.status === 'fulfilled') groups = g.value?.groups ?? g.value ?? [];
+      const failed = [];
+      if (c.status === 'rejected') failed.push('kurser');
+      if (g.status === 'rejected') failed.push('klasser');
+      loadError = failed.length ? 'Kunde inte hämta ' + failed.join(' och ') + '.' : '';
+    });
   });
 
   function pickCourse(id) {
@@ -617,13 +621,12 @@ git commit -m "feat(next): byggpanelens formulär för tavlan"
     display: block;
     background: var(--sunken);
   }
+  /* Varningarna är hela meningar från motorn — sans, inte mono
+     (DESIGN.md: mono är reserverad för små versala etiketter). */
   .warnings {
     margin: 10px 0 0;
     padding-left: 18px;
     color: var(--warn);
-    font-size: 0.72rem;
-    font-family: var(--mono);
-    letter-spacing: 0.08em;
   }
 </style>
 ```
@@ -734,13 +737,15 @@ Change the BuildPanel usage to `<BuildPanel onGenerate={generateBoard} />`, and 
 with styles:
 
 ```css
+  /* Loggraderna är hela meningar, inte mikroetiketter — sans, inte mono. */
   .log {
     margin: 24px 0 0;
     padding-left: 20px;
     color: var(--ink-3);
-    font-size: 0.72rem;
-    font-family: var(--mono);
-    letter-spacing: 0.08em;
+  }
+  /* En körning som havererar ska synas, inte drunkna bland framstegsraderna. */
+  .log .failed {
+    color: var(--bad);
   }
   .errors {
     margin: 16px 0 0;
@@ -786,7 +791,12 @@ export async function refineBoard() {
   if (!message || !plan.id || plan.phase === 'running') return;
   plan.chatInput = '';
   resetRun();
-  await streamPost(`/api/planning/${plan.id}/refine`, { message }, handlePlanEvent);
+  // Går ändringen inte igenom läggs texten tillbaka i fältet — annars måste
+  // läraren skriva om hela sin begäran efter ett fel som inte var deras.
+  await streamPost(`/api/planning/${plan.id}/refine`, { message }, (ev) => {
+    if (ev.type === 'error' && !plan.chatInput) plan.chatInput = message;
+    handlePlanEvent(ev);
+  });
 }
 ```
 
