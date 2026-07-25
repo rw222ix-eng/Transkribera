@@ -1,7 +1,7 @@
 <script>
   // Språkparet och den automatiskt valda modellen. Speglar app.js:4504-4532.
   import { tr } from './stores.svelte.js';
-  import { pickLang, pickTargetLang } from './actions.js';
+  import { pickLang, pickTargetLang, syncModel } from './actions.js';
   import { katalog, modellNamn, fitDot } from './katalog.svelte.js';
 
   /** @type {Array<['sv'|'en', string]>} */
@@ -24,10 +24,11 @@
   const prick = $derived(tr.model ? fitDot(tr.model) : 'var(--bad)');
 
   // Katalogen kommer efter första renderingen; när den landar väljs modellen
-  // för det språk som redan står i formuläret. Speglar loadModels patch.model
-  // (app.js:3020-3024).
+  // för det språk som redan står i formuläret. Bara modellen — ett
+  // resultatspråk läraren redan valt får inte nollställas. Speglar
+  // loadModels patch.model (app.js:3020-3024).
   $effect(() => {
-    if (katalog.klar && !tr.model) pickLang(/** @type {'sv'|'en'} */ (tr.language));
+    if (katalog.klar && !tr.model) syncModel();
   });
 </script>
 

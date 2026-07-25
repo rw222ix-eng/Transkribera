@@ -209,3 +209,13 @@ export function pickLang(l) {
 export function pickTargetLang(l) {
   tr.targetLanguage = l;
 }
+
+/**
+ * Väljer modell för det språk som redan står i formuläret, utan att röra
+ * något annat. Används när modellkatalogen landar efter första renderingen —
+ * gamla appen sätter bara patch.model där (app.js:3020-3024), och att köra
+ * hela pickLang skulle nollställa ett resultatspråk läraren redan valt.
+ */
+export function syncModel() {
+  tr.model = recommendModel(/** @type {'sv'|'en'} */ (tr.language));
+}
