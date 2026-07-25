@@ -29,6 +29,14 @@ let uppladdningsKedja = Promise.resolve();
 // efter att löftet löst ut (app.js:1441), så ett snabbt dubbelklick kunde starta
 // två strömmar och läcka den första öppen.
 let startar = false;
+// Generationsräknare för inspelningarna, samma mönster som korToken i
+// actions.js:284. Bumpas synkront vid varje start och vid varje avbrott.
+// slutforInspelning fångar den före sitt första await och jämför före varje
+// skrivning: hinner läraren starta en NY inspelning inom fönstret (await på
+// uppladdningskedjan plus finish-POSTen) får den gamla, redan avslutade
+// körningen inte nollställa den NYA inspelningens tr.recElapsed/tr.recMarkerCount
+// och inte flytta guiden från steg 1.
+let inspelningsToken = 0;
 
 /** Stöder webbläsaren inspelning alls? app.js:1381. */
 export function recSupported() {
@@ -116,6 +124,11 @@ export async function startRecording() {
     return;
   }
   startar = true;
+  // Bumpas här, synkront vid klicket — INTE efter att getUserMedia löst ut.
+  // Ligger en behörighetsdialog och väntar hinner en pågående slutforInspelning
+  // annars slå om tr.step till 'config' innan strömmen delats ut, och den nya
+  // inspelningen skulle starta med widgeten avmonterad.
+  inspelningsToken++;
   tr.recError = '';
   tr.recLostSecs = 0;
   try {
@@ -179,6 +192,9 @@ export function stopRecording() {
 }
 
 export function cancelRecording() {
+  // Ett avbrott är också ett generationsskifte: skulle en slutföring ändå vara
+  // i flykt får den inte skriva tillbaka tillstånd för det läraren just slängt.
+  inspelningsToken++;
   clearInterval(tidTimer);
   tidTimer = 0;
   stoppaNivamatare();
@@ -249,11 +265,16 @@ function koaChunk(blob) {
 
 /** Stänger sessionen och lägger filen i kön. Markörerna kopplas i Task 4. */
 async function slutforInspelning(mime) {
+  // Fångas SYNKRONT, före det första await:et — se inspelningsToken.
+  const token = inspelningsToken;
   stoppaStrom();
   stoppaNivamatare();
   const s = session;
   session = null;
-  if (!s) { tr.recElapsed = 0; return; }
+  if (!s) {
+    if (token === inspelningsToken) tr.recElapsed = 0;
+    return;
+  }
   const namn = `lektion_${stampel()}.${extAvMime(mime)}`;
   try {
     await uppladdningsKedja;
@@ -262,11 +283,29 @@ async function slutforInspelning(mime) {
       { method: 'POST' },
     );
     const res = await r.json();
+    const aktuell = token === inspelningsToken;
     if (res && res.path) {
+      // Filen läggs ALLTID i kön, även om en ny inspelning hunnit starta: en
+      // lektion går inte att spela in igen, filen ligger redan färdig på disk
+      // (finish har döpt om .part-filen) och skulle annars försvinna ur UI:t
+      // utan ett ord. Men addFiles slår om tr.step till 'config', och steg 2
+      // avmonterar <Inspelning /> — pågår en inspelning måste guiden därför
+      // hållas kvar på steg 1. tr.recording kan bara vara sant här om en NY
+      // inspelning startat, alltså om den här körningen är inaktuell.
+      const steg = tr.step;
       addFiles([{ name: res.name || namn, path: res.path }]);
-      tr.recElapsed = 0;
-      tr.recMarkerCount = 0;
+      if (tr.recording) tr.step = steg;
+      // Räknarna tillhör den inspelning som just nu visas i widgeten. Är
+      // körningen inaktuell skulle de nollställa den nya inspelningens tid och
+      // markörantal mitt i lektionen.
+      if (aktuell) {
+        tr.recElapsed = 0;
+        tr.recMarkerCount = 0;
+      }
     } else {
+      // Ingen generationsvakt på felet, medvetet: det gäller den GAMLA
+      // inspelningen och måste nå läraren även om en ny hunnit starta —
+      // annars försvinner beskedet att en hel lektion inte gick att slutföra.
       tr.recError = (res && res.error) || 'Kunde inte slutföra inspelningen.';
     }
   } catch {
