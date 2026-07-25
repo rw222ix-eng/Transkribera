@@ -3,7 +3,13 @@
   // men omstylad: gamla widgeten är ren inline-CSS med 8-12px hörn, vilket
   // DESIGN.md avvisar. Ingen literal hex, bara tokens.
   import { tr } from './stores.svelte.js';
-  import { startRecording, stopRecording, cancelRecording, recSupported } from './inspelning.svelte.js';
+  import {
+    startRecording,
+    stopRecording,
+    cancelRecording,
+    addRecMarker,
+    recSupported,
+  } from './inspelning.svelte.js';
 
   const stods = recSupported();
 
@@ -26,6 +32,9 @@
       </div>
       {#if tr.recSilent}<span class="ingen">Ingen signal?</span>{/if}
       <span class="spacer"></span>
+      <button type="button" class="ghost" onclick={addRecMarker} title="Markera ett viktigt ögonblick">
+        Markera{tr.recMarkerCount ? ` (${tr.recMarkerCount})` : ''}
+      </button>
       <button type="button" class="ghost" onclick={cancelRecording}>Avbryt</button>
       <button type="button" class="primar" onclick={stopRecording}>Stoppa och lägg till</button>
     {:else}

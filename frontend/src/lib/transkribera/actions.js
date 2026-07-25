@@ -1,7 +1,11 @@
-import { getJSON, streamPost } from '../api.js';
+import { getJSON, postJSON, streamPost } from '../api.js';
 import { tr, isMedia } from './stores.svelte.js';
 import { recommendModel } from './katalog.svelte.js';
 import { startProgressAnim, stopProgressAnim } from './korning.js';
+// BARA lagringsmodulen — inspelning.svelte.js får ALDRIG importeras härifrån.
+// Den importerar den här filen (addFiles), så beroendet åt andra hållet skulle
+// sluta cirkeln. inspelningLagring.js importerar ingenting alls, just därför.
+import { glomSession } from './inspelningLagring.js';
 
 let idRakning = 0;
 
@@ -366,6 +370,16 @@ export async function startRun() {
         tr.qStatus = { ...tr.qStatus, [aktiv.id]: 'done' };
         tr.qProgress = { ...tr.qProgress, [aktiv.id]: 100 };
         tr.log = [...tr.log, '[klar] Färdig på ' + fmtTid(tr.elapsed)];
+        // Markörer satta under inspelningen kan inte postas förrän lektionen
+        // har ett id. Speglar app.js:2255-2263, matchat på filens path.
+        const mark = tr.recMarkersByPath[aktiv.path];
+        if (mark && mark.markers.length && r.id) {
+          postJSON(`/api/recordings/${r.id}/markers`, { markers: mark.markers })
+            .then(() => glomSession(mark.session))
+            .catch(() => { /* markörerna ligger kvar i localStorage till nästa gång */ });
+          const { [aktiv.path]: _borttagen, ...kvar } = tr.recMarkersByPath;
+          tr.recMarkersByPath = kvar;
+        }
         const nasta = nextPending(aktiv.id);
         if (nasta) {
           // Nästa fil startar efter en kort paus, så läraren hinner se att den

@@ -6,7 +6,7 @@
 // aldrig i storen — samma delning som korning.js gör med sin rAF-loop.
 import { tr } from './stores.svelte.js';
 import { addFiles } from './actions.js';
-import { extAvMime, sparaSession, glomSession } from './inspelningLagring.js';
+import { extAvMime, sparaSession, lasSession, glomSession } from './inspelningLagring.js';
 
 const CHUNK_MS = 4000;           // timeslice: en bit var fjärde sekund, app.js:1438
 const TYSTNADSNIVA = 0.02;       // under den här nivån räknas det som tystnad
@@ -37,6 +37,12 @@ let startar = false;
 // körningen inte nollställa den NYA inspelningens tr.recElapsed/tr.recMarkerCount
 // och inte flytta guiden från steg 1.
 let inspelningsToken = 0;
+// Markörerna för den inspelning som pågår just nu. Nollställs på samma ställen
+// som annat körtillstånd (startRecording, cancelRecording) och fångas synkront
+// av slutforInspelning, se där. Typannoteringen behövs: utan den infererar
+// checkJs never[] ur den tomma litteralen och fäller pushen av { t }.
+/** @type {Array<{t: number}>} */
+let markorer = [];
 
 /** Stöder webbläsaren inspelning alls? app.js:1381. */
 export function recSupported() {
@@ -157,6 +163,7 @@ export async function startRecording() {
     tr.recording = true;
     tr.recElapsed = 0;
     tr.recMarkerCount = 0;
+    markorer = [];
     tr.recLevel = 0;
     tr.recSilent = false;
     startaNivamatare(s);
@@ -247,9 +254,23 @@ export function cancelRecording() {
   tr.recElapsed = 0;
   tr.recError = '';
   tr.recMarkerCount = 0;
+  markorer = [];
   tr.recLevel = 0;
   tr.recSilent = false;
   tr.recLostSecs = 0;
+}
+
+/** Markerar ett viktigt ögonblick. app.js:1462-1466 — bara en tidsstämpel;
+ *  etiketter finns i schemat men gamla appen skriver aldrig någon. */
+export function addRecMarker() {
+  if (!tr.recording || !session) return;
+  markorer = [...markorer, { t: tr.recElapsed }];
+  tr.recMarkerCount = markorer.length;
+  // Skrivs till localStorage direkt. Gamla appen håller dem BARA i minnet, så
+  // en krasch mitt i lektionen förlorar dem permanent — återställningen
+  // återskapar bara ljudet.
+  const post = lasSession(session) || { mime: '', markers: [] };
+  sparaSession(session, { ...post, markers: markorer });
 }
 
 function vaktaOmladdning(e) {
@@ -333,7 +354,7 @@ function koaChunk(blob) {
   return uppladdningsKedja;
 }
 
-/** Stänger sessionen och lägger filen i kön. Markörerna kopplas i Task 4. */
+/** Stänger sessionen, lägger filen i kön och lämnar över markörerna. */
 async function slutforInspelning(mime) {
   // Fångas SYNKRONT, före det första await:et — se inspelningsToken.
   const token = inspelningsToken;
@@ -341,6 +362,15 @@ async function slutforInspelning(mime) {
   stoppaNivamatare();
   const s = session;
   session = null;
+  // Markörerna fångas SYNKRONT tillsammans med sessionen och token, av exakt
+  // samma skäl. Läses `markorer` först efter await:en nedan kan läraren redan
+  // ha startat en NY inspelning (som nollställt listan) och satt markörer i
+  // den — då hade den gamla filen fått den nya lektionens markörer, och den
+  // nya lektionen blivit av med dem. Nollställningen här är dessutom vad som
+  // gör listan tom för nästa inspelning även utan startRecording, t.ex. om
+  // läraren stoppar och aldrig spelar in igen.
+  const mina = markorer;
+  markorer = [];
   if (!s) {
     if (token === inspelningsToken) tr.recElapsed = 0;
     return;
@@ -355,6 +385,31 @@ async function slutforInspelning(mime) {
     const res = await r.json();
     const aktuell = token === inspelningsToken;
     if (res && res.path) {
+      // Markörhandoffen är MEDVETET ovaktad, precis som addFiles nedan — och
+      // till skillnad från räknarna sist i grenen. Skälet är detsamma som för
+      // addFiles: det här hör till FILEN, inte till den inspelning widgeten
+      // visar just nu. Nyckeln är res.path, mellanlagret läses av actions.js
+      // när just den filen transkriberats klart, och filen köas ovillkorligt.
+      // Hoppade vi över handoffen när körningen är inaktuell skulle den gamla
+      // lektionen transkriberas utan sina markörer, samtidigt som posten i
+      // localStorage blev kvar för alltid — ingen skulle någonsin posta eller
+      // glömma den. Ingen krock med en pågående inspelning är möjlig: den har
+      // en egen session och en egen (nyss nollställd) markörlista, och
+      // nycklarna i tr.recMarkersByPath är filsökvägar som finish gjort unika.
+      //
+      // Posten i localStorage behålls så länge markörerna väntar — det ÄR
+      // kraschnätet — och glöms först i actions.js, när servern tagit emot dem.
+      if (mina.length) {
+        tr.recMarkersByPath = {
+          ...tr.recMarkersByPath,
+          [res.path]: { session: s, markers: mina },
+        };
+      } else {
+        // Inga markörer att vänta på, alltså inget att skydda mot en krasch.
+        // Posten bär bara mime i det läget.
+        glomSession(s);
+      }
+
       // Filen läggs ALLTID i kön, även om en ny inspelning hunnit starta: en
       // lektion går inte att spela in igen, filen ligger redan färdig på disk
       // (finish har döpt om .part-filen) och skulle annars försvinna ur UI:t
@@ -392,9 +447,16 @@ async function slutforInspelning(mime) {
       // Ingen generationsvakt på felet, medvetet: det gäller den GAMLA
       // inspelningen och måste nå läraren även om en ny hunnit starta —
       // annars försvinner beskedet att en hel lektion inte gick att slutföra.
+      //
+      // Markörerna är borta ur minnet här (de fångades och nollställdes
+      // synkront ovan), men posten i localStorage rörs INTE: filen blev aldrig
+      // klar, så det finns ingen sökväg att nyckla dem på. Ljudet ligger kvar
+      // som en .part och erbjuds av /api/recordings/incomplete — markörerna
+      // ligger kvar bredvid, under samma sessions-id, åt återställningen.
       tr.recError = (res && res.error) || 'Kunde inte slutföra inspelningen.';
     }
   } catch {
+    // Samma sak här: posten i localStorage lämnas kvar åt återställningen.
     tr.recError = 'Kunde inte slutföra inspelningen.';
   }
 }
