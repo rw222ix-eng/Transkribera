@@ -366,6 +366,17 @@ export async function startRun() {
         tr.qStatus = { ...tr.qStatus, [aktiv.id]: 'done' };
         tr.qProgress = { ...tr.qProgress, [aktiv.id]: 100 };
         tr.log = [...tr.log, '[klar] Färdig på ' + fmtTid(tr.elapsed)];
+        const nasta = nextPending(aktiv.id);
+        if (nasta) {
+          // Nästa fil startar efter en kort paus, så läraren hinner se att den
+          // förra blev klar. Speglar app.js:2256-2259.
+          setTimeout(() => {
+            if (token !== korToken) return;
+            tr.activeId = nasta;
+            tr.run = 'idle';
+            startRun();
+          }, 800);
+        }
       }
     },
   );

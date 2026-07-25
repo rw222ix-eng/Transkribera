@@ -95,6 +95,16 @@ export default defineConfig({
       // undertextvillkoret. Steg 3 (själva körningen) täcks INTE här — det
       // steget finns inte än, se plan A3. Startknappen renderas avstängd,
       // och specen kontrollerar just att den ÄR avstängd.
+      //
+      // Plan A3 Task 6 lägger till e2e/transkribera-korning.spec.mjs (samma
+      // placering, samma fejkserver) som täcker guidens steg 3: att starten
+      // tar guiden hit med stegindikatorn på Transkribering, att körningen
+      // når Klar med 100 % och klarbeskedet, att loggen fälls ut, och att ett
+      // avbrott landar i avbrutet-kortet med Återuppta och en verklig POST
+      // till /api/transcribe/cancel. Överlämningen till Inspelningar täcks
+      // INTE — den vyn är inte migrerad än, så guiden stannar medvetet kvar
+      // på steg 3 och säger det i klartext i stället för att navigera till en
+      // platshållare (se plan A3).
       name: "next-foundation",
       testDir: __dirname,
       testMatch: [
@@ -104,6 +114,7 @@ export default defineConfig({
         /planering-prov\.spec\.mjs$/,
         /transkribera-kalla\.spec\.mjs$/,
         /transkribera-installningar\.spec\.mjs$/,
+        /transkribera-korning\.spec\.mjs$/,
       ],
       use: { ...devices["Desktop Chrome"] },
     },

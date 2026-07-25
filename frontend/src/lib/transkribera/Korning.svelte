@@ -13,6 +13,11 @@
 
   const aktiv = $derived(tr.queue.find((q) => q.id === tr.activeId) || tr.queue[0] || null);
 
+  // Finns det fler filer som inte körts än? Då är körningen inte färdig, även
+  // om den AKTUELLA filen är klar — kedjan i startRun startar nästa efter
+  // 800 ms. Klarbeskedet får bara visas när hela kön är tömd.
+  const nagotKvar = $derived(!!tr.queue.find((q) => (tr.qStatus[q.id] || 'pending') === 'pending'));
+
   const status = $derived(
     tr.run === 'running' ? 'Kör' :
     tr.run === 'done' ? 'Klar' :
@@ -97,6 +102,26 @@
     </ol>
   {/if}
 </div>
+
+{#if tr.run === 'done' && !nagotKvar}
+  <div class="klar-besked">
+    <p class="klar-titel">Klart — lektionen är sparad.</p>
+    {#if tr.resultFiles.length}
+      <ul class="filer">
+        <!-- Servern skickar filerna som objekt ({path, name, ext, kind, size},
+             se app/output_store.py:_file_entry), inte som strängar — utan
+             .name skulle raden bli "[object Object]". `|| f` behåller stödet
+             för en ren sträng om kontraktet någonsin förenklas. -->
+        {#each tr.resultFiles as f}<li>{f.name || f}</li>{/each}
+      </ul>
+    {/if}
+    <p class="senare">
+      Inspelningar — där lektionen går att öppna, läsa och söka i — migreras i en
+      senare plan. Tills dess finns den i den gamla appen.
+    </p>
+    <button type="button" class="ghost" onclick={goSource}>Transkribera något mer</button>
+  </div>
+{/if}
 
 {#if tr.queue.length > 1}
   <p class="kolabel">Kö — {Object.values(tr.qStatus).filter((s) => s === 'done').length} av {tr.queue.length} klara</p>
@@ -272,6 +297,30 @@
     color: var(--ink-2);
     font-variant-numeric: tabular-nums;
   }
+  /* Klarbeskedet. Guiden stannar kvar på steg 3 — Inspelningar är inte
+     migrerad än, så det finns ingenstans att navigera. Beskedet säger det
+     rakt ut i stället för att låtsas. */
+  .klar-besked {
+    margin-top: 28px;
+    padding-top: 20px;
+    border-top: 1px solid var(--line);
+  }
+  .klar-titel {
+    font-weight: 600;
+    font-size: 1.125rem;
+    color: var(--ink);
+    margin: 0 0 12px;
+  }
+  .filer {
+    list-style: none;
+    margin: 0 0 14px;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .filer li { color: var(--ink-2); }
+  .senare { max-width: 62ch; color: var(--ink-2); margin: 0 0 16px; }
   .kolabel {
     font-family: var(--mono);
     font-size: 0.72rem;
