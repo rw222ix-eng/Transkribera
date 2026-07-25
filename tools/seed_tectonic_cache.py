@@ -79,6 +79,8 @@ PROBE_TEX = r"""
 \begin{document}
 Sond för cacheseedning. Matematik: $x^2 - 4x + 3 = 0$,
 $\frac{a}{b} \geq \sqrt{c} \neq \pm\infty$, $\alpha \cdot \beta \leq \Sigma$.
+Storleksstege (text → script → scriptscript, glyf på varje nivå):
+$x^{a \cdot \sqrt{b}}$ och $y^{\frac{c \cdot d}{e}}$.
 \begin{tikzpicture}[scale=0.6]
   \draw[->] (-1,0) -- (4,0); \draw[->] (0,-1) -- (0,4);
   \draw[very thick,domain=-0.5:3.2,smooth,samples=40] plot(\x,{(\x-1)*(\x-3)+2});
@@ -170,8 +172,20 @@ def _representative_doc() -> exam_spec.ExamDoc:
                 # [0,0,0] ligger på föräldern, barnen bär poäng/lösning/
                 # bedömning (samma mönster som _exam_med_deluppgifter i
                 # tests/test_exam.py).
+                # STORLEKSSTEGE: fontfilerna slås upp på NAMN (ntxsy7), inte
+                # på skalad storlek, så det räcker att varje mattestil träffas
+                # en gång — men den måste träffas av en riktig GLYF.
+                #   x^{a \cdot \sqrt{b}} → script: bokstav (ntxmi7) OCH symbol
+                #                          (\cdot, \sqrt → familj 2 = ntxsy7)
+                #   y^{\frac{c \cdot d}{e}} → bråket ligger i script, så
+                #                          täljare/nämnare faller till
+                #                          scriptscript: ntxmi5 + ntxsy5
+                # Utan detta hämtades bara .tfm-metriken och --only-cached
+                # kraschade på skarpa prov med "Could not locate a virtual/
+                # physical font for TFM ntxsy7" (skarp körning 2026-07-25).
                 text=r"En population modelleras av $N(t) = N_0 \cdot a^{t}$. "
-                     r"Undersök hur populationen växer.",
+                     r"Undersök hur populationen växer. Förenkla också "
+                     r"$x^{a \cdot \sqrt{b}}$ och $y^{\frac{c \cdot d}{e}}$.",
                 losning="", bedomning="",
                 deluppgifter=[
                     exam_spec.SubItem(
