@@ -926,7 +926,8 @@ git commit -m "feat(transkribera): oavslutade inspelningar med rätt filändelse
   function tillInspelningen() {
     setTab('transkribera');
     // Byt INTE steg när körsteget bär något oåterkalleligt. Se noten nedan.
-    if (tr.run !== 'running' && tr.run !== 'done') goSource();
+    if (tr.step === 'process' && (tr.run === 'running' || tr.run === 'done')) return;
+    goSource();
   }
 </script>
 
@@ -947,7 +948,9 @@ Styling: `var(--bad)` for the dot, `var(--surface)`/`var(--line)` for the chip, 
 
 - [ ] **Step 2: Mount it in the topbar**
 
-In `frontend/src/lib/shell/AppShell.svelte`, import it and place it between the `<nav class="flikar">` block and `<div class="temaruta">`:
+In `frontend/src/lib/shell/AppShell.svelte`, import it and place it **inside** `<div class="temaruta">`, before the theme button.
+
+**Not between `.flikar` and `.temaruta`** — an earlier draft said that and a review rejected it. `.ordmarke` and `.temaruta` are both `flex: 1 1 0`, and that is what centres `.flikar`. A `flex: 0 0 auto` badge inserted as a *fourth* column shifts the tab group roughly 85px sideways the moment recording starts, and back when it stops. Inside the existing right-hand column it costs nothing.
 
 ```svelte
   <InspelningBricka />
@@ -971,7 +974,9 @@ Create `e2e/transkribera-inspelning.spec.mjs`. Follow the style of `e2e/transkri
 
 10. the whole marker chain, not just the counter: record with markers → stop → let the transcription finish → assert a `POST /api/recordings/{id}/markers` carrying those timestamps, and that the session's `localStorage` key is **gone** afterwards. Do not skip this: it is the only part of A4 that spans three files (`inspelning.svelte.js` writes, `stores.svelte.js` carries, `actions.js` posts), case 3 only proves the first hop, and a broken hand-off loses the teacher's markers silently.
 
-Cases 7–10 were each proven once by hand with scratchpad driver scripts (`.superpowers/sdd/a4-task-3-report.md`, `a4-task-4-report.md`) that are **not** in the repo — so until they live here they have no permanent regression guard.
+11. the two locks that keep a recording and a run from colliding: with a recording in progress the start button on step 2 is **disabled** and says so, and clicking the badge from step 3 while `run === 'running'` leaves the run intact. Do not skip this: without the first lock a teacher can start a transcription mid-recording, and without the second a badge click unmounts `<Korning />` — the finished state, the result files and "Transkribera något mer" all become unreachable, and pressing start again re-runs the same finished item into a second lesson row and a second output folder.
+
+Cases 7–11 were each proven once by hand with scratchpad driver scripts (`.superpowers/sdd/a4-task-3-report.md`, `a4-task-4-report.md`) that are **not** in the repo — so until they live here they have no permanent regression guard.
 
 Assert on user-visible text and ARIA, never on internal state. Never pin elapsed time or any wall-clock value.
 

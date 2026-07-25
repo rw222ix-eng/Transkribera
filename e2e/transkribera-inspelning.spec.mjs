@@ -88,7 +88,7 @@ function partFiler() {
  * Chrome loggar varje anrop testet självt aborterat eller besvarat med 5xx som
  * ett konsolfel ("Failed to load resource: net::ERR_FAILED"). De felen är
  * testets egna injektioner, inte appens — allt annat räknas fortfarande.
- * Används BARA i de tre testerna som injicerar uppladdningsfel.
+ * Används BARA i de fyra testerna som injicerar nätverksfel.
  */
 function appfel(errors) {
   return errors.filter((e) => !/Failed to load resource/.test(e));
@@ -155,7 +155,11 @@ let fanns = new Set();
  * .part-filer.
  */
 function egenArtefakt(namn) {
-  return /^lektion_\d{4}-\d{2}-\d{2}_\d{4}\./.test(namn) || namn.endsWith(".part");
+  // [.-] och inte bara \. — server.py:785 döper om till
+  // lektion_<stämpel>-<uuid8>.webm när målnamnet redan finns. En sådan kvarleva
+  // från en avbruten körning skulle annars hamna i ögonblicksbilden och förgifta
+  // /api/sample bestående, vilket är precis det den här rensningen finns för.
+  return /^lektion_\d{4}-\d{2}-\d{2}_\d{4}[.-]/.test(namn) || namn.endsWith(".part");
 }
 
 test.beforeAll(() => {
