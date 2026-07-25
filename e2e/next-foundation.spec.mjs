@@ -10,8 +10,17 @@ test("Svelte-grunden under /next/ renderar", async ({ page }) => {
 
   await page.goto("/next/");
 
-  // Vyns rubrik — sätts av PlaneringView, inte av det gamla scaffold-skalet.
-  await expect(page.locator("#app h1")).toHaveText("Dagens tavla");
+  // Skalet: tre flikar, Transkribera aktiv från start.
+  const tabs = ["Transkribera", "Inspelningar", "Planering"];
+  for (const t of tabs) {
+    await expect(page.getByRole("button", { name: t, exact: true })).toBeVisible();
+  }
+  await expect(page.getByRole("button", { name: "Transkribera", exact: true }))
+    .toHaveAttribute("aria-pressed", "true");
+
+  // Planeringsvyn finns kvar bakom sin flik.
+  await page.getByRole("button", { name: "Planering", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Dagens tavla" })).toBeVisible();
 
   const bg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
   expect(bg).toBe("rgb(241, 242, 237)"); // pappersduken (#F1F2ED)

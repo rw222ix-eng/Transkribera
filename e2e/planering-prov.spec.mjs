@@ -33,6 +33,10 @@ test("Planering (/next/): skriv provet, ändra via chatten, godkänn & PDF", asy
 
   await page.goto("/next/");
 
+  // Skalet startar på Transkribera-fliken (som gamla appen) — gå till
+  // Planering först. Se docs/superpowers/plans/2026-07-25-transkribera-A1-skal-och-kalla.md.
+  await page.getByRole("button", { name: "Planering", exact: true }).click();
+
   // 1) Typväljaren: Prov byter rubriken (heading, "Nytt prov" — serif-
   // kursiverade "prov" ingår i den tillgängliga rubriktexten).
   await expect(page.getByRole("heading", { name: /tavla/i })).toBeVisible();

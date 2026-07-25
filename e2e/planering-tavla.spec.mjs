@@ -20,6 +20,10 @@ test("Planering (/next/): skriv tavlan, förhandsvisa, ändra-raden, godkänn & 
 
   await page.goto("/next/");
 
+  // Skalet startar på Transkribera-fliken (som gamla appen) — gå till
+  // Planering först. Se docs/superpowers/plans/2026-07-25-transkribera-A1-skal-och-kalla.md.
+  await page.getByRole("button", { name: "Planering", exact: true }).click();
+
   // 1) Masthead: mono-eyebrowen + rubriken (serif-kursiverade "tavla" ingår i
   // den tillgängliga rubriktexten "Dagens tavla").
   await expect(page.getByText("PLANERING", { exact: true })).toBeVisible();
