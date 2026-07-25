@@ -78,7 +78,7 @@
     flex: 0 0 auto;
     width: 40px;
     height: 22px;
-    border-radius: 99px;
+    border-radius: 5px;
     border: 1px solid var(--line-2);
     background: var(--track);
     padding: 2px;
