@@ -1107,16 +1107,28 @@ def test_compile_pdf_real_engine_bedomning_med_djupt_nastlad_matte(tmp_path):
     behöver .vf först när en glyf faktiskt sätts. Med --only-cached (aktivt
     så fort .seeded finns) kraschade Tectonic på skarpa prov med
     'Could not locate a virtual/physical font for TFM "ntxsy7"' medan provet
-    kompilerade felfritt."""
+    kompilerade felfritt.
+
+    Testet täcker även FAMILJ 3 (newtxmaths utökningsfamilj, ntxexx/ntxexa),
+    som är en egen matematisk familj och alltså inte täcks av storleksstegen
+    ovan: \\sum och \\int är familj 3 direkt, och en extensibel parentes
+    (\\left(...\\right)) samt en stor \\sqrt över ett bråk når familj 3 genom
+    delimiter- respektive rottecknets charlist. Summor och integraler är
+    vanliga i riktiga Ma3/Ma4-prov, så luckan var minst lika angelägen som
+    ntxsy7-kraschen."""
     if not exam_pdf.engine_available():
         pytest.skip("Tectonic-motorn saknas (bin/tectonic/tectonic.exe)")
 
     data = copy.deepcopy(_exam())
     # \cdot i en exponent → symbolglyf i script-storlek (ntxsy7).
     # \frac i en exponent → täljare/nämnare i scriptscript (ntxmi5/ntxsy5).
+    # \sum/\int → familj 3 (ntxexx) direkt. \left(...\right) och en stor
+    # \sqrt över ett bråk → familj 3 via delimiter-/rotteckningens charlist.
     data["uppgifter"][0]["text"] = (
         "Förenkla $x^{a \\cdot \\sqrt{b}}$ och bestäm sedan "
-        "$y^{\\frac{c \\cdot d}{e}}$ då $b = 4$.")
+        "$y^{\\frac{c \\cdot d}{e}}$ då $b = 4$. Beräkna även "
+        "$\\sum_{i=1}^{n} i^2$ och $\\int_0^1 f(x)\\,dx$ samt förenkla "
+        "$\\left(\\frac{n(n+1)}{2}\\right)$ och $\\sqrt{\\frac{x}{2}}$.")
     doc, errors = exam_spec.validate_exam_json(data)
     assert doc is not None and errors == []
 

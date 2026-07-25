@@ -81,6 +81,9 @@ Sond för cacheseedning. Matematik: $x^2 - 4x + 3 = 0$,
 $\frac{a}{b} \geq \sqrt{c} \neq \pm\infty$, $\alpha \cdot \beta \leq \Sigma$.
 Storleksstege (text → script → scriptscript, glyf på varje nivå):
 $x^{a \cdot \sqrt{b}}$ och $y^{\frac{c \cdot d}{e}}$.
+Familj 3 (utökningsfamiljen; stor operator, extensibel parentes, stor rot):
+$\sum_{i=1}^{n} i^2$ och $\int_0^1 f(x)\,dx$ samt
+$\left(\frac{n(n+1)}{2}\right)$ och $\sqrt{\frac{x}{2}}$.
 \begin{tikzpicture}[scale=0.6]
   \draw[->] (-1,0) -- (4,0); \draw[->] (0,-1) -- (0,4);
   \draw[very thick,domain=-0.5:3.2,smooth,samples=40] plot(\x,{(\x-1)*(\x-3)+2});
@@ -183,9 +186,25 @@ def _representative_doc() -> exam_spec.ExamDoc:
                 # Utan detta hämtades bara .tfm-metriken och --only-cached
                 # kraschade på skarpa prov med "Could not locate a virtual/
                 # physical font for TFM ntxsy7" (skarp körning 2026-07-25).
+                #
+                # FAMILJ 3 (newtxmaths utökningsfamilj, ntxexx/ntxexa) nås
+                # INTE av stegen ovan — den är inte en storlek utan en EGEN
+                # matematisk familj. \sum och \int är familj 3 direkt (\sum
+                # är \mathchar"1350, \int är \mathchar"1352), och en
+                # extensibel parentes (\left(...\right)) liksom en stor
+                # \sqrt över ett bråk når familj 3 genom att delimiter- och
+                # rottecknets charlist byggs av staplade familj 3-glyfer.
+                # Sådana uttryck är vanliga i riktiga Ma3/Ma4-prov, minst
+                # lika vanliga som storlekskraschen ovan, så utan raden
+                # nedan seedas familj 3 aldrig och --only-cached kraschar på
+                # samma sätt fast på "ntxexx" i stället för "ntxsy7".
                 text=r"En population modelleras av $N(t) = N_0 \cdot a^{t}$. "
                      r"Undersök hur populationen växer. Förenkla också "
-                     r"$x^{a \cdot \sqrt{b}}$ och $y^{\frac{c \cdot d}{e}}$.",
+                     r"$x^{a \cdot \sqrt{b}}$ och $y^{\frac{c \cdot d}{e}}$. "
+                     r"Beräkna även $\sum_{i=1}^{n} i^2$ och "
+                     r"$\int_0^1 f(x)\,dx$ samt förenkla "
+                     r"$\left(\frac{n(n+1)}{2}\right)$ och "
+                     r"$\sqrt{\frac{x}{2}}$.",
                 losning="", bedomning="",
                 deluppgifter=[
                     exam_spec.SubItem(

@@ -86,6 +86,14 @@ def test_sonden_satter_glyfer_i_alla_mattestorlekar():
     physical font'. Därför måste både en symbol (\\cdot, \\sqrt) och en
     bokstav finnas på varje nivå.
 
+    Familj 3 (newtxmaths utökningsfamilj, ntxexx/ntxexa) är INTE en storlek
+    utan en EGEN matematisk familj, och stegen ovan når den aldrig: \\sum
+    och \\int är familj 3 direkt, och en extensibel parentes
+    (\\left(...\\right)) samt en stor \\sqrt över ett bråk når familj 3
+    genom delimiter- respektive rottecknets charlist. Sådana uttryck är
+    minst lika vanliga i riktiga Ma3/Ma4-prov (summor, integraler) som
+    storlekskraschen ovan.
+
     escape_mixed gör om $…$ till \\(…\\), så matte-kroppen matchas utan
     delimitrar."""
     tex = exam_latex.render_bedomning(
@@ -94,7 +102,19 @@ def test_sonden_satter_glyfer_i_alla_mattestorlekar():
         "symbolglyf i script-storlek (ntxsy7) seedas aldrig"
     assert r"y^{\frac{c \cdot d}{e}}" in tex, \
         "glyfer i scriptscript-storlek (ntxmi5/ntxsy5) seedas aldrig"
+    assert r"\sum_{i=1}^{n} i^2" in tex, \
+        "stor operator med gränser (familj 3, ntxexx) seedas aldrig"
+    assert r"\int_0^1 f(x)\,dx" in tex, \
+        "integraltecken (familj 3, ntxexx) seedas aldrig"
+    assert r"\left(\frac{n(n+1)}{2}\right)" in tex, \
+        "extensibel parentes (familj 3, ntxexx/ntxexa) seedas aldrig"
+    assert r"\sqrt{\frac{x}{2}}" in tex, \
+        "stor rot över ett bråk (familj 3, ntxexx/ntxexa) seedas aldrig"
     # Sonden speglar stegen (belt and braces, som \pic-figuren) så att den
     # står kvar även om det representativa dokumentet skrivs om.
     assert r"x^{a \cdot \sqrt{b}}" in seed_tectonic_cache.PROBE_TEX
     assert r"y^{\frac{c \cdot d}{e}}" in seed_tectonic_cache.PROBE_TEX
+    assert r"\sum_{i=1}^{n} i^2" in seed_tectonic_cache.PROBE_TEX
+    assert r"\int_0^1 f(x)\,dx" in seed_tectonic_cache.PROBE_TEX
+    assert r"\left(\frac{n(n+1)}{2}\right)" in seed_tectonic_cache.PROBE_TEX
+    assert r"\sqrt{\frac{x}{2}}" in seed_tectonic_cache.PROBE_TEX
