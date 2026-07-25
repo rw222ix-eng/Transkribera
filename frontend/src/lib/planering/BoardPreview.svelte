@@ -136,7 +136,7 @@
      ingenting live vid den FÖRSTA genereringen. Nu är motorn varm när det smäller.
      Iframen får aldrig villkoras bort: att återskapa den laddar om dokumentet
      och tömmer tavlan. -->
-<figure class="preview" class:zoomed class:idle={!plan.board && plan.phase !== 'running'}>
+<figure class="preview" class:zoomed class:idle={plan.typ !== 'tavla' || (!plan.board && plan.phase !== 'running')}>
     <figcaption class="cap">
       <span class="label">Förhandsvisning</span>
       <span class="title">{title}</span>

@@ -89,12 +89,6 @@
       >✕</button>
     </div>
 
-    {#if prov.log.length}
-      <ol class="log" aria-live="polite">
-        {#each prov.log as line}<li>{line}</li>{/each}
-      </ol>
-    {/if}
-
     {#if summor}
       <p class="sums">
         Totalt {summor.total} p — E {summor.e} · C {summor.c} · A {summor.a}
@@ -221,12 +215,6 @@
     font-family: inherit;
   }
   .close:hover { background: var(--sunken); }
-
-  .log {
-    margin: 0 0 12px;
-    padding-left: 20px;
-    color: var(--ink-2);
-  }
 
   .sums {
     margin: 0 0 4px;

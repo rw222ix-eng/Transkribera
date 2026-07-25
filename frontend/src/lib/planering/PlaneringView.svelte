@@ -8,6 +8,7 @@
   import ProvParams from '../prov/ProvParams.svelte';
   import ProvCard from '../prov/ProvCard.svelte';
   import { plan } from './stores.svelte.js';
+  import { prov } from '../prov/stores.svelte.js';
   import { generateBoard, approveBoard } from './actions.js';
   import { loadContent, loadHistorik, generateExam } from '../prov/actions.js';
 
@@ -46,10 +47,25 @@
   {#if plan.typ !== 'tavla'}
     <ContentPicker />
     <ProvParams />
+    {#if prov.log.length}
+      <ol class="log" aria-live="polite">
+        {#each prov.log as line}
+          <li class:failed={line.startsWith('Fel:')}>{line}</li>
+        {/each}
+      </ol>
+    {/if}
+    {#if prov.errors.length}
+      <ul class="errors">
+        {#each prov.errors as err}<li>{err}</li>{/each}
+      </ul>
+    {/if}
     <ProvCard />
   {/if}
+  <!-- BoardPreview villkoras aldrig bort — iframen måste stå monterad hela
+       tiden (se kommentaren i BoardPreview.svelte). Den göms visuellt via sin
+       egen idle-klass när typen inte är tavla. -->
   <BoardPreview />
-  {#if plan.phase === 'running' && plan.liveSections > 0}
+  {#if plan.typ === 'tavla' && plan.phase === 'running' && plan.liveSections > 0}
     <p class="live" aria-live="polite">
       Ritar live — {plan.liveSections}
       {plan.liveSections === 1 ? 'sektion' : 'sektioner'} hittills …
@@ -57,7 +73,7 @@
   {/if}
   <ChangeChat />
 
-  {#if plan.id && plan.phase === 'done'}
+  {#if plan.typ === 'tavla' && plan.id && plan.phase === 'done'}
     <div class="approve">
       <button class="primary" disabled={plan.saving} onclick={() => approveBoard()}>
         {plan.saving ? 'Sparar …' : 'Godkänn och spara'}
@@ -71,18 +87,20 @@
     </div>
   {/if}
 
-  {#if plan.log.length}
-    <ol class="log" aria-live="polite">
-      {#each plan.log as line}
-        <li class:failed={line.startsWith('Fel:')}>{line}</li>
-      {/each}
-    </ol>
-  {/if}
+  {#if plan.typ === 'tavla'}
+    {#if plan.log.length}
+      <ol class="log" aria-live="polite">
+        {#each plan.log as line}
+          <li class:failed={line.startsWith('Fel:')}>{line}</li>
+        {/each}
+      </ol>
+    {/if}
 
-  {#if plan.errors.length}
-    <ul class="errors">
-      {#each plan.errors as err}<li>{err}</li>{/each}
-    </ul>
+    {#if plan.errors.length}
+      <ul class="errors">
+        {#each plan.errors as err}<li>{err}</li>{/each}
+      </ul>
+    {/if}
   {/if}
 </section>
 
