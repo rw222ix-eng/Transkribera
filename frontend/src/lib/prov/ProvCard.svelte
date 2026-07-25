@@ -23,7 +23,7 @@
     let n = 0;
     for (const del of DEL_ORDNING) {
       for (const u of uppgifter) {
-        if ((u.del ?? null) !== del) continue;
+        if ((u.del || null) !== del) continue;
         n += 1;
         out.push({ nummer: n, del: u.del || '', text: u.text || '', poang: poangOf(u) });
       }
