@@ -147,9 +147,35 @@ function flik(page, namn) {
 // Därför: allt den här filen lägger till i downloads/ tas bort igen.
 let fanns = new Set();
 
+/**
+ * Filer som BARA den här specen skapar: avslutade inspelningar
+ * (lektion_<stämpel>.<ext>, namnsatt av inspelning.svelte.js) och halvfärdiga
+ * .part-filer.
+ */
+function egenArtefakt(namn) {
+  return /^lektion_\d{4}-\d{2}-\d{2}_\d{4}\./.test(namn) || namn.endsWith(".part");
+}
+
 test.beforeAll(() => {
   const d = nedladdningar();
-  fanns = new Set(fs.existsSync(d) ? fs.readdirSync(d) : []);
+  if (!fs.existsSync(d)) {
+    fanns = new Set();
+    return;
+  }
+  // Städa FÖRE ögonblicksbilden, annars konserverar den skräp i stället för att
+  // rensa det. playwright.config.ts har reuseExistingServer: true, och
+  // serve_test_app.py torkar basmappen bara när servern FAKTISKT startar.
+  // Avbryts en körning (Ctrl-C, kraschad worker) med en lektion_*.webm kvar i
+  // downloads/, tar nästa körning mot samma levande server in filen i `fanns` —
+  // och då rör afterEach den aldrig. Eftersom den fortfarande är senast ändrad
+  // mediefil fortsätter /api/sample (server.py:1718-1734) att returnera den, och
+  // transkribera-installningar + transkribera-korning faller på nytt — nu
+  // BESTÅENDE i stället för övergående. Specens egna filer ska därför aldrig
+  // kunna hamna under ögonblicksbildens skydd.
+  for (const f of fs.readdirSync(d)) {
+    if (egenArtefakt(f)) fs.rmSync(path.join(d, f), { force: true, recursive: true });
+  }
+  fanns = new Set(fs.readdirSync(d));
 });
 
 test.afterEach(() => {
