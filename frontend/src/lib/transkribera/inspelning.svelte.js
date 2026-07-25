@@ -182,6 +182,13 @@ export function stopRecording() {
     // eller redan 'inactive' kommer inget onstop, inga spår stoppas och
     // mikrofonlampan lyser vidare fast läraren tror att hon stoppat.
     // stoppaStrom() är idempotent, så dubbelanrop är ofarligt.
+    //
+    // MEN — utgå INTE från att stopRecording alltid stänger sessionen: i
+    // else-grenen skickas varken finish eller discard, och `session` nollställs
+    // inte. En .part blir kvar på servern och en efterföljande startRecording
+    // skriver över modulvariabeln. Vägen är inte nåbar från UI:t och backend
+    // erbjuder filen som "ofullständig", vilket är rimligt — men den som bygger
+    // vidare (Task 5) måste veta att sessionen bara stängs via onstop-vägen.
     if (recorder && recorder.state !== 'inactive') recorder.stop();
     else stoppaStrom();
   } catch { /* redan stoppad */ }
