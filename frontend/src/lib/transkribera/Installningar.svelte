@@ -1,11 +1,12 @@
 <script>
   // Guidens steg 2 — inställningar. Speglar viewTranscribe:s stepConfig-gren
   // (app/web/static/app.js:4472-4578), omstylad till designsystemet.
-  import { tr, extOf } from './stores.svelte.js';
-  import { removeFromQueue, goSource } from './actions.js';
+  import { tr } from './stores.svelte.js';
+  import { goSource } from './actions.js';
   import Sprakval from './Sprakval.svelte';
   import Formatval from './Formatval.svelte';
   import Undertextval from './Undertextval.svelte';
+  import Kolista from './Kolista.svelte';
   import { katalog } from './katalog.svelte.js';
 
   const startEtikett = $derived(
@@ -37,20 +38,7 @@
   <button type="button" class="ghost" onclick={goSource}>Lägg till fler</button>
 </div>
 
-<ul class="ko">
-  {#each tr.queue as q (q.id)}
-    <li>
-      <span class="ext">{(/^https?:/i).test(q.path || '') ? 'URL' : (extOf(q.name) || 'fil')}</span>
-      <span class="namn">{q.name}</span>
-      <button
-        type="button"
-        class="bort"
-        aria-label={'Ta bort ' + q.name + ' ur kön'}
-        onclick={() => removeFromQueue(q.id)}
-      >✕</button>
-    </li>
-  {/each}
-</ul>
+<Kolista />
 
 <Sprakval />
 <Formatval />
@@ -121,42 +109,6 @@
     font-size: inherit;
     cursor: pointer;
   }
-  .ko { list-style: none; margin: 0; padding: 0; }
-  .ko li {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    border-top: 1px solid var(--line);
-    padding: 12px 0;
-  }
-  .ext {
-    font-family: var(--mono);
-    font-size: 0.72rem;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--ink-3);
-    flex: 0 0 auto;
-  }
-  .namn {
-    flex: 1;
-    min-width: 0;
-    color: var(--ink);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .bort {
-    flex: 0 0 auto;
-    border: 1px solid var(--line);
-    background: transparent;
-    color: var(--ink-3);
-    border-radius: 3px;
-    padding: 5px 10px;
-    font-family: inherit;
-    font-size: inherit;
-    cursor: pointer;
-  }
-  .bort:hover { border-color: var(--bad); color: var(--bad); }
   .start {
     display: flex;
     align-items: center;

@@ -2,11 +2,12 @@
   // Transkriberingsguiden, steg 1 — Källa. Speglar viewTranscribe:s
   // stepSource-gren (app/web/static/app.js:4383-4470), omstylad till
   // designsystemet. Steg 2 kom i plan A2. Steg 3 kommer i plan A3.
-  import { tr, extOf } from './stores.svelte.js';
-  import { removeFromQueue, addSample, addSampleCorrupt, goConfig } from './actions.js';
+  import { tr } from './stores.svelte.js';
+  import { addSample, addSampleCorrupt, goConfig } from './actions.js';
   import Stegindikator from './Stegindikator.svelte';
   import Dropzone from './Dropzone.svelte';
   import LankFalt from './LankFalt.svelte';
+  import Kolista from './Kolista.svelte';
   import Installningar from './Installningar.svelte';
   import { loadKatalog } from './katalog.svelte.js';
 
@@ -63,20 +64,9 @@
     <p class="fel" class:info={tr.fileNoteArt === 'info'} aria-hidden="true">{tr.fileError}</p>
 
     {#if tr.queue.length}
-      <ul class="ko">
-        {#each tr.queue as q (q.id)}
-          <li>
-            <span class="ext">{(/^https?:/i).test(q.path || '') ? 'URL' : (extOf(q.name) || 'fil')}</span>
-            <span class="namn">{q.name}</span>
-            <button
-              type="button"
-              class="bort"
-              aria-label={'Ta bort ' + q.name + ' ur kön'}
-              onclick={() => removeFromQueue(q.id)}
-            >✕</button>
-          </li>
-        {/each}
-      </ul>
+      <div class="ko-wrap">
+        <Kolista />
+      </div>
       <p class="antal">{tr.queue.length} {tr.queue.length === 1 ? 'fil' : 'filer'} i kön.</p>
     {/if}
 
@@ -147,43 +137,7 @@
     clip-path: inset(50%);
     white-space: nowrap;
   }
-  .ko { list-style: none; margin: 20px 0 0; padding: 0; }
-  .ko li {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    border-top: 1px solid var(--line);
-    padding: 12px 0;
-  }
-  .ko li:first-child { border-top: none; }
-  .ext {
-    font-family: var(--mono);
-    font-size: 0.72rem;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--ink-3);
-    flex: 0 0 auto;
-  }
-  .namn {
-    flex: 1;
-    min-width: 0;
-    color: var(--ink);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .bort {
-    flex: 0 0 auto;
-    border: 1px solid var(--line);
-    background: transparent;
-    color: var(--ink-3);
-    border-radius: 3px;
-    padding: 5px 10px;
-    font-family: inherit;
-    font-size: inherit;
-    cursor: pointer;
-  }
-  .bort:hover { border-color: var(--bad); color: var(--bad); }
+  .ko-wrap { margin: 20px 0 0; }
   .antal { color: var(--ink-3); margin: 10px 0 0; }
   .vidare { margin: 24px 0 0; }
   .primar {
