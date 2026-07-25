@@ -137,3 +137,27 @@ export function onDrop(e) {
   if (fs.length) addFiles(fs);
   else tr.dragging = false;
 }
+
+/** Namn att visa i kön för en länk. Speglar urlName, app.js:1373. */
+function lankNamn(u) {
+  if (/youtu/i.test(u)) return 'YouTube-länk';
+  try {
+    return new URL(u).hostname.replace(/^www\./, '') + '-länk';
+  } catch {
+    return 'Länk';
+  }
+}
+
+/**
+ * Köar en länk. Backendens /api/transcribe hämtar http(s)-källor med yt-dlp,
+ * så kön bär bara URL:en som sökväg. Speglar addUrl, app.js:1374-1380.
+ */
+export function addUrl() {
+  const u = tr.urlInput.trim();
+  if (!/^https?:\/\//i.test(u)) {
+    tr.fileError = 'Klistra in en giltig länk (måste börja med http:// eller https://).';
+    return;
+  }
+  addFiles([{ name: lankNamn(u), path: u }]);
+  tr.urlInput = '';
+}

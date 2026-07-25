@@ -6,6 +6,7 @@
   import { removeFromQueue, addSample, addSampleCorrupt } from './actions.js';
   import Stegindikator from './Stegindikator.svelte';
   import Dropzone from './Dropzone.svelte';
+  import LankFalt from './LankFalt.svelte';
 </script>
 
 <section class="view">
@@ -18,6 +19,7 @@
   </p>
 
   <Dropzone />
+  <LankFalt />
 
   <p class="prova">
     Eller prova med
