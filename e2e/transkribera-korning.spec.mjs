@@ -12,12 +12,16 @@
 // POSTen är inte bokföring, det är den som avslutar subprocessen på servern
 // och släpper GPU:n (app.js:2270-2276).
 //
+// TÄCKER OCKSÅ kökedjan: att klarbeskedet HÅLLS TILLBAKA så länge en post i
+// kön fortfarande väntar (nagotKvar), och att done-grenens setTimeout-kedja
+// verkligen startar nästa post. Miljön har bara EN riktig mediefil
+// (/api/sample), så post 2 är `skadad_inspelning.m4a` — den felar direkt på
+// servern ("Filen finns inte", app/web/server.py:524). Det räcker: kedjan
+// behöver bara STARTA post 2 för att vara observerbar.
+//
 // TÄCKER INTE överlämningen till Inspelningar: den vyn är inte migrerad än,
 // så guiden stannar medvetet kvar på steg 3 och säger det i klartext i
-// stället för att navigera till en platshållare (se plan A3). TÄCKER INTE
-// heller kökedjan med flera filer (startRun startar nästa post efter 800 ms) —
-// miljön har bara EN riktig mediefil att köa (/api/sample), och ett påhittat
-// filnamn skulle ta felvägen i stället för att bli klart.
+// stället för att navigera till en platshållare (se plan A3).
 import { test, expect, failOnConsoleError } from "./helpers/app";
 
 /** Förkontroll: utan demofilen blir felet annars en obegriplig timeout. */
@@ -32,18 +36,24 @@ async function kravExempel(page) {
 }
 
 /**
- * Köar exemplet och väntar in startknappen. /api/models gör en riktig
+ * Väntar in startknappen och trycker på den. /api/models gör en riktig
  * hårdvaruskanning även i fejkläge, så vi väntar in katalogen i stället för en
  * fast paus. Svenska är förvalt talat språk, och KB-Whisper large (svenska) är
  * den enda riktigt installerade modellen i den här miljön — bara det språket
- * kan göra knappen klickbar.
+ * kan göra knappen klickbar. Etiketten byter form vid flera filer
+ * (Installningar.svelte:12-20), därför är den en parameter.
  */
-async function startaExempel(page) {
-  await page.getByRole("button", { name: "ett exempel", exact: true }).click();
-  const start = page.getByRole("button", { name: "Starta transkribering", exact: true });
+async function startaKon(page, etikett = "Starta transkribering") {
+  const start = page.getByRole("button", { name: etikett, exact: true });
   await expect(start).toBeVisible({ timeout: 20_000 });
   await expect(start).toBeEnabled({ timeout: 20_000 });
   await start.click();
+}
+
+/** Köar exemplet och startar. */
+async function startaExempel(page) {
+  await page.getByRole("button", { name: "ett exempel", exact: true }).click();
+  await startaKon(page);
 }
 
 test("Transkribera (/next/): körningen blir klar, med filer och logg", async ({ page }) => {
@@ -197,6 +207,87 @@ test("Transkribera (/next/): avbrott stoppar körningen och erbjuder Återuppta"
   // körningen var klar.
   const brott = await page.evaluate(() => window.__e2eBrott);
   expect(brott, "Baren visade 100 % innan körningen var klar: " + brott.join(", ")).toEqual([]);
+
+  expect(errors, errors.join("\n")).toEqual([]);
+});
+
+test("Transkribera (/next/): kökedjan startar nästa post och håller tillbaka klarbeskedet", async ({ page }) => {
+  const errors = [];
+  failOnConsoleError(page, errors);
+
+  // Fönstret där post 1 är klar och post 2 fortfarande väntar är bara 800 ms
+  // långt (kedjans setTimeout i actions.js). En stickprovsassertion mitt i det
+  // fönstret vore ett kapplöpningstest, så i stället installeras — före
+  // navigeringen — en MutationObserver som läser av VARJE DOM-mutation. Samma
+  // slags vakt som avbrottstestet ovan använder.
+  //
+  //   brott:      klarbeskedet fanns medan en köpost stod på "Väntar" —
+  //               alltså nagotKvar-grinden inverterad eller borta.
+  //   vantelage:  antalet mutationer där körningen sa "Klar" OCH en post
+  //               stod kvar på "Väntar" — beviset att testet verkligen
+  //               passerade genom det tillstånd grinden gäller, i stället för
+  //               att godkännas tomt.
+  await page.addInitScript(() => {
+    window.__e2eKedja = { brott: [], vantelage: 0 };
+    const las = (el) => (el?.textContent || "").replace(/\s+/g, " ").trim();
+    const kolla = () => {
+      const laget = las(document.querySelector(".kort .status"));
+      const ko = [...document.querySelectorAll(".ko .qstatus")].map(las);
+      const vantar = ko.includes("Väntar");
+      if (!vantar) return;
+      if (document.querySelector(".klar-besked")) {
+        window.__e2eKedja.brott.push(laget + " / kö: " + ko.join(","));
+      }
+      if (laget === "Klar") window.__e2eKedja.vantelage++;
+    };
+    const start = () => new MutationObserver(kolla).observe(document.body, {
+      subtree: true, childList: true, characterData: true,
+    });
+    if (document.body) start();
+    else document.addEventListener("DOMContentLoaded", start);
+  });
+
+  await page.goto("/next/");
+  await kravExempel(page);
+
+  // Två poster, i den ordningen: exemplet blir klart och kedjan tar vid;
+  // skadad_inspelning.m4a finns inte på disk och felar direkt på servern.
+  // Ordningen är bärande — kedjan sitter i done-grenen, så en felande post 1
+  // skulle aldrig starta post 2. Att köa flyttar guiden till steg 2, därför
+  // tar "Lägg till fler" oss tillbaka till steg 1 för den andra posten.
+  await page.getByRole("button", { name: "ett exempel", exact: true }).click();
+  await page.getByRole("button", { name: "Lägg till fler", exact: true }).click();
+  await page.getByRole("button", { name: "skadad_inspelning.m4a", exact: true }).click();
+  await expect(page.locator("ul.ko li")).toHaveCount(2);
+
+  await startaKon(page, "Starta · 2 filer");
+
+  const kortFil = page.locator(".kort .fil");
+  const status = page.locator(".kort .status");
+  await expect(kortFil).toHaveText("Mamma waw isolerad.wav");
+
+  // Kedjan tar vid: kortet byter till post 2, som felar på servern. Utan
+  // setTimeout-kedjan i done-grenen står kortet kvar på post 1 för alltid.
+  await expect(kortFil).toHaveText("skadad_inspelning.m4a", { timeout: 30_000 });
+  await expect(status).toHaveText("Fel", { timeout: 15_000 });
+
+  // Post 1 blev alltså verkligen klar innan kedjan gick vidare.
+  await expect(page.getByText("Kö — 1 av 2 klara")).toBeVisible();
+
+  // Klarbeskedet hör till en TÖMD kö och får inte finnas här — varken nu
+  // (post 2 felade) eller under väntefönstret (vakten nedan).
+  await expect(page.getByText("Klart — lektionen är sparad.")).toHaveCount(0);
+
+  const kedja = await page.evaluate(() => window.__e2eKedja);
+  expect(
+    kedja.brott,
+    "Klarbeskedet visades medan en köpost fortfarande väntade: " + kedja.brott.join(" | "),
+  ).toEqual([]);
+  expect(
+    kedja.vantelage,
+    "Testet passerade aldrig tillståndet \"post 1 klar, post 2 väntar\" — " +
+      "vakten ovan hade inget att fånga och assertionen vore tom.",
+  ).toBeGreaterThan(0);
 
   expect(errors, errors.join("\n")).toEqual([]);
 });
