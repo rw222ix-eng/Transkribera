@@ -14,7 +14,6 @@
   type="button"
   class="zon"
   class:over={tr.dragging}
-  aria-label="Välj eller dra in ljud- eller videofiler"
   onclick={openPicker}
   ondragover={onDragOver}
   ondragleave={onDragLeave}
