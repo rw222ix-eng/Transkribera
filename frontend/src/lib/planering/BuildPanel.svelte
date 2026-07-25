@@ -13,10 +13,14 @@
   // prov.phase) — "running" måste läsa rätt store beroende på typ, annars
   // visar CTA:n aldrig "Skriver …" under en provgenerering.
   const running = $derived(plan.typ === 'tavla' ? plan.phase === 'running' : prov.phase === 'running');
-  const hasContent = $derived(Object.values(prov.valda).some(Boolean));
+  // Innehållsvalet är valfritt för prov/arbetsblad, precis som i gamla appen
+  // (exCanStart: !!st.byggCourseId, app.js:3605) — utan val väljer modellen
+  // fritt ur kursens innehåll (se ContentPickers "Inget valt"-text). Att
+  // skriva ett prov över en hel kurs utan att peka ut enskilda punkter är
+  // ett riktigt arbetsflöde, inte ett ofullständigt formulär.
   const canGenerate = $derived(
     !running &&
-      (plan.typ === 'tavla' ? plan.moment.trim().length > 0 : plan.courseId !== '' && hasContent),
+      (plan.typ === 'tavla' ? plan.moment.trim().length > 0 : plan.courseId !== ''),
   );
   const typLabel = $derived(
     plan.typ === 'tavla' ? 'tavlan' : plan.typ === 'arbetsblad' ? 'arbetsbladet' : 'provet',
@@ -114,8 +118,6 @@
         Beskriv momentet ovan så kan tavlan skrivas.
       {:else if !plan.courseId}
         Välj kurs ovan så kan {typLabel} skrivas.
-      {:else if !hasContent}
-        Välj minst en innehållspunkt ovan så kan {typLabel} skrivas.
       {/if}
     </span>
     <button class="primary" disabled={!canGenerate} onclick={() => onGenerate()}>

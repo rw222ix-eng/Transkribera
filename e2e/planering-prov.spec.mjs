@@ -39,18 +39,22 @@ test("Planering (/next/): skriv provet, ändra via chatten, godkänn & PDF", asy
   await page.getByRole("button", { name: "Prov", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Nytt prov" })).toBeVisible();
 
-  // 2) CTA:n är avstängd tills en kurs är vald OCH minst en innehållspunkt.
+  // 2) CTA:n är avstängd tills en kurs är vald — innehållsval är valfritt
+  // (exCanStart: !!st.byggCourseId, app.js:3605; parity-fix: gaten kräver
+  // bara kurs, precis som gamla appen, se BuildPanel.svelte).
   const cta = page.getByRole("button", { name: "Skriv provet" });
   await expect(cta).toBeDisabled();
 
   // 3) Kursval laddar kursens innehållspunkter (ContentPicker.svelte via
-  // loadContent(), triggat av $effect på plan.courseId i PlaneringView).
+  // loadContent(), triggat av $effect på plan.courseId i PlaneringView) OCH
+  // slår på CTA:n direkt — utan att någon innehållspunkt är vald.
   await page.getByRole("button", { name: KURS, exact: true }).click();
   await expect(page.getByText("Aritmetik, algebra och funktioner")).toBeVisible({ timeout: 10000 });
   await expect(page.getByText("0 valda av 7", { exact: true })).toBeVisible();
-  await expect(cta).toBeDisabled();
+  await expect(cta).toBeEnabled();
 
-  // 4) Markera en hel grupp innehållspunkter -> CTA:n slår på.
+  // 4) Att markera en hel grupp innehållspunkter fungerar fortfarande — och
+  // CTA:n förblir på (den var redan på från steg 3).
   await page.getByRole("button", { name: "Markera alla" }).first().click();
   await expect(page.getByText("7 valda av 7", { exact: true })).toBeVisible();
   await expect(cta).toBeEnabled();
