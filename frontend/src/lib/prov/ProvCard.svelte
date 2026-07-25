@@ -4,10 +4,12 @@
   // (godkänn → PDF, öppna PDF/TeX, radera). Motsvarar exam-card-markupen i
   // app.js (rad ~5992-6046), men bygger på prov.doc i stället för S.exam.
   //
-  // KaTeX är utanför scope här (se task-4-brief.md): uppgiftstexten kan
-  // innehålla $…$-matte som gamla appen renderar med KaTeX. Här visas texten
-  // rå — matte-uttryck syns alltså som LaTeX-källkod, inte satt matematik.
+  // Uppgiftstexten kan innehålla $…$-matte. Den sätts med den vendrade
+  // KaTeX:en via renderMath-actionen (frontend/src/lib/math.js), precis som
+  // gamla appens data-math-element. Texten står kvar i markupen, så en
+  // utebliven KaTeX ger rå LaTeX i stället för ett tomt kort.
   import { prov } from './stores.svelte.js';
+  import { renderMath } from '../math.js';
   import { approveExam, openPdf, openTex, deleteExam, closeExam } from './actions.js';
 
   const typLabel = $derived(prov.doc?.typ === 'arbetsblad' ? 'Arbetsblad' : 'Prov');
@@ -148,7 +150,7 @@
             {#if n.antalDel}<span class="meta">{n.antalDel} deluppgift{n.antalDel === 1 ? '' : 'er'}</span>{/if}
             <span class="poang">E {n.poang[0]} · C {n.poang[1]} · A {n.poang[2]}</span>
           </div>
-          <div class="text">{n.text}</div>
+          <div class="text" use:renderMath={n.text}>{n.text}</div>
         </li>
       {/each}
     </ol>
