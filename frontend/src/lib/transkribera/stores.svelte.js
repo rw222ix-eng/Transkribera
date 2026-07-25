@@ -4,8 +4,8 @@ export const tr = $state({
   queue: [],            // [{id, name, path}] — path är en absolut sökväg eller en http(s)-länk
   activeId: null,       // vilken post som räknas som "aktuell källa"
   step: 'source',       // source | config | process
-  fileError: '',        // felraden under källfälten
-  fileNoteArt: 'fel',    // 'fel' | 'info' — styr om felraden målas som fel eller neutral
+  fileError: '',         // guidens delade statusrad — skrivs från båda stegen, senaste händelsen vinner
+  fileNoteArt: 'fel',    // 'fel' | 'info' — styr om statusraden målas som fel eller neutral
   dragging: false,      // dropzonen är påhoverad av ett drag
   urlInput: '',         // länkfältets råtext
 
