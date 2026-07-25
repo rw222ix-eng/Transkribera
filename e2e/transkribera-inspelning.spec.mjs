@@ -29,7 +29,9 @@
 //     /api/recordings/{id}/markers med rätt tidsstämplar, och att sessionens
 //     localStorage-post är BORTA efteråt;
 // 12. nekad mikrofon ger ett begripligt besked, ingen bricka och inget
-//     halvstartat tillstånd.
+//     halvstartat tillstånd;
+// 13. att en körning inte går att STARTA mitt i en inspelning, och att brickan
+//     inte kastar ut läraren ur en körning om den grinden ändå kringgås.
 //
 // TÄCKER INTE — och det här är luckor, inte glömska:
 //  · Tystnadsvarningen ("Ingen signal?"). Chromiums fejkenhet skickar en
@@ -615,4 +617,96 @@ test("Inspelning (/next/): nekad mikrofon ger ett begripligt besked och ingen br
   await expect(starta).toBeEnabled();
 
   expect(errors, errors.join("\n")).toEqual([]);
+});
+
+test("Inspelning (/next/): brickan kastar inte ut läraren ur en pågående körning", async ({ page }) => {
+  test.setTimeout(60_000);
+  const errors = [];
+  failOnConsoleError(page, errors);
+  rensaPartFiler();
+
+  // /api/transcribe besvaras ALDRIG: körningen blir kvar i 'running' hela
+  // testet igenom. Fejkserverns transkribering är i praktiken omedelbar
+  // (serve_test_app.py: fake_transcribe), så utan det här tävlar "done" med
+  // assertionerna nedan och testet mäter en annan gren än den det påstår.
+  // Ruttet släpps med abort() längre ned — då, och först då, blir run 'error'.
+  /** @type {import("@playwright/test").Route | null} */
+  let hallen = null;
+  await page.route(
+    (url) => url.pathname === "/api/transcribe",
+    (route) => { hallen = route; },
+  );
+
+  await page.goto("/next/");
+
+  // Referensläget FÖRST, utan inspelning: knappen är klickbar med precis den
+  // här kön och den här modellkatalogen. Utan det steget kunde "avstängd" nedan
+  // lika gärna betyda att katalogen inte hunnit landa (startEtikett har flera
+  // grindvillkor), och testet hade bevisat fel sak.
+  const exempel = page.getByRole("button", { name: "ett exempel", exact: true });
+  await exempel.click();
+  const start = page.locator(".start button.primar");
+  await expect(start).toBeEnabled({ timeout: 30_000 });
+  await expect(start).toHaveText("Starta transkribering");
+
+  await page.getByRole("button", { name: "Lägg till fler", exact: true }).click();
+  await page.getByRole("button", { name: "Starta inspelning", exact: true }).click();
+  const stoppa = page.getByRole("button", { name: "Stoppa och lägg till", exact: true });
+  await expect(stoppa).toBeVisible();
+
+  // Vägen in i defekten: addFiles sätter tr.step = 'config' OVILLKORLIGT
+  // (actions.js) — även för en dubblett — så steg 2 nås mitt i en inspelning
+  // utan att passera "Nästa: inställningar" och dess tr.recording-grind.
+  await exempel.click();
+  // Den synliga kopian, inte live-regionen — samma data-testid som övriga specer.
+  await expect(page.getByTestId("statusrad")).toHaveText("1 fil låg redan i kön.");
+
+  // LÅS 1 — samma knapp, samma kö, samma katalog, men nu avstängd, och den
+  // säger varför.
+  await expect(start).toBeDisabled();
+  await expect(start).toHaveText("Stoppa inspelningen först");
+
+  // LÅS 2 kan bara nås genom att kringgå lås 1; det är hela innebörden av ett
+  // andra lås. disabled tas bort och knappen klickas i SAMMA tick, så ingen
+  // Svelte-uppdatering hinner sätta tillbaka attributet emellan.
+  await start.evaluate((el) => {
+    el.removeAttribute("disabled");
+    /** @type {HTMLButtonElement} */ (el).click();
+  });
+  const status = page.locator(".kort .status");
+  await expect(status).toHaveText("Kör", { timeout: 15_000 });
+
+  // Före fixen tog det här klicket läraren till steg 1: <Korning /> avmonterades,
+  // stegindikatorn är inte klickbar och startRun returnerar tyst medan run ===
+  // 'running'. Körningen blev alltså osynlig och oåterkallelig — inget
+  // klarbesked, inga resultatfiler, och ett nytt tryck på Starta hade kört om
+  // samma tr.activeId till en andra lessons-rad för samma lektion.
+  const bricka = page.locator("header.bar button.bricka");
+  await expect(bricka).toBeVisible();
+  await bricka.click();
+  await expect(status).toHaveText("Kör");
+  await expect(flik(page, "Transkribera")).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("heading", { name: /Vad vill du transkribera/ })).toHaveCount(0);
+
+  // Men brickan är ingen död knapp: så fort körsteget inte längre bär något
+  // oåterkalleligt — här ett fel, där kortet ändå erbjuder "Byt fil" — tar
+  // samma klick läraren till steg 1 och widgetens egna knappar.
+  await hallen.abort("failed");
+  await expect(page.getByRole("button", { name: "Byt fil", exact: true })).toBeVisible({
+    timeout: 15_000,
+  });
+  await bricka.click();
+  await expect(page.getByRole("heading", { name: /Vad vill du transkribera/ })).toBeVisible();
+  await expect(stoppa).toBeVisible();
+
+  // Och grinden släpper igen så fort lektionen är stoppad och köad — det är en
+  // spärr, inte ett förbud. Det här är också det som pinnar fast att det VAR
+  // tr.recording som stängde knappen ovan.
+  await stoppa.click();
+  await expect(page.locator("ul.ko li")).toHaveCount(2);
+  await expect(start).toBeEnabled();
+  await expect(start).toHaveText("Starta · 2 filer");
+  await expect(bricka).toHaveCount(0);
+
+  expect(appfel(errors), appfel(errors).join("\n")).toEqual([]);
 });

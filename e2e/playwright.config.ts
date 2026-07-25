@@ -116,8 +116,10 @@ export default defineConfig({
       // .part-filer (inklusive att den PÅGÅENDE inspelningen filtreras bort),
       // hela felkedjan för uppladdningen (nätverksfel med växande
       // sekundräknare, omförsöket, och serverns 507 utan omförsök), hela
-      // markörkedjan fram till POST /api/recordings/{id}/markers, samt nekad
-      // mikrofon. Fejkmikrofonen kommer från de GLOBALA launchOptions ovan
+      // markörkedjan fram till POST /api/recordings/{id}/markers, nekad
+      // mikrofon, samt att en körning inte går att starta mitt i en inspelning
+      // och att brickan inte lämnar en pågående körning om den grinden ändå
+      // kringgås. Fejkmikrofonen kommer från de GLOBALA launchOptions ovan
       // (--use-fake-device-for-media-stream + --use-fake-ui-for-media-stream),
       // som alla projekt ärver — projektet behöver alltså inga egna flaggor.
       // TÄCKS INTE: tystnadsvarningen (fejkenheten skickar en kontinuerlig ton

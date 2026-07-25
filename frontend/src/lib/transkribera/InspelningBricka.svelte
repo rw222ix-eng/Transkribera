@@ -28,8 +28,26 @@
   // där Stoppa / Avbryt / Markera bor, utan att röra kön. Hon kan mycket väl
   // hålla på att bygga en kö medan lektionen spelas in — nyTranskribering
   // hade tömt den.
+  //
+  // Men steget byts ALDRIG när körsteget bär något som inte går att få tillbaka:
+  //  · run === 'running' — <Korning /> avmonteras, Stegindikatorn är inte
+  //    klickbar och startRun returnerar tyst så länge körningen lever. Läraren
+  //    blir alltså kvar på steg 1 utan klarbesked, utan resultatfiler och utan
+  //    "Transkribera något mer". Trycker hon Starta transkribering igen körs
+  //    samma redan klara tr.activeId OM — en andra lessons-rad och en andra
+  //    utdatamapp för samma lektion, exakt den följd nyTranskribering:s egen
+  //    dokkommentar i actions.js varnar för.
+  //  · run === 'done' — klarbeskedet med filerna är hela kvittot på körningen,
+  //    och nyTranskribering (enda vägen som nollställer kön) bor inuti det.
+  // Vid 'error' och 'cancelled' erbjuder kortet redan "Byt fil", som ÄR
+  // goSource — då tar brickan bara en genväg läraren ändå har.
+  //
+  // Grinden på startknappen (Installningar.svelte) stänger den enda kända vägen
+  // in i "kör OCH spelar in". Raden här är andra låset: brickan får inte kasta
+  // ut läraren ur en körning, oavsett hur tillståndet uppstod.
   function tillInspelningen() {
     setTab('transkribera');
+    if (tr.step === 'process' && (tr.run === 'running' || tr.run === 'done')) return;
     goSource();
   }
 </script>

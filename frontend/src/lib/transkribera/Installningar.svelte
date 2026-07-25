@@ -9,14 +9,19 @@
   import Kolista from './Kolista.svelte';
   import { katalog } from './katalog.svelte.js';
 
+  // tr.recording först: den är det enda av grindvillkoren läraren själv kan
+  // åtgärda på plats, och den ska stå kvar tills hon gör det. De andra är
+  // övergående (katalogen laddas) eller hör till en annan skärm.
   const startEtikett = $derived(
-    !katalog.klar
-      ? 'Laddar modeller …'
-      : !tr.model
-        ? 'Ladda ner en modell först'
-        : tr.queue.length > 1
-          ? 'Starta · ' + tr.queue.length + ' filer'
-          : 'Starta transkribering',
+    tr.recording
+      ? 'Stoppa inspelningen först'
+      : !katalog.klar
+        ? 'Laddar modeller …'
+        : !tr.model
+          ? 'Ladda ner en modell först'
+          : tr.queue.length > 1
+            ? 'Starta · ' + tr.queue.length + ' filer'
+            : 'Starta transkribering',
   );
 </script>
 
@@ -64,11 +69,27 @@
 <Undertextval />
 
 <div class="start">
+  <!--
+    tr.recording grindar starten, precis som den grindar "Nästa: inställningar"
+    på steg 1 (TranskriberaView.svelte). Grinden där räcker INTE: addFiles sätter
+    tr.step = 'config' ovillkorligt (actions.js), så "ett exempel", en länk eller
+    en släppt fil tar guiden hit mitt i en pågående inspelning utan att passera
+    den knappen.
+
+    Utan den här raden startar alltså en körning medan mikrofonen är på: steg 3
+    avmonterar <Inspelning />, så Stoppa / Avbryt / Markera försvinner, och
+    inspelningen kan inte avslutas förrän körningen är klar. Stegindikatorn är
+    inte klickbar under en körning och startRun returnerar tyst — läraren har
+    ingen väg tillbaka till lektionen hon fortfarande spelar in.
+
+    Grinden är en spärr, inte ett förbud: inspelningen fortsätter som vanligt,
+    det är bara starten som väntar tills lektionen är stoppad och köad.
+  -->
   <button
     type="button"
     class="primar"
     onclick={startRun}
-    disabled={!katalog.klar || !tr.model || !tr.queue.length}
+    disabled={!katalog.klar || !tr.model || !tr.queue.length || tr.recording}
   >{startEtikett}</button>
 </div>
 
