@@ -261,3 +261,109 @@ export async function downloadAudioModel() {
     }
   });
 }
+
+/** mm:ss för loggraderna. Speglar fmtTime, app.js. */
+function fmtTid(s) {
+  const n = Math.max(0, Math.floor(s || 0));
+  const m = Math.floor(n / 60);
+  return String(m).padStart(2, '0') + ':' + String(n % 60).padStart(2, '0');
+}
+
+/** Nästa köpost som inte körts än. Speglar _nextPending, app.js:2207. */
+export function nextPending(excludeId) {
+  for (const q of tr.queue) {
+    if (q.id !== excludeId && (tr.qStatus[q.id] || 'pending') === 'pending') return q.id;
+  }
+  return null;
+}
+
+// Ökar vid avbrott så en ström som fortfarande droppar in inte får skriva
+// tillstånd för en körning läraren redan avbrutit. Speglar _runToken,
+// app.js:2220.
+let korToken = 0;
+let tickare = null;
+
+/** Stoppar sekundräknaren. */
+function stoppaTickare() {
+  if (tickare) {
+    clearInterval(tickare);
+    tickare = null;
+  }
+}
+
+/**
+ * Kör den aktiva köposten mot /api/transcribe. Speglar _runActive,
+ * app.js:2215-2268 — payloaden matchas fält för fält.
+ */
+export async function startRun() {
+  if (tr.run === 'running') return;
+  const aktiv = tr.queue.find((q) => q.id === tr.activeId) || tr.queue[0];
+  if (!aktiv) return;
+  const token = ++korToken;
+
+  tr.step = 'process';
+  tr.run = 'running';
+  tr.progress = 0;
+  tr.dispProgress = 0;
+  tr.elapsed = 0;
+  tr.runError = null;
+  tr.resultFiles = [];
+  tr.resultId = null;
+  tr.qStatus = { ...tr.qStatus, [aktiv.id]: 'running' };
+  tr.log = ['[00:00] Startar transkribering …'];
+
+  const t0 = Date.now();
+  stoppaTickare();
+  tickare = setInterval(() => {
+    if (token === korToken) tr.elapsed = (Date.now() - t0) / 1000;
+  }, 250);
+
+  const formats = ['srt', 'txt', 'vtt'].filter((f) => tr.formats[f]);
+
+  await streamPost(
+    '/api/transcribe',
+    {
+      source: aktiv.path || aktiv.name,
+      model_id: tr.model,
+      language: tr.language,
+      target_language: tr.targetLanguage,
+      formats,
+      audio_correct: tr.audioCorrect,
+      sub_mode: tr.subtitleMode,
+      // Ternären är bärande: tr.embedKind behåller sitt värde när läraren
+      // växlar tillbaka till "Spara separat", så ett gammalt 'burn' skulle
+      // annars läcka in i en separate-förfrågan. Speglar app.js:2236.
+      embed_kind: tr.subtitleMode === 'embed' ? tr.embedKind : null,
+      more_pending: !!nextPending(aktiv.id),
+    },
+    (ev) => {
+      if (token !== korToken) return;
+      if (ev.type === 'progress') {
+        // Aldrig 100 % före 'done' — 100 ska betyda färdig, inte "Whisper
+        // klar, sätter fortfarande ihop". Speglar app.js:2241-2243.
+        tr.progress = Math.min(ev.pct || 0, 99);
+      } else if (ev.type === 'log') {
+        tr.log = [...tr.log, '[' + fmtTid(tr.elapsed) + '] ' + ev.msg];
+      } else if (ev.type === 'error') {
+        stoppaTickare();
+        tr.run = 'error';
+        tr.runError = {
+          title: 'Transkriberingen misslyckades',
+          detail: ev.message || 'Okänt fel',
+        };
+        tr.qStatus = { ...tr.qStatus, [aktiv.id]: 'error' };
+        tr.qProgress = { ...tr.qProgress, [aktiv.id]: Math.round(tr.progress) };
+      } else if (ev.type === 'done') {
+        stoppaTickare();
+        const r = ev.result || {};
+        tr.run = 'done';
+        tr.progress = 100;
+        tr.resultFiles = r.files || [];
+        tr.resultId = r.id || null;
+        tr.qStatus = { ...tr.qStatus, [aktiv.id]: 'done' };
+        tr.qProgress = { ...tr.qProgress, [aktiv.id]: 100 };
+        tr.log = [...tr.log, '[klar] Färdig på ' + fmtTid(tr.elapsed)];
+      }
+    },
+  );
+}
