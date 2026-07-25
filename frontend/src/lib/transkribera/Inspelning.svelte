@@ -60,10 +60,32 @@
          laddaOavslutade, så nyckeln ändrar ingenting just nu — men den kostar
          ingenting och krävs så fort en rad får eget tillstånd. -->
     {#each tr.incompleteRecs as p (p.session)}
+      <!--
+        "18,8 MB · 30 jan", inte sessions-id:t. Backend levererar redan en
+        färdig människoläsbar storlek och ett datum (server.py:796-806), och
+        gamla appen bygger sin etikett av exakt de två fälten (app.js:4054).
+        Datumet är det enda som låter läraren skilja passet hon tappade i
+        morse från en gammal rest; "rec_1738…" säger henne ingenting. Den
+        egenräknade kB-siffran ligger kvar som fallback ifall size skulle
+        saknas. aria-label på knapparna: med flera rader läser en skärmläsare
+        annars "Släng, Släng, Släng" utan åtskillnad.
+      -->
+      {@const etikett =
+        (p.size || `${Math.round((p.bytes || 0) / 1024)} kB`) + (p.modified ? ` · ${p.modified}` : '')}
       <div class="oav-rad">
-        <span class="oav-namn">{p.session} — {Math.round((p.bytes || 0) / 1024)} kB</span>
-        <button type="button" class="ghost" onclick={() => aterstallOavslutad(p.session)}>Återställ</button>
-        <button type="button" class="ghost fara" onclick={() => slangOavslutad(p.session)}>Släng</button>
+        <span class="oav-namn">{etikett}</span>
+        <button
+          type="button"
+          class="ghost"
+          aria-label="Återställ inspelning {etikett}"
+          onclick={() => aterstallOavslutad(p.session)}
+        >Återställ</button>
+        <button
+          type="button"
+          class="ghost fara"
+          aria-label="Släng inspelning {etikett}"
+          onclick={() => slangOavslutad(p.session)}
+        >Släng</button>
       </div>
     {/each}
   </div>
@@ -134,12 +156,11 @@
   .oav-titel { color: var(--ink); font-size: 1.03rem; font-weight: 500; margin: 0 0 10px; }
   .oav-rad { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
   .oav-rad + .oav-rad { margin-top: 8px; }
-  /* Sessions-id:t är långt och obrytbart (rec_<ms>_<slump>) — utan
-     overflow-wrap spränger det raden på smala fönster. */
+  /* Etiketten är kort och bryter på mellanslag ("18,8 MB · 30 jan"), så ingen
+     overflow-wrap behövs — den fanns bara för det obrytbara sessions-id:t. */
   .oav-namn {
     flex: 1;
     min-width: 0;
-    overflow-wrap: anywhere;
     color: var(--ink-2);
     font-size: 1.03rem;
   }
