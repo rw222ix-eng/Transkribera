@@ -20,6 +20,16 @@
 <section class="view">
   <Stegindikator />
 
+  <!--
+    Statusraden är hoistad hit, ovanför {#if}, så den är EN enda live-region
+    som finns i båda stegen (plan A2-fixrunda). tr.fileError sätts inte bara
+    från källsteget — t.ex. downloadAudioModel (actions.js) skriver hit medan
+    läraren står på steg 2 — så raden måste synas oavsett steg. Den får INTE
+    villkoras med {#if tr.fileError}: en role="status"-region som skapas
+    samtidigt som sin text annonseras inte tillförlitligt av skärmläsare.
+  -->
+  <p class="fel" class:info={tr.fileNoteArt === 'info'} role="status">{tr.fileError}</p>
+
   {#if tr.step === 'source'}
     <p class="eyebrow">STEG 1 — KÄLLA</p>
     <h1 class="display">Vad vill du <span class="ser">transkribera?</span></h1>
@@ -35,8 +45,6 @@
       <button type="button" class="lank" onclick={addSample}>ett exempel</button>
       <button type="button" class="lank" onclick={addSampleCorrupt}>skadad_inspelning.m4a</button>
     </p>
-
-    <p class="fel" class:info={tr.fileNoteArt === 'info'} role="status">{tr.fileError}</p>
 
     {#if tr.queue.length}
       <ul class="ko">

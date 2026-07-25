@@ -42,10 +42,15 @@ test("Transkribera (/next/): exempel i kön, dubblett, länk och borttagning", a
   // 3) Samma fil igen är en dubblett — kön växer inte, och läraren får veta.
   await page.getByRole("button", { name: "ett exempel", exact: true }).click();
   // Dubbletten går genom addFiles precis som en ny fil, så guiden hoppar
-  // återigen till steg 2 — tillbaka till källsteget igen.
-  await page.getByRole("button", { name: "Lägg till fler" }).click();
+  // återigen till steg 2. Statusraden är hoistad ovanför stegväxlingen
+  // (plan A2-fixrunda) och är den enda live-regionen i båda stegen, så
+  // beskedet ska synas HÄR, direkt på steg 2 — utan att navigera tillbaka
+  // till källsteget först.
   await expect(ko).toHaveCount(1);
   await expect(page.getByText("1 fil låg redan i kön.")).toBeVisible();
+  // Tillbaka till källsteget igen, för att fortsätta pröva källfälten
+  // (länkfältet nedan finns bara där).
+  await page.getByRole("button", { name: "Lägg till fler" }).click();
 
   // 4) Ogiltig länk avvisas med besked, och köas inte.
   // exact: true krävs — aria-label på fältet ("YouTube-länk") är en delsträng

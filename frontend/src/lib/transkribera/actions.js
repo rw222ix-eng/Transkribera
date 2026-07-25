@@ -62,18 +62,16 @@ export function removeFromQueue(id) {
 }
 
 /**
- * Tillbaka till steg 1. Speglar goSource, app.js:1367 — utom att den INTE
- * rensar tr.fileError. Sedan käll- och inställningsstegen blev ömsesidigt
- * uteslutande (plan A2) sätter addFiles felraden och tr.step='config' i
- * samma anrop, så t.ex. dubblettbeskedet hinner aldrig visas innan panelen
- * växlar bort från källsteget. Legacy slipper det: dubblettbeskedet där går
- * via en flytande toast (app.js:3051-3055) som är frikopplad från steget —
- * den här porten har ingen toast-infrastruktur (se kommentaren i addFiles).
- * Att INTE rensa här är vad som gör beskedet synligt igen när läraren går
- * tillbaka med "Lägg till fler".
+ * Tillbaka till steg 1. Speglar goSource, app.js:1367, och rensar tr.fileError
+ * precis som originalet. Statusraden är numera hoistad ovanför stegväxlingen
+ * i TranskriberaView.svelte, så t.ex. dubblettbeskedet från addFiles syns
+ * redan på steg 2 — det är inte längre beroende av att stå kvar okänsligt
+ * tills läraren går tillbaka hit. Att rensa här förhindrar i stället att ett
+ * gammalt besked lever kvar genom godtycklig navigering.
  */
 export function goSource() {
   tr.step = 'source';
+  tr.fileError = '';
 }
 
 /**
