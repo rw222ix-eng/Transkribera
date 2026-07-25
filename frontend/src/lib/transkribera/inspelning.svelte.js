@@ -204,7 +204,20 @@ export function cancelRecording() {
   session = null;
   if (slangd) {
     glomSession(slangd);
-    fetch(`/api/recording/discard?session=${encodeURIComponent(slangd)}`, { method: 'POST' })
+    // discard MÅSTE vänta in uppladdningskedjan. En vanlig 4-sekundersflush kan
+    // ligga i flykt när läraren trycker Avbryt, och api_recording_append
+    // (app/web/server.py:762-764) öppnar filen med "ab" — den ÅTERSKAPAR alltså
+    // .part-filen om discard hunnit unlink:a först. Resultatet blir samma symtom
+    // som den lagade null.part-defekten, fast med ett riktigt sessions-id: en
+    // föräldralös .part med verkligt lektionsljud som /api/recordings/incomplete
+    // sedan erbjuder läraren att återställa — efter att hon uttryckligen bett
+    // appen slänga den. Fönstret är litet men ingen städar upp efteråt, och en
+    // belastad server breddar det.
+    // .catch(() => {}) före .then: kedjan får inte kortslutas av att en append
+    // föll, då är det ännu viktigare att discard körs.
+    uppladdningsKedja
+      .catch(() => {})
+      .then(() => fetch(`/api/recording/discard?session=${encodeURIComponent(slangd)}`, { method: 'POST' }))
       .catch(() => { /* .part städas av backend vid nästa start */ });
   }
   tr.recording = false;
