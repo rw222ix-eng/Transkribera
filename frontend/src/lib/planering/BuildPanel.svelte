@@ -103,7 +103,11 @@
   <div class="row">
     <span class="label">När</span>
     <input class="field narrow" type="date" aria-label="Datum" bind:value={plan.datum} />
-    <input class="field narrow" type="time" aria-label="Starttid" bind:value={plan.starttid} />
+    {#if plan.typ === 'tavla'}
+      <!-- Starttid ingår aldrig i prov-/arbetsbladspayloaden (prov/actions.js:
+           generateExam) — gamla appen döljer fältet av samma skäl, app.js:5853-5858. -->
+      <input class="field narrow" type="time" aria-label="Starttid" bind:value={plan.starttid} />
+    {/if}
   </div>
 
   {#if loadError}
