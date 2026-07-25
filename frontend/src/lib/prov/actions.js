@@ -8,6 +8,7 @@ export async function loadContent() {
   if (!plan.courseId) {
     prov.punkter = [];
     prov.valda = {};
+    prov.contentError = '';
     return;
   }
   const q = new URLSearchParams({ course_id: String(plan.courseId) });
@@ -19,6 +20,10 @@ export async function loadContent() {
     prov.contentError = '';
   } catch (e) {
     prov.punkter = [];
+    // En stale markering får inte överleva ett misslyckat hämtningsförsök —
+    // annars visar CTA:n "Klart att skriva" trots att bilden bakom den är av
+    // en annan kurs, och generateExam skulle skicka förra kursens ids.
+    prov.valda = {};
     prov.contentError = 'Kunde inte hämta kursens innehåll: ' + (e?.message || e);
   }
 }
@@ -33,6 +38,14 @@ export async function loadHistorik() {
   try {
     const d = await getJSON('/api/exams?course_id=' + encodeURIComponent(plan.courseId));
     prov.historik = d?.exams ?? [];
+    // Referensvalet rensas på VARJE lyckad laddning, inte bara när kursen
+    // saknas — annars kan ett gammalt referens-id från en tidigare kurs
+    // hänga kvar osynligt (ProvParams döljer raden när nya kursen inte har
+    // något godkänt prov) och ändå skickas med i generateExam, vilket läcker
+    // en annan kurs innehåll i prompten. Speglar loadExamHistorik,
+    // app.js:1188-1193. Samma anrop städar upp efter deleteExam, som redan
+    // kör loadHistorik() på lyckad radering.
+    prov.referensId = '';
   } catch {
     prov.historik = [];
   }
@@ -66,9 +79,9 @@ export async function generateExam() {
   if (!plan.courseId || prov.phase === 'running') return;
   const typ = plan.typ === 'arbetsblad' ? 'arbetsblad' : 'prov';
   resetProvRun();
-  // prov.valda kan bära kvarvarande false-nycklar (ContentPicker.svelte togglar
-  // med !prov.valda[id] i stället för att ta bort nyckeln) — filtrera på
-  // sanningsvärdet, inte bara på nycklarna.
+  // Nycklarna i prov.valda ska alltid vara exakt de valda punkterna
+  // (ContentPicker.svelte tar bort nyckeln vid avval) — sanningsfiltret här
+  // är ett defensivt skydd mot avvikelser, inte den egentliga urvalslogiken.
   const punkter = Object.keys(prov.valda)
     .filter((id) => prov.valda[id])
     .map(Number);
