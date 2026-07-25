@@ -33,7 +33,10 @@
   }
 
   function togglePunkt(id) {
-    prov.valda = { ...prov.valda, [id]: !prov.valda[id] };
+    const next = { ...prov.valda };
+    if (next[id]) delete next[id];
+    else next[id] = true;
+    prov.valda = next;
   }
 
   function toggleGrupp(g) {
