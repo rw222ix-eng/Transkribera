@@ -1,5 +1,6 @@
 import { getJSON } from '../api.js';
 import { tr, isMedia } from './stores.svelte.js';
+import { recommendModel } from './katalog.svelte.js';
 
 let idRakning = 0;
 
@@ -190,4 +191,21 @@ export function addUrl() {
 export function goConfig() {
   if (!tr.queue.length) return;
   tr.step = 'config';
+}
+
+/**
+ * Byter talat språk. Nollställer resultatspråket till samma språk och väljer
+ * om modellen — ett nytt talat språk ska inte lämna kvar en gammal
+ * översättning eller en modell för fel språk. Speglar pickLang, app.js:1516.
+ * @param {'sv'|'en'} l
+ */
+export function pickLang(l) {
+  tr.language = l;
+  tr.targetLanguage = l;
+  tr.model = recommendModel(l);
+}
+
+/** Byter resultatspråk. Skiljer det sig från det talade översätts texten. */
+export function pickTargetLang(l) {
+  tr.targetLanguage = l;
 }

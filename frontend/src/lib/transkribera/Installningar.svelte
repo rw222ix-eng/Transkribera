@@ -3,6 +3,7 @@
   // (app/web/static/app.js:4472-4578), omstylad till designsystemet.
   import { tr, extOf } from './stores.svelte.js';
   import { removeFromQueue, goSource } from './actions.js';
+  import Sprakval from './Sprakval.svelte';
 </script>
 
 <p class="eyebrow">STEG 2 — INSTÄLLNINGAR</p>
@@ -32,6 +33,8 @@
     </li>
   {/each}
 </ul>
+
+<Sprakval />
 
 <style>
   .eyebrow {
