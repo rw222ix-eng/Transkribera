@@ -344,14 +344,26 @@ def create_router(base: Path, arbiter) -> APIRouter:
                               "msg": "PDF-motorn saknas — sparar .tex utan PDF."})
                         break
                     emit({"type": "log", "msg": "Kompilerar PDF …"})
-                    pdf_path, log = exam_pdf.compile_pdf(tex, out_dir, slug)
+                    prov_pdf, log = exam_pdf.compile_pdf(tex, out_dir, slug)
+                    # Ett prov som EN GÅNG kompilerat får inte försvinna för att
+                    # en senare korrigeringsrunda (utlöst av bedömningen) skrev
+                    # om provet till något som inte går att kompilera. Filen
+                    # ligger kvar i utkatalogen — behåll sökvägen så länge den
+                    # gör det. (Om en senare Tectonic-körning skulle lämna en
+                    # TRASIG {slug}.pdf bakom sig men ändå returnera fel skulle
+                    # den kvarhållna sökvägen peka på den — accepterad restrisk,
+                    # den observerade felvägen avbryter innan filen skrivs.)
+                    if prov_pdf is not None:
+                        pdf_path = prov_pdf
+                    elif pdf_path is not None and not pdf_path.exists():
+                        pdf_path = None
                     # En runda är lyckad först när SAMTLIGA dokument som ska
                     # produceras har kompilerat. Bedömningens returvärde
                     # kastades tidigare bort: föll den syntes ingenting alls
                     # och kvittot ljög om att allt gått bra.
                     bed_path = None
                     bed_misslyckades = False
-                    if pdf_path is not None and bed is not None:
+                    if prov_pdf is not None and bed is not None:
                         bed_path, bed_log = exam_pdf.compile_pdf(
                             bed, out_dir, f"{slug} - bedomning")
                         if bed_path is None:
@@ -361,7 +373,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                             # bara avslöjas här — och fix_latex behöver DEN
                             # loggen, inte provets tomma.
                             log = bed_log
-                    if pdf_path is not None and (bed is None or bed_path is not None):
+                    if prov_pdf is not None and (bed is None or bed_path is not None):
                         errors = []
                         break
                     # Avgör FÖRE loggraden om en korrigering faktiskt följer —
@@ -376,10 +388,11 @@ def create_router(base: Path, arbiter) -> APIRouter:
                                      "Bedömningsanvisningen gick inte att "
                                      "kompilera — försöker korrigera …"})
                     if sista_forsoket:
-                        # Provet behålls om det kompilerade: ett fungerande
-                        # prov kastas inte bort för att det sekundära
-                        # dokumentet föll. Skild kod låter gränssnittet skilja
-                        # "inget prov alls" från "anvisningen saknas".
+                        # Provet behålls om det NÅGON gång kompilerat: ett
+                        # fungerande prov kastas inte bort för att en SENARE
+                        # rundas kompilering (utlöst av bedömningen) föll.
+                        # Skild kod låter gränssnittet skilja "inget prov
+                        # alls" från "anvisningen saknas".
                         errors = [{"path": "latex",
                                    "code": "bedomning" if pdf_path else "kompilering",
                                    "message": log}]

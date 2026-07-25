@@ -241,6 +241,46 @@ def test_approve_bedomning_failure_surfaces_and_keeps_prov(client, monkeypatch):
     assert bed_loggar[-1] == "Bedömningsanvisningen gick inte att kompilera."
 
 
+def test_approve_prov_fran_tidigare_runda_overlever_senare_kompileringsfel(
+        client, monkeypatch):
+    """Fynd 2 (granskning): koden satte om pdf_path till DENNA rundas
+    kompileringsresultat varje varv. Om provet kompilerar i runda 0 men
+    bedömningen faller, går slingan vidare till fix_latex — som kan skriva om
+    HELA provet till JSON där en senare runda inte längre går att kompilera.
+    Då blev pdf_path None trots att runda 0:s fungerande prov-PDF fortfarande
+    låg kvar i utkatalogen, och ett fullt användbart prov blev oåtkomligt
+    för läraren bara för att en SENARE, av bedömningen utlöst, runda gick
+    illa."""
+    result, _ = _make_exam(client, monkeypatch)
+    monkeypatch.setattr(exam_pdf, "engine_available", lambda: True)
+
+    antal_provkompileringar = {"n": 0}
+
+    def fake_compile(tex, out_dir, jobname, **kw):
+        if jobname.endswith("bedomning"):
+            return None, "! Undefined control sequence i bedömningen."
+        antal_provkompileringar["n"] += 1
+        if antal_provkompileringar["n"] == 1:
+            out_dir.mkdir(parents=True, exist_ok=True)
+            p = out_dir / f"{jobname}.pdf"
+            p.write_bytes(b"%PDF-1.5 fejk")
+            return p, ""
+        return None, "! Missing $ inserted."
+    monkeypatch.setattr(exam_pdf, "compile_pdf", fake_compile)
+    monkeypatch.setattr(exam_gen, "fix_latex",
+                        lambda exam, log, **kw: {"exam": exam, "errors": [],
+                                                 "rounds": 1})
+
+    r = client.post(f"/api/exams/{result['id']}/approve", json={})
+    res = _done(r)
+
+    from pathlib import Path
+    assert res["pdf"], "runda 0:s fungerande prov ska inte försvinna"
+    assert Path(res["pdf"]).exists()
+    assert any(e["code"] == "bedomning" for e in res["errors"]), res["errors"]
+    assert not any(e["code"] == "kompilering" for e in res["errors"])
+
+
 def test_approve_bedomning_failure_without_llm_still_gets_bedomning_code(
         client, monkeypatch):
     """Grenen för "ingen omkörning möjlig" (modellen kan inte startas) hade
