@@ -85,7 +85,10 @@ exports/
 /Transkriberingar/
 
 # Nedladdad föreläsningsmedia och lösa transkript i repo-roten (lokal lektionsdata
-# — får ALDRIG checkas in; *.wav täcker bara ljudet, inte mp4/webm/srt eller txt)
+# — får ALDRIG checkas in). Själva medie- och undertextfilerna är redan täckta
+# globalt ovan (*.mkv/*.mp4/*.webm rad 28-30, *.srt/*.vtt rad 34-35); det som
+# saknade täckning var .txt-transkripten och yt-dlp:s sidofiler (.info.json,
+# .description, miniatyrer), som reglerna nedan fångar.
 /downloads/
 /Mamma waw isolerad.txt
 

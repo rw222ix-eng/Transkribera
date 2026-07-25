@@ -405,9 +405,10 @@ export async function cancelRun() {
 /**
  * "Transkribera något mer" — nollställer HELA körtillståndet och tar guiden
  * tillbaka till steg 1. Speglar gamla appens restart (app.js:1508-1512) fält
- * för fält, med ett medvetet undantag: den navigerar INTE vidare till någon
- * annan flik, för Inspelningar-vyn finns inte i den här frontenden än (plan A3
- * stannar på steg 3).
+ * för fält. restart() navigerar inte själv någonstans — det gör anropsplatsen:
+ * `restart(); setTab('recordings');` i finishTranscribe (app.js:2323-2324).
+ * Just den setTab-raden har ingen motsvarighet här, för Inspelningar-vyn finns
+ * inte i den här frontenden än (plan A3 stannar på steg 3).
  *
  * goSource räcker inte: den byter bara steg. Kön, qStatus, activeId, run='done'
  * och resultatfilerna skulle leva kvar, med två följder — steg 1 säger "1 fil i

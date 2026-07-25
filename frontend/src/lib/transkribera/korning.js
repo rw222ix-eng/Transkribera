@@ -82,7 +82,12 @@ export function startProgressAnim() {
   if (!rafId) rafId = requestAnimationFrame(frame);
 }
 
-/** Stoppar animeringen. Anropas vid avbrott och när vyn lämnas. */
+/**
+ * Stoppar animeringen. Anropas på körningens tre icke-'done'-utgångar, alla i
+ * actions.js: felgrenen i startRun, cancelRun och nyTranskribering. Vyn
+ * monteras aldrig av — skalet håller Transkribera-vyn kvar hela sessionen — så
+ * det finns inget anropsställe "när vyn lämnas".
+ */
 export function stopProgressAnim() {
   if (rafId) cancelAnimationFrame(rafId);
   rafId = 0;

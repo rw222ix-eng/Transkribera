@@ -1,7 +1,9 @@
 <script>
   // Transkriberingsguiden, steg 1 — Källa. Speglar viewTranscribe:s
   // stepSource-gren (app/web/static/app.js:4383-4470), omstylad till
-  // designsystemet. Steg 2 kom i plan A2. Steg 3 kommer i plan A3.
+  // designsystemet. Steg 2 kom i plan A2 (<Installningar />) och steg 3 i plan
+  // A3 (<Korning />) — båda renderas ur stegväxlingen längst ned i den här
+  // filen, så guiden är komplett fram till och med körningen.
   import { tr } from './stores.svelte.js';
   import { addSample, addSampleCorrupt, goConfig, loadAudioModel } from './actions.js';
   import Stegindikator from './Stegindikator.svelte';
