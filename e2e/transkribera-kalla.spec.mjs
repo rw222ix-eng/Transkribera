@@ -14,6 +14,16 @@ test("Transkribera (/next/): exempel i kön, dubblett, länk och borttagning", a
 
   await page.goto("/next/");
 
+  // /api/sample kräver att "Mamma waw isolerad.wav" finns i repo-roten —
+  // e2e/serve_test_app.py kopierar den bara om den finns, och den ligger inte
+  // i git. Utan den blir felet annars en obegriplig timeout på kön.
+  const sample = await page.request.get("/api/sample");
+  expect(
+    sample.status(),
+    'Saknad testfixtur: "Mamma waw isolerad.wav" i repo-roten (se e2e/serve_test_app.py). ' +
+      "/api/sample svarade " + sample.status() + ".",
+  ).toBe(200);
+
   // 1) Skalet startar på Transkribera-fliken.
   await expect(page.getByRole("button", { name: "Transkribera", exact: true }))
     .toHaveAttribute("aria-pressed", "true");
