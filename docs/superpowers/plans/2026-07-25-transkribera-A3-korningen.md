@@ -168,7 +168,7 @@ A run token guards against a cancelled stream still writing state (`app.js:2220`
 
 - [ ] **Step 1: Add the helpers and `startRun` to `actions.js`**
 
-Append (and add `import { willCorrect } from './korning.js';` at the top):
+Append (do **not** add an import of `willCorrect` — `actions.js` never calls it; se noten i Task 3):
 
 ```js
 /** mm:ss för loggraderna. Speglar fmtTime, app.js. */
@@ -444,7 +444,7 @@ git commit -m "feat(transkribera): mjuk progress som aldrig fryser eller backar"
 
 <div class="kort">
   <div class="topp">
-    <span class="status" class:kor={tr.run === 'running'} class:ok={klar} class:fel={tr.run === 'error'}>
+    <span class="status" role="status" class:kor={tr.run === 'running'} class:ok={klar} class:fel={tr.run === 'error'}>
       {status}
     </span>
     <span class="fil">{aktiv?.name || ''}</span>
@@ -466,7 +466,7 @@ git commit -m "feat(transkribera): mjuk progress som aldrig fryser eller backar"
 </div>
 
 {#if tr.queue.length > 1}
-  <p class="kolabel">Kö — {Object.values(tr.qStatus).filter((s) => s === 'done').length} av {tr.queue.length} klara</p>
+  <p class="kolabel">Kö — {tr.queue.filter((q) => tr.qStatus[q.id] === 'done').length} av {tr.queue.length} klara</p>
   <Kolista visaStatus={true} />
 {/if}
 
@@ -565,6 +565,9 @@ git commit -m "feat(transkribera): mjuk progress som aldrig fryser eller backar"
   }
 </style>
 ```
+
+**Note (rättat i efterhand, båda fynd ur slutgranskningen — kopiera blocket som det står nu):**
+`role="status"` på `.status`-spannet är inte kosmetiskt. Det är den enda live-regionen som täcker **alla fyra** utfallen (Kör/Klar/Fel/Avbruten), och det är spannet — inte något `{#if}`-grindat kort — som måste bära den, eftersom en region som monteras samtidigt som sin text inte annonseras pålitligt. Gamla appen gör likadant (`app.js:4618`, renderad hela `step === 'process'` via `showStatus`, `app.js:4081`). Räknaren för klara köposter måste gå genom **kön**, inte genom `Object.values(tr.qStatus)`: `removeFromQueue` (`actions.js:54-63`) lämnar kvar `qStatus`-nyckeln, så den senare formen kan visa "Kö — 3 av 2 klara".
 
 - [ ] **Step 2: Teach `Kolista.svelte` to show status**
 

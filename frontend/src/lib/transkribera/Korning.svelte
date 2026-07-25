@@ -56,6 +56,11 @@
       ersatte med den hoistade regionen i TranskriberaView.svelte:47. Utan den
       här raden får en lärare som startar en körning och går därifrån inget
       besked när den MISSLYCKAS.
+      GRÄNS: "går därifrån" betyder inom appen på steg 3. Byter läraren FLIK
+      döljs hela panelen med hidden (App.svelte:15, .pane[hidden] {display:none})
+      och regionen tystnar. Det är paritet med gamla appen, som inte ens har
+      noden i DOM:en då. Ska utfallet överleva ett flikbyte krävs en region på
+      skalnivå — egen plan.
     -->
     <span
       class="status"

@@ -126,6 +126,10 @@ test("Transkribera (/next/): körningen blir klar, med filer och logg", async ({
   //    procenten väntas in i stället för att läsas av direkt.
   const status = page.locator(".kort .status");
   const procent = page.locator(".kort .topp .matt").filter({ hasText: "Klart" });
+  // Statusraden är körningens enda live-region som täcker alla fyra utfallen.
+  // Tappas rollen annonseras ett misslyckande aldrig, och det syns inte på
+  // skärmen — därav en egen assertion i stället för enbart texten.
+  await expect(status).toHaveAttribute("role", "status");
   await expect(status).toHaveText("Klar", { timeout: 30_000 });
   await expect(procent).toHaveText("Klart 100 %", { timeout: 15_000 });
 
