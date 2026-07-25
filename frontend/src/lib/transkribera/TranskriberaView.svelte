@@ -21,14 +21,18 @@
   <Stegindikator />
 
   <!--
-    Statusraden är hoistad hit, ovanför {#if}, så den är EN enda live-region
-    som finns i båda stegen (plan A2-fixrunda). tr.fileError sätts inte bara
-    från källsteget — t.ex. downloadAudioModel (actions.js) skriver hit medan
-    läraren står på steg 2 — så raden måste synas oavsett steg. Den får INTE
-    villkoras med {#if tr.fileError}: en role="status"-region som skapas
-    samtidigt som sin text annonseras inte tillförlitligt av skärmläsare.
+    En enda hoistad live-region bär texten för skärmläsare, oavsett vilket
+    steg läraren står på — annars hinner ett fel som skrivs medan hon står på
+    steg 2 (t.ex. downloadAudioModel i actions.js) aldrig annonseras. Noden
+    är permanent i DOM:en (aldrig {#if}) och bara VISUELLT gömd med en
+    klippande teknik — INTE display:none, som tar bort den ur
+    tillgänglighetsträdet och gör att role="status" inte längre kan
+    annonsera mutationen (plan A2-fixrunda, punkt 1).
+    Varje steg renderar därutöver sin egen SYNLIGA kopia av samma text, nära
+    fältet den gäller, markerad aria-hidden="true" — bara live-regionen ovan
+    ska annonseras, inte båda.
   -->
-  <p class="fel" class:info={tr.fileNoteArt === 'info'} role="status">{tr.fileError}</p>
+  <p class="fel-sr" role="status">{tr.fileError}</p>
 
   {#if tr.step === 'source'}
     <p class="eyebrow">STEG 1 — KÄLLA</p>
@@ -45,6 +49,10 @@
       <button type="button" class="lank" onclick={addSample}>ett exempel</button>
       <button type="button" class="lank" onclick={addSampleCorrupt}>skadad_inspelning.m4a</button>
     </p>
+
+    <!-- Synlig kopia av live-regionen ovan, i den position raden hade före
+         hoisten till plan A2-fixrunda: direkt under källfälten. -->
+    <p class="fel" class:info={tr.fileNoteArt === 'info'} aria-hidden="true">{tr.fileError}</p>
 
     {#if tr.queue.length}
       <ul class="ko">
@@ -121,6 +129,16 @@
   .fel { color: var(--bad); margin: 14px 0 0; }
   .fel:empty { display: none; }
   .fel.info { color: var(--ink-3); }
+  /* Klippande teknik — noden finns kvar i tillgänglighetsträdet men upptar
+     ingen synlig plats, till skillnad från display:none. */
+  .fel-sr {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
   .ko { list-style: none; margin: 20px 0 0; padding: 0; }
   .ko li {
     display: flex;

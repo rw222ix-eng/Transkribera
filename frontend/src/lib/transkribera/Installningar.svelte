@@ -25,6 +25,11 @@
   Välj språk och format — rätt modell väljs automatiskt, allt körs lokalt på din dator.
 </p>
 
+<!-- Synlig kopia av statusraden som TranskriberaView hoistar som en dold
+     live-region (plan A2-fixrunda, punkt 1) — t.ex. downloadAudioModel i
+     actions.js kan skriva hit medan läraren står här på steg 2. -->
+<p class="fel" class:info={tr.fileNoteArt === 'info'} aria-hidden="true">{tr.fileError}</p>
+
 <div class="ko-huvud">
   <span class="label">Filer i kö</span>
   <span class="antal">{tr.queue.length}</span>
@@ -86,6 +91,9 @@
     letter-spacing: -0.01em;
   }
   .lede { max-width: 62ch; color: var(--ink-2); margin: 0 0 28px; }
+  .fel { color: var(--bad); margin: 0 0 20px; }
+  .fel:empty { display: none; }
+  .fel.info { color: var(--ink-3); }
   .ko-huvud {
     display: flex;
     align-items: baseline;
