@@ -10,6 +10,7 @@
   import Dropzone from './Dropzone.svelte';
   import LankFalt from './LankFalt.svelte';
   import Kolista from './Kolista.svelte';
+  import Inspelning from './Inspelning.svelte';
   import Installningar from './Installningar.svelte';
   import Korning from './Korning.svelte';
   import { loadKatalog } from './katalog.svelte.js';
@@ -63,6 +64,8 @@
       <button type="button" class="lank" onclick={addSample}>ett exempel</button>
       <button type="button" class="lank" onclick={addSampleCorrupt}>skadad_inspelning.m4a</button>
     </p>
+
+    <Inspelning />
 
     <!--
       Synlig kopia av live-regionen ovan, i den position raden hade före
