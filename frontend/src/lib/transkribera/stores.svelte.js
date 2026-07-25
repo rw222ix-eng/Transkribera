@@ -5,6 +5,7 @@ export const tr = $state({
   activeId: null,       // vilken post som räknas som "aktuell källa"
   step: 'source',       // source | config | process
   fileError: '',        // felraden under källfälten
+  fileNoteArt: 'fel',    // 'fel' | 'info' — styr om felraden målas som fel eller neutral
   dragging: false,      // dropzonen är påhoverad av ett drag
   urlInput: '',         // länkfältets råtext
 });

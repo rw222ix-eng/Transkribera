@@ -15,6 +15,7 @@ export function addFiles(items) {
   const skippade = items.length - goda.length;
   if (!goda.length) {
     tr.fileError = 'Filformatet stöds inte — välj ljud eller video (MP4, MKV, MOV, MP3, WAV, M4A …).';
+    tr.fileNoteArt = 'fel';
     tr.dragging = false;
     return;
   }
@@ -30,15 +31,20 @@ export function addFiles(items) {
   tr.step = 'config';
   // Gamla appen visar dubblettbeskedet som en flytande toast (app.js:3051-3055).
   // Den här appen har ingen toast-infrastruktur och DESIGN.md:s ton talar emot
-  // att bygga en för det här — beskedet hamnar på samma rad som filfelet.
+  // att bygga en för det här — beskedet hamnar på samma rad som filfelet. Men
+  // dubblettbeskedet är inget fel, så det bär en egen "art" (tr.fileNoteArt)
+  // som vyn målar neutralt i stället för rött.
   if (skippade) {
     tr.fileError = 'Hoppade över ' + skippade + ' fil(er) — formatet stöds inte.';
+    tr.fileNoteArt = 'fel';
   } else if (dubbletter) {
     tr.fileError = dubbletter === 1
       ? '1 fil låg redan i kön.'
       : dubbletter + ' filer låg redan i kön.';
+    tr.fileNoteArt = 'info';
   } else {
     tr.fileError = '';
+    tr.fileNoteArt = 'fel';
   }
 }
 
@@ -46,6 +52,9 @@ export function addFiles(items) {
 export function removeFromQueue(id) {
   tr.queue = tr.queue.filter((q) => q.id !== id);
   if (tr.activeId === id) tr.activeId = tr.queue[0]?.id || null;
+  // Rensa ett eventuellt kvarstående besked (t.ex. dubblettnotisen) — annars
+  // står det kvar utan någon kö att höra till.
+  tr.fileError = '';
   // Tom kö tar guiden tillbaka till källsteget — annars står läraren på ett
   // inställningssteg utan något att ställa in.
   if (!tr.queue.length) tr.step = 'source';
@@ -66,10 +75,15 @@ export async function addSample() {
   tr.fileError = '';
   try {
     const res = await getJSON('/api/sample');
-    if (res?.path) addFiles([{ name: res.name, path: res.path }]);
-    else tr.fileError = 'Inget exempel finns på den här datorn — lägg till en egen fil.';
+    if (res?.path) {
+      addFiles([{ name: res.name, path: res.path }]);
+    } else {
+      tr.fileError = 'Inget exempel finns på den här datorn — lägg till en egen fil.';
+      tr.fileNoteArt = 'fel';
+    }
   } catch {
     tr.fileError = 'Inget exempel finns på den här datorn — lägg till en egen fil.';
+    tr.fileNoteArt = 'fel';
   }
 }
 
@@ -156,6 +170,7 @@ export function addUrl() {
   const u = tr.urlInput.trim();
   if (!/^https?:\/\//i.test(u)) {
     tr.fileError = 'Klistra in en giltig länk (måste börja med http:// eller https://).';
+    tr.fileNoteArt = 'fel';
     return;
   }
   addFiles([{ name: lankNamn(u), path: u }]);

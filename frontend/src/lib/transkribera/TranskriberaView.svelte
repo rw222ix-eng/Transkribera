@@ -27,15 +27,13 @@
     <button type="button" class="lank" onclick={addSampleCorrupt}>skadad_inspelning.m4a</button>
   </p>
 
-  {#if tr.fileError}
-    <p class="fel" role="status">{tr.fileError}</p>
-  {/if}
+  <p class="fel" class:info={tr.fileNoteArt === 'info'} role="status">{tr.fileError}</p>
 
   {#if tr.queue.length}
     <ul class="ko">
       {#each tr.queue as q (q.id)}
         <li>
-          <span class="ext">{extOf(q.name) || '?'}</span>
+          <span class="ext">{(/^https?:/i).test(q.path || '') ? 'URL' : (extOf(q.name) || 'fil')}</span>
           <span class="namn">{q.name}</span>
           <button
             type="button"
@@ -92,6 +90,8 @@
   }
   .lank:hover { color: var(--ink); }
   .fel { color: var(--bad); margin: 14px 0 0; }
+  .fel:empty { display: none; }
+  .fel.info { color: var(--ink-3); }
   .ko { list-style: none; margin: 20px 0 0; padding: 0; }
   .ko li {
     display: flex;
