@@ -26,12 +26,19 @@
   // TranskriberaView.svelte och avmonteras alltså på steg 2 — effekten körs om
   // varje gång läraren kommer tillbaka till källsteget.
   //
-  // Det är önskvärt (listan blir färsk i stället för att spegla sidladdningen)
-  // och ofarligt: städningen i laddaOavslutade kan inte råka svepa bort en
-  // PÅGÅENDE inspelnings post, eftersom "Nästa: inställningar" är avstängd
-  // medan tr.recording är sann — widgeten kan därför inte avmonteras och
-  // monteras om mitt i en inspelning. De väntande markörsessionerna skyddas
-  // uttryckligen, se laddaOavslutade.
+  // Det är önskvärt: listan blir färsk i stället för att spegla sidladdningen.
+  //
+  // OBS — omkörningen kan ske MITT I en inspelning. Här stod tidigare att den
+  // inte kunde det, eftersom "Nästa: inställningar" är avstängd medan
+  // tr.recording är sann. Det stämmer inte: den grinden sitter bara på den
+  // knappen, medan addFiles sätter tr.step = 'config' ovillkorligt
+  // (actions.js:37), och Dropzone, LankFalt, "ett exempel" och exempelfilen är
+  // alla klickbara under pågående inspelning. Spela in → dra in en fil → steg
+  // 2 → "Lägg till fler" → steg 1, så körs den här effekten om med mikrofonen
+  // igång. laddaOavslutade hanterar det uttryckligen: den pågående sessionen
+  // filtreras bort ur bannern (annars stod Släng och Återställ bredvid
+  // "Spelar in") och räknas ändå som levande vid städningen. Väntande
+  // markörsessioner skyddas på samma ställe.
   //
   // Effekten spårar ingenting: laddaOavslutade läser tillstånd först EFTER
   // sitt första await, och asynkrona läsningar registreras inte som beroenden.

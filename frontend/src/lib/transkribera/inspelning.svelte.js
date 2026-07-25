@@ -485,7 +485,24 @@ export async function laddaOavslutade() {
     const r = await fetch('/api/recordings/incomplete');
     const lista = await r.json();
     if (Array.isArray(lista)) {
-      tr.incompleteRecs = lista;
+      // Den PÅGÅENDE inspelningens egen .part filtreras bort. Widgeten KAN
+      // monteras om mitt i en inspelning: tr.recording grindar bara "Nästa:
+      // inställningar" (TranskriberaView.svelte), medan addFiles sätter
+      // tr.step = 'config' ovillkorligt (actions.js:37) — och Dropzone,
+      // LankFalt, "ett exempel" och exempelfilen är alla klickbara medan det
+      // spelas in. Vägen: spela in → dra in en fil → steg 2 → "Lägg till fler"
+      // → steg 1 → den här effekten körs om. Den levande .part-filen är då
+      // större än noll byte och listas av server.py:796-806.
+      //
+      // Utan filtret erbjuder bannern den pågående lektionen med Släng och
+      // Återställ bredvid "Spelar in 12:34":
+      //  · Släng unlink:ar .part medan recordern rullar, och nästa append
+      //    öppnar filen igen med "ab" (server.py:763) — lektionen trunkeras
+      //    tyst till det som spelades in EFTER klicket. Precis den
+      //    återuppståndelse cancelRecording går långa vägar för att undvika.
+      //  · Återställ döper om den levande .part-filen; resten hamnar i en ny
+      //    fil och markörerna följer bara den andra.
+      tr.incompleteRecs = lista.filter((p) => p && p.session !== session);
       ok = true;
     } else {
       tr.incompleteRecs = [];
@@ -500,9 +517,16 @@ export async function laddaOavslutade() {
   // markörerna postats (actions.js gör det först när transkriberingen är klar).
   // Städade vi bara mot incompleteRecs skulle ett besök på steg 1 under
   // pågående transkribering svepa bort posten mitt i det fönster den finns för.
+  //
+  // Den PÅGÅENDE sessionen måste med av samma skäl, och dessutom för att den
+  // nyss filtrerats bort ur listan ovan: sker omkörningen inom de första ~4
+  // sekunderna, innan första chunk-POSTen skapat .part-filen, finns den i
+  // ingen av källorna alls. Posten skulle raderas, addRecMarker återskapa den
+  // med mime: '' — och en senare krasch återställas som .webm.
   stadaSessioner([
     ...tr.incompleteRecs.map((p) => p.session),
     ...Object.values(tr.recMarkersByPath).map((m) => m.session),
+    ...(session ? [session] : []),
   ]);
 }
 
