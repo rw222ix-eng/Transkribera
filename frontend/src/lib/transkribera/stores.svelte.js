@@ -34,6 +34,22 @@ export const tr = $state({
   logExpand: false,     // loggen utfälld
   resultFiles: [],      // filer den senaste körningen skrev
   resultId: null,       // serverns id för den sparade lektionen
+
+  // steg 1 — inspelning (plan A4)
+  recording: false,       // en inspelning pågår just nu
+  recElapsed: 0,          // sekunder sedan inspelningen startade
+  recError: '',           // inspelningens eget fel; egen rad, inte guidens fileError
+  recMarkerCount: 0,      // antal markörer satta i den pågående inspelningen
+  recLevel: 0,            // mikrofonnivå 0-1, uppdateras var 200:e ms
+  recSilent: false,       // mer än 4 s under tystnadströskeln
+  recLostSecs: 0,         // sekunder som gick förlorade när en chunk inte kunde sparas
+  incompleteRecs: [],     // [{session, bytes, size, modified}] från /api/recordings/incomplete
+  // Markörer väntar här mellan inspelningens slut och transkriberingens slut —
+  // de kan inte postas förrän lektionen har ett id. Nyckeln är filens path.
+  // Bor i storen, INTE i inspelning.svelte.js: actions.js måste läsa den, och
+  // inspelning.svelte.js importerar actions.js. Ett importberoende åt andra
+  // hållet hade blivit en cykel.
+  recMarkersByPath: {},   // {path: {session, markers: [{t}]}}
 });
 
 // Samma lista som gamla appens ALLOWED (app.js:298). Ändras den här måste
