@@ -36,11 +36,15 @@
     {/each}
   </nav>
 
-  <!-- Syns bara medan det spelas in; annars renderas ingenting alls och
-       flikarna står kvar centrerade som förut. -->
-  <InspelningBricka />
-
+  <!-- Brickan bor INUTI .temaruta, inte som en egen kolumn i .bar. Det är
+       .ordmarke och .temaruta som centrerar .flikar: båda är flex: 1 1 0, alltså
+       två lika breda sidor. En fjärde flex: 0 0 auto-kolumn på ~170 px hade
+       flyttat hela flikgruppen ~85 px åt vänster i samma ögonblick inspelningen
+       startar — och tillbaka igen när den stoppas. Här växer i stället höger
+       kolumn inifrån och flikarna står stilla. Brickan renderar ingenting alls
+       när inget spelas in. -->
   <div class="temaruta">
+    <InspelningBricka />
     <button
       type="button"
       class="tema"
@@ -104,7 +108,11 @@
   .temaruta {
     flex: 1 1 0;
     display: flex;
+    align-items: center;
     justify-content: flex-end;
+    /* Samma 16px som .bar:s egen gap — brickan och temaväxlaren ska stå isär
+       lika mycket som topbarens övriga kolumner. */
+    gap: 16px;
   }
   .tema {
     flex: 0 0 auto;
