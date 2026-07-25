@@ -102,6 +102,22 @@ export async function approveExam() {
   await streamPost('/api/exams/' + prov.doc.id + '/approve', {}, handleExamEvent);
 }
 
+/** Ändrar det öppna provet/arbetsbladet via den delade ändringschatten.
+ * Speglar sendByggChat:s icke-tavla-gren, app.js:945-957 (utan uppgifts-
+ * markering, som inte finns i den här porten — se planeringens ChangeChat). */
+export async function refineExam() {
+  const message = plan.chatInput.trim();
+  if (!message || !prov.doc?.id || prov.phase === 'running') return;
+  plan.chatInput = '';
+  resetProvRun();
+  // Går ändringen inte igenom läggs texten tillbaka i fältet — samma skydd
+  // som refineBoard (planering/actions.js) ger tavlan.
+  await streamPost(`/api/exams/${prov.doc.id}/refine`, { message }, (ev) => {
+    if (ev.type === 'error' && !plan.chatInput) plan.chatInput = message;
+    handleExamEvent(ev);
+  });
+}
+
 /** Öppnar den kompilerade PDF:en i en ny flik. Speglar openExamPdf, app.js:1307. */
 export function openPdf() {
   if (prov.doc?.id) window.open('/api/exams/' + prov.doc.id + '/pdf', '_blank');

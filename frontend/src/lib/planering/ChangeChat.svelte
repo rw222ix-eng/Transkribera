@@ -1,23 +1,46 @@
 <script>
+  // Den gemensamma ändringschatten: ett fält, samma beteende för alla tre
+  // typer — ruttar till tavlans respektive provets refine-endpoint. Speglar
+  // sendByggChat, app.js:945-957, och byggChat*-fälten runt app.js:3518-3530.
   import { plan } from './stores.svelte.js';
   import { refineBoard } from './actions.js';
+  import { prov } from '../prov/stores.svelte.js';
+  import { refineExam } from '../prov/actions.js';
 
-  const canSend = $derived(
-    plan.chatInput.trim().length > 0 && !!plan.id && plan.phase !== 'running',
+  const isBoard = $derived(plan.typ === 'tavla');
+  const docFinns = $derived(isBoard ? !!plan.id : !!prov.doc?.id);
+  const upptagen = $derived(isBoard ? plan.phase === 'running' : prov.phase === 'running');
+  const canSend = $derived(plan.chatInput.trim().length > 0 && docFinns && !upptagen);
+
+  const etikett = $derived(
+    isBoard ? 'Ändra tavlan' : plan.typ === 'arbetsblad' ? 'Ändra arbetsbladet' : 'Ändra provet',
   );
+  const placeholder = $derived(
+    isBoard
+      ? 'Ändra tavlan — t.ex. byt exempel 2 mot ett med decimaltal'
+      : plan.typ === 'arbetsblad'
+        ? 'Ändra arbetsbladet — t.ex. gör uppgift 3 svårare, byt kontext'
+        : 'Ändra provet — t.ex. gör uppgift 3 svårare, lägg till en A-uppgift',
+  );
+
+  function send() {
+    if (!canSend) return;
+    if (isBoard) refineBoard();
+    else refineExam();
+  }
 </script>
 
-{#if plan.id}
+{#if docFinns}
   <div class="chat">
     <span class="label">Ändra</span>
     <input
       class="field"
-      aria-label="Ändra tavlan"
-      placeholder="Be om en ändring — t.ex. lägg till ett exempel med bråk"
+      aria-label={etikett}
+      {placeholder}
       bind:value={plan.chatInput}
-      onkeydown={(e) => { if (e.key === 'Enter' && canSend) refineBoard(); }}
+      onkeydown={(e) => { if (e.key === 'Enter' && canSend) send(); }}
     />
-    <button class="send" disabled={!canSend} onclick={() => refineBoard()}>Skicka</button>
+    <button class="send" disabled={!canSend} onclick={send}>Skicka</button>
   </div>
 {/if}
 
