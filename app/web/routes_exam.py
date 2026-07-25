@@ -350,13 +350,12 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     # kastades tidigare bort: föll den syntes ingenting alls
                     # och kvittot ljög om att allt gått bra.
                     bed_path = None
+                    bed_misslyckades = False
                     if pdf_path is not None and bed is not None:
                         bed_path, bed_log = exam_pdf.compile_pdf(
                             bed, out_dir, f"{slug} - bedomning")
                         if bed_path is None:
-                            emit({"type": "log",
-                                  "msg": "Bedömningsanvisningen gick inte att "
-                                         "kompilera — försöker korrigera …"})
+                            bed_misslyckades = True
                             # Bedömningsmallen renderar losning/bedomning, som
                             # prov.tex.j2 aldrig rör. Ett trasigt fält där kan
                             # bara avslöjas här — och fix_latex behöver DEN
@@ -365,8 +364,18 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     if pdf_path is not None and (bed is None or bed_path is not None):
                         errors = []
                         break
-                    if (round_ >= exam_gen.MAX_LATEX_ROUNDS
-                            or arbiter.ensure_llm() is None):
+                    # Avgör FÖRE loggraden om en korrigering faktiskt följer —
+                    # annars lovar strömmen ett omförsök som aldrig sker, vilket
+                    # är precis den sortens osanning den här rutten ska bort med.
+                    sista_forsoket = (round_ >= exam_gen.MAX_LATEX_ROUNDS
+                                      or arbiter.ensure_llm() is None)
+                    if bed_misslyckades:
+                        emit({"type": "log",
+                              "msg": "Bedömningsanvisningen gick inte att kompilera."
+                                     if sista_forsoket else
+                                     "Bedömningsanvisningen gick inte att "
+                                     "kompilera — försöker korrigera …"})
+                    if sista_forsoket:
                         # Provet behålls om det kompilerade: ett fungerande
                         # prov kastas inte bort för att det sekundära
                         # dokumentet föll. Skild kod låter gränssnittet skilja

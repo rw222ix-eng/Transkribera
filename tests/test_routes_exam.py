@@ -224,8 +224,9 @@ def test_approve_bedomning_failure_surfaces_and_keeps_prov(client, monkeypatch):
     evs = _events(r)
     res = _done(r)
 
-    assert any(e["type"] == "log" and "edömningsanvisningen" in e.get("msg", "")
-               for e in evs), "felet nämndes aldrig i strömmen"
+    bed_loggar = [e["msg"] for e in evs
+                  if e["type"] == "log" and "edömningsanvisningen" in e.get("msg", "")]
+    assert bed_loggar, "felet nämndes aldrig i strömmen"
     bed = [e for e in res["errors"] if e["code"] == "bedomning"]
     assert bed, f"ingen bedömningspost i errors: {res['errors']}"
     assert "ntxsy7" in bed[0]["message"]
@@ -234,6 +235,10 @@ def test_approve_bedomning_failure_surfaces_and_keeps_prov(client, monkeypatch):
     # fix_latex måste få BEDÖMNINGENS logg — provets är tom, och en tom logg
     # ger modellen ingenting att korrigera.
     assert sedda_loggar and all("ntxsy7" in lg for lg in sedda_loggar)
+    # Sista rundan ger upp (MAX_LATEX_ROUNDS nått) — då får loggraden inte
+    # längre lova en korrigering som aldrig sker. Tidigare rundor FÅR lova
+    # det, eftersom de faktiskt följs av ett fix_latex-anrop.
+    assert bed_loggar[-1] == "Bedömningsanvisningen gick inte att kompilera."
 
 
 def test_approve_bedomning_failure_without_llm_still_gets_bedomning_code(
@@ -257,12 +262,19 @@ def test_approve_bedomning_failure_without_llm_still_gets_bedomning_code(
     monkeypatch.setattr(exam_pdf, "compile_pdf", fake_compile)
 
     r = client.post(f"/api/exams/{result['id']}/approve", json={})
+    evs = _events(r)
     res = _done(r)
 
     bed = [e for e in res["errors"] if e["code"] == "bedomning"]
     assert bed, f"koden ska vara 'bedomning', inte 'kompilering': {res['errors']}"
     assert res["pdf"], "provet kompilerade och ska behållas trots att " \
                         "modellen inte kunde startas"
+    # ensure_llm() är None redan vid FÖRSTA rundan här, så det blir aldrig
+    # något omförsök. Loggraden får då inte påstå "försöker korrigera" —
+    # det vore precis den sortens tomt löfte den här rutten ska bort med.
+    bed_loggar = [e["msg"] for e in evs
+                  if e["type"] == "log" and "edömningsanvisningen" in e.get("msg", "")]
+    assert bed_loggar == ["Bedömningsanvisningen gick inte att kompilera."]
 
 
 # ------------------------------------------------------ Fas 5: arbetsblad --
