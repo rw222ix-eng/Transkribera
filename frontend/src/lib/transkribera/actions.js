@@ -418,7 +418,12 @@ export async function cancelRun() {
  * utdatamapp för samma lektion.
  */
 export function nyTranskribering() {
-  // Timers först, precis som restart():s clearInterval/clearTimeout — inget får
+  // Körtoken först, likt cancelRun: en ström som fortfarande droppar in blir
+  // ogiltig omedelbart och kan inte skriva in i tillståndet vi tömmer nedan.
+  // Ingen nåbar väg dit är funnen — knappen är grindad på run === 'done' &&
+  // !nagotKvar — men raden är billig försäkring.
+  korToken++;
+  // Sedan timers, precis som restart():s clearInterval/clearTimeout — inget får
   // skriva in i det tillstånd vi tömmer på nästa rad.
   stoppaTickare();
   stopProgressAnim();
