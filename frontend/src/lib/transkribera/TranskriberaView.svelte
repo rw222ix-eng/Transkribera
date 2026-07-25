@@ -46,8 +46,23 @@
     Varje steg renderar därutöver sin egen SYNLIGA kopia av samma text, nära
     fältet den gäller, markerad aria-hidden="true" — bara live-regionen ovan
     ska annonseras, inte båda.
+
+    Regionen bär BÅDA felkanalerna: guidens tr.fileError och inspelningens
+    tr.recError. Inspelningen får medvetet ingen egen live-region — en region
+    som monteras in i DOM:en samtidigt som sin text annonseras inte pålitligt
+    (samma mönster som fälldes i A2 och i A3:s slutgranskning), och två
+    samtidigt muterande role="status" läses dessutom i oförutsägbar ordning.
+
+    VALET NÄR BÅDA ÄR SATTA: tr.recError går först. Ett mikrofonfel gäller en
+    handling som pågår just nu — nekad mikrofon, ingen mikrofon hittad,
+    "Mikrofonen försvann" mitt i lektionen — medan tr.fileError är en passiv
+    notis om kön ("1 fil låg redan i kön"). Priset är att filbeskedet
+    annonseras en gång till när tr.recError nollställs (ny start eller Avbryt)
+    och filbeskedet fortfarande står kvar: en dubblering, inte en förlust.
+    Motsatt prioritet hade kunnat svälja mikrofonfelet helt, och det är det
+    allvarligare av de två.
   -->
-  <p class="fel-sr" role="status">{tr.fileError}</p>
+  <p class="fel-sr" role="status">{tr.recError || tr.fileError}</p>
 
   {#if tr.step === 'source'}
     <p class="eyebrow">STEG 1 — KÄLLA</p>

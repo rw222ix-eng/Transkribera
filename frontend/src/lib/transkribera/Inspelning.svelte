@@ -42,9 +42,21 @@
   </div>
 </div>
 
-{#if tr.recError}
-  <p class="rec-fel" role="status">{tr.recError}</p>
-{/if}
+<!--
+  SYNLIG kopia av inspelningsfelet — den annonseras INTE. Det som skärmläsaren
+  läser är den hoistade live-regionen i TranskriberaView.svelte, som ligger
+  permanent i DOM:en och numera bär både tr.fileError och tr.recError. Raden
+  hade tidigare role="status" och monterades in via {#if} tillsammans med sin
+  text, och en live-region som förs in i DOM:en samtidigt som sin text
+  annonseras inte pålitligt — det träffade precis de besked en skärmläsar-
+  användare mest behöver (nekad mikrofon, ingen mikrofon hittad, "Mikrofonen
+  försvann"). Samma uppdelning som .fel/.fel-sr redan har.
+
+  Noden är permanent och aria-hidden, så :empty { display: none } är riskfritt
+  här: den tar bort raden ur layouten, inte ur tillgänglighetsträdet — och
+  raden finns inte i tillgänglighetsträdet från början.
+-->
+<p class="rec-fel" aria-hidden="true">{tr.recError}</p>
 
 <style>
   .rad { margin: 20px 0 0; }
@@ -148,7 +160,12 @@
     font-size: inherit;
     cursor: pointer;
   }
-  /* Inspelningens fel bär en EGEN rad, inte guidens delade tr.fileError —
-     ett mikrofonfel hör inte hemma i samma statusrad som filformatsfel. */
+  /* Inspelningens fel bär en EGEN synlig rad, inte guidens delade tr.fileError —
+     ett mikrofonfel hör inte hemma i samma statusrad som filformatsfel. För
+     skärmläsaren delas de däremot på en enda hoistad live-region, se markupen
+     ovan och kommentaren i TranskriberaView.svelte. */
   .rec-fel { color: var(--bad); margin: 12px 0 0; }
+  /* Samma teknik som .fel i TranskriberaView.svelte: noden är permanent, men
+     ska inte lägga beslag på 12px marginal när det inte finns något fel. */
+  .rec-fel:empty { display: none; }
 </style>
