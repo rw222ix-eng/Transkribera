@@ -4,7 +4,7 @@
   // designsystemet. Steg 2 kom i plan A2 (<Installningar />) och steg 3 i plan
   // A3 (<Korning />) — båda renderas ur stegväxlingen längst ned i den här
   // filen, så guiden är komplett fram till och med körningen.
-  import { tr } from './stores.svelte.js';
+  import { tr, samladStatus } from './stores.svelte.js';
   import { addSample, addSampleCorrupt, goConfig, loadAudioModel } from './actions.js';
   import Stegindikator from './Stegindikator.svelte';
   import Dropzone from './Dropzone.svelte';
@@ -45,7 +45,8 @@
     annonsera mutationen (plan A2-fixrunda, punkt 1).
     Varje steg renderar därutöver sin egen SYNLIGA kopia av samma text, nära
     fältet den gäller, markerad aria-hidden="true" — bara live-regionen ovan
-    ska annonseras, inte båda.
+    ska annonseras, inte båda. Sammanvävningen görs av samladStatus() i
+    stores.svelte.js, så att region och kopia inte kan divergera.
 
     Regionen bär BÅDA felkanalerna: guidens tr.fileError och inspelningens
     tr.recError. Inspelningen får medvetet ingen egen live-region — en region
@@ -73,12 +74,10 @@
     fela åt. Växer felkanalerna bortom två bör det här göras om till en riktig
     meddelandekö i stället för en filter/join.
 
-    Punkten trimmas bara på segment som INTE är sist: nästan varje feltext i
-    katalogen slutar redan på punkt, så ett rakt join('. ') gav "… försök
-    igen.. 1 fil låg redan i kön." Att lämna det sista segmentet orört gör
-    att ett ensamt meddelande blir tecken-för-tecken som förut.
+    Hur segmenten fogas ihop (och varför punkten trimmas på alla utom det
+    sista) står vid samladStatus() i stores.svelte.js.
   -->
-  <p class="fel-sr" role="status">{[tr.recError, tr.fileError].filter(Boolean).map((s, i, a) => (i < a.length - 1 ? s.replace(/\.\s*$/, '') : s)).join('. ')}</p>
+  <p class="fel-sr" role="status">{samladStatus()}</p>
 
   {#if tr.step === 'source'}
     <p class="eyebrow">STEG 1 — KÄLLA</p>
@@ -108,6 +107,13 @@
       som annonseras. e2e-testerna skiljer den här synliga kopian från
       live-regionen via data-testid="statusrad" i stället för att leta upp
       texten två gånger (se e2e/transkribera-kalla.spec.mjs).
+
+      HÄR — och bara här — bär den synliga kopian enbart tr.fileError, inte
+      samladStatus(). Skälet: <Inspelning /> är monterad precis ovanför på det
+      här steget och visar tr.recError på sin egen .rec-fel-rad. Vävde den
+      här raden in inspelningsfelet också skulle det stå två gånger på
+      skärmen, med tre raders mellanrum. Steg 2 har inte den raden — där
+      renderas samladStatus(), se Installningar.svelte.
     -->
     <p class="fel" class:info={tr.fileNoteArt === 'info'} aria-hidden="true" data-testid="statusrad">{tr.fileError}</p>
 

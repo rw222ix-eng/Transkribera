@@ -1,7 +1,7 @@
 <script>
   // Guidens steg 2 — inställningar. Speglar viewTranscribe:s stepConfig-gren
   // (app/web/static/app.js:4472-4578), omstylad till designsystemet.
-  import { tr } from './stores.svelte.js';
+  import { tr, samladStatus } from './stores.svelte.js';
   import { goSource, startRun } from './actions.js';
   import Sprakval from './Sprakval.svelte';
   import Formatval from './Formatval.svelte';
@@ -33,8 +33,22 @@
   INTE CSS-genererat innehåll — se motiveringen i TranskriberaView.svelte.
   e2e-testerna skiljer den här synliga kopian från live-regionen via
   data-testid="statusrad" i stället för att leta upp texten två gånger.
+
+  Raden bär HELA samladStatus(), alltså även tr.recError — inte bara
+  tr.fileError. Utan det blev inspelningsfelet osynligt just när det betyder
+  mest: faller den SISTA biten är sekvensen chunk fallerar → tr.recError sätts
+  → slutforInspelning → addFiles sätter tr.step = 'config' (actions.js:33) →
+  <Inspelning /> avmonteras med sin .rec-fel-rad. Beskedet försvann alltså i
+  praktiken samma ögonblick det skrevs, och det är exakt fallet "filen köades
+  med ett hål i ljudet". Skärmläsaren fick det ändå via den hoistade regionen;
+  en seende lärare kunde missa det helt. Raden är fortfarande aria-hidden, så
+  bara EN nod är exponerad för skärmläsare.
+
+  class:info stängs av när tr.recError är satt: tr.fileNoteArt hör till
+  filkanalen, och dess neutrala "info"-läge (dubblettbeskedet) får inte måla
+  ett inspelningsfel som en lugn notis.
 -->
-<p class="fel" class:info={tr.fileNoteArt === 'info'} aria-hidden="true" data-testid="statusrad">{tr.fileError}</p>
+<p class="fel" class:info={tr.fileNoteArt === 'info' && !tr.recError} aria-hidden="true" data-testid="statusrad">{samladStatus()}</p>
 
 <div class="ko-huvud">
   <span class="label">Filer i kö</span>

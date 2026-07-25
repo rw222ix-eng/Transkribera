@@ -52,6 +52,28 @@ export const tr = $state({
   recMarkersByPath: {},   // {path: {session, markers: [{t}]}}
 });
 
+/**
+ * Guidens samlade statustext: inspelningens fel och guidens filbesked
+ * sammanvävda, i den ordning de renderas.
+ *
+ * Bor HÄR och inte i markupen därför att TVÅ noder visar samma text — den
+ * hoistade live-regionen i TranskriberaView.svelte och det aktuella stegets
+ * egna aria-hidden-kopia. Skrivs uttrycket av två gånger divergerar de förr
+ * eller senare, och då hör skärmläsaren en annan text än den seende läraren
+ * ser. En källa, två avläsare.
+ *
+ * Punkten trimmas bara på segment som INTE är sist: nästan varje feltext i
+ * katalogen slutar redan på punkt, så ett rakt join('. ') gav "… försök
+ * igen.. 1 fil låg redan i kön." Att lämna sista segmentet orört gör att ett
+ * ensamt meddelande blir tecken-för-tecken som förut.
+ */
+export function samladStatus() {
+  return [tr.recError, tr.fileError]
+    .filter(Boolean)
+    .map((s, i, a) => (i < a.length - 1 ? s.replace(/\.\s*$/, '') : s))
+    .join('. ');
+}
+
 // Samma lista som gamla appens ALLOWED (app.js:298). Ändras den här måste
 // den ändras där också tills den gamla appen är pensionerad.
 const TILLATNA = [
