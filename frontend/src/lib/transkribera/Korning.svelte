@@ -130,7 +130,11 @@
 {/if}
 
 {#if tr.queue.length > 1}
-  <p class="kolabel">Kö — {Object.values(tr.qStatus).filter((s) => s === 'done').length} av {tr.queue.length} klara</p>
+  <!-- Räkna genom KÖN, inte genom tr.qStatus: removeFromQueue tar bort posten
+       men lämnar kvar dess qStatus-nyckel (actions.js:54-63), så en borttagen
+       klar fil skulle fortsätta räknas och ge "3 av 2 klara". Speglar gamla
+       appens doneCount (app.js:3363). -->
+  <p class="kolabel">Kö — {tr.queue.filter((q) => tr.qStatus[q.id] === 'done').length} av {tr.queue.length} klara</p>
   <Kolista visaStatus={true} />
 {/if}
 
