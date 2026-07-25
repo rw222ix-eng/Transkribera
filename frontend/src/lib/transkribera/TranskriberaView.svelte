@@ -3,7 +3,7 @@
   // stepSource-gren (app/web/static/app.js:4383-4470), omstylad till
   // designsystemet. Steg 2 kom i plan A2. Steg 3 kommer i plan A3.
   import { tr } from './stores.svelte.js';
-  import { addSample, addSampleCorrupt, goConfig } from './actions.js';
+  import { addSample, addSampleCorrupt, goConfig, loadAudioModel } from './actions.js';
   import Stegindikator from './Stegindikator.svelte';
   import Dropzone from './Dropzone.svelte';
   import LankFalt from './LankFalt.svelte';
@@ -11,10 +11,11 @@
   import Installningar from './Installningar.svelte';
   import { loadKatalog } from './katalog.svelte.js';
 
-  // Katalogen hämtas en gång när vyn monteras — skalet håller vyn monterad
-  // hela sessionen, så det här körs inte om vid flikbyten. Ett fel (offline
-  // eller trasig hårdvaruskanning, se app/gpu_arbiter.py) skulle annars
-  // lämna CTA:n i Installningar.svelte fastnad på "Laddar modeller …" utan
+  // Katalogen och ljudmodellens status hämtas en gång när vyn monteras —
+  // skalet håller vyn monterad hela sessionen, så det här körs inte om vid
+  // flikbyten eller stegväxlingar. Ett fel i katalogen (offline eller
+  // trasig hårdvaruskanning, se app/gpu_arbiter.py) skulle annars lämna
+  // CTA:n i Installningar.svelte fastnad på "Laddar modeller …" utan
   // förklaring.
   $effect(() => {
     loadKatalog().then((ok) => {
@@ -23,6 +24,7 @@
         tr.fileError = 'Kunde inte läsa modellistan — starta om appen och försök igen.';
       }
     });
+    loadAudioModel();
   });
 </script>
 

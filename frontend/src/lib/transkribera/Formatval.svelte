@@ -1,13 +1,13 @@
 <script>
   // Utdataformat och andra passet mot ljudet. Speglar app.js:4534-4552.
+  // loadAudioModel() hämtas i TranskriberaView:s mount-effekt, inte här —
+  // den här komponenten monteras och avmonteras med tr.step (varje "Lägg
+  // till fler" ↔ "Nästa"), så ett eget $effect skulle hämta om statusen vid
+  // varje stegväxling i stället för en gång per session.
   import { tr } from './stores.svelte.js';
-  import { toggleFormat, toggleAudioCorrect, downloadAudioModel, loadAudioModel } from './actions.js';
+  import { toggleFormat, toggleAudioCorrect, downloadAudioModel } from './actions.js';
 
   const FORMAT = ['srt', 'txt', 'vtt'];
-
-  $effect(() => {
-    loadAudioModel();
-  });
 </script>
 
 <div class="rad">
