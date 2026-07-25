@@ -187,9 +187,6 @@
   .count {
     flex: 0 0 auto;
     margin-left: auto;
-    font-family: var(--mono);
-    font-size: 0.72rem;
-    letter-spacing: 0.05em;
     color: var(--ink-3);
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
