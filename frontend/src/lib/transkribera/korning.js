@@ -68,7 +68,13 @@ function frame() {
       // medvetet kvar det ursprungliga (trasiga) beteendet.
       disp += (Math.min(real, 99) - disp) * 0.12;
     } else if (disp < tak) {
-      disp += (tak - disp) * 0.004;                 // läck framåt så inget fryser
+      // Läck framåt så inget fryser. Faktorn är plan-mandaterad (A3 Task 3) och
+      // medvetet dämpad mot gamla appens 0.012 (app.js:2301): där var grenen
+      // död — `real > disp` blev aldrig falskt — medan den här är nåbar hela
+      // körningen, och odämpad skulle baren rusa mot fastaket mellan
+      // serverhändelser. Enda läget gamla appen faktiskt nådde hit är real = 0
+      // (URL-nedladdningsfönstret); där kryper nya baren ~3x långsammare.
+      disp += (tak - disp) * 0.004;
     }
     if (disp > 99) disp = 99;
   }
