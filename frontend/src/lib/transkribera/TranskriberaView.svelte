@@ -72,8 +72,13 @@
     satta samtidigt. Det är en dubblering, inte en tyst förlust — rätt håll att
     fela åt. Växer felkanalerna bortom två bör det här göras om till en riktig
     meddelandekö i stället för en filter/join.
+
+    Punkten trimmas bara på segment som INTE är sist: nästan varje feltext i
+    katalogen slutar redan på punkt, så ett rakt join('. ') gav "… försök
+    igen.. 1 fil låg redan i kön." Att lämna det sista segmentet orört gör
+    att ett ensamt meddelande blir tecken-för-tecken som förut.
   -->
-  <p class="fel-sr" role="status">{[tr.recError, tr.fileError].filter(Boolean).join('. ')}</p>
+  <p class="fel-sr" role="status">{[tr.recError, tr.fileError].filter(Boolean).map((s, i, a) => (i < a.length - 1 ? s.replace(/\.\s*$/, '') : s)).join('. ')}</p>
 
   {#if tr.step === 'source'}
     <p class="eyebrow">STEG 1 — KÄLLA</p>
