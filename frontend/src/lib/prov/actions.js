@@ -70,6 +70,7 @@ export function handleExamEvent(ev) {
     else if (r.tex && r.status === 'godkänt') prov.msg = 'Sparad utan PDF: ' + r.tex;
     loadArkiv();       // handlingen syns direkt i arkivet, se app.js:1278
     loadHistorik();    // historiken + prövad-markörerna uppdateras, app.js:1279
+    loadContent();     // PRÖVAT-markörerna i innehållslistan uppdateras, app.js:1280
   }
 }
 
