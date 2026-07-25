@@ -88,10 +88,19 @@
     {/if}
 
     <p class="vidare">
+      <!--
+        tr.recording grindar knappen: ligger redan en fil i kön går det annars
+        att lämna steg 1 MITT I en pågående inspelning. Steg 2 avmonterar
+        <Inspelning />, men modultillståndet i inspelning.svelte.js lever kvar
+        — mikrofonen är på, timern tickar, bitarna POSTas var fjärde sekund och
+        beforeunload-vakten blockerar sidstängning utan att något syns som
+        förklarar varför. Widgetens egna knappar (Stoppa / Avbryt) är då enda
+        vägen ur läget, och de är inte längre monterade.
+      -->
       <button
         type="button"
         class="primar"
-        disabled={!tr.queue.length}
+        disabled={!tr.queue.length || tr.recording}
         onclick={goConfig}
       >Nästa: inställningar</button>
     </p>
