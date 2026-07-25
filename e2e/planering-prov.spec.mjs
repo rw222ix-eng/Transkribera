@@ -1,0 +1,104 @@
+// Task 6 (Plan 4): e2e för prov- och arbetsbladsflödet i den nya Svelte-
+// frontenden (/next/). Bevisar hela vägen typväljare -> innehållsval ->
+// generering -> ändra via den delade chatten -> godkänn & PDF, mot den
+// riktiga backenden (fejkad LLM/GPU/Tectonic, se e2e/serve_test_app.py) —
+// inte bara att grunden monteras. Se docs/superpowers/plans/
+// 2026-07-25-prov-arbetsblad-svelte.md, Task 6.
+//
+// Mönster/fixtures återanvända rakt av från e2e/planering-tavla.spec.mjs
+// och e2e/planering-arkiv.spec.mjs: failOnConsoleError, "/next/"-
+// navigeringen och frameLocator-vanan (den här specen rör aldrig
+// tavel-iframen). serve_test_app.py patchar exam_gen.generate_exam och
+// exam_gen.refine_exam deterministiskt (_fake_exam/fake_refine_exam,
+// ~rad 201-251) och exam_pdf.compile_pdf/engine_available (~rad 253-263)
+// med en riktig, giltig PDF-stubbe — så generering, refine OCH
+// godkännande+PDF går att köra end-to-end mot fejkservern utan Tectonic.
+//
+// Körordning (alfabetisk filordning inom next-foundation-projektet, se
+// kommentaren i planering-arkiv.spec.mjs): next-foundation -> planering-
+// arkiv -> planering-prov -> planering-tavla. Den här specen skapar inga
+// planeringsarkivposter (prov/arbetsblad ligger i en egen tabell, rörs
+// aldrig av routes_planning.py) och stör därför inte arkiv-specens
+// "exakt en post"-antagande, oavsett körordning.
+import { test, expect, failOnConsoleError } from "./helpers/app";
+
+// Kursen har riktigt seedat Gy25-innehåll (seed_course_content körs vid
+// serverstart, se .superpowers/sdd/progress.md T2) — "Aritmetik, algebra
+// och funktioner" är den första gruppen med 7 punkter.
+const KURS = "Matematik, nivå 1a";
+
+test("Planering (/next/): skriv provet, ändra via chatten, godkänn & PDF", async ({ page }) => {
+  const errors = [];
+  failOnConsoleError(page, errors);
+
+  await page.goto("/next/");
+
+  // 1) Typväljaren: Prov byter rubriken (heading, "Nytt prov" — serif-
+  // kursiverade "prov" ingår i den tillgängliga rubriktexten).
+  await expect(page.getByRole("heading", { name: /tavla/i })).toBeVisible();
+  await page.getByRole("button", { name: "Prov", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Nytt prov" })).toBeVisible();
+
+  // 2) CTA:n är avstängd tills en kurs är vald OCH minst en innehållspunkt.
+  const cta = page.getByRole("button", { name: "Skriv provet" });
+  await expect(cta).toBeDisabled();
+
+  // 3) Kursval laddar kursens innehållspunkter (ContentPicker.svelte via
+  // loadContent(), triggat av $effect på plan.courseId i PlaneringView).
+  await page.getByRole("button", { name: KURS, exact: true }).click();
+  await expect(page.getByText("Aritmetik, algebra och funktioner")).toBeVisible({ timeout: 10000 });
+  await expect(page.getByText("0 valda av 7", { exact: true })).toBeVisible();
+  await expect(cta).toBeDisabled();
+
+  // 4) Markera en hel grupp innehållspunkter -> CTA:n slår på.
+  await page.getByRole("button", { name: "Markera alla" }).first().click();
+  await expect(page.getByText("7 valda av 7", { exact: true })).toBeVisible();
+  await expect(cta).toBeEnabled();
+
+  // 5) Generering: en loggrad från fejk-provgeneratorn, sedan provkortet med
+  // sex uppgifter (_fake_exam, e2e/serve_test_app.py).
+  await cta.click();
+  await expect(page.getByText(/Skriver provet/)).toBeVisible({ timeout: 15000 });
+  const card = page.locator('[data-key="exam-card"]');
+  await expect(card).toBeVisible({ timeout: 15000 });
+  await expect(card.getByText("Prov — " + KURS)).toBeVisible();
+  const tasks = card.locator(".tasks li");
+  await expect(tasks).toHaveCount(6);
+  await expect(card.getByText("Uppgift 1", { exact: true })).toBeVisible();
+
+  // 6) Ändra-raden (den delade chatten) visas nu när provet (prov.doc.id)
+  // finns, med en provspecifik platshållartext (ChangeChat.svelte).
+  const changeField = page.getByLabel("Ändra provet");
+  await expect(changeField).toBeVisible();
+  await expect(changeField).toHaveAttribute(
+    "placeholder",
+    "Ändra provet — t.ex. gör uppgift 3 svårare, lägg till en A-uppgift",
+  );
+
+  // 6b) refineExam(): skicka en ändring och vänta på att uppgift 1 får
+  // ändrings-suffixet. fake_refine_exam (e2e/serve_test_app.py) lägger
+  // deterministiskt till " (ändrad)" på uppgiften (nummer saknas i den här
+  // porten -> alltid uppgift 1, se prov/actions.js: refineExam).
+  const chat = changeField.locator("xpath=ancestor::div[contains(@class,'chat')]");
+  await changeField.fill("Gör uppgift 1 svårare");
+  await chat.getByRole("button", { name: "Skicka" }).click();
+  await expect(
+    card.locator(".tasks li").first().getByText(/\(ändrad\)$/),
+  ).toBeVisible({ timeout: 15000 });
+  // Fältet töms igen efter en lyckad ändring.
+  await expect(changeField).toHaveValue("");
+
+  // 7) Godkänn och skapa PDF: fejkservern har en riktig Tectonic-binär och
+  // en patchad compile_pdf som alltid ger en giltig PDF-stubbe tillbaka
+  // (fake_compile_pdf, e2e/serve_test_app.py) — deterministiskt, ingen
+  // flaky LaTeX-kompilering. Statustaggen byter till "godkänt" och Öppna
+  // PDF/TeX dyker upp.
+  await card.getByRole("button", { name: "Godkänn och skapa PDF" }).click();
+  await expect(card.getByText("godkänt", { exact: true })).toBeVisible({ timeout: 15000 });
+  await expect(card.getByRole("button", { name: "Öppna PDF" })).toBeVisible();
+  await expect(card.getByRole("button", { name: "Öppna TeX" })).toBeVisible();
+  await expect(card.getByText(/PDF skapad:/)).toBeVisible();
+
+  // 8) Inga konsolfel under hela flödet.
+  expect(errors, errors.join("\n")).toEqual([]);
+});

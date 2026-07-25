@@ -68,6 +68,14 @@ export default defineConfig({
       // same fake webServer) covering the archive (list/word-search/Rensa/
       // Fråga AI) below the board view — see .superpowers/sdd/task-4-brief.md.
       //
+      // Plan 4 Task 6 adds e2e/planering-prov.spec.mjs (same placement, same
+      // fake webServer) covering the prov/arbetsblad flow (typväljare,
+      // innehållsval, generering, den delade ändringschatten, godkännande
+      // och PDF) — see docs/superpowers/plans/2026-07-25-prov-arbetsblad-
+      // svelte.md, Task 6. It never touches the planning archive, so it
+      // doesn't disturb planering-arkiv.spec.mjs's "exactly one entry"
+      // assumption regardless of execution order.
+      //
       // OBS (stale-bundle-gaten): app/web/next/ är byggartefakter (npm run
       // build i repo-roten), inte något Playwright bygger själv — webServer
       // nedan är top-level och delas av alla projekt, så den kan inte bygga
@@ -80,6 +88,7 @@ export default defineConfig({
         /next-foundation\.spec\.mjs$/,
         /planering-tavla\.spec\.mjs$/,
         /planering-arkiv\.spec\.mjs$/,
+        /planering-prov\.spec\.mjs$/,
       ],
       use: { ...devices["Desktop Chrome"] },
     },
