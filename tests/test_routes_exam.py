@@ -195,6 +195,144 @@ def test_approve_compile_failure_reports_honestly(client, monkeypatch):
     assert res["pdf"] is None
 
 
+def test_approve_bedomning_failure_surfaces_and_keeps_prov(client, monkeypatch):
+    """Bedömningsanvisningens returvärde kastades bort: föll den kom varken
+    logg eller errors-post, och kvittot stod kvar på 'PDF skapad'. Läraren
+    upptäckte det först vid rättningen. Felet ska SYNAS — men ett fungerande
+    prov får inte kastas bort bara för att det sekundära dokumentet föll."""
+    result, _ = _make_exam(client, monkeypatch)
+    monkeypatch.setattr(exam_pdf, "engine_available", lambda: True)
+
+    sedda_loggar = []
+
+    def fake_compile(tex, out_dir, jobname, **kw):
+        if jobname.endswith("bedomning"):
+            return None, ('Could not locate a virtual/physical font for '
+                          'TFM "ntxsy7".')
+        out_dir.mkdir(parents=True, exist_ok=True)
+        p = out_dir / f"{jobname}.pdf"
+        p.write_bytes(b"%PDF-1.5 fejk")
+        return p, ""
+    monkeypatch.setattr(exam_pdf, "compile_pdf", fake_compile)
+
+    def fake_fix(exam, log, **kw):
+        sedda_loggar.append(log)
+        return {"exam": exam, "errors": [], "rounds": 1}
+    monkeypatch.setattr(exam_gen, "fix_latex", fake_fix)
+
+    r = client.post(f"/api/exams/{result['id']}/approve", json={})
+    evs = _events(r)
+    res = _done(r)
+
+    bed_loggar = [e["msg"] for e in evs
+                  if e["type"] == "log" and "edömningsanvisningen" in e.get("msg", "")]
+    assert bed_loggar, "felet nämndes aldrig i strömmen"
+    bed = [e for e in res["errors"] if e["code"] == "bedomning"]
+    assert bed, f"ingen bedömningspost i errors: {res['errors']}"
+    assert "ntxsy7" in bed[0]["message"]
+    # Loggraden i strömmen är transient (den försvinner när körningen är
+    # klar, se exRunning-gaten i app.js) — det som PERSISTERAS är message,
+    # och gränssnittet läser aldrig code. Utan svensk prefix framför den
+    # råa LaTeX-loggen ser läraren bara en engelsk fontrad bredvid ett
+    # kvitto som säger att PDF:en skapades, med inget som säger VILKET
+    # dokument som saknas.
+    assert bed[0]["message"].startswith(
+        "Bedömningsanvisningen gick inte att kompilera:\n")
+    assert res["pdf"], "det fungerande provet ska INTE kastas bort"
+    assert res["status"] == "godkänt"
+    # fix_latex måste få BEDÖMNINGENS logg — provets är tom, och en tom logg
+    # ger modellen ingenting att korrigera.
+    assert sedda_loggar and all("ntxsy7" in lg for lg in sedda_loggar)
+    # Sista rundan ger upp (MAX_LATEX_ROUNDS nått) — då får loggraden inte
+    # längre lova en korrigering som aldrig sker. Tidigare rundor FÅR lova
+    # det, eftersom de faktiskt följs av ett fix_latex-anrop.
+    assert bed_loggar[-1] == "Bedömningsanvisningen gick inte att kompilera."
+    # Fynd 5 (granskning): bed_loggar har tre poster (två omförsök + den
+    # sista, uppgivna) — bara [-1] pinnades tidigare. En implementation som
+    # ALLTID skickade den uppgivna varianten hade ändå passerat oupptäckt.
+    # Pinna även att en icke-sista runda faktiskt lovar ett omförsök.
+    assert bed_loggar[:-1] == ["Bedömningsanvisningen gick inte att "
+                               "kompilera — försöker korrigera …"] * 2
+
+
+def test_approve_prov_fran_tidigare_runda_overlever_senare_kompileringsfel(
+        client, monkeypatch):
+    """Fynd 2 (granskning): koden satte om pdf_path till DENNA rundas
+    kompileringsresultat varje varv. Om provet kompilerar i runda 0 men
+    bedömningen faller, går slingan vidare till fix_latex — som kan skriva om
+    HELA provet till JSON där en senare runda inte längre går att kompilera.
+    Då blev pdf_path None trots att runda 0:s fungerande prov-PDF fortfarande
+    låg kvar i utkatalogen, och ett fullt användbart prov blev oåtkomligt
+    för läraren bara för att en SENARE, av bedömningen utlöst, runda gick
+    illa."""
+    result, _ = _make_exam(client, monkeypatch)
+    monkeypatch.setattr(exam_pdf, "engine_available", lambda: True)
+
+    antal_provkompileringar = {"n": 0}
+
+    def fake_compile(tex, out_dir, jobname, **kw):
+        if jobname.endswith("bedomning"):
+            return None, "! Undefined control sequence i bedömningen."
+        antal_provkompileringar["n"] += 1
+        if antal_provkompileringar["n"] == 1:
+            out_dir.mkdir(parents=True, exist_ok=True)
+            p = out_dir / f"{jobname}.pdf"
+            p.write_bytes(b"%PDF-1.5 fejk")
+            return p, ""
+        return None, "! Missing $ inserted."
+    monkeypatch.setattr(exam_pdf, "compile_pdf", fake_compile)
+    monkeypatch.setattr(exam_gen, "fix_latex",
+                        lambda exam, log, **kw: {"exam": exam, "errors": [],
+                                                 "rounds": 1})
+
+    r = client.post(f"/api/exams/{result['id']}/approve", json={})
+    res = _done(r)
+
+    from pathlib import Path
+    assert res["pdf"], "runda 0:s fungerande prov ska inte försvinna"
+    assert Path(res["pdf"]).exists()
+    assert any(e["code"] == "bedomning" for e in res["errors"]), res["errors"]
+    assert not any(e["code"] == "kompilering" for e in res["errors"])
+
+
+def test_approve_bedomning_failure_without_llm_still_gets_bedomning_code(
+        client, monkeypatch):
+    """Grenen för "ingen omkörning möjlig" (modellen kan inte startas) hade
+    kvar den gamla hårdkodade 'kompilering'-koden efter att rundgrenen fick
+    'bedomning'. Provet hade då redan kompilerat och bara anvisningen
+    saknades, men klienten fick samma kod som vid ett fullständigt
+    misslyckande — och skulle kunna kasta bort ett fullt användbart prov."""
+    result, _ = _make_exam(client, monkeypatch)
+    monkeypatch.setattr(exam_pdf, "engine_available", lambda: True)
+    monkeypatch.setattr(client.app.state.arbiter, "ensure_llm", lambda: None)
+
+    def fake_compile(tex, out_dir, jobname, **kw):
+        if jobname.endswith("bedomning"):
+            return None, "! Undefined control sequence."
+        out_dir.mkdir(parents=True, exist_ok=True)
+        p = out_dir / f"{jobname}.pdf"
+        p.write_bytes(b"%PDF-1.5 fejk")
+        return p, ""
+    monkeypatch.setattr(exam_pdf, "compile_pdf", fake_compile)
+
+    r = client.post(f"/api/exams/{result['id']}/approve", json={})
+    evs = _events(r)
+    res = _done(r)
+
+    bed = [e for e in res["errors"] if e["code"] == "bedomning"]
+    assert bed, f"koden ska vara 'bedomning', inte 'kompilering': {res['errors']}"
+    assert bed[0]["message"].startswith(
+        "Bedömningsanvisningen gick inte att kompilera:\n")
+    assert res["pdf"], "provet kompilerade och ska behållas trots att " \
+                        "modellen inte kunde startas"
+    # ensure_llm() är None redan vid FÖRSTA rundan här, så det blir aldrig
+    # något omförsök. Loggraden får då inte påstå "försöker korrigera" —
+    # det vore precis den sortens tomt löfte den här rutten ska bort med.
+    bed_loggar = [e["msg"] for e in evs
+                  if e["type"] == "log" and "edömningsanvisningen" in e.get("msg", "")]
+    assert bed_loggar == ["Bedömningsanvisningen gick inte att kompilera."]
+
+
 # ------------------------------------------------------ Fas 5: arbetsblad --
 
 def test_generate_arbetsblad_sets_typ_and_profile(client, monkeypatch):
