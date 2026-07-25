@@ -1097,6 +1097,35 @@ def test_compile_pdf_real_engine_produces_all_three_documents(tmp_path):
         assert bild_fil in (tmp_path / f"{jobname}.tex").read_text(encoding="utf-8")
 
 
+def test_compile_pdf_real_engine_bedomning_med_djupt_nastlad_matte(tmp_path):
+    """Fältet text renderas som {\\small\\itshape …} i bedomning.tex.j2.
+    Matte som nästlar ner i script- och scriptscript-storlek hämtar då
+    symbolfonten och matte-kursiven i 7 pt och 5 pt (ntxsy7/ntxsy5/ntxmi5).
+    Cachen hade bara metrikfilerna (.tfm) för dem — aldrig de virtuella
+    fonterna — eftersom sonden aldrig SATT en glyf i de storlekarna: TeX
+    laddar en .tfm enbart för mattens fontdimensioner, medan xdvipdfmx
+    behöver .vf först när en glyf faktiskt sätts. Med --only-cached (aktivt
+    så fort .seeded finns) kraschade Tectonic på skarpa prov med
+    'Could not locate a virtual/physical font for TFM "ntxsy7"' medan provet
+    kompilerade felfritt."""
+    if not exam_pdf.engine_available():
+        pytest.skip("Tectonic-motorn saknas (bin/tectonic/tectonic.exe)")
+
+    data = copy.deepcopy(_exam())
+    # \cdot i en exponent → symbolglyf i script-storlek (ntxsy7).
+    # \frac i en exponent → täljare/nämnare i scriptscript (ntxmi5/ntxsy5).
+    data["uppgifter"][0]["text"] = (
+        "Förenkla $x^{a \\cdot \\sqrt{b}}$ och bestäm sedan "
+        "$y^{\\frac{c \\cdot d}{e}}$ då $b = 4$.")
+    doc, errors = exam_spec.validate_exam_json(data)
+    assert doc is not None and errors == []
+
+    pdf, logg = exam_pdf.compile_pdf(
+        exam_latex.render_bedomning(doc), tmp_path, "bedomning")
+    assert pdf is not None and pdf.exists(), f"bedömningen misslyckades: {logg}"
+    assert pdf.stat().st_size > 0
+
+
 def test_compile_pdf_real_engine_compiles_deluppgifter_och_flerval(tmp_path):
     """Skyddsnät mot att en STRUKTURSPECIFIK kompileringsregression aldrig
     blir röd: test_compile_pdf_real_engine_produces_all_three_documents
