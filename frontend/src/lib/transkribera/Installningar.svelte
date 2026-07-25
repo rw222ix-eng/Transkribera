@@ -6,6 +6,17 @@
   import Sprakval from './Sprakval.svelte';
   import Formatval from './Formatval.svelte';
   import Undertextval from './Undertextval.svelte';
+  import { katalog } from './katalog.svelte.js';
+
+  const startEtikett = $derived(
+    !katalog.klar
+      ? 'Laddar modeller …'
+      : !tr.model
+        ? 'Ladda ner en modell först'
+        : tr.queue.length > 1
+          ? 'Starta · ' + tr.queue.length + ' filer'
+          : 'Starta transkribering',
+  );
 </script>
 
 <p class="eyebrow">STEG 2 — INSTÄLLNINGAR</p>
@@ -39,6 +50,14 @@
 <Sprakval />
 <Formatval />
 <Undertextval />
+
+<div class="start">
+  <!-- Steg 3 (körningen) byggs i plan A3. Knappen står avstängd tills dess i
+       stället för att leda till en tom panel — guiden ska aldrig peka på ett
+       steg som inte finns. -->
+  <button type="button" class="primar" disabled>{startEtikett}</button>
+  <span class="snart">Själva transkriberingen kommer i nästa steg av migrationen.</span>
+</div>
 
 <style>
   .eyebrow {
@@ -130,4 +149,24 @@
     cursor: pointer;
   }
   .bort:hover { border-color: var(--bad); color: var(--bad); }
+  .start {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-top: 28px;
+  }
+  .primar {
+    background: var(--btn-bg);
+    color: var(--btn-fg);
+    border: none;
+    border-radius: 4px;
+    padding: 12px 22px;
+    font-family: inherit;
+    font-size: inherit;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .primar:disabled { opacity: 0.55; cursor: default; }
+  .snart { color: var(--ink-3); }
 </style>

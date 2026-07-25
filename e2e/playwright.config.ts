@@ -88,6 +88,13 @@ export default defineConfig({
       // /api/sample, dubblettbeskedet, länkvalideringen och borttagning.
       // Filväljaren och drag-och-släpp kräver pywebview och täcks INTE här —
       // se docs/superpowers/plans/2026-07-25-transkribera-A1-skal-och-kalla.md.
+      //
+      // Plan A2 Task 6 lägger till e2e/transkribera-installningar.spec.mjs
+      // (samma placering, samma fejkserver) som täcker guidens steg 2:
+      // kölistan, talat språk/resultatspråk, formatchipsen och
+      // undertextvillkoret. Steg 3 (själva körningen) täcks INTE här — det
+      // steget finns inte än, se plan A3. Startknappen renderas avstängd,
+      // och specen kontrollerar just att den ÄR avstängd.
       name: "next-foundation",
       testDir: __dirname,
       testMatch: [
@@ -96,6 +103,7 @@ export default defineConfig({
         /planering-arkiv\.spec\.mjs$/,
         /planering-prov\.spec\.mjs$/,
         /transkribera-kalla\.spec\.mjs$/,
+        /transkribera-installningar\.spec\.mjs$/,
       ],
       use: { ...devices["Desktop Chrome"] },
     },
