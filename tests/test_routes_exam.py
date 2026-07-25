@@ -195,6 +195,47 @@ def test_approve_compile_failure_reports_honestly(client, monkeypatch):
     assert res["pdf"] is None
 
 
+def test_approve_bedomning_failure_surfaces_and_keeps_prov(client, monkeypatch):
+    """Bedömningsanvisningens returvärde kastades bort: föll den kom varken
+    logg eller errors-post, och kvittot stod kvar på 'PDF skapad'. Läraren
+    upptäckte det först vid rättningen. Felet ska SYNAS — men ett fungerande
+    prov får inte kastas bort bara för att det sekundära dokumentet föll."""
+    result, _ = _make_exam(client, monkeypatch)
+    monkeypatch.setattr(exam_pdf, "engine_available", lambda: True)
+
+    sedda_loggar = []
+
+    def fake_compile(tex, out_dir, jobname, **kw):
+        if jobname.endswith("bedomning"):
+            return None, ('Could not locate a virtual/physical font for '
+                          'TFM "ntxsy7".')
+        out_dir.mkdir(parents=True, exist_ok=True)
+        p = out_dir / f"{jobname}.pdf"
+        p.write_bytes(b"%PDF-1.5 fejk")
+        return p, ""
+    monkeypatch.setattr(exam_pdf, "compile_pdf", fake_compile)
+
+    def fake_fix(exam, log, **kw):
+        sedda_loggar.append(log)
+        return {"exam": exam, "errors": [], "rounds": 1}
+    monkeypatch.setattr(exam_gen, "fix_latex", fake_fix)
+
+    r = client.post(f"/api/exams/{result['id']}/approve", json={})
+    evs = _events(r)
+    res = _done(r)
+
+    assert any(e["type"] == "log" and "edömningsanvisningen" in e.get("msg", "")
+               for e in evs), "felet nämndes aldrig i strömmen"
+    bed = [e for e in res["errors"] if e["code"] == "bedomning"]
+    assert bed, f"ingen bedömningspost i errors: {res['errors']}"
+    assert "ntxsy7" in bed[0]["message"]
+    assert res["pdf"], "det fungerande provet ska INTE kastas bort"
+    assert res["status"] == "godkänt"
+    # fix_latex måste få BEDÖMNINGENS logg — provets är tom, och en tom logg
+    # ger modellen ingenting att korrigera.
+    assert sedda_loggar and all("ntxsy7" in lg for lg in sedda_loggar)
+
+
 # ------------------------------------------------------ Fas 5: arbetsblad --
 
 def test_generate_arbetsblad_sets_typ_and_profile(client, monkeypatch):

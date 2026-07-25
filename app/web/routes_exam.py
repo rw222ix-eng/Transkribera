@@ -345,13 +345,33 @@ def create_router(base: Path, arbiter) -> APIRouter:
                         break
                     emit({"type": "log", "msg": "Kompilerar PDF …"})
                     pdf_path, log = exam_pdf.compile_pdf(tex, out_dir, slug)
-                    if pdf_path is not None:
-                        if bed is not None:
-                            exam_pdf.compile_pdf(bed, out_dir, f"{slug} - bedomning")
+                    # En runda är lyckad först när SAMTLIGA dokument som ska
+                    # produceras har kompilerat. Bedömningens returvärde
+                    # kastades tidigare bort: föll den syntes ingenting alls
+                    # och kvittot ljög om att allt gått bra.
+                    bed_path = None
+                    if pdf_path is not None and bed is not None:
+                        bed_path, bed_log = exam_pdf.compile_pdf(
+                            bed, out_dir, f"{slug} - bedomning")
+                        if bed_path is None:
+                            emit({"type": "log",
+                                  "msg": "Bedömningsanvisningen gick inte att "
+                                         "kompilera — försöker korrigera …"})
+                            # Bedömningsmallen renderar losning/bedomning, som
+                            # prov.tex.j2 aldrig rör. Ett trasigt fält där kan
+                            # bara avslöjas här — och fix_latex behöver DEN
+                            # loggen, inte provets tomma.
+                            log = bed_log
+                    if pdf_path is not None and (bed is None or bed_path is not None):
                         errors = []
                         break
                     if round_ >= exam_gen.MAX_LATEX_ROUNDS:
-                        errors = [{"path": "latex", "code": "kompilering",
+                        # Provet behålls om det kompilerade: ett fungerande
+                        # prov kastas inte bort för att det sekundära
+                        # dokumentet föll. Skild kod låter gränssnittet skilja
+                        # "inget prov alls" från "anvisningen saknas".
+                        errors = [{"path": "latex",
+                                   "code": "bedomning" if pdf_path else "kompilering",
                                    "message": log}]
                         break
                     if arbiter.ensure_llm() is None:
