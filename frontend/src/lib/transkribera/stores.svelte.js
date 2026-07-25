@@ -8,6 +8,17 @@ export const tr = $state({
   fileNoteArt: 'fel',    // 'fel' | 'info' — styr om felraden målas som fel eller neutral
   dragging: false,      // dropzonen är påhoverad av ett drag
   urlInput: '',         // länkfältets råtext
+
+  // steg 2 — inställningar
+  language: 'sv',         // talat språk: sv | en
+  targetLanguage: 'sv',   // resultatspråk: sv | en. Skiljer det sig översätts texten.
+  model: '',              // vald whisper-modell; '' = ingen installerad för språket
+  formats: { srt: true, txt: true, vtt: false },
+  audioCorrect: true,     // andra passet som rättar mot ljudet (app.js:36)
+  audioModelInstalled: false,
+  audioModelDownloading: false,
+  subtitleMode: 'separate', // separate | embed — bara för video
+  embedKind: 'soft',        // soft | burn
 });
 
 // Samma lista som gamla appens ALLOWED (app.js:298). Ändras den här måste
