@@ -25,7 +25,15 @@
       for (const u of uppgifter) {
         if ((u.del || null) !== del) continue;
         n += 1;
-        out.push({ nummer: n, del: u.del || '', text: u.text || '', poang: poangOf(u) });
+        out.push({
+          nummer: n,
+          del: u.del || '',
+          formaga: u.formaga || '',
+          typ: u.typ || '',
+          antalDel: (u.deluppgifter || []).length,
+          text: u.text || '',
+          poang: poangOf(u),
+        });
       }
     }
     return out;
@@ -59,6 +67,12 @@
   });
   const hasPdf = $derived(!!current?.pdf_path);
   const hasTex = $derived(!!current?.tex_path);
+  // "Version N av M" — samma uträkning som versionRad, app.js:3620.
+  const versionRad = $derived.by(() => {
+    const vs = prov.doc?.versions || [];
+    if (!vs.length) return '';
+    return 'Version ' + (current?.version ?? 1) + ' av ' + vs.length;
+  });
 
   function errText(e) {
     if (typeof e === 'string') return e;
@@ -79,6 +93,7 @@
       <span class="titel">{prov.doc.exam?.titel || typLabel}</span>
       <span class="tag">{typLabel}</span>
       <span class="tag" class:on={prov.doc.status === 'godkänt'}>{prov.doc.status}</span>
+      {#if versionRad}<span class="version">{versionRad}</span>{/if}
       <span class="spacer"></span>
       <button
         type="button"
@@ -129,6 +144,8 @@
           <div class="taskhead">
             <span class="nr">Uppgift {n.nummer}</span>
             {#if n.del}<span class="del">DEL {n.del}</span>{/if}
+            {#if n.formaga || n.typ}<span class="meta">{n.formaga}{n.formaga && n.typ ? ' · ' : ''}{n.typ}</span>{/if}
+            {#if n.antalDel}<span class="meta">{n.antalDel} deluppgift{n.antalDel === 1 ? '' : 'er'}</span>{/if}
             <span class="poang">E {n.poang[0]} · C {n.poang[1]} · A {n.poang[2]}</span>
           </div>
           <div class="text">{n.text}</div>
@@ -202,6 +219,10 @@
     color: var(--ink-3);
   }
   .tag.on { color: var(--ok); }
+  /* Hela ord i naturlig sats ("Version 1 av 2") — ingen mikroetikett, alltså
+     inte mono. Ingen av de tillåtna storlekarna ligger mellan 0.72rem och
+     1.03rem, så body-textens storlek (inherit) återanvänds, som .sums nedan. */
+  .version { color: var(--ink-3); }
   .spacer { flex: 1; }
   .close {
     border: none;
@@ -258,6 +279,12 @@
     font-family: var(--mono);
     font-size: 0.72rem;
     letter-spacing: 0.06em;
+    color: var(--ink-3);
+  }
+  /* Formåga/typ ("B · rutin") och deluppgiftsräkningen är gemena svenska ord,
+     inte versala mikroetiketter — därför ingen mono, till skillnad från .del. */
+  .meta {
+    font-size: 0.72rem;
     color: var(--ink-3);
   }
   .poang {
