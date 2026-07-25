@@ -360,7 +360,9 @@ export function stopProgressAnim() {
 
 - [ ] **Step 2: Start it from `startRun`**
 
-In `actions.js`, widen the `korning.js` import to `import { willCorrect, startProgressAnim, stopProgressAnim } from './korning.js';`, call `startProgressAnim()` directly after `tr.log = [...]` in `startRun`, and call `stopProgressAnim()` in the `error` branch.
+In `actions.js`, add `import { startProgressAnim, stopProgressAnim } from './korning.js';`, call `startProgressAnim()` directly after `tr.log = [...]` in `startRun`, and call `stopProgressAnim()` in the `error` branch.
+
+**Note:** `willCorrect` is *not* imported here. It is called only from inside `korning.js` (by `stageNames`/`stageBounds`); no code in this plan calls it from `actions.js`. An earlier draft of this plan said otherwise — adding the import would leave dead code.
 
 - [ ] **Step 3: Verify**
 
