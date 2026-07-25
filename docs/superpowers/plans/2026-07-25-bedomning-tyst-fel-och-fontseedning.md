@@ -141,7 +141,9 @@ I `app/web/routes_exam.py`, ersätt raderna 346–356:
                         break
 ```
 
-med:
+med (detta utkast visade sig ha två hål som en efterföljande granskning
+hittade — se "Efterföljande granskning" i slutet av denna uppgift för vad
+som faktiskt landade):
 
 ```python
                     emit({"type": "log", "msg": "Kompilerar PDF …"})
@@ -176,6 +178,88 @@ med:
                                    "message": log}]
                         break
 ```
+
+**VARNING — detta utkast är INTE vad som landade.** En efterföljande
+granskning hittade två hål:
+
+1. Loggraden skrivs ovillkorligt med "— försöker korrigera …", även på den
+   SISTA rundan (`round_ >= MAX_LATEX_ROUNDS`), när inget omförsök längre
+   sker. Grenen `arbiter.ensure_llm() is None` (ingen körande modell) saknas
+   också helt — den föll fortfarande tillbaka på den hårdkodade
+   `"kompilering"`-koden i stället för `"bedomning"`.
+2. `pdf_path` sätts om till DENNA rundas kompileringsresultat varje varv. Om
+   provet kompilerar i runda 0 men bedömningen faller, och `fix_latex` i en
+   SENARE runda skriver om provet till något som inte längre går att
+   kompilera, blev `pdf_path` `None` — trots att runda 0:s fungerande
+   prov-PDF fortfarande låg kvar i utkatalogen. Ett fullt användbart prov
+   blev då oåtkomligt för läraren.
+
+Det som faktiskt landade (se `app/web/routes_exam.py`, ca rad 346–408, och
+Del 1 i spec-dokumentet för den fullständiga motiveringen):
+
+```python
+                    emit({"type": "log", "msg": "Kompilerar PDF …"})
+                    prov_pdf, log = exam_pdf.compile_pdf(tex, out_dir, slug)
+                    # Ett prov som EN GÅNG kompilerat får inte försvinna för att
+                    # en senare korrigeringsrunda (utlöst av bedömningen) skrev
+                    # om provet till något som inte går att kompilera. Filen
+                    # ligger kvar i utkatalogen — behåll sökvägen så länge den
+                    # gör det.
+                    if prov_pdf is not None:
+                        pdf_path = prov_pdf
+                    elif pdf_path is not None and not pdf_path.exists():
+                        pdf_path = None
+                    # En runda är lyckad först när SAMTLIGA dokument som ska
+                    # produceras har kompilerat. Bedömningens returvärde
+                    # kastades tidigare bort: föll den syntes ingenting alls
+                    # och kvittot ljög om att allt gått bra.
+                    bed_path = None
+                    bed_misslyckades = False
+                    if prov_pdf is not None and bed is not None:
+                        bed_path, bed_log = exam_pdf.compile_pdf(
+                            bed, out_dir, f"{slug} - bedomning")
+                        if bed_path is None:
+                            bed_misslyckades = True
+                            # Bedömningsmallen renderar losning/bedomning, som
+                            # prov.tex.j2 aldrig rör. Ett trasigt fält där kan
+                            # bara avslöjas här — och fix_latex behöver DEN
+                            # loggen, inte provets tomma.
+                            log = bed_log
+                    if prov_pdf is not None and (bed is None or bed_path is not None):
+                        errors = []
+                        break
+                    # Avgör FÖRE loggraden om en korrigering faktiskt följer —
+                    # annars lovar strömmen ett omförsök som aldrig sker.
+                    sista_forsoket = (round_ >= exam_gen.MAX_LATEX_ROUNDS
+                                      or arbiter.ensure_llm() is None)
+                    if bed_misslyckades:
+                        emit({"type": "log",
+                              "msg": "Bedömningsanvisningen gick inte att kompilera."
+                                     if sista_forsoket else
+                                     "Bedömningsanvisningen gick inte att "
+                                     "kompilera — försöker korrigera …"})
+                    if sista_forsoket:
+                        # Provet behålls om det NÅGON gång kompilerat: ett
+                        # fungerande prov kastas inte bort för att en SENARE
+                        # rundas kompilering (utlöst av bedömningen) föll.
+                        felkod = "bedomning" if pdf_path else "kompilering"
+                        # message PERSISTERAS (loggraden ovan är transient) —
+                        # prefixa med svensk mening så gränssnittet, som
+                        # renderar message rått utan att läsa code, aldrig
+                        # visar en ensam engelsk Tectonic-loggrad.
+                        meddelande = (
+                            ("Bedömningsanvisningen gick inte att kompilera:\n"
+                             + log) if felkod == "bedomning" else log)
+                        errors = [{"path": "latex", "code": felkod,
+                                   "message": meddelande}]
+                        break
+```
+
+Motsvarande test i `tests/test_routes_exam.py` utökades med
+`test_approve_prov_fran_tidigare_runda_overlever_senare_kompileringsfel`
+(hål 2), assertions på det svenskprefixade `message` (svensk prefix), och en
+pinning av att en icke-sista rundas loggrad faktiskt lovar ett omförsök (hål
+1, `bed_loggar[:-1]`).
 
 - [ ] **Steg 4: Kör testet och bekräfta att det passerar**
 
@@ -422,6 +506,26 @@ git add tools/seed_tectonic_cache.py tests/test_tectonic_seed.py
 git commit -m "fix(seed): sonden sätter glyfer i script- och scriptscript-storlek"
 ```
 
+**Efterföljande granskning: familj 3 saknades fortfarande.** Stegen ovan
+sätter aldrig en glyf i familj 3 (`ntxexx`/`ntxexa`, newtxmaths
+utökningsfamilj) — det är inte en storlek utan en EGEN matematisk familj.
+`\sum`/`\int` är familj 3 direkt, och `\left(...\right)` samt en stor
+`\sqrt` över ett bråk når familj 3 genom delimiter- respektive
+rottecknets charlist. Verifierat empiriskt: en bedömning med
+
+```latex
+$\sum_{i=1}^{n} i^2$ och $\int_0^1 f(x)\,dx$ samt
+$\left(\frac{n(n+1)}{2}\right)$ och $\sqrt{\frac{x}{2}}$
+```
+
+i uppgiftstexten faller under `--only-cached` med samma sorts fel som
+`ntxsy7`-kraschen, fast på `"ntxexx"`. Samma uttryck lades till direkt
+efter storleksstegen i problemuppgiftens `text`-fält och speglades in i
+`PROBE_TEX`, och pinnades i `tests/test_tectonic_seed.py` samt i
+`test_compile_pdf_real_engine_bedomning_med_djupt_nastlad_matte` i
+`tests/test_exam.py` (se Del 2/"Familj 3" i spec-dokumentet). Committat
+separat: `fix(seed): sonden når aldrig mattefamilj 3 (ntxexx/ntxexa)`.
+
 ---
 
 ### Uppgift 4: Seeda om cachen
@@ -439,10 +543,13 @@ ingen commit kan laga en maskin.
 - [ ] **Steg 1: Dokumentera utgångsläget**
 
 ```bash
-find bin/tectonic/cache -iname "ntxsy7.*" -o -iname "ntxsy5.*" -o -iname "ntxmi5.*"
+find bin/tectonic/cache -iname "ntxsy7.*" -o -iname "ntxsy5.*" -o -iname "ntxmi5.*" \
+  -o -iname "ntxexx.*" -o -iname "ntxexa.*"
 ```
 
-Förväntat före omseedning: bara `.tfm`-filer, inga `.vf`.
+Förväntat före omseedning: bara `.tfm`-filer, inga `.vf` (familj 3-tillägget
+i denna plans Uppgift 3 lades till EFTER att detta ursprungligen skrevs —
+`ntxexx`/`ntxexa` täcktes inte av den första omseedningen).
 
 - [ ] **Steg 2: Kör omseedningen**
 
@@ -463,10 +570,11 @@ fastna i `--only-cached`. Läs felmeddelandet och kör om med nät på.
 - [ ] **Steg 3: Verifiera att fonterna nu finns**
 
 ```bash
-find bin/tectonic/cache -iname "ntxsy7.*" -o -iname "ntxsy5.*" -o -iname "ntxmi5.*"
+find bin/tectonic/cache -iname "ntxsy7.*" -o -iname "ntxsy5.*" -o -iname "ntxmi5.*" \
+  -o -iname "ntxexx.*" -o -iname "ntxexa.*"
 ```
 
-Förväntat: nu även `.vf` (eller motsvarande fysiska fonter) för alla tre.
+Förväntat: nu även `.vf` (eller motsvarande fysiska fonter) för alla fem.
 Bekräfta också att markören är återskriven:
 
 ```bash
