@@ -525,9 +525,20 @@ export async function aterstallOavslutad(s) {
 
 /** Raderar en oavslutad inspelning permanent. app.js:1503-1506. */
 export async function slangOavslutad(s) {
-  glomSession(s);
   try {
     await fetch(`/api/recording/discard?session=${encodeURIComponent(s)}`, { method: 'POST' });
+    // glomSession körs FÖRST efter att POSTen gått igenom. Låg den före
+    // await:et — som gamla appen och som briefen — försvann mime och markörer
+    // så snart nätet hackade, medan .part-filen låg kvar på disk: nästa
+    // laddning erbjuder den igen, och en Återställ då ger extAvMime(null)
+    // → .webm plus tappade markörer. Alltså exakt den defekt hela det här
+    // steget finns för att laga.
+    //
+    // "Lyckades" är ändå en svag signal: backendens discard sväljer OSError
+    // och svarar {ok: true} även när unlink föll (server.py:810-819). Filen
+    // kan alltså ligga kvar trots att posten glöms — men då dyker den upp i
+    // bannern igen, och det är den riktningen felet ska luta åt.
+    glomSession(s);
   } catch { /* filen ligger kvar och dyker upp igen nästa gång */ }
   await laddaOavslutade();
 }
