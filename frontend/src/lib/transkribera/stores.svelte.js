@@ -21,6 +21,19 @@ export const tr = $state({
   audioModelDownloading: false,
   subtitleMode: 'separate', // separate | embed — bara för video
   embedKind: 'soft',        // soft | burn
+
+  // steg 3 — körningen
+  run: 'idle',          // idle | running | done | error | cancelled
+  progress: 0,          // serverns procent, 0-100. Når 100 först vid 'done'.
+  dispProgress: 0,      // mjukt animerat visningsvärde, se korning.js
+  elapsed: 0,           // sekunder sedan den aktiva filen startade
+  log: [],              // ['[00:12] Transkriberar …']
+  runError: null,       // {title, detail}
+  qStatus: {},          // {queueId: 'pending' | 'running' | 'done' | 'error'}
+  qProgress: {},        // {queueId: procent vid avslut}
+  logExpand: false,     // loggen utfälld
+  resultFiles: [],      // filer den senaste körningen skrev
+  resultId: null,       // serverns id för den sparade lektionen
 });
 
 // Samma lista som gamla appens ALLOWED (app.js:298). Ändras den här måste
