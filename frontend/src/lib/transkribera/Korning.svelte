@@ -3,7 +3,7 @@
   // (app/web/static/app.js:4582-4668), omstylad till designsystemet.
   import { tr } from './stores.svelte.js';
   import { stageNames, stageBounds, phaseIndex } from './korning.js';
-  import { cancelRun, resumeRun, retryRun, toggleLog, goSource } from './actions.js';
+  import { cancelRun, resumeRun, retryRun, toggleLog, goSource, nyTranskribering } from './actions.js';
   import Kolista from './Kolista.svelte';
 
   const faser = $derived(stageNames());
@@ -122,7 +122,10 @@
       Inspelningar — där lektionen går att öppna, läsa och söka i — migreras i en
       senare plan. Tills dess finns den i den gamla appen.
     </p>
-    <button type="button" class="ghost" onclick={goSource}>Transkribera något mer</button>
+    <!-- nyTranskribering, INTE goSource: guiden måste börja om från ett tomt
+         körtillstånd, annars ligger den nyss sparade filen kvar i kön och körs
+         om först nästa gång (se actions.js). -->
+    <button type="button" class="ghost" onclick={nyTranskribering}>Transkribera något mer</button>
   </div>
 {/if}
 

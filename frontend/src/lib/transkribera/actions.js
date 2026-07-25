@@ -402,6 +402,41 @@ export async function cancelRun() {
   }
 }
 
+/**
+ * "Transkribera något mer" — nollställer HELA körtillståndet och tar guiden
+ * tillbaka till steg 1. Speglar gamla appens restart (app.js:1508-1512) fält
+ * för fält, med ett medvetet undantag: den navigerar INTE vidare till någon
+ * annan flik, för Inspelningar-vyn finns inte i den här frontenden än (plan A3
+ * stannar på steg 3).
+ *
+ * goSource räcker inte: den byter bara steg. Kön, qStatus, activeId, run='done'
+ * och resultatfilerna skulle leva kvar, med två följder — steg 1 säger "1 fil i
+ * kön" om precis den fil som nyss rapporterades sparad, och eftersom addFiles
+ * behåller ett redan satt activeId (`tr.activeId = tr.activeId || …`) skulle
+ * nästa start köra om den GAMLA filen först: en andra lessons-rad och en andra
+ * utdatamapp för samma lektion.
+ */
+export function nyTranskribering() {
+  // Timers först, precis som restart():s clearInterval/clearTimeout — inget får
+  // skriva in i det tillstånd vi tömmer på nästa rad.
+  stoppaTickare();
+  stopProgressAnim();
+  tr.queue = [];
+  tr.qStatus = {};
+  tr.qProgress = {};
+  tr.activeId = null;
+  tr.run = 'idle';
+  tr.progress = 0;
+  tr.dispProgress = 0;
+  tr.elapsed = 0;
+  tr.log = [];
+  tr.runError = null;
+  tr.resultFiles = [];
+  tr.resultId = null;
+  tr.logExpand = false;
+  goSource();
+}
+
 /** Återupptar den avbrutna posten. Speglar resumeRun, app.js:2277. */
 export function resumeRun() {
   tr.run = 'idle';

@@ -779,12 +779,14 @@ After the log, add:
       Inspelningar — där lektionen går att öppna, läsa och söka i — migreras i en
       senare plan. Tills dess finns den i den gamla appen.
     </p>
-    <button type="button" class="ghost" onclick={goSource}>Transkribera något mer</button>
+    <button type="button" class="ghost" onclick={nyTranskribering}>Transkribera något mer</button>
   </div>
 {/if}
 ```
 
 with `const nagotKvar = $derived(!!tr.queue.find((q) => (tr.qStatus[q.id] || 'pending') === 'pending'));` in the script.
+
+`goSource` räcker inte här: den byter bara steg, så kön, `qStatus`, `activeId`, `run='done'` och resultatfilerna lever kvar — steg 1 visar "1 fil i kön" om precis den fil som nyss sparades, och eftersom `addFiles` behåller ett redan satt `activeId` körs den gamla filen om först vid nästa start. Lägg därför till en egen action `nyTranskribering` i `actions.js` som nollställer hela körtillståndet (queue, qStatus, qProgress, activeId, run, progress, dispProgress, elapsed, log, runError, resultFiles, resultId, logExpand) precis som gamla appens `restart()` (`app.js:1508-1512`) och därefter anropar `goSource()`. `goSource` lämnas oförändrad — "Lägg till fler" och "Byt fil" ska fortsatt behålla kön. Till skillnad från `restart()` navigerar den INTE vidare till Inspelningar; den vyn finns inte här.
 
 - [ ] **Step 3: Register and write the spec**
 
