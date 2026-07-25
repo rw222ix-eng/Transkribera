@@ -74,6 +74,13 @@
      yta — panelen ska förbli papper, inte bli en larmruta. */
   .ruta.kor { border-color: var(--line-2); }
   /* 8px bred, 4px radie = en exakt cirkel, och håller sig inom 2-5px-regeln. */
+  /* MEDVETET AVSTEG från DESIGN.md, rätta inte: tokenet var(--bad) är enligt
+     "Tertiary — Status" reserverat för fel och destruktiv bekräftelse, och
+     live-tillstånd ska bäras av accenten. Den röda inspelningspricken är ändå
+     en så stark branschkonvention (varje kamera, varje bandspelare, varje
+     mötesverktyg) att den vinner över regeln just här — en blå prick läses
+     helt enkelt inte som "spelar in". Avsteget gäller BARA pricken;
+     tystnadsindikatorn nedan bär var(--warn) som sig bör. */
   .prick {
     width: 8px;
     height: 8px;
@@ -110,8 +117,12 @@
     transform: scaleX(0);
     transform-origin: left center;
   }
-  .fyllnad.tyst { background: var(--bad); }
-  .ingen { color: var(--bad); font-size: 1.03rem; }
+  /* Tystnad är en VARNING, inte ett fel: inspelningen rullar vidare, inget har
+     gått sönder och ingenting är förlorat — mikrofonen kan mycket väl vara
+     avstängd med flit. Därför var(--warn) ("Mustard … also the warning tone",
+     DESIGN.md), inte var(--bad) som är reserverat för fel. */
+  .fyllnad.tyst { background: var(--warn); }
+  .ingen { color: var(--warn); font-size: 1.03rem; }
   .spacer { flex: 1; }
   /* Samma knapputseende som Korning.svelte och Installningar.svelte — widgeten
      uppfinner inga egna knappklasser. */
