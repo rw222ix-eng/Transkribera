@@ -5,6 +5,13 @@
   // defaultvärden till servern, se generateExam i actions.js).
   import { plan } from '../planering/stores.svelte.js';
   import { prov } from './stores.svelte.js';
+
+  // Bara godkända PROV duger som referens — samma filter som gamla appen
+  // (app.js:3577-3578). Ett ogodkänt utkast eller ett arbetsblad är inget
+  // man vill bygga ett nytt prov ifrån.
+  const referensval = $derived(
+    prov.historik.filter((h) => h.status === 'godkänt' && (h.typ || 'prov') === 'prov'),
+  );
 </script>
 
 <div class="params">
@@ -43,15 +50,17 @@
     </div>
   </div>
 
-  <div class="row">
-    <span class="label">Utgå från</span>
-    <select class="field narrow" aria-label="Utgå från tidigare prov" bind:value={prov.referensId}>
-      <option value="">Inget referensprov</option>
-      {#each prov.historik as h (h.id)}
-        <option value={String(h.id)}>{h.titel || 'Prov'}{h.datum ? ' · ' + h.datum : ''}</option>
-      {/each}
-    </select>
-  </div>
+  {#if referensval.length}
+    <div class="row">
+      <span class="label">Utgå från</span>
+      <select class="field narrow" aria-label="Utgå från tidigare prov" bind:value={prov.referensId}>
+        <option value="">Inget referensprov</option>
+        {#each referensval as h (h.id)}
+          <option value={String(h.id)}>{h.titel || 'Prov'}{h.datum ? ' · ' + h.datum : ''}</option>
+        {/each}
+      </select>
+    </div>
+  {/if}
 </div>
 
 <style>
