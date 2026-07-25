@@ -215,7 +215,7 @@ export function pickTargetLang(l) {
  * hela pickLang skulle nollställa ett resultatspråk läraren redan valt.
  */
 export function syncModel() {
-  tr.model = recommendModel(/** @type {'sv'|'en'} */ (tr.language));
+  tr.model = recommendModel(tr.language);
 }
 
 /** Slår på/av ett utdataformat. Ny objekt, inte mutation. */

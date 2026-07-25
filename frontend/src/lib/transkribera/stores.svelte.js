@@ -10,8 +10,10 @@ export const tr = $state({
   urlInput: '',         // länkfältets råtext
 
   // steg 2 — inställningar
-  language: 'sv',         // talat språk: sv | en
-  targetLanguage: 'sv',   // resultatspråk: sv | en. Skiljer det sig översätts texten.
+  /** @type {'sv'|'en'} */
+  language: 'sv',         // talat språk
+  /** @type {'sv'|'en'} */
+  targetLanguage: 'sv',   // resultatspråk. Skiljer det sig från language översätts texten.
   model: '',              // vald whisper-modell; '' = ingen installerad för språket
   formats: { srt: true, txt: true, vtt: false },
   audioCorrect: true,     // andra passet som rättar mot ljudet (app.js:36)
