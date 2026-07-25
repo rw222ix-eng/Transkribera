@@ -53,16 +53,27 @@
     (samma mönster som fälldes i A2 och i A3:s slutgranskning), och två
     samtidigt muterande role="status" läses dessutom i oförutsägbar ordning.
 
-    VALET NÄR BÅDA ÄR SATTA: tr.recError går först. Ett mikrofonfel gäller en
-    handling som pågår just nu — nekad mikrofon, ingen mikrofon hittad,
-    "Mikrofonen försvann" mitt i lektionen — medan tr.fileError är en passiv
-    notis om kön ("1 fil låg redan i kön"). Priset är att filbeskedet
-    annonseras en gång till när tr.recError nollställs (ny start eller Avbryt)
-    och filbeskedet fortfarande står kvar: en dubblering, inte en förlust.
-    Motsatt prioritet hade kunnat svälja mikrofonfelet helt, och det är det
-    allvarligare av de två.
+    NÄR BÅDA ÄR SATTA VÄVS DE SAMMAN — ingen av dem väljs bort. En tidigare
+    version valde en av dem med "tr.recError || tr.fileError" och tystade
+    därmed hela filkanalen: tr.recError nollställs BARA i startRecording och
+    cancelRecording (inspelning.svelte.js), alltså bara när läraren själv
+    trycker en knapp. Ett getUserMedia-fel eller ett misslyckat slutförande
+    blev därför stående resten av sessionen, och så länge det stod kvar
+    utvärderades uttrycket till samma sträng oavsett vad som hände med
+    tr.fileError — textnoden muterade inte, och role="status" annonserade
+    ingenting. Konkret felfall: mikrofonen blockeras på steg 1, läraren lägger
+    till en fil och går till steg 2, "Ladda ner modell" faller och
+    actions.js skriver tr.fileError — och beskedet nådde aldrig fram. Det är
+    exakt scenariot regionen hoistades för. Widgeten är dessutom avmonterad på
+    steg 2, så det klibbiga tr.recError var samtidigt osynligt på skärmen
+    medan det tystade den enda skärmläsarkanalen.
+
+    Priset för sammanvävningen är en längre uppläsning när båda kanalerna står
+    satta samtidigt. Det är en dubblering, inte en tyst förlust — rätt håll att
+    fela åt. Växer felkanalerna bortom två bör det här göras om till en riktig
+    meddelandekö i stället för en filter/join.
   -->
-  <p class="fel-sr" role="status">{tr.recError || tr.fileError}</p>
+  <p class="fel-sr" role="status">{[tr.recError, tr.fileError].filter(Boolean).join('. ')}</p>
 
   {#if tr.step === 'source'}
     <p class="eyebrow">STEG 1 — KÄLLA</p>
