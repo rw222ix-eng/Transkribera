@@ -12,6 +12,11 @@
 // till /api/transcribe/cancel — den POSTen är inte bokföring, det är den som
 // avslutar subprocessen på servern och släpper GPU:n (app.js:2270-2276).
 //
+// TÄCKER OCKSÅ läckgrenen i progressanimeringen: att baren fortsätter krypa
+// framåt inom fasen mellan serverhändelser. Det är planens enda medvetna
+// beteendedivergens mot gamla appen (`real - disp > 0.01` i stället för
+// `real > disp`, app.js:2300) och skulle annars sakna assertion helt.
+//
 // TÄCKER OCKSÅ kökedjan: att klarbeskedet HÅLLS TILLBAKA så länge en post i
 // kön fortfarande väntar (nagotKvar), och att done-grenens setTimeout-kedja
 // verkligen startar nästa post. Miljön har bara EN riktig mediefil
@@ -54,6 +59,48 @@ async function startaKon(page, etikett = "Starta transkribering") {
 async function startaExempel(page) {
   await page.getByRole("button", { name: "ett exempel", exact: true }).click();
   await startaKon(page);
+}
+
+/**
+ * Bromsar /api/transcribe-strömmen så testet styr den händelse för händelse.
+ * Fejkkörningen tar ~170 ms — för snabbt både för att hinna klicka Avbryt och
+ * för att hinna läsa av baren mitt i körningen.
+ *
+ * page.route räcker inte hela vägen: route.fulfill kan bara skicka en FÄRDIG
+ * kropp, och streamPost (frontend/src/lib/api.js:90) översätter en ström som
+ * tar slut utan 'done'/'error' till ett fel — en fulfillad kropp slår alltså
+ * över körningen i felläge i stället för att låta den ligga kvar i 'running'.
+ * Därför dubbleras window.fetch, med en ReadableStream som testet matar i egen
+ * takt via window.__e2eStrom.skicka(ev). Bara /api/transcribe fångas; allt
+ * annat — inte minst avbrotts-POSTen, som ska synas i nätverksloggen — går till
+ * den riktiga fetchen.
+ */
+async function bromsaStrommen(page) {
+  await page.addInitScript(() => {
+    const riktig = window.fetch.bind(window);
+    const kodare = new TextEncoder();
+    let styrning = null;
+    window.__e2eStrom = {
+      skicka(ev) {
+        styrning.enqueue(kodare.encode("data: " + JSON.stringify(ev) + "\n\n"));
+      },
+    };
+    window.fetch = (input, init) => {
+      const url = String(typeof input === "string" ? input : input.url).split("?")[0];
+      if (/\/api\/transcribe$/.test(url)) {
+        return Promise.resolve(new Response(
+          new ReadableStream({ start(c) { styrning = c; } }),
+          { status: 200, headers: { "Content-Type": "text/event-stream" } },
+        ));
+      }
+      return riktig(input, init);
+    };
+  });
+}
+
+/** Talet ur kortets "Klart NN %". */
+async function lasProcent(procent) {
+  return Number(((await procent.textContent()) || "").replace(/\D/g, ""));
 }
 
 test("Transkribera (/next/): körningen blir klar, med filer och logg", async ({ page }) => {
@@ -123,37 +170,7 @@ test("Transkribera (/next/): avbrott stoppar körningen och erbjuder Återuppta"
   const errors = [];
   failOnConsoleError(page, errors);
 
-  // Fejkkörningen tar ~170 ms — för snabbt både för att hinna klicka Avbryt
-  // och för att hinna läsa av baren mitt i körningen. Strömmen måste bromsas.
-  //
-  // page.route räcker inte hela vägen: route.fulfill kan bara skicka en
-  // FÄRDIG kropp, och streamPost (frontend/src/lib/api.js:90) översätter en
-  // ström som tar slut utan 'done'/'error' till ett fel — en fulfillad kropp
-  // slår alltså över körningen i felläge i stället för att låta den ligga kvar
-  // i 'running'. Därför dubbleras window.fetch, med en ReadableStream som
-  // testet matar i egen takt. Bara /api/transcribe fångas; allt annat — inte
-  // minst avbrotts-POSTen, som ska synas i nätverksloggen — går till den
-  // riktiga fetchen.
-  await page.addInitScript(() => {
-    const riktig = window.fetch.bind(window);
-    const kodare = new TextEncoder();
-    let styrning = null;
-    window.__e2eStrom = {
-      skicka(ev) {
-        styrning.enqueue(kodare.encode("data: " + JSON.stringify(ev) + "\n\n"));
-      },
-    };
-    window.fetch = (input, init) => {
-      const url = String(typeof input === "string" ? input : input.url).split("?")[0];
-      if (/\/api\/transcribe$/.test(url)) {
-        return Promise.resolve(new Response(
-          new ReadableStream({ start(c) { styrning = c; } }),
-          { status: 200, headers: { "Content-Type": "text/event-stream" } },
-        ));
-      }
-      return riktig(input, init);
-    };
-  });
+  await bromsaStrommen(page);
 
   await page.goto("/next/");
   await kravExempel(page);
@@ -216,6 +233,56 @@ test("Transkribera (/next/): avbrott stoppar körningen och erbjuder Återuppta"
   // körningen var klar.
   const brott = await page.evaluate(() => window.__e2eBrott);
   expect(brott, "Baren visade 100 % innan körningen var klar: " + brott.join(", ")).toEqual([]);
+
+  expect(errors, errors.join("\n")).toEqual([]);
+});
+
+test("Transkribera (/next/): baren kryper vidare mellan serverhändelser", async ({ page }) => {
+  const errors = [];
+  failOnConsoleError(page, errors);
+
+  // Läckgrenen i korning.js är planens enda medvetna beteendedivergens mot
+  // gamla appen: ikappvillkoret är `real - disp > 0.01`, inte `real > disp`
+  // (app.js:2300). Skillnaden är inte kosmetisk. `disp` konvergerar
+  // asymptotiskt mot `real` UNDERIFRÅN och når det aldrig, så med
+  // originalvillkoret blir läckgrenen onåbar och baren fryser bitvis exakt
+  // mellan serverhändelser — precis det animeringen finns för att hindra.
+  // Avbrottsspecen kan inte skilja villkoren åt: den skickar pct 100, som
+  // klampas till 99, och båda landar på "Klart 99 %". Det här testet finns för
+  // att en återgång till `real > disp` ska FALLA.
+  await bromsaStrommen(page);
+
+  await page.goto("/next/");
+  await kravExempel(page);
+  await startaExempel(page);
+
+  const procent = page.locator(".kort .topp .matt").filter({ hasText: "Klart" });
+  await expect(page.locator(".kort .status")).toHaveText("Kör");
+
+  // EN enda serverhändelse, och sedan tystnad — exakt det läge som fryser
+  // baren i gamla appen.
+  await page.evaluate(() => window.__e2eStrom.skicka({ type: "progress", pct: 30 }));
+
+  // Först hinner ikapp-grenen upp baren till serverns 30 %. Väntan är på ">= 29"
+  // och inte på exakt "Klart 30 %": med den RÄTTA koden passerar baren 30 och
+  // fortsätter, så 30 står bara kvar en halvsekund. Att kräva den rutan vore
+  // ett kapplöpningstest — och just den rutan är dessutom det enda de båda
+  // villkoren är överens om.
+  await expect
+    .poll(() => lasProcent(procent), { timeout: 20_000 })
+    .toBeGreaterThanOrEqual(29);
+  const fore = await lasProcent(procent);
+
+  // Utan en enda ny serverhändelse ska baren fortsätta framåt inom fasen.
+  await page.waitForTimeout(3000);
+  const efter = await lasProcent(procent);
+
+  expect(
+    efter,
+    "Baren frös på serverns senaste värde (" + fore + " % → " + efter + " %) i " +
+      "stället för att krypa vidare. Läckgrenen i korning.js är onåbar — är " +
+      "ikappvillkoret återställt till gamla appens `real > disp`?",
+  ).toBeGreaterThanOrEqual(35);
 
   expect(errors, errors.join("\n")).toEqual([]);
 });
