@@ -47,7 +47,7 @@ test("Transkribera (/next/): exempel i kön, dubblett, länk och borttagning", a
   // beskedet ska synas HÄR, direkt på steg 2 — utan att navigera tillbaka
   // till källsteget först.
   await expect(ko).toHaveCount(1);
-  await expect(page.getByText("1 fil låg redan i kön.")).toBeVisible();
+  await expect(page.getByTestId("statusrad")).toHaveText("1 fil låg redan i kön.");
   // Tillbaka till källsteget igen, för att fortsätta pröva källfälten
   // (länkfältet nedan finns bara där).
   await page.getByRole("button", { name: "Lägg till fler" }).click();
@@ -61,9 +61,9 @@ test("Transkribera (/next/): exempel i kön, dubblett, länk och borttagning", a
   const lank = page.getByLabel("YouTube-länk", { exact: true });
   await lank.fill("inte-en-länk");
   await lank.press("Enter");
-  await expect(
-    page.getByText("Klistra in en giltig länk (måste börja med http:// eller https://)."),
-  ).toBeVisible();
+  await expect(page.getByTestId("statusrad")).toHaveText(
+    "Klistra in en giltig länk (måste börja med http:// eller https://).",
+  );
   await expect(ko).toHaveCount(1);
 
   // 5) Giltig länk köas med härlett namn, och fältet töms.
@@ -134,9 +134,15 @@ test("Transkribera (/next/): misslyckad nedladdning av ljudmodellen visar fel p�
 
   // Felet ska synas HÄR, direkt på steg 2 — statusraden är hoistad ovanför
   // stegväxlingen (plan A2-fixrunda) just för att göra det här felet synligt.
-  await expect(
-    page.getByText("Kunde inte ladda ner ljudmodellen: 401 Unauthorized — modellen är gated"),
-  ).toBeVisible();
+  const statusrad = page.getByTestId("statusrad");
+  await expect(statusrad).toBeVisible();
+  await expect(statusrad).toHaveText(
+    "Kunde inte ladda ner ljudmodellen: 401 Unauthorized — modellen är gated",
+  );
+  // Samma text bärs av den enda live-regionen, för skärmläsare.
+  await expect(page.getByRole("status")).toHaveText(
+    "Kunde inte ladda ner ljudmodellen: 401 Unauthorized — modellen är gated",
+  );
   // Knappen ska ha återgått till sin ursprungstext, inte fastnat på "Laddar ner …".
   await expect(page.getByRole("button", { name: "Ladda ner modell" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Laddar ner …" })).toHaveCount(0);

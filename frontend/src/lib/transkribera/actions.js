@@ -203,7 +203,10 @@ export function pickLang(l) {
   tr.model = recommendModel(l);
 }
 
-/** Byter resultatspråk. Skiljer det sig från det talade översätts texten. */
+/**
+ * Byter resultatspråk. Skiljer det sig från det talade översätts texten.
+ * @param {'sv'|'en'} l
+ */
 export function pickTargetLang(l) {
   tr.targetLanguage = l;
 }

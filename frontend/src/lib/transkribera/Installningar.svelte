@@ -29,18 +29,12 @@
 <!--
   Synlig kopia av statusraden som TranskriberaView hoistar som en dold
   live-region (plan A2-fixrunda, punkt 1) — t.ex. downloadAudioModel i
-  actions.js kan skriva hit medan läraren står här på steg 2. Texten renderas
-  via CSS (content: attr(...)), inte som en vanlig textnod — se motiveringen
-  i TranskriberaView.svelte: en andra ordagrant identisk textnod skulle
-  krocka med Playwrights getByText(), som kräver exakt en träff och inte
-  bryr sig om aria-hidden.
+  actions.js kan skriva hit medan läraren står här på steg 2. Riktig textnod,
+  INTE CSS-genererat innehåll — se motiveringen i TranskriberaView.svelte.
+  e2e-testerna skiljer den här synliga kopian från live-regionen via
+  data-testid="statusrad" i stället för att leta upp texten två gånger.
 -->
-<p
-  class="fel"
-  class:info={tr.fileNoteArt === 'info'}
-  aria-hidden="true"
-  data-fel={tr.fileError}
-></p>
+<p class="fel" class:info={tr.fileNoteArt === 'info'} aria-hidden="true" data-testid="statusrad">{tr.fileError}</p>
 
 <div class="ko-huvud">
   <span class="label">Filer i kö</span>
@@ -91,8 +85,7 @@
   }
   .lede { max-width: 62ch; color: var(--ink-2); margin: 0 0 28px; }
   .fel { color: var(--bad); margin: 0 0 20px; }
-  .fel::before { content: attr(data-fel); }
-  .fel[data-fel=''] { display: none; }
+  .fel:empty { display: none; }
   .fel.info { color: var(--ink-3); }
   .ko-huvud {
     display: flex;

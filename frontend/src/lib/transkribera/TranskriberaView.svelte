@@ -63,21 +63,16 @@
 
     <!--
       Synlig kopia av live-regionen ovan, i den position raden hade före
-      hoisten till plan A2-fixrunda: direkt under källfälten. Texten renderas
-      via CSS (content: attr(...)) i stället för som en vanlig textnod: raden
-      är redan aria-hidden så skärmläsare struntar i den oavsett, men en
-      textnod HÄR skulle vara en andra, ordagrant identisk träff för samma
-      text som live-regionen ovan bär — och e2e-testerna letar upp texten med
-      Playwrights getByText(), som inte bryr sig om aria-hidden och kräver
-      exakt en träff. Genererat innehåll håller texten synlig för läraren
-      utan att skapa den kollisionen.
+      hoisten till plan A2-fixrunda: direkt under källfälten. Riktig textnod,
+      INTE CSS-genererat innehåll (content: attr(...)) — det gick inte att
+      markera, kopiera eller Ctrl+F-söka, och skulle försvinna helt spårlöst
+      om stilmallen någonsin saknades vid paketering. Raden är redan
+      aria-hidden så skärmläsare struntar i den; det är live-regionen ovan
+      som annonseras. e2e-testerna skiljer den här synliga kopian från
+      live-regionen via data-testid="statusrad" i stället för att leta upp
+      texten två gånger (se e2e/transkribera-kalla.spec.mjs).
     -->
-    <p
-      class="fel"
-      class:info={tr.fileNoteArt === 'info'}
-      aria-hidden="true"
-      data-fel={tr.fileError}
-    ></p>
+    <p class="fel" class:info={tr.fileNoteArt === 'info'} aria-hidden="true" data-testid="statusrad">{tr.fileError}</p>
 
     {#if tr.queue.length}
       <div class="ko-wrap">
@@ -141,8 +136,7 @@
   }
   .lank:hover { color: var(--ink); }
   .fel { color: var(--bad); margin: 14px 0 0; }
-  .fel::before { content: attr(data-fel); }
-  .fel[data-fel=''] { display: none; }
+  .fel:empty { display: none; }
   .fel.info { color: var(--ink-3); }
   /* Klippande teknik — noden finns kvar i tillgänglighetsträdet men upptar
      ingen synlig plats, till skillnad från display:none. */
