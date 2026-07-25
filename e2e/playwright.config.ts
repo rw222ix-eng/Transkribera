@@ -82,6 +82,12 @@ export default defineConfig({
       // åt just detta ett. Kör därför alltid via `npm run test:next-foundation`
       // (e2e/package.json), som bygger frontend FÖRST och sedan kör detta
       // projekt — annars riskerar testerna att tyst godkänna en gammal bundle.
+      //
+      // Plan A1 Task 5 lägger till e2e/transkribera-kalla.spec.mjs (samma
+      // placering, samma fejkserver) som täcker guidens steg 1: kön via
+      // /api/sample, dubblettbeskedet, länkvalideringen och borttagning.
+      // Filväljaren och drag-och-släpp kräver pywebview och täcks INTE här —
+      // se docs/superpowers/plans/2026-07-25-transkribera-A1-skal-och-kalla.md.
       name: "next-foundation",
       testDir: __dirname,
       testMatch: [
@@ -89,6 +95,7 @@ export default defineConfig({
         /planering-tavla\.spec\.mjs$/,
         /planering-arkiv\.spec\.mjs$/,
         /planering-prov\.spec\.mjs$/,
+        /transkribera-kalla\.spec\.mjs$/,
       ],
       use: { ...devices["Desktop Chrome"] },
     },

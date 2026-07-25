@@ -1,0 +1,62 @@
+// Plan A1: e2e för transkriberingsguidens steg 1 i Svelte-frontenden
+// (/next/). Kör mot den riktiga backenden med fejkad inferens
+// (e2e/serve_test_app.py) — /api/sample är INTE stubbad och ger en riktig,
+// validerad sökväg under base_dir (app/web/server.py:1718).
+//
+// TÄCKER INTE filväljaren eller drag-och-släpp: båda kräver pywebview
+// (window.pywebview.api.pick_files respektive File.path), som inte finns i
+// en vanlig webbläsare. Det är en medveten lucka, inte en glömska.
+import { test, expect, failOnConsoleError } from "./helpers/app";
+
+test("Transkribera (/next/): exempel i kön, dubblett, länk och borttagning", async ({ page }) => {
+  const errors = [];
+  failOnConsoleError(page, errors);
+
+  await page.goto("/next/");
+
+  // 1) Skalet startar på Transkribera-fliken.
+  await expect(page.getByRole("button", { name: "Transkribera", exact: true }))
+    .toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("heading", { name: /Vad vill du transkribera/ })).toBeVisible();
+
+  // 2) Exempelfilen: /api/sample ger en riktig sökväg som hamnar i kön.
+  const ko = page.locator("ul.ko li");
+  await expect(ko).toHaveCount(0);
+  await page.getByRole("button", { name: "ett exempel", exact: true }).click();
+  await expect(ko).toHaveCount(1);
+  await expect(page.getByText("1 fil i kön.")).toBeVisible();
+
+  // 3) Samma fil igen är en dubblett — kön växer inte, och läraren får veta.
+  await page.getByRole("button", { name: "ett exempel", exact: true }).click();
+  await expect(ko).toHaveCount(1);
+  await expect(page.getByText("1 fil låg redan i kön.")).toBeVisible();
+
+  // 4) Ogiltig länk avvisas med besked, och köas inte.
+  // exact: true krävs — aria-label på fältet ("YouTube-länk") är en delsträng
+  // av borttagningsknappens aria-label ("Ta bort YouTube-länk ur kön"), och
+  // getByLabel matchar tillgängliga namn som delsträng. Utan exact matchar
+  // lokatorn två element så fort en YouTube-rad ligger i kön, vilket bryter
+  // Playwrights strict mode i steg 6.
+  const lank = page.getByLabel("YouTube-länk", { exact: true });
+  await lank.fill("inte-en-länk");
+  await lank.press("Enter");
+  await expect(
+    page.getByText("Klistra in en giltig länk (måste börja med http:// eller https://)."),
+  ).toBeVisible();
+  await expect(ko).toHaveCount(1);
+
+  // 5) Giltig länk köas med härlett namn, och fältet töms.
+  await lank.fill("https://www.youtube.com/watch?v=abc123");
+  await lank.press("Enter");
+  await expect(ko).toHaveCount(2);
+  await expect(page.getByText("YouTube-länk", { exact: true })).toBeVisible();
+  await expect(lank).toHaveValue("");
+
+  // 6) Borttagning plockar bort rätt post — länken försvinner, exemplet är kvar.
+  await page.getByRole("button", { name: /Ta bort YouTube-länk/ }).click();
+  await expect(ko).toHaveCount(1);
+  await expect(page.getByText("YouTube-länk", { exact: true })).toHaveCount(0);
+
+  // 7) Inga konsolfel under hela flödet.
+  expect(errors, errors.join("\n")).toEqual([]);
+});
