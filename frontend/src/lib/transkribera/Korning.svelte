@@ -3,6 +3,7 @@
   // (app/web/static/app.js:4582-4668), omstylad till designsystemet.
   import { tr } from './stores.svelte.js';
   import { stageNames, stageBounds, phaseIndex } from './korning.js';
+  import { cancelRun, resumeRun, retryRun, toggleLog, goSource } from './actions.js';
   import Kolista from './Kolista.svelte';
 
   const faser = $derived(stageNames());
@@ -58,6 +59,42 @@
         </div>
       {/each}
     </div>
+  {/if}
+
+  {#if tr.run === 'error'}
+    <div class="besked fel-besked">
+      <p class="besked-titel">{tr.runError?.title || 'Transkriberingen misslyckades'}</p>
+      <p class="besked-text">{tr.runError?.detail || ''}</p>
+      <div class="knappar">
+        <button type="button" class="primar" onclick={retryRun}>Försök igen</button>
+        <button type="button" class="ghost" onclick={goSource}>Byt fil</button>
+      </div>
+    </div>
+  {:else if tr.run === 'cancelled'}
+    <div class="besked">
+      <p class="besked-titel">Transkriberingen avbröts</p>
+      <p class="besked-text">Du stoppade körningen — inget sparades. Återuppta där du var, eller byt fil.</p>
+      <div class="knappar">
+        <button type="button" class="primar" onclick={resumeRun}>Återuppta</button>
+        <button type="button" class="ghost" onclick={goSource}>Byt fil</button>
+      </div>
+    </div>
+  {:else if tr.run === 'running'}
+    <div class="knappar">
+      <button type="button" class="ghost" onclick={cancelRun}>Avbryt</button>
+    </div>
+  {/if}
+</div>
+
+<div class="logg">
+  <button type="button" class="loggknapp" aria-expanded={tr.logExpand} onclick={toggleLog}>
+    <span class="label">Logg</span>
+    <span>{tr.logExpand ? 'Dölj' : 'Visa'} — {tr.log.length} rader</span>
+  </button>
+  {#if tr.logExpand}
+    <ol class="loggrader">
+      {#each tr.log as rad}<li>{rad}</li>{/each}
+    </ol>
   {/if}
 </div>
 
@@ -150,6 +187,91 @@
     text-overflow: ellipsis;
   }
   .fas.pagar .fasnamn { color: var(--ink); }
+  /* Fel-, avbrutet- och körningsbeskeden delar en yta ovanför faserna, eller
+     ersätter dem helt (felet och avbrottet döljer .faser ovan). */
+  .besked {
+    margin-top: 18px;
+    padding-top: 18px;
+    border-top: 1px solid var(--line);
+  }
+  .besked-titel {
+    font-weight: 600;
+    font-size: 1.125rem;
+    color: var(--ink);
+    margin: 0 0 6px;
+  }
+  .fel-besked .besked-titel { color: var(--bad); }
+  .besked-text {
+    color: var(--ink-2);
+    margin: 0;
+  }
+  .knappar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-top: 16px;
+  }
+  .primar {
+    background: var(--btn-bg);
+    color: var(--btn-fg);
+    border: none;
+    border-radius: 4px;
+    padding: 10px 20px;
+    font-family: inherit;
+    font-size: inherit;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .ghost {
+    background: transparent;
+    color: var(--ink);
+    border: 1px solid var(--line-2);
+    border-radius: 4px;
+    padding: 9px 18px;
+    font-family: inherit;
+    font-size: inherit;
+    cursor: pointer;
+  }
+  .logg { margin-top: 20px; }
+  .loggknapp {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+    background: transparent;
+    border: none;
+    padding: 0;
+    color: var(--ink-2);
+    font-family: inherit;
+    font-size: inherit;
+    cursor: pointer;
+    text-align: left;
+  }
+  .loggknapp .label {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  /* Loggraderna är hela meningar, inte mikroetiketter — därför sans, inte mono
+     (DESIGN.md: mono är reserverad för små versala etiketter). Samma regel som
+     PlaneringView.svelte tillämpar på sin logg. */
+  .loggrader {
+    list-style: none;
+    margin: 12px 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .loggrader li {
+    color: var(--ink-2);
+    font-variant-numeric: tabular-nums;
+  }
   .kolabel {
     font-family: var(--mono);
     font-size: 0.72rem;

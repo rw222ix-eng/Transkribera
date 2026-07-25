@@ -370,3 +370,44 @@ export async function startRun() {
     },
   );
 }
+
+/**
+ * Avbryter körningen. POSTar till /api/transcribe/cancel — det räcker INTE att
+ * sluta lyssna på strömmen: servern måste avsluta subprocessen och släppa
+ * GPU:n. Speglar cancelRun, app.js:2269-2276.
+ */
+export async function cancelRun() {
+  korToken++;
+  stoppaTickare();
+  stopProgressAnim();
+  const id = tr.activeId;
+  tr.run = 'cancelled';
+  // Tillbaka till 'pending' så posten går att återuppta.
+  if (id) tr.qStatus = { ...tr.qStatus, [id]: 'pending' };
+  try {
+    await fetch('/api/transcribe/cancel', { method: 'POST' });
+  } catch {
+    // Servern kan redan ha avslutat jobbet — UI:t är ändå avbrutet.
+  }
+}
+
+/** Återupptar den avbrutna posten. Speglar resumeRun, app.js:2277. */
+export function resumeRun() {
+  tr.run = 'idle';
+  startRun();
+}
+
+/** Kör om efter ett fel, med nollställda räknare. Speglar retryRun, app.js:2278. */
+export function retryRun() {
+  tr.run = 'idle';
+  tr.runError = null;
+  tr.progress = 0;
+  tr.dispProgress = 0;
+  tr.elapsed = 0;
+  startRun();
+}
+
+/** Fäller ut/ihop loggen. Speglar toggleLogExpand, app.js:2310. */
+export function toggleLog() {
+  tr.logExpand = !tr.logExpand;
+}
