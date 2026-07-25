@@ -549,5 +549,5 @@ def test_approve_copies_bilder_and_includes_graphics(client, monkeypatch):
     result = _done(r2)
     from pathlib import Path
     tex = Path(result["tex"]).read_text(encoding="utf-8")
-    assert "\includegraphics" in tex and "bild-01.png" in tex
+    assert r"\includegraphics" in tex and "bild-01.png" in tex
     assert (Path(result["tex"]).parent / "bild-01.png").exists()
