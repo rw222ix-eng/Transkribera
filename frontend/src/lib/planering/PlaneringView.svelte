@@ -6,6 +6,7 @@
   import ChangeChat from './ChangeChat.svelte';
   import ContentPicker from '../prov/ContentPicker.svelte';
   import ProvParams from '../prov/ProvParams.svelte';
+  import ProvCard from '../prov/ProvCard.svelte';
   import { plan } from './stores.svelte.js';
   import { generateBoard, approveBoard } from './actions.js';
   import { loadContent, loadHistorik, generateExam } from '../prov/actions.js';
@@ -45,6 +46,7 @@
   {#if plan.typ !== 'tavla'}
     <ContentPicker />
     <ProvParams />
+    <ProvCard />
   {/if}
   <BoardPreview />
   {#if plan.phase === 'running' && plan.liveSections > 0}

@@ -92,3 +92,63 @@ export async function generateExam() {
     handleExamEvent,
   );
 }
+
+/** Godkänner det öppna provet/arbetsbladet: renderar LaTeX och kompilerar
+ * PDF:en lokalt (max två korrigeringsrundor vid kompileringsfel). Speglar
+ * approveExam, app.js:1302-1306. */
+export async function approveExam() {
+  if (!prov.doc?.id || prov.phase === 'running') return;
+  resetProvRun();
+  await streamPost('/api/exams/' + prov.doc.id + '/approve', {}, handleExamEvent);
+}
+
+/** Öppnar den kompilerade PDF:en i en ny flik. Speglar openExamPdf, app.js:1307. */
+export function openPdf() {
+  if (prov.doc?.id) window.open('/api/exams/' + prov.doc.id + '/pdf', '_blank');
+}
+
+/** Öppnar LaTeX-källan i en ny flik. Speglar openExamTex, app.js:1308. */
+export function openTex() {
+  if (prov.doc?.id) window.open('/api/exams/' + prov.doc.id + '/tex', '_blank');
+}
+
+/** Raderar provet/arbetsbladet permanent — databasposten, versionerna och de
+ * sparade filerna. Kortet armar bekräftelsen (prov.deleteArm) innan denna
+ * anropas, så ett enda klick aldrig raderar — samma tvåstegsmönster som
+ * deleteExam, app.js:1155-1170. Det finns ingen postJSON/DELETE-hjälpare i
+ * api.js, så anropet går direkt via fetch och läser svaret ärligt. */
+export async function deleteExam() {
+  const id = prov.doc?.id;
+  if (!id) return;
+  try {
+    const resp = await fetch('/api/exams/' + id, { method: 'DELETE' });
+    let data = null;
+    try {
+      data = await resp.json();
+    } catch {
+      data = null;
+    }
+    if (resp.ok && data?.ok) {
+      prov.doc = null;
+      prov.errors = [];
+      prov.msg = '';
+      prov.deleteArm = false;
+      loadArkiv();     // handlingen försvinner ur arkivet, se app.js:1163
+      loadHistorik();  // referenslistan uppdateras, app.js:1164
+    } else {
+      prov.msg = 'Kunde inte radera: ' + (data?.error || 'okänt fel');
+      prov.deleteArm = false;
+    }
+  } catch {
+    prov.msg = 'Kunde inte radera — försök igen.';
+    prov.deleteArm = false;
+  }
+}
+
+/** Stänger kortet: tillbaka till inställningarna. Speglar closeExam, app.js:1148-1150. */
+export function closeExam() {
+  prov.doc = null;
+  prov.errors = [];
+  prov.msg = '';
+  prov.deleteArm = false;
+}
