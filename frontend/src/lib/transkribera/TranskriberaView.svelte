@@ -5,6 +5,7 @@
   import { tr, extOf } from './stores.svelte.js';
   import { removeFromQueue, addSample, addSampleCorrupt } from './actions.js';
   import Stegindikator from './Stegindikator.svelte';
+  import Dropzone from './Dropzone.svelte';
 </script>
 
 <section class="view">
@@ -15,6 +16,8 @@
   <p class="lede">
     Dra in en eller flera filer, eller välj från datorn — allt körs på din egen dator.
   </p>
+
+  <Dropzone />
 
   <p class="prova">
     Eller prova med

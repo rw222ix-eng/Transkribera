@@ -77,3 +77,63 @@ export async function addSample() {
 export function addSampleCorrupt() {
   addFiles([{ name: 'skadad_inspelning.m4a' }]);
 }
+
+/** Referens till det dolda <input type="file">, satt av Dropzone. */
+let filInput = null;
+
+/** @param {HTMLInputElement | null} el */
+export function setFilInput(el) {
+  filInput = el;
+}
+
+/**
+ * Öppnar filväljaren. I pywebview-fönstret används den nativa dialogen, som
+ * ger riktiga sökvägar; i en vanlig webbläsare faller vi tillbaka på ett dolt
+ * <input type="file">, som BARA ger filnamn. Transkriberingen behöver
+ * sökvägar, så webbläsarvägen är en bekvämlighet, inte en fungerande väg.
+ * Speglar openPicker, app.js:1348-1353.
+ */
+export function openPicker() {
+  tr.fileError = '';
+  const api = /** @type {any} */ (window).pywebview?.api;
+  if (api?.pick_files) {
+    api.pick_files().then((files) => {
+      if (files?.length) addFiles(files);
+    });
+    return;
+  }
+  filInput?.click();
+}
+
+/** Filer valda i det dolda inputfältet. Speglar onPickFile, app.js:1365. */
+export function onPickFile(e) {
+  const el = /** @type {HTMLInputElement} */ (e.target);
+  const fs = Array.from(el.files || []).map((f) => ({
+    name: f.name,
+    // File.path finns bara i pywebview-fönstret — i webbläsaren blir det namnet.
+    path: /** @type {any} */ (f).path || f.name,
+  }));
+  if (fs.length) addFiles(fs);
+  el.value = '';
+}
+
+export function onDragOver(e) {
+  e.preventDefault();
+  if (!tr.dragging) tr.dragging = true;
+}
+
+export function onDragLeave(e) {
+  e.preventDefault();
+  tr.dragging = false;
+}
+
+/** Speglar onDrop, app.js:1368. */
+export function onDrop(e) {
+  e.preventDefault();
+  const fs = Array.from(e.dataTransfer?.files || []).map((f) => ({
+    name: f.name,
+    path: /** @type {any} */ (f).path || f.name,
+  }));
+  if (fs.length) addFiles(fs);
+  else tr.dragging = false;
+}
