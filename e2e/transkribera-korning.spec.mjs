@@ -7,10 +7,10 @@
 // TÄCKER: att starten tar guiden till steg 3 med stegindikatorn på
 // Transkribering, att körningen når status Klar med 100 % och klarbeskedet
 // (med de filer som faktiskt skrevs), att loggen fälls ut och bär både
-// startraden och slutraden, samt att ett avbrott landar i avbrutet-kortet med
-// Återuppta OCH skickar en verklig POST till /api/transcribe/cancel — den
-// POSTen är inte bokföring, det är den som avslutar subprocessen på servern
-// och släpper GPU:n (app.js:2270-2276).
+// klientens start- och slutrad OCH serverns egna rader däremellan, samt att ett
+// avbrott landar i avbrutet-kortet med Återuppta OCH skickar en verklig POST
+// till /api/transcribe/cancel — den POSTen är inte bokföring, det är den som
+// avslutar subprocessen på servern och släpper GPU:n (app.js:2270-2276).
 //
 // TÄCKER OCKSÅ kökedjan: att klarbeskedet HÅLLS TILLBAKA så länge en post i
 // kön fortfarande väntar (nagotKvar), och att done-grenens setTimeout-kedja
@@ -95,16 +95,25 @@ test("Transkribera (/next/): körningen blir klar, med filer och logg", async ({
   await expect(filer.filter({ hasText: stam + ".srt" })).toHaveCount(1);
   await expect(filer.filter({ hasText: "[object Object]" })).toHaveCount(0);
 
-  // 5) Loggen är ihopfälld från början och fälls ut på klick. Den ska bära
-  //    både startraden och slutraden — alltså ha fyllts på UNDER körningen.
+  // 5) Loggen är ihopfälld från början och fälls ut på klick.
   const loggknapp = page.getByRole("button", { name: "Logg" });
   await expect(loggknapp).toHaveAttribute("aria-expanded", "false");
   await expect(page.locator("ol.loggrader")).toHaveCount(0);
   await loggknapp.click();
   await expect(loggknapp).toHaveAttribute("aria-expanded", "true");
   const rader = page.locator("ol.loggrader li");
+  // Ramraderna skriver KLIENTEN själv (actions.js: startRun respektive
+  // done-grenen) — de bevisar bara att körningen började och slutade.
   await expect(rader.first()).toContainText("Startar transkribering");
   await expect(rader.last()).toContainText("Färdig på");
+  // Mellanraderna är SERVERNS. Det är de som bevisar att strömmens log-events
+  // verkligen fyllde på loggen UNDER körningen; utan dem vore testet grönt även
+  // om fejken slutade emittera log-events (e2e/serve_test_app.py:63 och 70).
+  // Antalet assertas inte: fejken körs en gång per delband i "ärlig
+  // progress"-refaktorn, så raderna dyker upp lika många gånger som det finns
+  // pass — det är förekomsten, inte antalet, som är beviset.
+  await expect(rader.filter({ hasText: "Transkriberar (fejk)" }).first()).toBeVisible();
+  await expect(rader.filter({ hasText: /\] Klar\.$/ }).first()).toBeVisible();
 
   // 6) Inga konsolfel under hela flödet.
   expect(errors, errors.join("\n")).toEqual([]);
