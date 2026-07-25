@@ -971,7 +971,8 @@ Put these in the spec's comment block and in your report, plainly:
 
 - The silence warning cannot be exercised — Chromium's fake device emits a continuous tone and is never silent.
 - `localStorage` survival across a **pywebview** restart is unverified; only a browser reload is.
-- Real microphone hardware, permission denial, and device removal mid-recording are untested — the fake UI flag auto-grants, so the `NotAllowedError` branch never runs.
+- Real microphone hardware and device removal mid-recording are untested.
+- Permission denial **is** reachable — do not skip it. The fake UI flag only auto-grants the real permission prompt; it does not stop you from shadowing `navigator.mediaDevices.getUserMedia` with `page.addInitScript` so it rejects with a `NotAllowedError`. The A4 Task 2 fix round did exactly that and drove the branch end to end (see `.superpowers/sdd/a4-task-2-report.md`). Only list permission denial as uncovered if you deliberately chose not to write that case, and say so.
 
 - [ ] **Step 6: Full gate**
 
