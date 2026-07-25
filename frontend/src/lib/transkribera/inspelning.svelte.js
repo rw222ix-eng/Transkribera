@@ -311,9 +311,24 @@ function koaChunk(blob) {
     // exakt inuti fönstret.
     if (token !== inspelningsToken) return;
     tr.recLostSecs += CHUNK_MS / 1000;
+    // AVSTEG från briefens ordalydelse, som slutar "Resten spelas in som
+    // vanligt." Den meningen är ett LÖFTE om att felet var engångsartat, och
+    // löftet är osant i precis det serverfel som realistiskt inträffar: 413
+    // är i praktiken onåbart (MAX_UPLOAD_BYTES är 2 GiB, server.py:40), medan
+    // 507 — full disk, server.py:765-768 — är BESTÄNDIGT. Varje följande bit
+    // fallerar också, räknaren tickar 4 → 8 → 12, och texten påstår samtidigt
+    // att resten spelas in normalt. Osant precis när läraren behöver veta att
+    // det inte är det.
+    //
+    // "Inspelningen fortsätter." håller i BÅDA fallen, och säger bara det som
+    // faktiskt är sant: kedjan bryts inte, recordern rullar vidare, följande
+    // bitar försöker fortfarande, och det som gick fram läggs ändå i kön vid
+    // Stoppa. Den lovar däremot ingenting om att följande bitar LYCKAS — det
+    // får siffran som växer bära, tillsammans med serverns egen text ("Kunde
+    // inte skriva till disk — kontrollera ledigt utrymme.").
     tr.recError =
       `${fel} ${tr.recLostSecs} sekunder av inspelningen gick förlorade. ` +
-      'Resten spelas in som vanligt.';
+      'Inspelningen fortsätter.';
   });
   return uppladdningsKedja;
 }
