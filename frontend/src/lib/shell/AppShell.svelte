@@ -31,13 +31,15 @@
     {/each}
   </nav>
 
-  <button
-    type="button"
-    class="tema"
-    aria-label="Växla tema"
-    title="Växla tema"
-    onclick={toggleTheme}
-  >{nav.theme === 'light' ? 'Mörkt' : 'Ljust'}</button>
+  <div class="temaruta">
+    <button
+      type="button"
+      class="tema"
+      aria-label={'Växla tema — ' + (nav.theme === 'light' ? 'Mörkt' : 'Ljust')}
+      title="Växla tema"
+      onclick={toggleTheme}
+    >{nav.theme === 'light' ? 'Mörkt' : 'Ljust'}</button>
+  </div>
 </header>
 
 <style>
@@ -90,10 +92,13 @@
     background: var(--surface);
     color: var(--ink);
   }
-  .tema {
+  .temaruta {
     flex: 1 1 0;
     display: flex;
     justify-content: flex-end;
+  }
+  .tema {
+    flex: 0 0 auto;
     border: none;
     background: transparent;
     color: var(--ink-3);
