@@ -164,7 +164,13 @@ export function stopRecording() {
   stoppaNivamatare();
   window.removeEventListener('beforeunload', vaktaOmladdning);
   try {
+    // else-grenen är en härdning: stoppaStrom() körs annars BARA ur
+    // slutforInspelning, som bara körs ur recorder.onstop. Är recorder null
+    // eller redan 'inactive' kommer inget onstop, inga spår stoppas och
+    // mikrofonlampan lyser vidare fast läraren tror att hon stoppat.
+    // stoppaStrom() är idempotent, så dubbelanrop är ofarligt.
     if (recorder && recorder.state !== 'inactive') recorder.stop();
+    else stoppaStrom();
   } catch { /* redan stoppad */ }
   tr.recording = false;
   tr.recLevel = 0;
