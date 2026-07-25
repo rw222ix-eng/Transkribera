@@ -925,7 +925,8 @@ git commit -m "feat(transkribera): oavslutade inspelningar med rätt filändelse
 
   function tillInspelningen() {
     setTab('transkribera');
-    goSource();
+    // Byt INTE steg när körsteget bär något oåterkalleligt. Se noten nedan.
+    if (tr.run !== 'running' && tr.run !== 'done') goSource();
   }
 </script>
 
@@ -941,6 +942,8 @@ git commit -m "feat(transkribera): oavslutade inspelningar med rätt filändelse
 Styling: `var(--bad)` for the dot, `var(--surface)`/`var(--line)` for the chip, `border-radius: 3px`, `font-size: 1.03rem` for the text and `0.72rem` for nothing here — the badge shows a sentence fragment and a clock, so **no** `var(--mono)` on it beyond the tabular-numeral time, which uses `font-variant-numeric: tabular-nums` rather than a font swap.
 
 **Note:** `goSource()` sends the wizard back to step 1 without clearing the queue — that is the correct action here (`nyTranskribering` would wipe a queue the teacher is still building).
+
+**Note (rättat i efterhand — en granskning fällde den ovillkorliga versionen).** An earlier draft called `goSource()` unconditionally, which is destructive from step 3. The path is reachable: record → "ett exempel" (`addFiles` sets `tr.step='config'` unconditionally, `actions.js:36`) → "Starta transkribering" → step 3 with `run='running'` → clicking the badge unmounts `<Korning />`. `Stegindikator` is not clickable and `startRun` returns silently while `run === 'running'`, so the finished state, the result files and "Transkribera något mer" are all unreachable — and pressing start again re-runs the same already-finished `tr.activeId`, producing a second lesson row and a second output folder for one lesson. `'done'` is guarded for the same reason: the finished message and `nyTranskribering` live there. At `'error'`/`'cancelled'` the card already offers "Byt fil", which *is* `goSource`, so those stay open. **Guard the source too:** `Installningar.svelte`'s start button gates on catalogue/model/queue but not on `tr.recording` — mirror the `TranskriberaView.svelte` gate there so the path cannot be entered in the first place.
 
 - [ ] **Step 2: Mount it in the topbar**
 
