@@ -104,7 +104,10 @@
 </div>
 
 {#if tr.run === 'done' && !nagotKvar}
-  <div class="klar-besked">
+  <!-- role="status" — statusen går Kör → Klar och ett helt nytt block dyker upp
+       långt ned på sidan. Utan live-region får en skärmläsaranvändare inget
+       besked alls om att lektionen är sparad. -->
+  <div class="klar-besked" role="status">
     <p class="klar-titel">Klart — lektionen är sparad.</p>
     {#if tr.resultFiles.length}
       <ul class="filer">
