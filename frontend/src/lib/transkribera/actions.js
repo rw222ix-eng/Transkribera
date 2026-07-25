@@ -376,7 +376,11 @@ export async function startRun() {
         if (mark && mark.markers.length && r.id) {
           postJSON(`/api/recordings/${r.id}/markers`, { markers: mark.markers })
             .then(() => glomSession(mark.session))
-            .catch(() => { /* markörerna ligger kvar i localStorage till nästa gång */ });
+            // Faller POSTen lämnas localStorage-posten kvar med markörerna i.
+            // Den här sessionen läser den inte igen — minnesnyckeln släpps tre
+            // rader ned — men återställningsvägen i inspelning.svelte.js gör
+            // det. Alltså inget omförsök här, till skillnad från chunk-kedjan.
+            .catch(() => {});
           const { [aktiv.path]: _borttagen, ...kvar } = tr.recMarkersByPath;
           tr.recMarkersByPath = kvar;
         }

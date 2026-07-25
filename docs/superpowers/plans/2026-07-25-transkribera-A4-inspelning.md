@@ -783,7 +783,16 @@ export async function laddaOavslutade() {
   } catch {
     tr.incompleteRecs = [];
   }
-  stadaSessioner(tr.incompleteRecs.map((p) => p.session));
+  // De VÄNTANDE markörsessionerna måste räknas som levande. En SLUTFÖRD
+  // inspelning har fått sin .part omdöpt av finish och dyker därför aldrig upp
+  // i /api/recordings/incomplete — men dess localStorage-post ska leva tills
+  // markörerna postats (actions.js gör det först när transkriberingen är klar).
+  // Städade vi bara mot incompleteRecs skulle ett besök på steg 1 under
+  // pågående transkribering svepa bort posten mitt i det fönster den finns för.
+  stadaSessioner([
+    ...tr.incompleteRecs.map((p) => p.session),
+    ...Object.values(tr.recMarkersByPath).map((m) => m.session),
+  ]);
 }
 
 /**
@@ -957,7 +966,9 @@ Create `e2e/transkribera-inspelning.spec.mjs`. Follow the style of `e2e/transkri
 8. `route.abort("failed")` on request **number one** only, `route.continue()` for the rest → **two** requests for the *same* chunk (identical body size, milliseconds apart rather than a whole `CHUNK_MS` apart) and **no** error text. Do not skip this: without it the retry loop can be deleted without turning a single test red, and every transient network hiccup becomes four seconds of lost audio again.
 9. `route.fulfill` with status **507** and `{"error": "Kunde inte skriva till disk — kontrollera ledigt utrymme."}` → **one** request for the chunk (no retry) and the server's own wording visible to the teacher. Do not skip this: 507 is the only server error that realistically occurs (413 needs 2 GiB — `MAX_UPLOAD_BYTES`, `app/web/server.py:40`), it is *persistent* rather than transient, and retrying a response the server has already given only delays the next chunk.
 
-Cases 7–9 were proven once by hand with a scratchpad driver script (`.superpowers/sdd/a4-task-3-report.md`) that is **not** in the repo — so until they live here they have no permanent regression guard.
+10. the whole marker chain, not just the counter: record with markers → stop → let the transcription finish → assert a `POST /api/recordings/{id}/markers` carrying those timestamps, and that the session's `localStorage` key is **gone** afterwards. Do not skip this: it is the only part of A4 that spans three files (`inspelning.svelte.js` writes, `stores.svelte.js` carries, `actions.js` posts), case 3 only proves the first hop, and a broken hand-off loses the teacher's markers silently.
+
+Cases 7–10 were each proven once by hand with scratchpad driver scripts (`.superpowers/sdd/a4-task-3-report.md`, `a4-task-4-report.md`) that are **not** in the repo — so until they live here they have no permanent regression guard.
 
 Assert on user-visible text and ARIA, never on internal state. Never pin elapsed time or any wall-clock value.
 
