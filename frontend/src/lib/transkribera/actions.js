@@ -1,4 +1,4 @@
-import { getJSON } from '../api.js';
+import { getJSON, streamPost } from '../api.js';
 import { tr, isMedia } from './stores.svelte.js';
 import { recommendModel } from './katalog.svelte.js';
 
@@ -218,4 +218,45 @@ export function pickTargetLang(l) {
  */
 export function syncModel() {
   tr.model = recommendModel(/** @type {'sv'|'en'} */ (tr.language));
+}
+
+/** Slår på/av ett utdataformat. Ny objekt, inte mutation. */
+export function toggleFormat(f) {
+  tr.formats = { ...tr.formats, [f]: !tr.formats[f] };
+}
+
+/** Slår på/av andra passet som rättar mot ljudet. */
+export function toggleAudioCorrect() {
+  tr.audioCorrect = !tr.audioCorrect;
+}
+
+/** Är ljudmodellen installerad? Speglar loadAudioModel, app.js:1519-1521. */
+export async function loadAudioModel() {
+  try {
+    const d = await getJSON('/api/audio-model');
+    if (d) tr.audioModelInstalled = !!d.installed;
+  } catch {
+    // Tyst: knappen visas då som "Ladda ner modell", vilket är sant.
+  }
+}
+
+/**
+ * Laddar ner ljudmodellen. Ett fel MÅSTE synas — Gemma 3n är gated, och utan
+ * besked ser knappen bara död ut. Speglar downloadAudioModel, app.js:1522-1534,
+ * men beskedet hamnar på statusraden i stället för i en toast.
+ */
+export async function downloadAudioModel() {
+  if (tr.audioModelDownloading) return;
+  tr.audioModelDownloading = true;
+  tr.fileError = '';
+  await streamPost('/api/download/audio-model', {}, (ev) => {
+    if (ev.type === 'done') {
+      tr.audioModelDownloading = false;
+      tr.audioModelInstalled = true;
+    } else if (ev.type === 'error') {
+      tr.audioModelDownloading = false;
+      tr.fileNoteArt = 'fel';
+      tr.fileError = 'Kunde inte ladda ner ljudmodellen: ' + (ev.message || 'okänt fel');
+    }
+  });
 }

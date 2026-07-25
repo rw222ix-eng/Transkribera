@@ -4,6 +4,7 @@
   import { tr, extOf } from './stores.svelte.js';
   import { removeFromQueue, goSource } from './actions.js';
   import Sprakval from './Sprakval.svelte';
+  import Formatval from './Formatval.svelte';
 </script>
 
 <p class="eyebrow">STEG 2 — INSTÄLLNINGAR</p>
@@ -35,6 +36,7 @@
 </ul>
 
 <Sprakval />
+<Formatval />
 
 <style>
   .eyebrow {
