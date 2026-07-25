@@ -230,6 +230,14 @@ def test_approve_bedomning_failure_surfaces_and_keeps_prov(client, monkeypatch):
     bed = [e for e in res["errors"] if e["code"] == "bedomning"]
     assert bed, f"ingen bedömningspost i errors: {res['errors']}"
     assert "ntxsy7" in bed[0]["message"]
+    # Loggraden i strömmen är transient (den försvinner när körningen är
+    # klar, se exRunning-gaten i app.js) — det som PERSISTERAS är message,
+    # och gränssnittet läser aldrig code. Utan svensk prefix framför den
+    # råa LaTeX-loggen ser läraren bara en engelsk fontrad bredvid ett
+    # kvitto som säger att PDF:en skapades, med inget som säger VILKET
+    # dokument som saknas.
+    assert bed[0]["message"].startswith(
+        "Bedömningsanvisningen gick inte att kompilera:\n")
     assert res["pdf"], "det fungerande provet ska INTE kastas bort"
     assert res["status"] == "godkänt"
     # fix_latex måste få BEDÖMNINGENS logg — provets är tom, och en tom logg
@@ -307,6 +315,8 @@ def test_approve_bedomning_failure_without_llm_still_gets_bedomning_code(
 
     bed = [e for e in res["errors"] if e["code"] == "bedomning"]
     assert bed, f"koden ska vara 'bedomning', inte 'kompilering': {res['errors']}"
+    assert bed[0]["message"].startswith(
+        "Bedömningsanvisningen gick inte att kompilera:\n")
     assert res["pdf"], "provet kompilerade och ska behållas trots att " \
                         "modellen inte kunde startas"
     # ensure_llm() är None redan vid FÖRSTA rundan här, så det blir aldrig

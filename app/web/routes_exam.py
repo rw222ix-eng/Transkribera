@@ -393,9 +393,19 @@ def create_router(base: Path, arbiter) -> APIRouter:
                         # rundas kompilering (utlöst av bedömningen) föll.
                         # Skild kod låter gränssnittet skilja "inget prov
                         # alls" från "anvisningen saknas".
-                        errors = [{"path": "latex",
-                                   "code": "bedomning" if pdf_path else "kompilering",
-                                   "message": log}]
+                        felkod = "bedomning" if pdf_path else "kompilering"
+                        # Loggraden ovan är transient (den försvinner ur
+                        # gränssnittet så fort körningen är klar) — det som
+                        # PERSISTERAS är denna message, och app.js skriver ut
+                        # den utan att titta på code. Utan svensk prefix ser
+                        # läraren bara en engelsk LaTeX-logg bredvid ett
+                        # kvitto som säger "PDF skapad" och vet inte vilket
+                        # dokument som saknas.
+                        meddelande = (
+                            ("Bedömningsanvisningen gick inte att kompilera:\n"
+                             + log) if felkod == "bedomning" else log)
+                        errors = [{"path": "latex", "code": felkod,
+                                   "message": meddelande}]
                         break
                     fix = exam_gen.fix_latex(
                         exam, log, model=_model_name(), rounds_used=round_,
