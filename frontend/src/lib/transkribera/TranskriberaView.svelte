@@ -11,9 +11,17 @@
   import { loadKatalog } from './katalog.svelte.js';
 
   // Katalogen hämtas en gång när vyn monteras — skalet håller vyn monterad
-  // hela sessionen, så det här körs inte om vid flikbyten.
+  // hela sessionen, så det här körs inte om vid flikbyten. Ett fel (offline
+  // eller trasig hårdvaruskanning, se app/gpu_arbiter.py) skulle annars
+  // lämna CTA:n i Installningar.svelte fastnad på "Laddar modeller …" utan
+  // förklaring.
   $effect(() => {
-    loadKatalog();
+    loadKatalog().then((ok) => {
+      if (ok === false) {
+        tr.fileNoteArt = 'fel';
+        tr.fileError = 'Kunde inte läsa modellistan — starta om appen och försök igen.';
+      }
+    });
   });
 </script>
 

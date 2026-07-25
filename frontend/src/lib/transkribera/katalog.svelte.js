@@ -11,11 +11,18 @@ export const katalog = $state({
   klar: false,       // katalogen är hämtad (motsvarar catalogReady)
 });
 
-/** Hämtar katalogen. Tyst vid fel — panelen visar då "ingen modell". */
+/**
+ * Hämtar katalogen. Returnerar `false` vid fel (nätverksfel eller ett svar
+ * utan whisper-lista) så att anroparen kan berätta det för läraren —
+ * katalog.klar förblir annars false utan förklaring, och startEtikett i
+ * Installningar.svelte fastnar på "Laddar modeller …" i evighet. Modulen
+ * känner inte till tr — den ska inte känna till storen; TranskriberaView:s
+ * mount-effekt tolkar returvärdet och skriver på statusraden.
+ */
 export async function loadKatalog() {
   try {
     const d = await getJSON('/api/models');
-    if (!d?.whisper) return;
+    if (!d?.whisper) return false;
     katalog.whisper = d.whisper;
     const inst = {};
     for (const m of d.whisper) if (m.installed) inst[m.id] = true;
@@ -23,8 +30,7 @@ export async function loadKatalog() {
     katalog.vramFree = d.hardware?.vram?.free ?? 0;
     katalog.klar = true;
   } catch {
-    // Offline eller trasig backend: katalog.klar förblir false och CTA:n
-    // stannar på "Laddar modeller …" i stället för att ljuga om ett val.
+    return false;
   }
 }
 
