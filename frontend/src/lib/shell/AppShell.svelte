@@ -4,6 +4,11 @@
   // designsystemet — originalets 15,5px text och 9-12px hörn ligger utanför
   // rampen.
   import { nav, setTab, toggleTheme } from './nav.svelte.js';
+  // Skalet känner till transkriberingsvyn, inte tvärtom — samma riktning som
+  // App.svelte redan monterar vyerna i. Brickan måste bo HÄR: den ska synas
+  // även när Transkribera-panelen är hidden (App.svelte), och topbaren är den
+  // enda nod som alltid ligger framme.
+  import InspelningBricka from '../transkribera/InspelningBricka.svelte';
 
   const FLIKAR = [
     ['transkribera', 'Transkribera'],
@@ -30,6 +35,10 @@
       >{etikett}</button>
     {/each}
   </nav>
+
+  <!-- Syns bara medan det spelas in; annars renderas ingenting alls och
+       flikarna står kvar centrerade som förut. -->
+  <InspelningBricka />
 
   <div class="temaruta">
     <button

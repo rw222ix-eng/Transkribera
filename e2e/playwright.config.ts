@@ -107,6 +107,23 @@ export default defineConfig({
       // INTE — den vyn är inte migrerad än, så guiden stannar medvetet kvar
       // på steg 3 och säger det i klartext i stället för att navigera till en
       // platshållare (se plan A3).
+      //
+      // Plan A4 Task 6 lägger till e2e/transkribera-inspelning.spec.mjs (samma
+      // placering, samma fejkserver) som täcker inspelningen i guidens steg 1:
+      // start och timer, att bitarna verkligen POSTas till
+      // /api/recording/append, Markera (räknare + localStorage), Stoppa och
+      // lägg till, topbar-brickan över flikbyte, bannern för oavslutade
+      // .part-filer (inklusive att den PÅGÅENDE inspelningen filtreras bort),
+      // hela felkedjan för uppladdningen (nätverksfel med växande
+      // sekundräknare, omförsöket, och serverns 507 utan omförsök), hela
+      // markörkedjan fram till POST /api/recordings/{id}/markers, samt nekad
+      // mikrofon. Fejkmikrofonen kommer från de GLOBALA launchOptions ovan
+      // (--use-fake-device-for-media-stream + --use-fake-ui-for-media-stream),
+      // som alla projekt ärver — projektet behöver alltså inga egna flaggor.
+      // TÄCKS INTE: tystnadsvarningen (fejkenheten skickar en kontinuerlig ton
+      // och blir aldrig tyst), localStorage över en pywebview-omstart (bara
+      // över en omladdning), och riktig mikrofonhårdvara inklusive att enheten
+      // dras ur mitt i en inspelning. Specens egen kommentar upprepar listan.
       name: "next-foundation",
       testDir: __dirname,
       testMatch: [
@@ -117,6 +134,7 @@ export default defineConfig({
         /transkribera-kalla\.spec\.mjs$/,
         /transkribera-installningar\.spec\.mjs$/,
         /transkribera-korning\.spec\.mjs$/,
+        /transkribera-inspelning\.spec\.mjs$/,
       ],
       use: { ...devices["Desktop Chrome"] },
     },
