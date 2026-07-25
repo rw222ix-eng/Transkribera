@@ -3,9 +3,15 @@
 // (e2e/serve_test_app.py); /api/sample och /api/models är oberörda av
 // fejkarna och svarar på riktigt.
 //
-// TÄCKER INTE steg 3 (körningen) — den byggs i plan A3. Startknappen är
-// avstängd, och den här specen kontrollerar att den ÄR avstängd, så att
-// ingen råkar tro att guiden går hela vägen.
+// Plan A3 (task 4) lägger till täckning av steg 3:s startknapp: att den blir
+// klickbar när en fil är köad och en modell är vald. /api/models gör en
+// riktig hårdvaruskanning även i fejkläge, så testet väntar in katalogen i
+// stället för en fast paus, och växlar talat språk till svenska — KB-Whisper
+// large är den enda riktiga modellen som faktiskt är installerad i den här
+// miljön, så bara det språket kan göra knappen klickbar.
+// TÄCKER INTE själva körningen (fasbaren, den animerade procenten och den
+// riktiga transkriberingen) — det verifierades manuellt mot fejkservern,
+// se .superpowers/sdd/task-4-brief.md.
 import { test, expect, failOnConsoleError } from "./helpers/app";
 
 test("Transkribera (/next/): inställningssteget", async ({ page }) => {
@@ -59,12 +65,15 @@ test("Transkribera (/next/): inställningssteget", async ({ page }) => {
   // INTE finnas här.
   await expect(page.getByRole("group", { name: "Undertext i video" })).toHaveCount(0);
 
-  // 7) Startknappen är avstängd: steg 3 finns inte än (plan A3).
-  const start = page.getByRole("button", {
-    name: /Starta transkribering|Ladda ner en modell först|Laddar modeller/,
-  });
-  await expect(start).toBeVisible();
-  await expect(start).toBeDisabled();
+  // 7) Ett laddat exempel plus en vald modell aktiverar startknappen — steg 3
+  // finns nu (plan A3). Växla tillbaka till svenska: det är den enda riktigt
+  // installerade Whisper-modellen i den här miljön (KB-Whisper large), så
+  // bara det språket kan göra knappen klickbar. Vänta in katalogen (riktig
+  // hårdvaruskanning i /api/models) i stället för en fast paus.
+  await talat.getByRole("button", { name: "Svenska" }).click();
+  const start = page.getByRole("button", { name: "Starta transkribering", exact: true });
+  await expect(start).toBeVisible({ timeout: 20_000 });
+  await expect(start).toBeEnabled();
 
   // 8) Inga konsolfel under hela flödet.
   expect(errors, errors.join("\n")).toEqual([]);

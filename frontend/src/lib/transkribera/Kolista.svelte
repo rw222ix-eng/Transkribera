@@ -9,6 +9,13 @@
   // ko-huvud), så den styrs inte här.
   import { tr, extOf } from './stores.svelte.js';
   import { removeFromQueue } from './actions.js';
+
+  // Steg 3 (körningen) visar per-fil-status i stället för borttagningsknappen —
+  // att ta bort en fil mitt i en körning ska inte gå, därför byts knappen ut
+  // i stället för att bara stängas av (plan A3-brief, steg 2).
+  let { visaStatus = false } = $props();
+
+  const STATUSTEXT = { pending: 'Väntar', running: 'Kör', done: 'Klar', error: 'Fel' };
 </script>
 
 <ul class="ko">
@@ -16,12 +23,23 @@
     <li>
       <span class="ext">{(/^https?:/i).test(q.path || '') ? 'URL' : (extOf(q.name) || 'fil')}</span>
       <span class="namn">{q.name}</span>
-      <button
-        type="button"
-        class="bort"
-        aria-label={'Ta bort ' + q.name + ' ur kön'}
-        onclick={() => removeFromQueue(q.id)}
-      >✕</button>
+      {#if visaStatus}
+        <span
+          class="qstatus"
+          class:kor={(tr.qStatus[q.id] || 'pending') === 'running'}
+          class:ok={(tr.qStatus[q.id] || 'pending') === 'done'}
+          class:fel={(tr.qStatus[q.id] || 'pending') === 'error'}
+        >
+          {STATUSTEXT[tr.qStatus[q.id] || 'pending']}
+        </span>
+      {:else}
+        <button
+          type="button"
+          class="bort"
+          aria-label={'Ta bort ' + q.name + ' ur kön'}
+          onclick={() => removeFromQueue(q.id)}
+        >✕</button>
+      {/if}
     </li>
   {/each}
 </ul>
@@ -64,4 +82,15 @@
     cursor: pointer;
   }
   .bort:hover { border-color: var(--bad); color: var(--bad); }
+  .qstatus {
+    flex: 0 0 auto;
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  .qstatus.kor { color: var(--accent); }
+  .qstatus.ok { color: var(--ok); }
+  .qstatus.fel { color: var(--bad); }
 </style>

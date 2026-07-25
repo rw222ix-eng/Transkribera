@@ -2,7 +2,7 @@
   // Guidens steg 2 — inställningar. Speglar viewTranscribe:s stepConfig-gren
   // (app/web/static/app.js:4472-4578), omstylad till designsystemet.
   import { tr } from './stores.svelte.js';
-  import { goSource } from './actions.js';
+  import { goSource, startRun } from './actions.js';
   import Sprakval from './Sprakval.svelte';
   import Formatval from './Formatval.svelte';
   import Undertextval from './Undertextval.svelte';
@@ -50,11 +50,12 @@
 <Undertextval />
 
 <div class="start">
-  <!-- Steg 3 (körningen) byggs i plan A3. Knappen står avstängd tills dess i
-       stället för att leda till en tom panel — guiden ska aldrig peka på ett
-       steg som inte finns. -->
-  <button type="button" class="primar" disabled>{startEtikett}</button>
-  <span class="snart">Själva transkriberingen kommer i nästa steg av migrationen.</span>
+  <button
+    type="button"
+    class="primar"
+    onclick={startRun}
+    disabled={!katalog.klar || !tr.model || !tr.queue.length}
+  >{startEtikett}</button>
 </div>
 
 <style>
@@ -133,5 +134,4 @@
     cursor: pointer;
   }
   .primar:disabled { opacity: 0.55; cursor: default; }
-  .snart { color: var(--ink-3); }
 </style>

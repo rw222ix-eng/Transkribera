@@ -9,6 +9,7 @@
   import LankFalt from './LankFalt.svelte';
   import Kolista from './Kolista.svelte';
   import Installningar from './Installningar.svelte';
+  import Korning from './Korning.svelte';
   import { loadKatalog } from './katalog.svelte.js';
 
   // Katalogen och ljudmodellens status hämtas en gång när vyn monteras —
@@ -91,6 +92,8 @@
     </p>
   {:else if tr.step === 'config'}
     <Installningar />
+  {:else}
+    <Korning />
   {/if}
 </section>
 
