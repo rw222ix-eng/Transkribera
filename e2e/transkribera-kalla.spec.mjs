@@ -149,3 +149,65 @@ test("Transkribera (/next/): misslyckad nedladdning av ljudmodellen visar fel p�
 
   expect(errors, errors.join("\n")).toEqual([]);
 });
+
+// Regressionsspärr för själva live-regionen (p.fel-sr).
+//
+// Mönstret "{#if} runt en role=\"status\"" har fällts TRE gånger i den här
+// migrationen — A2:s fixrunda, A3:s slutgranskning och A4 Task 2 — och hade
+// ändå ingen automatisk spärr: testerna ovan assertar alla på den SYNLIGA
+// kopian (data-testid="statusrad"), som är aria-hidden och alltså inte är det
+// skärmläsaren läser. En live-region som monteras in i DOM:en samtidigt som
+// sin text annonseras inte pålitligt; det som annonseras är en MUTATION i en
+// nod som redan låg där.
+//
+// Testet vaktar därför tre egenskaper:
+//   1. p.fel-sr finns INNAN något fel uppstått (en {#if}-grindad region finns
+//      inte alls då, och en region som ligger inuti stegväxlingens
+//      source-gren försvinner vid stegbyte),
+//   2. det är SAMMA DOM-nod efteråt — noden märks med en expando som måste
+//      överleva. Monteras regionen om i stället för att mutera försvinner
+//      märket, och skärmläsaren annonserar ingenting,
+//   3. antalet [role="status"] inuti section.view är oförändrat — två
+//      samtidigt muterande live-regioner läses i oförutsägbar ordning, vilket
+//      är varför inspelningswidgeten medvetet saknar en egen.
+//
+// Ingen fejkmikrofon behövs: felet som framkallas är tr.fileError ur addUrl
+// (ogiltig länk), samma väg som testet överst i filen redan använder. Regionen
+// bär båda felkanalerna, så spärren gäller lika mycket för tr.recError.
+test("Transkribera (/next/): live-regionen är permanent och muterar i stället för att monteras om", async ({ page }) => {
+  const errors = [];
+  failOnConsoleError(page, errors);
+
+  await page.goto("/next/");
+
+  const region = page.locator("section.view p.fel-sr");
+  const liveRegioner = page.locator('section.view [role="status"]');
+
+  // 1) Regionen finns FÖRE felet — tom, men på plats och med role="status".
+  await expect(region).toHaveCount(1);
+  await expect(region).toHaveText("");
+  await expect(region).toHaveAttribute("role", "status");
+  const antalFore = await liveRegioner.count();
+  expect(antalFore).toBe(1);
+
+  // Märk noden. Expandon lever bara så länge exakt DET HÄR DOM-elementet gör —
+  // en ommontering ger ett nytt element utan märke.
+  await region.evaluate((el) => {
+    el.dataset.spar = "fel-sr-1";
+  });
+
+  // 2) Framkalla ett tr.fileError. Ogiltig länk, samma väg som ovan.
+  const lank = page.getByLabel("YouTube-länk", { exact: true });
+  await lank.fill("inte-en-länk");
+  await lank.press("Enter");
+  await expect(region).toHaveText(
+    "Klistra in en giltig länk (måste börja med http:// eller https://).",
+  );
+
+  // 3) Samma nod, samma antal live-regioner.
+  await expect(region).toHaveCount(1);
+  await expect(region).toHaveAttribute("data-spar", "fel-sr-1");
+  expect(await liveRegioner.count()).toBe(antalFore);
+
+  expect(errors, errors.join("\n")).toEqual([]);
+});
