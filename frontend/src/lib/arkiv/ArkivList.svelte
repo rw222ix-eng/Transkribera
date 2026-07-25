@@ -1,5 +1,6 @@
 <script>
   import { arkiv } from './stores.svelte.js';
+  import { openArkivItem } from './actions.js';
   import Snippet from './Snippet.svelte';
   import { groupByWeek } from './week.js';
 
@@ -23,6 +24,9 @@
     {arkiv.hits ? 'Inga träffar.' : 'Inget sparat än — godkänn en tavla så samlas den här.'}
   </p>
 {:else}
+  {#if arkiv.openError}
+    <p class="note error">{arkiv.openError}</p>
+  {/if}
   {#each weeks as w (w.key)}
     <section class="week">
       <header class="whead">
@@ -33,14 +37,21 @@
       <ul class="rows">
         {#each w.rows as it (it.typ + ':' + it.id)}
           <li class="row">
-            <span class="typ">{typLabel(it.typ)}</span>
-            <span class="titel">{it.titel}</span>
-            <span class="meta">
-              {[it.course, it.group, it.datum].filter(Boolean).join(' · ')}
-            </span>
-            {#if it.snippet}
-              <Snippet text={it.snippet} />
-            {/if}
+            <button
+              type="button"
+              class="rowbtn"
+              onclick={() => openArkivItem(it)}
+              aria-label={'Öppna ' + typLabel(it.typ).toLowerCase() + ': ' + it.titel}
+            >
+              <span class="typ">{typLabel(it.typ)}</span>
+              <span class="titel">{it.titel}</span>
+              <span class="rowmeta">
+                {[it.course, it.group, it.datum].filter(Boolean).join(' · ')}
+              </span>
+              {#if it.snippet}
+                <Snippet text={it.snippet} />
+              {/if}
+            </button>
           </li>
         {/each}
       </ul>
@@ -69,14 +80,25 @@
   .wrange { color: var(--ink-3); }
   .wcount { margin-left: auto; color: var(--ink-3); }
   .rows { list-style: none; margin: 8px 0 0; padding: 0; }
-  .row {
+  .row { border-top: 1px solid var(--line); }
+  .rowbtn {
     display: flex;
     align-items: baseline;
     gap: 12px;
-    padding: 12px 0;
-    border-top: 1px solid var(--line);
+    width: 100%;
+    padding: 12px 4px;
+    margin: 0 -4px;
+    border: none;
+    border-radius: 3px;
+    background: transparent;
+    font-family: inherit;
+    font-size: inherit;
+    text-align: left;
+    color: inherit;
+    cursor: pointer;
     flex-wrap: wrap;
   }
+  .rowbtn:hover { background: var(--sunken); }
   .typ {
     flex: 0 0 92px;
     font-family: var(--mono);
@@ -86,6 +108,6 @@
     color: var(--ink-3);
   }
   .titel { flex: 1; min-width: 200px; color: var(--ink); }
-  .meta { color: var(--ink-3); }
-  .row :global(.snippet) { flex: 1 0 100%; }
+  .rowmeta { color: var(--ink-3); }
+  .rowbtn :global(.snippet) { flex: 1 0 100%; }
 </style>

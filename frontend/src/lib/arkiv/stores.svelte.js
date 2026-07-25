@@ -5,6 +5,7 @@ export const arkiv = $state({
   items: [],
   loading: true,
   error: '',
+  openError: '',       // "kunde inte öppna" — se actions.js: openArkivItem
   // sök
   query: '',
   mode: 'ask',        // 'ask' = låt modellen svara | 'word' = ordsökning
