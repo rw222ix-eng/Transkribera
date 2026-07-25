@@ -236,6 +236,35 @@ def test_approve_bedomning_failure_surfaces_and_keeps_prov(client, monkeypatch):
     assert sedda_loggar and all("ntxsy7" in lg for lg in sedda_loggar)
 
 
+def test_approve_bedomning_failure_without_llm_still_gets_bedomning_code(
+        client, monkeypatch):
+    """Grenen för "ingen omkörning möjlig" (modellen kan inte startas) hade
+    kvar den gamla hårdkodade 'kompilering'-koden efter att rundgrenen fick
+    'bedomning'. Provet hade då redan kompilerat och bara anvisningen
+    saknades, men klienten fick samma kod som vid ett fullständigt
+    misslyckande — och skulle kunna kasta bort ett fullt användbart prov."""
+    result, _ = _make_exam(client, monkeypatch)
+    monkeypatch.setattr(exam_pdf, "engine_available", lambda: True)
+    monkeypatch.setattr(client.app.state.arbiter, "ensure_llm", lambda: None)
+
+    def fake_compile(tex, out_dir, jobname, **kw):
+        if jobname.endswith("bedomning"):
+            return None, "! Undefined control sequence."
+        out_dir.mkdir(parents=True, exist_ok=True)
+        p = out_dir / f"{jobname}.pdf"
+        p.write_bytes(b"%PDF-1.5 fejk")
+        return p, ""
+    monkeypatch.setattr(exam_pdf, "compile_pdf", fake_compile)
+
+    r = client.post(f"/api/exams/{result['id']}/approve", json={})
+    res = _done(r)
+
+    bed = [e for e in res["errors"] if e["code"] == "bedomning"]
+    assert bed, f"koden ska vara 'bedomning', inte 'kompilering': {res['errors']}"
+    assert res["pdf"], "provet kompilerade och ska behållas trots att " \
+                        "modellen inte kunde startas"
+
+
 # ------------------------------------------------------ Fas 5: arbetsblad --
 
 def test_generate_arbetsblad_sets_typ_and_profile(client, monkeypatch):

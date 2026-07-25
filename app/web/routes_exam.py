@@ -365,17 +365,14 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     if pdf_path is not None and (bed is None or bed_path is not None):
                         errors = []
                         break
-                    if round_ >= exam_gen.MAX_LATEX_ROUNDS:
+                    if (round_ >= exam_gen.MAX_LATEX_ROUNDS
+                            or arbiter.ensure_llm() is None):
                         # Provet behålls om det kompilerade: ett fungerande
                         # prov kastas inte bort för att det sekundära
                         # dokumentet föll. Skild kod låter gränssnittet skilja
                         # "inget prov alls" från "anvisningen saknas".
                         errors = [{"path": "latex",
                                    "code": "bedomning" if pdf_path else "kompilering",
-                                   "message": log}]
-                        break
-                    if arbiter.ensure_llm() is None:
-                        errors = [{"path": "latex", "code": "kompilering",
                                    "message": log}]
                         break
                     fix = exam_gen.fix_latex(
