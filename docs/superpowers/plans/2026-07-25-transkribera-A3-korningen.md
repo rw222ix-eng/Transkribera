@@ -334,7 +334,7 @@ function frame() {
     let ph = 0;
     while (ph < b.length - 2 && real >= b[ph + 1]) ph++;
     const tak = b[ph + 1] - 0.5;          // stanna inom aktuell fas
-    if (real > disp) {
+    if (real - disp > 0.01) {
       disp += (Math.min(real, 99) - disp) * 0.12;   // hinn ikapp servern
     } else if (disp < tak) {
       disp += (tak - disp) * 0.004;                 // läck framåt så inget fryser
@@ -357,6 +357,8 @@ export function stopProgressAnim() {
   rafId = 0;
 }
 ```
+
+**Note:** ikappgrenens villkor är `real - disp > 0.01`, inte gamla appens `real > disp` (`app.js:2300`). Originalet var fel här: `disp` konvergerar asymptotiskt mot `real` underifrån och når det aldrig, så `real > disp` förblir sant för evigt och läckgrenen under blir onåbar — baren fryser permanent mellan serverhändelser, vilket är precis det animeringen finns för. Tröskeln är ett ägarbeslutat avsteg (commit `847b1c0`); skriv inte tillbaka `real > disp`.
 
 - [ ] **Step 2: Start it from `startRun`**
 
@@ -772,7 +774,7 @@ After the log, add:
     <p class="klar-titel">Klart — lektionen är sparad.</p>
     {#if tr.resultFiles.length}
       <ul class="filer">
-        {#each tr.resultFiles as f}<li>{f}</li>{/each}
+        {#each tr.resultFiles as f}<li>{f.name || f}</li>{/each}
       </ul>
     {/if}
     <p class="senare">
@@ -785,6 +787,10 @@ After the log, add:
 ```
 
 with `const nagotKvar = $derived(!!tr.queue.find((q) => (tr.qStatus[q.id] || 'pending') === 'pending'));` in the script.
+
+**Note:** filraden är `{f.name || f}`, inte `{f}`. Originalet var fel: servern skickar resultatfilerna som objekt (`{path, name, ext, kind, size}` — `app/output_store.py:167-175`), så `{f}` renderar `[object Object]` i stället för filnamnet. `|| f` behåller stödet för en ren sträng om kontraktet någonsin förenklas.
+
+**Note:** klarbeskedet bär INGEN `role="status"`. Originalutkastet lade en live-region på det här `{#if}`-grindade blocket, vilket är samma mönster som plan A2:s fixrunda underkände: en region som monteras in samtidigt som sin text annonseras inte pålitligt, och ett fel- eller avbrottsutfall — som aldrig renderar det här blocket — skulle inte annonseras alls. Rollen hör hemma på statusbrickan i kortets topprad (`.status`), som ligger permanent i DOM:en hela steg 3 och vars text är just Kör/Klar/Fel/Avbruten — precis som gamla appen gör det (`app.js:4618`).
 
 `goSource` räcker inte här: den byter bara steg, så kön, `qStatus`, `activeId`, `run='done'` och resultatfilerna lever kvar — steg 1 visar "1 fil i kön" om precis den fil som nyss sparades, och eftersom `addFiles` behåller ett redan satt `activeId` körs den gamla filen om först vid nästa start. Lägg därför till en egen action `nyTranskribering` i `actions.js` som nollställer hela körtillståndet (queue, qStatus, qProgress, activeId, run, progress, dispProgress, elapsed, log, runError, resultFiles, resultId, logExpand) precis som gamla appens `restart()` (`app.js:1508-1512`) och därefter anropar `goSource()`. `goSource` lämnas oförändrad — "Lägg till fler" och "Byt fil" ska fortsatt behålla kön. Till skillnad från `restart()` navigerar den INTE vidare till Inspelningar; den vyn finns inte här.
 
