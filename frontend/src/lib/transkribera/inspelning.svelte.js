@@ -257,16 +257,64 @@ function vaktaOmladdning(e) {
   e.returnValue = '';
 }
 
-/** Köar en bit för uppladdning. Kedjan görs riktig i Task 3. */
+/**
+ * Laddar upp en bit. Returnerar {ok} eller {ok:false, fel}.
+ * Ett nätverksfel får ETT omförsök; ett svar från servern (4xx/5xx) får inget —
+ * har servern sagt nej hjälper inte en likadan förfrågan till.
+ */
+async function laddaUppChunk(blob, s) {
+  for (let forsok = 0; forsok < 2; forsok++) {
+    try {
+      const r = await fetch(`/api/recording/append?session=${encodeURIComponent(s)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body: blob,
+      });
+      if (r.ok) return { ok: true };
+      const j = await r.json().catch(() => null);
+      return { ok: false, fel: (j && j.error) || 'Kunde inte spara inspelningen.' };
+    } catch {
+      // Nätverksfel. Faller igenom till ett omförsök, sedan ger vi upp.
+    }
+  }
+  return { ok: false, fel: 'Nätverket svarade inte.' };
+}
+
+/**
+ * Köar en bit i ordning. Misslyckas den räknas de förlorade sekunderna upp och
+ * läraren FÅR VETA. Gamla appen sväljer felet helt (app.js:1420), vilket är det
+ * värsta en inspelningsapp kan göra: ljud försvinner utan att någon märker det.
+ */
 function koaChunk(blob) {
   const s = session;
-  uppladdningsKedja = uppladdningsKedja.then(() =>
-    fetch(`/api/recording/append?session=${encodeURIComponent(s)}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/octet-stream' },
-      body: blob,
-    }).catch(() => { /* omförsök och räknare kommer i Task 3 */ }),
-  );
+  // Fångas SYNKRONT tillsammans med sessionen — se inspelningsToken.
+  const token = inspelningsToken;
+  uppladdningsKedja = uppladdningsKedja.then(async () => {
+    const { ok, fel } = await laddaUppChunk(blob, s);
+    if (ok) return;
+    // Generationsvakt — MEDVETET tvärtemot slutforInspelnings felgren, som är
+    // ovaktad. Skillnaden: den grenen bär ett engångsbesked om att en HEL
+    // lektion inte gick att slutföra, utan siffra. Här hör både räknaren och
+    // texten till den inspelning som just nu visas i widgeten — startRecording
+    // och cancelRecording nollställer tr.recLostSecs — och meddelandet citerar
+    // räknaren. En bit från en avslutad eller avbruten session som fallerar
+    // efter att läraren startat en NY inspelning skulle alltså både skriva
+    // förlorade sekunder på fel körning och göra själva siffran osann: "4
+    // sekunder av inspelningen gick förlorade" om en inspelning där ingenting
+    // gått förlorat.
+    //
+    // Priset: faller en gammal bit precis i det fönstret sägs det inte, och
+    // filen köas ändå med en lucka. Accepterat, av två skäl. Efter Avbryt har
+    // läraren uttryckligen slängt ljudet — där är beskedet bara brus. Och är
+    // nätet verkligen nere fallerar den NYA inspelningens egna bitar inom fyra
+    // sekunder, så hon får veta då; tyst blir bara ett fel som hinner läka
+    // exakt inuti fönstret.
+    if (token !== inspelningsToken) return;
+    tr.recLostSecs += CHUNK_MS / 1000;
+    tr.recError =
+      `${fel} ${tr.recLostSecs} sekunder av inspelningen gick förlorade. ` +
+      'Resten spelas in som vanligt.';
+  });
   return uppladdningsKedja;
 }
 
