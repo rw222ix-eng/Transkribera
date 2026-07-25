@@ -5,9 +5,10 @@
   import BoardPreview from './BoardPreview.svelte';
   import ChangeChat from './ChangeChat.svelte';
   import ContentPicker from '../prov/ContentPicker.svelte';
+  import ProvParams from '../prov/ProvParams.svelte';
   import { plan } from './stores.svelte.js';
   import { generateBoard, approveBoard } from './actions.js';
-  import { loadContent, loadHistorik } from '../prov/actions.js';
+  import { loadContent, loadHistorik, generateExam } from '../prov/actions.js';
 
   // Innehållslistan (och historiken) laddas om vid varje kurs-/klassbyte —
   // se app.js:1197-1206 (byggPickCourse/byggPickGroup). Effekten läser
@@ -40,9 +41,10 @@
     {/if}
   </p>
 
-  <BuildPanel onGenerate={generateBoard} />
+  <BuildPanel onGenerate={plan.typ === 'tavla' ? generateBoard : generateExam} />
   {#if plan.typ !== 'tavla'}
     <ContentPicker />
+    <ProvParams />
   {/if}
   <BoardPreview />
   {#if plan.phase === 'running' && plan.liveSections > 0}

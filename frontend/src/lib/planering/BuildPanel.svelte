@@ -1,5 +1,6 @@
 <script>
   import { plan } from './stores.svelte.js';
+  import { prov } from '../prov/stores.svelte.js';
   import { getJSON } from '../api.js';
 
   let { onGenerate = () => {} } = $props();
@@ -8,9 +9,14 @@
   let groups = $state([]);
   let loadError = $state('');
 
+  // Tavlan och prov/arbetsblad kör var sin SSE-ström (plan.phase resp.
+  // prov.phase) — "running" måste läsa rätt store beroende på typ, annars
+  // visar CTA:n aldrig "Skriver …" under en provgenerering.
+  const running = $derived(plan.typ === 'tavla' ? plan.phase === 'running' : prov.phase === 'running');
+  const hasContent = $derived(Object.values(prov.valda).some(Boolean));
   const canGenerate = $derived(
-    plan.phase !== 'running' &&
-      (plan.typ === 'tavla' ? plan.moment.trim().length > 0 : plan.courseId !== ''),
+    !running &&
+      (plan.typ === 'tavla' ? plan.moment.trim().length > 0 : plan.courseId !== '' && hasContent),
   );
   const typLabel = $derived(
     plan.typ === 'tavla' ? 'tavlan' : plan.typ === 'arbetsblad' ? 'arbetsbladet' : 'provet',
@@ -106,12 +112,14 @@
         Klart att skriva.
       {:else if plan.typ === 'tavla'}
         Beskriv momentet ovan så kan tavlan skrivas.
-      {:else}
+      {:else if !plan.courseId}
         Välj kurs ovan så kan {typLabel} skrivas.
+      {:else if !hasContent}
+        Välj minst en innehållspunkt ovan så kan {typLabel} skrivas.
       {/if}
     </span>
     <button class="primary" disabled={!canGenerate} onclick={() => onGenerate()}>
-      {#if plan.phase === 'running'}
+      {#if running}
         Skriver …
       {:else if plan.typ === 'tavla'}
         Skriv tavlan
