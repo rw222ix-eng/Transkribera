@@ -80,7 +80,7 @@
         onclick={goConfig}
       >Nästa: inställningar</button>
     </p>
-  {:else}
+  {:else if tr.step === 'config'}
     <Installningar />
   {/if}
 </section>
