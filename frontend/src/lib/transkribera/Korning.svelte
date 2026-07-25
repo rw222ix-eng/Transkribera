@@ -46,7 +46,24 @@
 
 <div class="kort">
   <div class="topp">
-    <span class="status" class:kor={tr.run === 'running'} class:ok={klar} class:fel={tr.run === 'error'}>
+    <!--
+      role="status" sitter HÄR, precis som i gamla appen (app.js:4618). Spannet
+      ligger permanent i DOM:en hela steg 3 och dess text ÄR utfallet:
+      Kör → Klar / Fel / Avbruten. Rollen får inte flyttas till ett
+      {#if}-grindat block — varken klarbeskedet nedan eller fel-/avbrutet-korten
+      — för en live-region som monteras in samtidigt som sin text annonseras
+      inte pålitligt; exakt det mönster plan A2:s fixrunda underkände och
+      ersatte med den hoistade regionen i TranskriberaView.svelte:47. Utan den
+      här raden får en lärare som startar en körning och går därifrån inget
+      besked när den MISSLYCKAS.
+    -->
+    <span
+      class="status"
+      role="status"
+      class:kor={tr.run === 'running'}
+      class:ok={klar}
+      class:fel={tr.run === 'error'}
+    >
       {status}
     </span>
     <span class="fil">{aktiv?.name || ''}</span>
@@ -104,10 +121,11 @@
 </div>
 
 {#if tr.run === 'done' && !nagotKvar}
-  <!-- role="status" — statusen går Kör → Klar och ett helt nytt block dyker upp
-       långt ned på sidan. Utan live-region får en skärmläsaranvändare inget
-       besked alls om att lektionen är sparad. -->
-  <div class="klar-besked" role="status">
+  <!-- Ingen egen role="status" här. Blocket är {#if}-grindat och monteras in
+       samtidigt som sin text, vilket inte annonseras pålitligt. Beskedet om att
+       körningen gick i mål bärs i stället av statusbrickan högst upp i kortet,
+       som ligger permanent i DOM:en och går Kör → Klar. -->
+  <div class="klar-besked">
     <p class="klar-titel">Klart — lektionen är sparad.</p>
     {#if tr.resultFiles.length}
       <ul class="filer">
