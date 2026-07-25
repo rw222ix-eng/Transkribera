@@ -404,18 +404,32 @@ test("Inspelning (/next/): ett nätverksfel ger ETT omförsök för samma bit, u
   await expect.poll(() => bitar.length, { timeout: 30_000 }).toBeGreaterThanOrEqual(2);
 
   // Samma bit två gånger: identisk kroppsstorlek …
+  //
+  // LÄS INTE storleksjämförelsen som beviset. Fejkenheten skickar en
+  // KONTINUERLIG ton, så två på varandra följande Opus-bitar har med stor
+  // sannolikhet identisk storlek ändå — likhet skiljer alltså inte ett
+  // omförsök från nästa bit. Den fäller bara det grövsta utfallet (en kropp
+  // som uppenbart hör till något annat) och är därför ett komplement.
+  // Beviset bärs av AVSTÅNDET nedan plus "ingen feltext" längre ned.
   expect(bitar[0].bytes, "tom kropp — då säger storleksjämförelsen ingenting").toBeGreaterThan(0);
   expect(
     bitar[1].bytes,
     "Andra anropet bar en ANNAN kropp (" + bitar[0].bytes + " → " + bitar[1].bytes +
       " byte) — det är nästa bit, inte ett omförsök av den första.",
   ).toBe(bitar[0].bytes);
-  // … och det kom direkt efter, inte en hel timeslice senare.
+  // … och det kom OMEDELBART efter, inte som nästa bit.
+  //
+  // Gränsen är CHUNK_MS/4, inte CHUNK_MS. Nästa bit POSTas en hel timeslice
+  // efter den förra, så < CHUNK_MS utesluter exakt ingenting: en nästa-bit-POST
+  // 3 990 ms senare hade passerat som "omförsök". Omförsöket har ingen backoff
+  // — laddaUppChunk (inspelning.svelte.js:293) går direkt in i varv två när
+  // fetch:en avvisas — så en fjärdedels timeslice är rundlig marginal för den
+  // riktiga händelsen och långt under nästa bit.
   expect(
     bitar[1].ms - bitar[0].ms,
-    "De två anropen låg " + (bitar[1].ms - bitar[0].ms) + " ms isär, alltså minst en hel " +
-      "CHUNK_MS — det är nästa bit, inte ett omförsök.",
-  ).toBeLessThan(CHUNK_MS);
+    "De två anropen låg " + (bitar[1].ms - bitar[0].ms) + " ms isär, alltså långt mer än " +
+      "ett omedelbart omförsök — det är nästa bit, inte ett omförsök.",
+  ).toBeLessThan(CHUNK_MS / 4);
 
   // Ingen feltext — omförsöket räddade biten. Vakten läser varje DOM-mutation,
   // så inte ens en blinkande text går förbi.
