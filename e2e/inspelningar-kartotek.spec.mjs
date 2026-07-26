@@ -377,18 +377,35 @@ test("Inspelningar (/next/): månadsfiltret rör inte nätverket men ändrar kor
   const { manad } = filter(vy);
   const meta = vy.locator("article.kort .meta");
 
-  // Månaderna härleds ur den hämtade listan, inte ur en egen endpoint.
-  await expect(manad.locator("option")).toHaveText(["Alla månader", "2026-04", "2026-03"]);
+  // Månaderna härleds ur den hämtade listan, inte ur en egen endpoint. Läraren
+  // ser MÅNADSNAMN, inte den råa nyckeln — gamla appen gör likadant
+  // (app.js:3917-3919), och en select full av "2026-04" var enda stället i vyn
+  // där en maskinsträng nådde fram.
+  await expect(manad.locator("option")).toHaveText(["Alla månader", "apr 2026", "mar 2026"]);
+
+  // Men VÄRDET är fortfarande 'YYYY-MM'. Den halvan är load-bearing och har
+  // ingen annan spärr: filtreringen jämför value mot l.datum.slice(0, 7)
+  // (InspelningarView.svelte), så flyttas den läsbara formen in i value slutar
+  // månadsfiltret tyst att matcha någonting alls — och kortassertionerna nedan
+  // skulle då falla på "inga kort" utan att peka ut varför.
+  //
+  // evaluateAll och inte toHaveValues: den matchern läser vad ett <select> har
+  // VALT, inte vilka värden dess optioner bär. Det som ska prövas här är det
+  // senare.
+  expect(
+    await manad.locator("option").evaluateAll((els) => els.map((el) => el.value)),
+    "Månadsvalets VÄRDE är inte längre 'YYYY-MM' — filtreringen slutar matcha",
+  ).toEqual(["", "2026-04", "2026-03"]);
 
   const anrop = loggaLektionsanrop(page);
 
-  // 2026-04 innehåller bara den ena halvan av vecka 14.
-  await manad.selectOption({ label: "2026-04" });
+  // April innehåller bara den ena halvan av vecka 14.
+  await manad.selectOption({ label: "apr 2026" });
   await expect(meta).toHaveText([META("A1")]);
 
-  // 2026-03 innehåller den andra halvan plus hela vecka 13 — korten ändras
+  // Mars innehåller den andra halvan plus hela vecka 13 — korten ändras
   // alltså på riktigt MELLAN de två valen, inte bara mot utgångsläget.
-  await manad.selectOption({ label: "2026-03" });
+  await manad.selectOption({ label: "mar 2026" });
   await expect(meta).toHaveText([META("A2"), META("B3")]);
 
   await manad.selectOption({ label: "Alla månader" });
@@ -577,7 +594,7 @@ test("Inspelningar (/next/): de två tomtillstånden är inte utbytbara", async 
   // LÄGE 1 — arkivet är fullt men filtren döljer allt. Månaden väljs FÖRST,
   // medan alla tre lektionerna är hämtade och båda månaderna alltså finns i
   // rutan; klassbytet krymper sedan listan till vecka 13, som ligger i mars.
-  await manad.selectOption({ label: "2026-04" });
+  await manad.selectOption({ label: "apr 2026" });
   await klass.selectOption({ label: "9B" });
   await expect(kort).toHaveCount(0);
   await expect(vy.getByText(TOMT_FILTER)).toBeVisible();

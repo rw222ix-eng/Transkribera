@@ -15,6 +15,9 @@
   // popovern bär ingen mening som selecten saknar.
   import { insp } from './stores.svelte.js';
   import { valjKlass, valjKurs, valjManad, rensaFilter } from './actions.js';
+  // Månadsnamnen bor i week.js, tillsammans med veckoetiketternas. Se
+  // kommentaren där om varför det inte blir en andra lista här.
+  import { manadsEtikett } from '../week.js';
 
   // Månaderna härleds ur den HÄMTADE listan, inte ur en egen endpoint — samma
   // sak som gamla appen gör (app.js:3443). Nyaste först.
@@ -72,7 +75,12 @@
     <span class="etikett">MÅNAD</span>
     <select value={insp.filterMonth} onchange={(e) => valjManad(e.currentTarget.value)}>
       <option value="">Alla månader</option>
-      {#each manader as m (m)}<option value={m}>{m}</option>{/each}
+      <!-- ETIKETTEN böjs, VÄRDET inte. value={m} är 'YYYY-MM' och jämförs mot
+           l.datum.slice(0, 7) i InspelningarView — läggs den läsbara formen i
+           value slutar filtreringen tyst att matcha. Råa "2026-04" var enda
+           stället i vyn där en maskinsträng nådde läraren, och gamla appen
+           visar "mar 2026" (app.js:3917-3919). -->
+      {#each manader as m (m)}<option value={m}>{manadsEtikett(m)}</option>{/each}
     </select>
   </label>
 
