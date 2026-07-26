@@ -22,6 +22,7 @@
   import Sokfalt from './Sokfalt.svelte';
   import Traefflista from './Traefflista.svelte';
   import { sok } from './sok.svelte.js';
+  import { rensaSokning } from './sokActions.js';
   import RedigeraLektion from './RedigeraLektion.svelte';
   import { nav } from '../shell/nav.svelte.js';
 
@@ -95,6 +96,17 @@
       // Utanför untrack hade effekten spårat filtret — och då blir valjKlass
       // explicita omhämtning en DUBBELHÄMTNING i stället för enda vägen.
       laddaPaneler();
+      // SÖKET NOLLSTÄLLS ÄVEN DET, av samma "färskt varje gång"-skäl som
+      // kollaHistorik ovan: transkriberar läraren en lektion i en ANNAN flik
+      // och kommer tillbaka hit med en gammal aktiv sökning, skymmer den
+      // gamla träfflistan det nyss omhämtade kartoteket i stället för att
+      // visa den nya lektionen. rensaSokning() bumpar dessutom sokToken, så
+      // ett svar som redan var i luften från förra besöket inte kan landa
+      // efteråt och återuppliva träffarna. Den läser ingen store synkront
+      // (bara sok själv och den egna modulräknaren), så den behöver inte
+      // untrack av SPÅRNINGSSKÄL — men ligger ändå här, tillsammans med de
+      // andra anropen, av samma "allt hämtas/nollställs om vid flikbyte"-skäl.
+      rensaSokning();
     });
   });
 
