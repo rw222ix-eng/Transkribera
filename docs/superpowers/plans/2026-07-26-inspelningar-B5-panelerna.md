@@ -370,6 +370,19 @@ känt tomt och renderar en tomtext. De tre laddarna får var sin
 generationsvakt, aldrig en delad — de startas ur samma block."
 ```
 
+RÄTTAT I SLUTGRANSKNINGEN (efter B5 var klar, se `.superpowers/sdd/slutfix-report.md`):
+`stores.svelte.js` fick ett SJUNDE fält utöver de sex ovan, `felArt: ''`.
+Det hör inte till panelerna specifikt utan till `insp.fel` i stort — B5:s
+export var vyns FÖRSTA positiva besked genom den statusraden, och innan
+`felArt` fanns målades det ovillkorligen i `--bad` trots att ingenting gått
+fel. Fältet styr `class:info` på båda statusnoderna i
+`InspelningarView.svelte`, speglar `tr.fileNoteArt` i
+`frontend/src/lib/transkribera/stores.svelte.js:8` och nollställs överallt
+`insp.fel` redan nollställs eller sätts till ett riktigt fel, i `laddaLektioner`,
+`laddaOrg`, `sparaLektion`, `bekraftaRadera`, `startaRedigering`, `fragaRadera`
+och `markeraKlar` (Task 2 nedan) — se Task 2:s tillägg om `markeraKlar` och
+`exporteraIcs`.
+
 ---
 
 ### Task 2: Agendan
@@ -412,11 +425,19 @@ export function vaxlaAgenda() {
  * texten "Kunde inte markera åtgärden som klar" beror uteslutande på att ingen
  * av de tre laddarna kan kasta — de har alla egen try/catch. Gör någon av dem
  * kastande måste raden flyttas ut ur try:et.
+ *
+ * insp.fel nollställs DIREKT EFTER dubbelklicksvakten (RÄTTAT I
+ * SLUTGRANSKNINGEN — den ursprungliga koden saknade raden), till skillnad
+ * från startaRedigering/fragaRadera/exporteraIcs i samma fil. Utan den står
+ * ett kvarstående besked — exportens, till exempel — kvar hela PATCH-
+ * rundturen och läses som om det gällde bocken.
  */
 export async function markeraKlar(insightId) {
   if (insightId == null) return;
   if (insp.markerar === insightId) return;
   insp.markerar = insightId;
+  insp.fel = '';
+  insp.felArt = '';
   try {
     const r = await fetch(`/api/insights/${encodeURIComponent(insightId)}`, {
       method: 'PATCH',
@@ -426,12 +447,15 @@ export async function markeraKlar(insightId) {
     if (!r.ok) {
       const j = await r.json().catch(() => null);
       insp.fel = (j && j.error) || 'Kunde inte markera åtgärden som klar.';
+      insp.felArt = '';
       return;
     }
     insp.fel = '';
+    insp.felArt = '';
     await laddaPaneler();
   } catch {
     insp.fel = 'Kunde inte markera åtgärden som klar — kontrollera att appen körs.';
+    insp.felArt = '';
   } finally {
     // Vaktad: har läraren hunnit bocka av en annan insikt äger det anropet
     // flaggan nu, och det här svaret får inte släppa dess knapp.
@@ -456,11 +480,18 @@ export async function markeraKlar(insightId) {
  * insp.fel nollställs FÖRST, av samma skäl som i startaRedigering: statusraden
  * är gemensam, och ett gammalt besked hade annars stått kvar och lästs som om
  * det gällde exporten.
+ *
+ * insp.felArt sätts till 'info' på FRAMGÅNGSGRENEN (RÄTTAT I
+ * SLUTGRANSKNINGEN — se .superpowers/sdd/slutfix-report.md): exportens besked
+ * är vyns FÖRSTA positiva skrivning till insp.fel, och innan felArt fanns
+ * målades det ovillkorligen i --bad trots att ingenting gått fel. Alla andra
+ * grenar sätter ''.
  */
 export async function exporteraIcs() {
   if (insp.agendaExporterar) return;
   insp.agendaExporterar = true;
   insp.fel = '';
+  insp.felArt = '';
   try {
     const r = await fetch('/api/agenda/ics', {
       method: 'POST',
@@ -470,6 +501,7 @@ export async function exporteraIcs() {
     const data = await r.json().catch(() => null);
     if (!r.ok) {
       insp.fel = (data && data.error) || 'Kunde inte skriva kalenderfilen.';
+      insp.felArt = '';
       return;
     }
     const antal = (data && data.count) || 0;
@@ -478,6 +510,7 @@ export async function exporteraIcs() {
       antal === 1
         ? `1 post sparad i ${sokvag}`
         : `${antal} poster sparade i ${sokvag}`;
+    insp.felArt = 'info';
     if (sokvag) {
       // Fel SVÄLJS medvetet — se funktionens huvudkommentar.
       await fetch('/api/open', {
@@ -488,6 +521,7 @@ export async function exporteraIcs() {
     }
   } catch {
     insp.fel = 'Kunde inte skriva kalenderfilen — kontrollera att appen körs.';
+    insp.felArt = '';
   } finally {
     insp.agendaExporterar = false;
   }
@@ -557,21 +591,35 @@ export async function exporteraIcs() {
           {#each poster as a (a.id)}
             <li class="rad" class:forsenad={a.overdue}>
               <!--
-                En KLAR post får ingen knapp. Gamla appen renderar en klickbar
-                ruta även för dem, och ett klick PATCH:ar status: "klar" på nytt
-                — en no-op som ser ut som en handling och kostar en rundtur.
+                RÄTTAT I SLUTGRANSKNINGEN (se .superpowers/sdd/slutfix-report.md):
+                SAMMA <button> i BÅDA lägena — öppen och klar. En tidigare
+                version bytte till <span> när posten blev klar (kommentaren
+                nedan är historisk och gäller fortfarande VARFÖR posten inte
+                ska vara klickbar, bara inte HUR): #each är nyckelad på a.id,
+                och ett bytt elementnamn river Sveltes DOM-nod för raden —
+                läraren bockar av, PATCH:en lyckas, laddaPaneler() hämtar om,
+                och precis den rad hon höll tangentbordsfokus på försvinner
+                under fingret. En klar post ska ändå inte gå att aktivera:
+                det löser aria-disabled plus en tidig retur i onclick, INTE
+                disabled — en fokuserad nod som blir disabled tappar fokus
+                lika säkert som span-bytet gjorde.
+
+                (Historisk motivering, oförändrad: En KLAR post får ingen
+                HANDLING. Gamla appen renderar en klickbar ruta även för dem,
+                och ett klick PATCH:ar status: "klar" på nytt — en no-op som
+                ser ut som en handling och kostar en rundtur.)
               -->
-              {#if a.status === 'klar'}
-                <span class="ruta klar" aria-hidden="true">✓</span>
-              {:else}
-                <button
-                  class="ruta"
-                  onclick={() => markeraKlar(a.id)}
-                  disabled={insp.markerar === a.id}
-                  aria-label="Markera klar"
-                  title="Markera klar"
-                ></button>
-              {/if}
+              <button
+                class="ruta"
+                class:klar={a.status === 'klar'}
+                onclick={() => {
+                  if (a.status === 'klar' || insp.markerar === a.id) return;
+                  markeraKlar(a.id);
+                }}
+                aria-disabled={a.status === 'klar' || insp.markerar === a.id}
+                aria-label={"Markera klar: " + (a.text || "")}
+                title="Markera klar"
+              >{#if a.status === 'klar'}✓{/if}</button>
 
               <div class="text">
                 <p class="titel" class:avklarad={a.status === 'klar'}>{a.text || ''}</p>
@@ -700,11 +748,19 @@ export async function exporteraIcs() {
     padding: 0;
     line-height: 1;
   }
-  .ruta:hover:not(:disabled) {
+  /* RÄTTAT I SLUTGRANSKNINGEN: :disabled är ersatt av [aria-disabled="true"]
+     rakt igenom — ruta är nu ALLTID en <button>, aldrig en <span>, och det
+     native disabled-attributet används medvetet inte (det tar fokus med
+     sig). Se onclick-kommentaren ovanför markupen. */
+  .ruta:hover:not([aria-disabled="true"]) {
     border-color: var(--ok);
     background: color-mix(in srgb, var(--ok) 18%, transparent);
   }
-  .ruta:disabled { cursor: default; opacity: 0.5; }
+  /* :not(.klar): en KLAR post är också aria-disabled, men ska inte dämpas —
+     den bär redan sin egen fulla --ok-yta nedan. Utan undantaget vinner den
+     här regeln över .klar:s opacitet (ingen sätts där) och släcker
+     checkmarken till 0.5. */
+  .ruta[aria-disabled="true"]:not(.klar) { cursor: default; opacity: 0.5; }
   .ruta.klar {
     display: flex;
     align-items: center;
@@ -806,7 +862,11 @@ Utöka monteringseffekten (`:79-86`). Kommentarsblocket ovanför är oförändra
 Montera panelen mellan den synliga statusraden (`:156`) och `<Kartotek …/>` (`:158`):
 
 ```svelte
-  <p class="fel" aria-hidden="true" data-testid="insp-statusrad">{insp.fel}</p>
+  <!-- RÄTTAT I SLUTGRANSKNINGEN (se .superpowers/sdd/slutfix-report.md):
+       raden bär numera även class:info={insp.felArt === 'info'} — se
+       tillägget efter Task 2:s commit ovan. Oförändrat här i övrigt; citerad
+       bara som ankare för var <Agenda /> hör hemma. -->
+  <p class="fel" class:info={insp.felArt === 'info'} aria-hidden="true" data-testid="insp-statusrad">{insp.fel}</p>
 
   <!--
     PANELERNA (B5) ligger HÄR, mellan filterraden och kartoteket, precis som i
@@ -849,6 +909,46 @@ POST /api/open skriver inte över beskedet: filen är sparad, och att
 programmet inte startade gör inte exporten misslyckad."
 ```
 
+RÄTTAT I SLUTGRANSKNINGEN (se `.superpowers/sdd/slutfix-report.md`): commit-
+meddelandets "En klarmarkerad post får ingen knapp längre" ovan var sant för
+koden som skrevs här, men fick en dyr bieffekt som inte upptäcktes förrän en
+senare granskningsomgång. `disabled={insp.markerar === a.id}` på den ÖPPNA
+knappen och `<span class="ruta klar">` för den KLARA raden delar ett
+gemensamt fel: en fokuserad `<button>` som blir `disabled` tappar fokus, och
+byts elementet dessutom till `<span>` när posten blir klar finns ingen nod
+kvar att återvända till — den keyade `{#each … (a.id)}` bevarar alla andra
+rader, men just den läraren höll fokus på försvinner under fingret vid varje
+avbockning.
+
+Fixen (nu i koden): SAMMA `<button>` i båda lägena, aldrig en `<span>`.
+`disabled` ersattes av `aria-disabled` plus en tidig retur i `onclick` (både
+för `insp.markerar === a.id` OCH för `a.status === 'klar'`), så en klar post
+fortfarande inte går att aktivera — men utan att någonsin ta bort eller
+inaktivera noden på ett sätt webbläsaren svarar på med att tappa fokus.
+`aria-label` växte samtidigt från det generiska `"Markera klar"` till
+`"Markera klar: " + (a.text || "")`, av samma skäl som `markeraKlar` nedan
+fick sin tidiga `insp.fel`-nollställning: en lista med tio identiska
+`aria-label` är oanvändbar för en skärmläsare. CSS-selektorerna följde med:
+`.ruta:disabled` fungerar inte längre (ingen disabled-attribut kvar) och
+blev `.ruta[aria-disabled="true"]:not(.klar)` — `:not(.klar)` krävs för att
+inte dämpa opaciteten på den redan färdiga checkmarken, som bär sin egen
+fulla `--ok`-yta. `.ruta:hover:not(:disabled)` blev
+`.ruta:hover:not([aria-disabled="true"])` av samma skäl.
+
+`actions.js`s `markeraKlar` fick dessutom en rad den saknade: `insp.fel = '';`
+(och `insp.felArt = '';`) direkt efter dubbelklicksvakten — till skillnad
+från `startaRedigering`, `fragaRadera` och `exporteraIcs` i samma fil
+nollställde den ursprungliga koden ALDRIG ett kvarstående besked innan
+PATCH:en, så exportens "N poster sparade i …" kunde stå kvar genom hela
+avbockningens rundtur och läsas som om det gällde bocken. `exporteraIcs`
+fick `insp.felArt = 'info'` på sin framgångsgren (och `''` på alla andra) —
+exportbeskedet är vyns FÖRSTA positiva skrivning till `insp.fel` och målades
+före fixen ovillkorligen i `--bad`, statusradens felfärg, trots att
+ingenting gått fel. `class:info={insp.felArt === 'info'}` lades på båda
+statusnoderna i `InspelningarView.svelte`, och `.fel.info { color:
+var(--ink-3); }` i dess `<style>` — ordagrant samma mönster som
+`TranskriberaView.svelte:118` och `:194`.
+
 ---
 
 ### Task 3: Inför nästa lektion
@@ -870,7 +970,12 @@ programmet inte startade gör inte exporten misslyckad."
   // Gamla panelen är fylld med --accent-weak och inramad i --accent. Det följer
   // INTE med: DESIGN.md:s One Voice reserverar accenten för handlingar, val och
   // live-tillstånd — inte för att måla ett helt kort. Panelen får samma form som
-  // de två andra, och accenten sparas till mikroetiketterna.
+  // de två andra, och ingen del av den bär accenten (RÄTTAT I
+  // SLUTGRANSKNINGEN — se .superpowers/sdd/slutfix-report.md): mikroetiketterna
+  // är --ink-3, som Filterrad.svelte och Terminstrender.svelte. "Att göra
+  // (öppna)" är interaktiv men delar etikettstil med "Repetera — förra
+  // lektionens svårigheter", som är en punktlista utan interaktion — och en
+  // accent på den senare hade inte haft något att markera.
   import { insp } from './stores.svelte.js';
   import { markeraKlar } from './actions.js';
   import { datumEtikett } from '../week.js';
@@ -917,11 +1022,22 @@ programmet inte startade gör inte exporten misslyckad."
       <ul class="lista">
         {#each atgarder as a (a.id)}
           <li class="rad">
+            <!--
+              RÄTTAT I SLUTGRANSKNINGEN (se .superpowers/sdd/slutfix-report.md):
+              aria-disabled, INTE disabled — en fokuserad knapp som blir
+              disabled tappar tangentbordsfokus, och den keyade #each (a.id)
+              gör annars ingenting för att rädda det. Den tidiga returen i
+              onclick gör vakten likvärdig utan att röra fokus. Samma fix som
+              Agenda.svelte, av samma skäl.
+            -->
             <button
               class="ruta"
-              onclick={() => markeraKlar(a.id)}
-              disabled={insp.markerar === a.id}
-              aria-label="Markera klar"
+              onclick={() => {
+                if (insp.markerar === a.id) return;
+                markeraKlar(a.id);
+              }}
+              aria-disabled={insp.markerar === a.id}
+              aria-label={"Markera klar: " + (a.text || "")}
               title="Markera klar"
             ></button>
             <div class="text">
@@ -974,15 +1090,17 @@ programmet inte startade gör inte exporten misslyckad."
   }
 
   /* Mikroetikett: den ENDA platsen i panelen där var(--mono) hör hemma. Kort,
-     versal, och en etikett — inte löpande text. Accenten markerar att det är
-     panelens handlingsbara sektion. */
+     versal, och en etikett — inte löpande text. RÄTTAT I SLUTGRANSKNINGEN
+     (se .superpowers/sdd/slutfix-report.md): --ink-3, som Filterrad.svelte
+     och Terminstrender.svelte — accent hör till handlingar och val (One
+     Voice, specens avsnitt 8), inte till en punktlista utan interaktion. */
   .etikett {
     font-family: var(--mono);
     font-size: 0.72rem;
     font-weight: 500;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: var(--accent);
+    color: var(--ink-3);
     margin: 16px 0 6px;
   }
   .etikett.avstand { margin-top: 20px; }
@@ -1008,11 +1126,14 @@ programmet inte startade gör inte exporten misslyckad."
     cursor: pointer;
     padding: 0;
   }
-  .ruta:hover:not(:disabled) {
+  /* :disabled är ersatt av [aria-disabled="true"] (RÄTTAT I
+     SLUTGRANSKNINGEN) — knappen bär inte längre det native
+     disabled-attributet, som tar fokus med sig. */
+  .ruta:hover:not([aria-disabled="true"]) {
     border-color: var(--ok);
     background: color-mix(in srgb, var(--ok) 18%, transparent);
   }
-  .ruta:disabled { cursor: default; opacity: 0.5; }
+  .ruta[aria-disabled="true"] { cursor: default; opacity: 0.5; }
 
   .text { flex: 1; min-width: 0; }
   .titel {
@@ -1075,6 +1196,25 @@ Panelens accentfyllda yta med accentram följer inte med — One Voice
 reserverar accenten för handlingar och val, inte för att måla ett kort.
 Den sparas till sektionernas mikroetiketter."
 ```
+
+RÄTTAT I SLUTGRANSKNINGEN (se `.superpowers/sdd/slutfix-report.md`): commit-
+meddelandets sista mening ovan — "Den sparas till sektionernas
+mikroetiketter" — visade sig vara halva sanningen. `.etikett` bar `color:
+var(--accent)`, vilket gjorde den till den ENDA accentfärgade mikroetiketten
+i hela Svelte-frontenden: `Filterrad.svelte`, `InspelningarView.svelte` och
+`Terminstrender.svelte` har alla `--ink-3` på motsvarande element, och
+motiveringen (nu borttagen ur koden) höll dessutom bara för "Att göra
+(öppna)" — inte för "Repetera — förra lektionens svårigheter", en punktlista
+utan interaktion som en accent inte har något att markera på. Fixad till
+`--ink-3`, med kommentaren omskriven i koden så den inte längre motiverar en
+accent som inte finns kvar.
+
+Samma granskningsomgång bytte `disabled` mot `aria-disabled` plus en tidig
+retur i `onclick`, av samma skäl och på samma sätt som i `Agenda.svelte` (se
+Task 2:s tillägg ovan) — knapparna här har ingen `.klar`-motsvarighet
+(`open_actions` bär bara öppna poster), så ingen `:not(.klar)`-undantag
+behövdes i CSS:en. `aria-label` växte till `"Markera klar: " + (a.text ||
+"")` av samma tillgänglighetsskäl.
 
 ---
 
@@ -1610,14 +1750,12 @@ async function stubbaOpen(page) {
   );
 }
 
-/** Låter sidan rendera två rutor, så en omprövande assertion inte kan passera
- *  på att den hann före Sveltes flush. Samma hjälpare som i
- *  inspelningar-kartotek.spec.mjs:269-273. */
-function tvaRutor(page) {
-  return page.evaluate(
-    () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))),
-  );
-}
+// RÄTTAT I SLUTGRANSKNINGEN (se .superpowers/sdd/slutfix-report.md): en
+// tvaRutor-hjälpare stod här ("Låter sidan rendera två rutor …", samma
+// mönster som inspelningar-kartotek.spec.mjs) och användes bara av
+// kursbytesassertionen nedan. Den bytte tidsbunden väntan mot den
+// händelsebundna DOM-väntan i samma test och blev därmed oanvänd — borttagen
+// i stället för att lämnas som dött kod.
 
 test.afterEach(async ({ request }) => {
   await toemArkivet(request);
@@ -1654,8 +1792,11 @@ test("Panelerna (/next/): agendan märker försenad, idag och framtid", async ({
   await expect(sen).toHaveClass(/forsenad/);
   await expect(sen.locator(".datum")).toHaveClass(/forsenad/);
 
-  // Den framtida är varken eller.
+  // Den framtida är varken eller. Båda kontrollerna är NEGATIVA (not.toHave…),
+  // så en textändring som tömmer filtret ovan hade fått dem att passera
+  // vakuöst — count(1) säkrar att raden faktiskt hittades först.
   const framtid = rader.filter({ hasText: "Prov om derivata" });
+  await expect(framtid).toHaveCount(1);
   await expect(framtid).not.toHaveClass(/forsenad/);
   await expect(framtid.locator(".datum")).not.toHaveText("Idag");
 
@@ -1666,7 +1807,8 @@ test("Panelerna (/next/): agendan märker försenad, idag och framtid", async ({
 RÄTTAT I GRANSKNINGSOMGÅNGEN (se task-5-report.md): båda kontrollerna av den
 framtida posten ovan är NEGATIVA (`not.toHaveClass`/`not.toHaveText`), så en
 textändring som tömde `framtid`-filtret hade fått dem att passera vakuöst.
-Ett `await expect(framtid).toHaveCount(1);` lades till FÖRE dem.
+Ett `await expect(framtid).toHaveCount(1);` lades till FÖRE dem — och står nu
+i kodblocket ovan, inte bara i den här prosan.
 
 ```js
 test("Panelerna (/next/): utan vald klass finns varken trender eller Inför nästa", async ({ page, request }) => {
@@ -1740,9 +1882,21 @@ test("Panelerna (/next/): ett klassbyte hämtar trender och Inför nästa", asyn
   await expect(nasta.locator("ul.punkter li")).toHaveText(["Derivata (uppg 3)"]);
 
   // Kursbytet, med 9A redan vald, prövar valjKurs på riktigt.
+  //
+  // RÄTTAT I SLUTGRANSKNINGEN (se .superpowers/sdd/slutfix-report.md):
+  // kursen är "Fysik 1a", INTE 9A:s egen "Matematik 2b". Med Matematik 2b
+  // redan vald lämnade ett byte TILL Matematik 2b kortantalet oförändrat på
+  // 2 — ingenting i testet bevisade att change-handlern över huvud taget
+  // kördes; kopplas selecten loss från valjKurs blir assertionen grön ändå.
+  // 9B äger "Fysik 1a", så filtret 9A + Fysik 1a matchar noll lektioner: ett
+  // POSITIVT ankare som bara kan bli sant om valjKurs faktiskt hämtade om med
+  // den nya kursen i querysträngen. Väntan bytte samtidigt från tvaRutor
+  // (tidsbunden, två gissade requestAnimationFrame) till den HÄNDELSEBUNDNA
+  // DOM-väntan nedan, som inväntar /api/lessons-svängen och stänger båda
+  // luckorna på en gång.
   anrop.length = 0;
-  await filter(vy).kurs.selectOption({ label: "Matematik 2b" });
-  await tvaRutor(page);
+  await filter(vy).kurs.selectOption({ label: "Fysik 1a" });
+  await expect(vy.locator("article.kort")).toHaveCount(0);
   expect(
     anrop,
     "Ett kursbyte får inte hämta agenda, trender eller next-prep när en klass redan är vald",
@@ -1991,6 +2145,23 @@ De två bärande spärrarna är tandkontrollerade: markeraKlar bakåtställd
 till gamla appens laddaNastaLektion fäller asymmetritestet, och en
 ogrindad Terminstrender fäller tillämplighetstestet."
 ```
+
+RÄTTAT I SLUTGRANSKNINGEN (se `.superpowers/sdd/slutfix-report.md`): svit-
+storleken ovan (`38 passed`) och kursbytesblocket i testet "ett klassbyte
+hämtar trender och Inför nästa" hörde till versionen som lämnade Task 5.
+En senare granskningsomgång fann att kursbytesassertionen — trots fixen
+dokumenterad ovan — fortfarande inte bevisade att `change`-handlern körde:
+den bytte TILL "Matematik 2b" med "Matematik 2b" (via 9A) redan implicit
+aktiv, så kortantalet stod stilla oavsett om selecten var kopplad till
+`valjKurs` eller inte. Fixad till "Fysik 1a" (9B:s kurs, matchar noll
+lektioner för 9A) plus en positiv `toHaveCount(0)`-väntan — se det uppdaterade
+kodblocket i Step 1 ovan.
+
+Samma omgång lade till ett SJUNDE test, "en avbockning i agendan behåller
+tangentbordsfokus" — beviset för att `disabled` (som tar tangentbordsfokus
+med sig) ersattes av `aria-disabled` plus en tidig retur i `onclick`, i både
+`Agenda.svelte` och `NastaLektion.svelte`. Sviten växer därför till
+`39 passed` (32 före B5 + 7), inte 38.
 
 ---
 

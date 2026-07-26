@@ -37,7 +37,7 @@ Nya filer under `frontend/src/lib/inspelningar/`:
 
 | Fil | Ändring |
 |---|---|
-| `frontend/src/lib/inspelningar/stores.svelte.js` | Tre nya fält på `insp`: `agenda`, `nastaLektion`, `trender`, plus `agendaOppen` och `agendaExporterar`. |
+| `frontend/src/lib/inspelningar/stores.svelte.js` | Tre nya fält på `insp`: `agenda`, `nastaLektion`, `trender`, plus `agendaOppen`, `agendaExporterar` och `markerar`. Dessutom `felArt` (slutgranskningens punkt 1) — hör till `insp.fel` i stort, inte bara panelerna, men landar i samma fil och samma commit. |
 | `frontend/src/lib/inspelningar/actions.js` | `laddaAgenda`, `laddaNastaLektion`, `laddaTrender`, `laddaPaneler`, `vaxlaAgenda`, `markeraKlar`, `exporteraIcs`. Tre nya generationsvakter. |
 | `frontend/src/lib/inspelningar/InspelningarView.svelte` | Monterar de tre panelerna; monteringseffekten utökas. |
 | `frontend/src/lib/week.js` | Tredje export: `datumEtikett(iso)`. |
@@ -67,7 +67,7 @@ inferens. Panelerna testas alltså mot oförfalskad backend.
 
 | Anrop | När | Kräver vald klass |
 |---|---|---|
-| `GET /api/agenda` | Flikbyte till Inspelningar, efter varje bock, efter export | nej |
+| `GET /api/agenda` | Flikbyte till Inspelningar, efter varje bock | nej |
 | `GET /api/next-prep?group_id=` | Flikbyte, klassbyte, efter varje bock | ja |
 | `GET /api/trends?group_id=` | Flikbyte, klassbyte, efter varje bock | ja |
 | `PATCH /api/insights/{id}` | Bocka av en åtgärd — `{status: "klar"}` | — |
