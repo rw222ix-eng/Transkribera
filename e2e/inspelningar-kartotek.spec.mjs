@@ -106,6 +106,19 @@ const FIXTUR = [
 const TOM_KLASS = "9C";
 
 /**
+ * En KURS utan lektioner. Behöver inte skapas: db.py seedar hela Gy25-stegen
+ * (ensure_gy25_nivaer, app/db.py:407-412) vid databasskapandet, så de tio
+ * nivånamnen finns i kursregistret i varje ny testdatabas. Fixturen ovan kan
+ * aldrig råka fylla någon av dem — "Matematik 2b" och "Fysik 1a" är inga
+ * Gy25-nivånamn och normaliseras inte till några (GY25_KURSNAMN slår bara på
+ * kurskoder som "Ma2b"), så get_or_create_course lägger dem i egna rader.
+ *
+ * Tomtillståndstestets läge 1c behöver den: KURSEN är, precis som klassen, ett
+ * SERVERfilter, och den är det ENDA som isolerat utövar !insp.filterCourse.
+ */
+const TOM_KURS = "Matematik, nivå 1a";
+
+/**
  * Kortets metarad, minus salen. Talen är fejkens: segmenten slutar på 7,6 s
  * (dur "00:07") och modellen väljs nedan så etiketten är förutsägbar.
  * byggFixtur kontrollerar prefixet mot verkligheten, så en miljöändring blir
@@ -202,7 +215,11 @@ async function oppnaInspelningar(page, { kort = FIXTUR.length } = {}) {
  */
 function filter(vy) {
   const rad = vy.locator(".filter");
-  return { klass: rad.getByLabel("KLASS"), manad: rad.getByLabel("MÅNAD") };
+  return {
+    klass: rad.getByLabel("KLASS"),
+    kurs: rad.getByLabel("KURS"),
+    manad: rad.getByLabel("MÅNAD"),
+  };
 }
 
 /**
@@ -492,7 +509,7 @@ test("Inspelningar (/next/): de två tomtillstånden är inte utbytbara", async 
   const TOMT_FILTER = "Inga inspelningar matchar dina filter.";
 
   const vy = await oppnaInspelningar(page);
-  const { klass, manad } = filter(vy);
+  const { klass, kurs, manad } = filter(vy);
   const kort = vy.locator("article.kort");
 
   // Fullt arkiv, inga filter: inget av beskeden ska synas.
@@ -524,9 +541,29 @@ test("Inspelningar (/next/): de två tomtillstånden är inte utbytbara", async 
     "Ett tomt SERVERfilter förväxlades med ett tomt arkiv",
   ).toHaveCount(0);
 
+  // LÄGE 1c — KURSfiltret ENSAMT, på en kurs utan lektioner. Villkorets FJÄRDE
+  // term (!insp.filterCourse) har ingen annan täckning i filen: läge 1 lämnar
+  // insp.lessons med ETT kort (månaden döljer det på klienten, så filtertermerna
+  // utövas inte alls där) och läge 1b utövar bara klasstermen. Utan det här
+  // läget går !insp.filterCourse att stryka ur villkoret utan att ett enda test
+  // faller — och felläget är exakt det steget finns för att förbjuda: en lärare
+  // med fullt arkiv får "Inga inspelningar än" så fort hon väljer en kurs hon
+  // ännu inte spelat in något i.
+  await klass.selectOption({ label: "Alla klasser" });
+  // Arkivet ÄR fullt här. Utan den kontrollen vore nollan nedan trivial: läge
+  // 1b lämnade redan noll kort på skärmen.
+  await expect(kort).toHaveCount(3);
+  await kurs.selectOption({ label: TOM_KURS });
+  await expect(kort).toHaveCount(0);
+  await expect(vy.getByText(TOMT_FILTER)).toBeVisible();
+  await expect(
+    vy.getByText(TOMT_ARKIV),
+    "Ett tomt KURSfilter förväxlades med ett tomt arkiv",
+  ).toHaveCount(0);
+
   // LÄGE 2 — arkivet är verkligen tomt. Raderas via API:et och hämtas om genom
   // ett riktigt flikbyte (hämtningarna är grindade på nav.tab, inte montering).
-  await klass.selectOption({ label: "Alla klasser" });
+  await kurs.selectOption({ label: "Alla kurser" });
   await expect(kort).toHaveCount(3);
   await toemArkivet(page.request);
 
