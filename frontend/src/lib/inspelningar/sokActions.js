@@ -31,6 +31,15 @@ export async function korSokning() {
     // bumpen får ett svar som redan är i luften skriva tillbaka dem.
     sokToken++;
     sok.traffar = null;
+    // soker HÖR IHOP med bumpen ovan och måste nollställas av SAMMA skäl:
+    // skriv ett ord, Enter (hämtning i luften, soker=true), töm fältet,
+    // Enter igen — den här grenen körs, men det gamla svaret landar
+    // FORTFARANDE. Dess try-grens finally är vaktad (token !== sokToken
+    // efter bumpen ovan) och rör då aldrig soker, så utan raden nedan
+    // fastnar körknappen i "Söker …"/disabled för alltid — enda vägen ut
+    // vore att skriva om och trycka Enter. rensaSokning gör samma
+    // nollställning, av exakt samma skäl.
+    sok.soker = false;
     return;
   }
   // Nollställs HÄR, ÖVERST — samma mönster som markeraKlar och exporteraIcs
@@ -71,7 +80,9 @@ export async function korSokning() {
  *
  * Bumpar räknaren så att ett svar som redan är i luften inte får återuppliva
  * träfflistan efteråt — utan den kan läraren rensa fältet och ändå se träffar
- * dyka upp en sekund senare.
+ * dyka upp en sekund senare. soker nollställs av SAMMA skäl och hör ihop med
+ * bumpen: ett svar i luften vars finally är vaktad (token !== sokToken) rör
+ * aldrig soker, så utan raden nedan kan körknappen fastna i "Söker …".
  */
 export function rensaSokning() {
   sokToken++;

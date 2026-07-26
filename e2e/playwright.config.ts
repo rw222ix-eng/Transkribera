@@ -199,6 +199,14 @@ export default defineConfig({
       // redan prövas i inspelningar-kartotek.spec.mjs) eller LIKE-fallbacken
       // när sqlite saknar FTS5.
       //
+      // Slutgranskningens fynd 1 (efter leverans) lade till ett sjunde test:
+      // att körknappen inte fastnar i "Söker …"/disabled när fältet töms och
+      // Enter trycks igen medan ett tidigare /api/search-svar fortfarande är
+      // i luften — korSoknings tomma-frågan-gren nollställde sok.traffar men
+      // aldrig sok.soker. Svaret hålls uppehållet med page.route (samma
+      // fetch+fulfill-mönster som inspelningar-kartotek.spec.mjs) så
+      // kapplöpningen kan tvingas fram pålitligt.
+      //
       // FÄLLA FÖR B2-B5, skarpladdad men ännu otriggad: en CSS-räkning av
       // [role="status"] inuti den SYNLIGA Inspelningar-panelen ger nu 2 —
       // RedigeraLektion.svelte:165 plus InspelningarView.svelte:94 — medan

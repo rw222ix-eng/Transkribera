@@ -219,6 +219,15 @@ export async function korSokning() {
     // bumpen får ett svar som redan är i luften skriva tillbaka dem.
     sokToken++;
     sok.traffar = null;
+    // soker HÖR IHOP med bumpen ovan och måste nollställas av SAMMA skäl:
+    // skriv ett ord, Enter (hämtning i luften, soker=true), töm fältet,
+    // Enter igen — den här grenen körs, men det gamla svaret landar
+    // FORTFARANDE. Dess try-grens finally är vaktad (token !== sokToken
+    // efter bumpen ovan) och rör då aldrig soker, så utan raden nedan
+    // fastnar körknappen i "Söker …"/disabled för alltid — enda vägen ut
+    // vore att skriva om och trycka Enter. rensaSokning gör samma
+    // nollställning, av exakt samma skäl.
+    sok.soker = false;
     return;
   }
   // Nollställs HÄR, ÖVERST — samma mönster som markeraKlar och exporteraIcs
@@ -259,7 +268,9 @@ export async function korSokning() {
  *
  * Bumpar räknaren så att ett svar som redan är i luften inte får återuppliva
  * träfflistan efteråt — utan den kan läraren rensa fältet och ändå se träffar
- * dyka upp en sekund senare.
+ * dyka upp en sekund senare. soker nollställs av SAMMA skäl och hör ihop med
+ * bumpen: ett svar i luften vars finally är vaktad (token !== sokToken) rör
+ * aldrig soker, så utan raden nedan kan körknappen fastna i "Söker …".
  */
 export function rensaSokning() {
   sokToken++;
@@ -793,12 +804,18 @@ Skapa `e2e/inspelningar-sok.spec.mjs`:
 //   4. tomtillståndet vid noll träffar,
 //   5. att ett KLASSbyte inte ändrar träfflistan — söket är ofiltrerat på
 //      servern,
-//   6. att "Fråga AI" visar sin förklarande rad och en inaktiv körknapp.
+//   6. att "Fråga AI" visar sin förklarande rad och en inaktiv körknapp,
+//   7. att körknappen INTE fastnar i "Söker …"/disabled när fältet töms och
+//      Enter trycks igen medan en tidigare sökning fortfarande är i luften
+//      (slutgranskningens fynd 1: den tomma-frågan-grenen i korSokning
+//      nollställde sok.traffar men aldrig sok.soker).
 //
 // Punkt 2 och 5 är planens bärande krav. Punkt 2 vaktar regeln "en yta i
 // taget"; punkt 5 vaktar ett serverbeteende som är lätt att missförstå —
 // api_search (server.py:1395-1410) tar inga filterparametrar, så en träff i en
-// bortfiltrerad klass ska fortfarande synas.
+// bortfiltrerad klass ska fortfarande synas. Punkt 7 vaktar en regression som
+// annars bara syns genom att prova exakt den sekvensen i appen — den fälls
+// aldrig av en spärr som bara söker EN gång.
 //
 // TÄCKS INTE, och det är avsiktligt:
 //   · Fråge-läget i sak. Det svarar inte förrän B3b; punkt 6 prövar bara att
@@ -954,6 +971,25 @@ async function sok(page, vy, ord) {
   await sokfalt(vy).input.fill(ord);
   await sokfalt(vy).kor.click();
   await svar;
+}
+
+/**
+ * Väntar in ett löfte med en generös men ÄNDLIG frist.
+ *
+ * Samma mönster som inspelningar-kartotek.spec.mjs:250: ersätter en fast
+ * paus, som antingen gör testet FALSKT GRÖNT (går ut för tidigt, assertionen
+ * efteråt körs innan det den vaktar hunnit hända) eller onödigt långsamt
+ * (tilltaget i överkant). Ett verkligt hängande svar ger i stället ett
+ * begripligt fel med sin egen text.
+ */
+function vantaPa(loftet, vad, ms = 15_000) {
+  let timer;
+  return Promise.race([
+    Promise.resolve(loftet).finally(() => clearTimeout(timer)),
+    new Promise((_, avvisa) => {
+      timer = setTimeout(() => avvisa(new Error(vad)), ms);
+    }),
+  ]);
 }
 
 test.beforeEach(async ({ request }) => {
@@ -1139,6 +1175,77 @@ test("Sök (/next/): ett lägesbyte nollställer fältet och träffarna", async 
   await expect(sokfalt(vy).input).toHaveValue("");
   await expect(vy.locator("article.kort")).toHaveCount(FIXTUR.length);
 
+  expect(errors, errors.join("\n")).toEqual([]);
+});
+
+test("Sök (/next/): körknappen fastnar inte i Söker … när fältet töms medan ett svar är i luften", async ({
+  page,
+}) => {
+  const errors = [];
+  failOnConsoleError(page, errors);
+
+  const vy = await oppnaInspelningar(page);
+  const f = sokfalt(vy);
+
+  // Håller tillbaka DET FÖRSTA /api/search-svaret tills testet själv släpper
+  // det, så sekvensen "sök, töm fältet, Enter igen" verkligen kan hinna köras
+  // MEDAN sökningen fortfarande är i luften — annars är kapplöpningen för
+  // snabb för att pålitligt träffa i en riktig FTS5-sökning.
+  //
+  // fetch + fulfill, inte route.abort/continue: samma mönster som
+  // inspelningar-kartotek.spec.mjs:490-497 ("ett långsammare filtersvar").
+  // route.continue() returnerar när begäran släpps vidare, inte när svaret
+  // kommit tillbaka — bara fetch()+fulfill() säger NÄR svaret verkligen
+  // levererades till sidan.
+  let slappForstaSvaret;
+  const forstaSvaretFar = new Promise((r) => (slappForstaSvaret = r));
+  let forstaSvaretLevererat;
+  const forstaSvaretKlart = new Promise((r) => (forstaSvaretLevererat = r));
+
+  let n = 0;
+  await page.route("**/api/search*", async (route) => {
+    if (++n !== 1) return route.continue();
+    await forstaSvaretFar;
+    await route.fulfill({ response: await route.fetch() });
+    forstaSvaretLevererat();
+  });
+
+  // ETT ord, Enter — inte klick på Sök-knappen. Sekvensen i fyndet är
+  // uttryckligen tangentbordsdriven (taKey i Sokfalt.svelte).
+  await f.input.fill(ORD);
+  await f.input.press("Enter");
+  // Bevisar att körningen faktiskt startat innan fältet töms — annars mäter
+  // resten av testet ingenting om kapplöpningen.
+  await expect(f.kor).toHaveText("Söker …");
+  await expect(f.kor).toBeDisabled();
+
+  // TÖM FÄLTET, ENTER IGEN — medan det första svaret fortfarande hålls
+  // tillbaka av routen ovan. korSoknings tomma-frågan-gren körs nu: den
+  // bumpar sokToken och nollställer sok.traffar. Utan fyndets fix nollställs
+  // INTE sok.soker här.
+  await f.input.fill("");
+  await f.input.press("Enter");
+
+  // Släpp det uppehållna svaret och vänta in att det VERKLIGEN landat innan
+  // körknappen kontrolleras — annars kan assertionen råka mäta ett tillstånd
+  // från INNAN svaret kom tillbaka, vilket inte bevisar något om buggen.
+  // Svaret landar på en token som redan bytts ut (sokToken bumpades av den
+  // tomma-frågan-grenen ovan), så dess vaktade finally (token !== sokToken)
+  // rör aldrig sok.soker — precis det scenario fyndet beskriver.
+  slappForstaSvaret();
+  await vantaPa(forstaSvaretKlart, "Det uppehållna /api/search-svaret landade aldrig");
+
+  // BEVISET: körknappen ska vara TILLBAKA i sitt vilande läge — "Sök" och
+  // klickbar, inte fast i "Söker …"/disabled. Utan fyndets
+  // `sok.soker = false;` i tomma-frågan-grenen fastnar knappen här, eftersom
+  // varken den grenen eller det sena (vaktade) svaret någonsin nollställer
+  // flaggan.
+  await expect(f.kor).toHaveText("Sök");
+  await expect(f.kor).toBeEnabled();
+  // Och ✕-knappen ska ha lämnat tabbordningen igen — fältet är tomt.
+  await expect(f.rensa).toBeHidden();
+
+  await page.unroute("**/api/search*");
   expect(errors, errors.join("\n")).toEqual([]);
 });
 ```
