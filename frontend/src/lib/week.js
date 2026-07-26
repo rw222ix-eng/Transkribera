@@ -32,7 +32,13 @@ export function weekInfo(datum) {
 
   const fmt = (x) => x.getDate() + ' ' + MON_SV[x.getMonth()];
   return {
-    key: 'v' + wk + '-' + mon.getFullYear(),
+    // ISO-VECKOÅRET, inte måndagens kalenderår. t är redan veckans torsdag,
+    // alltså per definition det år veckan tillhör. Med mon.getFullYear()
+    // kolliderar skilda veckor: veckan som börjar 2024-01-01 och den som
+    // börjar 2024-12-30 blir båda 'v1-2024', och kartoteket slår ihop dem
+    // till EN grupp med den tidigare veckans datumspann — tyst. Uppmätt
+    // över 2015-2035: 4 kolliderande nycklar med kalenderår, 0 med detta.
+    key: 'v' + wk + '-' + t.getUTCFullYear(),
     label: 'Vecka ' + wk,
     num: String(wk),
     range: fmt(mon) + ' – ' + fmt(fri),

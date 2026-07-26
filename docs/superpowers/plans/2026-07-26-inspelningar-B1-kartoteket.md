@@ -809,6 +809,14 @@ git commit -m "feat(inspelningar): redigera uppgifter och radera en lektion"
 - Consumes: everything from Tasks 1–4.
 - Produces: `kollaHistorik()`.
 
+- [ ] **Step 0: Give `insp.fel` a visible copy**
+
+Task 1 shipped only the clipped `.fel-sr` live region. That reaches screen readers and nobody else — and Tasks 4 and 5 write real failures into it, including the `DELETE` 409 that this plan says **must** reach the teacher, because backend deliberately leaves the lesson intact when the folder is locked.
+
+`TranskriberaView.svelte` established the pattern: a clipped live region **plus** a visible copy near the control it concerns, marked `aria-hidden="true"` so only one node is announced. Mirror it — a `<p class="fel" aria-hidden="true" data-testid="statusrad">{insp.fel}</p>` above the catalogue, with `.fel:empty { display: none }` on the **visible** copy only (never on the live region).
+
+Do not give the visible copy its own `role` — two announcing nodes in one view read in unpredictable order, which is exactly what the guard in `e2e/transkribera-kalla.spec.mjs` exists to prevent.
+
 - [ ] **Step 1: The two empty states**
 
 The legacy view distinguishes them (`app.js:4903-4905` and `:4949-4951`) and so must this one:
