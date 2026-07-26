@@ -422,7 +422,6 @@ som inte existerar än."
     min-width: 0;
     background: transparent;
     border: 0;
-    outline: none;
     color: var(--ink);
     font-family: inherit;
     font-size: 1.03rem;
