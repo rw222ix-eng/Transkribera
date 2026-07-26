@@ -1717,7 +1717,16 @@ test("Panelerna (/next/): ett klassbyte hämtar trender och Inför nästa", asyn
   // Kalenderposten bärs INTE över — bara åtgärd/grupprum/material.
   await expect(nasta.locator("li.rad")).toHaveCount(2);
   await expect(nasta).not.toContainText("Prov om derivata");
-  await expect(nasta.locator("ul.punkter li")).toHaveText(["Derivata (uppg 3)"]);
+  // RÄTTAT I TASK 5 (se task-5-report.md): koden ovan skrevs blind och antog
+  // ett mellanslag före parentesen. Kört mot en riktig webbläsare visar
+  // NastaLektion.svelte:78 <span class="ref"> ({d.ref})</span> — Svelte
+  // trimmar bort det inledande mellanslaget eftersom det står direkt intill
+  // en {#if}-gräns utan mellanrum i källan, så DOM:en blir "Derivata(uppg 3)"
+  // utan mellanslag. Samma bugg finns i NastaLektion.svelte:38 och
+  // Terminstrender.svelte:38/:88 (alla fyra <span> med inledande mellanslag
+  // intill en {#if}-gräns) — INGEN av dem fixades i Task 5, bara rapporterade.
+  // Assertionen nedan speglar det verifierade (buggiga) resultatet.
+  await expect(nasta.locator("ul.punkter li")).toHaveText(["Derivata(uppg 3)"]);
 
   expect(errors).toEqual([]);
 });
@@ -1858,6 +1867,16 @@ cd e2e && npm run test:next-foundation
 ```
 
 Förväntat: `38 passed` (32 före + 6 nya).
+
+RÄTTAT I TASK 5 (se task-5-report.md): den första körningen gav 36 passed,
+2 failed. Task 1-2 (Agenda.svelte) monterar en egen `<h2>`"Kommande" direkt i
+vyn, alltid synlig så fort agendan laddats — även tom, vilket är en avsiktlig
+och testad regel (specens avsnitt 4). `inspelningar-kartotek.spec.mjs` (plan
+B1, skriven innan panelerna fanns) hade två osäkrade
+`vy.getByRole("heading", { level: 2 })`-lokatorer som antog att h2 i vyn bara
+var veckorubrikerna — antagandet höll inte längre. Fixen (utanför Task 5:s
+deklarerade filer, men nödvändig för grinden) avgränsade båda till `.grupp`
+(Kartotek.svelte:s egen veckogrupp-wrapper), utan att ändra vad som testas.
 
 - [ ] **Step 4: Tandkontrollera de två bärande spärrarna**
 
