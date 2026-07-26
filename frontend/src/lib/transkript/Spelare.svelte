@@ -163,6 +163,7 @@
     font-size: inherit;
     cursor: pointer;
   }
+  /* Identisk med .ghost:disabled i frontend/src/lib/inspelningar/InspelningarView.svelte:425. */
   .ghost:disabled { opacity: 0.55; cursor: default; }
   .play { flex: 0 0 auto; }
   .klocka {

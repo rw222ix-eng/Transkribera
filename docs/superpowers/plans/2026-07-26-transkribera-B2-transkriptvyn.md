@@ -2275,6 +2275,7 @@ Knappen bor i kontrollraden, inte i `Markorrad.svelte`: den verkar på uppspelni
 Lägg till i CSS:
 
 ```css
+  /* Identisk med .ghost:disabled i frontend/src/lib/inspelningar/InspelningarView.svelte:425. */
   .ghost:disabled { opacity: 0.55; cursor: default; }
 ```
 
