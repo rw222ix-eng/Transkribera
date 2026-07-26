@@ -470,12 +470,17 @@ Styling: `.grid` is `display: grid; grid-template-columns: repeat(auto-fill, min
 In `InspelningarView.svelte`, import `Kartotek`, `laddaLektioner` and `laddaOrg`, add a mount effect, and render the catalogue after the status line:
 
 ```js
-  // Hämtas när vyn monteras. Till skillnad från Transkribera-vyn monteras den
-  // här om vid varje flikbyte (App.svelte göms med hidden men panelen är alltid
-  // monterad — kontrollera vilket som gäller och skriv ned vad du fann).
+  // RÄTTAT EFTER GRANSKNING — kopiera den här versionen, inte en enklare.
+  // Panelen monteras EN gång (App.svelte göms med hidden, inte {#if}), så en
+  // ren monteringseffekt hade hämtat vid appstart och aldrig mer: transkribera
+  // en lektion, byt hit, och den finns inte — hela sessionen. Gamla appen
+  // hämtar om vid varje navigering hit (app.js:606).
+  // untrack behövs för att laddaLektioner läser insp.filterGroup/filterCourse
+  // synkront före sitt första await; utan den blir de beroenden, och Task 5:s
+  // tandkontroll av filterdelningen blir tandlös.
   $effect(() => {
-    laddaOrg();
-    laddaLektioner();
+    if (nav.tab !== 'inspelningar') return;   // enda beroendet
+    untrack(() => { laddaOrg(); laddaLektioner(); });
   });
 ```
 

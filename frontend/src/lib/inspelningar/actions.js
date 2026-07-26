@@ -6,6 +6,7 @@ import { insp } from './stores.svelte.js';
 // Behövs från Task 3, där filterbyten kan överlappa, och Task 4, som lägger
 // till Promise.all([laddaLektioner(), laddaOrg()]).
 let laddToken = 0;
+let orgToken = 0;
 
 /**
  * Hämtar lektionerna. Klass- och kursfiltret ligger i QUERYSTRÄNGEN, alltså på
@@ -42,10 +43,23 @@ export async function laddaLektioner() {
  * behölls medvetet. allSettled så att ett trasigt anrop inte sänker det andra.
  */
 export async function laddaOrg() {
+  // Samma generationsvakt som laddaLektioner, och av samma skäl. Före
+  // flikgrindningen kunde den här funktionen bara anropas EN gång per session,
+  // så ingen kapplöpning var möjlig — men monteringseffekten kör nu vid varje
+  // byte till Inspelningar, och snabb fram-och-tillbaka-navigering kan låta ett
+  // äldre svar landa efter ett nyare och skriva över filtervalen med inaktuell
+  // data. Fixen som stängde kapplöpningen för lektionerna öppnade den här.
+  //
+  // EGEN räknare, inte laddToken: monteringseffekten anropar laddaOrg och
+  // laddaLektioner direkt efter varandra, så en delad räknare hade låtit
+  // lektionshämtningen ogiltigförklara organisationshämtningen innan den
+  // hann skriva — filtervalen hade blivit permanent tomma.
+  const token = ++orgToken;
   const [g, c] = await Promise.allSettled([
     getJSON('/api/groups'),
     getJSON('/api/courses'),
   ]);
+  if (token !== orgToken) return;
   insp.groups = g.status === 'fulfilled' ? (g.value?.groups ?? g.value ?? []) : [];
   insp.courses = c.status === 'fulfilled' ? (c.value?.courses ?? c.value ?? []) : [];
   if (g.status === 'rejected' || c.status === 'rejected') {
