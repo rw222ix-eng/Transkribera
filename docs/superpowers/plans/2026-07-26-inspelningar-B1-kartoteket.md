@@ -4,7 +4,7 @@
 
 **Goal:** Give the Inspelningar tab a real catalogue — week-grouped lesson cards, class/course/month filters, edit and delete — replacing the placeholder pane.
 
-**Architecture:** A pure leaf module (`vecka.js`) for ISO week maths and course colour, a rune store (`stores.svelte.js`), named side effects (`actions.js`), and components that only render. The class/course filter runs on the **server** (refetch); the month filter runs on the **client**.
+**Architecture:** Pure leaf modules — the **shared** `lib/week.js` for ISO week maths and `kursfarg.js` for the course colour — a rune store (`stores.svelte.js`), named side effects (`actions.js`), and components that only render. The class/course filter runs on the **server** (refetch); the month filter runs on the **client**.
 
 **Tech Stack:** Svelte 5 runes · Vite · FastAPI backend (unchanged) · Playwright against the fake server.
 
@@ -26,7 +26,8 @@
 
 | File | Responsibility |
 |---|---|
-| Create `frontend/src/lib/inspelningar/vecka.js` | ISO week maths and course colour. **Imports nothing.** |
+| Create `frontend/src/lib/inspelningar/kursfarg.js` | Course colour only. **Imports nothing.** |
+| Modify `frontend/src/lib/week.js` | The shared ISO week maths, hoisted out of `lib/arkiv/` — see the note below. |
 | Create `frontend/src/lib/inspelningar/stores.svelte.js` | The view's state (`insp`). |
 | Create `frontend/src/lib/inspelningar/actions.js` | Fetching, filter changes, save, delete. |
 | Create `frontend/src/lib/inspelningar/InspelningarView.svelte` | Shell: heading, filter row, catalogue, empty states. |
@@ -37,6 +38,21 @@
 | Create `e2e/inspelningar-kartotek.spec.mjs` | End-to-end coverage. |
 | Modify `frontend/src/App.svelte` | Replace the placeholder pane. |
 | Modify `e2e/playwright.config.ts` | A ninth `testMatch` entry. |
+
+## Efterhandsnot — veckologiken är DELAD, inte ny
+
+Task 1 skrevs som om ISO-veckoberäkningen behövde skrivas för Inspelningar. Det
+stämde inte: `frontend/src/lib/arkiv/week.js` innehöll redan exakt samma port av
+`weekInfo`, använd av Planeringens arkiv. Två uppsättningar torsdagsregel i samma
+frontend driver garanterat isär.
+
+Beräkningen bor därför nu i **`frontend/src/lib/week.js`**, importerad av både
+`lib/arkiv/week.js` (som behåller sin egen `groupByWeek`) och Inspelningarnas
+kartotek. `lib/inspelningar/kursfarg.js` bär bara kursfärgen. Kodblocken nedan är
+uppdaterade — men om något block ändå säger `veckoInfo` eller `./vecka.js` är det
+en kvarleva: den funktionen heter `weekInfo` och ligger i `../week.js`.
+
+---
 
 ## Where this plan stops
 
@@ -55,7 +71,8 @@ Search, "Fråga ditt arkiv", agenda, trends, "Inför nästa lektion", the backup
 - Modify: `frontend/src/App.svelte`
 
 **Interfaces:**
-- Produces: `veckoInfo(datum)` → `{key, label, num, range, start}`; `kursFarg(l)` → one of `'sky' | 'sage' | 'plum' | 'mustard' | 'none'`; the `insp` store.
+- Produces: `kursFarg(l)` → one of `'sky' | 'sage' | 'plum' | 'mustard' | 'none'` from `kursfarg.js`; the `insp` store.
+- Consumes: `weekInfo(datum)` → `{key, label, num, range, start}` from `frontend/src/lib/week.js`.
 
 - [ ] **Step 1: Create the leaf module**
 
@@ -296,8 +313,8 @@ git commit -m "feat(inspelningar): veckologiken, storen och vyskalet"
 - Modify: `frontend/src/lib/inspelningar/InspelningarView.svelte`
 
 **Interfaces:**
-- Consumes: `insp` and `veckoInfo`/`kursFarg` from Task 1. `getJSON(url)` from `../api.js`.
-- Produces: `laddaLektioner()`, `laddaOrg()` from `actions.js`; the `veckoGrupper()` derivation.
+- Consumes: `insp` and `kursFarg` from Task 1, `weekInfo` from `frontend/src/lib/week.js`. `getJSON(url)` from `../api.js`.
+- Produces: `laddaLektioner()`, `laddaOrg()` from `actions.js`.
 
 - [ ] **Step 1: Create the actions**
 
@@ -357,7 +374,7 @@ export async function laddaOrg() {
   // Ett lektionskort. Speglar app.js:4917-4946 funktionellt, omstylat till
   // designsystemet. Att ÖPPNA lektionen ingår inte i B1 — transkriptvyn kommer
   // i plan B2 och lektionschatten i B4.
-  import { kursFarg } from './vecka.js';
+  import { kursFarg } from './kursfarg.js';
 
   let { l, onRedigera, onRadera } = $props();
 
@@ -402,7 +419,7 @@ Styling: `var(--surface)` background, `var(--line)` border, `border-radius: 4px`
 <script>
   // Veckogrupperna. Nyaste veckan först; lektioner utan tolkningsbart datum
   // hamnar sist i gruppen "Tidigare" (veckoInfo ger dem start 0).
-  import { veckoInfo } from './vecka.js';
+  import { weekInfo } from '../week.js';
   import Lektionskort from './Lektionskort.svelte';
 
   let { lektioner, onRedigera, onRadera } = $props();
@@ -413,7 +430,7 @@ Styling: `var(--surface)` background, `var(--line)` border, `border-radius: 4px`
       // l.datum är ISO-strängen. l.date är serverns formaterade etikett
       // ("Idag · 14:32") och går INTE att räkna på — blandas de ihop grupperas
       // allt tyst fel.
-      const v = veckoInfo(l.datum || '');
+      const v = weekInfo(l.datum || '');
       if (!karta.has(v.key)) karta.set(v.key, { ...v, kort: [] });
       karta.get(v.key).kort = [...karta.get(v.key).kort, l];
     }
@@ -468,7 +485,7 @@ The fake server has an isolated base dir and starts with **no** lessons. There i
 1. Drive the wizard to completion twice against the fake server. Each run gets a fresh `history_id`, so it produces a second lesson rather than updating the first. `e2e/transkribera-korning.spec.mjs` already shows the click path; a fake run takes roughly 170 ms plus the queueing.
 2. `GET /api/lessons` to read back the two ids.
 3. `PATCH /api/lessons/{id}` with `{"datum": "2026-07-20"}` on one and `{"datum": "2026-07-13"}` on the other. Those are Mondays in two consecutive ISO weeks, so the catalogue must show two groups.
-4. `PATCH` a third time with `{"datum": ""}` on one of them if you also want to see the "Tidigare" group — an empty date is what `veckoInfo` treats as unparseable.
+4. `PATCH` a third time with `{"datum": ""}` on one of them if you also want to see the "Tidigare" group — an empty date is what `weekInfo` treats as unparseable.
 
 Do it from the test with `page.request`, not by hand, so the same steps work in Task 5's spec.
 
