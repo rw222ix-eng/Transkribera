@@ -18,7 +18,7 @@ Inspelningar delas därför i **fem planer**:
 
 | Plan | Innehåll | Ungefär |
 |---|---|---|
-| **B1** | Kartoteket: veckogrupperade lektionskort, klass/kurs/månadsfilter, byt namn, radera | ~270 rader |
+| **B1** | Kartoteket: veckogrupperade lektionskort, klass/kurs/månadsfilter, redigera uppgifter, radera | ~270 rader |
 | **B2** | Transkript + ljudspelare + markörrad — modalen som **delas med Transkribera** | ~77 rader + tillstånd |
 | **B3** | Sök i transkript och "Fråga ditt arkiv" (RAG över SSE), källciteringar, följdfrågor, genomsökningsanimationen | ~150 rader |
 | **B4** | Lektions-chatt-overlayen ("Fråga lektionen") | ~90 rader |
@@ -41,7 +41,7 @@ och lektions-overlayen — alltså i B3 och B4, inte här.
 
 Kartoteket är Inspelningar-flikens ryggrad: läraren ser sina transkriberade
 lektioner, grupperade per vecka, och kan filtrera dem på klass, kurs och månad,
-byta namn på dem och radera dem.
+redigera deras uppgifter och radera dem.
 
 Ingenting av det här finns i Svelte-frontenden i dag. `App.svelte` renderar en
 platshållarpanel för fliken.
@@ -61,7 +61,7 @@ Nya filer under `frontend/src/lib/inspelningar/`:
 | `Filterrad.svelte` | Klass-, kurs- och månadsväljare, aktiva chips, Rensa alla. |
 | `Kartotek.svelte` | Veckogrupperna med rubrikrad och kortgrid. |
 | `Lektionskort.svelte` | Ett kort. |
-| `RedigeraLektion.svelte` | Redigeringsmodalen (klass, kurs, sal, datum). |
+| `RedigeraLektion.svelte` | Redigeringsmodalen. **Namnet går inte att ändra** — modalen redigerar klass, kurs, sal och datum, precis som gamla appens `saveLesson` (`app.js:1752-1760`), som aldrig skickar `name`. |
 
 Ändras: `frontend/src/App.svelte` — platshållarpanelen byts mot `<InspelningarView />`.
 
@@ -155,7 +155,7 @@ i stället för att tyst dölja skillnaden. Den kostar ett extra anrop en gång 
 montering och är den enda platsen där B1 rör historik-endpointen.
 
 **Att öppna en lektion ingår inte i B1.** Kortets två öppna-vägar leder till
-transkriptvyn (B2) och lektionschatten (B4). B1 ger kortet **byt namn** och
+transkriptvyn (B2) och lektionschatten (B4). B1 ger kortet **redigera uppgifter** och
 **radera**, och vyn säger rakt ut att öppna en lektion kommer i nästa plan och tills
 dess finns i den gamla appen. Ingen navigering till en platshållare — samma ärliga
 hållning som A3:s klartillstånd, och medvetet inte det A1 kritiserades för.
@@ -174,8 +174,8 @@ Specen ska täcka:
 2. att ett **klassbyte utlöser ett nytt `GET /api/lessons`** — fångat ur
    nätverksloggen, inte härlett;
 3. att ett **månadsbyte inte gör det** — samma nätverkslogg, noll nya anrop;
-4. att byt namn persisterar: `PATCH` skickas och kortet visar det nya värdet efter
-   en omladdning;
+4. att redigeringen persisterar: `PATCH` skickas och kortet visar det nya värdet
+   efter en omladdning;
 5. att radera tar bort kortet och att `DELETE` verkligen skickades;
 6. de två tomtillstånden var för sig — "inga inspelningar än" respektive "inga
    matchar dina filter".
