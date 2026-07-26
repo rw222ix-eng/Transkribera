@@ -320,23 +320,24 @@
     font-size: 1.03rem;
     color: var(--ink-2);
   }
-  /* Vakten bär en diskret markering — den säger faktiskt att något saknas,
-     till skillnad från senare-raden som bara beskriver planen. */
-  .notis {
-    border-left: 2px solid var(--line-2);
-    padding-left: 10px;
-  }
-
+  /* INGEN border-left-stripe här, och ingen på .bekraft nedan. DESIGN.md §6
+     namnger mönstret uttryckligen: "Don't use a border-left/border-right
+     colored stripe as an accent". De två var de ENDA förekomsterna i hela
+     Svelte-frontenden. Vakten skiljs redan från senare-raden av brödstorleken
+     och --ink-2 (se ovan); rutan nedan har redan en hel ram, och var(--bad) på
+     rubriken bär allvaret. */
   .bekraft {
     margin-top: 16px;
     background: var(--surface);
     border: 1px solid var(--line);
-    border-left: 3px solid var(--bad);
     border-radius: 4px;
     padding: 14px 16px;
   }
   .bekraft:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  .fraga { font-size: 1.03rem; color: var(--ink); margin: 0; overflow-wrap: anywhere; }
+  /* Rubriken bär allvaret, i stället för den borttagna stripen. Kontrollmätt
+     mot båda temana: #C8463A på #FFFFFF ger 4,78:1 och #E0796A på #1C1D15 ger
+     5,75:1 — båda över AA:s 4,5:1 för brödtext. */
+  .fraga { font-size: 1.03rem; color: var(--bad); margin: 0; overflow-wrap: anywhere; }
   /* BRÖDTEXT, inte etikett — meningen räknar upp vad som faktiskt raderas och
      är det enda läraren har att gå på innan hon trycker på en oåterkallelig
      knapp. 0.72rem/--ink-3 hör till de versala mikroetiketterna och gör just
