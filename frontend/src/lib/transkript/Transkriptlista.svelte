@@ -2,6 +2,9 @@
   import { tk } from './stores.svelte.js';
   import { fmtTid, aktuellRad } from './tid.js';
   import { hoppaTillRad } from './actions.js';
+  import { styckaRad } from './sok.js';
+
+  let { perRad, traffar } = $props();
 
   const aktuell = $derived(aktuellRad(tk.segment, tk.tid));
 
@@ -54,6 +57,12 @@
     const rad = lista.querySelector(`[data-rad="${i}"]`);
     rad?.scrollIntoView({ block: 'center', behavior: 'smooth' });
   });
+
+  $effect(() => {
+    const t = traffar[tk.traffIndex];
+    if (!t || !lista) return;
+    lista.querySelector(`[data-rad="${t.rad}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  });
 </script>
 
 <ol class="rader" bind:this={lista} use:slappVidEgenScroll>
@@ -71,7 +80,7 @@
            user-select: text i CSS:en nedan håller markeringen vid liv. -->
       <button type="button" class="radknapp" onclick={() => klick(i)}>
         <span class="tid">{fmtTid(s.start)}</span>
-        <span class="text">{s.text}</span>
+        <span class="text">{#each styckaRad(s.text, perRad.get(i), tk.traffIndex) as bit}{#if bit.traff}<mark class:aktuell={bit.aktuell}>{bit.text}</mark>{:else}{bit.text}{/if}{/each}</span>
       </button>
     </li>
   {/each}
@@ -127,6 +136,15 @@
     color: var(--ink-3);
   }
   .text { overflow-wrap: anywhere; }
+  mark {
+    background: color-mix(in srgb, var(--warn) 26%, transparent);
+    color: inherit;
+    border-radius: 2px;
+  }
+  /* aktuell delar accent-weak/accent-paret med mark i
+     frontend/src/lib/arkiv/Snippet.svelte:39-44 — appens signal för "det här
+     är den aktiva träffen", inte bara en träff bland andra. */
+  mark.aktuell { background: var(--accent-weak); color: var(--accent); }
   /*
    * ALLTID monterad (class:dold i stället för {#if !tk.foljer} som planen
    * anger, docs/superpowers/plans/2026-07-26-transkribera-B2-transkriptvyn.md,

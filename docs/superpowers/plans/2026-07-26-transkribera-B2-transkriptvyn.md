@@ -2370,6 +2370,53 @@ test("sökfrågan följer inte med in i nästa transkript", async ({ page }) => 
 });
 ```
 
+**AVVIKELSE UPPTÄCKT UNDER IMPLEMENTATIONEN (steg 7, tandkontrollen):** testet
+ovan tog bort `tk.fraga = '';` ur `nollstall()` och körde om — testet skulle
+enligt planen falla på `toHaveValue("")`, men förblev grönt. Orsaken:
+`oppnaTranskript()` går via `oppnaInspelningar()`, som gör
+`page.goto("/next/")` — en RIKTIG sidnavigering som startar om hela
+JS-runtimen och nollställer `tk.fraga` även om `nollstall()` aldrig gjorde
+det. Ett andra anrop till `oppnaTranskript(page)` för att öppna "nästa
+transkript" gjorde alltså assertionen grön oavsett — den bevisade ingenting
+om `nollstall()`. Testet skrevs om för att återanvända SAMMA vy och
+"Öppna"-knapp och stänga/öppna på nytt inom EN sidladdning, så att
+assertionen verkligen prövar `nollstall()` och inte en sidladdning som råkar
+göra samma sak:
+
+```js
+test("sökfrågan följer inte med in i nästa transkript", async ({ page }) => {
+  const errors = [];
+  failOnConsoleError(page, errors);
+
+  const vy = await oppnaInspelningar(page);
+  const oppna = vy.getByRole("button", { name: "Öppna" });
+  await oppna.click();
+  const ruta = page.getByRole("dialog", { name: "Transkript" });
+  await expect(ruta).toBeVisible();
+
+  const falt = ruta.getByRole("searchbox", { name: "Sök i transkriptet" });
+  await falt.fill("bråk");
+  await expect(ruta.locator("mark")).not.toHaveCount(0);
+
+  await page.keyboard.press("Escape");
+  await expect(ruta).toBeHidden();
+
+  // Gamla appen nollställer aldrig searchQuery (app.js:1659-1665, 2965), så
+  // den gamla frågan färgade nästa transkript direkt.
+  await oppna.click();
+  const igen = page.getByRole("dialog", { name: "Transkript" });
+  await expect(igen).toBeVisible();
+  await expect(igen.getByRole("searchbox", { name: "Sök i transkriptet" })).toHaveValue("");
+  await expect(igen.locator("mark")).toHaveCount(0);
+
+  expect(errors, errors.join("\n")).toEqual([]);
+});
+```
+
+Efter omskrivningen gav samma tandkontroll (tk.fraga = '' borttagen ur
+nollstall()) rätt fel på rätt rad: `Expected: "" / Received: "bråk"` på
+`toHaveValue("")`-raden.
+
 - [ ] **Steg 2: Kör och se dem falla**
 
 ```bash
@@ -2452,6 +2499,32 @@ Utöka `<script>`:
   }
 
   function paSokTangent(e) {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    stegaTraff(e.shiftKey ? -1 : 1);
+  }
+```
+
+**AVVIKELSE UPPTÄCKT UNDER IMPLEMENTATIONEN:** `<input type="search">` äter sitt
+EGET Escape-tryck för att tömma sig självt när det har ett värde, och
+`<dialog>`:ens inbyggda escape-stängning hinner då aldrig köra i SAMMA
+tangenttryckning. Bekräftat genom att lyssna på `keydown` i fältet:
+`defaultPrevented` stod kvar `false` medan fältet ändå tömdes och rutan
+förblev öppen (`{"valAfter":"","dialogOpen":true,"log":["keydown:Escape:defaultPrevented=false"]}`)
+— webbläsaren väljer alltså EN standardåtgärd per Escape-tryck när fokus står
+i ett icke-tomt sökfält, och fältets egen tömning vinner över dialogens
+stängning. Utan en egen gren hade en lärare som skrivit en sökfråga behövt
+trycka Escape TVÅ gånger för att stänga rutan. `paSokTangent` fick därför en
+Escape-gren som stänger rutan explicit i stället för att förlita sig på
+webbläsarens cancel-algoritm:
+
+```js
+  function paSokTangent(e) {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      stangTranskript();
+      return;
+    }
     if (e.key !== 'Enter') return;
     e.preventDefault();
     stegaTraff(e.shiftKey ? -1 : 1);

@@ -515,3 +515,56 @@ test("en markör som servern tyst kastar ger ett synligt fel", async ({ page }) 
 
   expect(errors, errors.join("\n")).toEqual([]);
 });
+
+test("sökningen markerar träffar och stegar mellan dem", async ({ page }) => {
+  const errors = [];
+  failOnConsoleError(page, errors);
+
+  const ruta = await oppnaTranskript(page);
+  await ruta.getByRole("searchbox", { name: "Sök i transkriptet" }).fill("a");
+
+  // "a" finns i alla tre raderna; räknaren visar totalen, inte per rad.
+  await expect(ruta.locator("mark")).not.toHaveCount(0);
+  await expect(ruta.getByTestId("transkript-traffar")).toHaveText(/^1\/\d+$/);
+
+  await ruta.getByRole("button", { name: "Nästa träff" }).click();
+  await expect(ruta.getByTestId("transkript-traffar")).toHaveText(/^2\/\d+$/);
+
+  expect(errors, errors.join("\n")).toEqual([]);
+});
+
+test("sökfrågan följer inte med in i nästa transkript", async ({ page }) => {
+  const errors = [];
+  failOnConsoleError(page, errors);
+
+  // UPPTÄCKT UNDER TANDKONTROLLEN (steg 7): oppnaTranskript() går via
+  // oppnaInspelningar(), som gör page.goto("/next/") — en RIKTIG
+  // sidnavigering som startar om hela JS-runtimen och alltså nollställer
+  // tk.fraga även om nollstall() aldrig gjorde det. Ett andra anrop till
+  // oppnaTranskript(page) här hade gjort assertionen grön oavsett — bruten
+  // nollstall() gav ändå "passed". Håll i stället kvar SAMMA vy och knapp och
+  // stäng/öppna på nytt inom EN sidladdning, så testet verkligen prövar
+  // nollstall(), inte en sidladdning som råkar göra samma sak.
+  const vy = await oppnaInspelningar(page);
+  const oppna = vy.getByRole("button", { name: "Öppna" });
+  await oppna.click();
+  const ruta = page.getByRole("dialog", { name: "Transkript" });
+  await expect(ruta).toBeVisible();
+
+  const falt = ruta.getByRole("searchbox", { name: "Sök i transkriptet" });
+  await falt.fill("bråk");
+  await expect(ruta.locator("mark")).not.toHaveCount(0);
+
+  await page.keyboard.press("Escape");
+  await expect(ruta).toBeHidden();
+
+  // Gamla appen nollställer aldrig searchQuery (app.js:1659-1665, 2965), så
+  // den gamla frågan färgade nästa transkript direkt.
+  await oppna.click();
+  const igen = page.getByRole("dialog", { name: "Transkript" });
+  await expect(igen).toBeVisible();
+  await expect(igen.getByRole("searchbox", { name: "Sök i transkriptet" })).toHaveValue("");
+  await expect(igen.locator("mark")).toHaveCount(0);
+
+  expect(errors, errors.join("\n")).toEqual([]);
+});

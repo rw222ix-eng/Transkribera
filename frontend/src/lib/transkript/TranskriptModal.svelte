@@ -1,11 +1,44 @@
 <script>
   import { tk } from './stores.svelte.js';
   import { stangTranskript, vaxlaSpelning } from './actions.js';
+  import { hittaTraffar, traffarPerRad } from './sok.js';
   import Spelare from './Spelare.svelte';
   import Markorrad from './Markorrad.svelte';
   import Transkriptlista from './Transkriptlista.svelte';
 
   let ruta = $state(null);
+
+  const traffar = $derived(hittaTraffar(tk.segment, tk.fraga));
+  const perRad = $derived(traffarPerRad(traffar));
+  const traffEtikett = $derived(
+    !tk.fraga.trim() ? '' : traffar.length ? `${tk.traffIndex + 1}/${traffar.length}` : '0/0',
+  );
+
+  function stegaTraff(steg) {
+    if (!traffar.length) return;
+    tk.traffIndex = (tk.traffIndex + steg + traffar.length) % traffar.length;
+  }
+
+  /**
+   * UPPTÄCKT UNDER IMPLEMENTATIONEN (avviker alltså från planen, som bara gav
+   * Enter-grenen): ett <input type="search"> med ett värde äter sitt EGET
+   * Escape-tryck för att tömma sig självt, och <dialog>:ens inbyggda
+   * escape-stängning hinner då aldrig köra i SAMMA tangenttryckning — bekräftat
+   * genom att lyssna på keydown i fältet: defaultPrevented stod kvar false
+   * medan fältet ändå tömdes och rutan förblev öppen. Utan grenen nedan hade
+   * en lärare som skrivit en sökfråga behövt trycka Escape TVÅ gånger för att
+   * stänga rutan — första för att tömma fältet, andra för att faktiskt stänga.
+   */
+  function paSokTangent(e) {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      stangTranskript();
+      return;
+    }
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    stegaTraff(e.shiftKey ? -1 : 1);
+  }
 
   // Villkoret bär MEDVETET inte nav.tab, till skillnad från B1:s dialoger
   // (InspelningarView.svelte:41-55). Deras bor inuti en panel som göms med
@@ -65,6 +98,19 @@
 >
   <header class="topp">
     <h2 class="titel">{tk.namn || 'Transkript'}</h2>
+    <div class="sok">
+      <input
+        type="search"
+        class="sokfalt"
+        aria-label="Sök i transkriptet"
+        bind:value={tk.fraga}
+        oninput={() => (tk.traffIndex = 0)}
+        onkeydown={paSokTangent}
+      />
+      <span class="traffar" data-testid="transkript-traffar">{traffEtikett}</span>
+      <button type="button" class="stega" aria-label="Föregående träff" onclick={() => stegaTraff(-1)}>↑</button>
+      <button type="button" class="stega" aria-label="Nästa träff" onclick={() => stegaTraff(1)}>↓</button>
+    </div>
     <button type="button" class="ghost" onclick={stangTranskript}>Stäng</button>
   </header>
 
@@ -85,7 +131,7 @@
 
   <Spelare />
   <Markorrad />
-  <Transkriptlista />
+  <Transkriptlista {perRad} {traffar} />
 </dialog>
 
 <style>
@@ -143,6 +189,44 @@
     padding: 9px 18px;
     font-family: inherit;
     font-size: inherit;
+    cursor: pointer;
+  }
+
+  .sok { display: flex; align-items: center; gap: 6px; }
+  /* Speglar input-formen i frontend/src/lib/inspelningar/RedigeraLektion.svelte:242-253,
+     men med var(--line-2) i stället för var(--line) — det här är ett sekundärt
+     fält i en dialogs topprad, inte ett primärt formulärfält — och en fast
+     bredd i stället för 100 %, eftersom fältet delar raden med räknare och
+     stegningsknappar. */
+  .sokfalt {
+    background: var(--surface);
+    color: var(--ink);
+    border: 1px solid var(--line-2);
+    border-radius: 3px;
+    padding: 8px 10px;
+    font-family: inherit;
+    font-size: 1.03rem;
+    width: 16ch;
+  }
+  .sokfalt:focus-visible { border-color: var(--accent); }
+  .traffar {
+    font-size: 0.72rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-3);
+    min-width: 5ch;
+  }
+  /* Nästan identisk med .hoppa/.ta-bort i Markorrad.svelte:39-49 (samma
+     bakgrund, färg, font-size och padding), men som EGEN knapp med egen
+     border i stället för en delad pill, och utan tabular-nums — pilarna är
+     symboler, inte siffror. */
+  .stega {
+    background: transparent;
+    color: var(--ink-2);
+    border: 1px solid var(--line-2);
+    border-radius: 3px;
+    padding: 4px 8px;
+    font-family: inherit;
+    font-size: 0.72rem;
     cursor: pointer;
   }
 
