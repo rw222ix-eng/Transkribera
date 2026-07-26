@@ -177,10 +177,11 @@ export default defineConfig({
       //
       // inspelningar-paneler.spec.mjs (plan B5) täcker de tre PANELERNA:
       // agendans märkning av försenad/idag/framtid, att ett KLASSbyte skickar
-      // nya GET /api/trends och /api/next-prep medan ett KURSbyte inte gör det,
-      // att varken trender eller Inför nästa renderas utan vald klass, att en
-      // bock i Inför nästa laddar om agendan (gamla appens refetch-asymmetri,
-      // fixad), .ics-exporten med POST /api/open stubbad, och de harmoniserade
+      // nya GET /api/trends och /api/next-prep, att ett KURSbyte DÄREFTER
+      // (med klassen redan vald) inte gör det, att varken trender eller
+      // Inför nästa renderas utan vald klass, att en bock i Inför nästa
+      // laddar om agendan (gamla appens refetch-asymmetri, fixad),
+      // .ics-exporten med POST /api/open stubbad, och de harmoniserade
       // tomtillstånden. TÄCKER INTE: .ics-filens innehåll (tests/
       // test_ics_export.py), att /api/open startar ett program, eller
       // panelernas generationsvakter — de är ordagranna kopior av den som

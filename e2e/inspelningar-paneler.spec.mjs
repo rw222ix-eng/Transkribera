@@ -7,20 +7,24 @@
 // TÄCKER:
 //   1. att agendan renderar försenad, dagens och framtida post med rätt
 //      märkning ("Idag" respektive försenad-markering),
-//   2. att ett KLASSbyte skickar nya GET /api/trends och GET /api/next-prep —
-//      avläst ur nätverksloggen, inte antaget,
-//   3. att varken trender eller Inför nästa renderas UTAN vald klass, och att
-//      inga anrop görs för dem,
+//   2. att ett KLASSbyte skickar nya GET /api/trends och GET /api/next-prep,
+//      och att ett KURSbyte DÄREFTER (med klassen redan vald) inte skickar
+//      något av de tre — båda avlästa ur nätverksloggen, inte antagna. Ett
+//      kursbyte UTAN vald klass mäts medvetet inte här: laddaNastaLektion och
+//      laddaTrender gör då en tidig retur innan något anrop görs, oavsett vad
+//      kursbytet i sig utlöser, så en sådan mätning hade vaktat den tidiga
+//      returen, inte valjKurs,
+//   3. att varken trender eller Inför nästa renderas UTAN vald klass,
 //   4. att en bock i Inför nästa laddar om AGENDAN — alltså att gamla appens
 //      refetch-asymmetri verkligen är fixad,
 //   5. att .ics-exporten POSTar och att statusraden får antalet,
 //   6. de harmoniserade tomtillstånden: tom agenda respektive klass utan
 //      lektioner.
 //
-// Punkt 3 och 4 är planens bärande krav. Punkt 3 vaktar regeln "ej tillämpligt
-// → ingen panel" (specens avsnitt 4); punkt 4 vaktar den enda avsiktliga
-// BETEENDEförändringen mot gamla appen. Båda mäts på faktiska HTTP-anrop i
-// stället för att panelernas innehåll får stå som bevis.
+// Punkt 2:s kursbytesled och punkt 4 är planens bärande krav. Punkt 3 vaktar
+// regeln "ej tillämpligt → ingen panel" (specens avsnitt 4); punkt 4 vaktar
+// den enda avsiktliga BETEENDEförändringen mot gamla appen. Alla mäts på
+// faktiska HTTP-anrop i stället för att panelernas innehåll får stå som bevis.
 //
 // TÄCKS INTE, och det är avsiktligt:
 //   · Att .ics-FILENS innehåll är giltig iCalendar. Det ägs av
@@ -261,8 +265,11 @@ test("Panelerna (/next/): agendan märker försenad, idag och framtid", async ({
   await expect(sen).toHaveClass(/forsenad/);
   await expect(sen.locator(".datum")).toHaveClass(/forsenad/);
 
-  // Den framtida är varken eller.
+  // Den framtida är varken eller. Båda kontrollerna är NEGATIVA (not.toHave…),
+  // så en textändring som tömmer filtret ovan hade fått dem att passera
+  // vakuöst — count(1) säkrar att raden faktiskt hittades först.
   const framtid = rader.filter({ hasText: "Prov om derivata" });
+  await expect(framtid).toHaveCount(1);
   await expect(framtid).not.toHaveClass(/forsenad/);
   await expect(framtid.locator(".datum")).not.toHaveText("Idag");
 
@@ -277,7 +284,6 @@ test("Panelerna (/next/): utan vald klass finns varken trender eller Inför näs
   await laggTillInsikter(request, lektioner);
 
   const vy = await oppnaInspelningar(page);
-  const anrop = loggaPanelanrop(page);
 
   // "Ej tillämpligt" är inte "tomt": panelerna ska inte finnas alls, inte visa
   // en tomtext. Regeln i specens avsnitt 4.
@@ -286,14 +292,11 @@ test("Panelerna (/next/): utan vald klass finns varken trender eller Inför näs
   // Agendan är tvärs alla klasser och SKA finnas.
   await expect(vy.getByRole("heading", { name: /Kommande/ })).toHaveCount(1);
 
-  // Ett KURSbyte rör inte panelerna: båda endpoints tar bara group_id.
-  await filter(vy).kurs.selectOption({ label: "Fysik 1a" });
-  await expect(vy.locator("article.kort")).toHaveCount(1);
-  await tvaRutor(page);
-  expect(
-    anrop.filter((p) => p !== "/api/agenda"),
-    "Ett kursbyte får inte hämta trender eller next-prep — de tar bara group_id",
-  ).toEqual([]);
+  // Kursbytets nätverkskontroll flyttad härifrån: utan vald klass gör
+  // laddaNastaLektion/laddaTrender en tidig retur INNAN något anrop görs,
+  // oavsett vad valjKurs gör — en mätning här hade vaktat den tidiga returen,
+  // inte valjKurs. Se testet "ett klassbyte hämtar trender och Inför nästa",
+  // som gör mätningen med en klass redan vald.
 
   expect(errors).toEqual([]);
 });
@@ -330,23 +333,38 @@ test("Panelerna (/next/): ett klassbyte hämtar trender och Inför nästa", asyn
   await expect(trender).toContainText("1/3 · 33 %");
   await expect(trender.locator("li")).toHaveCount(1);
   await expect(trender.locator("li .bricka")).toHaveText("2×");
+  // EXAKT text, inte bara "innehåller": vaktar whitespace-buggen (rapporterad
+  // i task-5-report.md, fixad i granskningsomgången) som klistrade ihop
+  // rubriken och klassen till "Terminstrender· 9A" — Svelte trimmade bort ett
+  // bokstavligt mellanslag som stod först i en <span> intill en {#if}-gräns.
+  // {level: 2} vaktar samtidigt rubriknivån för en panelrubrik, sedan
+  // inspelningar-kartotek.spec.mjs fick avgränsa sina egna h2-lokatorer till
+  // .grupp (se motiveringen där för varför den avgränsningen behövdes).
+  await expect(trender.getByRole("heading", { level: 2, name: /Terminstrender/ })).toHaveText(
+    "Terminstrender · 9A",
+  );
 
   const nasta = vy.locator("section.panel").filter({ has: page.getByRole("heading", { name: /Inför nästa lektion/ }) });
   // Kalenderposten bärs INTE över — bara åtgärd/grupprum/material.
   await expect(nasta.locator("li.rad")).toHaveCount(2);
   await expect(nasta).not.toContainText("Prov om derivata");
-  // KÄND BUGG (rapporterad i task-5-report.md, INTE fixad i den här tasken):
-  // NastaLektion.svelte:78 skriver <span class="ref"> ({d.ref})</span> — ett
-  // MELLANSLAG före parentesen — men Svelte trimmar bort inledande whitespace
-  // i en tagg som direkt följer en {#if}-gräns utan mellanrum i källan.
-  // Verifierat i en riktig webbläsare (DOM-inspektion mot en manuellt startad
-  // fejkserver): li.innerHTML blir "Derivata<span…>(uppg 3)</span>", alltså
-  // UTAN mellanslag. Samma mönster (och samma bugg) finns i
-  // NastaLektion.svelte:38, Terminstrender.svelte:38 och :88 — alla fyra
-  // <span> med ett inledande mellanslag intill en {#if}-gräns. Assertionen
-  // nedan speglar det VERIFIERADE (buggiga) resultatet i stället för det
-  // avsedda, så gaten kan bli grön utan att tysta fyndet — se rapporten.
-  await expect(nasta.locator("ul.punkter li")).toHaveText(["Derivata(uppg 3)"]);
+  // Mellanslaget här var samma bugg som ovan (NastaLektion.svelte:78, samma
+  // {#if}-gräns-trimning) — rapporterad i task-5-report.md, fixad i
+  // granskningsomgången genom att lägga separatorn INUTI uttrycket i stället
+  // för som ett bokstavligt mellanslag i markupen.
+  await expect(nasta.locator("ul.punkter li")).toHaveText(["Derivata (uppg 3)"]);
+
+  // KURSBYTESKONTROLLEN hör hemma här, inte i föregående test: med en klass
+  // redan vald prövar ett kursbyte faktiskt valjKurs, i stället för att bara
+  // mäta laddarnas tidiga retur (se kommentaren i föregående test). Loggen
+  // nollas här så bara kursbytets EGNA anrop räknas.
+  anrop.length = 0;
+  await filter(vy).kurs.selectOption({ label: "Matematik 2b" });
+  await tvaRutor(page);
+  expect(
+    anrop,
+    "Ett kursbyte får inte hämta agenda, trender eller next-prep när en klass redan är vald",
+  ).toEqual([]);
 
   expect(errors).toEqual([]);
 });
