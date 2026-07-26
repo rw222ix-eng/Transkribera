@@ -300,14 +300,25 @@
     margin: 28px 0 0;
     max-width: 52ch;
   }
-  /* Ärlighetsvakten och senare-raden är fotnoter till kartoteket, inte besked.
-     Mikrostorleken och --ink-3 håller dem tillbakadragna. */
+  /* Senare-raden är en fotnot till kartoteket — den beskriver planen, inte
+     lektionerna. Mikrostorleken och --ink-3 håller den tillbakadragen. */
   .notis,
+  .senare {
+    margin: 18px 0 0;
+    max-width: 62ch;
+  }
   .senare {
     font-size: 0.72rem;
     color: var(--ink-3);
-    margin: 18px 0 0;
-    max-width: 62ch;
+  }
+  /* Ärlighetsvakten är däremot BRÖDTEXT: en hel mening som säger att något
+     faktiskt saknas, och som läraren ska kunna läsa. 0.72rem/--ink-3 är
+     reserverat för korta versala mikroetiketter (KLASS, KURS, MÅNAD,
+     eyebrow:erna) — sätts löpande text i den rampen blir beskedet svårläst och
+     ser dessutom ut som en etikett. Samma brödrytm som .lede och .tomt. */
+  .notis {
+    font-size: 1.03rem;
+    color: var(--ink-2);
   }
   /* Vakten bär en diskret markering — den säger faktiskt att något saknas,
      till skillnad från senare-raden som bara beskriver planen. */
@@ -326,7 +337,11 @@
   }
   .bekraft:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .fraga { font-size: 1.03rem; color: var(--ink); margin: 0; overflow-wrap: anywhere; }
-  .brod { font-size: 0.72rem; color: var(--ink-3); margin: 6px 0 0; max-width: 62ch; }
+  /* BRÖDTEXT, inte etikett — meningen räknar upp vad som faktiskt raderas och
+     är det enda läraren har att gå på innan hon trycker på en oåterkallelig
+     knapp. 0.72rem/--ink-3 hör till de versala mikroetiketterna och gör just
+     den här texten svårast att läsa av allt i vyn. */
+  .brod { font-size: 1.03rem; color: var(--ink-2); margin: 6px 0 0; max-width: 62ch; }
   .knappar { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
   /* Identisk med .ghost i frontend/src/lib/transkribera/Korning.svelte:284-293. */
   .ghost {
