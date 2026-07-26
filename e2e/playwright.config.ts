@@ -187,6 +187,18 @@ export default defineConfig({
       // panelernas generationsvakter — de är ordagranna kopior av den som
       // redan prövas i inspelningar-kartotek.spec.mjs.
       //
+      // inspelningar-sok.spec.mjs (plan B3a) täcker ORDSÖKET: att träffarna
+      // renderas med markerade utdrag och att \x02/\x03 aldrig läcker som
+      // synlig text, att kartoteket viker för träfflistan och kommer tillbaka
+      // när fältet rensas, att kartotekets tomtillstånd inte renderas under
+      // träffarna, nollträffstexten, att ett KLASSbyte inte ändrar träffarna
+      // (api_search tar inga filterparametrar), och att "Fråga AI" säger att
+      // den kommer i B3b i stället för att låtsas svara. TÄCKER INTE:
+      // fråge-läget i sak (B3b), att öppna en träff i transkriptet (B2,
+      // andra strömmen), sökets generationsvakt (ordagrann kopia av den som
+      // redan prövas i inspelningar-kartotek.spec.mjs) eller LIKE-fallbacken
+      // när sqlite saknar FTS5.
+      //
       // FÄLLA FÖR B2-B5, skarpladdad men ännu otriggad: en CSS-räkning av
       // [role="status"] inuti den SYNLIGA Inspelningar-panelen ger nu 2 —
       // RedigeraLektion.svelte:165 plus InspelningarView.svelte:94 — medan
@@ -205,6 +217,7 @@ export default defineConfig({
       testMatch: [
         /inspelningar-kartotek\.spec\.mjs$/,
         /inspelningar-paneler\.spec\.mjs$/,
+        /inspelningar-sok\.spec\.mjs$/,
         /next-foundation\.spec\.mjs$/,
         /planering-tavla\.spec\.mjs$/,
         /planering-arkiv\.spec\.mjs$/,
