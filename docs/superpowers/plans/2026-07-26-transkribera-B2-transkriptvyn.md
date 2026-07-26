@@ -1872,7 +1872,7 @@ git commit -m "feat(transkript): gör hela raden klickbar och markera den som sp
 
 **Interfaces:**
 - Consumes: `tk.foljer`, `aktuell` från task 5.
-- Produces: inga exporter. `Transkriptlista` renderar knappen "Följ uppspelningen" när `!tk.foljer`.
+- Produces: inga exporter. `Transkriptlista` visar knappen "Följ uppspelningen" när `!tk.foljer`. Noden är **alltid monterad** och döljs med `visibility: hidden` — se steg 3 om varför en `{#if}` flyttade hela dialogen mitt i ett klick. För tillgänglighetsträdet och för `getByRole` är den ändå borta när den är dold.
 
 - [x] **Steg 1: Skriv det fallerande testet**
 
