@@ -128,11 +128,30 @@ const SEGMENT = [
 /** Fejkens AI-namngivning, serve_test_app.py:135-137. */
 const LEKTIONSNAMN = "Bråk och procent — introduktion";
 
-/** Raderar varje lektion. Tar historikposten och mappen med sig. */
+/**
+ * Raderar varje lektion. Tar historikposten och mappen med sig.
+ *
+ * RÄTTAD efter task 3. Spelarens preload="metadata" hinner utlösa en RIKTIG
+ * förfrågan mot /api/media, och mediaSokvagFor (Steg 7 nedan) föredrar
+ * h.video.path — assemble_output (app/output_store.py) kopierar median IN i
+ * resultatmappen även för en ren ljudkälla, så webbläsaren håller filen i
+ * precis den mapp DELETE ska radera. Avbrottet av förfrågan sker asynkront
+ * när sidan lämnas och hinner inte alltid slå igenom innan afterEach kör den
+ * här funktionen; backendens rmtree() svarar då 409 ("en fil kan vara öppen",
+ * server.py:1032-1034) trots att ingenting utom testkörningens egen, redan
+ * avslutade sida någonsin höll filen öppen. Uppmätt: fyra av task 1/2:s redan
+ * gröna tester föll om med precis den här kapplöpningen så fort task 3
+ * monterade spelaren — ett kort, begränsat omförsök löser den utan att dölja
+ * ett verkligt låst dokument, som fortfarande ger upp efter sista försöket.
+ */
 async function toemArkivet(request) {
   const lektioner = await (await request.get("/api/lessons")).json();
   for (const l of lektioner) {
-    const r = await request.delete("/api/lessons/" + l.id);
+    let r = await request.delete("/api/lessons/" + l.id);
+    for (let forsok = 0; r.status() === 409 && forsok < 8; forsok++) {
+      await new Promise((klar) => setTimeout(klar, 400));
+      r = await request.delete("/api/lessons/" + l.id);
+    }
     expect(r.ok(), `DELETE /api/lessons/${l.id} svarade ${r.status()}`).toBeTruthy();
   }
 }
@@ -1349,6 +1368,17 @@ cd e2e && npm run test:next-foundation -- --grep "rätt källa|404 från|faller 
 ```
 
 Förväntat: 3 passed.
+
+**Kör därefter HELA `transkript.spec.mjs`, inte bara grep:et.** Spelaren är
+den FÖRSTA komponenten som monterar ett riktigt medieelement mot fixturens
+riktiga ljudfil (task 1 och 2:s tester öppnar samma fixtur men renderade
+tidigare ingenting som rörde nätverket). Fyra av task 1/2:s redan gröna
+tester — "kortet öppnar …", "dialogen har EN annonserande nod",
+"transkriptet renderas …" och "en lektion över en timme …" — föll om med
+`DELETE /api/lessons/N svarade 409` i `afterEach`, en äkta kapplöpning mot
+`<audio preload="metadata">` som förklaras vid `toemArkivet`, Steg 1 i task 1
+ovan (nu rättad där med ett begränsat omförsök). Rör inte testerna i sig —
+fixen hör hemma i den delade städhjälparen, inte i varje enskilt test.
 
 - [ ] **Steg 8: Tandkontrollera felvägen**
 
