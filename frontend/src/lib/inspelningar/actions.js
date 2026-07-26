@@ -1,6 +1,12 @@
 import { getJSON } from '../api.js';
 import { insp } from './stores.svelte.js';
 
+// Ökar vid varje hämtning så ett långsamt svar inte får skriva över ett
+// nyare. Speglar korToken i frontend/src/lib/transkribera/actions.js:314.
+// Behövs från Task 3, där filterbyten kan överlappa, och Task 4, som lägger
+// till Promise.all([laddaLektioner(), laddaOrg()]).
+let laddToken = 0;
+
 /**
  * Hämtar lektionerna. Klass- och kursfiltret ligger i QUERYSTRÄNGEN, alltså på
  * servern (db.list_lessons, app/db.py:544-560) — därför måste varje byte av dem
@@ -8,19 +14,25 @@ import { insp } from './stores.svelte.js';
  * filtrerar den redan hämtade listan på klienten.
  */
 export async function laddaLektioner() {
+  const token = ++laddToken;
   insp.laddar = true;
   const q = new URLSearchParams();
   if (insp.filterGroup) q.set('group_id', insp.filterGroup);
   if (insp.filterCourse) q.set('course_id', insp.filterCourse);
   try {
     const res = await getJSON('/api/lessons' + (q.toString() ? '?' + q : ''));
+    if (token !== laddToken) return;
     insp.lessons = Array.isArray(res) ? res : [];
     insp.fel = '';
   } catch {
+    if (token !== laddToken) return;
     insp.lessons = [];
     insp.fel = 'Kunde inte läsa lektionerna — starta om appen och försök igen.';
   } finally {
-    insp.laddar = false;
+    // finally kör även vid de tidiga return:erna ovan, så laddindikatorn
+    // måste vara token-vaktad den också — annars släcker ett gammalt svar
+    // spinnern medan ett nyare fortfarande är i luften.
+    if (token === laddToken) insp.laddar = false;
   }
 }
 
