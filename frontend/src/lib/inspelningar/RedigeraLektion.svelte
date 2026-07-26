@@ -93,6 +93,23 @@
         <input type="date" bind:value={insp.edits.datum} />
       </label>
 
+      <!--
+        SPARFELET, inuti rutan. sparaLektion lämnar dialogen öppen på BÅDA
+        felvägarna, och vyns enda synliga kopia av insp.fel ligger utanför
+        skärmen (position: fixed; inset: 0) — alltså dimmad bakom den och i
+        praktiken utanför synfältet. Utan den här noden ser Spara ut att göra
+        ingenting alls när servern är nere: exakt det svalda fel som briefen
+        förbjuder för DELETE, och som Steg 0 flyttades hit för att förhindra.
+
+        aria-hidden och UTAN egen roll, precis som kopian i
+        InspelningarView.svelte:120: vyns live-region (p.fel-sr[role="status"])
+        är fortfarande den enda annonserande noden. Två annonserande noder i
+        samma vy läses i oförutsägbar ordning.
+
+        :empty-regeln hör hemma här — på en kopia, aldrig på en live-region.
+      -->
+      <p class="fel" aria-hidden="true">{insp.fel}</p>
+
       <div class="knappar">
         <button type="button" class="ghost" onclick={avbrytRedigering}>Avbryt</button>
         <button type="submit" class="primar">Spara</button>
@@ -169,6 +186,15 @@
     box-sizing: border-box;
   }
   input:focus-visible { border-color: var(--accent); }
+  /* Identisk med .fel i InspelningarView.svelte:196 så de två kopiorna av
+     insp.fel ser likadana ut var läraren än råkar se dem. */
+  .fel {
+    grid-column: 1 / -1;
+    color: var(--bad);
+    margin: 8px 0 0;
+    overflow-wrap: anywhere;
+  }
+  .fel:empty { display: none; }
   .knappar {
     grid-column: 1 / -1;
     display: flex;
