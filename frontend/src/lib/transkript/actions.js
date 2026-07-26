@@ -267,3 +267,54 @@ export function hoppaTillRad(index) {
   spolaTill(s.start ?? 0);
   if (mediaEl && mediaEl.paused) mediaEl.play().catch(mediaFel);
 }
+
+export async function laggTillMarkor() {
+  if (tk.laggerTill || !tk.historyId) return;
+  tk.laggerTill = true;
+  try {
+    // POST skrivs med rå fetch — api.js exporterar bara getJSON, postJSON och
+    // streamPost, och postJSON kastar bort svaret vi måste läsa count ur.
+    const r = await fetch('/api/recordings/' + encodeURIComponent(tk.historyId) + '/markers', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ markers: [{ t: tk.tid }] }),
+    });
+    const j = await r.json().catch(() => null);
+    if (!r.ok) {
+      satBesked((j && j.error) || 'Markören kunde inte sparas — kontrollera att appen körs.');
+      return;
+    }
+    // 200 med count: 0 betyder att historikposten saknar lektionsrad
+    // (server.py:1241-1244 → app/db.py:804-806). Knappen kan INTE
+    // förhandsspärras: GET svarar [] både för "ingen lektion" och "inga
+    // markörer" (server.py:1229), så de är oskiljbara innan man försökt.
+    if (!j || !j.count) {
+      satBesked('Markören kunde inte sparas — inspelningen saknar en lektionspost att koppla den till.');
+      return;
+    }
+    satBesked('', 'info');
+    await laddaMarkorer();
+  } catch {
+    satBesked('Markören kunde inte sparas — kontrollera att appen körs.');
+  } finally {
+    tk.laggerTill = false;
+  }
+}
+
+/**
+ * KÄND GRÄNS: DELETE /api/markers/{id} svarar 200 även för okänt id
+ * (server.py:1213-1220), så ett lyckat svar bevisar ingenting. Vi laddar om
+ * listan efteråt och litar på den. Backenden är orörd, alltså lagas det inte här.
+ */
+export async function taBortMarkor(id) {
+  try {
+    const r = await fetch('/api/markers/' + encodeURIComponent(id), { method: 'DELETE' });
+    if (!r.ok) {
+      satBesked('Markören kunde inte tas bort.');
+      return;
+    }
+    await laddaMarkorer();
+  } catch {
+    satBesked('Markören kunde inte tas bort.');
+  }
+}

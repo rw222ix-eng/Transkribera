@@ -2,6 +2,7 @@
   import { tk } from './stores.svelte.js';
   import { stangTranskript, vaxlaSpelning } from './actions.js';
   import Spelare from './Spelare.svelte';
+  import Markorrad from './Markorrad.svelte';
   import Transkriptlista from './Transkriptlista.svelte';
 
   let ruta = $state(null);
@@ -83,6 +84,7 @@
   {/if}
 
   <Spelare />
+  <Markorrad />
   <Transkriptlista />
 </dialog>
 

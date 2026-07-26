@@ -475,3 +475,43 @@ test("ett radklick återtar följandet trots att pointerdown släpper det", asyn
 
   expect(errors, errors.join("\n")).toEqual([]);
 });
+
+test("markören sparas och dyker upp i raden", async ({ page }) => {
+  const errors = [];
+  failOnConsoleError(page, errors);
+
+  const ruta = await oppnaTranskript(page);
+  await ruta.getByRole("button", { name: "Markera" }).click();
+
+  await expect(ruta.locator(".markor")).toHaveCount(1);
+  await expect(ruta.getByTestId("transkript-statusrad")).toHaveText("");
+
+  expect(errors, errors.join("\n")).toEqual([]);
+});
+
+test("en markör som servern tyst kastar ger ett synligt fel", async ({ page }) => {
+  const errors = [];
+  failOnConsoleError(page, errors);
+
+  // Servern svarar 200 med count: 0 när historikposten saknar lektionsrad
+  // (app/db.py:804-806). Gamla appen läser aldrig count (app.js:1679-1685), så
+  // knappen blir en tyst no-op. Backenden är orörd — fixen är på klienten.
+  await page.route("**/api/recordings/*/markers", async (route) => {
+    if (route.request().method() !== "POST") return route.fallback();
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: '{"markers":[],"count":0}',
+    });
+  });
+
+  const ruta = await oppnaTranskript(page);
+  await ruta.getByRole("button", { name: "Markera" }).click();
+
+  await expect(ruta.getByTestId("transkript-statusrad")).toHaveText(
+    "Markören kunde inte sparas — inspelningen saknar en lektionspost att koppla den till.",
+  );
+  await expect(ruta.locator(".markor")).toHaveCount(0);
+
+  expect(errors, errors.join("\n")).toEqual([]);
+});

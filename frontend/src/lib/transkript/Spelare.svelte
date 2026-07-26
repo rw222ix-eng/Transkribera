@@ -1,7 +1,7 @@
 <script>
   import { tk } from './stores.svelte.js';
   import { fmtTid } from './tid.js';
-  import { bindMedia, slappMedia, vaxlaSpelning, spolaTill, cyklaHastighet, fmtHastighet } from './actions.js';
+  import { bindMedia, slappMedia, vaxlaSpelning, spolaTill, cyklaHastighet, fmtHastighet, laggTillMarkor } from './actions.js';
 
   let spar = $state(null);
   let rafId = 0;
@@ -125,6 +125,12 @@
         aria-label="Uppspelningshastighet, {fmtHastighet(tk.hastighet)}"
         onclick={cyklaHastighet}
       >{fmtHastighet(tk.hastighet)}</button>
+      <button
+        type="button"
+        class="ghost"
+        disabled={tk.laggerTill}
+        onclick={laggTillMarkor}
+      >Markera</button>
     </div>
   </div>
 {/if}
@@ -157,6 +163,7 @@
     font-size: inherit;
     cursor: pointer;
   }
+  .ghost:disabled { opacity: 0.55; cursor: default; }
   .play { flex: 0 0 auto; }
   .klocka {
     flex: 0 0 auto;
