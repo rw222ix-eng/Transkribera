@@ -1001,12 +1001,12 @@ git commit -m "feat(transkript): rendera transkriptet med tidkod och text per ra
 
 **Interfaces:**
 - Consumes: `tk`, `fmtTid`, `byggMediaUrl`, `satBesked`.
-- Produces: `bindMedia(el) -> void`, `vaxlaSpelning() -> void`, `spolaTill(sekunder) -> void`. Mediaelementet hålls **modulprivat** i `actions.js`, aldrig i storen — samma hållning som `transkribera/inspelning.svelte.js`.
+- Produces: `bindMedia(el) -> void`, `slappMedia(el) -> void`, `vaxlaSpelning() -> void`, `spolaTill(sekunder) -> void`. Mediaelementet hålls **modulprivat** i `actions.js`, aldrig i storen — samma hållning som `transkribera/inspelning.svelte.js`.
 
 - [ ] **Steg 1: Skriv de fallerande testerna**
 
 ```js
-test("ljudspelaren får rätt källa och en spärrad spolning innan längden är känd", async ({ page }) => {
+test("ljudspelaren får rätt källa och renderar inget videoelement", async ({ page }) => {
   const errors = [];
   failOnConsoleError(page, errors);
 
@@ -1061,6 +1061,26 @@ function tystWav() {
   return b;
 }
 
+test("en okänd längd spärrar spolningen i stället för att gissa", async ({ page }) => {
+  const errors = [];
+  failOnConsoleError(page, errors);
+
+  // Noll sampel ⇒ längd 0. Gamla appen faller i det läget tillbaka på
+  // AUDIO_DUR = 150 s (app.js:2103, 297), så ett klick i spåret räknar mot
+  // fel total och landar helt fel på en lång lektion.
+  await page.route("**/api/media?**", (route) =>
+    route.fulfill({ status: 200, contentType: "audio/wav", body: tystWav() }),
+  );
+
+  const ruta = await oppnaTranskript(page);
+  const spar = ruta.getByRole("slider", { name: "Sök i uppspelningen" });
+  await expect(spar).toHaveAttribute("aria-disabled", "true");
+  await expect(spar).toHaveAttribute("tabindex", "-1");
+  await expect(ruta.getByText("--:--")).toBeVisible();
+
+  expect(errors.filter((e) => !/Failed to load/.test(e)), errors.join("\n")).toEqual([]);
+});
+
 test("en video begärs som video och faller tillbaka på ljudet när den inte går att förbereda", async ({ page }) => {
   const errors = [];
   failOnConsoleError(page, errors);
@@ -1111,7 +1131,7 @@ test("en video begärs som video och faller tillbaka på ljudet när den inte g�
 - [ ] **Steg 2: Kör och se dem falla**
 
 ```bash
-cd e2e && npm run test:next-foundation -- --grep "rätt källa|404 från|faller tillbaka på ljudet"
+cd e2e && npm run test:next-foundation -- --grep "rätt källa|404 från|okänd längd|faller tillbaka på ljudet"
 ```
 
 Förväntat: FAIL — `expect(locator).toHaveCount(1)` får 0 för `audio`.
@@ -1126,6 +1146,18 @@ Lägg överst, efter de befintliga importerna:
 // och en resurs i en $state gör varje läsning till ett reaktivt beroende.
 let mediaEl = null;
 let lyssnare = [];
+
+// Position att återta när fallbacken byter medieelement. Sätts av mediaFel och
+// konsumeras EN gång av loadedmetadata på efterföljaren — currentTime går inte
+// att sätta innan metadata finns.
+let atergaTill = null;
+```
+
+Nollställ `atergaTill` i `nollstall()` (task 1), tillsammans med de övriga
+spelarfälten:
+
+```js
+  atergaTill = null;
 ```
 
 och funktionerna sist i filen:
@@ -1136,6 +1168,7 @@ function mediaFel() {
   // svarar då 500 (server.py:1703-1707). Ljudspåret går alltid att servera,
   // så vyn förblir användbar: det är transkriptet läraren är där för.
   if (tk.arVideo && tk.mediaSokvag) {
+    atergaTill = tk.tid > 0 ? tk.tid : null;
     tk.arVideo = false;
     tk.forbereder = false;
     tk.mediaUrl = byggMediaUrl(tk.mediaSokvag, false);
@@ -1163,13 +1196,49 @@ export function bindMedia(el) {
   lyssnare = [
     ['timeupdate', () => { if (!tk.drar) tk.tid = el.currentTime; }],
     ['durationchange', () => { tk.langd = Number.isFinite(el.duration) ? el.duration : 0; }],
-    ['loadedmetadata', () => { tk.forbereder = false; }],
+    ['loadedmetadata', () => {
+      tk.forbereder = false;
+      if (atergaTill === null) return;
+      const t = atergaTill;
+      atergaTill = null;
+      if (Number.isFinite(el.duration) && el.duration > 0) {
+        el.currentTime = Math.min(t, el.duration);
+        tk.tid = el.currentTime;
+      }
+    }],
     ['play', () => { tk.spelar = true; }],
     ['pause', () => { tk.spelar = false; }],
     ['ended', () => { tk.spelar = false; }],
     ['error', mediaFel],
   ];
   for (const [namn, fn] of lyssnare) el.addEventListener(namn, fn);
+}
+
+/**
+ * Släpper elementet — men BARA om det fortfarande är det bundna. Vid ett
+ * grenbyte (<video> → <audio> i videofallbacken) monterar Svelte den NYA
+ * grenen INNAN den gamla förstörs, så den gamla nodens destroy kommer efter
+ * att efterföljaren redan bundit sig. Ett ovillkorligt bindMedia(null) hade
+ * då rivit efterföljarens lyssnare och nollat mediaEl — spelaren blev en tyst
+ * no-op precis i det läge fallbacken finns för att rädda. Grenbytesordningen
+ * är Sveltes, inte ett val vi gjort — en destroy som städar delat tillstånd
+ * måste därför vara identitetsmedveten, inte ovillkorlig.
+ */
+export function slappMedia(el) {
+  if (mediaEl !== el) return;
+  // Släpp filen med en gång. Utan det håller webbläsaren källan öppen tills
+  // den skräpsamlas, och backendens rmtree() svarar 409 "en fil kan vara
+  // öppen" (server.py:1032-1034) om läraren stänger transkriptet och genast
+  // raderar lektionen. Det är samma kapplöpning e2e-städningen fick omförsök
+  // för — men här löses den där den uppstår.
+  try {
+    el.pause();
+    el.removeAttribute('src');
+    el.load();
+  } catch {
+    // Noden kan redan vara ur dokumentet; då finns inget att släppa.
+  }
+  bindMedia(null);
 }
 
 export function vaxlaSpelning() {
@@ -1192,6 +1261,15 @@ export function spolaTill(sekunder) {
 }
 ```
 
+**Varför `bindMedia(null)` inte fick vara den enda utsläppsvägen:** Svelte
+monterar den nya `{#if}`-grenen (video → ljud i fallbacken) INNAN den gamla
+grenen förstörs, så den nya `<audio>`-nodens `use:media` hinner binda sig
+före den gamla `<video>`-nodens destroy körs. En ovillkorlig `bindMedia(null)`
+i destroy hade då rivit efterföljarens just bundna lyssnare och nollat
+`mediaEl` — spelaren hade blivit en tyst no-op precis i det ögonblick
+fallbacken finns för att rädda den. `slappMedia` löser det genom att bara
+släppa elementet om det fortfarande är det bundna (`mediaEl === el`).
+
 Uppdatera `stangTranskript` så mediet pausas innan storen töms — lägg raden först i funktionen, efter räknarna:
 
 ```js
@@ -1204,7 +1282,7 @@ Uppdatera `stangTranskript` så mediet pausas innan storen töms — lägg raden
 <script>
   import { tk } from './stores.svelte.js';
   import { fmtTid } from './tid.js';
-  import { bindMedia, vaxlaSpelning, spolaTill } from './actions.js';
+  import { bindMedia, slappMedia, vaxlaSpelning, spolaTill } from './actions.js';
 
   let spar = $state(null);
 
@@ -1214,7 +1292,7 @@ Uppdatera `stangTranskript` så mediet pausas innan storen töms — lägg raden
   /** use:-action. Binder elementet och släpper det när noden rivs. */
   function media(el) {
     bindMedia(el);
-    return { destroy: () => bindMedia(null) };
+    return { destroy: () => slappMedia(el) };
   }
 
   function tidVidX(x) {
@@ -1364,10 +1442,10 @@ Förväntat: `0 ERRORS 0 WARNINGS`.
 - [ ] **Steg 7: Kör e2e**
 
 ```bash
-cd e2e && npm run test:next-foundation -- --grep "rätt källa|404 från|faller tillbaka på ljudet"
+cd e2e && npm run test:next-foundation -- --grep "rätt källa|404 från|okänd längd|faller tillbaka på ljudet"
 ```
 
-Förväntat: 3 passed.
+Förväntat: 4 passed.
 
 **Kör därefter HELA `transkript.spec.mjs`, inte bara grep:et.** Spelaren är
 den FÖRSTA komponenten som monterar ett riktigt medieelement mot fixturens

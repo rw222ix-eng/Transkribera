@@ -8,6 +8,11 @@ import { arVideoFil, masteTranskodas, byggMediaUrl } from './media.js';
 let mediaEl = null;
 let lyssnare = [];
 
+// Position att återta när fallbacken byter medieelement. Sätts av mediaFel och
+// konsumeras EN gång av loadedmetadata på efterföljaren — currentTime går inte
+// att sätta innan metadata finns.
+let atergaTill = null;
+
 // Egna räknare per hämtning. En DELAD hade låtit markörhämtningen
 // ogiltigförklara historikhämtningen vid öppning — samma fälla som
 // inspelningar/actions.js:45-57 beskriver.
@@ -66,6 +71,7 @@ function nollstall() {
   tk.sparar = false;
   tk.sparad = false;
   tk.andringar = {};
+  atergaTill = null;
 }
 
 /** Öppnar med allt känt — INGA nätanrop. Guidens genväg (plan B2, task 10). */
@@ -145,6 +151,7 @@ function mediaFel() {
   // svarar då 500 (server.py:1703-1707). Ljudspåret går alltid att servera,
   // så vyn förblir användbar: det är transkriptet läraren är där för.
   if (tk.arVideo && tk.mediaSokvag) {
+    atergaTill = tk.tid > 0 ? tk.tid : null;
     tk.arVideo = false;
     tk.forbereder = false;
     tk.mediaUrl = byggMediaUrl(tk.mediaSokvag, false);
@@ -172,13 +179,47 @@ export function bindMedia(el) {
   lyssnare = [
     ['timeupdate', () => { if (!tk.drar) tk.tid = el.currentTime; }],
     ['durationchange', () => { tk.langd = Number.isFinite(el.duration) ? el.duration : 0; }],
-    ['loadedmetadata', () => { tk.forbereder = false; }],
+    ['loadedmetadata', () => {
+      tk.forbereder = false;
+      if (atergaTill === null) return;
+      const t = atergaTill;
+      atergaTill = null;
+      if (Number.isFinite(el.duration) && el.duration > 0) {
+        el.currentTime = Math.min(t, el.duration);
+        tk.tid = el.currentTime;
+      }
+    }],
     ['play', () => { tk.spelar = true; }],
     ['pause', () => { tk.spelar = false; }],
     ['ended', () => { tk.spelar = false; }],
     ['error', mediaFel],
   ];
   for (const [namn, fn] of lyssnare) el.addEventListener(namn, fn);
+}
+
+/**
+ * Släpper elementet — men BARA om det fortfarande är det bundna. Vid ett
+ * grenbyte (<video> → <audio> i videofallbacken) monterar Svelte den NYA
+ * grenen innan den gamla förstörs, så den gamla nodens destroy kommer efter
+ * att efterföljaren redan bundit sig. Ett ovillkorligt bindMedia(null) hade
+ * då rivit efterföljarens lyssnare och nollat mediaEl — spelaren blev en tyst
+ * no-op precis i det läge fallbacken finns för att rädda.
+ */
+export function slappMedia(el) {
+  if (mediaEl !== el) return;
+  // Släpp filen med en gång. Utan det håller webbläsaren källan öppen tills
+  // den skräpsamlas, och backendens rmtree() svarar 409 "en fil kan vara
+  // öppen" (server.py:1032-1034) om läraren stänger transkriptet och genast
+  // raderar lektionen. Det är samma kapplöpning e2e-städningen fick omförsök
+  // för — men här löses den där den uppstår.
+  try {
+    el.pause();
+    el.removeAttribute('src');
+    el.load();
+  } catch {
+    // Noden kan redan vara ur dokumentet; då finns inget att släppa.
+  }
+  bindMedia(null);
 }
 
 export function vaxlaSpelning() {

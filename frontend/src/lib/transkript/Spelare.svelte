@@ -1,7 +1,7 @@
 <script>
   import { tk } from './stores.svelte.js';
   import { fmtTid } from './tid.js';
-  import { bindMedia, vaxlaSpelning, spolaTill } from './actions.js';
+  import { bindMedia, slappMedia, vaxlaSpelning, spolaTill } from './actions.js';
 
   let spar = $state(null);
 
@@ -11,7 +11,7 @@
   /** use:-action. Binder elementet och släpper det när noden rivs. */
   function media(el) {
     bindMedia(el);
-    return { destroy: () => bindMedia(null) };
+    return { destroy: () => slappMedia(el) };
   }
 
   function tidVidX(x) {

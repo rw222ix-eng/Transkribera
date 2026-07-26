@@ -202,7 +202,7 @@ test("en lektion över en timme får en timkomponent i tidkoden", async ({ page,
   expect(errors, errors.join("\n")).toEqual([]);
 });
 
-test("ljudspelaren får rätt källa och en spärrad spolning innan längden är känd", async ({ page }) => {
+test("ljudspelaren får rätt källa och renderar inget videoelement", async ({ page }) => {
   const errors = [];
   failOnConsoleError(page, errors);
 
@@ -256,6 +256,26 @@ function tystWav() {
   b.writeUInt32LE(0, 40);   // noll sampel
   return b;
 }
+
+test("en okänd längd spärrar spolningen i stället för att gissa", async ({ page }) => {
+  const errors = [];
+  failOnConsoleError(page, errors);
+
+  // Noll sampel ⇒ längd 0. Gamla appen faller i det läget tillbaka på
+  // AUDIO_DUR = 150 s (app.js:2103, 297), så ett klick i spåret räknar mot
+  // fel total och landar helt fel på en lång lektion.
+  await page.route("**/api/media?**", (route) =>
+    route.fulfill({ status: 200, contentType: "audio/wav", body: tystWav() }),
+  );
+
+  const ruta = await oppnaTranskript(page);
+  const spar = ruta.getByRole("slider", { name: "Sök i uppspelningen" });
+  await expect(spar).toHaveAttribute("aria-disabled", "true");
+  await expect(spar).toHaveAttribute("tabindex", "-1");
+  await expect(ruta.getByText("--:--")).toBeVisible();
+
+  expect(errors.filter((e) => !/Failed to load/.test(e)), errors.join("\n")).toEqual([]);
+});
 
 test("en video begärs som video och faller tillbaka på ljudet när den inte går att förbereda", async ({ page }) => {
   const errors = [];
