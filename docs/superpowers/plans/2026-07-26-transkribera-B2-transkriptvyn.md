@@ -1692,7 +1692,7 @@ git commit -m "feat(transkript): lägg till hastighet, mellanslag och dragspolni
 - Consumes: `spolaTill`, `tk`.
 - Produces: `aktuellRad(segment, tid) -> number` i `tid.js`, `hoppaTillRad(index) -> void` i `actions.js` — spolar till radens `start`, startar uppspelning och sätter `tk.foljer = true`.
 
-- [ ] **Steg 1: Skriv de fallerande testerna**
+- [x] **Steg 1: Skriv de fallerande testerna**
 
 ```js
 test("ett klick var som helst på raden hoppar dit", async ({ page }) => {
@@ -1712,6 +1712,18 @@ test("ett klick var som helst på raden hoppar dit", async ({ page }) => {
   await rader.nth(1).locator(".tid").click();
   t = await ruta.locator("audio").evaluate((el) => el.currentTime);
   expect(t, "klicket på tidkoden spolade inte dit").toBeCloseTo(2.4, 1);
+
+  // Stäng rutan. Till skillnad från alla tidigare tester i den här filen har
+  // hoppaTillRad faktiskt startat uppspelning mot RIKTIGA backend-mediet (inget
+  // /api/media-route här) — lämnas rutan öppen håller webbläsaren filen öppen
+  // in i afterEach, och toemArkivets DELETE kan kapplöpa mot den även efter dess
+  // ordinarie omförsök. actions.js:210-214 dokumenterar precis den här vägen:
+  // stängning släpper filen med en gång via slappMedia. UPPTÄCKT UNDER
+  // IMPLEMENTATIONEN (avviker alltså från planen): utan de här två raderna
+  // föll hela svit-körningen (15 tester) två gånger av två på en 409 i
+  // afterEach — men aldrig när bara de två nya testerna kördes isolerat.
+  await page.keyboard.press("Escape");
+  await expect(ruta).toBeHidden();
 
   expect(errors, errors.join("\n")).toEqual([]);
 });
@@ -1737,7 +1749,7 @@ test("en textmarkering hindrar hoppet", async ({ page }) => {
 });
 ```
 
-- [ ] **Steg 2: Kör och se dem falla**
+- [x] **Steg 2: Kör och se dem falla**
 
 ```bash
 cd e2e && npm run test:next-foundation -- --grep "klick var som helst|textmarkering hindrar"
@@ -1745,7 +1757,7 @@ cd e2e && npm run test:next-foundation -- --grep "klick var som helst|textmarker
 
 Förväntat: FAIL — `currentTime` är 0 i det första testet.
 
-- [ ] **Steg 3: Lägg `aktuellRad` i `tid.js`**
+- [x] **Steg 3: Lägg `aktuellRad` i `tid.js`**
 
 Sist i filen:
 
@@ -1775,7 +1787,7 @@ export function aktuellRad(segment, tid) {
 }
 ```
 
-- [ ] **Steg 4: Lägg `hoppaTillRad` i `actions.js`**
+- [x] **Steg 4: Lägg `hoppaTillRad` i `actions.js`**
 
 Sist i filen:
 
@@ -1794,7 +1806,7 @@ export function hoppaTillRad(index) {
 }
 ```
 
-- [ ] **Steg 5: Koppla klicket och markeringen i `Transkriptlista.svelte`**
+- [x] **Steg 5: Koppla klicket och markeringen i `Transkriptlista.svelte`**
 
 Utöka `<script>`:
 
@@ -1827,7 +1839,7 @@ Lägg till CSS:
   .rad.aktuell .radknapp { background: var(--accent-weak); }
 ```
 
-- [ ] **Steg 6: Kör grindar och test**
+- [x] **Steg 6: Kör grindar och test**
 
 ```bash
 npm run check && npm run build
@@ -1839,11 +1851,11 @@ cd e2e && npm run test:next-foundation -- --grep "klick var som helst|textmarker
 
 Förväntat: `0 ERRORS 0 WARNINGS` och 2 passed.
 
-- [ ] **Steg 7: Tandkontrollera markeringsvakten**
+- [x] **Steg 7: Tandkontrollera markeringsvakten**
 
 Ta bort de två raderna med `markering` ur `klick` och kör om. Testet "en textmarkering hindrar hoppet" ska falla med `currentTime` ≈ 5. Fånga utdatan, återställ.
 
-- [ ] **Steg 8: Commit**
+- [x] **Steg 8: Commit**
 
 ```bash
 git add frontend/src/lib/transkript e2e/transkript.spec.mjs

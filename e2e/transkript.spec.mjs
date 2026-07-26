@@ -383,3 +383,53 @@ test("ett enkelklick i spåret spolar dit, inte bara dragningen", async ({ page 
 
   expect(errors, errors.join("\n")).toEqual([]);
 });
+
+test("ett klick var som helst på raden hoppar dit", async ({ page }) => {
+  const errors = [];
+  failOnConsoleError(page, errors);
+
+  const ruta = await oppnaTranskript(page);
+  const rader = ruta.locator("li.rad");
+
+  // Klicka på TEXTEN, inte på tidkoden. Gamla appen gjorde bara tidkoden
+  // klickbar (app.js:5538 vs 5543-5549).
+  await rader.nth(2).locator(".text").click();
+  let t = await ruta.locator("audio").evaluate((el) => el.currentTime);
+  expect(t, "klicket på radens text spolade inte dit").toBeCloseTo(5.0, 1);
+
+  // Och tidkoden fungerar fortfarande — den ligger i samma knapp.
+  await rader.nth(1).locator(".tid").click();
+  t = await ruta.locator("audio").evaluate((el) => el.currentTime);
+  expect(t, "klicket på tidkoden spolade inte dit").toBeCloseTo(2.4, 1);
+
+  // Stäng rutan. Till skillnad från alla tidigare tester i den här filen har
+  // hoppaTillRad faktiskt startat uppspelning mot RIKTIGA backend-mediet (inget
+  // /api/media-route här) — lämnas rutan öppen håller webbläsaren filen öppen
+  // in i afterEach, och toemArkivets DELETE kan kapplöpa mot den även efter dess
+  // ordinarie omförsök. actions.js:210-214 dokumenterar precis den här vägen:
+  // stängning släpper filen med en gång via slappMedia.
+  await page.keyboard.press("Escape");
+  await expect(ruta).toBeHidden();
+
+  expect(errors, errors.join("\n")).toEqual([]);
+});
+
+test("en textmarkering hindrar hoppet", async ({ page }) => {
+  const errors = [];
+  failOnConsoleError(page, errors);
+
+  const ruta = await oppnaTranskript(page);
+  const rader = ruta.locator("li.rad");
+
+  // Markera texten i sista raden med musen: pointerdown, dra, släpp.
+  const ruta3 = await rader.nth(2).locator(".text").boundingBox();
+  await page.mouse.move(ruta3.x + 4, ruta3.y + ruta3.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(ruta3.x + ruta3.width - 4, ruta3.y + ruta3.height / 2, { steps: 8 });
+  await page.mouse.up();
+
+  const t = await ruta.locator("audio").evaluate((el) => el.currentTime);
+  expect(t, "en markering tolkades som ett hopp — lärare kopierar citat").toBe(0);
+
+  expect(errors, errors.join("\n")).toEqual([]);
+});

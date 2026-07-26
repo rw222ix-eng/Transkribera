@@ -1,6 +1,17 @@
 <script>
   import { tk } from './stores.svelte.js';
-  import { fmtTid } from './tid.js';
+  import { fmtTid, aktuellRad } from './tid.js';
+  import { hoppaTillRad } from './actions.js';
+
+  const aktuell = $derived(aktuellRad(tk.segment, tk.tid));
+
+  function klick(i) {
+    // En pågående textmarkering är inte ett hopp. Utan vakten blir varje
+    // försök att kopiera ett citat en spolning.
+    const markering = window.getSelection();
+    if (markering && !markering.isCollapsed) return;
+    hoppaTillRad(i);
+  }
 </script>
 
 <ol class="rader">
@@ -8,7 +19,7 @@
        bara av actions vid öppning och efter ett lyckat sparande — så någon
        stabilare identitet finns inte att vinna något på. -->
   {#each tk.segment as s, i (i)}
-    <li class="rad" data-rad={i}>
+    <li class="rad" class:aktuell={i === aktuell} data-rad={i}>
       <!-- Hela raden är EN knapp, inte ett <li onclick> med tidkoden som
            separat knapp som i gamla appen (app.js:5538 vs 5543-5549). Skälen:
            ett klick på ett icke-interaktivt element kräver svelte-ignore, och
@@ -16,7 +27,7 @@
            för två; och det tillgängliga namnet blir tidkod plus text, vilket
            är bättre än "Hoppa till 05:12".
            user-select: text i CSS:en nedan håller markeringen vid liv. -->
-      <button type="button" class="radknapp">
+      <button type="button" class="radknapp" onclick={() => klick(i)}>
         <span class="tid">{fmtTid(s.start)}</span>
         <span class="text">{s.text}</span>
       </button>
@@ -56,6 +67,8 @@
     user-select: text;
   }
   .radknapp:hover { background: var(--sunken); }
+  /* Bara bakgrunden, ingen färgad vänsterkant — DESIGN.md §Don't. */
+  .rad.aktuell .radknapp { background: var(--accent-weak); }
   /* Tidkoden är DATA, inte en mikroetikett: var(--sans) med tabular-nums,
      aldrig var(--mono). DESIGN.md §181-183, "The Mono-Is-Labels-Only Rule". */
   .tid {

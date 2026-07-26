@@ -254,3 +254,16 @@ export function cyklaHastighet() {
   tk.hastighet = HASTIGHETER[(i + 1) % HASTIGHETER.length];
   if (mediaEl) mediaEl.playbackRate = tk.hastighet;
 }
+
+/**
+ * Spolar till radens början och startar uppspelningen, som gamla appens
+ * jumpToLine (app.js:2157-2161). Återupptar följandet: ett medvetet hopp är
+ * ett besked om att man vill se var man är.
+ */
+export function hoppaTillRad(index) {
+  const s = tk.segment[index];
+  if (!s) return;
+  tk.foljer = true;
+  spolaTill(s.start ?? 0);
+  if (mediaEl && mediaEl.paused) mediaEl.play().catch(mediaFel);
+}
