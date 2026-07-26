@@ -104,3 +104,108 @@ export async function rensaFilter() {
   insp.filterMonth = '';
   if (rorServern) await laddaLektioner();
 }
+
+/** Öppnar redigeringen. Namnet är MEDVETET inte med — gamla appens saveLesson
+ *  (app.js:1752-1760) skickar aldrig name, och modalen har inget namnfält. */
+export function startaRedigering(l) {
+  insp.editId = l.id;
+  insp.edits = {
+    group: l.group || '',
+    course: l.course || '',
+    sal: l.sal || '',
+    datum: l.datum || '',
+  };
+}
+
+export function avbrytRedigering() {
+  insp.editId = null;
+  insp.edits = { group: '', course: '', sal: '', datum: '' };
+}
+
+/**
+ * Sparar. group_name/course_name SKAPAR klassen eller kursen om den saknas
+ * (server.py:972-979), och ett byte av klass/kurs/datum auto-länkar lektionen
+ * mot en planerad lektion (server.py:987-992). Båda är avsedda och portas som
+ * de är — modalen är alltså ingen ren fältuppdatering.
+ *
+ * Efter sparandet hämtas både lektionerna och organisationslistorna om: en ny
+ * klass ska dyka upp i filtret direkt, utan omladdning. Monteringseffekten i
+ * InspelningarView spårar bara nav.tab och kör inuti untrack(), så ingenting
+ * hämtas om av sig själv — de här två anropen är enda vägen.
+ *
+ * INGEN tredje generationsvakt: laddaLektioner har laddToken och laddaOrg sin
+ * egen orgToken, så Promise.all är redan säkert mot omlott landande svar.
+ *
+ * PATCH skrivs med fetch direkt — api.js exporterar bara getJSON, postJSON och
+ * streamPost.
+ */
+export async function sparaLektion() {
+  const id = insp.editId;
+  if (id == null) return;
+  const e = insp.edits;
+  try {
+    const r = await fetch(`/api/lessons/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        group_name: e.group || '',
+        course_name: e.course || '',
+        sal: e.sal || '',
+        datum: e.datum || '',
+      }),
+    });
+    if (!r.ok) {
+      // Serverns egen text först (t.ex. "okänd klass/kurs", 400, eller
+      // "lektionen finns inte", 404) — den är mer precis än vår reservtext.
+      const j = await r.json().catch(() => null);
+      insp.fel = (j && j.error) || 'Kunde inte spara ändringarna.';
+      return;
+    }
+    insp.fel = '';
+    avbrytRedigering();
+    await Promise.all([laddaLektioner(), laddaOrg()]);
+  } catch {
+    insp.fel = 'Kunde inte spara ändringarna — kontrollera att appen körs.';
+  }
+}
+
+export function fragaRadera(l) {
+  insp.raderId = l.id;
+  insp.raderNamn = l.name || '(namnlös)';
+}
+
+export function avbrytRadera() {
+  insp.raderId = null;
+  insp.raderNamn = '';
+}
+
+/**
+ * Raderar. 409 betyder att resultatmappen är låst — backend har DÅ medvetet
+ * lämnat både lektionen och historikposten intakta (server.py:1027-1035), så
+ * felet MÅSTE nå läraren. Sväljs det står kortet kvar efter nästa hämtning
+ * utan förklaring.
+ *
+ * Vid fel hämtas listan MEDVETET inte om: lektionen finns kvar på servern, så
+ * en omhämtning hade bara ritat om samma kort och riskerat att nolla insp.fel
+ * (laddaLektioner sätter fel = '' vid lyckad hämtning) innan läraren hunnit
+ * läsa beskedet.
+ */
+export async function bekraftaRadera() {
+  const id = insp.raderId;
+  if (id == null) return;
+  try {
+    const r = await fetch(`/api/lessons/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    if (!r.ok) {
+      const j = await r.json().catch(() => null);
+      insp.fel = (j && j.error) || 'Kunde inte radera lektionen.';
+      avbrytRadera();
+      return;
+    }
+    insp.fel = '';
+    avbrytRadera();
+    await laddaLektioner();
+  } catch {
+    insp.fel = 'Kunde inte radera lektionen — kontrollera att appen körs.';
+    avbrytRadera();
+  }
+}

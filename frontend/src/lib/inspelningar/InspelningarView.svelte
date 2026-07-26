@@ -4,10 +4,25 @@
   // designsystemet — gamla vyn är ren inline-CSS med 9-14px hörn.
   import { untrack } from 'svelte';
   import { insp } from './stores.svelte.js';
-  import { laddaLektioner, laddaOrg } from './actions.js';
+  import {
+    laddaLektioner,
+    laddaOrg,
+    startaRedigering,
+    fragaRadera,
+    avbrytRadera,
+    bekraftaRadera,
+  } from './actions.js';
   import Filterrad from './Filterrad.svelte';
   import Kartotek from './Kartotek.svelte';
+  import RedigeraLektion from './RedigeraLektion.svelte';
   import { nav } from '../shell/nav.svelte.js';
+
+  // Fokusmål för raderingsbekräftelsen. $effect körs när blocket monterats in,
+  // alltså efter att insp.raderId satts.
+  let bekraftRuta = $state(null);
+  $effect(() => {
+    if (insp.raderId !== null) bekraftRuta?.focus();
+  });
 
   // Hämtas vid varje NAVIGERING HIT, inte vid montering. KONTROLLERAT
   // (App.svelte:20-22): panelen står i markupen UTAN {#if} och göms bara med
@@ -72,7 +87,64 @@
   <p class="fel-sr" role="status">{insp.fel}</p>
 
   <Filterrad />
-  <Kartotek lektioner={synliga} onRedigera={() => {}} onRadera={() => {}} />
+
+  <!--
+    SYNLIG kopia av live-regionen ovan. Task 1 levererade bara den klippta
+    regionen, och den når skärmläsare men ingen annan — Task 4 är den första
+    som skriver riktiga fel hit, bland dem DELETE-ets 409 ("kunde inte radera
+    mappen — en fil kan vara öppen"). Backend lämnar då MEDVETET både lektionen
+    och historikposten intakta (server.py:1027-1035), så sväljs beskedet står
+    kortet kvar efter nästa hämtning utan förklaring.
+
+    aria-hidden och UTAN egen roll: bara live-regionen ovan ska annonseras.
+    Två annonserande noder i samma vy läses i oförutsägbar ordning — det är
+    precis vad antalsspärren i e2e/transkribera-kalla.spec.mjs finns för.
+    Samma mönster som TranskriberaView.svelte:118. Riktig textnod, inte
+    content: attr(...), så den går att markera, kopiera och Ctrl+F-söka.
+
+    :empty-regeln ligger på DEN HÄR kopian, aldrig på live-regionen —
+    display:none tar bort noden ur tillgänglighetsträdet, och då kan
+    role="status" inte längre annonsera mutationen.
+
+    TESTID:T ÄR "insp-statusrad", inte "statusrad" som Task 4:s brief skrev.
+    Skälet är MÄTT, inte antaget: TranskriberaView bär redan
+    data-testid="statusrad", och App.svelte:16-27 håller ALLA paneler monterade
+    (bara hidden). En andra nod med samma id ger därför strict mode violation i
+    de befintliga spärrarna, som lokaliserar den osäkrat:
+    transkribera-kalla.spec.mjs:50, :64, :137-139 och
+    transkribera-inspelning.spec.mjs:919. Kört och verifierat: "strict mode
+    violation: getByTestId('statusrad') resolved to 2 elements", 2 fällda
+    tester. Ett per-vy-id är dessutom vad de här id:na faktiskt är, och det
+    lämnar de gröna spärrarna orörda i stället för att skriva om dem.
+  -->
+  <p class="fel" aria-hidden="true" data-testid="insp-statusrad">{insp.fel}</p>
+
+  <!--
+    Raderingsbekräftelsen. MEDVETET ingen confirm(): den går varken att styla
+    eller att testa, och den blockerar dessutom hela renderaren. Blocket ligger
+    ovanför kartoteket och tar fokus när det öppnas — annars hamnar det före
+    kortet läraren just tryckte på i DOM-ordningen, och en tangentbordsanvändare
+    skulle behöva backa med Shift+Tab för att hitta det.
+  -->
+  {#if insp.raderId !== null}
+    <div class="bekraft" tabindex="-1" bind:this={bekraftRuta}>
+      <p class="fraga">Ta bort <strong>{insp.raderNamn}</strong>?</p>
+      <p class="brod">
+        Lektionen tas bort ur lektionsdatabasen och historiken, tillsammans med
+        resultatmappen. Filer du själv sparat någon annanstans påverkas inte.
+      </p>
+      <div class="knappar">
+        <button type="button" class="ghost" onclick={avbrytRadera}>Avbryt</button>
+        <button type="button" class="ghost fara" onclick={bekraftaRadera}>Radera</button>
+      </div>
+    </div>
+  {/if}
+
+  <Kartotek lektioner={synliga} onRedigera={startaRedigering} onRadera={fragaRadera} />
+
+  {#if insp.editId !== null}
+    <RedigeraLektion />
+  {/if}
 </section>
 
 <style>
@@ -119,4 +191,34 @@
     margin: 0 0 26px;
     max-width: 52ch;
   }
+  /* Den SYNLIGA felraden. :empty-regeln hör hemma här och ingen annanstans —
+     se kommentaren vid noden. Identisk med .fel i TranskriberaView.svelte:192. */
+  .fel { color: var(--bad); margin: 14px 0 0; }
+  .fel:empty { display: none; }
+
+  .bekraft {
+    margin-top: 16px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--bad);
+    border-radius: 4px;
+    padding: 14px 16px;
+  }
+  .bekraft:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .fraga { font-size: 1.03rem; color: var(--ink); margin: 0; overflow-wrap: anywhere; }
+  .brod { font-size: 0.72rem; color: var(--ink-3); margin: 6px 0 0; max-width: 62ch; }
+  .knappar { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  /* Identisk med .ghost i frontend/src/lib/transkribera/Korning.svelte:284-293. */
+  .ghost {
+    background: transparent;
+    color: var(--ink);
+    border: 1px solid var(--line-2);
+    border-radius: 4px;
+    padding: 9px 18px;
+    font-family: inherit;
+    font-size: inherit;
+    cursor: pointer;
+  }
+  /* Raderingen bär färgen, inte en egen form — samma grepp som på kortet. */
+  .fara { color: var(--bad); }
 </style>
