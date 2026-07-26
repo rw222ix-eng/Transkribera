@@ -623,14 +623,24 @@ export async function laddaMarkorer() {
   .ruta {
     width: min(94vw, 860px);
     max-height: 90vh;
-    display: flex;
-    flex-direction: column;
     background: var(--surface);
     color: var(--ink);
     border: 1px solid var(--line);
     border-radius: 5px;
     box-shadow: var(--shadow);
     padding: 14px 16px;
+  }
+  /* display:flex hör HÄR, inte i .ruta ovan: en författarregel (authors origin)
+     slår webbläsarens dialog:not([open]) { display: none } OAVSETT specificitet
+     — ursprung går före specificitet i cascade-ordningen. .ruta { display: flex }
+     hade alltså tvingat rutan synlig (fast layoutlös/inert) även EFTER close(),
+     eftersom [open] försvinner men klassen .ruta finns kvar. Bekräftat med
+     getComputedStyle: display stod kvar på "flex" trots dialog.open === false.
+     RedigeraLektion.svelte/InspelningarView.svelte:s rutor sätter av samma skäl
+     ALDRIG display alls och får sin block-layout gratis av webbläsaren. */
+  .ruta[open] {
+    display: flex;
+    flex-direction: column;
   }
   /* Samma dimning och samma 42 % som B1:s dialoger. */
   .ruta::backdrop { background: color-mix(in srgb, var(--ink) 42%, transparent); }
@@ -747,7 +757,34 @@ Förväntat: 4 passed.
 
 - [ ] **Steg 13: Tandkontrollera fokusåtergången**
 
-Grinda komponenten i `App.svelte` med `{#if tk.open}` och kör om testet. Det ska falla på `await expect(oppna).toBeFocused()`. Fånga felutdatan ordagrant, återställ sedan `App.svelte`. Passerar testet ändå är assertionen fel.
+Grinda komponenten i `App.svelte` med `{#if tk.open}` och kör om testet.
+
+**Escape-vägen biter inte, och det är väntat.** Webbläsarens egen
+`cancelDialog`-algoritm återställer fokus till den tidigare fokuserade noden
+**synkront**, som en del av samma algoritm som tar bort `open` — alltså innan
+`close`-eventet ens köas. Svelte-effekten som skulle avmontera komponenten hinner
+därför aldrig göra skada på just den vägen. Mätt i den här planen: samma
+tandkontroll mot B1:s `.bekraft`-dialog passerar också trots bruten grind, så
+egenskapen är hela kodbasens, inte den här komponentens.
+
+Vaktan är ändå verklig — den gäller **JS-initierade** stängningar. Kontrollera
+den med Stäng-knappen i stället, fortfarande med `{#if tk.open}` på plats:
+
+```js
+  await ruta.getByRole("button", { name: "Stäng" }).click();
+  await expect(ruta).toBeHidden();
+  await expect(oppna).toBeFocused();   // <-- ska falla här
+```
+
+Väntat fel, ordagrant:
+
+```
+Error: expect(locator).toBeFocused() failed
+Expected: focused
+Received: inactive
+```
+
+Återställ `App.svelte` efteråt.
 
 - [ ] **Steg 14: Commit**
 
