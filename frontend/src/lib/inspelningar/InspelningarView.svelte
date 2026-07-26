@@ -3,6 +3,23 @@
   // viewRecordings (app/web/static/app.js:4776-4956), omstylad till
   // designsystemet — gamla vyn är ren inline-CSS med 9-14px hörn.
   import { insp } from './stores.svelte.js';
+  import { laddaLektioner, laddaOrg } from './actions.js';
+  import Kartotek from './Kartotek.svelte';
+
+  // Hämtas när vyn monteras. KONTROLLERAT (App.svelte:20-22): panelen står i
+  // markupen UTAN {#if} och göms bara med hidden, så den här vyn monteras EN
+  // gång och avmonteras aldrig vid flikbyte — effekten kör alltså inte om per
+  // flikbyte. (Plan A4 brändes av det motsatta antagandet en nivå längre ned,
+  // där komponenten satt inuti ett {#if} och verkligen monterades om.)
+  //
+  // Effekten läser dessutom insp.filterGroup/filterCourse, eftersom
+  // laddaLektioner hinner läsa dem synkront innan sitt första await. Det är
+  // avsiktligt: serverfiltren MÅSTE ge en ny hämtning. Task 3 ska därför bara
+  // sätta dem, inte anropa laddaLektioner() en extra gång.
+  $effect(() => {
+    laddaOrg();
+    laddaLektioner();
+  });
 </script>
 
 <section class="view">
@@ -30,6 +47,8 @@
     synliga panelen, vilket är vad den hela tiden menade.
   -->
   <p class="fel-sr" role="status">{insp.fel}</p>
+
+  <Kartotek lektioner={insp.lessons} onRedigera={() => {}} onRadera={() => {}} />
 </section>
 
 <style>
