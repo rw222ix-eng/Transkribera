@@ -200,6 +200,7 @@ export default defineConfig({
         /transkribera-installningar\.spec\.mjs$/,
         /transkribera-korning\.spec\.mjs$/,
         /transkribera-inspelning\.spec\.mjs$/,
+        /transkript\.spec\.mjs$/,
       ],
       use: { ...devices["Desktop Chrome"] },
     },

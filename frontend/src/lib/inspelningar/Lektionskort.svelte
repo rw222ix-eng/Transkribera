@@ -1,8 +1,14 @@
 <script>
   // Ett lektionskort. Speglar app.js:4917-4946 funktionellt, omstylat till
-  // designsystemet. Att ÖPPNA lektionen ingår inte i B1 — transkriptvyn kommer
-  // i plan B2 och lektionschatten i B4.
+  // designsystemet. Att öppna lektionen kom i plan B2; lektionschatten kommer
+  // i B4.
   import { kursFarg } from './kursfarg.js';
+  // Action:en importeras DIREKT i stället för att komma som prop, till
+  // skillnad från onRedigera och onRadera. De muterar Inspelningar-vyns egen
+  // store och hör därför hemma hos vyn; transkriptvyn är en global modal som
+  // ingen flik äger. Dessutom kommer kortets props från InspelningarView.svelte,
+  // som ägs av ström B — en prop till hade krävt en ändring i deras fil.
+  import { oppnaTranskriptFor } from '../transkript/actions.js';
 
   let { l, onRedigera, onRadera } = $props();
 
@@ -38,6 +44,7 @@
   <p class="tagg" data-cc={farg}>{etikett}</p>
   <p class="meta">{meta}{l.sal ? ' · ' + l.sal : ''}</p>
   <div class="knappar">
+    <button type="button" class="ghost" onclick={() => oppnaTranskriptFor(l.history_id, l.name)}>Öppna</button>
     <button type="button" class="ghost" onclick={() => onRedigera(l)}>Redigera</button>
     <button type="button" class="ghost fara" onclick={() => onRadera(l)}>Radera</button>
   </div>

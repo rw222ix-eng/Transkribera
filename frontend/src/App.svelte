@@ -5,6 +5,7 @@
   import InspelningarView from './lib/inspelningar/InspelningarView.svelte';
   import PlaneringView from './lib/planering/PlaneringView.svelte';
   import ArkivView from './lib/arkiv/ArkivView.svelte';
+  import TranskriptModal from './lib/transkript/TranskriptModal.svelte';
 </script>
 
 <AppShell />
@@ -25,6 +26,11 @@
   <PlaneringView />
   <ArkivView />
 </div>
+
+<!-- Transkriptvyn monteras EN gång, utanför flikpanelerna: den delas av
+     Inspelningar och Transkribera, och en <dialog> i en hidden panel ritas
+     inte men blockerar dokumentet. Utanför panelerna finns inte problemet. -->
+<TranskriptModal />
 
 <style>
   /* Explicit — så att ingen framtida display-regel på div råkar besegra
