@@ -19,6 +19,7 @@
   import Agenda from './Agenda.svelte';
   import NastaLektion from './NastaLektion.svelte';
   import Terminstrender from './Terminstrender.svelte';
+  import Sokfalt from './Sokfalt.svelte';
   import RedigeraLektion from './RedigeraLektion.svelte';
   import { nav } from '../shell/nav.svelte.js';
 
@@ -164,6 +165,13 @@
     lämnar de gröna spärrarna orörda i stället för att skriva om dem.
   -->
   <p class="fel" class:info={insp.felArt === 'info'} aria-hidden="true" data-testid="insp-statusrad">{insp.fel}</p>
+
+  <!--
+    SÖKET ligger under filterraden, inte över den. Det är OFILTRERAT —
+    api_search tar inga filterparametrar — och läggs det ovanför filtren
+    antyder placeringen att de gäller det, vilket de inte gör.
+  -->
+  <Sokfalt />
 
   <!--
     PANELERNA (B5) ligger HÄR, mellan filterraden och kartoteket, precis som i
