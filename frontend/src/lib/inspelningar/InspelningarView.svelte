@@ -17,6 +17,7 @@
   import Filterrad from './Filterrad.svelte';
   import Kartotek from './Kartotek.svelte';
   import Agenda from './Agenda.svelte';
+  import NastaLektion from './NastaLektion.svelte';
   import RedigeraLektion from './RedigeraLektion.svelte';
   import { nav } from '../shell/nav.svelte.js';
 
@@ -171,6 +172,7 @@
     än" före sin agenda.
   -->
   <Agenda />
+  <NastaLektion />
 
   <Kartotek lektioner={synliga} onRedigera={startaRedigering} onRadera={fragaRadera} />
 
