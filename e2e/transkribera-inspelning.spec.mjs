@@ -565,7 +565,7 @@ test("Inspelning (/next/): varje förlorad bit räknas upp och läraren får vet
   await page.getByRole("button", { name: "Starta inspelning", exact: true }).click();
 
   const fel = page.locator("p.rec-fel");
-  const region = page.locator("section.view p.fel-sr");
+  const region = page.locator(".pane:not([hidden]) section.view p.fel-sr");
   const fyra =
     "Nätverket svarade inte. 4 sekunder av inspelningen gick förlorade. Inspelningen fortsätter.";
   const atta =
@@ -652,7 +652,7 @@ test("Inspelning (/next/): ett nätverksfel ger ETT omförsök för samma bit, u
   // Ingen feltext — omförsöket räddade biten. Vakten läser varje DOM-mutation,
   // så inte ens en blinkande text går förbi.
   await expect(page.locator("p.rec-fel")).toHaveText("");
-  await expect(page.locator("section.view p.fel-sr")).toHaveText("");
+  await expect(page.locator(".pane:not([hidden]) section.view p.fel-sr")).toHaveText("");
   const blinkat = await page.evaluate(() => window.__e2eRecFel);
   expect(blinkat, "Felraden visade text trots att omförsöket lyckades: " + blinkat.join(" | "))
     .toEqual([]);
@@ -865,7 +865,7 @@ test("Inspelning (/next/): nekad mikrofon ger ett begripligt besked och ingen br
   const fel = page.locator("p.rec-fel");
   await expect(fel).toHaveText(besked);
   await expect(fel).toBeVisible();
-  await expect(page.locator("section.view p.fel-sr")).toHaveText(besked);
+  await expect(page.locator(".pane:not([hidden]) section.view p.fel-sr")).toHaveText(besked);
 
   // Inget halvstartat tillstånd: ingen bricka, ingen timer, och knappen går att
   // trycka igen så fort läraren släppt fram mikrofonen.

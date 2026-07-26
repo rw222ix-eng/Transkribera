@@ -167,9 +167,17 @@ test("Transkribera (/next/): misslyckad nedladdning av ljudmodellen visar fel p�
 //   2. det är SAMMA DOM-nod efteråt — noden märks med en expando som måste
 //      överleva. Monteras regionen om i stället för att mutera försvinner
 //      märket, och skärmläsaren annonserar ingenting,
-//   3. antalet [role="status"] inuti section.view är oförändrat — två
-//      samtidigt muterande live-regioner läses i oförutsägbar ordning, vilket
-//      är varför inspelningswidgeten medvetet saknar en egen.
+//   3. antalet [role="status"] inuti den SYNLIGA panelens section.view är
+//      oförändrat — två samtidigt muterande live-regioner läses i
+//      oförutsägbar ordning, vilket är varför inspelningswidgeten medvetet
+//      saknar en egen.
+//
+// Om avgränsningen ".pane:not([hidden])": App.svelte göms per flik med hidden,
+// inte genom att avmontera, så varje migrerad vy ligger kvar i DOM:en samtidigt
+// — och varje vy har rätteligen sin egen permanenta live-region. En
+// sidoövergripande räkning fällde därför plan B1:s nya Inspelningar-vy för att
+// den gjorde rätt. Att en dold panels region inte kan annonsera är garanterat:
+// .pane[hidden] är display:none, alltså borta ur tillgänglighetsträdet.
 //
 // Ingen fejkmikrofon behövs: felet som framkallas är tr.fileError ur addUrl
 // (ogiltig länk), samma väg som testet överst i filen redan använder. Regionen
@@ -180,8 +188,14 @@ test("Transkribera (/next/): live-regionen är permanent och muterar i stället 
 
   await page.goto("/next/");
 
-  const region = page.locator("section.view p.fel-sr");
-  const liveRegioner = page.locator('section.view [role="status"]');
+  // Avgränsat till den SYNLIGA panelen. App.svelte göms per flik med hidden,
+  // inte {#if}, så alla vyers paneler ligger kvar i DOM:en samtidigt — och
+  // varje vy har (rätteligen) sin egen permanenta live-region. En sidoövergripande
+  // räkning skulle därför fälla varje ny vy som gör rätt. Att en dold panels
+  // region inte kan annonsera är dessutom garanterat: .pane[hidden] är
+  // display:none, vilket tar bort den ur tillgänglighetsträdet.
+  const region = page.locator(".pane:not([hidden]) section.view p.fel-sr");
+  const liveRegioner = page.locator('.pane:not([hidden]) section.view [role="status"]');
 
   // 1) Regionen finns FÖRE felet — tom, men på plats och med role="status".
   await expect(region).toHaveCount(1);
