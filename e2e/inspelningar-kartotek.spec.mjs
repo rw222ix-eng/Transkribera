@@ -311,7 +311,18 @@ test("Inspelningar (/next/): kartoteket grupperar per vecka med rätt antal", as
   // Veckorubrikerna, nyaste först. <h2> är ett krav och inte bara stil: vyns
   // <h1> följs av korten på <h3>, så utan en rubriknivå per vecka finns ingen
   // väg för en skärmläsare att hoppa mellan veckorna.
-  await expect(vy.getByRole("heading", { level: 2 })).toHaveText(["Vecka 14", "Vecka 13"]);
+  //
+  // AVGRÄNSAT TILL .grupp (plan B5, upptäckt av inspelningar-paneler.spec.mjs):
+  // Agenda.svelte lägger en egen <h2>"Kommande" direkt i vyn, alltid synlig så
+  // fort agendan laddats — även tom, vilket är en avsiktlig, testad regel
+  // (specens avsnitt 4: agendan gäller tvärs alla klasser och ska alltid
+  // finnas). En osäkrad vy.getByRole("heading", {level:2}) fångar därför även
+  // den rubriken och fäller ordningen nedan. Kartoteket ägs av .grupp, så det
+  // är rätt avgränsning — inte ett svagare krav.
+  await expect(vy.locator(".grupp").getByRole("heading", { level: 2 })).toHaveText([
+    "Vecka 14",
+    "Vecka 13",
+  ]);
 
   // Spannet och antalet står bredvid rubriken. Antalet är den enda kontrollen
   // av att grupperingen räknar rätt — två kort i den ena veckan, ett i den
@@ -605,7 +616,9 @@ test("Inspelningar (/next/): raderingen skickar DELETE och kortet försvinner", 
 
   // Vecka 13 hade bara det kortet — hela gruppen ska vara borta, inte stå kvar
   // tom med rubrik och "0 inspelningar".
-  await expect(vy.getByRole("heading", { level: 2 })).toHaveText(["Vecka 14"]);
+  //
+  // AVGRÄNSAT TILL .grupp — se motiveringen vid samma mönster ovan (rad ~314).
+  await expect(vy.locator(".grupp").getByRole("heading", { level: 2 })).toHaveText(["Vecka 14"]);
 
   // Och raderingen nådde disken: efter en omhämtning är kortet fortfarande
   // borta.
