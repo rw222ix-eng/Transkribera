@@ -1874,7 +1874,7 @@ git commit -m "feat(transkript): gör hela raden klickbar och markera den som sp
 - Consumes: `tk.foljer`, `aktuell` från task 5.
 - Produces: inga exporter. `Transkriptlista` renderar knappen "Följ uppspelningen" när `!tk.foljer`.
 
-- [ ] **Steg 1: Skriv det fallerande testet**
+- [x] **Steg 1: Skriv det fallerande testet**
 
 ```js
 test("egen scroll släpper följandet och knappen tar tillbaka det", async ({ page }) => {
@@ -1899,7 +1899,7 @@ test("egen scroll släpper följandet och knappen tar tillbaka det", async ({ pa
 });
 ```
 
-- [ ] **Steg 2: Kör och se det falla**
+- [x] **Steg 2: Kör och se det falla**
 
 ```bash
 cd e2e && npm run test:next-foundation -- --grep "egen scroll släpper"
@@ -1907,7 +1907,7 @@ cd e2e && npm run test:next-foundation -- --grep "egen scroll släpper"
 
 Förväntat: FAIL på `await expect(folj).toHaveCount(1)` — hjulsvepet gör ingenting.
 
-- [ ] **Steg 3: Lägg följandet i `Transkriptlista.svelte`**
+- [x] **Steg 3: Lägg följandet i `Transkriptlista.svelte`**
 
 Lägg till i `<script>`:
 
@@ -1987,7 +1987,52 @@ och CSS:
   }
 ```
 
-- [ ] **Steg 4: Kör grindar och test**
+**AVVIKELSE UPPTÄCKT UNDER IMPLEMENTATIONEN:** `{#if !tk.foljer}` ovan monterar och
+avmonterar raden, vilket ändrar `<dialog>`:ens innehållshöjd. `<dialog>` är
+`position: fixed` och centreras av webbläsaren med `margin: auto`, så en
+höjdändring flyttar HELA rutan. Ett vanligt radklick (pointerdown släpper
+följandet, click kallar `hoppaTillRad` som tar tillbaka det) hann då flytta
+raden undan musen mellan pointerdown och click — mätt: rutans höjd växte
+250,7px → 298,7px, toppen flyttade 234,7px → 210,7px (exakt halva
+höjdökningen). Testet "ett klick var som helst på raden hoppar dit" (task 5)
+gick från grönt till rött av detta. Ett första försök att lösa det med
+`position: absolute` (knappen ovanpå listan i stället för att skjuta den)
+bytte ut felet mot ett värre: stripen låg då över hela sista radens bredd och
+tystade varje klick OCH varje textmarkeringsdrag som korsade den — "en
+textmarkering hindrar hoppet" (task 5) gick då från grönt till rött i stället.
+
+Den faktiska implementationen håller `.folj-rad` **alltid monterad** (ingen
+`{#if}`) och döljer den med en klass i stället:
+
+```svelte
+<div class="folj-rad" class:dold={tk.foljer}>
+  <button type="button" class="ghost" onclick={() => (tk.foljer = true)}>Följ uppspelningen</button>
+</div>
+```
+
+```css
+  .folj-rad { margin-top: 8px; }
+  .folj-rad.dold { visibility: hidden; }
+  .ghost {
+    background: transparent;
+    color: var(--ink);
+    border: 1px solid var(--line-2);
+    border-radius: 4px;
+    padding: 9px 18px;
+    font-family: inherit;
+    font-size: inherit;
+    cursor: pointer;
+  }
+```
+
+Höjden är konstant redan från montering — ingen omcentrering, oavsett hur
+`tk.foljer` växlar. `visibility: hidden` (inte `display: none`) behåller
+platsen men tar bort knappen ur tillgänglighetsträdet och tabbordningen, så
+`getByRole(...).toHaveCount(0)` fortfarande stämmer när man följer. Se
+kommentaren vid `.folj-rad` i `Transkriptlista.svelte` för den fullständiga
+motiveringen.
+
+- [x] **Steg 4: Kör grindar och test**
 
 ```bash
 npm run check && npm run build
@@ -1999,7 +2044,7 @@ cd e2e && npm run test:next-foundation -- --grep "egen scroll släpper"
 
 Förväntat: `0 ERRORS 0 WARNINGS` och 1 passed.
 
-- [ ] **Steg 5: Tandkontrollera att radklicket vinner över pointerdown**
+- [x] **Steg 5: Tandkontrollera att radklicket vinner över pointerdown**
 
 Lägg till detta test och kör det — det ska passera direkt, men det vaktar ordningen mellan `pointerdown` och `click`:
 
@@ -2022,7 +2067,7 @@ test("ett radklick återtar följandet trots att pointerdown släpper det", asyn
 
 Ta bort `tk.foljer = true;` ur `hoppaTillRad` i `actions.js` och kör om — testet ska falla. Återställ.
 
-- [ ] **Steg 6: Commit**
+- [x] **Steg 6: Commit**
 
 ```bash
 git add frontend/src/lib/transkript e2e/transkript.spec.mjs

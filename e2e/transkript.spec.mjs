@@ -433,3 +433,45 @@ test("en textmarkering hindrar hoppet", async ({ page }) => {
 
   expect(errors, errors.join("\n")).toEqual([]);
 });
+
+test("egen scroll släpper följandet och knappen tar tillbaka det", async ({ page }) => {
+  const errors = [];
+  failOnConsoleError(page, errors);
+
+  const ruta = await oppnaTranskript(page);
+  const folj = ruta.getByRole("button", { name: "Följ uppspelningen" });
+
+  // Följer från start: knappen ska inte finnas.
+  await expect(folj).toHaveCount(0);
+
+  // Ett hjulsvep i listan släpper följandet.
+  await ruta.locator("ol.rader").hover();
+  await page.mouse.wheel(0, 120);
+  await expect(folj).toHaveCount(1);
+
+  await folj.click();
+  await expect(folj).toHaveCount(0);
+
+  expect(errors, errors.join("\n")).toEqual([]);
+});
+
+test("ett radklick återtar följandet trots att pointerdown släpper det", async ({ page }) => {
+  const errors = [];
+  failOnConsoleError(page, errors);
+
+  const ruta = await oppnaTranskript(page);
+  await ruta.locator("ol.rader").hover();
+  await page.mouse.wheel(0, 120);
+  await expect(ruta.getByRole("button", { name: "Följ uppspelningen" })).toHaveCount(1);
+
+  await ruta.locator("li.rad").nth(1).locator(".text").click();
+  await expect(ruta.getByRole("button", { name: "Följ uppspelningen" })).toHaveCount(0);
+
+  // Radklicket har startat uppspelning mot RIKTIGA backend-mediet, som i "ett
+  // klick var som helst på raden hoppar dit" ovan — stäng rutan så filen
+  // släpps innan afterEach:s DELETE.
+  await page.keyboard.press("Escape");
+  await expect(ruta).toBeHidden();
+
+  expect(errors, errors.join("\n")).toEqual([]);
+});

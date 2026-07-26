@@ -12,9 +12,51 @@
     if (markering && !markering.isCollapsed) return;
     hoppaTillRad(i);
   }
+
+  let lista = $state(null);
+
+  /**
+   * Släpper följandet när LÄRAREN flyttar sig, aldrig när vi själva gör det.
+   *
+   * Lyssnarna bindes imperativt i en use:-action i stället för som
+   * onwheel/onkeydown-attribut: som attribut hade de fällt
+   * a11y_no_noninteractive_element_interactions på <ol>, och repot har noll
+   * svelte-ignore. Det är dessutom sant — det här är gester, inte affordanser.
+   *
+   * scroll-eventet duger INTE: det kan inte skilja vår egen scrollIntoView
+   * från lärarens, så följandet hade stängt av sig självt vid första raden.
+   */
+  function slappVidEgenScroll(el) {
+    const NAVTANGENTER = ['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End'];
+    const slapp = () => { tk.foljer = false; };
+    // pointerdown fyras även när man klickar en rad — men radklicket kallar
+    // hoppaTillRad, som sätter tillbaka foljer. Ordningen (pointerdown före
+    // click) gör att återtagningen vinner.
+    const paTangent = (e) => { if (NAVTANGENTER.includes(e.key)) tk.foljer = false; };
+
+    el.addEventListener('wheel', slapp, { passive: true });
+    el.addEventListener('touchmove', slapp, { passive: true });
+    el.addEventListener('pointerdown', slapp);
+    el.addEventListener('keydown', paTangent);
+    return {
+      destroy() {
+        el.removeEventListener('wheel', slapp);
+        el.removeEventListener('touchmove', slapp);
+        el.removeEventListener('pointerdown', slapp);
+        el.removeEventListener('keydown', paTangent);
+      },
+    };
+  }
+
+  $effect(() => {
+    const i = aktuell;
+    if (!tk.foljer || !lista || i < 0) return;
+    const rad = lista.querySelector(`[data-rad="${i}"]`);
+    rad?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  });
 </script>
 
-<ol class="rader">
+<ol class="rader" bind:this={lista} use:slappVidEgenScroll>
   <!-- Nyckeln är indexet. Listan byts ALLTID ut i sin helhet — segment sätts
        bara av actions vid öppning och efter ett lyckat sparande — så någon
        stabilare identitet finns inte att vinna något på. -->
@@ -34,6 +76,12 @@
     </li>
   {/each}
 </ol>
+
+<!-- ALLTID monterad (inte {#if}-grindad som planen anger) — se motiveringen
+     vid .folj-rad nedan. class:dold döljer den utan att avmontera. -->
+<div class="folj-rad" class:dold={tk.foljer}>
+  <button type="button" class="ghost" onclick={() => (tk.foljer = true)}>Följ uppspelningen</button>
+</div>
 
 <style>
   .rader {
@@ -79,4 +127,53 @@
     color: var(--ink-3);
   }
   .text { overflow-wrap: anywhere; }
+  /*
+   * ALLTID monterad (class:dold i stället för {#if !tk.foljer} som planen
+   * anger, docs/superpowers/plans/2026-07-26-transkribera-B2-transkriptvyn.md,
+   * Task 6 steg 3). UPPTÄCKT UNDER IMPLEMENTATIONEN (avviker alltså från
+   * planen), i två steg:
+   *
+   * 1. Montera/avmontera raden ändrar <dialog>:ens innehållshöjd. <dialog>
+   *    är position: fixed och centreras av webbläsaren med margin: auto — en
+   *    höjdändring FLYTTAR HELA RUTAN. Ett vanligt radklick (pointerdown
+   *    släpper följandet, click kallar hoppaTillRad som tar tillbaka det)
+   *    hinner då flytta raden undan musen mellan pointerdown och click, och
+   *    klicket missar helt. Uppmätt: rutans höjd växte 250,7px → 298,7px och
+   *    toppen flyttade 234,7px → 210,7px (exakt halva höjdökningen) — ett
+   *    äkta felklick, inte bara ett testartefakt, eftersom musen INTE flyttar
+   *    sig bara för att sidan gör det. Test "ett klick var som helst på
+   *    raden hoppar dit" (task 5) fångade detta.
+   *
+   * 2. Försöket att lösa (1) med position: absolute (knappen läggs OVANPÅ
+   *    listan i stället för att skjuta den) bytte ut det felet mot ett värre:
+   *    stripen låg då över HELA sista radens bredd och tystade varje klick
+   *    och varje textmarkeringsdrag som passerade den — testet "en
+   *    textmarkering hindrar hoppet" (task 5) började då HOPPA i stället för
+   *    att markera, eftersom dragets väg korsade knappens klickbara yta och
+   *    bröt webbläsarens markeringsalgoritm.
+   *
+   * Lösningen är alltså inte att flytta raden ur flödet utan att aldrig ändra
+   * dess NÄRVARO: höjden är konstant redan från montering, och tk.foljer
+   * växlar bara synligheten. visibility: hidden (inte display: none) behåller
+   * platsen — ingen höjdändring, alltså ingen omcentrering — och tar samtidigt
+   * bort knappen ur tillgänglighetsträdet och tabbordningen, så
+   * getByRole(...).toHaveCount(0) fortfarande stämmer när man följer.
+   */
+  .folj-rad {
+    margin-top: 8px;
+  }
+  .folj-rad.dold {
+    visibility: hidden;
+  }
+  /* Identisk med .ghost i frontend/src/lib/transkribera/Korning.svelte:284-293. */
+  .ghost {
+    background: transparent;
+    color: var(--ink);
+    border: 1px solid var(--line-2);
+    border-radius: 4px;
+    padding: 9px 18px;
+    font-family: inherit;
+    font-size: inherit;
+    cursor: pointer;
+  }
 </style>
