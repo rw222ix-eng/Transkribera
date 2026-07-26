@@ -90,24 +90,26 @@ test("Planeringsarkiv (/next/): lista, ordsök utan styrtecken, Rensa och Fråga
   // är helt deterministisk i fejkläget — svaret beror aldrig på frågans
   // innehåll, bara på att minst en arkivpost matchar frågans innehållsord.
   //
-  // AVGRÄNSAT TILL .arkiv (plan B3a lade ett EGET sökfält med SAMMA
-  // aria-label, "Sök i arkivet", i Inspelningar-fliken — Sokfalt.svelte).
-  // App.svelte håller alla flikar monterade och göms bara med hidden, så båda
-  // fälten ligger i DOM:en samtidigt — en osäkrad page.getByLabel(...) fäller
-  // "strict mode violation" oavsett vilken flik som råkar vara synlig, eftersom
-  // getByLabel (till skillnad från getByRole) inte självavgränsar mot dolda
-  // paneler (en dold panel är display:none och alltså ute ur
-  // tillgänglighetsträdet, men getByLabel bryr sig inte om det). Samma mönster
-  // som .grupp-avgränsningen i inspelningar-kartotek.spec.mjs (upptäckt av
-  // inspelningar-paneler.spec.mjs, plan B5) — .arkiv är för övrigt redan den
-  // avgränsning resten av den här specen använder (rad 70, 72, 80, 86 nedan).
+  // KOSTNADSFRI AVGRÄNSNING: getByRole (plan B3a lade ett EGET sökfält med
+  // SAMMA aria-label, "Sök i arkivet", i Inspelningar-fliken —
+  // Sokfalt.svelte). App.svelte håller alla flikar monterade och göms bara med
+  // hidden, så båda fälten ligger i DOM:en samtidigt — men en dold panel är
+  // display:none och alltså ute ur tillgänglighetsträdet, och getByRole
+  // SJÄLVAVGRÄNSAR mot det, till skillnad från getByLabel. Ett osäkrat
+  // page.getByLabel(...) fällde därför "strict mode violation" här oavsett
+  // vilken flik som råkade vara synlig; page.getByRole("textbox", …) gör inte
+  // det. Samma princip som .grupp-avgränsningen i
+  // inspelningar-kartotek.spec.mjs (upptäckt av inspelningar-paneler.spec.mjs,
+  // plan B5) löser med en container-klass — getByRole löser den här utan att
+  // behöva någon.
   //
-  // GER UPP: den OAVSIKTLIGA egenskapen en osäkrad lokator råkade bevisa på
-  // köpet — att sidan bara innehöll ETT fält med den här etiketten. Den
-  // egenskapen vaktas inte längre här: "Sök i arkivet" är nu en medvetet DELAD
-  // etikett mellan planeringsarkivets frågefält och inspelningsarkivets
-  // sökfält (båda söker faktiskt i ett arkiv), inte ett missöde att laga.
-  const searchField = page.locator(".arkiv").getByLabel("Sök i arkivet");
+  // GER INGET UPP: "Sök i arkivet" är en medvetet DELAD etikett mellan
+  // planeringsarkivets frågefält och inspelningsarkivets sökfält (båda söker
+  // faktiskt i ett arkiv). Egenskapen en lokator ska bevisa är "bara ETT
+  // NÅBART fält bär den här etiketten" — och det bevisar getByRole fortfarande,
+  // eftersom rollnamnet självavgränsar mot allt som ligger utanför
+  // tillgänglighetsträdet.
+  const searchField = page.getByRole("textbox", { name: "Sök i arkivet" });
   await searchField.fill("Arkivprobet");
   await page.getByRole("button", { name: "Fråga", exact: true }).click();
   await expect(page.locator(".svar .fraga")).toHaveText("Arkivprobet");
