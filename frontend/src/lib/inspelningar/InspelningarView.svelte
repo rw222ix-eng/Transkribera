@@ -130,7 +130,7 @@
     HELA sidan och fällde därför den här noden; den är nu avgränsad till den
     synliga panelen, vilket är vad den hela tiden menade.
   -->
-  <p class="fel-sr" role="status">{insp.fel}</p>
+  <p class="fel-sr" class:info={insp.felArt === 'info'} role="status">{insp.fel}</p>
 
   <Filterrad />
 
@@ -163,7 +163,7 @@
     tester. Ett per-vy-id är dessutom vad de här id:na faktiskt är, och det
     lämnar de gröna spärrarna orörda i stället för att skriva om dem.
   -->
-  <p class="fel" aria-hidden="true" data-testid="insp-statusrad">{insp.fel}</p>
+  <p class="fel" class:info={insp.felArt === 'info'} aria-hidden="true" data-testid="insp-statusrad">{insp.fel}</p>
 
   <!--
     PANELERNA (B5) ligger HÄR, mellan filterraden och kartoteket, precis som i
@@ -352,6 +352,10 @@
      se kommentaren vid noden. Identisk med .fel i TranskriberaView.svelte:192. */
   .fel { color: var(--bad); margin: 14px 0 0; }
   .fel:empty { display: none; }
+  /* Neutrala besked (exportens "N poster sparade i …") målas INTE i --bad —
+     de är inget fel. Speglar .fel.info i TranskriberaView.svelte:194 ordagrant;
+     samma mönster, samma token. */
+  .fel.info { color: var(--ink-3); }
 
   /* Båda tomtillstånden bär samma form — skillnaden ligger i TEXTEN, inte i
      utseendet. Löpande text i typrampens brödstorlek, ingen ram och ingen

@@ -14,6 +14,12 @@ export const insp = $state({
 
   laddar: false,        // en hämtning av lektionslistan pågår
   fel: '',              // vyns statusrad — fel OCH neutrala besked
+  // 'info' | ''. Styr om statusraden målas som fel (--bad) eller neutral
+  // (--ink-3) — speglar tr.fileNoteArt i frontend/src/lib/transkribera/
+  // stores.svelte.js. Bara exportens framgångsgren sätter 'info'; allt annat
+  // som skriver insp.fel nollställer den, så ett kvarstående positivt besked
+  // inte kan färga ett senare RIKTIGT fel som neutralt.
+  felArt: '',
 
   editId: null,         // lektionen som redigeras, eller null
   edits: { group: '', course: '', sal: '', datum: '' },

@@ -37,10 +37,12 @@ export async function laddaLektioner() {
     if (token !== laddToken) return;
     insp.lessons = Array.isArray(res) ? res : [];
     insp.fel = '';
+    insp.felArt = '';
   } catch {
     if (token !== laddToken) return;
     insp.lessons = [];
     insp.fel = 'Kunde inte läsa lektionerna — starta om appen och försök igen.';
+    insp.felArt = '';
   } finally {
     // finally kör även vid de tidiga return:erna ovan, så laddindikatorn
     // måste vara token-vaktad den också — annars släcker ett gammalt svar
@@ -76,6 +78,7 @@ export async function laddaOrg() {
   insp.courses = c.status === 'fulfilled' ? (c.value?.courses ?? c.value ?? []) : [];
   if (g.status === 'rejected' || c.status === 'rejected') {
     insp.fel = 'Kunde inte läsa klasser och kurser — filtren kan vara ofullständiga.';
+    insp.felArt = '';
   }
 }
 
@@ -170,6 +173,7 @@ export async function rensaFilter() {
  *  radering — kvar och läses som om det gällde den här redigeringen. */
 export function startaRedigering(l) {
   insp.fel = '';
+  insp.felArt = '';
   insp.editId = l.id;
   insp.edits = {
     group: l.group || '',
@@ -241,9 +245,11 @@ export async function sparaLektion() {
       // "lektionen finns inte", 404) — den är mer precis än vår reservtext.
       const j = await r.json().catch(() => null);
       insp.fel = (j && j.error) || 'Kunde inte spara ändringarna.';
+      insp.felArt = '';
       return;
     }
     insp.fel = '';
+    insp.felArt = '';
     // Stäng bara den dialog vi faktiskt sparade. Hann läraren stänga den och
     // öppna en annan lektion medan PATCH:en var i luften vore det den NYA
     // dialogen som försvann här — med hennes oskrivna ändringar i.
@@ -251,6 +257,7 @@ export async function sparaLektion() {
     await Promise.all([laddaLektioner(), laddaOrg()]);
   } catch {
     insp.fel = 'Kunde inte spara ändringarna — kontrollera att appen körs.';
+    insp.felArt = '';
   } finally {
     // Vaktad av samma skäl som vakterna ovan: har en nyare PATCH mot en annan
     // lektion redan tagit över flaggan ska det här svaret inte släppa dess
@@ -265,6 +272,7 @@ export async function sparaLektion() {
  *  visuellt ovanpå frågan om nästa lektion. */
 export function fragaRadera(l) {
   insp.fel = '';
+  insp.felArt = '';
   insp.raderId = l.id;
   insp.raderNamn = l.name || '(namnlös)';
 }
@@ -310,14 +318,17 @@ export async function bekraftaRadera() {
     if (!r.ok) {
       const j = await r.json().catch(() => null);
       insp.fel = (j && j.error) || 'Kunde inte radera lektionen.';
+      insp.felArt = '';
       if (insp.raderId === id) avbrytRadera();
       return;
     }
     insp.fel = '';
+    insp.felArt = '';
     if (insp.raderId === id) avbrytRadera();
     await laddaLektioner();
   } catch {
     insp.fel = 'Kunde inte radera lektionen — kontrollera att appen körs.';
+    insp.felArt = '';
     if (insp.raderId === id) avbrytRadera();
   } finally {
     // Vaktad: har läraren hunnit be om en annan radering äger det anropet
@@ -435,11 +446,19 @@ export function vaxlaAgenda() {
  * texten "Kunde inte markera åtgärden som klar" beror uteslutande på att ingen
  * av de tre laddarna kan kasta — de har alla egen try/catch. Gör någon av dem
  * kastande måste raden flyttas ut ur try:et.
+ *
+ * insp.fel nollställs DIREKT EFTER dubbelklicksvakten, till skillnad från
+ * startaRedigering/fragaRadera/exporteraIcs i samma fil — Task 2 missade det
+ * här. Utan nollställningen står ett kvarstående besked (exportens "N poster
+ * sparade i …", till exempel) kvar genom hela PATCH-rundturen och läses som om
+ * det gällde bocken.
  */
 export async function markeraKlar(insightId) {
   if (insightId == null) return;
   if (insp.markerar === insightId) return;
   insp.markerar = insightId;
+  insp.fel = '';
+  insp.felArt = '';
   try {
     const r = await fetch(`/api/insights/${encodeURIComponent(insightId)}`, {
       method: 'PATCH',
@@ -449,12 +468,15 @@ export async function markeraKlar(insightId) {
     if (!r.ok) {
       const j = await r.json().catch(() => null);
       insp.fel = (j && j.error) || 'Kunde inte markera åtgärden som klar.';
+      insp.felArt = '';
       return;
     }
     insp.fel = '';
+    insp.felArt = '';
     await laddaPaneler();
   } catch {
     insp.fel = 'Kunde inte markera åtgärden som klar — kontrollera att appen körs.';
+    insp.felArt = '';
   } finally {
     // Vaktad: har läraren hunnit bocka av en annan insikt äger det anropet
     // flaggan nu, och det här svaret får inte släppa dess knapp.
@@ -479,11 +501,19 @@ export async function markeraKlar(insightId) {
  * insp.fel nollställs FÖRST, av samma skäl som i startaRedigering: statusraden
  * är gemensam, och ett gammalt besked hade annars stått kvar och lästs som om
  * det gällde exporten.
+ *
+ * insp.felArt sätts till 'info' på FRAMGÅNGSGRENEN — den enda platsen i hela
+ * vyn. Exporten är beskedet "N poster sparade i …", inte ett fel, och innan
+ * den här skillnaden fanns målades den ovillkorligen i --bad (statusradens
+ * felfärg) trots att ingenting gått fel. Alla andra grenar (fel och det inledande
+ * nollställandet) sätter '' — ett kvarstående 'info' hade annars färgat ett
+ * SENARE riktigt fel som neutralt.
  */
 export async function exporteraIcs() {
   if (insp.agendaExporterar) return;
   insp.agendaExporterar = true;
   insp.fel = '';
+  insp.felArt = '';
   try {
     const r = await fetch('/api/agenda/ics', {
       method: 'POST',
@@ -493,6 +523,7 @@ export async function exporteraIcs() {
     const data = await r.json().catch(() => null);
     if (!r.ok) {
       insp.fel = (data && data.error) || 'Kunde inte skriva kalenderfilen.';
+      insp.felArt = '';
       return;
     }
     const antal = (data && data.count) || 0;
@@ -501,6 +532,7 @@ export async function exporteraIcs() {
       antal === 1
         ? `1 post sparad i ${sokvag}`
         : `${antal} poster sparade i ${sokvag}`;
+    insp.felArt = 'info';
     if (sokvag) {
       // Fel SVÄLJS medvetet — se funktionens huvudkommentar.
       await fetch('/api/open', {
@@ -511,6 +543,7 @@ export async function exporteraIcs() {
     }
   } catch {
     insp.fel = 'Kunde inte skriva kalenderfilen — kontrollera att appen körs.';
+    insp.felArt = '';
   } finally {
     insp.agendaExporterar = false;
   }
