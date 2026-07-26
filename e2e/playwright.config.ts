@@ -209,7 +209,7 @@ export default defineConfig({
       //
       // FÄLLA FÖR B2-B5, skarpladdad men ännu otriggad: en CSS-räkning av
       // [role="status"] inuti den SYNLIGA Inspelningar-panelen ger nu 2 —
-      // RedigeraLektion.svelte:165 plus InspelningarView.svelte:94 — medan
+      // RedigeraLektion.svelte:165 plus InspelningarView.svelte:148 — medan
       // TILLGÄNGLIGHETSTRÄDET säger 1. Motsägelsen är skenbar och båda noderna
       // är rätt: stängd är dialogen display:none och alltså ur trädet, öppen gör
       // showModal() resten av panelen inert och tar bort vyns region ur trädet i
