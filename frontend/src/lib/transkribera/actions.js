@@ -340,6 +340,8 @@ export async function startRun() {
   tr.runError = null;
   tr.resultFiles = [];
   tr.resultId = null;
+  tr.resultSegment = [];
+  tr.resultMedia = null;
   tr.qStatus = { ...tr.qStatus, [aktiv.id]: 'running' };
   tr.log = ['[00:00] Startar transkribering …'];
   startProgressAnim();
@@ -393,6 +395,8 @@ export async function startRun() {
         tr.progress = 100;
         tr.resultFiles = r.files || [];
         tr.resultId = r.id || null;
+        tr.resultSegment = Array.isArray(r.transcript) ? r.transcript : [];
+        tr.resultMedia = r.media || null;
         tr.qStatus = { ...tr.qStatus, [aktiv.id]: 'done' };
         tr.qProgress = { ...tr.qProgress, [aktiv.id]: 100 };
         tr.log = [...tr.log, '[klar] Färdig på ' + fmtTid(tr.elapsed)];
@@ -466,10 +470,13 @@ export async function cancelRun() {
 /**
  * "Transkribera något mer" — nollställer HELA körtillståndet och tar guiden
  * tillbaka till steg 1. Speglar gamla appens restart (app.js:1508-1512) fält
- * för fält. restart() navigerar inte själv någonstans — det gör anropsplatsen:
- * `restart(); setTab('recordings');` i finishTranscribe (app.js:2323-2324).
- * Just den setTab-raden har ingen motsvarighet här, för Inspelningar-vyn finns
- * inte i den här frontenden än (plan A3 stannar på steg 3).
+ * för fält.
+ *
+ * restart() navigerar inte själv någonstans. Gamla appen gör `restart();
+ * setTab('recordings');` i finishTranscribe (app.js:2323-2324) — den raden har
+ * medvetet ingen motsvarighet här. Guiden stannar på steg 3 och ERBJUDER
+ * transkriptet i stället för att rycka undan vyn (plan B2). Notera också att
+ * fliken heter 'inspelningar' i den här frontenden, inte 'recordings'.
  *
  * goSource räcker inte: den byter bara steg. Kön, qStatus, activeId, run='done'
  * och resultatfilerna skulle leva kvar, med två följder — steg 1 säger "1 fil i
@@ -500,6 +507,8 @@ export function nyTranskribering() {
   tr.runError = null;
   tr.resultFiles = [];
   tr.resultId = null;
+  tr.resultSegment = [];
+  tr.resultMedia = null;
   tr.logExpand = false;
   goSource();
 }

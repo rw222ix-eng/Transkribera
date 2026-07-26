@@ -3260,6 +3260,17 @@ Byt `<p class="senare">…</p>`-blocket (rad 144-147) mot:
 
 Ta bort CSS-regeln `.senare { … }` om ingen annan nod använder den.
 
+**AVVIKELSE UPPTÄCKT UNDER IMPLEMENTATIONEN:** de två knapparna (Öppna
+transkriptet + det redan befintliga "Transkribera något mer") hamnar som
+ogrupperade syskon om snippet ovan klistras in rakt av — ingen gap, bara ett
+enda mellanslagstecken från själva mallens whitespace mellan dem. Varje annat
+knapp-par i den här filen (fel-beskedet, avbrutet-beskedet, körnings-raden)
+grupperas i en `.knappar`-div. De två nya knapparna wrappas därför i samma
+`.knappar` (redan definierad i filens stilblock, ingen ny CSS) för att inte
+sticka ut från komponentens egen konvention. `.primar` fanns redan i
+stilblocket sedan tidigare (fel-beskedets "Försök igen"), så ingen ny CSS-regel
+tillkommer.
+
 - [ ] **Steg 6: Kör grindar och test**
 
 ```bash

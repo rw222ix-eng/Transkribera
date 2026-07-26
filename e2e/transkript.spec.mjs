@@ -724,3 +724,43 @@ test("Enter mitt i en redigerbar rad slår inte ihop orden vid sparande", async 
 
   expect(errors, errors.join("\n")).toEqual([]);
 });
+
+test("guiden öppnar transkriptet utan ett enda extra anrop", async ({ page, request }) => {
+  const errors = [];
+  failOnConsoleError(page, errors);
+  // Guiden skapar sin egen lektion; fixturen från beforeEach är bara i vägen.
+  await toemArkivet(request);
+
+  const historikanrop = [];
+  page.on("request", (r) => {
+    const u = new URL(r.url());
+    if (r.method() === "GET" && /^\/api\/history\//.test(u.pathname)) historikanrop.push(u.pathname);
+  });
+
+  // Vägen genom guiden, kopierad ur e2e/transkribera-korning.spec.mjs:58-62.
+  // "ett exempel" köar demofilen OCH går vidare till steg 2 av sig själv —
+  // addFiles sätter tr.step = 'config' (transkribera/actions.js:60). Ingen
+  // pywebview-fejk behövs.
+  await page.goto("/next/");
+  await page.getByRole("button", { name: "ett exempel", exact: true }).click();
+
+  // /api/models gör en riktig hårdvaruskanning även i fejkläge, så vi väntar
+  // in att knappen blir klickbar i stället för att pausa en fast tid.
+  const start = page.getByRole("button", { name: "Starta transkribering", exact: true });
+  await expect(start).toBeVisible({ timeout: 20_000 });
+  await expect(start).toBeEnabled({ timeout: 20_000 });
+  await start.click();
+
+  const oppna = page.getByRole("button", { name: "Öppna transkriptet" });
+  await expect(oppna).toBeVisible({ timeout: 30_000 });
+  await oppna.click();
+
+  const ruta = page.getByRole("dialog", { name: "Transkript" });
+  await expect(ruta.locator("li.rad")).toHaveCount(SEGMENT.length);
+
+  // Hela poängen: done-eventet bär redan {id, files, transcript, media,
+  // folder} (server.py:698-700). Fångar guiden dem behövs ingen hämtning.
+  expect(historikanrop, "genvägen hämtade posten i onödan: " + historikanrop.join(", ")).toHaveLength(0);
+
+  expect(errors, errors.join("\n")).toEqual([]);
+});

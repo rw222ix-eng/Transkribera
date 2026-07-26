@@ -136,7 +136,9 @@ test("Transkribera (/next/): körningen blir klar, med filer och logg", async ({
   // 3) Klarbeskedet: lektionen är sparad, och det står rakt ut att
   //    Inspelningar kommer senare — guiden navigerar alltså inte någonstans.
   await expect(page.getByText("Klart — lektionen är sparad.")).toBeVisible();
-  await expect(page.getByText(/Inspelningar — där lektionen går att öppna/)).toBeVisible();
+  // Guiden erbjuder numera en riktig genväg till transkriptet i stället för
+  // att bara säga att Inspelningar kommer senare (plan B2, task 10).
+  await expect(page.getByRole("button", { name: "Öppna transkriptet" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Transkribera något mer" })).toBeVisible();
 
   // 4) Filerna som faktiskt skrevs listas med sina NAMN. Servern skickar dem
