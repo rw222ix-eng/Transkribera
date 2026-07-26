@@ -1389,20 +1389,31 @@ Skapa `e2e/inspelningar-paneler.spec.mjs`:
 // TÄCKER:
 //   1. att agendan renderar försenad, dagens och framtida post med rätt
 //      märkning ("Idag" respektive försenad-markering),
-//   2. att ett KLASSbyte skickar nya GET /api/trends och GET /api/next-prep —
-//      avläst ur nätverksloggen, inte antaget,
-//   3. att varken trender eller Inför nästa renderas UTAN vald klass, och att
-//      inga anrop görs för dem,
+//   2. att ett KLASSbyte skickar nya GET /api/trends och GET /api/next-prep,
+//      och att ett KURSbyte DÄREFTER (med klassen redan vald) inte skickar
+//      något av de tre — båda avlästa ur nätverksloggen, inte antagna. Ett
+//      kursbyte UTAN vald klass mäts medvetet inte här: laddaNastaLektion och
+//      laddaTrender gör då en tidig retur innan något anrop görs, oavsett vad
+//      kursbytet i sig utlöser, så en sådan mätning hade vaktat den tidiga
+//      returen, inte valjKurs,
+//   3. att varken trender eller Inför nästa renderas UTAN vald klass,
 //   4. att en bock i Inför nästa laddar om AGENDAN — alltså att gamla appens
 //      refetch-asymmetri verkligen är fixad,
 //   5. att .ics-exporten POSTar och att statusraden får antalet,
 //   6. de harmoniserade tomtillstånden: tom agenda respektive klass utan
 //      lektioner.
 //
-// Punkt 3 och 4 är planens bärande krav. Punkt 3 vaktar regeln "ej tillämpligt
-// → ingen panel" (specens avsnitt 4); punkt 4 vaktar den enda avsiktliga
-// BETEENDEförändringen mot gamla appen. Båda mäts på faktiska HTTP-anrop i
-// stället för att panelernas innehåll får stå som bevis.
+// Punkt 2:s kursbytesled och punkt 4 är planens bärande krav. Punkt 3 vaktar
+// regeln "ej tillämpligt → ingen panel" (specens avsnitt 4); punkt 4 vaktar
+// den enda avsiktliga BETEENDEförändringen mot gamla appen. Alla mäts på
+// faktiska HTTP-anrop i stället för att panelernas innehåll får stå som bevis.
+//
+// RÄTTAT I GRANSKNINGSOMGÅNGEN (se task-5-report.md, avsnittet om fixarna
+// efter granskning): punkt 3 påstod ursprungligen även "och att inga anrop
+// görs för dem", mätt av en kursbytesassertion i testet UTAN vald klass. Den
+// assertionen kunde inte falla för det den namngav — laddarnas tidiga retur
+// gjorde loggen tom oavsett vad valjKurs faktiskt gjorde. Mätningen flyttades
+// till punkt 2, i testet med en klass redan vald, och tandkontrollerades där.
 //
 // TÄCKS INTE, och det är avsiktligt:
 //   · Att .ics-FILENS innehåll är giltig iCalendar. Det ägs av
@@ -1650,7 +1661,14 @@ test("Panelerna (/next/): agendan märker försenad, idag och framtid", async ({
 
   expect(errors).toEqual([]);
 });
+```
 
+RÄTTAT I GRANSKNINGSOMGÅNGEN (se task-5-report.md): båda kontrollerna av den
+framtida posten ovan är NEGATIVA (`not.toHaveClass`/`not.toHaveText`), så en
+textändring som tömde `framtid`-filtret hade fått dem att passera vakuöst.
+Ett `await expect(framtid).toHaveCount(1);` lades till FÖRE dem.
+
+```js
 test("Panelerna (/next/): utan vald klass finns varken trender eller Inför nästa", async ({ page, request }) => {
   const errors = [];
   failOnConsoleError(page, errors);
@@ -1659,7 +1677,6 @@ test("Panelerna (/next/): utan vald klass finns varken trender eller Inför näs
   await laggTillInsikter(request, lektioner);
 
   const vy = await oppnaInspelningar(page);
-  const anrop = loggaPanelanrop(page);
 
   // "Ej tillämpligt" är inte "tomt": panelerna ska inte finnas alls, inte visa
   // en tomtext. Regeln i specens avsnitt 4.
@@ -1668,18 +1685,18 @@ test("Panelerna (/next/): utan vald klass finns varken trender eller Inför näs
   // Agendan är tvärs alla klasser och SKA finnas.
   await expect(vy.getByRole("heading", { name: /Kommande/ })).toHaveCount(1);
 
-  // Ett KURSbyte rör inte panelerna: båda endpoints tar bara group_id.
-  await filter(vy).kurs.selectOption({ label: "Fysik 1a" });
-  await expect(vy.locator("article.kort")).toHaveCount(1);
-  await tvaRutor(page);
-  expect(
-    anrop.filter((p) => p !== "/api/agenda"),
-    "Ett kursbyte får inte hämta trender eller next-prep — de tar bara group_id",
-  ).toEqual([]);
-
   expect(errors).toEqual([]);
 });
+```
 
+RÄTTAT I GRANSKNINGSOMGÅNGEN (se task-5-report.md, det underkända Important-
+fyndet): kursbytesblocket som stod här togs bort. Utan vald klass gör
+`laddaNastaLektion`/`laddaTrender` en tidig retur INNAN något nätverksanrop —
+en assertion här mätte alltså den tidiga returen, aldrig `valjKurs`, och kunde
+inte falla för det den påstod sig vakta. Mätningen flyttades till testet
+"ett klassbyte hämtar trender och Inför nästa", där en klass redan är vald.
+
+```js
 test("Panelerna (/next/): ett klassbyte hämtar trender och Inför nästa", async ({ page, request }) => {
   const errors = [];
   failOnConsoleError(page, errors);
@@ -1712,25 +1729,52 @@ test("Panelerna (/next/): ett klassbyte hämtar trender och Inför nästa", asyn
   await expect(trender).toContainText("1/3 · 33 %");
   await expect(trender.locator("li")).toHaveCount(1);
   await expect(trender.locator("li .bricka")).toHaveText("2×");
+  await expect(trender.getByRole("heading", { level: 2, name: /Terminstrender/ })).toHaveText(
+    "Terminstrender · 9A",
+  );
 
   const nasta = vy.locator("section.panel").filter({ has: page.getByRole("heading", { name: /Inför nästa lektion/ }) });
   // Kalenderposten bärs INTE över — bara åtgärd/grupprum/material.
   await expect(nasta.locator("li.rad")).toHaveCount(2);
   await expect(nasta).not.toContainText("Prov om derivata");
-  // RÄTTAT I TASK 5 (se task-5-report.md): koden ovan skrevs blind och antog
-  // ett mellanslag före parentesen. Kört mot en riktig webbläsare visar
-  // NastaLektion.svelte:78 <span class="ref"> ({d.ref})</span> — Svelte
-  // trimmar bort det inledande mellanslaget eftersom det står direkt intill
-  // en {#if}-gräns utan mellanrum i källan, så DOM:en blir "Derivata(uppg 3)"
-  // utan mellanslag. Samma bugg finns i NastaLektion.svelte:38 och
-  // Terminstrender.svelte:38/:88 (alla fyra <span> med inledande mellanslag
-  // intill en {#if}-gräns) — INGEN av dem fixades i Task 5, bara rapporterade.
-  // Assertionen nedan speglar det verifierade (buggiga) resultatet.
-  await expect(nasta.locator("ul.punkter li")).toHaveText(["Derivata(uppg 3)"]);
+  await expect(nasta.locator("ul.punkter li")).toHaveText(["Derivata (uppg 3)"]);
+
+  // Kursbytet, med 9A redan vald, prövar valjKurs på riktigt.
+  anrop.length = 0;
+  await filter(vy).kurs.selectOption({ label: "Matematik 2b" });
+  await tvaRutor(page);
+  expect(
+    anrop,
+    "Ett kursbyte får inte hämta agenda, trender eller next-prep när en klass redan är vald",
+  ).toEqual([]);
 
   expect(errors).toEqual([]);
 });
+```
 
+RÄTTAT I GRANSKNINGSOMGÅNGEN (se task-5-report.md): två saker ändrades i
+testet ovan mot vad som stod här ursprungligen.
+
+1. **Whitespace-buggen är nu FIXAD, inte bara rapporterad.** Task 5:s
+   ursprungliga kod (och den ursprungliga versionen av det här stycket) sa att
+   `nasta.locator("ul.punkter li")` skulle innehålla `"Derivata(uppg 3)"` UTAN
+   mellanslag, med en kommentar om att bara SPEGLA den verifierade buggen i
+   `NastaLektion.svelte:78` (`<span class="ref"> ({d.ref})</span>`, ett
+   mellanslag som Svelte trimmar bort eftersom det ligger direkt intill en
+   `{#if}`-gräns). Samma mönster fanns på FEM ställen, inte fyra som Task 5:s
+   rapport räknade — `NastaLektion.svelte` rad 72-73
+   (`svårigheter{#if forraDatum}\n  ({...}){/if}`) missades eftersom
+   mellanslaget där låg som ett bokstavligt radbrutet mellanrum inuti
+   `{#if}`-blocket, inte inuti en `<span>`. Alla fem rättades i
+   granskningsomgången genom att lägga separatorn INUTI uttrycket
+   (`{" · " + klass}`, `{" (" + d.ref + ")"}` osv.) i stället för som ett
+   bokstavligt mellanslag i markupen. Assertionen ovan förväntar sig nu det
+   AVSEDDA resultatet, med mellanslag, och en ny exakt-textassertion mot
+   `Terminstrender · 9A` vaktar att buggen inte kan återkomma tyst.
+2. **Kursbytesblocket är nytt här.** Se motiveringen vid föregående test:
+   mätningen hörde aldrig hemma där en klass inte var vald.
+
+```js
 test("Panelerna (/next/): en bock i Inför nästa laddar om agendan", async ({ page, request }) => {
   const errors = [];
   failOnConsoleError(page, errors);
@@ -1848,15 +1892,24 @@ Lägg dessutom till ett stycke i kommentarsblocket ovanför, direkt före `// F�
 ```ts
       // inspelningar-paneler.spec.mjs (plan B5) täcker de tre PANELERNA:
       // agendans märkning av försenad/idag/framtid, att ett KLASSbyte skickar
-      // nya GET /api/trends och /api/next-prep medan ett KURSbyte inte gör det,
-      // att varken trender eller Inför nästa renderas utan vald klass, att en
-      // bock i Inför nästa laddar om agendan (gamla appens refetch-asymmetri,
-      // fixad), .ics-exporten med POST /api/open stubbad, och de harmoniserade
+      // nya GET /api/trends och /api/next-prep, att ett KURSbyte DÄREFTER
+      // (med klassen redan vald) inte gör det, att varken trender eller
+      // Inför nästa renderas utan vald klass, att en bock i Inför nästa
+      // laddar om agendan (gamla appens refetch-asymmetri, fixad),
+      // .ics-exporten med POST /api/open stubbad, och de harmoniserade
       // tomtillstånden. TÄCKER INTE: .ics-filens innehåll (tests/
       // test_ics_export.py), att /api/open startar ett program, eller
       // panelernas generationsvakter — de är ordagranna kopior av den som
       // redan prövas i inspelningar-kartotek.spec.mjs.
 ```
+
+RÄTTAT I GRANSKNINGSOMGÅNGEN (se task-5-report.md): stycket ovan preciserar
+nu att kursbytet som INTE ska hämta panelerna prövas MED klassen redan vald.
+Den ursprungliga formuleringen ("medan ett KURSbyte inte gör det") var
+tvetydig på just den punkten, och den första implementationen mätte kursbytet
+UTAN vald klass — där `laddaNastaLektion`/`laddaTrender` gör en tidig retur
+oavsett vad kursbytet gör, så assertionen inte kunde falla för det den
+påstod sig vakta. Se den underkända Important-punkten i task-5-report.md.
 
 - [ ] **Step 3: Bygg frontenden och kör sviten**
 
@@ -1969,4 +2022,25 @@ ogrindad Terminstrender fäller tillämplighetstestet."
 
 **Typkonsistens.** `laddaPaneler` heter så i Task 1, 2 och 5. `markeraKlar(insightId)` definieras i Task 2 och konsumeras i Task 3 med samma signatur. `datumEtikett(iso)` definieras i Task 1 och används i Task 2 (`a.due_date`) och Task 3 (`a.lesson_datum`, `last_lesson.datum`). Storefälten `agenda`, `nastaLektion`, `trender`, `agendaOppen`, `agendaExporterar`, `markerar` heter likadant i Task 1 och i alla komponenter. CSS-klassen `forsenad` används i både `Agenda.svelte` och testet i Task 5.
 
-**En känd svaghet, utskriven i stället för dold.** Test 2 påstår att ett kursbyte inte hämtar panelerna genom att filtrera bort `/api/agenda` ur loggen. Skulle någon senare låta `valjKurs` hämta agendan blir testet grönt ändå. Skärpningen hade krävt att agendan räknades separat före och efter, vilket kostar mer läsbarhet än den vaktar — men den som rör `valjKurs` bör veta det.
+**RÄTTAT I GRANSKNINGSOMGÅNGEN (se task-5-report.md) — det här var ingen känd
+svaghet, det var ett trasigt test.** Stycket nedan stod kvar från den
+ursprungliga planen och beskrev problemet som en teoretisk begränsning:
+"testet blir grönt ändå OM någon senare låter `valjKurs` hämta agendan".
+Verkligheten var strängare. Test 2 körde utan vald klass, och
+`laddaNastaLektion`/`laddaTrender` gör där en tidig retur INNAN något
+nätverksanrop görs — oavsett vad `valjKurs` faktiskt gör. Assertionen kunde
+alltså inte falla för det den påstod sig vakta, inte bara i det uppkonstruerade
+scenariot ovan utan för VARJE tänkbar ändring av `valjKurs`. Fixen flyttade
+mätningen till testet "ett klassbyte hämtar trender och Inför nästa", där en
+klass redan är vald och kursbytet faktiskt går igenom `valjKurs`s egen kod.
+Tandkontrollerad: en tillfällig ändring av `valjKurs` till
+`await Promise.all([laddaLektioner(), laddaNastaLektion(), laddaTrender()]);`
+fick den nya assertionen att falla (se task-5-report.md för den ordagranna
+felutdatan), och ändringen återställdes.
+
+Ursprunglig text, kvar som historik: "Test 2 påstår att ett kursbyte inte
+hämtar panelerna genom att filtrera bort `/api/agenda` ur loggen. Skulle
+någon senare låta `valjKurs` hämta agendan blir testet grönt ändå.
+Skärpningen hade krävt att agendan räknades separat före och efter, vilket
+kostar mer läsbarhet än den vaktar — men den som rör `valjKurs` bör veta
+det."
