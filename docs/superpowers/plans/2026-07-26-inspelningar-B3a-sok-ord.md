@@ -368,7 +368,7 @@ som inte existerar än."
     </button>
   </div>
 
-  <div class="lagen" role="group" aria-label="Sökläge">
+  <div class="lagen" role="group" aria-label="Sökläge för inspelningar">
     <button class="lage" aria-pressed={sok.lage === 'ask'} onclick={() => valjLage('ask')}>
       Fråga AI
     </button>
