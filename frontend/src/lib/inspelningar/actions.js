@@ -413,3 +413,105 @@ export async function laddaTrender() {
 export async function laddaPaneler() {
   await Promise.all([laddaAgenda(), laddaNastaLektion(), laddaTrender()]);
 }
+
+/** Fäller agendan upp och ned. Rent UI-tillstånd, inget nätverk. */
+export function vaxlaAgenda() {
+  insp.agendaOppen = !insp.agendaOppen;
+}
+
+/**
+ * Bockar av en åtgärd. DELAS av Agenda och Inför nästa lektion — samma
+ * insights-rad, samma PATCH, samma omhämtning. Att båda går genom den här
+ * funktionen är hela fixen av gamla appens refetch-asymmetri.
+ *
+ * fetch direkt i stället för api.js: getJSON kastar bort svarskroppen
+ * (frontend/src/lib/api.js:7-12), och serverns egen error-text är mer precis än
+ * vår reservtext.
+ *
+ * insp.markerar bär ID:T och inte true — se kommentaren i stores.svelte.js.
+ *
+ * DOLT BEROENDE, samma som i sparaLektion: laddaPaneler() ligger INUTI try:et,
+ * efter att PATCH:en redan lyckats. Att ett fel där inte kan visa den falska
+ * texten "Kunde inte markera åtgärden som klar" beror uteslutande på att ingen
+ * av de tre laddarna kan kasta — de har alla egen try/catch. Gör någon av dem
+ * kastande måste raden flyttas ut ur try:et.
+ */
+export async function markeraKlar(insightId) {
+  if (insightId == null) return;
+  if (insp.markerar === insightId) return;
+  insp.markerar = insightId;
+  try {
+    const r = await fetch(`/api/insights/${encodeURIComponent(insightId)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'klar' }),
+    });
+    if (!r.ok) {
+      const j = await r.json().catch(() => null);
+      insp.fel = (j && j.error) || 'Kunde inte markera åtgärden som klar.';
+      return;
+    }
+    insp.fel = '';
+    await laddaPaneler();
+  } catch {
+    insp.fel = 'Kunde inte markera åtgärden som klar — kontrollera att appen körs.';
+  } finally {
+    // Vaktad: har läraren hunnit bocka av en annan insikt äger det anropet
+    // flaggan nu, och det här svaret får inte släppa dess knapp.
+    if (insp.markerar === insightId) insp.markerar = null;
+  }
+}
+
+/**
+ * Skriver .ics-filen och ber servern öppna den i lärarens kalenderprogram.
+ *
+ * TVÅ ANROP, och bara det FÖRSTA avgör om exporten lyckades. Faller
+ * POST /api/open står beskedet kvar orört: filen ÄR sparad, och att
+ * kalenderprogrammet inte startade gör inte exporten misslyckad. Att låta det
+ * andra anropet skriva ett fel hade sagt åt läraren att göra om något som redan
+ * är gjort.
+ *
+ * Body:t är MEDVETET '{}' och inte {only_open: true}. Endpointen stöder
+ * flaggan, men gamla appen skickar alltid {} (app.js:2085) och exporterar
+ * alltså även avklarat. Att börja filtrera ändrar vad som hamnar i lärarens
+ * kalender — eget beslut, specens avsnitt 9.
+ *
+ * insp.fel nollställs FÖRST, av samma skäl som i startaRedigering: statusraden
+ * är gemensam, och ett gammalt besked hade annars stått kvar och lästs som om
+ * det gällde exporten.
+ */
+export async function exporteraIcs() {
+  if (insp.agendaExporterar) return;
+  insp.agendaExporterar = true;
+  insp.fel = '';
+  try {
+    const r = await fetch('/api/agenda/ics', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    });
+    const data = await r.json().catch(() => null);
+    if (!r.ok) {
+      insp.fel = (data && data.error) || 'Kunde inte skriva kalenderfilen.';
+      return;
+    }
+    const antal = (data && data.count) || 0;
+    const sokvag = (data && data.path) || '';
+    insp.fel =
+      antal === 1
+        ? `1 post sparad i ${sokvag}`
+        : `${antal} poster sparade i ${sokvag}`;
+    if (sokvag) {
+      // Fel SVÄLJS medvetet — se funktionens huvudkommentar.
+      await fetch('/api/open', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: sokvag }),
+      }).catch(() => {});
+    }
+  } catch {
+    insp.fel = 'Kunde inte skriva kalenderfilen — kontrollera att appen körs.';
+  } finally {
+    insp.agendaExporterar = false;
+  }
+}

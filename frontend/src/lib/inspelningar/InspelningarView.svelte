@@ -8,6 +8,7 @@
     laddaLektioner,
     laddaOrg,
     kollaHistorik,
+    laddaPaneler,
     startaRedigering,
     fragaRadera,
     avbrytRadera,
@@ -15,6 +16,7 @@
   } from './actions.js';
   import Filterrad from './Filterrad.svelte';
   import Kartotek from './Kartotek.svelte';
+  import Agenda from './Agenda.svelte';
   import RedigeraLektion from './RedigeraLektion.svelte';
   import { nav } from '../shell/nav.svelte.js';
 
@@ -82,6 +84,12 @@
       laddaOrg();
       laddaLektioner();
       kollaHistorik();
+      // Panelerna ligger MED i untrack av exakt samma skäl som de tre ovan:
+      // laddaNastaLektion och laddaTrender läser insp.filterGroup synkront före
+      // sitt första await, och Sveltes spårning är dynamisk, inte lexikal.
+      // Utanför untrack hade effekten spårat filtret — och då blir valjKlass
+      // explicita omhämtning en DUBBELHÄMTNING i stället för enda vägen.
+      laddaPaneler();
     });
   });
 
@@ -154,6 +162,15 @@
     lämnar de gröna spärrarna orörda i stället för att skriva om dem.
   -->
   <p class="fel" aria-hidden="true" data-testid="insp-statusrad">{insp.fel}</p>
+
+  <!--
+    PANELERNA (B5) ligger HÄR, mellan filterraden och kartoteket, precis som i
+    gamla appen (app.js:4897-4901). De beror på klassfiltret och hör visuellt
+    ihop med det — och tomtillstånden nedan talar om KARTOTEKET, så läggs
+    panelerna efter dem får en lärare med tomt kartotek se "Inga inspelningar
+    än" före sin agenda.
+  -->
+  <Agenda />
 
   <Kartotek lektioner={synliga} onRedigera={startaRedigering} onRadera={fragaRadera} />
 
