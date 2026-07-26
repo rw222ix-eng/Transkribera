@@ -37,6 +37,16 @@
 //   · DELETE:ets 409 ("kunde inte radera mappen — en fil kan vara öppen").
 //     Den kräver att resultatmappen är låst av en annan process; att fejka
 //     svaret hade bara testat vår egen fejk.
+//   · Att insp.laddar VAKTAR de två tomtillstånden. NAMNGIVEN LUCKA, så nästa
+//     läsare inte tror att den termen är bevisad: villkorets uppgift är att
+//     inget av beskeden ska BLINKA FÖRBI under en omhämtning, men bägge
+//     assertionerna i tomtillståndstestet är omprövande (toBeVisible respektive
+//     toHaveCount(0)) och prövar alltså om tills läget stabiliserat sig. En
+//     enstaka renderingsruta med fel besked mitt i en omhämtning kan de inte
+//     fälla — tas !insp.laddar bort ur båda grenarna förblir specen grön.
+//     Ingen billig deterministisk fix finns: den hade krävt att ett svar hålls
+//     tillbaka och att DOM:en samplas i exakt det fönstret, vilket är just den
+//     tidsberoende konstruktion resten av filen undviker.
 //
 // FIXTUREN BYGGS VIA RIKTIGA API:ER, och det finns bara en väg: fejkservern
 // startar med TOM basmapp, och det finns INGEN POST /api/lessons — en
