@@ -683,6 +683,16 @@ git commit -m "feat(inspelningar): filterraden med server- och klientfilter isä
 1. `PATCH /api/lessons/{id}` accepts `group_name` and `course_name`, and those **create** the class or course if it does not exist (`db.get_or_create_group`/`get_or_create_course`). It also auto-links the lesson to a planned lesson when class, course, date or start time change. That is intended behaviour, ported as-is — but it means the edit dialog is not a plain field update, and free-text input can grow the organisation list.
 2. `DELETE /api/lessons/{id}` returns **409** with `{"error": "kunde inte radera mappen — en fil kan vara öppen"}` when the result folder is locked. The lesson and its history entry are then deliberately left intact. **That error must reach the teacher** — swallowing it would show a card that reappears on the next load with no explanation.
 
+- [ ] **Step 0: Give `insp.fel` a visible copy — before anything else**
+
+**Flyttat hit från Task 5 efter Task 3:s granskning.** Task 4 är den första task som skriver riktiga fel till `insp.fel`, och utan den synliga kopian går den här taskens egen verifiering inte att göra — Steg 4 kräver att 409-felet *syns*.
+
+Task 1 shipped only the clipped `.fel-sr` live region. That reaches screen readers and nobody else — and Tasks 4 and 5 write real failures into it, including the `DELETE` 409 that this plan says **must** reach the teacher, because backend deliberately leaves the lesson intact when the folder is locked.
+
+`TranskriberaView.svelte` established the pattern: a clipped live region **plus** a visible copy near the control it concerns, marked `aria-hidden="true"` so only one node is announced. Mirror it — a `<p class="fel" aria-hidden="true" data-testid="statusrad">{insp.fel}</p>` above the catalogue, with `.fel:empty { display: none }` on the **visible** copy only (never on the live region).
+
+Do not give the visible copy its own `role` — two announcing nodes in one view read in unpredictable order, which is exactly what the guard in `e2e/transkribera-kalla.spec.mjs` exists to prevent.
+
 - [ ] **Step 1: Add the actions**
 
 Append to `actions.js` (add `postJSON` is **not** needed — `PATCH` and `DELETE` are written with `fetch` directly, since `api.js` exposes only `getJSON`/`postJSON`/`streamPost`):
@@ -820,14 +830,6 @@ git commit -m "feat(inspelningar): redigera uppgifter och radera en lektion"
 **Interfaces:**
 - Consumes: everything from Tasks 1–4.
 - Produces: `kollaHistorik()`.
-
-- [ ] **Step 0: Give `insp.fel` a visible copy**
-
-Task 1 shipped only the clipped `.fel-sr` live region. That reaches screen readers and nobody else — and Tasks 4 and 5 write real failures into it, including the `DELETE` 409 that this plan says **must** reach the teacher, because backend deliberately leaves the lesson intact when the folder is locked.
-
-`TranskriberaView.svelte` established the pattern: a clipped live region **plus** a visible copy near the control it concerns, marked `aria-hidden="true"` so only one node is announced. Mirror it — a `<p class="fel" aria-hidden="true" data-testid="statusrad">{insp.fel}</p>` above the catalogue, with `.fel:empty { display: none }` on the **visible** copy only (never on the live region).
-
-Do not give the visible copy its own `role` — two announcing nodes in one view read in unpredictable order, which is exactly what the guard in `e2e/transkribera-kalla.spec.mjs` exists to prevent.
 
 - [ ] **Step 1: The two empty states**
 
