@@ -13,8 +13,15 @@
   const meta = $derived([l.dur, l.model, l.lang].filter(Boolean).join(' · '));
 
   // Bara VIDEO-källor får miniatyr. Ljudfiler har också en spelbar mediapost,
-  // så det avgörs på filändelsen — samma regel som _videoThumb, app.js:434-439.
-  const VIDEO = ['mp4', 'mkv', 'mov', 'webm', 'avi', 'm4v'];
+  // så det avgörs på filändelsen. Listan är VIDEO_EXT ur _videoThumb
+  // (app.js:433) ordagrant — INTE app/media.py:39:s VIDEO_EXTS, som är en
+  // annan lista med ett annat syfte.
+  //
+  // webm saknas MEDVETET: det är appens eget LJUDinspelningsformat
+  // (audio/webm;codecs=opus, plan A4). En sådan fil har ingen videoström, så
+  // /api/thumb → make_thumbnail → ffmpeg misslyckas, svarar 404, och kortet
+  // får en trasig <img>. Det drabbar varje lektion läraren spelat in i appen.
+  const VIDEO = ['mp4', 'm4v', 'mkv', 'mov', 'avi', 'mpg', 'mpeg', 'wmv', 'flv', 'ts', 'mts'];
   const miniatyr = $derived.by(() => {
     const p = l.recording_path || '';
     const ext = (/\.([^.\\/]+)$/.exec(p) || [, ''])[1].toLowerCase();
