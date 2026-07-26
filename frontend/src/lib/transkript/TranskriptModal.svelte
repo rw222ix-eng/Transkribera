@@ -1,6 +1,6 @@
 <script>
   import { tk } from './stores.svelte.js';
-  import { stangTranskript } from './actions.js';
+  import { stangTranskript, vaxlaSpelning } from './actions.js';
   import Spelare from './Spelare.svelte';
   import Transkriptlista from './Transkriptlista.svelte';
 
@@ -38,6 +38,15 @@
   function paClose() {
     if (tk.open) stangTranskript();
   }
+
+  function paTangent(e) {
+    if (e.key !== ' ') return;
+    // En fokuserad knapp ska TRYCKAS av mellanslag, inte kapas. Detsamma för
+    // fält och redigerbara rader.
+    if (e.target.closest('button, input, textarea, [contenteditable="true"]')) return;
+    e.preventDefault();
+    vaxlaSpelning();
+  }
 </script>
 
 <!-- Alltid monterad, aldrig {#if}-grindad: avmonteras komponenten i
@@ -51,6 +60,7 @@
   tabindex="-1"
   bind:this={ruta}
   onclose={paClose}
+  onkeydown={paTangent}
 >
   <header class="topp">
     <h2 class="titel">{tk.namn || 'Transkript'}</h2>

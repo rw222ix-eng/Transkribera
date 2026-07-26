@@ -1,9 +1,10 @@
 <script>
   import { tk } from './stores.svelte.js';
   import { fmtTid } from './tid.js';
-  import { bindMedia, slappMedia, vaxlaSpelning, spolaTill } from './actions.js';
+  import { bindMedia, slappMedia, vaxlaSpelning, spolaTill, cyklaHastighet, fmtHastighet } from './actions.js';
 
   let spar = $state(null);
+  let rafId = 0;
 
   const andel = $derived(tk.langd > 0 ? Math.min(1, Math.max(0, tk.tid / tk.langd)) : 0);
   const spolbar = $derived(tk.langd > 0);
@@ -20,9 +21,37 @@
     return f * tk.langd;
   }
 
-  function paKlick(e) {
+  function flyttaTill(x) {
+    // Visningen följer fingret direkt; currentTime-skrivningen stryps till en
+    // per animationsruta, så en snabb dragning inte köar hundra sökningar.
+    tk.tid = tidVidX(x);
+    if (rafId) return;
+    rafId = requestAnimationFrame(() => {
+      rafId = 0;
+      spolaTill(tk.tid);
+    });
+  }
+
+  function paPointerDown(e) {
     if (!spolbar) return;
-    spolaTill(tidVidX(e.clientX));
+    tk.drar = true;
+    spar.setPointerCapture(e.pointerId);
+    flyttaTill(e.clientX);
+  }
+
+  function paPointerMove(e) {
+    if (tk.drar) flyttaTill(e.clientX);
+  }
+
+  function paPointerUp(e) {
+    if (!tk.drar) return;
+    tk.drar = false;
+    try {
+      spar.releasePointerCapture(e.pointerId);
+    } catch {
+      // Redan släppt — pointercancel kan ha hunnit före.
+    }
+    spolaTill(tk.tid);
   }
 
   function paTangent(e) {
@@ -81,12 +110,21 @@
         aria-valuetext="{fmtTid(tk.tid)} av {fmtTid(tk.langd)}"
         aria-disabled={!spolbar}
         bind:this={spar}
-        onclick={paKlick}
+        onpointerdown={paPointerDown}
+        onpointermove={paPointerMove}
+        onpointerup={paPointerUp}
+        onpointercancel={paPointerUp}
         onkeydown={paTangent}
       >
         <div class="fyllnad" style="width: {andel * 100}%"></div>
       </div>
       <span class="klocka">{spolbar ? fmtTid(tk.langd) : '--:--'}</span>
+      <button
+        type="button"
+        class="ghost hastighet"
+        aria-label="Uppspelningshastighet, {fmtHastighet(tk.hastighet)}"
+        onclick={cyklaHastighet}
+      >{fmtHastighet(tk.hastighet)}</button>
     </div>
   </div>
 {/if}
@@ -137,4 +175,9 @@
   }
   .spar[aria-disabled='true'] { cursor: default; }
   .fyllnad { height: 100%; background: var(--accent); }
+  .hastighet {
+    flex: 0 0 auto;
+    padding: 9px 12px;
+    font-variant-numeric: tabular-nums;
+  }
 </style>

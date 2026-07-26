@@ -240,3 +240,17 @@ export function spolaTill(sekunder) {
   mediaEl.currentTime = t;
   tk.tid = t;
 }
+
+// 1 först, så den vanliga hastigheten är ett kliv bort från varje annan.
+const HASTIGHETER = [1, 1.25, 1.5, 2, 0.75];
+
+/** Svenskt decimaltecken. "1,25×", inte "1.25×". */
+export function fmtHastighet(h) {
+  return String(h).replace('.', ',') + '×';
+}
+
+export function cyklaHastighet() {
+  const i = HASTIGHETER.indexOf(tk.hastighet);
+  tk.hastighet = HASTIGHETER[(i + 1) % HASTIGHETER.length];
+  if (mediaEl) mediaEl.playbackRate = tk.hastighet;
+}

@@ -322,3 +322,64 @@ test("en video begärs som video och faller tillbaka på ljudet när den inte g�
 
   expect(errors.filter((e) => !/Failed to load|500/.test(e)), errors.join("\n")).toEqual([]);
 });
+
+test("hastigheten cyklar och skrivs med decimalkomma", async ({ page }) => {
+  const errors = [];
+  failOnConsoleError(page, errors);
+
+  const ruta = await oppnaTranskript(page);
+  const knapp = ruta.getByRole("button", { name: /^Uppspelningshastighet/ });
+  await expect(knapp).toHaveText("1×");
+  await knapp.click();
+  await expect(knapp).toHaveText("1,25×");
+  await knapp.click();
+  await expect(knapp).toHaveText("1,5×");
+
+  // Hastigheten når faktiskt mediaelementet — annars är knappen dekoration.
+  const rate = await ruta.locator("audio").evaluate((el) => el.playbackRate);
+  expect(rate, "playbackRate följde inte med knappen").toBeCloseTo(1.5, 5);
+
+  expect(errors, errors.join("\n")).toEqual([]);
+});
+
+test("mellanslag växlar uppspelning men inte medan fokus står i ett fält", async ({ page }) => {
+  const errors = [];
+  failOnConsoleError(page, errors);
+
+  const ruta = await oppnaTranskript(page);
+  const hastighet = ruta.getByRole("button", { name: /^Uppspelningshastighet/ });
+
+  // Mellanslag på en FOKUSERAD KNAPP ska trycka knappen, inte spela upp.
+  await hastighet.focus();
+  await page.keyboard.press("Space");
+  await expect(hastighet).toHaveText("1,25×");
+
+  expect(errors, errors.join("\n")).toEqual([]);
+});
+
+test("ett enkelklick i spåret spolar dit, inte bara dragningen", async ({ page }) => {
+  const errors = [];
+  failOnConsoleError(page, errors);
+
+  // paKlick är borta — pointerdown ska ensam bära det gamla enkelklicket.
+  // Utan det här testet skulle en framtida ändring kunna tysta klicket och
+  // bara låta dragningen fungera, utan att någon spärr slog till.
+  const ruta = await oppnaTranskript(page);
+  const spar = ruta.getByRole("slider", { name: "Sök i uppspelningen" });
+  await expect(spar).toHaveAttribute("aria-disabled", "false");
+
+  const langd = await ruta.locator("audio").evaluate((el) => el.duration);
+  const box = await spar.boundingBox();
+  await spar.click({ position: { x: box.width * 0.25, y: box.height / 2 } });
+
+  const forvantat = langd * 0.25;
+  const valuenow = Number(await spar.getAttribute("aria-valuenow"));
+  expect(valuenow, "aria-valuenow följde inte klicket").toBeGreaterThan(forvantat - 3);
+  expect(valuenow, "aria-valuenow följde inte klicket").toBeLessThan(forvantat + 3);
+
+  const currentTime = await ruta.locator("audio").evaluate((el) => el.currentTime);
+  expect(currentTime, "currentTime följde inte klicket").toBeGreaterThan(forvantat - 3);
+  expect(currentTime, "currentTime följde inte klicket").toBeLessThan(forvantat + 3);
+
+  expect(errors, errors.join("\n")).toEqual([]);
+});
