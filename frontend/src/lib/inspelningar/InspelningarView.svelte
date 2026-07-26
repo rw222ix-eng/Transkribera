@@ -2,23 +2,35 @@
   // Inspelningar-fliken: kartoteket över transkriberade lektioner. Speglar
   // viewRecordings (app/web/static/app.js:4776-4956), omstylad till
   // designsystemet — gamla vyn är ren inline-CSS med 9-14px hörn.
+  import { untrack } from 'svelte';
   import { insp } from './stores.svelte.js';
   import { laddaLektioner, laddaOrg } from './actions.js';
   import Kartotek from './Kartotek.svelte';
+  import { nav } from '../shell/nav.svelte.js';
 
-  // Hämtas när vyn monteras. KONTROLLERAT (App.svelte:20-22): panelen står i
-  // markupen UTAN {#if} och göms bara med hidden, så den här vyn monteras EN
-  // gång och avmonteras aldrig vid flikbyte — effekten kör alltså inte om per
-  // flikbyte. (Plan A4 brändes av det motsatta antagandet en nivå längre ned,
-  // där komponenten satt inuti ett {#if} och verkligen monterades om.)
+  // Hämtas vid varje NAVIGERING HIT, inte vid montering. KONTROLLERAT
+  // (App.svelte:20-22): panelen står i markupen UTAN {#if} och göms bara med
+  // hidden, så vyn monteras EN gång och avmonteras aldrig. En ren
+  // monteringseffekt hade alltså kört vid appstart — innan läraren ens öppnat
+  // fliken — och sedan aldrig mer: transkribera en lektion, byt hit, och den
+  // saknas hela sessionen. Grindningen på nav.tab speglar app.js:606, som
+  // anropar loadLessons(); loadOrg(); vid varje byte till recordings.
   //
-  // Effekten läser dessutom insp.filterGroup/filterCourse, eftersom
-  // laddaLektioner hinner läsa dem synkront innan sitt första await. Det är
-  // avsiktligt: serverfiltren MÅSTE ge en ny hämtning. Task 3 ska därför bara
-  // sätta dem, inte anropa laddaLektioner() en extra gång.
+  // Effekten spårar BARA nav.tab. untrack håller allt som laddaOrg och
+  // laddaLektioner läser — insp.filterGroup, insp.filterCourse — utanför
+  // beroendegrafen. Utan den spåras filtren, eftersom laddaLektioner läser dem
+  // synkront före sitt första await och Sveltes spårning är dynamisk, inte
+  // lexikal. Det vore fel på tre sätt: implicit reaktivitet är precis den fälla
+  // specen varnar för, beroendet försvinner tyst om någon lägger en await före
+  // prologen, och Task 3:s explicita await laddaLektioner() skulle bli en
+  // dubbelhämtning i stället för enda vägen till en omhämtning vid filterbyte
+  // — vilket den nu är.
   $effect(() => {
-    laddaOrg();
-    laddaLektioner();
+    if (nav.tab !== 'inspelningar') return;
+    untrack(() => {
+      laddaOrg();
+      laddaLektioner();
+    });
   });
 </script>
 
