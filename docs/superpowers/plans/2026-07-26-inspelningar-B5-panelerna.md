@@ -855,9 +855,21 @@ Utöka monteringseffekten (`:79-86`). Kommentarsblocket ovanför är oförändra
       // Utanför untrack hade effekten spårat filtret — och då blir valjKlass
       // explicita omhämtning en DUBBELHÄMTNING i stället för enda vägen.
       laddaPaneler();
+      rensaSokning();
     });
   });
 ```
+
+RÄTTAT I SLUTGRANSKNINGEN (plan B3a, se `.superpowers/sdd/b3a-slutfix-report.md`):
+`rensaSokning()` (från `./sokActions.js`, commit `7e29f11`) lades till sist i
+blocket ovan. B3a kom efter B5 och gav vyn ett sökläge; utan raden överlever
+en gammal aktiv sökning ett flikbyte och skymmer det nyss omhämtade
+kartoteket i stället för att visa den nya lektionen. Den läser ingen store
+synkront (bara `sok` själv och sin egen modulräknare `sokToken`), så den
+behöver inte `untrack` av spårningsskäl — men ligger ändå här, tillsammans
+med de andra anropen, av samma "allt hämtas/nollställs om vid
+flikbyte"-skäl. Se den fullständiga kommentaren i
+`InspelningarView.svelte`.
 
 Montera panelen mellan den synliga statusraden (`:156`) och `<Kartotek …/>` (`:158`):
 
