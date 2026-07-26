@@ -993,9 +993,11 @@ test("Sök (/next/): kartoteket viker för träffarna och kommer tillbaka", asyn
   await expect(vy.locator("article.kort")).toHaveCount(0);
   await expect(vy.locator("section.traffar li.traff")).toHaveCount(FIXTUR.length);
 
-  // Och kartotekets tomtillstånd får INTE renderas under träfflistan — bevisat
-  // NEDAN att det faktiskt KAN rendera, så den här raden inte är grön oavsett
-  // vad koden gör.
+  // Två billiga spärrar: i DET HÄR tillståndet (tre lektioner, inget filter)
+  // kan kartotekets tomtillstånd ändå inte rendera, så de här raderna bevisar
+  // inget om huruvida "en yta i taget" faktiskt hålls. Den skarpa kontrollen
+  // — att tomtillståndet FAKTISKT kan rendera och ändå döljs av sökningen —
+  // ligger i BEVISBLOCKET nedan, i ett annat tillstånd (TOM_KLASS).
   await expect(vy.getByText("Inga inspelningar än")).toHaveCount(0);
   await expect(vy.getByText("Inga inspelningar matchar dina filter")).toHaveCount(0);
 
