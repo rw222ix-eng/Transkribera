@@ -48,6 +48,17 @@
     </button>
   </div>
 
+  <!--
+    DEN HÄR LÄGESVÄXELNS FORM AVVIKER MEDVETET, inte av misstag. Både
+    ArkivSearch.svelte (frontend/src/lib/arkiv/) och BuildPanel.svelte
+    (frontend/src/lib/planering/) renderar samma sorts kontroll — ask/keyword
+    respektive typväljaren — som en SEGMENTKONTROLL: ett spårfärgat fack
+    (var(--track)) med knapparna inuti, det aktiva valet lyft till
+    var(--surface). Den här är i stället fristående mikroetiketter
+    (var(--line)-ram var, var(--accent-weak) på det aktiva valet). Ingen av
+    formerna är fel i sig — ägaren gör en separat visuell genomgång av alla
+    tre; rör inte stylingen här som en del av en punktfix.
+  -->
   <div class="lagen" role="group" aria-label="Sökläge för inspelningar">
     <button class="lage" aria-pressed={sok.lage === 'ask'} onclick={() => valjLage('ask')}>
       Fråga AI
