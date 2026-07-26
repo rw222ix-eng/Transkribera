@@ -1,6 +1,6 @@
 <script>
   import { tk } from './stores.svelte.js';
-  import { stangTranskript, vaxlaSpelning } from './actions.js';
+  import { stangTranskript, vaxlaSpelning, borjaRedigera, avslutaRedigering, stangMedSparning } from './actions.js';
   import { hittaTraffar, traffarPerRad } from './sok.js';
   import Spelare from './Spelare.svelte';
   import Markorrad from './Markorrad.svelte';
@@ -73,6 +73,14 @@
     if (tk.open) stangTranskript();
   }
 
+  // Escape stänger normalt rutan direkt. Står redigeringsläget på måste
+  // sparandet få köra först — cancel går att avbryta, close gör det inte.
+  function paCancel(e) {
+    if (!tk.redigerar && !tk.sparar) return;
+    e.preventDefault();
+    stangMedSparning();
+  }
+
   function paTangent(e) {
     if (e.key !== ' ') return;
     // En fokuserad knapp ska TRYCKAS av mellanslag, inte kapas. Detsamma för
@@ -93,25 +101,36 @@
   aria-label="Transkript"
   tabindex="-1"
   bind:this={ruta}
+  oncancel={paCancel}
   onclose={paClose}
   onkeydown={paTangent}
 >
   <header class="topp">
     <h2 class="titel">{tk.namn || 'Transkript'}</h2>
-    <div class="sok">
-      <input
-        type="search"
-        class="sokfalt"
-        aria-label="Sök i transkriptet"
-        bind:value={tk.fraga}
-        oninput={() => (tk.traffIndex = 0)}
-        onkeydown={paSokTangent}
-      />
-      <span class="traffar" data-testid="transkript-traffar">{traffEtikett}</span>
-      <button type="button" class="stega" aria-label="Föregående träff" onclick={() => stegaTraff(-1)}>↑</button>
-      <button type="button" class="stega" aria-label="Nästa träff" onclick={() => stegaTraff(1)}>↓</button>
-    </div>
-    <button type="button" class="ghost" onclick={stangTranskript}>Stäng</button>
+    {#if !tk.redigerar}
+      <div class="sok">
+        <input
+          type="search"
+          class="sokfalt"
+          aria-label="Sök i transkriptet"
+          bind:value={tk.fraga}
+          oninput={() => (tk.traffIndex = 0)}
+          onkeydown={paSokTangent}
+        />
+        <span class="traffar" data-testid="transkript-traffar">{traffEtikett}</span>
+        <button type="button" class="stega" aria-label="Föregående träff" onclick={() => stegaTraff(-1)}>↑</button>
+        <button type="button" class="stega" aria-label="Nästa träff" onclick={() => stegaTraff(1)}>↓</button>
+      </div>
+    {/if}
+    {#if tk.redigerar}
+      <button type="button" class="ghost" disabled={tk.sparar} onclick={avslutaRedigering}>
+        {tk.sparar ? 'Sparar …' : 'Klar'}
+      </button>
+    {:else}
+      <button type="button" class="ghost" onclick={borjaRedigera}>Redigera</button>
+      {#if tk.sparad}<span class="sparad">Sparat</span>{/if}
+    {/if}
+    <button type="button" class="ghost" onclick={stangMedSparning}>Stäng</button>
   </header>
 
   <!-- Live-regionen. Permanent nod, aldrig {#if}-grindad, bara visuellt
@@ -191,6 +210,9 @@
     font-size: inherit;
     cursor: pointer;
   }
+  .sparad { font-size: 0.72rem; color: var(--ok); }
+  /* Identisk med .ghost:disabled i frontend/src/lib/transkript/Spelare.svelte:167. */
+  .ghost:disabled { opacity: 0.55; cursor: default; }
 
   .sok { display: flex; align-items: center; gap: 6px; }
   /* Speglar input-formen i frontend/src/lib/inspelningar/RedigeraLektion.svelte:242-253,

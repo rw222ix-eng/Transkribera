@@ -568,3 +568,123 @@ test("sökfrågan följer inte med in i nästa transkript", async ({ page }) => 
 
   expect(errors, errors.join("\n")).toEqual([]);
 });
+
+test("ett misslyckat sparande ljuger inte", async ({ page }) => {
+  const errors = [];
+  failOnConsoleError(page, errors);
+
+  await page.route("**/api/history/*", async (route) => {
+    if (route.request().method() !== "PATCH") return route.fallback();
+    await route.fulfill({
+      status: 500,
+      contentType: "application/json",
+      body: '{"error":"kunde inte skriva till disk"}',
+    });
+  });
+
+  const ruta = await oppnaTranskript(page);
+  await ruta.getByRole("button", { name: "Redigera" }).click();
+
+  const rad = ruta.locator('li.rad [contenteditable="true"]').first();
+  await rad.click();
+  await page.keyboard.type(" ÄNDRAD");
+
+  await ruta.getByRole("button", { name: "Klar" }).click();
+
+  // Serverns egen text vinner över reservtexten.
+  await expect(ruta.getByTestId("transkript-statusrad")).toHaveText("kunde inte skriva till disk");
+  // Ingen "Sparat"-bricka, och läget står kvar så arbetet inte går förlorat.
+  await expect(ruta.locator(".sparad")).toHaveCount(0);
+  await expect(ruta.getByRole("button", { name: "Klar" })).toBeVisible();
+
+  // UPPTÄCKT UNDER IMPLEMENTATIONEN (avviker alltså från planen, som bara gav
+  // en ofiltrerad assertion): webbläsaren själv loggar ett nätverksfel till
+  // konsolen när PATCH:en fulfillas med 500 — precis som för GET-fallet i
+  // "en historikpost som inte går att läsa säger det" ovan. Det är inte ett
+  // applikationsfel och räknas inte.
+  expect(errors.filter((e) => !/500|Failed to load/.test(e)), errors.join("\n")).toEqual([]);
+});
+
+test("en tom diff skickar ingenting och lovar ingenting", async ({ page }) => {
+  const errors = [];
+  failOnConsoleError(page, errors);
+
+  const patchar = [];
+  page.on("request", (r) => {
+    if (r.method() === "PATCH" && new URL(r.url()).pathname.startsWith("/api/history/")) {
+      patchar.push(r.url());
+    }
+  });
+
+  const ruta = await oppnaTranskript(page);
+  await ruta.getByRole("button", { name: "Redigera" }).click();
+
+  // Ändra en rad och ändra tillbaka. Gamla appen sätter då edited = true men
+  // tömmer edits, och saveTranscriptEdits returnerar tidigt (app.js:1695,
+  // 2173-2174) — ingen PATCH skickas medan "Sparat" lyser.
+  const rad = ruta.locator('li.rad [contenteditable="true"]').first();
+  await rad.click();
+  await page.keyboard.type("X");
+  await page.keyboard.press("Backspace");
+
+  await ruta.getByRole("button", { name: "Klar" }).click();
+  await expect(ruta.getByRole("button", { name: "Redigera" })).toBeVisible();
+
+  expect(patchar, "en oförändrad rad skickade ändå en PATCH").toHaveLength(0);
+  await expect(ruta.locator(".sparad")).toHaveCount(0);
+
+  expect(errors, errors.join("\n")).toEqual([]);
+});
+
+test("ett lyckat sparande kvitteras och överlever en omöppning", async ({ page }) => {
+  const errors = [];
+  failOnConsoleError(page, errors);
+
+  const ruta = await oppnaTranskript(page);
+  await ruta.getByRole("button", { name: "Redigera" }).click();
+
+  const rad = ruta.locator('li.rad [contenteditable="true"]').first();
+  await rad.click();
+  await page.keyboard.type(" Extra.");
+  await ruta.getByRole("button", { name: "Klar" }).click();
+
+  await expect(ruta.getByTestId("transkript-statusrad")).toHaveText("Ändringarna är sparade.");
+  await expect(ruta.locator(".sparad")).toHaveCount(1);
+
+  await page.keyboard.press("Escape");
+  const igen = await oppnaTranskript(page);
+  await expect(igen.locator("li.rad .text").first()).toContainText("Extra.");
+
+  expect(errors, errors.join("\n")).toEqual([]);
+});
+
+/**
+ * BRIEFEN KAN INTE VETA DETTA: sökfältets Escape-gren (paSokTangent) är helt
+ * borta i redigeringsläget — <div class="sok"> är {#if}-grindad på
+ * !tk.redigerar — så den kan inte krocka med oncancel här. Frågan är i
+ * stället vad EN redigerbar rads eget Escape-tryck ska göra. Ett
+ * contenteditable-element sväljer inte Escape (till skillnad från
+ * <input type="search">, se paSokTangent-kommentaren), så webbläsarens
+ * <dialog> ser sitt normala cancel-event. Beslutet: samma sak som
+ * Stäng-knappen — försök spara, stäng bara vid ett lyckat sparande — så en
+ * lärare aldrig kan trycka bort en påbörjad ändring av misstag.
+ */
+test("Escape med fokus i en redigerbar rad sparar innan rutan stängs", async ({ page }) => {
+  const errors = [];
+  failOnConsoleError(page, errors);
+
+  const ruta = await oppnaTranskript(page);
+  await ruta.getByRole("button", { name: "Redigera" }).click();
+
+  const rad = ruta.locator('li.rad [contenteditable="true"]').first();
+  await rad.click();
+  await page.keyboard.type(" Extra.");
+  await page.keyboard.press("Escape");
+
+  await expect(ruta).toBeHidden();
+
+  const igen = await oppnaTranskript(page);
+  await expect(igen.locator("li.rad .text").first()).toContainText("Extra.");
+
+  expect(errors, errors.join("\n")).toEqual([]);
+});

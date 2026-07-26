@@ -16,6 +16,17 @@
     hoppaTillRad(i);
   }
 
+  /**
+   * Skriver in radens text EN gång. Låter man Svelte rita om noden medan den
+   * redigeras hoppar markören till början vid varje tangenttryck — samma
+   * problem morphdom löste med data-eline (app.js:4252), löst på Sveltes sätt:
+   * blocket renderar tomt och innehållet sätts här.
+   */
+  function fyll(el, i) {
+    el.textContent = i in tk.andringar ? tk.andringar[i] : (tk.segment[i]?.text ?? '');
+    return {};
+  }
+
   let lista = $state(null);
 
   /**
@@ -70,18 +81,34 @@
        bara av actions vid öppning och efter ett lyckat sparande — så någon
        stabilare identitet finns inte att vinna något på. -->
   {#each tk.segment as s, i (i)}
-    <li class="rad" class:aktuell={i === aktuell} data-rad={i}>
-      <!-- Hela raden är EN knapp, inte ett <li onclick> med tidkoden som
-           separat knapp som i gamla appen (app.js:5538 vs 5543-5549). Skälen:
-           ett klick på ett icke-interaktivt element kräver svelte-ignore, och
-           repot har noll sådana; en knapp per rad ger EN tabbstopp i stället
-           för två; och det tillgängliga namnet blir tidkod plus text, vilket
-           är bättre än "Hoppa till 05:12".
-           user-select: text i CSS:en nedan håller markeringen vid liv. -->
-      <button type="button" class="radknapp" onclick={() => klick(i)}>
-        <span class="tid">{fmtTid(s.start)}</span>
-        <span class="text">{#each styckaRad(s.text, perRad.get(i), tk.traffIndex) as bit}{#if bit.traff}<mark class:aktuell={bit.aktuell}>{bit.text}</mark>{:else}{bit.text}{/if}{/each}</span>
-      </button>
+    <li class="rad" class:aktuell={!tk.redigerar && i === aktuell} data-rad={i}>
+      {#if tk.redigerar}
+        <!-- contenteditable kan inte bo i en knapp, och det finns inget att
+             hoppa till här ändå: ljudet pausas när redigeringen slås på. -->
+        <div class="radrad">
+          <span class="tid">{fmtTid(s.start)}</span>
+          <div
+            class="text redigerbar"
+            contenteditable="true"
+            role="textbox"
+            aria-label="Rad {i + 1}"
+            use:fyll={i}
+            oninput={(e) => (tk.andringar[i] = e.currentTarget.textContent)}
+          ></div>
+        </div>
+      {:else}
+        <!-- Hela raden är EN knapp, inte ett <li onclick> med tidkoden som
+             separat knapp som i gamla appen (app.js:5538 vs 5543-5549). Skälen:
+             ett klick på ett icke-interaktivt element kräver svelte-ignore, och
+             repot har noll sådana; en knapp per rad ger EN tabbstopp i stället
+             för två; och det tillgängliga namnet blir tidkod plus text, vilket
+             är bättre än "Hoppa till 05:12".
+             user-select: text i CSS:en nedan håller markeringen vid liv. -->
+        <button type="button" class="radknapp" onclick={() => klick(i)}>
+          <span class="tid">{fmtTid(s.start)}</span>
+          <span class="text">{#each styckaRad(s.text, perRad.get(i), tk.traffIndex) as bit}{#if bit.traff}<mark class:aktuell={bit.aktuell}>{bit.text}</mark>{:else}{bit.text}{/if}{/each}</span>
+        </button>
+      {/if}
     </li>
   {/each}
 </ol>
@@ -136,6 +163,19 @@
     color: var(--ink-3);
   }
   .text { overflow-wrap: anywhere; }
+  .radrad {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    padding: 5px 6px;
+  }
+  .redigerbar {
+    flex: 1 1 auto;
+    border: 1px solid var(--line-2);
+    border-radius: 3px;
+    padding: 4px 6px;
+  }
+  .redigerbar:focus-visible { border-color: var(--accent); }
   mark {
     background: color-mix(in srgb, var(--warn) 26%, transparent);
     color: inherit;

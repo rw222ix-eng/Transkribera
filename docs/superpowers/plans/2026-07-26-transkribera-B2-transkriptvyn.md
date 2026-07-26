@@ -2750,6 +2750,31 @@ test("ett lyckat sparande kvitteras och överlever en omöppning", async ({ page
 });
 ```
 
+**AVVIKELSE UPPTÄCKT UNDER IMPLEMENTATIONEN:** "ett misslyckat sparande ljuger
+inte" som skriven ovan är röd av fel skäl första gången den körs mot en
+riktig implementation — inte bara för att knappen "Redigera" saknas (steg 2),
+utan även efteråt: webbläsaren själv loggar ett konsolfel ("Failed to load
+resource: the server responded with a status of 500") när `route.fulfill`
+svarar 500 på PATCH:en, precis som för GET-fallet i "en historikpost som inte
+går att läsa säger det" (task 4). Planen gav en ofiltrerad
+`expect(errors, ...).toEqual([])`; testet filtrerar i stället bort
+`/500|Failed to load/`, som den befintliga 500-testen redan gör:
+
+```js
+  // Konsolen får ett nätverksfel av webbläsaren själv när PATCH:en fulfillas
+  // med 500 — det är inte ett applikationsfel och räknas inte.
+  expect(errors.filter((e) => !/500|Failed to load/.test(e)), errors.join("\n")).toEqual([]);
+```
+
+Utöver de tre testerna ovan lades ett fjärde till (se "Saker briefen inte kan
+veta" i uppdragets ram): `<div class="sok">` är {#if}-grindad på
+`!tk.redigerar`, så sökfältets egen Escape-gren (paSokTangent) kan aldrig
+krocka med `oncancel` i redigeringsläget. Ett contenteditable-element sväljer
+inte Escape som ett `<input type="search">` gör, så frågan är i stället vad
+raden ska göra: beslutet blev samma som Stäng-knappen — försök spara, stäng
+bara vid ett lyckat sparande. Testet "Escape med fokus i en redigerbar rad
+sparar innan rutan stängs" bekräftar just det.
+
 - [ ] **Steg 2: Kör och se dem falla**
 
 ```bash
@@ -2972,6 +2997,36 @@ Förväntat: `0 ERRORS 0 WARNINGS` och 3 passed.
 Först: flytta `tk.sparad = true;` i `avslutaRedigering` till raden **före** `const r = await fetch(...)`. Kör om — "ett misslyckat sparande ljuger inte" ska falla på `.sparad` toHaveCount(0). Återställ.
 
 Sedan: ta bort den tidiga returen för tom diff (blocket `if (!andrade.length)`). Kör om — "en tom diff skickar ingenting" ska falla på `toHaveLength(0)`. Återställ.
+
+**AVVIKELSE UPPTÄCKT UNDER IMPLEMENTATIONEN (den första kontrollen ovan
+biter inte som skrivet):** att bara flytta `tk.sparad = true;` gjorde INTE
+"ett misslyckat sparande ljuger inte" röd — testet förblev grönt (bekräftat
+körning: `1 passed`, `.sparad` toHaveCount(0) höll). Orsaken finns i steg 4:s
+egen header-markup, som planen själv gav —
+
+```svelte
+{#if tk.redigerar}
+  <button ...>{tk.sparar ? 'Sparar …' : 'Klar'}</button>
+{:else}
+  <button ...>Redigera</button>
+  {#if tk.sparad}<span class="sparad">Sparat</span>{/if}
+{/if}
+```
+
+`.sparad` ligger i `{:else}`-grenen, alltså bakom `!tk.redigerar` — och
+`avslutaRedigering` sätter `tk.redigerar = false` BARA i success-grenen.
+Ett misslyckat PATCH lämnar `tk.redigerar` sant genom hela funktionen
+(bekräftat: "Klar"-knappen är fortfarande synlig), så `.sparad` kan
+strukturellt inte visas oavsett när `tk.sparad` sätts internt — kontrollen
+testar alltså i praktiken bara EN av de två synkrona lögnerna gamla appen bar
+(`toggleEdit()`, app.js:2164, sätter både `editing: false` OCH brickan
+synkront). Att replikera BÅDA (flytta även `tk.redigerar = false;` till
+samma rad) gav rätt fel på rätt rad: `.sparad` toHaveCount(0) — Expected: 0,
+Received: 1. Kontrollen är alltså riktig, men den gäller den KOMBINERADE
+lögnen, inte `tk.sparad` isolerat — vilket är en ofarlig skillnad här,
+eftersom `redigerar`-grindningen i steg 4:s markup redan är den mekanism som
+gör brickan ärlig. Ingen kodändring gjordes; det här stycket dokumenterar
+bara vad som faktiskt verifierades.
 
 - [ ] **Steg 8: Commit**
 

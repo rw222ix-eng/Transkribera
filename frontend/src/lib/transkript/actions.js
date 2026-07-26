@@ -318,3 +318,73 @@ export async function taBortMarkor(id) {
     satBesked('Markören kunde inte tas bort.');
   }
 }
+
+export function borjaRedigera() {
+  tk.redigerar = true;
+  tk.sparad = false;
+  tk.andringar = {};
+  // Söket är avstängt i redigeringsläget, som i gamla appen (app.js:3324).
+  tk.fraga = '';
+  tk.traffIndex = 0;
+  mediaEl?.pause();
+}
+
+/**
+ * Lämnar redigeringsläget. Returnerar sant när läget FAKTISKT lämnades — falskt
+ * betyder att sparandet föll och att arbetet står kvar orört.
+ *
+ * Gamla appen sätter "Sparat" synkront i _commitEdits (app.js:2174), före
+ * PATCH:en, och anropet saknar både resp.ok-koll och innehåll i sin .catch
+ * (app.js:1697-1698). Brickan kan alltså ljuga på två sätt.
+ */
+export async function avslutaRedigering() {
+  if (tk.sparar) return false;
+
+  const andrade = Object.keys(tk.andringar).filter(
+    (i) => tk.andringar[i] !== (tk.segment[i]?.text ?? ''),
+  );
+  if (!andrade.length) {
+    // Inget ändrat är inte samma sak som sparat. Ingen PATCH, ingen bricka.
+    tk.redigerar = false;
+    tk.andringar = {};
+    return true;
+  }
+
+  tk.sparar = true;
+  try {
+    // Servern vill ha HELA transkriptet (server.py:869-899), i sin egen form.
+    const kropp = tk.segment.map((s, i) => ({
+      start: s.start,
+      end: s.end,
+      text: i in tk.andringar ? tk.andringar[i] : s.text,
+    }));
+    const r = await fetch('/api/history/' + encodeURIComponent(tk.historyId), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ transcript: kropp }),
+    });
+    if (!r.ok) {
+      // Serverns egen text först — den är mer precis än vår reservtext.
+      const j = await r.json().catch(() => null);
+      satBesked((j && j.error) || 'Kunde inte spara ändringarna.');
+      return false;
+    }
+    tk.segment = kropp;
+    tk.andringar = {};
+    tk.redigerar = false;
+    tk.sparad = true;
+    satBesked('Ändringarna är sparade.', 'info');
+    return true;
+  } catch {
+    satBesked('Kunde inte spara ändringarna.');
+    return false;
+  } finally {
+    tk.sparar = false;
+  }
+}
+
+/** Stänger, men sparar först om redigeringsläget är på. */
+export async function stangMedSparning() {
+  if (tk.redigerar && !(await avslutaRedigering())) return;
+  stangTranskript();
+}
