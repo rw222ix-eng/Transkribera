@@ -235,6 +235,39 @@ function loggaLektionsanrop(page) {
   return anrop;
 }
 
+/**
+ * Väntar in ett löfte med en generös men ÄNDLIG frist.
+ *
+ * Finns för att ersätta fasta pauser. En waitForTimeout som går ut för tidigt
+ * gör testet FALSKT GRÖNT — assertionen efteråt körs innan det den vaktar ens
+ * hunnit hända — medan ett verkligt hängande svar här i stället ger ett
+ * begripligt fel med sin egen text.
+ */
+function vantaPa(loftet, vad, ms = 15_000) {
+  let timer;
+  return Promise.race([
+    Promise.resolve(loftet).finally(() => clearTimeout(timer)),
+    new Promise((_, avvisa) => {
+      timer = setTimeout(() => avvisa(new Error(vad)), ms);
+    }),
+  ]);
+}
+
+/**
+ * Låter sidan rendera två rutor.
+ *
+ * Ett svar som just levererats behandlas i mikrouppgifter — fetch → json →
+ * tilldelning → Sveltes flush — så DOM:en är ännu inte uppdaterad i det
+ * ögonblick svaret landat. Efter två requestAnimationFrame har en sådan
+ * skrivning garanterat slagit igenom, och en omprövande assertion kan därför
+ * inte passera på att den hann före skrivningen.
+ */
+function tvaRutor(page) {
+  return page.evaluate(
+    () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))),
+  );
+}
+
 test.beforeEach(async ({ request }) => {
   await byggFixtur(request);
 });
@@ -598,12 +631,20 @@ test("Inspelningar (/next/): ärlighetsvakten räknar historikposter utan lektio
   // "Alla klasser"-val skickar ett ofiltrerat /api/lessons, och att kalla
   // unroute medan just det anropet ligger inne i route.fetch() ger
   // "Route is already handled!".
+  //
+  // slappTrimmat signalerar när ett trimmat svar VERKLIGEN levererats till
+  // sidan. Flikbytet längre ner väntar på den signalen i stället för på en
+  // gissad paus — se kommentaren där.
+  let slappTrimmat = () => {};
+  const nastaTrimmadeSvar = () => new Promise((r) => (slappTrimmat = r));
+
   let trimma = true;
   await page.route("**/api/lessons*", async (route) => {
     const u = new URL(route.request().url());
     if (!trimma || route.request().method() !== "GET" || u.search) return route.continue();
     const svar = await route.fetch();
     await route.fulfill({ json: (await svar.json()).slice(1) });
+    slappTrimmat();
   });
 
   const vy = await oppnaInspelningar(page, { kort: 2 });
@@ -619,8 +660,44 @@ test("Inspelningar (/next/): ärlighetsvakten räknar historikposter utan lektio
   // Vakten gör ett EGET, ofiltrerat anrop — talet ska alltså inte följa den
   // filtrerade vyn. Härleddes det ur insp.lessons.length skulle ett klassbyte
   // som lämnar ett kort kvar göra beskedet till "2 inspelningar".
+  //
+  // FLIKBYTET NEDAN ÄR ASSERTIONENS TÄNDER, inte kosmetik. kollaHistorik() körs
+  // BARA ur monteringseffekten, som är grindad på nav.tab
+  // (InspelningarView.svelte) — ett klassbyte kör den alltså aldrig om. Utan
+  // flikbytet skulle en implementation som räknade antalH - insp.lessons.length
+  // VID MONTERINGEN lämna historikExtra orört genom klassbytet, och raden nedan
+  // hade passerat på ett tal som ingen räknat om. Bara en $derived-variant hade
+  // fällts.
+  //
+  // Med flikbytet körs vakten om medan ett SERVERfilter är aktivt. Routen ovan
+  // trimmar bara det OFILTRERADE svaret, så rätt kod ser fortfarande 3 - 2 = 1
+  // medan en läsning av den filtrerade listan ger 3 - 1 = 2 och fäller raden.
   const { klass } = filter(vy);
   await klass.selectOption({ label: "9B" });
+  await expect(vy.locator("article.kort")).toHaveCount(1);
+
+  // Vaktens omräkning väntas IN, inte gissas. Assertionen efteråt hade annars
+  // kunnat läsa det gamla talet (1, skrivet vid monteringen) innan flikbytets
+  // omräkning ens skett — och då hade även den felaktiga implementationen
+  // passerat. kollaHistorik skriver först när BÅDA dess hämtningar landat, så
+  // båda väntas in: /api/history går direkt till servern, det ofiltrerade
+  // /api/lessons genom routen ovan.
+  const historikOm = page.waitForResponse(
+    (r) => new URL(r.url()).pathname === "/api/history",
+    { timeout: 15_000 },
+  );
+  const lektionerOm = nastaTrimmadeSvar();
+
+  await page.getByRole("button", { name: "Transkribera", exact: true }).click();
+  await page.getByRole("button", { name: "Inspelningar", exact: true }).click();
+
+  await historikOm;
+  await vantaPa(
+    lektionerOm,
+    "Vaktens ofiltrerade GET /api/lessons levererades aldrig efter flikbytet",
+  );
+  await tvaRutor(page);
+
   await expect(vy.locator("article.kort")).toHaveCount(1);
   await expect(
     vy.getByText("1 inspelning finns i historiken men saknas i kartoteket."),
