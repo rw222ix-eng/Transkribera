@@ -18,11 +18,40 @@
   import RedigeraLektion from './RedigeraLektion.svelte';
   import { nav } from '../shell/nav.svelte.js';
 
-  // Fokusmål för raderingsbekräftelsen. $effect körs när blocket monterats in,
-  // alltså efter att insp.raderId satts.
+  // Raderingsbekräftelsen är ett NATIVE <dialog>, byggt precis som
+  // RedigeraLektion.svelte och av samma skäl — läs kommentarerna där, de gäller
+  // ord för ord även här.
+  //
+  // Den var fram till nu en handgjord tabindex="-1"-div: ingen fokusfälla, inget
+  // Escape, och fokus tappades till <body> när blocket avmonterades. Att just
+  // den DESTRUKTIVA av vyns två rutor saknade allt det redigeringsdialogen fick
+  // var inkonsekvensen B2-B5 annars ärvt.
+  //
+  // ALLTID MONTERAD, inte {#if}-grindad: avmonteras komponenten i
+  // stängningsögonblicket hinner close() aldrig köras, och då uteblir
+  // webbläsarens återställning av fokus till Radera-knappen som öppnade rutan —
+  // exakt det tangentbordstapp bytet gjordes för att stoppa. Stängd är ett
+  // <dialog> display:none och alltså borta ur både layout och
+  // tillgänglighetsträd; den kostar ingenting att låta stå.
+  //
+  // nav.tab ÄR MED I VILLKORET av samma skäl som i RedigeraLektion: en förfader
+  // med display:none gör att dialogen inte RITAS men lämnar den `open`, och
+  // showModal() håller då fortfarande hela dokumentet inert. Appen slutar svara
+  // utan att något på skärmen förklarar varför.
   let bekraftRuta = $state(null);
   $effect(() => {
-    if (insp.raderId !== null) bekraftRuta?.focus();
+    if (!bekraftRuta) return;
+    if (insp.raderId !== null && nav.tab === 'inspelningar') {
+      if (!bekraftRuta.open) {
+        bekraftRuta.showModal();
+        // Rutan själv, inte en knapp: då läses frågan och följderna innan
+        // fokus står på något som går att trycka på. showModal() hade annars
+        // fokuserat Avbryt direkt.
+        bekraftRuta.focus();
+      }
+    } else if (bekraftRuta.open) {
+      bekraftRuta.close();
+    }
   });
 
   // Hämtas vid varje NAVIGERING HIT, inte vid montering. KONTROLLERAT
@@ -126,41 +155,6 @@
   -->
   <p class="fel" aria-hidden="true" data-testid="insp-statusrad">{insp.fel}</p>
 
-  <!--
-    Raderingsbekräftelsen. MEDVETET ingen confirm(): den går varken att styla
-    eller att testa, och den blockerar dessutom hela renderaren. Blocket ligger
-    ovanför kartoteket och tar fokus när det öppnas — annars hamnar det före
-    kortet läraren just tryckte på i DOM-ordningen, och en tangentbordsanvändare
-    skulle behöva backa med Shift+Tab för att hitta det.
-  -->
-  {#if insp.raderId !== null}
-    <div class="bekraft" tabindex="-1" bind:this={bekraftRuta}>
-      <p class="fraga">Ta bort <strong>{insp.raderNamn}</strong>?</p>
-      <p class="brod">
-        Lektionen tas bort ur lektionsdatabasen och historiken, tillsammans med
-        resultatmappen. Filer du själv sparat någon annanstans påverkas inte.
-      </p>
-      <!-- Radera är avstängd medan DELETE:et mot DEN HÄR lektionen är i luften.
-           Ett andra DELETE mot samma lektion svarar 200 med folder_removed:
-           false och är alltså helt tyst — läraren får ingen aning om att hon
-           skickat två raderingar. Jämförelsen mot raderId, inte en
-           sanningskontroll: insp.raderar bär id:t så att ett långsamt DELETE
-           inte stänger av knappen för nästa lektion läraren hinner fråga om
-           (flaggan står kvar genom laddaLektioner() efteråt). -->
-      <div class="knappar">
-        <button type="button" class="ghost" onclick={avbrytRadera}>Avbryt</button>
-        <button
-          type="button"
-          class="ghost fara"
-          onclick={bekraftaRadera}
-          disabled={insp.raderar === insp.raderId}
-        >
-          Radera
-        </button>
-      </div>
-    </div>
-  {/if}
-
   <Kartotek lektioner={synliga} onRedigera={startaRedigering} onRadera={fragaRadera} />
 
   <!--
@@ -227,6 +221,53 @@
     Att öppna en lektion — transkript, ljud och chatt — migreras i en senare
     plan. Tills dess finns den i den gamla appen.
   </p>
+
+  <!--
+    Raderingsbekräftelsen. MEDVETET ingen confirm(): den går varken att styla
+    eller att testa, och den blockerar dessutom hela renderaren.
+
+    Ligger HÄR, sist bland innehållet och intill den andra dialogen, i stället
+    för ovanför kartoteket. Den gamla placeringen fanns för att en inmonterad div
+    annars hamnade FÖRE kortet läraren just tryckte på i DOM-ordningen — ett
+    Shift+Tab-tapp. Med showModal() lyfts rutan till top-layer och webbläsaren
+    fokusfäller inuti den, så DOM-ordningen styr ingenting längre. Kvar är att de
+    två alltid monterade dialogerna står tillsammans.
+
+    aria-label och inte aria-labelledby på frågan: skärmläsaren läser namnet när
+    fokus landar på rutan och sedan innehållet, så lektionsnamnet hörs ändå — en
+    labelledby hade läst frågan två gånger. Samma val som RedigeraLektion.
+  -->
+  <dialog
+    class="bekraft"
+    aria-label="Bekräfta radering"
+    tabindex="-1"
+    bind:this={bekraftRuta}
+    onclose={avbrytRadera}
+  >
+    <p class="fraga">Ta bort <strong>{insp.raderNamn}</strong>?</p>
+    <p class="brod">
+      Lektionen tas bort ur lektionsdatabasen och historiken, tillsammans med
+      resultatmappen. Filer du själv sparat någon annanstans påverkas inte.
+    </p>
+    <!-- Radera är avstängd medan DELETE:et mot DEN HÄR lektionen är i luften.
+         Ett andra DELETE mot samma lektion svarar 200 med folder_removed:
+         false och är alltså helt tyst — läraren får ingen aning om att hon
+         skickat två raderingar. Jämförelsen mot raderId, inte en
+         sanningskontroll: insp.raderar bär id:t så att ett långsamt DELETE
+         inte stänger av knappen för nästa lektion läraren hinner fråga om
+         (flaggan står kvar genom laddaLektioner() efteråt). -->
+    <div class="knappar">
+      <button type="button" class="ghost" onclick={avbrytRadera}>Avbryt</button>
+      <button
+        type="button"
+        class="ghost fara"
+        onclick={bekraftaRadera}
+        disabled={insp.raderar === insp.raderId}
+      >
+        Radera
+      </button>
+    </div>
+  </dialog>
 
   <!--
     ALLTID monterad, MEDVETET inte {#if}-grindad. Dialogen är ett native
@@ -326,13 +367,26 @@
      Svelte-frontenden. Vakten skiljs redan från senare-raden av brödstorleken
      och --ink-2 (se ovan); rutan nedan har redan en hel ram, och var(--bad) på
      rubriken bär allvaret. */
+  /* Ingen egen skärm, inget z-index och ingen centrering: showModal() lyfter
+     rutan till top-layer och webbläsarens <dialog>-regel
+     (position: fixed; inset: 0; margin: auto) centrerar den. Formen är i övrigt
+     densamma som .ruta i RedigeraLektion.svelte.
+
+     color sätts UTTRYCKLIGEN — webbläsarens <dialog>-regel sätter
+     color: CanvasText, som bryter arvet från body. Samma fälla som .ruta. */
   .bekraft {
-    margin-top: 16px;
+    width: min(94vw, 460px);
+    max-height: 90vh;
+    overflow: auto;
     background: var(--surface);
+    color: var(--ink);
     border: 1px solid var(--line);
     border-radius: 4px;
+    box-shadow: var(--shadow);
     padding: 14px 16px;
   }
+  /* Samma dimning och samma 42 % som redigeringsdialogens. */
+  .bekraft::backdrop { background: color-mix(in srgb, var(--ink) 42%, transparent); }
   .bekraft:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   /* Rubriken bär allvaret, i stället för den borttagna stripen. Kontrollmätt
      mot båda temana: #C8463A på #FFFFFF ger 4,78:1 och #E0796A på #1C1D15 ger
@@ -343,7 +397,17 @@
      knapp. 0.72rem/--ink-3 hör till de versala mikroetiketterna och gör just
      den här texten svårast att läsa av allt i vyn. */
   .brod { font-size: 1.03rem; color: var(--ink-2); margin: 6px 0 0; max-width: 62ch; }
-  .knappar { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  /* justify-content: flex-end speglar RedigeraLektion.svelte:277-284. Som
+     inmonterat block i sidflödet var vänsterställt naturligt; som centrerad
+     modal vid sidan av den andra dialogen blir skillnaden bara en synlig
+     inkonsekvens mellan två rutor som ska se likadana ut. */
+  .knappar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: flex-end;
+    margin-top: 12px;
+  }
   /* Identisk med .ghost i frontend/src/lib/transkribera/Korning.svelte:284-293. */
   .ghost {
     background: transparent;

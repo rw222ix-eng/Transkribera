@@ -569,15 +569,30 @@ test("Inspelningar (/next/): raderingen skickar DELETE och kortet försvinner", 
 
   // Bekräftelsen är MEDVETET ingen confirm(): den går varken att styla eller
   // att testa. Den namnger lektionen och säger vad som faktiskt försvinner.
-  // Blocket har ingen egen roll, så det lokaliseras strukturellt — men allt
-  // som kontrolleras är dess synliga text.
+  // Den är ett native <dialog> som öppnas med showModal(), precis som
+  // redigeringsdialogen — den destruktiva av de två får inte vara den som saknar
+  // fokusfälla, Escape och fokusåterställning.
   const bekraft = vy.locator(".bekraft");
+  await expect(bekraft).toBeVisible();
   await expect(bekraft).toContainText("Ta bort");
   await expect(bekraft).toContainText("Lektionen tas bort ur lektionsdatabasen och historiken");
 
-  // Avbryt måste vara ofarligt — annars är bekräftelsen ingen bekräftelse.
+  // ESCAPE stänger, och det är webbläsarens showModal() som ger den — inte egen
+  // kod. Den handgjorda tabindex="-1"-diven den ersatte ignorerade Escape helt.
+  await page.keyboard.press("Escape");
+  await expect(bekraft).toBeHidden();
+
+  // FOKUS ÅTERSTÄLLS till knappen som öppnade rutan. Det är hela skälet till att
+  // dialogen är ALLTID monterad i stället för {#if}-grindad: avmonteras den i
+  // stängningsögonblicket kör close() aldrig, och fokus hamnar på <body>.
+  await expect(kort.last().getByRole("button", { name: "Radera" })).toBeFocused();
+  expect(raderingar, "Escape skickade ett DELETE").toEqual([]);
+
+  // Avbryt måste vara lika ofarligt — annars är bekräftelsen ingen bekräftelse.
+  await kort.last().getByRole("button", { name: "Radera" }).click();
+  await expect(bekraft).toBeVisible();
   await bekraft.getByRole("button", { name: "Avbryt" }).click();
-  await expect(bekraft).toHaveCount(0);
+  await expect(bekraft).toBeHidden();
   await expect(meta).toHaveText([META("A1"), META("A2"), META("B3")]);
   expect(raderingar, "Avbryt skickade ett DELETE").toEqual([]);
 
