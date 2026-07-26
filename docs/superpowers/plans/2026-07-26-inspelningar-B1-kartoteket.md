@@ -834,16 +834,20 @@ Do not give the visible copy its own `role` — two announcing nodes in one view
 The legacy view distinguishes them (`app.js:4903-4905` and `:4949-4951`) and so must this one:
 
 ```svelte
-{#if !insp.laddar && !insp.lessons.length}
+{#if !insp.laddar && !insp.lessons.length && !insp.filterGroup && !insp.filterCourse}
   <p class="tomt">
     Inga inspelningar än. Transkribera en lektion så dyker den upp här.
   </p>
-{:else if !synliga.length}
+{:else if !insp.laddar && !synliga.length}
   <p class="tomt">Inga inspelningar matchar dina filter.</p>
 {/if}
 ```
 
 The first is "you have nothing", the second is "you have things but hid them" — conflating them tells a teacher with a full archive that it is empty.
+
+**Why the filter terms are in the first condition (added after Task 3's review).** Before Task 3, `insp.lessons` was the whole archive. It is not any more: class and course are **server** filters, so picking a class with no lessons sets `insp.lessons = []` — and without `!insp.filterGroup && !insp.filterCourse` a teacher with a full archive would be told they have never recorded anything. That is the exact conflation this step forbids. The month term is deliberately absent: when the list is empty the client filter cannot matter, and when it is not empty the case falls to the second branch.
+
+`insp.laddar` guards **both** branches so neither message flashes during a refetch.
 
 - [ ] **Step 2: The honesty guard**
 
@@ -922,7 +926,24 @@ Break two things, one at a time, capture the failing output verbatim, then rever
 a. In `actions.js`, make `valjKlass` set the field without awaiting `laddaLektioner()`. Assertion 2 must fail.
 b. In `actions.js`, make `valjManad` call `laddaLektioner()` too. Assertion 3 must fail.
 
-If either still passes, the assertion is watching the wrong thing — fix the assertion, do not weaken the check. Together these two are the whole point of the filter split.
+c. In `actions.js`, remove `if (token !== laddToken) return;` from `laddaLektioner`'s success branch. Assertion 7 (below) must fail — the cards then show the **first** class's lessons.
+
+If any still passes, the assertion is watching the wrong thing — fix the assertion, do not weaken the check. (a) and (b) are the whole point of the filter split; (c) is the only thing that exercises the generation guard.
+
+**Assertion 7 — force the overlap.** Task 3 made this cheap: two quick server-filter changes now trigger it. Use `page.route`, not the SSE-shaped `window.fetch` patch from `transkribera-korning.spec.mjs`:
+
+```js
+let n = 0;
+await page.route('**/api/lessons*', async (route) => {
+  if (++n === 1) await new Promise((r) => setTimeout(r, 800));  // FÖRSTA svaret sist
+  await route.continue();
+});
+await klass.selectOption('1');   // selectOption väntar inte på nätverket
+await klass.selectOption('2');
+await expect(kort).toHaveText([...klass2]);   // det ANDRA svaret måste vinna
+```
+
+If (c) does not fail, the delay is not inverting the response order — raise it, do not weaken the assertion.
 
 - [ ] **Step 6: Full gate**
 

@@ -24,6 +24,12 @@
       const m = String(l.datum || '').slice(0, 7);
       if (m) s.add(m);
     }
+    // Den VALDA månaden hålls kvar även om ingen kvarvarande lektion har den.
+    // Ett klassbyte kan annars ta bort den ur listan medan insp.filterMonth
+    // står kvar: Svelte hittar då ingen matchande option, sätter
+    // selectedIndex = -1, och läraren ser en tom ruta över ett tomt kartotek
+    // utan att kunna se vad som filtrerar bort allt — eller välja bort det.
+    if (insp.filterMonth && !s.has(insp.filterMonth)) s.add(insp.filterMonth);
     return [...s].sort().reverse();
   });
 
