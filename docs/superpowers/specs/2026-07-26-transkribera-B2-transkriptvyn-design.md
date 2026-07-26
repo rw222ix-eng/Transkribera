@@ -113,7 +113,9 @@ Nya filer under `frontend/src/lib/transkript/`:
 
 | Fil | Ansvar |
 |---|---|
-| `tid.js` | `fmtTid` / `parseTid` **med timkomponent**. Ren modul, importerar ingenting. |
+| `tid.js` | `fmtTid` **med timkomponent** och `aktuellRad` (binärsökning tid → radindex). Ren modul. |
+| `media.js` | `arVideoFil`, `masteTranskodas`, `mediaUrl`. Ren modul. |
+| `sok.js` | `hittaTraffar`, `traffarPerRad`, `styckaRad`. Ren modul. |
 | `stores.svelte.js` | Vyns tillstånd (`tk`). |
 | `actions.js` | Öppna, stänga, spola, markörer, sök, redigering. |
 | `TranskriptModal.svelte` | Native `<dialog>`. Äger live-regionen och rubriken. |
@@ -132,11 +134,18 @@ Nya filer under `frontend/src/lib/transkript/`:
 | `frontend/src/lib/transkribera/actions.js` | `done`-grenen slutar kasta `r.transcript` och `r.media`. |
 | `e2e/playwright.config.ts` | `testMatch`-rad för den nya specen. |
 
-**Varför `tid.js` är ny mot ägarens skiss.** `fmtTid` finns redan, men modulprivat
-i `frontend/src/lib/transkribera/actions.js:297` och utan timkomponent — vilket är
-rätt där (loggraderna mäter körtid, som aldrig når en timme) och fel här. Att
-exportera och bygga ut den skulle ändra A3:s loggformat. Egen modul, ingen
-refaktorering av grannen.
+**Varför tre rena moduler är nya mot ägarens skiss.** `fmtTid` finns redan, men
+modulprivat i `frontend/src/lib/transkribera/actions.js:297` och utan
+timkomponent — vilket är rätt där (loggraderna mäter körtid, som aldrig når en
+timme) och fel här. Att exportera och bygga ut den skulle ändra A3:s loggformat.
+`media.js` och `sok.js` bär de två beslut som är lätta att få fel och värda att
+kunna läsa isolerat: vilket medieelement en fil ska spelas i (§8.1) och hur
+sökpasset undviker gamla appens tre svep (§8.3). Alla tre importerar ingenting,
+som `week.js` och `kursfarg.js`.
+
+**`parseTid` byggs inte.** Gamla appen behöver `parseTS` (`app.js:425`) för att
+den lagrar tidkoder som strängar. Vi lagrar `start` som tal, så avläsningen
+åt andra hållet har ingen anropare.
 
 ### Filer som inte får röras
 
@@ -159,15 +168,18 @@ export const tk = $state({
 
   // innehållet
   segment: [],          // [{start, end, text}] — serverns form, ENDA sanningen
+  mediaSokvag: null,    // rå sökväg; behövs för att bygga om URL:en vid videofallback
   mediaUrl: null,       // färdig /api/media-URL, byggd av action:en
   arVideo: false,
   laddar: false,        // bara sant i oppnaTranskriptFor, medan GET är i luften
-  fel: '',              // vyns statusrad
+  besked: '',           // vyns statusrad — fel OCH kvitton
+  beskedArt: 'fel',     // 'fel' | 'info' — styr om raden målas som fel
 
   // spelaren
   spelar: false,
   tid: 0,
-  langd: 0,             // 0 = okänd; se §6, ingen konstantfallback
+  langd: 0,             // 0 = okänd; se §8.1, ingen konstantfallback
+  drar: false,          // dragspolning pågår — timeupdate får inte skriva över
   hastighet: 1,
   forbereder: false,    // video som måste transkodas
 
@@ -274,9 +286,20 @@ Vid stängning: mediet pausas, storen nollställs, och webbläsarens
 
 ### 8.1 Spelaren
 
-`arVideo` avgörs på filändelsen, speglat mot `app/media.py:39`
-(`.mp4 .mkv .mov .webm .avi .m4v`). Video får `<video …&want=video>`, allt annat
+`arVideo` avgörs på filändelsen. Video får `<video …&want=video>`, allt annat
 `<audio …>`.
+
+**Listan är `app/media.py:39`:s `VIDEO_EXTS` minus `.webm`, och avvikelsen är
+avsiktlig.** `.webm` är appens **eget ljudinspelningsformat** —
+`audio/webm;codecs=opus` ur plan A4. En lektion läraren spelat in i appen har
+ingen videoström, så ett `<video>` hade gett en svart ruta där ljudet ändå hörs.
+`inspelningar/Lektionskort.svelte:20-23` gör redan exakt samma undantag för
+miniatyrerna, av exakt samma skäl, och dokumenterar det. Priset är att en
+*nedladdad* `.webm`-video spelas som ljud — vilket är precis vad gamla appen gör
+med allt (`app.js:5556` renderar alltid `<audio>`), alltså ingen regression, och
+den vanliga filen är den egeninspelade.
+
+Listan blir alltså `mp4 · m4v · mkv · mov · avi`.
 
 Kostnaden är ojämn och det syns i designen. `ensure_web_video`
 (`app/media.py:99`) returnerar `.mp4/.m4v/.mov/.webm` **oförändrade**, medan
@@ -338,10 +361,26 @@ Någon närhets-dedupe byggs inte.
 ### 8.3 Transkriptlistan
 
 **Hela raden blir klickbar utan att transkriptet slutar gå att markera.** Raden är
-ett `<li>` med `onclick` som returnerar tidigt om `getSelection()` inte är
-kollapsad; tidkoden förblir en riktig `<button>` som bär det tillgängliga namnet
-för tangentbord och skärmläsare. Ett `<button>` runt hela raden hade dödat
-textmarkeringen — och lärare kopierar citat.
+**en enda `<button>`** som rymmer både tidkod och text, med `user-select: text` så
+markering fortsätter fungera, och en vakt i klickhanteraren som returnerar tidigt
+om `getSelection()` inte är kollapsad. Lärare kopierar citat ur transkriptet.
+
+Varför inte ett `<li onclick>` med tidkoden som separat knapp, som gamla appen:
+repot har **noll** `svelte-ignore` i dag, och ett klick på ett icke-interaktivt
+element hade krävt den första undertryckningen för att klara grinden
+`npm run check` med 0 warnings. En knapp per rad ger dessutom **en** tabbstoppning
+per rad i stället för två, och dess tillgängliga namn blir tidkod plus text —
+"05:12, Idag ska vi prata om bråk och procent" — vilket är bättre än gamla appens
+`aria-label="Hoppa till 05:12"`.
+
+I redigeringsläget byter raden form: `contenteditable` kan inte bo i en knapp, och
+där finns inget att hoppa till ändå (ljudet pausas när redigeringen slås på).
+Raden blir då tidkod som `<span>` plus ett `role="textbox"`-fält.
+
+**Följandets släpp-lyssnare bindes imperativt i en `use:`-action**, inte som
+`onwheel`/`onkeydown`-attribut. Det är gester, inte affordanser — och som
+attribut hade de utlöst `a11y_no_noninteractive_element_interactions` på
+containern och tvingat fram samma undertryckning.
 
 **Aktuell rad hittas med binärsökning** över `segment`, inte det gamla `O(n)`-svepet
 (`app.js:3317`). Markeringen är `background: var(--accent-weak)` som i dag, plus
@@ -415,7 +454,10 @@ faller.
 
 ## 10. Felhantering
 
-En statusrad, `tk.fel`. En permanent `role="status"` inne i dialogen med klippande
+En statusrad, `tk.besked`, med `tk.beskedArt` som avgör om den målas som fel eller
+neutralt — samma par som `tr.fileError` / `tr.fileNoteArt` i guiden, eftersom
+raden bär både fel och kvitton ("Ändringarna är sparade"). En permanent
+`role="status"` inne i dialogen med klippande
 CSS (`clip-path: inset(50%)`, aldrig `display: none`) plus den synliga
 `aria-hidden="true"`-kopian. `data-testid="transkript-statusrad"` — **eget
 prefix**, eftersom alla vyer är monterade samtidigt och ett delat id ger *strict
@@ -436,6 +478,7 @@ Sparandet vaktas av `tk.sparar` i stället.
 | `PATCH` faller | Serverns egen text vinner, annars: Kunde inte spara ändringarna. |
 | `<audio>` felar | Kunde inte spela mediet — filen kan ha flyttats eller tagits bort. |
 | `<video>` felar | Kunde inte förbereda videon — spelar ljudet. |
+| `PATCH` lyckas | Ändringarna är sparade. (`beskedArt: 'info'` — enda raden som inte är ett fel) |
 
 **En känd gräns skrivs ut i stället för att döljas:**
 `DELETE /api/markers/{id}` svarar 200 även för okänt id (`server.py:1213-1220`),
