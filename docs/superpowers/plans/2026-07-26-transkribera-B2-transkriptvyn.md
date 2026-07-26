@@ -21,6 +21,7 @@ Varje tasks krav inkluderar implicit det här avsnittet.
 - **Ingen ny verktygskedja.** Repot har **ingen JS-testlöpare** (ingen vitest, jest, mocha) och CLAUDE.md säger uttryckligen "inför inte fler verktyg utan att bli ombedd". Alla frontendtester är därför Playwright-e2e. Rena moduler testas genom den första UI som använder dem.
 - **Noll `svelte-ignore`.** Repot har inga i dag och ska inte få några. `npm run check` måste ge **0 ERRORS 0 WARNINGS**.
 - **DESIGN.md är sanningskällan.** Bara CSS-variabler, aldrig literal hex. Typrampen är stängd: `2.375rem`, `1.5rem`, `1.125rem`, `1.03rem`, `0.72rem` eller `inherit`. Hörn 2–5px. `var(--mono)` **bara** på korta versala mikroetiketter — tidkoder sätts i `var(--sans)` med `font-variant-numeric: tabular-nums`. Inga pillerformade knappar, inga färgade vänsterkanter, aldrig `#000`/`#fff`.
+- **Duplicerad CSS mellan komponenter är projektets konvention, inte en defekt.** Sveltes stilar är scopade, så delade klasser som `.ghost` skrivs av i varje komponent som behöver dem, med en kommentar som pekar ut källan: `/* Identisk med .ghost i frontend/src/lib/transkribera/Korning.svelte:284-293. */`. Mönstret finns redan i `Lektionskort.svelte:120`, `InspelningarView.svelte:411` och `RedigeraLektion.svelte:285`. Att hissa upp dem i ett globalt ark vore en egen refaktorering av `app.css`, och den ingår inte i B2.
 - **Filändelser:** runes utanför komponenter kräver `.svelte.js`. Rena moduler (`tid.js`, `media.js`, `sok.js`, `actions.js`) ska **inte** ha den ändelsen.
 - **Live-regioner:** `role="status"` får aldrig ligga i ett `{#if}`-block. Noden är permanent och bara visuellt klippt med `clip-path: inset(50%)` — aldrig `display: none`. En synlig `aria-hidden="true"`-kopia bär samma text.
 - **E2E-lokatorer** avgränsas till synlig panel (`.pane:not([hidden])`) eller använder `getByRole`, som självavgränsar. Live-regioner räknas **alltid** med `getByRole("status")`, aldrig med CSS.
@@ -1200,10 +1201,14 @@ Uppdatera `stangTranskript` så mediet pausas innan storen töms — lägg raden
 {#if tk.mediaUrl}
   <div class="spelare">
     {#if tk.arVideo}
-      <!-- svelte-check kräver <track> på media med undertexter. Transkriptet ÄR
-           undertexten och står bredvid, så spåret utelämnas medvetet med en
-           tom kind="captions"-fri video: elementet har inga textspår alls. -->
-      <video class="video" src={tk.mediaUrl} use:media preload="metadata"></video>
+      <!-- <track> utan src: svelte-checks a11y_media_has_caption kräver ett
+           captions-spår, och repot har noll svelte-ignore. Något VTT att peka
+           på finns inte här — transkriptet står bredvid videon och ÄR
+           undertexten. Ett tomt spår är därför sant: elementet har inga
+           textspår att erbjuda. -->
+      <video class="video" src={tk.mediaUrl} use:media preload="metadata">
+        <track kind="captions" />
+      </video>
     {:else}
       <audio src={tk.mediaUrl} use:media preload="metadata"></audio>
     {/if}
@@ -1308,7 +1313,7 @@ I `TranskriptModal.svelte`, importera och montera **före** `<Transkriptlista />
 npm run check && npm run build
 ```
 
-Förväntat: `0 ERRORS 0 WARNINGS`. Klagar svelte-check på `<video>` utan `<track>` — lägg till `<track kind="captions" />` som självstängande barn i videon i stället för en `svelte-ignore`.
+Förväntat: `0 ERRORS 0 WARNINGS`.
 
 - [ ] **Steg 7: Kör e2e**
 
