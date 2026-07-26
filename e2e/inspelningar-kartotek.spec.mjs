@@ -420,10 +420,25 @@ test("Inspelningar (/next/): ett långsammare filtersvar får inte skriva över 
   // Routen registreras EFTER att vyn laddats, så räknaren börjar på
   // klassbytena och inte på monteringens egna hämtningar (laddaLektioner OCH
   // kollaHistorik hämtar båda /api/lessons vid flikbytet).
+  //
+  // Routen resolvar dessutom ett löfte när det fördröjda svaret VERKLIGEN
+  // levererats till sidan. Den andra kortassertionen nedan väntar på det löftet
+  // i stället för på en fast paus, och skälet är att den assertionen är testets
+  // enda tandade: den FÖRSTA kan bara mäta att 9A:s svar ännu inte hunnit fram.
+  // Går en gissad paus ut innan det fördröjda svaret levererats blir testet
+  // FALSKT GRÖNT och generationsvakten står otestad.
+  let slappFordrojda;
+  const fordrojdaSvaretLevererat = new Promise((r) => (slappFordrojda = r));
+
   let n = 0;
   await page.route("**/api/lessons*", async (route) => {
-    if (++n === 1) await new Promise((r) => setTimeout(r, 1500));
-    await route.continue();
+    if (++n !== 1) return route.continue();
+    await new Promise((r) => setTimeout(r, 1500));
+    // fetch + fulfill i stället för continue: bara så går det att veta NÄR
+    // svaret lämnades över till sidan. continue() returnerar när begäran
+    // släppts vidare, inte när svaret kommit tillbaka.
+    await route.fulfill({ response: await route.fetch() });
+    slappFordrojda();
   });
 
   // selectOption väntar inte in nätverket, så de två bytena överlappar.
@@ -436,10 +451,20 @@ test("Inspelningar (/next/): ett långsammare filtersvar får inte skriva över 
   await expect(meta).toHaveText([META("B3")]);
   expect(n, "Båda klassbytena nådde inte servern").toBe(2);
 
-  // Och läget står KVAR när det långsamma svaret väl landat — utan den här
-  // väntan hade assertionen ovan lika gärna kunnat mäta att 9A:s svar ännu
-  // inte hunnit fram.
-  await page.waitForTimeout(2500);
+  // Och läget står KVAR när det INAKTUELLA svaret väl landat — det här är
+  // testets enda assertion med tänder, eftersom den ovan lika gärna kan ha mätt
+  // att 9A:s svar ännu inte hunnit fram.
+  //
+  // Väntan är därför KAUSAL och inte tidsbaserad: löftet resolvas när det
+  // fördröjda svaret levererats till sidan, och de två renderingsrutorna efter
+  // det gör att en eventuell överskrivning redan slagit igenom i DOM:en när
+  // assertionen körs. Fristen är generös men ÄNDLIG, så ett svar som verkligen
+  // hänger ger ett begripligt fel i stället för en tyst grön.
+  await vantaPa(
+    fordrojdaSvaretLevererat,
+    "Det fördröjda /api/lessons-svaret levererades aldrig — överlappet uppstod aldrig",
+  );
+  await tvaRutor(page);
   await expect(meta).toHaveText([META("B3")]);
   await expect(klass.locator("option:checked")).toHaveText("9B");
 
