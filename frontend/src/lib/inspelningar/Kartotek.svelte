@@ -23,7 +23,10 @@
 {#each grupper as g (g.key)}
   <div class="grupp">
     <div class="rubrik">
-      <span class="vecka">{g.label}</span>
+      <!-- Rubriknivå, inte bara stil: vyns <h1> följs av korten på <h3>, så utan
+           en <h2> per vecka finns ingen väg för en skärmläsare att hoppa mellan
+           veckorna. Storleken är redan satt av .vecka, så inget syns. -->
+      <h2 class="vecka">{g.label}</h2>
       {#if g.range}<span class="spann">{g.range}</span>{/if}
       <span class="antal">
         {g.kort.length} {g.kort.length === 1 ? 'inspelning' : 'inspelningar'}
@@ -48,10 +51,13 @@
     padding-bottom: 8px;
     border-bottom: 1px solid var(--line);
   }
+  /* margin: 0 nollar <h2>:ans 0.83em-marginaler, som annars hade brutit
+     baslinjeraden i .rubrik. Resten är oförändrat mot <span>-versionen. */
   .vecka {
     font-size: 1.03rem;
     font-weight: 600;
     color: var(--ink);
+    margin: 0;
   }
   .spann {
     font-size: 0.72rem;
