@@ -27,9 +27,10 @@
     -->
     <ul class="lista">
       {#each traffar as h (h.lesson_id)}
+        {@const m = meta(h)}
         <li class="traff">
           <p class="namn">{h.name || '(namnlös)'}</p>
-          {#if meta(h)}<p class="meta">{meta(h)}</p>{/if}
+          {#if m}<p class="meta">{m}</p>{/if}
           <!--
             Snippet översätter serverns \x02/\x03 till <mark>. LIKE-fallbacken
             (db.py:962-971, när sqlite saknar FTS5) sätter INGA markörer — då
@@ -56,12 +57,13 @@
 <style>
   .traffar { margin-top: 22px; }
 
+  /* Speglar Agenda.svelte:144-149s .antal — samma sorts räknare i samma vy
+     ("3 öppna" respektive "3 träffar"). Tal bär --sans (via inherit) med
+     tabular-nums, inte --mono: mono är reserverat för korta versala
+     mikroetiketter, och "3 träffar" är en siffra plus ett böjt ord. */
   .antal {
-    font-family: var(--mono);
     font-size: 0.72rem;
-    font-weight: 500;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
+    font-weight: 400;
     color: var(--ink-3);
     font-variant-numeric: tabular-nums;
     margin: 0 0 10px;

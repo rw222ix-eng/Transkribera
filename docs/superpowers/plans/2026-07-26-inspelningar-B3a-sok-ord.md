@@ -556,9 +556,10 @@ ska ha sin form från början, inte för att låtsas fungera. Gamla appens
     -->
     <ul class="lista">
       {#each traffar as h (h.lesson_id)}
+        {@const m = meta(h)}
         <li class="traff">
           <p class="namn">{h.name || '(namnlös)'}</p>
-          {#if meta(h)}<p class="meta">{meta(h)}</p>{/if}
+          {#if m}<p class="meta">{m}</p>{/if}
           <!--
             Snippet översätter serverns \x02/\x03 till <mark>. LIKE-fallbacken
             (db.py:962-971, när sqlite saknar FTS5) sätter INGA markörer — då
@@ -585,12 +586,13 @@ ska ha sin form från början, inte för att låtsas fungera. Gamla appens
 <style>
   .traffar { margin-top: 22px; }
 
+  /* Speglar Agenda.svelte:144-149s .antal — samma sorts räknare i samma vy
+     ("3 öppna" respektive "3 träffar"). Tal bär --sans (via inherit) med
+     tabular-nums, inte --mono: mono är reserverat för korta versala
+     mikroetiketter, och "3 träffar" är en siffra plus ett böjt ord. */
   .antal {
-    font-family: var(--mono);
     font-size: 0.72rem;
-    font-weight: 500;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
+    font-weight: 400;
     color: var(--ink-3);
     font-variant-numeric: tabular-nums;
     margin: 0 0 10px;
@@ -1209,3 +1211,5 @@ klientfiltrerad träfflista fäller ofiltrerat-kravet."
 **En svaghet jag valde medvetet.** Tandkontroll 4b bryter `Traefflista.svelte` i stället för `sokActions.js`, eftersom serverns tolerans mot okända queryparametrar gör den uppenbara sabotagevägen verkningslös. Det bevisar att assertionen ser en filtrerad lista — inte att just `korSokning` avstår från att filtrera. Den som senare lägger ett filter i querysträngen får alltså inget larm härifrån. Att stänga det hade krävt en assertion på det faktiska anropets URL, vilket är värt att lägga till om B3b ändå rör sökvägen.
 
 **Fångat av granskningen.** `korSokning`s tidiga retur för tom fråga nollställde `sok.traffar` utan att bumpa `sokToken`. En sökning som redan var i luften kunde då skriva tillbaka sina träffar efter att fältet rensats och en ny (tom) sökning körts. Kodblocket ovan och `sokActions.js` är rättade i samma commit som fångade felet.
+
+**Fångat av en andra granskning (Task 4).** `Traefflista.svelte`s `.antal` bröt Mono-Is-Labels-Only: `font-family: var(--mono)` och `text-transform: uppercase` på "3 träffar" — en siffra plus ett böjt ord, inte en mikroetikett. `Agenda.svelte`s `.antal` visar samma sorts räknare ("3 öppna") i samma vy utan mono. Rättat till att spegla den. Samtidigt rättat: `meta(h)` anropades två gånger per rad i `{#each}`-blocket; ersatt med `{@const m = meta(h)}`. Kodblocket ovan och `Traefflista.svelte` är rättade i samma commit som fångade felen.
