@@ -18,6 +18,7 @@
   import Kartotek from './Kartotek.svelte';
   import Agenda from './Agenda.svelte';
   import NastaLektion from './NastaLektion.svelte';
+  import Terminstrender from './Terminstrender.svelte';
   import RedigeraLektion from './RedigeraLektion.svelte';
   import { nav } from '../shell/nav.svelte.js';
 
@@ -173,6 +174,7 @@
   -->
   <Agenda />
   <NastaLektion />
+  <Terminstrender />
 
   <Kartotek lektioner={synliga} onRedigera={startaRedigering} onRadera={fragaRadera} />
 
