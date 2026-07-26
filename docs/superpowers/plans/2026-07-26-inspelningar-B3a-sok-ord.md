@@ -1201,7 +1201,7 @@ Bygg om och kör:
 cd e2e && npm run test:next-foundation -- -g "klassbyte ändrar inte"
 ```
 
-Förväntat: förhandsräkningen direkt efter sökningen PASSERAR (3) — sabotaget gäller inte förrän klassfiltret är satt — och FAIL sker på den märkta assertionen som bär meddelandet *"Söket är ofiltrerat: ett klassbyte får inte ändra träfflistan"*, `Expected: 3, Received: 2`. Verifierat ordagrant (körning 2026-07-26):
+Förväntat: förhandsräkningen direkt efter sökningen PASSERAR (3) — sabotaget gäller inte förrän klassfiltret är satt — och FAIL sker på den märkta assertionen som bär meddelandet *"Söket är ofiltrerat: ett klassbyte får inte ändra träfflistan"*, `Expected: 3, Received: 2`. Verifierat ordagrant mot slutfilens radnumrering (körning 2026-07-26):
 
 ```
 Error: Söket är ofiltrerat: ett klassbyte får inte ändra träfflistan
@@ -1219,12 +1219,19 @@ Call log:
     14 × locator resolved to 2 elements
        - unexpected value "2"
 
-    313 |     vy.locator("section.traffar li.traff"),
-    314 |     "Söket är ofiltrerat: ett klassbyte får inte ändra träfflistan",
-> 315 |   ).toHaveCount(FIXTUR.length);
-      |     ^
-    at E:\Transkribera-worktrees\b5-paneler\e2e\inspelningar-sok.spec.mjs:315:5
+      320 |     vy.locator("section.traffar li.traff"),
+      321 |     "Söket är ofiltrerat: ett klassbyte får inte ändra träfflistan",
+    > 322 |   ).toHaveCount(FIXTUR.length);
+          |     ^
+      323 |
+      324 |   expect(errors, errors.join("\n")).toEqual([]);
+      325 | });
+        at E:\Transkribera-worktrees\b5-paneler\e2e\inspelningar-sok.spec.mjs:322:5
+
+1 failed
 ```
+
+Förhandsräkningen står på rad 306, `await expect(vy.locator("section.traffar li.traff")).toHaveCount(FIXTUR.length);`.
 
 **Återställ sedan `Traefflista.svelte` (både den härledda listan och den tillfälliga importen).**
 
