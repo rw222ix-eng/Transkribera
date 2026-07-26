@@ -228,6 +228,16 @@ export async function korSokning() {
     // vore att skriva om och trycka Enter. rensaSokning gör samma
     // nollställning, av exakt samma skäl.
     sok.soker = false;
+    // insp.fel/insp.felArt nollställs HÄR OCKSÅ (RÄTTAT I SLUTGRANSKNINGEN,
+    // se .superpowers/sdd/b3a-slutfix-report.md) — samma "läraren
+    // agerade"-mönster som nollställningen längre ned i den vanliga vägen
+    // bygger på. Läraren har just TÖMT fältet, vilket tar tillbaka
+    // kartoteket; utan raderna nedan kan "Kunde inte söka — kontrollera att
+    // appen körs." från ett tidigare misslyckat sök stå kvar sedan
+    // kartoteket redan syns igen — ett besked om något som inte längre
+    // visas. rensaSokning gör samma nollställning, av exakt samma skäl.
+    insp.fel = '';
+    insp.felArt = '';
     return;
   }
   // Nollställs HÄR, ÖVERST — samma mönster som markeraKlar och exporteraIcs
@@ -271,12 +281,20 @@ export async function korSokning() {
  * dyka upp en sekund senare. soker nollställs av SAMMA skäl och hör ihop med
  * bumpen: ett svar i luften vars finally är vaktad (token !== sokToken) rör
  * aldrig soker, så utan raden nedan kan körknappen fastna i "Söker …".
+ *
+ * insp.fel/insp.felArt nollställs ÄVEN HÄR (RÄTTAT I SLUTGRANSKNINGEN, se
+ * .superpowers/sdd/b3a-slutfix-report.md), av samma "läraren agerade"-skäl
+ * som korSoknings tom-fråga-gren: utan raderna nedan kan ett gammalt
+ * "Kunde inte söka — kontrollera att appen körs." stå kvar sedan kartoteket
+ * redan kommit tillbaka.
  */
 export function rensaSokning() {
   sokToken++;
   sok.fraga = '';
   sok.traffar = null;
   sok.soker = false;
+  insp.fel = '';
+  insp.felArt = '';
 }
 
 /**
@@ -1478,3 +1496,7 @@ klientfiltrerad träfflista fäller ofiltrerat-kravet."
 5. Rapporten i `.superpowers/sdd/b3a-task-5-report.md` påstod att `aria-label="Sök i arkivet"` var den ENDA dubbletten B3a införde — fel, se punkt 2 ovan. Rättat i rapportens fixavsnitt.
 
 Kodblocket ovan, Step 4b och fixturens `TOM_KLASS` är rättade i samma commit som fångade respektive fel.
+
+**Fångat av en fjärde granskning (efter leverans, se `.superpowers/sdd/b3a-slutfix-report.md`).**
+
+1. `korSokning`s tom-fråga-gren och `rensaSokning` nollställde `sok.soker` men aldrig `insp.fel`/`insp.felArt`. Efter en misslyckad sökning stod "Kunde inte söka — kontrollera att appen körs." kvar även sedan läraren tömt fältet och kartoteket kommit tillbaka — ett besked om något som inte längre visas. Samma "läraren agerade"-mönster som den vanliga vägens nollställning bygger på. Kodblocket ovan och `sokActions.js` är rättade i samma commit som fångade felet.

@@ -40,6 +40,16 @@ export async function korSokning() {
     // vore att skriva om och trycka Enter. rensaSokning gör samma
     // nollställning, av exakt samma skäl.
     sok.soker = false;
+    // insp.fel/insp.felArt nollställs HÄR OCKSÅ (RÄTTAT I SLUTGRANSKNINGEN,
+    // se .superpowers/sdd/b3a-slutfix-report.md) — samma "läraren
+    // agerade"-mönster som nollställningen längre ned i den vanliga vägen
+    // bygger på. Läraren har just TÖMT fältet, vilket tar tillbaka
+    // kartoteket; utan raderna nedan kan "Kunde inte söka — kontrollera att
+    // appen körs." från ett tidigare misslyckat sök stå kvar sedan
+    // kartoteket redan syns igen — ett besked om något som inte längre
+    // visas. rensaSokning gör samma nollställning, av exakt samma skäl.
+    insp.fel = '';
+    insp.felArt = '';
     return;
   }
   // Nollställs HÄR, ÖVERST — samma mönster som markeraKlar och exporteraIcs
@@ -83,12 +93,20 @@ export async function korSokning() {
  * dyka upp en sekund senare. soker nollställs av SAMMA skäl och hör ihop med
  * bumpen: ett svar i luften vars finally är vaktad (token !== sokToken) rör
  * aldrig soker, så utan raden nedan kan körknappen fastna i "Söker …".
+ *
+ * insp.fel/insp.felArt nollställs ÄVEN HÄR (RÄTTAT I SLUTGRANSKNINGEN, se
+ * .superpowers/sdd/b3a-slutfix-report.md), av samma "läraren agerade"-skäl
+ * som korSoknings tom-fråga-gren: utan raderna nedan kan ett gammalt
+ * "Kunde inte söka — kontrollera att appen körs." stå kvar sedan kartoteket
+ * redan kommit tillbaka.
  */
 export function rensaSokning() {
   sokToken++;
   sok.fraga = '';
   sok.traffar = null;
   sok.soker = false;
+  insp.fel = '';
+  insp.felArt = '';
 }
 
 /**
