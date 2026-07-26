@@ -17,9 +17,11 @@ export const insp = $state({
 
   editId: null,         // lektionen som redigeras, eller null
   edits: { group: '', course: '', sal: '', datum: '' },
+  sparar: false,        // en PATCH är i luften — Spara ska vara avstängd
 
   raderId: null,        // lektionen som väntar på raderingsbekräftelse
   raderNamn: '',
+  raderar: false,       // ett DELETE är i luften — Radera ska vara avstängd
 
   historikExtra: 0,     // ärlighetsvakten: poster i history.json utan lektionsrad
 });

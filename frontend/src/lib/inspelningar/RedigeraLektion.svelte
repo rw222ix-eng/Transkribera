@@ -135,9 +135,13 @@
     -->
     <p class="fel" aria-hidden="true">{insp.fel}</p>
 
+    <!-- Spara är avstängd medan PATCH:en är i luften; två klick hade annars
+         skickat två PATCH. Avbryt lämnas PÅ med flit — ångrar sig läraren mitt
+         i ett långsamt sparande ska hon komma ur rutan, och sparaLektion vaktar
+         redan att den inte stänger fel dialog när svaret landar. -->
     <div class="knappar">
       <button type="button" class="ghost" onclick={avbrytRedigering}>Avbryt</button>
-      <button type="submit" class="primar">Spara</button>
+      <button type="submit" class="primar" disabled={insp.sparar}>Spara</button>
     </div>
   </form>
 </dialog>
@@ -250,6 +254,8 @@
     font-weight: 500;
     cursor: pointer;
   }
+  /* Väntläget ska SYNAS, annars ser en avstängd knapp bara trasig ut. */
+  .primar:disabled { opacity: 0.55; cursor: default; }
 
   /* En smal ruta får inte tvinga två kolumner. */
   @media (max-width: 420px) {

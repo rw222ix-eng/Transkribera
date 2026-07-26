@@ -133,9 +133,14 @@
         Lektionen tas bort ur lektionsdatabasen och historiken, tillsammans med
         resultatmappen. Filer du själv sparat någon annanstans påverkas inte.
       </p>
+      <!-- Radera är avstängd medan DELETE:et är i luften. Ett andra DELETE mot
+           samma lektion svarar 200 med folder_removed: false och är alltså helt
+           tyst — läraren får ingen aning om att hon skickat två raderingar. -->
       <div class="knappar">
         <button type="button" class="ghost" onclick={avbrytRadera}>Avbryt</button>
-        <button type="button" class="ghost fara" onclick={bekraftaRadera}>Radera</button>
+        <button type="button" class="ghost fara" onclick={bekraftaRadera} disabled={insp.raderar}>
+          Radera
+        </button>
       </div>
     </div>
   {/if}
@@ -230,4 +235,6 @@
   }
   /* Raderingen bär färgen, inte en egen form — samma grepp som på kortet. */
   .fara { color: var(--bad); }
+  /* Väntläget ska SYNAS, annars ser en avstängd knapp bara trasig ut. */
+  .ghost:disabled { opacity: 0.55; cursor: default; }
 </style>

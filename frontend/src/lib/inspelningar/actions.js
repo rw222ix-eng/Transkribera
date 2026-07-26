@@ -157,6 +157,11 @@ export function avbrytRedigering() {
 export async function sparaLektion() {
   const id = insp.editId;
   if (id == null) return;
+  // Dubbelklick skickar annars två PATCH. Vakten sitter HÄR och inte bara på
+  // knappens disabled, eftersom Enter i ett fält submittar formuläret utan att
+  // gå via knappen alls.
+  if (insp.sparar) return;
+  insp.sparar = true;
   const e = insp.edits;
   try {
     const r = await fetch(`/api/lessons/${encodeURIComponent(id)}`, {
@@ -184,6 +189,8 @@ export async function sparaLektion() {
     await Promise.all([laddaLektioner(), laddaOrg()]);
   } catch {
     insp.fel = 'Kunde inte spara ändringarna — kontrollera att appen körs.';
+  } finally {
+    insp.sparar = false;
   }
 }
 
@@ -222,6 +229,13 @@ export function avbrytRadera() {
 export async function bekraftaRadera() {
   const id = insp.raderId;
   if (id == null) return;
+  // Dubbelklick skickar annars två DELETE. Det ANDRA svarar 200 med
+  // folder_removed: false (server.py) och är alltså helt tyst — kortet
+  // försvinner, men läraren har utan den här vakten skickat två raderingar mot
+  // en lektion som bara fanns en gång. Gamla appen gjorde likadant; det är
+  // billigt att stänga.
+  if (insp.raderar) return;
+  insp.raderar = true;
   try {
     const r = await fetch(`/api/lessons/${encodeURIComponent(id)}`, { method: 'DELETE' });
     if (!r.ok) {
@@ -236,5 +250,7 @@ export async function bekraftaRadera() {
   } catch {
     insp.fel = 'Kunde inte radera lektionen — kontrollera att appen körs.';
     if (insp.raderId === id) avbrytRadera();
+  } finally {
+    insp.raderar = false;
   }
 }
