@@ -881,6 +881,15 @@ Skapa `e2e/inspelningar-sok.spec.mjs`:
 //     mönstret på laddaLektioner; den här är en ordagrann kopia av det.
 //   · LIKE-fallbacken (sqlite utan FTS5). Miljön har FTS5, och att fejka bort
 //     det hade prövat testmiljön snarare än koden.
+//   · Fråge-radens PLACERING (att den renderas precis ovanför resultatytan,
+//     inte längre upp bland panelerna, d9dea52). Ingen spec i den här filen
+//     gör DOM-ordningsjämförelser mellan syskonelement, och fixen landade
+//     utan en sådan assertion — se .superpowers/sdd/b3a-slutfix-report.md.
+//   · Flikbytesnollställningen (att en aktiv sökning nollställs när läraren
+//     lämnar Inspelningar-fliken och kommer tillbaka, 7e29f11). Att pröva
+//     den kräver att byta till en ANNAN flik och tillbaka mitt i en aktiv
+//     sökning — ingen spec i den här filen byter flik, och fixen landade
+//     utan den täckningen — se .superpowers/sdd/b3a-slutfix-report.md.
 //
 // SÖKORDEN ÄR VALDA UR FEJKENS TRANSKRIPT. Alla lektioner skapas ur samma
 // demofil, och fejkinferensen ger dem alltid samma text
@@ -1103,10 +1112,20 @@ test("Sök (/next/): kartoteket viker för träffarna och kommer tillbaka", asyn
   await expect(vy.getByText("Inga inspelningar än")).toHaveCount(0);
   await expect(vy.getByText("Inga inspelningar matchar dina filter")).toHaveCount(0);
 
+  // Tredje billiga spärren, av samma skäl: kartotekets FOTNOT ("Att öppna en
+  // lektion …") är en fotnot till KARTOTEKET, inte till träfflistan
+  // ({#if !sok.traffar} i InspelningarView.svelte) och ska därför vara borta
+  // så länge träfflistan visas. Traefflista.svelte har en egen, nästan
+  // identisk rad ("Att öppna en TRÄFF …") — "Att öppna en lektion" träffar
+  // bara kartotekets.
+  await expect(vy.getByText("Att öppna en lektion")).toHaveCount(0);
+
   await sokfalt(vy).rensa.click();
 
   await expect(vy.locator("section.traffar")).toHaveCount(0);
   await expect(vy.locator("article.kort")).toHaveCount(FIXTUR.length);
+  // Fotnoten är tillbaka tillsammans med kartoteket.
+  await expect(vy.getByText("Att öppna en lektion")).toBeVisible();
 
   // BEVISET: driv kartotekets FILTRERADE tomtillstånd till att faktiskt
   // rendera, sök därefter, och kontrollera att det försvinner medan
@@ -1500,3 +1519,4 @@ Kodblocket ovan, Step 4b och fixturens `TOM_KLASS` är rättade i samma commit s
 **Fångat av en fjärde granskning (efter leverans, se `.superpowers/sdd/b3a-slutfix-report.md`).**
 
 1. `korSokning`s tom-fråga-gren och `rensaSokning` nollställde `sok.soker` men aldrig `insp.fel`/`insp.felArt`. Efter en misslyckad sökning stod "Kunde inte söka — kontrollera att appen körs." kvar även sedan läraren tömt fältet och kartoteket kommit tillbaka — ett besked om något som inte längre visas. Samma "läraren agerade"-mönster som den vanliga vägens nollställning bygger på. Kodblocket ovan och `sokActions.js` är rättade i samma commit som fångade felet.
+2. Av helhetsgranskningens åtta fixar fick bara körknappens fastnande fynd en e2e-spärr. Testet "kartoteket viker för träffarna och kommer tillbaka" fick en tredje billig assertion för kartotekets fotnot ("Att öppna en lektion") — borta medan träfflistan visas, tillbaka när fältet rensas. De två övriga otäckta fixarna (fråge-radens placering, flikbytesnollställningen) listas i stället i TÄCKS INTE-listan ovan, med en mening om varför. Kodblocket ovan är rättat i samma commit som fångade luckan.
