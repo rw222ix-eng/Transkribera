@@ -106,8 +106,15 @@ export async function rensaFilter() {
 }
 
 /** Öppnar redigeringen. Namnet är MEDVETET inte med — gamla appens saveLesson
- *  (app.js:1752-1760) skickar aldrig name, och modalen har inget namnfält. */
+ *  (app.js:1752-1760) skickar aldrig name, och modalen har inget namnfält.
+ *
+ *  insp.fel nollställs FÖRST. Statusraden är gemensam för hela vyn, och
+ *  ingenting på vägen hit rensar den: laddaLektioner gör det vid en lyckad
+ *  hämtning, men den körs inte när läraren bara öppnar en dialog. Utan
+ *  nollställningen står ett gammalt besked — t.ex. 409:an från en misslyckad
+ *  radering — kvar och läses som om det gällde den här redigeringen. */
 export function startaRedigering(l) {
+  insp.fel = '';
   insp.editId = l.id;
   insp.edits = {
     group: l.group || '',
@@ -169,7 +176,12 @@ export async function sparaLektion() {
   }
 }
 
+/** Öppnar raderingsbekräftelsen. Samma nollställning och samma skäl som i
+ *  startaRedigering — och här är den värre: bekräftelseblocket monteras DIREKT
+ *  under statusraden, så ett kvarstående fel från en tidigare radering hamnar
+ *  visuellt ovanpå frågan om nästa lektion. */
 export function fragaRadera(l) {
+  insp.fel = '';
   insp.raderId = l.id;
   insp.raderNamn = l.name || '(namnlös)';
 }
