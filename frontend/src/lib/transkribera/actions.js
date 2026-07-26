@@ -376,10 +376,27 @@ export async function startRun() {
         if (mark && mark.markers.length && r.id) {
           postJSON(`/api/recordings/${r.id}/markers`, { markers: mark.markers })
             .then(() => glomSession(mark.session))
-            // Faller POSTen lämnas localStorage-posten kvar med markörerna i.
-            // Den här sessionen läser den inte igen — minnesnyckeln släpps tre
-            // rader ned — men återställningsvägen i inspelning.svelte.js gör
-            // det. Alltså inget omförsök här, till skillnad från chunk-kedjan.
+            // Faller POSTen är markörerna BORTA för den här lektionen. Inget
+            // omförsök, till skillnad från chunk-kedjan — och ingen
+            // återställningsväg heller: aterstallOavslutad nås bara ur bannern,
+            // som listar sessioner med en .part på disk, och en SLUTFÖRD
+            // inspelning har ingen (finish har döpt om filen). Sessionen finns
+            // då varken i tr.incompleteRecs eller — tre rader ned — i
+            // tr.recMarkersByPath, så stadaSessioner sveper localStorage-posten
+            // vid nästa besök på steg 1.
+            //
+            // Alternativet vore att behålla posten i tr.recMarkersByPath vid
+            // fel. Det avvisas: done-grenen är enda läsaren, och den körs bara
+            // om SAMMA sökväg transkriberas igen — en köpost som är 'done' körs
+            // inte om. Omförsöket hade alltså aldrig fyrat, medan posten i
+            // gengäld hållits vid liv i localStorage för alltid av just den
+            // stadaSessioner-vakt som skyddar väntande markörer. En läcka i
+            // utbyte mot ett omförsök som inte finns.
+            //
+            // Priset är en tyst förlust av markörerna. Accepterat: servern är
+            // lokal, POSTen är den sista av tre mot samma process, och ljudet
+            // och transkriptionen är redan sparade — det som går förlorat är
+            // tidsstämplarna, inte lektionen.
             .catch(() => {});
           const { [aktiv.path]: _borttagen, ...kvar } = tr.recMarkersByPath;
           tr.recMarkersByPath = kvar;
