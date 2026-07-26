@@ -142,9 +142,18 @@
 
   <Kartotek lektioner={synliga} onRedigera={startaRedigering} onRadera={fragaRadera} />
 
-  {#if insp.editId !== null}
-    <RedigeraLektion />
-  {/if}
+  <!--
+    ALLTID monterad, MEDVETET inte {#if}-grindad. Dialogen är ett native
+    <dialog> som öppnas och stängs med showModal()/close() ur en effekt som
+    speglar insp.editId — avmonteras komponenten i stängningsögonblicket hinner
+    close() aldrig köras, och då uteblir webbläsarens återställning av fokus
+    till knappen som öppnade den. Fokus hade i stället hamnat på <body>, vilket
+    är precis det tangentbordstapp fokusfällan finns för att undvika.
+
+    Stängd är ett <dialog> display:none och alltså borta ur både layout och
+    tillgänglighetsträd — den kostar ingenting att låta stå.
+  -->
+  <RedigeraLektion />
 </section>
 
 <style>

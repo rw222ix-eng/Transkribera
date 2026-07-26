@@ -14,131 +14,155 @@
   import { insp } from './stores.svelte.js';
   import { avbrytRedigering, sparaLektion } from './actions.js';
 
-  let ruta = $state(null);
-
-  // Fokus in i dialogen när den öppnas. Rutan själv, inte första fältet — då
-  // läser skärmläsaren aria-label ("Redigera lektionsuppgifter") innan
-  // fälten, och första Tab landar på Klass.
-  $effect(() => {
-    ruta?.focus();
-  });
+  let dialog = $state(null);
 
   // Vilken lektion det gäller. startaRedigering sparar MEDVETET inte namnet i
   // insp.edits — det skickas aldrig till servern — men läraren behöver ändå se
   // vilket kort hon öppnade när flera ser lika ut.
-  const namn = $derived(
-    insp.lessons.find((l) => l.id === insp.editId)?.name || '(namnlös)',
-  );
+  //
+  // FRYST vid öppning, inte $derived ur insp.editId: härleds det reaktivt byter
+  // rubriken till "(namnlös)" i samma flush som stängningen, alltså medan
+  // dialogen fortfarande är öppen.
+  let namn = $state('(namnlös)');
 
-  function tangent(e) {
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      avbrytRedigering();
+  // showModal()/close() speglar insp.editId.
+  //
+  // Ett NATIVE <dialog> valdes framför en egen fälla i tangent(): webbläsaren
+  // ger då fokusfälla, Escape, backdrop och top-layer — allt det som annars är
+  // egen kod som kan glida isär. Bakgrunden blir dessutom inert, vilket är den
+  // konkreta buggen som fanns här: Tab kunde vandra ut ur rutan och landa på
+  // ett korts Radera-knapp, som skärmläsaren påstår inte finns (aria-modal),
+  // och Enter monterade bekräftelseblocket BAKOM skärmen — dit
+  // InspelningarViews $effect sedan flyttade fokus.
+  //
+  // Effekten kräver att komponenten är monterad även när editId är null; se
+  // kommentaren vid <RedigeraLektion /> i InspelningarView.svelte.
+  $effect(() => {
+    if (!dialog) return;
+    if (insp.editId !== null) {
+      namn = insp.lessons.find((l) => l.id === insp.editId)?.name || '(namnlös)';
+      if (!dialog.open) {
+        dialog.showModal();
+        // Rutan själv, inte första fältet: då läser skärmläsaren aria-label
+        // ("Redigera lektionsuppgifter") innan fälten, och första Tab landar
+        // på Klass. showModal() hade annars fokuserat Klass direkt.
+        dialog.focus();
+      }
+    } else if (dialog.open) {
+      dialog.close();
     }
-  }
+  });
 </script>
 
-<svelte:window onkeydown={tangent} />
+<!-- Bakgrunden är MEDVETET inte klickbar. En stängning på backdrop-klick är en
+     destruktiv genväg — allt oskrivet försvinner vid en felklick. Escape och
+     Avbryt är vägarna ut.
 
-<!-- Bakgrunden är MEDVETET inte klickbar. Ett onclick på en <div> utan roll
-     ger både a11y-varningar och en destruktiv genväg (allt oskrivet försvinner
-     vid en felklick). Escape och Avbryt är vägarna ut. -->
-<div class="bakgrund">
-  <div
-    class="ruta"
-    role="dialog"
-    aria-modal="true"
-    aria-label="Redigera lektionsuppgifter"
-    tabindex="-1"
-    bind:this={ruta}
+     onclose nollställer storen. Escape stängs av WEBBLÄSAREN, inte av oss, så
+     utan den raden vore dialogen stängd medan insp.editId fortfarande pekade på
+     lektionen — och en ny öppning av SAMMA kort hade inte ändrat editId och
+     alltså inte utlöst effekten ovan. Dialogen hade aldrig gått att öppna igen.
+
+     Varken role="dialog" eller aria-modal="true" står kvar: showModal() ger
+     båda från webbläsaren, och en utskriven roll på ett element som redan har
+     den fälls av svelte-checks a11y-regler. -->
+<dialog
+  class="ruta"
+  aria-label="Redigera lektionsuppgifter"
+  tabindex="-1"
+  bind:this={dialog}
+  onclose={avbrytRedigering}
+>
+  <p class="eyebrow">REDIGERA UPPGIFTER</p>
+  <h2 class="namn">{namn}</h2>
+
+  <!-- Datalisterna är förslag ur insp.groups/insp.courses. Läraren kan lika
+       gärna skriva ett nytt värde — API:et skapar det då. -->
+  <datalist id="insp-dl-klass">
+    {#each insp.groups as g (g.id)}<option value={g.namn}></option>{/each}
+  </datalist>
+  <datalist id="insp-dl-kurs">
+    {#each insp.courses as c (c.id)}<option value={c.namn}></option>{/each}
+  </datalist>
+
+  <!-- <form> så att Enter i ett fält sparar. preventDefault eftersom
+       sparandet går via fetch, inte via en riktig formulärpost.
+
+       method="dialog" används MEDVETET inte: det hade stängt dialogen innan
+       fetch:en ens skickats, och ett misslyckat sparande hade då försvunnit
+       tillsammans med rutan. -->
+  <form
+    class="falt"
+    onsubmit={(e) => {
+      e.preventDefault();
+      sparaLektion();
+    }}
   >
-    <p class="eyebrow">REDIGERA UPPGIFTER</p>
-    <h2 class="namn">{namn}</h2>
+    <label>
+      <span class="etikett">Klass</span>
+      <!-- bind:value på store-EGENSKAPEN, inte på en lokal kopia. Det är
+           mutationen runes-reglerna kräver, och PR 6 bekräftade att den
+           skriver igenom. -->
+      <input list="insp-dl-klass" bind:value={insp.edits.group} placeholder="t.ex. NA21" />
+    </label>
+    <label>
+      <span class="etikett">Kurs</span>
+      <input list="insp-dl-kurs" bind:value={insp.edits.course} placeholder="t.ex. Matematik 2b" />
+    </label>
+    <label>
+      <span class="etikett">Sal</span>
+      <input bind:value={insp.edits.sal} placeholder="t.ex. B214" />
+    </label>
+    <label>
+      <span class="etikett">Datum</span>
+      <input type="date" bind:value={insp.edits.datum} />
+    </label>
 
-    <!-- Datalisterna är förslag ur insp.groups/insp.courses. Läraren kan lika
-         gärna skriva ett nytt värde — API:et skapar det då. -->
-    <datalist id="insp-dl-klass">
-      {#each insp.groups as g (g.id)}<option value={g.namn}></option>{/each}
-    </datalist>
-    <datalist id="insp-dl-kurs">
-      {#each insp.courses as c (c.id)}<option value={c.namn}></option>{/each}
-    </datalist>
+    <!--
+      SPARFELET, inuti rutan. sparaLektion lämnar dialogen öppen på BÅDA
+      felvägarna, och vyns enda synliga kopia av insp.fel ligger utanför
+      dialogen — alltså bakom dess backdrop, i den inerta bakgrunden, och i
+      praktiken utanför synfältet. Utan den här noden ser Spara ut att göra
+      ingenting alls när servern är nere: exakt det svalda fel som briefen
+      förbjuder för DELETE, och som Steg 0 flyttades hit för att förhindra.
 
-    <!-- <form> så att Enter i ett fält sparar. preventDefault eftersom
-         sparandet går via fetch, inte via en riktig formulärpost. -->
-    <form
-      class="falt"
-      onsubmit={(e) => {
-        e.preventDefault();
-        sparaLektion();
-      }}
-    >
-      <label>
-        <span class="etikett">Klass</span>
-        <!-- bind:value på store-EGENSKAPEN, inte på en lokal kopia. Det är
-             mutationen runes-reglerna kräver, och PR 6 bekräftade att den
-             skriver igenom. -->
-        <input list="insp-dl-klass" bind:value={insp.edits.group} placeholder="t.ex. NA21" />
-      </label>
-      <label>
-        <span class="etikett">Kurs</span>
-        <input list="insp-dl-kurs" bind:value={insp.edits.course} placeholder="t.ex. Matematik 2b" />
-      </label>
-      <label>
-        <span class="etikett">Sal</span>
-        <input bind:value={insp.edits.sal} placeholder="t.ex. B214" />
-      </label>
-      <label>
-        <span class="etikett">Datum</span>
-        <input type="date" bind:value={insp.edits.datum} />
-      </label>
+      aria-hidden och UTAN egen roll, precis som kopian i
+      InspelningarView.svelte: vyns live-region (p.fel-sr[role="status"]) är
+      fortfarande den enda annonserande noden. Två annonserande noder i samma
+      vy läses i oförutsägbar ordning.
 
-      <!--
-        SPARFELET, inuti rutan. sparaLektion lämnar dialogen öppen på BÅDA
-        felvägarna, och vyns enda synliga kopia av insp.fel ligger utanför
-        skärmen (position: fixed; inset: 0) — alltså dimmad bakom den och i
-        praktiken utanför synfältet. Utan den här noden ser Spara ut att göra
-        ingenting alls när servern är nere: exakt det svalda fel som briefen
-        förbjuder för DELETE, och som Steg 0 flyttades hit för att förhindra.
+      :empty-regeln hör hemma här — på en kopia, aldrig på en live-region.
+    -->
+    <p class="fel" aria-hidden="true">{insp.fel}</p>
 
-        aria-hidden och UTAN egen roll, precis som kopian i
-        InspelningarView.svelte:120: vyns live-region (p.fel-sr[role="status"])
-        är fortfarande den enda annonserande noden. Två annonserande noder i
-        samma vy läses i oförutsägbar ordning.
-
-        :empty-regeln hör hemma här — på en kopia, aldrig på en live-region.
-      -->
-      <p class="fel" aria-hidden="true">{insp.fel}</p>
-
-      <div class="knappar">
-        <button type="button" class="ghost" onclick={avbrytRedigering}>Avbryt</button>
-        <button type="submit" class="primar">Spara</button>
-      </div>
-    </form>
-  </div>
-</div>
+    <div class="knappar">
+      <button type="button" class="ghost" onclick={avbrytRedigering}>Avbryt</button>
+      <button type="submit" class="primar">Spara</button>
+    </div>
+  </form>
+</dialog>
 
 <style>
-  .bakgrund {
-    position: fixed;
-    inset: 0;
-    z-index: 130;
-    background: color-mix(in srgb, var(--ink) 42%, transparent);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 24px;
-  }
+  /* Ingen egen skärm och inget z-index längre: showModal() lyfter dialogen till
+     top-layer, som ligger över allt annat oavsett stackningskontext, och
+     centreringen kommer ur webbläsarens egna `position: fixed; inset: 0;
+     margin: auto` för <dialog>. Kvar här är bara rutans form.
+
+     color sätts uttryckligen — webbläsarens <dialog>-regel sätter
+     `color: CanvasText`, som bryter arvet från body. */
   .ruta {
     width: min(94vw, 460px);
     max-height: 90vh;
     overflow: auto;
     background: var(--canvas);
+    color: var(--ink);
     border: 1px solid var(--line);
     border-radius: 4px;
     box-shadow: var(--shadow);
     padding: 20px 22px;
   }
+  /* Dimmningen, med samma token och samma 42 % som den borttagna .bakgrund. */
+  .ruta::backdrop { background: color-mix(in srgb, var(--ink) 42%, transparent); }
   .ruta:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   /* Kort versal mikroetikett — den enda sorts text som bär var(--mono). */
   .eyebrow {
