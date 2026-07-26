@@ -221,14 +221,26 @@ export async function korSokning() {
     sok.traffar = null;
     return;
   }
+  // Nollställs HÄR, ÖVERST — samma mönster som markeraKlar och exporteraIcs
+  // (actions.js): rensa statusraden innan hämtningen startar, inte på
+  // framgångsgrenen efteråt. Låg nollställningen kvar där en sökningen just
+  // lyckades stod kartoteket öppet för Radera/Redigera under HELA tiden
+  // sökningen pågick (kartoteket lämnas orört tills svaret landar, se
+  // InspelningarView.svelte), så ett fel som landade UNDER tiden — t.ex.
+  // DELETE:ets 409 ("kunde inte radera mappen …", bekraftaRadera ovan) —
+  // torkades bort så fort söksvaret kom tillbaka, och läraren hann aldrig
+  // läsa det. bekraftaRadera avstår redan medvetet från att hämta om
+  // lektionerna efter ett misslyckat DELETE av exakt det skälet; en
+  // nollställning på korSoknings framgångsgren öppnade samma dörr från ett
+  // nytt håll.
+  insp.fel = '';
+  insp.felArt = '';
   const token = ++sokToken;
   sok.soker = true;
   try {
     const res = await getJSON('/api/search?q=' + encodeURIComponent(q));
     if (token !== sokToken) return;
     sok.traffar = res && Array.isArray(res.hits) ? res.hits : [];
-    insp.fel = '';
-    insp.felArt = '';
   } catch {
     if (token !== sokToken) return;
     // traffar tillbaka till NULL, alltså kartoteket — inte en tom träfflista.
