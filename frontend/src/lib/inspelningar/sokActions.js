@@ -26,6 +26,10 @@ let sokToken = 0;
 export async function korSokning() {
   const q = sok.fraga.trim();
   if (!q) {
+    // Samma generationsvakt som i rensaSokning, och av samma skäl: den här
+    // grenen nollställer träffarna utan att starta en ny hämtning, så utan
+    // bumpen får ett svar som redan är i luften skriva tillbaka dem.
+    sokToken++;
     sok.traffar = null;
     return;
   }

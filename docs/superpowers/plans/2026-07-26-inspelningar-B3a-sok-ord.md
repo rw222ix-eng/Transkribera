@@ -214,6 +214,10 @@ let sokToken = 0;
 export async function korSokning() {
   const q = sok.fraga.trim();
   if (!q) {
+    // Samma generationsvakt som i rensaSokning, och av samma skäl: den här
+    // grenen nollställer träffarna utan att starta en ny hämtning, så utan
+    // bumpen får ett svar som redan är i luften skriva tillbaka dem.
+    sokToken++;
     sok.traffar = null;
     return;
   }
@@ -1203,3 +1207,5 @@ klientfiltrerad träfflista fäller ofiltrerat-kravet."
 **Typkonsistens.** `sok` heter så i Task 2, 3 och 4. `korSokning`/`rensaSokning`/`valjLage` definieras i Task 2 och konsumeras i Task 3 med samma signaturer. `sok.traffar` är `null | Array` i Task 2 och grindas som sanningsvärde i Task 4 — en tom array är truthy, vilket är precis vad regeln kräver. CSS-klasserna `section.sok`, `section.traffar`, `li.traff` och `p.antal` används i Task 3 och 4 och lokaliseras med samma namn i Task 5.
 
 **En svaghet jag valde medvetet.** Tandkontroll 4b bryter `Traefflista.svelte` i stället för `sokActions.js`, eftersom serverns tolerans mot okända queryparametrar gör den uppenbara sabotagevägen verkningslös. Det bevisar att assertionen ser en filtrerad lista — inte att just `korSokning` avstår från att filtrera. Den som senare lägger ett filter i querysträngen får alltså inget larm härifrån. Att stänga det hade krävt en assertion på det faktiska anropets URL, vilket är värt att lägga till om B3b ändå rör sökvägen.
+
+**Fångat av granskningen.** `korSokning`s tidiga retur för tom fråga nollställde `sok.traffar` utan att bumpa `sokToken`. En sökning som redan var i luften kunde då skriva tillbaka sina träffar efter att fältet rensats och en ny (tom) sökning körts. Kodblocket ovan och `sokActions.js` är rättade i samma commit som fångade felet.
