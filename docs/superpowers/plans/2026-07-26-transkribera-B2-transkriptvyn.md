@@ -92,7 +92,7 @@ cd e2e && npm run test:next-foundation
 - Modify: `e2e/playwright.config.ts`
 
 **Interfaces:**
-- Produces: `tk` (store), `fmtTid(sekunder) -> string`, `aktuellRad(segment, tid) -> number`, `arVideoFil(sokvag) -> boolean`, `masteTranskodas(sokvag) -> boolean`, `byggMediaUrl(sokvag, somVideo) -> string|null`, `oppnaTranskript({historyId, namn, segment, mediaPath}) -> void`, `oppnaTranskriptFor(historyId, namn) -> Promise<void>`, `stangTranskript() -> void`, `satBesked(text, art) -> void`.
+- Produces: `tk` (store), `fmtTid(sekunder) -> string`, `arVideoFil(sokvag) -> boolean`, `masteTranskodas(sokvag) -> boolean`, `byggMediaUrl(sokvag, somVideo) -> string|null`, `oppnaTranskript({historyId, namn, segment, mediaPath}) -> void`, `oppnaTranskriptFor(historyId, namn) -> Promise<void>`, `stangTranskript() -> void`, `satBesked(text, art) -> void`, `laddaMarkorer() -> Promise<void>`.
 
 - [ ] **Steg 1: Skriv den fallerande e2e-specen**
 
@@ -291,31 +291,10 @@ export function fmtTid(sekunder) {
   const m = String(minuter).padStart(2, '0');
   return timmar ? `${timmar}:${m}:${s}` : `${m}:${s}`;
 }
-
-/**
- * Index för det segment som spelas vid `tid`, eller -1 före det första.
- *
- * Binärsökning, inte gamla appens linjära svep (app.js:3317). Svepet kördes
- * dessutom vid varje render av HELA appen, eftersom det låg ogrindat i vm().
- * Segmenten är sorterade på `start` — det är serverns kontrakt
- * (app/transcriber.py:211).
- */
-export function aktuellRad(segment, tid) {
-  let lo = 0;
-  let hi = segment.length - 1;
-  let svar = -1;
-  while (lo <= hi) {
-    const mitt = (lo + hi) >> 1;
-    if ((segment[mitt].start ?? 0) <= tid) {
-      svar = mitt;
-      lo = mitt + 1;
-    } else {
-      hi = mitt - 1;
-    }
-  }
-  return svar;
-}
 ```
+
+`aktuellRad` hör också hemma i den här modulen, men skrivs i task 5 där den
+får sin första anropare. Skriv den inte nu.
 
 - [ ] **Steg 5: Skriv `media.js`**
 
@@ -365,6 +344,13 @@ export function byggMediaUrl(sokvag, somVideo) {
 ```js
 // Transkriptvyn (plan B2). Modalen delas av Inspelningar-fliken och
 // transkriberingsguiden, så tillståndet bor här och inte i någon av vyerna.
+//
+// Storen deklareras HEL redan här, till skillnad från insp i inspelningar/,
+// som växte plan för plan. Skillnaden är avsiktlig: insp:s luckor gick över
+// PLANgränser (B2-B5) och var alltså okända, medan varje fält nedan har en
+// namngiven anropare inom den här planen — spelaren i task 3-4, markörerna i
+// task 7, söket i task 8 och redigeringen i task 9. En halv store hade bara
+// gjort fälten svårare att läsa som helhet.
 export const tk = $state({
   // identitet
   open: false,          // styr <dialog>. Sätts bara av actions.
@@ -1554,8 +1540,8 @@ git commit -m "feat(transkript): lägg till hastighet, mellanslag och dragspolni
 - Modify: `e2e/transkript.spec.mjs`
 
 **Interfaces:**
-- Consumes: `spolaTill`, `aktuellRad`, `tk`.
-- Produces: `hoppaTillRad(index) -> void` — spolar till radens `start`, startar uppspelning och sätter `tk.foljer = true`.
+- Consumes: `spolaTill`, `tk`.
+- Produces: `aktuellRad(segment, tid) -> number` i `tid.js`, `hoppaTillRad(index) -> void` i `actions.js` — spolar till radens `start`, startar uppspelning och sätter `tk.foljer = true`.
 
 - [ ] **Steg 1: Skriv de fallerande testerna**
 
@@ -1610,7 +1596,37 @@ cd e2e && npm run test:next-foundation -- --grep "klick var som helst|textmarker
 
 Förväntat: FAIL — `currentTime` är 0 i det första testet.
 
-- [ ] **Steg 3: Lägg `hoppaTillRad` i `actions.js`**
+- [ ] **Steg 3: Lägg `aktuellRad` i `tid.js`**
+
+Sist i filen:
+
+```js
+/**
+ * Index för det segment som spelas vid `tid`, eller -1 före det första.
+ *
+ * Binärsökning, inte gamla appens linjära svep (app.js:3317). Svepet kördes
+ * dessutom vid varje render av HELA appen, eftersom det låg ogrindat i vm().
+ * Segmenten är sorterade på `start` — det är serverns kontrakt
+ * (app/transcriber.py:211).
+ */
+export function aktuellRad(segment, tid) {
+  let lo = 0;
+  let hi = segment.length - 1;
+  let svar = -1;
+  while (lo <= hi) {
+    const mitt = (lo + hi) >> 1;
+    if ((segment[mitt].start ?? 0) <= tid) {
+      svar = mitt;
+      lo = mitt + 1;
+    } else {
+      hi = mitt - 1;
+    }
+  }
+  return svar;
+}
+```
+
+- [ ] **Steg 4: Lägg `hoppaTillRad` i `actions.js`**
 
 Sist i filen:
 
@@ -1629,7 +1645,7 @@ export function hoppaTillRad(index) {
 }
 ```
 
-- [ ] **Steg 4: Koppla klicket och markeringen i `Transkriptlista.svelte`**
+- [ ] **Steg 5: Koppla klicket och markeringen i `Transkriptlista.svelte`**
 
 Utöka `<script>`:
 
@@ -1662,7 +1678,7 @@ Lägg till CSS:
   .rad.aktuell .radknapp { background: var(--accent-weak); }
 ```
 
-- [ ] **Steg 5: Kör grindar och test**
+- [ ] **Steg 6: Kör grindar och test**
 
 ```bash
 npm run check && npm run build
@@ -1674,11 +1690,11 @@ cd e2e && npm run test:next-foundation -- --grep "klick var som helst|textmarker
 
 Förväntat: `0 ERRORS 0 WARNINGS` och 2 passed.
 
-- [ ] **Steg 6: Tandkontrollera markeringsvakten**
+- [ ] **Steg 7: Tandkontrollera markeringsvakten**
 
 Ta bort de två raderna med `markering` ur `klick` och kör om. Testet "en textmarkering hindrar hoppet" ska falla med `currentTime` ≈ 5. Fånga utdatan, återställ.
 
-- [ ] **Steg 7: Commit**
+- [ ] **Steg 8: Commit**
 
 ```bash
 git add frontend/src/lib/transkript e2e/transkript.spec.mjs
