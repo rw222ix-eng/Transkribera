@@ -317,8 +317,12 @@ test("Inspelningar (/next/): kartoteket grupperar per vecka med rätt antal", as
   // fort agendan laddats — även tom, vilket är en avsiktlig, testad regel
   // (specens avsnitt 4: agendan gäller tvärs alla klasser och ska alltid
   // finnas). En osäkrad vy.getByRole("heading", {level:2}) fångar därför även
-  // den rubriken och fäller ordningen nedan. Kartoteket ägs av .grupp, så det
-  // är rätt avgränsning — inte ett svagare krav.
+  // den rubriken och fäller ordningen nedan. Kartoteket ägs av .grupp, så
+  // avgränsningen var nödvändig och rätt — men den ger samtidigt upp den
+  // OAVSIKTLIGA egenskapen en osäkrad lokator råkade bevisa på köpet: att vyn
+  // inte innehåller några andra <h2> än veckorubrikerna. Den egenskapen vaktas
+  // inte längre här; en panelrubriks nivå prövas i stället separat i
+  // inspelningar-paneler.spec.mjs ({level: 2} på Terminstrenders rubrik).
   await expect(vy.locator(".grupp").getByRole("heading", { level: 2 })).toHaveText([
     "Vecka 14",
     "Vecka 13",
