@@ -2,6 +2,12 @@ import { getJSON } from '../api.js';
 import { tk } from './stores.svelte.js';
 import { arVideoFil, masteTranskodas, byggMediaUrl } from './media.js';
 
+// Mediaelementet hålls MODULPRIVAT, aldrig i storen. Samma hållning som
+// transkribera/inspelning.svelte.js: en DOM-nod är en resurs, inte tillstånd,
+// och en resurs i en $state gör varje läsning till ett reaktivt beroende.
+let mediaEl = null;
+let lyssnare = [];
+
 // Egna räknare per hämtning. En DELAD hade låtit markörhämtningen
 // ogiltigförklara historikhämtningen vid öppning — samma fälla som
 // inspelningar/actions.js:45-57 beskriver.
@@ -112,6 +118,7 @@ export function stangTranskript() {
   // omedelbart och kan inte skriva in i tillståndet vi tömmer nedan.
   oppnaToken++;
   markorToken++;
+  mediaEl?.pause();
   tk.open = false;
   nollstall();
   tk.historyId = null;
@@ -131,4 +138,64 @@ export async function laddaMarkorer() {
     tk.markorer = [];
     satBesked('Kunde inte läsa markörerna — de kan saknas i listan.');
   }
+}
+
+function mediaFel() {
+  // Videon kan ha fallit på att ensure_web_video inte lyckades — servern
+  // svarar då 500 (server.py:1703-1707). Ljudspåret går alltid att servera,
+  // så vyn förblir användbar: det är transkriptet läraren är där för.
+  if (tk.arVideo && tk.mediaSokvag) {
+    tk.arVideo = false;
+    tk.forbereder = false;
+    tk.mediaUrl = byggMediaUrl(tk.mediaSokvag, false);
+    satBesked('Kunde inte förbereda videon — spelar ljudet.');
+    return;
+  }
+  tk.forbereder = false;
+  satBesked('Kunde inte spela mediet — filen kan ha flyttats eller tagits bort.');
+}
+
+/**
+ * Binder mediaelementet. Anropas ur en use:-action, så den kallas med null när
+ * elementet rivs — bland annat när videofallbacken byter <video> mot <audio>.
+ *
+ * Gamla appen har ingen error-lyssnare alls (app.js:2116-2120), vilket gör en
+ * 404 från /api/media till en spelare som ser normal ut men aldrig rör sig.
+ */
+export function bindMedia(el) {
+  for (const [namn, fn] of lyssnare) mediaEl?.removeEventListener(namn, fn);
+  lyssnare = [];
+  mediaEl = el;
+  if (!el) return;
+
+  el.playbackRate = tk.hastighet;
+  lyssnare = [
+    ['timeupdate', () => { if (!tk.drar) tk.tid = el.currentTime; }],
+    ['durationchange', () => { tk.langd = Number.isFinite(el.duration) ? el.duration : 0; }],
+    ['loadedmetadata', () => { tk.forbereder = false; }],
+    ['play', () => { tk.spelar = true; }],
+    ['pause', () => { tk.spelar = false; }],
+    ['ended', () => { tk.spelar = false; }],
+    ['error', mediaFel],
+  ];
+  for (const [namn, fn] of lyssnare) el.addEventListener(namn, fn);
+}
+
+export function vaxlaSpelning() {
+  if (!mediaEl) return;
+  if (mediaEl.paused) {
+    // Står vi vid slutet börjar vi om, som gamla appen (app.js:2125-2127).
+    if (tk.langd > 0 && mediaEl.currentTime >= tk.langd - 0.25) mediaEl.currentTime = 0;
+    mediaEl.play().catch(mediaFel);
+  } else {
+    mediaEl.pause();
+  }
+}
+
+/** Absolut spolning i sekunder. Klampar mot den KÄNDA längden, aldrig mot en konstant. */
+export function spolaTill(sekunder) {
+  if (!mediaEl || tk.langd <= 0) return;
+  const t = Math.min(tk.langd, Math.max(0, sekunder));
+  mediaEl.currentTime = t;
+  tk.tid = t;
 }
