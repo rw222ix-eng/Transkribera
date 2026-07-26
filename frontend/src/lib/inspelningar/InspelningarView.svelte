@@ -133,12 +133,21 @@
         Lektionen tas bort ur lektionsdatabasen och historiken, tillsammans med
         resultatmappen. Filer du själv sparat någon annanstans påverkas inte.
       </p>
-      <!-- Radera är avstängd medan DELETE:et är i luften. Ett andra DELETE mot
-           samma lektion svarar 200 med folder_removed: false och är alltså helt
-           tyst — läraren får ingen aning om att hon skickat två raderingar. -->
+      <!-- Radera är avstängd medan DELETE:et mot DEN HÄR lektionen är i luften.
+           Ett andra DELETE mot samma lektion svarar 200 med folder_removed:
+           false och är alltså helt tyst — läraren får ingen aning om att hon
+           skickat två raderingar. Jämförelsen mot raderId, inte en
+           sanningskontroll: insp.raderar bär id:t så att ett långsamt DELETE
+           inte stänger av knappen för nästa lektion läraren hinner fråga om
+           (flaggan står kvar genom laddaLektioner() efteråt). -->
       <div class="knappar">
         <button type="button" class="ghost" onclick={avbrytRadera}>Avbryt</button>
-        <button type="button" class="ghost fara" onclick={bekraftaRadera} disabled={insp.raderar}>
+        <button
+          type="button"
+          class="ghost fara"
+          onclick={bekraftaRadera}
+          disabled={insp.raderar === insp.raderId}
+        >
           Radera
         </button>
       </div>

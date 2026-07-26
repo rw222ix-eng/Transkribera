@@ -160,8 +160,15 @@ export async function sparaLektion() {
   // Dubbelklick skickar annars två PATCH. Vakten sitter HÄR och inte bara på
   // knappens disabled, eftersom Enter i ett fält submittar formuläret utan att
   // gå via knappen alls.
-  if (insp.sparar) return;
-  insp.sparar = true;
+  //
+  // Flaggan bär ID:T, inte true. Vakterna nedan är id-baserade och flaggan står
+  // kvar genom omhämtningen (Promise.all), alltså i ytterligare tre HTTP-anrop
+  // efter ett lyckat sparande. En boolean hade under den tiden stängt av Spara
+  // i en dialog läraren hunnit öppna för en annan lektion — och den här returen
+  // hade svalt hennes klick tyst. Dubbelklickskyddet är oförändrat: samma
+  // lektion två gånger ger fortfarande samma id.
+  if (insp.sparar === id) return;
+  insp.sparar = id;
   const e = insp.edits;
   try {
     const r = await fetch(`/api/lessons/${encodeURIComponent(id)}`, {
@@ -190,7 +197,10 @@ export async function sparaLektion() {
   } catch {
     insp.fel = 'Kunde inte spara ändringarna — kontrollera att appen körs.';
   } finally {
-    insp.sparar = false;
+    // Vaktad av samma skäl som vakterna ovan: har en nyare PATCH mot en annan
+    // lektion redan tagit över flaggan ska det här svaret inte släppa dess
+    // knapp.
+    if (insp.sparar === id) insp.sparar = null;
   }
 }
 
@@ -234,8 +244,12 @@ export async function bekraftaRadera() {
   // försvinner, men läraren har utan den här vakten skickat två raderingar mot
   // en lektion som bara fanns en gång. Gamla appen gjorde likadant; det är
   // billigt att stänga.
-  if (insp.raderar) return;
-  insp.raderar = true;
+  //
+  // Flaggan bär ID:T, av samma skäl som insp.sparar: den står kvar genom
+  // laddaLektioner() efteråt, och en boolean hade då stängt av Radera för nästa
+  // lektion läraren hinner fråga om.
+  if (insp.raderar === id) return;
+  insp.raderar = id;
   try {
     const r = await fetch(`/api/lessons/${encodeURIComponent(id)}`, { method: 'DELETE' });
     if (!r.ok) {
@@ -251,6 +265,8 @@ export async function bekraftaRadera() {
     insp.fel = 'Kunde inte radera lektionen — kontrollera att appen körs.';
     if (insp.raderId === id) avbrytRadera();
   } finally {
-    insp.raderar = false;
+    // Vaktad: har läraren hunnit be om en annan radering äger det anropet
+    // flaggan nu, och det här svaret får inte släppa dess knapp.
+    if (insp.raderar === id) insp.raderar = null;
   }
 }

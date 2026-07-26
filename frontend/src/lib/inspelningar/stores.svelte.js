@@ -17,11 +17,16 @@ export const insp = $state({
 
   editId: null,         // lektionen som redigeras, eller null
   edits: { group: '', course: '', sal: '', datum: '' },
-  sparar: false,        // en PATCH är i luften — Spara ska vara avstängd
+  // ID:T på lektionen vars PATCH är i luften, eller null. MEDVETET inte en
+  // boolean: vakterna runt await är id-baserade, och flaggan står kvar genom
+  // omhämtningen efteråt. En global flagga stänger därför av Spara i en dialog
+  // som läraren hunnit öppna för en ANNAN lektion, utan förklaring — och den
+  // tidiga returen i sparaLektion sväljer klicket tyst.
+  sparar: null,
 
   raderId: null,        // lektionen som väntar på raderingsbekräftelse
   raderNamn: '',
-  raderar: false,       // ett DELETE är i luften — Radera ska vara avstängd
+  raderar: null,        // id:t på lektionen vars DELETE är i luften — se sparar
 
   historikExtra: 0,     // ärlighetsvakten: poster i history.json utan lektionsrad
 });

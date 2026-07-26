@@ -165,13 +165,21 @@
     <p class="fel-sr" role="status">{insp.fel}</p>
     <p class="fel" aria-hidden="true">{insp.fel}</p>
 
-    <!-- Spara är avstängd medan PATCH:en är i luften; två klick hade annars
-         skickat två PATCH. Avbryt lämnas PÅ med flit — ångrar sig läraren mitt
-         i ett långsamt sparande ska hon komma ur rutan, och sparaLektion vaktar
-         redan att den inte stänger fel dialog när svaret landar. -->
+    <!-- Spara är avstängd medan PATCH:en mot DEN HÄR lektionen är i luften; två
+         klick hade annars skickat två PATCH. Jämförelsen mot editId, inte en
+         sanningskontroll: insp.sparar bär id:t just för att ett långsamt
+         sparande av en lektion inte ska stänga av Spara i en dialog läraren
+         hunnit öppna för en annan (flaggan står kvar genom omhämtningen
+         efteråt). Att båda är null när dialogen är stängd gör knappen
+         "avstängd" i en display:none-subtree — den går varken att klicka eller
+         fokusera då.
+
+         Avbryt lämnas PÅ med flit — ångrar sig läraren mitt i ett långsamt
+         sparande ska hon komma ur rutan, och sparaLektion vaktar redan att den
+         inte stänger fel dialog när svaret landar. -->
     <div class="knappar">
       <button type="button" class="ghost" onclick={avbrytRedigering}>Avbryt</button>
-      <button type="submit" class="primar" disabled={insp.sparar}>Spara</button>
+      <button type="submit" class="primar" disabled={insp.sparar === insp.editId}>Spara</button>
     </div>
   </form>
 </dialog>
