@@ -8,6 +8,18 @@ import { insp } from './stores.svelte.js';
 let laddToken = 0;
 let orgToken = 0;
 
+// EGEN räknare per panelhämtning, aldrig en delad. De tre startas ur samma
+// untrack-block i InspelningarView, direkt efter varandra — med en delad
+// räknare hade den sista ogiltigförklarat de två första innan de hunnit
+// skriva. Exakt den defekt som skilde orgToken från laddToken ovan.
+//
+// Trender och Inför nästa är dessutom vyns enda hämtningar som är VILLKORADE
+// AV ETT FILTER, och därmed de mest sannolika att överlappa: två snabba
+// klassbyten i följd kan annars landa fel klass i panelen.
+let agendaToken = 0;
+let prepToken = 0;
+let trendToken = 0;
+
 /**
  * Hämtar lektionerna. Klass- och kursfiltret ligger i QUERYSTRÄNGEN, alltså på
  * servern (db.list_lessons, app/db.py:544-560) — därför måste varje byte av dem
@@ -98,17 +110,29 @@ export async function kollaHistorik() {
  * Klassfilter — SERVERSIDA. Byter querysträngen och hämtar om.
  * Nollställer inte månadsfiltret: läraren kan rimligen vilja se "NA21 i mars".
  *
- * await laddaLektioner() är INTE valfritt och inte en dubblett: monteringseffekten
- * i InspelningarView.svelte spårar bara nav.tab och kör hämtningarna inuti
- * untrack(), så en skrivning till insp.filterGroup utlöser ingenting av sig själv.
- * Det här anropet är enda vägen till en omhämtning vid filterbyte.
+ * Anropen är INTE valfria och inte dubbletter: monteringseffekten i
+ * InspelningarView.svelte spårar bara nav.tab och kör hämtningarna inuti
+ * untrack(), så en skrivning till insp.filterGroup utlöser ingenting av sig
+ * själv. Det här är enda vägen till en omhämtning vid filterbyte.
+ *
+ * AGENDAN HÄMTAS MEDVETET INTE OM. Den är tvärs alla klasser och alltså
+ * opåverkad av filtret — gamla appen hämtar den inte heller vid filterbyte
+ * (app.js:1720-1722). Bara de två klassbundna panelerna berörs.
  */
 export async function valjKlass(id) {
   insp.filterGroup = String(id || '');
-  await laddaLektioner();
+  await Promise.all([laddaLektioner(), laddaNastaLektion(), laddaTrender()]);
 }
 
-/** Kursfilter — SERVERSIDA, samma sak som valjKlass. */
+/**
+ * Kursfilter — SERVERSIDA, samma sak som valjKlass.
+ *
+ * RÖR INTE PANELERNA. Både /api/trends och /api/next-prep tar bara group_id, så
+ * ett kursbyte kan inte ändra deras svar. Gamla appen hämtar dem ändå
+ * (app.js:1721 anropar loadPrep och loadTrends för båda filtren) — två
+ * identiska svar per kursbyte, till ingen nytta. Task 5 vaktar att vi inte gör
+ * det.
+ */
 export async function valjKurs(id) {
   insp.filterCourse = String(id || '');
   await laddaLektioner();
@@ -123,13 +147,17 @@ export function valjManad(m) {
   insp.filterMonth = String(m || '');
 }
 
-/** Rensar allt. Klass och kurs kräver en omhämtning, månaden gör det inte. */
+/** Rensar allt. Klass och kurs kräver en omhämtning av lektionerna; klassen
+ *  kräver dessutom att de två klassbundna panelerna nollas. Månaden filtrerar
+ *  på klienten och kräver ingenting. */
 export async function rensaFilter() {
   const rorServern = !!(insp.filterGroup || insp.filterCourse);
+  const rorPaneler = !!insp.filterGroup;
   insp.filterGroup = '';
   insp.filterCourse = '';
   insp.filterMonth = '';
   if (rorServern) await laddaLektioner();
+  if (rorPaneler) await Promise.all([laddaNastaLektion(), laddaTrender()]);
 }
 
 /** Öppnar redigeringen. Namnet är MEDVETET inte med — gamla appens saveLesson
@@ -296,4 +324,92 @@ export async function bekraftaRadera() {
     // flaggan nu, och det här svaret får inte släppa dess knapp.
     if (insp.raderar === id) insp.raderar = null;
   }
+}
+
+/**
+ * Agendan — daterade insikter TVÄRS ALLA KLASSER. Tar medvetet inget filter:
+ * den är lärarens överblick, inte klassens.
+ *
+ * TYST, som kollaHistorik och av samma skäl: den skriver aldrig till insp.fel.
+ * Läraren har inte bett om hämtningen, och ett uteblivet panelinnehåll är inget
+ * hon kan åtgärda — statusraden lämnas åt de fel som svarar på något hon
+ * faktiskt gjort.
+ *
+ * Vid fel sätts agenda = null, INTE []. Se kommentaren i stores.svelte.js.
+ */
+export async function laddaAgenda() {
+  const token = ++agendaToken;
+  try {
+    const res = await getJSON('/api/agenda');
+    if (token !== agendaToken) return;
+    insp.agenda = Array.isArray(res) ? res : [];
+  } catch {
+    if (token !== agendaToken) return;
+    insp.agenda = null;
+  }
+}
+
+/**
+ * Inför nästa lektion — KRÄVER en vald klass.
+ *
+ * Ingen vald klass är inte ett tomtillstånd utan "ej tillämpligt": fältet nollas
+ * och panelen renderas inte alls.
+ *
+ * Räknaren bumpas ÄVEN i den grenen, före den tidiga returen. Utan det kan ett
+ * svar för den nyss avvalda klassen landa efteråt och återuppliva panelen med
+ * fel klass i rubriken.
+ *
+ * Grinden på group_id != null (och inte truthiness) speglar gamla appens
+ * `p && p.group_id ? p : null` (app.js:1731) men tål group_id 0. Servern ekar
+ * alltid tillbaka fältet, även för en okänd grupp — då är listorna tomma och
+ * panelen visar sin tomtext, vilket är rätt: klassen ÄR vald.
+ */
+export async function laddaNastaLektion() {
+  const token = ++prepToken;
+  if (!insp.filterGroup) {
+    insp.nastaLektion = null;
+    return;
+  }
+  try {
+    const res = await getJSON('/api/next-prep?group_id=' + encodeURIComponent(insp.filterGroup));
+    if (token !== prepToken) return;
+    insp.nastaLektion = res && res.group_id != null ? res : null;
+  } catch {
+    if (token !== prepToken) return;
+    insp.nastaLektion = null;
+  }
+}
+
+/** Terminstrender — KRÄVER en vald klass. Samma grindning och samma skäl som
+ *  laddaNastaLektion; läs kommentaren där. */
+export async function laddaTrender() {
+  const token = ++trendToken;
+  if (!insp.filterGroup) {
+    insp.trender = null;
+    return;
+  }
+  try {
+    const res = await getJSON('/api/trends?group_id=' + encodeURIComponent(insp.filterGroup));
+    if (token !== trendToken) return;
+    insp.trender = res && res.group_id != null ? res : null;
+  } catch {
+    if (token !== trendToken) return;
+    insp.trender = null;
+  }
+}
+
+/**
+ * Uppdaterar alla tre panelerna. ENDA vägen efter en mutation.
+ *
+ * Gamla appen laddar om olika delmängder beroende på VAR läraren bockade av:
+ * markAgendaDone hämtar agendan och prep (app.js:2081), markPrepDone bara prep
+ * (app.js:1743). Samma insights-rad, tre paneler som läser den, och två av dem
+ * blir inaktuella beroende på vilken knapp som trycktes. Den asymmetrin fixas
+ * här: en väg, alla tre.
+ *
+ * De två klassbundna laddarna nollar sig själva utan vald klass, så anropet är
+ * säkert i alla lägen. Ingen egen generationsvakt behövs: alla tre har sin.
+ */
+export async function laddaPaneler() {
+  await Promise.all([laddaAgenda(), laddaNastaLektion(), laddaTrender()]);
 }
