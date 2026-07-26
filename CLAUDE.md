@@ -66,6 +66,79 @@ och organiserar dem per datum, klass och kurs. Allt körs **lokalt/offline**.
 
 ---
 
+## Svelte-frontendens konventioner (dyrköpta — bryt dem inte av misstag)
+
+Varje regel nedan kommer ur ett fel som faktiskt inträffade under migrationen
+(planerna A1–A4, B1). De är billiga att följa och dyra att återupptäcka.
+
+**Live-regioner och statusbesked**
+
+- En `role="status"` får **aldrig** ligga i ett `{#if}`-grindat block. En region
+  som monteras in samtidigt som sin text annonseras inte pålitligt. Noden ska
+  vara permanent och bara visuellt klippt (`clip-path: inset(50%)`) — **aldrig**
+  `display: none`, som tar bort den ur tillgänglighetsträdet. Underkänt fyra
+  gånger; `e2e/transkribera-kalla.spec.mjs` har en spärr som vaktar både
+  nodidentiteten och antalet.
+- **En annonserande nod per renderingskontext.** Varje vy har sin egen
+  permanenta region, och en öppen `<dialog>` har sin — de kan aldrig konkurrera,
+  eftersom en dold panel är `display: none` och en öppen modal gör resten inert.
+  Principen håller bara vid **äkta** modalitet: byter någon till `dialog.show()`
+  eller en icke-modal overlay blir båda regionerna levande samtidigt.
+- Varje steg/vy renderar dessutom en **synlig** kopia av samma text, märkt
+  `aria-hidden="true"` och utan egen roll. Bara live-regionen annonseras.
+- **E2E-lokatorer måste avgränsas till den synliga panelen** (`.pane:not([hidden])`),
+  eller använda `getByRole`, som självavgränsar. `App.svelte` göms per flik med
+  `hidden` i stället för att avmontera, så en sidoövergripande räkning fäller
+  varje ny vy som gör rätt. En **CSS**-räkning av `[role="status"]` i en panel med
+  en alltid monterad dialog ger 2 medan a11y-trädet säger 1.
+
+**Modaler**
+
+- Native `<dialog>` + `showModal()`. Det ger fokusfälla, Escape, backdrop och
+  top-layer gratis — allt annat blir handskriven kod för det webbläsaren redan gör.
+- Komponenten hålls **alltid monterad** (utan `{#if}`), annars hinner `close()`
+  aldrig köras och webbläsarens fokusåterställning uteblir. `onclose` nollställer
+  storen. Stäng dialogen vid flikbyte: en öppen dialog i en `hidden` panel ritas
+  inte men blockerar dokumentet.
+
+**Reaktivitet**
+
+- Föredra **explicita actions** framför implicita `$effect`-kedjor. En `$effect`
+  som råkar spåra ett fält för att en anropad funktion läser det synkront före
+  sitt första `await` är ett beroende som försvinner tyst så fort någon lägger
+  dit ett `await` — och den gör samtidigt tandkontroller tandlösa.
+- Monteringseffekter: grinda på det de faktiskt beror på och kör hämtningarna i
+  `untrack`. Sveltes spårning är **dynamisk, inte lexikal**.
+- Allt som kan överlappa behöver en **generationsvakt** (`korToken`-mönstret i
+  `frontend/src/lib/transkribera/actions.js`). Ge varje hämtning en **egen**
+  räknare — en delad låter den ena ogiltigförklara den andra.
+
+**E2E**
+
+- `npm run build` från repo-roten **före** Playwright. `npx playwright test`
+  bygger inte frontenden; det har gett falsk grön två gånger.
+- Fejkserverns basmapp **wipas vid varje start**, så fixturer måste skrivas efter
+  att servern är uppe. Specarna kör i **bokstavsordning** och delar server —
+  allt en spec lämnar efter sig ser de följande.
+- E2E-porten härleds ur worktreets sökväg (`e2e/playwright.config.ts`), så två
+  worktrees inte kan återanvända varandras server. Rör inte den härledningen.
+- **Tandkontrollera varje spärr**: bryt det den vaktar, fånga felutdatan
+  ordagrant, återställ. Passerar testet ändå är assertionen fel — skärp den,
+  försvaga den inte. Kontrollera också att den faller på **rätt rad**.
+
+**Planer**
+
+- Rätta plandokumentet i **samma commit** som koden. En plan som körts är ett
+  historiskt dokument, och halvrättade planer är sämre än orättade: nästa läsare
+  kan inte se vilka block som gäller.
+
+**Filändelser**
+
+- Runes utanför komponenter kräver `.svelte.js`. Rena moduler utan reaktiv state
+  (`week.js`, `kursfarg.js`, `korning.js`) ska **inte** ha den ändelsen.
+
+---
+
 ## Core principles (non-negotiable)
 
 1. Review and fix are separate phases. Never review and merge in the same pass.

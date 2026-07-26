@@ -2,8 +2,36 @@ import { defineConfig, devices } from "@playwright/test";
 import * as path from "path";
 
 const REPO = path.resolve(__dirname, "..");
-// 8731 kan hamna i Windows exkluderade portintervall (Hyper-V) — tillåt override.
-const PORT = Number(process.env.TRANSKRIBERA_PORT || 8731);
+
+/**
+ * Porten härleds ur repots sökväg, så varje worktree får sin egen.
+ *
+ * VARFÖR: webServer nedan har `reuseExistingServer: true`, medan TEST_DATA är
+ * per worktree (`path.join(__dirname, ...)`). Kör två worktrees Playwright
+ * samtidigt på samma port återanvänder den andra den FÖRSTAS server — som pekar
+ * på den förstas basmapp och serverar den förstas `app/web/next`. Testerna blir
+ * då gröna eller röda av fel skäl, utan att något syns.
+ *
+ * VARFÖR HÄRLEDD och inte en miljövariabel man sätter per worktree: en glömd
+ * variabel ger exakt det tysta felet ovan. En härledning går inte att glömma.
+ *
+ * INTERVALLET 8760-8799 är valt för att gå fritt från allt annat i repot:
+ * `app/web/desktop.py:71` tar 8731-8733 för appens eget fönster, `serve_test_app.py`
+ * defaultar till 8731, och överlämningsdokumentet kör fejkservern manuellt på 8750.
+ *
+ * Explicit `TRANSKRIBERA_PORT` vinner alltid — porten kan hamna i Windows
+ * exkluderade portintervall (Hyper-V), och då behövs en väg runt.
+ *
+ * OBS: `e2e/explore.mjs` och `npm run codegen` pekar fortfarande på 8731. De är
+ * manuella verktyg, inte grindar — i en worktree måste de få porten härifrån.
+ */
+function harledPort(): number {
+  if (process.env.TRANSKRIBERA_PORT) return Number(process.env.TRANSKRIBERA_PORT);
+  let h = 0;
+  for (const ch of REPO.toLowerCase()) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return 8760 + (h % 40); // 8760-8799
+}
+const PORT = harledPort();
 const BASE_URL = `http://127.0.0.1:${PORT}`;
 const TEST_DATA = path.join(__dirname, ".test-data");
 const TEST_DATA_REAL = path.join(__dirname, ".test-data-real");
