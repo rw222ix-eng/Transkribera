@@ -35,7 +35,7 @@
 {#if insp.nastaLektion}
   <section class="panel">
     <h2 class="rubrik">
-      Inför nästa lektion{#if klass}<span class="klass"> · {klass}</span>{/if}
+      Inför nästa lektion{#if klass}<span class="klass">{" · " + klass}</span>{/if}
     </h2>
 
     {#if tomt}
@@ -69,13 +69,12 @@
 
     {#if svarigheter.length}
       <p class="etikett" class:avstand={atgarder.length}>
-        Repetera — förra lektionens svårigheter{#if forraDatum}
-          ({datumEtikett(forraDatum)}){/if}
+        Repetera — förra lektionens svårigheter{#if forraDatum}{" "}({datumEtikett(forraDatum)}){/if}
       </p>
       <ul class="punkter">
         {#each svarigheter as d (d.id)}
           <li>
-            {d.text || ''}{#if d.ref}<span class="ref"> ({d.ref})</span>{/if}
+            {d.text || ''}{#if d.ref}<span class="ref">{" (" + d.ref + ")"}</span>{/if}
           </li>
         {/each}
       </ul>

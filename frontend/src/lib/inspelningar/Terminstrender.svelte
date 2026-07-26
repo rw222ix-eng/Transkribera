@@ -35,7 +35,7 @@
   <section class="panel">
     <div class="huvud">
       <h2 class="rubrik">
-        Terminstrender{#if klass}<span class="klass"> · {klass}</span>{/if}
+        Terminstrender{#if klass}<span class="klass">{" · " + klass}</span>{/if}
       </h2>
       {#if lektioner}
         <span class="andel">{analyserade} av {lektioner} lektioner analyserade</span>
@@ -85,7 +85,7 @@
             <li>
               <span class="bricka" class:ater={d.count > 1}>{d.count}×</span>
               <span class="svarighet">
-                {d.text}{#if d.refs?.length}<span class="ref"> ({d.refs.join(', ')})</span>{/if}
+                {d.text}{#if d.refs?.length}<span class="ref">{" (" + d.refs.join(', ') + ")"}</span>{/if}
               </span>
             </li>
           {/each}
