@@ -143,6 +143,14 @@ export function avbrytRedigering() {
  * INGEN tredje generationsvakt: laddaLektioner har laddToken och laddaOrg sin
  * egen orgToken, så Promise.all är redan säkert mot omlott landande svar.
  *
+ * DOLT BEROENDE — läs innan du rör omhämtningarna: Promise.all-anropet ligger
+ * INUTI try:et, efter att sparandet redan lyckats. Att ett fel där inte kan
+ * visa den falska texten "Kunde inte spara ändringarna" beror uteslutande på
+ * att VARKEN laddaLektioner (har egen try/catch) ELLER laddaOrg (Promise
+ * .allSettled) kan kasta. Gör någon av dem kastande — eller lägg till ett
+ * tredje anrop som kan — måste raden flyttas ut ur try:et, annars får läraren
+ * ett sparfel för ett sparande som gick igenom.
+ *
  * PATCH skrivs med fetch direkt — api.js exporterar bara getJSON, postJSON och
  * streamPost.
  */
