@@ -299,15 +299,22 @@
     A3:s klarbesked: säg var läraren kan gå, navigera inte till en platshållare.
     Transkriptvyn kommer i B2 och lektionschatten i B4.
 
-    GRINDAD PÅ sok.traffar === null, alltså ingen aktiv sökning. Raden är en
-    fotnot till KARTOTEKET — den beskriver att öppna en LEKTION, inte en
-    TRÄFF — och kartoteket självt renderas bara i den grenen (se
+    GRINDAD PÅ !sok.traffar — KOMPLEMENTET till träfflistans egen
+    {#if sok.traffar}-grindning ovan, skrivet som negationen av samma
+    uttryck i stället för sok.traffar === null (RÄTTAT I SLUTGRANSKNINGEN,
+    se .superpowers/sdd/b3a-slutfix-report.md): de två villkoren ska alltid
+    vara varandras motsats, men skrivna som två separata jämförelser kunde de
+    drifta isär — vid undefined hade kartoteket renderat UTAN sin fotnot,
+    eftersom varken sok.traffar (falsy, döljer inte kartoteket) eller
+    sok.traffar === null (falsy, döljer fotnoten) håller för det värdet.
+    Raden är en fotnot till KARTOTEKET — den beskriver att öppna en LEKTION,
+    inte en TRÄFF — och kartoteket självt renderas bara i den grenen (se
     {#if sok.traffar}/{:else}-blocket ovan). Utan grinden staplades den under
     en aktiv sökning direkt ovanpå Traefflista.svelte:s nästan identiska
     egna rad ("Att öppna en TRÄFF i transkriptet migreras …"), två fotnoter
     som sa nästan samma sak om olika saker i samma andetag.
   -->
-  {#if sok.traffar === null}
+  {#if !sok.traffar}
     <p class="senare">
       Att öppna en lektion — transkript, ljud och chatt — migreras i en senare
       plan. Tills dess finns den i den gamla appen.
