@@ -10,6 +10,41 @@
 
 **Spec:** `docs/superpowers/specs/2026-07-25-transkribera-A4-inspelning-design.md`
 
+---
+
+## Efterhandsnot — läs denna innan du kopierar något kodblock
+
+Planen är **genomförd**. Tasks 2–6 gick igenom sammanlagt sex fixrundor plus en
+slutgranskning, och flera av kodblocken nedan är därmed **överspelade**. De står
+kvar för att motiveringarna och radhänvisningarna till gamla appen fortfarande är
+värda något — men **de levererade filerna är sanningskällan**, inte den här texten:
+
+`frontend/src/lib/transkribera/` — `inspelningLagring.js`, `inspelning.svelte.js`,
+`Inspelning.svelte`, `InspelningBricka.svelte`, samt `stores.svelte.js`,
+`actions.js`, `TranskriberaView.svelte`, `Installningar.svelte` och
+`frontend/src/lib/shell/AppShell.svelte`. E2E: `e2e/transkribera-inspelning.spec.mjs`.
+
+Fyra block har rättats på plats (Task 4:s städning, brickans grind, brickans
+placering, täckningslistan). **Följande står kvar överspelade** — kopiera dem inte:
+
+| Block | Vad som saknas, och varför det spelar roll |
+|---|---|
+| Task 2, `cancelRecording` | Saknar `recorder.ondataavailable = null`. Utan den flushar `stop()` en sista bit asynkront efter att `session` nollställts, och en föräldralös `downloads/null.part` skrivs — backendens `_SESSION_RE` (`server.py:741`) släpper igenom strängen `"null"` — som appen sedan erbjuder läraren att "återställa". Reproducerat live. Saknar dessutom att `discard` kedjas på `uppladdningsKedja`: en append i flykt landar annars efter `discard`, och backend öppnar med `"ab"` och **återskapar** filen. Också reproducerat live. |
+| Task 2, `stopRecording` | Saknar `else stoppaStrom()`. Uteblir `onstop` släpps mikrofonen aldrig. Saknar även `session = null` i samma gren. |
+| Task 2/3/4, `slutforInspelning` och `koaChunk` | Visas **ovaktade**. Den levererade koden har en generationsräknare, `inspelningsToken`, som bumpas synkront vid start och avbrott och fångas före första `await`. Utan den skriver en avbruten körning tillbaka tillstånd över en ny. |
+| Task 2, widgetens felrad | `{#if tr.recError}<p class="rec-fel" role="status">` — exakt det `{#if}`-runt-`role="status"` som underkänts fyra gånger i den här migrationen. Texten går numera genom `samladStatus()` och den permanenta hoistade `.fel-sr`-regionen; den lokala raden är `aria-hidden`. `e2e/transkribera-kalla.spec.mjs` har en dedikerad spärr för just det. |
+| Task 3, förlust-meddelandet | Slutar på "Resten spelas in som vanligt." Osant vid 507 (full disk), som är beständigt: varje följande bit fallerar medan texten lovar motsatsen. Levererad text slutar på "Inspelningen fortsätter." |
+| Task 4, Step 2 | Säger "Replace the success branch's body with:" över kod med **ovillkorlig** nollställning av räknarna och utan `tr.step`-återställning. Att följa den ordagrant återinför två av Task 2:s regressioner — Task 4:s implementerare vägrade med rätta. |
+| Task 5, `laddaOavslutade` | Saknar `ok`-vakten (en fallerad hämtning raderade annars kraschnätet för `.part`-filer som finns på disk) och filtret för den **levande** sessionen (bannern erbjöd annars Släng för den pågående lektionen, vilket trunkerar den tyst). |
+| Task 5, `slangOavslutad` | Anropar `glomSession(s)` **före** `await`. Faller POSTen är mime och markörer borta men filen kvar. |
+| Task 5, bannern | Renderar `{p.session}`. Levererad kod visar `p.size · p.modified` — gamla appen visar aldrig sessions-id:t, och datumet är det enda fältet som skiljer "passet jag tappade i morse" från en gammal rest. |
+
+Lärdomen är inte att planen var dålig, utan att en plan som körts **är ett
+historiskt dokument**. Nästa plan bör rätta kodblocket i samma commit som koden,
+precis som `bd12a2d` gjorde i plan A3 — annars hamnar man här.
+
+---
+
 ## Global Constraints
 
 - **Backend untouched.** Nothing under `app/` changes. `/` and `/static` stay byte-identical. `app/web/static/app.js` is the source of truth to port from, never a file to edit.
