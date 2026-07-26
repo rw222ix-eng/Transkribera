@@ -117,6 +117,7 @@
     margin: 0;
     overflow-wrap: anywhere;
   }
+  /* Identisk med .ghost i frontend/src/lib/transkribera/Korning.svelte:284-293. */
   .ghost {
     background: transparent;
     color: var(--ink);
@@ -128,7 +129,8 @@
     cursor: pointer;
   }
 
-  /* Klippande teknik — noden finns kvar i tillgänglighetsträdet men upptar
+  /* Identisk med .fel-sr i frontend/src/lib/inspelningar/InspelningarView.svelte:316-323.
+     Klippande teknik — noden finns kvar i tillgänglighetsträdet men upptar
      ingen synlig plats, till skillnad från display:none. */
   .besked-sr {
     position: absolute;
@@ -138,7 +140,9 @@
     clip-path: inset(50%);
     white-space: nowrap;
   }
-  /* Den SYNLIGA raden. :empty-regeln hör hemma här och ingen annanstans. */
+  /* Den SYNLIGA raden. :empty-regeln hör hemma här och ingen annanstans —
+     se kommentaren vid noden. Speglar .fel i InspelningarView.svelte:330-333,
+     men med dialogens egen marginal i stället för vyns. */
   .besked { color: var(--bad); margin: 10px 0 0; }
   .besked.info { color: var(--ink-2); }
   .besked:empty { display: none; }
