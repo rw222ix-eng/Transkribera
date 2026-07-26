@@ -106,6 +106,14 @@
       // (bara sok själv och den egna modulräknaren), så den behöver inte
       // untrack av SPÅRNINGSSKÄL — men ligger ändå här, tillsammans med de
       // andra anropen, av samma "allt hämtas/nollställs om vid flikbyte"-skäl.
+      //
+      // DETTA TÖMMER ÄVEN sok.fraga, INTE BARA TRÄFFARNA (utskrivet i
+      // SLUTGRANSKNINGEN, se .superpowers/sdd/b3a-slutfix-report.md — samma
+      // beteende som förut, bara odokumenterat): en halvskriven, osänd fråga
+      // i fältet försvinner alltså också om läraren tittar i en annan flik
+      // och kommer tillbaka. Det är avsiktligt och inget nytt — ALLT annat i
+      // vyn hämtas på samma sätt om vid flikbyte (filter, kartotek, paneler),
+      // så en kvarglömd sökfråga vore det enda undantaget.
       rensaSokning();
     });
   });
