@@ -39,6 +39,15 @@ export const tr = $state({
   recording: false,       // en inspelning pågår just nu
   recElapsed: 0,          // sekunder sedan inspelningen startade
   recError: '',           // inspelningens eget fel; egen rad, inte guidens fileError
+  // Hur långt recError-beskedet ska följa med. '' = bärs vidare (förlorade
+  // bitar, misslyckad slutföring — de gäller ljud som redan spelats in och
+  // MÅSTE nå steg 2). 'mikrofon' = ett åtkomstfel som bara är sant på steg 1,
+  // där knappen och mikrofonen finns; det glöms när guiden lämnar steg 1 på
+  // någon annan väg än en färdig inspelning (se actions.js). Utan den
+  // skillnaden blev ett "Ingen mikrofon hittades" en permanent röd rad på
+  // steg 2 — samladStatus() väver in recError där, och den enda nollställaren
+  // var en LYCKAD start, vilket är precis det som är omöjligt utan mikrofon.
+  recErrorArt: '',        // '' | 'mikrofon'
   recMarkerCount: 0,      // antal markörer satta i den pågående inspelningen
   recLevel: 0,            // mikrofonnivå 0-1, uppdateras var 200:e ms
   recSilent: false,       // mer än 4 s under tystnadströskeln

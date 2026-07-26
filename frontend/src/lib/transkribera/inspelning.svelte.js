@@ -75,6 +75,23 @@ function mikrofonFel(err) {
   return `Kunde inte komma åt mikrofonen${namn ? ` (${namn})` : ''}.`;
 }
 
+/**
+ * Skriver inspelningens felrad. Går ALLTID via den här funktionen, så att
+ * beskedets livslängd sätts på samma ställe som texten.
+ *
+ * @param {string} text
+ * @param {''|'mikrofon'} [art] '' = beskedet bärs vidare till steg 2 (förlorade
+ *   bitar, misslyckad slutföring — de handlar om ljud som redan spelats in).
+ *   'mikrofon' = ett åtkomstfel som bara är sant på steg 1 och som glöms när
+ *   guiden lämnar steget på någon annan väg än en färdig inspelning.
+ *   Standardvärdet är det bevarande — ett nytt besked ska fela åt att synas
+ *   för länge, inte åt att försvinna.
+ */
+function satRecFel(text, art = '') {
+  tr.recError = text;
+  tr.recErrorArt = art;
+}
+
 function valjMimeType() {
   const helst = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'];
   if (!window.MediaRecorder || !MediaRecorder.isTypeSupported) return null;
@@ -132,7 +149,7 @@ function startaNivamatare(s) {
 export async function startRecording() {
   if (startar || tr.recording) return;
   if (!recSupported()) {
-    tr.recError = 'Inspelning stöds inte i den här vyn.';
+    satRecFel('Inspelning stöds inte i den här vyn.', 'mikrofon');
     return;
   }
   startar = true;
@@ -141,7 +158,7 @@ export async function startRecording() {
   // annars slå om tr.step till 'config' innan strömmen delats ut, och den nya
   // inspelningen skulle starta med widgeten avmonterad.
   inspelningsToken++;
-  tr.recError = '';
+  satRecFel('');
   tr.recLostSecs = 0;
   try {
     const s = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -161,7 +178,10 @@ export async function startRecording() {
     // aldrig, och läraren tror att lektionen spelas in.
     s.getAudioTracks().forEach((spar) => {
       spar.onended = () => {
-        tr.recError = 'Mikrofonen försvann — inspelningen stoppades. Det som hann spelas in finns kvar.';
+        // INTE 'mikrofon': det här beskedet handlar om ljud som redan spelats
+        // in, och stopRecording nedan tar guiden till steg 2 med filen i kön.
+        // Märktes det som ett åtkomstfel skulle det glömmas exakt då.
+        satRecFel('Mikrofonen försvann — inspelningen stoppades. Det som hann spelas in finns kvar.');
         stopRecording();
       };
     });
@@ -177,7 +197,9 @@ export async function startRecording() {
     tidTimer = setInterval(() => { tr.recElapsed += 1; }, 1000);
     window.addEventListener('beforeunload', vaktaOmladdning);
   } catch (err) {
-    tr.recError = mikrofonFel(err);
+    // Bundet till steg 1. Ingen inspelning startade, ingen fil köas, och
+    // beskedet handlar om en knapp och en mikrofon som bara finns här.
+    satRecFel(mikrofonFel(err), 'mikrofon');
     stoppaStrom();
   } finally {
     startar = false;
@@ -268,7 +290,7 @@ export function cancelRecording() {
   }
   tr.recording = false;
   tr.recElapsed = 0;
-  tr.recError = '';
+  satRecFel('');
   tr.recMarkerCount = 0;
   markorer = [];
   tr.recLevel = 0;
@@ -363,9 +385,10 @@ function koaChunk(blob) {
     // Stoppa. Den lovar däremot ingenting om att följande bitar LYCKAS — det
     // får siffran som växer bära, tillsammans med serverns egen text ("Kunde
     // inte skriva till disk — kontrollera ledigt utrymme.").
-    tr.recError =
+    satRecFel(
       `${fel} ${tr.recLostSecs} sekunder av inspelningen gick förlorade. ` +
-      'Inspelningen fortsätter.';
+      'Inspelningen fortsätter.',
+    );
   });
   return uppladdningsKedja;
 }
@@ -469,11 +492,11 @@ async function slutforInspelning(mime) {
       // klar, så det finns ingen sökväg att nyckla dem på. Ljudet ligger kvar
       // som en .part och erbjuds av /api/recordings/incomplete — markörerna
       // ligger kvar bredvid, under samma sessions-id, åt återställningen.
-      tr.recError = (res && res.error) || 'Kunde inte slutföra inspelningen.';
+      satRecFel((res && res.error) || 'Kunde inte slutföra inspelningen.');
     }
   } catch {
     // Samma sak här: posten i localStorage lämnas kvar åt återställningen.
-    tr.recError = 'Kunde inte slutföra inspelningen.';
+    satRecFel('Kunde inte slutföra inspelningen.');
   }
 }
 
@@ -565,10 +588,10 @@ export async function aterstallOavslutad(s) {
       }
       addFiles([{ name: res.name || namn, path: res.path }]);
     } else {
-      tr.recError = (res && res.error) || 'Kunde inte återställa inspelningen.';
+      satRecFel((res && res.error) || 'Kunde inte återställa inspelningen.');
     }
   } catch {
-    tr.recError = 'Kunde inte återställa inspelningen.';
+    satRecFel('Kunde inte återställa inspelningen.');
   }
   await laddaOavslutade();
 }

@@ -10,6 +10,28 @@ import { glomSession } from './inspelningLagring.js';
 let idRakning = 0;
 
 /**
+ * Glömmer ett mikrofonåtkomstfel när guiden lämnar steg 1. Anropas på de TVÅ
+ * ställen där tr.step slås om till 'config'.
+ *
+ * Varför bara den arten: ett åtkomstfel ("Ingen mikrofon hittades", "Mikrofonen
+ * blockerades") är sant om en knapp och en enhet som bara finns på steg 1.
+ * tr.recError nollställs annars enbart av en LYCKAD start eller av Avbryt —
+ * alltså aldrig på en dator utan mikrofon — och samladStatus() väver in det i
+ * steg 2:s synliga felrad. Läraren fick då sitt mikrofonbesked i rött ovanför
+ * en fil som inte har med saken att göra, permanent, återannonserat av
+ * live-regionen framför varje senare statusändring.
+ *
+ * Beskeden om FÖRLORAT LJUD (chunk-kedjan, misslyckad slutföring) bär art ''
+ * och rörs inte: de gäller ljud som redan spelats in, och att de följer med
+ * till steg 2 är hela poängen med den sammanvävningen.
+ */
+function glomMikrofonfel() {
+  if (tr.recErrorArt !== 'mikrofon') return;
+  tr.recError = '';
+  tr.recErrorArt = '';
+}
+
+/**
  * Lägger till källor i kön. Speglar addFilesObjs (app.js:3036-3056) regel för
  * regel: format filtreras, http(s)-länkar släpps alltid igenom, dubbletter på
  * sökväg tas bort, och kön flyttar guiden vidare till steg 2.
@@ -34,6 +56,7 @@ export function addFiles(items) {
   tr.queue = [...tr.queue, ...nya];
   tr.dragging = false;
   tr.activeId = tr.activeId || tr.queue[0]?.id || null;
+  glomMikrofonfel();
   tr.step = 'config';
   // Gamla appen visar dubblettbeskedet som en flytande toast (app.js:3051-3055).
   // Den här appen har ingen toast-infrastruktur och DESIGN.md:s ton talar emot
@@ -193,6 +216,9 @@ export function addUrl() {
 /** Vidare till inställningarna. Kön måste ha något i sig. */
 export function goConfig() {
   if (!tr.queue.length) return;
+  // Egen väg ut ur steg 1, vid sidan av addFiles: kön kan ha fyllts innan
+  // läraren försökte spela in. Se glomMikrofonfel.
+  glomMikrofonfel();
   tr.step = 'config';
 }
 
