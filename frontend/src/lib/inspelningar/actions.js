@@ -169,7 +169,10 @@ export async function sparaLektion() {
       return;
     }
     insp.fel = '';
-    avbrytRedigering();
+    // Stäng bara den dialog vi faktiskt sparade. Hann läraren stänga den och
+    // öppna en annan lektion medan PATCH:en var i luften vore det den NYA
+    // dialogen som försvann här — med hennes oskrivna ändringar i.
+    if (insp.editId === id) avbrytRedigering();
     await Promise.all([laddaLektioner(), laddaOrg()]);
   } catch {
     insp.fel = 'Kunde inte spara ändringarna — kontrollera att appen körs.';
@@ -201,6 +204,12 @@ export function avbrytRadera() {
  * en omhämtning hade bara ritat om samma kort och riskerat att nolla insp.fel
  * (laddaLektioner sätter fel = '' vid lyckad hämtning) innan läraren hunnit
  * läsa beskedet.
+ *
+ * Varje avbrytRadera() efter await:et är VAKTAD mot att bekräftelsen hunnit
+ * byta lektion. Klickar läraren Radera på ett annat kort medan det första
+ * DELETE:et är i luften stängde den gamla svarslandningen annars den NYA
+ * bekräftelsen tyst, och den lektionen raderades aldrig. Att id fångas överst
+ * gör att fel lektion aldrig kan raderas — men bekräftelsen försvann ändå.
  */
 export async function bekraftaRadera() {
   const id = insp.raderId;
@@ -210,14 +219,14 @@ export async function bekraftaRadera() {
     if (!r.ok) {
       const j = await r.json().catch(() => null);
       insp.fel = (j && j.error) || 'Kunde inte radera lektionen.';
-      avbrytRadera();
+      if (insp.raderId === id) avbrytRadera();
       return;
     }
     insp.fel = '';
-    avbrytRadera();
+    if (insp.raderId === id) avbrytRadera();
     await laddaLektioner();
   } catch {
     insp.fel = 'Kunde inte radera lektionen — kontrollera att appen körs.';
-    avbrytRadera();
+    if (insp.raderId === id) avbrytRadera();
   }
 }
