@@ -69,7 +69,7 @@ Nya filer:
 | Fil | Ändring |
 |---|---|
 | `frontend/src/lib/inspelningar/InspelningarView.svelte` | Monterar `<Sokfalt />`; växlar mellan `<Traefflista />` och `<Kartotek />`; grindar kartotekets tomtillstånd. |
-| `frontend/src/lib/arkiv/ArkivAnswer.svelte`, `ArkivList.svelte` | Importsökvägen till `Snippet.svelte`. |
+| `frontend/src/lib/arkiv/ArkivList.svelte` | Importsökvägen till `Snippet.svelte`. |
 | `e2e/playwright.config.ts` | En rad i `testMatch` plus ett stycke i kommentarsblocket. |
 
 Ny e2e-spec: `e2e/inspelningar-sok.spec.mjs`.
@@ -347,8 +347,9 @@ korrekt tomtillstånd. Fixturen måste därför förkontrollera att sökordet fi
 faktiska transkriptet, på samma sätt som kartotekspecen förkontrollerar `METAPREFIX`.
 
 **`Snippet.svelte` flyttas medan en annan session rör `lib/arkiv/`.** Flytten ändrar
-importsökvägen i `ArkivAnswer.svelte` och `ArkivList.svelte`. Konflikten är en rad per
-fil, men den ska förväntas snarare än upptäckas vid merge.
+importsökvägen i `ArkivList.svelte`, den enda importören (`ArkivAnswer.svelte`
+importerar den aldrig). Konflikten är en rad, men den ska förväntas snarare än
+upptäckas vid merge.
 
 **Sökfältets plats i vyn.** Det monteras mellan filterraden och B5:s paneler. Läggs det
 ovanför filterraden hamnar en ofiltrerad funktion ovanpå filtren och antyder att de
