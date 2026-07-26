@@ -151,3 +151,38 @@ test("en historikpost som inte går att läsa säger det", async ({ page }) => {
 
   expect(errors.filter((e) => !/500|Failed to load/.test(e)), errors.join("\n")).toEqual([]);
 });
+
+test("transkriptet renderas med tidkod och text per rad", async ({ page }) => {
+  const errors = [];
+  failOnConsoleError(page, errors);
+
+  const ruta = await oppnaTranskript(page);
+  const rader = ruta.locator("li.rad");
+  await expect(rader).toHaveCount(SEGMENT.length);
+
+  for (let i = 0; i < SEGMENT.length; i++) {
+    await expect(rader.nth(i).locator(".tid")).toHaveText(SEGMENT[i].tid);
+    await expect(rader.nth(i).locator(".text")).toHaveText(SEGMENT[i].text);
+  }
+
+  expect(errors, errors.join("\n")).toEqual([]);
+});
+
+test("en lektion över en timme får en timkomponent i tidkoden", async ({ page, request }) => {
+  const errors = [];
+  failOnConsoleError(page, errors);
+
+  // Gamla appens fmtTime saknar timkomponent (app.js:424) och visar "62:05"
+  // för en lektion på en timme och två minuter. Fejkens segment stannar på
+  // 7,6 s, så tiden måste skrivas in.
+  const lektion = (await (await request.get("/api/lessons")).json())[0];
+  const r = await request.patch("/api/history/" + lektion.history_id, {
+    data: { transcript: [{ start: 3725, end: 3730, text: "Sent i lektionen." }] },
+  });
+  expect(r.ok(), `PATCH /api/history svarade ${r.status()}`).toBeTruthy();
+
+  const ruta = await oppnaTranskript(page);
+  await expect(ruta.locator("li.rad .tid")).toHaveText("1:02:05");
+
+  expect(errors, errors.join("\n")).toEqual([]);
+});

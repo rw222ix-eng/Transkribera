@@ -1,6 +1,7 @@
 <script>
   import { tk } from './stores.svelte.js';
   import { stangTranskript } from './actions.js';
+  import Transkriptlista from './Transkriptlista.svelte';
 
   let ruta = $state(null);
 
@@ -69,6 +70,8 @@
   {#if tk.laddar}
     <p class="laddar">Hämtar transkriptet …</p>
   {/if}
+
+  <Transkriptlista />
 </dialog>
 
 <style>
