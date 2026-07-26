@@ -4,6 +4,11 @@
   // designsystemet — originalets 15,5px text och 9-12px hörn ligger utanför
   // rampen.
   import { nav, setTab, toggleTheme } from './nav.svelte.js';
+  // Skalet känner till transkriberingsvyn, inte tvärtom — samma riktning som
+  // App.svelte redan monterar vyerna i. Brickan måste bo HÄR: den ska synas
+  // även när Transkribera-panelen är hidden (App.svelte), och topbaren är den
+  // enda nod som alltid ligger framme.
+  import InspelningBricka from '../transkribera/InspelningBricka.svelte';
 
   const FLIKAR = [
     ['transkribera', 'Transkribera'],
@@ -31,7 +36,15 @@
     {/each}
   </nav>
 
+  <!-- Brickan bor INUTI .temaruta, inte som en egen kolumn i .bar. Det är
+       .ordmarke och .temaruta som centrerar .flikar: båda är flex: 1 1 0, alltså
+       två lika breda sidor. En fjärde flex: 0 0 auto-kolumn på ~170 px hade
+       flyttat hela flikgruppen ~85 px åt vänster i samma ögonblick inspelningen
+       startar — och tillbaka igen när den stoppas. Här växer i stället höger
+       kolumn inifrån och flikarna står stilla. Brickan renderar ingenting alls
+       när inget spelas in. -->
   <div class="temaruta">
+    <InspelningBricka />
     <button
       type="button"
       class="tema"
@@ -95,7 +108,11 @@
   .temaruta {
     flex: 1 1 0;
     display: flex;
+    align-items: center;
     justify-content: flex-end;
+    /* Samma 16px som .bar:s egen gap — brickan och temaväxlaren ska stå isär
+       lika mycket som topbarens övriga kolumner. */
+    gap: 16px;
   }
   .tema {
     flex: 0 0 auto;

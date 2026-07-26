@@ -1,7 +1,7 @@
 <script>
   // Guidens steg 2 — inställningar. Speglar viewTranscribe:s stepConfig-gren
   // (app/web/static/app.js:4472-4578), omstylad till designsystemet.
-  import { tr } from './stores.svelte.js';
+  import { tr, samladStatus } from './stores.svelte.js';
   import { goSource, startRun } from './actions.js';
   import Sprakval from './Sprakval.svelte';
   import Formatval from './Formatval.svelte';
@@ -9,14 +9,19 @@
   import Kolista from './Kolista.svelte';
   import { katalog } from './katalog.svelte.js';
 
+  // tr.recording först: den är det enda av grindvillkoren läraren själv kan
+  // åtgärda på plats, och den ska stå kvar tills hon gör det. De andra är
+  // övergående (katalogen laddas) eller hör till en annan skärm.
   const startEtikett = $derived(
-    !katalog.klar
-      ? 'Laddar modeller …'
-      : !tr.model
-        ? 'Ladda ner en modell först'
-        : tr.queue.length > 1
-          ? 'Starta · ' + tr.queue.length + ' filer'
-          : 'Starta transkribering',
+    tr.recording
+      ? 'Stoppa inspelningen först'
+      : !katalog.klar
+        ? 'Laddar modeller …'
+        : !tr.model
+          ? 'Ladda ner en modell först'
+          : tr.queue.length > 1
+            ? 'Starta · ' + tr.queue.length + ' filer'
+            : 'Starta transkribering',
   );
 </script>
 
@@ -33,8 +38,22 @@
   INTE CSS-genererat innehåll — se motiveringen i TranskriberaView.svelte.
   e2e-testerna skiljer den här synliga kopian från live-regionen via
   data-testid="statusrad" i stället för att leta upp texten två gånger.
+
+  Raden bär HELA samladStatus(), alltså även tr.recError — inte bara
+  tr.fileError. Utan det blev inspelningsfelet osynligt just när det betyder
+  mest: faller den SISTA biten är sekvensen chunk fallerar → tr.recError sätts
+  → slutforInspelning → addFiles sätter tr.step = 'config' (actions.js:33) →
+  <Inspelning /> avmonteras med sin .rec-fel-rad. Beskedet försvann alltså i
+  praktiken samma ögonblick det skrevs, och det är exakt fallet "filen köades
+  med ett hål i ljudet". Skärmläsaren fick det ändå via den hoistade regionen;
+  en seende lärare kunde missa det helt. Raden är fortfarande aria-hidden, så
+  bara EN nod är exponerad för skärmläsare.
+
+  class:info stängs av när tr.recError är satt: tr.fileNoteArt hör till
+  filkanalen, och dess neutrala "info"-läge (dubblettbeskedet) får inte måla
+  ett inspelningsfel som en lugn notis.
 -->
-<p class="fel" class:info={tr.fileNoteArt === 'info'} aria-hidden="true" data-testid="statusrad">{tr.fileError}</p>
+<p class="fel" class:info={tr.fileNoteArt === 'info' && !tr.recError} aria-hidden="true" data-testid="statusrad">{samladStatus()}</p>
 
 <div class="ko-huvud">
   <span class="label">Filer i kö</span>
@@ -50,11 +69,27 @@
 <Undertextval />
 
 <div class="start">
+  <!--
+    tr.recording grindar starten, precis som den grindar "Nästa: inställningar"
+    på steg 1 (TranskriberaView.svelte). Grinden där räcker INTE: addFiles sätter
+    tr.step = 'config' ovillkorligt (actions.js), så "ett exempel", en länk eller
+    en släppt fil tar guiden hit mitt i en pågående inspelning utan att passera
+    den knappen.
+
+    Utan den här raden startar alltså en körning medan mikrofonen är på: steg 3
+    avmonterar <Inspelning />, så Stoppa / Avbryt / Markera försvinner, och
+    inspelningen kan inte avslutas förrän körningen är klar. Stegindikatorn är
+    inte klickbar under en körning och startRun returnerar tyst — läraren har
+    ingen väg tillbaka till lektionen hon fortfarande spelar in.
+
+    Grinden är en spärr, inte ett förbud: inspelningen fortsätter som vanligt,
+    det är bara starten som väntar tills lektionen är stoppad och köad.
+  -->
   <button
     type="button"
     class="primar"
     onclick={startRun}
-    disabled={!katalog.klar || !tr.model || !tr.queue.length}
+    disabled={!katalog.klar || !tr.model || !tr.queue.length || tr.recording}
   >{startEtikett}</button>
 </div>
 

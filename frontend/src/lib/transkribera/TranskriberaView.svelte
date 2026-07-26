@@ -4,12 +4,13 @@
   // designsystemet. Steg 2 kom i plan A2 (<Installningar />) och steg 3 i plan
   // A3 (<Korning />) — båda renderas ur stegväxlingen längst ned i den här
   // filen, så guiden är komplett fram till och med körningen.
-  import { tr } from './stores.svelte.js';
+  import { tr, samladStatus } from './stores.svelte.js';
   import { addSample, addSampleCorrupt, goConfig, loadAudioModel } from './actions.js';
   import Stegindikator from './Stegindikator.svelte';
   import Dropzone from './Dropzone.svelte';
   import LankFalt from './LankFalt.svelte';
   import Kolista from './Kolista.svelte';
+  import Inspelning from './Inspelning.svelte';
   import Installningar from './Installningar.svelte';
   import Korning from './Korning.svelte';
   import { loadKatalog } from './katalog.svelte.js';
@@ -44,9 +45,39 @@
     annonsera mutationen (plan A2-fixrunda, punkt 1).
     Varje steg renderar därutöver sin egen SYNLIGA kopia av samma text, nära
     fältet den gäller, markerad aria-hidden="true" — bara live-regionen ovan
-    ska annonseras, inte båda.
+    ska annonseras, inte båda. Sammanvävningen görs av samladStatus() i
+    stores.svelte.js, så att region och kopia inte kan divergera.
+
+    Regionen bär BÅDA felkanalerna: guidens tr.fileError och inspelningens
+    tr.recError. Inspelningen får medvetet ingen egen live-region — en region
+    som monteras in i DOM:en samtidigt som sin text annonseras inte pålitligt
+    (samma mönster som fälldes i A2 och i A3:s slutgranskning), och två
+    samtidigt muterande role="status" läses dessutom i oförutsägbar ordning.
+
+    NÄR BÅDA ÄR SATTA VÄVS DE SAMMAN — ingen av dem väljs bort. En tidigare
+    version valde en av dem med "tr.recError || tr.fileError" och tystade
+    därmed hela filkanalen: tr.recError nollställs BARA i startRecording och
+    cancelRecording (inspelning.svelte.js), alltså bara när läraren själv
+    trycker en knapp. Ett getUserMedia-fel eller ett misslyckat slutförande
+    blev därför stående resten av sessionen, och så länge det stod kvar
+    utvärderades uttrycket till samma sträng oavsett vad som hände med
+    tr.fileError — textnoden muterade inte, och role="status" annonserade
+    ingenting. Konkret felfall: mikrofonen blockeras på steg 1, läraren lägger
+    till en fil och går till steg 2, "Ladda ner modell" faller och
+    actions.js skriver tr.fileError — och beskedet nådde aldrig fram. Det är
+    exakt scenariot regionen hoistades för. Widgeten är dessutom avmonterad på
+    steg 2, så det klibbiga tr.recError var samtidigt osynligt på skärmen
+    medan det tystade den enda skärmläsarkanalen.
+
+    Priset för sammanvävningen är en längre uppläsning när båda kanalerna står
+    satta samtidigt. Det är en dubblering, inte en tyst förlust — rätt håll att
+    fela åt. Växer felkanalerna bortom två bör det här göras om till en riktig
+    meddelandekö i stället för en filter/join.
+
+    Hur segmenten fogas ihop (och varför punkten trimmas på alla utom det
+    sista) står vid samladStatus() i stores.svelte.js.
   -->
-  <p class="fel-sr" role="status">{tr.fileError}</p>
+  <p class="fel-sr" role="status">{samladStatus()}</p>
 
   {#if tr.step === 'source'}
     <p class="eyebrow">STEG 1 — KÄLLA</p>
@@ -64,6 +95,8 @@
       <button type="button" class="lank" onclick={addSampleCorrupt}>skadad_inspelning.m4a</button>
     </p>
 
+    <Inspelning />
+
     <!--
       Synlig kopia av live-regionen ovan, i den position raden hade före
       hoisten till plan A2-fixrunda: direkt under källfälten. Riktig textnod,
@@ -74,6 +107,13 @@
       som annonseras. e2e-testerna skiljer den här synliga kopian från
       live-regionen via data-testid="statusrad" i stället för att leta upp
       texten två gånger (se e2e/transkribera-kalla.spec.mjs).
+
+      HÄR — och bara här — bär den synliga kopian enbart tr.fileError, inte
+      samladStatus(). Skälet: <Inspelning /> är monterad precis ovanför på det
+      här steget och visar tr.recError på sin egen .rec-fel-rad. Vävde den
+      här raden in inspelningsfelet också skulle det stå två gånger på
+      skärmen, med tre raders mellanrum. Steg 2 har inte den raden — där
+      renderas samladStatus(), se Installningar.svelte.
     -->
     <p class="fel" class:info={tr.fileNoteArt === 'info'} aria-hidden="true" data-testid="statusrad">{tr.fileError}</p>
 
@@ -85,10 +125,19 @@
     {/if}
 
     <p class="vidare">
+      <!--
+        tr.recording grindar knappen: ligger redan en fil i kön går det annars
+        att lämna steg 1 MITT I en pågående inspelning. Steg 2 avmonterar
+        <Inspelning />, men modultillståndet i inspelning.svelte.js lever kvar
+        — mikrofonen är på, timern tickar, bitarna POSTas var fjärde sekund och
+        beforeunload-vakten blockerar sidstängning utan att något syns som
+        förklarar varför. Widgetens egna knappar (Stoppa / Avbryt) är då enda
+        vägen ur läget, och de är inte längre monterade.
+      -->
       <button
         type="button"
         class="primar"
-        disabled={!tr.queue.length}
+        disabled={!tr.queue.length || tr.recording}
         onclick={goConfig}
       >Nästa: inställningar</button>
     </p>

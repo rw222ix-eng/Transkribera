@@ -1,9 +1,35 @@
-import { getJSON, streamPost } from '../api.js';
+import { getJSON, postJSON, streamPost } from '../api.js';
 import { tr, isMedia } from './stores.svelte.js';
 import { recommendModel } from './katalog.svelte.js';
 import { startProgressAnim, stopProgressAnim } from './korning.js';
+// BARA lagringsmodulen — inspelning.svelte.js får ALDRIG importeras härifrån.
+// Den importerar den här filen (addFiles), så beroendet åt andra hållet skulle
+// sluta cirkeln. inspelningLagring.js importerar ingenting alls, just därför.
+import { glomSession } from './inspelningLagring.js';
 
 let idRakning = 0;
+
+/**
+ * Glömmer ett mikrofonåtkomstfel när guiden lämnar steg 1. Anropas på de TVÅ
+ * ställen där tr.step slås om till 'config'.
+ *
+ * Varför bara den arten: ett åtkomstfel ("Ingen mikrofon hittades", "Mikrofonen
+ * blockerades") är sant om en knapp och en enhet som bara finns på steg 1.
+ * tr.recError nollställs annars enbart av en LYCKAD start eller av Avbryt —
+ * alltså aldrig på en dator utan mikrofon — och samladStatus() väver in det i
+ * steg 2:s synliga felrad. Läraren fick då sitt mikrofonbesked i rött ovanför
+ * en fil som inte har med saken att göra, permanent, återannonserat av
+ * live-regionen framför varje senare statusändring.
+ *
+ * Beskeden om FÖRLORAT LJUD (chunk-kedjan, misslyckad slutföring) bär art ''
+ * och rörs inte: de gäller ljud som redan spelats in, och att de följer med
+ * till steg 2 är hela poängen med den sammanvävningen.
+ */
+function glomMikrofonfel() {
+  if (tr.recErrorArt !== 'mikrofon') return;
+  tr.recError = '';
+  tr.recErrorArt = '';
+}
 
 /**
  * Lägger till källor i kön. Speglar addFilesObjs (app.js:3036-3056) regel för
@@ -30,6 +56,7 @@ export function addFiles(items) {
   tr.queue = [...tr.queue, ...nya];
   tr.dragging = false;
   tr.activeId = tr.activeId || tr.queue[0]?.id || null;
+  glomMikrofonfel();
   tr.step = 'config';
   // Gamla appen visar dubblettbeskedet som en flytande toast (app.js:3051-3055).
   // Den här appen har ingen toast-infrastruktur och DESIGN.md:s ton talar emot
@@ -189,6 +216,9 @@ export function addUrl() {
 /** Vidare till inställningarna. Kön måste ha något i sig. */
 export function goConfig() {
   if (!tr.queue.length) return;
+  // Egen väg ut ur steg 1, vid sidan av addFiles: kön kan ha fyllts innan
+  // läraren försökte spela in. Se glomMikrofonfel.
+  glomMikrofonfel();
   tr.step = 'config';
 }
 
@@ -366,6 +396,37 @@ export async function startRun() {
         tr.qStatus = { ...tr.qStatus, [aktiv.id]: 'done' };
         tr.qProgress = { ...tr.qProgress, [aktiv.id]: 100 };
         tr.log = [...tr.log, '[klar] Färdig på ' + fmtTid(tr.elapsed)];
+        // Markörer satta under inspelningen kan inte postas förrän lektionen
+        // har ett id. Speglar app.js:2255-2263, matchat på filens path.
+        const mark = tr.recMarkersByPath[aktiv.path];
+        if (mark && mark.markers.length && r.id) {
+          postJSON(`/api/recordings/${r.id}/markers`, { markers: mark.markers })
+            .then(() => glomSession(mark.session))
+            // Faller POSTen är markörerna BORTA för den här lektionen. Inget
+            // omförsök, till skillnad från chunk-kedjan — och ingen
+            // återställningsväg heller: aterstallOavslutad nås bara ur bannern,
+            // som listar sessioner med en .part på disk, och en SLUTFÖRD
+            // inspelning har ingen (finish har döpt om filen). Sessionen finns
+            // då varken i tr.incompleteRecs eller — tre rader ned — i
+            // tr.recMarkersByPath, så stadaSessioner sveper localStorage-posten
+            // vid nästa besök på steg 1.
+            //
+            // Alternativet vore att behålla posten i tr.recMarkersByPath vid
+            // fel. Det avvisas: done-grenen är enda läsaren, och den körs bara
+            // om SAMMA sökväg transkriberas igen — en köpost som är 'done' körs
+            // inte om. Omförsöket hade alltså aldrig fyrat, medan posten i
+            // gengäld hållits vid liv i localStorage för alltid av just den
+            // stadaSessioner-vakt som skyddar väntande markörer. En läcka i
+            // utbyte mot ett omförsök som inte finns.
+            //
+            // Priset är en tyst förlust av markörerna. Accepterat: servern är
+            // lokal, POSTen är den sista av tre mot samma process, och ljudet
+            // och transkriptionen är redan sparade — det som går förlorat är
+            // tidsstämplarna, inte lektionen.
+            .catch(() => {});
+          const { [aktiv.path]: _borttagen, ...kvar } = tr.recMarkersByPath;
+          tr.recMarkersByPath = kvar;
+        }
         const nasta = nextPending(aktiv.id);
         if (nasta) {
           // Nästa fil startar efter en kort paus, så läraren hinner se att den
