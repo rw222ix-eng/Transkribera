@@ -135,20 +135,34 @@
     </label>
 
     <!--
-      SPARFELET, inuti rutan. sparaLektion lämnar dialogen öppen på BÅDA
-      felvägarna, och vyns enda synliga kopia av insp.fel ligger utanför
-      dialogen — alltså bakom dess backdrop, i den inerta bakgrunden, och i
-      praktiken utanför synfältet. Utan den här noden ser Spara ut att göra
-      ingenting alls när servern är nere: exakt det svalda fel som briefen
-      förbjuder för DELETE, och som Steg 0 flyttades hit för att förhindra.
+      SPARFELET, i två noder: en klippt live-region och en synlig kopia.
 
-      aria-hidden och UTAN egen roll, precis som kopian i
-      InspelningarView.svelte: vyns live-region (p.fel-sr[role="status"]) är
-      fortfarande den enda annonserande noden. Två annonserande noder i samma
-      vy läses i oförutsägbar ordning.
+      EN ANNONSERANDE NOD PER RENDERINGSKONTEXT — principen B2-B5 ärver.
+      showModal() gör resten av dokumentet INERT, och inert innehåll är borta ur
+      tillgänglighetsträdet. Vyns p.fel-sr[role="status"]
+      (InspelningarView.svelte:87) kan alltså inte annonsera medan dialogen är
+      öppen, och den synliga kopian här är aria-hidden och finns inte i trädet
+      heller. Utan regionen nedan finns INGEN väg fram till texten alls: en <p>
+      går inte att tabba till, och aria-hidden gömmer den även för läsmarkören.
+      Sparfelet blir då osynligt för en skärmläsaranvändare — precis det svalda
+      fel som modalen fick sin felrad för att förhindra.
 
-      :empty-regeln hör hemma här — på en kopia, aldrig på en live-region.
+      De två regionerna kan aldrig konkurrera, och det är villkoret för att den
+      här noden inte bryter antalsregeln: är dialogen öppen är vyn inert, är den
+      stängd är dialogen display:none och alltså själv borta ur trädet. Antalet
+      annonserande noder i den kontext som faktiskt syns är fortfarande ett.
+
+      Regionen får INTE :empty { display: none } — display:none tar bort noden
+      ur trädet, och då kan role="status" inte längre annonsera mutationen. Det
+      mönstret har underkänts fyra gånger i den här migrationen. Den ligger
+      permanent i markupen av samma skäl: en region som monteras in samtidigt
+      som sin text annonseras inte pålitligt.
+
+      Den SYNLIGA kopian är aria-hidden och utan egen roll, precis som kopian i
+      InspelningarView.svelte. :empty-regeln hör hemma på den — på en kopia,
+      aldrig på en live-region.
     -->
+    <p class="fel-sr" role="status">{insp.fel}</p>
     <p class="fel" aria-hidden="true">{insp.fel}</p>
 
     <!-- Spara är avstängd medan PATCH:en är i luften; två klick hade annars
@@ -230,7 +244,20 @@
     box-sizing: border-box;
   }
   input:focus-visible { border-color: var(--accent); }
-  /* Identisk med .fel i InspelningarView.svelte:196 så de två kopiorna av
+  /* Klippande teknik, identisk med .fel-sr i InspelningarView.svelte:194 och
+     TranskriberaView.svelte:197: noden finns kvar i tillgänglighetsträdet men
+     upptar ingen synlig plats. position:absolute tar den dessutom ur
+     rutnätsflödet, så den lägger ingen rad i .falt. INGEN :empty-regel — se
+     kommentaren vid noden. */
+  .fel-sr {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  /* Identisk med .fel i InspelningarView.svelte:210 så de två kopiorna av
      insp.fel ser likadana ut var läraren än råkar se dem. */
   .fel {
     grid-column: 1 / -1;
