@@ -4,7 +4,11 @@
   // Gamla panelen är fylld med --accent-weak och inramad i --accent. Det följer
   // INTE med: DESIGN.md:s One Voice reserverar accenten för handlingar, val och
   // live-tillstånd — inte för att måla ett helt kort. Panelen får samma form som
-  // de två andra, och accenten sparas till mikroetiketterna.
+  // de två andra, och ingen del av den bär accenten: mikroetiketterna är
+  // --ink-3, som Filterrad.svelte och Terminstrender.svelte. "Att göra
+  // (öppna)" är interaktiv men delar etikettstil med "Repetera — förra
+  // lektionens svårigheter", som är en punktlista utan interaktion — och en
+  // accent på den senare hade inte haft något att markera.
   import { insp } from './stores.svelte.js';
   import { markeraKlar } from './actions.js';
   import { datumEtikett } from '../week.js';
@@ -51,11 +55,21 @@
       <ul class="lista">
         {#each atgarder as a (a.id)}
           <li class="rad">
+            <!--
+              aria-disabled, INTE disabled — en fokuserad knapp som blir
+              disabled tappar tangentbordsfokus, och den keyade #each (a.id)
+              gör annars ingenting för att rädda det. Den tidiga returen i
+              onclick gör vakten likvärdig utan att röra fokus. Samma fix som
+              Agenda.svelte, av samma skäl.
+            -->
             <button
               class="ruta"
-              onclick={() => markeraKlar(a.id)}
-              disabled={insp.markerar === a.id}
-              aria-label="Markera klar"
+              onclick={() => {
+                if (insp.markerar === a.id) return;
+                markeraKlar(a.id);
+              }}
+              aria-disabled={insp.markerar === a.id}
+              aria-label={"Markera klar: " + (a.text || "")}
               title="Markera klar"
             ></button>
             <div class="text">
@@ -107,15 +121,17 @@
   }
 
   /* Mikroetikett: den ENDA platsen i panelen där var(--mono) hör hemma. Kort,
-     versal, och en etikett — inte löpande text. Accenten markerar att det är
-     panelens handlingsbara sektion. */
+     versal, och en etikett — inte löpande text. Samma --ink-3 som Filterrad.
+     svelte:115 och Terminstrender.svelte:157: accent hör till handlingar och
+     val (One Voice, specens avsnitt 8), inte till en punktlista utan
+     interaktion — "Repetera — förra lektionens svårigheter" har ingen. */
   .etikett {
     font-family: var(--mono);
     font-size: 0.72rem;
     font-weight: 500;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: var(--accent);
+    color: var(--ink-3);
     margin: 16px 0 6px;
   }
   .etikett.avstand { margin-top: 20px; }
@@ -141,11 +157,14 @@
     cursor: pointer;
     padding: 0;
   }
-  .ruta:hover:not(:disabled) {
+  /* :disabled är ersatt av [aria-disabled="true"] — knappen bär inte längre
+     det native disabled-attributet, som tar fokus med sig. Se
+     onclick-kommentaren ovanför markupen. */
+  .ruta:hover:not([aria-disabled="true"]) {
     border-color: var(--ok);
     background: color-mix(in srgb, var(--ok) 18%, transparent);
   }
-  .ruta:disabled { cursor: default; opacity: 0.5; }
+  .ruta[aria-disabled="true"] { cursor: default; opacity: 0.5; }
 
   .text { flex: 1; min-width: 0; }
   .titel {

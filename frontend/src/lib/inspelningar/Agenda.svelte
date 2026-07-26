@@ -58,21 +58,29 @@
           {#each poster as a (a.id)}
             <li class="rad" class:forsenad={a.overdue}>
               <!--
-                En KLAR post får ingen knapp. Gamla appen renderar en klickbar
-                ruta även för dem, och ett klick PATCH:ar status: "klar" på nytt
-                — en no-op som ser ut som en handling och kostar en rundtur.
+                SAMMA <button> i BÅDA lägena — öppen och klar. Gamla appen
+                (och en tidigare version här) bytte till <span> när posten
+                blev klar: en no-op-knapp PATCH:ade om samma status, så bytet
+                stängde det. Men #each är nyckelad på a.id, och ett bytt
+                elementnamn river Sveltes DOM-nod för just den raden — läraren
+                bockar av, PATCH:en lyckas, laddaPaneler() hämtar om, och
+                precis den rad hon höll tangentbordsfokus på försvinner under
+                fingret. En klar post ska ändå inte gå att aktivera: det löser
+                aria-disabled plus den tidiga returen i onclick, INTE
+                disabled — en fokuserad nod som blir disabled tappar fokus
+                lika säkert som span-bytet gjorde.
               -->
-              {#if a.status === 'klar'}
-                <span class="ruta klar" aria-hidden="true">✓</span>
-              {:else}
-                <button
-                  class="ruta"
-                  onclick={() => markeraKlar(a.id)}
-                  disabled={insp.markerar === a.id}
-                  aria-label="Markera klar"
-                  title="Markera klar"
-                ></button>
-              {/if}
+              <button
+                class="ruta"
+                class:klar={a.status === 'klar'}
+                onclick={() => {
+                  if (a.status === 'klar' || insp.markerar === a.id) return;
+                  markeraKlar(a.id);
+                }}
+                aria-disabled={a.status === 'klar' || insp.markerar === a.id}
+                aria-label={"Markera klar: " + (a.text || "")}
+                title="Markera klar"
+              >{#if a.status === 'klar'}✓{/if}</button>
 
               <div class="text">
                 <p class="titel" class:avklarad={a.status === 'klar'}>{a.text || ''}</p>
@@ -201,11 +209,20 @@
     padding: 0;
     line-height: 1;
   }
-  .ruta:hover:not(:disabled) {
+  /* :disabled är ersatt av [aria-disabled="true"] rakt igenom — ruta är nu
+     ALLTID en <button>, aldrig en <span>, och det native disabled-attributet
+     används medvetet inte (det tar fokus med sig). Se onclick-kommentaren
+     ovanför markupen. */
+  .ruta:hover:not([aria-disabled="true"]) {
     border-color: var(--ok);
     background: color-mix(in srgb, var(--ok) 18%, transparent);
   }
-  .ruta:disabled { cursor: default; opacity: 0.5; }
+  /* :not(.klar): en KLAR post är också aria-disabled, men ska inte dämpas —
+     den bär redan sin egen fulla --ok-yta nedan. Utan undantaget vinner den
+     här regeln över .klar:s opacitet (ingen sätts där) och släcker
+     checkmarken till 0.5, en synlig regression mot span-varianten som aldrig
+     matchade :disabled. */
+  .ruta[aria-disabled="true"]:not(.klar) { cursor: default; opacity: 0.5; }
   .ruta.klar {
     display: flex;
     align-items: center;
