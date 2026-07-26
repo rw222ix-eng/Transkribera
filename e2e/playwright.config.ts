@@ -126,9 +126,44 @@ export default defineConfig({
       // och blir aldrig tyst), localStorage över en pywebview-omstart (bara
       // över en omladdning), och riktig mikrofonhårdvara inklusive att enheten
       // dras ur mitt i en inspelning. Specens egen kommentar upprepar listan.
+      //
+      // Plan B1 Task 5 lägger till e2e/inspelningar-kartotek.spec.mjs (samma
+      // placering, samma fejkserver) som täcker Inspelningar-flikens kartotek:
+      // veckogrupperingen med antal per grupp, att KLASS-filtret verkligen
+      // skickar ett nytt GET /api/lessons (avläst ur nätverksloggen) medan
+      // MÅNADS-filtret inte skickar något alls, generationsvakten som hindrar
+      // ett långsammare filtersvar från att skriva över ett nyare, PATCH:en
+      // från redigeringsdialogen, DELETE:et från raderingsbekräftelsen,
+      // DELETE:ets 409 (fejkat med page.route och serverns egen kropp — det som
+      // prövas är klientens visningsväg, inte serverns förmåga att svara 409),
+      // de två åtskilda tomtillstånden och ärlighetsvakten för historikposter
+      // utan lektionsrad. TÄCKER INTE: att öppna en lektion (transkript, ljud,
+      // chatt — det finns inte i B1 och kommer i B2/B4), sök, arkivfrågan och
+      // panelerna, kortets miniatyr (miljön har bara en .wav) eller en ÄKTA
+      // fillåsning bakom 409:an. Specen skapar sina lektioner via
+      // riktiga POST /api/transcribe — det finns ingen POST /api/lessons — och
+      // raderar dem i afterEach, så basmappen lämnas i samma tomma läge som
+      // servern startade i. Den sorteras FÖRST av filerna i det här projektet,
+      // vilket är just därför städningen är obligatorisk.
+      // Se .superpowers/sdd/task-5-brief.md.
+      //
+      // FÄLLA FÖR B2-B5, skarpladdad men ännu otriggad: en CSS-räkning av
+      // [role="status"] inuti den SYNLIGA Inspelningar-panelen ger nu 2 —
+      // RedigeraLektion.svelte:165 plus InspelningarView.svelte:94 — medan
+      // TILLGÄNGLIGHETSTRÄDET säger 1. Motsägelsen är skenbar och båda noderna
+      // är rätt: stängd är dialogen display:none och alltså ur trädet, öppen gör
+      // showModal() resten av panelen inert och tar bort vyns region ur trädet i
+      // stället. Antalet annonserande noder i den kontext som faktiskt syns är
+      // alltid ett. En framtida spec som vill hålla den regeln MÅSTE därför
+      // räkna med getByRole("status") — eller utesluta dialog:not([open]) — och
+      // inte med page.locator('[role="status"]'). Ingen befintlig spärr träffas
+      // (A4:s antalsspärr i transkribera-kalla.spec.mjs räknar i
+      // Transkribera-panelen, som inte har någon dialog), men mönstret ärvs av
+      // varje vy B2-B5 lägger till.
       name: "next-foundation",
       testDir: __dirname,
       testMatch: [
+        /inspelningar-kartotek\.spec\.mjs$/,
         /next-foundation\.spec\.mjs$/,
         /planering-tavla\.spec\.mjs$/,
         /planering-arkiv\.spec\.mjs$/,

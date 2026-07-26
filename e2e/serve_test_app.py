@@ -309,6 +309,24 @@ def main() -> None:
     (base / "downloads").mkdir(parents=True, exist_ok=True)
     if SAMPLE_WAV.exists():
         shutil.copy(SAMPLE_WAV, base / "downloads" / SAMPLE_WAV.name)
+        # ...och en andra kopia DIREKT i basmappen. Den är candidates[0] i
+        # /api/sample (app/web/server.py:1724), medan kopian i downloads/ bara
+        # nås via reservgrenen "senast ändrade mediefil".
+        #
+        # Varför båda: DELETE /api/lessons/{id} anropar _delete_recording
+        # (server.py:1000-1012), som raderar källinspelningen om den ligger
+        # under downloads/ — alltså precis den kopian. En spec som verkligen
+        # raderar en lektion tömmer därmed downloads/ och skulle utan den här
+        # raden förgifta /api/sample för varje efterföljande spec i samma
+        # serverstart: servern startas EN gång per körning
+        # (playwright.config.ts, reuseExistingServer: true) och basmappen
+        # torkas bara vid en verklig start. Felet hade dessutom sett ut som en
+        # saknad repo-fixtur ("Saknad testfixtur: Mamma waw isolerad.wav"),
+        # vilket är maximalt vilseledande.
+        #
+        # _delete_recording rör bara downloads/, så den här kopian är
+        # oförstörbar och specordningen slutar spela roll.
+        shutil.copy(SAMPLE_WAV, base / SAMPLE_WAV.name)
     # Real installed models, isolated db/history/Transkriberingar.
     (base / "settings.json").write_text(
         json.dumps({"models_dir": str(REAL_MODELS)}), encoding="utf-8")

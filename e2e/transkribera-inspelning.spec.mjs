@@ -83,10 +83,10 @@ function nedladdningar() {
  * Verifierat i det här repot — "återställd_rec_e2e_m4a.m4a" (namnet
  * aterstallOavslutad ger) överlevde både rmSync(force) och
  * rmSync(force+recursive) utan att kasta, medan unlinkSync tog den direkt.
- * Med den tysta miss blir filen kvar som senast ändrade mediefil i downloads/,
- * och /api/sample (server.py:1718-1734) serverar den till varje spec som kör
- * efter den här — transkribera-installningar och transkribera-korning faller
- * då på en fil de aldrig bett om.
+ * Med den tysta missen blir filen kvar i downloads/ BESTÅENDE: nästa körning mot
+ * samma levande server tar in den i `fanns`, och då rör afterEach den aldrig
+ * igen. (Den förgiftar däremot inte längre /api/sample — se kommentaren vid
+ * `fanns` nedan.)
  *
  * rmSync ligger kvar som andra försök för kataloger, som unlink inte tar.
  */
@@ -215,14 +215,25 @@ function flik(page, namn) {
 }
 
 // Den här specen är den enda som skapar RIKTIGA mediefiler i fejkserverns
-// downloads/ (en avslutad inspelning blir lektion_<stämpel>.webm där). Det
-// spiller över på andra specer: /api/sample (server.py:1718-1734) letar
-// "Mamma waw isolerad.wav" direkt under base_dir — där ligger den inte, den
-// kopieras till downloads/ — och faller därför tillbaka på den SENAST ändrade
-// mediefilen i downloads/. En kvarlämnad inspelning gör alltså att "ett
-// exempel" köar den i stället för demofilen i transkribera-installningar och
-// transkribera-korning, som kör efter den här filen i bokstavsordning.
-// Därför: allt den här filen lägger till i downloads/ tas bort igen.
+// downloads/ (en avslutad inspelning blir lektion_<stämpel>.webm där). Allt den
+// lägger till där tas bort igen.
+//
+// VAD STÄDNINGEN INTE LÄNGRE SKYDDAR MOT: /api/sample. Fejkservern lägger sedan
+// B1 Task 4:s fixrunda en fixturkopia DIREKT under basmappen
+// (serve_test_app.py:329), och den kopian är candidates[0] i /api/sample
+// (server.py:1724). Reservgrenen "senast ändrade mediefilen i downloads/" nås
+// därmed aldrig så länge basmappskopian finns, och en kvarlämnad inspelning kan
+// inte längre få "ett exempel" att köa fel fil i transkribera-installningar
+// eller transkribera-korning.
+//
+// VARFÖR DEN ÄNDÅ BEHÖVS, två skäl som båda är lokala för den här filen:
+//   1. .part-filerna. Bannern för oavslutade inspelningar testas både positivt
+//      och negativt, och partFiler() räknar exakt de filerna — skräp från en
+//      tidigare körning gör räkningen fel.
+//   2. Specens egna avslutade inspelningar ska inte samlas på hög. Basmappen
+//      återanvänds mellan körningar (playwright.config.ts har
+//      reuseExistingServer: true, och serve_test_app.py torkar basmappen bara
+//      vid en FAKTISK serverstart).
 let fanns = new Set();
 
 /**
@@ -233,11 +244,11 @@ let fanns = new Set();
 function egenArtefakt(namn) {
   // [.-] och inte bara \. — server.py:785 döper om till
   // lektion_<stämpel>-<uuid8>.webm när målnamnet redan finns. En sådan kvarleva
-  // från en avbruten körning skulle annars hamna i ögonblicksbilden och förgifta
-  // /api/sample bestående, vilket är precis det den här rensningen finns för.
+  // från en avbruten körning skulle annars hamna i ögonblicksbilden och bli
+  // liggande bestående, vilket är precis det den här rensningen finns för.
   // "återställd_<session>." kommer ur aterstallOavslutad och är lika mycket en
   // mediefil i downloads/ som en avslutad inspelning — utan den grenen kunde en
-  // avbruten körning lämna kvar en som /api/sample sedan serverar bestående.
+  // avbruten körning lämna kvar en för gott.
   return (
     /^lektion_\d{4}-\d{2}-\d{2}_\d{4}[.-]/.test(namn) ||
     /^återställd_rec_e2e/.test(namn) ||
@@ -254,13 +265,12 @@ test.beforeAll(() => {
   // Städa FÖRE ögonblicksbilden, annars konserverar den skräp i stället för att
   // rensa det. playwright.config.ts har reuseExistingServer: true, och
   // serve_test_app.py torkar basmappen bara när servern FAKTISKT startar.
-  // Avbryts en körning (Ctrl-C, kraschad worker) med en lektion_*.webm kvar i
-  // downloads/, tar nästa körning mot samma levande server in filen i `fanns` —
-  // och då rör afterEach den aldrig. Eftersom den fortfarande är senast ändrad
-  // mediefil fortsätter /api/sample (server.py:1718-1734) att returnera den, och
-  // transkribera-installningar + transkribera-korning faller på nytt — nu
-  // BESTÅENDE i stället för övergående. Specens egna filer ska därför aldrig
-  // kunna hamna under ögonblicksbildens skydd.
+  // Avbryts en körning (Ctrl-C, kraschad worker) med en lektion_*.webm eller en
+  // .part kvar i downloads/, tar nästa körning mot samma levande server in filen
+  // i `fanns` — och då rör afterEach den aldrig igen. Skräpet blir alltså kvar
+  // BESTÅENDE i stället för övergående: mediefilerna växer på hög i basmappen,
+  // och en .part räknas med av partFiler() i bannartesterna nedan. Specens egna
+  // filer ska därför aldrig kunna hamna under ögonblicksbildens skydd.
   for (const f of fs.readdirSync(d)) {
     if (egenArtefakt(f)) taBort(path.join(d, f));
   }
@@ -565,7 +575,7 @@ test("Inspelning (/next/): varje förlorad bit räknas upp och läraren får vet
   await page.getByRole("button", { name: "Starta inspelning", exact: true }).click();
 
   const fel = page.locator("p.rec-fel");
-  const region = page.locator("section.view p.fel-sr");
+  const region = page.locator(".pane:not([hidden]) section.view p.fel-sr");
   const fyra =
     "Nätverket svarade inte. 4 sekunder av inspelningen gick förlorade. Inspelningen fortsätter.";
   const atta =
@@ -652,7 +662,7 @@ test("Inspelning (/next/): ett nätverksfel ger ETT omförsök för samma bit, u
   // Ingen feltext — omförsöket räddade biten. Vakten läser varje DOM-mutation,
   // så inte ens en blinkande text går förbi.
   await expect(page.locator("p.rec-fel")).toHaveText("");
-  await expect(page.locator("section.view p.fel-sr")).toHaveText("");
+  await expect(page.locator(".pane:not([hidden]) section.view p.fel-sr")).toHaveText("");
   const blinkat = await page.evaluate(() => window.__e2eRecFel);
   expect(blinkat, "Felraden visade text trots att omförsöket lyckades: " + blinkat.join(" | "))
     .toEqual([]);
@@ -865,7 +875,7 @@ test("Inspelning (/next/): nekad mikrofon ger ett begripligt besked och ingen br
   const fel = page.locator("p.rec-fel");
   await expect(fel).toHaveText(besked);
   await expect(fel).toBeVisible();
-  await expect(page.locator("section.view p.fel-sr")).toHaveText(besked);
+  await expect(page.locator(".pane:not([hidden]) section.view p.fel-sr")).toHaveText(besked);
 
   // Inget halvstartat tillstånd: ingen bricka, ingen timer, och knappen går att
   // trycka igen så fort läraren släppt fram mikrofonen.
