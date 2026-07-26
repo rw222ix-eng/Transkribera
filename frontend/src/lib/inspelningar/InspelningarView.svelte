@@ -20,6 +20,8 @@
   import NastaLektion from './NastaLektion.svelte';
   import Terminstrender from './Terminstrender.svelte';
   import Sokfalt from './Sokfalt.svelte';
+  import Traefflista from './Traefflista.svelte';
+  import { sok } from './sok.svelte.js';
   import RedigeraLektion from './RedigeraLektion.svelte';
   import { nav } from '../shell/nav.svelte.js';
 
@@ -174,6 +176,18 @@
   <Sokfalt />
 
   <!--
+    Fråge-läget svarar inte förrän B3b. Raden står där resultatet kommer att
+    stå, så läget inte ser trasigt ut — och kartoteket lämnas kvar, eftersom
+    ett lägesbyte inte ska gömma lärarens lektioner.
+  -->
+  {#if sok.lage === 'ask'}
+    <p class="senare">
+      Att fråga arkivet med egna ord migreras i nästa plan. Tills dess finns
+      det i den gamla appen.
+    </p>
+  {/if}
+
+  <!--
     PANELERNA (B5) ligger HÄR, mellan filterraden och kartoteket, precis som i
     gamla appen (app.js:4897-4901). De beror på klassfiltret och hör visuellt
     ihop med det — och tomtillstånden nedan talar om KARTOTEKET, så läggs
@@ -184,35 +198,56 @@
   <NastaLektion />
   <Terminstrender />
 
-  <Kartotek lektioner={synliga} onRedigera={startaRedigering} onRadera={fragaRadera} />
-
   <!--
-    TVÅ TOMTILLSTÅND, MEDVETET ÅTSKILDA. Gamla vyn skiljer på dem
-    (app.js:4903-4905 respektive :4949-4951) och det gör den här också: det
-    första är "du har ingenting", det andra "du har saker men gömde dem". Slås
-    de ihop får en lärare med fullt arkiv beskedet att hon aldrig spelat in
-    något.
+    EN YTA I TAGET. Medan en sökning är aktiv renderas träfflistan i STÄLLET
+    för kartoteket; töms fältet kommer kartoteket tillbaka oförändrat.
 
-    FILTERTERMERNA I FÖRSTA VILLKORET är inte pynt. Efter Task 3 är
-    insp.lessons inte hela arkivet utan arkivet EFTER serverfiltrering: klass
-    och kurs ligger i querysträngen till /api/lessons, så att välja en klass
-    utan lektioner sätter insp.lessons = []. Utan
-    !insp.filterGroup && !insp.filterCourse hade just den läraren fått "Inga
-    inspelningar än" — exakt den hopblandning det här steget finns för att
-    förbjuda. MÅNADEN är lika medvetet FRÅNVARANDE: den filtrerar på klienten,
-    så är listan tom kan den inte vara orsaken, och är listan inte tom faller
-    fallet till andra grenen ändå.
+    Gamla appen visar båda samtidigt och filtrerar dessutom kartoteket live på
+    filnamn (app.js:3446-3450) — vilket nästan alltid tömmer kortrutnätet, för
+    filnamn heter sällan det läraren sökte på, samtidigt som träfflistan fylls
+    med ställen där ordet faktiskt sades. Två ytor som svarar på olika frågor,
+    varav den ena nästan alltid svarar fel.
 
-    insp.laddar vaktar BÅDA grenarna, så inget av beskeden blinkar förbi under
-    en omhämtning — och en omhämtning är precis vad ett klass- eller kursbyte
-    utlöser.
+    Grinden är sok.traffar !== null, inte fältets innehåll: null betyder ingen
+    aktiv sökning, en array betyder att servern svarat — även den tomma.
+
+    KARTOTEKETS TOMTILLSTÅND LIGGER MED HÄR INNE. Utan det renderas "Inga
+    inspelningar än" under träfflistan och påstår att arkivet är tomt medan
+    träffar visas ovanför.
   -->
-  {#if !insp.laddar && !insp.lessons.length && !insp.filterGroup && !insp.filterCourse}
-    <p class="tomt">
-      Inga inspelningar än. Transkribera en lektion så dyker den upp här.
-    </p>
-  {:else if !insp.laddar && !synliga.length}
-    <p class="tomt">Inga inspelningar matchar dina filter.</p>
+  {#if sok.traffar}
+    <Traefflista />
+  {:else}
+    <Kartotek lektioner={synliga} onRedigera={startaRedigering} onRadera={fragaRadera} />
+
+    <!--
+      TVÅ TOMTILLSTÅND, MEDVETET ÅTSKILDA. Gamla vyn skiljer på dem
+      (app.js:4903-4905 respektive :4949-4951) och det gör den här också: det
+      första är "du har ingenting", det andra "du har saker men gömde dem". Slås
+      de ihop får en lärare med fullt arkiv beskedet att hon aldrig spelat in
+      något.
+
+      FILTERTERMERNA I FÖRSTA VILLKORET är inte pynt. Efter Task 3 är
+      insp.lessons inte hela arkivet utan arkivet EFTER serverfiltrering: klass
+      och kurs ligger i querysträngen till /api/lessons, så att välja en klass
+      utan lektioner sätter insp.lessons = []. Utan
+      !insp.filterGroup && !insp.filterCourse hade just den läraren fått "Inga
+      inspelningar än" — exakt den hopblandning det här steget finns för att
+      förbjuda. MÅNADEN är lika medvetet FRÅNVARANDE: den filtrerar på klienten,
+      så är listan tom kan den inte vara orsaken, och är listan inte tom faller
+      fallet till andra grenen ändå.
+
+      insp.laddar vaktar BÅDA grenarna, så inget av beskeden blinkar förbi under
+      en omhämtning — och en omhämtning är precis vad ett klass- eller kursbyte
+      utlöser.
+    -->
+    {#if !insp.laddar && !insp.lessons.length && !insp.filterGroup && !insp.filterCourse}
+      <p class="tomt">
+        Inga inspelningar än. Transkribera en lektion så dyker den upp här.
+      </p>
+    {:else if !insp.laddar && !synliga.length}
+      <p class="tomt">Inga inspelningar matchar dina filter.</p>
+    {/if}
   {/if}
 
   <!--
