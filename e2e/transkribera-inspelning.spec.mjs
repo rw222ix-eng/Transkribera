@@ -31,20 +31,30 @@
 // 12. nekad mikrofon ger ett begripligt besked, ingen bricka och inget
 //     halvstartat tillstånd;
 // 13. att en körning inte går att STARTA mitt i en inspelning, och att brickan
-//     inte kastar ut läraren ur en körning om den grinden ändå kringgås.
+//     inte kastar ut läraren ur en körning om den grinden ändå kringgås;
+// 14. att nivåmätaren RÖR SIG — scaleX skilt från noll, läst ur computed style
+//     (specens §6.1, som tidigare var otäckt);
+// 15. att Avbryt SLÄPPER mikrofonen: varje spår getUserMedia delade ut har
+//     readyState "ended" efteråt (specens §6.4);
+// 16. att Återställ ger filändelsen ur den SPARADE sessionen, inte en
+//     hårdkodad .webm — en session med mime audio/mp4 köas som .m4a (specens
+//     §6.5, och hela skälet till att Task 5 finns);
+// 17. att ett andra klick på samma plats som "Stoppa och lägg till" inte
+//     startar en ny inspelning, och att spärren släpper när slutföringen är
+//     klar.
 //
 // TÄCKER INTE — och det här är luckor, inte glömska:
 //  · Tystnadsvarningen ("Ingen signal?"). Chromiums fejkenhet skickar en
 //    kontinuerlig ton och blir aldrig tyst, så tröskeln i startaNivamatare kan
 //    inte nås. Logiken är porterad oförändrad och är alltså OVERIFIERAD här.
+//    Mätarens UTSLAG är däremot täckt, se punkt 14 — det är bara
+//    tystnadsgrenen som inte går att nå.
 //  · localStorage över en pywebview-omstart. Det som är bevisat (A4 Task 4) är
 //    att posten överlever en OMLADDNING av dokumentet i Chromium. Om WebView2:s
 //    användardatamapp bevarar den när appen dödas och startas om är okänt —
 //    kraschnätet ska därför inte beskrivas som bevisat hela vägen.
 //  · Riktig mikrofonhårdvara, och att enheten dras ur mitt i en inspelning
 //    (spar.onended). Fejkenheten går inte att koppla ur.
-//  · Nivåmätarens utslag. Den ritas ur tr.recLevel och testas inte här; bara
-//    tystnadsgrenen är namngiven ovan, men själva mätaren är lika oprövad.
 //
 // Nekad mikrofon är däremot INTE en lucka: fejk-UI-flaggan auto-godkänner bara
 // den riktiga behörighetsdialogen och hindrar inte att getUserMedia skuggas —
@@ -66,6 +76,31 @@ function nedladdningar() {
 }
 
 /**
+ * Raderar en artefakt ur downloads/.
+ *
+ * fs.rmSync används MEDVETET inte som förstahandsval: på Windows med Node 24
+ * rapporterar den framgång men lämnar filer med icke-ASCII-namn kvar på disk.
+ * Verifierat i det här repot — "återställd_rec_e2e_m4a.m4a" (namnet
+ * aterstallOavslutad ger) överlevde både rmSync(force) och
+ * rmSync(force+recursive) utan att kasta, medan unlinkSync tog den direkt.
+ * Med den tysta miss blir filen kvar som senast ändrade mediefil i downloads/,
+ * och /api/sample (server.py:1718-1734) serverar den till varje spec som kör
+ * efter den här — transkribera-installningar och transkribera-korning faller
+ * då på en fil de aldrig bett om.
+ *
+ * rmSync ligger kvar som andra försök för kataloger, som unlink inte tar.
+ */
+function taBort(p) {
+  try {
+    fs.unlinkSync(p);
+    return;
+  } catch { /* katalog, eller redan borta */ }
+  try {
+    fs.rmSync(p, { force: true, recursive: true });
+  } catch { /* inget mer att göra här */ }
+}
+
+/**
  * Nollställer .part-filerna. Bannern testas både positivt och negativt, och
  * båda riktningarna kräver att vi vet exakt vilka .part-filer som finns.
  * serve_test_app.py rensar visserligen basmappen vid varje START, men testerna
@@ -75,7 +110,7 @@ function rensaPartFiler() {
   const d = nedladdningar();
   if (!fs.existsSync(d)) return;
   for (const f of fs.readdirSync(d)) {
-    if (f.endsWith(".part")) fs.rmSync(path.join(d, f), { force: true });
+    if (f.endsWith(".part")) taBort(path.join(d, f));
   }
 }
 
@@ -133,6 +168,47 @@ async function vaktaFelraden(page) {
   });
 }
 
+/**
+ * Skuggar getUserMedia och sparar VARJE utdelat spår, så att mikrofonens
+ * verkliga tillstånd går att läsa av efteråt.
+ *
+ * Utan det här går "Avbryt släpper mikrofonen" (specens §6.4) inte att
+ * assertera: DOM:en säger ingenting om huruvida strömmen stängdes, och en
+ * kvarglömd ström lyser vidare i mikrofonlampan medan läraren tror att hon
+ * avbrutit. Skuggan anropar originalet — inspelningen körs alltså på riktigt,
+ * till skillnad från den avvisande skuggan i det nekade-mikrofonen-testet.
+ */
+async function vaktaStrommar(page) {
+  await page.addInitScript(() => {
+    window.__e2eSpar = [];
+    // Räknas SYNKRONT vid anropet, inte när löftet löser ut. Det är skillnaden
+    // mellan "startade ingen ny inspelning" och "hann inte starta en än":
+    // startRecording anropar getUserMedia synkront i klick-hanteraren, så en
+    // avläsning direkt efter klicket är sann. Väntar man i stället på ett
+    // UTDELAT spår mäter man kapplöpningen mellan enhetsförvärvet och
+    // assertionen, och en borttagen spärr kan passera obemärkt.
+    window.__e2eAnrop = 0;
+    const md = navigator.mediaDevices;
+    if (!md || !md.getUserMedia) return;
+    const original = md.getUserMedia.bind(md);
+    Object.defineProperty(md, "getUserMedia", {
+      configurable: true,
+      value: (...args) => {
+        window.__e2eAnrop += 1;
+        return original(...args).then((s) => {
+          window.__e2eSpar.push(...s.getTracks());
+          return s;
+        });
+      },
+    });
+  });
+}
+
+/** Spårens readyState, i den ordning de delades ut. Kräver vaktaStrommar. */
+function sparTillstand(page) {
+  return page.evaluate(() => window.__e2eSpar.map((t) => t.readyState));
+}
+
 /** Flikknappen i topbaren (inte någon likanämnd knapp inne i en vy). */
 function flik(page, namn) {
   return page.locator("nav.flikar").getByRole("button", { name: namn, exact: true });
@@ -159,7 +235,14 @@ function egenArtefakt(namn) {
   // lektion_<stämpel>-<uuid8>.webm när målnamnet redan finns. En sådan kvarleva
   // från en avbruten körning skulle annars hamna i ögonblicksbilden och förgifta
   // /api/sample bestående, vilket är precis det den här rensningen finns för.
-  return /^lektion_\d{4}-\d{2}-\d{2}_\d{4}[.-]/.test(namn) || namn.endsWith(".part");
+  // "återställd_<session>." kommer ur aterstallOavslutad och är lika mycket en
+  // mediefil i downloads/ som en avslutad inspelning — utan den grenen kunde en
+  // avbruten körning lämna kvar en som /api/sample sedan serverar bestående.
+  return (
+    /^lektion_\d{4}-\d{2}-\d{2}_\d{4}[.-]/.test(namn) ||
+    /^återställd_rec_e2e/.test(namn) ||
+    namn.endsWith(".part")
+  );
 }
 
 test.beforeAll(() => {
@@ -179,7 +262,7 @@ test.beforeAll(() => {
   // BESTÅENDE i stället för övergående. Specens egna filer ska därför aldrig
   // kunna hamna under ögonblicksbildens skydd.
   for (const f of fs.readdirSync(d)) {
-    if (egenArtefakt(f)) fs.rmSync(path.join(d, f), { force: true, recursive: true });
+    if (egenArtefakt(f)) taBort(path.join(d, f));
   }
   fanns = new Set(fs.readdirSync(d));
 });
@@ -188,7 +271,7 @@ test.afterEach(() => {
   const d = nedladdningar();
   if (!fs.existsSync(d)) return;
   for (const f of fs.readdirSync(d)) {
-    if (!fanns.has(f)) fs.rmSync(path.join(d, f), { force: true, recursive: true });
+    if (!fanns.has(f)) taBort(path.join(d, f));
   }
 });
 
@@ -223,6 +306,24 @@ test("Inspelning (/next/): start, bitar till servern, markörer, bricka och kö"
   const stoppa = page.getByRole("button", { name: "Stoppa och lägg till", exact: true });
   await expect(stoppa).toBeVisible();
   await expect(page.locator(".ruta .tid")).toHaveText(/^00:(0[1-9]|[1-5]\d)$/, { timeout: 15_000 });
+
+  //    Och nivåmätaren RÖR SIG. Läst ur computed style, inte ur attributet:
+  //    style:transform skrivs av Svelte oavsett vad tr.recLevel innehåller, så
+  //    en avläsning av attributet hade gått igenom även med en död mätare.
+  //    scaleX(0.42) beräknas till matrix(0.42, 0, 0, 1, 0, 0); ett stillastående
+  //    utslag ger matrix(0, …). Fejkenheten skickar en kontinuerlig ton, så
+  //    utslaget SKA vara skilt från noll — faller den här assertionen är det
+  //    AnalyserNode-kedjan i startaNivamatare som brustit, inte tonen.
+  await expect
+    .poll(
+      () =>
+        page.locator(".ruta .fyllnad").evaluate((el) => {
+          const m = /matrix\(\s*([-\d.]+)/.exec(getComputedStyle(el).transform);
+          return m ? parseFloat(m[1]) : 0;
+        }),
+      { timeout: 15_000 },
+    )
+    .toBeGreaterThan(0);
 
   // 3) Markera räknar upp i knappens egen etikett …
   const markera = page.getByRole("button", { name: /^Markera/ });
@@ -325,6 +426,42 @@ test("Inspelning (/next/): start, bitar till servern, markörer, bricka och kö"
   expect(errors, errors.join("\n")).toEqual([]);
 });
 
+test("Inspelning (/next/): Avbryt släpper mikrofonen — inga levande spår kvar", async ({ page }) => {
+  const errors = [];
+  failOnConsoleError(page, errors);
+  rensaPartFiler();
+  await vaktaStrommar(page);
+
+  await page.goto("/next/");
+  await page.getByRole("button", { name: "Starta inspelning", exact: true }).click();
+
+  const stoppa = page.getByRole("button", { name: "Stoppa och lägg till", exact: true });
+  await expect(stoppa).toBeVisible();
+  // Referensläget: spåret är LEVANDE medan inspelningen pågår. Utan det steget
+  // kunde "ended" nedan lika gärna betyda att getUserMedia aldrig lyckades, och
+  // testet hade bevisat fel sak.
+  expect(await sparTillstand(page)).toEqual(["live"]);
+
+  // Avbryt ska också städa på servern — annars ligger .part-filen kvar och
+  // erbjuds tillbaka i bannern efter att läraren uttryckligen slängt den.
+  const kast = page.waitForRequest(
+    (r) => r.url().includes("/api/recording/discard") && r.method() === "POST",
+  );
+  await page.getByRole("button", { name: "Avbryt", exact: true }).click();
+  await kast;
+
+  // Mikrofonen är SLÄPPT. Det syns inte i DOM:en: släpps inte spåret lyser
+  // mikrofonlampan vidare i operativsystemet medan appen visar viloläget, och
+  // nästa startRecording begär en andra ström ovanpå den första.
+  await expect.poll(() => sparTillstand(page), { timeout: 10_000 }).toEqual(["ended"]);
+
+  // Och raden är tillbaka i viloläget, utan bricka i topbaren.
+  await expect(page.getByRole("button", { name: "Starta inspelning", exact: true })).toBeVisible();
+  await expect(page.locator("header.bar button.bricka")).toHaveCount(0);
+
+  expect(errors, errors.join("\n")).toEqual([]);
+});
+
 test("Inspelning (/next/): en oavslutad .part blir en banner, och Släng tar bort den", async ({ page }) => {
   const errors = [];
   failOnConsoleError(page, errors);
@@ -360,6 +497,55 @@ test("Inspelning (/next/): en oavslutad .part blir en banner, och Släng tar bor
   // optimistiskt medan ljudet ligger kvar.
   await expect(page.getByText("Oavslutad inspelning hittad")).toHaveCount(0);
   await expect.poll(() => fs.existsSync(part), { timeout: 10_000 }).toBe(false);
+
+  expect(errors, errors.join("\n")).toEqual([]);
+});
+
+test("Inspelning (/next/): Återställ ger ändelsen ur sessionen, inte hårdkodad .webm", async ({ page }) => {
+  const errors = [];
+  failOnConsoleError(page, errors);
+  rensaPartFiler();
+
+  // Det HÄR är defekten Task 5 finns för: gamla appens recoverIncomplete
+  // hårdkodar .webm (app.js:1496), så en session som spelades in med audio/mp4
+  // — Safari, och Chromium när opus-grenarna faller bort — kom tillbaka med fel
+  // filändelse. Utan det här testet har fixen ingen spärr alls: både .webm och
+  // .m4a passerar isMedia, så köraden ser lika riktig ut i båda fallen.
+  const session = "rec_e2e_m4a";
+  const part = path.join(nedladdningar(), session + ".part");
+  fs.mkdirSync(nedladdningar(), { recursive: true });
+  fs.writeFileSync(part, Buffer.alloc(2048, 7));
+
+  await page.goto("/next/");
+  await expect(page.getByText("Oavslutad inspelning hittad")).toBeVisible();
+
+  // Posten seedas EFTER första laddningen och läses vid omladdningen: en
+  // addInitScript hade kört redan på about:blank, där localStorage tillhör fel
+  // origin. stadaSessioner rör den inte — sessionen ligger i incompleteRecs.
+  await page.evaluate(
+    ([prefix, s]) =>
+      localStorage.setItem(prefix + s, JSON.stringify({ mime: "audio/mp4", markers: [] })),
+    [LAGRINGSPREFIX, session],
+  );
+  await page.reload();
+  await expect(page.getByText("Oavslutad inspelning hittad")).toBeVisible();
+
+  await page.getByRole("button", { name: /^Återställ inspelning / }).click();
+
+  // Filen ligger i kön under sitt riktiga format …
+  const ko = page.locator("ul.ko li");
+  await expect(ko).toHaveCount(1);
+  await expect(ko.locator(".namn")).toHaveText("återställd_" + session + ".m4a");
+  await expect(ko.locator(".ext")).toHaveText("m4a");
+  // … och på disk, med samma namn: servern döper om .part-filen till det namn
+  // klienten skickade, så en fel ändelse här hade blivit bestående.
+  await expect
+    .poll(() => fs.existsSync(path.join(nedladdningar(), "återställd_" + session + ".m4a")), {
+      timeout: 10_000,
+    })
+    .toBe(true);
+  // Bannern är tom igen — .part-filen är förbrukad.
+  expect(partFiler()).toEqual([]);
 
   expect(errors, errors.join("\n")).toEqual([]);
 });
@@ -582,6 +768,73 @@ test("Inspelning (/next/): markörerna följer med hela vägen till den sparade 
       { timeout: 20_000 },
     )
     .toBe(0);
+
+  expect(errors, errors.join("\n")).toEqual([]);
+});
+
+test("Inspelning (/next/): ett andra klick på samma plats startar ingen ny inspelning", async ({ page }) => {
+  test.setTimeout(60_000);
+  const errors = [];
+  failOnConsoleError(page, errors);
+  rensaPartFiler();
+  await vaktaStrommar(page);
+
+  // Båda grenarna av .ruta slutar med samma högerställda .primar-knapp, och
+  // "Starta inspelning" ligger helt innanför fotavtrycket för "Stoppa och lägg
+  // till". tr.recording slår om till false SYNKRONT i stopRecording, så raden
+  // hinner ritas om mellan två snabba klick och det andra landar på Starta.
+  //
+  // /api/recording/finish HÅLLS här, så fönstret blir deterministiskt i stället
+  // för en kapplöpning: slutföringen är i flykt hela tiden mellan klicken,
+  // precis som vid ett riktigt dubbelklick på en långsammare dator.
+  /** @type {import("@playwright/test").Route | null} */
+  let hallen = null;
+  await page.route(
+    (url) => url.pathname === "/api/recording/finish",
+    (route) => { hallen = route; },
+  );
+
+  await page.goto("/next/");
+  const starta = page.getByRole("button", { name: "Starta inspelning", exact: true });
+  const stoppa = page.getByRole("button", { name: "Stoppa och lägg till", exact: true });
+
+  await starta.click();
+  await expect(stoppa).toBeVisible();
+  // Vänta in att det finns ljud att slutföra, annars svarar finish 404 och
+  // fönstret som testas uppstår aldrig.
+  await expect(page.locator(".ruta .tid")).toHaveText(/^00:(0[1-9]|[1-5]\d)$/, { timeout: 15_000 });
+
+  await stoppa.click();
+  // Raden är redan omritad — det är hela problemet.
+  await expect(starta).toBeVisible();
+
+  await starta.click();
+  // Ingen ny inspelning. Beviset är ANROPSRÄKNAREN, inte DOM:en: startRecording
+  // anropar getUserMedia synkront i klick-hanteraren, medan raden och brickan
+  // ritas om först när löftet löst ut — en assertion på dem hade varit sann i
+  // några millisekunder även med spärren borttagen. Utan spärren hade det andra
+  // klicket gett läraren en inspelning hon aldrig bad om, och hade dess
+  // getUserMedia hunnit lösa ut före den gamla recorderns onstop hade
+  // slutforInspelning nollställt den NYA sessionen — varpå bitarna POSTat mot
+  // ?session=null och Stoppa kastat hela lektionen utan ett ord.
+  expect(
+    await page.evaluate(() => window.__e2eAnrop),
+    "getUserMedia anropades en andra gång — det andra klicket startade en ny inspelning.",
+  ).toBe(1);
+  await expect(stoppa).toHaveCount(0);
+  await expect(page.locator("header.bar button.bricka")).toHaveCount(0);
+
+  // Spärren är en spärr, inte ett lås: så fort slutföringen är klar går det att
+  // spela in igen.
+  await expect.poll(() => (hallen ? 1 : 0), { timeout: 15_000 }).toBe(1);
+  await hallen.continue();
+  await expect(page.locator("ul.ko li")).toHaveCount(1);
+  await page.getByRole("button", { name: "Lägg till fler", exact: true }).click();
+  await starta.click();
+  await expect(stoppa).toBeVisible();
+  expect(await page.evaluate(() => window.__e2eAnrop)).toBe(2);
+
+  await page.getByRole("button", { name: "Avbryt", exact: true }).click();
 
   expect(errors, errors.join("\n")).toEqual([]);
 });
