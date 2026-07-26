@@ -286,11 +286,21 @@
     Vad B1 INTE gör, utskrivet i stället för antytt. Samma hållning som plan
     A3:s klarbesked: säg var läraren kan gå, navigera inte till en platshållare.
     Transkriptvyn kommer i B2 och lektionschatten i B4.
+
+    GRINDAD PÅ sok.traffar === null, alltså ingen aktiv sökning. Raden är en
+    fotnot till KARTOTEKET — den beskriver att öppna en LEKTION, inte en
+    TRÄFF — och kartoteket självt renderas bara i den grenen (se
+    {#if sok.traffar}/{:else}-blocket ovan). Utan grinden staplades den under
+    en aktiv sökning direkt ovanpå Traefflista.svelte:s nästan identiska
+    egna rad ("Att öppna en TRÄFF i transkriptet migreras …"), två fotnoter
+    som sa nästan samma sak om olika saker i samma andetag.
   -->
-  <p class="senare">
-    Att öppna en lektion — transkript, ljud och chatt — migreras i en senare
-    plan. Tills dess finns den i den gamla appen.
-  </p>
+  {#if sok.traffar === null}
+    <p class="senare">
+      Att öppna en lektion — transkript, ljud och chatt — migreras i en senare
+      plan. Tills dess finns den i den gamla appen.
+    </p>
+  {/if}
 
   <!--
     Raderingsbekräftelsen. MEDVETET ingen confirm(): den går varken att styla
