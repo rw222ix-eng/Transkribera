@@ -1062,6 +1062,14 @@ test("Sök (/next/): ett klassbyte ändrar inte träffarna", async ({ page }) =>
   // INTE ändrade träfflistan — inte bara att den råkade ha rätt antal från
   // början. Utan den här raden kan testet inte skilja "klassbytet tog bort en
   // träff" från "sökningen gav bara två från början".
+  //
+  // Tandkontrollerad mot ETT rättat sabotage i Traefflista.svelte (grindat på
+  // insp.filterGroup, se planens Task 5 Step 4b) — den här raden PASSERAR (3)
+  // och fällningen sker på den märkta assertionen nedan. Ett tidigare
+  // sabotageförslag som filtrerade OVILLKORLIGT på träffens egen h.group i
+  // stället för UI-filtret fällde i stället den här raden, eftersom 2 av 3
+  // fixturlektioner redan bär group='9A' innan KLASS-selecten ens rörs — det
+  // var ett fel i det sabotaget, inte i den här assertionen.
   await expect(vy.locator("section.traffar li.traff")).toHaveCount(FIXTUR.length);
 
   // 9A har två av tre lektioner. Söket är OFILTRERAT — api_search tar inga
@@ -1300,7 +1308,7 @@ klientfiltrerad träfflista fäller ofiltrerat-kravet."
 **Fångat av en tredje granskning (Task 5, efter leverans).** Fem punkter, alla i den ovanstående specen om inget annat sägs:
 
 1. Task 5:s ursprungliga leverans TOG BORT förhandsräkningen i "ett klassbyte ändrar inte träffarna" med motiveringen att briefens sabotage (`!h.group || h.group === '9A'`) fällde den i stället för den märkta assertionen. Slutsatsen var fel: sabotaget var trasigt (det läste aldrig `insp.filterGroup` och gällde alltså redan FÖRE klassbytet), inte assertionen — CLAUDE.md är uttrycklig att en assertion som en trasig spärr råkar fälla ska skärpas, inte tas bort. Förhandsräkningen är återinförd, och sabotaget i Step 4b ovan är rättat till att grinda på `insp.filterGroup`.
-2. `Sokfalt.svelte`s lägesgrupp (`role="group" aria-label="Sökläge"`) delade etikett med `ArkivSearch.svelte`s egen lägesgrupp — en andra, ännu oexploaterad `aria-label`-krock av exakt samma sort som just spräng planering-arkiv.spec.mjs (se rapportens "FYND"-avsnitt). Rättat till `"Sökläge för inspelningar"`; Task 3:s kodblock ovan speglar det.
+2. `Sokfalt.svelte`s lägesgrupp (`role="group" aria-label="Sökläge"`) delade etikett med `ArkivSearch.svelte`s egen lägesgrupp — en andra, ännu oexploaterad `aria-label`-krock av exakt samma sort som just sprängde planering-arkiv.spec.mjs (se rapportens "FYND"-avsnitt). Rättat till `"Sökläge för inspelningar"`; Task 3:s kodblock ovan speglar det.
 3. Coverage-punkt 3 ("kartotekets tomtillstånd inte renderas under träfflistan") vaktades av assertioner som ALDRIG kunde falla: fixturen har alltid tre lektioner, så `insp.lessons.length === 3` genom hela testet och `"Inga inspelningar matchar dina filter"` kunde inte rendera ens under tandkontroll 4a. Testet driver nu FÖRST kartotekets filtrerade tomtillstånd till att faktiskt rendera (`TOM_KLASS`, tillagd i fixturen) INNAN det bevisar att söket döljer det — se testkoden ovan och `TOM_KLASS`-kommentaren.
 4. Sex mindre punkter (`e2e/planering-arkiv.spec.mjs` för den första): den kostnadsfria `getByRole`-fixen användes i stället för en container-klass; `waitForResponse`-löftet skapas nu FÖRE handlingen, inte efter; `"3 träffar"` härleds ur `FIXTUR.length`; `oppnaInspelningar`s döda `kort`-parameter är borttagen; `expect(errors, …)` bär nu ett felmeddelande överallt; fixturens förkontroll loopar över ALLA träffar, inte bara `hits[0]`.
 5. Rapporten i `.superpowers/sdd/b3a-task-5-report.md` påstod att `aria-label="Sök i arkivet"` var den ENDA dubbletten B3a införde — fel, se punkt 2 ovan. Rättat i rapportens fixavsnitt.
