@@ -54,6 +54,19 @@ const FIXTUR = [
 const ORD = "bråk";
 const ORD_UTAN_TRAFF = "kvadratrot";
 
+/**
+ * En klass UTAN lektioner. get_or_create_group (server.py:972-979) skapar
+ * klassen så fort namnet nämns i en PATCH, och att flytta tillbaka lektionen
+ * lämnar den kvar tom — precis som när en lärare raderat alla inspelningar
+ * för en klass. Samma mönster som inspelningar-kartotek.spec.mjs.
+ *
+ * Testet "kartoteket viker för träffarna" behöver den: fixturen har annars
+ * ALLTID tre lektioner, så kartotekets tomtillstånd ("Inga inspelningar
+ * matchar dina filter") aldrig kan rendera under testet — och en assertion
+ * mot ett tillstånd som aldrig kan uppstå är grön oavsett vad koden gör.
+ */
+const TOM_KLASS = "9C";
+
 /** Raderar varje lektion som finns. Tar historikposten och mappen med sig. */
 async function toemArkivet(request) {
   const lektioner = await (await request.get("/api/lessons")).json();
@@ -99,6 +112,11 @@ async function byggFixtur(request) {
   const skapade = await (await request.get("/api/lessons")).json();
   expect(skapade, "Tre transkriberingar skulle ge tre lektionsrader").toHaveLength(FIXTUR.length);
 
+  // Skapa den tomma klassen INNAN de riktiga PATCH:arna, exakt som
+  // inspelningar-kartotek.spec.mjs: sätt den på en lektion och flytta sedan
+  // tillbaka lektionen till sin riktiga klass i loopen nedan. Kvar blir en
+  // registrerad klass utan någon lektion.
+  await request.patch("/api/lessons/" + skapade[0].id, { data: { group_name: TOM_KLASS } });
   for (let i = 0; i < FIXTUR.length; i++) {
     const r = await request.patch("/api/lessons/" + skapade[i].id, { data: FIXTUR[i] });
     expect(r.ok(), `PATCH /api/lessons/${skapade[i].id} svarade ${r.status()}`).toBeTruthy();
@@ -110,10 +128,15 @@ async function byggFixtur(request) {
     `Fejktranskriptet innehåller inte "${ORD}" i alla tre lektionerna — ` +
       "uppdatera ORD efter serve_test_app.py:41-46",
   ).toBe(FIXTUR.length);
-  expect(
-    kontroll.hits[0].snippet,
-    `Utdraget saknar \\x02-markering — kör sqlite utan FTS5? (LIKE-fallbacken markerar inte)`,
-  ).toContain("\x02");
+  // Loopa över ALLA träffar, inte bara den första: ett index som markerar
+  // träff 0 men inte de andra två skulle passera en förkontroll som bara
+  // läste hits[0].
+  for (const hit of kontroll.hits || []) {
+    expect(
+      hit.snippet,
+      `Utdraget saknar \\x02-markering — kör sqlite utan FTS5? (LIKE-fallbacken markerar inte)`,
+    ).toContain("\x02");
+  }
 }
 
 /**
@@ -122,11 +145,11 @@ async function byggFixtur(request) {
  * Flikbytet är inte kosmetik: hämtningarna är grindade på nav.tab, inte på
  * montering — App.svelte håller alla paneler monterade och gömmer dem bara.
  */
-async function oppnaInspelningar(page, { kort = FIXTUR.length } = {}) {
+async function oppnaInspelningar(page) {
   await page.goto("/next/");
   await page.getByRole("button", { name: "Inspelningar", exact: true }).click();
   const vy = page.locator(".pane:not([hidden]) section.view");
-  await expect(vy.locator("article.kort")).toHaveCount(kort, { timeout: 15_000 });
+  await expect(vy.locator("article.kort")).toHaveCount(FIXTUR.length, { timeout: 15_000 });
   return vy;
 }
 
@@ -169,7 +192,7 @@ test("Sök (/next/): träffarna renderas med markerade utdrag", async ({ page })
 
   const lista = vy.locator("section.traffar");
   await expect(lista.locator("li.traff")).toHaveCount(FIXTUR.length);
-  await expect(lista.locator("p.antal")).toHaveText("3 träffar");
+  await expect(lista.locator("p.antal")).toHaveText(`${FIXTUR.length} träffar`);
 
   // MARKERINGEN är kravet, inte bara att texten finns: utan <mark> har
   // Snippet.svelte:s \x02-parser tystnat.
@@ -185,7 +208,7 @@ test("Sök (/next/): träffarna renderas med markerade utdrag", async ({ page })
   // B3a navigerar inte till transkriptet, och säger det.
   await expect(lista).toContainText("migreras i en senare plan");
 
-  expect(errors).toEqual([]);
+  expect(errors, errors.join("\n")).toEqual([]);
 });
 
 test("Sök (/next/): kartoteket viker för träffarna och kommer tillbaka", async ({ page }) => {
@@ -201,7 +224,9 @@ test("Sök (/next/): kartoteket viker för träffarna och kommer tillbaka", asyn
   await expect(vy.locator("article.kort")).toHaveCount(0);
   await expect(vy.locator("section.traffar li.traff")).toHaveCount(FIXTUR.length);
 
-  // Och kartotekets tomtillstånd får INTE renderas under träfflistan.
+  // Och kartotekets tomtillstånd får INTE renderas under träfflistan — bevisat
+  // NEDAN att det faktiskt KAN rendera, så den här raden inte är grön oavsett
+  // vad koden gör.
   await expect(vy.getByText("Inga inspelningar än")).toHaveCount(0);
   await expect(vy.getByText("Inga inspelningar matchar dina filter")).toHaveCount(0);
 
@@ -210,7 +235,32 @@ test("Sök (/next/): kartoteket viker för träffarna och kommer tillbaka", asyn
   await expect(vy.locator("section.traffar")).toHaveCount(0);
   await expect(vy.locator("article.kort")).toHaveCount(FIXTUR.length);
 
-  expect(errors).toEqual([]);
+  // BEVISET: driv kartotekets FILTRERADE tomtillstånd till att faktiskt
+  // rendera, sök därefter, och kontrollera att det försvinner medan
+  // träffarna visas. Fixturen har annars alltid tre lektioner, så
+  // "Inga inspelningar matchar dina filter" kan aldrig rendera i den här
+  // filen, och assertionerna ovan mot den vore gröna oavsett vad koden gör.
+  // TOM_KLASS är ett SERVERfilter (samma mönster som
+  // inspelningar-kartotek.spec.mjs) som ger insp.lessons = [] fast arkivet
+  // är fullt. Görs EFTER "kommer tillbaka"-kontrollen ovan, så den ursprungliga
+  // "en yta i taget"-mätningen (mot ett FULLT, ofiltrerat kartotek) inte
+  // späds ut av filtret.
+  const lektionerSvar = page.waitForResponse(
+    (r) => new URL(r.url()).pathname === "/api/lessons" && r.status() === 200,
+  );
+  await vy.locator(".filter").getByLabel("KLASS").selectOption({ label: TOM_KLASS });
+  await lektionerSvar;
+  await expect(vy.locator("article.kort")).toHaveCount(0);
+  await expect(vy.getByText("Inga inspelningar matchar dina filter")).toBeVisible();
+
+  await sok(page, vy, ORD);
+  await expect(vy.locator("section.traffar li.traff")).toHaveCount(FIXTUR.length);
+  await expect(
+    vy.getByText("Inga inspelningar matchar dina filter"),
+    "Kartotekets tomtillstånd renderade under träfflistan trots att det bevisligen KAN rendera",
+  ).toHaveCount(0);
+
+  expect(errors, errors.join("\n")).toEqual([]);
 });
 
 test("Sök (/next/): noll träffar visar sin egen text", async ({ page }) => {
@@ -228,7 +278,7 @@ test("Sök (/next/): noll träffar visar sin egen text", async ({ page }) => {
   await expect(vy.locator("article.kort")).toHaveCount(0);
   await expect(vy.getByText("Inga inspelningar matchar dina filter")).toHaveCount(0);
 
-  expect(errors).toEqual([]);
+  expect(errors, errors.join("\n")).toEqual([]);
 });
 
 test("Sök (/next/): ett klassbyte ändrar inte träffarna", async ({ page }) => {
@@ -238,31 +288,38 @@ test("Sök (/next/): ett klassbyte ändrar inte träffarna", async ({ page }) =>
   const vy = await oppnaInspelningar(page);
   await sok(page, vy, ORD);
 
-  // INGEN föregående räkning här (tandkontrollerat och rättat): en identisk
-  // "3 träffar"-assertion direkt efter sökningen fångar exakt samma
-  // gruppfiltrerings-sabotage som assertionen nedan, fast en rad för tidigt —
-  // eftersom sabotaget filtrerar på TRÄFFENS EGEN grupp, inte på det valda
-  // klassfiltret, och 2 av 3 fixturlektioner redan bär group='9A' innan
-  // KLASS-selecten ens rörts. Testet "träffarna renderas med markerade
-  // utdrag" bevisar redan att en osabotagerad sökning ger FIXTUR.length
-  // träffar; den bevisningen ska inte upprepas här och därmed riskera att bli
-  // den rad som (fel) tar äran av tandkontrollens fällning.
+  // FÖRHANDSRÄKNING: bevisar att sökningen redan gav FIXTUR.length träffar
+  // INNAN klassfiltret rörs, så assertionen efter bytet nedan mäter att bytet
+  // INTE ändrade träfflistan — inte bara att den råkade ha rätt antal från
+  // början. Utan den här raden kan testet inte skilja "klassbytet tog bort en
+  // träff" från "sökningen gav bara två från början".
   //
+  // Tandkontrollerad mot ETT rättat sabotage i Traefflista.svelte (grindat på
+  // insp.filterGroup, se planens Task 5 Step 4b) — den här raden PASSERAR (3)
+  // och fällningen sker på den märkta assertionen nedan. Ett tidigare
+  // sabotageförslag som filtrerade OVILLKORLIGT på träffens egen h.group i
+  // stället för UI-filtret fällde i stället den här raden, eftersom 2 av 3
+  // fixturlektioner redan bär group='9A' innan KLASS-selecten ens rörs — det
+  // var ett fel i det sabotaget, inte i den här assertionen.
+  await expect(vy.locator("section.traffar li.traff")).toHaveCount(FIXTUR.length);
+
   // 9A har två av tre lektioner. Söket är OFILTRERAT — api_search tar inga
   // filterparametrar — så alla tre träffarna ska stå kvar.
-  await vy.locator(".filter").getByLabel("KLASS").selectOption({ label: "9A" });
-
-  // Vänta in att filtret verkligen slog igenom: lektionslistan hämtas om.
-  await page.waitForResponse(
+  const lektionerSvar = page.waitForResponse(
     (r) => new URL(r.url()).pathname === "/api/lessons" && r.status() === 200,
   );
+  await vy.locator(".filter").getByLabel("KLASS").selectOption({ label: "9A" });
+  // Vänta in att filtret verkligen slog igenom. valjKlass (actions.js) avfyrar
+  // /api/lessons, /api/next-prep och /api/trends PARALLELLT (laddaPaneler) —
+  // löftet ovan är avgränsat till /api/lessons, det enda som räknas här.
+  await lektionerSvar;
 
   await expect(
     vy.locator("section.traffar li.traff"),
     "Söket är ofiltrerat: ett klassbyte får inte ändra träfflistan",
   ).toHaveCount(FIXTUR.length);
 
-  expect(errors).toEqual([]);
+  expect(errors, errors.join("\n")).toEqual([]);
 });
 
 test("Sök (/next/): Fråga AI säger att den kommer senare", async ({ page }) => {
@@ -283,7 +340,7 @@ test("Sök (/next/): Fråga AI säger att den kommer senare", async ({ page }) =
   // Lägesbytet gömmer inte lärarens lektioner.
   await expect(vy.locator("article.kort")).toHaveCount(FIXTUR.length);
 
-  expect(errors).toEqual([]);
+  expect(errors, errors.join("\n")).toEqual([]);
 });
 
 test("Sök (/next/): ett lägesbyte nollställer fältet och träffarna", async ({ page }) => {
@@ -299,5 +356,5 @@ test("Sök (/next/): ett lägesbyte nollställer fältet och träffarna", async 
   await expect(sokfalt(vy).input).toHaveValue("");
   await expect(vy.locator("article.kort")).toHaveCount(FIXTUR.length);
 
-  expect(errors).toEqual([]);
+  expect(errors, errors.join("\n")).toEqual([]);
 });
