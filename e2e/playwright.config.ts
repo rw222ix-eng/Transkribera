@@ -144,6 +144,20 @@ export default defineConfig({
       // servern startade i. Den sorteras FÖRST av filerna i det här projektet,
       // vilket är just därför städningen är obligatorisk.
       // Se .superpowers/sdd/task-5-brief.md.
+      //
+      // FÄLLA FÖR B2-B5, skarpladdad men ännu otriggad: en CSS-räkning av
+      // [role="status"] inuti den SYNLIGA Inspelningar-panelen ger nu 2 —
+      // RedigeraLektion.svelte:165 plus InspelningarView.svelte:94 — medan
+      // TILLGÄNGLIGHETSTRÄDET säger 1. Motsägelsen är skenbar och båda noderna
+      // är rätt: stängd är dialogen display:none och alltså ur trädet, öppen gör
+      // showModal() resten av panelen inert och tar bort vyns region ur trädet i
+      // stället. Antalet annonserande noder i den kontext som faktiskt syns är
+      // alltid ett. En framtida spec som vill hålla den regeln MÅSTE därför
+      // räkna med getByRole("status") — eller utesluta dialog:not([open]) — och
+      // inte med page.locator('[role="status"]'). Ingen befintlig spärr träffas
+      // (A4:s antalsspärr i transkribera-kalla.spec.mjs räknar i
+      // Transkribera-panelen, som inte har någon dialog), men mönstret ärvs av
+      // varje vy B2-B5 lägger till.
       name: "next-foundation",
       testDir: __dirname,
       testMatch: [

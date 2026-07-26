@@ -33,6 +33,21 @@
     return [...s].sort().reverse();
   });
 
+  // MÅNADEN ÄR MED HÄR OCH MEDVETET INTE i tomtillståndets villkor i
+  // InspelningarView.svelte. Skillnaden ser ut som en slarvig dubblett och är
+  // det inte — harmonisera dem inte, det återinför precis det fel Task 3:s
+  // granskning fångade.
+  //
+  //   HÄR frågar villkoret "döljer något av filtren något?" — och månaden
+  //   döljer, den filtrerar den hämtade listan på klienten. Utan den kan läraren
+  //   välja en månad, se kartoteket krympa, och sakna vägen tillbaka: Rensa alla
+  //   syns inte.
+  //
+  //   DÄR frågar villkoret "kan ett filter förklara att insp.lessons är TOM?" —
+  //   och det kan månaden aldrig, eftersom den inte rör hämtningen. Är listan
+  //   tom är den tom av andra skäl; är den inte tom faller fallet till andra
+  //   tomtillståndsgrenen ändå. Läggs månaden till där får en lärare med
+  //   verkligt tomt arkiv beskedet "Inga inspelningar matchar dina filter".
   const nagotAktivt = $derived(!!(insp.filterGroup || insp.filterCourse || insp.filterMonth));
 </script>
 
