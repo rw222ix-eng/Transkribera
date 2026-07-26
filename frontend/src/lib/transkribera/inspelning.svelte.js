@@ -35,6 +35,29 @@ let uppladdningsKedja = Promise.resolve();
 // efter att löftet löst ut (app.js:1441), så ett snabbt dubbelklick kunde starta
 // två strömmar och läcka den första öppen.
 let startar = false;
+// Speglar `startar` åt andra hållet, och stänger ett dubbelklick på "Stoppa och
+// lägg till". Båda grenarna av .ruta slutar med samma högerställda .primar-knapp
+// (Inspelning.svelte), och "Starta inspelning" ligger helt innanför fotavtrycket
+// för "Stoppa och lägg till". tr.recording slår om till false SYNKRONT i
+// stopRecording, så raden hinner ritas om mellan de två klicken — det andra
+// klicket landar då på Starta.
+//
+// Två utfall stängs:
+//  · en inspelning läraren aldrig bad om, mitt i överlämningen av den förra;
+//  · och den smala men allvarliga svansen: hinner det andra klickets
+//    getUserMedia lösa ut FÖRE den gamla recorderns onstop, läser
+//    slutforInspelning modulens `session` — som då är den NYA — och nollställer
+//    den. Den nya inspelningens bitar hade POSTat mot ?session=null (backendens
+//    _SESSION_RE, server.py:741, släpper igenom strängen "null"), alltså exakt
+//    den föräldralösa downloads/null.part som cancelRecording redan lagat, och
+//    dess Stoppa hade träffat `if (!s) return` och kastat hela lektionen utan
+//    ett ord.
+//
+// Nollställs SIST i slutforInspelning, alltså när överlämningen är färdig.
+// Priset: svarar servern aldrig på finish-POSTen förblir Starta tyst.
+// Accepterat — i det läget är lektionen ändå inte köad, och en dubblettström
+// hade gjort läget värre, inte bättre.
+let stoppar = false;
 // Generationsräknare för inspelningarna, samma mönster som korToken i
 // actions.js:284. Bumpas synkront vid varje start och vid varje avbrott.
 // slutforInspelning fångar den före sitt första await och jämför före varje
@@ -147,7 +170,7 @@ function startaNivamatare(s) {
 }
 
 export async function startRecording() {
-  if (startar || tr.recording) return;
+  if (startar || stoppar || tr.recording) return;
   if (!recSupported()) {
     satRecFel('Inspelning stöds inte i den här vyn.', 'mikrofon');
     return;
@@ -231,8 +254,14 @@ export function stopRecording() {
     // filtrerar bort just det id:t ur bannern som "den pågående inspelningen",
     // och räknar det som levande vid städningen — så den övergivna .part-filen
     // blev osynlig för läraren i stället för återställbar.
-    if (recorder && recorder.state !== 'inactive') recorder.stop();
-    else {
+    if (recorder && recorder.state !== 'inactive') {
+      recorder.stop();
+      // Sätts EFTER stop(): kastar den kommer inget onstop, och då hade
+      // ingenting någonsin nollställt flaggan. Anropet är dessutom bara
+      // köläggande — onstop fyrar i en senare uppgift — så ordningen här
+      // lämnar inget fönster öppet.
+      stoppar = true;
+    } else {
       stoppaStrom();
       session = null;
     }
@@ -247,6 +276,9 @@ export function cancelRecording() {
   // Ett avbrott är också ett generationsskifte: skulle en slutföring ändå vara
   // i flykt får den inte skriva tillbaka tillstånd för det läraren just slängt.
   inspelningsToken++;
+  // Avbryt är utvägen ur varje halvläge, alltså också ur en stoppspärr som
+  // aldrig hann nollställas (se `stoppar`).
+  stoppar = false;
   clearInterval(tidTimer);
   tidTimer = 0;
   stoppaNivamatare();
@@ -412,6 +444,7 @@ async function slutforInspelning(mime) {
   markorer = [];
   if (!s) {
     if (token === inspelningsToken) tr.recElapsed = 0;
+    stoppar = false;
     return;
   }
   const namn = `lektion_${stampel()}.${extAvMime(mime)}`;
@@ -497,6 +530,12 @@ async function slutforInspelning(mime) {
   } catch {
     // Samma sak här: posten i localStorage lämnas kvar åt återställningen.
     satRecFel('Kunde inte slutföra inspelningen.');
+  } finally {
+    // SIST, och i finally så att även en kastad slutföring släpper spärren.
+    // Först här är överlämningen färdig: sessionen stängd, filen köad och
+    // markörerna nycklade på sökvägen — alltså först här kan en ny inspelning
+    // starta utan att kunna skriva över den förras tillstånd.
+    stoppar = false;
   }
 }
 
