@@ -133,11 +133,11 @@ test("Transkribera (/next/): körningen blir klar, med filer och logg", async ({
   await expect(status).toHaveText("Klar", { timeout: 30_000 });
   await expect(procent).toHaveText("Klart 100 %", { timeout: 15_000 });
 
-  // 3) Klarbeskedet: lektionen är sparad, och det står rakt ut att
-  //    Inspelningar kommer senare — guiden navigerar alltså inte någonstans.
+  // 3) Klarbeskedet: lektionen är sparad, och guiden erbjuder en riktig genväg
+  //    till transkriptet i stället för att bara säga att Inspelningar kommer
+  //    senare (plan B2, task 10). Guiden navigerar fortfarande ingenstans av
+  //    sig själv — läraren väljer.
   await expect(page.getByText("Klart — lektionen är sparad.")).toBeVisible();
-  // Guiden erbjuder numera en riktig genväg till transkriptet i stället för
-  // att bara säga att Inspelningar kommer senare (plan B2, task 10).
   await expect(page.getByRole("button", { name: "Öppna transkriptet" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Transkribera något mer" })).toBeVisible();
 
