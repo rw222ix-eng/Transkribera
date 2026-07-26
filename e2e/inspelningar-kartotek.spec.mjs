@@ -14,9 +14,11 @@
 //      (generationsvakten i laddaLektioner),
 //   5. att redigeringen skickar PATCH och att kortet visar det nya värdet,
 //   6. att raderingen tar bort kortet OCH att ett DELETE verkligen skickades,
-//   7. att de två tomtillstånden hör till var sitt villkor och inte är
+//   7. att raderingens 409 når läraren med SERVERNS egen text och att kortet
+//      står kvar — planens enda uttalade MÅSTE,
+//   8. att de två tomtillstånden hör till var sitt villkor och inte är
 //      utbytbara,
-//   8. att ärlighetsvakten räknar historikposter utan lektionsrad.
+//   9. att ärlighetsvakten räknar historikposter utan lektionsrad.
 //
 // Punkt 2 och 3 är planens bärande krav. Klass och kurs ligger i
 // QUERYSTRÄNGEN till /api/lessons, alltså på servern; månaden filtrerar den
@@ -34,9 +36,11 @@
 //   · Miniatyren på kortet (.tumme). Testmiljön har bara en .wav, och wav/webm
 //     får medvetet ingen miniatyr — videogrenen kan inte nås utan en riktig
 //     videofixtur.
-//   · DELETE:ets 409 ("kunde inte radera mappen — en fil kan vara öppen").
-//     Den kräver att resultatmappen är låst av en annan process; att fejka
-//     svaret hade bara testat vår egen fejk.
+//   · Att en ÄKTA fillåsning framkallar 409:an. Punkt 7 fejkar svaret med
+//     page.route och serverns egen kropp, och det är avsiktligt: det som prövas
+//     där är klientens visningsväg, inte serverns förmåga att svara 409. Att
+//     backend verkligen gör det verifierades manuellt en gång med en riktig
+//     låsning (plan B1 Task 4) och har sin egen gren i server.py.
 //   · Att insp.laddar VAKTAR de två tomtillstånden. NAMNGIVEN LUCKA, så nästa
 //     läsare inte tror att den termen är bevisad: villkorets uppgift är att
 //     inget av beskeden ska BLINKA FÖRBI under en omhämtning, men bägge
@@ -266,6 +270,26 @@ function tvaRutor(page) {
   return page.evaluate(
     () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))),
   );
+}
+
+/**
+ * Konsolfelen MINUS de som testet självt framkallat.
+ *
+ * Chrome loggar varje svar med felstatus som "Failed to load resource: the
+ * server responded with a status of 409 (Conflict)". Det är fejkens egen 409,
+ * inte ett appfel — utan filtret fäller failOnConsoleError 409-testet på just
+ * det svar testet finns för att framkalla. Allt annat räknas fortfarande, och
+ * ett riktigt undantag ur bekraftaRadera kommer in som pageerror och passerar
+ * inte filtret.
+ *
+ * MEDVETET en egen kopia. transkribera-inspelning.spec.mjs:128-130 har en
+ * identisk privat appfel(), och den ligger inte i e2e/helpers/. Att lyfta dit
+ * hade krävt en ändring i den 900+ rader långa, gröna specen också (annars finns
+ * duplikatet ändå kvar) — mer sprängradie än två rader regex är värda. Blir det
+ * en tredje kopia är det dags att lyfta alla tre.
+ */
+function appfel(errors) {
+  return errors.filter((e) => !/Failed to load resource/.test(e));
 }
 
 test.beforeEach(async ({ request }) => {
@@ -574,6 +598,104 @@ test("Inspelningar (/next/): raderingen skickar DELETE och kortet försvinner", 
   await expect(meta).toHaveText([META("A1"), META("A2")]);
 
   expect(errors, errors.join("\n")).toEqual([]);
+});
+
+/**
+ * DELETE:ets 409. Planens enda uttalade MÅSTE, och fram till nu utan en enda
+ * rad täckning: inget test i sviten skrev insp.fel över huvud taget, så
+ * data-testid="insp-statusrad" refererades av noll spärrar.
+ *
+ * VARFÖR EN FEJK ÄR RÄTT HÄR. Ett äkta 409 kräver att resultatmappen är låst av
+ * en annan process — det gjorde Task 4 manuellt, EN gång, och efter merge finns
+ * ingenting som fångar en regression. Invändningen "att fejka svaret hade bara
+ * testat vår egen fejk" gäller om man prövar SERVERN. Det som prövas här är
+ * KLIENTENS visningsväg: att !r.ok-grenen i bekraftaRadera plockar serverns text
+ * ur kroppen, lägger den i insp.fel, och att båda felnoderna i vyn visar den
+ * medan kortet står kvar. Ingen del av den kedjan är fejkad.
+ *
+ * Kroppen är serverns EGNA, ordagrant ur app/web/server.py:1030-1032 — går den
+ * texten isär från serverns är det den här assertionen som säger det.
+ *
+ * BAKGRUNDEN som gör felet nödvändigt: backend raderar mappen FÖRST och lämnar
+ * vid 409 medvetet både lektionsraden och historikposten intakta. Sväljs
+ * beskedet står kortet alltså kvar efter nästa hämtning, utan förklaring — och
+ * B2-B5 ärver både felrörledningen och den här statusraden.
+ */
+test("Inspelningar (/next/): raderingens 409 når läraren och kortet står kvar", async ({ page }) => {
+  const errors = [];
+  failOnConsoleError(page, errors);
+
+  const SERVERTEXT = "kunde inte radera mappen — en fil kan vara öppen";
+
+  const vy = await oppnaInspelningar(page);
+  const kort = vy.locator("article.kort");
+  const meta = vy.locator("article.kort .meta");
+
+  // BARA DELETE fångas. GET /api/lessons måste fortsätta gå till den riktiga
+  // backenden — annars är korten nedan fejkade och "kortet står kvar" mäter
+  // ingenting. page.route påverkar inte request-fixturen, så beforeEach/
+  // afterEach bygger och river fixturen oberoende av routen.
+  let raderingar = 0;
+  await page.route("**/api/lessons/*", async (route) => {
+    if (route.request().method() !== "DELETE") return route.continue();
+    raderingar++;
+    await route.fulfill({ status: 409, json: { error: SERVERTEXT } });
+  });
+
+  // Loggen registreras FÖRE klicket: en av sakerna som prövas är att felgrenen
+  // INTE hämtar om listan.
+  const anrop = loggaLektionsanrop(page);
+
+  await kort.last().getByRole("button", { name: "Radera" }).click();
+  await vy.locator(".bekraft").getByRole("button", { name: "Radera" }).click();
+
+  // KÄRNAN: SERVERNS text, inte vår reservtext ("Kunde inte radera lektionen."),
+  // i den SYNLIGA felraden. Reservtexten säger inte att en fil är öppen, och
+  // det är den upplysningen som gör felet åtgärdbart.
+  const statusrad = vy.locator('[data-testid="insp-statusrad"]');
+  await expect(statusrad).toHaveText(SERVERTEXT);
+  await expect(statusrad).toBeVisible();
+
+  // Och i live-regionen, som är den enda vägen fram för en skärmläsare: den
+  // synliga kopian är aria-hidden och finns inte i tillgänglighetsträdet.
+  //
+  // getByRole("status") och INTE locator("p.fel-sr"): den här panelen innehåller
+  // TVÅ noder med den klassen — vyns egen och RedigeraLektions, som ligger inuti
+  // <section class="view"> eftersom dialogen alltid är monterad. En CSS-räkning
+  // ger alltså 2 och fälls av strict mode (uppmätt, inte antaget: det var precis
+  // så den här raden gick sönder första gången). Tillgänglighetsträdet ger 1 —
+  // den stängda dialogen är display:none och därmed borta ur det — och det är
+  // trädet frågan handlar om. Fällan står nedskriven i playwright.config.ts:
+  // varje spec B2-B5 lägger till ärver den.
+  await expect(vy.getByRole("status")).toHaveText(SERVERTEXT);
+
+  // KORTET STÅR KVAR. Klienten får inte plocka bort det optimistiskt — servern
+  // har medvetet lämnat både lektionsraden och historikposten intakta, så ett
+  // borttaget kort hade varit en ren lögn som nästa hämtning ändå avslöjar.
+  await expect(meta).toHaveText([META("A1"), META("A2"), META("B3")]);
+  await expect(kort).toHaveCount(3);
+
+  // Bekräftelsen stängs — beskedet hör hemma i vyns statusrad, inte bakom en
+  // ruta läraren måste stänga. toBeHidden och inte toHaveCount(0): den passerar
+  // både för en avmonterad ruta och för en stängd <dialog> (display:none).
+  await expect(vy.locator(".bekraft")).toBeHidden();
+
+  // Exakt ETT DELETE, och INGEN omhämtning efteråt. Omhämtningen är medvetet
+  // utelämnad i felgrenen (actions.js): laddaLektioner sätter insp.fel = '' vid
+  // ett lyckat svar, så en omhämtning här hade rensat beskedet innan läraren
+  // hunnit läsa det — kortet hade stått kvar helt utan förklaring, vilket är
+  // exakt det feltillstånd hela det här testet finns för att förbjuda.
+  expect(raderingar, "Raderingen skickade inte exakt ett DELETE").toBe(1);
+  expect(
+    anrop,
+    "Felgrenen hämtade om lektionslistan och riskerade att rensa felet: " + JSON.stringify(anrop),
+  ).toEqual([]);
+
+  await page.unroute("**/api/lessons/*");
+
+  // Chromes egen "Failed to load resource … 409 (Conflict)" är testets
+  // injektion, inte ett appfel — se appfel().
+  expect(appfel(errors), appfel(errors).join("\n")).toEqual([]);
 });
 
 test("Inspelningar (/next/): de två tomtillstånden är inte utbytbara", async ({ page }) => {

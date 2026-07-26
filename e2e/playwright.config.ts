@@ -133,12 +133,14 @@ export default defineConfig({
       // skickar ett nytt GET /api/lessons (avläst ur nätverksloggen) medan
       // MÅNADS-filtret inte skickar något alls, generationsvakten som hindrar
       // ett långsammare filtersvar från att skriva över ett nyare, PATCH:en
-      // från redigeringsdialogen, DELETE:et från raderingsbekräftelsen, de två
-      // åtskilda tomtillstånden och ärlighetsvakten för historikposter utan
-      // lektionsrad. TÄCKER INTE: att öppna en lektion (transkript, ljud,
+      // från redigeringsdialogen, DELETE:et från raderingsbekräftelsen,
+      // DELETE:ets 409 (fejkat med page.route och serverns egen kropp — det som
+      // prövas är klientens visningsväg, inte serverns förmåga att svara 409),
+      // de två åtskilda tomtillstånden och ärlighetsvakten för historikposter
+      // utan lektionsrad. TÄCKER INTE: att öppna en lektion (transkript, ljud,
       // chatt — det finns inte i B1 och kommer i B2/B4), sök, arkivfrågan och
-      // panelerna, kortets miniatyr (miljön har bara en .wav) eller DELETE:ets
-      // 409, som kräver en låst resultatmapp. Specen skapar sina lektioner via
+      // panelerna, kortets miniatyr (miljön har bara en .wav) eller en ÄKTA
+      // fillåsning bakom 409:an. Specen skapar sina lektioner via
       // riktiga POST /api/transcribe — det finns ingen POST /api/lessons — och
       // raderar dem i afterEach, så basmappen lämnas i samma tomma läge som
       // servern startade i. Den sorteras FÖRST av filerna i det här projektet,
