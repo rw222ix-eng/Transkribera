@@ -2802,9 +2802,18 @@ export function borjaRedigera() {
  * Lämnar redigeringsläget. Returnerar sant när läget FAKTISKT lämnades — falskt
  * betyder att sparandet föll och att arbetet står kvar orört.
  *
- * Gamla appen sätter "Sparat" synkront i _commitEdits (app.js:2174), före
- * PATCH:en, och anropet saknar både resp.ok-koll och innehåll i sin .catch
- * (app.js:1697-1698). Brickan kan alltså ljuga på två sätt.
+ * Skyddet mot en ljugande "Sparat"-bricka är STRUKTURELLT, inte en fråga om
+ * i vilken ordning fälten sätts här nedan: TranskriptModal.svelte visar
+ * `.sparad` bara i {:else}-grenen, bakom `!tk.redigerar`, och `tk.redigerar`
+ * sätts till false BARA i den här funktionens lyckade gren. Ett misslyckat
+ * sparande lämnar alltså både läget och arbetet orört, och brickan kan därför
+ * strukturellt inte visas — oavsett var på raden `tk.sparad = true` råkar stå.
+ *
+ * Det betyder att en ISOLERAD flytt av bara `tk.sparad` (utan att flytta med
+ * `tk.redigerar = false`) inte syns i testerna. Den kombinerade flytten är
+ * precis gamla appens faktiska dubbla lögn: toggleEdit() (app.js:2174) sätter
+ * `editing: false` och brickan synkront, båda före PATCH:en, och anropet
+ * saknar både resp.ok-koll och innehåll i sin .catch (app.js:1697-1698).
  */
 export async function avslutaRedigering() {
   if (tk.sparar) return false;
@@ -2933,7 +2942,24 @@ Lägg till fyllnads-action:en i `<script>`:
     el.textContent = i in tk.andringar ? tk.andringar[i] : (tk.segment[i]?.text ?? '');
     return {};
   }
+
+  /**
+   * Ett segment är EN rad. Utan den här vakten infogar webbläsaren en
+   * radbrytning som textContent sedan läser utan mellanrum — "bråk" + Enter
+   * + "procent" blir "bråkprocent" i det sparade transkriptet. Gamla appen
+   * bär samma lucka (app.js:5540); B2 lagar defekter i stället för att porta
+   * dem.
+   */
+  function paRadTangent(e) {
+    if (e.key === 'Enter') e.preventDefault();
+  }
 ```
+
+**RÄTTELSE EFTER KODGRANSKNING (se `.superpowers/sdd/task-9-report.md`,
+Fixrunda 1):** `paRadTangent` fanns inte i den ursprungliga versionen av det
+här steget. Utan den slår ett Enter-tryck mitt i en redigerbar rad ihop två
+ord utan mellanrum när `textContent` läses tillbaka vid sparande — bekräftat
+med ett tandkontrollerat e2e-test (se nedan).
 
 Byt radens innehåll mot två grenar:
 
@@ -2948,9 +2974,11 @@ Byt radens innehåll mot två grenar:
             class="text redigerbar"
             contenteditable="true"
             role="textbox"
+            tabindex="0"
             aria-label="Rad {i + 1}"
             use:fyll={i}
             oninput={(e) => (tk.andringar[i] = e.currentTarget.textContent)}
+            onkeydown={paRadTangent}
           ></div>
         </div>
       {:else}
@@ -2962,9 +2990,20 @@ Byt radens innehåll mot två grenar:
     </li>
 ```
 
+`tabindex="0"` tillkom i samma granskningsrunda: `onkeydown` på ett element
+med `role="textbox"` gör att svelte-checks a11y-regel kräver ett uttryckligt
+`tabindex`, trots att `contenteditable="true"` redan gör noden tabbningsbar i
+webbläsaren. Utan den föll `npm run check` med
+`a11y_interactive_supports_focus`.
+
 och CSS:
 
 ```css
+  /* Raden har samma mått i båda lägena: som knapp utanför redigering, som
+     rad med ett redigerbart fält inuti den. Delad regel i stället för två
+     kopior — de MÅSTE hålla ihop, annars hoppar layouten när läraren slår
+     på redigeringen. */
+  .radknapp,
   .radrad {
     display: flex;
     align-items: baseline;
@@ -2980,6 +3019,65 @@ och CSS:
   .redigerbar:focus-visible { border-color: var(--accent); }
 ```
 
+**RÄTTELSE EFTER KODGRANSKNING:** den ursprungliga versionen av det här steget
+gav `.radrad` som en egen regel som ordagrant upprepade fyra deklarationer ur
+`.radknapp` (definierad i en tidigare task, samma fil) — `display: flex`,
+`align-items: baseline`, `gap: 12px` och `padding: 5px 6px`. `.radknapp`
+behåller sina egna, unika deklarationer (bredd, text-align, bakgrund, border,
+font, cursor, user-select) i en egen regel omedelbart efter den delade.
+
+Lägg till ett e2e-test som tandkontrollerar `paRadTangent` (från samma
+granskningsrunda), i `e2e/transkript.spec.mjs`:
+
+```js
+/**
+ * Rad 1 (index 1) är "Idag ska vi prata om bråk och procent." — cursorn
+ * placeras precis efter "bråk", omedelbart före mellanslaget in i "och".
+ * Utan paRadTangent splittrar webbläsaren raden i två syskonblock där Enter
+ * trycks, och textContent läser dem tillbaka utan att lägga in något
+ * mellanrum för blockgränsen: "bråk" + "och procent." kan bli "bråkoch
+ * procent." i det sparade transkriptet.
+ */
+test("Enter mitt i en redigerbar rad slår inte ihop orden vid sparande", async ({ page }) => {
+  const errors = [];
+  failOnConsoleError(page, errors);
+
+  const ruta = await oppnaTranskript(page);
+  await ruta.getByRole("button", { name: "Redigera" }).click();
+
+  const rad = ruta.locator('li.rad [contenteditable="true"]').nth(1);
+  await rad.click();
+  await page.keyboard.press("Home");
+  const fore = "Idag ska vi prata om bråk";
+  for (let i = 0; i < fore.length; i++) await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type(" extra");
+
+  await ruta.getByRole("button", { name: "Klar" }).click();
+  await expect(ruta.getByRole("button", { name: "Redigera" })).toBeVisible();
+
+  await page.keyboard.press("Escape");
+  const igen = await oppnaTranskript(page);
+  const text = await igen.locator("li.rad .text").nth(1).textContent();
+  expect(text, `Enter mitt i raden slog ihop orden: ${JSON.stringify(text)}`).toBe(
+    "Idag ska vi prata om bråk extra och procent.",
+  );
+
+  expect(errors, errors.join("\n")).toEqual([]);
+});
+```
+
+**TANDKONTROLLERAT:** `e.preventDefault()` togs bort ur `paRadTangent` och
+testet ovan föll — `Expected: "Idag ska vi prata om bråk extra och procent."`,
+`Received: "Idag ska vi prata om bråk extra och procent."` (strängarna ser
+identiska ut i terminalen; skillnaden är webbläsarens osynliga blockdelning
+i DOM:en som `textContent` läser utan separator). Guarden återställdes och
+testet blev grönt igen. Det bekräftar att vakten faktiskt bär sin egen vikt
+— ett borttaget `preventDefault()` gör precis det testet som ska falla, falla.
+
+Totalt antal tester i `e2e/transkript.spec.mjs` efter den här granskningsrundan:
+**26** (var 25 innan det nya testet lades till).
+
 - [ ] **Steg 6: Kör grindar och test**
 
 ```bash
@@ -2994,39 +3092,35 @@ Förväntat: `0 ERRORS 0 WARNINGS` och 3 passed.
 
 - [ ] **Steg 7: Tandkontrollera båda lögnerna**
 
-Först: flytta `tk.sparad = true;` i `avslutaRedigering` till raden **före** `const r = await fetch(...)`. Kör om — "ett misslyckat sparande ljuger inte" ska falla på `.sparad` toHaveCount(0). Återställ.
+**RÄTTAD EFTER KODGRANSKNING (se `.superpowers/sdd/task-9-report.md`,
+Fixrunda 1) — det här steget beskrev tidigare en kontroll som inte bet.** En
+ISOLERAD flytt av bara `tk.sparad = true;` räcker INTE: `.sparad` ligger i
+`TranskriptModal.svelte`:s `{:else}`-gren, alltså bakom `!tk.redigerar`, och
+`avslutaRedigering` sätter `tk.redigerar = false` BARA i success-grenen. Ett
+misslyckat PATCH lämnar `tk.redigerar` sant genom hela funktionen, så
+`.sparad` kan strukturellt inte visas oavsett när `tk.sparad` sätts internt —
+skyddet är mallens `!tk.redigerar`-grindning, inte ordningen på raderna i
+`actions.js`.
+
+Flytta i stället **BÅDA** `tk.sparad = true;` OCH `tk.redigerar = false;` i
+`avslutaRedigering` till raden **före** `const r = await fetch(...)`. Det är
+precis gamla appens faktiska dubbla lögn (`toggleEdit()`, app.js:2174, sätter
+både `editing: false` och brickan synkront, före PATCH:en). Kör om — "ett
+misslyckat sparande ljuger inte" ska falla på `.sparad` toHaveCount(0):
+Expected: 0, Received: 1. Återställ.
 
 Sedan: ta bort den tidiga returen för tom diff (blocket `if (!andrade.length)`). Kör om — "en tom diff skickar ingenting" ska falla på `toHaveLength(0)`. Återställ.
 
-**AVVIKELSE UPPTÄCKT UNDER IMPLEMENTATIONEN (den första kontrollen ovan
-biter inte som skrivet):** att bara flytta `tk.sparad = true;` gjorde INTE
-"ett misslyckat sparande ljuger inte" röd — testet förblev grönt (bekräftat
-körning: `1 passed`, `.sparad` toHaveCount(0) höll). Orsaken finns i steg 4:s
-egen header-markup, som planen själv gav —
-
-```svelte
-{#if tk.redigerar}
-  <button ...>{tk.sparar ? 'Sparar …' : 'Klar'}</button>
-{:else}
-  <button ...>Redigera</button>
-  {#if tk.sparad}<span class="sparad">Sparat</span>{/if}
-{/if}
-```
-
-`.sparad` ligger i `{:else}`-grenen, alltså bakom `!tk.redigerar` — och
-`avslutaRedigering` sätter `tk.redigerar = false` BARA i success-grenen.
-Ett misslyckat PATCH lämnar `tk.redigerar` sant genom hela funktionen
-(bekräftat: "Klar"-knappen är fortfarande synlig), så `.sparad` kan
-strukturellt inte visas oavsett när `tk.sparad` sätts internt — kontrollen
-testar alltså i praktiken bara EN av de två synkrona lögnerna gamla appen bar
-(`toggleEdit()`, app.js:2164, sätter både `editing: false` OCH brickan
-synkront). Att replikera BÅDA (flytta även `tk.redigerar = false;` till
-samma rad) gav rätt fel på rätt rad: `.sparad` toHaveCount(0) — Expected: 0,
-Received: 1. Kontrollen är alltså riktig, men den gäller den KOMBINERADE
-lögnen, inte `tk.sparad` isolerat — vilket är en ofarlig skillnad här,
-eftersom `redigerar`-grindningen i steg 4:s markup redan är den mekanism som
-gör brickan ärlig. Ingen kodändring gjordes; det här stycket dokumenterar
-bara vad som faktiskt verifierades.
+**BEKRÄFTAT UNDER DEN URSPRUNGLIGA IMPLEMENTATIONEN:** att bara flytta
+`tk.sparad = true;` isolerat gjorde INTE "ett misslyckat sparande ljuger
+inte" röd — testet förblev grönt (bekräftat körning: `1 passed`, `.sparad`
+toHaveCount(0) höll), av precis den strukturella anledningen ovan. Att
+replikera BÅDA (flytta även `tk.redigerar = false;` till samma rad) gav rätt
+fel på rätt rad: `.sparad` toHaveCount(0) — Expected: 0, Received: 1. Ingen
+kodändring gjordes då; skillnaden mot den ursprungliga texten i det här
+steget är bara att den nu leder med den kontroll som faktiskt biter, i
+stället för att presentera den isolerade flytten som primärt recept och
+gömma den riktiga slutsatsen i en avvikelsenot efteråt.
 
 - [ ] **Steg 8: Commit**
 

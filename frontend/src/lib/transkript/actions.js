@@ -333,9 +333,18 @@ export function borjaRedigera() {
  * Lämnar redigeringsläget. Returnerar sant när läget FAKTISKT lämnades — falskt
  * betyder att sparandet föll och att arbetet står kvar orört.
  *
- * Gamla appen sätter "Sparat" synkront i _commitEdits (app.js:2174), före
- * PATCH:en, och anropet saknar både resp.ok-koll och innehåll i sin .catch
- * (app.js:1697-1698). Brickan kan alltså ljuga på två sätt.
+ * Skyddet mot en ljugande "Sparat"-bricka är STRUKTURELLT, inte en fråga om
+ * i vilken ordning fälten sätts här nedan: TranskriptModal.svelte visar
+ * `.sparad` bara i {:else}-grenen, bakom `!tk.redigerar`, och `tk.redigerar`
+ * sätts till false BARA i den här funktionens lyckade gren. Ett misslyckat
+ * sparande lämnar alltså både läget och arbetet orört, och brickan kan därför
+ * strukturellt inte visas — oavsett var på raden `tk.sparad = true` råkar stå.
+ *
+ * Det betyder att en ISOLERAD flytt av bara `tk.sparad` (utan att flytta med
+ * `tk.redigerar = false`) inte syns i testerna. Den kombinerade flytten är
+ * precis gamla appens faktiska dubbla lögn: toggleEdit() (app.js:2174) sätter
+ * `editing: false` och brickan synkront, båda före PATCH:en, och anropet
+ * saknar både resp.ok-koll och innehåll i sin .catch (app.js:1697-1698).
  */
 export async function avslutaRedigering() {
   if (tk.sparar) return false;

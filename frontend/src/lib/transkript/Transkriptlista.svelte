@@ -27,6 +27,17 @@
     return {};
   }
 
+  /**
+   * Ett segment är EN rad. Utan den här vakten infogar webbläsaren en
+   * radbrytning som textContent sedan läser utan mellanrum — "bråk" + Enter
+   * + "procent" blir "bråkprocent" i det sparade transkriptet. Gamla appen
+   * bär samma lucka (app.js:5540); B2 lagar defekter i stället för att porta
+   * dem.
+   */
+  function paRadTangent(e) {
+    if (e.key === 'Enter') e.preventDefault();
+  }
+
   let lista = $state(null);
 
   /**
@@ -91,9 +102,11 @@
             class="text redigerbar"
             contenteditable="true"
             role="textbox"
+            tabindex="0"
             aria-label="Rad {i + 1}"
             use:fyll={i}
             oninput={(e) => (tk.andringar[i] = e.currentTarget.textContent)}
+            onkeydown={paRadTangent}
           ></div>
         </div>
       {:else}
@@ -130,17 +143,24 @@
     min-height: 0;
   }
   .rad { margin: 0; }
-  .radknapp {
+  /* Raden har samma mått i båda lägena: som knapp utanför redigering, som
+     rad med ett redigerbart fält inuti den. Delad regel i stället för två
+     kopior — de MÅSTE hålla ihop, annars hoppar layouten när läraren slår
+     på redigeringen. */
+  .radknapp,
+  .radrad {
     display: flex;
     align-items: baseline;
     gap: 12px;
+    padding: 5px 6px;
+  }
+  .radknapp {
     width: 100%;
     text-align: left;
     background: transparent;
     color: inherit;
     border: none;
     border-radius: 3px;
-    padding: 5px 6px;
     font-family: inherit;
     font-size: inherit;
     line-height: inherit;
@@ -163,12 +183,6 @@
     color: var(--ink-3);
   }
   .text { overflow-wrap: anywhere; }
-  .radrad {
-    display: flex;
-    align-items: baseline;
-    gap: 12px;
-    padding: 5px 6px;
-  }
   .redigerbar {
     flex: 1 1 auto;
     border: 1px solid var(--line-2);

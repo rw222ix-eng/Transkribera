@@ -688,3 +688,39 @@ test("Escape med fokus i en redigerbar rad sparar innan rutan stängs", async ({
 
   expect(errors, errors.join("\n")).toEqual([]);
 });
+
+/**
+ * Rad 1 (index 1) är "Idag ska vi prata om bråk och procent." — cursorn
+ * placeras precis efter "bråk", omedelbart före mellanslaget in i "och".
+ * Utan paRadTangent splittrar webbläsaren raden i två syskonblock där Enter
+ * trycks, och textContent läser dem tillbaka utan att lägga in något
+ * mellanrum för blockgränsen: "bråk" + "och procent." kan bli "bråkoch
+ * procent." i det sparade transkriptet.
+ */
+test("Enter mitt i en redigerbar rad slår inte ihop orden vid sparande", async ({ page }) => {
+  const errors = [];
+  failOnConsoleError(page, errors);
+
+  const ruta = await oppnaTranskript(page);
+  await ruta.getByRole("button", { name: "Redigera" }).click();
+
+  const rad = ruta.locator('li.rad [contenteditable="true"]').nth(1);
+  await rad.click();
+  await page.keyboard.press("Home");
+  const fore = "Idag ska vi prata om bråk";
+  for (let i = 0; i < fore.length; i++) await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type(" extra");
+
+  await ruta.getByRole("button", { name: "Klar" }).click();
+  await expect(ruta.getByRole("button", { name: "Redigera" })).toBeVisible();
+
+  await page.keyboard.press("Escape");
+  const igen = await oppnaTranskript(page);
+  const text = await igen.locator("li.rad .text").nth(1).textContent();
+  expect(text, `Enter mitt i raden slog ihop orden: ${JSON.stringify(text)}`).toBe(
+    "Idag ska vi prata om bråk extra och procent.",
+  );
+
+  expect(errors, errors.join("\n")).toEqual([]);
+});
