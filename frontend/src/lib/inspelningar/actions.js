@@ -68,6 +68,33 @@ export async function laddaOrg() {
 }
 
 /**
+ * Jämför historiken med kartoteket. B1 släpper gamla appens "Tidigare
+ * körningar"-lista, och create_lesson ligger i en try/except som bara loggar
+ * (server.py:682-696) — en post KAN alltså finnas i history.json utan
+ * lektionsrad. Hellre säga det med ett antal än att tyst dölja skillnaden.
+ *
+ * Körs utan filter: jämförelsen ska gälla hela arkivet, inte den filtrerade
+ * vyn. Därför ett eget anrop i stället för att läsa insp.lessons.length.
+ *
+ * MEDVETET ingen generationsvakt och ingen skrivning till insp.fel. Det enda
+ * den rör är historikExtra, ett tal som räknas om från grunden vid varje
+ * anrop — ett omlott landande svar kan alltså bara skriva ett något äldre men
+ * lika sant tal, aldrig blanda ihop två hämtningar. Och ett misslyckat mått är
+ * ingenting läraren kan åtgärda: raden uteblir, statusraden lämnas åt de fel
+ * som faktiskt betyder något.
+ */
+export async function kollaHistorik() {
+  try {
+    const [h, l] = await Promise.all([getJSON('/api/history'), getJSON('/api/lessons')]);
+    const antalH = Array.isArray(h) ? h.length : 0;
+    const antalL = Array.isArray(l) ? l.length : 0;
+    insp.historikExtra = Math.max(0, antalH - antalL);
+  } catch {
+    insp.historikExtra = 0; // kan vi inte mäta påstår vi ingenting
+  }
+}
+
+/**
  * Klassfilter — SERVERSIDA. Byter querysträngen och hämtar om.
  * Nollställer inte månadsfiltret: läraren kan rimligen vilja se "NA21 i mars".
  *

@@ -7,6 +7,7 @@
   import {
     laddaLektioner,
     laddaOrg,
+    kollaHistorik,
     startaRedigering,
     fragaRadera,
     avbrytRadera,
@@ -41,11 +42,17 @@
   // prologen, och Task 3:s explicita await laddaLektioner() skulle bli en
   // dubbelhämtning i stället för enda vägen till en omhämtning vid filterbyte
   // — vilket den nu är.
+  //
+  // kollaHistorik() ligger MED här, av samma skäl som de två andra: den mäter
+  // hela arkivet mot hela historiken, och svaret ska vara färskt varje gång
+  // läraren kommer hit — en lektion som just transkriberats kan vara precis den
+  // som saknar rad.
   $effect(() => {
     if (nav.tab !== 'inspelningar') return;
     untrack(() => {
       laddaOrg();
       laddaLektioner();
+      kollaHistorik();
     });
   });
 
@@ -157,6 +164,71 @@
   <Kartotek lektioner={synliga} onRedigera={startaRedigering} onRadera={fragaRadera} />
 
   <!--
+    TVÅ TOMTILLSTÅND, MEDVETET ÅTSKILDA. Gamla vyn skiljer på dem
+    (app.js:4903-4905 respektive :4949-4951) och det gör den här också: det
+    första är "du har ingenting", det andra "du har saker men gömde dem". Slås
+    de ihop får en lärare med fullt arkiv beskedet att hon aldrig spelat in
+    något.
+
+    FILTERTERMERNA I FÖRSTA VILLKORET är inte pynt. Efter Task 3 är
+    insp.lessons inte hela arkivet utan arkivet EFTER serverfiltrering: klass
+    och kurs ligger i querysträngen till /api/lessons, så att välja en klass
+    utan lektioner sätter insp.lessons = []. Utan
+    !insp.filterGroup && !insp.filterCourse hade just den läraren fått "Inga
+    inspelningar än" — exakt den hopblandning det här steget finns för att
+    förbjuda. MÅNADEN är lika medvetet FRÅNVARANDE: den filtrerar på klienten,
+    så är listan tom kan den inte vara orsaken, och är listan inte tom faller
+    fallet till andra grenen ändå.
+
+    insp.laddar vaktar BÅDA grenarna, så inget av beskeden blinkar förbi under
+    en omhämtning — och en omhämtning är precis vad ett klass- eller kursbyte
+    utlöser.
+  -->
+  {#if !insp.laddar && !insp.lessons.length && !insp.filterGroup && !insp.filterCourse}
+    <p class="tomt">
+      Inga inspelningar än. Transkribera en lektion så dyker den upp här.
+    </p>
+  {:else if !insp.laddar && !synliga.length}
+    <p class="tomt">Inga inspelningar matchar dina filter.</p>
+  {/if}
+
+  <!--
+    ÄRLIGHETSVAKTEN. B1 släpper gamla appens "Tidigare körningar"-lista, som
+    var det enda stället en historikpost UTAN lektionsrad syntes. En sådan post
+    kan uppstå på riktigt: create_lesson ligger i ett try/except som bara
+    loggar (server.py:682-696), uttryckligen för att en DB-miss aldrig ska
+    fälla en lyckad transkribering. Hellre säga skillnaden med ett antal än att
+    tyst dölja den.
+
+    Ingen egen live-region och ingen role: raden är ett stillsamt konstaterande
+    som ritas när vyn hämtas, inte ett svar på något läraren just gjorde. Vyns
+    enda annonserande nod är p.fel-sr ovan, och så ska det förbli.
+
+    Böjningen görs på BÅDA ställena. Briefens utkast böjde bara
+    "inspelning(ar) finns" och lät andra meningen stå kvar i plural, vilket ger
+    "1 inspelning finns ... De går att öppna" — fel numerus på ett pronomen som
+    syftar tillbaka på ett ental.
+  -->
+  {#if insp.historikExtra}
+    <p class="notis">
+      {insp.historikExtra}
+      {insp.historikExtra === 1 ? 'inspelning finns' : 'inspelningar finns'}
+      i historiken men saknas i kartoteket.
+      {insp.historikExtra === 1 ? 'Den går' : 'De går'} att öppna i den gamla appen.
+    </p>
+  {/if}
+
+  <!--
+    Vad B1 INTE gör, utskrivet i stället för antytt. Samma hållning som plan
+    A3:s klarbesked: säg var läraren kan gå, navigera inte till en platshållare.
+    Transkriptvyn kommer i B2 och lektionschatten i B4.
+  -->
+  <p class="senare">
+    Att öppna en lektion — transkript, ljud och chatt — migreras i en senare
+    plan. Tills dess finns den i den gamla appen.
+  </p>
+
+  <!--
     ALLTID monterad, MEDVETET inte {#if}-grindad. Dialogen är ett native
     <dialog> som öppnas och stängs med showModal()/close() ur en effekt som
     speglar insp.editId — avmonteras komponenten i stängningsögonblicket hinner
@@ -218,6 +290,31 @@
      se kommentaren vid noden. Identisk med .fel i TranskriberaView.svelte:192. */
   .fel { color: var(--bad); margin: 14px 0 0; }
   .fel:empty { display: none; }
+
+  /* Båda tomtillstånden bär samma form — skillnaden ligger i TEXTEN, inte i
+     utseendet. Löpande text i typrampens brödstorlek, ingen ram och ingen
+     ikon: ett tomt kartotek är ett normalläge, inte ett fel. */
+  .tomt {
+    font-size: 1.03rem;
+    color: var(--ink-2);
+    margin: 28px 0 0;
+    max-width: 52ch;
+  }
+  /* Ärlighetsvakten och senare-raden är fotnoter till kartoteket, inte besked.
+     Mikrostorleken och --ink-3 håller dem tillbakadragna. */
+  .notis,
+  .senare {
+    font-size: 0.72rem;
+    color: var(--ink-3);
+    margin: 18px 0 0;
+    max-width: 62ch;
+  }
+  /* Vakten bär en diskret markering — den säger faktiskt att något saknas,
+     till skillnad från senare-raden som bara beskriver planen. */
+  .notis {
+    border-left: 2px solid var(--line-2);
+    padding-left: 10px;
+  }
 
   .bekraft {
     margin-top: 16px;
