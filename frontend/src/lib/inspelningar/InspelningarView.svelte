@@ -176,18 +176,6 @@
   <Sokfalt />
 
   <!--
-    Fråge-läget svarar inte förrän B3b. Raden står där resultatet kommer att
-    stå, så läget inte ser trasigt ut — och kartoteket lämnas kvar, eftersom
-    ett lägesbyte inte ska gömma lärarens lektioner.
-  -->
-  {#if sok.lage === 'ask'}
-    <p class="senare">
-      Att fråga arkivet med egna ord migreras i nästa plan. Tills dess finns
-      det i den gamla appen.
-    </p>
-  {/if}
-
-  <!--
     PANELERNA (B5) ligger HÄR, mellan filterraden och kartoteket, precis som i
     gamla appen (app.js:4897-4901). De beror på klassfiltret och hör visuellt
     ihop med det — och tomtillstånden nedan talar om KARTOTEKET, så läggs
@@ -197,6 +185,24 @@
   <Agenda />
   <NastaLektion />
   <Terminstrender />
+
+  <!--
+    Fråge-läget svarar inte förrän B3b. Raden står HÄR, precis ovanför där
+    resultatet (träfflistan/kartoteket) faktiskt renderas nedan — inte längre
+    upp, ovanför panelerna, där den varken stod där resultatet kommer att stå
+    eller bar resultatets typform. Klassen är .tomt, samma stycke som
+    träfflistans "Inga lektioner matchade din sökning" och kartotekets egna
+    tomtillstånd använder (1.03rem/--ink-2) — inte .senare (0.72rem/--ink-3,
+    vyns fotnotsramp), som gjorde svaret på en knapptryckning lika litet som
+    en fotnot. Kartoteket lämnas kvar under raden, eftersom ett lägesbyte
+    inte ska gömma lärarens lektioner.
+  -->
+  {#if sok.lage === 'ask'}
+    <p class="tomt">
+      Att fråga arkivet med egna ord migreras i nästa plan. Tills dess finns
+      det i den gamla appen.
+    </p>
+  {/if}
 
   <!--
     EN YTA I TAGET. Medan en sökning är aktiv renderas träfflistan i STÄLLET

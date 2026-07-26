@@ -731,27 +731,54 @@ Efter — kommentarsblocket om de två tomtillstånden lämnas **ordagrant oför
 
 - [ ] **Step 3: Lägg fråge-lägets förklarande rad**
 
-Direkt efter `<Sokfalt />` och före `<Agenda />`:
+RÄTTAD AV SLUTGRANSKNINGEN (fynd 4, efter leverans) — se Self-Review nedan.
+Ursprungsleveransen lade raden direkt efter `<Sokfalt />` och före `<Agenda />`,
+med klassen `.senare`. Det höll varken vad kommentaren lovade ("står där
+resultatet kommer att stå" — Agenda/NastaLektion/Terminstrender renderades
+mellan raden och den faktiska träfflistan/kartoteket) eller matchade
+resultatets typform (`.senare` är 0.72rem/--ink-3, vyns fotnotsramp;
+träfflistans egen "Inga lektioner matchade din sökning" och kartotekets
+tomtillstånd bär `.tomt`, 1.03rem/--ink-2). Raden ligger nu i stället DIREKT
+OVANFÖR `{#if sok.traffar}`-blocket från Step 2 ovan, efter panelerna och med
+klassen `.tomt`:
 
 ```svelte
   <Sokfalt />
 
   <!--
-    Fråge-läget svarar inte förrän B3b. Raden står där resultatet kommer att
-    stå, så läget inte ser trasigt ut — och kartoteket lämnas kvar, eftersom
-    ett lägesbyte inte ska gömma lärarens lektioner.
+    PANELERNA (B5) ligger HÄR, mellan filterraden och kartoteket, precis som i
+    gamla appen (app.js:4897-4901). De beror på klassfiltret och hör visuellt
+    ihop med det — och tomtillstånden nedan talar om KARTOTEKET, så läggs
+    panelerna efter dem får en lärare med tomt kartotek se "Inga inspelningar
+    än" före sin agenda.
+  -->
+  <Agenda />
+  <NastaLektion />
+  <Terminstrender />
+
+  <!--
+    Fråge-läget svarar inte förrän B3b. Raden står HÄR, precis ovanför där
+    resultatet (träfflistan/kartoteket) faktiskt renderas nedan — inte längre
+    upp, ovanför panelerna, där den varken stod där resultatet kommer att stå
+    eller bar resultatets typform. Klassen är .tomt, samma stycke som
+    träfflistans "Inga lektioner matchade din sökning" och kartotekets egna
+    tomtillstånd använder (1.03rem/--ink-2) — inte .senare (0.72rem/--ink-3,
+    vyns fotnotsramp), som gjorde svaret på en knapptryckning lika litet som
+    en fotnot. Kartoteket lämnas kvar under raden, eftersom ett lägesbyte
+    inte ska gömma lärarens lektioner.
   -->
   {#if sok.lage === 'ask'}
-    <p class="senare">
+    <p class="tomt">
       Att fråga arkivet med egna ord migreras i nästa plan. Tills dess finns
       det i den gamla appen.
     </p>
   {/if}
 
-  <Agenda />
+  <!-- (Step 2:s EN YTA I TAGET-kommentar och {#if sok.traffar}-blocket följer härefter, oförändrat.) -->
 ```
 
-`.senare` finns redan som klass i vyns `<style>` (den används av B1:s rad om att öppna en lektion) och behöver inte läggas till.
+`.tomt` finns redan som klass i vyns `<style>` (den används av kartotekets och
+träfflistans egna tomtillstånd) och behöver inte läggas till.
 
 - [ ] **Step 4: Kör grindarna**
 
