@@ -7,24 +7,30 @@
 // TÄCKER:
 //   1. att agendan renderar försenad, dagens och framtida post med rätt
 //      märkning ("Idag" respektive försenad-markering),
-//   2. att ett KLASSbyte skickar nya GET /api/trends och GET /api/next-prep,
+//   2. att en avbockning i agendan BEHÅLLER TANGENTBORDSFOKUS på samma knapp,
+//      genom hela PATCH:en och omhämtningen, in i det klarmarkerade läget —
+//      slutgranskningens punkt 3 (aria-disabled + tidig retur i onclick i
+//      stället för disabled, som tar fokus med sig),
+//   3. att ett KLASSbyte skickar nya GET /api/trends och GET /api/next-prep,
 //      och att ett KURSbyte DÄREFTER (med klassen redan vald) inte skickar
 //      något av de tre — båda avlästa ur nätverksloggen, inte antagna. Ett
 //      kursbyte UTAN vald klass mäts medvetet inte här: laddaNastaLektion och
 //      laddaTrender gör då en tidig retur innan något anrop görs, oavsett vad
 //      kursbytet i sig utlöser, så en sådan mätning hade vaktat den tidiga
 //      returen, inte valjKurs,
-//   3. att varken trender eller Inför nästa renderas UTAN vald klass,
-//   4. att en bock i Inför nästa laddar om AGENDAN — alltså att gamla appens
+//   4. att varken trender eller Inför nästa renderas UTAN vald klass,
+//   5. att en bock i Inför nästa laddar om AGENDAN — alltså att gamla appens
 //      refetch-asymmetri verkligen är fixad,
-//   5. att .ics-exporten POSTar och att statusraden får antalet,
-//   6. de harmoniserade tomtillstånden: tom agenda respektive klass utan
+//   6. att .ics-exporten POSTar och att statusraden får antalet,
+//   7. de harmoniserade tomtillstånden: tom agenda respektive klass utan
 //      lektioner.
 //
-// Punkt 2:s kursbytesled och punkt 4 är planens bärande krav. Punkt 3 vaktar
-// regeln "ej tillämpligt → ingen panel" (specens avsnitt 4); punkt 4 vaktar
-// den enda avsiktliga BETEENDEförändringen mot gamla appen. Alla mäts på
-// faktiska HTTP-anrop i stället för att panelernas innehåll får stå som bevis.
+// Punkt 3:s kursbytesled och punkt 5 är planens bärande krav. Punkt 4 vaktar
+// regeln "ej tillämpligt → ingen panel" (specens avsnitt 4); punkt 5 vaktar
+// den enda avsiktliga BETEENDEförändringen mot gamla appen. De flesta mäts på
+// faktiska HTTP-anrop i stället för att panelernas innehåll får stå som bevis
+// — punkt 2 är undantaget, där själva DOM-nodens identitet och webbläsarens
+// fokus ÄR beviset.
 //
 // TÄCKS INTE, och det är avsiktligt:
 //   · Att .ics-FILENS innehåll är giltig iCalendar. Det ägs av
@@ -221,15 +227,6 @@ async function stubbaOpen(page) {
   );
 }
 
-/** Låter sidan rendera två rutor, så en omprövande assertion inte kan passera
- *  på att den hann före Sveltes flush. Samma hjälpare som i
- *  inspelningar-kartotek.spec.mjs:269-273. */
-function tvaRutor(page) {
-  return page.evaluate(
-    () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))),
-  );
-}
-
 test.afterEach(async ({ request }) => {
   await toemArkivet(request);
 });
@@ -272,6 +269,39 @@ test("Panelerna (/next/): agendan märker försenad, idag och framtid", async ({
   await expect(framtid).toHaveCount(1);
   await expect(framtid).not.toHaveClass(/forsenad/);
   await expect(framtid.locator(".datum")).not.toHaveText("Idag");
+
+  expect(errors).toEqual([]);
+});
+
+test("Panelerna (/next/): en avbockning i agendan behåller tangentbordsfokus", async ({ page, request }) => {
+  const errors = [];
+  failOnConsoleError(page, errors);
+
+  const lektioner = await byggFixtur(request);
+  await laggTillInsikter(request, lektioner);
+
+  const vy = await oppnaInspelningar(page);
+  const agenda = vy.locator("section.panel").filter({ has: page.getByRole("heading", { name: /Kommande/ }) });
+  await agenda.getByRole("button", { name: /Kommande/ }).click();
+
+  // BEVISET för slutgranskningens punkt 3: samma <button>-nod, samma ruta,
+  // genom hela PATCH:en och omhämtningen. Fixen bytte disabled mot
+  // aria-disabled + en tidig retur i onclick — en fokuserad nod som blir
+  // disabled tappar fokus, och webbläsaren återställer det aldrig av sig
+  // själv. Ett riktigt klick och en riktig fråga om vem som har fokus, inte
+  // bara en läsning av attributen.
+  const ruta = agenda.locator("li.rad").filter({ hasText: "Ta med linjaler" }).locator("button.ruta");
+  await ruta.click();
+  await expect(ruta).toBeFocused();
+
+  // Vänta in att PATCH:en OCH laddaPaneler() faktiskt är klara — annars
+  // bevisar assertionen ovan bara fokus under det korta mellanläget, inte att
+  // det överlever hela vägen till att raden blir den permanenta checkmarken.
+  // Samma <button> i båda lägena (Agenda.svelte) är precis vad som gör att
+  // Sveltes keyade #each kan behålla noden, och därmed fokus, över bytet.
+  await expect(ruta).toHaveAttribute("aria-disabled", "true");
+  await expect(ruta).toHaveClass(/klar/);
+  await expect(ruta).toBeFocused();
 
   expect(errors).toEqual([]);
 });
@@ -358,9 +388,20 @@ test("Panelerna (/next/): ett klassbyte hämtar trender och Inför nästa", asyn
   // redan vald prövar ett kursbyte faktiskt valjKurs, i stället för att bara
   // mäta laddarnas tidiga retur (se kommentaren i föregående test). Loggen
   // nollas här så bara kursbytets EGNA anrop räknas.
+  //
+  // KURSEN ÄR "Fysik 1a", INTE 9A:s egen "Matematik 2b". Med Matematik 2b
+  // redan vald lämnar ett byte TILL Matematik 2b kortantalet oförändrat på
+  // 2 — ingenting i testet bevisade att change-handlern över huvud taget
+  // kördes; kopplas selecten loss från valjKurs blir assertionen grön ändå.
+  // 9B äger "Fysik 1a", så filtret 9A + Fysik 1a matchar noll lektioner: ett
+  // POSITIVT ankare som bara kan bli sant om valjKurs faktiskt hämtade om med
+  // den nya kursen i querysträngen.
   anrop.length = 0;
-  await filter(vy).kurs.selectOption({ label: "Matematik 2b" });
-  await tvaRutor(page);
+  await filter(vy).kurs.selectOption({ label: "Fysik 1a" });
+  // HÄNDELSEBUNDEN väntan, inte tidsbunden: inväntar /api/lessons-svängen
+  // kursbytet utlöser och stänger båda luckorna (positivt bevis + flush) på
+  // en gång, i stället för två gissade requestAnimationFrame.
+  await expect(vy.locator("article.kort")).toHaveCount(0);
   expect(
     anrop,
     "Ett kursbyte får inte hämta agenda, trender eller next-prep när en klass redan är vald",
