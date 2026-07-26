@@ -362,8 +362,7 @@ som inte existerar än."
   <div class="falt">
     <input
       class="input"
-      value={sok.fraga}
-      oninput={(e) => (sok.fraga = e.currentTarget.value)}
+      bind:value={sok.fraga}
       onkeydown={taKey}
       aria-label="Sök i arkivet"
       placeholder={sok.lage === 'ask'
