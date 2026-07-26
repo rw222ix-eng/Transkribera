@@ -13,6 +13,7 @@
   // organisationslistorna, så en nyskapad klass syns i filtret direkt.
   import { insp } from './stores.svelte.js';
   import { avbrytRedigering, sparaLektion } from './actions.js';
+  import { nav } from '../shell/nav.svelte.js';
 
   let dialog = $state(null);
 
@@ -37,9 +38,24 @@
   //
   // Effekten kräver att komponenten är monterad även när editId är null; se
   // kommentaren vid <RedigeraLektion /> i InspelningarView.svelte.
+  //
+  // nav.tab ÄR MED I VILLKORET, inte bara insp.editId. App.svelte göms per flik
+  // med hidden (.pane[hidden] { display: none }), och en förfader med
+  // display:none gör att dialogen inte RITAS — men den förblir `open`, och
+  // showModal() håller då fortfarande hela dokumentet inert. Läraren får en app
+  // som inte svarar på någonting, utan något på skärmen som förklarar varför.
+  // Det går inte att nå via UI:t idag (flikknapparna är inerta medan dialogen
+  // är öppen), men ett programmatiskt nav.tab-byte gör det — och mönstret ärvs
+  // av B2-B5. Enda säkra invarianten är därför: dialogen är öppen ENBART när
+  // Inspelningar-fliken är den synliga.
+  //
+  // close() ger onclose -> avbrytRedigering, så storen nollställs och oskrivna
+  // ändringar förkastas vid flikbytet. Det är avsiktligt: en osynlig dialog som
+  // ligger kvar och blockerar dokumentet är värre än en förlorad halvskriven
+  // klassbeteckning, och läraren bläddrade själv bort.
   $effect(() => {
     if (!dialog) return;
-    if (insp.editId !== null) {
+    if (insp.editId !== null && nav.tab === 'inspelningar') {
       namn = insp.lessons.find((l) => l.id === insp.editId)?.name || '(namnlös)';
       if (!dialog.open) {
         dialog.showModal();
