@@ -66,3 +66,41 @@ export async function laddaOrg() {
     insp.fel = 'Kunde inte läsa klasser och kurser — filtren kan vara ofullständiga.';
   }
 }
+
+/**
+ * Klassfilter — SERVERSIDA. Byter querysträngen och hämtar om.
+ * Nollställer inte månadsfiltret: läraren kan rimligen vilja se "NA21 i mars".
+ *
+ * await laddaLektioner() är INTE valfritt och inte en dubblett: monteringseffekten
+ * i InspelningarView.svelte spårar bara nav.tab och kör hämtningarna inuti
+ * untrack(), så en skrivning till insp.filterGroup utlöser ingenting av sig själv.
+ * Det här anropet är enda vägen till en omhämtning vid filterbyte.
+ */
+export async function valjKlass(id) {
+  insp.filterGroup = String(id || '');
+  await laddaLektioner();
+}
+
+/** Kursfilter — SERVERSIDA, samma sak som valjKlass. */
+export async function valjKurs(id) {
+  insp.filterCourse = String(id || '');
+  await laddaLektioner();
+}
+
+/**
+ * Månadsfilter — KLIENTSIDA. Rör medvetet INTE nätverket: listan är redan
+ * hämtad, och en omhämtning här hade bara kostat tid. Speglar setMonthFilter,
+ * app.js:1723, vars kommentar säger samma sak.
+ */
+export function valjManad(m) {
+  insp.filterMonth = String(m || '');
+}
+
+/** Rensar allt. Klass och kurs kräver en omhämtning, månaden gör det inte. */
+export async function rensaFilter() {
+  const rorServern = !!(insp.filterGroup || insp.filterCourse);
+  insp.filterGroup = '';
+  insp.filterCourse = '';
+  insp.filterMonth = '';
+  if (rorServern) await laddaLektioner();
+}

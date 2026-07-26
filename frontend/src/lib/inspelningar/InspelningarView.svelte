@@ -5,6 +5,7 @@
   import { untrack } from 'svelte';
   import { insp } from './stores.svelte.js';
   import { laddaLektioner, laddaOrg } from './actions.js';
+  import Filterrad from './Filterrad.svelte';
   import Kartotek from './Kartotek.svelte';
   import { nav } from '../shell/nav.svelte.js';
 
@@ -32,6 +33,16 @@
       laddaLektioner();
     });
   });
+
+  // MÅNADSFILTRET tillämpas HÄR, på klienten. Klass och kurs är redan
+  // bortfiltrerade av servern innan listan kom hit — läggs de till här också
+  // filtreras det två gånger, och en framtida läsare tror att omhämtningen är
+  // överflödig och tar bort den.
+  const synliga = $derived(
+    insp.filterMonth
+      ? insp.lessons.filter((l) => String(l.datum || '').slice(0, 7) === insp.filterMonth)
+      : insp.lessons,
+  );
 </script>
 
 <section class="view">
@@ -60,7 +71,8 @@
   -->
   <p class="fel-sr" role="status">{insp.fel}</p>
 
-  <Kartotek lektioner={insp.lessons} onRedigera={() => {}} onRadera={() => {}} />
+  <Filterrad />
+  <Kartotek lektioner={synliga} onRedigera={() => {}} onRadera={() => {}} />
 </section>
 
 <style>
