@@ -268,6 +268,12 @@ export default defineConfig({
       // Spårning (`trace: "retain-on-failure"`) lägger annars 35-85 ms på
       // mönstret "skriv ett tecken, assertera direkt" och dominerar det som
       // ska mätas — se filens egen header för hela A/B-mätningen.
+      //
+      // Paritetslucka 1 (gamla appens autoExtractLessons, saknades i Svelte-
+      // frontenden — se .superpowers/sdd/paritetsluckor-report.md) lägger
+      // till e2e/transkribera-autoextraktion.spec.mjs: att en färdig kö
+      // POSTar /api/lessons/{id}/extract sekventiellt, en gång per lektion,
+      // och laddar om Inspelningar-panelerna efteråt.
       name: "next-foundation",
       testDir: __dirname,
       testMatch: [
@@ -279,6 +285,7 @@ export default defineConfig({
         /planering-tavla\.spec\.mjs$/,
         /planering-arkiv\.spec\.mjs$/,
         /planering-prov\.spec\.mjs$/,
+        /transkribera-autoextraktion\.spec\.mjs$/,
         /transkribera-kalla\.spec\.mjs$/,
         /transkribera-installningar\.spec\.mjs$/,
         /transkribera-korning\.spec\.mjs$/,
