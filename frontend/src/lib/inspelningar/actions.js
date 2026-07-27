@@ -1,4 +1,4 @@
-import { getJSON } from '../api.js';
+import { getJSON, postJSON } from '../api.js';
 import { insp } from './stores.svelte.js';
 
 // Ökar vid varje hämtning så ett långsamt svar inte får skriva över ett
@@ -547,5 +547,65 @@ export async function exporteraIcs() {
     insp.felArt = '';
   } finally {
     insp.agendaExporterar = false;
+  }
+}
+
+/**
+ * Säkerhetskopierar kunskapsbasen (db + historik + inställningar) till en zip
+ * under exports/. Speglar backupNow, app.js:2059-2066.
+ *
+ * INGEN TOAST. Den här frontenden har medvetet ingen toast-infrastruktur (se
+ * frontend/src/lib/transkribera/actions.js, kommentaren vid addFiles) —
+ * kvittot ("N filer") skrivs i stället på vyns DELADE statusrad (insp.fel/
+ * insp.felArt), exakt som exporteraIcs() ovan gör för sin .ics-fil. felArt
+ * 'info' på framgångsgrenen av samma skäl som där: det är ett kvitto, inte
+ * ett fel, och ska inte målas i --bad.
+ *
+ * ÖPPNAR MAPPEN EFTERÅT — precis som exporteraIcs() gör för sin export, i
+ * SAMMA fil. Konsekvens med det redan etablerade mönstret väger tyngre än att
+ * hitta på ett nytt: gamla appens backupNow gör samma sak
+ * (_openContainingFolder, app.js:2055-2057), så beteendet är dessutom redan
+ * det läraren är van vid.
+ *
+ * /api/reveal används i stället för /api/open — inte för att de beter sig
+ * olika (server.py: båda är samma _open_path), utan för att /api/reveal
+ * semantiskt är RÄTT verb här: "visa var filen hamnade", inte "öppna en
+ * godtycklig sökväg". Båda kräver dessutom en KATALOG, inte en fil —
+ * pekas de mot själva zip-filen försöker os.startfile öppna ARKIVET i sitt
+ * standardprogram i stället för att visa mappen den ligger i. Sökvägen
+ * trunkeras därför till sin förälder innan anropet, precis som gamla appens
+ * _openContainingFolder.
+ *
+ * Fel SVÄLJS på reveal-anropet, medvetet — se exporteraIcs() ovan: zip-filen
+ * är redan skriven och kvitterad när det anropet görs, så att en misslyckad
+ * mappöppning skulle skriva ett fel hade sagt åt läraren att göra om ett
+ * sparande som redan gick igenom.
+ */
+export async function saveBackup() {
+  if (insp.backupKor) return;
+  insp.backupKor = true;
+  insp.fel = '';
+  insp.felArt = '';
+  try {
+    const res = await postJSON('/api/backup');
+    const antal = (res?.files || []).length;
+    insp.fel = antal === 1
+      ? 'Säkerhetskopia skapad — 1 fil.'
+      : `Säkerhetskopia skapad — ${antal} filer.`;
+    insp.felArt = 'info';
+    const sokvag = res?.path || '';
+    const mapp = sokvag.replace(/[\\/][^\\/]*$/, '');
+    if (mapp) {
+      await fetch('/api/reveal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: mapp }),
+      }).catch(() => {});
+    }
+  } catch (e) {
+    insp.fel = 'Kunde inte skapa säkerhetskopian: ' + (e?.message || e);
+    insp.felArt = '';
+  } finally {
+    insp.backupKor = false;
   }
 }

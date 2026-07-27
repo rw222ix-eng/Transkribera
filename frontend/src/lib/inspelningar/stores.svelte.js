@@ -61,4 +61,11 @@ export const insp = $state({
   // omhämtningen efteråt, och en boolean hade under den tiden stängt av
   // varenda annan bock i båda panelerna.
   markerar: null,
+
+  // En säkerhetskopiering pågår. BOOLEAN och inte ett id, till skillnad från
+  // sparar/raderar/markerar ovan: /api/backup tar ingen post-identitet — det
+  // finns bara EN kopiering man kan be om åt gången, aldrig flera parallella
+  // riktade mot olika rader. Dubbelklickvakten i saveBackup (actions.js)
+  // speglar samma mönster ändå.
+  backupKor: false,
 });

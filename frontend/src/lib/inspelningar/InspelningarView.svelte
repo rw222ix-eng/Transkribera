@@ -13,6 +13,7 @@
     fragaRadera,
     avbrytRadera,
     bekraftaRadera,
+    saveBackup,
   } from './actions.js';
   import Filterrad from './Filterrad.svelte';
   import Kartotek from './Kartotek.svelte';
@@ -227,6 +228,17 @@
     lämnar de gröna spärrarna orörda i stället för att skriva om dem.
   -->
   <p class="fel" class:info={insp.felArt === 'info'} aria-hidden="true" data-testid="insp-statusrad">{insp.fel}</p>
+
+  <!--
+    SÄKERHETSKOPIERINGEN. Portad från gamla appens backupNow (app.js:2059-2066,
+    knappen app.js:4886) — se saveBackup i actions.js för valet att återanvända
+    vyns delade statusrad ovan i stället för en toast, och att öppna mappen
+    efteråt via /api/reveal. .ghost är samma klass som Avbryt/Radera nedan —
+    en sekundär handling ska inte konkurrera med någon fylld knapp i vyn.
+  -->
+  <button type="button" class="ghost verktyg" onclick={saveBackup} disabled={insp.backupKor}>
+    {insp.backupKor ? 'Säkerhetskopierar …' : 'Säkerhetskopiera'}
+  </button>
 
   <!--
     SÖKET ligger under filterraden, inte över den. Det är OFILTRERAT —
@@ -527,6 +539,9 @@
      Svelte-frontenden. Vakten skiljs redan från senare-raden av brödstorleken
      och --ink-2 (se ovan); rutan nedan har redan en hel ram, och var(--bad) på
      rubriken bär allvaret. */
+  /* Säkerhetskopieringsknappen sitter UTANFÖR dialogens .knappar-rad, så den
+     behöver egen radplacering — .ghost i sig bär ingen. */
+  .verktyg { display: block; margin: 16px 0 0; }
   /* Ingen egen skärm, inget z-index och ingen centrering: showModal() lyfter
      rutan till top-layer och webbläsarens <dialog>-regel
      (position: fixed; inset: 0; margin: auto) centrerar den. Formen är i övrigt

@@ -274,12 +274,18 @@ export default defineConfig({
       // till e2e/transkribera-autoextraktion.spec.mjs: att en färdig kö
       // POSTar /api/lessons/{id}/extract sekventiellt, en gång per lektion,
       // och laddar om Inspelningar-panelerna efteråt.
+      //
+      // Paritetslucka 2 (gamla appens backupNow, app.js:2059-2066) lägger
+      // till e2e/inspelningar-sakerhetskopiering.spec.mjs: att
+      // Säkerhetskopiera-knappen POSTar /api/backup och kvitterar antalet
+      // filer på vyns delade statusrad, och att ett serverfel syns där.
       name: "next-foundation",
       testDir: __dirname,
       testMatch: [
         /inspelningar-fraga\.spec\.mjs$/,
         /inspelningar-kartotek\.spec\.mjs$/,
         /inspelningar-paneler\.spec\.mjs$/,
+        /inspelningar-sakerhetskopiering\.spec\.mjs$/,
         /inspelningar-sok\.spec\.mjs$/,
         /next-foundation\.spec\.mjs$/,
         /planering-tavla\.spec\.mjs$/,
