@@ -209,15 +209,15 @@
   <Terminstrender />
 
   <!--
-    Fråge-läget svarar inte förrän B3b. Raden står HÄR, precis ovanför där
-    resultatet (träfflistan/kartoteket) faktiskt renderas nedan — inte längre
-    upp, ovanför panelerna, där den varken stod där resultatet kommer att stå
-    eller bar resultatets typform. Platshållarstycket som en gång bar klassen
+    GENOMSÖKNINGEN OCH SVARET ligger HÄR, precis ovanför där resultatet
+    (träfflistan/kartoteket) faktiskt renderas nedan — inte längre upp,
+    ovanför panelerna, där de varken skulle stå där resultatet kommer att stå
+    eller bära resultatets typform. Platshållarstycket som en gång bar klassen
     .tomt (samma stycke som träfflistans "Inga lektioner matchade din
-    sökning" och kartotekets egna tomtillstånd använder) är borta —
-    Genomsokning.svelte renderar nu här och äger sin egen typform. Kartoteket
-    lämnas kvar under raden, eftersom ett lägesbyte inte ska gömma lärarens
-    lektioner.
+    sökning" och kartotekets egna tomtillstånd använder) försvann redan i
+    Task 3 — Genomsokning.svelte och Svar.svelte renderar nu här, var för sig,
+    och äger sin egen typform. Kartoteket lämnas kvar under de två ytorna,
+    eftersom ett lägesbyte inte ska gömma lärarens lektioner.
   -->
   <Genomsokning />
   <Svar />
