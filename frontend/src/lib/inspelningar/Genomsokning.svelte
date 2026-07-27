@@ -276,9 +276,18 @@
     .fyllnad { transition: none; }
   }
 
+  /* FYND 4 I SLUTGRANSKNINGEN: löptext ("Skickar frågan …", serverns
+     log-meddelande via sok.notis — ibland en hel mening, t.ex. "Inga direkta
+     ordträffar — läser mellan raderna och söker på närliggande begrepp …"),
+     inte en mikroetikett. 0.72rem/--ink-3 är reserverat för korta versala
+     etiketter (se .antal och .titel nedan) — samma argument som
+     InspelningarView.svelte gjorde för sin egen .notis (ärlighetsvakten) och
+     som ledde till att DEN höjdes till 1.03rem/--ink-2. Två .notis i samma vy
+     med motsatt regel vore en inkonsekvens utan skäl; rättat hit i stället
+     för att motivera en skillnad som inte finns. */
   .notis {
-    font-size: 0.72rem;
-    color: var(--ink-3);
+    font-size: 1.03rem;
+    color: var(--ink-2);
     margin: 10px 0 0;
     max-width: 52ch;
   }

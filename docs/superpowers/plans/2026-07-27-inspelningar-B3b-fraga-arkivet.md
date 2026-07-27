@@ -853,9 +853,18 @@ Komponenten är **inert tills Task 4** kopplar körknappen: `sok.skanPlan` är `
     .fyllnad { transition: none; }
   }
 
+  /* FYND 4 I SLUTGRANSKNINGEN: löptext ("Skickar frågan …", serverns
+     log-meddelande via sok.notis — ibland en hel mening, t.ex. "Inga direkta
+     ordträffar — läser mellan raderna och söker på närliggande begrepp …"),
+     inte en mikroetikett. 0.72rem/--ink-3 är reserverat för korta versala
+     etiketter (se .antal och .titel nedan) — samma argument som
+     InspelningarView.svelte gjorde för sin egen .notis (ärlighetsvakten) och
+     som ledde till att DEN höjdes till 1.03rem/--ink-2. Två .notis i samma vy
+     med motsatt regel vore en inkonsekvens utan skäl; rättat hit i stället
+     för att motivera en skillnad som inte finns. */
   .notis {
-    font-size: 0.72rem;
-    color: var(--ink-3);
+    font-size: 1.03rem;
+    color: var(--ink-2);
     margin: 10px 0 0;
     max-width: 52ch;
   }
@@ -2114,3 +2123,5 @@ Tandkontroll 4a bevisar att assertionen ser en tom lyft-mängd, inte att stadiet
 **Rättat i slutgranskningen (fynd 2, MEDIUM — `namn()` kastade på en saknad källa).** Task 4:s `namn = (s) => [s.name, s.datum]...` läste `s.name` oskyddat, medan `.cite`-spannets `title`/`aria-label` var skrivna som om `namn(...)` kunde returnera falsy (`namn(...) || 'okänd'`) — det kunde det aldrig, eftersom anropet kastade FÖRE det. Syskonderivatet `citerade` filtrerar redan bort en referens vars `sok.kallor[kallIndex]` saknas (`.filter((x) => x.kalla)`), vilket visar att avsikten alltid var att tolerera en saknad källa — bara inte i `namn` själv. Fixen gör `s` valfri: `s ? [...].join(' · ') : ''`.
 
 **Rättat i slutgranskningen (fynd 3, MEDIUM — specen påstod täckning den inte hade).** Task 6:s spec och kommentarsblocket ovanför `testMatch` påstod "SERVERNS ordning" och "dim för resten" — ingetdera går att bevisa med den här fixturen: alla tre lektionerna får samma namn av fejkens titelförslag (`fake_suggest_title`) och delar transkript, så en klientsortering respektive en trasig dim-gren hade passerat obemärkt. Ordningsanspråket och dim-anspråket är strukna ur testnamn, filhuvudets `TÄCKER`-lista och `playwright.config.ts`s kommentarsblock, och flyttade till en ny `TÄCKS INTE`-lista med skälen utskrivna. Kommentaren "de citerade lyfts, resten dämpas" i lift/dim-testet var dessutom sakligt fel — stadiet kommer från `done.result.sources` (alla djupt lästa), inte från de citerade (`Svar.svelte`s smalare mängd, "1 källa") — rättad till att säga det. Träffräkningen skärptes från `> 0` till exakta strängar (`● 2 träffar` — verifierat empiriskt: "bråk" träffar en gång i fejkens namnförslag och en gång i transkriptet, `3 ordträffar hittills`), och läsbordets assertion skärptes från `toContainText("Svaret bygger på")` till den exakta `"Svaret bygger på denna"` (singular, verifierat), den enda assertionen som gör citatfiltreringen meningsfull.
+
+**Rättat i slutgranskningen (fynd 4, LOW — fyra dokument- och formfel).** (1) Specens §8 rättad — se `docs/superpowers/specs/2026-07-27-inspelningar-B3b-fraga-arkivet-design.md`. (2) Specens §10 rättad till "45 till 51 tester", samma. (3) Task 3:s `.notis` höjdes från `0.72rem/--ink-3` (mikroetikettens ramp) till `1.03rem/--ink-2` — samma argument InspelningarView.svelte redan gjorde för sin egen `.notis` (ärlighetsvakten): löptext, ibland en hel mening ur serverns log, hör inte hemma i mikroetikettramp reserverad för korta versala etiketter. Två `.notis` i samma vy med motsatt regel var en inkonsekvens utan skäl. (4) `sokActions.js`s kommentar om lägesväxelns asymmetri ("B3b får återinföra den när den betyder något") rättad — B3b har landat och behöll symmetrin, så formuleringen läste som en öppen TODO.
