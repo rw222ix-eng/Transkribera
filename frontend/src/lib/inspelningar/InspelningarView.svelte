@@ -212,12 +212,12 @@
     Fråge-läget svarar inte förrän B3b. Raden står HÄR, precis ovanför där
     resultatet (träfflistan/kartoteket) faktiskt renderas nedan — inte längre
     upp, ovanför panelerna, där den varken stod där resultatet kommer att stå
-    eller bar resultatets typform. Klassen är .tomt, samma stycke som
-    träfflistans "Inga lektioner matchade din sökning" och kartotekets egna
-    tomtillstånd använder (1.03rem/--ink-2) — inte .senare (0.72rem/--ink-3,
-    vyns fotnotsramp), som gjorde svaret på en knapptryckning lika litet som
-    en fotnot. Kartoteket lämnas kvar under raden, eftersom ett lägesbyte
-    inte ska gömma lärarens lektioner.
+    eller bar resultatets typform. Platshållarstycket som en gång bar klassen
+    .tomt (samma stycke som träfflistans "Inga lektioner matchade din
+    sökning" och kartotekets egna tomtillstånd använder) är borta —
+    Genomsokning.svelte renderar nu här och äger sin egen typform. Kartoteket
+    lämnas kvar under raden, eftersom ett lägesbyte inte ska gömma lärarens
+    lektioner.
   -->
   <Genomsokning />
   <Svar />
