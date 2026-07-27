@@ -5,9 +5,9 @@
 // modulmapp, och B3a är inte rätt tillfälle att införa en.
 export const sok = $state({
   // 'ask' = fråga arkivet med egna ord, 'keyword' = ordsök.
-  // DEFAULTEN FLIPPADES TILL 'ask' I TASK 2 — commiten före den som kopplade
-  // körknappen och Enter till stallFraga och fick läget att faktiskt börja
-  // svara. Gamla appens default är också 'ask' (app.js:121).
+  // DEFAULTEN FLIPPADES TILL 'ask' I TASK 2. Läget svarade då ännu inte —
+  // det började svara först i TASK 4, som kopplade körknappen och Enter till
+  // stallFraga. Gamla appens default är också 'ask' (app.js:121).
   lage: 'ask',
 
   fraga: '',
