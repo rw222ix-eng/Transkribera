@@ -153,7 +153,9 @@ export async function stallFraga() {
         // att ett svar aldrig får torka ett besked läraren inte hunnit läsa.
         if (!insp.fel) {
           const n = sok.kallor.length;
-          insp.fel = n === 1 ? 'Svaret är klart — 1 källa.' : `Svaret är klart — ${n} källor.`;
+          insp.fel = n === 0
+            ? 'Svaret är klart.'
+            : n === 1 ? 'Svaret är klart — 1 källa.' : `Svaret är klart — ${n} källor.`;
           insp.felArt = 'info';
         }
       } else if (ev.type === 'error') {
