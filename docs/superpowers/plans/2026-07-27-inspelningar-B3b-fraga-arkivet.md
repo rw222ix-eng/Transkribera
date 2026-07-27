@@ -591,20 +591,35 @@ Komponenten är **inert tills Task 4** kopplar körknappen: `sok.skanPlan` är `
 
   const plan = $derived(sok.skanPlan || []);
 
-  // Under frågan avslöjas korten i takt; efteråt visas alla.
-  const visade = $derived(sok.fragar ? Math.min(sok.skanVisade, plan.length) : plan.length);
+  // TVÅ FLAGGOR, TVÅ BETYDELSER — blanda inte ihop dem igen. sok.fragar
+  // betyder "svaret strömmar fortfarande" (frågan är i luften); skannar
+  // betyder "utrullningen av kort pågår fortfarande". De slocknar INTE
+  // samtidigt: sokActions.js stoppar medvetet inte utrullningstimern vid
+  // done, för svaret kan bli klart innan alla kort hunnit avslöjas
+  // (no_hit_job och grenen utan installerad språkmodell svarar synkront,
+  // ofta inom millisekunder — se sokActions.js:18-22). Allt som beskriver
+  // UTRULLNINGENS FÖRLOPP (hur många kort som syns, korttillstånden, vilket
+  // kort som är aktuellt, läsbordets tändning, träffräknarens "hittills")
+  // läser skannar. Allt som beskriver att SVARET STRÖMMAR ("Skickar
+  // frågan …", tänker-suffixet, läsbordets rubrik, citatfiltreringen) läser
+  // sok.fragar. Speglar InspelningarView.svelte:s stadiekarta och gamla
+  // appens tvådelade scanning-flagga (app.js:3403-3404).
+  const skannar = $derived(sok.fragar || sok.skanVisade < plan.length);
+
+  // Under utrullningen avslöjas korten i takt; är den klar visas alla.
+  const visade = $derived(skannar ? Math.min(sok.skanVisade, plan.length) : plan.length);
   const utrullningKlar = $derived(plan.length > 0 && sok.skanVisade >= plan.length);
 
   // Läsbordet tänds när modellen valt sina källor OCH utrullningen hunnit
   // klart — annars hoppar blicken mellan två ytor som växer samtidigt.
-  const lasbordPa = $derived(sok.laser.length > 0 && (utrullningKlar || !sok.fragar));
+  const lasbordPa = $derived(sok.laser.length > 0 && (utrullningKlar || !skannar));
 
   const ordtraffar = $derived(
     plan.slice(0, visade).filter((p) => (sok.skanTraffar[p.key] || 0) > 0).length,
   );
 
   const aktuell = $derived(
-    sok.fragar && !lasbordPa ? plan[Math.min(sok.skanVisade, plan.length - 1)] : null,
+    skannar && !lasbordPa ? plan[Math.min(sok.skanVisade, plan.length - 1)] : null,
   );
 
   const kort = $derived.by(() => {
@@ -612,10 +627,10 @@ Komponenten är **inert tills Task 4** kopplar körknappen: `sok.skanPlan` är `
       const traffar = sok.skanTraffar[p.key] || 0;
       let stadie;
       let etikett;
-      if (sok.fragar && i === sok.skanVisade) {
+      if (skannar && i === sok.skanVisade) {
         stadie = 'laser';
         etikett = 'Läser …';
-      } else if (!sok.fragar || i < sok.skanVisade) {
+      } else if (!skannar || i < sok.skanVisade) {
         stadie = traffar > 0 ? 'traff' : 'last';
         etikett = traffar > 0
           ? `● ${traffar} ${traffar === 1 ? 'träff' : 'träffar'}`
@@ -659,8 +674,8 @@ Komponenten är **inert tills Task 4** kopplar körknappen: `sok.skanPlan` är `
   const traffEtikett = $derived(
     `${ordtraffar} ${
       ordtraffar === 1
-        ? sok.fragar ? 'ordträff hittills' : 'ordträff'
-        : sok.fragar ? 'ordträffar hittills' : 'ordträffar'
+        ? skannar ? 'ordträff hittills' : 'ordträff'
+        : skannar ? 'ordträffar hittills' : 'ordträffar'
     }`,
   );
 
@@ -681,7 +696,7 @@ Komponenten är **inert tills Task 4** kopplar körknappen: `sok.skanPlan` är `
   <section class="genomsokning">
     <div class="status">
       <p class="ticker">
-        {#if sok.fragar}
+        {#if skannar}
           Söker igenom {plan.length} {plan.length === 1 ? 'inspelning' : 'inspelningar'}{aktuell &&
           aktuell.name
             ? ` — ${aktuell.name}`
@@ -713,7 +728,7 @@ Komponenten är **inert tills Task 4** kopplar körknappen: `sok.skanPlan` är `
       {/each}
     </ul>
 
-    {#if lasbordPa || (!sok.fragar && bordet.length)}
+    {#if lasbordPa || (!skannar && bordet.length)}
       <p class="bordsrubrik">
         {#if sok.fragar}
           {bordet.length === 1 ? 'AI:n läser nu denna' : `AI:n läser nu dessa ${bordet.length}`}
@@ -1330,7 +1345,12 @@ I `frontend/src/lib/inspelningar/InspelningarView.svelte`, lägg efter det befin
       for (const p of plan) if ((sok.skanTraffar[p.key] || 0) > 0) traffar.add(p.key);
     }
 
-    const antal = sok.fragar ? Math.min(sok.skanVisade, plan.length) : plan.length;
+    // Utrullningen får spela klart även när svaret redan kommit. sokActions
+    // stoppar MEDVETET inte timern vid done, och den här gränsen är
+    // konsumentsidan av samma beslut — utan andra ledet hoppar alla kort till
+    // sitt slutläge så fort strömmen tar slut. Speglar app.js:3404.
+    const skannar = sok.fragar || sok.skanVisade < plan.length;
+    const antal = skannar ? Math.min(sok.skanVisade, plan.length) : plan.length;
     for (const p of plan.slice(0, antal)) {
       karta.set(p.key, traffar.has(p.key) ? 'lift' : 'dim');
     }
@@ -1886,3 +1906,5 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 Läsbordet anropar `parseCitat` en gång till i `Genomsokning.svelte`, utöver anropet i `Svar.svelte`. Alternativet — att lyfta resultatet till storen — hade gjort en ren funktion till delat tillstånd med två skrivare. Kostnaden är en extra regex-körning per rendering av ett färdigt svar.
 
 Tandkontroll 4a bevisar att assertionen ser en tom lyft-mängd, inte att stadiet härleds ur just `done.sources` snarare än ur `deep_read` eller `scan_result`. Prioritetsordningen mellan de tre är alltså otäckt. Att skilja dem åt kräver en fixtur där de tre ger olika svar, vilket fejkens identiska transkript inte kan ge.
+
+**Rättat i granskningen (fyndet om `sok.fragar` vid blixtsnabba svar).** Task 3 och Task 5:s kodblock ovan använde `sok.fragar` ensam för att avgöra hur många kort som fått avslöjas — men `sokActions.js` stoppar MEDVETET inte utrullningstimern vid `done` (svaret kan bli klart innan alla kort hunnit visas, t.ex. `no_hit_job` och grenen utan installerad språkmodell, som svarar synkront inom millisekunder utan något LLM-anrop emellan). Med bara `sok.fragar` hoppade båda konsumenterna direkt till hela planen så fort strömmen tog slut, oavsett `sok.skanVisade`. Fixen inför en tvådelad flagga, `skannar = sok.fragar || sok.skanVisade < plan.length`, speglad ur gamla appens `scanning`-variabel (app.js:3403-3404), och läser den överallt kodblocken ovan beskriver UTRULLNINGENS FÖRLOPP (antal synliga kort, korttillstånden, aktuellt kort, läsbordets tändning, träffräknarens "hittills", tickerns "Söker igenom"/"✓ Genomsökte" och läsbordssektionens synlighet) — medan ställen som beskriver att SVARET STRÖMMAR ("Skickar frågan …", tänker-suffixet, läsbordets rubriktext, citatfiltreringen) fortsatt läser `sok.fragar` rakt av. Verifierat genom att tillfälligt tvinga `sok.fragar = false` direkt efter `scan_plan` i `stallFraga` och bekräfta att korten ändå avslöjades i takt i stället för på en gång; ändringen återställdes efteråt.

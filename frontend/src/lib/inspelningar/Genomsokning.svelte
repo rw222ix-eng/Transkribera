@@ -14,20 +14,35 @@
 
   const plan = $derived(sok.skanPlan || []);
 
-  // Under frågan avslöjas korten i takt; efteråt visas alla.
-  const visade = $derived(sok.fragar ? Math.min(sok.skanVisade, plan.length) : plan.length);
+  // TVÅ FLAGGOR, TVÅ BETYDELSER — blanda inte ihop dem igen. sok.fragar
+  // betyder "svaret strömmar fortfarande" (frågan är i luften); skannar
+  // betyder "utrullningen av kort pågår fortfarande". De slocknar INTE
+  // samtidigt: sokActions.js stoppar medvetet inte utrullningstimern vid
+  // done, för svaret kan bli klart innan alla kort hunnit avslöjas
+  // (no_hit_job och grenen utan installerad språkmodell svarar synkront,
+  // ofta inom millisekunder — se sokActions.js:18-22). Allt som beskriver
+  // UTRULLNINGENS FÖRLOPP (hur många kort som syns, korttillstånden, vilket
+  // kort som är aktuellt, läsbordets tändning, träffräknarens "hittills")
+  // läser skannar. Allt som beskriver att SVARET STRÖMMAR ("Skickar
+  // frågan …", tänker-suffixet, läsbordets rubrik, citatfiltreringen) läser
+  // sok.fragar. Speglar InspelningarView.svelte:s stadiekarta och gamla
+  // appens tvådelade scanning-flagga (app.js:3403-3404).
+  const skannar = $derived(sok.fragar || sok.skanVisade < plan.length);
+
+  // Under utrullningen avslöjas korten i takt; är den klar visas alla.
+  const visade = $derived(skannar ? Math.min(sok.skanVisade, plan.length) : plan.length);
   const utrullningKlar = $derived(plan.length > 0 && sok.skanVisade >= plan.length);
 
   // Läsbordet tänds när modellen valt sina källor OCH utrullningen hunnit
   // klart — annars hoppar blicken mellan två ytor som växer samtidigt.
-  const lasbordPa = $derived(sok.laser.length > 0 && (utrullningKlar || !sok.fragar));
+  const lasbordPa = $derived(sok.laser.length > 0 && (utrullningKlar || !skannar));
 
   const ordtraffar = $derived(
     plan.slice(0, visade).filter((p) => (sok.skanTraffar[p.key] || 0) > 0).length,
   );
 
   const aktuell = $derived(
-    sok.fragar && !lasbordPa ? plan[Math.min(sok.skanVisade, plan.length - 1)] : null,
+    skannar && !lasbordPa ? plan[Math.min(sok.skanVisade, plan.length - 1)] : null,
   );
 
   const kort = $derived.by(() => {
@@ -35,10 +50,10 @@
       const traffar = sok.skanTraffar[p.key] || 0;
       let stadie;
       let etikett;
-      if (sok.fragar && i === sok.skanVisade) {
+      if (skannar && i === sok.skanVisade) {
         stadie = 'laser';
         etikett = 'Läser …';
-      } else if (!sok.fragar || i < sok.skanVisade) {
+      } else if (!skannar || i < sok.skanVisade) {
         stadie = traffar > 0 ? 'traff' : 'last';
         etikett = traffar > 0
           ? `● ${traffar} ${traffar === 1 ? 'träff' : 'träffar'}`
@@ -82,8 +97,8 @@
   const traffEtikett = $derived(
     `${ordtraffar} ${
       ordtraffar === 1
-        ? sok.fragar ? 'ordträff hittills' : 'ordträff'
-        : sok.fragar ? 'ordträffar hittills' : 'ordträffar'
+        ? skannar ? 'ordträff hittills' : 'ordträff'
+        : skannar ? 'ordträffar hittills' : 'ordträffar'
     }`,
   );
 
@@ -104,7 +119,7 @@
   <section class="genomsokning">
     <div class="status">
       <p class="ticker">
-        {#if sok.fragar}
+        {#if skannar}
           Söker igenom {plan.length} {plan.length === 1 ? 'inspelning' : 'inspelningar'}{aktuell &&
           aktuell.name
             ? ` — ${aktuell.name}`
@@ -136,7 +151,7 @@
       {/each}
     </ul>
 
-    {#if lasbordPa || (!sok.fragar && bordet.length)}
+    {#if lasbordPa || (!skannar && bordet.length)}
       <p class="bordsrubrik">
         {#if sok.fragar}
           {bordet.length === 1 ? 'AI:n läser nu denna' : `AI:n läser nu dessa ${bordet.length}`}

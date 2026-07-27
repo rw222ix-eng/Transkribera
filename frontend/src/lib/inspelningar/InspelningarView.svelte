@@ -155,7 +155,12 @@
       for (const p of plan) if ((sok.skanTraffar[p.key] || 0) > 0) traffar.add(p.key);
     }
 
-    const antal = sok.fragar ? Math.min(sok.skanVisade, plan.length) : plan.length;
+    // Utrullningen får spela klart även när svaret redan kommit. sokActions
+    // stoppar MEDVETET inte timern vid done, och den här gränsen är
+    // konsumentsidan av samma beslut — utan andra ledet hoppar alla kort till
+    // sitt slutläge så fort strömmen tar slut. Speglar app.js:3404.
+    const skannar = sok.fragar || sok.skanVisade < plan.length;
+    const antal = skannar ? Math.min(sok.skanVisade, plan.length) : plan.length;
     for (const p of plan.slice(0, antal)) {
       karta.set(p.key, traffar.has(p.key) ? 'lift' : 'dim');
     }
