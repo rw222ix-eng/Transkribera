@@ -10,19 +10,23 @@
   // halv "[1" annars blinka förbi som text.
   const citat = $derived(klar && sok.kallor.length ? parseCitat(sok.svar, sok.kallor.length) : null);
 
+  // Källistan filtrerar bort en referens vars källa saknas i sok.kallor —
+  // ett inkonsekvent svar från servern ska inte rendera en rad med tomt namn.
+  const citerade = $derived(
+    citat ? citat.refs.map((r) => ({ num: r.num, kalla: sok.kallor[r.kallIndex] })).filter((x) => x.kalla) : [],
+  );
+
   // Rubriken räknar bara FAKTISKT CITERADE källor (app.js:3797-3807) — det som
-  // visas ska vara det svaret verkligen lutar sig mot.
-  const antalCiterade = $derived(citat ? citat.refs.length : 0);
+  // visas ska vara det svaret verkligen lutar sig mot. Härledd ur citerade.length,
+  // INTE citat.refs.length: det senare räknar även med referenser som filtret
+  // ovan tog bort, vilket kan påstå fler källor i rubriken än listan visar.
+  const antalCiterade = $derived(citerade.length);
   const rubrik = $derived(
     antalCiterade === 0
       ? 'Svar'
       : antalCiterade === 1
         ? 'Svar — 1 källa'
         : `Svar — ${antalCiterade} källor`,
-  );
-
-  const citerade = $derived(
-    citat ? citat.refs.map((r) => ({ num: r.num, kalla: sok.kallor[r.kallIndex] })).filter((x) => x.kalla) : [],
   );
 
   const meta = (s) => [s.group, s.course, s.datum].filter(Boolean).join(' · ');
@@ -51,6 +55,7 @@
         {#each citat.tokens as t, i (i)}
           {#if t.text}{t.text}{:else}<span
               class="cite"
+              role="img"
               title={namn(sok.kallor[t.kallIndex]) || `Källa ${t.cite}`}
               aria-label="Källa {t.cite} — {namn(sok.kallor[t.kallIndex]) || 'okänd'}"
               >{t.cite}</span
@@ -108,7 +113,11 @@
 
   /* Sifferkällan är en MARKÖR, inte en knapp — att öppna källan är B3c. Ett
      <span> utan tabindex är rätt: en knapp som inte gör något är värre än
-     ingen knapp. */
+     ingen knapp. role="img" i markupen (inte här — bara ett attribut) ger
+     spanet en roll som TILLÅTER ett tillgängligt namn: ett rollöst <span> är
+     role="generic", och ARIA förbjuder namngivning av generiska element, så
+     title/aria-label hade annars kastats av skärmläsaren. Ingen live-region
+     och inget interaktivt läggs till. */
   .cite {
     display: inline-block;
     min-width: 15px;
