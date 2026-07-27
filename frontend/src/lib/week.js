@@ -66,3 +66,31 @@ export function weekInfo(datum) {
     start: mon.getTime(),
   };
 }
+
+/**
+ * "2026-04-02" → "2 apr". Ett fullt ISO-timestamp klipps till datumdelen, precis
+ * som servern gör (_agenda_view, app/web/server.py:1300).
+ *
+ * ÅRTALET SÄTTS UT när datumet ligger i ett annat år än innevarande. Utan den
+ * regeln läses en försenad agendapost från i fjol som "2 apr" — alltså som om
+ * den vore i år — vilket är precis det agendan finns för att förhindra.
+ *
+ * Ligger HÄR och inte i lib/inspelningar/ av samma skäl som manadsEtikett:
+ * MON_SV finns redan i den här filen, och en andra lista svenska
+ * månadsförkortningar i en vy hade garanterat drivit isär från den här.
+ *
+ * Oigenkännlig indata ger TOM STRÄNG, till skillnad från manadsEtikett som
+ * lämnar sin indata orörd. Skillnaden är avsiktlig: en månadsetikett är en
+ * rubrik där maskinsträngen är ful men sann, medan det här är ett förfallodatum
+ * bredvid en åtgärd — där är "inte-ett-datum" värre än ingenting.
+ */
+export function datumEtikett(iso) {
+  const p = String(iso || '').slice(0, 10).split('-');
+  const ar = parseInt(p[0], 10);
+  const dag = parseInt(p[2], 10);
+  const man = MON_SV[parseInt(p[1], 10) - 1];
+  if (!man || !Number.isFinite(ar) || !Number.isFinite(dag)) return '';
+  return ar === new Date().getFullYear()
+    ? dag + ' ' + man
+    : dag + ' ' + man + ' ' + ar;
+}

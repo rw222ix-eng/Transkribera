@@ -155,6 +155,28 @@ export default defineConfig({
       // över en omladdning), och riktig mikrofonhårdvara inklusive att enheten
       // dras ur mitt i en inspelning. Specens egen kommentar upprepar listan.
       //
+      // inspelningar-fraga.spec.mjs (plan B3b) täcker FRÅGE-LÄGET: att
+      // genomsökningen visar ÄKTA träffantal med exakta strängar (inte bara
+      // "> 0"), att svaret strömmar in och att [1] blir en markör i stället
+      // för rå text, att läsbordet säger "Svaret bygger på denna" (singular,
+      // vilket bara håller om citatfiltreringen faktiskt filtrerar), att
+      // kartotekets kort LYFTS efter SERVERNS träffar (aldrig efter en
+      // klientmatchning på frågans ord — gamla appen hade den buggen), att
+      // ett fel renderas i svarsytan och inte som ett svar, att en rensning
+      // överger den pågående strömmen, och (slutgranskningens fynd 1, HIGH)
+      // att ett error-event MITT I strömmen — efter deep_read — inte får
+      // tickern att kvittera en avbruten genomsökning som lyckad. TÄCKER
+      // INTE: SERVERNS SÖKORDNING (fixturens tre lektioner får samma namn av
+      // fejkens titelförslag och PATCH /api/lessons tar inget `name`-fält,
+      // så en klientsortering hade passerat obemärkt), DIM-GRENEN i
+      // kartotekets stadiekarta (fixturens tre lektioner delar transkript,
+      // så ingen blir källa-lös — det finns ingen fjärde lektion utan träff),
+      // den semantiska omsökningen med två scan_plan (fejkens tre meningar
+      // räcker inte till en fråga som ger noll ordträffar men ändå ett
+      // närliggande transkript — backend har egen täckning i
+      // tests/test_web_server.py:1125), källmodalen och följdfrågorna (B3c),
+      // eller prefers-reduced-motion-grenen.
+      //
       // Plan B1 Task 5 lägger till e2e/inspelningar-kartotek.spec.mjs (samma
       // placering, samma fejkserver) som täcker Inspelningar-flikens kartotek:
       // veckogrupperingen med antal per grupp, att KLASS-filtret verkligen
@@ -181,9 +203,49 @@ export default defineConfig({
       // se filens egen header för den fullständiga listan och vad som
       // MEDVETET inte täcks (Google-kopplingsguiden, arkivsvarets kalenderväg).
       //
+      // inspelningar-paneler.spec.mjs (plan B5) täcker de tre PANELERNA:
+      // agendans märkning av försenad/idag/framtid, att ett KLASSbyte skickar
+      // nya GET /api/trends och /api/next-prep, att ett KURSbyte DÄREFTER
+      // (med klassen redan vald) inte gör det, att varken trender eller
+      // Inför nästa renderas utan vald klass, att en bock i Inför nästa
+      // laddar om agendan (gamla appens refetch-asymmetri, fixad),
+      // .ics-exporten med POST /api/open stubbad, och de harmoniserade
+      // tomtillstånden. TÄCKER INTE: .ics-filens innehåll (tests/
+      // test_ics_export.py), att /api/open startar ett program, eller
+      // panelernas generationsvakter — de är ordagranna kopior av den som
+      // redan prövas i inspelningar-kartotek.spec.mjs.
+      //
+      // inspelningar-sok.spec.mjs (plan B3a) täcker ORDSÖKET: att träffarna
+      // renderas med markerade utdrag och att \x02/\x03 aldrig läcker som
+      // synlig text, att kartoteket viker för träfflistan och kommer tillbaka
+      // när fältet rensas, att kartotekets tomtillstånd inte renderas under
+      // träffarna, nollträffstexten, och att ett KLASSbyte inte ändrar
+      // träffarna (api_search tar inga filterparametrar). TÄCKER INTE:
+      // fråge-läget i sak, att öppna en träff i transkriptet (B2, andra
+      // strömmen), sökets generationsvakt (ordagrann kopia av den som redan
+      // prövas i inspelningar-kartotek.spec.mjs) eller LIKE-fallbacken när
+      // sqlite saknar FTS5.
+      //
+      // B3b (sok.svelte.js:11) flippade sok.lages DEFAULT från 'keyword' till
+      // 'ask', vilket gjorde fråge-läget levande. Den täckningen hör nu hemma
+      // i B3b:s egen spec (inspelningar-fraga.spec.mjs), inte här — det gamla
+      // testet "Fråga AI säger att den kommer senare", som prövade en
+      // placeholder-rad och en inaktiv körknapp, är BORTTAGET ur den här
+      // filen av det skälet. oppnaInspelningar (specens hjälpare som öppnar
+      // Inspelningar-fliken) växlar därför explicit tillbaka till 'keyword'
+      // åt varje kvarvarande test, en gång, i stället för i vart och ett.
+      //
+      // Slutgranskningens fynd 1 (efter leverans) lade till ett sjätte test:
+      // att körknappen inte fastnar i "Söker …"/disabled när fältet töms och
+      // Enter trycks igen medan ett tidigare /api/search-svar fortfarande är
+      // i luften — korSoknings tomma-frågan-gren nollställde sok.traffar men
+      // aldrig sok.soker. Svaret hålls uppehållet med page.route (samma
+      // fetch+fulfill-mönster som inspelningar-kartotek.spec.mjs) så
+      // kapplöpningen kan tvingas fram pålitligt.
+      //
       // FÄLLA FÖR B2-B5, skarpladdad men ännu otriggad: en CSS-räkning av
       // [role="status"] inuti den SYNLIGA Inspelningar-panelen ger nu 2 —
-      // RedigeraLektion.svelte:165 plus InspelningarView.svelte:94 — medan
+      // RedigeraLektion.svelte:165 plus InspelningarView.svelte:158 — medan
       // TILLGÄNGLIGHETSTRÄDET säger 1. Motsägelsen är skenbar och båda noderna
       // är rätt: stängd är dialogen display:none och alltså ur trädet, öppen gör
       // showModal() resten av panelen inert och tar bort vyns region ur trädet i
@@ -209,7 +271,10 @@ export default defineConfig({
       name: "next-foundation",
       testDir: __dirname,
       testMatch: [
+        /inspelningar-fraga\.spec\.mjs$/,
         /inspelningar-kartotek\.spec\.mjs$/,
+        /inspelningar-paneler\.spec\.mjs$/,
+        /inspelningar-sok\.spec\.mjs$/,
         /next-foundation\.spec\.mjs$/,
         /planering-tavla\.spec\.mjs$/,
         /planering-arkiv\.spec\.mjs$/,

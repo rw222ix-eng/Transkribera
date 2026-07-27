@@ -89,7 +89,27 @@ test("Planeringsarkiv (/next/): lista, ordsök utan styrtecken, Rensa och Fråga
   // (scan_plan/scan_result/deep_read/log/token/done, se serve_test_app.py)
   // är helt deterministisk i fejkläget — svaret beror aldrig på frågans
   // innehåll, bara på att minst en arkivpost matchar frågans innehållsord.
-  const searchField = page.getByLabel("Sök i arkivet");
+  //
+  // KOSTNADSFRI AVGRÄNSNING: getByRole (plan B3a lade ett EGET sökfält med
+  // SAMMA aria-label, "Sök i arkivet", i Inspelningar-fliken —
+  // Sokfalt.svelte). App.svelte håller alla flikar monterade och göms bara med
+  // hidden, så båda fälten ligger i DOM:en samtidigt — men en dold panel är
+  // display:none och alltså ute ur tillgänglighetsträdet, och getByRole
+  // SJÄLVAVGRÄNSAR mot det, till skillnad från getByLabel. Ett osäkrat
+  // page.getByLabel(...) fällde därför "strict mode violation" här oavsett
+  // vilken flik som råkade vara synlig; page.getByRole("textbox", …) gör inte
+  // det. Samma princip som .grupp-avgränsningen i
+  // inspelningar-kartotek.spec.mjs (upptäckt av inspelningar-paneler.spec.mjs,
+  // plan B5) löser med en container-klass — getByRole löser den här utan att
+  // behöva någon.
+  //
+  // GER INGET UPP: "Sök i arkivet" är en medvetet DELAD etikett mellan
+  // planeringsarkivets frågefält och inspelningsarkivets sökfält (båda söker
+  // faktiskt i ett arkiv). Egenskapen en lokator ska bevisa är "bara ETT
+  // NÅBART fält bär den här etiketten" — och det bevisar getByRole fortfarande,
+  // eftersom rollnamnet självavgränsar mot allt som ligger utanför
+  // tillgänglighetsträdet.
+  const searchField = page.getByRole("textbox", { name: "Sök i arkivet" });
   await searchField.fill("Arkivprobet");
   await page.getByRole("button", { name: "Fråga", exact: true }).click();
   await expect(page.locator(".svar .fraga")).toHaveText("Arkivprobet");

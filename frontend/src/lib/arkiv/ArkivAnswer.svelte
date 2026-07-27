@@ -10,7 +10,9 @@
     {#if arkiv.scan.length}
       <ul class="scan" aria-live="polite">
         {#each arkiv.scan as s (s.key)}
-          <li>{s.name}{#if s.hits != null} — {s.hits} träffar{/if}</li>
+          <!-- Separatorn ligger INUTI uttrycket: Svelte trimmar bara statiska
+               text-noder vid {#if}-gränsen, aldrig utvärderade uttryck. -->
+          <li>{s.name}{#if s.hits != null}{" — " + s.hits + " träffar"}{/if}</li>
         {/each}
       </ul>
     {/if}

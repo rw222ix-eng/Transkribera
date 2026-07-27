@@ -904,6 +904,16 @@ Under the catalogue, a permanent line:
 
 Same honest stance as plan A3's finished state: say where the teacher can go, do not navigate to a placeholder.
 
+RÄTTAT I SLUTGRANSKNINGEN (plan B3a, se `.superpowers/sdd/b3a-slutfix-report.md`):
+raden ovan visas här som B1 lämnade den — en permanent, ogrindad rad. Sedan
+B3a (commit `2c9e380`) är den grindad på att ingen sökning är aktiv
+(`{#if !sok.traffar}` i `InspelningarView.svelte`, komplementet till
+träfflistans egen `{#if sok.traffar}`). Skälet är att raden är en fotnot
+till KARTOTEKET, inte till träfflistan: B3a lade en nästan identisk egen rad
+i `Traefflista.svelte` ("Att öppna en TRÄFF i transkriptet migreras …"), och
+utan grindningen staplades de två fotnoterna på varandra under en aktiv
+sökning och sa nästan samma sak om olika saker i samma andetag.
+
 - [ ] **Step 4: Register and write the spec**
 
 Add a ninth `testMatch` entry to the `next-foundation` project in `e2e/playwright.config.ts` — `/inspelningar-kartotek\.spec\.mjs$/` — and extend the comment block above `name: "next-foundation"` with a paragraph in the same style, naming plan B1 and saying what is not covered (opening a lesson, search, the archive question, the panels).
