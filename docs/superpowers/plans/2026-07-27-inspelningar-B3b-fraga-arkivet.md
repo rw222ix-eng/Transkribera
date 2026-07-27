@@ -1049,7 +1049,14 @@ Det här är tasken som gör fråge-läget levande: efter den kan läraren stäl
   );
 
   const meta = (s) => [s.group, s.course, s.datum].filter(Boolean).join(' · ');
-  const namn = (s) => [s.name, s.datum].filter(Boolean).join(' · ');
+  // FYND 2 I SLUTGRANSKNINGEN: `s` kan vara undefined — `.cite`-spannet nedan
+  // anropar namn(sok.kallor[t.kallIndex]) för VARJE citeringstoken, oavsett
+  // om källan finns i sok.kallor. Anropsställena (`namn(...) || 'okänd'`) var
+  // redan skrivna som om ett falsy returvärde vore möjligt, men ett oskyddat
+  // s.name kastade FÖRE den punkten nåddes. Syskonderivatet `citerade` ovan
+  // filtrerar uttryckligen bort just det fallet (`.filter((x) => x.kalla)`)
+  // — samma skydd hör hemma här, inte bara där.
+  const namn = (s) => (s ? [s.name, s.datum].filter(Boolean).join(' · ') : '');
 </script>
 
 {#if sok.fragaFel}
@@ -2040,3 +2047,5 @@ Tandkontroll 4a bevisar att assertionen ser en tom lyft-mängd, inte att stadiet
 **Rättat i granskningen (fyndet om `sok.fragar` vid blixtsnabba svar).** Task 3 och Task 5:s kodblock ovan använde `sok.fragar` ensam för att avgöra hur många kort som fått avslöjas — men `sokActions.js` stoppar MEDVETET inte utrullningstimern vid `done` (svaret kan bli klart innan alla kort hunnit visas, t.ex. `no_hit_job` och grenen utan installerad språkmodell, som svarar synkront inom millisekunder utan något LLM-anrop emellan). Med bara `sok.fragar` hoppade båda konsumenterna direkt till hela planen så fort strömmen tog slut, oavsett `sok.skanVisade`. Fixen inför en tvådelad flagga, `skannar = sok.fragar || sok.skanVisade < plan.length`, speglad ur gamla appens `scanning`-variabel (app.js:3403-3404), och läser den överallt kodblocken ovan beskriver UTRULLNINGENS FÖRLOPP (antal synliga kort, korttillstånden, aktuellt kort, läsbordets tändning, träffräknarens "hittills", tickerns "Söker igenom"/"✓ Genomsökte" och läsbordssektionens synlighet) — medan ställen som beskriver att SVARET STRÖMMAR ("Skickar frågan …", tänker-suffixet, läsbordets rubriktext, citatfiltreringen) fortsatt läser `sok.fragar` rakt av. Verifierat genom att tillfälligt tvinga `sok.fragar = false` direkt efter `scan_plan` i `stallFraga` och bekräfta att korten ändå avslöjades i takt i stället för på en gång; ändringen återställdes efteråt.
 
 **Rättat i slutgranskningen (fynd 1, HIGH — genomsökningen kvitterade en misslyckad sökning).** Servern kan kasta `RuntimeError("Språkmodellen är inte installerad.")` EFTER `scan_plan`, `scan_result` och `deep_read` redan emitterats (server.py:1591), och `streamPost`s syntetiska `'Anslutningen till servern bröts.'` kan landa när som helst. `error`-grenen i `stallFraga` sätter `sok.fragaFel` men rör varken `sok.laser` eller `sok.skanPlan`, och `finally` sätter `sok.fragar = false` — så tickern (Task 3, `{:else}`-grenen) och läsbordsgrinden (`lasbordPa || (!skannar && bordet.length)`) läste bara UTRULLNINGENS förlopp, aldrig felkanalen, och visade alltså "✓ Genomsökte N inspelningar" och "Svaret bygger på dessa N" för en fråga som just misslyckades — samtidigt som `Svar.svelte` visade felet i samma vy. Fixen lägger till en `{:else if sok.fragaFel}`-gren i tickern (varken "✓ Genomsökte" eller "Söker igenom", se kodblocket ovan) och grindar läsbordet på `!sok.fragaFel`. Tandkontrollerat med ett nytt e2e-test i Task 6 som injicerar ett `error`-event mitt i strömmen (efter `deep_read`) via `page.route`.
+
+**Rättat i slutgranskningen (fynd 2, MEDIUM — `namn()` kastade på en saknad källa).** Task 4:s `namn = (s) => [s.name, s.datum]...` läste `s.name` oskyddat, medan `.cite`-spannets `title`/`aria-label` var skrivna som om `namn(...)` kunde returnera falsy (`namn(...) || 'okänd'`) — det kunde det aldrig, eftersom anropet kastade FÖRE det. Syskonderivatet `citerade` filtrerar redan bort en referens vars `sok.kallor[kallIndex]` saknas (`.filter((x) => x.kalla)`), vilket visar att avsikten alltid var att tolerera en saknad källa — bara inte i `namn` själv. Fixen gör `s` valfri: `s ? [...].join(' · ') : ''`.

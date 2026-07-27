@@ -30,7 +30,14 @@
   );
 
   const meta = (s) => [s.group, s.course, s.datum].filter(Boolean).join(' · ');
-  const namn = (s) => [s.name, s.datum].filter(Boolean).join(' · ');
+  // FYND 2 I SLUTGRANSKNINGEN: `s` kan vara undefined — `.cite`-spannet nedan
+  // anropar namn(sok.kallor[t.kallIndex]) för VARJE citeringstoken, oavsett
+  // om källan finns i sok.kallor. Anropsställena (`namn(...) || 'okänd'`) var
+  // redan skrivna som om ett falsy returvärde vore möjligt, men ett oskyddat
+  // s.name kastade FÖRE den punkten nåddes. Syskonderivatet `citerade` ovan
+  // filtrerar uttryckligen bort just det fallet (`.filter((x) => x.kalla)`)
+  // — samma skydd hör hemma här, inte bara där.
+  const namn = (s) => (s ? [s.name, s.datum].filter(Boolean).join(' · ') : '');
 </script>
 
 {#if sok.fragaFel}
