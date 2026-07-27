@@ -3,16 +3,17 @@
   // (app/web/static/app.js:5138-5162), omstylat till designsystemet — gamla
   // fältet är inline-CSS med 14px hörn, --shadow och en pulserande accentprick.
   import { sok } from './sok.svelte.js';
-  import { korSokning, rensaSokning, valjLage } from './sokActions.js';
+  import { korSokning, rensaSokning, valjLage, stallFraga } from './sokActions.js';
 
   const harFraga = $derived(sok.fraga.trim().length > 0);
 
-  // Enter kör sökningen. preventDefault så fältet inte submittar något
+  // Enter kör lägets aktion. preventDefault så fältet inte submittar något
   // formulär — det finns inget här, men vyn har dialoger som gör det.
   function taKey(e) {
     if (e.key !== 'Enter') return;
     e.preventDefault();
-    if (sok.lage === 'keyword') korSokning();
+    if (sok.lage === 'ask') stallFraga();
+    else korSokning();
   }
 </script>
 
@@ -42,9 +43,12 @@
       style:visibility={harFraga ? 'visible' : 'hidden'}
     >✕</button>
 
-    <!-- Inaktiv i fråge-läget: det svarar inte förrän B3b. -->
-    <button class="kor" onclick={korSokning} disabled={sok.soker || sok.lage === 'ask'}>
-      {sok.soker ? 'Söker …' : 'Sök'}
+    <button
+      class="kor"
+      onclick={sok.lage === 'ask' ? stallFraga : korSokning}
+      disabled={sok.soker || sok.fragar}
+    >
+      {sok.soker || sok.fragar ? 'Söker …' : sok.lage === 'ask' ? 'Fråga' : 'Sök'}
     </button>
   </div>
 

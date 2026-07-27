@@ -22,6 +22,7 @@
   import Sokfalt from './Sokfalt.svelte';
   import Traefflista from './Traefflista.svelte';
   import Genomsokning from './Genomsokning.svelte';
+  import Svar from './Svar.svelte';
   import { sok } from './sok.svelte.js';
   import { rensaSokning } from './sokActions.js';
   import RedigeraLektion from './RedigeraLektion.svelte';
@@ -219,6 +220,7 @@
     inte ska gömma lärarens lektioner.
   -->
   <Genomsokning />
+  <Svar />
 
   <!--
     EN YTA I TAGET. Medan en sökning är aktiv renderas träfflistan i STÄLLET
