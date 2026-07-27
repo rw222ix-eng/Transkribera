@@ -156,17 +156,26 @@ export default defineConfig({
       // dras ur mitt i en inspelning. Specens egen kommentar upprepar listan.
       //
       // inspelningar-fraga.spec.mjs (plan B3b) täcker FRÅGE-LÄGET: att
-      // genomsökningen visar serverns ordning med äkta träffantal, att svaret
-      // strömmar in och att [1] blir en markör i stället för rå text, att
-      // läsbordet säger "Svaret bygger på …", att kartotekets kort lyfts och
-      // dämpas efter SERVERNS träffar (aldrig efter en klientmatchning på
-      // frågans ord — gamla appen hade den buggen), att ett fel renderas i
-      // svarsytan och inte som ett svar, och att en rensning överger den
-      // pågående strömmen. TÄCKER INTE: den semantiska omsökningen med två
-      // scan_plan (fejkens tre meningar räcker inte till en fråga som ger noll
-      // ordträffar men ändå ett närliggande transkript — backend har egen
-      // täckning i tests/test_web_server.py:1125), källmodalen och
-      // följdfrågorna (B3c), eller prefers-reduced-motion-grenen.
+      // genomsökningen visar ÄKTA träffantal med exakta strängar (inte bara
+      // "> 0"), att svaret strömmar in och att [1] blir en markör i stället
+      // för rå text, att läsbordet säger "Svaret bygger på denna" (singular,
+      // vilket bara håller om citatfiltreringen faktiskt filtrerar), att
+      // kartotekets kort LYFTS efter SERVERNS träffar (aldrig efter en
+      // klientmatchning på frågans ord — gamla appen hade den buggen), att
+      // ett fel renderas i svarsytan och inte som ett svar, att en rensning
+      // överger den pågående strömmen, och (slutgranskningens fynd 1, HIGH)
+      // att ett error-event MITT I strömmen — efter deep_read — inte får
+      // tickern att kvittera en avbruten genomsökning som lyckad. TÄCKER
+      // INTE: SERVERNS SÖKORDNING (fixturens tre lektioner får samma namn av
+      // fejkens titelförslag och PATCH /api/lessons tar inget `name`-fält,
+      // så en klientsortering hade passerat obemärkt), DIM-GRENEN i
+      // kartotekets stadiekarta (fixturens tre lektioner delar transkript,
+      // så ingen blir källa-lös — det finns ingen fjärde lektion utan träff),
+      // den semantiska omsökningen med två scan_plan (fejkens tre meningar
+      // räcker inte till en fråga som ger noll ordträffar men ändå ett
+      // närliggande transkript — backend har egen täckning i
+      // tests/test_web_server.py:1125), källmodalen och följdfrågorna (B3c),
+      // eller prefers-reduced-motion-grenen.
       //
       // Plan B1 Task 5 lägger till e2e/inspelningar-kartotek.spec.mjs (samma
       // placering, samma fejkserver) som täcker Inspelningar-flikens kartotek:

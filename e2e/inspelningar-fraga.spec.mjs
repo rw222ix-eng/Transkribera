@@ -5,22 +5,47 @@
 // svarsgenereringen är stubbad.
 //
 // TÄCKER:
-//   1. att genomsökningen renderar korten i SERVERNS ordning med ÄKTA
-//      träffantal, och att utrullningen når alla kort,
+//   1. att genomsökningen renderar ÄKTA träffantal per lektion (ur
+//      scan_result, exakta strängar — inte bara "> 0"), och att utrullningen
+//      når alla kort,
 //   2. att svaret strömmar in och att [1] blir en markör, inte rå text,
-//   3. att läsbordet säger "Svaret bygger på …" efter done,
-//   4. att kartotekets kort får data-stage — lift för träffar, dim för resten
-//      — och att INGET stadie sätts utan aktiv fråga,
+//   3. att läsbordet säger "Svaret bygger på denna" — SINGULAR, med rätt
+//      antal — efter done, vilket bara håller om Genomsokning.svelte:s
+//      citatfilter verkligen filtrerar bort de olästa källorna,
+//   4. att kartotekets kort får data-stage="lift" för lektioner servern
+//      räknar som källor, och att INGET stadie sätts utan aktiv fråga,
 //   5. att ett fel renderas i SVARSYTAN och inte som ett svar (409 fejkad),
 //   6. att en ny fråga överger den föregående strömmen (generationsvakten),
-//   7. att fråge-läget är default och att körknappen är aktiv.
+//   7. att fråge-läget är default och att körknappen är aktiv,
+//   8. att ett error-event MITT I strömmen (efter deep_read) inte kvitteras
+//      som en lyckad genomsökning — slutgranskningens fynd 1 (HIGH).
 //
-// Punkt 4 och 6 är planens bärande krav. Punkt 4 vaktar att stadiet kommer
-// från servern och inte från en klientmatchning på frågans ord — gamla appen
-// hade den buggen och kommentaren app.js:3384-3386 säger att den togs bort.
-// Punkt 6 vaktar en kapplöpning som är osynlig tills den inträffar.
+// Punkt 4, 6 och 8 är planens bärande krav. Punkt 4 vaktar att stadiet
+// kommer från servern och inte från en klientmatchning på frågans ord —
+// gamla appen hade den buggen och kommentaren app.js:3384-3386 säger att den
+// togs bort. Punkt 6 vaktar en kapplöpning som är osynlig tills den
+// inträffar. Punkt 8 vaktar att ett fel som landar EFTER att servern redan
+// hunnit skicka scan_plan/scan_result/deep_read inte får tickern att visa
+// "✓ Genomsökte" eller läsbordet att visa "Svaret bygger på" — se
+// Genomsokning.svelte.
 //
 // TÄCKS INTE, och det är avsiktligt:
+//   · SERVERNS SÖKORDNING (scan_plan.items i ORDER BY datum DESC). Den här
+//     fixturen kan inte bevisa det: alla tre lektionerna får SAMMA namn av
+//     fejkens titelförslag (fake_suggest_title, serve_test_app.py:135-137,
+//     verifierat: "Bråk och procent — introduktion" för alla tre), PATCH
+//     /api/lessons tar inte emot ett `name`-fält (server.py — bara
+//     datum/starttid/sal/summary/group_name/course_name), och kortens `key`
+//     (lesson_id) syns inte i DOM:en. En klientsortering som råkade byta
+//     ordning hade alltså passerat obemärkt. Att bevisa ordning kräver
+//     antingen ett synligt lesson_id i markupen eller en väg att ge
+//     lektionerna olika namn efter transkribering — ingen av de vägarna
+//     finns i den här specens fixtur.
+//   · DIM-GRENEN i kartotekets stadiekarta (data-stage="dim"). Alla tre
+//     lektionerna delar samma fejktranskript, så alla tre får ordträff och
+//     blir källor (done.result.sources = alla 3 djupt lästa) — det finns
+//     ingen FJÄRDE lektion UTAN träff i fixturen som kunde blivit dim. Punkt
+//     4 nedan verifierar därför bara att lift sätts, aldrig att dim gör det.
 //   · Den SEMANTISKA OMSÖKNINGEN (två scan_plan i samma ström). Den kräver en
 //     fråga som ger noll ordträffar men ändå har ett ämnesmässigt närliggande
 //     transkript, vilket fejkens tre meningar inte räcker till. Backend har
@@ -161,7 +186,9 @@ test("Fråga (/next/): fråge-läget är default och körknappen är aktiv", asy
   expect(errors, errors.join("\n")).toEqual([]);
 });
 
-test("Fråga (/next/): genomsökningen visar serverns ordning och äkta träffantal", async ({ page }) => {
+test("Fråga (/next/): genomsökningen visar äkta träffantal och utrullningen når alla kort", async ({
+  page,
+}) => {
   const errors = [];
   failOnConsoleError(page, errors);
 
@@ -180,6 +207,23 @@ test("Fråga (/next/): genomsökningen visar serverns ordning och äkta träffan
   await expect(teater.locator('li.ruta[data-scan="traff"]')).toHaveCount(FIXTUR.length, {
     timeout: 20_000,
   });
+
+  // EXAKT antal, inte bara "> 0". Ordet "bråk" träffar en gång i fejkens
+  // namnförslag ("Bråk och procent — introduktion", suggest_title stubbad i
+  // serve_test_app.py) och en gång i transkriptet — 2 per lektion, samma för
+  // alla tre eftersom alla delar segment. Ett kort som visar "● 1 träff"
+  // (t.ex. bara transkriptet, inte namnet, räknat) ska falla här.
+  await expect(teater.locator('li.ruta[data-scan="traff"] span.etikett')).toHaveText([
+    "● 2 träffar",
+    "● 2 träffar",
+    "● 2 träffar",
+  ]);
+  // Räknaren räknar ANTAL LEKTIONER med träff, inte summan av träffarna —
+  // alla tre lektionerna har träff, så den blir 3 oavsett att varje kort
+  // visar "2 träffar". "hittills" hänger på att svaret fortfarande strömmar
+  // vid det här laget (fejksvaret sover 1,5 s före första token, långt efter
+  // att utrullningen — golv 60 ms/kort — hunnit avslöja alla tre korten).
+  await expect(teater.locator("span.antal")).toHaveText("3 ordträffar hittills");
   await expect(teater.locator("p.ticker")).toContainText("Genomsökte 3 inspelningar");
 
   expect(errors, errors.join("\n")).toEqual([]);
@@ -206,15 +250,22 @@ test("Fråga (/next/): svaret strömmar in och sifferkällan blir en markör", a
   await expect(svar.locator("li.kalla")).toHaveCount(1);
   await expect(svar).toContainText("migreras i en senare plan");
 
-  // Läsbordet efter done.
+  // Läsbordet efter done: SINGULAR ("denna", inte "dessa 3") — det är den
+  // enda assertionen som gör Genomsokning.svelte:s citatfiltrering
+  // meningsfull. bordet filtreras till bara den citerade källan (1 av 3
+  // djupt lästa), så en bugg som visade alla tre ("dessa 3") ska falla här.
+  // Åt-sidan-räkningen (2 av 3 ordträffar) hänger på samma filtrering.
   await expect(vy.locator("section.genomsokning p.bordsrubrik")).toContainText(
-    "Svaret bygger på",
+    "Svaret bygger på denna",
+  );
+  await expect(vy.locator("section.genomsokning p.bordsrubrik .aside")).toHaveText(
+    "… och la 2 ordträffar åt sidan",
   );
 
   expect(errors, errors.join("\n")).toEqual([]);
 });
 
-test("Fråga (/next/): kartotekets kort lyfts och dämpas efter serverns träffar", async ({ page }) => {
+test("Fråga (/next/): kartotekets kort lyfts efter serverns träffar", async ({ page }) => {
   const errors = [];
   failOnConsoleError(page, errors);
 
@@ -226,16 +277,19 @@ test("Fråga (/next/): kartotekets kort lyfts och dämpas efter serverns träffa
   await stallFraga(page, vy, ORD);
   await expect(vy.locator("section.svar span.cite")).toHaveCount(1, { timeout: 20_000 });
 
-  // Efter done styr done.result.sources: de citerade lyfts, resten dämpas.
-  // Summan måste vara alla tre — annars har utrullningen inte nått klart.
+  // Efter done styr done.result.sources — ALLA DJUPT LÄSTA lyfts, inte bara
+  // de CITERADE (Svar.svelte:s rubrik "Svar — 1 källa" räknar en annan,
+  // smalare mängd: det modellen faktiskt hänvisar till i löptexten).
+  //
+  // DIM TÄCKS INTE HÄR (se filhuvudets TÄCKS INTE): fixturens tre lektioner
+  // delar samma fejktranskript, så alla tre får ordträff och blir källor
+  // (done.result.sources = alla 3) — det finns ingen fjärde lektion utan
+  // träff som kunde blivit dim. dampade asserteras därför till EXAKT 0, inte
+  // "> 0 av misstag", så testet är ärligt om vad det faktiskt visar.
   const lyfta = vy.locator('div.hylsa[data-stage="lift"]');
   const dampade = vy.locator('div.hylsa[data-stage="dim"]');
-  await expect(vy.locator("div.hylsa[data-stage]")).toHaveCount(FIXTUR.length);
-  expect(
-    (await lyfta.count()) + (await dampade.count()),
-    "Varje avslöjat kort ska ha antingen lift eller dim",
-  ).toBe(FIXTUR.length);
-  expect(await lyfta.count(), "Minst ett kort ska vara lyft").toBeGreaterThan(0);
+  await expect(lyfta).toHaveCount(FIXTUR.length);
+  await expect(dampade).toHaveCount(0);
 
   // Och en rensning tar bort stadierna igen.
   await vy.locator("section.genomsokning").getByRole("button", { name: /Ny fråga/ }).click();
