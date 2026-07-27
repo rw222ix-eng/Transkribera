@@ -4,7 +4,7 @@
   import { weekInfo } from '../week.js';
   import Lektionskort from './Lektionskort.svelte';
 
-  let { lektioner, onRedigera, onRadera } = $props();
+  let { lektioner, onRedigera, onRadera, stadier = new Map() } = $props();
 
   const grupper = $derived.by(() => {
     const karta = new Map();
@@ -34,7 +34,19 @@
     </div>
     <div class="grid">
       {#each g.kort as l (l.id)}
-        <Lektionskort {l} {onRedigera} {onRadera} />
+        <!--
+          OMSLAG PER KORT, inte ett attribut på Lektionskort: den filen ägs av
+          den parallella arbetsströmmen och har varken rest-props eller
+          attributspridning, så attributet går inte att skicka in utifrån.
+
+          Griden bryts inte. grid-template-columns definierar SPÅR, inte vilka
+          barn som är item, så omslaget byter bara ut vem som är grid-item —
+          spårantal och spårbredder är oförändrade, och align-items: start gör
+          omslaget exakt lika högt som kortet.
+        -->
+        <div class="hylsa" data-stage={stadier.get(l.id) || null}>
+          <Lektionskort {l} {onRedigera} {onRadera} />
+        </div>
       {/each}
     </div>
   </div>
@@ -73,5 +85,23 @@
     grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
     gap: 12px;
     align-items: start;
+  }
+
+  .hylsa {
+    border-radius: 4px;
+    transition: opacity 0.42s ease, box-shadow 0.42s ease;
+  }
+  /* Dämpningen bärs av opacitet ensam. Gamla appens saturate(.5) och
+     scale(.965) följer inte med — se specens avsnitt 5. */
+  .hylsa[data-stage='dim'] { opacity: 0.34; }
+  /* LYFTET är en DUBBEL SKUGGA, inte border-color: omslaget har ingen ram att
+     färga, och en genomskinlig ram hade kostat 2px i varje riktning i ett tätt
+     rutnät. Kortets overflow: hidden klipper ingenting, eftersom skuggan ligger
+     på FÖRÄLDERN. Ingen floaty-animation. */
+  .hylsa[data-stage='lift'] {
+    box-shadow: 0 0 0 1px var(--accent), 0 0 0 4px var(--accent-weak);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .hylsa { transition: none; }
   }
 </style>

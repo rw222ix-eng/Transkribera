@@ -129,6 +129,38 @@
       ? insp.lessons.filter((l) => String(l.datum || '').slice(0, 7) === insp.filterMonth)
       : insp.lessons,
   );
+
+  // STADIEKARTAN räknas EN gång per ändring, inte per kort. En stadie-funktion
+  // som läser sok-fälten inuti {#each} hade blivit O(kort × ändringar) — och
+  // ändringarna kommer var 60-150 ms under utrullningen.
+  //
+  // STADIET ÄR SERVERNS, inte klientens. Prioritetsordningen är
+  // done.sources → deep_read → scan_result > 0, precis som gamla appen
+  // (app.js:3392-3397), vars kommentar är uttrycklig: "Ingen klientmatchning
+  // på frågans ord längre — den markerade småordsträffar."
+  //
+  // Ett kort som ännu inte avslöjats av utrullningen får INGET stadie: det är
+  // hela koreografin, att markeringen växer fram i takt med genomsökningen.
+  const stadier = $derived.by(() => {
+    const karta = new Map();
+    const plan = sok.skanPlan;
+    if (!plan || !plan.length) return karta;
+
+    const traffar = new Set();
+    if (sok.kallor.length) {
+      for (const s of sok.kallor) traffar.add(s.lesson_id);
+    } else if (sok.laser.length) {
+      for (const s of sok.laser) traffar.add(s.lesson_id);
+    } else {
+      for (const p of plan) if ((sok.skanTraffar[p.key] || 0) > 0) traffar.add(p.key);
+    }
+
+    const antal = sok.fragar ? Math.min(sok.skanVisade, plan.length) : plan.length;
+    for (const p of plan.slice(0, antal)) {
+      karta.set(p.key, traffar.has(p.key) ? 'lift' : 'dim');
+    }
+    return karta;
+  });
 </script>
 
 <section class="view">
@@ -242,7 +274,12 @@
   {#if sok.traffar}
     <Traefflista />
   {:else}
-    <Kartotek lektioner={synliga} onRedigera={startaRedigering} onRadera={fragaRadera} />
+    <Kartotek
+      lektioner={synliga}
+      onRedigera={startaRedigering}
+      onRadera={fragaRadera}
+      {stadier}
+    />
 
     <!--
       TVÅ TOMTILLSTÅND, MEDVETET ÅTSKILDA. Gamla vyn skiljer på dem
