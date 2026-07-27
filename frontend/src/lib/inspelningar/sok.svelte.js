@@ -72,4 +72,6 @@ export const sok = $state({
   // kalenderhändelse.
   calAnsluten: null,
   calKlientKlar: false,
+  calSetupOppen: false,  // det guidade uppsättningsfönstret
+  calUpptagen: false,    // ett kalenderanrop är i luften
 });

@@ -515,3 +515,125 @@ test("Fråga (/next/): en följdfråga får ett eget svar", async ({ page }) => 
 
   expect(errors, errors.join("\n")).toEqual([]);
 });
+
+/* ---- Kalenderkedjan -------------------------------------------------------
+   Fejkserverns fake_answer skickar ALDRIG en [KALENDERFÖRSLAG]-rad, så kedjan
+   går inte att nå genom den vanliga vägen. Testerna nedan injicerar därför en
+   egen SSE-kropp med page.route. Det som prövas är klientens tolkning och
+   visning — inte serverns förmåga att producera raden, som har egen täckning i
+   backend. */
+
+/** Bygger en SSE-kropp av samma form som app/web/sse.py skickar. */
+function sseKropp(events) {
+  return events.map((e) => `data: ${JSON.stringify(e)}\n\n`).join("");
+}
+
+const KALLA = {
+  lesson_id: 1,
+  history_id: "h1",
+  name: "lektion.mp3",
+  group: "9A",
+  course: "Matematik 2b",
+  datum: "2026-04-02",
+};
+
+/** Rutar /api/search/ask till en egen ström som slutar med `svarstext`. */
+async function stubbaStrom(page, svarstext) {
+  await page.route("**/api/search/ask", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "text/event-stream",
+      body: sseKropp([
+        { type: "scan_plan", total: 1, items: [{ key: 1, name: "lektion.mp3" }] },
+        { type: "scan_result", key: 1, hits: 2 },
+        { type: "deep_read", sources: [KALLA] },
+        { type: "token", text: svarstext },
+        { type: "done", result: { text: svarstext, sources: [KALLA] } },
+      ]),
+    }),
+  );
+}
+
+test("Fråga (/next/): ett kalenderförslag blir en granskningsbar ruta", async ({ page }) => {
+  const errors = [];
+  failOnConsoleError(page, errors);
+
+  await page.route("**/api/calendar/status", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ connected: true, client_ready: true }),
+    }),
+  );
+  const FORSLAG =
+    'Provet ligger på fredag [1].\n[KALENDERFÖRSLAG] {"title":"Prov om bråk","date":"2026-09-04","time":"09:10","desc":"Kapitel 3"}';
+  await stubbaStrom(page, FORSLAG);
+
+  const vy = await oppnaInspelningar(page);
+  await stallFraga(page, vy, ORD);
+
+  const ruta = vy.locator("section.forslag");
+  await expect(ruta).toBeVisible({ timeout: 20_000 });
+  await expect(ruta.getByLabel("Titel")).toHaveValue("Prov om bråk");
+  await expect(ruta.getByLabel("Anteckning")).toHaveValue("Kapitel 3");
+  // Modellens tid nollutfylls: "9:10" i JSON blir "09:10" i väljaren.
+  await expect(ruta.locator("button.nar")).toContainText("09:10");
+
+  // DEN MASKINLÄSBARA RADEN FÅR ALDRIG SYNAS — varken i svaret eller någon
+  // annanstans i vyn.
+  await expect(vy).not.toContainText("KALENDERFÖRSLAG");
+  await expect(vy.locator("section.svar p.text")).toContainText("Provet ligger på fredag");
+
+  // Och först ett medvetet klick skickar något ut ur maskinen.
+  let skickat = null;
+  await page.route("**/api/calendar/event", (route) => {
+    skickat = JSON.parse(route.request().postData() || "{}");
+    return route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
+  });
+  await ruta.getByRole("button", { name: "Lägg till" }).click();
+
+  await expect(ruta).toContainText("Händelsen är tillagd i Google Kalender");
+  expect(skickat.title).toBe("Prov om bråk");
+  expect(skickat.start).toBe("2026-09-04T09:10:00");
+
+  await page.unroute("**/api/search/ask");
+  await page.unroute("**/api/calendar/event");
+  await page.unroute("**/api/calendar/status");
+  expect(errors, errors.join("\n")).toEqual([]);
+});
+
+test("Fråga (/next/): klargörande frågor blir en dialog som går att hoppa över", async ({ page }) => {
+  const errors = [];
+  failOnConsoleError(page, errors);
+
+  const FRAGOR =
+    'Ett par frågor först.\n[KALENDERFRÅGOR] {"fragor":[{"q":"Hur långt ska provet vara?","alternativ":["60 min","90 min"]}]}';
+  await stubbaStrom(page, FRAGOR);
+
+  const vy = await oppnaInspelningar(page);
+  await stallFraga(page, vy, ORD);
+
+  // Native <dialog> — ligger i top-layer, utanför .pane-avgränsningen.
+  const dialog = page.locator("dialog.fragor");
+  await expect(dialog).toBeVisible({ timeout: 20_000 });
+  await expect(dialog).toContainText("Hur långt ska provet vara?");
+  await expect(dialog.getByRole("button", { name: "60 min" })).toBeVisible();
+
+  // Taggen får inte läcka ut i svarstexten.
+  await expect(vy).not.toContainText("KALENDERFRÅGOR");
+
+  // Ett val markeras, och ett andra klick ångrar det.
+  const val = dialog.getByRole("button", { name: "90 min" });
+  await val.click();
+  await expect(val).toHaveAttribute("aria-pressed", "true");
+  await val.click();
+  await expect(val).toHaveAttribute("aria-pressed", "false");
+
+  // "Hoppa över" ska alltid finnas: läraren får aldrig tvingas svara för att
+  // få en kalenderhändelse.
+  await dialog.getByRole("button", { name: "Hoppa över" }).click();
+  await expect(dialog).toBeHidden();
+
+  await page.unroute("**/api/search/ask");
+  expect(errors, errors.join("\n")).toEqual([]);
+});

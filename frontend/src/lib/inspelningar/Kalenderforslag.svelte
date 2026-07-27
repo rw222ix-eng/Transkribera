@@ -15,6 +15,7 @@
     avfardaHandelse,
     laggTillHandelse,
     anslutCal,
+    oppnaCalSetup,
   } from './sokActions.js';
 
   const dagar = evDagar();
@@ -91,14 +92,9 @@
           <button class="lank" onclick={anslutCal}>Logga in med Google</button>
         </p>
       {:else if sok.calAnsluten === false && !sok.calKlientKlar}
-        <!--
-          Det guidade uppsättningsfönstret (OAuth-klientfilen, Google Cloud
-          Console) är inte porterat. Samma hållning som resten av migrationen:
-          säg var läraren kan gå i stället för att bygga en halv guide.
-        -->
         <p class="notis">
-          Google Kalender är inte uppsatt på den här datorn. Uppsättningen görs
-          i den gamla appen; den migreras i en senare plan.
+          Google Kalender är inte uppsatt på den här datorn.
+          <button class="lank" onclick={oppnaCalSetup}>Koppla kalendern</button>
         </p>
       {/if}
 

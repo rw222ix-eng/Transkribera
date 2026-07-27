@@ -2,7 +2,14 @@ import { getJSON, streamPost } from '../api.js';
 import { insp } from './stores.svelte.js';
 import { sok } from './sok.svelte.js';
 import { peekTermer, valjRader, tidsEtikett } from './kallmodal.js';
-import { stripKalendertagg, tolkaForslag, tolkaFragor, startTid } from './kalender.js';
+import {
+  stripKalendertagg,
+  tolkaForslag,
+  tolkaFragor,
+  startTid,
+  arKalenderkommando,
+  tolkaKommando,
+} from './kalender.js';
 
 // EGEN räknare, aldrig delad med kartotekets laddToken: två snabba sökningar i
 // följd kan annars landa i fel ordning och skriva ett äldre resultat över ett
@@ -401,6 +408,24 @@ export function stangKalla() {
 export async function stallFoljdfraga() {
   const q = sok.foljdInput.trim();
   if (!q || sok.fragar || sok.foljdSkriver) return;
+
+  // KORT ÄNDRINGSKOMMANDO mot ett befintligt förslag tolkas LOKALT, utan
+  // LLM-anrop: "flytta till onsdag 14:30" behöver ingen språkmodell, och en
+  // rundtur dit tar sekunder för något som ska kännas omedelbart.
+  //
+  // En TOM patch betyder att regexen inte förstod. Då faller frågan igenom som
+  // en vanlig arkivsökning — att svara med hjälptexten på en riktig fråga vore
+  // värre än att bara söka. Gamla appen gör samma val (app.js:1905-1916).
+  if (arKalenderkommando(sok.handelse, q)) {
+    const { patch, svar } = tolkaKommando(sok.handelse, q);
+    if (Object.keys(patch).length) {
+      sok.handelse = { ...sok.handelse, ...patch };
+      sok.foljdfragor = [...sok.foljdfragor, { q, a: svar, skriver: false }];
+      sok.foljdInput = '';
+      return;
+    }
+  }
+
   const token = ++foljdToken;
   const index = sok.foljdfragor.length;
   sok.foljdfragor = [...sok.foljdfragor, { q, a: '', skriver: true }];
@@ -474,13 +499,66 @@ export async function laddaCalStatus() {
  * fetchen aldrig, och utan den raden hade knappen varit låst till omstart.
  */
 export async function anslutCal() {
-  if (sok.calAnsluten) return;
+  if (sok.calAnsluten || sok.calUpptagen) return;
+  sok.calUpptagen = true;
+  insp.fel = '';
+  insp.felArt = '';
   try {
-    await fetch('/api/calendar/connect', { method: 'POST' });
+    const r = await fetch('/api/calendar/connect', { method: 'POST' });
+    const j = await r.json().catch(() => null);
+    sok.calAnsluten = !!(j && j.connected);
+    if (sok.calAnsluten) sok.calSetupOppen = false;
+    else if (j && j.error) insp.fel = j.error;
   } catch {
-    /* status hämtas om nedan oavsett */
+    sok.calAnsluten = false;
   } finally {
+    sok.calUpptagen = false;
+  }
+}
+
+/** Öppnar det guidade uppsättningsfönstret och hämtar färsk status. */
+export function oppnaCalSetup() {
+  sok.calSetupOppen = true;
+  laddaCalStatus();
+}
+
+export function stangCalSetup() {
+  sok.calSetupOppen = false;
+  sok.calUpptagen = false;
+}
+
+/** Öppnar Google Cloud Console i lärarens webbläsare. */
+export function oppnaGoogleConsole() {
+  fetch('/api/calendar/open-console', { method: 'POST' }).catch(() => {});
+}
+
+/**
+ * Installerar OAuth-klientfilen läraren valt.
+ *
+ * Filen POSTas RÅ, inte som JSON-kropp: endpointen läser `await req.body()`
+ * och validerar innehållet själv (server.py:1363-1379). Den avvisar kroppar
+ * över 64 kB innan de buffras.
+ */
+export async function installeraKlientfil(fil) {
+  if (!fil || sok.calUpptagen) return;
+  sok.calUpptagen = true;
+  insp.fel = '';
+  insp.felArt = '';
+  try {
+    const text = await fil.text();
+    const r = await fetch('/api/calendar/client-secret', { method: 'POST', body: text });
+    const j = await r.json().catch(() => null);
+    if (!r.ok) {
+      insp.fel = (j && j.error) || 'Kunde inte installera klientfilen.';
+      return;
+    }
+    insp.fel = 'Klientfilen är installerad.';
+    insp.felArt = 'info';
     await laddaCalStatus();
+  } catch {
+    insp.fel = 'Kunde inte läsa klientfilen.';
+  } finally {
+    sok.calUpptagen = false;
   }
 }
 

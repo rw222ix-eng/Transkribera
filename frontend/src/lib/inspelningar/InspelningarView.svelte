@@ -28,6 +28,7 @@
   import RedigeraLektion from './RedigeraLektion.svelte';
   import Kallmodal from './Kallmodal.svelte';
   import Kalenderfragor from './Kalenderfragor.svelte';
+  import Kalendersetup from './Kalendersetup.svelte';
   import { nav } from '../shell/nav.svelte.js';
 
   // Raderingsbekräftelsen är ett NATIVE <dialog>, byggt precis som
@@ -436,6 +437,9 @@
 
   <!-- Modellens klargörande frågor innan en kalenderhändelse skapas. -->
   <Kalenderfragor />
+
+  <!-- Det guidade fönstret för att koppla Google Kalender. -->
+  <Kalendersetup />
 </section>
 
 <style>
