@@ -21,6 +21,7 @@
   import Terminstrender from './Terminstrender.svelte';
   import Sokfalt from './Sokfalt.svelte';
   import Traefflista from './Traefflista.svelte';
+  import Genomsokning from './Genomsokning.svelte';
   import { sok } from './sok.svelte.js';
   import { rensaSokning } from './sokActions.js';
   import RedigeraLektion from './RedigeraLektion.svelte';
@@ -217,12 +218,7 @@
     en fotnot. Kartoteket lämnas kvar under raden, eftersom ett lägesbyte
     inte ska gömma lärarens lektioner.
   -->
-  {#if sok.lage === 'ask'}
-    <p class="tomt">
-      Att fråga arkivet med egna ord migreras i nästa plan. Tills dess finns
-      det i den gamla appen.
-    </p>
-  {/if}
+  <Genomsokning />
 
   <!--
     EN YTA I TAGET. Medan en sökning är aktiv renderas träfflistan i STÄLLET
