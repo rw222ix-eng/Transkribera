@@ -16,8 +16,9 @@ export const insp = $state({
   fel: '',              // vyns statusrad — fel OCH neutrala besked
   // 'info' | ''. Styr om statusraden målas som fel (--bad) eller neutral
   // (--ink-3) — speglar tr.fileNoteArt i frontend/src/lib/transkribera/
-  // stores.svelte.js. Bara exportens framgångsgren sätter 'info'; allt annat
-  // som skriver insp.fel nollställer den, så ett kvarstående positivt besked
+  // stores.svelte.js. Två ställen sätter 'info' (exportens framgångsgren och,
+  // sedan Task 2, stallFrågas done-gren i sokActions.js); allt annat som
+  // skriver insp.fel nollställer den, så ett kvarstående positivt besked
   // inte kan färga ett senare RIKTIGT fel som neutralt.
   felArt: '',
 

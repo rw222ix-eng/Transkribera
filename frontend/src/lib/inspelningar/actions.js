@@ -502,8 +502,9 @@ export async function markeraKlar(insightId) {
  * är gemensam, och ett gammalt besked hade annars stått kvar och lästs som om
  * det gällde exporten.
  *
- * insp.felArt sätts till 'info' på FRAMGÅNGSGRENEN — den enda platsen i hela
- * vyn. Exporten är beskedet "N poster sparade i …", inte ett fel, och innan
+ * insp.felArt sätts till 'info' på FRAMGÅNGSGRENEN — ett av två ställen i
+ * vyn sedan Task 2, det andra är stallFrågas done-gren (sokActions.js).
+ * Exporten är beskedet "N poster sparade i …", inte ett fel, och innan
  * den här skillnaden fanns målades den ovillkorligen i --bad (statusradens
  * felfärg) trots att ingenting gått fel. Alla andra grenar (fel och det inledande
  * nollställandet) sätter '' — ett kvarstående 'info' hade annars färgat ett
