@@ -46,6 +46,14 @@ function sattMedia(sokvag) {
   // Beskedet visas BARA för format som faktiskt måste transkodas. En mp4
   // returneras oförändrad, och "Förbereder videon …" hade blinkat till falskt.
   tk.forbereder = video && masteTranskodas(sokvag);
+  // Sista segmentets slut är en ärlig undre gräns för längden, och den enda
+  // vi har innan mediet svarat. Appens EGNA inspelningar är webm från
+  // MediaRecorder, som skriver containern utan Duration-element — Chromium
+  // rapporterar då Infinity, och .webm serveras rått (server.py:34-36) så
+  // ingen omkodning lagar headern. Utan seedningen blir langd permanent 0,
+  // och då returnerar spolaTill() tidigt: radklick och markörer slutar
+  // fungera för just de filer läraren själv spelat in.
+  tk.langd = tk.segment.length ? (tk.segment[tk.segment.length - 1].end ?? 0) : 0;
 }
 
 /** Allt utom hastigheten, som medvetet följer med till nästa transkript. */
@@ -80,7 +88,14 @@ export function oppnaTranskript({ historyId, namn, segment, mediaPath }) {
   nollstall();
   tk.historyId = historyId || null;
   tk.namn = namn || '';
-  tk.segment = Array.isArray(segment) ? segment : [];
+  // Kopiera, dela inte referensen: segment kommer från guidens tr.resultSegment
+  // (Korning.svelte:156), och båda är $state-proxyer — Sveltes proxy() returnerar
+  // en redan proxad array oförändrad, så utan kopian blir tk.segment === den
+  // arrayen. Ett lyckat sparande gör tk.segment = kropp (en NY array, se
+  // avslutaRedigering), vilket alltså aldrig når guidens store: läraren som
+  // öppnar transkriptet ur guiden igen efter ett sparande får den oredigerade
+  // texten tillbaka.
+  tk.segment = Array.isArray(segment) ? segment.map((s) => ({ ...s })) : [];
   sattMedia(mediaPath);
   tk.open = true;
   laddaMarkorer();
@@ -163,6 +178,17 @@ function mediaFel() {
 }
 
 /**
+ * Ett avbrutet play() är inte ett trasigt medium. AbortError kommer när en
+ * pause() eller load() hinner emellan — dubbelklick på Spela, mellanslag
+ * direkt efter ett radklick, Stäng direkt efter start. Utan skillnaden
+ * degraderas en fullt fungerande video till ljud med ett besked som ljuger.
+ */
+function spelaFel(e) {
+  if (e && e.name === 'AbortError') return;
+  mediaFel();
+}
+
+/**
  * Binder mediaelementet. Anropas ur en use:-action, så den kallas med null när
  * elementet rivs — bland annat när videofallbacken byter <video> mot <audio>.
  *
@@ -178,7 +204,13 @@ export function bindMedia(el) {
   el.playbackRate = tk.hastighet;
   lyssnare = [
     ['timeupdate', () => { if (!tk.drar) tk.tid = el.currentTime; }],
-    ['durationchange', () => { tk.langd = Number.isFinite(el.duration) ? el.duration : 0; }],
+    // Skriver BARA över den seedade längden när mediet faktiskt levererar en
+    // användbar siffra. Ett ogiltigt svar (0 eller Infinity, se sattMedia) ska
+    // lämna den ärliga undre gränsen från transkriptet orörd, inte nollställa
+    // den och låsa spolningen igen.
+    ['durationchange', () => {
+      if (Number.isFinite(el.duration) && el.duration > 0) tk.langd = el.duration;
+    }],
     ['loadedmetadata', () => {
       tk.forbereder = false;
       if (atergaTill === null) return;
@@ -198,12 +230,16 @@ export function bindMedia(el) {
 }
 
 /**
- * Släpper elementet — men BARA om det fortfarande är det bundna. Vid ett
- * grenbyte (<video> → <audio> i videofallbacken) monterar Svelte den NYA
- * grenen innan den gamla förstörs, så den gamla nodens destroy kommer efter
- * att efterföljaren redan bundit sig. Ett ovillkorligt bindMedia(null) hade
- * då rivit efterföljarens lyssnare och nollat mediaEl — spelaren blev en tyst
- * no-op precis i det läge fallbacken finns för att rädda.
+ * Släpper elementet — men BARA om det fortfarande är det bundna.
+ *
+ * RÄTTELSE (spårad i Sveltes källa, inte antagen): vid ett grenbyte
+ * (<video> → <audio> i videofallbacken) förstörs den GAMLA grenen SYNKRONT i
+ * samma anrop, medan use:-actionen som binder den NYA är en effekt som köas
+ * och alltså kör EFTER. Ordningen är alltså den motsatta mot vad en tidigare
+ * version av den här kommentaren påstod. Vakten är ändå rätt att ha kvar: den
+ * skyddar mot att ett ovillkorligt bindMedia(null) river en efterföljares
+ * lyssnare och nollar mediaEl om ordningen någonsin ändras — billig
+ * försäkring, oavsett vilket håll den råkar peka just nu.
  */
 export function slappMedia(el) {
   if (mediaEl !== el) return;
@@ -227,7 +263,7 @@ export function vaxlaSpelning() {
   if (mediaEl.paused) {
     // Står vi vid slutet börjar vi om, som gamla appen (app.js:2125-2127).
     if (tk.langd > 0 && mediaEl.currentTime >= tk.langd - 0.25) mediaEl.currentTime = 0;
-    mediaEl.play().catch(mediaFel);
+    mediaEl.play().catch(spelaFel);
   } else {
     mediaEl.pause();
   }
@@ -265,21 +301,31 @@ export function hoppaTillRad(index) {
   if (!s) return;
   tk.foljer = true;
   spolaTill(s.start ?? 0);
-  if (mediaEl && mediaEl.paused) mediaEl.play().catch(mediaFel);
+  if (mediaEl && mediaEl.paused) mediaEl.play().catch(spelaFel);
 }
 
+/**
+ * Fångar tk.historyId vid ingången och bail:ar om det ändrats efter varje
+ * await. tk.laggerTill ensam räcker inte: den nollställs av nollstall() så
+ * fort transkriptet stängs, medan POST:en kan fortsätta i luften. Stänger
+ * läraren och öppnar ett ANNAT transkript hinner svaret annars skriva en
+ * osann mening in i det nya transkriptets statusrad — eller, i lyckogrenen,
+ * satBesked('', 'info') som TYST rensar ett äkta fel som hör till det nya.
+ */
 export async function laggTillMarkor() {
   if (tk.laggerTill || !tk.historyId) return;
+  const id = tk.historyId;
   tk.laggerTill = true;
   try {
     // POST skrivs med rå fetch — api.js exporterar bara getJSON, postJSON och
     // streamPost, och postJSON kastar bort svaret vi måste läsa count ur.
-    const r = await fetch('/api/recordings/' + encodeURIComponent(tk.historyId) + '/markers', {
+    const r = await fetch('/api/recordings/' + encodeURIComponent(id) + '/markers', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ markers: [{ t: tk.tid }] }),
     });
     const j = await r.json().catch(() => null);
+    if (tk.historyId !== id) return;
     if (!r.ok) {
       satBesked((j && j.error) || 'Markören kunde inte sparas — kontrollera att appen körs.');
       return;
@@ -295,6 +341,7 @@ export async function laggTillMarkor() {
     satBesked('', 'info');
     await laddaMarkorer();
   } catch {
+    if (tk.historyId !== id) return;
     satBesked('Markören kunde inte sparas — kontrollera att appen körs.');
   } finally {
     tk.laggerTill = false;
@@ -305,16 +352,24 @@ export async function laggTillMarkor() {
  * KÄND GRÄNS: DELETE /api/markers/{id} svarar 200 även för okänt id
  * (server.py:1213-1220), så ett lyckat svar bevisar ingenting. Vi laddar om
  * listan efteråt och litar på den. Backenden är orörd, alltså lagas det inte här.
+ *
+ * Samma generationsvakt som laggTillMarkor, av samma skäl: DELETE:n kan
+ * fortfarande vara i luften när läraren stänger och öppnar ett annat
+ * transkript, och ett obevakat svar skulle då skriva in sig i FEL transkripts
+ * tillstånd. `id` här är markörens id, inte historyId — därför ett eget namn.
  */
 export async function taBortMarkor(id) {
+  const historyId = tk.historyId;
   try {
     const r = await fetch('/api/markers/' + encodeURIComponent(id), { method: 'DELETE' });
+    if (tk.historyId !== historyId) return;
     if (!r.ok) {
       satBesked('Markören kunde inte tas bort.');
       return;
     }
     await laddaMarkorer();
   } catch {
+    if (tk.historyId !== historyId) return;
     satBesked('Markören kunde inte tas bort.');
   }
 }
@@ -373,9 +428,12 @@ export async function avslutaRedigering() {
       body: JSON.stringify({ transcript: kropp }),
     });
     if (!r.ok) {
-      // Serverns egen text först — den är mer precis än vår reservtext.
+      // Serverns text KOMPLETTERAR vår mening i stället för att ersätta den.
+      // PATCH /api/history/{id} svarar med lösryckta fragment ("okänd post",
+      // "inget att uppdatera") — inga hela meningar — så statusraden ska inte
+      // kunna läsa enbart "okänd post".
       const j = await r.json().catch(() => null);
-      satBesked((j && j.error) || 'Kunde inte spara ändringarna.');
+      satBesked('Kunde inte spara ändringarna' + (j && j.error ? ' — ' + j.error : '.'));
       return false;
     }
     tk.segment = kropp;
