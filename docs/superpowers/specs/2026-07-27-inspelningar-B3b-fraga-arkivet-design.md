@@ -43,7 +43,7 @@ Nya filer:
 | Fil | Ändring |
 |---|---|
 | `frontend/src/lib/inspelningar/sok.svelte.js` | Fråge-tillståndet; `lage`-defaulten flippar till `'ask'`. |
-| `frontend/src/lib/inspelningar/sokActions.js` | `stallFraga`, `avbrytFraga`, utrullningens timer, `fragaToken`. |
+| `frontend/src/lib/inspelningar/sokActions.js` | `stallFraga`, `fragaFelText`, utrullningens timer, `fragaToken`. "✕ Ny fråga" använder `rensaSokning`, som nu nollställer även frågan. |
 | `frontend/src/lib/inspelningar/Sokfalt.svelte` | Körknappen och Enter grenar per läge. |
 | `frontend/src/lib/inspelningar/Kartotek.svelte` | Omslag per kort med `data-stage`; ny prop. |
 | `frontend/src/lib/inspelningar/InspelningarView.svelte` | Monterar `<Genomsokning />` och `<Svar />` i stället för B3a:s platshållarrad; skickar stadie-funktionen till `<Kartotek />`. |
@@ -140,7 +140,10 @@ Ordvalet **"ordträff"** är medvetet och kommenterat i gamla appen (`app.js:506
 
 ### "✕ Ny fråga"
 
-Knappen sitter i genomsökningens statusrad och gör samma sak som gamla appens `clearSearch` (`app.js:1789-1794`): bumpar `fragaToken`, rensar utrullningstimern, nollställer genomsökningen, svaret, källorna och felet, och tömmer fältet. Kartoteket tappar därmed sina stadier och står som vanligt igen.
+Knappen sitter i genomsökningens statusrad och anropar `rensaSokning`, som gör
+samma sak som gamla appens `clearSearch` (`app.js:1789-1794`): bumpar båda
+generationsvakterna, rensar utrullningstimern, nollställer genomsökningen,
+svaret, källorna och felet, och tömmer fältet. Kartoteket tappar därmed sina stadier och står som vanligt igen.
 
 Den är alltså **inte** en avbrytning i nätverksmening — strömmen rullar vidare hos servern tills LLM:en är klar, och GPU-låset släpps först då. En ny fråga direkt efteråt kan därför mötas av 409. Det är gamla appens beteende och en känd konsekvens av att `streamPost` saknar `AbortController`.
 

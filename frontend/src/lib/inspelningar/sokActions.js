@@ -1,4 +1,4 @@
-import { getJSON } from '../api.js';
+import { getJSON, streamPost } from '../api.js';
 import { insp } from './stores.svelte.js';
 import { sok } from './sok.svelte.js';
 
@@ -7,6 +7,169 @@ import { sok } from './sok.svelte.js';
 // nyare. Samma mönster som laddaLektioner (actions.js:17-38) och korToken
 // (transkribera/actions.js:314).
 let sokToken = 0;
+
+// EGEN räknare för frågan, skild från sokToken: ordsöket och RAG-frågan är två
+// olika hämtningar, och CLAUDE.md kräver en räknare per. streamPost saknar
+// AbortController (verifierat: ingen finns någonstans i frontenden), så en
+// övergiven ström rullar vidare hos servern — vakten filtrerar bort dess
+// events, den stoppar dem inte.
+let fragaToken = 0;
+
+// setInterval-handtaget för utrullningen. MÅSTE ägas: timern lever i modulen,
+// inte i en komponent, så en avmonterad vy städar den inte. Varje väg ut —
+// ny fråga, rensning, fel, färdig utrullning — rensar den.
+let utrullning = null;
+
+function stoppaUtrullning() {
+  if (utrullning !== null) {
+    clearInterval(utrullning);
+    utrullning = null;
+  }
+}
+
+/**
+ * Pacar utrullningen av genomsökningskorten.
+ *
+ * ÄRLIGHETSPRINCIPEN (docs/superpowers/specs/2026-07-18-arkivsok-live-progression-design.md):
+ * datan är äkta, bara tempot är regisserat. Servern skickar alla scan_result
+ * inom millisekunder (server.py:1582-1584), så träffantalen är kompletta innan
+ * första kortet avslöjats — utrullningen finns bara för att förloppet ska gå
+ * att följa med ögat.
+ *
+ * Taket är ~3,5 s oavsett arkivstorlek, golvet 60 ms per kort. Samma formel
+ * som gamla appens startScanReveal (app.js:1808-1820).
+ */
+function startaUtrullning(antal) {
+  stoppaUtrullning();
+  if (!antal) return;
+  // prefers-reduced-motion snappar fram allt direkt. Det kostar ingen
+  // information — datan finns redan — bara tempot försvinner.
+  if (typeof window !== 'undefined' && window.matchMedia
+      && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    sok.skanVisade = antal;
+    return;
+  }
+  const steg = Math.max(60, Math.min(150, Math.round(3500 / antal)));
+  utrullning = setInterval(() => {
+    if (sok.skanVisade >= antal) {
+      stoppaUtrullning();
+      return;
+    }
+    sok.skanVisade += 1;
+  }, steg);
+}
+
+/** Nollställer allt fråge-tillstånd utom fältets text. */
+function nollstallFraga() {
+  stoppaUtrullning();
+  sok.skanPlan = null;
+  sok.skanVisade = 0;
+  sok.skanTraffar = {};
+  sok.laser = [];
+  sok.notis = '';
+  sok.svar = '';
+  sok.kallor = [];
+  sok.fragaFel = '';
+}
+
+/**
+ * Översätter ett serverfel till lärartext. Tre fall, ordagrant ur gamla appen
+ * (app.js:1865-1869).
+ *
+ * ANSLUTNINGSFALLET MÅSTE NÄMNA streamPost:s EGEN STRÄNG. När strömmen tar
+ * slut utan done eller error syntetiserar api.js:90-92
+ * 'Anslutningen till servern bröts.' — den matchar varken "matchar sökningen"
+ * eller de engelska nätverksmönstren, så utan den första alternativen nedan
+ * hade den fallit till sista grenen och blivit
+ * "Kunde inte söka: Anslutningen till servern bröts."
+ */
+export function fragaFelText(message) {
+  const m = String(message || '');
+  if (/matchar sökningen/i.test(m)) {
+    return 'Ingen inspelning i arkivet verkar nämna det du frågar om. '
+      + 'Prova att formulera om frågan, eller sök på enstaka ord under Sök ord.';
+  }
+  if (/anslutningen till servern bröts|network|failed to fetch|load failed/i.test(m)) {
+    return 'Anslutningen till appen bröts mitt i sökningen. '
+      + 'Ställ frågan igen så görs ett nytt försök.';
+  }
+  return 'Kunde inte söka: ' + (m || 'okänt fel');
+}
+
+/**
+ * Ställer frågan och läser svaret ur SSE-strömmen.
+ *
+ * BODYN ÄR {q} OCH INGET MER. Gamla appen skickar alltid {q, calendar: true}
+ * (app.js:1831), vilket ger modellen kalenderförmågan — och tvingar klienten
+ * att stripCalTag varje token så en påbörjad [KALENDERFÖRSLAG]-rad aldrig
+ * blinkar förbi. Serverns default är calendar: false, så utan flaggan uppstår
+ * inga taggar och ingen strippning behövs. Kalenderkedjan får slå på den i sin
+ * egen plan.
+ *
+ * insp.fel nollställs ÖVERST, aldrig på en framgångsgren — samma invariant som
+ * B3a fastställde: nollställ när LÄRAREN AGERADE, aldrig när ett svar landade.
+ */
+export async function stallFraga() {
+  const q = sok.fraga.trim();
+  if (!q || sok.fragar) return;
+  const token = ++fragaToken;
+  nollstallFraga();
+  insp.fel = '';
+  insp.felArt = '';
+  sok.fragar = true;
+  try {
+    await streamPost('/api/search/ask', { q }, (ev) => {
+      // Vakten FÖRST: ett event från en övergiven ström får inte röra något.
+      if (token !== fragaToken) return;
+
+      if (ev.type === 'scan_plan') {
+        // KAN KOMMA TVÅ GÅNGER. Ger ordsökningen noll träffar spelar servern
+        // om hela genomsökningen med breddade söktermer (server.py:1478-1568).
+        // Utrullningen måste därför börja om från noll, inte fortsätta.
+        sok.skanPlan = ev.items || [];
+        sok.skanVisade = 0;
+        sok.skanTraffar = {};
+        startaUtrullning(sok.skanPlan.length);
+      } else if (ev.type === 'scan_result') {
+        // Ny objektidentitet, inte mutation: $state-proxyn spårar tilldelningen.
+        sok.skanTraffar = { ...sok.skanTraffar, [ev.key]: ev.hits };
+      } else if (ev.type === 'deep_read') {
+        sok.laser = ev.sources || [];
+      } else if (ev.type === 'log') {
+        sok.notis = ev.msg || '';
+      } else if (ev.type === 'token') {
+        sok.svar += ev.text || '';
+        sok.notis = '';
+      } else if (ev.type === 'done') {
+        sok.svar = (ev.result && ev.result.text) || sok.svar;
+        sok.kallor = (ev.result && ev.result.sources) || [];
+        sok.notis = '';
+        // ENDA annonseringen per fråga. Teatern renderas tyst — den uppdateras
+        // var 60-150 ms och skulle bli en flod i en skärmläsare, och vyn har
+        // redan sin enda annonserande nod.
+        //
+        // BARA om ingen annan äger statusraden. Ett DELETE-409 som landat under
+        // strömmen är viktigare än vårt klarbesked, och B3a:s invariant säger
+        // att ett svar aldrig får torka ett besked läraren inte hunnit läsa.
+        if (!insp.fel) {
+          const n = sok.kallor.length;
+          insp.fel = n === 1 ? 'Svaret är klart — 1 källa.' : `Svaret är klart — ${n} källor.`;
+          insp.felArt = 'info';
+        }
+      } else if (ev.type === 'error') {
+        // Utrullningen snappas fram så progressionen inte fryser mitt i.
+        stoppaUtrullning();
+        if (sok.skanPlan) sok.skanVisade = sok.skanPlan.length;
+        sok.fragaFel = fragaFelText(ev.message);
+        sok.notis = '';
+      }
+    });
+  } finally {
+    // Vaktad av samma skäl som vakten ovan: har en nyare fråga redan tagit över
+    // räknaren ska den här strömmens slut inte släcka dess "Söker …".
+    if (token === fragaToken) sok.fragar = false;
+  }
+}
 
 /**
  * Kör ordsökningen. Anropas från Enter i fältet och från Sök-knappen — ALDRIG
@@ -86,25 +249,30 @@ export async function korSokning() {
 }
 
 /**
- * Rensar fältet och träffarna, men lämnar läget.
+ * Rensar fältet, träffarna OCH frågan, men lämnar läget.
  *
- * Bumpar räknaren så att ett svar som redan är i luften inte får återuppliva
- * träfflistan efteråt — utan den kan läraren rensa fältet och ändå se träffar
- * dyka upp en sekund senare. soker nollställs av SAMMA skäl och hör ihop med
- * bumpen: ett svar i luften vars finally är vaktad (token !== sokToken) rör
- * aldrig soker, så utan raden nedan kan körknappen fastna i "Söker …".
+ * Bumpar BÅDA räknarna så att varken ett ordsökssvar eller en RAG-ström som
+ * redan är i luften kan skriva tillbaka något efteråt. soker och fragar
+ * nollställs av samma skäl: ett övergivet svars finally är vaktad och rör dem
+ * aldrig, så utan raderna nedan kan körknappen fastna i "Söker …".
  *
- * insp.fel/insp.felArt nollställs ÄVEN HÄR (RÄTTAT I SLUTGRANSKNINGEN, se
- * .superpowers/sdd/b3a-slutfix-report.md), av samma "läraren agerade"-skäl
- * som korSoknings tom-fråga-gren: utan raderna nedan kan ett gammalt
- * "Kunde inte söka — kontrollera att appen körs." stå kvar sedan kartoteket
- * redan kommit tillbaka.
+ * Det här är också "✕ Ny fråga". Notera att den INTE är en avbrytning i
+ * nätverksmening: streamPost saknar AbortController, så strömmen rullar vidare
+ * hos servern tills LLM:en är klar och GPU-låset släpps först då. En ny fråga
+ * direkt efteråt kan därför mötas av 409. Gamla appen beter sig likadant.
+ *
+ * insp.fel/insp.felArt nollställs av samma "läraren agerade"-skäl som i
+ * korSokning: utan det kan ett gammalt besked stå kvar sedan ytan det gällde
+ * redan försvunnit.
  */
 export function rensaSokning() {
   sokToken++;
+  fragaToken++;
+  nollstallFraga();
   sok.fraga = '';
   sok.traffar = null;
   sok.soker = false;
+  sok.fragar = false;
   insp.fel = '';
   insp.felArt = '';
 }

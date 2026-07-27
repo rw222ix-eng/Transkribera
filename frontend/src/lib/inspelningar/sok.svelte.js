@@ -4,11 +4,11 @@
 // åt. Filen ligger platt i samma mapp som resten — kodbasen har ingen nästlad
 // modulmapp, och B3a är inte rätt tillfälle att införa en.
 export const sok = $state({
-  // 'keyword' = ordsök, enda läget som fungerar i B3a.
-  // 'ask' = fråga arkivet, som kommer i B3b och tills dess bara visar en
-  // förklarande rad. Gamla appens default är 'ask' (app.js:121); B3b flippar
-  // tillbaka den i SAMMA commit som läget börjar svara.
-  lage: 'keyword',
+  // 'ask' = fråga arkivet med egna ord, 'keyword' = ordsök.
+  // DEFAULTEN FLIPPADES TILL 'ask' HÄR, i samma commit som läget började
+  // svara — precis som B3a:s kommentar utlovade. Gamla appens default är
+  // också 'ask' (app.js:121).
+  lage: 'ask',
 
   fraga: '',
 
@@ -20,4 +20,21 @@ export const sok = $state({
   traffar: null,        // null | [{lesson_id, name, group, course, date, snippet, …}]
 
   soker: false,
+
+  // FRÅGE-LÄGET (B3b). null = ingen fråga ställd → ingen genomsökning
+  // renderas. Samma null-betyder-okänt-regel som resten av vyn.
+  skanPlan: null,       // null | [{key: lesson_id, name}] — SERVERNS ordning
+  skanVisade: 0,        // hur många kort utrullningen hunnit avslöja
+  skanTraffar: {},      // key → antal ordträffar, ur scan_result
+  laser: [],            // deep_read: källorna modellen faktiskt läser (≤5)
+  notis: '',            // serverns log-msg, t.ex. den semantiska omsökningen
+  svar: '',             // ackumulerad svarstext
+  kallor: [],           // done.result.sources
+  fragar: false,        // en fråga är i luften
+
+  // EGEN felkanal, skild från insp.fel. Gamla appen renderar felet SOM svaret
+  // (askAnswer = msg, app.js:1870), vilket gör ett fel omöjligt att skilja
+  // från ett kort svar. Svelte-arkivet valde medvetet ett eget fält; den
+  // förbättringen tas med.
+  fragaFel: '',
 });
