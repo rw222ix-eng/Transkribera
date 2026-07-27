@@ -1,4 +1,4 @@
-import { getJSON, postJSON } from '../api.js';
+import { getJSON, postJSON, postRaw } from '../api.js';
 import { starttidFor } from './tid.js';
 import { kal } from './stores.svelte.js';
 
@@ -79,13 +79,133 @@ export function satTid(hhmm) {
  * Jfr D18 (rekon §11): gamla appens `evPick` var ETT globalt fält delat
  * mellan lektionsoverlayen och arkivsvaret och nollställdes inte
  * konsekvent mellan dem. Här finns bara en väg (lesson), men principen är
- * densamma: allt som hör till ETT samtal nollställs när samtalet gör det.
+ * densamma: allt som hör till ETT samtal nollställs när samtalet gör det —
+ * inklusive de tre modalerna (frågekort, anteckning, Google-guide), som
+ * annars kunde stå kvar öppna in i nästa lektions samtal.
  */
 export function nollstallForslag() {
   kal.forslag = null;
   kal.ansluten = null;
   kal.klientKlar = null;
   kal.hint = '';
+  kal.fragor = null;
+  kal.anteckningOppen = false;
+  kal.guideOppen = false;
+  kal.guideBusy = false;
+}
+
+/**
+ * Väljer/avväljer ett alternativ för fråga `qi` i frågekortet. Samma
+ * alternativ igen avmarkerar — speglar calQPick (app.js:2737-2742).
+ */
+export function valjAlternativ(qi, alt) {
+  if (!kal.fragor) return;
+  const f = kal.fragor.fragor[qi];
+  if (!f) return;
+  f.val = f.val === alt ? null : alt;
+}
+
+export function satFritext(text) {
+  if (kal.fragor) kal.fragor.fritext = text;
+}
+
+/** Öppnar anteckningsmodalen. Ingen effekt utan ett förslag att redigera. */
+export function oppnaAnteckning() {
+  if (kal.forslag) kal.anteckningOppen = true;
+}
+
+export function stangAnteckning() {
+  kal.anteckningOppen = false;
+}
+
+/**
+ * Öppnar Google-guiden och hämtar färsk status — speglar openCalSetup
+ * (app.js:2591), som alltid hämtade om statusen vid öppning i stället för
+ * att lita på ett gammalt värde.
+ */
+export function oppnaGuide() {
+  kal.guideOppen = true;
+  hamtaStatus();
+}
+
+/**
+ * Stänger guiden. Nollställer guideBusy EXPLICIT: /api/calendar/connect
+ * BLOCKERAR utan timeout (rekon §7.4/§"Vad jag inte hittade") — överger
+ * läraren webbläsarflödet resolvar fetchen aldrig, och utan den här raden
+ * förblir "Logga in med Google" låst tills appen startas om. Den
+ * bakomliggande serverntråden läcker ändå (backenden är orörd denna
+ * omgång) — känd, dokumenterad begränsning, ärvd från gamla appen.
+ */
+export function stangGuide() {
+  kal.guideOppen = false;
+  kal.guideBusy = false;
+}
+
+/**
+ * Den enda ingången till kopplingen (startCalConnect i gamla appen): en
+ * OAuth-klient krävs alltid, men finns den redan (klientKlar) räcker ett
+ * klick "Logga in med Google" direkt — annars öppnas den guidade rutan.
+ */
+export function startaAnslutning() {
+  if (kal.klientKlar) loggaIn();
+  else oppnaGuide();
+}
+
+/**
+ * Kör Google-inloggningen. BLOCKERAR tills webbläsarens samtyckesflöde är
+ * klart — ingen timeout finns serverside och backenden är orörd denna
+ * omgång (bindande krav), så anropet kan i värsta fall hänga kvar tills
+ * läraren stänger guiden. Returnerar `{ok}` eller `{ok:false, fel}` —
+ * anroparen (GoogleAnslutModal) visar felet i sin EGEN statusrad.
+ */
+export async function loggaIn() {
+  kal.guideBusy = true;
+  try {
+    await postJSON('/api/calendar/connect', {});
+    kal.ansluten = true;
+    kal.klientKlar = true;
+    kal.guideBusy = false;
+    kal.guideOppen = false;
+    return { ok: true };
+  } catch (e) {
+    kal.ansluten = false;
+    kal.guideBusy = false;
+    return { ok: false, fel: (e && e.message) || 'Inloggningen misslyckades.' };
+  }
+}
+
+/**
+ * Installerar en vald OAuth-klientfil. Rå textkropp, inte JSON — se
+ * api.js:postRaw och dess kommentar om varför postJSON inte duger här.
+ */
+export async function installeraKlientfil(text) {
+  kal.guideBusy = true;
+  try {
+    await postRaw('/api/calendar/client-secret', text);
+    kal.klientKlar = true;
+    kal.guideBusy = false;
+    return { ok: true };
+  } catch (e) {
+    kal.guideBusy = false;
+    return { ok: false, fel: (e && e.message) || 'Kunde inte installera klientfilen.' };
+  }
+}
+
+/**
+ * D13 (rekon §11): gamla appens openGoogleConsole läste aldrig svaret och
+ * svalde alla fel — misslyckades webbläsaröppningen fick läraren INGEN
+ * indikation alls, trots att servern redan returnerar {ok, url}
+ * (server.py:1381-1390). Backenden är orörd, så fixen är att faktiskt LÄSA
+ * svaret: anroparen visar url:en som en reservlänk om webbläsaren inte
+ * öppnade sig själv.
+ */
+export async function oppnaGoogleConsole() {
+  try {
+    const res = await postJSON('/api/calendar/open-console', {});
+    return (res && res.url) || null;
+  } catch {
+    return null;
+  }
 }
 
 /**

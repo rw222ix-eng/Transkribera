@@ -1,7 +1,7 @@
 <script>
   import { kal } from './stores.svelte.js';
   import { evDagar, isoEtikett } from './tid.js';
-  import { avfarda, satTitel, satAnteckning, satDag, satTid, laggTillHandelse } from './actions.js';
+  import { avfarda, satTitel, satDag, satTid, laggTillHandelse, oppnaAnteckning, startaAnslutning } from './actions.js';
   import { satBesked, annonsera } from '../lektionschatt/actions.js';
 
   // Idag som ISO — undre gräns för dagväljaren. Modellens egen instruktion
@@ -11,9 +11,6 @@
 
   function paTitel(e) {
     satTitel(e.currentTarget.value);
-  }
-  function paAnteckning(e) {
-    satAnteckning(e.currentTarget.value);
   }
   function paDag(e) {
     const iso = e.currentTarget.value;
@@ -73,14 +70,19 @@
         {#if f.slutDag}<span class="slut">→ {f.slutDag}</span>{/if}
       </div>
 
-      <textarea
-        class="falt anteckningsfalt"
-        rows="2"
-        placeholder="Anteckning i kalenderposten …"
-        value={f.anteckning}
-        oninput={paAnteckning}
-        aria-label="Anteckning i kalenderposten"
-      ></textarea>
+      <!-- Klippt förhandsvisning, inte redigering direkt i boxen — klick
+           öppnar AnteckningModal.svelte, som läser OCH redigerar samma fält
+           i ett större textfält. Speglar gamla appens mönster (en klippt
+           preview öppnade läsmodalen, app.js:5397) men slår ihop läs- och
+           redigeringsläget till EN modal (bindande beslut: descModalFor
+           behövs inte när arkivsvarets väg inte portas). -->
+      <button type="button" class="anteckningsforhandsvisning" onclick={oppnaAnteckning}>
+        {#if f.anteckning}
+          <span class="klippt">{f.anteckning}</span>
+        {:else}
+          <span class="tom">Lägg till en anteckning …</span>
+        {/if}
+      </button>
 
       <p class="status" class:ansluten={kal.ansluten === true} class:ejansluten={kal.ansluten === false}>
         {#if kal.ansluten === null}
@@ -91,6 +93,14 @@
           Inte ansluten till Google Kalender{kal.hint ? ' — ' + kal.hint : ' ännu'}
         {/if}
       </p>
+      {#if kal.ansluten === false}
+        <!-- Egen knapp, inte inuti .status: statusraden är en kort versal
+             mikroetikett (var(--mono)) — en handlingstext som "Anslut
+             Google-konto" hör inte till den rösten (DESIGN.md, Mono-är-bara-
+             etiketter-regeln), så den får ligga utanför i stället för att
+             tvinga fram en font-family-override på en inline-knapp. -->
+        <button type="button" class="anslut" onclick={startaAnslutning}>Anslut Google-konto</button>
+      {/if}
 
       <div class="knappar">
         <button type="button" class="primar" disabled={f.upptagen} onclick={paLaggTill}>
@@ -172,12 +182,34 @@
     font-variant-numeric: tabular-nums;
   }
 
-  .anteckningsfalt {
+  /* Klippt förhandsvisning i stället för ett fält — en riktig knapp, inte
+     ett <p>: den ÖPPNAR AnteckningModal.svelte, en handling, inte bara
+     text. */
+  .anteckningsforhandsvisning {
+    display: block;
     width: 100%;
     box-sizing: border-box;
-    resize: vertical;
+    text-align: left;
+    background: var(--surface);
+    color: var(--ink);
+    border: 1px solid var(--line-2);
+    border-radius: 3px;
+    padding: 8px 10px;
     margin-top: 8px;
+    font-family: inherit;
+    font-size: 1.03rem;
+    line-height: 1.45;
+    cursor: pointer;
   }
+  .anteckningsforhandsvisning:focus-visible { border-color: var(--accent); }
+  .klippt {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .tom { color: var(--ink-3); }
 
   .status {
     font-family: var(--mono);
@@ -189,6 +221,22 @@
   }
   .status.ansluten { color: var(--ok); }
   .status.ejansluten { color: var(--ink-3); }
+  /* Egen knapp under statusraden — se markup-kommentaren om varför den
+     inte ligger inuti .status. Liten, tillbakadragen: det här är en
+     sekundär genväg, inte huvudhandlingen (Lägg till). */
+  .anslut {
+    display: block;
+    background: transparent;
+    color: var(--accent);
+    border: none;
+    padding: 4px 0 0;
+    margin: 0;
+    font-family: inherit;
+    font-size: 0.72rem;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    cursor: pointer;
+  }
 
   .knappar {
     display: flex;

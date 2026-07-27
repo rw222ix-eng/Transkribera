@@ -175,6 +175,12 @@ export default defineConfig({
       // vilket är just därför städningen är obligatorisk.
       // Se .superpowers/sdd/task-5-brief.md.
       //
+      // Kalender-omgång 2 lägger till e2e/kalender.spec.mjs (samma placering,
+      // samma fejkserver) som täcker frågekortet, anteckningsmodalen och
+      // deras samspel med förslagsboxen och kalenderkommandots snabbväg —
+      // se filens egen header för den fullständiga listan och vad som
+      // MEDVETET inte täcks (Google-kopplingsguiden, arkivsvarets kalenderväg).
+      //
       // FÄLLA FÖR B2-B5, skarpladdad men ännu otriggad: en CSS-räkning av
       // [role="status"] inuti den SYNLIGA Inspelningar-panelen ger nu 2 —
       // RedigeraLektion.svelte:165 plus InspelningarView.svelte:94 — medan
@@ -215,6 +221,7 @@ export default defineConfig({
         /transkript\.spec\.mjs$/,
         /transkript-prestanda\.spec\.mjs$/,
         /lektionschatt\.spec\.mjs$/,
+        /kalender\.spec\.mjs$/,
       ],
       use: { ...devices["Desktop Chrome"] },
     },

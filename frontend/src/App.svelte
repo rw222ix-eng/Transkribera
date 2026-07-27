@@ -7,6 +7,9 @@
   import ArkivView from './lib/arkiv/ArkivView.svelte';
   import TranskriptModal from './lib/transkript/TranskriptModal.svelte';
   import LektionschattModal from './lib/lektionschatt/LektionschattModal.svelte';
+  import FragekortModal from './lib/kalender/FragekortModal.svelte';
+  import AnteckningModal from './lib/kalender/AnteckningModal.svelte';
+  import GoogleAnslutModal from './lib/kalender/GoogleAnslutModal.svelte';
 </script>
 
 <AppShell />
@@ -38,6 +41,17 @@
      staplar dem i ÖPPNINGSORDNING — så transkriptvyn lägger sig ovanpå
      chatten när den öppnas därifrån, och chatten finns kvar under. -->
 <LektionschattModal />
+
+<!-- Kalenderns tre modaler (frågekort, anteckning, Google-koppling) hör
+     till lektionschatten men monteras på SAMMA nivå som den, inte inuti
+     LektionschattModal.svelte: nested <dialog>-element ärver sin förälders
+     display — en förälder som är display:none (dialog:not([open])) gör att
+     ett barn aldrig ritas ens om barnet själv har showModal() anropat på
+     sig. Som toppnivå-syskon lägger showModal() dem i top-layer oberoende
+     av lektionschattens DOM-läge, precis som TranskriptModal ovan. -->
+<FragekortModal />
+<AnteckningModal />
+<GoogleAnslutModal />
 
 <style>
   /* Explicit — så att ingen framtida display-regel på div råkar besegra

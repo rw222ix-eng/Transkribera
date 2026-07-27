@@ -136,6 +136,21 @@ export function vaxlaTank() {
 }
 
 /**
+ * Skrivradens Skicka-knapp: tar frågan ur chatt.utkast och skickar den.
+ * Själva sändningen (kalenderkommando-snabbvägen, POST:en, strömningen) är
+ * utbruten till skickaFraga() nedan, som ÄVEN anropas från
+ * kalender/FragekortModal.svelte med en konstruerad text (frågekortets
+ * "Skapa direkt"/"Skapa förslaget") — samma sändningsväg, oavsett om texten
+ * kom från skrivrutan eller frågekortet.
+ */
+export async function skicka() {
+  const fraga = chatt.utkast.trim();
+  if (!fraga || chatt.skickar || !chatt.lektionId) return;
+  chatt.utkast = '';
+  await skickaFraga(fraga);
+}
+
+/**
  * Ställer frågan och strömmar svaret.
  *
  * Två av gamla appens defekter bor här. `skickar` förblir sant till done ELLER
@@ -144,9 +159,13 @@ export function vaxlaTank() {
  * skriva till samma meddelande. Och varje event är token-vaktat; utan det kan
  * lektion A:s svar skriva över lektion B:s sista meddelande, eftersom
  * skrivningen bara kollar att tråden inte är tom (app.js:2527).
+ *
+ * Guarden nedan (`!fraga || chatt.skickar || !chatt.lektionId`) är också
+ * halva fixen för D2 (rekon §11): FragekortModal.svelte stänger ALDRIG
+ * kal.fragor förrän den vet att den här funktionen faktiskt kommer köra —
+ * se den modalens paSvara() och dess kommentar om den andra halvan.
  */
-export async function skicka() {
-  const fraga = chatt.utkast.trim();
+export async function skickaFraga(fraga) {
   if (!fraga || chatt.skickar || !chatt.lektionId) return;
 
   // Kalenderkommandon ("flytta till onsdag 14:30", "kortare titel" …)
@@ -154,6 +173,8 @@ export async function skicka() {
   // tillagt — speglar gamla appens snabbväg (app.js:2501-2521). Grinden
   // (isCal/calComplex) ligger inuti tolkaKommando själv (se kommando.js),
   // så den enda regeln här är "körs alltid, lita på ett tomt resultat".
+  // (Ett frågekortssvar når aldrig hit ändå: kal.forslag är null under
+  // STEG 1 — se tagg.js — så villkoret nedan är automatiskt falskt då.)
   if (kal.forslag && !kal.forslag.tillagd) {
     const { patch, gjort } = tolkaKommando(fraga, kal.forslag);
     if (gjort.length) {
@@ -164,7 +185,6 @@ export async function skicka() {
         { roll: 'anvandare', text: fraga, resonemang: '' },
         { roll: 'modell', text: svarText, resonemang: '' },
       ];
-      chatt.utkast = '';
       chatt.besked = '';
       chatt.beskedArt = 'fel';
       annonsera(svarText);
@@ -255,12 +275,12 @@ export async function skicka() {
         let fel = null;
         const fr = tolkaFragor(full);
         if (fr.hittad && fr.fragor) {
-          // Frågekortet är nästa omgångs modal (bindande beslut). Fram tills
-          // dess visas frågorna som text — läraren svarar i chatten som
-          // vanligt, i stället för i en väljare.
-          taggBesked = 'Några frågor innan jag skapar förslaget: '
-            + fr.fragor.map((f) => f.fraga).join(' ')
-            + ' — svara i chatten så fortsätter jag.';
+          // Frågekortet: öppnar FragekortModal.svelte med alternativ-korten.
+          // `val` (vald-state) hör inte hemma i tolkaFragor (se tagg.js) —
+          // läggs på här, vid öppning. tolkaFragor speglade tidigare bara
+          // applyCalQ:s parsning (rekon §11); denna omgång kopplar in kortet.
+          kal.fragor = { fragor: fr.fragor.map((f) => ({ ...f, val: null })), fritext: '' };
+          taggBesked = 'Några frågor innan jag skapar förslaget — svara i kortet som öppnats.';
         } else if (fr.hittad) {
           // D3: taggen fanns men gick inte att tolka. Strippas ändå (nedan)
           // — aldrig rå JSON kvar i bubblan.
