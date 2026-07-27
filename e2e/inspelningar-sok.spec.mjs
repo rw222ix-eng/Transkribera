@@ -35,12 +35,12 @@
 // Testet som tidigare hette "Fråga AI säger att den kommer senare" är
 // BORTTAGET, inte omskrivet: det prövade en placeholder-rad och en inaktiv
 // körknapp som B3b ersatte med ett levande läge. Den täckningen ägs nu av
-// B3b:s egen svit, inspelningar-fraga.spec.mjs — den här filen ska inte
-// påstå något om fråge-läget i sak.
+// B3b:s egen svit, inspelningar-fraga.spec.mjs (B3b Task 6, ÄNNU INTE
+// SKRIVEN) — den här filen ska inte påstå något om fråge-läget i sak.
 //
 // TÄCKS INTE, och det är avsiktligt:
 //   · Fråge-läget i sak. Det är levande sedan B3b och täcks av
-//     inspelningar-fraga.spec.mjs, inte här.
+//     inspelningar-fraga.spec.mjs (B3b Task 6, ÄNNU INTE SKRIVEN), inte här.
 //   · Att öppna en träff i transkriptet. Det finns inte i B3a — vyn säger i
 //     klartext att det kommer senare, och punkt 1 kontrollerar att raden står
 //     där.
