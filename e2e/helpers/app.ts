@@ -1,31 +1,15 @@
 import { Page, test, expect } from "@playwright/test";
-import * as path from "path";
 
-// The sample file the launcher copied into the isolated base/downloads.
-export function samplePath(): string {
-  const base = process.env.E2E_TEST_DATA as string;
-  return path.join(base, "downloads", "Mamma waw isolerad.wav");
-}
-
-// Make the page believe it runs inside pywebview so the genuine file-pick ->
-// transcribe flow executes. MUST be called before navigation (addInitScript).
-export async function installFakePywebview(page: Page, filePath: string) {
-  await page.addInitScript((p) => {
-    (window as any).pywebview = {
-      api: {
-        pick_files: async () => [{ path: p, name: p.split(/[\\/]/).pop() }],
-        save_file: async () => true,
-        reveal: async () => true,
-      },
-    };
-  }, filePath);
-}
-
-// Navigate to the app with the e2e flag so app.js exposes window.S (read-only
-// state access for assertions via page.evaluate).
-export async function gotoApp(page: Page) {
-  await page.goto("/?e2e=1");
-}
+// Städat i samband med att den gamla vanilla-appen (app.js/style.css/
+// index.html) pensionerades — se
+// docs/superpowers/plans/2026-07-25-cutover-till-svelte.md, Task 4, och
+// .superpowers/sdd/pensionering-report.md. Borttaget: samplePath,
+// installFakePywebview, gotoApp och transcribeSample — de drev den gamla
+// filväljar-/pywebview-baserade transkriberingsguiden och användes bara av
+// de nu raderade specarna under e2e/tests/ (utom 08-real-smoke.spec.ts, som
+// portats till Svelte-flödet och inte behöver dem: /api/sample ger en
+// riktig sökväg utan pywebview-mock). Ingen kvarvarande spec importerar
+// dem — kontrollerat före borttagningen.
 
 // Collect console errors / page errors into `errors` for an assertion at the
 // end of a test. Call right after creating the page, before navigation.
@@ -34,24 +18,6 @@ export function failOnConsoleError(page: Page, errors: string[]) {
     if (m.type() === "error") errors.push(m.text());
   });
   page.on("pageerror", (e) => errors.push(String(e)));
-}
-
-// Drive the full file-pick -> transcribe flow with the faked ASR, leaving the
-// page in the "done" result view. Shared setup for post-processing tests.
-export async function transcribeSample(page: Page) {
-  await installFakePywebview(page, samplePath());
-  await page.goto("/");
-  const removeBtns = page.getByRole("button", { name: "Ta bort från kön" });
-  for (let i = await removeBtns.count(); i > 0; i--) await removeBtns.first().click();
-  await page.getByText("klicka för att välja").click();
-  await expect(page.getByText("Mamma waw isolerad").first()).toBeVisible({ timeout: 8000 });
-  await expect(page.getByText("KB-Whisper large (sv)")).toBeVisible({ timeout: 15000 });
-  await page.getByRole("button", { name: /Starta/ }).click();
-  // Fire-and-forget (design 14 juli): wizarden öppnar Inspelningar själv när
-  // transkriberingen är klar — vänta in toasten och lektionskortet.
-  await expect(page.getByText(/Sparade? i Inspelningar/).first()).toBeVisible({ timeout: 25000 });
-  // Fejkservern AI-namnger inspelningen utifrån transkriptet.
-  await expect(page.getByText("Bråk och procent — introduktion").first()).toBeVisible({ timeout: 10000 });
 }
 
 export { test, expect };

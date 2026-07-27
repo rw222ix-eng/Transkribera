@@ -57,16 +57,6 @@ export default defineConfig({
   },
   projects: [
     {
-      name: "fake",
-      testIgnore: /(visual|real-smoke)\.spec\.ts/,
-      use: { ...devices["Desktop Chrome"], viewport: { width: 1040, height: 780 } },
-    },
-    {
-      name: "visual",
-      testMatch: /visual\.spec\.ts/,
-      use: { ...devices["Desktop Chrome"] },
-    },
-    {
       // The real smoke runs against the REAL backend. Playwright's webServer is
       // top-level only, so start the real server yourself before this project:
       //   TRANSKRIBERA_BASE_DIR=e2e/.test-data-real python e2e/serve_test_app.py --real
@@ -311,7 +301,7 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"] },
     },
   ],
-  // Default server (fake) for the fake + visual projects. reuseExistingServer
+  // Default server (fake) for the next-foundation project. reuseExistingServer
   // lets the real smoke reuse a manually-started --real server on the same port.
   webServer: {
     command: `python e2e/serve_test_app.py`,
