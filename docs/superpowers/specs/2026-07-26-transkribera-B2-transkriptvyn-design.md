@@ -551,8 +551,21 @@ frontenden, och det har gett falsk grön två gånger i den här migrationen.
 ## 13. Vad B2 medvetet inte gör
 
 - **Ingen volym.** Struken, se §3.
-- **Ingen virtualisering** utan en mätning som kräver den, och då först efter den
-  imperativa klassväxlingen i §9.
+- **Ingen virtualisering.** Mätt (task 11, 1200 rader): öppning 132 ms (gräns
+  400), en REALISTISK sökning (sökordet i 12 av 1200 rader) 12-14 ms (gräns
+  50), omritning under uppspelning ≈ 0,25 ms per timeupdate. Inget av detta
+  kräver virtualisering. **Känd gräns:** ett PATOLOGISKT värsta fall — sökordet
+  bokstavligen i VARJE rad, så att varje tangenttryck ritar om `<mark>` i hela
+  listan samtidigt — mäter 44-48 ms, med en dokumenterad regressionsgräns på
+  150 ms (inte en spärr på 50 ms; se e2e/transkript-prestanda.spec.mjs). Det
+  här skulle bara bli en riktig lärarupplevd tröghet vid transkript långt över
+  1200 rader ELLER sökord som (nästan) alltid förekommer i varje rad — annars
+  inte. Virtualisering vore dessutom dyrare här än den låter: raderna har
+  variabel höjd (radbruten text), och en `contenteditable`-rad får ALDRIG
+  avmonteras medan en lärare skriver i den (dataförlustrisk) — så den skulle
+  behöva stängas av helt under `tk.redigerar`, inte bara skalas ned. Byggs
+  bara om en framtida mätning av ett verkligt scenario (inte ett konstruerat
+  värsta fall) visar att den behövs.
 - **Ingen backend-ändring.** Markörernas 200-med-`count: 0` och `DELETE`:s
   alltid-200 är serverns kontrakt och lagas inte här.
 - **Ingen ändring i `InspelningarView.svelte`** — dess "senare"-lucka blir osann

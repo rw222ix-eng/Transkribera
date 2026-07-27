@@ -188,6 +188,18 @@ export default defineConfig({
       // (A4:s antalsspärr i transkribera-kalla.spec.mjs räknar i
       // Transkribera-panelen, som inte har någon dialog), men mönstret ärvs av
       // varje vy B2-B5 lägger till.
+      //
+      // Plan B2 Task 11 lägger till e2e/transkript-prestanda.spec.mjs — EGEN
+      // fil, inte en del av transkript.spec.mjs, trots att den bara har två
+      // tester. Skälet är tekniskt: `test.use({ trace: 'off' })` går inte att
+      // scopa till ett test.describe-block ("Cannot use({ trace }) in a
+      // describe group ... Make it top-level in the test file or put in the
+      // configuration file" — Playwrights eget felmeddelande). Filnivå var
+      // alltså enda sättet att stänga av spårning för BARA de här två
+      // mätningarna utan att släcka den för resten av transkript.spec.mjs.
+      // Spårning (`trace: "retain-on-failure"`) lägger annars 35-85 ms på
+      // mönstret "skriv ett tecken, assertera direkt" och dominerar det som
+      // ska mätas — se filens egen header för hela A/B-mätningen.
       name: "next-foundation",
       testDir: __dirname,
       testMatch: [
@@ -201,6 +213,7 @@ export default defineConfig({
         /transkribera-korning\.spec\.mjs$/,
         /transkribera-inspelning\.spec\.mjs$/,
         /transkript\.spec\.mjs$/,
+        /transkript-prestanda\.spec\.mjs$/,
       ],
       use: { ...devices["Desktop Chrome"] },
     },

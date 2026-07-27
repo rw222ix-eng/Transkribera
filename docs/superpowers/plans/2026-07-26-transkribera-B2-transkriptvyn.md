@@ -3298,120 +3298,124 @@ git commit -m "feat(transkribera): ge guiden en äkta genväg till transkriptet,
 
 ## Task 11: Prestandamätningen
 
-**Files:**
-- Modify: `e2e/transkript.spec.mjs`
-- Modify: `docs/superpowers/plans/2026-07-26-transkribera-B2-transkriptvyn.md` (skriv in de uppmätta talen)
+**Files (faktiskt ändrade — avviker från planens ursprungliga lista, se "AVVIKELSER" nedan):**
+- Modify: `e2e/transkript.spec.mjs` (netto oförändrad — se avvikelse 1)
+- Create: `e2e/transkript-prestanda.spec.mjs`
+- Modify: `e2e/playwright.config.ts` (`testMatch` för den nya filen)
+- Modify: `docs/superpowers/plans/2026-07-26-transkribera-B2-transkriptvyn.md` (den här sektionen)
+- Modify: `docs/superpowers/specs/2026-07-26-transkribera-B2-transkriptvyn-design.md` (§13, känd gräns)
 
 **Interfaces:** inga nya.
 
-- [ ] **Steg 1: Skriv mätspecen**
+**MÄTT 2026-07-27 (UTAN SPÅRNING — se avvikelse 2 för varför det tillägget behövdes):**
 
-```js
-/**
- * Mätning, inte en spärr med en gräns tagen ur luften. Målfallet är en
- * timmeslång lektion: faster-whisper ger ~3-6 s per segment, alltså ~1200.
- *
- * Fixturen skrivs med PATCH /api/history/{id} — INTE genom att ändra
- * _fake_segments() i serve_test_app.py:41-46, som alla andra specar delar.
- */
-const LANGT_ANTAL = 1200;
+- **Öppning, 1200 rader:** 130-139 ms (gräns 400 ms). Klar marginal.
+- **Realistisk sökning** (sökordet i 12 av 1200 rader — en handfull, inte
+  alla): **12-14 ms** (gräns 50 ms). Klar marginal.
+- **Patologiskt värsta fall** (sökordet bokstavligen i VARJE rad): **44-48 ms**,
+  mot en dokumenterad övre gräns på **150 ms** (≈ 3× det uppmätta talet, satt
+  som ren regressionsvakt — INTE ett krav på att just det här scenariot ska
+  kännas blixtsnabbt). Se avvikelse 1 för varför det här testet finns och
+  varför dess gräns inte är 50 ms.
+- **Omritning under uppspelning** (`class:aktuell` i `{#each}`-blocket, ~4
+  `timeupdate`/s): uppmätt via en rå CDP `Tracing`-session (se avvikelse 3)
+  till **≈ 0,05 ms Recalculate Style + ≈ 0,20 ms Layout per timeupdate**,
+  dvs. ≈ 0,25 ms totalt — cirka 10 ms över ett 10-sekunders mätfönster, 0,1 %
+  av fönstret. **Hackar inte.**
 
-async function skrivLangtTranskript(request, historyId) {
-  const segment = [];
-  for (let i = 0; i < LANGT_ANTAL; i++) {
-    segment.push({
-      start: i * 3,
-      end: i * 3 + 3,
-      text: `Rad ${i + 1}. Vi räknar vidare på bråk och procent i dagens genomgång.`,
-    });
-  }
-  const r = await request.patch("/api/history/" + historyId, { data: { transcript: segment } });
-  expect(r.ok(), `PATCH /api/history/${historyId} svarade ${r.status()}`).toBeTruthy();
-}
+**Slutsats: virtualisering byggdes INTE.** Ingen av de fyra mätningarna kräver
+den. Se §13 i designspecen för den fullständiga "vad B2 medvetet inte gör"-
+formuleringen, inklusive den kända gränsen (det patologiska fallet) och varför
+virtualisering skulle vara dyrare här än den låter (variabel radhöjd,
+`contenteditable`-rader som aldrig får avmonteras under redigering).
 
-test("ett transkript på 1200 rader öppnas och söks utan att hacka", async ({ page, request }) => {
-  const errors = [];
-  failOnConsoleError(page, errors);
+- [x] **Steg 1: Skriv mätspecen**
 
-  const lektion = (await (await request.get("/api/lessons")).json())[0];
-  await skrivLangtTranskript(request, lektion.history_id);
+Skriven enligt planen, som en spec med en `LANGT_ANTAL = 1200`-fixtur skriven
+via `PATCH /api/history/{id}` (aldrig genom att röra `_fake_segments()` i
+`serve_test_app.py`).
 
-  const vy = await oppnaInspelningar(page);
-  const t0 = Date.now();
-  await vy.getByRole("button", { name: "Öppna" }).click();
-  const ruta = page.getByRole("dialog", { name: "Transkript" });
-  await expect(ruta.locator("li.rad")).toHaveCount(LANGT_ANTAL, { timeout: 15_000 });
-  const oppnaMs = Date.now() - t0;
+**AVVIKELSE 1 — fixturens sökord är ett patologiskt värsta fall, inte en
+realistisk sökning, och testet fick sällskap av ett andra.** Planens fixturtext
+lägger ordet "procent" i **varje** av de 1200 raderna. Söker man på det ordet
+ritar varje tangenttryck om `<mark>` i hela listan samtidigt — ett scenario
+ingen lärare faktiskt stöter på (en sökning i en riktig lektion träffar en
+handfull rader, inte alla). Upptäckt när den ursprungliga 50 ms-gränsen
+föll (126-127 ms) och en imperativ klassväxling för `class:aktuell` (se
+avvikelse 3) visade sig **inte** påverka talet alls — boven satt i sökningens
+DOM-uppdatering, inte i uppspelningens. En skalningskontroll (200/600/1200
+rader ≈ 32/62/127 ms, med spårning på) bekräftade att kostnaden är genuint
+linjär i antalet rader som FAKTISKT får eller tappar sin markering — i det
+patologiska fallet är det alla 1200.
 
-  const falt = ruta.getByRole("searchbox", { name: "Sök i transkriptet" });
-  await falt.click();
-  const tider = [];
-  for (const tecken of "procent") {
-    const t = Date.now();
-    await page.keyboard.type(tecken);
-    await expect(ruta.getByTestId("transkript-traffar")).not.toHaveText("");
-    tider.push(Date.now() - t);
-  }
-  tider.sort((a, b) => a - b);
-  const median = tider[Math.floor(tider.length / 2)];
+Ägaren avgjorde: behåll värstafallstestet (med en dokumenterad övre gräns, inte
+en 50 ms-spärr — se ovan) och **lägg till** ett andra test med en REALISTISK
+fixtur (`skrivRealistisktTranskript`): var hundrade rad (12 av 1200) bär det
+unika ordet "Kvadratrot", som inte förekommer i fyllnadstexten alls. Det testet
+bär den riktiga 50 ms-gränsen.
 
-  console.log(`MÄTNING öppning=${oppnaMs} ms, sökmedian=${median} ms`);
-  expect(oppnaMs, `öppningen tog ${oppnaMs} ms`).toBeLessThan(400);
-  expect(median, `söktangenten tog ${median} ms i median`).toBeLessThan(50);
-
-  expect(errors, errors.join("\n")).toEqual([]);
-});
-```
-
-- [ ] **Steg 2: Kör mätningen**
+- [x] **Steg 2: Kör mätningen**
 
 ```bash
 cd e2e && npm run test:next-foundation -- --grep "1200 rader"
 ```
 
-Notera de två talen ur `MÄTNING`-raden.
+Se de uppmätta talen i sammanfattningen ovan.
 
-- [ ] **Steg 3: Mät omritningen under uppspelning**
+- [x] **Steg 3: Mät omritningen under uppspelning**
 
-Det här är den verkliga risken och den mätningen ingen assertion kan göra åt dig. Kör appen manuellt:
+**AVVIKELSE 2 — mätt utan `npm run dev` + Chrome DevTools Performance-panelen,
+med en dokumenterad, likvärdig metod.** Miljön hade ingen interaktiv
+skrivbordssession att peka och klicka i DevTools med. I stället drevs den
+FÄRDIGBYGGDA appen med Playwright (en riktig Chromium, samma bygge som
+`npm run test:next-foundation` testar), och en rå CDP `Tracing`-session lästes
+av — samma underliggande instrumentering som DevTools Performance-panelen
+själv bygger på (`UpdateLayoutTree` = Recalculate Style, `Layout` = Layout).
+Det är en ärlig och fullgod metod, men ingen har klickat i panelen; se
+task-11-report.md för fullständig redovisning av mätmetoden.
 
-```bash
-npm run dev
-```
+Resultat: **hackar inte** (≈ 0,25 ms per timeupdate, se sammanfattningen ovan).
+Provade ändå planens föreslagna imperativa klassväxling som experiment (kod
+identisk med briefen), byggde om, mätte om — talet för sökmediangränsen
+ändrades INTE (126 → 126 ms), vilket bekräftade att class:aktuell inte är
+boven bakom söktrögheten (se avvikelse 1). Eftersom mätningen av
+uppspelningen inte fallerar ens utan fixen, och "bygg ingenting om inget
+faller" är regeln, **återställdes experimentet** — koden i
+`frontend/src/lib/transkript/Transkriptlista.svelte` är alltså oförändrad från
+task 9.
 
-Öppna `http://127.0.0.1:5173/`, öppna det långa transkriptet, starta uppspelningen, och spela in ~10 sekunder i Chrome DevTools **Performance**. Titta på hur mycket tid som går till *Recalculate Style* och *Layout* per `timeupdate` (~4/s).
+**AVVIKELSE 3 — en ANNAN mätartefakt upptäcktes och rättades: projektets egen
+spårning.** Den realistiska sökningens första mätning (51-53 ms) föll mot
+50 ms-gränsen med bara någon millisekunds marginal. En A/B-kontroll (samma
+bygge, `--trace=off` mot standardinställning, upprepad i båda riktningarna)
+visade att `trace: "retain-on-failure"` — på för HELA projektet
+(`playwright.config.ts`) — lägger 35-85 ms på mönstret "skriv ett tecken,
+assertera direkt" genom att instrumentera varje åtgärd med skärmbilder och
+DOM-ögonblicksbilder. De spårade talen (126-133 / 51-53 ms) var alltså till
+största delen mätartefakter, inte appkostnad. Ägaren avgjorde: stäng av
+spårning för BARA de här mätningarna (`test.use({ trace: "off" })`), rör inte
+projektinställningen. Playwright tillåter dock inte det inuti ett
+`test.describe`-block ("Cannot use({ trace }) ... Make it top-level in the
+test file or put in the configuration file") — bekräftat genom att faktiskt
+försöka. Lösningen blev en EGEN fil, `e2e/transkript-prestanda.spec.mjs`, med
+`test.use({ trace: "off" })` på filnivå — samma konvention som
+`inspelningar-kartotek.spec.mjs` redan följer (helperfunktioner dupliceras per
+fil, ingen delad modul). De två mätningstesterna flyttades dit i sin helhet;
+`e2e/transkript.spec.mjs` är därför netto oförändrad (dess Task 11-tillägg
+skrevs och flyttades ut i samma arbetspass). `e2e/playwright.config.ts` fick en
+`testMatch`-rad för den nya filen, med en kommentar som förklarar varför den
+inte bara är en del av `transkript.spec.mjs`.
 
-**Om det hackar:** åtgärden är **inte** virtualisering. `class:aktuell={i === aktuell}` i `{#each}`-blocket ger varje rad en effekt som beror på `aktuell`, alltså 1200 effekter fyra gånger i sekunden. Byt den mot en imperativ klassväxling på de två rader som faktiskt ändras:
+- [x] **Steg 4: Skriv in talen i planen**
 
-```js
-  let forraAktuell = -1;
-  $effect(() => {
-    const i = aktuell;
-    if (!lista || i === forraAktuell) return;
-    lista.querySelector(`[data-rad="${forraAktuell}"]`)?.classList.remove('aktuell');
-    lista.querySelector(`[data-rad="${i}"]`)?.classList.add('aktuell');
-    forraAktuell = i;
-  });
-```
+Se sammanfattningen överst i den här sektionen — samtliga fyra mätvärden,
+gränser och slutsats.
 
-Virtualisering blir kvar som svar **bara** om steg 2:s två tal fallerar.
-
-- [ ] **Steg 4: Skriv in talen i planen**
-
-Ersätt den här raden med de uppmätta värdena, så nästa läsare vet vad som faktiskt gällde:
-
-```
-MÄTT 2026-07-26: öppning ___ ms (gräns 400), sökmedian ___ ms (gräns 50),
-omritning under uppspelning: ___ . Virtualisering: byggd / inte byggd, för att ___.
-```
-
-- [ ] **Steg 5: Kör hela grinden**
+- [x] **Steg 5: Kör hela grinden**
 
 ```bash
 python -m pytest
 ```
-
-Förväntat: `803 passed`. Backenden är orörd — faller något här har någon brutit den regeln.
 
 ```bash
 npm run check && npm run build
@@ -3421,12 +3425,14 @@ npm run check && npm run build
 cd e2e && npm run test:next-foundation
 ```
 
-Förväntat: `0 ERRORS 0 WARNINGS`, exit 0, och 32 + B2:s nya tester passed.
+Resultat i task-11-report.md (fullständig utdata).
 
-- [ ] **Steg 6: Commit**
+- [x] **Steg 6: Commit**
 
 ```bash
-git add e2e/transkript.spec.mjs docs/superpowers/plans/2026-07-26-transkribera-B2-transkriptvyn.md frontend/src/lib/transkript
+git add e2e/transkript.spec.mjs e2e/transkript-prestanda.spec.mjs e2e/playwright.config.ts \
+        docs/superpowers/plans/2026-07-26-transkribera-B2-transkriptvyn.md \
+        docs/superpowers/specs/2026-07-26-transkribera-B2-transkriptvyn-design.md
 git commit -m "test(transkript): mät 1200 rader innan virtualisering ens övervägs"
 ```
 
