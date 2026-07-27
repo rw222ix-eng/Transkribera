@@ -261,6 +261,21 @@ test("en okänd längd spärrar spolningen i stället för att gissa", async ({ 
   const errors = [];
   failOnConsoleError(page, errors);
 
+  // UPPTÄCKT UNDER B2-FIXRUNDAN (HIGH 1): sattMedia seedar sedan tk.langd ur
+  // TRANSKRIPTETS sista segments slut som en ärlig undre gräns (actions.js).
+  // Med fixturens RIKTIGA segment (sista slutar 7,6 s) hade spolningen alltså
+  // INTE längre varit spärrad här — testet skulle då mäta segmentgolvet, inte
+  // den gissningsspärr det är till för. Historikpostens transkript stubbas
+  // därför tomt, så scenariot förblir "verkligen ingen information alls",
+  // varken från mediet eller från transkriptet.
+  await page.route("**/api/history/*", async (route) => {
+    if (route.request().method() !== "GET") return route.fallback();
+    const svar = await route.fetch();
+    const post = await svar.json();
+    post.transcript = [];
+    await route.fulfill({ response: svar, body: JSON.stringify(post) });
+  });
+
   // Noll sampel ⇒ längd 0. Gamla appen faller i det läget tillbaka på
   // AUDIO_DUR = 150 s (app.js:2103, 297), så ett klick i spåret räknar mot
   // fel total och landar helt fel på en lång lektion.
@@ -273,6 +288,59 @@ test("en okänd längd spärrar spolningen i stället för att gissa", async ({ 
   await expect(spar).toHaveAttribute("aria-disabled", "true");
   await expect(spar).toHaveAttribute("tabindex", "-1");
   await expect(ruta.getByText("--:--")).toBeVisible();
+
+  expect(errors.filter((e) => !/Failed to load/.test(e)), errors.join("\n")).toEqual([]);
+});
+
+/**
+ * HIGH 1 (B2-fixrundan): appens EGNA inspelningar är webm från MediaRecorder,
+ * som skriver containern utan Duration-element — Chromium rapporterar då
+ * Infinity för el.duration, PERMANENT, inte bara innan metadata hunnit
+ * laddas. Utan segmentgolvet i sattMedia (actions.js) blir tk.langd kvar på
+ * 0 för alltid, och spolaTill() returnerar tidigt på tk.langd <= 0: radklick
+ * och markörer slutar spola helt — appens huvudfunktion, för just den
+ * vanligaste filtypen i appen.
+ *
+ * En riktig sådan .webm är opraktisk att bygga för hand här — "okänd
+ * längd"-kodningen i Matroska-containern är implementationsberoende och
+ * skulle göra testet skört. Vi skuggar i stället duration-gettern direkt på
+ * HTMLMediaElement.prototype, så att den ALLTID rapporterar Infinity oavsett
+ * vad mediet egentligen är — samma symptom som den riktiga buggen. Mediet
+ * bakom är RIKTIGT backend-ljud (fixturens sample, inget /api/media-route
+ * här), fullt spolbart, precis som en äkta inspelning: skillnaden mot den
+ * riktiga buggen är bara VARFÖR duration aldrig blir giltig, inte VAD koden
+ * ser eller hur den ska bete sig.
+ */
+test("en post vars media aldrig ger en giltig duration går ändå att spola i", async ({ page }) => {
+  const errors = [];
+  failOnConsoleError(page, errors);
+
+  await page.addInitScript(() => {
+    Object.defineProperty(HTMLMediaElement.prototype, "duration", {
+      configurable: true,
+      get() {
+        return Infinity;
+      },
+    });
+  });
+
+  const ruta = await oppnaTranskript(page);
+  const spar = ruta.getByRole("slider", { name: "Sök i uppspelningen" });
+  // Spärren i "en okänd längd spärrar spolningen …" ovan gäller INTE här:
+  // transkriptet har riktiga segment (fixturens tre), som ger en ärlig undre
+  // gräns — precis det HIGH 1 lägger till i sattMedia.
+  await expect(spar).toHaveAttribute("aria-disabled", "false");
+
+  // Radklicket är appens sätt att spola — spolaTill() är den delade
+  // implementationen bakom både rader och spåret, så det här bevisar båda.
+  const rader = ruta.locator("li.rad");
+  await rader.nth(1).locator(".text").click();
+  const t = await ruta.locator("audio").evaluate((el) => el.currentTime);
+  // SEGMENT[1] i fixturen börjar 2,4 s in (serve_test_app.py:44).
+  expect(t, "radklicket spolade inte trots att duration aldrig blev giltig").toBeCloseTo(2.4, 1);
+
+  await page.keyboard.press("Escape");
+  await expect(ruta).toBeHidden();
 
   expect(errors.filter((e) => !/Failed to load/.test(e)), errors.join("\n")).toEqual([]);
 });
@@ -591,8 +659,13 @@ test("ett misslyckat sparande ljuger inte", async ({ page }) => {
 
   await ruta.getByRole("button", { name: "Klar" }).click();
 
-  // Serverns egen text vinner över reservtexten.
-  await expect(ruta.getByTestId("transkript-statusrad")).toHaveText("kunde inte skriva till disk");
+  // Serverns text KOMPLETTERAR vår mening i stället för att ersätta den —
+  // /api/history/{id} svarar med lösryckta fragment ("okänd post", "inget
+  // att uppdatera"), inte hela meningar, så statusraden får inte kunna läsa
+  // bara "kunde inte skriva till disk" utan sammanhang.
+  await expect(ruta.getByTestId("transkript-statusrad")).toHaveText(
+    "Kunde inte spara ändringarna — kunde inte skriva till disk",
+  );
   // Ingen "Sparat"-bricka, och läget står kvar så arbetet inte går förlorat.
   await expect(ruta.locator(".sparad")).toHaveCount(0);
   await expect(ruta.getByRole("button", { name: "Klar" })).toBeVisible();
@@ -718,9 +791,15 @@ test("Enter mitt i en redigerbar rad slår inte ihop orden vid sparande", async 
   await page.keyboard.press("Escape");
   const igen = await oppnaTranskript(page);
   const text = await igen.locator("li.rad .text").nth(1).textContent();
-  expect(text, `Enter mitt i raden slog ihop orden: ${JSON.stringify(text)}`).toBe(
-    "Idag ska vi prata om bråk extra och procent.",
-  );
+  // Kodpunkterna med i felmeddelandet: en trasig vakt har visat sig ersätta
+  // radbrytningen med ett osynligt tecken (troligen U+00A0) i stället för att
+  // slå ihop orden rakt av — Expected/Received ser då visuellt identiska ut i
+  // testutdatan, och utan kodpunkterna går skillnaden inte att diagnosticera.
+  const kodpunkter = (s) => (s == null ? "null" : [...s].map((c) => c.codePointAt(0)).join(","));
+  expect(
+    text,
+    `Enter mitt i raden slog ihop orden: ${JSON.stringify(text)} (kodpunkter: ${kodpunkter(text)})`,
+  ).toBe("Idag ska vi prata om bråk extra och procent.");
 
   expect(errors, errors.join("\n")).toEqual([]);
 });

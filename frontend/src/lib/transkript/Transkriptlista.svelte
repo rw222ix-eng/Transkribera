@@ -38,6 +38,17 @@
     if (e.key === 'Enter') e.preventDefault();
   }
 
+  /**
+   * Samma skäl som Enter-vakten: ett segment är EN rad. Klistras flerradig
+   * text in bygger webbläsaren block som textContent sedan läser utan
+   * mellanrum. Vi normaliserar all vitrymd till enkla mellanslag.
+   */
+  function paKlistra(e) {
+    e.preventDefault();
+    const text = (e.clipboardData && e.clipboardData.getData('text/plain')) || '';
+    document.execCommand('insertText', false, text.replace(/\s+/g, ' '));
+  }
+
   let lista = $state(null);
 
   /**
@@ -107,6 +118,7 @@
             use:fyll={i}
             oninput={(e) => (tk.andringar[i] = e.currentTarget.textContent)}
             onkeydown={paRadTangent}
+            onpaste={paKlistra}
           ></div>
         </div>
       {:else}
