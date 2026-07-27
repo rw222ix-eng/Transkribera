@@ -205,7 +205,7 @@ Visuellt likvärdigt, och `.kort`s `overflow: hidden` klipper ingenting eftersom
 
 **Stadiet är serverns, inte klientens.** Prioritetsordningen (`app.js:3392-3397`) är `done.sources` → `deep_read` → `scan_result[id] > 0`. Gamla appens kommentar är uttrycklig: *"Ingen klientmatchning på frågans ord längre — den markerade småordsträffar."* Ett kort som ännu inte genomsökts får inget stadie alls.
 
-`Kartotek.svelte` får en ny prop — en funktion `stadie(l)` som returnerar `''`, `'lift'` eller `'dim'` — och `InspelningarView.svelte` skickar in den. Utan aktiv fråga returnerar den alltid `''`, så kartoteket ser ut precis som i dag.
+`Kartotek.svelte` får en ny prop — `stadier`, en FÄRDIGBERÄKNAD `Map` från lektions-id till `'lift'` eller `'dim'` (frånvaro av en nyckel betyder inget stadie) — och `InspelningarView.svelte` beräknar den en gång i en `$derived.by` och skickar in den. Kartan slås upp per kort (`stadier.get(l.id) || null`), den räknas inte om per kort: en funktion anropad inuti kartotekets `{#each}` hade läst `sok`-fält som ändras var 60–150 ms under utrullningen och ritat om hela rutnätet lika ofta (§12). Utan aktiv fråga är kartan tom, så kartoteket ser ut precis som i dag.
 
 ---
 
