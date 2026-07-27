@@ -1,37 +1,62 @@
 <script>
+  // Kalenderförslaget — delas av BÅDA värdarna (lektionschatten och
+  // arkivsvaret) via props i stället för att importera lektionschattens
+  // store/actions rakt av: kalender/ har annars noll importer utanför sin
+  // egen mapp, och den egenskapen ska gälla även UI-lagret. `onBesked`
+  // ersätter det tidigare direktimporterade satBesked/annonsera-paret —
+  // anroparen (Meddelandelista.svelte för 'lektion', Svar.svelte för
+  // 'arkiv') avgör själv VAR beskedet ska synas.
   import { kal } from './stores.svelte.js';
-  import { evDagar, isoEtikett } from './tid.js';
+  import { evDagar, isoEtikett, KLOCKSLAG } from './tid.js';
   import { avfarda, satTitel, satDag, satTid, laggTillHandelse, oppnaAnteckning, startaAnslutning } from './actions.js';
-  import { satBesked, annonsera } from '../lektionschatt/actions.js';
+
+  let { vardnyckel, onBesked } = $props();
 
   // Idag som ISO — undre gräns för dagväljaren. Modellens egen instruktion
   // säger redan "datumet får aldrig ligga före idag" (llm_client._cal_instr),
   // men fältet ska hålla samma regel även när läraren väljer manuellt.
   const idag = evDagar()[0].iso;
 
+  const f = $derived(kal.forslag[vardnyckel]);
+
   function paTitel(e) {
-    satTitel(e.currentTarget.value);
+    satTitel(vardnyckel, e.currentTarget.value);
   }
   function paDag(e) {
     const iso = e.currentTarget.value;
     if (!iso) return;
     const etikett = isoEtikett(iso);
-    if (etikett) satDag(iso, etikett);
+    if (etikett) satDag(vardnyckel, iso, etikett);
   }
   function paTid(e) {
-    if (e.currentTarget.value) satTid(e.currentTarget.value);
+    if (e.currentTarget.value) satTid(vardnyckel, e.currentTarget.value);
+  }
+  /** Snabbvalen nedanför tidfältet — samma sätta-tid som klockslagsfältet. */
+  function paTidChip(t) {
+    satTid(vardnyckel, t);
   }
 
   async function paLaggTill() {
-    const titel = kal.forslag ? kal.forslag.titel : '';
-    const r = await laggTillHandelse();
-    if (!r.ok) satBesked(r.fel, 'fel');
-    else annonsera('Tillagd i Google Kalender — ' + titel);
+    const titel = f ? f.titel : '';
+    const r = await laggTillHandelse(vardnyckel);
+    if (!r.ok) onBesked(r.fel, 'fel');
+    else onBesked('Tillagd i Google Kalender — ' + titel, 'info');
+  }
+
+  /**
+   * D-liknande fynd ur slutgranskningen: startaAnslutning() returnerar nu
+   * loggaIn():s resultat (se actions.js) när klientfilen redan finns — den
+   * här knappen är den enda platsen som annars körde den rakt mot onclick
+   * och kastade bort svaret, så en misslyckad inloggning gav ingen
+   * indikation alls.
+   */
+  async function paAnslut() {
+    const r = await startaAnslutning();
+    if (r && !r.ok) onBesked(r.fel, 'fel');
   }
 </script>
 
-{#if kal.forslag}
-  {@const f = kal.forslag}
+{#if f}
   <section class="box" aria-label="Kalenderförslag">
     <p class="eyebrow">Förslag → Kalender</p>
 
@@ -70,13 +95,38 @@
         {#if f.slutDag}<span class="slut">→ {f.slutDag}</span>{/if}
       </div>
 
+      <!-- Snabbval för vanliga lektionstider, BREDVID klockslagsfältet — inte
+           i stället för det. Listan (tid.js:KLOCKSLAG) är delvis dött veten-
+           skap (rekon §12.2: hårdkodad utan koppling till lärarens faktiska
+           schema) men rimliga genvägar för de flesta ändå.
+
+           aria-label INNEHÅLLER MEDVETET INTE ordet "tid": kalender.spec.mjs
+           och inspelningar-fraga.spec.mjs läser tidfältet med
+           getByLabel("Tid"), som matchar VARJE aria-label vars text
+           innehåller "tid" (case-insensitive substräng, oavsett element) —
+           "Vanliga lektionstider" gjorde precis det och gav "strict mode
+           violation: resolved to 2 elements". Tandkontrollerat. -->
+      <ul class="tidchips" aria-label="Snabbval för klockslag">
+        {#each KLOCKSLAG as t (t)}
+          <li>
+            <button
+              type="button"
+              class="chip"
+              aria-pressed={(f.nar || '').slice(-5) === t}
+              onclick={() => paTidChip(t)}
+            >{t}</button>
+          </li>
+        {/each}
+      </ul>
+
       <!-- Klippt förhandsvisning, inte redigering direkt i boxen — klick
            öppnar AnteckningModal.svelte, som läser OCH redigerar samma fält
            i ett större textfält. Speglar gamla appens mönster (en klippt
            preview öppnade läsmodalen, app.js:5397) men slår ihop läs- och
-           redigeringsläget till EN modal (bindande beslut: descModalFor
-           behövs inte när arkivsvarets väg inte portas). -->
-      <button type="button" class="anteckningsforhandsvisning" onclick={oppnaAnteckning}>
+           redigeringsläget till EN modal (descModalFor behövs inte — den
+           delade modalen vet vilket förslag den redigerar via
+           kal.anteckningOppen, se stores.svelte.js). -->
+      <button type="button" class="anteckningsforhandsvisning" onclick={() => oppnaAnteckning(vardnyckel)}>
         {#if f.anteckning}
           <span class="klippt">{f.anteckning}</span>
         {:else}
@@ -84,7 +134,12 @@
         {/if}
       </button>
 
-      <p class="status" class:ansluten={kal.ansluten === true} class:ejansluten={kal.ansluten === false}>
+      <!-- LÖPANDE TEXT, inte en mikroetikett: den kan bära serverns hela
+           hjälptext (kal.hint, t.ex. "Ingen OAuth-klientfil hittades — …"),
+           och en versal mono-MENING bryter DESIGN.md:s Mono-Is-Labels-Only-
+           regel lika mycket som en versal mono-etikett med bara ett par ord
+           inte gör. -->
+      <p class="status" class:ansluten={kal.ansluten === true}>
         {#if kal.ansluten === null}
           Kontrollerar Google-anslutningen …
         {:else if kal.ansluten}
@@ -94,15 +149,23 @@
         {/if}
       </p>
       {#if kal.ansluten === false}
-        <!-- Egen knapp, inte inuti .status: statusraden är en kort versal
-             mikroetikett (var(--mono)) — en handlingstext som "Anslut
-             Google-konto" hör inte till den rösten (DESIGN.md, Mono-är-bara-
-             etiketter-regeln), så den får ligga utanför i stället för att
-             tvinga fram en font-family-override på en inline-knapp. -->
-        <button type="button" class="anslut" onclick={startaAnslutning}>Anslut Google-konto</button>
+        <button type="button" class="anslut" onclick={paAnslut}>Anslut Google-konto</button>
       {/if}
 
       <div class="knappar">
+        <!-- INTE avstängd av kal.ansluten (B:s Kalenderforslag.svelte:106
+             gjorde det, disabled={... || calAnsluten !== true}) — provat och
+             backat: A:s EGEN e2e-täckning (kalender.spec.mjs, "'Lägg till'
+             mot ett fejkat /api/calendar/event — lyckat och ett 400-fel" och
+             D11-testet) klickar medvetet UTAN att först stubba
+             /api/calendar/status, just för att bevisa att ett obekräftat
+             klick ger serverns EGNA felmeddelande via onBesked i stället för
+             att tyst blockeras. /api/calendar/status går mot den RIKTIGA
+             backenden i de testerna (kommentaren högst upp i den filen), så
+             kal.ansluten där är miljöberoende — en klientspärr på den hade
+             gjort testernas utfall lika miljöberoende. Tandkontrollerat: satte
+             tillbaka spärren, båda testerna föll (strict-avstängd knapp,
+             timeout). Kvar är bara busy-spärren, som redan fanns. -->
         <button type="button" class="primar" disabled={f.upptagen} onclick={paLaggTill}>
           {f.upptagen ? 'Lägger till …' : 'Lägg till'}
         </button>
@@ -112,7 +175,7 @@
              busy, så en händelse kunde skapas i Google efter att förslaget
              redan setts som avfärdat i UI:t. Det kvarstår fortfarande om
              läraren stänger hela chatten mitt i — se laggTillHandelse. -->
-        <button type="button" class="ghost" disabled={f.upptagen} onclick={avfarda}>Avfärda</button>
+        <button type="button" class="ghost" disabled={f.upptagen} onclick={() => avfarda(vardnyckel)}>Avfärda</button>
       </div>
 
       <p class="hjalp">
@@ -182,6 +245,34 @@
     font-variant-numeric: tabular-nums;
   }
 
+  /* Snabbvalen för klockslag — samma chip-form som FragekortModal.svelte:s
+     alternativknappar, i miniatyr. */
+  .tidchips {
+    list-style: none;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin: 6px 0 0;
+    padding: 0;
+  }
+  .chip {
+    background: var(--surface);
+    color: var(--ink-2);
+    border: 1px solid var(--line-2);
+    border-radius: 3px;
+    padding: 3px 9px;
+    font-family: inherit;
+    font-size: 0.72rem;
+    font-variant-numeric: tabular-nums;
+    cursor: pointer;
+  }
+  .chip:hover { border-color: var(--ink-3); color: var(--ink); }
+  .chip[aria-pressed='true'] {
+    background: var(--accent-weak);
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+
   /* Klippt förhandsvisning i stället för ett fält — en riktig knapp, inte
      ett <p>: den ÖPPNAR AnteckningModal.svelte, en handling, inte bara
      text. */
@@ -211,19 +302,19 @@
   }
   .tom { color: var(--ink-3); }
 
+  /* Löpande text — se markup-kommentaren om varför den inte längre är
+     var(--mono) i versaler. */
   .status {
-    font-family: var(--mono);
-    font-size: 0.72rem;
-    letter-spacing: 0.07em;
-    text-transform: uppercase;
-    color: var(--ink-3);
+    font-size: 1.03rem;
+    color: var(--ink-2);
+    max-width: 52ch;
     margin: 10px 0 0;
   }
   .status.ansluten { color: var(--ok); }
-  .status.ejansluten { color: var(--ink-3); }
-  /* Egen knapp under statusraden — se markup-kommentaren om varför den
-     inte ligger inuti .status. Liten, tillbakadragen: det här är en
-     sekundär genväg, inte huvudhandlingen (Lägg till). */
+  /* Egen knapp under statusraden — en handlingstext som "Anslut
+       Google-konto" hör inte till statusradens röst. Liten, tillbaka-
+       dragen: det här är en sekundär genväg, inte huvudhandlingen
+       (Lägg till). */
   .anslut {
     display: block;
     background: transparent;

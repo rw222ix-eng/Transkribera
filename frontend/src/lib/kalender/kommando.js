@@ -22,15 +22,16 @@ const AR_DAGSORD = /måndag|tisdag|onsdag|torsdag|fredag|lördag|söndag|imorgon
 /**
  * calComplex (app.js:2507-2509): längre eller sammansatta önskemål går till
  * modellen i stället — annars svarar tolken "Klart" på delar den aldrig
- * tillämpade. Arkivsvarets variant hade dessutom ordet "innefatta" (rekon
- * §10.2) — den vägen portas inte (bindande beslut #1), så listan här är
- * lektionschattens egen, oförändrad.
+ * tillämpade. Ordet "innefatta" (rekon §10.2) hörde ursprungligen bara till
+ * arkivsvarets variant av den här listan — nu när kalender/ betjänar BÅDA
+ * värdarna (lektionschatt och arkivsvar, se stores.svelte.js) är det åter
+ * med, så ingendera värden tappar ett ord den andra hade.
  */
 function arKomplex(text) {
   return (
     text.length > 80 ||
     (text.match(/[.!?]/g) || []).length > 1 ||
-    /detaljerad|detaljer|mål|beskriv|utveckla|förklara|varje dag|hela (nästa )?veckan?|från kl/i.test(text)
+    /detaljerad|detaljer|mål|beskriv|utveckla|förklara|innefatta|varje dag|hela (nästa )?veckan?|från kl/i.test(text)
   );
 }
 

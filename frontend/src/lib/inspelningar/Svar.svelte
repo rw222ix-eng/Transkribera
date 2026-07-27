@@ -2,9 +2,19 @@
   // Det strömmade svaret med sifferkällor. Speglar svarsstycket i
   // viewRecordings (app/web/static/app.js:4808-4819).
   import { sok } from './sok.svelte.js';
+  import { insp } from './stores.svelte.js';
   import { parseCitat } from './citat.js';
   import { oppnaKalla, stallFoljdfraga } from './sokActions.js';
-  import Kalenderforslag from './Kalenderforslag.svelte';
+  import Forslagsbox from '../kalender/Forslagsbox.svelte';
+
+  // Forslagsbox (kalender/) delas med lektionschatten och tar sitt besked
+  // via en callback i stället för en egen import — vyns ENDA annonserande
+  // nod är p.fel-sr (InspelningarView.svelte), så beskedet skrivs till
+  // insp.fel/insp.felArt, precis som B:s tidigare Kalenderforslag gjorde.
+  function paKalenderbesked(text, art) {
+    insp.fel = text;
+    insp.felArt = art === 'info' ? 'info' : '';
+  }
 
   // Enter skickar följdfrågan. preventDefault så fältet inte submittar den
   // dialog det ligger i närheten av.
@@ -97,7 +107,7 @@
       KALENDERFÖRSLAGET ligger mellan svaret och följdfrågorna: det är en
       följd av svaret, och en följdfråga gäller ofta just förslaget.
     -->
-    <Kalenderforslag />
+    <Forslagsbox vardnyckel="arkiv" onBesked={paKalenderbesked} />
 
     <!--
       FÖLJDFRÅGORNA LIGGER INLINE, inte i en zoom-modal. Gamla appen visar dem

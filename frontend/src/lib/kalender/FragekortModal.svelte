@@ -1,15 +1,25 @@
 <script>
   // Frågekortet (calQ i gamla appen, STEG 1 i llm_client._cal_instr) — de 1-3
   // klargörande frågorna modellen ställer INNAN den föreslår en händelse.
-  // tolkaFragor() (kalender/tagg.js) gör tolkningen och öppnar kal.fragor
-  // (lektionschatt/actions.js, done-hanteraren); den här komponenten är bara
-  // UI:t ovanpå den storen.
+  // tolkaFragor() (kalender/tagg.js) gör tolkningen och öppnar kal.fragor;
+  // den här komponenten är bara UI:t ovanpå den storen.
+  //
+  // DELAS AV BÅDA VÄRDARNA (lektionschatt och arkivsvar) via props i stället
+  // för att importera lektionschattens store/actions rakt av — kalender/ har
+  // annars noll importer utanför sin egen mapp, och den egenskapen ska
+  // gälla även UI-lagret. Varje mount (App.svelte) binder sin egen
+  // `vardnyckel`, `onSkicka` och `skickar`.
   import { kal } from './stores.svelte.js';
   import { valjAlternativ, satFritext } from './actions.js';
-  import { chatt } from '../lektionschatt/stores.svelte.js';
-  import { skickaFraga } from '../lektionschatt/actions.js';
+
+  let { vardnyckel, onSkicka, skickar = false } = $props();
 
   let dialog = $state(null);
+
+  // Bara MINA frågor — kal.fragor är ETT delat fält (se stores.svelte.js)
+  // med en `vard` som pekar ut ägaren. Utan den här filtreringen skulle
+  // BÅDA värdarnas instanser rendera samma innehåll samtidigt.
+  const minaFragor = $derived(kal.fragor && kal.fragor.vard === vardnyckel ? kal.fragor : null);
 
   // Alltid monterad, aldrig {#if}-grindad (DESIGN-kravet, se
   // LektionschattModal.svelte — samma mönster). showModal() ger fokusfälla,
@@ -17,7 +27,7 @@
   // ovanpå den redan öppna, redan modala lektionschatten utan eget z-index.
   $effect(() => {
     if (!dialog) return;
-    if (kal.fragor) {
+    if (minaFragor) {
       if (!dialog.open) {
         dialog.showModal();
         // Rutan själv: då läser skärmläsaren rubriken innan ett alternativ.
@@ -31,17 +41,23 @@
   // Escape/backdrop stängs av webbläsaren, inte av oss — onclose nollställer
   // storen. Utan den raden kunde en NY [KALENDERFRÅGOR]-tagg inte öppna
   // kortet igen (samma resonemang som LektionschattModal.svelte:28-31).
+  //
+  // VAKTAD på `vard`: när kal.fragor byter ägare (den ANDRA värdens instans
+  // öppnar sin dialog) stänger effekten ovan den här instansen
+  // programmatiskt, vilket ÄVEN utlöser onclose — utan vakten skulle den
+  // stängningen nollställa kal.fragor och släcka den nya ägarens frågor
+  // innan de ens hunnit visas.
   function paClose() {
-    kal.fragor = null;
+    if (kal.fragor && kal.fragor.vard === vardnyckel) kal.fragor = null;
   }
 
   const kanSkicka = $derived(
-    !!kal.fragor
-      && (kal.fragor.fragor.some((f) => f.val) || !!(kal.fragor.fritext || '').trim()),
+    !!minaFragor
+      && (minaFragor.fragor.some((f) => f.val) || !!(minaFragor.fritext || '').trim()),
   );
 
   function byggText(skip) {
-    const fr = kal.fragor;
+    const fr = minaFragor;
     if (skip) return 'Skapa kalenderhändelsen direkt med rimliga antaganden.';
     const delar = fr.fragor.map((f) => f.fraga + ' Svar: ' + (f.val || 'inget särskilt'));
     if ((fr.fritext || '').trim()) delar.push('Övrigt önskemål: ' + fr.fritext.trim());
@@ -53,25 +69,27 @@
    * till sendLessonChat, som var en TYST no-op om ett svar redan strömmade
    * (S.lessonChatTyping) — lärarens val och fritext försvann spårlöst, utan
    * felmeddelande. Fixen är dubbel:
-   *   1. `disabled={chatt.skickar}` på knapparna nedan gör dem otryckbara
-   *      medan ett svar är i luften — spärrat, inte tyst.
+   *   1. `disabled={skickar}` på knapparna nedan gör dem otryckbara medan
+   *      ett svar är i luften — spärrat, inte tyst.
    *   2. Samma villkor upprepas här, på funktionsnivå: kortet stängs ALDRIG
    *      (kal.fragor nollställs inte) förrän vi vet att sändningen
-   *      faktiskt går iväg. skickaFraga() (lektionschatt/actions.js) har
-   *      samma vakt, så det här är försvar i djupet snarare än den enda
-   *      spärren — men det är just den ordningen (kolla FÖRE stängning, inte
-   *      stäng och hoppas) som var bugg i gamla appen.
+   *      faktiskt går iväg. Anroparens `onSkicka` (skickaFraga för
+   *      lektionschatten, skickaKalenderSvar för arkivsvaret) har samma
+   *      vakt, så det här är försvar i djupet snarare än den enda spärren —
+   *      men det är just den ordningen (kolla FÖRE stängning, inte stäng
+   *      och hoppas) som var bugg i gamla appen.
    *
-   * I praktiken kan grenen inte nås via UI:t: showModal() gör
-   * lektionschattens skrivfält inert medan kortet är öppet, så inget ANNAT
-   * kan sätta chatt.skickar medan kortet väntar på ett klick. Vakten kostar
-   * en rad och tar bort beroendet av den garantin.
+   * I praktiken kan grenen inte nås via UI:t för lektionschatten:
+   * showModal() gör dess skrivfält inert medan kortet är öppet. Arkivsvaret
+   * har ingen motsvarande modal, men `stallFoljdfraga`/`skickaKalenderSvar`
+   * har sin egen vakt (sokActions.js), så vakten här kostar en rad och tar
+   * bort beroendet av att den ALLTID hinner före.
    */
   async function paSvara(skip) {
-    if (chatt.skickar || !kal.fragor) return;
+    if (skickar || !minaFragor) return;
     const text = byggText(skip);
     kal.fragor = null;
-    await skickaFraga(text);
+    await onSkicka(text);
   }
 </script>
 
@@ -82,7 +100,7 @@
   bind:this={dialog}
   onclose={paClose}
 >
-  {#if kal.fragor}
+  {#if minaFragor}
     <p class="eyebrow">Kalenderhändelsen</p>
     <h2 class="titel">Några frågor först</h2>
     <p class="lede">
@@ -91,7 +109,7 @@
     </p>
 
     <ol class="fragor">
-      {#each kal.fragor.fragor as f, qi (qi)}
+      {#each minaFragor.fragor as f, qi (qi)}
         <li class="fraga-rad">
           <p class="fraga">{f.fraga}</p>
           <div class="alternativ" role="group" aria-label={f.fraga}>
@@ -114,23 +132,23 @@
         class="falt"
         rows="2"
         placeholder="Egna önskemål — t.ex. exakt vad anteckningen ska innehålla …"
-        value={kal.fragor.fritext}
+        value={minaFragor.fritext}
         oninput={(e) => satFritext(e.currentTarget.value)}
       ></textarea>
     </label>
 
-    {#if chatt.skickar}
+    {#if skickar}
       <p class="vantar">Väntar på föregående svar — knapparna går att trycka igen om ett ögonblick.</p>
     {/if}
 
     <div class="knappar">
-      <button type="button" class="ghost" disabled={chatt.skickar} onclick={() => paSvara(true)}>
+      <button type="button" class="ghost" disabled={skickar} onclick={() => paSvara(true)}>
         Skapa direkt utan svar
       </button>
       <button
         type="button"
         class="primar"
-        disabled={chatt.skickar || !kanSkicka}
+        disabled={skickar || !kanSkicka}
         onclick={() => paSvara(false)}
       >Skapa förslaget</button>
     </div>

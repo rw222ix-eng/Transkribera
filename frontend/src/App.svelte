@@ -10,6 +10,10 @@
   import FragekortModal from './lib/kalender/FragekortModal.svelte';
   import AnteckningModal from './lib/kalender/AnteckningModal.svelte';
   import GoogleAnslutModal from './lib/kalender/GoogleAnslutModal.svelte';
+  import { chatt } from './lib/lektionschatt/stores.svelte.js';
+  import { skickaFraga } from './lib/lektionschatt/actions.js';
+  import { sok } from './lib/inspelningar/sok.svelte.js';
+  import { skickaKalenderSvar } from './lib/inspelningar/sokActions.js';
 </script>
 
 <AppShell />
@@ -42,14 +46,25 @@
      chatten när den öppnas därifrån, och chatten finns kvar under. -->
 <LektionschattModal />
 
-<!-- Kalenderns tre modaler (frågekort, anteckning, Google-koppling) hör
-     till lektionschatten men monteras på SAMMA nivå som den, inte inuti
-     LektionschattModal.svelte: nested <dialog>-element ärver sin förälders
-     display — en förälder som är display:none (dialog:not([open])) gör att
-     ett barn aldrig ritas ens om barnet själv har showModal() anropat på
-     sig. Som toppnivå-syskon lägger showModal() dem i top-layer oberoende
-     av lektionschattens DOM-läge, precis som TranskriptModal ovan. -->
-<FragekortModal />
+<!-- Kalenderns tre modaler (frågekort, anteckning, Google-koppling) hör till
+     BÅDA värdarna (lektionschatten och arkivsvaret i Inspelningar-fliken),
+     inte inuti LektionschattModal.svelte eller InspelningarView.svelte:
+     nested <dialog>-element ärver sin förälders display — en förälder som
+     är display:none (dialog:not([open])) eller [hidden] gör att ett barn
+     aldrig ritas ens om barnet själv har showModal() anropat på sig. Som
+     toppnivå-syskon lägger showModal() dem i top-layer oberoende av vilken
+     flik eller modal som råkar vara öppen, precis som TranskriptModal ovan
+     — därför behövs ingen flikgrind (jfr nav.tab-kollen B:s motsvarande
+     dialoger hade).
+
+     FragekortModal MONTERAS TVÅ GÅNGER, en per värdnyckel: kal.fragor är
+     ETT delat fält (se kalender/stores.svelte.js) med bara EN ägare åt
+     gången, så de två instanserna konkurrerar aldrig om samma dialog.
+     AnteckningModal och GoogleAnslutModal tar inga värd-props — den förra
+     läser värden ur kal.anteckningOppen själv, den senare är inte
+     värdbunden alls (ett Google-konto delas av båda). -->
+<FragekortModal vardnyckel="lektion" onSkicka={skickaFraga} skickar={chatt.skickar} />
+<FragekortModal vardnyckel="arkiv" onSkicka={skickaKalenderSvar} skickar={sok.fragar || sok.foljdSkriver} />
 <AnteckningModal />
 <GoogleAnslutModal />
 

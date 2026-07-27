@@ -27,8 +27,6 @@
   import { rensaSokning } from './sokActions.js';
   import RedigeraLektion from './RedigeraLektion.svelte';
   import Kallmodal from './Kallmodal.svelte';
-  import Kalenderfragor from './Kalenderfragor.svelte';
-  import Kalendersetup from './Kalendersetup.svelte';
   import { nav } from '../shell/nav.svelte.js';
 
   // Raderingsbekräftelsen är ett NATIVE <dialog>, byggt precis som
@@ -435,11 +433,10 @@
   <!-- Källmodalen. Alltid monterad, av samma skäl som de två dialogerna ovan. -->
   <Kallmodal />
 
-  <!-- Modellens klargörande frågor innan en kalenderhändelse skapas. -->
-  <Kalenderfragor />
-
-  <!-- Det guidade fönstret för att koppla Google Kalender. -->
-  <Kalendersetup />
+  <!-- Frågekortet och Google-kopplingsguiden hör till kalenderkedjan (delad
+       med lektionschatten) och monteras nu på App.svelte-nivå, inte här —
+       en <dialog> nästlad i den här vyns [hidden]-panel skulle aldrig ritas
+       ens med showModal() anropat på sig. Se kommentaren i App.svelte. -->
 </section>
 
 <style>

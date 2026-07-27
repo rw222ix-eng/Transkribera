@@ -554,6 +554,11 @@ async function stubbaStrom(page, svarstext) {
   );
 }
 
+// De två testerna nedan vaktar kalender/Forslagsbox.svelte och
+// kalender/FragekortModal.svelte — DELADE med lektionschatten (se
+// kalender-sammanslagningen). Lokatorerna speglar den delade komponenten,
+// inte den tidigare arkiv-egna Kalenderforslag.svelte/Kalenderfragor.svelte.
+
 test("Fråga (/next/): ett kalenderförslag blir en granskningsbar ruta", async ({ page }) => {
   const errors = [];
   failOnConsoleError(page, errors);
@@ -565,34 +570,45 @@ test("Fråga (/next/): ett kalenderförslag blir en granskningsbar ruta", async 
       body: JSON.stringify({ connected: true, client_ready: true }),
     }),
   );
+  // "9:10" (inte "09:10") är MEDVETET: modellens tid nollutfylls av
+  // kalender/tagg.js:tolkaForslag, och den utfyllningen ska bevisas här, inte
+  // bara en redan zero-padded konstant.
   const FORSLAG =
-    'Provet ligger på fredag [1].\n[KALENDERFÖRSLAG] {"title":"Prov om bråk","date":"2026-09-04","time":"09:10","desc":"Kapitel 3"}';
+    'Provet ligger på fredag [1].\n[KALENDERFÖRSLAG] {"title":"Prov om bråk","date":"2026-09-04","time":"9:10","desc":"Kapitel 3"}';
   await stubbaStrom(page, FORSLAG);
 
   const vy = await oppnaInspelningar(page);
   await stallFraga(page, vy, ORD);
 
-  const ruta = vy.locator("section.forslag");
+  // Forslagsbox.svelte: <section class="box" aria-label="Kalenderförslag">.
+  const ruta = vy.getByRole("region", { name: "Kalenderförslag" });
   await expect(ruta).toBeVisible({ timeout: 20_000 });
-  await expect(ruta.getByLabel("Titel")).toHaveValue("Prov om bråk");
-  await expect(ruta.getByLabel("Anteckning")).toHaveValue("Kapitel 3");
-  // Modellens tid nollutfylls: "9:10" i JSON blir "09:10" i väljaren.
-  await expect(ruta.locator("button.nar")).toContainText("09:10");
+  await expect(ruta.getByLabel("Titel på händelsen")).toHaveValue("Prov om bråk");
+  await expect(ruta.getByLabel("Tid")).toHaveValue("09:10");
+  // Anteckningen är en klippt FÖRHANDSVISNING som öppnar AnteckningModal —
+  // inget eget redigeringsfält i boxen (till skillnad från B:s tidigare UI).
+  await expect(ruta.getByRole("button", { name: "Kapitel 3" })).toBeVisible();
 
   // DEN MASKINLÄSBARA RADEN FÅR ALDRIG SYNAS — varken i svaret eller någon
   // annanstans i vyn.
   await expect(vy).not.toContainText("KALENDERFÖRSLAG");
   await expect(vy.locator("section.svar p.text")).toContainText("Provet ligger på fredag");
 
-  // Och först ett medvetet klick skickar något ut ur maskinen.
+  // Och först ett medvetet klick skickar något ut ur maskinen. "Lägg till"
+  // är INTE avstängd av Google-anslutningsstatus (se kalender/Forslagsbox.svelte
+  // — provat och medvetet backat: A:s egen e2e-täckning i kalender.spec.mjs
+  // klickar utan att först stubba /api/calendar/status), bara av `upptagen`.
   let skickat = null;
   await page.route("**/api/calendar/event", (route) => {
     skickat = JSON.parse(route.request().postData() || "{}");
     return route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
   });
-  await ruta.getByRole("button", { name: "Lägg till" }).click();
+  const laggTill = ruta.getByRole("button", { name: "Lägg till" });
+  await expect(laggTill).toBeEnabled();
+  await laggTill.click();
 
-  await expect(ruta).toContainText("Händelsen är tillagd i Google Kalender");
+  // A:s bekräftelsetext, inte B:s tidigare "Händelsen är tillagd …".
+  await expect(ruta).toContainText("Tillagd i Google Kalender");
   expect(skickat.title).toBe("Prov om bråk");
   expect(skickat.start).toBe("2026-09-04T09:10:00");
 
@@ -613,8 +629,10 @@ test("Fråga (/next/): klargörande frågor blir en dialog som går att hoppa ö
   const vy = await oppnaInspelningar(page);
   await stallFraga(page, vy, ORD);
 
-  // Native <dialog> — ligger i top-layer, utanför .pane-avgränsningen.
-  const dialog = page.locator("dialog.fragor");
+  // FragekortModal.svelte: <dialog aria-label="Kalenderhändelsen — några
+  // frågor först">. Native <dialog> — ligger i top-layer, utanför
+  // .pane-avgränsningen (monteras på App.svelte-nivå, se App.svelte).
+  const dialog = page.getByRole("dialog", { name: "Kalenderhändelsen — några frågor först" });
   await expect(dialog).toBeVisible({ timeout: 20_000 });
   await expect(dialog).toContainText("Hur långt ska provet vara?");
   await expect(dialog.getByRole("button", { name: "60 min" })).toBeVisible();
@@ -629,10 +647,25 @@ test("Fråga (/next/): klargörande frågor blir en dialog som går att hoppa ö
   await val.click();
   await expect(val).toHaveAttribute("aria-pressed", "false");
 
-  // "Hoppa över" ska alltid finnas: läraren får aldrig tvingas svara för att
-  // få en kalenderhändelse.
-  await dialog.getByRole("button", { name: "Hoppa över" }).click();
+  // "Skapa direkt utan svar" (A:s text för B:s "Hoppa över") ska alltid
+  // finnas: läraren får aldrig tvingas svara för att få en kalenderhändelse.
+  //
+  // SKÄRPNING (slutgranskningens fynd): fejkservern svarar med SAMMA
+  // [KALENDERFRÅGOR]-rad oavsett vad som skickas (stubbaStrom är statisk),
+  // så efter klicket öppnas kortet snart igen av precis den anledningen —
+  // "dialogen är dold" är därför ett ÖVERGÅENDE tillstånd, inte ett bevis på
+  // att svaret faktiskt gick iväg. Den riktiga vakten är den UTGÅENDE
+  // begäran: skickaKalenderSvar (sokActions.js) går via stallFoljdfraga, som
+  // postar {q} till /api/search/ask — vänta in DEN och läs dess kropp.
+  const uppfoljning = page.waitForRequest(
+    (r) => new URL(r.url()).pathname === "/api/search/ask" && r.method() === "POST",
+  );
+  await dialog.getByRole("button", { name: "Skapa direkt utan svar" }).click();
   await expect(dialog).toBeHidden();
+  const begaran = await uppfoljning;
+  expect(begaran.postDataJSON().q).toBe(
+    "Skapa kalenderhändelsen direkt med rimliga antaganden.",
+  );
 
   await page.unroute("**/api/search/ask");
   expect(errors, errors.join("\n")).toEqual([]);

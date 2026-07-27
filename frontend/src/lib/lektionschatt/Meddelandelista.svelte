@@ -1,9 +1,19 @@
 <script>
   import { chatt } from './stores.svelte.js';
   import { parseCitat } from './citat.js';
-  import { vaxlaResonemang, valjCitat } from './actions.js';
+  import { vaxlaResonemang, valjCitat, satBesked, annonsera } from './actions.js';
   import { kal } from '../kalender/stores.svelte.js';
   import Forslagsbox from '../kalender/Forslagsbox.svelte';
+
+  // Forslagsbox tar inte längre lektionschatten som en egen import (se
+  // kalender/Forslagsbox.svelte) — den skriver till valfri värds besked via
+  // en callback. 'info' hör redan hemma i chattens EGEN live-region
+  // (annonsera), som skiljer på "ny synlig statusrad" och "bara annonsera" —
+  // se satBesked/annonsera-kommentaren i lektionschatt/actions.js.
+  function paKalenderbesked(text, art) {
+    if (art === 'info') annonsera(text);
+    else satBesked(text, art);
+  }
 
   let lista = $state(null);
   let foljer = $state(true);
@@ -99,8 +109,8 @@
   {/each}
 </ol>
 
-{#if kal.forslag}
-  <Forslagsbox />
+{#if kal.forslag.lektion}
+  <Forslagsbox vardnyckel="lektion" onBesked={paKalenderbesked} />
 {/if}
 
 <style>

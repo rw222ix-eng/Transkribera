@@ -48,7 +48,7 @@ Gäller varje task nedan, utan att upprepas i dem.
 ## Where this plan stops
 
 - **Källmodalen (`citePeek`), zoom-modalen och följdfrågorna** — B3c.
-- **Kalenderkedjan** — egen plan. B3b skickar inte `calendar`-flaggan alls.
+- **Kalenderkedjan** — egen plan. B3b skickar redan `calendar: true` i `stallFraga`/`stallFoljdfraga` (sokActions.js), men TOLKNINGEN av modellens [KALENDERFÖRSLAG]/[KALENDERFRÅGOR]-rader (visning, förslagsruta, frågekort, Google-anslutning) hörde till en egen plan — och landade sedan, i kalender-sammanslagningen, i den delade `kalender/`-modulen (samma som lektionschatten).
 - **Att öppna en källa eller en lektion** — B2 respektive B3c.
 - **Avbrytning i nätverksmening.** `streamPost` saknar `AbortController`; generationsvakten ger avbrott i praktiken.
 

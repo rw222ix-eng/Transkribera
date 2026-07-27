@@ -54,7 +54,10 @@ function nollstall() {
   chatt.valtCitat = null;
   // Kalenderförslaget hör till SAMTALET, precis som tråden — det får inte
   // överleva ett lektionsbyte eller en stängning. Se kalender/actions.js.
-  nollstallForslag();
+  // 'lektion' är lektionschattens värdnyckel i kal.forslag — arkivsvarets
+  // motsvarande nollställning (inspelningar/sokActions.js:nollstallFraga)
+  // använder 'arkiv'.
+  nollstallForslag('lektion');
 }
 
 /**
@@ -173,12 +176,12 @@ export async function skickaFraga(fraga) {
   // tillagt — speglar gamla appens snabbväg (app.js:2501-2521). Grinden
   // (isCal/calComplex) ligger inuti tolkaKommando själv (se kommando.js),
   // så den enda regeln här är "körs alltid, lita på ett tomt resultat".
-  // (Ett frågekortssvar når aldrig hit ändå: kal.forslag är null under
-  // STEG 1 — se tagg.js — så villkoret nedan är automatiskt falskt då.)
-  if (kal.forslag && !kal.forslag.tillagd) {
-    const { patch, gjort } = tolkaKommando(fraga, kal.forslag);
+  // (Ett frågekortssvar når aldrig hit ändå: kal.forslag.lektion är null
+  // under STEG 1 — se tagg.js — så villkoret nedan är automatiskt falskt då.)
+  if (kal.forslag.lektion && !kal.forslag.lektion.tillagd) {
+    const { patch, gjort } = tolkaKommando(fraga, kal.forslag.lektion);
     if (gjort.length) {
-      Object.assign(kal.forslag, patch);
+      Object.assign(kal.forslag.lektion, patch);
       const svarText = 'Klart — jag ändrade ' + gjort.join(' och ') + '.';
       chatt.trad = [
         ...chatt.trad,
@@ -219,13 +222,13 @@ export async function skickaFraga(fraga) {
   // Modellen kan skapa/ändra kalenderförslaget direkt ur samtalet: den får
   // det aktuella förslaget och svarar med en [KALENDERFÖRSLAG]-rad som
   // tolkas i done-grenen nedan. Speglar app.js:2530-2534.
-  const calEv = kal.forslag && !kal.forslag.tillagd
+  const calEv = kal.forslag.lektion && !kal.forslag.lektion.tillagd
     ? {
-        title: kal.forslag.titel,
-        date: kal.forslag.startIso || null,
-        time: (kal.forslag.nar || '').slice(-5),
-        end_date: kal.forslag.slutIso || null,
-        desc: kal.forslag.anteckning || '',
+        title: kal.forslag.lektion.titel,
+        date: kal.forslag.lektion.startIso || null,
+        time: (kal.forslag.lektion.nar || '').slice(-5),
+        end_date: kal.forslag.lektion.slutIso || null,
+        desc: kal.forslag.lektion.anteckning || '',
       }
     : null;
 
@@ -279,16 +282,16 @@ export async function skickaFraga(fraga) {
           // `val` (vald-state) hör inte hemma i tolkaFragor (se tagg.js) —
           // läggs på här, vid öppning. tolkaFragor speglade tidigare bara
           // applyCalQ:s parsning (rekon §11); denna omgång kopplar in kortet.
-          kal.fragor = { fragor: fr.fragor.map((f) => ({ ...f, val: null })), fritext: '' };
+          kal.fragor = { vard: 'lektion', fragor: fr.fragor.map((f) => ({ ...f, val: null })), fritext: '' };
           taggBesked = 'Några frågor innan jag skapar förslaget — svara i kortet som öppnats.';
         } else if (fr.hittad) {
           // D3: taggen fanns men gick inte att tolka. Strippas ändå (nedan)
           // — aldrig rå JSON kvar i bubblan.
           fel = 'Kalenderfrågorna gick inte att tolka — skriv gärna om vad du vill boka.';
         } else {
-          const fs = tolkaForslag(full, kal.forslag);
+          const fs = tolkaForslag(full, kal.forslag.lektion);
           if (fs.hittad && fs.forslag) {
-            kal.forslag = fs.forslag;
+            kal.forslag.lektion = fs.forslag;
             if (kal.ansluten === null) hamtaStatus();
             taggBesked = 'Här är kalenderförslaget: "' + (fs.forslag.titel || '') + '" · ' + fs.forslag.nar
               + (fs.forslag.slutDag ? ' → ' + fs.forslag.slutDag : '')

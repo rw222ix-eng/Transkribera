@@ -1,13 +1,19 @@
 <script>
   // Anteckningsmodalen — läsning OCH redigering i en och samma ruta. Gamla
   // appen hade två (ovDescView läste, descModal redigerade, växlade via
-  // descModalFor). Arkivsvarets kalenderväg portas inte (bindande beslut
-  // #1), så det finns bara EN källa till ett förslag — descModalFor behövs
-  // alltså inte, och en modal som gör båda sakerna räcker.
+  // descModalFor). Den här modalen slår ihop läs- och redigeringsläget till
+  // EN modal — descModalFor behövs alltså inte — men delas ändå av BÅDA
+  // värdarna (lektionschatt och arkivsvar): `kal.anteckningOppen` bär
+  // VÄRDNYCKELN för förslaget som redigeras i stället för en ren boolean
+  // (se stores.svelte.js), så en enda global modalinstans (App.svelte)
+  // räcker utan en egen `vardnyckel`-prop.
   import { kal } from './stores.svelte.js';
   import { satAnteckning, stangAnteckning } from './actions.js';
 
   let dialog = $state(null);
+
+  const vard = $derived(kal.anteckningOppen);
+  const f = $derived(vard ? kal.forslag[vard] : null);
 
   // Stängs också om förslaget försvinner medan rutan är öppen (Avfärda,
   // Lägg till, eller ett nytt [KALENDERFÖRSLAG] som ersätter det gamla) —
@@ -15,7 +21,7 @@
   // finns.
   $effect(() => {
     if (!dialog) return;
-    if (kal.anteckningOppen && kal.forslag) {
+    if (vard && f) {
       if (!dialog.open) {
         dialog.showModal();
         dialog.focus();
@@ -43,7 +49,7 @@
   }
 
   function paAnteckning(e) {
-    satAnteckning(e.currentTarget.value);
+    satAnteckning(vard, e.currentTarget.value);
   }
 </script>
 
@@ -54,7 +60,7 @@
   bind:this={dialog}
   onclose={paClose}
 >
-  {#if kal.forslag}
+  {#if f}
     <div class="topp">
       <h2 class="titel">Anteckning i kalenderposten</h2>
       <button type="button" class="ghost" onclick={stangAnteckning}>Stäng</button>
@@ -62,7 +68,7 @@
     <textarea
       class="falt"
       rows="10"
-      value={kal.forslag.anteckning}
+      value={f.anteckning}
       oninput={paAnteckning}
       aria-label="Anteckning i kalenderposten"
     ></textarea>

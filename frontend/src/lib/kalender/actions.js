@@ -41,24 +41,25 @@ export async function hamtaStatus() {
 }
 
 /** Kastar bort det aktuella förslaget utan att lägga till det. */
-export function avfarda() {
-  kal.forslag = null;
+export function avfarda(vard) {
+  kal.forslag[vard] = null;
 }
 
-export function satTitel(text) {
-  if (kal.forslag) kal.forslag.titel = text;
+export function satTitel(vard, text) {
+  if (kal.forslag[vard]) kal.forslag[vard].titel = text;
 }
 
-export function satAnteckning(text) {
-  if (kal.forslag) kal.forslag.anteckning = text;
+export function satAnteckning(vard, text) {
+  if (kal.forslag[vard]) kal.forslag[vard].anteckning = text;
 }
 
 /** Dagväljaren. Sätter både etiketten (`nar`) och `startIso`, som vinner vid Lägg till. */
-export function satDag(iso, etikett) {
-  if (!kal.forslag) return;
-  const tid = (kal.forslag.nar || '').slice(-5) || '08:00';
-  kal.forslag.nar = etikett + ' · ' + tid;
-  kal.forslag.startIso = iso;
+export function satDag(vard, iso, etikett) {
+  const f = kal.forslag[vard];
+  if (!f) return;
+  const tid = (f.nar || '').slice(-5) || '08:00';
+  f.nar = etikett + ' · ' + tid;
+  f.startIso = iso;
 }
 
 /**
@@ -66,32 +67,32 @@ export function satDag(iso, etikett) {
  * kommando.js): fältet är `<input type="time">`, och webbläsaren släpper
  * aldrig igenom ett värde utanför hh<=23/mm<=59.
  */
-export function satTid(hhmm) {
-  if (!kal.forslag) return;
-  const dag = (kal.forslag.nar || ' · ').split(' · ')[0];
-  kal.forslag.nar = dag + ' · ' + hhmm;
+export function satTid(vard, hhmm) {
+  const f = kal.forslag[vard];
+  if (!f) return;
+  const dag = (f.nar || ' · ').split(' · ')[0];
+  f.nar = dag + ' · ' + hhmm;
 }
 
 /**
- * Nollställer kalenderdelen av samtalet. Anropas av lektionschattens
- * nollstall() (lektionschatt/actions.js) — förslaget hör till samtalet,
- * precis som tråden och utkastet, och får inte läcka till nästa lektion.
- * Jfr D18 (rekon §11): gamla appens `evPick` var ETT globalt fält delat
- * mellan lektionsoverlayen och arkivsvaret och nollställdes inte
- * konsekvent mellan dem. Här finns bara en väg (lesson), men principen är
- * densamma: allt som hör till ETT samtal nollställs när samtalet gör det —
- * inklusive de tre modalerna (frågekort, anteckning, Google-guide), som
- * annars kunde stå kvar öppna in i nästa lektions samtal.
+ * Nollställer kalenderdelen av EN värds samtal. Anropas av lektionschattens
+ * nollstall() med `vard: 'lektion'` (lektionschatt/actions.js) och
+ * arkivsvarets nollstallFraga() med `vard: 'arkiv'`
+ * (inspelningar/sokActions.js) — förslaget hör till samtalet/frågan, precis
+ * som chattens tråd eller arkivsvarets text, och får inte läcka till nästa.
+ *
+ * Rör BARA den egna värdens data: `forslag[vard]`, och `fragor`/
+ * `anteckningOppen` bara om de för tillfället TILLHÖR den här värden (annars
+ * skulle en lektionschatt som stängs kunna släcka ett frågekort som just då
+ * hör till arkivsvaret — se D18, rekon §11, om exakt den sortens läcka
+ * mellan två värdar). Google-anslutningen (ansluten/klientKlar/hint/
+ * guideOppen/guideBusy) rörs INTE alls — se kommentaren i
+ * stores.svelte.js om varför den inte längre är samtalsbunden.
  */
-export function nollstallForslag() {
-  kal.forslag = null;
-  kal.ansluten = null;
-  kal.klientKlar = null;
-  kal.hint = '';
-  kal.fragor = null;
-  kal.anteckningOppen = false;
-  kal.guideOppen = false;
-  kal.guideBusy = false;
+export function nollstallForslag(vard) {
+  kal.forslag[vard] = null;
+  if (kal.fragor && kal.fragor.vard === vard) kal.fragor = null;
+  if (kal.anteckningOppen === vard) kal.anteckningOppen = null;
 }
 
 /**
@@ -109,13 +110,13 @@ export function satFritext(text) {
   if (kal.fragor) kal.fragor.fritext = text;
 }
 
-/** Öppnar anteckningsmodalen. Ingen effekt utan ett förslag att redigera. */
-export function oppnaAnteckning() {
-  if (kal.forslag) kal.anteckningOppen = true;
+/** Öppnar anteckningsmodalen för `vard`. Ingen effekt utan ett förslag att redigera. */
+export function oppnaAnteckning(vard) {
+  if (kal.forslag[vard]) kal.anteckningOppen = vard;
 }
 
 export function stangAnteckning() {
-  kal.anteckningOppen = false;
+  kal.anteckningOppen = null;
 }
 
 /**
@@ -145,10 +146,21 @@ export function stangGuide() {
  * Den enda ingången till kopplingen (startCalConnect i gamla appen): en
  * OAuth-klient krävs alltid, men finns den redan (klientKlar) räcker ett
  * klick "Logga in med Google" direkt — annars öppnas den guidade rutan.
+ *
+ * MÅSTE returnera loggaIn():s resultat. D-liknande fynd ur slutgranskningen:
+ * den här funktionen körde tidigare `loggaIn()` utan att returnera eller
+ * invänta den, så anroparen (Forslagsboxens "Anslut Google-konto"-knapp,
+ * bunden rakt till onclick) kunde aldrig se att inloggningen misslyckades —
+ * `{ok: false, fel}` kastades bort på golvet och läraren fick INGEN
+ * indikation alls. Anroparen väntar nu in returvärdet och visar `fel` om
+ * `ok` är falskt.
+ *
+ * @returns {Promise<{ok: boolean, fel?: string}>}
  */
 export function startaAnslutning() {
-  if (kal.klientKlar) loggaIn();
-  else oppnaGuide();
+  if (kal.klientKlar) return loggaIn();
+  oppnaGuide();
+  return Promise.resolve({ ok: true });
 }
 
 /**
@@ -217,14 +229,17 @@ export async function oppnaGoogleConsole() {
  * Generationsvakten här är objektidentitet (`malObjekt`), inte en delad
  * räknare: begäran pekar på EXAKT det förslagsobjekt den gäller. Hinner
  * läraren avfärda det eller ersätts det av ett nytt [KALENDERFÖRSLAG]
- * medan POST:en är i luften (`kal.forslag` blir null eller en annan
+ * medan POST:en är i luften (`kal.forslag[vard]` blir null eller en annan
  * referens), skrivs svaret aldrig in i ett förslag det inte längre gäller.
  * Det är mer precist än en delad räknare hade varit — det identifierar
  * VILKET förslag, inte bara VILKEN omgång — och matchar ändå kravet om en
- * egen, aldrig delad, generationsvakt per väg.
+ * egen, aldrig delad, generationsvakt per väg. `vard` pekar bara ut VILKET
+ * fält i `kal.forslag` som gäller — den faktiska vakten är fortfarande
+ * `malObjekt`, så en lektionschatt och ett arkivsvar kan ha varsin
+ * "Lägg till" i luften samtidigt utan att störa varandra.
  */
-export async function laggTillHandelse() {
-  const f = kal.forslag;
+export async function laggTillHandelse(vard) {
+  const f = kal.forslag[vard];
   if (!f || f.upptagen || f.tillagd) return { ok: true };
   const malObjekt = f;
   f.upptagen = true;
@@ -239,16 +254,16 @@ export async function laggTillHandelse() {
       description: f.anteckning || '',
       end_date: f.slutIso || null,
     });
-    if (kal.forslag !== malObjekt) return { ok: true };
-    kal.forslag.upptagen = false;
-    kal.forslag.tillagd = true;
+    if (kal.forslag[vard] !== malObjekt) return { ok: true };
+    kal.forslag[vard].upptagen = false;
+    kal.forslag[vard].tillagd = true;
     // D14 (rekon §11): gamla appens addEvent läste aldrig svarets länk
     // (res.j.link) — bekräftelsen var ren text. Sparas här så Forslagsbox
     // kan visa en riktig länk till händelsen i stället för att kasta den.
-    kal.forslag.lank = (res && res.link) || null;
+    kal.forslag[vard].lank = (res && res.link) || null;
     return { ok: true };
   } catch (e) {
-    if (kal.forslag === malObjekt) kal.forslag.upptagen = false;
+    if (kal.forslag[vard] === malObjekt) kal.forslag[vard].upptagen = false;
     return { ok: false, fel: (e && e.message) || 'Kunde inte lägga till händelsen.' };
   }
 }

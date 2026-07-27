@@ -54,24 +54,11 @@ export const sok = $state({
   foljdInput: '',
   foljdSkriver: false,  // en följdfråga är i luften
 
-  // KALENDERKEDJAN. Modellen kan svara med en maskinläsbar [KALENDERFÖRSLAG]-
-  // rad, som blir ett förslag läraren granskar och godkänner — eller med
-  // [KALENDERFRÅGOR], som blir en liten frågedialog. Båda raderna klipps ur
-  // svarstexten innan den visas.
-  //
-  // GOOGLE KALENDER ÄR APPENS ENDA VÄG UT UR MASKINEN. Allt annat i
-  // Transkribera är lokalt. Ett godkänt förslag skickar titel, tid och
-  // beskrivning till Googles servrar — CLAUDE.md namnger tjänsten bland det
-  // som inte ska användas för riktig elevdata, och det gäller fortfarande.
-  handelse: null,       // null | {title, when, desc, startIso, endIso, endDag, added, busy}
-  kalFragor: null,      // null | {fragor: [{q, alternativ, val}], extra}
-  evValjare: false,     // dag/tid-väljaren utfälld
-
-  // null = ostatus känd ännu. Hämtas först när ett förslag faktiskt dykt upp —
-  // ingen anledning att fråga Google-status för en lärare som aldrig ber om en
-  // kalenderhändelse.
-  calAnsluten: null,
-  calKlientKlar: false,
-  calSetupOppen: false,  // det guidade uppsättningsfönstret
-  calUpptagen: false,    // ett kalenderanrop är i luften
+  // KALENDERKEDJAN flyttade till kalender/ (delad med lektionschatten, se
+  // kalender/stores.svelte.js:kal.forslag.arkiv och kal.fragor). Modellen
+  // kan svara med en maskinläsbar [KALENDERFÖRSLAG]-rad, som blir ett
+  // förslag läraren granskar och godkänner — eller med [KALENDERFRÅGOR], som
+  // blir en liten frågedialog. Båda raderna klipps ur svarstexten innan den
+  // visas (sokActions.js:stallFraga/stallFoljdfraga). Inget kalendertillstånd
+  // bor kvar här.
 });
