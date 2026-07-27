@@ -279,6 +279,12 @@ export default defineConfig({
       // till e2e/inspelningar-sakerhetskopiering.spec.mjs: att
       // Säkerhetskopiera-knappen POSTar /api/backup och kvitterar antalet
       // filer på vyns delade statusrad, och att ett serverfel syns där.
+      //
+      // Cutover-planens Task 4 (pensioneringen av app.js) räddade ETT test ur
+      // den gamla e2e-sviten innan den raderades: e2e/whiteboard-expr.spec.mjs
+      // (ordagrant flyttad ur e2e/tests/10-tavla.spec.ts) — den enda spärren
+      // mot att ogiltiga uttryck kraschar whiteboard-motorn. Se
+      // .superpowers/sdd/pensionering-report.md.
       name: "next-foundation",
       testDir: __dirname,
       testMatch: [
@@ -300,6 +306,7 @@ export default defineConfig({
         /transkript-prestanda\.spec\.mjs$/,
         /lektionschatt\.spec\.mjs$/,
         /kalender\.spec\.mjs$/,
+        /whiteboard-expr\.spec\.mjs$/,
       ],
       use: { ...devices["Desktop Chrome"] },
     },
