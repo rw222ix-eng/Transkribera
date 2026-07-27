@@ -27,7 +27,12 @@ export default defineConfig(({ command }) => ({
   // rakt in i bygget — förbi fs.allow-allowlistan.
   root: __dirname,
   publicDir: false,
-  base: command === 'build' ? '/next/' : '/',
+  // Rot-absolut i BÅDA lägena sedan cutovern: appen serveras från "/" och
+  // tillgångarna monteras på "/assets" (server.py). Samma index.html funkar
+  // därmed både på "/" och på det kvarvarande "/next" under övergången.
+  // Dev-basen har alltid varit "/" — Impeccables live-läge kräver att
+  // /node_modules/.impeccable-live/* löser rot-absolut.
+  base: '/',
   plugins: [svelte()],
   server: {
     port: 5173,

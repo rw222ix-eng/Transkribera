@@ -271,10 +271,20 @@ def create_app(base_dir: Path | None = None,
 
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
-    # Parallell Svelte-frontend (byggd av Vite → app/web/next). Serveras additivt;
-    # rör inte "/" eller "/static". Monteras bara om bygget finns (dev utan bygge = tyst).
+    # Svelte-frontenden (byggd av Vite → app/web/next).
+    #
+    # Sedan cutovern byggs den med base "/" (vite.config.js), så index.html
+    # refererar tillgångarna rot-absolut som /assets/*. De monteras därför vid
+    # roten. "/next" behålls under övergången: hela e2e-sviten kör mot den, och
+    # samma index.html fungerar på båda vägarna just tack vare den rot-absoluta
+    # basen.
+    #
+    # Monteras bara om bygget finns. En utcheckning utan `npm run build` ska
+    # inte ge en död app — "/" faller då tillbaka på den gamla appen, se index().
     NEXT_DIR = STATIC_DIR.parent / "next"
-    if (NEXT_DIR / "index.html").exists():
+    NEXT_READY = (NEXT_DIR / "index.html").exists()
+    if NEXT_READY:
+        app.mount("/assets", StaticFiles(directory=str(NEXT_DIR / "assets")), name="next-assets")
         app.mount("/next", StaticFiles(directory=str(NEXT_DIR), html=True), name="next")
 
     # Single owner of the LLM process + GPU exclusivity. The LLM is NOT started
@@ -300,6 +310,24 @@ def create_app(base_dir: Path | None = None,
 
     @app.get("/")
     def index():
+        """Svelte-appen. Faller tillbaka på den gamla om bygget saknas.
+
+        Fallbacken är avsiktlig: en utcheckning där ingen kört `npm run build`
+        ska ge en fungerande app, inte en 404. Den dagen app.js pensioneras
+        försvinner både den och den här grenen.
+        """
+        if NEXT_READY:
+            return FileResponse(str(NEXT_DIR / "index.html"))
+        return FileResponse(str(STATIC_DIR / "index.html"))
+
+    @app.get("/gammal")
+    def index_gammal():
+        """Den gamla vanilla-appen, kvar under övergången för jämförelse.
+
+        Pensioneras i cutover-planens task 4, tillsammans med app.js och
+        style.css. /static-monteringen stannar oavsett — whiteboard-motorn,
+        den vendorade KaTeX:en och typsnitten serveras därifrån.
+        """
         return FileResponse(str(STATIC_DIR / "index.html"))
 
     @app.get("/api/hardware")
