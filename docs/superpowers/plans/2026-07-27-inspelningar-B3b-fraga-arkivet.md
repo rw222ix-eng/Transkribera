@@ -714,6 +714,25 @@ Komponenten är **inert tills Task 4** kopplar körknappen: `sok.skanPlan` är `
           aktuell.name
             ? ` — ${aktuell.name}`
             : ''}{tanker ? ' · tänker …' : ''}
+        {:else if sok.fragaFel}
+          <!--
+            FYND 1 I SLUTGRANSKNINGEN. Ett error-event kan komma EFTER
+            scan_plan, scan_result och deep_read redan emitterats — servern
+            kastar t.ex. "Språkmodellen är inte installerad." (server.py:1591)
+            EFTER deep_read, och streamPost:s syntetiska
+            "Anslutningen till servern bröts." kan landa när som helst. Utan
+            den här grenen faller tickern till else-grenen nedan (skannar är
+            redan false här — se skannar-uttrycket ovan, som snäpps av
+            error-hanteraren i sokActions.js) och visar "✓ Genomsökte" — en
+            KVITTENS för en sökning som just kraschade, samtidigt som
+            Svar.svelte visar felet. Det är inget kantfall: en installation
+            utan Qwen3-14B hamnar här vid VARJE fråga.
+
+            Texten påstår varken framgång ("✓ Genomsökte …") eller att
+            sökningen fortfarande pågår ("Söker igenom …") — bara att den
+            avbröts, och pekar mot felet som redan renderas i svarsytan.
+          -->
+          Genomsökningen avbröts — se felet nedan
         {:else}
           ✓ Genomsökte {plan.length} {plan.length === 1 ? 'inspelning' : 'inspelningar'}
         {/if}
@@ -741,7 +760,14 @@ Komponenten är **inert tills Task 4** kopplar körknappen: `sok.skanPlan` är `
       {/each}
     </ul>
 
-    {#if lasbordPa || (!skannar && bordet.length)}
+    <!--
+      FYND 1 I SLUTGRANSKNINGEN: grindat på !sok.fragaFel. sok.laser
+      (deep_read) kan redan vara ifyllt när error-eventet landar — samma
+      ordning som tickerns fragaFel-gren ovan beskriver — så utan grinden
+      hade läsbordet fortsatt visa "Svaret bygger på dessa N" för en fråga
+      som aldrig fick ett svar. Ett påstått svar är inget svar.
+    -->
+    {#if !sok.fragaFel && (lasbordPa || (!skannar && bordet.length))}
       <p class="bordsrubrik">
         {#if sok.fragar}
           {bordet.length === 1 ? 'AI:n läser nu denna' : `AI:n läser nu dessa ${bordet.length}`}
@@ -1716,6 +1742,90 @@ test("Fråga (/next/): ett fel renderas i svarsytan, inte som ett svar", async (
   expect(appfel, appfel.join("\n")).toEqual([]);
 });
 
+/**
+ * SLUTGRANSKNINGENS FYND 1 (HIGH): servern kan kasta EFTER scan_plan,
+ * scan_result och deep_read redan emitterats — t.ex. RuntimeError("Språk-
+ * modellen är inte installerad."), server.py:1591 — och streamPost:s
+ * syntetiska "Anslutningen till servern bröts." kan landa när som helst.
+ * Utan grinden i Genomsokning.svelte kvitterade tickern med "✓ Genomsökte N
+ * inspelningar" och läsbordet med "Svaret bygger på dessa N", trots att
+ * Svar.svelte SAMTIDIGT visade felet — ett svar påstods finnas när sökningen
+ * misslyckades. Ingen fejkjobb-gren i serve_test_app.py kan producera den
+ * här händelseordningen (fake_answer kastar aldrig), så strömmen byggs för
+ * hand och injiceras med page.route — samma mönster som 409-testet ovan,
+ * fast med en handskriven SSE-kropp i stället för ett enkelt JSON-fel.
+ */
+test("Fråga (/next/): genomsökningen kvitterar inte en sökning som avbröts mitt i strömmen", async ({
+  page,
+}) => {
+  const errors = [];
+  failOnConsoleError(page, errors);
+
+  const vy = await oppnaInspelningar(page);
+
+  const sse = (events) => events.map((e) => `data: ${JSON.stringify(e)}\n\n`).join("");
+  const body = sse([
+    {
+      type: "scan_plan",
+      total: FIXTUR.length,
+      items: [
+        { key: 1, name: "Lektion A" },
+        { key: 2, name: "Lektion B" },
+        { key: 3, name: "Lektion C" },
+      ],
+    },
+    { type: "scan_result", key: 1, hits: 2 },
+    { type: "scan_result", key: 2, hits: 1 },
+    { type: "scan_result", key: 3, hits: 0 },
+    // deep_read FÖRE felet — det är just den ordningen fyndet gäller.
+    {
+      type: "deep_read",
+      sources: [
+        {
+          lesson_id: 1, history_id: "h1", name: "Lektion A",
+          group: "9A", course: "Matematik 2b", datum: "2026-04-02",
+        },
+        {
+          lesson_id: 2, history_id: "h2", name: "Lektion B",
+          group: "9A", course: "Matematik 2b", datum: "2026-03-30",
+        },
+      ],
+    },
+    { type: "error", message: "Språkmodellen är inte installerad." },
+  ]);
+  await page.route("**/api/search/ask", (route) =>
+    route.fulfill({ status: 200, contentType: "text/event-stream", body }),
+  );
+
+  await sokfalt(vy).input.fill(ORD);
+  await sokfalt(vy).kor.click();
+
+  const teater = vy.locator("section.genomsokning");
+  // Genomsökningen SYNS — scan_plan kom, så teatern renderas.
+  await expect(teater).toBeVisible();
+
+  // KRAVET: tickern får aldrig kvittera en genomsökning som avbröts, men den
+  // ska heller inte se ut att fortfarande söka — felet är redan känt.
+  await expect(teater.locator("p.ticker")).not.toContainText("Genomsökte");
+  await expect(teater.locator("p.ticker")).not.toContainText("Söker igenom");
+  await expect(teater.locator("p.ticker")).toContainText("avbröts");
+
+  // Läsbordet får INTE påstå att svaret bygger på källorna — inget svar kom.
+  await expect(teater.locator("p.bordsrubrik")).toHaveCount(0);
+
+  // Felet renderas i svarsytan, med streamPost-vägens vanliga textklassning
+  // (fragaFelText — allt annat än "matchar sökningen"/anslutningsmönstren).
+  await expect(vy.locator("p.fragafel")).toContainText(
+    "Kunde inte söka: Språkmodellen är inte installerad.",
+  );
+  await expect(vy.locator("section.svar")).toHaveCount(0);
+  await expect(sokfalt(vy).kor).toBeEnabled();
+
+  await page.unroute("**/api/search/ask");
+  const appfel = errors.filter((e) => !/Failed to load resource/.test(e));
+  expect(appfel, appfel.join("\n")).toEqual([]);
+});
+
 test("Fråga (/next/): en rensning överger den pågående strömmen", async ({ page }) => {
   const errors = [];
   failOnConsoleError(page, errors);
@@ -1807,6 +1917,10 @@ Förväntat: `51 passed` (45 före + 6 nya). **RÄTTAT:** B3b:s defaultflipp
 (sok.svelte.js:11, ask i stället för keyword) sänkte B3a:s sök-svit, och
 e2e-reparationen (`.superpowers/sdd/b3b-e2e-reparation.md`) tog bort ett test
 vars premiss försvunnit — sviten stod på 45, inte 46, innan den här tasken.
+
+**RÄTTAT I SLUTGRANSKNINGEN (efter leverans):** fynd 1 (HIGH — se Self-Review)
+lade till ett sjunde test i den här filen, `52 passed` totalt (51 + 1). Se
+`.superpowers/sdd/b3b-slutfix-report.md`.
 
 - [ ] **Step 4: Tandkontrollera de två bärande spärrarna**
 
@@ -1924,3 +2038,5 @@ Läsbordet anropar `parseCitat` en gång till i `Genomsokning.svelte`, utöver a
 Tandkontroll 4a bevisar att assertionen ser en tom lyft-mängd, inte att stadiet härleds ur just `done.sources` snarare än ur `deep_read` eller `scan_result`. Prioritetsordningen mellan de tre är alltså otäckt. Att skilja dem åt kräver en fixtur där de tre ger olika svar, vilket fejkens identiska transkript inte kan ge.
 
 **Rättat i granskningen (fyndet om `sok.fragar` vid blixtsnabba svar).** Task 3 och Task 5:s kodblock ovan använde `sok.fragar` ensam för att avgöra hur många kort som fått avslöjas — men `sokActions.js` stoppar MEDVETET inte utrullningstimern vid `done` (svaret kan bli klart innan alla kort hunnit visas, t.ex. `no_hit_job` och grenen utan installerad språkmodell, som svarar synkront inom millisekunder utan något LLM-anrop emellan). Med bara `sok.fragar` hoppade båda konsumenterna direkt till hela planen så fort strömmen tog slut, oavsett `sok.skanVisade`. Fixen inför en tvådelad flagga, `skannar = sok.fragar || sok.skanVisade < plan.length`, speglad ur gamla appens `scanning`-variabel (app.js:3403-3404), och läser den överallt kodblocken ovan beskriver UTRULLNINGENS FÖRLOPP (antal synliga kort, korttillstånden, aktuellt kort, läsbordets tändning, träffräknarens "hittills", tickerns "Söker igenom"/"✓ Genomsökte" och läsbordssektionens synlighet) — medan ställen som beskriver att SVARET STRÖMMAR ("Skickar frågan …", tänker-suffixet, läsbordets rubriktext, citatfiltreringen) fortsatt läser `sok.fragar` rakt av. Verifierat genom att tillfälligt tvinga `sok.fragar = false` direkt efter `scan_plan` i `stallFraga` och bekräfta att korten ändå avslöjades i takt i stället för på en gång; ändringen återställdes efteråt.
+
+**Rättat i slutgranskningen (fynd 1, HIGH — genomsökningen kvitterade en misslyckad sökning).** Servern kan kasta `RuntimeError("Språkmodellen är inte installerad.")` EFTER `scan_plan`, `scan_result` och `deep_read` redan emitterats (server.py:1591), och `streamPost`s syntetiska `'Anslutningen till servern bröts.'` kan landa när som helst. `error`-grenen i `stallFraga` sätter `sok.fragaFel` men rör varken `sok.laser` eller `sok.skanPlan`, och `finally` sätter `sok.fragar = false` — så tickern (Task 3, `{:else}`-grenen) och läsbordsgrinden (`lasbordPa || (!skannar && bordet.length)`) läste bara UTRULLNINGENS förlopp, aldrig felkanalen, och visade alltså "✓ Genomsökte N inspelningar" och "Svaret bygger på dessa N" för en fråga som just misslyckades — samtidigt som `Svar.svelte` visade felet i samma vy. Fixen lägger till en `{:else if sok.fragaFel}`-gren i tickern (varken "✓ Genomsökte" eller "Söker igenom", se kodblocket ovan) och grindar läsbordet på `!sok.fragaFel`. Tandkontrollerat med ett nytt e2e-test i Task 6 som injicerar ett `error`-event mitt i strömmen (efter `deep_read`) via `page.route`.

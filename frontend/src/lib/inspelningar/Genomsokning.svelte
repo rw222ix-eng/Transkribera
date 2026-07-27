@@ -137,6 +137,25 @@
           aktuell.name
             ? ` — ${aktuell.name}`
             : ''}{tanker ? ' · tänker …' : ''}
+        {:else if sok.fragaFel}
+          <!--
+            FYND 1 I SLUTGRANSKNINGEN. Ett error-event kan komma EFTER
+            scan_plan, scan_result och deep_read redan emitterats — servern
+            kastar t.ex. "Språkmodellen är inte installerad." (server.py:1591)
+            EFTER deep_read, och streamPost:s syntetiska
+            "Anslutningen till servern bröts." kan landa när som helst. Utan
+            den här grenen faller tickern till else-grenen nedan (skannar är
+            redan false här — se skannar-uttrycket ovan, som snäpps av
+            error-hanteraren i sokActions.js) och visar "✓ Genomsökte" — en
+            KVITTENS för en sökning som just kraschade, samtidigt som
+            Svar.svelte visar felet. Det är inget kantfall: en installation
+            utan Qwen3-14B hamnar här vid VARJE fråga.
+
+            Texten påstår varken framgång ("✓ Genomsökte …") eller att
+            sökningen fortfarande pågår ("Söker igenom …") — bara att den
+            avbröts, och pekar mot felet som redan renderas i svarsytan.
+          -->
+          Genomsökningen avbröts — se felet nedan
         {:else}
           ✓ Genomsökte {plan.length} {plan.length === 1 ? 'inspelning' : 'inspelningar'}
         {/if}
@@ -164,7 +183,14 @@
       {/each}
     </ul>
 
-    {#if lasbordPa || (!skannar && bordet.length)}
+    <!--
+      FYND 1 I SLUTGRANSKNINGEN: grindat på !sok.fragaFel. sok.laser
+      (deep_read) kan redan vara ifyllt när error-eventet landar — samma
+      ordning som tickerns fragaFel-gren ovan beskriver — så utan grinden
+      hade läsbordet fortsatt visa "Svaret bygger på dessa N" för en fråga
+      som aldrig fick ett svar. Ett påstått svar är inget svar.
+    -->
+    {#if !sok.fragaFel && (lasbordPa || (!skannar && bordet.length))}
       <p class="bordsrubrik">
         {#if sok.fragar}
           {bordet.length === 1 ? 'AI:n läser nu denna' : `AI:n läser nu dessa ${bordet.length}`}

@@ -278,6 +278,90 @@ test("Fråga (/next/): ett fel renderas i svarsytan, inte som ett svar", async (
   expect(appfel, appfel.join("\n")).toEqual([]);
 });
 
+/**
+ * SLUTGRANSKNINGENS FYND 1 (HIGH): servern kan kasta EFTER scan_plan,
+ * scan_result och deep_read redan emitterats — t.ex. RuntimeError("Språk-
+ * modellen är inte installerad."), server.py:1591 — och streamPost:s
+ * syntetiska "Anslutningen till servern bröts." kan landa när som helst.
+ * Utan grinden i Genomsokning.svelte kvitterade tickern med "✓ Genomsökte N
+ * inspelningar" och läsbordet med "Svaret bygger på dessa N", trots att
+ * Svar.svelte SAMTIDIGT visade felet — ett svar påstods finnas när sökningen
+ * misslyckades. Ingen fejkjobb-gren i serve_test_app.py kan producera den
+ * här händelseordningen (fake_answer kastar aldrig), så strömmen byggs för
+ * hand och injiceras med page.route — samma mönster som 409-testet ovan,
+ * fast med en handskriven SSE-kropp i stället för ett enkelt JSON-fel.
+ */
+test("Fråga (/next/): genomsökningen kvitterar inte en sökning som avbröts mitt i strömmen", async ({
+  page,
+}) => {
+  const errors = [];
+  failOnConsoleError(page, errors);
+
+  const vy = await oppnaInspelningar(page);
+
+  const sse = (events) => events.map((e) => `data: ${JSON.stringify(e)}\n\n`).join("");
+  const body = sse([
+    {
+      type: "scan_plan",
+      total: FIXTUR.length,
+      items: [
+        { key: 1, name: "Lektion A" },
+        { key: 2, name: "Lektion B" },
+        { key: 3, name: "Lektion C" },
+      ],
+    },
+    { type: "scan_result", key: 1, hits: 2 },
+    { type: "scan_result", key: 2, hits: 1 },
+    { type: "scan_result", key: 3, hits: 0 },
+    // deep_read FÖRE felet — det är just den ordningen fyndet gäller.
+    {
+      type: "deep_read",
+      sources: [
+        {
+          lesson_id: 1, history_id: "h1", name: "Lektion A",
+          group: "9A", course: "Matematik 2b", datum: "2026-04-02",
+        },
+        {
+          lesson_id: 2, history_id: "h2", name: "Lektion B",
+          group: "9A", course: "Matematik 2b", datum: "2026-03-30",
+        },
+      ],
+    },
+    { type: "error", message: "Språkmodellen är inte installerad." },
+  ]);
+  await page.route("**/api/search/ask", (route) =>
+    route.fulfill({ status: 200, contentType: "text/event-stream", body }),
+  );
+
+  await sokfalt(vy).input.fill(ORD);
+  await sokfalt(vy).kor.click();
+
+  const teater = vy.locator("section.genomsokning");
+  // Genomsökningen SYNS — scan_plan kom, så teatern renderas.
+  await expect(teater).toBeVisible();
+
+  // KRAVET: tickern får aldrig kvittera en genomsökning som avbröts, men den
+  // ska heller inte se ut att fortfarande söka — felet är redan känt.
+  await expect(teater.locator("p.ticker")).not.toContainText("Genomsökte");
+  await expect(teater.locator("p.ticker")).not.toContainText("Söker igenom");
+  await expect(teater.locator("p.ticker")).toContainText("avbröts");
+
+  // Läsbordet får INTE påstå att svaret bygger på källorna — inget svar kom.
+  await expect(teater.locator("p.bordsrubrik")).toHaveCount(0);
+
+  // Felet renderas i svarsytan, med streamPost-vägens vanliga textklassning
+  // (fragaFelText — allt annat än "matchar sökningen"/anslutningsmönstren).
+  await expect(vy.locator("p.fragafel")).toContainText(
+    "Kunde inte söka: Språkmodellen är inte installerad.",
+  );
+  await expect(vy.locator("section.svar")).toHaveCount(0);
+  await expect(sokfalt(vy).kor).toBeEnabled();
+
+  await page.unroute("**/api/search/ask");
+  const appfel = errors.filter((e) => !/Failed to load resource/.test(e));
+  expect(appfel, appfel.join("\n")).toEqual([]);
+});
+
 test("Fråga (/next/): en rensning överger den pågående strömmen", async ({ page }) => {
   const errors = [];
   failOnConsoleError(page, errors);
