@@ -1,6 +1,7 @@
 import { getJSON, streamPost } from '../api.js';
 import { insp } from './stores.svelte.js';
 import { sok } from './sok.svelte.js';
+import { peekTermer, valjRader, tidsEtikett } from './kallmodal.js';
 
 // EGEN räknare, aldrig delad med kartotekets laddToken: två snabba sökningar i
 // följd kan annars landa i fel ordning och skriva ett äldre resultat över ett
@@ -272,7 +273,15 @@ export async function korSokning() {
 export function rensaSokning() {
   sokToken++;
   fragaToken++;
+  // Källmodalens och följdfrågornas räknare bumpas av samma skäl: en hämtning
+  // eller ström som redan är i luften får inte skriva tillbaka något efteråt.
+  kallaToken++;
+  foljdToken++;
   nollstallFraga();
+  sok.kalla = null;
+  sok.foljdfragor = [];
+  sok.foljdInput = '';
+  sok.foljdSkriver = false;
   sok.fraga = '';
   sok.traffar = null;
   sok.soker = false;
@@ -298,4 +307,99 @@ export function valjLage(lage) {
   if (sok.lage === nytt) return;
   sok.lage = nytt;
   rensaSokning();
+}
+
+// EGNA räknare för källmodalen och följdfrågorna. Tre hämtningar i samma fil
+// betyder tre räknare — en delad låter den ena ogiltigförklara den andra.
+let kallaToken = 0;
+let foljdToken = 0;
+
+/**
+ * Öppnar källmodalen för en sifferkälla i svaret.
+ *
+ * Matchningen använder termer ur BÅDE frågan och svaret. Modellen omformulerar
+ * ofta — frågan säger "stereotyper" om ett klipp som säger "fördomar" — så
+ * svarets egna ord är den säkraste bryggan tillbaka till källraden. Gamla
+ * appens kommentar (app.js:2389-2391) säger samma sak.
+ *
+ * Modalen öppnas OMEDELBART med laddar: true, inte efter hämtningen. Ett klick
+ * som inte gör något på en halv sekund läses som att knappen är trasig.
+ */
+export async function oppnaKalla(kalla) {
+  if (!kalla) return;
+  const token = ++kallaToken;
+  sok.kalla = {
+    namn: kalla.name || '(namnlös)',
+    meta: [kalla.group, kalla.course, kalla.datum].filter(Boolean).join(' · '),
+    laddar: true,
+    rader: [],
+    fler: 0,
+    fel: false,
+  };
+  const hid = kalla.history_id || kalla.lesson_id;
+  try {
+    const h = await getJSON('/api/history/' + encodeURIComponent(hid));
+    if (token !== kallaToken || !sok.kalla) return;
+    const segment = ((h && h.transcript) || []).map((g) => ({
+      tid: tidsEtikett(g.start),
+      text: g.text,
+    }));
+    const { rader, fler } = valjRader(segment, peekTermer(sok.fraga + ' ' + sok.svar));
+    sok.kalla = { ...sok.kalla, laddar: false, rader, fler };
+  } catch {
+    if (token !== kallaToken || !sok.kalla) return;
+    sok.kalla = { ...sok.kalla, laddar: false, fel: true };
+  }
+}
+
+/** Stänger källmodalen. Bumpar räknaren så en hämtning i luften inte kan
+ *  återuppliva den efteråt. */
+export function stangKalla() {
+  kallaToken++;
+  sok.kalla = null;
+}
+
+/**
+ * Ställer en följdfråga.
+ *
+ * SKICKAR BARA {q} — inget samtalsminne, ingen kalenderflagga. Servern får
+ * alltså ingen historik, vilket gör varje följdfråga till en fristående
+ * arkivsökning. Det är gamla appens beteende (app.js:1937) och behålls; se
+ * kommentaren i sok.svelte.js för vad det innebär för läraren.
+ *
+ * Egen generationsvakt, och bubblan patchas via index i stället för "sista
+ * posten": hinner en rensning tömma listan medan strömmen lever skulle en
+ * sista-posten-patch annars skriva i fel bubbla.
+ */
+export async function stallFoljdfraga() {
+  const q = sok.foljdInput.trim();
+  if (!q || sok.fragar || sok.foljdSkriver) return;
+  const token = ++foljdToken;
+  const index = sok.foljdfragor.length;
+  sok.foljdfragor = [...sok.foljdfragor, { q, a: '', skriver: true }];
+  sok.foljdInput = '';
+  sok.foljdSkriver = true;
+  let acc = '';
+  const patcha = (fn) => {
+    if (token !== foljdToken) return;
+    const lista = sok.foljdfragor.slice();
+    if (!lista[index]) return;
+    lista[index] = fn({ ...lista[index] });
+    sok.foljdfragor = lista;
+  };
+  try {
+    await streamPost('/api/search/ask', { q }, (ev) => {
+      if (token !== foljdToken) return;
+      if (ev.type === 'token') {
+        acc += ev.text || '';
+        patcha((f) => ({ ...f, a: acc }));
+      } else if (ev.type === 'done') {
+        patcha((f) => ({ ...f, skriver: false, a: (ev.result && ev.result.text) || acc }));
+      } else if (ev.type === 'error') {
+        patcha((f) => ({ ...f, skriver: false, a: f.a || fragaFelText(ev.message) }));
+      }
+    });
+  } finally {
+    if (token === foljdToken) sok.foljdSkriver = false;
+  }
 }

@@ -3,6 +3,15 @@
   // viewRecordings (app/web/static/app.js:4808-4819).
   import { sok } from './sok.svelte.js';
   import { parseCitat } from './citat.js';
+  import { oppnaKalla, stallFoljdfraga } from './sokActions.js';
+
+  // Enter skickar följdfrågan. preventDefault så fältet inte submittar den
+  // dialog det ligger i närheten av.
+  function foljdKey(e) {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    stallFoljdfraga();
+  }
 
   const klar = $derived(!sok.fragar && !!sok.svar);
 
@@ -60,12 +69,12 @@
     <p class="text">
       {#if citat}
         {#each citat.tokens as t, i (i)}
-          {#if t.text}{t.text}{:else}<span
+          {#if t.text}{t.text}{:else}<button
               class="cite"
-              role="img"
+              onclick={() => oppnaKalla(sok.kallor[t.kallIndex])}
               title={namn(sok.kallor[t.kallIndex]) || `Källa ${t.cite}`}
-              aria-label="Källa {t.cite} — {namn(sok.kallor[t.kallIndex]) || 'okänd'}"
-              >{t.cite}</span
+              aria-label="Öppna källa {t.cite} — {namn(sok.kallor[t.kallIndex]) || 'okänd'}"
+              >{t.cite}</button
             >{/if}
         {/each}
       {:else}{sok.svar}{/if}{#if sok.fragar}<span class="markor" aria-hidden="true"></span>{/if}
@@ -81,15 +90,39 @@
           </li>
         {/each}
       </ul>
-      <!--
-        Vad B3b INTE gör, utskrivet i stället för antytt. Samma hållning som B1
-        och B3a: säg var läraren kan gå, navigera inte till en platshållare.
-        Källmodalen är B3c.
-      -->
-      <p class="senare">
-        Att öppna en källa i transkriptet migreras i en senare plan. Tills dess
-        finns det i den gamla appen.
-      </p>
+    {/if}
+
+    <!--
+      FÖLJDFRÅGORNA LIGGER INLINE, inte i en zoom-modal. Gamla appen visar dem
+      bara i ett helskärmsläge (askZoom) och utanför det bara en återvändsgränd
+      ("N följdfrågor — öppna chattvyn för att fortsätta"). Inline är färre
+      rörliga delar och närmare den lugna riktningen i DESIGN.md.
+
+      INGET SAMTALSMINNE: varje följdfråga är en fristående arkivsökning — se
+      kommentaren i sok.svelte.js.
+    -->
+    {#if klar}
+      <div class="foljd">
+        {#each sok.foljdfragor as f, i (i)}
+          <p class="fraga">{f.q}</p>
+          <p class="foljdsvar">
+            {f.a}{#if f.skriver}<span class="markor" aria-hidden="true"></span>{/if}
+          </p>
+        {/each}
+
+        <div class="foljdfalt">
+          <input
+            class="foljdinput"
+            bind:value={sok.foljdInput}
+            onkeydown={foljdKey}
+            aria-label="Ställ en följdfråga"
+            placeholder="Ställ en följdfråga …"
+          />
+          <button class="ghost" onclick={stallFoljdfraga} disabled={sok.foljdSkriver}>
+            {sok.foljdSkriver ? 'Söker …' : 'Skicka'}
+          </button>
+        </div>
+      </div>
     {/if}
   </section>
 {/if}
@@ -118,26 +151,28 @@
     overflow-wrap: anywhere;
   }
 
-  /* Sifferkällan är en MARKÖR, inte en knapp — att öppna källan är B3c. Ett
-     <span> utan tabindex är rätt: en knapp som inte gör något är värre än
-     ingen knapp. role="img" i markupen (inte här — bara ett attribut) ger
-     spanet en roll som TILLÅTER ett tillgängligt namn: ett rollöst <span> är
-     role="generic", och ARIA förbjuder namngivning av generiska element, så
-     title/aria-label hade annars kastats av skärmläsaren. Ingen live-region
-     och inget interaktivt läggs till. */
+  /* Sifferkällan är nu en KNAPP — den öppnar källmodalen. Fram till B3c var
+     den ett rollöst <span> med role="img", eftersom en knapp som inte gör
+     något är värre än ingen knapp. Nu gör den något, och då är <button> rätt
+     element: det ger tangentbordsfokus, Enter/Space och en roll som bär det
+     tillgängliga namnet utan att behöva role-attributet. */
   .cite {
     display: inline-block;
     min-width: 15px;
     text-align: center;
     background: var(--accent-weak);
     color: var(--accent);
+    border: 0;
     border-radius: 2px;
     padding: 0 4px;
     margin: 0 1px;
+    font-family: inherit;
     font-size: 0.72rem;
     font-variant-numeric: tabular-nums;
     vertical-align: 1px;
+    cursor: pointer;
   }
+  .cite:hover { background: var(--accent); color: var(--on-accent); }
 
   .markor {
     display: inline-block;
@@ -184,12 +219,71 @@
     font-variant-numeric: tabular-nums;
   }
 
-  .senare {
-    font-size: 0.72rem;
-    color: var(--ink-3);
-    max-width: 52ch;
-    margin: 16px 0 0;
+  /* FÖLJDFRÅGORNA. Hårlinje över, inte ett eget kort: de hör till svaret
+     ovanför, inte bredvid det. */
+  .foljd {
+    margin-top: 18px;
+    padding-top: 14px;
+    border-top: 1px solid var(--line);
   }
+  /* Frågan högerställd, svaret vänsterställt — samma läsriktning som gamla
+     appens chattbubblor, men utan bubblorna. */
+  .fraga {
+    font-size: 1.03rem;
+    color: var(--ink-2);
+    margin: 0 0 4px;
+    text-align: right;
+    max-width: 62ch;
+    margin-left: auto;
+    overflow-wrap: anywhere;
+  }
+  .foljdsvar {
+    font-size: 1.03rem;
+    line-height: 1.75;
+    color: var(--ink);
+    white-space: pre-wrap;
+    max-width: 62ch;
+    margin: 0 0 16px;
+    overflow-wrap: anywhere;
+  }
+
+  .foljdfalt {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--surface);
+    border: 1px solid var(--line-2);
+    border-radius: 4px;
+    padding: 4px 4px 4px 12px;
+  }
+  .foljdfalt:focus-within { border-color: var(--accent); }
+  .foljdinput {
+    flex: 1;
+    min-width: 0;
+    background: transparent;
+    border: 0;
+    color: var(--ink);
+    font-family: inherit;
+    font-size: 1.03rem;
+    padding: 8px 0;
+  }
+  .foljdinput::placeholder { color: var(--ink-3); }
+
+  /* Identisk med .ghost i InspelningarView.svelte, som i sin tur är kopian av
+     Korning.svelte:284-293. */
+  .ghost {
+    flex: none;
+    background: transparent;
+    color: var(--ink-2);
+    border: 1px solid var(--line-2);
+    border-radius: 4px;
+    padding: 8px 16px;
+    font-family: inherit;
+    font-size: inherit;
+    cursor: pointer;
+  }
+  .ghost:hover:not(:disabled) { border-color: var(--ink); color: var(--ink); }
+  .ghost:disabled { cursor: default; opacity: 0.6; }
 
   /* Felet bär samma typform som tomtillstånden i vyn — löpande text, ingen ram,
      ingen ikon. Ett fel är inget larm. */

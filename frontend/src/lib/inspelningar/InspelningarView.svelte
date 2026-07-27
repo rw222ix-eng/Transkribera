@@ -26,6 +26,7 @@
   import { sok } from './sok.svelte.js';
   import { rensaSokning } from './sokActions.js';
   import RedigeraLektion from './RedigeraLektion.svelte';
+  import Kallmodal from './Kallmodal.svelte';
   import { nav } from '../shell/nav.svelte.js';
 
   // Raderingsbekräftelsen är ett NATIVE <dialog>, byggt precis som
@@ -428,6 +429,9 @@
     tillgänglighetsträd — den kostar ingenting att låta stå.
   -->
   <RedigeraLektion />
+
+  <!-- Källmodalen. Alltid monterad, av samma skäl som de två dialogerna ovan. -->
+  <Kallmodal />
 </section>
 
 <style>

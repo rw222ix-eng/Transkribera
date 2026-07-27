@@ -37,4 +37,20 @@ export const sok = $state({
   // från ett kort svar. Svelte-arkivet valde medvetet ett eget fält; den
   // förbättringen tas med.
   fragaFel: '',
+
+  // KÄLLMODALEN (B3c). null = stängd. Öppnas av en sifferkälla i svaret och
+  // visar själva stället i transkriptionen, med träffraderna markerade.
+  kalla: null,          // null | {namn, meta, laddar, rader, fler, fel}
+
+  // FÖLJDFRÅGORNA (B3c). Varje post är {q, a, skriver}.
+  //
+  // INGET SAMTALSMINNE, och det är inte en förenkling — servern får bara `q`,
+  // precis som huvudfrågan. En följdfråga är alltså en helt fristående
+  // arkivsökning. Gamla appen gör exakt likadant (app.js:1937), trots att
+  // Planeringsarkivets dokumentation påstår motsatsen. Konsekvensen är värd
+  // att veta: "kan du utveckla?" som följdfråga söker på orden "kan du
+  // utveckla" och landar i 404-vägen.
+  foljdfragor: [],
+  foljdInput: '',
+  foljdSkriver: false,  // en följdfråga är i luften
 });

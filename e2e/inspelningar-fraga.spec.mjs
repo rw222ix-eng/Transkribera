@@ -241,14 +241,20 @@ test("Fråga (/next/): svaret strömmar in och sifferkällan blir en markör", a
   await expect(svar.locator("p.text")).toContainText("[FEJK svar]", { timeout: 20_000 });
 
   // MARKÖREN är kravet: [1] ska ha blivit ett element, inte stå kvar som text.
-  await expect(svar.locator("span.cite")).toHaveCount(1, { timeout: 20_000 });
-  await expect(svar.locator("span.cite")).toHaveText("1");
+  await expect(svar.locator("button.cite")).toHaveCount(1, { timeout: 20_000 });
+  await expect(svar.locator("button.cite")).toHaveText("1");
+  // B3c gjorde markören klickbar — den öppnar källmodalen. Fram till dess
+  // var den ett rollöst span, eftersom en knapp som inte gör något är värre
+  // än ingen knapp.
+  await expect(svar.getByRole("button", { name: /^Öppna källa 1/ })).toBeVisible();
   await expect(svar.locator("p.text")).not.toContainText("[1]");
 
   // Rubriken räknar bara citerade källor — fejksvaret citerar exakt en.
   await expect(svar.locator("h2.rubrik")).toHaveText("Svar — 1 källa");
   await expect(svar.locator("li.kalla")).toHaveCount(1);
-  await expect(svar).toContainText("migreras i en senare plan");
+  // Raden "att öppna en källa migreras i en senare plan" är BORTA sedan B3c:
+  // markören öppnar nu källmodalen på riktigt. Se testet längre ned.
+  await expect(svar).not.toContainText("migreras i en senare plan");
 
   // Läsbordet efter done: SINGULAR ("denna", inte "dessa 3") — det är den
   // enda assertionen som gör Genomsokning.svelte:s citatfiltrering
@@ -275,7 +281,7 @@ test("Fråga (/next/): kartotekets kort lyfts efter serverns träffar", async ({
   await expect(vy.locator("div.hylsa[data-stage]")).toHaveCount(0);
 
   await stallFraga(page, vy, ORD);
-  await expect(vy.locator("section.svar span.cite")).toHaveCount(1, { timeout: 20_000 });
+  await expect(vy.locator("section.svar button.cite")).toHaveCount(1, { timeout: 20_000 });
 
   // Efter done styr done.result.sources — ALLA DJUPT LÄSTA lyfts, inte bara
   // de CITERADE (Svar.svelte:s rubrik "Svar — 1 källa" räknar en annan,
@@ -448,6 +454,64 @@ test("Fråga (/next/): en rensning överger den pågående strömmen", async ({ 
   await expect(vy.locator("section.genomsokning")).toHaveCount(0);
   await expect(vy.locator("section.svar")).toHaveCount(0);
   await expect(sokfalt(vy).input).toHaveValue("");
+
+  expect(errors, errors.join("\n")).toEqual([]);
+});
+
+test("Fråga (/next/): en sifferkälla öppnar transkriptionen på rätt ställe", async ({ page }) => {
+  const errors = [];
+  failOnConsoleError(page, errors);
+
+  const vy = await oppnaInspelningar(page);
+  await stallFraga(page, vy, ORD);
+  await expect(vy.locator("section.svar button.cite")).toHaveCount(1, { timeout: 20_000 });
+
+  await vy.locator("section.svar button.cite").click();
+
+  // Native <dialog> — den ligger i top-layer, alltså utanför .pane-avgränsningen.
+  const modal = page.locator("dialog.kalla");
+  await expect(modal).toBeVisible();
+
+  // Fejkens transkript är tre segment, och bara ett av dem nämner ORD. Fönstret
+  // är två rader före och fem efter, så alla tre ryms — men exakt en ska vara
+  // MARKERAD. Utan markeringen har termmatchningen tystnat.
+  await expect(modal.locator("li.rad")).toHaveCount(3);
+  await expect(modal.locator("li.rad.traff")).toHaveCount(1);
+  await expect(modal.locator("li.rad.traff")).toContainText(ORD);
+
+  // Tidsstämpeln ska vara en läsbar etikett, inte råa sekunder.
+  await expect(modal.locator("li.rad").first().locator("span.tid")).toHaveText("0:00");
+
+  await modal.getByRole("button", { name: "Stäng" }).click();
+  await expect(modal).toBeHidden();
+
+  expect(errors, errors.join("\n")).toEqual([]);
+});
+
+test("Fråga (/next/): en följdfråga får ett eget svar", async ({ page }) => {
+  const errors = [];
+  failOnConsoleError(page, errors);
+
+  const vy = await oppnaInspelningar(page);
+  await stallFraga(page, vy, ORD);
+  await expect(vy.locator("section.svar")).toBeVisible({ timeout: 20_000 });
+
+  const svar = vy.locator("section.svar");
+  const foljd = svar.getByLabel("Ställ en följdfråga");
+  await expect(foljd).toBeVisible();
+
+  const stromen = page.waitForResponse(
+    (r) => new URL(r.url()).pathname === "/api/search/ask",
+  );
+  await foljd.fill("procent");
+  await svar.getByRole("button", { name: /^Skicka$|^Söker/ }).click();
+  await stromen;
+
+  // Frågan syns som en egen rad, och svaret kommer i en egen.
+  await expect(svar.locator("p.fraga")).toHaveText("procent");
+  await expect(svar.locator("p.foljdsvar")).toContainText("[FEJK svar]", { timeout: 20_000 });
+  // Fältet töms så nästa fråga kan skrivas direkt.
+  await expect(foljd).toHaveValue("");
 
   expect(errors, errors.join("\n")).toEqual([]);
 });
