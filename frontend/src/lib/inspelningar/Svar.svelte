@@ -4,6 +4,7 @@
   import { sok } from './sok.svelte.js';
   import { parseCitat } from './citat.js';
   import { oppnaKalla, stallFoljdfraga } from './sokActions.js';
+  import Kalenderforslag from './Kalenderforslag.svelte';
 
   // Enter skickar följdfrågan. preventDefault så fältet inte submittar den
   // dialog det ligger i närheten av.
@@ -91,6 +92,12 @@
         {/each}
       </ul>
     {/if}
+
+    <!--
+      KALENDERFÖRSLAGET ligger mellan svaret och följdfrågorna: det är en
+      följd av svaret, och en följdfråga gäller ofta just förslaget.
+    -->
+    <Kalenderforslag />
 
     <!--
       FÖLJDFRÅGORNA LIGGER INLINE, inte i en zoom-modal. Gamla appen visar dem

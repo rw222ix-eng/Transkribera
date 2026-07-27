@@ -2,6 +2,7 @@ import { getJSON, streamPost } from '../api.js';
 import { insp } from './stores.svelte.js';
 import { sok } from './sok.svelte.js';
 import { peekTermer, valjRader, tidsEtikett } from './kallmodal.js';
+import { stripKalendertagg, tolkaForslag, tolkaFragor, startTid } from './kalender.js';
 
 // EGEN räknare, aldrig delad med kartotekets laddToken: två snabba sökningar i
 // följd kan annars landa i fel ordning och skriva ett äldre resultat över ett
@@ -73,6 +74,12 @@ function nollstallFraga() {
   sok.svar = '';
   sok.kallor = [];
   sok.fragaFel = '';
+  // En ny fråga betyder ett nytt förslag. Gamla appen nollställer askEvent på
+  // samma ställe (app.js:1824) — annars står gårdagens kalenderförslag kvar
+  // under ett svar som inte handlar om det.
+  sok.handelse = null;
+  sok.kalFragor = null;
+  sok.evValjare = false;
 }
 
 /**
@@ -102,12 +109,14 @@ export function fragaFelText(message) {
 /**
  * Ställer frågan och läser svaret ur SSE-strömmen.
  *
- * BODYN ÄR {q} OCH INGET MER. Gamla appen skickar alltid {q, calendar: true}
- * (app.js:1831), vilket ger modellen kalenderförmågan — och tvingar klienten
- * att stripCalTag varje token så en påbörjad [KALENDERFÖRSLAG]-rad aldrig
- * blinkar förbi. Serverns default är calendar: false, så utan flaggan uppstår
- * inga taggar och ingen strippning behövs. Kalenderkedjan får slå på den i sin
- * egen plan.
+ * BODYN BÄR calendar: true, vilket ger modellen förmågan att föreslå en
+ * kalenderhändelse (server.py:1417-1433). Priset är att varje token måste
+ * strippas: modellens [KALENDERFÖRSLAG]-rad är maskinläsbar och ska aldrig
+ * synas, inte ens halvströmmad som "[KALEN".
+ *
+ * Rå text ackumuleras i `acc`; sok.svar bär alltid den STRIPPADE versionen.
+ * Taggarna tolkas ur den råa texten vid done — en halvströmmad JSON går inte
+ * att tolka, och att försöka mitt i strömmen ger bara skräpförslag.
  *
  * insp.fel nollställs ÖVERST, aldrig på en framgångsgren — samma invariant som
  * B3a fastställde: nollställ när LÄRAREN AGERADE, aldrig när ett svar landade.
@@ -120,8 +129,9 @@ export async function stallFraga() {
   insp.fel = '';
   insp.felArt = '';
   sok.fragar = true;
+  let acc = '';
   try {
-    await streamPost('/api/search/ask', { q }, (ev) => {
+    await streamPost('/api/search/ask', { q, calendar: true }, (ev) => {
       // Vakten FÖRST: ett event från en övergiven ström får inte röra något.
       if (token !== fragaToken) return;
 
@@ -141,12 +151,29 @@ export async function stallFraga() {
       } else if (ev.type === 'log') {
         sok.notis = ev.msg || '';
       } else if (ev.type === 'token') {
-        sok.svar += ev.text || '';
+        acc += ev.text || '';
+        sok.svar = stripKalendertagg(acc);
         sok.notis = '';
       } else if (ev.type === 'done') {
-        sok.svar = (ev.result && ev.result.text) || sok.svar;
+        const full = (ev.result && ev.result.text) || acc;
+        sok.svar = stripKalendertagg(full);
         sok.kallor = (ev.result && ev.result.sources) || [];
         sok.notis = '';
+
+        // KLARGÖRANDE FRÅGOR GÅR FÖRE ett förslag: svarar modellen med båda
+        // menar den att förslaget är en gissning den vill ha bekräftad.
+        const fragor = tolkaFragor(full);
+        if (fragor) {
+          sok.kalFragor = { fragor, extra: '' };
+        } else {
+          const forslag = tolkaForslag(full, sok.handelse);
+          if (forslag) {
+            sok.handelse = forslag;
+            // Google-statusen hämtas FÖRST här — ingen anledning att fråga för
+            // en lärare som aldrig ber om en kalenderhändelse.
+            if (sok.calAnsluten === null) laddaCalStatus();
+          }
+        }
         // ENDA annonseringen per fråga. Teatern renderas tyst — den uppdateras
         // var 60-150 ms och skulle bli en flod i en skärmläsare, och vyn har
         // redan sin enda annonserande nod.
@@ -388,13 +415,26 @@ export async function stallFoljdfraga() {
     sok.foljdfragor = lista;
   };
   try {
-    await streamPost('/api/search/ask', { q }, (ev) => {
+    // calendar: true även här — en följdfråga är oftast just den som ber om en
+    // kalenderhändelse ("boka provet på fredag"). Taggarna strippas likadant.
+    await streamPost('/api/search/ask', { q, calendar: true }, (ev) => {
       if (token !== foljdToken) return;
       if (ev.type === 'token') {
         acc += ev.text || '';
-        patcha((f) => ({ ...f, a: acc }));
+        patcha((f) => ({ ...f, a: stripKalendertagg(acc) }));
       } else if (ev.type === 'done') {
-        patcha((f) => ({ ...f, skriver: false, a: (ev.result && ev.result.text) || acc }));
+        const full = (ev.result && ev.result.text) || acc;
+        patcha((f) => ({ ...f, skriver: false, a: stripKalendertagg(full) }));
+        const fragor = tolkaFragor(full);
+        if (fragor) {
+          sok.kalFragor = { fragor, extra: '' };
+        } else {
+          const forslag = tolkaForslag(full, sok.handelse);
+          if (forslag) {
+            sok.handelse = forslag;
+            if (sok.calAnsluten === null) laddaCalStatus();
+          }
+        }
       } else if (ev.type === 'error') {
         patcha((f) => ({ ...f, skriver: false, a: f.a || fragaFelText(ev.message) }));
       }
@@ -402,4 +442,158 @@ export async function stallFoljdfraga() {
   } finally {
     if (token === foljdToken) sok.foljdSkriver = false;
   }
+}
+
+/* ---- Kalenderkedjan -------------------------------------------------------
+   Modellen kan svara med [KALENDERFÖRSLAG] eller [KALENDERFRÅGOR]. Båda
+   raderna klipps ur svarstexten av stripKalendertagg innan den visas; det som
+   blir kvar här är förslaget läraren granskar och godkänner.
+
+   GOOGLE KALENDER ÄR APPENS ENDA VÄG UT UR MASKINEN — se kommentaren i
+   sok.svelte.js. */
+
+/** Hämtar Google-kopplingens status. Tyst: ett misslyckat statusanrop är
+ *  inget läraren kan åtgärda, och förslaget ska ändå gå att granska. */
+export async function laddaCalStatus() {
+  try {
+    const r = await getJSON('/api/calendar/status');
+    sok.calAnsluten = !!(r && r.connected);
+    sok.calKlientKlar = !!(r && r.client_ready);
+  } catch {
+    sok.calAnsluten = false;
+    sok.calKlientKlar = false;
+  }
+}
+
+/**
+ * Startar Googles samtyckesflöde.
+ *
+ * `/api/calendar/connect` BLOCKERAR tills flödet är klart i webbläsaren
+ * (server.py:1344-1348), så anropet kan stå öppet i minuter. Knappen låses
+ * under tiden och släpps i finally — överger läraren inloggningen svarar
+ * fetchen aldrig, och utan den raden hade knappen varit låst till omstart.
+ */
+export async function anslutCal() {
+  if (sok.calAnsluten) return;
+  try {
+    await fetch('/api/calendar/connect', { method: 'POST' });
+  } catch {
+    /* status hämtas om nedan oavsett */
+  } finally {
+    await laddaCalStatus();
+  }
+}
+
+/** Sätter ett fält på förslaget. */
+export function satHandelseFalt(nyckel, varde) {
+  if (!sok.handelse) return;
+  sok.handelse = { ...sok.handelse, [nyckel]: varde };
+}
+
+/** Dag- och tidväljaren. Dagen bär sitt ISO-datum, så ett val utanför
+ *  etikettuppslaget ändå landar rätt i API-anropet. */
+export function valjDag(etikett, iso) {
+  if (!sok.handelse) return;
+  const bitar = (sok.handelse.when || ' · ').split(' · ');
+  sok.handelse = {
+    ...sok.handelse,
+    when: `${etikett} · ${bitar[1] || '08:00'}`,
+    startIso: iso,
+  };
+}
+
+export function valjTid(tid) {
+  if (!sok.handelse) return;
+  const bitar = (sok.handelse.when || ' · ').split(' · ');
+  sok.handelse = { ...sok.handelse, when: `${bitar[0] || ''} · ${tid}` };
+  sok.evValjare = false;
+}
+
+export function avfardaHandelse() {
+  sok.handelse = null;
+  sok.evValjare = false;
+}
+
+/**
+ * Skickar händelsen till Google Kalender.
+ *
+ * Felet visas i vyns statusrad, inte som en toast: den nya frontenden har
+ * ingen toast-mekanism, och ett misslyckat kalenderanrop är ett direkt svar på
+ * ett klick — precis det insp.fel finns för.
+ */
+export async function laggTillHandelse() {
+  const ev = sok.handelse;
+  if (!ev || ev.busy || ev.added) return;
+  sok.handelse = { ...ev, busy: true };
+  insp.fel = '';
+  insp.felArt = '';
+  try {
+    const r = await fetch('/api/calendar/event', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: ev.title,
+        start: startTid(ev),
+        description: ev.desc || '',
+        end_date: ev.endIso || null,
+      }),
+    });
+    const j = await r.json().catch(() => null);
+    if (!r.ok) {
+      sok.handelse = { ...sok.handelse, busy: false };
+      insp.fel = (j && j.error) || 'Kunde inte skapa händelsen i Google Kalender.';
+      insp.felArt = '';
+      return;
+    }
+    sok.handelse = { ...sok.handelse, busy: false, added: true };
+    insp.fel = 'Händelsen är tillagd i Google Kalender.';
+    insp.felArt = 'info';
+  } catch {
+    sok.handelse = { ...sok.handelse, busy: false };
+    insp.fel = 'Kunde inte nå Google Kalender — kontrollera att appen körs.';
+    insp.felArt = '';
+  }
+}
+
+/* ---- Modellens klargörande frågor ---- */
+
+export function valjFragesvar(index, alternativ) {
+  if (!sok.kalFragor) return;
+  const fragor = sok.kalFragor.fragor.map((f, i) =>
+    // Klick på ett redan valt alternativ nollställer det: läraren ska kunna
+    // ångra utan att behöva stänga dialogen.
+    i === index ? { ...f, val: f.val === alternativ ? null : alternativ } : f,
+  );
+  sok.kalFragor = { ...sok.kalFragor, fragor };
+}
+
+export function satFrageExtra(varde) {
+  if (!sok.kalFragor) return;
+  sok.kalFragor = { ...sok.kalFragor, extra: varde };
+}
+
+export function stangFragor() {
+  sok.kalFragor = null;
+}
+
+/**
+ * Skickar svaren tillbaka till modellen som en ny fråga.
+ *
+ * `hoppa` betyder "strunta i frågorna och gissa rimligt" — läraren ska aldrig
+ * tvingas svara på tre frågor för att få en kalenderhändelse.
+ */
+export function skickaFragesvar(hoppa) {
+  const cq = sok.kalFragor;
+  if (!cq) return;
+  let text;
+  if (hoppa) {
+    text = 'Skapa kalenderhändelsen direkt med rimliga antaganden.';
+  } else {
+    const delar = cq.fragor.map((f) => `${f.q} Svar: ${f.val || 'inget särskilt'}`);
+    if ((cq.extra || '').trim()) delar.push(`Övrigt önskemål: ${cq.extra.trim()}`);
+    text = delar.join(' · ') + ' — skapa nu kalenderhändelsen med en detaljerad anteckning utifrån detta.';
+  }
+  sok.kalFragor = null;
+  sok.foljdInput = text;
+  stallFoljdfraga();
 }

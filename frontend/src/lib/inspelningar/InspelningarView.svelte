@@ -27,6 +27,7 @@
   import { rensaSokning } from './sokActions.js';
   import RedigeraLektion from './RedigeraLektion.svelte';
   import Kallmodal from './Kallmodal.svelte';
+  import Kalenderfragor from './Kalenderfragor.svelte';
   import { nav } from '../shell/nav.svelte.js';
 
   // Raderingsbekräftelsen är ett NATIVE <dialog>, byggt precis som
@@ -432,6 +433,9 @@
 
   <!-- Källmodalen. Alltid monterad, av samma skäl som de två dialogerna ovan. -->
   <Kallmodal />
+
+  <!-- Modellens klargörande frågor innan en kalenderhändelse skapas. -->
+  <Kalenderfragor />
 </section>
 
 <style>
