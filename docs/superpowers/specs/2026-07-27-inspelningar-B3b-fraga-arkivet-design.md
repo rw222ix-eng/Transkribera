@@ -243,7 +243,7 @@ Den ska täcka:
 
 Punkt 4 och 6 är de bärande: den ena vaktar att stadiet kommer från servern och inte från klientens ordmatchning, den andra en kapplöpning som är osynlig tills den inträffar.
 
-**Grindar:** `python -m pytest` → `781 passed, 22 skipped` (noll backend-filer ändras), `npm run check` → 0 ERRORS 0 WARNINGS, `npm run build` → exit 0, och `next-foundation` växer från 46 tester. `npm run build` **före** Playwright.
+**Grindar:** `python -m pytest` → `781 passed, 22 skipped` (noll backend-filer ändras), `npm run check` → 0 ERRORS 0 WARNINGS, `npm run build` → exit 0, och `next-foundation` växer från 45 till 51 tester. `npm run build` **före** Playwright.
 
 ---
 
