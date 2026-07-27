@@ -13,17 +13,16 @@ Transkribera — lokal skrivbordsapp (Windows) som transkriberar lektioner/ljud/
 och organiserar dem per datum, klass och kurs. Allt körs **lokalt/offline**.
 
 - **Stack:** Python 3 · FastAPI + Uvicorn (lokalt webb-UI) · pywebview (eget
-  fönster) · vanilla JS i `app/web/static/` (**inget byggsteg**, morphdom-rendering) ·
+  fönster) · **Svelte 5 + Vite** (frontenden, källan i `frontend/src/`, serveras på `/`) ·
   faster-whisper/CTranslate2 (KB-Whisper sv) · llama.cpp (`llama-server`) + Qwen3-14B-Q8
   för korrigering/sammanfattning/chatt/extraktion · lokal **SQLite** (`app/db.py`,
   `transkribera.db`) + `history.json` · PyInstaller-bygge. Målhårdvara: RTX 4090 / 24 GB.
-- **Ny frontend (Svelte 5 + Vite) — medvetet undantag från "inget byggsteg":**
-  vid sidan av den gamla appen finns en Svelte-frontend. Dess konfig (`package.json`,
-  `vite.config.js`, `svelte.config.js`, `jsconfig.json`, `index.html`) ligger i
-  **repo-roten**; källan i `frontend/src/`. Den byggs till `app/web/next/`
-  (gitignorerad) och serveras **additivt** av FastAPI på `/next` — `/` och `/static`
-  är orörda. Kommandon körs från repo-roten, **utan `--prefix`**: `npm run dev`
-  (Vite `:5173`), `npm run build`, `npm run check` (svelte-check).
+- **Frontenden (Svelte 5 + Vite):** dess konfig (`package.json`, `vite.config.js`,
+  `svelte.config.js`, `jsconfig.json`, `index.html`) ligger i **repo-roten**; källan i
+  `frontend/src/`. Byggs till `app/web/next/` (gitignorerad) och serveras av FastAPI på
+  `/` — samt fortsatt på `/next`, dit hela e2e-sviten pekar. Kommandon körs från
+  repo-roten, **utan `--prefix`**: `npm run dev` (Vite `:5173`), `npm run build`,
+  `npm run check` (svelte-check).
   · **Byggordning vid paketering:** `npm run build` MÅSTE köras före PyInstaller.
   · **Varför Vite-roten är repo-roten:** Impeccables live-läge skriver temp-komponenter
     till `<projectRoot>/node_modules/.impeccable-live/`, och Vite transformerar bara
@@ -33,9 +32,19 @@ och organiserar dem per datum, klass och kurs. Allt körs **lokalt/offline**.
     i `vite.config.js` en **allowlist** (`frontend/src`, `node_modules`, `index.html`)
     och dev-servern binder till `127.0.0.1`. Utan den skulle dev-servern kunna servera
     hela repot över HTTP, inklusive `Transkriberingar/`. **Vidga den inte.**
-  Den gamla appen på `/` är oförändrad vanilla `app.js` + `style.css` **utan byggsteg**.
-- **Test-kommando:** `python -m pytest` (kör från repo-roten). Ny JS i den gamla appen
-  syntaxkontrolleras med `node --check app/web/static/app.js`. För Svelte-frontenden:
+  · **Den gamla vanilla-JS-appen är pensionerad** (`app.js`, `style.css`, `index.html`,
+    "inget byggsteg", morphdom-rendering) — se
+    `docs/superpowers/plans/2026-07-25-cutover-till-svelte.md`, Task 4.
+    `app/web/static/` innehåller numera bara whiteboard-motorn (`whiteboard/`, egna
+    `styles.css`/`fonts.css`), vendorade bibliotek (`vendor/` — KaTeX, använd av både
+    `board.html` och Svelte-appens `index.html`, samt `morphdom.js`, använd av
+    `board.html`) och typsnitt (`fonts/`).
+  · **Historiska `app.js:NNNN`-referenser** i kodkommentarer runt om i `frontend/src/`
+    och `e2e/` är avsiktligt kvar trots att filen är borta — de förklarar *varför* en
+    Svelte-komponent eller en spec ser ut som den gör (porterad ur, eller ett beteende
+    som speglar, en viss rad i den gamla appen). Läs dem som citat ur ett dokument som
+    inte längre finns, inte som levande sökvägar.
+- **Test-kommando:** `python -m pytest` (kör från repo-roten). För frontenden:
   `npm run check` (svelte-check) + `npm run build`, båda från repo-roten. Ingen lint är
   konfigurerad i repot — inför inte fler verktyg utan att bli ombedd.
 - **Default branch:** `main`.
@@ -59,7 +68,8 @@ och organiserar dem per datum, klass och kurs. Allt körs **lokalt/offline**.
     anti-referenser, designprinciper) och `DESIGN.md` (visuellt: färg, typografi, komponenter,
     motion) i roten är källan till sanning för visuell riktning (redaktionell papper+bläck;
     lugn, tillbakadragen ton; undvik AI/SaaS-dashboard och tät företags-UI). Faktisk CSS:
-    `app/web/static/style.css` — de äldre `docs/design/*.md` är föråldrade.
+    `frontend/src/app.css` (porterad från den nu pensionerade `app/web/static/style.css`)
+    — de äldre `docs/design/*.md` är föråldrade.
   - **Inga hemligheter** i diffen (särskilt `cookies.txt`, som är gitignored).
 - **Tilldelad arbetsgren:** om sessionen fått en specifik gren tilldelad (t.ex.
   `claude/<slug>`) utvecklas och pushas där; den går före branch-namnskonventionen nedan.
