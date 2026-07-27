@@ -6,6 +6,7 @@
   import PlaneringView from './lib/planering/PlaneringView.svelte';
   import ArkivView from './lib/arkiv/ArkivView.svelte';
   import TranskriptModal from './lib/transkript/TranskriptModal.svelte';
+  import LektionschattModal from './lib/lektionschatt/LektionschattModal.svelte';
 </script>
 
 <AppShell />
@@ -31,6 +32,12 @@
      Inspelningar och Transkribera, och en <dialog> i en hidden panel ritas
      inte men blockerar dokumentet. Utanför panelerna finns inte problemet. -->
 <TranskriptModal />
+
+<!-- Lektionschatten monteras på samma nivå och av samma skäl. Ordningen i
+     DOM:en styr ingenting: showModal() lyfter båda till top-layer, som
+     staplar dem i ÖPPNINGSORDNING — så transkriptvyn lägger sig ovanpå
+     chatten när den öppnas därifrån, och chatten finns kvar under. -->
+<LektionschattModal />
 
 <style>
   /* Explicit — så att ingen framtida display-regel på div råkar besegra

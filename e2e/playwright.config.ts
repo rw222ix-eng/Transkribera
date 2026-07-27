@@ -214,6 +214,7 @@ export default defineConfig({
         /transkribera-inspelning\.spec\.mjs$/,
         /transkript\.spec\.mjs$/,
         /transkript-prestanda\.spec\.mjs$/,
+        /lektionschatt\.spec\.mjs$/,
       ],
       use: { ...devices["Desktop Chrome"] },
     },
