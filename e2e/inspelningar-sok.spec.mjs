@@ -12,8 +12,7 @@
 //   4. tomtillståndet vid noll träffar,
 //   5. att ett KLASSbyte inte ändrar träfflistan — söket är ofiltrerat på
 //      servern,
-//   6. att "Fråga AI" visar sin förklarande rad och en inaktiv körknapp,
-//   7. att körknappen INTE fastnar i "Söker …"/disabled när fältet töms och
+//   6. att körknappen INTE fastnar i "Söker …"/disabled när fältet töms och
 //      Enter trycks igen medan en tidigare sökning fortfarande är i luften
 //      (slutgranskningens fynd 1: den tomma-frågan-grenen i korSokning
 //      nollställde sok.traffar men aldrig sok.soker).
@@ -21,13 +20,27 @@
 // Punkt 2 och 5 är planens bärande krav. Punkt 2 vaktar regeln "en yta i
 // taget"; punkt 5 vaktar ett serverbeteende som är lätt att missförstå —
 // api_search (server.py:1395-1410) tar inga filterparametrar, så en träff i en
-// bortfiltrerad klass ska fortfarande synas. Punkt 7 vaktar en regression som
+// bortfiltrerad klass ska fortfarande synas. Punkt 6 vaktar en regression som
 // annars bara syns genom att prova exakt den sekvensen i appen — den fälls
 // aldrig av en spärr som bara söker EN gång.
 //
+// B3b (sok.svelte.js:11) FLIPPADE sok.lages DEFAULTVÄRDE från 'keyword' till
+// 'ask' — vyn öppnar numera i fråge-läget. Den här filen prövar ORDSÖKET, så
+// oppnaInspelningar (nedan) växlar tillbaka till 'keyword' åt varje test,
+// EN gång, i stället för att sprida samma klick över alla sex testerna. Se
+// funktionens egen kommentar för varför: utan växlingen heter körknappen
+// "Fråga", och sokfalt().kor — som bara matchar "Sök"/"Söker …" — hittar
+// den aldrig.
+//
+// Testet som tidigare hette "Fråga AI säger att den kommer senare" är
+// BORTTAGET, inte omskrivet: det prövade en placeholder-rad och en inaktiv
+// körknapp som B3b ersatte med ett levande läge. Den täckningen ägs nu av
+// B3b:s egen svit, inspelningar-fraga.spec.mjs — den här filen ska inte
+// påstå något om fråge-läget i sak.
+//
 // TÄCKS INTE, och det är avsiktligt:
-//   · Fråge-läget i sak. Det svarar inte förrän B3b; punkt 6 prövar bara att
-//     B3a säger det i stället för att låtsas.
+//   · Fråge-läget i sak. Det är levande sedan B3b och täcks av
+//     inspelningar-fraga.spec.mjs, inte här.
 //   · Att öppna en träff i transkriptet. Det finns inte i B3a — vyn säger i
 //     klartext att det kommer senare, och punkt 1 kontrollerar att raden står
 //     där.
@@ -155,16 +168,25 @@ async function byggFixtur(request) {
 }
 
 /**
- * Öppnar Inspelningar-fliken och väntar in kartoteket.
+ * Öppnar Inspelningar-fliken, väntar in kartoteket och växlar till ORDSÖKET.
  *
  * Flikbytet är inte kosmetik: hämtningarna är grindade på nav.tab, inte på
  * montering — App.svelte håller alla paneler monterade och gömmer dem bara.
+ *
+ * LÄGESVÄXLINGEN sist är B3b-anpassningen: B3b (sok.svelte.js:11) flippade
+ * sok.lages DEFAULTVÄRDE från 'keyword' till 'ask', eftersom fråge-läget
+ * numera är levande. Den här filen prövar ORDSÖKET, inte fråge-läget, så
+ * varje test måste tillbaka till 'keyword' innan det gör något — annars
+ * heter körknappen "Fråga" i stället för "Sök"/"Söker …", och sokfalt().kor
+ * (som bara matchar de två sistnämnda) hittar den aldrig och testet fastnar
+ * i en timeout. Görs HÄR, en gång, i stället för i varje enskilt test.
  */
 async function oppnaInspelningar(page) {
   await page.goto("/next/");
   await page.getByRole("button", { name: "Inspelningar", exact: true }).click();
   const vy = page.locator(".pane:not([hidden]) section.view");
   await expect(vy.locator("article.kort")).toHaveCount(FIXTUR.length, { timeout: 15_000 });
+  await sokfalt(vy).sokOrd.click();
   return vy;
 }
 
@@ -364,27 +386,6 @@ test("Sök (/next/): ett klassbyte ändrar inte träffarna", async ({ page }) =>
     vy.locator("section.traffar li.traff"),
     "Söket är ofiltrerat: ett klassbyte får inte ändra träfflistan",
   ).toHaveCount(FIXTUR.length);
-
-  expect(errors, errors.join("\n")).toEqual([]);
-});
-
-test("Sök (/next/): Fråga AI säger att den kommer senare", async ({ page }) => {
-  const errors = [];
-  failOnConsoleError(page, errors);
-
-  const vy = await oppnaInspelningar(page);
-  const f = sokfalt(vy);
-
-  await expect(f.sokOrd).toHaveAttribute("aria-pressed", "true");
-  await expect(f.fragaAi).toHaveAttribute("aria-pressed", "false");
-
-  await f.fragaAi.click();
-
-  await expect(f.fragaAi).toHaveAttribute("aria-pressed", "true");
-  await expect(f.kor).toBeDisabled();
-  await expect(vy).toContainText("Att fråga arkivet med egna ord migreras i nästa plan");
-  // Lägesbytet gömmer inte lärarens lektioner.
-  await expect(vy.locator("article.kort")).toHaveCount(FIXTUR.length);
 
   expect(errors, errors.join("\n")).toEqual([]);
 });

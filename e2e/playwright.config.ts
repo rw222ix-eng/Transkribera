@@ -191,15 +191,24 @@ export default defineConfig({
       // renderas med markerade utdrag och att \x02/\x03 aldrig läcker som
       // synlig text, att kartoteket viker för träfflistan och kommer tillbaka
       // när fältet rensas, att kartotekets tomtillstånd inte renderas under
-      // träffarna, nollträffstexten, att ett KLASSbyte inte ändrar träffarna
-      // (api_search tar inga filterparametrar), och att "Fråga AI" säger att
-      // den kommer i B3b i stället för att låtsas svara. TÄCKER INTE:
-      // fråge-läget i sak (B3b), att öppna en träff i transkriptet (B2,
-      // andra strömmen), sökets generationsvakt (ordagrann kopia av den som
-      // redan prövas i inspelningar-kartotek.spec.mjs) eller LIKE-fallbacken
-      // när sqlite saknar FTS5.
+      // träffarna, nollträffstexten, och att ett KLASSbyte inte ändrar
+      // träffarna (api_search tar inga filterparametrar). TÄCKER INTE:
+      // fråge-läget i sak, att öppna en träff i transkriptet (B2, andra
+      // strömmen), sökets generationsvakt (ordagrann kopia av den som redan
+      // prövas i inspelningar-kartotek.spec.mjs) eller LIKE-fallbacken när
+      // sqlite saknar FTS5.
       //
-      // Slutgranskningens fynd 1 (efter leverans) lade till ett sjunde test:
+      // B3b (sok.svelte.js:11) flippade sok.lages DEFAULT från 'keyword' till
+      // 'ask', vilket gjorde fråge-läget levande. Den täckningen hör nu hemma
+      // i B3b:s egen spec (inspelningar-fraga.spec.mjs, ännu inte tillagd i
+      // testMatch nedan), inte här — det gamla testet "Fråga AI säger att den
+      // kommer senare", som prövade en placeholder-rad och en inaktiv
+      // körknapp, är BORTTAGET ur den här filen av det skälet.
+      // oppnaInspelningar (specens hjälpare som öppnar Inspelningar-fliken)
+      // växlar därför explicit tillbaka till 'keyword' åt varje kvarvarande
+      // test, en gång, i stället för i vart och ett.
+      //
+      // Slutgranskningens fynd 1 (efter leverans) lade till ett sjätte test:
       // att körknappen inte fastnar i "Söker …"/disabled när fältet töms och
       // Enter trycks igen medan ett tidigare /api/search-svar fortfarande är
       // i luften — korSoknings tomma-frågan-gren nollställde sok.traffar men
