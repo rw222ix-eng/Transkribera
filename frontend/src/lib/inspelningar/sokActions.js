@@ -17,7 +17,9 @@ let fragaToken = 0;
 
 // setInterval-handtaget för utrullningen. MÅSTE ägas: timern lever i modulen,
 // inte i en komponent, så en avmonterad vy städar den inte. Varje väg ut —
-// ny fråga, rensning, fel, färdig utrullning — rensar den.
+// ny fråga, rensning, fel, färdig utrullning — rensar den. `done` gör det
+// MEDVETET INTE: genomsökningen ska alltid gå att följa med ögat, även när
+// svaret kom blixtsnabbt, så timern får rulla klart på egen hand.
 let utrullning = null;
 
 function stoppaUtrullning() {
