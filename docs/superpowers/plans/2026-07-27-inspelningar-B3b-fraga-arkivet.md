@@ -696,7 +696,20 @@ Komponenten är **inert tills Task 4** kopplar körknappen: `sok.skanPlan` är `
   <section class="genomsokning">
     <div class="status">
       <p class="ticker">
-        {#if skannar}
+        <!--
+          skannar && !lasbordPa, inte bara skannar. Gamla appen växlar tickern
+          på buildScanModels HÄRLEDDA fält (app.js:5062: scanning = cfg.scanning
+          && !deskOn), inte på den råa flaggan — samma sammansättning som
+          aktuell ovan använder.
+
+          Utan andra ledet påstår tickern "Söker igenom N inspelningar" så
+          länge svaret strömmar, trots att utrullningen är klar och läsbordet
+          under den redan säger "AI:n läser nu dessa N". Det är inte ett
+          kantfall utan NORMALFALLET: skanningen tar högst 3,5 s medan
+          LLM-svaret tar längre, så de två raderna hade motsagt varandra vid
+          nästan varje fråga. (RÄTTAT I GRANSKNINGEN.)
+        -->
+        {#if skannar && !lasbordPa}
           Söker igenom {plan.length} {plan.length === 1 ? 'inspelning' : 'inspelningar'}{aktuell &&
           aktuell.name
             ? ` — ${aktuell.name}`
