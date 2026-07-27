@@ -1,13 +1,22 @@
-"""Behaviour test for app.js recommendModel().
+"""Behaviour test for the Svelte port's recommendModel().
 
 The frontend resolves which Whisper model a transcription uses from the chosen
 language. It MUST pick the best INSTALLED model for that language (highest score),
 not the first one in catalog order — otherwise Swedish silently runs on
 kb-whisper-tiny even when kb-whisper-large is installed.
 
-We evaluate the REAL function extracted from app.js under Node against a mock
-catalog mirroring /api/models (tiny before large, both installed). Skipped when
-Node is unavailable (the project already uses `node --check` in its gate)."""
+We evaluate the REAL function extracted from the frontend source under Node
+against a mock catalog mirroring /api/models (tiny before large, both
+installed). Skipped when Node is unavailable.
+
+Originally tested app.js's recommendModel() (vanilla frontend). Repointed at
+frontend/src/lib/transkribera/katalog.svelte.js when app.js was retired — see
+docs/superpowers/plans/2026-07-25-cutover-till-svelte.md, Task 4, and
+.superpowers/sdd/pensionering-report.md. The Svelte function
+(katalog.svelte.js:44-57) is an explicit line-for-line port of app.js:450-466
+(same highest-score selection, same no-cross-language-fallback rule), so the
+behaviour and the assertions below are unchanged — only the extraction target
+moved."""
 from __future__ import annotations
 import json
 import shutil
@@ -16,7 +25,8 @@ from pathlib import Path
 
 import pytest
 
-APP_JS = Path(__file__).resolve().parent.parent / "app" / "web" / "static" / "app.js"
+RECOMMEND_JS = (Path(__file__).resolve().parent.parent / "frontend" / "src" / "lib"
+                 / "transkribera" / "katalog.svelte.js")
 
 # Mirrors /api/models: kb-whisper-tiny precedes kb-whisper-large in catalog order,
 # both installed; Parakeet (en) installed; a multilingual model not installed.
@@ -54,14 +64,16 @@ ONLY_ENGLISH = [
 
 
 def _recommend(language, whisper=MOCK_WHISPER, current="KBLab/kb-whisper-tiny") -> str:
+    # `current` mirrors the old app.js harness's S.model; katalog.svelte.js's
+    # recommendModel() doesn't read it either (only katalog.whisper/.installed),
+    # kept only so callers below stay symmetric and self-documenting.
     node = shutil.which("node")
     if not node:
         pytest.skip("node not available")
-    fn = _extract_fn(APP_JS.read_text(encoding="utf-8"), "recommendModel")
+    fn = _extract_fn(RECOMMEND_JS.read_text(encoding="utf-8"), "recommendModel")
     harness = (
-        "var WHISPER = " + json.dumps(whisper) + ";\n"
-        "var S = { installed: {}, model: " + json.dumps(current) + " };\n"
-        "WHISPER.forEach(function (m) { if (m.installed) S.installed[m.id] = true; });\n"
+        "var katalog = { whisper: " + json.dumps(whisper) + ", installed: {} };\n"
+        "katalog.whisper.forEach(function (m) { if (m.installed) katalog.installed[m.id] = true; });\n"
         + fn + "\n"
         "console.log(recommendModel(" + json.dumps(language) + ") || '');\n"
     )

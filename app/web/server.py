@@ -17,7 +17,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
@@ -253,9 +253,9 @@ def create_app(base_dir: Path | None = None,
         return await call_next(request)
 
     # 3) Ingen heuristisk cachning av UI-filerna: utan Cache-Control gissar
-    #    webbläsaren friskhet ur Last-Modified och kan köra gammal app.js länge
-    #    efter en uppdatering. no-cache = alltid omfråga (304 via ETag är
-    #    fortfarande snabbt, allt ligger på lokal disk).
+    #    webbläsaren friskhet ur Last-Modified och kan köra ett gammalt
+    #    index.html länge efter en uppdatering. no-cache = alltid omfråga
+    #    (304 via ETag är fortfarande snabbt, allt ligger på lokal disk).
     #    "/next" och "/next/" är den ohashade Svelte-entrydokumentet (index.html) —
     #    build.emptyOutDir rensar gamla hashade assets vid varje ombygge, så en
     #    kvarcachad /next/index.html skulle be om en /next/assets/*-fil som redan
@@ -279,8 +279,9 @@ def create_app(base_dir: Path | None = None,
     # samma index.html fungerar på båda vägarna just tack vare den rot-absoluta
     # basen.
     #
-    # Monteras bara om bygget finns. En utcheckning utan `npm run build` ska
-    # inte ge en död app — "/" faller då tillbaka på den gamla appen, se index().
+    # Monteras bara om bygget finns. Saknas det svarar "/" med en förklarande
+    # text i stället för en trasig FileResponse eller en obegriplig 404 — se
+    # index().
     NEXT_DIR = STATIC_DIR.parent / "next"
     NEXT_READY = (NEXT_DIR / "index.html").exists()
     if NEXT_READY:
@@ -310,25 +311,20 @@ def create_app(base_dir: Path | None = None,
 
     @app.get("/")
     def index():
-        """Svelte-appen. Faller tillbaka på den gamla om bygget saknas.
+        """Svelte-appen.
 
-        Fallbacken är avsiktlig: en utcheckning där ingen kört `npm run build`
-        ska ge en fungerande app, inte en 404. Den dagen app.js pensioneras
-        försvinner både den och den här grenen.
+        Den gamla vanilla-appen (app.js/style.css/index.html) är pensionerad —
+        se docs/superpowers/plans/2026-07-25-cutover-till-svelte.md, Task 4.
+        Det fanns alltså inget att falla tillbaka på längre om bygget saknas,
+        och en tyst FileResponse mot en fil som inte finns hade bara gett en
+        obegriplig 404. Svara i stället med en förklarande text: en utcheckning
+        utan `npm run build` ska ge ett begripligt besked, inte en gissning.
         """
         if NEXT_READY:
             return FileResponse(str(NEXT_DIR / "index.html"))
-        return FileResponse(str(STATIC_DIR / "index.html"))
-
-    @app.get("/gammal")
-    def index_gammal():
-        """Den gamla vanilla-appen, kvar under övergången för jämförelse.
-
-        Pensioneras i cutover-planens task 4, tillsammans med app.js och
-        style.css. /static-monteringen stannar oavsett — whiteboard-motorn,
-        den vendorade KaTeX:en och typsnitten serveras därifrån.
-        """
-        return FileResponse(str(STATIC_DIR / "index.html"))
+        return PlainTextResponse(
+            "Svelte-appen är inte byggd. Kör `npm run build` i repo-roten "
+            "och starta om servern.", status_code=503)
 
     @app.get("/api/hardware")
     def api_hardware():
