@@ -2,6 +2,10 @@ import { getJSON, streamPost } from '../api.js';
 import { fmtTid } from '../transkript/tid.js';
 import { oppnaTranskriptFor } from '../transkript/actions.js';
 import { chatt } from './stores.svelte.js';
+import { kal } from '../kalender/stores.svelte.js';
+import { strippaTagg, tolkaForslag, tolkaFragor } from '../kalender/tagg.js';
+import { tolkaKommando } from '../kalender/kommando.js';
+import { nollstallForslag, hamtaStatus } from '../kalender/actions.js';
 
 // Samtalen, per lektions-id. MODULPRIVAT, aldrig i storen — samma hållning som
 // mediaelementet i B2 och resurserna i transkribera/inspelning.svelte.js. En
@@ -48,6 +52,9 @@ function nollstall() {
   chatt.skickar = false;
   chatt.resonemangOppet = {};
   chatt.valtCitat = null;
+  // Kalenderförslaget hör till SAMTALET, precis som tråden — det får inte
+  // överleva ett lektionsbyte eller en stängning. Se kalender/actions.js.
+  nollstallForslag();
 }
 
 /**
@@ -141,6 +148,30 @@ export function vaxlaTank() {
 export async function skicka() {
   const fraga = chatt.utkast.trim();
   if (!fraga || chatt.skickar || !chatt.lektionId) return;
+
+  // Kalenderkommandon ("flytta till onsdag 14:30", "kortare titel" …)
+  // tolkas lokalt utan LLM-anrop när ett förslag redan finns och inte är
+  // tillagt — speglar gamla appens snabbväg (app.js:2501-2521). Grinden
+  // (isCal/calComplex) ligger inuti tolkaKommando själv (se kommando.js),
+  // så den enda regeln här är "körs alltid, lita på ett tomt resultat".
+  if (kal.forslag && !kal.forslag.tillagd) {
+    const { patch, gjort } = tolkaKommando(fraga, kal.forslag);
+    if (gjort.length) {
+      Object.assign(kal.forslag, patch);
+      const svarText = 'Klart — jag ändrade ' + gjort.join(' och ') + '.';
+      chatt.trad = [
+        ...chatt.trad,
+        { roll: 'anvandare', text: fraga, resonemang: '' },
+        { roll: 'modell', text: svarText, resonemang: '' },
+      ];
+      chatt.utkast = '';
+      chatt.besked = '';
+      chatt.beskedArt = 'fel';
+      annonsera(svarText);
+      return;
+    }
+  }
+
   const token = ++skickToken;
 
   chatt.trad = [
@@ -165,6 +196,23 @@ export async function skicka() {
     .map((s, i) => '[' + (i + 1) + '] (' + fmtTid(s.start) + ') ' + (s.text || ''))
     .join('\n');
 
+  // Modellen kan skapa/ändra kalenderförslaget direkt ur samtalet: den får
+  // det aktuella förslaget och svarar med en [KALENDERFÖRSLAG]-rad som
+  // tolkas i done-grenen nedan. Speglar app.js:2530-2534.
+  const calEv = kal.forslag && !kal.forslag.tillagd
+    ? {
+        title: kal.forslag.titel,
+        date: kal.forslag.startIso || null,
+        time: (kal.forslag.nar || '').slice(-5),
+        end_date: kal.forslag.slutIso || null,
+        desc: kal.forslag.anteckning || '',
+      }
+    : null;
+
+  // `raw` är modellens otolkade text (kan innehålla en kalendertagg); `svar`
+  // är vad som faktiskt visas — alltid taggstrippad, även halvströmmad, så
+  // en rå [KALENDERFÖRSLAG]-rad aldrig flimrar fram innan svaret är klart.
+  let raw = '';
   let svar = '';
   let resonemang = '';
 
@@ -182,12 +230,14 @@ export async function skicka() {
       model: LLM_NAMN,
       think: chatt.tank,
       cite: true,
-      calendar: false, // kalendermaskineriet portas inte i B4
+      calendar: true,
+      cal_event: calEv,
     },
     (ev) => {
       if (token !== skickToken) return;
       if (ev.type === 'token') {
-        svar += ev.text || '';
+        raw += ev.text || '';
+        svar = strippaTagg(raw);
         skrivSista();
       } else if (ev.type === 'reasoning') {
         resonemang += ev.text || '';
@@ -195,12 +245,56 @@ export async function skicka() {
       } else if (ev.type === 'done') {
         // done bär HELA svaret (sse.py:27) — vi behöver inte lita på vår
         // egen ackumulering.
-        svar = (ev.result && ev.result.text) || svar;
+        const full = (ev.result && ev.result.text) || raw;
+
+        // Klargörande frågor (STEG 1) före ett nytt förslag, eller själva
+        // förslaget (STEG 2) — aldrig båda i samma svar. tolkaFragor provas
+        // först, precis som applyCalQ gjorde före applyCalTag (app.js:2542-
+        // 2543).
+        let taggBesked = null;
+        let fel = null;
+        const fr = tolkaFragor(full);
+        if (fr.hittad && fr.fragor) {
+          // Frågekortet är nästa omgångs modal (bindande beslut). Fram tills
+          // dess visas frågorna som text — läraren svarar i chatten som
+          // vanligt, i stället för i en väljare.
+          taggBesked = 'Några frågor innan jag skapar förslaget: '
+            + fr.fragor.map((f) => f.fraga).join(' ')
+            + ' — svara i chatten så fortsätter jag.';
+        } else if (fr.hittad) {
+          // D3: taggen fanns men gick inte att tolka. Strippas ändå (nedan)
+          // — aldrig rå JSON kvar i bubblan.
+          fel = 'Kalenderfrågorna gick inte att tolka — skriv gärna om vad du vill boka.';
+        } else {
+          const fs = tolkaForslag(full, kal.forslag);
+          if (fs.hittad && fs.forslag) {
+            kal.forslag = fs.forslag;
+            if (kal.ansluten === null) hamtaStatus();
+            taggBesked = 'Här är kalenderförslaget: "' + (fs.forslag.titel || '') + '" · ' + fs.forslag.nar
+              + (fs.forslag.slutDag ? ' → ' + fs.forslag.slutDag : '')
+              + '. Inget läggs in förrän du godkänner med Lägg till.';
+          } else if (fs.hittad) {
+            // D3, samma fix för [KALENDERFÖRSLAG].
+            fel = 'Kalenderförslaget gick inte att tolka — skriv gärna om vad du vill boka.';
+          }
+        }
+
+        // Svarar modellen med enbart kalenderraden blir bubblan annars tom.
+        svar = strippaTagg(full);
+        if (!svar && taggBesked) svar = taggBesked;
+        if (!svar && fel) svar = 'Kalenderdelen av svaret gick inte att tolka.';
         skrivSista();
         chatt.skickar = false;
-        // Först nu annonseras texten. Ett svar som växer sub-word för
-        // sub-word vore oanvändbart att lyssna på.
-        annonsera(svar || 'Svaret kom tomt.');
+        if (fel) {
+          // satBesked sätter både den synliga statusraden och annonseringen
+          // i ett svep — anropas i stället för annonsera() här, annars
+          // skriver den över felet en rad längre ner.
+          satBesked(fel);
+        } else {
+          // Först nu annonseras texten. Ett svar som växer sub-word för
+          // sub-word vore oanvändbart att lyssna på.
+          annonsera(svar || 'Svaret kom tomt.');
+        }
       } else if (ev.type === 'error') {
         chatt.skickar = false;
         // streamPost normaliserar även 400 och 409 hit. 409 betyder att GPU:n

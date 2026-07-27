@@ -2,6 +2,8 @@
   import { chatt } from './stores.svelte.js';
   import { parseCitat } from './citat.js';
   import { vaxlaResonemang, valjCitat } from './actions.js';
+  import { kal } from '../kalender/stores.svelte.js';
+  import Forslagsbox from '../kalender/Forslagsbox.svelte';
 
   let lista = $state(null);
   let foljer = $state(true);
@@ -96,6 +98,10 @@
     </li>
   {/each}
 </ol>
+
+{#if kal.forslag}
+  <Forslagsbox />
+{/if}
 
 <style>
   .trad {
