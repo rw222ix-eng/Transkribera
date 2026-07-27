@@ -1803,7 +1803,10 @@ committen, inte i en separat.
 cd e2e && npm run test:next-foundation
 ```
 
-Förväntat: `52 passed` (46 före + 6 nya).
+Förväntat: `51 passed` (45 före + 6 nya). **RÄTTAT:** B3b:s defaultflipp
+(sok.svelte.js:11, ask i stället för keyword) sänkte B3a:s sök-svit, och
+e2e-reparationen (`.superpowers/sdd/b3b-e2e-reparation.md`) tog bort ett test
+vars premiss försvunnit — sviten stod på 45, inte 46, innan den här tasken.
 
 - [ ] **Step 4: Tandkontrollera de två bärande spärrarna**
 
@@ -1862,7 +1865,7 @@ Förväntat: exit 0.
 cd e2e && npm run test:next-foundation
 ```
 
-Förväntat: `52 passed`.
+Förväntat: `51 passed`.
 
 - [ ] **Step 6: Committa**
 

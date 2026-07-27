@@ -155,6 +155,19 @@ export default defineConfig({
       // över en omladdning), och riktig mikrofonhårdvara inklusive att enheten
       // dras ur mitt i en inspelning. Specens egen kommentar upprepar listan.
       //
+      // inspelningar-fraga.spec.mjs (plan B3b) täcker FRÅGE-LÄGET: att
+      // genomsökningen visar serverns ordning med äkta träffantal, att svaret
+      // strömmar in och att [1] blir en markör i stället för rå text, att
+      // läsbordet säger "Svaret bygger på …", att kartotekets kort lyfts och
+      // dämpas efter SERVERNS träffar (aldrig efter en klientmatchning på
+      // frågans ord — gamla appen hade den buggen), att ett fel renderas i
+      // svarsytan och inte som ett svar, och att en rensning överger den
+      // pågående strömmen. TÄCKER INTE: den semantiska omsökningen med två
+      // scan_plan (fejkens tre meningar räcker inte till en fråga som ger noll
+      // ordträffar men ändå ett närliggande transkript — backend har egen
+      // täckning i tests/test_web_server.py:1125), källmodalen och
+      // följdfrågorna (B3c), eller prefers-reduced-motion-grenen.
+      //
       // Plan B1 Task 5 lägger till e2e/inspelningar-kartotek.spec.mjs (samma
       // placering, samma fejkserver) som täcker Inspelningar-flikens kartotek:
       // veckogrupperingen med antal per grupp, att KLASS-filtret verkligen
@@ -200,13 +213,12 @@ export default defineConfig({
       //
       // B3b (sok.svelte.js:11) flippade sok.lages DEFAULT från 'keyword' till
       // 'ask', vilket gjorde fråge-läget levande. Den täckningen hör nu hemma
-      // i B3b:s egen spec (inspelningar-fraga.spec.mjs, ännu inte tillagd i
-      // testMatch nedan), inte här — det gamla testet "Fråga AI säger att den
-      // kommer senare", som prövade en placeholder-rad och en inaktiv
-      // körknapp, är BORTTAGET ur den här filen av det skälet.
-      // oppnaInspelningar (specens hjälpare som öppnar Inspelningar-fliken)
-      // växlar därför explicit tillbaka till 'keyword' åt varje kvarvarande
-      // test, en gång, i stället för i vart och ett.
+      // i B3b:s egen spec (inspelningar-fraga.spec.mjs), inte här — det gamla
+      // testet "Fråga AI säger att den kommer senare", som prövade en
+      // placeholder-rad och en inaktiv körknapp, är BORTTAGET ur den här
+      // filen av det skälet. oppnaInspelningar (specens hjälpare som öppnar
+      // Inspelningar-fliken) växlar därför explicit tillbaka till 'keyword'
+      // åt varje kvarvarande test, en gång, i stället för i vart och ett.
       //
       // Slutgranskningens fynd 1 (efter leverans) lade till ett sjätte test:
       // att körknappen inte fastnar i "Söker …"/disabled när fältet töms och
@@ -232,6 +244,7 @@ export default defineConfig({
       name: "next-foundation",
       testDir: __dirname,
       testMatch: [
+        /inspelningar-fraga\.spec\.mjs$/,
         /inspelningar-kartotek\.spec\.mjs$/,
         /inspelningar-paneler\.spec\.mjs$/,
         /inspelningar-sok\.spec\.mjs$/,
