@@ -286,8 +286,12 @@ export function rensaSokning() {
  *
  * Gamla appen är asymmetrisk här — setSearchMode (app.js:1779-1782) kör hela
  * clearSearch() mot keyword men tömmer bara träffarna mot ask, för att bevara
- * ett RAG-svar. Det svaret finns inte i B3a, så asymmetrin har ingenting att
- * bevara. B3b får återinföra den när den betyder något, och ska då säga varför.
+ * ett RAG-svar när läraren växlade bort och tillbaka. B3b HAR nu ett riktigt
+ * RAG-svar (sok.svar, sok.kallor) och behöll ändå symmetrin, MED AVSIKT: att
+ * bevara ett svar bakom ett lägesbyte gör tillståndet svårare att resonera
+ * om (vilket svar hör till vilken fråga, i vilket läge?) för en marginell
+ * vinst — läraren kan ställa om frågan. Ingen öppen TODO; symmetrin är den
+ * avsedda formen, inte en plats att fylla senare.
  */
 export function valjLage(lage) {
   const nytt = lage === 'ask' ? 'ask' : 'keyword';
