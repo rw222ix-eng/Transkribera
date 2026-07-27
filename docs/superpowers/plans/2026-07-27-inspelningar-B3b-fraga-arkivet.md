@@ -42,6 +42,7 @@ Gäller varje task nedan, utan att upprepas i dem.
 | `frontend/src/lib/inspelningar/Kartotek.svelte` | Modify | Omslag per kort med `data-stage`; ny prop `stadier`. |
 | `frontend/src/lib/inspelningar/InspelningarView.svelte` | Modify | Monterar de två nya komponenterna; räknar stadiekartan. |
 | `e2e/inspelningar-fraga.spec.mjs` | Create | E2E-täckningen. |
+| `e2e/inspelningar-sok.spec.mjs` | Modify | Reparation efter leverans: B3b:s defaultflipp (`lage: 'ask'`) sänkte B3a:s befintliga svit, som antog `'keyword'` som startläge. |
 | `e2e/playwright.config.ts` | Modify | En rad i `testMatch` plus ett stycke i kommentarsblocket. |
 
 ## Where this plan stops
@@ -1756,6 +1757,12 @@ Lägg ett stycke i kommentarsblocket ovanför, före stycket om `inspelningar-ka
       // täckning i tests/test_web_server.py:1125), källmodalen och
       // följdfrågorna (B3c), eller prefers-reduced-motion-grenen.
 ```
+
+**OBS:** kommentarsblocket ovanför `testMatch` bär sedan e2e-reparationen
+(`.superpowers/sdd/b3b-e2e-reparation.md`) ett stycke om B3b:s defaultflipp
+som slutar med parentesen "(ännu inte tillagd i testMatch nedan)". Den blir
+felaktig i samma stund raden ovan läggs till — stryk parentesen i den här
+committen, inte i en separat.
 
 - [ ] **Step 3: Bygg frontenden och kör sviten**
 
