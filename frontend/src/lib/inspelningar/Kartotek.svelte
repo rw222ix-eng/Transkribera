@@ -32,17 +32,15 @@
         {g.kort.length} {g.kort.length === 1 ? 'inspelning' : 'inspelningar'}
       </span>
     </div>
-    <div class="grid">
+    <div class="lista">
       {#each g.kort as l (l.id)}
         <!--
-          OMSLAG PER KORT, inte ett attribut på Lektionskort: den filen ägs av
-          den parallella arbetsströmmen och har varken rest-props eller
-          attributspridning, så attributet går inte att skicka in utifrån.
+          OMSLAG PER RAD, inte ett attribut på Lektionskort: den filen har
+          varken rest-props eller attributspridning, så data-stage går inte
+          att skicka in utifrån.
 
-          Griden bryts inte. grid-template-columns definierar SPÅR, inte vilka
-          barn som är item, så omslaget byter bara ut vem som är grid-item —
-          spårantal och spårbredder är oförändrade, och align-items: start gör
-          omslaget exakt lika högt som kortet.
+          Omslaget bär också hårlinjen mellan raderna (se .hylsa + .hylsa
+          nedan) — den hör till listan, inte till raden.
         -->
         <div class="hylsa" data-stage={stadier.get(l.id) || null}>
           <Lektionskort {l} {onRedigera} {onRadera} />
@@ -80,15 +78,18 @@
     font-size: 0.72rem;
     color: var(--ink-3);
   }
-  .grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-    gap: 12px;
-    align-items: start;
-  }
+  /* LISTA, inte rutnät. repeat(auto-fill, minmax(240px, 1fr)) gjorde
+     kartoteket till det kortrutnät DESIGN.md förbjuder; se den långa
+     kommentaren i Lektionskort.svelte för hela skälet. */
+  .lista { display: flex; flex-direction: column; }
+
+  /* SEPARATORN ÄGS AV LISTAN. Raden bär ingen egen ram — hade den gjort det
+     skulle den första raden i varje vecka dubblera grupprubrikens
+     border-bottom. Samma lösning som Agenda.svelte:178. */
+  .hylsa + .hylsa { border-top: 1px solid var(--line); }
 
   .hylsa {
-    border-radius: 4px;
+    border-radius: 3px;
     transition: opacity 0.42s ease, box-shadow 0.42s ease;
   }
   /* Dämpningen bärs av opacitet ensam. Gamla appens saturate(.5) och

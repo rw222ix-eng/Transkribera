@@ -102,7 +102,7 @@ async function byggFixtur(request) {
 
 async function oppnaInspelningar(page) {
   await page.goto("/next/");
-  await page.getByRole("button", { name: "Inspelningar", exact: true }).click();
+  await page.getByRole("tab", { name: "Inspelningar", exact: true }).click();
   const vy = page.locator(".pane:not([hidden]) section.view");
   await expect(vy.locator("article.kort")).toHaveCount(2, { timeout: 15_000 });
   return vy;

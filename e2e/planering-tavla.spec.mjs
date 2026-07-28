@@ -30,7 +30,7 @@ import { test, expect, failOnConsoleError } from "./helpers/app";
  *  ändra-raden och godkännandet — de behövs inte för exporttesterna. */
 async function skrivTavla(page) {
   await page.goto("/next/");
-  await page.getByRole("button", { name: "Planering", exact: true }).click();
+  await page.getByRole("tab", { name: "Planering", exact: true }).click();
   await page.getByLabel("Moment").fill("Andragradsfunktioner — minimipunkt");
   await page.getByRole("button", { name: "Skriv tavlan" }).click();
   const boardFrame = page.frameLocator('iframe[title^="Lektionstavla"]');
@@ -45,7 +45,7 @@ test("Planering (/next/): Spara som PNG är grindad och sparar via serverfallbac
   await page.addInitScript(() => { delete window.showSaveFilePicker; });
 
   await page.goto("/next/");
-  await page.getByRole("button", { name: "Planering", exact: true }).click();
+  await page.getByRole("tab", { name: "Planering", exact: true }).click();
 
   // GRINDAD: ingen tavla ritad än. Knappen finns i DOM:en (figuren är alltid
   // monterad, se BoardPreview.svelte) men figure.idle gömmer hela
@@ -127,7 +127,7 @@ test("Planering (/next/): skriv tavlan, förhandsvisa, ändra-raden, godkänn & 
 
   // Skalet startar på Transkribera-fliken (som gamla appen) — gå till
   // Planering först. Se docs/superpowers/plans/2026-07-25-transkribera-A1-skal-och-kalla.md.
-  await page.getByRole("button", { name: "Planering", exact: true }).click();
+  await page.getByRole("tab", { name: "Planering", exact: true }).click();
 
   // 1) Masthead: mono-eyebrowen + rubriken (serif-kursiverade "tavla" ingår i
   // den tillgängliga rubriktexten "Dagens tavla").

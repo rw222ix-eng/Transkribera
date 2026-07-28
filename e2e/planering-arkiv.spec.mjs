@@ -45,7 +45,7 @@ test("Planeringsarkiv (/next/): lista, ordsök utan styrtecken, Rensa och Fråga
 
   // Skalet startar på Transkribera-fliken (som gamla appen) — gå till
   // Planering först. Se docs/superpowers/plans/2026-07-25-transkribera-A1-skal-och-kalla.md.
-  await page.getByRole("button", { name: "Planering", exact: true }).click();
+  await page.getByRole("tab", { name: "Planering", exact: true }).click();
 
   // 1) ARKIV-sektionen renderar (mono-eyebrow + rubrik) — ArkivView.svelte.
   await expect(page.getByText("ARKIV", { exact: true })).toBeVisible();

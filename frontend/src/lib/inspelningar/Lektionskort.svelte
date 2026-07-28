@@ -18,6 +18,9 @@
   const etikett = $derived(
     l.group ? l.group + (l.course ? ' · ' + l.course : '') : (l.course || 'Ej tilldelad'),
   );
+  // Samma villkor som etiketten faller tillbaka på — skrivet en gång, läst
+  // två gånger, så texten och knappgrindningen inte kan glida isär.
+  const otilldelad = $derived(!l.group && !l.course);
   const meta = $derived([l.dur, l.model, l.lang].filter(Boolean).join(' · '));
 
   // Bara VIDEO-källor får miniatyr. Ljudfiler har också en spelbar mediapost,
@@ -51,6 +54,28 @@
   const visaTumme = $derived(!!miniatyr && trasigTumme !== miniatyr);
 </script>
 
+<!--
+  EN RAD, inte ett kort i ett rutnät. Kartoteket var tidigare
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)) med ramade,
+  ytfärgade kort — precis det DESIGN.md förbjuder ("this is not a card-grid
+  system", "no hero-metric tiles, no nested cards") och den enda vy i appen
+  som läste som en SaaS-admin.
+
+  Raden löser fyra fynd samtidigt: kortrutnätet självt, den tomma miniatyrytan
+  (miniatyren är nu en liten ruta i radens vänsterkant i stället för ett fält i
+  full bredd), Raderas vikt (handlingarna ligger i en tyst grupp till höger i
+  stället för i ett 2×2-rutnät där destruktivt väger lika tungt som primärt),
+  och att lektionerna kom långt ned i vyn — en rad är ungefär en tredjedel så
+  hög som kortet var.
+
+  Mönstret är inte uppfunnet här: Agenda.svelte i SAMMA vy bytte redan
+  "gamla appens rutor med egen ram" mot hårlinjer mellan raderna
+  (Agenda.svelte:178). Kartoteket följer nu sin granne.
+
+  SEPARATORN ÄGS AV LISTAN, inte av raden: Kartotek.svelte ritar hårlinjen
+  mellan .hylsa-syskon. En rad som bär sin egen border-top dubblerar
+  grupprubrikens border-bottom på den första raden i varje vecka.
+-->
 <article class="kort">
   {#if visaTumme}
     <!-- alt="" med flit: miniatyren är dekor, hela innehållet står i texten
@@ -64,39 +89,74 @@
       onerror={() => (trasigTumme = miniatyr)}
     />
   {/if}
-  <p class="datum">{l.date || l.datum || ''}</p>
-  <h3 class="namn">{l.name || '(namnlös)'}</h3>
-  <p class="tagg" data-cc={farg}>{etikett}</p>
-  <p class="meta">{meta}{l.sal ? ' · ' + l.sal : ''}</p>
+  <div class="text">
+    <p class="datum">{l.date || l.datum || ''}</p>
+    <h3 class="namn">{l.name || '(namnlös)'}</h3>
+    <!--
+      "Ej tilldelad" stod tidigare som en död etikett på varje rad utan att
+      något förklarade var man tilldelar. Saknas klass och kurs är taggen
+      numera en KNAPP rakt in i redigeringen — samma dialog som Redigera
+      öppnar, alltså ingen ny väg, bara den befintliga där frågan uppstår.
+
+      Bara i det otilldelade fallet. En rad som REDAN bär "9A · Matematik 2b"
+      säger något sant och ska förbli text; att göra även den klickbar hade
+      lagt ett andra, otydligare Redigera på varje rad.
+    -->
+    {#if otilldelad}
+      <button
+        type="button"
+        class="tagg tilldela"
+        data-cc={farg}
+        onclick={() => onRedigera(l)}
+      >{etikett} — tilldela</button>
+    {:else}
+      <p class="tagg" data-cc={farg}>{etikett}</p>
+    {/if}
+    <p class="meta">{meta}{l.sal ? ' · ' + l.sal : ''}</p>
+  </div>
+  <!--
+    RADERA STÅR FÖR SIG. Tidigare låg de fyra knapparna i ett 2×2-rutnät där
+    "Radera" hade exakt samma yta och ram som "Öppna" — destruktivt och
+    primärt vägde lika. Nu är de tre ofarliga textknappar i en grupp, och
+    raderingen skiljs av en hårlinje och bär sin färg först vid hover/fokus.
+    Formen skriker inte, men den är fortfarande omöjlig att missa när man
+    letar efter den.
+  -->
   <div class="knappar">
-    <button type="button" class="ghost" onclick={() => oppnaTranskriptFor(l.history_id, l.name)}>Öppna</button>
-    <button type="button" class="ghost" onclick={() => oppnaLektionschatt(l)}>Fråga</button>
-    <button type="button" class="ghost" onclick={() => onRedigera(l)}>Redigera</button>
-    <button type="button" class="ghost fara" onclick={() => onRadera(l)}>Radera</button>
+    <button type="button" class="tyst" onclick={() => oppnaTranskriptFor(l.history_id, l.name)}>Öppna</button>
+    <button type="button" class="tyst" onclick={() => oppnaLektionschatt(l)}>Fråga</button>
+    <button type="button" class="tyst" onclick={() => onRedigera(l)}>Redigera</button>
+    <button type="button" class="tyst fara" onclick={() => onRadera(l)}>Radera</button>
   </div>
 </article>
 
 <style>
+  /* Ingen ram, ingen ytfärg, inga hörn: raden bärs av hårlinjen mellan
+     syskonen (Kartotek.svelte) och av luften runt texten. Flat-by-Default. */
   .kort {
     display: flex;
-    flex-direction: column;
-    gap: 6px;
-    background: var(--surface);
-    border: 1px solid var(--line);
-    border-radius: 4px;
-    padding: 14px 15px;
-    overflow: hidden;
+    align-items: center;
+    gap: 16px;
+    padding: 12px 0;
   }
-  /* Miniatyren dras ut till kortets kanter — samma bildfält som gamla kortet,
-     men utan dess 9-14px hörn. */
+  /* Miniatyren är en liten ruta i vänsterkanten, inte ett fält i full bredd.
+     Faller /api/thumb bort helt (visaTumme) hoppar raden bara ihop — ingen
+     tom yta står kvar, och rader med och utan video ser ut som varandra. */
   .tumme {
+    flex: 0 0 auto;
     display: block;
-    width: auto;
-    margin: -14px -15px 4px;
+    width: 72px;
     aspect-ratio: 16 / 9;
     object-fit: cover;
+    border-radius: 3px;
     background: var(--sunken);
-    border-bottom: 1px solid var(--line);
+  }
+  .text {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
   }
   .datum {
     font-size: 0.72rem;
@@ -115,6 +175,7 @@
   .tagg {
     align-self: flex-start;
     max-width: 100%;
+    font-family: inherit;
     font-size: 0.72rem;
     font-weight: 500;
     border-radius: 3px;
@@ -124,6 +185,10 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+  /* Knappvarianten ärver taggens form helt — den ska läsas som samma sak,
+     bara tryckbar. Understrykningen vid hover är enda skillnaden i vila. */
+  .tilldela { border: 1px solid transparent; cursor: pointer; }
+  .tilldela:hover { text-decoration: underline; text-underline-offset: 2px; }
   .meta {
     font-size: 0.72rem;
     color: var(--ink-3);
@@ -143,25 +208,32 @@
   [data-cc="none"] { background: var(--sunken); color: var(--ink-3); border-color: var(--line); }
 
   .knappar {
+    flex: 0 0 auto;
     display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-top: 8px;
-    padding-top: 10px;
-    border-top: 1px solid var(--line);
+    align-items: center;
+    gap: 14px;
   }
-  /* Identisk med .ghost i frontend/src/lib/transkribera/Korning.svelte:284-293. */
-  .ghost {
+  /* Textknappar utan ram. Fyra ramade knappar per rad hade gett kartoteket
+     tillbaka den chrome hårlinjeraden just tog bort. */
+  .tyst {
     background: transparent;
-    color: var(--ink);
-    border: 1px solid var(--line-2);
-    border-radius: 4px;
-    padding: 9px 18px;
+    border: none;
+    padding: 4px 0;
+    color: var(--ink-2);
     font-family: inherit;
-    font-size: inherit;
+    font-size: 0.72rem;
     cursor: pointer;
   }
-  /* Raderingen är den enda destruktiva knappen på kortet — den bär färgen,
-     inte en egen form. */
-  .fara { color: var(--bad); }
+  .tyst:hover { color: var(--ink); }
+  /* Raderingen skiljs av en hårlinje och bär --bad först vid hover/fokus:
+     synlig när man letar, tyst när man inte gör det. Färg är dessutom inte
+     ensam bärare av att den är farlig — separatorn och ordet är det. */
+  .fara {
+    margin-left: 4px;
+    padding-left: 18px;
+    border-left: 1px solid var(--line);
+    color: var(--ink-3);
+  }
+  .fara:hover,
+  .fara:focus-visible { color: var(--bad); }
 </style>

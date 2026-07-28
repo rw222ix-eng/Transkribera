@@ -8,6 +8,37 @@
 
   const harFraga = $derived(sok.fraga.trim().length > 0);
 
+  // "/" FOKUSERAR SÖKET. Appen hade inga kortkommandon alls; en lärare med
+  // ett läsår i arkivet når annars fältet bara genom att tabba förbi
+  // filterraden och säkerhetskopieringen. "/" är webbens etablerade
+  // sökgenväg och kostar inget att lära sig.
+  //
+  // GRINDARNA. Genvägen får inte kapa ett tecken läraren skriver någon
+  // annanstans:
+  //   · redigerbara fält (input, textarea, contenteditable) äger sitt "/",
+  //   · modifierade tryck (Ctrl+/, Cmd+/) är webbläsarens eller OS:ets,
+  //   · en öppen <dialog> gör resten av dokumentet inert — men lyssnaren
+  //     sitter på window och nås ändå, så flikgrinden nedan räcker inte.
+  //
+  // Lyssnaren är knuten till komponentens livstid via <svelte:window>, inte
+  // till en $effect med manuell add/removeEventListener: komponenten är
+  // monterad hela sessionen (App.svelte göms med hidden), och attributformen
+  // kan inte läcka en lyssnare.
+  let falt = $state(null);
+
+  function globalTangent(e) {
+    if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
+    const m = e.target;
+    if (m instanceof HTMLElement && (m.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(m.tagName))) return;
+    // Panelen är dold vid flikbyte; en genväg som fokuserar ett osynligt fält
+    // flyttar fokus ut ur det läraren tittar på. offsetParent är null för allt
+    // under en [hidden]-förälder.
+    if (!falt || !falt.offsetParent) return;
+    e.preventDefault();
+    falt.focus();
+    falt.select();
+  }
+
   // Enter kör lägets aktion. preventDefault så fältet inte submittar något
   // formulär — det finns inget här, men vyn har dialoger som gör det.
   function taKey(e) {
@@ -18,10 +49,13 @@
   }
 </script>
 
+<svelte:window onkeydown={globalTangent} />
+
 <section class="sok">
   <div class="falt">
     <input
       class="input"
+      bind:this={falt}
       bind:value={sok.fraga}
       onkeydown={taKey}
       aria-label="Sök i arkivet"

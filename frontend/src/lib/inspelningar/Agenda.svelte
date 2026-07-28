@@ -23,14 +23,24 @@
   avsnitt 4.
 -->
 {#if insp.agenda}
-  <section class="panel">
-    {#if !poster.length}
-      <h2 class="rubrik">Kommande</h2>
-      <p class="tomt">
-        Inga daterade insikter ännu — sätt ett datum på en åtgärd eller en
-        kalenderpost så dyker den upp här.
-      </p>
-    {:else}
+  <!--
+    TOM PANEL FÅR INGEN LÅDA. Tomläget ritade tidigare samma ramade,
+    ytfärgade .panel som den fyllda: rubrik plus två raders förklaring, i
+    full bredd, ovanför lektionerna — alltså en låda som tog plats för att
+    säga att den inte hade något att säga. Den lärare som öppnar Inspelningar
+    för att hitta måndagens genomgång fick den i vägen varje gång.
+
+    Panelen finns kvar som EN rad i brödtexten. Texten är oförändrad; det är
+    ramen, ytan och rubriken som är borta. Den fyllda panelen är orörd — där
+    bär lådan faktiskt något.
+  -->
+  {#if !poster.length}
+    <p class="tomrad">
+      Inga daterade insikter ännu — sätt ett datum på en åtgärd eller en
+      kalenderpost så dyker den upp här.
+    </p>
+  {:else}
+    <section class="panel">
       <!--
         Knappen ligger INUTI <h2> och inte tvärtom: ett <button> får bara
         innehålla frasinnehåll, och en rubrik är flödesinnehåll. Så här blir
@@ -99,8 +109,8 @@
           </button>
         </div>
       {/if}
-    {/if}
-  </section>
+    </section>
+  {/if}
 {/if}
 
 <style>
@@ -160,11 +170,14 @@
     .chevron { transition: none; }
   }
 
-  .tomt {
+  /* Tomläget är en rad i brödtexten, inte en panel. Samma typform som
+     kartotekets egna tomtillstånd (InspelningarView.svelte:.tomt) — det är
+     samma sorts besked, och de ska inte se olika ut. */
+  .tomrad {
     font-size: 1.03rem;
     color: var(--ink-2);
     max-width: 52ch;
-    margin: 10px 0 0;
+    margin: 0 0 14px;
   }
 
   .lista {

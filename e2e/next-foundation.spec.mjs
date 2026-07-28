@@ -15,11 +15,11 @@ test("Svelte-grunden under /next/ renderar", async ({ page }) => {
   for (const t of tabs) {
     await expect(page.getByRole("button", { name: t, exact: true })).toBeVisible();
   }
-  await expect(page.getByRole("button", { name: "Transkribera", exact: true }))
+  await expect(page.getByRole("tab", { name: "Transkribera", exact: true }))
     .toHaveAttribute("aria-pressed", "true");
 
   // Planeringsvyn finns kvar bakom sin flik.
-  await page.getByRole("button", { name: "Planering", exact: true }).click();
+  await page.getByRole("tab", { name: "Planering", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Dagens tavla" })).toBeVisible();
 
   const bg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);

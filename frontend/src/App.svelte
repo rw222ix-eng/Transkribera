@@ -21,16 +21,43 @@
 <!-- Vyerna monteras alltid och göms med hidden — de villkoras aldrig bort.
      Tavelns iframe (BoardPreview.svelte:168) måste stå monterad hela tiden;
      avmonteras den tappar en ritad tavla sitt innehåll och motorn får laddas
-     om. Samma skäl som iframens egen .idle-regel. -->
-<div class="pane" hidden={nav.tab !== 'transkribera'}>
+     om. Samma skäl som iframens egen .idle-regel.
+
+     role="tabpanel" + aria-labelledby knyter panelen till sin flik i
+     AppShell.svelte, som sedan flikraden blev en riktig tablist. id:na måste
+     matcha AppShell:s aria-controls respektive id på formen panel-<tab> /
+     flik-<tab> — ändras den ena måste den andra följa med.
+
+     Att alla tre paneler ligger monterade och göms med hidden är inte en
+     avvikelse från flikmönstret utan precis vad det förutsätter: en dold
+     tabpanel ska vara hidden, inte avmonterad. -->
+<div
+  class="pane"
+  id="panel-transkribera"
+  role="tabpanel"
+  aria-labelledby="flik-transkribera"
+  hidden={nav.tab !== 'transkribera'}
+>
   <TranskriberaView />
 </div>
 
-<div class="pane" hidden={nav.tab !== 'inspelningar'}>
+<div
+  class="pane"
+  id="panel-inspelningar"
+  role="tabpanel"
+  aria-labelledby="flik-inspelningar"
+  hidden={nav.tab !== 'inspelningar'}
+>
   <InspelningarView />
 </div>
 
-<div class="pane" hidden={nav.tab !== 'planering'}>
+<div
+  class="pane"
+  id="panel-planering"
+  role="tabpanel"
+  aria-labelledby="flik-planering"
+  hidden={nav.tab !== 'planering'}
+>
   <PlaneringView />
   <ArkivView />
 </div>

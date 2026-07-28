@@ -92,8 +92,12 @@
 <style>
   /* ENVAL — plattan. Formen kommer ur Sprakval.svelte, som var den mest
      genomarbetade av de fyra varianterna. */
+  /* inline-flex, inte flex: som blockelement sträckte sig plattan över hela
+     raden i Sokfalt och ArkivSearch och läste som ett verktygsfält i stället
+     för en kontroll. Där kontrollen SKA fylla bredden (Sprakvals .halva) är
+     föräldern en kolumn-flexbox, och där stretchar barnet ändå. */
   .seg {
-    display: flex;
+    display: inline-flex;
     gap: 3px;
     padding: 3px;
     background: var(--track);

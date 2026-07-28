@@ -207,7 +207,7 @@ async function byggFixtur(request) {
  */
 async function oppnaInspelningar(page, { kort = FIXTUR.length } = {}) {
   await page.goto("/next/");
-  await page.getByRole("button", { name: "Inspelningar", exact: true }).click();
+  await page.getByRole("tab", { name: "Inspelningar", exact: true }).click();
   const vy = page.locator(".pane:not([hidden]) section.view");
   await expect(vy.locator("article.kort")).toHaveCount(kort, { timeout: 15_000 });
   return vy;
@@ -805,8 +805,8 @@ test("Inspelningar (/next/): de två tomtillstånden är inte utbytbara", async 
   await expect(kort).toHaveCount(3);
   await toemArkivet(page.request);
 
-  await page.getByRole("button", { name: "Transkribera", exact: true }).click();
-  await page.getByRole("button", { name: "Inspelningar", exact: true }).click();
+  await page.getByRole("tab", { name: "Transkribera", exact: true }).click();
+  await page.getByRole("tab", { name: "Inspelningar", exact: true }).click();
 
   await expect(kort).toHaveCount(0);
   await expect(vy.getByText(TOMT_ARKIV)).toBeVisible();
@@ -898,8 +898,8 @@ test("Inspelningar (/next/): ärlighetsvakten räknar historikposter utan lektio
   );
   const lektionerOm = nastaTrimmadeSvar();
 
-  await page.getByRole("button", { name: "Transkribera", exact: true }).click();
-  await page.getByRole("button", { name: "Inspelningar", exact: true }).click();
+  await page.getByRole("tab", { name: "Transkribera", exact: true }).click();
+  await page.getByRole("tab", { name: "Inspelningar", exact: true }).click();
 
   await historikOm;
   await vantaPa(
@@ -918,8 +918,8 @@ test("Inspelningar (/next/): ärlighetsvakten räknar historikposter utan lektio
   // permanent etikett.
   trimma = false;
   await klass.selectOption({ label: "Alla klasser" });
-  await page.getByRole("button", { name: "Transkribera", exact: true }).click();
-  await page.getByRole("button", { name: "Inspelningar", exact: true }).click();
+  await page.getByRole("tab", { name: "Transkribera", exact: true }).click();
+  await page.getByRole("tab", { name: "Inspelningar", exact: true }).click();
   await expect(vy.locator("article.kort")).toHaveCount(3);
   await expect(vy.getByText(/saknas i kartoteket/)).toHaveCount(0);
 

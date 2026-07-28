@@ -167,7 +167,14 @@
     <!-- Progresslinjen. 2px spår, ingen puls: tänker-läget bärs av tickerns
          suffix i stället för av en oändlig animation. -->
     <div class="spar">
-      <div class="fyllnad" style:width="{plan.length ? (visade / plan.length) * 100 : 0}%"></div>
+      <!--
+        scaleX, inte width. Att animera width är en layoutegenskap: varje bild
+        i övergången tvingar fram en ny layoutberäkning, medan transform körs
+        på kompositorn. Baren är full bredd och skalas ned i stället —
+        transform-origin: left gör att den växer från vänsterkanten precis som
+        förut.
+      -->
+      <div class="fyllnad" style:transform="scaleX({plan.length ? visade / plan.length : 0})"></div>
     </div>
 
     {#if sok.notis}
@@ -267,10 +274,12 @@
     margin: 10px 0 0;
   }
   .fyllnad {
+    width: 100%;
     height: 100%;
     background: var(--accent);
     border-radius: 2px;
-    transition: width 0.32s cubic-bezier(0.2, 0.8, 0.25, 1);
+    transform-origin: left center;
+    transition: transform 0.32s cubic-bezier(0.2, 0.8, 0.25, 1);
   }
   @media (prefers-reduced-motion: reduce) {
     .fyllnad { transition: none; }
