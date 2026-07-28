@@ -57,16 +57,6 @@ export default defineConfig({
   },
   projects: [
     {
-      name: "fake",
-      testIgnore: /(visual|real-smoke)\.spec\.ts/,
-      use: { ...devices["Desktop Chrome"], viewport: { width: 1040, height: 780 } },
-    },
-    {
-      name: "visual",
-      testMatch: /visual\.spec\.ts/,
-      use: { ...devices["Desktop Chrome"] },
-    },
-    {
       // The real smoke runs against the REAL backend. Playwright's webServer is
       // top-level only, so start the real server yourself before this project:
       //   TRANSKRIBERA_BASE_DIR=e2e/.test-data-real python e2e/serve_test_app.py --real
@@ -155,6 +145,28 @@ export default defineConfig({
       // över en omladdning), och riktig mikrofonhårdvara inklusive att enheten
       // dras ur mitt i en inspelning. Specens egen kommentar upprepar listan.
       //
+      // inspelningar-fraga.spec.mjs (plan B3b) täcker FRÅGE-LÄGET: att
+      // genomsökningen visar ÄKTA träffantal med exakta strängar (inte bara
+      // "> 0"), att svaret strömmar in och att [1] blir en markör i stället
+      // för rå text, att läsbordet säger "Svaret bygger på denna" (singular,
+      // vilket bara håller om citatfiltreringen faktiskt filtrerar), att
+      // kartotekets kort LYFTS efter SERVERNS träffar (aldrig efter en
+      // klientmatchning på frågans ord — gamla appen hade den buggen), att
+      // ett fel renderas i svarsytan och inte som ett svar, att en rensning
+      // överger den pågående strömmen, och (slutgranskningens fynd 1, HIGH)
+      // att ett error-event MITT I strömmen — efter deep_read — inte får
+      // tickern att kvittera en avbruten genomsökning som lyckad. TÄCKER
+      // INTE: SERVERNS SÖKORDNING (fixturens tre lektioner får samma namn av
+      // fejkens titelförslag och PATCH /api/lessons tar inget `name`-fält,
+      // så en klientsortering hade passerat obemärkt), DIM-GRENEN i
+      // kartotekets stadiekarta (fixturens tre lektioner delar transkript,
+      // så ingen blir källa-lös — det finns ingen fjärde lektion utan träff),
+      // den semantiska omsökningen med två scan_plan (fejkens tre meningar
+      // räcker inte till en fråga som ger noll ordträffar men ändå ett
+      // närliggande transkript — backend har egen täckning i
+      // tests/test_web_server.py:1125), källmodalen och följdfrågorna (B3c),
+      // eller prefers-reduced-motion-grenen.
+      //
       // Plan B1 Task 5 lägger till e2e/inspelningar-kartotek.spec.mjs (samma
       // placering, samma fejkserver) som täcker Inspelningar-flikens kartotek:
       // veckogrupperingen med antal per grupp, att KLASS-filtret verkligen
@@ -175,9 +187,55 @@ export default defineConfig({
       // vilket är just därför städningen är obligatorisk.
       // Se .superpowers/sdd/task-5-brief.md.
       //
+      // Kalender-omgång 2 lägger till e2e/kalender.spec.mjs (samma placering,
+      // samma fejkserver) som täcker frågekortet, anteckningsmodalen och
+      // deras samspel med förslagsboxen och kalenderkommandots snabbväg —
+      // se filens egen header för den fullständiga listan och vad som
+      // MEDVETET inte täcks (Google-kopplingsguiden, arkivsvarets kalenderväg).
+      //
+      // inspelningar-paneler.spec.mjs (plan B5) täcker de tre PANELERNA:
+      // agendans märkning av försenad/idag/framtid, att ett KLASSbyte skickar
+      // nya GET /api/trends och /api/next-prep, att ett KURSbyte DÄREFTER
+      // (med klassen redan vald) inte gör det, att varken trender eller
+      // Inför nästa renderas utan vald klass, att en bock i Inför nästa
+      // laddar om agendan (gamla appens refetch-asymmetri, fixad),
+      // .ics-exporten med POST /api/open stubbad, och de harmoniserade
+      // tomtillstånden. TÄCKER INTE: .ics-filens innehåll (tests/
+      // test_ics_export.py), att /api/open startar ett program, eller
+      // panelernas generationsvakter — de är ordagranna kopior av den som
+      // redan prövas i inspelningar-kartotek.spec.mjs.
+      //
+      // inspelningar-sok.spec.mjs (plan B3a) täcker ORDSÖKET: att träffarna
+      // renderas med markerade utdrag och att \x02/\x03 aldrig läcker som
+      // synlig text, att kartoteket viker för träfflistan och kommer tillbaka
+      // när fältet rensas, att kartotekets tomtillstånd inte renderas under
+      // träffarna, nollträffstexten, och att ett KLASSbyte inte ändrar
+      // träffarna (api_search tar inga filterparametrar). TÄCKER INTE:
+      // fråge-läget i sak, att öppna en träff i transkriptet (B2, andra
+      // strömmen), sökets generationsvakt (ordagrann kopia av den som redan
+      // prövas i inspelningar-kartotek.spec.mjs) eller LIKE-fallbacken när
+      // sqlite saknar FTS5.
+      //
+      // B3b (sok.svelte.js:11) flippade sok.lages DEFAULT från 'keyword' till
+      // 'ask', vilket gjorde fråge-läget levande. Den täckningen hör nu hemma
+      // i B3b:s egen spec (inspelningar-fraga.spec.mjs), inte här — det gamla
+      // testet "Fråga AI säger att den kommer senare", som prövade en
+      // placeholder-rad och en inaktiv körknapp, är BORTTAGET ur den här
+      // filen av det skälet. oppnaInspelningar (specens hjälpare som öppnar
+      // Inspelningar-fliken) växlar därför explicit tillbaka till 'keyword'
+      // åt varje kvarvarande test, en gång, i stället för i vart och ett.
+      //
+      // Slutgranskningens fynd 1 (efter leverans) lade till ett sjätte test:
+      // att körknappen inte fastnar i "Söker …"/disabled när fältet töms och
+      // Enter trycks igen medan ett tidigare /api/search-svar fortfarande är
+      // i luften — korSoknings tomma-frågan-gren nollställde sok.traffar men
+      // aldrig sok.soker. Svaret hålls uppehållet med page.route (samma
+      // fetch+fulfill-mönster som inspelningar-kartotek.spec.mjs) så
+      // kapplöpningen kan tvingas fram pålitligt.
+      //
       // FÄLLA FÖR B2-B5, skarpladdad men ännu otriggad: en CSS-räkning av
       // [role="status"] inuti den SYNLIGA Inspelningar-panelen ger nu 2 —
-      // RedigeraLektion.svelte:165 plus InspelningarView.svelte:94 — medan
+      // RedigeraLektion.svelte:165 plus InspelningarView.svelte:158 — medan
       // TILLGÄNGLIGHETSTRÄDET säger 1. Motsägelsen är skenbar och båda noderna
       // är rätt: stängd är dialogen display:none och alltså ur trädet, öppen gör
       // showModal() resten av panelen inert och tar bort vyns region ur trädet i
@@ -188,23 +246,62 @@ export default defineConfig({
       // (A4:s antalsspärr i transkribera-kalla.spec.mjs räknar i
       // Transkribera-panelen, som inte har någon dialog), men mönstret ärvs av
       // varje vy B2-B5 lägger till.
+      //
+      // Plan B2 Task 11 lägger till e2e/transkript-prestanda.spec.mjs — EGEN
+      // fil, inte en del av transkript.spec.mjs, trots att den bara har två
+      // tester. Skälet är tekniskt: `test.use({ trace: 'off' })` går inte att
+      // scopa till ett test.describe-block ("Cannot use({ trace }) in a
+      // describe group ... Make it top-level in the test file or put in the
+      // configuration file" — Playwrights eget felmeddelande). Filnivå var
+      // alltså enda sättet att stänga av spårning för BARA de här två
+      // mätningarna utan att släcka den för resten av transkript.spec.mjs.
+      // Spårning (`trace: "retain-on-failure"`) lägger annars 35-85 ms på
+      // mönstret "skriv ett tecken, assertera direkt" och dominerar det som
+      // ska mätas — se filens egen header för hela A/B-mätningen.
+      //
+      // Paritetslucka 1 (gamla appens autoExtractLessons, saknades i Svelte-
+      // frontenden — se .superpowers/sdd/paritetsluckor-report.md) lägger
+      // till e2e/transkribera-autoextraktion.spec.mjs: att en färdig kö
+      // POSTar /api/lessons/{id}/extract sekventiellt, en gång per lektion,
+      // och laddar om Inspelningar-panelerna efteråt.
+      //
+      // Paritetslucka 2 (gamla appens backupNow, app.js:2059-2066) lägger
+      // till e2e/inspelningar-sakerhetskopiering.spec.mjs: att
+      // Säkerhetskopiera-knappen POSTar /api/backup och kvitterar antalet
+      // filer på vyns delade statusrad, och att ett serverfel syns där.
+      //
+      // Cutover-planens Task 4 (pensioneringen av app.js) räddade ETT test ur
+      // den gamla e2e-sviten innan den raderades: e2e/whiteboard-expr.spec.mjs
+      // (ordagrant flyttad ur e2e/tests/10-tavla.spec.ts) — den enda spärren
+      // mot att ogiltiga uttryck kraschar whiteboard-motorn. Se
+      // .superpowers/sdd/pensionering-report.md.
       name: "next-foundation",
       testDir: __dirname,
       testMatch: [
+        /inspelningar-fraga\.spec\.mjs$/,
         /inspelningar-kartotek\.spec\.mjs$/,
+        /inspelningar-paneler\.spec\.mjs$/,
+        /inspelningar-sakerhetskopiering\.spec\.mjs$/,
+        /inspelningar-sok\.spec\.mjs$/,
         /next-foundation\.spec\.mjs$/,
         /planering-tavla\.spec\.mjs$/,
         /planering-arkiv\.spec\.mjs$/,
         /planering-prov\.spec\.mjs$/,
+        /transkribera-autoextraktion\.spec\.mjs$/,
         /transkribera-kalla\.spec\.mjs$/,
         /transkribera-installningar\.spec\.mjs$/,
         /transkribera-korning\.spec\.mjs$/,
         /transkribera-inspelning\.spec\.mjs$/,
+        /transkript\.spec\.mjs$/,
+        /transkript-prestanda\.spec\.mjs$/,
+        /lektionschatt\.spec\.mjs$/,
+        /kalender\.spec\.mjs$/,
+        /whiteboard-expr\.spec\.mjs$/,
       ],
       use: { ...devices["Desktop Chrome"] },
     },
   ],
-  // Default server (fake) for the fake + visual projects. reuseExistingServer
+  // Default server (fake) for the next-foundation project. reuseExistingServer
   // lets the real smoke reuse a manually-started --real server on the same port.
   webServer: {
     command: `python e2e/serve_test_app.py`,

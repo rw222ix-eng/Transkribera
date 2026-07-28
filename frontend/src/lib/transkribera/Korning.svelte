@@ -4,6 +4,7 @@
   import { tr } from './stores.svelte.js';
   import { stageNames, stageBounds, phaseIndex } from './korning.js';
   import { cancelRun, resumeRun, retryRun, toggleLog, goSource, nyTranskribering } from './actions.js';
+  import { oppnaTranskript } from '../transkript/actions.js';
   import Kolista from './Kolista.svelte';
 
   const faser = $derived(stageNames());
@@ -141,14 +142,26 @@
         {#each tr.resultFiles as f}<li>{f.name || f}</li>{/each}
       </ul>
     {/if}
-    <p class="senare">
-      Inspelningar — där lektionen går att öppna, läsa och söka i — migreras i en
-      senare plan. Tills dess finns den i den gamla appen.
-    </p>
-    <!-- nyTranskribering, INTE goSource: guiden måste börja om från ett tomt
-         körtillstånd, annars ligger den nyss sparade filen kvar i kön och körs
-         om först nästa gång (se actions.js). -->
-    <button type="button" class="ghost" onclick={nyTranskribering}>Transkribera något mer</button>
+    <!-- .knappar återanvänds från fel-/avbrutet-beskeden ovan i stället för
+         att låta de två knapparna stå ogrupperade — samma grupperingsklass,
+         ingen ny CSS. -->
+    <div class="knappar">
+      <button
+        type="button"
+        class="primar"
+        onclick={() =>
+          oppnaTranskript({
+            historyId: tr.resultId,
+            namn: tr.queue.find((q) => q.id === tr.activeId)?.name || '',
+            segment: tr.resultSegment,
+            mediaPath: tr.resultMedia,
+          })}
+      >Öppna transkriptet</button>
+      <!-- nyTranskribering, INTE goSource: guiden måste börja om från ett tomt
+           körtillstånd, annars ligger den nyss sparade filen kvar i kön och körs
+           om först nästa gång (se actions.js). -->
+      <button type="button" class="ghost" onclick={nyTranskribering}>Transkribera något mer</button>
+    </div>
   </div>
 {/if}
 
@@ -330,9 +343,10 @@
     color: var(--ink-2);
     font-variant-numeric: tabular-nums;
   }
-  /* Klarbeskedet. Guiden stannar kvar på steg 3 — Inspelningar är inte
-     migrerad än, så det finns ingenstans att navigera. Beskedet säger det
-     rakt ut i stället för att låtsas. */
+  /* Klarbeskedet. Guiden stannar kvar på steg 3 — den navigerar aldrig undan
+     läraren till en annan flik. "Öppna transkriptet" öppnar i stället samma
+     modal som Inspelningar-kortet, direkt ur körningens eget resultat
+     (actions.js: oppnaTranskript, plan B2 task 10). */
   .klar-besked {
     margin-top: 28px;
     padding-top: 20px;
@@ -353,7 +367,6 @@
     gap: 6px;
   }
   .filer li { color: var(--ink-2); }
-  .senare { max-width: 62ch; color: var(--ink-2); margin: 0 0 16px; }
   .kolabel {
     font-family: var(--mono);
     font-size: 0.72rem;

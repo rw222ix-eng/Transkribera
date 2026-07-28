@@ -17,7 +17,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
@@ -253,9 +253,9 @@ def create_app(base_dir: Path | None = None,
         return await call_next(request)
 
     # 3) Ingen heuristisk cachning av UI-filerna: utan Cache-Control gissar
-    #    webbläsaren friskhet ur Last-Modified och kan köra gammal app.js länge
-    #    efter en uppdatering. no-cache = alltid omfråga (304 via ETag är
-    #    fortfarande snabbt, allt ligger på lokal disk).
+    #    webbläsaren friskhet ur Last-Modified och kan köra ett gammalt
+    #    index.html länge efter en uppdatering. no-cache = alltid omfråga
+    #    (304 via ETag är fortfarande snabbt, allt ligger på lokal disk).
     #    "/next" och "/next/" är den ohashade Svelte-entrydokumentet (index.html) —
     #    build.emptyOutDir rensar gamla hashade assets vid varje ombygge, så en
     #    kvarcachad /next/index.html skulle be om en /next/assets/*-fil som redan
@@ -271,10 +271,21 @@ def create_app(base_dir: Path | None = None,
 
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
-    # Parallell Svelte-frontend (byggd av Vite → app/web/next). Serveras additivt;
-    # rör inte "/" eller "/static". Monteras bara om bygget finns (dev utan bygge = tyst).
+    # Svelte-frontenden (byggd av Vite → app/web/next).
+    #
+    # Sedan cutovern byggs den med base "/" (vite.config.js), så index.html
+    # refererar tillgångarna rot-absolut som /assets/*. De monteras därför vid
+    # roten. "/next" behålls under övergången: hela e2e-sviten kör mot den, och
+    # samma index.html fungerar på båda vägarna just tack vare den rot-absoluta
+    # basen.
+    #
+    # Monteras bara om bygget finns. Saknas det svarar "/" med en förklarande
+    # text i stället för en trasig FileResponse eller en obegriplig 404 — se
+    # index().
     NEXT_DIR = STATIC_DIR.parent / "next"
-    if (NEXT_DIR / "index.html").exists():
+    NEXT_READY = (NEXT_DIR / "index.html").exists()
+    if NEXT_READY:
+        app.mount("/assets", StaticFiles(directory=str(NEXT_DIR / "assets")), name="next-assets")
         app.mount("/next", StaticFiles(directory=str(NEXT_DIR), html=True), name="next")
 
     # Single owner of the LLM process + GPU exclusivity. The LLM is NOT started
@@ -300,7 +311,20 @@ def create_app(base_dir: Path | None = None,
 
     @app.get("/")
     def index():
-        return FileResponse(str(STATIC_DIR / "index.html"))
+        """Svelte-appen.
+
+        Den gamla vanilla-appen (app.js/style.css/index.html) är pensionerad —
+        se docs/superpowers/plans/2026-07-25-cutover-till-svelte.md, Task 4.
+        Det fanns alltså inget att falla tillbaka på längre om bygget saknas,
+        och en tyst FileResponse mot en fil som inte finns hade bara gett en
+        obegriplig 404. Svara i stället med en förklarande text: en utcheckning
+        utan `npm run build` ska ge ett begripligt besked, inte en gissning.
+        """
+        if NEXT_READY:
+            return FileResponse(str(NEXT_DIR / "index.html"))
+        return PlainTextResponse(
+            "Svelte-appen är inte byggd. Kör `npm run build` i repo-roten "
+            "och starta om servern.", status_code=503)
 
     @app.get("/api/hardware")
     def api_hardware():

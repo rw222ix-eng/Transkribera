@@ -34,6 +34,11 @@ export const tr = $state({
   logExpand: false,     // loggen utfälld
   resultFiles: [],      // filer den senaste körningen skrev
   resultId: null,       // serverns id för den sparade lektionen
+  // done-eventet bär {id, files, transcript, media, folder} (server.py:698-700).
+  // A3 plockade bara files och id; de här två är det transkriptvyn behöver för
+  // att öppnas utan ett enda extra anrop (plan B2).
+  resultSegment: [],    // [{start, end, text}]
+  resultMedia: null,    // sammanslagen mediasökväg: video om sådan finns, annars källan
 
   // steg 1 — inspelning (plan A4)
   recording: false,       // en inspelning pågår just nu

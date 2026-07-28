@@ -12,7 +12,112 @@
 // (e2e/serve_test_app.py) strömmar numera tavlans JSON via token_cb (med en
 // kort paus per bit) i stället för att svälja den, så live-räknaren blir
 // observerbar utan att göra testet flaky.
+//
+// Paritetslucka 3 (PNG-exporten): lade till "Spara som PNG" i
+// BoardPreview.svelte, portad från gamla appens wbExportPng (app.js:819-868).
+// De två testerna nedan täcker GRINDNINGEN (knappen är gömd innan en tavla är
+// ritad, precis som Skriv ut/Förstora ovan — figure.idle döljer hela
+// verktygsraden) och SERVERFALLBACKEN (POST /api/planning/export) — INTE
+// File System Access-vägen: window.showSaveFilePicker öppnar en äkta OS-
+// dialog som Playwright inte kan styra, så den stängs av deterministiskt med
+// `delete window.showSaveFilePicker` innan navigeringen, exakt som gamla
+// appens egen kod faller tillbaka på servern när API:n saknas
+// (app.js:825/849-850). Det andra testet bevisar att ett exportfel SYNS
+// (kravet "Ingen tom .catch") genom att fejka ett 500-svar från endpointen.
 import { test, expect, failOnConsoleError } from "./helpers/app";
+
+/** Skriver en tavla, precis som steg 1-3 i huvudtestet ovan, men utan
+ *  ändra-raden och godkännandet — de behövs inte för exporttesterna. */
+async function skrivTavla(page) {
+  await page.goto("/next/");
+  await page.getByRole("button", { name: "Planering", exact: true }).click();
+  await page.getByLabel("Moment").fill("Andragradsfunktioner — minimipunkt");
+  await page.getByRole("button", { name: "Skriv tavlan" }).click();
+  const boardFrame = page.frameLocator('iframe[title^="Lektionstavla"]');
+  await expect(boardFrame.getByText("Symmetrilinjen:")).toBeVisible({ timeout: 15000 });
+}
+
+test("Planering (/next/): Spara som PNG är grindad och sparar via serverfallbacken", async ({ page }) => {
+  const errors = [];
+  failOnConsoleError(page, errors);
+
+  // Tvingar fram serverfallbacken deterministiskt — se filhuvudets kommentar.
+  await page.addInitScript(() => { delete window.showSaveFilePicker; });
+
+  await page.goto("/next/");
+  await page.getByRole("button", { name: "Planering", exact: true }).click();
+
+  // GRINDAD: ingen tavla ritad än. Knappen finns i DOM:en (figuren är alltid
+  // monterad, se BoardPreview.svelte) men figure.idle gömmer hela
+  // verktygsraden — samma mönster Skriv ut/Förstora redan lever under.
+  const exportBtn = page.getByRole("button", { name: "Spara som PNG" });
+  await expect(exportBtn).toBeHidden();
+
+  await page.getByLabel("Moment").fill("Andragradsfunktioner — minimipunkt");
+  await page.getByRole("button", { name: "Skriv tavlan" }).click();
+  const boardFrame = page.frameLocator('iframe[title^="Lektionstavla"]');
+  await expect(boardFrame.getByText("Symmetrilinjen:")).toBeVisible({ timeout: 15000 });
+
+  // Tavlan finns — knappen är nu aktiv, precis som sina syskon.
+  await expect(exportBtn).toBeVisible();
+  await expect(exportBtn).toBeEnabled();
+
+  const exportSvar = page.waitForResponse(
+    (r) => new URL(r.url()).pathname === "/api/planning/export" && r.request().method() === "POST",
+  );
+  await exportBtn.click();
+  const svar = await exportSvar;
+  expect(svar.ok(), "POST /api/planning/export svarade " + svar.status()).toBeTruthy();
+  const kropp = await svar.json();
+  expect(kropp.path, "Servern angav ingen sparad sökväg").toBeTruthy();
+
+  // Kvittot syns i den permanenta live-regionens SYNLIGA kopia (p.exportmsg).
+  // Avgränsat dit och inte getByText: den klippta live-regionen (p.exportmsg-sr,
+  // role="status") bär SAMMA text och ger annars strict mode violation — precis
+  // det mönster InspelningarView.svelte:229/687-702 redan är avgränsat mot.
+  await expect(page.locator("p.exportmsg")).toHaveText(/^PNG sparad: /, { timeout: 10000 });
+
+  // MOTORNS EGEN, FÖRUTVARANDE brus: WBHost.exportPng (board.js, inlineUrls)
+  // hämtar VARJE url() i KaTeX-typsnittens @font-face-regler för att bädda in
+  // dem i export-SVG:n — även .woff/.ttf-fallbackerna, trots att vendor-
+  // katalogen bara skeppar .woff2 (app/web/static/vendor/katex/fonts/, 20
+  // filer, uppmätt). Webbläsaren hittar ändå .woff2-källan i samma
+  // @font-face-regel och exporten blir korrekt — bruset är kosmetiskt och
+  // förekommer lika mycket i produktion. Motorn ligger under app/ och är
+  // uttryckligen "given" (specen: "Motorn kan det"), så det är test-filtret
+  // som ska anpassas, inte motorn. Samma appfel-mönster som
+  // inspelningar-kartotek.spec.mjs använder för sin egen 409:a.
+  const appfel = errors.filter((e) => !/Failed to load resource/.test(e));
+  expect(appfel, appfel.join("\n")).toEqual([]);
+});
+
+test("Planering (/next/): ett exportfel syns i vyn", async ({ page }) => {
+  const errors = [];
+  failOnConsoleError(page, errors);
+
+  await page.addInitScript(() => { delete window.showSaveFilePicker; });
+  await skrivTavla(page);
+
+  await page.route("**/api/planning/export", (route) =>
+    route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "diskfel" }) }),
+  );
+
+  await page.getByRole("button", { name: "Spara som PNG" }).click();
+
+  // Felet SYNS — ingen tom .catch. Serverns egen text ("diskfel") ska med,
+  // inte bara en generisk reservtext. Avgränsat till den synliga kopian
+  // (p.exportmsg) — se motiveringen i föregående test.
+  await expect(page.locator("p.exportmsg")).toHaveText("Kunde inte spara PNG: diskfel", { timeout: 10000 });
+  await expect(page.locator("p.exportmsg")).toHaveClass(/fel/);
+
+  await page.unroute("**/api/planning/export");
+
+  // Chromes egen "Failed to load resource … 500" är testets EGEN injektion,
+  // inte ett appfel — samma filter som inspelningar-kartotek.spec.mjs
+  // (appfel) använder för sin 409:a.
+  const appfel = errors.filter((e) => !/Failed to load resource/.test(e));
+  expect(appfel, appfel.join("\n")).toEqual([]);
+});
 
 test("Planering (/next/): skriv tavlan, förhandsvisa, ändra-raden, godkänn & spara", async ({ page }) => {
   const errors = [];

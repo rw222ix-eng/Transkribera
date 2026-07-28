@@ -2,6 +2,7 @@
   import { plan } from './stores.svelte.js';
   import { parsePartialBoard, countSections } from './boardStream.js';
   import { onToken } from './actions.js';
+  import { postJSON } from '../api.js';
 
   let frame = $state(null);
   let ready = $state(false);
@@ -16,8 +17,83 @@
 
   let zoomed = $state(false);
 
+  // PNG-exportens eget kvittotillstånd. INTE i plan (stores.svelte.js) — det
+  // gäller bara den här komponenten, precis som warnings/frameHeight ovan.
+  let exporting = $state(false);
+  let exportMsg = $state('');
+  let exportFailed = $state(false);
+
   function print() {
     frame?.contentWindow?.WBHost?.print();
+  }
+
+  /**
+   * "Spara som PNG". Speglar wbExportPng, app.js:819-868, i samma ordning:
+   * File System Access-dialogen FÖRST (om webbläsaren har den), servern som
+   * fallback. Dialogen öppnas SYNKRONT i klickgesten, innan den långsamma
+   * WBHost.exportPng(2) — annars nekar webbläsaren den (samma skäl som
+   * gamla appens kommentar, app.js:823-824).
+   *
+   * Motorn kan skriva DIREKT till disk via File System Access — servern
+   * (POST /api/planning/export) behövs bara som fallback för webbläsare utan
+   * den API:n, och sparar då under Transkriberingar/<lektion>/planering/
+   * (routes_planning.py).
+   */
+  async function exportPng() {
+    const win = frame?.contentWindow;
+    if (!win?.WBHost || exporting) return;
+
+    // File System Access API — inte i TypeScripts DOM-lib än. Samma
+    // /** @type {any} */-mönster som window.pywebview i
+    // frontend/src/lib/transkribera/actions.js (openPicker).
+    const picker = /** @type {any} */ (window).showSaveFilePicker;
+    if (picker) {
+      const namn = (title || 'tavla').replace(/[\\/:*?"<>|]/g, '-') + '.png';
+      let handle;
+      try {
+        handle = await picker({
+          suggestedName: namn,
+          types: [{ description: 'PNG-bild', accept: { 'image/png': ['.png'] } }],
+        });
+      } catch (e) {
+        if (e?.name === 'AbortError') return; // läraren avbröt dialogen — inget fel
+        exportFailed = true;
+        exportMsg = 'Kunde inte spara PNG: ' + (e?.message || e);
+        return;
+      }
+      exporting = true;
+      exportMsg = '';
+      exportFailed = false;
+      try {
+        const dataUrl = await win.WBHost.exportPng(2);
+        const blob = await (await fetch(dataUrl)).blob();
+        const writable = await handle.createWritable();
+        await writable.write(blob);
+        await writable.close();
+        exportMsg = 'PNG sparad: ' + handle.name;
+      } catch (e) {
+        exportFailed = true;
+        exportMsg = 'Kunde inte spara PNG: ' + (e?.message || e);
+      } finally {
+        exporting = false;
+      }
+      return;
+    }
+
+    // Serverfallbacken (äldre motor utan File System Access API).
+    exporting = true;
+    exportMsg = '';
+    exportFailed = false;
+    try {
+      const dataUrl = await win.WBHost.exportPng(2);
+      const res = await postJSON('/api/planning/export', { title, png: dataUrl });
+      exportMsg = 'PNG sparad: ' + res.path;
+    } catch (e) {
+      exportFailed = true;
+      exportMsg = 'Kunde inte spara PNG: ' + (e?.message || e);
+    } finally {
+      exporting = false;
+    }
   }
 
   function setPanZoom(on) {
@@ -145,7 +221,21 @@
       <button class="ghost" onclick={toggleZoom}>
         {zoomed ? 'Stäng' : 'Förstora'}
       </button>
+      <button class="ghost" onclick={exportPng} disabled={exporting}>
+        {exporting ? 'Sparar …' : 'Spara som PNG'}
+      </button>
     </figcaption>
+    <!--
+      Exportens live-region. PERMANENT och bara visuellt klippt — aldrig
+      {#if}-grindad och aldrig display:none (CLAUDE.md: en {#if}-grindad
+      role="status" annonseras inte pålitligt eftersom noden monteras in
+      samtidigt som sin text). Klipptekniken är identisk med .fel-sr i
+      InspelningarView.svelte/TranskriberaView.svelte — samma teknik, ny plats.
+      Den delar figurens .idle-gömning med resten av verktygsraden, vilket är
+      rätt: finns ingen tavla finns inget att exportera och inget att annonsera,
+      exakt som en dold flik inte annonserar (App.svelte).
+    -->
+    <p class="exportmsg-sr" role="status">{exportMsg}</p>
     <iframe
       bind:this={frame}
       onload={onLoad}
@@ -153,6 +243,11 @@
       title={'Lektionstavla — ' + title}
       style="height: {frameHeight}px"
     ></iframe>
+    <!-- SYNLIG kopia av live-regionen ovan, aria-hidden och utan egen roll —
+         bara live-regionen ska annonseras. :empty döljer den utan att
+         villkora bort monteringen (samma :empty-mönster som .fel i
+         InspelningarView.svelte). -->
+    <p class="exportmsg" class:fel={exportFailed} aria-hidden="true">{exportMsg}</p>
     {#if warnings.length}
       <ul class="warnings">
         {#each warnings as w}<li>{w}</li>{/each}
@@ -194,6 +289,27 @@
     font-size: inherit;
     cursor: pointer;
   }
+  /* Väntläget ska SYNAS, annars ser en avstängd knapp bara trasig ut. Samma
+     regel som InspelningarView.svelte:585 (Radera under en pågående DELETE). */
+  .ghost:disabled { opacity: 0.55; cursor: default; }
+  /* Klippande teknik — noden finns kvar i tillgänglighetsträdet men upptar
+     ingen synlig plats, till skillnad från display:none. Duplicerad från
+     InspelningarView.svelte (.fel-sr) och TranskriberaView.svelte, källan
+     till mönstret. */
+  .exportmsg-sr {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  /* Kvittotext, inte en mikroetikett — 0.72rem/--mono är reserverat för korta
+     versala etiketter (DESIGN.md), och den här raden är en hel mening.
+     font-size: inherit håller den i den slutna typrampen. */
+  .exportmsg { margin: 8px 0 0; color: var(--ink-3); }
+  .exportmsg:empty { display: none; }
+  .exportmsg.fel { color: var(--bad); }
   iframe {
     width: 100%;
     border: 1px solid var(--line);

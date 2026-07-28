@@ -8,14 +8,26 @@
     laddaLektioner,
     laddaOrg,
     kollaHistorik,
+    laddaPaneler,
     startaRedigering,
     fragaRadera,
     avbrytRadera,
     bekraftaRadera,
+    saveBackup,
   } from './actions.js';
   import Filterrad from './Filterrad.svelte';
   import Kartotek from './Kartotek.svelte';
+  import Agenda from './Agenda.svelte';
+  import NastaLektion from './NastaLektion.svelte';
+  import Terminstrender from './Terminstrender.svelte';
+  import Sokfalt from './Sokfalt.svelte';
+  import Traefflista from './Traefflista.svelte';
+  import Genomsokning from './Genomsokning.svelte';
+  import Svar from './Svar.svelte';
+  import { sok } from './sok.svelte.js';
+  import { rensaSokning } from './sokActions.js';
   import RedigeraLektion from './RedigeraLektion.svelte';
+  import Kallmodal from './Kallmodal.svelte';
   import { nav } from '../shell/nav.svelte.js';
 
   // Raderingsbekräftelsen är ett NATIVE <dialog>, byggt precis som
@@ -82,6 +94,31 @@
       laddaOrg();
       laddaLektioner();
       kollaHistorik();
+      // Panelerna ligger MED i untrack av exakt samma skäl som de tre ovan:
+      // laddaNastaLektion och laddaTrender läser insp.filterGroup synkront före
+      // sitt första await, och Sveltes spårning är dynamisk, inte lexikal.
+      // Utanför untrack hade effekten spårat filtret — och då blir valjKlass
+      // explicita omhämtning en DUBBELHÄMTNING i stället för enda vägen.
+      laddaPaneler();
+      // SÖKET NOLLSTÄLLS ÄVEN DET, av samma "färskt varje gång"-skäl som
+      // kollaHistorik ovan: transkriberar läraren en lektion i en ANNAN flik
+      // och kommer tillbaka hit med en gammal aktiv sökning, skymmer den
+      // gamla träfflistan det nyss omhämtade kartoteket i stället för att
+      // visa den nya lektionen. rensaSokning() bumpar dessutom sokToken, så
+      // ett svar som redan var i luften från förra besöket inte kan landa
+      // efteråt och återuppliva träffarna. Den läser ingen store synkront
+      // (bara sok själv och den egna modulräknaren), så den behöver inte
+      // untrack av SPÅRNINGSSKÄL — men ligger ändå här, tillsammans med de
+      // andra anropen, av samma "allt hämtas/nollställs om vid flikbyte"-skäl.
+      //
+      // DETTA TÖMMER ÄVEN sok.fraga, INTE BARA TRÄFFARNA (utskrivet i
+      // SLUTGRANSKNINGEN, se .superpowers/sdd/b3a-slutfix-report.md — samma
+      // beteende som förut, bara odokumenterat): en halvskriven, osänd fråga
+      // i fältet försvinner alltså också om läraren tittar i en annan flik
+      // och kommer tillbaka. Det är avsiktligt och inget nytt — ALLT annat i
+      // vyn hämtas på samma sätt om vid flikbyte (filter, kartotek, paneler),
+      // så en kvarglömd sökfråga vore det enda undantaget.
+      rensaSokning();
     });
   });
 
@@ -94,6 +131,43 @@
       ? insp.lessons.filter((l) => String(l.datum || '').slice(0, 7) === insp.filterMonth)
       : insp.lessons,
   );
+
+  // STADIEKARTAN räknas EN gång per ändring, inte per kort. En stadie-funktion
+  // som läser sok-fälten inuti {#each} hade blivit O(kort × ändringar) — och
+  // ändringarna kommer var 60-150 ms under utrullningen.
+  //
+  // STADIET ÄR SERVERNS, inte klientens. Prioritetsordningen är
+  // done.sources → deep_read → scan_result > 0, precis som gamla appen
+  // (app.js:3392-3397), vars kommentar är uttrycklig: "Ingen klientmatchning
+  // på frågans ord längre — den markerade småordsträffar."
+  //
+  // Ett kort som ännu inte avslöjats av utrullningen får INGET stadie: det är
+  // hela koreografin, att markeringen växer fram i takt med genomsökningen.
+  const stadier = $derived.by(() => {
+    const karta = new Map();
+    const plan = sok.skanPlan;
+    if (!plan || !plan.length) return karta;
+
+    const traffar = new Set();
+    if (sok.kallor.length) {
+      for (const s of sok.kallor) traffar.add(s.lesson_id);
+    } else if (sok.laser.length) {
+      for (const s of sok.laser) traffar.add(s.lesson_id);
+    } else {
+      for (const p of plan) if ((sok.skanTraffar[p.key] || 0) > 0) traffar.add(p.key);
+    }
+
+    // Utrullningen får spela klart även när svaret redan kommit. sokActions
+    // stoppar MEDVETET inte timern vid done, och den här gränsen är
+    // konsumentsidan av samma beslut — utan andra ledet hoppar alla kort till
+    // sitt slutläge så fort strömmen tar slut. Speglar app.js:3404.
+    const skannar = sok.fragar || sok.skanVisade < plan.length;
+    const antal = skannar ? Math.min(sok.skanVisade, plan.length) : plan.length;
+    for (const p of plan.slice(0, antal)) {
+      karta.set(p.key, traffar.has(p.key) ? 'lift' : 'dim');
+    }
+    return karta;
+  });
 </script>
 
 <section class="view">
@@ -120,7 +194,7 @@
     HELA sidan och fällde därför den här noden; den är nu avgränsad till den
     synliga panelen, vilket är vad den hela tiden menade.
   -->
-  <p class="fel-sr" role="status">{insp.fel}</p>
+  <p class="fel-sr" class:info={insp.felArt === 'info'} role="status">{insp.fel}</p>
 
   <Filterrad />
 
@@ -153,37 +227,106 @@
     tester. Ett per-vy-id är dessutom vad de här id:na faktiskt är, och det
     lämnar de gröna spärrarna orörda i stället för att skriva om dem.
   -->
-  <p class="fel" aria-hidden="true" data-testid="insp-statusrad">{insp.fel}</p>
-
-  <Kartotek lektioner={synliga} onRedigera={startaRedigering} onRadera={fragaRadera} />
+  <p class="fel" class:info={insp.felArt === 'info'} aria-hidden="true" data-testid="insp-statusrad">{insp.fel}</p>
 
   <!--
-    TVÅ TOMTILLSTÅND, MEDVETET ÅTSKILDA. Gamla vyn skiljer på dem
-    (app.js:4903-4905 respektive :4949-4951) och det gör den här också: det
-    första är "du har ingenting", det andra "du har saker men gömde dem". Slås
-    de ihop får en lärare med fullt arkiv beskedet att hon aldrig spelat in
-    något.
-
-    FILTERTERMERNA I FÖRSTA VILLKORET är inte pynt. Efter Task 3 är
-    insp.lessons inte hela arkivet utan arkivet EFTER serverfiltrering: klass
-    och kurs ligger i querysträngen till /api/lessons, så att välja en klass
-    utan lektioner sätter insp.lessons = []. Utan
-    !insp.filterGroup && !insp.filterCourse hade just den läraren fått "Inga
-    inspelningar än" — exakt den hopblandning det här steget finns för att
-    förbjuda. MÅNADEN är lika medvetet FRÅNVARANDE: den filtrerar på klienten,
-    så är listan tom kan den inte vara orsaken, och är listan inte tom faller
-    fallet till andra grenen ändå.
-
-    insp.laddar vaktar BÅDA grenarna, så inget av beskeden blinkar förbi under
-    en omhämtning — och en omhämtning är precis vad ett klass- eller kursbyte
-    utlöser.
+    SÄKERHETSKOPIERINGEN. Portad från gamla appens backupNow (app.js:2059-2066,
+    knappen app.js:4886) — se saveBackup i actions.js för valet att återanvända
+    vyns delade statusrad ovan i stället för en toast, och att öppna mappen
+    efteråt via /api/reveal. .ghost är samma klass som Avbryt/Radera nedan —
+    en sekundär handling ska inte konkurrera med någon fylld knapp i vyn.
   -->
-  {#if !insp.laddar && !insp.lessons.length && !insp.filterGroup && !insp.filterCourse}
-    <p class="tomt">
-      Inga inspelningar än. Transkribera en lektion så dyker den upp här.
-    </p>
-  {:else if !insp.laddar && !synliga.length}
-    <p class="tomt">Inga inspelningar matchar dina filter.</p>
+  <button type="button" class="ghost verktyg" onclick={saveBackup} disabled={insp.backupKor}>
+    {insp.backupKor ? 'Säkerhetskopierar …' : 'Säkerhetskopiera'}
+  </button>
+
+  <!--
+    SÖKET ligger under filterraden, inte över den. Det är OFILTRERAT —
+    api_search tar inga filterparametrar — och läggs det ovanför filtren
+    antyder placeringen att de gäller det, vilket de inte gör.
+  -->
+  <Sokfalt />
+
+  <!--
+    PANELERNA (B5) ligger HÄR, mellan filterraden och kartoteket, precis som i
+    gamla appen (app.js:4897-4901). De beror på klassfiltret och hör visuellt
+    ihop med det — och tomtillstånden nedan talar om KARTOTEKET, så läggs
+    panelerna efter dem får en lärare med tomt kartotek se "Inga inspelningar
+    än" före sin agenda.
+  -->
+  <Agenda />
+  <NastaLektion />
+  <Terminstrender />
+
+  <!--
+    GENOMSÖKNINGEN OCH SVARET ligger HÄR, precis ovanför där resultatet
+    (träfflistan/kartoteket) faktiskt renderas nedan — inte längre upp,
+    ovanför panelerna, där de varken skulle stå där resultatet kommer att stå
+    eller bära resultatets typform. Platshållarstycket som en gång bar klassen
+    .tomt (samma stycke som träfflistans "Inga lektioner matchade din
+    sökning" och kartotekets egna tomtillstånd använder) försvann redan i
+    Task 3 — Genomsokning.svelte och Svar.svelte renderar nu här, var för sig,
+    och äger sin egen typform. Kartoteket lämnas kvar under de två ytorna,
+    eftersom ett lägesbyte inte ska gömma lärarens lektioner.
+  -->
+  <Genomsokning />
+  <Svar />
+
+  <!--
+    EN YTA I TAGET. Medan en sökning är aktiv renderas träfflistan i STÄLLET
+    för kartoteket; töms fältet kommer kartoteket tillbaka oförändrat.
+
+    Gamla appen visar båda samtidigt och filtrerar dessutom kartoteket live på
+    filnamn (app.js:3446-3450) — vilket nästan alltid tömmer kortrutnätet, för
+    filnamn heter sällan det läraren sökte på, samtidigt som träfflistan fylls
+    med ställen där ordet faktiskt sades. Två ytor som svarar på olika frågor,
+    varav den ena nästan alltid svarar fel.
+
+    Grinden är sok.traffar !== null, inte fältets innehåll: null betyder ingen
+    aktiv sökning, en array betyder att servern svarat — även den tomma.
+
+    KARTOTEKETS TOMTILLSTÅND LIGGER MED HÄR INNE. Utan det renderas "Inga
+    inspelningar än" under träfflistan och påstår att arkivet är tomt medan
+    träffar visas ovanför.
+  -->
+  {#if sok.traffar}
+    <Traefflista />
+  {:else}
+    <Kartotek
+      lektioner={synliga}
+      onRedigera={startaRedigering}
+      onRadera={fragaRadera}
+      {stadier}
+    />
+
+    <!--
+      TVÅ TOMTILLSTÅND, MEDVETET ÅTSKILDA. Gamla vyn skiljer på dem
+      (app.js:4903-4905 respektive :4949-4951) och det gör den här också: det
+      första är "du har ingenting", det andra "du har saker men gömde dem". Slås
+      de ihop får en lärare med fullt arkiv beskedet att hon aldrig spelat in
+      något.
+
+      FILTERTERMERNA I FÖRSTA VILLKORET är inte pynt. Efter Task 3 är
+      insp.lessons inte hela arkivet utan arkivet EFTER serverfiltrering: klass
+      och kurs ligger i querysträngen till /api/lessons, så att välja en klass
+      utan lektioner sätter insp.lessons = []. Utan
+      !insp.filterGroup && !insp.filterCourse hade just den läraren fått "Inga
+      inspelningar än" — exakt den hopblandning det här steget finns för att
+      förbjuda. MÅNADEN är lika medvetet FRÅNVARANDE: den filtrerar på klienten,
+      så är listan tom kan den inte vara orsaken, och är listan inte tom faller
+      fallet till andra grenen ändå.
+
+      insp.laddar vaktar BÅDA grenarna, så inget av beskeden blinkar förbi under
+      en omhämtning — och en omhämtning är precis vad ett klass- eller kursbyte
+      utlöser.
+    -->
+    {#if !insp.laddar && !insp.lessons.length && !insp.filterGroup && !insp.filterCourse}
+      <p class="tomt">
+        Inga inspelningar än. Transkribera en lektion så dyker den upp här.
+      </p>
+    {:else if !insp.laddar && !synliga.length}
+      <p class="tomt">Inga inspelningar matchar dina filter.</p>
+    {/if}
   {/if}
 
   <!--
@@ -216,11 +359,28 @@
     Vad B1 INTE gör, utskrivet i stället för antytt. Samma hållning som plan
     A3:s klarbesked: säg var läraren kan gå, navigera inte till en platshållare.
     Transkriptvyn kommer i B2 och lektionschatten i B4.
+
+    GRINDAD PÅ !sok.traffar — KOMPLEMENTET till träfflistans egen
+    {#if sok.traffar}-grindning ovan, skrivet som negationen av samma
+    uttryck i stället för sok.traffar === null (RÄTTAT I SLUTGRANSKNINGEN,
+    se .superpowers/sdd/b3a-slutfix-report.md): de två villkoren ska alltid
+    vara varandras motsats, men skrivna som två separata jämförelser kunde de
+    drifta isär — vid undefined hade kartoteket renderat UTAN sin fotnot,
+    eftersom varken sok.traffar (falsy, döljer inte kartoteket) eller
+    sok.traffar === null (falsy, döljer fotnoten) håller för det värdet.
+    Raden är en fotnot till KARTOTEKET — den beskriver att öppna en LEKTION,
+    inte en TRÄFF — och kartoteket självt renderas bara i den grenen (se
+    {#if sok.traffar}/{:else}-blocket ovan). Utan grinden staplades den under
+    en aktiv sökning direkt ovanpå Traefflista.svelte:s nästan identiska
+    egna rad ("Att öppna en TRÄFF i transkriptet migreras …"), två fotnoter
+    som sa nästan samma sak om olika saker i samma andetag.
   -->
-  <p class="senare">
-    Att öppna en lektion — transkript, ljud och chatt — migreras i en senare
-    plan. Tills dess finns den i den gamla appen.
-  </p>
+  {#if !sok.traffar}
+    <p class="senare">
+      Att öppna en lektion — transkript, ljud och chatt — migreras i en senare
+      plan. Tills dess finns den i den gamla appen.
+    </p>
+  {/if}
 
   <!--
     Raderingsbekräftelsen. MEDVETET ingen confirm(): den går varken att styla
@@ -281,6 +441,14 @@
     tillgänglighetsträd — den kostar ingenting att låta stå.
   -->
   <RedigeraLektion />
+
+  <!-- Källmodalen. Alltid monterad, av samma skäl som de två dialogerna ovan. -->
+  <Kallmodal />
+
+  <!-- Frågekortet och Google-kopplingsguiden hör till kalenderkedjan (delad
+       med lektionschatten) och monteras nu på App.svelte-nivå, inte här —
+       en <dialog> nästlad i den här vyns [hidden]-panel skulle aldrig ritas
+       ens med showModal() anropat på sig. Se kommentaren i App.svelte. -->
 </section>
 
 <style>
@@ -331,6 +499,10 @@
      se kommentaren vid noden. Identisk med .fel i TranskriberaView.svelte:192. */
   .fel { color: var(--bad); margin: 14px 0 0; }
   .fel:empty { display: none; }
+  /* Neutrala besked (exportens "N poster sparade i …") målas INTE i --bad —
+     de är inget fel. Speglar .fel.info i TranskriberaView.svelte:194 ordagrant;
+     samma mönster, samma token. */
+  .fel.info { color: var(--ink-3); }
 
   /* Båda tomtillstånden bär samma form — skillnaden ligger i TEXTEN, inte i
      utseendet. Löpande text i typrampens brödstorlek, ingen ram och ingen
@@ -367,6 +539,9 @@
      Svelte-frontenden. Vakten skiljs redan från senare-raden av brödstorleken
      och --ink-2 (se ovan); rutan nedan har redan en hel ram, och var(--bad) på
      rubriken bär allvaret. */
+  /* Säkerhetskopieringsknappen sitter UTANFÖR dialogens .knappar-rad, så den
+     behöver egen radplacering — .ghost i sig bär ingen. */
+  .verktyg { display: block; margin: 16px 0 0; }
   /* Ingen egen skärm, inget z-index och ingen centrering: showModal() lyfter
      rutan till top-layer och webbläsarens <dialog>-regel
      (position: fixed; inset: 0; margin: auto) centrerar den. Formen är i övrigt

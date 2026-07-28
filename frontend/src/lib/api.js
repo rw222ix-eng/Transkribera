@@ -30,6 +30,27 @@ export async function postJSON(url, body = {}) {
 }
 
 /**
+ * POST med RÅ textkropp — inte JSON. Kalenderns klientfilsinstallation
+ * (POST /api/calendar/client-secret) vill ha filens INNEHÅLL som kropp;
+ * servern gör `json.loads(raw)` på hela requestkroppen själv
+ * (app/web/server.py:1363-1379). postJSON hade lindat innehållet i ännu ett
+ * lager JSON-strängifiering och gett en trasig kropp.
+ */
+export async function postRaw(url, text) {
+  const resp = await fetch(url, { method: 'POST', body: text });
+  let data = null;
+  try {
+    data = await resp.json();
+  } catch {
+    data = null;
+  }
+  if (!resp.ok || (data && data.error)) {
+    throw new Error((data && data.error) || `HTTP ${resp.status}`);
+  }
+  return data;
+}
+
+/**
  * POST som streamar SSE-events. `onEvent` anropas per event.
  * Fel — både HTTP-fel och avbrott — levereras som {type:'error', message}
  * i stället för att kastas, så anroparen har ett enda felställe.

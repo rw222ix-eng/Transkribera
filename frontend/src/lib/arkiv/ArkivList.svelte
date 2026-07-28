@@ -1,7 +1,7 @@
 <script>
   import { arkiv } from './stores.svelte.js';
   import { openArkivItem } from './actions.js';
-  import Snippet from './Snippet.svelte';
+  import Snippet from '../Snippet.svelte';
   import { groupByWeek } from './week.js';
 
   /** "prov"/"arbetsblad"/"tavla" → kort etikett. */

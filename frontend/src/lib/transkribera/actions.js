@@ -6,6 +6,11 @@ import { startProgressAnim, stopProgressAnim } from './korning.js';
 // Den importerar den här filen (addFiles), så beroendet åt andra hållet skulle
 // sluta cirkeln. inspelningLagring.js importerar ingenting alls, just därför.
 import { glomSession } from './inspelningLagring.js';
+// Panelerna (Agenda/Inför nästa lektion/Terminstrender) hör till Inspelningar-
+// vyn, inte till guiden — men auto-extraktionen (se extractQueue nedan) är den
+// enda vägen som fyller dem UTAN att läraren själv öppnar den fliken. Ingen
+// cirkel: inspelningar/actions.js importerar ingenting härifrån.
+import { laddaPaneler } from '../inspelningar/actions.js';
 
 let idRakning = 0;
 
@@ -323,6 +328,92 @@ function stoppaTickare() {
 }
 
 /**
+ * Auto-extraktion (bakgrundsprocess): när HELA kön är klar analyseras varje ny
+ * lektion med den lokala modellen — kalenderposter, åtgärder och svårigheter
+ * matas in i Agenda/Inför nästa lektion/Terminstrender utan någon knapp. Körs
+ * EFTER kön (aldrig parallellt med Whisper — GPU-arbitern serialiserar), en
+ * lektion i taget, och TYST: den får varken blockera klarbeskedet, spärra
+ * guiden eller skriva på tr.* (och därmed guidens statusrad). Speglar
+ * autoExtractLessons, app.js:2337-2352.
+ *
+ * doneHids SAMLAR HISTORIK-ID:N FÖR HELA KÖN, inte bara den sista — tr.resultId
+ * skrivs över per post (se done-grenen i startRun nedan). Fylls där, töms när
+ * extraktionen startar (extractQueue). Modulvariabel och INTE ett fält i tr:
+ * den bär ingen UI och behöver aldrig rendera — samma val som korToken/tickare
+ * ovan. Speglar _doneHids, app.js:232, ordagrant: nollställs INTE av
+ * nyTranskribering() (precis som gamla appens restart() lämnar _doneHids
+ * orörd, se app.js:1508-1512) — en avbruten körning kan ha lämnat tidigare
+ * lyckade poster i listan, och de ska följa med i nästa lyckade kös flush i
+ * stället för att tappas bort.
+ */
+let doneHids = [];
+
+/**
+ * Generationsvakt för EXTRAKTIONSSEKVENSEN — skild från körningens egen
+ * korToken, eftersom sekvensen lever KVAR i bakgrunden efter att en körning
+ * redan är 'done' och inte skriver till tr.* alls. Startar läraren en helt ny
+ * kö som TÖMS IGEN (en andra extractQueue-sekvens) medan den FÖRRA
+ * fortfarande postar mot /api/lessons/{id}/extract, ska den gamla sluta
+ * skriva: annars kan två sekvenser hamna i otakt och posta samtidigt mot en
+ * endpoint GPU-arbitern bara serialiserar mot Whisper, inte mot sig själv —
+ * "en lektion i taget" gäller PER sekvens utan vakten, inte totalt.
+ */
+let extractGen = 0;
+
+/**
+ * Postar extraktionen för en lista lektions-id:n, EN I TAGET — nästa POST
+ * skickas först när den föregåendes SSE-ström nått 'done' ELLER 'error' (ett
+ * fel hoppar vidare till nästa lektion i stället för att avbryta hela kön,
+ * precis som app.js:2346-2348). En parallell loop (t.ex. Promise.all) hade
+ * bara genererat 409:or i onödan.
+ *
+ * @param {number[]} lids
+ * @param {number} gen — sekvensens generation, se extractGen ovan
+ */
+function extractLessonsQueued(lids, gen) {
+  const ids = lids.slice();
+  const next = () => {
+    if (gen !== extractGen) return; // en nyare sekvens har tagit över — sluta skriva
+    const lid = ids.shift();
+    if (lid == null) {
+      // TYST: laddaPaneler() rör bara insp.* (Inspelningar-vyns store), aldrig
+      // tr.* — ett fel där får alltså aldrig nå guidens statusrad. laddaAgenda/
+      // laddaNastaLektion/laddaTrender har redan var sin try/catch och kan
+      // inte kasta hit.
+      laddaPaneler();
+      return;
+    }
+    streamPost('/api/lessons/' + encodeURIComponent(lid) + '/extract', {}, (ev) => {
+      if (gen !== extractGen) return;
+      if (ev.type === 'done' || ev.type === 'error') next();
+    });
+  };
+  next();
+}
+
+/**
+ * Slår upp vilka av de NYSS TRANSKRIBERADE lektionerna (via deras historik-
+ * id:n) som faktiskt fick en lektionsrad, och kör extraktionen för dem.
+ * Speglar autoExtractLessons, app.js:2337-2352, fält för fält — inklusive att
+ * en trasig /api/lessons-hämtning tystas (.catch(() => {})): extraktionen är
+ * ett bakgrundsjobb utan knapp, så det finns ingen guide att visa ett fel i.
+ *
+ * @param {string[]} hids
+ */
+function extractQueue(hids) {
+  if (!hids.length) return;
+  const gen = ++extractGen;
+  getJSON('/api/lessons').then((lessons) => {
+    if (gen !== extractGen) return; // en nyare sekvens redan påbörjad — se ovan
+    if (!Array.isArray(lessons)) return;
+    const lids = lessons
+      .filter((l) => l.history_id && hids.includes(l.history_id))
+      .map((l) => l.id);
+    extractLessonsQueued(lids, gen);
+  }).catch(() => {});
+}
+
+/**
  * Kör den aktiva köposten mot /api/transcribe. Speglar _runActive,
  * app.js:2215-2268 — payloaden matchas fält för fält.
  */
@@ -340,6 +431,8 @@ export async function startRun() {
   tr.runError = null;
   tr.resultFiles = [];
   tr.resultId = null;
+  tr.resultSegment = [];
+  tr.resultMedia = null;
   tr.qStatus = { ...tr.qStatus, [aktiv.id]: 'running' };
   tr.log = ['[00:00] Startar transkribering …'];
   startProgressAnim();
@@ -393,9 +486,16 @@ export async function startRun() {
         tr.progress = 100;
         tr.resultFiles = r.files || [];
         tr.resultId = r.id || null;
+        tr.resultSegment = Array.isArray(r.transcript) ? r.transcript : [];
+        tr.resultMedia = r.media || null;
         tr.qStatus = { ...tr.qStatus, [aktiv.id]: 'done' };
         tr.qProgress = { ...tr.qProgress, [aktiv.id]: 100 };
         tr.log = [...tr.log, '[klar] Färdig på ' + fmtTid(tr.elapsed)];
+        // Kom ihåg körningen till auto-extraktionen (se extractQueue ovan).
+        // Speglar app.js:2254 — pushas för VARJE post i kön, inte bara den
+        // sista, eftersom tr.resultId (liksom gamla appens S.resultId) skrivs
+        // över per post.
+        if (r.id) doneHids.push(r.id);
         // Markörer satta under inspelningen kan inte postas förrän lektionen
         // har ett id. Speglar app.js:2255-2263, matchat på filens path.
         const mark = tr.recMarkersByPath[aktiv.path];
@@ -437,6 +537,15 @@ export async function startRun() {
             tr.run = 'idle';
             startRun();
           }, 800);
+        } else {
+          // HELA KÖN ÄR KLAR — utlös auto-extraktionen. Speglar
+          // finishTranscribe, app.js:2328-2329 (hids-flush + anrop), fast
+          // utan gamla appens omväg via en 1600 ms toast-timer: den här
+          // guiden navigerar inte bort på egen hand (se nyTranskribering),
+          // så det finns inget "efter klarbeskedet" att vänta in.
+          const hids = doneHids.slice();
+          doneHids = [];
+          extractQueue(hids);
         }
       }
     },
@@ -466,10 +575,13 @@ export async function cancelRun() {
 /**
  * "Transkribera något mer" — nollställer HELA körtillståndet och tar guiden
  * tillbaka till steg 1. Speglar gamla appens restart (app.js:1508-1512) fält
- * för fält. restart() navigerar inte själv någonstans — det gör anropsplatsen:
- * `restart(); setTab('recordings');` i finishTranscribe (app.js:2323-2324).
- * Just den setTab-raden har ingen motsvarighet här, för Inspelningar-vyn finns
- * inte i den här frontenden än (plan A3 stannar på steg 3).
+ * för fält.
+ *
+ * restart() navigerar inte själv någonstans. Gamla appen gör `restart();
+ * setTab('recordings');` i finishTranscribe (app.js:2323-2324) — den raden har
+ * medvetet ingen motsvarighet här. Guiden stannar på steg 3 och ERBJUDER
+ * transkriptet i stället för att rycka undan vyn (plan B2). Notera också att
+ * fliken heter 'inspelningar' i den här frontenden, inte 'recordings'.
  *
  * goSource räcker inte: den byter bara steg. Kön, qStatus, activeId, run='done'
  * och resultatfilerna skulle leva kvar, med två följder — steg 1 säger "1 fil i
@@ -500,6 +612,8 @@ export function nyTranskribering() {
   tr.runError = null;
   tr.resultFiles = [];
   tr.resultId = null;
+  tr.resultSegment = [];
+  tr.resultMedia = null;
   tr.logExpand = false;
   goSource();
 }
