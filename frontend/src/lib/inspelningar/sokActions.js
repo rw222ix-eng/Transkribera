@@ -389,15 +389,19 @@ let foljdToken = 0;
 export async function oppnaKalla(kalla) {
   if (!kalla) return;
   const token = ++kallaToken;
+  const hid = kalla.history_id || kalla.lesson_id;
   sok.kalla = {
     namn: kalla.name || '(namnlös)',
     meta: [kalla.group, kalla.course, kalla.datum].filter(Boolean).join(' · '),
+    // Samma id som hämtningen nedan använder. Det bärs vidare i storen så att
+    // modalen kan öppna HELA transkriptet med oppnaTranskriptFor() — utan det
+    // hade Kallmodal.svelte fått räkna ut identiteten en andra gång.
+    hid,
     laddar: true,
     rader: [],
     fler: 0,
     fel: false,
   };
-  const hid = kalla.history_id || kalla.lesson_id;
   try {
     const h = await getJSON('/api/history/' + encodeURIComponent(hid));
     if (token !== kallaToken || !sok.kalla) return;

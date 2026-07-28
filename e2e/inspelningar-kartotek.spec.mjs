@@ -28,9 +28,11 @@
 // stället för att kortens innehåll får stå som bevis.
 //
 // TÄCKS INTE, och det är avsiktligt:
-//   · Att ÖPPNA en lektion (transkript, ljud, chatt). Det finns inte i B1 —
-//     vyn säger i klartext att det kommer i en senare plan i stället för att
-//     navigera till en platshållare. Specen kontrollerar att raden står där.
+//   · Vad som HÄNDER när en lektion öppnas (transkriptvyn, lektionschatten).
+//     De ägs av transkript.spec.mjs respektive lektionschatt.spec.mjs. Den här
+//     specen kontrollerar bara att korten ERBJUDER Öppna och Fråga — den
+//     assertionen ersatte B1:s gamla "migreras i en senare plan"-rad, som blev
+//     falsk när B2 och B4 landade.
 //   · Sök, arkivfrågan ("Fråga AI") och panelerna. De ligger i B2-B5 och har
 //     inget tillstånd i den här vyn.
 //   · Miniatyren på kortet (.tumme). Testmiljön har bara en .wav, och wav/webm
@@ -349,15 +351,22 @@ test("Inspelningar (/next/): kartoteket grupperar per vecka med rätt antal", as
     "9B · Fysik 1a",
   ]);
 
-  // B1 säger rakt ut vad den inte gör i stället för att antyda det. Texten
-  // matchas som STRÄNG och inte som regex: markupen bryter meningen över två
-  // rader, och Playwright normaliserar radbrytningar till mellanslag bara vid
-  // strängmatchning.
-  await expect(
-    vy.getByText(
-      "Att öppna en lektion — transkript, ljud och chatt — migreras i en senare plan.",
-    ),
-  ).toBeVisible();
+  // FOTNOTEN ÄR BORTA, och det är hela poängen med assertionen. B1:s rad
+  // "Att öppna en lektion — transkript, ljud och chatt — migreras i en senare
+  // plan. Tills dess finns den i den gamla appen." var falsk i båda leden när
+  // B2 och B4 väl landat: korten öppnar transkriptet och lektionschatten, och
+  // den gamla vanilla-appen finns inte kvar att hänvisa till.
+  //
+  // Den negativa assertionen räcker inte ensam — den passerar också om NÅGON
+  // TAR BORT KNAPPARNA. Därför paras den med kravet att varje kort faktiskt
+  // erbjuder det fotnoten förnekade. Tillsammans fäller de båda riktningarna:
+  // återinförd lögn OCH borttagen förmåga.
+  await expect(vy.getByText("migreras i en senare plan")).toHaveCount(0);
+  await expect(vy.getByText("den gamla appen")).toHaveCount(0);
+
+  const kortNu = vy.locator("article.kort");
+  await expect(kortNu.getByRole("button", { name: "Öppna" })).toHaveCount(3);
+  await expect(kortNu.getByRole("button", { name: "Fråga" })).toHaveCount(3);
 
   expect(errors, errors.join("\n")).toEqual([]);
 });
@@ -846,10 +855,15 @@ test("Inspelningar (/next/): ärlighetsvakten räknar historikposter utan lektio
   const vy = await oppnaInspelningar(page, { kort: 2 });
 
   // SINGULARgrenen: en post saknas. BÅDA meningarna böjs — "1 inspelning ...
-  // De går att öppna" vore fel numerus på pronomenet.
+  // Texterna ligger kvar" vore fel numerus på subjektet i andra meningen.
+  //
+  // Andra meningen pekade tidigare på "den gamla appen". Den finns inte kvar
+  // (cutovern, 595015c), så beskedet säger nu var texten FAKTISKT ligger:
+  // Transkriberingar-mappen, som transkriberingen skrev innan create_lesson
+  // föll (server.py:682-696).
   await expect(
     vy.getByText(
-      "1 inspelning finns i historiken men saknas i kartoteket. Den går att öppna i den gamla appen.",
+      "1 inspelning finns i historiken men saknas i kartoteket. Texten ligger kvar i Transkriberingar-mappen.",
     ),
   ).toBeVisible();
 

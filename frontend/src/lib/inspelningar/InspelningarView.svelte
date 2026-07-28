@@ -351,36 +351,25 @@
       {insp.historikExtra}
       {insp.historikExtra === 1 ? 'inspelning finns' : 'inspelningar finns'}
       i historiken men saknas i kartoteket.
-      {insp.historikExtra === 1 ? 'Den går' : 'De går'} att öppna i den gamla appen.
+      {insp.historikExtra === 1 ? 'Texten ligger' : 'Texterna ligger'} kvar i
+      Transkriberingar-mappen.
     </p>
   {/if}
 
   <!--
-    Vad B1 INTE gör, utskrivet i stället för antytt. Samma hållning som plan
-    A3:s klarbesked: säg var läraren kan gå, navigera inte till en platshållare.
-    Transkriptvyn kommer i B2 och lektionschatten i B4.
+    HÄR LÅG B1:s fotnot "Att öppna en lektion … migreras i en senare plan.
+    Tills dess finns den i den gamla appen." Den är borttagen, inte omskriven:
+    påståendet var falskt i BÅDA leden. Lektionskortets Öppna och Fråga anropar
+    oppnaTranskriptFor respektive oppnaLektionschatt (Lektionskort.svelte:49-50)
+    sedan B2 och B4, alltså gör vyn precis det fotnoten sa att den inte gjorde —
+    och den gamla vanilla-appen finns inte kvar att hänvisa till (cutovern,
+    595015c: app/web/static/app.js är borttagen).
 
-    GRINDAD PÅ !sok.traffar — KOMPLEMENTET till träfflistans egen
-    {#if sok.traffar}-grindning ovan, skrivet som negationen av samma
-    uttryck i stället för sok.traffar === null (RÄTTAT I SLUTGRANSKNINGEN,
-    se .superpowers/sdd/b3a-slutfix-report.md): de två villkoren ska alltid
-    vara varandras motsats, men skrivna som två separata jämförelser kunde de
-    drifta isär — vid undefined hade kartoteket renderat UTAN sin fotnot,
-    eftersom varken sok.traffar (falsy, döljer inte kartoteket) eller
-    sok.traffar === null (falsy, döljer fotnoten) håller för det värdet.
-    Raden är en fotnot till KARTOTEKET — den beskriver att öppna en LEKTION,
-    inte en TRÄFF — och kartoteket självt renderas bara i den grenen (se
-    {#if sok.traffar}/{:else}-blocket ovan). Utan grinden staplades den under
-    en aktiv sökning direkt ovanpå Traefflista.svelte:s nästan identiska
-    egna rad ("Att öppna en TRÄFF i transkriptet migreras …"), två fotnoter
-    som sa nästan samma sak om olika saker i samma andetag.
+    Med raden går också dess !sok.traffar-grindning, som bara fanns för att
+    fotnoten inte skulle stapla sig på Traefflista.svelte:s nästan identiska
+    egen rad under en aktiv sökning. Båda raderna är borta nu; träfflistan har
+    i stället en riktig "Öppna i transkriptet" per träff.
   -->
-  {#if !sok.traffar}
-    <p class="senare">
-      Att öppna en lektion — transkript, ljud och chatt — migreras i en senare
-      plan. Tills dess finns den i den gamla appen.
-    </p>
-  {/if}
 
   <!--
     Raderingsbekräftelsen. MEDVETET ingen confirm(): den går varken att styla
@@ -513,23 +502,16 @@
     margin: 28px 0 0;
     max-width: 52ch;
   }
-  /* Senare-raden är en fotnot till kartoteket — den beskriver planen, inte
-     lektionerna. Mikrostorleken och --ink-3 håller den tillbakadragen. */
-  .notis,
-  .senare {
+  /* .senare-reglerna är borta med fotnoten de stylade (se kommentaren i
+     markupen ovan). Kvar står ärlighetsvakten, som är BRÖDTEXT: en hel mening
+     som säger att något faktiskt saknas, och som läraren ska kunna läsa.
+     0.72rem/--ink-3 är reserverat för korta versala mikroetiketter (KLASS,
+     KURS, MÅNAD, eyebrow:erna) — sätts löpande text i den rampen blir beskedet
+     svårläst och ser dessutom ut som en etikett. Samma brödrytm som .lede
+     och .tomt. */
+  .notis {
     margin: 18px 0 0;
     max-width: 62ch;
-  }
-  .senare {
-    font-size: 0.72rem;
-    color: var(--ink-3);
-  }
-  /* Ärlighetsvakten är däremot BRÖDTEXT: en hel mening som säger att något
-     faktiskt saknas, och som läraren ska kunna läsa. 0.72rem/--ink-3 är
-     reserverat för korta versala mikroetiketter (KLASS, KURS, MÅNAD,
-     eyebrow:erna) — sätts löpande text i den rampen blir beskedet svårläst och
-     ser dessutom ut som en etikett. Samma brödrytm som .lede och .tomt. */
-  .notis {
     font-size: 1.03rem;
     color: var(--ink-2);
   }

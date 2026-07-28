@@ -3,6 +3,8 @@
   // (app/web/static/app.js:5164-5182).
   import { sok } from './sok.svelte.js';
   import Snippet from '../Snippet.svelte';
+  // Global modal utan ägande flik — samma direktimport som Lektionskort.svelte.
+  import { oppnaTranskriptFor } from '../transkript/actions.js';
 
   const traffar = $derived(sok.traffar || []);
 
@@ -38,19 +40,25 @@
             degraderad och det ska synas, inte döljas.
           -->
           <Snippet text={h.snippet || ''} />
+          <!--
+            Ersätter B3a:s "migreras i en senare plan"-fotnot. Träffen bär
+            history_id hela vägen från sökningen (_SEARCH_META i app/db.py:974),
+            så transkriptvyn kan öppnas direkt på den — knappen sitter PER TRÄFF
+            i stället för som en gemensam fotnot, eftersom det är den enskilda
+            träffen läraren vill läsa vidare i.
+
+            Namnet är inte bara "Öppna": listan kan ha tio knappar, och tio
+            likadana tillgängliga namn går inte att skilja åt i en
+            skärmläsares elementlista. Lektionsnamnet ligger därför i namnet.
+          -->
+          <button
+            type="button"
+            class="oppna"
+            onclick={() => oppnaTranskriptFor(h.history_id, h.name)}
+          >Öppna i transkriptet<span class="sr"> — {h.name || '(namnlös)'}</span></button>
         </li>
       {/each}
     </ul>
-
-    <!--
-      Vad B3a INTE gör, utskrivet i stället för antytt. Samma hållning som B1
-      tog för att öppna en lektion: säg var läraren kan gå, navigera inte till
-      en platshållare. Transkriptvyn är B2 och ägs av den andra strömmen.
-    -->
-    <p class="senare">
-      Att öppna en träff i transkriptet migreras i en senare plan. Tills dess
-      finns det i den gamla appen.
-    </p>
   {/if}
 </section>
 
@@ -99,10 +107,30 @@
     max-width: 52ch;
     margin: 0;
   }
-  .senare {
+  /* Textknapp, inte spökknapp: träfflistan är en läslista med hårlinjer, och
+     en ramad knapp per rad hade gjort den till ett kortrutnät igen. */
+  .oppna {
+    display: inline-block;
+    margin: 8px 0 0;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: var(--ink-2);
+    font-family: inherit;
     font-size: 0.72rem;
-    color: var(--ink-3);
-    max-width: 52ch;
-    margin: 18px 0 0;
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .oppna:hover { color: var(--ink); }
+  /* Skiljetexten i knappnamnet — läses av skärmläsare, syns inte. Samma
+     klippande teknik som .fel-sr i TranskriberaView.svelte, INTE display:none. */
+  .sr {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 </style>

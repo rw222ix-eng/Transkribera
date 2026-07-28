@@ -261,8 +261,19 @@ test("Sök (/next/): träffarna renderas med markerade utdrag", async ({ page })
   const text = await lista.innerText();
   expect(text, "\\x02/\\x03 läckte som synlig text").not.toMatch(/[\x02\x03]/);
 
-  // B3a navigerar inte till transkriptet, och säger det.
-  await expect(lista).toContainText("migreras i en senare plan");
+  // B3a NAVIGERAR numera till transkriptet. Fotnoten "migreras i en senare
+  // plan … finns det i den gamla appen" är borta, och varje träff har i stället
+  // en egen väg in i transkriptet — träffen bär history_id hela vägen från
+  // sökningen (_SEARCH_META, app/db.py:974).
+  //
+  // Räkningen är assertionens tänder: EN knapp per träff. Ett fel som lägger
+  // knappen utanför {#each}-blocket ger en enda knapp för hela listan och
+  // passerar en ren toBeVisible().
+  await expect(lista).not.toContainText("migreras i en senare plan");
+  await expect(lista).not.toContainText("den gamla appen");
+  await expect(lista.getByRole("button", { name: /^Öppna i transkriptet/ })).toHaveCount(
+    FIXTUR.length,
+  );
 
   expect(errors, errors.join("\n")).toEqual([]);
 });
@@ -288,20 +299,20 @@ test("Sök (/next/): kartoteket viker för träffarna och kommer tillbaka", asyn
   await expect(vy.getByText("Inga inspelningar än")).toHaveCount(0);
   await expect(vy.getByText("Inga inspelningar matchar dina filter")).toHaveCount(0);
 
-  // Tredje billiga spärren, av samma skäl: kartotekets FOTNOT ("Att öppna en
-  // lektion …") är en fotnot till KARTOTEKET, inte till träfflistan
-  // ({#if !sok.traffar} i InspelningarView.svelte) och ska därför vara borta
-  // så länge träfflistan visas. Traefflista.svelte har en egen, nästan
-  // identisk rad ("Att öppna en TRÄFF …") — "Att öppna en lektion" träffar
-  // bara kartotekets.
-  await expect(vy.getByText("Att öppna en lektion")).toHaveCount(0);
+  // Tredje billiga spärren, av samma skäl. Den mätte tidigare kartotekets
+  // fotnot ("Att öppna en lektion …"), som är borttagen — den påstod att
+  // transkript, ljud och chatt inte gick att öppna, vilket blev falskt när B2
+  // och B4 landade. VECKORUBRIKEN mäter samma sak och är dessutom en ärligare
+  // proxy: den renderas av Kartotek.svelte självt, inte av en fristående rad
+  // bredvid det, så den kan inte överleva ett borttaget kartotek.
+  await expect(vy.locator("h2.vecka")).toHaveCount(0);
 
   await sokfalt(vy).rensa.click();
 
   await expect(vy.locator("section.traffar")).toHaveCount(0);
   await expect(vy.locator("article.kort")).toHaveCount(FIXTUR.length);
-  // Fotnoten är tillbaka tillsammans med kartoteket.
-  await expect(vy.getByText("Att öppna en lektion")).toBeVisible();
+  // Kartoteket är tillbaka — veckogrupperingen med det.
+  await expect(vy.locator("h2.vecka").first()).toBeVisible();
 
   // BEVISET: driv kartotekets FILTRERADE tomtillstånd till att faktiskt
   // rendera, sök därefter, och kontrollera att det försvinner medan

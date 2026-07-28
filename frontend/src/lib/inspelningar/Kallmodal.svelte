@@ -5,6 +5,25 @@
   import { sok } from './sok.svelte.js';
   import { stangKalla } from './sokActions.js';
   import { nav } from '../shell/nav.svelte.js';
+  // Transkriptvyn är en global modal utan ägande flik, precis som i
+  // Lektionskort.svelte — därför importeras action:en direkt i stället för
+  // att komma in som en prop genom vyn.
+  import { oppnaTranskriptFor } from '../transkript/actions.js';
+
+  /** Stänger källutdraget och öppnar hela transkriptet i dess ställe. Två
+   *  modaler samtidigt går inte: showModal() gör resten av dokumentet inert,
+   *  så källrutan måste stängas FÖRE transkriptet öppnas.
+   *
+   *  close() anropas DIREKT i stället för att gå via stangKalla() och låta
+   *  $effect:en nedan stänga: effekten kör först efter att ändringen spolats,
+   *  alltså efter oppnaTranskriptFor(), och då hade båda dialogerna legat i
+   *  top-layer samtidigt ett ögonblick. close() kör onclose synkront, och
+   *  onclose ÄR stangKalla — storen nollställs alltså ändå. */
+  function oppnaHela() {
+    const { hid, namn } = sok.kalla;
+    ruta?.close();
+    oppnaTranskriptFor(hid, namn);
+  }
 
   // NATIVE <dialog> + showModal(). Ger fokusfälla, Escape, backdrop och
   // top-layer gratis — allt annat blir handskriven kod för det webbläsaren
@@ -72,14 +91,13 @@
     </div>
 
     <!--
-      Vad B3c INTE gör, utskrivet i stället för antytt. Gamla appens
-      "Öppna i chattvyn" går till lektionschatten, som byggs i B4 av den
-      parallella arbetsströmmen. Samma hållning som B1, B3a och B3b tog: säg
-      var läraren kan gå, navigera inte till en platshållare.
+      Ersätter B3c:s "migreras i en senare plan"-fotnot. Transkriptvyn finns
+      sedan B2 och tar exakt det id hämtningen ovan redan använder, så utdraget
+      leder numera hela vägen in i transkriptet i stället för att peka på en
+      app som inte finns kvar.
     -->
-    <p class="senare">
-      Att öppna hela transkriptet migreras i en senare plan. Tills dess finns
-      det i den gamla appen.
+    <p class="vidare">
+      <button type="button" class="ghost" onclick={oppnaHela}>Öppna hela transkriptet</button>
     </p>
   {/if}
 </dialog>
@@ -181,11 +199,17 @@
     max-width: 52ch;
     margin: 8px 0 0;
   }
-  .senare {
-    font-size: 0.72rem;
-    color: var(--ink-3);
-    max-width: 52ch;
-    margin: 16px 0 0;
+  .vidare { margin: 16px 0 0; }
+  /* Samma spökknapp som Lektionskort.svelte och Korning.svelte:284-293. */
+  .ghost {
+    background: transparent;
+    color: var(--ink);
+    border: 1px solid var(--line-2);
+    border-radius: 4px;
+    padding: 9px 18px;
+    font-family: inherit;
+    font-size: inherit;
+    cursor: pointer;
   }
 
   /* MEDVETET ingen Stäng-knapp i en fot. Modalen är en läsvy: ✕ och Escape

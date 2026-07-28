@@ -21,6 +21,18 @@
   // trasig hårdvaruskanning, se app/gpu_arbiter.py) skulle annars lämna
   // CTA:n i Installningar.svelte fastnad på "Laddar modeller …" utan
   // förklaring.
+  // Skälet till att "Nästa: inställningar" är låst, i samma ordning som
+  // knappens disabled-uttryck utvärderar villkoren. Pågående inspelning
+  // först: den grindar även när kön INTE är tom, och är därför det svar som
+  // faktiskt förklarar en låst knapp bredvid en fylld kö.
+  const lasSkal = $derived(
+    tr.recording
+      ? 'Stoppa eller avbryt inspelningen först.'
+      : !tr.queue.length
+        ? 'Lägg till minst en fil, en länk eller en inspelning först.'
+        : '',
+  );
+
   $effect(() => {
     loadKatalog().then((ok) => {
       if (ok === false) {
@@ -138,8 +150,28 @@
         type="button"
         class="primar"
         disabled={!tr.queue.length || tr.recording}
+        aria-describedby={lasSkal ? 'nasta-skal' : undefined}
         onclick={goConfig}
       >Nästa: inställningar</button>
+      <!--
+        SKÄLET TILL LÅSNINGEN, utskrivet. En grå knapp utan förklaring är
+        appens enda ställe där läraren kan bli stående utan att veta varför —
+        Planering skriver redan ut sitt skäl ("Beskriv momentet ovan så kan
+        tavlan skrivas", BuildPanel.svelte), och det här är samma mönster på
+        samma sorts knapp.
+
+        INGEN role och ingen live-region: raden är en statisk förklaring av
+        vad knappen väntar på, inte ett svar på något läraren just gjorde.
+        Vyns enda annonserande nod är p.fel-sr ovan, och så ska det förbli
+        (samma hållning som ärlighetsvakten i InspelningarView.svelte).
+
+        aria-describedby knyter den till knappen i stället: en skärmläsare som
+        landar på den låsta knappen får skälet uppläst direkt efter namnet,
+        vilket är precis när det behövs.
+      -->
+      {#if lasSkal}
+        <span class="skal" id="nasta-skal">{lasSkal}</span>
+      {/if}
     </p>
   {:else if tr.step === 'config'}
     <Installningar />
@@ -204,7 +236,16 @@
   }
   .ko-wrap { margin: 20px 0 0; }
   .antal { color: var(--ink-3); margin: 10px 0 0; }
-  .vidare { margin: 24px 0 0; }
+  /* Knapp och skäl på samma baslinjerad, inte skälet under: raden ska läsas
+     som "knappen väntar på det här", inte som en ny brödtextrad. */
+  .vidare {
+    margin: 24px 0 0;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+  .skal { color: var(--ink-3); }
   .primar {
     background: var(--btn-bg);
     color: var(--btn-fg);
