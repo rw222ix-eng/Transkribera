@@ -22,8 +22,11 @@ const REPO = path.resolve(__dirname, "..");
  * Explicit `TRANSKRIBERA_PORT` vinner alltid — porten kan hamna i Windows
  * exkluderade portintervall (Hyper-V), och då behövs en väg runt.
  *
- * OBS: `e2e/explore.mjs` och `npm run codegen` pekar fortfarande på 8731. De är
- * manuella verktyg, inte grindar — i en worktree måste de få porten härifrån.
+ * OBS: `npm run codegen` pekar på 8731 — `serve_test_app.py`:s default, alltså
+ * rätt för en manuellt startad fejkserver. Den delar INTE den här härledningen
+ * och ska inte göra det: codegen körs mot en server man startat själv, inte mot
+ * Playwrights `webServer`. Kör du fejkservern på en annan port, peka codegen dit
+ * för hand.
  */
 function harledPort(): number {
   if (process.env.TRANSKRIBERA_PORT) return Number(process.env.TRANSKRIBERA_PORT);
