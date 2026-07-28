@@ -35,11 +35,34 @@
     const ext = (/\.([^.\\/]+)$/.exec(p) || [, ''])[1].toLowerCase();
     return VIDEO.includes(ext) ? '/api/thumb?path=' + encodeURIComponent(p) : '';
   });
+
+  // RESERVLÄGET. Filändelsen säger bara att filen BORDE ha en videoström —
+  // den säger ingenting om huruvida /api/thumb faktiskt lyckas. make_thumbnail
+  // behöver ffmpeg, och saknas det (eller är filen flyttad, låst eller trasig)
+  // svarar servern 404. Utan reservläge blev det en tom ruta i kortets fulla
+  // bredd med aspect-ratio 16/9 — inget att se, inget att förklara, och
+  // kortanatomin skilde sig dessutom från grannkortet utan miniatyr.
+  //
+  // Sparas som den URL som FÖLL, inte som en boolean: byter lektionen
+  // recording_path (en redigering, en omhämtning) pekar jämförelsen nedan på
+  // en ny URL och miniatyren får ett nytt försök helt utan $effect. En
+  // boolean hade fastnat i falskt läge tills komponenten monterades om.
+  let trasigTumme = $state('');
+  const visaTumme = $derived(!!miniatyr && trasigTumme !== miniatyr);
 </script>
 
 <article class="kort">
-  {#if miniatyr}
-    <img class="tumme" src={miniatyr} alt="" loading="lazy" />
+  {#if visaTumme}
+    <!-- alt="" med flit: miniatyren är dekor, hela innehållet står i texten
+         nedanför. onerror fäller den till textlayouten i stället för att lämna
+         en tom ruta — se kommentaren vid trasigTumme. -->
+    <img
+      class="tumme"
+      src={miniatyr}
+      alt=""
+      loading="lazy"
+      onerror={() => (trasigTumme = miniatyr)}
+    />
   {/if}
   <p class="datum">{l.date || l.datum || ''}</p>
   <h3 class="namn">{l.name || '(namnlös)'}</h3>
