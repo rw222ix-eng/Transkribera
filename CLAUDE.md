@@ -69,7 +69,9 @@ och organiserar dem per datum, klass och kurs. Allt körs **lokalt/offline**.
     motion) i roten är källan till sanning för visuell riktning (redaktionell papper+bläck;
     lugn, tillbakadragen ton; undvik AI/SaaS-dashboard och tät företags-UI). Faktisk CSS:
     `frontend/src/app.css` (porterad från den nu pensionerade `app/web/static/style.css`)
-    — de äldre `docs/design/*.md` är föråldrade.
+    plus komponenternas egna `<style>`-block. De gamla utkasten under `docs/design/`
+    är raderade — de beskrev den pensionerade vanilla-appen och ett typsnitt (Geist)
+    som aldrig användes. Ligger kvar i git-historiken om någon behöver dem.
   - **Inga hemligheter** i diffen (särskilt `cookies.txt`, som är gitignored).
 - **Tilldelad arbetsgren:** om sessionen fått en specifik gren tilldelad (t.ex.
   `claude/<slug>`) utvecklas och pushas där; den går före branch-namnskonventionen nedan.

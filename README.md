@@ -55,8 +55,21 @@ egen exe med subkommandot `transcribe-cli` (`transkribera_web.py` dirigerar dit)
 Logiken i `app/` är **GUI-oberoende** och testbar (`python -m pytest`): `hardware`, `recommend`,
 `whisper_manager`, `llm_manager`, `llm_client`, `llama_server`, `gpu_arbiter`, `output_store`,
 `youtube`, `postprocess`, `transcriber`.
-Webb-lagret `app/web/` (FastAPI-server + HTML/CSS/JS i `app/web/static/` + pywebview-fönster) är
-ett tunt skal ovanpå. Transkribering körs i en **isolerad subprocess** (`app/transcribe_cli.py`)
+Webb-lagret `app/web/` (FastAPI-server + pywebview-fönster) är ett tunt skal ovanpå.
+
+Gränssnittet är byggt i **Svelte 5 + Vite**. Källan ligger i `frontend/src/`, konfigurationen
+i repo-roten (`package.json`, `vite.config.js`), och bygget hamnar i `app/web/next/`
+(gitignorerat) som servern serverar på `/`. Kommandon körs från repo-roten:
+
+```powershell
+npm run dev      # Vite på :5173, proxar /api och /static till FastAPI
+npm run build    # -> app/web/next/
+npm run check    # svelte-check
+```
+
+**`npm run build` måste köras före PyInstaller** — annars saknas bygget och `/` svarar
+med en förklarande 503 i stället för appen. Kvar i `app/web/static/` finns bara
+lektionstavlans renderingsmotor (`whiteboard/`, egen iframe), vendorad KaTeX och typsnitt. Transkribering körs i en **isolerad subprocess** (`app/transcribe_cli.py`)
 eftersom CTranslate2:s modell-destruktor kan abortera processen vid GPU-teardown på Windows —
 subprocessen håller modellen vid liv till sitt eget rena avslut och servern streamar progress.
 

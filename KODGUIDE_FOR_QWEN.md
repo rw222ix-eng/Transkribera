@@ -6,8 +6,9 @@
 > kod, filnamn, funktionsnamn och sökvägar står kvar i original.
 >
 > **Källa = koden.** Om något i den här guiden skiljer sig från koden är det koden
-> som gäller. Guiden är grundad i den faktiskt levererade koden i `app/` och
-> `app/web/static/` (inte i äldre designutkast under `docs/design/`, som är föråldrade).
+> som gäller. Guiden är grundad i den faktiskt levererade koden i `app/` (backend)
+> och `frontend/src/` (Svelte‑frontenden). Designens sanningskälla är `PRODUCT.md`
+> och `DESIGN.md` i repo‑roten.
 
 ---
 
@@ -28,9 +29,9 @@ Transkribera är en **lokal skrivbordsapp för Windows** som:
 RTX 4090 / 24 GB VRAM.
 
 **Teknik i ett andetag:** Python 3 · FastAPI + Uvicorn (lokalt webb‑UI) · pywebview
-(eget fönster) · vanilla JS + morphdom (inget byggsteg) · faster‑whisper / CTranslate2
-· llama.cpp (`llama-server.exe`) · transformers (ljudkorrigering) · SQLite ·
-`history.json` · PyInstaller‑bygge.
+(eget fönster) · **Svelte 5 + Vite** (frontend, byggs till `app/web/next/`) ·
+faster‑whisper / CTranslate2 · llama.cpp (`llama-server.exe`) · transformers
+(ljudkorrigering) · SQLite · `history.json` · PyInstaller‑bygge.
 
 ---
 
@@ -58,20 +59,23 @@ av en lokal AI att sammanfatta, korrekturläsa och svara på frågor om innehål
 
 | Lager | Teknik |
 |---|---|
-| Språk | Python 3.12 (backend) · Vanilla JavaScript ES5‑stil (frontend) |
+| Språk | Python 3.12 (backend) · modern JavaScript (frontend) |
 | Webbserver | **FastAPI** + **Uvicorn** (lokalt, `127.0.0.1`) |
 | Fönster | **pywebview** (Edge WebView2 på Win11) — visar det lokala UI:t i ett eget fönster |
-| Frontend‑rendering | **morphdom** (DOM‑diff mot en HTML‑sträng) — **inget byggsteg**, inga ramverk |
+| Frontend‑ramverk | **Svelte 5** (runes) + **Vite**. Konfig i repo‑roten, källa i `frontend/src/`, bygge till `app/web/next/` (gitignorerat) |
 | ASR (tal→text) | **faster‑whisper / CTranslate2** (Whisper + KB‑Whisper sv) och **onnx‑asr** (NVIDIA Parakeet, en) |
 | LLM | **llama.cpp** (`llama-server.exe`) som serverar **Qwen3‑14B‑Q8_0** (text) och **Gemma 3 4B** (vision) |
 | Ljudkorrigering | **transformers** på GPU med **`google/gemma-4-E4B-it`** (native ljud‑input) |
 | Datalager | **SQLite** (`transkribera.db`, se `app/db.py`) + **`history.json`** + `settings.json` |
 | Nedladdning | `huggingface_hub` (modeller) · `yt-dlp` (YouTube) · `ffmpeg/ffprobe` (media) |
 | Paketering | **PyInstaller** (one‑folder, windowed) — `Transkribera_web.spec` |
-| Tester | `pytest` (kör från repo‑roten). JS syntaxkontrolleras med `node --check app/web/static/app.js` |
+| Tester | `python -m pytest` (backend) · `npm run check` = svelte‑check (frontend) · Playwright i `e2e/` — allt från repo‑roten |
 
-Beroenden: se `requirements.txt`. `ffmpeg/ffprobe` måste finnas i PATH. Ingen
-lint/typecheck är konfigurerad i repot.
+Beroenden: se `requirements.txt` (Python) och `package.json` (frontend).
+`ffmpeg/ffprobe` måste finnas i PATH. Ingen lint är konfigurerad i repot.
+
+**Byggordning vid paketering:** `npm run build` MÅSTE köras före PyInstaller —
+annars saknas `app/web/next/` och `/` svarar med en 503‑text i stället för appen.
 
 ---
 
@@ -81,8 +85,10 @@ lint/typecheck är konfigurerad i repot.
 - **`app/`** — all domänlogik, **GUI‑oberoende och testbar** (`hardware`, `recommend`,
   `whisper_manager`, `llm_manager`, `llm_client`, `llama_server`, `gpu_arbiter`,
   `output_store`, `youtube`, `postprocess`, `transcriber`, `db`, …).
-- **`app/web/`** — FastAPI‑server (`server.py`) + statiska filer (`static/index.html`,
-  `style.css`, `app.js`) + pywebview‑fönstret (`desktop.py`). Ett **tunt skal** ovanpå `app/`.
+- **`app/web/`** — FastAPI‑server (`server.py`), det byggda Svelte‑bygget (`next/`,
+  gitignorerat), kvarvarande statiska filer (`static/` — whiteboard‑motorn, vendorad
+  KaTeX, typsnitt) och pywebview‑fönstret (`desktop.py`). Ett **tunt skal** ovanpå `app/`.
+- **`frontend/src/`** — Svelte‑frontendens källkod. Se avsnitt 6.
 
 ### 3.2 Processmodell — tre sorters processer
 1. **Huvudprocessen** — uvicorn‑servern (bakgrundstråd) + pywebview‑fönstret.
@@ -173,12 +179,22 @@ app/
     __main__.py                # python -m app.web (webbläsarläge)
     desktop.py                 # pywebview-fönster + native Api
     server.py                  # FastAPI: ALLA /api/*-rutter, SSE, subprocess-orkestrering
+    next/                      # Vites bygge av Svelte-appen — GITIGNORERAT, serveras på /
     static/
-      index.html               # 14 rader: laddar morphdom + app.js, <div id="root">
-      style.css                # designsystem (tokens, keyframes, re-skin)
-      app.js                   # HELA frontend (~7000 rader, ett state-objekt)
-      vendor/morphdom.js       # vendorerad morphdom
+      whiteboard/              # lektionstavlans renderingsmotor (egen iframe, vanilla JS)
+      vendor/katex/            # vendorad KaTeX (offline) — board.html + Svelte-appens index.html
+      vendor/morphdom.js       # används numera BARA av whiteboard/board.html
       fonts/                   # Inter Tight, Instrument Serif, JetBrains Mono (woff2, offline)
+
+frontend/src/                  # Svelte-frontendens källkod (se avsnitt 6)
+  main.js                      # mount(App, #app)
+  App.svelte                   # skalet: tre flikpaneler + toppnivå-dialoger
+  app.css                      # designsystemets tokens och bastypografi
+  lib/api.js                   # getJSON / postJSON / postRaw / streamPost (SSE)
+  lib/<domän>/                 # stores.svelte.js + actions.js + komponenter
+
+index.html · vite.config.js · svelte.config.js · package.json · jsconfig.json
+                               # frontendens konfig ligger i REPO-ROTEN, inte i frontend/
 ```
 
 ### 4.2 Datamappar på disk (under `base_dir`)
@@ -631,216 +647,178 @@ Alla rutter definieras i `create_app()` i `server.py`. Grupperat:
 
 ---
 
-## 6. Frontend i detalj (`app/web/static/app.js`)
+## 6. Frontend i detalj (`frontend/src/`, Svelte 5 + Vite)
 
-### 6.1 Arkitektur: `S → vm() → view() → morphdom`
-Hela frontenden är **en** IIFE i `app.js` (~7000 rader), **vanilla JS, inget byggsteg**.
-Mönstret (från filens egen header):
+> **Historisk not.** Fram till 2026‑07‑27 var frontenden **en** IIFE i
+> `app/web/static/app.js` (~6200 rader vanilla JS, morphdom‑diff mot en
+> HTML‑sträng, inget byggsteg). Den appen är **pensionerad och raderad**.
+> Kodkommentarer i `frontend/src/` och `e2e/` citerar fortfarande `app.js:NNNN`
+> — läs dem som citat ur ett dokument som inte längre finns, inte som levande
+> sökvägar. Beskrivs något i den här guiden som inte går att hitta i koden är
+> det guiden som är fel: **källa = koden**.
+
+### 6.1 Arkitektur: runes‑state → actions → komponenter
+
+Frontenden är **Svelte 5 + Vite** — 51 `.svelte`‑komponenter och 39 `.js`‑moduler
+under `frontend/src/`. Det finns inget centralt state‑objekt, ingen render‑loop
+och ingen event‑delegation; Svelte kompilerar bort allt det.
 
 ```
-S            : ett enda state-objekt
-vm()         : view-model — beräknade stilsträngar + per-item händelse-closures
-view(vm)     : sektionsvyer returnerar HTML-STRÄNGAR
-render()     : state -> vm -> html -> morphdom(#root)  (bevarar noder, så
-               CSS-transitioner/animationer inte nollställs mellan tick)
-delegation   : handlers registreras per render i H[], refereras från markup
-               via data-click / data-input / data-change ... = index i H[]
-data-sh      : hover-stilar appliceras på pointerenter/leave
+frontend/src/main.js          mount(App, { target: #app })
+frontend/src/App.svelte       skalet: AppShell + tre flikpaneler + toppnivå-dialoger
+frontend/src/lib/<domän>/
+    stores.svelte.js          $state-objekt — domänens tillstånd
+    actions.js                allt som gör något: hämtar, streamar, muterar storen
+    *.svelte                  presentation; läser storen, anropar actions
 ```
 
-### 6.2 State‑objektet `S`
-Ett stort, platt objekt med all UI‑state. Utdrag ur början:
+Domänmapparna är `shell`, `transkribera`, `inspelningar`, `transkript`,
+`lektionschatt`, `kalender`, `planering`, `arkiv`, `prov`. Delade moduler ligger
+direkt i `lib/` (`api.js`, `week.js`, `math.js`, `Snippet.svelte`).
+
+**Konfigurationen ligger i repo‑roten**, inte i `frontend/`: `package.json`,
+`vite.config.js`, `svelte.config.js`, `jsconfig.json`, `index.html`. Vite‑roten
+**är** repo‑roten — det krävs för att Impeccables live‑designläge ska kunna
+skriva temp‑komponenter till `node_modules/.impeccable-live/` och få dem
+transformerade. Därför är `server.fs.allow` i `vite.config.js` en **allowlist**
+och dev‑servern binder till `127.0.0.1`; utan den kunde dev‑servern servera hela
+repot över HTTP, inklusive `Transkriberingar/` med elevdata. **Vidga den aldrig.**
+
+### 6.2 State: runes i stället för ett `S`‑objekt
+
+Varje domän äger ett `$state`‑objekt i sin `stores.svelte.js`. Filändelsen
+`.svelte.js` är **obligatorisk** för runes utanför komponenter — rena moduler
+utan reaktivt tillstånd (`week.js`, `kursfarg.js`, `korning.js`) ska inte ha den.
 
 ```javascript
-var S = {
-  theme: 'light',
-  tab: 'transcribe',            // 'transcribe' | 'models' | 'recordings'
-  step: 'source',               // wizard-steg: 'source' | 'config' | 'process'
-  source: '', urlInput: '', dragging: false,
-  model: 'KB-Whisper large', language: 'sv', targetLanguage: 'sv',
+// frontend/src/lib/transkribera/stores.svelte.js (utdrag)
+export const tr = $state({
+  queue: [],            // [{id, name, path}]
+  step: 'source',       // source | config | process
+  language: 'sv', targetLanguage: 'sv', model: '',
   formats: { srt: true, txt: true, vtt: false },
-  subtitleMode: 'separate',     // 'separate' = media + SRT | 'embed' = bädda in
-  audioCorrect: false,          // andra passet: rätta texten mot ljudet
-  run: 'idle', progress: 0, elapsed: 0, log: [],
-  pp: 'idle', ppOp: 'clean', ppModel: 'Qwen3 14B (Q8_0)', ppOut: '',
-  chat: [], chatInput: '', chatThink: false, chatAttach: [], chatCiteSel: null,
-  lessonChatId: null, lessonChat: [], lessonChatSegs: [],  // per-lektion isolerad chatt
-  queue: [], qStatus: {}, qProgress: {}, activeId: null,
-  history: [], lessons: [], groups: [], courses: [],
-  searchMode: 'keyword', searchHits: null, askAnswer: '', asking: false,
-  recording: false, recElapsed: 0, recLevel: 0, markers: [], incompleteRecs: [],
-  // ... ~130 fält totalt (transkript-editor, insikter, agenda, trender, toast, tip, confirm ...)
-};
+  audioCorrect: true,
+  run: 'idle',          // idle | running | done | error | cancelled
+  progress: 0, dispProgress: 0, elapsed: 0, log: [],
+  qStatus: {}, qProgress: {},
+});
 ```
 
-Mutationer sker via `setState(patch)`, som slår ihop patchen och schemalägger en render
-på nästa `requestAnimationFrame` (coalescar många mutationer till en render):
+Två regler som gäller överallt:
+
+- **Muteras store‑EGENSKAPER, aldrig importbindningen.** `tr.step = 'config'` är
+  rätt; `tr = {...}` går inte.
+- **Arrayer får en ny array, aldrig `.push`.** `tr.log = [...tr.log, rad]`.
+
+Ingen `setState`, ingen `requestAnimationFrame`‑coalescing, ingen `morphdom`:
+Svelte spårar läsningarna och uppdaterar bara det som faktiskt ändrats.
+
+### 6.3 Reaktivitet — de dyrköpta reglerna
+
+Varje regel här kommer ur ett fel som faktiskt inträffade under migrationen.
+
+- **Föredra explicita actions framför implicita `$effect`‑kedjor.** En `$effect`
+  som råkar spåra ett fält bara för att en anropad funktion läser det synkront
+  före sitt första `await` är ett beroende som försvinner **tyst** så fort någon
+  lägger dit ett `await`. Sveltes spårning är **dynamisk, inte lexikal**.
+- **Monteringseffekter** grindas på det de faktiskt beror på, och hämtningarna
+  körs i `untrack`.
+- **Allt som kan överlappa behöver en generationsvakt** — `korToken`‑mönstret i
+  `frontend/src/lib/transkribera/actions.js`. Varje hämtning får en **egen**
+  räknare; en delad låter den ena ogiltigförklara den andra.
+
+### 6.4 Backend‑kommunikation (`frontend/src/lib/api.js`)
+
+En tunn klient mot FastAPI. Fyra exporter — `getJSON`, `postJSON`, `postRaw`,
+`streamPost`:
 
 ```javascript
-function setState(patch, cb) {
-  if (typeof patch === 'function') patch = patch(S);
-  if (patch == null) { if (cb) { pendingCbs.push(cb); scheduleRender(); } return; }
-  Object.assign(S, patch);
-  if (cb) pendingCbs.push(cb);
-  scheduleRender();
-}
-function scheduleRender() {
-  if (_raf) return; _raf = true;
-  requestAnimationFrame(function () { _raf = false; render(); });
-}
+export async function streamPost(url, body, onEvent) { … }
 ```
 
-### 6.3 Render‑loopen och event‑delegation
-`render()` bygger view‑modellen, renderar en HTML‑sträng och **morphar** in den i `#root`.
-morphdom bevarar befintliga DOM‑noder → pågående CSS‑animationer/transitioner nollställs inte.
+`streamPost` läser serverns SSE‑kontrakt (`app/web/sse.py`,
+`data: {"type":"log"|"token"|"done"|"error", …}\n\n`) och har en egenskap som är
+värd att känna till: **fel kastas aldrig, de levereras som
+`{type:'error', message}`** genom samma `onEvent`. Anroparen får ett enda
+felställe. Bryts anslutningen utan att ett terminalt event setts syntetiseras
+`"Anslutningen till servern bröts."` — annars hade UI:t fastnat i `running`
+för alltid.
 
-```javascript
-function render() {
-  var root = document.getElementById('root');
-  if (!root) return;
-  H = [];                        // handler-registret nollställs varje render
-  var v = vm();                  // beräkna allt (stilsträngar + closures)
-  var htmlStr = view(v);
-  morphdom(root, '<div id="root">' + htmlStr + '</div>', {
-    childrenOnly: true,
-    getNodeKey: function (node) {  // nyckla wizard-paneler så morphdom ERSÄTTER vid stegbyte
-      return node.nodeType === 1 ? (node.getAttribute('data-key')
-        || node.getAttribute('data-pane') || node.id || null) : null; },
-    onBeforeElUpdated: function (from, to) {  // rör inte en rad som redigeras just nu
-      if (from.nodeType === 1 && from.hasAttribute('data-eline') && S.editing) return false;
-      return true; },
-  });
-  root.querySelectorAll('[data-ref]').forEach(function (el) {
-    var f = H[+el.dataset.ref]; if (typeof f === 'function') f(el); });
-  applySideEffects();
-}
-```
+`postRaw` finns för kalenderns klientfilsinstallation
+(`POST /api/calendar/client-secret`), där servern gör `json.loads` på hela
+requestkroppen själv; `postJSON` hade lindat innehållet i ännu ett lager
+strängifiering.
 
-Händelser binds **en gång** på `#root` och dirigeras via `data-*`‑attribut som pekar på ett
-index i `H[]`:
+**pywebview‑bryggan** används fortfarande för native filåtkomst — en webbläsare
+ger bara filnamn, men backend behöver riktiga sökvägar. `window.pywebview.api.pick_files()`
+med `<input type=file>` som webbläsarfallback.
 
-```javascript
-function dispatch(el, key, e) {
-  if (!el) return;
-  var idx = el.getAttribute('data-' + key); if (idx == null) return;
-  var fn = H[+idx]; if (typeof fn === 'function') fn(e);
-}
-function bindEvents(root) {
-  root.addEventListener('click',  function (e){ dispatch(e.target.closest('[data-click]'),  'click',  e); });
-  root.addEventListener('input',  function (e){ dispatch(e.target.closest('[data-input]'),  'input',  e); });
-  root.addEventListener('change', function (e){ dispatch(e.target.closest('[data-change]'), 'change', e); });
-  // ... keydown, dragover/leave/drop, pointerover/out (hover-stilar via data-sh + tooltips)
-}
-```
+### 6.5 Vyerna och skalet
 
-I markup ser en knapp t.ex. ut så här (`on(fn)` pushar `fn` till `H[]` och returnerar index):
+`App.svelte` monterar `AppShell` (header, tre flikar, temaväxlare) och tre
+flikpaneler. **Panelerna avmonteras aldrig** — de göms med `hidden`. Tavlans
+iframe måste stå monterad hela tiden; avmonteras den tappar en ritad tavla sitt
+innehåll och motorn får laddas om.
 
-```javascript
-'<button data-click="' + on(v.onTabT) + '" data-seg="' + (v.tabTOn ? 'on':'off') + '" ...>Transkribera</button>'
-```
+| Flik | Komponent | Innehåll |
+|---|---|---|
+| Transkribera | `transkribera/TranskriberaView.svelte` | Trestegsguiden: **Källa** (dropzon, URL, inbyggd inspelning, återhämtning) → **Inställningar** (modell/språk/format, undertextläge, ljudkorrigering) → **Körning** (progress, logg, resultatfiler) |
+| Inspelningar | `inspelningar/InspelningarView.svelte` | Kartoteket (lektionskort i veckogrupper, filter), arkivsök med markerade träffar, fråga arkivet med strömmat svar och källor, agenda/inför‑nästa‑lektion/terminstrender, säkerhetskopiering |
+| Planering | `planering/PlaneringView.svelte` + `arkiv/ArkivView.svelte` | Tavelflödet (formulär → generering med live‑uppbyggnad → whiteboard‑iframe → ändringschatt → godkänn), prov och arbetsblad, arkivet |
 
-### 6.4 Backend‑kommunikation
-Två hjälpare + pywebview‑bryggan:
+Fyra dialoger monteras på **toppnivå**, utanför flikpanelerna: `TranskriptModal`,
+`LektionschattModal`, `FragekortModal` (två instanser, en per värdnyckel),
+`AnteckningModal`, `GoogleAnslutModal`. Skälet är konkret: ett nästlat `<dialog>`
+ärver sin förälders `display`, så ett barn till en `hidden` panel ritas aldrig ens
+om `showModal()` anropats på det.
 
-```javascript
-function getJSON(url) { return fetch(url).then(function (r) { return r.json(); }); }
+### 6.6 Modaler, live‑regioner och andra konventioner
 
-// SSE via en POST med strömmad body — läser text/event-stream rad för rad
-function streamPost(url, body, onEvent) {
-  return fetch(url, { method:'POST', headers:{'Content-Type':'application/json'},
-                      body: JSON.stringify(body) })
-    .then(function (resp) {
-      if (!resp.ok) { /* läs {error} och rapportera som {type:'error'} */ }
-      var reader = resp.body.getReader(), dec = new TextDecoder(), buf = '';
-      function pump() {
-        return reader.read().then(function (res) {
-          if (res.done) return;
-          buf += dec.decode(res.value, { stream: true });
-          var parts = buf.split('\n\n'); buf = parts.pop();
-          parts.forEach(function (chunk) {
-            var line = chunk.split('\n').filter(function (l){ return l.indexOf('data:')===0; })[0];
-            if (line) { try { onEvent(JSON.parse(line.slice(5).trim())); } catch (e) {} }
-          });
-          return pump();
-        });
-      }
-      return pump();
-    });
-}
-```
+**Modaler är native `<dialog>` + `showModal()`.** Det ger fokusfälla, Escape,
+backdrop och top‑layer gratis; allt annat blir handskriven kod för det
+webbläsaren redan gör. Komponenten hålls **alltid monterad** (utan `{#if}`) —
+annars hinner `close()` aldrig köras och webbläsarens fokusåterställning
+uteblir. `onclose` nollställer storen.
 
-**pywebview‑bryggan** används för native filåtkomst (en webbläsare ger bara filnamn, backend
-behöver riktiga sökvägar):
+**Live‑regioner** (`role="status"`) får **aldrig** ligga i ett `{#if}`‑grindat
+block: en region som monteras in samtidigt som sin text annonseras inte
+pålitligt. Noden ska vara permanent och bara visuellt klippt
+(`clip-path: inset(50%)`) — **aldrig** `display: none`, som tar bort den ur
+tillgänglighetsträdet. En annonserande nod per renderingskontext; varje vy
+renderar dessutom en **synlig** kopia av samma text märkt `aria-hidden="true"`.
+Underkänt fyra gånger under migrationen; `e2e/transkribera-kalla.spec.mjs` har
+en spärr som vaktar både nodidentiteten och antalet.
 
-```javascript
-function openPicker() {
-  var api = window.pywebview && window.pywebview.api;
-  if (api && api.pick_files) { api.pick_files().then(function (files){ if (files.length) addFilesObjs(files); }); return; }
-  if (_file) _file.click();     // webbläsar-fallback
-}
-```
+**Nyckelinteraktioner** (oförändrade från den gamla appen, ombyggda i Svelte):
 
-Exempel på ett komplett strömmat flöde — chatt med källförankring och tänkande:
+- **Kö** — flera filer transkriberas i följd; `qStatus`/`qProgress` visar
+  väntar/kör/klar/fel. `more_pending` skickas så LLM:en inte laddas om i onödan.
+- **Inbyggd inspelning** — `MediaRecorder` med periodisk chunk‑flush till
+  `/api/recording/append` (kraschåterhämtning via `.part`), nivåmätare via
+  Web Audio API, tyst‑varning, live‑markörer.
+- **Automatisk insiktsextraktion** — när kön tömts POSTas
+  `/api/lessons/{id}/extract` **en lektion i taget**, sekventiellt, med egen
+  generationsvakt (`extractGen`). Tyst för läraren; enda synliga effekten är att
+  Inspelningarnas paneler laddas om.
+- **Efterbearbetning & chatt** — SSE mot `/api/postprocess` och `/api/chat`;
+  citat `[n]` blir klickbara länkar till transkriptsegment.
 
-```javascript
-streamPost('/api/chat',
-  { messages: msgs, transcript: transcript, model: S.ppModel, think: S.chatThink, cite: true },
-  function (ev) {
-    if (ev.type === 'reasoning') { accReason += ev.text; setLast(acc, accReason, true); }
-    else if (ev.type === 'token') { acc += ev.text; setLast(acc, accReason, false); }
-    else if (ev.type === 'error') { setLast('Fel: ' + (ev.message||'okänt'), accReason, false); }
-    else if (ev.type === 'done')  { setLast((ev.result||{}).text || acc, accReason, false); }
-  });
-```
+### 6.7 Kända luckor mot den gamla appen
 
-### 6.5 Vyerna
-`view(v)` sätter ihop skalet: header + `<main>` med den aktiva vyn + modaler:
-
-```javascript
-function view(v) {
-  return viewHeader(v) +
-    '<main style="max-width:1120px;margin:0 auto;padding:0 24px">' +
-      (v.tabTranscribe ? viewTranscribe(v) : '') +
-      (v.tabRecordings ? viewRecordings(v) : '') +
-    '</main>' +
-    viewModals(v);
-}
-```
-
-- **`viewTranscribe(v)`** — trestegsguiden: **Källa** (dropzon + URL + inbyggd inspelning +
-  återhämtning) → **Inställningar** (modell/språk/format‑väljare, undertextläge,
-  ljudkorrigerings‑toggle) → **Process** (fyra progress‑steg, transkriptförhandsvisning,
-  efterbearbetningspanel, inline‑chatt). Har ett **tomt läge** ("Ladda ner en modell för att
-  börja") när ingen Whisper är installerad.
-- **`viewRecordings(v)`** — "Inspelningar": slår ihop historik + lektioner. Agenda‑panel,
-  sök + RAG‑fråga med **"AI tänker"‑banner**, filter (grupp/kurs/månad), förberedelse‑ och
-  trend‑paneler, och ett rutnät av **inspelnings‑kort** med scen‑koreografi (se 7.3).
-- **`viewModals(v)`** — transkript‑fullskärm (spelare + markörer + sök + redigering),
-  per‑lektion‑chattmodal, bekräftelse, disk‑varning, toast, tooltip.
-
-> **Observation om Modeller‑vyn:** funktionen `viewModels(v)` finns i koden (en fullständig
-> modellhanterare), men `view(v)` monterar den **inte** i nuvarande skal — headern har bara två
-> flikar (**Transkribera**, **Inspelningar**), och `S.tab` kan visserligen bli `'models'` men
-> renderas då inte. Detta hänger ihop med den senaste refaktorn "förenkla till fast
-> modelluppsättning": modellerna behandlas nu som ett förvalt, i stort sett förinstallerat set.
-> Modellnedladdnings‑API:t i backend är dock fullt levande.
-
-### 6.6 Nyckelkomponenter och interaktioner
-- **Fil‑drag‑drop / väljare** — `onDrop`/`onDragOver` + `openPicker` (pywebview eller `<input type=file>`).
-- **Inbyggd inspelning** — `MediaRecorder` med periodisk chunk‑flush till `/api/recording/append`
-  (kraschåterhämtning via `.part`), nivåmätare (Web Audio API), tyst‑varning, live‑markörer.
-- **Kö** — flera filer transkriberas i följd; `qStatus`/`qProgress` visar väntar/kör/klar/fel.
-  `more_pending` skickas så LLM:en inte laddas om i onödan mellan köposterna.
-- **Efterbearbetning & chatt** — `runPP()` (SSE `/api/postprocess`), `sendChat()` (SSE `/api/chat`),
-  citat `[n]` blir klickbara länkar till transkript‑segment.
-- **"AI tänker"‑banner** — vid RAG (`asking:true`) visas en pulserande banner med stegvis status.
-- **Modell‑nedladdning** — `_startDownload(id)` streamar progress in i `dlProg`/`installing`.
+- **Modellhanteraren.** `katalog.svelte.js` hämtar `/api/models` men renderar
+  bara det inställningssteget behöver. Nedladdningar av *whisper*‑modeller och
+  kvantiseringschips är inte byggda i Svelte (`downloadAudioModel` för
+  ljudkorrigeringsmodellen **finns**). Backendens nedladdnings‑API är fullt
+  levande — det är UI:t som saknas.
+- **Diskutrymmesvarningen** (`diskWarnOpen`) och **tooltip‑popupen** (`tipOpen`)
+  ur gamla `viewModals` har ingen Svelte‑motsvarighet.
 
 ---
 
 ## 7. Design och visuellt språk
 
-Designsystemet bor i **`app/web/static/style.css`** och är porterat från Claude Design
+Designsystemet bor i **`frontend/src/app.css`** (tokens och bastypografi) plus
+komponenternas egna `<style>`‑block, och är porterat från Claude Design
 (2026‑07‑01): **"Warm paper + ink, Inter Tight / Instrument Serif italic / JetBrains Mono,
 sharp corners, mask‑reveal motion"**. Estetiken är **redaktionell** (editorial): varmt papper,
 bläcksvart text, seriff‑kursiva accenter i rubriker, mono‑etiketter, och skarpa hörn.
@@ -910,7 +888,7 @@ innehåll aldrig fastnar på `opacity:0` (viktigt eftersom `[style*=…]`‑sele
 när inline‑stilar re‑serialiseras).
 
 ### 7.4 Enhetligt knappspråk
-En genomgående regel i `style.css`: outline/yt/ikon‑knappar **fylls solitt med bläck** vid
+En genomgående regel: outline/yt/ikon‑knappar **fylls solitt med bläck** vid
 hover; fyllda primärknappar flippar till **accent**; segment/chip‑toggles i "tracks" får en
 accent‑tvätt; destruktiva knappar (Ta bort) går **röda**. Ingen vertikal lyft — hörnen står still.
 
@@ -933,13 +911,19 @@ LLM → `token`/`reasoning`/`done`/`error`.
 
 ## 9. Tester, bygge och gate
 
-- **Testkommando:** `python -m pytest` (från repo‑roten). JS: `node --check app/web/static/app.js`.
-- **Ingen CI** finns (`.github/` saknas). Merge‑gaten är att pytest är grön.
+- **Testkommandon** (alla från repo‑roten): `python -m pytest` (backend) ·
+  `npm run check` = svelte‑check, ska ge **0 ERRORS 0 WARNINGS** · `npm run build` ·
+  `cd e2e && npm run test:next-foundation` (Playwright — **bygger frontenden först**;
+  `npx playwright test` gör det inte och har gett falsk grön två gånger).
+- **Ingen CI** finns (`.github/` saknas). Merge‑gaten är att pytest är grön; rör
+  ändringen frontenden gäller dessutom `npm run check` + `npm run build`.
 - **Känt undantag:** `tests/test_hardware.py::test_scan_returns_sane_values` faller i en
   hårdvaru‑/RAM‑lös container (även på ren `main`) — **inte** en regression.
 - **Paketering:** `python -m PyInstaller Transkribera_web.spec --noconfirm` →
   `dist/Transkribera_web/Transkribera_web.exe` (~5 GB p.g.a. torch/CUDA/cuDNN/PyAV).
-  `bin/llamacpp` och `app/web/static` buntas med; GGUF‑vikterna laddas ner i `models/` vid körning.
+  `bin/llamacpp`, `app/web/static` och `app/web/next` buntas med; GGUF‑vikterna laddas
+  ner i `models/` vid körning. **`npm run build` måste köras först** — specen har en
+  fail‑fast‑vakt om `app/web/next/` saknas.
 
 ---
 
@@ -981,6 +965,6 @@ LLM → `token`/`reasoning`/`done`/`error`.
 
 ---
 
-*Slut. Denna guide speglar koden per den senaste refaktorn ("förenkla till fast
-modelluppsättning + ärlig progress + omdesignad Inspelningar"). Vid tvivel: läs koden i
-`app/` och `app/web/static/` — den är sanningskällan.*
+*Slut. Denna guide speglar koden efter Svelte‑migrationen (2026‑07‑27), då den gamla
+vanilla‑frontenden pensionerades och `/` började servera Svelte‑appen. Vid tvivel:
+läs koden i `app/` (backend) och `frontend/src/` (frontend) — den är sanningskällan.*

@@ -1,22 +1,25 @@
 # Överlämning — Svelte-migrationen av Transkribera
 
-**Skriven:** 2026-07-25. Klistra in det här dokumentet (eller peka på det) i en ny chatt
-så har sessionen allt den behöver utan att gräva.
+**Skriven:** 2026-07-25. **Uppdaterad:** 2026-07-28 — migrationen är **klar och
+mergad till `main`**. Klistra in det här dokumentet (eller peka på det) i en ny
+chatt så har sessionen allt den behöver utan att gräva.
 
 ---
 
-## 1. Vad det här handlar om
+## 1. Vad det här handlade om
 
 Transkribera är en **lokal, offline** skrivbordsapp (Windows) som transkriberar
 lektioner och organiserar dem per datum, klass och kurs. Python 3 · FastAPI +
 Uvicorn · pywebview · faster-whisper (KB-Whisper) · llama.cpp + Qwen3-14B ·
 SQLite · PyInstaller. All elevdata stannar på maskinen.
 
-Frontenden migreras från en handskriven vanilla-JS-app till **Svelte 5 + Vite**.
-Migrationen sker **additivt**: den gamla appen ligger kvar på `/`, den nya byggs
-upp på `/next`. Ingenting användarvänt har ändrats ännu.
+Frontenden migrerades från en handskriven vanilla-JS-app till **Svelte 5 + Vite**.
+Migrationen skedde **additivt** — den gamla appen låg kvar på `/` medan den nya
+byggdes upp på `/next` — och avslutades med en **cutover**: `/` serverar numera
+Svelte-appen, och `app/web/static/app.js` (6195 rader), `style.css` och gamla
+`index.html` är **raderade**.
 
-**Varför migrationen ens gjordes:** för att kunna använda Impeccables live-designläge
+**Varför migrationen gjordes:** för att kunna använda Impeccables live-designläge
 (peka på ett element i webbläsaren → tre varianter → acceptera → landar i källan).
 Det kräver ett komponentramverk. Loopen är bevisad och fungerar.
 
@@ -26,11 +29,11 @@ Det kräver ett komponentramverk. Loopen är bevisad och fungerar.
 
 | Sak | Plats |
 |---|---|
-| Gamla appen (orörd) | `app/web/static/app.js` (6195 rader), `style.css` |
-| Nya frontenden, källa | `frontend/src/` (~2700 rader) |
+| Frontenden, källa | `frontend/src/` — 51 `.svelte`, 39 `.js` |
 | Vite-konfig | **repo-roten** (`package.json`, `vite.config.js`, `index.html`, `jsconfig.json`, `svelte.config.js`) |
 | Byggutdata | `app/web/next/` — **gitignorerad**, byggs vid paketering |
-| Serveras på | `/next` (additiv `StaticFiles`-mount i `app/web/server.py`) |
+| Serveras på | `/` (`app/web/server.py`, `index()`) |
+| Kvar i `app/web/static/` | whiteboard-motorn (egen iframe), vendorad KaTeX, `morphdom.js` (bara `board.html` använder den), typsnitt |
 | Backend-rutter | `app/web/routes_planning.py`, `routes_exam.py`, `server.py` |
 | Planer & specar | `docs/superpowers/plans/`, `docs/superpowers/specs/` |
 | Arbetslogg (gitignorerad) | `.superpowers/sdd/progress.md` — **läs den, den är detaljerad** |
@@ -64,14 +67,14 @@ cd e2e && npm run test:next-foundation   # bygger frontenden först, kör Playwr
 ```
 
 **Grindar som måste vara gröna före merge:**
-- `python -m pytest` → **798 passed** (backend är orört av migrationen)
-- `npm run check` → **0 ERRORS 0 WARNINGS**
+- `python -m pytest` → **781 passed, 22 skipped**
+- `npm run check` → **0 ERRORS 0 WARNINGS** (188 filer)
 - `npm run build` → exit 0
-- `cd e2e && npm run test:next-foundation` → **4 passed**
+- `cd e2e && npm run test:next-foundation` → **107 passed**
 
 **Paketering:** `npm run build` MÅSTE köras före `python -m PyInstaller
 Transkribera_web.spec --noconfirm`. Specen har en fail-fast-vakt om
-`app/web/next/` saknas.
+`app/web/next/` saknas. Utan bygget svarar `/` med en förklarande 503-text.
 
 **Fejkservern** (`e2e/serve_test_app.py`) monterar de **riktiga** routrarna men
 patchar LLM:en, `exam_gen` och `compile_pdf`. Starta så här:
@@ -82,13 +85,13 @@ python -c "import os,sys; os.environ['TRANSKRIBERA_PORT']='8750'; os.environ['TR
 
 ---
 
-## 4. Arbetssättet som använts (fortsätt så)
+## 4. Arbetssättet som användes
 
-Varje plan körs med **superpowers:subagent-driven-development**:
+Varje plan kördes med **superpowers:subagent-driven-development**:
 en färsk implementerar-subagent per task → granskar-subagent (spec + kvalitet) →
 fixrunda vid behov → slutgranskning av hela grenen på `opus`.
 
-Det har lönat sig konkret. Slutgranskningarna har fångat sådant som per-task-granskning
+Det lönade sig konkret. Slutgranskningarna fångade sådant som per-task-granskning
 strukturellt inte kan se, t.ex.:
 - en committad Impeccable-live-tagg som hade följt med i det frysta bygget och kört
   godtycklig JS same-origin med `/api/*`
@@ -103,8 +106,14 @@ en bugg som "avsett beteende" innan det upptäcktes.
 
 ## 5. Regler som gäller all kod här
 
-- **Backend orört.** Migrationen ändrar inget under `app/`.
-- **Gamla appen orörd.** `/` och `/static` fungerar exakt som förut.
+De frontend-konventioner som kostade mest att lära sig står i **`CLAUDE.md`**,
+avsnittet "Svelte-frontendens konventioner" — live-regioner, modaler, reaktivitet,
+e2e, filändelser. Läs det avsnittet, inte en kopia här.
+
+Utöver det:
+
+- **Backend orörd.** Migrationen ändrade inget under `app/` utom serveringen i
+  `server.py`.
 - **Svenska** i all användarvänd text — lugnt och rakt, aldrig hypat.
 - **Designsystemet** (`DESIGN.md` i roten är sanningskällan):
   - Bara CSS-variabler, **aldrig literal hex**.
@@ -124,42 +133,52 @@ en bugg som "avsett beteende" innan det upptäcktes.
 
 ## 6. Var migrationen står
 
-**Klart och granskat** (60 commits sedan förra main-mergen, allt pushat):
+**KLAR.** Mergad till `main` 2026-07-28 (grenen
+`feat/inspelningar-b4-lektionschatt`, 124 commits).
 
-- Grunden: Svelte 5 + Vite, serverad på `/next`, designsystemet porterat, PyInstaller,
+Levererat och granskat:
+
+- **Grunden:** Svelte 5 + Vite, designsystemet porterat, PyInstaller,
   live-loopen bevisad end-to-end.
-- **Planering-vyn**: tavelflödet (formulär → generera med live-uppbyggnad →
+- **Planering:** tavelflödet (formulär → generera med live-uppbyggnad →
   förhandsvisa i whiteboard-iframen → ändringschatt → godkänn/spara), Skriv ut,
-  Förstora, iframen följer tavlans höjd.
-- **Arkivet**: lista med veckogrupper och antal, ordsökning med markerade träffar,
+  Förstora, PNG-export, iframen följer tavlans höjd.
+- **Arkivet:** lista med veckogrupper och antal, ordsökning med markerade träffar,
   fråga arkivet (strömmat svar + källor), följdfrågor med körtoken.
-- **Prov och arbetsblad**: typväljare, innehållsval med behandlat/prövat-markörer,
+- **Prov och arbetsblad:** typväljare, innehållsval med behandlat/prövat-markörer,
   parametrar, generering, provkort, godkänn → PDF, radering, ändringschatt per typ.
+- **Transkribera-guiden (A1–A4):** källsteget (filer, YouTube, inspelning),
+  inställningar, körningen med SSE-progress och avbryt, inbyggd inspelning.
+- **Inspelningar (B1–B5):** kartoteket, transkriptvyn med spelare och markörer,
+  arkivsöket, fråga arkivet, källmodalen, kalenderkedjan, lektionschatten,
+  agenda/inför-nästa-lektion/terminstrender, säkerhetskopiering.
+- **Cutovern:** `/` serverar Svelte-appen; vanilla-appen och dess e2e-svit är
+  pensionerade. Se `.superpowers/sdd/pensionering-report.md`.
 
-**Kvar** (se planerna):
-1. Tre medvetna luckor i provkortet — **Plan 5**.
-2. Transkribera-wizarden (`viewTranscribe`, 406 rader).
-3. Inspelningar + lektionsoverlay (`viewRecordings`, 551 rader).
-4. Modaler och modellhantering (`viewModals`, 434 rader).
-5. **Cutover** — flippa `/` till Svelte, pensionera `app.js`. **Plan 6.**
+### Kända luckor (inte migrationsrester — medvetna avgränsningar)
 
-### Storleksförhållandet — läs det här innan något planeras
-
-`viewPlanning` är **434 rader** i `app.js`. Att migrera den tog **fyra planer** och
-gav ~2700 rader Svelte. Kvar ligger **1391 rader** (`viewTranscribe` 406 +
-`viewRecordings` 551 + `viewModals` 434) — drygt **tre gånger** så mycket som
-gjorts hittills. Räkna därefter; underskatta inte.
+1. **Modellhanteraren för whisper-modeller.** `frontend/src/lib/transkribera/katalog.svelte.js`
+   hämtar `/api/models` men renderar bara det inställningssteget behöver.
+   Nedladdnings-UI för whisper-modeller och kvantiseringschips är inte byggt
+   (`downloadAudioModel` för ljudkorrigeringsmodellen **finns**). Backendens
+   `POST /api/download/whisper` är fullt levande — det är UI:t som saknas.
+   Detta var "Plan C" i cutover-planen och byggdes aldrig; modellerna behandlas
+   i praktiken som ett förinstallerat set.
+2. **Diskutrymmesvarningen** (`diskWarnOpen`) och **tooltip-popupen** (`tipOpen`)
+   ur gamla `viewModals` har ingen Svelte-motsvarighet.
+3. **`e2e/tests/08-real-smoke.spec.ts`** är porterad till Svelte-flödet men
+   **aldrig körd** — den kräver flera minuters genuin GPU-transkribering. Kör
+   `TRANSKRIBERA_BASE_DIR=e2e/.test-data-real python e2e/serve_test_app.py --real`
+   och sedan `cd e2e && npm run test:real` innan den litas på.
 
 ---
 
 ## 7. Kvarstående uppgifter utanför migrationen
 
-Två chips skapades under arbetet och rör inte Svelte-koden:
-
 1. **Dubblerade typsnittsfiler.** `inter-tight-400/500/600/700.woff2` är alla samma
    fil (md5 `f5af7a76…`), liksom `jetbrains-mono-400/500.woff2`. Ingen har `fvar`,
    dvs. de är statiska. Webbläsaren kan alltså inte instansiera 600/700 utan
-   faux-fetar. Gäller **båda** apparna.
+   faux-fetar. Grenen `refactor/konsolidera-variabelfonter` finns påbörjad.
 2. **Saknade träffmarkörer i LIKE-sökvägen.** `archive_search()` lovar i sin docstring
    `\x02`/`\x03` men anropar `db._snippet_like()` som aldrig sätter dem — bara
    FTS5-vägen (`db.py:994`) gör det. Arkivsöket har därför aldrig highlightat träffar.
@@ -170,8 +189,9 @@ Två chips skapades under arbetet och rör inte Svelte-koden:
 
 ## 8. Kända medvetna avvikelser (hör hemma i PR-beskrivningar)
 
-- Fejturens `compile_pdf` är en stubbe, så **skarp Tectonic-kompilering är overifierad**
-  i den nya frontenden (Plan 5 åtgärdar).
+- `WBHost.exportPng()` genererar ~40 ofarliga 404 i konsolen vid varje export —
+  `.woff`/`.ttf`-fallbackerna i KaTeX-typsnittens `@font-face`-regler, medan
+  vendor-katalogen bara skeppar `.woff2`. Förbefintligt motorbeteende.
 - `"1 post"`-assertionerna i arkiv-specen vilar på filordningen inom
   `next-foundation`-projektet (alfabetisk). Fäller högljutt, inte tyst.
 - Preview-fliken i den här miljön är ofta **inte fronted**, vilket stryper timers.
