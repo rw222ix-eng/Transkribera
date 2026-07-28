@@ -1,1 +1,391 @@
-{"namespace":"TranskriberaDesignSystem_c5f72b","components":[],"startingPoints":[],"cards":[],"templates":[{"name":"Transkribera — app","description":"Komplett lokal transkriberings-app: wizard (Källa/Inställningar/Resultat), Historik, Lektioner. Ljust/mörkt tema.","folder":"templates/transkribera-app","entryPath":"templates/transkribera-app/TranskriberaApp.dc.html","thumbnail":{"path":"templates/transkribera-app/.thumbnail","kind":"captured"}}],"hasThumbnailHtml":false,"globalCssPaths":["styles.css"],"tokens":[{"name":"--canvas","value":"#F1F2ED","kind":"color","definedIn":"styles.css"},{"name":"--surface","value":"#FFFFFF","kind":"color","definedIn":"styles.css"},{"name":"--sunken","value":"#F3F4EE","kind":"color","definedIn":"styles.css"},{"name":"--ink","value":"#161A14","kind":"color","definedIn":"styles.css"},{"name":"--ink-2","value":"#4F514D","kind":"color","definedIn":"styles.css"},{"name":"--ink-3","value":"#6A6C68","kind":"color","definedIn":"styles.css"},{"name":"--line","value":"#D9D9D5","kind":"color","definedIn":"styles.css"},{"name":"--line-2","value":"#C7C9C2","kind":"color","definedIn":"styles.css"},{"name":"--accent","value":"#2C6E9E","kind":"color","definedIn":"styles.css"},{"name":"--accent-weak","value":"#E3ECF2","kind":"color","definedIn":"styles.css"},{"name":"--ok","value":"#5C7E40","kind":"color","definedIn":"styles.css"},{"name":"--warn","value":"#9A7416","kind":"color","definedIn":"styles.css"},{"name":"--bad","value":"#C8463A","kind":"color","definedIn":"styles.css"},{"name":"--c-plum","value":"#5B3A6E","kind":"color","definedIn":"styles.css"},{"name":"--c-sky","value":"#2C6E9E","kind":"color","definedIn":"styles.css"},{"name":"--c-sage","value":"#5C7E40","kind":"color","definedIn":"styles.css"},{"name":"--c-mustard","value":"#9A7416","kind":"color","definedIn":"styles.css"},{"name":"--btn-bg","value":"#161A14","kind":"color","definedIn":"styles.css"},{"name":"--btn-fg","value":"#F1F2ED","kind":"color","definedIn":"styles.css"},{"name":"--track","value":"#E8E9E2","kind":"color","definedIn":"styles.css"},{"name":"--sans","value":"\"Inter Tight\",\"Helvetica Neue\",system-ui,sans-serif","kind":"font","definedIn":"styles.css","annotation":"font"},{"name":"--serif","value":"\"Instrument Serif\",\"GT Sectra\",Georgia,\"Times New Roman\",serif","kind":"font","definedIn":"styles.css","annotation":"font"},{"name":"--mono","value":"\"JetBrains Mono\",ui-monospace,\"SFMono-Regular\",monospace","kind":"font","definedIn":"styles.css","annotation":"font"},{"name":"--shadow-sm","value":"0 1px 2px rgba(22,26,20,.05)","kind":"shadow","definedIn":"styles.css"},{"name":"--shadow","value":"0 26px 60px -34px rgba(22,26,20,.40),0 6px 18px -14px rgba(22,26,20,.14)","kind":"shadow","definedIn":"styles.css"},{"name":"--canvas","value":"#14150E","kind":"color","definedIn":"styles.css","scope":"[data-theme=\"dark\"]"},{"name":"--surface","value":"#1C1D15","kind":"color","definedIn":"styles.css","scope":"[data-theme=\"dark\"]"},{"name":"--sunken","value":"#23241A","kind":"color","definedIn":"styles.css","scope":"[data-theme=\"dark\"]"},{"name":"--ink","value":"#F1F2ED","kind":"color","definedIn":"styles.css","scope":"[data-theme=\"dark\"]"},{"name":"--ink-2","value":"#C4C6BC","kind":"color","definedIn":"styles.css","scope":"[data-theme=\"dark\"]"},{"name":"--ink-3","value":"#9A9C92","kind":"color","definedIn":"styles.css","scope":"[data-theme=\"dark\"]"},{"name":"--line","value":"#2E2F26","kind":"color","definedIn":"styles.css","scope":"[data-theme=\"dark\"]"},{"name":"--line-2","value":"#3B3C30","kind":"color","definedIn":"styles.css","scope":"[data-theme=\"dark\"]"},{"name":"--accent","value":"#7FB4DA","kind":"color","definedIn":"styles.css","scope":"[data-theme=\"dark\"]"},{"name":"--accent-weak","value":"#1E2A33","kind":"color","definedIn":"styles.css","scope":"[data-theme=\"dark\"]"},{"name":"--ok","value":"#8FB06A","kind":"color","definedIn":"styles.css","scope":"[data-theme=\"dark\"]"},{"name":"--warn","value":"#D6A53F","kind":"color","definedIn":"styles.css","scope":"[data-theme=\"dark\"]"},{"name":"--bad","value":"#E0796A","kind":"color","definedIn":"styles.css","scope":"[data-theme=\"dark\"]"},{"name":"--c-plum","value":"#B79ECB","kind":"color","definedIn":"styles.css","scope":"[data-theme=\"dark\"]"},{"name":"--c-sky","value":"#7FB4DA","kind":"color","definedIn":"styles.css","scope":"[data-theme=\"dark\"]"},{"name":"--c-sage","value":"#8FB06A","kind":"color","definedIn":"styles.css","scope":"[data-theme=\"dark\"]"},{"name":"--c-mustard","value":"#D9AC45","kind":"color","definedIn":"styles.css","scope":"[data-theme=\"dark\"]"},{"name":"--btn-bg","value":"#F1F2ED","kind":"color","definedIn":"styles.css","scope":"[data-theme=\"dark\"]"},{"name":"--btn-fg","value":"#14150E","kind":"color","definedIn":"styles.css","scope":"[data-theme=\"dark\"]"},{"name":"--track","value":"#23241A","kind":"color","definedIn":"styles.css","scope":"[data-theme=\"dark\"]"},{"name":"--shadow-sm","value":"0 1px 2px rgba(0,0,0,.5)","kind":"shadow","definedIn":"styles.css","scope":"[data-theme=\"dark\"]"},{"name":"--shadow","value":"0 26px 60px -32px rgba(0,0,0,.78),0 8px 20px -14px rgba(0,0,0,.6)","kind":"shadow","definedIn":"styles.css","scope":"[data-theme=\"dark\"]"}],"themes":[{"selector":"[data-theme=\"dark\"]","label":"Dark"}],"fonts":[],"brandFonts":[{"family":"Inter Tight","status":"ok","tokens":["--sans"],"path":"styles.css"},{"family":"Instrument Serif","status":"ok","tokens":["--serif"],"path":"styles.css"},{"family":"JetBrains Mono","status":"ok","tokens":["--mono"],"path":"styles.css"}],"source":"spa"}
+{
+  "namespace": "TranskriberaDesignSystem_c5f72b",
+  "components": [],
+  "startingPoints": [],
+  "cards": [
+    {
+      "name": "Appen",
+      "path": "app.html",
+      "group": "Template",
+      "subtitle": "Alla tre vyer: steg 1 & 2, Inspelningar, Planering",
+      "viewport": {
+        "width": 1280,
+        "height": 900
+      }
+    },
+    {
+      "name": "Fundament",
+      "path": "foundations.html",
+      "group": "Foundations",
+      "subtitle": "Färger, typramp, hörn, namngivna regler",
+      "viewport": {
+        "width": 1100,
+        "height": 900
+      }
+    },
+    {
+      "name": "Komponenter",
+      "path": "components.html",
+      "group": "Components",
+      "subtitle": "Navigation, segment, knappar, fält, listrad",
+      "viewport": {
+        "width": 1100,
+        "height": 900
+      }
+    }
+  ],
+  "templates": [],
+  "hasThumbnailHtml": false,
+  "globalCssPaths": [
+    "styles.css"
+  ],
+  "tokens": [
+    {
+      "name": "--canvas",
+      "value": "#F1F2ED",
+      "kind": "color",
+      "definedIn": "styles.css"
+    },
+    {
+      "name": "--surface",
+      "value": "#FFFFFF",
+      "kind": "color",
+      "definedIn": "styles.css"
+    },
+    {
+      "name": "--sunken",
+      "value": "#F3F4EE",
+      "kind": "color",
+      "definedIn": "styles.css"
+    },
+    {
+      "name": "--ink",
+      "value": "#161A14",
+      "kind": "color",
+      "definedIn": "styles.css"
+    },
+    {
+      "name": "--ink-2",
+      "value": "#4F514D",
+      "kind": "color",
+      "definedIn": "styles.css"
+    },
+    {
+      "name": "--ink-3",
+      "value": "#6A6C68",
+      "kind": "color",
+      "definedIn": "styles.css"
+    },
+    {
+      "name": "--line",
+      "value": "#D9D9D5",
+      "kind": "color",
+      "definedIn": "styles.css"
+    },
+    {
+      "name": "--line-2",
+      "value": "#C7C9C2",
+      "kind": "color",
+      "definedIn": "styles.css"
+    },
+    {
+      "name": "--accent",
+      "value": "#2C6E9E",
+      "kind": "color",
+      "definedIn": "styles.css"
+    },
+    {
+      "name": "--accent-weak",
+      "value": "#E3ECF2",
+      "kind": "color",
+      "definedIn": "styles.css"
+    },
+    {
+      "name": "--ok",
+      "value": "#5C7E40",
+      "kind": "color",
+      "definedIn": "styles.css"
+    },
+    {
+      "name": "--warn",
+      "value": "#9A7416",
+      "kind": "color",
+      "definedIn": "styles.css"
+    },
+    {
+      "name": "--bad",
+      "value": "#C8463A",
+      "kind": "color",
+      "definedIn": "styles.css"
+    },
+    {
+      "name": "--c-plum",
+      "value": "#5B3A6E",
+      "kind": "color",
+      "definedIn": "styles.css"
+    },
+    {
+      "name": "--c-sky",
+      "value": "#2C6E9E",
+      "kind": "color",
+      "definedIn": "styles.css"
+    },
+    {
+      "name": "--c-sage",
+      "value": "#5C7E40",
+      "kind": "color",
+      "definedIn": "styles.css"
+    },
+    {
+      "name": "--c-mustard",
+      "value": "#9A7416",
+      "kind": "color",
+      "definedIn": "styles.css"
+    },
+    {
+      "name": "--btn-bg",
+      "value": "#161A14",
+      "kind": "color",
+      "definedIn": "styles.css"
+    },
+    {
+      "name": "--btn-fg",
+      "value": "#F1F2ED",
+      "kind": "color",
+      "definedIn": "styles.css"
+    },
+    {
+      "name": "--track",
+      "value": "#E8E9E2",
+      "kind": "color",
+      "definedIn": "styles.css"
+    },
+    {
+      "name": "--sans",
+      "value": "\"Inter Tight\",\"Helvetica Neue\",system-ui,sans-serif",
+      "kind": "font",
+      "definedIn": "styles.css",
+      "annotation": "font"
+    },
+    {
+      "name": "--serif",
+      "value": "\"Instrument Serif\",\"GT Sectra\",Georgia,\"Times New Roman\",serif",
+      "kind": "font",
+      "definedIn": "styles.css",
+      "annotation": "font"
+    },
+    {
+      "name": "--mono",
+      "value": "\"JetBrains Mono\",ui-monospace,\"SFMono-Regular\",monospace",
+      "kind": "font",
+      "definedIn": "styles.css",
+      "annotation": "font"
+    },
+    {
+      "name": "--shadow-sm",
+      "value": "0 1px 2px rgba(22,26,20,.05)",
+      "kind": "shadow",
+      "definedIn": "styles.css"
+    },
+    {
+      "name": "--shadow",
+      "value": "0 26px 60px -34px rgba(22,26,20,.40),0 6px 18px -14px rgba(22,26,20,.14)",
+      "kind": "shadow",
+      "definedIn": "styles.css"
+    },
+    {
+      "name": "--canvas",
+      "value": "#14150E",
+      "kind": "color",
+      "definedIn": "styles.css",
+      "scope": "[data-theme=\"dark\"]"
+    },
+    {
+      "name": "--surface",
+      "value": "#1C1D15",
+      "kind": "color",
+      "definedIn": "styles.css",
+      "scope": "[data-theme=\"dark\"]"
+    },
+    {
+      "name": "--sunken",
+      "value": "#23241A",
+      "kind": "color",
+      "definedIn": "styles.css",
+      "scope": "[data-theme=\"dark\"]"
+    },
+    {
+      "name": "--ink",
+      "value": "#F1F2ED",
+      "kind": "color",
+      "definedIn": "styles.css",
+      "scope": "[data-theme=\"dark\"]"
+    },
+    {
+      "name": "--ink-2",
+      "value": "#C4C6BC",
+      "kind": "color",
+      "definedIn": "styles.css",
+      "scope": "[data-theme=\"dark\"]"
+    },
+    {
+      "name": "--ink-3",
+      "value": "#9A9C92",
+      "kind": "color",
+      "definedIn": "styles.css",
+      "scope": "[data-theme=\"dark\"]"
+    },
+    {
+      "name": "--line",
+      "value": "#2E2F26",
+      "kind": "color",
+      "definedIn": "styles.css",
+      "scope": "[data-theme=\"dark\"]"
+    },
+    {
+      "name": "--line-2",
+      "value": "#3B3C30",
+      "kind": "color",
+      "definedIn": "styles.css",
+      "scope": "[data-theme=\"dark\"]"
+    },
+    {
+      "name": "--accent",
+      "value": "#7FB4DA",
+      "kind": "color",
+      "definedIn": "styles.css",
+      "scope": "[data-theme=\"dark\"]"
+    },
+    {
+      "name": "--accent-weak",
+      "value": "#1E2A33",
+      "kind": "color",
+      "definedIn": "styles.css",
+      "scope": "[data-theme=\"dark\"]"
+    },
+    {
+      "name": "--ok",
+      "value": "#8FB06A",
+      "kind": "color",
+      "definedIn": "styles.css",
+      "scope": "[data-theme=\"dark\"]"
+    },
+    {
+      "name": "--warn",
+      "value": "#D6A53F",
+      "kind": "color",
+      "definedIn": "styles.css",
+      "scope": "[data-theme=\"dark\"]"
+    },
+    {
+      "name": "--bad",
+      "value": "#E0796A",
+      "kind": "color",
+      "definedIn": "styles.css",
+      "scope": "[data-theme=\"dark\"]"
+    },
+    {
+      "name": "--c-plum",
+      "value": "#B79ECB",
+      "kind": "color",
+      "definedIn": "styles.css",
+      "scope": "[data-theme=\"dark\"]"
+    },
+    {
+      "name": "--c-sky",
+      "value": "#7FB4DA",
+      "kind": "color",
+      "definedIn": "styles.css",
+      "scope": "[data-theme=\"dark\"]"
+    },
+    {
+      "name": "--c-sage",
+      "value": "#8FB06A",
+      "kind": "color",
+      "definedIn": "styles.css",
+      "scope": "[data-theme=\"dark\"]"
+    },
+    {
+      "name": "--c-mustard",
+      "value": "#D9AC45",
+      "kind": "color",
+      "definedIn": "styles.css",
+      "scope": "[data-theme=\"dark\"]"
+    },
+    {
+      "name": "--btn-bg",
+      "value": "#F1F2ED",
+      "kind": "color",
+      "definedIn": "styles.css",
+      "scope": "[data-theme=\"dark\"]"
+    },
+    {
+      "name": "--btn-fg",
+      "value": "#14150E",
+      "kind": "color",
+      "definedIn": "styles.css",
+      "scope": "[data-theme=\"dark\"]"
+    },
+    {
+      "name": "--track",
+      "value": "#23241A",
+      "kind": "color",
+      "definedIn": "styles.css",
+      "scope": "[data-theme=\"dark\"]"
+    },
+    {
+      "name": "--shadow-sm",
+      "value": "0 1px 2px rgba(0,0,0,.5)",
+      "kind": "shadow",
+      "definedIn": "styles.css",
+      "scope": "[data-theme=\"dark\"]"
+    },
+    {
+      "name": "--shadow",
+      "value": "0 26px 60px -32px rgba(0,0,0,.78),0 8px 20px -14px rgba(0,0,0,.6)",
+      "kind": "shadow",
+      "definedIn": "styles.css",
+      "scope": "[data-theme=\"dark\"]"
+    },
+    {
+      "name": "--hero-ink",
+      "value": "#000000",
+      "kind": "color",
+      "definedIn": "styles.css"
+    }
+  ],
+  "themes": [
+    {
+      "selector": "[data-theme=\"dark\"]",
+      "label": "Dark"
+    }
+  ],
+  "fonts": [],
+  "brandFonts": [
+    {
+      "family": "Inter Tight",
+      "status": "ok",
+      "tokens": [
+        "--sans"
+      ],
+      "path": "styles.css"
+    },
+    {
+      "family": "Instrument Serif",
+      "status": "ok",
+      "tokens": [
+        "--serif"
+      ],
+      "path": "styles.css"
+    },
+    {
+      "family": "JetBrains Mono",
+      "status": "ok",
+      "tokens": [
+        "--mono"
+      ],
+      "path": "styles.css"
+    }
+  ],
+  "source": "spa"
+}
