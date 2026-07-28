@@ -52,7 +52,17 @@ test("Planering (/next/): skriv provet, ändra via chatten, godkänn & PDF", asy
   // 3) Kursval laddar kursens innehållspunkter (ContentPicker.svelte via
   // loadContent(), triggat av $effect på plan.courseId i PlaneringView) OCH
   // slår på CTA:n direkt — utan att någon innehållspunkt är vald.
-  await page.getByRole("button", { name: KURS, exact: true }).click();
+  // Kursen väljs i en <select>, inte bland chips: tio kurser gav tio synliga
+  // val vid ett beslut, och Klass-raden ovanför var redan en select
+  // (BuildPanel.svelte). selectOption matchar på etikett.
+  //
+  // getByRole("combobox"), inte getByLabel: Planering-panelen har ett ANNAT
+  // fält som också bär den tillgängliga etiketten "Kurs", och getByLabel
+  // träffar båda. Rollen skiljer dem — en <select> är combobox, det andra
+  // fältet är en textbox.
+  await page
+    .getByRole("combobox", { name: "Kurs", exact: true })
+    .selectOption({ label: KURS });
   await expect(page.getByText("Aritmetik, algebra och funktioner")).toBeVisible({ timeout: 10000 });
   await expect(page.getByText("0 valda av 7", { exact: true })).toBeVisible();
   await expect(cta).toBeEnabled();

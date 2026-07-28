@@ -1,21 +1,18 @@
 <script>
   import { arkiv } from './stores.svelte.js';
   import { runAsk, runSearch, clearSearch } from './actions.js';
+  import Segment from '../Segment.svelte';
 </script>
 
 <div class="sok">
-  <div class="lagen" role="group" aria-label="Sökläge">
-    <button
-      class="seg"
-      aria-pressed={arkiv.mode === 'ask'}
-      onclick={() => (arkiv.mode = 'ask')}
-    >Fråga AI</button>
-    <button
-      class="seg"
-      aria-pressed={arkiv.mode === 'word'}
-      onclick={() => (arkiv.mode = 'word')}
-    >Sök ord</button>
-  </div>
+  <!-- Enval — plattan. Samma kontroll och samma form som Sokfalt.svelte:s
+       lägesväxel; de två var tidigare olika utan att beteendet skilde sig. -->
+  <Segment
+    alternativ={[['ask', 'Fråga AI'], ['word', 'Sök ord']]}
+    etikett="Sökläge"
+    arVald={(m) => arkiv.mode === m}
+    valj={(m) => (arkiv.mode = m)}
+  />
   <input
     class="field"
     aria-label="Sök i arkivet"
@@ -43,28 +40,7 @@
     flex-wrap: wrap;
     margin-top: 16px;
   }
-  .lagen {
-    display: inline-flex;
-    gap: 3px;
-    padding: 3px;
-    background: var(--track);
-    border: 1px solid var(--line);
-    border-radius: 4px;
-  }
-  .seg {
-    border: none;
-    border-radius: 3px;
-    padding: 8px 14px;
-    background: transparent;
-    color: var(--ink-2);
-    font-family: inherit;
-    font-size: inherit;
-    cursor: pointer;
-  }
-  .seg[aria-pressed='true'] {
-    background: var(--surface);
-    color: var(--ink);
-  }
+  /* Lägesväxelns form bor i Segment.svelte. */
   .field {
     flex: 1;
     min-width: 240px;

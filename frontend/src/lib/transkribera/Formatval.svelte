@@ -6,22 +6,34 @@
   // varje stegväxling i stället för en gång per session.
   import { tr } from './stores.svelte.js';
   import { toggleFormat, toggleAudioCorrect, downloadAudioModel } from './actions.js';
+  import Segment from '../Segment.svelte';
 
-  const FORMAT = ['srt', 'txt', 'vtt'];
+  // Etiketten versaliseras HÄR, i datan, inte med text-transform i CSS.
+  // Segment.svelte delas med kontroller vars etiketter är vanlig svenska
+  // ("Svenska", "Arbetsblad") — en versalregel i den komponenten hade
+  // skrikit i alla utom den här. Versalerna är dessutom filändelsernas egen
+  // form, inte en stilistisk effekt.
+  const FORMAT = [
+    ['srt', 'SRT'],
+    ['txt', 'TXT'],
+    ['vtt', 'VTT'],
+  ];
 </script>
 
 <div class="rad">
   <span class="rubrik">Filformat</span>
-  <div class="chips">
-    {#each FORMAT as f}
-      <button
-        type="button"
-        class="chip"
-        aria-pressed={!!tr.formats[f]}
-        onclick={() => toggleFormat(f)}
-      >{f.toUpperCase()}</button>
-    {/each}
-  </div>
+  <!--
+    FLERVAL — och det är hela poängen med att formen skiljer sig från
+    språkvalets platta ovanför. Här går det att välja SRT *och* TXT; i
+    Sprakval byter ett klick val. Se regeln överst i Segment.svelte.
+  -->
+  <Segment
+    flerval
+    alternativ={FORMAT}
+    etikett="Filformat"
+    arVald={(f) => !!tr.formats[f]}
+    valj={toggleFormat}
+  />
 </div>
 
 <div class="rad">
@@ -57,23 +69,6 @@
     margin-top: 12px;
   }
   .rubrik { color: var(--ink-2); font-weight: 500; }
-  .chips { display: flex; gap: 6px; }
-  .chip {
-    border: 1px solid var(--line);
-    background: transparent;
-    color: var(--ink-2);
-    border-radius: 3px;
-    padding: 7px 13px;
-    font-family: inherit;
-    font-size: inherit;
-    font-weight: 500;
-    cursor: pointer;
-  }
-  .chip[aria-pressed='true'] {
-    background: var(--accent-weak);
-    color: var(--accent);
-    border-color: var(--accent);
-  }
   .switch {
     flex: 0 0 auto;
     width: 40px;

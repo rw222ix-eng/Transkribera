@@ -2,6 +2,7 @@
   import { plan } from './stores.svelte.js';
   import { prov } from '../prov/stores.svelte.js';
   import { getJSON } from '../api.js';
+  import Segment from '../Segment.svelte';
 
   let { onGenerate = () => {} } = $props();
 
@@ -39,24 +40,20 @@
     });
   });
 
-  function pickCourse(id) {
-    plan.courseId = plan.courseId === String(id) ? '' : String(id);
-  }
+  // pickCourse() är borta med chipsen. En <select> med bind:value skriver
+  // plan.courseId direkt, och "Ingen kurs" bär tomvalet som chipsens
+  // toggla-av-gren stod för.
 </script>
 
 <div class="panel">
   <div class="row">
     <span class="label">Skriv</span>
-    <div class="typval" role="group" aria-label="Dokumenttyp">
-      {#each [['tavla', 'Tavla'], ['prov', 'Prov'], ['arbetsblad', 'Arbetsblad']] as [v, etikett]}
-        <button
-          type="button"
-          class="seg"
-          aria-pressed={plan.typ === v}
-          onclick={() => (plan.typ = v)}
-        >{etikett}</button>
-      {/each}
-    </div>
+    <Segment
+      alternativ={[['tavla', 'Tavla'], ['prov', 'Prov'], ['arbetsblad', 'Arbetsblad']]}
+      etikett="Dokumenttyp"
+      arVald={(v) => plan.typ === v}
+      valj={(v) => (plan.typ = v)}
+    />
   </div>
 
   {#if plan.typ === 'tavla'}
@@ -85,18 +82,29 @@
   {/if}
 
   {#if courses.length}
-    <div class="row start">
+    <div class="row">
       <span class="label">Kurs</span>
-      <div class="chips" role="group" aria-label="Kurs">
+      <!--
+        <select>, inte chips. Kurslistan är lärarens EGNA kurser och växer med
+        tjänsten — på den här maskinen ritade den tio chips över tre rader,
+        alltså tio synliga val vid ETT beslut. Arbetsminnet rymmer fyra.
+
+        Valet av kontroll är inte uppfunnet för tillfället: Klass-raden tre
+        rader ovanför är redan en <select class="field">, och Inspelningars
+        Filterrad.svelte väljer klass, kurs och månad på exakt samma sätt. Ett
+        chipsfält bredvid en select för samma sorts val var inkonsekvensen,
+        inte antalet i sig.
+
+        Tomvalet ersätter chipsens toggla-av-beteende (pickCourse nollställde
+        vid klick på det redan valda). En select kan inte "klickas av", så
+        vägen tillbaka till inget kursval måste finnas som ett alternativ.
+      -->
+      <select class="field" aria-label="Kurs" bind:value={plan.courseId}>
+        <option value="">Ingen kurs</option>
         {#each courses as c (c.id)}
-          <button
-            type="button"
-            class="chip"
-            aria-pressed={plan.courseId === String(c.id)}
-            onclick={() => pickCourse(c.id)}
-          >{c.namn ?? c.name}</button>
+          <option value={String(c.id)}>{c.namn ?? c.name}</option>
         {/each}
-      </div>
+      </select>
     </div>
   {/if}
 
@@ -151,26 +159,7 @@
     gap: 14px;
     flex-wrap: wrap;
   }
-  .row.start { align-items: flex-start; }
-  .typval {
-    display: inline-flex;
-    gap: 3px;
-    padding: 3px;
-    background: var(--track);
-    border: 1px solid var(--line);
-    border-radius: 4px;
-  }
-  .seg {
-    border: none;
-    border-radius: 3px;
-    padding: 8px 14px;
-    background: transparent;
-    color: var(--ink-2);
-    font-family: inherit;
-    font-size: inherit;
-    cursor: pointer;
-  }
-  .seg[aria-pressed='true'] { background: var(--surface); color: var(--ink); }
+  /* Typväljarens form bor i Segment.svelte, kursens i den vanliga .field. */
   .label {
     flex: 0 0 74px;
     font-family: var(--mono);
@@ -193,22 +182,6 @@
   }
   .field.narrow { flex: 0 0 auto; min-width: 0; padding: 8px 10px; }
   .field:focus-visible { border-color: var(--accent); }
-  .chips { flex: 1; display: flex; flex-wrap: wrap; gap: 6px; }
-  .chip {
-    font-family: inherit;
-    font-size: inherit;
-    padding: 6px 12px;
-    border-radius: 3px;
-    background: var(--surface);
-    color: var(--ink-2);
-    border: 1px solid var(--line);
-    cursor: pointer;
-  }
-  .chip[aria-pressed='true'] {
-    background: var(--accent-weak);
-    color: var(--accent);
-    border-color: var(--accent);
-  }
   .cta {
     display: flex;
     align-items: center;

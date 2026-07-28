@@ -3,6 +3,7 @@
   import { tr } from './stores.svelte.js';
   import { pickLang, pickTargetLang, syncModel } from './actions.js';
   import { katalog, modellNamn, fitDot } from './katalog.svelte.js';
+  import Segment from '../Segment.svelte';
 
   /** @type {Array<['sv'|'en', string]>} */
   const SPRAK = [['sv', 'Svenska'], ['en', 'Engelska']];
@@ -38,30 +39,24 @@
   <div class="par">
     <div class="halva">
       <span class="rubrik">Talat språk</span>
-      <div class="seg" role="group" aria-label="Talat språk">
-        {#each SPRAK as [kod, etikett]}
-          <button
-            type="button"
-            aria-pressed={tr.language === kod}
-            onclick={() => pickLang(kod)}
-          >{etikett}</button>
-        {/each}
-      </div>
+      <Segment
+        alternativ={SPRAK}
+        etikett="Talat språk"
+        arVald={(kod) => tr.language === kod}
+        valj={pickLang}
+      />
     </div>
 
     <span class="pil" aria-hidden="true">→</span>
 
     <div class="halva">
       <span class="rubrik">Resultatspråk</span>
-      <div class="seg" role="group" aria-label="Resultatspråk">
-        {#each SPRAK as [kod, etikett]}
-          <button
-            type="button"
-            aria-pressed={tr.targetLanguage === kod}
-            onclick={() => pickTargetLang(kod)}
-          >{etikett}</button>
-        {/each}
-      </div>
+      <Segment
+        alternativ={SPRAK}
+        etikett="Resultatspråk"
+        arVald={(kod) => tr.targetLanguage === kod}
+        valj={pickTargetLang}
+      />
     </div>
   </div>
 
@@ -93,27 +88,10 @@
   .halva { flex: 1 1 0; min-width: 180px; display: flex; flex-direction: column; gap: 8px; }
   .rubrik { color: var(--ink-2); }
   .pil { color: var(--ink-3); padding-bottom: 9px; }
-  .seg {
-    display: flex;
-    gap: 3px;
-    padding: 3px;
-    background: var(--track);
-    border: 1px solid var(--line);
-    border-radius: 5px;
-  }
-  .seg button {
-    flex: 1 1 0;
-    border: none;
-    border-radius: 3px;
-    padding: 8px 14px;
-    background: transparent;
-    color: var(--ink-2);
-    font-family: inherit;
-    font-size: inherit;
-    font-weight: 500;
-    cursor: pointer;
-  }
-  .seg button[aria-pressed='true'] { background: var(--surface); color: var(--ink); }
+  /* Segmenten delar bredd lika inom språkparet, så de två halvorna blir
+     spegelbilder. Formen i övrigt bor i Segment.svelte; det här är den enda
+     lokala avvikelsen och den hör till LAYOUTEN här, inte till kontrollen. */
+  .halva :global(.seg button) { flex: 1 1 0; }
   .fot {
     display: flex;
     align-items: baseline;

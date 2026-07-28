@@ -4,6 +4,7 @@
   // fältet är inline-CSS med 14px hörn, --shadow och en pulserande accentprick.
   import { sok } from './sok.svelte.js';
   import { korSokning, rensaSokning, valjLage, stallFraga } from './sokActions.js';
+  import Segment from '../Segment.svelte';
 
   const harFraga = $derived(sok.fraga.trim().length > 0);
 
@@ -53,24 +54,23 @@
   </div>
 
   <!--
-    DEN HÄR LÄGESVÄXELNS FORM AVVIKER MEDVETET, inte av misstag. Både
-    ArkivSearch.svelte (frontend/src/lib/arkiv/) och BuildPanel.svelte
-    (frontend/src/lib/planering/) renderar samma sorts kontroll — ask/keyword
-    respektive typväljaren — som en SEGMENTKONTROLL: ett spårfärgat fack
-    (var(--track)) med knapparna inuti, det aktiva valet lyft till
-    var(--surface). Den här är i stället fristående mikroetiketter
-    (var(--line)-ram var, var(--accent-weak) på det aktiva valet). Ingen av
-    formerna är fel i sig — ägaren gör en separat visuell genomgång av alla
-    tre; rör inte stylingen här som en del av en punktfix.
+    AVVIKELSEN ÄR BORTA. Den här lägesväxeln bar tidigare fristående
+    mikroetiketter (var(--line)-ram var, var(--accent-weak) på det aktiva
+    valet) medan ArkivSearch och BuildPanel ritade samma sorts kontroll som en
+    segmentplatta. Den gamla kommentaren här sköt upp valet till "en separat
+    visuell genomgång av alla tre" — det här ÄR den genomgången.
+
+    Formen som vann är plattan, och skälet är inte estetiskt: chipsformen var
+    identisk med Formatval.svelte:s FLERVALS-chips (SRT *och* TXT), medan den
+    här kontrollen är ENVAL (Fråga AI *eller* Sök ord). Två motsatta kontrakt
+    med ett utseende. Regeln står överst i Segment.svelte.
   -->
-  <div class="lagen" role="group" aria-label="Sökläge för inspelningar">
-    <button class="lage" aria-pressed={sok.lage === 'ask'} onclick={() => valjLage('ask')}>
-      Fråga AI
-    </button>
-    <button class="lage" aria-pressed={sok.lage === 'keyword'} onclick={() => valjLage('keyword')}>
-      Sök ord
-    </button>
-  </div>
+  <Segment
+    alternativ={[['ask', 'Fråga AI'], ['keyword', 'Sök ord']]}
+    etikett="Sökläge för inspelningar"
+    arVald={(l) => sok.lage === l}
+    valj={valjLage}
+  />
 </section>
 
 <style>
@@ -128,28 +128,9 @@
   }
   .kor:disabled { cursor: default; opacity: 0.5; }
 
-  .lagen { display: flex; gap: 6px; margin-top: 10px; }
-
-  /* Mikroetikettens form: kort, versal, mono. Den ENDA platsen i komponenten
-     där var(--mono) hör hemma. */
-  .lage {
-    background: transparent;
-    border: 1px solid var(--line);
-    border-radius: 3px;
-    padding: 5px 11px;
-    font-family: var(--mono);
-    font-size: 0.72rem;
-    font-weight: 500;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--ink-3);
-    cursor: pointer;
-  }
-  .lage:hover { color: var(--ink-2); border-color: var(--line-2); }
-  /* Accenten markerar ett VAL — precis vad One Voice reserverar den för. */
-  .lage[aria-pressed='true'] {
-    background: var(--accent-weak);
-    border-color: var(--accent);
-    color: var(--accent);
-  }
+  /* Lägesväxelns egen form bor numera i Segment.svelte. Kvar här är bara
+     placeringen i sökfältet. Med den gick också var(--mono) ur komponenten:
+     mono är reserverat för korta versala MIKROETIKETTER, och en kontroll som
+     läraren trycker på är inte en etikett (DESIGN.md, Mono-Is-Labels-Only). */
+  .sok :global(.seg) { margin-top: 10px; }
 </style>
