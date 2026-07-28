@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<!-- @generated DO NOT EDIT: skrivskyddad spegel från Claude Design (DesignSync) - riktig källa är frontend/src/ -->
+<!-- @dsCard group="Template" -->
+<html lang="sv">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Transkribera — appen</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    /* ==========================================================
+       Speglar frontend/src/lib/**. Statisk: alla tre vyer ligger
+       under varandra i stället för bakom flikar, så hela appen går
+       att se och designa på en gång. I appen visas en i taget.
+       ========================================================== */
+
+    .topbar {
+      position: sticky; top: 0; z-index: 20; display: flex; align-items: center;
+      gap: 16px; padding: 14px 24px; border-bottom: 1px solid var(--line);
+      background: var(--canvas);
+    }
+    .ordmarke { flex: 1 1 0; font-size: 1.125rem; font-weight: 500; letter-spacing: -0.01em; color: var(--ink); }
+    .ordmarke .ser { font-family: var(--serif); font-style: italic; font-weight: 400; }
+    .flikar { flex: 0 1 auto; display: inline-flex; gap: 26px; }
+    .flik {
+      position: relative; border: none; padding: 4px 0; background: transparent;
+      color: var(--ink-3); font-family: inherit; font-size: inherit;
+      font-weight: 500; cursor: pointer;
+    }
+    .flik[aria-selected='true'] { color: var(--ink); font-weight: 600; }
+    .flik::after {
+      content: ''; position: absolute; left: 0; right: 0; bottom: -3px;
+      height: 2px; background: transparent;
+    }
+    .flik[aria-selected='true']::after { background: var(--accent); }
+    .temaruta { flex: 1 1 0; display: flex; justify-content: flex-end; }
+    .tema {
+      border: none; background: transparent; color: var(--ink-3);
+      font-family: inherit; font-size: 0.72rem; letter-spacing: 0.06em;
+      text-transform: uppercase; cursor: pointer;
+    }
+
+    .view { max-width: 860px; margin: 0 auto; padding: 56px 24px 96px; }
+    .vydelare { border-top: 1px solid var(--line-2); }
+
+    .eyebrow {
+      font-family: var(--mono); font-size: 0.72rem; font-weight: 500;
+      letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3);
+      margin: 0 0 14px;
+    }
+    /* HERO — en röst, hela raden i serif kursiv, rent svart. */
+    .rubrik {
+      font-family: var(--serif); font-style: italic; font-weight: 400;
+      font-size: 3.2rem; line-height: 1.05; letter-spacing: -0.01em;
+      color: #000; margin: 0 0 26px; text-wrap: balance;
+    }
+
+    /* Stegindikator */
+    .steg { display: flex; align-items: center; gap: 14px; margin: 0 0 40px; }
+    .stegpost { display: flex; align-items: center; gap: 10px; }
+    .bricka {
+      width: 26px; height: 26px; border-radius: 50%; display: grid;
+      place-items: center; font-size: 0.72rem; font-variant-numeric: tabular-nums;
+      border: 1px solid var(--line-2); color: var(--ink-3);
+    }
+    .bricka.pa { background: var(--ink); border-color: var(--ink); color: var(--btn-fg); }
+    .bricka.klar { background: var(--ok); border-color: var(--ok); color: var(--on-ok); }
+    .stegnamn { color: var(--ink-3); }
+    .stegpost.pa .stegnamn { color: var(--ink); }
+    .streck { flex: 1; height: 1px; background: var(--line); }
+
+    .dropzone {
+      background: var(--surface); border: 1px dashed var(--line-2);
+      border-radius: 4px; padding: 26px 24px;
+    }
+    .dz-titel { font-weight: 600; color: var(--ink); margin: 0 0 4px; }
+    .dz-under { color: var(--ink-2); margin: 0; }
+
+    .falt-rad { display: flex; align-items: center; gap: 14px; margin: 22px 0 0; }
+    .minietikett {
+      font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--ink-3); flex: 0 0 auto; line-height: 1.3;
+    }
+    .field {
+      flex: 1; background: var(--surface); border: 1px solid var(--line);
+      border-radius: 4px; padding: 12px 14px; font-family: inherit;
+      font-size: inherit; color: var(--ink);
+    }
+    .primar {
+      background: var(--btn-bg); color: var(--btn-fg); border: none;
+      border-radius: 4px; padding: 12px 22px; font-family: inherit;
+      font-size: inherit; font-weight: 500; cursor: pointer;
+    }
+    .primar:disabled { opacity: 0.55; cursor: default; }
+    .ghost {
+      background: transparent; color: var(--ink); border: 1px solid var(--line-2);
+      border-radius: 4px; padding: 9px 18px; font-family: inherit;
+      font-size: inherit; cursor: pointer;
+    }
+    .lank {
+      border: none; background: transparent; color: var(--ink-2);
+      font-family: inherit; font-size: inherit; padding: 0; cursor: pointer;
+      text-decoration: underline; text-underline-offset: 3px;
+    }
+    .prova { color: var(--ink-3); margin: 20px 0 0; display: flex; gap: 12px; }
+
+    .inspelningsrad {
+      display: flex; align-items: center; gap: 14px; background: var(--surface);
+      border: 1px solid var(--line); border-radius: 5px; padding: 14px 18px; margin: 12px 0 0;
+    }
+    .inspelningsrad p { flex: 1; margin: 0; color: var(--ink-2); }
+
+    .vidare { margin: 24px 0 0; display: flex; align-items: center; gap: 14px; }
+    .skal { color: var(--ink-3); }
+
+    /* Steg 2 */
+    .ruta {
+      background: var(--surface); border: 1px solid var(--line);
+      border-radius: 5px; padding: 18px 20px; margin-top: 12px;
+    }
+    .par { display: flex; align-items: flex-end; gap: 16px; }
+    .halva { flex: 1 1 0; display: flex; flex-direction: column; gap: 8px; }
+    .halva .rub { color: var(--ink-2); }
+    .pil { color: var(--ink-3); padding-bottom: 9px; }
+    .fot {
+      display: flex; align-items: baseline; gap: 10px; margin: 16px 0 0;
+      padding-top: 14px; border-top: 1px solid var(--line); color: var(--ink-2);
+    }
+    .prick { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); align-self: center; }
+    .hint { margin-left: auto; color: var(--ink-3); }
+    .radruta { display: flex; align-items: center; gap: 14px; background: var(--surface);
+      border: 1px solid var(--line); border-radius: 5px; padding: 14px 18px; margin-top: 12px; }
+    .switch {
+      width: 40px; height: 22px; border-radius: 5px; border: 1px solid var(--accent);
+      background: var(--accent); padding: 2px; flex: 0 0 auto;
+    }
+    .knopp { display: block; width: 16px; height: 16px; border-radius: 50%; background: var(--knob); transform: translateX(18px); }
+    .mjuk { color: var(--ink-3); font-size: 0.72rem; }
+
+    /* Segment */
+    .seg { display: inline-flex; gap: 3px; padding: 3px; background: var(--track); border: 1px solid var(--line); border-radius: 5px; }
+    .seg button { border: none; border-radius: 3px; padding: 8px 14px; background: transparent;
+      color: var(--ink-2); font-family: inherit; font-size: inherit; font-weight: 500; cursor: pointer; }
+    .seg button[aria-pressed='true'] { background: var(--surface); color: var(--ink); }
+    .halva .seg button { flex: 1 1 0; }
+    .seg.flerval { gap: 6px; padding: 0; background: transparent; border: none; }
+    .seg.flerval button { border: 1px solid var(--line); border-radius: 3px; padding: 7px 13px; }
+    .seg.flerval button[aria-pressed='true'] { background: var(--accent-weak); color: var(--accent); border-color: var(--accent); }
+
+    /* Inspelningar */
+    .filterrad { display: flex; gap: 22px; margin: 0 0 18px; }
+    .filter { display: flex; flex-direction: column; gap: 6px; }
+    .sokfalt {
+      display: flex; align-items: center; gap: 8px; background: var(--surface);
+      border: 1px solid var(--line-2); border-radius: 4px; padding: 4px 4px 4px 12px; margin: 18px 0 0;
+    }
+    .sokfalt input { flex: 1; border: none; background: transparent; font-family: inherit; font-size: inherit; color: var(--ink); outline: none; }
+    .kor { background: var(--btn-bg); color: var(--btn-fg); border: none; border-radius: 4px; padding: 8px 18px; font-family: inherit; font-size: inherit; cursor: pointer; }
+    .tomrad { font-size: 1.03rem; color: var(--ink-2); max-width: 52ch; margin: 14px 0; }
+
+    .grupprubrik {
+      display: flex; align-items: baseline; gap: 12px; margin: 28px 0 10px;
+      padding-bottom: 8px; border-bottom: 1px solid var(--line);
+    }
+    .vecka { font-size: 1.03rem; font-weight: 600; color: var(--ink); margin: 0; }
+    .spann, .antal { font-size: 0.72rem; color: var(--ink-3); }
+    .antal { margin-left: auto; }
+    .lista { display: flex; flex-direction: column; }
+    .kort { display: flex; align-items: center; gap: 16px; padding: 12px 0; }
+    .kort + .kort { border-top: 1px solid var(--line); }
+    .tumme { width: 72px; aspect-ratio: 16/9; background: var(--sunken); border-radius: 3px; flex: 0 0 auto; }
+    .text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+    .datum { font-size: 0.72rem; color: var(--ink-3); margin: 0; }
+    .namn { font-size: 1.03rem; font-weight: 600; color: var(--ink); margin: 0; }
+    .tagg {
+      align-self: flex-start; font-size: 0.72rem; font-weight: 500; border-radius: 3px;
+      padding: 2px 8px; margin: 2px 0 0; border: 1px solid transparent; font-family: inherit; cursor: pointer;
+    }
+    .meta { font-size: 0.72rem; color: var(--ink-3); margin: 0; }
+    [data-cc='sky'] { background: color-mix(in srgb, var(--c-sky) 14%, transparent); color: var(--c-sky); }
+    [data-cc='sage'] { background: color-mix(in srgb, var(--c-sage) 16%, transparent); color: var(--c-sage); }
+    [data-cc='plum'] { background: color-mix(in srgb, var(--c-plum) 14%, transparent); color: var(--c-plum); }
+    [data-cc='none'] { background: var(--sunken); color: var(--ink-3); border-color: var(--line); }
+    .knappar { flex: 0 0 auto; display: flex; align-items: center; gap: 14px; }
+    .tyst { background: transparent; border: none; padding: 4px 0; color: var(--ink-2); font-family: inherit; font-size: 0.72rem; cursor: pointer; }
+    .fara { margin-left: 4px; padding-left: 18px; border-left: 1px solid var(--line); color: var(--ink-3); }
+
+    /* Planering */
+    .panel { display: flex; flex-direction: column; gap: 14px; }
+    .rad { display: flex; align-items: center; gap: 14px; }
+    .label {
+      flex: 0 0 74px; font-family: var(--mono); font-size: 0.72rem; font-weight: 500;
+      letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3);
+    }
+    .narrow { flex: 0 0 auto; min-width: 0; padding: 8px 10px; }
+    .cta { display: flex; align-items: center; gap: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+    .note { flex: 1; color: var(--ink-3); margin: 0; }
+  </style>
+</head>
+<body>
+
+<header class="topbar">
+  <span class="ordmarke">transkrib<span class="ser">era</span></span>
+  <div class="flikar" role="tablist" aria-label="Vy">
+    <button class="flik" role="tab" aria-selected="true">Transkribera</button>
+    <button class="flik" role="tab" aria-selected="false">Inspelningar</button>
+    <button class="flik" role="tab" aria-selected="false">Planering</button>
+  </div>
+  <div class="temaruta"><button class="tema">Mörkt</button></div>
+</header>
+
+<!-- ══════════════════════ TRANSKRIBERA · STEG 1 ══════════════════════ -->
+<section class="view">
+  <div class="steg">
+    <div class="stegpost pa"><span class="bricka pa">1</span><span class="stegnamn">Källa</span></div>
+    <span class="streck"></span>
+    <div class="stegpost"><span class="bricka">2</span><span class="stegnamn">Inställningar</span></div>
+    <span class="streck"></span>
+    <div class="stegpost"><span class="bricka">3</span><span class="stegnamn">Transkribering</span></div>
+  </div>
+
+  <p class="eyebrow">Steg 1 — Källa</p>
+  <h1 class="rubrik">Vad vill du transkribera?</h1>
+
+  <div class="dropzone">
+    <p class="dz-titel">Dra in filer — eller klicka för att välja</p>
+    <p class="dz-under">MP4 · MKV · MOV · MP3 · WAV · M4A — flera filer går bra</p>
+  </div>
+
+  <div class="falt-rad">
+    <span class="minietikett">Eller<br />länk</span>
+    <input class="field" placeholder="Klistra in en YouTube-länk …" />
+    <button class="ghost">Lägg till</button>
+  </div>
+
+  <p class="prova">Eller prova med
+    <button class="lank">ett exempel</button>
+    <button class="lank">skadad_inspelning.m4a</button>
+  </p>
+
+  <p class="minietikett" style="margin:22px 0 8px">Eller spela in</p>
+  <div class="inspelningsrad">
+    <p>Spela in lektionen direkt — ljudet sparas lokalt</p>
+    <button class="primar">Starta inspelning</button>
+  </div>
+
+  <div class="vidare">
+    <button class="primar" disabled>Nästa: inställningar</button>
+    <span class="skal">Lägg till minst en fil, en länk eller en inspelning först.</span>
+  </div>
+</section>
+
+<!-- ══════════════════════ TRANSKRIBERA · STEG 2 ══════════════════════ -->
+<section class="view vydelare">
+  <div class="steg">
+    <div class="stegpost"><span class="bricka klar">✓</span><span class="stegnamn">Källa</span></div>
+    <span class="streck"></span>
+    <div class="stegpost pa"><span class="bricka pa">2</span><span class="stegnamn">Inställningar</span></div>
+    <span class="streck"></span>
+    <div class="stegpost"><span class="bricka">3</span><span class="stegnamn">Transkribering</span></div>
+  </div>
+
+  <p class="eyebrow">Steg 2 — Inställningar</p>
+  <h1 class="rubrik">Så ska det låta</h1>
+
+  <div class="rad" style="margin-bottom:8px">
+    <span class="minietikett">Filer i kö</span>
+    <strong style="color:var(--ink)">1</strong>
+    <span style="margin-left:auto"><button class="ghost">Lägg till fler</button></span>
+  </div>
+  <div class="kort" style="border-top:1px solid var(--line)">
+    <span class="minietikett">WAV</span>
+    <span class="text"><span class="namn" style="font-weight:400">Mamma waw isolerad.wav</span></span>
+    <button class="ghost" style="padding:6px 12px">✕</button>
+  </div>
+
+  <div class="ruta">
+    <p class="minietikett" style="margin:0 0 16px">Språk</p>
+    <div class="par">
+      <div class="halva">
+        <span class="rub">Talat språk</span>
+        <div class="seg" role="group"><button aria-pressed="true">Svenska</button><button aria-pressed="false">Engelska</button></div>
+      </div>
+      <span class="pil">→</span>
+      <div class="halva">
+        <span class="rub">Resultatspråk</span>
+        <div class="seg" role="group"><button aria-pressed="true">Svenska</button><button aria-pressed="false">Engelska</button></div>
+      </div>
+    </div>
+    <p class="fot">
+      <span class="prick"></span>
+      <span>KB-Whisper large (sv) · väljs automatiskt</span>
+      <span class="hint">Resultatet blir på svenska — samma som det talade språket.</span>
+    </p>
+  </div>
+
+  <div class="radruta">
+    <span style="color:var(--ink-2);font-weight:500">Filformat</span>
+    <div class="seg flerval" role="group">
+      <button aria-pressed="true">SRT</button><button aria-pressed="true">TXT</button><button aria-pressed="false">VTT</button>
+    </div>
+  </div>
+
+  <div class="radruta">
+    <span class="switch"><span class="knopp"></span></span>
+    <div style="flex:1">
+      <p style="margin:0;color:var(--ink);font-weight:500">Rätta mot ljudet <span class="mjuk">· Gemma 4 (experimentell)</span></p>
+      <p style="margin:2px 0 0;color:var(--ink-2)">Ett andra pass som rättar transkriptet mot vad som faktiskt sägs.</p>
+    </div>
+  </div>
+
+  <div class="vidare"><button class="primar">Starta transkribering</button></div>
+</section>
+
+<!-- ══════════════════════ INSPELNINGAR ══════════════════════ -->
+<section class="view vydelare">
+  <p class="eyebrow">Inspelningar</p>
+  <h1 class="rubrik">Dina lektioner</h1>
+
+  <div class="filterrad">
+    <div class="filter"><span class="minietikett">Klass</span><select class="field"><option>Alla klasser</option></select></div>
+    <div class="filter"><span class="minietikett">Kurs</span><select class="field"><option>Alla kurser</option></select></div>
+    <div class="filter"><span class="minietikett">Månad</span><select class="field"><option>Alla månader</option></select></div>
+  </div>
+
+  <button class="ghost">Säkerhetskopiera</button>
+
+  <div class="sokfalt">
+    <input placeholder="Ställ en fråga, t.ex. när hade vi prov om derivata?" />
+    <button class="kor">Fråga</button>
+  </div>
+  <div class="seg" role="group" style="margin-top:10px">
+    <button aria-pressed="true">Fråga AI</button><button aria-pressed="false">Sök ord</button>
+  </div>
+
+  <p class="tomrad">Inga daterade insikter ännu — sätt ett datum på en åtgärd eller en kalenderpost så dyker den upp här.</p>
+
+  <div class="grupprubrik">
+    <h2 class="vecka">Vecka 29</h2><span class="spann">13 jul – 17 jul</span><span class="antal">2 inspelningar</span>
+  </div>
+  <div class="lista">
+    <article class="kort">
+      <div class="tumme"></div>
+      <div class="text">
+        <p class="datum">15 jul</p>
+        <p class="namn">Derivatans definition</p>
+        <p class="tagg" data-cc="sky">9A · Matematik 3c</p>
+        <p class="meta">42:11 · KB-Whisper large (sv) · Svenska · A214</p>
+      </div>
+      <div class="knappar">
+        <button class="tyst">Öppna</button><button class="tyst">Fråga</button>
+        <button class="tyst">Redigera</button><button class="tyst fara">Radera</button>
+      </div>
+    </article>
+    <article class="kort">
+      <div class="text">
+        <p class="datum">13 jul</p>
+        <p class="namn">Integraler — introduktion</p>
+        <button class="tagg" data-cc="none">Ej tilldelad — tilldela</button>
+        <p class="meta">38:02 · KB-Whisper large (sv) · Svenska</p>
+      </div>
+      <div class="knappar">
+        <button class="tyst">Öppna</button><button class="tyst">Fråga</button>
+        <button class="tyst">Redigera</button><button class="tyst fara">Radera</button>
+      </div>
+    </article>
+  </div>
+
+  <div class="grupprubrik">
+    <h2 class="vecka">Vecka 28</h2><span class="spann">6 jul – 10 jul</span><span class="antal">1 inspelning</span>
+  </div>
+  <div class="lista">
+    <article class="kort">
+      <div class="tumme"></div>
+      <div class="text">
+        <p class="datum">9 jul</p>
+        <p class="namn">Trigonometriska ettan</p>
+        <p class="tagg" data-cc="sage">9B · Matematik 4</p>
+        <p class="meta">45:30 · KB-Whisper large (sv) · Svenska</p>
+      </div>
+      <div class="knappar">
+        <button class="tyst">Öppna</button><button class="tyst">Fråga</button>
+        <button class="tyst">Redigera</button><button class="tyst fara">Radera</button>
+      </div>
+    </article>
+  </div>
+</section>
+
+<!-- ══════════════════════ PLANERING ══════════════════════ -->
+<section class="view vydelare">
+  <p class="eyebrow">Planering</p>
+  <h1 class="rubrik">Dagens tavla</h1>
+
+  <div class="panel">
+    <div class="rad">
+      <span class="label">Skriv</span>
+      <div class="seg" role="group">
+        <button aria-pressed="true">Tavla</button><button aria-pressed="false">Prov</button><button aria-pressed="false">Arbetsblad</button>
+      </div>
+    </div>
+    <div class="rad">
+      <span class="label">Moment</span>
+      <input class="field" placeholder="Moment — t.ex. derivatans definition" />
+    </div>
+    <div class="rad">
+      <span class="label">Klass</span>
+      <select class="field"><option>Ingen klass</option></select>
+    </div>
+    <div class="rad">
+      <span class="label">Kurs</span>
+      <select class="field"><option>Ingen kurs</option></select>
+    </div>
+    <div class="rad">
+      <span class="label">När</span>
+      <input class="field narrow" type="date" />
+      <input class="field narrow" type="time" />
+    </div>
+    <div class="cta">
+      <p class="note">Beskriv momentet ovan så kan tavlan skrivas.</p>
+      <button class="primar" disabled>Skriv tavlan</button>
+    </div>
+  </div>
+
+  <p class="eyebrow" style="margin:56px 0 14px">Arkiv</p>
+  <h2 style="font-family:var(--sans);font-weight:600;font-size:1.125rem;color:var(--ink);margin:0 0 14px">Sparade tavlor och prov</h2>
+  <div class="rad">
+    <div class="seg" role="group"><button aria-pressed="true">Fråga AI</button><button aria-pressed="false">Sök ord</button></div>
+    <input class="field" placeholder="Ställ en fråga — t.ex. när gick vi igenom derivata?" />
+    <button class="ghost">Fråga</button>
+  </div>
+  <p class="tomrad">Inget sparat än — godkänn en tavla så samlas den här.</p>
+</section>
+
+</body>
+</html>
