@@ -26,7 +26,7 @@ test("Transkribera (/next/): exempel i kön, dubblett, länk och borttagning", a
 
   // 1) Skalet startar på Transkribera-fliken.
   await expect(page.getByRole("tab", { name: "Transkribera", exact: true }))
-    .toHaveAttribute("aria-pressed", "true");
+    .toHaveAttribute("aria-selected", "true");
   await expect(page.getByRole("heading", { name: /Vad vill du transkribera/ })).toBeVisible();
 
   // 2) Exempelfilen: /api/sample ger en riktig sökväg som hamnar i kön.

@@ -209,9 +209,16 @@ function sparTillstand(page) {
   return page.evaluate(() => window.__e2eSpar.map((t) => t.readyState));
 }
 
-/** Flikknappen i topbaren (inte någon likanämnd knapp inne i en vy). */
+/**
+ * Fliken i topbaren (inte någon likanämnd knapp inne i en vy).
+ *
+ * role="tab" räcker som avgränsning: flikraden är dokumentets enda tablist,
+ * och ingen vy renderar egna flikar. Den tidigare avgränsningen på
+ * nav.flikar gäller inte längre — behållaren är en <div role="tablist">
+ * sedan flikarna blev riktiga flikar (AppShell.svelte).
+ */
 function flik(page, namn) {
-  return page.locator("nav.flikar").getByRole("button", { name: namn, exact: true });
+  return page.getByRole("tab", { name: namn, exact: true });
 }
 
 // Den här specen är den enda som skapar RIKTIGA mediefiler i fejkserverns
@@ -406,13 +413,13 @@ test("Inspelning (/next/): start, bitar till servern, markörer, bricka och kö"
   // 7) Brickan överlever ett flikbyte — det är hela defekten den lagar
   //    (setTab, app.js:602, byter flik utan spärr och utan indikator).
   await flik(page, "Planering").click();
-  await expect(flik(page, "Planering")).toHaveAttribute("aria-pressed", "true");
+  await expect(flik(page, "Planering")).toHaveAttribute("aria-selected", "true");
   await expect(bricka).toBeVisible();
 
   // 8) Ett klick tar läraren tillbaka till inspelningen — rätt flik, steg 1,
   //    och kön ORÖRD (goSource, inte nyTranskribering).
   await bricka.click();
-  await expect(flik(page, "Transkribera")).toHaveAttribute("aria-pressed", "true");
+  await expect(flik(page, "Transkribera")).toHaveAttribute("aria-selected", "true");
   await expect(page.getByRole("heading", { name: /Vad vill du transkribera/ })).toBeVisible();
   await expect(stoppa).toBeVisible();
   await expect(page.locator("ul.ko li")).toHaveCount(1);
@@ -952,7 +959,7 @@ test("Inspelning (/next/): brickan kastar inte ut läraren ur en pågående kör
   await expect(bricka).toBeVisible();
   await bricka.click();
   await expect(status).toHaveText("Kör");
-  await expect(flik(page, "Transkribera")).toHaveAttribute("aria-pressed", "true");
+  await expect(flik(page, "Transkribera")).toHaveAttribute("aria-selected", "true");
   await expect(page.getByRole("heading", { name: /Vad vill du transkribera/ })).toHaveCount(0);
 
   // Men brickan är ingen död knapp: så fort körsteget inte längre bär något

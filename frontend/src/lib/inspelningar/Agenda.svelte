@@ -25,20 +25,28 @@
 {#if insp.agenda}
   <!--
     TOM PANEL FÅR INGEN LÅDA. Tomläget ritade tidigare samma ramade,
-    ytfärgade .panel som den fyllda: rubrik plus två raders förklaring, i
-    full bredd, ovanför lektionerna — alltså en låda som tog plats för att
-    säga att den inte hade något att säga. Den lärare som öppnar Inspelningar
-    för att hitta måndagens genomgång fick den i vägen varje gång.
+    ytfärgade .panel som den fyllda: en låda i full bredd, ovanför
+    lektionerna, som tog plats för att säga att den inte hade något att säga.
+    Den lärare som öppnar Inspelningar för att hitta måndagens genomgång fick
+    den i vägen varje gång.
 
-    Panelen finns kvar som EN rad i brödtexten. Texten är oförändrad; det är
-    ramen, ytan och rubriken som är borta. Den fyllda panelen är orörd — där
-    bär lådan faktiskt något.
+    RUBRIKEN ÄR KVAR, och det är avsiktligt: utan "Kommande" står raden
+    "Inga daterade insikter ännu …" fritt under sökfältet utan att säga vad
+    det är som är tomt. Det är ramen och ytan som försvinner, inte
+    innebörden — och tomtillståndet SYNS fortfarande, vilket är hela poängen
+    med panelen (se inspelningar-paneler.spec.mjs: den försvinner inte, till
+    skillnad från i gamla appen).
+
+    Den fyllda panelen är orörd — där bär lådan faktiskt något.
   -->
   {#if !poster.length}
-    <p class="tomrad">
-      Inga daterade insikter ännu — sätt ett datum på en åtgärd eller en
-      kalenderpost så dyker den upp här.
-    </p>
+    <section class="tompanel">
+      <h2 class="rubrik">Kommande</h2>
+      <p class="tomrad">
+        Inga daterade insikter ännu — sätt ett datum på en åtgärd eller en
+        kalenderpost så dyker den upp här.
+      </p>
+    </section>
   {:else}
     <section class="panel">
       <!--
@@ -170,14 +178,16 @@
     .chevron { transition: none; }
   }
 
-  /* Tomläget är en rad i brödtexten, inte en panel. Samma typform som
-     kartotekets egna tomtillstånd (InspelningarView.svelte:.tomt) — det är
-     samma sorts besked, och de ska inte se olika ut. */
+  /* Tomläget bär rubriken men ingen låda: ingen ram, ingen ytfärg, ingen
+     radie. Bara marginalen som håller isär det från nästa block. */
+  .tompanel { margin-bottom: 14px; }
+  /* Samma typform som kartotekets egna tomtillstånd
+     (InspelningarView.svelte:.tomt) — samma sorts besked ska se likadant ut. */
   .tomrad {
     font-size: 1.03rem;
     color: var(--ink-2);
     max-width: 52ch;
-    margin: 0 0 14px;
+    margin: 6px 0 0;
   }
 
   .lista {

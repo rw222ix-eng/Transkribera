@@ -10,13 +10,18 @@ test("Svelte-grunden under /next/ renderar", async ({ page }) => {
 
   await page.goto("/next/");
 
-  // Skalet: tre flikar, Transkribera aktiv från start.
+  // Skalet: tre flikar, Transkribera aktiv från start. Flikarna är RIKTIGA
+  // flikar (role="tab" i en tablist), inte längre växlingsknappar med
+  // aria-pressed — se AppShell.svelte för varför.
   const tabs = ["Transkribera", "Inspelningar", "Planering"];
   for (const t of tabs) {
-    await expect(page.getByRole("button", { name: t, exact: true })).toBeVisible();
+    await expect(page.getByRole("tab", { name: t, exact: true })).toBeVisible();
   }
+  // Panelen är knuten till sin flik. Utan den här raden kan aria-controls
+  // peka på ett id som inte finns och testet märker ingenting.
+  await expect(page.getByRole("tabpanel", { name: "Transkribera" })).toBeVisible();
   await expect(page.getByRole("tab", { name: "Transkribera", exact: true }))
-    .toHaveAttribute("aria-pressed", "true");
+    .toHaveAttribute("aria-selected", "true");
 
   // Planeringsvyn finns kvar bakom sin flik.
   await page.getByRole("tab", { name: "Planering", exact: true }).click();

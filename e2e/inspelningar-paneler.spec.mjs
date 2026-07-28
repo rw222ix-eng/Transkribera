@@ -239,7 +239,11 @@ test("Panelerna (/next/): agendan märker försenad, idag och framtid", async ({
   await laggTillInsikter(request, lektioner);
 
   const vy = await oppnaInspelningar(page);
-  const agenda = vy.locator("section.panel").filter({ has: page.getByRole("heading", { name: /Kommande/ }) });
+  // Lokatorn hänger på RUBRIKEN, inte på .panel-klassen: tomläget bär numera
+  // ingen låda (Agenda.svelte) — en tom panel som ritar ram och ytfärg tar
+  // plats för att säga att den inte har något att säga. Det testet bevakar är
+  // att tomtillståndet SYNS, inte vilken form det har.
+  const agenda = vy.locator("section").filter({ has: page.getByRole("heading", { name: /Kommande/ }) });
 
   // Hopfälld vid laddning, som gamla appen — rubrikraden bär ändå summan.
   const huvud = agenda.getByRole("button", { name: /Kommande/ });
@@ -281,7 +285,11 @@ test("Panelerna (/next/): en avbockning i agendan behåller tangentbordsfokus", 
   await laggTillInsikter(request, lektioner);
 
   const vy = await oppnaInspelningar(page);
-  const agenda = vy.locator("section.panel").filter({ has: page.getByRole("heading", { name: /Kommande/ }) });
+  // Lokatorn hänger på RUBRIKEN, inte på .panel-klassen: tomläget bär numera
+  // ingen låda (Agenda.svelte) — en tom panel som ritar ram och ytfärg tar
+  // plats för att säga att den inte har något att säga. Det testet bevakar är
+  // att tomtillståndet SYNS, inte vilken form det har.
+  const agenda = vy.locator("section").filter({ has: page.getByRole("heading", { name: /Kommande/ }) });
   await agenda.getByRole("button", { name: /Kommande/ }).click();
 
   // BEVISET för slutgranskningens punkt 3: samma <button>-nod, samma ruta,
@@ -454,7 +462,11 @@ test("Panelerna (/next/): .ics-exporten skriver filen och rapporterar antalet", 
   await stubbaOpen(page);
 
   const vy = await oppnaInspelningar(page);
-  const agenda = vy.locator("section.panel").filter({ has: page.getByRole("heading", { name: /Kommande/ }) });
+  // Lokatorn hänger på RUBRIKEN, inte på .panel-klassen: tomläget bär numera
+  // ingen låda (Agenda.svelte) — en tom panel som ritar ram och ytfärg tar
+  // plats för att säga att den inte har något att säga. Det testet bevakar är
+  // att tomtillståndet SYNS, inte vilken form det har.
+  const agenda = vy.locator("section").filter({ has: page.getByRole("heading", { name: /Kommande/ }) });
   await agenda.getByRole("button", { name: /Kommande/ }).click();
 
   const svar = page.waitForResponse(
@@ -484,7 +496,11 @@ test("Panelerna (/next/): tomtillstånden syns i stället för att panelen förs
 
   // Läge 1: agendan finns och säger varför den är tom — den försvinner INTE,
   // vilket är skillnaden mot gamla appen.
-  const agenda = vy.locator("section.panel").filter({ has: page.getByRole("heading", { name: /Kommande/ }) });
+  // Lokatorn hänger på RUBRIKEN, inte på .panel-klassen: tomläget bär numera
+  // ingen låda (Agenda.svelte) — en tom panel som ritar ram och ytfärg tar
+  // plats för att säga att den inte har något att säga. Det testet bevakar är
+  // att tomtillståndet SYNS, inte vilken form det har.
+  const agenda = vy.locator("section").filter({ has: page.getByRole("heading", { name: /Kommande/ }) });
   await expect(agenda).toContainText("Inga daterade insikter ännu");
   await expect(agenda.getByRole("button", { name: /Exportera till kalender/ })).toHaveCount(0);
 
