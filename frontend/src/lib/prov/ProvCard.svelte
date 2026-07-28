@@ -5,11 +5,11 @@
   // app.js (rad ~5992-6046), men bygger på prov.doc i stället för S.exam.
   //
   // Uppgiftstexten kan innehålla $…$-matte. Den sätts med den vendrade
-  // KaTeX:en via renderMath-actionen (frontend/src/lib/math.js), precis som
+  // KaTeX:en via typsattning-attachmentet (frontend/src/lib/math.js), precis som
   // gamla appens data-math-element. Texten står kvar i markupen, så en
   // utebliven KaTeX ger rå LaTeX i stället för ett tomt kort.
   import { prov, toggleProvSel } from './stores.svelte.js';
-  import { renderMath } from '../math.js';
+  import { typsattning } from '../math.js';
   import { approveExam, openPdf, openTex, deleteExam, closeExam } from './actions.js';
 
   const typLabel = $derived(prov.doc?.typ === 'arbetsblad' ? 'Arbetsblad' : 'Prov');
@@ -98,7 +98,7 @@
     <div class="head">
       <span class="titel">{prov.doc.exam?.titel || typLabel}</span>
       <span class="tag">{typLabel}</span>
-      <span class="tag" class:on={prov.doc.status === 'godkänt'}>{prov.doc.status}</span>
+      <span class={['tag', { on: prov.doc.status === 'godkänt' }]}>{prov.doc.status}</span>
       {#if versionRad}<span class="version">{versionRad}</span>{/if}
       <span class="spacer"></span>
       <button
@@ -147,7 +147,7 @@
     <ol class="tasks">
       {#each numbered as n (n.nummer)}
         {@const vald = valdaNummer.has(n.nummer)}
-        <li class:vald>
+        <li class={{ vald }}>
           <div class="taskhead">
             <span class="nr">Uppgift {n.nummer}</span>
             {#if n.del}<span class="del">DEL {n.del}</span>{/if}
@@ -166,7 +166,7 @@
               onclick={() => toggleProvSel(n.nummer, 'Uppgift ' + n.nummer)}
             >{vald ? 'Markerad' : 'Markera'}</button>
           </div>
-          <div class="text" use:renderMath={n.text}>{n.text}</div>
+          <div class="text" {@attach typsattning(n.text)}>{n.text}</div>
         </li>
       {/each}
     </ol>

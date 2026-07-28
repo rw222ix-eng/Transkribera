@@ -63,7 +63,7 @@ import { test, expect, failOnConsoleError } from "./helpers/app";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-// inspelning.svelte.js:17 — MediaRecorder-timeslice. Hämtas hit som konstant
+// inspelning.js:17 — MediaRecorder-timeslice. Hämtas hit som konstant
 // för att uttrycka "inom samma bit" relativt koden i stället för att pinna en
 // väggklockssiffra.
 const CHUNK_MS = 4000;
@@ -238,7 +238,7 @@ let fanns = new Set();
 
 /**
  * Filer som BARA den här specen skapar: avslutade inspelningar
- * (lektion_<stämpel>.<ext>, namnsatt av inspelning.svelte.js) och halvfärdiga
+ * (lektion_<stämpel>.<ext>, namnsatt av inspelning.js) och halvfärdiga
  * .part-filer.
  */
 function egenArtefakt(namn) {
@@ -364,7 +364,7 @@ test("Inspelning (/next/): start, bitar till servern, markörer, bricka och kö"
   expect(
     bit,
     "Ingen POST till /api/recording/append kom fram. Utan timeslice — " +
-      "recorder.start(CHUNK_MS), inspelning.svelte.js:158 — emitterar MediaRecorder " +
+      "recorder.start(CHUNK_MS), inspelning.js:158 — emitterar MediaRecorder " +
       "ingen bit alls förrän vid stopp, och då ligger hela lektionen kvar i minnet: " +
       "en krasch mitt i passet tar med sig allt.",
   ).not.toBeNull();
@@ -650,7 +650,7 @@ test("Inspelning (/next/): ett nätverksfel ger ETT omförsök för samma bit, u
   // Gränsen är CHUNK_MS/4, inte CHUNK_MS. Nästa bit POSTas en hel timeslice
   // efter den förra, så < CHUNK_MS utesluter exakt ingenting: en nästa-bit-POST
   // 3 990 ms senare hade passerat som "omförsök". Omförsöket har ingen backoff
-  // — laddaUppChunk (inspelning.svelte.js:293) går direkt in i varv två när
+  // — laddaUppChunk (inspelning.js:293) går direkt in i varv två när
   // fetch:en avvisas — så en fjärdedels timeslice är rundlig marginal för den
   // riktiga händelsen och långt under nästa bit.
   expect(
@@ -738,7 +738,7 @@ test("Inspelning (/next/): markörerna följer med hela vägen till den sparade 
   await markera.click();
   await expect(markera).toHaveText(/Markera \(2\)/);
 
-  // Kedjan spänner över TRE filer — inspelning.svelte.js skriver, stores.svelte.js
+  // Kedjan spänner över TRE filer — inspelning.js skriver, stores.svelte.js
   // bär (tr.recMarkersByPath), actions.js postar när transkriberingen är klar.
   // POSTen registreras före körningen så den inte kan missas.
   const markorPost = page.waitForRequest(

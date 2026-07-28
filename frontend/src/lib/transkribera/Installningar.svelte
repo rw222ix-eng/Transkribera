@@ -49,11 +49,11 @@
   en seende lärare kunde missa det helt. Raden är fortfarande aria-hidden, så
   bara EN nod är exponerad för skärmläsare.
 
-  class:info stängs av när tr.recError är satt: tr.fileNoteArt hör till
+  info-klassen stängs av när tr.recError är satt: tr.fileNoteArt hör till
   filkanalen, och dess neutrala "info"-läge (dubblettbeskedet) får inte måla
   ett inspelningsfel som en lugn notis.
 -->
-<p class="fel" class:info={tr.fileNoteArt === 'info' && !tr.recError} aria-hidden="true" data-testid="statusrad">{samladStatus()}</p>
+<p class={['fel', { info: tr.fileNoteArt === 'info' && !tr.recError }]} aria-hidden="true" data-testid="statusrad">{samladStatus()}</p>
 
 <div class="ko-huvud">
   <span class="label">Filer i kö</span>

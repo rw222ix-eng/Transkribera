@@ -1,4 +1,5 @@
 <script>
+  import { untrack } from 'svelte';
   import { tk } from './stores.svelte.js';
   import { fmtTid } from './tid.js';
   import { bindMedia, slappMedia, vaxlaSpelning, spolaTill, cyklaHastighet, fmtHastighet, laggTillMarkor } from './actions.js';
@@ -9,10 +10,19 @@
   const andel = $derived(tk.langd > 0 ? Math.min(1, Math.max(0, tk.tid / tk.langd)) : 0);
   const spolbar = $derived(tk.langd > 0);
 
-  /** use:-action. Binder elementet och släpper det när noden rivs. */
+  /**
+   * Attachment. Binder elementet och släpper det när noden rivs.
+   *
+   * UNTRACK ÄR INTE VALFRITT. Ett attachment kör om när något det läser
+   * ändras, och bindMedia läser `tk.hastighet` synkront (actions.js:204) för
+   * att seeda playbackRate. Utan untrack blir hastigheten alltså ett beroende:
+   * varje tryck på hastighetsknappen hade rivit alla medialyssnare och satt
+   * upp dem igen. Det här är en bind-EN-gång, inte en synkronisering — precis
+   * som use:-actionen den ersatte, som aldrig hade någon update-gren.
+   */
   function media(el) {
-    bindMedia(el);
-    return { destroy: () => slappMedia(el) };
+    untrack(() => bindMedia(el));
+    return () => slappMedia(el);
   }
 
   function tidVidX(x) {
@@ -78,11 +88,11 @@
            på finns inte här — transkriptet står bredvid videon och ÄR
            undertexten. Ett tomt spår är därför sant: elementet har inga
            textspår att erbjuda. -->
-      <video class="video" src={tk.mediaUrl} use:media preload="metadata">
+      <video class="video" src={tk.mediaUrl} {@attach media} preload="metadata">
         <track kind="captions" />
       </video>
     {:else}
-      <audio src={tk.mediaUrl} use:media preload="metadata"></audio>
+      <audio src={tk.mediaUrl} {@attach media} preload="metadata"></audio>
     {/if}
 
     {#if tk.forbereder}

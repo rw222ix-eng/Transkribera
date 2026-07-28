@@ -25,6 +25,12 @@
       <p class="text muted">Läser arkivet …</p>
     {/if}
 
+    <!-- INDEXNYCKEL, avsiktligt. Listan är append-only (actions.js:89 lägger
+         till med [...followups, ny]) och nollställs bara i sin helhet; posterna
+         muteras på plats medan svaret strömmar in. En innehållsnyckel hade
+         alltså rivit och byggt om noden vid VARJE token. Börjar någon ta bort
+         eller sortera om följdfrågor måste nyckeln bytas mot ett stabilt id
+         FÖRST — annars återanvänds fel DOM-nod tyst. -->
     {#each arkiv.followups as f, i (i)}
       <div class="foljd">
         <p class="fq">{f.q}</p>

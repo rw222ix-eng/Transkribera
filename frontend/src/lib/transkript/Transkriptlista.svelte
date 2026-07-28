@@ -1,4 +1,5 @@
 <script>
+  import { untrack } from 'svelte';
   import { tk } from './stores.svelte.js';
   import { fmtTid, aktuellRad } from './tid.js';
   import { hoppaTillRad } from './actions.js';
@@ -21,10 +22,23 @@
    * redigeras hoppar markören till början vid varje tangenttryck — samma
    * problem morphdom löste med data-eline (app.js:4252), löst på Sveltes sätt:
    * blocket renderar tomt och innehållet sätts här.
+   *
+   * UNTRACK ÄR HELA POÄNGEN. Som `use:`-action utan update-gren kördes det här
+   * en gång och aldrig mer. Ett attachment kör i stället om så fort något det
+   * LÄSER ändras — och den här läser `tk.andringar[i]`, som skrivs av oninput
+   * vid varje tangenttryck. Utan untrack skulle alltså varje tecken skriva om
+   * nodens textContent och kasta markören till radens början: exakt buggen
+   * kommentaren ovan finns för att förhindra, återinförd av en refaktor som
+   * såg ut som ren syntax. e2e:s "Enter mitt i en redigerbar rad"-test vaktar det.
+   *
+   * @param {number} i radindex
+   * @returns {(el: HTMLElement) => void}
    */
-  function fyll(el, i) {
-    el.textContent = i in tk.andringar ? tk.andringar[i] : (tk.segment[i]?.text ?? '');
-    return {};
+  function fyll(i) {
+    return (el) =>
+      untrack(() => {
+        el.textContent = i in tk.andringar ? tk.andringar[i] : (tk.segment[i]?.text ?? '');
+      });
   }
 
   /**
@@ -54,13 +68,17 @@
   /**
    * Släpper följandet när LÄRAREN flyttar sig, aldrig när vi själva gör det.
    *
-   * Lyssnarna bindes imperativt i en use:-action i stället för som
+   * Lyssnarna bindes imperativt i ett attachment i stället för som
    * onwheel/onkeydown-attribut: som attribut hade de fällt
    * a11y_no_noninteractive_element_interactions på <ol>, och repot har noll
    * svelte-ignore. Det är dessutom sant — det här är gester, inte affordanser.
    *
    * scroll-eventet duger INTE: det kan inte skilja vår egen scrollIntoView
    * från lärarens, så följandet hade stängt av sig självt vid första raden.
+   *
+   * Inget untrack behövs här, till skillnad från fyll och Spelares media:
+   * uppsättningen läser ingen reaktiv state alls. `tk.foljer` rörs bara INUTI
+   * hanterarna, och det är en skrivning — inte ett beroende.
    */
   function slappVidEgenScroll(el) {
     const NAVTANGENTER = ['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End'];
@@ -74,13 +92,11 @@
     el.addEventListener('touchmove', slapp, { passive: true });
     el.addEventListener('pointerdown', slapp);
     el.addEventListener('keydown', paTangent);
-    return {
-      destroy() {
-        el.removeEventListener('wheel', slapp);
-        el.removeEventListener('touchmove', slapp);
-        el.removeEventListener('pointerdown', slapp);
-        el.removeEventListener('keydown', paTangent);
-      },
+    return () => {
+      el.removeEventListener('wheel', slapp);
+      el.removeEventListener('touchmove', slapp);
+      el.removeEventListener('pointerdown', slapp);
+      el.removeEventListener('keydown', paTangent);
     };
   }
 
@@ -98,12 +114,17 @@
   });
 </script>
 
-<ol class="rader" bind:this={lista} use:slappVidEgenScroll>
+<ol class="rader" bind:this={lista} {@attach slappVidEgenScroll}>
   <!-- Nyckeln är indexet. Listan byts ALLTID ut i sin helhet — segment sätts
        bara av actions vid öppning och efter ett lyckat sparande — så någon
-       stabilare identitet finns inte att vinna något på. -->
+       stabilare identitet finns inte att vinna något på.
+       Indexet är dessutom identiteten på riktigt här: tk.andringar nycklas på
+       radindex och data-rad="{i}" är det scrollningen och söket letar efter.
+       Skulle någon införa infogning eller borttagning av enskilda rader måste
+       nyckeln, tk.andringar och data-rad byta till ett stabilt id i SAMMA
+       ändring — annars hamnar en redigerad text tyst på fel rad. -->
   {#each tk.segment as s, i (i)}
-    <li class="rad" class:aktuell={!tk.redigerar && i === aktuell} data-rad={i}>
+    <li class={['rad', { aktuell: !tk.redigerar && i === aktuell }]} data-rad={i}>
       {#if tk.redigerar}
         <!-- contenteditable kan inte bo i en knapp, och det finns inget att
              hoppa till här ändå: ljudet pausas när redigeringen slås på. -->
@@ -115,7 +136,7 @@
             role="textbox"
             tabindex="0"
             aria-label="Rad {i + 1}"
-            use:fyll={i}
+            {@attach fyll(i)}
             oninput={(e) => (tk.andringar[i] = e.currentTarget.textContent)}
             onkeydown={paRadTangent}
             onpaste={paKlistra}
@@ -131,7 +152,7 @@
              user-select: text i CSS:en nedan håller markeringen vid liv. -->
         <button type="button" class="radknapp" onclick={() => klick(i)}>
           <span class="tid">{fmtTid(s.start)}</span>
-          <span class="text">{#each styckaRad(s.text, perRad.get(i), tk.traffIndex) as bit}{#if bit.traff}<mark class:aktuell={bit.aktuell}>{bit.text}</mark>{:else}{bit.text}{/if}{/each}</span>
+          <span class="text">{#each styckaRad(s.text, perRad.get(i), tk.traffIndex) as bit}{#if bit.traff}<mark class={{ aktuell: bit.aktuell }}>{bit.text}</mark>{:else}{bit.text}{/if}{/each}</span>
         </button>
       {/if}
     </li>
@@ -139,8 +160,8 @@
 </ol>
 
 <!-- ALLTID monterad (inte {#if}-grindad som planen anger) — se motiveringen
-     vid .folj-rad nedan. class:dold döljer den utan att avmontera. -->
-<div class="folj-rad" class:dold={tk.foljer}>
+     vid .folj-rad nedan. dold-klassen döljer den utan att avmontera. -->
+<div class={['folj-rad', { dold: tk.foljer }]}>
   <button type="button" class="ghost" onclick={() => (tk.foljer = true)}>Följ uppspelningen</button>
 </div>
 
@@ -212,7 +233,7 @@
      är den aktiva träffen", inte bara en träff bland andra. */
   mark.aktuell { background: var(--accent-weak); color: var(--accent); }
   /*
-   * ALLTID monterad (class:dold i stället för {#if !tk.foljer} som planen
+   * ALLTID monterad (dold-klassen i stället för {#if !tk.foljer} som planen
    * anger, docs/superpowers/plans/2026-07-26-transkribera-B2-transkriptvyn.md,
    * Task 6 steg 3). UPPTÄCKT UNDER IMPLEMENTATIONEN (avviker alltså från
    * planen), i två steg:

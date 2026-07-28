@@ -63,19 +63,18 @@ export function typeset(el, text) {
 }
 
 /**
- * Svelte-action: typsätter vid montering och när `text` ändras.
- * Använd som <p use:renderMath={uppgift.text}>{uppgift.text}</p> — texten
+ * Attachment-fabrik: typsätter vid montering och när `text` ändras.
+ * Använd som <p {@attach typsattning(uppgift.text)}>{uppgift.text}</p> — texten
  * står kvar i markupen så den syns även utan KaTeX.
  *
- * @param {HTMLElement} el
+ * Var en `use:`-action förut. Attachmentet ÄR omtypsättningen: Svelte kör om
+ * funktionen när något den läser ändras, och `text` läses här i fabriken. Det
+ * gör actionens separata `update`-gren överflödig — samma beteende, ett
+ * kodstycke mindre att hålla i synk.
+ *
  * @param {string} text uppgiftstexten.
+ * @returns {(el: HTMLElement) => void}
  */
-export function renderMath(el, text) {
-  typeset(el, text);
-  return {
-    /** @param {string} nyText */
-    update(nyText) {
-      typeset(el, nyText);
-    },
-  };
+export function typsattning(text) {
+  return (el) => typeset(el, text);
 }

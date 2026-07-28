@@ -139,7 +139,7 @@
            och en versal mono-MENING bryter DESIGN.md:s Mono-Is-Labels-Only-
            regel lika mycket som en versal mono-etikett med bara ett par ord
            inte gör. -->
-      <p class="status" class:ansluten={kal.ansluten === true}>
+      <p class={['status', { ansluten: kal.ansluten === true }]}>
         {#if kal.ansluten === null}
           Kontrollerar Google-anslutningen …
         {:else if kal.ansluten}

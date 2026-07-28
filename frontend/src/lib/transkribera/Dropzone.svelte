@@ -12,8 +12,7 @@
 
 <button
   type="button"
-  class="zon"
-  class:over={tr.dragging}
+  class={['zon', { over: tr.dragging }]}
   onclick={openPicker}
   ondragover={onDragOver}
   ondragleave={onDragLeave}

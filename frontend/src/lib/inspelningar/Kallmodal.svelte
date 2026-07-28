@@ -52,8 +52,11 @@
         <p class="notis">Transkriptionen är tom.</p>
       {:else}
         <ul class="rader">
+          <!-- INDEXNYCKEL, avsiktligt: raderna sätts i sin helhet när källan
+               hämtas och muteras aldrig. Någon stabilare identitet finns inte
+               att vinna något på — transkriptrader saknar id. -->
           {#each sok.kalla.rader as r, i (i)}
-            <li class="rad" class:traff={r.traff}>
+            <li class={['rad', { traff: r.traff }]}>
               <span class="tid">{r.tid}</span>
               <span class="replik">{r.text}</span>
             </li>

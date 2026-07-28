@@ -1,6 +1,6 @@
 // Sessionslagring för inspelningar. Den här modulen importerar MEDVETET
-// ingenting: både actions.js och inspelning.svelte.js behöver den, och
-// inspelning.svelte.js importerar actions.js. Vore den beroende av någon av
+// ingenting: både actions.js och inspelning.js behöver den, och
+// inspelning.js importerar actions.js. Vore den beroende av någon av
 // dem skulle importgrafen bli cirkulär.
 //
 // Varför localStorage: markörerna och den valda codec:en måste överleva en

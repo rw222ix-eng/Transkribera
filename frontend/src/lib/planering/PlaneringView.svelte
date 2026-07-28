@@ -50,7 +50,7 @@
     {#if prov.log.length}
       <ol class="log" aria-live="polite">
         {#each prov.log as line}
-          <li class:failed={line.startsWith('Fel:')}>{line}</li>
+          <li class={{ failed: line.startsWith('Fel:') }}>{line}</li>
         {/each}
       </ol>
     {/if}
@@ -91,7 +91,7 @@
     {#if plan.log.length}
       <ol class="log" aria-live="polite">
         {#each plan.log as line}
-          <li class:failed={line.startsWith('Fel:')}>{line}</li>
+          <li class={{ failed: line.startsWith('Fel:') }}>{line}</li>
         {/each}
       </ol>
     {/if}

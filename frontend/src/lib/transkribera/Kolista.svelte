@@ -25,10 +25,7 @@
       <span class="namn">{q.name}</span>
       {#if visaStatus}
         <span
-          class="qstatus"
-          class:kor={(tr.qStatus[q.id] || 'pending') === 'running'}
-          class:ok={(tr.qStatus[q.id] || 'pending') === 'done'}
-          class:fel={(tr.qStatus[q.id] || 'pending') === 'error'}
+          class={['qstatus', { kor: (tr.qStatus[q.id] || 'pending') === 'running', ok: (tr.qStatus[q.id] || 'pending') === 'done', fel: (tr.qStatus[q.id] || 'pending') === 'error' }]}
         >
           {STATUSTEXT[tr.qStatus[q.id] || 'pending']}
         </span>

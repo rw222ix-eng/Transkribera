@@ -41,13 +41,11 @@
     el.addEventListener('touchmove', slapp, { passive: true });
     el.addEventListener('pointerdown', slapp);
     el.addEventListener('keydown', paTangent);
-    return {
-      destroy() {
-        el.removeEventListener('wheel', slapp);
-        el.removeEventListener('touchmove', slapp);
-        el.removeEventListener('pointerdown', slapp);
-        el.removeEventListener('keydown', paTangent);
-      },
+    return () => {
+      el.removeEventListener('wheel', slapp);
+      el.removeEventListener('touchmove', slapp);
+      el.removeEventListener('pointerdown', slapp);
+      el.removeEventListener('keydown', paTangent);
     };
   }
 
@@ -67,9 +65,16 @@
   });
 </script>
 
-<ol class="trad" bind:this={lista} use:slappVidEgenScroll aria-busy={chatt.skickar}>
+<ol class="trad" bind:this={lista} {@attach slappVidEgenScroll} aria-busy={chatt.skickar}>
+  <!-- INDEXNYCKEL, avsiktligt, och här är den dessutom den RIKTIGA identiteten:
+       chatt.valtCitat lagrar sin position som {mi, segIndex} (se citatknappen
+       nedan), alltså är radens index det citatvalet pekar på. Tråden är
+       append-only (actions.js:186, 200) och sista meddelandets text växer på
+       plats medan svaret strömmar — en innehållsnyckel hade byggt om bubblan
+       vid varje token. Införs borttagning av enskilda meddelanden måste både
+       nyckeln och valtCitat byta till ett stabilt id, i samma ändring. -->
   {#each chatt.trad as m, mi (mi)}
-    <li class="rad" class:jag={m.roll === 'anvandare'}>
+    <li class={['rad', { jag: m.roll === 'anvandare' }]}>
       {#if m.roll === 'anvandare'}
         <p class="fraga">{m.text}</p>
       {:else}
@@ -95,8 +100,7 @@
                i B2 — samma mönster, ingen HTML-injektion. -->
           <p class="svar">{#each tolkade[mi].bitar as bit, bi (bi)}{#if bit.citat}<button
                 type="button"
-                class="citat"
-                class:vald={chatt.valtCitat && chatt.valtCitat.mi === mi && chatt.valtCitat.segIndex === bit.citat.segIndex}
+                class={['citat', { vald: chatt.valtCitat && chatt.valtCitat.mi === mi && chatt.valtCitat.segIndex === bit.citat.segIndex }]}
                 aria-pressed={!!(chatt.valtCitat && chatt.valtCitat.mi === mi && chatt.valtCitat.segIndex === bit.citat.segIndex)}
                 aria-label="Visa källa {bit.citat.nummer} i transkriptet"
                 onclick={() => valjCitat(mi, bit.citat.segIndex)}

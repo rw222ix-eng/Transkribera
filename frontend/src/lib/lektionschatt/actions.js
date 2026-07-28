@@ -8,7 +8,7 @@ import { tolkaKommando } from '../kalender/kommando.js';
 import { nollstallForslag, hamtaStatus } from '../kalender/actions.js';
 
 // Samtalen, per lektions-id. MODULPRIVAT, aldrig i storen — samma hållning som
-// mediaelementet i B2 och resurserna i transkribera/inspelning.svelte.js. En
+// mediaelementet i B2 och resurserna i transkribera/inspelning.js. En
 // vanlig Map i ett $state är dessutom inte djupreaktiv i Svelte 5, så den hade
 // bara sett reaktiv ut. Storen bär den AKTUELLA tråden; kartan de vilande.
 // Allt försvinner när appen stängs — inget skrivs till disk eller server.

@@ -212,7 +212,7 @@
      ingenting live vid den FÖRSTA genereringen. Nu är motorn varm när det smäller.
      Iframen får aldrig villkoras bort: att återskapa den laddar om dokumentet
      och tömmer tavlan. -->
-<figure class="preview" class:zoomed class:idle={plan.typ !== 'tavla' || (!plan.board && plan.phase !== 'running')}>
+<figure class={['preview', { zoomed, idle: plan.typ !== 'tavla' || (!plan.board && plan.phase !== 'running') }]}>
     <figcaption class="cap">
       <span class="label">Förhandsvisning</span>
       <span class="title">{title}</span>
@@ -247,7 +247,7 @@
          bara live-regionen ska annonseras. :empty döljer den utan att
          villkora bort monteringen (samma :empty-mönster som .fel i
          InspelningarView.svelte). -->
-    <p class="exportmsg" class:fel={exportFailed} aria-hidden="true">{exportMsg}</p>
+    <p class={['exportmsg', { fel: exportFailed }]} aria-hidden="true">{exportMsg}</p>
     {#if warnings.length}
       <ul class="warnings">
         {#each warnings as w}<li>{w}</li>{/each}

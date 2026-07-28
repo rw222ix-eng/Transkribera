@@ -57,7 +57,7 @@
         {#each RAKNARE as r (r.nyckel)}
           <div class="post">
             <span class="etikett">{r.etikett}</span>
-            <span class="tal" class:noll={!counts[r.nyckel]}>{counts[r.nyckel] || 0}</span>
+            <span class={['tal', { noll: !counts[r.nyckel] }]}>{counts[r.nyckel] || 0}</span>
           </div>
         {/each}
       </div>
@@ -83,7 +83,7 @@
         <ul class="lista">
           {#each svarigheter as d (d.text)}
             <li>
-              <span class="bricka" class:ater={d.count > 1}>{d.count}×</span>
+              <span class={['bricka', { ater: d.count > 1 }]}>{d.count}×</span>
               <span class="svarighet">
                 {d.text}{#if d.refs?.length}<span class="ref">{" (" + d.refs.join(', ') + ")"}</span>{/if}
               </span>

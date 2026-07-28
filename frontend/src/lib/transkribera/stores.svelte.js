@@ -60,8 +60,8 @@ export const tr = $state({
   incompleteRecs: [],     // [{session, bytes, size, modified}] från /api/recordings/incomplete
   // Markörer väntar här mellan inspelningens slut och transkriberingens slut —
   // de kan inte postas förrän lektionen har ett id. Nyckeln är filens path.
-  // Bor i storen, INTE i inspelning.svelte.js: actions.js måste läsa den, och
-  // inspelning.svelte.js importerar actions.js. Ett importberoende åt andra
+  // Bor i storen, INTE i inspelning.js: actions.js måste läsa den, och
+  // inspelning.js importerar actions.js. Ett importberoende åt andra
   // hållet hade blivit en cykel.
   recMarkersByPath: {},   // {path: {session, markers: [{t}]}}
 });

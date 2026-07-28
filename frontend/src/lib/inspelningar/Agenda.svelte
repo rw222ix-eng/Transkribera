@@ -49,14 +49,14 @@
               </span>
             {/if}
           </span>
-          <span class="chevron" class:upp={insp.agendaOppen} aria-hidden="true">▾</span>
+          <span class={['chevron', { upp: insp.agendaOppen }]} aria-hidden="true">▾</span>
         </button>
       </h2>
 
       {#if insp.agendaOppen}
         <ul class="lista">
           {#each poster as a (a.id)}
-            <li class="rad" class:forsenad={a.overdue}>
+            <li class={['rad', { forsenad: a.overdue }]}>
               <!--
                 SAMMA <button> i BÅDA lägena — öppen och klar. Gamla appen
                 (och en tidigare version här) bytte till <span> när posten
@@ -71,8 +71,7 @@
                 lika säkert som span-bytet gjorde.
               -->
               <button
-                class="ruta"
-                class:klar={a.status === 'klar'}
+                class={['ruta', { klar: a.status === 'klar' }]}
                 onclick={() => {
                   if (a.status === 'klar' || insp.markerar === a.id) return;
                   markeraKlar(a.id);
@@ -83,11 +82,11 @@
               >{#if a.status === 'klar'}✓{/if}</button>
 
               <div class="text">
-                <p class="titel" class:avklarad={a.status === 'klar'}>{a.text || ''}</p>
+                <p class={['titel', { avklarad: a.status === 'klar' }]}>{a.text || ''}</p>
                 {#if meta(a)}<p class="meta">{meta(a)}</p>{/if}
               </div>
 
-              <span class="datum" class:forsenad={a.overdue} class:idag={a.today}>
+              <span class={['datum', { forsenad: a.overdue, idag: a.today }]}>
                 {a.today ? 'Idag' : datumEtikett(a.due_date)}
               </span>
             </li>

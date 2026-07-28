@@ -3,7 +3,7 @@ import { tk } from './stores.svelte.js';
 import { arVideoFil, masteTranskodas, byggMediaUrl } from './media.js';
 
 // Mediaelementet hålls MODULPRIVAT, aldrig i storen. Samma hållning som
-// transkribera/inspelning.svelte.js: en DOM-nod är en resurs, inte tillstånd,
+// transkribera/inspelning.js: en DOM-nod är en resurs, inte tillstånd,
 // och en resurs i en $state gör varje läsning till ett reaktivt beroende.
 let mediaEl = null;
 let lyssnare = [];
@@ -189,7 +189,7 @@ function spelaFel(e) {
 }
 
 /**
- * Binder mediaelementet. Anropas ur en use:-action, så den kallas med null när
+ * Binder mediaelementet. Anropas ur ett attachment, så den kallas med null när
  * elementet rivs — bland annat när videofallbacken byter <video> mot <audio>.
  *
  * Gamla appen har ingen error-lyssnare alls (app.js:2116-2120), vilket gör en
@@ -234,7 +234,7 @@ export function bindMedia(el) {
  *
  * RÄTTELSE (spårad i Sveltes källa, inte antagen): vid ett grenbyte
  * (<video> → <audio> i videofallbacken) förstörs den GAMLA grenen SYNKRONT i
- * samma anrop, medan use:-actionen som binder den NYA är en effekt som köas
+ * samma anrop, medan attachmentet som binder den NYA är en effekt som köas
  * och alltså kör EFTER. Ordningen är alltså den motsatta mot vad en tidigare
  * version av den här kommentaren påstod. Vakten är ändå rätt att ha kvar: den
  * skyddar mot att ett ovillkorligt bindMedia(null) river en efterföljares

@@ -79,6 +79,9 @@
     -->
     <p class="text">
       {#if citat}
+        <!-- INDEXNYCKEL, avsiktligt: tokens härleds om ur hela svarstexten
+             för varje strömmad token, så listan är alltid ny. En innehållsnyckel
+             hade gett maximal DOM-omsättning under strömningen. -->
         {#each citat.tokens as t, i (i)}
           {#if t.text}{t.text}{:else}<button
               class="cite"
@@ -120,6 +123,9 @@
     -->
     {#if klar}
       <div class="foljd">
+        <!-- INDEXNYCKEL, avsiktligt — samma skäl som ArkivAnswer: append-only
+             (sokActions.js:454, 462) och posterna växer på plats under
+             strömningen. Införs borttagning måste nyckeln bytas först. -->
         {#each sok.foljdfragor as f, i (i)}
           <p class="fraga">{f.q}</p>
           <p class="foljdsvar">

@@ -12,7 +12,7 @@
     laddaOavslutade,
     aterstallOavslutad,
     slangOavslutad,
-  } from './inspelning.svelte.js';
+  } from './inspelning.js';
 
   const stods = recSupported();
 
@@ -101,13 +101,13 @@
 <div class="rad">
   <span class="etikett">ELLER SPELA IN</span>
 
-  <div class="ruta" class:kor={tr.recording}>
+  <div class={['ruta', { kor: tr.recording }]}>
     {#if tr.recording}
       <span class="prick" aria-hidden="true"></span>
       <span class="text">Spelar in</span>
       <span class="tid">{tid}</span>
       <div class="matare" title="Mikrofonnivå">
-        <div class="fyllnad" class:tyst={tr.recSilent} style:transform={`scaleX(${tr.recLevel})`}></div>
+        <div class={['fyllnad', { tyst: tr.recSilent }]} style:transform={`scaleX(${tr.recLevel})`}></div>
       </div>
       {#if tr.recSilent}<span class="ingen">Ingen signal?</span>{/if}
       <span class="spacer"></span>
@@ -117,7 +117,7 @@
       <button type="button" class="ghost" onclick={cancelRecording}>Avbryt</button>
       <button type="button" class="primar" onclick={stopRecording}>Stoppa och lägg till</button>
     {:else}
-      <span class="text" class:av={!stods}>
+      <span class={['text', { av: !stods }]}>
         {stods
           ? 'Spela in lektionen direkt — ljudet sparas lokalt'
           : 'Inspelning kräver mikrofonåtkomst i webbläsaren'}

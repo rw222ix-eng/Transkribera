@@ -64,11 +64,8 @@
       skalnivå — egen plan.
     -->
     <span
-      class="status"
+      class={['status', { kor: tr.run === 'running', ok: klar, fel: tr.run === 'error' }]}
       role="status"
-      class:kor={tr.run === 'running'}
-      class:ok={klar}
-      class:fel={tr.run === 'error'}
     >
       {status}
     </span>
@@ -81,7 +78,7 @@
   {#if tr.run !== 'error' && tr.run !== 'cancelled'}
     <div class="faser">
       {#each faser as namn, i}
-        <div class="fas" class:passerad={i < nuFas} class:pagar={i === nuFas}>
+        <div class={['fas', { passerad: i < nuFas, pagar: i === nuFas }]}>
           <div class="spar"><div class="fyllnad" style:width={fasFyllnad(i) + '%'}></div></div>
           <span class="fasnamn">{namn}</span>
         </div>

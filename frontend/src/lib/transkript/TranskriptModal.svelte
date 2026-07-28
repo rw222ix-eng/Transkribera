@@ -138,8 +138,7 @@
        konkurrera med vyernas egna regioner. -->
   <p class="besked-sr" role="status">{tk.besked}</p>
   <p
-    class="besked"
-    class:info={tk.beskedArt === 'info'}
+    class={['besked', { info: tk.beskedArt === 'info' }]}
     aria-hidden="true"
     data-testid="transkript-statusrad"
   >{tk.besked}</p>

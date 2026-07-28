@@ -60,8 +60,7 @@
        aldrig — bara "Svarar …" och det färdiga svaret. -->
   <p class="annons-sr" role="status">{chatt.annons}</p>
   <p
-    class="besked"
-    class:info={chatt.beskedArt === 'info'}
+    class={['besked', { info: chatt.beskedArt === 'info' }]}
     aria-hidden="true"
     data-testid="chatt-statusrad"
   >{chatt.besked}</p>

@@ -32,7 +32,7 @@
     aria-checked={tr.audioCorrect}
     aria-label="Rätta mot ljudet"
     onclick={toggleAudioCorrect}
-  ><span class="knopp" class:pa={tr.audioCorrect}></span></button>
+  ><span class={['knopp', { pa: tr.audioCorrect }]}></span></button>
   <div class="text">
     <p class="titel">Rätta mot ljudet <span class="mjuk">· Gemma 4 (experimentell)</span></p>
     <p class="under">Ett andra pass som rättar transkriptet mot vad som faktiskt sägs.</p>

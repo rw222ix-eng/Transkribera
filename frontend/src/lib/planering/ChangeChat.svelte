@@ -46,7 +46,7 @@
       <button type="button" class="clear" onclick={clearProvSel}>Rensa markeringen</button>
     </p>
   {/if}
-  <div class="chat" class:tight={!!valdaRad}>
+  <div class={['chat', { tight: !!valdaRad }]}>
     <span class="label">Ändra</span>
     <input
       class="field"

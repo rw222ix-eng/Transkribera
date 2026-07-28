@@ -57,7 +57,7 @@
     NÄR BÅDA ÄR SATTA VÄVS DE SAMMAN — ingen av dem väljs bort. En tidigare
     version valde en av dem med "tr.recError || tr.fileError" och tystade
     därmed hela filkanalen: tr.recError nollställs BARA i startRecording och
-    cancelRecording (inspelning.svelte.js), alltså bara när läraren själv
+    cancelRecording (inspelning.js), alltså bara när läraren själv
     trycker en knapp. Ett getUserMedia-fel eller ett misslyckat slutförande
     blev därför stående resten av sessionen, och så länge det stod kvar
     utvärderades uttrycket till samma sträng oavsett vad som hände med
@@ -115,7 +115,7 @@
       skärmen, med tre raders mellanrum. Steg 2 har inte den raden — där
       renderas samladStatus(), se Installningar.svelte.
     -->
-    <p class="fel" class:info={tr.fileNoteArt === 'info'} aria-hidden="true" data-testid="statusrad">{tr.fileError}</p>
+    <p class={['fel', { info: tr.fileNoteArt === 'info' }]} aria-hidden="true" data-testid="statusrad">{tr.fileError}</p>
 
     {#if tr.queue.length}
       <div class="ko-wrap">
@@ -128,7 +128,7 @@
       <!--
         tr.recording grindar knappen: ligger redan en fil i kön går det annars
         att lämna steg 1 MITT I en pågående inspelning. Steg 2 avmonterar
-        <Inspelning />, men modultillståndet i inspelning.svelte.js lever kvar
+        <Inspelning />, men modultillståndet i inspelning.js lever kvar
         — mikrofonen är på, timern tickar, bitarna POSTas var fjärde sekund och
         beforeunload-vakten blockerar sidstängning utan att något syns som
         förklarar varför. Widgetens egna knappar (Stoppa / Avbryt) är då enda

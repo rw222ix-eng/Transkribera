@@ -83,7 +83,7 @@
        information snarare än en händelse att annonsera; den visas separat
        nedan som vanlig text. -->
   <p class="annons-sr" role="status">{besked}</p>
-  <p class="besked" class:fel={beskedArt === 'fel'} aria-hidden="true">{besked}</p>
+  <p class={['besked', { fel: beskedArt === 'fel' }]} aria-hidden="true">{besked}</p>
 
   {#if kal.ansluten}
     <p class="klar">Ansluten till Google Kalender</p>

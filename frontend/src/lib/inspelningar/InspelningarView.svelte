@@ -194,7 +194,7 @@
     HELA sidan och fällde därför den här noden; den är nu avgränsad till den
     synliga panelen, vilket är vad den hela tiden menade.
   -->
-  <p class="fel-sr" class:info={insp.felArt === 'info'} role="status">{insp.fel}</p>
+  <p class={['fel-sr', { info: insp.felArt === 'info' }]} role="status">{insp.fel}</p>
 
   <Filterrad />
 
@@ -227,7 +227,7 @@
     tester. Ett per-vy-id är dessutom vad de här id:na faktiskt är, och det
     lämnar de gröna spärrarna orörda i stället för att skriva om dem.
   -->
-  <p class="fel" class:info={insp.felArt === 'info'} aria-hidden="true" data-testid="insp-statusrad">{insp.fel}</p>
+  <p class={['fel', { info: insp.felArt === 'info' }]} aria-hidden="true" data-testid="insp-statusrad">{insp.fel}</p>
 
   <!--
     SÄKERHETSKOPIERINGEN. Portad från gamla appens backupNow (app.js:2059-2066,

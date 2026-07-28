@@ -82,7 +82,7 @@
     {/if}
 
     {#if svarigheter.length}
-      <p class="etikett" class:avstand={atgarder.length}>
+      <p class={['etikett', { avstand: atgarder.length }]}>
         Repetera — förra lektionens svårigheter{#if forraDatum}{" "}({datumEtikett(forraDatum)}){/if}
       </p>
       <ul class="punkter">

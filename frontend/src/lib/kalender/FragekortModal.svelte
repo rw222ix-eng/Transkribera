@@ -109,6 +109,9 @@
     </p>
 
     <ol class="fragor">
+      <!-- INDEXNYCKEL, avsiktligt: frågekortet sätts i sin helhet av modellen
+           och listan ändrar aldrig längd medan den visas — bara f.val muteras.
+           qi är dessutom den identitet svaren lagras under. -->
       {#each minaFragor.fragor as f, qi (qi)}
         <li class="fraga-rad">
           <p class="fraga">{f.fraga}</p>

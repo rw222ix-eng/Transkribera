@@ -2,7 +2,7 @@ import { getJSON, postJSON, streamPost } from '../api.js';
 import { tr, isMedia } from './stores.svelte.js';
 import { recommendModel } from './katalog.svelte.js';
 import { startProgressAnim, stopProgressAnim } from './korning.js';
-// BARA lagringsmodulen — inspelning.svelte.js får ALDRIG importeras härifrån.
+// BARA lagringsmodulen — inspelning.js får ALDRIG importeras härifrån.
 // Den importerar den här filen (addFiles), så beroendet åt andra hållet skulle
 // sluta cirkeln. inspelningLagring.js importerar ingenting alls, just därför.
 import { glomSession } from './inspelningLagring.js';

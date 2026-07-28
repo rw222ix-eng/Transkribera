@@ -14,7 +14,7 @@
 
 <ol class="steg">
   {#each STEG as [id, etikett], i}
-    <li class:klar={i < nuIdx} class:aktiv={i === nuIdx} aria-current={i === nuIdx ? 'step' : undefined}>
+    <li class={{ klar: i < nuIdx, aktiv: i === nuIdx }} aria-current={i === nuIdx ? 'step' : undefined}>
       <span class="nr" aria-hidden="true">{i < nuIdx ? '✓' : i + 1}</span>
       <span class="etikett">{etikett}</span>
       {#if i < STEG.length - 1}<span class="strack" aria-hidden="true"></span>{/if}

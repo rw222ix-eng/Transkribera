@@ -24,7 +24,7 @@
     <p class="rubrik">Källa</p>
     <ol class="rader" bind:this={panel}>
       {#each chatt.segment as s, i (i)}
-        <li class="rad" class:vald={i === valdIndex} data-seg={i}>
+        <li class={['rad', { vald: i === valdIndex }]} data-seg={i}>
           <span class="tid">{fmtTid(s.start)}</span>
           <span class="text">{s.text}</span>
         </li>
