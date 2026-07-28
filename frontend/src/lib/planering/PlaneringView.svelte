@@ -27,21 +27,22 @@
 
 <section class="view">
   <p class="eyebrow">PLANERING</p>
-  <h1 class="display">
-    {#if plan.typ === 'tavla'}Dagens <span class="ser">tavla</span>
-    {:else if plan.typ === 'prov'}Nytt <span class="ser">prov</span>
-    {:else}Nytt <span class="ser">arbetsblad</span>{/if}
+  <h1 class="rubrik">
+    {#if plan.typ === 'tavla'}Dagens tavla
+    {:else if plan.typ === 'prov'}Nytt prov
+    {:else}Nytt arbetsblad{/if}
   </h1>
-  <p class="lede">
-    {#if plan.typ === 'tavla'}
-      Beskriv momentet — och välj kurs om du vill — så skrivs tavlan som du annars
-      hade skrivit för hand.
-    {:else if plan.typ === 'arbetsblad'}
-      Välj kurs och innehåll så skrivs ett arbetsblad med facit — uppgifter att öva på.
-    {:else}
-      Välj kurs och innehåll så skrivs ett prov med egenformulerade uppgifter.
-    {/if}
-  </p>
+  <!--
+    LEDEN ÄR BORTTAGEN, samma behandling som de två andra vyerna fick. Här är
+    förlusten STÖRST av de tre: raden var inte en dubblering utan den enda
+    texten som förklarade vad vyn gör ("Beskriv momentet … så skrivs tavlan som
+    du annars hade skrivit för hand"). Vyn öppnar nu direkt i ett formulär.
+
+    BuildPanel bär redan sina egna fältetiketter och en CTA-rad som skriver ut
+    varför knappen är låst ("Beskriv momentet ovan så kan tavlan skrivas"), så
+    en förstagångsanvändare är inte helt utan ledning — men ingressen som
+    ramade in hela flödet finns inte längre.
+  -->
 
   <BuildPanel onGenerate={plan.typ === 'tavla' ? generateBoard : generateExam} />
   {#if plan.typ !== 'tavla'}
@@ -118,27 +119,22 @@
     color: var(--ink-3);
     margin: 0 0 14px;
   }
-  .display {
-    font-family: var(--sans);
-    font-weight: 700;
-    font-size: 1.5rem;
-    line-height: 1.15;
-    letter-spacing: -0.02em;
-    color: var(--ink);
-    margin: 0 0 10px;
-  }
-  .display .ser {
+  /* Vyrubriken. Identisk form i alla tre vyer — en röst i Instrument Serif
+     kursiv på hero-steget 3.2rem, i rent #000. Både steget och färgen är
+     dokumenterade i DESIGN.md (§3 respektive undantaget i §2).
+
+     Marginalen är 26px, inte 10px: avståndet ned till byggpanelen bars
+     tidigare av leden som stod emellan. .lede är borttagen med den. */
+  .rubrik {
     font-family: var(--serif);
     font-style: italic;
     font-weight: 400;
-    font-size: 2.375rem;
+    font-size: 3.2rem;
     line-height: 1.05;
     letter-spacing: -0.01em;
-  }
-  .lede {
-    max-width: 62ch;
-    color: var(--ink-2);
-    margin: 0;
+    color: #000000;
+    margin: 0 0 26px;
+    text-wrap: balance;
   }
   /* Loggraderna är hela meningar, inte mikroetiketter — därför sans, inte mono
      (DESIGN.md: mono är reserverad för små versala etiketter). */

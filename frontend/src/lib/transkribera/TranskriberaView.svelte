@@ -93,10 +93,19 @@
 
   {#if tr.step === 'source'}
     <p class="eyebrow">STEG 1 — KÄLLA</p>
-    <h1 class="display">Vad vill du <span class="ser">transkribera?</span></h1>
-    <p class="lede">
-      Dra in en eller flera filer, eller välj från datorn — allt körs på din egen dator.
-    </p>
+    <h1 class="rubrik">Vad vill du transkribera?</h1>
+    <!--
+      LEDEN ÄR BORTTAGEN ("Dra in en eller flera filer, eller välj från datorn
+      — allt körs på din egen dator."). Första halvan sa ordagrant det
+      Dropzone.svelte säger tio pixlar längre ned ("Dra in filer — eller klicka
+      för att välja"), alltså samma instruktion två gånger.
+
+      Andra halvan — "allt körs på din egen dator" — var däremot INTE en
+      dubblering: det är produktens kärnlöfte (PRODUCT.md, "Local and private
+      is the point") på den första skärm en lärare möter. Att den försvann med
+      raden är en känd förlust, inte ett förbiseende. Ska den tillbaka hör den
+      hemma i dropzonens undertext eller i eyebrown, inte som en egen led.
+    -->
 
     <Dropzone />
     <LankFalt />
@@ -190,24 +199,9 @@
     color: var(--ink-3);
     margin: 0 0 14px;
   }
-  .display {
-    font-family: var(--sans);
-    font-weight: 700;
-    font-size: 1.5rem;
-    line-height: 1.15;
-    letter-spacing: -0.02em;
-    color: var(--ink);
-    margin: 0 0 10px;
-  }
-  .display .ser {
-    font-family: var(--serif);
-    font-style: italic;
-    font-weight: 400;
-    font-size: 2.375rem;
-    line-height: 1.05;
-    letter-spacing: -0.01em;
-  }
-  .lede { max-width: 62ch; color: var(--ink-2); margin: 0; }
+  /* .display och .display .ser är borta med den delade rubriken — se .rubrik
+     längst ned. Reglerna låg kvar döda efter bytet. */
+  /* .lede är borta med raden den stylade — se kommentaren i markupen. */
   .prova { color: var(--ink-3); margin: 20px 0 0; display: flex; gap: 12px; flex-wrap: wrap; }
   .lank {
     border: none;
@@ -258,4 +252,40 @@
     cursor: pointer;
   }
   .primar:disabled { opacity: 0.55; cursor: default; }
+
+  /*
+    Steg 1:s rubrik. Tidigare delad i två storlekar — "Vad vill du" i sans 700
+    på 1.5rem och "transkribera?" i serif kursiv på 2.375rem, ett språng på
+    1,58× — vilket gjorde raden optiskt ojämn. Hela meningen sätts nu i
+    Instrument Serif kursiv på ett steg, så det finns bara en storlek och ett
+    snitt att jämna ut.
+
+    3.2rem är valt i live-läget (impeccable, 2026-07-28) och alltså medvetet
+    större än DESIGN.md:s displaysteg 2.375rem: raden bär hela rubriken själv
+    nu, utan en sansdel som drar upp den optiska vikten. Steget är inskrivet
+    i DESIGN.md §3 som "Hero display".
+
+    FÄRGEN ÄR RENT #000, valt i samma live-runda. Det är ett UTTALAT UNDANTAG
+    från No Pure Black-or-White Rule, inte ett misstag — regeln och undantaget
+    står tillsammans i DESIGN.md §2. Skriv aldrig om det här till var(--ink)
+    "för att följa systemet"; systemet säger numera att just den här rubriken
+    är svart.
+  */
+  .rubrik {
+    font-family: var(--serif);
+    font-style: italic;
+    font-weight: 400;
+    font-size: 3.2rem;
+    line-height: 1.05;
+    /* -0.01em enligt DESIGN.md. Golvet i skalan är -0.04em; den här ligger
+       långt innanför, så bokstäverna kan aldrig nudda varandra. */
+    letter-spacing: -0.01em;
+    color: #000000;
+    margin: 0 0 10px;
+    /* Jämna radlängder om rubriken bryts på en smal skärm. */
+    text-wrap: balance;
+  }
+
+  /* color-mix i srgb, samma teknik som kartotekets kursfärger redan använder
+  (Lektionskort.svelte). :global() så att runtimens --p-svarta når hit. */
 </style>

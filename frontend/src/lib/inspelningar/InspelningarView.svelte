@@ -172,11 +172,14 @@
 
 <section class="view">
   <p class="eyebrow">INSPELNINGAR</p>
-  <h1 class="display">Dina <span class="ser">lektioner</span></h1>
-  <p class="lede">
-    Allt som transkriberats, samlat per vecka. Ljudet och texten ligger kvar på
-    din egen dator.
-  </p>
+  <h1 class="rubrik">Dina lektioner</h1>
+  <!--
+    LEDEN ÄR BORTTAGEN ("Allt som transkriberats, samlat per vecka. Ljudet och
+    texten ligger kvar på din egen dator."), samma behandling som steg 1 fick.
+    "Samlat per vecka" står redan implicit i veckorubrikerna nedan; meningen om
+    att ljudet stannar på datorn är en KÄND FÖRLUST — se motsvarande kommentar
+    i TranskriberaView.svelte.
+  -->
 
   <!--
     Vyns egen live-region. Permanent i DOM:en och bara visuellt klippt — aldrig
@@ -450,22 +453,25 @@
     color: var(--ink-3);
     margin: 0 0 14px;
   }
-  .display {
-    font-family: var(--sans);
-    font-weight: 700;
-    font-size: 1.5rem;
-    line-height: 1.15;
-    letter-spacing: -0.02em;
-    color: var(--ink);
-    margin: 0 0 10px;
-  }
-  .display .ser {
+  /* Vyrubriken. Samma form som TranskriberaView och PlaneringView — en enda
+     röst i Instrument Serif kursiv på hero-steget 3.2rem, i rent #000.
+     Den delade sans+serif-formen (1.5rem / 2.375rem) är borta ur alla tre:
+     språnget på 1,58× gjorde raden optiskt ojämn.
+
+     Både 3.2rem och #000 är dokumenterade i DESIGN.md (§3 Hero display
+     respektive undantaget i §2) — de är valda, inte drift. */
+  .rubrik {
     font-family: var(--serif);
     font-style: italic;
     font-weight: 400;
-    font-size: 2.375rem;
+    font-size: 3.2rem;
     line-height: 1.05;
     letter-spacing: -0.01em;
+    color: #000000;
+    /* 26px, inte 10px: avståndet ned till filterraden bars tidigare av leden
+       som stod emellan. */
+    margin: 0 0 26px;
+    text-wrap: balance;
   }
   /* Klippande teknik — noden finns kvar i tillgänglighetsträdet men upptar
      ingen synlig plats, till skillnad från display:none. Identisk med
@@ -478,12 +484,9 @@
     clip-path: inset(50%);
     white-space: nowrap;
   }
-  .lede {
-    font-size: 1.03rem;
-    color: var(--ink-2);
-    margin: 0 0 26px;
-    max-width: 52ch;
-  }
+  /* .lede är borta med raden den stylade — se kommentaren i markupen. Dess
+     26px mot filterraden bars av leden, inte av rubriken, så avståndet ligger
+     nu på .rubrik ovan. */
   /* Den SYNLIGA felraden. :empty-regeln hör hemma här och ingen annanstans —
      se kommentaren vid noden. Identisk med .fel i TranskriberaView.svelte:192. */
   .fel { color: var(--bad); margin: 14px 0 0; }

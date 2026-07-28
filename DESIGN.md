@@ -149,6 +149,15 @@ lost its meaning — pull it back to ink and paper.
 ink; surfaces are warm paper. Every neutral is tinted toward the paper hue in light
 mode and toward the ink hue in dark mode.
 
+> **Ett dokumenterat undantag: vyrubrikerna.** De tre vyernas `<h1>` — "Vad vill du
+> transkribera?", "Dina lektioner", "Dagens tavla" / "Nytt prov" / "Nytt arbetsblad"
+> — sätts i **rent `#000000`**, valt i live-läget 2026-07-28. Undantaget gäller
+> *bara* dessa rubriker: rubriken är det enda elementet på skärmen som bär hela
+> vyns identitet ensam, och där vinner den maximala kontrasten mot papperet över
+> tonningsregeln. Allt annat — brödtext, etiketter, ikoner, ramar — följer regeln
+> ovan utan undantag. Skriv aldrig om rubrikerna till `var(--ink)` "för att följa
+> systemet"; systemet säger numera att just de är svarta.
+
 **The Grade-Palette-Is-Data Rule.** Plum, sage, and mustard exist to distinguish
 classes and courses. They are never backgrounds, never gradients, never brand
 flourish.
@@ -166,8 +175,11 @@ reserved for the smallest labels. Fonts are shipped as local woff2 — the app r
 offline, so no Google Fonts.
 
 ### Hierarchy
-- **Display** (Instrument Serif italic, ~2.375rem, line-height 1.05): Section and
-  view titles, and targeted serif-italic accents inside headings (`.ser`).
+- **Hero display** (Instrument Serif italic, **3.2rem**, line-height 1.05,
+  letter-spacing -0.01em, `#000000`): De tre vyernas `<h1>`. **Hela raden** sätts i
+  serif-kursiv — ingen delad sans/serif-rubrik. Valt i live-läget 2026-07-28.
+- **Display** (Instrument Serif italic, ~2.375rem, line-height 1.05): Sektionstitlar
+  och riktade serif-kursiva accenter inuti rubriker (`.ser`) på nivåer under `<h1>`.
 - **Headline** (Inter Tight 700, ~1.5rem, line-height 1.15, letter-spacing -0.02em):
   Prominent sans headings where a serif would be too soft.
 - **Title** (Inter Tight 600, ~1.125rem): Card, panel, and group titles.
@@ -183,8 +195,14 @@ and eyebrows — nothing else. Never body, never data figures, never "techy" fla
 Numbers use Inter Tight with tabular alignment.
 
 **The Serif-Italic-Earns-Display Rule.** Instrument Serif appears only as italic
-display accents (the eyebrow → serif-italic title → lede cadence). It never sets a
-button, a label, or a run of body text.
+display accents. Den sätter aldrig en knapp, en etikett eller en löptext.
+
+**The One-Voice-Heading Rule** (ny 2026-07-28). En vyrubrik sätts i **ett** snitt
+och **en** storlek. Den tidigare formen delade raden — sans 700 på 1.5rem plus
+serif-kursiv på 2.375rem — ett språng på 1,58× som gjorde raden optiskt ojämn.
+Kadensen är numera **mono-eyebrow → serif-kursiv hero-rubrik**; leden under
+rubriken är borttagen i alla tre vyer. Behöver en vy förklarande text hör den
+hemma vid kontrollen den gäller, inte som en ingress.
 
 ## 4. Elevation
 
@@ -227,6 +245,27 @@ spinners) stay round.
 - **State:** Selected chips carry the sky wash; unselected are hairline-bordered on
   paper.
 
+### Segmentkontroll (`Segment.svelte`)
+Appens enda kontroll för "välj bland några få alternativ". **Formen säger vilket
+kontrakt kontrollen har:**
+
+- **Enval → platta.** Segmenten ligger på en `--track`-platta med hårlinjeram; det
+  valda lyfts upp på `--surface`. Talat/Resultatspråk, dokumenttyp, sökläge.
+- **Flerval → chips.** Fristående, hårlinjeramade, valda bär `--accent-weak` med
+  accentfärgad text. Filformat (SRT/TXT/VTT).
+
+**The Form-Tells-The-Contract Rule** (ny 2026-07-28). Innan den här delningen bar
+sökets LÄGEN (enval) exakt samma chipsform som filformaten (flerval) — läraren kunde
+inte se på kontrollen om ett klick byter val eller lägger till ett. Bygg aldrig en
+sjätte egen segmentform; utöka `Segment.svelte`.
+
+Kontrollen bär piltangenter (←/→, Home/End) med **manuell aktivering** — pilen
+flyttar fokus, Enter/Mellanslag väljer. Automatisk aktivering skulle trigga
+hämtningar för varje segment man sveper förbi.
+
+**Fler än ~4 alternativ är inte en segmentkontroll.** Då är det en `<select>` (se
+kursväljaren i Planering och Filterrad i Inspelningar).
+
 ### Cards / Containers
 - **Corner Style:** Sharp (4–5px). Used sparingly — this is not a card-grid system.
 - **Background:** Surface or sunken paper layers; separated by hairline rules more
@@ -243,6 +282,26 @@ spinners) stay round.
 ### Navigation
 - **Style:** Quiet top-level sections with mono eyebrows; the active section is marked
   by ink weight and the sky accent, not by a filled tab or heavy chrome.
+- **Implementationen följer regeln sedan 2026-07-28.** Fram till dess ritade
+  `AppShell.svelte` motsatsen — en fylld flik på ett `--track`-fack med egen ram,
+  det visuellt tyngsta elementet på skärmen. Nu: text utan chrome, aktiv flik i
+  `--ink` vikt 600 med en 2px accentlinje under.
+- **Semantik:** riktig `role="tablist"` / `role="tab"` / `role="tabpanel"` med roving
+  tabindex och piltangenter — inte `<button aria-pressed>`. En skärmläsare ska säga
+  "flik 1 av 3", inte "tryckt växlingsknapp".
+
+### Listor (kartotek, agenda, träffar)
+Hårlinjer mellan raderna. **Inga kort, inget rutnät.** Kartoteket i Inspelningar var
+fram till 2026-07-28 ett `repeat(auto-fill, minmax(240px, 1fr))`-rutnät med ramade,
+ytfärgade kort — det som §1 kallar "generic AI / SaaS dashboard" och den enda vy som
+läste som en admin. Raden bär i stället: liten miniatyr i vänsterkanten, texten i
+mitten, handlingarna som tysta textknappar till höger.
+
+**Destruktivt skiljs, det skriker inte.** "Radera" står efter en hårlinje och bär
+`--bad` först vid hover/fokus. Färgen är aldrig ensam bärare av att något är farligt.
+
+**Separatorn ägs av listan, inte av raden** — annars dubblerar första raden i varje
+grupp sin grupprubriks understrykning.
 
 ### Signature — Mask-reveal heading & phased progress
 - **Mask-reveal title** (`.reveal-mask > span`): Display words rise into view from a
@@ -274,7 +333,10 @@ spinners) stay round.
 - **Don't** imply the **cloud or an online service** — no account, sync, or online
   iconography; the app is strictly local and offline.
 - **Don't** use `#000` or `#fff`, or light-gray body text for "elegance" — keep
-  neutrals warm and text readable.
+  neutrals warm and text readable. *Enda undantaget är de tre vyrubrikerna, se §2.*
+- **Don't** bygga en ny segmentform. `Segment.svelte` finns, och dess två former
+  bär två olika kontrakt (§5).
+- **Don't** göra en lista till ett kortrutnät. Hårlinjer, inte ramar (§5).
 - **Don't** set JetBrains Mono anywhere but small uppercase micro-labels, or set
   Instrument Serif anywhere but italic display accents.
 - **Don't** use a `border-left`/`border-right` colored stripe as an accent, and never
