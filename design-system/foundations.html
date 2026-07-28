@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<!-- @generated DO NOT EDIT: skrivskyddad spegel från Claude Design (DesignSync) - riktig källa är frontend/src/app.css + DESIGN.md -->
+<!-- @dsCard group="Foundations" -->
+<html lang="sv">
+<head>
+  <meta charset="utf-8" />
+  <title>Transkribera — fundament</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    body { padding: 48px 40px 80px; }
+    .wrap { max-width: 980px; margin: 0 auto; }
+    h1 {
+      font-family: var(--serif); font-style: italic; font-weight: 400;
+      font-size: 3.2rem; line-height: 1.05; letter-spacing: -0.01em;
+      color: #000; margin: 0 0 26px;
+    }
+    h2 {
+      font-family: var(--mono); font-size: 0.72rem; font-weight: 500;
+      letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3);
+      margin: 48px 0 16px;
+    }
+    p { max-width: 62ch; color: var(--ink-2); margin: 0 0 10px; }
+    .rutor { display: flex; flex-wrap: wrap; gap: 10px; }
+    .ruta { width: 148px; }
+    .prov { height: 64px; border: 1px solid var(--line); border-radius: 4px; }
+    .namn { font-size: 0.72rem; color: var(--ink); margin: 6px 0 0; }
+    .hex {
+      font-family: var(--mono); font-size: 0.72rem; color: var(--ink-3);
+      margin: 1px 0 0;
+    }
+    .rad { padding: 14px 0; border-top: 1px solid var(--line); }
+    .rad:first-of-type { border-top: 0; }
+    .etikett {
+      font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--ink-3); margin: 0 0 4px;
+    }
+    .regel {
+      border-left: 0; background: var(--sunken); border: 1px solid var(--line);
+      border-radius: 4px; padding: 14px 16px; max-width: 72ch; margin: 0 0 12px;
+    }
+    .regel p { margin: 0; color: var(--ink-2); }
+    .regel strong { color: var(--ink); }
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <p class="etikett">Fundament</p>
+  <h1>Ink on good paper</h1>
+  <p>
+    Varmt papper, nästan svart bläck, hårlinjer och en enda återhållen accent.
+    Djup byggs av tonlager och luft — aldrig av lådor, kort eller skuggor.
+  </p>
+
+  <h2>Neutraler</h2>
+  <div class="rutor">
+    <div class="ruta"><div class="prov" style="background:var(--canvas)"></div><p class="namn">Papper</p><p class="hex">--canvas #F1F2ED</p></div>
+    <div class="ruta"><div class="prov" style="background:var(--surface)"></div><p class="namn">Yta</p><p class="hex">--surface #FFFFFF</p></div>
+    <div class="ruta"><div class="prov" style="background:var(--sunken)"></div><p class="namn">Sänkt</p><p class="hex">--sunken #F3F4EE</p></div>
+    <div class="ruta"><div class="prov" style="background:var(--ink)"></div><p class="namn">Bläck</p><p class="hex">--ink #161A14</p></div>
+    <div class="ruta"><div class="prov" style="background:var(--ink-2)"></div><p class="namn">Bläck 2</p><p class="hex">--ink-2 #4F514D</p></div>
+    <div class="ruta"><div class="prov" style="background:var(--ink-3)"></div><p class="namn">Bläck 3</p><p class="hex">--ink-3 #6A6C68</p></div>
+    <div class="ruta"><div class="prov" style="background:var(--line)"></div><p class="namn">Hårlinje</p><p class="hex">--line #D9D9D5</p></div>
+  </div>
+
+  <h2>Accent och gradpalett</h2>
+  <div class="rutor">
+    <div class="ruta"><div class="prov" style="background:var(--accent)"></div><p class="namn">Sky</p><p class="hex">--accent #2C6E9E</p></div>
+    <div class="ruta"><div class="prov" style="background:var(--accent-weak)"></div><p class="namn">Sky wash</p><p class="hex">--accent-weak #E3ECF2</p></div>
+    <div class="ruta"><div class="prov" style="background:var(--c-plum)"></div><p class="namn">Plommon</p><p class="hex">--c-plum #5B3A6E</p></div>
+    <div class="ruta"><div class="prov" style="background:var(--c-sage)"></div><p class="namn">Salvia</p><p class="hex">--c-sage #5C7E40</p></div>
+    <div class="ruta"><div class="prov" style="background:var(--c-mustard)"></div><p class="namn">Senap</p><p class="hex">--c-mustard #9A7416</p></div>
+    <div class="ruta"><div class="prov" style="background:var(--bad)"></div><p class="namn">Fel</p><p class="hex">--bad #C8463A</p></div>
+  </div>
+
+  <div class="regel" style="margin-top:20px">
+    <p><strong>One Voice.</strong> Sky bär åtgärder, urval och live-tillstånd — aldrig dekoration.</p>
+  </div>
+  <div class="regel">
+    <p><strong>Gradpaletten är DATA.</strong> Plommon, salvia och senap skiljer klasser och kurser åt. De är aldrig bakgrunder, aldrig gradienter, aldrig varumärkesflärp.</p>
+  </div>
+  <div class="regel">
+    <p><strong>Aldrig rent svart eller vitt</strong> — med ett dokumenterat undantag: de tre vyrubrikerna nedan sätts i rent <code>#000</code>. Allt annat följer regeln.</p>
+  </div>
+
+  <h2>Typografi</h2>
+
+  <div class="rad">
+    <p class="etikett">Hero display · Instrument Serif kursiv · 3.2rem / 1.05 / -0.01em · #000</p>
+    <p style="font-family:var(--serif);font-style:italic;font-weight:400;font-size:3.2rem;line-height:1.05;letter-spacing:-0.01em;color:#000;margin:0">Vad vill du transkribera?</p>
+  </div>
+
+  <div class="rad">
+    <p class="etikett">Display · Instrument Serif kursiv · 2.375rem / 1.05</p>
+    <p style="font-family:var(--serif);font-style:italic;font-size:2.375rem;line-height:1.05;letter-spacing:-0.01em;color:var(--ink);margin:0">Sektionstitel</p>
+  </div>
+
+  <div class="rad">
+    <p class="etikett">Headline · Inter Tight 700 · 1.5rem / 1.15 / -0.02em</p>
+    <p style="font-family:var(--sans);font-weight:700;font-size:1.5rem;line-height:1.15;letter-spacing:-0.02em;color:var(--ink);margin:0">Prominent sansrubrik</p>
+  </div>
+
+  <div class="rad">
+    <p class="etikett">Title · Inter Tight 600 · 1.125rem</p>
+    <p style="font-family:var(--sans);font-weight:600;font-size:1.125rem;color:var(--ink);margin:0">Panel- och grupptitel</p>
+  </div>
+
+  <div class="rad">
+    <p class="etikett">Body · Inter Tight 400 · 1.03rem / 1.55 / -0.011em</p>
+    <p style="margin:0">Allt som transkriberats, samlat per vecka. Ljudet och texten ligger kvar på din egen dator.</p>
+  </div>
+
+  <div class="rad">
+    <p class="etikett">Label · JetBrains Mono 500 · 0.72rem / 0.08em / VERSALER</p>
+    <p style="font-family:var(--mono);font-size:0.72rem;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-3);margin:0">Steg 1 — Källa</p>
+  </div>
+
+  <div class="regel" style="margin-top:20px">
+    <p><strong>En röst per rubrik.</strong> En vyrubrik sätts i ett snitt och en storlek. Den tidigare delade formen — sans 700 på 1.5rem plus serif-kursiv på 2.375rem — gav ett språng på 1,58× som läste ojämnt.</p>
+  </div>
+  <div class="regel">
+    <p><strong>Mono är bara etiketter.</strong> Korta versala mikroetiketter och eyebrows. Aldrig brödtext, aldrig siffror, aldrig en kontroll läraren trycker på.</p>
+  </div>
+
+  <h2>Hörn och djup</h2>
+  <div class="rutor">
+    <div class="ruta"><div class="prov" style="background:var(--surface);border-radius:2px"></div><p class="namn">xs · 2px</p></div>
+    <div class="ruta"><div class="prov" style="background:var(--surface);border-radius:3px"></div><p class="namn">sm · 3px</p></div>
+    <div class="ruta"><div class="prov" style="background:var(--surface);border-radius:4px"></div><p class="namn">md · 4px</p></div>
+    <div class="ruta"><div class="prov" style="background:var(--surface);border-radius:5px"></div><p class="namn">lg · 5px</p></div>
+  </div>
+  <div class="regel" style="margin-top:20px">
+    <p><strong>Platt i vila.</strong> Skuggor finns bara för att lyfta äkta overlays — modaler, popovers, toaster. Har något en skugga utan att sväva är skuggan fel; använd ett tonlager eller en hårlinje.</p>
+  </div>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<!-- @generated DO NOT EDIT: skrivskyddad spegel från Claude Design (DesignSync) - riktig källa är frontend/src/lib/ -->
+<!-- @dsCard group="Components" -->
+<html lang="sv">
+<head>
+  <meta charset="utf-8" />
+  <title>Transkribera — komponenter</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    body { padding: 48px 40px 80px; }
+    .wrap { max-width: 980px; margin: 0 auto; }
+    h1 {
+      font-family: var(--serif); font-style: italic; font-weight: 400;
+      font-size: 3.2rem; line-height: 1.05; letter-spacing: -0.01em;
+      color: #000; margin: 0 0 26px;
+    }
+    h2 {
+      font-family: var(--mono); font-size: 0.72rem; font-weight: 500;
+      letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3);
+      margin: 44px 0 14px;
+    }
+    .etikett {
+      font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--ink-3); margin: 0 0 4px;
+    }
+    .not { max-width: 68ch; color: var(--ink-2); margin: 0 0 14px; }
+    .demo { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin: 0 0 10px; }
+
+    /* Knappar */
+    .primar {
+      background: var(--btn-bg); color: var(--btn-fg); border: none;
+      border-radius: 4px; padding: 12px 22px; font-family: inherit;
+      font-size: inherit; font-weight: 500; cursor: pointer;
+    }
+    .primar:disabled { opacity: 0.55; cursor: default; }
+    .ghost {
+      background: transparent; color: var(--ink); border: 1px solid var(--line-2);
+      border-radius: 4px; padding: 9px 18px; font-family: inherit;
+      font-size: inherit; cursor: pointer;
+    }
+    .tyst {
+      background: transparent; border: none; padding: 4px 0; color: var(--ink-2);
+      font-family: inherit; font-size: 0.72rem; cursor: pointer;
+    }
+    .fara { margin-left: 4px; padding-left: 18px; border-left: 1px solid var(--line); color: var(--ink-3); }
+
+    /* Segmentkontroll — de två formerna */
+    .seg {
+      display: inline-flex; gap: 3px; padding: 3px; background: var(--track);
+      border: 1px solid var(--line); border-radius: 5px;
+    }
+    .seg button {
+      border: none; border-radius: 3px; padding: 8px 14px; background: transparent;
+      color: var(--ink-2); font-family: inherit; font-size: inherit;
+      font-weight: 500; white-space: nowrap; cursor: pointer;
+    }
+    .seg button[aria-pressed='true'] { background: var(--surface); color: var(--ink); }
+    .seg.flerval {
+      gap: 6px; padding: 0; background: transparent; border: none; border-radius: 0;
+    }
+    .seg.flerval button { border: 1px solid var(--line); border-radius: 3px; padding: 7px 13px; }
+    .seg.flerval button[aria-pressed='true'] {
+      background: var(--accent-weak); color: var(--accent); border-color: var(--accent);
+    }
+
+    /* Flikar */
+    .flikar { display: inline-flex; gap: 26px; }
+    .flik {
+      position: relative; border: none; padding: 4px 0; background: transparent;
+      color: var(--ink-3); font-family: inherit; font-size: inherit;
+      font-weight: 500; cursor: pointer;
+    }
+    .flik[aria-selected='true'] { color: var(--ink); font-weight: 600; }
+    .flik::after {
+      content: ''; position: absolute; left: 0; right: 0; bottom: -3px;
+      height: 2px; background: transparent;
+    }
+    .flik[aria-selected='true']::after { background: var(--accent); }
+
+    /* Fält */
+    .field {
+      background: var(--surface); border: 1px solid var(--line); border-radius: 4px;
+      padding: 12px 14px; font-family: inherit; font-size: inherit; color: var(--ink);
+      min-width: 260px;
+    }
+
+    /* Listrad */
+    .lista { display: flex; flex-direction: column; }
+    .rad2 { display: flex; align-items: center; gap: 16px; padding: 12px 0; }
+    .rad2 + .rad2 { border-top: 1px solid var(--line); }
+    .tumme { width: 72px; aspect-ratio: 16/9; background: var(--sunken); border-radius: 3px; flex: 0 0 auto; }
+    .text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+    .datum { font-size: 0.72rem; color: var(--ink-3); margin: 0; }
+    .namn { font-size: 1.03rem; font-weight: 600; color: var(--ink); margin: 0; }
+    .tagg {
+      align-self: flex-start; font-size: 0.72rem; font-weight: 500; border-radius: 3px;
+      padding: 2px 8px; margin: 2px 0 0; border: 1px solid transparent;
+    }
+    .meta { font-size: 0.72rem; color: var(--ink-3); margin: 0; }
+    [data-cc='sky'] { background: color-mix(in srgb, var(--c-sky) 14%, transparent); color: var(--c-sky); }
+    [data-cc='sage'] { background: color-mix(in srgb, var(--c-sage) 16%, transparent); color: var(--c-sage); }
+    [data-cc='none'] { background: var(--sunken); color: var(--ink-3); border-color: var(--line); }
+    .grupprubrik {
+      display: flex; align-items: baseline; gap: 12px; margin-bottom: 10px;
+      padding-bottom: 8px; border-bottom: 1px solid var(--line);
+    }
+    .vecka { font-size: 1.03rem; font-weight: 600; color: var(--ink); margin: 0; }
+    .spann, .antal { font-size: 0.72rem; color: var(--ink-3); }
+    .antal { margin-left: auto; }
+
+    .regel {
+      background: var(--sunken); border: 1px solid var(--line); border-radius: 4px;
+      padding: 14px 16px; max-width: 72ch; margin: 12px 0 0;
+    }
+    .regel p { margin: 0; color: var(--ink-2); }
+    .regel strong { color: var(--ink); }
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <p class="etikett">Komponenter</p>
+  <h1>Vokabulär</h1>
+
+  <h2>Navigation</h2>
+  <p class="not">
+    Text utan chrome. Aktiv vy bärs av bläckvikt och en 2px accentlinje — aldrig
+    av en fylld flik eller ett spårfärgat fack. Semantiskt en riktig tablist.
+  </p>
+  <div class="flikar" role="tablist">
+    <button class="flik" role="tab" aria-selected="true">Transkribera</button>
+    <button class="flik" role="tab" aria-selected="false">Inspelningar</button>
+    <button class="flik" role="tab" aria-selected="false">Planering</button>
+  </div>
+
+  <h2>Segmentkontroll</h2>
+  <p class="not">Formen säger vilket kontrakt kontrollen har.</p>
+
+  <p class="etikett" style="margin-top:16px">Enval — platta</p>
+  <div class="demo">
+    <div class="seg" role="group">
+      <button aria-pressed="true">Svenska</button>
+      <button aria-pressed="false">Engelska</button>
+    </div>
+    <div class="seg" role="group">
+      <button aria-pressed="true">Tavla</button>
+      <button aria-pressed="false">Prov</button>
+      <button aria-pressed="false">Arbetsblad</button>
+    </div>
+  </div>
+
+  <p class="etikett" style="margin-top:16px">Flerval — chips</p>
+  <div class="demo">
+    <div class="seg flerval" role="group">
+      <button aria-pressed="true">SRT</button>
+      <button aria-pressed="true">TXT</button>
+      <button aria-pressed="false">VTT</button>
+    </div>
+  </div>
+
+  <div class="regel">
+    <p><strong>Formen säger kontraktet.</strong> Enval byter val, flerval lägger till. Bygg aldrig en sjätte egen segmentform. Fler än ~4 alternativ är inte en segmentkontroll — då är det en <code>&lt;select&gt;</code>.</p>
+  </div>
+
+  <h2>Knappar</h2>
+  <div class="demo">
+    <button class="primar">Starta transkribering</button>
+    <button class="ghost">Lägg till fler</button>
+    <button class="primar" disabled>Nästa: inställningar</button>
+    <span style="color:var(--ink-3)">Lägg till minst en fil först.</span>
+  </div>
+  <div class="regel">
+    <p><strong>En låst knapp motiverar sig.</strong> Skälet står bredvid, knutet med <code>aria-describedby</code> — aldrig en grå knapp utan förklaring.</p>
+  </div>
+
+  <h2>Fält</h2>
+  <div class="demo">
+    <input class="field" placeholder="Klistra in en YouTube-länk …" />
+    <select class="field"><option>Alla klasser</option></select>
+  </div>
+
+  <h2>Listrad</h2>
+  <p class="not">
+    Kartotek, agenda och träfflista bärs av hårlinjer mellan raderna. Inga kort,
+    inget rutnät, inga ramar. Miniatyren är en liten ruta i vänsterkanten och
+    faller bort helt om den inte kan hämtas.
+  </p>
+
+  <div class="grupprubrik">
+    <h3 class="vecka">Vecka 29</h3>
+    <span class="spann">13 jul – 17 jul</span>
+    <span class="antal">2 inspelningar</span>
+  </div>
+
+  <div class="lista">
+    <div class="rad2">
+      <div class="tumme"></div>
+      <div class="text">
+        <p class="datum">15 jul</p>
+        <p class="namn">Derivatans definition</p>
+        <p class="tagg" data-cc="sky">9A · Matematik 3c</p>
+        <p class="meta">42:11 · KB-Whisper large (sv) · Svenska</p>
+      </div>
+      <div class="demo" style="margin:0">
+        <button class="tyst">Öppna</button>
+        <button class="tyst">Fråga</button>
+        <button class="tyst">Redigera</button>
+        <button class="tyst fara">Radera</button>
+      </div>
+    </div>
+    <div class="rad2">
+      <div class="text">
+        <p class="datum">14 jul</p>
+        <p class="namn">Integraler — introduktion</p>
+        <p class="tagg" data-cc="none">Ej tilldelad — tilldela</p>
+        <p class="meta">38:02 · KB-Whisper large (sv) · Svenska</p>
+      </div>
+      <div class="demo" style="margin:0">
+        <button class="tyst">Öppna</button>
+        <button class="tyst">Fråga</button>
+        <button class="tyst">Redigera</button>
+        <button class="tyst fara">Radera</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="regel">
+    <p><strong>Destruktivt skiljs, det skriker inte.</strong> Radera står efter en hårlinje och bär <code>--bad</code> först vid hover. Färg är aldrig ensam bärare av att något är farligt.</p>
+  </div>
+  <div class="regel">
+    <p><strong>Separatorn ägs av listan.</strong> Raden bär ingen egen ram — annars dubblerar första raden i varje grupp sin grupprubriks understrykning.</p>
+  </div>
+
+</div>
+</body>
+</html>

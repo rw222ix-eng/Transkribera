@@ -4,6 +4,9 @@ description: Local, offline lesson-transcription workspace with a calm editorial
 colors:
   paper: "#F1F2ED"
   surface: "#FFFFFF"
+  # Rent svart. ENDAST de tre vyrubrikerna — dokumenterat undantag från
+  # The No Pure Black-or-White Rule, se §2.
+  hero-ink: "#000000"
   sunken: "#F3F4EE"
   ink: "#161A14"
   ink-2: "#4F514D"
@@ -19,6 +22,12 @@ colors:
   btn-bg: "#161A14"
   btn-fg: "#F1F2ED"
 typography:
+  hero:
+    fontFamily: "Instrument Serif, GT Sectra, Georgia, serif"
+    fontSize: "3.2rem"
+    fontWeight: 400
+    lineHeight: 1.05
+    letterSpacing: "-0.01em"
   display:
     fontFamily: "Instrument Serif, GT Sectra, Georgia, serif"
     fontSize: "2.375rem"
