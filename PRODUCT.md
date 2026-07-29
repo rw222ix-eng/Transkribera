@@ -10,35 +10,93 @@ web
 
 ## Users
 
-Swedish gymnasium (high-school) teachers, working alone on their own Windows 11
-desktop (RTX 4090 / 24 GB class). They record lessons — local audio and video
-files, or pasted YouTube links — and need them turned into accurate transcripts
-(SRT / TXT / VTT) and organized by **date, class, and course**. They are
-subject-matter experts, not AI or ML experts. The typical moment of use is a busy
-workday, often between or right after lessons, while handling **sensitive student
-data** — which is why everything runs locally and offline, with no cloud and no
-account.
+**En användare: ägaren.** En svensk gymnasielärare på sin egen Windows 11-dator
+(RTX 4090 / 24 GB-klass). Det här är ett arbetsredskap, inte en produkt — appen får
+anta att den som använder den vet vad den gör, men får aldrig slösa hens tid eller
+ljuga om vad den kan. Kraven på onboarding och tålighet för ovana användare är
+därför låga; kraven på hastighet och ärlighet är höga.
 
-The job runs past transcription: proofread, summarize, and chat with a transcript
-through a local LLM (Qwen3 over an app-managed llama.cpp); extract action items and
-calendar events; and search what was said across the whole archive. All of it stays
-private and on-device.
+Lektionen spelas in med **annan utrustning** — telefon, diktafon, vad som råkar
+finnas — och filen dras in i appen efteråt. Inspelning direkt i appen finns, men är
+inte den normala vägen in. Det betyder att appen börjar sitt arbete när lektionen
+redan är slut och läraren sitter ner, typiskt mellan två pass eller på
+eftermiddagen.
+
+Materialet bär **elevers röster, namn och svårigheter**. Det är hela skälet till att
+allt körs lokalt: inget konto, ingen synk, ingenting som kan hamna i molnet av
+misstag.
 
 ## Product Purpose
 
-Transkribera turns recorded lessons into trustworthy, well-organized transcripts and
-lets a teacher work with them — proofreading, summarizing, questioning, extracting,
-searching — entirely on their own machine. It exists because lesson audio carries
-sensitive student data that must never leave the teacher's computer, and because the
-tools that otherwise do this well are cloud services. Success is a teacher who can go
-from a recording to an accurate, filed, searchable transcript in one unhurried
-sitting, confident that nothing was uploaded anywhere.
+**Det enda i läraryrket som ingen annan kan göra åt läraren är att tänka ut vad
+lektionen ska innehålla.** Allt runt omkring — komma ihåg vad som sades, hålla reda
+på vad som lovades, föra in saker i kalendern, dokumentera vad som hanns med, sätta
+ihop ett prov, förbereda en tavla — är arbete som äter tid från just den delen.
+
+Transkribera finns för att absorbera så mycket som möjligt av det arbetet, så att
+tiden går till innehållet i stället. **Appen mäts på hur snabbt den gör läraren klar,
+inte på hur mycket den kan.** Ett flöde som kräver städning efteråt har misslyckats
+även om resultatet är korrekt. Så få steg som möjligt, så rätt som möjligt på första
+försöket, och snabb iteration när det inte blev rätt.
+
+Den bärande observationen bakom arkivet: **en lektion innehåller mer än en lärare
+hinner fånga medan den pågår.** En elev nämner att hen är borta nästa vecka. Läraren
+säger själv att klassen ska samlas någonstans vid något tillfälle. Någon ställer en
+fråga som borde följas upp. Det finns ingen lucka mellan meningarna där man hinner ta
+fram en anteckningsbok, så det försvinner. Appen finns för att fånga upp det i
+efterhand och göra det till konkreta kalenderposter — inte för att arkivera lektioner.
+
+Uppföljningen är **för lärarens egen skull**: se vad som gick tungt, vad som hanns
+med, vad som återkommer, och undervisa bättre nästa gång. Ingen rektor, ingen
+vårdnadshavare, inget utvecklingssamtal ska behöva se den. Den avgränsningen befriar
+appen från exportformat, bevarandepolicy och granskningsbarhet mot tredje part — och
+låter den optimeras helt för hastighet.
+
+### Avsett men obyggt (2026-07-28)
+
+Två saker hör till syftet men finns inte i koden än. De står här för att beskrivningen
+inte ska läsas som en beskrivning av nuläget:
+
+1. **Automatisk genomgång efter varje transkribering.** Så snart en körning är klar
+   ska appen själv leta upp datum, åtaganden och uppföljningar i transkriptet och
+   lägga fram dem som granskningsbara förslag. I dag sker extraktionen bara när
+   läraren *frågar* — vilket förutsätter att hon kommer ihåg att fråga, och att komma
+   ihåg är precis det problem appen finns för att lösa.
+2. **Klass, kurs och namn vid inläsning.** De sätts i dag först i efterhand i
+   arkivet. Inläsningen är den enda punkten i flödet där läraren säkert vet vilken
+   lektion det är; att märka den där tar bort ett städmoment.
 
 ## Positioning
 
-Everything a teacher needs to turn a lesson recording into an accurate, searchable,
-well-filed transcript — proofread, summarized, and questioned with a local model —
-running entirely on their own machine, never the cloud.
+Fångar upp det som sades under lektionen och som annars försvinner — åtaganden,
+datum, uppföljningar — och gör det till kalenderposter och sökbar kunskap, samtidigt
+som det tar över förberedelsearbetet runt nästa lektion. Allt på lärarens egen dator,
+aldrig i molnet.
+
+## Flödet
+
+**1 · Transkribera.** Filen dras in, märks med namn/klass/kurs, får språk och format,
+och ett valfritt andra pass som rättar texten mot vad som faktiskt sägs (räddar
+främst namn och ämnesord). Körningen startar och läraren går ifrån — lektionen landar
+i arkivet av sig själv. KB-Whisper på det egna grafikkortet; appen serialiserar
+Whisper och LLM så de aldrig konkurrerar om minnet.
+
+**2 · Inspelningar.** Lektionerna grupperas per vecka, filtrerbara på klass, kurs och
+månad. Varje lektion kan öppnas som transkript med ljudet synkat mot texten, så ett
+ställe går att hoppa till och höra. Hela arkivet är frågbart — svaren bygger på vad
+som verkligen sades och bär källhänvisningar tillbaka till stället i transkriptet, så
+de går att kontrollera. Kalenderförslag granskas alltid av läraren innan något
+skickas; det som godkänns kan läggas i Google Kalender. Det är appens **enda medvetna
+undantag** från offline-principen, gjort för att kalendern ändå är där lärarens dag
+bor.
+
+**3 · Planering.** Vänder på riktningen och tar över förberedelsearbetet.
+En **lektionstavla** är ett förberedelsedokument: läraren beskriver momentet, får ett
+strukturerat utkast och tänker igenom lektionen med det. Tavlan projiceras *inte* —
+läraren skriver själv på whiteboarden, bättre förberedd. **Prov och arbetsblad** går
+hela vägen till papper: byggda mot Gy25:s centrala innehåll med poäng och förmågor
+fördelade, ändringsbara genom att skriva vad som ska bli annorlunda, och satta som
+färdig PDF med facit avsedd att skrivas ut.
 
 ## Brand Personality
 
@@ -73,6 +131,10 @@ Three looks the owner has explicitly ruled out:
    respectful of the teacher's time — no hype, no chirp.
 5. **Restrained motion; accessibility as a floor.** Purposeful mask-reveal and
    fade-up with expo-out easing, and reduced motion always honored.
+6. **Färdig slår fullständig.** Appen finns för att ge tillbaka tid. Ett steg som
+   kan tas bort ska tas bort; ett värde appen kan gissa rätt på ska den gissa på; ett
+   moment som måste städas efteråt är ett designfel även när resultatet blir rätt.
+   Vid val mellan en funktion till och ett kortare flöde vinner det kortare flödet.
 
 ## Accessibility & Inclusion
 
