@@ -110,20 +110,33 @@ def _gemini_saknas():
     return None
 
 
-def _gemini(bild: Path) -> str:
-    nyckel = os.environ.get("GEMINI_API_KEY") or os.environ["GOOGLE_API_KEY"]
-    b64, mime = _b64(bild)
-    modell = os.environ.get("GEMINI_MODEL", "gemini-2.5-pro")
-    url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
-           f"{modell}:generateContent")
-    svar = _post(url, {
-        "contents": [{"parts": [
-            {"text": PROMPT},
-            {"inline_data": {"mime_type": mime, "data": b64}},
-        ]}],
-        "generationConfig": {"temperature": 0},
-    }, {"x-goog-api-key": nyckel})
-    return svar["candidates"][0]["content"]["parts"][0]["text"]
+def _gemini_kor(modell: str):
+    def kor(bild: Path) -> str:
+        nyckel = os.environ.get("GEMINI_API_KEY") or os.environ["GOOGLE_API_KEY"]
+        b64, mime = _b64(bild)
+        url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
+               f"{modell}:generateContent")
+        svar = _post(url, {
+            "contents": [{"parts": [
+                {"text": PROMPT},
+                {"inline_data": {"mime_type": mime, "data": b64}},
+            ]}],
+            "generationConfig": {"temperature": 0},
+        }, {"x-goog-api-key": nyckel})
+        return svar["candidates"][0]["content"]["parts"][0]["text"]
+    return kor
+
+
+# MODELLNAMNEN ÄR FÄRSKVARA. Gemini 3.5 kom i juni 2026, 3.6 Flash och 3.5
+# Flash-Lite den 21 juli, Opus 5 den 24 juli. Publicerade dokument-benchmarks
+# ligger kvartal efter — därav den här riggen. Styr namnen med GEMINI_MODEL,
+# GEMINI_FLASH_MODEL och ANTHROPIC_MODEL utan att röra koden.
+_GEMINI_PRO = os.environ.get("GEMINI_MODEL", "gemini-3.5-pro")
+# Flash-tiern är MED FLIT en egen kandidat, inte en billigare variant att välja
+# om Pro är för dyr. Google riktar den uttryckligen mot dokumentbearbetning, och
+# det du faktiskt betalar för här är VÄNTETID: OCR är steget du står och väntar
+# på. Är Flash lika bra på dina sidor är den det rätta valet oavsett pris.
+_GEMINI_FLASH = os.environ.get("GEMINI_FLASH_MODEL", "gemini-3.6-flash")
 
 
 # ------------------------------------------------------------------- claude
@@ -177,7 +190,8 @@ def _mistral(bild: Path) -> str:
 KANDIDATER = [
     Kandidat("tesseract", "lokalt (golv)", _tesseract, _tesseract_saknas),
     Kandidat("qwen-vl", "lokalt", _qwen, _qwen_saknas),
-    Kandidat("gemini", "API", _gemini, _gemini_saknas),
+    Kandidat("gemini-pro", "API", _gemini_kor(_GEMINI_PRO), _gemini_saknas),
+    Kandidat("gemini-flash", "API", _gemini_kor(_GEMINI_FLASH), _gemini_saknas),
     Kandidat("claude", "API", _claude, _claude_saknas),
     Kandidat("mistral", "API", _mistral, _mistral_saknas),
 ]

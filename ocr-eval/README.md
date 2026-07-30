@@ -62,13 +62,24 @@ bredvid. Det är den sidan beslutet fattas på.
 
 ## Kandidater
 
-| Kandidat | Var | Kräver |
-|---|---|---|
-| `tesseract` | lokalt | `tesseract` på PATH + svenskt språkdata |
-| `qwen-vl` | lokalt | llama.cpp-server med en VL-modell på `LLAMACPP_VL_URL` |
-| `gemini` | API | `GEMINI_API_KEY` |
-| `claude` | API | `ANTHROPIC_API_KEY` |
-| `mistral` | API | `MISTRAL_API_KEY` |
+| Kandidat | Var | Kräver | Modellnamn styrs av |
+|---|---|---|---|
+| `tesseract` | lokalt | `tesseract` på PATH + svenskt språkdata | — |
+| `qwen-vl` | lokalt | llama.cpp-server på `LLAMACPP_VL_URL` | serverns modell |
+| `gemini-pro` | API | `GEMINI_API_KEY` | `GEMINI_MODEL` |
+| `gemini-flash` | API | `GEMINI_API_KEY` | `GEMINI_FLASH_MODEL` |
+| `claude` | API | `ANTHROPIC_API_KEY` | `ANTHROPIC_MODEL` |
+| `mistral` | API | `MISTRAL_API_KEY` | `MISTRAL_MODEL` |
+
+**Modellnamnen är färskvara.** Gemini 3.5 kom i juni 2026, 3.6 Flash och 3.5
+Flash-Lite den 21 juli, Claude Opus 5 den 24 juli. Publicerade dokument-benchmarks
+(OmniDocBench, OCRBench) ligger ett kvartal efter och saknar helt siffror för allt
+som släppts de senaste veckorna. Kolla defaultnamnen i `adaptrar.py` mot vad som
+faktiskt finns när du kör, och styr med miljövariablerna ovan.
+
+`gemini-flash` ligger med som **egen kandidat**, inte som en billigare reservutväg.
+Det du betalar för i det här steget är väntetid — OCR är momentet du står och väntar
+på. Är Flash lika bra på dina sidor är den rätt val oavsett pris.
 
 Tesseract ligger med som **golv**, inte som kandidat. Den kan ingen matematik och
 inga figurer. Poängen är att se hur långt ifrån användbart ren OCR ligger, så att
