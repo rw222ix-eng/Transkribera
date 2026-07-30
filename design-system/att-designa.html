@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<!-- @dsCard group="Brief" -->
+<html lang="sv">
+<head>
+  <meta charset="utf-8" />
+  <title>Transkribera — att designa härnäst</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    body { padding: 48px 40px 96px; }
+    .wrap { max-width: 1000px; margin: 0 auto; }
+    h1 {
+      font-family: var(--serif); font-style: italic; font-weight: 400;
+      font-size: 3.2rem; line-height: 1.05; letter-spacing: -0.01em;
+      color: #000; margin: 0 0 22px;
+    }
+    h2 {
+      font-family: var(--mono); font-size: 0.72rem; font-weight: 500;
+      letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3);
+      margin: 56px 0 4px;
+    }
+    .etikett {
+      font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--ink-3); margin: 0 0 6px;
+    }
+    p { max-width: 66ch; color: var(--ink-2); margin: 0 0 10px; }
+    .lede { max-width: 68ch; margin: 0 0 8px; }
+    .avsnittslede { max-width: 66ch; margin: 0 0 10px; color: var(--ink-3); }
+
+    /* Hårlinjerad lista, inga kort. Samma hållning som kartoteket. */
+    .post { padding: 20px 0; border-top: 1px solid var(--line); }
+    .post:first-of-type { border-top: 1px solid var(--line-2); }
+    .topp { display: flex; align-items: baseline; gap: 14px; }
+    .nr {
+      font-family: var(--mono); font-size: 0.72rem; color: var(--ink-3);
+      font-variant-numeric: tabular-nums; flex: 0 0 auto; min-width: 16px;
+    }
+    .namn { color: var(--ink); font-weight: 500; margin: 0; }
+    .post p { margin: 6px 0 0 0; padding-left: 30px; }
+    .fraga { color: var(--ink); }
+    .fraga::before {
+      content: "Designfrågan"; font-family: var(--mono); font-size: 0.72rem;
+      letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3);
+      display: block; margin-bottom: 2px;
+    }
+    .finns {
+      font-family: var(--mono); font-size: 0.72rem; color: var(--ink-3);
+      padding-left: 30px; margin-top: 8px;
+    }
+    .rad-tung { color: var(--ink); }
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <p class="etikett">Brief · 30 juli 2026</p>
+  <h1>Vad som ska ritas härnäst</h1>
+  <p class="lede">
+    Allt nedan är beslutat att byggas. Ordningen är den som bedömdes betala
+    tillbaka mest tid i en pressad skolvecka, inte den ordning sakerna måste ritas
+    i. Varje post säger vad som saknas och vilken fråga som är <em>designens</em>,
+    inte kodens.
+  </p>
+  <p class="lede">
+    En sak att bära med sig genom hela briefen: appen mäts på hur snabbt den gör
+    läraren klar. Ett steg som kan tas bort ska tas bort, och ett värde appen kan
+    gissa rätt på ska den gissa på. Flera av posterna nedan är just det, inmatning
+    som försvinner snarare än funktioner som läggs till.
+  </p>
+
+  <p class="lede">
+    Briefen förutsätter de elva punkterna i <span class="rad-tung">FÖRBÄTTRINGAR.md</span>
+    som redan är designade här: automatisk extraktion, klass och kurs per rad i
+    kön, gissningar ur filnamnet, den delade kalendern som läses innan något
+    föreslås, ärvda provparametrar. Där en post nedan rör vid något av det står det
+    utskrivet, och då är uppgiften att bygga vidare, inte att rita om.
+  </p>
+
+  <h2>Först: tre tillstånd som inte finns i systemet i dag</h2>
+  <p class="avsnittslede">
+    Språkmodellsarbetet flyttar från den lokala Qwen3 till Claude Code på ägarens
+    prenumeration. Whisper och ljudrättningen stannar lokalt. Det skapar tre
+    tillstånd gränssnittet aldrig behövt visa förut, och de är de svåraste i
+    briefen, eftersom de ska vara ärliga utan att bli en molnprodukts skyltning.
+  </p>
+
+  <div class="post">
+    <div class="topp"><span class="nr">1</span><p class="namn">Det här lämnar datorn</p></div>
+    <p class="fraga">
+      Sammanfattning, extraktion, arkivchatt, tavla och prov skickar numera text
+      till Anthropic, och det är lektionstext med elevers namn och svårigheter i.
+      Ljudet går aldrig ut. Hur syns den skillnaden en gång, lugnt, på det ställe
+      där momentet startar, utan att bli en banner eller ett integritetsmeddelande
+      man klickar bort? Kalenderförslagen har redan en granskningsgest att lära av.
+    </p>
+  </div>
+
+  <div class="post">
+    <div class="topp"><span class="nr">2</span><p class="namn">Väntan utan framsteg</p></div>
+    <p class="fraga">
+      En lokal modell strömmar token direkt. Claude Code tiger i en till två
+      minuter och svarar sedan allt på en gång. Tavlan, provet och chatten använder
+      i dag den strömmande texten som väntekaraktär. Vad ersätter den när det inte
+      finns något att strömma, och hur ser ett prov ut som behöver flera
+      reparationsrundor och därmed flera minuter?
+    </p>
+  </div>
+
+  <div class="post">
+    <div class="topp"><span class="nr">3</span><p class="namn">Modellhanteraren krymper</p></div>
+    <p class="fraga">
+      Nedladdningar, VRAM-rekommendationer och installationsstatus för
+      språkmodeller utgår. Kvar blir Whisper, ljudrättningen och ett nytt
+      tillstånd: <span class="rad-tung">Claude Code saknas eller är inte
+      inloggad</span>. Det måste bli ett besked som säger vad läraren ska göra,
+      aldrig en tyst tom utdata mitt i en förberedelse.
+    </p>
+    <p class="finns">Rör: modellhanteraren</p>
+  </div>
+
+  <div class="post">
+    <div class="topp"><span class="nr">3b</span><p class="namn">Den ärliga körtiden blir delvis osann</p></div>
+    <p class="fraga">
+      Punkt 10 i förbättringarna satte texten «körs lokalt på din GPU, du kan gå,
+      körningen fortsätter». Det stämmer fortfarande för transkriberingen och
+      ljudrättningen, men inte för sammanfattningen, extraktionen eller
+      planeringen. Vilken formulering bär båda sanningarna i samma flöde utan att
+      bli två meddelanden?
+    </p>
+    <p class="finns">Bygger på: FÖRBÄTTRINGAR punkt 10</p>
+  </div>
+
+  <h2>Boksidan: nästan färdig, saknar sin väg in</h2>
+  <p class="avsnittslede">
+    Backenden tar redan emot foton och PDF:er, delar upp PDF-sidor, tolkar varje
+    sida och låter beskrivningarna styra både tavlan och provet. Provuppgifter kan
+    till och med referera en uppladdad sida. Men kontrollen som laddar upp finns
+    inte i gränssnittet. Den fanns i den gamla appen och kom aldrig med i
+    Svelte-cutovern. Det som saknas är alltså vägen in, inte maskineriet.
+  </p>
+
+  <div class="post">
+    <div class="topp"><span class="nr">4</span><p class="namn">Dra in sidan i stället för att beskriva den</p></div>
+    <p class="fraga">
+      Byggpanelen frågar i dag efter momentet i ett textfält, medan läraren sitter
+      med sidan i handen. Hur ser ytan ut där en bild ersätter det fältet, och vad
+      händer med fältet självt? Blir det valfritt, förifyllt av sidans rubrik,
+      eller borta? Sidorna ska också gå att se, ordna och ta bort igen.
+    </p>
+    <p class="finns">Finns i backenden · saknar UI</p>
+  </div>
+
+  <div class="post">
+    <div class="topp"><span class="nr">5</span><p class="namn">Boken en gång, i stället för sidan varje vecka</p></div>
+    <p class="fraga">
+      Den andra nivån: importera hela boken en gång, indexera per kapitel, och välj
+      sedan «3.4 Exponentialekvationer» ur en lista. Det är den som faktiskt sparar
+      tid, för då är inmatningen per lektion noll. Hur väljer man ur en bok utan att
+      listan blir en innehållsförteckning man scrollar i?
+    </p>
+  </div>
+
+  <h2>Kalendern och schemat</h2>
+  <p class="avsnittslede">
+    Krockkontrollen i punkt 7 gav appen en delad kalender som läses innan något
+    föreslås. Det som saknas är steget utanför appen: lärarens riktiga schema
+    ligger i Google Kalender, och dit skriver appen men läser aldrig. Schemat vet
+    vilka klasser, vilka tider och vilka lov. Det är den enskilt största
+    outnyttjade källan, och den betalar av sig i flera av posterna nedan samtidigt.
+  </p>
+
+  <div class="post">
+    <div class="topp"><span class="nr">6</span><p class="namn">Läs schemat, inte bara skriv till det</p></div>
+    <p class="fraga">
+      Med schemat inläst vet appen vilka lektioner som kommer, vilka som saknar
+      tavla, när provperioden är och att det är sportlov. Var bor den kunskapen? I
+      den kalender krockkontrollen redan ritat, eller som en lugn rad högst upp i
+      appen? Och hur skiljer sig en post som kommer från schemat från en appen
+      själv har lagt dit?
+    </p>
+    <p class="finns">Bygger på: FÖRBÄTTRINGAR punkt 7</p>
+  </div>
+
+  <div class="post">
+    <div class="topp"><span class="nr">7</span><p class="namn">Gissningen blir säker när schemat är känt</p></div>
+    <p class="fraga">
+      Kön gissar redan kurs ur filnamnet och klass ur den senast använda, med
+      streckad ram och «Gissat, kontrollera». Med schemat inläst blir gissningen
+      nästan alltid rätt, eftersom filen bär inspelningstid och schemat vet vem som
+      hade lektion då. Ska en gissning som vilar på schemat se annorlunda ut än en
+      som vilar på filnamnet, eller är det samma streckade ram med en säkrare
+      källa?
+    </p>
+    <p class="finns">Bygger på: FÖRBÄTTRINGAR punkt 5</p>
+  </div>
+
+  <div class="post">
+    <div class="topp"><span class="nr">8</span><p class="namn">Provet hör hemma i kalendern</p></div>
+    <p class="fraga">
+      Kalenderförslagen hamnar redan i den delade kalendern, men ett godkänt prov
+      gör det inte. Det borde bli en post i tiden och en påminnelse om att trycka
+      det några dagar innan. Hur skiljer sig ett prov visuellt från en lektion utan
+      att bli en andra sorts kort?
+    </p>
+    <p class="finns">Bygger på: FÖRBÄTTRINGAR punkt 7</p>
+  </div>
+
+  <div class="post">
+    <div class="topp"><span class="nr">9</span><p class="namn">Veckobriefen</p></div>
+    <p class="fraga">
+      Agendan är passiv och kräver att man öppnar appen och tittar. Det är
+      söndagskvällen som behöver hjälp: tre tavlor oskrivna, ett prov att trycka på
+      tisdag, 3B saknar inspelning från i torsdags. Är det en egen vy, appens
+      startläge en viss dag, eller något som ligger överst i Inspelningar?
+    </p>
+  </div>
+
+  <h2>Provet: allt som händer runt omkring det</h2>
+  <p class="avsnittslede">
+    Själva provkonstruktionen är appens starkaste del, med balanserat skelett,
+    förmåge- och nivåmål, kravgränser samt lösning och bedömningsanvisning per
+    uppgift. Svagheten ligger i att appen bygger artefakten och sedan släpper den.
+  </p>
+
+  <div class="post">
+    <div class="topp"><span class="nr">10</span><p class="namn">Varianter och omprov</p></div>
+    <p class="fraga">
+      Elever sitter tätt, och någon är alltid sjuk på provdagen. Samma skelett med
+      nya tal ger både en B-variant och ett omprov. Den självklara formen är
+      upptagen: brickorna «v1 v2 v3» revs medvetet till förmån för ångra och gör
+      om, så en variant får inte se ut som en historikpost. Är den ett syskon i
+      listan, en rad under provet, eller något som bara syns när man ska trycka?
+    </p>
+    <p class="finns">Begränsas av: FÖRBÄTTRINGAR, versioner till ångra/gör om</p>
+  </div>
+
+  <div class="post">
+    <div class="topp"><span class="nr">11</span><p class="namn">Extra anpassningar</p></div>
+    <p class="fraga">
+      Förlängd tid, färre uppgifter, luftigare sättning. Det är arbete läraren gör
+      ändå, och mallen är redan parametriserad. Var väljs en anpassad version, och
+      hur syns det på det tryckta provet utan att peka ut eleven?
+    </p>
+  </div>
+
+  <div class="post">
+    <div class="topp"><span class="nr">12</span><p class="namn">Rättningen tillbaka in</p></div>
+    <p class="fraga">
+      Appen vet vad som undervisats och vad som provats, aldrig vad som
+      <em>satt</em>. En enkel poänglista per uppgift, aggregerad och utan namn,
+      skulle mata nästa arbetsblad, nästa tavla och repetitionen. Hur ser den
+      inmatningen ut när den ska ta två minuter efter en rättningskväll och inte
+      kännas som ett formulär?
+    </p>
+  </div>
+
+  <div class="post">
+    <div class="topp"><span class="nr">13</span><p class="namn">Tidsrimligheten</p></div>
+    <p class="fraga">
+      Provtiden går in i genereringen och kontrolleras aldrig. En varning om att
+      provet är dimensionerat för 160 minuter och inte 120 fångar en klassisk tabbe
+      innan den blir en provdag. Var sitter den? Vid provtiden, vid godkännandet,
+      eller som en lugn rad i sammanställningen?
+    </p>
+  </div>
+
+  <div class="post">
+    <div class="topp"><span class="nr">14</span><p class="namn">Formelbladet</p></div>
+    <p class="fraga">
+      Nationella provet har ett, här är hjälpmedel bara fritext. Ett kursanpassat
+      formelblad som bilaga är kort väg från det som redan finns. Hör det till
+      provet som en sida till, eller är det ett eget dokument?
+    </p>
+  </div>
+
+  <div class="post">
+    <div class="topp"><span class="nr">15</span><p class="namn">Uppgiftsbanken</p></div>
+    <p class="fraga">
+      Uppgifterna ligger strukturerade med förmåga, nivå och innehållstagg, men går
+      inte att söka i. «Har jag redan gjort en uppgift om halveringstid?» kräver i
+      dag att man öppnar gamla PDF:er. Hur ser ett sökbart uppgiftsförråd ut där man
+      plockar tre uppgifter till fredagens arbetsblad?
+    </p>
+  </div>
+
+  <h2>Slingan mellan lektionerna</h2>
+
+  <div class="post">
+    <div class="topp"><span class="nr">16</span><p class="namn">Planen mot utfallet</p></div>
+    <p class="fraga">
+      Appen har både tavlan som planerades och transkriptet av vad som hände, men
+      lägger dem aldrig bredvid varandra. «Du planerade fem moment, ni hann tre» är
+      nästa lektions startpunkt, gratis, utan att någon behöver minnas något. Hur
+      visas en sådan jämförelse utan att den läses som betyg på läraren?
+    </p>
+  </div>
+
+  <div class="post">
+    <div class="topp"><span class="nr">17</span><p class="namn">Samma lektion till parallellklassen</p></div>
+    <p class="fraga">
+      Samma kurs i två klasser betyder i dag samma arbete två gånger. Tavlan finns
+      redan, det som ska bytas är minneskontexten, för 3B fastnade på annat än 3A.
+      Är det en knapp på en färdig tavla, eller ett val redan när den skrivs?
+    </p>
+  </div>
+
+  <div class="post">
+    <div class="topp"><span class="nr">18</span><p class="namn">Utskriftspaketet</p></div>
+    <p class="fraga">
+      Inför lektionen vill man ha tavla, arbetsblad och facit i rätt ordning, ett
+      klick till skrivaren. I dag är det tre PDF:er och tre klick, i den vecka då
+      tiden är som minst. Hur ser «det här ska tryckas» ut som en enda gest?
+    </p>
+  </div>
+
+  <h2>Redan beslutat och beskrivet på annat håll</h2>
+  <p>
+    Gruppuppgiften som fjärde dokumenttyp, där ifyllnadsställningen ska
+    <em>följa av uppgiften</em> och aldrig väljas ur ett mallbibliotek. Därtill
+    automatisk genomgång efter varje transkribering, klass och kurs redan vid
+    inläsning, samt massradering i kartoteket. De ligger i planen och hör hemma i
+    samma designomgång.
+  </p>
+
+</div>
+</body>
+</html>
