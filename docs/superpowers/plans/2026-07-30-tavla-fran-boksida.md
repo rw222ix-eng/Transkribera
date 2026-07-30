@@ -63,33 +63,137 @@ startar en hel agentloop per sida, därav 96 s mot Flash 32 s.
 
 ---
 
-## Öppen fråga: varför är API-anropet noggrannare än Claude Code?
+## Utredd 2026-07-30: varför API-anropet skriver mer än Claude Code
 
-Samma underliggande modell (`claude-opus-5`), ändå ger API-adaptern ~24 % mer
-text och ~46 % mer figurbeskrivning. Ägaren undrar om det är en
-tankeinställning. **Detta är obesvarat och bör utredas först i nya sessionen.**
+Frågan var varför samma modell (`claude-opus-5`) ger ~24 % mer text och ~46 %
+mer figurbeskrivning över API:et än genom `claude -p`. **Alla tre hypoteserna
+prövades och föll.** Tre variantkandidater ligger kvar i `adaptrar.py` som bevis
+— återuppfinn dem inte.
 
-Tre hypoteser, i fallande sannolikhet:
+| Kandidat | Vad som ändrades | Tecken | Figurtext | sek |
+|---|---|---|---|---|
+| `claude` (API) | — | 8 999 | 3 168 | 115 |
+| `claude-code-max` | `--effort max` | 7 489 | 2 591 | **334** |
+| `claude-code` | (default) | 7 276 | 2 169 | 96 |
+| `claude-code-fil` | svaret skrivs till fil | 6 776 | 2 042 | 92 |
+| `claude-code-egen` | egen systemprompt | 6 298 | 1 851 | 75 |
+| `gemini-flash` | — | 5 016 | 1 651 | 32 |
 
-1. **Claude Codes systemprompt drar mot korthet.** Den är en kodagent, optimerad
-   för terse output. Vår OCR-prompt konkurrerar med den; API-anropet har bara
-   vår prompt. Detta är den troligaste förklaringen.
-2. **Read-verktyget kan skala ned bilden** innan modellen ser den. Sker det
-   förlorar vi figurdetaljer som ett rakt API-anrop behåller. Testa genom att
-   jämföra utläsningen av en tät figur.
-3. **Effort/thinking skiljer sig.** Minst trolig — båda kör Opus 5 med thinking
-   på, och Claude Code kör `xhigh` som default.
+**Hypotes 1 (systemprompten drar mot korthet) — motbevisad, åt fel håll.** En
+systemprompt skriven för avläsning, som uttryckligen kräver fullständighet och
+förbjuder sammanfattning, gav *mindre* text än kodagentens egen. Kodagentens
+systemprompt är alltså inte bromsen; den bidrar snarare.
 
-**Konkret lever att testa:** `claude -p` har `--system-prompt` (ersätter) och
-`--append-system-prompt` (lägger till), plus
-`--exclude-dynamic-system-prompt-sections`. Byt ut standardpromten mot en som är
-skriven för transkribering i stället för kodning och mät om gapet stänger.
-Riggen är byggd för precis den jämförelsen — lägg till en variantkandidat och
-kör `python ocr-eval/kor.py --bara <namn>`.
+**Hypotes 2 (Read skalar ned bilden) — motbevisad, med mätning.** Tre `claude -p`-
+körningar med `--output-format json`, identiska så när som på bilden, gav
+32 199 / 33 052 / 36 309 cache-token för ingen bild / 768 px / originalet. Read
+levererar alltså ~3 850 bildtoken, mot API-anropets 4 748 (`count_tokens`) — inte
+en hårt nedskalad bild utan ~81 %. Och det avgör saken: API-kandidaten matad med
+**1568 px, bara 2 360 token**, gav ändå 10 214 tecken / 3 826 figurtecken mot
+Claude Codes 8 814 / 2 910 med *fler* pixlar på samma sida. Gapet handlar inte om
+vad modellen ser.
 
-Om gapet stänger: kör Claude Code med egen systemprompt. Om det inte gör det:
-hypotes 2 är kvar, och då är nedskalningen i Read en hård gräns som talar för
-API-vägen trots nyckelhanteringen.
+*Bifynd som motsäger dokumentationen:* Anthropics API skalar **inte** ned allt
+över 1568 px längsta sida. En 4096×3072-bild kostar 4 748 token, ungefär dubbelt
+mot vad den gränsen skulle tillåta. Upplösning är en verklig variabel i
+API-vägen, inte en utjämnad — vilket också syntes i utläsningen: 11 095 tecken
+vid 4096 px, 10 214 vid 1568, 8 924 vid 768.
+
+**Hypotes 3 (effort) — motbevisad som lösning, men inte som mekanism.**
+`--effort max` är den enda varianten som rör sig uppåt, och mest på den axel som
+betyder något (figurtext 2 169 → 2 591, alltså 82 % av API:ets). Priset är 334 s
+per sida mot 96, med en sida på 559 s. Ingen lärare väntar nio minuter på en
+boksida.
+
+**Hypotes 4, som planen inte hade: leveranssättet.** Ett agentsvar är en replik
+i ett samtal och kortas därefter; en fil är ett dokument. `claude-code-fil` lät
+agenten skriva avläsningen med Write i stället för att svara i chatten. Det
+hjälpte inte heller (6 776 tecken).
+
+### Vad som återstår, och vad det betyder
+
+Ingen inställning som går att nå utifrån `claude -p` stänger gapet. Kvar står
+själva agentramen — att bilden kommer som ett verktygsresultat inne i en loop i
+stället för som uppgiftens egen indata — och den går inte att ställa av.
+
+**Håll isär två saker som utvärderingen inte höll isär:** det som mätts är
+MÄNGD text, inte att texten är RÄTT. Att API:et skriver 46 % mer om figurerna
+säger att det beskriver utförligare, inte att Claude Code har fel. Ska "noggrann"
+beläggas krävs att någon läser båda utläsningarna mot fotot på ett par ställen
+där notationen är tät. `resultat/jamfor.html` är byggd för precis det, och
+beslutet ligger hos ägaren.
+
+**Konsekvens för appen: de två vägarna i punkt 1 nedan har olika krav.**
+Per lektion står läraren och väntar, och då är 96 s redan mycket och 334 s
+uteslutet. Engångsimporten av en hel bok körs obevakad, och där är väntetiden
+gratis — den vägen bör köra `--effort max`, eller API:et. Samma avläsare behöver
+alltså inte betjäna båda.
+
+### Ägarens beslut, 2026-07-30 (efter mätningen)
+
+**Claude Code, `claude -p`, för per-lektionsvägen.** Gapet mot API:et är mätt,
+känt och accepterat: ~24 % mindre text och ~46 % mindre figurbeskrivning mot
+noll nyckelhantering och ingen tokenfaktura. Bygg avläsaren mot CLI:n, med
+`ocr-eval/adaptrar.py:_claude_code_kor` som referens — de två fällorna där
+(prompten på stdin, den upplösta sökvägen från `shutil.which`) gäller
+fortfarande, och `--bare` får aldrig användas eftersom den flyttar
+autentiseringen till `ANTHROPIC_API_KEY`.
+
+Det gör CLI:n till en **extern körtidsberoende** för appen: installerad,
+inloggad och på PATH. Det måste synas i PyInstaller-bygget och ge ett begripligt
+felmeddelande i UI:t när den saknas — inte en tyst tom avläsning.
+
+---
+
+## Modellbytet — ägarens beslut 2026-07-30
+
+Qwen3-14B och vision-Gemman utgår. Claude Code CLI tar över deras arbete.
+**Detta är beslutat, inte föreslaget.**
+
+| Modell | Vad den gör i dag | Beslut |
+|---|---|---|
+| KB-Whisper (lokal) | transkriberingen | **stannar** — fungerar som den ska |
+| Gemma 4 E4B (lokal, `audio_model.py`) | andra passet som rättar texten **mot ljudet** | **stannar** — Claude kan inte ta emot ljud, så den har ingen ersättare |
+| Qwen3-14B Q8 (~15 GB) | rättning, sammanfattning, extraktion, arkivchatt, tavla, prov, arbetsblad | **utgår** → Claude Code |
+| Gemma 3 4B vision (~3,3 GB) | bildtolkning av uppladdade boksidor | **utgår** → Claude Code |
+
+### Vad som följer av det, och som måste hanteras
+
+**1. Elevdata lämnar datorn.** Transkripten går till Anthropic. Ägaren är
+informerad och har valt det ändå; det är hens data och hens beslut. Men appens
+grundregel var det motsatta, så `PRODUCT.md` är omskriven i samma veva — en
+strategitext som påstår "allt körs lokalt" när det inte stämmer är värre än
+ingen strategitext. **Följden för gränssnittet:** appen måste vara ärlig om
+vilka moment som går ut, på samma sätt som kalenderförslagen redan granskas före
+sändning. Det är en designfråga, inte en implementationsdetalj — den ligger i
+Claude Design-briefen.
+
+**2. Den garanterade JSON:en försvinner — den största tekniska risken.**
+llama.cpp *grammatiktvingar* utdatan: modellen kan fysiskt inte skriva ogiltig
+JSON, och provets balans låses per uppgift med `prefixItems`/`const`
+(`exam_spec.to_response_format`). `claude -p --json-schema` **validerar** i
+stället, vilket är något annat. Reparationsloopen i `exam_gen` går därmed från
+skyddsnät till bärande konstruktion, och skelettets balansgaranti måste
+kontrolleras i efterhand i stället för att vara sann by construction.
+
+**3. GPU-arbitern förenklas men försvinner inte.** Den 21 GB stora LLM:en är
+borta, så Whisper slipper konkurrera om kortet — men ljud-Gemman finns kvar och
+behöver fortfarande serialiseras mot Whisper.
+
+**4. Väntetiden byter form.** En lokal modell strömmar token direkt; `claude -p`
+startar en agentloop och tiger i 1–2 minuter. Varje ställe som i dag visar
+strömmande text (tavlan, provet, chatten) får en annan väntekaraktär, och prov
+med flera reparationsrundor kan bli flera minuter. Det är en designfråga för
+Claude Design: hur ser väntan ut när den inte längre kan visa framsteg?
+
+**5. Modellhanteraren krymper.** Nedladdning, VRAM-rekommendationer och
+installationsstatus för LLM:er utgår; kvar blir Whisper, ljud-Gemman och ett
+nytt tillstånd: *Claude Code saknas / är inte inloggad*. Det senare måste vara
+ett begripligt besked, aldrig en tyst tom utdata.
+
+**6. Appen blir nätberoende.** Utan internet fungerar transkriberingen och
+ljudrättningen, men ingenting annat. Takgränserna blir dessutom
+användningsfönster i stället för tokenkostnad.
 
 ---
 
@@ -185,6 +289,16 @@ regel: vid varje designändring skrivs DESIGN.md om i samma commit.**
 
 - Läroboksfotona ligger i `ocr-eval/sidor/` (gitignorerade, finns lokalt).
 - Jämförelsen byggs med `python ocr-eval/jamfor.py` → `resultat/jamfor.html`.
+- Siffrorna i tabellen ovan kommer ur `python ocr-eval/matt.py`, som räknar om
+  allt i `resultat/`. Kör den efter varje ny variant i stället för att jämföra
+  fem markdownfiler mot fem andra i huvudet.
+- **Läs `oläsligt`-kolumnen försiktigt.** `claude-code-max` satte 0,2 markörer
+  per sida men skrev 1 200 tecken under OSÄKERT — den redovisar i prosa i
+  stället för att märka i texten. Låg siffra är inte självsäkerhet förrän du
+  läst avsnittet.
+- Konsollen på den här maskinen är cp1252 och kvävs på `ä` i skriptutdata. Kör
+  `PYTHONIOENCODING=utf-8 python ocr-eval/matt.py` så slipper du en
+  `UnicodeEncodeError` som ser ut som ett fel i riggen.
 - **Bygg aldrig med Impeccables live-tagg injicerad i `index.html`** — den
   bakas in i e2e-bygget och äter Escape och klick. Det gav nio falska fel.
 - Fejkserverns databas förorenas av avbrutna e2e-körningar. Ser du dubbletter
