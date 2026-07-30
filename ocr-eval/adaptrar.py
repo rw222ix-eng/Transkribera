@@ -216,7 +216,45 @@ def _mistral(bild: Path) -> str:
     return svar["choices"][0]["message"]["content"]
 
 
+# --------------------------------------------------------------- claude-code
+# ÄGARENS PRENUMERATION, inte API-fakturering. Claude Code har en EGEN
+# inloggning (dess /login) som är skild från ANTHROPIC_API_KEY och från ant:s
+# OAuth-profiler — och den kan vara ett Claude.ai-abonnemang. Att starta
+# `claude -p` som subprocess är därför vägen till prenumerationen; det är också
+# exakt vad Codex gör när man lägger till Claude Code som tillägg.
+#
+# Ingen nyckel passerar riggen, miljön eller den här filen. Vi vet inte ens
+# vilken sorts autentisering som används — bara att CLI:n har en.
+#
+# --allowedTools Read: den ska läsa EN bild, inget annat. Utan grinden har
+# agenten hela verktygslådan i ett repo den inte ska röra.
+
+def _claude_code_saknas():
+    if not shutil.which("claude"):
+        return "claude (Claude Code CLI) finns inte på PATH"
+    return None
+
+
+def _claude_code(bild: Path) -> str:
+    # Prompten på stdin, inte som argument: PROMPT är ~1,5 kB och Windows
+    # kommandorad har en hård gräns som en längre prompt kan slå i.
+    text = (f"Läs bilden {bild.resolve().as_posix()} med Read-verktyget.\n\n"
+            f"Följ sedan den här instruktionen på det du ser:\n\n{PROMPT}")
+    # Den UPPLÖSTA sökvägen, inte "claude". shutil.which tillämpar PATHEXT och
+    # hittar claude.CMD; subprocess gör INTE det uppslaget själv på Windows och
+    # letar efter en fil som heter exakt "claude" — som inte finns.
+    ut = subprocess.run(
+        [shutil.which("claude"), "-p", "--allowedTools", "Read"],
+        input=text, capture_output=True, text=True,
+        encoding="utf-8", errors="replace", timeout=600,
+    )
+    if ut.returncode != 0:
+        raise RuntimeError((ut.stderr or ut.stdout).strip()[:400])
+    return ut.stdout.strip()
+
+
 KANDIDATER = [
+    Kandidat("claude-code", "prenumeration", _claude_code, _claude_code_saknas),
     Kandidat("tesseract", "lokalt (golv)", _tesseract, _tesseract_saknas),
     Kandidat("qwen-vl", "lokalt", _qwen, _qwen_saknas),
     Kandidat("gemini-pro", "API", _gemini_kor(_GEMINI_PRO), _gemini_saknas),
