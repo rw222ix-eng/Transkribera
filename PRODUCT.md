@@ -22,9 +22,19 @@ inte den normala vägen in. Det betyder att appen börjar sitt arbete när lekti
 redan är slut och läraren sitter ner, typiskt mellan två pass eller på
 eftermiddagen.
 
-Materialet bär **elevers röster, namn och svårigheter**. Det är hela skälet till att
-allt körs lokalt: inget konto, ingen synk, ingenting som kan hamna i molnet av
-misstag.
+Materialet bär **elevers röster, namn och svårigheter**. Ljudet lämnar aldrig
+datorn: transkriberingen körs på det egna grafikkortet, och rättningen mot ljudet
+likaså.
+
+**Ägarens beslut 2026-07-30:** *texten* får däremot gå ut. Språkmodellsarbetet —
+sammanfattning, extraktion, arkivchatt, tavla, prov — flyttas från den lokala
+Qwen3 till Claude Code på ägarens prenumeration. Det betyder att lektionstexten,
+med de namn och svårigheter den bär, skickas till Anthropic.
+
+Det är en medveten avvägning och den är hens att göra, men den ska stå skriven
+rakt ut i stället för att bo i en kommentar: appen är **inte längre offline i
+strikt mening**. Kvar som hård regel är att *ljudfilen* aldrig lämnar maskinen,
+och att appen ska vara ärlig i gränssnittet om vilka moment som går ut.
 
 ## Product Purpose
 
@@ -78,17 +88,16 @@ aldrig i molnet.
 **1 · Transkribera.** Filen dras in, märks med namn/klass/kurs, får språk och format,
 och ett valfritt andra pass som rättar texten mot vad som faktiskt sägs (räddar
 främst namn och ämnesord). Körningen startar och läraren går ifrån — lektionen landar
-i arkivet av sig själv. KB-Whisper på det egna grafikkortet; appen serialiserar
-Whisper och LLM så de aldrig konkurrerar om minnet.
+i arkivet av sig själv. KB-Whisper på det egna grafikkortet, och ljudrättningen
+likaså; appen serialiserar dem så de aldrig konkurrerar om minnet.
 
 **2 · Inspelningar.** Lektionerna grupperas per vecka, filtrerbara på klass, kurs och
 månad. Varje lektion kan öppnas som transkript med ljudet synkat mot texten, så ett
 ställe går att hoppa till och höra. Hela arkivet är frågbart — svaren bygger på vad
 som verkligen sades och bär källhänvisningar tillbaka till stället i transkriptet, så
 de går att kontrollera. Kalenderförslag granskas alltid av läraren innan något
-skickas; det som godkänns kan läggas i Google Kalender. Det är appens **enda medvetna
-undantag** från offline-principen, gjort för att kalendern ändå är där lärarens dag
-bor.
+skickas; det som godkänns kan läggas i Google Kalender, eftersom kalendern ändå är
+där lärarens dag bor.
 
 **3 · Planering.** Vänder på riktningen och tar över förberedelsearbetet.
 En **lektionstavla** är ett förberedelsedokument: läraren beskriver momentet, får ett
@@ -114,8 +123,10 @@ Three looks the owner has explicitly ruled out:
   glassmorphism, cyan-on-dark neon. The "AI slop" look.
 - **Dense corporate / enterprise admin UI** — cramped, cold, bureaucratic,
   Bootstrap-gray.
-- **Anything that reads as a cloud or online service** — no account or online
-  affordances of any kind; the app is strictly local and offline.
+- **Anything that reads as a cloud or online service** — no accounts, no sync
+  status, no "connected"-badges, no service chrome. Att en del av arbetet numera
+  går ut ändrar inte det här: undantagen redovisas **där de sker**, i lugn
+  svenska på det ställe momentet startar, aldrig som en molnprodukts skyltning.
 
 ## Design Principles
 
@@ -125,8 +136,10 @@ Three looks the owner has explicitly ruled out:
 2. **Editorial, not dashboard.** Compose like print: a mono eyebrow, a serif-italic
    display title, a lede, asymmetric grids, hairline rules. Never card-grid or
    hero-metric slop; never dense admin tables.
-3. **Local and private is the point.** Never imply the cloud. No account or online
-   language or iconography; everything stays on-device.
+3. **Ärlighet om var arbetet sker.** Ljudet stannar på maskinen, alltid. Det som
+   går ut — språkmodellsarbetet och kalenderposterna — ska synas där det sker,
+   en gång, i lugn text. Aldrig molnspråk eller molnikonografi, aldrig
+   kontokänsla, men heller aldrig ett tyst "lokalt" som inte längre är sant.
 4. **Swedish, plain, unhurried.** All user-facing text is natural Swedish, calm and
    respectful of the teacher's time — no hype, no chirp.
 5. **Restrained motion; accessibility as a floor.** Purposeful mask-reveal and
