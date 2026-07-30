@@ -100,3 +100,4 @@ node_modules/
 # Riggen (kor.py, jamfor.py, adaptrar.py, prompt.py, README.md) gör det.
 ocr-eval/sidor/
 ocr-eval/resultat/
+ocr-eval/.nycklar

@@ -1,0 +1,30 @@
+# Mall för ocr-eval/.nycklar
+#
+# GÖR SÅ HÄR:
+#   1. Kopiera den här filen till ocr-eval/.nycklar
+#   2. Öppna kopian i en vanlig textredigerare
+#   3. Ersätt platshållarna med dina riktiga nycklar
+#   4. Spara. Kör sedan: python ocr-eval/kor.py
+#
+# .nycklar är gitignorerad och läses bara av kor.py. Riggen skriver aldrig ut
+# innehållet — den rapporterar bara om en nyckel FINNS eller inte, aldrig vad
+# den är. Rader som fortfarande börjar med DIN- behandlas som tomma, så du kan
+# lämna kvar de kandidater du inte vill köra.
+#
+# Nycklarna hämtar du själv här:
+#   Gemini   https://aistudio.google.com/apikey
+#   Claude   https://console.anthropic.com/settings/keys
+#   Mistral  https://console.mistral.ai/api-keys
+#
+# Börja med Gemini om du bara vill sätta en. Den har gratisnivå, och den leder
+# på figur- och diagrambenchmarks — vilket är den axel som avgör här.
+
+GEMINI_API_KEY=DIN-NYCKEL-HÄR
+ANTHROPIC_API_KEY=DIN-NYCKEL-HÄR
+MISTRAL_API_KEY=DIN-NYCKEL-HÄR
+
+# Modellnamn — bara om defaulterna i adaptrar.py inte stämmer när du kör.
+# GEMINI_MODEL=gemini-3.5-pro
+# GEMINI_FLASH_MODEL=gemini-3.6-flash
+# ANTHROPIC_MODEL=claude-opus-5
+# MISTRAL_MODEL=pixtral-large-latest

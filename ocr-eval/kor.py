@@ -10,6 +10,7 @@ andra — lägg till en nyckel, kör igen, bara den nya kandidaten körs.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import time
 import traceback
@@ -17,6 +18,36 @@ from pathlib import Path
 
 HAR = Path(__file__).resolve().parent
 sys.path.insert(0, str(HAR))
+
+
+def las_nycklar() -> None:
+    """Läser ocr-eval/.nycklar in i miljön, om filen finns.
+
+    VARFÖR EN FIL OCH INTE setx: den här processen startas av ett skal som
+    redan körde när du satte variabeln, och ärver därför den GAMLA miljön.
+    setx skriver till registret och syns först i processer som startas efteråt
+    — vilket gör felsökningen förvirrande ("jag satte ju nyckeln").
+
+    Filen är gitignorerad och läses bara här. Ingen del av riggen skriver ut
+    innehållet, och värdena rapporteras aldrig — bara om de finns eller inte.
+    """
+    fil = HAR / ".nycklar"
+    if not fil.exists():
+        return
+    for rad in fil.read_text(encoding="utf-8").splitlines():
+        rad = rad.strip()
+        if not rad or rad.startswith("#") or "=" not in rad:
+            continue
+        namn, _, varde = rad.partition("=")
+        varde = varde.strip().strip('"').strip("'")
+        # DIN-NYCKEL-HÄR o.l. lämnas kvar som platshållare — sätts de i miljön
+        # ser adaptern en "nyckel" och kandidaten faller med ett 401 i stället
+        # för att hoppas över med ett begripligt besked.
+        if varde and not varde.startswith("DIN-"):
+            os.environ.setdefault(namn.strip(), varde)
+
+
+las_nycklar()
 
 from adaptrar import KANDIDATER  # noqa: E402
 
