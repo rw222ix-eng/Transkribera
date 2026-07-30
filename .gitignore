@@ -95,3 +95,8 @@ exports/
 # Byggd Svelte-frontend (byggs vid paketering, checkas inte in)
 app/web/next/
 node_modules/
+
+# OCR-utvärderingen: läroboksidor och modellutdata checkas aldrig in.
+# Riggen (kor.py, jamfor.py, adaptrar.py, prompt.py, README.md) gör det.
+ocr-eval/sidor/
+ocr-eval/resultat/
