@@ -101,3 +101,6 @@ node_modules/
 ocr-eval/sidor/
 ocr-eval/resultat/
 ocr-eval/.nycklar
+# claude-code-fil låter agenten skriva avläsningen hit i stället för att svara
+# i chatten; adaptern läser tillbaka filen. Samma boksidesinnehåll som resultat/.
+ocr-eval/.tmp/

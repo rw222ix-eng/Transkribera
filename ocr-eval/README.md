@@ -60,10 +60,25 @@ python ocr-eval/jamfor.py
 Bygger `resultat/jamfor.html` — fotot till vänster, varje kandidats utläsning
 bredvid. Det är den sidan beslutet fattas på.
 
+`python ocr-eval/matt.py` räknar dessutom ihop det som går att räkna — tecken,
+figurtext, `[oläsligt]` och väntetid per sida. Det måttet finns för en smalare
+fråga än beslutet: när samma kandidat körs om med en ändrad inställning, rörde
+sig något? Det svarar aldrig på om utläsningen blev *rätt*.
+
+De fyra `claude-code`-raderna är samma CLI med en sak ändrad var — effort,
+systemprompt respektive leveranssätt. De ligger kvar som bevis: var och en av
+dem prövade en förklaring till varför API-anropet skriver mer, och ingen av dem
+stängde gapet. Se plandokumentet `docs/superpowers/plans/2026-07-30-tavla-fran-boksida.md`
+innan du prövar samma sak igen.
+
 ## Kandidater
 
 | Kandidat | Var | Kräver | Modellnamn styrs av |
 |---|---|---|---|
+| `claude-code` | prenumerationen | `claude` på PATH, inloggad | CLI:ns egen modell |
+| `claude-code-max` | prenumerationen | d:o | d:o |
+| `claude-code-egen` | prenumerationen | d:o | d:o |
+| `claude-code-fil` | prenumerationen | d:o | d:o |
 | `tesseract` | lokalt | `tesseract` på PATH + svenskt språkdata | — |
 | `qwen-vl` | lokalt | llama.cpp-server på `LLAMACPP_VL_URL` | serverns modell |
 | `gemini-pro` | API | `GEMINI_API_KEY` | `GEMINI_MODEL` |

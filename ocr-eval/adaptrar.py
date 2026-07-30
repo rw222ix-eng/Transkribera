@@ -235,26 +235,132 @@ def _claude_code_saknas():
     return None
 
 
-def _claude_code(bild: Path) -> str:
-    # Prompten på stdin, inte som argument: PROMPT är ~1,5 kB och Windows
-    # kommandorad har en hård gräns som en längre prompt kan slå i.
-    text = (f"Läs bilden {bild.resolve().as_posix()} med Read-verktyget.\n\n"
-            f"Följ sedan den här instruktionen på det du ser:\n\n{PROMPT}")
-    # Den UPPLÖSTA sökvägen, inte "claude". shutil.which tillämpar PATHEXT och
-    # hittar claude.CMD; subprocess gör INTE det uppslaget själv på Windows och
-    # letar efter en fil som heter exakt "claude" — som inte finns.
-    ut = subprocess.run(
-        [shutil.which("claude"), "-p", "--allowedTools", "Read"],
-        input=text, capture_output=True, text=True,
-        encoding="utf-8", errors="replace", timeout=600,
-    )
-    if ut.returncode != 0:
-        raise RuntimeError((ut.stderr or ut.stdout).strip()[:400])
-    return ut.stdout.strip()
+# Skriven för att pröva den mest närliggande förklaringen till att API-anropet
+# gav ~24 % mer text än `claude -p`: att kodagentens systemprompt, som belönar
+# korta svar, konkurrerar med vår OCR-prompt. Den här är motsatsen —
+# fullständighet är hela målet.
+#
+# UTFALLET, 2026-07-30: hypotesen föll, och åt fel håll. 6 298 tecken mot
+# defaultens 7 276 och API:ets 8 999. Kodagentens systemprompt är alltså inte
+# bromsen; den bidrar snarare. Prompten ligger kvar som bevis så att nästa
+# läsare slipper pröva samma sak igen.
+SYSTEM_AVLASARE = """\
+Du är en noggrann avläsare av tryckta sidor. Din enda uppgift är att återge vad \
+som står på en bild — fullständigt, ordagrant och i sidans egen ordning.
+
+Du skriver ingen kod, löser inga uppgifter på sidan och kommenterar inte \
+innehållet. Du gör inga ändringar i något filsystem.
+
+Utförlighet är rätt här. Utdatan ska kunna ersätta sidan för någon som inte ser \
+den: den som läser den ska kunna hålla en genomgång utan att ha sidan framför \
+sig. Korta aldrig ned, sammanfatta aldrig, utelämna aldrig något för att spara \
+plats, och skriv aldrig hänvisningar av typen "som ovan" i stället för \
+innehållet. Långa svar är förväntade och önskade.
+
+Hitta aldrig på. Kan du inte läsa något säkert skriver du [oläsligt] på den \
+platsen i stället för att gissa.
+
+Använd verktyget Read för att öppna den bild du får en sökväg till, och lämna \
+sedan hela avläsningen i ett enda svar.
+"""
+
+
+def _claude_code_kor(systemprompt: str | None = None, effort: str | None = None,
+                     till_fil: bool = False):
+    """Bygger en adapter mot `claude -p`.
+
+    `till_fil` byter leveranssätt: i stället för att svara i chatten skriver
+    agenten avläsningen till en fil med Write, och adaptern läser tillbaka den.
+    Se kommentaren vid claude-code-fil om varför det kan spela roll.
+    """
+
+    def kor(bild: Path) -> str:
+        # Prompten på stdin, inte som argument: PROMPT är ~1,5 kB och Windows
+        # kommandorad har en hård gräns som en längre prompt kan slå i.
+        text = (f"Läs bilden {bild.resolve().as_posix()} med Read-verktyget.\n\n"
+                f"Följ sedan den här instruktionen på det du ser:\n\n{PROMPT}")
+        mal = None
+        if till_fil:
+            tmp = Path(__file__).resolve().parent / ".tmp"
+            tmp.mkdir(exist_ok=True)
+            mal = tmp / f"{bild.stem}.md"
+            mal.unlink(missing_ok=True)
+            text = (
+                f"Läs bilden {bild.resolve().as_posix()} med Read-verktyget och "
+                f"skriv sedan avläsningen till filen {mal.as_posix()} med "
+                f"Write-verktyget.\n\nFilen ska innehålla HELA avläsningen enligt "
+                f"instruktionen nedan, och ingenting annat — ingen inledning, "
+                f"ingen sammanfattning av vad du gjort. Svara själv bara med "
+                f"ordet KLART.\n\n{PROMPT}"
+            )
+        # Den UPPLÖSTA sökvägen, inte "claude". shutil.which tillämpar PATHEXT
+        # och hittar claude.CMD; subprocess gör INTE det uppslaget själv på
+        # Windows och letar efter en fil som heter exakt "claude" — som inte
+        # finns.
+        argv = [shutil.which("claude"), "-p",
+                "--allowedTools", "Read,Write" if till_fil else "Read"]
+        if systemprompt:
+            argv += ["--system-prompt", systemprompt]
+        if effort:
+            argv += ["--effort", effort]
+        # INTE --bare, hur frestande det än ser ut. Den flaggan skär bort
+        # CLAUDE.md, hooks och plugins — men också OAuth: med --bare är
+        # autentiseringen strikt ANTHROPIC_API_KEY. Den skulle alltså tyst
+        # flytta kandidaten från prenumerationen till API-fakturering, vilket
+        # är hela det val ägaren gjort tvärtom.
+        ut = subprocess.run(
+            argv, input=text, capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=600,
+        )
+        if ut.returncode != 0:
+            raise RuntimeError((ut.stderr or ut.stdout).strip()[:400])
+        if mal is not None:
+            # Nekad skrivning ger returkod 0 och ett vänligt svar i chatten. Utan
+            # den här kontrollen hade det blivit en tom resultatfil som ser ut
+            # som en modell som inte kunde läsa sidan — samma tysta fel som
+            # tokenbudgeten gav på API-kandidaten.
+            if not mal.exists():
+                raise RuntimeError("ingen fil skrevs; svaret var: "
+                                   + ut.stdout.strip()[:300])
+            return mal.read_text(encoding="utf-8").strip()
+        return ut.stdout.strip()
+
+    return kor
+
+
+_claude_code = _claude_code_kor(None)
 
 
 KANDIDATER = [
     Kandidat("claude-code", "prenumeration", _claude_code, _claude_code_saknas),
+    # De tre nedan är samma CLI med EN sak ändrad var. Ingen av dem stängde
+    # gapet mot API-kandidaten — se plandokumentet
+    # docs/superpowers/plans/2026-07-30-tavla-fran-boksida.md för hela mätningen.
+    # De ligger kvar för att en motbevisad hypotes annars prövas igen.
+    Kandidat("claude-code-egen", "prenumeration",
+             _claude_code_kor(SYSTEM_AVLASARE), _claude_code_saknas),
+    # Effort, inte systemprompt. `claude -p` ärver effortLevel ur användarens
+    # settings.json — här "high" — medan API-kandidaten kör med en tankebudget
+    # på 32 000 token.
+    #
+    # UTFALLET: den enda varianten som rör sig uppåt, och mest på den axel som
+    # betyder något (figurtext 2 169 → 2 591, alltså 82 % av API:ets). Priset är
+    # 334 s per sida mot 96, med en sida på 559 s. Oanvändbar när läraren står
+    # och väntar — men värd att överväga för engångsimporten av en hel bok, som
+    # körs obevakad och där väntetiden är gratis.
+    Kandidat("claude-code-max", "prenumeration",
+             _claude_code_kor(effort="max"), _claude_code_saknas),
+    # Leveranssättet, inte modellen. Det enda som återstod när systemprompt,
+    # upplösning och effort var avfärdade är att svaret i Claude Code är ett
+    # AGENTSVAR efter ett verktygsanrop, medan API-anropet bara har en uppgift
+    # och ett svar. Ett agentsvar är en replik i ett samtal — kort av samma skäl
+    # som en människa fattar sig kort när hon redan gjort jobbet. Skriver
+    # agenten i stället avläsningen till en FIL är leveransen ett dokument, och
+    # dokument skrivs inte korta för att vara artiga.
+    #
+    # UTFALLET: höll inte heller. 6 776 tecken, alltså under defaultens 7 276.
+    Kandidat("claude-code-fil", "prenumeration",
+             _claude_code_kor(till_fil=True), _claude_code_saknas),
     Kandidat("tesseract", "lokalt (golv)", _tesseract, _tesseract_saknas),
     Kandidat("qwen-vl", "lokalt", _qwen, _qwen_saknas),
     Kandidat("gemini-pro", "API", _gemini_kor(_GEMINI_PRO), _gemini_saknas),
