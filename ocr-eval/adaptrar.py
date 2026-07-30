@@ -37,8 +37,22 @@ def _post(url: str, kropp: dict, huvuden: dict) -> dict:
     req.add_header("content-type", "application/json")
     for k, v in huvuden.items():
         req.add_header(k, v)
-    with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
-        return json.loads(r.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+            return json.loads(r.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        # SERVERNS EGEN TEXT, inte bara statuskoden. Ett bart "400 Bad Request"
+        # säger ingenting om det var fel modellnamn, för stor bild eller fel
+        # fältnamn — och det är precis den skillnaden man behöver när en
+        # kandidat vägrar. Kroppen kan innehålla nyckeln i ett eko av
+        # förfrågan, så bara felmeddelandet plockas ut, aldrig hela svaret.
+        try:
+            detalj = json.loads(e.read().decode("utf-8", "replace"))
+            m = detalj.get("error", detalj)
+            text = m.get("message") or m.get("type") or json.dumps(m)[:300]
+        except Exception:
+            text = "(kunde inte läsa felkroppen)"
+        raise RuntimeError(f"HTTP {e.code}: {text}") from None
 
 
 @dataclass
@@ -131,7 +145,11 @@ def _gemini_kor(modell: str):
 # Flash-Lite den 21 juli, Opus 5 den 24 juli. Publicerade dokument-benchmarks
 # ligger kvartal efter — därav den här riggen. Styr namnen med GEMINI_MODEL,
 # GEMINI_FLASH_MODEL och ANTHROPIC_MODEL utan att röra koden.
-_GEMINI_PRO = os.environ.get("GEMINI_MODEL", "gemini-3.5-pro")
+# 3.1-pro-preview är den nyaste Pro som FAKTISKT går att anropa på
+# generativelanguage-API:et (verifierat mot /v1beta/models 2026-07-30).
+# "Gemini 3.5 Pro" finns i pressmaterial men inte i modellistan — Flash-serien
+# har hunnit till 3.6 medan Pro står kvar på 3.1.
+_GEMINI_PRO = os.environ.get("GEMINI_MODEL", "gemini-3.1-pro-preview")
 # Flash-tiern är MED FLIT en egen kandidat, inte en billigare variant att välja
 # om Pro är för dyr. Google riktar den uttryckligen mot dokumentbearbetning, och
 # det du faktiskt betalar för här är VÄNTETID: OCR är steget du står och väntar
@@ -150,10 +168,19 @@ def _claude_saknas():
 def _claude(bild: Path) -> str:
     b64, mime = _b64(bild)
     modell = os.environ.get("ANTHROPIC_MODEL", "claude-opus-5")
+    # INGEN temperature. De andra kandidaterna körs på 0 för att göra
+    # jämförelsen reproducerbar, men Opus 5 resonerar och avvisar då hela
+    # anropet med 400 — temperature får bara vara 1 när thinking är på.
+    # Determinismen offras hellre än kandidaten.
     svar = _post("https://api.anthropic.com/v1/messages", {
         "model": modell,
-        "max_tokens": 8000,
-        "temperature": 0,
+        # 32k, inte 8k. Med thinking påslaget räknas RESONEMANGET in i
+        # max_tokens — vid 8000 åt tänkandet upp hela budgeten på de täta
+        # sidorna och svaret kom aldrig ut. Utfallet var inte ett fel utan ett
+        # tomt svar, vilket är den värsta sortens tyst fel: riggen skrev en
+        # resultatfil på 0 tecken som såg ut som att modellen inte kunde läsa
+        # sidan.
+        "max_tokens": 32000,
         "messages": [{"role": "user", "content": [
             {"type": "image", "source": {"type": "base64", "media_type": mime, "data": b64}},
             {"type": "text", "text": PROMPT},
@@ -162,6 +189,8 @@ def _claude(bild: Path) -> str:
         "x-api-key": os.environ["ANTHROPIC_API_KEY"],
         "anthropic-version": "2023-06-01",
     })
+    # Svaret kan inledas med thinking-block som saknar "text". .get() i stället
+    # för [] plockar ut just textblocken utan att falla på de andra.
     return "".join(b.get("text", "") for b in svar["content"])
 
 
