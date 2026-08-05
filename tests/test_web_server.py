@@ -966,69 +966,72 @@ class _TransArbiter:
     def llm_installed(self): return True
 
 
-def _run_one_transcribe(tmp_path, monkeypatch, arb, more_pending):
-    from fastapi.testclient import TestClient
+def _fejka_kedjan(monkeypatch, tmp_path, moln=None):
+    """Molnet + tidsättningen fejkade: inget nät, ingen GPU, ingen nedladdning."""
     monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: _HW())
-    monkeypatch.setattr(server.whisper_manager, "is_installed", lambda *a, **k: True)
-    monkeypatch.setattr(server, "_run_transcribe_subprocess",
-                        lambda *a, **k: (["/x/lektion.srt"], [{"start": 0.0, "end": 1.0, "text": "hej"}]))
+    monkeypatch.setattr(server.llm_client, "is_running", lambda *a, **k: False)
+    monkeypatch.setattr(server.openai_asr, "har_nyckel", lambda *a, **k: True)
+    monkeypatch.setattr(server.openai_asr, "transkribera", moln or (
+        lambda audio, base, **k: server.openai_asr.Resultat(
+            bitar=[server.openai_asr.Bit(0.0, 1.0, "hej", 1.0)], sprak="sv")))
+    monkeypatch.setattr(server.alignment, "ar_installerad", lambda *a, **k: True)
+    monkeypatch.setattr(server.alignment, "tidsatt",
+                        lambda *a, **k: [{"start": 0.0, "end": 1.0, "text": "hej"}])
     folder = tmp_path / "Transkriberingar" / "r"
     monkeypatch.setattr(server.output_store, "assemble_output", lambda *a, **k: {
         "folder": str(folder),
         "files": [{"path": str(folder / "lektion.srt"), "name": "lektion.srt",
                    "ext": "srt", "kind": "subtitle"}],
         "video": {"path": str(folder / "lektion.mp4"), "name": "lektion.mp4"}})
-    media = tmp_path / "lektion.mp3"
-    media.write_text("a", encoding="utf-8")
-    c = TestClient(server.create_app(base_dir=tmp_path, arbiter=arb))
-    r = c.post("/api/transcribe", json={
-        "source": str(media), "model_id": server.WHISPER_MODELS[0].id,
-        "language": "sv", "formats": ["srt"], "more_pending": more_pending})
-    assert r.status_code == 200
-    return c
 
 
 def test_history_stores_original_source(tmp_path, monkeypatch):
-    arb = _TransArbiter()
-    c = _run_one_transcribe(tmp_path, monkeypatch, arb, more_pending=False)
+    from fastapi.testclient import TestClient
+    _fejka_kedjan(monkeypatch, tmp_path)
+    media = tmp_path / "lektion.mp3"
+    media.write_text("a", encoding="utf-8")
+    c = TestClient(server.create_app(base_dir=tmp_path, arbiter=_TransArbiter()))
+    r = c.post("/api/transcribe", json={
+        "source": str(media), "language": "sv", "formats": ["srt"]})
+    assert r.status_code == 200
     entry = c.get("/api/history").json()[0]
     assert entry["source"] == str(tmp_path / "lektion.mp3")   # original, not result path
-    assert arb.prewarmed == 1                                  # last item → prewarm
+    assert entry["model"] == server.openai_asr.MODEL          # modellen är förbestämd
 
 
-def test_prewarm_skipped_when_more_pending(tmp_path, monkeypatch):
-    arb = _TransArbiter()
-    _run_one_transcribe(tmp_path, monkeypatch, arb, more_pending=True)
-    assert arb.prewarmed == 0                                  # queue draining → no reload
-
-
-def test_cancel_skips_prewarm(tmp_path, monkeypatch):
-    # A cancel arriving mid-run must NOT trigger the ~21 GB LLM prewarm in the
-    # job's finally block (the user stopped; don't pay the reload).
+def test_avbrott_mitt_i_kor_ger_fel_och_slapper_gpun(tmp_path, monkeypatch):
+    # Avbryt mitt i molnsteget: jobbet ska fela snyggt (inte skriva en halv
+    # historikpost) och GPU-låset ska släppas i finally.
     from fastapi.testclient import TestClient
     arb = _TransArbiter()
-    monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: _HW())
-    monkeypatch.setattr(server.whisper_manager, "is_installed", lambda *a, **k: True)
-    folder = tmp_path / "Transkriberingar" / "r"
-    monkeypatch.setattr(server.output_store, "assemble_output", lambda *a, **k: {
-        "folder": str(folder),
-        "files": [{"path": str(folder / "lektion.srt"), "name": "lektion.srt",
-                   "ext": "srt", "kind": "subtitle"}],
-        "video": {"path": str(folder / "lektion.mp4"), "name": "lektion.mp4"}})
+
+    def moln_med_avbrott(audio, base, **k):
+        c.app.state.transcribe_job["cancelled"] = True
+        return server.openai_asr.Resultat(
+            bitar=[server.openai_asr.Bit(0.0, 1.0, "hej", 1.0)], sprak="sv")
+    _fejka_kedjan(monkeypatch, tmp_path, moln=moln_med_avbrott)
     media = tmp_path / "lektion.mp3"
     media.write_text("a", encoding="utf-8")
     c = TestClient(server.create_app(base_dir=tmp_path, arbiter=arb))
 
-    def fake_sub(*a, **k):                                     # cancel flips mid-run
-        c.app.state.transcribe_job["cancelled"] = True
-        return (["/x/lektion.srt"], [{"start": 0.0, "end": 1.0, "text": "hej"}])
-    monkeypatch.setattr(server, "_run_transcribe_subprocess", fake_sub)
-
     r = c.post("/api/transcribe", json={
-        "source": str(media), "model_id": server.WHISPER_MODELS[0].id,
-        "language": "sv", "formats": ["srt"], "more_pending": False})
+        "source": str(media), "language": "sv", "formats": ["srt"]})
     assert r.status_code == 200
-    assert arb.prewarmed == 0                                  # cancelled → no reload
+    assert "avbröts" in r.text
+    assert c.get("/api/history").json() == []
+
+
+def test_transkribering_utan_nyckel_avvisas(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+    _fejka_kedjan(monkeypatch, tmp_path)
+    monkeypatch.setattr(server.openai_asr, "har_nyckel", lambda *a, **k: False)
+    media = tmp_path / "lektion.mp3"
+    media.write_text("a", encoding="utf-8")
+    c = TestClient(server.create_app(base_dir=tmp_path, arbiter=_TransArbiter()))
+    r = c.post("/api/transcribe", json={
+        "source": str(media), "language": "sv", "formats": ["srt"]})
+    assert r.status_code == 400
+    assert r.json()["kod"] == "nyckel_saknas"
 
 
 # ---- Modelldisk-val (#6): persistent modellrot ------------------------------

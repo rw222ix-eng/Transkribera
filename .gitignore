@@ -9,6 +9,7 @@ venv/
 cookies.txt
 google_client_secret.json
 google_token.json
+openai_key.txt
 
 # Runtime-data (skapas bredvid exe:n)
 history.json

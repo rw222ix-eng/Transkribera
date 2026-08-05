@@ -2,9 +2,11 @@
 
 Bug: andra passet (ljudkorrigering mot ljudet) körde
 ``_run_transcribe_subprocess`` utan skalning, så baren nollställdes och
-klättrade 0→100 en andra gång ("kördes två gånger"). Efter fixen delas baren i
-två framåtriktade delband — transkribera 0–60 %, rätta 60–90 % — så det
-emitterade ``pct`` aldrig minskar.
+klättrade 0→100 en andra gång ("kördes två gånger"). Efter fixen har varje pass
+sitt eget framåtriktade delband, så det emitterade ``pct`` aldrig minskar.
+
+Banden efter molnbytet: molnet (gpt-transcribe) 0–45 %, tidsättningen 50–60 %,
+ljudkorrigeringen 60–90 %, efterarbetet 93/98.
 """
 import json
 import types
@@ -47,17 +49,33 @@ def _progress_pcts(sse_text: str) -> list[int]:
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: _HW())
-    monkeypatch.setattr(server.whisper_manager, "is_installed", lambda *a, **k: True)
-    monkeypatch.setattr(server.whisper_manager, "model_dir_for",
-                        lambda *a, **k: tmp_path / "model")
-    monkeypatch.setattr(server.recommend, "evaluate_whisper",
-                        lambda *a, **k: types.SimpleNamespace(device="cpu", compute_type="int8"))
     # Ljudmodellen "installerad" så andra passet (ljudkorrigering) faktiskt körs.
     monkeypatch.setattr(server.audio_model, "is_audio_model_installed", lambda *_: True)
     monkeypatch.setattr(server.postprocess, "should_translate", lambda *a, **k: False)
+    monkeypatch.setattr(server.llm_client, "is_running", lambda *a, **k: True)
 
-    # Ersätt subprocess-körningen: emittera framsteg utifrån skala/bas som servern
-    # skickar in — precis som barnprocessens PROGRESS-rader mappas i verkligheten.
+    # Molnet och tidsättningen fejkas — de emitterar via sina progress_cb precis
+    # som i verkligheten, så bandmappningen i servern är det som faktiskt testas.
+    def fake_moln(audio, base, *, langd, sprak="", ledtext="", log_cb=None,
+                  progress_cb=None, delta_cb=None, avbruten=None):
+        if progress_cb:
+            progress_cb(50)
+            progress_cb(100)
+        return server.openai_asr.Resultat(
+            bitar=[server.openai_asr.Bit(0.0, 1.0, "hej", 1.0)], sprak="sv")
+    monkeypatch.setattr(server.openai_asr, "har_nyckel", lambda *a, **k: True)
+    monkeypatch.setattr(server.openai_asr, "transkribera", fake_moln)
+
+    def fake_tidsatt(audio, bitar, models_root, *, device="", log_cb=None,
+                     progress_cb=None, avbruten=None):
+        if progress_cb:
+            progress_cb(100)
+        return [{"start": 0.0, "end": 1.0, "text": "hej"}]
+    monkeypatch.setattr(server.alignment, "ar_installerad", lambda *a, **k: True)
+    monkeypatch.setattr(server.alignment, "tidsatt", fake_tidsatt)
+
+    # Ljudkorrigeringen kör fortfarande i en isolerad subprocess (Gemma på GPU:n):
+    # emittera framsteg utifrån skala/bas som servern skickar in.
     def fake_sub(cmd, base, emit, on_proc=None, progress_scale=1.0, progress_base=0.0):
         emit({"type": "progress", "pct": int(progress_base + 50 * progress_scale)})
         emit({"type": "progress", "pct": int(progress_base + 100 * progress_scale)})
@@ -78,10 +96,8 @@ def client(tmp_path, monkeypatch):
 def test_progress_is_monotonic_with_audio_correction(client, tmp_path):
     src = tmp_path / "lektion.wav"
     src.write_bytes(b"RIFF0000WAVE")                       # källan måste finnas på disk
-    model_id = server.WHISPER_MODELS[0].id
     r = client.post("/api/transcribe", json={
-        "source": str(src), "model_id": model_id,
-        "language": "sv", "target_language": "sv",
+        "source": str(src), "language": "sv", "target_language": "sv",
         "formats": ["srt"], "audio_correct": True})
     assert r.status_code == 200
 
@@ -89,23 +105,24 @@ def test_progress_is_monotonic_with_audio_correction(client, tmp_path):
     assert pcts, "inga framstegshändelser emitterades"
     # Aldrig bakåt: baren nollställs inte för det andra passet.
     assert pcts == sorted(pcts), f"progress gick bakåt (kördes två gånger): {pcts}"
-    # Två framåtriktade delband: transkribera i 0–60 %, ljudkorrigering i (60, 92].
-    assert any(p <= 60 for p in pcts), f"saknar transkriberings-band: {pcts}"
+    # Tre framåtriktade delband: molnet 0–45, tidsättningen (45, 60],
+    # ljudkorrigeringen (60, 92].
+    assert any(p <= 45 for p in pcts), f"saknar molnband: {pcts}"
+    assert any(45 < p <= 60 for p in pcts), f"saknar tidsättningsband: {pcts}"
     assert any(60 < p <= 92 for p in pcts), f"saknar ljudkorrigerings-band: {pcts}"
 
 
 def _run_and_get_name(client, source, audio_correct=False):
-    model_id = server.WHISPER_MODELS[0].id
     r = client.post("/api/transcribe", json={
-        "source": source, "model_id": model_id, "language": "sv",
+        "source": source, "language": "sv",
         "target_language": "sv", "formats": ["srt"], "audio_correct": audio_correct})
     assert r.status_code == 200
     hist = client.get("/api/history").json()
     return hist[0]["name"] if hist else None
 
 
-def test_lokal_kalla_namnges_av_qwen(client, tmp_path, monkeypatch):
-    # Inspelning/lokal fil → titeln kommer från den lokala LLM:en, inte filnamnet.
+def test_lokal_kalla_namnges_av_claude(client, tmp_path, monkeypatch):
+    # Inspelning/lokal fil → titeln kommer från Claude Code, inte filnamnet.
     monkeypatch.setattr(server.postprocess, "suggest_title",
                         lambda segs, model, **k: "Bråk och procent")
     src = tmp_path / "inspelning_2026-07-06.wav"
@@ -139,12 +156,14 @@ def test_lokal_kalla_behaller_filnamnet_om_titel_kastar(client, tmp_path, monkey
     assert _run_and_get_name(client, str(src)) == "matte_lektion.wav"
 
 
-def test_lokal_kalla_behaller_filnamnet_om_llm_start_kastar(client, tmp_path, monkeypatch):
-    # ensure_llm() kastar om llama-servern inte startar (trasig GGUF/port/VRAM).
-    # Det får inte fälla en redan klar transkribering — filnamnet behålls.
-    def _boom():
-        raise RuntimeError("llama-server startade inte")
-    monkeypatch.setattr(client.app.state.arbiter, "ensure_llm", _boom)
+def test_lokal_kalla_behaller_filnamnet_nar_claude_inte_ar_inloggad(client, tmp_path,
+                                                                    monkeypatch):
+    # Utan inloggning finns ingen som kan föreslå en titel. Det får inte fälla en
+    # redan klar transkribering — filnamnet behålls och posten skrivs ändå.
+    monkeypatch.setattr(server.llm_client, "is_running", lambda *a, **k: False)
+    def _boom(*a, **k):
+        raise AssertionError("titeln får inte frågas när Claude Code är utloggat")
+    monkeypatch.setattr(server.postprocess, "suggest_title", _boom)
     src = tmp_path / "fysik_lektion.wav"
     src.write_bytes(b"RIFF0000WAVE")
     assert _run_and_get_name(client, str(src)) == "fysik_lektion.wav"

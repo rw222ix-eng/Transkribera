@@ -25,7 +25,11 @@ from app import (debug_log, hardware, recommend, whisper_manager, llm_client,
                  llm_manager, youtube, postprocess, transcriber,
                  history_store, gpu_arbiter, output_store, media, audio_model, db,
                  paths, settings_store, ics_export, backup, report,
-                 calendar_google, course_data)
+                 calendar_google, course_data, openai_asr, alignment, claude_code)
+# Samma modul som `media` ovan. Inne i transkriberingsjobbet är `media` namnet på
+# SJÄLVA filen (media = Path(...)) och skuggar modulen — aliaset gör att
+# varaktigheten går att fråga efter även där.
+from app import media as media_mod
 from app.models_catalog import WHISPER_MODELS, LLM_MODELS
 from app.web import routes_exam, routes_planning, sse
 
@@ -389,6 +393,74 @@ def create_app(base_dir: Path | None = None,
     def api_settings():
         return {"models_dir": str(models_root)}
 
+    # ---- Var arbetet körs -------------------------------------------------
+    # Två hus, och appen ska aldrig behöva gissa vilket som svarar: molnet
+    # (transkribering hos OpenAI, språkmodell via Claude Code) och den här datorn
+    # (tidsättningen, ljudrättningen). Frontendens «Var arbetet körs» och
+    # härkomstraden vid varje knapp läser den här rutan.
+    @app.get("/api/var-kors")
+    def api_var_kors():
+        cc = claude_code.status()
+        return {
+            "moln": {
+                "transkribering": {
+                    "modell": openai_asr.MODEL,
+                    "leverantor": "OpenAI",
+                    "nyckel": openai_asr.har_nyckel(base),
+                    "pris_per_minut": openai_asr.PRIS_USD_PER_MINUT,
+                },
+                "sprakmodell": {
+                    "leverantor": "Anthropic",
+                    "verktyg": "Claude Code",
+                    "finns": cc["finns"], "inloggad": cc["inloggad"],
+                    "epost": cc["epost"], "plan": cc["plan"], "fel": cc["fel"],
+                    "senaste": dict(claude_code.SENASTE),
+                },
+            },
+            "har": {
+                "tidsstamplar": {
+                    "modell": alignment.MODELL_ID,
+                    "installerad": alignment.ar_installerad(models_root),
+                    "download_mb": alignment.MODELL_MB,
+                },
+                "ljudrattning": {
+                    "modell": audio_model.AUDIO_MODEL_ID,
+                    "installerad": audio_model.is_audio_model_installed(models_root),
+                    "download_mb": audio_model.AUDIO_MODEL_DOWNLOAD_MB,
+                },
+            },
+        }
+
+    @app.post("/api/openai-nyckel")
+    async def api_openai_nyckel(req: Request):
+        """Spara (eller radera) OpenAI-nyckeln. Nyckeln returneras ALDRIG — svaret
+        säger bara om det finns en. Filen ligger i .gitignore."""
+        body = await req.json()
+        try:
+            openai_asr.spara_nyckel(base, body.get("nyckel") or "")
+        except OSError as e:
+            return JSONResponse({"error": f"kunde inte spara nyckeln: {e}"}, status_code=500)
+        return {"nyckel": openai_asr.har_nyckel(base)}
+
+    @app.post("/api/claude/kontrollera")
+    def api_claude_kontrollera():
+        """«Kontrollera igen» i felrutan — tvingar fram en färsk statuskoll."""
+        return claude_code.status(force=True)
+
+    @app.post("/api/download/tidsmodell")
+    async def api_download_tidsmodell(req: Request):
+        if not _enough_disk(alignment.MODELL_MB):
+            return JSONResponse(
+                {"error": "För lite ledigt diskutrymme för nedladdningen."}, status_code=507)
+
+        def job(emit):
+            alignment.ladda_ner(
+                models_root,
+                log_cb=lambda m: emit({"type": "log", "msg": m}),
+                progress_cb=lambda p: emit({"type": "progress", "pct": p}))
+            return {"installed": alignment.MODELL_ID}
+        return _sse_response(job)
+
     @app.post("/api/settings/models-disk")
     async def api_set_models_disk(req: Request):
         """Flytta modell-lagringen till en annan disk. Body: {"dir": "<abs sökväg>"}
@@ -498,26 +570,25 @@ def create_app(base_dir: Path | None = None,
     async def api_transcribe(req: Request):
         body = await req.json()
         source = (body.get("source") or "").strip()
-        model_id = body.get("model_id")
         language = body.get("language") or ""
         target_language = body.get("target_language") or language   # subtitle output language
         audio_correct = bool(body.get("audio_correct"))   # 2nd pass: fix text vs the audio
         sub_mode = body.get("sub_mode") or "separate"     # "separate" | "embed"
         embed_kind = body.get("embed_kind")               # "soft" | "burn" | None
-        more_pending = bool(body.get("more_pending"))     # more queue items follow → skip prewarm
         formats = [f for f in (body.get("formats") or ["srt"]) if f in transcriber.WRITERS]
-        if not source or not model_id or not formats:
-            return JSONResponse({"error": "källa, modell och minst ett format krävs"},
+        if not source or not formats:
+            return JSONResponse({"error": "källa och minst ett format krävs"},
                                 status_code=400)
-        spec = next((s for s in WHISPER_MODELS if s.id == model_id), None)
-        if spec is None or not whisper_manager.is_installed(spec, models_root):
-            return JSONResponse({"error": "modellen är inte installerad"}, status_code=400)
-        hw = hardware.scan_hardware(models_root)
-        rec = recommend.evaluate_whisper(spec, hw)
-        model_dir = str(whisper_manager.model_dir_for(spec, models_root))
+        # model_id tas emot men ignoreras: modellen är gpt-transcribe och inget
+        # annat (se app/openai_asr.py). Servern väljer inte, och frontenden får
+        # inte välja åt den.
+        if not openai_asr.har_nyckel(base):
+            return JSONResponse(
+                {"error": "Ingen OpenAI-nyckel. Lägg in den under Inställningar.",
+                 "kod": "nyckel_saknas"}, status_code=400)
 
-        # Take the GPU exclusively for this job. Whisper (~10 GB) cannot share the
-        # 24 GB card with the resident LLM (~21 GB), so we stop the LLM first.
+        # GPU:n tas fortfarande exklusivt — inte för Whisper (borta) utan för
+        # tidsättningen, som lägger en wav2vec2-modell på kortet.
         if not arb.try_acquire_gpu():
             return JSONResponse(
                 {"error": "GPU upptagen – vänta tills pågående jobb är klart."},
@@ -527,16 +598,11 @@ def create_app(base_dir: Path | None = None,
 
         def job(emit):
             try:
-                if arb.stop_llm():
-                    emit({"type": "log", "msg": "Frigör GPU-minne (stoppar språkmodellen) ..."})
                 return _transcribe(emit)
             finally:
                 job_state["proc"] = None
+                alignment.frigor()          # släpp tidsmodellens VRAM
                 arb.release_gpu()
-                # Skip the costly ~21 GB LLM reload while a queue is still draining
-                # (the next file would immediately unload it again) or after a cancel.
-                if not job_state["cancelled"] and not more_pending:
-                    arb.prewarm_async()   # restart the LLM in the background for the next correction
 
         def _transcribe(emit):
             source_is_url = _is_url(source)
@@ -552,44 +618,51 @@ def create_app(base_dir: Path | None = None,
                 if not media.exists():
                     raise RuntimeError(f"Filen finns inte: {media}")
             out_base = media.with_suffix("")
-            # Will the audio-correction second pass actually run? If so, split the
-            # bar into two forward sub-bands (transcribe 0–60 %, correct 60–90 %) so
-            # progress only ever moves forward instead of restarting from zero for
-            # the 2nd pass. Otherwise the transcribe pass owns 0–90 % as before.
             will_correct = audio_correct and audio_model.is_audio_model_installed(models_root)
-            cmd = transcriber.build_transcribe_cmd(
-                media, model_dir, rec.device, rec.compute_type, language, out_base, formats,
-                engine=spec.engine, runtime=spec.runtime)
-            written, segments = _run_transcribe_subprocess(
-                cmd, base, emit, on_proc=_set_proc,
-                progress_scale=0.6 if will_correct else 0.9)
+
+            # ── Molnet: texten ────────────────────────────────────────────────
+            # Ljudet lämnar datorn här, och bara här. Progressbandet 0–45 % är
+            # molnets, 45–60 % tidsättningens; resten är efterarbetet.
+            langd = media_mod.probe_duration(media) or 0.0
+            avbruten = lambda: bool(job_state["cancelled"])
+            moln = openai_asr.transkribera(
+                media, base, langd=langd, sprak=language,
+                log_cb=lambda m: emit({"type": "log", "msg": m}),
+                progress_cb=lambda p: emit({"type": "progress", "pct": int(p * 0.45)}),
+                # Texten som växer fram är väntans enda ärliga framsteg.
+                delta_cb=lambda t: emit({"type": "delta", "text": t}),
+                avbruten=avbruten)
             if job_state["cancelled"]:
                 raise RuntimeError("Transkriberingen avbröts.")
-            if not written:
-                expected = [str(out_base.with_suffix(transcriber.WRITERS[f][1])) for f in formats]
-                if all(Path(p).exists() for p in expected):
-                    written = expected
-                elif segments:
-                    # Subprocessen dog i slutskedet (sen CTranslate2-abort på
-                    # Windows/CUDA) efter att segmenten strömmats men innan filerna
-                    # skrevs — återskapa resultatet här i stället för att fela.
-                    emit({"type": "log",
-                          "msg": "Transkriberingsprocessen avslutades oväntat i "
-                                 "slutskedet — återskapar resultatfilerna från "
-                                 "strömmade segment."})
-                    written = [str(p) for p in transcriber.write_outputs(
-                        [transcriber.Segment(d["start"], d["end"], d["text"])
-                         for d in segments], out_base, formats)]
-                else:
-                    raise RuntimeError("Transkriberingen gav inget resultat")
-            srt_path = next((Path(p) for p in written if str(p).lower().endswith(".srt")), None)
+            if not moln.text:
+                raise RuntimeError("Transkriberingen gav inget resultat")
+            emit({"type": "kostnad", "usd": moln.kostnad,
+                  "minuter": round(moln.debiterade_sekunder / 60, 1)})
 
-            # The isolated subprocess can abort (CTranslate2 on Windows/CUDA) after
-            # writing the subtitle but before its SEG stream reaches us. The files are
-            # recovered from disk above; recover the transcript the same way so the
-            # result (preview, history, chat/summary source) isn't blank.
-            if not segments and srt_path and srt_path.exists():
-                segments = transcriber.read_srt(srt_path)
+            # ── Datorn: tiderna ───────────────────────────────────────────────
+            # gpt-transcribe svarar utan en enda tidsstämpel. Undertexter,
+            # källmarkörer och 20-sekunderslyssningen får sina tider ur forced
+            # alignment mot ljudet som ligger kvar här.
+            if not alignment.ar_installerad(models_root):
+                emit({"type": "log", "msg": "Hämtar tidsmodellen (engångs) ..."})
+                alignment.ladda_ner(
+                    models_root, log_cb=lambda m: emit({"type": "log", "msg": m}),
+                    progress_cb=lambda p: emit({"type": "progress", "pct": 45 + int(p * 0.05)}))
+            segments = alignment.tidsatt(
+                media, moln.bitar, models_root,
+                log_cb=lambda m: emit({"type": "log", "msg": m}),
+                progress_cb=lambda p: emit({"type": "progress", "pct": 50 + int(p * 0.10)}),
+                avbruten=avbruten)
+            segments = transcriber.clean_caption_dicts(segments)
+            if job_state["cancelled"]:
+                raise RuntimeError("Transkriberingen avbröts.")
+
+            written = [str(p) for p in transcriber.write_outputs(
+                [transcriber.Segment(d["start"], d["end"], d["text"]) for d in segments],
+                out_base, formats)]
+            for p in written:
+                emit({"type": "log", "msg": "Skrev " + p})
+            srt_path = next((Path(p) for p in written if str(p).lower().endswith(".srt")), None)
 
             # Optional second pass: correct the draft text against the actual audio
             # (Gemma 3n E4B via transformers). Best effort — skipped if not installed.
@@ -625,14 +698,14 @@ def create_app(base_dir: Path | None = None,
                 emit({"type": "log", "msg": "Hoppar över ljudkorrigering — ljudmodellen "
                                             "(Gemma 4) är inte nedladdad."})
 
-            # Optional translation to a different result language. The text model
-            # is reloaded here (Whisper has exited and freed its VRAM); the
-            # original-language SRT is kept alongside as a reference track.
+            # Valfri översättning till ett annat resultatspråk. Görs av Claude
+            # Code på texten som redan är skriven — originalspråkets SRT ligger
+            # kvar bredvid som referensspår.
             ref_srt = sub_lang = ref_lang = None
             if postprocess.should_translate(language, target_language):
-                if arb.ensure_llm() is None:
-                    emit({"type": "log", "msg": "Hoppar över översättning — språkmodellen är "
-                                                "inte nedladdad. Behåller originalspråket."})
+                if not llm_client.is_running():
+                    emit({"type": "log", "msg": "Hoppar över översättning — Claude Code är "
+                                                "inte inloggat. Behåller originalspråket."})
                 else:
                     emit({"type": "log", "msg": "Översätter undertexterna ..."})
                     sv_dicts = postprocess.translate_segments(
@@ -662,25 +735,21 @@ def create_app(base_dir: Path | None = None,
             video = assembled["video"]
             emit({"type": "progress", "pct": 98})
 
-            spec_label = next((s.label for s in WHISPER_MODELS if s.id == model_id), model_id)
+            spec_label = openai_asr.MODEL
             _lang_lbl = {"en": "Engelska", "sv": "Svenska"}
-            lang_label = _lang_lbl.get(language, "Auto")
+            lang_label = _lang_lbl.get(language or moln.sprak, "Auto")
             target_label = _lang_lbl.get(target_language, lang_label)
 
-            # Auto-titel för LOKALA källor (inspelning eller lokal video) via den
-            # lokala LLM:en — läser transkriptet och sätter ett vettigt namn i
-            # stället för filnamnet. En YouTube-källa behåller sin titel (yt-dlp
-            # namnger redan filen efter videons titel). Best effort: filnamnet
-            # behålls om modellen inte är laddad eller inte ger något användbart.
+            # Auto-titel för LOKALA källor (inspelning eller lokal video): Claude
+            # Code läser transkriptet och sätter ett vettigt namn i stället för
+            # filnamnet. En YouTube-källa behåller sin titel (yt-dlp namnger redan
+            # filen efter videons titel). Best effort: filnamnet behålls om Claude
+            # Code inte är inloggat eller inte ger något användbart.
             display_name = Path(media).name
             if not source_is_url and segments:
                 try:
-                    # ensure_llm() kan kasta om llama-servern inte startar (trasig
-                    # GGUF, port, VRAM). Namngivningen är best effort och får aldrig
-                    # fälla en redan klar transkribering — därför inne i try:et, så
-                    # filnamnet behålls i stället för att hela jobbet felar.
-                    if arb.ensure_llm() is not None:
-                        _title = postprocess.suggest_title(segments, LLM_MODELS[0].name)
+                    if llm_client.is_running():
+                        _title = postprocess.suggest_title(segments, "")
                         if _title:
                             display_name = _title
                             emit({"type": "log", "msg": "Namngav inspelningen: " + _title})
