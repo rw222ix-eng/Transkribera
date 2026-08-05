@@ -21,8 +21,8 @@ from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, Str
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from app import (debug_log, hardware, recommend, whisper_manager, llm_client,
-                 llm_manager, youtube, postprocess, transcriber,
+from app import (debug_log, hardware, llm_client,
+                 youtube, postprocess, transcriber,
                  history_store, gpu_arbiter, output_store, media, audio_model, db,
                  paths, settings_store, ics_export, backup, report,
                  calendar_google, course_data, openai_asr, alignment, claude_code)
@@ -30,7 +30,6 @@ from app import (debug_log, hardware, recommend, whisper_manager, llm_client,
 # SJÄLVA filen (media = Path(...)) och skuggar modulen — aliaset gör att
 # varaktigheten går att fråga efter även där.
 from app import media as media_mod
-from app.models_catalog import WHISPER_MODELS, LLM_MODELS
 from app.web import routes_exam, routes_planning, sse
 
 _MONTHS_SV = ["jan", "feb", "mar", "apr", "maj", "jun", "jul", "aug", "sep", "okt", "nov", "dec"]
@@ -338,44 +337,6 @@ def create_app(base_dir: Path | None = None,
     def api_hardware():
         return _hw_view(hardware.scan_hardware(models_root))
 
-    @app.get("/api/models")
-    def api_models():
-        hw = hardware.scan_hardware(models_root)
-        wevals, wbest = recommend.recommend_whisper(WHISPER_MODELS, hw)
-        whisper = [{
-            "id": e.spec.id, "label": e.spec.label, "size": _size_str(e.spec.download_mb),
-            "download_mb": e.spec.download_mb, "vram": e.spec.vram_gb, "rtf": e.spec.rtf,
-            "score": e.spec.score or e.spec.rank, "lang": e.spec.languages,
-            "fit": e.fit.value, "reason": e.reason, "device": e.device,
-            "compute_type": e.compute_type, "useFor": e.spec.note or e.spec.label,
-            "installed": whisper_manager.is_installed(e.spec, models_root),
-            "recommended": bool(wbest and e.spec.id == wbest.id),
-        } for e in wevals]
-
-        running = llm_client.is_running()                 # llama-server /health
-        installed = [s.filename for s in llm_manager.ALL_LLMS
-                     if llm_manager.is_installed(s, models_root)]
-        levals, lbest = recommend.recommend_llm(LLM_MODELS, hw)
-        llm = [{
-            "id": e.spec.name, "name": e.spec.name, "label": e.spec.label,
-            "size": _size_str(e.spec.download_mb), "download_mb": e.spec.download_mb,
-            "vram": e.spec.vram_gb, "toks": e.spec.toks, "ctx": e.spec.ctx,
-            "uses": list(e.spec.uses), "caps": {"vision": e.spec.vision, "files": list(e.spec.files)},
-            "score": e.spec.rank, "fit": e.fit.value, "reason": e.reason,
-            "useFor": e.spec.note or e.spec.label,
-            "installed": e.spec.name in installed,
-            "recommended": bool(lbest and e.spec.name == lbest.name),
-        } for e in levals]
-
-        # NOTE: the app serves local GGUFs via the bundled llama.cpp server, not
-        # Ollama. The old ollama.com online catalog is intentionally NOT surfaced
-        # any more — those tags can't be installed through /api/download/llm
-        # (spec_by_name only knows the bundled GGUFs) so listing them was a dead end.
-        return {
-            "hardware": _hw_view(hw), "ollama_running": running,
-            "whisper": whisper, "llm": llm, "online": [],
-        }
-
     def _enough_disk(need_mb: int) -> bool:
         """True if the model-storage drive has room for a `need_mb` download plus a
         500 MB headroom. Checks the drive `models_root` lives on (which may differ
@@ -483,72 +444,6 @@ def create_app(base_dir: Path | None = None,
                 {"error": "kunde inte skapa modellmappen på den disken"}, status_code=400)
         arb.models_root = models_root                  # språkmodellen hittar nya roten
         return {"models_dir": str(models_root)}
-
-    @app.post("/api/download/whisper")
-    async def api_download_whisper(req: Request):
-        body = await req.json()
-        spec = next((s for s in WHISPER_MODELS if s.id == body.get("id")), None)
-        if spec is None:
-            return JSONResponse({"error": "okänd modell"}, status_code=404)
-        if not _enough_disk(spec.download_mb):
-            return JSONResponse(
-                {"error": "För lite ledigt diskutrymme för nedladdningen."},
-                status_code=507)
-
-        def job(emit):
-            whisper_manager.download_whisper(
-                spec, models_root,
-                log_cb=lambda m: emit({"type": "log", "msg": m}),
-                progress_cb=lambda p: emit({"type": "progress", "pct": p}))
-            return {"installed": spec.id}
-        return _sse_response(job)
-
-    @app.post("/api/download/llm")
-    async def api_download_llm(req: Request):
-        body = await req.json()
-        name = body.get("name")
-        if not name:
-            return JSONResponse({"error": "namn saknas"}, status_code=400)
-        spec = llm_manager.spec_by_name(name)
-        if spec is None:
-            return JSONResponse({"error": "okänd modell"}, status_code=404)
-        if not _enough_disk(spec.download_mb):
-            return JSONResponse(
-                {"error": "För lite ledigt diskutrymme för nedladdningen."},
-                status_code=507)
-
-        def job(emit):
-            llm_manager.download_gguf(
-                spec, models_root,
-                log_cb=lambda m: emit({"type": "log", "msg": m}),
-                progress_cb=lambda p: emit({"type": "progress", "pct": p}))
-            return {"installed": spec.filename}
-        return _sse_response(job)
-
-    @app.post("/api/uninstall/whisper")
-    async def api_uninstall_whisper(req: Request):
-        model_id = (await req.json()).get("id")
-        spec = next((s for s in WHISPER_MODELS if s.id == model_id), None)
-        if spec is None:
-            return JSONResponse({"error": "okänd modell"}, status_code=404)
-        return {"ok": whisper_manager.delete_whisper(spec, models_root)}
-
-    @app.post("/api/uninstall/llm")
-    async def api_uninstall_llm(req: Request):
-        spec = llm_manager.spec_by_name((await req.json()).get("name"))
-        if spec is None:
-            return JSONResponse({"error": "okänd modell"}, status_code=404)
-        # Free the GPU/handle if the model being removed is the one loaded now.
-        if arb.try_acquire_gpu():
-            try:
-                arb.stop_llm()
-            finally:
-                arb.release_gpu()
-        else:
-            return JSONResponse(
-                {"error": "GPU upptagen – vänta tills pågående jobb är klart."},
-                status_code=409)
-        return {"ok": llm_manager.delete_gguf(spec, models_root)}
 
     @app.get("/api/audio-model")
     def api_audio_model():
@@ -709,7 +604,7 @@ def create_app(base_dir: Path | None = None,
                 else:
                     emit({"type": "log", "msg": "Översätter undertexterna ..."})
                     sv_dicts = postprocess.translate_segments(
-                        segments, language, target_language, LLM_MODELS[0].name)
+                        segments, language, target_language, "")
                     sv_segs = [transcriber.Segment(d["start"], d["end"], d["text"]) for d in sv_dicts]
                     orig_segs = [transcriber.Segment(s["start"], s["end"], s["text"]) for s in segments]
                     srt_path = transcriber.write_outputs(sv_segs, out_base, ["srt"])[0]
@@ -1213,7 +1108,7 @@ def create_app(base_dir: Path | None = None,
                     raise RuntimeError("Språkmodellen är inte installerad.")
                 emit({"type": "log", "msg": "Analyserar lektionen ..."})
                 result = postprocess.extract_full(
-                    transcript, llm_manager.ACTIVE_LLM.filename,
+                    transcript, "",
                     log_cb=lambda m: emit({"type": "log", "msg": m}))
                 found = result["insights"]
                 conn = _db()
@@ -1539,7 +1434,7 @@ def create_app(base_dir: Path | None = None,
                         raise RuntimeError("Språkmodellen är inte installerad.")
                     text = postprocess.edit_calendar_suggestion(
                         query, context, cal_event,
-                        llm_manager.ACTIVE_LLM.filename,
+                        "",
                         token_cb=lambda t: emit({"type": "token", "text": t}))
                     return {"text": text, "sources": []}
                 finally:
@@ -1615,7 +1510,7 @@ def create_app(base_dir: Path | None = None,
                                  "raderna och söker på närliggande begrepp …"})
                     try:
                         termer = postprocess.expand_search_terms(
-                            query, llm_manager.ACTIVE_LLM.filename)
+                            query, "")
                     except Exception:
                         # Breddningen är en bonus — faller den (modellen nere
                         # mitt i) levereras det ärliga ordsvaret i stället.
@@ -1652,7 +1547,7 @@ def create_app(base_dir: Path | None = None,
                     emit({"type": "log",
                           "msg": f"Söker i {len(excerpts2)} lektioner ..."})
                     text = postprocess.answer_over_lessons(
-                        query, excerpts2, llm_manager.ACTIVE_LLM.filename,
+                        query, excerpts2, "",
                         token_cb=lambda t: emit({"type": "token", "text": t}),
                         calendar=calendar)
                     return {"text": text, "sources": [
@@ -1688,7 +1583,7 @@ def create_app(base_dir: Path | None = None,
                     raise RuntimeError("Språkmodellen är inte installerad.")
                 emit({"type": "log", "msg": f"Söker i {len(excerpts)} lektioner ..."})
                 text = postprocess.answer_over_lessons(
-                    query, excerpts, llm_manager.ACTIVE_LLM.filename,
+                    query, excerpts, "",
                     token_cb=lambda t: emit({"type": "token", "text": t}),
                     calendar=calendar)
                 return {"text": text, "sources": [
@@ -1746,13 +1641,12 @@ def create_app(base_dir: Path | None = None,
 
         def job(emit):
             try:
-                # An image needs the multimodal model; otherwise the long-context
-                # text model answers grounded in the transcript. The arbiter
-                # switches the served model (they can't coexist in 24 GB VRAM).
-                spec = llm_manager.VISION_LLM if images else llm_manager.ACTIVE_LLM
-                if arb.ensure_model(spec) is None:
-                    raise RuntimeError(f"{spec.label} är inte installerad.")
-                # think/reason_cb apply to the text model; the vision path ignores them.
+                # Bilder och text går till samma modell nu — Claude läser båda.
+                # Kollen finns kvar för att «inte inloggad» ska bli ett besked
+                # här, innan läraren väntar på ett svar som aldrig kommer.
+                if arb.ensure_llm() is None:
+                    raise RuntimeError("Claude Code är inte inloggat.")
+                # think/reason_cb hörde till den lokala modellens tänkande.
                 text = llm_client.chat(
                     model, messages, transcript=transcript, images=images, think=think,
                     cite=cite, calendar=calendar, cal_event=cal_event,

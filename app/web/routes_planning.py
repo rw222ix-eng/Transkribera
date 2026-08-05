@@ -18,7 +18,7 @@ from pathlib import Path
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
-from app import db, lesson_board, llm_client, llm_manager
+from app import db, lesson_board, llm_client
 from app.web.sse import sse_response
 
 # Två tavlor i 2× blir ett par MB; 30 MB är väl tilltaget men stoppar missbruk.
@@ -146,9 +146,9 @@ def create_router(base: Path, arbiter) -> APIRouter:
             return ""
 
     def _model_name() -> str:
-        # Arbitern laddar ACTIVE_LLM; namnsträngen är kosmetisk för llama-server
-        # (samma mönster som /api/lessons/{id}/extract i server.py).
-        return llm_manager.ACTIVE_LLM.filename
+        # Kosmetiskt sedan Claude Code tog över: det finns ingen modell att
+        # namnge (samma mönster som /api/lessons/{id}/extract i server.py).
+        return ""
 
     # ------------------------------------------------------------ underlag --
 
@@ -228,7 +228,9 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 d = _underlag_dir(pid)
                 d.mkdir(parents=True, exist_ok=True)
                 meta = []
-                vision_url = arbiter.ensure_model(llm_manager.VISION_LLM) \
+                # Bilderna läses av samma modell som allt annat; kollen svarar
+                # bara på om det finns någon att fråga.
+                vision_url = arbiter.ensure_model() \
                     if hasattr(arbiter, "ensure_model") else None
                 for i, (namn, raw) in enumerate(pages, 1):
                     fil = d / f"sida-{i:02d}.png"
@@ -238,16 +240,16 @@ def create_router(base: Path, arbiter) -> APIRouter:
                         emit({"type": "log",
                               "msg": f"Tolkar sida {i} av {len(pages)} …"})
                         try:
-                            dataurl = ("data:image/png;base64,"
-                                       + base64.b64encode(raw).decode())
+                            # Sidan ligger redan på disk — Claude Code läser
+                            # filen, i stället för att den bakas in som data-URL.
                             beskrivning = llm_client.chat(
-                                llm_manager.VISION_LLM.filename,
+                                "",
                                 [{"role": "user", "content":
                                   "Beskriv sidan ur en matematikbok kort och "
                                   "sakligt på svenska: avsnittets rubrik/moment, "
                                   "centrala begrepp och formler (LaTeX), samt "
                                   "vilka typuppgifter som förekommer."}],
-                                images=[dataurl])
+                                images=[str(fil)])
                         except Exception:
                             beskrivning = ""
                     meta.append({"namn": namn, "fil": fil.name,

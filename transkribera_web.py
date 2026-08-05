@@ -1,10 +1,14 @@
 """Entry point for the web-UI desktop app: a native window (pywebview) backed by a
 local FastAPI/uvicorn server.
 
-Like transkribera.py, the frozen exe re-invokes ITSELF with the `transcribe-cli`
-subcommand for the isolated transcription subprocess (see
-app.transcriber.build_transcribe_cmd), so that branch must be dispatched here
-BEFORE importing uvicorn/webview.
+Den frysta exe:n återanropar SIG SJÄLV med `audio-correct-cli` för det isolerade
+ljudrättningspasset (se app.transcriber.build_audio_correct_cmd), så den grenen
+måste avgöras här FÖRE importen av uvicorn/webview.
+
+Motsvarande `transcribe-cli` är borta: transkriberingen sker hos OpenAI och
+tidsättningen i serverprocessen. Isoleringen fanns bara för att CTranslate2:s
+destruktor kunde abortera processen på Windows/CUDA — utan CTranslate2 finns
+inget skäl kvar.
 """
 from __future__ import annotations
 import os
@@ -19,10 +23,6 @@ if sys.stderr is None:
 
 
 def run() -> None:
-    if len(sys.argv) > 1 and sys.argv[1] == "transcribe-cli":
-        from app.transcribe_cli import main as cli_main
-        cli_main(sys.argv[2:])  # calls os._exit(0); never returns
-        return
     if len(sys.argv) > 1 and sys.argv[1] == "audio-correct-cli":
         from app.audio_correct_cli import main as cli_main
         cli_main(sys.argv[2:])  # calls os._exit(0); never returns

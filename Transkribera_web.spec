@@ -17,8 +17,8 @@ import os as _os
 datas, binaries, hiddenimports = [], [], []
 
 _PKGS = [
-    "torch", "ctranslate2", "faster_whisper", "av",
-    "huggingface_hub", "tokenizers", "onnxruntime", "onnx_asr",
+    "torch", "torchaudio", "av",
+    "huggingface_hub", "tokenizers",
     "fastapi", "starlette", "uvicorn", "anyio", "h11", "click", "sniffio",
     "webview", "clr_loader", "pythonnet",
 ]

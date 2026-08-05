@@ -90,7 +90,6 @@ def miljo(tmp_path, monkeypatch):
 
     monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: HW())
     monkeypatch.setattr(server.llm_client, "is_running", lambda *a, **k: False)
-    monkeypatch.setattr(server.llm_manager, "is_installed", lambda *a, **k: False)
     # Nyckeln finns (annars 400 innan jobbet ens startar), molnet och
     # tidsmodellen fejkas — inget nät, ingen GPU, ingen nedladdning.
     monkeypatch.setattr(server.openai_asr, "har_nyckel", lambda *a, **k: True)

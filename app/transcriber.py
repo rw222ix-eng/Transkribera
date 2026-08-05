@@ -211,37 +211,10 @@ def clean_caption_dicts(segments: list[dict], group: bool = True) -> list[dict]:
     return [{"start": s.start, "end": s.end, "text": s.text} for s in cleaned]
 
 
-# NOTE: transcription deliberately does NOT run in-process. The CTranslate2
-# WhisperModel destructor can abort the process on Windows/CUDA when deallocated
-# mid-program, so the model is loaded only inside the isolated subprocess
-# `app.transcribe_cli`, launched via the argv built below.
-def build_transcribe_cmd(audio: Path, model_dir: str, device: str, compute_type: str,
-                         language: str, out_base: Path, formats: list[str],
-                         engine: str = "whisper", runtime: str = "") -> list[str]:
-    """Build the argv to run one transcription in an isolated subprocess.
-
-    Frozen (PyInstaller): re-invoke our own exe with the `transcribe-cli` subcommand,
-    since `-m app.transcribe_cli` does not exist in a frozen build. Source runs use
-    the normal module form. `engine` selects the ASR backend ("whisper" via
-    faster-whisper, "parakeet" via onnx-asr); `runtime` is the onnx-asr model key.
-    """
-    if getattr(sys, "frozen", False):
-        head = [sys.executable, "transcribe-cli"]
-    else:
-        head = [sys.executable, "-m", "app.transcribe_cli"]
-    return head + [
-        "--audio", str(audio),
-        "--model-dir", model_dir,
-        "--device", device,
-        "--compute-type", compute_type,
-        "--language", language or "",
-        "--out-base", str(out_base),
-        "--formats", ",".join(formats),
-        "--engine", engine,
-        "--runtime", runtime or "",
-    ]
-
-
+# Transkriberingen har ingen argv här längre: den sker hos OpenAI
+# (app/openai_asr.py) och tidsstämplarna sätts i serverprocessen
+# (app/alignment.py). Kvar är ljudrättningen, som fortfarande vill ha en egen
+# process — Gemma laddas på GPU:n och ska släppa allt sitt minne när den är klar.
 def build_audio_correct_cmd(audio: Path, model_dir: str, segments_json: str,
                             out_base: Path, formats: list[str], language: str = "") -> list[str]:
     """Build the argv for the isolated audio-grounded correction subprocess

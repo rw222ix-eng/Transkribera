@@ -38,7 +38,6 @@ def client(tmp_path, monkeypatch):
 
     monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: HW())
     monkeypatch.setattr(server.llm_client, "is_running", lambda *a, **k: False)
-    monkeypatch.setattr(server.llm_manager, "is_installed", lambda *a, **k: False)
     c = TestClient(server.create_app(base_dir=tmp_path))
     monkeypatch.setattr(c.app.state.arbiter, "ensure_llm", lambda: "http://x")
     c.base_dir = tmp_path
@@ -437,7 +436,7 @@ _PNG_1PX_B64 = ("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ"
 def _upload_underlag(client, monkeypatch, beskrivning="Graf över en andragradsfunktion."):
     from app.web import routes_planning as rp
     monkeypatch.setattr(client.app.state.arbiter, "ensure_model",
-                        lambda spec: "http://127.0.0.1:8170")
+                        lambda spec=None: "claude-code")
     monkeypatch.setattr(rp.llm_client, "chat", lambda *a, **k: beskrivning)
     r = client.post("/api/planning/underlag", json={
         "filer": [{"namn": "figur.png",

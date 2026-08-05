@@ -46,8 +46,6 @@ def client(tmp_path, monkeypatch):
 
     monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: HW())
     monkeypatch.setattr(server.llm_client, "is_running", lambda *a, **k: False)
-    monkeypatch.setattr(server.llm_manager, "is_installed", lambda *a, **k: False)
-    monkeypatch.setattr(server.whisper_manager, "is_installed", lambda *a, **k: False)
     c = TestClient(server.create_app(base_dir=tmp_path))
     c.base_dir = tmp_path
     return c
@@ -392,7 +390,7 @@ def _underlag_fixture(client, monkeypatch, beskrivning="Sida om andragradsfunkti
     """Stubbar visionsmodellen och laddar upp en 1×1-PNG som underlag."""
     from app.web import routes_planning as rp
     monkeypatch.setattr(client.app.state.arbiter, "ensure_model",
-                        lambda spec: "http://127.0.0.1:8170")
+                        lambda spec=None: "claude-code")
     monkeypatch.setattr(rp.llm_client, "chat",
                         lambda *a, **k: beskrivning)
     r = client.post("/api/planning/underlag",
@@ -420,7 +418,7 @@ def test_underlag_rejects_bad_format_and_empty(client):
 
 
 def test_underlag_without_vision_model_degrades(client, monkeypatch):
-    monkeypatch.setattr(client.app.state.arbiter, "ensure_model", lambda spec: None)
+    monkeypatch.setattr(client.app.state.arbiter, "ensure_model", lambda spec=None: None)
     r = client.post("/api/planning/underlag",
                     json={"filer": [{"namn": "kap3.png", "data": _DATA_URL}]})
     result = _done(r)
@@ -499,7 +497,6 @@ def test_archive_ask_emits_real_scan_events(client, monkeypatch):
                         lambda: "http://127.0.0.1:8170")
     monkeypatch.setattr(rp.llm_client, "generate",
                         lambda *a, **k: "Det står på tavlan Bråk")
-    monkeypatch.setattr(server.llm_manager, "is_installed", lambda *a, **k: True)
 
     r = client.post("/api/planning/ask",
                     json={"q": "Var förklarar jag täljare och nämnare?"})

@@ -34,8 +34,9 @@ def main() -> None:
 
     threading.Thread(target=open_browser, daemon=True).start()
     print(f"Transkribera web: {url}  (Ctrl+C för att stänga)")
-    # The LLM starts lazily on the first correction/chat (the GPU arbiter owns it,
-    # see app/gpu_arbiter.py). Stop it on exit so no llama-server is left orphaned.
+    # Språkmodellen startas per fråga av Claude Code (app/claude_code.py) och
+    # lämnar ingen process efter sig. Avslutningsanropet står kvar som en enda
+    # väg ut ur allt appen kan ha startat.
     try:
         uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")
     finally:

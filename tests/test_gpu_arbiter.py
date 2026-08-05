@@ -1,186 +1,56 @@
+"""GPU-låset och frågan «går det att fråga språkmodellen?».
+
+Arbitern startade förr llama-servern och växlade mellan text- och bildmodell på
+ett 24 GB-kort. Ingen av modellerna finns kvar. Kvar är två saker: ett lås så att
+tidsättningen och ljudrättningen inte kör samtidigt på kortet, och ett ärligt
+svar på om Claude Code går att nå — det är det svaret ett tjugotal rutter läser
+innan de lovar läraren ett resultat.
+"""
 from app import gpu_arbiter as ga
-from app import llm_client
 
 
 def _arb(tmp_path):
-    return ga.GpuArbiter(models_root=tmp_path)
+    return ga.GpuArbiter(tmp_path / "models")
 
 
-def test_gpu_lock_is_exclusive_and_releasable(tmp_path):
+# ---- Låset ----------------------------------------------------------------
+
+def test_gpu_last_slapper_bara_igenom_ett_jobb(tmp_path):
     arb = _arb(tmp_path)
     assert arb.try_acquire_gpu() is True
-    assert arb.try_acquire_gpu() is False     # busy
+    assert arb.try_acquire_gpu() is False          # upptagen
     arb.release_gpu()
-    assert arb.try_acquire_gpu() is True       # free again
-    arb.release_gpu()
+    assert arb.try_acquire_gpu() is True
 
 
-def test_release_gpu_is_safe_when_not_held(tmp_path):
+def test_release_utan_las_ar_ofarligt(tmp_path):
     arb = _arb(tmp_path)
-    arb.release_gpu()                          # must not raise
+    arb.release_gpu()                              # aldrig taget — inget att göra
+    assert arb.try_acquire_gpu() is True
 
 
-def test_ensure_llm_returns_none_when_not_installed(tmp_path, monkeypatch):
+# ---- Språkmodellen --------------------------------------------------------
+
+def test_ensure_llm_ger_none_nar_claude_code_inte_gar_att_na(tmp_path, monkeypatch):
+    monkeypatch.setattr(ga.llm_client, "is_running", lambda *a, **k: False)
     arb = _arb(tmp_path)
-    monkeypatch.setattr(ga.llm_manager, "is_installed", lambda *a, **k: False)
     assert arb.ensure_llm() is None
+    assert arb.ensure_model() is None
+    assert arb.llm_installed() is False
 
 
-def test_ensure_llm_starts_server_and_sets_base_url(tmp_path, monkeypatch):
+def test_ensure_llm_ger_ett_varde_nar_claude_code_ar_inloggat(tmp_path, monkeypatch):
+    monkeypatch.setattr(ga.llm_client, "is_running", lambda *a, **k: True)
     arb = _arb(tmp_path)
-    monkeypatch.setattr(ga.llm_manager, "is_installed", lambda *a, **k: True)
-    monkeypatch.setattr(ga, "find_free_port", lambda *a, **k: 8200)
-    monkeypatch.setattr(ga, "is_healthy", lambda *a, **k: False)
-
-    class FakeSrv:
-        def __init__(self, *a, **k):
-            self.port = 8200
-            self.started = False
-
-        @property
-        def base_url(self):
-            return "http://127.0.0.1:8200"
-
-        def start(self, *a, **k):
-            self.started = True
-
-        def stop(self):
-            pass
-
-    monkeypatch.setattr(ga, "LlamaServer", FakeSrv)
-    url = arb.ensure_llm()
-    assert url == "http://127.0.0.1:8200"
-    assert llm_client.BASE_URL == "http://127.0.0.1:8200"
-    assert isinstance(arb._server, FakeSrv) and arb._server.started is True
+    assert arb.ensure_llm() == ga.TILLGANGLIG
+    # Text och bild går till samma modell — ingen växling att göra längre.
+    assert arb.ensure_model() == arb.ensure_llm()
 
 
-def test_ensure_llm_reuses_healthy_server(tmp_path, monkeypatch):
+def test_ingen_process_att_stoppa_eller_forvarma(tmp_path, monkeypatch):
+    # Avslutningsvägarna (desktop.py, __main__.py) anropar stop_llm() — den ska
+    # svara att det inte fanns något att stoppa, inte spricka.
+    monkeypatch.setattr(ga.llm_client, "is_running", lambda *a, **k: True)
     arb = _arb(tmp_path)
-    monkeypatch.setattr(ga.llm_manager, "is_installed", lambda *a, **k: True)
-    starts = {"n": 0}
-
-    class FakeSrv:
-        def __init__(self, *a, **k):
-            self.port = 8201
-
-        @property
-        def base_url(self):
-            return "http://127.0.0.1:8201"
-
-        def start(self, *a, **k):
-            starts["n"] += 1
-
-        def stop(self):
-            pass
-
-    monkeypatch.setattr(ga, "LlamaServer", FakeSrv)
-    monkeypatch.setattr(ga, "find_free_port", lambda *a, **k: 8201)
-    monkeypatch.setattr(ga, "is_healthy", lambda *a, **k: False)
-    arb.ensure_llm()                           # cold start -> 1
-    monkeypatch.setattr(ga, "is_healthy", lambda *a, **k: True)
-    arb.ensure_llm()                           # healthy -> reused, no new start
-    assert starts["n"] == 1
-
-
-def test_stop_llm_stops_and_clears(tmp_path, monkeypatch):
-    arb = _arb(tmp_path)
-    stopped = {"n": 0}
-
-    class FakeSrv:
-        port = 8202
-
-        def stop(self):
-            stopped["n"] += 1
-
-    arb._server = FakeSrv()
-    assert arb.stop_llm() is True
-    assert arb._server is None
-    assert stopped["n"] == 1
-    assert arb.stop_llm() is False             # idempotent, nothing to stop
-
-
-def test_prewarm_async_skips_when_not_installed(tmp_path, monkeypatch):
-    arb = _arb(tmp_path)
-    monkeypatch.setattr(ga.llm_manager, "is_installed", lambda *a, **k: False)
-    called = {"thread": False}
-    monkeypatch.setattr(ga.threading, "Thread",
-                        lambda *a, **k: called.__setitem__("thread", True))
-    arb.prewarm_async()
-    assert called["thread"] is False           # no thread spawned
-
-
-def test_prewarm_async_swallows_start_failure(tmp_path, monkeypatch):
-    arb = _arb(tmp_path)
-    monkeypatch.setattr(ga.llm_manager, "is_installed", lambda *a, **k: True)
-    monkeypatch.setattr(arb, "ensure_llm",
-                        lambda: (_ for _ in ()).throw(RuntimeError("oom")))
-    # Run the daemon thread's target synchronously; must not raise.
-    monkeypatch.setattr(ga.threading, "Thread",
-                        lambda target=None, **k: type("T", (), {"start": lambda self: target()})())
-    arb.prewarm_async()                         # best effort — no exception escapes
-
-
-# ---- ensure_model: text <-> vision switching on the single GPU ---------------
-
-def test_ensure_model_none_when_not_installed(tmp_path, monkeypatch):
-    arb = _arb(tmp_path)
-    monkeypatch.setattr(ga.llm_manager, "is_installed", lambda *a, **k: False)
-    assert arb.ensure_model(ga.llm_manager.VISION_LLM) is None
-
-
-def test_ensure_model_vision_passes_mmproj_and_ctx(tmp_path, monkeypatch):
-    arb = _arb(tmp_path)
-    monkeypatch.setattr(ga.llm_manager, "is_installed", lambda *a, **k: True)
-    monkeypatch.setattr(ga, "find_free_port", lambda *a, **k: 8201)
-    monkeypatch.setattr(ga, "is_healthy", lambda *a, **k: False)
-    cap = {}
-    class FakeSrv:
-        def __init__(self, *a, **k): cap.update(k); self.port = 8201
-        @property
-        def base_url(self): return "http://127.0.0.1:8201"
-        def start(self, *a, **k): pass
-        def stop(self): pass
-    monkeypatch.setattr(ga, "LlamaServer", FakeSrv)
-    arb.ensure_model(ga.llm_manager.VISION_LLM)
-    assert cap.get("mmproj") is not None          # vision -> projector passed
-    assert cap.get("ctx") == ga.VISION_CTX
-    assert arb._spec is ga.llm_manager.VISION_LLM
-
-
-def test_ensure_model_switches_and_stops_previous(tmp_path, monkeypatch):
-    arb = _arb(tmp_path)
-    monkeypatch.setattr(ga.llm_manager, "is_installed", lambda *a, **k: True)
-    monkeypatch.setattr(ga, "find_free_port", lambda *a, **k: 8202)
-    monkeypatch.setattr(ga, "is_healthy", lambda *a, **k: False)
-    stops = {"n": 0}
-    class FakeSrv:
-        def __init__(self, *a, **k): self.port = 8202
-        @property
-        def base_url(self): return "http://127.0.0.1:8202"
-        def start(self, *a, **k): pass
-        def stop(self): stops["n"] += 1
-    monkeypatch.setattr(ga, "LlamaServer", FakeSrv)
-    arb.ensure_model(ga.llm_manager.ACTIVE_LLM)   # text first
-    arb.ensure_model(ga.llm_manager.VISION_LLM)   # switch -> stops the text server
-    assert stops["n"] == 1
-    assert arb._spec is ga.llm_manager.VISION_LLM
-
-
-def test_ensure_model_noop_when_same_spec_healthy(tmp_path, monkeypatch):
-    arb = _arb(tmp_path)
-    monkeypatch.setattr(ga.llm_manager, "is_installed", lambda *a, **k: True)
-    monkeypatch.setattr(ga, "find_free_port", lambda *a, **k: 8203)
-    healthy = {"v": False}
-    monkeypatch.setattr(ga, "is_healthy", lambda *a, **k: healthy["v"])
-    builds = {"n": 0}
-    class FakeSrv:
-        def __init__(self, *a, **k): builds["n"] += 1; self.port = 8203
-        @property
-        def base_url(self): return "http://127.0.0.1:8203"
-        def start(self, *a, **k): pass
-        def stop(self): pass
-    monkeypatch.setattr(ga, "LlamaServer", FakeSrv)
-    arb.ensure_model(ga.llm_manager.ACTIVE_LLM)   # cold start -> builds once
-    healthy["v"] = True
-    arb.ensure_model(ga.llm_manager.ACTIVE_LLM)   # same model, healthy -> reuse
-    assert builds["n"] == 1
+    assert arb.stop_llm() is False
+    assert arb.prewarm_async() is None

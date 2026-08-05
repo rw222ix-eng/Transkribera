@@ -21,8 +21,9 @@ from typing import Callable
 
 from app import claude_code
 
-# Kvar för de anropsställen som fortfarande sätter den (llama_server, gpu_arbiter).
-# Pekar ingenstans; ingen läser den längre.
+# Kvar för de anropsställen som fortfarande SKICKAR med en base_url. Pekar
+# ingenstans: servern den pekade på (llama.cpp) finns inte längre, och ingen
+# läser värdet.
 BASE_URL = ""
 
 # Stil- och formatregler som gör svaren konkreta, tydligt disponerade och med

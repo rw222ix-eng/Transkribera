@@ -107,7 +107,7 @@ def main() -> None:
                           width=1040, height=780, min_size=(820, 600),
                           js_api=Api())
     webview.start()                      # blocks until the window is closed
-    app.state.arbiter.stop_llm()         # no orphan llama-server on exit
+    app.state.arbiter.stop_llm()         # ingen egen modellprocess kvar att stänga
     server.should_exit = True
     time.sleep(0.2)
 

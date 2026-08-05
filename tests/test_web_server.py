@@ -20,8 +20,6 @@ def client(tmp_path, monkeypatch):
     # Stub out heavy / external calls so the endpoints are unit-testable.
     monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: HW())
     monkeypatch.setattr(server.llm_client, "is_running", lambda *a, **k: False)
-    monkeypatch.setattr(server.llm_manager, "is_installed", lambda *a, **k: False)
-    monkeypatch.setattr(server.whisper_manager, "is_installed", lambda *a, **k: False)
     return TestClient(server.create_app(base_dir=tmp_path))
 
 
@@ -80,17 +78,6 @@ def test_hardware_endpoint(client):
     assert data["vram"]["total"] > 0
 
 
-def test_models_endpoint_structure(client):
-    r = client.get("/api/models")
-    assert r.status_code == 200
-    data = r.json()
-    assert {"hardware", "whisper", "llm", "ollama_running", "online"} <= data.keys()
-    assert len(data["whisper"]) == len(server.WHISPER_MODELS)
-    # The dead Ollama online catalog is no longer surfaced (can't be installed
-    # through the llama.cpp GGUF path).
-    assert data["online"] == []
-
-
 def test_transcribe_requires_fields(client):
     r = client.post("/api/transcribe", json={"source": "", "model_id": "", "formats": []})
     assert r.status_code == 400
@@ -118,7 +105,7 @@ def test_chat_forwards_think_and_streams_reasoning(client, monkeypatch):
             token_cb("Svar.")
         return "Svar."
 
-    monkeypatch.setattr(client.app.state.arbiter, "ensure_model", lambda spec: "http://x")
+    monkeypatch.setattr(client.app.state.arbiter, "ensure_llm", lambda: "claude-code")
     monkeypatch.setattr(server.llm_client, "chat", fake_chat)
     r = client.post("/api/chat", json={
         "messages": [{"role": "user", "content": "fråga"}],
@@ -138,7 +125,7 @@ def test_chat_think_defaults_off(client, monkeypatch):
         captured["think"] = think
         return ""
 
-    monkeypatch.setattr(client.app.state.arbiter, "ensure_model", lambda spec: "http://x")
+    monkeypatch.setattr(client.app.state.arbiter, "ensure_llm", lambda: "claude-code")
     monkeypatch.setattr(server.llm_client, "chat", fake_chat)
     r = client.post("/api/chat", json={
         "messages": [{"role": "user", "content": "q"}], "model": "m"})
@@ -154,7 +141,7 @@ def test_chat_forwards_cite_flag(client, monkeypatch):
         captured["cite"] = cite
         return ""
 
-    monkeypatch.setattr(client.app.state.arbiter, "ensure_model", lambda spec: "http://x")
+    monkeypatch.setattr(client.app.state.arbiter, "ensure_llm", lambda: "claude-code")
     monkeypatch.setattr(server.llm_client, "chat", fake_chat)
     r = client.post("/api/chat", json={
         "messages": [{"role": "user", "content": "q"}], "model": "m", "cite": True})
@@ -319,10 +306,9 @@ def test_chat_busy_returns_409(tmp_path):
 
 def test_transcribe_busy_returns_409(tmp_path, monkeypatch):
     monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: _HW())
-    monkeypatch.setattr(server.whisper_manager, "is_installed", lambda *a, **k: True)
-    mid = server.WHISPER_MODELS[0].id
+    monkeypatch.setattr(server.openai_asr, "har_nyckel", lambda *a, **k: True)
     r = _busy_client(tmp_path).post(
-        "/api/transcribe", json={"source": "/tmp/a.mp3", "model_id": mid, "formats": ["srt"]})
+        "/api/transcribe", json={"source": "/tmp/a.mp3", "formats": ["srt"]})
     assert r.status_code == 409
     assert "upptagen" in r.json()["error"]
 
@@ -334,12 +320,12 @@ def test_app_exposes_arbiter_on_state(client):
 # ---- model routing: image chat -> vision model, text chat/correction -> Qwen --
 
 class _RecordingArbiter:
-    """Grants the GPU and records which model the endpoint asked the arbiter for."""
-    def __init__(self): self.model = None
+    """Släpper fram GPU:n och minns om rutten frågade efter språkmodellen alls."""
+    def __init__(self): self.fragad = False
     def try_acquire_gpu(self): return True
     def release_gpu(self): pass
-    def ensure_model(self, spec): self.model = spec; return "http://x"
-    def ensure_llm(self): return self.ensure_model(server.llm_manager.ACTIVE_LLM)
+    def ensure_model(self, spec=None): self.fragad = True; return "claude-code"
+    def ensure_llm(self): return self.ensure_model()
     def stop_llm(self): return False
     def prewarm_async(self): pass
     def llm_installed(self): return True
@@ -350,35 +336,37 @@ def _recording_client(tmp_path, arb):
     return TestClient(server.create_app(base_dir=tmp_path, arbiter=arb))
 
 
-def test_chat_with_image_switches_to_vision_model(tmp_path, monkeypatch):
+def test_chat_med_bild_skickar_bilderna_vidare(tmp_path, monkeypatch):
+    # Ingen modellväxling längre — samma modell läser text och bild. Kvar är att
+    # bilderna faktiskt följer med, och att «inte inloggad» stoppar innan svaret.
     arb = _RecordingArbiter()
     captured = {}
     monkeypatch.setattr(server.llm_client, "chat",
                         lambda *a, **k: captured.update(images=k.get("images")) or "svar")
     r = _recording_client(tmp_path, arb).post("/api/chat", json={
         "model": "m", "messages": [{"role": "user", "content": "vad är detta"}],
-        "images": ["data:image/png;base64,AAAA"]})
+        "images": ["C:/bilder/sida.png"]})
     assert r.status_code == 200
-    assert arb.model is server.llm_manager.VISION_LLM
-    assert captured["images"] == ["data:image/png;base64,AAAA"]
+    assert arb.fragad is True
+    assert captured["images"] == ["C:/bilder/sida.png"]
 
 
-def test_chat_without_image_uses_text_model(tmp_path, monkeypatch):
+def test_chat_utan_bild_fragar_ocksa_om_modellen_finns(tmp_path, monkeypatch):
     arb = _RecordingArbiter()
     monkeypatch.setattr(server.llm_client, "chat", lambda *a, **k: "svar")
     r = _recording_client(tmp_path, arb).post("/api/chat", json={
         "model": "m", "messages": [{"role": "user", "content": "hej"}]})
     assert r.status_code == 200
-    assert arb.model is server.llm_manager.ACTIVE_LLM
+    assert arb.fragad is True
 
 
-def test_postprocess_uses_text_model(tmp_path, monkeypatch):
+def test_postprocess_kraver_att_claude_gar_att_na(tmp_path, monkeypatch):
     arb = _RecordingArbiter()
     monkeypatch.setattr(server.postprocess, "run", lambda *a, **k: "sammanfattning")
     r = _recording_client(tmp_path, arb).post("/api/postprocess", json={
         "operation": "summary", "transcript": "lång text", "model": "m"})
     assert r.status_code == 200
-    assert arb.model is server.llm_manager.ACTIVE_LLM
+    assert arb.fragad is True
 
 
 # ---- Lektioner: organisation per datum/klass/kurs (Fas 1) -------------------
@@ -839,9 +827,12 @@ class _FakeProc:
     def __init__(self): self.terminated = False; self._alive = True
     def poll(self): return None if self._alive else 0
     def terminate(self): self.terminated = True; self._alive = False
+    def wait(self, timeout=None): self._alive = False
 
 
 def test_transcribe_cancel_terminates_proc(client):
+    # Kvar att döda är ljudrättningens subprocess; molnanropet och tidsättningen
+    # läser samma avbrottsflagga och stannar av sig själva.
     proc = _FakeProc()
     client.app.state.transcribe_job["proc"] = proc
     r = client.post("/api/transcribe/cancel")
@@ -854,43 +845,6 @@ def test_transcribe_cancel_noop_when_idle(client):
     client.app.state.transcribe_job["proc"] = None
     r = client.post("/api/transcribe/cancel")
     assert r.status_code == 200 and r.json() == {"cancelled": False}
-
-
-# ---- #5: uninstall removes model files from disk ----------------------------
-
-def test_uninstall_whisper_removes_dir(client, tmp_path):
-    spec = server.WHISPER_MODELS[0]
-    d = server.whisper_manager.model_dir_for(spec, tmp_path / "models")
-    d.mkdir(parents=True)
-    (d / "model.bin").write_bytes(b"x")
-    r = client.post("/api/uninstall/whisper", json={"id": spec.id})
-    assert r.status_code == 200 and r.json() == {"ok": True}
-    assert not d.exists()
-
-
-def test_uninstall_whisper_unknown_404(client):
-    r = client.post("/api/uninstall/whisper", json={"id": "nope"})
-    assert r.status_code == 404
-
-
-def test_uninstall_llm_removes_dir(client, tmp_path):
-    spec = server.llm_manager.ACTIVE_LLM
-    d = server.llm_manager.model_dir_for(spec, tmp_path / "models")
-    d.mkdir(parents=True)
-    server.llm_manager.model_path_for(spec, tmp_path / "models").write_bytes(b"x")
-    r = client.post("/api/uninstall/llm", json={"name": spec.filename})
-    assert r.status_code == 200 and r.json() == {"ok": True}
-    assert not d.exists()
-
-
-def test_uninstall_llm_busy_returns_409(tmp_path):
-    spec = server.llm_manager.ACTIVE_LLM
-    d = server.llm_manager.model_dir_for(spec, tmp_path / "models")
-    d.mkdir(parents=True)
-    server.llm_manager.model_path_for(spec, tmp_path / "models").write_bytes(b"x")
-    r = _busy_client(tmp_path).post("/api/uninstall/llm", json={"name": spec.filename})
-    assert r.status_code == 409
-    assert d.exists()                                # not deleted while GPU busy
 
 
 # ---- #8/#9: persist edited transcript + saved summary -----------------------
@@ -928,42 +882,15 @@ def test_patch_history_saves_summary(client, tmp_path):
 
 def test_patch_history_unknown_404(client):
     assert client.patch("/api/history/nope", json={"summary": "x"}).status_code == 404
-
-
-def test_patch_history_empty_400(client, tmp_path):
-    _seed_history_with_srt(tmp_path)
-    assert client.patch("/api/history/h1", json={}).status_code == 400
-
-
-# ---- disk-space guard before downloads --------------------------------------
-
-def test_download_whisper_blocked_when_disk_full(client, monkeypatch):
-    import types
-    monkeypatch.setattr(server.shutil, "disk_usage",
-                        lambda p: types.SimpleNamespace(free=0))
-    r = client.post("/api/download/whisper", json={"id": server.WHISPER_MODELS[0].id})
-    assert r.status_code == 507
-
-
-def test_download_llm_blocked_when_disk_full(client, monkeypatch):
-    import types
-    monkeypatch.setattr(server.shutil, "disk_usage",
-                        lambda p: types.SimpleNamespace(free=0))
-    r = client.post("/api/download/llm", json={"name": server.LLM_MODELS[0].name})
-    assert r.status_code == 507
-
-
-# ---- #2 + #11: history stores the ORIGINAL source; prewarm skipped if queued -
-
 class _TransArbiter:
-    def __init__(self): self.prewarmed = 0
+    """Släpper fram GPU:n; språkmodellen finns inte att fråga i de här testerna."""
     def try_acquire_gpu(self): return True
     def release_gpu(self): pass
     def stop_llm(self): return False
-    def ensure_llm(self): return "http://x"
-    def ensure_model(self, spec): return "http://x"
-    def prewarm_async(self): self.prewarmed += 1
-    def llm_installed(self): return True
+    def ensure_llm(self): return None
+    def ensure_model(self, spec=None): return None
+    def prewarm_async(self): pass
+    def llm_installed(self): return False
 
 
 def _fejka_kedjan(monkeypatch, tmp_path, moln=None):

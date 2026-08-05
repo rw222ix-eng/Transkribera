@@ -19,7 +19,7 @@ from pathlib import Path
 from fastapi import APIRouter, Request
 from fastapi.responses import FileResponse, JSONResponse
 
-from app import db, exam_gen, exam_latex, exam_pdf, exam_spec, llm_manager
+from app import db, exam_gen, exam_latex, exam_pdf, exam_spec
 from app.web import routes_planning
 from app.web.sse import sse_response
 
@@ -36,7 +36,9 @@ def create_router(base: Path, arbiter) -> APIRouter:
     db_file = base / "transkribera.db"
 
     def _model_name() -> str:
-        return llm_manager.ACTIVE_LLM.filename
+        # Modellnamnet är kosmetiskt sedan språkmodellen flyttade till Claude
+        # Code — det finns ingen modell att peka ut, och ingen att välja.
+        return ""
 
     def _dubbletter(view: dict) -> list[dict]:
         """Fas 5: flagga uppgifter som liknar tidigare godkända provs
