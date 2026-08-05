@@ -56,10 +56,9 @@ datas += [("app/templates", "app/templates")]
 if _os.path.isdir("bin/tectonic"):
     datas += [("bin/tectonic", "bin/tectonic")]
 
-# Bundle the llama.cpp server binary + CUDA DLLs where llama_server.server_binary()
-# looks for it when frozen (sys._MEIPASS/bin/llamacpp/llama-server.exe). The GGUF
-# model itself is downloaded into models/ at runtime, not bundled.
-datas += [("bin/llamacpp", "bin/llamacpp")]
+# llama.cpp-servern buntades här förr (680 MB binär + CUDA-DLL:er). Den är borta
+# med den lokala språkmodellen: allt språkmodellsarbete går via Claude Code, som
+# körs som ett eget kommando på datorn och inte ska ligga i vår exe.
 
 a = Analysis(
     ["transkribera_web.py"],
