@@ -1235,8 +1235,10 @@
         <p class="note" id="plannot">Beskriv momentet ovan så kan tavlan skrivas.</p>
         <button class="primar" id="skriv" disabled>Skriv tavlan</button>
       </div>
-      <!-- Härkomstraden är borta: att texten går till Claude och ljudet stannar
-           på datorn är underförstått i hela appen. -->
+      <!-- Härkomstraden är borta här: det HÄR steget skickar bara text, till
+           Claude. Underförstått är det däremot inte längre att ljudet stannar —
+           transkriberingen skickar ljudet till OpenAI, och den sanningen står
+           vid den knapp som utlöser den (foten i steg 2, app.js). -->
       <div id="skrivstatus" hidden></div>
       </div>
     </div>
@@ -1286,6 +1288,11 @@
   </div>
 </section>
 </div>
+
+<!-- Backenden. Först av alla skript: den sonderar servern en gång och sätter
+     window.API, som resten av appen frågar. Svarar ingen server (Claude Design)
+     står API.pa på false och appen visar sina egna data i stället. -->
+<script src="api.js"></script>
 
 <!-- Figurerna i uppgifterna är CeTZ-källa som kompileras till SVG i webbläsaren.
      figurer.js äger katalogen (vilka figurtyper som finns), figur.js kompilatorn. -->

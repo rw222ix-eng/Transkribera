@@ -166,7 +166,7 @@ function gissaTid(namn) {
   if (!m) m = utan.match(/(?:^|[^\d])([01]\d|2[0-3])([0-5]\d)(?:[^\d]|$)/);
   return m ? `${m[1]}:${m[2]}` : '';
 }
-function laggTill(namn, langd) {
+function laggTill(namn, langd, kalla) {
   const typ = (namn.split('.').pop() || 'fil').toUpperCase().slice(0, 4);
   let kurs = gissaKurs(namn);
   const datum = gissaDatum(namn);
@@ -184,21 +184,81 @@ function laggTill(namn, langd) {
     schema = { tid: t.tid, klass: t.klass, kurs: t.kurs, dagnamn: dn };
     senasteKlass[kurs] = klass;
   }
-  ko.push({ namn, langd: langd || '—', typ, klass, kurs, datum, gissad, schema });
+  /* `kalla` är det servern transkriberar: en sökväg på disk eller en URL. Utan
+     server (Claude Design) finns den inte, och kön är då en ren uppvisning. */
+  ko.push({ namn, langd: langd || '—', typ, klass, kurs, datum, gissad, schema, kalla });
   ritaKo();
 }
 
-$('#dropzone').addEventListener('click', () => laggTill('Mamma waw isolerad.wav', '12:04'));
+/* Filerna läggs på disk innan de hamnar i kön: en lektion får inte bo i en
+   webbläsarbuffert som försvinner med fliken. */
+async function valjFiler() {
+  const val = document.createElement('input');
+  val.type = 'file';
+  val.multiple = true;
+  val.accept = 'audio/*,video/*,.mp3,.wav,.m4a,.mp4,.mkv,.mov,.webm,.flac,.ogg';
+  val.addEventListener('change', () => laggUppFiler([...val.files]));
+  val.click();
+}
+
+async function laggUppFiler(filer) {
+  for (const fil of filer) {
+    const sek = await window.API.langd(fil);
+    const rad = laddarrad(fil.name);
+    try {
+      const sparad = await window.API.laddaUpp(fil);
+      laggTill(fil.name, sek ? window.API.klocka(sek) : '—', sparad.path);
+    } catch (e) {
+      toast(`${fil.name} kunde inte läggas till: ${e.message}`);
+    } finally {
+      rad.remove();
+    }
+  }
+}
+
+/* Uppladdningen tar tid på en 70-minuterslektion — kön visar raden medan den
+   pågår i stället för att stå tom och se trasig ut. */
+function laddarrad(namn) {
+  const d = document.createElement('div');
+  d.className = 'korad';
+  d.innerHTML = '<span class="minietikett kotyp">…</span><span class="konamn"></span><span class="kolangd">lägger till</span>';
+  $('.konamn', d).textContent = namn;
+  $('#ko-steg1').appendChild(d);
+  return d;
+}
+
+$('#dropzone').addEventListener('click', () => {
+  if (window.API && window.API.pa) valjFiler();
+  else laggTill('Mamma waw isolerad.wav', '12:04');
+});
+$('#dropzone').addEventListener('dragover', e => { e.preventDefault(); $('#dropzone').setAttribute('data-over', ''); });
+$('#dropzone').addEventListener('dragleave', () => $('#dropzone').removeAttribute('data-over'));
+$('#dropzone').addEventListener('drop', e => {
+  e.preventDefault();
+  $('#dropzone').removeAttribute('data-over');
+  const filer = [...(e.dataTransfer.files || [])];
+  if (window.API && window.API.pa && filer.length) laggUppFiler(filer);
+  else if (filer.length) filer.forEach(f => laggTill(f.name, '—'));
+});
 $('#dropzone').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('#dropzone').click(); } });
 $('#lagg-till-lank').addEventListener('click', () => {
   const v = $('#lankfalt').value.trim();
   if (!v) { $('#lankfalt').focus(); return; }
-  laggTill(v.replace(/^https?:\/\//, '').slice(0, 48), 'länk');
+  laggTill(v.replace(/^https?:\/\//, '').slice(0, 48), 'länk', v);
   $('#lankfalt').value = '';
 });
 $('#lankfalt').addEventListener('keydown', e => { if (e.key === 'Enter') $('#lagg-till-lank').click(); });
-$$('[data-exempel]').forEach(b => b.addEventListener('click', () => {
+$$('[data-exempel]').forEach(b => b.addEventListener('click', async () => {
   const [namn, langd] = b.dataset.exempel.split('|');
+  /* Med server pekar «prova ett exempel» på en RIKTIG fil på disken — annars
+     hade knappen köat ett filnamn som alltid faller på start. */
+  if (window.API && window.API.pa) {
+    try {
+      const ex = await window.API.json('/api/sample');
+      laggTill(ex.name, langd, ex.path);
+      return;
+    } catch (e) { /* inget exempel på disken — falla igenom till namnet */ }
+  }
   laggTill(namn, langd);
 }));
 
@@ -231,7 +291,10 @@ function ritaInst() { /* Valen syns i sina egna reglage — inget chip att skriv
 function sprakNot() {
   const talat = talatSprak(), res = valt('resultat');
   const m = $('#modell');
-  if (m) m.textContent = `KB-Whisper large (${talat === 'Svenska' ? 'sv' : 'en'}) · väljs automatiskt`;
+  /* Ingen modell «väljs automatiskt» längre — det finns ett val och det är
+     gjort. gpt-transcribe kör hos OpenAI, och priset står där så att det inte
+     är en överraskning på fakturan. */
+  if (m) m.textContent = `gpt-transcribe hos OpenAI (${talat === 'Svenska' ? 'sv' : 'en'}) · $0,0045/minut`;
   const not = $('#spraknot');
   if (not) not.textContent = talat === res
     ? `Resultatet blir på ${res.toLowerCase()} — samma som det talade språket.`
@@ -337,10 +400,95 @@ $('#starta').addEventListener('click', () => {
     const fs = faser(f);
     $('.fassteg', d).innerHTML = fs.map(s => `<li class="fas" data-lage="vantar"${s.moln ? ' data-moln' : ''}><span class="fasikon"></span><span class="fasnamn">${s.namn}</span><span class="fasdetalj"></span></li>`).join('');
     lista.appendChild(d);
-    return { el: d, fs, noder: [...d.querySelectorAll('.fas')], tot: Math.max(35, sekunder(f.langd) * 0.32) };
+    return { el: d, fil: f, fs, noder: [...d.querySelectorAll('.fas')],
+             tot: Math.max(35, sekunder(f.langd) * 0.32) };
   });
   const totalSek = rader.reduce((a, r) => a + r.tot, 0);
-  $('#korkvar').textContent = `${kvarText(totalSek)} · ljudet körs på din GPU — du kan gå. Sista steget skickar texten till Claude.`;
+  /* Foten bär hela sanningen i en mening, i tidsordning: ljudet går ut först,
+     tiderna räknas här, och texten går till Claude sist. */
+  const FOTTEXT = 'ljudet skickas till OpenAI för transkribering · tidsstämplar och ljudrättning körs här · sista steget skickar texten till Claude.';
+  $('#korkvar').textContent = `${kvarText(totalSek)} · ${FOTTEXT}`;
+  if (window.API && window.API.pa) korRiktigt(rader, FOTTEXT);
+  else korFejk(rader, totalSek, FOTTEXT);
+});
+
+/* ── Riktig körning ───────────────────────────────────────────────────────
+   En fil i taget: servern håller GPU:n exklusivt för tidsättningen, så två
+   parallella jobb hade ändå bara fått vänta på varandra — men här syns kön. */
+async function korRiktigt(rader, fottext) {
+  const t0 = Date.now();
+  const klockan = setInterval(() => {
+    const gick = mmss(Math.round((Date.now() - t0) / 1000));
+    rader.forEach(r => { if (!r.klar && !r.fel) $('.pklocka', r.el).textContent = gick; });
+  }, 500);
+  let kostnad = 0;
+  for (const r of rader) {
+    const f = r.fil;
+    if (!f.kalla) {
+      r.fel = true;
+      $('.ppct', r.el).textContent = 'ingen fil';
+      varnruta('fel', `${f.namn} finns inte på disken`,
+        'Filen lades till utan att laddas upp. Lägg till den igen via rutan högst upp.', [
+          { namn: 'Tillbaka till kön', stark: true, gor: d => { d.remove(); visaSteg(1); } }]);
+      continue;
+    }
+    try {
+      const svar = await window.API.strom('/api/transcribe', {
+        source: f.kalla,
+        language: talatSprak() === 'Svenska' ? 'sv' : 'en',
+        target_language: valt('resultat') === 'Svenska' ? 'sv' : 'en',
+        formats: valda('format').map(x => x.toLowerCase()),
+        audio_correct: $('#ratta').getAttribute('aria-pressed') === 'true',
+      }, {
+        progress: p => {
+          $('.fyll', r.el).style.width = p + '%';
+          $('.ppct', r.el).textContent = Math.round(p) + ' %';
+          ritaFaser(r, p);
+          visaPill(p, '');
+          $('#korkvar').textContent = `${Math.round(p)} % · ${fottext}`;
+        },
+        log: m => { r.senasteLogg = m; },
+        /* Texten som kommer tillbaka medan den skrivs — det enda ärliga
+           framsteget under ett molnanrop. */
+        delta: t => {
+          r.moln = (r.moln || '') + t;
+          const fas = $$('.fas', r.el)[2];
+          if (fas) $('.fasdetalj', fas).textContent =
+            `${r.moln.trim().split(/\s+/).length} ord hittills`;
+        },
+        kostnad: h => { kostnad += h.usd; },
+      });
+      r.klar = true;
+      r.resultat = svar;
+      window.transkript = (svar.transcript || []).map(s => [klockstr(Math.round(s.start)), s.text]);
+      ritaFaser(r, 100);
+      $('.fyll', r.el).style.width = '100%';
+      $('.ppct', r.el).textContent = '100 %';
+      $('.pkvar', r.el).textContent = '';
+    } catch (e) {
+      r.fel = true;
+      $('.ppct', r.el).textContent = 'avbruten';
+      $('.fyll', r.el).style.background = 'var(--berry)';
+      const kor = $('.fas[data-lage="kor"]', r.el);
+      if (kor) kor.dataset.lage = 'fel';
+      varnruta('fel', `${f.namn} gick inte att transkribera`, e.message, [
+        { namn: 'Försök igen', stark: true, gor: d => { d.remove(); $('#starta').click(); } },
+        { namn: 'Hoppa över filen', gor: d => d.remove() }]);
+      klaraFiler = klaraFiler.filter(x => x !== f);
+    }
+  }
+  clearInterval(klockan);
+  taBortPill();
+  $('#korkvar').textContent = klaraFiler.length
+    ? `Klart · ${kostnad ? '$' + kostnad.toFixed(2) + ' hos OpenAI · ' : ''}ljudet ligger kvar på datorn, transkriptet är sparat här`
+    : 'Ingen fil blev klar.';
+  if (klaraFiler.length) klar();
+}
+
+/* ── Prototypens klocka ───────────────────────────────────────────────────
+   Utan server finns ingen körning att följa. Förloppet spelas upp i samma
+   band som servern skulle ha emitterat, så designen visar en sann form. */
+function korFejk(rader, totalSek, fottext) {
   let p = 0;
   const t0 = Date.now();
   const timer = setInterval(() => {
@@ -356,40 +504,46 @@ $('#starta').addEventListener('click', () => {
     });
     const kvarSek = totalSek * (1 - p / 100);
     $('#korkvar').textContent = p >= 100
-      ? 'Klart · ljudet låg kvar på din maskin, texten sammanfattades hos Claude'
-      : `${kvarText(kvarSek)} · ljudet körs på din GPU — du kan gå. Sista steget skickar texten till Claude.`;
+      ? 'Klart · ljudet transkriberades hos OpenAI, tiderna sattes här'
+      : `${kvarText(kvarSek)} · ${fottext}`;
     visaPill(p, p >= 100 ? '' : kvarText(kvarSek));
     if (p > 21 && p < 23) varningar(ko, rader);
     if (p >= 100) { clearInterval(timer); taBortPill(); klar(); }
   }, 110);
-});
+}
 function sekunder(langd) {
   const d = String(langd || '').split(':').map(Number);
   return d.length === 2 && d.every(n => !isNaN(n)) ? d[0] * 60 + d[1] : 600;
 }
 function mmss(s) { const h = Math.max(0, Math.round(s)); return Math.floor(h / 60) + ':' + String(h % 60).padStart(2, '0'); }
+/* Faserna speglar serverns egna band (app/web/server.py): molnet 0–45,
+   tidsättningen 45–60, ljudrättningen 60–90, efterarbetet resten. Samma lista
+   används av den riktiga körningen och av prototypens klocka — då finns bara ett
+   förlopp att hålla sant.
+
+   Två steg lämnar datorn, och de är märkta: ljudet till OpenAI, texten till
+   Claude. Det är den ordningen som gäller nu — förr transkriberades allt här och
+   bara sammanfattningen gick ut. */
 function faser(f) {
   const sek = sekunder(f.langd);
   const mb = Math.round(sek / 60 * 1.4 * 10) / 10;
-  const n = Math.max(4, Math.round(sek / 95));
-  const seg = t => `segment ${Math.min(n, Math.max(1, Math.ceil(t * n)))} av ${n}`;
+  const delar = Math.max(1, Math.ceil(sek / 300));
   const fmt = (valda('format').join(' · ') || 'TXT');
+  const ratta = $('#ratta').getAttribute('aria-pressed') === 'true';
   const lista = [
-    { namn: 'Läser in filen', v: 7, d: () => `${mb} MB · ${f.langd || '—'}` },
-    { namn: 'Förbereder ljudet', v: 8, d: () => '16 kHz mono · normaliserar nivån' },
-    { namn: 'Delar upp i segment', v: 9, d: t => `${n} segment · tystnadsdetektering` },
-    { namn: 'Transkriberar tal', v: 36, d: t => `${seg(t)} · ${mmss(t * sek)} av ${f.langd || mmss(sek)}` }
+    { namn: 'Läser in filen', fran: 0, till: 4, d: () => `${mb} MB · ${f.langd || '—'}` },
+    { namn: 'Delar upp vid pauserna', fran: 4, till: 8,
+      d: () => `${delar} ${delar === 1 ? 'del' : 'delar'} · tystnadsdetektering · här` },
+    { namn: 'Skickar ljudet till OpenAI', fran: 8, till: 45, moln: true,
+      d: t => `gpt-transcribe · ${Math.min(delar, Math.max(1, Math.ceil(t * delar)))} av ${delar}` },
+    { namn: 'Sätter tidsstämplar mot ljudet', fran: 45, till: 60,
+      d: () => 'ordtider ur ljudet · här' },
   ];
-  if ($('#ratta').getAttribute('aria-pressed') === 'true')
-    lista.push({ namn: 'Rättar mot ljudet', v: 19, d: t => `andra passet · ${seg(t)}` });
-  lista.push({ namn: 'Interpunktion och talarbyten', v: 12, d: t => `${Math.max(1, Math.round(t * n * 11))} meningar satta` });
-  lista.push({ namn: 'Skriver ut resultat', v: 9, d: () => fmt });
-  /* Sista steget är det enda som lämnar datorn. Det står på fasen, och foten
-     bär hela sanningen i en mening: ljudet här, texten sist till Claude. */
-  lista.push({ namn: 'Sammanfattar och letar förslag', v: 8, d: () => 'skickas till Claude · ≈ 1 min', moln: true });
-  const summa = lista.reduce((a, s) => a + s.v, 0);
-  let ack = 0;
-  lista.forEach(s => { s.fran = ack / summa * 100; ack += s.v; s.till = ack / summa * 100; });
+  if (ratta) lista.push({ namn: 'Rättar mot ljudet', fran: 60, till: 90,
+                          d: t => `andra passet · här` });
+  lista.push({ namn: 'Skriver ut resultat', fran: ratta ? 90 : 60, till: 96, d: () => fmt });
+  lista.push({ namn: 'Sammanfattar och letar förslag', fran: 96, till: 100,
+               d: () => 'skickas till Claude · ≈ 1 min', moln: true });
   return lista;
 }
 function ritaFaser(r, p) {
@@ -413,7 +567,7 @@ function klar() {
     klaraFiler.length === 1 ? f0.langd : null,
     valt('resultat').toLowerCase(),
     $('#ratta').getAttribute('aria-pressed') === 'true' ? 'rättat mot ljudet' : 'orättat',
-    'KB-Whisper large'
+    'gpt-transcribe · tidsstämplar satta här'
   ].filter(Boolean).join(' · ');
   const kurs = klaraFiler.map(f => f.kurs).filter(Boolean)[0];
   $('#klarsparat').textContent = `Ligger på sin lektion i veckan${kurs ? ' · ' + kurs : ''}.`;
