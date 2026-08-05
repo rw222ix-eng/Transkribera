@@ -253,40 +253,43 @@ def create_app(base_dir: Path | None = None,
         return await call_next(request)
 
     # 3) Ingen heuristisk cachning av UI-filerna: utan Cache-Control gissar
-    #    webbläsaren friskhet ur Last-Modified och kan köra ett gammalt
-    #    index.html länge efter en uppdatering. no-cache = alltid omfråga
-    #    (304 via ETag är fortfarande snabbt, allt ligger på lokal disk).
-    #    "/next" och "/next/" är den ohashade Svelte-entrydokumentet (index.html) —
-    #    build.emptyOutDir rensar gamla hashade assets vid varje ombygge, så en
-    #    kvarcachad /next/index.html skulle be om en /next/assets/*-fil som redan
-    #    raderats och rendera blankt. De hashade assetsen under /next/assets/*
-    #    ska INTE träffas av detta — de är innehålls-adresserade och får cachas.
+    #    webbläsaren friskhet ur Last-Modified och kan köra en gammal fil länge
+    #    efter en uppdatering. no-cache = alltid omfråga (304 via ETag är
+    #    fortfarande snabbt, allt ligger på lokal disk).
+    #
+    #    Frontenden har inga innehållshashade filnamn — den serveras som den
+    #    ligger, med namnen den har i Claude Design (app.js, styles.css, ...).
+    #    Därför måste HELA frontenden vara no-cache, inte bara entrydokumentet:
+    #    med hashade Vite-assets räckte det att undanta index.html, men nu skulle
+    #    en cachad app.js överleva en omdesign och visa gårdagens app.
+    #    Typsnitten och bilderna undantas — de byter namn när de byter innehåll
+    #    och är det enda tunga som hämtas.
     @app.middleware("http")
     async def _no_stale_static(request: Request, call_next):
         response = await call_next(request)
-        if (request.url.path in ("/", "/next", "/next/")
-                or request.url.path.startswith("/static")):
+        path = request.url.path
+        tung = path.startswith(("/typsnitt/", "/assets/"))
+        if not tung and (path == "/" or path.startswith("/static")
+                         or path.endswith((".js", ".css", ".html"))):
             response.headers["Cache-Control"] = "no-cache"
         return response
 
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
-    # Svelte-frontenden (byggd av Vite → app/web/next).
+    # Frontenden (app/web/ui) — designprojektet «Transkribera Design System»
+    # kopierat rakt av från Claude Design. Den är ramverkslös: app.html laddar 45
+    # skript i bestämd ordning och de delar globaler med varandra.
     #
-    # Sedan cutovern byggs den med base "/" (vite.config.js), så index.html
-    # refererar tillgångarna rot-absolut som /assets/*. De monteras därför vid
-    # roten. "/next" behålls under övergången: hela e2e-sviten kör mot den, och
-    # samma index.html fungerar på båda vägarna just tack vare den rot-absoluta
-    # basen.
+    # Därför serveras den OBYGGD. Det är inte lättja utan själva poängen: ett
+    # bygg- eller kompileringssteg är ett ställe där resultatet kan börja skilja
+    # sig från det som ritades, och kravet här är att appen ska vara identisk med
+    # designen — inte likna den. Ingen Vite, ingen bundling, inga hashade namn.
     #
-    # Monteras bara om bygget finns. Saknas det svarar "/" med en förklarande
-    # text i stället för en trasig FileResponse eller en obegriplig 404 — se
-    # index().
-    NEXT_DIR = STATIC_DIR.parent / "next"
-    NEXT_READY = (NEXT_DIR / "index.html").exists()
-    if NEXT_READY:
-        app.mount("/assets", StaticFiles(directory=str(NEXT_DIR / "assets")), name="next-assets")
-        app.mount("/next", StaticFiles(directory=str(NEXT_DIR), html=True), name="next")
+    # Monteringen vid "/" sker sist i create_app, efter alla /api-rutter: en
+    # Mount på "/" matchar varje sökväg, och Starlette provar rutter i den
+    # ordning de registrerats. Monterad här hade den svalt hela API:et.
+    UI_DIR = STATIC_DIR.parent / "ui"
+    UI_READY = (UI_DIR / "app.html").exists()
 
     # Single owner of the LLM process + GPU exclusivity. The LLM is NOT started
     # here — it starts lazily on the first correction/chat (see /api/postprocess,
@@ -311,20 +314,21 @@ def create_app(base_dir: Path | None = None,
 
     @app.get("/")
     def index():
-        """Svelte-appen.
+        """Appen.
 
-        Den gamla vanilla-appen (app.js/style.css/index.html) är pensionerad —
-        se docs/superpowers/plans/2026-07-25-cutover-till-svelte.md, Task 4.
-        Det fanns alltså inget att falla tillbaka på längre om bygget saknas,
-        och en tyst FileResponse mot en fil som inte finns hade bara gett en
-        obegriplig 404. Svara i stället med en förklarande text: en utcheckning
-        utan `npm run build` ska ge ett begripligt besked, inte en gissning.
+        Filen heter app.html och inte index.html med flit: mappen är en rak
+        spegel av designprojektet, och en omdöpning hade gjort nästa synk från
+        Claude Design till en kopiering med ett undantag att komma ihåg. Rutan
+        pekar ut den explicit i stället.
+
+        Saknas den svarar vi med en läsbar text i stället för en obegriplig 404
+        — en utcheckning där app/web/ui inte kommit med ska säga vad som fattas.
         """
-        if NEXT_READY:
-            return FileResponse(str(NEXT_DIR / "index.html"))
+        if UI_READY:
+            return FileResponse(str(UI_DIR / "app.html"))
         return PlainTextResponse(
-            "Svelte-appen är inte byggd. Kör `npm run build` i repo-roten "
-            "och starta om servern.", status_code=503)
+            "Frontenden saknas: app/web/ui/app.html finns inte i den här "
+            "utcheckningen.", status_code=503)
 
     @app.get("/api/hardware")
     def api_hardware():
@@ -1780,5 +1784,17 @@ def create_app(base_dir: Path | None = None,
     async def api_reveal(req: Request):
         """Reveal a result folder/file in the OS file manager."""
         return _open_path((await req.json()).get("path") or "")
+
+    # Frontenden monteras SIST. app.html refererar sina 45 skript, 15 stilmallar,
+    # typsnitt och bilder med relativa sökvägar, och eftersom dokumentet ligger på
+    # "/" måste de lösas ut därifrån — alltså en mount på roten. En Mount på "/"
+    # matchar varje sökväg, och Starlette provar rutter i registreringsordning, så
+    # den får ligga efter allt annat: /static, /api/* och "/" ovan vinner, och
+    # mounten tar bara det som ingen annan rutt svarade på.
+    #
+    # html=True är AVSIKTLIGT bortvalt: det får StaticFiles att leta index.html i
+    # varje katalog, och entrydokumentet heter app.html och serveras av index().
+    if UI_READY:
+        app.mount("/", StaticFiles(directory=str(UI_DIR)), name="ui")
 
     return app

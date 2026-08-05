@@ -5,9 +5,9 @@ One-folder, windowed. Reuses the heavy-dep collection from Transkribera.spec and
 adds the web stack (fastapi/uvicorn), pywebview (+ pythonnet for the EdgeChromium
 backend) and the static frontend. PySide6 is excluded — the web build has no Qt UI.
 
-OBS: kör `npm run build` (i repo-roten) FÖRE PyInstaller så app/web/next finns.
+Inget byggsteg krävs för frontenden: app/web/ui serveras som den ligger.
 
-Build:  npm run build && pyinstaller Transkribera_web.spec
+Build:  pyinstaller Transkribera_web.spec
 Result: dist/Transkribera_web/Transkribera_web.exe
 """
 from PyInstaller.utils.hooks import collect_all, collect_submodules
@@ -37,16 +37,14 @@ hiddenimports += ["clr"]
 # Bundle the web frontend where server._static_dir() looks for it when frozen.
 datas += [("app/web/static", "app/web/static")]
 
-# Bundla den byggda Svelte-frontenden (npm run build) så /next fungerar offline
-# i det frysta bygget. Kräver att app/web/next/ finns vid paketeringstillfället
-# (se OBS ovan) — till skillnad från bin/tectonic-guarden nedan är detta INTE en
-# valfri katalog: PyInstaller 6.x kraschar hela bygget med ett kryptiskt
-# "ERROR: Unable to find ... when adding binary and data files" om den saknas,
-# så vi kollar explicit och avbryter tidigt med ett begripligt svenskt felmeddelande.
-if not _os.path.isdir("app/web/next"):
-    raise SystemExit(
-        "app/web/next saknas — kör `npm run build` i repo-roten före PyInstaller.")
-datas += [("app/web/next", "app/web/next")]
+# Frontenden. Den är versionshanterad och behöver inget byggsteg — den serveras
+# precis som den ligger — men den måste med i paketet, annars svarar "/" med
+# 503-texten i server.index() i det frysta bygget. Kollas explicit: PyInstaller
+# 6.x kraschar annars hela bygget med ett kryptiskt "ERROR: Unable to find ...
+# when adding binary and data files" i stället för att säga vad som fattas.
+if not _os.path.isdir("app/web/ui"):
+    raise SystemExit("app/web/ui saknas — frontenden finns inte i utcheckningen.")
+datas += [("app/web/ui", "app/web/ui")]
 
 # Bundlad appdata (centralt innehåll m.m.) där course_data.data_dir() letar
 # när appen är fryst (Fas 3).
