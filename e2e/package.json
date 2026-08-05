@@ -4,9 +4,6 @@
   "version": "0.0.0",
   "scripts": {
     "test": "playwright test",
-    "test:real": "playwright test --project=real",
-    "test:next-foundation": "npm run build --prefix .. && playwright test --project=next-foundation",
-    "codegen": "playwright codegen http://127.0.0.1:8731",
     "report": "playwright show-report"
   },
   "devDependencies": {
