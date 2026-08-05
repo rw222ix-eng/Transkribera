@@ -1,0 +1,466 @@
+/* ══════════ STEG 3 · FEM DÖRRAR ══════════
+   Källan väljs först: förra lektionen, boken, egna filer, ett tidigare papper
+   eller ett rättat prov — en, flera eller alla. Varje vald dörr fäller ut sitt
+   eget verktyg under raden. Korten bär appens enda hovergest: disblå fyllning
+   med en glans som sveper.
+
+   Fem dörrar i fyra spalter gav fyra breda och en femtedel så bred på egen rad —
+   och den femte såg avstängd ut för att den var mindre. Fem spalter, alla lika,
+   och dörrarna får bli smalare i stället: att de är lika stora är det som säger
+   att de är fem jämlika vägar in. */
+.kallled{margin:12px 0 0;font-size:.86rem;line-height:1.5;color:var(--ink-2)}
+.dorrar{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:9px;margin-top:14px}
+/* Under ~720 px rymmer raden inte fem läsbara dörrar. Då blir de EN spalt —
+   fortfarande lika stora. Två spalter hade lagt den femte ensam på sista raden,
+   alltså tillbaka till felet. */
+@media (max-width:720px){.dorrar{grid-template-columns:1fr}}
+.kalla{position:relative;display:grid;gap:4px;align-content:start;text-align:left;padding:14px 14px 15px;border:none;border-radius:var(--r-card);font-family:inherit;cursor:pointer;background-color:var(--accent-weak);background-image:linear-gradient(100deg,transparent 34%,rgba(255,255,255,.32) 50%,transparent 66%);background-size:260% 100%;background-position:130% 0;background-repeat:no-repeat;transition:transform var(--dur-1) var(--ease),background-color var(--dur-2) var(--ease),background-position var(--dur-4) var(--ease),box-shadow var(--dur-2) var(--ease),color var(--dur-2) var(--ease)}
+.kalla:hover{background-color:#006FD6;background-position:-30% 0;box-shadow:0 14px 28px -12px rgba(9,66,108,.62);transform:translateY(-2px)}
+.kalla:active{transform:translateY(0) scale(.99)}
+.kalla:focus-visible{outline:2px solid var(--sky-deep);outline-offset:3px}
+/* Bocken står i övre högra hörnet: rubriken håller sig undan den så att en vald
+   dörr inte får sin första rad skriven under märket. */
+.kalla b{font-size:.94rem;font-weight:600;line-height:1.25;padding-right:15px;color:var(--ink);transition:color var(--dur-2) var(--ease)}
+.kalla i{font-style:normal;font-size:.75rem;line-height:1.4;color:var(--ink-3);transition:color var(--dur-2) var(--ease)}
+.kalla:hover b{color:#fff}
+.kalla:hover i{color:rgba(255,255,255,.8)}
+/* En TOM d\u00f6rr \u00e4r inte en avst\u00e4ngd d\u00f6rr. Den ska (a) l\u00e4sas som en d\u00f6rr, (b) l\u00e4sas
+   som tom, (c) aldrig tappa sin text och (d) h\u00f6ra ihop med de fyra andra. F\u00f6rr
+   st\u00e4llde tomheten sig utanf\u00f6r familjen: `background-color:transparent` gav en vit
+   d\u00f6rr i en rad ljusbl\u00e5, allts\u00e5 en d\u00f6rr som s\u00e5g avst\u00e4ngd ut. Och eftersom regeln
+   st\u00e5r EFTER `.kalla:hover` med samma specificitet vann den ocks\u00e5 i hovern, medan
+   `.kalla:hover b` f\u00e4rgade texten vit: vit text p\u00e5 vit yta.
+
+   Nu: samma fyllning som de fyra andra, och tomheten sagd med den streckade
+   konturen appen anv\u00e4nder p\u00e5 allt som inte \u00e4r ifyllt \u00e4n. Konturen ligger i
+   `outline` och inte i `border`, s\u00e5 att alla fem d\u00f6rrar h\u00e5ller exakt samma m\u00e5tt.
+   Hovern och valet \u00e4rvs fr\u00e5n de andra d\u00f6rrarna \u2014 bara strecket f\u00f6ljer med, s\u00e5 att
+   en tom d\u00f6rr g\u00e5r att skilja fr\u00e5n en fylld i alla fyra l\u00e4gen. */
+/* En TOM dörr är inte en avstängd dörr, och den ska inte heller ha en egen
+   kontur: de andra har ingen, och en dörr med streck runt sig läses som en annan
+   sorts dörr. Strecket låg här för att skilja tom från ifylld — det gör
+   UNDERTEXTEN i stället: «Ingen fil inlagd än · PDF eller foto», «inget register
+   än», «Inget sparat än», «Inget prov är rättat än».
+
+   Det ursprungliga felet får inte tillbaka: `background-color:transparent` på
+   `[data-tom]` stod EFTER `.kalla:hover` med samma specificitet och vann därför i
+   hovern, medan `.kalla:hover b` färgade texten vit — vit text på vit yta. Det
+   finns ingen regel här som rör `[data-tom]`:s fyllning: alla dörrar tar sin ur
+   `.kalla`, `.kalla:hover` och `.kalla[aria-pressed='true']`, alltså ur samma
+   regler. Attributet står kvar i DOM — det är vad undertexten skrivs ur. */
+.kalla[aria-pressed='true']{background-color:var(--btn-bg);box-shadow:0 10px 22px -12px rgba(9,66,108,.6),inset 0 0 0 1.5px rgba(255,255,255,.3)}
+/* Vald och hovrad: samma ljusnande som allt annat — aldrig samma färg som valet
+   självt, annars går det inte att se vilken dörr som är på. */
+.kalla[aria-pressed='true']:hover{background-color:#006FD6}
+.kalla[aria-pressed='true'] b{color:#fff}
+.kalla[aria-pressed='true'] i{color:rgba(255,255,255,.8)}
+.kalla[aria-pressed='true']::after{content:'✓';position:absolute;top:11px;right:12px;font-size:.72rem;color:#fff}
+/* Vald men hopfälld: källan följer med — raden står i kvittot — men verktyget är
+   inte uppslaget. Kortet står då en aning tystare, och ett klick slår upp det. */
+/* Vald men hopfälld: källan följer med — raden står i kvittot — men verktyget är
+   inte uppslaget. Fyllningen är densamma som på den uppslagna dörren: alla fyra
+   ÄR valda. Skillnaden är höjden över ytan och pilen i hörnet. Förr blektes
+   fyllningen mot vitt och tre valda dörrar läste sig som tre avstängda. */
+.kalla[data-hopfalld]{box-shadow:inset 0 0 0 1px rgba(255,255,255,.2)}
+.kalla[data-hopfalld]:hover{box-shadow:0 14px 28px -12px rgba(9,66,108,.62)}
+.kalla[data-hopfalld]::after{content:'✓ ›';letter-spacing:.1em}
+/* «Föreslås» står SIST i dörren, inte först: stod den överst sköt den den ena
+   dörrens rubrik en rad ned, och fem dörrar i rad fick fyra rubriker på en
+   baslinje och en på en annan. */
+.kmark{order:3;display:inline-flex;align-items:center;justify-self:start;align-self:start;margin-top:3px;padding:2px 8px;border-radius:var(--r-pill);background:var(--sky-deep);color:#fff;font-size:.6rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase}
+.kalla[aria-pressed='true'] .kmark{background:rgba(255,255,255,.22)}
+
+/* ── den utfällda källpanelen ─────────────────────────── */
+.kpanel{border:1px solid var(--line);border-radius:var(--r-card);margin-top:12px;animation:kpin var(--dur-3) var(--ease)}
+@keyframes kpin{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+.kphuv{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;padding:11px 15px;background:var(--accent-weak);border-bottom:1px solid var(--atmosphere);border-radius:calc(var(--r-card) - 1px) calc(var(--r-card) - 1px) 0 0}
+.kpn{font-size:.88rem;font-weight:600;color:var(--sky-deep)}
+.kpx{font-size:.78rem;line-height:1.4;color:var(--ink-2)}
+/* Krysset är appens enda destruktiva gest och bär samma sken som de blå
+   knapparna — bara i bärrött: en fylld cirkel med glans som sveper över. */
+.kpstang,.kbort{display:grid;place-items:center;width:26px;height:26px;border:none;border-radius:50%;padding:0;font-family:inherit;font-size:.78rem;line-height:1;color:var(--ink-3);cursor:pointer;background-color:transparent;background-image:linear-gradient(100deg,transparent 34%,rgba(255,255,255,.34) 50%,transparent 66%);background-size:260% 100%;background-position:130% 0;background-repeat:no-repeat;transition:background-color var(--dur-2) var(--ease),background-position var(--dur-4) var(--ease),color var(--dur-2) var(--ease),box-shadow var(--dur-2) var(--ease),transform var(--dur-1) var(--ease)}
+.kpstang:hover,.kbort:hover{background-color:var(--berry);background-position:-30% 0;color:#fff;box-shadow:0 8px 18px -8px rgba(178,42,58,.6);transform:translateY(-1px)}
+.kpstang:active,.kbort:active{transform:translateY(0) scale(.94)}
+.kpstang:focus-visible,.kbort:focus-visible{outline:2px solid var(--berry);outline-offset:2px}
+.kpkropp{padding:13px 17px 16px;display:grid;gap:14px}
+/* En tom ruta ska inte reservera ett rutnätsspår och en lucka — den ska vara borta. */
+.utgangnat:empty{display:none}
+.kpkropp .bokdel{margin-top:0;padding-top:0;border-top:none}
+.kpkropp .dropzon{padding:26px 22px}
+.kpkropp #momentrad{margin-top:0!important}
+.kpunkt{display:grid;grid-template-columns:6px 1fr;gap:12px;align-items:start;font-size:.86rem;line-height:1.5;color:var(--ink)}
+.kpunkt::before{content:'';width:5px;height:5px;border-radius:50%;background:var(--sky-deep);margin-top:8px}
+
+/* ── ny bok som PDF, på plats i bokpanelen ────────────── */
+/* Bokens väljare och «Lägg till bok» är samma slags knapp och ska bete sig lika:
+   appens enda hovergest — disblå fyllning med en glans som sveper över ytan. */
+/* En app, en dropdown: bokens väljare bär samma mått som .valjknapp — samma
+   höjd, samma radie, samma pil — så att bokhyllan, avsnittet och «Lägg till bok»
+   läser sig som en enda familj tillsammans med lektions- och gy-väljaren. */
+.bkhuvud .bkavsnitt{padding:10px 16px;font-size:.88rem;border-color:transparent;box-shadow:var(--shadow-sm);background-color:var(--surface);background-image:linear-gradient(100deg,transparent 34%,rgba(255,255,255,.3) 50%,transparent 66%);background-size:260% 100%;background-position:130% 0;background-repeat:no-repeat;cursor:pointer;transition:background-color var(--dur-2) var(--ease),background-position var(--dur-4) var(--ease),border-color var(--dur-2) var(--ease),color var(--dur-2) var(--ease),box-shadow var(--dur-2) var(--ease),transform var(--dur-1) var(--ease)}
+.bkhuvud .bkavsnitt::after{width:9px;height:9px;border-right-width:1.5px;border-bottom-width:1.5px;border-right-color:currentColor;border-bottom-color:currentColor;opacity:.7;transform:translateY(-2px) rotate(45deg)}
+.bkhuvud .bkavsnitt:hover{background-color:var(--sky-pale);background-position:-30% 0;border-color:var(--atmosphere);color:var(--ink);transform:translateY(-1px);box-shadow:0 6px 16px -12px rgba(9,66,108,.5)}
+.bkhuvud .bkavsnitt:hover::after{border-right-color:currentColor;border-bottom-color:currentColor}
+.bkhuvud .bkavsnitt:active{transform:translateY(0) scale(.976)}
+.bkhuvud .bkladd{white-space:nowrap}
+.bkhuvud .bkladd::after{content:none}
+.bkhuvud .bkladd::before{content:'+';font-size:1rem;line-height:1;margin-right:-2px;color:var(--sky-deep);transition:color var(--dur-2) var(--ease)}
+.bkhuvud .bkladd:hover::before{color:var(--sky-deep)}
+.bkhuvud .bkladd[data-over]{background-color:var(--accent-weak);border-color:var(--accent);color:var(--sky-deep)}
+/* En rad, inte en förklaring: vad boken är och vad som INTE hör hit. */
+.bknot{margin:8px 0 0;font-size:.76rem;line-height:1.45;color:var(--ink-3);text-wrap:pretty}
+.bknot b{font-weight:600;color:var(--ink-2)}
+.boklas{display:grid;gap:8px;padding:13px 15px;border:1px solid var(--atmosphere);border-radius:var(--r-card);background:var(--accent-weak)}
+.boklasspar{display:block;height:4px;border-radius:2px;background:var(--track);overflow:hidden}
+.boklasspar span{display:block;height:100%;width:0;border-radius:2px;background:var(--sky-deep);transition:width .4s var(--ease)}
+.boklastext{font-size:.8rem;color:var(--ink-2)}
+
+/* ── kvittot: vad som faktiskt följer med ─────────────── */
+.kvitto{display:grid;gap:9px;margin-top:16px;padding:13px 15px 14px;border:1px solid var(--line);border-radius:var(--r-card);background:var(--sunken)}
+.kvitto .valdachips{display:none}
+.kvittotom{font-size:.82rem;color:var(--ink-3)}
+/* En rad per källa: vad det är, vad det innehåller, och vägen att ta bort det. */
+.krad{display:grid;grid-template-columns:78px 1fr auto;gap:12px;align-items:baseline;padding:9px 11px;border-radius:10px;background:var(--surface);box-shadow:inset 0 0 0 1px var(--line)}
+.kart{font-size:.6rem;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--sky-deep)}
+.ktext{min-width:0}
+.ktext b{display:block;font-size:.88rem;font-weight:600;color:var(--ink);line-height:1.3}
+.ktext>span{display:block;margin-top:2px;font-size:.76rem;line-height:1.45;color:var(--ink-2);font-variant-numeric:tabular-nums}
+
+@media (max-width:620px){.krad{grid-template-columns:1fr auto}.kart{grid-column:1/-1}}
+.kchip{display:inline-flex;align-items:center;gap:9px;padding:5px 10px 5px 13px;border-radius:var(--r-pill);background:var(--accent-weak);box-shadow:inset 0 0 0 1px var(--atmosphere);color:var(--sky-deep);font-size:.8rem;font-weight:500;font-family:inherit;border:none;cursor:pointer;transition:box-shadow var(--dur-2) var(--ease),color var(--dur-2) var(--ease)}
+.kchip:hover{box-shadow:inset 0 0 0 1px var(--sky-deep)}
+.kchip .kx{color:var(--ink-3);font-size:.74rem}
+.kchip:hover .kx{color:var(--sky-deep)}
+
+/* Lektionsväljaren är en utväg, inte ett val: den ska läsas som en länk under
+   korten — «välj en annan lektion» — inte som en knapp med ett tillstånd. */
+.kpkropp #lektionsvalj{justify-self:start;position:relative}
+.kpkropp #lektionsknapp{border:none;background:transparent;box-shadow:none;padding:2px 0;color:var(--ink-2);font-size:.86rem;font-family:inherit;cursor:pointer}
+.kpkropp #lektionsknapp:hover{color:var(--ink);text-decoration:underline;text-underline-offset:3px;background:transparent;box-shadow:none;transform:none}
+.kpkropp #lektionsknapp .valjpil{opacity:.6}
+/* Listan är bredare än länken som öppnar den — den ska falla ut åt HÖGER från
+   knappen, inte hänga ut över panelens vänsterkant. */
+.kpkropp #lektionsvalj .valjpanel.brett{left:0;right:auto;transform-origin:top left}
+
+/* ── Lektionslistan: en enda hovergest för ALLA rader ──────────────────
+   app2.css bär två generationer regler: en som fyller raden ljusblå och en
+   som gör metatexten vit. Tillsammans gav de vit text på ljus botten (osynlig)
+   och olika hover för valda och ovalda rader. Här sätts hela raden i appens
+   vanliga gest: disblå fyllning, glans som sveper, vit text — samma för alla. */
+.valjpanel.brett .lrad-val{background-color:transparent;background-image:linear-gradient(100deg,transparent 34%,rgba(255,255,255,.28) 50%,transparent 66%);background-size:260% 100%;background-position:130% 0;background-repeat:no-repeat;cursor:pointer;transition:background-color var(--dur-2) var(--ease),background-position var(--dur-4) var(--ease),color var(--dur-2) var(--ease),box-shadow var(--dur-2) var(--ease)}
+.valjpanel.brett .lrad-val[aria-selected='true']{background-color:var(--accent-weak)}
+.valjpanel.brett .lrad-val[aria-selected='true'] .lvnamn{font-weight:600;color:var(--sky-deep)}
+/* Hovern får inte vara starkare än valet: den ovalda raden ljusnar mot --sunken,
+   den valda (som redan bär --accent-weak) djupnar ett steg till --sky-pale. */
+.valjpanel.brett .lrad-val:hover,.valjpanel.brett .lrad-val:focus-visible{outline:none;background-color:var(--sunken);background-position:-30% 0}
+.valjpanel.brett .lrad-val[aria-selected='true']:hover{outline:none;background-color:var(--sky-pale)}
+.valjpanel.brett .lrad-val:hover .lvnamn,.valjpanel.brett .lrad-val:focus-visible .lvnamn{color:var(--ink)}
+.valjpanel.brett .lrad-val:hover .lvmeta,.valjpanel.brett .lrad-val:focus-visible .lvmeta,.valjpanel.brett .lrad-val:hover .lvlangd,.valjpanel.brett .lrad-val:focus-visible .lvlangd{color:var(--ink-2)}
+.valjpanel.brett .lrad-val:hover .lkryss{border-color:var(--atmosphere)}
+.valjpanel.brett .lrad-val[aria-selected='true']:hover .lkryss{background:var(--sky-deep);border-color:var(--sky-deep);color:#fff}
+.valjpanel.brett .lrad-val:hover .ltum{box-shadow:0 0 0 1.5px var(--line-2)}
+.valjpanel.brett .lvmeta,.valjpanel.brett .lvlangd{transition:color var(--dur-2) var(--ease)}
+.valjpanel.brett .lgrupprad{margin-top:14px}
+.valjpanel.brett .lgrupprad:first-of-type{margin-top:6px}
+
+/* Bok- och fotopanelen håller sitt innehåll innanför kanten igen: sidremsan är
+   avsiktligt bredare än panelen och rullas i sig själv. Bara lektionspanelen
+   släpper ut något — dess lista måste få ligga ovanpå. */
+.kpanel[data-panel='bok'],.kpanel[data-panel='foton']{overflow:hidden}
+/* Ur Sparat: den valda förlagan står som en rad, listan fäller ut under den. */
+.sparatvald{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;padding:11px 13px;border-radius:var(--r-card);background:var(--sunken)}
+.svminis{width:30px;height:40px;display:grid;place-items:center;border-radius:3px;background:#fff;box-shadow:inset 0 0 0 1px var(--line);font-family:var(--mono);font-size:.6rem;letter-spacing:.06em;color:var(--ink-2)}
+.svtext{display:grid;gap:2px;min-width:0}
+.svtext b{font-size:.92rem;font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.svtext span{font-size:.78rem;color:var(--ink-3)}
+.kpkropp #sparatvalj{justify-self:start;position:relative}
+.kpkropp #sparatknapp{border:none;background:transparent;box-shadow:none;padding:2px 0;color:var(--ink-2);font-size:.86rem;font-family:inherit;cursor:pointer}
+.kpkropp #sparatknapp:hover{color:var(--ink);text-decoration:underline;text-underline-offset:3px;background:transparent;box-shadow:none;transform:none}
+.kpkropp #sparatknapp .valjpil{opacity:.6}
+.kpkropp #sparatvalj .valjpanel.brett{left:0;right:auto;transform-origin:top left}
+/* Ur Sparat väljer EN förlaga — då ska markören vara rund. Fyrkantiga kryssrutor
+   lovar att man kan välja flera, och det kan man inte här. */
+.kpkropp #sparatvalj .lkryss{border-radius:50%}
+/* Dokumentbrickan: samma form som lektionens tumnagel, men papper i st\u00e4llet f\u00f6r bild. */
+.valjpanel.brett .ltum[data-typ='dok']{display:grid;place-items:center;background:#fff;background-image:none;box-shadow:inset 0 0 0 1px var(--line);font-family:var(--mono);font-size:.5rem;letter-spacing:.1em;font-weight:600;color:var(--ink-2)}
+.valjpanel.brett .lrad-val:hover .ltum[data-typ='dok']{box-shadow:0 0 0 1.5px var(--line-2)}
+.kpkropp{min-width:0}
+/* ── Lektionerna i tiden ──
+   Samma vecka som resten av appen visar, i litet och bara för den klass
+   planeringen gäller. Brickan ÄR valet: en transkriberad lektion går att klicka
+   på och klicka bort igen — därför finns ingen lista under kalendern längre.
+   Formspråket är veckans (.vpost i app4.css) nedskalat: fylld bricka = det
+   finns något att utgå från, streckad och blek = lektionen gick men blev aldrig
+   transkriberad, ring = den man utgår från. */
+/* Veckan är rutans huvudsak — den ska fylla hela bredden, inte sitta i en
+   spalt med tom yta bredvid. */
+.kpkropp #lektionskal{display:grid;gap:10px;width:100%;max-width:none;justify-self:stretch;padding:15px 16px 14px;border:1px solid var(--line);border-radius:var(--r-card);background:var(--surface)}
+.kpkropp #lektionskal[hidden]{display:none}
+.minivecka .mkhuv{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.minivecka .mketikett{font-size:.78rem;font-weight:600;color:var(--ink)}
+.minivecka .mkant{font-size:.72rem;color:var(--ink-3)}
+.minivecka .mvhuvud{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.minivecka .mvvecka{font-size:.78rem;color:var(--ink-2);font-variant-numeric:tabular-nums}
+/* Samma glans som appens övriga knappar: skenet dras över när färgen fylls i. */
+.minivecka .kalpil{width:26px;height:26px;font-size:.86rem;background-color:transparent;background-image:linear-gradient(100deg,transparent 34%,rgba(255,255,255,.4) 50%,transparent 66%);background-size:260% 100%;background-position:130% 0;background-repeat:no-repeat;transition:background-color var(--dur-2) var(--ease),background-position var(--dur-4) var(--ease),color var(--dur-2) var(--ease),transform var(--dur-1) var(--ease),box-shadow var(--dur-2) var(--ease)}
+.minivecka .kalpil:hover{background-color:var(--sky-pale);background-position:-30% 0;color:var(--ink);transform:translateY(-1px);box-shadow:0 8px 18px -10px rgba(9,66,108,.6)}
+.minivecka .kalpil:active{transform:translateY(0) scale(.94)}
+/* «Idag» står mellan pilarna och veckan — vägen hem, aldrig ett läge. */
+.minivecka .mvidag{padding:4px 11px;border:1px solid var(--line);border-radius:var(--r-pill);background-color:transparent;background-image:linear-gradient(100deg,transparent 34%,rgba(255,255,255,.4) 50%,transparent 66%);background-size:260% 100%;background-position:130% 0;background-repeat:no-repeat;font-family:inherit;font-size:.72rem;font-weight:500;color:var(--ink-2);white-space:nowrap;cursor:pointer;transition:background-color var(--dur-2) var(--ease),background-position var(--dur-4) var(--ease),color var(--dur-2) var(--ease),border-color var(--dur-2) var(--ease),transform var(--dur-1) var(--ease),box-shadow var(--dur-2) var(--ease)}
+.minivecka .mvidag:hover{background-color:var(--sky-pale);background-position:-30% 0;border-color:var(--atmosphere);color:var(--ink);transform:translateY(-1px);box-shadow:0 8px 18px -10px rgba(9,66,108,.55)}
+.minivecka .mvidag:active{transform:translateY(0) scale(.976)}
+.minivecka .mvmitt{display:flex;align-items:center;gap:10px;min-width:0}
+.minivecka .mvnat{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}
+.minivecka .mvdag{display:flex;flex-direction:column;gap:5px;min-width:0}
+.minivecka .mvdagnamn{margin:0 0 1px;padding-bottom:5px;border-bottom:1px solid var(--line);font-size:.6rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);white-space:nowrap;overflow:hidden}
+.minivecka .mvdag[data-idag] .mvdagnamn{color:var(--sky-deep);border-bottom-color:var(--sky-deep)}
+/* Samma hovergest som resten av appen: blå fyllning, ett litet lyft OCH glansen
+   som sveper vänster→höger. En «background»-shorthand här skulle nolla
+   glanslagret — därför background-color. */
+.minivecka .mvpost{display:flex;flex-direction:column;gap:1px;padding:5px 6px;border:none;border-radius:7px;background-color:var(--accent-weak);background-image:linear-gradient(100deg,transparent 34%,rgba(255,255,255,.4) 50%,transparent 66%);background-size:260% 100%;background-position:130% 0;background-repeat:no-repeat;font-family:inherit;text-align:left;cursor:pointer;transition:background-color var(--dur-2) var(--ease),background-position var(--dur-4) var(--ease),box-shadow var(--dur-2) var(--ease),color var(--dur-2) var(--ease),transform var(--dur-1) var(--ease)}
+.minivecka button.mvpost:hover{background-color:var(--sky-pale);background-position:-30% 0;transform:translateY(-1px);box-shadow:0 8px 18px -10px rgba(9,66,108,.62)}
+.minivecka button.mvpost:hover :is(.mvtid,.mvsal,.mvkurs){color:var(--ink)}
+/* Valet är en RING, inte en fyllning — samma markering som lektionskorten i
+   schemat högst upp, så att det betyder samma sak på båda ställena. */
+.minivecka .mvpost{position:relative}
+.minivecka .mvpost[aria-pressed='true']{background-color:var(--accent-weak);outline:2px solid var(--navy);outline-offset:2px;box-shadow:none}
+.minivecka .mvpost[aria-pressed='true'] .mvtid{color:var(--navy);font-weight:600}
+.minivecka .mvbock{position:absolute;top:-6px;right:-6px;display:grid;place-items:center;width:15px;height:15px;border-radius:50%;background:var(--sky-deep);color:#fff;font-size:.58rem;line-height:1}
+/* Brickan ritas om vid varje val — därför poppar BARA den man just tryckte på
+   (data-nyss), annars skulle hela veckan studsa varje gång. */
+.minivecka .mvpost[data-nyss]{animation:valjpopp 340ms cubic-bezier(.22,.61,.36,1)}
+.minivecka .mvpost[data-nyss][aria-pressed='true']{animation:valjpopp 340ms cubic-bezier(.22,.61,.36,1),ringin 340ms cubic-bezier(.22,.61,.36,1)}
+.minivecka .mvpost[data-nyss] .mvbock{animation:bockin 300ms 70ms cubic-bezier(.22,.61,.36,1) both}
+@media (prefers-reduced-motion:reduce){.minivecka .mvpost[data-nyss]{animation:none}}
+.minivecka button.mvpost:hover .mvbock{background:var(--sky-deep);color:#fff}
+.minivecka .mkvalda{display:grid;gap:8px}
+.minivecka .mkvalpost{display:grid;gap:8px}
+.minivecka .mvpost[data-tom]{cursor:default;background-color:transparent;background-image:none;box-shadow:inset 0 0 0 1px var(--line-2);border-left:2px dashed var(--line-2);border-radius:2px 7px 7px 2px;opacity:.62}
+.minivecka .mvtid{font-size:.7rem;font-weight:500;font-variant-numeric:tabular-nums;color:var(--ink)}
+.minivecka .mvsal{font-size:.66rem;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--ink-3)}
+/* Kursen står på brickan bara när klassen har två i veckan — då bär den mer vikt
+   än salen och läggs närmast tiden. */
+.minivecka .mvkurs{font-size:.7rem;font-weight:500;color:var(--ink-2);white-space:nowrap}
+.minivecka .mvlov{display:block;padding:5px 6px;border-radius:7px;background:repeating-linear-gradient(135deg,var(--line-2) 0 1.5px,transparent 1.5px 7px);font-size:.7rem;color:var(--ink-3);text-align:center}
+.minivecka .mkfot{margin:1px 0 0;font-size:.78rem;color:var(--ink-2)}
+.minivecka .mkfot b{font-weight:600;color:var(--ink)}
+/* ── Den valda lektionen ──
+   Transkriptet stod förr som ett eget kort ovanför kalendern och sa samma sak
+   som raden här. Nu finns det bara här, under veckan där lektionen valdes, och
+   får den plats det behöver: namnet stort, tiden bredvid, och det transkriptet
+   faktiskt säger en klickning bort. */
+.minivecka .mkval{display:grid;gap:3px;width:100%;margin:2px 0 0;padding:12px 14px;border:1px solid var(--line);border-radius:var(--r-card);background-color:var(--accent-weak);background-image:linear-gradient(100deg,transparent 34%,rgba(255,255,255,.4) 50%,transparent 66%);background-size:260% 100%;background-position:130% 0;background-repeat:no-repeat;font-family:inherit;text-align:left;cursor:pointer;transition:background-color var(--dur-2) var(--ease),background-position var(--dur-4) var(--ease),border-color var(--dur-2) var(--ease),box-shadow var(--dur-2) var(--ease),transform var(--dur-1) var(--ease)}
+.minivecka .mkval:hover{background-color:var(--sky-pale);background-position:-30% 0;border-color:transparent;transform:translateY(-1px);box-shadow:0 12px 26px -14px rgba(9,66,108,.62)}
+.minivecka .mkval:active{transform:translateY(0) scale(.99)}
+.minivecka .mkval:hover .mkvalnamn{color:var(--ink)}
+.minivecka .mkval:hover :is(.mkvaletikett,.mkvalmeta,.mkvalmer){color:var(--ink-2)}
+.minivecka .mkvaltopp{display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.minivecka .mkvaletikett{font-size:.6rem;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);transition:color var(--dur-2) var(--ease)}
+.minivecka .mkvalmeta{font-size:.7rem;color:var(--ink-3);font-variant-numeric:tabular-nums;transition:color var(--dur-2) var(--ease)}
+.minivecka .mkvalnamn{font-size:1rem;font-weight:600;color:var(--ink);transition:color var(--dur-2) var(--ease)}
+.minivecka .mkvalmer{font-size:.72rem;color:var(--sky-deep);transition:color var(--dur-2) var(--ease)}
+.minivecka .mkvalpanel{display:grid;gap:7px;padding:13px 15px;border-radius:var(--r-card);background:var(--surface);box-shadow:inset 0 0 0 1px var(--line);animation:stigin var(--dur-3) var(--ease) both}
+.minivecka .mkvalpanel[hidden]{display:none}
+.minivecka .mkvalrad{margin:0;font-size:.84rem;line-height:1.45;color:var(--ink);text-wrap:pretty}
+.minivecka .mkvalpunkt{position:relative;margin:0;padding-left:15px;font-size:.78rem;line-height:1.45;color:var(--ink-2);text-wrap:pretty}
+.minivecka .mkvalpunkt::before{content:'';position:absolute;left:2px;top:.56em;width:5px;height:5px;border-radius:50%;background:var(--atmosphere)}
+.minivecka .mkvalfot{margin:3px 0 0;padding-top:8px;border-top:1px solid var(--line);font-size:.72rem;color:var(--ink-3);font-variant-numeric:tabular-nums}
+/* Listan «välj en annan lektion» är borta — kalendern är valet. */
+.kpkropp #lektionsvalj{display:none}
+.kpkropp>*{min-width:0;max-width:100%}
+
+/* Utgångskortets överrad: källans art till vänster, dess när och hur länge till
+   höger — dagen, veckan och längden i ord, på en rad man läser i en blick. */
+.utgangnat .ukalltopp{display:flex;align-items:baseline;justify-content:space-between;gap:8px 12px;flex-wrap:wrap}
+/* Bocken flyttar ner i kortets fot — överraden behöver bredden till när och hur länge. */
+.utgangnat .ukallval[aria-pressed='true']::after{top:auto;bottom:14px;right:16px}
+.utgangnat .ukallrad{padding-right:56px}
+.utgangnat .ukallfot{display:block;margin-top:0;font-family:var(--sans);font-size:.72rem;font-weight:500;color:var(--ink-2);white-space:nowrap;font-variant-numeric:tabular-nums}
+.utgangnat .ukalltitel{padding-right:0;margin-top:8px}
+
+/* Sökrutan i avsnittslistan — samma form som lektionslistans sök. */
+.bkkapitel .bksokrad{display:flex;align-items:center;margin:8px 8px 6px;padding:9px 15px;border-radius:var(--r-pill);background:var(--sunken)}
+.bkkapitel .bksokrad input{flex:1;min-width:0;border:none;background:transparent;outline:none;font-family:inherit;font-size:.86rem;color:var(--ink)}
+.bkkapitel .bksokrad input::placeholder{color:var(--ink-3)}
+.bkkapitel .bktomsok{margin:10px 14px 14px;font-size:.86rem;color:var(--ink-3)}
+.bkkapitel .bkkaprad:first-of-type{border-top:1px solid var(--line)}
+
+/* «Skriv utan underlag» finns kvar i DOM för äldre kod som pekar på den, men
+   den ska aldrig visas: är ingen dörr markerad ÄR det utan underlag. */
+#utanrad{display:none!important}
+
+/* Utgångskorten är samma slags knapp som dörrarna ovanför och ska bete sig lika:
+   disblå fyllning med en glans som sveper, och en tydlig vald-ton. */
+.utgangnat .ukallval{background-color:var(--surface);background-image:linear-gradient(100deg,transparent 34%,rgba(255,255,255,.3) 50%,transparent 66%);background-size:260% 100%;background-position:130% 0;background-repeat:no-repeat;transition:background-color var(--dur-2) var(--ease),background-position var(--dur-4) var(--ease),border-color var(--dur-2) var(--ease),color var(--dur-2) var(--ease),box-shadow var(--dur-2) var(--ease),transform var(--dur-1) var(--ease)}
+.utgangnat .ukallval:hover{background-color:#006FD6;background-position:-30% 0;border-color:transparent;transform:translateY(-2px);box-shadow:0 14px 28px -12px rgba(9,66,108,.6)}
+.utgangnat .ukallval:hover .ukalltitel,.utgangnat .ukallval:hover .ukalletikett,.utgangnat .ukallval:hover .ukallrad,.utgangnat .ukallval:hover .ukallfot{color:#fff}
+.utgangnat .ukallval:hover .ukalletikett,.utgangnat .ukallval:hover .ukallfot{color:rgba(255,255,255,.82)}
+.utgangnat .ukallval:active{transform:translateY(0) scale(.99)}
+.utgangnat .ukallval[aria-pressed='true']{background-color:var(--btn-bg);border-color:transparent;box-shadow:0 12px 26px -14px rgba(9,66,108,.6)}
+.utgangnat .ukallval[aria-pressed='true'] .ukalltitel{color:#fff}
+.utgangnat .ukallval[aria-pressed='true'] .ukallrad{color:rgba(255,255,255,.86)}
+.utgangnat .ukallval[aria-pressed='true'] .ukalletikett,.utgangnat .ukallval[aria-pressed='true'] .ukallfot{color:rgba(255,255,255,.78)}
+.utgangnat .ukallval[aria-pressed='true']::after{color:#fff}
+
+/* «Börja om» står tyst i kortets övre högra hörn — den tar ingen egen rad. Förr
+   sköt den ner hela steget en radhöjd för en länk som nästan aldrig används. */
+.omstartrad{position:absolute;top:-22px;right:0;z-index:6;display:flex;justify-content:flex-end;margin:0;line-height:1}
+/* Att börja om är destruktivt — knappen står tom och FYLLS röd på hover, precis
+   som «Radera». Samma glans som appens övriga knappar sveper över när färgen
+   kommer; färgen betyder något i stället för att alltid skrika. */
+.omstartrad .omstartknapp{display:inline-flex;align-items:center;color:var(--berry);padding:5px 14px;border:1px solid var(--berry);border-radius:var(--r-pill);background-color:transparent;background-image:linear-gradient(100deg,transparent 34%,rgba(255,255,255,.5) 50%,transparent 66%);background-size:260% 100%;background-position:130% 0;background-repeat:no-repeat;font-family:inherit;font-size:.76rem;font-weight:500;color:var(--berry);text-decoration:none;white-space:nowrap;cursor:pointer;transition:background-color var(--dur-2) var(--ease),background-position var(--dur-4) var(--ease),color var(--dur-2) var(--ease),border-color var(--dur-2) var(--ease),box-shadow var(--dur-2) var(--ease),transform var(--dur-1) var(--ease)}
+.omstartrad .omstartknapp:hover{background-color:var(--berry);background-position:-30% 0;border-color:var(--berry);color:#fff;box-shadow:0 10px 22px -10px rgba(155,28,63,.65);transform:translateY(-1px)}
+.omstartrad .omstartknapp:active{transform:translateY(0) scale(.976)}
+.omstartrad .omstartknapp::after{display:none}
+/* Finns inget att rensa står knappen tyst i grått — den vaknar när den betyder
+   något (omstart.js sätter data-aktiv). */
+.omstartrad:not([data-aktiv]) .omstartknapp{border-color:var(--line);color:var(--ink-3)}
+
+/* Minutfältet svarar på hjulet — det ska synas att det är vridbart. */
+.minutfalt{cursor:ns-resize}
+.minutfalt:hover{border-color:var(--atmosphere)}
+.minutfalt[data-rullar]{border-color:var(--atmosphere);box-shadow:0 0 0 3px rgba(96,168,221,.22)}
+.minutfalt input{cursor:ns-resize}
+
+/* Fakta i stället för kontroll: det som redan är bestämt läses, det väljs inte. */
+.typfakta{display:inline-flex;align-items:baseline;gap:9px;margin-left:auto;flex:0 0 auto}
+.typfakta b{font-size:.92rem;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums}
+.typfakta span{font-size:.76rem;color:var(--ink-3)}
+/* Provets dag, klockslag och längd — en väljare, aldrig ett formulär. */
+.narfalt{display:inline-flex;align-items:center;gap:9px;margin-left:auto;flex:0 0 auto}
+
+/* ══════════ FÖLJER MED FRÅN LEKTIONEN ══════════
+   Transkriptet är bara halva lektionen: papperen som delades ut på den hör
+   också dit. De ligger under veckan där lektionen valdes — som fakta, inte som
+   ett formulär — och klickas bort på plats. */
+.lmat{display:grid;gap:9px;padding:13px 15px 14px;border:1px solid var(--line);border-radius:var(--r-card);background:var(--sunken)}
+.lmat[hidden]{display:none}
+.lmhuv{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.lmhuv .minietikett{margin:0}
+.lmnot{font-size:.74rem;color:var(--ink-3)}
+.lmchips{display:flex;flex-wrap:wrap;gap:8px}
+.lmfast,.lmchip{display:inline-flex;align-items:center;gap:8px;padding:6px 13px;border-radius:var(--r-pill);font-family:inherit;font-size:.8rem;line-height:1.25;white-space:nowrap}
+.lmfast{background:var(--surface);box-shadow:inset 0 0 0 1px var(--line);color:var(--ink-2)}
+.lmfast::before{content:'✓';font-size:.7rem;color:var(--sky-deep)}
+/* Samma hovergest som allt annat i appen: disblå fyllning och en glans som sveper. */
+.lmchip{border:none;cursor:pointer;background-color:var(--accent-weak);background-image:linear-gradient(100deg,transparent 34%,rgba(255,255,255,.34) 50%,transparent 66%);background-size:260% 100%;background-position:130% 0;background-repeat:no-repeat;box-shadow:inset 0 0 0 1px var(--atmosphere);color:var(--sky-deep);transition:background-color var(--dur-2) var(--ease),background-position var(--dur-4) var(--ease),box-shadow var(--dur-2) var(--ease),color var(--dur-2) var(--ease),transform var(--dur-1) var(--ease)}
+.lmchip::before{content:'✓';font-size:.7rem}
+.lmchip b{font-weight:600}
+.lmchip span{color:var(--ink-2)}
+.lmchip[aria-pressed='false']{background-color:transparent;box-shadow:inset 0 0 0 1px var(--line);color:var(--ink-3)}
+.lmchip[aria-pressed='false'] b{font-weight:500}
+.lmchip[aria-pressed='false'] span,.lmchip[aria-pressed='false']::before{color:var(--ink-3)}
+.lmchip[aria-pressed='false']::before{content:'+';opacity:.8}
+.lmchip:hover{background-color:var(--sky-pale);background-position:-30% 0;box-shadow:inset 0 0 0 1px var(--sky-deep);color:var(--sky-deep);transform:translateY(-1px)}
+.lmchip:hover span,.lmchip:hover::before{color:var(--sky-deep)}
+.lmchip:active{transform:translateY(0) scale(.976)}
+.lmchip:focus-visible{outline:2px solid var(--sky-deep);outline-offset:2px}
+
+/* ══════════ UNDERLAGET I CANVASEN ══════════
+   Det som skrev pappret står kvar bredvid pappret. Klickar man en källa börjar
+   meningen «Ta mer ur boken …» — viktningen sägs i ord, i det fält som redan
+   ändrar dokumentet, i stället för att bli fyra reglage i planeringen. */
+.gunderlag{display:grid;gap:9px;padding:14px 26px 0;border-top:1px solid var(--line)}
+.gunderlag[hidden]{display:none}
+.gunderlagshuv{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.gunderlagshuv .minietikett{margin:0}
+.gunderlagsnot{font-size:.74rem;color:var(--ink-3)}
+.gkallor{display:flex;flex-wrap:wrap;gap:7px}
+.gkalla{display:inline-flex;align-items:baseline;gap:8px;max-width:100%;padding:6px 13px;border:none;border-radius:var(--r-pill);background-color:var(--sunken);background-image:linear-gradient(100deg,transparent 34%,rgba(255,255,255,.34) 50%,transparent 66%);background-size:260% 100%;background-position:130% 0;background-repeat:no-repeat;font-family:inherit;font-size:.78rem;color:var(--ink-2);cursor:pointer;transition:background-color var(--dur-2) var(--ease),background-position var(--dur-4) var(--ease),color var(--dur-2) var(--ease),box-shadow var(--dur-2) var(--ease),transform var(--dur-1) var(--ease)}
+.gkalla b{font-size:.6rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--sky-deep);white-space:nowrap;transition:color var(--dur-2) var(--ease)}
+.gkalla span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink)}
+.gkalla:hover{background-color:var(--btn-bg);background-position:-30% 0;box-shadow:0 10px 22px -12px rgba(9,66,108,.55);transform:translateY(-1px)}
+.gkalla:hover b{color:rgba(255,255,255,.8)}
+.gkalla:hover span{color:#fff}
+.gkalla:active{transform:translateY(0) scale(.976)}
+.gkalla:focus-visible{outline:2px solid var(--sky-deep);outline-offset:2px}
+
+/* ══════════ FOKUSFÄLTET ══════════
+   Viktningen mellan källor sägs i ord, inte med reglage: har man valt både boken
+   och ett rättat prov är det här man säger vilket som ska väga tyngst. Fältet
+   står sist i steget, precis före knappen — det sista man säger innan pappret
+   skrivs — och följer med in i canvasen som kontext. */
+.fokusruta{display:flex;align-items:center;gap:14px;flex-wrap:wrap;width:100%;margin:0 0 6px}
+.fokusruta[hidden]{display:none}
+.fokusruta .minietikett{margin:0;flex:0 0 auto}
+.fokusruta .field{flex:1;min-width:240px}
+
+/* ══════════ EN RUTA MINDRE I STEG 2 ══════════
+   Förr: fyra dörrar, ett kvitto i egen ram, och en panel med sitt eget
+   rubrikhuvud som upprepade dörrens namn och sitt eget kryss. Tre lager för ett
+   val. Nu säger dörren vad källan är, kvittot står som rader utan ram, och
+   panelen är bara verktyget. */
+.kphuv{display:none}
+.kpcap{margin:0;font-size:.8rem;line-height:1.45;color:var(--ink-3);text-wrap:pretty}
+.kpcap:empty{display:none}
+.kvitto{margin-top:14px;padding:0;border:none;background:transparent}
+.kvitto .minietikett{margin:0}
+
+/* Papperen ur Sparat, öppna i panelen: en rad per papper, ringen visar valet. */
+.doksok{display:flex;align-items:center;padding:9px 15px;border:1px solid var(--line);border-radius:var(--r-pill);background:var(--surface);transition:border-color var(--dur-2) var(--ease),box-shadow var(--dur-2) var(--ease)}
+.doksok:hover{border-color:var(--atmosphere)}
+.doksok:focus-within{border-color:var(--atmosphere);box-shadow:0 0 0 3px rgba(96,168,221,.25)}
+.doksok[hidden]{display:none}
+.doksok input{flex:1;min-width:0;border:none;background:transparent;outline:none;font-family:inherit;font-size:.86rem;color:var(--ink)}
+.doksok input::placeholder{color:var(--ink-3)}
+.doklista{display:grid;gap:1px;max-height:266px;overflow:auto;overscroll-behavior:contain}
+.dokgrupp{margin:10px 0 3px;font-size:.72rem;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3)}
+.dokgrupp:first-child{margin-top:0}
+.doktom{margin:0;font-size:.86rem;color:var(--ink-3)}
+.dokrad{display:grid;grid-template-columns:auto auto minmax(0,1fr);gap:12px;align-items:center;width:100%;padding:9px 12px;border:none;border-radius:10px;font-family:inherit;text-align:left;cursor:pointer;background-color:transparent;background-image:linear-gradient(100deg,transparent 34%,rgba(255,255,255,.3) 50%,transparent 66%);background-size:260% 100%;background-position:130% 0;background-repeat:no-repeat;transition:background-color var(--dur-2) var(--ease),background-position var(--dur-4) var(--ease),box-shadow var(--dur-2) var(--ease),color var(--dur-2) var(--ease)}
+.dokrad .dring{width:15px;height:15px;border-radius:50%;box-shadow:inset 0 0 0 1.5px var(--line-2);transition:background-color var(--dur-2) var(--ease),box-shadow var(--dur-2) var(--ease)}
+.dokrad .dtum{width:26px;height:34px;display:grid;place-items:center;border-radius:3px;background:#fff;box-shadow:inset 0 0 0 1px var(--line);font-family:var(--mono);font-size:.5rem;letter-spacing:.08em;font-weight:600;color:var(--ink-2)}
+.dokrad .dtext{display:grid;gap:1px;min-width:0}
+.dokrad .dtext b{font-size:.9rem;font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;transition:color var(--dur-2) var(--ease)}
+.dokrad .dtext>span{font-size:.76rem;color:var(--ink-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;transition:color var(--dur-2) var(--ease)}
+.dokrad[aria-selected='true']{background-color:var(--accent-weak)}
+.dokrad[aria-selected='true'] .dring{background:var(--sky-deep);box-shadow:inset 0 0 0 1.5px var(--sky-deep),inset 0 0 0 4px #fff}
+.dokrad[aria-selected='true'] .dtext b{color:var(--sky-deep)}
+.dokrad:hover,.dokrad:focus-visible{outline:none;background-color:var(--sunken);background-position:-30% 0}
+.dokrad[aria-selected='true']:hover{background-color:var(--sky-pale)}
+.dokrad:hover .dtext b,.dokrad:focus-visible .dtext b{color:var(--ink)}
+.dokrad:hover .dtext>span,.dokrad:focus-visible .dtext>span{color:var(--ink-3)}
+.dokrad:hover .dring,.dokrad:focus-visible .dring{box-shadow:inset 0 0 0 1.5px var(--atmosphere)}
+.dokrad[aria-selected='true']:hover .dring{background:var(--sky-deep);box-shadow:inset 0 0 0 1.5px var(--sky-deep),inset 0 0 0 4px #fff}
+.dokrad:hover .dtum,.dokrad:focus-visible .dtum{box-shadow:0 0 0 1.5px var(--line-2)}
+
+/* Kvittot är för de HOPFÄLLDA källorna: den uppslagna panelen säger redan sitt.
+   Förr stod samma lektion tre gånger — på dörren, i kvittot och i panelen. */
+.kvitto[data-dolt]{display:none}
+.kvitto[data-oppen='lektion'] .krad[data-kalla='lektion'],
+.kvitto[data-oppen='bok'] .krad[data-kalla='bok'],
+.kvitto[data-oppen='foton'] .krad[data-kalla='foton'],
+.kvitto[data-oppen='sparat'] .krad[data-kalla='sparat']{display:none}
+/* Rullningen i papperslistan ska vara en antydan, inte en svart stapel. */
+.doklista{scrollbar-width:thin;scrollbar-color:var(--line-2) transparent}
+.doklista::-webkit-scrollbar{width:8px}
+.doklista::-webkit-scrollbar-track{background:transparent}
+.doklista::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:99px;border:2px solid var(--surface)}
+.doklista::-webkit-scrollbar-thumb:hover{background:var(--atmosphere)}
+
+/* ══════════ ETT TIDIGARE PAPPER · TVÅ ANVÄNDNINGAR ══════════
+   Att bygga vidare på ett papper och att lägga det oförändrat på en ny lektion är
+   två saker — men de visar samma dokumenthög, och två dörrar för samma hög vore
+   ett fel. Valet ligger därför inne i dörren, och upplysningen som gör återbruket
+   möjligt att lita på — hur många papper kursen har och hur många som kommer från
+   en annan klass — står i samma rad som valet. */
+.sparatrad{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap}
+.sparatseg{flex:0 0 auto}
+.sparatseg button{padding:6px 13px;font-size:.8rem}
+.sparatnot{font-size:.78rem;color:var(--ink-2);text-wrap:pretty}
+/* Samlingen: en rad per papper, avsnitt för avsnitt. Samma form som listan över
+   förlagor, men med en handling i stället för en ring — det är pappret självt som
+   flyttar, inte ett val. */
+.atergrupp{margin:14px 0 2px;font-size:.72rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--ink)}
+.atergrupp:first-child{margin-top:0}
+.aterrad{display:grid;grid-template-columns:28px minmax(0,1fr) auto auto;align-items:center;gap:12px;padding:8px 0;border-top:1px solid var(--line)}
+.atertum{display:grid;place-items:center;height:26px;border-radius:3px;background:var(--sunken);box-shadow:inset 0 0 0 1px var(--line);font-family:var(--mono);font-size:.6rem;font-weight:600;letter-spacing:.06em;color:var(--ink-2)}
+.atertum[data-typ='Tavla']{background:var(--accent-weak);box-shadow:none;color:var(--sky-deep)}
+.atertext{display:flex;flex-direction:column;gap:2px;min-width:0}
+.atertext b{font-size:.88rem;font-weight:500;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.atertext>span{font-size:.75rem;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.aterlagg{white-space:nowrap}
+.aterlagg[disabled]{opacity:.45;pointer-events:none}
+.aterbort{width:26px;height:26px;flex:0 0 auto;border:none;border-radius:50%;background:transparent;color:var(--ink-3);font-family:inherit;font-size:.8rem;cursor:pointer;transition:background-color var(--dur-2) var(--ease),color var(--dur-2) var(--ease),transform var(--dur-1) var(--ease)}
+.aterbort:hover{background:var(--berry);color:#fff}
+.aterbort:active{transform:scale(.94)}

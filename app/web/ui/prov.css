@@ -1,0 +1,239 @@
+/* ══════════ PROVET — EN GRAMMATIK, FEM FORMER ══════════
+   Förlagan är det nationella provets elevhäfte: löpande huvud, uppgiftsnumret i
+   vänstermarginalen, svarslinjen som slutar i en poängparentes, och OBS-rutan
+   som talar om vad som gäller för delprovet. Fem saker bär formen och
+   bara fem: huvudet, numret, texten, svarsraden och poängen. Allt nedan är
+   samma fem delar satta olika. */
+
+/* Bladet. A4 vid 96 dpi — samma pappersmått som arbetsbladen, så att prov,
+   arbetsblad och lösningsförslag går att lägga i samma trave. */
+.ark{position:absolute;width:794px;height:1123px;padding:56px 62px 46px;background:#fff;color:#000;font-family:Arimo,Arial,'Helvetica Neue',Helvetica,sans-serif;font-size:15px;line-height:1.62;box-shadow:0 40px 80px -30px rgba(0,0,0,.5);display:flex;flex-direction:column}
+
+/* Radrubriken: vilken familj kanvasens rad visar. Inte en del av bladet. */
+.radrubrik{position:absolute;margin:0;font:700 42px/1 Arimo,Arial,sans-serif;letter-spacing:-.025em;color:#000}
+.radrubrik span{display:block;margin-top:12px;font:400 14.5px/1.55 Arimo,Arial,sans-serif;letter-spacing:0;color:#000;max-width:820px}
+
+/* ── Löpande huvud ──
+   Kurskod till vänster, delprovet till höger. Ingen regel under — huvudet bärs
+   av sin grad och sin plats. Det är det enda
+   som återkommer på varje sida i förlagan, så det är det som gör att ett blad
+   känns som ett prov och inte som ett arbetsblad. */
+.prhuvud{display:flex;justify-content:space-between;align-items:baseline;gap:16px;padding-bottom:0;font-size:15px;letter-spacing:.02em;color:#000}
+.prhuvud b{font-weight:700}
+
+.prtitel{margin:26px 0 0;font-size:25px;font-weight:700;letter-spacing:-.015em;line-height:1.12}
+.prunder{margin:6px 0 0;font-size:13.5px;color:#000}
+
+/* ── Provtabellen ──
+   Delprov, provtid, hjälpmedel. Två spalter, ingen ram: etiketten står i fet
+   halvgrad, värdet i brödgrad, och raderna hålls ihop av luft. */
+.prmeta{width:100%;margin-top:20px;border-collapse:collapse;font-size:15px}
+.prmeta th{width:116px;padding:6px 12px 6px 0;text-align:left;vertical-align:top;font-weight:700;color:#000}
+.prmeta td{padding:6px 0;vertical-align:top;color:#000}
+
+/* ── Namnraderna ──
+   Förlagans understreck, men satta som hårlinjer: samma linje som allt annat
+   man skriver på i det här systemet. */
+.prnot{margin:16px 0 0;font-size:13.5px;line-height:1.5;color:#000}
+/* ── Betygstabellen ──
+   En klassisk tabell: heldragna linjer runt varje ruta, grå rubrikrad, feta
+   betyg. Den ska kunna läsas på en meters avstånd av en elev som räknar på
+   sina poäng, inte studeras. Därför bara tre gränser och maxpoängen. */
+.prbetyg{width:100%;margin-top:16px;border-collapse:collapse;font-size:15px}
+.prbetyg th,.prbetyg td{border:1px solid #000;padding:9px 13px;text-align:left;vertical-align:top;color:#000}
+.prbetyg thead th{background:#EDEDED;font-size:12.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase}
+.prbetyg tbody td:first-child{width:96px;font-size:17.5px;font-weight:700}
+.prbetyg tfoot td{background:#EDEDED;font-weight:700}
+
+.prrad{display:flex;align-items:baseline;gap:12px;margin-top:12px}
+.prtitel+.prrad{margin-top:26px}
+.prrad>b{flex:0 0 auto;min-width:104px;font-size:13.5px;font-weight:700}
+.prlinje{flex:1;height:16px;border-bottom:1px solid #9A9A9A}
+
+/* ── Uppgiften ──
+   Numret i marginalen, texten i spalten. Grid, aldrig indrag: numret sitter i
+   sin egen kolumn så att flerradig text löper rakt under sin första rad.
+   Marginalen är bredare än förut för att den bär TVÅ saker: numret, som är
+   bladets navigering, och uppgiftens värde. En elev som fördelar 100 minuter
+   ska kunna se vad varje uppgift är värd utan att läsa en enda uppgift. */
+/* align-items:baseline binder uppgiftsnumret till frågans FÖRSTA baslinje.
+   Utan den satt numret på radboxens topp, och en fråga vars första rad bär ett
+   staplat bråk (som är två rader hög) sköt ner frågans text medan numret stod
+   still — numret hamnade ovanför sin egen fråga. Nu ligger de i lod oavsett
+   vad frågan innehåller. */
+.pruppg{display:grid;grid-template-columns:66px minmax(0,1fr);gap:0 12px;margin-top:24px;align-items:baseline}
+/* Avståndet mellan två uppgifter är det som säger att de ÄR två uppgifter.
+   Det ska därför vara större än allt avstånd inne i en uppgift — annars läser
+   ögat en svarslinje och nästa uppgiftstext som samma stycke. */
+#pr1b .pruppg,[data-form="pr1b"] .pruppg,[data-form="pr1-"] .pruppg{margin-top:26px}
+#pr1c .pruppg,[data-form="pr1c"] .pruppg,#pr1d .pruppg,[data-form="pr1d"] .pruppg{margin-top:34px}
+#pr1d .probs,[data-form="pr1d"] .probs{margin-top:12px;padding:9px 13px}
+#pr1c .prfig,[data-form="pr1c"] .prfig{margin-top:10px}
+#pr1b .prsvar,[data-form="pr1b"] .prsvar{margin-top:8px}
+#pr1b .prdel,[data-form="pr1b"] .prdel{margin-top:7px}
+#pr1c .prkravrad,[data-form="pr1c"] .prkravrad{margin-top:7px}
+#pr1c .prfigkap,[data-form="pr1c"] .prfigkap{margin-top:6px}
+.prslut{padding-top:10px}
+#pr1c .probs,[data-form="pr1c"] .probs{margin-top:12px;padding:9px 13px}
+.prnr{font-weight:700;font-size:23px;line-height:1.05}
+/* Värdet under numret: liten grad, men i marginalen där ögat redan är. */
+.prvarde{display:block;margin-top:3px;font-size:12.5px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:0;line-height:1.25;white-space:nowrap}
+/* Radlängden: 62 tecken. Längre rader läses långsammare, och ett prov läses
+   under tidspress. Figurer och tabeller får gå utanför spalten. */
+/* Ett staplat bråk är drygt två rader högt. Utan extra radhöjd växer radboxen
+   symmetriskt runt mitten, frågans första baslinje glider nedåt — och
+   uppgiftsnumret i marginalen står plötsligt ovanför sin egen fråga. Samma
+   grepp som blad.css använder i tabellcellerna. */
+.prtext{margin:0;max-width:62ch}
+.prtext:has(.brak){line-height:1.95}
+.prtext i{font-style:italic}
+.prdel{margin:9px 0 0;padding:0;list-style:none;display:grid;gap:8px}
+.prdel>li{display:grid;grid-template-columns:20px minmax(0,1fr);gap:0 8px}
+.prdel>li>i{font-style:normal;font-weight:700;font-size:13.5px}
+.prdel b{font-weight:400;font-style:italic}
+
+/* ── Alternativen A–D ──
+   Utan ruta vet eleven inte om svaret ska kryssas, ringas in eller skrivas.
+   Rutan är samma ruta som arbetsbladen använder — samma hand i hela systemet. */
+.prval>li{grid-template-columns:46px minmax(0,1fr)}
+.prval>li>i{display:flex;align-items:center;gap:8px}
+.prval>li>i::before{content:'';flex:0 0 auto;width:14px;height:14px;border:1.4px solid #000;border-radius:2px}
+
+/* ── Deluppgifterna ──
+   Luft skiljer dem, inte linjer. Varje deluppgift har redan sin egen svarslinje;
+   en avdelare mellan dem blir en linje till på ett blad som redan är fullt av
+   linjer man ska skriva på — och då slutar linjerna betyda «skriv här». */
+.prdel[data-avdelad]{gap:12px}
+.prdel[data-avdelad]>li{padding:0}
+
+/* ── Kravet i marginalen ──
+   Var uppgiften besvaras hör till samma fråga som vad den är värd: båda
+   avgörs innan man läser uppgiften. Därför står de i samma marginal, under
+   numret, och inte som en rad i textspalten. */
+.prlosblad{display:block;margin-top:3px;font-size:11.5px;font-weight:700;line-height:1.25;letter-spacing:.02em}
+
+/* Deluppgifternas poäng står sist på sin egen rad — samma plats som på
+   delprov B, så att en elev läser bladen på samma sätt. */
+.prdel[data-avdelad]>li{grid-template-columns:20px minmax(0,1fr) auto;align-items:baseline}
+.prdel[data-avdelad]>li>.prpo{min-width:44px}
+
+/* ── Datatabellen ──
+   Provets egen tabell: hårlinjer, ingen grå platta. Arbetsbladens tabell hör
+   till arbetsbladen. */
+.prtab{margin-top:12px;border-collapse:collapse;font-size:15px}
+.prtab th,.prtab td{padding:7px 13px;border:1px solid #000;text-align:left;white-space:nowrap}
+.prtab th{font-weight:700}
+.prtab td:first-child{font-weight:700}
+
+/* ── Slutmarkeringen ──
+   Utan sidnummer behöver bladet säga att det är slut, och vad delen är värd. */
+.prslut{margin:auto 0 0;padding-top:14px;font-size:13.5px;font-weight:700;letter-spacing:.02em}
+/* Slutraden står mitt på bladet: det är en signal till hela sidan, inte en
+   anteckning i vänsterkanten. */
+.prslut[data-slut]{text-align:center;font-size:17.5px;letter-spacing:.04em}
+.prslut+.prslut{margin-top:8px;padding-top:0}
+/* Vändpilen: en böjd pil som pekar högerut mot bladkanten — samma gest som
+   handen gör. Ritad som en enda rundad bana, ingen ikon och ingen dekor. */
+.prslut[data-vand]{display:flex;align-items:center;justify-content:center;gap:14px;font-size:17.5px;letter-spacing:.04em}
+.prslut[data-vand]::after{content:'';flex:0 0 auto;width:34px;height:14px;background:#000;-webkit-mask:var(--vandpil) center/contain no-repeat;mask:var(--vandpil) center/contain no-repeat;--vandpil:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 34 14'%3E%3Crect x='0' y='5.6' width='24' height='2.8' fill='%23000'/%3E%3Cpath d='M22 0.6 34 7 22 13.4Z' fill='%23000'/%3E%3C/svg%3E")}
+
+/* ── Svarsraden ──
+   Linjen och, för deluppgifter, poängen längst till höger. Uppgiftens totala
+   värde står i marginalen; här står bara det som gäller den enskilda raden. */
+.prsvar{display:flex;align-items:baseline;gap:14px;margin-top:10px}
+.prsvar .prlinje{max-width:none}
+.prenhet{flex:0 0 auto;font-size:13.5px;color:#000}
+.prpo{flex:0 0 auto;min-width:56px;text-align:right;font-size:15px;font-weight:700;font-variant-numeric:tabular-nums;color:#000}
+.prpo[data-lang]{min-width:0}
+
+/* Skrivrutan: för fullständiga lösningar. Linjerad yta, ingen ram — pappret
+   ska se ut som pappret, inte som ett formulär. */
+.prskriv{margin-top:10px;height:var(--h,84px);background:repeating-linear-gradient(180deg,transparent 0 27px,#9A9A9A 27px 28px)}
+
+/* ── OBS-rutan ──
+   Delprovets villkor. Samma svarta ram som OBS-rutan, ingen ifyllnad. */
+.prband{margin-top:auto;padding:11px 14px;border:1.5px solid #000;font-size:13.5px;font-weight:700;line-height:1.5;color:#000;text-wrap:pretty}
+.prband b{font-weight:700}
+
+/* OBS-rutan: tjock löptext i en ren svart ram, ingen ifyllnad. Ramen säger att
+   meningen är ett villkor; ingen platta som konkurrerar med pappret. */
+.probs{margin:14px 0 0;padding:11px 14px;border:1.5px solid #000;font-size:15px;font-weight:700;line-height:1.5;color:#000;text-wrap:pretty}
+
+/* Figurplats och ritad figur — samma två tillstånd som på arbetsbladen. */
+.prfig{position:relative;display:grid;place-items:center;margin-top:12px;margin-inline:auto}
+.prfig[data-vantar]{min-height:150px;border:1px solid #CFCFCF;background:repeating-linear-gradient(135deg,#F2F2F2 0 1px,#fff 1px 7px)}
+.prfig[data-cetz]{background:#fff;border:none}
+.prfig[data-cetz][data-vantar]{border:1px solid #CFCFCF;background:repeating-linear-gradient(135deg,#F2F2F2 0 1px,#fff 1px 7px)}
+/* Figuren får aldrig bestämma sidans höjd. Typst lämnar en SVG med egna mått i
+   punkter; här hålls den inom en takhöjd och centreras — bredden får ge sig. */
+.prfig svg{display:block;width:100%;height:auto;max-height:var(--fh,180px);margin:0 auto}
+.prfig svg text{font-family:Arimo,Arial,sans-serif;font-size:11px;fill:#000}
+/* Figurtexten hör till figuren, inte till spalten: den centreras under bilden
+   så att bild och text läses som ett block. */
+.prfigkap{margin:8px auto 0;font-size:13.5px;line-height:1.45;color:#000;text-align:center}
+.prfigkap b{font-weight:700;letter-spacing:.03em}
+/* Kravet: var uppgiften besvaras och vad den är värd, sist i beskrivningen och
+   inom parentes. Ingen linje — på ett blad utan skrivyta är en linje en lögn. */
+.prkrav{font-weight:700;white-space:nowrap;color:#000}
+
+/* ── 1 · Nationell form ── inget eget: förlagan oförändrad. */
+
+/* ── 1 · Försättsbladet ──
+   Inget löpande huvud: bladet är inte en sida i en följd, det är första sidan.
+   Därför ingen regel under kursraden och inget sidnummer — bara kursen, större. */
+#pr1 .prhuvud,[data-form="pr1"] .prhuvud{padding-bottom:0;border-bottom:none;font-size:17.5px}
+
+/* ── 2 · Poängspalt ──
+   Poängen lämnar svarsraden och blir en egen marginal: tre rutor per uppgift,
+   E, C och A. Läraren kryssar i marginalen, eleven ser vad uppgiften kan ge. */
+#pr2 .pruppg,[data-form="pr2"] .pruppg{grid-template-columns:30px minmax(0,1fr) 76px}
+#pr2 .prporuta,[data-form="pr2"] .prporuta{display:flex;gap:4px;justify-content:flex-end;align-self:start;padding-top:1px}
+#pr2 .prporuta i,[data-form="pr2"] .prporuta i{display:grid;place-items:center;width:21px;height:21px;border:1px solid #B4B4B4;border-radius:3px;font-style:normal;font-size:11px;font-weight:700;color:#000}
+#pr2 .prporuta i[data-ger],[data-form="pr2"] .prporuta i[data-ger]{border-color:#000;color:#000}
+#pr2 .prspalt,[data-form="pr2"] .prspalt{grid-column:2}
+#pr2 .prhuvud,[data-form="pr2"] .prhuvud{border-bottom-width:1.6px}
+
+/* ── 3 · Uppgiftskort ──
+   Provet lånar arbetsbladens ruta: varje uppgift i sin inramning med numret som
+   svart bricka och poängen som stämpel i övre högra hörnet. Formen håller ihop
+   ett prov där uppgifterna är olika långa. */
+#pr3 .prkort,[data-form="pr3"] .prkort{margin-top:14px;padding:15px 18px 17px;border:1px solid #CFCFCF;border-radius:6px}
+#pr3 .prkorthuv,[data-form="pr3"] .prkorthuv{display:flex;align-items:center;justify-content:space-between;gap:12px}
+#pr3 .prbricka,[data-form="pr3"] .prbricka{display:inline-block;min-width:26px;padding:3px 8px;border-radius:4px;background:#000;color:#fff;font-size:13px;font-weight:700;text-align:center}
+#pr3 .prstampel,[data-form="pr3"] .prstampel{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#000}
+#pr3 .pruppg,[data-form="pr3"] .pruppg{display:block;margin-top:11px}
+#pr3 .prkort .prsvar,[data-form="pr3"] .prkort .prsvar{margin-top:12px}
+
+/* ── 4 · Tvåspalt, kortsvar ──
+   Delprov B är elva korta uppgifter. I en spalt blir det fyra sidor luft; i två
+   blir det en sida. Svaret får en ruta i stället för en linje, för att kortsvar
+   ska se ut som kortsvar. */
+#pr4 .prtva,[data-form="pr4"] .prtva{margin-top:18px;flex:1;column-count:2;column-gap:26px;column-rule:1px solid #E2E2E2}
+#pr4 .pruppg,[data-form="pr4"] .pruppg{margin:0 0 24px;break-inside:avoid;grid-template-columns:24px minmax(0,1fr);font-size:12.5px}
+#pr4 .prtext,[data-form="pr4"] .prtext{line-height:1.5}
+#pr4 .prsvarruta,[data-form="pr4"] .prsvarruta{display:flex;align-items:center;gap:9px;margin-top:8px}
+#pr4 .prsvarruta u,[data-form="pr4"] .prsvarruta u{flex:1;height:32px;border:1px solid #9A9A9A;text-decoration:none}
+#pr4 .prpo,[data-form="pr4"] .prpo{min-width:0}
+#pr4 .prband,[data-form="pr4"] .prband{margin-top:auto}
+#pr4 .prfig[data-vantar],[data-form="pr4"] .prfig[data-vantar]{min-height:96px}
+
+/* ── 5 · Bandrubrik ──
+   Huvudet blir ett svart band tvärs över bladet och uppgifterna skiljs bara av
+   hårlinjer. Ingen ram någonstans: provet är en löpande text med stämplar i
+   marginalen. Formen för långsvarsdelen, där varje uppgift behöver skrivyta. */
+#pr5,[data-form="pr5"]{padding:0 0 46px}
+#pr5 .prband5,[data-form="pr5"] .prband5{padding:26px 62px 24px;background:#1B1B1B;color:#fff}
+#pr5 .prband5 .prtitel,[data-form="pr5"] .prband5 .prtitel{margin:0;color:#fff}
+#pr5 .prband5 .prunder,[data-form="pr5"] .prband5 .prunder{color:rgba(255,255,255,.72)}
+#pr5 .prband5 .prmeta th,[data-form="pr5"] .prband5 .prmeta th{color:#fff}
+#pr5 .prband5 .prmeta td,[data-form="pr5"] .prband5 .prmeta td{color:rgba(255,255,255,.82)}
+#pr5 .prkropp,[data-form="pr5"] .prkropp{padding:0 62px;display:flex;flex-direction:column;flex:1}
+#pr5 .pruppg,[data-form="pr5"] .pruppg{margin-top:0;padding:18px 0;border-bottom:1px solid #DCDCDC;grid-template-columns:30px minmax(0,1fr) 58px}
+#pr5 .pruppg:first-of-type,[data-form="pr5"] .pruppg:first-of-type{padding-top:22px}
+#pr5 .prpo,[data-form="pr5"] .prpo{grid-row:1;grid-column:3;align-self:start}
+#pr5 .prspalt,[data-form="pr5"] .prspalt{grid-column:2}
+#pr5 .prband,[data-form="pr5"] .prband{margin-top:auto;margin-left:0;margin-right:0}
+
+/* Bilduppgiftens fotografi: platsen är bildens, inte tvärtom — höjden följer
+   av bredden så att måtten i bilden aldrig beskärs. */
+.prbild img{display:block;width:100%;height:auto}

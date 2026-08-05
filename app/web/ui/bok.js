@@ -1,0 +1,161 @@
+/* ══════════ BOKEN ══════════
+   Två nivåer på samma sak. Sidan man drar in tolkas mot bokens register, och
+   hela boken importeras en gång så att momentet kan väljas med tre bokstäver —
+   eller inte alls, eftersom appen vet vilket avsnitt som står på tur.
+   Registret är listan man ALDRIG ska behöva scrolla i. */
+(() => {
+  const $ = s => document.querySelector(s);
+
+  /* Registret är bokens innehållsförteckning, och det måste vara HELT: en
+     förteckning med luckor mellan avsnitten gör att terminsvyn räknar bort sidor
+     som finns i boken, och kursen tar slut för tidigt. Sidorna är därför
+     sammanhängande från första till sista avsnittet. */
+  const AVSNITT = [
+    { nr: '1.1', titel: 'Algebraiska uttryck', kap: 'Kapitel 1 · Algebra', vag: 'Förenkling och faktorisering', sid: '8–19', uppg: 26 },
+    { nr: '1.2', titel: 'Andragradsekvationer', kap: 'Kapitel 1 · Algebra', vag: 'Kvadratkomplettering', sid: '20–33', uppg: 24 },
+    { nr: '1.3', titel: 'Polynomekvationer och faktorsatsen', kap: 'Kapitel 1 · Algebra', vag: 'Nollställen och faktorer', sid: '34–47', uppg: 22 },
+    { nr: '2.1', titel: 'Funktionsbegreppet', kap: 'Kapitel 2 · Funktioner', vag: 'Definitions- och värdemängd', sid: '48–61', uppg: 20 },
+    { nr: '2.2', titel: 'Andragradsfunktioner och grafer', kap: 'Kapitel 2 · Funktioner', vag: 'Symmetrilinje och extrempunkt', sid: '62–77', uppg: 25 },
+    { nr: '2.3', titel: 'Absolutbelopp och styckvisa funktioner', kap: 'Kapitel 2 · Funktioner', vag: 'Grafer i delar', sid: '78–91', uppg: 18 },
+    { nr: '2.4', titel: 'Modeller och tolkning av grafer', kap: 'Kapitel 2 · Funktioner', vag: 'Från verklighet till formel', sid: '92–103', uppg: 19 },
+    { nr: '3.1', titel: 'Exponentialfunktioner', kap: 'Kapitel 3 · Exponentialfunktioner', vag: 'Tillväxt och avtagande', sid: '104–111', uppg: 24 },
+    { nr: '3.2', titel: 'Potenslagar och rationella exponenter', kap: 'Kapitel 3 · Exponentialfunktioner', vag: 'Räknelagar', sid: '112–117', uppg: 19 },
+    { nr: '3.4', titel: 'Exponentialekvationer', kap: 'Kapitel 3 · Exponentialfunktioner', vag: 'Ekvationer med okänd exponent', sid: '118–123', uppg: 18 },
+    { nr: '3.5', titel: 'Logaritmer med basen 10', kap: 'Kapitel 3 · Exponentialfunktioner', vag: 'Tiologaritmen', sid: '124–129', uppg: 16 },
+    { nr: '3.6', titel: 'Tillämpningar med exponentiell modell', kap: 'Kapitel 3 · Exponentialfunktioner', vag: 'Halveringstid och fördubbling', sid: '130–137', uppg: 21 },
+    { nr: '4.1', titel: 'Naturliga logaritmen', kap: 'Kapitel 4 · Logaritmer', vag: 'Talet e och ln', sid: '138–151', uppg: 20 },
+    { nr: '4.2', titel: 'Logaritmlagar och exponentform', kap: 'Kapitel 4 · Logaritmer', vag: 'Räknelagar', sid: '152–158', uppg: 17 },
+    { nr: '4.3', titel: 'Ekvationer med logaritmer', kap: 'Kapitel 4 · Logaritmer', vag: 'Lösning och rimlighet', sid: '159–171', uppg: 22 },
+    { nr: '4.4', titel: 'Gränsvärden', kap: 'Kapitel 4 · Logaritmer', vag: 'Närmevärden och asymptoter', sid: '172–183', uppg: 18 },
+    { nr: '5.1', titel: 'Derivatans definition', kap: 'Kapitel 5 · Derivata', vag: 'Från sekant till tangent', sid: '184–191', uppg: 20 },
+    { nr: '5.2', titel: 'Derivator av potens- och exponentialfunktioner', kap: 'Kapitel 5 · Derivata', vag: 'Grundderivatorna', sid: '192–197', uppg: 23 },
+    { nr: '5.3', titel: 'Deriveringsregler', kap: 'Kapitel 5 · Derivata', vag: 'Produkt, kvot och kedja', sid: '198–206', uppg: 26 },
+    { nr: '5.4', titel: 'Extrempunkter och andraderivatan', kap: 'Kapitel 5 · Derivata', vag: 'Teckenschema', sid: '207–215', uppg: 24 },
+    { nr: '5.5', titel: 'Kurvor, asymptoter och optimering', kap: 'Kapitel 5 · Derivata', vag: 'Största och minsta värde', sid: '216–223', uppg: 21 },
+    { nr: '6.1', titel: 'Primitiva funktioner', kap: 'Kapitel 6 · Integraler', vag: 'Motsatsen till derivering', sid: '224–231', uppg: 18 },
+    { nr: '6.2', titel: 'Integraler och areor', kap: 'Kapitel 6 · Integraler', vag: 'Riemannsumma till integral', sid: '232–245', uppg: 22 },
+    { nr: '6.3', titel: 'Tillämpningar av integraler', kap: 'Kapitel 6 · Integraler', vag: 'Areor mellan kurvor', sid: '246–259', uppg: 19 }
+  ];
+  /* Det avsnitt som gicks igenom sist — i appen ur de godkända tavlorna. */
+  let senast = '5.1';
+  /* Vilket register som gäller avgörs av kursen man planerar, inte av vilken bok
+     appen startade med: en sökning i momentfältet på en Ma 4-lektion ska hitta
+     «2.3 Polär form», inte 3c:s kapitel. */
+  const kursNu = () => (($('#p-kurs') || {}).value || '').trim();
+  const registerFor = kurs => REGISTER[kurs || kursNu()] || AVSNITT;
+  const nasta = (kurs, klass) => {
+    const A = registerFor(kurs);
+    const i = A.findIndex(a => a.nr === senast);
+    if (i >= 0) return A[Math.min(A.length - 1, i + 1)];
+    /* Registret känner inte avsnittet som gicks igenom sist — då är det en annan
+       kurs, och det som säger var man är är klassens läge i just den kursen. */
+    const kl = klass || (($('#p-klass') || {}).value || '').trim();
+    const l = window.Profil && window.Profil.lageFor ? window.Profil.lageFor(kl, kurs || kursNu()) : null;
+    const sid = l && l.senasteSida;
+    const e = sid ? A.find(a => Number(String(a.sid).split('–')[1]) > sid) : null;
+    return e || A[0];
+  };
+  const sok = q => {
+    const l = q.trim().toLowerCase();
+    if (!l) return [];
+    return registerFor().filter(a => (a.nr + ' ' + a.titel + ' ' + a.vag).toLowerCase().includes(l)).slice(0, 6);
+  };
+  const namnet = a => `${a.nr} ${a.titel}`;
+
+  /* Registret för Matematik 4. Böckerna delar inte avsnitt: en termin med 9B i
+     Ma 4 ska inte läsa 3c:s kapitel. `forKurs` är vägen in — `avsnitt` står kvar
+     som 3c så att allt som redan läser den fortsätter göra det. */
+  const AVSNITT_4 = [
+    { nr: '1.1', titel: 'Trigonometriska ettan', kap: 'Kapitel 1 · Trigonometri', vag: 'Enhetscirkeln', sid: '8–17', uppg: 22 },
+    { nr: '1.2', titel: 'Trigonometriska ekvationer', kap: 'Kapitel 1 · Trigonometri', vag: 'Alla lösningar', sid: '18–29', uppg: 20 },
+    { nr: '1.3', titel: 'Additions- och subtraktionsformler', kap: 'Kapitel 1 · Trigonometri', vag: 'Formlerna och deras bevis', sid: '30–43', uppg: 19 },
+    { nr: '2.1', titel: 'Komplexa tal i rektangulär form', kap: 'Kapitel 2 · Komplexa tal', vag: 'Räknelagar i C', sid: '44–55', uppg: 24 },
+    { nr: '2.2', titel: 'Komplexa talplanet', kap: 'Kapitel 2 · Komplexa tal', vag: 'Absolutbelopp och argument', sid: '56–69', uppg: 18 },
+    { nr: '2.3', titel: 'Polär form och de Moivre', kap: 'Kapitel 2 · Komplexa tal', vag: 'Multiplikation som vridning', sid: '70–85', uppg: 21 },
+    { nr: '3.1', titel: 'Deriveringsregler för trigonometriska funktioner', kap: 'Kapitel 3 · Derivator', vag: 'Sinus, cosinus och kedjan', sid: '86–99', uppg: 26 },
+    { nr: '3.2', titel: 'Derivator av sammansatta funktioner', kap: 'Kapitel 3 · Derivator', vag: 'Kedjeregeln i flera steg', sid: '100–115', uppg: 23 },
+    { nr: '3.3', titel: 'Tillämpningar och optimering', kap: 'Kapitel 3 · Derivator', vag: 'Modeller som deriveras', sid: '116–131', uppg: 20 },
+    { nr: '3.4', titel: 'Differentialekvationer av första ordningen', kap: 'Kapitel 3 · Derivator', vag: 'Separabla ekvationer', sid: '132–147', uppg: 18 },
+    { nr: '4.1', titel: 'Integraler och areor', kap: 'Kapitel 4 · Integraler', vag: 'Riemannsumma till integral', sid: '148–161', uppg: 23 },
+    { nr: '4.2', titel: 'Partiell integration och substitution', kap: 'Kapitel 4 · Integraler', vag: 'Två metoder', sid: '162–177', uppg: 21 },
+    { nr: '4.3', titel: 'Rotationsvolymer', kap: 'Kapitel 4 · Integraler', vag: 'Skivor och skal', sid: '178–195', uppg: 17 }
+  ];
+  const REGISTER = { 'Matematik 3c': AVSNITT, 'Matematik 4': AVSNITT_4 };
+  const forKurs = kurs => REGISTER[kurs] || null;
+  const BOKNAMN = { 'Matematik 3c': 'Matematik 5000+ 3c', 'Matematik 4': 'Matematik 5000+ 4' };
+  /* Vilken kurs en bok i hyllan hör till. Utan den kan uppslaget inte veta vilket
+     register en sida ska tolkas mot, och en Ma 4-sida får ett 3c-avsnittsnamn. */
+  const KURS_FOR_BOK = { 'Matematik 5000+ 3c': 'Matematik 3c', 'Matematik 5000+ 4': 'Matematik 4', 'Exponent 3c': 'Matematik 3c' };
+  const registerForBok = namn => REGISTER[KURS_FOR_BOK[namn]] || AVSNITT;
+  const namnFor = kurs => BOKNAMN[kurs] || window.Bok.namn;
+
+  window.Bok = { namn: 'Matematik 5000+ 3c', avsnitt: AVSNITT, register: REGISTER, forKurs, registerFor, registerForBok, namnFor, sok, nasta, namnet, tolka };
+
+  /* ── Tolkningen av en indragen sida: rubriken som fältet fylls med ── */
+  const SIDTYP = ['teori och två exempel', 'uppgifter, blandad svårighet', 'facit till uppgifterna', 'sammanfattning av avsnittet'];
+  function tolka(filnamn, i) {
+    const A = registerFor();
+    const m = String(filnamn).match(/(\d+)[.,](\d+)/);
+    const träff = m && A.find(a => a.nr === `${m[1]}.${m[2]}`);
+    const a = träff || A.find(x => x.nr === senast) || A[0];
+    return { avsnitt: a, rubrik: namnet(a), text: `${namnet(a)} — ${SIDTYP[i % SIDTYP.length]}` };
+  }
+
+  /* ── Sökpanelen: öppnas när man skriver, högst sex rader, grupperad ── */
+  const falt = $('#moment'), panel = $('#bokpanel');
+  if (!falt || !panel) return;
+
+  function fakta(a) {
+    const f = $('#momentfakta');
+    if (!f) return;
+    f.hidden = !a;
+    if (a) f.querySelector('span:last-child').textContent = `${window.Bok.namn} · s. ${a.sid} · ${a.uppg} uppgifter`;
+  }
+  function valj(a) {
+    falt.value = namnet(a);
+    falt.removeAttribute('data-gissad');
+    const g = $('#momentgissat');
+    if (g) g.hidden = true;
+    fakta(a);
+    falt.dispatchEvent(new Event('input', { bubbles: true }));
+    falt.dispatchEvent(new Event('change', { bubbles: true }));
+    panel.hidden = true;
+  }
+  function rita(traffar) {
+    if (!traffar.length) { panel.hidden = true; return; }
+    let kap = '';
+    panel.innerHTML = '';
+    traffar.forEach(a => {
+      if (a.kap !== kap) {
+        kap = a.kap;
+        panel.insertAdjacentHTML('beforeend', `<p class="bokgrupp">${kap}</p>`);
+      }
+      const b = document.createElement('button');
+      b.className = 'bokrad';
+      b.type = 'button';
+      b.innerHTML = '<span><span class="boknamn"></span><span class="bokvag"></span></span><span class="boksid"></span>';
+      b.querySelector('.boknamn').textContent = namnet(a);
+      b.querySelector('.bokvag').textContent = a.vag;
+      b.querySelector('.boksid').textContent = 's. ' + a.sid;
+      b.addEventListener('mousedown', e => { e.preventDefault(); valj(a); });
+      panel.appendChild(b);
+    });
+    panel.hidden = false;
+  }
+  falt.addEventListener('input', e => { if (!e.isTrusted) return; fakta(null); rita(sok(falt.value)); });
+  falt.addEventListener('blur', () => setTimeout(() => { panel.hidden = true; }, 80));
+  falt.addEventListener('keydown', e => { if (e.key === 'Escape') panel.hidden = true; });
+
+  /* ── Nästa i boken: den vanligaste veckan kräver noll inmatning ── */
+  const chip = $('#boknast');
+  if (chip) {
+    /* Chipet läste registret EN gång vid start. Bytte man till en lektion i en
+       annan kurs stod ett 3c-avsnitt kvar som «nästa i boken» i Matematik 4. */
+    const skriv = () => { $('#boknastnamn').textContent = namnet(nasta()); };
+    skriv();
+    chip.hidden = false;
+    $('#boknastanv').addEventListener('click', () => { const a = nasta(); valj(a); senast = a.nr; skriv(); });
+    const kf = $('#p-kurs');
+    if (kf) kf.addEventListener('change', skriv);
+  }
+})();

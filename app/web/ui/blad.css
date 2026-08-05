@@ -1,0 +1,240 @@
+/* ══════════ BLADEN I APPEN ══════════
+   Reglerna är lyfta ur «Arbetsblad prov och tavlor — femton former»: exakt samma
+   sättning, samma A4-mått, samma hårlinjer. Skillnaden är att bladen här ligger i
+   flödet i stället för på en kanvas, och att formen bärs av data-form i stället
+   för av ett id — appen visar flera blad av samma slag i en trave.
+   Läses tillsammans med prov.css, losning.css, matte.css och blad.js. */
+/* ══════════ EN GRAMMATIK, FYRA FORMER ══════════
+   Förlagan är ett tryckt arbetsblad: svart, grått och hårlinjer. Inga färger,
+   inga rundade paneler i paneler, ingen dekor. Det som bär formen är fyra saker
+   och bara fyra: den feta rubriken, OBS-rutan
+   — fet text i en ren svart ram, den svarta bokstavsbrickan, och
+   ifyllnadsraden — en hårlinje man skriver på. Allt nedan är samma fyra delar
+   satta olika. */
+
+/* Bladet: A4 vid 96 dpi. Måtten är verkliga så att sättningen går att lita på. */
+.gu{position:relative;width:794px;height:1123px;padding:64px 62px 54px;background:#fff;color:#000;font-family:Arimo,Arial,'Helvetica Neue',Helvetica,sans-serif;font-size:15px;line-height:1.6;box-shadow:0 40px 80px -30px rgba(0,0,0,.5);display:flex;flex-direction:column}
+
+/* ── Huvudet ──
+   Bara rubriken över regeln. Att det är en gruppuppgift och vilken nivå den
+   ligger på står redan i uppgifterna själva — det behöver ingen egen etikett. */
+.guhuv{padding-bottom:2px}
+.gutitel{margin:0;font-size:25px;font-weight:700;letter-spacing:-.01em;line-height:1.14}
+/* Gruppens storlek, tiden och redovisningsformen är elevernas information — en
+   stämpelrad under rubriken, inte en mening i brödtext. */
+.gumeta{margin:6px 0 0;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;line-height:1.3;color:#000}
+
+/* ── Instruktionsbandet ── */
+.guband{margin:16px 0 0;padding:10px 13px;border:1.5px solid #000;font-size:13.5px;font-weight:700;line-height:1.5;color:#000;text-wrap:pretty}
+.guband b{font-weight:700}
+.guband .gupil{color:#000}
+
+/* ── Uppgiftsrutan ── */
+/* Uppgiften avgränsas av en hårlinje, inte av en rundad grå panel. En ram i en
+   ram är skärmspråk; på papper räcker regeln, och den kostar ingen bredd — så
+   ifyllnadslinjerna går ut i hela satsytan. */
+/* Uppgifterna skiljs åt av luft och av brickan — inget streck. En regel per
+   uppgift blev bara ett extra streck bland skrivlinjerna. */
+.gukort{margin:34px 0 0;padding:0}
+.gubricka{display:inline-block;align-self:flex-start;min-width:28px;padding:3px 9px;border-radius:3px;background:#000;color:#fff;font-size:13px;font-weight:700;text-align:center;letter-spacing:.02em}
+.gufraga{margin:12px 0 0;font-size:15px;line-height:1.6}
+.gufraga i{font-style:italic}
+.gudel{margin:9px 0 0 18px;padding:0;list-style:none;font-size:13.5px}
+.gudel li{margin:2px 0}
+
+/* ── Ifyllnadsraden: hårlinjen ÄR fältet ── */
+/* Radhöjden är ett skrivmått, inte ett luftmått: 17 px marginal + etikettens
+   ascender ger ~8 mm fritt över linjen, vilket är vad en hand behöver. Allt
+   under 6 mm tvingar eleven att skriva mellan linjerna. */
+.gurad{display:flex;align-items:baseline;gap:14px;margin-top:17px}
+.guforts{margin-top:13px}
+.gunamn{flex:0 0 auto;min-width:88px;font-size:13.5px;font-weight:700}
+.gulos{margin:12px 0 0;font-size:13.5px;font-style:italic;color:#000}
+.gulinje{flex:1;border-bottom:1px solid #9A9A9A;height:17px}
+.guruta{display:flex;align-items:center;gap:8px;font-size:13.5px;color:#000;white-space:nowrap}
+.guruta::before{content:'';width:14px;height:14px;flex:0 0 auto;border:1.4px solid #000;border-radius:2px}
+.gurutor{display:flex;flex-wrap:wrap;gap:10px 28px}
+
+/* ── Figuren: en plats, inte en teckning ── */
+.gufigur{position:relative;display:grid;place-items:center;border:1px solid #9A9A9A;background:repeating-linear-gradient(135deg,#F2F2F2 0 1px,#fff 1px 7px)}
+.gufigtext{font:11px/1.45 ui-monospace,'SF Mono',Menlo,monospace;color:#000;text-align:center;padding:0 12px;letter-spacing:.02em}
+/* En ritad figur är ingen platshållare: rutan blir vit och strecken svarta.
+   Figurerna är matematik — axlar, kurvor, kordor — inte illustration. */
+.gufigur[data-ritad],.gufigur[data-cetz]{background:#fff;padding:2px;border:none;display:grid;place-items:center}
+.gufigur[data-cetz][data-vantar]{background:repeating-linear-gradient(135deg,#F2F2F2 0 1px,#fff 1px 7px);min-height:104px;border:1px solid #CFCFCF}
+.gufigur[data-fel]{background:#FDF1F0;border:1px solid #CF372D;min-height:104px}
+.gufigur[data-ritad] svg,.gufigur[data-cetz] svg{display:block;width:100%;height:auto;max-height:var(--fh,200px);margin:0 auto}
+.gutab td .katex{font-size:1.1em}
+/* Exponenterna. Tidigare skalades KaTeX' scriptsteg upp med CSS för att bli
+   läsbara på papper. Det gick inte: KaTeX räknar ut exponentens `top`-förskjutning
+   i em av 0,7-storleken och skriver in den som ett fast värde. Växer glyfen med
+   CSS följer förskjutningen inte med — exponenten växer ut ur sin ruta och lade
+   sig på bråkstrecket och på cellramen ovanför. Lösningen är att låta TeX behålla
+   sina proportioner och i stället sätta HELA formeln större: 1,22 em ger samma
+   läsbara exponent med metriker som stämmer. Rör inte scriptstegen här igen. */
+.gutab td{line-height:1.68}
+/* Ett inline-bråk är drygt två rader högt. Cellen måste ge det den höjden,
+   annars skär bråket i raden ovanför. */
+.gutab td:has(.brak){padding-top:15px;padding-bottom:15px;line-height:2.1}
+/* ── Bildplatsen ──
+   Samma två tillstånd som figurplatsen: en väntande yta med hårlinje runt, och
+   en fylld yta utan ram. Skillnaden mot .prfig är att innehållet inte ritas av
+   systemet utan läggs in — därför en droppyta, inte en SVG. */
+.prbild{margin-top:12px;margin-inline:auto;width:100%;border:1px solid #CFCFCF;overflow:hidden}
+.prbild image-slot{display:block;width:100%;height:100%}
+[data-form="pr1e"] .prbild{margin-top:10px}
+/* Bildbladet och delprov B ligger närmast sin höjdbudget: formlerna är större
+   sedan matematiken sätts med rätta metriker, och en staplad bråkdel är högre
+   än KaTeX inline-bråk. Höjden tas ur bildytorna och ur avståndet mellan
+   uppgifter — aldrig ur textstorleken. */
+[data-form="pr1b"] .pruppg{margin-top:21px}[data-form="pr1e"] .pruppg{margin-top:22px}
+[data-form="pr1e"] .probs{margin-top:12px;padding:9px 13px}
+[data-form="pr1e"] .prfigkap{margin-top:6px}
+/* Givna värden: en punktlista, inte löptext. Måtten ska gå att slå upp igen
+   mitt i en lösning utan att läsa om meningen de stod i. */
+.prgiv{margin:9px 0 0;padding:0;list-style:none;display:grid;gap:3px;font-size:13.5px}
+.prgiv li{display:grid;grid-template-columns:auto minmax(0,1fr);gap:0 8px}
+.prgiv li::before{content:'·';font-weight:700}
+.gufigkap{margin:7px auto 0;font-size:13.5px;color:#000;line-height:1.45;text-align:center}
+
+/* ── Namnraderna ──
+   Först på bladet, inte sist: gruppen skriver sina namn innan de börjar räkna,
+   och ett blad utan namn är ett blad ingen kan lämna in. */
+.gutopp{margin-top:12px;display:flex;gap:34px}
+.gutopp .gurad{flex:1;margin-top:0}
+.gutopp .gunamn{min-width:0}
+
+/* ── 2 · figurspalten ── */
+.gutva{display:grid;grid-template-columns:minmax(0,1fr) 356px;gap:18px;align-items:start}
+.gutva .gufigur{align-self:start}
+
+/* ── 3 · jämförelsen ── */
+/* Tabellen: alltid klassisk. Heldragna linjer runt varje ruta, grå rubrikrad,
+   inget «svävande» rutnät av bara hjälplinjer — en tabell ska gå att läsa i
+   båda riktningar, och då måste kolumnerna ritas. */
+.gutab{width:100%;margin-top:16px;border-collapse:collapse;font-size:13.5px}
+.gutab th{padding:8px 11px;border:1px solid #000;background:#EDEDED;font-size:12.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;text-align:left;color:#000}
+.gutab td{padding:9px 11px;border:1px solid #000;vertical-align:top;line-height:1.5;color:#000}
+.gutab tr:last-child td{border-bottom:1px solid #000}
+.gusteg{width:56px;font-weight:700;color:#000;font-size:13.5px}
+/* line-height:0 gör kryssrutan till hela radboxen. Annars sitter den på
+   textens baslinje och underhänget skjuter den ett par tiondels millimeter
+   uppåt i cellen. */
+.gutab td.gukryss{width:64px;text-align:center;vertical-align:middle;line-height:0}
+.gukryss span{display:inline-block;width:14px;height:14px;border:1.4px solid #000;border-radius:2px}
+/* 1 · radbunden: tre uppgifter med full trippel är bladets tätaste variant, så
+   raderna går ner till 14 px (~7 mm fritt) — golvet, inte normalvärdet. */
+/* Avståndet mellan uppgifter är samma på alla blad. Att fördela restytan lika
+   gav ettan gap på 130 px medan de andra låg på 30 — samma regel, olika
+   resultat, och det syns. Fast mått; luften som blir över lägger sig nederst. */
+[data-form="gu1"] .gukort{margin-top:34px}
+[data-form="gu1"] .gurad{margin-top:14px}
+[data-form="gu1"] .guforts{margin-top:11px}
+[data-form="gu1"] .gufraga{margin-top:9px}[data-form="gu1"] .gutopp{margin-top:9px}[data-form="gu1"] .guband{margin-top:13px}
+.gumono{font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:13.5px}
+
+
+/* ── 6 · kombinationen ──
+   Tre former på ett blad kostar höjd. Den tas ur radhöjden i stegtabellen och
+   ur luften mellan korten — aldrig ur textstorleken. */
+[data-form="gu6"] .gukort{margin-top:34px;padding-top:0}
+[data-form="gu6"] .gutab td:not(.gukryss){padding:1.5px 9px;line-height:1.3}
+[data-form="gu6"] .gutab td:has(.brak){padding-top:9px;padding-bottom:9px;line-height:1.9}
+[data-form="gu6"] .gutab th{padding:4px 9px}
+[data-form="gu6"] .gudel{margin-top:5px}
+[data-form="gu6"] .gurad{margin-top:10px}[data-form="gu6"] .guforts{margin-top:8px}
+[data-form="gu6"] .gufraga{margin-top:6px}
+[data-form="gu6"] .gutopp{margin-top:4px}
+[data-form="gu6"] .guband{margin-top:10px;padding:7px 12px}
+[data-form="gu6"] .gutab{margin-top:12px}
+[data-form="gu6"] .gubricka{padding:2px 8px}
+[data-form="gu6"] .gutva{gap:16px;grid-template-columns:minmax(0,1fr) 372px}
+[data-form="gu6"] .gufigkap{margin-top:5px;font-size:12.5px}
+
+/* ── 2 · figurspalten: figuren är uppgiftens huvudsak, så den får höjden.
+   Luften mellan korten betalar. ── */
+[data-form="gu2"] .gukort{margin-top:34px;padding:0}
+[data-form="gu2"] .guband{margin-top:12px;padding:8px 12px}
+[data-form="gu2"] .gurad{margin-top:15px}[data-form="gu2"] .guforts{margin-top:12px}
+[data-form="gu2"] .gutopp{margin-top:10px}
+[data-form="gu2"] .gutva{grid-template-columns:minmax(0,1fr) 250px}
+.tavhost .boards-container{justify-content:flex-start}
+/* Spaltlinjen på en riktig tavla är dragen, inte streckad: en hel linje med
+   handens vinglighet. Motorn ritar den streckad och blek — här tas den upp. */
+.tavhost .whiteboard>svg.wb-svg{opacity:.75!important}
+.tavhost .whiteboard>svg.wb-svg path[stroke-dasharray]{stroke-dasharray:none;stroke-width:2.2}
+[data-form="gu2"] .gufigur{--fh:168px}
+[data-form="gu6"] .gufigur{--fh:150px}
+[data-form="gu6"] .gukort{margin-top:34px}
+[data-form="gu6"] .gubred{margin-top:9px}
+
+/* ── Traven i appen ──
+   Bladen är 794 px breda på riktigt. Rutan de ligger i är smalare, så traven
+   skalas ner med zoom (som reflowar, till skillnad från transform) — måtten i
+   sättningen förblir de tryckta. */
+.bladtrav{display:flex;flex-direction:column;align-items:center;gap:22px;width:100%}
+.blad{flex:0 0 auto;zoom:var(--bladskala,1)}
+/* prov.css lägger bladen absolut för kanvasen — i appen står de i traven. */
+.bladtrav .ark,.bladtrav .gu{position:relative;left:auto;top:auto;margin:0}
+.bladlapp{width:794px;margin:0 auto;font:600 11px/1.3 var(--sans,Arimo),Arial,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3)}
+/* Tavlan ritas i sin verkliga bredd och krymps efteråt med transform (se
+   blad.js). Rutan bär den skalade höjden så traven inte får ett hål under sig. */
+.tavruta{position:relative;width:100%;overflow:hidden}
+.bladtrav .tavhost{width:1440px}
+.bladtrav .tavhost .boards-container{justify-content:flex-start}
+/* Spaltlinjen på en riktig tavla är dragen, inte streckad. */
+.bladtrav .tavhost .whiteboard>svg.wb-svg{opacity:.75!important}
+.bladtrav .tavhost .whiteboard>svg.wb-svg path[stroke-dasharray]{stroke-dasharray:none;stroke-width:2.2}
+
+/* ══════════ SVARSUTRYMMET PÅ BLADET ══════════
+   Svarsutrymme, rutnät och illustrationsplats är val läraren gör i planeringen.
+   De ändrar bladet, inte bara texten under det — annars är valet en etikett.
+
+   Höjden är INTE längre en restyta. Förr fick rutfältet den luft kortet råkade
+   ha kvar (flex:1 1 0), och då fick uppgiften med flest delfrågor minst plats
+   att räkna på — tvärtemot vad den behövde. Nu sätter blad-bygg.js en höjd i
+   pixlar ur uppgiftens poäng och svarstyp, och blad.js kontrollerar att den
+   ryms. Därför får inget här flexa. */
+.gu .gukort{display:flex;flex-direction:column;min-height:0;flex:0 0 auto}
+.gu .gukort>*{flex:0 0 auto}
+
+/* Kortsvarsraden: uppgiften vill ha ett tal, inte en uträkning. Då är en rad
+   rätt yta — ett rutfält hade sagt «räkna här» om något som inte ska räknas. */
+.gusvarsrad{margin-top:14px}
+.gusvarsrad .gunamn{min-width:52px}
+
+/* Flervalsalternativen bär en ruta att kryssa i — samma ruta som provet. */
+.guval{margin-top:10px;display:grid;gap:5px}
+.guval li{display:grid;grid-template-columns:46px minmax(0,1fr);align-items:center}
+.guval li>i{display:flex;align-items:center;gap:8px;font-style:italic}
+.guval li>i::before{content:'';flex:0 0 auto;width:14px;height:14px;border:1.4px solid #000;border-radius:2px}
+
+
+/* Platsen för en illustration är en väntande yta, inte en ritning — samma
+   randiga fält som figurplatsen, med en förklaring i monospace. Den har egen
+   höjd och konkurrerar inte längre med svarsutrymmet. */
+.guplats{margin-top:12px}
+
+/* Traven i granskningen: kanvasen ger .gdok en dokumentskugga, men här är det
+   varje blad som är dokumentet — de bär sin egen skugga från prov.css/.gu.
+   Traven behöver också sin tryckta bredd: i kanvasen står den fritt, och
+   width:100% mot en absolut positionerad plan blir noll. */
+.gdok.bladtrav{width:794px;box-shadow:none;background:transparent}
+.gdok.bladtrav .blad{zoom:1}
+/* Tavlan i canvasen ritas om i sin verkliga bredd (blad.js: omritaTavlor) — en
+   klonad, nerkrympt tavla går varken att zooma i eller peka på. */
+.gdok.bladtrav[data-typ="Tavla"]{width:1440px}
+.gdok.bladtrav .tavruta{width:1440px;overflow:visible}
+
+/* Ett blad som bara bär kortsvar har halva sidan kvar. Den ytan är inte
+   dekoration — det är där eleven räknar. En gemensam ruta med en etikett är
+   ärligare än tre uppblåsta fält. */
+/* Arbetsbladet bär INGA skrivytor — varken linjer eller rutnät. Eleven skriver
+   svaret på svarsraden eller löser hela uppgiften på rutat lösblad, precis som
+   i mallen och precis som på provet. */
+
+/* Provets försättsblad: betygstabellen slutar en bit ner på sidan och resten är
+   tomt papper. Bildplatsen tar den luften — och blir en riktig bild när läraren
+   lägger in en i canvas. */
+.prforsatt{margin-top:26px}
+.prforsatt .prbild{min-height:300px;display:grid;place-items:center}

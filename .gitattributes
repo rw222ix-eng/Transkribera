@@ -1,0 +1,18 @@
+# Frontenden i app/web/ui/ är en byte-för-byte-spegel av designprojektet
+# "Transkribera Design System" i Claude Design, och en synk därifrån är tänkt att
+# vara en ren filkopiering. Molnet skriver LF. Den här maskinen har
+# core.autocrlf=true, så utan reglerna nedan checkas filerna ut med CRLF — och då
+# skiljer sig varje rad i varje fil från exporten, vilket gör det omöjligt att se
+# vad en synk FAKTISKT ändrade. Radsluten låses därför till LF.
+app/web/ui/**            text eol=lf
+
+# Binärerna ska inte röras alls. De måste stå EFTER regeln ovan för att vinna:
+# senare rad gäller. Utan detta skulle git behandla dem som text och radslutens
+# byte-mönster förstöra typsnitt, wasm-moduler och paket-tarbollar.
+app/web/ui/**/*.woff2    binary
+app/web/ui/**/*.ttf      binary
+app/web/ui/**/*.otf      binary
+app/web/ui/**/*.wasm     binary
+app/web/ui/**/*.png      binary
+app/web/ui/**/*.jpg      binary
+app/web/ui/**/*.gz       binary

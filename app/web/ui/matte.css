@@ -1,0 +1,42 @@
+/* ══════════ MATEMATIKEN PÅ PAPPER ══════════
+   Ett snitt, en storlek, ett bråk. Gäller varje blad i appen som sätter
+   matematik med <span class="mat" data-tex="…">: arbetsblad, prov,
+   lösningsförslag, facit. Läses tillsammans med matte.js — CSS ensam räcker
+   inte, för två av besluten kräver mätning efter rendering.
+
+   Tavlan är undantaget och ska förbli det: .tmat och .wb-math håller KaTeX
+   eget snitt, för på en tavla ska formeln SYNAS som citerad ur boken. Därför
+   är allt här scopat till .mat. */
+
+.mat{white-space:nowrap}
+
+/* ── Ett snitt, text som matematik ──
+   KaTeX hämtar annars glyferna ur fyra egna filer — kursiv seriff för
+   variabler, upprätt seriff för parenteser och likhetstecken, grotesk bara för
+   det \sf täcker — och en formel mitt i en mening läses då som ett inklistrat
+   citat. Här sätts alla glyfer i bladets egen Arimo.
+   Det är säkert: KaTeX horisontella placering är vanligt inline-flöde, och de
+   vertikala förskjutningarna (exponenter, index) räknas i em och följer med.
+   KaTeX egna filer står SIST i stacken. Arimo vinner varje bokstav och siffra
+   den har; de tecken den saknar (⋅ ≈ ∘ ⇒ ≥, och private-use-glyfer som \neq)
+   faller deterministiskt till KaTeX_Main i stället för till vad datorn råkar
+   ha i sin fallback-kedja — ett tryckt blad får inte byta tecken mellan två
+   maskiner.
+   RÖR INTE storleken på scriptstegen (.sizing.reset-size…). KaTeX räknar
+   exponentens förskjutning i em av 0,7-storleken och skriver in den som ett
+   fast värde; växer glyfen med CSS följer förskjutningen inte med, och
+   exponenten lägger sig på bråkstrecket. Vill du ha större exponenter: höj
+   hela formeln. */
+.mat .katex{font-size:1.06em;color:#000}
+.mat .katex,.mat .katex span[class]{font-family:Arimo,Arial,'Helvetica Neue',Helvetica,KaTeX_Main,KaTeX_Size1,sans-serif}
+
+/* ── Bråket sätts av bladet, inte av TeX ──
+   KaTeX räknar täljarens och nämnarens läge mot deras ink-höjd, så en exponent
+   i nämnaren trycks upp mot bråkstrecket medan en täljare utan underhäng
+   hamnar långt ifrån. Här är avståndet lika stort åt båda håll, alltid,
+   oavsett innehåll. Delarna sätts fortfarande av KaTeX — bara staplingen är
+   vår. Paddingen nedan är utgångsläget; matte.js mäter och korrigerar den så
+   att BLÄCKET, inte rutan, hamnar lika långt från strecket. */
+.brak{display:inline-grid;vertical-align:middle;line-height:1.1;text-align:center;margin:0 4px}
+.brakt{padding:0 4px 5px;border-bottom:1px solid currentColor}
+.brakn{padding:5px 4px 0}

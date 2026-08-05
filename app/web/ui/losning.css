@@ -1,0 +1,132 @@
+/* ══════════ LÖSNINGSFÖRSLAGET — TVÅ BLAD ══════════
+   Förlagan är bedömningsanvisningen, men den valda formen är den kommenterade
+   elevlösningen: bedömningen sätts där den hör hemma — i marginalen på en riktig
+   lösning. Fem saker bär formen: elevraden med utfallet, faksimilen, klämmaren
+   i marginalen, brickan som binder klämmaren till kommentaren, och poängen.
+
+   Två blad: ett för långsvar (tre elevlösningar, 0 → 1 → 2 poäng) och ett för
+   kortsvar (flera korta uppgifter med vägen dit och svaret i ruta).
+
+   Bladet ärver .ark från prov.css — samma papper, samma trave. */
+
+/* ── Huvudet ──
+   Ett lösningsförslag är ett internt dokument. Därför en etikett i stället för
+   en titel: den säger vad man håller i innan man börjat läsa, och uppgiftens
+   tak står i svart till höger — det är det första man vill veta. */
+.lohuvud>b:first-child{white-space:nowrap}
+.lohuvud{display:flex;justify-content:space-between;align-items:baseline;gap:16px;padding-bottom:0;font-size:12.5px;letter-spacing:.06em;text-transform:uppercase;font-weight:700;color:#000}
+.lohuvud span{font-weight:700;font-size:13.5px;letter-spacing:.04em;text-transform:none;color:#000}
+.lotitel{margin:18px 0 0;font-size:25px;font-weight:700;letter-spacing:-.015em;line-height:1.14}
+.lolede{margin:7px 0 0;font-size:13.5px;line-height:1.5;color:#000;max-width:62ch}
+.lokomm{margin:9px 0 0;font-size:13.5px;line-height:1.5;color:#000}
+.lokomm b{font-weight:700}
+
+/* ══════════ 1 · KOMMENTERAD ELEVLÖSNING (långsvar) ══════════ */
+
+/* Elevens rad: vem lösningen är och vad den fick, FÖRE lösningen. Utfallet ska
+   vara känt innan man börjar läsa — därför står bedömningen här och inte som en
+   summering längst ner. */
+#lo4 .loelev,[data-form="lo4"] .loelev,[data-form^="fe-"] .loelev{display:flex;align-items:baseline;justify-content:space-between;gap:18px;margin:16px 0 0;color:#000}
+#lo4 .loelev b,[data-form="lo4"] .loelev b,[data-form^="fe-"] .loelev b{font-size:17.5px;font-weight:700}
+#lo4 .loelev span,[data-form="lo4"] .loelev span,[data-form^="fe-"] .loelev span{font-size:15px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+#lo4 .loelev span[data-utan],[data-form="lo4"] .loelev span[data-utan],[data-form^="fe-"] .loelev span[data-utan]{color:#C0392B}
+#lo4 .loelev span[data-full],[data-form="lo4"] .loelev span[data-full],[data-form^="fe-"] .loelev span[data-full]{color:#1B7A46}
+
+/* Faksimilen: elevens egen hand, på papper som inte är bladets papper. */
+#lo4 .loskann,[data-form="lo4"] .loskann,[data-form^="fe-"] .loskann{position:relative;margin-top:9px;padding:12px 20px 12px 24px;background:#FBFAF7;border:1px solid #E2DFD8;font-family:Caveat,'Shadows Into Light Two',cursive;font-size:22px;line-height:1.38;color:#22303F}
+#lo4 .loskann .katex,[data-form="lo4"] .loskann .katex,[data-form^="fe-"] .loskann .katex{font-size:1.02em}
+#lo4 .loskannrad,[data-form="lo4"] .loskannrad,[data-form^="fe-"] .loskannrad{display:flex;align-items:baseline;gap:14px}
+
+/* Partiet: den klämmare läraren sätter i marginalen när en poäng gäller flera
+   rader. Bricka och klämmare bär samma nummer som kommentarraden nedanför — det
+   är det enda som gör att man hittar från bedömning till lösning utan att räkna
+   rader. Grön klämmare = poäng gavs, röd = ingen poäng. Färgen är hela
+   avläsningen: man ska kunna se utfallet innan man läst en rad. */
+#lo4 .loparti,[data-form="lo4"] .loparti,[data-form^="fe-"] .loparti{position:relative;padding:2px 0 4px 15px;border-left:3px solid #1B7A46}
+#lo4 .loparti+.loparti,[data-form="lo4"] .loparti+.loparti,[data-form^="fe-"] .loparti+.loparti{margin-top:10px}
+/* Domen: poängen och skälet står i partiet, satt — inte handskrivet. Den som
+   rättar ser rad och bedömning i samma blick. */
+/* Domen sätts i BLADETS snitt. Förr stod här font-family:var(--sans) — inne i
+   appen är det Switzer, och bedömningen blev då den enda texten på pappret som
+   inte var Arimo. */
+#lo4 .lodom,[data-form="lo4"] .lodom,[data-form^="fe-"] .lodom{margin:7px 0 1px;display:grid;grid-template-columns:auto minmax(0,1fr);align-items:baseline;gap:0 10px;font-family:Arimo,Arial,'Helvetica Neue',Helvetica,sans-serif}
+#lo4 .lodom>i,[data-form="lo4"] .lodom>i,[data-form^="fe-"] .lodom>i{font-style:normal;font-weight:700;font-size:13.5px;letter-spacing:.02em;color:#1B7A46;white-space:nowrap;font-variant-numeric:tabular-nums}
+#lo4 .lodom>i[data-utan],[data-form="lo4"] .lodom>i[data-utan],[data-form^="fe-"] .lodom>i[data-utan]{color:#C0392B}
+#lo4 .lodom>p,[data-form="lo4"] .lodom>p,[data-form^="fe-"] .lodom>p{margin:0;font-size:13.5px;line-height:1.42;color:#000}
+#lo4 .lodom .katex,[data-form="lo4"] .lodom .katex,[data-form^="fe-"] .lodom .katex{font-size:1.06em}
+#lo4 .loparti[data-utan],[data-form="lo4"] .loparti[data-utan],[data-form^="fe-"] .loparti[data-utan]{border-left-color:#C0392B}
+#lo4 .loparti[data-utan]>b,[data-form="lo4"] .loparti[data-utan]>b,[data-form^="fe-"] .loparti[data-utan]>b,#lo4 .lomark[data-utan],[data-form="lo4"] .lomark[data-utan],[data-form^="fe-"] .lomark[data-utan]{background:#C0392B}
+
+/* Kommentarraden: brickan, skälet, poängen. Poängen sist och i svart — den är
+   summan av skälet, inte en etikett på det. */
+#lo4 .lokomm,[data-form="lo4"] .lokomm,[data-form^="fe-"] .lokomm{margin-top:8px}
+
+/* ══════════ 2 · KORTSVAR ══════════
+   Facit ska läsas med provet bredvid sig, så det använder provets grammatik och
+   ingen egen: numret med punkt i marginalen, uppgiftens värde under numret,
+   frågan i spalten. Hårlinjen mellan posterna är borta — luften mellan två
+   uppgifter är redan större än luften inne i en, och ett streck till på ett blad
+   fullt av streck säger ingenting. Poängen för en deluppgift står där den står
+   på provet: sist på deluppgiftens egen rad. */
+
+/* Svarsraden: det enda som ska kunna läsas på en armlängds avstånd. Svaret ett
+   helt gradsteg över frågan — inte fetare. KaTeX har ingen fet kursiv matematik,
+   så fetstil hade gjort «2 400 laddpunkter/år» fet och «F(x) = 2x³ − 2x²» mager:
+   samma rad, två vikter. Graden gäller båda lika. */
+.losvar{margin:8px 0 0;display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 14px}
+.losvar>span{flex:0 0 auto;font-size:17.5px;color:#000}
+/* Etiketten som skiljer svaret från frågan. Utan den läses de två raderna som
+   ett stycke — frågan är satt i löptext och svaret är ofta bara en formel till. */
+.losetikett{flex:0 0 auto;min-width:40px;font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#000}
+/* I en deluppgift bär a) b) c) redan navigeringen; en etikett till blir brus. */
+.prdel .losvar{margin-top:0;padding-left:0}
+.losvar>span .katex{font-size:1.05em}
+.losvar>em{font-style:normal;font-size:12.5px;font-weight:400;color:#000}
+
+/* ── Lösningsgången i facit ──
+   Vägen till svaret, inte en fullständig redovisning: de rader en lärare skulle
+   skriva på tavlan för att visa hur man kommer dit. Ingen numrering — stegen
+   läses uppifrån och ner, och en siffra till hade konkurrerat med uppgiftens. */
+.lovag{margin:9px 0 0;padding:0;list-style:none;display:grid;gap:5px;font-size:13.5px;line-height:1.5;color:#000}
+.lovag>li{display:grid;grid-template-columns:auto minmax(0,1fr);gap:0 9px}
+.lovag>li::before{content:'';align-self:center;width:11px;height:1px;background:#000}
+
+/* Facitets elevlösningar är tre stycken på ett blad, mot lo4:s samma tre men
+   utan lösningsgång ovanför. Höjden tas ur luften mellan eleverna och ur
+   faksimilens inre marginal — aldrig ur textstorleken. */
+[data-form^="fe-"] .loelev{margin-top:13px}
+[data-form^="fe-"] .loskann{padding-top:9px;padding-bottom:9px}
+[data-form^="fe-"] .loparti+.loparti{margin-top:8px}
+
+/* Poängen per steg i lösningsgången: det är dem läraren delar ut, så de står i
+   marginalen av steget — inte i en summering under. */
+.losteg{display:block}
+.lovag>li em{font-style:normal;font-weight:700;font-size:11.5px;letter-spacing:.02em;color:#1B7A46;white-space:nowrap;margin-left:8px}
+
+/* Lösningsgången till delprov C bär tre fullständiga lösningar per blad. Den
+   luft ett kortsvarsfacit har råd med finns inte här — måtten är stramare, och
+   A4 går ihop utan att något steg faller utanför. */
+[data-form^="lo-c"] .lotitel{margin-top:12px;font-size:23px}
+[data-form^="lo-c"] .pruppg{margin-top:16px}
+[data-form^="lo-c"] .lovag{margin-top:6px;gap:3px;font-size:13.5px;line-height:1.42}
+[data-form^="lo-c"] .losvar{margin-top:6px}
+
+/* ══════════ BOKENS UPPGIFTER ══════════
+   Gäller BARA bokens två egna former, lo-bok (svarsfacit) och lo-bok3 (nivå 3) —
+   aldrig provets lo-b och lo-c. Boken numrerar sina uppgifter fyrsiffrigt (5201,
+   5202 …) medan provet numrerar «7.», och provets marginal är satt för det: 66 px
+   och 23 px. Fyra siffror i samma grad tryckte numret in i frågan, så bokens
+   papper får en egen grad och en bredare marginal. Låg regeln på lo-c ändrade den
+   tyst provets lösningsförslag också — samma nyckel, två olika papper. */
+[data-form="lo-bok"] .pruppg,[data-form="lo-bok3"] .pruppg{grid-template-columns:82px minmax(0,1fr)}
+[data-form="lo-bok"] .prnr,[data-form="lo-bok3"] .prnr{font-size:19px;font-variant-numeric:tabular-nums}
+[data-form="lo-bok"] .prvarde,[data-form="lo-bok3"] .prvarde{text-transform:lowercase;letter-spacing:.02em}
+/* Faksimilen är satt i skrivstil på 22 px, och en staplad bråkdel är då högre än
+   radens linjehöjd: numeratorn klev upp i «Väg B»-raden ovanför. Bokens papper får
+   därför luftigare rader än förlagans, som bara bär formler på en nivå. */
+[data-form="fe-bok"] .loskann{padding-top:15px;padding-bottom:15px}
+[data-form="fe-bok"] .loskannrad{line-height:2}
+/* «Väg B · ändringskvot» bröts efter mittpunkten, och andra raden lade sig över
+   faksimilen under. Rubriken är en etikett, inte löptext — den bryts inte. */
+[data-form="fe-bok"] .loelev{flex-wrap:wrap;gap:4px 18px}
+[data-form="fe-bok"] .loelev b{white-space:nowrap}

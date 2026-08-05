@@ -1,0 +1,70 @@
+/* ══════════ GRUPPUPPGIFTEN SOM TRYCKT ARBETSBLAD ══════════
+   Gruppuppgiften hade appens generiska uppgiftsform: numrerade rader i en lista.
+   Ett papper som ligger på ett bord under en lektion är något annat. Grammatiken
+   här är fyra delar och bara fyra — samma fyra som lärarens egna blad:
+
+     rubriken            fet, ensam, ingen etikettrad
+     OBS-rutan          fet text i en ren svart ram, en gång, högst upp
+     bokstavsbrickan     liten svart ruta med vit bokstav
+     ifyllnadsraden      en hårlinje man skriver på
+
+   Svart, grått och linjer. Ingen färg, inga rundade paneler i paneler, ingen
+   dekor. Reglerna ligger under .gruppark så resten av appen inte påverkas. */
+/* Gruppuppgiften ÄR ett arbetsblad. Den bar tidigare eget snitt (var(--sans),
+   alltså appens Switzer inne på ett Arimo-blad) och en egen, ~30 % mindre
+   gradskala — två blad i samma trave läste sig som två olika system. Nu ärver
+   den .ark:s papper och blad.css:s .gu*-regler; kvar här står bara det som
+   verkligen är gruppuppgiftens: bokstavsrutans topprad med tiden, figurspaltens
+   bredd, och den täthet fyra rutor på ett A4 kräver. */
+.gruppark{padding:56px 62px 46px;display:flex;flex-direction:column}
+
+/* Bokstaven och tiden på samma rad. Uppgiftsrutorna skiljs av luft och av
+   brickan — ingen ram, precis som på arbetsbladet. */
+.gruppark .gukorttopp{display:flex;align-items:baseline;gap:12px}
+.gruppark .gutid{margin-left:auto;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#000}
+/* Fyra rutor med namnrader, band och skrivlinjer på ett A4: luften mellan
+   rutorna betalar, aldrig textstorleken. */
+/* Fyra rutor slutade 350 px över bladkanten — den ytan är där gruppen räknar,
+   inte marginal. Rutorna delar restytan lika, så varje ruta får lika många
+   skrivmillimeter oavsett hur lång frågan är. */
+.gruppark .gukort{margin:22px 0 0;padding:0;border:none;flex:1 1 auto;display:flex;flex-direction:column;min-height:0}
+.gruppark .gukort>*{flex:0 0 auto}
+.gruppark .gurad{margin-top:13px}
+.gruppark .gufraga{margin-top:9px}
+.gruppark .guband{margin-top:13px}
+.gruppark .gutopp{margin-top:10px;gap:28px}
+
+/* Figurspalten: figuren står BREDVID frågan, aldrig ovanför den, och i sin
+   verkliga storlek — sträcks den förstoras etiketterna. */
+.gruppark .gutva{display:grid;grid-template-columns:minmax(0,1fr) 284px;gap:16px;align-items:start}
+.gruppark .gufigur{display:grid;place-items:center;padding:2px;min-height:186px}
+.gruppark .gufigur[data-vantar]{border:1px solid #CFCFCF;background:repeating-linear-gradient(135deg,#F2F2F2 0 1px,#fff 1px 7px)}
+.gruppark .gufigur[data-fel]{border:1px solid #CF372D;background:#FDF1F0}
+.gruppark .gufigur svg{display:block;max-width:100%;height:auto}
+
+/* Canvas markerar element med samma ram som i övriga dokument — men rutan får
+   inte byta form när den markeras, bara få sin kontur. */
+.gruppark [data-el]{scroll-margin-top:20px}
+@media (max-width:640px){.gruppark{padding:24px 22px}.gruppark .gutva{grid-template-columns:minmax(0,1fr)}}
+
+/* ══════════ FIGUREN I PROV, ARBETSBLAD OCH PÅ TAVLAN ══════════
+   Samma figur, samma storlek, samma plats i satsen: bredvid frågan i en egen
+   spalt. Reglerna står här en gång i stället för en gång per dokumenttyp —
+   annars driver de isär, och en figur som är läsbar på ett arbetsblad blir en
+   miniatyr på ett prov. */
+.dokfigur{display:grid;place-items:center;padding:2px;min-height:186px}
+.dokfigur[data-vantar]{border:1px solid var(--line,#CFCFCF);border-radius:4px;background:repeating-linear-gradient(135deg,#F2F2F2 0 1px,#fff 1px 7px)}
+.dokfigur[data-fel]{border:1px solid var(--berry,#CF372D);border-radius:4px;background:#FDF1F0}
+.dokfigur svg{display:block;max-width:100%;height:auto}
+.dokfigkap{margin:7px 0 0;font-size:11.5px;line-height:1.45;color:#000}
+/* Figuren i en React-satt uppgift: egen rad under frågan, full spaltbredd, så
+   den inte klämmer texten. Samma storlek som i de HTML-satta dokumenten. */
+.dokfigurrad{display:block;margin:14px 0 6px;max-width:300px}
+/* Uppgiften med figur blir tvåspaltig — figuren står bredvid texten, aldrig
+   ovanför den, för eleven måste kunna läsa båda samtidigt. */
+.uppg[data-figur-plats]{display:grid;grid-template-columns:auto minmax(0,1fr) 284px;gap:0 16px;align-items:start}
+.uppg[data-figur-plats] .upoang{grid-column:2;justify-self:end}
+.tblock .dokfigur{margin-top:10px}
+.tblock[data-figur-plats] .tinnehall{display:grid;grid-template-columns:minmax(0,1fr) 284px;gap:16px;align-items:start}
+.tblock[data-figur-plats] .dokfigur{margin-top:0}
+@media (max-width:640px){.uppg[data-figur-plats]{grid-template-columns:auto minmax(0,1fr)}.tblock[data-figur-plats] .tinnehall{grid-template-columns:minmax(0,1fr)}}

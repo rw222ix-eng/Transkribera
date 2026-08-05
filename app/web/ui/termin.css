@@ -1,0 +1,122 @@
+/* ══════════ TERMINEN ══════════
+   Veckan är detaljen, terminen är avståndet. Samma huvud bär båda: lägesväljaren
+   först i raden, och det som bara gäller ett av lägena döljs i det andra.
+
+   Terminen svarar på EN fråga — vilka veckor framåt saknar material — och
+   sättningen har därför bara tre lager: kursen man läser, läget man matar in, och
+   bilden. De fyra beskeden, kapitelbandet, provraden, indexraden, remsan och
+   biblioteket är strukna (granskning 9 · A).
+
+   Formvokabulären är appens egen: hårlinjer i stället för ramar, versaletiketter
+   över värdet, seriffen på det som ska läsas först, och inga gråa lådor. */
+
+#ark-klass[data-lage='termin'] #schemagrid,
+#ark-klass[data-lage='termin'] #schemasum,
+#ark-klass[data-lage='termin'] #schemahuvudtext,
+#ark-klass[data-lage='termin'] #synkrad,
+#ark-klass[data-lage='termin'] #schemanu,
+#ark-klass[data-lage='termin'] .schemahuvud .historik:not(.terminhist){display:none}
+/* Terminen har EN meny: kursraden i vyn, som namnger klass OCH kurs och som
+   sätter veckans filter. Klassremsans chip («Alla klasser · 9A · 9B») sa halva
+   samma sak — två rader som båda väljer klass är dubbelt att läsa. Profilknappen
+   står kvar: den väljer ingen klass, den öppnar en panel om den valda. */
+#ark-klass[data-lage='termin'] #klassrad .klasschip{display:none}
+#ark-klass:not([data-lage='termin']) .terminvy,
+#ark-klass:not([data-lage='termin']) .terminhuvudtext,
+#ark-klass:not([data-lage='termin']) .terminnu,
+#ark-klass:not([data-lage='termin']) .terminhist{display:none}
+.lagesseg{flex:0 0 auto}
+.lagesseg button{padding:7px 15px;font-size:.84rem}
+.terminhuvudtext{display:flex;align-items:baseline;gap:12px}
+.terminhuvudtext .schemavecka{font-size:1.3rem}
+.terminvy{display:flex;flex-direction:column;gap:20px;margin:18px 0 0}
+
+/* ── Kursen man läser ────────────────────────────────
+   «Alla klasser» är tre kurser, och tre kursblock under varandra var hela felet:
+   det första var 1 905 px högt. Terminen läses en kurs i taget, och raden är
+   valet — inte en genväg till något som ligger utanför bild. Valt läge är
+   --accent-weak med blå text; hovern ljusnar mot --sunken (ovalt) eller djupnar
+   till --sky-pale (valt), aldrig till samma yta som valet. */
+.tkursval{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding-bottom:16px;border-bottom:1px solid var(--line)}
+.tkursval .minietikett{margin:0}
+.tkursk{flex:0 0 auto;display:inline-flex;align-items:baseline;gap:8px;white-space:nowrap;border:1px solid var(--line);border-radius:var(--r-pill);padding:6px 14px;background:transparent;font-family:inherit;font-size:.84rem;color:var(--ink);cursor:pointer;transition:background-color var(--dur-2) var(--ease),border-color var(--dur-2) var(--ease),color var(--dur-2) var(--ease),transform var(--dur-1) var(--ease)}
+.tkursk b{font-weight:600}
+.tkursk span{font-size:.8rem}
+.tkursk[aria-pressed='true']{background:var(--accent-weak);border-color:transparent;color:var(--sky-deep)}
+.tkursk:hover{background:var(--sunken);border-color:var(--atmosphere);color:var(--ink)}
+.tkursk[aria-pressed='true']:hover{background:var(--sky-pale);border-color:transparent;color:var(--ink)}
+.tkursk:active{transform:scale(.976)}
+.tkursk:focus-visible{outline:2px solid var(--sky-deep);outline-offset:2px}
+
+/* ── En kurs ───────────────────────────────────────── */
+.tkurs{display:flex;flex-direction:column;gap:12px}
+.tkhuvud{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+.tkklass{margin:0;font-family:var(--serif);font-size:1.22rem;font-weight:500;color:var(--ink);white-space:nowrap}
+.tkklass b{font-weight:600}
+.tkstod{margin:0;font-size:.8rem;color:var(--ink-2);font-variant-numeric:tabular-nums}
+
+/* ── Läget: det enda läraren matar in ────────────────
+   En rad, inte fyra besked. Sidan är en knapp med vilobild — seriffen med prickad
+   understrykning — och samma mening bär också hur långt boken då räcker, för det
+   är samma faktum. */
+.tlagerad{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;margin:0;padding-bottom:14px;border-bottom:1px solid var(--line);font-size:.88rem;line-height:1.45;color:var(--ink-2);text-wrap:pretty}
+.tlagein{color:var(--ink-2)}
+.tlageknapp{padding:0;border:none;background:transparent;font-family:var(--serif);font-size:1.1rem;font-weight:500;line-height:1.2;color:var(--sky-deep);font-variant-numeric:tabular-nums;cursor:pointer;text-decoration:underline dotted var(--atmosphere);text-underline-offset:4px;transition:color var(--dur-2) var(--ease),text-decoration-color var(--dur-2) var(--ease)}
+.tlageknapp:hover{color:var(--ink);text-decoration:underline solid var(--sky-deep)}
+.tlageknapp:active{transform:scale(.976)}
+.tlageknapp:focus-visible{outline:2px solid var(--sky-deep);outline-offset:3px;border-radius:3px}
+.tlageknapp[data-osakert]{text-decoration-color:var(--berry)}
+.tlagesag{color:var(--ink-2)}
+.tlageej{font-size:.78rem;color:var(--berry)}
+
+/* ── Att sätta läget ──
+   Läget är annars lärt ur de sidor man SA att man skulle gå igenom. Här sätts det
+   som det blev — och här, inte i översikten, står frågan om det står kvar. */
+.tlagesatt{background:var(--sunken);border-radius:var(--r-card);padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.tlagesatt .minietikett{margin:0}
+.tsattrad{display:flex;flex-wrap:wrap;gap:7px}
+.tsattrad .chip{white-space:nowrap}
+.tsattfalt{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.tsattfalt .field{width:100px;font-variant-numeric:tabular-nums}
+.tsatttom{margin:0;font-size:.85rem;color:var(--ink-2)}
+.tfraga{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 2px;padding-bottom:12px;border-bottom:1px solid var(--line);font-size:.85rem}
+.tfragatext{flex:1;min-width:220px;margin:0;font-size:.85rem;line-height:1.45;color:var(--ink);text-wrap:pretty}
+.tfraga .chip{white-space:nowrap}
+
+/* ══════ BANDET ══════
+   En ruta per vecka, fylld så högt som veckan har material. Fyllnadshöjden är
+   mätningen «2 av 5 lektioner» i en form man inte behöver räkna. */
+.tbandvy{display:flex;flex-direction:column}
+.tbnat{display:grid;grid-template-columns:repeat(var(--n),minmax(0,1fr));gap:3px;align-items:end}
+.tbv{display:grid;gap:7px;justify-items:stretch;padding:7px 3px;border:none;border-radius:7px;background:transparent;font-family:inherit;cursor:pointer;transition:background-color var(--dur-2) var(--ease),transform var(--dur-2) var(--ease)}
+.tbv:hover{background:var(--sunken)}
+.tbv:active{transform:scale(.99)}
+.tbv:focus-visible{outline:2px solid var(--sky-deep);outline-offset:1px}
+.tbnr{font-family:var(--mono);font-size:.74rem;font-weight:600;color:var(--ink);text-align:center;font-variant-numeric:tabular-nums}
+.tbruta{position:relative;height:56px;border-radius:4px;overflow:hidden;box-shadow:inset 0 0 0 1.2px var(--line-2)}
+.tbfyll{position:absolute;inset:auto 0 0 0;background:var(--sky-deep);transition:height var(--dur-3) var(--ease)}
+.tbv[data-nu]{background:var(--accent-weak)}
+.tbv[data-nu]:hover{background:var(--sky-pale)}
+.tbv[data-nu] .tbnr{color:var(--sky-deep)}
+.tbv[data-forbi] .tbruta{opacity:.5}
+.tbv[data-efter] .tbnr{font-weight:500;color:var(--ink-3)}
+/* Ett prov är en vecka man måste göra något åt — därför en ring om rutan, inte
+   en egen rad. Ett nationellt prov skrivs inte här: streckad ring. */
+.tbruta[data-prov]{box-shadow:inset 0 0 0 1.8px var(--berry)}
+.tbruta[data-nat]{box-shadow:none;outline:1.4px dashed var(--berry);outline-offset:-1.4px}
+.tblov{display:grid;gap:7px;justify-items:stretch;padding:7px 3px}
+.tblovruta{display:grid;place-items:center;height:56px;border-radius:4px;background:repeating-linear-gradient(135deg,var(--line-2) 0 1.5px,transparent 1.5px 7px);font-size:.72rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
+.tbfot{display:flex;flex-direction:column;gap:10px;margin:16px 0 0;padding-top:13px;border-top:1px solid var(--line)}
+.tbsvar{margin:0;font-size:.95rem;line-height:1.5;color:var(--ink);text-wrap:pretty}
+.tbsvar b{font-weight:600}
+.tblegend{display:flex;align-items:center;gap:18px;flex-wrap:wrap;margin:0;font-size:.78rem;color:var(--ink-2)}
+.tblegend>span{display:inline-flex;align-items:center;gap:7px}
+.tbprick{flex:0 0 auto;width:15px;height:15px;border-radius:3px}
+.tbprick[data-full]{background:var(--sky-deep)}
+.tbprick[data-tom]{box-shadow:inset 0 0 0 1.2px var(--line-2)}
+.tbprick[data-prov]{box-shadow:inset 0 0 0 1.8px var(--berry)}
+
+@media (max-width:860px){
+  .tbruta,.tblovruta{height:44px}
+  .tbnr{font-size:.66rem}
+}

@@ -1,0 +1,1540 @@
+<!DOCTYPE html>
+<!-- Transkriberas frontend. Detta ÄR appen, inte en spegel av den: filerna i den
+     här mappen är designprojektet «Transkribera Design System» (Claude Design)
+     kopierade rakt av, och de serveras som de ligger — inget byggsteg, inget
+     ramverk. Skälet är att designen ska vara identisk med det som ritades, inte
+     likna det: så länge ingen skriver om markup eller CSS för hand kan de inte
+     glida isär. En ny synk från Claude Design är därför en ren filkopiering.
+
+     Fyra saker skiljer sig från prototypen, alla av samma skäl — appen är en
+     skrivbordsapp och får inte behöva nätet för att rendera rätt:
+       · typsnitten hämtas ur typsnitt.css i stället för Fontshare/Google Fonts
+       · KaTeX pekar på /static/vendor/katex/ som redan buntas med appen
+       · React-UMD och _ds_bundle.js är borta (Claude Designs egen
+         förhandsvisningsställning — inget i appen rör deras globaler)
+       · Matteprovs tokenfiler är borta (av deras 84 variabler delade appen bara
+         --accent, som styles.css sätter själv och senare i kaskaden)
+     Utseendet är oförändrat av alla fyra. -->
+<html lang="sv">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Transkribera</title>
+  <!-- Typsnitten först: @font-face deltar inte i kaskaden, så ordningen här spelar
+       ingen roll för utseendet — men snitten måste vara deklarerade innan något
+       sätts i dem. Ersätter Matteprovs tokens/fonts.css. -->
+  <link rel="stylesheet" href="typsnitt.css" />
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="app2.css" />
+  <link rel="stylesheet" href="app3.css" />
+  <link rel="stylesheet" href="app4.css" />
+  <link rel="stylesheet" href="app5.css" />
+  <link rel="stylesheet" href="kallor.css" />
+  <link rel="stylesheet" href="klass.css" />
+  <link rel="stylesheet" href="termin.css" />
+  <link rel="stylesheet" href="gruppark.css" />
+  <!-- Bladen är inte appens egna mallar längre: prov, arbetsblad, gruppuppgift och
+       lösningsförslag sätts med samma regler som i «Arbetsblad prov och tavlor —
+       femton former», och tavlan ritas som en riktig whiteboard. -->
+  <!-- KaTeX ur appens egen vendormapp (samma 0.16.11 som prototypen hämtade från
+       jsdelivr). Caveat ligger i typsnitt.css högst upp. -->
+  <link rel="stylesheet" href="/static/vendor/katex/katex.min.css" />
+  <link rel="stylesheet" href="matte.css" />
+  <link rel="stylesheet" href="prov.css" />
+  <link rel="stylesheet" href="losning.css" />
+  <link rel="stylesheet" href="tavla-wb.css" />
+  <link rel="stylesheet" href="blad.css" />
+  <style>
+    /* ==========================================================
+       Speglar frontend/src/lib/**. Tre vyer bakom flikarna i toppen —
+       Transkribera (steg 1–3), Inspelningar och Planering.
+
+       Duken är himlen: den ligger fast bakom allt och rör sig långsamt.
+       Arbetsytorna är vita "skivor" som flyter ovanpå den.
+       ========================================================== */
+
+    /* ── DUK ─────────────────────────────────────────── */
+    .duk{position:fixed;inset:0;z-index:0;overflow:hidden;pointer-events:none}
+    .topbar,.vy{position:relative;z-index:1}
+    .himmel{position:absolute;inset:0;background:radial-gradient(46% 34% at 80% 2%,rgba(255,255,255,.32),rgba(255,255,255,0) 70%),linear-gradient(180deg,#0C64A8 0%,#1276BD 16%,#1E85CB 34%,#3C9CD8 56%,#66B5E3 74%,#93CBEC 88%,#BADDF3 100%);transition:background var(--dur-4) var(--ease)}
+    /* Målad himmel per flik: bilden ligger stilla i botten och andas långsamt (Ken Burns),
+       lagret ovanför tonar mellan flikarna. Diset håller svart text läsbar. */
+    .fotolager{position:absolute;left:0;right:0;top:-64px;bottom:-64px;transform:translate3d(0,calc(var(--rull,0px) * -1),0)}
+    .foto{position:absolute;inset:0;background-position:var(--pos,50% 45%);background-size:cover;background-repeat:no-repeat;opacity:0;transform:scale(1.06);will-change:transform,opacity;transition:opacity 1100ms var(--ease)}
+    .foto.pa{opacity:1;animation:kenburns var(--dur,56s) var(--ease) infinite alternate}
+    .foto.vand.pa{animation-name:kenburns-vand}
+    @keyframes kenburns{from{transform:scale(1.05) translate3d(1.2%,.8%,0)}to{transform:scale(1.16) translate3d(-1.4%,-1.6%,0)}}
+    @keyframes kenburns-vand{from{transform:scale(1.16) translate3d(-1.6%,1.2%,0)}to{transform:scale(1.05) translate3d(1.4%,-1%,0)}}
+    .dis{position:absolute;inset:0;background:linear-gradient(180deg,rgba(255,255,255,.46) 0%,rgba(255,255,255,.2) 26%,rgba(255,255,255,.1) 48%,rgba(255,255,255,.26) 82%,rgba(255,255,255,.44) 100%)}
+    @media (prefers-reduced-motion:reduce){.foto.pa{animation:none}}
+    .sol{position:absolute;inset:0;background:radial-gradient(34% 26% at 80% 3%,rgba(255,255,255,.3),rgba(255,255,255,0) 70%);animation:andas 19s var(--ease) infinite}
+    @keyframes andas{0%,100%{opacity:.72;transform:scale(1)}50%{opacity:1;transform:scale(1.06)}}
+    .bank{position:absolute;width:210px;height:112px;pointer-events:none;transform-origin:0 50%;will-change:transform;animation-name:drift;animation-timing-function:linear;animation-iteration-count:infinite}
+    @keyframes drift{from{transform:translate3d(-42vw,0,0) scale(var(--s))}to{transform:translate3d(142vw,0,0) scale(var(--s))}}
+    .puff{position:absolute;border-radius:50%;background:radial-gradient(closest-side,#FFFFFF 0 85%,rgba(255,255,255,.62) 94%,rgba(255,255,255,0) 100%)}
+    .bank .puff{filter:blur(1px)}
+    .puff.skugga{background:radial-gradient(closest-side,#C3DCEF 0 85%,rgba(195,220,239,.55) 94%,rgba(195,220,239,0) 100%)}
+    /* Molnbank längs horisonten — två lager som driver i olika takt */
+    .horisont{position:absolute;left:0;width:200%;pointer-events:none;will-change:transform;animation-name:driv;animation-timing-function:linear;animation-iteration-count:infinite}
+    @keyframes driv{from{transform:translate3d(0,0,0)}to{transform:translate3d(-50%,0,0)}}
+    .horisont .bas{position:absolute;left:0;right:0;bottom:0;height:60%}
+    .horisont.fjarran{bottom:14vh;height:15vh;opacity:.42;animation-duration:420s}
+    .horisont.fjarran .bas{display:none}
+    .horisont.nara{bottom:-6vh;height:26vh;animation-duration:260s}
+    .horisont.nara .bas{background:linear-gradient(180deg,rgba(255,255,255,0),#FFFFFF 62%)}
+    .horisont .puff{filter:blur(1.5px)}
+    .fagel{position:absolute;width:15px;height:7px;pointer-events:none;opacity:.5;will-change:transform;animation-name:flyg;animation-timing-function:linear;animation-iteration-count:infinite}
+    .fagel i{position:absolute;top:0;width:7px;height:7px;border-top:1.5px solid rgba(9,66,108,.8);border-radius:70% 70% 0 0;animation:flax 1.05s var(--ease) infinite}
+    .fagel i:first-child{left:0;transform-origin:100% 0}
+    .fagel i:last-child{left:7px;transform-origin:0 0;animation-delay:-.03s}
+    @keyframes flyg{0%{transform:translate3d(-14vw,0,0)}25%{transform:translate3d(16vw,-4vh,0)}50%{transform:translate3d(46vw,2vh,0)}75%{transform:translate3d(76vw,-3vh,0)}100%{transform:translate3d(114vw,1vh,0)}}
+    @keyframes flax{0%,100%{transform:rotate(14deg) scaleY(1)}50%{transform:rotate(-16deg) scaleY(.7)}}
+
+    /* ── TOPPRAD ─────────────────────────────────────── */
+    .topbar{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:16px;padding:16px 30px;background:transparent;transition:background-color var(--dur-3) var(--ease),box-shadow var(--dur-3) var(--ease)}
+    .topbar.rullad{background:rgba(255,255,255,.62);box-shadow:0 1px 0 rgba(0,0,0,.1)}
+    .ordmarke{flex:1 1 0}
+    .flikar{position:relative;flex:0 1 auto;display:inline-flex;gap:30px;padding-bottom:9px}
+    .flik{position:relative;border:none;padding:2px 0;background:transparent;color:var(--sky-ink-3);font-family:inherit;font-size:.95rem;font-weight:500;cursor:pointer;transition:color var(--dur-2) var(--ease),transform var(--dur-2) var(--ease)}
+    /* Blek understrykning som mjukt växer fram vid hover — aktiv flik har flikglid */
+    .flik::after{content:'';position:absolute;left:0;right:0;bottom:-9px;height:1.5px;border-radius:2px;background:color-mix(in srgb,var(--sky-ink) 26%,transparent);transform:scaleX(0);transform-origin:50% 50%;transition:transform var(--dur-3) var(--ease),opacity var(--dur-2) var(--ease)}
+    .flik:hover::after{transform:scaleX(1)}
+    .flik[aria-selected='true']::after{opacity:0}
+    .flik:hover{color:var(--sky-ink)}
+    .flik[aria-selected='true']{color:var(--sky-ink)}
+    .flikglid{position:absolute;left:0;bottom:0;height:1.5px;width:0;border-radius:2px;background:var(--sky-ink);transition:transform var(--dur-3) var(--ease),width var(--dur-3) var(--ease)}
+
+    /* ── SPALT OCH SKIVA ─────────────────────────────── */
+    .view{max-width:900px;margin:0 auto;padding:34px 28px 120px}
+    .view.i-steg[data-steg="1"]{padding-bottom:280px}
+    .vy[hidden],[hidden]{display:none!important}
+    .himmelhuvud{padding:0 2px 24px}
+    /* Steg 1:s fråga står mitt över ytan den gäller — och samma sak gäller
+       lektionslistan och planeringens fråga: det är en fråga till hela sidan. */
+    #vy-transkribera .view[data-steg="1"] .himmelhuvud,
+    #vy-inspelningar .himmelhuvud,
+    #vy-planering .himmelhuvud{text-align:center}
+    .eyebrow{font-size:.72rem;font-weight:500;letter-spacing:.16em;text-transform:uppercase;color:var(--sky-ink-3);margin:0 0 16px}
+    .rubrik{font-family:var(--serif);font-weight:600;font-size:clamp(2.5rem,5.4vw,3.44rem);line-height:1.02;letter-spacing:-.004em;color:var(--sky-ink);margin:0;text-wrap:balance}
+    .skiva{position:relative;background:var(--surface);border-radius:var(--r-panel);padding:26px 28px;box-shadow:var(--shadow);transition:background-color var(--dur-4) var(--ease),box-shadow var(--dur-4) var(--ease)}
+    .skiva+.skiva{margin-top:18px}
+    [data-stig]{animation:stigin var(--dur-4) var(--ease) both}
+    @keyframes stigin{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+    .in{animation:stigin var(--dur-3) var(--ease) both}
+
+    /* ── STEGRÄCKA ───────────────────────────────────── */
+    :root{--sky-ink:#000;--sky-ink-2:#000;--sky-ink-3:#000;--sky-hair:rgba(0,0,0,.4)}
+    .stegwrap{max-width:900px;margin:0 auto;padding:26px 28px 0}
+    .steg{display:flex;align-items:center;gap:14px;justify-content:center}
+    .stegpost{display:flex;align-items:center;gap:10px}
+    .bricka{width:27px;height:27px;border-radius:50%;display:grid;place-items:center;font-size:.72rem;font-weight:500;font-variant-numeric:tabular-nums;border:1px solid var(--sky-hair);color:var(--sky-ink-3);transition:background-color var(--dur-2) var(--ease),border-color var(--dur-2) var(--ease),color var(--dur-2) var(--ease)}
+    .bricka.pa{background:var(--sky-ink);border-color:var(--sky-ink);color:#fff;animation:brickapa var(--dur-3) var(--ease)}
+    .bricka.klar{background:transparent;border-color:var(--sky-ink);color:var(--sky-ink);animation:brickapa var(--dur-3) var(--ease)}
+    @keyframes brickapa{from{transform:scale(.72)}to{transform:scale(1)}}
+    .stegnamn{font-size:.9rem;font-weight:500;color:var(--sky-ink-3);transition:color var(--dur-2) var(--ease)}
+    .stegpost.pa .stegnamn{color:var(--sky-ink)}
+    .streck{position:relative;flex:1;height:1px;background:var(--sky-hair)}
+    .streck::after{content:'';position:absolute;inset:0;background:var(--sky-ink);transform:scaleX(0);transform-origin:0 50%;transition:transform var(--dur-4) var(--ease)}
+    .streck.fylld::after{transform:scaleX(1)}
+
+    /* ── FÄLT OCH KNAPPAR ────────────────────────────── */
+    .field{flex:1;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-input);padding:12px 14px;font-family:inherit;font-size:.95rem;color:var(--ink);transition:border-color var(--dur-2) var(--ease),box-shadow var(--dur-2) var(--ease)}
+    .field:hover{border-color:var(--atmosphere)}
+    .field:focus{outline:none;border-color:var(--atmosphere);box-shadow:0 0 0 3px rgba(96,168,221,.25)}
+    .primar{white-space:nowrap;display:inline-flex;align-items:center;gap:9px;background-color:var(--btn-bg);background-image:linear-gradient(100deg,transparent 34%,rgba(255,255,255,.24) 50%,transparent 66%);background-size:260% 100%;background-position:130% 0;background-repeat:no-repeat;color:var(--btn-fg);border:none;border-radius:var(--r-pill);padding:13px 24px;font-family:inherit;font-size:.95rem;font-weight:500;cursor:pointer;box-shadow:0 4px 10px -4px rgba(9,66,108,.5);transition:transform var(--dur-1) var(--ease),box-shadow var(--dur-2) var(--ease),background-position var(--dur-4) var(--ease),opacity var(--dur-2) var(--ease)}
+    .primar::after{content:'→';font-size:1em;transition:transform var(--dur-2) var(--ease)}
+    .primar:hover{background-color:#006FD6;background-position:-30% 0;box-shadow:0 12px 26px -10px rgba(9,66,108,.62);transform:translateY(-1px)}
+    .primar:hover::after{transform:translateX(4px)}
+    .primar:active{transform:translateY(0) scale(.976)}
+    /* Ett avstängt läge ska SE avstängt ut — annars klickar man i tomma luften */
+    .primar:disabled{background-color:var(--track);background-image:none;color:var(--ink-3);cursor:default;box-shadow:none;transform:none}
+    .primar:disabled:hover{background-color:var(--track);color:var(--ink-3);transform:none;box-shadow:none}
+    /* Finns redan ett utkast på skärmen är godkännandet sidans huvudväg — då
+       kliver «Skriv om» ner till ghost, så att bara EN knapp är mörkblå. */
+    .primar.nedtonad{background-color:transparent;background-image:none;color:var(--sky-deep);border:1px solid var(--sky-deep);padding:12px 23px;box-shadow:none}
+    .primar.nedtonad:hover{background-color:#006FD6;border-color:#006FD6;color:#fff;box-shadow:0 10px 22px -10px rgba(9,66,108,.5)}
+    /* väntar på ifyllt moment — samma mörkblå fyllning, bara utan lyft */
+    .primar[data-vantar]{cursor:pointer;box-shadow:none}
+    .primar[data-vantar]::after{opacity:.55}
+    /* stegvis planering — nästa steg tonar in när det föregående är klart */
+    .plansteg{transition:opacity .34s cubic-bezier(.2,.6,.2,1),filter .34s cubic-bezier(.2,.6,.2,1)}
+    .plansteg[data-last]{opacity:.28;filter:saturate(.3);pointer-events:none}
+    .stegklar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px}
+    .kallflik{display:flex;flex-direction:column;gap:10px;align-items:flex-end}
+    #detaljsam{align-items:baseline}
+    #detaljsam .mjuk{flex:1 1 auto}
+    /* lägesval — tre kort i stället för en segmentrad */
+    .kort3{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+    @media (max-width:860px){.kort3{grid-template-columns:repeat(2,1fr)}}
+    .lagekort{position:relative;text-align:left;padding:18px 16px;border:1px solid var(--line);border-radius:var(--r-card);background-color:var(--surface);background-image:linear-gradient(100deg,transparent 34%,rgba(255,255,255,.3) 50%,transparent 66%);background-size:260% 100%;background-position:130% 0;background-repeat:no-repeat;cursor:pointer;font-family:inherit;color:var(--ink);transition:border-color var(--dur-2) var(--ease),background-color var(--dur-2) var(--ease),background-position var(--dur-4) var(--ease),box-shadow var(--dur-2) var(--ease),transform var(--dur-1) var(--ease),color var(--dur-2) var(--ease)}
+    /* Hovern får aldrig se ut som valet: det valda är mörkblått, hovern ljusnar.
+       Förr fyllde båda samma --btn-bg och då gick det inte att se vad som var valt
+       så länge musen låg över ett grannkort. */
+    .lagekort:hover,.lagekort[aria-pressed='true']{border-color:transparent;background-position:-30% 0;color:#fff;box-shadow:0 14px 28px -14px rgba(9,66,108,.62);transform:translateY(-1px)}
+    .lagekort[aria-pressed='true']{background-color:var(--btn-bg)}
+    .lagekort:hover{background-color:#006FD6}
+    .lagekort:hover span,.lagekort[aria-pressed='true'] span{color:rgba(255,255,255,.78)}
+    .lagekort:active{transform:translateY(0) scale(.99)}
+    .lagekort b{display:block;font-size:1.05rem;font-weight:600;margin-bottom:5px}
+    .lagekort span{display:block;font-size:.78rem;line-height:1.45;color:var(--ink-3)}
+    /* underlag — dropzon i stället för knapprad */
+    .dropzon{border:1.5px dashed var(--line-2);border-radius:var(--r-card);background:var(--sunken);padding:30px 24px;text-align:center;cursor:pointer;transition:border-color var(--dur-2) var(--ease),background-color var(--dur-2) var(--ease)}
+    .dropzon:hover{border-color:var(--atmosphere)}
+    .dropzon[data-over]{border-color:var(--accent);background:var(--accent-weak)}
+    .dropzon p{margin:0 0 6px;font-size:.95rem;font-weight:500}
+    .dzlankar{display:flex;gap:20px;justify-content:center;margin-top:14px}
+    .utanrad{display:flex;align-items:center;justify-content:center;gap:14px;margin-top:16px;padding-top:16px;border-top:1px solid var(--line);flex-wrap:wrap}
+    #underlag{display:block}
+    #lektionsvalj{position:relative}
+    #lektionsvalj{justify-self:start}
+    .field.pekar{border-color:var(--atmosphere);animation:pekapa 1.1s var(--ease) 2}
+    @keyframes pekapa{0%,100%{box-shadow:0 0 0 0 rgba(96,168,221,0)}45%{box-shadow:0 0 0 4px rgba(96,168,221,.4)}}
+    .primar:disabled::after{opacity:.5}
+    .primar:disabled:hover::after{transform:none}
+    /* En enda hovergest i hela appen: blå fyllning, ett litet lyft, en glans som
+       sveper vänster→höger och en pil som glider med. */
+    .ghost{white-space:nowrap;display:inline-flex;align-items:center;gap:9px;background-color:transparent;background-image:linear-gradient(100deg,transparent 34%,rgba(255,255,255,.3) 50%,transparent 66%);background-size:260% 100%;background-position:130% 0;background-repeat:no-repeat;color:var(--sky-deep);border:1px solid var(--sky-deep);border-radius:var(--r-pill);padding:11px 20px;font-family:inherit;font-size:.9rem;font-weight:500;cursor:pointer;transition:background-color var(--dur-2) var(--ease),background-position var(--dur-4) var(--ease),color var(--dur-2) var(--ease),border-color var(--dur-2) var(--ease),box-shadow var(--dur-2) var(--ease),transform var(--dur-1) var(--ease)}
+    .ghost:hover{background-color:#006FD6;background-position:-30% 0;color:#fff;border-color:#006FD6;transform:translateY(-1px);box-shadow:0 10px 22px -10px rgba(9,66,108,.5)}
+    .ghost:active{transform:translateY(0) scale(.976)}
+    .ghost[data-pil]::after{content:'→';font-size:1em;transition:transform var(--dur-2) var(--ease)}
+    .ghost:hover[data-pil]::after{transform:translateX(4px)}
+    .ghost:disabled{opacity:.45;cursor:default;box-shadow:none;transform:none}
+    .ghost:disabled:hover{background-color:transparent;color:var(--sky-deep);border-color:var(--sky-deep);transform:none;box-shadow:none}
+    .paa-himmel .ghost,.pa-himmel.ghost{color:#000;border-color:rgba(0,0,0,.34);background-color:rgba(255,255,255,.72);backdrop-filter:blur(6px)}
+    .paa-himmel .ghost:hover,.pa-himmel.ghost:hover{background-color:#006FD6;color:#fff;border-color:#006FD6}
+    /* Träffytan är 28 px hög även när texten är liten — förr var «Avbryt kön» och
+       «Ta bort förlagan» 21 px och krävde precision med musen. */
+    .lank{position:relative;display:inline-flex;align-items:center;min-height:28px;border:none;background:transparent;color:var(--ink-2);font-family:inherit;font-size:.9rem;padding:3px 0;cursor:pointer;transition:color var(--dur-2) var(--ease)}
+    .lank::after{content:'';position:absolute;left:0;right:0;bottom:4px;height:1px;background:currentColor;opacity:.26;transform-origin:0 50%;transition:opacity var(--dur-2) var(--ease)}
+    .lank:hover{color:var(--ink)}
+    .lank:hover::after{opacity:1}
+    .minietikett{white-space:nowrap;font-size:.72rem;font-weight:500;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);flex:0 0 auto;line-height:1.5}
+
+    /* ── SEGMENT ─────────────────────────────────────── */
+    .seg{position:relative;display:inline-flex;gap:2px;padding:4px;background:var(--track);border-radius:var(--r-pill)}
+    /* Bytet är en RÖRELSE, inte ett hopp: pillen glider över och tar sin nya bredd
+    i samma svep, med en aning fjäder i slutet. Etiketterna tonar med, långsamt
+    nog att ögat hinner följa vilken som blir vald. */
+    .segglid{position:absolute;left:4px;top:4px;bottom:4px;width:0;border-radius:var(--r-pill);background:var(--surface);box-shadow:var(--shadow-sm);transition:transform 460ms cubic-bezier(.31,.86,.35,1),width 460ms cubic-bezier(.31,.86,.35,1),opacity var(--dur-2) var(--ease)}
+    @media (prefers-reduced-motion:reduce){.segglid{transition:opacity var(--dur-2) var(--ease)}}
+    .segglid:not([data-klar]){opacity:0}
+    .seg button{white-space:nowrap;position:relative;z-index:1;border:none;border-radius:var(--r-pill);padding:9px 18px;background-color:transparent;background-image:linear-gradient(100deg,transparent 34%,rgba(255,255,255,.3) 50%,transparent 66%);background-size:260% 100%;background-position:130% 0;background-repeat:no-repeat;color:var(--ink-3);font-family:inherit;font-size:.9rem;font-weight:500;cursor:pointer;transition:color 300ms var(--ease),background-color var(--dur-2) var(--ease),background-position var(--dur-4) var(--ease),transform var(--dur-1) var(--ease),box-shadow var(--dur-2) var(--ease)}
+    .seg button:hover{color:var(--ink)}
+    /* Hovern ska inte vara radens starkaste yta. Det valda är ett vitt piller med
+       skugga — förr fylldes hovern mörkblå, och då lyste det man INTE valt
+       kraftigare än valet. Nu ljusnar hovern till en ljusblå ton. (--accent-weak
+       går inte: den är #E6F1FA mot spårets #E8F1F8 — samma färg i praktiken.) */
+    .seg:not(.flerval) button:hover:not([aria-pressed='true']){background-color:var(--sky-pale);color:var(--ink);transform:translateY(-1px)}
+    .seg button:active{transform:translateY(0) scale(.976)}
+    /* Det valda ska vara radens starkaste text, inte dess blekaste: förr stod det
+       i blått på vitt piller medan de ovalda stod i mörk text — ögat läste valet
+       som avstängt. */
+    .seg button[aria-pressed='true']{color:var(--ink);font-weight:600}
+    /* Markeringen ÄR det vita pillret. Förr bars det ENBART av .segglid, som
+       motion.js mäter fram — och ett segment som byggs in i en panel medan den
+       är hidden, eller som ritas om av plan.js, fick aldrig sin mätning. Följden
+       var att «Balanserat» och «Del B + Del C» stod som fetare text på tom
+       platta: det gick inte att se vad som var valt. Nu bär KNAPPEN pillret i
+       ren CSS, och den glidande spanen tar över först när den är mätt — så finns
+       markeringen alltid, och animeringen när den kan. */
+    .seg:not(.flerval) button[aria-pressed='true']{background-color:var(--surface);box-shadow:var(--shadow-sm)}
+    .seg:not(.flerval):has(.segglid[data-klar]) button[aria-pressed='true']{background-color:transparent;box-shadow:none}
+    .verktyg .seg:not(.flerval) button[aria-pressed='true']{background-color:rgba(255,255,255,.92)}
+    .seg.flerval button[aria-pressed='true']{color:var(--sky-deep)}
+    .halva .seg{display:flex}.halva .seg button{flex:1 1 0}
+    .seg.flerval{gap:8px;padding:0;background:transparent}
+    .seg.flerval button{border:1px solid var(--line);border-radius:var(--r-pill);padding:8px 16px;transition:background-color var(--dur-2) var(--ease),background-position var(--dur-4) var(--ease),border-color var(--dur-2) var(--ease),color var(--dur-2) var(--ease),transform var(--dur-1) var(--ease),box-shadow var(--dur-2) var(--ease)}
+    /* Chipsen: det VALDA äger fyllningen (ljusblå), hovern äger bara ramen. Två
+       fyllningar hade blivit samma färg, och en mörkblå hover såg starkare ut
+       än valet. */
+    .seg.flerval button:hover:not([aria-pressed='true']){border-color:var(--atmosphere);color:var(--ink);transform:translateY(-1px);box-shadow:0 4px 12px -8px rgba(9,66,108,.4)}
+    .seg.flerval button[aria-pressed='true']:hover{background:var(--sky-pale);border-color:var(--sky-deep)}
+    .seg.flerval button[aria-pressed='true']{background:var(--accent-weak);color:var(--sky-deep);border-color:var(--atmosphere);animation:valdpop var(--dur-2) var(--ease)}
+    @keyframes valdpop{50%{transform:scale(1.05)}}
+
+    /* ── STEG 1 ──────────────────────────────────────── */
+    .dropzone{position:relative;overflow:hidden;background:var(--sunken);border:1px dashed var(--line-2);border-radius:var(--r-card);padding:28px 24px;cursor:pointer;transition:border-color var(--dur-2) var(--ease),background-color var(--dur-2) var(--ease),transform var(--dur-2) var(--ease),box-shadow var(--dur-2) var(--ease)}
+    .dropzone::after{content:'';position:absolute;inset:0;background:radial-gradient(60% 120% at 50% 130%,rgba(96,168,221,.28),transparent 70%);opacity:0;transition:opacity var(--dur-3) var(--ease)}
+    .dropzone:hover{border-style:solid;border-color:var(--sky-deep);background:var(--sky-pale);transform:translateY(-2px);box-shadow:0 12px 24px -16px rgba(13,92,150,.5)}
+    .dropzone:hover::after{opacity:1}
+    .dropzone:active{transform:translateY(0) scale(.99)}
+    .dz-titel{position:relative;z-index:1;font-size:1rem;font-weight:600;color:var(--ink);margin:0 0 5px}
+    .dz-under{position:relative;z-index:1;font-size:.85rem;color:var(--ink-2);margin:0}
+    .falt-rad{display:flex;align-items:center;gap:14px;margin:22px 0 0}
+    .prova{font-size:.88rem;color:var(--ink-3);margin:18px 0 0;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+    .inspelningsrad{display:flex;align-items:center;gap:14px;background:var(--sunken);border-radius:var(--r-card);padding:14px 14px 14px 20px;margin:12px 0 0;transition:background-color var(--dur-3) var(--ease)}
+    .inspelningsrad p{flex:1;margin:0;font-size:.92rem;color:var(--ink-2)}
+    .inspelningsrad.spelar{background:color-mix(in srgb,var(--berry) 10%,var(--surface))}
+    .kolista{display:flex;flex-direction:column;margin:14px 0 0}
+    .kolista:empty{display:none}
+    .korad{display:grid;grid-template-columns:44px minmax(0,1fr) auto auto;grid-template-areas:'typ namn langd bort' '. mark mark mark';align-items:center;gap:10px 14px;padding:14px 2px}
+    .korad+.korad{border-top:1px solid var(--line)}
+    .korad[data-ny='1']{animation:radin var(--dur-3) var(--ease) both}
+    @keyframes radin{from{opacity:0;transform:translateX(-12px);max-height:0;padding-top:0;padding-bottom:0}to{opacity:1;transform:none;max-height:220px;padding-top:14px;padding-bottom:14px}}
+    .korad .kotyp{grid-area:typ}
+    .korad .konamn{grid-area:namn;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.95rem;color:var(--ink)}
+    .korad .kolangd{grid-area:langd;font-family:var(--mono);font-size:.75rem;color:var(--ink-3)}
+    .korad .ta-bort{grid-area:bort}
+    .komark{grid-area:mark;display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+    .komini{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-pill);padding:6px 12px;font-family:inherit;font-size:.8rem;color:var(--ink);cursor:pointer;transition:border-color var(--dur-2) var(--ease),color var(--dur-2) var(--ease)}
+    .komini:hover{border-color:var(--atmosphere)}
+    .komini:focus{outline:none;border-color:var(--atmosphere);box-shadow:0 0 0 3px rgba(96,168,221,.25)}
+    input.komini{font-family:var(--mono);font-variant-numeric:tabular-nums}
+    .komini[data-tom]{color:var(--ink-3);font-style:italic}
+    .komini[data-gissad]{border-style:dashed;border-color:var(--atmosphere);color:var(--ink-2)}
+    .gissatnot{display:flex;align-items:center;gap:7px;font-size:.78rem;color:var(--ink-3)}
+    .kodatum{font-size:.8rem;color:var(--ink-2);white-space:nowrap}
+    .gissatnot::before{content:'';width:5px;height:5px;border-radius:50%;background:var(--atmosphere);flex:0 0 auto}
+    .instrad{position:relative;display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:22px 0 0;padding-top:18px;border-top:1px solid var(--line)}
+    .instval{position:relative;flex:0 0 auto}
+    .instchip[aria-expanded='true']{background-color:var(--sky-deep);border-color:var(--sky-deep);color:#fff}
+    .instpanel{position:absolute;z-index:60;top:calc(100% + 14px);left:0;width:min(460px,100%);background:var(--surface);border-radius:14px;box-shadow:0 26px 50px -22px rgba(9,66,108,.55),0 2px 6px rgba(9,66,108,.12);padding:20px;transform-origin:top left;animation:valjin 300ms cubic-bezier(.16,1,.3,1) both}
+    .instpanel[data-ut]{animation-name:valjut;animation-duration:120ms;animation-timing-function:cubic-bezier(.32,0,.67,0);pointer-events:none}
+    .instpanel.upp{top:auto;bottom:calc(100% + 14px);transform-origin:bottom left}
+    /* Bron över glänten: panelens träffyta börjar vid chipsradens underkant, så att
+       vägen ner till menyn aldrig räknas som ett avhopp. */
+    .instpanel::before{content:'';position:absolute;left:-12px;right:-12px;top:-18px;height:18px}
+    .instpanel::after{content:'';position:absolute;left:-12px;right:-12px;bottom:-18px;height:18px}
+    .instpanel .fot{margin:16px 0 0}
+    /* En typstorlek och ett typsnitt i alla tre paneler */
+    .instpanel,.instpanel p,.instpanel button{font-family:var(--sans);font-size:.92rem}
+    .sprakfakta{display:flex;align-items:center;gap:9px;margin:0;color:var(--ink-2)}
+    .instetikett{margin:16px 0 9px;color:var(--ink-2)}
+    .instrubrik{margin:0;color:var(--ink);font-weight:500}
+    .insttext{margin:4px 0 0;color:var(--ink-2)}
+    .sprakfakta b{font-weight:600;color:var(--ink)}
+    .seg.brett{display:flex;width:100%}
+    .seg.brett button{flex:1 1 0}
+    .instswitchrad{display:flex;align-items:flex-start;gap:14px}
+    /* Reglaget står direkt i raden — en inställning med två lägen behöver ingen
+       panel att öppna, den behöver bara synas. */
+    /* Kontrollerna talar själva: "Svenska/Engelska" och "SRT/TXT/VTT" behöver
+       ingen rubrik. Kvar blir en ledtext, tre kontroller och två hårstreck. */
+    .instrad .seg{flex:0 0 auto;padding:3px}
+    .instrad .seg button{padding:6px 14px;font-size:.84rem}
+    .instrad .seg.flerval{gap:6px;padding:0}
+    .instrad .seg.flerval button{padding:5px 12px;font-size:.8rem}
+    .lodlinje{width:1px;height:24px;background:var(--line-2);flex:0 0 auto;margin:0 4px}
+    .instswitch{display:inline-flex;align-items:center;gap:8px;flex:0 0 auto;font-size:.84rem;color:var(--ink-2);cursor:pointer;user-select:none;transition:color var(--dur-2) var(--ease)}
+    .instswitch:hover{color:var(--ink)}
+    .instswitch .switch{width:34px;height:21px}
+    .instswitch .knopp{width:15px;height:15px;transform:translateX(13px)}
+    .instswitch .switch[aria-pressed='false'] .knopp{transform:translateX(0)}
+    .instswitch:has(.switch[aria-pressed='false']) .instswitchtext{color:var(--ink-3)}
+    .skiva:has(.instpanel:not([hidden])){z-index:80}
+    .korfot{display:flex;align-items:center;gap:10px;margin:0 0 18px;font-size:.85rem;color:var(--ink-2)}
+    .progtopp .pkvar{font-size:.8rem;color:var(--ink-3);white-space:nowrap}
+    .ta-bort{background:transparent;border:none;color:var(--ink-3);font-family:inherit;cursor:pointer;padding:4px 6px;border-radius:var(--r-pill);transition:color var(--dur-2) var(--ease),background-color var(--dur-2) var(--ease),transform var(--dur-2) var(--ease)}
+    .ta-bort:hover{color:#fff;background:var(--berry);transform:rotate(90deg)}
+    .klocka{font-family:var(--mono);font-size:.85rem;font-variant-numeric:tabular-nums;color:var(--berry);display:inline-flex;align-items:center;gap:8px}
+    .klocka::before{content:'';width:7px;height:7px;border-radius:50%;background:var(--berry);animation:puls 1.4s var(--ease) infinite}
+    @keyframes puls{0%,100%{opacity:.35;transform:scale(.8)}50%{opacity:1;transform:scale(1)}}
+    .vidare{margin:22px 0 0;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+    .skiva .vidare{margin-top:24px}
+    .skal{font-size:.88rem;color:var(--sky-ink-2)}
+    .skiva .skal{color:var(--ink-2)}
+    .skiva .lank{color:var(--ink-2)}
+    .vidare .lank{color:var(--sky-ink-2)}
+    .vidare .lank:hover{color:var(--sky-ink)}
+    .skiva .vidare .lank{color:var(--ink-2)}
+    .skiva .vidare .lank:hover{color:var(--ink)}
+
+    /* ── STEG 2 ──────────────────────────────────────── */
+    .ruta{background:var(--sunken);border-radius:var(--r-card);padding:18px 20px;margin-top:14px}
+    .par{display:flex;align-items:flex-end;gap:18px}
+    .halva{flex:1 1 0;display:flex;flex-direction:column;gap:9px}
+    .halva .rub{font-size:.9rem;color:var(--ink-2)}
+    .pil{color:var(--atmosphere);padding-bottom:10px}
+    .fot{display:flex;align-items:center;gap:10px;margin:16px 0 0;padding-top:14px;border-top:1px solid var(--line);font-size:.85rem;color:var(--ink-2);flex-wrap:wrap}
+    .prick{width:8px;height:8px;border-radius:50%;background:var(--ok);flex:0 0 auto}
+    .hint{margin-left:auto;color:var(--ink-3)}
+    .radruta{display:flex;align-items:center;gap:16px;background:var(--sunken);border-radius:var(--r-card);padding:16px 20px;margin-top:14px}
+    /* Påslaget är mörkblått, inte cerulean: två lysande blå reglage drog mer
+       uppmärksamhet till sig än «Skriv provet», som är radens huvudväg. */
+    .switch{width:42px;height:26px;border-radius:var(--r-pill);border:1px solid var(--sky-deep);background:var(--sky-deep);padding:2px;flex:0 0 auto;cursor:pointer;transition:background-color var(--dur-2) var(--ease),border-color var(--dur-2) var(--ease)}
+    .knopp{display:block;width:20px;height:20px;border-radius:50%;background:var(--knob);transform:translateX(16px);box-shadow:0 1px 3px rgba(9,66,108,.3);transition:transform var(--dur-2) var(--ease)}
+    .mjuk{font-size:.78rem;color:var(--ink-3)}
+    .ko-topp{display:flex;align-items:center;gap:12px;margin-bottom:6px}
+
+    /* ── STEG 3 ──────────────────────────────────────── */
+    .prograd{margin-top:16px}
+    .prograd+.prograd{margin-top:20px}
+    .progtopp{display:flex;align-items:baseline;gap:10px}
+    .progtopp .pnamn{flex:1;font-size:.95rem;color:var(--ink);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .progtopp .ppct{font-family:var(--mono);font-size:.75rem;color:var(--ink-3);font-variant-numeric:tabular-nums}
+    .progtopp .pklocka{font-family:var(--mono);font-size:.72rem;color:var(--ink-2);font-variant-numeric:tabular-nums}
+    .fassteg{list-style:none;margin:16px 0 0;padding:0}
+    .fas{display:grid;grid-template-columns:16px 1fr auto;align-items:center;gap:12px;padding:9px 0;border-top:1px solid var(--line);font-size:.88rem;color:var(--ink);transition:opacity var(--dur-2) var(--ease)}
+    .fas:first-child{border-top:none}
+    .fasikon{width:14px;height:14px;border-radius:50%;border:1.5px solid var(--line-2);display:grid;place-items:center;font-size:.6rem;line-height:1;justify-self:center;box-sizing:border-box}
+    .fas[data-lage='vantar']{opacity:.4}
+    .fas[data-lage='kor'] .fasikon{border-color:var(--atmosphere);border-top-color:transparent;animation:snurr .8s linear infinite}
+    .fas[data-lage='kor'] .fasnamn{font-weight:600}
+    .fas[data-lage='klar'] .fasikon{background:var(--sky-deep);border-color:var(--sky-deep);color:#fff}
+    .fas[data-lage='klar'] .fasikon::after{content:'✓'}
+    @keyframes snurr{to{transform:rotate(360deg)}}
+    .fasdetalj{font-family:var(--mono);font-size:.72rem;color:var(--ink-2);text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:46vw}
+    .spar{position:relative;height:6px;border-radius:var(--r-pill);background:var(--track);margin-top:9px;overflow:hidden}
+    .fyll{position:relative;display:block;height:100%;width:0;border-radius:var(--r-pill);background:linear-gradient(90deg,var(--sky-deep),var(--atmosphere));transition:width .3s var(--ease)}
+    .fyll::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.6),transparent);animation:skimra 1.3s linear infinite}
+    .fyll[style*='100%']::after{animation:none;opacity:0}
+    @keyframes skimra{from{transform:translateX(-100%)}to{transform:translateX(100%)}}
+    .chips{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0 0}
+    .chip{border:1px solid var(--line);border-radius:var(--r-pill);background:var(--surface);color:var(--ink);font-family:inherit;font-size:.82rem;font-weight:500;padding:8px 16px;cursor:pointer;transition:background-color var(--dur-2) var(--ease),border-color var(--dur-2) var(--ease),color var(--dur-2) var(--ease),transform var(--dur-1) var(--ease)}
+    .chip{background-image:linear-gradient(100deg,transparent 34%,rgba(255,255,255,.3) 50%,transparent 66%);background-size:260% 100%;background-position:130% 0;background-repeat:no-repeat;transition:background-color var(--dur-2) var(--ease),background-position var(--dur-4) var(--ease),border-color var(--dur-2) var(--ease),color var(--dur-2) var(--ease),transform var(--dur-1) var(--ease),box-shadow var(--dur-2) var(--ease)}
+    .chip:hover:not([data-vald]){background-color:var(--sky-deep);background-position:-30% 0;border-color:var(--sky-deep);color:#fff;transform:translateY(-1px);box-shadow:0 8px 18px -10px rgba(9,66,108,.5)}
+    .chip:active{transform:translateY(0) scale(.976)}
+    /* Ett valt bankchips ljusnar på hover — det fyller redan --navy. */
+    #bankfilter .chip:hover:not([data-vald]){background-color:var(--sky-pale);border-color:var(--atmosphere);color:var(--ink);box-shadow:0 4px 12px -8px rgba(9,66,108,.4)}
+    #bankfilter .chip[data-vald]:hover{background-color:#006FD6;border-color:#006FD6;color:#fff}
+
+    /* ── INSPELNINGAR ────────────────────────────────── */
+    .sokfalt{display:flex;align-items:center;gap:8px;background:var(--surface);border-radius:var(--r-pill);padding:6px 6px 6px 20px;box-shadow:var(--shadow-sm);transition:box-shadow var(--dur-3) var(--ease),transform var(--dur-3) var(--ease)}
+    .sokfalt:focus-within{box-shadow:0 14px 30px -18px rgba(9,66,108,.55);transform:translateY(-1px)}
+    .sokfalt input{flex:1;border:none;background:transparent;font-family:inherit;font-size:.98rem;color:var(--ink);outline:none;min-width:0}
+    .kor{background-color:var(--btn-bg);background-image:linear-gradient(100deg,transparent 34%,rgba(255,255,255,.24) 50%,transparent 66%);background-size:260% 100%;background-position:130% 0;background-repeat:no-repeat;color:var(--btn-fg);border:none;border-radius:var(--r-pill);padding:11px 22px;font-family:inherit;font-size:.9rem;font-weight:500;cursor:pointer;transition:transform var(--dur-1) var(--ease),box-shadow var(--dur-2) var(--ease),background-color var(--dur-2) var(--ease),background-position var(--dur-4) var(--ease)}
+    .kor:hover{background-color:#006FD6;background-position:-30% 0;box-shadow:0 10px 20px -10px rgba(9,66,108,.6);transform:translateY(-1px)}
+    .kor:active{transform:translateY(0) scale(.976)}
+    .verktyg{display:flex;align-items:center;gap:14px;margin:14px 0 0;flex-wrap:wrap}
+    .verktyg .seg{background:rgba(255,255,255,.22)}
+    .verktyg .seg{background:rgba(255,255,255,.5)}
+    .verktyg .seg button{color:var(--sky-ink-2)}
+    .verktyg .seg button:hover{color:var(--sky-ink)}
+    .verktyg .seg button[aria-pressed='true']{color:var(--sky-deep)}
+    .filterrad{position:relative;z-index:30;display:flex;gap:12px;margin:20px 0 0;flex-wrap:wrap}
+    .valj[data-oppen]{z-index:2}
+    .skiva:has(.valj[data-oppen]),.kort:has(.minipanel){z-index:80}
+    /* köraden måste lyftas över raderna under sig medan en väljare är öppen */
+    .korad{position:relative;z-index:1;border-radius:var(--r-card);transition:background var(--dur-2) var(--ease),box-shadow var(--dur-2) var(--ease)}
+    .korad:has(.valj[data-oppen]){z-index:80;background:var(--surface);box-shadow:0 0 0 12px var(--surface),var(--shadow)}
+    .korad:has(.valj[data-oppen])+.korad{border-top-color:transparent}
+    /* En app, en dropdown: köns väljare är samma väljare som i filtren och
+       planeringen — heldragen ram, gissningen märks i notraden. */
+    .komark .valj[data-gissad] .valjknapp{border-style:solid;border-color:var(--atmosphere)}
+    .filterrad .field{flex:0 0 auto;border-radius:var(--r-pill);padding:10px 16px;font-size:.88rem;border-color:transparent;box-shadow:var(--shadow-sm)}
+    .filterrad input.field{font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--ink)}
+    .valj{position:relative;flex:0 0 auto}
+    .valj select{position:absolute;inset:0;opacity:0;pointer-events:none}
+    .valjknapp{display:inline-flex;align-items:center;gap:10px;background-color:var(--surface);background-image:linear-gradient(100deg,transparent 34%,rgba(255,255,255,.3) 50%,transparent 66%);background-size:260% 100%;background-position:130% 0;background-repeat:no-repeat;border:1px solid transparent;border-radius:var(--r-pill);box-shadow:var(--shadow-sm);padding:10px 16px;font-family:inherit;font-size:.88rem;font-weight:500;color:var(--ink);cursor:pointer;transition:background-color var(--dur-2) var(--ease),background-position var(--dur-4) var(--ease),color var(--dur-2) var(--ease),box-shadow var(--dur-2) var(--ease),border-color var(--dur-2) var(--ease),transform var(--dur-1) var(--ease)}
+    /* Hovern på en VÄLJARE är tyst: en ram som tänds och en aning ton. Den
+       svepande mörkblå fyllningen är kvar på allt som GÖR något — knappar, kort,
+       chips — så att färgen betyder handling och inte «musen råkade passera». */
+    .valjknapp:hover{background-color:var(--sky-pale);background-position:-30% 0;color:var(--ink);border-color:var(--atmosphere);box-shadow:0 6px 16px -12px rgba(9,66,108,.5);transform:translateY(-1px)}
+    .valjknapp:active{transform:translateY(0) scale(.976)}
+    .valjknapp:focus-visible{outline:none;border-color:var(--atmosphere);box-shadow:0 0 0 3px rgba(96,168,221,.28)}
+    .valj[data-oppen] .valjknapp{border-color:var(--atmosphere);box-shadow:0 12px 26px -16px rgba(9,66,108,.6)}
+    /* Ett VALT värde är inte en handling. Förr fylldes väljaren mörkblå så fort
+       den hade ett värde — samma färg som «Skriv provet» — och en läsbar rad såg
+       ut som en knapp att trycka på. Nu står värdet i klar text på ljus botten
+       med en tydligare ram; mörkblått är reserverat för det som HÄNDER. */
+    .valj[data-satt] .valjknapp{background-color:var(--surface);color:var(--ink);border-color:var(--atmosphere);font-weight:600;box-shadow:var(--shadow-sm)}
+    .valj[data-satt] .valjknapp:hover{background-color:var(--sky-pale);color:var(--ink);border-color:var(--sky-deep)}
+    .valj[data-satt] .valjpil{opacity:.55}
+    .valjpil{width:9px;height:9px;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:translateY(-2px) rotate(45deg);opacity:.7;transition:transform var(--dur-2) var(--ease)}
+    .valj[data-oppen] .valjpil{transform:translateY(2px) rotate(225deg)}
+    .valjpanel{position:absolute;z-index:40;top:calc(100% + 8px);left:0;min-width:100%;width:max-content;max-width:280px;background:var(--surface);border-radius:14px;box-shadow:0 26px 50px -22px rgba(9,66,108,.55),0 2px 6px rgba(9,66,108,.12);padding:6px;display:flex;flex-direction:column;gap:2px;transform-origin:top left;animation:valjin var(--dur-2) var(--ease) both}
+    @keyframes valjin{from{opacity:0;transform:translateY(-8px) scale(.97)}to{opacity:1;transform:none}}
+    @keyframes valjut{from{opacity:1;transform:none}to{opacity:0;transform:translateY(-6px) scale(.985)}}
+    html{scroll-behavior:auto}
+    .valjpanel,.kalpanel,.rader{overscroll-behavior:contain}
+    .valjpanel,.kalpanel{animation-duration:300ms;animation-timing-function:cubic-bezier(.16,1,.3,1)}
+    .valjpanel[data-ut],.kalpanel[data-ut]{animation-name:valjut;animation-duration:120ms;animation-timing-function:cubic-bezier(.32,0,.67,0);pointer-events:none}
+    /* Bron över glänten — varje meny i appen har samma osynliga träffyta mellan
+       knappen och panelen, åt båda hållen, så vägen ner räknas aldrig som ett
+       avhopp. Menyn kan då stängas snabbt utan att bli omöjlig att nå. */
+    .valjpanel::before,.kalpanel::before,.bokpanel::before,.minipanel::before,.radmeny::before,
+    .valjpanel::after,.kalpanel::after,.bokpanel::after,.minipanel::after,.radmeny::after{content:'';position:absolute;left:-12px;right:-12px;height:18px;pointer-events:auto}
+    .valjpanel::before,.kalpanel::before,.bokpanel::before,.minipanel::before,.radmeny::before{top:-18px}
+    .valjpanel::after,.kalpanel::after,.bokpanel::after,.minipanel::after,.radmeny::after{bottom:-18px}
+    .valjrad{display:grid;grid-template-columns:16px 1fr;align-items:center;gap:10px;border:none;background:transparent;border-radius:9px;padding:9px 12px;font-family:inherit;font-size:.9rem;color:var(--ink);text-align:left;white-space:nowrap;cursor:pointer;transition:background-color var(--dur-1) var(--ease),color var(--dur-1) var(--ease)}
+    .valjrad:hover,.valjrad:focus-visible{outline:none;background:var(--accent-weak);color:var(--ink)}
+    .valjrad:hover .tagg,.valjrad:focus-visible .tagg,.valjrad:hover .mjuk,.valjrad:focus-visible .mjuk{color:var(--ink)}
+    .valjrad[aria-selected='true']{font-weight:600;color:var(--sky-deep)}
+    .valjbock{opacity:0;font-size:.7rem;justify-self:center}
+    .valjrad[aria-selected='true'] .valjbock{opacity:1}
+    .filterrad input.field::-webkit-calendar-picker-indicator{cursor:pointer;opacity:.75}
+    .kalpanel{position:absolute;z-index:60;top:calc(100% + 8px);left:0;width:318px;background:var(--surface);border-radius:16px;box-shadow:0 30px 56px -24px rgba(9,66,108,.6),0 2px 6px rgba(9,66,108,.12);padding:14px;transform-origin:top left;animation:valjin var(--dur-2) var(--ease) both}
+    .kalhuvud{display:flex;align-items:center;gap:6px;margin:0 0 10px}
+    .kalman{flex:1;border:none;background:transparent;border-radius:9px;padding:7px 10px;font-family:inherit;font-size:.95rem;font-weight:600;color:var(--ink);text-transform:capitalize;cursor:pointer;transition:background-color var(--dur-1) var(--ease),color var(--dur-1) var(--ease)}
+    .kalman:hover{background:var(--sky-pale);color:var(--ink)}
+    .kalman[aria-pressed='true']{background:var(--sky-deep);color:#fff}
+    .kalpil{width:30px;height:30px;flex:0 0 auto;border:none;border-radius:50%;background:transparent;color:var(--ink-2);font-family:inherit;font-size:1rem;cursor:pointer;transition:background-color var(--dur-1) var(--ease),color var(--dur-1) var(--ease)}
+    .kalpil:hover{background:var(--sky-pale);color:var(--ink)}
+    .kalrutnat{display:grid;grid-template-columns:26px repeat(7,1fr);gap:2px}
+    .kaltopp{font-size:.72rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);text-align:center;padding:4px 0 6px}
+    .kalvecka,.kaldag{border:none;background:transparent;font-family:inherit;cursor:pointer;border-radius:8px;transition:background-color var(--dur-1) var(--ease),color var(--dur-1) var(--ease)}
+    .kalvecka{font-family:var(--mono);font-size:.72rem;color:var(--ink-3);padding:0}
+    .kalvecka:hover{background:var(--sky-pale);color:var(--ink)}
+    .kaldag{position:relative;aspect-ratio:1;display:grid;place-items:center;font-size:.82rem;font-variant-numeric:tabular-nums;color:var(--ink)}
+    .kaldag[data-utanfor]{opacity:.4}
+    /* Idag är kalenderns fixpunkt — ringad, aldrig utsuddad, och veckonumret med. */
+    .kaldag[data-idag]{font-weight:700;color:var(--sky-deep);box-shadow:inset 0 0 0 1.5px var(--sky-deep);opacity:1}
+    .kaldag[data-idag][data-utanfor]{opacity:.75}
+    .kaldag[data-idag]:hover{color:var(--ink)}
+    .kaldag[data-idag][aria-pressed='true']{color:#fff}
+    .kalvecka[data-idag]{color:var(--sky-deep);font-weight:700;background:var(--sky-mist,rgba(96,168,221,.16))}
+    .kaldag:hover{background:var(--sky-pale);color:var(--ink)}
+    .kaldag:hover::after{background:var(--sky-deep)}
+    .kaldag[data-finns]::after{content:'';position:absolute;bottom:4px;width:4px;height:4px;border-radius:50%;background:var(--atmosphere)}
+    .kaldag[aria-pressed='true'],.kalvecka[aria-pressed='true']{background:var(--sky-deep);color:#fff;font-weight:600}
+    .kaldag[aria-pressed='true']::after{background:#fff}
+    .kalfot{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:12px 0 0;padding-top:10px;border-top:1px solid var(--line)}
+    .kalfot .lank{font-size:.82rem;color:var(--ink-2)}
+    .kaltips{font-size:.74rem;color:var(--ink-3)}
+    .kaltid{margin:12px 0 0;padding-top:12px;border-top:1px solid var(--line)}
+    .kaltidrubrik{display:block;font-size:.72rem;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);margin:0 0 8px}
+    .kaltidfalt{width:100%;border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:10px 12px;font-family:var(--sans);font-size:1.06rem;font-weight:500;letter-spacing:.01em;font-variant-numeric:tabular-nums;color:var(--ink);text-align:center;transition:border-color var(--dur-2) var(--ease),box-shadow var(--dur-2) var(--ease)}
+    .kaltidfalt::placeholder{color:var(--ink-3);letter-spacing:.1em}
+    .kaltidfalt:focus{outline:none;border-color:var(--atmosphere);box-shadow:0 0 0 3px rgba(96,168,221,.25)}
+    .modalskal{position:fixed;inset:0;z-index:200;display:grid;place-items:center;padding:28px;background:rgba(9,66,108,.4);backdrop-filter:blur(7px);opacity:0;transition:opacity var(--dur-2) var(--ease)}
+    .modalskal[data-pa]{opacity:1}
+    .modal{width:min(680px,100%);max-height:min(84vh,760px);display:flex;flex-direction:column;background:var(--surface);border-radius:20px;box-shadow:0 40px 80px -30px rgba(4,26,42,.7);overflow:hidden;transform:translateY(12px) scale(.985);transition:transform var(--dur-3) var(--ease)}
+    .modalskal[data-pa] .modal{transform:none}
+    .chatthuvud{display:flex;align-items:flex-start;gap:16px;padding:22px 24px 16px;border-bottom:1px solid var(--line)}
+    .chattetikett{margin:0 0 4px;font-size:.72rem;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--sky-deep)}
+    .chatttitel{margin:0;font-family:var(--serif);font-weight:600;font-size:1.5rem;line-height:1.15;color:var(--ink)}
+    .chattmeta{margin:5px 0 0;font-size:.82rem;color:var(--ink-2);font-family:var(--sans);letter-spacing:0}
+    .stangx{margin-left:auto;flex:0 0 auto;width:32px;height:32px;border:none;border-radius:50%;background-color:var(--sunken);color:var(--ink-2);font-family:inherit;font-size:.8rem;cursor:pointer;transition:background-color var(--dur-1) var(--ease),color var(--dur-1) var(--ease)}
+    /* Runda kromknappar bär appens enda hovergest: samma blå (#006FD6) som
+       .ghost och briefens rader, samma glans som sveper vänster→höger. En
+       shorthand «background» här skulle nolla glanslagret — därför background-color. */
+    .stangx,.ikonknapp{background-image:linear-gradient(100deg,transparent 34%,rgba(255,255,255,.34) 50%,transparent 66%);background-size:260% 100%;background-position:130% 0;background-repeat:no-repeat;transition:background-color var(--dur-2) var(--ease),background-position var(--dur-4) var(--ease),color var(--dur-2) var(--ease),transform var(--dur-1) var(--ease),box-shadow var(--dur-2) var(--ease)}
+    .ikonknapp:hover{background-color:#006FD6;background-position:-30% 0;color:#fff;transform:translateY(-1px);box-shadow:0 10px 22px -10px rgba(9,66,108,.5)}
+    /* Krysset stänger — det är den enda runda knappen som tar bort något, och
+       bär därför appens bärröda gest i stället för den blå. */
+    .stangx:hover{background-color:var(--berry);background-position:-30% 0;color:#fff;transform:translateY(-1px);box-shadow:0 10px 22px -10px rgba(207,55,45,.55)}
+    .stangx:active,.ikonknapp:active{transform:translateY(0) scale(.94)}
+    .videoskal .stangx:hover{background-color:var(--berry);color:#fff}
+    .ikonknapp[aria-pressed='true']:hover{background-color:#006FD6;color:#fff}
+    .chatttrad{flex:1;overflow-y:auto;padding:20px 24px;display:flex;flex-direction:column;gap:14px}
+    /* Rullning finns kvar — listen döljs */
+    html,.chatttrad,.kolista,.arkivlista,.modal{scrollbar-width:none;-ms-overflow-style:none}
+    html::-webkit-scrollbar,.chatttrad::-webkit-scrollbar,.kolista::-webkit-scrollbar,.arkivlista::-webkit-scrollbar,.modal::-webkit-scrollbar{width:0;height:0;display:none}
+    .msg{max-width:86%;animation:stigin var(--dur-3) var(--ease) both}
+    .msg p{margin:0;font-size:.94rem;line-height:1.5}
+    .msg.jag{align-self:flex-end}
+    .msg.jag p{background:var(--sky-deep);color:#fff;border-radius:14px 14px 4px 14px;padding:11px 15px}
+    .msg.modell p{background:var(--sunken);color:var(--ink);border-radius:14px 14px 14px 4px;padding:11px 15px}
+    .msgkalla{margin:6px 0 0!important;font-size:.76rem!important;font-family:var(--sans);color:var(--ink-3)!important;background:none!important;padding:0!important}
+    .punkter{display:inline-flex;gap:5px;padding:12px 15px;background:var(--sunken);border-radius:14px}
+    .punkter i{width:6px;height:6px;border-radius:50%;background:var(--atmosphere);animation:puls 1.1s var(--ease) infinite}
+    .punkter i:nth-child(2){animation-delay:.16s}.punkter i:nth-child(3){animation-delay:.32s}
+    .forslag{margin:10px 0 0;background:var(--surface);border:1px solid var(--line-2);border-radius:14px;padding:16px 18px;box-shadow:var(--shadow-sm);animation:stigin var(--dur-3) var(--ease) .1s both}
+    .forslagtitel{margin:0 0 4px!important;font-size:1rem!important;font-weight:600;color:var(--ink);background:none!important;padding:0!important}
+    .forslagtext{margin:0 0 12px!important;font-size:.88rem!important;color:var(--ink-2);background:none!important;padding:0!important}
+    .forslagrad{display:flex;gap:12px;padding:7px 0;border-top:1px solid var(--line);font-size:.84rem}
+    .fnyckel{flex:0 0 74px;font-size:.74rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);padding-top:2px}
+    .fvarde{color:var(--ink);font-family:inherit;font-size:.9rem;font-weight:500;font-variant-numeric:tabular-nums}
+    .forslagknappar{display:flex;align-items:center;gap:14px;margin:14px 0 0}
+    .forslag[data-inlagt]{border-color:var(--atmosphere);background:var(--accent-weak)}
+    .fklar{font-size:.84rem;font-weight:600;color:var(--sky-deep)}
+    .chattfot{border-top:1px solid var(--line);padding:14px 24px 18px;background:var(--surface)}
+    .chattforslag{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 12px}
+    .chattform{display:flex;align-items:flex-end;gap:12px}
+    .chattform textarea{flex:1;resize:none;border:1px solid var(--line);border-radius:var(--r-input);background:var(--surface);padding:12px 14px;font-family:inherit;font-size:.94rem;line-height:1.45;color:var(--ink);max-height:140px;transition:border-color var(--dur-2) var(--ease),box-shadow var(--dur-2) var(--ease)}
+    .chattform textarea:focus{outline:none;border-color:var(--atmosphere);box-shadow:0 0 0 3px rgba(96,168,221,.25)}
+    .chattlokal{display:flex;align-items:center;gap:8px;margin:10px 0 0;font-size:.72rem;color:var(--ink-3)}
+    .chattlokal span{width:6px;height:6px;border-radius:50%;background:var(--ok)}
+    .svarsruta{background:var(--surface);border-radius:var(--r-card);padding:20px 22px;margin:16px 0 0;box-shadow:var(--shadow-sm)}
+    .svarsruta p{margin:0;font-size:.98rem;line-height:1.55;color:var(--ink)}
+    .svarsruta .kalla{margin-top:12px;font-size:.78rem;color:var(--ink-3)}
+    .ordin{display:inline;opacity:0;animation:ordfram var(--dur-3) var(--ease) both}
+    @keyframes ordfram{from{opacity:0;filter:blur(3px)}to{opacity:1;filter:none}}
+    .tomrad{font-size:.95rem;color:var(--sky-ink-2);max-width:56ch;margin:22px 0 0}
+    .grupprubrik{display:flex;align-items:baseline;gap:12px;margin:0 0 6px;padding-bottom:12px;border-bottom:1px solid var(--line)}
+    .vecka{font-size:1.05rem;font-weight:700;color:var(--ink);margin:0}
+    .spann,.antal{white-space:nowrap;font-size:.75rem;color:var(--ink-3)}
+    .antal{margin-left:auto}
+    .lista{display:flex;flex-direction:column}
+    .kort{position:relative;display:flex;align-items:center;gap:16px;padding:14px 12px;margin:0 -12px;border-radius:var(--r-card);transition:background-color var(--dur-2) var(--ease)}
+    .kort+.kort{border-top:1px solid var(--line)}
+    .kort:hover{background:var(--accent-weak);border-top-color:transparent}
+    .tumme{position:relative;width:132px;aspect-ratio:16/9;border-radius:8px;flex:0 0 auto;overflow:hidden;background:linear-gradient(165deg,var(--sky-pale),#2E8BD0 58%,var(--sky-deep));box-shadow:var(--shadow-sm);transition:transform var(--dur-3) var(--ease),filter var(--dur-3) var(--ease)}
+    .tumme image-slot{position:absolute;inset:0;width:100%;height:100%}
+    .tumkol{display:flex;flex-direction:column;align-items:center;gap:6px;flex:0 0 auto}
+    /* Längden är fakta man läser, inte en tidsstämpel klistrad i ett hörn:
+       den står under bildrutan i klartext, i sifferklara siffror. */
+    .tumlangd{font-size:.74rem;font-weight:600;letter-spacing:.01em;color:var(--ink-2);font-variant-numeric:tabular-nums;white-space:nowrap}
+    .sprakmark{color:var(--ink-3)}
+    .sprakmark[data-oversatt]{color:var(--ink-2)}
+    .metaprick{margin:0 6px;color:var(--line-2)}
+    .tumtid{display:none;position:absolute;right:5px;bottom:5px;padding:2px 6px;border-radius:4px;background:rgba(0,0,0,.66);color:#fff;font-family:var(--mono);font-size:.7rem;font-variant-numeric:tabular-nums;pointer-events:none}
+    .tumspela{position:absolute;inset:0;display:grid;place-items:center;pointer-events:none;opacity:0;transition:opacity var(--dur-2) var(--ease)}
+    .kort:hover .tumspela{opacity:1}
+    .tumspela span{width:26px;height:26px;border-radius:50%;background:rgba(255,255,255,.92);color:var(--sky-deep);display:grid;place-items:center;font-size:.58rem;padding-left:2px;box-shadow:0 2px 6px rgba(0,0,0,.3)}
+    .tumme[data-typ='ljud']{display:grid;place-items:center}
+    .tumljud{font-size:.58rem;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.92);pointer-events:none}
+    .kort:hover .tumme{transform:scale(1.05);filter:saturate(1.15) brightness(1.05)}
+    /* Scopad till kortet. Naken träffade den KaTeX egen .text-atom (\text{…}) och
+       gjorde formeln till en kolumn-flexbox — «max (1, 6)» bröts i tre rader på
+       tavlan. En generisk klassnamnsregel får inte gälla hela sidan. */
+    .kort>.text{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:4px}
+    .dagnamn{color:var(--ink-2);font-weight:700;margin-right:7px}
+    .datum{white-space:nowrap;font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);margin:0}
+    .namn{font-size:1.05rem;font-weight:600;color:var(--ink);margin:0;align-self:flex-start;border-radius:6px;padding:1px 4px;margin-left:-4px;cursor:text;transition:background-color var(--dur-1) var(--ease)}
+    .namn:hover{background:var(--accent-weak)}
+    .tagg{white-space:nowrap;align-self:flex-start;font-size:.74rem;font-weight:500;border-radius:var(--r-pill);padding:4px 12px;margin:3px 0 0;border:1px solid transparent;font-family:inherit;cursor:default;transition:background-color var(--dur-2) var(--ease)}
+    .tagg{position:relative;display:inline-flex;align-items:center;gap:5px}
+    .taggdel{border:none;background-color:transparent;background-image:linear-gradient(100deg,transparent 34%,rgba(255,255,255,.34) 50%,transparent 66%);background-size:260% 100%;background-position:130% 0;background-repeat:no-repeat;color:inherit;font-family:inherit;font-size:inherit;font-weight:inherit;padding:1px 5px;border-radius:5px;cursor:pointer;transition:background-color var(--dur-1) var(--ease),color var(--dur-1) var(--ease),background-position var(--dur-4) var(--ease),box-shadow var(--dur-2) var(--ease)}
+    .taggdel:hover,.taggdel[aria-expanded='true']{background-color:var(--sky-deep);background-position:-30% 0;color:#fff;box-shadow:0 6px 14px -8px rgba(9,66,108,.6)}
+    .taggdel[data-tom]{font-style:italic;opacity:.8}
+    .taggpunkt{opacity:.5}
+    .minipanel{position:absolute;z-index:70;top:calc(100% + 6px);left:0;min-width:150px;width:max-content;background:var(--surface);border-radius:12px;box-shadow:0 22px 44px -20px rgba(9,66,108,.55),0 2px 6px rgba(9,66,108,.12);padding:5px;display:flex;flex-direction:column;gap:2px;transform-origin:top left;animation:valjin 150ms cubic-bezier(.16,1,.3,1) both}
+    .minipanel[data-ut]{animation:valjut 120ms cubic-bezier(.4,0,1,1) both;pointer-events:none}
+    .minirad{display:grid;grid-template-columns:14px 1fr;align-items:center;gap:8px;border:none;background:transparent;border-radius:8px;padding:8px 11px;font-family:inherit;font-size:.85rem;font-weight:500;color:var(--ink);text-align:left;white-space:nowrap;cursor:pointer;transition:background-color var(--dur-1) var(--ease),color var(--dur-1) var(--ease)}
+    .minirad:hover,.minirad:focus-visible{outline:none;background:var(--accent-weak);color:var(--ink)}
+    .minirad[aria-selected='true']{color:var(--sky-deep);font-weight:600}
+    .minirad[aria-selected='true']:hover{color:var(--sky-deep)}
+    .minibock{opacity:0;font-size:.68rem;justify-self:center}
+    .minirad[aria-selected='true'] .minibock{opacity:1}
+    .meta{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;font-size:.78rem;color:var(--ink-3);margin:0}
+    [data-cc='sky']{background:color-mix(in srgb,var(--c-sky) 12%,transparent);color:var(--c-sky)}
+    [data-cc='sage']{background:color-mix(in srgb,var(--c-sage) 12%,transparent);color:var(--c-sage)}
+    [data-cc='plum']{background:color-mix(in srgb,var(--c-plum) 12%,transparent);color:var(--c-plum)}
+    [data-cc='none']{background:var(--sunken);color:var(--ink-3);border-color:var(--line)}
+    .knappar{flex:0 0 auto;display:flex;align-items:center;gap:6px;opacity:.62;transition:opacity var(--dur-2) var(--ease)}
+    .kort:hover .knappar{opacity:1}
+    .tyst{position:relative;background-color:transparent;background-image:linear-gradient(100deg,transparent 34%,rgba(255,255,255,.3) 50%,transparent 66%);background-size:260% 100%;background-position:130% 0;background-repeat:no-repeat;border:none;padding:6px 10px;border-radius:var(--r-pill);color:var(--ink-2);font-family:inherit;font-size:.8rem;font-weight:500;cursor:pointer;transition:color var(--dur-2) var(--ease),background-color var(--dur-2) var(--ease),background-position var(--dur-4) var(--ease),transform var(--dur-1) var(--ease),box-shadow var(--dur-2) var(--ease)}
+    .tyst:hover{color:#fff;background-color:var(--sky-deep);background-position:-30% 0;transform:translateY(-1px);box-shadow:0 8px 18px -10px rgba(9,66,108,.55)}
+    .tyst:active{transform:translateY(0) scale(.976)}
+    .fara{margin-left:4px;color:var(--ink-3)}
+    .fara:hover{color:#fff;background-color:var(--berry);box-shadow:0 8px 18px -10px rgba(155,28,63,.55)}
+    .detalj{overflow:hidden;background:var(--sunken);border-radius:var(--r-card);padding:16px 20px;margin:2px 0 12px}
+    .detalj.in{animation:oppna var(--dur-4) var(--ease) both}
+    @keyframes oppna{from{opacity:0;max-height:0;padding-top:0;padding-bottom:0;transform:translateY(-8px)}to{opacity:1;max-height:520px;padding-top:16px;padding-bottom:16px;transform:none}}
+    .detalj p{margin:0 0 8px;font-size:.92rem;color:var(--ink-2);animation:stigin var(--dur-3) var(--ease) both}
+    .detalj p:nth-child(1){animation-delay:.1s}.detalj p:nth-child(2){animation-delay:.16s}
+    .detalj p:nth-child(3){animation-delay:.22s}.detalj p:nth-child(4){animation-delay:.28s}
+    .detalj .tid{font-family:var(--mono);font-size:.74rem;color:var(--atmosphere);margin-right:10px}
+    .detalj .chips{animation:stigin var(--dur-3) var(--ease) .34s both}
+    .vscen{position:relative;aspect-ratio:16/9;width:100%;max-width:520px;border-radius:12px;overflow:hidden;background:linear-gradient(165deg,var(--sky-pale),#2E8BD0 58%,var(--sky-deep));box-shadow:0 18px 34px -22px rgba(9,66,108,.65);margin:0 0 14px}
+    .vbild{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+    .vtom{position:absolute;inset:0;display:grid;place-items:center;padding:20px;text-align:center;font-size:.8rem;color:rgba(255,255,255,.9)}
+    .vscen::after{content:'';position:absolute;inset:auto 0 0;height:42%;background:linear-gradient(to top,rgba(0,0,0,.62),transparent);pointer-events:none}
+    .vtext{position:absolute;left:0;right:0;bottom:14px;z-index:2;display:flex;justify-content:center;padding:0 22px;pointer-events:none}
+    .vtext span{background:rgba(0,0,0,.55);color:#fff;border-radius:6px;padding:5px 12px;font-size:.9rem;font-weight:500;line-height:1.35;text-align:center;text-wrap:balance;text-shadow:0 1px 2px rgba(0,0,0,.6);max-width:100%}
+    .vtext[data-tom] span{opacity:0}
+    .vspelknapp{position:absolute;inset:0;z-index:3;display:grid;place-items:center;border:none;background:transparent;cursor:pointer}
+    .vspelknapp span{width:52px;height:52px;border-radius:50%;background:rgba(255,255,255,.92);color:var(--sky-deep);display:grid;place-items:center;font-size:.9rem;padding-left:3px;box-shadow:0 6px 18px rgba(0,0,0,.35);transition:transform var(--dur-2) var(--ease),opacity var(--dur-2) var(--ease)}
+    .vspelknapp:hover span{transform:scale(1.06)}
+    .vscen[data-spelar] .vspelknapp span{opacity:0;transform:scale(.9)}
+    .detaljhuvud{display:flex;align-items:baseline;gap:12px;margin:0 0 12px}
+    .dtyp{font-size:.74rem;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--sky-deep)}
+    .dmeta{font-size:.8rem;color:var(--ink-2);font-family:var(--mono)}
+    .spelare{display:flex;align-items:center;gap:14px;background:var(--surface);border-radius:var(--r-pill);padding:8px 16px 8px 8px;box-shadow:var(--shadow-sm);margin:0 0 14px}
+    .spelknapp{flex:0 0 auto;width:32px;height:32px;border-radius:50%;border:none;background:var(--btn-bg);color:var(--btn-fg);font-size:.7rem;cursor:pointer;display:grid;place-items:center;transition:transform var(--dur-1) var(--ease),box-shadow var(--dur-2) var(--ease)}
+    .spelknapp:hover{transform:scale(1.06);box-shadow:0 6px 14px -6px rgba(9,66,108,.6)}
+    .spelspar{position:relative;flex:1;height:4px;border-radius:var(--r-pill);background:var(--track);overflow:hidden}
+    .spelfyll{position:absolute;inset:0 auto 0 0;width:0;border-radius:var(--r-pill);background:linear-gradient(90deg,var(--sky-deep),var(--atmosphere));transition:width .12s linear}
+    .speltid{font-family:var(--mono);font-size:.72rem;color:var(--ink-2);font-variant-numeric:tabular-nums;white-space:nowrap}
+    .rader{display:flex;flex-direction:column;gap:2px;margin:0 0 14px}
+    .trad{display:grid;grid-template-columns:56px 1fr;gap:6px;align-items:baseline;text-align:left;border:none;background:transparent;border-radius:8px;padding:8px 10px;font-family:inherit;font-size:.92rem;color:var(--ink-2);cursor:pointer;transition:background-color var(--dur-1) var(--ease),color var(--dur-1) var(--ease)}
+    .trad:hover{background:var(--sky-deep);color:#fff}
+    .trad:hover .tid{color:rgba(255,255,255,.85)}
+    .trad.spelas{background:var(--accent-weak);color:var(--ink);font-weight:500}
+    .trad .tid{font-family:var(--mono);font-size:.74rem;color:var(--atmosphere);margin:0}
+    .namnfalt{font-size:1.05rem;font-weight:600;padding:6px 10px;border-radius:var(--r-input);max-width:340px}
+    .svarsruta.in{animation:stigin var(--dur-3) var(--ease) both}
+
+    /* ── PLANERING ───────────────────────────────────── */
+    .panel{position:relative;display:flex;flex-direction:column;gap:16px}
+    .rad{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+    .label{flex:0 0 74px;font-size:.74rem;font-weight:500;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3)}
+    .narrow{flex:0 0 auto;min-width:0;padding:10px 12px}
+    .cta{display:flex;align-items:center;gap:16px;padding-top:18px;border-top:1px solid var(--line);flex-wrap:wrap}
+    .note{flex:1;font-size:.9rem;color:var(--ink-2);margin:0}
+    .punkter{display:inline-flex;gap:4px;margin-left:6px;vertical-align:middle}
+    .punkter i{width:4px;height:4px;border-radius:50%;background:var(--atmosphere);animation:hoppa 1.1s var(--ease) infinite}
+    .punkter i:nth-child(2){animation-delay:.14s}.punkter i:nth-child(3){animation-delay:.28s}
+    @keyframes hoppa{0%,100%{opacity:.3;transform:translateY(0)}50%{opacity:1;transform:translateY(-4px)}}
+    .utkast h3{font-family:var(--serif);font-weight:400;font-size:1.75rem;line-height:1.15;color:var(--ink);margin:0 0 14px}
+    .utkast ul{margin:0;padding-left:20px;color:var(--ink-2)}
+    .utkast li{margin:0 0 7px;font-size:.95rem;animation:stigin var(--dur-3) var(--ease) both}
+    .utkast li:nth-child(1){animation-delay:.05s}.utkast li:nth-child(2){animation-delay:.11s}
+    .utkast li:nth-child(3){animation-delay:.17s}.utkast li:nth-child(4){animation-delay:.23s}
+    .utkast li:nth-child(5){animation-delay:.29s}
+    .arkivlista{display:flex;flex-direction:column}
+    .arkivrad{display:flex;align-items:center;gap:14px;padding:14px 2px;animation:radin var(--dur-3) var(--ease) both}
+    .arkivrad+.arkivrad{border-top:1px solid var(--line)}
+    .arkivrad .anamn{flex:1;font-size:.95rem;color:var(--ink);font-weight:600}
+    .arkivhuvud{font-family:var(--serif);font-weight:600;font-size:2.1rem;line-height:1.1;color:var(--sky-ink);margin:0 0 20px}
+
+    /* ── TOAST ───────────────────────────────────────── */
+    .toast{position:fixed;left:50%;bottom:28px;display:flex;align-items:center;gap:16px;background:var(--navy);color:#fff;border-radius:var(--r-pill);padding:13px 22px;box-shadow:0 22px 44px -20px rgba(9,66,108,.7);z-index:320;font-size:.92rem;overflow:hidden;animation:toastin var(--dur-3) var(--ease-out) both}
+    @keyframes toastin{from{opacity:0;transform:translateX(-50%) translateY(22px) scale(.96)}to{opacity:1;transform:translateX(-50%) translateY(0) scale(1)}}
+    .toast.ut{animation:toastut var(--dur-2) var(--ease) forwards}
+    @keyframes toastut{to{opacity:0;transform:translateX(-50%) translateY(16px) scale(.97)}}
+    .toast::after{content:'';position:absolute;left:0;bottom:0;height:2px;width:100%;background:rgba(255,255,255,.45);transform-origin:0 50%;animation:tickar 5s linear forwards}
+    @keyframes tickar{from{transform:scaleX(1)}to{transform:scaleX(0)}}
+    .toast button{background:transparent;border:none;color:#fff;font-family:inherit;font-size:inherit;font-weight:500;text-decoration:underline;text-underline-offset:3px;cursor:pointer;padding:0}
+
+  </style>
+</head>
+<body>
+
+<div class="duk" aria-hidden="true"><div class="himmel"></div><div class="fotolager"><div class="foto pa" data-vy="vy-transkribera" style="background-image:url(assets/himmel/transkribera.jpg);--pos:50% 40%;--dur:58s"></div><div class="foto vand" data-vy="vy-inspelningar" style="background-image:url(assets/himmel/transkribera.jpg);--pos:50% 40%;--dur:72s"></div><div class="foto" data-vy="vy-planering" style="background-image:url(assets/himmel/transkribera.jpg);--pos:50% 40%;--dur:64s"></div></div><div class="dis"></div></div>
+
+<header class="topbar">
+  <div class="flikar" role="tablist" aria-label="Vy">
+    <span class="flikglid"></span>
+    <button class="flik" role="tab" aria-selected="true" aria-controls="vy-transkribera">Transkribera</button>
+    <button class="flik" role="tab" aria-selected="false" aria-controls="vy-planering">Planering</button>
+  </div>
+  <div class="korruta" id="korruta" style="margin-left:auto"></div>
+</header>
+
+<div class="vy" id="vy-transkribera" role="tabpanel">
+  <div class="stegwrap" data-stig>
+    <div class="steg" id="stegrad">
+      <div class="stegpost pa" data-s="1"><span class="bricka pa">1</span><span class="stegnamn">Källa</span></div>
+      <span class="streck"></span>
+      <div class="stegpost" data-s="2"><span class="bricka">2</span><span class="stegnamn">Transkribering</span></div>
+    </div>
+  </div>
+
+  <!-- ═══════════ STEG 1 · KÄLLA ═══════════ -->
+  <section class="view i-steg" data-steg="1">
+    <div class="himmelhuvud">
+      <h1 class="rubrik" data-stig>Vad vill du transkribera?</h1>
+    </div>
+
+    <div class="skiva" data-stig>
+      <div class="dropzone" id="dropzone" role="button" tabindex="0">
+        <p class="dz-titel">Dra in filer — eller klicka för att välja</p>
+        <p class="dz-under">MP4 · MKV · MOV · MP3 · WAV · M4A — flera filer går bra</p>
+      </div>
+
+      <div class="kolista" id="ko-steg1"></div>
+
+      <div class="falt-rad">
+        <span class="minietikett">Eller<br />länk</span>
+        <input class="field" id="lankfalt" placeholder="Klistra in en YouTube-länk …" />
+        <button class="ghost" id="lagg-till-lank">Lägg till</button>
+      </div>
+
+      <p class="prova">Eller prova med
+        <button class="lank" data-exempel="Exempellektion — derivator.mp4|41:20">ett exempel</button>
+        <button class="lank" data-exempel="skadad_inspelning.m4a|07:48">skadad_inspelning.m4a</button>
+        <button class="lank" data-exempel="2026-08-20 1410 inspelning.mp4|48:02">en fil som schemat känner igen</button>
+      </p>
+
+
+      <!-- Inställningarna gömmer sig inte bakom chips: tre val, alla synliga och
+           direkt vridbara i raden. Ingenting att öppna för att se vad som gäller. -->
+      <div class="instrad" id="instrad">
+        <span class="minietikett" style="margin:0">Körs som</span>
+        <span id="talat-upptackt" hidden>svenska</span>
+        <div class="seg" role="group" data-seg="resultat" aria-label="Resultatspråk"><button aria-pressed="true">Svenska</button><button aria-pressed="false">Engelska</button></div>
+        <span class="lodlinje"></span>
+        <div class="seg flerval" role="group" data-seg="format" data-flerval="1" aria-label="Filformat"><button aria-pressed="true">SRT</button><button aria-pressed="true">TXT</button><button aria-pressed="false">VTT</button></div>
+        <span class="lodlinje"></span>
+        <span class="instswitch" id="rattaval" data-tip="Ett andra pass som rättar transkriptet mot vad som faktiskt sägs — körs på din GPU">
+          <button class="switch" id="ratta" type="button" aria-pressed="true" aria-label="Rätta mot ljudet"><span class="knopp"></span></button>
+          <span class="instswitchtext">Rätta mot ljudet</span>
+        </span>
+      </div>
+
+      <div class="vidare" data-stig>
+        <button class="primar" id="starta" disabled>Starta transkribering</button>
+        <span class="skal" id="skal">Lägg till minst en fil, en länk eller en inspelning först.</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════ STEG 2 · TRANSKRIBERING ═══════════ -->
+  <section class="view i-steg" data-steg="2" hidden>
+    <div class="himmelhuvud">
+      <h1 class="rubrik" id="steg3-rubrik" data-stig>Lyssnar igenom …</h1>
+    </div>
+
+    <div class="skiva" data-stig>
+      <p class="korfot" id="korfot"><span class="prick"></span><span id="korkvar">Räknar ut hur lång tid det tar …</span></p>
+      <div id="korvarningar"></div>
+      <div id="progresslista"></div>
+
+      <div id="klarruta" hidden>
+        <div class="klartva">
+          <div class="klarvad">
+            <p class="minietikett">Klart</p>
+            <p class="klarfil" id="klarfil">Filen</p>
+            <p class="klarmeta" id="klartext"></p>
+            <p class="klarsparat" id="klarsparat">Ligger på sin lektion i veckan.</p>
+            <div class="chips" id="klarchips"></div>
+          </div>
+          <span class="klarstreck"></span>
+          <div class="klarnasta">
+            <p class="minietikett">Nästa steg</p>
+            <div class="klarsteg">
+              <button class="nstegrad" id="granska-forslag" type="button">
+                <span class="nsn"><span class="nsr">Granska förslagen</span><span class="nst" id="forslagnot">Läser igenom transkriptet …</span></span>
+                <span class="nsantal" id="forslagantal" hidden>0</span>
+                <span class="nspil">→</span>
+              </button>
+              <button class="nstegrad" id="fraga-nyss" type="button">
+                <span class="nsn"><span class="nsr">Fråga lektionen</span><span class="nst">Svar med citat ur transkriptet</span></span>
+                <span class="nspil">→</span>
+              </button>
+              <button class="nstegrad" id="gor-om" type="button">
+                <span class="nsn"><span class="nsr">Transkribera fler</span><span class="nst">Tillbaka till kön</span></span>
+                <span class="nspil">→</span>
+              </button>
+            </div>
+          </div>
+        </div>
+        <div id="klarforslag"></div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="vy" id="vy-inspelningar" role="tabpanel" hidden data-arkiv>
+<!-- ══════════════════════ INSPELNINGARNA ══════════════════════
+     Fliken är borta: en inspelning är vad som HÄNDE på en lektion, och den bor
+     därför på lektionen i veckan — med lådan «Alla inspelningar» under schemat
+     för arkivsysslorna och planeringens frågerad för sökningen.
+
+     Själva korten står kvar här som appens lager av inspelningar: schemat,
+     lektionsfönstret, minikalendern och sökningen läser dem härifrån. Vyn visas
+     aldrig — ingen flik pekar på den längre. -->
+<section class="view">
+  <div class="himmelhuvud">
+    <h1 class="rubrik" data-stig>Dina lektioner</h1>
+  </div>
+
+  <!-- Konsol i två våningar: sök överst, filter och verktyg i hyllan under samma tak. -->
+  <div class="konsol" data-stig>
+    <div class="konsolovre">
+      <span class="lupp"></span>
+      <input id="sokfalt" placeholder="Sök eller ställ en fråga om lektionerna …" />
+      <button class="kor" id="soknapp" data-lage="fraga">Fråga</button>
+      <button class="ghost sokord" id="sokordknapp" type="button">Sök ord</button>
+    </div>
+    <div class="konsolundre">
+      <select class="field" id="f-klass" aria-label="Filtrera på klass"><option value="">Alla klasser</option><option>9A</option><option>9B</option></select>
+      <select class="field" id="f-kurs" aria-label="Filtrera på kurs"><option value="">Alla kurser</option><option>Matematik 3c</option><option>Matematik 4</option></select>
+      <div class="valj" id="kalvalj"><button class="valjknapp" id="kalknapp" type="button" aria-haspopup="dialog" aria-expanded="false"><span class="valjtext">Alla datum</span><span class="valjpil"></span></button></div>
+      <span class="konsolverktyg">
+        <button class="lank" id="backup" type="button">Säkerhetskopiera</button>
+        <button class="lank" type="button" id="markeralage">Markera flera</button>
+      </span>
+    </div>
+  </div>
+
+  <div id="fragavard" style="margin-top:18px" hidden></div>
+  <div class="kallpop" id="fragapop" hidden></div>
+
+  <!-- Massradering: kryssrutor bara i markeringsläge, så listan förblir en lista. -->
+  <div id="markrad" class="markrad" hidden>
+    <span class="markvad"><b id="markantal">0 inspelningar markerade</b><span class="antalmark" id="markstorlek"></span></span>
+    <span class="markknapp">
+      <button class="ghost" type="button" id="markavbryt">Avbryt</button>
+      <button class="radera" type="button" id="markradera" disabled>Radera</button>
+    </span>
+  </div>
+
+  <p class="tomrad" id="tomrad-filter" hidden>Inga inspelningar matchar filtret.</p>
+
+  <div id="inspelningar" style="margin-top:22px">
+    <div class="veckogrupp skiva" data-vecka="31" data-mandag="2026-07-27" data-stig hidden>
+      <div class="grupprubrik"><h2 class="vecka">Vecka 31</h2><span class="spann">27 jul – 31 jul</span><span class="antal">0 inspelningar</span></div>
+      <div class="lista"></div>
+    </div>
+    <div class="veckogrupp skiva" data-vecka="24" data-mandag="2026-06-08" data-stig>
+      <div class="grupprubrik"><h2 class="vecka">Vecka 24</h2><span class="spann">8 jun – 12 jun</span><span class="antal">1 inspelning</span></div>
+      <div class="lista">
+        <article class="kort" data-klass="9B" data-kurs="Matematik 4" data-manad="jun" data-datum="2026-06-11">
+          <div class="tumkol"><div class="tumme" data-typ="video"><image-slot id="tum-trigonometri" shape="rect" placeholder="Bildruta"></image-slot><span class="tumspela"><span>▶</span></span><span class="tumtid">45:30</span></div><span class="tumlangd">45 min 30 s</span></div>
+          <div class="text">
+            <p class="datum"><span class="dagnamn">Tor</span> 11 jun</p>
+            <p class="namn" data-akt="redigera" data-tip="Klicka för att byta namn">Trigonometriska ettan</p>
+            <span class="tagg" data-cc="sage"><button class="taggdel" type="button" data-del="klass">9B</button><span class="taggpunkt">·</span><button class="taggdel" type="button" data-del="kurs">Matematik 4</button></span>
+            <p class="meta"><span class="sprakmark" data-oversatt data-tip="Talad engelska, översatt till svenska">Engelska → svenska</span></p>
+          </div>
+          <div class="knappar">
+            <button class="tyst" data-akt="fraga">Fråga</button>
+            <button class="mer" data-akt="mer" aria-haspopup="menu" aria-expanded="false" aria-label="Mer">⋯</button>
+          </div>
+        </article>
+      </div>
+    </div>
+    <div class="veckogrupp skiva" data-vecka="23" data-mandag="2026-06-01" data-stig>
+      <div class="grupprubrik"><h2 class="vecka">Vecka 23</h2><span class="spann">1 jun – 5 jun</span><span class="antal">2 inspelningar</span></div>
+      <div class="lista">
+        <article class="kort" data-klass="9A" data-kurs="Matematik 3c" data-manad="jun" data-datum="2026-06-03">
+          <div class="tumkol"><div class="tumme" data-typ="video"><image-slot id="tum-derivator" shape="rect" placeholder="Bildruta"></image-slot><span class="tumspela"><span>▶</span></span><span class="tumtid">42:11</span></div><span class="tumlangd">42 min 11 s</span></div>
+          <div class="text">
+            <p class="datum"><span class="dagnamn">Ons</span> 3 jun</p>
+            <p class="namn" data-akt="redigera" data-tip="Klicka för att byta namn">Derivatans definition</p>
+            <span class="tagg" data-cc="sky"><button class="taggdel" type="button" data-del="klass">9A</button><span class="taggpunkt">·</span><button class="taggdel" type="button" data-del="kurs">Matematik 3c</button></span>
+            <p class="meta"><span class="sprakmark" data-tip="Talad svenska, transkriberad på svenska">Svenska</span></p>
+          </div>
+          <div class="knappar">
+            <button class="tyst" data-akt="fraga">Fråga</button>
+            <button class="mer" data-akt="mer" aria-haspopup="menu" aria-expanded="false" aria-label="Mer">⋯</button>
+          </div>
+        </article>
+        <article class="kort" data-klass="" data-kurs="" data-manad="jun" data-datum="2026-06-01">
+          <div class="tumkol"><div class="tumme" data-typ="ljud"><span class="tumljud">Ljud</span><span class="tumtid">38:02</span></div><span class="tumlangd">38 min 2 s</span></div>
+          <div class="text">
+            <p class="datum"><span class="dagnamn">Mån</span> 1 jun</p>
+            <p class="namn" data-akt="redigera" data-tip="Klicka för att byta namn">Integraler — introduktion</p>
+            <span class="tagg" data-cc="none"><button class="taggdel" type="button" data-del="klass" data-tom>Klass</button><span class="taggpunkt">·</span><button class="taggdel" type="button" data-del="kurs" data-tom>Kurs</button></span>
+            <p class="meta"><span class="sprakmark" data-tip="Talad svenska, transkriberad på svenska">Svenska</span></p>
+          </div>
+          <div class="knappar">
+            <button class="tyst" data-akt="fraga">Fråga</button>
+            <button class="mer" data-akt="mer" aria-haspopup="menu" aria-expanded="false" aria-label="Mer">⋯</button>
+          </div>
+        </article>
+      </div>
+    </div>
+  </div>
+</section>
+</div>
+
+<div class="vy" id="vy-planering" role="tabpanel" hidden>
+<!-- ══════════════════════ PLANERING ══════════════════════ -->
+<section class="view">
+  <div class="himmelhuvud">
+    <h1 class="rubrik" id="planrubrik" data-stig>Vad ska du planera?</h1>
+  </div>
+
+  <!-- Klassvyn ligger FÖRST: veckan är frågan «vilken lektion?», och den ställs
+       en gång. Schemat, klasserna och materialet som redan finns står i samma
+       ruta — inget avskalat schema en andra gång längre ner, och ingen egen
+       «Allt sparat»-hög: allt godkänt ligger på sin lektion i veckan. -->
+  <div class="skiva" id="klassvyn" data-stig>
+    <!-- En konsol, inte tre kontroller: läget, fältet och knappen ligger i SAMMA
+         vita piller — läget är fältets omfång, inte en egen sak att välja. -->
+    <div class="rad arkfraga">
+      <div class="fragkonsol">
+        <div class="seg" role="group" data-seg="arkivläge"><button aria-pressed="true">Fråga AI</button><button aria-pressed="false">Inspelningar</button></div>
+        <span class="konsollinje"></span>
+        <input class="field" id="arkivfalt" placeholder="Fråga om veckan eller lektionerna …" />
+        <button class="kor" id="arkivknapp">Fråga</button>
+      </div>
+      <!-- Veckobriefen är en KNAPP i sökraden: det appen har att säga om veckan
+           ligger en klickning bort, inte som en remsa längst ner på sidan. -->
+      <div class="briefwrap" id="briefwrap" hidden>
+        <div class="brikyta">
+          <div class="brikinner">
+            <button class="briefknapp" type="button" id="briefoppna" aria-expanded="false">
+              <span class="brkantal" id="brkantal">3</span>
+              <span class="brktext" id="brktext">Veckan</span>
+              <span class="brkpil">▾</span>
+            </button>
+          </div>
+        </div>
+        <div class="briefyta"><div class="briefinner">
+          <div class="skiva" id="veckobrief">
+            <p class="bnar" id="briefnar">Söndag · vecka 34</p>
+            <h2 class="brubrik" id="briefrubrik">Tre tavlor, ett prov och en lucka</h2>
+            <div class="klarsteg blista" id="brieflista"></div>
+          </div>
+        </div></div>
+      </div>
+    </div>
+    <div id="arkivsvar" style="margin-top:16px" hidden></div>
+    <div class="kallpop" id="arkivpop" hidden></div>
+    <!-- Inspelningarna är ett SÖKLÄGE, inte en låda för sig: samma fält, samma
+         rad, samma plats som «Fråga AI» och «Sök ord». -->
+    <div class="insplada" id="insplada" hidden></div>
+
+    <section class="arkpanel" id="ark-klass">
+      <!-- Klassremsan är veckans filter: «Alla klasser» är hela schemat, en klass
+           visar bara den — tiderna, salen och kursen står kvar. Räknaren på varje
+           chip säger hur mycket av veckan som redan har material, så att man kan
+           jämföra klasserna utan att byta. -->
+      <!-- Omprovet frågar bara efter dagen: allt annat är redan känt ur provet. -->
+      <div class="omprovband" id="omprovband" hidden>
+        <span class="arvprick"></span>
+        <p id="omprovbandtext"></p>
+        <button class="lank" id="omprovavbryt" type="button">Avbryt</button>
+      </div>
+      <div class="oplacband" id="oplacband" hidden></div>
+      <!-- ETT huvud för veckan: vilken vecka, vägen mellan veckorna, när det
+           senast synkade — och klassfiltret i samma rad till höger. Förr stod
+           klassremsan och veckoraden som två egna våningar med egna marginaler,
+           och «Den här veckan» stod kvar avstängd när man redan var där. -->
+      <div class="schemahuvud">
+        <!-- Veckan och terminen är samma vy i två zoomnivåer, inte två vyer: samma
+             klassfilter, samma schema, samma material — bara olika avstånd. -->
+        <div class="seg lagesseg" id="schemalage" role="group" data-seg="schemaläge" aria-label="Zoom"><button type="button" aria-pressed="true">Vecka</button><button type="button" aria-pressed="false">Termin</button></div>
+        <span class="schemahuvudtext" id="schemahuvudtext"><span class="schemavecka" id="schemavecka">Vecka</span><span class="spann" id="schemaspann"></span></span>
+        <span class="terminhuvudtext"><span class="schemavecka" id="terminnamn">Terminen</span></span>
+        <!-- Terminen har EN form: bandet. Riktningarna Luckor och Månader låg uppe
+             för valet och är borta — två svar på samma fråga var hela felet
+             (granskning 9 · A4). Därför står ingen formväljare här. -->
+        <div class="historik terminhist">
+          <button class="hknapp" type="button" id="terminbak" aria-label="Föregående termin" data-tip="Föregående termin">‹</button>
+          <button class="hknapp" type="button" id="terminfram" aria-label="Nästa termin" data-tip="Nästa termin">›</button>
+        </div>
+        <div class="synkrad" id="synkrad"></div>
+        <div class="historik">
+          <button class="hknapp" type="button" id="schemabak" aria-label="Föregående vecka" data-tip="Föregående vecka">‹</button>
+          <button class="hknapp" type="button" id="schemafram" aria-label="Nästa vecka" data-tip="Nästa vecka">›</button>
+        </div>
+        <button class="lank terminnu" id="terminnu" type="button" hidden>Den här terminen</button>
+        <button class="lank" id="schemanu" type="button">Den här veckan</button>
+        <div class="klassrad" id="klassrad"></div>
+      </div>
+      <div class="schemagrid" id="schemagrid"></div>
+      <p class="mjuk schemasum" id="schemasum"></p>
+      <!-- Klassprofilen ligger UNDER veckan och är fälld ihop som förval. Låg den
+           ovanför trycktes schemat ur bild i samma klick som valde klassen — och
+           då kunde man inte läsa av det man just filtrerade fram.
+           Men den låg också under TERMINEN, som är fem tusen pixlar hög: då hände
+           «ingenting» när man klickade Profil. Panelen står nu mellan veckan och
+           terminen — under det man filtrerade fram, ovanför det som är långt —
+           och klicket rullar dit den öppnas. -->
+      <div class="klassprofil" id="klassprofil" hidden></div>
+      <!-- Terminen svarar på EN fråga: vilka veckor framåt saknar material. Läget
+           står som en rad över bilden, för det är det enda läraren matar in.
+           Klick på en vecka går tillbaka till veckoläget, i den veckan. -->
+      <div class="terminvy" id="terminvy"></div>
+      <!-- Veckobriefen bor under schemat, centrerad: det är veckan man just läst
+           av som den sammanfattar. Provrekommendationen som stod här är borta —
+           samma väg in finns redan i briefens lista, och två knappar för samma
+           sak gör valet otydligare, inte tydligare. -->
+    </section>
+  </div>
+
+  <div class="skiva" data-stig>
+    <div class="panel">
+      <!-- Väntande följeslagare: sa man «inte nu» ligger den kvar här i stället
+           för att försvinna för alltid. -->
+      <div class="foljevanta" id="foljevanta" hidden>
+        <span class="arvprick"></span>
+        <p id="foljevantatext">Provet till tavlan väntar</p>
+        <button class="chip" id="foljevantaja" type="button">Skriv provet</button>
+        <button class="lank" id="foljevantabort" type="button">Släpp</button>
+      </div>
+      <!-- Stapeln: ett steg är öppet, klara steg viker ihop sig till en rad med sitt
+           eget svar, kommande steg står som streckade rader. Klass, kurs och dag
+           väljs EN gång — här, med lektionen — och upprepas aldrig som ett eget steg. -->
+      <!-- Lektionen valdes i klassvyn ovan — här står den bara som ett kvitto,
+           med vägen tillbaka upp. Inget eget steg frågar om den en andra gång. -->
+      <div class="lektionsrad" id="lektionsrad">
+        <span class="arvprick"></span>
+        <p class="planvald" id="planvald" hidden></p>
+        <p class="planingen" id="planingen">Ingen lektion vald — markera en i veckan ovan</p>
+        <button class="lank" id="planbyt" type="button">Välj i veckan</button>
+      </div>
+      <p class="mjuk" id="plankallnot" hidden style="margin:10px 0 0"></p>
+      <div class="planlektdolt">
+        <span class="mjuk" id="detaljtext" hidden></span>
+        <div id="detaljinner" style="display:none">
+          <div class="rad">
+            <span class="label">Klass</span>
+            <select class="field" id="p-klass" aria-label="Klass"><option value="">Ingen klass</option><option>9A</option><option>9B</option></select>
+            <span class="label" style="flex:0 0 auto">Kurs</span>
+            <select class="field" id="p-kurs" aria-label="Kurs"><option value="">Ingen kurs</option><option>Matematik 3c</option><option>Matematik 4</option></select>
+          </div>
+          <div class="rad">
+            <span class="label">När</span>
+            <div class="valj" id="pdatumvalj"><button class="valjknapp" id="pdatumknapp" type="button" aria-haspopup="dialog" aria-expanded="false"><span class="valjtext">Välj datum</span><span class="valjpil"></span></button></div>
+            <input id="p-datum" type="hidden" />
+            <input id="p-tid" type="hidden" />
+          </div>
+        </div>
+      </div>
+      <div class="plansteg" data-steg="2" data-visnr="1" data-namn="Skapar" data-vant="Tavla, prov, arbetsblad eller gruppuppgift" data-last>
+        <div class="steghuvud"><span class="stegnr">1</span><p class="stegfraga">Vad ska du skapa?</p><span class="hjalp" id="lagenot">Välj två om de hör ihop — då skrivs de i samklang, med det andra byggt på det första</span></div>
+        <div class="kort3" id="lagesval">
+          <button class="lagekort" type="button" data-lage="Tavla" aria-pressed="true"><b>Tavla</b><span>Att skriva av under genomgången</span></button>
+          <button class="lagekort" type="button" data-lage="Prov" aria-pressed="false"><b>Prov</b><span>Med poäng, delar och lösningsförslag</span></button>
+          <button class="lagekort" type="button" data-lage="Arbetsblad" aria-pressed="false"><b>Arbetsblad</b><span>Uppgifter med nivå och facit</span></button>
+          <button class="lagekort" type="button" data-lage="Gruppuppgift" aria-pressed="false"><b>Gruppuppgift</b><span>Ifyllnadsställning som följer av uppgiften</span></button>
+        </div>
+        <!-- Andra handen: skapar man ett par är typen redan bestämd när det
+             andra dokumentet ska skrivas — då står valet som en rad, inte fyra
+             kort att välja om. -->
+        <div class="andrahand" id="andrahand" hidden>
+          <span class="arvprick"></span>
+          <p id="andrahandtext">Provet — det skrivs på tavlan du godkände</p>
+          <button class="lank" id="andrahandbyt" type="button">Välj något annat</button>
+        </div>
+        <div class="seg" role="group" data-seg="skrivtyp" hidden>
+          <button aria-pressed="true">Tavla</button><button aria-pressed="false">Prov</button><button aria-pressed="false">Arbetsblad</button><button aria-pressed="false">Gruppuppgift</button>
+        </div>
+        <!-- OBS-raden hör till valet man just gjort och står därför i stegets fot,
+             till vänster om Nästa. plansteg.js ger den sin plats där, notis.js
+             tänder den. Den hindrar ingenting — Nästa gör som förut. -->
+        <p class="lagenobs" id="lagenobs" hidden><b>Obs</b> — du har inte markerat en lektion.</p>
+      </div>
+      <div class="plansteg" data-steg="3" data-visnr="2" data-namn="Utgår från" data-vant="Transkription, boken eller foton av sidorna" data-last>
+        <div class="steghuvud"><span class="stegnr">2</span><p class="stegfraga">Vad ska det utgå från?</p><span class="hjalp" id="utgangnot">Välj en eller flera — de vägs samman när dokumentet skrivs</span></div>
+        <!-- Källan väljs FÖRST. Tre dörrar, var för sig påslagbara; den valda
+             dörren fäller ut sitt eget verktyg under raden. Förra lektionen
+             föreslås av sig själv ur klassen som valdes i steg 1. -->
+        <div class="dorrar" id="dorrar">
+          <button class="kalla" type="button" data-dorr="lektion" aria-pressed="false"><span class="kmark">Föreslås</span><b>Förra lektionen</b><i>Transkription av det klassen gjorde sist</i></button>
+          <button class="kalla" type="button" data-dorr="bok" aria-pressed="false"><b>Boken</b><i>Inläst och indexerad</i></button>
+          <!-- Två slag av filer, två dörrar. Boken är indexerad: den har kapitel,
+               avsnitt och sidnummer, och sidorna väljs i remsan. Allt annat är
+               fria filer — en PDF, ett kapitel ur något, foton av sidor — och
+               läses som det är. -->
+          <button class="kalla" type="button" data-dorr="foton" aria-pressed="false"><b>Egna filer</b><i>PDF:er och foton av sidorna</i></button>
+          <button class="kalla" type="button" data-dorr="sparat" aria-pressed="false"><b>Ett tidigare papper</b><i>Bygg vidare på det, eller lägg det som det är</i></button>
+          <!-- Femte dörren: inte provet som mall, utan provets UTFALL. Klassens
+               poäng per uppgift och de svagaste uppgifterna följer med som
+               underlag, så att nästa tavla eller gruppuppgift handlar om det som
+               föll. -->
+          <button class="kalla" type="button" data-dorr="prov" aria-pressed="false"><b>Ett rättat prov</b><i>Klassens resultat — det som föll</i></button>
+        </div>
+        <!-- Kvittot står direkt under dörrarna: svaret på «vad utgår det från?» ska
+             synas utan att man rullar förbi bokremsan, och det är det enda som
+             behövs när en dörr är vald men hopfälld. -->
+        <div class="kvitto" id="kvitto" data-tom>
+          <span class="minietikett">Utgår från</span>
+          <div class="valdachips" id="valdalektioner"></div>
+          <div id="kvittoextra" style="display:contents"></div>
+          <span class="kvittotom" id="kvittotom">Inget valt än — du kan gå vidare ändå</span>
+        </div>
+        <div id="underlag">
+          <!-- Panelerna bär ingen egen rubrikrad: dörren ovanför säger redan vad
+               källan är, och ett klick på dörren tar bort den. Kvar blir verktyget. -->
+          <section class="kpanel" data-panel="lektion" hidden>
+            <div class="kpkropp">
+              <div class="utgangnat" id="utgangnat"></div>
+              <div class="valj" id="lektionsvalj"><button class="valjknapp" id="lektionsknapp" type="button" aria-haspopup="listbox" aria-expanded="false"><span class="valjtext">Välj lektioner</span><span class="valjpil"></span></button></div>
+            </div>
+          </section>
+          <section class="kpanel" data-panel="bok" hidden>
+            <div class="kpkropp">
+              <p class="kpcap">Klicka första och sista sidan i remsan — spannet blir momentet</p>
+              <!-- Boken som uppslag: sidorna är bilder, inte siffror. Momentfältet
+                   finns kvar, men bara för den som hellre skriver. -->
+              <div class="bokdel" id="bokdel">
+                <div class="bkhuvud">
+                  <span class="minietikett" style="margin:0">Bok</span>
+                  <div class="valj" id="bokvaljare" data-satt><button class="valjknapp" type="button" id="bokvalj" aria-haspopup="listbox" aria-expanded="false"><span class="valjtext">Matematik 5000+ 3c</span><span class="valjpil"></span></button></div>
+                  <button class="bkavsnitt" type="button" id="bokavsnitt" aria-haspopup="listbox" aria-expanded="false"></button>
+                  <button class="bkavsnitt bkladd" type="button" id="bokladd" data-tip="Dra in eller välj en PDF — hela boken eller ett kapitel. Den läses in en gång och indexeras per avsnitt">Lägg till bok</button>
+                </div>
+                <p class="bknot">En bok läses in en gång och indexeras per avsnitt — hela boken eller ett kapitel i taget. En PDF som inte är en lärobok hör till <b>Egna filer</b>.</p>
+                <div class="bkkapitel" id="bkkapitel" hidden></div>
+                <div class="bkuppslag" id="bkuppslag"></div>
+                <div class="bkremsa" id="bkremsa"></div>
+                <p class="bkspann" id="bkspann"></p>
+                <!-- Uppgifterna på de valda sidorna. Boken ligger inläst, så
+                     modellen har redan läst dem när panelen öppnas och lämnar ett
+                     förslag på vad som ska hoppas över. uppgifter.js äger blocket. -->
+                <div class="uppgblock" id="uppgblock" hidden></div>
+              </div>
+              <div class="rad" id="momentrad" hidden>
+                <span class="label">Moment</span>
+                <div style="flex:1;min-width:0;position:relative">
+                  <input class="field" id="moment" placeholder="Moment — skriv, eller välj ur boken" style="width:100%" autocomplete="off" />
+                  <div class="bokpanel" id="bokpanel" hidden></div>
+                  <p class="gissatnot" id="momentgissat" hidden>Gissat ur sidans rubrik — kontrollera</p>
+                  <p class="faktarad" id="momentfakta" hidden><span class="kk">Ur boken</span><span></span></p>
+                </div>
+              </div>
+              <!-- Boken kommer in HÄR, där man saknar den: knappen står bland bokens
+                   egna väljare, inte som en egen ruta längst ner. -->
+              <div class="boklas" id="boklas" hidden><span class="boklasspar"><span id="boklasfyll"></span></span><span class="boklastext"></span></div>
+            </div>
+          </section>
+          <section class="kpanel" data-panel="foton" hidden>
+            <div class="kpkropp">
+              <div class="dropzon" id="dropzon">
+                <p>Dra hit PDF:er eller foton av sidorna</p>
+                <span class="mjuk" id="sidnot">PDF, JPG, PNG eller HEIC — flera åt gången. Ett helt kapitel går bra.</span>
+                <div class="dzlankar">
+                  <button class="lank" id="dzfiler" type="button">bläddra bland filer</button>
+                  <button class="lank" id="dzlektioner" type="button" hidden>välj lektioner i stället</button>
+                </div>
+              </div>
+              <div class="sidminis" id="sidminis"></div>
+              <div id="sidrad" hidden><button class="valjknapp" id="sidknapp" type="button"><span class="valjtext">Lägg till sidor</span></button></div>
+            </div>
+          </section>
+          <!-- Papperen ligger ÖPPNA i panelen. Förr var det en rullgardin: en
+               knapp att slå upp, en lista som föll ut under sidans underkant, och
+               ett nytt klick på knappen för varje papper man ville byta till. -->
+          <section class="kpanel" data-panel="sparat" hidden>
+            <div class="kpkropp">
+              <!-- Ett tidigare papper har två användningar, och de visar samma
+                   dokumenthög: att BYGGA VIDARE på det (pappret blir förlaga, ett
+                   nytt skrivs) och att ANVÄNDA DET OFÖRÄNDRAT (pappret läggs som
+                   det är på lektionen man planerar). Två dörrar för samma hög vore
+                   ett fel — skillnaden är ett val inne i dörren. -->
+              <p class="kpcap" id="sparatcap">Det valda blir förlaga — i sista steget säger du vad som ska följa med och vad som ska bli nytt</p>
+              <div class="sparatrad">
+                <div class="seg sparatseg" id="sparatlage" role="group" data-seg="sparatläge" aria-label="Vad pappret ska användas till"><button type="button" data-lage="vidare" aria-pressed="true">Bygg vidare på</button><button type="button" data-lage="oforandrat" aria-pressed="false">Använd oförändrat</button></div>
+                <span class="sparatnot" id="sparatnot"></span>
+              </div>
+              <div class="doksok" id="doksok" hidden><input type="text" id="sparatsok" placeholder="Sök bland dina papper …" autocomplete="off" aria-label="Sök bland sparade papper" /></div>
+              <div class="doklista" id="sparatlista" role="listbox" aria-label="Sparade papper"></div>
+            </div>
+          </section>
+          <section class="kpanel" data-panel="prov" hidden>
+            <div class="kpkropp">
+              <p class="kpcap">Uppgifterna, poängen och de svagaste uppgifterna följer med — det som föll är det nästa papper ska handla om</p>
+              <div class="doklista" id="provlista" role="listbox" aria-label="Rättade prov"></div>
+            </div>
+          </section>
+        </div>
+        <!-- Ingen «skriv utan underlag»-knapp: är ingen dörr markerad ÄR det utan
+             underlag. Nästa säger det i en notis i stället. -->
+        <div class="utanrad" id="utanrad" hidden>
+          <button class="valjknapp" id="hoppaunderlag" type="button"><span class="valjtext">Skriv utan underlag</span></button>
+        </div>
+        <input id="sidfil" type="file" accept="application/pdf,image/*" multiple hidden />
+        <input id="bokfil" type="file" accept="application/pdf" hidden />
+      </div>
+      <div class="plansteg" data-steg="4" data-visnr="3" data-namn="Upplägg" data-vant="Längd, nivå och centralt innehåll" data-last>
+        <div class="steghuvud"><span class="stegnr">3</span><p class="stegfraga">Upplägg — och skriv</p></div>
+      <!-- Gy25: en väljare, inte två. Nivån står som en egen rad högst upp i
+           panelen och nivåns punkter under — att byta nivå och att välja
+           innehåll är samma gest, på samma ställe. -->
+      <div class="gyrad" id="gyrad">
+        <div class="gyhuvud">
+          <p class="minietikett" id="gykurs">Gy25 · centralt innehåll</p>
+          <span class="gynot" id="nivanot"></span>
+          <div class="valj" id="gyvalj" data-host="#gyinline"><button class="valjknapp" id="gyknapp" type="button" aria-haspopup="listbox" aria-expanded="false"><span class="valjtext">Matematik – fortsättning · nivå 1b</span><span class="valjpil"></span></button></div>
+        </div>
+        <!-- Innehållslistan fälls ut HÄR, i flödet under knappen: den täcker
+             inte längden, exemplen och brickorna man just kryssat. -->
+        <div class="gyinline" id="gyinline"></div>
+        <div class="gychips" id="gychips"></div>
+        <p class="tackning"><span class="tackspar"><span id="tackfyll"></span></span><span id="tacktext"></span></p>
+      </div>
+      <!-- Arvet är en notering OM steget, inte ett beslut i det: en pratbubbla i
+           marginalen med svansen mot stegnumret, i stället för ett band tvärs
+           över panelen. -->
+      <div class="arvrad bubbla" id="arvrad" data-sida="hoger" hidden>
+        <span class="arvprick"></span>
+        <p id="arvtext">Ärvt från förra provet</p>
+        <button class="lank" id="arvaterstall" type="button">Börja från standard</button>
+      </div>
+      <div class="typval" id="typval"></div>
+      <div class="refruta" id="refruta" hidden>
+        <div class="refhuvud">
+          <span class="minietikett">Bygger vidare på</span>
+          <button class="lank" id="reftabort" type="button">Ta bort förlagan</button>
+        </div>
+        <div class="refkort">
+          <span class="refminis" id="refminis"></span>
+          <span class="reftext"><span class="refnamn" id="refnamn">Dokumentet</span><span class="refmeta" id="refmeta"></span></span>
+        </div>
+        <p class="minietikett" style="margin:16px 0 8px">Hur ska det bygga vidare?</p>
+        <textarea class="field refhur" id="refhur" rows="2" placeholder="T.ex. samma typ av uppgifter, men på geometri i stället för algebra …"></textarea>
+        <div class="chips" id="refchips"></div>
+        <p class="fot"><span class="prick"></span><span>Förlagan läses som referens, inte som mall — skriv vad som ska följa med och vad som ska bli nytt.</span></p>
+      </div>
+      <div class="cta">
+        <!-- Viktningen sägs i ord, inte med reglage: har man valt både boken och ett
+             rättat prov är det här man säger vilket som ska väga tyngst. Fältet står
+             före knappen — det är det sista man säger innan pappret skrivs. -->
+        <div class="fokusruta" id="fokusruta" hidden>
+          <span class="minietikett">Vad ska väga tyngst?</span>
+          <input class="field" id="fokus" placeholder="T.ex. mest ur provet, lite ur boken — eller ett tema att hålla" autocomplete="off" />
+        </div>
+        <p class="note" id="plannot">Beskriv momentet ovan så kan tavlan skrivas.</p>
+        <button class="primar" id="skriv" disabled>Skriv tavlan</button>
+      </div>
+      <!-- Härkomstraden är borta: att texten går till Claude och ljudet stannar
+           på datorn är underförstått i hela appen. -->
+      <div id="skrivstatus" hidden></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="skiva" id="dokument" hidden>
+    <div class="dokhuvud">
+      <span class="doktyp" id="doktyp">Tavla</span>
+      <span class="dmeta" id="dokmeta"></span>
+      <div class="historik" id="historik">
+        <button class="hknapp" id="angra" type="button" disabled aria-label="Ångra senaste ändringen" data-tip="Ångra">↶</button>
+        <button class="hknapp" id="gorom" type="button" disabled aria-label="Gör om ändringen" data-tip="Gör om">↷</button>
+        <span class="histnot" id="histnot">Första utkastet</span>
+      </div>
+    </div>
+    <div class="arkskal" id="arkskal"></div>
+    <div class="dokverktyg">
+      <div class="seg" id="arkval" data-seg="arkval" role="group" hidden><button type="button" aria-pressed="true">Provet</button><button type="button" aria-pressed="false">Lösningsförslag</button></div>
+      <span class="mjuk" id="dokhint">Förminskad vy — öppna canvas för att granska, zooma och ändra i full storlek.</span>
+      <span class="dokverktygsslut">
+        <button class="ghost" id="dokstorlek" type="button" aria-expanded="false">Visa hela</button>
+        <button class="ghost" id="granska" type="button" data-pil>Öppna canvas</button>
+      </span>
+    </div>
+    <!-- Valde man två saker skrivs den andra på det första — inte parallellt,
+         utan i samklang. Raden är bara en upplysning: nästa dokument frågas om
+         FÖRST när det här är godkänt och ligger i Sparat. -->
+    <div class="foljerad" id="foljerad" hidden>
+      <span class="arvprick"></span>
+      <p id="foljetext">Provet till tavlan väntar</p>
+    </div>
+    <div class="vidare">
+      <button class="primar" id="godkann">Godkänn och sätt som PDF</button>
+      <span class="skal" id="tidsskal" hidden></span>
+    </div>
+  </div>
+
+  <!-- Utskriftspaketet: appen packar, läraren skriver ut. En gest. -->
+  <div class="skiva" id="tryckruta" data-stig hidden>
+    <p class="minietikett" id="trycktitel">Att skriva ut<span class="hjalp">Ordningen är den de ska ligga i högen — din tavla överst, elevernas papper under, facit sist</span></p>
+    <div id="trycklista" style="margin-top:10px"></div>
+    <div class="tryckfot">
+      <button class="primar" id="tryckskicka">Skriv ut</button>
+      <button class="ghost" id="trycksampdf">Ladda ner som PDF</button>
+      <button class="lank" id="tryckanpassad">Lägg till anpassad kopia</button>
+    </div>
+  </div>
+</section>
+</div>
+
+<!-- Figurerna i uppgifterna är CeTZ-källa som kompileras till SVG i webbläsaren.
+     figurer.js äger katalogen (vilka figurtyper som finns), figur.js kompilatorn. -->
+<script src="figur.js"></script>
+<script src="figurer.js"></script>
+<script src="/static/vendor/katex/katex.min.js"></script>
+<script src="matte.js"></script>
+<script src="tavla-wb.js"></script>
+<script src="innehall.js"></script>
+<script src="blad-tavla.js"></script>
+<script src="blad-bygg.js"></script>
+<script src="blad-boklos.js"></script>
+<script src="blad.js"></script>
+<script src="motion.js"></script>
+<script src="image-slot.js"></script>
+
+<div class="modalskal" id="lektionsskal" hidden>
+  <div class="modal bred" role="dialog" aria-modal="true" aria-labelledby="l-titel">
+    <header class="lhuvud">
+      <div>
+        <p class="chattetikett" id="l-etikett">Videoinspelning</p>
+        <h3 class="chatttitel" id="l-titel">Lektionen</h3>
+        <p class="chattmeta" id="l-meta"></p>
+      </div>
+      <button class="ghost lspelupp" id="l-spelupp" type="button">Spela lektionen</button>
+      <button class="ikonknapp lmax" id="l-max" type="button" data-tip="Förstora till helskärm" aria-label="Förstora till helskärm" aria-pressed="false"><svg class="ikonsvg" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3H5.5A2.5 2.5 0 0 0 3 5.5V9" /><path d="M15 3h3.5A2.5 2.5 0 0 1 21 5.5V9" /><path d="M9 21H5.5A2.5 2.5 0 0 1 3 18.5V15" /><path d="M15 21h3.5a2.5 2.5 0 0 0 2.5-2.5V15" /></svg></button>
+      <button class="stangx" id="l-stang" aria-label="Stäng">✕</button>
+    </header>
+    <div class="lkropp3" id="l-kropp">
+      <div class="ltrad" id="l-trad"></div>
+      <div class="lfot" id="l-radfot"></div>
+      <div class="lfotfalt" id="l-fot"></div>
+    </div>
+    <div class="kallpop" id="l-pop" hidden></div>
+  </div>
+</div>
+
+<!-- Uppspelning är ett eget rum: hela bilden, framspolad till citatet. -->
+<div class="modalskal videoskal" id="videoskal" hidden>
+  <div class="videomodal" role="dialog" aria-modal="true" aria-labelledby="v-titel">
+    <header class="vhuvud">
+      <div>
+        <p class="chattetikett" id="v-etikett">Videoinspelning</p>
+        <h3 class="chatttitel" id="v-titel">Lektionen</h3>
+      </div>
+      <button class="stangx" id="v-stang" aria-label="Stäng uppspelningen">✕</button>
+    </header>
+    <div class="lstor" id="l-stor"></div>
+    <div class="vfot">
+      <div class="lspelrad" id="l-spelrad"></div>
+      <p class="vcitat" id="v-citat"></p>
+    </div>
+  </div>
+</div>
+
+<div class="modalskal" id="platsskal" hidden>
+  <div class="modal plats" role="dialog" aria-modal="true" aria-labelledby="pl-titel">
+    <header class="chatthuvud">
+      <div>
+        <p class="chattetikett">Säkerhetskopia</p>
+        <h3 class="chatttitel" id="pl-titel">Välj plats på den här datorn</h3>
+        <p class="chattmeta" id="pl-meta">18,4 GB transkript och ljud kopieras dit du pekar.</p>
+      </div>
+      <button class="stangx" id="pl-stang" aria-label="Stäng">✕</button>
+    </header>
+    <div class="platslista" id="pl-lista" role="listbox" aria-label="Diskar och mappar"></div>
+    <div class="platsvag">
+      <span class="minietikett">Sökväg</span>
+      <input class="field vagfalt" id="pl-vag" aria-label="Sökväg" />
+    </div>
+    <div class="platsfot">
+      <label class="autopill"><button class="switch" id="pl-auto" type="button" aria-pressed="true" aria-label="Kopiera hit automatiskt varje kväll" data-tip="Kopiera hit automatiskt varje kväll klockan 21:00"><span class="knopp"></span></button><span>Varje kväll</span></label>
+      <div class="knappstock">
+        <button class="sekundar" id="pl-avbryt" type="button">Avbryt</button>
+        <button class="primar" id="pl-kor" type="button">Säkerhetskopiera hit</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modalskal" id="forhandsskal" hidden>
+  <div class="modal bred" role="dialog" aria-modal="true" aria-labelledby="fh-titel">
+    <header class="chatthuvud">
+      <div>
+        <p class="chattetikett" id="fh-etikett">Förhandsvisning</p>
+        <h3 class="chatttitel" id="fh-titel">Dokumentet</h3>
+        <p class="chattmeta" id="fh-meta"></p>
+      </div>
+      <button class="stangx" id="fh-stang" aria-label="Stäng förhandsvisningen">✕</button>
+    </header>
+    <div class="fhark" id="fh-ark"></div>
+    <div class="fhfot">
+      <button class="primar" id="fh-oppna" type="button">Bygg vidare på den här</button>
+      <button class="ghost" id="fh-pdf" type="button">Ladda ner PDF</button>
+      <span class="fhnot"><span class="pk"></span>Ligger sparat lokalt — inget lämnar datorn</span>
+    </div>
+  </div>
+</div>
+
+<!-- Följeslagaren frågas om EFTER godkännandet: det första ligger i Sparat, och
+     nästa i paret behöver ett ja eller ett nej innan man går vidare. -->
+<div class="modalskal" id="foljeskal" hidden>
+  <div class="modal notis" role="dialog" aria-modal="true" aria-labelledby="foljetitel">
+    <div class="notisruta">
+      <p class="chattetikett">Nästa i samklang</p>
+      <h3 class="chatttitel" id="foljetitel">Provet till tavlan</h3>
+      <p class="notisbrod" id="foljebrod"></p>
+      <div class="notisredan" id="foljeredan"></div>
+      <div class="notisfot">
+        <button class="primar" id="foljeja" type="button">Ja, skriv provet</button>
+        <button class="lank" id="foljesen" type="button">Inte nu — spara det till senare</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Rättningen: öppnas från provet i Sparat, inte som en ruta ur ingenstans.
+     Klassens totalpoäng per uppgift och delfråga medan högen ligger framme. -->
+<div class="modalskal" id="rattskal" hidden>
+  <div class="modal bred" role="dialog" aria-modal="true" aria-labelledby="rattningtitel">
+    <header class="chatthuvud">
+      <div>
+        <p class="chattetikett">Hur gick provet?</p>
+        <h3 class="chatttitel" id="rattningtitel">Provet</h3>
+        <p class="chattmeta">Klassens totalpoäng per uppgift — ingen elev för sig, inga namn.</p>
+      </div>
+      <button class="stangx" id="rattstang" aria-label="Stäng rättningen">✕</button>
+    </header>
+    <div class="rattkropp">
+      <div class="rattelever">
+        <span class="minietikett" style="margin:0">Elever</span>
+        <input class="field rattantal" id="rattelever" type="number" min="1" max="40" step="1" value="22" inputmode="numeric" aria-label="Antal elever som skrev provet" />
+        <span class="mjuk" id="rattmaxnot"></span>
+      </div>
+      <div class="ratthuvud"><span></span><span>Uppgift</span><span>Max</span><span>Klassen</span><span>Andel</span></div>
+      <div id="rattninglista"></div>
+      <p class="rattsumma" id="rattsumma"></p>
+      <div class="rattanalys" id="rattanalys" hidden>
+        <p class="minietikett">Vad provet säger</p>
+        <p class="rattlas" id="rattlas"></p>
+        <div id="rattsvaga"></div>
+      </div>
+    </div>
+    <div class="fhfot">
+      <button class="primar" id="rattningspara" disabled>Spara</button>
+      <span class="fhnot" id="rattningsnot"></span>
+    </div>
+  </div>
+</div>
+
+<input type="file" id="bildfil" accept="image/*" hidden />
+
+<div class="granskaskal" id="granskaskal" hidden>
+  <header class="gtopp">
+    <div class="gtopptext">
+      <p class="chattetikett" id="g-etikett">Granska utkastet</p>
+      <h3 class="chatttitel" id="g-titel">Utkast</h3>
+      <p class="chattmeta" id="g-meta"></p>
+    </div>
+    <div class="gverktyg">
+      <div class="seg garkval" id="g-arkval" role="group" hidden><button type="button" aria-pressed="true">Provet</button><button type="button" aria-pressed="false">Lösningsförslag</button></div>
+      <div class="historik" id="g-historik">
+        <button class="hknapp" id="g-angra" type="button" disabled aria-label="Ångra senaste ändringen" data-tip="Ångra">↶</button>
+        <button class="hknapp" id="g-gorom" type="button" disabled aria-label="Gör om ändringen" data-tip="Gör om">↷</button>
+        <span class="histnot" id="g-histnot">Första utkastet</span>
+      </div>
+      <button class="gzknapp" type="button" data-z="ut" aria-label="Zooma ut">−</button>
+      <span class="gzoomtext" id="g-zoomtext">100 %</span>
+      <button class="gzknapp" type="button" data-z="in" aria-label="Zooma in">+</button>
+      <div class="gzlagen" role="group" aria-label="Zoom">
+        <button type="button" data-z="fit" aria-pressed="true">Bredd</button>
+        <button type="button" data-z="ett" aria-pressed="false">100 %</button>
+        <button type="button" data-z="hela" aria-pressed="false">Hela</button>
+      </div>
+      <button class="primar" type="button" id="g-godkann">Godkänn och sätt som PDF</button>
+    </div>
+    <button class="stangx" id="g-stang" aria-label="Stäng">✕</button>
+  </header>
+  <div class="gsplit">
+    <div class="gduk" id="g-duk">
+      <div class="gplan" id="g-plan"></div>
+      <div class="gfabs">
+        <button class="gfab" id="g-valj" type="button" aria-pressed="false"><span class="gfabikon">◎</span><span id="g-valjtext">Välj element</span></button>
+      </div>
+    </div>
+    <aside class="gpanel">
+      <div class="gpanelhuvud">
+        <h4 class="gpanelrubrik">Ändringar i utkastet</h4>
+        <span class="gantal" id="g-antal">Inga ändringar än</span>
+      </div>
+      <div class="glista" id="g-lista">
+        <p class="gtom" id="g-tom">Slå på <b>Välj element</b> och klicka på en uppgift, en rubrik eller ett block i pappret — skriv sedan här vad som ska ändras. Modellen skriver om just den delen, och ändringen markeras i pappret.</p>
+      </div>
+      <!-- Underlaget följer med in i canvasen: det som skrev dokumentet står
+           kvar som kontext, och ett klick på en källa väger om vad nästa
+           ändring ska ta mest ifrån. Det är reglaget — i ord. -->
+      <div class="gunderlag" id="g-underlag" hidden>
+        <div class="gunderlagshuv"><span class="minietikett">Utgår från</span><span class="gunderlagsnot">Klicka en källa för att ta mer ur den</span></div>
+        <div class="gkallor" id="g-kallor"></div>
+      </div>
+      <div class="gskriv">
+        <div class="gmal" id="g-mal"><span class="gmaltext">Hela dokumentet</span><button class="gmalx" id="g-malx" type="button" aria-label="Välj hela dokumentet i stället" hidden>✕</button></div>
+        <form class="gform" id="g-form">
+          <textarea id="g-falt" rows="2" placeholder="Skriv vad som ska ändras …"></textarea>
+          <div class="gformrad">
+            <button class="ghost gbild" id="g-bild" type="button">Bild</button>
+            <p class="chattlokal" data-ut><span></span>Skrivs av Claude Code</p>
+            <button class="kor" type="submit">Ändra</button>
+          </div>
+        </form>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<script src="kalender.js"></script>
+<script src="fraga.js"></script>
+<script src="app.js"></script>
+<script src="tips.js"></script>
+<script src="lov.js"></script>
+<script src="lektion.js"></script>
+<script src="gy.js"></script>
+<script src="plan.js"></script>
+<script src="plan-sidor.js"></script>
+<script src="plansteg.js"></script>
+<script src="planlage.js"></script>
+<script src="granska.js"></script>
+<script src="moln.js"></script>
+<script src="brief.js"></script>
+<script src="bok.js"></script>
+<script src="uppslag.js"></script>
+<script src="uppgifter.js"></script>
+<script src="plankon.js"></script>
+<script src="profil.js"></script>
+<script src="klass.js"></script>
+<script src="termin-band.js"></script>
+<script src="termin.js"></script>
+<script src="inspelning.js"></script>
+<script src="rattning.js"></script>
+<script src="utgang.js"></script>
+<script src="notis.js"></script>
+<script src="lektionskal.js?v=5"></script>
+<script src="kallor.js"></script>
+<script src="lektionsmaterial.js"></script>
+<script src="omstart.js"></script>
+<script src="markera.js"></script>
+<script src="molnrad.js?v=13"></script>
+
+<script src="tryck.js"></script>
+<script src="scroll.js"></script>
+</body>
+</html>

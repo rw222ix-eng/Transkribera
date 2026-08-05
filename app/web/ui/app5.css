@@ -1,0 +1,264 @@
+/* Hjälptexter bor vid sin rubrik, i parentes — aldrig som en egen rad under
+   innehållet de förklarar. Parenteserna sätts av CSS så att texten som JS
+   skriver in förblir ren. */
+.hjalp{display:inline;margin-left:10px;font-size:.8rem;font-weight:400;line-height:1.4;letter-spacing:0;text-transform:none;color:var(--ink-3);min-width:0}
+.hjalp::before{content:'('}
+.hjalp::after{content:')'}
+.hjalp:empty{display:none}
+/* Hjälptexten står på EGEN RAD under frågan, i linje med frågans första bokstav.
+   Förr låg den bredvid, radbröt till två rader och drog frågans baslinje uppåt —
+   två texter som slogs om samma rad. Raden är ett rutnät i stället för en
+   flexrad: `flex-basis:100%` bet i inte mot `max-width`, som gjorde den
+   hypotetiska bredden liten nog att ändå rymmas på första raden. */
+.steghuvud{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 12px;align-items:baseline}
+.steghuvud .stegnr{grid-column:1;grid-row:1}
+.steghuvud .stegfraga{grid-column:2;grid-row:1}
+.steghuvud .hjalp{grid-column:2;max-width:64ch;margin:0;text-wrap:pretty}
+
+/* Lägeskorten bär sin färg vidare: markeringen (✓) och följdkortets tvåa. */
+.lagekort[aria-pressed='true']:not([data-foljd])::after{content:'\2713';position:absolute;top:11px;right:13px;font-size:.72rem;color:rgba(255,255,255,.9)}
+/* Finns det redan på lektionen ska kortet säga det — annars föreslår appen en
+   dubblett och kallar det förval. */
+.lagekort[data-finns]:not([aria-pressed='true'])::after{content:'finns redan';position:absolute;top:12px;right:13px;font-size:.6rem;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3)}
+.lagekort[data-finns]:not([aria-pressed='true']){border-style:dashed}
+.lagekort[data-foljd]{border-style:solid;background-color:var(--sky-deep)}
+.lagekort[data-foljd]::after{content:'2';position:absolute;top:10px;right:12px;width:17px;height:17px;border-radius:50%;background:rgba(255,255,255,.26);color:#fff;font-size:.62rem;display:grid;place-items:center}
+
+/* ══════════ LOVET I ARKIVET ══════════
+   Terminens rytm ska synas utan att man läser ett enda datum: fem rutor per
+   vecka, ett band där skolan var stängd, en rad där veckan gick utan
+   inspelning. Allt läst ur Google Kalender — appen skriver aldrig i den. */
+.remslegend{display:flex;flex-wrap:wrap;align-items:center;gap:8px 18px;margin:0 4px 16px;font-size:.76rem;color:var(--sky-ink-2)}
+.remspar{display:inline-flex;align-items:center;gap:7px}
+.remslegend .dr{width:14px;height:14px;border-radius:4px}
+.dagremsa{display:flex;align-self:center;gap:4px;margin-left:14px}
+.dr{width:22px;height:22px;flex:0 0 auto;display:grid;place-items:center;border-radius:6px;background:var(--track);color:var(--ink-3);font-size:.62rem;font-weight:600;line-height:1}
+.dr[data-t='inspelad']{background:var(--sky-deep);color:#fff}
+.dr[data-t='lektion']{background:transparent;box-shadow:inset 0 0 0 1.5px var(--line-2);color:var(--ink-2)}
+.dr[data-t='tom']{opacity:.5}
+.dr[data-t='lov']{background:repeating-linear-gradient(135deg,var(--line-2) 0 1.5px,transparent 1.5px 6px);box-shadow:inset 0 0 0 1px var(--line);color:var(--ink-3)}
+.lovmark{display:inline-flex;align-items:center;gap:9px;white-space:nowrap;font-size:.92rem;font-weight:600;color:var(--ink);background:var(--sunken);box-shadow:inset 0 0 0 1px var(--line);border-radius:var(--r-pill);padding:7px 16px}
+.lovmark::before{content:'';width:13px;height:13px;flex:0 0 auto;border-radius:4px;background:repeating-linear-gradient(135deg,var(--line-2) 0 1.5px,transparent 1.5px 6px);box-shadow:inset 0 0 0 1px var(--line)}
+.lovmark b{font-weight:600;color:var(--sky-deep)}
+.lovmark b::first-letter{text-transform:uppercase}
+
+/* Bandet ligger på himlen mellan skivorna — halvgenomskinligt och streckat,
+   så att en stängd vecka aldrig läses som en tom arbetsvecka. */
+.lovband{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;margin:18px 0;padding:14px 22px;border-radius:var(--r-panel);background-color:rgba(255,255,255,.42);background-image:repeating-linear-gradient(135deg,rgba(255,255,255,.42) 0 10px,rgba(255,255,255,0) 10px 20px);box-shadow:inset 0 0 0 1px rgba(255,255,255,.6);animation:stigin var(--dur-4) var(--ease) both}
+.lovband .lovnamn{font-size:1rem;font-weight:600;color:var(--sky-ink)}
+.lovband .lovspann{font-size:.8rem;color:var(--sky-ink-2)}
+.lovnu{font-size:.72rem;font-weight:600;color:var(--sky-deep);background:rgba(255,255,255,.82);border-radius:var(--r-pill);padding:3px 11px}
+
+/* Tyst vecka: en rad, inte ett kort. */
+.tystvecka{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;margin:16px 6px;font-size:.8rem;color:var(--sky-ink-2)}
+.tystvecka .tv{font-weight:600;color:var(--sky-ink)}
+.tystvecka .tvspann{color:var(--sky-ink-3)}
+.tystlov{font-size:.72rem;color:var(--sky-ink-2);background:rgba(255,255,255,.5);border-radius:var(--r-pill);padding:3px 10px}
+.tystvecka::after{content:'';flex:1 1 40px;height:1px;background:var(--sky-hair);opacity:.32}
+@media (max-width:560px){.dagremsa{width:100%;margin:8px 0 0}}
+
+/* Lovdagen i planeringsveckan — samma streckning som i arkivet. */
+.vdaglov{margin:0;padding:9px 10px;border-radius:10px;background:repeating-linear-gradient(135deg,var(--line-2) 0 1.5px,transparent 1.5px 7px);box-shadow:inset 0 0 0 1px var(--line);font-size:.76rem;color:var(--ink-2);text-align:center}
+.vpost[data-vald]{background-color:var(--btn-bg);background-position:-30% 0;box-shadow:0 10px 22px -12px rgba(9,66,108,.6)}
+.vpost[data-kall='schema'][data-vald]{background-color:var(--btn-bg);border-left-color:var(--btn-bg);box-shadow:0 10px 22px -12px rgba(9,66,108,.6)}
+.vpost[data-vald] .vtitel{color:#fff}
+.vpost[data-vald] .vtid,.vpost[data-vald] .vkall{color:rgba(255,255,255,.82)}
+.vpost[data-vald]::after{content:'\2713';position:absolute;top:6px;right:8px;font-size:.7rem;color:rgba(255,255,255,.9)}
+.vpost{position:relative}
+.vpost[data-nu]{outline:2px solid var(--atmosphere);outline-offset:2px}
+
+/* Remsan som håller ordning på kön — vilken lektion man står i, hur många kvar. */
+.konnu{font-size:.98rem;font-weight:600;color:var(--ink)}
+.konlekt{font-size:.9rem;color:var(--ink-2)}
+.konprickar{display:inline-flex;align-items:center;gap:6px;margin-left:auto}
+.konprick{width:9px;height:9px;border-radius:50%;background:var(--line-2)}
+.konprick[data-klar]{background:var(--sky-deep)}
+.konprick[data-nu]{background:transparent;box-shadow:inset 0 0 0 2px var(--sky-deep)}
+.konknappar{display:inline-flex;align-items:center;gap:12px}
+/* Under själva planeringen ska kön inte ta en egen rad: den blir en liten
+   remsa på samma axel som «Börja om», i motsatt hörn. Steg 1 och 2 flyttar upp
+   och den vita luften mellan dem försvinner — också när den säger klart. */
+.konrad[hidden]{display:none}
+.panel[data-kon]{padding-top:18px}
+.konrad{position:absolute;top:-24px;left:0;right:auto;z-index:6;display:flex;flex-wrap:nowrap;align-items:center;gap:10px;max-width:calc(100% - 124px);min-height:32px;margin:0;padding:4px 5px 4px 15px;border-radius:var(--r-pill);background:var(--accent-weak);box-shadow:inset 0 0 0 1px var(--atmosphere);line-height:1.35}
+.konrad .konnu{font-size:.8rem;font-weight:600;white-space:nowrap;flex:0 0 auto;line-height:1.35}
+.konrad .konlekt{font-size:.78rem;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.konrad .konprickar{margin-left:auto;flex:0 0 auto;padding-left:2px}
+/* Hur långt kön har kommit — i ord, inte i prickar. */
+.konlage{display:inline-block;font-family:var(--mono);font-size:.74rem;letter-spacing:.02em;color:var(--sky-deep);background:var(--surface);border-radius:var(--r-pill);padding:3px 10px;white-space:nowrap}
+.konlage b{font-weight:600}
+.konrad[data-lage='klar'] .konlage,.konrad[data-lage='slut'] .konlage{background:var(--accent-weak)}
+.konrad .konknappar{flex:0 0 auto;gap:10px}
+/* Remsan har en rad att ge — knappen i den ska därför inte bryta rad, och den ska
+   bära remsans skala, inte formulärets. */
+.konrad .konknappar .chip{white-space:nowrap;padding:6px 13px;font-size:.78rem}
+.konrad .konknappar .lank{font-size:.78rem;padding-right:8px}
+/* Klart-läget bär ett nästa steg — knappen är kvar, men i remsans egen skala. */
+.konrad[data-lage='klar'],.konrad[data-lage='slut']{background:var(--surface);box-shadow:inset 0 0 0 1.5px var(--sky-deep)}
+.konrad .primar{padding:5px 14px;font-size:.78rem;gap:7px}
+/* Smala fönster har inte plats bredvid «Börja om» — då faller remsan ner i flödet igen. */
+@media (max-width:760px){.konrad{position:static;max-width:none;margin:0 0 14px;padding:9px 14px;flex-wrap:wrap}}
+
+/* ══════════ BOKEN SOM UPPSLAG (steg 2) ══════════
+   Sidorna är bilder, inte siffror. Remsan går genom hela boken; avsnittslistan
+   är en genväg, inte en gräns. Uppslaget visar vad man faktiskt valt. */
+.bokdel{margin-top:18px;padding-top:18px;border-top:1px solid var(--line)}
+.bkhuvud{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px}
+.bkavsnitt{display:inline-flex;align-items:center;gap:9px;flex:0 0 auto;white-space:nowrap;border:1px solid var(--line);border-radius:var(--r-pill);background:var(--surface);padding:8px 15px;font-family:inherit;font-size:.86rem;font-weight:500;color:var(--ink);cursor:pointer;transition:border-color var(--dur-2) var(--ease),background-color var(--dur-2) var(--ease)}
+.bkavsnitt::after{content:'';width:6px;height:6px;border-right:1.5px solid var(--ink-3);border-bottom:1.5px solid var(--ink-3);transform:rotate(45deg) translateY(-2px)}
+.bkavsnitt:hover{border-color:var(--atmosphere);background:var(--accent-weak)}
+.bkhuvud .lank{margin-left:auto;font-size:.82rem}
+.bkkapitel{display:grid;margin:12px 0 0;border:1px solid var(--line);border-radius:var(--r-card);overflow:hidden;animation:stigin var(--dur-3) var(--ease) both}
+.bkkaprad{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:baseline;padding:11px 15px;background:var(--surface);border:none;text-align:left;font-family:inherit;cursor:pointer;transition:background-color var(--dur-1) var(--ease)}
+.bkkaprad+.bkkaprad{border-top:1px solid var(--line)}
+.bkkaprad .n{display:inline-flex;align-items:center;gap:10px;font-size:.9rem;color:var(--ink)}
+.bkkaprad .s{font-size:.78rem;color:var(--ink-3);font-variant-numeric:tabular-nums}
+.bkkaprad:hover{background:var(--sunken)}
+.bkkaprad[data-pa]{background:var(--accent-weak);box-shadow:inset 3px 0 0 var(--sky-deep)}
+.bkkaprad[data-pa] .n{font-weight:600}
+.bktur{font-size:.74rem;font-weight:600;color:var(--sky-deep);background:rgba(255,255,255,.72);border-radius:var(--r-pill);padding:2px 9px}
+.bkbokpanel{position:absolute;z-index:60;top:calc(100% + 6px);left:0;min-width:220px;display:grid;background:var(--surface);border-radius:12px;box-shadow:0 22px 44px -20px rgba(9,66,108,.5),var(--shadow-sm);padding:6px;animation:stigin var(--dur-2) var(--ease) both}
+.bkbokpanel[data-ut],.bkkapitel[data-ut]{animation:bkut 130ms var(--ease) both}
+@keyframes bkut{to{opacity:0;transform:translateY(-4px)}}
+.bkbokrad{border:none;background:transparent;border-radius:8px;padding:10px 12px;font-family:inherit;font-size:.88rem;color:var(--ink);text-align:left;cursor:pointer}
+.bkbokrad:hover{background:var(--sunken)}
+.bkbokrad[data-pa]{background:var(--accent-weak);color:var(--sky-deep);font-weight:500}
+.bkuppslag{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
+.bkblad{display:grid;gap:6px;align-content:start;min-height:136px;padding:14px 14px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;box-shadow:var(--shadow-sm)}
+.bkbrub{height:8px;width:54%;border-radius:2px;background:var(--sky-deep);opacity:.72}
+.bkblad i{display:block;height:4px;border-radius:2px;background:var(--line-2)}
+.bkbnr{margin-top:auto;padding-top:8px;font-size:.74rem;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums}
+.bkbavs{font-size:.72rem;color:var(--ink-3)}
+.bkremsa{position:relative;display:flex;gap:4px;align-items:flex-end;margin-top:12px;padding:14px 12px 12px;border-radius:var(--r-card);background:var(--sunken);overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none;-ms-overflow-style:none;scroll-behavior:smooth;cursor:ew-resize}
+.bkremsa::-webkit-scrollbar{width:0;height:0;display:none}
+.bksida{flex:0 0 auto;width:28px;height:42px;display:grid;align-content:end;justify-items:center;padding:0 0 4px;border:none;border-radius:3px;background:#fff;box-shadow:inset 0 0 0 1px var(--line);font-family:inherit;font-size:.62rem;color:var(--ink-3);font-variant-numeric:tabular-nums;cursor:pointer;transition:background-color var(--dur-1) var(--ease),height var(--dur-2) var(--ease),color var(--dur-1) var(--ease)}
+.bksida:hover{background:var(--accent-weak);color:var(--sky-deep)}
+.bksida[data-start]{box-shadow:inset 0 0 0 1px var(--line),inset 2px 0 0 var(--atmosphere)}
+.bksida[data-i]{background:var(--accent-weak);box-shadow:inset 0 0 0 1px var(--atmosphere);color:var(--sky-deep)}
+.bksida[data-kant]{height:54px;background:var(--sky-deep);box-shadow:none;color:#fff;font-weight:600}
+.bkspann{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;margin:12px 2px 0;font-size:.88rem;color:var(--ink)}
+.bkspann b{font-weight:600;font-variant-numeric:tabular-nums}
+.bkfakta{font-size:.8rem;color:var(--ink-2)}
+.bknyckla{margin-left:auto;display:inline-flex;align-items:center;gap:7px;font-size:.78rem;color:var(--ink-3)}
+.bknr{width:52px;border:1px solid var(--line);border-radius:8px;background:var(--surface);padding:6px 8px;font-family:inherit;font-size:.82rem;color:var(--ink);text-align:center;font-variant-numeric:tabular-nums}
+.bknr:focus{outline:none;border-color:var(--atmosphere);box-shadow:0 0 0 3px rgba(96,168,221,.25)}
+@media (max-width:560px){.bkuppslag{grid-template-columns:1fr}.bknyckla{margin-left:0}}
+
+/* Piller: texten radbryts aldrig — «Transkriberar 3 filer» på två rader med
+   «kvar» avklippt läses som en trasig etikett. */
+.korpill .ptext,.korpill .peta{white-space:nowrap}
+.korpill .peta{font-family:var(--sans);font-variant-numeric:tabular-nums}
+
+/* Skrivmaskinssnittet är ute ur appen. Där siffror ska stå i kolumn hålls de
+   ihop av tabulära siffror i stället för av ett eget typsnitt. */
+.vtid,.vkall,.vdagnamn,.kolangd,.speltid,.tumtid,.klocka,.ppct,.pklocka,.fasdetalj,.dmeta,.refmeta,.refminis,.vagfalt,.ktid2,.kalvecka,.kaltidfalt,.detalj .tid,.trad .tid,.lvmeta,input.komini,.filterrad input.field,.minietikett{font-variant-numeric:tabular-nums}
+/* … och därför inte heller i kön, steppern eller minutvalet: siffrorna i samma
+   vy ska se ut som siffror i samma vy. */
+.konlage,.konlage b,.steppervarde,.minutchip,.minutfalt input,.gzoomtext{font-family:var(--sans);font-variant-numeric:tabular-nums}
+
+/* Skrivknappen står i högerkanten också när noten bredvid är tom — det är
+   raden som håller platsen, inte texten som råkar fylla den. */
+.cta #skriv{margin-left:auto}
+
+/* ══════════ TVÅ KRYSS PÅ EN RAD ══════════
+   Provets lösningsförslag och formelblad är samma beslut — vad som skrivs ut
+   utöver provet — och tog förr en switchrad var. Kryssen bär samma form som
+   minutchipsen: samma spår, samma valda-ton, så att raden känns igen. */
+.kryssval{display:inline-flex;gap:2px;margin-left:auto;padding:4px;background:var(--track);border-radius:var(--r-pill)}
+.kryssknapp{border:none;border-radius:var(--r-pill);padding:7px 15px;background:transparent;font:inherit;font-size:.82rem;color:var(--ink-2);cursor:pointer;transition:background var(--dur-2) var(--ease),color var(--dur-2) var(--ease)}
+.kryssknapp:hover:not([aria-pressed='true']){background:var(--sky-pale);color:var(--ink)}
+.kryssknapp[aria-pressed='true']{background:var(--surface);color:var(--sky-deep);font-weight:600;box-shadow:var(--shadow-sm)}
+.kryssknapp[aria-pressed='true']::before{content:'✓ ';font-weight:400}
+
+/* Ett mätarspår utan fyllning är inget mått, bara ett streck — när ingen punkt
+   är vald står meningen ensam. */
+.tackning[data-tomt] .tackspar{display:none}
+
+/* ══════════ RADEN SOM SÄGER OM VALET HÅLLER ══════════
+   Provtiden mot lektionen, dagen mot kalendern. Tyst när allt stämmer, tydlig
+   när det inte gör det — men aldrig en modal för något man kan läsa på plats. */
+.typnot{flex:0 0 100%;display:flex;flex-wrap:wrap;align-items:center;gap:6px 9px;margin:2px 0 8px;font-size:.78rem;line-height:1.45;color:var(--ink-2)}
+.typnot[data-ton='krock']{color:var(--berry)}
+.typnot[data-ton='krock']::before{content:'';flex:0 0 auto;width:6px;height:6px;border-radius:50%;background:var(--berry)}
+.typnot[data-ton='ok']::before{content:'';flex:0 0 auto;width:6px;height:6px;border-radius:50%;background:var(--sage,var(--atmosphere))}
+/* Varningen bär sin egen åtgärd: raden säger vad som inte går ihop OCH hur det
+   löses, i stället för att peka tillbaka på en kontroll längre upp. */
+.typnotgor{white-space:nowrap;padding:3px 11px;font:inherit;font-size:.76rem;color:var(--berry);background:transparent;border:1px solid color-mix(in oklab,var(--berry) 42%,transparent);border-radius:999px;cursor:pointer;transition:background var(--dur-1,140ms) ease,border-color var(--dur-1,140ms) ease}
+.typnotgor:hover{background:color-mix(in oklab,var(--berry) 10%,transparent);border-color:var(--berry)}
+.typnot[data-ton='ok'] .typnotgor{color:var(--ink-2);border-color:var(--line)}
+
+/* Lov och bokade dagar syns i väljaren, inte först efteråt. */
+.kaldag[data-lov]{color:var(--ink-3);background:repeating-linear-gradient(135deg,transparent,transparent 3px,rgba(9,66,108,.07) 3px,rgba(9,66,108,.07) 6px)}
+/* Hovern fyller --sky-pale nu — en vit siffra på #BCDCF2 ger 1,43:1 och
+   försvinner. Vitt hör bara till det valda, som fyller mörkblått. */
+.kaldag[data-lov]:hover{color:var(--ink)}
+.kaldag[data-lov][aria-pressed='true']{color:#fff}
+.kaldag[data-bokat]::after{content:'';position:absolute;bottom:4px;width:4px;height:4px;border-radius:50%;background:var(--berry)}
+
+/* Canvas tonar ut i 220 ms. Under tiden får den inte äta klick — den är osynlig
+   men låg kvar över hela sidan. */
+.granskaskal:not([data-pa]){pointer-events:none}
+.granskaskal[data-pa]{pointer-events:auto}
+
+/* Förminskad vy går att fälla ut på plats — canvas ska vara ett val, inte enda
+   vägen till sitt eget dokument. */
+.dokstorlek{margin-left:0}
+
+/* En rad appen fyllde i åt en är ett förslag, inte ett beslut. Bocken blir en
+   ring tills läraren själv gått igenom steget. */
+.stegrad[data-foreslaget] .stegbock{background:transparent;color:transparent;box-shadow:inset 0 0 0 1.5px var(--line-2)}
+.stegrad[data-foreslaget] .stegtext b{color:var(--ink-2);font-weight:500}
+
+/* ══════════ MENYER SOM FÅR PLATS ══════════
+   En bred väljare rullar inuti sig själv, men scrollbaren var gömd: den sista
+   raden såg avskuren ut och menyn läste sig som trasig. Nu syns rullningen —
+   och sidan har luft under sista rutan, så att en meny som öppnas längst ner
+   alltid kan rullas fram i bild i stället för att skäras av mot fönsterkanten. */
+.valjpanel.brett{scrollbar-width:thin;scrollbar-color:var(--line-2) transparent}
+.valjpanel.brett::-webkit-scrollbar{width:9px;display:block}
+.valjpanel.brett::-webkit-scrollbar-track{background:transparent}
+.valjpanel.brett::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:99px;border:2px solid var(--surface)}
+.valjpanel.brett::-webkit-scrollbar-thumb:hover{background:var(--atmosphere)}
+#vy-planering .view{padding-bottom:300px}
+
+/* En bred väljare rullar bara lodrätt — den synliga scrollbaren skulle annars
+   pressa fram en vågrät stapel på tvären. */
+.valjpanel.brett{overflow-x:hidden}
+
+/* ── Det centrala innehållet, öppet i rutan ──────────
+   Listan låg som en flytande meny över panelen: den täckte längden, exemplen och
+   brickorna man just kryssade, och hängde ut under sidans underkant. Nu fälls
+   den ut i flödet under sin egen knapp. */
+.gyinline{display:grid}
+.gyinline:empty{display:none}
+.gyinline .valjpanel{position:static;top:auto;left:auto;right:auto;width:auto;min-width:0;max-width:none;margin:14px 0 2px;padding:8px;background:var(--sunken);box-shadow:inset 0 0 0 1px var(--line);max-height:334px;transform-origin:top center}
+.gyinline .valjpanel .lsokrad{background:var(--surface)}
+
+/* ── Uppgifterna ur boken ──────────────────────────────
+   Blocket sitter under sidspannet i bokpanelen, för det är spannet det handlar
+   om. Ingen ram runt panelens ram: en linje över, och därunder appens vanliga
+   chips. */
+.uppgblock{margin:18px 2px 0;padding-top:16px;border-top:1px solid var(--line)}
+.uppgblock[hidden]{display:none}
+.uppghuvud{display:flex;align-items:baseline;gap:12px}
+.uppgant{margin-left:auto;font-size:.78rem;color:var(--ink-3);font-variant-numeric:tabular-nums}
+/* Modellens förslag är en mening, inte en ruta. Den har läst sidorna redan när
+   panelen öppnas, så den ska inte se ut som ett svar man just väntat på — det
+   som ÄR ett svar ritas av fraga.js längre ner. */
+.uppgforslag{display:flex;gap:9px;margin:10px 0 0;font-size:.88rem;line-height:1.5;color:var(--ink);text-wrap:pretty}
+.uppgforslag::before{content:'';flex:0 0 auto;width:6px;height:6px;margin-top:.55em;border-radius:50%;background:var(--atmosphere)}
+.uppgater{margin:8px 0 0;font-size:.8rem}
+.uppgnivaer{display:grid;gap:8px;margin:14px 0 0}
+.uppgniva{display:grid;grid-template-columns:64px minmax(0,1fr);gap:10px;align-items:start}
+.uppgnivanamn{padding-top:6px;font-size:.78rem;color:var(--ink-3)}
+.uppgchips{display:flex;flex-wrap:wrap;gap:6px}
+.uppgchip{border:1px solid var(--line);border-radius:var(--r-pill);background:var(--surface);padding:5px 11px;font-family:var(--mono);font-size:.76rem;font-variant-numeric:tabular-nums;color:var(--ink);cursor:pointer;transition:background-color var(--dur-2) var(--ease),border-color var(--dur-2) var(--ease),color var(--dur-2) var(--ease)}
+.uppgchip:hover{border-color:var(--atmosphere);color:var(--sky-deep)}
+.uppgchip[aria-pressed='true']{background:var(--accent-weak);border-color:var(--atmosphere);color:var(--sky-deep)}
+/* En bortvald uppgift ska gå att LÄSA — den står kvar med streck över. Det är
+   boken man läser av, och boken byter inte ordning för att man hoppar en uppgift. */
+.uppgchip[data-bort]{background:var(--sunken);border-style:dashed;color:var(--ink-3);text-decoration:line-through}
+.uppgfragarad{display:flex;gap:10px;margin:14px 0 0}
+.uppgfragarad .field{flex:1;min-width:0}
+.uppgsvar{margin-top:10px}
+@media (max-width:560px){.uppgniva{grid-template-columns:1fr}.uppgnivanamn{padding-top:0}}

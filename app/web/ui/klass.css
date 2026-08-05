@@ -1,0 +1,348 @@
+/* ══════════ KLASSVYN ══════════
+   Sparat är inte längre ett rutnät man letar i — det är veckan man arbetar i.
+   Två flikar i samma skiva: klassens schema (där materialet ligger på lektionen
+   där det hör hemma) och hela högen som kort. Schemat är etsat med hårlinje och
+   svart lodstreck precis som i planeringsveckan; lektioner som har material är
+   fyllda i disblått. Samma grammatik, större yta. */
+
+/* ── Flikarna i skivan ─────────────────────────────── */
+.arkflikar{position:relative;display:flex;align-items:center;gap:26px;margin:-4px 0 20px;padding-bottom:11px;border-bottom:1px solid var(--line)}
+.arkflik{position:relative;border:none;padding:2px 0;background:transparent;color:var(--ink-3);font-family:inherit;font-size:.95rem;font-weight:500;cursor:pointer;opacity:.5;transition:opacity var(--dur-2) var(--ease)}
+.arkflik::after{content:'';position:absolute;left:0;right:0;bottom:-12px;height:1.5px;background:var(--ink);transform:scaleX(0);transform-origin:0 50%;transition:transform var(--dur-3) var(--ease)}
+.arkflik:hover{opacity:.8}
+.arkflik[aria-selected='true']{opacity:1}
+.arkflik[aria-selected='true']::after{transform:scaleX(1)}
+.arkflikantal{margin-left:auto;font-size:.78rem;color:var(--ink-3);opacity:.6;white-space:nowrap}
+.arkfraga{margin-top:0}
+.arkpanel{margin-top:20px}
+.arkpanel[hidden]{display:none}
+
+/* ── Klassremsan: veckans filter ─────────────────────
+   Ett filter som inte säger att det är ett filter läses som fyra knappar. */
+.klassrad{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 18px}
+.klassradlabel{font-size:.7rem;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-3);opacity:.6;margin-right:2px}
+.klasschip{display:inline-flex;align-items:center;white-space:nowrap;border:none;padding:7px 14px;border-radius:var(--r-pill);background-color:var(--track);background-image:linear-gradient(100deg,transparent 34%,rgba(255,255,255,.24) 50%,transparent 66%);background-size:260% 100%;background-position:130% 0;background-repeat:no-repeat;color:var(--ink-2);font-family:inherit;font-size:.84rem;font-weight:500;cursor:pointer;transition:background-color var(--dur-2) var(--ease),background-position var(--dur-4) var(--ease),color var(--dur-2) var(--ease),transform var(--dur-2) var(--ease),box-shadow var(--dur-2) var(--ease)}
+/* Samma hover som Fråga-knappen: den lyfter, ljusnar och får en glans dragen
+   över sig — inte en ny färg per knapptyp. */
+.klasschip:hover{background-color:#006FD6;background-position:-30% 0;color:#fff;box-shadow:0 10px 20px -10px rgba(9,66,108,.6);transform:translateY(-1px)}
+.klasschip:hover .kkurs{opacity:.8}
+.klasschip:active{transform:translateY(0) scale(.976)}
+.klasschip[aria-pressed='true']{background-color:var(--btn-bg);color:var(--btn-fg)}
+.klasschip[aria-pressed='true']:hover{background-color:#006FD6}
+.klasschip .kkurs{margin-left:7px;font-size:.74rem;opacity:.62}
+/* Hur stor del av veckan klassen redan har material för — siffran man annars
+   måste byta klass för att läsa av. */
+.klasschip .klage{margin-left:9px;padding-left:9px;border-left:1px solid currentColor;font-family:var(--mono);font-size:.7rem;font-variant-numeric:tabular-nums;opacity:.5}
+.klasschip[aria-pressed='true'] .klage,.klasschip:hover .klage{opacity:.75}
+.klasschip .klage[data-klar]::after{content:' ✓'}
+/* Klassprofilen är ett påslag, inte remsans färg: den ligger sist och låter
+   klassvalet behålla sin vikt. */
+.profilknapp{margin-left:auto;display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);padding:6px 13px;border-radius:var(--r-pill);background:transparent;color:var(--ink-2);font-family:inherit;font-size:.8rem;font-weight:500;cursor:pointer;transition:background-color var(--dur-2) var(--ease),border-color var(--dur-2) var(--ease),color var(--dur-2) var(--ease)}
+.profilknapp:hover{border-color:var(--atmosphere);color:var(--ink)}
+.profilknapp .valjpil{opacity:.55}
+.profilknapp[aria-pressed='true']{border-color:var(--navy);color:var(--navy)}
+.profilknapp[aria-pressed='true'] .valjpil{transform:translateY(2px) rotate(225deg)}
+
+/* ── Veckohuvudet ──────────────────────────────────── */
+.schemahuvud{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:0 0 4px}
+.schemahuvudtext{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+.schemavecka{font-family:var(--serif);font-size:1.5rem;font-weight:600;line-height:1;color:var(--ink)}
+.schemahuvud .spann{font-size:.84rem;color:var(--ink-3);opacity:.7;font-variant-numeric:tabular-nums}
+.schemahuvud .historik{margin-left:auto}
+
+/* «Idag» ritar en ring runt dagens kolumn, pulserar två gånger och slocknar.
+   Den ska säga «här är du» — inte bli en markering man sedan måste stänga av. */
+@keyframes idagpuls{0%{box-shadow:0 0 0 0 rgba(9,66,108,0)}18%{box-shadow:0 0 0 4px var(--sky-deep)}52%{box-shadow:0 0 0 8px var(--accent-weak)}100%{box-shadow:0 0 0 0 rgba(9,66,108,0)}}
+[data-idagpuls]{border-radius:12px;animation:idagpuls 1500ms var(--ease) 2}
+@media (prefers-reduced-motion:reduce){[data-idagpuls]{animation:none}}
+
+/* ── Schemagriden ──────────────────────────────────── */
+.schemagrid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin:16px 0 0;align-items:start}
+.skdag{display:flex;flex-direction:column;gap:8px;min-width:0}
+.skdagnamn{margin:0 0 2px;padding-bottom:7px;border-bottom:1px solid var(--line);font-size:.74rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
+.skdag[data-idag] .skdagnamn{color:var(--ink);border-bottom-color:var(--ink)}
+.skdaglov{margin:0;padding:11px 12px;border-radius:10px;background:repeating-linear-gradient(135deg,var(--line-2) 0 1.5px,transparent 1.5px 7px);box-shadow:inset 0 0 0 1px var(--line);font-size:.76rem;color:var(--ink-2)}
+.sktom{margin:0;padding:11px 12px;border-radius:10px;box-shadow:inset 0 0 0 1px var(--line);font-size:.76rem;color:var(--ink-3);opacity:.5}
+
+/* Lektionen: hårlinje och svart lodstreck så länge den är tom, fylld i
+   disblått när den har material. Ingen ny färg — samma två tillstånd som
+   planeringsveckan redan använder. */
+/* Fyra tillstånd, fyra former — inte fyra blåtoner. Ett tomt kort är papper
+   med streckad kant: platsen finns men är inte fylld. Ett kort med material är
+   FYLLT i himmelsblått med en massiv kant, och skiljer sig därför i valör och
+   inte bara i nyans. Saknas materialet med provdagen inpå blir kanten bärröd.
+   Och en dag som redan gått lägger sig platt: ingen fyllning, ingen lyftning,
+   halv opacitet — det förflutna går inte att planera om. */
+.lekt{position:relative;display:flex;flex-direction:column;gap:9px;padding:11px 12px;border-radius:2px 10px 10px 2px;border-left:3px solid var(--line);background:var(--surface);box-shadow:inset 0 0 0 1px var(--line);transition:transform var(--dur-2) var(--ease),box-shadow var(--dur-2) var(--ease),background var(--dur-2) var(--ease),opacity var(--dur-2) var(--ease)}
+.lekt:hover{transform:translateY(-1px);box-shadow:inset 0 0 0 1px var(--line),0 14px 30px -22px rgba(9,66,108,.55)}
+/* Tomt: streckad kant, blek text — en plats som väntar. */
+.lekt[data-tom]{border-left-style:dashed;border-left-color:var(--line-2)}
+.lekt[data-tom] .lektnamn{color:var(--ink-2);opacity:.72}
+/* Har material: fylld, massiv kant, mörkare text. Syns över hela rutnätet. */
+.lekt[data-klar]{border-left:3px solid var(--navy);background:var(--sky-pale);box-shadow:inset 0 0 0 1px rgba(9,66,108,.16)}
+.lekt[data-klar]:hover{box-shadow:inset 0 0 0 1px rgba(9,66,108,.16),0 14px 30px -20px rgba(9,66,108,.6)}
+.lekt[data-klar] .lekttid,.lekt[data-klar] .lektnamn{color:var(--navy)}
+/* Brådskar: bärröd kant och bärröd notis. Färgen används bara här. */
+.lekt[data-bradskar]{border-left:3px solid var(--berry);background:#FDF1F0}
+.lekt[data-bradskar]:hover{box-shadow:inset 0 0 0 1px var(--line),0 14px 30px -20px rgba(207,55,45,.45)}
+/* Provet behåller sin bläckkontur — men bara som ring, aldrig som fyllning. */
+.lekt[data-prov]{border-left:none;border-radius:10px;box-shadow:inset 0 0 0 1.5px var(--ink)}
+.lekt[data-prov]:hover{box-shadow:inset 0 0 0 1.5px var(--ink),0 14px 30px -22px rgba(9,66,108,.55)}
+.lekt[data-prov][data-klar]{background:var(--sky-pale)}
+/* Förbi: platt och tyst. Ingen fyllning, ingen lyftning, ingen bärröd varning. */
+.lekt[data-forbi]{opacity:.44;background:var(--surface);border-left-color:var(--line);box-shadow:inset 0 0 0 1px var(--line)}
+.lekt[data-forbi][data-klar]{opacity:.6;background:var(--sunken);border-left-color:var(--line-2)}
+.lekt[data-forbi][data-klar] .lekttid,.lekt[data-forbi][data-klar] .lektnamn{color:var(--ink-2)}
+.lekt[data-forbi]:hover{transform:none;opacity:.9}
+.skdag[data-forbi] .skdagnamn{color:var(--ink-3);opacity:.45}
+/* Valet är en ring, inte en fyllning — annars går det inte att skilja från
+   ett kort som redan har material. Ringen ska VÄXA fram: ett klick som bara
+   byter pixlar känns som en glitch, ett klick som rör sig känns som ett svar. */
+@keyframes valjpopp{0%{transform:scale(1)}34%{transform:scale(1.03)}100%{transform:scale(1)}}
+@keyframes ringin{from{outline-width:0;outline-color:transparent}55%{outline-width:4px;outline-color:var(--navy)}to{outline-width:2px;outline-color:var(--navy)}}
+@keyframes bockin{from{opacity:0;transform:scale(.5)}to{opacity:1;transform:none}}
+.lekt{outline:0 solid transparent;outline-offset:2px;transition:outline-width var(--dur-2) var(--ease),outline-color var(--dur-2) var(--ease),background-color var(--dur-2) var(--ease),box-shadow var(--dur-2) var(--ease),transform var(--dur-2) var(--ease)}
+.lekt[data-vald]{outline:2px solid var(--navy);outline-offset:2px;opacity:1;animation:valjpopp 340ms cubic-bezier(.22,.61,.36,1),ringin 340ms cubic-bezier(.22,.61,.36,1)}
+@media (prefers-reduced-motion:reduce){.lekt[data-vald]{animation:none}}
+.lekt[data-nu]{outline:2px solid var(--navy);outline-offset:2px;box-shadow:inset 0 0 0 1px var(--line),0 0 0 6px var(--accent-weak)}
+.lekttopp{display:flex;align-items:baseline;gap:8px}
+.lekttid{font-size:.74rem;font-weight:500;font-variant-numeric:tabular-nums;color:var(--ink-2)}
+.lektklass{margin-left:auto;padding:2px 8px;border-radius:var(--r-pill);background:var(--track);font-size:.7rem;font-weight:600;letter-spacing:.02em;color:var(--ink-2)}
+.lekt[data-prov] .lektklass{background:var(--ink);color:#fff}
+.lektnamn{margin:0;font-size:.86rem;font-weight:500;line-height:1.3;color:var(--ink)}
+/* Salen är information läraren letar efter, inte dekor: den satt på 10 px i 75 %
+   opacitet och läste sig som en vattenstämpel. Systemets regel är att hierarkin
+   görs med grad och vikt — inte med grått. */
+.lektsal{font-size:.74rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
+
+/* Materialet på lektionen: en remsa små papper. Klick öppnar pappret. */
+.lektdok{display:flex;flex-wrap:wrap;gap:6px}
+.dokchip{display:inline-flex;align-items:center;gap:6px;border:none;padding:5px 10px;border-radius:var(--r-pill);background-color:var(--surface);background-image:linear-gradient(100deg,transparent 34%,rgba(255,255,255,.34) 50%,transparent 66%);background-size:260% 100%;background-position:130% 0;background-repeat:no-repeat;box-shadow:inset 0 0 0 1px var(--line);color:var(--ink);font-family:inherit;font-size:.74rem;font-weight:500;cursor:pointer;transition:transform var(--dur-1) var(--ease),background-color var(--dur-2) var(--ease),background-position var(--dur-4) var(--ease),color var(--dur-2) var(--ease),box-shadow var(--dur-2) var(--ease)}
+.dokchip::before{content:'';width:5px;height:6px;border-radius:1px;background:var(--ink);opacity:.5}
+.dokchip:hover{background-color:var(--btn-bg);background-position:-30% 0;color:#fff;box-shadow:0 10px 22px -14px rgba(9,66,108,.62)}
+.dokchip:active{transform:scale(.976)}
+.dokchip:hover::before{background:#fff;opacity:.8}
+.dokchip[data-los]{color:var(--ink-2);opacity:.72;font-weight:400}
+.dokchip[data-mer]{box-shadow:inset 0 0 0 1px var(--line-2);color:var(--ink-2);padding:5px 9px}
+/* Inspelningen är inte ett papper — den är ljudet från lektionen. Egen ton,
+   ingen pappersprick, och den står först i remsan: det hände före materialet. */
+.dokchip[data-insp]{background-color:var(--accent-weak);color:var(--sky-deep);font-weight:600;font-variant-numeric:tabular-nums}
+.dokchip[data-insp]::before{display:none}
+.dokchip[data-insp]:hover{background-color:var(--sky-deep);color:#fff}
+.lektsaknas{display:inline-flex;align-items:center;gap:6px;font-size:.74rem;color:var(--berry)}
+.lektsaknas::before{content:'';width:5px;height:5px;border-radius:50%;background:var(--berry)}
+/* Samma besked, lägre röst: «inget material än» är ett läge, inte en varning. */
+.lektsaknas[data-blek]{color:var(--ink-3);opacity:.6}
+.lektsaknas[data-blek]::before{background:transparent;box-shadow:inset 0 0 0 1.5px var(--atmosphere)}
+.lektbokat{display:inline-flex;align-items:center;gap:6px;font-size:.72rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-2)}
+.lektplanera{border:none;padding:7px 11px;border-radius:8px;background-color:transparent;background-image:linear-gradient(100deg,transparent 34%,rgba(255,255,255,.32) 50%,transparent 66%);background-size:260% 100%;background-position:130% 0;background-repeat:no-repeat;box-shadow:inset 0 0 0 1px var(--line);color:var(--ink-2);font-family:inherit;font-size:.78rem;font-weight:500;text-align:left;cursor:pointer;transition:transform var(--dur-1) var(--ease),background-color var(--dur-2) var(--ease),background-position var(--dur-4) var(--ease),box-shadow var(--dur-2) var(--ease),color var(--dur-2) var(--ease)}
+.lektplanera:hover{background-color:var(--btn-bg);background-position:-30% 0;color:#fff;box-shadow:0 12px 26px -12px rgba(9,66,108,.62)}
+.lektplanera:active{transform:scale(.976)}
+.lekt[data-prov] .lektplanera{box-shadow:inset 0 0 0 1px var(--ink);color:var(--ink)}
+.lekt[data-prov] .lektplanera:hover{background-color:var(--ink);color:#fff;box-shadow:0 12px 26px -12px rgba(9,66,108,.62)}
+.schemasum{margin:18px 0 0;font-size:.84rem;color:var(--ink-2)}
+
+/* ── Förslaget ur kalendern och boken ──────────────── */
+.forslag{position:relative;display:grid;gap:9px;margin:18px 0 0;padding:16px 18px 18px;border-radius:var(--r-card);background:var(--sunken);box-shadow:inset 0 0 0 1px var(--line-2)}
+.forslag[hidden]{display:none}
+.fsetikett{display:flex;align-items:center;gap:8px;margin:0;font-size:.7rem;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3)}
+.fsetikett::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--atmosphere)}
+.fstext{margin:0;font-size:.92rem;line-height:1.5;color:var(--ink-2);max-width:70ch;text-wrap:pretty}
+.fstext b{font-weight:600;color:var(--ink)}
+.fsknappar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:3px}
+
+@media (max-width:900px){.schemagrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:560px){.schemagrid{grid-template-columns:minmax(0,1fr)}.arkflikar{gap:18px}.schemaval{align-items:flex-start;flex-direction:column}.schemaval .primar{width:100%}}
+
+/* ══════════ ATT MARKERA LEKTIONER ══════════
+   Kortet är valet. Vald lektion får samma disblå fyllning som kön redan använder
+   och en bock i nederkanten — ingen ny färg, inget nytt mönster. Raden under
+   veckan är kvittot: så här många, så här ska de planeras. */
+.lekt[data-valjbar]{cursor:pointer}
+
+.lektvald{display:none;align-items:center;gap:7px;font-size:.74rem;font-weight:600;letter-spacing:.02em;color:var(--sky-deep)}
+.lekt[data-vald] .lektvald{display:inline-flex;animation:bockin 300ms 70ms cubic-bezier(.22,.61,.36,1) both}
+.lvbock{display:grid;place-items:center;width:15px;height:15px;border-radius:50%;background:var(--sky-deep);color:#fff;font-size:.6rem;line-height:1}
+.schemaval{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:16px 0 0;padding:12px 16px;border-radius:var(--r-card);background:var(--accent-weak);box-shadow:inset 0 0 0 1px var(--line-2);animation:stigin var(--dur-3) var(--ease) both;animation:stigin var(--dur-3) var(--ease) both}
+.schemaval[hidden]{display:none}
+.svantal{font-size:.9rem;font-weight:600;color:var(--ink)}
+.svmjuk{flex:1 1 240px;min-width:0;font-size:.82rem;color:var(--ink-2)}
+.schemaval .lank{white-space:nowrap}
+
+/* Provets två skyldigheter ligger på lektionen: rättningen och omprovet. */
+.dokchip[data-atgard]{background-color:transparent;box-shadow:inset 0 0 0 1px var(--ink);color:var(--ink);font-weight:600}
+.dokchip[data-atgard]::before{display:none}
+.dokchip[data-atgard]:hover{background-color:var(--ink);color:#fff}
+.dokchip[data-atgard][data-klar]{box-shadow:inset 0 0 0 1px var(--line-2);color:var(--ink-3);font-weight:500}
+
+/* Omprovet frågar bara efter dagen — bandet står över veckan medan det gör det. */
+.omprovband{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 18px;padding:12px 16px;border-radius:var(--r-card);background:var(--surface);box-shadow:inset 0 0 0 1.5px var(--ink);animation:stigin var(--dur-3) var(--ease) both}
+.omprovband[hidden]{display:none}
+.omprovband p{flex:1 1 320px;min-width:0;margin:0;font-size:.86rem;line-height:1.5;color:var(--ink-2);text-wrap:pretty}
+.omprovband .lank{white-space:nowrap}
+
+/* ── Inspelningen som inte kunde placeras ──
+   Bandet står över veckan, frågar där man ändå tittar och försvinner när man
+   svarat. Samma form som omprovbandet — det är samma sorts fråga. */
+.oplacband{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 18px;padding:12px 16px;border-radius:var(--r-card);background:var(--surface);box-shadow:inset 0 0 0 1.5px var(--line-2);animation:stigin var(--dur-3) var(--ease) both}
+.oplacband[hidden]{display:none}
+.oplacband p{margin:0;font-size:.86rem;line-height:1.5;color:var(--ink-2)}
+.oplacband p b{font-weight:600;color:var(--ink)}
+.oplacband .arvprick{width:8px;height:8px;flex:0 0 auto;border-radius:50%;background:var(--atmosphere);position:static}
+.oplacchip{display:inline-flex;align-items:center;gap:8px;padding:5px 11px;border-radius:var(--r-pill);border:1px dashed var(--line-2);background:transparent;font-family:inherit;font-size:.78rem;color:var(--ink-2);cursor:pointer;transition:border-color var(--dur-2) var(--ease),color var(--dur-2) var(--ease)}
+.oplacchip:hover{border-style:solid;border-color:var(--atmosphere);color:var(--ink)}
+.oplacfraga{display:flex;align-items:center;gap:8px;margin-left:auto;flex-wrap:wrap}
+.oplacvad{font-size:.82rem;color:var(--ink-2)}
+.oplacknapp{border:none;border-radius:var(--r-pill);padding:5px 12px;font-family:inherit;font-size:.78rem;font-weight:600;background:var(--accent-weak);color:var(--sky-deep);cursor:pointer;transition:background-color var(--dur-2) var(--ease),color var(--dur-2) var(--ease)}
+.oplacknapp:hover{background:var(--sky-deep);color:#fff}
+
+/* ── Träfflistan i sökrutan ──
+   «Inspelningar» är tredje läget i sökraden högst upp. Lådan hänger under den
+   och ritar träffarna plus sysslorna: döpa om, radera flera, säkerhetskopiera.
+   Stängd tar den ingen plats alls — inte ens en linje. */
+.insplada{margin:16px 0 0;background:var(--surface);border-radius:var(--r-card);box-shadow:inset 0 0 0 1px var(--line);overflow:hidden;transition:margin var(--dur-4) var(--ease),box-shadow var(--dur-4) var(--ease)}
+.insplada:not([data-oppen]){margin:0;box-shadow:none}
+.insplada[hidden]{display:none}
+.iltopp{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;padding-bottom:2px}
+.ilhuvud{display:flex;align-items:center;gap:12px;width:100%;padding:13px 16px;border:none;background:transparent;font-family:inherit;text-align:left;cursor:pointer;transition:background-color var(--dur-2) var(--ease)}
+.ilhuvud:hover{background:var(--accent-weak)}
+.ilnamn{font-size:.9rem;font-weight:600;color:var(--ink)}
+.ilant{font-size:.78rem;color:var(--ink-3)}
+.ilpil{margin-left:auto;color:var(--ink-3);transition:transform var(--dur-2) var(--ease)}
+.ilhuvud[aria-expanded='true'] .ilpil{transform:rotate(180deg)}
+/* Fälls som veckobriefen: ytan växer, innehållet tonar in. */
+.ilyta{display:grid;grid-template-rows:0fr;transition:grid-template-rows var(--dur-4) var(--ease)}
+.insplada[data-oppen] .ilyta{grid-template-rows:1fr}
+.ilinner{min-height:0;overflow:hidden;opacity:0;transform:translateY(-6px);transition:opacity var(--dur-3) var(--ease),transform var(--dur-3) var(--ease)}
+.insplada[data-oppen] .ilinner{opacity:1;transform:none}
+.ilkropp{display:grid;gap:10px;padding:14px 16px 16px}
+.ilsok{width:100%;max-width:340px}
+.illista{display:grid}
+.ilrad{display:grid;grid-template-columns:20px minmax(0,1fr) auto;gap:12px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line)}
+.ilrad:last-child{border-bottom:none}
+.ilkryss{width:18px;height:18px;border:none;border-radius:5px;background:transparent;box-shadow:inset 0 0 0 1.5px var(--line-2);color:#fff;font-size:.62rem;display:grid;place-items:center;cursor:pointer;transition:background-color var(--dur-1) var(--ease),box-shadow var(--dur-1) var(--ease),transform var(--dur-1) var(--ease)}
+.ilkryss:hover{box-shadow:inset 0 0 0 1.5px var(--sky-deep)}
+.ilkryss[aria-checked='true']:hover{background:#006FD6}
+.ilkryss:active{transform:scale(.94)}
+.ilkryss[aria-checked='true']{background:var(--sky-deep);box-shadow:none}
+.iltext{min-width:0;border:none;background:transparent;font-family:inherit;text-align:left;padding:0;cursor:pointer}
+.iltext b{display:block;font-size:.84rem;font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.iltext span{font-size:.74rem;color:var(--ink-3)}
+/* Den enda klickbara ytan i appen utan egen transition, och avsiktligt: hovern är
+   en understrykning, och text-decoration går inte att tona. */
+.iltext:hover b{text-decoration:underline;text-underline-offset:3px}
+.ildop{font-size:.84rem;padding:6px 10px;width:100%;max-width:320px}
+.ilfot{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding-top:4px}
+/* Radera står tom och FYLLS röd på hover — så syns glansen svepa, och färgen
+   betyder något i stället för att alltid skrika. Knappen är aldrig död: är inget
+   markerat säger den det i stället för att vara ogripbar. */
+.insplada .radera{background-color:transparent;color:var(--berry);box-shadow:inset 0 0 0 1px var(--berry);background-image:linear-gradient(100deg,transparent 34%,rgba(255,255,255,.5) 50%,transparent 66%);transition:background-color var(--dur-2) var(--ease),background-position var(--dur-4) var(--ease),color var(--dur-2) var(--ease),box-shadow var(--dur-2) var(--ease),transform var(--dur-1) var(--ease)}
+.insplada .radera:hover{background-color:var(--berry);color:#fff;background-position:-30% 0;filter:none;box-shadow:0 10px 22px -10px rgba(155,28,63,.65);transform:translateY(-1px)}
+.insplada .radera:active{transform:translateY(0) scale(.976)}
+.ilfot .ilnot{margin-left:auto;font-size:.76rem;color:var(--ink-3)}
+
+/* ══════════ KALENDERSYNKEN ══════════
+   Schemat, salarna och loven ägs av Google Kalender. Appen skriver tillbaka sina
+   egna poster — men pappret stannar här, för en kalender kan inte bära en PDF. */
+/* Synken hör till veckan man tittar på, inte till sidan: den står i veckohuvudet
+   bredvid «Den här veckan», som en knapp bland de andra. Vad den gör står i
+   tipset — raden själv säger bara när det senast hände. */
+.synkrad{display:flex;align-items:center;flex:0 0 auto}
+.synkknapp{display:inline-flex;align-items:center;min-height:28px;gap:7px;padding:5px 12px 5px 10px;border:1px solid var(--line);border-radius:var(--r-pill);background-color:var(--surface);background-image:linear-gradient(100deg,transparent 34%,rgba(255,255,255,.34) 50%,transparent 66%);background-size:260% 100%;background-position:130% 0;background-repeat:no-repeat;font-family:inherit;font-size:.74rem;color:var(--ink-2);white-space:nowrap;cursor:pointer;transition:background-color var(--dur-2) var(--ease),background-position var(--dur-4) var(--ease),color var(--dur-2) var(--ease),border-color var(--dur-2) var(--ease),box-shadow var(--dur-2) var(--ease),transform var(--dur-1) var(--ease)}
+.synkknapp:hover{background-color:var(--sky-deep);background-position:-30% 0;border-color:var(--sky-deep);color:#fff;transform:translateY(-1px);box-shadow:0 8px 18px -10px rgba(9,66,108,.55)}
+.synkknapp:active{transform:translateY(0) scale(.976)}
+.synkprick{width:6px;height:6px;border-radius:50%;background:var(--atmosphere);flex:0 0 auto}
+.synkknapp:hover .synkprick{background:#fff}
+.synkrad[data-lage='synkar'] .synkprick{animation:puls 1.05s var(--ease) infinite}
+.synkrad[data-lage='synkar'] .synkknapp{pointer-events:none;opacity:.75}
+.synktext{white-space:nowrap;flex:0 0 auto}
+
+/* ══════════ KLASSPROFILEN ══════════ */
+.klassprofil{margin:20px 0 0;padding:16px 18px 14px;border-radius:var(--r-card);background:var(--surface);box-shadow:inset 0 0 0 1px var(--line-2);animation:stigin var(--dur-3) var(--ease) both}
+.klassprofil[hidden]{display:none}
+.kprhuvud{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 12px}
+.kpretikett{margin:0;font-size:.72rem;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3)}
+.kprn{font-size:.78rem;color:var(--ink-3);opacity:.7}
+.kprhuvud .lank{margin-left:auto}
+.kprnat{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(258px,100%),1fr));gap:1px;background:var(--line);border-radius:10px;overflow:hidden}
+.kprrad{position:relative;display:grid;gap:2px;padding:10px 12px;background:var(--surface);transition:background var(--dur-2) var(--ease)}
+.kprrad:hover{background:var(--sunken)}
+.kprnamn{font-size:.74rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3)}
+.kprvarde{font-size:.9rem;font-weight:500;color:var(--ink);padding-right:44px}
+.kprstod{font-size:.75rem;color:var(--ink-3);opacity:.75}
+.kprglom{position:absolute;top:9px;right:10px;border:none;background:transparent;color:var(--ink-3);font-family:inherit;font-size:.72rem;cursor:pointer;opacity:0;transition:opacity var(--dur-2) var(--ease),color var(--dur-2) var(--ease)}
+.kprrad:hover .kprglom{opacity:.7}
+.kprglom:hover{opacity:1;color:var(--berry);text-decoration:underline;text-underline-offset:3px}
+.kprfot{margin:12px 0 0;font-size:.78rem;color:var(--ink-3);max-width:78ch}
+
+/* Vad minnet fyllde i åt läraren. Formen är pratbubblan i marginalen (.bubbla i
+   app4.css) — raden här är fallbacken för den som ligger kvar i flödet. */
+.minnesrad:not(.bubbla){display:flex;align-items:center;gap:11px;margin:0 0 16px;padding:10px 14px;border-radius:var(--r-pill);background:var(--accent-weak);box-shadow:inset 0 0 0 1px var(--line-2)}
+.minnesrad{animation:stigin var(--dur-3) var(--ease) both}
+.minnesrad[hidden]{display:none}
+.mrprick{width:7px;height:7px;border-radius:50%;background:var(--atmosphere);flex:0 0 auto}
+.mrtext{margin:0;font-size:.84rem;color:var(--ink-2);min-width:0}
+.minnesrad:not(.bubbla) .mrtext{flex:1 1 auto}
+.mrtext b{font-weight:600;color:var(--ink)}
+.minnesrad:not(.bubbla) .lank{white-space:nowrap}
+
+/* ══════════ INGEN MARKERING ══════════
+   Att dra med musknappen nere ska inte lägga en blå slöja över halva sidan. Det
+   här är ett gränssnitt, inte ett dokument: rubriker, etiketter, kort och knappar
+   markeras aldrig. Undantaget är där man FAKTISKT skriver eller kopierar —
+   fälten, transkriptet och pappret — där markeringen bär en funktion. */
+body{-webkit-user-select:none;user-select:none}
+input,textarea,select,[contenteditable='true'],[contenteditable='']{-webkit-user-select:text;user-select:text}
+.ltrad,.lstor,.fhark,.arkskal,.gplan,.provark,.ark,.tavla,#arkivsvar{-webkit-user-select:text;user-select:text}
+/* Dragningen får heller inte ta tag i bilder och miniatyrer. */
+img,.minisida,.refminis,.svminis{-webkit-user-drag:none;user-drag:none}
+
+/* En avklarad lektion i kön är inte samma sak som en vald: den blå ringen står
+   kvar, men bocken blir grön och texten säger «Klar». Med två klasser i kön är
+   det här den enda platsen där man ser hur långt man kommit i själva veckan. */
+.lekt[data-koklar]{outline-color:var(--sage,#2E7D5B)}
+.lekt[data-koklar] .lektvald{color:var(--sage,#2E7D5B)}
+.lekt[data-koklar] .lvbock{background:var(--sage,#2E7D5B)}
+.lekt[data-koklar][data-nu]{outline-color:var(--navy)}
+
+/* ══════════ ETT HUVUD FÖR VECKAN ══════════
+   Vecka, vägen mellan veckorna, synken och klassfiltret låg som tre egna
+   våningar med egna marginaler — tre rader knappar för två frågor. Nu är det en
+   rad: vilken vecka till vänster, vilken klass till höger. */
+.schemahuvud{display:flex;align-items:center;gap:8px 13px;flex-wrap:wrap;margin:0 0 14px}
+.schemahuvud .schemavecka{font-size:1.3rem}
+.schemahuvud .schemahuvudtext{gap:10px;align-items:baseline}
+.schemahuvud .historik{flex:0 0 auto;margin-left:-2px}
+.schemahuvud #schemanu{white-space:nowrap}
+.schemahuvud .klassrad{margin:0 0 0 auto;gap:7px}
+.schemahuvud .synkrad{margin-left:0}
+@media (max-width:900px){.schemahuvud .klassrad{margin-left:0}}
+
+/* ── Frågekonsolen: ETT piller, inte tre kontroller ──
+   Läget är fältets omfång och hör därför i fältet — inte bredvid det. */
+.arkfraga{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.fragkonsol{flex:1 1 460px;display:flex;align-items:center;gap:9px;min-width:0;padding:5px 6px;background:var(--surface);border-radius:var(--r-pill);box-shadow:var(--shadow-sm);transition:box-shadow var(--dur-3) var(--ease),transform var(--dur-3) var(--ease)}
+.fragkonsol:focus-within{box-shadow:0 14px 30px -18px rgba(9,66,108,.55);transform:translateY(-1px)}
+.fragkonsol .seg{flex:0 0 auto;padding:3px}
+.fragkonsol .seg button{padding:7px 14px;font-size:.86rem}
+.konsollinje{width:1px;height:22px;background:var(--line-2);flex:0 0 auto}
+.fragkonsol #arkivfalt{flex:1 1 auto;min-width:90px;border:none;background:transparent;box-shadow:none;padding:9px 2px}
+.fragkonsol #arkivfalt:hover,.fragkonsol #arkivfalt:focus{border:none;box-shadow:none}
+.fragkonsol .kor{flex:0 0 auto}
+@media (max-width:620px){.konsollinje{display:none}.fragkonsol{border-radius:var(--r-card);flex-wrap:wrap}}
+
+/* Synken är ett tillstånd, inte en handling man letar efter: den står som tyst
+   text efter veckans datum och väcks till knapp först när man pekar på den. */
+.schemahuvud .synkknapp{padding:3px 2px;border:none;box-shadow:none;background-color:transparent;font-size:.78rem;color:var(--ink-3)}
+.schemahuvud .synkknapp:hover{background-color:transparent;border:none;box-shadow:none;transform:none;color:var(--sky-deep);text-decoration:underline;text-underline-offset:3px}
+.schemahuvud .synkknapp:hover .synkprick{background:var(--sky-deep)}
+
+/* Datumspannet står redan i veckans dagrubriker (MÅN 17 AUG … FRE 21 AUG) —
+   därför behöver rubriken bara veckonumret. Det är bredden som gör att veckan och
+   klassfiltret får plats på samma rad. */
+.schemahuvud #schemaspann{display:none}
+
+/* Veckobriefen står nu sist i frågeraden — då ska dess panel falla ut från
+   HÖGER kant, annars hänger den ut över fönstret och kapas. */
+.arkfraga .briefwrap .briefyta{left:auto;right:0}
+.arkfraga .briefwrap{margin-left:auto}

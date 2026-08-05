@@ -1,0 +1,56 @@
+/* ============================================================
+   Transkribera — designsystemets fundament
+   SPEGEL av frontend/src/app.css. Genererad, redigera i Claude Design.
+
+   Riktning: "romantisk himmel med flytande skrivbord" — cerulean himmelsduk
+   som hel duk, vita ytor som flyter ovanpå, litterär serif i display,
+   Switzer i all UI. Rörelse är en del av systemet: --ease/--dur nedan
+   är de enda kurvorna och tiderna som får användas.
+
+   Snitten deklareras inte här utan i typsnitt.css, som app.html laddar före den
+   här filen: appen är en skrivbordsapp och får inte hämta typsnitt från
+   Fontshare eller Google Fonts vid start. Samma familjer, samma vikter.
+   Skymningsläget är borttaget — systemet har ett läge, dagsljus.
+   ============================================================ */
+
+:root{
+  /* himmelspalett */
+  --sky:#117BC8; --sky-deep:#0D5C96; --sky-pale:#BCDCF2; --atmosphere:#60A8DD;
+  --navy:#09426C; --berry:#CF372D;
+
+  --canvas:#117BC8; --surface:#FFFFFF; --sunken:#F1F7FB;
+  --ink:#000000; --ink-2:#000000; --ink-3:#000000;
+  --on-sky:#FFFFFF; --on-sky-2:rgba(255,255,255,.80); --on-sky-3:rgba(255,255,255,.58);
+  --line:#DADADA; --line-2:#BFDCF1;
+  --accent:#117BC8; --accent-weak:#E6F1FA;
+  --ok:#117BC8; --warn:#CF372D; --bad:#CF372D;
+  --c-plum:#CF372D; --c-sky:#117BC8; --c-sage:#09426C; --c-mustard:#60A8DD;
+  --btn-bg:#09426C; --btn-fg:#FFFFFF; --track:#E8F1F8;
+  --on-accent:#FFFFFF; --on-ok:#FFFFFF; --knob:#FFFFFF;
+
+  --sans:"Switzer","Helvetica Neue",system-ui,sans-serif; /* @kind font */
+  --serif:"Cormorant Garamond","EB Garamond",Georgia,"Times New Roman",serif; /* @kind font */
+  /* Inget skrivmaskinssnitt i appen. Siffror, tider och mikroetiketter sätts i
+     samma sans som allt annat — tydligare på små grader — med tabulära siffror
+     där de ska stå i kolumn. Namnet står kvar så rollen går att peka på. */
+  --mono:"Switzer","Helvetica Neue",system-ui,sans-serif; /* @kind font */
+
+  --r-input:8px; --r-card:12px; --r-panel:20px; --r-pill:9999px;
+  --shadow-sm:0 4px 4px rgba(13,92,150,.10);
+  --shadow:0 30px 64px -34px rgba(9,66,108,.48),0 8px 22px -14px rgba(13,92,150,.26);
+
+  /* rörelse */
+  --ease:cubic-bezier(.22,.61,.36,1); /* @kind other */
+  --ease-out:cubic-bezier(.16,1,.3,1); /* @kind other */
+  --dur-1:140ms; /* @kind other */
+  --dur-2:260ms; /* @kind other */
+  --dur-3:420ms; /* @kind other */
+  --dur-4:720ms; /* @kind other */
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--canvas);color:var(--ink);font-family:var(--sans);
+  font-size:16px;line-height:1.45;-webkit-font-smoothing:antialiased;letter-spacing:-0.006em}
+a{color:var(--sky-deep);text-decoration:underline;text-underline-offset:3px;text-decoration-thickness:1px}
+a:hover{color:var(--sky)}
+:focus-visible{outline:2px solid var(--atmosphere);outline-offset:3px}
