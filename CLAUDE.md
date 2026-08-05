@@ -104,8 +104,10 @@ kod inte gör:
 
 - **Den ruttnar tyst.** Koden ändras, filen ändras inte, och nästa läsare kan
   inte se vilka stycken som fortfarande gäller. Det har hänt här: `DESIGN.md`
-  beskrev papper+bläck långt efter att appen blivit en himmel, och de gamla
-  planerna under `docs/superpowers/` beskriver en Svelte-frontend som är borta.
+  beskrev papper+bläck långt efter att appen blivit en himmel, och de 74
+  plan- och specfilerna under `docs/superpowers/` beskrev en Svelte-frontend
+  som var borttagen. Båda är raderade; det som fortfarande gällde flyttades in
+  i koden vid raderna det handlar om.
 - **Den kostar dubbelt.** Varje ändring blir två ändringar, och den andra glöms.
 - **Den delar upp sanningen.** Läser man koden och nöjer sig — vilket man gör —
   missar man detaljen som bara stod i .md-filen. Står den i kommentaren ovanför

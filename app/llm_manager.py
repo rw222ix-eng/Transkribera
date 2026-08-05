@@ -30,8 +30,7 @@ class GGUFModelSpec:
         return self.mmproj_filename is not None
 
 
-# Locked text model — values from the Phase 0 spike
-# (docs/superpowers/notes/2026-06-19-llamacpp-spike.md).
+# Locked text model — values from the Phase 0 spike.
 # Phase 3 may swap this after the Swedish benchmark.
 ACTIVE_LLM = GGUFModelSpec(
     repo_id="Qwen/Qwen3-14B-GGUF",

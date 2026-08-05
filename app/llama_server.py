@@ -1,8 +1,7 @@
 """Manage the bundled llama.cpp server (llama-server.exe) as a child process.
 
-Flags encode the long-context strategy proven in the Phase 0 spike
-(docs/superpowers/notes/2026-06-19-llamacpp-spike.md): all layers on the GPU, a
-large context window, flash attention on, and a q8_0 KV cache (halves KV VRAM at
+Flags encode the long-context strategy proven in the Phase 0 spike: all layers on
+the GPU, a large context window, flash attention on, and a q8_0 KV cache (halves KV VRAM at
 <0.1% quality loss). Critically, --parallel 1 keeps the full -c as ONE contiguous
 context (the server otherwise splits it across 4 slots, silently shrinking each
 request's window). NEVER use q4 on the V-cache — it is 3-4x more sensitive than K.

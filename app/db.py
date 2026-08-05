@@ -5,7 +5,7 @@ The transcription *artifacts* (transcript segments, output files) stay in
 them: which lesson a recording belongs to, and its class/course/room. Each
 lesson links back to its history entry via ``history_id``.
 
-Design goals (see docs/superpowers/specs/2026-06-20-lektionsorganisation-design.md):
+Design goals:
 - Local/offline, single user — plain ``sqlite3`` from the stdlib, WAL mode.
 - GUI-agnostic and testable: every function takes a connection.
 - Degrades gracefully: callers open a fresh connection per request; WAL makes
@@ -115,7 +115,7 @@ CREATE INDEX IF NOT EXISTS idx_markers_lesson ON markers(lesson_id);
 # Lektionsminne & planering (v4, Fas 3) — ENDAST additiv: tre nya tabeller,
 # inga ändringar i befintliga. Rollback = DROP TABLE content_tags,
 # course_content, planned_lessons + PRAGMA user_version=3; befintlig data
-# rörs aldrig (se docs/superpowers/specs/2026-07-16-…-design.md §2).
+# rörs aldrig.
 #
 # * planned_lessons — tavlor/planeringar med status planerad|hållen|inställd;
 #   lesson_id sätts när lektionen hållits (auto-länkning i org-flödet).

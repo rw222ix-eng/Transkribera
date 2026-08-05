@@ -57,8 +57,7 @@ elevdokumentet.
 ## Konsekvenser för appen
 
 1. **Datamodell**: `courses`-tabellen (platt kurslista) behöver ersättas/utökas
-   med ämne + nivå (kod, namn, ämne, ordning, gy11-alias). Migrering krävs —
-   se planen i `docs/superpowers/`.
+   med ämne + nivå (kod, namn, ämne, ordning, gy11-alias). Migrering krävs.
 2. **Provkonstruktion**: generatorn ska (a) hämta nivåns centrala innehåll ur
    `centralt-innehall.json`/DB i stället för fri text, (b) tagga varje uppgift
    med förmåga + innehållspunkt, (c) sprida uppgifterna jämnt över de sex

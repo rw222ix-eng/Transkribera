@@ -73,4 +73,6 @@ lektionstavlans renderingsmotor (`whiteboard/`, egen iframe), vendorad KaTeX och
 eftersom CTranslate2:s modell-destruktor kan abortera processen vid GPU-teardown på Windows —
 subprocessen håller modellen vid liv till sitt eget rena avslut och servern streamar progress.
 
-Design och plan: `docs/superpowers/`.
+Designen bor i Claude Design-projektet «Transkribera Design System» och ligger
+kopierad i `app/web/ui/` — den mappen är frontenden, inte en spegel av den.
+Resonemangen bakom koden står i koden; `CLAUDE.md` bär det som gäller hela repot.

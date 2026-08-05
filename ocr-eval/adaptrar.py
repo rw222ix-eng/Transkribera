@@ -334,9 +334,20 @@ _claude_code = _claude_code_kor(None)
 KANDIDATER = [
     Kandidat("claude-code", "prenumeration", _claude_code, _claude_code_saknas),
     # De tre nedan är samma CLI med EN sak ändrad var. Ingen av dem stängde
-    # gapet mot API-kandidaten — se plandokumentet
-    # docs/superpowers/plans/2026-07-30-tavla-fran-boksida.md för hela mätningen.
-    # De ligger kvar för att en motbevisad hypotes annars prövas igen.
+    # gapet mot API-kandidaten. De ligger kvar för att en motbevisad hypotes
+    # annars prövas igen — mätningen 2026-07-30, tecken/figurtext/sekunder
+    # per boksida:
+    #
+    #   claude (API)       —                      8 999 / 3 168 / 115
+    #   claude-code-max    --effort max           7 489 / 2 591 / 334
+    #   claude-code        (default)              7 276 / 2 169 /  96
+    #   claude-code-fil    svaret skrivs till fil 6 776 / 2 042 /  92
+    #   claude-code-egen   egen systemprompt      6 298 / 1 851 /  75
+    #   gemini-flash       —                      5 016 / 1 651 /  32
+    #
+    # Alltså: `--effort max` kostade 3,5x tiden och gav MINDRE text än default,
+    # och en egen systemprompt gjorde avläsningen sämre, inte bättre. Valet blev
+    # claude-code på default — närmast API-kvaliteten, betalas av prenumerationen.
     Kandidat("claude-code-egen", "prenumeration",
              _claude_code_kor(SYSTEM_AVLASARE), _claude_code_saknas),
     # Effort, inte systemprompt. `claude -p` ärver effortLevel ur användarens

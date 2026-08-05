@@ -68,8 +68,8 @@ sig något? Det svarar aldrig på om utläsningen blev *rätt*.
 De fyra `claude-code`-raderna är samma CLI med en sak ändrad var — effort,
 systemprompt respektive leveranssätt. De ligger kvar som bevis: var och en av
 dem prövade en förklaring till varför API-anropet skriver mer, och ingen av dem
-stängde gapet. Se plandokumentet `docs/superpowers/plans/2026-07-30-tavla-fran-boksida.md`
-innan du prövar samma sak igen.
+stängde gapet. Mätningen står i `adaptrar.py` vid kandidatlistan — läs den innan
+du prövar samma sak igen.
 
 ## Kandidater
 
