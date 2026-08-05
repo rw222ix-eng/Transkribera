@@ -89,6 +89,23 @@ test("transkriptet från servern blir appens transkript", async ({ page }) => {
   expect(rader[0][0]).toBe("00:00");        // tidsstämpeln följer med in i appen
 });
 
+test("en ström som tar slut utan svar blir ett besked, inte ett JS-fel", async ({ page }) => {
+  // Servern kan dö mitt i, eller anslutningen brytas. Då finns inget done-event
+  // — och det får inte bli «Cannot read properties of null» i konsolen.
+  const jsfel = [];
+  page.on("pageerror", e => jsfel.push(e.message));
+  await page.route("**/api/transcribe", route =>
+    route.fulfill({ status: 200, contentType: "text/event-stream",
+                    body: strom([{ type: "progress", pct: 45 }]) }));
+  await page.goto("/");
+  await page.waitForFunction(() => window.API && window.API.pa);
+  await koaEnFil(page);
+  await page.locator("#starta").click();
+
+  await expect(page.locator("#korvarningar .varnruta")).toContainText("slutade svara");
+  expect(jsfel).toEqual([]);
+});
+
 test("ett fel från servern blir en varning läraren kan agera på", async ({ page }) => {
   await page.route("**/api/transcribe", route =>
     route.fulfill({ status: 400, contentType: "application/json",

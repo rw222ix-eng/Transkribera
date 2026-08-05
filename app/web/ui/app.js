@@ -458,6 +458,10 @@ async function korRiktigt(rader, fottext) {
         },
         kostnad: h => { kostnad += h.usd; },
       });
+      /* Strömmen kan ta slut utan sitt done — servern kan dö, anslutningen kan
+         brytas. Utan den här kontrollen blev det ett JS-fel i konsolen och en
+         obegriplig rad i varningsrutan i stället för ett besked. */
+      if (!svar) throw new Error('Servern slutade svara mitt i körningen. Filen är orörd — försök igen.');
       r.klar = true;
       r.resultat = svar;
       window.transkript = (svar.transcript || []).map(s => [klockstr(Math.round(s.start)), s.text]);
