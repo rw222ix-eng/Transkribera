@@ -4,8 +4,9 @@ Project memory for Claude Code. This file is always loaded at session start and
 reaches subagents. Most sections below govern **all PR-related work**: writing
 code that will become a PR, opening PRs, reviewing PRs, and applying fixes after
 review. Obey them whenever the task touches a branch, a diff, or a pull request.
-Undantaget är *Modellens kända svagheter*, som gäller **varje** uppgift i repot —
-även rena frågor, utredningar och engångskommandon.
+Undantagen är *Dokumentationen bor i koden* och *Modellens kända svagheter*, som
+gäller **varje** uppgift i repot — även rena frågor, utredningar och
+engångskommandon.
 
 ---
 
@@ -15,47 +16,58 @@ Transkribera — lokal skrivbordsapp (Windows) som transkriberar lektioner/ljud/
 och organiserar dem per datum, klass och kurs. Allt körs **lokalt/offline**.
 
 - **Stack:** Python 3 · FastAPI + Uvicorn (lokalt webb-UI) · pywebview (eget
-  fönster) · **Svelte 5 + Vite** (frontenden, källan i `frontend/src/`, serveras på `/`) ·
+  fönster) · **ramverkslös frontend** (`app/web/ui/`, serveras på `/`) ·
   faster-whisper/CTranslate2 (KB-Whisper sv) · llama.cpp (`llama-server`) + Qwen3-14B-Q8
   för korrigering/sammanfattning/chatt/extraktion · lokal **SQLite** (`app/db.py`,
   `transkribera.db`) + `history.json` · PyInstaller-bygge. Målhårdvara: RTX 4090 / 24 GB.
-- **Frontenden (Svelte 5 + Vite):** dess konfig (`package.json`, `vite.config.js`,
-  `svelte.config.js`, `jsconfig.json`, `index.html`) ligger i **repo-roten**; källan i
-  `frontend/src/`. Byggs till `app/web/next/` (gitignorerad) och serveras av FastAPI på
-  `/` — samt fortsatt på `/next`, dit hela e2e-sviten pekar. Kommandon körs från
-  repo-roten, **utan `--prefix`**: `npm run dev` (Vite `:5173`), `npm run build`,
-  `npm run check` (svelte-check).
-  · **Byggordning vid paketering:** `npm run build` MÅSTE köras före PyInstaller.
-  · **Varför Vite-roten är repo-roten:** Impeccables live-läge skriver temp-komponenter
-    till `<projectRoot>/node_modules/.impeccable-live/`, och Vite transformerar bara
-    filer inuti sin egen rot. Med roten i en undermapp levererades `.svelte`-filerna
-    okompilerade och varianterna kunde aldrig monteras.
-  · **Säkerhet — rör inte:** eftersom Vite-roten är repo-roten är `server.fs.allow`
-    i `vite.config.js` en **allowlist** (`frontend/src`, `node_modules`, `index.html`)
-    och dev-servern binder till `127.0.0.1`. Utan den skulle dev-servern kunna servera
-    hela repot över HTTP, inklusive `Transkriberingar/`. **Vidga den inte.**
-  · **Den gamla vanilla-JS-appen är pensionerad** (`app.js`, `style.css`, `index.html`,
-    "inget byggsteg", morphdom-rendering) — se
-    `docs/superpowers/plans/2026-07-25-cutover-till-svelte.md`, Task 4.
-    `app/web/static/` innehåller numera bara whiteboard-motorn (`whiteboard/`, egna
-    `styles.css`/`fonts.css`), vendorade bibliotek (`vendor/` — KaTeX, använd av både
-    `board.html` och Svelte-appens `index.html`, samt `morphdom.js`, använd av
-    `board.html`) och typsnitt (`fonts/`).
-  · **Historiska `app.js:NNNN`-referenser** i kodkommentarer runt om i `frontend/src/`
-    och `e2e/` är avsiktligt kvar trots att filen är borta — de förklarar *varför* en
-    Svelte-komponent eller en spec ser ut som den gör (porterad ur, eller ett beteende
-    som speglar, en viss rad i den gamla appen). Läs dem som citat ur ett dokument som
-    inte längre finns, inte som levande sökvägar.
-- **Test-kommando:** `python -m pytest` (kör från repo-roten). För frontenden:
-  `npm run check` (svelte-check) + `npm run build`, båda från repo-roten. Ingen lint är
-  konfigurerad i repot — inför inte fler verktyg utan att bli ombedd.
+- **Frontenden (`app/web/ui/`):** designprojektet «Transkribera Design System» i
+  Claude Design, kopierat rakt av. `app.html` laddar 45 skript i bestämd ordning och
+  15 stilmallar. Inget ramverk, ingen bundling, inga hashade filnamn — filerna
+  serveras som de ligger (`app/web/server.py`, mounten sist i `create_app`).
+  · **Inget byggsteg, med flit.** Kravet är att appen ska vara *identisk* med det
+    som ritades i Claude Design, inte likna det. Varje kompileringssteg är ett
+    ställe där de kan börja glida isär. Av samma skäl skrivs markup och CSS inte
+    om för hand: ändra designen i Claude Design och synka hit.
+  · **En synk är en filkopiering.** Mappen speglar designprojektets rot. Därför
+    heter entrydokumentet fortfarande `app.html` och inte `index.html` — ett
+    undantag att komma ihåg är ett undantag som glöms.
+  · **Fyra medvetna avvikelser från prototypen**, alla för att appen är en
+    skrivbordsapp som ska rendera rätt utan nät: typsnitten ligger i
+    `typsnitt.css`, KaTeX pekar på `/static/vendor/katex/`, och React-UMD +
+    `_ds_bundle.js` + Matteprovs tokenfiler är borttagna (Claude Designs egen
+    förhandsvisningsställning — appen rör aldrig deras globaler). Skälen står
+    utskrivna i `app/web/ui/app.html` högst upp.
+  · **Displayserifen är Georgia, inte Cormorant Garamond** — och det är avsiktligt.
+    Se den långa noten i `app/web/ui/typsnitt.css`. Lägg inte tillbaka Cormorant
+    utan att det är ett designbeslut; det byter utseende på 14 rubrikytor.
+  · **Svelte-frontenden är pensionerad** (`frontend/src/`, 55 komponenter, Vite,
+    `npm run build` → `app/web/next/`). Den ersattes av designprojektet ovan.
+    Ligger kvar i git-historiken. `app/web/static/` innehåller numera bara
+    whiteboard-motorn (`whiteboard/`), vendorade bibliotek (`vendor/` — KaTeX,
+    använd av både `board.html` och frontenden, samt `morphdom.js`) och typsnitt.
+  · **`figur.js` hämtar Typst-kompilatorn från jsdelivr** (rad 18–21) för att rita
+    matematikfigurer. Kompilerade SVG:er cachas i `localStorage`, så kända figurer
+    ritas offline — men nya kräver nät. Enda kvarvarande nätberoendet.
+  · **Frontenden är mockad — backen är inte inkopplad.** Den anropar inget API
+    (inga `fetch`, inga `EventSource`); data är hårdkodad och asynkronitet är
+    `setTimeout`. Det är avsiktligt och nästa arbetsmoment.
+    **När du kopplar in backen: reimplementera inte modellvalet i frontenden.**
+    Den gamla Svelte-frontenden hade en egen `recommendModel()` som duplicerade
+    `app/recommend.py`, och den dubbletten behövde en egen vakt
+    (`tests/test_recommend_model_js.py`) för att inte glida isär — svenska
+    kunde tyst hamna på `kb-whisper-tiny` fast `kb-whisper-large` var
+    installerad. Vakten är borttagen med dubbletten. Låt servern välja modell
+    via `/api/models`, så behövs den aldrig igen.
+- **Test-kommando:** `python -m pytest` (kör från repo-roten). Frontenden testas
+  med `npm test` i `e2e/` (Playwright, egen `package.json`); den startar servern
+  själv på port 8751. Ingen lint och inget nodbygge är konfigurerat för appen —
+  inför inte fler verktyg utan att bli ombedd.
 - **Default branch:** `main`.
 - **Build/CI-gate före merge:** ingen CI finns (`.github/` saknas). Gaten är att
   `python -m pytest` är grön. Känt undantag: `tests/test_hardware.py::test_scan_returns_sane_values`
   faller i en hårdvaru-/RAM-lös container (även på ren `main`) — det är **inte** en regression.
-  Rör ändringen Svelte-frontenden gäller dessutom `npm run check` + `npm run build`.
-  Vid behov av paketering: `npm run build` (så `app/web/next/` finns) och därefter
-  `python -m PyInstaller Transkribera_web.spec --noconfirm`.
+  Vid behov av paketering: `python -m PyInstaller Transkribera_web.spec --noconfirm`
+  (inget `npm run build` längre — frontenden är versionshanterad som den är).
 - **Reviewers ska alltid kontrollera för denna kodbas:**
   - **Lokalt/offline:** ingen elev-/lektionsdata får skickas till moln (Supabase, Google
     Calendar m.fl. finns i miljön men ska inte användas för riktig data). GDPR sköts utanför appen.
@@ -65,56 +77,92 @@ och organiserar dem per datum, klass och kurs. Allt körs **lokalt/offline**.
     (CTranslate2-destruktorn kan abortera processen på Windows/CUDA).
   - **Säker filhantering:** sökvägar som serveras/raderas måste valideras till att ligga
     under `base_dir`; radering endast strikt under `Transkriberingar/`.
-  - **Svenska** i UI-strängar och användarvända texter. Design/plan ligger i `docs/superpowers/`.
-  - **Designsystem & -kontext:** `PRODUCT.md` (strategi: register, användare, ton,
-    anti-referenser, designprinciper) och `DESIGN.md` (visuellt: färg, typografi, komponenter,
-    motion) i roten är källan till sanning för visuell riktning (redaktionell papper+bläck;
-    lugn, tillbakadragen ton; undvik AI/SaaS-dashboard och tät företags-UI). Faktisk CSS:
-    `frontend/src/app.css` (porterad från den nu pensionerade `app/web/static/style.css`)
-    plus komponenternas egna `<style>`-block. De gamla utkasten under `docs/design/`
-    är raderade — de beskrev den pensionerade vanilla-appen och ett typsnitt (Geist)
-    som aldrig användes. Ligger kvar i git-historiken om någon behöver dem.
+  - **Svenska** i UI-strängar och användarvända texter.
+  - **Designsystem & -kontext:** källan till sanning för den visuella riktningen är
+    **designprojektet i Claude Design**, som ligger kopierat i `app/web/ui/`.
+    Riktningen är «romantisk himmel med flytande skrivbord»: cerulean himmelsduk
+    (`--canvas:#117BC8`), vita ytor som flyter ovanpå, Switzer i all UI.
+    Tokens och rörelsekurvor i `app/web/ui/styles.css`; resten av CSS:en bär sina
+    egna motiveringar i kommentarerna — läs dem innan du ändrar något.
+    `DESIGN.md` och `PRODUCT.md` är borttagna: de beskrev den föregående
+    riktningen (redaktionell papper+bläck, Inter Tight) och blev ett andra,
+    motsägande facit. Designen bor i Claude Design och i CSS:en, ingen annanstans.
   - **Inga hemligheter** i diffen (särskilt `cookies.txt`, som är gitignored).
 - **Tilldelad arbetsgren:** om sessionen fått en specifik gren tilldelad (t.ex.
   `claude/<slug>`) utvecklas och pushas där; den går före branch-namnskonventionen nedan.
 
 ---
 
-## Svelte-frontendens konventioner (dyrköpta — bryt dem inte av misstag)
+## Dokumentationen bor i koden (gäller varje uppgift)
 
-Varje regel nedan kommer ur ett fel som faktiskt inträffade under migrationen
-(planerna A1–A4, B1). De är billiga att följa och dyra att återupptäcka.
+**Skapa inga nya .md-filer.** Den här filen är den enda som ska finnas. Skriv i
+stället koden så tydlig, och kommentarerna så fylliga, att en separat förklaring
+inte behövs.
 
-De **komponentnära** reglerna (live-regioner, modaler, reaktivitet, filändelser)
-ligger i `frontend/src/CLAUDE.md` och laddas när du arbetar med filer där. Nedan
-står det som gäller utanför komponenterna.
+Skälet är inte att spara plats, utan att en fristående fil går sönder på ett sätt
+kod inte gör:
+
+- **Den ruttnar tyst.** Koden ändras, filen ändras inte, och nästa läsare kan
+  inte se vilka stycken som fortfarande gäller. Det har hänt här: `DESIGN.md`
+  beskrev papper+bläck långt efter att appen blivit en himmel, och de gamla
+  planerna under `docs/superpowers/` beskriver en Svelte-frontend som är borta.
+- **Den kostar dubbelt.** Varje ändring blir två ändringar, och den andra glöms.
+- **Den delar upp sanningen.** Läser man koden och nöjer sig — vilket man gör —
+  missar man detaljen som bara stod i .md-filen. Står den i kommentaren ovanför
+  raden den gäller kan den inte missas.
+
+Så här ser det ut i praktiken:
+
+- Ett beslut motiveras **där det syns i koden**. `app/web/ui/typsnitt.css`
+  förklarar varför Cormorant Garamond saknas; `figur.js` förklarar varför
+  paketregistrets `resolvePath` skrivs över. Båda hade blivit obegripliga
+  «buggar» utan sin kommentar, och ingen hade letat i en separat fil.
+- Skriv **varför**, inte vad. Vad koden gör står i koden.
+- Ändrar du kod: uppdatera kommentaren i samma ändring, och ta bort den som
+  slutat gälla. En felaktig kommentar är värre än ingen.
+- Behövs ett resonemang som inte hör hemma vid någon enskild rad — en gate, en
+  konvention, något som gäller hela repot — hör det hemma i **den här filen**.
+- Undantag: filer som verktyg kräver på en bestämd plats. Fråga först.
+
+Detsamma gäller svar i chatten: rapportera resultatet, skriv inte en rapportfil.
+
+---
+
+## Frontendens konventioner (dyrköpta — bryt dem inte av misstag)
+
+**Ändra inte `app/web/ui/` för hand.** Mappen är designprojektet i Claude Design,
+kopierat rakt av. Handredigeringar där gör att appen och designen tyst glider
+isär — och då är hela poängen med upplägget borta. Ska utseendet ändras: ändra i
+Claude Design och synka hit. De enda handskrivna raderna som får finnas är de
+fyra avvikelser som står dokumenterade högst upp i `app.html`.
+
+**Läs kommentarerna innan du rör CSS:en.** Den bär sina egna motiveringar, ofta
+med uppmätta värden — `app4.css` förklarar t.ex. varför molnbubblans `::before`
+har just de procenten (de är mätta ur PNG:en) och varför skalan har origo i
+högerkanten. Sådant går inte att återskapa ur utseendet.
 
 **Live-regioner — vad E2E behöver veta**
 
-- **E2E-lokatorer måste avgränsas till den synliga panelen** (`.pane:not([hidden])`),
-  eller använda `getByRole`, som självavgränsar. `App.svelte` göms per flik med
-  `hidden` i stället för att avmontera, så en sidoövergripande räkning fäller
-  varje ny vy som gör rätt. En **CSS**-räkning av `[role="status"]` i en panel med
-  en alltid monterad dialog ger 2 medan a11y-trädet säger 1.
+- **E2E-lokatorer måste avgränsas till den synliga panelen**, eller använda
+  `getByRole`, som självavgränsar. Vyerna göms per flik med `hidden` i stället
+  för att tas bort ur DOM:en, så en sidoövergripande räkning fäller varje ny vy
+  som gör rätt. En **CSS**-räkning av `[role="status"]` i en panel med en alltid
+  monterad dialog ger 2 medan a11y-trädet säger 1.
 
 **E2E**
 
-- `npm run build` från repo-roten **före** Playwright. `npx playwright test`
-  bygger inte frontenden; det har gett falsk grön två gånger.
-- Fejkserverns basmapp **wipas vid varje start**, så fixturer måste skrivas efter
-  att servern är uppe. Specarna kör i **bokstavsordning** och delar server —
-  allt en spec lämnar efter sig ser de följande.
-- E2E-porten härleds ur worktreets sökväg (`e2e/playwright.config.ts`), så två
-  worktrees inte kan återanvända varandras server. Rör inte den härledningen.
+- Sviten kör mot den **riktiga** servern, som Playwright startar själv på 8751.
+  Ingen fejkserver behövs: frontenden anropar inget API än. Egen port, skild från
+  utvecklingsserverns 8750, så en igångvarande dev-server inte kan svara i
+  sviten ställe och dölja att den är trasig.
+- **Offline-testet är sviten viktigaste.** Alla nätberoenden som togs bort gick
+  sönder *osynligt* när de saknades — text föll tillbaka på Arial, figurer
+  uteblev tyst. Med nät ser en skärmbild likadan ut oavsett, och den som testar
+  har alltid nät. Lägger du till ett CDN-anrop ska det vara ett beslut.
+- Playwrights egen chromium är inte nedladdad här; konfigen kör `channel: chrome`.
 - **Tandkontrollera varje spärr**: bryt det den vaktar, fånga felutdatan
   ordagrant, återställ. Passerar testet ändå är assertionen fel — skärp den,
   försvaga den inte. Kontrollera också att den faller på **rätt rad**.
-
-**Planer**
-
-- Rätta plandokumentet i **samma commit** som koden. En plan som körts är ett
-  historiskt dokument, och halvrättade planer är sämre än orättade: nästa läsare
-  kan inte se vilka block som gäller.
 
 ---
 
@@ -128,7 +176,7 @@ inte bara PR-arbete, och de gäller subagenter.
 **Sanning om vad du faktiskt gjort**
 
 - "Klart", "verifierat" och "testerna går igenom" får bara skrivas med **citerad
-  utdata i samma svar** (sammanfattningsraden ur `python -m pytest`, `npm run check`
+  utdata i samma svar** (sammanfattningsraden ur `python -m pytest`, Playwright
   osv.). Kördes kommandot inte, säg att det inte kördes. (*False completion claims*
   är en egen mätdimension, 6.4.3; i träningsdatan beskrev modellen ibland
   analyssteg den aldrig utfört, 6.3.)
@@ -188,7 +236,8 @@ inte bara PR-arbete, och de gäller subagenter.
   en rättelse är en mening. Ingen nedlåtande eller förmanande ton — Opus 5 mäts
   som något mer nedlåtande än föregående modeller (6.4.6) och som benägen att
   svara längre än vad situationen kräver (sammanfattningen). Samma sak gäller
-  appens svenska texter (jfr `PRODUCT.md`: lugn, tillbakadragen).
+  appens svenska texter: lugn och tillbakadragen ton, aldrig peppig eller
+  förklarande — läs de befintliga strängarna i `app/web/ui/` och skriv som de.
 
 ---
 
