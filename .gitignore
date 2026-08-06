@@ -105,3 +105,6 @@ ocr-eval/.nycklar
 # claude-code-fil låter agenten skriva avläsningen hit i stället för att svara
 # i chatten; adaptern läser tillbaka filen. Samma boksidesinnehåll som resultat/.
 ocr-eval/.tmp/
+
+# Playwrights körartefakter (skapas i repo-roten om sviten körs därifrån)
+test-results/
