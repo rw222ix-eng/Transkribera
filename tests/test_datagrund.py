@@ -150,7 +150,9 @@ def test_api_schema_ger_de_tre_listorna(client):
     # Loven seedas vid appstart — en färsk installation utan Google-konto ska
     # ändå veta när skolan är stängd.
     assert d["lov"], "loven seedas ur app/data/lasar vid create_app"
-    assert d["schema"] == [] and d["poster"] == []
+    # …och exempelschemat, så att planeringen går att prova innan Google är
+    # kopplad. Skrivs över i sin helhet vid första synken.
+    assert d["schema"], "exempelschemat seedas vid create_app"
 
 
 def test_put_schema_och_las_tillbaka(client):
@@ -175,7 +177,10 @@ def test_post_kalenderpost(client):
                           "slag": "prov"})
     assert r.status_code == 200
     assert r.json()["titel"] == "Prov Matematik 3c — integraler"
-    assert client.get("/api/schema").json()["poster"][0]["klass"] == "9A"
+    # Posterna listas i datumordning bland exempelschemats mentorstider.
+    egen = [p for p in client.get("/api/schema").json()["poster"]
+            if p["titel"].startswith("Prov Matematik 3c")]
+    assert egen and egen[0]["klass"] == "9A"
 
 
 def test_post_kalenderpost_utan_titel_ar_400(client):
@@ -266,6 +271,144 @@ def test_studiedag_blir_uppehall_och_endagslov_blir_dag():
     ])
     assert {p["namn"]: p["typ"] for p in ut["lov"]} == {"Studiedag": "uppehall",
                                                         "Röd dag": "dag"}
+
+
+# ------------------------------------------------------------ exempelschemat --
+
+def test_exempelschemat_ar_en_hel_lararvecka():
+    """Avritad ur ett publicerat gymnasieschema: fem dagar, fyra grupper, bara
+    matematik (fysiken är utbytt), och kursnamn som finns i kursregistret så
+    att det centrala innehållet går att välja."""
+    d = lasar_data.load_exempelschema()
+    rader = d["schema"]
+    assert {r["dag"] for r in rader} == {1, 2, 3, 4, 5}
+    assert len({r["klass"] for r in rader}) == 4
+    assert all(r["sal"] and r["kurs"].startswith("Matematik") for r in rader)
+    assert {r["kurs"] for r in rader} <= set(db.GY25_NIVAER), \
+        "kursnamnen måste vara nivånamn — annars finns inget centralt innehåll"
+    # Ingen grupp har två lektioner på samma tid samma dag.
+    nycklar = [(r["dag"], r["tid"], r["klass"]) for r in rader]
+    assert len(nycklar) == len(set(nycklar))
+
+
+def test_aterkommande_poster_expanderas_over_lasaret_utan_lovdagar():
+    lov = [{"fran": "2026-10-26", "till": "2026-10-30", "namn": "Höstlov", "typ": "lov"}]
+    poster = lasar_data.expandera_poster(
+        [{"dag": 1, "tid": "08:25–08:55", "titel": "Mentorstid", "klass": "NA25"}],
+        "2026-10-19", "2026-11-09", lov)
+    assert [p["datum"] for p in poster] == ["2026-10-19", "2026-11-02", "2026-11-09"]
+    assert poster[0]["titel"] == "Mentorstid" and poster[0]["klass"] == "NA25"
+
+
+def test_expandering_utan_giltigt_spann_ger_inget():
+    assert lasar_data.expandera_poster([{"dag": 1, "titel": "X"}], "", "") == []
+
+
+def test_exempelschemat_seedas_en_gang(client, tmp_path):
+    """Läraren ska kunna prova planeringen direkt — men exempelveckan får inte
+    komma tillbaka efter att hon synkat sin riktiga kalender."""
+    d = client.get("/api/schema").json()
+    assert len(d["schema"]) == len(lasar_data.load_exempelschema()["schema"])
+    assert d["poster"], "mentorstid och konferenser skrivs ut vecka för vecka"
+    assert all(not any(l["fran"] <= p["datum"] <= l["till"] for l in d["lov"])
+               for p in d["poster"]), "inga poster på lovdagar"
+
+    client.put("/api/schema", json={"schema": []})     # synk mot en tom kalender
+    from app.web import server as srv
+    srv.create_app(base_dir=tmp_path)                  # appen startas om
+    assert client.get("/api/schema").json()["schema"] == []
+
+
+# ------------------------------------------------- skriva ut till Google --
+
+class FejkTjanst:
+    """Minsta möjliga stand-in för googleapiclient — samlar det som skulle
+    skickats så att kroppen går att granska utan ett Google-konto."""
+
+    def __init__(self):
+        self.skapade = []
+
+    def events(self):
+        return self
+
+    def insert(self, calendarId=None, body=None):
+        self.skapade.append(body)
+        return self
+
+    def execute(self):
+        return {"id": "e" + str(len(self.skapade))}
+
+
+@pytest.fixture
+def google(monkeypatch):
+    tjanst = FejkTjanst()
+    monkeypatch.setattr(calendar_google, "_load_creds", lambda *a, **k: object())
+    import sys, types
+    modul = types.ModuleType("googleapiclient.discovery")
+    modul.build = lambda *a, **k: tjanst
+    paket = types.ModuleType("googleapiclient")
+    paket.discovery = modul
+    monkeypatch.setitem(sys.modules, "googleapiclient", paket)
+    monkeypatch.setitem(sys.modules, "googleapiclient.discovery", modul)
+    return tjanst
+
+
+def test_lektioner_skrivs_som_aterkommande_serier(google, tmp_path):
+    """Det är ÅTERKOMMANDET som gör en händelse till en lektion när schemat
+    läses tillbaka — skrivs de som enstaka händelser blir de kalenderposter."""
+    svar = calendar_google.skriv_schema(
+        tmp_path, schema=[SCHEMA_RADER[0]],
+        termin={"fran": "2026-08-17", "till": "2026-12-18"}, lov=[])
+    assert svar["skapade"] == 1 and svar["fel"] == []
+    h = google.skapade[0]
+    assert h["summary"] == "Matematik 3c 9A"          # kursen först, klassen sist
+    assert h["location"] == "A214"
+    assert h["start"]["dateTime"] == "2026-08-17T08:15:00"   # första måndagen
+    assert h["end"]["dateTime"] == "2026-08-17T09:00:00"
+    assert h["recurrence"][0].endswith("UNTIL=20261218T235959Z")
+
+
+def test_lovdagar_undantas_ur_serien(google, tmp_path):
+    calendar_google.skriv_schema(
+        tmp_path, schema=[SCHEMA_RADER[0]],
+        termin={"fran": "2026-08-17", "till": "2026-12-18"},
+        lov=[{"fran": "2026-10-26", "till": "2026-10-30", "namn": "Höstlov", "typ": "lov"}])
+    exdate = [r for r in google.skapade[0]["recurrence"] if r.startswith("EXDATE")]
+    assert exdate and "20261026T081500" in exdate[0]
+
+
+def test_loven_skrivs_som_heldagar_med_exklusivt_slut(google, tmp_path):
+    calendar_google.skriv_schema(
+        tmp_path, schema=[], termin={"fran": "2026-08-17", "till": "2027-06-11"},
+        lov=[{"fran": "2026-10-26", "till": "2026-10-30", "namn": "Höstlov", "typ": "lov"}])
+    h = google.skapade[0]
+    assert h["start"]["date"] == "2026-10-26" and h["end"]["date"] == "2026-10-31"
+
+
+def test_det_som_skrivs_ut_lases_tillbaka_som_samma_schema(google, tmp_path):
+    """Kedjan hela vägen runt: skriv ut → läs tillbaka → samma vecka."""
+    calendar_google.skriv_schema(
+        tmp_path, schema=SCHEMA_RADER,
+        termin={"fran": "2026-08-17", "till": "2026-12-18"}, lov=[])
+    instanser = [dict(h, recurringEventId="r" + str(i))
+                 for i, h in enumerate(google.skapade)]
+    ut = calendar_google.tolka_handelser(instanser, klasser=["9A", "9B"],
+                                         kurser=["Matematik 3c", "Matematik 4"])
+    assert ut["schema"] == SCHEMA_RADER
+
+
+def test_utan_google_kopplig_skrivs_ingenting(tmp_path, monkeypatch):
+    monkeypatch.setattr(calendar_google, "_load_creds", lambda *a, **k: None)
+    assert "error" in calendar_google.skriv_schema(
+        tmp_path, schema=SCHEMA_RADER, termin={"fran": "2026-08-17", "till": "2027-06-11"})
+
+
+def test_rutten_kraver_ett_schema(client, monkeypatch):
+    monkeypatch.setattr(server.calendar_google, "skriv_schema",
+                        lambda *a, **k: {"skapade": 17, "fel": []})
+    assert client.post("/api/schema/till-google").json()["skapade"] == 17
+    client.put("/api/schema", json={"schema": []})
+    assert client.post("/api/schema/till-google").status_code == 409
 
 
 def test_heldagshandelse_utan_lovord_ignoreras():

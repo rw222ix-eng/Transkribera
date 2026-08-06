@@ -1,8 +1,15 @@
 {
   "lasar": "2026/2027",
+  "kommentar": "Läsårets stängda dagar. Påskdagen 2027 infaller 28 mars, så långfredagen är 26 mars och påsklovet ligger vecka 13. Kristi himmelsfärd är 6 maj med klämdag dagen efter.",
   "lov": [
+    { "fran": "2026-09-25", "till": "2026-09-25", "namn": "Studiedag", "typ": "uppehall" },
     { "fran": "2026-10-26", "till": "2026-10-30", "namn": "Höstlov", "typ": "lov" },
     { "fran": "2026-12-21", "till": "2027-01-07", "namn": "Jullov", "typ": "lov" },
-    { "fran": "2027-02-22", "till": "2027-02-26", "namn": "Sportlov", "typ": "lov" }
+    { "fran": "2027-02-22", "till": "2027-02-26", "namn": "Sportlov", "typ": "lov" },
+    { "fran": "2027-03-26", "till": "2027-03-26", "namn": "Långfredag", "typ": "dag" },
+    { "fran": "2027-03-29", "till": "2027-04-02", "namn": "Påsklov", "typ": "lov" },
+    { "fran": "2027-05-06", "till": "2027-05-07", "namn": "Kristi himmelsfärd", "typ": "dag" },
+    { "fran": "2027-06-11", "till": "2027-06-11", "namn": "Läsårsavslutning", "typ": "uppehall" },
+    { "fran": "2027-06-14", "till": "2027-08-13", "namn": "Sommarlov", "typ": "lov" }
   ]
 }

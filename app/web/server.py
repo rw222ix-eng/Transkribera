@@ -201,6 +201,39 @@ def create_app(base_dir: Path | None = None,
     def _db():
         return db.connect(db_file)
 
+    def _seed_exempelschema(conn) -> bool:
+        """Exempelschemat (app/data/exempelschema.json): en avritad
+        gymnasielärarvecka — riktiga tider, riktiga salar, riktiga
+        gruppbeteckningar — som seedas EN gång på en installation som aldrig
+        haft ett schema. Utan den finns ingen vecka att planera i innan Google
+        Kalender är kopplad, och då går ingenting i planeringen att prova.
+
+        Att det skett markeras i settings.json och inte i «är tabellen tom?».
+        En lärare vars synkade kalender råkar sakna lektioner ska inte få
+        exempelveckan tillbaka vid varje omstart — och en synk skriver över
+        schemat i sin helhet ändå (se /api/schema/synk)."""
+        val = settings_store.load(base)
+        if val.get("exempelschema_seedat"):
+            return False
+        data = lasar_data.load_exempelschema()
+        rader = data.get("schema") or []
+        val["exempelschema_seedat"] = True
+        settings_store.save(base, val)
+        if not rader or db.list_schema(conn):
+            return False                       # redan ett schema: rör det inte
+        db.replace_schema(conn, rader)
+        termin = data.get("termin") or {}
+        # Mentorstiden och konferenserna ligger på bestämda dagar och måste
+        # därför skrivas ut vecka för vecka — lovdagarna hoppas över.
+        db.replace_kalenderposter(
+            conn,
+            lasar_data.expandera_poster(data.get("aterkommande") or [],
+                                        termin.get("fran") or "",
+                                        termin.get("till") or "",
+                                        db.list_lov(conn)),
+            kalla="schema")
+        return True
+
     # One-time import of any existing history into the lesson DB (idempotent).
     try:
         _conn = _db()
@@ -225,6 +258,7 @@ def create_app(base_dir: Path | None = None,
             # arbetsveckor på en färsk installation. INSERT OR IGNORE — en
             # synkad Google-kalender skrivs aldrig över av seedningen.
             db.seed_lov(_conn, lasar_data.load_lov())
+            _seed_exempelschema(_conn)
         finally:
             _conn.close()
     except Exception:
@@ -1162,6 +1196,29 @@ def create_app(base_dir: Path | None = None,
             conn.close()
         return {"synkad": datetime.now().isoformat(timespec="seconds"),
                 "schema": schema, "lov": lov, "poster": poster}
+
+    @app.post("/api/schema/till-google")
+    def api_schema_till_google():
+        """Lägg ut appens schema i lärarens egen Google Kalender, som
+        återkommande serier med loven undantagna.
+
+        Enda stället appen skriver LEKTIONER till Google — och bara på
+        uttryckligt anrop. Finns för att kunna prova kedjan hela vägen runt:
+        skriv ut schemat, synka tillbaka det, och se att veckan blir samma."""
+        conn = _db()
+        try:
+            schema, lov = db.list_schema(conn), db.list_lov(conn)
+        finally:
+            conn.close()
+        if not schema:
+            return JSONResponse({"error": "inget schema att skriva ut"}, status_code=409)
+        data = lasar_data.load_exempelschema()
+        svar = calendar_google.skriv_schema(
+            base, schema=schema, termin=data.get("termin") or {},
+            aterkommande=data.get("aterkommande") or [], lov=lov)
+        if svar.get("error"):
+            return JSONResponse(svar, status_code=409)
+        return svar
 
     # ---- Dokumenten: Sparat-högen och versionsarrayen (Etapp 0.2) ------------
     #

@@ -383,7 +383,10 @@ def test_courses_and_groups_get_or_create(client):
     assert client.post("/api/courses", json={"namn": "Matematik 2b"}).status_code == 200
     groups = client.get("/api/groups").json()
     courses = client.get("/api/courses").json()
-    assert [g["namn"] for g in groups] == ["NA21"]
+    # Klasslistan bär också exempelschemats grupper (Etapp 0.1) — den nya
+    # gruppen ska finnas bland dem, en gång.
+    namn = [g["namn"] for g in groups]
+    assert namn.count("NA21") == 1
     # Startseedningen (Fas 3) lägger in matematikkurserna — den nya kursen
     # ska finnas bland dem.
     names = [c["namn"] for c in courses]

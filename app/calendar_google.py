@@ -353,6 +353,108 @@ def list_events(base_dir: Path, fran: str, till: str) -> list[dict]:
     return ut
 
 
+# ------------------------------------------------------------- skriva ut --
+# Motsatsen till read_schema, och den enda vägen dit appen skriver LEKTIONER:
+# att lägga ut ett schema i lärarens egen kalender så att synken har något att
+# läsa. Används för exempelschemat och för att prova kedjan hela vägen runt —
+# aldrig av sig själv, alltid på uttrycklig begäran.
+#
+# Serierna skapas som ÅTERKOMMANDE händelser, för det är återkommandet som gör
+# en händelse till en lektion när schemat läses tillbaka (se tolka_handelser).
+# Lovdagarna undantas med EXDATE: en lektion mitt i sportlovet är fel i
+# kalendern även om appen själv aldrig ritar den.
+
+def _forsta_dagen(fran: str, veckodag: int) -> date:
+    d = date.fromisoformat(fran)
+    return d + timedelta(days=(int(veckodag) - d.isoweekday()) % 7)
+
+
+def _klockslag(tid: str) -> tuple[str, str]:
+    delar = [b.strip() for b in str(tid or "").replace("-", "–").split("–")]
+    return (delar[0] if delar else "08:00"), (delar[1] if len(delar) > 1 else "")
+
+
+def _exdates(start: date, till: date, starttid: str, lov: list[dict]) -> list[str]:
+    """Instanserna som ligger på en stängd dag, i EXDATE-form."""
+    ut, d = [], start
+    while d <= till:
+        iso = d.isoformat()
+        if any(p["fran"] <= iso <= p["till"] for p in lov or []):
+            ut.append(f"{iso.replace('-', '')}T{starttid.replace(':', '')}00")
+        d += timedelta(days=7)
+    return ut
+
+
+def skriv_schema(base_dir: Path, *, schema: list[dict], termin: dict,
+                 aterkommande: list[dict] | None = None,
+                 lov: list[dict] | None = None) -> dict:
+    """Lägg ut veckoschemat, de återkommande posterna och loven i användarens
+    primära kalender. Returnerar {skapade, fel} eller {error}."""
+    creds = _load_creds(base_dir)
+    if creds is None:
+        return {"error": status(base_dir).get("hint")
+                or "Inte ansluten till Google Kalender."}
+    fran, till = (termin or {}).get("fran"), (termin or {}).get("till")
+    if not fran or not till:
+        return {"error": "Terminens start- och slutdatum krävs."}
+    try:
+        from googleapiclient.discovery import build
+        service = build("calendar", "v3", credentials=creds, cache_discovery=False)
+    except Exception as exc:
+        return {"error": f"Kunde inte nå Google Kalender: {exc}"}
+
+    slut_rrule = date.fromisoformat(till).strftime("%Y%m%dT235959Z")
+    skapade, fel = 0, []
+
+    def serie(titel: str, veckodag: int, tid: str, sal: str = "") -> None:
+        nonlocal skapade
+        start_dag = _forsta_dagen(fran, veckodag)
+        if start_dag > date.fromisoformat(till):
+            return
+        t0, t1 = _klockslag(tid)
+        if not t1:
+            return
+        recurrence = [f"RRULE:FREQ=WEEKLY;UNTIL={slut_rrule}"]
+        undantag = _exdates(start_dag, date.fromisoformat(till), t0, lov or [])
+        if undantag:
+            recurrence.append(f"EXDATE;TZID={TIMEZONE}:" + ",".join(undantag))
+        body = {
+            "summary": titel, "location": sal or "",
+            "start": {"dateTime": f"{start_dag.isoformat()}T{t0}:00", "timeZone": TIMEZONE},
+            "end": {"dateTime": f"{start_dag.isoformat()}T{t1}:00", "timeZone": TIMEZONE},
+            "recurrence": recurrence,
+        }
+        try:
+            service.events().insert(calendarId="primary", body=body).execute()
+            skapade += 1
+        except Exception as exc:
+            fel.append(f"{titel}: {exc}")
+
+    for rad in schema or []:
+        # Titeln är den synken läser tillbaka: kursen först, klassen sist.
+        namn = " ".join(x for x in [(rad.get("kurs") or "").strip(),
+                                    (rad.get("klass") or "").strip()] if x)
+        serie(namn, rad.get("dag"), rad.get("tid"), rad.get("sal") or "")
+    for p in aterkommande or []:
+        titel = (p.get("titel") or "").strip()
+        klass = (p.get("klass") or "").strip()
+        serie(f"{titel} {klass}".strip(), p.get("dag"), p.get("tid"))
+    for p in lov or []:
+        try:
+            slut = (date.fromisoformat(p["till"]) + timedelta(days=1)).isoformat()
+        except (KeyError, TypeError, ValueError):
+            continue
+        try:
+            service.events().insert(calendarId="primary", body={
+                "summary": p.get("namn") or "Lov",
+                "start": {"date": p["fran"]}, "end": {"date": slut},
+            }).execute()
+            skapade += 1
+        except Exception as exc:
+            fel.append(f"{p.get('namn')}: {exc}")
+    return {"skapade": skapade, "fel": fel}
+
+
 def read_schema(base_dir: Path, dagar: int = 210,
                 klasser: list[str] | None = None,
                 kurser: list[str] | None = None) -> dict:

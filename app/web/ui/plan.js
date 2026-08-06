@@ -1920,7 +1920,15 @@
      efter sitt original, bunden med en hårlinje, med svart bricka och namnet på
      originalet under. Samma form bär omprovet och parallellklassens tavla —
      tre användningar av ett mönster. */
-  const KLASSER = ['9A', '9B', '9C'];
+  /* «Skriv om för en annan klass» ska erbjuda en klass läraren FAKTISKT har —
+     schemat vet vilka de är. Listan nedan är prototypens och gäller bara utan
+     server, där schemat är kalender.js egna rader. */
+  const KLASSER_PROTO = ['9A', '9B', '9C'];
+  const klasserna = () => {
+    const ur = [...new Set(((window.Kalender && window.Kalender.schema) || [])
+      .map(s => s.klass).filter(Boolean))];
+    return ur.length ? ur : KLASSER_PROTO;
+  };
   /* Varianten måste faktiskt skilja sig — annars ljuger kortet. Ordningen kastas
      om och de fristående talen i uppgiftstexten byts (poängangivelser rörs inte). */
   const nyaTal = t => String(t).replace(/(?:^|[^\d(/])(\d{1,3})(?![\d)/])/g, (hel, n) => hel.replace(n, String(((+n * 3 + 5) % 90) + 2)));
@@ -1963,7 +1971,7 @@
     if ($('.dokfraga', kort)) return;
     const v = sparat[i];
     const tavla = v.typ === 'Tavla';
-    const annanKlass = KLASSER.find(k => k !== v.klass) || '9B';
+    const annanKlass = klasserna().find(k => k !== v.klass) || '9B';
     const f = document.createElement('div');
     f.className = 'dokfraga';
     f.innerHTML = tavla

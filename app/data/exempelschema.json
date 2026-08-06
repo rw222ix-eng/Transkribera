@@ -1,0 +1,36 @@
+{
+  "lasar": "2026/2027",
+  "kommentar": "EXEMPELSCHEMA — en riktig gymnasielärarvecka, avritad ur ett publicerat Skola24-schema (Oscarsgymnasiet, v17 2026) och matematiserad: de fyra fysiklektionerna är utbytta mot matematik för två andra grupper, eftersom appen planerar matematik. Tiderna, salarna, grupperna och rytmen är oförändrade. Seedas EN gång på en färsk installation som inte har något schema — annars går ingenting i planeringen att prova innan Google Kalender är kopplad — och skrivs över i sin helhet vid första kalendersynken. Kursnamnen är kursregistrets Gy25-nivånamn, inte schemats etiketter, eftersom det centrala innehållet är seedat per nivånamn (se app/data/centralt_innehall).",
+  "termin": { "fran": "2026-08-17", "till": "2027-06-11" },
+  "grupper": [
+    { "klass": "NA25", "kurs": "Matematik, nivå 2c", "kod": "NA25/MATE2C00X", "elever": 21 },
+    { "klass": "NA24", "kurs": "Matematik – fortsättning, nivå 1c", "kod": "NA24/MATO1C00X", "elever": 21 },
+    { "klass": "IN24prk", "kurs": "Matematik, nivå 2a", "kod": "IN24prk/MATMAT02a", "elever": 8 },
+    { "klass": "TE25prk", "kurs": "Matematik, nivå 1c", "kod": "TE25prk/MATE1C00X", "elever": 8 }
+  ],
+  "schema": [
+    { "dag": 1, "tid": "09:05–10:20", "kurs": "Matematik, nivå 2c", "klass": "NA25", "sal": "P807" },
+    { "dag": 1, "tid": "13:45–14:35", "kurs": "Matematik, nivå 1c", "klass": "TE25prk", "sal": "P807" },
+    { "dag": 1, "tid": "14:40–15:25", "kurs": "Matematik, nivå 2a", "klass": "IN24prk", "sal": "P807" },
+
+    { "dag": 2, "tid": "08:25–09:25", "kurs": "Matematik – fortsättning, nivå 1c", "klass": "NA24", "sal": "I210" },
+    { "dag": 2, "tid": "09:40–11:00", "kurs": "Matematik, nivå 1c", "klass": "TE25prk", "sal": "I210" },
+    { "dag": 2, "tid": "11:45–12:50", "kurs": "Matematik, nivå 2a", "klass": "IN24prk", "sal": "I210" },
+    { "dag": 2, "tid": "14:20–15:20", "kurs": "Matematik – fortsättning, nivå 1c", "klass": "NA24", "sal": "I210" },
+
+    { "dag": 3, "tid": "09:50–11:15", "kurs": "Matematik, nivå 1c", "klass": "TE25prk", "sal": "I210" },
+    { "dag": 3, "tid": "12:05–13:20", "kurs": "Matematik, nivå 2a", "klass": "IN24prk", "sal": "P807" },
+    { "dag": 3, "tid": "14:20–15:50", "kurs": "Matematik, nivå 2c", "klass": "NA25", "sal": "P807" },
+
+    { "dag": 4, "tid": "08:25–09:40", "kurs": "Matematik – fortsättning, nivå 1c", "klass": "NA24", "sal": "I210" },
+    { "dag": 4, "tid": "13:00–14:00", "kurs": "Matematik, nivå 2c", "klass": "NA25", "sal": "P807" },
+
+    { "dag": 5, "tid": "08:25–09:40", "kurs": "Matematik – fortsättning, nivå 1c", "klass": "NA24", "sal": "I210" },
+    { "dag": 5, "tid": "12:45–14:00", "kurs": "Matematik, nivå 2c", "klass": "NA25", "sal": "P807" }
+  ],
+  "aterkommande": [
+    { "dag": 1, "tid": "08:25–08:55", "titel": "Mentorstid", "klass": "NA25" },
+    { "dag": 2, "tid": "15:30–17:00", "titel": "Konferens", "klass": "" },
+    { "dag": 4, "tid": "16:00–17:00", "titel": "Konferens", "klass": "" }
+  ]
+}
