@@ -97,18 +97,104 @@
     });
   });
 
+  /* ══════════ PAKETET PÅ RIKTIGT ══════════
+     Knappen räknade ihop högen och sa «Utskrivet» efter niohundra
+     millisekunder. Servern bygger den nu: provets och arbetsbladets PDF:er
+     (byggda vid godkännandet), tavlan som bild, facit bredvid provet — i den
+     här ordningen, med kopiorna I FILEN. En lärare som ska ha 22 elevark, en
+     tavla och ett facit kan inte säga det i en skrivardialog som har ETT
+     kopieantal för hela jobbet.
+
+     Utan server spelas prototypens kvittering upp precis som förut. */
+  const serverPa = () => !!(window.API && window.API.pa);
+  /* Tavlan kan ännu INTE följa med i paketet. Den finns bara som ritad DOM i
+     webbläsaren — ingen bild och ingen PDF — och servern kan inte rendera om
+     den (motorn bor här, inte där). Den som ska ha tavlan skriver ut den från
+     sidan så länge. Servern lägger den i `saknas` och kvittot säger det, i
+     stället för att paketet tyst blir en sida kortare. Nästa steg är en
+     PNG-export ur whiteboard-motorn — rutten som tar emot den finns redan
+     (/api/planning/export). */
+
+  function paketkropp() {
+    return {
+      titel,
+      dokument: rader.filter(r => r.med).map(r => {
+        const d = { namn: r.namn, typ: r.typ, kopior: r.antal };
+        if (r.v && r.v.provId) {
+          d.exam_id = r.v.provId;
+          if (r.typ === 'Facit') d.bedomning = true;
+          if (r.anpassad) d.anpassad = {
+            /* Samma anpassning som raden beskriver: förlängd tid, färre
+               uppgifter, och en kod i foten som skiljer kopian. */
+            tid_min: 150, antal: 4,
+            kod: `${(r.v.klass || 'kopia')}-${(r.v.datum || '').slice(5)}`,
+          };
+        }
+        return d;
+      }),
+    };
+  }
+
+  function bygg(knapp, efterat) {
+    const text = knapp.textContent;
+    knapp.disabled = true;
+    knapp.textContent = 'Bygger paketet …';
+    const ater = () => { knapp.textContent = text; knapp.disabled = false; };
+    window.API.strom('/api/tryck', paketkropp(), {
+      log: m => { knapp.textContent = String(m || '').slice(0, 40); },
+    }).then(res => {
+      if (!res) throw new Error('Servern slutade svara mitt i bygget.');
+      efterat(res);
+      ater();
+    }).catch(e => {
+      ater();
+      window.toast && window.toast(e.message || 'Paketet gick inte att bygga.');
+    });
+  }
+
   $('#tryckskicka').addEventListener('click', () => {
     const b = $('#tryckskicka');
-    const text = b.textContent;
-    b.disabled = true;
-    b.textContent = 'Skickar till skrivaren …';
-    setTimeout(() => {
-      b.textContent = 'Utskrivet';
-      window.toast && window.toast('Papperen ligger i rätt ordning i utskriftskön');
-      setTimeout(() => { b.textContent = text; b.disabled = false; }, 1600);
-    }, 900);
+    if (!serverPa()) {
+      const text = b.textContent;
+      b.disabled = true;
+      b.textContent = 'Skickar till skrivaren …';
+      setTimeout(() => {
+        b.textContent = 'Utskrivet';
+        window.toast && window.toast('Papperen ligger i rätt ordning i utskriftskön');
+        setTimeout(() => { b.textContent = text; b.disabled = false; }, 1600);
+      }, 900);
+      return;
+    }
+    bygg(b, res => {
+      /* Paketet öppnas i systemets PDF-läsare — där skrivardialogen bor.
+         Appen har ingen egen skrivarkö och ska inte låtsas ha det. */
+      window.API.json('/api/open', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: res.path }),
+      }).catch(() => {});
+      window.toast && window.toast(kvittotext(res));
+    });
   });
-  $('#trycksampdf').addEventListener('click', () => window.toast && window.toast('Nedladdad som en PDF — alla dokument i ordning'));
+  $('#trycksampdf').addEventListener('click', () => {
+    const b = $('#trycksampdf');
+    if (!serverPa()) { window.toast && window.toast('Nedladdad som en PDF — alla dokument i ordning'); return; }
+    bygg(b, res => {
+      window.API.json('/api/reveal', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: res.path }),
+      }).catch(() => {});
+      window.toast && window.toast(kvittotext(res));
+    });
+  });
+
+  /* Kvittot säger vad som FAKTISKT hamnade i filen — och vad som inte gjorde
+     det. Ett paket som tyst blev en sida kortare upptäcks framför kopiatorn. */
+  const kvittotext = res => {
+    const sidor = `${res.sidor} ${res.sidor === 1 ? 'sida' : 'sidor'}`;
+    return (res.saknas || []).length
+      ? `Paketet är byggt — ${sidor}. ${res.saknas.join(', ')} kom inte med: tavlan skrivs ut från sidan, och ett papper som inte är godkänt har ingen PDF än.`
+      : `Paketet är byggt — ${sidor} i rätt ordning.`;
+  };
 
   function fram() {
     const r = ruta.getBoundingClientRect();

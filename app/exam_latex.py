@@ -281,9 +281,13 @@ def _grupp_vy(grupp) -> dict | None:
 
 
 def render_prov(doc: exam_spec.ExamDoc,
-                bilder: dict[int, str] | None = None) -> str:
+                bilder: dict[int, str] | None = None,
+                dokumentkod: str = "") -> str:
+    """`dokumentkod` sätts bara av den anpassade kopian (app/tryck.py). Den
+    står i foten och är det ENDA som skiljer kopian från provet — ingen
+    etikett, ingen text som talar om för klassen vem som fick den."""
     return _environment().get_template("prov.tex.j2").render(
-        **_build_view(doc, bilder))
+        dokumentkod=dokumentkod, **_build_view(doc, bilder))
 
 
 def render_bedomning(doc: exam_spec.ExamDoc,
@@ -293,11 +297,13 @@ def render_bedomning(doc: exam_spec.ExamDoc,
 
 
 def render_arbetsblad(doc: exam_spec.ExamDoc, visa_poang: bool = False,
-                      bilder: dict[int, str] | None = None) -> str:
+                      bilder: dict[int, str] | None = None,
+                      dokumentkod: str = "") -> str:
     """Arbetsblad (Fas 5): inga kravgränser, valfri poängvisning, facit på
     egen sida (lösningsförslagen)."""
     return _environment().get_template("arbetsblad.tex.j2").render(
-        visa_poang=visa_poang, **_build_view(doc, bilder))
+        visa_poang=visa_poang, dokumentkod=dokumentkod,
+        **_build_view(doc, bilder))
 
 
 def render_gruppuppgift(doc: exam_spec.ExamDoc,

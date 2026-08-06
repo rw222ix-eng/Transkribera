@@ -50,6 +50,12 @@
 \fancyhead[C]{\small\textcolor{ink500}{((( sidhuvud )))}}
 \fancyhead[R]{\small\textcolor{ink500}{\thepage\ av \pageref{LastPage}}}
 \renewcommand{\headrulewidth}{0pt}
+((* if dokumentkod is defined and dokumentkod *))
+((# Dokumentkoden: den anpassade kopians enda kännetecken. Liten, grå, i
+    foten — den som får pappret ska inte kunna läsa av att det är anpassat,
+    men läraren ska kunna se vilken kopia hon håller i. #))
+\fancyfoot[R]{\tiny\textcolor{ink200}{((( dokumentkod )))}}
+((* endif *))
 
 \newcommand{\poang}[1]{\hfill\mbox{\small(#1)}}
 ((* if med_svarsrad *))
