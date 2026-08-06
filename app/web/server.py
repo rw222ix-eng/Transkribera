@@ -784,9 +784,11 @@ def create_app(base_dir: Path | None = None,
             return JSONResponse(
                 {"error": "Inspelningen är för stor för att laddas upp."},
                 status_code=413)
-        safe = Path(name).name                          # strip any directory parts
-        if safe in (".", "..", ""):                     # never a directory ref
-            safe = "inspelning.webm"
+        # Namnet kommer utifrån (webbläsarens filväljare, en telefon, en URL).
+        # `Path(name).name` tog bort mappdelarna men inte tecknen Windows vägrar
+        # skriva: «fråga?.mp3» blev OSError inne i write_bytes, alltså 500 utan
+        # besked — mitt i en lektion som just spelats in.
+        safe = paths.safe_name(name, "inspelning.webm")
         out_dir = base / "downloads"
         out_dir.mkdir(parents=True, exist_ok=True)
         dest = out_dir / safe
@@ -841,9 +843,7 @@ def create_app(base_dir: Path | None = None,
             return JSONResponse({"error": "ogiltig session"}, status_code=400)
         if not part.exists() or part.stat().st_size == 0:
             return JSONResponse({"error": "ingen inspelning att slutföra"}, status_code=404)
-        safe = Path(name).name
-        if safe in (".", "..", ""):
-            safe = "inspelning.webm"
+        safe = paths.safe_name(name, "inspelning.webm")
         dest = part.with_name(safe)
         if dest.exists():
             dest = part.with_name(f"{dest.stem}-{uuid.uuid4().hex[:8]}{dest.suffix}")

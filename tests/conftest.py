@@ -22,7 +22,7 @@ import os
 
 import pytest
 
-from app import exam_pdf
+from app import exam_pdf, media
 from app.web import server
 
 # ── Tectonic-grinden ────────────────────────────────────────────────────────
@@ -39,16 +39,24 @@ KRAV_TECTONIC = (os.environ.get("KRAV_TECTONIC", "").strip().lower()
 def pytest_configure(config):
     config.addinivalue_line(
         "markers", "tectonic: kräver den buntade Tectonic-motorn (bin/tectonic)")
+    config.addinivalue_line(
+        "markers", "ffmpeg: kräver riktig ffmpeg/ffprobe på maskinen")
 
 
 def pytest_runtest_setup(item):
-    if "tectonic" not in item.keywords or exam_pdf.engine_available():
-        return
-    besked = ("Tectonic-motorn saknas (bin/tectonic/tectonic.exe). "
-              "Kör `python -m tools.seed_tectonic_cache` med internet en gång.")
-    if KRAV_TECTONIC:
-        pytest.fail(besked + " KRAV_TECTONIC är satt — det här får inte hoppas över.")
-    pytest.skip(besked)
+    if "tectonic" in item.keywords and not exam_pdf.engine_available():
+        besked = ("Tectonic-motorn saknas (bin/tectonic/tectonic.exe). "
+                  "Kör `python -m tools.seed_tectonic_cache` med internet en gång.")
+        if KRAV_TECTONIC:
+            pytest.fail(besked + " KRAV_TECTONIC är satt — det här får inte hoppas över.")
+        pytest.skip(besked)
+    # ffmpeg är appens grundförutsättning (utan den går ingen transkribering
+    # alls), så de här testerna får aldrig hoppas över tyst i CI heller.
+    if "ffmpeg" in item.keywords and not media.ffmpeg_available():
+        besked = "ffmpeg/ffprobe saknas på maskinen — appen kan inte köra utan dem."
+        if KRAV_TECTONIC:
+            pytest.fail(besked)
+        pytest.skip(besked)
 
 
 class HW:

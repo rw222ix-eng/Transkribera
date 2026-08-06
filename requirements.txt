@@ -32,3 +32,4 @@ google-auth-oauthlib
 # Testsviten
 pytest
 pytest-cov
+hypothesis          # egenskapstester: styckningen, tiderna, datummatten

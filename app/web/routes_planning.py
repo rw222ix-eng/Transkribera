@@ -42,8 +42,12 @@ _PDF_SCALE = 2.0                         # pypdfium2-rendering (~144 dpi)
 
 
 def _safe_component(raw: str, fallback: str) -> str:
-    """Gör om fritext till ett ofarligt mapp-/filnamn: inga sökvägs- eller
-    Windows-reserverade tecken, ingen ledande/avslutande punkt."""
+    """Gör om fritext till ett ofarligt MAPP-namn: inga sökvägs- eller
+    Windows-reserverade tecken, ingen ledande/avslutande punkt.
+
+    Skild från paths.safe_name, som bevarar filändelsen — en lektionsmapp som
+    heter «4.2 Logaritmlagar» ska behålla punkten mitt i, inte tolka «.2
+    Logaritmlagar» som en ändelse."""
     name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "", raw or "").strip().strip(".")
     return name[:80] or fallback
 
