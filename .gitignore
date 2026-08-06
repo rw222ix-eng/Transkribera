@@ -108,3 +108,8 @@ ocr-eval/.tmp/
 
 # Playwrights körartefakter (skapas i repo-roten om sviten körs därifrån)
 test-results/
+
+# Coverage (CI laddar upp den som artefakt; lokalt är den skräp)
+.coverage
+coverage.xml
+htmlcov/

@@ -1,0 +1,115 @@
+# Testsviterna på varje push (Etapp 1).
+#
+# Repot hade ingen CI: sviterna kördes när någon råkade köra dem, och de två
+# gröna loggarna i roten var månader gamla och beskrev en svit som inte fanns
+# längre. Det här är minsta möjliga som ändå säger sanningen:
+#
+#   pytest  — hela sviten på Windows, appens egen plattform, MED Tectonic och
+#             KRAV_TECTONIC=1 så de kompilerande testerna inte får hoppa över
+#             sig själva. En grön svit som inte prövat en enda PDF är värre än
+#             en röd.
+#   e2e     — Playwright mot den riktiga servern, som lokalt (port 8751,
+#             channel chrome). Servern kör mot en tom temporär bas
+#             (e2e/testserver.py), aldrig mot något i repot.
+#   beroenden — att requirements.txt går att lösa. pypdfium2 saknades i ett
+#             halvår och märktes först när någon tryckte «Skriv ut».
+#
+# Tectonic buntas inte i repot (96 MB, gitignorerad). CI hämtar samma version
+# som ligger på lärarens maskin och seedar cachen — och cachar sedan hela
+# bin/tectonic på nyckeln «version + mallarna». Ändras en mall seedas om, vilket
+# är precis rätt: det är då cachen kan glida isär från vad mallarna producerar.
+name: Testsviterna
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  TECTONIC_VERSION: "0.16.9"
+  PYTHONIOENCODING: "utf-8"
+
+jobs:
+  pytest:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+
+      - name: Tectonic ur cachen
+        id: tectonic
+        uses: actions/cache@v4
+        with:
+          path: bin/tectonic
+          key: tectonic-${{ env.TECTONIC_VERSION }}-${{ hashFiles('tools/seed_tectonic_cache.py', 'app/templates/*.j2', 'app/exam_latex.py', 'app/exam_figures.py') }}
+
+      - name: Hämta och seeda Tectonic
+        if: steps.tectonic.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          $v = $env:TECTONIC_VERSION
+          $url = "https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic%40$v/tectonic-$v-x86_64-pc-windows-msvc.zip"
+          Invoke-WebRequest -Uri $url -OutFile tectonic.zip
+          New-Item -ItemType Directory -Force bin/tectonic | Out-Null
+          Expand-Archive tectonic.zip -DestinationPath bin/tectonic -Force
+          # Seedningen kräver nät EN gång; därefter kompilerar appen offline
+          # med --only-cached. Faller den skrivs ingen markör, och nästa steg
+          # faller på riktigt i stället för att köra halvcachad.
+          python -m tools.seed_tectonic_cache
+
+      - name: pytest
+        env:
+          KRAV_TECTONIC: "1"
+        run: pytest -q --cov=app --cov-report=term-missing --cov-report=xml
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage
+          path: coverage.xml
+
+  e2e:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+      - run: npm ci
+        working-directory: e2e
+      # channel: "chrome" — Playwrights egen chromium laddas aldrig ner;
+      # appen körs ändå bara i den Chromium pywebview bäddar in, och
+      # windows-runnern har Chrome installerat.
+      - run: npx playwright test
+        working-directory: e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-spar
+          path: e2e/test-results
+
+  beroenden:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # Löser hela trädet utan att installera något: räcker för att fånga en
+      # rad som inte går att installera alls.
+      - run: pip install --dry-run -r requirements.txt

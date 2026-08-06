@@ -1,11 +1,12 @@
 """Figurrecept (PR 4): ren TikZ-sträng + riktig kompilering.
 
 VIKTIGT om grinden: de kompilerande testerna (kraschskyddet mot "Dimension
-too large", en-sida-kontrollerna, escapning-i-praktiken) skippar när
-exam_pdf.engine_available() är False. På en maskin UTAN seedad Tectonic går
-alltså sviten grön utan att ett enda figurpåstående verifierats — en grön
-svit utan motor bevisar ingenting om figurerna. Kör med seedad motor (och
-fitz för sidräkningen) för att faktiskt testa recepten."""
+too large", en-sida-kontrollerna, escapning-i-praktiken) bär
+``@pytest.mark.tectonic``. Utan motorn hoppas de över lokalt — men med
+KRAV_TECTONIC=1 (som i CI) FALLER de i stället. På en maskin utan seedad
+Tectonic gick sviten annars grön utan att ett enda figurpåstående prövats, och
+en grön svit som inte bevisar något är värre än en röd. Grinden bor i
+tests/conftest.py."""
 from pathlib import Path
 
 import pytest
@@ -117,9 +118,8 @@ def test_axeletiketter_utan_e_notation_och_med_svenskt_komma():
     {"typ": "exponential", "C": 1, "bas": 2},
     {"typ": "normalfordelning", "mu": 0, "sigma": 1},
 ])
+@pytest.mark.tectonic
 def test_funktionsgrafer_kompilerar(d, tmp_path):
-    if not exam_pdf.engine_available():
-        pytest.skip("Tectonic saknas")
     assert _kompilera(exam_figures.render_figur(_bygg(d)), tmp_path), \
         f"{d['typ']} kompilerar inte"
 
@@ -243,9 +243,8 @@ def test_ladagram_har_lada_och_morrhar():
     {"typ": "stapeldiagram", "kategorier": ["A", "B", "C"], "varden": [3, 5, 2]},
     {"typ": "ladagram", "min": 2, "q1": 5, "median": 8, "q3": 11, "max": 14},
 ])
+@pytest.mark.tectonic
 def test_geometri_statistik_kompilerar(d, tmp_path):
-    if not exam_pdf.engine_available():
-        pytest.skip("Tectonic saknas")
     assert _kompilera(exam_figures.render_figur(_bygg(d)), tmp_path)
 
 
@@ -268,9 +267,8 @@ def _sidantal(tikz: str, base: Path):
     {"typ": "andragrad", "a": -1, "b": 4, "c": -3},   # nedåtvänd parabel
     {"typ": "linjar", "k": -1.5, "m": -2},            # brant negativ linje
 ])
+@pytest.mark.tectonic
 def test_extrema_parametrar_ryms_pa_en_sida(d, tmp_path):
-    if not exam_pdf.engine_available():
-        pytest.skip("Tectonic saknas")
     tikz = exam_figures.render_figur(_bygg(d))
     assert _kompilera(tikz, tmp_path), f"{d['typ']} kompilerar inte"
     n = _sidantal(tikz, tmp_path)
@@ -290,9 +288,8 @@ def test_extrema_parametrar_ryms_pa_en_sida(d, tmp_path):
     # måste normalisera in i en fast ritruta precis som funktionsgraferna.
     {"typ": "triangel", "a": 650, "b": 720, "c": 900},
 ])
+@pytest.mark.tectonic
 def test_stora_naturliga_tal_kompilerar_pa_en_sida(d, tmp_path):
-    if not exam_pdf.engine_available():
-        pytest.skip("Tectonic saknas")
     tikz = exam_figures.render_figur(_bygg(d))
     assert _kompilera(tikz, tmp_path), f"{d['typ']} kompilerar inte"
     n = _sidantal(tikz, tmp_path)

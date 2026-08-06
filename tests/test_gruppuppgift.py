@@ -178,7 +178,7 @@ def test_uppgifterna_heter_bokstaver_inte_siffror():
     assert r"\begin{uppgift}{1}" not in tex
 
 
-@pytest.mark.skipif(not exam_pdf.engine_available(), reason="Tectonic saknas")
+@pytest.mark.tectonic
 def test_pappret_gar_att_kompilera(tmp_path):
     """En mall som inte kompilerar upptäcks annars först framför klassen."""
     doc, _ = exam_spec.validate_exam_json(_doc(), "gruppuppgift")

@@ -1063,6 +1063,7 @@ def _exam_med_matte_i_bedomningen() -> dict:
     return data
 
 
+@pytest.mark.tectonic
 def test_compile_pdf_real_engine_produces_all_three_documents(tmp_path):
     """Skyddsnät mot att sonden och mallarna glider isär tyst: kompilerar
     med den RIKTIGA Tectonic-motorn (ingen stubbad runner/compile_fn) och
@@ -1072,8 +1073,6 @@ def test_compile_pdf_real_engine_produces_all_three_documents(tmp_path):
     testerna i den här filen. Alla andra tester i den här filen stubbar
     compile_pdf — det var just därför bugginen (bedömningsanvisningens
     PDF gick inte att producera) kunde smyga sig förbi en grön testsvit."""
-    if not exam_pdf.engine_available():
-        pytest.skip("Tectonic-motorn saknas (bin/tectonic/tectonic.exe)")
 
     data = _exam_med_matte_i_bedomningen()
     data["uppgifter"][0]["bild"] = 1
@@ -1097,6 +1096,7 @@ def test_compile_pdf_real_engine_produces_all_three_documents(tmp_path):
         assert bild_fil in (tmp_path / f"{jobname}.tex").read_text(encoding="utf-8")
 
 
+@pytest.mark.tectonic
 def test_compile_pdf_real_engine_bedomning_med_djupt_nastlad_matte(tmp_path):
     """Fältet text renderas som {\\small\\itshape …} i bedomning.tex.j2.
     Matte som nästlar ner i script- och scriptscript-storlek hämtar då
@@ -1116,8 +1116,6 @@ def test_compile_pdf_real_engine_bedomning_med_djupt_nastlad_matte(tmp_path):
     delimiter- respektive rottecknets charlist. Summor och integraler är
     vanliga i riktiga Ma3/Ma4-prov, så luckan var minst lika angelägen som
     ntxsy7-kraschen."""
-    if not exam_pdf.engine_available():
-        pytest.skip("Tectonic-motorn saknas (bin/tectonic/tectonic.exe)")
 
     data = copy.deepcopy(_exam())
     # \cdot i en exponent → symbolglyf i script-storlek (ntxsy7).
@@ -1138,6 +1136,7 @@ def test_compile_pdf_real_engine_bedomning_med_djupt_nastlad_matte(tmp_path):
     assert pdf.stat().st_size > 0
 
 
+@pytest.mark.tectonic
 def test_compile_pdf_real_engine_compiles_deluppgifter_och_flerval(tmp_path):
     """Skyddsnät mot att en STRUKTURSPECIFIK kompileringsregression aldrig
     blir röd: test_compile_pdf_real_engine_produces_all_three_documents
@@ -1146,8 +1145,6 @@ def test_compile_pdf_real_engine_compiles_deluppgifter_och_flerval(tmp_path):
     compile_pdf. Kompilerar BÅDE ett deluppgifts-prov (med en notis på en
     deluppgift, se Fynd 1) och ett flervalsprov genom alla tre mallarna
     med den RIKTIGA Tectonic-motorn."""
-    if not exam_pdf.engine_available():
-        pytest.skip("Tectonic-motorn saknas (bin/tectonic/tectonic.exe)")
 
     del_data = _exam_med_deluppgifter()
     del_data["uppgifter"][6]["deluppgifter"][0]["notis"] = "Tänk på tecknet."
@@ -1171,12 +1168,11 @@ def test_compile_pdf_real_engine_compiles_deluppgifter_och_flerval(tmp_path):
             assert pdf.stat().st_size > 0
 
 
+@pytest.mark.tectonic
 def test_compile_pdf_real_engine_figur_pa_foralder_med_deluppgifter(tmp_path):
     """Figuren ligger på uppgiftsnivå; en FÖRÄLDER med deluppgifter kan alltså
     bära figur_tex. Just den kombinationen är StrictUndefined-risken — kompilera
     den genom alla tre mallar med riktiga motorn (inte bara stubbad)."""
-    if not exam_pdf.engine_available():
-        pytest.skip("Tectonic-motorn saknas (bin/tectonic/tectonic.exe)")
     data = _exam_med_deluppgifter()
     data["uppgifter"][6]["figur"] = {"typ": "andragrad", "a": 1, "b": -4, "c": 3}
     doc, errors = exam_spec.validate_exam_json(data)

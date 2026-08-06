@@ -118,3 +118,36 @@ def test_sonden_satter_glyfer_i_alla_mattestorlekar():
     assert r"\int_0^1 f(x)\,dx" in seed_tectonic_cache.PROBE_TEX
     assert r"\left(\frac{n(n+1)}{2}\right)" in seed_tectonic_cache.PROBE_TEX
     assert r"\sqrt{\frac{x}{2}}" in seed_tectonic_cache.PROBE_TEX
+
+
+# ── Seeden måste spegla mallarna (Etapp 1) ─────────────────────────────────
+# Den tysta kraschklassen: en mall som cachen aldrig sett. Under --only-cached
+# kan Tectonic inte hämta det som fattas i efterhand — den kraschar (access
+# violation) i stället för att ge ett läsbart LaTeX-fel, och det sker första
+# gången läraren godkänner ett papper av den nya sorten. Gruppuppgiftsmallen
+# var precis det: den kom i Fas 0.6 och seedades aldrig.
+
+def test_varje_mall_appen_kan_rendera_seedas():
+    """Alla render_*-funktioner i exam_latex ska ha ett jobb i seeden."""
+    import inspect
+    renderare = {namn for namn, _ in inspect.getmembers(exam_latex, inspect.isfunction)
+                 if namn.startswith("render_")}
+    kalla = inspect.getsource(seed_tectonic_cache.seed)
+    for namn in sorted(renderare):
+        assert f"exam_latex.{namn}(" in kalla, (
+            f"{namn} renderar ett papper appen kan godkänna, men seeden "
+            f"kompilerar det aldrig — cachen saknar då dess fontmetriker och "
+            f"--only-cached kraschar tyst på lärarens maskin.")
+
+
+def test_sonden_namner_varje_paket_mallarna_anvander():
+    """Paketen läses ur mallarna, inte ur en lista någon får uppdatera."""
+    import re
+    mallar = (Path("app") / "templates").glob("*.tex.j2")
+    paket = set()
+    for m in mallar:
+        for rad in re.findall(r"\\usepackage(?:\[[^\]]*\])?\{([^}]*)\}",
+                              m.read_text(encoding="utf-8")):
+            paket.update(p.strip() for p in rad.split(",") if p.strip())
+    saknas = sorted(p for p in paket if p not in seed_tectonic_cache.PROBE_TEX)
+    assert not saknas, f"mallarna använder paket sonden inte drar in: {saknas}"

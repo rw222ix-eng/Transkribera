@@ -279,10 +279,21 @@ def seed(out_dir: Path, *, compile_fn=exam_pdf.compile_pdf) -> tuple[bool, str]:
     bilder = {1: bild_fil}
 
     doc = _representative_doc()
+    # Gruppuppgiften (Fas 0.6) har en EGEN mall: namnrader (\rule på 86 % av
+    # raden), rubriken i \LARGE\bfseries och metaraden i \small — sättningar
+    # de andra mallarna inte har. Kompilerades den inte här saknades dess
+    # fontmetriker i cachen, och första skarpa godkännandet under
+    # --only-cached kraschade i stället för att ge ett läsbart LaTeX-fel.
+    # Regeln som gäller: varje render_*-funktion i exam_latex ska ha ett jobb
+    # här (tests/test_tectonic_seed.py håller den).
+    grupp_doc = doc.model_copy(update={
+        "grupp": exam_spec.GruppUpplagg(elever=4, langd_min=45,
+                                        redovisning="poster")})
     jobb = (
         ("prov", exam_latex.render_prov(doc, bilder=bilder)),
         ("arbetsblad", exam_latex.render_arbetsblad(doc, bilder=bilder)),
         ("bedomning", exam_latex.render_bedomning(doc, bilder=bilder)),
+        ("gruppuppgift", exam_latex.render_gruppuppgift(grupp_doc, bilder=bilder)),
         ("sond", PROBE_TEX),
     )
 
@@ -294,7 +305,8 @@ def seed(out_dir: Path, *, compile_fn=exam_pdf.compile_pdf) -> tuple[bool, str]:
 
     markor.parent.mkdir(parents=True, exist_ok=True)
     markor.write_text("", encoding="utf-8")
-    return True, "cachen är seedad (prov, arbetsblad, bedömning, tikz/pgfplots)"
+    return True, ("cachen är seedad (prov, arbetsblad, bedömning, "
+                  "gruppuppgift, tikz/pgfplots)")
 
 
 def main() -> int:

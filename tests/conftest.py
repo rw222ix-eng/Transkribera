@@ -18,9 +18,37 @@ dem att glida isär.
 """
 from __future__ import annotations
 
+import os
+
 import pytest
 
+from app import exam_pdf
 from app.web import server
+
+# ── Tectonic-grinden ────────────────────────────────────────────────────────
+# Åtta kompilerande tester hoppade tyst över sig själva när motorn saknades.
+# På en maskin utan seedad Tectonic gick sviten alltså grön utan att ett enda
+# påstående om PDF:erna hade prövats — och en grön svit som inte bevisar något
+# är värre än en röd. Lokalt är hoppet fortfarande rätt (motorn är 100 MB och
+# behöver internet en gång). I CI, och för den som vill vara säker, sätts
+# KRAV_TECTONIC=1: då FALLER de i stället.
+KRAV_TECTONIC = (os.environ.get("KRAV_TECTONIC", "").strip().lower()
+                 not in ("", "0", "false", "nej"))
+
+
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers", "tectonic: kräver den buntade Tectonic-motorn (bin/tectonic)")
+
+
+def pytest_runtest_setup(item):
+    if "tectonic" not in item.keywords or exam_pdf.engine_available():
+        return
+    besked = ("Tectonic-motorn saknas (bin/tectonic/tectonic.exe). "
+              "Kör `python -m tools.seed_tectonic_cache` med internet en gång.")
+    if KRAV_TECTONIC:
+        pytest.fail(besked + " KRAV_TECTONIC är satt — det här får inte hoppas över.")
+    pytest.skip(besked)
 
 
 class HW:
