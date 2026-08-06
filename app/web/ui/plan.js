@@ -1239,9 +1239,26 @@
       }),
     };
     JOBB.Arbetsblad = JOBB.Prov;
-    /* Gruppuppgiften har ingen backend ännu (etapp 0.6) och spelas därför
-       fortfarande upp i prototypens takt. Det är sant om den, och syns i
-       klockan. */
+    /* Gruppuppgiften går samma väg men bär sitt eget upplägg: namnraderna,
+       tiden och redovisningsformen ÄR pappersformen, och de kommer ur
+       väljarna här — inte ur modellens fantasi. */
+    JOBB.Gruppuppgift = ({ signal, log }) => window.API.strom('/api/exams/generate', {
+      kurs: utkast.kurs, klass: utkast.klass,
+      punkter_text: [...vald],
+      /* Fyra uppgifter — inte en väljare, utan formen: fyra rutor är vad ett
+         A4 rymmer med plats att skriva på (gruppark.css). */
+      antal: 4,
+      datum: utkast.datum || '',
+      typ: 'gruppuppgift',
+      grupp: {
+        elever: Number(i0.grupp) || 3,
+        langd_min: Number(i0.langd) || 45,
+        redovisning: String(i0.redovisning || 'Muntligt').toLowerCase(),
+      },
+    }, { signal, log }).then(kravDone).then(r => {
+      if (!r.exam) throw new Error('Gruppuppgiften gick inte att skriva den här gången. Försök igen.');
+      return r;
+    });
     const jobb = serverPa() && JOBB[typ] ? JOBB[typ] : null;
     window.Fraga.kor($('#skrivstatus'), {
       jobb,

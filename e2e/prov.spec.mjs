@@ -195,3 +195,37 @@ test("ett prov som inte gick att skriva blir ett besked", async ({ page }) => {
   await expect(page.locator("#dokument")).toBeHidden();
   expect(jsfel, jsfel.join(" | ")).toEqual([]);
 });
+
+test("gruppuppgiften går samma väg och bär sitt upplägg", async ({ page }) => {
+  const anrop = await fejka(page);
+  await page.goto("/");
+  await hydrerad(page);
+  await page.getByRole("tab", { name: "Planering" }).click();
+  await page.evaluate(() => {
+    window.SattLage("Gruppuppgift");
+    const satt = (id, v) => {
+      const e = document.querySelector(id);
+      e.value = v;
+      e.dispatchEvent(new Event("change", { bubbles: true }));
+    };
+    satt("#p-kurs", "Matematik, nivå 2c");
+    satt("#p-klass", "NA25");
+    const f = document.querySelector("#moment");
+    f.value = "derivator";
+    f.dispatchEvent(new Event("input", { bubbles: true }));
+    window.PlanSteg.las(4, false);
+    window.PlanSteg.gaTill(4);
+  });
+  await page.locator("#skriv").click();
+  await expect(page.locator("#dokument")).toBeVisible({ timeout: 15_000 });
+
+  const gen = anrop.find(a => a.vag.endsWith("/generate"));
+  expect(gen.kropp.typ).toBe("gruppuppgift");
+  // Upplägget är väljarnas, inte modellens: namnrader, tid och redovisning.
+  expect(gen.kropp.grupp.elever).toBeGreaterThanOrEqual(2);
+  expect(gen.kropp.grupp.elever).toBeLessThanOrEqual(5);
+  expect(gen.kropp.grupp.langd_min).toBeGreaterThan(0);
+  expect(["muntligt", "skriftligt", "poster"]).toContain(gen.kropp.grupp.redovisning);
+  // Fyra rutor är formen, inte en väljare.
+  expect(gen.kropp.antal).toBe(4);
+});

@@ -1,0 +1,70 @@
+((# Gruppuppgiftsmall (Fas 0.6) — arbetsbladets syskon, men ett papper som
+    ligger på ett BORD: namnraderna högst upp, tiden och redovisningsformen i
+    klartext, och inga poäng på elevens ark. Formen speglar frontendens
+    gruppark (app/web/ui/gruppark.css, blad.js grupphuvud): rubriken ensam,
+    metaraden under, instruktionsbandet, sedan uppgifterna.
+    Facit ligger på egen sida — det är lärarens, inte gruppens.
+    Fast preamble; Jinja-avgränsarna är parentesbaserade. #))
+((* set med_grafik = true *))
+((* set med_svarsrad = true *))
+((* include '_preamble.tex.j2' *))
+
+\begin{document}
+
+\begin{center}
+  {\LARGE\bfseries ((( titel )))}\\[2mm]
+  {\large Gruppuppgift — ((( kurs )))((* if klass *)) \; · \; ((( klass )))((* endif *))((* if datum *)) \; · \; ((( datum )))((* endif *))}\\[1mm]
+  {\small ((( grupp.elever ))) elever per grupp \; · \; ((( grupp.langd_min ))) minuter \; · \; ((( grupp.redovisning_text )))}
+\end{center}
+
+\vspace{4mm}
+((# Namnraderna: en per elev i gruppen, precis som gutopp i webbversionen. #))
+((* for _ in range(grupp.elever) *))
+\noindent Namn: \rule{0.86\linewidth}{0.4pt}\par\vspace{3mm}
+((* endfor *))
+
+\vspace{2mm}
+\notisruta{((( grupp.band )))}
+
+\vspace{4mm}
+((* for del in delar *))
+((* for u in del.uppgifter *))
+((# Inga poäng på gruppens ark: det är samtalet som prövas, och en siffra i
+    marginalen gör uppgiften till en tävling. Poängen står i facit. #))
+\begin{uppgift}{((( u.bokstav )))}{}
+((( u.text )))
+((* if u.bild_fil *))\par\vspace{2mm}\begin{center}\includegraphics[width=0.72\linewidth,height=90mm,keepaspectratio]{((( u.bild_fil )))}\end{center}((* endif *))
+((* if u.figur_tex *))\par\vspace{2mm}\begin{center}((( u.figur_tex )))\end{center}((* endif *))
+((* if u.notis *))\notisruta{((( u.notis )))}((* endif *))
+((* if u.har_deluppgifter *))
+((* for d in u.deluppgifter *))
+\begin{deluppgift}{((( d.bokstav )))}{}
+((( d.text )))
+((* if d.notis *))\notisruta{((( d.notis )))}((* endif *))
+((* if d.flerval *))((* for alt in d.flerval *))\par\kryssruta\ ((( alt.bokstav ))): ((( alt.text )))((* endfor *))\par\vspace{2mm}((* elif d.endast_svar *))\svarsrad((* else *))\par\vspace{((( d.utrymme_mm )))mm}((* endif *))
+\end{deluppgift}
+((* endfor *))
+((* elif u.flerval *))
+((* for alt in u.flerval *))\par\kryssruta\ ((( alt.bokstav ))): ((( alt.text )))((* endfor *))\par\vspace{2mm}
+((* elif u.endast_svar *))\svarsrad((* else *))\par\vspace{((( u.utrymme_mm )))mm}((* endif *))
+\end{uppgift}
+((* endfor *))
+((* endfor *))
+
+\newpage
+\delprovband{Facit och bedömning}
+{\small Lärarens ark — delas inte ut. Poängen står vid det steg den delas ut på.}
+\vspace{3mm}
+((* for del in delar *))
+((* for u in del.uppgifter *))
+\begin{uppgift}{((( u.bokstav )))}{((( u.poang_str )))}\par
+((* if u.har_deluppgifter *))
+((* for d in u.deluppgifter *))
+\begin{deluppgift}{((( d.bokstav )))}{((( d.poang_str )))}\par((( d.losning )))\par\textit{((( d.bedomning )))}\end{deluppgift}
+((* endfor *))
+((* else *))((( u.losning )))\par\textit{((( u.bedomning )))}((* endif *))
+\end{uppgift}
+((* endfor *))
+((* endfor *))
+
+\end{document}

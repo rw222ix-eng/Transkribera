@@ -198,6 +198,11 @@ def _build_view(doc: exam_spec.ExamDoc,
                 item_vy["har_deluppgifter"] = False
                 item_vy["deluppgifter"] = None
             item_vy["nummer"] = nummer
+            # Gruppuppgiftens uppgifter heter A, B, C — inte 1, 2, 3. Brickan
+            # är en bokstav på pappret som ligger på bordet (gruppark.css), och
+            # numret finns kvar för de mallar som räknar.
+            item_vy["bokstav"] = (_BOKSTAV[nummer - 1].upper()
+                                  if nummer <= len(_BOKSTAV) else str(nummer))
             item_vy["poang_str"] = f"{sum(agg)}p"
             item_vy["poang_eca"] = f"{agg[0]}/{agg[1]}/{agg[2]}"
             # Figuren ligger på uppgiftsnivå (ExamItem), inte på deluppgift/
@@ -237,6 +242,41 @@ def _build_view(doc: exam_spec.ExamDoc,
         # PR 4: tikz + angles/quotes laddas bara när provet har minst en
         # figur (jfr med_grafik/med_svarsrad-mönstret för includegraphics).
         "med_tikz": any(it.figur is not None for it in doc.uppgifter),
+        # Gruppuppgiftens upplägg, färdigt att sätta: redovisningsformen i
+        # klartext och instruktionsbandet är samma texter som webbversionen
+        # skriver (app/web/ui/blad.js, grupphuvud) — ett papper och en skärm
+        # ska inte lova gruppen olika saker.
+        "grupp": _grupp_vy(doc.grupp),
+    }
+
+
+_REDOVISNING_TEXT = {
+    "muntligt": "muntlig redovisning",
+    "skriftligt": "skriftlig redovisning",
+    "poster": "redovisas som poster",
+}
+_REDOVISNING_HUR = {
+    "muntligt": "Redovisas muntligt: två minuter per grupp, och alla i gruppen "
+                "säger något.",
+    "skriftligt": "Redovisas skriftligt: ett gemensamt svar per grupp lämnas in "
+                  "vid lektionens slut.",
+    "poster": "Redovisas som poster: skriv lösningen stort på ett blad som "
+              "sätts upp i salen.",
+}
+_GRUPPBAND = ("Läs uppgiften tillsammans innan ni börjar räkna. Bestäm vem som "
+              "skriver. Alla i gruppen ska kunna förklara lösningen efteråt.")
+
+
+def _grupp_vy(grupp) -> dict | None:
+    if grupp is None:
+        return None
+    red = grupp.redovisning
+    return {
+        "elever": grupp.elever,
+        "langd_min": grupp.langd_min,
+        "redovisning": red,
+        "redovisning_text": escape_latex(_REDOVISNING_TEXT[red]),
+        "band": escape_latex(f"{_GRUPPBAND} {_REDOVISNING_HUR[red]}"),
     }
 
 
@@ -258,3 +298,12 @@ def render_arbetsblad(doc: exam_spec.ExamDoc, visa_poang: bool = False,
     egen sida (lösningsförslagen)."""
     return _environment().get_template("arbetsblad.tex.j2").render(
         visa_poang=visa_poang, **_build_view(doc, bilder))
+
+
+def render_gruppuppgift(doc: exam_spec.ExamDoc,
+                        bilder: dict[int, str] | None = None) -> str:
+    """Gruppuppgift (Fas 0.6): namnrader per elev, tiden och redovisningsformen
+    i klartext, inga poäng på gruppens ark — och facit med bedömning på egen
+    sida, för det är lärarens papper."""
+    return _environment().get_template("gruppuppgift.tex.j2").render(
+        **_build_view(doc, bilder))

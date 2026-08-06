@@ -31,6 +31,13 @@ def _safe_component(raw: str, fallback: str) -> str:
     return name[:80] or fallback
 
 
+# Dokumenttyperna prov-spåret bär. Gruppuppgiften (Fas 0.6) fick ingen egen
+# rutt-familj: den är ett ark med uppgifter, precis som arbetsbladet, och delar
+# därför generering, versionering, iteration och PDF-vägen. Skillnaden ligger i
+# balansprofilen (exam_spec.PROFILER), prompten och mallen.
+_TYPER = ("prov", "arbetsblad", "gruppuppgift")
+
+
 def create_router(base: Path, arbiter) -> APIRouter:
     router = APIRouter()
     db_file = base / "transkribera.db"
@@ -165,7 +172,20 @@ def create_router(base: Path, arbiter) -> APIRouter:
         tid_min = int(body.get("tid_min") or 120)
         delar = bool(body.get("delar", True))
         datum = (body.get("datum") or "").strip() or None
-        typ = "arbetsblad" if body.get("typ") == "arbetsblad" else "prov"
+        typ = body.get("typ") if body.get("typ") in _TYPER else "prov"
+        # Gruppuppgiftens upplägg (Fas 0.6): namnraderna, tiden och
+        # redovisningsformen ÄR pappersformen (se gruppark.css) — de kommer ur
+        # planeringens väljare och ska in i både prompten och dokumentet.
+        grupp = None
+        if typ == "gruppuppgift":
+            g = body.get("grupp") or {}
+            grupp = {
+                "elever": max(2, min(5, int(g.get("elever") or 3))),
+                "langd_min": max(10, min(180, int(g.get("langd_min") or 45))),
+                "redovisning": (str(g.get("redovisning") or "muntligt").lower()
+                                if str(g.get("redovisning") or "").lower()
+                                in ("muntligt", "skriftligt", "poster") else "muntligt"),
+            }
         referens_id = body.get("referens_exam_id")
         # Bildunderlag (Fas 4): samma uppladdningar som tavlans underlag.
         underlag_pid = body.get("underlag") or None
@@ -216,8 +236,12 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     kurs, klass or "klassen", punkter, model=_model_name(),
                     antal=antal, tid_min=tid_min, delar=delar,
                     memory=memory, teman=teman, referens=referens,
-                    bilder=bilder_block, profil=typ,
+                    bilder=bilder_block, profil=typ, grupp=grupp,
                     log_cb=lambda m: emit({"type": "log", "msg": m}))
+                # Upplägget är lärarens val, inte modellens: skriv in det som
+                # valdes även om modellen råkade fylla i något annat.
+                if res["exam"] is not None and grupp:
+                    res["exam"]["grupp"] = grupp
                 if res["exam"] is None:
                     return {"id": None, "exam": None,
                             "errors": res["errors"], "rounds": res["rounds"]}
@@ -352,7 +376,13 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     emit({"type": "log", "msg": "Renderar LaTeX …"})
                     # Typflaggan styr mallen (Fas 5): arbetsblad får facit-
                     # sida i samma dokument och ingen bedömningsanvisning.
-                    if typ == "arbetsblad":
+                    if typ == "gruppuppgift":
+                        # Gruppuppgiften bär sitt facit MED bedömning på sista
+                        # sidan — lärarens ark, inte gruppens — och behöver
+                        # därför inget separat bedömningsdokument.
+                        tex = exam_latex.render_gruppuppgift(doc, bilder=bilder_map)
+                        bed = None
+                    elif typ == "arbetsblad":
                         tex = exam_latex.render_arbetsblad(doc, bilder=bilder_map)
                         bed = None
                     else:

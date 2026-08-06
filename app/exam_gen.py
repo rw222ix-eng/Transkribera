@@ -141,7 +141,7 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
                  antal: int = 10, tid_min: int = 120, delar: bool = True,
                  memory: str = "", teman: str = "",
                  referens: str = "", bilder: str = "",
-                 profil: str = "prov",
+                 profil: str = "prov", grupp: dict | None = None,
                  skeleton: list[dict] | None = None) -> str:
     """Genereringsprompt: instruktion + valda innehållspunkter +
     minneskontext + tidigare provs teman (undvik upprepning som default).
@@ -159,7 +159,35 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
         block.append(referens)
     if bilder:
         block.append(bilder)
-    if profil == "arbetsblad":
+    if profil == "gruppuppgift":
+        g = grupp or {}
+        REDOV = {
+            "muntligt": "Redovisas muntligt: två minuter per grupp, och alla i "
+                        "gruppen ska kunna säga något.",
+            "skriftligt": "Redovisas skriftligt: ett gemensamt svar per grupp "
+                          "lämnas in vid lektionens slut.",
+            "poster": "Redovisas som poster: lösningen skrivs stort på ett blad "
+                      "som sätts upp i salen.",
+        }
+        n = int(g.get("elever") or 3)
+        min_ = int(g.get("langd_min") or 45)
+        red = str(g.get("redovisning") or "muntligt")
+        block.append(
+            f"Uppdrag: skriv en GRUPPUPPGIFT för {kurs}, klass {klass}, med "
+            f"EXAKT {antal} uppgifter (varken fler eller färre). {n} elever per "
+            f"grupp arbetar tillsammans i {min_} minuter. {REDOV.get(red, REDOV['muntligt'])}\n"
+            "Uppgifterna ska KRÄVA att man pratar: problemlösning, "
+            "modellering, resonemang och kommunikation — inte rutinräkning "
+            "som en elev gör snabbast själv. De är fyra ingångar till samma "
+            "sak, inte en trappa, så de behöver inte bli svårare nedåt.\n"
+            "Bygg in ställningen i uppgiften: en uppgift som ska diskuteras "
+            "delas i deluppgifter som leder samtalet framåt (undersök, "
+            "formulera, motivera), och den som bara ska besvaras skrivs som "
+            "en rutinuppgift.\n"
+            "Inga delar (del: null på alla uppgifter). Fyll fältet \"grupp\" "
+            f"med elever={n}, langd_min={min_}, redovisning=\"{red}\". "
+            "Svara med enbart JSON.")
+    elif profil == "arbetsblad":
         block.append(
             f"Uppdrag: skriv ett ARBETSBLAD (övningsblad, inte prov) för "
             f"{kurs}, klass {klass}, med EXAKT {antal} uppgifter (varken fler "
@@ -326,12 +354,16 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                   antal: int = 10, tid_min: int = 120, delar: bool = True,
                   memory: str = "", teman: str = "", referens: str = "",
                   bilder: str = "", profil: str = "prov",
+                  grupp: dict | None = None,
                   llm=llm_client.generate, max_rounds: int = MAX_ROUNDS,
                   log_cb: Callable[[str], None] | None = None) -> dict:
-    """Generera ett prov/arbetsblad och reparera schema-/balansfel inom
-    rundbudgeten. Returnerar {"exam": dict|None, "errors": [...], "rounds": int}."""
+    """Generera ett prov/arbetsblad/gruppuppgift och reparera schema- och
+    balansfel inom rundbudgeten. `grupp` är gruppuppgiftens upplägg (elever,
+    langd_min, redovisning) och ignoreras för de andra profilerna.
+    Returnerar {"exam": dict|None, "errors": [...], "rounds": int}."""
     log = log_cb or (lambda _m: None)
-    log("Skriver arbetsbladet …" if profil == "arbetsblad" else "Skriver provet …")
+    log({"arbetsblad": "Skriver arbetsbladet …",
+         "gruppuppgift": "Skriver gruppuppgiften …"}.get(profil, "Skriver provet …"))
     ogenomforbart = exam_spec.genomforbarhet(antal, profil)
     if ogenomforbart:
         return {"exam": None, "errors": ogenomforbart, "rounds": 0}
@@ -342,7 +374,7 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     prompt = build_prompt(kurs, klass, punkter, antal=antal, tid_min=tid_min,
                           delar=delar, memory=memory, teman=teman,
                           referens=referens, bilder=bilder, profil=profil,
-                          skeleton=skeleton)
+                          grupp=grupp, skeleton=skeleton)
     exam = _llm_round(prompt, model, llm, antal, skeleton)
     rounds = 1
     while exam is None and rounds < max_rounds:

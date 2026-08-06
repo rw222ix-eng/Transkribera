@@ -211,6 +211,16 @@ class ExamItem(_Uppgiftsbas):
         return self
 
 
+class GruppUpplagg(_Model):
+    """Gruppuppgiftens egna villkor — det frontendens gruppark trycker överst
+    på pappret: hur många namnrader, hur lång tid, hur det redovisas
+    (app/web/ui/blad.js, grupphuvud). Gränserna är väljarnas i planeringen
+    (plan.js TYPVAL.Gruppuppgift): 2–5 elever, 10–180 minuter."""
+    elever: int = Field(ge=2, le=5)
+    langd_min: int = Field(ge=10, le=180)
+    redovisning: Literal["muntligt", "skriftligt", "poster"]
+
+
 class ExamDoc(_Model):
     titel: str
     kurs: str
@@ -218,6 +228,8 @@ class ExamDoc(_Model):
     datum: str | None = None
     tid_min: int | None = None
     hjalpmedel: str
+    # Bara gruppuppgiften har den; prov och arbetsblad lämnar den tom.
+    grupp: GruppUpplagg | None = None
     uppgifter: list[ExamItem] = Field(min_length=1)
 
 
@@ -298,9 +310,29 @@ ARBETSBLAD_NIVA_MAL: dict[str, tuple[float, float]] = {
 # bara PROV — arbetsbladet får drilla samma uppgiftstyp i rad. Stigande
 # svårighet gäller BÅDA: arbetsbladsmallen lovar eleven att uppgifterna blir
 # svårare längre ner.
+# Gruppuppgift (Fas 0.6) — motsatsen till arbetsbladet. Ett papper som ligger
+# på ett BORD och som fyra elever ska prata sig igenom prövar inte rutin: det
+# prövar problemlösning, modellering, resonemang och kommunikation. Därför
+# golv > 0 på PL, M, R och K, tak på ren procedur, och tyngdpunkten på C/A —
+# en uppgift man löser i huvudet behöver ingen grupp.
+GRUPP_FORMAGA_MAL: dict[str, tuple[float, float]] = {
+    "B": (0.00, 0.35), "P": (0.00, 0.35), "PL": (0.15, 0.60),
+    "M": (0.05, 0.45), "R": (0.10, 0.50), "K": (0.10, 0.45),
+}
+GRUPP_NIVA_MAL: dict[str, tuple[float, float]] = {
+    "e": (0.10, 0.45), "c": (0.25, 0.60), "a": (0.10, 0.45),
+}
+
+# Balansprofil per dokumenttyp: (förmågemål, nivåmål, kräver redovisning,
+# kräver antiklumpning, kräver stigande svårighet).
 PROFILER: dict[str, tuple[dict, dict, bool, bool, bool]] = {
     "prov": (FORMAGA_MAL, NIVA_MAL, True, True, True),
     "arbetsblad": (ARBETSBLAD_FORMAGA_MAL, ARBETSBLAD_NIVA_MAL, False, False, True),
+    # Gruppuppgiften kräver redovisning (det är själva formen), men INTE
+    # stigande svårighet: fyra uppgifter på ett bord är fyra ingångar till
+    # samma sak, inte en trappa. Och inte antiklumpning — samma förmåga två
+    # gånger i rad är rimligt när det är gruppens samtal som prövas.
+    "gruppuppgift": (GRUPP_FORMAGA_MAL, GRUPP_NIVA_MAL, True, False, False),
 }
 
 # Ordningsregler (per del). Tröskelvärden justerbara efter utfall på
@@ -657,4 +689,12 @@ def validate_exam_json(data, profil: str = "prov") -> tuple[ExamDoc | None, list
             _err(".".join(str(p) for p in err["loc"]), "schema", err["msg"])
             for err in e.errors()
         ]
-    return doc, validate_balance(doc, profil=profil)
+    fel = validate_balance(doc, profil=profil)
+    # Gruppuppgiften är inget papper utan sitt upplägg: namnraderna, tiden och
+    # redovisningsformen ÄR formen (se gruppark.css). Saknas de blir arket ett
+    # arbetsblad med fel instruktionsband.
+    if profil == "gruppuppgift" and doc.grupp is None:
+        fel = fel + [_err("grupp", "saknas",
+                          "en gruppuppgift måste ha \"grupp\" med elever, "
+                          "langd_min och redovisning")]
+    return doc, fel
