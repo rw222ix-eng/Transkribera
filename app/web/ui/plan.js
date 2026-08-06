@@ -2443,6 +2443,33 @@
     const irank = insp.map(p => ({ p, n: ipoang(p) })).sort((a, b) => b.n - a.n);
     const ibast = irank[0] && irank[0].n > 0 ? irank[0].p : null;
     const omTalet = /\bsa\b|sade|sades|säger|gick igenom|hann|hanns|lektion|inspelning|transkript|nämnde|frågade|elev|förklara/i.test(q);
+    /* ══ FRÅGAN OM DET SOM SADES GÅR TILL TRANSKRIPTEN ══
+       Svaret nedan var skrivet i förväg: det citerade rad ett och två ur
+       prototypens enda transkription och påstod att det byggde på det som
+       faktiskt sades. Servern gör det på riktigt — FTS över alla lektioner,
+       läser de relevanta i sin helhet och skriver (POST /api/search/ask,
+       samma väg som lektionschatten). Utan server står prototypens svar kvar.
+
+       Frågor om PAPPREN går fortfarande genom högen här: den ligger i
+       webbläsaren (Sparat), och det är den som citaten pekar in i. */
+    const serverFraga = serverPa() && omTalet ? {
+      omfang: `${insp.length} ${insp.length === 1 ? 'inspelning' : 'inspelningar'} i arkivet`,
+      antal: Math.max(1, insp.length),
+      jobb: ({ signal, log }) => window.API.strom('/api/search/ask', { q }, { signal, log }),
+      plan: [
+        { namn: 'Söker i transkripten', detalj: insp.length + (insp.length === 1 ? ' inspelning' : ' inspelningar') },
+        { namn: 'Väljer ut relevanta lektioner', detalj: '' },
+        { namn: 'Läser avsnitten i sin helhet', detalj: '' },
+        { namn: 'Skriver svar med källor', detalj: '' }
+      ],
+      svar: res => {
+        if (!res) throw new Error('Servern slutade svara mitt i sökningen. Försök igen.');
+        const namn = (res.sources || []).map(s => s.name).filter(Boolean);
+        return res.text + (namn.length && !namn.some(n => (res.text || '').includes(n))
+          ? ` Svaret bygger på ${namn.slice(0, 3).join(', ')}.` : '');
+      },
+      kallor: []
+    } : null;
     const inspSvar = (ibast && (omTalet || !bast)) ? {
       omfang: `${insp.length} ${insp.length === 1 ? 'inspelning' : 'inspelningar'} · ${sparat.length} dokument`,
       antal: Math.max(1, insp.length),
@@ -2470,7 +2497,7 @@
         { namn: 'Skriver svar med källor', detalj: '' }
       ],
       kallor: []
-    }, inspSvar || {}, schemasvar || {}));
+    }, inspSvar || {}, schemasvar || {}, serverFraga || {}));
   });
   $('#arkivfalt').addEventListener('keydown', e => { if (e.key === 'Enter') $('#arkivknapp').click(); });
 

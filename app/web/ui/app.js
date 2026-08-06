@@ -466,6 +466,10 @@ async function korRiktigt(rader, fottext) {
       if (!svar) throw new Error('Servern slutade svara mitt i körningen. Filen är orörd — försök igen.');
       r.klar = true;
       r.resultat = svar;
+      /* Lektionens id på servern följer med filen: granskningen efteråt ber om
+         den riktiga extraktionen på den, i stället för att läsa transkriptet
+         med regex här. */
+      f.lektionId = svar.lesson_id || null;
       window.transkript = (svar.transcript || []).map(s => [klockstr(Math.round(s.start)), s.text]);
       ritaFaser(r, 100);
       $('.fyll', r.el).style.width = '100%';
@@ -656,12 +660,93 @@ function extrahera(filer) {
   });
   return ut;
 }
+/* ══════════ FÖRSLAGEN UR DEN RIKTIGA EXTRAKTIONEN ══════════
+   `extrahera()` ovan letar efter fyra fraser med regex — det är vad prototypen
+   kan, och det syns: den hittar «till nästa gång» men inte att klassen fastnade
+   på något som aldrig sas rakt ut. Servern läser hela lektionen
+   (POST /api/lessons/{id}/extract, app/postprocess.extract_full) och svarar med
+   insikter i fem slag. Korten är desamma — det är innehållet som blir sant.
+
+   Insikterna sparas samtidigt på lektionen (källa 'llm'), så de finns kvar i
+   minnet och i nästa lektions kontext även om läraren stänger rutan. */
+const INSIKTSKORT = {
+  'svårighet': { titel: 'Repetera det som fastnade', kort: 'repetition', nyckel: 'Ur lektionen',
+                 text: 'Det här stannade upp under lektionen. Det är värt fem minuter nästa gång.',
+                 knapp: 'Lägg på nästa tavla' },
+  'åtgärd': { titel: 'Att följa upp', kort: 'åtgärd', nyckel: 'Sades',
+              text: 'Något lämnades öppet på lektionen.', knapp: 'Lägg på nästa tavla' },
+  'material': { titel: 'Arbetsblad på hemuppgiften', kort: 'arbetsblad', nyckel: 'Källa',
+                text: 'Lektionen slutade med något att öva på. Jag kan bygga ett arbetsblad på samma innehåll.',
+                knapp: 'Bygg arbetsbladet' },
+  'grupprum': { titel: 'Att ordna före nästa lektion', kort: 'grupprum', nyckel: 'Sades',
+                text: 'Något praktiskt sades under lektionen.', knapp: 'Lägg på nästa tavla' },
+  'kalender': { titel: 'Lägg in i kalendern', kort: 'kalender', nyckel: 'Sades', kalender: true,
+                text: 'En tid nämndes på lektionen. Den ligger inte i kalendern än.',
+                knapp: 'Lägg in i kalendern' },
+};
+
+function insiktsforslag(insikter, f0) {
+  const ut = [];
+  (insikter || []).forEach(i => {
+    const mall = INSIKTSKORT[i.typ];
+    if (!mall || ut.length >= 4) return;
+    const rader = [[mall.nyckel, i.text]];
+    if (i.due_date) rader.push(['När', window.Kalender && window.Kalender.ord ? window.Kalender.ord(i.due_date) : i.due_date]);
+    rader.push(['Klass', f0.klass || 'ingen klass']);
+    ut.push({
+      titel: mall.titel, text: mall.text, rader, knapp: mall.knapp,
+      kort: mall.kort, kalender: !!(mall.kalender && i.due_date),
+      /* Kalenderinsikten är den enda som kan göras färdig här: den skriver in
+         posten i veckan. De andra öppnar planeringen, som förut. */
+      gor: mall.kalender && i.due_date && window.Kalender
+        ? () => {
+          window.Kalender.lagg({ datum: i.due_date, titel: String(i.text).slice(0, 60),
+                                 klass: f0.klass || '', kurs: f0.kurs || '',
+                                 slag: 'post', ursprung: 'insikt' });
+          window.Klass && window.Klass.rita && window.Klass.rita();
+          toast('Inlagt i veckan');
+        }
+        : () => { visaFlik(flikNamn('Planering')); toast('Planeringen öppnad'); },
+    });
+  });
+  return ut;
+}
+
+/* Regexförslagen står framme direkt — den som är klar ska inte vänta på en
+   analys — och byts ut mot serverns när den svarat. Svarar den inte alls står
+   prototypens kvar, precis som i Claude Design. */
+function hamtaInsikter() {
+  const f0 = klaraFiler.find(f => f.lektionId);
+  if (!f0 || !(window.API && window.API.pa)) return;
+  const not = $('#forslagnot');
+  const forra = not.textContent;
+  not.textContent = 'Läser igenom lektionen …';
+  window.API.strom(`/api/lessons/${f0.lektionId}/extract`, {})
+    .then(res => {
+      const forslag = insiktsforslag(res && res.insights, f0);
+      if (!forslag.length) { not.textContent = forra; return; }
+      const vard = $('#klarforslag'), rad = $('#granska-forslag');
+      vard.innerHTML = '';
+      vard.hidden = true;
+      rad.setAttribute('aria-expanded', 'false');
+      const nsr = $('.nsr', rad);
+      if (nsr) nsr.textContent = 'Granska förslagen';
+      visaForslag(forslag);
+    })
+    .catch(() => { not.textContent = forra; });
+}
+
 function granskaAutomatiskt() {
   const vard = $('#klarforslag'), rad = $('#granska-forslag');
   if (!vard || !rad) return;
   vard.innerHTML = '';
   vard.hidden = true;
-  const forslag = extrahera(klaraFiler);
+  visaForslag(extrahera(klaraFiler));
+  hamtaInsikter();
+}
+
+function visaForslag(forslag) {
+  const vard = $('#klarforslag'), rad = $('#granska-forslag');
   const antal = $('#forslagantal'), not = $('#forslagnot');
   antal.hidden = !forslag.length;
   antal.textContent = String(forslag.length);

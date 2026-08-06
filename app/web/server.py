@@ -712,10 +712,11 @@ def create_app(base_dir: Path | None = None,
             history_store.add_history(history_file, entry)
             # Mirror into the lesson DB so the recording can be organised by
             # date/class/course. Never let this break a successful transcription.
+            lesson_id = None
             try:
                 conn = _db()
                 try:
-                    db.create_lesson(
+                    lesson = db.create_lesson(
                         conn, history_id=entry["id"], ts=entry["ts"],
                         name=entry["name"], source=source, dur=entry["dur"],
                         model=spec_label, lang=lang_label,
@@ -723,11 +724,16 @@ def create_app(base_dir: Path | None = None,
                         transcript_folder=assembled["folder"],
                         recording_path=str(media), created_at=entry["ts"],
                         transcript_text=db.segments_text(segments))
+                    lesson_id = (lesson or {}).get("id")
                 finally:
                     conn.close()
             except Exception:
                 debug_log.get_logger().exception("Kunde inte spara lektion i DB")
-            return {"id": entry["id"], "files": files, "transcript": segments,
+            # `lesson_id` går med i svaret så att granskningen efteråt kan be om
+            # den riktiga extraktionen (POST /api/lessons/{id}/extract) i stället
+            # för att leta upp lektionen på history_id i en andra rundtur.
+            return {"id": entry["id"], "lesson_id": lesson_id, "files": files,
+                    "transcript": segments,
                     "media": video["path"] if video else str(media),
                     "folder": assembled["folder"]}
         return _sse_response(job)
