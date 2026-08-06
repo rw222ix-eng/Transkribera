@@ -18,7 +18,7 @@ from pathlib import Path
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
-from app import db, lesson_board, llm_client
+from app import db, lesson_board, llm_client, rattning
 from app.web.sse import sse_response
 
 # Två tavlor i 2× blir ett par MB; 30 MB är väl tilltaget men stoppar missbruk.
@@ -82,6 +82,31 @@ def underlag_text(base: Path, pid: str | None) -> str:
         lines.append(f"Sida {i} ({f.get('namn') or 'fil'}): "
                      + (desc or "(ingen bildtolkning tillgänglig)"))
     return "\n".join(lines)
+
+
+def utfall_text(db_file: Path, body: dict) -> str:
+    """Promptblocket för källdörr 5 — det rättade provets utfall (Etapp 0.7).
+    Delas med provroutern.
+
+    `utfall_dokument_id` är den sanna vägen: servern läser sin egen rättning.
+    `utfall` inline finns för pappret som rättats utan att ha nått databasen
+    (prototypens hög, ett papper som skapades innan servern var uppe) — då är
+    klientens siffror det enda som finns, och det är bättre än ingenting."""
+    u = body.get("utfall") if isinstance(body.get("utfall"), dict) else {}
+    namn = str(u.get("namn") or "")
+    rattat = u.get("rattat") if isinstance(u.get("rattat"), dict) else None
+    did = body.get("utfall_dokument_id")
+    if did:
+        conn = db.connect(db_file)
+        try:
+            sparad = db.get_rattning(conn, int(did))
+        except (TypeError, ValueError):
+            sparad = None
+        finally:
+            conn.close()
+        if sparad:
+            rattat = rattning.rattat_ur_rader(sparad)
+    return rattning.build_utfall(rattat, namn)
 
 
 def _memory_text(prep: dict) -> str:
@@ -302,6 +327,9 @@ def create_router(base: Path, arbiter) -> APIRouter:
         group, course = _names(group_id, course_id)
         memory = _memory(group_id, course_id)
         underlag_txt = _underlag_text(body.get("underlag"))
+        # Källdörr 5: tavlan ska ta om det klassen föll på, inte gå igenom
+        # momentet en gång till som om provet aldrig skrivits.
+        utfall_txt = utfall_text(db_file, body)
 
         if not arbiter.try_acquire_gpu():
             return JSONResponse(_GPU_BUSY, status_code=409)
@@ -313,6 +341,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 res = lesson_board.generate_board(
                     course or "matematik", group or "klassen", moment,
                     model=_model_name(), memory=memory, underlag=underlag_txt,
+                    utfall=utfall_txt,
                     log_cb=lambda m: emit({"type": "log", "msg": m}),
                     token_cb=lambda t: emit({"type": "token", "text": t}))
                 pid = uuid.uuid4().hex[:12]

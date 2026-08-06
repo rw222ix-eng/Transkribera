@@ -12,7 +12,7 @@
   const skal = $('#rattskal');
   if (!skal) return;
 
-  let doc = null, poster = [], varden = {}, elever = 22;
+  let doc = null, poster = [], varden = {}, elever = 22, serverrader = null;
 
   const FORMAGA = [
     [/egna ord|innebär|begrepp/i, 'Begreppsförståelse'],
@@ -61,7 +61,10 @@
     const uppg = (doc.uppgifter || []).length
       ? doc.uppgifter
       : Array.from({ length: 6 }, (_, i) => ({ nr: i + 1, t: 'Uppgift ' + (i + 1), p: 3 }));
-    poster = bygg(uppg);
+    /* Serverns rader är samma rader — byggda av app/rattning.py ur samma
+       uppgifter — men med provets EGNA förmågor i stället för gissningen ur
+       texten. Ett prov Claude skrivit vet vad varje uppgift prövar. */
+    poster = serverrader || bygg(uppg);
     $('#rattelever').value = elever;
     $('#rattningtitel').textContent = (window.Dokument ? window.Dokument.namn(doc) : 'Provet').replace(/^Prov — /, 'Prov · ') +
       (doc.klass ? ' · ' + doc.klass : '');
@@ -173,14 +176,67 @@
     box.hidden = false;
   }
 
+  /* ══════════ SERVERN ══════════
+     Rättningen räknas på servern (app/rattning.py) av samma skäl som allt
+     annat i planeringen: utfallet är en KÄLLA. «Läser provets utfall · 4b, 7
+     föll» är en rad i skrivplanen och det som föll går in i nästa prompt — och
+     ett tal som räknas på två ställen blir förr eller senare två tal.
+
+     Utan server räknar den här filen själv, precis som förut. Designprojektet
+     har ingen server, och prototypen ska stå kvar. */
+  const server = () => !!(window.API && window.API.pa && doc && doc.id);
+  const vag = v => '/api/dokument/' + v.id + '/rattning';
+
+  /* Modalen öppnas på egna rader direkt — den som rättar ska inte vänta på
+     nätet — och ritas om när servern svarat. */
+  function hamta() {
+    if (!server()) return;
+    const v = doc;
+    window.API.json(vag(v)).then(r => {
+      if (doc !== v || !r || !(r.rader || []).length) return;
+      serverrader = r.rader;
+      if (r.elever) elever = r.elever;
+      /* Serverns siffror gäller bara om ingenting står i fälten: har man
+         börjat skriva ska det man skrivit inte bytas ut under handen. */
+      if (!Object.keys(varden).length && r.varden) varden = Object.assign({}, r.varden);
+      rita();
+    }).catch(() => {});
+  }
+
+  /* Kvittot, inte källan: siffrorna ligger redan på skärmen. Svarar servern
+     något annat än vad som räknades här vinner den — den läste pappret ur
+     databasen — och pappret skrivs om en gång till. */
+  function spara(v, lokal) {
+    if (!(window.API && window.API.pa && v && v.id)) return;
+    window.API.json(vag(v), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ elever: lokal.elever, varden: lokal.varden }),
+    }).then(r => {
+      if (!r || !r.rattat || !v.rattat) return;
+      if (JSON.stringify(r.rattat) === JSON.stringify(v.rattat)) return;
+      v.rattat = r.rattat;
+      window.Dokument && window.Dokument.andrad && window.Dokument.andrad(v);
+      window.Dokument && window.Dokument.rita && window.Dokument.rita();
+      window.Utgang && window.Utgang.rita();
+    }).catch(() => {});
+  }
+
+  function slapp(v) {
+    if (!(window.API && window.API.pa && v && v.id)) return;
+    window.API.json(vag(v), { method: 'DELETE' }).catch(() => {});
+  }
+
   /* ── Modalen ─────────────────────────────────────── */
   const tangent = e => { if (e.key === 'Escape') stang(); };
   function oppna(v) {
     if (!v) return;
     doc = v;
+    serverrader = null;
     varden = v.rattat && v.rattat.varden ? Object.assign({}, v.rattat.varden) : {};
     elever = (v.rattat && v.rattat.elever) || 22;
     rita();
+    hamta();
     skal.hidden = false;
     requestAnimationFrame(() => skal.setAttribute('data-pa', ''));
     document.addEventListener('keydown', tangent);
@@ -197,27 +253,33 @@
 
   $('#rattningspara').addEventListener('click', () => {
     if (!doc) return;
+    /* Pappret hålls fast här: modalen kan hinna öppnas på ett annat prov innan
+       toasten hinner ångras, och då är det DET HÄR provets rättning som ska
+       tas bort — inte det som råkar ligga framme. */
+    const v = doc;
     const rader = poster.filter(p => !p.grupp && p.andel != null);
     const summa = rader.reduce((a, p) => a + varden[p.nyckel], 0);
     const tak = rader.reduce((a, p) => a + p.p * elever, 0) || 1;
     const s = svagaste(poster.filter(p => !p.grupp));
-    doc.rattat = {
+    v.rattat = {
       elever, varden: Object.assign({}, varden), andel: summa / tak,
       svaga: s ? s.lista.map(p => ({ kod: p.kod, formaga: p.formaga, text: p.text, andel: p.andel })) : []
     };
     /* Utfallet är fakta om pappret och skrivs rakt på det — ingen ny version att
        ångra. Utan det här överlever «Rättat · NN %» inte en omladdning, och
        källdörr 5 («Läser provets utfall») har inget att läsa. */
-    window.Dokument && window.Dokument.andrad && window.Dokument.andrad(doc);
+    window.Dokument && window.Dokument.andrad && window.Dokument.andrad(v);
     window.Dokument && window.Dokument.rita && window.Dokument.rita();
     window.Utgang && window.Utgang.rita();
+    spara(v, v.rattat);
     window.toast && window.toast(
       s ? `Sparat — uppgift ${rada(s.lista.map(p => p.kod))} ligger som utgångspunkt när du planerar` : 'Sparat',
       'Ångra', () => {
-        doc.rattat = null;
-        window.Dokument && window.Dokument.andrad && window.Dokument.andrad(doc);
+        v.rattat = null;
+        window.Dokument && window.Dokument.andrad && window.Dokument.andrad(v);
         window.Dokument && window.Dokument.rita();
         window.Utgang && window.Utgang.rita();
+        slapp(v);
       });
     stang();
   });

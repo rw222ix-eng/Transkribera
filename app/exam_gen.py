@@ -140,18 +140,23 @@ def _skelett_plan(skeleton: list[dict]) -> str:
 def build_prompt(kurs: str, klass: str, punkter: list[str], *,
                  antal: int = 10, tid_min: int = 120, delar: bool = True,
                  memory: str = "", teman: str = "",
-                 referens: str = "", bilder: str = "",
+                 referens: str = "", bilder: str = "", utfall: str = "",
                  profil: str = "prov", grupp: dict | None = None,
                  skeleton: list[dict] | None = None) -> str:
     """Genereringsprompt: instruktion + valda innehållspunkter +
     minneskontext + tidigare provs teman (undvik upprepning som default).
-    `profil` växlar mellan prov och arbetsblad (Fas 5)."""
+    `profil` växlar mellan prov och arbetsblad (Fas 5). `utfall` är ett rättat
+    provs resultat (Etapp 0.7, app/rattning.build_utfall) — det står näst
+    intill minnet därför att det är samma sak sagt med siffror: vad klassen
+    kunde, inte vad den gick igenom."""
     block = [INSTRUCTION]
     if punkter:
         block.append("Uppgifterna ska pröva följande centrala innehåll:\n- " +
                      "\n- ".join(punkter))
     if memory:
         block.append(f"Ur lektionsminnet (vad klassen arbetat med):\n{memory}")
+    if utfall:
+        block.append(utfall)
     if teman:
         block.append("Tidigare provs uppgiftsteman — UNDVIK att upprepa dessa:\n"
                      + teman)
@@ -353,7 +358,7 @@ def _repair_until_valid(exam: dict | None, errors: list, *, model: str, llm,
 def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                   antal: int = 10, tid_min: int = 120, delar: bool = True,
                   memory: str = "", teman: str = "", referens: str = "",
-                  bilder: str = "", profil: str = "prov",
+                  bilder: str = "", utfall: str = "", profil: str = "prov",
                   grupp: dict | None = None,
                   llm=llm_client.generate, max_rounds: int = MAX_ROUNDS,
                   log_cb: Callable[[str], None] | None = None) -> dict:
@@ -373,8 +378,8 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                 if profil == "prov" and delar else None)
     prompt = build_prompt(kurs, klass, punkter, antal=antal, tid_min=tid_min,
                           delar=delar, memory=memory, teman=teman,
-                          referens=referens, bilder=bilder, profil=profil,
-                          grupp=grupp, skeleton=skeleton)
+                          referens=referens, bilder=bilder, utfall=utfall,
+                          profil=profil, grupp=grupp, skeleton=skeleton)
     exam = _llm_round(prompt, model, llm, antal, skeleton)
     rounds = 1
     while exam is None and rounds < max_rounds:

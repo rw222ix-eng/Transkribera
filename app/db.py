@@ -21,7 +21,7 @@ import sqlite3
 import threading
 from pathlib import Path
 
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 10
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS courses (
@@ -362,11 +362,55 @@ CREATE TABLE IF NOT EXISTS kalenderbeslut (
 );
 """
 
+# Rättningen (v10, Etapp 0.7) — ENDAST additiv; rollback: DROP TABLE
+# rattning_rader, rattning + PRAGMA user_version=9.
+#
+# Vad klassen tog på provet, uppgift för uppgift. Låg bara i minnet mellan
+# sessionerna: «Rättat · 68 %» försvann vid omladdning och källdörr 5 («Läser
+# provets utfall») hade inget att läsa.
+#
+# * rattning — en rad per rättat papper (dokument_id är nyckeln: ett prov
+#   rättas en gång och siffrorna ändras, det blir inte två rättningar).
+#   `andel` är klassens andel av de IFYLLDA radernas tak — en halvrättad hög
+#   ska visa hur det gick på det som är rättat, inte straffas för resten.
+# * rattning_rader — raden per uppgift ELLER deluppgift, med sin förmåga.
+#   Förmågan lagras för att den är dyrast att få tillbaka: provets egen
+#   (exam_spec) finns bara så länge pappret bär sin `formaga`, och gissningen
+#   ur texten kan ändras när mönsterlistan gör det. Det som stod när läraren
+#   rättade är det som gällde.
+_RATTNING_MIGRATION = """
+CREATE TABLE IF NOT EXISTS rattning (
+    dokument_id INTEGER PRIMARY KEY REFERENCES dokument(id) ON DELETE CASCADE,
+    exam_id     INTEGER,
+    klass       TEXT,
+    kurs        TEXT,
+    datum       TEXT,
+    elever      INTEGER NOT NULL DEFAULT 22,
+    andel       REAL,
+    updated_at  TEXT
+);
+CREATE TABLE IF NOT EXISTS rattning_rader (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    dokument_id INTEGER NOT NULL REFERENCES rattning(dokument_id) ON DELETE CASCADE,
+    ordning     INTEGER NOT NULL,
+    nyckel      TEXT NOT NULL,
+    kod         TEXT,
+    text        TEXT,
+    poang       INTEGER NOT NULL DEFAULT 1,
+    formaga     TEXT,
+    varde       INTEGER,
+    andel       REAL,
+    UNIQUE(dokument_id, nyckel)
+);
+CREATE INDEX IF NOT EXISTS idx_rattrad_dok ON rattning_rader(dokument_id, ordning);
+"""
+
 _MIGRATIONS: dict[int, str] = {2: _FTS_MIGRATION, 3: _MARKERS_MIGRATION,
                                4: _PLANNING_MIGRATION, 5: _EXAMS_MIGRATION,
                                6: _GY25_MIGRATION, 7: _DATAGRUND_MIGRATION,
                                8: _DOKUMENT_MIGRATION,
-                               9: _KALENDERBESLUT_MIGRATION}
+                               9: _KALENDERBESLUT_MIGRATION,
+                               10: _RATTNING_MIGRATION}
 
 _LESSON_SELECT = """
 SELECT l.*, g.namn AS group_namn, c.namn AS course_namn
@@ -1899,6 +1943,77 @@ def save_klassprofil(conn: sqlite3.Connection, minne: dict) -> dict:
         conn.executemany(
             "INSERT INTO klassprofil(klass, data, updated_at) VALUES (?, ?, ?)", rader)
     return get_klassprofil(conn)
+
+
+# ---------------------------------------------------------------- rättningen --
+# Vad klassen tog på provet (v10, Etapp 0.7). Raderna är sanningen; `rattat` på
+# dokumentet är en kopia frontenden ritar ur, precis som dokumentets typ/datum
+# är kopior för att kunna sortera. Räknandet självt bor i app/rattning.py —
+# databasen har ingen åsikt om vad 27 % betyder.
+
+def _rattning_view(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
+    rader = [dict(r) for r in conn.execute(
+        "SELECT nyckel, kod, text, poang AS p, formaga, varde, andel "
+        "FROM rattning_rader WHERE dokument_id = ? ORDER BY ordning, id",
+        (row["dokument_id"],)).fetchall()]
+    return dict(row) | {
+        "rader": rader,
+        "varden": {r["nyckel"]: r["varde"] for r in rader if r["varde"] is not None},
+    }
+
+
+def get_rattning(conn: sqlite3.Connection, dokument_id: int) -> dict | None:
+    row = conn.execute("SELECT * FROM rattning WHERE dokument_id = ?",
+                       (dokument_id,)).fetchone()
+    return _rattning_view(conn, row) if row else None
+
+
+def save_rattning(conn: sqlite3.Connection, dokument_id: int, *,
+                  elever: int, andel: float | None, rader: list[dict],
+                  exam_id: int | None = None, klass: str | None = None,
+                  kurs: str | None = None, datum: str | None = None) -> dict:
+    """Skriv om hela rättningen. Ett prov rättas EN gång och siffrorna ändras
+    — därför ersätts raderna i stället för att läggas till, och en rad som
+    tömts försvinner i stället för att stå kvar med sitt gamla värde."""
+    nu = _now()
+    with conn:
+        conn.execute(
+            "INSERT INTO rattning(dokument_id, exam_id, klass, kurs, datum, "
+            "elever, andel, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(dokument_id) DO UPDATE SET exam_id = excluded.exam_id, "
+            "klass = excluded.klass, kurs = excluded.kurs, datum = excluded.datum, "
+            "elever = excluded.elever, andel = excluded.andel, "
+            "updated_at = excluded.updated_at",
+            (dokument_id, exam_id, klass, kurs, datum, int(elever), andel, nu))
+        conn.execute("DELETE FROM rattning_rader WHERE dokument_id = ?", (dokument_id,))
+        conn.executemany(
+            "INSERT INTO rattning_rader(dokument_id, ordning, nyckel, kod, text, "
+            "poang, formaga, varde, andel) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [(dokument_id, i, r.get("nyckel"), r.get("kod"), r.get("text"),
+              int(r.get("p") or 1), r.get("formaga"), r.get("varde"), r.get("andel"))
+             for i, r in enumerate(rader) if not r.get("grupp") and r.get("nyckel")])
+    return get_rattning(conn, dokument_id)
+
+
+def delete_rattning(conn: sqlite3.Connection, dokument_id: int) -> bool:
+    """Ångra rättningen. Raderna följer med (ON DELETE CASCADE gäller bara med
+    PRAGMA foreign_keys=ON, som connect() sätter — men raderas explicit här så
+    att en connection utan den inte lämnar föräldralösa rader kvar)."""
+    with conn:
+        conn.execute("DELETE FROM rattning_rader WHERE dokument_id = ?", (dokument_id,))
+        cur = conn.execute("DELETE FROM rattning WHERE dokument_id = ?", (dokument_id,))
+    return cur.rowcount > 0
+
+
+def list_rattningar(conn: sqlite3.Connection, *, kurs: str | None = None) -> list[dict]:
+    """De rättade proven, senast rättade först — källdörr 5:s hög."""
+    sql = "SELECT * FROM rattning"
+    params: list = []
+    if kurs:
+        sql += " WHERE kurs = ?"
+        params.append(kurs)
+    sql += " ORDER BY COALESCE(datum, '') DESC, updated_at DESC"
+    return [_rattning_view(conn, r) for r in conn.execute(sql, params).fetchall()]
 
 
 def memory_for_prompt(conn: sqlite3.Connection, group_id: int,

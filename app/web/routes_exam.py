@@ -195,6 +195,10 @@ def create_router(base: Path, arbiter) -> APIRouter:
         bilder_block = exam_gen.build_bilder(
             [f.get("beskrivning") or "" for f in underlag_filer]) \
             if underlag_filer else ""
+        # Källdörr 5 (Etapp 0.7): ett rättat provs utfall. Omprovet är det
+        # tydligaste fallet — det ska pröva just det som föll — men samma sak
+        # gäller arbetsbladet som ska ge klassen en ny chans på 4b.
+        utfall_block = routes_planning.utfall_text(db_file, body)
 
         conn = db.connect(db_file)
         try:
@@ -236,7 +240,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     kurs, klass or "klassen", punkter, model=_model_name(),
                     antal=antal, tid_min=tid_min, delar=delar,
                     memory=memory, teman=teman, referens=referens,
-                    bilder=bilder_block, profil=typ, grupp=grupp,
+                    bilder=bilder_block, utfall=utfall_block,
+                    profil=typ, grupp=grupp,
                     log_cb=lambda m: emit({"type": "log", "msg": m}))
                 # Upplägget är lärarens val, inte modellens: skriv in det som
                 # valdes även om modellen råkade fylla i något annat.

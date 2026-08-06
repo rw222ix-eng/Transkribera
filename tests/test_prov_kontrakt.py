@@ -57,11 +57,12 @@ def _stub(monkeypatch, exam=None):
     calls = []
 
     def fake(kurs, klass, punkter, *, model, antal=10, tid_min=120, delar=True,
-             memory="", teman="", referens="", bilder="", profil="prov", grupp=None,
+             memory="", teman="", referens="", bilder="", utfall="",
+             profil="prov", grupp=None,
              llm=None, max_rounds=exam_gen.MAX_ROUNDS, log_cb=None):
         calls.append({"kurs": kurs, "klass": klass, "punkter": punkter,
                       "antal": antal, "tid_min": tid_min, "delar": delar,
-                      "profil": profil})
+                      "utfall": utfall, "profil": profil})
         return {"exam": exam or _exam_doc(), "errors": [], "rounds": 1}
     monkeypatch.setattr(exam_gen, "generate_exam", fake)
     return calls

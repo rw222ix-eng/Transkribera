@@ -26,7 +26,7 @@ from app import (debug_log, hardware, llm_client,
                  history_store, gpu_arbiter, output_store, media, audio_model, db,
                  paths, settings_store, ics_export, backup, report,
                  calendar_google, kalender_ai, course_data, lasar_data,
-                 openai_asr, alignment, claude_code)
+                 openai_asr, alignment, claude_code, rattning)
 # Samma modul som `media` ovan. Inne i transkriberingsjobbet är `media` namnet på
 # SJÄLVA filen (media = Path(...)) och skuggar modulen — aliaset gör att
 # varaktigheten går att fråga efter även där.
@@ -1350,6 +1350,102 @@ def create_app(base_dir: Path | None = None,
         finally:
             conn.close()
         return {"ok": True}
+
+    # ---- Rättningen: vad klassen tog på provet (Etapp 0.7) -------------------
+    #
+    # Raderna byggs ur PAPPRET, inte ur databasen: uppgifterna står på
+    # dokumentet (app/web/ui/blad.js — samma lista som arket, rättningen och
+    # poängsummorna läser), och ett prov som itererats efter rättningen ska
+    # visa sina nya uppgifter. Sparade siffror följer med på nyckeln så länge
+    # raden finns kvar; en uppgift som skrivits bort tar sitt värde med sig.
+    #
+    # Förmågan är det enda servern vet BÄTTRE än frontenden: ett prov Claude
+    # skrivit bär exam_spec:s förmåga per uppgift, och då behöver den inte
+    # gissas ur texten. Har läraren redan rättat gäller det som stod DÅ — hen
+    # läste sin analys mot de orden.
+
+    def _rattning_underlag(dokument_id: int):
+        """(pappret, sparad rättning) eller (None, None) för okänt dokument."""
+        conn = _db()
+        try:
+            d = db.get_dokument(conn, dokument_id)
+            if d is None:
+                return None, None
+            return (d.get("dokument") or {}), db.get_rattning(conn, dokument_id)
+        finally:
+            conn.close()
+
+    def _rattning_svar(papper: dict, varden: dict, elever, sparad: dict | None) -> dict:
+        res = rattning.sammanfatta(papper.get("uppgifter"), varden, elever)
+        if sparad:
+            gammal = {r["nyckel"]: r.get("formaga") for r in sparad["rader"]}
+            for rad in res["rader"]:
+                if gammal.get(rad.get("nyckel")):
+                    rad["formaga"] = gammal[rad["nyckel"]]
+            for s in res["rattat"]["svaga"]:
+                if gammal.get(s["kod"]):
+                    s["formaga"] = gammal[s["kod"]]
+        return res
+
+    @app.get("/api/dokument/{dokument_id}/rattning")
+    def api_rattning(dokument_id: int):
+        """Raderna att fylla i + det som redan är ifyllt. `rattat` är null tills
+        provet rättats — kortet säger «Rätta provet», inte «Rättat · 0 %»."""
+        papper, sparad = _rattning_underlag(dokument_id)
+        if papper is None:
+            return JSONResponse({"error": "okänt dokument"}, status_code=404)
+        varden = (sparad or {}).get("varden") or {}
+        res = _rattning_svar(papper, varden,
+                             (sparad or {}).get("elever") or rattning.ELEVER_STANDARD,
+                             sparad)
+        return {"rader": res["rader"], "elever": res["elever"],
+                "varden": res["rattat"]["varden"],
+                "rattat": res["rattat"] if sparad else None}
+
+    @app.put("/api/dokument/{dokument_id}/rattning")
+    async def api_rattning_spara(dokument_id: int, req: Request):
+        """Klassens poäng per uppgift. Servern räknar andelen och de svaga
+        momenten och lämnar tillbaka dem i den form pappret bär (`rattat`) —
+        ett tal som räknas på två ställen blir förr eller senare två tal."""
+        body = await req.json()
+        papper, sparad = _rattning_underlag(dokument_id)
+        if papper is None:
+            return JSONResponse({"error": "okänt dokument"}, status_code=404)
+        varden = body.get("varden")
+        if not isinstance(varden, dict):
+            return JSONResponse({"error": "varden krävs"}, status_code=400)
+        res = _rattning_svar(papper, varden, body.get("elever"), sparad)
+        conn = _db()
+        try:
+            db.save_rattning(
+                conn, dokument_id, elever=res["elever"],
+                andel=res["rattat"]["andel"], rader=res["rader"],
+                exam_id=papper.get("provId"), klass=papper.get("klass"),
+                kurs=papper.get("kurs"), datum=papper.get("datum"))
+        finally:
+            conn.close()
+        return {"rader": res["rader"], "elever": res["elever"],
+                "varden": res["rattat"]["varden"], "rattat": res["rattat"]}
+
+    @app.delete("/api/dokument/{dokument_id}/rattning")
+    def api_rattning_ta_bort(dokument_id: int):
+        """Ångra: provet är orättat igen. Toasten i rättningen erbjuder det, och
+        då ska siffrorna vara borta — inte ligga kvar och komma tillbaka."""
+        conn = _db()
+        try:
+            db.delete_rattning(conn, dokument_id)
+        finally:
+            conn.close()
+        return {"ok": True}
+
+    @app.get("/api/rattningar")
+    def api_rattningar(kurs: str | None = None):
+        """De rättade proven — källdörr 5:s hög, senast rättade först."""
+        conn = _db()
+        try:
+            return {"rattningar": db.list_rattningar(conn, kurs=kurs)}
+        finally:
+            conn.close()
 
     # ---- Klassprofilen: det appen lärt sig per klass (Etapp 0.2) -------------
 

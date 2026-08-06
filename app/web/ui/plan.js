@@ -1215,12 +1215,21 @@
       return r;
     };
     const i0 = utkast.inst || {};
+    /* Källdörr 5 in i prompten: «Läser provets utfall · 4b, 7 föll» stod i
+       planen men nådde aldrig servern — modellen fick provet, aldrig hur det
+       gick. Id:t är den sanna vägen (servern läser sin egen rättning);
+       siffrorna följer med för pappret som rättats utan att ha nått databasen. */
+    const utfall = () => resDok ? {
+      utfall_dokument_id: resDok.id || undefined,
+      utfall: { namn: dokNamn(resDok), rattat: resDok.rattat || null },
+    } : {};
     const JOBB = {
       Tavla: ({ signal, log }) => window.API.strom('/api/planning/generate', {
         moment: moment.value.trim(),
         klass: utkast.klass, kurs: utkast.kurs,
         datum: utkast.datum || utkast.lektionsdatum || '',
         starttid: String(utkast.tid || utkast.lektionstid || '').split('–')[0].trim(),
+        ...utfall(),
       }, { signal, log }).then(kravDone),
       /* Provet och arbetsbladet delar rutt och skiljs åt av `typ`: samma
          skelett och samma balansvalidering, men arbetsbladet får sitt facit i
@@ -1233,6 +1242,7 @@
         delar: i0.delprov !== 'En del',
         datum: utkast.datum || '',
         typ: typ === 'Arbetsblad' ? 'arbetsblad' : 'prov',
+        ...utfall(),
       }, { signal, log }).then(kravDone).then(r => {
         if (!r.exam) throw new Error('Provet gick inte att skriva den här gången. Försök igen.');
         return r;
@@ -1250,6 +1260,7 @@
       antal: 4,
       datum: utkast.datum || '',
       typ: 'gruppuppgift',
+      ...utfall(),
       grupp: {
         elever: Number(i0.grupp) || 3,
         langd_min: Number(i0.langd) || 45,

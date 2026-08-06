@@ -127,10 +127,12 @@ def llm_ready(client, monkeypatch):
 def _stub_generate(monkeypatch, result):
     calls = []
 
-    def fake(course, group, moment, *, model, memory="", underlag="", llm=None,
+    def fake(course, group, moment, *, model, memory="", underlag="",
+             utfall="", llm=None,
              max_rounds=lesson_board.MAX_ROUNDS, log_cb=None, token_cb=None):
         calls.append({"course": course, "group": group, "moment": moment,
-                      "model": model, "memory": memory, "underlag": underlag})
+                      "model": model, "memory": memory, "underlag": underlag,
+                      "utfall": utfall})
         if log_cb:
             log_cb("Genererar lektionstavlan …")
         return result

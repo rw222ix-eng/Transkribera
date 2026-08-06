@@ -252,17 +252,19 @@ def _few_shot_block() -> str:
 
 
 def build_prompt(course: str, group: str, moment: str, memory: str = "",
-                 underlag: str = "") -> str:
+                 underlag: str = "", utfall: str = "") -> str:
     """Genereringsprompt: instruktion + few-shots + minneskontext + ev.
-    uppladdat underlag (bokssidor/uppgifter) + uppdraget."""
+    uppladdat underlag (bokssidor/uppgifter) + ev. rättat provs utfall
+    (Etapp 0.7) + uppdraget."""
     mem = f"\nUr lektionsminnet (senaste lektionerna med klassen):\n{memory}\n" if memory else ""
+    utf = f"\n{utfall}\n" if utfall else ""
     und = (
         "\nUNDERLAG — läraren har laddat upp sidor ur läroboken/uppgifter som "
         "lektionen SKA bygga på. Utgå från dessa: använd samma begrepp, notation "
         "och typuppgifter, och låt tavlans exempel ansluta till underlaget:\n"
         f"{underlag}\n" if underlag else "")
     return (
-        f"{INSTRUCTION}\n{_few_shot_block()}\n{mem}{und}\n"
+        f"{INSTRUCTION}\n{_few_shot_block()}\n{mem}{utf}{und}\n"
         f"Uppdrag: skriv lektionstavlan för {course}, klass {group} — {moment}.\n"
         "Svara med enbart JSON."
     )
@@ -359,7 +361,7 @@ def _repair_until_valid(board: dict | None, errors: list, *, model: str, llm,
 
 
 def generate_board(course: str, group: str, moment: str, *, model: str,
-                   memory: str = "", underlag: str = "",
+                   memory: str = "", underlag: str = "", utfall: str = "",
                    llm=llm_client.generate,
                    max_rounds: int = MAX_ROUNDS,
                    log_cb: Callable[[str], None] | None = None,
@@ -371,7 +373,7 @@ def generate_board(course: str, group: str, moment: str, *, model: str,
     råa tokens medan den skriver — UI:t bygger upp tavlan live ur dem."""
     log = log_cb or (lambda _m: None)
     log("Genererar lektionstavlan …")
-    prompt = build_prompt(course, group, moment, memory, underlag)
+    prompt = build_prompt(course, group, moment, memory, underlag, utfall)
     board = _llm_round(prompt, model, llm, token_cb=token_cb)
     rounds = 1
     # Ogiltig JSON (t.ex. trunkerat svar) → kör om från början inom budgeten
