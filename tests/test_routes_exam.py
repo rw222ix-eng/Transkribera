@@ -49,8 +49,8 @@ def _stub_generate(monkeypatch, result=None):
 
     def fake(kurs, klass, punkter, *, model, antal=10, tid_min=120,
              delar=True, memory="", teman="", referens="", bilder="",
-             utfall="", profil="prov", grupp=None,
-             llm=None, max_rounds=exam_gen.MAX_ROUNDS, log_cb=None):
+             utfall="", bok="", profil="prov", grupp=None,
+             llm=None, max_rounds=exam_gen.MAX_ROUNDS, log_cb=None, **_kw):
         calls.append({"kurs": kurs, "punkter": punkter, "memory": memory,
                       "teman": teman, "antal": antal, "utfall": utfall,
                       "referens": referens, "bilder": bilder, "profil": profil})

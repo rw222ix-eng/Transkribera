@@ -21,7 +21,7 @@ import sqlite3
 import threading
 from pathlib import Path
 
-SCHEMA_VERSION = 10
+SCHEMA_VERSION = 11
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS courses (
@@ -405,12 +405,77 @@ CREATE TABLE IF NOT EXISTS rattning_rader (
 CREATE INDEX IF NOT EXISTS idx_rattrad_dok ON rattning_rader(dokument_id, ordning);
 """
 
+# Boken (v11, Etapp 0.8) — ENDAST additiv; rollback: DROP TABLE bok_uppgifter,
+# bok_sidor, bok_avsnitt, bocker + PRAGMA user_version=10.
+#
+# Läroboken är en skannad PDF utan textlager: varje sida måste läsas av en
+# modell, och det kostar ~96 sekunder (ocr-eval, 2026-07-30). Därför lagras
+# boken i tre lager med olika pris:
+#
+# * bocker — hyllan. `sidoffset` är skillnaden mellan PDF:ens sidindex och det
+#   TRYCKTA sidnumret (omslag och förord ligger före sidan 1). Utan den slår
+#   «s. 184–191» upp fel sidor.
+# * bok_avsnitt — registret ur innehållsförteckningen, läst EN gång vid import.
+#   `uppg` är NULL tills avsnittets sidor lästs: ett antal ur tomma luften hade
+#   varit en gissning som ser ut som ett faktum.
+# * bok_sidor + bok_uppgifter — sidorna, lästa när de behövs och sparade för
+#   alltid. `text` är hela avläsningen (tavlan skrivs ur den) och är NULL så
+#   länge bara faktapasset körts. En sida läses aldrig två gånger.
+_BOK_MIGRATION = """
+CREATE TABLE IF NOT EXISTS bocker (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    namn       TEXT NOT NULL,
+    kurs       TEXT,
+    fil        TEXT,
+    mapp       TEXT,
+    sidor      INTEGER NOT NULL DEFAULT 0,
+    sidoffset  INTEGER,
+    status     TEXT NOT NULL DEFAULT 'ny',
+    created_at TEXT,
+    updated_at TEXT
+);
+CREATE TABLE IF NOT EXISTS bok_avsnitt (
+    id      INTEGER PRIMARY KEY AUTOINCREMENT,
+    bok_id  INTEGER NOT NULL REFERENCES bocker(id) ON DELETE CASCADE,
+    ordning INTEGER NOT NULL DEFAULT 0,
+    nr      TEXT NOT NULL,
+    titel   TEXT,
+    kap     TEXT,
+    vag     TEXT,
+    fran    INTEGER NOT NULL,
+    till    INTEGER NOT NULL,
+    uppg    INTEGER,
+    UNIQUE(bok_id, nr)
+);
+CREATE TABLE IF NOT EXISTS bok_sidor (
+    bok_id   INTEGER NOT NULL REFERENCES bocker(id) ON DELETE CASCADE,
+    sida     INTEGER NOT NULL,
+    pdf_sida INTEGER,
+    avsnitt  TEXT,
+    rubrik   TEXT,
+    text     TEXT,
+    last_at  TEXT,
+    PRIMARY KEY (bok_id, sida)
+);
+CREATE TABLE IF NOT EXISTS bok_uppgifter (
+    bok_id INTEGER NOT NULL REFERENCES bocker(id) ON DELETE CASCADE,
+    nr     INTEGER NOT NULL,
+    sida   INTEGER,
+    niva   INTEGER,
+    PRIMARY KEY (bok_id, nr)
+);
+CREATE INDEX IF NOT EXISTS idx_bokavs_bok  ON bok_avsnitt(bok_id, ordning);
+CREATE INDEX IF NOT EXISTS idx_boksid_bok  ON bok_sidor(bok_id, sida);
+CREATE INDEX IF NOT EXISTS idx_bokupp_sida ON bok_uppgifter(bok_id, sida);
+"""
+
 _MIGRATIONS: dict[int, str] = {2: _FTS_MIGRATION, 3: _MARKERS_MIGRATION,
                                4: _PLANNING_MIGRATION, 5: _EXAMS_MIGRATION,
                                6: _GY25_MIGRATION, 7: _DATAGRUND_MIGRATION,
                                8: _DOKUMENT_MIGRATION,
                                9: _KALENDERBESLUT_MIGRATION,
-                               10: _RATTNING_MIGRATION}
+                               10: _RATTNING_MIGRATION,
+                               11: _BOK_MIGRATION}
 
 _LESSON_SELECT = """
 SELECT l.*, g.namn AS group_namn, c.namn AS course_namn
@@ -2014,6 +2079,160 @@ def list_rattningar(conn: sqlite3.Connection, *, kurs: str | None = None) -> lis
         params.append(kurs)
     sql += " ORDER BY COALESCE(datum, '') DESC, updated_at DESC"
     return [_rattning_view(conn, r) for r in conn.execute(sql, params).fetchall()]
+
+
+# --------------------------------------------------------------------- boken --
+# Hyllan, registret och de lästa sidorna (v11, Etapp 0.8). Databasen räknar
+# ingenting själv: den vet vilka sidor som är lästa och vad som stod på dem.
+# Läsandet och tolkningen bor i app/bok.py och app/bok_ocr.py.
+
+def _bok_view(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
+    d = dict(row)
+    d["avsnitt"] = [dict(r) for r in conn.execute(
+        "SELECT nr, titel, kap, vag, fran, till, uppg FROM bok_avsnitt "
+        "WHERE bok_id = ? ORDER BY ordning, id", (row["id"],)).fetchall()]
+    d["lasta"] = conn.execute(
+        "SELECT COUNT(*) AS n FROM bok_sidor WHERE bok_id = ? AND text IS NOT NULL",
+        (row["id"],)).fetchone()["n"]
+    return d
+
+
+def list_bocker(conn: sqlite3.Connection) -> list[dict]:
+    return [_bok_view(conn, r) for r in conn.execute(
+        "SELECT * FROM bocker ORDER BY id").fetchall()]
+
+
+def get_bok(conn: sqlite3.Connection, bok_id: int) -> dict | None:
+    row = conn.execute("SELECT * FROM bocker WHERE id = ?", (bok_id,)).fetchone()
+    return _bok_view(conn, row) if row else None
+
+
+def find_bok(conn: sqlite3.Connection, namn: str) -> dict | None:
+    """Boken vid namn — hyllan i frontenden känner böcker på namnet, inte id."""
+    row = conn.execute("SELECT * FROM bocker WHERE namn = ?", (namn,)).fetchone()
+    return _bok_view(conn, row) if row else None
+
+
+def create_bok(conn: sqlite3.Connection, *, namn: str, kurs: str | None = None,
+               fil: str | None = None, mapp: str | None = None,
+               sidor: int = 0, status: str = "ny") -> dict:
+    nu = _now()
+    with conn:
+        cur = conn.execute(
+            "INSERT INTO bocker(namn, kurs, fil, mapp, sidor, status, "
+            "created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (namn, kurs, fil, mapp, int(sidor), status, nu, nu))
+    return get_bok(conn, cur.lastrowid)
+
+
+def update_bok(conn: sqlite3.Connection, bok_id: int, **falt) -> dict | None:
+    tillatna = {"namn", "kurs", "fil", "mapp", "sidor", "sidoffset", "status"}
+    satt = {k: v for k, v in falt.items() if k in tillatna}
+    if satt:
+        satt["updated_at"] = _now()
+        with conn:
+            conn.execute(f"UPDATE bocker SET {', '.join(k + ' = ?' for k in satt)} "
+                         "WHERE id = ?", (*satt.values(), bok_id))
+    return get_bok(conn, bok_id)
+
+
+def set_bok_register(conn: sqlite3.Connection, bok_id: int,
+                     avsnitt: list[dict]) -> dict | None:
+    """Registret ersätts i ett svep. Läses boken om ska den nya förteckningen
+    gälla — inte en blandning av två läsningar, där ett avsnitt kan finnas två
+    gånger med olika sidspann."""
+    with conn:
+        conn.execute("DELETE FROM bok_avsnitt WHERE bok_id = ?", (bok_id,))
+        conn.executemany(
+            "INSERT INTO bok_avsnitt(bok_id, ordning, nr, titel, kap, vag, "
+            "fran, till, uppg) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [(bok_id, i, a["nr"], a.get("titel"), a.get("kap"), a.get("vag"),
+              int(a["fran"]), int(a["till"]), a.get("uppg"))
+             for i, a in enumerate(avsnitt)])
+    return get_bok(conn, bok_id)
+
+
+def save_bok_sida(conn: sqlite3.Connection, bok_id: int, sida: int, *,
+                  pdf_sida: int | None = None, avsnitt: str | None = None,
+                  rubrik: str | None = None, text: str | None = None) -> None:
+    """En läst sida. Faktapasset skriver sidnummer/avsnitt, textpasset texten —
+    därför skrivs bara de fält som faktiskt har ett värde: ett faktapass som
+    körs om ska inte radera en text som redan kostat 96 sekunder."""
+    nu = _now()
+    with conn:
+        conn.execute(
+            "INSERT INTO bok_sidor(bok_id, sida, pdf_sida, avsnitt, rubrik, text, "
+            "last_at) VALUES (?, ?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(bok_id, sida) DO UPDATE SET "
+            "pdf_sida = COALESCE(excluded.pdf_sida, pdf_sida), "
+            "avsnitt = COALESCE(excluded.avsnitt, avsnitt), "
+            "rubrik = COALESCE(excluded.rubrik, rubrik), "
+            "text = COALESCE(excluded.text, text), last_at = excluded.last_at",
+            (bok_id, int(sida), pdf_sida, avsnitt, rubrik, text, nu))
+
+
+def save_bok_uppgifter(conn: sqlite3.Connection, bok_id: int,
+                       uppgifter: list[dict]) -> None:
+    with conn:
+        conn.executemany(
+            "INSERT INTO bok_uppgifter(bok_id, nr, sida, niva) VALUES (?, ?, ?, ?) "
+            "ON CONFLICT(bok_id, nr) DO UPDATE SET sida = excluded.sida, "
+            "niva = COALESCE(excluded.niva, niva)",
+            [(bok_id, int(u["nr"]), u.get("sida"), u.get("niva"))
+             for u in uppgifter if str(u.get("nr", "")).strip().isdigit()])
+
+
+def bok_sidor(conn: sqlite3.Connection, bok_id: int, fran: int, till: int,
+              *, med_text: bool = True) -> list[dict]:
+    kol = "sida, pdf_sida, avsnitt, rubrik, text" if med_text \
+        else "sida, pdf_sida, avsnitt, rubrik"
+    return [dict(r) for r in conn.execute(
+        f"SELECT {kol} FROM bok_sidor WHERE bok_id = ? AND sida BETWEEN ? AND ? "
+        "ORDER BY sida", (bok_id, int(fran), int(till))).fetchall()]
+
+
+def bok_uppgifter(conn: sqlite3.Connection, bok_id: int,
+                  fran: int | None = None, till: int | None = None) -> list[dict]:
+    sql = "SELECT nr, sida, niva FROM bok_uppgifter WHERE bok_id = ?"
+    params: list = [bok_id]
+    if fran is not None and till is not None:
+        sql += " AND sida BETWEEN ? AND ?"
+        params += [int(fran), int(till)]
+    return [dict(r) for r in conn.execute(sql + " ORDER BY nr", params).fetchall()]
+
+
+def rakna_om_uppg(conn: sqlite3.Connection, bok_id: int) -> None:
+    """Avsnittets uppgiftsantal = de uppgifter som FAKTISKT lästs på dess sidor.
+
+    Antalet sätts först när HELA avsnittet är läst. Ett avsnitt på tjugo sidor
+    där en enda sida är läst har tio uppgifter i databasen och femtio i boken —
+    och «10 uppgifter» i bokdörren är då ett fel som ser ut som ett faktum.
+    NULL betyder «inte läst än», och det är sant tills det är osant."""
+    with conn:
+        conn.execute(
+            "UPDATE bok_avsnitt SET uppg = ("
+            "  SELECT COUNT(*) FROM bok_uppgifter u "
+            "  WHERE u.bok_id = bok_avsnitt.bok_id "
+            "    AND u.sida BETWEEN bok_avsnitt.fran AND bok_avsnitt.till) "
+            "WHERE bok_id = ? AND ("
+            "  SELECT COUNT(*) FROM bok_sidor s WHERE s.bok_id = bok_avsnitt.bok_id "
+            "    AND s.sida BETWEEN bok_avsnitt.fran AND bok_avsnitt.till"
+            ") >= bok_avsnitt.till - bok_avsnitt.fran + 1",
+            (bok_id,))
+
+
+def delete_bok(conn: sqlite3.Connection, bok_id: int) -> str | None:
+    """Raderar boken och lämnar tillbaka dess mapp, så att anroparen kan ta bort
+    de renderade sidbilderna. Returnerar None om boken inte fanns."""
+    row = conn.execute("SELECT mapp FROM bocker WHERE id = ?", (bok_id,)).fetchone()
+    if row is None:
+        return None
+    with conn:
+        conn.execute("DELETE FROM bok_uppgifter WHERE bok_id = ?", (bok_id,))
+        conn.execute("DELETE FROM bok_sidor WHERE bok_id = ?", (bok_id,))
+        conn.execute("DELETE FROM bok_avsnitt WHERE bok_id = ?", (bok_id,))
+        conn.execute("DELETE FROM bocker WHERE id = ?", (bok_id,))
+    return row["mapp"] or ""
 
 
 def memory_for_prompt(conn: sqlite3.Connection, group_id: int,

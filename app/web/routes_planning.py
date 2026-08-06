@@ -18,7 +18,7 @@ from pathlib import Path
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
-from app import db, lesson_board, llm_client, rattning
+from app import bok, db, lesson_board, llm_client, rattning
 from app.web.sse import sse_response
 
 # Två tavlor i 2× blir ett par MB; 30 MB är väl tilltaget men stoppar missbruk.
@@ -107,6 +107,67 @@ def utfall_text(db_file: Path, body: dict) -> str:
         if sparad:
             rattat = rattning.rattat_ur_rader(sparad)
     return rattning.build_utfall(rattat, namn)
+
+
+def bok_val(body: dict) -> tuple[int, int, int] | None:
+    """(bok_id, fran, till) ur `bok: {id, fran, till}` — None när bokdörren inte
+    är en av källorna."""
+    b = body.get("bok") if isinstance(body.get("bok"), dict) else None
+    if not b or not b.get("id"):
+        return None
+    try:
+        bid, fran = int(b["id"]), int(b.get("fran") or 0)
+        till = int(b.get("till") or fran)
+    except (TypeError, ValueError):
+        return None
+    return (bid, fran, max(fran, till)) if fran > 0 else None
+
+
+def bok_las_text(base: Path, db_file: Path, body: dict, emit=None) -> str:
+    """Samma block som `bok_text`, men läser först de sidor som saknar text.
+
+    Det är HÄR sidorna faktiskt kostar sina 96 sekunder, och det är rätt ställe:
+    läraren har tryckt Skriv och väntar på en tavla. Uppslagets uppgiftsnummer
+    lästes redan när spannet valdes (faktapasset), så det som återstår är
+    innehållet — och bara för sidor ingen läst förut.
+    """
+    val = bok_val(body)
+    if val is None:
+        return ""
+    bid, fran, till = val
+    conn = db.connect(db_file)
+    try:
+        if db.get_bok(conn, bid) is None:
+            return ""
+        if bok.olasta(conn, bid, fran, till):
+            bok.las_spann(base, conn, bid, fran, till, emit=emit, bara="text")
+    finally:
+        conn.close()
+    return bok_text(db_file, body)
+
+
+def bok_text(db_file: Path, body: dict) -> str:
+    """Promptblocket för bokdörren — de uppslagna sidorna (Etapp 0.8).
+    Delas med provroutern.
+
+    `bok: {id, fran, till}` är vad remsan i planeringen valde. Bara sidor som
+    FAKTISKT lästs kommer med; en sida som ingen läst nämns inte alls, för en
+    rad om att den saknas hade blivit en inbjudan att fylla luckan själv.
+    """
+    val = bok_val(body)
+    if val is None:
+        return ""
+    bid, fran, till = val
+    conn = db.connect(db_file)
+    try:
+        rad = db.get_bok(conn, bid)
+        if rad is None:
+            return ""
+        text = bok.uppslag_text(conn, bid, fran, till)
+        uppg = db.bok_uppgifter(conn, bid, fran, till)
+    finally:
+        conn.close()
+    return bok.build_bok_block(rad, fran, till, text, uppg)
 
 
 def _memory_text(prep: dict) -> str:
@@ -338,10 +399,14 @@ def create_router(base: Path, arbiter) -> APIRouter:
             try:
                 if arbiter.ensure_llm() is None:
                     raise RuntimeError("Språkmodellen är inte installerad.")
+                # Bokdörren: sidorna läraren slog upp i remsan. Läses här inne,
+                # inne i jobbet — de kan kosta minuter, och då ska förloppet
+                # synas i stället för att begäran står tyst.
+                bok_txt = bok_las_text(base, db_file, body, emit=emit)
                 res = lesson_board.generate_board(
                     course or "matematik", group or "klassen", moment,
                     model=_model_name(), memory=memory, underlag=underlag_txt,
-                    utfall=utfall_txt,
+                    utfall=utfall_txt, bok=bok_txt,
                     log_cb=lambda m: emit({"type": "log", "msg": m}),
                     token_cb=lambda t: emit({"type": "token", "text": t}))
                 pid = uuid.uuid4().hex[:12]

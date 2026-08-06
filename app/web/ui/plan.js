@@ -1223,13 +1223,23 @@
       utfall_dokument_id: resDok.id || undefined,
       utfall: { namn: dokNamn(resDok), rattat: resDok.rattat || null },
     } : {};
+    /* Bokdörren: sidorna läraren slog upp i remsan. Servern läser de sidor som
+       inte redan är lästa (~96 s per sida) och lägger deras innehåll i
+       prompten — det är hela poängen med att boken finns i appen. Skickas bara
+       när dörren är öppen och boken är en riktig, inläst bok. */
+    const bokval = () => {
+      const s = window.Uppslag && window.Uppslag.spann ? window.Uppslag.spann() : null;
+      const id = s && window.Bok && window.Bok.bokId ? window.Bok.bokId(s.bok) : null;
+      const oppen = document.querySelector('.kalla[data-dorr="bok"][aria-pressed="true"]');
+      return id && oppen ? { bok: { id, fran: s.fran, till: s.till } } : {};
+    };
     const JOBB = {
       Tavla: ({ signal, log }) => window.API.strom('/api/planning/generate', {
         moment: moment.value.trim(),
         klass: utkast.klass, kurs: utkast.kurs,
         datum: utkast.datum || utkast.lektionsdatum || '',
         starttid: String(utkast.tid || utkast.lektionstid || '').split('–')[0].trim(),
-        ...utfall(),
+        ...utfall(), ...bokval(),
       }, { signal, log }).then(kravDone),
       /* Provet och arbetsbladet delar rutt och skiljs åt av `typ`: samma
          skelett och samma balansvalidering, men arbetsbladet får sitt facit i
@@ -1242,7 +1252,7 @@
         delar: i0.delprov !== 'En del',
         datum: utkast.datum || '',
         typ: typ === 'Arbetsblad' ? 'arbetsblad' : 'prov',
-        ...utfall(),
+        ...utfall(), ...bokval(),
       }, { signal, log }).then(kravDone).then(r => {
         if (!r.exam) throw new Error('Provet gick inte att skriva den här gången. Försök igen.');
         return r;
@@ -1260,7 +1270,7 @@
       antal: 4,
       datum: utkast.datum || '',
       typ: 'gruppuppgift',
-      ...utfall(),
+      ...utfall(), ...bokval(),
       grupp: {
         elever: Number(i0.grupp) || 3,
         langd_min: Number(i0.langd) || 45,

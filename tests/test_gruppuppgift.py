@@ -65,8 +65,9 @@ def _stub(monkeypatch, exam=None):
 
     def fake(kurs, klass, punkter, *, model, antal=10, tid_min=120, delar=True,
              memory="", teman="", referens="", bilder="", utfall="",
-             profil="prov",
-             grupp=None, llm=None, max_rounds=exam_gen.MAX_ROUNDS, log_cb=None):
+             bok="", profil="prov",
+             grupp=None, llm=None, max_rounds=exam_gen.MAX_ROUNDS, log_cb=None,
+             **_kw):
         calls.append({"kurs": kurs, "klass": klass, "antal": antal,
                       "profil": profil, "grupp": grupp})
         return {"exam": exam if exam is not None else _doc(),

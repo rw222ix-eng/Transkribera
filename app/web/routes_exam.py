@@ -236,11 +236,16 @@ def create_router(base: Path, arbiter) -> APIRouter:
             try:
                 if arbiter.ensure_llm() is None:
                     raise RuntimeError("Språkmodellen är inte installerad.")
+                # Bokdörren (Etapp 0.8): uppgifterna ska ansluta till de sidor
+                # klassen arbetar med. Sidor som ingen läst läses här — inne i
+                # jobbet, där väntan syns.
+                bok_block = routes_planning.bok_las_text(base, db_file, body,
+                                                         emit=emit)
                 res = exam_gen.generate_exam(
                     kurs, klass or "klassen", punkter, model=_model_name(),
                     antal=antal, tid_min=tid_min, delar=delar,
                     memory=memory, teman=teman, referens=referens,
-                    bilder=bilder_block, utfall=utfall_block,
+                    bilder=bilder_block, utfall=utfall_block, bok=bok_block,
                     profil=typ, grupp=grupp,
                     log_cb=lambda m: emit({"type": "log", "msg": m}))
                 # Upplägget är lärarens val, inte modellens: skriv in det som

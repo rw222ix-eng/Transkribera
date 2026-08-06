@@ -42,9 +42,14 @@
      appen startade med: en sökning i momentfältet på en Ma 4-lektion ska hitta
      «2.3 Polär form», inte 3c:s kapitel. */
   const kursNu = () => (($('#p-kurs') || {}).value || '').trim();
-  const registerFor = kurs => REGISTER[kurs || kursNu()] || AVSNITT;
+  /* Utan server är prototypens 3c-register default. MED server finns bara det
+     läraren själv läst in: en kurs utan bok har inget register, och då är tomt
+     det sanna svaret — inte en annan boks kapitel. */
+  const registerFor = kurs => REGISTER[kurs || kursNu()]
+    || (franServern() ? (REG_BOK[window.Bok.namn] || []) : AVSNITT);
   const nasta = (kurs, klass) => {
     const A = registerFor(kurs);
+    if (!A.length) return null;
     const i = A.findIndex(a => a.nr === senast);
     if (i >= 0) return A[Math.min(A.length - 1, i + 1)];
     /* Registret känner inte avsnittet som gicks igenom sist — då är det en annan
@@ -86,10 +91,63 @@
   /* Vilken kurs en bok i hyllan hör till. Utan den kan uppslaget inte veta vilket
      register en sida ska tolkas mot, och en Ma 4-sida får ett 3c-avsnittsnamn. */
   const KURS_FOR_BOK = { 'Matematik 5000+ 3c': 'Matematik 3c', 'Matematik 5000+ 4': 'Matematik 4', 'Exponent 3c': 'Matematik 3c' };
-  const registerForBok = namn => REGISTER[KURS_FOR_BOK[namn]] || AVSNITT;
+  /* ══════════ BÖCKERNA UR SERVERN ══════════
+     Hyllan är lärarens egna böcker, och registret är läst ur deras
+     innehållsförteckning (app/bok.py: innehållsförteckningen OCR:as vid
+     import, sidorna när de behövs). Prototypens tre böcker står kvar tills
+     servern svarar — Claude Design har ingen server, och där ska bokdörren
+     fortsätta fungera precis som den gör.
+
+     Svarar servern äger den hyllan HELT, också när den är tom: en bok läraren
+     inte har lagt in ska inte stå i hennes hylla, och ett register hon inte
+     läst in ska inte låtsas finnas. */
+  let servern = null;                 // [{id, namn, kurs, sidor, avsnitt …}]
+  const REG_BOK = {};                 // boknamn → register
+  const ID_BOK = {};                  // boknamn → id på servern
+  const franServern = () => Array.isArray(servern);
+  const registerForBok = namn => REG_BOK[namn]
+    || (franServern() ? [] : (REGISTER[KURS_FOR_BOK[namn]] || AVSNITT));
   const namnFor = kurs => BOKNAMN[kurs] || window.Bok.namn;
 
-  window.Bok = { namn: 'Matematik 5000+ 3c', avsnitt: AVSNITT, register: REGISTER, forKurs, registerFor, registerForBok, namnFor, sok, nasta, namnet, tolka };
+  function taEmot(bocker) {
+    servern = bocker || [];
+    Object.keys(REG_BOK).forEach(k => delete REG_BOK[k]);
+    Object.keys(ID_BOK).forEach(k => delete ID_BOK[k]);
+    servern.forEach(b => {
+      REG_BOK[b.namn] = b.avsnitt || [];
+      ID_BOK[b.namn] = b.id;
+      if (b.kurs) { REGISTER[b.kurs] = b.avsnitt || []; BOKNAMN[b.kurs] = b.namn; }
+      KURS_FOR_BOK[b.namn] = b.kurs || '';
+    });
+    if (servern.length) window.Bok.namn = servern[0].namn;
+    window.Bok.bocker = servern;
+    /* Remsan, hyllan, dörren och uppgiftslistan ritas ur det här — de får veta
+       i samma andetag, annars står tre olika svar på samma sida. */
+    document.dispatchEvent(new CustomEvent('bok-redo', { detail: servern }));
+  }
+
+  window.Bok = {
+    namn: 'Matematik 5000+ 3c', avsnitt: AVSNITT, register: REGISTER, bocker: null,
+    forKurs, registerFor, registerForBok, namnFor, sok, nasta, namnet, tolka,
+    franServern, taEmot,
+    /* Bokens id på servern — uppslaget och skrivningen behöver det för att
+       kunna be om sidorna. null för prototypens böcker: de finns ingenstans. */
+    bokId: namn => ID_BOK[namn] || null,
+    /* Sidantalet i den tryckta boken (PDF:ens sidor minus omslag och förord).
+       Remsan går genom hela boken och måste veta var den slutar. */
+    sidorFor: namn => {
+      const b = (servern || []).find(x => x.namn === namn);
+      if (!b || !b.sidor) return 0;
+      return Math.max(1, b.sidor - (b.sidoffset || 0));
+    },
+    hamta: () => {
+      if (!(window.API && window.API.pa)) return Promise.resolve(null);
+      return window.API.json('/api/bocker')
+        .then(d => { taEmot(d.bocker || []); return d.bocker; })
+        .catch(() => null);
+    },
+  };
+  if (window.API && window.API.redo) window.API.redo.then(() => window.Bok.hamta());
 
   /* ── Tolkningen av en indragen sida: rubriken som fältet fylls med ── */
   const SIDTYP = ['teori och två exempel', 'uppgifter, blandad svårighet', 'facit till uppgifterna', 'sammanfattning av avsnittet'];
@@ -151,11 +209,17 @@
   if (chip) {
     /* Chipet läste registret EN gång vid start. Bytte man till en lektion i en
        annan kurs stod ett 3c-avsnitt kvar som «nästa i boken» i Matematik 4. */
-    const skriv = () => { $('#boknastnamn').textContent = namnet(nasta()); };
+    /* Utan register finns inget «nästa» att peka på — då står chipet inte där
+       och påstår något. Det händer med server men utan inläst bok. */
+    const skriv = () => {
+      const a = nasta();
+      chip.hidden = !a;
+      if (a) $('#boknastnamn').textContent = namnet(a);
+    };
     skriv();
-    chip.hidden = false;
-    $('#boknastanv').addEventListener('click', () => { const a = nasta(); valj(a); senast = a.nr; skriv(); });
+    $('#boknastanv').addEventListener('click', () => { const a = nasta(); if (!a) return; valj(a); senast = a.nr; skriv(); });
     const kf = $('#p-kurs');
     if (kf) kf.addEventListener('change', skriv);
+    document.addEventListener('bok-redo', skriv);
   }
 })();

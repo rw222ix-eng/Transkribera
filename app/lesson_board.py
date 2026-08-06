@@ -252,19 +252,22 @@ def _few_shot_block() -> str:
 
 
 def build_prompt(course: str, group: str, moment: str, memory: str = "",
-                 underlag: str = "", utfall: str = "") -> str:
+                 underlag: str = "", utfall: str = "", bok: str = "") -> str:
     """Genereringsprompt: instruktion + few-shots + minneskontext + ev.
     uppladdat underlag (bokssidor/uppgifter) + ev. rättat provs utfall
-    (Etapp 0.7) + uppdraget."""
+    (Etapp 0.7) + ev. lärobokens uppslag (Etapp 0.8) + uppdraget."""
     mem = f"\nUr lektionsminnet (senaste lektionerna med klassen):\n{memory}\n" if memory else ""
     utf = f"\n{utfall}\n" if utfall else ""
+    # Boken står SIST bland källorna och närmast uppdraget: läraren slog upp
+    # just de här sidorna, och det är dem klassen har framför sig.
+    bk = f"\n{bok}\n" if bok else ""
     und = (
         "\nUNDERLAG — läraren har laddat upp sidor ur läroboken/uppgifter som "
         "lektionen SKA bygga på. Utgå från dessa: använd samma begrepp, notation "
         "och typuppgifter, och låt tavlans exempel ansluta till underlaget:\n"
         f"{underlag}\n" if underlag else "")
     return (
-        f"{INSTRUCTION}\n{_few_shot_block()}\n{mem}{utf}{und}\n"
+        f"{INSTRUCTION}\n{_few_shot_block()}\n{mem}{utf}{und}{bk}\n"
         f"Uppdrag: skriv lektionstavlan för {course}, klass {group} — {moment}.\n"
         "Svara med enbart JSON."
     )
@@ -362,6 +365,7 @@ def _repair_until_valid(board: dict | None, errors: list, *, model: str, llm,
 
 def generate_board(course: str, group: str, moment: str, *, model: str,
                    memory: str = "", underlag: str = "", utfall: str = "",
+                   bok: str = "",
                    llm=llm_client.generate,
                    max_rounds: int = MAX_ROUNDS,
                    log_cb: Callable[[str], None] | None = None,
@@ -373,7 +377,7 @@ def generate_board(course: str, group: str, moment: str, *, model: str,
     råa tokens medan den skriver — UI:t bygger upp tavlan live ur dem."""
     log = log_cb or (lambda _m: None)
     log("Genererar lektionstavlan …")
-    prompt = build_prompt(course, group, moment, memory, underlag, utfall)
+    prompt = build_prompt(course, group, moment, memory, underlag, utfall, bok)
     board = _llm_round(prompt, model, llm, token_cb=token_cb)
     rounds = 1
     # Ogiltig JSON (t.ex. trunkerat svar) → kör om från början inom budgeten

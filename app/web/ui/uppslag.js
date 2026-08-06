@@ -10,23 +10,36 @@
   const vard = $('#bokdel');
   if (!vard || !window.Bok) return;
 
-  const BOCKER = ['Matematik 5000+ 3c', 'Matematik 5000+ 4', 'Exponent 3c'];
-  const grans = a => a.sid.split('–').map(Number);
+  /* Hyllan: prototypens tre böcker tills servern svarar med lärarens egna
+     (bok.js taEmot). Med server är hyllan hennes — också när den är tom. */
+  let BOCKER = ['Matematik 5000+ 3c', 'Matematik 5000+ 4', 'Exponent 3c'];
+  const grans = a => String(a.sid).split('–').map(Number);
   /* Registret följer BOKEN i hyllan, inte appens första bok. Låg det fast på 3c
      tolkades en Ma 4-sida mot 3c:s register: s. 178 i Matematik 4 blev «4.4
      Gränsvärden» — det 3c-avsnitt som råkar innehålla sidnumret — och just det
      momentet skrevs sedan på pappret. */
   let bok = window.Bok.namn;
   const reg = () => (window.Bok.registerForBok ? window.Bok.registerForBok(bok) : window.Bok.avsnitt);
-  const sista = () => Math.max(320, ...reg().map(a => grans(a)[1] + 40));
+  /* Prototypens bok har inget slut, så remsan gissade: sista avsnittet plus
+     fyrtio sidor, minst 320. En riktig bok VET hur många sidor den har —
+     PDF:ens sidantal minus omslag och förord (app/bok.py sidoffset). */
+  const sista = () => {
+    const riktig = window.Bok.sidorFor ? window.Bok.sidorFor(bok) : 0;
+    if (riktig) return riktig;
+    const A = reg();
+    return A.length ? Math.max(320, ...A.map(a => grans(a)[1] + 40)) : 320;
+  };
 
   const knapp = $('#bokvalj'), knapptext = $('.valjtext', knapp);
   const avsnittsknapp = $('#bokavsnitt'), lista = $('#bkkapitel');
   const uppslag = $('#bkuppslag'), remsa = $('#bkremsa'), spann = $('#bkspann');
   const moment = $('#moment'), momentrad = $('#momentrad');
 
+  /* Utan register finns inget avsnitt att stå på — remsan öppnar då på sidan
+     ett och avsnittsknappen säger «Välj avsnitt». Det händer med server men
+     utan inläst bok, och det är sant om läget. */
   let avsnitt = window.Bok.nasta();
-  let fran = grans(avsnitt)[0], till = grans(avsnitt)[1];
+  let fran = avsnitt ? grans(avsnitt)[0] : 1, till = avsnitt ? grans(avsnitt)[1] : 1;
   let halv = false;
 
   const avsnittFor = sida => reg().find(a => { const [f, t] = grans(a); return sida >= f && sida <= t; }) || null;
@@ -106,7 +119,7 @@
     const traffar = q ? A.filter(a => (a.nr + ' ' + a.titel + ' ' + (a.vag || '') + ' ' + a.kap).toLowerCase().includes(q)) : A;
     lista.innerHTML = `<div class="bksokrad"><input type="text" id="bksok" placeholder="Sök avsnitt, rubrik eller sidnummer …" aria-label="Sök i boken" value="${avsnittssok.replace(/"/g, '&quot;')}" /></div>`
       + (traffar.length ? traffar.map(a => {
-        return `<button class="bkkaprad" type="button" data-nr="${a.nr}"${a.nr === avsnitt.nr ? ' data-pa' : ''}><span class="n">${a.nr} ${a.titel}${a.nr === pa.nr ? '<span class="bktur">står på tur</span>' : ''}</span><span class="s">s. ${a.sid}</span></button>`;
+        return `<button class="bkkaprad" type="button" data-nr="${a.nr}"${avsnitt && a.nr === avsnitt.nr ? ' data-pa' : ''}><span class="n">${a.nr} ${a.titel}${pa && a.nr === pa.nr ? '<span class="bktur">står på tur</span>' : ''}</span><span class="s">s. ${a.sid}</span></button>`;
       }).join('') : '<p class="bktomsok">Inget avsnitt matchar sökningen.</p>');
     const falt = $('#bksok', lista);
     if (falt) {
@@ -179,7 +192,10 @@
   const bokpanel = document.createElement('div');
   bokpanel.className = 'bkbokpanel';
   bokpanel.hidden = true;
-  bokpanel.innerHTML = BOCKER.map(b => `<button class="bkbokrad" type="button"${b === bok ? ' data-pa' : ''}>${b}</button>`).join('');
+  const byggBokpanel = () => {
+    bokpanel.innerHTML = BOCKER.map(b => `<button class="bkbokrad" type="button"${b === bok ? ' data-pa' : ''}>${b}</button>`).join('');
+  };
+  byggBokpanel();
   $('#bokvaljare').appendChild(bokpanel);
   knapp.addEventListener('click', () => {
     bokpanel.hidden = !bokpanel.hidden;
@@ -209,6 +225,21 @@
     knapp.setAttribute('aria-expanded', 'false');
     valjBok(b.textContent.trim());
     window.toast && window.toast(`Boken är nu ${bok}`);
+  });
+  /* Servern svarade med lärarens hylla: den ersätter prototypens. Boken som
+     var vald finns sällan kvar — då öppnas den första i hyllan, och finns
+     ingen bok alls står remsan kvar utan register (och säger det). */
+  document.addEventListener('bok-redo', e => {
+    const bocker = e.detail || [];
+    BOCKER = bocker.map(b => b.namn);
+    byggBokpanel();
+    if (BOCKER.length && !BOCKER.includes(bok)) {
+      const a = window.Bok.nasta();
+      if (a) { [fran, till] = grans(a); avsnitt = a; halv = false; }
+      valjBok(BOCKER[0]);
+    } else {
+      ritaRemsa(); rita(); skrivMoment();
+    }
   });
   document.addEventListener('pointerdown', e => {
     if (!bokpanel.hidden && !$('#bokvaljare').contains(e.target)) { bokpanel.hidden = true; knapp.setAttribute('aria-expanded', 'false'); }

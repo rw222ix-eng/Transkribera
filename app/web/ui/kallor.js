@@ -565,11 +565,57 @@
     const zon = $('#bokladd'), fil = $('#bokfil'), las = $('#boklas');
     if (!zon) return;
     const namnUr = f => String(f || 'Ny bok.pdf').replace(/\.pdf$/i, '').replace(/[_-]+/g, ' ').trim() || 'Ny bok';
-    function lasIn(filnamn) {
-      const namn = namnUr(filnamn);
+    const serverPa = () => !!(window.API && window.API.pa);
+
+    /* Fyra steg, och de betyder samma sak som förut — skillnaden är att de nu
+       beskriver något som händer. Servern laddar upp PDF:en, renderar de
+       första sidorna, läser innehållsförteckningen och räknar ut hur mycket
+       PDF:ens sidnummer ligger före bokens (app/bok.py importera). Det tar
+       minuter, inte sekunder, så raderna kommer ur strömmen i stället för ur
+       en setTimeout-kedja. Sidornas innehåll läses INTE nu: det är 96 sekunder
+       per sida, och de sidor läraren aldrig slår upp ska ingen betala för. */
+    function lasInPaServern(file, namn, fyll, text) {
+      const stegtext = { 18: `Läser ${namn} …`, 56: 'Hittar kapitel och avsnitt …', 88: 'Indexerar sidorna …' };
+      return window.API.laddaUpp(file)
+        .then(upp => window.API.strom('/api/bocker', { path: upp.path, namn }, {
+          progress: p => { fyll.style.width = Math.max(0, Math.min(100, p)) + '%'; if (stegtext[p]) text.textContent = stegtext[p]; },
+          log: m => { text.textContent = String(m || '').slice(0, 70); },
+        }))
+        .then(bok => {
+          if (!bok) throw new Error('Servern slutade svara mitt i inläsningen.');
+          return window.Bok && window.Bok.hamta ? window.Bok.hamta().then(() => bok) : bok;
+        });
+    }
+
+    function lasIn(file, filnamn) {
+      const namn = namnUr(filnamn || (file && file.name));
       zon.hidden = true;
       las.hidden = false;
       const fyll = $('#boklasfyll'), text = $('.boklastext', las);
+      const klar = (lagd, fel) => {
+        las.hidden = true;
+        zon.hidden = false;
+        fyll.style.width = '0';
+        text.textContent = '';
+        if (fel) { window.toast && window.toast(fel); return; }
+        /* Med server har hyllan redan bytts ut av bok-redo; utan server läggs
+           boken till i prototypens hylla som förut. */
+        if (!serverPa()) window.Uppslag && window.Uppslag.laggBok && window.Uppslag.laggBok(namn);
+        if (!pa('bok')) satt('bok', true, true);
+        ritaDorrar();
+        ritaKvitto();
+        window.toast && window.toast(`${lagd || namn} ligger i bokhyllan`);
+      };
+      if (serverPa() && file) {
+        text.textContent = `Läser ${namn} …`;
+        fyll.style.width = '8%';
+        lasInPaServern(file, namn, fyll, text)
+          .then(bok => klar(bok && bok.namn, bok && bok.register === false
+            ? 'Boken ligger i hyllan, men ingen innehållsförteckning gick att läsa.'
+            : null))
+          .catch(e => klar(null, e.message || 'Boken gick inte att läsa in.'));
+        return;
+      }
       const steg2 = [[18, `Läser ${namn} …`], [56, 'Hittar kapitel och avsnitt …'], [88, 'Indexerar sidorna …'], [100, 'Klar — boken ligger i hyllan']];
       let i = 0;
       const gaVidare = () => {
@@ -578,29 +624,20 @@
         text.textContent = t;
         i++;
         if (i < steg2.length) setTimeout(gaVidare, 620);
-        else setTimeout(() => {
-          las.hidden = true;
-          zon.hidden = false;
-          fyll.style.width = '0';
-          window.Uppslag && window.Uppslag.laggBok && window.Uppslag.laggBok(namn);
-          if (!pa('bok')) satt('bok', true, true);
-          ritaDorrar();
-          ritaKvitto();
-          window.toast && window.toast(`${namn} ligger i bokhyllan`);
-        }, 700);
+        else setTimeout(() => klar(), 700);
       };
       gaVidare();
     }
     zon.addEventListener('click', () => fil.click());
     zon.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fil.click(); } });
-    fil.addEventListener('change', () => { if (fil.files && fil.files[0]) lasIn(fil.files[0].name); fil.value = ''; });
+    fil.addEventListener('change', () => { if (fil.files && fil.files[0]) lasIn(fil.files[0], fil.files[0].name); fil.value = ''; });
     ['dragenter', 'dragover'].forEach(n => zon.addEventListener(n, e => { e.preventDefault(); zon.setAttribute('data-over', ''); }));
     ['dragleave', 'dragend'].forEach(n => zon.addEventListener(n, () => zon.removeAttribute('data-over')));
     zon.addEventListener('drop', e => {
       e.preventDefault();
       zon.removeAttribute('data-over');
       const f = e.dataTransfer && e.dataTransfer.files[0];
-      lasIn(f ? f.name : 'Ny bok.pdf');
+      lasIn(f || null, f ? f.name : 'Ny bok.pdf');
     });
   })();
 

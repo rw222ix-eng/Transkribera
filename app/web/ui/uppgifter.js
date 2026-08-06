@@ -37,9 +37,34 @@
      Fördelningen är därför en uppskattning, och den måste vara STABIL: byter
      listan uppgifter varje gång panelen ritas om byter förslaget uppgifter mitt
      i planeringen, och då är det inget förslag. */
+  /* ══════════ UPPGIFTERNA UR BOKEN PÅ RIKTIGT ══════════
+     Fördelningen nedan är en uppskattning ur avsnittets uppgiftsantal — den
+     var det enda prototypen kunde. En inläst bok VET: uppgiftsnumren står på
+     sidorna och läses därifrån (app/bok_ocr.py faktapasset), med sin nivå ur
+     de färgade markörerna. Då gissas ingenting.
+
+     Sidorna läses när uppslaget väljs, inte vid import: en bok är 313 sidor
+     och en sida kostar ~96 sekunder. Tills faktapasset är klart står listan
+     tom — den ritar hellre ingenting än chips för uppgifter ingen sett. */
+  let serverdata = null;      // {nyckel, uppgifter: [{nr, sida, niva}]}
+  let laser = false;
+  const bokId = () => {
+    const s = spann();
+    return s && window.Bok && window.Bok.bokId ? window.Bok.bokId(s.bok) : null;
+  };
+  const nyckelNu = () => { const s = spann(); return s ? `${s.bok}|${s.fran}|${s.till}` : ''; };
+
   function alla() {
     const s = spann();
     if (!s || !s.fran) return [];
+    if (bokId()) {
+      if (!serverdata || serverdata.nyckel !== nyckelNu()) return [];
+      const a = avsnittet();
+      return serverdata.uppgifter.map(u => ({
+        nr: u.nr, sida: u.sida || s.fran, niva: u.niva || 1,
+        avsnitt: reg().find(x => { const [f, t] = grans(x); return u.sida >= f && u.sida <= t; }) || a,
+      }));
+    }
     const ut = [];
     reg().forEach(a => {
       const [f, t] = grans(a);
@@ -118,13 +143,56 @@
   let bort = new Set();
   let forslag = [];
   function synka() {
-    const s = spann();
-    const ny = s ? `${s.bok}|${s.fran}|${s.till}` : '';
+    const ny = nyckelNu();
     if (ny === nyckel) return false;
     nyckel = ny;
     forslag = forslaget();
     bort = new Set(forslag.map(f => f.nr));
+    hamta();
     return true;
+  }
+
+  /* Vad står på sidorna? Servern svarar med det den redan läst, och säger
+     vilka sidor som inte är lästa än. Är någon oläst körs faktapasset —
+     ett anrop per åtta sidor, en dryg minut — och listan fylls i efterhand. */
+  function hamta() {
+    const id = bokId(), s = spann();
+    serverdata = null;
+    if (!id || !s || !(window.API && window.API.pa)) return;
+    const nyck = nyckelNu();
+    window.API.json(`/api/bocker/${id}/uppslag?fran=${s.fran}&till=${s.till}`)
+      .then(d => {
+        if (nyckelNu() !== nyck) return;         // spannet hann bytas
+        serverdata = { nyckel: nyck, uppgifter: d.uppgifter || [] };
+        forslag = forslaget();
+        bort = new Set(forslag.map(f => f.nr));
+        rita();
+        window.planKoll && window.planKoll();
+        if ((d.olasta || []).length) lasSidorna(id, s, nyck);
+      })
+      .catch(() => {});
+  }
+
+  function lasSidorna(id, s, nyck) {
+    const host = $('#uppgsvar');
+    if (!host || laser) return;
+    laser = true;
+    const klart = () => { laser = false; if (nyckelNu() === nyck) hamta(); };
+    const jobb = ({ signal, log }) => window.API.strom(
+      `/api/bocker/${id}/las`,
+      { fran: s.fran, till: s.till, bara: 'fakta' }, { signal, log });
+    if (window.Fraga && window.Fraga.kor) {
+      window.Fraga.kor(host, {
+        enkel: true, jobb,
+        jobbtext: `Slår upp s. ${s.fran}–${s.till} i ${s.bok} …`,
+        svar: r => r && r.uppgifter && r.uppgifter.length
+          ? `Sidorna är uppslagna — ${r.uppgifter.length} uppgifter står där.`
+          : 'Sidorna är uppslagna.',
+        efterKlar: klart, efterFel: () => { laser = false; },
+      });
+    } else {
+      jobb({}).then(klart, () => { laser = false; });
+    }
   }
   const rort = () => {
     const f = new Set(forslag.map(x => x.nr));
@@ -264,6 +332,9 @@
   if (moment) moment.addEventListener('input', () => { synka(); rita(); speglaSteg3(); });
   const dorr = document.querySelector('.kalla[data-dorr="bok"]');
   if (dorr) dorr.addEventListener('click', () => setTimeout(() => { synka(); rita(); speglaSteg3(); }, 0));
+  /* Servern svarade med lärarens hylla: spannet pekar på en annan bok nu, och
+     uppgifterna hör till den. */
+  document.addEventListener('bok-redo', () => { nyckel = ''; synka(); rita(); speglaSteg3(); });
 
   const NIVAFILTER = { 'Inga': [], 'Alla': [1, 2, 3], 'Nivå 2 och 3': [2, 3], 'Bara nivå 3': [3] };
   const losningarna = niva => {
@@ -290,6 +361,10 @@
       const los = losningarna(i.boklosniva);
       return {
         bok: s.bok, sidor: `${s.fran}–${s.till}`, avsnitt: window.Uppgifter.avsnittsnamn(),
+        /* Bokens id på servern följer med pappret: ett dokument ska kunna peka
+           tillbaka på de sidor det skrevs ur, också nästa termin. null för
+           prototypens böcker — de finns ingenstans att peka på. */
+        bokId: bokId(),
         uppg: kvar.map(x => x.nr), bort: [...bort].sort((a, b) => a - b),
         remsa: remsa(kvar.map(x => x.nr)), bortremsa: remsa([...bort]),
         /* Posterna bär NIVÅN, inte bara numret: lösningsbladet sätter nivå 3 som
