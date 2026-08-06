@@ -32,7 +32,11 @@ export default defineConfig({
     trace: "retain-on-failure",
   },
   webServer: {
-    command: `python -c "import uvicorn; uvicorn.run('app.web.server:create_app', factory=True, host='127.0.0.1', port=${PORT}, log_level='warning')"`,
+    // Servern körs mot en TOM temporär bas, aldrig repot. create_app utan
+    // base_dir pekar på reporoten — alltså lärarens riktiga transkribera.db,
+    // history.json och Transkriberingar/ — och varje skrivande test hade
+    // skrivit där. Se e2e/testserver.py.
+    command: `python e2e/testserver.py ${PORT}`,
     cwd: "..",
     url: `http://127.0.0.1:${PORT}/`,
     reuseExistingServer: false,

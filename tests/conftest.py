@@ -52,3 +52,33 @@ def llm_ready(client, monkeypatch):
     monkeypatch.setattr(client.app.state.arbiter, "ensure_llm",
                         lambda: "http://127.0.0.1:8170")
     return client
+
+
+@pytest.fixture
+def moln(monkeypatch):
+    """OpenAI-gränsen, beordringsbar. `moln.lagen = ["ok", "429", ...]` sätter
+    ett läge per ljudbit; `moln.anrop` är vad som faktiskt skickades."""
+    from tests.fejk import Moln
+    return Moln().installera(monkeypatch)
+
+
+@pytest.fixture
+def fejk_claude(tmp_path, monkeypatch):
+    """En riktig `claude`-fil på disk som appen startar som vanligt — inget i
+    app/claude_code.py stubbas. Byt läge med `fejk_claude("hanger")`."""
+    from app import claude_code
+    from tests.fejk import skriv_claude
+
+    exe = skriv_claude(tmp_path / "fejkbin")
+    monkeypatch.setenv("CLAUDE_CODE_BIN", str(exe))
+
+    def satt(lage: str = "ok", *, svar: str | None = None):
+        monkeypatch.setenv("FEJK_CLAUDE", lage)
+        if svar is not None:
+            monkeypatch.setenv("FEJK_CLAUDE_SVAR", svar)
+        # Statusen cachas i 20 s — annars svarar nästa test på förra lägets svar.
+        claude_code._STATUS_CACHE.update(tid=0.0, varde=None)
+        return exe
+
+    satt("ok")
+    return satt

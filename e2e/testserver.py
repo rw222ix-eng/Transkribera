@@ -1,0 +1,65 @@
+"""E2E-serverns bas: en TOM katalog — aldrig lärarens egna filer.
+
+playwright.config.ts startade uvicorn med `app.web.server:create_app` som
+factory. `create_app` utan `base_dir` pekar på REPOROTEN (`server._base_dir`),
+alltså lärarens riktiga `transkribera.db`, `history.json` och
+`Transkriberingar/`. Varje POST i ett e2e-test skrev alltså i hennes data —
+och därför gick det inte att skriva ett enda skrivande e2e-test. Det här är
+fixen: sviten kör mot en katalog under systemets temp som töms vid varje
+körning.
+
+Basen seedas av appen själv (läsåret och exempelschemat, precis som på en ny
+installation), så veckan har lektioner att planera i utan att någon fixtur
+behöver underhållas vid sidan om.
+
+`claude` fejkas dessutom: `CLAUDE_CODE_BIN` pekas på ett skript som svarar
+«inloggad» på `auth status` och skriver ett stumt svar på allt annat. Utan det
+kör «Var arbetet körs» lärarens riktiga Claude Code vid varje sidladdning — och
+ett test som råkar nå en generering skulle betala för den.
+
+Körs av playwright.config.ts. Porten kommer som argument.
+"""
+from __future__ import annotations
+
+import shutil
+import sys
+import tempfile
+from pathlib import Path
+
+ROT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROT))
+
+from tests.fejk import skriv_claude          # noqa: E402  (efter sys.path)
+
+
+def bas() -> Path:
+    """Färsk bas per körning. Samma sökväg varje gång så en trasig körning går
+    att titta i efteråt — men tömd, så ingen körning ärver förra körningens
+    dokument."""
+    b = Path(tempfile.gettempdir()) / "transkribera-e2e"
+    if b.exists():
+        shutil.rmtree(b, ignore_errors=True)
+    b.mkdir(parents=True, exist_ok=True)
+    return b
+
+
+def main() -> None:
+    import os
+
+    import uvicorn
+
+    port = int(sys.argv[1]) if len(sys.argv) > 1 else 8751
+    b = bas()
+    os.environ["CLAUDE_CODE_BIN"] = str(skriv_claude(b / "fejkbin"))
+    os.environ.setdefault("FEJK_CLAUDE", "ok")
+    # Ingen nyckel: ett test som råkar nå molnvägen ska få «lägg in nyckeln»,
+    # inte skicka lärarens ljud till OpenAI för riktiga pengar.
+    os.environ.pop("OPENAI_API_KEY", None)
+
+    from app.web import server
+    uvicorn.run(server.create_app(base_dir=b), host="127.0.0.1", port=port,
+                log_level="warning")
+
+
+if __name__ == "__main__":
+    main()

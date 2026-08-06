@@ -145,10 +145,20 @@
   function rita() { ritaUppslag(); markera(); ritaSpann(); ritaAvsnitt(); }
 
   /* Spannet ÄR momentet — fältet fylls i tyst, så steg 3 låses upp av valet. */
-  function skrivMoment() {
+  /* ...men bara när momentet är remsans eget. En omritning som INTE kommer ur
+     en gest — hyllan som kom från servern, eller uppstarten — får inte skriva
+     över ett moment som står där av något annat skäl: ett återställt utkast,
+     eller något läraren skrivit själv. Den kapplöpningen (bokhyllan mot
+     dokumenthydreringen) var det kända flakyt «utkastet ligger framme igen»:
+     vann `bok-redo` stod «s. 192–197 ur Matematik 5000+ 3c» i fältet i stället
+     för lärarens moment — i testet, och lika gärna framför läraren. */
+  let skrivet = '';
+  function skrivMoment(tvinga = true) {
     if (!moment) return;
+    if (!tvinga && (moment.value || '').trim() && moment.value !== skrivet) return;
     const a = avsnittFor(fran);
     moment.value = a ? `${a.nr} ${a.titel}` : `s. ${fran}–${till} ur ${bok}`;
+    skrivet = moment.value;
     moment.dataset.sidor = `s. ${fran}–${till}`;
     moment.removeAttribute('data-gissad');
     const g = $('#momentgissat'); if (g) g.hidden = true;
@@ -205,14 +215,14 @@
      momentet, dörren och kvittot måste ritas om i samma gest. Gjorde bara
      momentfältet det stod tre olika svar på samma sida samtidigt i panelen —
      och det som trycks på pappret sa något annat än knappen intill. */
-  function valjBok(namn) {
+  function valjBok(namn, tvinga = true) {
     bok = namn;
     window.Bok.namn = namn;
     knapptext.textContent = namn;
     [...bokpanel.children].forEach(x => x.toggleAttribute('data-pa', x.textContent.trim() === namn));
     ritaRemsa();
     rita();
-    skrivMoment();
+    skrivMoment(tvinga);
     if (window.Kallor) {
       window.Kallor.ritaDorrar && window.Kallor.ritaDorrar();
       window.Kallor.ritaKvitto && window.Kallor.ritaKvitto();
@@ -236,9 +246,9 @@
     if (BOCKER.length && !BOCKER.includes(bok)) {
       const a = window.Bok.nasta();
       if (a) { [fran, till] = grans(a); avsnitt = a; halv = false; }
-      valjBok(BOCKER[0]);
+      valjBok(BOCKER[0], false);
     } else {
-      ritaRemsa(); rita(); skrivMoment();
+      ritaRemsa(); rita(); skrivMoment(false);
     }
   });
   document.addEventListener('pointerdown', e => {
@@ -281,7 +291,8 @@
 
   ritaRemsa();
   rita();
-  skrivMoment();
+  skrivMoment(false);          /* uppstart: fältet är tomt och fylls — men ett
+                                  utkast som redan hunnit fram vinner */
   requestAnimationFrame(() => centrera(false));
   /* Steget är dolt när sidan laddas — remsan kan inte mäta sig själv då.
      Så fort den får bredd (steget öppnas) centrerar den om på spannet. */
