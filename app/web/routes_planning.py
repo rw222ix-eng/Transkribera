@@ -848,7 +848,14 @@ def create_router(base: Path, arbiter) -> APIRouter:
     @router.post("/api/planning/export")
     async def export_board(req: Request):
         """Spara en PNG-export av tavlan under
-        Transkriberingar/<lektion>/planering/ — alltid under base_dir."""
+        Transkriberingar/<lektion>/planering/ — alltid under base_dir.
+
+        Bilden ritas i webbläsaren (app/web/ui/tavla-bild.js): motorn skriver
+        DOM, och en PNG är det enda som går att lägga i ett tryckpaket eller
+        titta på om två år. `pid` är planeringens id och är valfritt — med det
+        tas lektionsnamnet ur planeringen själv, precis som approve gör, så
+        bilden hamnar bredvid wb-json:en i stället för i en egen mapp när
+        klientens titel råkar vara en annan."""
         try:
             body = await req.json()
         except Exception:
@@ -871,7 +878,13 @@ def create_router(base: Path, arbiter) -> APIRouter:
         if not raw.startswith(_PNG_MAGIC):
             return JSONResponse({"error": "innehållet är inte en PNG"}, status_code=400)
 
-        out_dir = _planning_dir(str(body.get("title") or ""))
+        titel = str(body.get("title") or "")
+        st = plannings.get(str(body.get("pid") or ""))
+        if st is not None:
+            board = st.get("board")
+            titel = ((board.get("title") if isinstance(board, dict) else "")
+                     or st.get("moment") or titel)
+        out_dir = _planning_dir(titel)
         if out_dir is None:
             return JSONResponse({"error": "otillåten sökväg"}, status_code=400)
         out_dir.mkdir(parents=True, exist_ok=True)

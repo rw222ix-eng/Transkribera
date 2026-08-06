@@ -494,6 +494,34 @@ window.Blad = (() => {
   const tavlor = new Map();
   let tavnr = 0;
 
+  /* ── Kurvorna ──
+     I wb-json-v1 är en grafs kurva en UTTRYCKSSTRÄNG (plots[].expr):
+     språkmodellen får inte skicka JS-funktioner. Motorn vill ha en funktion
+     (plots[].fn), och utan det här steget ritades axlar och rutnät men ingen
+     kurva — tavlan såg färdig ut och saknade det den handlade om. Prototypens
+     egna specar (innehall.js) bär redan fn och rörs inte.
+     Kompileringen görs av WBExpr (whitelist-parser, ingen eval) som bor i
+     /static/whiteboard/expr.js — samma fil app/whiteboard_spec.py speglar
+     grammatiken ur serversidigt. Ett uttryck som inte går att kompilera blir
+     en [WB]-varning och kurvan hoppas över: hellre en tavla utan kurva än
+     ingen tavla, och varningen går vidare till reparationsrundan. */
+  function kurvor(x) {
+    if (Array.isArray(x)) return x.map(kurvor);
+    if (!x || typeof x !== 'object') return x;
+    const ut = {};
+    Object.keys(x).forEach(k => { ut[k] = kurvor(x[k]); });
+    if (ut.kind === 'graph' && Array.isArray(ut.plots)) {
+      ut.plots = ut.plots.filter(p => {
+        if (typeof p.fn === 'function') return true;
+        if (!p.expr) return false;
+        if (!window.WBExpr) { console.warn('[WB] uttrycksparsern saknas — kurvan kunde inte ritas'); return false; }
+        try { p.fn = window.WBExpr.compile(p.expr); return true; }
+        catch (e) { console.warn(`[WB] ogiltigt uttryck i plots[].expr: '${p.expr}' — ${e.message}`); return false; }
+      });
+    }
+    return ut;
+  }
+
   function ritaTavlan(ruta, spec, v, naturlig) {
     if (!spec || !window.WBLayout || !ruta.isConnected) return;
     let host = $('.tavhost', ruta);
@@ -513,7 +541,7 @@ window.Blad = (() => {
     };
     /* Tavlan kan vara ETT bräde (prototypens form ur innehall.js) eller ett helt
        dokument med flera (det språkmodellen skriver, wb-json-v1). */
-    try { window.WBLayout.renderWhiteboard(spec.boards ? spec : { boards: [spec] }, host); }
+    try { window.WBLayout.renderWhiteboard(kurvor(spec.boards ? spec : { boards: [spec] }), host); }
     catch (e) { console.warn = forraWarn; forraWarn.call(console, 'Tavlan kunde inte ritas:', e && e.message); return; }
     finally { console.warn = forraWarn; }
     if (varningar.length && window.Tavla && window.Tavla.varnade) window.Tavla.varnade(v, varningar);
@@ -826,6 +854,29 @@ window.Blad = (() => {
     return ut;
   }
 
+  /* Tavlan språkmodellen skrivit (wb-json-v1) om den finns — annars prototypens
+     form ur innehall.js. Formen är densamma för motorn; det som skiljer är
+     varifrån innehållet kom. */
+  function tavlanFor(v) {
+    const lage = TEORI.test(ord(v.moment)) ? 'teori' : 'genomgang';
+    const skriven = v.wb && (v.wb.boards || []).length ? v.wb : null;
+    return tavlaSpec(skriven || (T().spec ? T().spec(v.moment, lage) : null), v);
+  }
+
+  /* Tavlan ritad i sin verkliga storlek någon annanstans än på pappret.
+     Bildproducenten (tavla-bild.js) ska ha SAMMA spec och SAMMA motor som
+     förhandsvisningen — annars är bilden av en annan tavla än den läraren
+     godkände. Returnerar brädenas container, eller null om tavlan inte gick
+     att rita. Målet måste sitta i dokumentet: motorn mäter. */
+  function tavlaTill(mal, v) {
+    if (!mal || !v || v.typ !== 'Tavla') return null;
+    const ruta = document.createElement('div');
+    ruta.className = 'tavruta';
+    mal.appendChild(ruta);
+    ritaTavlan(ruta, tavlanFor(v), v, true);
+    return $('.boards-container', ruta);
+  }
+
   function rita(mal, v) {
     if (!mal || !v) return;
     mal.innerHTML = '';
@@ -841,12 +892,7 @@ window.Blad = (() => {
       host.className = 'tavhost';
       ruta.appendChild(host);
       trav.appendChild(ruta);
-      /* Tavlan språkmodellen skrivit (wb-json-v1) om den finns — annars
-         prototypens form ur innehall.js. Formen är densamma för motorn; det som
-         skiljer är varifrån innehållet kom. */
-      const lage = TEORI.test(ord(v.moment)) ? 'teori' : 'genomgang';
-      const skriven = v.wb && (v.wb.boards || []).length ? v.wb : null;
-      ritaTavla(ruta, host, tavlaSpec(skriven || (T().spec ? T().spec(v.moment, lage) : null), v), v);
+      ritaTavla(ruta, host, tavlanFor(v), v);
     } else {
       bladen(v).forEach(html => {
         const skal = document.createElement('div');
@@ -892,5 +938,5 @@ window.Blad = (() => {
     return trav;
   }
 
-  return { rita, form, uppgifter, skala, omritaTavlor };
+  return { rita, form, uppgifter, skala, omritaTavlor, tavlaTill };
 })();

@@ -321,6 +321,33 @@ def test_approve_writes_board_json_under_base(llm_ready, monkeypatch):
     assert payload["board"]["title"] == "Pythagoras sats"
 
 
+def test_export_lagger_bilden_bredvid_wb_jsonen(llm_ready, monkeypatch):
+    """Tavlan är två saker i arkivet: JSON:en den skrevs som och bilden den
+    såg ut som. Med `pid` tas lektionsnamnet ur planeringen själv, så de två
+    hamnar i samma mapp även när klienten skickar en annan titel."""
+    pid = _make_planning(llm_ready, monkeypatch)
+    godkand = llm_ready.post(f"/api/planning/{pid}/approve", json={}).json()
+    r = llm_ready.post("/api/planning/export",
+                       json={"pid": pid, "title": "något helt annat",
+                             "png": _DATA_URL})
+    assert r.status_code == 200
+    from pathlib import Path
+    bild = Path(r.json()["path"])
+    assert bild.parent == Path(godkand["path"]).parent
+    assert bild.suffix == ".png" and bild.read_bytes() == _PNG_1PX
+
+
+def test_export_utan_kand_pid_faller_tillbaka_pa_titeln(llm_ready):
+    """En tavla som aldrig gick genom servern (prototypens form) har inget
+    pid — då gäller titeln klienten skickar."""
+    r = llm_ready.post("/api/planning/export",
+                       json={"pid": "finns-ej", "title": "Pythagoras sats",
+                             "png": _DATA_URL})
+    assert r.status_code == 200
+    from pathlib import Path
+    assert "Pythagoras sats" in Path(r.json()["path"]).parts
+
+
 def test_approve_unknown_id(llm_ready):
     r = llm_ready.post("/api/planning/finns-ej/approve", json={})
     assert r.status_code == 404

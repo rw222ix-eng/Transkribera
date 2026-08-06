@@ -57,6 +57,7 @@ async function fejka(page, { generate, rapport } = {}) {
                              body: rapport || strom([{ type: "done", result: { ok: true, repaired: false } }]) });
     }
     if (vag.endsWith("/approve")) return json(route, { ok: true, planned_id: 5 });
+    if (vag.endsWith("/export")) return json(route, { ok: true, path: "tavla.png" });
     return route.fulfill({
       status: 200, contentType: "text/event-stream",
       body: generate || strom([
@@ -154,6 +155,26 @@ test("motorns varningar går tillbaka för en reparationsrunda", async ({ page }
   await expect(page.locator("#dokument .tavruta")).toContainText("Lagad tavla", { timeout: 15_000 });
 });
 
+test("grafens kurva kompileras ur uttrycket — inte bara axlar och rutnät", async ({ page }) => {
+  /* wb-json-v1 bär kurvan som en uttryckssträng (plots[].expr) — språkmodellen
+     får inte skicka JS-funktioner. Utan kompileringen ritades axlar och rutnät
+     men ingen kurva, och tavlan såg färdig ut utan det den handlade om. */
+  const medGraf = tavla();
+  medGraf.boards[0].sections.push({
+    kind: "graph", width: 250, height: 210, xRange: [-3, 3], yRange: [-2, 6],
+    plots: [{ expr: "x^2", color: "blue" }],
+  });
+  await fejka(page, { generate: strom([{ type: "done", result: {
+    id: "abc123def456", board: medGraf, errors: [], rounds: 1 } }]) });
+  await page.goto("/");
+  await hydrerad(page);
+  await skriv(page);
+
+  await expect(page.locator("#dokument")).toBeVisible({ timeout: 15_000 });
+  await expect(page.locator('#dokument .tavruta path[stroke="var(--ink-blue)"]'))
+    .toHaveCount(1, { timeout: 15_000 });
+});
+
 test("godkännandet skriver in tavlan i planeringsarkivet", async ({ page }) => {
   const anrop = await fejka(page);
   await page.goto("/");
@@ -163,6 +184,17 @@ test("godkännandet skriver in tavlan i planeringsarkivet", async ({ page }) => 
 
   await page.locator("#godkann").click();
   await expect.poll(() => anrop.some(a => a.vag.endsWith("/approve"))).toBe(true);
+
+  /* Tavlan är två saker i arkivet: JSON:en den skrevs som och bilden den såg ut
+     som. Bilden ritas av på klienten — servern har ingen motor — och det som
+     skickas ska vara en riktig PNG, inte en tom duk. */
+  await expect.poll(() => anrop.some(a => a.vag.endsWith("/export")),
+                    { timeout: 20_000 }).toBe(true);
+  const exp = anrop.find(a => a.vag.endsWith("/export"));
+  expect(exp.kropp.pid).toBe("abc123def456");
+  const rå = Buffer.from(exp.kropp.png.slice("data:image/png;base64,".length), "base64");
+  expect([...rå.subarray(0, 8)]).toEqual([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  expect(rå.readUInt32BE(16)).toBeGreaterThan(2000);   // bredden ur IHDR
 });
 
 test("ett fel från servern blir ett besked, inte en tom ruta", async ({ page }) => {

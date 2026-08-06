@@ -107,41 +107,46 @@
 
      Utan server spelas prototypens kvittering upp precis som förut. */
   const serverPa = () => !!(window.API && window.API.pa);
-  /* Tavlan kan ännu INTE följa med i paketet. Den finns bara som ritad DOM i
-     webbläsaren — ingen bild och ingen PDF — och servern kan inte rendera om
-     den (motorn bor här, inte där). Den som ska ha tavlan skriver ut den från
-     sidan så länge. Servern lägger den i `saknas` och kvittot säger det, i
-     stället för att paketet tyst blir en sida kortare. Nästa steg är en
-     PNG-export ur whiteboard-motorn — rutten som tar emot den finns redan
-     (/api/planning/export). */
+  /* Tavlan finns bara som ritad DOM i webbläsaren — servern kan inte rendera om
+     den, för motorn bor här och inte där. Den ritas därför av på klienten
+     (tavla-bild.js) och skickas med som PNG; servern lägger bilden på ett A4
+     överst i paketet. Går avritningen inte igenom hamnar tavlan i `saknas` och
+     kvittot säger det, i stället för att paketet tyst blir en sida kortare. */
 
   function paketkropp() {
-    return {
-      titel,
-      dokument: rader.filter(r => r.med).map(r => {
-        const d = { namn: r.namn, typ: r.typ, kopior: r.antal };
-        if (r.v && r.v.provId) {
-          d.exam_id = r.v.provId;
-          if (r.typ === 'Facit') d.bedomning = true;
-          if (r.anpassad) d.anpassad = {
-            /* Samma anpassning som raden beskriver: förlängd tid, färre
-               uppgifter, och en kod i foten som skiljer kopian. */
-            tid_min: 150, antal: 4,
-            kod: `${(r.v.klass || 'kopia')}-${(r.v.datum || '').slice(5)}`,
-          };
-        }
-        return d;
-      }),
-    };
+    const med = rader.filter(r => r.med);
+    return Promise.all(med.map(r => {
+      const d = { namn: r.namn, typ: r.typ, kopior: r.antal };
+      if (r.v && r.v.provId) {
+        d.exam_id = r.v.provId;
+        if (r.typ === 'Facit') d.bedomning = true;
+        if (r.anpassad) d.anpassad = {
+          /* Samma anpassning som raden beskriver: förlängd tid, färre
+             uppgifter, och en kod i foten som skiljer kopian. */
+          tid_min: 150, antal: 4,
+          kod: `${(r.v.klass || 'kopia')}-${(r.v.datum || '').slice(5)}`,
+        };
+      }
+      if (r.typ !== 'Tavla' || !window.TavlaBild) return d;
+      return window.TavlaBild.png(r.v)
+        .then(png => Object.assign(d, { png }))
+        .catch(() => d);      /* utan bild går raden till `saknas` — och sägs */
+    })).then(dokument => ({ titel, dokument }));
   }
 
   function bygg(knapp, efterat) {
     const text = knapp.textContent;
     knapp.disabled = true;
-    knapp.textContent = 'Bygger paketet …';
+    /* Avritningen av tavlan tar sina hundradelar och sker före anropet —
+       knappen ska säga vad den gör, inte stå tyst. */
+    knapp.textContent = rader.some(r => r.med && r.typ === 'Tavla')
+      ? 'Ritar av tavlan …' : 'Bygger paketet …';
     const ater = () => { knapp.textContent = text; knapp.disabled = false; };
-    window.API.strom('/api/tryck', paketkropp(), {
-      log: m => { knapp.textContent = String(m || '').slice(0, 40); },
+    paketkropp().then(kropp => {
+      knapp.textContent = 'Bygger paketet …';
+      return window.API.strom('/api/tryck', kropp, {
+        log: m => { knapp.textContent = String(m || '').slice(0, 40); },
+      });
     }).then(res => {
       if (!res) throw new Error('Servern slutade svara mitt i bygget.');
       efterat(res);
@@ -192,7 +197,7 @@
   const kvittotext = res => {
     const sidor = `${res.sidor} ${res.sidor === 1 ? 'sida' : 'sidor'}`;
     return (res.saknas || []).length
-      ? `Paketet är byggt — ${sidor}. ${res.saknas.join(', ')} kom inte med: tavlan skrivs ut från sidan, och ett papper som inte är godkänt har ingen PDF än.`
+      ? `Paketet är byggt — ${sidor}. ${res.saknas.join(', ')} kom inte med: ett papper som inte är godkänt har ingen PDF än.`
       : `Paketet är byggt — ${sidor} i rätt ordning.`;
   };
 

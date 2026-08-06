@@ -4,6 +4,7 @@ Tectonic körs inte här — kompileringen är stubbad. Det som testas är det s
 avgör om läraren kan bära in rätt hög: ordningen, kopieantalet och att ett
 dokument som inte går att hämta SÄGS i stället för att tyst försvinna.
 """
+import base64
 import json
 
 import pytest
@@ -154,11 +155,34 @@ def test_dokumentkoden_star_i_foten_bara_nar_den_finns():
 
 # -------------------------------------------------------------- tavelbilden --
 
+_PNG_1PX = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJ"
+    "AAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+)
+_DATA_URL = "data:image/png;base64," + base64.b64encode(_PNG_1PX).decode()
+
+
+def test_tavlan_foljer_med_nar_klienten_skickar_bilden(client, monkeypatch):
+    """Tavlan finns bara som ritad DOM i webbläsaren. Klienten ritar av den
+    (app/web/ui/tavla-bild.js) och skickar PNG:en — då ska den ligga överst i
+    paketet, inte i `saknas`."""
+    monkeypatch.setattr(tryck.exam_pdf, "engine_available", lambda: True)
+    monkeypatch.setattr(tryck.exam_pdf, "compile_pdf",
+                        lambda tex, ut, stam, **kw: (pdf_fil(ut / f"{stam}.pdf", 1), ""))
+    eid = _prov(client, monkeypatch, sidor=2)
+    res = _done(client.post("/api/tryck", json={"dokument": [
+        {"namn": "Tavla — derivator", "typ": "Tavla", "png": _DATA_URL, "kopior": 1},
+        {"namn": "Provet", "exam_id": eid, "kopior": 2}]}))
+    assert res["saknas"] == []
+    assert [d["namn"] for d in res["dokument"]] == ["Tavla — derivator", "Provet"]
+    # Tavlan är ETT ark, elevernas papper två sidor i två kopior.
+    assert res["sidor"] == 1 + 2 * 2
+
+
 def test_tavlan_som_bild_kraver_en_riktig_png(tmp_path, monkeypatch):
     monkeypatch.setattr(tryck.exam_pdf, "engine_available", lambda: True)
     monkeypatch.setattr(tryck.exam_pdf, "compile_pdf",
                         lambda tex, ut, stam, **kw: (pdf_fil(ut / f"{stam}.pdf", 1), ""))
-    import base64
     png = tryck._PNG_MAGIC + b"resten spelar ingen roll"
     dataurl = tryck._DATA_PREFIX + base64.b64encode(png).decode()
     assert tryck.png_till_pdf(dataurl, tmp_path, "t") is not None

@@ -1301,11 +1301,17 @@
 <script src="/static/vendor/katex/katex.min.js"></script>
 <script src="matte.js"></script>
 <script src="tavla-wb.js"></script>
+<!-- Uttrycksparsern för grafernas plots[].expr (wb-json-v1). Ligger kvar under
+     /static/whiteboard/ därför att app/whiteboard_spec.py speglar dess
+     grammatik — grammatiken ska bo på ETT ställe. Som KaTeX finns den inte i
+     designprojektet; se avvikelserna högst upp. -->
+<script src="/static/whiteboard/expr.js"></script>
 <script src="innehall.js"></script>
 <script src="blad-tavla.js"></script>
 <script src="blad-bygg.js"></script>
 <script src="blad-boklos.js"></script>
 <script src="blad.js"></script>
+<script src="tavla-bild.js"></script>
 <script src="motion.js"></script>
 <script src="image-slot.js"></script>
 

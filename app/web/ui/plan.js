@@ -2291,6 +2291,14 @@
        det nästa tavla bygger vidare på — hade aldrig sett den. */
     if (serverPa() && godkant.wbId) {
       skicka(`/api/planning/${godkant.wbId}/approve`, 'POST', {})
+        /* Tavlan är två saker i arkivet: JSON:en den skrevs som och bilden den
+           såg ut som. JSON:en kan ritas om av motorn; bilden är den som går att
+           öppna om två år, och den enda som kan läggas i ett tryckpaket.
+           Avritningen sker här (tavla-bild.js) — servern har ingen motor. */
+        .then(() => (window.TavlaBild ? window.TavlaBild.png(godkant) : null))
+        .then(png => png && skicka('/api/planning/export', 'POST', {
+          pid: godkant.wbId, title: (godkant.wb && godkant.wb.title) || godkant.moment || '', png,
+        }))
         .catch(() => { /* pappret ligger i Sparat; arkivkopian får vänta */ });
     }
     /* Provet och arbetsbladet får sin PDF vid godkännandet — Tectonic
