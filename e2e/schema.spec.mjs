@@ -57,6 +57,11 @@ async function hydrerad(page) {
 
 test("veckoschemat kommer från servern, inte ur kalender.js", async ({ page }) => {
   await fejkaDatagrunden(page);
+  /* Klockan fryses: kalenderposten nedan ligger den 20 augusti, och veckan
+     appen öppnar är den som schemat och LOVEN pekar ut. Utan frysning berodde
+     testet på vilken dag sviten råkade köras — det gick igenom i augusti 2026
+     och började falla dagen efter. */
+  await page.clock.install({ time: new Date("2026-08-20T09:00:00") });
   await page.goto("/");
   await hydrerad(page);
 

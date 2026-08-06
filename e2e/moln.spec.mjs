@@ -106,6 +106,36 @@ test("en ström som tar slut utan svar blir ett besked, inte ett JS-fel", async 
   expect(jsfel).toEqual([]);
 });
 
+test("nätet som dör mitt i körningen blir ett besked, inte en bar som står still",
+  async ({ page, context }) => {
+    /* Regressionen från 746ef20 fast på riktigt: strömmen bryts på
+       transportnivå mitt i en körning. Kravet är detsamma som när den tar slut
+       utan done — ett besked med en väg vidare, ingen klarruta, inget JS-fel.
+       Wifi som glappar mitt i en 70-minuterslektion är inte ett kantfall. */
+    const jsfel = [];
+    page.on("pageerror", e => jsfel.push(e.message));
+    let bryt;
+    const brutet = new Promise(r => { bryt = r; });
+    await page.route("**/api/transcribe", async route => {
+      await brutet;
+      await route.abort("internetdisconnected");
+    });
+    await page.goto("/");
+    await page.waitForFunction(() => window.API && window.API.pa);
+    await koaEnFil(page);
+    await page.locator("#starta").click();
+
+    // Körningen är igång: fasen syns innan nätet försvinner.
+    await expect(page.locator("#progresslista")).toContainText("Skickar ljudet till OpenAI");
+    await context.setOffline(true);
+    bryt();
+
+    await expect(page.locator("#korvarningar .varnruta")).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator("#klarruta")).toBeHidden();
+    expect(jsfel, jsfel.join(" | ")).toEqual([]);
+    await context.setOffline(false);
+  });
+
 test("ett fel från servern blir en varning läraren kan agera på", async ({ page }) => {
   await page.route("**/api/transcribe", route =>
     route.fulfill({ status: 400, contentType: "application/json",

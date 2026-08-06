@@ -15,7 +15,22 @@ window.Klass = (() => {
   if (!grid || !K) return { rita() {}, fragan: () => null };
 
   let vald = 'alla';
-  let mandag = K.nastaSkolvecka ? K.nastaSkolvecka(K.idag()) : K.mandagen(K.idag());
+  const oppningsvecka = () => (K.nastaSkolvecka ? K.nastaSkolvecka(K.idag())
+                                                : K.mandagen(K.idag()));
+  let mandag = oppningsvecka();
+  /* Öppningsveckan räknas ur schemat OCH loven — och de kommer från servern en
+     stund efter att den här filen kört. Räknades den bara en gång stod veckan
+     kvar på PROTOTYPENS lov: en lärare vars skola har lov en annan vecka fick
+     appen öppnad i fel vecka, och den rättade sig aldrig. Nu räknas den om när
+     servern svarat — men bara om läraren inte redan bläddrat själv. */
+  let styrd = false;
+  if (K.redo && K.redo.then) K.redo.then(() => {
+    if (styrd) return;
+    const ny = oppningsvecka();
+    if (ny === mandag) return;
+    mandag = ny;
+    rita();
+  });
   let avvisat = false;
   /* Klassprofilen är fälld ihop som förval: klicket på en klass ska filtrera
      veckan, inte fylla skärmen med minnet av klassen. */
@@ -663,6 +678,7 @@ window.Klass = (() => {
   let koat = 0;
   function byt(steg, tillDatum) {
     if (!steg && !tillDatum) return;
+    styrd = true;                 /* läraren har valt vecka — rör den inte */
     if (byter) { if (!tillDatum) koat += steg; return; }
     byter = true;
     const ut = steg > 0 ? -1 : 1;
