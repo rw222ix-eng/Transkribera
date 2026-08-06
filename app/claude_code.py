@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import os
+import queue
 import shutil
 import subprocess
 import tempfile
@@ -154,15 +155,62 @@ def generate(prompt: str, *, system: str | None = None,
             pass
     threading.Thread(target=mata, daemon=True).start()
 
+    # stderr töms i en egen tråd. Läser man den först efter wait() räcker det
+    # att CLI:t skriver 64 kB varningar för att röret ska bli fullt: då blockerar
+    # det på sin skrivning, vi blockerar på vår läsning, och båda står kvar för
+    # evigt. En daemontråd som dricker ur röret hela tiden kostar ingenting.
+    stderr_delar: list[str] = []
+
+    def sug_stderr():
+        try:
+            for rad in proc.stderr:
+                stderr_delar.append(rad)
+                del stderr_delar[:-40]        # bara svansen behövs i ett besked
+        except (OSError, ValueError, TypeError):
+            pass                              # inget stderr att läsa (eller en stubbe)
+    threading.Thread(target=sug_stderr, daemon=True).start()
+
+    # Raderna läses i en egen tråd och plockas ur en kö. Läser man dem direkt
+    # med `for rad in proc.stdout` ligger timeout- och avbrottskollarna INUTI
+    # loopen — och en process som inte skriver någonting alls kommer aldrig till
+    # dem. `timeout=1800` triggade därför aldrig när det behövdes som mest: när
+    # CLI:t hängde. Nu vaktas väntan i stället för raderna.
+    rader: "queue.Queue[str | None]" = queue.Queue()
+
+    def sug_stdout():
+        try:
+            for rad in proc.stdout:
+                rader.put(rad)
+        except (OSError, ValueError):
+            pass
+        finally:
+            rader.put(None)                   # strömmen är slut
+    threading.Thread(target=sug_stdout, daemon=True).start()
+
+    def _stopp(varfor: Exception):
+        try:
+            proc.kill()
+        except OSError:
+            pass
+        raise varfor
+
     delar: list[str] = []
     fel = ""
-    for rad in proc.stdout:
+    while True:
+        try:
+            rad = rader.get(timeout=0.25)
+        except queue.Empty:
+            if avbruten and avbruten():
+                _stopp(RuntimeError("Avbruten."))
+            if time.time() - t0 > timeout:
+                _stopp(TimeoutError("Claude Code svarade inte i tid."))
+            continue
+        if rad is None:
+            break
         if avbruten and avbruten():
-            proc.kill()
-            raise RuntimeError("Avbruten.")
+            _stopp(RuntimeError("Avbruten."))
         if time.time() - t0 > timeout:
-            proc.kill()
-            raise TimeoutError("Claude Code svarade inte i tid.")
+            _stopp(TimeoutError("Claude Code svarade inte i tid."))
         rad = rad.strip()
         if not rad.startswith("{"):
             continue
@@ -194,11 +242,21 @@ def generate(prompt: str, *, system: str | None = None,
                 # Svaret kom aldrig som deltan (t.ex. med --json-schema) —
                 # resultatfältet är då hela texten.
                 delar.append(str(h["result"]))
-    proc.wait(timeout=30)
+    # Strömmen är slut, men processen kan ändå dröja med att lägga sig. Den får
+    # trettio sekunder; sedan dödas den. Utan try/except reste `wait` en
+    # TimeoutExpired rakt ut i anropskedjan — och en processlämning är inget
+    # svar läraren kan göra något med.
+    try:
+        proc.wait(timeout=30)
+    except subprocess.TimeoutExpired:
+        try:
+            proc.kill()
+        except OSError:
+            pass
     if fel:
         raise RuntimeError(fel)
     if proc.returncode not in (0, None) and not delar:
-        raise RuntimeError((proc.stderr.read() or "").strip()[:400] or
+        raise RuntimeError("".join(stderr_delar).strip()[-400:] or
                            f"Claude Code avslutades med kod {proc.returncode}.")
     return "".join(delar).strip()
 

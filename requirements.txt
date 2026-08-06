@@ -1,16 +1,34 @@
-numpy
-torch
-torchaudio
-transformers>=4.53
-numpy
-huggingface_hub
-psutil
-requests
-yt-dlp
+# Allt appen importerar direkt. Listan är komplett: pypdfium2 saknades trots
+# att tryckpaketet, bokimporten och PDF-underlaget importerar den — en ny
+# installation kraschade först när läraren tryckte «Skriv ut».
+
+# Servern
 fastapi
 uvicorn
-pywebview
+pydantic            # schemana: exam_spec, whiteboard_spec
+jinja2              # prov- och arbetsbladsmallarna (app/templates/*.tex.j2)
+httpx               # molnanropet (OpenAI) och testklienten
+pywebview           # skrivbordsskalet (modulen heter webview)
+
+# Ljudet och tiderna
+torch
+torchaudio
+transformers>=4.53  # ljudrättningspasset (Gemma) och alignmentmodellen
+huggingface_hub
+numpy
+
+# Filer in och ut
+pypdfium2           # tryckpaketet, bokimporten, PDF-underlaget
+yt-dlp
+requests
+
+# Maskinen
+psutil
+
+# Google Kalender
 google-api-python-client
 google-auth-oauthlib
+
+# Testsviten
 pytest
-httpx
+pytest-cov

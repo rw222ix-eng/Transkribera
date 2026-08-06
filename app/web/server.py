@@ -43,6 +43,11 @@ _WEB_MEDIA = {".mp3", ".m4a", ".aac", ".wav", ".ogg", ".oga", ".opus",
 # is far above any realistic lesson-length Opus recording but rejects runaways.
 MAX_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024
 
+# Tak för spelarens omkodning i /api/media. Den körs i en trådpooltråd, och en
+# hängd ffmpeg lägger beslag på tråden för alltid — några sådana och servern
+# svarar inte på något. 70 minuters lektionsljud tar ungefär en minut.
+MEDIA_FFMPEG_TIMEOUT = 300
+
 
 def _is_url(s: str) -> bool:
     return s.startswith("http://") or s.startswith("https://")
@@ -350,7 +355,12 @@ def create_app(base_dir: Path | None = None,
     # Tracks the live transcription subprocess so /api/transcribe/cancel can
     # terminate it and free the GPU mid-run (otherwise "Avbryt" only stopped the
     # browser from listening while the job ran to completion holding the GPU lock).
-    job_state: dict = {"proc": None, "cancelled": False}
+    # `kor` säger att ett jobb PÅGÅR — `proc` säger bara att just nu råkar en
+    # subprocess vara igång, och det gör den bara under ljudrättningspasset.
+    # Molnfasen och tidsättningen har ingen process att döda; de frågar
+    # `avbruten()` mellan bitarna. Utan `kor` svarade Avbryt {cancelled: false}
+    # under hela molnfasen medan jobbet fortsatte och höll GPU-låset.
+    job_state: dict = {"proc": None, "cancelled": False, "kor": False}
     app.state.transcribe_job = job_state
 
     def _set_proc(proc):
@@ -531,12 +541,14 @@ def create_app(base_dir: Path | None = None,
                 status_code=409)
 
         job_state["cancelled"] = False
+        job_state["kor"] = True
 
         def job(emit):
             try:
                 return _transcribe(emit)
             finally:
                 job_state["proc"] = None
+                job_state["kor"] = False
                 alignment.frigor()          # släpp tidsmodellens VRAM
                 arb.release_gpu()
 
@@ -560,6 +572,19 @@ def create_app(base_dir: Path | None = None,
             # Ljudet lämnar datorn här, och bara här. Progressbandet 0–45 % är
             # molnets, 45–60 % tidsättningens; resten är efterarbetet.
             langd = media_mod.probe_duration(media) or 0.0
+            if langd <= 0:
+                # Utan längd blir styckningen tom, molnet får noll bitar och
+                # felet läraren såg var «Transkriberingen gav inget resultat» —
+                # ett besked som pekar på ljudet när felet i själva verket är
+                # att ffmpeg saknas eller att filen inte går att läsa. Säg vad
+                # som är fel och vad hon kan göra åt det, här och inte senare.
+                if not media_mod.ffmpeg_available():
+                    raise RuntimeError(
+                        "ffmpeg/ffprobe saknas på datorn — de behövs för att "
+                        "läsa och stycka ljudet. Installera ffmpeg och försök igen.")
+                raise RuntimeError(
+                    f"Kunde inte läsa någon speltid ur {media.name}. Filen kan "
+                    "vara trasig eller sakna ljudspår.")
             avbruten = lambda: bool(job_state["cancelled"])
             moln = openai_asr.transkribera(
                 media, base, langd=langd, sprak=language,
@@ -859,17 +884,27 @@ def create_app(base_dir: Path | None = None,
 
     @app.post("/api/transcribe/cancel")
     def api_transcribe_cancel():
-        """Terminate the running transcription subprocess so the GPU is freed at
-        once. Idempotent: returns {cancelled: False} when nothing is running."""
+        """Avbryt körningen: flaggan sätts, och finns det en subprocess dödas
+        den så GPU:n släpps med en gång. Idempotent — {cancelled: False} när
+        ingenting är igång.
+
+        Flaggan måste sättas ÄVEN när ingen process finns. Bara
+        ljudrättningspasset kör i en subprocess; under molnet och tidsättningen
+        är `proc` None, och den som tryckte Avbryt fick då `{cancelled: false}`
+        medan jobbet fortsatte, höll GPU-låset och till slut skrev en fil hon
+        inte längre ville ha. Molnet och tidsättningen frågar `avbruten()`
+        mellan bitarna — de behöver flaggan, inte en dödsstöt."""
         proc = job_state.get("proc")
-        if proc is not None and proc.poll() is None:
-            job_state["cancelled"] = True
+        lever = proc is not None and proc.poll() is None
+        if not (lever or job_state.get("kor")):
+            return {"cancelled": False}
+        job_state["cancelled"] = True
+        if lever:
             try:
                 proc.terminate()
             except Exception:
                 pass
-            return {"cancelled": True}
-        return {"cancelled": False}
+        return {"cancelled": True}
 
     @app.get("/api/history")
     def api_history():
@@ -2055,9 +2090,13 @@ def create_app(base_dir: Path | None = None,
         body = await req.json()
         operation = body.get("operation", "summary")
         transcript = body.get("transcript", "")
+        # `model` tas emot och ignoreras sedan Claude Code tog över (samma sak
+        # som i /api/transcribe). Att KRÄVA det var kvar från modellväljarens
+        # tid: en klient som inte skickar ett fält appen inte längre använder
+        # fick 400 «text och modell krävs».
         model = body.get("model", "")
-        if not transcript or not model:
-            return JSONResponse({"error": "text och modell krävs"}, status_code=400)
+        if not transcript:
+            return JSONResponse({"error": "text krävs"}, status_code=400)
         if not arb.try_acquire_gpu():
             return JSONResponse(
                 {"error": "GPU upptagen med transkribering – försök igen strax."},
@@ -2081,14 +2120,14 @@ def create_app(base_dir: Path | None = None,
         body = await req.json()
         messages = body.get("messages") or []
         transcript = body.get("transcript", "")
-        model = body.get("model", "")
+        model = body.get("model", "")     # tas emot, ignoreras — se /api/postprocess
         images = body.get("images") or []
         think = bool(body.get("think", False))   # only the (text) chat may turn on Qwen3 thinking
         cite = bool(body.get("cite", False))     # källförankrat läge: numrerade segmentcitat
         calendar = bool(body.get("calendar", False))  # kalenderförmåga: [KALENDERFÖRSLAG]-rad
         cal_event = body.get("cal_event") if isinstance(body.get("cal_event"), dict) else None
-        if not model or not messages:
-            return JSONResponse({"error": "modell och meddelande krävs"}, status_code=400)
+        if not messages:
+            return JSONResponse({"error": "meddelande krävs"}, status_code=400)
         if not arb.try_acquire_gpu():
             return JSONResponse(
                 {"error": "GPU upptagen med transkribering – försök igen strax."},
@@ -2155,8 +2194,23 @@ def create_app(base_dir: Path | None = None,
             return FileResponse(str(p))
         cached = p.with_name(p.stem + ".preview.m4a")
         if not cached.exists() or cached.stat().st_mtime < p.stat().st_mtime:
-            subprocess.run(["ffmpeg", "-y", "-i", str(p), "-vn", "-c:a", "aac",
-                            "-b:a", "128k", str(cached)], capture_output=True)
+            # Timeout, alltid. En hängd konvertering (trasig fil, ffmpeg som
+            # väntar på svar) höll annars en trådpooltråd för evigt — och när
+            # de tar slut svarar servern inte längre på någonting alls.
+            # 70 minuters lektionsljud kodas om på någon minut; taket är satt
+            # med god marginal och är ett stopp, inte en budget.
+            try:
+                subprocess.run(["ffmpeg", "-y", "-i", str(p), "-vn", "-c:a", "aac",
+                                "-b:a", "128k", str(cached)],
+                               capture_output=True, timeout=MEDIA_FFMPEG_TIMEOUT)
+            except subprocess.TimeoutExpired:
+                cached.unlink(missing_ok=True)   # halvskriven fil ska inte spelas
+                return JSONResponse(
+                    {"error": "Ljudet gick inte att förbereda i tid — filen kan "
+                              "vara trasig."}, status_code=504)
+            except OSError as e:
+                return JSONResponse({"error": f"ffmpeg kunde inte köras: {e}"},
+                                    status_code=500)
         if cached.exists():
             return FileResponse(str(cached))
         return JSONResponse({"error": "kunde inte läsa ljud"}, status_code=500)

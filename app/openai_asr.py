@@ -28,6 +28,7 @@ import os
 import re
 import subprocess
 import tempfile
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Iterable
@@ -51,6 +52,23 @@ NYCKELFIL = "openai_key.txt"
 
 class SaknarNyckel(RuntimeError):
     """Ingen API-nyckel — frontenden ska visa vägen till att lägga in en, inte ett fel."""
+
+
+class MolnFel(RuntimeError):
+    """Ett fel från API:et, med koden kvar. Koden avgör om det är lönt att
+    försöka igen — meddelandet är det läraren läser."""
+
+    def __init__(self, kod: int, meddelande: str):
+        super().__init__(meddelande)
+        self.kod = kod
+
+
+# Omtagen. Ett 429 på bit fjorton av femton kastade förut hela körningen: de
+# tretton bitar som redan gått igenom slängdes, och de var redan betalda.
+# Ett tillfälligt fel (429, 5xx, nätet som glappar) ska kosta en paus, inte en
+# lektion. Talen är avsiktligt få och långa — API:et ber själv om lugn vid 429.
+FORSOK = 4                        # ett försök + tre omtag
+BACKOFF = (2.0, 6.0, 15.0)        # sekunder före omtag 1, 2, 3
 
 
 def api_key(base: Path | str) -> str:
@@ -201,7 +219,8 @@ def transkribera_bit(fil: Path, key: str, *, sprak: str = "", ledtext: str = "",
                            files={"file": (fil.name, fil.read_bytes(), "audio/ogg")}) as svar:
             if svar.status_code != 200:
                 svar.read()
-                raise RuntimeError(_felmeddelande(svar.status_code, svar.text))
+                raise MolnFel(svar.status_code,
+                              _felmeddelande(svar.status_code, svar.text))
             for rad in svar.iter_lines():
                 if not rad.startswith("data:"):
                     continue
@@ -228,6 +247,44 @@ def transkribera_bit(fil: Path, key: str, *, sprak: str = "", ledtext: str = "",
                     if sprak_lista:
                         upptackt = (sprak_lista[0] or {}).get("code") or ""
     return "".join(text_delar).strip(), sekunder, upptackt
+
+
+def _tillfalligt(fel: Exception) -> bool:
+    """Går det över av sig självt? 429 och 5xx gör det, och ett nät som glappar
+    mitt i strömmen gör det. En avvisad nyckel (401) och en avvisad begäran
+    (4xx) gör det aldrig — att försöka igen där är bara väntan."""
+    if isinstance(fel, MolnFel):
+        return fel.kod == 429 or fel.kod >= 500
+    return isinstance(fel, httpx.TransportError)
+
+
+def _vila(sekunder: float, avbruten: Callable[[], bool] | None) -> None:
+    """Sov i småbitar så Avbryt biter under pausen — en lärare som ångrar sig
+    ska inte behöva vänta ut en backoff."""
+    slut = time.monotonic() + sekunder
+    while time.monotonic() < slut:
+        if avbruten and avbruten():
+            raise RuntimeError("Transkriberingen avbröts.")
+        time.sleep(min(0.25, slut - time.monotonic()))
+
+
+def med_omtag(gor: Callable[[], object], *, vad: str = "biten",
+              log_cb: Callable[[str], None] | None = None,
+              avbruten: Callable[[], bool] | None = None):
+    """Kör `gor()` och ta om vid tillfälliga fel. Sista felet reses som det är
+    — meddelandet är redan skrivet för läraren."""
+    for varv in range(FORSOK):
+        try:
+            return gor()
+        except Exception as fel:                      # noqa: BLE001 — reses igen
+            sista_varvet = varv == FORSOK - 1
+            if sista_varvet or not _tillfalligt(fel):
+                raise
+            paus = BACKOFF[min(varv, len(BACKOFF) - 1)]
+            if log_cb:
+                log_cb(f"{vad} gick inte igenom ({fel}). Försöker igen om "
+                       f"{paus:.0f} s — försök {varv + 2} av {FORSOK}.")
+            _vila(paus, avbruten)
 
 
 def _felmeddelande(kod: int, kropp: str) -> str:
@@ -272,9 +329,16 @@ def transkribera(audio: Path, base: Path, *, langd: float, sprak: str = "",
                 raise RuntimeError("Transkriberingen avbröts.")
             bitfil = _klipp_ut(audio, start, end, Path(tmp) / f"bit{i:03d}.ogg")
             svans = " ".join(resultat.text.split()[-120:])
-            text, sek, kod = transkribera_bit(
-                bitfil, key, sprak=sprak,
-                ledtext=(ledtext + " " + svans).strip(), delta_cb=delta_cb)
+            # Ett omtag skickar biten igen från början — deltan som redan
+            # strömmats får därför inte räknas som text. `transkribera_bit`
+            # bygger sin egen sträng per anrop, så bara skärmen ser dubbletten,
+            # och den skriver över sig själv vid nästa done.
+            text, sek, kod = med_omtag(
+                lambda: transkribera_bit(
+                    bitfil, key, sprak=sprak,
+                    ledtext=(ledtext + " " + svans).strip(), delta_cb=delta_cb),
+                vad=f"Del {i + 1} av {len(granser)}",
+                log_cb=log_cb, avbruten=avbruten)
             resultat.bitar.append(Bit(start, end, text, sek))
             if kod and not resultat.sprak:
                 resultat.sprak = kod

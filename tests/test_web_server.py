@@ -883,6 +883,11 @@ def _fejka_kedjan(monkeypatch, tmp_path, moln=None):
     """Molnet + tidsättningen fejkade: inget nät, ingen GPU, ingen nedladdning."""
     monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: _HW())
     monkeypatch.setattr(server.llm_client, "is_running", lambda *a, **k: False)
+    # Filen i testet är tolv byte "wav" — ffprobe hade sagt noll, och servern
+    # avbryter numera med «ffmpeg saknas»/«ingen speltid» i stället för att
+    # skicka noll bitar till molnet och skylla på ljudet. Fixturen säger att
+    # filen är läsbar; att den INTE är det testas för sig.
+    monkeypatch.setattr(server.media_mod, "probe_duration", lambda *_: 60.0)
     monkeypatch.setattr(server.openai_asr, "har_nyckel", lambda *a, **k: True)
     monkeypatch.setattr(server.openai_asr, "transkribera", moln or (
         lambda audio, base, **k: server.openai_asr.Resultat(

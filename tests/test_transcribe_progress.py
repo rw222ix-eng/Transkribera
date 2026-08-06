@@ -49,6 +49,9 @@ def _progress_pcts(sse_text: str) -> list[int]:
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: _HW())
+    # Speltiden: utan den stoppar servern körningen innan molnet (se
+    # test_web_server._fejka_kedjan).
+    monkeypatch.setattr(server.media_mod, "probe_duration", lambda *_: 60.0)
     # Ljudmodellen "installerad" så andra passet (ljudkorrigering) faktiskt körs.
     monkeypatch.setattr(server.audio_model, "is_audio_model_installed", lambda *_: True)
     monkeypatch.setattr(server.postprocess, "should_translate", lambda *a, **k: False)
