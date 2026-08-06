@@ -856,6 +856,11 @@ function hydreraFilter() {
   };
   fyll($('#f-klass'), 'Alla klasser', klasser);
   fyll($('#f-kurs'), 'Alla kurser', kurser);
+  /* Planeringens egna väljare läser SAMMA listor. De stod hårdkodade i
+     app.html, och med ett riktigt schema erbjöd de klasser läraren inte har —
+     och saknade dem hon faktiskt undervisar. */
+  fyll($('#p-klass'), 'Ingen klass', klasser);
+  fyll($('#p-kurs'), 'Ingen kurs', kurser);
   ritaKo();                        // köns klass-/kursväljare läser samma listor
 }
 

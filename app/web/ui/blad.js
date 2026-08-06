@@ -62,7 +62,7 @@ window.Blad = (() => {
     return ut.map((u, k) => ({ ...u, orig: u.nr, nr: k + 1 }));
   }
   const provval = provplock;
-  const delBAntal = v => provplock(v).filter(arE).length;
+  const delBAntal = v => uppgifter(v).filter(arE).length;
 
   /* Arbetsbladet och gruppuppgiften håller sig till dagens avsnitt — och till
      den nivå läraren valde. «Nivå» var förr en etikett på metaraden; nu väljer
@@ -106,7 +106,14 @@ window.Blad = (() => {
     ];
   }
 
+  /* Ett prov eller arbetsblad som SERVERN skrivit bär sina egna uppgifter.
+     De får aldrig bytas mot avsnittspoolens: nyVersion räknar om uppgifterna
+     vid varje ändring, och utan den här grinden hade en itererad tavla eller
+     ett rättat prov tappat allt Claude skrev och tyst fyllts med prototypens
+     uppgifter i stället. */
+  const franServern = v => !!(v && v.provId && (v.uppgifter || []).length);
   function uppgifter(v) {
+    if (franServern(v)) return v.uppgifter;
     if (v.typ === 'Prov') return provval(v);
     if (v.typ === 'Tavla') return tavuppg(v);
     return arkval(v);
@@ -118,7 +125,7 @@ window.Blad = (() => {
     const bb = B();
     if (!bb) return [];
     if (v.typ === 'Prov') {
-      const u = provplock(v);
+      const u = uppgifter(v);
       if (!u.length) return [];
       const b = u.filter(arE), c = u.filter(x => !arE(x));
       const enDel = (v.inst || {}).delprov === 'En del' || !b.length || !c.length;
@@ -128,7 +135,7 @@ window.Blad = (() => {
       else { ut.push(bb.provblad(v, b, 'B', true)); ut.push(bb.provblad(v, c, 'C', true)); }
       return ut;
     }
-    const u = arkval(v);
+    const u = uppgifter(v);
     if (!u.length) return [];
     if (v.losningsblad) return [bb.arkfacit(v, u)];
     const ut = [bb.ark(v, u, {})];
@@ -173,7 +180,7 @@ window.Blad = (() => {
 
   function planvalProv(trav, v) {
     const i = v.inst || {};
-    const plock = provplock(v);
+    const plock = uppgifter(v);
     const kvar = new Map(plock.map((u, k) => [u.nr, k + 1]));
     const antalB = plock.filter(arE).length;
     const summa = plock.reduce((a, u) => a + u.p, 0);

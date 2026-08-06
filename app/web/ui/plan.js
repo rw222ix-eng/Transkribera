@@ -819,6 +819,48 @@
       minuter: min
     };
   }
+  /* ══════════ PROVET UR SERVERN ══════════
+     Backenden skriver prov-JSON (app/exam_spec.py): förmåga, uppgiftstyp och
+     poäng i NP:s tre nivåer (e/c/a) per uppgift, med lösning och
+     bedömningsanvisning. Frontendens ark läser en enklare form — nr, poäng,
+     text, nivå, svarsyta, facit. Det här är översättningen mellan dem, och den
+     bor på ETT ställe: renderaren är kontraktet, inte tvärtom.
+
+     Nivån följer av poängen, inte av en egen etikett: en uppgift som ger
+     A-poäng ÄR en A-uppgift. `ut` avgör svarsytan — en rutinuppgift svarar man
+     på, allt annat redovisas på lösblad, vilket är precis skillnaden mellan
+     backendens «rutin» och de övriga uppgiftstyperna. */
+  const provNiva = p => ((p || [])[2] > 0 ? 'A' : (p || [])[1] > 0 ? 'C' : 'E');
+  const provSumma = p => (p || [0, 0, 0]).reduce((a, b) => a + (b || 0), 0);
+  function franProv(exam) {
+    return ((exam || {}).uppgifter || []).map((u, i) => {
+      const delar = u.deluppgifter || [];
+      /* En uppgift med deluppgifter bär poängen [0,0,0] själv — den ligger på
+         deluppgifterna (exam_spec kräver det). */
+      const nivavektor = delar.length
+        ? delar.reduce((a, d) => a.map((x, k) => x + ((d.poang || [])[k] || 0)), [0, 0, 0])
+        : (u.poang || [0, 0, 0]);
+      const ut = {
+        nr: i + 1,
+        p: provSumma(nivavektor),
+        t: u.text || '',
+        niva: provNiva(nivavektor),
+        ut: u.typ === 'rutin' ? 'kort' : 'rakna',
+        f: u.losning || delar.map((d, k) => `${'abcdef'[k]}) ${d.losning || ''}`).join('   '),
+        formaga: u.formaga || '',
+      };
+      if (u.alternativ) { ut.alt = u.alternativ; ut.ratt = u.ratt_alternativ; }
+      if (delar.length) {
+        ut.del = delar.map(d => d.text || '');
+        /* Facitbladets poängsatta väg: varje deluppgift är ett steg med sin
+           egen poäng — samma form som prototypens `vag`. */
+        ut.vag = delar.map((d, k) => [`${'abcdef'[k]}) ${d.losning || ''}`,
+                                      provSumma(d.poang) + ' p']);
+      }
+      return ut;
+    });
+  }
+
   function nyVersion(bas, andring) {
     const vtyp = valt('skrivtyp');
     const nar = vtyp === 'Prov' ? provNar() : null;
@@ -1165,22 +1207,45 @@
        backend ännu: prov och arbetsblad går via /api/exams (nästa skiva) och
        gruppuppgiften har ingen backend alls, så de spelas fortfarande upp i
        prototypens takt. Det är sant om dem, och syns i klockan. */
-    const jobb = typ === 'Tavla' && serverPa() ? ({ signal, log }) =>
-      window.API.strom('/api/planning/generate', {
+    /* Strömmen kan ta slut utan sitt done — servern kan dö, anslutningen
+       brytas. Utan kontrollen blev det ett JS-fel i stället för ett besked
+       (samma fix som i transkriberingen, commit 746ef20). */
+    const kravDone = r => {
+      if (!r) throw new Error('Servern slutade svara mitt i skrivningen. Försök igen.');
+      return r;
+    };
+    const i0 = utkast.inst || {};
+    const JOBB = {
+      Tavla: ({ signal, log }) => window.API.strom('/api/planning/generate', {
         moment: moment.value.trim(),
         klass: utkast.klass, kurs: utkast.kurs,
         datum: utkast.datum || utkast.lektionsdatum || '',
         starttid: String(utkast.tid || utkast.lektionstid || '').split('–')[0].trim(),
-      }, { signal, log }).then(r => {
-        /* Strömmen kan ta slut utan sitt done — servern kan dö, anslutningen
-           brytas. Utan kontrollen blev det ett JS-fel i stället för ett besked
-           (samma fix som i transkriberingen, commit 746ef20). */
-        if (!r) throw new Error('Servern slutade svara mitt i skrivningen. Försök igen.');
+      }, { signal, log }).then(kravDone),
+      /* Provet och arbetsbladet delar rutt och skiljs åt av `typ`: samma
+         skelett och samma balansvalidering, men arbetsbladet får sitt facit i
+         dokumentet och ingen bedömningsanvisning (routes_exam approve). */
+      Prov: ({ signal, log }) => window.API.strom('/api/exams/generate', {
+        kurs: utkast.kurs, klass: utkast.klass,
+        punkter_text: [...vald],
+        antal: Number(i0.antal) || undefined,
+        tid_min: Number(i0.provminuter) || undefined,
+        delar: i0.delprov !== 'En del',
+        datum: utkast.datum || '',
+        typ: typ === 'Arbetsblad' ? 'arbetsblad' : 'prov',
+      }, { signal, log }).then(kravDone).then(r => {
+        if (!r.exam) throw new Error('Provet gick inte att skriva den här gången. Försök igen.');
         return r;
-      }) : null;
+      }),
+    };
+    JOBB.Arbetsblad = JOBB.Prov;
+    /* Gruppuppgiften har ingen backend ännu (etapp 0.6) och spelas därför
+       fortfarande upp i prototypens takt. Det är sant om den, och syns i
+       klockan. */
+    const jobb = serverPa() && JOBB[typ] ? JOBB[typ] : null;
     window.Fraga.kor($('#skrivstatus'), {
       jobb,
-      molnsteg: typ === 'Tavla' && jobb ? 'Claude skriver tavlan' : undefined,
+      molnsteg: jobb ? `Claude skriver ${best(typ)}` : undefined,
       /* Smalt läge: en rad, ett tunt spår, en klocka — samma diskreta förlopp som i
          lektionschatten. Sidan följer med ner till raden i stället för att låta den
          poppa upp utanför synfältet. */
@@ -1210,6 +1275,18 @@
           utkast.wb = res.board;
           utkast.wbId = res.id;
           utkast.wbFel = res.errors || [];
+        }
+        /* Provet servern skrev översätts till arkets form EN gång och följer
+           sedan med pappret. `granser` är kravgränserna (E/C/A) som
+           försättsbladet visar; de räknas av backenden ur poängsummorna och
+           ska inte räknas om här. */
+        if (res && res.exam) {
+          utkast.provId = res.id;
+          utkast.uppgifter = franProv(res.exam);
+          utkast.granser = res.granser || null;
+          utkast.summor = res.summor || null;
+          utkast.provFel = res.errors || [];
+          if (res.exam.titel) utkast.titel = res.exam.titel;
         }
         versioner = [utkast];
         utkastNytt(utkast);
@@ -2133,6 +2210,22 @@
     if (serverPa() && godkant.wbId) {
       skicka(`/api/planning/${godkant.wbId}/approve`, 'POST', {})
         .catch(() => { /* pappret ligger i Sparat; arkivkopian får vänta */ });
+    }
+    /* Provet och arbetsbladet får sin PDF vid godkännandet — Tectonic
+       kompilerar LaTeX:en lokalt, med en fixloop när den inte går igenom.
+       Det tar tid och sker i bakgrunden: pappret ligger redan i Sparat, och
+       toasten säger när PDF:en är på plats eller varför den inte blev det. */
+    if (serverPa() && godkant.provId) {
+      window.API.strom(`/api/exams/${godkant.provId}/approve`, {})
+        .then(r => {
+          if (!r) return;
+          godkant.pdf = r.pdf_path || null;
+          dokUppdatera(godkant);
+          window.toast && window.toast(r.pdf_path
+            ? `${Best(godkant.typ)} är utskriven som PDF`
+            : `${Best(godkant.typ)} är godkänd — PDF:en gick inte att bygga, .tex finns sparad`);
+        })
+        .catch(e => window.toast && window.toast(`PDF:en kunde inte byggas: ${e.message}`));
     }
     /* Ett godkänt dokument hör hemma i tiden. Provet blir en post med bläck-
        kontur och en tryckskyldighet några dagar innan; tavlan bara en post som

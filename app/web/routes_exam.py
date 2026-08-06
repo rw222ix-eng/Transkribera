@@ -40,6 +40,26 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # Code — det finns ingen modell att peka ut, och ingen att välja.
         return ""
 
+    def _ids(body: dict) -> tuple[int | None, int | None]:
+        """Klass och kurs som id. Frontenden känner dem vid NAMN — schemat är
+        namn hela vägen (app/web/ui/kalender.js) — så namnen slås upp här och
+        skapas om de saknas. Skickas id:n direkt används de som de är.
+        Samma mönster som routes_planning._ids."""
+        gid, cid = body.get("group_id"), body.get("course_id")
+        klass = (body.get("klass") or "").strip()
+        kurs = (body.get("kurs") or "").strip()
+        if not klass and not kurs:
+            return gid, cid
+        conn = db.connect(db_file)
+        try:
+            if cid is None and kurs:
+                cid = db.get_or_create_course(conn, kurs)
+            if gid is None and klass:
+                gid = db.get_or_create_group(conn, klass)
+        finally:
+            conn.close()
+        return gid, cid
+
     def _dubbletter(view: dict) -> list[dict]:
         """Fas 5: flagga uppgifter som liknar tidigare godkända provs
         uppgifter i samma kurs (visas i balansmätaren)."""
@@ -132,11 +152,15 @@ def create_router(base: Path, arbiter) -> APIRouter:
     @router.post("/api/exams/generate")
     async def generate(req: Request):
         body = await req.json()
-        course_id = body.get("course_id")
+        group_id, course_id = _ids(body)
         if not course_id:
             return JSONResponse({"error": "välj en kurs"}, status_code=400)
-        group_id = body.get("group_id")
         punkt_ids = [int(p) for p in (body.get("punkter") or [])]
+        # Frontendens Gy25-väljare håller sina egna korta punkttexter (gy.js),
+        # inte kursregistrets rader. Skickas de med används de som de är —
+        # prompten vill ha text, och det ÄR texten läraren valde.
+        punkter_text = [str(p).strip() for p in (body.get("punkter_text") or [])
+                        if str(p).strip()]
         antal = int(body.get("antal") or 10)
         tid_min = int(body.get("tid_min") or 120)
         delar = bool(body.get("delar", True))
@@ -164,7 +188,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 klass = g["namn"] if g else ""
             innehall = db.list_course_content(conn, int(course_id))
             valda = [c for c in innehall if c["id"] in punkt_ids]
-            punkter = [f"{c['rubrik']}: {c['text']}" for c in valda]
+            punkter = [f"{c['rubrik']}: {c['text']}" for c in valda] or punkter_text
             memory = db.memory_for_prompt(conn, int(group_id), int(course_id)) \
                 if group_id else ""
             teman = db.exam_themes_for_prompt(conn, int(course_id))
