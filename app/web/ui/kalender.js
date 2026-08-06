@@ -180,6 +180,76 @@ window.Kalender = (() => {
     return mandagen(datum || iso(new Date()));
   }
 
-  function lagg(post) { poster.push(post); return post; }
-  return { poster, schema, lov, omVeckor, forDatum, schemaFor, lovFor, traff, krockrad, veckan, veckoBild, veckonr, mandagen, nastaSkolvecka, terminen, lagg, ord, idag: () => iso(new Date()) };
+  /* ── UR SERVERN ────────────────────────────────────
+     Listorna ovan är prototypens, och de är default med flit: i Claude Design
+     finns ingen server, och en app som ritar en tom vecka går inte att designa
+     mot. Svarar servern är det DEN som äger schemat, loven och posterna.
+
+     Listorna byts ut PÅ PLATS — hela appen håller redan referenser till dem
+     (klass.js läser K.schema, lov.js läser via veckoBild, plan.js skriver i
+     K.poster) och en ny array hade lämnat halva appen kvar i prototypen.
+
+     Ett tomt schema från servern är ett giltigt svar och betyder precis det:
+     läraren har inte synkat sin kalender än. Appen hittar inte på lektioner
+     för att fylla ut veckan. */
+  const ersatt = (mal, nya) => mal.splice(0, mal.length, ...(nya || []));
+  let franServern = false;
+  function ta(d) {
+    ersatt(schema, d.schema);
+    ersatt(lov, d.lov);
+    ersatt(poster, d.poster);
+    franServern = true;
+  }
+  /* Allt som ritar veckan ritar om sig. Klass.rita drar med sig terminen,
+     briefen och klassprofilen — se klass.js. */
+  function ritaOm() {
+    ['Klass', 'Lov', 'Lektionskal'].forEach(n => {
+      const m = window[n];
+      if (m && m.rita) { try { m.rita(); } catch (e) { /* en trasig vy ska inte ta de andra */ } }
+    });
+    document.dispatchEvent(new CustomEvent('kalender-ny'));
+  }
+
+  /* Synken går åt BÅDA håll i gränssnittet men bara ett håll i data: appen
+     läser schemat, salarna och loven ur Google och skriver aldrig i dem. Bara
+     posterna med ursprung «schema» byts ut — det läraren själv godkänt
+     överlever (server.py: /api/schema/synk). */
+  async function synka() {
+    const A = window.API;
+    if (!A || !A.pa) {
+      /* Ingen server: prototypens uppvisning, i sin egen takt — samma paus som
+         knappen alltid haft, så designen fortsätter visa synkens tre lägen. */
+      await new Promise(r => setTimeout(r, 1100));
+      return { prototyp: true };
+    }
+    try {
+      const d = await A.json('/api/schema/synk', { method: 'POST' });
+      ta(d);
+      ritaOm();
+      return { synkad: d.synkad };
+    } catch (e) {
+      return { fel: e.message };
+    }
+  }
+
+  function lagg(post) {
+    poster.push(post);
+    /* Utan server dör posten vid omladdning — det är prototypens läge, och
+       det är sant om den. Med server ligger den kvar. */
+    if (franServern && window.API) {
+      window.API.json('/api/kalenderposter', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(post),
+      }).catch(() => { /* posten står i vyn; nästa synk rättar listan */ });
+    }
+    return post;
+  }
+
+  const redo = (window.API ? window.API.redo : Promise.resolve())
+    .then(() => (window.API && window.API.pa) ? window.API.json('/api/schema') : null)
+    .then(d => { if (d) { ta(d); ritaOm(); } })
+    .catch(() => { /* servern svarar inte: prototypens vecka står kvar */ });
+
+  return { poster, schema, lov, omVeckor, forDatum, schemaFor, lovFor, traff, krockrad, veckan, veckoBild, veckonr, mandagen, nastaSkolvecka, terminen, lagg, ord, synka, redo, franServern: () => franServern, idag: () => iso(new Date()) };
 })();

@@ -73,7 +73,9 @@ const valda = seg => $$(`[data-seg="${seg}"] [aria-pressed="true"]`).map(b => b.
 let ko = [];
 let steg = 1;
 
-const KLASSVAL = ['9A', '9B'], KURSVAL = ['Matematik 3c', 'Matematik 4'];
+/* Prototypens klasser och kurser. Med server byts de mot lärarens egna, ur
+   schemat och ur inspelningarna — se hydreraFilter(). */
+let KLASSVAL = ['9A', '9B'], KURSVAL = ['Matematik 3c', 'Matematik 4'];
 const MANAD = { jan: 0, feb: 1, mar: 2, apr: 3, maj: 4, jun: 5, jul: 6, aug: 7, sep: 8, okt: 9, nov: 10, dec: 11 };
 const idag = () => new Date().toISOString().slice(0, 10);
 function gissaDatum(namn) {
@@ -769,16 +771,98 @@ function nyttKort(f) {
   a.dataset.klass = klass; a.dataset.kurs = kurs;
   a.dataset.manad = d.toLocaleDateString('sv-SE', { month: 'short' }).replace('.', '');
   a.dataset.datum = iso;
-  const video = /\.(mp4|mkv|mov|webm|avi)$/i.test(f.namn) || /^https?:|youtu/i.test(f.namn);
+  /* En hydrerad post VET om den har bild (servern sparade en videofil) och vilka
+     språk den kördes med. En nyss klar körning vet det inte om sig själv och
+     läser reglagen — som förut. */
+  const video = f.video != null ? !!f.video
+    : (/\.(mp4|mkv|mov|webm|avi)$/i.test(f.namn) || /^https?:|youtu/i.test(f.namn));
+  const talat = f.talat || talatSprak(), mal = f.mal || valt('resultat');
   const langdtext = klartext(f.langd);
   const tum = video
     ? `<div class="tumme" data-typ="video"><image-slot id="tum-${Date.now()}-${Math.round(Math.random() * 1e4)}" shape="rect" placeholder="Bildruta"></image-slot><span class="tumspela"><span>▶</span></span><span class="tumtid">${f.langd}</span></div><span class="tumlangd">${langdtext}</span>`
     : `<div class="tumme" data-typ="ljud"><span class="tumljud">Ljud</span><span class="tumtid">${f.langd}</span></div><span class="tumlangd">${langdtext}</span>`;
   const cc = klass && kurs ? (KURSFARG[kurs] || 'sky') : 'none';
-  a.innerHTML = `<div class="tumkol">${tum}</div><div class="text"><p class="datum"><span class="dagnamn">${d.toLocaleDateString('sv-SE', { weekday: 'short' }).replace('.', '')}</span> ${d.toLocaleDateString('sv-SE', { day: 'numeric', month: 'short' })}</p><p class="namn" data-akt="redigera" data-tip="Klicka för att byta namn"></p><span class="tagg" data-cc="${cc}"><button class="taggdel" type="button" data-del="klass"${klass ? '' : ' data-tom'}>${klass || 'Klass'}</button><span class="taggpunkt">·</span><button class="taggdel" type="button" data-del="kurs"${kurs ? '' : ' data-tom'}>${kurs || 'Kurs'}</button></span><p class="meta"><span class="sprakmark"${talatSprak() === valt('resultat') ? '' : ' data-oversatt'} data-tip="${talatSprak() === valt('resultat') ? 'Talad ' + valt('resultat').toLowerCase() + ', transkriberad på samma språk' : 'Talad ' + talatSprak().toLowerCase() + ', översatt till ' + valt('resultat').toLowerCase()}">${talatSprak() === valt('resultat') ? valt('resultat') : talatSprak() + ' → ' + valt('resultat').toLowerCase()}</span></p></div><div class="knappar"><button class="tyst" data-akt="fraga">Fråga</button><button class="mer" data-akt="mer" aria-haspopup="menu" aria-expanded="false" aria-label="Mer">⋯</button></div>`;
+  a.innerHTML = `<div class="tumkol">${tum}</div><div class="text"><p class="datum"><span class="dagnamn">${d.toLocaleDateString('sv-SE', { weekday: 'short' }).replace('.', '')}</span> ${d.toLocaleDateString('sv-SE', { day: 'numeric', month: 'short' })}</p><p class="namn" data-akt="redigera" data-tip="Klicka för att byta namn"></p><span class="tagg" data-cc="${cc}"><button class="taggdel" type="button" data-del="klass"${klass ? '' : ' data-tom'}>${klass || 'Klass'}</button><span class="taggpunkt">·</span><button class="taggdel" type="button" data-del="kurs"${kurs ? '' : ' data-tom'}>${kurs || 'Kurs'}</button></span><p class="meta"><span class="sprakmark"${talat === mal ? '' : ' data-oversatt'} data-tip="${talat === mal ? 'Talad ' + mal.toLowerCase() + ', transkriberad på samma språk' : 'Talad ' + talat.toLowerCase() + ', översatt till ' + mal.toLowerCase()}">${talat === mal ? mal : talat + ' → ' + mal.toLowerCase()}</span></p></div><div class="knappar"><button class="tyst" data-akt="fraga">Fråga</button><button class="mer" data-akt="mer" aria-haspopup="menu" aria-expanded="false" aria-label="Mer">⋯</button></div>`;
   $('.namn', a).textContent = f.namn.replace(/\.[a-z0-9]+$/i, '');
   return a;
 }
+
+/* ══════════ HYDRERING · arkivet ur servern ══════════
+   Korten i #inspelningar står i app.html för att designprojektet ska visa en
+   fylld app utan server. Svarar servern är det DEN som äger listan: de statiska
+   korten byts ut mot lärarens riktiga lektioner, EN gång vid start, innan
+   filtren, lovbanden och veckan räknas.
+
+   Två källor slås ihop på history_id, för ingen av dem har allt:
+   /api/lessons bär organisationen (datum, klass, kurs — det arkivet sorterar
+   och filtrerar på) och /api/history bär körningen (talat och målspråk, om det
+   finns bild). Att spegla in det saknade fältet i den andra tabellen hade gjort
+   samma sanning till två som kan glida isär. */
+async function hydreraArkivet() {
+  const A = window.API;
+  if (!A || !A.pa) return;
+  let lektioner, historik;
+  try {
+    [lektioner, historik] = await Promise.all([A.json('/api/lessons'), A.json('/api/history')]);
+  } catch (e) {
+    return;                       // servern svarar inte längre: prototypen står kvar
+  }
+  const kor = new Map((historik || []).map(h => [h.id, h]));
+  const vard = $('#inspelningar');
+  $$('.veckogrupp', vard).forEach(g => g.remove());
+  /* Servern sorterar nyast först — korten läggs i den ordningen, i sin egen
+     ISO-vecka (veckogruppFor skapar veckan om den saknas). */
+  (lektioner || []).forEach(les => {
+    const h = kor.get(les.history_id) || {};
+    const datum = les.datum || (les.ts || '').slice(0, 10) || idag();
+    const grupp = veckogruppFor(datum);
+    grupp.hidden = false;
+    grupp.querySelector('.lista').appendChild(nyttKort({
+      namn: les.name || 'Namnlös inspelning',
+      langd: les.dur || '—',
+      klass: les.group || '',
+      kurs: les.course || '',
+      datum,
+      video: !!h.video,
+      talat: les.lang || h.lang || 'Svenska',
+      mal: h.target_lang || les.lang || 'Svenska',
+    }));
+  });
+  hydreraFilter();
+  raknaOm();                      // räknar om rubrikerna och ritar lovbanden (lov.js)
+  window.Klass && window.Klass.rita && window.Klass.rita();
+  window.Lektionskal && window.Lektionskal.rita && window.Lektionskal.rita();
+}
+
+/* Filtren ska erbjuda de klasser och kurser läraren FAKTISKT har: schemat
+   först (det är facit), inspelningarna som komplement för det som ligger i
+   arkivet men inte i veckan. Samma listor styr kökns två väljare. */
+function hydreraFilter() {
+  const K = window.Kalender;
+  const ur = falt => [...new Set([
+    ...((K && K.schema) || []).map(s => s[falt]),
+    ...$$('.kort').map(k => k.dataset[falt]),
+  ].filter(Boolean))].sort((a, b) => a.localeCompare(b, 'sv'));
+  const klasser = ur('klass'), kurser = ur('kurs');
+  if (!klasser.length && !kurser.length) return;   // tom server: behåll prototypen
+  KLASSVAL = klasser; KURSVAL = kurser;
+  const fyll = (sel, tom, lista) => {
+    if (!sel) return;
+    const forra = sel.value;
+    sel.innerHTML = `<option value="">${tom}</option>` + lista.map(v => `<option></option>`).join('');
+    [...sel.options].slice(1).forEach((o, i) => { o.textContent = lista[i]; });
+    sel.value = lista.includes(forra) ? forra : '';
+    sel.dispatchEvent(new Event('change', { bubbles: true }));
+  };
+  fyll($('#f-klass'), 'Alla klasser', klasser);
+  fyll($('#f-kurs'), 'Alla kurser', kurser);
+  ritaKo();                        // köns klass-/kursväljare läser samma listor
+}
+
+/* Schemat först, arkivet sedan: filtren och veckan läser båda, och en halv
+   vecka ritad två gånger är sämre än en hel ritad en gång. */
+(window.Kalender && window.Kalender.redo ? window.Kalender.redo : Promise.resolve())
+  .then(hydreraArkivet);
 
 /* ══════════════════ INSPELNINGAR ══════════════════ */
 function raknaOm() {

@@ -25,7 +25,8 @@ from app import (debug_log, hardware, llm_client,
                  youtube, postprocess, transcriber,
                  history_store, gpu_arbiter, output_store, media, audio_model, db,
                  paths, settings_store, ics_export, backup, report,
-                 calendar_google, course_data, openai_asr, alignment, claude_code)
+                 calendar_google, course_data, lasar_data, openai_asr, alignment,
+                 claude_code)
 # Samma modul som `media` ovan. Inne i transkriberingsjobbet är `media` namnet på
 # SJÄLVA filen (media = Path(...)) och skuggar modulen — aliaset gör att
 # varaktigheten går att fråga efter även där.
@@ -220,6 +221,10 @@ def create_app(base_dir: Path | None = None,
             db.ensure_gy25_nivaer(_conn)
             db.ensure_amnen(_conn)
             db.seed_course_content(_conn, course_data.load_centralt_innehall())
+            # Loven (Etapp 0.1): utan dem ritar veckovyn lovveckor som
+            # arbetsveckor på en färsk installation. INSERT OR IGNORE — en
+            # synkad Google-kalender skrivs aldrig över av seedningen.
+            db.seed_lov(_conn, lasar_data.load_lov())
         finally:
             _conn.close()
     except Exception:
@@ -1073,6 +1078,90 @@ def create_app(base_dir: Path | None = None,
         if gid is None:
             return JSONResponse({"error": "namn krävs"}, status_code=400)
         return {"id": gid, "namn": body.get("namn", "").strip()}
+
+    # ---- Datagrunden: veckoschemat, loven och kalenderposterna (Etapp 0.1) ----
+    #
+    # EN rutt för allt window.Kalender håller (app/web/ui/kalender.js). Den läses
+    # innan första ritningen av veckovyn, terminsvyn, arkivets lovband, briefen
+    # och köns schematräff — tre separata anrop hade gett tre tillfällen att rita
+    # en halv vecka. Fälten är frontendens egna, se db.list_schema.
+    #
+    # Tomt schema är ett giltigt svar och betyder precis det: den här läraren har
+    # inte synkat sin kalender än. Appen hittar aldrig på lektioner.
+
+    @app.get("/api/schema")
+    def api_schema():
+        conn = _db()
+        try:
+            return {"schema": db.list_schema(conn), "lov": db.list_lov(conn),
+                    "poster": db.list_kalenderposter(conn)}
+        finally:
+            conn.close()
+
+    @app.put("/api/schema")
+    async def api_schema_replace(req: Request):
+        """Skriv om hela veckoschemat. PUT och inte POST med flit: schemat är
+        EN sak som ägs av skolan, inte en samling rader att lägga till i."""
+        body = await req.json()
+        rader = body.get("schema") if isinstance(body, dict) else body
+        if not isinstance(rader, list):
+            return JSONResponse({"error": "schema måste vara en lista"}, status_code=400)
+        conn = _db()
+        try:
+            return {"schema": db.replace_schema(conn, rader)}
+        finally:
+            conn.close()
+
+    @app.post("/api/kalenderposter")
+    async def api_kalenderpost_create(req: Request):
+        """Posten läraren godtagit (frontendens Kalender.lagg). Utan den dog
+        kalendern vid omladdning — det var prototypens största lögn."""
+        body = await req.json()
+        conn = _db()
+        try:
+            post = db.add_kalenderpost(
+                conn, datum=body.get("datum", ""), titel=body.get("titel", ""),
+                tid=body.get("tid", ""), klass=body.get("klass", ""),
+                slag=body.get("slag"))
+        finally:
+            conn.close()
+        if post is None:
+            return JSONResponse({"error": "datum och titel krävs"}, status_code=400)
+        return post
+
+    @app.post("/api/schema/synk")
+    def api_schema_synk(dagar: int = 210):
+        """Läs om schemat, salarna, loven och posterna ur Google Kalender.
+
+        Bara 'schema'-ursprunget byts ut — lärarens godkända poster ('appen')
+        överlever synken, precis som frontendens två ursprung säger. Utan
+        Google-koppling svarar rutten vänligt och lämnar datan orörd, som
+        resten av calendar_google."""
+        conn = _db()
+        try:
+            klasser = [g["namn"] for g in db.list_groups(conn)]
+            kurser = [c["namn"] for c in db.list_courses(conn)]
+        finally:
+            conn.close()
+        try:
+            hamtat = calendar_google.read_schema(base, dagar=dagar,
+                                                 klasser=klasser, kurser=kurser)
+        except Exception as e:                       # nätfel, trasig token, …
+            debug_log.get_logger().exception("Kalendersynk misslyckades")
+            return JSONResponse({"error": str(e) or "synken misslyckades"},
+                                status_code=502)
+        if hamtat.get("error"):
+            return JSONResponse(hamtat, status_code=409)
+        conn = _db()
+        try:
+            schema = db.replace_schema(conn, hamtat.get("schema") or [])
+            lov = db.replace_lov(conn, hamtat.get("lov") or [])
+            poster = db.replace_kalenderposter(conn, hamtat.get("poster") or [],
+                                               kalla="schema")
+        finally:
+            conn.close()
+        return {"synkad": datetime.now().isoformat(timespec="seconds"),
+                "schema": schema, "lov": lov, "poster": poster}
 
     # ---- Insikter: LLM-extraktion + redigerbara kort (Fas 2) ------------------
 

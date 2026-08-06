@@ -736,12 +736,26 @@ window.Klass = (() => {
       r.dataset.lage = 'synkar';
       $('.synktext', r).textContent = 'Synkar …';
       window.Tips && window.Tips.gom();
-      setTimeout(() => {
+      /* Raden ritas om av rita() medan synken pågår — ritaSynk går ur på
+         data-lage, så «Synkar …» står kvar tills svaret kommit. */
+      const klar = besked => {
         r.removeAttribute('data-lage');
         synkad = new Date();
         ritaSynk();
-        window.toast && window.toast('Kalendern är synkad — schemat, salarna och loven oförändrade');
-      }, 1100);
+        window.toast && window.toast(besked);
+      };
+      /* Med server läser synken om schemat, salarna och loven ur Google
+         Kalender på riktigt. Utan server är den prototypens uppvisning, i
+         samma takt som förut. */
+      if (K.synka) {
+        K.synka().then(sv => klar(
+          sv && sv.fel ? sv.fel
+            : sv && sv.prototyp
+              ? 'Kalendern är synkad — schemat, salarna och loven oförändrade'
+              : 'Kalendern är synkad — schemat, salarna och loven är omlästa'));
+      } else {
+        setTimeout(() => klar('Kalendern är synkad — schemat, salarna och loven oförändrade'), 1100);
+      }
     });
   }
 

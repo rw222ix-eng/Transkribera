@@ -17,8 +17,9 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 SCOPES = ["https://www.googleapis.com/auth/calendar.events"]
@@ -214,3 +215,154 @@ def create_event(base_dir: Path, title: str, start_iso: str,
     except Exception as exc:
         return {"error": f"Kunde inte skapa händelsen: {exc}"}
     return {"ok": True, "id": created.get("id"), "link": created.get("htmlLink")}
+
+
+# --------------------------------------------------------------- läsa in --
+# Synken åt andra hållet (Etapp 0.1): schemat, salarna och loven kommer FRÅN
+# Google. Appen skriver aldrig i dem — den läser dem och ritar veckan ur dem.
+#
+# Tolkningen är medvetet enkel och beskrivbar i en mening per regel, för en
+# gissning som ser ut som fakta är värre än ett tomt schema:
+#
+#   · heldagshändelse med lovord i titeln  → lov
+#   · ÅTERKOMMANDE tidsatt händelse        → en rad i veckoschemat
+#   · allt annat tidsatt                   → en kalenderpost
+#
+# Klass och kurs plockas ur titeln: känt klass-/kursnamn ur databasen först,
+# annars ett ord som ser ut som en klassbeteckning (9A, NA22, TE21a). Hittas
+# ingen klass blir händelsen en post, inte en lektion — hellre en post för
+# mycket i kalendern än en påhittad lektion i schemat.
+
+_LOVORD = ("lov", "ledig", "helgdag", "röd dag", "klämdag")
+_UPPEHALLSORD = ("studiedag", "avslutning", "uppstart", "planeringsdag",
+                 "kompetensutveckling", "fortbildning")
+_KLASS_MONSTER = re.compile(r"^(?:\d{1,2}[A-Za-zÅÄÖåäö]{1,3}"
+                            r"|[A-ZÅÄÖ]{2,4}\d{2}[A-Za-zÅÄÖåäö]?)$")
+
+
+def _lovtyp(namn: str, dagar: int) -> str | None:
+    """lov | dag | uppehall | None. `dagar` = periodens längd i dagar."""
+    n = (namn or "").lower()
+    if any(o in n for o in _UPPEHALLSORD):
+        return "uppehall"
+    if any(o in n for o in _LOVORD):
+        return "lov" if dagar >= 2 else "dag"
+    return None
+
+
+def _klass_och_kurs(titel: str, klasser: list[str],
+                    kurser: list[str]) -> tuple[str, str]:
+    t = titel or ""
+    tl = t.lower()
+    klass = next((k for k in klasser if k and k.lower() in tl), "")
+    kurs = next((k for k in kurser if k and k.lower() in tl), "")
+    if not klass:
+        # Kvar står orden i titeln: det som SER UT som en klassbeteckning vinner,
+        # och det sista av dem — "Matematik 3c 9A" har klassen sist.
+        for ord_ in reversed(re.split(r"[\s,·/]+", t.strip())):
+            if _KLASS_MONSTER.match(ord_) and ord_.lower() not in (kurs or "").lower():
+                klass = ord_
+                break
+    if not kurs and klass:
+        kurs = re.sub(r"[\s,·/]*" + re.escape(klass) + r"\s*$", "", t).strip()
+    return klass, kurs
+
+
+def _tid(start: str, slut: str) -> str:
+    """"08:15–09:00" ur två ISO-tidsstämplar. Tankestreck, som schemat skriver."""
+    return f"{(start or '')[11:16]}–{(slut or '')[11:16]}"
+
+
+def tolka_handelser(handelser: list[dict], klasser: list[str] | None = None,
+                    kurser: list[str] | None = None) -> dict:
+    """Ren funktion: Google-händelser in, {schema, lov, poster} ut i exakt de
+    former frontendens window.Kalender håller. Testbar utan Google."""
+    klasser = sorted(klasser or [], key=len, reverse=True)
+    kurser = sorted(kurser or [], key=len, reverse=True)
+    schema: list[dict] = []
+    sedda: set[tuple] = set()
+    lov: list[dict] = []
+    poster: list[dict] = []
+    for h in handelser or []:
+        titel = (h.get("summary") or "").strip()
+        if not titel:
+            continue
+        start, slut = h.get("start") or {}, h.get("end") or {}
+        if start.get("date"):                       # heldag
+            fran = start["date"]
+            # Google räknar heldagars slutdatum exklusivt.
+            try:
+                till = (date.fromisoformat(slut.get("date") or fran)
+                        - timedelta(days=1)).isoformat()
+            except ValueError:
+                till = fran
+            if till < fran:
+                till = fran
+            langd = (date.fromisoformat(till) - date.fromisoformat(fran)).days + 1
+            typ = _lovtyp(titel, langd)
+            if typ:
+                lov.append({"fran": fran, "till": till, "namn": titel, "typ": typ})
+            continue
+        s, e = start.get("dateTime") or "", slut.get("dateTime") or ""
+        if not s:
+            continue
+        datum = s[:10]
+        klass, kurs = _klass_och_kurs(titel, klasser, kurser)
+        if h.get("recurringEventId") and klass:
+            try:
+                dag = date.fromisoformat(datum).isoweekday()
+            except ValueError:
+                continue
+            rad = {"dag": dag, "tid": _tid(s, e), "kurs": kurs, "klass": klass,
+                   "sal": (h.get("location") or "").strip()}
+            nyckel = (rad["dag"], rad["tid"], rad["klass"], rad["kurs"], rad["sal"])
+            if nyckel not in sedda:                 # samma vecka, många instanser
+                sedda.add(nyckel)
+                schema.append(rad)
+            continue
+        poster.append({"datum": datum, "tid": _tid(s, e), "titel": titel,
+                       "klass": klass})
+    schema.sort(key=lambda r: (r["dag"], r["tid"], r["klass"]))
+    lov.sort(key=lambda p: (p["fran"], p["till"]))
+    poster.sort(key=lambda p: (p["datum"], p["tid"]))
+    return {"schema": schema, "lov": lov, "poster": poster}
+
+
+def list_events(base_dir: Path, fran: str, till: str) -> list[dict]:
+    """Händelser i primärkalendern mellan två ISO-datum. singleEvents=True gör
+    att återkommande serier expanderas till instanser — varje instans bär
+    recurringEventId, som är det som avslöjar veckoschemat."""
+    creds = _load_creds(base_dir)
+    if creds is None:
+        raise RuntimeError(
+            status(base_dir).get("hint")
+            or "Inte ansluten till Google Kalender — klicka \"Anslut Google-konto\" först.")
+    from googleapiclient.discovery import build
+    service = build("calendar", "v3", credentials=creds, cache_discovery=False)
+    ut: list[dict] = []
+    sida = None
+    while True:
+        svar = service.events().list(
+            calendarId="primary", singleEvents=True, orderBy="startTime",
+            timeMin=f"{fran}T00:00:00Z", timeMax=f"{till}T00:00:00Z",
+            maxResults=2500, pageToken=sida).execute()
+        ut.extend(svar.get("items") or [])
+        sida = svar.get("nextPageToken")
+        if not sida:
+            break
+    return ut
+
+
+def read_schema(base_dir: Path, dagar: int = 210,
+                klasser: list[str] | None = None,
+                kurser: list[str] | None = None) -> dict:
+    """{schema, lov, poster} ur Google Kalender, eller {error} när kopplingen
+    saknas. Läser även bakåt: arkivets lovband ritar terminen som den VAR."""
+    idag = date.today()
+    fran = (idag - timedelta(days=120)).isoformat()
+    till = (idag + timedelta(days=max(1, int(dagar or 210)))).isoformat()
+    try:
+        handelser = list_events(base_dir, fran, till)
+    except RuntimeError as e:
+        return {"error": str(e)}
+    return tolka_handelser(handelser, klasser, kurser)

@@ -21,7 +21,7 @@ import sqlite3
 import threading
 from pathlib import Path
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS courses (
@@ -241,9 +241,59 @@ ALTER TABLE courses ADD COLUMN niva_kort TEXT;
 ALTER TABLE courses ADD COLUMN sort     INTEGER;
 """
 
+# Datagrunden (v7, Etapp 0.1) — ENDAST additiv; rollback: DROP TABLE
+# kalenderposter, lov, schema_lektioner + PRAGMA user_version=6.
+#
+# Tre tabeller som tillsammans är det frontendens window.Kalender läser. Formen
+# är härledd ur app/web/ui/kalender.js — inte uppfunnen här:
+#
+# * schema_lektioner — lärarens veckoschema, en rad per återkommande lektion.
+#   dag 1 = måndag. `tid` lagras precis som schemat skriver den ("08:15–09:00",
+#   med tankestreck) eftersom det är strängen gränssnittet visar och delar på.
+#   Ägs av skolan/Google: appen skriver bara hela veckan på en gång (se
+#   replace_schema), aldrig en enskild lektion.
+# * lov — stängda perioder. typ: lov (hel period) | dag (röd dag/klämdag) |
+#   uppehall (skoldag utan lektioner). Seedas ur app/data/lasar/*.json så att en
+#   färsk installation utan Google-konto ändå vet när skolan är stängd.
+# * kalenderposter — allt annat i kalendern. `kalla` bär frontendens två
+#   ursprung: 'schema' = etsat, läst ur Google och aldrig skrivet av appen;
+#   'appen' = det appen föreslagit och läraren godtagit (Kalender.lagg).
+#   En synk byter bara ut 'schema'-raderna — lärarens egna poster överlever.
+_DATAGRUND_MIGRATION = """
+CREATE TABLE IF NOT EXISTS schema_lektioner (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    dag       INTEGER NOT NULL,      -- 1 = måndag … 5 = fredag
+    tid       TEXT NOT NULL,         -- "08:15–09:00"
+    group_id  INTEGER REFERENCES groups(id)  ON DELETE CASCADE,
+    course_id INTEGER REFERENCES courses(id) ON DELETE SET NULL,
+    sal       TEXT
+);
+CREATE TABLE IF NOT EXISTS lov (
+    id   INTEGER PRIMARY KEY AUTOINCREMENT,
+    fran TEXT NOT NULL,
+    till TEXT NOT NULL,
+    namn TEXT NOT NULL,
+    typ  TEXT NOT NULL DEFAULT 'lov',
+    UNIQUE(fran, till, namn)
+);
+CREATE TABLE IF NOT EXISTS kalenderposter (
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    datum    TEXT NOT NULL,
+    tid      TEXT NOT NULL DEFAULT '',
+    titel    TEXT NOT NULL,
+    group_id INTEGER REFERENCES groups(id) ON DELETE SET NULL,
+    slag     TEXT,                            -- prov|tavla|arbetsblad|… (frontendens v.typ)
+    kalla    TEXT NOT NULL DEFAULT 'appen',   -- schema | appen
+    UNIQUE(datum, tid, titel)
+);
+CREATE INDEX IF NOT EXISTS idx_schema_dag    ON schema_lektioner(dag);
+CREATE INDEX IF NOT EXISTS idx_lov_fran      ON lov(fran);
+CREATE INDEX IF NOT EXISTS idx_kalpost_datum ON kalenderposter(datum);
+"""
+
 _MIGRATIONS: dict[int, str] = {2: _FTS_MIGRATION, 3: _MARKERS_MIGRATION,
                                4: _PLANNING_MIGRATION, 5: _EXAMS_MIGRATION,
-                               6: _GY25_MIGRATION}
+                               6: _GY25_MIGRATION, 7: _DATAGRUND_MIGRATION}
 
 _LESSON_SELECT = """
 SELECT l.*, g.namn AS group_namn, c.namn AS course_namn
@@ -1406,6 +1456,154 @@ def calendar_entries(conn: sqlite3.Connection, year: int, month: int) -> list[di
         })
     entries.sort(key=lambda e: (e["datum"] or "", e["starttid"] or "", e["id"]))
     return entries
+
+
+# --------------------------------------------------------------- datagrunden --
+# Veckoschemat, loven och kalenderposterna — de tre listorna frontendens
+# window.Kalender håller (app/web/ui/kalender.js). Fältnamnen är FRONTENDENS
+# (klass/kurs/sal, fran/till/namn/typ, datum/tid/titel/klass/slag) så att
+# hydreringen är en tilldelning och inte en översättning: översätter man i JS
+# finns formen på två ställen och glider isär.
+
+def list_schema(conn: sqlite3.Connection) -> list[dict]:
+    """Veckoschemat i visningsordning: dag, sedan klockslag. Klass och kurs
+    som namn — schemat visas, det joinas aldrig vidare i gränssnittet."""
+    rows = conn.execute(
+        "SELECT s.dag, s.tid, s.sal, g.namn AS klass, c.namn AS kurs "
+        "FROM schema_lektioner s "
+        "LEFT JOIN groups  g ON g.id = s.group_id "
+        "LEFT JOIN courses c ON c.id = s.course_id "
+        "ORDER BY s.dag, s.tid, s.id").fetchall()
+    return [{"dag": r["dag"], "tid": r["tid"], "kurs": r["kurs"] or "",
+             "klass": r["klass"] or "", "sal": r["sal"] or ""} for r in rows]
+
+
+def replace_schema(conn: sqlite3.Connection, rader: list[dict]) -> list[dict]:
+    """Byt ut HELA veckoschemat. Allt-eller-inget i en transaktion: ett halvt
+    schema är värre än ett gammalt, för veckovyn skulle rita det som sanning.
+    Rader utan dag eller tid hoppas över — de kan inte placeras i veckan.
+
+    Klass- och kursraderna slås upp FÖRE transaktionen: _get_or_create
+    committar när den skapar en rad, och en commit mitt i hade avslutat
+    transaktionen och lämnat schemat halvtomt om nästa rad small."""
+    klara = []
+    for r in rader or []:
+        try:
+            dag = int(r.get("dag") or 0)
+        except (TypeError, ValueError):
+            continue
+        tid = (r.get("tid") or "").strip()
+        if not (1 <= dag <= 7) or not tid:
+            continue
+        klara.append((dag, tid, get_or_create_group(conn, r.get("klass") or ""),
+                      get_or_create_course(conn, r.get("kurs") or ""),
+                      (r.get("sal") or "").strip() or None))
+    with conn:
+        conn.execute("DELETE FROM schema_lektioner")
+        conn.executemany(
+            "INSERT INTO schema_lektioner(dag, tid, group_id, course_id, sal) "
+            "VALUES (?, ?, ?, ?, ?)", klara)
+    return list_schema(conn)
+
+
+def list_lov(conn: sqlite3.Connection) -> list[dict]:
+    rows = conn.execute(
+        "SELECT fran, till, namn, typ FROM lov ORDER BY fran, till, id").fetchall()
+    return [dict(r) for r in rows]
+
+
+def seed_lov(conn: sqlite3.Connection, poster: list[dict]) -> int:
+    """Idempotent seedning ur bundlad läsårsdata (lasar_data.load_lov).
+    INSERT OR IGNORE mot UNIQUE(fran, till, namn): en synkad kalender som
+    redan lagt in samma lov skrivs aldrig över, och omstart lägger inte
+    dubbletter. Returnerar antal nya rader."""
+    n = 0
+    with conn:
+        for p in poster or []:
+            if not (p.get("fran") and p.get("till") and p.get("namn")):
+                continue
+            n += conn.execute(
+                "INSERT OR IGNORE INTO lov(fran, till, namn, typ) VALUES (?, ?, ?, ?)",
+                (p["fran"], p["till"], p["namn"], p.get("typ") or "lov")).rowcount
+    return n
+
+
+def replace_lov(conn: sqlite3.Connection, poster: list[dict]) -> list[dict]:
+    """Google Kalender vet bäst när skolan är stängd — en synk ersätter hela
+    listan. Bundlade lov kommer tillbaka vid nästa appstart bara om de inte
+    krockar (seed_lov är INSERT OR IGNORE)."""
+    with conn:
+        conn.execute("DELETE FROM lov")
+        for p in poster or []:
+            if not (p.get("fran") and p.get("till") and p.get("namn")):
+                continue
+            conn.execute(
+                "INSERT OR IGNORE INTO lov(fran, till, namn, typ) VALUES (?, ?, ?, ?)",
+                (p["fran"], p["till"], p["namn"], p.get("typ") or "lov"))
+    return list_lov(conn)
+
+
+def list_kalenderposter(conn: sqlite3.Connection) -> list[dict]:
+    rows = conn.execute(
+        "SELECT k.datum, k.tid, k.titel, k.slag, k.kalla, g.namn AS klass "
+        "FROM kalenderposter k LEFT JOIN groups g ON g.id = k.group_id "
+        "ORDER BY k.datum, k.tid, k.id").fetchall()
+    out = []
+    for r in rows:
+        p = {"datum": r["datum"], "tid": r["tid"] or "", "titel": r["titel"],
+             "klass": r["klass"] or "", "kalla": r["kalla"]}
+        if r["slag"]:
+            p["slag"] = r["slag"]
+        out.append(p)
+    return out
+
+
+def add_kalenderpost(conn: sqlite3.Connection, *, datum: str, titel: str,
+                     tid: str = "", klass: str = "", slag: str | None = None,
+                     kalla: str = "appen") -> dict | None:
+    """Lägg in en post läraren godtagit (frontendens Kalender.lagg). Idempotent
+    via UNIQUE(datum, tid, titel): godkänner man samma dokument två gånger står
+    det ändå en gång i kalendern."""
+    datum = (datum or "").strip()
+    titel = (titel or "").strip()
+    if not datum or not titel:
+        return None
+    group_id = get_or_create_group(conn, klass or "")
+    with conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO kalenderposter(datum, tid, titel, group_id, slag, kalla) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (datum, (tid or "").strip(), titel, group_id, slag or None, kalla))
+    row = conn.execute(
+        "SELECT k.datum, k.tid, k.titel, k.slag, k.kalla, g.namn AS klass "
+        "FROM kalenderposter k LEFT JOIN groups g ON g.id = k.group_id "
+        "WHERE k.datum = ? AND k.tid = ? AND k.titel = ?",
+        (datum, (tid or "").strip(), titel)).fetchone()
+    if row is None:
+        return None
+    p = {"datum": row["datum"], "tid": row["tid"] or "", "titel": row["titel"],
+         "klass": row["klass"] or "", "kalla": row["kalla"]}
+    if row["slag"]:
+        p["slag"] = row["slag"]
+    return p
+
+
+def replace_kalenderposter(conn: sqlite3.Connection, poster: list[dict],
+                           kalla: str = "schema") -> list[dict]:
+    """Byt ut posterna med ett visst ursprung. En synk rör bara 'schema' —
+    lärarens egna 'appen'-poster (godkända prov, tavlor) överlever.
+    Klasserna slås upp före transaktionen, av samma skäl som i replace_schema."""
+    klara = [(p["datum"], (p.get("tid") or "").strip(), p["titel"],
+              get_or_create_group(conn, p.get("klass") or ""),
+              p.get("slag") or None, kalla)
+             for p in (poster or []) if p.get("datum") and p.get("titel")]
+    with conn:
+        conn.execute("DELETE FROM kalenderposter WHERE kalla = ?", (kalla,))
+        conn.executemany(
+            "INSERT OR IGNORE INTO kalenderposter"
+            "(datum, tid, titel, group_id, slag, kalla) VALUES (?, ?, ?, ?, ?, ?)",
+            klara)
+    return list_kalenderposter(conn)
 
 
 def memory_for_prompt(conn: sqlite3.Connection, group_id: int,
