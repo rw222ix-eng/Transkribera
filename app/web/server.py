@@ -1163,6 +1163,129 @@ def create_app(base_dir: Path | None = None,
         return {"synkad": datetime.now().isoformat(timespec="seconds"),
                 "schema": schema, "lov": lov, "poster": poster}
 
+    # ---- Dokumenten: Sparat-högen och versionsarrayen (Etapp 0.2) ------------
+    #
+    # Pappret lagras som den JSON frontenden håller (app/web/ui/plan.js). Servern
+    # tolkar det inte — den sorterar det, versionerar det och lämnar tillbaka det
+    # oförändrat. Hade backenden haft en egen dokumentform hade det funnits två,
+    # och den som ritas hade inte varit den som sparas.
+
+    @app.get("/api/dokument")
+    def api_dokument_lista():
+        """Hela högen + det utkast som eventuellt låg framme. Ett anrop: båda
+        läses vid start och två anrop hade gett två tillfällen att rita halvt."""
+        conn = _db()
+        try:
+            alla = db.list_dokument(conn)
+        finally:
+            conn.close()
+        return {"sparade": [d for d in alla if d["status"] == "godkant"],
+                "utkast": next((d for d in alla if d["status"] == "utkast"), None)}
+
+    @app.post("/api/dokument")
+    async def api_dokument_skapa(req: Request):
+        body = await req.json()
+        dok = body.get("dokument")
+        if not isinstance(dok, dict):
+            return JSONResponse({"error": "dokument krävs"}, status_code=400)
+        status = body.get("status") or "utkast"
+        if status not in ("utkast", "godkant"):
+            return JSONResponse({"error": "status måste vara utkast eller godkant"},
+                                status_code=400)
+        conn = _db()
+        try:
+            return db.create_dokument(conn, dokument=dok, status=status,
+                                      sort=body.get("sort"), foljd=body.get("foljd"),
+                                      anteckning=body.get("anteckning"))
+        finally:
+            conn.close()
+
+    @app.patch("/api/dokument/{dokument_id}")
+    async def api_dokument_uppdatera(dokument_id: int, req: Request):
+        """Skriver om versionen markören står på, flyttar markören eller byter
+        status. Rättningen och återbruksräknaren är inte ändringar att ångra —
+        de skrivs rakt på pappret."""
+        body = await req.json()
+        conn = _db()
+        try:
+            d = db.update_dokument(
+                conn, dokument_id,
+                dokument=body.get("dokument") if isinstance(body.get("dokument"), dict) else None,
+                markor=body.get("markor"), status=body.get("status"),
+                foljd=body.get("foljd", ...))
+        finally:
+            conn.close()
+        if d is None:
+            return JSONResponse({"error": "okänt dokument"}, status_code=404)
+        return d
+
+    @app.post("/api/dokument/{dokument_id}/versioner")
+    async def api_dokument_version(dokument_id: int, req: Request):
+        """En ändring: ny version efter markören, och det som låg framåt kapas."""
+        body = await req.json()
+        dok = body.get("dokument")
+        if not isinstance(dok, dict):
+            return JSONResponse({"error": "dokument krävs"}, status_code=400)
+        conn = _db()
+        try:
+            d = db.add_dokument_version(conn, dokument_id, dokument=dok,
+                                        anteckning=body.get("anteckning"))
+        finally:
+            conn.close()
+        if d is None:
+            return JSONResponse({"error": "okänt dokument"}, status_code=404)
+        return d
+
+    @app.delete("/api/dokument/{dokument_id}")
+    def api_dokument_radera(dokument_id: int):
+        conn = _db()
+        try:
+            borta = db.delete_dokument(conn, dokument_id)
+        finally:
+            conn.close()
+        if not borta:
+            return JSONResponse({"error": "okänt dokument"}, status_code=404)
+        return {"ok": True}
+
+    @app.put("/api/dokument/ordning")
+    async def api_dokument_ordning(req: Request):
+        """Högens ordning, som klienten håller den: syskonet direkt efter sitt
+        original, en ångrad radering tillbaka på sin plats."""
+        body = await req.json()
+        ids = body.get("ids") if isinstance(body, dict) else body
+        if not isinstance(ids, list):
+            return JSONResponse({"error": "ids måste vara en lista"}, status_code=400)
+        conn = _db()
+        try:
+            db.set_dokument_ordning(conn, ids)
+        finally:
+            conn.close()
+        return {"ok": True}
+
+    # ---- Klassprofilen: det appen lärt sig per klass (Etapp 0.2) -------------
+
+    @app.get("/api/klassprofil")
+    def api_klassprofil():
+        conn = _db()
+        try:
+            return db.get_klassprofil(conn)
+        finally:
+            conn.close()
+
+    @app.put("/api/klassprofil")
+    async def api_klassprofil_spara(req: Request):
+        """Hela minnet i ett svep. Självläkningen (fel bok på fel kurs) körs i
+        frontenden innan den skriver hit — servern ska inte ha en andra åsikt om
+        vad klassen läser."""
+        body = await req.json()
+        if not isinstance(body, dict):
+            return JSONResponse({"error": "minnet måste vara ett objekt"}, status_code=400)
+        conn = _db()
+        try:
+            return db.save_klassprofil(conn, body)
+        finally:
+            conn.close()
+
     # ---- Insikter: LLM-extraktion + redigerbara kort (Fas 2) ------------------
 
     @app.get("/api/lessons/{lesson_id}/insights")

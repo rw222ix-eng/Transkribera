@@ -21,7 +21,7 @@ import sqlite3
 import threading
 from pathlib import Path
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS courses (
@@ -291,9 +291,63 @@ CREATE INDEX IF NOT EXISTS idx_lov_fran      ON lov(fran);
 CREATE INDEX IF NOT EXISTS idx_kalpost_datum ON kalenderposter(datum);
 """
 
+# Dokumentpersistensen (v8, Etapp 0.2) — ENDAST additiv; rollback: DROP TABLE
+# klassprofil, dokument_versioner, dokument + PRAGMA user_version=7.
+#
+# Frontendens Sparat-hög och versionsarray, en mot en (app/web/ui/plan.js):
+#
+# * dokument — ett papper. `status` skiljer utkastet man håller på att skriva
+#   från det godkända som ligger på sin lektion. `markor` är ångra/gör
+#   om-markören (frontendens `nu`) och `sort` är platsen i högen — ett syskon
+#   läggs DIREKT efter sitt original, och den ordningen ska överleva omstart.
+#   `foljd` är det parkerade parförslaget ("skriv provet också").
+# * dokument_versioner — versionsarrayen. Hela dokumentet lagras som JSON, inte
+#   utplattat i kolumner: pappret är frontendens form och den växer (uppgifter,
+#   bilder, referenser, bokuppg, rattat …). Kolumnerna ovan är kopior för att
+#   kunna sortera och söka, aldrig sanningen. Att ändra från ett ångrat läge
+#   kapar det som låg framåt — samma regel som i en textredigerare, se
+#   add_dokument_version.
+# * klassprofil — det appen lärt sig per klass. Låg i localStorage och dog med
+#   webbläsarprofilen; en lärares minne av sin klass ska inte göra det.
+_DOKUMENT_MIGRATION = """
+CREATE TABLE IF NOT EXISTS dokument (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    typ        TEXT,
+    moment     TEXT,
+    group_id   INTEGER REFERENCES groups(id)  ON DELETE SET NULL,
+    course_id  INTEGER REFERENCES courses(id) ON DELETE SET NULL,
+    datum      TEXT,
+    tid        TEXT,
+    status     TEXT NOT NULL DEFAULT 'utkast',   -- utkast | godkant
+    markor     INTEGER NOT NULL DEFAULT 0,
+    sort       INTEGER NOT NULL DEFAULT 0,
+    foljd      TEXT,
+    created_at TEXT,
+    updated_at TEXT
+);
+CREATE TABLE IF NOT EXISTS dokument_versioner (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    dokument_id INTEGER NOT NULL REFERENCES dokument(id) ON DELETE CASCADE,
+    version     INTEGER NOT NULL,
+    data        TEXT NOT NULL,
+    anteckning  TEXT,
+    created_at  TEXT,
+    UNIQUE(dokument_id, version)
+);
+CREATE TABLE IF NOT EXISTS klassprofil (
+    klass      TEXT PRIMARY KEY,
+    data       TEXT NOT NULL,
+    updated_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_dokument_status ON dokument(status, sort);
+CREATE INDEX IF NOT EXISTS idx_dokument_datum  ON dokument(datum);
+CREATE INDEX IF NOT EXISTS idx_dokver_dokument ON dokument_versioner(dokument_id, version);
+"""
+
 _MIGRATIONS: dict[int, str] = {2: _FTS_MIGRATION, 3: _MARKERS_MIGRATION,
                                4: _PLANNING_MIGRATION, 5: _EXAMS_MIGRATION,
-                               6: _GY25_MIGRATION, 7: _DATAGRUND_MIGRATION}
+                               6: _GY25_MIGRATION, 7: _DATAGRUND_MIGRATION,
+                               8: _DOKUMENT_MIGRATION}
 
 _LESSON_SELECT = """
 SELECT l.*, g.namn AS group_namn, c.namn AS course_namn
@@ -1604,6 +1658,186 @@ def replace_kalenderposter(conn: sqlite3.Connection, poster: list[dict],
             "(datum, tid, titel, group_id, slag, kalla) VALUES (?, ?, ?, ?, ?, ?)",
             klara)
     return list_kalenderposter(conn)
+
+
+# ------------------------------------------------------- dokumentpersistens --
+# Sparat-högen och versionsarrayen (Etapp 0.2). Dokumentet lagras som den JSON
+# frontenden håller — vi plockar bara ut det som behövs för att sortera och
+# hitta. Läser man tillbaka ett dokument ska det vara BYTE för byte det som
+# godkändes; ett papper som ändrar form på vägen genom databasen är inte samma
+# papper.
+
+def _dokument_kolumner(dokument: dict) -> dict:
+    """De fält som kopieras ut ur bloben för sortering och sökning."""
+    return {"typ": dokument.get("typ"), "moment": dokument.get("moment"),
+            "datum": dokument.get("datum") or None, "tid": dokument.get("tid") or None}
+
+
+def _dokument_view(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
+    versioner = []
+    for v in conn.execute(
+            "SELECT data, anteckning FROM dokument_versioner "
+            "WHERE dokument_id = ? ORDER BY version", (row["id"],)).fetchall():
+        try:
+            versioner.append(json.loads(v["data"]))
+        except (TypeError, ValueError):
+            continue
+    markor = max(0, min(int(row["markor"] or 0), len(versioner) - 1)) if versioner else 0
+    d = {"id": row["id"], "status": row["status"], "markor": markor,
+         "sort": row["sort"], "foljd": row["foljd"], "versioner": versioner}
+    # `dokument` är versionen markören står på — det som ritas. Klienten läser
+    # den och behöver aldrig veta hur historiken lagras.
+    d["dokument"] = dict(versioner[markor], id=row["id"]) if versioner else None
+    return d
+
+
+def list_dokument(conn: sqlite3.Connection, *, status: str | None = None) -> list[dict]:
+    sql = "SELECT * FROM dokument"
+    params: list = []
+    if status:
+        sql += " WHERE status = ?"
+        params.append(status)
+    sql += " ORDER BY sort, id"
+    return [_dokument_view(conn, r) for r in conn.execute(sql, params).fetchall()]
+
+
+def get_dokument(conn: sqlite3.Connection, dokument_id: int) -> dict | None:
+    row = conn.execute("SELECT * FROM dokument WHERE id = ?", (dokument_id,)).fetchone()
+    return _dokument_view(conn, row) if row else None
+
+
+def create_dokument(conn: sqlite3.Connection, *, dokument: dict,
+                    status: str = "utkast", sort: int | None = None,
+                    foljd: str | None = None,
+                    anteckning: str | None = None) -> dict:
+    """Nytt papper med sin första version. `sort` sist i högen om den utelämnas."""
+    nu = _now()
+    kol = _dokument_kolumner(dokument or {})
+    gid = get_or_create_group(conn, (dokument or {}).get("klass") or "")
+    cid = get_or_create_course(conn, (dokument or {}).get("kurs") or "")
+    if sort is None:
+        rad = conn.execute("SELECT COALESCE(MAX(sort), -1) + 1 AS n FROM dokument").fetchone()
+        sort = rad["n"]
+    with conn:
+        cur = conn.execute(
+            "INSERT INTO dokument(typ, moment, group_id, course_id, datum, tid, "
+            "status, markor, sort, foljd, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)",
+            (kol["typ"], kol["moment"], gid, cid, kol["datum"], kol["tid"],
+             status, sort, foljd, nu, nu))
+        did = cur.lastrowid
+        conn.execute(
+            "INSERT INTO dokument_versioner(dokument_id, version, data, anteckning, created_at) "
+            "VALUES (?, 0, ?, ?, ?)",
+            (did, json.dumps(dokument or {}, ensure_ascii=False),
+             anteckning or (dokument or {}).get("anteckning"), nu))
+    return get_dokument(conn, did)
+
+
+def add_dokument_version(conn: sqlite3.Connection, dokument_id: int, *,
+                         dokument: dict, anteckning: str | None = None) -> dict | None:
+    """Lägg en ny version EFTER markören och kapa det som låg framåt — att ändra
+    från ett ångrat läge slänger gör om-historiken, precis som i en
+    textredigerare (frontendens versioner.slice(0, nu + 1).concat([v]))."""
+    row = conn.execute("SELECT * FROM dokument WHERE id = ?", (dokument_id,)).fetchone()
+    if row is None:
+        return None
+    markor = int(row["markor"] or 0)
+    nu = _now()
+    kol = _dokument_kolumner(dokument or {})
+    gid = get_or_create_group(conn, (dokument or {}).get("klass") or "")
+    cid = get_or_create_course(conn, (dokument or {}).get("kurs") or "")
+    with conn:
+        conn.execute("DELETE FROM dokument_versioner WHERE dokument_id = ? AND version > ?",
+                     (dokument_id, markor))
+        conn.execute(
+            "INSERT INTO dokument_versioner(dokument_id, version, data, anteckning, created_at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (dokument_id, markor + 1, json.dumps(dokument or {}, ensure_ascii=False),
+             anteckning or (dokument or {}).get("anteckning"), nu))
+        conn.execute(
+            "UPDATE dokument SET markor = ?, typ = ?, moment = ?, group_id = ?, "
+            "course_id = ?, datum = ?, tid = ?, updated_at = ? WHERE id = ?",
+            (markor + 1, kol["typ"], kol["moment"], gid, cid, kol["datum"],
+             kol["tid"], nu, dokument_id))
+    return get_dokument(conn, dokument_id)
+
+
+def update_dokument(conn: sqlite3.Connection, dokument_id: int, *,
+                    dokument: dict | None = None, markor: int | None = None,
+                    status: str | None = None, foljd: str | None = ...) -> dict | None:
+    """Skriv om versionen markören står på (rättat, anvand, aterbruk skrivs rakt
+    på pappret — de är inte en ändring att ångra), flytta markören eller byt
+    status. `foljd=...` betyder «rör inte», None betyder «töm»."""
+    row = conn.execute("SELECT * FROM dokument WHERE id = ?", (dokument_id,)).fetchone()
+    if row is None:
+        return None
+    nu = _now()
+    satt: dict = {"updated_at": nu}
+    if markor is not None:
+        antal = conn.execute("SELECT COUNT(*) AS n FROM dokument_versioner "
+                             "WHERE dokument_id = ?", (dokument_id,)).fetchone()["n"]
+        satt["markor"] = max(0, min(int(markor), max(0, antal - 1)))
+    if status is not None:
+        satt["status"] = status
+    if foljd is not ...:
+        satt["foljd"] = foljd
+    if dokument is not None:
+        satt.update(_dokument_kolumner(dokument))
+        satt["group_id"] = get_or_create_group(conn, dokument.get("klass") or "")
+        satt["course_id"] = get_or_create_course(conn, dokument.get("kurs") or "")
+    with conn:
+        if dokument is not None:
+            conn.execute(
+                "UPDATE dokument_versioner SET data = ?, anteckning = ? "
+                "WHERE dokument_id = ? AND version = ?",
+                (json.dumps(dokument, ensure_ascii=False), dokument.get("anteckning"),
+                 dokument_id, satt.get("markor", int(row["markor"] or 0))))
+        conn.execute(f"UPDATE dokument SET {', '.join(k + ' = ?' for k in satt)} "
+                     "WHERE id = ?", (*satt.values(), dokument_id))
+    return get_dokument(conn, dokument_id)
+
+
+def delete_dokument(conn: sqlite3.Connection, dokument_id: int) -> bool:
+    with conn:
+        cur = conn.execute("DELETE FROM dokument WHERE id = ?", (dokument_id,))
+    return cur.rowcount > 0
+
+
+def set_dokument_ordning(conn: sqlite3.Connection, ids: list[int]) -> list[dict]:
+    """Högens ordning som klienten håller den. Ett syskon ligger direkt efter
+    sitt original, och en ångrad radering hamnar tillbaka på sin plats — det är
+    positioner, inte tidsstämplar, och de måste därför skrivas explicit."""
+    with conn:
+        conn.executemany("UPDATE dokument SET sort = ? WHERE id = ?",
+                         [(i, int(d)) for i, d in enumerate(ids or [])])
+    return list_dokument(conn)
+
+
+# ------------------------------------------------------------- klassprofilen --
+
+def get_klassprofil(conn: sqlite3.Connection) -> dict:
+    """Hela minnet som frontenden håller det: {klass: profil}."""
+    ut: dict = {}
+    for r in conn.execute("SELECT klass, data FROM klassprofil").fetchall():
+        try:
+            ut[r["klass"]] = json.loads(r["data"])
+        except (TypeError, ValueError):
+            continue
+    return ut
+
+
+def save_klassprofil(conn: sqlite3.Connection, minne: dict) -> dict:
+    """Ersätt minnet. Frontendens självläkning körs INNAN det sparas — servern
+    är en låda, inte en andra åsikt om vad klassen läser."""
+    nu = _now()
+    rader = [(k, json.dumps(v, ensure_ascii=False), nu)
+             for k, v in (minne or {}).items() if isinstance(v, dict)]
+    with conn:
+        conn.execute("DELETE FROM klassprofil")
+        conn.executemany(
+            "INSERT INTO klassprofil(klass, data, updated_at) VALUES (?, ?, ?)", rader)
+    return get_klassprofil(conn)
 
 
 def memory_for_prompt(conn: sqlite3.Connection, group_id: int,

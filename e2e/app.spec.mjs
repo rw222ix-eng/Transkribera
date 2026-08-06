@@ -49,11 +49,13 @@ test("de två vyerna renderar och flikarna byter mellan dem", async ({ page }) =
   await expect(synlig()).toHaveAttribute("id", "vy-planering");
   await expect(rubrik()).toHaveText("Vad ska du planera?");
 
-  // Schemaveckan är planeringens kärna och byggs av JS, så en tom vecka betyder
-  // att ett skript dog utan att synas. Lektionerna är .schemagrid .skdag .lekt —
-  // INTE .veckan .vpost, som CSS:en också beskriver: de reglerna hör till
-  // designprojektets fristående skissdokument och matchar inget i appen.
-  await expect(synlig().locator(".schemagrid .lekt").first()).toBeVisible();
+  // Schemaveckan är planeringens kärna och byggs av JS, så ett tomt rutnät
+  // betyder att ett skript dog utan att synas. Dagarna ritas alltid — fem
+  // .skdag — medan LEKTIONERNA (.schemagrid .lekt) kommer ur lärarens schema
+  // och alltså saknas tills Google Kalender är synkad. Att kräva en lektion
+  // här hade gjort ett tomt schema till ett testfel; lektionsritningen prövas
+  // mot ett känt schema i schema.spec.mjs i stället.
+  await expect(synlig().locator(".schemagrid .skdag")).toHaveCount(5);
 
   expect(jsfel, jsfel.join(" | ")).toEqual([]);
 });

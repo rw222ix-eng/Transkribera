@@ -51,7 +51,8 @@ window.Profil = (() => {
 
   let minne = {};
   try { minne = JSON.parse(localStorage.getItem(NYCKEL) || 'null') || {}; } catch (e) { minne = {}; }
-  Object.keys(GRUND).forEach(k => { if (!minne[k]) minne[k] = JSON.parse(JSON.stringify(GRUND[k])); });
+  const grundvalar = () => Object.keys(GRUND).forEach(
+    k => { if (!minne[k]) minne[k] = JSON.parse(JSON.stringify(GRUND[k])); });
   /* Minnet ska aldrig kunna lära sig en bok som hör till en annan kurs. Hände det
      ändå en gång (öppen Ma 4-bok medan en Ma 3c-lektion planerades) drog felet med
      sig varje förval efteråt — så det läses av och rättas här vid start.
@@ -61,7 +62,7 @@ window.Profil = (() => {
      senast planerades (`kursNu`), och en läkning mot fel kurs skrev om den
      aktuella kursens bok — varefter speglaNed cementerade felet i kursfacket.
      Därför läks varje kursfack för sig, och toppnivån mot kursNu. */
-  Object.keys(minne).forEach(k => {
+  const laka = () => Object.keys(minne).forEach(k => {
     const p = minne[k];
     if (!p) return;
     const skurs = (K && (K.schema.find(s => s.klass === k) || {}).kurs) || '';
@@ -92,10 +93,49 @@ window.Profil = (() => {
     p.sidorPerLektion = (GRUND[k] || {}).sidorPerLektion || 4;
     p.taktN = 0;
   });
+  grundvalar();
+  laka();
   /* Läkningen ska överleva sidan: rättas minnet bara i RAM kommer felet
      tillbaka nästa gång appen öppnas. */
-  try { localStorage.setItem(NYCKEL, JSON.stringify(minne)); } catch (e) { /* minnet får leva i sessionen */ }
-  const spara = () => { try { localStorage.setItem(NYCKEL, JSON.stringify(minne)); } catch (e) { /* minnet får leva i sessionen */ } };
+  const lokaltSpara = () => { try { localStorage.setItem(NYCKEL, JSON.stringify(minne)); } catch (e) { /* minnet får leva i sessionen */ } };
+  lokaltSpara();
+
+  /* ── UR SERVERN ────────────────────────────────────
+     Minnet av en klass låg i localStorage och dog med webbläsarprofilen — en
+     ny dator, en rensad cache, ett annat fönster, och nio planeringars belägg
+     var borta. Servern är lådan nu. localStorage är kvar som SYNKRON första
+     läsning, så profilen finns direkt vid start, och som hela sanningen i
+     Claude Design där ingen server finns.
+
+     Självläkningen körs om efter hämtningen: schemat kan ha ändrats sedan
+     minnet skrevs, och det är schemat som avgör vilken kurs en klass läser. */
+  let franServern = false;
+  const spara = () => {
+    lokaltSpara();
+    if (!franServern || !window.API) return;
+    window.API.json('/api/klassprofil', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(minne),
+    }).catch(() => { /* minnet står i vyn; nästa skrivning försöker igen */ });
+  };
+  (window.Kalender && window.Kalender.redo ? window.Kalender.redo : Promise.resolve())
+    .then(() => (window.API && window.API.pa) ? window.API.json('/api/klassprofil') : null)
+    .then(d => {
+      if (!d) return;
+      franServern = true;
+      const hade = Object.keys(d).length > 0;
+      if (hade) minne = d;
+      grundvalar();
+      laka();
+      /* Läkningen skrivs tillbaka bara om servern FAKTISKT hade ett minne. En
+         färsk installation ska inte få prototypens 9A och 9B inskrivna i
+         databasen som om appen hade lärt sig dem — det första riktiga valet
+         (lar/sattLage/slapp) skriver ändå hela minnet. */
+      if (hade) spara();
+      rita();
+    })
+    .catch(() => { /* ingen server: minnet är webbläsarens, som förut */ });
 
   const dok = () => (window.Dokument && window.Dokument.sparade ? window.Dokument.sparade() : []);
   /* Två dokument på samma lektion täcker samma sidor. Bara det första flyttar

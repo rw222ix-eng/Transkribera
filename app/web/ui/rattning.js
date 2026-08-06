@@ -205,11 +205,20 @@
       elever, varden: Object.assign({}, varden), andel: summa / tak,
       svaga: s ? s.lista.map(p => ({ kod: p.kod, formaga: p.formaga, text: p.text, andel: p.andel })) : []
     };
+    /* Utfallet är fakta om pappret och skrivs rakt på det — ingen ny version att
+       ångra. Utan det här överlever «Rättat · NN %» inte en omladdning, och
+       källdörr 5 («Läser provets utfall») har inget att läsa. */
+    window.Dokument && window.Dokument.andrad && window.Dokument.andrad(doc);
     window.Dokument && window.Dokument.rita && window.Dokument.rita();
     window.Utgang && window.Utgang.rita();
     window.toast && window.toast(
       s ? `Sparat — uppgift ${rada(s.lista.map(p => p.kod))} ligger som utgångspunkt när du planerar` : 'Sparat',
-      'Ångra', () => { doc.rattat = null; window.Dokument && window.Dokument.rita(); window.Utgang && window.Utgang.rita(); });
+      'Ångra', () => {
+        doc.rattat = null;
+        window.Dokument && window.Dokument.andrad && window.Dokument.andrad(doc);
+        window.Dokument && window.Dokument.rita();
+        window.Utgang && window.Utgang.rita();
+      });
     stang();
   });
 

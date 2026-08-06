@@ -64,6 +64,14 @@ test("veckoschemat kommer från servern, inte ur kalender.js", async ({ page }) 
   expect(schema).toEqual(SCHEMA.schema);
   // Prototypens klasser får inte ligga kvar bredvid lärarens riktiga.
   expect(schema.some(s => s.klass === "9A")).toBe(false);
+
+  // Och veckan RITAS ur det: schemats två lektioner får sin sal, och
+  // kalenderposten står som «Ur kalendern» — tre kort, tre olika ursprung.
+  await page.getByRole("tab", { name: "Planering" }).click();
+  const rutnat = page.locator("#schemagrid");
+  await expect(rutnat.locator(".lekt")).toHaveCount(3);
+  await expect(rutnat.locator(".lektsal")).toHaveText(["C112", "C112"]);
+  await expect(rutnat.locator(".lekt", { hasText: "Ämneslagsmöte" })).toContainText("Ur kalendern");
 });
 
 test("arkivets kort är lärarens lektioner, inte app.html:s", async ({ page }) => {

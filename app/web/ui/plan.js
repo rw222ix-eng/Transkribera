@@ -18,6 +18,107 @@
 
   let vald = new Set(), versioner = [], nu = -1, sparat = [];
 
+  /* ══════════ PERSISTENS ══════════
+     `sparat` och `versioner` är fortfarande appens listor: allt ritar ur dem,
+     synkront, och ingen vy väntar på nätet. Servern är deras spegel, och varje
+     mutation går genom EN funktion här — så finns det ett enda ställe i
+     planeringen som vet att det finns en databas.
+
+     Utan server gör funktionerna ingenting. Då är högen prototypens igen,
+     precis som i Claude Design, och det är sant om den: den dör vid omladdning.
+
+     Pappret skickas som det är. Backenden lagrar JSON:en och lämnar tillbaka
+     den oförändrad — hade den haft en egen dokumentform hade det funnits två,
+     och den som ritas hade inte varit den som sparas. */
+  let utkastId = null;
+  /* Skrivningen av ett nytt papper är asynkron men allt annat är synkront.
+     Löftet hålls VID SIDAN av dokumentet (WeakMap, inte ett fält) — ett fält
+     hade följt med in i varje JSON.stringify-kopia och ut till servern. */
+  const sparasNu = new WeakMap();
+  const serverPa = () => !!(window.API && window.API.pa);
+  const skicka = (vag, metod, kropp) => window.API.json(vag, {
+    method: metod,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(kropp || {}),
+  });
+  const dokKlart = v => sparasNu.get(v) || Promise.resolve(null);
+
+  function dokSpara(v) {
+    if (!serverPa() || !v) return Promise.resolve(null);
+    delete v.id;
+    const p = skicka('/api/dokument', 'POST', { dokument: v, status: 'godkant' })
+      .then(d => { v.id = d.id; return d; })
+      .catch(() => null);
+    sparasNu.set(v, p);
+    return p;
+  }
+  /* Rättningen, återbruksräknaren och syskonmärkningen skrivs rakt på pappret:
+     de är fakta om det, inte ändringar att ångra, och får därför ingen ny
+     version. */
+  function dokUppdatera(v) {
+    if (!serverPa() || !v) return Promise.resolve(null);
+    return dokKlart(v).then(() => v.id
+      ? skicka('/api/dokument/' + v.id, 'PATCH', { dokument: v }).catch(() => null)
+      : null);
+  }
+  function dokTaBort(v) {
+    if (!serverPa() || !v) return Promise.resolve(null);
+    return dokKlart(v).then(() => v.id
+      ? window.API.json('/api/dokument/' + v.id, { method: 'DELETE' }).catch(() => null)
+      : null);
+  }
+  /* Platsen i högen bär betydelse: syskonet ligger direkt efter sitt original
+     och en ångrad radering hamnar tillbaka där den låg. Ordningen skrivs därför
+     explicit, efter varje flytt. */
+  function dokOrdna() {
+    if (!serverPa()) return;
+    Promise.all(sparat.map(dokKlart)).then(() => {
+      const ids = sparat.map(v => v.id).filter(Boolean);
+      if (ids.length) skicka('/api/dokument/ordning', 'PUT', { ids }).catch(() => {});
+    });
+  }
+
+  /* ── Utkastet och dess versionsarray ────────────────
+     Ett utkast åt gången: så fungerar planeringen — ett papper ligger framme.
+     Godkännandet BYTER status på samma rad i stället för att skapa en kopia;
+     annars hade ett papper blivit två. */
+  function utkastNytt(v) {
+    if (!serverPa()) return;
+    utkastId = null;
+    skicka('/api/dokument', 'POST', { dokument: v, status: 'utkast' })
+      .then(d => { utkastId = d.id; })
+      .catch(() => {});
+  }
+  function utkastVersion(v) {
+    if (!serverPa() || !utkastId) return;
+    skicka('/api/dokument/' + utkastId + '/versioner', 'POST', { dokument: v }).catch(() => {});
+  }
+  function utkastMarkor(i) {
+    if (!serverPa() || !utkastId) return;
+    skicka('/api/dokument/' + utkastId, 'PATCH', { markor: i }).catch(() => {});
+  }
+  function utkastGodkann(v) {
+    const id = utkastId;
+    utkastId = null;
+    if (!serverPa()) return Promise.resolve(null);
+    if (!id) return dokSpara(v);          // utkastet hann aldrig skrivas
+    delete v.id;
+    const p = skicka('/api/dokument/' + id, 'PATCH',
+                     { status: 'godkant', dokument: v, foljd: null })
+      .then(d => { v.id = d.id; return d; })
+      .catch(() => null);
+    sparasNu.set(v, p);
+    return p;
+  }
+  /* Det parkerade parförslaget hör till pappret som väntar på sin följeslagare
+     — inte till sessionen. Därför bor det på det godkända dokumentet. */
+  function dokFoljd(v, typ) {
+    if (!serverPa() || !v) return;
+    dokKlart(v).then(() => {
+      if (v.id) skicka('/api/dokument/' + v.id, 'PATCH', { foljd: typ || null }).catch(() => {});
+    });
+  }
+
   /* Varje dokumenttyp har sina egna val — en tavla läraren skriver av, ett prov med
      provtid och poängnivåer, ett arbetsblad med nivå och facit. */
   /* Bestämd form per dokumenttyp. Fyra typer betyder att '+ et' inte längre
@@ -1011,11 +1112,13 @@
   function angra() {
     if (nu <= 0) return;
     visa(nu - 1);
+    utkastMarkor(nu);
     window.toast && window.toast('Ändringen ångrad', 'Gör om', gorOm);
   }
   function gorOm() {
     if (nu < 0 || nu >= versioner.length - 1) return;
     visa(nu + 1);
+    utkastMarkor(nu);
   }
 
   $('#skriv').addEventListener('click', () => {
@@ -1074,6 +1177,7 @@
       ],
       efterKlar: () => {
         versioner = [utkast];
+        utkastNytt(utkast);
         /* Ett nytt dokument öppnas alltid på ELEVERNAS ark. Stod växlaren kvar på
            facit sedan förra dokumentet fick läraren lösningsgången i stället för
            uppgifterna — och kunde bara ändra i facit. */
@@ -1168,6 +1272,7 @@
   function startaFoljd(o) {
     if (!o) return;
     foljdVantar = null;
+    dokFoljd(o.forlaga, null);
     ritaFoljeVanta();
     refDok = JSON.parse(JSON.stringify(o.forlaga));
     $('#refhur').value = `Följer ${best(o.forlaga.typ)}: samma exempel och begrepp, men som ${o.typ.toLowerCase()}.`;
@@ -1190,10 +1295,14 @@
   $('#foljesen') && $('#foljesen').addEventListener('click', () => {
     stangNotis();
     ritaFoljeVanta();
+    /* «Inte nu» är en parkering, inte ett avslag — och en parkering som inte
+       överlever en omladdning är ett avslag i förklädnad. */
+    if (foljdVantar) dokFoljd(foljdVantar.forlaga, foljdVantar.typ);
     window.toast && window.toast(`${Best(foljdVantar ? foljdVantar.typ : 'Dokumentet')} ligger kvar högst upp i planeringen`);
   });
   $('#foljevantaja') && $('#foljevantaja').addEventListener('click', () => startaFoljd(foljdVantar));
   $('#foljevantabort') && $('#foljevantabort').addEventListener('click', () => {
+    dokFoljd(foljdVantar && foljdVantar.forlaga, null);
     foljdVantar = null;
     ritaFoljeVanta();
     window.toast && window.toast('Släppt — du kan alltid bygga vidare ur Sparat');
@@ -1522,6 +1631,7 @@
     });
     versioner = versioner.slice(0, nu + 1).concat([v]);
     visa(versioner.length - 1);
+    utkastVersion(v);
   }
   $('#angra').addEventListener('click', angra);
   $('#gorom').addEventListener('click', gorOm);
@@ -1637,6 +1747,7 @@
         return null;
       }
       const kopia = JSON.parse(JSON.stringify(v));
+      delete kopia.id;                    // kopian är ett eget papper, inte originalet
       delete kopia.rattat;
       delete kopia.syskonAv;
       delete kopia.syskontext;
@@ -1650,6 +1761,8 @@
       kopia.tid = p.tid || '';
       v.anvand = (v.anvand || 1) + 1;
       sparat.push(kopia);
+      dokSpara(kopia);
+      dokUppdatera(v);                    // räknaren står på originalet
       ritaSparat();
       window.Klass && window.Klass.rita();
       window.toast && window.toast(
@@ -1658,6 +1771,8 @@
           const j = sparat.indexOf(kopia);
           if (j > -1) sparat.splice(j, 1);
           v.anvand = Math.max(1, (v.anvand || 2) - 1);
+          dokTaBort(kopia);
+          dokUppdatera(v);
           ritaSparat();
           window.Klass && window.Klass.rita();
         });
@@ -1671,16 +1786,25 @@
       const syskon = sparat.filter(x => x !== v && x.losningsblad && x.typ === v.typ && x.moment === v.moment && x.datum === v.datum);
       const bort = [{ i, v }].concat(syskon.map(s => ({ i: sparat.indexOf(s), v: s })));
       bort.sort((a, b) => b.i - a.i).forEach(b => sparat.splice(b.i, 1));
+      bort.forEach(b => dokTaBort(b.v));
       ritaSparat();
       window.Klass && window.Klass.rita();
       window.toast && window.toast(`${dokNamn(v)} raderad${syskon.length ? ' med sitt facit' : ''}`, 'Ångra', () => {
         bort.slice().sort((a, b) => a.i - b.i).forEach(b => sparat.splice(b.i, 0, b.v));
+        /* Ångrandet skriver tillbaka pappret — det får ett nytt id, men ligger
+           på sin gamla plats i högen. */
+        bort.forEach(b => dokSpara(b.v));
+        dokOrdna();
         ritaSparat();
         window.Klass && window.Klass.rita();
       });
     },
     /* «Börja om» släpper också den väntande följeslagaren — allt rensat betyder allt. */
-    slappFoljd() { foljdVantar = null; foljdKvar = null; ritaFoljeVanta(); const r = $('#foljerad'); if (r) r.hidden = true; },
+    slappFoljd() { dokFoljd(foljdVantar && foljdVantar.forlaga, null); foljdVantar = null; foljdKvar = null; ritaFoljeVanta(); const r = $('#foljerad'); if (r) r.hidden = true; },
+    /* Något skrevs rakt på pappret — rättningen är den som gör det. Skickas det
+       inte hit står «Rättat · 68 %» kvar tills sidan laddas om, och då är det
+       borta. */
+    andrad: v => dokUppdatera(v),
     forlagan: () => refDok,
     /* Omprovet startas härifrån: från kortet, från lektionen i veckan eller från
        förhandsvisningen — samma väg, ett förifyllt formulär och en dag att välja. */
@@ -1701,6 +1825,7 @@
       });
       v.uppgifter = uppgifter.map((u, n) => Object.assign({}, u, { nr: n + 1 }));
       sparat.push(v);
+      dokSpara(v);
       ritaSparat();
       return v;
     }
@@ -1810,6 +1935,7 @@
   function skapaSyskon(i, sort) {
     const orig = sparat[i];
     const v = JSON.parse(JSON.stringify(orig));
+    delete v.id;                          // syskonet är ett eget papper
     v.syskonAv = dokNamn(orig);
     v.variant = sort.bricka;
     v.syskontext = sort.text;
@@ -1819,9 +1945,12 @@
     v.uppgifter = blanda(v.uppgifter || []).map((u, n) => Object.assign({}, u, { t: nyaTal(u.t), nr: n + 1 }));
     v.andrat = [];
     sparat.splice(i + 1, 0, v);
+    dokSpara(v);
+    dokOrdna();                           // syskonet ligger direkt efter sitt original
     ritaSparat();
     window.toast && window.toast(`${sort.bricka} skapad — ${sort.text}`, 'Ångra', () => {
       sparat.splice(i + 1, 1);
+      dokTaBort(v);
       ritaSparat();
     });
   }
@@ -1871,9 +2000,12 @@
   }
   function taBort(i, namn) {
     const bort = sparat.splice(i, 1)[0];
+    dokTaBort(bort);
     ritaSparat();
     window.toast && window.toast(`${namn} raderades`, 'Ångra', () => {
       sparat.splice(i, 0, bort);
+      dokSpara(bort);
+      dokOrdna();
       ritaSparat();
       const kort = $$('#sparatnat .dokkort')[i];
       if (kort) { kort.setAttribute('data-traff', ''); setTimeout(() => kort.removeAttribute('data-traff'), 2400); }
@@ -1917,7 +2049,10 @@
   $('#godkann').addEventListener('click', () => {
     if (nu < 0) return;
     const v = versioner[nu];
-    sparat.push(JSON.parse(JSON.stringify(v)));
+    const godkant = JSON.parse(JSON.stringify(v));
+    delete godkant.id;
+    sparat.push(godkant);
+    utkastGodkann(godkant);
     /* Ett godkänt dokument hör hemma i tiden. Provet blir en post med bläck-
        kontur och en tryckskyldighet några dagar innan; tavlan bara en post som
        släcker «Tavla saknas» i veckan. Ingenting läggs in innan godkännandet. */
@@ -1935,8 +2070,10 @@
     const i = v.inst || {};
     if ((v.typ === 'Prov' && i.losningar) || (v.typ === 'Arbetsblad' && i.facit === 'Separat facit')) {
       const l = JSON.parse(JSON.stringify(v));
+      delete l.id;
       l.losningsblad = true;
       sparat.push(l);
+      dokSpara(l);
     }
     ritaSparat();
     omprovAv = null;
@@ -1962,7 +2099,10 @@
     const extra = (v.typ === 'Prov' && i.losningar) || (v.typ === 'Arbetsblad' && i.facit === 'Separat facit');
     /* Godkännandet är grinden: först här föreslås nästa i paret, och då med det
        sparade dokumentet som förlaga. */
-    const par = foljdKvar ? { typ: foljdKvar, forlaga: JSON.parse(JSON.stringify(v)) } : null;
+    /* Förlagan är det GODKÄNDA pappret självt, inte en kopia av versionen: det
+       är på det raden om en väntande följeslagare ska stå, och det är det som
+       ligger i Sparat efter en omladdning. */
+    const par = foljdKvar ? { typ: foljdKvar, forlaga: godkant } : null;
     foljdKvar = null;
     $('#foljerad').hidden = true;
     if (par) {
@@ -2271,4 +2411,58 @@
   ritaKallval();
   planKoll();
   ritaSparat();
+
+  /* ══════════ HYDRERING ══════════
+     Högen ovan är prototypens, och den är default med flit: designprojektet har
+     ingen server och en tom planering går inte att designa mot. Svarar servern
+     är det lärarens egna papper som gäller — med sin ordning, sin rättning,
+     sina syskon, sitt parkerade parförslag och sitt eventuella utkast.
+
+     Schemat först (Kalender.redo): klassvyn ritas om här, och den läser veckan. */
+  async function hydreraDokument() {
+    if (!serverPa()) return;
+    let d;
+    try { d = await window.API.json('/api/dokument'); } catch (e) { return; }
+    const rader = d.sparade || [];
+    sparat = rader.map(x => x.dokument).filter(Boolean);
+    /* Det parkerade parförslaget bor på pappret som väntar på sin följeslagare
+       — «inte nu» ska betyda inte nu, också efter en omladdning. */
+    const i = rader.findIndex(x => x.foljd && x.dokument);
+    if (i > -1) {
+      foljdVantar = { typ: rader[i].foljd, forlaga: sparat[i] };
+      ritaFoljeVanta();
+    }
+    ritaSparat();
+    window.Klass && window.Klass.rita && window.Klass.rita();
+    if (d.utkast && (d.utkast.versioner || []).length) aterstallUtkast(d.utkast);
+  }
+  /* Utkastet låg framme när fliken stängdes, och ska ligga framme när den öppnas
+     igen — med sin ångra-historik OCH med stegen ovanför ifyllda. Ett papper som
+     hänger över en tom planering är sämre än inget papper alls. */
+  function aterstallUtkast(u) {
+    utkastId = u.id;
+    versioner = u.versioner;
+    const v = versioner[u.markor] || versioner[0];
+    if (!v) return;
+    moment.value = v.moment || '';
+    if (v.kurs) { $('#p-kurs').value = v.kurs; $('#p-kurs').dispatchEvent(new Event('change', { bubbles: true })); }
+    if (v.klass) { $('#p-klass').value = v.klass; $('#p-klass').dispatchEvent(new Event('change', { bubbles: true })); }
+    if (v.lektionsdatum) $('#p-datum').value = v.lektionsdatum;
+    if (v.lektionstid) $('#p-tid').value = v.lektionstid;
+    vald.clear();
+    (v.gy || []).forEach(g => vald.add(g));
+    /* Upplägget är pappersts eget — provtiden och nivåmixen står på det, inte i
+       de förval som råkade ligga i panelen när sidan laddades. */
+    if (v.inst && inst[v.typ]) Object.assign(inst[v.typ], JSON.parse(JSON.stringify(v.inst)));
+    sattSkrivtyp(v.typ);
+    visarLosning = false;
+    $('#dokument').setAttribute('data-litet', '');
+    ritaGy();
+    ritaTypval();
+    visa(u.markor);
+    planKoll();
+    if (window.PlanSteg) { window.PlanSteg.las(4, false); window.PlanSteg.gaTill(4); }
+  }
+  (window.Kalender && window.Kalender.redo ? window.Kalender.redo : Promise.resolve())
+    .then(hydreraDokument);
 })();
