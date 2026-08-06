@@ -234,6 +234,13 @@ def create_event(base_dir: Path, title: str, start_iso: str,
 # mycket i kalendern än en påhittad lektion i schemat.
 
 _LOVORD = ("lov", "ledig", "helgdag", "röd dag", "klämdag")
+# De röda dagarna heter något — de innehåller inte ordet «lov». Utan den här
+# listan läste synken tillbaka «Långfredag» och «Kristi himmelsfärd» som
+# vanliga heldagsanteckningar och skolan såg öppen ut på en stängd dag.
+_HELGDAGAR = ("nyårsdag", "trettondedag", "skärtorsdag", "långfredag",
+              "påskafton", "påskdag", "annandag", "valborg", "första maj",
+              "kristi himmelsfärd", "pingst", "nationaldag", "midsommar",
+              "alla helgons", "julafton", "juldag", "nyårsafton")
 _UPPEHALLSORD = ("studiedag", "avslutning", "uppstart", "planeringsdag",
                  "kompetensutveckling", "fortbildning")
 _KLASS_MONSTER = re.compile(r"^(?:\d{1,2}[A-Za-zÅÄÖåäö]{1,3}"
@@ -245,6 +252,8 @@ def _lovtyp(namn: str, dagar: int) -> str | None:
     n = (namn or "").lower()
     if any(o in n for o in _UPPEHALLSORD):
         return "uppehall"
+    if any(o in n for o in _HELGDAGAR):
+        return "lov" if dagar >= 3 else "dag"
     if any(o in n for o in _LOVORD):
         return "lov" if dagar >= 2 else "dag"
     return None
@@ -308,7 +317,14 @@ def tolka_handelser(handelser: list[dict], klasser: list[str] | None = None,
             continue
         datum = s[:10]
         klass, kurs = _klass_och_kurs(titel, klasser, kurser)
-        if h.get("recurringEventId") and klass:
+        # En återkommande händelse med en klass i titeln är en lektion — MEN
+        # bara om det också står en kurs appen känner igen. Mentorstiden och
+        # klassens utvecklingssamtal återkommer varje vecka och bär klassens
+        # namn, och de är inte lektioner att planera. Utan en kurslista att
+        # jämföra mot (tester, en tom installation) räcker klassen.
+        lektion = bool(h.get("recurringEventId") and klass
+                       and (not kurser or any(k.lower() in titel.lower() for k in kurser)))
+        if lektion:
             try:
                 dag = date.fromisoformat(datum).isoweekday()
             except ValueError:
@@ -455,16 +471,22 @@ def skriv_schema(base_dir: Path, *, schema: list[dict], termin: dict,
     return {"skapade": skapade, "fel": fel}
 
 
-def read_schema(base_dir: Path, dagar: int = 210,
+def read_schema(base_dir: Path, dagar: int = 330,
                 klasser: list[str] | None = None,
                 kurser: list[str] | None = None) -> dict:
-    """{schema, lov, poster} ur Google Kalender, eller {error} när kopplingen
-    saknas. Läser även bakåt: arkivets lovband ritar terminen som den VAR."""
+    """{schema, lov, poster, fran, till} ur Google Kalender, eller {error} när
+    kopplingen saknas.
+
+    Fönstret spänner ett helt läsår åt båda håll: arkivets lovband ritar
+    terminen som den VAR, och planeringen behöver loven som kommer. `fran` och
+    `till` följer med i svaret eftersom den som skriver in resultatet bara får
+    ersätta det som ligger INOM fönstret — annars raderar en synk i augusti
+    påsklovet nästa vår bara för att det låg utanför läsningen."""
     idag = date.today()
-    fran = (idag - timedelta(days=120)).isoformat()
-    till = (idag + timedelta(days=max(1, int(dagar or 210)))).isoformat()
+    fran = (idag - timedelta(days=240)).isoformat()
+    till = (idag + timedelta(days=max(1, int(dagar or 330)))).isoformat()
     try:
         handelser = list_events(base_dir, fran, till)
     except RuntimeError as e:
         return {"error": str(e)}
-    return tolka_handelser(handelser, klasser, kurser)
+    return dict(tolka_handelser(handelser, klasser, kurser), fran=fran, till=till)

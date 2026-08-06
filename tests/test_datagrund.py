@@ -238,6 +238,43 @@ def test_kanda_namn_ur_databasen_vinner_over_monstret():
     assert ut["schema"][0]["kurs"] == "Matematik, nivå 2"
 
 
+def test_aterkommande_utan_kant_kurs_blir_post_inte_lektion():
+    """Mentorstiden och utvecklingssamtalen återkommer varje vecka och bär
+    klassens namn — men de är inga lektioner att planera. Känner appen till
+    sina kurser är det KURSEN som avgör."""
+    ut = calendar_google.tolka_handelser(
+        [_tid("2026-08-17", "08:25", "08:55", summary="Mentorstid NA25",
+              recurringEventId="r9"),
+         _tid("2026-08-17", "09:05", "10:20", summary="Matematik, nivå 2c NA25",
+              location="P807", recurringEventId="r8")],
+        klasser=["NA25"], kurser=["Matematik, nivå 2c"])
+    assert [r["kurs"] for r in ut["schema"]] == ["Matematik, nivå 2c"]
+    assert [p["titel"] for p in ut["poster"]] == ["Mentorstid NA25"]
+
+
+def test_synk_utanfor_fonstret_raderar_inte_loven(conn):
+    """En synk i augusti läser inte påsklovet nästa vår — och får därför inte
+    radera det heller."""
+    db.seed_lov(conn, [
+        {"fran": "2026-10-26", "till": "2026-10-30", "namn": "Höstlov", "typ": "lov"},
+        {"fran": "2027-03-29", "till": "2027-04-02", "namn": "Påsklov", "typ": "lov"},
+    ])
+    db.replace_lov(conn, [{"fran": "2026-10-26", "till": "2026-10-31",
+                           "namn": "Höstlov", "typ": "lov"}],
+                   fran="2026-08-01", till="2026-12-31")
+    namn = [(p["namn"], p["till"]) for p in db.list_lov(conn)]
+    assert namn == [("Höstlov", "2026-10-31"), ("Påsklov", "2027-04-02")]
+
+
+def test_synk_utanfor_fonstret_raderar_inte_posterna(conn):
+    db.replace_kalenderposter(conn, [
+        {"datum": "2026-09-01", "titel": "Konferens"},
+        {"datum": "2027-05-03", "titel": "Konferens"}], kalla="schema")
+    db.replace_kalenderposter(conn, [{"datum": "2026-09-08", "titel": "Konferens"}],
+                              kalla="schema", fran="2026-08-01", till="2026-12-31")
+    assert [p["datum"] for p in db.list_kalenderposter(conn)] == ["2026-09-08", "2027-05-03"]
+
+
 def test_engangshandelse_blir_post_inte_lektion():
     ut = calendar_google.tolka_handelser([_tid("2026-08-20", "13:00", "14:30",
                                                summary="Ämneslagsmöte")])
@@ -409,6 +446,20 @@ def test_rutten_kraver_ett_schema(client, monkeypatch):
     assert client.post("/api/schema/till-google").json()["skapade"] == 17
     client.put("/api/schema", json={"schema": []})
     assert client.post("/api/schema/till-google").status_code == 409
+
+
+def test_rada_dagar_kanns_igen_pa_sitt_namn():
+    """«Långfredag» och «Kristi himmelsfärd» innehåller inte ordet lov — men
+    skolan är stängd. Utan namnlistan såg en stängd dag öppen ut."""
+    heldag = lambda namn, fran, till: {
+        "summary": namn, "start": {"date": fran}, "end": {"date": till}}
+    ut = calendar_google.tolka_handelser([
+        heldag("Långfredag", "2027-03-26", "2027-03-27"),
+        heldag("Kristi himmelsfärd", "2027-05-06", "2027-05-07"),
+        heldag("Midsommarafton", "2027-06-25", "2027-06-26"),
+    ])
+    assert {p["namn"]: p["typ"] for p in ut["lov"]} == {
+        "Långfredag": "dag", "Kristi himmelsfärd": "dag", "Midsommarafton": "dag"}
 
 
 def test_heldagshandelse_utan_lovord_ignoreras():

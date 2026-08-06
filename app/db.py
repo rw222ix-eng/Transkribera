@@ -1582,12 +1582,18 @@ def seed_lov(conn: sqlite3.Connection, poster: list[dict]) -> int:
     return n
 
 
-def replace_lov(conn: sqlite3.Connection, poster: list[dict]) -> list[dict]:
-    """Google Kalender vet bäst när skolan är stängd — en synk ersätter hela
-    listan. Bundlade lov kommer tillbaka vid nästa appstart bara om de inte
-    krockar (seed_lov är INSERT OR IGNORE)."""
+def replace_lov(conn: sqlite3.Connection, poster: list[dict], *,
+                fran: str | None = None, till: str | None = None) -> list[dict]:
+    """Google Kalender vet bäst när skolan är stängd — en synk ersätter listan.
+
+    Med ett fönster (`fran`/`till`) rörs bara lov som ÖVERLAPPAR det. Utan den
+    begränsningen raderade en synk i augusti påsklovet nästa vår, bara för att
+    läsningen inte sträckte sig dit."""
     with conn:
-        conn.execute("DELETE FROM lov")
+        if fran and till:
+            conn.execute("DELETE FROM lov WHERE till >= ? AND fran <= ?", (fran, till))
+        else:
+            conn.execute("DELETE FROM lov")
         for p in poster or []:
             if not (p.get("fran") and p.get("till") and p.get("namn")):
                 continue
@@ -1643,16 +1649,23 @@ def add_kalenderpost(conn: sqlite3.Connection, *, datum: str, titel: str,
 
 
 def replace_kalenderposter(conn: sqlite3.Connection, poster: list[dict],
-                           kalla: str = "schema") -> list[dict]:
+                           kalla: str = "schema", *,
+                           fran: str | None = None,
+                           till: str | None = None) -> list[dict]:
     """Byt ut posterna med ett visst ursprung. En synk rör bara 'schema' —
-    lärarens egna 'appen'-poster (godkända prov, tavlor) överlever.
+    lärarens egna 'appen'-poster (godkända prov, tavlor) överlever — och bara
+    inom det lästa fönstret, av samma skäl som i replace_lov.
     Klasserna slås upp före transaktionen, av samma skäl som i replace_schema."""
     klara = [(p["datum"], (p.get("tid") or "").strip(), p["titel"],
               get_or_create_group(conn, p.get("klass") or ""),
               p.get("slag") or None, kalla)
              for p in (poster or []) if p.get("datum") and p.get("titel")]
     with conn:
-        conn.execute("DELETE FROM kalenderposter WHERE kalla = ?", (kalla,))
+        if fran and till:
+            conn.execute("DELETE FROM kalenderposter WHERE kalla = ? "
+                         "AND datum BETWEEN ? AND ?", (kalla, fran, till))
+        else:
+            conn.execute("DELETE FROM kalenderposter WHERE kalla = ?", (kalla,))
         conn.executemany(
             "INSERT OR IGNORE INTO kalenderposter"
             "(datum, tid, titel, group_id, slag, kalla) VALUES (?, ?, ?, ?, ?, ?)",

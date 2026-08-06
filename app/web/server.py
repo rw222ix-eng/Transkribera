@@ -1188,10 +1188,14 @@ def create_app(base_dir: Path | None = None,
             return JSONResponse(hamtat, status_code=409)
         conn = _db()
         try:
+            # Fönstret som FAKTISKT lästes styr vad som får ersättas: loven och
+            # posterna utanför det rördes inte av synken och ska inte försvinna
+            # med den.
+            fran, till = hamtat.get("fran"), hamtat.get("till")
             schema = db.replace_schema(conn, hamtat.get("schema") or [])
-            lov = db.replace_lov(conn, hamtat.get("lov") or [])
+            lov = db.replace_lov(conn, hamtat.get("lov") or [], fran=fran, till=till)
             poster = db.replace_kalenderposter(conn, hamtat.get("poster") or [],
-                                               kalla="schema")
+                                               kalla="schema", fran=fran, till=till)
         finally:
             conn.close()
         return {"synkad": datetime.now().isoformat(timespec="seconds"),
