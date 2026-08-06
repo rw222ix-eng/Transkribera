@@ -5,8 +5,9 @@
    som ska visas: A4 vid 96 dpi, feta rubriker, hårlinjer, poängparenteser,
    bokstavsbrickor, och tavlan satt som en riktig whiteboard.
 
-   Här bor valet och ritningen. Bladen själva ligger i blad-prov.js, blad-ark.js
-   och blad-tavla.js, lyfta verbatim ur förlagan.
+   Här bor valet och ritningen. Bladen själva byggs i blad-bygg.js (försättsblad,
+   provblad, ark, facit och bokens lösningsblad via blad-boklos.js) och tavlan i
+   blad-tavla.js, som kör whiteboard-motorn i tavla-wb.js.
 
      Blad.rita(mal, v)     ritar dokumentet v i mal
      Blad.uppgifter(v)     uppgiftslistan bladet faktiskt bär (poäng, nivå)

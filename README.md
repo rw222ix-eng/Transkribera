@@ -1,78 +1,75 @@
 # Transkribera
 
-Lokal skrivbordsapp (Windows) som transkriberar **video och ljud** (och YouTube-länkar)
-till SRT/TXT/VTT med Whisper, och har en **modellhanterare** som skannar datorns hårdvara
-och rekommenderar/laddar ner modeller. Gränssnittet är ett **lokalt webb-UI** (FastAPI) som
-visas i ett eget fönster via **pywebview** — ingen molntjänst, allt körs lokalt.
+En lokal-först-app för en gymnasielärare i matematik. Hon spelar in sina
+lektioner, appen transkriberar dem, och utifrån transkriptionerna, läroboken och
+det hon redan gjort planerar hon nästa lektion och skriver tavlor, prov,
+arbetsblad och gruppuppgifter.
 
-## Funktioner
+Allt annat står i koden, i kommentarer vid raden de handlar om. Det här är den
+enda .md-filen i repot och den ska förbli det.
 
-- Transkribera lokala video-/ljudfiler eller en inklistrad YouTube-URL (yt-dlp).
-- Whisper via `faster-whisper` (svenska KB-Whisper + standardmodeller).
-- Modellhanterare: skannar GPU/VRAM/RAM/disk, färgmarkerar modeller 🟢/🟡/🔴 och föreslår
-  en rekommenderad. Ett klick laddar ner. Listan kompletteras med **online-katalogen** från
-  ollama.com (cachas lokalt, fungerar offline).
-- Valfri efterbearbetning av transkript med en lokal LLM via en **app-hanterad
-  llama.cpp-server** (Qwen3) — sammanfatta / korrekturläs / chatta. Modellen laddas
-  och stoppas automatiskt; ingen extern tjänst behövs.
-- Debug-logg till `transkribera.log` bredvid exe:n.
+## Så här hänger den ihop
 
-## Installation
+**Servern** är FastAPI (`app/web/server.py` + routers för planering, prov, bok
+och utskrift). Den binder 127.0.0.1 och startas antingen som skrivbordsfönster
+(pywebview, `app/web/desktop.py`) eller som ren server via `transkribera_web.py`.
 
-```powershell
-python -m pip install -r requirements.txt
+**Transkriberingen** styckar ljudet vid tystnader (ffmpeg), skickar bitarna till
+OpenAI `gpt-transcribe` (`app/openai_asr.py`) och sätter tidsstämplarna **lokalt**
+med forced alignment (`app/alignment.py`, KBLab wav2vec2). Ett valfritt
+ljudrättningspass kör Gemma i egen subprocess. Kostnaden räknas ur svarets
+`usage.seconds` — aldrig ur filens längd.
+
+**Språkmodellen är Claude Code CLI**, headless (`app/claude_code.py`). Ingen
+API-nyckel: appen kör på lärarens egen inloggning. Verktygen är avstängda utom
+`Read`, som tänds när bilder skickas (boksidorna). `app/llm_client.py` är
+promptlagret.
+
+**Läroboken** (`app/bok.py`, `app/bok_ocr.py`) läses ur en PDF: importen läser
+innehållsförteckningen och bygger registret, och sidornas innehåll läses först
+när ett uppslag faktiskt används — en sida kostar ungefär en minut och en bok är
+tre hundra sidor.
+
+**Persistensen** är SQLite (`app/db.py`) plus `history.json` — enda stället
+segmenttiderna ligger utöver SRT-filen — och mappen `Transkriberingar/` för
+resultat, tavlor, prov, bokens sidbilder och utskriftspaket.
+
+**PDF:er** byggs av en bundlad Tectonic (`bin/tectonic/`) ur LaTeX-mallarna i
+`app/templates/`. Kompileringsfel går tillbaka till modellen som
+korrigeringsprompt, högst två rundor.
+
+**Frontenden** (`app/web/ui/`) är ramverkslös: `app.html` laddar ett fyrtiotal
+vanliga skript i bestämd ordning, utan byggsteg. Den är en byte-för-byte-kopia
+av Claude Design-projektet «Transkribera Design System» med fyra dokumenterade
+avvikelser, alla för offline-drift (lokala typsnitt, vendorerad KaTeX, borttagen
+React-UMD och borttagna Matteprov-tokens). Varje ändring här synkas tillbaka
+till designprojektet — repo och design ska vara identiska.
+
+Utan server kör frontenden vidare på sin prototypdata. Det är inte en reservplan
+utan ett krav: designprojektet har ingen server, och appen ska gå att rita mot.
+
+## Köra
+
+```bash
+python transkribera_web.py
 ```
 
-Kräver även **ffmpeg/ffprobe** i PATH. LLM-efterbearbetningen körs via den medföljande
-**llama.cpp**-servern som appen startar/stoppar själv (ingen Ollama). Det egna fönstret
-(pywebview) använder **Edge WebView2** (finns på Win11).
+Kraven ligger i `requirements.txt`. `ffmpeg` och `ffprobe` ska finnas på PATH,
+och `claude` ska vara installerat och inloggat för allt som skriver text.
 
-## Köra (från källkod)
+## Testa
 
-```powershell
-python -m app.web
+```bash
+python -m pytest -q
 ```
 
-Startar en lokal server och öppnar UI:t i webbläsaren. Det paketerade exet visar i stället
-samma UI i ett eget fönster (via `app/web/desktop.py`).
-
-## Bygga en dubbelklickbar .exe (Windows)
-
-```powershell
-python -m PyInstaller Transkribera_web.spec --noconfirm
+```bash
+cd e2e && npx playwright test
 ```
 
-Resultatet hamnar i `dist\Transkribera_web\` — dubbelklicka `Transkribera_web.exe` (eller
-skapa en skrivbordsgenväg). Mappen är stor (~5 GB) eftersom torch/CUDA/cuDNN/PyAV följer med.
-Nedladdade modeller och `cookies.txt` hamnar bredvid exe:n.
+E2E-sviten kör mot en riktig server på port 8751 och kräver Chrome
+(`channel: "chrome"`). Det viktigaste testet är `offline.spec.mjs`: appen får
+inte göra ett enda anrop utanför datorn.
 
-Det frusna exet är **återinträdande**: GUI-processen startar transkribering genom att köra sin
-egen exe med subkommandot `transcribe-cli` (`transkribera_web.py` dirigerar dit), eftersom
-`python -m app.transcribe_cli` inte finns i ett fryst bygge.
-
-## Arkitektur
-
-Logiken i `app/` är **GUI-oberoende** och testbar (`python -m pytest`): `hardware`, `recommend`,
-`whisper_manager`, `llm_manager`, `llm_client`, `llama_server`, `gpu_arbiter`, `output_store`,
-`youtube`, `postprocess`, `transcriber`.
-Webb-lagret `app/web/` (FastAPI-server + pywebview-fönster) är ett tunt skal ovanpå.
-
-Gränssnittet är byggt i **Svelte 5 + Vite**. Källan ligger i `frontend/src/`, konfigurationen
-i repo-roten (`package.json`, `vite.config.js`), och bygget hamnar i `app/web/next/`
-(gitignorerat) som servern serverar på `/`. Kommandon körs från repo-roten:
-
-```powershell
-npm run dev      # Vite på :5173, proxar /api och /static till FastAPI
-npm run build    # -> app/web/next/
-npm run check    # svelte-check
-```
-
-**`npm run build` måste köras före PyInstaller** — annars saknas bygget och `/` svarar
-med en förklarande 503 i stället för appen. Kvar i `app/web/static/` finns bara
-lektionstavlans renderingsmotor (`whiteboard/`, egen iframe), vendorad KaTeX och typsnitt. Transkribering körs i en **isolerad subprocess** (`app/transcribe_cli.py`)
-eftersom CTranslate2:s modell-destruktor kan abortera processen vid GPU-teardown på Windows —
-subprocessen håller modellen vid liv till sitt eget rena avslut och servern streamar progress.
-
-Designen bor i Claude Design-projektet «Transkribera Design System» och ligger
-kopierad i `app/web/ui/` — den mappen är frontenden, inte en spegel av den.
-Resonemangen bakom koden står i koden; `CLAUDE.md` bär det som gäller hela repot.
+`ocr-eval/` är en egen rigg som avgör vilken modell som ska läsa boksidor. Den
+kostar riktiga pengar och körs för hand — se dess egen README.
