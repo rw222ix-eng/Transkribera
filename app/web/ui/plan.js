@@ -1159,14 +1159,40 @@
        tillbaka: hinner man byta lektion under tiden ska pappret ändå bära den
        lektion man skrev det för. */
     const utkast = nyVersion(null);
+    /* ── Tavlan skrivs på riktigt ────────────────────────────────
+       Servern producerar wb-json-v1 (lesson_board.py) och motorn i tavla-wb.js
+       renderar wb-json-v1 — det som saknades var kabeln. Bara Tavla har en
+       backend ännu: prov och arbetsblad går via /api/exams (nästa skiva) och
+       gruppuppgiften har ingen backend alls, så de spelas fortfarande upp i
+       prototypens takt. Det är sant om dem, och syns i klockan. */
+    const jobb = typ === 'Tavla' && serverPa() ? ({ signal, log }) =>
+      window.API.strom('/api/planning/generate', {
+        moment: moment.value.trim(),
+        klass: utkast.klass, kurs: utkast.kurs,
+        datum: utkast.datum || utkast.lektionsdatum || '',
+        starttid: String(utkast.tid || utkast.lektionstid || '').split('–')[0].trim(),
+      }, { signal, log }).then(r => {
+        /* Strömmen kan ta slut utan sitt done — servern kan dö, anslutningen
+           brytas. Utan kontrollen blev det ett JS-fel i stället för ett besked
+           (samma fix som i transkriberingen, commit 746ef20). */
+        if (!r) throw new Error('Servern slutade svara mitt i skrivningen. Försök igen.');
+        return r;
+      }) : null;
     window.Fraga.kor($('#skrivstatus'), {
+      jobb,
+      molnsteg: typ === 'Tavla' && jobb ? 'Claude skriver tavlan' : undefined,
       /* Smalt läge: en rad, ett tunt spår, en klocka — samma diskreta förlopp som i
          lektionschatten. Sidan följer med ner till raden i stället för att låta den
          poppa upp utanför synfältet. */
       smal: true,
       omfang: underlag.length ? `${underlag.length} lektion${underlag.length === 1 ? '' : 'er'} ur arkivet` : 'Gy25 och kursplanen',
       antal: underlag.length || vald.size || 5,
-      svar: `Utkastet är skrivet. ${Best(typ)} täcker ${vald.size || 'inga'} valda moment — läs igenom och skriv vad som ska bli annorlunda.`,
+      /* Svarstexten säger vad som FAKTISKT hände när det gick på riktigt: en
+         tavla som behövde tre rundor är inte samma sak som en som satt direkt. */
+      svar: res => res
+        ? `${Best(typ)} är skriven${(res.rounds || 1) > 1 ? ` — ${res.rounds} rundor innan den satt` : ''}. `
+          + `${(res.errors || []).length ? 'Något gick inte att rätta helt; läs igenom extra noga.' : 'Läs igenom och skriv vad som ska bli annorlunda.'}`
+        : `Utkastet är skrivet. ${Best(typ)} täcker ${vald.size || 'inga'} valda moment — läs igenom och skriv vad som ska bli annorlunda.`,
       plan: [
         { namn: 'Läser centralt innehåll (Gy25)', detalj: (vald.size || 0) + ' moment' },
         ...(refDok ? [{ namn: 'Läser förlagan', detalj: dokNamn(refDok) + (($('#refhur') || {}).value ? ' · ' + $('#refhur').value.trim().slice(0, 40) : '') }] : []),
@@ -1175,7 +1201,16 @@
         { namn: underlag.length ? 'Läser vad klassen hann med' : 'Hoppar över transkripten', detalj: underlag.length ? underlag.map(l => l.namn).join(' · ') : 'inga lektioner valda' },
         { namn: 'Skriver och poängsätter', detalj: typ }
       ],
-      efterKlar: () => {
+      efterKlar: (_el, res) => {
+        /* Tavlan servern skrev följer med pappret: den ritas av samma motor som
+           prototypens form, och den ligger kvar i Sparat efteråt. `wbId` är
+           planeringens id på servern — reparationsrundan och iterationen
+           behöver det. */
+        if (res && res.board) {
+          utkast.wb = res.board;
+          utkast.wbId = res.id;
+          utkast.wbFel = res.errors || [];
+        }
         versioner = [utkast];
         utkastNytt(utkast);
         /* Ett nytt dokument öppnas alltid på ELEVERNAS ark. Stod växlaren kvar på
@@ -1830,6 +1865,36 @@
       return v;
     }
   };
+  /* ── REPARATIONSRUNDAN ──────────────────────────────
+     Motorn MÄTER tavlan när den ritas, och det den invänder mot — «innehållet
+     ryms inte», «element-överlapp» — är precis det språkmodellen inte kan se
+     själv: den skriver JSON, den ser ingen sida. Varningarna går därför
+     tillbaka till servern, som skriver om tavlan och skickar en ny.
+
+     Högst tre rundor (servern räknar), sedan får varningarna stå kvar ärligt i
+     stället för att appen försöker i evighet. En rapport per uppsättning
+     varningar: annars svarar en omritad tavla med nya varningar, som ger en ny
+     tavla, som ritas om, som varnar … */
+  const rapporterade = new WeakMap();
+  window.Tavla = {
+    varnade(v, varningar) {
+      if (!serverPa() || !v || !v.wbId || !varningar.length) return;
+      const nyckel = varningar.join('|');
+      if (rapporterade.get(v) === nyckel) return;
+      rapporterade.set(v, nyckel);
+      /* Rutten strömmar när den reparerar och svarar med vanlig JSON när den
+         inte gör det — då ger strom() null, och då finns inget att rita om. */
+      window.API.strom(`/api/planning/${v.wbId}/render-report`, { warnings: varningar })
+        .then(res => {
+          if (!res || !res.board) return;
+          v.wb = res.board;
+          v.wbFel = res.errors || [];
+          if (versioner[nu] === v) visa(nu); else ritaSparat();
+        })
+        .catch(() => { /* GPU upptagen eller nätfel: tavlan står som den ritades */ });
+    },
+  };
+
   function ritaSparat() {
     const nat = $('#sparatnat');
     /* Högen har ingen egen vy längre — materialet ligger på sin lektion i veckan.
@@ -2061,6 +2126,14 @@
     delete godkant.id;
     sparat.push(godkant);
     utkastGodkann(godkant);
+    /* Tavlan servern skrev godkänns också DÄR: den skrivs in i planned_lessons
+       och exporteras som wb-json-v1 under Transkriberingar/<lektion>/planering/.
+       Utan det här steget levde den bara i dokumenthögen, och lektionsminnet —
+       det nästa tavla bygger vidare på — hade aldrig sett den. */
+    if (serverPa() && godkant.wbId) {
+      skicka(`/api/planning/${godkant.wbId}/approve`, 'POST', {})
+        .catch(() => { /* pappret ligger i Sparat; arkivkopian får vänta */ });
+    }
     /* Ett godkänt dokument hör hemma i tiden. Provet blir en post med bläck-
        kontur och en tryckskyldighet några dagar innan; tavlan bara en post som
        släcker «Tavla saknas» i veckan. Ingenting läggs in innan godkännandet. */

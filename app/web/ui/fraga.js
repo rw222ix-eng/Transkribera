@@ -10,7 +10,8 @@
   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
   const MODELL = { namn: 'Claude Code · Anthropic', mb: 0 };
   /* Spegeln kortar väntan till några sekunder men låter klockan gå i appens takt,
-     så texten «brukar ta 1–2 min» stämmer mot det som visas. */
+     så texten «brukar ta 1–2 min» stämmer mot det som visas. Med ett RIKTIGT
+     jobb (o.jobb) går klockan i verklig tid — då finns inget att komprimera. */
   const TAKT = 22;
   let varm = false;
 
@@ -160,9 +161,19 @@
     const kall = !varm;
     const t0 = Date.now();
     let stoppad = false;
+    /* ── Riktigt jobb ────────────────────────────────────────────────
+       Utan `o.jobb` spelas förloppet upp i prototypens takt: varje rad får sin
+       tid, molnraden 1,5 sekunder, och svaret är det som stod i `o.svar`. Med
+       ett jobb är raderna före anropet fortfarande appens egna — den läser
+       verkligen igenom materialet här — men MOLNRADEN står kvar tills svaret
+       kommit, klockan går i verklig tid, och Avbryt avbryter anropet på
+       riktigt. Samma rader, samma ordning, samma texter. */
+    const styrning = o.jobb ? new AbortController() : null;
+    let svaret = null, jobbfel = null;
 
     const stoppa = (etikett) => {
       stoppad = true;
+      if (styrning) { try { styrning.abort(); } catch (e) { /* redan klar */ } }
       timers.forEach(clearTimeout);
       smalUt();
       el.dataset.lage = 'stoppad';
@@ -203,7 +214,9 @@
 
     /* fas 2 — appens egna steg runt anropet. Det som händer hos Claude går inte
        att mäta, så den raden bär klockan i stället för en mätare. */
-    function plan() {
+    const paus = ms => new Promise(los => senare(ms, los));
+
+    async function plan() {
       const egna = o.plan && o.plan.length ? o.plan : [
         { namn: 'Väljer ut relevanta avsnitt', detalj: '4 avsnitt' },
         { namn: 'Läser avsnitten i sin helhet', detalj: '00:42–28:05' }
@@ -220,22 +233,62 @@
       rader.forEach(r => faser.insertAdjacentHTML('beforeend', fas(r.namn) ));
       const noder = $$('.ffas', el).slice(-rader.length);
       noder.forEach((n, i) => { if (rader[i].rond) n.setAttribute('data-rond', ''); });
-      let t = 0;
-      rader.forEach((r, i) => {
-        const langd = r.vanta ? 1500 : r.kort ? 260 : 340;
-        const nu = t;
-        senare(nu, () => {
-          noder[i].dataset.lage = 'kor';
-          smal(r.namn, 0.24 + ((i + 1) / rader.length) * 0.72);
-          vantelage(!!r.vanta);
-        });
-        senare(nu + langd - 20, () => {
-          noder[i].dataset.lage = 'klar';
-          $('.fdetalj', noder[i]).textContent = r.detalj || '';
-          if (i === rader.length - 1) { vantelage(false); visaSvar(); }
-        });
-        t += langd;
-      });
+
+      /* Jobbet startas HÄR, samtidigt som «Skickar förfrågan» tänds — inte när
+         molnraden nås. Annars hade appens egna rader varit ren väntetid. */
+      let jobbet = null;
+      if (o.jobb) {
+        jobbet = Promise.resolve()
+          .then(() => o.jobb({
+            signal: styrning.signal,
+            /* Serverns loggrader står som detalj på molnraden: det enda som
+               finns att visa medan Claude skriver. */
+            log: m => { const n = noder.find((x, i) => rader[i].vanta && x.dataset.lage === 'kor');
+                        if (n) $('.fdetalj', n).textContent = String(m || '').slice(0, 72); },
+          }))
+          .then(r => { svaret = r; }, e => { jobbfel = e; });
+      }
+
+      for (let i = 0; i < rader.length; i++) {
+        if (stoppad) return;
+        const r = rader[i];
+        noder[i].dataset.lage = 'kor';
+        smal(r.namn, 0.24 + ((i + 1) / rader.length) * 0.72);
+        vantelage(!!r.vanta);
+        if (r.vanta && jobbet) await jobbet;
+        else await paus(r.vanta ? 1500 : r.kort ? 260 : 340);
+        if (stoppad) return;
+        /* Gick jobbet fel är det ett besked, inte en tavla: raderna som ligger
+           efter spelas aldrig upp. */
+        if (jobbfel) { vantelage(false); felade(jobbfel); return; }
+        noder[i].dataset.lage = 'klar';
+        if (!(r.vanta && jobbet)) $('.fdetalj', noder[i]).textContent = r.detalj || '';
+        else if (!$('.fdetalj', noder[i]).textContent) $('.fdetalj', noder[i]).textContent = r.detalj || '';
+      }
+      vantelage(false);
+      visaSvar();
+    }
+
+    /* Ett fel ur jobbet blir ett besked med en väg vidare — aldrig en tom ruta
+       och aldrig ett JS-fel i konsolen. */
+    function felade(e) {
+      const avbrutet = e && (e.name === 'AbortError' || /abort/i.test(e.message || ''));
+      if (avbrutet) return;
+      timers.forEach(clearTimeout);
+      el.dataset.lage = 'stoppad';
+      smalUt();
+      $('.fstopp', el).hidden = true;
+      $$('.ffas[data-lage="kor"]', el).forEach(f => { f.dataset.lage = 'fel'; });
+      malaText((e && e.message) || 'Det gick inte att skriva dokumentet.', text);
+      const a = $('.fatgard', el);
+      a.hidden = false;
+      a.innerHTML = '';
+      const b = document.createElement('button');
+      b.className = 'ghost';
+      b.textContent = 'Försök igen';
+      b.addEventListener('click', () => (o.onIgen ? o.onIgen() : kor(host, o)));
+      a.appendChild(b);
+      if (o.efterFel) o.efterFel(e);
     }
 
     /* Klockan räknar upp — den enda ärliga siffran när svaret kommer på en gång.
@@ -243,7 +296,7 @@
        förr stod 0:22 i rutan och «svarade efter 4:49» i raden efteråt. */
     let klockan = null;
     const vantaruta = $('.fvanta', el);
-    const gangen = () => Math.max(0, Math.round((Date.now() - t0) / 1000 * TAKT));
+    const gangen = () => Math.max(0, Math.round((Date.now() - t0) / 1000 * (o.jobb ? 1 : TAKT)));
     const klocktext = s => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
     function vantelage(pa) {
       vantaruta.hidden = smalt || !pa;
@@ -264,7 +317,9 @@
        det finns ingen ström att visa när svaret kommer i ett stycke. */
     function visaSvar() {
       if (stoppad) return;
-      malaText(o.svar, text);
+      /* Med ett riktigt jobb kan svarstexten säga vad som FAKTISKT kom tillbaka
+         — hur många reparationsrundor det tog, vad som inte gick att rätta. */
+      malaText(typeof o.svar === 'function' ? o.svar(svaret) : o.svar, text);
       klar();
     }
 
@@ -320,7 +375,7 @@
           a.appendChild(b);
         });
       }
-      if (o.efterKlar) o.efterKlar(el);
+      if (o.efterKlar) o.efterKlar(el, svaret);
       /* Svaret ska stå i vyn när det kommer — ingen jakt neråt efteråt. */
       if (smalt) setTimeout(() => { if (el.isConnected) hallKvar(el, 'topp'); }, 240);
     }

@@ -161,6 +161,41 @@ def test_generate_streams_board_and_stores_planning(llm_ready, monkeypatch):
     assert r2.status_code == 200
 
 
+def test_generate_tar_klass_och_kurs_som_namn(llm_ready, monkeypatch):
+    """Frontenden känner klass och kurs vid NAMN — schemat är namn hela vägen
+    (app/web/ui/kalender.js). Namnen ska räcka: de slås upp, skapas om de
+    saknas, och når prompten som klass och kurs."""
+    calls = _stub_generate(monkeypatch,
+                           {"board": _valid_board(), "errors": [], "rounds": 1})
+    r = llm_ready.post("/api/planning/generate",
+                       json={"moment": "Derivatans definition",
+                             "klass": "NA25", "kurs": "Matematik, nivå 2c"})
+    assert r.status_code == 200
+    _done(r)
+    assert calls[0]["group"] == "NA25"
+    assert calls[0]["course"] == "Matematik, nivå 2c"
+    assert "NA25" in [g["namn"] for g in llm_ready.get("/api/groups").json()]
+
+
+def test_id_vinner_over_namn(llm_ready, monkeypatch):
+    gid = llm_ready.post("/api/groups", json={"namn": "TE25prk"}).json()["id"]
+    calls = _stub_generate(monkeypatch,
+                           {"board": _valid_board(), "errors": [], "rounds": 1})
+    r = llm_ready.post("/api/planning/generate",
+                       json={"moment": "Enhetscirkeln", "group_id": gid,
+                             "klass": "struntnamn"})
+    _done(r)
+    assert calls[0]["group"] == "TE25prk"
+
+
+def test_generate_utan_klass_och_kurs_gar_anda(llm_ready, monkeypatch):
+    """Man ska kunna skriva en tavla utan att ha valt lektion i veckan."""
+    calls = _stub_generate(monkeypatch,
+                           {"board": _valid_board(), "errors": [], "rounds": 1})
+    _done(llm_ready.post("/api/planning/generate", json={"moment": "Integraler"}))
+    assert calls[0]["group"] == "klassen" and calls[0]["course"] == "matematik"
+
+
 def test_generate_409_when_gpu_busy(llm_ready, monkeypatch):
     monkeypatch.setattr(llm_ready.app.state.arbiter, "try_acquire_gpu",
                         lambda: False)

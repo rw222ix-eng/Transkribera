@@ -129,6 +129,22 @@ def create_router(base: Path, arbiter) -> APIRouter:
             pass
         return group, course
 
+    def _ids(body: dict) -> tuple[int | None, int | None]:
+        """Klass och kurs som id. Frontenden känner dem vid NAMN — schemat är
+        namn hela vägen (app/web/ui/kalender.js) — så namnen slås upp här och
+        skapas om de saknas. Skickas id:n direkt används de som de är."""
+        gid, cid = body.get("group_id"), body.get("course_id")
+        klass = (body.get("klass") or "").strip()
+        kurs = (body.get("kurs") or "").strip()
+        if gid is not None or cid is not None or not (klass or kurs):
+            return gid, cid
+        conn = db.connect(db_file)
+        try:
+            return (db.get_or_create_group(conn, klass) if klass else None,
+                    db.get_or_create_course(conn, kurs) if kurs else None)
+        finally:
+            conn.close()
+
     def _memory(group_id, course_id=None) -> str:
         if group_id is None:
             return ""
@@ -280,8 +296,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
         if not moment:
             return JSONResponse({"error": "ange ett moment/ämne för lektionen"},
                                 status_code=400)
-        group_id = body.get("group_id")
-        course_id = body.get("course_id")
+        group_id, course_id = _ids(body)
         datum = (body.get("datum") or "").strip() or None
         starttid = (body.get("starttid") or "").strip() or None
         group, course = _names(group_id, course_id)

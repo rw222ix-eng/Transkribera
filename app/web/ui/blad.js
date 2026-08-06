@@ -493,8 +493,22 @@ window.Blad = (() => {
     host.innerHTML = '';
     host.style.transform = '';
     ruta.style.height = '';
-    try { window.WBLayout.renderWhiteboard({ boards: [spec] }, host); }
-    catch (e) { console.warn('Tavlan kunde inte ritas:', e && e.message); return; }
+    /* Motorn skriver sina invändningar som «[WB] …» i konsolen medan den mäter:
+       innehåll som inte ryms, element som krockar. En tavla skriven av
+       språkmodellen kan REPARERAS på dem — därför fångas de här i stället för
+       att bara rulla förbi. Se window.Tavla.varnade i plan.js. */
+    const varningar = [];
+    const forraWarn = console.warn;
+    console.warn = function (...a) {
+      if (String(a[0] || '').startsWith('[WB]')) varningar.push(String(a[0]));
+      forraWarn.apply(console, a);
+    };
+    /* Tavlan kan vara ETT bräde (prototypens form ur innehall.js) eller ett helt
+       dokument med flera (det språkmodellen skriver, wb-json-v1). */
+    try { window.WBLayout.renderWhiteboard(spec.boards ? spec : { boards: [spec] }, host); }
+    catch (e) { console.warn = forraWarn; forraWarn.call(console, 'Tavlan kunde inte ritas:', e && e.message); return; }
+    finally { console.warn = forraWarn; }
+    if (varningar.length && window.Tavla && window.Tavla.varnade) window.Tavla.varnade(v, varningar);
     const tavla = host.firstElementChild;
     if (!tavla) return;
     taggaTavla(host, v);
@@ -819,8 +833,12 @@ window.Blad = (() => {
       host.className = 'tavhost';
       ruta.appendChild(host);
       trav.appendChild(ruta);
+      /* Tavlan språkmodellen skrivit (wb-json-v1) om den finns — annars
+         prototypens form ur innehall.js. Formen är densamma för motorn; det som
+         skiljer är varifrån innehållet kom. */
       const lage = TEORI.test(ord(v.moment)) ? 'teori' : 'genomgang';
-      ritaTavla(ruta, host, tavlaSpec(T().spec ? T().spec(v.moment, lage) : null, v), v);
+      const skriven = v.wb && (v.wb.boards || []).length ? v.wb : null;
+      ritaTavla(ruta, host, tavlaSpec(skriven || (T().spec ? T().spec(v.moment, lage) : null), v), v);
     } else {
       bladen(v).forEach(html => {
         const skal = document.createElement('div');
