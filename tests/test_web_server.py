@@ -6,23 +6,6 @@ import pytest
 from app.web import server
 
 
-@pytest.fixture
-def client(tmp_path, monkeypatch):
-    from fastapi.testclient import TestClient
-
-    class HW:
-        gpu_name = "Test GPU"; vram_mb = 24000; has_cuda = True
-        ram_mb = 64000; cpu_cores = 16; free_disk_mb = 500000
-        cpu_name = "Test CPU"; vram_free_mb = 20000; ram_free_mb = 40000
-        total_disk_mb = 1000000; cuda_version = "12.1"
-        compute_capability = "8.9"; gpu_arch = "Ada Lovelace"; disks = []
-
-    # Stub out heavy / external calls so the endpoints are unit-testable.
-    monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: HW())
-    monkeypatch.setattr(server.llm_client, "is_running", lambda *a, **k: False)
-    return TestClient(server.create_app(base_dir=tmp_path))
-
-
 def test_index_served(client):
     r = client.get("/")
     assert r.status_code == 200

@@ -7,7 +7,6 @@ import json
 import pytest
 
 from app import lesson_board
-from app.web import server
 
 
 def _events(resp) -> list[dict]:
@@ -31,24 +30,6 @@ _PNG_1PX = base64.b64decode(
     "AAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
 )
 _DATA_URL = "data:image/png;base64," + base64.b64encode(_PNG_1PX).decode()
-
-
-@pytest.fixture
-def client(tmp_path, monkeypatch):
-    from fastapi.testclient import TestClient
-
-    class HW:
-        gpu_name = "Test GPU"; vram_mb = 24000; has_cuda = True
-        ram_mb = 64000; cpu_cores = 16; free_disk_mb = 500000
-        cpu_name = "Test CPU"; vram_free_mb = 20000; ram_free_mb = 40000
-        total_disk_mb = 1000000; cuda_version = "12.1"
-        compute_capability = "8.9"; gpu_arch = "Ada Lovelace"; disks = []
-
-    monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: HW())
-    monkeypatch.setattr(server.llm_client, "is_running", lambda *a, **k: False)
-    c = TestClient(server.create_app(base_dir=tmp_path))
-    c.base_dir = tmp_path
-    return c
 
 
 def test_export_writes_png_under_planering(client):
@@ -115,14 +96,6 @@ def test_export_rejects_oversized(client):
 
 
 # ------------------------------------------------------- Fas 1: generate --
-
-@pytest.fixture
-def llm_ready(client, monkeypatch):
-    """Arbitern svarar som om LLM:en är installerad och startad."""
-    monkeypatch.setattr(client.app.state.arbiter, "ensure_llm",
-                        lambda: "http://127.0.0.1:8170")
-    return client
-
 
 def _stub_generate(monkeypatch, result):
     calls = []
