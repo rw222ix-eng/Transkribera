@@ -62,6 +62,27 @@ class HW:
     compute_capability = "8.9"; gpu_arch = "Ada Lovelace"; disks = []
 
 
+@pytest.fixture(autouse=True)
+def inget_riktigt_claude(monkeypatch):
+    """Staketet: ingen testkörning får starta lärarens RIKTIGA Claude Code.
+
+    Det kunde den. `claude_code.binar()` faller tillbaka på `which("claude")`,
+    och på utvecklingsmaskinen finns claude i PATH — så varje kodväg som inte
+    var stubbad startade CLI:t på riktigt: långsamt, olika svar varje gång, och
+    betalt. Det var också roten till det kända flakyt
+    `test_search_ask_no_match_streams_scan_and_honest_answer`: när
+    begreppsbreddningen fick ett riktigt svar hittade omskanningen träffar och
+    «0 träffar» stämde inte längre.
+
+    Statuscachen nollas före OCH efter — den lever i tjugo sekunder, alltså
+    tvärs över testgränser."""
+    from app import claude_code
+    monkeypatch.setattr(claude_code, "binar", lambda: None)
+    claude_code._STATUS_CACHE.update(tid=0.0, varde=None)
+    yield
+    claude_code._STATUS_CACHE.update(tid=0.0, varde=None)
+
+
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     from fastapi.testclient import TestClient
@@ -99,6 +120,9 @@ def fejk_claude(tmp_path, monkeypatch):
 
     exe = skriv_claude(tmp_path / "fejkbin")
     monkeypatch.setenv("CLAUDE_CODE_BIN", str(exe))
+    # Staketet ovan (inget_riktigt_claude) säger «ingen CLI finns». Den här
+    # sviten vill ha EN — den fejkade, aldrig lärarens.
+    monkeypatch.setattr(claude_code, "binar", lambda: str(exe))
 
     def satt(lage: str = "ok", *, svar: str | None = None):
         monkeypatch.setenv("FEJK_CLAUDE", lage)
