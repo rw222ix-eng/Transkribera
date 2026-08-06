@@ -1650,11 +1650,61 @@ def create_app(base_dir: Path | None = None,
         finally:
             conn.close()
 
+    # ---- Säkerhetskopian: lärarens plats och kvällsschemat (Etapp 0.9) ------
+    #
+    # En kopia bredvid originalet skyddar mot ett misstag men inte mot en
+    # trasig disk. Platsen är därför hennes egen — och «varje kväll» betyder
+    # varje kväll APPEN ÄR IGÅNG, för mer kan en lokal app inte lova.
+
+    def _backup_installningar() -> dict:
+        s = settings_store.load(base)
+        return {"vag": s.get("backup_vag") or "", "auto": bool(s.get("backup_auto")),
+                "senast": s.get("backup_senast") or ""}
+
+    @app.get("/api/backup")
+    def api_backup_status():
+        return _backup_installningar()
+
     @app.post("/api/backup")
-    def api_backup():
-        """Back up the knowledge base (DB + history + settings) to a zip under
-        base/exports/ and return its path so the UI can open the folder."""
-        return backup.create_backup(base)
+    async def api_backup(req: Request):
+        """Skriv en säkerhetskopia. `vag` är platsen läraren valt (tom =
+        appens exports/), `auto` slår på kvällskopian."""
+        try:
+            body = await req.json()
+        except Exception:
+            body = {}
+        if not isinstance(body, dict):
+            body = {}
+        vag = str(body.get("vag") or "").strip()
+        s = settings_store.load(base)
+        if "vag" in body:
+            s["backup_vag"] = vag
+        if "auto" in body:
+            s["backup_auto"] = bool(body.get("auto"))
+        res = backup.create_backup(base, dest_dir=vag or s.get("backup_vag") or None)
+        s["backup_senast"] = datetime.now().isoformat(timespec="seconds")
+        settings_store.save(base, s)
+        return res | _backup_installningar()
+
+    def _kvallskopian():
+        """Kollar med jämna mellanrum om dagens kvällskopia är tagen. Tråden
+        är daemon: den ska aldrig hålla appen vid liv, bara följa med."""
+        while True:
+            time.sleep(900)
+            try:
+                s = settings_store.load(base)
+                if not s.get("backup_auto"):
+                    continue
+                if not backup.dags_for_kvallskopia(s.get("backup_senast")):
+                    continue
+                backup.create_backup(base, dest_dir=s.get("backup_vag") or None)
+                s = settings_store.load(base)
+                s["backup_senast"] = datetime.now().isoformat(timespec="seconds")
+                settings_store.save(base, s)
+            except Exception:
+                debug_log.get_logger().exception("Kvällskopian misslyckades")
+
+    threading.Thread(target=_kvallskopian, daemon=True).start()
 
     @app.get("/api/lessons/{lesson_id}/report")
     def api_lesson_report(lesson_id: int, format: str = "html"):

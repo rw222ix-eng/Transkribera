@@ -28,12 +28,32 @@ _MANIFEST = (
 )
 
 
-def create_backup(base: Path, *, now: datetime | None = None) -> dict:
-    """Zip the knowledge-base files into base/exports/. Returns {path, files,
-    bytes}. Only files that exist are included; missing ones are skipped."""
+def create_backup(base: Path, *, now: datetime | None = None,
+                  dest_dir: Path | str | None = None) -> dict:
+    """Zip the knowledge-base files into base/exports/ — eller till den plats
+    läraren valt (Etapp 0.9).
+
+    En säkerhetskopia som ligger kvar bredvid originalet skyddar mot ett
+    misstag men inte mot en trasig disk, och det är den senare läraren är rädd
+    för. `dest_dir` är därför hennes egen plats: en USB-sticka, en molnmapp,
+    en nätverksenhet. Går den inte att skriva till faller kopian tillbaka på
+    exports/ och SÄGER det — en kopia man tror finns är värre än ingen.
+
+    Returns {path, files, bytes, plats, fallback}."""
     base = Path(base)
     stamp = (now or datetime.now()).strftime("%Y%m%d-%H%M")
+    fallback = False
     out_dir = base / "exports"
+    if dest_dir:
+        onskad = Path(str(dest_dir)).expanduser()
+        try:
+            onskad.mkdir(parents=True, exist_ok=True)
+            prov = onskad / ".transkribera-skrivprov"
+            prov.write_bytes(b"")
+            prov.unlink()
+            out_dir = onskad
+        except OSError:
+            fallback = True
     out_dir.mkdir(parents=True, exist_ok=True)
     dest = out_dir / f"transkribera-backup-{stamp}.zip"
 
@@ -47,4 +67,28 @@ def create_backup(base: Path, *, now: datetime | None = None) -> dict:
         zf.writestr("manifest.txt", _MANIFEST.format(
             when=(now or datetime.now()).isoformat(timespec="seconds"),
             files=", ".join(included) or "(inga filer hittades)"))
-    return {"path": str(dest), "files": included, "bytes": dest.stat().st_size}
+    return {"path": str(dest), "files": included, "bytes": dest.stat().st_size,
+            "plats": str(out_dir), "fallback": fallback}
+
+
+# ── Kvällskopian (Etapp 0.9) ────────────────────────────────────────────────
+# «Varje kväll» betyder varje kväll APPEN ÄR IGÅNG. En lokal app kan inte
+# kopiera något när datorn är avstängd, och att lova det vore att lova något
+# ingen kan hålla. Därför: en kontroll med jämna mellanrum medan appen lever,
+# och en kopia så fort klockan passerat kvällen utan att dagen fått sin.
+KVALL_TIMME = 18
+
+
+def dags_for_kvallskopia(senast: str | None, now: datetime | None = None,
+                         timme: int = KVALL_TIMME) -> bool:
+    """Har dagens kvällskopia inte tagits än — och är det kväll?"""
+    nu = now or datetime.now()
+    if nu.hour < timme:
+        return False
+    if not senast:
+        return True
+    try:
+        sist = datetime.fromisoformat(str(senast))
+    except ValueError:
+        return True
+    return sist.date() < nu.date()

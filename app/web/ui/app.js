@@ -1952,13 +1952,45 @@ const PLATSER = [
     setTimeout(() => { skal.hidden = true; }, 220);
     document.removeEventListener('keydown', tangent);
   }
+  /* ══ SÄKERHETSKOPIAN PÅ RIKTIGT ══
+     Rutan räknade upp till hundra procent och sa att kopian skrevs. Servern
+     skriver den nu — databasen, historiken och inställningarna som en zip på
+     lärarens EGNA plats (POST /api/backup). Går platsen inte att skriva till
+     hamnar kopian i appens exports/ och kvittot säger det: en kopia man tror
+     finns är värre än ingen.
+
+     «Varje kväll» sparas som en inställning och sköts av servern medan den är
+     igång — mer kan en lokal app inte lova, och kvittot lovar inte mer. */
+  const klart = (vag, res) => {
+    const bt = $('#backuptext');
+    if (bt) bt.textContent = new Date().toLocaleDateString('sv-SE', { day: 'numeric', month: 'short' });
+    const mb = res && res.bytes ? ` · ${(res.bytes / 1048576).toFixed(1)} MB` : '';
+    const plats = (res && res.plats) || vag;
+    toast(res && res.fallback
+      ? `${plats} gick inte att skriva till — kopian ligger i appens exports-mapp${mb}`
+      : `Säkerhetskopian skrevs till ${plats}${mb}${auto ? ' · sker nu varje kväll appen är igång' : ''}`);
+  };
+
   function kopiera() {
     const vag = $('#pl-vag').value.trim() || valdPlats.vag;
     stang();
     const b = $('#backup');
     if (b.disabled) return;
-    b.disabled = true;
     const gammal = b.textContent;
+    b.disabled = true;
+    if (window.API && window.API.pa) {
+      b.textContent = 'Kopierar …';
+      window.API.json('/api/backup', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vag, auto }),
+      }).then(res => { b.textContent = gammal; b.disabled = false; klart(vag, res); })
+        .catch(e => {
+          b.textContent = gammal;
+          b.disabled = false;
+          toast(e.message || 'Säkerhetskopian gick inte att skriva.');
+        });
+      return;
+    }
     let p = 0;
     const t = setInterval(() => {
       p += 12;
@@ -1967,9 +1999,7 @@ const PLATSER = [
       clearInterval(t);
       b.textContent = gammal;
       b.disabled = false;
-      const bt = $('#backuptext');
-      if (bt) bt.textContent = new Date().toLocaleDateString('sv-SE', { day: 'numeric', month: 'short' });
-      toast(`Säkerhetskopian skrevs till ${vag}${auto ? ' · sker nu automatiskt varje kväll' : ''}`);
+      klart(vag, null);
     }, 180);
   }
   $('#backup').addEventListener('click', oppna);
