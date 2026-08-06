@@ -176,3 +176,45 @@ def test_fil_som_inte_finns_sags_rakt_ut(tmp_path, monkeypatch):
     r = c.post("/api/transcribe", json={"source": str(tmp_path / "borta.mp3"),
                                         "language": "sv", "formats": ["srt"]})
     assert "Filen finns inte" in r.text
+
+
+# ── De två andra källorna: exempelfilen och en URL ───────────────────────
+
+def test_exempelknappen_pekar_pa_en_riktig_fil(client):
+    """«Prova ett exempel» ska köa en fil som FINNS. Ett påhittat namn ger ett
+    fel först vid transkriberingen, och då har läraren redan tryckt två
+    gånger."""
+    assert client.get("/api/sample").status_code == 404      # inget att prova än
+    (client.base_dir / "downloads").mkdir(parents=True, exist_ok=True)
+    (client.base_dir / "downloads" / "lektion.m4a").write_bytes(b"ljud")
+    svar = client.get("/api/sample").json()
+    assert svar["name"] == "lektion.m4a"
+    from pathlib import Path
+    assert Path(svar["path"]).is_file()
+
+
+def test_exempelknappen_slapper_inte_ut_filer_utanfor_basen(client, tmp_path_factory):
+    """Sökvägen valideras mot base_dir — annars kan en fil utanför appen köas
+    och skickas till molnet."""
+    utanfor = tmp_path_factory.mktemp("annat") / "hemlig.wav"
+    utanfor.write_bytes(b"x")
+    assert client.get("/api/sample").status_code == 404
+
+
+def test_en_url_som_inte_gar_att_hamta_blir_ett_besked(tmp_path, monkeypatch):
+    """Källa nummer tre är en URL. Går nedladdningen inte igenom ska felet
+    säga det — inte «Transkriberingen gav inget resultat»."""
+    from fastapi.testclient import TestClient
+    from tests.conftest import HW
+
+    monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: HW())
+    monkeypatch.setattr(server.llm_client, "is_running", lambda *a, **k: False)
+    monkeypatch.setattr(server.openai_asr, "har_nyckel", lambda *a, **k: True)
+
+    def dor(*a, **k):
+        raise RuntimeError("Videon är privat eller borttagen.")
+    monkeypatch.setattr(server.youtube, "download", dor)
+    c = TestClient(server.create_app(base_dir=tmp_path, arbiter=_Arbiter()))
+    r = c.post("/api/transcribe", json={"source": "https://example.com/film",
+                                        "language": "sv", "formats": ["srt"]})
+    assert "privat eller borttagen" in r.text

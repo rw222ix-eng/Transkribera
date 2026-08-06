@@ -166,6 +166,46 @@ test("nästa skolvecka hoppar över ett lov som är längre än en vecka",
     expect(m).toBe("2027-01-11");           // första måndagen efter jullovet
   });
 
+// ── Termbandet ──────────────────────────────────────────────────────────
+// Bandet svarar på EN fråga: vilka veckor framåt saknar material. Klickar man
+// på en vecka ska man landa i den — inte i en vecka bredvid, och inte i
+// terminsläget igen.
+
+test("ett klick i termbandet landar i rätt vecka", async ({ page }) => {
+  await fejka(page);
+  await vid(page, "2026-09-09");             // onsdag, vecka 37
+  await page.goto("/");
+  await hydrerad(page);
+  await page.getByRole("tab", { name: "Planering" }).click();
+  await page.locator("#schemalage button", { hasText: "Termin" }).click();
+
+  const rutor = page.locator(".tbv");
+  await expect(rutor.first()).toBeVisible();
+  // Veckonumret i bandet och veckan man landar i måste vara samma vecka.
+  const mal = rutor.nth(3);
+  const nr = (await mal.locator(".tbnr").textContent()).trim();
+  await mal.click();
+
+  await expect(page.locator("#ark-klass")).toHaveAttribute("data-lage", "vecka");
+  await expect(page.locator("#schemavecka")).toHaveText(`Vecka ${nr.replace("v", "")}`);
+});
+
+test("terminsläget och veckoläget är samma panel i två zoomlägen", async ({ page }) => {
+  await fejka(page);
+  await vid(page, "2026-09-09");
+  await page.goto("/");
+  await hydrerad(page);
+  await page.getByRole("tab", { name: "Planering" }).click();
+
+  const panel = page.locator("#ark-klass");
+  await page.locator("#schemalage button", { hasText: "Termin" }).click();
+  await expect(panel).toHaveAttribute("data-lage", "termin");
+  await page.locator("#schemalage button", { hasText: "Vecka" }).click();
+  await expect(panel).toHaveAttribute("data-lage", "vecka");
+  await expect(page.locator("#schemavecka")).toContainText("Vecka");
+});
+
+
 // ── Klassprofilen ───────────────────────────────────────────────────────
 // Profilen låg i localStorage innan den flyttade till servern, och den lokala
 // kopian läses fortfarande som första snabba svar. En trasig eller uråldrig
