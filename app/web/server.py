@@ -25,8 +25,8 @@ from app import (debug_log, hardware, llm_client,
                  youtube, postprocess, transcriber,
                  history_store, gpu_arbiter, output_store, media, audio_model, db,
                  paths, settings_store, ics_export, backup, report,
-                 calendar_google, course_data, lasar_data, openai_asr, alignment,
-                 claude_code)
+                 calendar_google, kalender_ai, course_data, lasar_data,
+                 openai_asr, alignment, claude_code)
 # Samma modul som `media` ovan. Inne i transkriberingsjobbet är `media` namnet på
 # SJÄLVA filen (media = Path(...)) och skuggar modulen — aliaset gör att
 # varaktigheten går att fråga efter även där.
@@ -1177,9 +1177,33 @@ def create_app(base_dir: Path | None = None,
             kurser = [c["namn"] for c in db.list_courses(conn)]
         finally:
             conn.close()
+        # Andra passet i tolkningen (Etapp 0.1b): reglerna klarar det mesta och
+        # markerar resten som osäker. Bara resten — en handfull SERIER, inte
+        # hundratals instanser — går till Claude, och svaret cachas per serie.
+        # Utan Claude inloggad hoppas steget över: reglernas placering står,
+        # och den är alltid bättre än ingen vecka alls.
+        def bedomare(osakra: list[dict]) -> dict:
+            conn2 = _db()
+            try:
+                cachade = db.get_kalenderbeslut(conn2)
+                nya = [o for o in osakra if o["nyckel"] not in cachade]
+                if nya and arb.ensure_llm() is not None:
+                    try:
+                        farska = kalender_ai.bedom(nya, klasser, kurser)
+                    except Exception:
+                        debug_log.get_logger().exception("Kalenderbedömningen misslyckades")
+                        farska = {}
+                    if farska:
+                        db.save_kalenderbeslut(conn2, farska)
+                        cachade.update(farska)
+                return cachade
+            finally:
+                conn2.close()
+
         try:
             hamtat = calendar_google.read_schema(base, dagar=dagar,
-                                                 klasser=klasser, kurser=kurser)
+                                                 klasser=klasser, kurser=kurser,
+                                                 bedomare=bedomare)
         except Exception as e:                       # nätfel, trasig token, …
             debug_log.get_logger().exception("Kalendersynk misslyckades")
             return JSONResponse({"error": str(e) or "synken misslyckades"},
@@ -1199,7 +1223,11 @@ def create_app(base_dir: Path | None = None,
         finally:
             conn.close()
         return {"synkad": datetime.now().isoformat(timespec="seconds"),
-                "schema": schema, "lov": lov, "poster": poster}
+                "schema": schema, "lov": lov, "poster": poster,
+                # Hur många osäkra serier Claude fick avgöra — synken ska kunna
+                # säga vad den lutade sig mot, inte bara att den lyckades.
+                "bedomda": len(hamtat.get("beslut") or {}),
+                "osakra": len(hamtat.get("osakra") or [])}
 
     @app.post("/api/schema/till-google")
     def api_schema_till_google():

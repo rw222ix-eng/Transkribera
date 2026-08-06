@@ -282,21 +282,105 @@ def _tid(start: str, slut: str) -> str:
     return f"{(start or '')[11:16]}–{(slut or '')[11:16]}"
 
 
+def serienyckel(h: dict) -> str:
+    """Identiteten på en SERIE, inte på en instans: samma titel, samma slag av
+    händelse. Mentorstiden varje måndag hela läsåret är en nyckel, inte
+    fyrtio — det är den som bedömningen cachas på."""
+    titel = " ".join((h.get("summary") or "").lower().split())
+    heldag = "heldag" if (h.get("start") or {}).get("date") else "tid"
+    ater = "serie" if h.get("recurringEventId") else "enstaka"
+    return f"{titel}|{heldag}|{ater}"
+
+
 def tolka_handelser(handelser: list[dict], klasser: list[str] | None = None,
-                    kurser: list[str] | None = None) -> dict:
-    """Ren funktion: Google-händelser in, {schema, lov, poster} ut i exakt de
-    former frontendens window.Kalender håller. Testbar utan Google."""
+                    kurser: list[str] | None = None,
+                    beslut: dict[str, dict] | None = None) -> dict:
+    """Ren funktion: Google-händelser in, {schema, lov, poster, osakra} ut i
+    exakt de former frontendens window.Kalender håller. Testbar utan Google.
+
+    `osakra` är de händelser reglerna PLACERADE men inte är säkra på — en
+    heldag utan lovord, en återkommande lektionstid utan igenkänd kurs. De
+    ligger kvar där reglerna satte dem (inget försvinner om ingen frågar
+    vidare) och skickas till Claude i ett andra steg, se app/kalender_ai.py."""
     klasser = sorted(klasser or [], key=len, reverse=True)
     kurser = sorted(kurser or [], key=len, reverse=True)
     schema: list[dict] = []
     sedda: set[tuple] = set()
     lov: list[dict] = []
     poster: list[dict] = []
+    osakra: dict[str, dict] = {}
+
+    def osaker(h: dict, titel: str, varfor: str, **extra) -> None:
+        nyckel = serienyckel(h)
+        if nyckel in osakra:
+            return                          # en serie frågas en gång
+        start, slut = h.get("start") or {}, h.get("end") or {}
+        osakra[nyckel] = dict({
+            "nyckel": nyckel, "titel": titel, "varfor": varfor,
+            "heldag": bool(start.get("date")),
+            "aterkommande": bool(h.get("recurringEventId")),
+            "fran": start.get("date") or (start.get("dateTime") or "")[:10],
+            "till": slut.get("date") or (slut.get("dateTime") or "")[:10],
+            "tid": "" if start.get("date") else _tid(start.get("dateTime") or "",
+                                                    slut.get("dateTime") or ""),
+            "plats": (h.get("location") or "").strip(),
+        }, **extra)
+
     for h in handelser or []:
         titel = (h.get("summary") or "").strip()
         if not titel:
             continue
         start, slut = h.get("start") or {}, h.get("end") or {}
+        # Ett fattat beslut går före reglerna. Det är ANDRA passet: samma rena
+        # funktion körs om med Claudes svar på de osäkra serierna, så det finns
+        # bara EN väg som placerar en händelse i veckan.
+        b = (beslut or {}).get(serienyckel(h))
+        if b:
+            slag = b.get("slag")
+            if slag == "ignorera":
+                continue
+            if slag in ("lov", "dag", "uppehall"):
+                fran = start.get("date") or (start.get("dateTime") or "")[:10]
+                if not fran:
+                    continue
+                rat = slut.get("date")
+                try:
+                    till = ((date.fromisoformat(rat) - timedelta(days=1)).isoformat()
+                            if rat else (slut.get("dateTime") or fran)[:10])
+                except ValueError:
+                    till = fran
+                lov.append({"fran": fran, "till": max(fran, till),
+                            "namn": b.get("namn") or titel, "typ": slag})
+                continue
+            if slag == "lektion" and h.get("recurringEventId") and start.get("dateTime"):
+                s2, e2 = start["dateTime"], slut.get("dateTime") or ""
+                try:
+                    dag = date.fromisoformat(s2[:10]).isoweekday()
+                except ValueError:
+                    continue
+                rad = {"dag": dag, "tid": _tid(s2, e2),
+                       "kurs": (b.get("kurs") or "").strip(),
+                       "klass": (b.get("klass") or "").strip(),
+                       "sal": (h.get("location") or "").strip()}
+                if not rad["klass"] or not rad["kurs"]:
+                    continue               # en lektion utan klass och kurs är ingen
+                nyckel = (rad["dag"], rad["tid"], rad["klass"], rad["kurs"], rad["sal"])
+                if nyckel not in sedda:
+                    sedda.add(nyckel)
+                    schema.append(rad)
+                continue
+            # En post kan vara heldag: «Öppet hus» stänger inte skolan men står
+            # i kalendern. Utan den här grenen tappades den helt — gränssnittet
+            # skriver «Hela dagen» när tiden är tom (klass.js).
+            datum = start.get("date") or (start.get("dateTime") or "")[:10]
+            if datum:
+                poster.append({
+                    "datum": datum,
+                    "tid": "" if start.get("date")
+                           else _tid(start["dateTime"], slut.get("dateTime") or ""),
+                    "titel": titel,
+                    "klass": _klass_och_kurs(titel, klasser, kurser)[0]})
+            continue
         if start.get("date"):                       # heldag
             fran = start["date"]
             # Google räknar heldagars slutdatum exklusivt.
@@ -311,6 +395,11 @@ def tolka_handelser(handelser: list[dict], klasser: list[str] | None = None,
             typ = _lovtyp(titel, langd)
             if typ:
                 lov.append({"fran": fran, "till": till, "namn": titel, "typ": typ})
+            else:
+                # «APL-vecka», «Skolavslutning åk 3», «Friluftsdag» — heldagar
+                # som KAN stänga skolan men inte säger det med ett ord vi känner.
+                # Reglerna låter dem vara; Claude får titta.
+                osaker(h, titel, "heldag utan känt lovord")
             continue
         s, e = start.get("dateTime") or "", slut.get("dateTime") or ""
         if not s:
@@ -338,10 +427,17 @@ def tolka_handelser(handelser: list[dict], klasser: list[str] | None = None,
             continue
         poster.append({"datum": datum, "tid": _tid(s, e), "titel": titel,
                        "klass": klass})
+        # En återkommande tidsatt händelse som INTE blev en lektion är den
+        # osäkraste sortens gissning: «Ma2c NA25 halvklass A» är en lektion med
+        # en kursstavning vi inte känner, «Mentorstid NA25» är det inte.
+        if h.get("recurringEventId"):
+            osaker(h, titel, "återkommande men ingen igenkänd kurs",
+                   klass=klass, kurs=kurs)
     schema.sort(key=lambda r: (r["dag"], r["tid"], r["klass"]))
     lov.sort(key=lambda p: (p["fran"], p["till"]))
     poster.sort(key=lambda p: (p["datum"], p["tid"]))
-    return {"schema": schema, "lov": lov, "poster": poster}
+    return {"schema": schema, "lov": lov, "poster": poster,
+            "osakra": sorted(osakra.values(), key=lambda o: o["titel"])}
 
 
 def list_events(base_dir: Path, fran: str, till: str) -> list[dict]:
@@ -473,7 +569,8 @@ def skriv_schema(base_dir: Path, *, schema: list[dict], termin: dict,
 
 def read_schema(base_dir: Path, dagar: int = 330,
                 klasser: list[str] | None = None,
-                kurser: list[str] | None = None) -> dict:
+                kurser: list[str] | None = None,
+                bedomare=None) -> dict:
     """{schema, lov, poster, fran, till} ur Google Kalender, eller {error} när
     kopplingen saknas.
 
@@ -489,4 +586,13 @@ def read_schema(base_dir: Path, dagar: int = 330,
         handelser = list_events(base_dir, fran, till)
     except RuntimeError as e:
         return {"error": str(e)}
-    return dict(tolka_handelser(handelser, klasser, kurser), fran=fran, till=till)
+    ut = tolka_handelser(handelser, klasser, kurser)
+    # Andra passet: `bedomare` får de osäkra serierna och svarar med beslut
+    # (cache + Claude, se app/kalender_ai.py). Samma rena funktion körs om med
+    # besluten, så det finns bara EN väg som placerar en händelse i veckan.
+    if bedomare and ut.get("osakra"):
+        beslut = bedomare(ut["osakra"]) or {}
+        if beslut:
+            ut = dict(tolka_handelser(handelser, klasser, kurser, beslut=beslut),
+                      beslut=beslut)
+    return dict(ut, fran=fran, till=till)

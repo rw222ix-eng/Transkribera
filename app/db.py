@@ -21,7 +21,7 @@ import sqlite3
 import threading
 from pathlib import Path
 
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS courses (
@@ -344,10 +344,29 @@ CREATE INDEX IF NOT EXISTS idx_dokument_datum  ON dokument(datum);
 CREATE INDEX IF NOT EXISTS idx_dokver_dokument ON dokument_versioner(dokument_id, version);
 """
 
+# Kalenderbesluten (v9, Etapp 0.1b) — ENDAST additiv; rollback: DROP TABLE
+# kalenderbeslut + PRAGMA user_version=8.
+#
+# Claudes bedömning av de kalenderposter reglerna inte kunde avgöra, cachad per
+# SERIE (samma titel, samma slag av händelse — se calendar_google.serienyckel).
+# Utan cachen hade mentorstiden bedömts vid varje synk: samma fråga, samma svar,
+# ny kostnad — och ett schema som kan svara olika två gånger.
+_KALENDERBESLUT_MIGRATION = """
+CREATE TABLE IF NOT EXISTS kalenderbeslut (
+    nyckel     TEXT PRIMARY KEY,
+    slag       TEXT NOT NULL,          -- lektion|lov|dag|uppehall|post|ignorera
+    klass      TEXT,
+    kurs       TEXT,
+    namn       TEXT,
+    updated_at TEXT
+);
+"""
+
 _MIGRATIONS: dict[int, str] = {2: _FTS_MIGRATION, 3: _MARKERS_MIGRATION,
                                4: _PLANNING_MIGRATION, 5: _EXAMS_MIGRATION,
                                6: _GY25_MIGRATION, 7: _DATAGRUND_MIGRATION,
-                               8: _DOKUMENT_MIGRATION}
+                               8: _DOKUMENT_MIGRATION,
+                               9: _KALENDERBESLUT_MIGRATION}
 
 _LESSON_SELECT = """
 SELECT l.*, g.namn AS group_namn, c.namn AS course_namn
@@ -1671,6 +1690,35 @@ def replace_kalenderposter(conn: sqlite3.Connection, poster: list[dict],
             "(datum, tid, titel, group_id, slag, kalla) VALUES (?, ?, ?, ?, ?, ?)",
             klara)
     return list_kalenderposter(conn)
+
+
+def get_kalenderbeslut(conn: sqlite3.Connection) -> dict[str, dict]:
+    """{nyckel: {slag, klass, kurs, namn}} — Claudes tidigare bedömningar."""
+    ut: dict[str, dict] = {}
+    for r in conn.execute("SELECT nyckel, slag, klass, kurs, namn "
+                          "FROM kalenderbeslut").fetchall():
+        b = {"slag": r["slag"]}
+        for f in ("klass", "kurs", "namn"):
+            if r[f]:
+                b[f] = r[f]
+        ut[r["nyckel"]] = b
+    return ut
+
+
+def save_kalenderbeslut(conn: sqlite3.Connection, beslut: dict[str, dict]) -> int:
+    """Spara/uppdatera bedömningar. Samma serie frågas en gång; ändrar läraren
+    sin kalendertitel blir det en ny nyckel och därmed en ny fråga."""
+    nu = _now()
+    rader = [(n, b.get("slag"), b.get("klass"), b.get("kurs"), b.get("namn"), nu)
+             for n, b in (beslut or {}).items()
+             if isinstance(b, dict) and b.get("slag")]
+    with conn:
+        conn.executemany(
+            "INSERT INTO kalenderbeslut(nyckel, slag, klass, kurs, namn, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(nyckel) DO UPDATE SET "
+            "slag=excluded.slag, klass=excluded.klass, kurs=excluded.kurs, "
+            "namn=excluded.namn, updated_at=excluded.updated_at", rader)
+    return len(rader)
 
 
 # ------------------------------------------------------- dokumentpersistens --

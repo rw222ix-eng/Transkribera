@@ -141,7 +141,7 @@ test("synkknappen läser om schemat ur Google", async ({ page }) => {
     body: JSON.stringify({
       synkad: "2026-08-06T09:00:00",
       schema: [{ dag: 2, tid: "09:15–10:00", kurs: "Matematik, nivå 2c", klass: "NA24", sal: "C201" }],
-      lov: SCHEMA.lov, poster: [] }) }));
+      lov: SCHEMA.lov, poster: [], bedomda: 2, osakra: 2 }) }));
   await page.goto("/");
   await hydrerad(page);
 
@@ -152,6 +152,8 @@ test("synkknappen läser om schemat ur Google", async ({ page }) => {
   await expect.poll(() => page.evaluate(() => window.Kalender.schema.length)).toBe(1);
   expect(await page.evaluate(() => window.Kalender.schema[0].sal)).toBe("C201");
   await expect(page.locator(".toast")).toContainText("omlästa");
+  // Det reglerna inte kunde avgöra läste Claude — det ska stå, inte döljas.
+  await expect(page.locator(".toast")).toContainText("2 poster tolkade av Claude");
 });
 
 test("utan server står prototypen kvar", async ({ page }) => {

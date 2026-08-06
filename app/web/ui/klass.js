@@ -752,7 +752,10 @@ window.Klass = (() => {
           sv && sv.fel ? sv.fel
             : sv && sv.prototyp
               ? 'Kalendern är synkad — schemat, salarna och loven oförändrade'
-              : 'Kalendern är synkad — schemat, salarna och loven är omlästa'));
+              /* Posterna reglerna inte kunde avgöra läste Claude — det ska
+                 stå, inte döljas bakom ett allmänt «synkad». */
+              : `Kalendern är synkad — schemat, salarna och loven är omlästa${
+                  sv && sv.bedomda ? ` · ${sv.bedomda} ${sv.bedomda === 1 ? 'post' : 'poster'} tolkade av Claude` : ''}`));
       } else {
         setTimeout(() => klar('Kalendern är synkad — schemat, salarna och loven oförändrade'), 1100);
       }

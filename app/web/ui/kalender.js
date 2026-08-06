@@ -226,7 +226,9 @@ window.Kalender = (() => {
       const d = await A.json('/api/schema/synk', { method: 'POST' });
       ta(d);
       ritaOm();
-      return { synkad: d.synkad };
+      /* `bedomda` = hur många osäkra serier Claude fick avgöra. Synken ska
+         kunna säga vad den lutade sig mot, inte bara att den lyckades. */
+      return { synkad: d.synkad, bedomda: d.bedomda || 0 };
     } catch (e) {
       return { fel: e.message };
     }
