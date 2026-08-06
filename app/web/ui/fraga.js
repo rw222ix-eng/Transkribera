@@ -59,12 +59,16 @@
     host.hidden = false;
     let stoppad = false;
     const jobb = $('.fjobb', el);
-    const t = setTimeout(() => {
+    /* Samma `o.jobb` som i det stora läget: finns det väntar raden på ett
+       riktigt anrop i stället för på en klocka, och Avbryt avbryter det. */
+    const styrning = o.jobb ? new AbortController() : null;
+    let svaret = null;
+    const klarna = () => {
       if (stoppad) return;
       jobb.setAttribute('data-ut', '');
       setTimeout(() => jobb.remove(), 220);
       el.dataset.lage = 'klar';
-      malaText(o.svar, $('.ftext', el));
+      malaText(typeof o.svar === 'function' ? o.svar(svaret) : o.svar, $('.ftext', el));
       if (o.atgarder && o.atgarder.length) {
         const a = $('.fatgard', el);
         a.hidden = false;
@@ -76,10 +80,39 @@
           a.appendChild(b);
         });
       }
-      if (o.efterKlar) o.efterKlar(el);
-    }, o.vantan || 1400);
+      if (o.efterKlar) o.efterKlar(el, svaret);
+    };
+    /* Ett fel blir ett besked i samma ruta, med en väg tillbaka — inte en
+       ändring som ser gjord ut men aldrig skedde. */
+    const felade = e => {
+      if (stoppad || (e && e.name === 'AbortError')) return;
+      jobb.remove();
+      el.dataset.lage = 'stoppad';
+      malaText((e && e.message) || 'Det gick inte att skriva om.', $('.ftext', el));
+      const a = $('.fatgard', el);
+      a.hidden = false;
+      a.innerHTML = '';
+      const b = document.createElement('button');
+      b.className = 'ghost';
+      b.textContent = 'Försök igen';
+      b.addEventListener('click', () => (o.onIgen ? o.onIgen() : korEnkel(host, o)));
+      a.appendChild(b);
+      if (o.efterFel) o.efterFel(e);
+    };
+    let t = null;
+    if (o.jobb) {
+      Promise.resolve()
+        .then(() => o.jobb({
+          signal: styrning.signal,
+          log: m => { $('.fjobbtext', el).textContent = String(m || '').slice(0, 72); },
+        }))
+        .then(r => { svaret = r; klarna(); }, felade);
+    } else {
+      t = setTimeout(klarna, o.vantan || 1400);
+    }
     const stoppa = etikett => {
       stoppad = true;
+      if (styrning) { try { styrning.abort(); } catch (e) { /* redan klar */ } }
       clearTimeout(t);
       jobb.remove();
       el.dataset.lage = 'stoppad';

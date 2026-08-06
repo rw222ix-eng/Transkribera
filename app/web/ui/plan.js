@@ -1718,7 +1718,17 @@
     if ((forsok || 0) > 30) return;
     requestAnimationFrame(() => omGranska(ark, (forsok || 0) + 1));
   }
-  function iterera(text, etikett, elId) {
+  /* ── ITERATIONEN ────────────────────────────────────
+     Nålarna, diffen och källomviktningen är oförändrade: `andrat` styr vilka
+     element som får en numrerad nål i canvas, och den listan härleds ur vad
+     läraren SKREV — det är en avläsning av meningen, inte en gissning om
+     innehållet, och den ska göras här oavsett vem som skrev om pappret.
+
+     Det som ÄNDRATS är varifrån innehållet kommer: skrevs pappret av servern
+     ligger den omskrivna tavlan respektive provet i `res`, och de heuristiska
+     reglerna nedan (svårighet, kontext, nivå) rör då inte det som ritas — de
+     lever kvar för prototypen, där de är hela omskrivningen. */
+  function iterera(text, etikett, elId, res) {
     if (nu < 0) return;
     const l = (etikett ? etikett + ' ' : '') + text.toLowerCase();
     const v = nyVersion(versioner[nu], x => {
@@ -1741,9 +1751,40 @@
       if (/instruktion|regler|räknare/.test(l)) x.andrat.push('instr');
       if (!x.andrat.length) x.andrat.push('uppg1', 'block0');
     });
+    if (res && res.board) { v.wb = res.board; v.wbFel = res.errors || []; }
+    if (res && res.exam) {
+      v.uppgifter = franProv(res.exam);
+      v.granser = res.granser || v.granser || null;
+      v.summor = res.summor || v.summor || null;
+      v.provFel = res.errors || [];
+    }
     versioner = versioner.slice(0, nu + 1).concat([v]);
     visa(versioner.length - 1);
     utkastVersion(v);
+  }
+
+  /* Anropet bakom en ändring i canvas. Hela meddelandet går som prompt — också
+     det ett klick på en källa la till («Ta mer ur boken …»), för viktningen ÄR
+     en mening läraren skrev. */
+  function iterationsJobb(text, _etikett, _elId, krokar) {
+    const v = versioner[nu];
+    if (!serverPa() || !v) return null;
+    const krav = r => {
+      if (!r) throw new Error('Servern slutade svara mitt i omskrivningen. Försök igen.');
+      return r;
+    };
+    if (v.wbId) {
+      return window.API.strom(`/api/planning/${v.wbId}/refine`,
+                              { message: text }, krokar).then(krav);
+    }
+    if (v.provId) {
+      return window.API.strom(`/api/exams/${v.provId}/refine`,
+                              { message: text }, krokar).then(krav).then(r => {
+        if (!r.exam) throw new Error('Omskrivningen gick inte igenom. Försök igen.');
+        return r;
+      });
+    }
+    return null;
   }
   $('#angra').addEventListener('click', angra);
   $('#gorom').addEventListener('click', gorOm);
@@ -1811,7 +1852,10 @@
       titel: `${v.typ} — ${versal(v.moment)}`,
       meta: $('#dokmeta').textContent,
       ark: arkLage(v),
-      onAndra: (text, etikett, elId) => iterera(text, etikett, elId),
+      onAndra: (text, etikett, elId, res) => iterera(text, etikett, elId, res),
+      /* Finns ingen server, eller är pappret prototypens, returneras null och
+         canvas kör sin egen takt precis som förut. */
+      onJobb: (text, etikett, elId, krokar) => iterationsJobb(text, etikett, elId, krokar),
       onBild: elId => valjBild(elId)
     });
   });

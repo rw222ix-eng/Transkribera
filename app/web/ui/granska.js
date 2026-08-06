@@ -270,9 +270,16 @@
       enkel: true,
       omfang: post.namn.toLowerCase(),
       jobbtext: `Skriver om ${post.namn.toLowerCase()} …`,
+      /* Skrevs pappret av servern går ändringen dit — hela texten, inklusive
+         det ett klick på en källa la till («Ta mer ur boken …»), är prompten.
+         Annars är det prototypens omskrivning, som förut. */
+      jobb: host && host.onJobb ? k => host.onJobb(text, post.namn, post.el, k)
+        /* Inget riktigt anrop — prototypen, eller ett papper appen skrev själv.
+           Då är väntan prototypens egen, precis som förut. */
+        || new Promise(r => setTimeout(r, 1400)) : null,
       svar: `Skrivet om. ${post.namn} följer nu ”${text.trim()}” — ändringen är markerad i pappret.`,
-      efterKlar: () => {
-        if (host && host.onAndra) host.onAndra(text, post.namn, post.el);
+      efterKlar: (_el, res) => {
+        if (host && host.onAndra) host.onAndra(text, post.namn, post.el, res);
         vantaDiff(varv, fore, 0);
         (window.rullaLada || ((b, y) => { b.scrollTop = y; }))(lista, lista.scrollHeight);
         fokusera(nr);

@@ -552,3 +552,39 @@ def test_archive_ask_emits_real_scan_events(client, monkeypatch):
 
     deep = next(e for e in events if e["type"] == "deep_read")
     assert [s["titel"] for s in deep["sources"]] == ["Bråk"]
+
+
+def test_refine_far_hela_meddelandet_inklusive_kallviktningen(llm_ready, monkeypatch):
+    """Ett klick på en källa i canvas skriver in «Ta mer ur boken …» i FÄLTET.
+    Hela meningen är prompten — det finns inget separat viktningsfält, och ska
+    inte finnas: viktningen är något läraren skrev."""
+    _stub_generate(monkeypatch, {"board": _valid_board(), "errors": [], "rounds": 1})
+    pid = _done(llm_ready.post("/api/planning/generate",
+                               json={"moment": "Derivator"}))["id"]
+
+    sett = {}
+
+    def fake_refine(board, message, *, model, llm=None,
+                    max_rounds=lesson_board.MAX_ROUNDS, log_cb=None, token_cb=None):
+        sett["message"] = message
+        return {"board": _valid_board(), "errors": [], "rounds": 1}
+    monkeypatch.setattr(lesson_board, "refine_board", fake_refine)
+
+    meddelande = "Ta mer ur boken och mer ur lektionen — byt exempel 2"
+    r = llm_ready.post(f"/api/planning/{pid}/refine", json={"message": meddelande})
+    assert r.status_code == 200
+    _done(r)
+    assert sett["message"] == meddelande
+
+
+def test_refine_utan_meddelande_ar_400(llm_ready, monkeypatch):
+    _stub_generate(monkeypatch, {"board": _valid_board(), "errors": [], "rounds": 1})
+    pid = _done(llm_ready.post("/api/planning/generate",
+                               json={"moment": "Derivator"}))["id"]
+    assert llm_ready.post(f"/api/planning/{pid}/refine",
+                          json={"message": "  "}).status_code == 400
+
+
+def test_refine_pa_okand_planering_ar_404(llm_ready):
+    assert llm_ready.post("/api/planning/finnsinte/refine",
+                          json={"message": "byt exempel"}).status_code == 404
