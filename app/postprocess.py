@@ -2,6 +2,8 @@
 from __future__ import annotations
 import json
 import re
+import sys
+from pathlib import Path
 from typing import Callable
 
 from app import llm_client
@@ -552,6 +554,59 @@ def build_extract_prompt(transcript: str) -> str:
     return f"{EXTRACT_INSTRUCTION}---\n{transcript}\n---"
 
 
+# ── Nätet under integritetsregeln (Etapp 3) ────────────────────────────────
+# Prompten säger åt modellen att aldrig skriva ut elevers fullständiga namn.
+# Det var HELA skyddet: skrev den ändå ut «Anna Lindqvist behöver extra tid»
+# hamnade namnet i databasen, i lektionsminnet och i varje framtida prompt —
+# och ett transkript från ett klassrum är fullt av namn. En instruktion är
+# inte en spärr, så det här är spärren.
+#
+# Regeln är avsiktligt snäv: bara «Förnamn Efternamn» där förnamnet står i
+# app/data/fornamn.txt kortas till «A.L.». Ett ensamt förnamn rörs inte (då
+# skulle «Anna räknade fel» bli oläsbart), och ett namn som inte står i listan
+# står kvar — prompten är fortfarande första försvaret. Priset för en bredare
+# regel vore att «Pythagoras sats» förvanskas, och ett papper som ljuger om
+# matematiken är värre än ett namn för mycket.
+def _las_fornamn() -> frozenset[str]:
+    try:
+        rå = (_data_dir() / "fornamn.txt").read_text(encoding="utf-8")
+    except OSError:
+        return frozenset()
+    return frozenset(
+        rad.strip().lower() for rad in rå.splitlines()
+        if rad.strip() and not rad.lstrip().startswith("#"))
+
+
+def _data_dir() -> Path:
+    # Frozen: PyInstaller packar bundlad data under sys._MEIPASS (jfr
+    # lasar_data._rot).
+    if getattr(sys, "frozen", False):
+        return Path(getattr(sys, "_MEIPASS", ".")) / "app" / "data"
+    return Path(__file__).resolve().parent / "data"
+
+
+_FORNAMN: frozenset[str] | None = None
+# Förnamnet får vara sammansatt («Anna-Lena»): matchas bara halva blir
+# resultatet «Anna-L.E.», vilket lämnar kvar precis det som skulle bort.
+_ORD = r"[A-ZÅÄÖ][a-zåäöéèü]+"
+_NAMNPAR = re.compile(rf"\b({_ORD}(?:-{_ORD})*)\s+({_ORD}(?:[-']{_ORD})*)\b")
+
+
+def initialisera(text: str) -> str:
+    """«Anna Lindqvist» → «A.L.», «Anna-Lena Ek» → «A-L.E.». Annat lämnas."""
+    global _FORNAMN
+    if _FORNAMN is None:
+        _FORNAMN = _las_fornamn()
+
+    def byt(m: "re.Match[str]") -> str:
+        fornamn, efternamn = m.group(1), m.group(2)
+        delar = fornamn.split("-")
+        if not any(d.lower() in _FORNAMN for d in delar):
+            return m.group(0)
+        return "-".join(d[0] for d in delar) + "." + efternamn[0] + "."
+    return _NAMNPAR.sub(byt, str(text or ""))
+
+
 def _parse_extract(raw: str) -> dict:
     """Parse the model's JSON. The schema makes this reliable, but stay robust:
     fall back to the first {...} block, then to an empty structure."""
@@ -589,16 +644,18 @@ def _extract_one(transcript: str, model: str,
         response_format=EXTRACT_RESPONSE_FORMAT,
         max_tokens=EXTRACT_MAX_TOKENS)
     parsed = _parse_extract(raw)
+    # Varje fält som skrivs vidare passerar initialiseringen: det här är sista
+    # stället före databasen, lektionsminnet och nästa prompt.
     insights: list[dict] = []
     for key, typ in _EXTRACT_TYP.items():
         for it in parsed.get(key, []):
             insights.append({
                 "typ": typ,
-                "text": str(it.get("text", "")).strip(),
+                "text": initialisera(str(it.get("text", "")).strip()),
                 "due_date": (str(it.get("due_date")).strip() or None) if it.get("due_date") else None,
-                "ref": (str(it.get("ref")).strip() or None) if it.get("ref") else None,
+                "ref": initialisera(str(it.get("ref")).strip()) or None if it.get("ref") else None,
             })
-    innehall = [str(it.get("text", "")).strip()
+    innehall = [initialisera(str(it.get("text", "")).strip())
                 for it in parsed.get("innehall", []) if it.get("text")]
     return insights, innehall
 

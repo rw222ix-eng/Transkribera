@@ -248,18 +248,23 @@ def test_geometri_statistik_kompilerar(d, tmp_path):
     assert _kompilera(exam_figures.render_figur(_bygg(d)), tmp_path)
 
 
-def _sidantal(tikz: str, base: Path):
-    """Antal PDF-sidor för en figur (None om fitz saknas), kompilerad i en
-    per-test tmp-katalog (base)."""
-    try:
-        import fitz
-    except ImportError:
-        return None
+def _sidantal(tikz: str, base: Path) -> int:
+    """Antal PDF-sidor för en figur, kompilerad i en per-test tmp-katalog.
+
+    Räknades förr med fitz (PyMuPDF) — ett paket som varken står i
+    requirements eller finns på en ren maskin. Saknades det returnerade
+    hjälparen None och en-sida-kravet försvann tyst ur testet: figuren kunde
+    spränga sin ruta utan att någon svit blev röd. pypdfium2 är redan ett
+    deklarerat beroende (tryckpaketet fogar ihop PDF:er med den)."""
+    import pypdfium2 as pdfium
     pdf, _ = exam_pdf.compile_pdf(_wrap(tikz), base / "figsid", "sid")
     if pdf is None:
         return -1
-    d = fitz.open(pdf); n = d.page_count; d.close()
-    return n
+    d = pdfium.PdfDocument(str(pdf))
+    try:
+        return len(d)
+    finally:
+        d.close()
 
 
 @pytest.mark.parametrize("d", [
@@ -271,9 +276,8 @@ def _sidantal(tikz: str, base: Path):
 def test_extrema_parametrar_ryms_pa_en_sida(d, tmp_path):
     tikz = exam_figures.render_figur(_bygg(d))
     assert _kompilera(tikz, tmp_path), f"{d['typ']} kompilerar inte"
-    n = _sidantal(tikz, tmp_path)
-    if n is not None:
-        assert n == 1, f"{d['typ']} blev {n} sidor — kurvan klipps inte mot rutan"
+    assert _sidantal(tikz, tmp_path) == 1, \
+        f"{d['typ']} blev fler sidor — kurvan klipps inte mot rutan"
 
 
 @pytest.mark.parametrize("d", [
@@ -292,6 +296,4 @@ def test_extrema_parametrar_ryms_pa_en_sida(d, tmp_path):
 def test_stora_naturliga_tal_kompilerar_pa_en_sida(d, tmp_path):
     tikz = exam_figures.render_figur(_bygg(d))
     assert _kompilera(tikz, tmp_path), f"{d['typ']} kompilerar inte"
-    n = _sidantal(tikz, tmp_path)
-    if n is not None:
-        assert n == 1, f"{d['typ']} blev {n} sidor"
+    assert _sidantal(tikz, tmp_path) == 1, f"{d['typ']} blev fler sidor"

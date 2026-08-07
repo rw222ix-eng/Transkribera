@@ -40,12 +40,20 @@ def engine_available() -> bool:
 
 def compile_pdf(tex: str, out_dir: Path, jobname: str, *,
                 timeout: int = _TIMEOUT_S,
+                epoch: int | None = None,
                 runner=subprocess.run) -> tuple[Path | None, str]:
     """Kompilera LaTeX-källan till ``out_dir/jobname.pdf``.
 
     Returnerar (pdf_path, "") vid framgång eller (None, fellogg). Källan
     och en loggfil lämnas alltid kvar bredvid utdatan (felsökning +
-    korrigeringsprompt). ``runner`` är injicerbar för tester."""
+    korrigeringsprompt). ``runner`` är injicerbar för tester.
+
+    ``epoch`` (unix-sekunder) sätter ``SOURCE_DATE_EPOCH``: PDF:ens
+    tidsstämplar och id blir då en funktion av källan i stället för av
+    klockan, och två kompileringar av samma .tex ger IDENTISKA byte. Det är
+    testsvitens snabbpass — samma källa ska ge samma PDF, annars har mallen,
+    motorn eller cachen ändrats. Utelämnad (som i appen) står den riktiga
+    tiden i filen; ett papper ska inte ljuga om när det skrevs."""
     exe = engine_path()
     if exe is None:
         return None, ("PDF-motorn (Tectonic) är inte installerad — "
@@ -60,6 +68,8 @@ def compile_pdf(tex: str, out_dir: Path, jobname: str, *,
     env = dict(os.environ)
     cache = engine_dir() / "cache"
     env["TECTONIC_CACHE_DIR"] = str(cache)
+    if epoch is not None:
+        env["SOURCE_DATE_EPOCH"] = str(int(epoch))
     cmd = [str(exe), "--outdir", str(out_dir)]
     # Strikt offline (--only-cached) ENDAST när cachen är färdigseedad —
     # markören skrivs av seedningssteget efter en lyckad kompilering. En
