@@ -140,6 +140,7 @@ import json, os, sys, time
 
 LAGE = os.environ.get("FEJK_CLAUDE", "ok")
 SVAR = os.environ.get("FEJK_CLAUDE_SVAR", "Det här är svaret.")
+KASSETT = os.environ.get("FEJK_KASSETT", "")
 
 def skriv(h):
     sys.stdout.write(json.dumps(h, ensure_ascii=False) + "\n")
@@ -152,6 +153,17 @@ if "auth" in sys.argv:
     sys.exit(0)
 
 prompt = sys.stdin.read()          # appen matar prompten på stdin
+
+if LAGE == "kassett":
+    # Uppspelning: raderna skrivs ut ORDAGRANT som CLI:t en gång skrev dem.
+    # Allt efter svaret — strömtolkningen, JSON-parsningen, schemat, balansen,
+    # reparationsrundorna — körs då på riktigt.
+    with open(KASSETT, encoding="utf-8") as fh:
+        band = json.load(fh)
+    for rad in band["rader"]:
+        sys.stdout.write(rad + "\n")
+    sys.stdout.flush()
+    sys.exit(0)
 
 if LAGE == "hanger":
     # Skriver ALDRIG något. Det här är buggkandidat 3: läser man timeouten inuti
@@ -213,3 +225,69 @@ def skriv_claude(mapp: Path) -> Path:
                             encoding="utf-8")
         startare.chmod(startare.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP)
     return startare
+
+
+# ═════════════════════════════════════════════════════ kassetter ════════
+# En kassett är ETT svar från Claude Code, sparat rad för rad som CLI:t
+# skrev det. Spelas den upp går allt EFTER svaret på riktigt: strömtolkningen
+# i claude_code, JSON-parsningen, schemat, balansreglerna och
+# reparationsrundorna. Skillnaden mot en vanlig stubb är att stubben hoppar
+# över just den delen av kedjan som brukar gå sönder.
+#
+# `inspelad: true` betyder att banden kommer ur en riktig körning
+# (tools/spela_in_kassett.py, kräver lärarens inloggning och kostar några
+# ören). `false` betyder att de är byggda ur appens egna exempel — samma form,
+# men ingen modell har skrivit dem. Fältet finns för att ingen ska tro att en
+# konstruerad kassett bevisar något om modellens beteende.
+
+KASSETTER = Path(__file__).resolve().parent / "kassetter"
+
+
+def kassettfil(namn: str) -> Path:
+    return KASSETTER / f"{namn}.json"
+
+
+def las_kassett(namn: str) -> dict:
+    return json.loads(kassettfil(namn).read_text(encoding="utf-8"))
+
+
+def alla_kassetter() -> list[str]:
+    if not KASSETTER.is_dir():
+        return []
+    return sorted(p.stem for p in KASSETTER.glob("*.json"))
+
+
+def stream_rader(text: str, *, bitar: int = 8, kostnad: float = 0.02,
+                 modell: str = "claude-opus-5") -> list[str]:
+    """Bygg stream-json-raderna för ett svar — samma form som CLI:t skriver:
+    text_delta-bitar och en avslutande result-rad."""
+    steg = max(1, len(text) // max(1, bitar))
+    rader = [json.dumps({"type": "system", "subtype": "init"}, ensure_ascii=False)]
+    for i in range(0, len(text), steg):
+        rader.append(json.dumps(
+            {"type": "stream_event",
+             "event": {"delta": {"type": "text_delta", "text": text[i:i + steg]}}},
+            ensure_ascii=False))
+    rader.append(json.dumps(
+        {"type": "result", "is_error": False, "result": text,
+         "total_cost_usd": kostnad, "duration_ms": 4200,
+         "modelUsage": {modell: {"outputTokens": max(1, len(text) // 4)}}},
+        ensure_ascii=False))
+    return rader
+
+
+def skriv_kassett(namn: str, *, vad: str, svar: str, inspelad: bool,
+                  modell: str = "claude-opus-5", rader: list[str] | None = None,
+                  extra: dict | None = None) -> Path:
+    KASSETTER.mkdir(parents=True, exist_ok=True)
+    band = {
+        "namn": namn,
+        "vad": vad,
+        "inspelad": inspelad,
+        "modell": modell,
+        "rader": rader if rader is not None else stream_rader(svar, modell=modell),
+    }
+    band.update(extra or {})
+    fil = kassettfil(namn)
+    fil.write_text(json.dumps(band, ensure_ascii=False, indent=1), encoding="utf-8")
+    return fil

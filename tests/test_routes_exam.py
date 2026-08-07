@@ -182,6 +182,61 @@ def test_approve_compile_failure_reports_honestly(client, monkeypatch):
     assert res["pdf"] is None
 
 
+def test_approve_ger_upp_efter_tva_fixrundor(client, monkeypatch):
+    """Reparationsloopens tak. En modell som skriver trasig LaTeX om och om
+    igen får inte hålla läraren kvar i en väntan utan slut — och varje runda
+    är ett betalt anrop. Taket är MAX_LATEX_ROUNDS, och när det är nått ska
+    felet SÄGAS, med .tex-filen kvar att öppna."""
+    result, _ = _make_exam(client, monkeypatch)
+    monkeypatch.setattr(exam_pdf, "engine_available", lambda: True)
+    monkeypatch.setattr(exam_pdf, "compile_pdf",
+                        lambda *a, **k: (None, "! Missing $ inserted."))
+
+    rundor = {"n": 0}
+
+    def rakna(exam, log, **kw):
+        rundor["n"] += 1
+        # Modellen «rättar» men skriver lika trasig LaTeX varje gång.
+        return {"exam": exam, "errors": [], "rounds": rundor["n"]}
+    monkeypatch.setattr(exam_gen, "fix_latex", rakna)
+
+    r = client.post(f"/api/exams/{result['id']}/approve", json={})
+    res = _done(r)
+    assert rundor["n"] == exam_gen.MAX_LATEX_ROUNDS,         f"{rundor['n']} fixrundor — taket är {exam_gen.MAX_LATEX_ROUNDS}"
+    assert any(e["code"] == "kompilering" for e in res["errors"])
+    assert res["pdf"] is None
+    assert res["tex"], "källan ska ligga kvar att öppna"
+
+
+def test_approve_slutar_fixa_nar_provet_kompilerar(client, monkeypatch):
+    """Andra sidan av taket: går det igenom i andra rundan ska det inte bli
+    en tredje."""
+    result, _ = _make_exam(client, monkeypatch)
+    monkeypatch.setattr(exam_pdf, "engine_available", lambda: True)
+    forsok = {"n": 0}
+
+    def fake_compile(tex, out_dir, jobname, **kw):
+        forsok["n"] += 1
+        if forsok["n"] == 1:
+            return None, "! Missing $ inserted."
+        out_dir.mkdir(parents=True, exist_ok=True)
+        p = out_dir / f"{jobname}.pdf"
+        p.write_bytes(b"%PDF-1.5 fejk")
+        return p, ""
+    monkeypatch.setattr(exam_pdf, "compile_pdf", fake_compile)
+
+    rundor = {"n": 0}
+
+    def rakna(exam, log, **kw):
+        rundor["n"] += 1
+        return {"exam": exam, "errors": [], "rounds": rundor["n"]}
+    monkeypatch.setattr(exam_gen, "fix_latex", rakna)
+
+    res = _done(client.post(f"/api/exams/{result['id']}/approve", json={}))
+    assert rundor["n"] == 1
+    assert res["pdf"] and res["errors"] == []
+
+
 def test_approve_bedomning_failure_surfaces_and_keeps_prov(client, monkeypatch):
     """Bedömningsanvisningens returvärde kastades bort: föll den kom varken
     logg eller errors-post, och kvittot stod kvar på 'PDF skapad'. Läraren

@@ -132,10 +132,14 @@ def fejk_claude(tmp_path, monkeypatch):
     # sviten vill ha EN — den fejkade, aldrig lärarens.
     monkeypatch.setattr(claude_code, "binar", lambda: str(exe))
 
-    def satt(lage: str = "ok", *, svar: str | None = None):
-        monkeypatch.setenv("FEJK_CLAUDE", lage)
+    def satt(lage: str = "ok", *, svar: str | None = None,
+             kassett: str | None = None):
+        monkeypatch.setenv("FEJK_CLAUDE", "kassett" if kassett else lage)
         if svar is not None:
             monkeypatch.setenv("FEJK_CLAUDE_SVAR", svar)
+        if kassett is not None:
+            from tests import fejk
+            monkeypatch.setenv("FEJK_KASSETT", str(fejk.kassettfil(kassett)))
         # Statusen cachas i 20 s — annars svarar nästa test på förra lägets svar.
         claude_code._STATUS_CACHE.update(tid=0.0, varde=None)
         return exe

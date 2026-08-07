@@ -103,6 +103,27 @@ def kravs() -> None:
         raise InteInloggad(s["fel"])
 
 
+# ── Schemat som inte får plats på kommandoraden ────────────────────────────
+# `claude` installeras på Windows som claude.CMD, och cmd.exe:s kommandorad tar
+# slut vid 8191 tecken (CreateProcess vid 32767). Tavelschemat är 34 kB och
+# provschemat 24 kB — skickade som `--json-schema` startade processen inte ens:
+# «FileNotFoundError [WinError 206]» respektive «The command line is too long».
+# Tavlan och provet kunde alltså aldrig genereras på lärarens maskin, och det
+# syntes inte i någon svit eftersom alla stubbar satt innanför den här sömmen.
+#
+# Ett schema som inte får plats går därför i PROMPTEN i stället — den matas på
+# stdin och har inget tak. Grammatiktvånget förloras, men valideringen och
+# reparationsrundorna (lesson_board/exam_gen) finns kvar och är just till för
+# det. Ett svar som går att reparera är oändligt mycket bättre än ett anrop som
+# aldrig sker.
+SCHEMA_TAK = 6000
+
+_SCHEMA_I_PROMPT = (
+    "\n\nSvara med JSON som följer det här JSON-schemat EXAKT — inga extra "
+    "fält, inga utelämnade obligatoriska fält, och ingen text runt omkring:\n"
+)
+
+
 def _argv(exe: str, *, system: str | None, schema: dict | None,
           modell: str, verktyg: str, extra_dirs: list[str]) -> list[str]:
     argv = [exe, "-p", "--safe-mode", "--no-session-persistence",
@@ -136,6 +157,12 @@ def generate(prompt: str, *, system: str | None = None,
     exe = binar()
     bilder = [str(Path(b)) for b in (bilder or []) if Path(b).exists()]
     mappar = sorted({str(Path(b).parent) for b in bilder})
+    # Ett stort schema flyttas till prompten — se SCHEMA_TAK.
+    if schema is not None:
+        schema_json = json.dumps(schema, ensure_ascii=False)
+        if len(schema_json) > SCHEMA_TAK:
+            prompt = prompt + _SCHEMA_I_PROMPT + schema_json
+            schema = None
     argv = _argv(exe, system=system, schema=schema, modell=modell,
                  verktyg="Read" if bilder else "", extra_dirs=mappar)
     if bilder:

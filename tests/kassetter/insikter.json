@@ -1,0 +1,19 @@
+{
+ "namn": "insikter",
+ "vad": "postprocess.extract — insikter ur ett lektionstranskript",
+ "inspelad": false,
+ "modell": "claude-opus-5",
+ "rader": [
+  "{\"type\": \"system\", \"subtype\": \"init\"}",
+  "{\"type\": \"stream_event\", \"event\": {\"delta\": {\"type\": \"text_delta\", \"text\": \"{\\\"kalender\\\": [{\\\"text\\\": \\\"Prov den 12 maj\\\", \\\"d\"}}}",
+  "{\"type\": \"stream_event\", \"event\": {\"delta\": {\"type\": \"text_delta\", \"text\": \"ue_date\\\": \\\"2026-05-12\\\"}], \\\"svarigheter\\\": [{\\\"\"}}}",
+  "{\"type\": \"stream_event\", \"event\": {\"delta\": {\"type\": \"text_delta\", \"text\": \"text\\\": \\\"Anna Lindqvist fastnade på kedjerege\"}}}",
+  "{\"type\": \"stream_event\", \"event\": {\"delta\": {\"type\": \"text_delta\", \"text\": \"ln\\\", \\\"ref\\\": \\\"kedjeregeln\\\"}], \\\"atgarder\\\": [{\\\"\"}}}",
+  "{\"type\": \"stream_event\", \"event\": {\"delta\": {\"type\": \"text_delta\", \"text\": \"text\\\": \\\"Ta om kedjeregeln på fredag\\\"}], \\\"gru\"}}}",
+  "{\"type\": \"stream_event\", \"event\": {\"delta\": {\"type\": \"text_delta\", \"text\": \"pprum\\\": [], \\\"material\\\": [{\\\"text\\\": \\\"Kopiera u\"}}}",
+  "{\"type\": \"stream_event\", \"event\": {\"delta\": {\"type\": \"text_delta\", \"text\": \"pp arbetsbladet\\\"}], \\\"innehall\\\": [{\\\"text\\\": \\\"d\"}}}",
+  "{\"type\": \"stream_event\", \"event\": {\"delta\": {\"type\": \"text_delta\", \"text\": \"erivatans definition\\\"}, {\\\"text\\\": \\\"ändringskv\"}}}",
+  "{\"type\": \"stream_event\", \"event\": {\"delta\": {\"type\": \"text_delta\", \"text\": \"ot\\\"}]}\"}}}",
+  "{\"type\": \"result\", \"is_error\": false, \"result\": \"{\\\"kalender\\\": [{\\\"text\\\": \\\"Prov den 12 maj\\\", \\\"due_date\\\": \\\"2026-05-12\\\"}], \\\"svarigheter\\\": [{\\\"text\\\": \\\"Anna Lindqvist fastnade på kedjeregeln\\\", \\\"ref\\\": \\\"kedjeregeln\\\"}], \\\"atgarder\\\": [{\\\"text\\\": \\\"Ta om kedjeregeln på fredag\\\"}], \\\"grupprum\\\": [], \\\"material\\\": [{\\\"text\\\": \\\"Kopiera upp arbetsbladet\\\"}], \\\"innehall\\\": [{\\\"text\\\": \\\"derivatans definition\\\"}, {\\\"text\\\": \\\"ändringskvot\\\"}]}\", \"total_cost_usd\": 0.02, \"duration_ms\": 4200, \"modelUsage\": {\"claude-opus-5\": {\"outputTokens\": 89}}}"
+ ]
+}

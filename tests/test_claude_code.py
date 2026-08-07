@@ -225,3 +225,67 @@ def test_chatten_vaver_in_historiken_i_prompten(monkeypatch):
     assert "Vad sa jag om bråk?" in prompt
     assert "Du tog det på slutet." in prompt
     assert prompt.rstrip().endswith("Och procent?")
+
+
+# ── Kommandoraden har ett tak (Etapp 3) ────────────────────────────────────
+# Fyndet: `claude` installeras på Windows som claude.CMD, och cmd.exe:s
+# kommandorad tar slut vid 8191 tecken (CreateProcess vid 32767). Tavelschemat
+# är 34 kB och provschemat 24 kB — skickade som --json-schema startade
+# processen inte ens. Tavlan och provet gick alltså inte att generera på
+# lärarens maskin, och ingen svit såg det: alla stubbar satt INNANFÖR den här
+# sömmen.
+
+def _fanga_argv(monkeypatch):
+    sett = {}
+
+    def fejk(argv, **kw):
+        sett["argv"] = argv
+        return _FejkProc(_strom("{}"))
+    monkeypatch.setattr(claude_code.subprocess, "Popen", fejk)
+    return sett
+
+
+def test_ett_litet_schema_gar_pa_kommandoraden(monkeypatch):
+    _inloggad(monkeypatch)
+    sett = _fanga_argv(monkeypatch)
+    litet = {"type": "object", "properties": {"a": {"type": "string"}}}
+    claude_code.generate("fråga", schema=litet)
+    assert "--json-schema" in sett["argv"]
+
+
+def test_ett_stort_schema_flyttas_till_prompten(monkeypatch):
+    """Det som inte får plats går på stdin i stället — prompten har inget tak."""
+    _inloggad(monkeypatch)
+    sett = _fanga_argv(monkeypatch)
+    stort = {"type": "object", "properties": {
+        f"f{i}": {"type": "string", "description": "x" * 40} for i in range(200)}}
+    matat = {}
+    monkeypatch.setattr(claude_code, "_neutral_cwd", lambda: ".")
+    proc = _FejkProc(_strom("{}"))
+
+    class _Stdin:
+        def write(self, s): matat["prompt"] = s
+        def close(self): pass
+    proc.stdin = _Stdin()
+    monkeypatch.setattr(claude_code.subprocess, "Popen",
+                        lambda argv, **kw: (sett.update(argv=argv), proc)[1])
+    claude_code.generate("fråga", schema=stort)
+
+    assert "--json-schema" not in sett["argv"]
+    assert sum(len(a) for a in sett["argv"]) < claude_code.SCHEMA_TAK + 2000
+    assert "JSON-schema" in matat["prompt"] and '"f199"' in matat["prompt"]
+
+
+def test_appens_egna_scheman_far_plats_i_ett_anrop(monkeypatch):
+    """Regressionsvakten: tavlans och provets scheman ska ALDRIG hamna på
+    kommandoraden igen, hur de än växer."""
+    from app import exam_spec, whiteboard_spec
+    _inloggad(monkeypatch)
+    sett = _fanga_argv(monkeypatch)
+    for schema in (whiteboard_spec.to_response_format()["json_schema"]["schema"],
+                   exam_spec.to_response_format(
+                       7, exam_spec.balanced_skeleton(7))["json_schema"]["schema"]):
+        claude_code.generate("fråga", schema=schema)
+        rad = " ".join(sett["argv"])
+        # Windows: cmd.exe 8191, CreateProcess 32767. Med marginal för sökvägar.
+        assert len(rad) < 8000, f"kommandoraden är {len(rad)} tecken"
