@@ -309,16 +309,27 @@ def build_refine_prompt(board_json: dict, instruction: str) -> str:
     )
 
 
+def _rensa_toppnycklar(board: dict | None) -> dict | None:
+    """Samma städning som i exam_gen: toppnycklar utanför dokumentet slängs.
+    Utan grammatiktvång (schemat ligger i prompten — se claude_code.SCHEMA_TAK)
+    kostar ett påhittat toppfält annars en hel reparationsrunda. Sektionerna
+    städas INTE: ett extra fält där betyder att formen missförståtts."""
+    if not isinstance(board, dict):
+        return board
+    tillatna = set(ws.BoardDoc.model_fields)
+    return {k: v for k, v in board.items() if k in tillatna}
+
+
 def _parse_board(raw: str) -> dict | None:
     """Robust JSON-parse (jfr _parse_extract i postprocess.py): modellen kan
     lämna skräp runt JSON-objektet trots grammatiktvånget i skarp drift."""
     try:
-        return json.loads(raw)
+        return _rensa_toppnycklar(json.loads(raw))
     except (json.JSONDecodeError, TypeError):
         m = re.search(r"\{.*\}", raw or "", re.DOTALL)
         if m:
             try:
-                return json.loads(m.group(0))
+                return _rensa_toppnycklar(json.loads(m.group(0)))
             except json.JSONDecodeError:
                 return None
     return None

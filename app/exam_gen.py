@@ -300,14 +300,34 @@ def _repair_ctrl_chars(x):
     return x
 
 
+def _rensa_toppnycklar(exam: dict | None) -> dict | None:
+    """Släng toppnycklar som inte hör till dokumentet.
+
+    Sedan schemat flyttade in i PROMPTEN (app/claude_code.SCHEMA_TAK — det får
+    inte plats på kommandoraden) finns inget grammatiktvång kvar, och modellen
+    lägger gärna till fält den tycker hör hemma på ett prov: `totalpoang`,
+    `instruktion`, `tid_minuter`. Schemat förbjuder extra fält, så ETT sådant
+    ord kostade en hel reparationsrunda — en ny 12 000-token-generering för att
+    ta bort tre rader appen ändå räknar ut själv (observerat i en skarp
+    inspelning, tests/kassetter/prov.json).
+
+    Bara TOPPNIVÅN städas. Ett extra fält inne i en uppgift betyder att
+    modellen missförstått uppgiftens form, och det ska fortfarande gå tillbaka
+    som ett fel att rätta."""
+    if not isinstance(exam, dict):
+        return exam
+    tillatna = set(exam_spec.ExamDoc.model_fields)
+    return {k: v for k, v in exam.items() if k in tillatna}
+
+
 def _parse_exam(raw: str) -> dict | None:
     try:
-        return _repair_ctrl_chars(json.loads(raw))
+        return _rensa_toppnycklar(_repair_ctrl_chars(json.loads(raw)))
     except (json.JSONDecodeError, TypeError):
         m = re.search(r"\{.*\}", raw or "", re.DOTALL)
         if m:
             try:
-                return _repair_ctrl_chars(json.loads(m.group(0)))
+                return _rensa_toppnycklar(_repair_ctrl_chars(json.loads(m.group(0))))
             except json.JSONDecodeError:
                 return None
     return None

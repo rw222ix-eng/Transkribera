@@ -81,28 +81,44 @@ def test_en_trasig_tavla_repareras_i_nasta_runda(fejk_claude):
 
 
 def test_provet_ur_kassetten_klarar_balansreglerna(fejk_claude):
+    """Den skarpa inspelningen bar tre påhittade toppfält (`totalpoang`,
+    `instruktion`, `tid_minuter`) — det modellen gör när grammatiktvånget är
+    borta. De städas bort vid parsningen i stället för att kosta en hel
+    reparationsrunda, och resten ska hålla balansreglerna."""
     fejk_claude(kassett="prov")
-    res = exam_gen.generate_exam("Matematik 3c", "NA25", ["Derivata"],
-                                 model="", antal=7)
+    res = exam_gen.generate_exam("Matematik 3c", "NA25",
+                                 ["Derivata", "Gränsvärden"], model="", antal=6)
     assert res["errors"] == [], res["errors"]
     exam = res["exam"]
     assert exam["uppgifter"] and exam["titel"]
     from app import exam_spec
     doc, fel = exam_spec.validate_exam_json(exam)
     assert doc is not None and fel == []
+    # Städningen tar toppnivån — och bara den.
+    assert "totalpoang" not in exam and "instruktion" not in exam
+    assert all("del" in u and "poang" in u for u in exam["uppgifter"])
 
 
-def test_insikterna_ur_kassetten_nar_databasen_utan_namn(fejk_claude):
-    """Bandet innehåller ett fullständigt elevnamn — modellen bröt mot
-    instruktionen. Spärren ska ta det på vägen in."""
+def test_insikterna_ur_den_skarpa_kassetten_bar_inga_namn(fejk_claude):
+    """Den riktiga körningen FÖLJDE integritetsregeln — inga fullständiga
+    namn kom tillbaka. Det testet vaktar är att det förblir så."""
     fejk_claude(kassett="insikter")
     insikter, innehall = postprocess._extract_one("transkript", "modell")
+    assert insikter and innehall
     texter = " ".join(i["text"] + " " + (i["ref"] or "") for i in insikter)
-    assert "Lindqvist" not in texter
-    assert "A.L." in texter
-    assert any(i["typ"] == "kalender" and i["due_date"] == "2026-05-12"
-               for i in insikter)
-    assert "ändringskvot" in innehall
+    assert postprocess.initialisera(texter) == texter, \
+        "ett fullständigt namn kom tillbaka ur den skarpa inspelningen"
+    assert any(i["typ"] == "kalender" for i in insikter)
+
+
+def test_ett_namn_som_anda_kommer_tillbaka_stoppas(fejk_claude):
+    """…och när den INTE följer regeln — det bandet är konstruerat, för det
+    ska inte behöva hända på riktigt för att spärren ska vara prövad."""
+    fejk_claude(kassett="insikter-med-namn")
+    insikter, _ = postprocess._extract_one("transkript", "modell")
+    texter = " ".join(i["text"] + " " + (i["ref"] or "") for i in insikter)
+    assert "Lindqvist" not in texter and "Svensson" not in texter
+    assert "A.L." in texter and "E.S." in texter
 
 
 def test_en_kassett_som_inte_finns_ar_ett_tydligt_fel(fejk_claude):

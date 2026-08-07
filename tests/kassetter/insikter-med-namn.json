@@ -1,0 +1,19 @@
+{
+ "namn": "insikter-med-namn",
+ "vad": "ett svar där modellen bröt mot integritetsregeln",
+ "inspelad": false,
+ "modell": "claude-opus-5",
+ "rader": [
+  "{\"type\": \"system\", \"subtype\": \"init\"}",
+  "{\"type\": \"stream_event\", \"event\": {\"delta\": {\"type\": \"text_delta\", \"text\": \"{\\\"kalender\\\": [{\\\"text\\\": \\\"Prov den\"}}}",
+  "{\"type\": \"stream_event\", \"event\": {\"delta\": {\"type\": \"text_delta\", \"text\": \" 12 maj\\\", \\\"due_date\\\": \\\"2026-05-1\"}}}",
+  "{\"type\": \"stream_event\", \"event\": {\"delta\": {\"type\": \"text_delta\", \"text\": \"2\\\"}], \\\"svarigheter\\\": [{\\\"text\\\": \\\"\"}}}",
+  "{\"type\": \"stream_event\", \"event\": {\"delta\": {\"type\": \"text_delta\", \"text\": \"Anna Lindqvist fastnade på kedje\"}}}",
+  "{\"type\": \"stream_event\", \"event\": {\"delta\": {\"type\": \"text_delta\", \"text\": \"regeln\\\", \\\"ref\\\": \\\"Erik Svensson s\"}}}",
+  "{\"type\": \"stream_event\", \"event\": {\"delta\": {\"type\": \"text_delta\", \"text\": \"att bredvid\\\"}], \\\"atgarder\\\": [], \"}}}",
+  "{\"type\": \"stream_event\", \"event\": {\"delta\": {\"type\": \"text_delta\", \"text\": \"\\\"grupprum\\\": [], \\\"material\\\": [], \"}}}",
+  "{\"type\": \"stream_event\", \"event\": {\"delta\": {\"type\": \"text_delta\", \"text\": \"\\\"innehall\\\": [{\\\"text\\\": \\\"kedjerege\"}}}",
+  "{\"type\": \"stream_event\", \"event\": {\"delta\": {\"type\": \"text_delta\", \"text\": \"ln\\\"}]}\"}}}",
+  "{\"type\": \"result\", \"is_error\": false, \"result\": \"{\\\"kalender\\\": [{\\\"text\\\": \\\"Prov den 12 maj\\\", \\\"due_date\\\": \\\"2026-05-12\\\"}], \\\"svarigheter\\\": [{\\\"text\\\": \\\"Anna Lindqvist fastnade på kedjeregeln\\\", \\\"ref\\\": \\\"Erik Svensson satt bredvid\\\"}], \\\"atgarder\\\": [], \\\"grupprum\\\": [], \\\"material\\\": [], \\\"innehall\\\": [{\\\"text\\\": \\\"kedjeregeln\\\"}]}\", \"total_cost_usd\": 0.02, \"duration_ms\": 4200, \"modelUsage\": {\"claude-opus-5\": {\"outputTokens\": 65}}}"
+ ]
+}
