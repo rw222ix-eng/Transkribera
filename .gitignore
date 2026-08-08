@@ -30,6 +30,8 @@ models/
 *.mp4
 *.webm
 *.png
+# Ikonernas källbilder är undantagna: utan dem går .ico-filerna inte att bygga om.
+!assets/*.png
 
 # Genererade transkript
 *.srt
