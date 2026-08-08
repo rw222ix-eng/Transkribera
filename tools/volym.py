@@ -143,8 +143,8 @@ def papper(nr: int, tavla: dict, prov: dict) -> dict:
     }
 
 
-def fyll(bas: Path, ar: float, *, tyst: bool = False) -> None:
-    """Fyll basen med ett läsårs arbete (gånger `ar`).
+def fyll(bas: Path, n: dict, *, tyst: bool = False) -> None:
+    """Fyll basen med `n` rader per hög (se PER_AR).
 
     `synchronous=OFF` gäller BARA seedningen: db-funktionerna committar en gång
     per rad, och 30 000 fsync tar tio minuter utan att mäta något. Basen slängs
@@ -155,7 +155,6 @@ def fyll(bas: Path, ar: float, *, tyst: bool = False) -> None:
     tavla, prov = ur_kassett("tavla"), ur_kassett("prov")
     conn = db.connect(bas / "transkribera.db")
     conn.execute("PRAGMA synchronous=OFF")
-    n = {k: max(1, int(v * ar)) for k, v in PER_AR.items()}
 
     def spar(vad: str, i: int, av: int) -> None:
         if not tyst and (i % 50 == 0 or i == av):
@@ -301,6 +300,12 @@ def ta_tid(rutt: str, varv: int = 3) -> dict:
 def main() -> int:
     ap = argparse.ArgumentParser(description="Volymmätning: appen efter ett läsår")
     ap.add_argument("--ar", type=float, default=1.0, help="antal läsår att fylla")
+    # En hög i taget: när /api/dokument är misstänkt vill man kunna lägga 2000
+    # papper i basen UTAN 4000 lektioner, annars går det inte att säga vilken
+    # hög som kostar.
+    for hog in PER_AR:
+        ap.add_argument(f"--{hog}", type=int, default=None,
+                        help=f"sätt antalet {hog} rakt av (annars --ar × {PER_AR[hog]})")
     ap.add_argument("--tak", type=float, default=TAK_S, help="sekunder per rutt")
     ap.add_argument("--logg", default=str(ROT / "volym.log"))
     ap.add_argument("--behall", action="store_true", help="behåll basen efteråt")
@@ -310,12 +315,13 @@ def main() -> int:
         shutil.rmtree(BAS, ignore_errors=True)
     BAS.mkdir(parents=True, exist_ok=True)
 
-    n = {k: max(1, int(v * a.ar)) for k, v in PER_AR.items()}
+    n = {k: (getattr(a, k) if getattr(a, k) is not None else max(1, int(v * a.ar)))
+         for k, v in PER_AR.items()}
     print(f"volym: {a.ar} läsår — {n['lektioner']} lektioner, {n['papper']} papper "
           f"× {VERSIONER} versioner, {n['prov']} prov, {n['planerade']} planerade",
           flush=True)
     t0 = time.time()
-    fyll(BAS, a.ar)
+    fyll(BAS, n)
     db_mb = (BAS / "transkribera.db").stat().st_size / 1e6
     wal = BAS / "transkribera.db-wal"
     print(f"fylld på {time.time() - t0:.0f} s — basen är {db_mb:.0f} MB"
