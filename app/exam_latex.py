@@ -120,11 +120,59 @@ def _flerval_vy(alternativ, ratt):
     return rader, (_VERSAL[ratt] if ratt is not None else None)
 
 
+def _tabell_vy(t):
+    """Datatabellen som mallen sätter den: escapade celler och en kolumnspec.
+    Vänsterställd första kolumn (rubriker som «År», «Antal»), resten centrerade
+    — det är så mätvärden läses."""
+    if t is None:
+        return None
+    kol = len(t.rubriker)
+    return {
+        "spec": "l" + "c" * (kol - 1),
+        "rubriker": [escape_mixed(r) for r in t.rubriker],
+        "rader": [[escape_mixed(c) for c in rad] for rad in t.rader],
+    }
+
+
+def _stegtabell_vy(s, *, facit: bool):
+    """Stegtabellen. `facit=False` är elevens ark — då står det INTE vilket steg
+    som brister, för det är hela uppgiften. `facit=True` är bedömningen."""
+    if s is None:
+        return None
+    return {
+        "spec": "l" + "X" * len(s.kolumner) + "c",
+        "kolumner": [escape_mixed(k) for k in s.kolumner],
+        "steg": [{"nr": i + 1, "celler": [escape_mixed(c) for c in st.celler],
+                  "fel": facit and i == s.forsta_fel}
+                 for i, st in enumerate(s.steg)],
+        "forsta_fel": s.forsta_fel + 1 if facit else None,
+    }
+
+
+def _svarsrutor_vy(r, *, facit: bool):
+    if r is None:
+        return None
+    return {
+        "etikett": escape_mixed(r.etikett),
+        "val": [{"text": escape_mixed(v),
+                 "ratt": facit and r.ratt is not None and i == r.ratt}
+                for i, v in enumerate(r.val)],
+        "ratt_text": (escape_mixed(r.val[r.ratt])
+                      if facit and r.ratt is not None else None),
+    }
+
+
 def _enhet_vy(*, poang, typ, formaga, text, losning, bedomning,
-             alternativ, ratt_alternativ, notis, bild_fil):
+             alternativ, ratt_alternativ, notis, bild_fil,
+             enhet=None, tabell=None, svarsrutor=None, stegtabell=None,
+             facit=False):
     """Delad vy för ett löv och för en deluppgift."""
     flerval, ratt_bokstav = _flerval_vy(alternativ, ratt_alternativ)
     return {
+        "enhet": escape_mixed(enhet) if enhet else None,
+        "tabell": _tabell_vy(tabell),
+        "svarsrutor": _svarsrutor_vy(svarsrutor, facit=facit),
+        "stegtabell": _stegtabell_vy(stegtabell, facit=facit),
         "poang_str": f"{sum(poang)}p",
         "poang_eca": f"{poang[0]}/{poang[1]}/{poang[2]}",
         "endast_svar": typ == "rutin",
@@ -141,7 +189,8 @@ def _enhet_vy(*, poang, typ, formaga, text, losning, bedomning,
 
 
 def _build_view(doc: exam_spec.ExamDoc,
-                bilder: dict[int, str] | None = None) -> dict:
+                bilder: dict[int, str] | None = None,
+                *, facit: bool = False) -> dict:
     """Mallens vy: uppgifter numrerade löpande, grupperade per del
     (B, C, D, sedan del-lösa). `bilder` mappar uppgiftens bildindex
     (1-baserat) till filnamn i utkatalogen — filnamnet, inte sökvägen,
@@ -166,12 +215,18 @@ def _build_view(doc: exam_spec.ExamDoc,
                         formaga=d.formaga or it.formaga, text=d.text,
                         losning=d.losning, bedomning=d.bedomning,
                         alternativ=d.alternativ, ratt_alternativ=d.ratt_alternativ,
-                        notis=d.notis, bild_fil=None)
+                        notis=d.notis, bild_fil=None, enhet=d.enhet,
+                        tabell=d.tabell, svarsrutor=d.svarsrutor,
+                        stegtabell=d.stegtabell, facit=facit)
                     ev["bokstav"] = _BOKSTAV[j]
                     deluppg.append(ev)
                 item_vy = {
                     "har_deluppgifter": True,
                     "text": escape_mixed(it.text),
+                    "enhet": escape_mixed(it.enhet) if it.enhet else None,
+                    "tabell": _tabell_vy(it.tabell),
+                    "svarsrutor": _svarsrutor_vy(it.svarsrutor, facit=facit),
+                    "stegtabell": _stegtabell_vy(it.stegtabell, facit=facit),
                     "notis": escape_mixed(it.notis) if it.notis else None,
                     "flerval": None, "ratt_bokstav": None,
                     # endast_svar/utrymme_mm nås av mallen för VARJE uppgift
@@ -194,9 +249,17 @@ def _build_view(doc: exam_spec.ExamDoc,
                     poang=it.poang, typ=it.typ, formaga=it.formaga,
                     text=it.text, losning=it.losning, bedomning=it.bedomning,
                     alternativ=it.alternativ, ratt_alternativ=it.ratt_alternativ,
-                    notis=it.notis, bild_fil=bild_fil)
+                    notis=it.notis, bild_fil=bild_fil, enhet=it.enhet,
+                    tabell=it.tabell, svarsrutor=it.svarsrutor,
+                    stegtabell=it.stegtabell, facit=facit)
                 item_vy["har_deluppgifter"] = False
                 item_vy["deluppgifter"] = None
+            item_vy["elevlosningar"] = [
+                {"etikett": escape_mixed(e.etikett), "poang": e.poang,
+                 "partier": [{"rader": [escape_mixed(r) for r in pa.rader],
+                              "poang": pa.poang,
+                              "dom": escape_mixed(pa.dom)} for pa in e.partier]}
+                for e in (it.elevlosningar or [])] if facit else []
             item_vy["nummer"] = nummer
             # Gruppuppgiftens uppgifter heter A, B, C — inte 1, 2, 3. Brickan
             # är en bokstav på pappret som ligger på bordet (gruppark.css), och
@@ -293,7 +356,9 @@ def render_prov(doc: exam_spec.ExamDoc,
 def render_bedomning(doc: exam_spec.ExamDoc,
                      bilder: dict[int, str] | None = None) -> str:
     return _environment().get_template("bedomning.tex.j2").render(
-        **_build_view(doc, bilder))
+        # facit=True: bedömningen är lärarens papper, och bara där får det stå
+        # vilket kryss som är rätt och vilket steg som brister.
+        **_build_view(doc, bilder, facit=True))
 
 
 def render_arbetsblad(doc: exam_spec.ExamDoc, visa_poang: bool = False,

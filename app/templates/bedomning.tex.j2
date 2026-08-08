@@ -4,6 +4,7 @@
 ((* set med_svarsrad = false *))
 ((* set sidhuvud = kurs ~ ' — ' ~ titel ~ ' · Bedömningsanvisning' *))
 ((* include '_preamble.tex.j2' *))
+((* import '_former.tex.j2' as former *))
 
 \begin{document}
 
@@ -29,11 +30,13 @@ av totalt ((( granser.total ))) poäng.}
 {\small\itshape ((( u.text )))}\par\vspace{2mm}
 ((* if u.bild_fil *)){\small Uppgiften har en bild: ((( u.bild_fil )))}\par\vspace{1mm}((* endif *))
 ((* if u.figur_tex *))\par\vspace{2mm}\begin{center}((( u.figur_tex )))\end{center}((* endif *))
+((( former.kropp(u) )))
 ((* if u.har_deluppgifter *))
 ((* for d in u.deluppgifter *))
 \begin{deluppgift}{((( d.bokstav )))}{((( d.poang_eca )))}\par
 {\small\textcolor{ink500}{((( d.formaga_namn )))}}\par\vspace{1mm}
 {\small\itshape ((( d.text )))}\par\vspace{1mm}
+((( former.kropp(d) )))
 ((* if d.flerval *))\textbf{Rätt: ((( d.ratt_bokstav )))}\par\vspace{1mm}((* endif *))
 \textbf{Lösningsförslag:} ((( d.losning )))\par\vspace{1mm}
 \textbf{Bedömning:} ((( d.bedomning )))
@@ -44,6 +47,19 @@ av totalt ((( granser.total ))) poäng.}
 \textbf{Lösningsförslag:} ((( u.losning )))\par\vspace{1mm}
 \textbf{Bedömning:} ((( u.bedomning )))
 ((* endif *))
+((# Kommenterade elevlösningar (förlagans lo4): samma uppgift löst två eller
+    tre gånger, i stigande ordning, med domen INNE i det parti den gäller. Det
+    är gränsen mellan poängen som är svår att dra, och den syns bara när man
+    ser lösningarna bredvid varandra. Står bara här — eleven ser dem aldrig. #))
+((* for e in u.elevlosningar *))
+\par\vspace{3mm}\noindent\textbf{((( e.etikett )))} \textemdash{} ((( e.poang ))) p
+((* for pa in e.partier *))
+\begin{elevparti}{((* if pa.poang *))+((( pa.poang ))) p((* else *))0 p((* endif *))}
+((* for r in pa.rader *))((( r )))\par((* endfor *))
+{\small\itshape ((( pa.dom )))}
+\end{elevparti}
+((* endfor *))
+((* endfor *))
 \end{uppgift}
 ((* endfor *))
 ((* endfor *))

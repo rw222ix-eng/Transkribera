@@ -142,6 +142,45 @@
     (bygger på \fbox + \rule, alltid tillgängligt). #))
 \newcommand{\kryssruta}{\fbox{\rule{0pt}{1.5ex}\rule{1.5ex}{0pt}}}
 
+((# Svarsraden med led och/eller enhet: «$f'(x) =$ …………» och «………… kr».
+    Ledet står FÖRE linjen (det hör till uttrycket), enheten EFTER den (den hör
+    till svaret). Utan båda är den vanliga \svarsrad. #))
+\newcommand{\svarsradmed}[2]{%
+  \par\vspace{4mm}%
+  \noindent\if\relax\detokenize{#1}\relax\else#1\ \fi
+  \makebox[0.45\linewidth]{\dotfill}%
+  \if\relax\detokenize{#2}\relax\else\ #2\fi\par}
+
+((# Kryssrutesvar på en rad: «Sats: [] Randvinkelsatsen [] Kordasatsen».
+    Rutorna sitter på samma rad som etiketten och bryter som text — en rad
+    att fylla i, inte en flervalsfråga. #))
+\newcommand{\svarsrutor}[2]{%
+  \par\vspace{3mm}\noindent\textbf{#1:}\quad #2\par\vspace{1mm}}
+\newcommand{\svarsruteval}[1]{\kryssruta\ #1\hspace{6mm}}
+
+((# Tabellrubrik — i tabeller (datatabell och stegtabell). På skärmen är
+    rubrikraden grå (.gutab th, #EDEDED); här är den bara fet. Grå bakgrund i
+    en LaTeX-tabell kräver colortbl, och ett paket till i preamblen är ett
+    paket till som måste ligga i den buntade Tectonic-cachen — annars kraschar
+    kompileringen på lärarens dator, offline, mitt i ett godkännande. Fet
+    rubrik läser lika tydligt på papper och kostar ingenting. #))
+\newcommand{\tabrubrik}[1]{{\small\bfseries #1}}
+
+((# Elevlösningens parti i bedömningsanvisningen: lösningens egna rader, och
+    domen inne i partiet den gäller — inte i en lista under. #))
+\newsavebox{\elevpartibox}
+\newenvironment{elevparti}[1]{%
+  \par\vspace{2mm}%
+  \setlength{\fboxrule}{0.25mm}\setlength{\fboxsep}{2.5mm}%
+  \begin{lrbox}{\elevpartibox}%
+  \begin{minipage}{\dimexpr\linewidth-2\fboxrule-2\fboxsep\relax}%
+  \textbf{#1}\par\vspace{1mm}%
+}{%
+  \end{minipage}%
+  \end{lrbox}%
+  \noindent\fcolorbox{ink500}{white}{\usebox{\elevpartibox}}%
+  \par\vspace{2mm}}
+
 ((# Notis (callout): tunn inramad ruta med \small text under uppgiftstexten. #))
 \newcommand{\notisruta}[1]{%
   \par\vspace{2.5mm}%

@@ -40,10 +40,95 @@ class _Model(BaseModel):
                               allow_inf_nan=False)
 
 
+class Svarsrutor(_Model):
+    """Kryssrutesvar på svarsraden: «Sats: ☐ Randvinkelsatsen ☐ Kordasatsen».
+
+    Skilt från `alternativ`, som är en flervalsfråga med numrerade svarsled
+    (A–D) och ett rätt svar. Det här är en RAD att fylla i: eleven kryssar
+    vilken sats, vilken metod eller vilket svar som gäller, och raden står
+    bland de andra ifyllnadsraderna. Formen finns i förlagan («Arbetsblad prov
+    och tavlor — femton former», form 2 och 3)."""
+    etikett: str                         # raden heter något: «Sats», «Alltid?»
+    val: list[str] = Field(min_length=2, max_length=5)
+    ratt: int | None = None              # 0-baserat; None när flera svar duger
+
+    @model_validator(mode="after")
+    def _kontrollera(self):
+        if self.ratt is not None and not 0 <= self.ratt < len(self.val):
+            raise ValueError("ratt måste vara ett giltigt index i val")
+        return self
+
+
+class Tabell(_Model):
+    """Datatabell inuti en uppgift — mätvärden, årtal, priser. Uppgiften
+    hänvisar till den («Bestäm med hjälp av tabellen ovan …»), så den är en del
+    av uppgiften och inte en figur bredvid."""
+    rubriker: list[str] = Field(min_length=2, max_length=6)
+    rader: list[list[str]] = Field(min_length=1, max_length=8)
+
+    @model_validator(mode="after")
+    def _kontrollera(self):
+        for i, r in enumerate(self.rader):
+            if len(r) != len(self.rubriker):
+                raise ValueError(f"rad {i + 1} har {len(r)} celler men "
+                                 f"tabellen har {len(self.rubriker)} kolumner")
+        return self
+
+
+class Steg(_Model):
+    celler: list[str] = Field(min_length=1, max_length=2)
+
+
+class Stegtabell(_Model):
+    """«Läs rad för rad och kryssa det FÖRSTA steg som är fel.»
+
+    Formen bär förlagans form 3 (två elevers lösningar sida vid sida) och
+    halva form 6 (en lösning). Den prövar något inget annat uppgiftsslag gör:
+    att LÄSA en lösning. Därför bär den också svaret — vilket steg som brister
+    — och det svaret hör hemma i facit, aldrig på elevens ark."""
+    kolumner: list[str] = Field(min_length=1, max_length=2)
+    steg: list[Steg] = Field(min_length=3, max_length=8)
+    forsta_fel: int                      # 0-baserat index i steg
+
+    @model_validator(mode="after")
+    def _kontrollera(self):
+        if not 0 <= self.forsta_fel < len(self.steg):
+            raise ValueError("forsta_fel måste peka ut ett av stegen")
+        for i, s in enumerate(self.steg):
+            if len(s.celler) != len(self.kolumner):
+                raise ValueError(f"steg {i + 1} har {len(s.celler)} celler men "
+                                 f"tabellen har {len(self.kolumner)} kolumner")
+        return self
+
+
+class Parti(_Model):
+    """Ett stycke av en elevlösning, med sin dom. Bedömningen sätts DÄR den
+    gäller — inte i en lista under lösningen."""
+    rader: list[str] = Field(min_length=1, max_length=6)
+    poang: int = Field(ge=0, le=6)
+    dom: str                             # varför partiet gav (eller inte gav) poäng
+
+
+class Elevlosning(_Model):
+    etikett: str                         # «Elevlösning A»
+    partier: list[Parti] = Field(min_length=1, max_length=4)
+
+    @property
+    def poang(self) -> int:
+        return sum(p.poang for p in self.partier)
+
+
 class _Uppgiftsbas(_Model):
     """Delade fält för uppgifter och deluppgifter."""
     poang: tuple[int, int, int]          # (E, C, A) — NP-notationen (2/1/0)
     text: str                            # uppgifts-/deluppgiftstext; matte inom $…$
+    # Enheten svaret ska anges i, eller ledet det ska skrivas efter: «kr»,
+    # «laddpunkter/år», «f'(x) =». Står på svarsraden, före linjen om det är
+    # ett led och efter den om det är en enhet (exam_latex, blad-bygg).
+    enhet: str | None = None
+    svarsrutor: "Svarsrutor | None" = None
+    tabell: "Tabell | None" = None
+    stegtabell: "Stegtabell | None" = None
     # max_length=12: _VERSAL/_BOKSTAV i exam_latex har bara 12 bokstäver
     # (A–L) — fler alternativ skulle IndexError:a renderingen i stället för
     # att stoppas här som ett rent valideringsfel.
@@ -189,11 +274,26 @@ class ExamItem(_Uppgiftsbas):
     # max_length=12: samma _BOKSTAV-gräns (a–l) som alternativ ovan.
     deluppgifter: list[SubItem] | None = Field(default=None, max_length=12)
     figur: Figur | None = None
+    # Kommenterade elevlösningar (förlagans lo4): samma uppgift löst två eller
+    # tre gånger, i stigande ordning, med domen inne i det parti den gäller.
+    # Hör till BEDÖMNINGEN, inte till elevens ark — den som skriver provet ska
+    # aldrig se dem. Renderas i bedomning.tex.j2 och i appens facitblad.
+    elevlosningar: list[Elevlosning] | None = Field(default=None, max_length=3)
 
     @model_validator(mode="after")
     def _kontrollera_struktur(self):
         if self.figur is not None and self.bild is not None:
             raise ValueError("figur och bild utesluter varandra — välj en")
+        if self.elevlosningar is not None:
+            if len(self.elevlosningar) < 2:
+                raise ValueError("kommenterade elevlösningar ska vara minst "
+                                 "två — poängen är att visa skillnaden")
+            tak = sum(uppg_poang(self)) if self.deluppgifter else sum(self.poang)
+            for e in self.elevlosningar:
+                if e.poang > tak:
+                    raise ValueError(
+                        f"elevlösningen «{e.etikett}» ger {e.poang} p men "
+                        f"uppgiften är värd {tak} p")
         if self.deluppgifter:
             if any(self.poang):
                 raise ValueError("en uppgift med deluppgifter måste ha poäng "

@@ -1,0 +1,47 @@
+((# ══════════ DE FEM FORMERNA ══════════
+    Datatabellen, kryssruteraden, stegtabellen och svarsraden med enhet — samma
+    former som på skärmarket (blad-bygg.js), satta för papper. De står här som
+    makron i stället för fyra gånger i prov/arbetsblad/gruppuppgift/bedömning:
+    en form som sätts på fyra ställen glider isär på tre av dem.
+
+    Anropas med uppgiftsvyn (u eller d) — samma nycklar för löv och deluppgift
+    (exam_latex._enhet_vy). Elevlösningarna hör bara till bedömningen och står
+    därför i den mallen. #))
+
+((# Datatabellen: mätvärdena uppgiften bygger på. Rutnätet ritas helt — en
+    tabell ska gå att läsa i båda riktningar. #))
+((* macro tabell(t) *))
+((* if t *))\par\vspace{2mm}
+{\small\noindent\begin{tabular}{((( t.spec )))}\hline
+((* for r in t.rubriker *))\tabrubrik{((( r )))}((* if not loop.last *)) & ((* endif *))((* endfor *)) \\ \hline
+((* for rad in t.rader *))((* for c in rad *))((( c )))((* if not loop.last *)) & ((* endif *))((* endfor *)) \\ \hline
+((* endfor *))\end{tabular}}\par\vspace{2mm}
+((* endif *))
+((* endmacro *))
+
+((# Kryssruteraden: en rad att fylla i, inte en flervalsfråga. På lärarens
+    papper är det rätta valet fetstilt; på elevens står rutorna tomma. #))
+((* macro rutor(r) *))
+((* if r *))\svarsrutor{((( r.etikett )))}{((* for v in r.val *))((* if v.ratt *))\textbf{\svarsruteval{((( v.text )))}}((* else *))\svarsruteval{((( v.text )))}((* endif *))((* endfor *))}
+((* endif *))
+((* endmacro *))
+
+((# Stegtabellen: en färdig lösning rad för rad, och en kryssrutekolumn där
+    eleven markerar det FÖRSTA felet. Vilket steget är står bara på lärarens
+    papper (exam_latex bygger vyn med facit=True bara för bedömningen). #))
+((* macro steg(s) *))
+((* if s *))\par\vspace{2mm}
+{\small\noindent\begin{tabularx}{\linewidth}{((( s.spec )))}\hline
+\tabrubrik{Steg} ((* for k in s.kolumner *))& \tabrubrik{((( k )))} ((* endfor *))& \tabrubrik{Fel} \\ \hline
+((* for rad in s.steg *))((( rad.nr ))) ((* for c in rad.celler *))& ((( c ))) ((* endfor *))& ((* if rad.fel *))\textbf{X}((* else *))\kryssruta((* endif *)) \\ \hline
+((* endfor *))\end{tabularx}}\par\vspace{2mm}
+((* if s.forsta_fel *))\par{\small\itshape Första felet står i steg ((( s.forsta_fel ))).}\par((* endif *))
+((* endif *))
+((* endmacro *))
+
+((# Allt som hör till uppgiftens KROPP, i den ordning eleven läser det:
+    tabellen (data att räkna på), stegtabellen (lösningen att granska) och
+    kryssruteraden (svaret att kryssa). #))
+((* macro kropp(u) *))
+((( tabell(u.tabell) )))((( steg(u.stegtabell) )))((( rutor(u.svarsrutor) )))
+((* endmacro *))

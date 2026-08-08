@@ -14,6 +14,46 @@ window.BladBygg = (() => {
   const BOKSTAV = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
   const versal = s => String(s || '').charAt(0).toUpperCase() + String(s || '').slice(1);
 
+  /* ── DE FEM FORMERNA ──────────────────────────────
+     Datatabellen, kryssruteraden och stegtabellen är samma former som i
+     förlagan («Arbetsblad prov och tavlor — femton former») och samma som
+     LaTeX-mallarna sätter (_former.tex.j2). De byggs här EN gång och används
+     av både arbetsbladet och provet — en form som sätts på två ställen glider
+     isär på ett av dem.
+
+     Facit står ALDRIG här: vilket kryss som är rätt och vilket steg som
+     brister hör till lärarens papper (bedomning.tex.j2). */
+  function tabell(t, klass) {
+    if (!t || !t.rubriker) return '';
+    const rad = celler => `<tr>${celler.map(c => `<td>${mat(c)}</td>`).join('')}</tr>`;
+    return `<table class="${klass}"><thead><tr>${
+      t.rubriker.map(r => `<th>${esc(r)}</th>`).join('')}</tr></thead><tbody>${
+      (t.rader || []).map(rad).join('')}</tbody></table>`;
+  }
+  /* Kryssruteraden: en rad att fylla i, inte en flervalsfråga. Etiketten står
+     där svarsradens namn står, rutorna där linjen skulle gå. */
+  function rutor(r) {
+    if (!r || !r.val) return '';
+    return `<div class="gurad"><span class="gunamn">${esc(r.etikett)}:</span>`
+      + `<span class="gurutor">${r.val.map(v => `<span class="guruta">${mat(v)}</span>`).join('')}</span></div>`;
+  }
+  /* Stegtabellen: en färdig lösning rad för rad, med en kryssrutekolumn där
+     eleven markerar det FÖRSTA felet. */
+  function stegtabell(s) {
+    if (!s || !s.steg) return '';
+    const kol = s.kolumner || [];
+    return `<table class="gutab"><thead><tr><th class="gusteg">Steg</th>${
+      kol.map(k => `<th>${esc(k)}</th>`).join('')}<th class="gukryss">Fel</th></tr></thead><tbody>${
+      s.steg.map((st, i) => `<tr><td class="gusteg">${i + 1}</td>${
+        (st.celler || []).map(c => `<td>${mat(c)}</td>`).join('')
+      }<td class="gukryss"><span></span></td></tr>`).join('')}</tbody></table>`;
+  }
+  /* Enheten på svarsraden: ledet före linjen, enheten efter den. */
+  function svarsradEnhet(enhet) {
+    return `<div class="gurad gusvarsrad"><span class="gunamn">Svar:</span>`
+      + `<span class="gulinje"></span>${enhet ? `<span class="prenhet">${esc(enhet)}</span>` : ''}</div>`;
+  }
+
   /* ── Svarsutrymmet: en rad eller ett lösblad. Inget annat. ──
      Eleven gör en av två saker: skriver bara svaret, eller löser hela uppgiften
      på rutat lösblad. Ett linjerat fält mitt i bladet ger varken det ena eller
@@ -23,7 +63,10 @@ window.BladBygg = (() => {
   const svarsrad = '<div class="gurad gusvarsrad"><span class="gunamn">Svar:</span><span class="gulinje"></span></div>';
 
   function svarsyta(u) {
-    return u.ut === 'kort' ? svarsrad : `<p class="gulos">${losblad}</p>`;
+    /* Kryssrutorna ÄR svarsytan när de finns — den som kryssar skriver inte. */
+    if (u.rutor) return rutor(u.rutor);
+    if (u.ut !== 'kort') return `<p class="gulos">${losblad}</p>`;
+    return u.enhet ? svarsradEnhet(u.enhet) : svarsrad;
   }
 
   /* ── Arbetsbladet och gruppuppgiften ─────────────── */
@@ -43,10 +86,13 @@ window.BladBygg = (() => {
       ? `<div class="gufigur" data-vantar="" data-figur="${attr(JSON.stringify(u.fig))}"></div>`
         + (u.figkap ? `<p class="gufigkap">${mat(u.figkap)}</p>` : '')
       : '';
+    // Formerna står mellan frågan och svaret: tabellen att räkna på, lösningen
+    // att granska, och sedan svarsytan.
+    const former = tabell(u.tabell, 'gutab') + stegtabell(u.stegtabell);
     const kropp = egen
-      ? `<div class="gutva"><div><p class="gufraga">${mat(u.t)}</p>${alt}${del}${svarsyta(u)}</div>`
+      ? `<div class="gutva"><div><p class="gufraga">${mat(u.t)}</p>${alt}${del}${former}${svarsyta(u)}</div>`
         + `<div>${egen}</div></div>`
-      : `<p class="gufraga">${mat(u.t)}</p>${alt}${del}${fig}${svarsyta(u)}`;
+      : `<p class="gufraga">${mat(u.t)}</p>${alt}${del}${former}${fig}${svarsyta(u)}`;
     return `<div class="gukort" data-ut="${u.ut || 'rakna'}">
       <span class="gubricka">${bricka}</span>
       ${kropp}
@@ -129,8 +175,16 @@ window.BladBygg = (() => {
        hängde raden på u.ut === 'kort', och en uppgift som saknade den märkningen
        blev en fråga utan svarsplats mitt bland två som hade det. Alternativ
        (kryssrutor) och deluppgifter bär sin egen plats. */
-    const behoverRad = !u.alt && !(u.del && u.del.length);
-    const svarsrad = behoverRad ? '<div class="prsvar"><span class="prlinje"></span></div>' : '';
+    const behoverRad = !u.alt && !(u.del && u.del.length) && !u.rutor;
+    /* Enheten står EFTER linjen på provet, som i förlagan: «………… laddpunkter/år».
+       Kryssrutorna ersätter raden helt — den som kryssar skriver inte. */
+    const svarsrad = u.rutor
+      ? `<div class="prsvar"><b>${esc(u.rutor.etikett)}:</b><span class="gurutor">${
+          (u.rutor.val || []).map(v => `<span class="guruta">${mat(v)}</span>`).join('')}</span></div>`
+      : behoverRad
+        ? `<div class="prsvar"><span class="prlinje"></span>${
+            u.enhet ? `<span class="prenhet">${esc(u.enhet)}</span>` : ''}</div>`
+        : '';
     /* REDOVISNINGEN görs aldrig i provet, alltid på separat lösblad. Uppgifter
        som kräver en redovisad lösning märks i marginalen under numret — samma
        plats som poängen, för båda avgörs innan man läst uppgiften. */
@@ -138,9 +192,10 @@ window.BladBygg = (() => {
     /* Marginalen bär ETT format. «(totalt 3 p)» bredvid «1 p» läste sig som två
        olika fält; att poängen är en summa framgår av deluppgifternas egna. */
     const varde = `${u.p} p`;
+    const former = tabell(u.tabell, 'prtab') + stegtabell(u.stegtabell);
     return `<div class="pruppg">
       <span class="prnr">${u.nr}.<span class="prvarde">${varde}</span>${losblad}</span>
-      <div><p class="prtext">${mat(u.t)}</p>${alt}${del}${figur}${svarsrad}</div>
+      <div><p class="prtext">${mat(u.t)}</p>${alt}${del}${former}${figur}${svarsrad}</div>
     </div>`;
   }
   function provforsatt(v) {
@@ -191,12 +246,32 @@ window.BladBygg = (() => {
         <div class="losvar"><b class="losetikett">Svar</b><span>${mat(u.f)}</span>${u.enhet ? `<em>${esc(u.enhet)}</em>` : ''}</div>
       </div></div>`;
   }
+  /* ── Kommenterad elevlösning (förlagans lo4) ──────
+     Samma uppgift löst två eller tre gånger, i stigande ordning, med domen
+     INNE i det parti den gäller — inte i en lista under. Det är gränsen mellan
+     poängen som är svår att dra, och den syns bara när lösningarna står
+     bredvid varandra. Lärarens papper: eleven ser dem aldrig. */
+  function elevlosningar(u) {
+    if (!u.elever || !u.elever.length) return '';
+    return u.elever.map(e => {
+      const total = (e.partier || []).reduce((a, p) => a + (p.poang || 0), 0);
+      const partier = (e.partier || []).map(p => `<div class="loparti"${p.poang ? '' : ' data-utan'}>${
+        (p.rader || []).map(r => `<div class="loskannrad">${mat(r)}</div>`).join('')
+      }<div class="lodom"><i${p.poang ? '' : ' data-utan'}>${p.poang ? '+' : ''}${p.poang || 0} p</i><p>${mat(p.dom)}</p></div></div>`).join('');
+      const full = total >= (u.p || 0) && total > 0;
+      return `<div class="loelev"><b>${esc(e.etikett)}</b><span${
+        total ? (full ? ' data-full' : '') : ' data-utan'}>${total} av ${u.p} poäng${
+        full ? ' · full pott' : ''}</span></div><div class="loskann">${partier}</div>`;
+    }).join('');
+  }
+
   function losVag(u) {
     return `<div class="pruppg">
       <span class="prnr">${u.nr}.<span class="prvarde">${u.p} p</span></span>
       <div><p class="prtext">${mat(u.t)}</p>
         <ul class="lovag">${(u.vag || []).map(s => `<li><span class="losteg">${mat(s[0])}<em>${esc(s[1])}</em></span></li>`).join('')}</ul>
         <div class="losvar"><b class="losetikett">Svar</b><span>${mat(u.f)}</span></div>
+        ${elevlosningar(u)}
       </div></div>`;
   }
   /* Kortsvarsfacit för del A, utskriven lösningsgång för del B. Ett facit som

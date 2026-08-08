@@ -149,6 +149,113 @@ test("provets figur följer med från serverns JSON hela vägen till arket",
     }
   });
 
+/* ── De fem formerna som förlagan har men appen inte kunde producera ──
+   Datatabellen, kryssruteraden, stegtabellen, enheten på svarsraden och den
+   kommenterade elevlösningen. Nu finns de i schemat (exam_spec), i LaTeX:en
+   (_former.tex.j2) och här på skärmarket — och det som prövas är att de ser
+   likadana ut på skärmen som på papperet, och att FACIT inte följer med. */
+
+test("arbetsbladet sätter tabellen, kryssruteraden och stegtabellen",
+  async ({ page }) => {
+    await L.fejkatMoln(page);
+    await L.oppna(page);
+    const html = await page.evaluate(() => window.BladBygg.ark(
+      { typ: "Arbetsblad", moment: "former", inst: {} },
+      [{ nr: 1, p: 2, t: "Bestäm förändringshastigheten.", ut: "kort",
+         enhet: "laddpunkter/år",
+         tabell: { rubriker: ["År", "2020", "2023"],
+                   rader: [["Antal", "5 400", "12 600"]] } },
+       { nr: 2, p: 2, t: "Vilken sats gäller?", ut: "kort",
+         rutor: { etikett: "Sats", val: ["Randvinkelsatsen", "Kordasatsen"] } },
+       { nr: 3, p: 2, t: "Kryssa första felet.", ut: "rakna",
+         stegtabell: { kolumner: ["Alvas lösning"],
+                       steg: [{ celler: ["$3^{x+1}$"] }, { celler: ["$27 = 7$"] },
+                              { celler: ["ingen lösning"] }] } }], {}));
+    await satt(page, html);
+
+    // Datatabellen — förlagans klassiska rutnät.
+    await expect(page.locator("#formprov .gukort .gutab").first()
+      .locator("th")).toHaveCount(3);
+    await expect(page.locator("#formprov .gutab td").first()).toHaveText("Antal");
+    // Enheten står efter linjen på svarsraden.
+    await expect(page.locator("#formprov .gusvarsrad .prenhet"))
+      .toHaveText("laddpunkter/år");
+    // Kryssruteraden ÄR svarsytan — ingen linje att skriva på.
+    const rutrad = page.locator("#formprov .gukort").nth(1);
+    await expect(rutrad.locator(".gurutor .guruta")).toHaveCount(2);
+    await expect(rutrad.locator(".gulinje")).toHaveCount(0);
+    // Stegtabellen: en kryssruta per steg, och inget förkryssat.
+    const steg = page.locator("#formprov .gukort").nth(2);
+    await expect(steg.locator("tbody .gukryss")).toHaveCount(3);
+    await expect(steg.locator("tbody .gusteg").first()).toHaveText("1");
+  });
+
+test("provarket bär samma former — och aldrig facit", async ({ page }) => {
+  const EXAM = {
+    titel: "Prov · former", kurs: "Matematik, nivå 2c", klass: "NA25",
+    datum: "2026-09-03", tid_min: 90, hjalpmedel: "Räknare.",
+    uppgifter: [
+      { del: "B", formaga: "P", typ: "rutin", poang: [2, 0, 0],
+        text: "Bestäm förändringshastigheten.", losning: "2 400",
+        bedomning: "+2 E", enhet: "laddpunkter/år",
+        tabell: { rubriker: ["År", "2020", "2023"],
+                  rader: [["Antal", "5 400", "12 600"]] } },
+      { del: "B", formaga: "B", typ: "rutin", poang: [1, 1, 0],
+        text: "Vilken sats gäller?", losning: "randvinkelsatsen",
+        bedomning: "+1 E", svarsrutor: {
+          etikett: "Sats", val: ["Randvinkelsatsen", "Kordasatsen"], ratt: 0 } },
+      { del: "C", formaga: "R", typ: "resonemang", poang: [0, 1, 1],
+        text: "Kryssa det första felet.", losning: "steg 2",
+        bedomning: "+1 C, +1 A",
+        stegtabell: { kolumner: ["Alvas lösning"],
+                      steg: [{ celler: ["$3^{x+1}$"] }, { celler: ["$27 = 7$"] },
+                             { celler: ["ingen lösning"] }],
+                      forsta_fel: 1 },
+        elevlosningar: [
+          { etikett: "Elevlösning A", partier: [
+            { rader: ["$f'(x) = 3x^2$"], poang: 0, dom: "Derivatan är fel." }] },
+          { etikett: "Elevlösning B", partier: [
+            { rader: ["$f'(x) = 3x^2 + 3$"], poang: 1, dom: "Godtagbar ansats." }] }] },
+    ],
+  };
+  const strom = h => h.map(x => `data: ${JSON.stringify(x)}\n\n`).join("");
+  await L.fejkatMoln(page);
+  await page.route("**/api/exams/generate", route => route.fulfill({
+    status: 200, contentType: "text/event-stream",
+    body: strom([{ type: "done", result: {
+      id: 11, exam: EXAM, typ: "prov", status: "utkast", errors: [], rounds: 1,
+      granser: { E: 3, C: 4, A: 5 }, summor: { totalt: 5 } } }]) }));
+  await L.oppna(page);
+  await L.valjKlass(page, "NA25");
+  await L.skriv(page, { typ: "Prov", moment: "former" });
+  await L.vantaPapper(page, 60_000);
+
+  const ark = page.locator("#dokument");
+  await expect(ark.locator(".prtab th")).toHaveCount(3);
+  await expect(ark.locator(".prsvar .prenhet").first()).toHaveText("laddpunkter/år");
+  await expect(ark.locator(".prsvar .guruta")).toHaveCount(2);
+  await expect(ark.locator(".gutab tbody .gukryss")).toHaveCount(3);
+
+  /* FACIT: vilket kryss som är rätt, vilket steg som brister och
+     elevlösningarna hör till lärarens papper. Står de här är provet förstört
+     — och det märks först när klassen sitter med det. */
+  const text = await ark.innerText();
+  expect(text).not.toContain("Elevlösning");
+  // Facitmeningen ur bedömningen får aldrig stå här. (Uppgiftens EGEN text
+  // säger «kryssa det första felet» — det är frågan, inte svaret.)
+  expect(text).not.toContain("står i steg");
+  const pappret = await page.evaluate(() =>
+    JSON.stringify(window.Dokument.sparade().concat([]).slice(-1)));
+  expect(pappret).not.toContain("forsta_fel");
+  expect(pappret).not.toContain("ratt_alternativ");
+
+  // Städa utkastet — prov 11 finns bara i den här filens route (se ovan).
+  const hogen = await (await page.request.get("/api/dokument")).json();
+  if (hogen.utkast && hogen.utkast.id) {
+    await page.request.delete(`/api/dokument/${hogen.utkast.id}`);
+  }
+});
+
 test("tavlans spaltlinje är dragen, inte streckad", async ({ page }) => {
   await L.fejkatMoln(page);
   await L.oppna(page);

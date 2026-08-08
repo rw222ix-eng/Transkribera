@@ -4,6 +4,7 @@
 ((* set med_grafik = true *))
 ((* set med_svarsrad = true *))
 ((* include '_preamble.tex.j2' *))
+((* import '_former.tex.j2' as former *))
 
 \begin{document}
 
@@ -36,6 +37,7 @@ på sista sidan((* if visa_poang *)); poäng anges som totalpoäng((* endif *)).
 ((( u.text )))
 ((* if u.bild_fil *))\par\vspace{2mm}\begin{center}\includegraphics[width=0.72\linewidth,height=90mm,keepaspectratio]{((( u.bild_fil )))}\end{center}((* endif *))
 ((* if u.figur_tex *))\par\vspace{2mm}\begin{center}((( u.figur_tex )))\end{center}((* endif *))
+((( former.kropp(u) )))
 ((* if u.notis *))\notisruta{((( u.notis )))}((* endif *))
 ((* if u.har_deluppgifter *))
 ((* for d in u.deluppgifter *))
@@ -47,13 +49,14 @@ på sista sidan((* if visa_poang *)); poäng anges som totalpoäng((* endif *)).
 \begin{deluppgift}{((( d.bokstav )))}{}
 ((* endif *))
 ((( d.text )))
+((( former.kropp(d) )))
 ((* if d.notis *))\notisruta{((( d.notis )))}((* endif *))
-((* if d.flerval *))((* for alt in d.flerval *))\par\kryssruta\ ((( alt.bokstav ))): ((( alt.text )))((* endfor *))\par\vspace{2mm}((* elif d.endast_svar *))\svarsrad((* else *))\par\vspace{((( d.utrymme_mm )))mm}((* endif *))
+((* if d.flerval *))((* for alt in d.flerval *))\par\kryssruta\ ((( alt.bokstav ))): ((( alt.text )))((* endfor *))\par\vspace{2mm}((* elif d.endast_svar *))((* if d.enhet *))\svarsradmed{}{((( d.enhet )))}((* else *))\svarsrad((* endif *))((* else *))\par\vspace{((( d.utrymme_mm )))mm}((* endif *))
 \end{deluppgift}
 ((* endfor *))
 ((* elif u.flerval *))
 ((* for alt in u.flerval *))\par\kryssruta\ ((( alt.bokstav ))): ((( alt.text )))((* endfor *))\par\vspace{2mm}
-((* elif u.endast_svar *))\svarsrad((* else *))\par\vspace{((( u.utrymme_mm )))mm}((* endif *))
+((* elif u.endast_svar *))((* if u.enhet *))\svarsradmed{}{((( u.enhet )))}((* else *))\svarsrad((* endif *))((* else *))\par\vspace{((( u.utrymme_mm )))mm}((* endif *))
 \end{uppgift}
 ((* endfor *))
 ((* endfor *))

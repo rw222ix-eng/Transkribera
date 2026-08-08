@@ -856,6 +856,21 @@
          och på papperet. */
       if (u.figur) ut.fig = u.figur;
       if (u.bild) ut.bild = u.bild;
+      /* De fem formerna. Facit följer INTE med till arket: `ratt` och
+         `forsta_fel` stannar i provets JSON och trycks bara i
+         bedömningsanvisningen (bedomning.tex.j2). Ett ark som råkar bära
+         svaret är ett förstört prov, och det märks först när klassen sitter
+         med det. */
+      if (u.enhet) ut.enhet = u.enhet;
+      if (u.tabell) ut.tabell = { rubriker: u.tabell.rubriker, rader: u.tabell.rader };
+      if (u.svarsrutor) ut.rutor = { etikett: u.svarsrutor.etikett, val: u.svarsrutor.val };
+      if (u.stegtabell) {
+        ut.stegtabell = { kolumner: u.stegtabell.kolumner,
+                          steg: (u.stegtabell.steg || []).map(s => ({ celler: s.celler })) };
+      }
+      /* Elevlösningarna är lärarens papper — de går till facitbladet, inte
+         till uppgiften. */
+      if (u.elevlosningar) ut.elever = u.elevlosningar;
       if (delar.length) {
         ut.del = delar.map(d => d.text || '');
         /* Deluppgifternas EGNA poäng — arket ska inte dela totalen jämnt. */

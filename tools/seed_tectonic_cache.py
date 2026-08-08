@@ -242,6 +242,54 @@ def _representative_doc() -> exam_spec.ExamDoc:
                 bedomning=r"+1 C ställningstagande, +1 A stringens.",
             ),
             exam_spec.ExamItem(
+                # DE FEM FORMERNA i en uppgift: datatabellen (\begin{tabular}
+                # med \tabrubrik), enheten på svarsraden (\svarsradmed),
+                # kryssruteraden (\svarsrutor + \svarsruteval), stegtabellen
+                # (\begin{tabularx} med \kryssruta i varje rad) och de
+                # kommenterade elevlösningarna (\begin{elevparti}, som bygger
+                # på \lrbox + \fcolorbox). Ingen av dem fanns i seeden när de
+                # kom, och en form som aldrig kompilerats under seedningen
+                # kraschar --only-cached FÖRSTA gången läraren godkänner ett
+                # papper som råkar bära den.
+                del_="C", formaga="M", typ="problem", poang=(1, 1, 0),
+                text=r"Tabellen visar antalet laddpunkter. Bestäm den "
+                     r"genomsnittliga förändringshastigheten $\frac{\Delta y}"
+                     r"{\Delta x}$ mellan 2020 och 2023.",
+                enhet=r"laddpunkter/år",
+                tabell=exam_spec.Tabell(
+                    rubriker=["År", "2020", "2021", "2023"],
+                    rader=[["Antal", "5 400", "7 100", "12 600"]]),
+                svarsrutor=exam_spec.Svarsrutor(
+                    etikett="Metod", val=[r"Sekant genom $(x_1, y_1)$",
+                                          r"Derivata i punkten"], ratt=0),
+                stegtabell=exam_spec.Stegtabell(
+                    kolumner=["Alvas lösning", "Bilals lösning"],
+                    steg=[exam_spec.Steg(celler=[r"$3^{x+1} = 7 \cdot 3^{x-2}$",
+                                                 r"$\lg(3^{x+1}) = \lg 7$"]),
+                          exam_spec.Steg(celler=[r"$3^{3} = 7$",
+                                                 r"$(x+1)\lg 3 = \lg 7$"]),
+                          exam_spec.Steg(celler=[r"$27 = 7$",
+                                                 r"$x \approx 0{,}77$"])],
+                    forsta_fel=1),
+                losning=r"$\frac{12\,600 - 5\,400}{3} = 2\,400$ per år.",
+                bedomning=r"+1 E korrekt kvot, +1 C tolkning i sammanhanget.",
+                elevlosningar=[
+                    exam_spec.Elevlosning(
+                        etikett="Elevlösning A", partier=[exam_spec.Parti(
+                            rader=[r"$f'(x) = 3x^2$"], poang=0,
+                            dom=r"Derivatan är fel — termen $3x$ deriveras inte.")]),
+                    exam_spec.Elevlosning(
+                        etikett="Elevlösning B", partier=[
+                            exam_spec.Parti(rader=[r"$f'(x) = 3x^2 + 3 = 0$"],
+                                            poang=1,
+                                            dom=r"Godtagbar ansats: ekvationen tecknas."),
+                            exam_spec.Parti(
+                                rader=[r"$x^2 = -1$ saknar reell lösning, ty "
+                                       r"$x^2 \geq 0$."], poang=1,
+                                dom=r"Godtagbart resonemang med motivering.")]),
+                ],
+            ),
+            exam_spec.ExamItem(
                 # Figur (enhetscirkel) — kompilerar exam_figures.render_figur
                 # och \pic angle genom den RIKTIGA mallkedjan (inte bara
                 # PROBE_TEX ovan). figur och bild utesluter varandra i
