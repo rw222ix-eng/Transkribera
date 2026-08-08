@@ -74,5 +74,33 @@ def gor() -> Path:
     return UT
 
 
+def fran_png(kalla: Path, mal: Path) -> Path:
+    """En genererad bild → .ico i alla storlekar Windows ber om.
+
+    Bildmodeller levererar en kvadrat på 1024 px, ibland med bakgrund. Den
+    beskärs till kvadrat och skalas ner en gång per storlek med LANCZOS —
+    lägger man bara in 256 px sköter Windows nedskalningen själv, och gör det
+    sämre. Alfakanalen behålls: en ikon utan genomskinliga hörn ser ut som en
+    klistrad ruta i aktivitetsfältet.
+    """
+    bild = Image.open(kalla).convert("RGBA")
+    sida = min(bild.size)
+    v, o = (bild.width - sida) // 2, (bild.height - sida) // 2
+    bild = bild.crop((v, o, v + sida, o + sida))
+    mal.parent.mkdir(parents=True, exist_ok=True)
+    bild.resize((RUTA, RUTA), Image.LANCZOS).save(
+        mal, format="ICO", sizes=[(s, s) for s in STORLEKAR])
+    return mal
+
+
 if __name__ == "__main__":
-    print("Skrev", gor())
+    import sys
+
+    # Utan argument ritas standardikonen. Med en bildfil görs den till .ico i
+    # stället — vägen in för ikoner som kommer från en bildmodell.
+    if len(sys.argv) > 1:
+        kalla = Path(sys.argv[1])
+        mal = Path(sys.argv[2]) if len(sys.argv) > 2 else kalla.with_suffix(".ico")
+        print("Skrev", fran_png(kalla, mal))
+    else:
+        print("Skrev", gor())
