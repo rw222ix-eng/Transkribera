@@ -1,0 +1,280 @@
+<!doctype html>
+<!-- Studions gränssnitt. Serveras av manus_studio.py på 127.0.0.1:8752.
+
+     En sida, fem lägen (data-lage på <body>): skriv → spelar → lyssna → arbetar
+     → klar. Ingen router och inget ramverk — hela programmet är kortare än den
+     konfiguration ett ramverk hade krävt, och det ska gå att läsa i ett svep.
+
+     Paletten är appens (styles.css i app/web/ui), men filen är fristående med
+     flit: den där är genererad ur Claude Design och ska inte kopplas till ett
+     sidoprogram. Snitten är systemets — studion får inte hämta typsnitt från
+     nätet bara för att den råkar visas i en webbläsare. -->
+<meta charset="utf-8">
+<title>Manusstudio</title>
+<style>
+:root{
+  --sky:#117BC8; --sky-deep:#0D5C96; --navy:#09426C; --berry:#CF372D;
+  --surface:#fff; --sunken:#F1F7FB; --line:#DADADA; --accent-weak:#E6F1FA;
+  --sans:system-ui,"Segoe UI",sans-serif;
+  --serif:Georgia,"Times New Roman",serif;
+  --ease:cubic-bezier(.22,.61,.36,1);
+}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;background:var(--sky);color:#000;
+  font:16px/1.5 var(--sans);display:grid;place-items:center;padding:28px}
+.kort{width:min(820px,100%);background:var(--surface);border-radius:20px;padding:30px 34px 26px;
+  box-shadow:0 30px 64px -34px rgba(9,66,108,.55),0 8px 22px -14px rgba(13,92,150,.3)}
+h1{font:400 2rem/1.1 var(--serif);margin:0 0 4px}
+.under{margin:0 0 22px;color:#456}
+label{display:block;font-size:.85rem;color:#456;margin:0 0 5px}
+input,textarea{width:100%;font:inherit;border:1px solid var(--line);border-radius:8px;
+  padding:10px 12px;background:var(--sunken)}
+textarea{min-height:210px;resize:vertical;line-height:1.6}
+input:focus,textarea:focus{outline:2px solid var(--sky);outline-offset:1px;border-color:var(--sky)}
+.rad{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:18px}
+button{font:inherit;border:none;border-radius:9999px;padding:11px 22px;cursor:pointer;
+  background:var(--navy);color:#fff;transition:filter var(--ease) 140ms}
+button:hover{filter:brightness(1.15)}
+button.tyst{background:transparent;color:var(--navy);box-shadow:inset 0 0 0 1px var(--line)}
+button.stopp{background:var(--berry)}
+button:disabled{background:#E8F1F8;color:#8aa;cursor:default}
+.fil{font-size:.85rem;color:var(--sky-deep);cursor:pointer;text-decoration:underline}
+
+/* Teleprompter: stor serif, generöst radavstånd, och en tonad kant upptill och
+   nedtill så att raden man läser hamnar i mitten utan att texten tvärklipps. */
+#prompt{height:min(58vh,460px);overflow:hidden;margin:6px 0 0;padding:10px 0;
+  font:400 clamp(1.4rem,2.6vw,2rem)/1.85 var(--serif);white-space:pre-wrap;
+  -webkit-mask-image:linear-gradient(transparent,#000 12%,#000 88%,transparent)}
+.mat{height:8px;border-radius:9999px;background:var(--accent-weak);overflow:hidden;flex:1;min-width:120px}
+.mat i{display:block;height:100%;width:0;background:var(--sky);transition:width 90ms linear}
+.tid{font-variant-numeric:tabular-nums;font-size:1.5rem;color:var(--navy)}
+.pill{font-size:.8rem;color:#456;background:var(--accent-weak);border-radius:9999px;padding:4px 12px}
+#logg{margin:16px 0 0;padding:14px 16px;background:var(--sunken);border-radius:12px;
+  font-size:.86rem;line-height:1.55;max-height:240px;overflow:auto;white-space:pre-wrap;
+  word-break:break-word}
+.filer{margin:14px 0 0;padding:0;list-style:none;font-size:.92rem}
+.filer li{padding:7px 0;border-top:1px solid var(--line)}
+.fel{color:var(--berry)}
+[data-lage=skriv]   .v:not(.skriv),
+[data-lage=spelar]  .v:not(.spelar),
+[data-lage=lyssna]  .v:not(.lyssna),
+[data-lage=arbetar] .v:not(.arbetar),
+[data-lage=klar]    .v:not(.klar){display:none}
+</style>
+
+<body data-lage="skriv">
+<div class="kort">
+
+  <section class="v skriv">
+    <h1>Manusstudio</h1>
+    <p class="under">Läs in manuset — få undertexter och ordtider tillbaka.</p>
+    <label for="namn">Namn på avsnittet</label>
+    <input id="namn" placeholder="Derivatan, del 1" autocomplete="off">
+    <div class="rad" style="margin:16px 0 5px;justify-content:space-between">
+      <label for="manus" style="margin:0">Manus</label>
+      <span class="fil" id="oppnamanus">Öppna en .txt ...</span>
+      <input type="file" id="valjfil" accept=".txt,text/plain" hidden>
+    </div>
+    <textarea id="manus" placeholder="Klistra in manuset här. Det rullar medan du läser, och styr stavningen i undertexterna."></textarea>
+    <div class="rad">
+      <button id="start">Spela in</button>
+      <span class="pill" id="rakning">0 ord</span>
+    </div>
+  </section>
+
+  <section class="v spelar">
+    <div class="rad" style="margin:0">
+      <span class="tid" id="tid">0:00</span>
+      <span class="mat"><i id="niva"></i></span>
+      <button class="stopp" id="stoppa">Stoppa</button>
+    </div>
+    <div id="prompt"></div>
+    <p class="under" style="margin:10px 0 0;font-size:.82rem">
+      Mellanslag pausar rullningen · ↑ ↓ ändrar farten · Esc stoppar inspelningen
+    </p>
+  </section>
+
+  <section class="v lyssna">
+    <h1>Lyssna igenom</h1>
+    <p class="under">Blev det bra? Annars tar du om det — inget skickas förrän du säger till.</p>
+    <audio id="spelare" controls style="width:100%"></audio>
+    <div class="rad">
+      <button id="gor">Gör undertexter</button>
+      <button class="tyst" id="omtag">Spela in igen</button>
+      <span class="pill" id="kostnad"></span>
+    </div>
+  </section>
+
+  <section class="v arbetar">
+    <h1>Arbetar</h1>
+    <p class="under" id="steg">Skickar ljudet ...</p>
+    <span class="mat"><i id="jobbmat"></i></span>
+    <div id="logg"></div>
+  </section>
+
+  <section class="v klar">
+    <h1 id="klarrubrik">Klart</h1>
+    <p class="under" id="klartext"></p>
+    <ul class="filer" id="filer"></ul>
+    <div class="rad">
+      <button id="oppna">Öppna mappen</button>
+      <button class="tyst" id="nytt">Nytt avsnitt</button>
+    </div>
+  </section>
+
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const lage = v => document.body.dataset.lage = v;
+
+let inspelare, bitar = [], strom, ljudkontext, analys, blob, andelse = '.webm';
+let t0 = 0, klocka, mataren, rullning, fart = 34, rullar = true, y = 0;
+
+// ---- Manuset -------------------------------------------------------------
+$('#manus').addEventListener('input', rakna);
+function rakna(){
+  const n = $('#manus').value.trim().split(/\s+/).filter(Boolean).length;
+  // ~150 ord/min är lugnt uppläsningstempo; siffran är till för att se om
+  // manuset alls är i närheten av de fem minuter videon ska bli.
+  $('#rakning').textContent = n ? `${n} ord · ca ${(n / 150).toFixed(1)} min` : '0 ord';
+}
+$('#oppnamanus').onclick = () => $('#valjfil').click();
+$('#valjfil').onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  $('#manus').value = await f.text();
+  if (!$('#namn').value) $('#namn').value = f.name.replace(/\.txt$/i, '');
+  rakna();
+};
+
+// ---- Inspelning ----------------------------------------------------------
+$('#start').onclick = async () => {
+  try {
+    strom = await navigator.mediaDevices.getUserMedia({audio:{
+      echoCancellation:true, noiseSuppression:true, autoGainControl:true}});
+  } catch (fel) {
+    alert('Mikrofonen gick inte att öppna: ' + fel.message +
+          '\n\nTillåt mikrofon för den här sidan och försök igen.');
+    return;
+  }
+  // Opus i webm är det Chrome spelar in bäst; servern paketerar om till Ogg
+  // efteråt (webm skrivet live saknar speltid i headern).
+  const typ = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+    ? 'audio/webm;codecs=opus' : '';
+  andelse = typ ? '.webm' : '.ogg';
+  inspelare = new MediaRecorder(strom, typ ? {mimeType:typ} : {});
+  bitar = [];
+  inspelare.ondataavailable = e => e.data.size && bitar.push(e.data);
+  inspelare.onstop = klarInspelad;
+  inspelare.start();
+
+  t0 = Date.now();
+  klocka = setInterval(() => {
+    const s = Math.floor((Date.now() - t0) / 1000);
+    $('#tid').textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  }, 250);
+  nivamatare();
+  $('#prompt').textContent = $('#manus').value;
+  y = 0; rullar = true; rulla();
+  lage('spelar');
+};
+
+function nivamatare(){
+  // Stapeln finns för tryggheten: en tyst mätare betyder fel mikrofon, och det
+  // vill man veta på sekund tre — inte efter fem minuters uppläsning.
+  ljudkontext = new AudioContext();
+  analys = ljudkontext.createAnalyser();
+  analys.fftSize = 512;
+  ljudkontext.createMediaStreamSource(strom).connect(analys);
+  const buf = new Uint8Array(analys.fftSize);
+  mataren = setInterval(() => {
+    if (!analys) return;
+    analys.getByteTimeDomainData(buf);
+    let sum = 0;
+    for (const v of buf) sum += (v - 128) ** 2;
+    $('#niva').style.width = Math.min(100, Math.sqrt(sum / buf.length) * 6) + '%';
+  }, 50);
+}
+
+function rulla(){
+  // setInterval, inte requestAnimationFrame: rAF pausas så fort fönstret hamnar
+  // i bakgrunden eller täcks av ett annat, och en teleprompter som fryser mitt i
+  // en uppläsning — medan inspelningen fortsätter — är värre än en som rullar
+  // lite ryckigare. Positionen räknas ur klockan, inte ur antalet bildrutor, så
+  // texten står på rätt rad även om rutorna glesnar. 30 i sekunden går inte att
+  // skilja från 60 vid de här farterna.
+  let sist = performance.now();
+  rullning = setInterval(() => {
+    const nu = performance.now();
+    if (rullar) { y += fart * (nu - sist) / 1000; $('#prompt').scrollTop = y; }
+    sist = nu;
+  }, 33);
+}
+
+addEventListener('keydown', e => {
+  if (document.body.dataset.lage !== 'spelar') return;
+  if (e.code === 'Space')      { rullar = !rullar; e.preventDefault(); }
+  else if (e.key === 'ArrowUp')   { fart = Math.min(160, fart + 6); e.preventDefault(); }
+  else if (e.key === 'ArrowDown') { fart = Math.max(6, fart - 6); e.preventDefault(); }
+  else if (e.key === 'Escape')    $('#stoppa').click();
+});
+// Rullar man med hjulet ska den manuella positionen gälla, inte den räknade.
+$('#prompt').addEventListener('wheel', e => {
+  $('#prompt').scrollTop += e.deltaY; y = $('#prompt').scrollTop; e.preventDefault();
+}, {passive:false});
+
+$('#stoppa').onclick = () => {
+  inspelare.stop();
+  strom.getTracks().forEach(t => t.stop());
+  clearInterval(klocka); clearInterval(rullning); clearInterval(mataren);
+  analys = null; ljudkontext.close();
+};
+
+function klarInspelad(){
+  blob = new Blob(bitar, {type: inspelare.mimeType});
+  $('#spelare').src = URL.createObjectURL(blob);
+  const min = (Date.now() - t0) / 60000;
+  $('#kostnad').textContent = `${min.toFixed(1)} min · ca $${(min * 0.0045).toFixed(2)}`;
+  lage('lyssna');
+}
+$('#omtag').onclick = () => lage('skriv');
+
+// ---- Jobbet --------------------------------------------------------------
+$('#gor').onclick = async () => {
+  lage('arbetar');
+  $('#logg').textContent = ''; $('#jobbmat').style.width = '0';
+  $('#steg').textContent = 'Skickar ljudet ...';
+  // readAsDataURL i stället för btoa(String.fromCharCode(...)): en femminuters
+  // inspelning är miljontals byte, och spread-anropet spränger anropsstacken.
+  const b64 = await new Promise(k => {
+    const f = new FileReader();
+    f.onload = () => k(f.result.split(',')[1]);
+    f.readAsDataURL(blob);
+  });
+  await fetch('/spela', {method:'POST', body: JSON.stringify({
+    namn: $('#namn').value, manus: $('#manus').value, ljud: b64, andelse})});
+  polla();
+};
+
+function polla(){
+  const i = setInterval(async () => {
+    const l = await (await fetch('/lage')).json();
+    $('#logg').textContent = l.logg.join('\n');
+    $('#logg').scrollTop = $('#logg').scrollHeight;
+    $('#jobbmat').style.width = l.pct + '%';
+    if (l.etikett) $('#steg').textContent = l.etikett + ' ' + l.pct + ' %';
+    if (l.lage === 'klar' || l.lage === 'fel') {
+      clearInterval(i);
+      const fel = l.lage === 'fel';
+      $('#klarrubrik').textContent = fel ? 'Det gick inte' : 'Klart';
+      $('#klarrubrik').className = fel ? 'fel' : '';
+      $('#klartext').textContent = fel ? l.fel : l.mapp;
+      $('#filer').innerHTML = l.filer.map(f => `<li>${f}</li>`).join('');
+      lage('klar');
+    }
+  }, 400);
+}
+
+$('#oppna').onclick = () => fetch('/oppna');
+$('#nytt').onclick = () => { $('#namn').value = ''; $('#manus').value = ''; rakna(); lage('skriv'); };
+</script>

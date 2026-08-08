@@ -36,6 +36,10 @@ models/
 *.vtt
 *.ord.json
 
+# Studions inspelningar: en mapp per avsnitt med ljudet, manuset och tiderna.
+# Lärarens eget material — hör hemma på disken, aldrig i repot.
+Manus/
+
 # Diverse
 nul
 *.log

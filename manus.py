@@ -28,6 +28,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from typing import Callable
 
 from app import alignment, media as media_mod, openai_asr, settings_store, transcriber
 
@@ -70,8 +71,18 @@ def _procent(etikett: str):
 
 
 def kor(media: Path, manus: Path | None, format: list[str], sprak: str,
-        ut_mapp: Path | None) -> list[Path]:
-    """Hela vägen: ljud → moln → tider → filer. Returnerar det som skrevs."""
+        ut_mapp: Path | None, *,
+        logg: Callable[[str], None] | None = None,
+        strom: Callable[[str], None] | None = None,
+        pct: Callable[[str, int], None] | None = None) -> list[Path]:
+    """Hela vägen: ljud → moln → tider → filer. Returnerar det som skrevs.
+
+    De tre återanropen är utbytbara för att manus_studio.py kör samma väg men
+    ritar framstegen i ett fönster i stället för i en terminal. Utan dem skriver
+    de till stdout precis som förut."""
+    logg = logg or _logg
+    strom = strom or _strom
+    pct = pct or (lambda etikett, p: _procent(etikett)(p))
     if not media.exists():
         raise SystemExit(f"Filen finns inte: {media}")
     if not openai_asr.har_nyckel(BASE):
@@ -89,24 +100,24 @@ def kor(media: Path, manus: Path | None, format: list[str], sprak: str,
     if manus:
         # Bara texten behövs; radbrytningar och tomrader hjälper inte modellen.
         ledtext = " ".join(manus.read_text(encoding="utf-8").split())
-        _logg(f"Manus: {len(ledtext.split())} ord som ledtext.")
+        logg(f"Manus: {len(ledtext.split())} ord som ledtext.")
 
-    _logg(f"{media.name} — {langd / 60:.1f} min, ca ${openai_asr.kostnad_usd(langd):.2f}.")
+    logg(f"{media.name} — {langd / 60:.1f} min, ca ${openai_asr.kostnad_usd(langd):.2f}.")
     # Ingen procentmätare för molnet: texten som växer fram ÄR framsteget (samma
     # skäl som i servern), och den och mätaren kan inte dela rad.
     moln = openai_asr.transkribera(
         media, BASE, langd=langd, sprak=sprak, ledtext=ledtext,
-        log_cb=_logg, delta_cb=_strom)
+        log_cb=logg, delta_cb=strom)
     _ny_rad()
     if not moln.text:
         raise SystemExit("Transkriberingen gav ingen text.")
 
     if not alignment.ar_installerad(settings_store.get_models_root(BASE)):
-        _logg("Hämtar tidsmodellen (engångs, ~1,2 GB) ...")
-        alignment.ladda_ner(settings_store.get_models_root(BASE),
-                            log_cb=_logg, progress_cb=_procent("Modell"))
+        logg("Hämtar tidsmodellen (engångs, ~1,2 GB) ...")
+        alignment.ladda_ner(settings_store.get_models_root(BASE), log_cb=logg,
+                            progress_cb=lambda p: pct("Modell", p))
     segment = alignment.tidsatt(media, moln.bitar, settings_store.get_models_root(BASE),
-                                log_cb=_logg, progress_cb=_procent("Tider"))
+                                log_cb=logg, progress_cb=lambda p: pct("Tider", p))
     alignment.frigor()                          # släpp tidsmodellens VRAM direkt
 
     stam = (ut_mapp / media.stem) if ut_mapp else media.with_suffix("")
@@ -130,10 +141,10 @@ def kor(media: Path, manus: Path | None, format: list[str], sprak: str,
             [transcriber.Segment(d["start"], d["end"], d["text"]) for d in rader],
             stam, textformat)
 
-    _logg(f"Klart — {len(rader)} undertextrader, "
-          f"{moln.debiterade_sekunder / 60:.1f} ljudminuter, ${moln.kostnad:.2f}.")
+    logg(f"Klart — {len(rader)} undertextrader, "
+         f"{moln.debiterade_sekunder / 60:.1f} ljudminuter, ${moln.kostnad:.2f}.")
     for p in skrivna:
-        _logg("  " + str(p))
+        logg("  " + str(p))
     return skrivna
 
 
