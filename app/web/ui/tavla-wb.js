@@ -2377,14 +2377,20 @@ function renderBoard(boardSpec, container) {
         const h = innerH - 10;
         const vd = svg('svg', {
           class: 'wb-svg',
-          style: `position:absolute;left:${divX}px;top:${innerY + 5}px;width:8px;height:${h}px;overflow:visible;color:var(--ink-black);opacity:0.35;`,
+          /* Spaltlinjen på en riktig tavla är DRAGEN, inte streckad: läraren
+             drar den i ett svep innan genomgången börjar, och den syns lika
+             tydligt som det som skrivs. Motorn ritade den streckad och blek
+             (opacity 0,35, 6-4-streck) — förlagan («Arbetsblad prov och tavlor
+             — femton former») tog upp den i sitt eget stilblad, vilket är
+             beviset på att den ritades fel här. Handens vinglighet står kvar;
+             det är bara strecken som försvinner. */
+          style: `position:absolute;left:${divX}px;top:${innerY + 5}px;width:8px;height:${h}px;overflow:visible;color:var(--ink-black);opacity:0.75;`,
         },
           svg('path', {
             d: HW.wobblyVLine(h, { amplitude: 0.5, seed: HW.strHash(col.weight + 'div' + x) }),
             fill: 'none',
             stroke: 'currentColor',
-            'stroke-width': 1,
-            'stroke-dasharray': '6 4',
+            'stroke-width': 2.2,
             class: 'ink-stroke',
           })
         );

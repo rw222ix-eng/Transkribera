@@ -850,8 +850,16 @@
         formaga: u.formaga || '',
       };
       if (u.alternativ) { ut.alt = u.alternativ; ut.ratt = u.ratt_alternativ; }
+      /* Figuren följer med till arket. Servern ritar den i PDF:en
+         (exam_figures), och utan den här raden hänvisade skärmarket till «figuren
+         nedan» medan platsen stod tom — samma uppgift såg olika ut på skärmen
+         och på papperet. */
+      if (u.figur) ut.fig = u.figur;
+      if (u.bild) ut.bild = u.bild;
       if (delar.length) {
         ut.del = delar.map(d => d.text || '');
+        /* Deluppgifternas EGNA poäng — arket ska inte dela totalen jämnt. */
+        ut.delp = delar.map(d => provSumma(d.poang));
         /* Facitbladets poängsatta väg: varje deluppgift är ett steg med sin
            egen poäng — samma form som prototypens `vag`. */
         ut.vag = delar.map((d, k) => [`${'abcdef'[k]}) ${d.losning || ''}`,

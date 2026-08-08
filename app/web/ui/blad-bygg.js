@@ -35,10 +35,21 @@ window.BladBygg = (() => {
       ? `<ul class="gudel">${u.del.map((d, k) => `<li>${'abcdef'[k]}) ${mat(d)}</li>`).join('')}</ul>` : '';
     const fig = illustration && !u.fig
       ? '<div class="gufigur guplats" style="height:110px"><span class="gufigtext">plats för illustration</span></div>' : '';
-    const egen = u.fig ? `<div class="gufigur" data-vantar="" data-figur="${attr(JSON.stringify(u.fig))}"></div>` : '';
+    /* Figuren står BREDVID frågan, aldrig ovanför den — det är hela skillnaden
+       mellan förlagans form 1 (radbunden) och form 2 (figurspalt), och eleven
+       måste kunna läsa båda samtidigt. Förr lades figuren under uppgiften utan
+       spalt: samma innehåll, en annan form än den som var ritad. */
+    const egen = u.fig
+      ? `<div class="gufigur" data-vantar="" data-figur="${attr(JSON.stringify(u.fig))}"></div>`
+        + (u.figkap ? `<p class="gufigkap">${mat(u.figkap)}</p>` : '')
+      : '';
+    const kropp = egen
+      ? `<div class="gutva"><div><p class="gufraga">${mat(u.t)}</p>${alt}${del}${svarsyta(u)}</div>`
+        + `<div>${egen}</div></div>`
+      : `<p class="gufraga">${mat(u.t)}</p>${alt}${del}${fig}${svarsyta(u)}`;
     return `<div class="gukort" data-ut="${u.ut || 'rakna'}">
       <span class="gubricka">${bricka}</span>
-      <p class="gufraga">${mat(u.t)}</p>${alt}${del}${egen}${fig}${svarsyta(u)}
+      ${kropp}
     </div>`;
   }
 
@@ -54,7 +65,16 @@ window.BladBygg = (() => {
     const grupp = v.typ === 'Gruppuppgift';
     const namnrader = grupp ? Math.max(2, Math.min(6, Number(i.grupp) || 3)) : 1;
     const rad = '<div class="gurad"><span class="gunamn">Namn:</span><span class="gulinje"></span></div>';
-    return `<div class="gu" data-form="${grupp ? 'gu' : 'ab'}">
+    /* FORMNYCKELN. Arbetsbladet är en av förlagans fyra former, inte en femte:
+       har någon uppgift en figur är det form 2 (figurspalt), annars form 1
+       (radbunden). Förr stod «ab» här — en nyckel ingen regel i blad.css känner
+       — och bladet fick basvärdena i stället för formens egen sättning
+       (radhöjder, bandets padding, figurspaltens bredd, figurhöjden).
+       Gruppuppgiften behåller «gu»: den bär sin egen täthet i gruppark.css,
+       fyra rutor med namnrader på ett A4, och det ÄR dess form. */
+    const harFigur = uppgifter.some(u => u && u.fig);
+    const form = grupp ? 'gu' : (harFigur ? 'gu2' : 'gu1');
+    return `<div class="gu" data-form="${form}">
       <div class="guhuv"><h1 class="gutitel">${esc(versal(v.moment || o.titel || ''))}</h1></div>
       <div class="gutopp">${rad.repeat(namnrader)}</div>
       <div class="guband">${esc(BAND[v.typ] || BAND.Arbetsblad)}</div>
@@ -88,8 +108,23 @@ window.BladBygg = (() => {
   function provuppg(u) {
     const alt = u.alt
       ? `<ul class="prdel prval">${u.alt.map((a, k) => `<li><i>${BOKSTAV[k]}.</i>${mat(a)}</li>`).join('')}</ul>` : '';
+    /* Deluppgifternas poäng är provets EGNA, inte totalen delad på antalet.
+       Jämnt fördelat blev «2 p» på en deluppgift som ger 1 och «2 p» på en som
+       ger 3 — och det är poängen eleven planerar sin tid efter. Prototypens
+       uppgifter saknar delp; då står den gamla uppskattningen kvar. */
+    const delpoang = k => (u.delp && u.delp[k] != null
+      ? u.delp[k] : Math.max(1, Math.round(u.p / u.del.length)));
     const del = u.del && u.del.length
-      ? `<ul class="prdel" data-avdelad="">${u.del.map((d, k) => `<li><i>${'abcdef'[k]})</i><span>${mat(d)}</span><span class="prpo">${Math.max(1, Math.round(u.p / u.del.length))} p</span></li>`).join('')}</ul>` : '';
+      ? `<ul class="prdel" data-avdelad="">${u.del.map((d, k) => `<li><i>${'abcdef'[k]})</i><span>${mat(d)}</span><span class="prpo">${delpoang(k)} p</span></li>`).join('')}</ul>` : '';
+    /* FIGUREN. Provets uppgift kan bära en ritad figur (exam_spec figur) — en
+       graf, en triangel, en enhetscirkel — och den ritas i PDF:en av
+       exam_figures. På skärmarket saknades den helt: uppgiften hänvisade till
+       «figuren nedan» och där fanns ingen. Förlagans provblad har den i .prfig
+       med sin bildtext under. */
+    const figur = u.fig
+      ? `<div class="prfig" data-vantar="" data-figur="${attr(JSON.stringify(u.fig))}"></div>`
+        + (u.figkap ? `<p class="prfigkap">${mat(u.figkap)}</p>` : '')
+      : '';
     /* SVARET står alltid i provet — på båda delarna, på varje uppgift. Förr
        hängde raden på u.ut === 'kort', och en uppgift som saknade den märkningen
        blev en fråga utan svarsplats mitt bland två som hade det. Alternativ
@@ -105,7 +140,7 @@ window.BladBygg = (() => {
     const varde = `${u.p} p`;
     return `<div class="pruppg">
       <span class="prnr">${u.nr}.<span class="prvarde">${varde}</span>${losblad}</span>
-      <div><p class="prtext">${mat(u.t)}</p>${alt}${del}${svarsrad}</div>
+      <div><p class="prtext">${mat(u.t)}</p>${alt}${del}${figur}${svarsrad}</div>
     </div>`;
   }
   function provforsatt(v) {
