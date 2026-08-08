@@ -12,7 +12,12 @@ import { defineConfig } from "@playwright/test";
  * Egen port (8751), skild från utvecklingsserverns 8750, så en igångvarande
  * dev-server inte tystar en trasig svit genom att svara i dess ställe.
  */
-const PORT = 8751;
+/* Soak-körningen (tools/soak.py) startar EN server med en bas som lever kvar
+ * mellan varven — det är hela poängen: läckor syns bara i ett hus som inte rivs
+ * varje gång. Då ska sviten återanvända den servern i stället för att starta en
+ * egen och tömma basen. */
+const SOAK = !!process.env.SOAK;
+const PORT = SOAK ? Number(process.env.SOAK_PORT || 8752) : 8751;
 
 export default defineConfig({
   testDir: ".",
@@ -48,7 +53,7 @@ export default defineConfig({
     command: `python e2e/testserver.py ${PORT}`,
     cwd: "..",
     url: `http://127.0.0.1:${PORT}/`,
-    reuseExistingServer: false,
+    reuseExistingServer: SOAK,
     timeout: 120_000,
   },
 });

@@ -167,6 +167,17 @@ test("dag 4 — rättningsdag: siffrorna in, utfallet blir källdörr 5",
       await L.vantaPapper(page, 60_000);
       await page.locator("#godkann").click();
       await expect.poll(provet, { timeout: 120_000 }).not.toBeNull();
+      /* Vänta ut PDF-bygget. Godkännandet av ett prov håller GPU-låset medan
+         Tectonic kompilerar (routes_exam approve), så nästa skrivning får 409
+         «GPU:n är upptagen» om man går vidare direkt — läraren skulle trycka
+         «Försök igen», och dagen väntar i stället. Pappret bär sökvägen till
+         PDF:en när den finns, och det är den ärligaste signalen om att bygget
+         är klart. */
+      await expect.poll(() => page.evaluate(() => {
+        const p = window.Dokument.sparade().find(
+          v => (v.dokument || v).typ === "Prov" && v.id);
+        return !!(p && ((p.dokument || p).pdf));
+      }), { timeout: 180_000 }).toBe(true);
     }
     const provId = await provet();
     await page.evaluate(id => window.Rattning.oppna(
@@ -189,11 +200,16 @@ test("dag 4 — rättningsdag: siffrorna in, utfallet blir källdörr 5",
     await expect.poll(() => anrop.filter(a => a.metod === "PUT"
       && a.vag.endsWith("/rattning")).length, { timeout: 30_000 }).toBe(1);
 
-    // Rättningen överlever omstarten — «Rättat · NN %» ska inte vara ett
-    // minnesvärde.
-    const sparade = await L.efterOmladdning(page);
-    const rad = sparade.find(v => v.id === provId);
-    expect(rad.rattat || (rad.dokument || {}).rattat).toBeTruthy();
+    /* Rättningen överlever omstarten — «Rättat · NN %» ska inte vara ett
+       minnesvärde. Frågan ställs till SERVERN och inte till högen i webbläsaren:
+       högen växer för varje session (soak-körningen kör dagen om och om igen)
+       och «det första provet i listan» är inte samma papper i morgon. */
+    const svar = await page.request.get(`/api/dokument/${provId}/rattning`);
+    expect(svar.ok()).toBe(true);
+    const lagrad = await svar.json();
+    expect(lagrad.rattat, JSON.stringify(lagrad).slice(0, 200)).toBeTruthy();
+    expect(lagrad.elever).toBe(22);
+    await L.efterOmladdning(page);
 
     // Källdörr 5: utfallet följer med in i nästa skrivning — omprovet ska ta om
     // det klassen föll på, inte gå igenom momentet en gång till.

@@ -128,13 +128,29 @@ export function vakt(page) {
   return fel;
 }
 
-/** Öppnar appen med fryst klocka och väntar tills serverns data är inne. */
+/** Löftet om serverns dokumenthög — hämtas FÖRE sidladdningen. */
+const vantarHogen = page => page.waitForResponse(
+  r => new URL(r.url()).pathname === "/api/dokument" && r.request().method() === "GET",
+  { timeout: 30_000 });
+
+/**
+ * Öppnar appen med fryst klocka och väntar tills serverns data är inne.
+ *
+ * Också DOKUMENTHÖGEN: prototypens elva papper ligger framme tills
+ * /api/dokument svarat, och en dag som frågar «finns det ett prov i Sparat?»
+ * innan dess får prototypens svar. Det märks inte i en tom bas — men i en bas
+ * som vuxit under en natts soak-körning tar hydreringen längre tid, och då
+ * började dagarna arbeta på fel hög.
+ */
 export async function oppna(page, { tid = SKOLDAG } = {}) {
   await page.clock.install({ time: new Date(tid) });
+  const hogen = vantarHogen(page);
   await page.goto("/");
   await page.waitForFunction(() =>
     window.Kalender && window.Kalender.franServern() && window.Dokument && window.API
       && window.API.pa);
+  await hogen;
+  await page.waitForTimeout(150);          // högen ritas om efter svaret
 }
 
 /** Lägger en inspelning i kön och kör den. Molnet är fejkat — kedjan är äkta. */
@@ -224,9 +240,18 @@ export const vantarGenerering = (page, timeout = 60_000) =>
     { timeout });
 
 /** Väntar ut molnraden. Kassetten svarar snabbt, men servern validerar,
- *  reparerar och renderar på riktigt — och renderingen kan gå en runda till. */
+ *  reparerar och renderar på riktigt — och renderingen kan gå en runda till.
+ *
+ *  Kommer inget papper är beskedet i skrivrutan det enda som förklarar varför,
+ *  och det är borta när testet är slut — så det följer med i felet. */
 export async function vantaPapper(page, timeout = 40_000) {
-  await expect(page.locator("#dokument")).toBeVisible({ timeout });
+  try {
+    await expect(page.locator("#dokument")).toBeVisible({ timeout });
+  } catch (e) {
+    const besked = await page.locator("#skrivstatus").innerText().catch(() => "");
+    throw new Error("inget papper kom fram. Skrivrutan sa: "
+                    + (besked.replace(/\s+/g, " ").trim().slice(0, 400) || "ingenting"));
+  }
 }
 
 /** Godkänner pappret och väntar tills servern skrivit in det. */
@@ -241,10 +266,13 @@ export const antalSparade = page =>
 
 /** Papperen servern faktiskt har — läst genom en omladdning, inte ur minnet. */
 export async function efterOmladdning(page) {
+  const hogen = vantarHogen(page);
   await page.reload();
   await page.waitForFunction(() =>
     window.Dokument && window.API && window.API.pa && window.Kalender
       && window.Kalender.franServern());
+  await hogen;
+  await page.waitForTimeout(150);
   return page.evaluate(() => window.Dokument.sparade());
 }
 
