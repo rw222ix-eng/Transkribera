@@ -58,15 +58,22 @@ def create_backup(base: Path, *, now: datetime | None = None,
     dest = out_dir / f"transkribera-backup-{stamp}.zip"
 
     included: list[str] = []
-    with zipfile.ZipFile(dest, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-        for name in BACKUP_FILES:
-            src = base / name
-            if src.exists() and src.is_file():
-                zf.write(src, arcname=name)
-                included.append(name)
-        zf.writestr("manifest.txt", _MANIFEST.format(
-            when=(now or datetime.now()).isoformat(timespec="seconds"),
-            files=", ".join(included) or "(inga filer hittades)"))
+    try:
+        with zipfile.ZipFile(dest, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+            for name in BACKUP_FILES:
+                src = base / name
+                if src.exists() and src.is_file():
+                    zf.write(src, arcname=name)
+                    included.append(name)
+            zf.writestr("manifest.txt", _MANIFEST.format(
+                when=(now or datetime.now()).isoformat(timespec="seconds"),
+                files=", ".join(included) or "(inga filer hittades)"))
+    except OSError as e:
+        # Tar disken slut mitt i zippandet ligger en HALV kopia kvar med rätt
+        # namn och rätt datum — den ser ut som en säkerhetskopia ända tills
+        # dagen man behöver den. Den städas bort, och felet sägs rakt ut.
+        dest.unlink(missing_ok=True)
+        raise OSError(e.errno, "säkerhetskopian gick inte att skriva färdigt") from e
     return {"path": str(dest), "files": included, "bytes": dest.stat().st_size,
             "plats": str(out_dir), "fallback": fallback}
 

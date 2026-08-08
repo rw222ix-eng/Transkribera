@@ -529,18 +529,6 @@ def create_router(base: Path, arbiter) -> APIRouter:
         if out_dir is None:
             return JSONResponse({"error": "otillåten sökväg"}, status_code=400)
 
-        conn = db.connect(db_file)
-        try:
-            planned = db.create_planned_lesson(
-                conn, titel=str(title), moment=st.get("moment") or "",
-                board_json=json.dumps(st["board"], ensure_ascii=False),
-                datum=st.get("datum"), starttid=st.get("starttid"),
-                group_id=int(st["group_id"]) if st.get("group_id") else None,
-                course_id=int(st["course_id"]) if st.get("course_id") else None)
-        finally:
-            conn.close()
-
-        out_dir.mkdir(parents=True, exist_ok=True)
         stamp = datetime.now().strftime("%Y-%m-%d %H.%M.%S")
         path = out_dir / f"tavla {stamp}.json"
         payload = {
@@ -553,8 +541,32 @@ def create_router(base: Path, arbiter) -> APIRouter:
             "godkand": datetime.now().isoformat(timespec="seconds"),
             "board": st["board"],
         }
-        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2),
-                        encoding="utf-8")
+        # Pappret FÖRST, raden sedan. Läraren trycker Godkänn en gång; faller
+        # skrivningen halvvägs ska ingenting ha hänt. Skrevs raden först — som
+        # den gjorde — och disken sedan tog slut, låg en planerad lektion kvar
+        # i veckan utan papper, och nästa tryck på samma knapp gav henne två.
+        # En fil utan rad är däremot ofarlig: den ligger i arkivmappen och
+        # ingen vy räknar den.
+        try:
+            out_dir.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(payload, ensure_ascii=False, indent=2),
+                            encoding="utf-8")
+        except OSError:
+            return JSONResponse(
+                {"error": "Kunde inte skriva till disk — kontrollera ledigt "
+                          "utrymme. Ingenting sparades."}, status_code=507)
+
+        conn = db.connect(db_file)
+        try:
+            planned = db.create_planned_lesson(
+                conn, titel=str(title), moment=st.get("moment") or "",
+                board_json=json.dumps(st["board"], ensure_ascii=False),
+                datum=st.get("datum"), starttid=st.get("starttid"),
+                group_id=int(st["group_id"]) if st.get("group_id") else None,
+                course_id=int(st["course_id"]) if st.get("course_id") else None)
+        finally:
+            conn.close()
+
         st["approved_path"] = str(path)
         st["planned_id"] = planned["id"]
         return {"ok": True, "path": str(path), "planned_id": planned["id"]}

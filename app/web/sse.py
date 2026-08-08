@@ -2,6 +2,7 @@
 routers i egna moduler kan använda samma mönster utan cirkulär import)."""
 from __future__ import annotations
 
+import errno
 import json
 import queue
 import threading
@@ -9,6 +10,19 @@ import threading
 from fastapi.responses import StreamingResponse
 
 from app import debug_log
+
+
+# Fulla diskar ser likadana ut överallt: tavlan som godkänns, provets .tex,
+# tryckpaketet, bokens sidbilder. Errno är samma, och läraren behöver samma
+# besked — på svenska, med vad hon kan göra åt det. Utan den här
+# översättningen når «[Errno 28] No space left on device» henne rakt av.
+_DISKFULL = {errno.ENOSPC, getattr(errno, "EDQUOT", errno.ENOSPC)}
+
+
+def _besked(e: Exception) -> str:
+    if isinstance(e, OSError) and e.errno in _DISKFULL:
+        return "Kunde inte skriva till disk — kontrollera ledigt utrymme."
+    return str(e)
 
 
 def sse_response(job) -> StreamingResponse:
@@ -27,7 +41,7 @@ def sse_response(job) -> StreamingResponse:
             q.put({"type": "done", "result": result})
         except Exception as e:
             debug_log.get_logger().exception("Web-jobb misslyckades")
-            q.put({"type": "error", "message": str(e)})
+            q.put({"type": "error", "message": _besked(e)})
         finally:
             q.put(end)
 

@@ -1716,7 +1716,18 @@ def create_app(base_dir: Path | None = None,
             s["backup_vag"] = vag
         if "auto" in body:
             s["backup_auto"] = bool(body.get("auto"))
-        res = backup.create_backup(base, dest_dir=vag or s.get("backup_vag") or None)
+        try:
+            res = backup.create_backup(base, dest_dir=vag or s.get("backup_vag") or None)
+        except OSError:
+            # Platsen som inte gick att skriva till alls har en egen väg
+            # (fallback till exports/). Det här är den andra: disken tog slut
+            # MITT I. Inställningarna sparas ändå — det var inte de som föll —
+            # men kvittot lovar ingen kopia.
+            settings_store.save(base, s)
+            return JSONResponse(
+                {"error": "Kunde inte skriva till disk — kontrollera ledigt "
+                          "utrymme. Säkerhetskopian blev inte av."},
+                status_code=507)
         s["backup_senast"] = datetime.now().isoformat(timespec="seconds")
         settings_store.save(base, s)
         return res | _backup_installningar()

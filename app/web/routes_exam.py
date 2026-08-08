@@ -482,11 +482,15 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 try:
                     if exam != view["exam"]:
                         db.add_exam_version(conn, exam_id, exam)
+                    # Godkänt MED ENBART .tex är ärligt: LaTeX:en finns och går
+                    # att kompilera för hand. Godkänt UTAN någon fil alls är
+                    # det inte — föll redan valideringen skrevs ingenting, och
+                    # provet stod ändå som godkänt i kalendern med tom hand.
                     newview = db.set_exam_artifacts(
                         conn, exam_id,
                         tex_path=str(tex_path) if tex_path else None,
                         pdf_path=str(pdf_path) if pdf_path else None,
-                        approve=True)
+                        approve=tex_path is not None)
                 finally:
                     conn.close()
                 result = _exam_result(newview, errors, 0)
