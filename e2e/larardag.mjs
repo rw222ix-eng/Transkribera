@@ -116,7 +116,9 @@ const TILLATNA_404 = [/\/static\/vendor\/katex\/fonts\/.*\.(woff|ttf)$/,
  */
 export function vakt(page) {
   const fel = [];
-  page.on("pageerror", e => fel.push("JS: " + e.message));
+  page.on("pageerror", e => fel.push(
+    "JS: " + e.message
+    + (e.stack ? " @ " + String(e.stack).split("\n").slice(1, 3).join(" ← ") : "")));
   page.on("console", m => {
     if (m.type() !== "error") return;
     const url = (m.location() || {}).url || "";

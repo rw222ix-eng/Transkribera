@@ -18,6 +18,15 @@ export default defineConfig({
   testDir: ".",
   testMatch: /.*\.spec\.mjs$/,
   fullyParallel: false,
+  /* EN worker. `fullyParallel: false` serialiserar bara testerna INOM en fil —
+   * filerna fördelades på en worker per kärna och körde alltså samtidigt, mot
+   * EN server och EN databas. Det märktes inte så länge sviten mest läste och
+   * fejkade rutter med page.route, men Etapp 4:s lärardagar skriver på riktigt:
+   * en fil som raderade ett papper kunde då dra undan mattan för en annan fils
+   * mätning. Appen är dessutom en enanvändarapp — hundratals lärare betyder
+   * hundratals SESSIONER, aldrig samtidiga. Serialiserat är alltså också
+   * sannare. */
+  workers: 1,
   forbidOnly: !!process.env.CI,
   reporter: [["list"]],
   use: {

@@ -26,8 +26,18 @@ test("servern skriver i svitens egen bas, inte i repot", async ({ request }) => 
 
 test("ett papper som skrivs till servern ligger kvar efter omladdning",
   async ({ page }) => {
+    /* Serverns hög måste vara inne INNAN den mäts. Prototypens elva papper
+       ligger framme tills /api/dokument svarat, och räknar man dem som
+       utgångsläge mäter man fel hög: hydreringen byter ut listan mitt i
+       testet och «elva plus ett» blir plötsligt noll. Felet syntes först när
+       apan (zz-apan.spec.mjs) hade tömt basen — kapplöpningen fanns hela
+       tiden. */
+    const hog = page.waitForResponse(r =>
+      new URL(r.url()).pathname === "/api/dokument" && r.request().method() === "GET");
     await page.goto("/");
     await page.waitForFunction(() => window.Dokument && window.API && window.API.pa);
+    await hog;
+    await page.waitForTimeout(150);          // listan ritas om efter svaret
     const fore = await page.evaluate(() => window.Dokument.sparade().length);
 
     const moment = "e2e-bevis " + Date.now();
@@ -37,8 +47,11 @@ test("ett papper som skrivs till servern ligger kvar efter omladdning",
     await expect.poll(() => page.evaluate(
       () => window.Dokument.sparade().length)).toBe(fore + 1);
 
+    const hog2 = page.waitForResponse(r =>
+      new URL(r.url()).pathname === "/api/dokument" && r.request().method() === "GET");
     await page.reload();
     await page.waitForFunction(() => window.Dokument && window.API && window.API.pa);
+    await hog2;
     await expect.poll(() => page.evaluate(
       m => window.Dokument.sparade().some(v => v.moment === m), moment),
       { timeout: 15_000 }).toBe(true);

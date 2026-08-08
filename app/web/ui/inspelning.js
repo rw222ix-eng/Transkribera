@@ -248,19 +248,38 @@ window.Inspelningar = (() => {
 
   function dopOm(p, rad) {
     const t = $('.iltext b', rad);
+    /* Redan i omdöpning? Då finns ingen <b> kvar att byta ut — den ÄR fältet.
+       Ett andra klick på «Döp om» tog förr tag i den och kastade
+       «Cannot read properties of null», och raden blev sittande i sitt
+       halvläge. Nu tar knappen bara tillbaka fokus dit. */
+    if (!t) { const f = $('.ildop', rad); if (f) { f.focus(); f.select(); } return; }
     const falt = document.createElement('input');
     falt.className = 'field ildop';
     falt.value = p.namn;
     t.replaceWith(falt);
     falt.focus();
     falt.select();
+    /* Omdöpningen får hända EN gång, och aldrig inuti blur.
+       Enter kallar klar(true) och fältet tappar sedan fokus, vilket kallar den
+       igen. Värre: klickar man i stället på något annat i lådan — kryssrutan,
+       nästa rad — hinner blur rita om hela lådan (innerHTML) medan
+       webbläsaren fortfarande hanterar klicket, och då kastar den
+       «The node to be removed is no longer a child of this node. Perhaps it
+       was moved in a 'blur' event handler?». Klicket gick förlorat och namnet
+       stod kvar i ett halvläge. Flaggan gör den engångs och setTimeout lägger
+       omritningen efter händelsen som pågår. */
+    let gjort = false;
     const klar = spara => {
+      if (gjort) return;
+      gjort = true;
       if (spara && falt.value.trim()) {
         const n = $('.namn', p.el);
         if (n) n.textContent = falt.value.trim();
       }
-      rita();
-      window.Klass && window.Klass.rita && window.Klass.rita();
+      setTimeout(() => {
+        rita();
+        window.Klass && window.Klass.rita && window.Klass.rita();
+      }, 0);
     };
     falt.addEventListener('keydown', e => {
       if (e.key === 'Enter') klar(true);
