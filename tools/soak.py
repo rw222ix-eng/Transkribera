@@ -60,8 +60,13 @@ MAX_TRAD_VAXT = 8
 MAX_FIL_VAXT = 40
 
 
-def starta_server(bas: Path) -> subprocess.Popen:
-    """Servern som ALLA varv kör mot — poängen är att den lever kvar."""
+def starta_server(bas: Path, minne: bool = False) -> subprocess.Popen:
+    """Servern som ALLA varv kör mot — poängen är att den lever kvar.
+
+    `minne` startar tracemalloc i processen och hänger på mätrutten (se
+    tools/soakserver.py). Den kostar: varje allokering får en anropskedja på
+    tjugofem rutor, så servern blir långsammare och tyngre. Ett varvs siffror
+    är alltså INTE jämförbara mellan en körning med och en utan."""
     sys.path.insert(0, str(ROT))
     from tests import fejk
 
@@ -72,12 +77,12 @@ def starta_server(bas: Path) -> subprocess.Popen:
     miljo["FEJK_KASSETTER"] = str(fejk.KASSETTER)
     miljo.pop("OPENAI_API_KEY", None)
     miljo["SOAK_BAS"] = str(bas)
+    miljo["SOAK_PORT"] = str(PORT)
     miljo["PYTHONIOENCODING"] = "utf-8"
+    if minne:
+        miljo["SOAK_MINNE"] = "1"
     p = subprocess.Popen(
-        [sys.executable, "-c",
-         "import os, uvicorn; from pathlib import Path; from app.web import server; "
-         "uvicorn.run(server.create_app(base_dir=Path(os.environ['SOAK_BAS'])), "
-         f"host='127.0.0.1', port={PORT}, log_level='warning')"],
+        [sys.executable, "-m", "tools.soakserver"],
         cwd=str(ROT), env=miljo,
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     for _ in range(120):
@@ -145,6 +150,27 @@ def gpu_fri() -> str:
     return "LÅST" if status == 409 else "fri"
 
 
+def skriv_minne(d: dict) -> None:
+    """En minnesbild: vad OS:et ser, vad Python vet om, och vad som växer.
+
+    Läsordningen är viktig. Står `spårat` stilla medan `rss` klättrar är läckan
+    inte i Python-kod — då är det en C-allokering eller fragmentering, och
+    `topp` kommer att se oskyldig ut hur länge man än stirrar på den."""
+    if not d:
+        return
+    print(f"    minne: rss {d.get('rss_mb')} MB | spårat {d.get('sparat_mb')} MB "
+          f"(topp {d.get('sparat_topp_mb')}) | {d.get('objekt')} objekt", flush=True)
+    for r in (d.get("topp") or [])[:8]:
+        plats = r["plats"]
+        if len(plats) > 62:
+            plats = "…" + plats[-61:]
+        print(f"      +{r['mb']:>6.2f} MB  {r['antal']:>7} st  {plats}", flush=True)
+    fler = [t for t in (d.get("typer") or []) if t["fler"] > 0][:5]
+    if fler:
+        print("      fler objekt: "
+              + ", ".join(f"{t['typ']} +{t['fler']}" for t in fler), flush=True)
+
+
 def kor_varv(spec: str, grep: str = "") -> tuple[bool, float]:
     t0 = time.time()
     miljo = os.environ.copy()
@@ -173,11 +199,15 @@ def main() -> int:
     ap.add_argument("--logg", default=str(ROT / "soak.log"))
     ap.add_argument("--behall", action="store_true",
                     help="behåll basen efteråt (för att titta i den)")
+    ap.add_argument("--minne", action="store_true",
+                    help="starta tracemalloc i servern och skriv vad som växer")
+    ap.add_argument("--minne-var", type=int, default=10,
+                    help="skriv minnesbilden vart N:e varv (med --minne)")
     a = ap.parse_args()
 
     if BAS.exists():
         shutil.rmtree(BAS, ignore_errors=True)
-    server = starta_server(BAS)
+    server = starta_server(BAS, minne=a.minne)
     logg = Path(a.logg)
     rader: list[dict] = []
     slut = time.time() + a.timmar * 3600 if a.timmar else 0
@@ -201,6 +231,16 @@ def main() -> int:
                   flush=True)
             logg.write_text(json.dumps(rader, ensure_ascii=False, indent=1),
                             encoding="utf-8")
+            # Jämförelsepunkten sätts efter varv 2, av samma skäl som larmet
+            # räknar därifrån: varv 1 importerar moduler och fyller cachar, och
+            # allt det ser ut som en läcka om man mäter från noll.
+            if a.minne and varv == 2:
+                _json("/__minne?bas=1")
+            elif a.minne and varv > 2 and varv % a.minne_var == 0:
+                skriv_minne(_json("/__minne")[1])
+        if a.minne and len(rader) > 2:
+            print("\nsista minnesbilden (mot varv 2):", flush=True)
+            skriv_minne(_json("/__minne")[1])
     except KeyboardInterrupt:
         print("\navbrutet", flush=True)
     finally:
