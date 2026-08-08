@@ -134,11 +134,15 @@ def fejk_claude(tmp_path, monkeypatch):
 
     def satt(lage: str = "ok", *, svar: str | None = None,
              kassett: str | None = None):
+        from tests import fejk
+
         monkeypatch.setenv("FEJK_CLAUDE", "kassett" if kassett else lage)
+        # Auto-läget slår själv upp bandet ur prompten (en lärardag skriver
+        # både tavla, prov och granskning) — det behöver mappen, inte filen.
+        monkeypatch.setenv("FEJK_KASSETTER", str(fejk.KASSETTER))
         if svar is not None:
             monkeypatch.setenv("FEJK_CLAUDE_SVAR", svar)
         if kassett is not None:
-            from tests import fejk
             monkeypatch.setenv("FEJK_KASSETT", str(fejk.kassettfil(kassett)))
         # Statusen cachas i 20 s — annars svarar nästa test på förra lägets svar.
         claude_code._STATUS_CACHE.update(tid=0.0, varde=None)

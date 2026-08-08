@@ -29,7 +29,8 @@ from pathlib import Path
 ROT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROT))
 
-from tests.fejk import skriv_claude          # noqa: E402  (efter sys.path)
+from tests import fejk                       # noqa: E402  (efter sys.path)
+from tests.fejk import skriv_claude          # noqa: E402
 
 
 def bas() -> Path:
@@ -51,7 +52,13 @@ def main() -> None:
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8751
     b = bas()
     os.environ["CLAUDE_CODE_BIN"] = str(skriv_claude(b / "fejkbin"))
-    os.environ.setdefault("FEJK_CLAUDE", "ok")
+    # Auto: fejk-CLI:t väljer kassett ur prompten. En lärardag (Etapp 4) skriver
+    # tavla, prov, arbetsblad, gruppuppgift och granskning i samma körning —
+    # servern lever i en egen process och kan inte byta fixtur mellan två klick,
+    # så valet måste ske i CLI:t. Allt EFTER svaret (schemat, balansen,
+    # reparationsrundorna, godkännandet) körs därmed på riktigt i e2e.
+    os.environ.setdefault("FEJK_CLAUDE", "auto")
+    os.environ.setdefault("FEJK_KASSETTER", str(fejk.KASSETTER))
     # Ingen nyckel: ett test som råkar nå molnvägen ska få «lägg in nyckeln»,
     # inte skicka lärarens ljud till OpenAI för riktiga pengar.
     os.environ.pop("OPENAI_API_KEY", None)

@@ -141,6 +141,28 @@ import json, os, sys, time
 LAGE = os.environ.get("FEJK_CLAUDE", "ok")
 SVAR = os.environ.get("FEJK_CLAUDE_SVAR", "Det här är svaret.")
 KASSETT = os.environ.get("FEJK_KASSETT", "")
+BAND = os.environ.get("FEJK_KASSETTER", "")     # mappen, för auto-läget
+
+# Auto-läget läser vad prompten BER om och lägger i rätt band. Det behövs för
+# e2e: där lever servern i en egen process och kan inte byta fixtur mellan två
+# klick, men en lärardag skriver både en tavla, ett prov och en granskning.
+# Nyckelorden är generatorernas egna uppdragsrader (lesson_board.INSTRUCTION,
+# exam_gen.build_prompt, postprocess.EXTRACT_INSTRUCTION) — och de gäller även
+# reparations- och iterationsprompterna, som bär samma instruktion överst.
+_VAL = [
+    ("skriv en GRUPPUPPGIFT", "gruppuppgift"),
+    ("skriv ett ARBETSBLAD", "arbetsblad"),
+    ("lektionstavla", "tavla"),
+    ("matteprov", "prov"),
+    ("Läs transkriptet", "insikter"),
+]
+
+
+def _auto(prompt):
+    for nyckel, namn in _VAL:
+        if nyckel in prompt:
+            return os.path.join(BAND, namn + ".json")
+    return ""            # ingen generator — svara som vanligt (chatt, sökning)
 
 def skriv(h):
     sys.stdout.write(json.dumps(h, ensure_ascii=False) + "\n")
@@ -153,6 +175,10 @@ if "auth" in sys.argv:
     sys.exit(0)
 
 prompt = sys.stdin.read()          # appen matar prompten på stdin
+
+if LAGE == "auto":
+    KASSETT = _auto(prompt)
+    LAGE = "kassett" if KASSETT else "ok"
 
 if LAGE == "kassett":
     # Uppspelning: raderna skrivs ut ORDAGRANT som CLI:t en gång skrev dem.

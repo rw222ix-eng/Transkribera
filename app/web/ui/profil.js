@@ -334,14 +334,30 @@ window.Profil = (() => {
     /* Kommer typen ur kön är den redan bestämd — molnet ska ändå stå vid steg 1
        och säga varför rutan redan är ifylld, men med rätt källa. */
     if (typ) forval[1] = { text: `${String(typ).toLowerCase()} — ur lektionen du la i kön`, kalla: 'Redan ifyllt:', efter: '— lektionen du valde står redan i kalendern.' };
-    /* Boken: samma bok som alltid, och sidorna EFTER förra lektionen. */
+    /* Boken: samma bok som alltid, och sidorna EFTER förra lektionen.
+
+       Boken måste finnas PÅ HYLLAN. Svarar servern äger den hyllan helt, och
+       minns profilen en bok som inte står där — prototypens förval (BOK_FOR),
+       eller en bok läraren tagit bort — la `laggBok` tillbaka namnet i hyllan
+       ändå. Uppslaget fick då ett boknamn utan id på servern, och `bokval()` i
+       plan.js kastar tyst bort hela boken när id:t saknas: kvittot sa «Boken ·
+       s. 15–16», planen sa «Läser boken», och sidorna kom aldrig med i
+       prompten. Utan server (Claude Design) står prototypens hylla kvar och
+       allt fungerar som förut — och så gör den också när servern svarar med en
+       TOM hylla: då finns ingen riktig bok att välja i stället, och `bokval()`
+       skickar ändå ingenting. */
     let spannText = '';
-    if (p.bok && window.Uppslag && window.Uppslag.satt) {
-      if (window.Uppslag.laggBok) window.Uppslag.laggBok(p.bok);
+    const hyllan = window.Bok && window.Bok.franServern && window.Bok.franServern()
+      && (window.Bok.bocker || []).length > 0;
+    const boken = !hyllan ? p.bok
+      : (window.Bok.bokId(p.bok) ? p.bok
+        : (window.Bok.bokId(window.Bok.namnFor(kurs)) ? window.Bok.namnFor(kurs) : ''));
+    if (boken && window.Uppslag && window.Uppslag.satt) {
+      if (window.Uppslag.laggBok) window.Uppslag.laggBok(boken);
       const { fran, till } = typ === 'Prov' ? provSpann(p) : nastaSpann(p);
       window.Uppslag.satt(fran, till);
       window.Kallor && window.Kallor.satt && window.Kallor.satt('bok', true, true);
-      spannText = `${p.bok} · s. ${fran}–${till}`;
+      spannText = `${boken} · s. ${fran}–${till}`;
       gjort.push(spannText);
       forval[2] = { text: spannText, efter: typ === 'Prov' ? '— hela avsnittet klassen läst.' : '— sidorna efter förra lektionen.' };
       /* Centralt innehåll ur sidorna — läromedlet och ämnesplanen säger samma sak. */

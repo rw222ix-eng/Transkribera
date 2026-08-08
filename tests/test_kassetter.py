@@ -121,6 +121,40 @@ def test_ett_namn_som_anda_kommer_tillbaka_stoppas(fejk_claude):
     assert "A.L." in texter and "E.S." in texter
 
 
+def test_auto_laget_lagger_i_bandet_prompten_ber_om(fejk_claude):
+    """Auto-läget (Etapp 4) läser vad prompten BER om och väljer band därefter.
+
+    Det är e2e-serverns läge: den lever i en egen process och kan inte byta
+    fixtur mellan två klick, men en lärardag skriver tavla, prov, arbetsblad,
+    gruppuppgift OCH granskning i samma körning. Valet sker därför i CLI:t, på
+    generatorernas egna uppdragsrader — och glider de isär från nyckelorden
+    faller det här testet i stället för att en lärardag tyst får fel papper."""
+    fejk_claude("auto")
+    tavla = lesson_board.generate_board("Matematik, nivå 2c", "NA25",
+                                        "Derivator", model="")
+    assert tavla["errors"] == [] and tavla["rounds"] == 1
+    assert tavla["board"]["title"]
+
+    for profil, antal, grupp in [
+            ("prov", 6, None), ("arbetsblad", 6, None),
+            ("gruppuppgift", 4, {"elever": 3, "langd_min": 45,
+                                 "redovisning": "muntligt"})]:
+        res = exam_gen.generate_exam("Matematik, nivå 2c", "NA25",
+                                     ["Andragradsekvationer"], model="",
+                                     antal=antal, profil=profil, grupp=grupp)
+        assert res["errors"] == [], (profil, res["errors"])
+        assert res["exam"]["titel"], profil
+        # Rätt band, inte bara ETT band: profilerna har olika balansregler och
+        # provets kassett faller igenom arbetsbladets.
+        assert profil.split("upp")[0] in res["exam"]["titel"].lower(), profil
+
+    insikter, innehall = postprocess._extract_one("transkript", "modell")
+    assert insikter and innehall
+
+    # Det som inte är en generator (chatt, sökning) svarar som vanligt.
+    assert claude_code.generate("Vad heter huvudstaden?") == "Det här är svaret."
+
+
 def test_en_kassett_som_inte_finns_ar_ett_tydligt_fel(fejk_claude):
     fejk_claude(kassett="finns-inte")
     with pytest.raises(RuntimeError):

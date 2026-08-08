@@ -66,7 +66,12 @@
           else if (h.type === 'log' && krokar.log) krokar.log(h.msg);
           else if (h.type === 'delta' && krokar.delta) krokar.delta(h.text);
           else if (h.type === 'kostnad' && krokar.kostnad) krokar.kostnad(h);
-          else if (h.type === 'error') throw new Error(h.error || 'Okänt fel');
+          /* Servern skriver felet i `message` (app/web/sse.py), inte i `error`.
+             Läste vi bara `error` blev VARJE jobb som föll mitt i strömmen —
+             transkriberingen, tavlan, provet, tryckpaketet, bokimporten — ett
+             «Okänt fel» hos läraren, medan den svenska åtgärdbara meningen
+             servern faktiskt skrev kastades bort. */
+          else if (h.type === 'error') throw new Error(h.message || h.error || 'Okänt fel');
           else if (h.type === 'done') svar = h.result;
         }
       }
