@@ -1634,6 +1634,13 @@ function dagvaljare(wrap, knapp, input, tidInput, val) {
     if (l) l.value = String(langd());
   }
   function ritaPanel() {
+    /* Panelen kan vara stängd när ritningen kommer: knapparna INNE i den
+       (månadspilarna, dagarna, «Idag») ritar om panelen, och ett klick som
+       råkar landa medan den fälls ihop — eller ett andra klick på knappen som
+       öppnade den — har redan nollat referensen. Förr blev det «Cannot set
+       properties of null» och datumväljaren slutade svara. Samma vakt som
+       synk() redan har. */
+    if (!panel) return;
     const ar = visad.getFullYear(), man = visad.getMonth();
     const start = new Date(ar, man, 1);
     start.setDate(1 - ((start.getDay() + 6) % 7));

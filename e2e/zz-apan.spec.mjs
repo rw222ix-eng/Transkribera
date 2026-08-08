@@ -123,10 +123,11 @@ async function levande(page) {
   await page.keyboard.press("Escape");
   await page.getByRole("tab", { name: "Planering" }).click({ timeout: 15_000 });
   await expect(page.locator("#schemavecka")).toContainText("Vecka");
-  // Veckan kan glida in (klass.js byt, 175 + 20 + 300 ms) — korten finns men
-  // är osynliga under glidet. Att de RITAS är det som prövas här.
+  /* Veckan kan glida in (klass.js byt, 175 + 20 + 300 ms). Det som prövas är
+     att veckan RITAS — inte att den innehåller lektioner: apan bläddrar gärna
+     till ett lov eller ut ur läsåret, och en tom vecka är ett riktigt svar. */
   await page.waitForTimeout(700);
-  expect(await page.locator("#schemagrid .lekt").count()).toBeGreaterThan(0);
+  expect(await page.locator("#schemagrid .skdag").count()).toBeGreaterThan(0);
   await page.getByRole("tab", { name: "Transkribera" }).click({ timeout: 15_000 });
   await expect(page.locator("#vy-transkribera")).toBeVisible();
   await expect(page.locator("#vy-transkribera [data-steg]:not([hidden])").first())
@@ -217,8 +218,12 @@ for (const vy of VYER) {
          · /api/sample 404 — det finns ingen exempelfil på den här maskinen.
            Knappen faller tillbaka på prototypens namn (app.js, try/catch).
          · /api/schema/synk 409 — Google Kalender är inte kopplad i svitens bas.
-           Synkraden visar serverns besked som en toast (klass.js). */
-    L.rent(fel, { tillat: [/api\/sample/, /api\/schema\/synk/] });
+           Synkraden visar serverns besked som en toast (klass.js).
+         · /api/exams/generate 400 — apan trycker Skriv utan att ha valt kurs.
+           Servern svarar «välj en kurs» och skrivrutan visar det; att appen
+           frågar utan kurs är apans verk, inte appens. */
+    L.rent(fel, { tillat: [/api\/sample/, /api\/schema\/synk/,
+                           /api\/exams\/generate/] });
     await levande(page);
   });
 }

@@ -276,16 +276,16 @@ def _representative_doc() -> exam_spec.ExamDoc:
                 elevlosningar=[
                     exam_spec.Elevlosning(
                         etikett="Elevlösning A", partier=[exam_spec.Parti(
-                            rader=[r"$f'(x) = 3x^2$"], poang=0,
+                            rader=[r"$f'(x) = 3x^2$"], poang=(0, 0, 0),
                             dom=r"Derivatan är fel — termen $3x$ deriveras inte.")]),
                     exam_spec.Elevlosning(
                         etikett="Elevlösning B", partier=[
                             exam_spec.Parti(rader=[r"$f'(x) = 3x^2 + 3 = 0$"],
-                                            poang=1,
+                                            poang=(1, 0, 0),
                                             dom=r"Godtagbar ansats: ekvationen tecknas."),
                             exam_spec.Parti(
                                 rader=[r"$x^2 = -1$ saknar reell lösning, ty "
-                                       r"$x^2 \geq 0$."], poang=1,
+                                       r"$x^2 \geq 0$."], poang=(0, 1, 0),
                                 dom=r"Godtagbart resonemang med motivering.")]),
                 ],
             ),

@@ -103,10 +103,20 @@ class Stegtabell(_Model):
 
 class Parti(_Model):
     """Ett stycke av en elevlösning, med sin dom. Bedömningen sätts DÄR den
-    gäller — inte i en lista under lösningen."""
+    gäller — inte i en lista under lösningen.
+
+    Poängen är (E, C, A) precis som överallt annars i dokumentet. Fältet var
+    först ett ensamt heltal, och den första skarpa inspelningen visade varför
+    det var fel: modellen skrev [1, 0, 0] ändå — den läser hela dokumentets
+    språk, och i det språket ÄR poäng en trippel. Ett fält som säger emot
+    resten kostar en reparationsrunda varje gång."""
     rader: list[str] = Field(min_length=1, max_length=6)
-    poang: int = Field(ge=0, le=6)
+    poang: tuple[int, int, int]
     dom: str                             # varför partiet gav (eller inte gav) poäng
+
+    @property
+    def summa(self) -> int:
+        return sum(self.poang)
 
 
 class Elevlosning(_Model):
@@ -115,7 +125,7 @@ class Elevlosning(_Model):
 
     @property
     def poang(self) -> int:
-        return sum(p.poang for p in self.partier)
+        return sum(p.summa for p in self.partier)
 
 
 class _Uppgiftsbas(_Model):

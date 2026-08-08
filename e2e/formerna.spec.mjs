@@ -213,9 +213,9 @@ test("provarket bär samma former — och aldrig facit", async ({ page }) => {
                       forsta_fel: 1 },
         elevlosningar: [
           { etikett: "Elevlösning A", partier: [
-            { rader: ["$f'(x) = 3x^2$"], poang: 0, dom: "Derivatan är fel." }] },
+            { rader: ["$f'(x) = 3x^2$"], poang: [0, 0, 0], dom: "Derivatan är fel." }] },
           { etikett: "Elevlösning B", partier: [
-            { rader: ["$f'(x) = 3x^2 + 3$"], poang: 1, dom: "Godtagbar ansats." }] }] },
+            { rader: ["$f'(x) = 3x^2 + 3$"], poang: [1, 0, 0], dom: "Godtagbar ansats." }] }] },
     ],
   };
   const strom = h => h.map(x => `data: ${JSON.stringify(x)}\n\n`).join("");

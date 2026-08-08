@@ -267,6 +267,30 @@ def test_upptagen_gpu_ger_409_och_stjal_inte_nagon_annans_las(
         arb.release_gpu()
 
 
+def test_godkannandet_vantar_inte_pa_gpun(llm_ready, fejk_claude, monkeypatch):
+    """PDF-bygget är CPU-arbete (Tectonic) och ska inte köa bakom kortet.
+
+    Förr tog godkännandet låset och höll det genom hela kompileringen: läraren
+    som skrev nästa dokument direkt efter ett godkänt prov fick «GPU:n är
+    upptagen» — samtidigt som gränssnittet sa att PDF:en byggdes i bakgrunden.
+    Låset tas nu bara runt en eventuell LaTeX-fixrunda, som är ett LLM-anrop."""
+    exam_id = _prov(llm_ready, fejk_claude)
+    monkeypatch.setattr(exam_pdf, "engine_available", lambda: False)
+
+    arb = llm_ready.app.state.arbiter
+    assert arb.try_acquire_gpu(), "låset var upptaget innan testet började"
+    try:
+        r = llm_ready.post(f"/api/exams/{exam_id}/approve", json={})
+        assert r.status_code == 200, r.text
+        res = _done(r)
+        assert res["tex"], "ingen .tex skrevs — godkännandet kom aldrig fram"
+    finally:
+        arb.release_gpu()
+    # …och låset är kvar hos den som höll det.
+    assert arb.try_acquire_gpu()
+    arb.release_gpu()
+
+
 def test_ett_jobb_som_kastar_slapper_gpun(llm_ready, monkeypatch):
     """Ett jobb som dör mitt i får inte lämna GPU:n låst — då är appen slut
     för dagen och läraren måste starta om den."""

@@ -2,8 +2,11 @@
 
 Egen router (samma skäl som routes_planning): generering/iteration följer
 GPU-arbiterns 409-mönster; PDF-kompileringen är CPU (Tectonic) och behöver
-inte arbitern, men approve-jobbet håller låset eftersom kompileringsfel kan
-gå tillbaka till LLM:en som korrigeringsprompt (max 2 rundor).
+inte arbitern. Godkännandet tar därför INTE låset — det gjorde det förr, och då
+låg appen obrukbar i tiotals sekunder efter varje godkänt prov: läraren som
+skrev nästa dokument direkt fick «GPU:n är upptagen» medan gränssnittet sa att
+PDF:en byggdes i bakgrunden. Låset tas nu bara runt de LLM-rundor som kan följa
+på ett kompileringsfel (fix_latex, max 2 rundor), och släpps direkt efteråt.
 
 Artefakter (.tex/.pdf + bedömningsanvisning) skrivs under
 ``Transkriberingar/prov/<kurs>/<datum>/`` — alltid under base_dir.
@@ -360,8 +363,13 @@ def create_router(base: Path, arbiter) -> APIRouter:
         if out_dir is None:
             return JSONResponse({"error": "otillåten sökväg"}, status_code=400)
 
-        if not arbiter.try_acquire_gpu():
-            return JSONResponse(_GPU_BUSY, status_code=409)
+        # Godkännandet tar INTE GPU-låset. Det som händer här är LaTeX-rendering
+        # och Tectonic-kompilering — CPU-arbete som inte rör kortet — och att
+        # hålla låset under det gjorde appen obrukbar i tiotals sekunder efter
+        # varje godkänt prov: läraren som skrev nästa dokument direkt fick
+        # «GPU:n är upptagen» medan gränssnittet samtidigt sa att PDF:en byggs i
+        # bakgrunden. Låset tas nu bara runt de LLM-rundor som kan följa på ett
+        # kompileringsfel (fix_latex), och släpps direkt efteråt.
 
         def job(emit):
             try:
@@ -453,8 +461,14 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     # Avgör FÖRE loggraden om en korrigering faktiskt följer —
                     # annars lovar strömmen ett omförsök som aldrig sker, vilket
                     # är precis den sortens osanning den här rutten ska bort med.
-                    sista_forsoket = (round_ >= exam_gen.MAX_LATEX_ROUNDS
-                                      or arbiter.ensure_llm() is None)
+                    # Fixrundan behöver språkmodellen — och DÅ, först då, tas
+                    # GPU-låset. Är det upptaget av ett annat jobb är det här
+                    # sista försöket: felet redovisas ärligt i stället för att
+                    # provet står och väntar på ett kort det inte behöver.
+                    kan_fixa = (round_ < exam_gen.MAX_LATEX_ROUNDS
+                                and arbiter.ensure_llm() is not None
+                                and arbiter.try_acquire_gpu())
+                    sista_forsoket = not kan_fixa
                     if bed_misslyckades:
                         emit({"type": "log",
                               "msg": "Bedömningsanvisningen gick inte att kompilera."
@@ -481,9 +495,12 @@ def create_router(base: Path, arbiter) -> APIRouter:
                         errors = [{"path": "latex", "code": felkod,
                                    "message": meddelande}]
                         break
-                    fix = exam_gen.fix_latex(
-                        exam, log, model=_model_name(), rounds_used=round_,
-                        log_cb=lambda m: emit({"type": "log", "msg": m}))
+                    try:
+                        fix = exam_gen.fix_latex(
+                            exam, log, model=_model_name(), rounds_used=round_,
+                            log_cb=lambda m: emit({"type": "log", "msg": m}))
+                    finally:
+                        arbiter.release_gpu()
                     exam = fix["exam"]
 
                 conn = db.connect(db_file)
@@ -505,8 +522,12 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 result["pdf"] = str(pdf_path) if pdf_path else None
                 result["tex"] = str(tex_path) if tex_path else None
                 return result
-            finally:
+            except Exception:
+                # Faller jobbet mitt i en fixrunda ligger låset kvar hos oss.
+                # (release_gpu är idempotent — den som inte håller något
+                # släpper heller ingenting.)
                 arbiter.release_gpu()
+                raise
 
         return sse_response(job)
 

@@ -257,7 +257,7 @@ def _build_view(doc: exam_spec.ExamDoc,
             item_vy["elevlosningar"] = [
                 {"etikett": escape_mixed(e.etikett), "poang": e.poang,
                  "partier": [{"rader": [escape_mixed(r) for r in pa.rader],
-                              "poang": pa.poang,
+                              "poang": sum(pa.poang),
                               "dom": escape_mixed(pa.dom)} for pa in e.partier]}
                 for e in (it.elevlosningar or [])] if facit else []
             item_vy["nummer"] = nummer

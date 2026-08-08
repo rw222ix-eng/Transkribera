@@ -48,12 +48,12 @@ STEG = {"kolumner": ["Alvas lösning"],
         "forsta_fel": 1}
 ELEVER = [
     {"etikett": "Elevlösning A",
-     "partier": [{"rader": ["$f'(x) = 3x^2$"], "poang": 0,
+     "partier": [{"rader": ["$f'(x) = 3x^2$"], "poang": [0, 0, 0],
                   "dom": "Derivatan är fel."}]},
     {"etikett": "Elevlösning B",
-     "partier": [{"rader": ["$f'(x) = 3x^2 + 3 = 0$"], "poang": 1,
+     "partier": [{"rader": ["$f'(x) = 3x^2 + 3 = 0$"], "poang": [1, 0, 0],
                   "dom": "Godtagbar ansats."},
-                 {"rader": ["$x^2 = -1$ saknar reell lösning."], "poang": 1,
+                 {"rader": ["$x^2 = -1$ saknar reell lösning."], "poang": [0, 1, 0],
                   "dom": "Godtagbart resonemang."}]},
 ]
 
@@ -116,8 +116,8 @@ def test_en_elevlosning_kan_inte_ge_mer_an_uppgiften_ar_vard():
     """Bedömningen ska gå ihop: en lösning som ger fyra poäng på en uppgift
     värd två är ett skrivfel som annars når läraren mitt i rättningen."""
     for_mycket = [{"etikett": "A", "partier": [
-        {"rader": ["x"], "poang": 5, "dom": "…"}]},
-        {"etikett": "B", "partier": [{"rader": ["y"], "poang": 1, "dom": "…"}]}]
+        {"rader": ["x"], "poang": [5, 0, 0], "dom": "…"}]},
+        {"etikett": "B", "partier": [{"rader": ["y"], "poang": [1, 0, 0], "dom": "…"}]}]
     doc, fel = exam_spec.validate_exam_json(
         _dok(_uppgift(elevlosningar=for_mycket)), "arbetsblad")
     assert doc is None
