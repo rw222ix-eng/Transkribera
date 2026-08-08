@@ -159,7 +159,8 @@ def skriv_minne(d: dict) -> None:
     if not d:
         return
     print(f"    minne: rss {d.get('rss_mb')} MB | spårat {d.get('sparat_mb')} MB "
-          f"(topp {d.get('sparat_topp_mb')}) | {d.get('objekt')} objekt", flush=True)
+          f"(topp {d.get('sparat_topp_mb')}) | {d.get('objekt')} objekt | "
+          f"{d.get('block')} block", flush=True)
     for r in (d.get("topp") or [])[:8]:
         plats = r["plats"]
         if len(plats) > 62:

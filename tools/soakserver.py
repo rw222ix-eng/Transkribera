@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import gc
 import os
+import sys
 import tracemalloc
 from collections import Counter
 from pathlib import Path
@@ -72,7 +73,12 @@ def montera(app) -> None:
         svar = {"rss_mb": _rss_mb(),
                 "sparat_mb": round(sparat / 1e6, 1),
                 "sparat_topp_mb": round(topp_sparat / 1e6, 1),
-                "objekt": sum(typer.values())}
+                "objekt": sum(typer.values()),
+                # CPythons egen räknare över levande allokeringar. Den ser små
+                # objekt som väger lite men är många — och skiljer «Python
+                # samlar på sig» från «C-biblioteken gör det»: växer blocken
+                # inte, är bytesen inte Pythons.
+                "block": sys.getallocatedblocks()}
         if bas or _bas is None:
             _bas, _bas_typer = nu, typer
             svar["bas"] = True
