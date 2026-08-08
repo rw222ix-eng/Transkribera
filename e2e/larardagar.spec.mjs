@@ -262,12 +262,54 @@ test("dag 5 — pardokument: arbetsbladet skrivs PÅ tavlan man godkände",
     const gen = L.traff(anrop, "/api/exams/generate").pop();
     expect(gen.kropp.typ).toBe("arbetsblad");
     expect(gen.kropp.klass).toBeTruthy();
+    /* Förlagan följer med till servern — det är hela innebörden av «andra
+       hand». Förr stod «Läser förlagan» i planen medan arbetsbladet skrevs ur
+       kursen och det centrala innehållet: pappret läraren godkände nämndes
+       aldrig i prompten. */
+    expect(gen.kropp.forlaga_dokument_id,
+           "arbetsbladet vet inte vilken tavla det bygger på").toBeTruthy();
+    expect(gen.kropp.forlaga.typ).toBe("Tavla");
+    expect(gen.kropp.forlaga.wb, "tavlans innehåll saknas i förlagan").toBeTruthy();
+    expect(String(gen.kropp.forlaga_hur || "")).toContain("Följer");
 
     // Och tvåan hamnar på samma lektion som ettan.
     const fore2 = await L.antalSparade(page);
     await page.locator("#godkann").click();
     await expect.poll(() => L.antalSparade(page), { timeout: 120_000 })
       .toBeGreaterThan(fore2);
+    L.rent(fel);
+  });
+
+// ── Dag 5b ───────────────────────────────────────────────────────────────
+test("dag 5b — källdörr 4: ett tidigare papper som förlaga följer med till servern",
+  async ({ page }) => {
+    test.setTimeout(180_000);
+    const fel = L.vakt(page);
+    const anrop = L.spana(page);
+    await L.fejkatMoln(page);
+    await L.oppna(page);
+
+    /* Femte källdörren: «Ett tidigare papper». Läraren pekar ut det och skriver
+       i klartext hur det ska följas — och det är den meningen som ska nå
+       modellen. Förr nådde den ingen: planen skrev «Läser förlagan» medan
+       prompten bara bar kursen och det centrala innehållet. */
+    const forlagan = await page.evaluate(() => {
+      const v = window.Dokument.sparade().find(x => x.id) || null;
+      if (!v) return null;
+      window.Dokument.sattForlaga(
+        v, "Följer pappret: samma upplägg och begrepp, men nya tal.");
+      return { id: v.id, typ: v.typ, moment: v.moment };
+    });
+    expect(forlagan, "basen saknar ett papper att utgå från").not.toBeNull();
+
+    await L.valjKlass(page, "NA25");
+    await L.skriv(page, { moment: "repetition inför provet" });
+    await L.vantaPapper(page, 60_000);
+
+    const gen = L.traff(anrop, "/api/planning/generate").pop();
+    expect(gen.kropp.forlaga_dokument_id).toBe(forlagan.id);
+    expect(gen.kropp.forlaga_hur).toContain("nya tal");
+    expect(gen.kropp.forlaga.typ).toBe(forlagan.typ);
     L.rent(fel);
   });
 

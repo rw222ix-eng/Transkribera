@@ -18,7 +18,7 @@ from pathlib import Path
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
-from app import bok, db, lesson_board, llm_client, rattning
+from app import bok, db, forlaga, lesson_board, llm_client, rattning
 from app.web.sse import sse_response
 
 # Två tavlor i 2× blir ett par MB; 30 MB är väl tilltaget men stoppar missbruk.
@@ -111,6 +111,31 @@ def utfall_text(db_file: Path, body: dict) -> str:
         if sparad:
             rattat = rattning.rattat_ur_rader(sparad)
     return rattning.build_utfall(rattat, namn)
+
+
+def forlaga_text(db_file: Path, body: dict) -> str:
+    """Promptblocket för källdörr 4 — det tidigare pappret läraren utgår från.
+    Delas med provroutern.
+
+    Samma två vägar som utfallet: `forlaga_dokument_id` är den sanna (servern
+    läser sitt EGET papper ur dokumenttabellen, precis som det ligger i högen),
+    och `forlaga` inline finns för pappret som aldrig nått databasen. `hur` är
+    lärarens egen mening om hur förlagan ska följas — den står i planen och ska
+    stå i prompten."""
+    hur = str(body.get("forlaga_hur") or "")
+    dok = body.get("forlaga") if isinstance(body.get("forlaga"), dict) else None
+    did = body.get("forlaga_dokument_id")
+    if did:
+        conn = db.connect(db_file)
+        try:
+            rad = db.get_dokument(conn, int(did))
+        except (TypeError, ValueError):
+            rad = None
+        finally:
+            conn.close()
+        if rad and rad.get("dokument"):
+            dok = rad["dokument"]
+    return forlaga.build_forlaga(dok, hur)
 
 
 def bok_val(body: dict) -> tuple[int, int, int] | None:
@@ -395,6 +420,9 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # Källdörr 5: tavlan ska ta om det klassen föll på, inte gå igenom
         # momentet en gång till som om provet aldrig skrivits.
         utfall_txt = utfall_text(db_file, body)
+        # Källdörr 4: det tidigare pappret läraren pekade ut. Planen har alltid
+        # sagt «Läser förlagan» — nu gör den det.
+        forlaga_txt = forlaga_text(db_file, body)
 
         if not arbiter.try_acquire_gpu():
             return JSONResponse(_GPU_BUSY, status_code=409)
@@ -410,7 +438,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 res = lesson_board.generate_board(
                     course or "matematik", group or "klassen", moment,
                     model=_model_name(), memory=memory, underlag=underlag_txt,
-                    utfall=utfall_txt, bok=bok_txt,
+                    utfall=utfall_txt, bok=bok_txt, forlaga=forlaga_txt,
                     log_cb=lambda m: emit({"type": "log", "msg": m}),
                     token_cb=lambda t: emit({"type": "token", "text": t}))
                 pid = uuid.uuid4().hex[:12]

@@ -1223,6 +1223,27 @@
       utfall_dokument_id: resDok.id || undefined,
       utfall: { namn: dokNamn(resDok), rattat: resDok.rattat || null },
     } : {};
+    /* Källdörr 4 och pardokumentets andra hand: förlagan. Planen har alltid
+       skrivit «Läser förlagan», och rutan i steg 3 visar vilket papper det är —
+       men ingenting av det nådde servern, så modellen skrev sitt dokument ur
+       kursen och det centrala innehållet i stället för ur pappret läraren
+       pekade på. Id:t är den sanna vägen (servern läser sitt eget papper);
+       pappret följer med inline för den hög som aldrig nått databasen, och
+       `hur` är lärarens egen mening om hur förlagan ska följas. */
+    const forlagan = () => {
+      const f = refDok;
+      if (!f) return {};
+      const hur = ($('#refhur') || {}).value ? $('#refhur').value.trim() : '';
+      return {
+        forlaga_dokument_id: f.id || undefined,
+        forlaga_hur: hur || undefined,
+        forlaga: {
+          typ: f.typ, moment: f.moment || '', klass: f.klass || '',
+          kurs: f.kurs || '', datum: f.datum || '',
+          uppgifter: f.uppgifter || undefined, wb: f.wb || undefined,
+        },
+      };
+    };
     /* Bokdörren: sidorna läraren slog upp i remsan. Servern läser de sidor som
        inte redan är lästa (~96 s per sida) och lägger deras innehåll i
        prompten — det är hela poängen med att boken finns i appen. Skickas bara
@@ -1239,7 +1260,7 @@
         klass: utkast.klass, kurs: utkast.kurs,
         datum: utkast.datum || utkast.lektionsdatum || '',
         starttid: String(utkast.tid || utkast.lektionstid || '').split('–')[0].trim(),
-        ...utfall(), ...bokval(),
+        ...utfall(), ...bokval(), ...forlagan(),
       }, { signal, log }).then(kravDone),
       /* Provet och arbetsbladet delar rutt och skiljs åt av `typ`: samma
          skelett och samma balansvalidering, men arbetsbladet får sitt facit i
@@ -1252,7 +1273,7 @@
         delar: i0.delprov !== 'En del',
         datum: utkast.datum || '',
         typ: typ === 'Arbetsblad' ? 'arbetsblad' : 'prov',
-        ...utfall(), ...bokval(),
+        ...utfall(), ...bokval(), ...forlagan(),
       }, { signal, log }).then(kravDone).then(r => {
         if (!r.exam) throw new Error('Provet gick inte att skriva den här gången. Försök igen.');
         return r;
@@ -1270,7 +1291,7 @@
       antal: 4,
       datum: utkast.datum || '',
       typ: 'gruppuppgift',
-      ...utfall(), ...bokval(),
+      ...utfall(), ...bokval(), ...forlagan(),
       grupp: {
         elever: Number(i0.grupp) || 3,
         langd_min: Number(i0.langd) || 45,

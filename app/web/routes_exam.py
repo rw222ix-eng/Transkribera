@@ -199,6 +199,9 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # tydligaste fallet — det ska pröva just det som föll — men samma sak
         # gäller arbetsbladet som ska ge klassen en ny chans på 4b.
         utfall_block = routes_planning.utfall_text(db_file, body)
+        # Källdörr 4 / pardokumentets andra hand: arbetsbladet som ska skrivas
+        # PÅ den godkända tavlan, eller provet som följer ett tidigare papper.
+        forlaga_block = routes_planning.forlaga_text(db_file, body)
 
         conn = db.connect(db_file)
         try:
@@ -228,6 +231,11 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     teman = ""       # referensläget ersätter undvik-listan
         finally:
             conn.close()
+        # «Följ den här förlagan» och «undvik det du gjort förut» är motsatta
+        # order. Referensläget löser det genom att släppa undvik-listan —
+        # förlagan gör detsamma, av samma skäl: läraren har PEKAT på ett papper.
+        if forlaga_block:
+            teman = ""
 
         if not arbiter.try_acquire_gpu():
             return JSONResponse(_GPU_BUSY, status_code=409)
@@ -246,7 +254,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     antal=antal, tid_min=tid_min, delar=delar,
                     memory=memory, teman=teman, referens=referens,
                     bilder=bilder_block, utfall=utfall_block, bok=bok_block,
-                    profil=typ, grupp=grupp,
+                    forlaga=forlaga_block, profil=typ, grupp=grupp,
                     log_cb=lambda m: emit({"type": "log", "msg": m}))
                 # Upplägget är lärarens val, inte modellens: skriv in det som
                 # valdes även om modellen råkade fylla i något annat.

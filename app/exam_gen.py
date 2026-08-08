@@ -141,7 +141,8 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
                  antal: int = 10, tid_min: int = 120, delar: bool = True,
                  memory: str = "", teman: str = "",
                  referens: str = "", bilder: str = "", utfall: str = "",
-                 bok: str = "", profil: str = "prov", grupp: dict | None = None,
+                 bok: str = "", forlaga: str = "", profil: str = "prov",
+                 grupp: dict | None = None,
                  skeleton: list[dict] | None = None) -> str:
     """Genereringsprompt: instruktion + valda innehållspunkter +
     minneskontext + tidigare provs teman (undvik upprepning som default).
@@ -161,6 +162,11 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
     # klassen faktiskt arbetar med — samma notation, samma typuppgifter.
     if bok:
         block.append(bok)
+    # Förlagan (källdörr 4, pardokumentets andra hand) står närmast uppdraget:
+    # «gör som det här pappret» är det starkaste önskemålet läraren kan ge, och
+    # det ska inte tappas bakom minnet, boken eller undvik-listan.
+    if forlaga:
+        block.append(forlaga)
     if teman:
         block.append("Tidigare provs uppgiftsteman — UNDVIK att upprepa dessa:\n"
                      + teman)
@@ -383,7 +389,8 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                   antal: int = 10, tid_min: int = 120, delar: bool = True,
                   memory: str = "", teman: str = "", referens: str = "",
                   bilder: str = "", utfall: str = "", bok: str = "",
-                  profil: str = "prov", grupp: dict | None = None,
+                  forlaga: str = "", profil: str = "prov",
+                  grupp: dict | None = None,
                   llm=llm_client.generate, max_rounds: int = MAX_ROUNDS,
                   log_cb: Callable[[str], None] | None = None) -> dict:
     """Generera ett prov/arbetsblad/gruppuppgift och reparera schema- och
@@ -403,7 +410,8 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     prompt = build_prompt(kurs, klass, punkter, antal=antal, tid_min=tid_min,
                           delar=delar, memory=memory, teman=teman,
                           referens=referens, bilder=bilder, utfall=utfall,
-                          bok=bok, profil=profil, grupp=grupp, skeleton=skeleton)
+                          bok=bok, forlaga=forlaga, profil=profil, grupp=grupp,
+                          skeleton=skeleton)
     exam = _llm_round(prompt, model, llm, antal, skeleton)
     rounds = 1
     while exam is None and rounds < max_rounds:
