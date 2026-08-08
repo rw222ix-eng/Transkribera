@@ -143,6 +143,49 @@ def test_lista_skiljer_hogen_fran_utkastet(client):
     assert d["utkast"]["dokument"]["moment"] == "nytt"
 
 
+def test_hogen_bar_inte_angra_historiken(client):
+    """Ett läsårs hög med varje pappers alla versioner blev ett svar på 48 MB
+    och fyra sekunders väntan innan appen öppnade sig. Frontenden läser bara
+    `dokument` (plan.js hydreraDokument) — historiken har aldrig ritat något
+    i högen."""
+    d = client.post("/api/dokument", json={"dokument": papper()}).json()
+    for txt in ("v2", "v3"):
+        client.post(f"/api/dokument/{d['id']}/versioner",
+                    json={"dokument": papper(anteckning=txt)})
+    client.patch(f"/api/dokument/{d['id']}", json={"status": "godkant"})
+
+    rad = client.get("/api/dokument").json()["sparade"][0]
+    assert "versioner" not in rad                    # 48 MB → 12
+    assert rad["versioner_antal"] == 3               # men den SÄGS, inte tappas
+    assert rad["dokument"]["anteckning"] == "v3"     # det markören står på
+    # Historiken är utelämnad ur svaret, inte raderad ur basen.
+    c = db.connect(client.base_dir / "transkribera.db")
+    try:
+        assert len(db.get_dokument(c, d["id"])["versioner"]) == 3
+    finally:
+        c.close()
+
+
+def test_hogen_ritar_versionen_markoren_star_pa(client):
+    """Samma klämning som _dokument_view gör i Python, fast i SQL."""
+    d = client.post("/api/dokument", json={"dokument": papper(anteckning="v1")}).json()
+    client.post(f"/api/dokument/{d['id']}/versioner",
+                json={"dokument": papper(anteckning="v2")})
+    client.patch(f"/api/dokument/{d['id']}", json={"markor": 0, "status": "godkant"})
+    assert (client.get("/api/dokument").json()["sparade"][0]["dokument"]["anteckning"]
+            == "v1")
+
+
+def test_utkastet_behaller_hela_sin_historik(client):
+    """Utkastet är undantaget: dess versioner ÄR ångra-knappen (plan.js
+    aterstallUtkast läser u.versioner rakt av)."""
+    d = client.post("/api/dokument", json={"dokument": papper(anteckning="v1")}).json()
+    client.post(f"/api/dokument/{d['id']}/versioner",
+                json={"dokument": papper(anteckning="v2")})
+    utkast = client.get("/api/dokument").json()["utkast"]
+    assert [v["anteckning"] for v in utkast["versioner"]] == ["v1", "v2"]
+
+
 def test_tom_app_har_ingen_hog_och_inget_utkast(client):
     assert client.get("/api/dokument").json() == {"sparade": [], "utkast": None}
 

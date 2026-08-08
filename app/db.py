@@ -1861,14 +1861,63 @@ def _dokument_view(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
     return d
 
 
-def list_dokument(conn: sqlite3.Connection, *, status: str | None = None) -> list[dict]:
-    sql = "SELECT * FROM dokument"
+# Högen UTAN historiken: en fråga, en version per papper.
+#
+# `_dokument_view` läser varje versions blob och bygger hela `versioner`-arrayen.
+# Det är rätt för ETT papper och fel för högen: en lärare med ett läsårs arbete
+# (2275 papper à fyra versioner) fick ett svar på 48 MB och väntade fyra
+# sekunder på att appen skulle öppna sig — och frontenden slänger arrayen ändå
+# (plan.js hydreraDokument tar bara x.dokument).
+#
+# Den inre frågan räknar versionerna, den yttre hämtar BLOBEN som markören står
+# på — `min(max(markor,0), antal-1)` är samma klämning som _dokument_view gör i
+# Python.
+#
+# Versionen väljs på sin RANG (hur många versioner som ligger före den), inte
+# med OFFSET: SQLite tillåter inte korrelerade uttryck i LIMIT/OFFSET, så
+# `OFFSET x.markor` blir «no such column: x.markor». Rangräkningen är kvadratisk
+# i antalet versioner per papper — fyra rader, alltså sexton jämförelser, och
+# båda leden går på idx_dokver_dokument. Inga fönsterfunktioner: appen ska
+# starta på den sqlite som följer med lärarens Python, inte på den senaste.
+_DOKUMENT_LATT = """
+SELECT x.*, (SELECT v.data FROM dokument_versioner v
+             WHERE v.dokument_id = x.id
+               AND (SELECT COUNT(*) FROM dokument_versioner w
+                    WHERE w.dokument_id = x.id AND w.version < v.version)
+                   = min(max(x.markor, 0), x.antal - 1)) AS data
+FROM (SELECT d.*, (SELECT COUNT(*) FROM dokument_versioner v
+                   WHERE v.dokument_id = d.id) AS antal
+      FROM dokument d{where}) x
+ORDER BY x.sort, x.id
+"""
+
+
+def list_dokument(conn: sqlite3.Connection, *, status: str | None = None,
+                  versioner: bool = True) -> list[dict]:
+    """Högen. `versioner=False` ger varje papper som det RITAS (markörens
+    version) plus `versioner_antal` — ångra-historiken hämtas då per papper via
+    get_dokument."""
     params: list = []
+    where = ""
     if status:
-        sql += " WHERE status = ?"
+        where = " WHERE status = ?"
         params.append(status)
-    sql += " ORDER BY sort, id"
-    return [_dokument_view(conn, r) for r in conn.execute(sql, params).fetchall()]
+    if versioner:
+        return [_dokument_view(conn, r) for r in conn.execute(
+            "SELECT * FROM dokument" + where + " ORDER BY sort, id", params).fetchall()]
+    ut = []
+    for r in conn.execute(_DOKUMENT_LATT.format(where=where), params).fetchall():
+        try:
+            v = json.loads(r["data"]) if r["data"] else None
+        except (TypeError, ValueError):
+            v = None
+        ut.append({"id": r["id"], "status": r["status"],
+                   "markor": max(0, min(int(r["markor"] or 0), r["antal"] - 1))
+                             if r["antal"] else 0,
+                   "sort": r["sort"], "foljd": r["foljd"],
+                   "versioner_antal": r["antal"],
+                   "dokument": dict(v, id=r["id"]) if v else None})
+    return ut
 
 
 def get_dokument(conn: sqlite3.Connection, dokument_id: int) -> dict | None:

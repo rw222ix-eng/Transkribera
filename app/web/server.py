@@ -1305,14 +1305,22 @@ def create_app(base_dir: Path | None = None,
     @app.get("/api/dokument")
     def api_dokument_lista():
         """Hela högen + det utkast som eventuellt låg framme. Ett anrop: båda
-        läses vid start och två anrop hade gett två tillfällen att rita halvt."""
+        läses vid start och två anrop hade gett två tillfällen att rita halvt.
+
+        Högen kommer UTAN ångra-historik: den ritas ur `dokument` (plan.js
+        hydreraDokument), och att skicka varje sparat pappers alla versioner
+        gjorde svaret 48 MB efter ett läsår. Utkastet är undantaget — det är
+        pappret som ligger under händerna, och dess historik ÄR ångra-knappen."""
         conn = _db()
         try:
-            alla = db.list_dokument(conn)
+            alla = db.list_dokument(conn, versioner=False)
+            utkast = next((d for d in alla if d["status"] == "utkast"), None)
+            if utkast:
+                utkast = db.get_dokument(conn, utkast["id"])
         finally:
             conn.close()
         return {"sparade": [d for d in alla if d["status"] == "godkant"],
-                "utkast": next((d for d in alla if d["status"] == "utkast"), None)}
+                "utkast": utkast}
 
     @app.post("/api/dokument")
     async def api_dokument_skapa(req: Request):
