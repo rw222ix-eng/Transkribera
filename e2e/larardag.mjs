@@ -144,6 +144,13 @@ const vantarHogen = page => page.waitForResponse(
  */
 export async function oppna(page, { tid = SKOLDAG } = {}) {
   await page.clock.install({ time: new Date(tid) });
+  // Tryckknappen ber servern öppna paketet i systemets PDF-läsare (tryck.js →
+  // /api/open → os.startfile). Rätt i appen, fel i en svit: dag 3 trycker den
+  // varje varv, och en soak-natt lämnar hundra PDF-flikar i lärarens webb-
+  // läsare. Anropet GÖRS fortfarande — `spana` ser det, os.startfile gör det
+  // inte. Samma sak för /api/reveal (Utforskarfönster).
+  await page.route(/\/api\/(open|reveal)$/, r => r.fulfill({
+    status: 200, contentType: "application/json", body: '{"ok":true}' }));
   const hogen = vantarHogen(page);
   await page.goto("/");
   await page.waitForFunction(() =>
