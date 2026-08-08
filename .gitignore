@@ -34,6 +34,7 @@ models/
 # Genererade transkript
 *.srt
 *.vtt
+*.ord.json
 
 # Diverse
 nul
