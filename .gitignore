@@ -120,3 +120,6 @@ test-results/
 .coverage
 coverage.xml
 htmlcov/
+
+# Playwright-spår från soakvarv som föll (tools/soak.py)
+soak-fall/

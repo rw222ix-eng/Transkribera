@@ -32,8 +32,14 @@ Kör:
     python -m tools.soak --timmar 8              # över natten
     python -m tools.soak --varv 20 --spec zz-apan.spec.mjs
 
-Larmet: RSS eller trådar som ökar över gränsen mellan första och sista varvet
-ger exit 1 — och raderna ligger kvar i soak-loggen att titta på.
+Larmet: minnets TAKT (MB per varv, minsta kvadrat med standardfel) över
+gränsen, eller trådar/filer som växer, ger exit 1 — och raderna ligger kvar i
+soak-loggen att titta på. Takten larmar bara när hela konfidensintervallet
+ligger över gränsen; ligger bara halva säger körningen OAVGJORT i stället för
+att tiga, för en kort körning kan fälla minnet men aldrig fria det.
+
+Ett varv som faller sparar Playwrights spår under `soak-fall/varv-NNNN/` —
+`e2e/test-results/` skrivs annars över av nästa varv, en minut senare.
 """
 from __future__ import annotations
 
@@ -55,7 +61,24 @@ BAS = Path(tempfile.gettempdir()) / "transkribera-soak"
 
 # Gränser för larmet. Servern växer en del under första varvet (moduler som
 # importeras lat, cachar som fylls), så jämförelsen görs mot varv 2.
-MAX_RSS_VAXT_MB = 120
+#
+# Minnet mäts som TAKT, inte som total växt. En absolut gräns säger olika saker
+# om samma app beroende på hur länge man råkade köra: facit-körningen 2026-08-09
+# landade på 106,7 MB mot en gräns på 120 och slapp larm — en timme längre hade
+# larmat, utan att något var annorlunda. Takten är appens egenskap; totalen är
+# klockans.
+#
+# Gränsen ligger i ett smalt band, och det är värt att veta varför. Bakgrunden
+# efter fixarna är 0,313 MB/varv (C-sidans allokeringar, inte Pythons — se
+# planens DEL X), och `plannings`-läckan som soaken FAKTISKT hittade låg på
+# 0,425. En gräns som inte fäller den buggen är ett instrument utan värde, så
+# den måste ligga däremellan. 0,40 friar dagens app med marginal (övre
+# konfidensgräns 0,317) och fäller den gamla läckan (undre 0,424).
+#
+# Bandet är alltså smalt med flit, och siffran gäller den här maskinen. Byter
+# maskin, Python-bygge eller matrisen innehåll: mät om bakgrunden först, annars
+# larmar soaken på sig själv.
+MAX_RSS_PER_VARV = 0.40
 MAX_TRAD_VAXT = 8
 MAX_FIL_VAXT = 40
 
@@ -185,7 +208,61 @@ def skriv_minne(d: dict) -> None:
             print(f"        {rad}", flush=True)
 
 
-def kor_varv(spec: str, grep: str = "") -> tuple[bool, float]:
+def spara_fallet(varv: int, utskrift: str) -> Path | None:
+    """Rädda undan Playwrights spår från ett varv som föll.
+
+    `e2e/test-results/` skrivs över av NÄSTA varv, och i en åtta timmars
+    körning är nästa varv en minut bort. Varv 320 i facit-körningen
+    2026-08-09 föll på en timeout som aldrig gick att obducera av just det
+    skälet — spåret, felkontexten och skärmbilderna var borta innan någon
+    tittade."""
+    kalla = ROT / "e2e" / "test-results"
+    mal = ROT / "soak-fall" / f"varv-{varv:04d}"
+    try:
+        mal.mkdir(parents=True, exist_ok=True)
+        (mal / "utskrift.txt").write_text(utskrift or "", encoding="utf-8")
+        if kalla.is_dir():
+            shutil.copytree(kalla, mal / "test-results", dirs_exist_ok=True)
+        return mal
+    except OSError as e:                 # full disk ska inte fälla soaken
+        print(f"    (kunde inte spara fallet: {e})", flush=True)
+        return None
+
+
+# Uppvärmningen. Varv 1 importerar moduler, men det slutar inte där: lat
+# importerade moduler dök upp i tracemalloc ända till varv åtta. Mätningen
+# börjar därför vid varv fem — en sexvarvskörning larmade annars på 0,72
+# MB/varv när det den såg var cachar som fylldes.
+VARM_VARV = 5
+# Färre än så säger ingenting. Fem punkter med ±1 MB brus kan varken fälla
+# eller fria, och då ska soaken säga just det i stället för att gissa.
+MIN_MATVARV = 15
+
+
+def lutning(rader: list[dict]) -> tuple[float | None, float]:
+    """Minnets TAKT i MB per varv, med standardfel — minsta kvadrat över RSS.
+
+    Standardfelet är inte pynt. Bruset mellan varv är ±1 MB, och på tjugofem
+    varv kunde en körning inte skilja 0,30 från 0,42 MB/varv (det tog 344 varv
+    att göra det 2026-08-09). Larmet frågar därför om HELA
+    konfidensintervallet ligger över gränsen, inte om punktskattningen gör det."""
+    matbara = [r for r in rader if r["varv"] >= VARM_VARV]
+    if len(matbara) < MIN_MATVARV:
+        return None, 0.0
+    x = [float(r["varv"]) for r in matbara]
+    y = [float(r["rss_mb"]) for r in matbara]
+    n = len(x)
+    mx, my = sum(x) / n, sum(y) / n
+    sxx = sum((t - mx) ** 2 for t in x)
+    if sxx == 0:
+        return None, 0.0
+    k = sum((t - mx) * (u - my) for t, u in zip(x, y)) / sxx
+    m = my - k * mx
+    s2 = sum((u - (k * t + m)) ** 2 for t, u in zip(x, y)) / (n - 2)
+    return k, (s2 ** 0.5) / (sxx ** 0.5)
+
+
+def kor_varv(spec: str, grep: str = "", varv: int = 0) -> tuple[bool, float]:
     t0 = time.time()
     miljo = os.environ.copy()
     miljo["SOAK"] = "1"                  # playwright.config.ts återanvänder servern
@@ -199,6 +276,9 @@ def kor_varv(spec: str, grep: str = "") -> tuple[bool, float]:
                        errors="replace")
     if r.returncode != 0:
         print(r.stdout[-3000:] if r.stdout else "", flush=True)
+        mal = spara_fallet(varv, r.stdout)
+        if mal:
+            print(f"    spåret sparat: {mal}", flush=True)
     return r.returncode == 0, time.time() - t0
 
 
@@ -229,6 +309,15 @@ def main() -> int:
     server = starta_server(BAS, minne='sparning' if a.sparning
                            else bool(a.minne))
     logg = Path(a.logg)
+    # Förra körningen sparas ett steg bakåt. En åtta timmars mätning är det
+    # dyraste den här filen innehåller, och den skrevs över av en sexvarvs
+    # provkörning som råkade använda samma standardlogg (2026-08-09). Rådata
+    # som kostat en natt ska inte kunna försvinna på ett kommando utan flaggor.
+    if logg.exists():
+        try:
+            logg.replace(logg.with_suffix(logg.suffix + ".forra"))
+        except OSError:
+            pass
     rader: list[dict] = []
     slut = time.time() + a.timmar * 3600 if a.timmar else 0
     print(f"soak: bas {BAS}, port {PORT}, spec {a.spec}", flush=True)
@@ -241,7 +330,7 @@ def main() -> int:
                 break
             if not slut and varv > a.varv:
                 break
-            ok, sek = kor_varv(a.spec, a.grep)
+            ok, sek = kor_varv(a.spec, a.grep, varv)
             m = matt(server, BAS)
             m["varv"], m["sek"], m["ok"] = varv, round(sek, 1), ok
             rader.append(m)
@@ -279,9 +368,22 @@ def main() -> int:
     # Jämför mot varv 2: första varvet importerar moduler och fyller cachar.
     bas_rad, sista = rader[1], rader[-1]
     larm = []
-    if sista["rss_mb"] - bas_rad["rss_mb"] > MAX_RSS_VAXT_MB:
-        larm.append(f"minnet växte {sista['rss_mb'] - bas_rad['rss_mb']:.0f} MB "
-                    f"({bas_rad['rss_mb']} → {sista['rss_mb']})")
+    k, se = lutning(rader)
+    if k is None:
+        print(f"\nför få varv för att mäta minnets takt — mätningen börjar vid "
+              f"varv {VARM_VARV} och behöver {MIN_MATVARV} till", flush=True)
+    else:
+        print(f"\nminnets takt: {k:+.3f} MB/varv (standardfel {se:.3f}) — "
+              f"{bas_rad['rss_mb']} → {sista['rss_mb']} MB på "
+              f"{sista['varv'] - bas_rad['varv']} varv", flush=True)
+        if k - 2 * se > MAX_RSS_PER_VARV:
+            larm.append(f"minnet växer {k:.3f} MB/varv (gräns {MAX_RSS_PER_VARV})")
+        elif k + 2 * se > MAX_RSS_PER_VARV:
+            # Varken fällt eller friat. Att tiga här vore att låta en kort
+            # körning se ut som ett godkännande — och det är precis det den
+            # inte kan vara.
+            print(f"  OAVGJORT: takten kan vara upp till {k + 2 * se:.3f} MB/varv. "
+                  f"Kör längre innan minnet fris.", flush=True)
     if sista["tradar"] - bas_rad["tradar"] > MAX_TRAD_VAXT:
         larm.append(f"trådarna växte {sista['tradar'] - bas_rad['tradar']} "
                     f"({bas_rad['tradar']} → {sista['tradar']}) — SSE-jobb som "
