@@ -1,4 +1,6 @@
-"""Post-process a transcript with a local LLM via llama.cpp."""
+"""Efterarbetet på ett transkript: städning, sammanfattning, extraktion,
+översättning. Frågorna går till språkmodellen via app/llm_client.py — numera
+Claude Code, förr en GGUF på datorn."""
 from __future__ import annotations
 import json
 import re
@@ -8,8 +10,10 @@ from typing import Callable
 
 from app import llm_client
 
-# Hard language lock: some capable models (e.g. Qwen) drift into other languages
-# when the transcript is noisy/mixed. A firm system prompt keeps the answer Swedish.
+# Hårt språklås. Det skrevs för en modell som drev iväg till andra språk när
+# transkriptet var brusigt eller blandat. Låset står kvar för att det är en
+# billig försäkring: en systemtext som kostar ingenting och gör kravet
+# «svaret ska vara svenskt» explicit i stället för underförstått.
 SYSTEM_SV = (
     "Du är en noggrann svensk skrivassistent. Du svarar ALLTID på svenska och "
     "använder aldrig något annat språk i ditt svar – inte ens om transkriptet "
@@ -83,15 +87,15 @@ def suggest_title(segments: list[dict], model: str, base_url: str | None = None)
 
 
 # ---- long-transcript handling (map-reduce) ----------------------------------
-# The served model owns a fixed context (llama_server.DEFAULT_CTX = 40960). A
-# single pass over a long lecture would silently overflow it — the model would
-# only see the tail and summary/extraction would quietly miss most of the
-# lesson (the same class of bug PR #1 fixed for chat). So above a threshold we
-# split the transcript on line boundaries, process each chunk, and merge.
+# Varje modell äger ett ändligt kontextfönster. Ett enda pass över en lång
+# lektion kan tyst svämma över det — modellen ser då bara slutet, och
+# sammanfattningen missar det mesta av lektionen utan att säga något (samma
+# sorts bugg som PR #1 fixade för chatten). Över en gräns styckar vi därför
+# transkriptet på radgräns, kör varje del och slår ihop svaren.
 #
-# Char budget, not tokens: ~4 chars/token for Swedish, ~40k ctx. We keep a wide
-# margin for the instruction + the model's own output, so single-pass stays well
-# inside the window and each map chunk leaves room for its partial answer.
+# Budgeten räknas i TECKEN, inte tokens: ~4 tecken/token på svenska. Marginalen
+# är tilltagen så att både instruktionen och modellens eget svar får plats.
+# Måttet sattes mot ett 40k-fönster och är konservativt för Claude.
 SINGLE_PASS_CHARS = 90_000          # ≈ a 60-min lecture; above this → map-reduce
 CHUNK_CHARS = 70_000                # per map-step transcript slice
 # Städningens SVAR är lika långt som indatan (till skillnad från en samman-
@@ -220,8 +224,8 @@ def _run_summary_long(operation: str, chunks: list[str], model: str,
 
 
 # ---- subtitle translation (target-language output) --------------------------
-# Translate cue texts with the same local text LLM (llama.cpp) used for cleanup,
-# preserving each cue's start/end so the timing is unchanged.
+# Cue-texterna översätts av samma språkmodell som städningen använder, med varje
+# cues start/slut bevarat så att tidsättningen är oförändrad.
 
 _NUM_LINE = re.compile(r'^\s*(\d+)[.)]\s*(.*\S)\s*$')
 _LANG_NAMES = {"sv": "svenska", "en": "engelska"}
@@ -336,8 +340,9 @@ ANSWER_SYSTEM = (
 
 
 # Kalenderavsikt i arkivfrågan ("… gör en kalenderhändelse av detta"):
-# detekteras deterministiskt så prompten kan KRÄVA frågesteget — Qwen3
-# tappar annars den villkorade instruktionen när utdragen är långa.
+# detekteras deterministiskt så prompten kan KRÄVA frågesteget. En villkorad
+# instruktion («om användaren vill …») tappas lätt när utdragen är långa; en
+# ovillkorad gör det inte.
 _CAL_INTENT = re.compile(
     r"(?:gör|skapa|lägg\s+(?:in|till)|boka|schemalägg|sätt\s+upp)"
     r"[^.!?]{0,60}(?:kalender|händelse|påminnelse|läxförhör)"
@@ -457,8 +462,7 @@ def expand_search_terms(query: str, model: str) -> list[str]:
         "facktermer och vardagsord (även böjda vardagsformer). "
         "Svara med ENBART orden, kommaseparerade, utan förklaringar.",
         system=EXPAND_SYSTEM, options={"temperature": 0.2}, max_tokens=300)
-    # Qwen3 kan inleda med ett resonemangsblock — behåll bara slutsvaret.
-    raw = (raw or "").split("</think>")[-1]
+    raw = raw or ""
     ut: list[str] = []
     seen: set[str] = set()
     for kandidat in re.split(r"[,\n;·•]+", raw):

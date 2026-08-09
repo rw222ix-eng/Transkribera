@@ -78,7 +78,7 @@ def test_llama_parametrar_tas_emot_och_ignoreras(fangat):
     # temperatur, max_tokens och base_url hörde till llama-serverns sampling.
     # De finns kvar i ett tjugotal anropssignaturer och får inte spricka.
     lc.generate("", "fråga", options={"temperature": 0.9}, max_tokens=512,
-                base_url="http://127.0.0.1:8170", think=True)
+                base_url="http://127.0.0.1:8170")
     assert fangat["prompt"] == "fråga"
 
 
