@@ -167,6 +167,46 @@ def test_approve_with_stubbed_engine_sets_pdf(client, monkeypatch):
     assert pr.content.startswith(b"%PDF")
 
 
+def test_approve_svaret_bar_falten_plan_js_laser(client, monkeypatch):
+    """Kontraktet mellan rutten och klienten, läst ur BÅDA ändarna.
+
+    Rutten lägger sökvägarna i `pdf` och `tex`; plan.js läste `pdf_path` —
+    DB-kolumnens namn, som aldrig finns i svaret. Det syntes ingenstans:
+    `godkant.pdf` blev alltid null, dokumentet i Sparat fick aldrig sin
+    PDF-sökväg, och toasten sa «PDF:en gick inte att bygga» om varje prov som
+    kompilerat felfritt. Rutt-testerna såg det inte (de läser svaret, inte
+    klienten) och e2e-testerna inte heller (mockarna hittade på svaret).
+
+    Därför läses fältnamnen HÄR ur plan.js och krävs finnas i det svar rutten
+    faktiskt skickar. Byter någon ände namn faller det här testet."""
+    import re
+    from pathlib import Path
+
+    result, _ = _make_exam(client, monkeypatch, datum="2026-10-05")
+    monkeypatch.setattr(exam_pdf, "engine_available", lambda: True)
+
+    def fake_compile(tex, out_dir, jobname, **kw):
+        out_dir.mkdir(parents=True, exist_ok=True)
+        p = out_dir / f"{jobname}.pdf"
+        p.write_bytes(b"%PDF-1.5 fejk")
+        return p, ""
+    monkeypatch.setattr(exam_pdf, "compile_pdf", fake_compile)
+
+    res = _done(client.post(f"/api/exams/{result['id']}/approve", json={}))
+    assert res["pdf"] and res["tex"]
+
+    js = (Path(routes_exam.__file__).parent / "ui" / "plan.js"
+          ).read_text(encoding="utf-8")
+    start = js.index("/api/exams/${godkant.provId}/approve")
+    # Blocket är .then-hanteraren; .catch efter den läser felet, inte svaret.
+    block = js[start:js.index(".catch(", start)]
+    kod = re.sub(r"/\*.*?\*/", "", block, flags=re.S)   # kommentarer ljuger inte
+    lasta = set(re.findall(r"\br\.(\w+)", kod))
+    assert "pdf" in lasta, kod
+    saknas = sorted(lasta - set(res))
+    assert not saknas, f"plan.js läser fält som approve-svaret inte har: {saknas}"
+
+
 def test_approve_compile_failure_reports_honestly(client, monkeypatch):
     result, _ = _make_exam(client, monkeypatch)
     monkeypatch.setattr(exam_pdf, "engine_available", lambda: True)

@@ -2353,9 +2353,17 @@
       window.API.strom(`/api/exams/${godkant.provId}/approve`, {})
         .then(r => {
           if (!r) return;
-          godkant.pdf = r.pdf_path || null;
+          /* Fälten heter `pdf` och `tex` — det är vad routes_exam approve
+             lägger på resultatet (sökvägarna som kompilerades just nu).
+             `pdf_path` är DB-kolumnens namn och finns aldrig i svaret: läste
+             vi det blev sökvägen alltid null, dokumentet i Sparat fick aldrig
+             sin PDF, och toasten sa «gick inte att bygga» om varje prov som
+             byggts felfritt. Kontraktet hålls av test_routes_exam
+             (test_approve_svaret_bar_falten_plan_js_laser). */
+          godkant.pdf = r.pdf || null;
+          godkant.tex = r.tex || null;
           dokUppdatera(godkant);
-          window.toast && window.toast(r.pdf_path
+          window.toast && window.toast(r.pdf
             ? `${Best(godkant.typ)} är utskriven som PDF`
             : `${Best(godkant.typ)} är godkänd — PDF:en gick inte att bygga, .tex finns sparad`);
         })
