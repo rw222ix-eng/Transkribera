@@ -60,13 +60,17 @@ MAX_TRAD_VAXT = 8
 MAX_FIL_VAXT = 40
 
 
-def starta_server(bas: Path, minne: bool = False) -> subprocess.Popen:
+def starta_server(bas: Path, minne=False) -> subprocess.Popen:
     """Servern som ALLA varv kör mot — poängen är att den lever kvar.
 
-    `minne` startar tracemalloc i processen och hänger på mätrutten (se
-    tools/soakserver.py). Den kostar: varje allokering får en anropskedja på
-    tjugofem rutor, så servern blir långsammare och tyngre. Ett varvs siffror
-    är alltså INTE jämförbara mellan en körning med och en utan."""
+    `minne=True` hänger på mätrutten (tools/soakserver.py): RSS, antal levande
+    Python-block och objekt per typ. Den kostar nästan ingenting och får därför
+    läsas i en körning vars siffror ska jämföras med andra.
+
+    `minne="sparning"` startar dessutom tracemalloc, som säger VAR objekten
+    skapades — men bokför en anropskedja per allokering. Processen blir ~50 MB
+    tyngre och varven ~50 % längre, så en sådan körnings RSS-tal är INTE
+    jämförbara med en ren körnings."""
     sys.path.insert(0, str(ROT))
     from tests import fejk
 
@@ -81,6 +85,8 @@ def starta_server(bas: Path, minne: bool = False) -> subprocess.Popen:
     miljo["PYTHONIOENCODING"] = "utf-8"
     if minne:
         miljo["SOAK_MINNE"] = "1"
+    if minne == "sparning":
+        miljo["SOAK_SPARNING"] = "1"
     p = subprocess.Popen(
         [sys.executable, "-m", "tools.soakserver"],
         cwd=str(ROT), env=miljo,
@@ -208,14 +214,20 @@ def main() -> int:
     ap.add_argument("--behall", action="store_true",
                     help="behåll basen efteråt (för att titta i den)")
     ap.add_argument("--minne", action="store_true",
-                    help="starta tracemalloc i servern och skriv vad som växer")
+                    help="skriv minnesbilden (RSS, block, objekt) — billig, "
+                         "påverkar inte mätningen")
+    ap.add_argument("--sparning", action="store_true",
+                    help="som --minne, plus tracemalloc: säger VAR objekten "
+                         "skapades, men kostar ~50 MB och ~50 %% längre varv")
     ap.add_argument("--minne-var", type=int, default=10,
                     help="skriv minnesbilden vart N:e varv (med --minne)")
     a = ap.parse_args()
 
+    bild = a.minne or a.sparning
     if BAS.exists():
         shutil.rmtree(BAS, ignore_errors=True)
-    server = starta_server(BAS, minne=a.minne)
+    server = starta_server(BAS, minne='sparning' if a.sparning
+                           else bool(a.minne))
     logg = Path(a.logg)
     rader: list[dict] = []
     slut = time.time() + a.timmar * 3600 if a.timmar else 0
@@ -242,11 +254,11 @@ def main() -> int:
             # Jämförelsepunkten sätts efter varv 2, av samma skäl som larmet
             # räknar därifrån: varv 1 importerar moduler och fyller cachar, och
             # allt det ser ut som en läcka om man mäter från noll.
-            if a.minne and varv == 2:
+            if bild and varv == 2:
                 _json("/__minne?bas=1")
-            elif a.minne and varv > 2 and varv % a.minne_var == 0:
+            elif bild and varv > 2 and varv % a.minne_var == 0:
                 skriv_minne(_json("/__minne")[1])
-        if a.minne and len(rader) > 2:
+        if bild and len(rader) > 2:
             print("\nsista minnesbilden (mot varv 2):", flush=True)
             skriv_minne(_json("/__minne")[1])
     except KeyboardInterrupt:

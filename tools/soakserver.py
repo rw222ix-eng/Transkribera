@@ -97,8 +97,15 @@ def montera(app) -> None:
         # gc först: annars räknas skräp som ännu inte städats som växt, och
         # varje varv ser ut att läcka ett par MB det inte läcker.
         gc.collect()
-        nu = tracemalloc.take_snapshot()
-        sparat, topp_sparat = tracemalloc.get_traced_memory()
+        # Spårningen är valfri. Utan den kostar bilden nästan ingenting, och då
+        # går den att läsa i en REN körning — vilket är hela poängen när frågan
+        # är «hur mycket av RSS-växten är över huvud taget Pythons?». Med
+        # tracemalloc igång bär processen 50 MB bokföring och ~50 % längre varv,
+        # och då går den siffran inte att lita på.
+        spårar = tracemalloc.is_tracing()
+        nu = tracemalloc.take_snapshot() if spårar else None
+        sparat, topp_sparat = (tracemalloc.get_traced_memory() if spårar
+                               else (0, 0))
         typer = _typer()
         svar = {"rss_mb": _rss_mb(),
                 "sparat_mb": round(sparat / 1e6, 1),
@@ -110,6 +117,8 @@ def montera(app) -> None:
                 # inte, är bytesen inte Pythons.
                 "block": sys.getallocatedblocks(),
                 **_hallare()}
+        if not spårar:
+            return svar
         if bas or _bas is None:
             _bas, _bas_typer = nu, typer
             svar["bas"] = True
@@ -127,10 +136,15 @@ def montera(app) -> None:
         # Appens egna rutor lyfts fram; stdlib och site-packages ligger kvar men
         # sist, för det är sällan där felet bor.
         svar["kedjor"] = []
-        for s in nu.compare_to(_bas, "traceback")[:3]:
-            if s.size_diff <= 0:
+        for s in nu.compare_to(_bas, "traceback"):
+            if s.size_diff <= 0 or len(svar["kedjor"]) >= 5:
                 break
             rutor = [f"{f.filename}:{f.lineno}" for f in s.traceback]
+            # Mätningen mäter inte sig själv: ögonblicksbilden och typräkningen
+            # allokerar också, och de låg tvåa i förra körningens lista.
+            if any(__file__.rsplit("\\", 1)[-1] in r or "soakserver.py" in r
+                   for r in rutor):
+                continue
             egna = [r for r in rutor if "Transkribera" in r and "site-packages" not in r]
             svar["kedjor"].append({"mb": round(s.size_diff / 1e6, 2),
                                    "antal": s.count_diff,
@@ -147,10 +161,13 @@ def montera(app) -> None:
 def main() -> None:
     bas = Path(os.environ["SOAK_BAS"])
     port = int(os.environ.get("SOAK_PORT", "8752"))
-    if os.environ.get("SOAK_MINNE"):
+    # Två lägen. SOAK_MINNE ger den billiga bilden (RSS, block, objekt per typ)
+    # och går att läsa i en ren körning. SOAK_SPARNING lägger till tracemalloc,
+    # som säger VAR objekten skapades men kostar minne och tid.
+    if os.environ.get("SOAK_SPARNING"):
         tracemalloc.start(DJUP)
     app = server.create_app(base_dir=bas)
-    if os.environ.get("SOAK_MINNE"):
+    if os.environ.get("SOAK_MINNE") or os.environ.get("SOAK_SPARNING"):
         montera(app)
     uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")
 
