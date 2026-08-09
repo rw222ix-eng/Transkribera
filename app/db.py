@@ -21,7 +21,7 @@ import sqlite3
 import threading
 from pathlib import Path
 
-SCHEMA_VERSION = 11
+SCHEMA_VERSION = 12
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS courses (
@@ -469,13 +469,41 @@ CREATE INDEX IF NOT EXISTS idx_boksid_bok  ON bok_sidor(bok_id, sida);
 CREATE INDEX IF NOT EXISTS idx_bokupp_sida ON bok_uppgifter(bok_id, sida);
 """
 
+# Bokens nivåskala (v12, Del C:s C2) — ENDAST additiv; rollback: kolumnerna kan
+# lämnas kvar (NULL är giltigt) + PRAGMA user_version=11.
+#
+# `bok_uppgifter.niva` fanns redan: ett ordningstal 1–3 ur den färgade markören.
+# Det som saknades var vilket SYSTEM talet tillhör. Svenska läromedel märker sina
+# uppgifter olika — a/b/c, en till tre stjärnor, «Nivå 1/2/3», blå och röd kurs —
+# och «nivå 2» betyder ingenting utan sin skala. Systemet läses därför av från
+# sidorna i stället för att antas, och sparas per sida bredvid texten:
+#
+# * bok_sidor.nivasystem — bokens egen beskrivning av skalan, som den syns på
+#   uppslaget («a, b, c där c är svårast»). Per sida och inte per bok, därför att
+#   den bara kan vara känd om sidan lästs — och sidor som lästes FÖRE den här
+#   ändringen har NULL tills de läses om. Ingen migreringskörning: en omläsning
+#   kostar 96 sekunder per sida, och det är inte värt att betala för sidor
+#   läraren kanske aldrig slår upp igen.
+# * bok_uppgifter.nivamarke — markeringen som den STÅR vid uppgiften («b»,
+#   «★★», «blå»), vid sidan av ordningstalet i niva.
+_NIVAMARKE_MIGRATION = """
+ALTER TABLE bok_sidor ADD COLUMN nivasystem TEXT;
+ALTER TABLE bok_uppgifter ADD COLUMN nivamarke TEXT;
+"""
+
 _MIGRATIONS: dict[int, str] = {2: _FTS_MIGRATION, 3: _MARKERS_MIGRATION,
                                4: _PLANNING_MIGRATION, 5: _EXAMS_MIGRATION,
                                6: _GY25_MIGRATION, 7: _DATAGRUND_MIGRATION,
                                8: _DOKUMENT_MIGRATION,
                                9: _KALENDERBESLUT_MIGRATION,
                                10: _RATTNING_MIGRATION,
-                               11: _BOK_MIGRATION}
+                               11: _BOK_MIGRATION,
+                               12: _NIVAMARKE_MIGRATION}
+
+# Migreringar som bara innehåller ALTER TABLE … ADD COLUMN. De körs sats för
+# sats så att en redan tillagd kolumn hoppas över i stället för att fälla hela
+# migreringen — se _apply_migrations.
+_ALTER_MIGRATIONER = {6, 12}
 
 _LESSON_SELECT = """
 SELECT l.*, g.namn AS group_namn, c.namn AS course_namn
@@ -515,10 +543,10 @@ def _apply_migrations(conn: sqlite3.Connection) -> None:
             if not sql:
                 continue
             try:
-                if version == 6:
-                    # v6 består av ALTER-satser som inte är idempotenta i
-                    # sqlite. Efter en dokumenterad rollback av v4/v5 (som
-                    # sätter user_version bakåt) körs v6 om — kör därför
+                if version in _ALTER_MIGRATIONER:
+                    # De här migreringarna består av ALTER-satser, som inte är
+                    # idempotenta i sqlite. Efter en dokumenterad rollback (som
+                    # sätter user_version bakåt) körs de om — kör därför
                     # satserna en och en och hoppa över redan tillagda
                     # kolumner i stället för att fallera hela migreringen.
                     for stmt in sql.split(";"):
@@ -2203,7 +2231,8 @@ def set_bok_register(conn: sqlite3.Connection, bok_id: int,
 
 def save_bok_sida(conn: sqlite3.Connection, bok_id: int, sida: int, *,
                   pdf_sida: int | None = None, avsnitt: str | None = None,
-                  rubrik: str | None = None, text: str | None = None) -> None:
+                  rubrik: str | None = None, text: str | None = None,
+                  nivasystem: str | None = None) -> None:
     """En läst sida. Faktapasset skriver sidnummer/avsnitt, textpasset texten —
     därför skrivs bara de fält som faktiskt har ett värde: ett faktapass som
     körs om ska inte radera en text som redan kostat 96 sekunder."""
@@ -2211,30 +2240,35 @@ def save_bok_sida(conn: sqlite3.Connection, bok_id: int, sida: int, *,
     with conn:
         conn.execute(
             "INSERT INTO bok_sidor(bok_id, sida, pdf_sida, avsnitt, rubrik, text, "
-            "last_at) VALUES (?, ?, ?, ?, ?, ?, ?) "
+            "nivasystem, last_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT(bok_id, sida) DO UPDATE SET "
             "pdf_sida = COALESCE(excluded.pdf_sida, pdf_sida), "
             "avsnitt = COALESCE(excluded.avsnitt, avsnitt), "
             "rubrik = COALESCE(excluded.rubrik, rubrik), "
-            "text = COALESCE(excluded.text, text), last_at = excluded.last_at",
-            (bok_id, int(sida), pdf_sida, avsnitt, rubrik, text, nu))
+            "text = COALESCE(excluded.text, text), "
+            "nivasystem = COALESCE(excluded.nivasystem, nivasystem), "
+            "last_at = excluded.last_at",
+            (bok_id, int(sida), pdf_sida, avsnitt, rubrik, text, nivasystem, nu))
 
 
 def save_bok_uppgifter(conn: sqlite3.Connection, bok_id: int,
                        uppgifter: list[dict]) -> None:
     with conn:
         conn.executemany(
-            "INSERT INTO bok_uppgifter(bok_id, nr, sida, niva) VALUES (?, ?, ?, ?) "
+            "INSERT INTO bok_uppgifter(bok_id, nr, sida, niva, nivamarke) "
+            "VALUES (?, ?, ?, ?, ?) "
             "ON CONFLICT(bok_id, nr) DO UPDATE SET sida = excluded.sida, "
-            "niva = COALESCE(excluded.niva, niva)",
-            [(bok_id, int(u["nr"]), u.get("sida"), u.get("niva"))
+            "niva = COALESCE(excluded.niva, niva), "
+            "nivamarke = COALESCE(excluded.nivamarke, nivamarke)",
+            [(bok_id, int(u["nr"]), u.get("sida"), u.get("niva"),
+              u.get("nivamarke"))
              for u in uppgifter if str(u.get("nr", "")).strip().isdigit()])
 
 
 def bok_sidor(conn: sqlite3.Connection, bok_id: int, fran: int, till: int,
               *, med_text: bool = True) -> list[dict]:
-    kol = "sida, pdf_sida, avsnitt, rubrik, text" if med_text \
-        else "sida, pdf_sida, avsnitt, rubrik"
+    kol = "sida, pdf_sida, avsnitt, rubrik, nivasystem, text" if med_text \
+        else "sida, pdf_sida, avsnitt, rubrik, nivasystem"
     return [dict(r) for r in conn.execute(
         f"SELECT {kol} FROM bok_sidor WHERE bok_id = ? AND sida BETWEEN ? AND ? "
         "ORDER BY sida", (bok_id, int(fran), int(till))).fetchall()]
@@ -2242,7 +2276,7 @@ def bok_sidor(conn: sqlite3.Connection, bok_id: int, fran: int, till: int,
 
 def bok_uppgifter(conn: sqlite3.Connection, bok_id: int,
                   fran: int | None = None, till: int | None = None) -> list[dict]:
-    sql = "SELECT nr, sida, niva FROM bok_uppgifter WHERE bok_id = ?"
+    sql = "SELECT nr, sida, niva, nivamarke FROM bok_uppgifter WHERE bok_id = ?"
     params: list = [bok_id]
     if fran is not None and till is not None:
         sql += " AND sida BETWEEN ? AND ?"
