@@ -1,6 +1,15 @@
-# Allt appen importerar direkt. Listan är komplett: pypdfium2 saknades trots
-# att tryckpaketet, bokimporten och PDF-underlaget importerar den — en ny
-# installation kraschade först när läraren tryckte «Skriv ut».
+# Allt appen behöver — inte bara det den importerar med namn.
+#
+# Två gånger nu har listan sett komplett ut och inte varit det. Först
+# pypdfium2, som tryckpaketet, bokimporten och PDF-underlaget importerar rakt
+# av: en ny installation kraschade när läraren tryckte «Skriv ut». Sedan
+# pillow, som INGEN av våra filer importerar — pypdfium2 gör det lazily när den
+# lämnar ut en sida som bild. Den fanns på utvecklarmaskinen (torchvision och
+# matplotlib drar in den) och saknades i CI, som föll på
+# «ModuleNotFoundError: No module named 'PIL'».
+#
+# Lärdomen: en grep efter `import` räcker inte. Det som avgör är vad en TOM
+# maskin behöver, och den frågan besvaras av CI:s beroendejobb, inte av oss.
 
 # Servern
 fastapi
@@ -9,6 +18,8 @@ pydantic            # schemana: exam_spec, whiteboard_spec
 jinja2              # prov- och arbetsbladsmallarna (app/templates/*.tex.j2)
 httpx               # molnanropet (OpenAI) och testklienten
 pywebview           # skrivbordsskalet (modulen heter webview)
+starlette           # server.py använder den direkt, inte bara via fastapi
+anyio               # sse.py väntar på kön i en tråd utan att blockera slingan
 
 # Ljudet och tiderna
 torch
@@ -19,6 +30,7 @@ numpy
 
 # Filer in och ut
 pypdfium2           # tryckpaketet, bokimporten, PDF-underlaget
+pillow              # pypdfium2 lämnar ut sidbilder som PIL-objekt (lazy import)
 yt-dlp
 requests
 

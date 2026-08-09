@@ -32,6 +32,11 @@ models/
 *.png
 # Ikonernas källbilder är undantagna: utan dem går .ico-filerna inte att bygga om.
 !assets/*.png
+# Frontendens egna bilder likaså. `*.png` är till för lärarens media, men den
+# svalde också appens bakgrund: molnen låg på utvecklarens disk och INTE i
+# repot, så varje klon — och varje CI-körning — fick en app som svarade 404 på
+# sin egen bakgrund. Det var det som fällde apans konsolvakt i CI.
+!app/web/ui/assets/**/*.png
 
 # Genererade transkript
 *.srt
