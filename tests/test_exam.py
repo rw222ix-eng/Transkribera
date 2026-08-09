@@ -591,8 +591,8 @@ def test_genomforbarhet_arbetsblad_ar_tillatande():
 
 
 def test_smafallsregeln_kraver_en_formaga_per_uppgift():
-    """Under sex poängbärande enheter kan det jämna bandet inte gälla — då
-    kräver täckningsregeln i stället att varje enhet bär sin egen förmåga."""
+    """Under sex FÖRMÅGEBÄRARE kan det jämna bandet inte gälla — då kräver
+    täckningsregeln i stället att varje bärare bär sin egen förmåga."""
     # Nivåerna hålls innanför arbetsbladets band (E 40–85 %) så att det ENDA
     # som kan fälla bladet är förmågetäckningen.
     def blad(formagor):
@@ -604,11 +604,13 @@ def test_smafallsregeln_kraver_en_formaga_per_uppgift():
 
     _d, fel = exam_spec.validate_exam_json(blad(["P", "P", "P"]), "arbetsblad")
     assert [e["code"] for e in fel] == ["formagabalans"]
-    assert "3 poängbärande enheter täcker bara 1" in fel[0]["message"]
+    assert "3 uppgifter täcker bara 1 förmågor" in fel[0]["message"]
     _d, rent = exam_spec.validate_exam_json(blad(["P", "B", "M"]), "arbetsblad")
     assert rent == []
-    # Deluppgifter räknas som egna enheter: två uppgifter kan bära fyra
-    # förmågor, och då mäts täckningen mot fyra.
+    # Deluppgifter som deklarerar EGEN förmåga är egna bärare: två uppgifter
+    # kan bära fyra förmågor, och då mäts täckningen mot fyra. (En deluppgift
+    # som ÄRVER förälderns förmåga är däremot ingen ny bärare — se
+    # test_arvande_deluppgifter_hojer_inte_kravet nedan.)
     med_del = {"titel": "x", "kurs": "Ma2b", "hjalpmedel": "x", "uppgifter": [
         {"del": None, "formaga": "P", "typ": "rutin", "poang": [0, 0, 0],
          "text": "Stam.", "deluppgifter": [
@@ -1652,7 +1654,7 @@ def test_skelettet_ar_balanserat_for_alla_storlekar_och_profiler(antal, profil):
     doc = exam_spec._skeleton_doc(sk)
     assert exam_spec.validate_balance(doc, profil=profil) == []
     s = exam_spec.poangsummor(doc)
-    if antal >= exam_spec.MIN_ENHETER_FOR_BAND:
+    if antal >= exam_spec.MIN_BARARE_FOR_BAND:
         assert all(s["formagor"][f] > 0 for f in exam_spec.FORMAGA_NAMN)
     else:
         assert sum(1 for p in s["formagor"].values() if p > 0) >= antal
@@ -1716,3 +1718,41 @@ def test_np_tripplarna_har_ratt_karaktar():
         assert tripplar
         for t in tripplar:
             assert exam_spec._karaktar(list(t)) == kar, (kar, t)
+
+
+def test_arvande_deluppgifter_hojer_inte_kravet():
+    """Fyndet ur den skarpa gruppuppgiftsinspelningen: fyra uppgifter, två av
+    dem delade i deluppgifter som ÄRVER förälderns förmåga. Sex poängbärande
+    enheter — men fortfarande bara fyra förmågor att fördela, för en ärvande
+    deluppgift lägger till en poängpost och inte en bärare. Bandet slog ändå
+    till och krävde alla sex täckta, vilket dokumentet aldrig kunde leverera:
+    uppgiftsplanen hade fyra rader och modellen följde den exakt."""
+    def uppg(formaga, poang, delar=None):
+        u = {"del": None, "formaga": formaga, "typ": "problem",
+             "text": "Uppgift.", "poang": [0, 0, 0] if delar else poang,
+             "losning": "" if delar else "L.", "bedomning": "" if delar else "B."}
+        if delar:
+            u["deluppgifter"] = [{"poang": p, "text": "del", "losning": "L.",
+                                  "bedomning": "B."} for p in delar]
+        return u
+
+    doc = {"titel": "x", "kurs": "Ma2b", "hjalpmedel": "x", "grupp": {
+        "elever": 3, "langd_min": 45, "redovisning": "muntligt"}, "uppgifter": [
+            uppg("P", [2, 0, 0]),
+            uppg("B", None, [[0, 1, 0], [0, 1, 0]]),
+            uppg("M", None, [[1, 0, 0], [0, 1, 0]]),
+            uppg("PL", [0, 0, 1])]}
+    d, fel = exam_spec.validate_exam_json(doc, "gruppuppgift")
+    assert d is not None
+    assert exam_spec.formagebarare(d) == 4, "ärvande deluppgifter räknades som bärare"
+    assert [e for e in fel if e["code"] == "formagabalans"] == [], fel
+
+    # Deklarerar deluppgifterna EGNA förmågor är de däremot bärare — och då
+    # höjs kravet. Två deluppgifter som båda tar Procedur ger fem bärare men
+    # bara tre täckta förmågor, och det ska fällas.
+    doc2 = json.loads(json.dumps(doc))
+    for d_ in doc2["uppgifter"][1]["deluppgifter"]:
+        d_["formaga"] = "P"
+    d2, fel2 = exam_spec.validate_exam_json(doc2, "gruppuppgift")
+    assert exam_spec.formagebarare(d2) == 5
+    assert any(e["code"] == "formagabalans" for e in fel2), fel2

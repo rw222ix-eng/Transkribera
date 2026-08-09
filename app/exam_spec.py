@@ -407,7 +407,7 @@ def to_response_format(antal: int | None = None,
 #
 # Banden är STARTvärden och ska justeras efter kassettutfall, inte efter tycke.
 # Bandet kan bara gälla när dokumentet är stort nog att bära sex förmågor —
-# under den gränsen tar täckningsregeln vid (se MIN_ENHETER_FOR_BAND).
+# under den gränsen tar täckningsregeln vid (se MIN_BARARE_FOR_BAND).
 #
 # NIVÅERNA: bara provet följer nationella provets fördelning (lärarens andra
 # krav). Måltalen hämtas ur mätningen i app/niva_rubrik och bor DÄR, inte här:
@@ -531,33 +531,49 @@ def gruppera_per_del(uppgifter: list[ExamItem]
     return grupper
 
 
-# Under så här många poängbärande enheter är det jämna bandet omöjligt: fem
-# enheter kan inte fördela poäng på sex förmågor, och en enda enhet skulle
-# behöva ligga på 100 % av EN förmåga. Då gäller täckningsregeln i stället.
-MIN_ENHETER_FOR_BAND = len(FORMAGA_NAMN)
+# Under så här många FÖRMÅGEBÄRARE är det jämna bandet omöjligt: fem bärare kan
+# inte fördela poäng på sex förmågor, och en enda skulle behöva ligga på 100 %
+# av EN förmåga. Då gäller täckningsregeln i stället.
+MIN_BARARE_FOR_BAND = len(FORMAGA_NAMN)
 
 
-def _smafallsregeln(s: dict, antal_enheter: int) -> list[dict]:
-    """Täckningsregeln för små dokument: varje enhet ska bära SIN EGEN förmåga.
+def formagebarare(doc: ExamDoc) -> int:
+    """Hur många förmågor dokumentet ÖVER HUVUD TAGET kan bära.
+
+    Inte samma sak som antalet poängbärande enheter, och skillnaden hittades av
+    en skarp inspelning: en gruppuppgift på fyra uppgifter delade två av dem i
+    deluppgifter som ÄRVDE förälderns förmåga. Sex enheter, alltså — men
+    fortfarande bara fyra förmågor att fördela, eftersom en ärvande deluppgift
+    lägger till en poängpost och inte en förmåga. Bandet slog till och krävde
+    sex täckta, vilket dokumentet aldrig kunde leverera; uppgiftsplanen hade
+    fyra rader och modellen följde den exakt.
+
+    En uppgift bär alltså en förmåga, utom när dess deluppgifter deklarerar
+    egna: då bär den så många som deluppgifterna deklarerar."""
+    n = 0
+    for it in doc.uppgifter:
+        egna = sum(1 for d in (it.deluppgifter or []) if d.formaga)
+        n += max(1, egna)
+    return n
+
+
+def _smafallsregeln(s: dict, barare: int) -> list[dict]:
+    """Täckningsregeln för små dokument: varje bärare ska bära SIN EGEN förmåga.
 
     Regeln är bandets lillebror. Bandet säger «ingen förmåga får sakna poäng»
-    (golvet är > 0 i alla tre profilerna); med färre enheter än förmågor går det
+    (golvet är > 0 i alla tre profilerna); med färre bärare än förmågor går det
     inte, så kravet blir i stället att så många förmågor som möjligt täcks —
-    en förmåga får saknas per påbörjat underskott. Fyra enheter ska alltså ligga
-    på fyra olika förmågor, inte tre på samma.
-
-    Deluppgifter räknas som egna enheter (poangenheter räknar löv), så en uppgift
-    med två deluppgifter kan bära två förmågor. Därför mäts regeln på ENHETER
-    och inte på antalet uppgifter."""
+    en förmåga får saknas per påbörjat underskott. Fyra bärare ska alltså ligga
+    på fyra olika förmågor, inte tre på samma."""
     tackta = [f for f, p in s["formagor"].items() if p > 0]
-    kravs = min(len(FORMAGA_NAMN), antal_enheter)
+    kravs = min(len(FORMAGA_NAMN), barare)
     if len(tackta) < kravs:
         saknas = [f for f in FORMAGA_NAMN if f not in tackta]
         return [_err("uppgifter", "formagabalans",
-                     f"{antal_enheter} poängbärande enheter täcker bara "
-                     f"{len(tackta)} förmågor ({', '.join(tackta)}) — med så få "
-                     f"uppgifter ska varje uppgift bära sin egen förmåga, så "
-                     f"{kravs} ska vara täckta. Saknas: {', '.join(saknas)}.")]
+                     f"{barare} uppgifter täcker bara {len(tackta)} förmågor "
+                     f"({', '.join(tackta)}) — med så få uppgifter ska varje "
+                     f"uppgift bära sin egen förmåga, så {kravs} ska vara "
+                     f"täckta. Saknas: {', '.join(saknas)}.")]
     return []
 
 
@@ -596,8 +612,8 @@ def validate_balance(doc: ExamDoc,
                                f"{niva.upper()}-poängen är {andel:.0%} av totalen — "
                                f"målet är {lo:.0%}–{hi:.0%}."))
 
-    antal_enheter = sum(len(poangenheter(it)) for it in doc.uppgifter)
-    if antal_enheter >= MIN_ENHETER_FOR_BAND:
+    barare = formagebarare(doc)
+    if barare >= MIN_BARARE_FOR_BAND:
         for f, (lo, hi) in fm.items():
             andel = s["formagor"][f] / total
             if andel < lo or andel > hi:
@@ -605,7 +621,7 @@ def validate_balance(doc: ExamDoc,
                                    f"{FORMAGA_NAMN[f]} ({f}) har {andel:.0%} av poängen — "
                                    f"målet är {lo:.0%}–{hi:.0%}."))
     else:
-        errors.extend(_smafallsregeln(s, antal_enheter))
+        errors.extend(_smafallsregeln(s, barare))
 
     typer = {t for it in doc.uppgifter for _f, t, _p in poangenheter(it)}
     if "rutin" not in typer:
@@ -965,7 +981,7 @@ def _straff(slots: list[dict], profil: str) -> float:
         return 0.1 + avstand ** 2 if avstand > 0 else 0.0
 
     straff = sum(utanfor(s[n] / total, prof_nm[n]) for n in ("e", "c", "a"))
-    if len(slots) >= MIN_ENHETER_FOR_BAND:
+    if len(slots) >= MIN_BARARE_FOR_BAND:
         straff += sum(utanfor(s["formagor"][f] / total, prof_fm[f])
                       for f in prof_fm)
         # Bandet är kravet, jämnheten är önskemålet: en tiondels vikt på
