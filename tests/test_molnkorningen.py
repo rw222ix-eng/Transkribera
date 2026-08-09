@@ -10,7 +10,7 @@ Det som prövas är löftena i vägen ut till skärmen:
   * kostnaden kommer ur det API:et debiterar, aldrig ur filens längd,
   * ett tillfälligt fel kostar en paus och inte lektionen,
   * ett fel som inte går över blir ett svenskt besked med en väg vidare,
-  * framsteget går bara framåt, med och utan ljudrättningspasset,
+  * framsteget går bara framåt,
   * inget halvfärdigt hamnar i historiken.
 """
 from __future__ import annotations
@@ -65,14 +65,13 @@ def rigg(tmp_path, monkeypatch):
     media = tmp_path / "lektion.mp3"
     media.write_bytes(b"ljud")
 
-    def kor(*, langd=700.0, lagen="ok", audio_correct=False):
+    def kor(*, langd=700.0, lagen="ok"):
         """En körning. `lagen` är ett läge per ljudbit (fejk.Moln)."""
         moln = Moln(lagen).installera(monkeypatch)
         monkeypatch.setattr(server.media_mod, "probe_duration", lambda *_: langd)
         c = TestClient(server.create_app(base_dir=tmp_path, arbiter=arb))
         r = c.post("/api/transcribe", json={
-            "source": str(media), "language": "sv", "formats": ["srt"],
-            "audio_correct": audio_correct})
+            "source": str(media), "language": "sv", "formats": ["srt"]})
         return c, r, moln
 
     kor.arb = arb
@@ -201,28 +200,3 @@ def test_framsteget_gar_bara_framat(rigg):
     # Molnets band är 0–45: tre bitar ska synas som tre steg inom det.
     molnband = [p for p in pct if p <= 45]
     assert len(molnband) >= 3
-
-
-def test_framsteget_gar_bara_framat_ocksa_med_rattningspasset(rigg, monkeypatch):
-    """Andra passet nollställde förr baren och klättrade 0→100 en andra gång."""
-    monkeypatch.setattr(server.audio_model, "is_audio_model_installed",
-                        lambda *_: True)
-
-    def fejkat_pass(cmd, base, emit, on_proc=None, progress_scale=1.0,
-                    progress_base=0.0):
-        # Passet räknar 0→100 i sin EGEN skala; servern skalar in det i sitt
-        # band. Gör den inte det klättrar baren en andra gång från noll.
-        for p in (0, 50, 100):
-            emit({"type": "progress",
-                  "pct": int(progress_base + p * progress_scale)})
-        if on_proc:
-            on_proc(None)
-        return ["ut.srt"], [{"start": 0.0, "end": 1.0, "text": "hej"}]
-    monkeypatch.setattr(server, "_run_transcribe_subprocess", fejkat_pass)
-
-    c, r, moln = rigg(langd=700.0, audio_correct=True)
-    pct = _pcts(r.text)
-    assert pct == sorted(pct), pct
-    # Rättningspassets band är 60–90: syns det inte kördes passet aldrig, och
-    # då bevisar testet ingenting.
-    assert any(60 <= p <= 90 for p in pct), pct

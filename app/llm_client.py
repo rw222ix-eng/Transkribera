@@ -142,7 +142,7 @@ def _schema_ur(response_format: dict | None) -> dict | None:
 
 def chat(model: str, messages: list[dict], transcript: str = "",
          token_cb: Callable[[str], None] | None = None,
-         base_url: str | None = None, think: bool = False,
+         base_url: str | None = None,
          images: list[str] | None = None,
          reason_cb: Callable[[str], None] | None = None,
          cite: bool = False,
@@ -162,7 +162,7 @@ def chat(model: str, messages: list[dict], transcript: str = "",
 def generate(model: str, prompt: str,
              token_cb: Callable[[str], None] | None = None,
              base_url: str | None = None, system: str | None = None,
-             options: dict | None = None, think: bool = False,
+             options: dict | None = None,
              response_format: dict | None = None,
              max_tokens: int | None = None) -> str:
     """En fråga, ett svar.

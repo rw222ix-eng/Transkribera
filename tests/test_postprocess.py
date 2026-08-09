@@ -321,10 +321,10 @@ def test_cleanup_chunkas_sa_att_prompt_plus_svar_ryms_i_kontexten(monkeypatch):
 
 
 def test_expand_search_terms_parses_and_cleans(monkeypatch):
-    """Modellsvaret städas: resonemangsblock, dubbletter, småord och skräp
-    bort — kvar blir en ren svensk ordlista för omsökningen."""
+    """Modellsvaret städas: dubbletter, småord och skräp bort — kvar blir en
+    ren svensk ordlista för omsökningen."""
     monkeypatch.setattr(pp.llm_client, "generate", lambda *a, **k: (
-        "<think>hm, geometri …</think>triangel, vinkel, Pythagoras sats, "
+        "triangel, vinkel, Pythagoras sats, "
         "area,\nomkrets, Triangel, x!, av, rätvinklig triangel"))
     ord_ = pp.expand_search_terms("nämns geometri?", "m")
     assert "triangel" in ord_ and "Pythagoras sats" in ord_

@@ -811,7 +811,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
         def job(emit):
             try:
                 # Live-progressionens riktiga händelser (spec 2026-07-18) —
-                # före modellstarten, så kartoteket spelar medan Qwen laddar.
+                # före modellfrågan, så kartoteket spelar medan svaret dröjer.
                 emit({"type": "scan_plan", "total": len(scan), "items": [
                     {"key": s["key"], "name": s["name"]} for s in scan]})
                 for s in scan:
