@@ -223,7 +223,24 @@ def create_router(base: Path, arbiter) -> APIRouter:
     # Pågående planeringar (Fas 1): id -> {board, errors, rounds, titel-fält}.
     # Processlokalt av samma skäl som transcribe-jobben — appen är en lokal
     # enanvändarapp; Fas 3 flyttar godkända tavlor till SQLite.
+    #
+    # TAKAT sedan soaknatten 2026-08-08. Posterna lades in och togs aldrig bort:
+    # varje genererad tavla lämnade hela sin JSON kvar för processens livstid.
+    # Det var läckan soaken larmade om — 0,3 MB per varv, 136 MB över en natt,
+    # utan platå. Läraren som startar appen i augusti och stänger den i juni
+    # betalar samma sak, långsammare.
+    #
+    # Femtio räcker: pid:t används av render-report, iterationen, chatten och
+    # godkännandet — alla på tavlan som ligger under händerna just nu, inte på
+    # en från i förrgår.
     plannings: dict[str, dict] = {}
+    MAX_PLANERINGAR = 50
+
+    def spara_planering(pid: str, st: dict) -> None:
+        plannings[pid] = st
+        while len(plannings) > MAX_PLANERINGAR:
+            # dict behåller insättningsordning — den äldsta ligger först.
+            plannings.pop(next(iter(plannings)))
 
     def _names(group_id, course_id) -> tuple[str, str]:
         group = course = ""
@@ -442,12 +459,12 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     log_cb=lambda m: emit({"type": "log", "msg": m}),
                     token_cb=lambda t: emit({"type": "token", "text": t}))
                 pid = uuid.uuid4().hex[:12]
-                plannings[pid] = {
+                spara_planering(pid, {
                     "board": res["board"], "rounds": res["rounds"],
                     "moment": moment, "group": group, "course": course,
                     "group_id": group_id, "course_id": course_id,
                     "datum": datum, "starttid": starttid,
-                }
+                })
                 return {"id": pid, "board": res["board"],
                         "errors": res["errors"], "rounds": res["rounds"]}
             finally:

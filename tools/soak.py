@@ -170,6 +170,13 @@ def skriv_minne(d: dict) -> None:
     if fler:
         print("      fler objekt: "
               + ", ".join(f"{t['typ']} +{t['fler']}" for t in fler), flush=True)
+    print(f"      hållare: {d.get('koer')} köer, {d.get('tradobjekt')} trådobjekt, "
+          + ", ".join(f"{n}×{a}" for n, a in (d.get("levande_generatorer") or [])),
+          flush=True)
+    for k in (d.get("kedjor") or []):
+        print(f"      kedja +{k['mb']:.2f} MB ({k['antal']} st):", flush=True)
+        for rad in (k["egna"] or k["hela"]):
+            print(f"        {rad}", flush=True)
 
 
 def kor_varv(spec: str, grep: str = "") -> tuple[bool, float]:

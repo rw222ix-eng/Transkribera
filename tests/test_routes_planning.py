@@ -119,6 +119,30 @@ def test_generate_requires_moment(llm_ready):
     assert r.status_code == 400
 
 
+def test_planeringarna_ar_takade(llm_ready, monkeypatch):
+    """Soaknatten 2026-08-08: `plannings` fick en post per genererad tavla och
+    tappade aldrig någon. Hela tavlans JSON blev kvar för processens livstid —
+    0,3 MB per soakvarv, utan platå. Appen startas i augusti och stängs i juni.
+
+    Taket får inte ta den tavla läraren arbetar med; den nyaste ska leva.
+    """
+    _stub_generate(monkeypatch, {"board": _valid_board(), "errors": [], "rounds": 1})
+    ider = []
+    for i in range(55):
+        r = llm_ready.post("/api/planning/generate", json={"moment": f"moment {i}"})
+        ider.append(_done(r)["id"])
+
+    assert llm_ready.post(f"/api/planning/{ider[-1]}/render-report",
+                          json={"warnings": []}).status_code == 200
+    assert llm_ready.post(f"/api/planning/{ider[0]}/render-report",
+                          json={"warnings": []}).status_code == 404
+    # Femtio kvar, inte femtiofem — och det är de femtio senaste.
+    assert llm_ready.post(f"/api/planning/{ider[-50]}/render-report",
+                          json={"warnings": []}).status_code == 200
+    assert llm_ready.post(f"/api/planning/{ider[-51]}/render-report",
+                          json={"warnings": []}).status_code == 404
+
+
 def test_generate_streams_board_and_stores_planning(llm_ready, monkeypatch):
     board = _valid_board()
     calls = _stub_generate(monkeypatch,

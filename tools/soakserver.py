@@ -50,6 +50,36 @@ def _typer() -> Counter:
     return Counter(type(o).__name__ for o in gc.get_objects())
 
 
+# Misstänkta hållare. Kedjan visade att det som växer skapas inne i ett
+# SSE-jobb (sse.py:40) — och ett jobbs resultat kan bara bli kvar om något
+# fortfarande pekar på det: kön det lades i, tråden som körde det, eller
+# generatorn som skulle ha strömmat ut det men aldrig tömdes. Räkna dem.
+def _hallare() -> dict:
+    import queue
+    import threading
+    import types
+
+    koer = trad = 0
+    gen: Counter = Counter()
+    for o in gc.get_objects():
+        t = type(o)
+        if t is queue.Queue:
+            koer += 1
+        elif t is types.GeneratorType:
+            try:
+                namn = o.gi_code.co_qualname
+            except AttributeError:
+                continue
+            # Bara de som står STILLA mitt i sin kropp (gi_frame kvar) — en
+            # uttömd generator har ingen ram och håller ingenting.
+            if o.gi_frame is not None:
+                gen[namn] += 1
+        elif isinstance(o, threading.Thread):
+            trad += 1
+    return {"koer": koer, "tradobjekt": trad,
+            "levande_generatorer": gen.most_common(6)}
+
+
 def _rss_mb() -> float:
     try:
         import psutil
@@ -78,7 +108,8 @@ def montera(app) -> None:
                 # objekt som väger lite men är många — och skiljer «Python
                 # samlar på sig» från «C-biblioteken gör det»: växer blocken
                 # inte, är bytesen inte Pythons.
-                "block": sys.getallocatedblocks()}
+                "block": sys.getallocatedblocks(),
+                **_hallare()}
         if bas or _bas is None:
             _bas, _bas_typer = nu, typer
             svar["bas"] = True
@@ -90,6 +121,20 @@ def montera(app) -> None:
         svar["typer"] = [
             {"typ": t, "fler": typer[t] - _bas_typer.get(t, 0)}
             for t, _n in (typer - _bas_typer).most_common(topp)]
+        # Allokeringsplatsen säger var objekten SKAPADES — «json/decoder.py:354»
+        # är sant om varje parsad JSON i appen och pekar inte ut någon. Kedjan
+        # säger vem som bad om dem, och det är den frågan som går att åtgärda.
+        # Appens egna rutor lyfts fram; stdlib och site-packages ligger kvar men
+        # sist, för det är sällan där felet bor.
+        svar["kedjor"] = []
+        for s in nu.compare_to(_bas, "traceback")[:3]:
+            if s.size_diff <= 0:
+                break
+            rutor = [f"{f.filename}:{f.lineno}" for f in s.traceback]
+            egna = [r for r in rutor if "Transkribera" in r and "site-packages" not in r]
+            svar["kedjor"].append({"mb": round(s.size_diff / 1e6, 2),
+                                   "antal": s.count_diff,
+                                   "egna": egna[:8], "hela": rutor[:6]})
         return svar
 
     # Frontenden monteras på "/" SIST inne i create_app, och en Mount på "/"
