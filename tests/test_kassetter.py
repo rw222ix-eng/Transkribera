@@ -117,8 +117,13 @@ def test_nivadomen_ur_kassetten_gar_hela_vagen(fejk_claude, dokument, domarband)
     Ett band per dokumenttyp, alla tre SKARPA. Domaren fick uppgifterna utan
     poäng och utan bedömningsanvisningar, och det som prövas här är att domen
     kommer hela vägen tillbaka och går att para ihop med rätt uppgift — inte
-    att den håller med. Den fäller två av tjugosex enheter över de tre banden,
-    och båda fällningarna är rimliga (planens C7, punkt 4)."""
+    att den håller med.
+
+    Fällningarna räknas om vid varje omspelning. Efter Del F:s våg
+    (2026-08-09) fäller den EN av tjugoen enheter — gruppuppgiftens hitta-felet-
+    deluppgift, som är poängsatt C och bedöms som E — mot två av tjugosex före
+    vågen. Ingen «oklart» i något band, precis som förut: toleransen bärs av
+    tystnad, inte av att domaren hedgar (planens C7, punkt 4)."""
     fejk_claude(kassett=domarband)
     exam = exam_gen._parse_exam(json.loads(
         fejk.las_kassett(dokument)["rader"][-1])["result"])

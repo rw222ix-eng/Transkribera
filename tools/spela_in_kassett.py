@@ -71,7 +71,9 @@ SCENARIER = {
         "schema": lambda: None,
     },
     "gruppuppgift": {
-        "vad": ("exam_gen.generate_exam (profil gruppuppgift) — fyra ingångar "
+        # «Fyra ingångar» stod här förut. Lärarens skarpa lektion (Del F, dom 1)
+        # gjorde gruppuppgiften till en stegring i stället.
+        "vad": ("exam_gen.generate_exam (profil gruppuppgift) — en stegring "
                 "och ett upplägg"),
         "prompt": lambda: exam_gen.build_prompt(
             "Matematik, nivå 2c", "NA25", ["Andragradsfunktioner"],

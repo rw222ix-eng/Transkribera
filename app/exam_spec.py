@@ -361,7 +361,12 @@ class ExamDoc(_Model):
     # den som gör att alla grupper kommer igång: frågan är momentets, svaret är
     # elevens. Bara gruppuppgiften trycker den — den står efter arbetsregeln i
     # instruktionsbandet, som en fråga och inte som en genomgång.
-    nyckelfraga: str | None = None
+    #
+    # Taket är MÄTT, inte satt: förlagans egen instruktionsruta är ~150 tecken,
+    # och den första skarpa inspelningen med fältet gav 320 — tre frågor i
+    # stället för en, fetstilta i en liten ruta överst på pappret. Rutan är det
+    # gruppen läser när de fastnar; blir den ett stycke läses den inte alls.
+    nyckelfraga: str | None = Field(default=None, max_length=240)
     # Bara gruppuppgiften har den; prov och arbetsblad lämnar den tom.
     grupp: GruppUpplagg | None = None
     uppgifter: list[ExamItem] = Field(min_length=1)

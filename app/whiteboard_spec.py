@@ -541,6 +541,10 @@ _MAX_ITEM_CHARS = 80
 # varav ~290 är sammanfattningen, som i WB-JSON blir en table och inte räknas.
 # 400 lämnar alltså gott om luft för en tät men skrivbar tavla och fäller den
 # som blivit ett föredrag.
+#
+# Och den kostar inga rundor. Omspelningen efter Del F (2026-08-09) gav en
+# skarp tavla på 154 respektive 26 tecken — med en table-sektion på högertavlan
+# — och den gick igenom på EN runda, precis som före budgeten.
 _MAX_BOARD_TEXT = 400
 _ASPECT_TOLERANCE = 0.15  # motorn varnar vid >15 % avvikelse
 _VERTEX_EPS = 1e-6

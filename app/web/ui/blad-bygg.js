@@ -150,8 +150,11 @@ window.BladBygg = (() => {
     return `<div class="gu" data-form="${form}">
       <div class="guhuv"><h1 class="gutitel">${esc(versal(v.moment || o.titel || ''))}</h1></div>
       <div class="gutopp">${rad.repeat(namnrader)}</div>
+      ${/* Nyckelfrågan bär ofta matematik ($x = -b/(2a)$) — den ska sättas,
+             inte visas som dollartecken. Pappret gör det (escape_mixed), och
+             skärmen ska lova gruppen samma sak. */''}
       <div class="guband">${esc(BAND[v.typ] || BAND.Arbetsblad)}${
-        v.nyckelfraga ? ` <b>${esc(v.nyckelfraga)}</b>` : ''}</div>
+        v.nyckelfraga ? ` <b>${mat(v.nyckelfraga)}</b>` : ''}</div>
       ${uppgifter.map((u, k) => kort(u, k, !!i.illustration)).join('')}
     </div>`;
   }
