@@ -32,6 +32,19 @@ export default defineConfig({
    * hundratals SESSIONER, aldrig samtidiga. Serialiserat är alltså också
    * sannare. */
   workers: 1,
+  /* Playwrights standardgräns är 30 s och är satt för rena UI-test. Sviten kör
+   * appens riktiga server: generering, validering, reparationsrundor och
+   * Tectonic. Dag 3 behövde redan sätta 240 s för hand.
+   *
+   * På GitHubs windows-runner föll tre test på just 30 s (2026-08-09) medan
+   * samma test tar sekunder här — och dag 4 föll likadant på den här maskinen
+   * när soaken körde tracemalloc bredvid. Det är maskinens hastighet som
+   * avgör, inte koden.
+   *
+   * OBS att detta är en gräns, inte en väntan: en grön körning blir inte en
+   * sekund långsammare av att taket höjs. Blir ett test konsekvent 60 s är det
+   * något annat, och då syns det i körningstiderna. */
+  timeout: 90_000,
   forbidOnly: !!process.env.CI,
   reporter: [["list"]],
   use: {
