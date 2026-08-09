@@ -47,7 +47,10 @@ INSTRUCTION = (
     "PL Problemlösning, M Modellering, R Resonemang, K Kommunikation.\n"
     "- typ: rutin (endast svar), redovisning (fullständig lösning), "
     "problem (flersteg) eller resonemang.\n"
-    "- poang: [E, C, A] enligt NP-notationen, t.ex. [2, 1, 0].\n"
+    "- poang: [E, C, A] enligt NP-notationen, t.ex. [2, 1, 0]. En uppgift vars "
+    "förmåga är K (Kommunikation) får ALDRIG E-poäng — dess poäng ser ut som "
+    "[0, 1, 0] eller [0, 1, 1]. Skriftlig kommunikation bedöms inte på E-nivå "
+    "för enskilda uppgifter; den som klarar E i övrigt anses redovisa nog.\n"
     "- text: uppgiftstexten. Matematik skrivs inom $…$ (t.ex. "
     "$x^2 - 4x + 3 = 0$); övrig text är vanlig svenska utan LaTeX-kommandon.\n"
     "- losning: kort lösningsförslag för läraren (samma $-regel).\n"
@@ -60,6 +63,11 @@ INSTRUCTION = (
     "deluppgift har egen poang, text, losning och bedomning (och får ha egen "
     "formaga/typ). Blanda inte in deluppgifter i rutinuppgifter — de passar "
     "redovisnings-, problem- och resonemangsuppgifter. En nivå djupt.\n"
+    "  En deluppgift får BARA bära fälten poang, text, losning, bedomning, "
+    "formaga, typ, enhet, notis, alternativ, ratt_alternativ, tabell, "
+    "stegtabell och svarsrutor. Fälten del, innehall, sekundara, bild, figur, "
+    "elevlosningar och deluppgifter hör till UPPGIFTEN och får aldrig stå inne "
+    "i en deluppgift — de gäller hela uppgiften, inte en av dess frågor.\n"
     "- alternativ + ratt_alternativ: gör en uppgift ELLER deluppgift till "
     "flervalsfråga med minst tre alternativ (matte inom $…$) och "
     "ratt_alternativ som 0-baserat index på det rätta — aldrig på en uppgift "
@@ -104,7 +112,8 @@ INSTRUCTION = (
     "inte gav något, aldrig ett ensamt tal. Summan av partiernas "
     "poäng får inte överstiga uppgiftens. De hör till BEDÖMNINGEN — eleven ser "
     "dem aldrig — och är värda att skriva på den uppgift där gränsen mellan "
-    "poängen är svårast att dra.\n"
+    "poängen är svårast att dra. Har uppgiften deluppgifter sätts fältet på "
+    "FÖRÄLDERN och lösningarna visar hela uppgiften.\n"
     "Exempel på en uppgift MED deluppgifter (förälderns poang är [0, 0, 0]):\n"
     '{"del": "C", "formaga": "PL", "typ": "problem", "poang": [0, 0, 0], '
     '"text": "En rektangel har omkretsen 24 cm.", "deluppgifter": ['
@@ -294,6 +303,26 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
 DOMAR_MAX_TOKENS = 4_000
 # Hur många hela nivåsteg domen måste skilja sig för att fälla. 1 = E mot C
 # fäller. Höj till 2 om mätningen visar att domaren bråkar om gränsfall.
+#
+# MÄTT (planens C7, punkt 4) över de skarpa kassetterna, två inspelnings-
+# omgångar av samma tre dokument:
+#
+#     omgång 1:  prov 1/8    arbetsblad 0/6   gruppuppgift 1/12   =  2/26  (8 %)
+#     omgång 2:  prov 2/11   arbetsblad 0/7   gruppuppgift 6/11   =  8/29  (28 %)
+#
+# Spridningen mellan omgångarna är alltså större än skillnaden en toleranshöjning
+# skulle göra, och underlaget är ett dokument per typ och omgång. Därför står
+# toleransen kvar på 1: att skruva på den här siffran utifrån n=2 vore att
+# kalibrera mot brus. Två saker är ändå värda att veta innan någon rör den:
+# arbetsbladet föll ALDRIG (dess uppgifter är rutin, och där är domaren och
+# poängsättningen enkelt eniga), och gruppuppgiften står för nästan hela
+# utfallet. Det är väntat — gruppuppgiften är den enda profilen utan
+# balanserat skelett, så poängen är modellens eget påstående och ingen
+# grammatik håller emot. Domaren är därför mest värd där.
+#
+# Domaren svarade «oklart» noll gånger i båda omgångarna. Toleransen bärs i
+# praktiken av tystnad (en enhet domaren inte nämner fälls aldrig), inte av
+# att den hedgar.
 TOLERANS_STEG = 1
 # Taket på hur många nivåproblem som får gå in i EN reparationsprompt. Fler än
 # så är inte en lista fel utan ett underkänt prov, och då är det bättre att
@@ -573,14 +602,28 @@ def _format_problems(problems: list) -> str:
     return "\n".join(lines)
 
 
-def build_repair_prompt(exam: dict, problems: list) -> str:
+# Vad dokumentet HETER i reparationsprompten. Prompten sa «Ditt förra prov»
+# oavsett vad som skrevs, och det är fel på två sätt: modellen får höra att ett
+# arbetsblad är ett prov mitt i en rättning (och arbetsbladet har varken delar
+# eller kravgränser), och uppspelningen kunde inte se vilket dokument
+# reparationen gällde — den lade i provets band när en gruppuppgift skulle
+# lagas, så gruppuppgiften «lagades» till ett prov (tests/fejk.py _VAL).
+# Versalerna är avsiktliga och delas med uppdragsraderna i build_prompt.
+_DOKUMENTNAMN = {
+    "arbetsblad": ("ditt förra ARBETSBLAD", "arbetsbladet"),
+    "gruppuppgift": ("din förra GRUPPUPPGIFT", "gruppuppgiften"),
+}
+
+
+def build_repair_prompt(exam: dict, problems: list, profil: str = "prov") -> str:
+    vems, det = _DOKUMENTNAMN.get(profil, ("ditt förra prov", "provet"))
     return (
         f"{INSTRUCTION}\n"
-        "Ditt förra prov har problem som måste rättas. Här är provet:\n"
+        f"Det finns problem i {vems} som måste rättas. Här är {det}:\n"
         f"{json.dumps(exam, ensure_ascii=False)}\n\n"
         "Problem att åtgärda:\n"
         f"{_format_problems(problems)}\n\n"
-        "Skriv om HELA provet som JSON med problemen åtgärdade — justera "
+        f"Skriv om HELA {det} som JSON med problemen åtgärdade — justera "
         "poäng eller byt enstaka uppgifter, ändra så lite som möjligt i "
         "övrigt. Svara med enbart JSON."
     )
@@ -717,8 +760,8 @@ def _repair_until_valid(exam: dict | None, errors: list, *, model: str, llm,
         rounds_used += 1
         log(f"Justerar provet (runda {rounds_used} av {max_rounds}) — "
             f"{len(errors)} problem …")
-        candidate = _llm_round(build_repair_prompt(exam, errors), model, llm,
-                               antal, skeleton)
+        candidate = _llm_round(build_repair_prompt(exam, errors, profil),
+                               model, llm, antal, skeleton)
         if candidate is None:
             errors = [{"path": "svar", "code": "json",
                        "message": "modellen svarade inte med giltig JSON"}]
@@ -764,7 +807,7 @@ def _niva_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
         return {"exam": exam, "errors": errors + avv + signaler,
                 "rounds": rounds_used}
     log(f"Justerar nivån på {len(avv)} uppgift(er) …")
-    kandidat = _llm_round(build_repair_prompt(exam, avv), model, llm,
+    kandidat = _llm_round(build_repair_prompt(exam, avv, profil), model, llm,
                           antal, skeleton)
     rounds_used += 1
     if kandidat is None:

@@ -161,20 +161,39 @@ BAND = os.environ.get("FEJK_KASSETTER", "")     # mappen, för auto-läget
 # Nyckelorden är generatorernas egna uppdragsrader (lesson_board.INSTRUCTION,
 # exam_gen.build_prompt, postprocess.EXTRACT_INSTRUCTION) — och de gäller även
 # reparations- och iterationsprompterna, som bär samma instruktion överst.
+# Versalorden räcker som nyckel, och det är med flit: de står både i
+# uppdragsraden («skriv ett ARBETSBLAD») och i reparationsprompten («ditt förra
+# ARBETSBLAD»). Förut matchade bara uppdragsraden, så en reparation av ett
+# arbetsblad hamnade i PROVETS band — och arbetsbladet «lagades» till ett prov.
 _VAL = [
-    # Nivådomaren först: den läser ett FÄRDIGT dokument och dess prompt bär
-    # därför spår av alla tre generatorerna. Står den sist hamnar domen i
-    # provets band, och då «svarar» provet på en fråga om sin egen nivå.
-    ("vilken nivå den faktiskt ligger på", "nivadomare"),
-    ("skriv en GRUPPUPPGIFT", "gruppuppgift"),
-    ("skriv ett ARBETSBLAD", "arbetsblad"),
+    ("GRUPPUPPGIFT", "gruppuppgift"),
+    ("ARBETSBLAD", "arbetsblad"),
     ("lektionstavla", "tavla"),
     ("matteprov", "prov"),
     ("Läs transkriptet", "insikter"),
 ]
 
+# Nivådomaren (Del C) prövas FÖRE listan ovan, och i två steg. Skälet till båda
+# delarna: domarprompten läser ett färdigt dokument och bär därför spår av den
+# generator som skrev det — den skulle matcha «skriv ett ARBETSBLAD» och få
+# arbetsbladet tillbaka som svar på en fråga om dess nivå. Och EN domarkassett
+# räcker inte, för uppgiftsnumren betyder olika saker i olika band: uppgift 2a
+# är C i gruppuppgiften och E i provet, så provets dom fäller gruppuppgiften på
+# en skillnad som bara finns mellan kassetterna. Domarna skiljs åt på skalan de
+# fick med sig, vilket är det enda i prompten som säkert skiljer dem åt.
+_DOMARE = "vilken nivå den faktiskt ligger på"
+_DOMAR_VAL = [
+    ("Gruppuppgiften är inte en trappa", "nivadomare-grupp"),
+    ("det här bladet", "nivadomare-blad"),
+]
+
 
 def _auto(prompt):
+    if _DOMARE in prompt:
+        for nyckel, namn in _DOMAR_VAL:
+            if nyckel in prompt:
+                return os.path.join(BAND, namn + ".json")
+        return os.path.join(BAND, "nivadomare.json")
     for nyckel, namn in _VAL:
         if nyckel in prompt:
             return os.path.join(BAND, namn + ".json")
