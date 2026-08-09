@@ -151,6 +151,18 @@
   \makebox[0.45\linewidth]{\dotfill}%
   \if\relax\detokenize{#2}\relax\else\ #2\fi\par}
 
+((# Den namngivna ifyllnadsraden: «Ekvation: ………………». Etiketten är fet och står
+    före linjen, som går ut i resten av satsytan — samma sättning som
+    designdokumentets .gunamn + .gulinje, och samma som lärarens förlaga.
+    Skillnaden mot \svarsradmed är att raden HETER något: den ber om ett
+    bestämt slags svar, inte om «svaret». #))
+((# \hrulefill och inte \rule{...}: linjens längd är «resten av raden», och den
+    räknas av TeX själv. \widthof hade krävt paketet calc, och ett paket till i
+    preamblen är ett paket till som måste ligga i den buntade Tectonic-cachen. #))
+\newcommand{\svarsfaltrad}[1]{%
+  \par\vspace{3.5mm}%
+  \noindent\makebox[\linewidth]{\textbf{#1:}\enskip\hrulefill}\par}
+
 ((# Kryssrutesvar på en rad: «Sats: [] Randvinkelsatsen [] Kordasatsen».
     Rutorna sitter på samma rad som etiketten och bryter som text — en rad
     att fylla i, inte en flervalsfråga. #))

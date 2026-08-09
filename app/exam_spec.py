@@ -141,6 +141,18 @@ class _Uppgiftsbas(_Model):
     # «laddpunkter/år», «f'(x) =». Står på svarsraden, före linjen om det är
     # ett led och efter den om det är en enhet (exam_latex, blad-bygg).
     enhet: str | None = None
+    # Namngivna ifyllnadsrader: en etikett per rad, och en hårlinje att skriva
+    # på efter den («Ekvation: ______», «Svar i ord: ______»). Formen är
+    # designdokumentets egen — dess form 2 har «Vinkel:», «Sats:», «Båge:»,
+    # «Motivering:» — och den bär gruppuppgiftens pedagogik ur lärarens förlaga
+    # (docs/forlagor/): BESLUTEN skrivs på pappret, RÄKNINGEN på lösblad. En rad
+    # med en etikett tvingar fram ett svar av rätt sort; en tom svarslinje gör
+    # det inte.
+    #
+    # Etiketterna är fria med flit. Förlagan råkar handla om exponential- mot
+    # potensekvationer, men mönstret är momentoberoende: varje moment har sitt
+    # eget beslut att skriva ner.
+    svarsfalt: list[str] | None = Field(default=None, min_length=1, max_length=4)
     svarsrutor: "Svarsrutor | None" = None
     tabell: "Tabell | None" = None
     stegtabell: "Stegtabell | None" = None
@@ -343,6 +355,13 @@ class ExamDoc(_Model):
     datum: str | None = None
     tid_min: int | None = None
     hjalpmedel: str
+    # Metodregeln som ETT beslut, överst på pappret: «Ställ upp ekvationen. Var
+    # sitter den okända? I exponenten → logaritmera. I basen → upphöj till 1/n.»
+    # Lärarens förlaga (docs/forlagor/) hade den i instruktionsrutan, och det är
+    # den som gör att alla grupper kommer igång: frågan är momentets, svaret är
+    # elevens. Bara gruppuppgiften trycker den — den står efter arbetsregeln i
+    # instruktionsbandet, som en fråga och inte som en genomgång.
+    nyckelfraga: str | None = None
     # Bara gruppuppgiften har den; prov och arbetsblad lämnar den tom.
     grupp: GruppUpplagg | None = None
     uppgifter: list[ExamItem] = Field(min_length=1)
@@ -455,9 +474,16 @@ PROFILER: dict[str, tuple[dict, dict, bool, bool, bool]] = {
     "prov": (FORMAGA_MAL, NIVA_MAL, True, True, True),
     "arbetsblad": (ARBETSBLAD_FORMAGA_MAL, ARBETSBLAD_NIVA_MAL, False, False, True),
     # Gruppuppgiften kräver redovisning (det är själva formen), men INTE
-    # stigande svårighet: fyra uppgifter på ett bord är fyra ingångar till
-    # samma sak, inte en trappa. Och inte antiklumpning — samma förmåga två
-    # gånger i rad är rimligt när det är gruppens samtal som prövas.
+    # stigande svårighet — än. Läraren körde en gruppuppgift skarpt och sa att
+    # STEGRINGEN var det som fungerade: alla klarade den första uppgiften, bara
+    # några få grupper den sista, men någon klarade den (Del F, dom 1). Kravet
+    # står därför i PROMPTEN sedan 2026-08-09. Att slå på ordningsvalidatorn här
+    # är nästa steg och en egen mätning: den mäter svårighet i poängtripplar
+    # över halvor av dokumentet, och fyra uppgifter är för få steg för att det
+    # måttet ska säga något om just den här stegringen — det skulle fälla på
+    # brus. Mät i kassetterna först.
+    # Inte antiklumpning heller — samma förmåga två gånger i rad är rimligt när
+    # det är gruppens samtal som prövas.
     "gruppuppgift": (GRUPP_FORMAGA_MAL, GRUPP_NIVA_MAL, True, False, False),
 }
 

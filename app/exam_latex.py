@@ -165,11 +165,12 @@ def _svarsrutor_vy(r, *, facit: bool):
 def _enhet_vy(*, poang, typ, formaga, text, losning, bedomning,
              alternativ, ratt_alternativ, notis, bild_fil,
              enhet=None, tabell=None, svarsrutor=None, stegtabell=None,
-             facit=False):
+             svarsfalt=None, facit=False):
     """Delad vy för ett löv och för en deluppgift."""
     flerval, ratt_bokstav = _flerval_vy(alternativ, ratt_alternativ)
     return {
         "enhet": escape_mixed(enhet) if enhet else None,
+        "svarsfalt": [escape_mixed(e) for e in svarsfalt] if svarsfalt else None,
         "tabell": _tabell_vy(tabell),
         "svarsrutor": _svarsrutor_vy(svarsrutor, facit=facit),
         "stegtabell": _stegtabell_vy(stegtabell, facit=facit),
@@ -217,7 +218,8 @@ def _build_view(doc: exam_spec.ExamDoc,
                         alternativ=d.alternativ, ratt_alternativ=d.ratt_alternativ,
                         notis=d.notis, bild_fil=None, enhet=d.enhet,
                         tabell=d.tabell, svarsrutor=d.svarsrutor,
-                        stegtabell=d.stegtabell, facit=facit)
+                        stegtabell=d.stegtabell, svarsfalt=d.svarsfalt,
+                        facit=facit)
                     ev["bokstav"] = _BOKSTAV[j]
                     deluppg.append(ev)
                 item_vy = {
@@ -227,6 +229,8 @@ def _build_view(doc: exam_spec.ExamDoc,
                     "tabell": _tabell_vy(it.tabell),
                     "svarsrutor": _svarsrutor_vy(it.svarsrutor, facit=facit),
                     "stegtabell": _stegtabell_vy(it.stegtabell, facit=facit),
+                    "svarsfalt": [escape_mixed(e) for e in it.svarsfalt]
+                                 if it.svarsfalt else None,
                     "notis": escape_mixed(it.notis) if it.notis else None,
                     "flerval": None, "ratt_bokstav": None,
                     # endast_svar/utrymme_mm nås av mallen för VARJE uppgift
@@ -251,7 +255,8 @@ def _build_view(doc: exam_spec.ExamDoc,
                     alternativ=it.alternativ, ratt_alternativ=it.ratt_alternativ,
                     notis=it.notis, bild_fil=bild_fil, enhet=it.enhet,
                     tabell=it.tabell, svarsrutor=it.svarsrutor,
-                    stegtabell=it.stegtabell, facit=facit)
+                    stegtabell=it.stegtabell, svarsfalt=it.svarsfalt,
+                    facit=facit)
                 item_vy["har_deluppgifter"] = False
                 item_vy["deluppgifter"] = None
             item_vy["elevlosningar"] = [
@@ -309,7 +314,7 @@ def _build_view(doc: exam_spec.ExamDoc,
         # klartext och instruktionsbandet är samma texter som webbversionen
         # skriver (app/web/ui/blad.js, grupphuvud) — ett papper och en skärm
         # ska inte lova gruppen olika saker.
-        "grupp": _grupp_vy(doc.grupp),
+        "grupp": _grupp_vy(doc.grupp, doc.nyckelfraga),
     }
 
 
@@ -330,16 +335,26 @@ _GRUPPBAND = ("Läs uppgiften tillsammans innan ni börjar räkna. Bestäm vem s
               "skriver. Alla i gruppen ska kunna förklara lösningen efteråt.")
 
 
-def _grupp_vy(grupp) -> dict | None:
+def _grupp_vy(grupp, nyckelfraga: str | None = None) -> dict | None:
+    """Gruppens villkor + instruktionsbandet.
+
+    Bandet bär TVÅ saker och i den ordningen: arbetsregeln (hur gruppen jobbar,
+    samma text som skärmen skriver) och sedan metodregeln som en fråga —
+    lärarens nyckelfråga för just det här momentet. Den är momentets, inte
+    appens, så den kommer från dokumentet; saknas den står bandet som förut.
+    Frågan sätts fet: det är den som ska läsas först när gruppen fastnar."""
     if grupp is None:
         return None
     red = grupp.redovisning
+    band = escape_latex(f"{_GRUPPBAND} {_REDOVISNING_HUR[red]}")
+    if nyckelfraga:
+        band += r" \textbf{" + escape_mixed(nyckelfraga) + "}"
     return {
         "elever": grupp.elever,
         "langd_min": grupp.langd_min,
         "redovisning": red,
         "redovisning_text": escape_latex(_REDOVISNING_TEXT[red]),
-        "band": escape_latex(f"{_GRUPPBAND} {_REDOVISNING_HUR[red]}"),
+        "band": band,
     }
 
 

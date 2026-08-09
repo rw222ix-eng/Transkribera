@@ -136,8 +136,30 @@ def test_formerna_star_i_prompten_sa_modellen_vet_nar_de_ska_anvandas():
 def test_grammatiken_slapper_igenom_de_nya_falten():
     schema = exam_spec.to_response_format()
     text = str(schema)
-    for falt in ("tabell", "svarsrutor", "stegtabell", "elevlosningar", "enhet"):
+    for falt in ("tabell", "svarsrutor", "stegtabell", "elevlosningar", "enhet",
+                 "svarsfalt", "nyckelfraga"):
         assert falt in text, f"{falt} nås inte av grammatiken"
+
+
+def test_ifyllnadsraderna_finns_pa_bade_uppgift_och_deluppgift():
+    """Förlagans rader hör till den fråga som ska besvaras — och när gruppens
+    uppgift är delad i a/b är det deluppgiften som ställer frågan."""
+    doc = _doc(_uppgift(svarsfalt=["Ekvation", "Svar i ord"]),
+               {"del": None, "formaga": "PL", "typ": "problem",
+                "poang": [0, 0, 0], "text": "En sten släpps från en bro.",
+                "losning": "", "bedomning": "", "deluppgifter": [
+                    {"poang": [2, 0, 0], "text": "Lös algebraiskt.",
+                     "losning": "3,0 s", "bedomning": "+2 E",
+                     "svarsfalt": ["Ekvation"]},
+                    {"poang": [0, 2, 0], "text": "Lös grafiskt.",
+                     "losning": "Skärningen.", "bedomning": "+2 C"}]})
+    assert doc.uppgifter[0].svarsfalt == ["Ekvation", "Svar i ord"]
+    assert doc.uppgifter[1].deluppgifter[0].svarsfalt == ["Ekvation"]
+    assert doc.uppgifter[1].deluppgifter[1].svarsfalt is None
+    # Raderna sätts i ALLA mallar som bär uppgiftskroppen — en form som finns på
+    # fyra ställen glider isär på tre av dem.
+    for namn, tex in _alla_tex(doc).items():
+        assert r"\svarsfaltrad{Ekvation}" in tex, f"{namn} saknar raden"
 
 
 # ═════════════════════════════════ papperet ══════════════════════════════

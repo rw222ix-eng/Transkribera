@@ -345,12 +345,17 @@ def test_bokblocket_ger_spann_och_exempel_for_arbetsbladet():
     assert "1201, 1202" in block and "1203" not in block
 
 
-def test_bokblocket_ar_golv_och_tak_for_gruppuppgiften():
+def test_bokblocket_ar_golv_tak_och_ordning_for_gruppuppgiften():
+    """Golvet och taket stod rätt från början; ORDNINGEN var fel. Blocket sa
+    «inte en trappa — uppgifterna behöver inte bli svårare nedåt», och lärarens
+    skarpa lektion sa emot: stegringen var det som fungerade (Del F, dom 1)."""
     block = bok.build_niva_block({"namn": "Boken"}, 10, 11, [], _uppslag(),
                                  profil="gruppuppgift")
-    assert "INGÅNG" in block and "FÖRDJUPNINGEN" in block
+    assert "FÖRSTA" in block and "SISTA" in block
     assert "nivå 1" in block and "nivå 3" in block
-    assert "spänna" not in block          # ingen trappa
+    assert "svårare nedåt" in block
+    # Fortfarande golv och tak, inte provets jämna spann över alla nivåer.
+    assert "spänna" not in block
 
 
 def test_ett_uppslag_utan_nivaer_ger_inget_block():

@@ -44,6 +44,11 @@ import * as L from "./larardag.mjs";
  *   TAV 1 · genomgången .............. tre spalter, tabell, röd understrykning ✓ nytt
  *   TAV 2 · teori | exempel .......... dragen spaltlinje ................. ✓ ovan
  *
+ * Gruppuppgiften har ingen egen form på designsidan — den bär «gu» och sin
+ * egen täthet i gruppark.css. Dess ifyllnadsrader är däremot form 2:s
+ * (.gunamn + .gulinje) och prövas som sådana; den tryckta formen ligger i
+ * tests/test_gruppuppgift.py, som kompilerar pappret på riktigt.
+ *
  * Två mått i designens tavlor är MEDVETET andra i appen och ska inte «rättas»:
  * designsidan visar 1400×460 med två eller tre spalter, appen skriver alltid
  * 900×780 + 1800×780 — två fysiska tavlor bredvid varandra i en riktig sal.
@@ -435,6 +440,39 @@ test("provarket bär samma former — och aldrig facit", async ({ page }) => {
   if (hogen.utkast && hogen.utkast.id) {
     await page.request.delete(`/api/dokument/${hogen.utkast.id}`);
   }
+});
+
+test("gruppuppgiftens ifyllnadsrader ersätter svarsraden", async ({ page }) => {
+  /* Förlagans grepp (docs/forlagor/): BESLUTEN skrivs på pappret — «Ekvation:
+     ____», «Svar i ord: ____» — och räkningen på lösblad. Raderna sätts med
+     designens egna element, .gunamn + .gulinje, så en ny form inte drar med
+     sig ett nytt utseende. Och den som fyllt i dem har svarat: en svarslinje
+     till under dem är en rad ingen vet vad hon ska skriva på. */
+  await L.fejkatMoln(page);
+  await L.oppna(page);
+  const html = await page.evaluate(() => window.BladBygg.ark(
+    { typ: "Gruppuppgift", moment: "från text till ekvation",
+      nyckelfraga: "Var sitter den okända? I exponenten → logaritmera.",
+      inst: { grupp: 3 } },
+    [{ nr: 1, p: 3, t: "När är petriskålen full?", ut: "rakna",
+       falt: ["Ekvation", "Svar i ord"] },
+     { nr: 2, p: 2, t: "Hur lång tid tar fallet?", ut: "kort" }], {}));
+  await satt(page, html);
+
+  const forsta = page.locator("#formprov .gukort").first();
+  const etiketter = await forsta.locator(".gurad .gunamn").allTextContents();
+  expect(etiketter).toEqual(["Ekvation:", "Svar i ord:"]);
+  await expect(forsta.locator(".gurad .gulinje")).toHaveCount(2);
+  // Ingen extra «Svar:»-rad ovanpå — men lösbladet står kvar, för det är där
+  // räkningen görs.
+  await expect(forsta.locator(".gusvarsrad")).toHaveCount(0);
+  await expect(forsta.locator(".gulos")).toHaveCount(1);
+  // Uppgiften utan fält får svarsraden precis som förut.
+  await expect(page.locator("#formprov .gukort").nth(1).locator(".gusvarsrad"))
+    .toHaveCount(1);
+  // Nyckelfrågan står i instruktionsbandet — samma text som PDF:en trycker.
+  await expect(page.locator("#formprov .guband b"))
+    .toHaveText("Var sitter den okända? I exponenten → logaritmera.");
 });
 
 /** Ritar en tavla i sidan (i #tavprov) — mätningarna görs sedan i sidan. */

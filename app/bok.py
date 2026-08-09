@@ -371,11 +371,14 @@ def build_niva_block(bok: dict, fran: int, till: int, sidor: list[dict],
              + ". Nivå 1 är den lättaste. Uppgifterna nedan står i uppslaget "
                "ovan — läs dem och använd dem som måttstock:")
     if profil == "gruppuppgift":
-        krav = (f"Nivåkrav: gruppuppgiftens INGÅNG ska vara lösbar för den som "
-                f"klarar bokens nivå {lagst} på det här uppslaget, och "
-                f"FÖRDJUPNINGEN får nå bokens nivå {hogst}. Det är ett golv och "
-                "ett tak, inte en trappa — uppgifterna behöver inte bli svårare "
-                "nedåt, men ingen av dem får ligga under golvet eller över taket.")
+        # Golvet och taket stod redan rätt; ordningen var fel. Lärarens skarpa
+        # lektion (Del F, dom 1) visade att stegringen var det som fungerade:
+        # alla klarade den första uppgiften, några få den sista.
+        krav = (f"Nivåkrav: gruppuppgiftens FÖRSTA uppgift ska vara lösbar för "
+                f"den som klarar bokens nivå {lagst} på det här uppslaget, och "
+                f"den SISTA får nå bokens nivå {hogst}. Det är ett golv, ett tak "
+                "och en ordning: uppgifterna ska bli svårare nedåt, men ingen av "
+                "dem får ligga under golvet eller över taket.")
     else:
         krav = (f"Nivåkrav: uppgifterna ska spänna bokens nivåer {lagst}–"
                 f"{hogst} med tyngdpunkten enligt balansmålen, och varje uppgift "

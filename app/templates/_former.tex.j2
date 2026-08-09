@@ -39,9 +39,19 @@
 ((* endif *))
 ((* endmacro *))
 
+((# Ifyllnadsraderna: en namngiven rad per beslut eleven ska skriva ner
+    («Ekvation: ……», «Svar i ord: ……»). De ERSÄTTER svarsraden — den som fyller
+    i namngivna rader har redan skrivit sitt svar — och därför frågar mallarna
+    på u.svarsfalt innan de sätter ut sin egen svarsrad. #))
+((* macro falt(f) *))
+((* if f *))((* for etikett in f *))\svarsfaltrad{((( etikett )))}((* endfor *))\par\vspace{1mm}
+((* endif *))
+((* endmacro *))
+
 ((# Allt som hör till uppgiftens KROPP, i den ordning eleven läser det:
-    tabellen (data att räkna på), stegtabellen (lösningen att granska) och
-    kryssruteraden (svaret att kryssa). #))
+    tabellen (data att räkna på), stegtabellen (lösningen att granska),
+    kryssruteraden (svaret att kryssa) och ifyllnadsraderna (besluten att
+    skriva). #))
 ((* macro kropp(u) *))
-((( tabell(u.tabell) )))((( steg(u.stegtabell) )))((( rutor(u.svarsrutor) )))
+((( tabell(u.tabell) )))((( steg(u.stegtabell) )))((( rutor(u.svarsrutor) )))((( falt(u.svarsfalt) )))
 ((* endmacro *))

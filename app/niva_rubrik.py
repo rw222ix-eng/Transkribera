@@ -569,10 +569,15 @@ def build_skala_utan_bok(profil: str) -> str:
     arbetsblad utan någon skala alls är precis det läget planen skrevs för —
     «stigande svårighet» utan att någonstans säga vad svårare betyder."""
     if profil == "gruppuppgift":
+        # Spannet stod redan rätt här (E-ingång, A-fördjupning); det som var
+        # fel var ORDNINGEN. «Gruppuppgiften är inte en trappa» sa emot lärarens
+        # skarpa lektion, där stegringen var det som fungerade (Del F, dom 1).
         ram = ("Ingen lärobok är vald, så nivåskalan är den nedan. "
-               "Gruppuppgiften är inte en trappa: låt INGÅNGEN vara lösbar på "
-               "E-nivå så att alla i gruppen kommer in, och låt FÖRDJUPNINGEN "
-               "nå A-nivå så att samtalet har någonstans att ta vägen.")
+               "Gruppuppgiften ÄR en stegring: låt den FÖRSTA uppgiften vara "
+               "lösbar på E-nivå så att varenda grupp kommer in, och den SISTA "
+               "nå A-nivå så att samtalet har någonstans att ta vägen. Målet är "
+               "att alla klarar den första och att några få — men inte noll — "
+               "klarar den sista.")
     else:
         ram = ("Ingen lärobok är vald, så nivåskalan är den nedan. Låt de "
                "första uppgifterna ligga på E-nivå och de sista på C-nivå — "

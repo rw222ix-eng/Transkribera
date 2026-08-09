@@ -171,6 +171,44 @@ def test_gruppens_ark_bar_inga_poang_men_lararens_gor_det():
     assert doc.uppgifter[0].losning.replace("$", "\\(", 1) or True
 
 
+def test_ifyllnadsraderna_ersatter_svarsraden():
+    """Förlagans grepp: BESLUTEN skrivs på pappret («Ekvation: ____»,
+    «Svar i ord: ____»), räkningen på lösblad. Den som fyllt i de raderna har
+    svarat — en svarslinje till under dem är en rad ingen vet vad hon ska
+    skriva på."""
+    d = _doc()
+    d["uppgifter"][0]["svarsfalt"] = ["Ekvation", "Svar i ord"]
+    d["uppgifter"][0]["typ"] = "rutin"          # den som annars får \svarsrad
+    doc, fel = exam_spec.validate_exam_json(d, "gruppuppgift")
+    assert doc is not None, fel
+    tex = exam_latex.render_gruppuppgift(doc)
+    assert r"\svarsfaltrad{Ekvation}" in tex
+    assert r"\svarsfaltrad{Svar i ord}" in tex
+    gruppens = tex.split(r"\delprovband{Facit och bedömning}")[0]
+    forsta = gruppens.split(r"\begin{uppgift}")[1]
+    assert r"\svarsrad" not in forsta, "dubbel svarsplats på samma uppgift"
+
+
+def test_nyckelfragan_star_i_instruktionsbandet():
+    """Metodregeln som EN fråga, överst på pappret — det gruppen läser när de
+    fastnar. Den är momentets, inte appens, så den kommer ur dokumentet."""
+    doc, fel = exam_spec.validate_exam_json(
+        _doc(nyckelfraga="Var sitter den okända? I exponenten → logaritmera."),
+        "gruppuppgift")
+    assert doc is not None, fel
+    tex = exam_latex.render_gruppuppgift(doc)
+    band = tex.split(r"\notisruta{")[1].split("}")[0]
+    assert "Var sitter den okända?" in band
+    # Arbetsregeln står kvar före den — hur man jobbar, sedan vad man frågar.
+    assert band.index("Alla i gruppen") < band.index("Var sitter")
+
+
+def test_utan_nyckelfraga_star_bandet_som_forut():
+    doc, _ = exam_spec.validate_exam_json(_doc(), "gruppuppgift")
+    tex = exam_latex.render_gruppuppgift(doc)
+    assert r"\textbf{" not in tex.split(r"\notisruta{")[1].split("}")[0]
+
+
 def test_uppgifterna_heter_bokstaver_inte_siffror():
     doc, _ = exam_spec.validate_exam_json(_doc(), "gruppuppgift")
     tex = exam_latex.render_gruppuppgift(doc)
@@ -180,12 +218,29 @@ def test_uppgifterna_heter_bokstaver_inte_siffror():
 
 @pytest.mark.tectonic
 def test_pappret_gar_att_kompilera(tmp_path):
-    """En mall som inte kompilerar upptäcks annars först framför klassen."""
-    doc, _ = exam_spec.validate_exam_json(_doc(), "gruppuppgift")
+    """En mall som inte kompilerar upptäcks annars först framför klassen.
+
+    Pappret här bär förlagans två nya grepp — nyckelfrågan i bandet och de
+    namngivna ifyllnadsraderna — för det är de som är oprövade i sättningen.
+    \\svarsfaltrad bygger på \\makebox och \\hrulefill, alltså inget nytt paket
+    och ingen ny rad i Tectonic-seeden."""
+    import pypdfium2
+
+    d = _doc(nyckelfraga="Var sitter den okända? I exponenten → logaritmera.")
+    d["uppgifter"][0]["svarsfalt"] = ["Ekvation", "Svar i ord"]
+    doc, fel = exam_spec.validate_exam_json(d, "gruppuppgift")
+    assert doc is not None, fel
     pdf, log = exam_pdf.compile_pdf(exam_latex.render_gruppuppgift(doc),
                                     tmp_path, "gruppuppgift")
     assert pdf is not None, log[-2000:]
     assert pdf.stat().st_size > 5000
+    sidor = pypdfium2.PdfDocument(str(pdf))
+    # Radbrytningarna är sättningens, inte textens: bandet bryter mitt i frågan
+    # («Var sitter den\nokända?»), så mellanrum normaliseras före jämförelsen.
+    text = " ".join("".join(sidor[i].get_textpage().get_text_range()
+                            for i in range(len(sidor))).split())
+    assert "Ekvation:" in text and "Svar i ord:" in text
+    assert "Var sitter den okända? I exponenten → logaritmera." in text
 
 
 # ---------------------------------------------------------------- rutten --
@@ -240,3 +295,49 @@ def test_prompten_talar_om_gruppen(monkeypatch):
     assert "flera sätt" in p and "ingången till resonemanget" in p
     # Ställningen ligger i uppgiften, inte i en separat mall.
     assert "deluppgifter som leder samtalet" in p
+
+
+# ─────────────────────────── förlagan som mönster (Del F) ───────────────────
+# Läraren körde en egengjord gruppuppgift skarpt och kallade den en av de bästa
+# lektioner hon haft (pappret ligger i docs/forlagor/). Det som fungerade —
+# nyckelfrågan, de olika kontexterna, besluten på pappret och stegringen — är
+# nu gruppuppgiftens mönster. Det som INTE fungerade är lika viktigt: typ-
+# kryssrutorna behövdes inte.
+
+def test_prompten_bar_forlagans_monster():
+    p = exam_gen.build_prompt(
+        "Matematik, nivå 3c", "NA25", ["Trigonometri"], antal=4,
+        profil="gruppuppgift", grupp={"elever": 3, "langd_min": 45,
+                                      "redovisning": "muntligt"})
+    assert "MÖNSTRET" in p
+    assert "nyckelfraga" in p          # fältet, inte bara idén
+    assert "BRYTA mönstret" in p       # en situation som inte går att gissa
+    assert "svarsfalt" in p            # besluten skrivs på pappret
+    assert "lösblad" in p              # räkningen görs inte där
+    # Dom 2: kryssrutorna behövdes inte, och det ska stå UTTRYCKLIGEN — annars
+    # griper modellen efter svarsrutor, som finns i schemat.
+    assert "INGA TYP-KRYSSRUTOR" in p
+    # Exemplet ska visa formen på ETT ANNAT moment, aldrig förlagans eget.
+    assert "cosinussatsen" in p
+    assert "potensekvation" not in p.lower()
+
+
+def test_prompten_ber_om_stegringen_som_fungerade():
+    """Dom 1: alla klarade den första uppgiften, några få den sista — men
+    någon klarade den. Här stod förut motsatsen («inte en trappa»)."""
+    p = exam_gen.build_prompt(
+        "Matematik, nivå 3c", "NA25", ["Logaritmer"], antal=4,
+        profil="gruppuppgift", grupp={"elever": 3, "langd_min": 45,
+                                      "redovisning": "muntligt"})
+    assert "STEGRING" in p
+    assert "men inte noll" in p
+    assert "inte en trappa" not in p
+
+
+def test_stegringen_ar_promptstyrd_inte_validerad():
+    """Beslutspunkt, medvetet dokumenterad: ordningsvalidatorn mäter svårighet
+    i poängtripplar över dokumentets halvor, och fyra uppgifter är för få steg
+    för att det måttet ska säga något. Slås den på ska det ske efter en mätning
+    i kassetterna — inte för att den här raden såg tom ut."""
+    *_, kraver_stigande = exam_spec.PROFILER["gruppuppgift"]
+    assert kraver_stigande is False

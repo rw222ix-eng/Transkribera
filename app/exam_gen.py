@@ -206,6 +206,55 @@ FALLGROPAR_GRUPP = (
 )
 
 
+# ── Förlagan som mönster (Del F) ─────────────────────────────────────────────
+# Läraren körde en riktig lektion på en egengjord gruppuppgift och kallade den
+# en av de bästa hon haft. Pappret ligger arkiverat i docs/forlagor/ och
+# blocket nedan är destillatet: STRUKTUR, FRÅGOR och PEDAGOGIK — aldrig
+# utseendet, som appen äger själv.
+#
+# Skillnaden mot källdörr 4 (forlaga=) är att den är lärarens VAL för ett
+# enskilt jobb; det här är alltid med. Gruppuppgiften har ett mönster nu.
+#
+# JSON-exemplet är HANDSKRIVET ur förlagan men på ett ANNAT moment — förlagan
+# handlar om exponential- mot potensekvationer, exemplet om sinus- mot
+# cosinussatsen. Modellen ska härma formen, inte skriva av innehållet.
+FORLAGA_GRUPP = (
+    "MÖNSTRET (lärarens egen gruppuppgift, den som fungerade — följ dess form, "
+    "inte dess innehåll):\n"
+    "- NYCKELFRÅGAN: hitta momentets egen «var sitter den okända?» — den ENA "
+    "fråga som avgör vilken metod som gäller — och skriv den i dokumentets "
+    "fält \"nyckelfraga\", som en fråga följd av vägarna den öppnar. Den står "
+    "överst på pappret och är det gruppen läser när de fastnar. Nyckelfrågan är "
+    "i regel momentets vanligaste fallgrop vänd till ett beslut.\n"
+    "- FÅ SITUATIONER, VERKLIGA OCH OLIKA: varje uppgift är en egen konkret "
+    "situation ur skilda världar (ett labb, ett fritt fall, en olycka) kring "
+    "SAMMA matematiska val. Minst en av dem ska BRYTA mönstret, så att gruppen "
+    "inte kan gissa sig till metoden av att uppgifterna liknar varandra.\n"
+    "- BESLUTEN PÅ PAPPRET, RÄKNINGEN PÅ LÖSBLAD: ge uppgiften fältet "
+    "\"svarsfalt\" med de rader gruppen ska fylla i — vanligen uppställningen "
+    "och svaret i ord (t.ex. [\"Ekvation\", \"Svar i ord\"]). Det som skrivs på "
+    "pappret är alltså BESLUTEN; uträkningen görs på lösblad.\n"
+    "- INGA TYP-KRYSSRUTOR. Klassificeringen är ett tankesteg, inte ett svar "
+    "att kryssa: nyckelfrågan tvingar fram den, och den REDOVISAS genom "
+    "uppställningen. Använd inte svarsrutor för att låta gruppen kryssa vilken "
+    "sorts uppgift det är.\n"
+    "- TVÅ VÄGAR PÅ MINST EN UPPGIFT: dela den i a) lös algebraiskt och "
+    "b) lös grafiskt (eller momentets motsvarande andra representation), så att "
+    "gruppen får se att vägarna möts.\n"
+    "Exempel på EN uppgift i mönstret (annat moment än ditt):\n"
+    '{"del": null, "formaga": "PL", "typ": "problem", "poang": [1, 2, 0], '
+    '"text": "En båt ska gå från fyren till bojen. Sträckan fyr–hamn är 420 m, '
+    'sträckan hamn–boj 260 m, och vinkeln vid hamnen är 68 grader. Hur långt är '
+    'det mellan fyren och bojen?", "svarsfalt": ["Uppställning", "Svar i ord"], '
+    '"losning": "Två sidor och mellanliggande vinkel ger cosinussatsen: '
+    '$c^2 = 420^2 + 260^2 - 2 \\\\cdot 420 \\\\cdot 260 \\\\cos 68^\\\\circ$, '
+    'alltså $c \\\\approx 410$ m.", '
+    '"bedomning": "+1 E rätt sats vald, +2 C fullständig uppställning och svar '
+    'i meter; vanligt fel: sinussatsen väljs fast den motstående vinkeln är '
+    'okänd."}'
+)
+
+
 def build_referens(items: list[str]) -> str:
     """Referensläget (Fas 5): tidigare provs uppgifter in i prompten med
     instruktion att variera och höja svårighetsgraden — aldrig kopiera."""
@@ -325,9 +374,20 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
             f"Uppdrag: skriv en GRUPPUPPGIFT för {kurs}, klass {klass}, med "
             f"EXAKT {antal} uppgifter (varken fler eller färre). {n} elever per "
             f"grupp arbetar tillsammans i {min_} minuter. {REDOV.get(red, REDOV['muntligt'])}\n"
-            "Uppgifterna ska KRÄVA att man pratar: de är fyra ingångar till "
-            "samma sak, inte en trappa, så de behöver inte bli svårare nedåt. "
-            "Formen bär samtalet — en uppgift som är öppen, som kan angripas "
+            # STEGRINGEN (Del F, lärarens första dom). Här stod förut att
+            # uppgifterna är «fyra ingångar till samma sak, inte en trappa, så
+            # de behöver inte bli svårare nedåt». Lärarens skarpa lektion sa
+            # emot: stegringen var det som fungerade. ALLA klarade den första
+            # uppgiften, bara några få grupper den sista — men någon klarade
+            # den. Det är målprofilen, och den vinner över formuleringen.
+            #
+            # Kravet ligger i PROMPTEN, inte i valideringen: PROFILER har
+            # fortfarande stigande=False för gruppuppgift. Ordningsvalidatorn
+            # mäter svårighet i poängtripplar, och en gruppuppgift på fyra
+            # uppgifter har för få steg för att det måttet ska säga något om
+            # just den här stegringen. Mät i kassetterna innan den slås på.
+            "Uppgifterna ska KRÄVA att man pratar. Formen bär samtalet — en "
+            "uppgift som är öppen, som kan angripas "
             "på flera sätt eller som ber gruppen enas om ett svar kräver "
             "samtal oavsett vilken förmåga den prövar. Kravet ligger alltså "
             "INTE på förmågefördelningen: en begrepps- eller procedurpoäng är "
@@ -344,6 +404,13 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
             "rutinuppgift där endast svar krävs — utan den saknar upplägget "
             "ingången för den som inte kommer igång, och E-tyngden blir för "
             "stor.\n"
+            "STEGRING: ordna uppgifterna så att den FÖRSTA är ingången varenda "
+            "grupp klarar och den SISTA utmanar de starkaste. Målet är mätt i "
+            "en riktig klass: alla klarar den första, och några få grupper — "
+            "men inte noll — klarar den sista. Är den sista så svår att ingen "
+            "kommer i mål är den fel skriven, och är den lika lätt som den "
+            "första finns ingen stegring.\n"
+            f"{FORLAGA_GRUPP}\n"
             "Inga delar (del: null på alla uppgifter). Fyll fältet \"grupp\" "
             f"med elever={n}, langd_min={min_}, redovisning=\"{red}\". "
             # Inspelningen skrev «tid_minuter» bredvid grupp — ett fält som

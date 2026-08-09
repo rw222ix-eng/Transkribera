@@ -48,6 +48,15 @@ window.BladBygg = (() => {
         (st.celler || []).map(c => `<td>${mat(c)}</td>`).join('')
       }<td class="gukryss"><span></span></td></tr>`).join('')}</tbody></table>`;
   }
+  /* Namngivna ifyllnadsrader: «Ekvation: ______», «Svar i ord: ______».
+     Samma två element som förlagans form 2 sätter dem med — etiketten i
+     .gunamn, linjen i .gulinje — så en ny form aldrig drar med sig ett nytt
+     utseende. Besluten skrivs på pappret, räkningen på lösblad. */
+  function falt(f) {
+    if (!f || !f.length) return '';
+    return f.map(e => `<div class="gurad"><span class="gunamn">${esc(e)}:</span>`
+      + '<span class="gulinje"></span></div>').join('');
+  }
   /* Enheten på svarsraden: ledet före linjen, enheten efter den. */
   function svarsradEnhet(enhet) {
     return `<div class="gurad gusvarsrad"><span class="gunamn">Svar:</span>`
@@ -63,7 +72,15 @@ window.BladBygg = (() => {
   const svarsrad = '<div class="gurad gusvarsrad"><span class="gunamn">Svar:</span><span class="gulinje"></span></div>';
 
   function svarsyta(u) {
-    /* Kryssrutorna ÄR svarsytan när de finns — den som kryssar skriver inte. */
+    /* Kryssrutorna ÄR svarsytan när de finns — den som kryssar skriver inte.
+       Detsamma gäller de namngivna raderna: den som fyllt i «Ekvation» och
+       «Svar i ord» har svarat, och en svarslinje till under dem är en rad
+       ingen vet vad hon ska skriva på. Hänvisningen till lösbladet står kvar —
+       det är DÄR räkningen görs, och det är hela poängen med formen. */
+    if (u.falt && u.falt.length) {
+      return falt(u.falt)
+        + (u.ut !== 'kort' ? `<p class="gulos">${losblad}</p>` : '');
+    }
     if (u.rutor) return rutor(u.rutor);
     if (u.ut !== 'kort') return `<p class="gulos">${losblad}</p>`;
     return u.enhet ? svarsradEnhet(u.enhet) : svarsrad;
@@ -133,7 +150,8 @@ window.BladBygg = (() => {
     return `<div class="gu" data-form="${form}">
       <div class="guhuv"><h1 class="gutitel">${esc(versal(v.moment || o.titel || ''))}</h1></div>
       <div class="gutopp">${rad.repeat(namnrader)}</div>
-      <div class="guband">${esc(BAND[v.typ] || BAND.Arbetsblad)}</div>
+      <div class="guband">${esc(BAND[v.typ] || BAND.Arbetsblad)}${
+        v.nyckelfraga ? ` <b>${esc(v.nyckelfraga)}</b>` : ''}</div>
       ${uppgifter.map((u, k) => kort(u, k, !!i.illustration)).join('')}
     </div>`;
   }

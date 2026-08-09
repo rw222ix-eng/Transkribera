@@ -862,6 +862,9 @@
          svaret är ett förstört prov, och det märks först när klassen sitter
          med det. */
       if (u.enhet) ut.enhet = u.enhet;
+      /* Gruppuppgiftens ifyllnadsrader (Del F): etiketterna, inget mer —
+         raderna är tomma på båda sidor om skärmen. */
+      if (u.svarsfalt) ut.falt = u.svarsfalt;
       if (u.tabell) ut.tabell = { rubriker: u.tabell.rubriker, rader: u.tabell.rader };
       if (u.svarsrutor) ut.rutor = { etikett: u.svarsrutor.etikett, val: u.svarsrutor.val };
       if (u.stegtabell) {
@@ -1369,6 +1372,9 @@
           utkast.summor = res.summor || null;
           utkast.provFel = res.errors || [];
           if (res.exam.titel) utkast.titel = res.exam.titel;
+          /* Nyckelfrågan står i instruktionsbandet — samma text på skärmen som
+             i PDF:en, annars lovar pappret och skärmen gruppen olika saker. */
+          utkast.nyckelfraga = res.exam.nyckelfraga || null;
         }
         versioner = [utkast];
         utkastNytt(utkast);
@@ -1839,6 +1845,7 @@
       v.granser = res.granser || v.granser || null;
       v.summor = res.summor || v.summor || null;
       v.provFel = res.errors || [];
+      v.nyckelfraga = res.exam.nyckelfraga || v.nyckelfraga || null;
     }
     versioner = versioner.slice(0, nu + 1).concat([v]);
     visa(versioner.length - 1);

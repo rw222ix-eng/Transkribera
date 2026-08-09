@@ -44,11 +44,15 @@
 ((( d.text )))
 ((( former.kropp(d) )))
 ((* if d.notis *))\notisruta{((( d.notis )))}((* endif *))
-((* if d.flerval *))((* for alt in d.flerval *))\par\kryssruta\ ((( alt.bokstav ))): ((( alt.text )))((* endfor *))\par\vspace{2mm}((* elif d.endast_svar *))((* if d.enhet *))\svarsradmed{}{((( d.enhet )))}((* else *))\svarsrad((* endif *))((* else *))\par\vspace{((( d.utrymme_mm )))mm}((* endif *))
+((# Ifyllnadsraderna ÄR svarsplatsen när de finns: den som skrivit «Ekvation:»
+    och «Svar i ord:» har redan svarat, och en svarslinje till under dem är en
+    rad ingen vet vad hon ska fylla i. Räkningen görs på lösblad. #))
+((* if d.flerval *))((* for alt in d.flerval *))\par\kryssruta\ ((( alt.bokstav ))): ((( alt.text )))((* endfor *))\par\vspace{2mm}((* elif d.svarsfalt *))((* elif d.endast_svar *))((* if d.enhet *))\svarsradmed{}{((( d.enhet )))}((* else *))\svarsrad((* endif *))((* else *))\par\vspace{((( d.utrymme_mm )))mm}((* endif *))
 \end{deluppgift}
 ((* endfor *))
 ((* elif u.flerval *))
 ((* for alt in u.flerval *))\par\kryssruta\ ((( alt.bokstav ))): ((( alt.text )))((* endfor *))\par\vspace{2mm}
+((* elif u.svarsfalt *))
 ((* elif u.endast_svar *))((* if u.enhet *))\svarsradmed{}{((( u.enhet )))}((* else *))\svarsrad((* endif *))((* else *))\par\vspace{((( u.utrymme_mm )))mm}((* endif *))
 \end{uppgift}
 ((* endfor *))
