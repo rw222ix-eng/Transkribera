@@ -117,9 +117,19 @@ window.BladBygg = (() => {
        — och bladet fick basvärdena i stället för formens egen sättning
        (radhöjder, bandets padding, figurspaltens bredd, figurhöjden).
        Gruppuppgiften behåller «gu»: den bär sin egen täthet i gruppark.css,
-       fyra rutor med namnrader på ett A4, och det ÄR dess form. */
+       fyra rutor med namnrader på ett A4, och det ÄR dess form.
+
+       FORM 6 saknades. Förlagans sjätte form är «1 + 2 + 3»: basen, tvåans
+       figurspalt OCH treans stegtabell på samma blad — tre former kostar höjd,
+       och blad.css bär hela dess tätare sättning ([data-form="gu6"]: radhöjder,
+       tabellens cellpadding, figurspaltens bredd, figurhöjden). Renderaren
+       kunde aldrig nå den: ett blad med både figur och stegtabell fick gu2,
+       som är satt för ETT figurtungt blad och spiller när tabellen läggs till.
+       Samma sorts fel som «ab» var — en form som fanns i stilbladet men inte i
+       nyckeln. */
     const harFigur = uppgifter.some(u => u && u.fig);
-    const form = grupp ? 'gu' : (harFigur ? 'gu2' : 'gu1');
+    const harSteg = uppgifter.some(u => u && u.stegtabell);
+    const form = grupp ? 'gu' : (harFigur && harSteg ? 'gu6' : harFigur ? 'gu2' : 'gu1');
     return `<div class="gu" data-form="${form}">
       <div class="guhuv"><h1 class="gutitel">${esc(versal(v.moment || o.titel || ''))}</h1></div>
       <div class="gutopp">${rad.repeat(namnrader)}</div>
@@ -251,13 +261,23 @@ window.BladBygg = (() => {
      INNE i det parti den gäller — inte i en lista under. Det är gränsen mellan
      poängen som är svår att dra, och den syns bara när lösningarna står
      bredvid varandra. Lärarens papper: eleven ser dem aldrig. */
+  /* Partiets poäng är en TRIPPEL (E, C, A) — samma språk som resten av
+     dokumentet, se exam_spec.Parti. Den lästes här som ett ensamt tal, och i
+     JavaScript är `0 + [1,0,0]` inte 1 utan strängen «01,0,0»: bedömningen
+     tryckte «+1,0,0 p» i marginalen och «01,0,0 av 2 poäng» i huvudet, medan
+     designsidans lo4 visar «+1 p» och «2 av 2 poäng · full pott». Prototypens
+     egna facit bär ett tal, serverns prov en trippel — båda ska räknas. */
+  const partipoang = p => (Array.isArray(p.poang)
+    ? p.poang.reduce((a, x) => a + (Number(x) || 0), 0)
+    : Number(p.poang) || 0);
+
   function elevlosningar(u) {
     if (!u.elever || !u.elever.length) return '';
     return u.elever.map(e => {
-      const total = (e.partier || []).reduce((a, p) => a + (p.poang || 0), 0);
-      const partier = (e.partier || []).map(p => `<div class="loparti"${p.poang ? '' : ' data-utan'}>${
+      const total = (e.partier || []).reduce((a, p) => a + partipoang(p), 0);
+      const partier = (e.partier || []).map(p => `<div class="loparti"${partipoang(p) ? '' : ' data-utan'}>${
         (p.rader || []).map(r => `<div class="loskannrad">${mat(r)}</div>`).join('')
-      }<div class="lodom"><i${p.poang ? '' : ' data-utan'}>${p.poang ? '+' : ''}${p.poang || 0} p</i><p>${mat(p.dom)}</p></div></div>`).join('');
+      }<div class="lodom"><i${partipoang(p) ? '' : ' data-utan'}>${partipoang(p) ? '+' : ''}${partipoang(p)} p</i><p>${mat(p.dom)}</p></div></div>`).join('');
       const full = total >= (u.p || 0) && total > 0;
       return `<div class="loelev"><b>${esc(e.etikett)}</b><span${
         total ? (full ? ' data-full' : '') : ' data-utan'}>${total} av ${u.p} poäng${

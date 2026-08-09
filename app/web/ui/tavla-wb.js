@@ -481,12 +481,46 @@ WB.stack = function(spec) {
 // Component: table
 // { kind: 'table', headers: ['t','h'], rows: [[1,5],[2,11],...],
 //   cellW: 60, cellH: 40, color: 'black' }
+//
+// cellW SATT ger likbreda kolumner precis som förr — teckentabellen
+// (['x','<1','1','1–3','3','>3']) är designens egen användning och den ska
+// se ut som den gör. cellW UTELÄMNAT ger i stället en kolumnbredd per kolumn,
+// räknad ur innehållet: en sammanfattningstabell med en kontextspalt, en
+// ekvationsspalt och en metodspalt har inte fyra lika breda kolumner, och med
+// ett gemensamt mått blev valet mellan avhugget och glest. Texten ritades då
+// rakt ut ur sin ruta och lade sig över grannens.
 // ============================================================
+
+// Textbredd utan att sätta något i DOM:en (komponenten mäts av layoutmotorn
+// via _intrinsicSize och hinner aldrig ligga i dokumentet). Canvas mäter med
+// samma typsnitt handstilen ritas i, så bredden stämmer med det som syns.
+let _matduk = null;
+function textbredd(text, fontPx, weight) {
+  try {
+    if (!_matduk) _matduk = document.createElement('canvas').getContext('2d');
+    const hand = getComputedStyle(document.documentElement)
+      .getPropertyValue('--hand-font').trim() || 'sans-serif';
+    _matduk.font = `${weight || 400} ${fontPx}px ${hand}`;
+    return _matduk.measureText(String(text ?? '')).width;
+  } catch (e) {
+    // Ingen canvas (t.ex. serverside-rasterisering) — falla tillbaka på en
+    // teckenbreddsgissning hellre än att kasta mitt i en tavla.
+    return String(text ?? '').length * fontPx * 0.52;
+  }
+}
+
+// Kolumnen får sitt innehålls bredd plus luft, men aldrig smalare än en siffra
+// och aldrig bredare än ett drygt textled. Måtten är RELATIVA till gradtalet:
+// fit-passet skalar cellH (scaleSections), och ett fast pixeltak hade huggit av
+// texten så fort tavlan skalades upp.
+const CELL_PAD = 0.9;    // × gradtalet — luft på var sida om innehållet
+const CELL_MIN = 2.2;    // × gradtalet — en siffra ska ha en egen ruta
+const CELL_MAX = 16;     // × gradtalet — bredare än så är det en text, inte en cell
+
 WB.table = function(spec) {
   const {
     headers = [],
     rows = [],
-    cellW = 65,
     cellH = 36,
     color = 'black',
     seed,
@@ -499,11 +533,31 @@ WB.table = function(spec) {
 
   const cols = Math.max(headers.length, ...rows.map(r => r.length));
   const rowCount = (headers.length ? 1 : 0) + rows.length;
-  const totalW = cols * cellW;
+  const fontPx = cellH * 0.55;
+  const bredder = [];
+  for (let c = 0; c < cols; c++) {
+    if (spec.cellW) { bredder.push(spec.cellW); continue; }
+    let w = headers[c] != null
+      ? textbredd(headers[c], fontPx, headerWeight) : 0;
+    for (const row of rows) {
+      if (row[c] != null) w = Math.max(w, textbredd(row[c], fontPx, 400));
+    }
+    bredder.push(Math.min(CELL_MAX * fontPx,
+                          Math.max(CELL_MIN * fontPx,
+                                   Math.ceil(w) + CELL_PAD * fontPx)));
+  }
+  // Kolumnernas vänsterkanter — rutnätet och cellerna läser samma lista, så de
+  // kan inte glida isär.
+  const kant = [0];
+  for (const w of bredder) kant.push(kant[kant.length - 1] + w);
+  const totalW = kant[kant.length - 1];
   const totalH = rowCount * cellH;
 
   const container = el('div', {
-    class: 'wb-element',
+    // wb-table i samma anda som wb-text och wb-math: en typklass, ingen
+    // sättning. Utan den går tabellen inte att peka ut bland alla wb-element,
+    // och en form som inte går att peka ut går inte att pröva.
+    class: 'wb-element wb-table',
     style: {
       transform: `rotate(${rot.toFixed(2)}deg)`,
       width: totalW + 'px',
@@ -535,7 +589,7 @@ WB.table = function(spec) {
   }
   // vertical lines
   for (let i = 0; i <= cols; i++) {
-    const x = i * cellW;
+    const x = kant[i];
     const p = HW.wobblyVLine(totalH, { amplitude: 0.8, seed: s + i * 5 + 99 });
     gridSvg.appendChild(svg('path', {
       d: p,
@@ -555,14 +609,20 @@ WB.table = function(spec) {
     const cell = el('div', {
       style: {
         position: 'absolute',
-        left: col * cellW + djitter.x + 'px',
+        left: kant[col] + djitter.x + 'px',
         top: row * cellH + djitter.y + 'px',
-        width: cellW + 'px',
+        width: bredder[col] + 'px',
         height: cellH + 'px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        fontSize: cellH * 0.55 + 'px',
+        // Cellen är satt efter sitt innehåll; texten ska ändå aldrig radbryta
+        // ut ur rutan om måttet skulle slå fel med ett par tiondelar. Med en
+        // GIVEN cellW är det tvärtom motorns gamla beteende som gäller —
+        // designens egna tabeller ska se ut precis som de gör.
+        whiteSpace: 'nowrap',
+        overflow: spec.cellW ? 'visible' : 'hidden',
+        fontSize: fontPx + 'px',
         fontWeight: weight,
         transform: `rotate(${drot.toFixed(1)}deg)`,
       },
