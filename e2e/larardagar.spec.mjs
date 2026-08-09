@@ -195,6 +195,14 @@ test("dag 4 — rättningsdag: siffrorna in, utfallet blir källdörr 5",
       els => els.map(e => e.getAttribute("data-nyckel")));
     await page.locator(`.rattrad[data-nyckel="${nycklar[0]}"] .rattfalt`).fill("40");
     await page.locator(`.rattrad[data-nyckel="${nycklar[1]}"] .rattfalt`).fill("12");
+    /* Appen räknar om andelen på fältets input-händelse (rattning.js), och
+       `rattat` byggs BARA av rader som fått en andel. Att klicka Spara direkt
+       efter fill() är alltså en kapplöpning med uträkningen: i CI 2026-08-09
+       sparades raderna utan sin andel och `rattat` blev null i basen, medan
+       samma test var grönt här. Procenttalet i raden är kvittot på att
+       uträkningen hunnit fram. */
+    await expect(page.locator(`.rattrad[data-nyckel="${nycklar[0]}"] .rattproc`))
+      .toHaveText(/%/, { timeout: 15_000 });
     await page.locator("#rattningspara").click();
 
     await expect.poll(() => anrop.filter(a => a.metod === "PUT"

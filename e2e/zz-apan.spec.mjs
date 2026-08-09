@@ -221,9 +221,14 @@ for (const vy of VYER) {
            Synkraden visar serverns besked som en toast (klass.js).
          · /api/exams/generate 400 — apan trycker Skriv utan att ha valt kurs.
            Servern svarar «välj en kurs» och skrivrutan visar det; att appen
-           frågar utan kurs är apans verk, inte appens. */
+           frågar utan kurs är apans verk, inte appens.
+         · /api/planning/generate 400 och 409 — samma sak för tavlan. 409:an
+           kommer när apan hinner trycka Skriv två gånger: GPU-låset är taget av
+           det första jobbet och servern svarar «upptagen», precis som den ska.
+           Att det bara syns ibland är tajming — på CI:s långsammare maskin
+           landar andra klicket oftare innan första jobbet släppt (2026-08-09). */
     L.rent(fel, { tillat: [/api\/sample/, /api\/schema\/synk/,
-                           /api\/exams\/generate/] });
+                           /api\/exams\/generate/, /api\/planning\/generate/] });
     await levande(page);
   });
 }
