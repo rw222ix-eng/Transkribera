@@ -27,7 +27,8 @@ from pathlib import Path
 ROT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROT))
 
-from app import claude_code, exam_gen, lesson_board, postprocess   # noqa: E402
+from app import (claude_code, exam_gen, exam_spec, lesson_board,   # noqa: E402
+                 postprocess)
 from tests import fejk                                             # noqa: E402
 
 TRANSKRIPT = (
@@ -85,7 +86,56 @@ SCENARIER = {
         "system": lambda: postprocess.EXTRACT_SYSTEM,
         "schema": lambda: postprocess.EXTRACT_SCHEMA,
     },
+    # Nivådomaren (Del C) bedöms mot ett FÄRDIGT dokument, inte mot en tom
+    # sida. Därför läses respektive band in och döms — samma dokument som
+    # resten av sviten arbetar med, så en avvikelse i domen går att slå upp i
+    # uppgifterna.
+    #
+    # ETT band per dokumenttyp, och det är inte överdrift: uppspelningen har en
+    # fil per scenario, och uppgiftsnumren betyder olika saker i olika band
+    # (uppgift 2a är C i gruppuppgiften och E i provet). Med ett gemensamt band
+    # dömer provets dom gruppuppgiftens uppgifter, och fällningen säger då mer
+    # om kassetten än om dokumentet. Domarna skiljs åt på skalan de fick — se
+    # _DOMAR_VAL i tests/fejk.py.
+    "nivadomare": {
+        "vad": "exam_gen.doma_nivaer — blind nivåbedömning av provbandet",
+        "prompt": lambda: _domarprompt("prov"),
+        "system": lambda: exam_gen.DOMAR_SYSTEM,
+        "schema": lambda: exam_gen.DOMAR_SCHEMA,
+    },
+    "nivadomare-blad": {
+        "vad": "exam_gen.doma_nivaer — blind nivåbedömning av arbetsbladsbandet",
+        "prompt": lambda: _domarprompt("arbetsblad"),
+        "system": lambda: exam_gen.DOMAR_SYSTEM,
+        "schema": lambda: exam_gen.DOMAR_SCHEMA,
+    },
+    "nivadomare-grupp": {
+        "vad": "exam_gen.doma_nivaer — blind nivåbedömning av gruppuppgiftsbandet",
+        "prompt": lambda: _domarprompt("gruppuppgift"),
+        "system": lambda: exam_gen.DOMAR_SYSTEM,
+        "schema": lambda: exam_gen.DOMAR_SCHEMA,
+    },
 }
+
+# Vilket band varje domare läser, och hur många uppgifter dokumentet har. Det
+# senare bara för att provets skelett ska bli detsamma som när bandet spelades
+# in: skalan i domarprompten måste vara den dokumentet faktiskt skrevs mot.
+_DOMARENS_BAND = {"prov": ("prov", 6), "arbetsblad": ("arbetsblad", 6),
+                  "gruppuppgift": ("gruppuppgift", 4)}
+
+
+def _bandets_dokument(namn: str) -> dict:
+    """Dokumentet ur ett band — result-raden är hela svaret."""
+    band = fejk.las_kassett(namn)
+    return exam_gen._parse_exam(json.loads(band["rader"][-1])["result"])
+
+
+def _domarprompt(profil: str) -> str:
+    bandnamn, antal = _DOMARENS_BAND[profil]
+    skelett = exam_spec.balanced_skeleton(antal) if profil == "prov" else None
+    return exam_gen.build_domar_prompt(
+        exam_gen.domarenheter(_bandets_dokument(bandnamn)),
+        skala=exam_gen._skala(profil, "", skelett))
 
 
 def spela_in(namn: str) -> Path:

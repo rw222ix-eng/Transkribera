@@ -161,9 +161,11 @@ def _spara_fakta(conn, bok_id: int, fakta: list[dict], offset: int | None) -> No
             continue
         db.save_bok_sida(conn, bok_id, tryckt,
                          pdf_sida=(pdf_i + 1) if isinstance(pdf_i, int) else None,
-                         avsnitt=rad.get("avsnitt"), rubrik=rad.get("rubrik"))
+                         avsnitt=rad.get("avsnitt"), rubrik=rad.get("rubrik"),
+                         nivasystem=rad.get("nivasystem"))
         db.save_bok_uppgifter(conn, bok_id, [
-            {"nr": u.get("nr"), "sida": tryckt, "niva": u.get("niva")}
+            {"nr": u.get("nr"), "sida": tryckt, "niva": u.get("niva"),
+             "nivamarke": u.get("nivamarke")}
             for u in (rad.get("uppgifter") or []) if isinstance(u, dict)])
     db.rakna_om_uppg(conn, bok_id)
 
@@ -301,3 +303,84 @@ def build_bok_block(bok: dict, fran: int, till: int, text: str,
     if nummer:
         rader.append("Uppgiftsnummer på sidorna: " + ", ".join(nummer) + ".")
     return "\n\n".join(rader)
+
+
+# ── Bokens nivåskala ──────────────────────────────────────────────────────
+
+# Hur många uppgiftsnummer per nivå som följer med i prompten. Fler gör blocket
+# långt utan att göra skalan tydligare — två exempel räcker för att peka ut vad
+# nivån betyder, och texterna står ändå i uppslaget ovanför.
+EXEMPEL_PER_NIVA = 2
+
+
+def nivasystem(sidor: list[dict]) -> str:
+    """Bokens egen nivåskala som den lästes av på uppslagets sidor.
+
+    Sidor lästa före Del C saknar fältet (ingen omläsning gjordes — 96 sekunder
+    per sida är för dyrt för att betala om), så tystnad är det normala och inte
+    ett fel. Är sidorna oense vinner den vanligaste beskrivningen: samma bok kan
+    beskrivas i olika ord på två sidor, men det är samma skala."""
+    roster: dict[str, int] = {}
+    for s in sidor or []:
+        txt = str(s.get("nivasystem") or "").strip()
+        if txt:
+            roster[txt] = roster.get(txt, 0) + 1
+    if not roster:
+        return ""
+    return max(roster.items(), key=lambda kv: (kv[1], -len(kv[0])))[0]
+
+
+def build_niva_block(bok: dict, fran: int, till: int, sidor: list[dict],
+                     uppgifter: list[dict] | None, *, profil: str) -> str:
+    """Promptblocket för bokens NIVÅSKALA (Del C, C2b).
+
+    Läromedlet nivåmärker sina uppgifter, och för just den här klassen ÄR boken
+    skalan: en uppgift «i bokens nivå 2» är en svårighetsgrad läraren och
+    eleverna redan delar, till skillnad från «stigande svårighet» som inte är
+    något alls. Blocket ger nivåerna med några uppgiftsnummer var — texterna
+    står redan i uppslaget, som ligger tidigare i samma prompt, så numren räcker
+    som pekare.
+
+    Tomt block när uppslaget saknar nivåmärkning: då finns ingen skala att
+    förankra i, och anroparen faller tillbaka på NP-rubriken
+    (app/niva_rubrik.build_skala_utan_bok). Ett halvt block hade varit värre —
+    en skala med en enda nivå säger inte vad svårare betyder."""
+    per_niva: dict[int, list[dict]] = {}
+    for u in uppgifter or []:
+        n = u.get("niva")
+        if isinstance(n, int) and u.get("nr"):
+            per_niva.setdefault(n, []).append(u)
+    if len(per_niva) < 2:
+        return ""
+    system = nivasystem(sidor)
+    namn = (bok or {}).get("namn") or "läroboken"
+    rader = []
+    for n in sorted(per_niva):
+        val = per_niva[n][:EXEMPEL_PER_NIVA]
+        marken = sorted({str(u.get("nivamarke") or "").strip()
+                         for u in per_niva[n]} - {""})
+        etikett = f"Nivå {n}"
+        if marken:
+            etikett += f" (bokens beteckning: {', '.join(marken)})"
+        rader.append(f"- {etikett}: uppgift "
+                     + ", ".join(str(u["nr"]) for u in val))
+    lagst, hogst = min(per_niva), max(per_niva)
+    huvud = (f"BOKENS NIVÅSKALA — {namn}, s. {fran}–{till}. Uppgifterna på "
+             "uppslaget är nivåmärkta av läromedlet självt"
+             + (f" ({system})" if system else "")
+             + ". Nivå 1 är den lättaste. Uppgifterna nedan står i uppslaget "
+               "ovan — läs dem och använd dem som måttstock:")
+    if profil == "gruppuppgift":
+        krav = (f"Nivåkrav: gruppuppgiftens INGÅNG ska vara lösbar för den som "
+                f"klarar bokens nivå {lagst} på det här uppslaget, och "
+                f"FÖRDJUPNINGEN får nå bokens nivå {hogst}. Det är ett golv och "
+                "ett tak, inte en trappa — uppgifterna behöver inte bli svårare "
+                "nedåt, men ingen av dem får ligga under golvet eller över taket.")
+    else:
+        krav = (f"Nivåkrav: uppgifterna ska spänna bokens nivåer {lagst}–"
+                f"{hogst} med tyngdpunkten enligt balansmålen, och varje uppgift "
+                "ska vara JÄMFÖRBAR i svårighet med uppslagets uppgifter på "
+                f"samma nivå. Ingen uppgift svårare än bokens nivå {hogst}, "
+                f"ingen lättare än dess nivå {lagst}. Det är detta «stigande "
+                "svårighet» betyder här.")
+    return "\n".join([huvud, *rader, "", krav])

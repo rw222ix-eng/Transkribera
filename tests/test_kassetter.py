@@ -88,7 +88,14 @@ def test_provet_ur_kassetten_klarar_balansreglerna(fejk_claude):
     fejk_claude(kassett="prov")
     res = exam_gen.generate_exam("Matematik 3c", "NA25",
                                  ["Derivata", "Gränsvärden"], model="", antal=6)
-    assert res["errors"] == [], res["errors"]
+    # Det FÖRRA bandet bar två nivåfel: en kommunikationspoäng på E-nivå (som
+    # nationella provet aldrig delar ut) och en A-poäng på en «Visa att …»-
+    # uppgift (som är C-nivå i underlaget). Båda är borta i omspelningen —
+    # skelettet ber inte längre om EK, och rubriken i prompten säger vad ett
+    # A-innehåll kräver. Det är den enda mätning vi har på att kalibreringen
+    # gjorde skillnad i det modellen faktiskt skriver, och därför står den här.
+    assert [e for e in res["errors"] if e["code"] == "nivasignal"] == [], \
+        "nivåsignalerna tände på ett band inspelat EFTER kalibreringen"
     exam = res["exam"]
     assert exam["uppgifter"] and exam["titel"]
     from app import exam_spec
@@ -97,6 +104,39 @@ def test_provet_ur_kassetten_klarar_balansreglerna(fejk_claude):
     # Städningen tar toppnivån — och bara den.
     assert "totalpoang" not in exam and "instruktion" not in exam
     assert all("del" in u and "poang" in u for u in exam["uppgifter"])
+
+
+@pytest.mark.parametrize("dokument,domarband", [
+    ("prov", "nivadomare"),
+    ("arbetsblad", "nivadomare-blad"),
+    ("gruppuppgift", "nivadomare-grupp"),
+])
+def test_nivadomen_ur_kassetten_gar_hela_vagen(fejk_claude, dokument, domarband):
+    """Domarbanden genom hela kedjan: CLI → ström → JSON → nivåjämförelse.
+
+    Ett band per dokumenttyp, alla tre SKARPA. Domaren fick uppgifterna utan
+    poäng och utan bedömningsanvisningar, och det som prövas här är att domen
+    kommer hela vägen tillbaka och går att para ihop med rätt uppgift — inte
+    att den håller med. Den fäller två av tjugosex enheter över de tre banden,
+    och båda fällningarna är rimliga (planens C7, punkt 4)."""
+    fejk_claude(kassett=domarband)
+    exam = exam_gen._parse_exam(json.loads(
+        fejk.las_kassett(dokument)["rader"][-1])["result"])
+    enheter = exam_gen.domarenheter(exam)
+    domar = exam_gen._parse_domar(json.loads(
+        fejk.las_kassett(domarband)["rader"][-1])["result"])
+    # Varje poängbärande enhet ska ha fått en dom. Tystnad tolkas aldrig som
+    # medhåll, så en domare som hoppar över halva provet «godkänner» det —
+    # och det är just den tystnaden som inte får smyga sig in.
+    assert {e["nr"] for e in enheter} <= set(domar), \
+        f"{domarband}: domaren hoppade över uppgifter"
+    assert all(d["niva"] in ("E", "C", "A", "OKLART") for d in domar.values())
+    # Uppspelningen genom appens egen söm ger samma svar som filen.
+    avv = exam_gen.doma_nivaer(exam, model="")
+    vantat = exam_gen.avvikelser(enheter, domar)
+    assert [a["path"] for a in avv] == [a["path"] for a in vantat]
+    for a in avv:                      # en avvikelse ska säga vad som ska GÖRAS
+        assert "höj svårigheten" in a["message"] or "sänk svårigheten" in a["message"]
 
 
 def test_insikterna_ur_den_skarpa_kassetten_bar_inga_namn(fejk_claude):
@@ -142,7 +182,21 @@ def test_auto_laget_lagger_i_bandet_prompten_ber_om(fejk_claude):
         res = exam_gen.generate_exam("Matematik, nivå 2c", "NA25",
                                      ["Andragradsekvationer"], model="",
                                      antal=antal, profil=profil, grupp=grupp)
-        assert res["errors"] == [], (profil, res["errors"])
+        # Vad som får stå kvar och vad som inte får det.
+        #
+        # Uppspelningen svarar med SAMMA band varje gång, så en reparation ger
+        # tillbaka exakt det dokument som skulle lagas. Balans- och nivåfynd kan
+        # därför aldrig repareras bort här — de överlever alla rundor, och det
+        # är uppspelningens natur och inte ett fel i kedjan. Så var de blir
+        # varningar läraren ser, och det är rätt.
+        #
+        # Schema- och JSON-fel är något helt annat: de betyder att modellen
+        # skrev en form appen inte kan ta emot, och att prompten alltså inte
+        # räcker. Två sådana hittades av just den här inspelningen —
+        # elevlosningar och innehall inne i en deluppgift — och fixades i
+        # INSTRUCTION. Det är den bevakningen som ska stå kvar.
+        brott = [e for e in res["errors"] if e["code"] in ("schema", "json")]
+        assert brott == [], (profil, brott)
         assert res["exam"]["titel"], profil
         # Rätt band, inte bara ETT band: profilerna har olika balansregler och
         # provets kassett faller igenom arbetsbladets.

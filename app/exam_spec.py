@@ -17,6 +17,7 @@ Uppgifterna är alltid egenformulerade; endast strukturen efterliknar NP.
 from __future__ import annotations
 
 import copy
+import itertools
 import math
 import re
 from typing import Annotated, Literal, Union
@@ -688,14 +689,25 @@ def balanced_skeleton(antal: int, profil: str = "prov") -> list[dict]:
     if antal >= 8:
         slots.append({"del": "B", "formaga": "P", "typ": "rutin", "poang": [1, 0, 0]})
     have = {s["formaga"] for s in slots}
-    nc = antal - len(slots)
-    # Del C-förmågor: täck resterande golv, fyll med hög-mål-förmågor (P/PL/B).
+    nc = max(0, antal - len(slots))
+    # Del C-förmågor: täck resterande golv, fyll sedan ur ett CYKLISKT mönster.
+    # Fyllnaden var förut en fast lista på tio element, och den tog slut vid
+    # len(golv) + 10 = 16 slots. zip():en nedan kapade då skelettet TYST: den
+    # som bad om 20 uppgifter fick 16, utan fel och utan varning, eftersom
+    # to_response_format låser minItems/maxItems till skelettets längd (och för
+    # antal ≥ 27 slutade det kapade skelettet dessutom validera rent).
+    # Mönstret cyklar därför i stället, och ett varv är vägt mot FORMAGA_MAL:
+    # P 3/10, PL 2/10, B 2/10, M 1/10, R 1/10, K 1/10 — varje andel innanför
+    # sitt målintervall. Ordningen varvar också typerna (P/B/K ger redovisning,
+    # PL/M problem, R resonemang) så att MAX_LIKA_I_RAD håller även över
+    # skarven där mönstret börjar om.
     c_form = [f for f in golv if f not in have]
-    fill = ["P", "PL", "B", "P", "PL", "B", "P", "PL", "B", "P"]
-    c_form += fill[:max(0, nc - len(c_form))]
+    fyllnad = itertools.cycle(["P", "PL", "B", "P", "M", "K", "R", "P", "PL", "B"])
+    while len(c_form) < nc:
+        c_form.append(next(fyllnad))
     c_form = c_form[:nc]
     # Poäng: lättare (C) först, tyngre (C+A) sist → stigande svårighet.
-    m = max(1, min(nc, round(0.45 * antal)))          # antal C+A-uppgifter
+    m = min(nc, max(1, round(0.45 * antal)))          # antal C+A-uppgifter
     poangs = [[1, 1, 0]] * (nc - m) + [[1, 1, 1]] * m
 
     # Typ FÖLJER förmågan (varierar därmed som förmågorna gör) — annars blir
@@ -704,8 +716,21 @@ def balanced_skeleton(antal: int, profil: str = "prov") -> list[dict]:
         return ("resonemang" if f == "R"
                 else "problem" if f in ("PL", "M") else "redovisning")
 
-    for f, p in zip(c_form, poangs):
-        slots.append({"del": "C", "formaga": f, "typ": _typ(f), "poang": list(p)})
+    # strict=True: en osynkad zip HÄR var hela buggen ovan. Nu är listorna lika
+    # långa by construction, och skulle de någonsin glida isär vill vi ha ett
+    # undantag — inte ett tyst kortare prov.
+    for f, p in zip(c_form, poangs, strict=True):
+        p = list(p)
+        # Kommunikation har ingen E-nivå. Uppmätt över fyra nationella prov
+        # (app/niva_rubrik.ANALYSERADE_PROV): kommunikationspoäng delas ut på
+        # C- och A-nivå men ALDRIG på E — bedömningsanvisningarna säger att
+        # skriftlig kommunikation inte bedöms särskilt på E-nivå för enskilda
+        # uppgifter, eftersom den som klarar E i övrigt anses redovisa
+        # tillräckligt. Skelettet lade ändå [1, 1, 0] på K-raden och bad därmed
+        # om en poäng som inte finns.
+        if f == "K":
+            p[0] = 0
+        slots.append({"del": "C", "formaga": f, "typ": _typ(f), "poang": p})
 
     # Liten poängsökning: höj poäng på under-mål-förmågan / -nivån tills rent.
     for _ in range(60):
@@ -738,16 +763,19 @@ def _justera_skelett(slots: list[dict], errs: list[dict]) -> bool:
                     s["poang"][1] += 1
                     return True
             for s in slots:                            # annars +1 E
-                if s["formaga"] == f:
+                if s["formaga"] == f and f != "K":      # K har ingen E-nivå
                     s["poang"][0] += 1
                     return True
         if code == "nivabalans":
             niva = path.split()[-1].lower()            # "nivå E/C/A"
             idx = {"e": 0, "c": 1, "a": 2}[niva]
             # höj nivån på en lämplig Del C-uppgift (rör aldrig typ → bevarar
-            # antiklumpningen); E får höjas överallt, C/A bara på icke-rutin.
+            # antiklumpningen); E får höjas överallt utom på K-raden (som inte
+            # har någon E-nivå, se balanced_skeleton), C/A bara på icke-rutin.
             for s in slots:
-                if s["del"] == "C" and (idx == 0 or s["typ"] != "rutin"):
+                if s["del"] != "C" or (idx == 0 and s["formaga"] == "K"):
+                    continue
+                if idx == 0 or s["typ"] != "rutin":
                     s["poang"][idx] += 1
                     return True
     return False

@@ -138,20 +138,24 @@ class _Klient:
 _CLI = r'''
 import json, os, sys, time
 
-# Riktiga `claude` skriver UTF-8, och appen läser strömmen som UTF-8
-# (claude_code.generate, Popen(encoding="utf-8")). Fejken ärvde i stället
-# konsolens teckentabell — cp1252 på svenska Windows — och dog med
-# UnicodeEncodeError mitt i uppspelningen så fort ett band innehöll ett tecken
-# som saknas där. Ett MINUSTECKEN (U+2212, inte bindestreck) i tavelbandet
-# räckte: strömmen kapades mitt i en sträng och fyra kassettester föll på
-# «modellen svarade inte med giltig JSON» — ett fel i fejken, inte i bandet.
-sys.stdout.reconfigure(encoding="utf-8")
-sys.stderr.reconfigure(encoding="utf-8")
-# Samma sak åt andra hållet: appen matar prompten som UTF-8 på stdin, och
-# auto-läget nedan LÄSER den för att välja band. Med cp1252 föll läsningen på
-# ett tecken i fallgropsblocket, auto-läget fick en trasig prompt och la i
-# provbandet när testet bad om ett arbetsblad.
-sys.stdin.reconfigure(encoding="utf-8")
+# Rören är UTF-8, alltid. På Windows är sys.stdin/stdout annars den lokala
+# kodsidan (cp1252), och då går det sönder i BÅDA riktningarna. Två sessioner
+# hittade var sitt ansikte av samma fel, och båda står här för att de säger
+# olika saker om varför raderna behövs:
+#
+# * UT: ett MINUSTECKEN (U+2212, inte bindestreck) i tavelbandet finns inte i
+#   cp1252. Fejken dog med UnicodeEncodeError mitt i uppspelningen, strömmen
+#   kapades mitt i en sträng, och fyra kassettester föll på «modellen svarade
+#   inte med giltig JSON» — ett fel i fejken, inte i bandet.
+# * IN: appen matar prompten som UTF-8 på stdin, och auto-läget nedan LÄSER
+#   den för att välja band. Med cp1252 blev å, ä och ö mojibake, nyckelorden
+#   matchade inte, och ett arbetsblad fick tyst provbandet.
+#
+# errors="replace" så att en enstaka omöjlig teckenkombination ger ett
+# frågetecken i stället för att döda processen mitt i ett band.
+sys.stdin.reconfigure(encoding="utf-8", errors="replace")
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 LAGE = os.environ.get("FEJK_CLAUDE", "ok")
 SVAR = os.environ.get("FEJK_CLAUDE_SVAR", "Det här är svaret.")
@@ -164,16 +168,39 @@ BAND = os.environ.get("FEJK_KASSETTER", "")     # mappen, för auto-läget
 # Nyckelorden är generatorernas egna uppdragsrader (lesson_board.INSTRUCTION,
 # exam_gen.build_prompt, postprocess.EXTRACT_INSTRUCTION) — och de gäller även
 # reparations- och iterationsprompterna, som bär samma instruktion överst.
+# Versalorden räcker som nyckel, och det är med flit: de står både i
+# uppdragsraden («skriv ett ARBETSBLAD») och i reparationsprompten («ditt förra
+# ARBETSBLAD»). Förut matchade bara uppdragsraden, så en reparation av ett
+# arbetsblad hamnade i PROVETS band — och arbetsbladet «lagades» till ett prov.
 _VAL = [
-    ("skriv en GRUPPUPPGIFT", "gruppuppgift"),
-    ("skriv ett ARBETSBLAD", "arbetsblad"),
+    ("GRUPPUPPGIFT", "gruppuppgift"),
+    ("ARBETSBLAD", "arbetsblad"),
     ("lektionstavla", "tavla"),
     ("matteprov", "prov"),
     ("Läs transkriptet", "insikter"),
 ]
 
+# Nivådomaren (Del C) prövas FÖRE listan ovan, och i två steg. Skälet till båda
+# delarna: domarprompten läser ett färdigt dokument och bär därför spår av den
+# generator som skrev det — den skulle matcha «skriv ett ARBETSBLAD» och få
+# arbetsbladet tillbaka som svar på en fråga om dess nivå. Och EN domarkassett
+# räcker inte, för uppgiftsnumren betyder olika saker i olika band: uppgift 2a
+# är C i gruppuppgiften och E i provet, så provets dom fäller gruppuppgiften på
+# en skillnad som bara finns mellan kassetterna. Domarna skiljs åt på skalan de
+# fick med sig, vilket är det enda i prompten som säkert skiljer dem åt.
+_DOMARE = "vilken nivå den faktiskt ligger på"
+_DOMAR_VAL = [
+    ("Gruppuppgiften är inte en trappa", "nivadomare-grupp"),
+    ("det här bladet", "nivadomare-blad"),
+]
+
 
 def _auto(prompt):
+    if _DOMARE in prompt:
+        for nyckel, namn in _DOMAR_VAL:
+            if nyckel in prompt:
+                return os.path.join(BAND, namn + ".json")
+        return os.path.join(BAND, "nivadomare.json")
     for nyckel, namn in _VAL:
         if nyckel in prompt:
             return os.path.join(BAND, namn + ".json")
