@@ -164,7 +164,13 @@ BAND = os.environ.get("FEJK_KASSETTER", "")     # mappen, för auto-läget
 # Nyckelorden är generatorernas egna uppdragsrader (lesson_board.INSTRUCTION,
 # exam_gen.build_prompt, postprocess.EXTRACT_INSTRUCTION) — och de gäller även
 # reparations- och iterationsprompterna, som bär samma instruktion överst.
+# Anteckningarna står FÖRST. Deras prompt kan bära ett helt mötestranskript,
+# och i talspråk dyker orden upp var som helst — «jag kopierar upp ett
+# arbetsblad till fredag», sagt på ett möte, hade annars lagt i provspårets
+# band. Nyckeln är generatorns egen inledningsrad (notes_gen.INSTRUCTION), som
+# står överst även i reparations- och iterationsprompterna.
 _VAL = [
+    ("Skriv lärarens stödanteckningar", "anteckningar"),
     ("skriv en GRUPPUPPGIFT", "gruppuppgift"),
     ("skriv ett ARBETSBLAD", "arbetsblad"),
     ("lektionstavla", "tavla"),

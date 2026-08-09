@@ -208,10 +208,10 @@ export const traff = (anrop, slut) => anrop.filter(a => a.vag.endsWith(slut));
  * valt en lektion i veckan (då bär lektionen dem själv).
  */
 export async function skriv(page, { typ = "Tavla", moment = "derivatans definition",
-                                    klass = null, kurs = null,
+                                    klass = null, kurs = null, onskemal = null,
                                     vantaSvar = true } = {}) {
   await page.getByRole("tab", { name: "Planering" }).click();
-  await page.evaluate(([t, m, kl, ku]) => {
+  await page.evaluate(([t, m, kl, ku, ons]) => {
     window.SattLage(t);
     const satt = (id, v) => {
       const e = document.querySelector(id);
@@ -227,13 +227,22 @@ export async function skriv(page, { typ = "Tavla", moment = "derivatans definiti
     // Skriv-knappen bor i steg 4 («Upplägg»); stapeln viker ihop de andra.
     window.PlanSteg.las(4, false);
     window.PlanSteg.gaTill(4);
-  }, [typ, moment, klass, kurs]);
+    /* Anteckningarnas källa är rutan i typvalen, inte momentet — den fylls
+       EFTER gaTill, för raderna ritas om när typen byts. */
+    if (ons != null) {
+      const ruta = document.querySelector(".typfritext");
+      if (ruta) {
+        ruta.value = ons;
+        ruta.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+    }
+  }, [typ, moment, klass, kurs, onskemal]);
   /* Vänta på SVARET, inte på att ett papper syns. Utkastet återställs ur
      servern vid sidladdning (Etapp 0.2), så «#dokument är synligt» kan vara
      gårdagens papper — och då mäter dagen ingenting. */
   const svar = vantaSvar
     ? page.waitForResponse(
-        r => /\/api\/(planning|exams)\/generate$/.test(new URL(r.url()).pathname),
+        r => /\/api\/(planning|exams|anteckningar)\/generate$/.test(new URL(r.url()).pathname),
         { timeout: 60_000 })
     : Promise.resolve(null);
   await page.locator("#skriv").click();
