@@ -45,6 +45,24 @@ export default defineConfig({
    * sekund långsammare av att taket höjs. Blir ett test konsekvent 60 s är det
    * något annat, och då syns det i körningstiderna. */
   timeout: 90_000,
+  /* Omförsök BARA i CI, och bara där av en mätt anledning.
+   *
+   * GitHubs windows-runner har två kärnor och kör Chrome, Python-servern och
+   * Playwright samtidigt. Under trängseln tog en 404 på en statisk fil 38
+   * sekunder (spår, 2026-08-09) — ren kö. Följden blev att ETT test föll per
+   * körning, men aldrig samma: flerklass, sedan iterera och rattning, sedan
+   * offline, sedan dag 3. Alla på tid, aldrig på påstående.
+   *
+   * Hypotesen att appen svälter trådpoolen mättes och FÖLL: hela sviten kördes
+   * lokalt med serverns trådantal provat var tredje sekund, och trådarna toppar
+   * på 24 av anyios 40 och sjunker mot slutet. Det finns alltså inget i koden
+   * att laga.
+   *
+   * Noll här: ett test som är flakigt på den här maskinen är ett fynd, och det
+   * ska synas direkt. I CI rapporterar Playwright omförsökta test som «flaky» —
+   * de göms inte, de får en etikett. Faller ett test alla tre gångerna är det
+   * trasigt på riktigt. */
+  retries: process.env.CI ? 2 : 0,
   forbidOnly: !!process.env.CI,
   reporter: [["list"]],
   use: {
