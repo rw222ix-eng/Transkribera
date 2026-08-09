@@ -1,0 +1,341 @@
+<!-- ══════════════════ FÖRLAGA · GRUPPUPPGIFTEN ══════════════════
+     Lärarens egen gruppuppgift till lektionen «Från text till ekvation»
+     (exponential- mot potensekvationer). Körd skarpt, och en av de bästa
+     lektioner läraren haft — därför är den UTGÅNGSPUNKTEN för hur appen ska
+     skriva gruppuppgifter.
+
+     Filen är REFERENS, inte kod. Ingenting i appen läser docs/; destillatet
+     står för hand i app/exam_gen.py (FORLAGA_GRUPP) och pekar tillbaka hit.
+
+     LÄRARENS DOMAR — metadata som annars tappas:
+
+     1. STEGRINGEN VAR LYCKAD. Eleverna förstod frågorna, ALLA klarade första
+        uppgiften, och bara några få grupper klarade den sista — men någon
+        klarade den. Det är målprofilen appen ska sikta på, och den säger emot
+        den gamla regeln «fyra ingångar, inte en trappa».
+
+     2. TYP-KRYSSRUTORNA BEHÖVDES INTE. Raden «Typ: ☐ Exponentialekvation
+        ☐ Potensekvation» står i den här filen men är BORTA ur mönstret.
+        Klassificeringen är kvar som tankesteg — nyckelfrågan i
+        instruktionsrutan tvingar den — men den redovisas genom ekvationen,
+        inte genom ett kryss.
+
+     UTSEENDET ÄR INTE FACIT. Appens formgivning är färdig och rörs inte;
+     facit är designsystemets «Arbetsblad prov och tavlor — femton former».
+     DM Sans, kortlayouten och färgerna här ska INTE porteras. Det som
+     destilleras är struktur, frågor och pedagogik.
+-->
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Från text till ekvation</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  @page {
+    size: A4 portrait;
+    margin: 14mm 16mm 12mm 16mm;
+  }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 10.5pt;
+    line-height: 1.45;
+    color: #1a1a1a;
+    background: #fff;
+    width: 210mm;
+    margin: 0 auto;
+    padding: 14mm 16mm 12mm 16mm;
+  }
+
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 6pt;
+    padding-bottom: 5pt;
+    border-bottom: 1.5pt solid #1a1a1a;
+  }
+
+  .header-title {
+    font-size: 16pt;
+    font-weight: 700;
+    letter-spacing: -0.3px;
+    color: #1a1a1a;
+  }
+
+  .header-meta {
+    font-size: 8.5pt;
+    color: #666;
+    font-weight: 500;
+  }
+
+  .instruction-box {
+    background: #f0f0ee;
+    border-left: 3pt solid #888;
+    padding: 6pt 10pt;
+    margin: 7pt 0 10pt 0;
+    font-size: 9pt;
+    line-height: 1.45;
+    color: #2a2a2a;
+  }
+
+  .instruction-box strong {
+    font-weight: 600;
+  }
+
+  .situation {
+    border: 1pt solid #d0d0d0;
+    border-radius: 4pt;
+    padding: 10pt 12pt 9pt 12pt;
+    margin-bottom: 8pt;
+    background: #fff;
+    page-break-inside: avoid;
+  }
+
+  .situation-label {
+    display: inline-block;
+    font-size: 9pt;
+    font-weight: 700;
+    color: #fff;
+    background: #555;
+    border-radius: 3pt;
+    padding: 1pt 8pt;
+    margin-bottom: 5pt;
+    letter-spacing: 0.5px;
+  }
+
+  .situation-text {
+    font-size: 10.5pt;
+    line-height: 1.55;
+    margin-bottom: 8pt;
+    color: #1a1a1a;
+  }
+
+  .sub-task {
+    font-size: 10pt;
+    margin-left: 8pt;
+    margin-bottom: 2pt;
+    color: #1a1a1a;
+  }
+
+  .sub-tasks {
+    margin-bottom: 8pt;
+  }
+
+  .field-row {
+    display: flex;
+    align-items: baseline;
+    margin-bottom: 5pt;
+  }
+
+  .field-label {
+    font-size: 9pt;
+    font-weight: 600;
+    color: #444;
+    min-width: 62pt;
+    flex-shrink: 0;
+  }
+
+  .field-line {
+    flex: 1;
+    border-bottom: 0.8pt solid #aaa;
+    min-height: 14pt;
+  }
+
+  .type-row {
+    display: flex;
+    align-items: center;
+    gap: 18pt;
+    margin-bottom: 5pt;
+  }
+
+  .checkbox-option {
+    display: flex;
+    align-items: center;
+    gap: 5pt;
+    font-size: 9pt;
+    color: #333;
+  }
+
+  .checkbox-box {
+    width: 11pt;
+    height: 11pt;
+    border: 1.2pt solid #777;
+    border-radius: 2pt;
+    display: inline-block;
+    flex-shrink: 0;
+  }
+
+  .answer-row {
+    display: flex;
+    align-items: baseline;
+    margin-top: 3pt;
+    padding-top: 3pt;
+  }
+
+  .answer-row .field-line {
+    border-bottom: 1pt solid #888;
+  }
+
+  .note-text {
+    font-size: 8pt;
+    color: #888;
+    font-style: italic;
+    margin-top: 4pt;
+  }
+
+  .names-row {
+    margin-top: 12pt;
+    padding-top: 6pt;
+    border-top: 0.8pt solid #ccc;
+    display: flex;
+    gap: 16pt;
+  }
+
+  .name-field {
+    flex: 1;
+    display: flex;
+    align-items: baseline;
+    gap: 5pt;
+  }
+
+  .name-field .field-label {
+    font-size: 8.5pt;
+    min-width: auto;
+  }
+
+  .name-field .field-line {
+    flex: 1;
+  }
+
+  @media print {
+    html, body {
+      background: #fff !important;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+      padding: 0;
+      margin: 0;
+      width: auto;
+    }
+    .situation {
+      page-break-inside: avoid;
+      border: 1pt solid #bbb !important;
+    }
+    .instruction-box {
+      background: #f0f0ee !important;
+      border-left: 3pt solid #888 !important;
+    }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <span class="header-title">Från text till ekvation</span>
+  <span class="header-meta">Gruppuppgift · Nivå 2</span>
+</div>
+
+<div class="instruction-box">
+  Ställ upp ekvationen. Titta på den: <strong>var sitter den okända?</strong> I exponenten → logaritmera. I basen → upphöj till 1/n. Skriv lösningarna på lösblad.
+</div>
+
+<!-- ─── Situation B ─── -->
+<div class="situation">
+  <div class="situation-label">B</div>
+  <div class="situation-text">
+    I ett labbexperiment odlar ni bakterier i en petriskål. Klockan 8:00 finns 800 bakterier. Antalet växer med 15 % per timme. Petriskålen rymmer max 10 000 bakterier.
+    När är skålen full?
+  </div>
+  <div class="sub-tasks">
+    <div class="sub-task">a) Lös algebraiskt.</div>
+    <div class="sub-task">b) Lös grafiskt.</div>
+  </div>
+  <div class="field-row">
+    <span class="field-label">Ekvation:</span>
+    <span class="field-line"></span>
+  </div>
+  <div class="type-row">
+    <span class="field-label">Typ:</span>
+    <span class="checkbox-option"><span class="checkbox-box"></span> Exponentialekvation</span>
+    <span class="checkbox-option"><span class="checkbox-box"></span> Potensekvation</span>
+  </div>
+  <div class="answer-row">
+    <span class="field-label">Svar i ord:</span>
+    <span class="field-line"></span>
+  </div>
+</div>
+
+<!-- ─── Situation C ─── -->
+<div class="situation">
+  <div class="situation-label">C</div>
+  <div class="situation-text">
+    En sten släpps från en bro. Falltiden <i>t</i> sekunder och fallsträckan <i>s</i> meter
+    hänger ihop enligt <i>s</i> = 4,9 · <i>t</i>&thinsp;². Bron är 45 meter hög. Hur lång tid tar fallet?
+  </div>
+  <div class="field-row">
+    <span class="field-label">Ekvation:</span>
+    <span class="field-line"></span>
+  </div>
+  <div class="type-row">
+    <span class="field-label">Typ:</span>
+    <span class="checkbox-option"><span class="checkbox-box"></span> Exponentialekvation</span>
+    <span class="checkbox-option"><span class="checkbox-box"></span> Potensekvation</span>
+  </div>
+  <div class="answer-row">
+    <span class="field-label">Svar i ord:</span>
+    <span class="field-line"></span>
+  </div>
+</div>
+
+<!-- ─── Situation D ─── -->
+<div class="situation">
+  <div class="situation-label">D</div>
+  <div class="situation-text">
+    Vid Tjernobylolyckan 1986 släpptes cesium-137 ut. Ämnet har en halveringstid på 30 år. Marken räknas som säker när aktiviteten sjunkit under 5 % av den ursprungliga nivån. Vilket år är marken säker?
+  </div>
+  <div class="field-row">
+    <span class="field-label">Ekvation:</span>
+    <span class="field-line"></span>
+  </div>
+  <div class="type-row">
+    <span class="field-label">Typ:</span>
+    <span class="checkbox-option"><span class="checkbox-box"></span> Exponentialekvation</span>
+    <span class="checkbox-option"><span class="checkbox-box"></span> Potensekvation</span>
+  </div>
+  <div class="answer-row">
+    <span class="field-label">Svar i ord:</span>
+    <span class="field-line"></span>
+  </div>
+</div>
+
+<div class="names-row">
+  <div class="name-field">
+    <span class="field-label">Namn:</span>
+    <span class="field-line"></span>
+  </div>
+  <div class="name-field">
+    <span class="field-label">Namn:</span>
+    <span class="field-line"></span>
+  </div>
+</div>
+
+<script>
+  renderMathInElement(document.body, {
+    delimiters: [
+      {left: '\\(', right: '\\)', display: false},
+      {left: '\\[', right: '\\]', display: true}
+    ],
+    throwOnError: false
+  });
+</script>
+
+</body>
+</html>
