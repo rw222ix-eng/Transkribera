@@ -24,8 +24,8 @@ anyio               # sse.py väntar på kön i en tråd utan att blockera sling
 # Ljudet och tiderna
 torch
 torchaudio
-transformers>=4.53  # ljudrättningspasset (Gemma) och alignmentmodellen
-huggingface_hub
+transformers>=4.53  # alignmentmodellen (wav2vec2) i app/alignment.py
+huggingface_hub     # alignment.ladda_ner → snapshot_download
 numpy
 
 # Filer in och ut

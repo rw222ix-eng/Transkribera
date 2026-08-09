@@ -76,12 +76,12 @@ def test_chat_requires_fields(client):
     assert r.status_code == 400
 
 
-def test_chat_forwards_think_and_streams_reasoning(client, monkeypatch):
-    captured = {}
-
+def test_chat_streams_reasoning(client, monkeypatch):
+    # Tänkandet är modellens eget (thinking_delta ur Claude Code) — ingen flagga
+    # slår på det. Kommer det, ska det ut som egna `reasoning`-händelser och
+    # aldrig blandas in i svarstexten.
     def fake_chat(model, messages, transcript="", token_cb=None,
-                  reason_cb=None, think=False, **k):
-        captured["think"] = think
+                  reason_cb=None, **k):
         if reason_cb:
             reason_cb("internt resonemang")
         if token_cb:
@@ -91,36 +91,18 @@ def test_chat_forwards_think_and_streams_reasoning(client, monkeypatch):
     monkeypatch.setattr(client.app.state.arbiter, "ensure_llm", lambda: "claude-code")
     monkeypatch.setattr(server.llm_client, "chat", fake_chat)
     r = client.post("/api/chat", json={
-        "messages": [{"role": "user", "content": "fråga"}],
-        "model": "Qwen3-14B-Q8_0.gguf", "transcript": "T", "think": True})
+        "messages": [{"role": "user", "content": "fråga"}], "transcript": "T"})
     assert r.status_code == 200
-    assert captured["think"] is True
     body = r.text
     assert '"type": "reasoning"' in body and "internt resonemang" in body
     assert '"type": "token"' in body and "Svar." in body
-
-
-def test_chat_think_defaults_off(client, monkeypatch):
-    captured = {}
-
-    def fake_chat(model, messages, transcript="", token_cb=None,
-                  reason_cb=None, think=False, **k):
-        captured["think"] = think
-        return ""
-
-    monkeypatch.setattr(client.app.state.arbiter, "ensure_llm", lambda: "claude-code")
-    monkeypatch.setattr(server.llm_client, "chat", fake_chat)
-    r = client.post("/api/chat", json={
-        "messages": [{"role": "user", "content": "q"}], "model": "m"})
-    assert r.status_code == 200
-    assert captured["think"] is False
 
 
 def test_chat_forwards_cite_flag(client, monkeypatch):
     captured = {}
 
     def fake_chat(model, messages, transcript="", token_cb=None,
-                  reason_cb=None, think=False, cite=False, **k):
+                  reason_cb=None, cite=False, **k):
         captured["cite"] = cite
         return ""
 
@@ -807,28 +789,19 @@ def test_under_base_rejects_prefix_sibling_b(client, tmp_path):
     assert r.status_code == 404
 
 
-# ---- #3: server-side cancel terminates the running subprocess + frees GPU -----
+# ---- #3: avbrottet sätter flaggan så jobbet stannar och släpper GPU:n --------
 
-class _FakeProc:
-    def __init__(self): self.terminated = False; self._alive = True
-    def poll(self): return None if self._alive else 0
-    def terminate(self): self.terminated = True; self._alive = False
-    def wait(self, timeout=None): self._alive = False
-
-
-def test_transcribe_cancel_terminates_proc(client):
-    # Kvar att döda är ljudrättningens subprocess; molnanropet och tidsättningen
-    # läser samma avbrottsflagga och stannar av sig själva.
-    proc = _FakeProc()
-    client.app.state.transcribe_job["proc"] = proc
+def test_transcribe_cancel_satter_flaggan_nar_ett_jobb_kor(client):
+    # Ingen subprocess finns att döda längre: molnanropet och tidsättningen
+    # läser avbrottsflaggan och stannar av sig själva mellan bitarna.
+    client.app.state.transcribe_job["kor"] = True
     r = client.post("/api/transcribe/cancel")
     assert r.status_code == 200 and r.json() == {"cancelled": True}
-    assert proc.terminated is True
     assert client.app.state.transcribe_job["cancelled"] is True
 
 
 def test_transcribe_cancel_noop_when_idle(client):
-    client.app.state.transcribe_job["proc"] = None
+    client.app.state.transcribe_job["kor"] = False
     r = client.post("/api/transcribe/cancel")
     assert r.status_code == 200 and r.json() == {"cancelled": False}
 

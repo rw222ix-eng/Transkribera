@@ -1,5 +1,13 @@
 # Optimeringsnoteringar: transkribering & korrekturläsning
 
+> **HISTORISKT DOKUMENT.** Mätningarna gäller den pipeline som fanns i juli
+> 2026: KB-Whisper via CTranslate2 på kortet, ett ljudrättningspass med Gemma
+> och en lokal Qwen via llama.cpp. Ingen av dem finns kvar. Transkriberingen
+> sker hos OpenAI (`app/openai_asr.py`), tidsättningen lokalt med wav2vec2
+> (`app/alignment.py`) och språkmodellsarbetet hos Claude Code
+> (`app/claude_code.py`). Filen står kvar som mätprotokoll — inte som
+> beskrivning av appen och inte som förslagslista.
+
 QA-genomgång 2026-07-02 på målhårdvaran (RTX 4090, 24 GB). Testdata:
 `tests/download_sv_audio.py` → 7 varianter av riktigt svenskt tal (223 s bas):
 32 kbps+brus / 64 / 128 kbps / 48 kHz-24 bit samt 2/15/45 min (loopad bas).
@@ -61,7 +69,7 @@ våra körningar — men eftersom förälder-återskapandet redan gör abort:en 
 0 överlappande segment i samtliga körningar; gap > 2 s är verkliga pauser.
 `polish_captions` (`app/transcriber.py:182`) behöver **ingen** överlapp-/gap-
 hantering för Whisper-vägen — segmentens tider kommer monotont från modellen.
-Ljudkorrigeringen bevarar start/slut exakt (verifierat: 26/26 segment ±0,05 s).
+Ljudkorrigeringen bevarade start/slut exakt (verifierat: 26/26 segment ±0,05 s).
 
 ### Cue-längder
 
@@ -82,21 +90,12 @@ Uppmätt på 110 802 tecken riktig transkripttext genom `/api/postprocess`
 - `response_format={"type":"text"}` behövs inte: inga JSON-artefakter sågs i
   svaren (response_format används redan för extraktion, med JSON-schema).
 
-### Ljudkorrigering (pass 2, Gemma 4 E4B)
-
-Verifierad på riktig GPU för första gången (kommentaren "UNVERIFIED" i
-`app/audio_correct_cli.py` är uppdaterad):
+### Ljudkorrigering (pass 2, Gemma 4 E4B) — passet är sedan rivet
 
 - 2 min ljud: ~35 s inkl. modelladdning (60 s totalt med transkriberingen).
 - **5/26 segment ändrade (19 %)** — samtliga konservativa (interpunktion,
   borttagna felaktiga kommatecken). Inga tillagda/strukna ord. Semantiskt korrekta.
 - Tidsstämplar exakt bevarade.
-
-**Förslag om throughput blir ett problem på långa filer:** batchning styrs redan
-av `AC_BATCH_COUNT=8`/`AC_BATCH_SEC=44` (env); höj försiktigt på 24 GB-kortet.
-`torch.compile` är inte värt komplexiteten för engångsbatchar; modell-caching
-mellan körningar är inte möjlig med arbiterns VRAM-regim (Whisper ↔ LLM ↔ Gemma
-delar kortet). Ingen kodändring föreslås nu.
 
 ### Kalibrering av testdata
 
@@ -161,8 +160,8 @@ inte statistiskt slutgiltigt.
 
 1. **Gemma (ljudgrundad rättning): liten men aldrig negativ nettoeffekt** på
    alla nivåer (−0,2 à −0,5 pp; enskilda äkta hörfelsrättningar). Även på
-   svårt ljud är utrymmet begränsat — det Whisper hör fel hör ofta Gemma
-   också fel. Behåll som tillval; förvänta inga mirakel.
+   svårt ljud var utrymmet begränsat — det Whisper hörde fel hörde ofta Gemma
+   också fel. Vinsten bar inte sin kostnad: passet är rivet.
 2. **Qwens gamla "Städa upp"-prompt gjorde transkriptet MINDRE ordagrant på
    alla nivåer** (+0,6 à +1,7 pp), värst på redan korrekt text — den
    övernormaliserar (t.ex. "transportsystem" → "transportsystemet" på ett

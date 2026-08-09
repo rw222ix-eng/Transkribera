@@ -16,9 +16,8 @@ och utskrift). Den binder 127.0.0.1 och startas antingen som skrivbordsfönster
 
 **Transkriberingen** styckar ljudet vid tystnader (ffmpeg), skickar bitarna till
 OpenAI `gpt-transcribe` (`app/openai_asr.py`) och sätter tidsstämplarna **lokalt**
-med forced alignment (`app/alignment.py`, KBLab wav2vec2). Ett valfritt
-ljudrättningspass kör Gemma i egen subprocess. Kostnaden räknas ur svarets
-`usage.seconds` — aldrig ur filens längd.
+med forced alignment (`app/alignment.py`, KBLab wav2vec2). Kostnaden räknas ur
+svarets `usage.seconds` — aldrig ur filens längd.
 
 **Språkmodellen är Claude Code CLI**, headless (`app/claude_code.py`). Ingen
 API-nyckel: appen kör på lärarens egen inloggning. Verktygen är avstängda utom

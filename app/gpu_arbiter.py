@@ -5,8 +5,8 @@ Modulen skötte förr två saker: den startade och stoppade llama.cpp-servern (e
 höll ett lås så att de två aldrig krockade. Båda modellerna är borta:
 transkriberingen sker hos OpenAI och språkmodellsarbetet hos Claude Code.
 
-Kvar finns ett litet GPU-jobb — tidsättningen (wav2vec2) och ljudrättningen
-(Gemma) — och de ska fortfarande inte köra samtidigt. Låset finns därför kvar.
+Kvar finns ett litet GPU-jobb — tidsättningen (wav2vec2) — och två sådana ska
+fortfarande inte köra samtidigt på kortet. Låset finns därför kvar.
 
 Livscykelmetoderna står också kvar, men betyder något annat nu: de svarar på
 frågan «går det att fråga språkmodellen?» i stället för att starta en process.

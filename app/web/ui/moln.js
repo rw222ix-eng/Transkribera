@@ -1,7 +1,7 @@
 /* ══════════ MOLNET ══════════
    Två hus utanför datorn, inte ett: ljudet transkriberas hos OpenAI
    (gpt-transcribe) och språkmodellsarbetet görs av Claude Code hos Anthropic.
-   Tidsstämplarna, ljudrättningen och alla filer ligger kvar här.
+   Tidsstämplarna och alla filer ligger kvar här.
 
    Tre saker: härkomstraden vid knappen som skickar, listan över vad som
    faktiskt går ut, och tillståndet «Claude Code saknas eller är inte inloggad» —

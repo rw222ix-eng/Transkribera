@@ -4,8 +4,9 @@ Alla sju hittades genom att LÄSA koden, inte genom att köra den, och det är
 därför de fick vänta på testinfrastrukturen (Etapp 1): var och en kräver att
 man kan beordra molngränsen att bete sig illa. Det kan man nu (tests/fejk.py).
 
-  1. Avbryt var dött under molnfasen — `proc` sätts bara av ljudrättningens
-     subprocess, så flaggan sattes aldrig och jobbet fortsatte med GPU-låset.
+  1. Avbryt var dött under molnfasen — koden letade efter en subprocess att
+     döda (ljudrättningens, sedan riven), så flaggan sattes aldrig och jobbet
+     fortsatte med GPU-låset.
   2. Noll omtag mot OpenAI — ett 429 på bit fjorton av femton slängde tretton
      betalda bitar.
   3. Tyst hängning i Claude-bryggan — timeouten låg inuti läsloopen och

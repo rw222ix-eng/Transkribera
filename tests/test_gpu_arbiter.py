@@ -2,9 +2,9 @@
 
 Arbitern startade förr llama-servern och växlade mellan text- och bildmodell på
 ett 24 GB-kort. Ingen av modellerna finns kvar. Kvar är två saker: ett lås så att
-tidsättningen och ljudrättningen inte kör samtidigt på kortet, och ett ärligt
-svar på om Claude Code går att nå — det är det svaret ett tjugotal rutter läser
-innan de lovar läraren ett resultat.
+bara ett tungt GPU-jobb (tidsättningen) kör i taget, och ett ärligt svar på om
+Claude Code går att nå — det är det svaret ett tjugotal rutter läser innan de
+lovar läraren ett resultat.
 """
 from app import gpu_arbiter as ga
 

@@ -1,7 +1,6 @@
-"""Transcription core: data model, output formatters, and the faster-whisper runner."""
+"""Transkriptets form: datamodellen, filformaten och undertextstyckningen."""
 from __future__ import annotations
 import re
-import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -116,7 +115,7 @@ _LEAD_PUNCT = re.compile(r'^[\s.,;:!?…·\-–—]+')
 _WORD = re.compile(r'\w', re.UNICODE)
 
 MAX_CAPTION_CHARS = 84    # ~2 rader à ~42 tecken
-MAX_CAPTION_SEC = 30.0    # nödbroms; sammanfaller med Gemmas ljudgräns
+MAX_CAPTION_SEC = 30.0    # nödbroms mot en cue som blir stående för länge
 
 
 def _split_long_text(text: str, start: float, end: float, max_chars: int) -> list[Segment]:
@@ -211,25 +210,6 @@ def clean_caption_dicts(segments: list[dict], group: bool = True) -> list[dict]:
     return [{"start": s.start, "end": s.end, "text": s.text} for s in cleaned]
 
 
-# Transkriberingen har ingen argv här längre: den sker hos OpenAI
-# (app/openai_asr.py) och tidsstämplarna sätts i serverprocessen
-# (app/alignment.py). Kvar är ljudrättningen, som fortfarande vill ha en egen
-# process — Gemma laddas på GPU:n och ska släppa allt sitt minne när den är klar.
-def build_audio_correct_cmd(audio: Path, model_dir: str, segments_json: str,
-                            out_base: Path, formats: list[str], language: str = "") -> list[str]:
-    """Build the argv for the isolated audio-grounded correction subprocess
-    (Gemma 3n E4B via transformers on the GPU). Same stdout protocol as the
-    transcription CLI; segments are passed as a JSON file path.
-    """
-    if getattr(sys, "frozen", False):
-        head = [sys.executable, "audio-correct-cli"]
-    else:
-        head = [sys.executable, "-m", "app.audio_correct_cli"]
-    return head + [
-        "--audio", str(audio),
-        "--model-dir", model_dir,
-        "--segments", segments_json,
-        "--out-base", str(out_base),
-        "--formats", ",".join(formats),
-        "--language", language or "",
-    ]
+# Ingen argv byggs här längre: transkriberingen sker hos OpenAI
+# (app/openai_asr.py), tidsstämplarna sätts i serverprocessen
+# (app/alignment.py) och ljudrättningen är riven. Modulen är ren textformning.

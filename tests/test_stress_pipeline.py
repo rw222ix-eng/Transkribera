@@ -270,14 +270,3 @@ def test_chunkad_inspelning_413_over_taket(miljo, monkeypatch):
     assert r.status_code == 413
     assert "för stor" in r.json()["error"]
 
-
-# ------------------------------------------------------- ljudkorrigering ------
-
-def test_ljudkorrigering_hoppas_over_nar_modellen_saknas(miljo):
-    client, media, _ = miljo
-    r = client.post("/api/transcribe",
-                    json=_transcribe_body(media, audio_correct=True))
-    events = _sse_events(r.text)
-    assert events[-1]["type"] == "done"
-    loggar = [e["msg"] for e in events if e["type"] == "log"]
-    assert any("Hoppar över ljudkorrigering" in m for m in loggar)

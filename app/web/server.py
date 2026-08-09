@@ -23,7 +23,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app import (debug_log, hardware, llm_client,
                  youtube, postprocess, transcriber,
-                 history_store, gpu_arbiter, output_store, media, audio_model, db,
+                 history_store, gpu_arbiter, output_store, media, db,
                  paths, settings_store, ics_export, backup, report,
                  calendar_google, kalender_ai, course_data, lasar_data,
                  openai_asr, alignment, claude_code, rattning)
@@ -131,58 +131,6 @@ def _hw_view(hw) -> dict:
         "ram": {"total": _gb(hw.ram_mb), "free": _gb(rfree)},
         "disks": disks,
     }
-
-
-def _child_cwd(base: Path) -> Path:
-    if getattr(sys, "frozen", False):
-        return Path(sys.executable).resolve().parent
-    return base
-
-
-def _run_transcribe_subprocess(cmd, base: Path, emit, on_proc=None,
-                               progress_scale: float = 1.0,
-                               progress_base: float = 0.0) -> list[str]:
-    """Run the isolated transcribe-cli subprocess; emit its stdout protocol lines.
-    `on_proc(proc)` is called with the live Popen (and with None when it exits) so
-    a cancel endpoint can terminate it and free the GPU mid-run. `progress_scale`
-    compresses the child's 0-100 into a sub-range so the bar keeps headroom for the
-    finishing phase (files/assemble/thumbnail) — 100% then means actually done.
-    `progress_base` offsets that sub-range so a later pass (the audio-correction
-    second pass) advances its own forward band instead of restarting the bar from
-    zero — the bar must only ever move forward, never run through twice."""
-    proc = subprocess.Popen(
-        cmd, cwd=str(_child_cwd(base)), stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace")
-    if on_proc is not None:
-        on_proc(proc)
-    written: list[str] = []
-    segments: list[dict] = []
-    assert proc.stdout is not None
-    for line in proc.stdout:
-        line = line.rstrip("\n")
-        if line.startswith("PROGRESS "):
-            emit({"type": "progress",
-                  "pct": int(progress_base + int(line[9:]) * progress_scale)})
-        elif line.startswith("FILE "):
-            written.append(line[5:])
-            emit({"type": "log", "msg": "Skrev " + line[5:]})
-        elif line.startswith("SEG "):
-            bits = line[4:].split(" ", 2)
-            try:
-                segments.append({"start": float(bits[0]), "end": float(bits[1]),
-                                 "text": bits[2] if len(bits) > 2 else ""})
-            except (ValueError, IndexError):
-                pass
-        elif line.startswith("LOG "):
-            emit({"type": "log", "msg": line[4:]})
-        elif line == "DONE":
-            emit({"type": "log", "msg": "Klar."})
-        elif line:
-            emit({"type": "log", "msg": line})
-    proc.wait()
-    if on_proc is not None:
-        on_proc(None)
-    return written, segments
 
 
 # Utbruten till app/web/sse.py (delas med routers i egna moduler, t.ex.
@@ -352,19 +300,16 @@ def create_app(base_dir: Path | None = None,
     app.include_router(routes_bok.create_router(base, arb))
     app.include_router(routes_tryck.create_router(base, arb))
 
-    # Tracks the live transcription subprocess so /api/transcribe/cancel can
-    # terminate it and free the GPU mid-run (otherwise "Avbryt" only stopped the
-    # browser from listening while the job ran to completion holding the GPU lock).
-    # `kor` säger att ett jobb PÅGÅR — `proc` säger bara att just nu råkar en
-    # subprocess vara igång, och det gör den bara under ljudrättningspasset.
-    # Molnfasen och tidsättningen har ingen process att döda; de frågar
-    # `avbruten()` mellan bitarna. Utan `kor` svarade Avbryt {cancelled: false}
-    # under hela molnfasen medan jobbet fortsatte och höll GPU-låset.
-    job_state: dict = {"proc": None, "cancelled": False, "kor": False}
+    # Följer den pågående transkriberingen så /api/transcribe/cancel kan svara
+    # sant och avbryta den (annars slutade «Avbryt» bara lyssna i webbläsaren
+    # medan jobbet gick färdigt och höll GPU-låset).
+    #
+    # `kor` säger att ett jobb PÅGÅR. Det finns ingen process att döda längre:
+    # molnfasen och tidsättningen kör i serverprocessen och frågar `avbruten()`
+    # mellan bitarna. Ljudrättningens subprocess var den enda som gick att
+    # terminera, och den är riven.
+    job_state: dict = {"cancelled": False, "kor": False}
     app.state.transcribe_job = job_state
-
-    def _set_proc(proc):
-        job_state["proc"] = proc
 
     @app.get("/")
     def index():
@@ -408,7 +353,7 @@ def create_app(base_dir: Path | None = None,
     # ---- Var arbetet körs -------------------------------------------------
     # Två hus, och appen ska aldrig behöva gissa vilket som svarar: molnet
     # (transkribering hos OpenAI, språkmodell via Claude Code) och den här datorn
-    # (tidsättningen, ljudrättningen). Frontendens «Var arbetet körs» och
+    # (tidsättningen). Frontendens «Var arbetet körs» och
     # härkomstraden vid varje knapp läser den här rutan.
     @app.get("/api/var-kors")
     def api_var_kors():
@@ -434,11 +379,6 @@ def create_app(base_dir: Path | None = None,
                     "modell": alignment.MODELL_ID,
                     "installerad": alignment.ar_installerad(models_root),
                     "download_mb": alignment.MODELL_MB,
-                },
-                "ljudrattning": {
-                    "modell": audio_model.AUDIO_MODEL_ID,
-                    "installerad": audio_model.is_audio_model_installed(models_root),
-                    "download_mb": audio_model.AUDIO_MODEL_DOWNLOAD_MB,
                 },
             },
         }
@@ -496,29 +436,12 @@ def create_app(base_dir: Path | None = None,
         arb.models_root = models_root                  # språkmodellen hittar nya roten
         return {"models_dir": str(models_root)}
 
-    @app.get("/api/audio-model")
-    def api_audio_model():
-        return {"id": audio_model.AUDIO_MODEL_ID,
-                "installed": audio_model.is_audio_model_installed(models_root),
-                "download_mb": audio_model.AUDIO_MODEL_DOWNLOAD_MB}
-
-    @app.post("/api/download/audio-model")
-    async def api_download_audio_model(req: Request):
-        def job(emit):
-            audio_model.download_audio_model(
-                models_root,
-                log_cb=lambda m: emit({"type": "log", "msg": m}),
-                progress_cb=lambda p: emit({"type": "progress", "pct": p}))
-            return {"installed": audio_model.AUDIO_MODEL_ID}
-        return _sse_response(job, req)
-
     @app.post("/api/transcribe")
     async def api_transcribe(req: Request):
         body = await req.json()
         source = (body.get("source") or "").strip()
         language = body.get("language") or ""
         target_language = body.get("target_language") or language   # subtitle output language
-        audio_correct = bool(body.get("audio_correct"))   # 2nd pass: fix text vs the audio
         sub_mode = body.get("sub_mode") or "separate"     # "separate" | "embed"
         embed_kind = body.get("embed_kind")               # "soft" | "burn" | None
         formats = [f for f in (body.get("formats") or ["srt"]) if f in transcriber.WRITERS]
@@ -548,7 +471,6 @@ def create_app(base_dir: Path | None = None,
             try:
                 return _transcribe(emit)
             finally:
-                job_state["proc"] = None
                 job_state["kor"] = False
                 alignment.frigor()          # släpp tidsmodellens VRAM
                 arb.release_gpu(gpu)
@@ -567,7 +489,6 @@ def create_app(base_dir: Path | None = None,
                 if not media.exists():
                     raise RuntimeError(f"Filen finns inte: {media}")
             out_base = media.with_suffix("")
-            will_correct = audio_correct and audio_model.is_audio_model_installed(models_root)
 
             # ── Molnet: texten ────────────────────────────────────────────────
             # Ljudet lämnar datorn här, och bara här. Progressbandet 0–45 % är
@@ -625,40 +546,6 @@ def create_app(base_dir: Path | None = None,
             for p in written:
                 emit({"type": "log", "msg": "Skrev " + p})
             srt_path = next((Path(p) for p in written if str(p).lower().endswith(".srt")), None)
-
-            # Optional second pass: correct the draft text against the actual audio
-            # (Gemma 3n E4B via transformers). Best effort — skipped if not installed.
-            # Använd `will_correct` (utvärderad EN gång ovan) — inte en ny
-            # is_audio_model_installed-koll. Annars kan modellen hinna bli
-            # nedladdad mellan de två kollarna: pass 1 hade då tagit 0–90 %, och
-            # ett nu tillkommande pass 2 emitterar 60–90 % → baren går bakåt.
-            if will_correct:
-                emit({"type": "log", "msg": "Rättar transkriptet mot ljudet ..."})
-                seg_json = media.with_name(media.stem + ".segments.json")
-                seg_json.write_text(json.dumps(segments, ensure_ascii=False), encoding="utf-8")
-                corr_base = media.with_name(media.stem + "_korr")
-                ac_written = []
-                try:
-                    ac_cmd = transcriber.build_audio_correct_cmd(
-                        media, str(audio_model.audio_model_dir(models_root)),
-                        str(seg_json), corr_base, ["srt"], language)
-                    ac_written, corrected = _run_transcribe_subprocess(
-                        ac_cmd, base, emit, on_proc=_set_proc,
-                        progress_scale=0.3, progress_base=60)
-                    if corrected:
-                        segments = corrected
-                        srt_path = transcriber.write_outputs(
-                            [transcriber.Segment(d["start"], d["end"], d["text"])
-                             for d in corrected], out_base, ["srt"])[0]
-                finally:
-                    for p in [seg_json] + [Path(x) for x in ac_written]:
-                        try:
-                            p.unlink()
-                        except OSError:
-                            pass
-            elif audio_correct:
-                emit({"type": "log", "msg": "Hoppar över ljudkorrigering — ljudmodellen "
-                                            "(Gemma 4) är inte nedladdad."})
 
             # Valfri översättning till ett annat resultatspråk. Görs av Claude
             # Code på texten som redan är skriven — originalspråkets SRT ligger
@@ -885,26 +772,18 @@ def create_app(base_dir: Path | None = None,
 
     @app.post("/api/transcribe/cancel")
     def api_transcribe_cancel():
-        """Avbryt körningen: flaggan sätts, och finns det en subprocess dödas
-        den så GPU:n släpps med en gång. Idempotent — {cancelled: False} när
-        ingenting är igång.
+        """Avbryt körningen: flaggan sätts och jobbet stannar vid nästa bit.
+        Idempotent — {cancelled: False} när ingenting är igång.
 
-        Flaggan måste sättas ÄVEN när ingen process finns. Bara
-        ljudrättningspasset kör i en subprocess; under molnet och tidsättningen
-        är `proc` None, och den som tryckte Avbryt fick då `{cancelled: false}`
-        medan jobbet fortsatte, höll GPU-låset och till slut skrev en fil hon
-        inte längre ville ha. Molnet och tidsättningen frågar `avbruten()`
-        mellan bitarna — de behöver flaggan, inte en dödsstöt."""
-        proc = job_state.get("proc")
-        lever = proc is not None and proc.poll() is None
-        if not (lever or job_state.get("kor")):
+        Det som avgör är `kor`, inte om någon subprocess lever. Förr fanns en
+        att döda (ljudrättningen) och koden frågade efter DEN: under molnet och
+        tidsättningen fick den som tryckte Avbryt `{cancelled: false}` medan
+        jobbet fortsatte, höll GPU-låset och till slut skrev en fil hon inte
+        längre ville ha. Molnet och tidsättningen frågar `avbruten()` mellan
+        bitarna — de behöver flaggan, inte en dödsstöt."""
+        if not job_state.get("kor"):
             return {"cancelled": False}
         job_state["cancelled"] = True
-        if lever:
-            try:
-                proc.terminate()
-            except Exception:
-                pass
         return {"cancelled": True}
 
     @app.get("/api/history")
@@ -1972,7 +1851,7 @@ def create_app(base_dir: Path | None = None,
                     ids.append(s["lesson_id"])
             # 2600 tecken/inspelning (5 källor ≈ 13k tecken): tillräckligt med
             # sammanhang för konkreta, citatförankrade svar i stället för
-            # generella referat — ryms gott i Qwen3-kontexten.
+            # generella referat — ryms gott i modellens kontextfönster.
             excerpts = db.lessons_excerpts_for(conn, ids, query, window=2600)
         finally:
             conn.close()
@@ -2081,8 +1960,8 @@ def create_app(base_dir: Path | None = None,
             try:
                 # Live-progressionens riktiga händelser (spec 2026-07-18):
                 # skanningsplan → per-lektion-resultat → vad AI:n läser djupt.
-                # Skickas FÖRE modellstarten — skanningen behöver ingen LLM,
-                # och kartoteket ska spela medan Qwen laddar (kan ta en minut).
+                # Skickas FÖRE modellfrågan — skanningen behöver ingen LLM,
+                # och kartoteket ska spela medan svaret dröjer (kan ta en minut).
                 emit({"type": "scan_plan", "total": len(scan), "items": [
                     {"key": s["lesson_id"], "name": s["name"]} for s in scan]})
                 for s in scan:
@@ -2147,7 +2026,6 @@ def create_app(base_dir: Path | None = None,
         transcript = body.get("transcript", "")
         model = body.get("model", "")     # tas emot, ignoreras — se /api/postprocess
         images = body.get("images") or []
-        think = bool(body.get("think", False))   # only the (text) chat may turn on Qwen3 thinking
         cite = bool(body.get("cite", False))     # källförankrat läge: numrerade segmentcitat
         calendar = bool(body.get("calendar", False))  # kalenderförmåga: [KALENDERFÖRSLAG]-rad
         cal_event = body.get("cal_event") if isinstance(body.get("cal_event"), dict) else None
@@ -2166,9 +2044,11 @@ def create_app(base_dir: Path | None = None,
                 # här, innan läraren väntar på ett svar som aldrig kommer.
                 if arb.ensure_llm() is None:
                     raise RuntimeError("Claude Code är inte inloggat.")
-                # think/reason_cb hörde till den lokala modellens tänkande.
+                # `reason_cb` fylls när Claude tänker högt (thinking_delta) —
+                # ingen flagga slår på det, modellen avgör. Den gamla
+                # `think`-flaggan styrde en lokal modell och är borta.
                 text = llm_client.chat(
-                    model, messages, transcript=transcript, images=images, think=think,
+                    model, messages, transcript=transcript, images=images,
                     cite=cite, calendar=calendar, cal_event=cal_event,
                     token_cb=lambda t: emit({"type": "token", "text": t}),
                     reason_cb=lambda t: emit({"type": "reasoning", "text": t}))

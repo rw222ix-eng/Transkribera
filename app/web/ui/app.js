@@ -304,9 +304,6 @@ function sprakNot() {
 }
 /* Inga chipspaneler kvar i raden — maskineriet står kvar för framtida paneler. */
 const instPar = [];
-/* Hela brickan är knappen — texten bredvid reglaget slår om det med. */
-const rattaval = $('#rattaval');
-if (rattaval) rattaval.addEventListener('click', e => { if (!e.target.closest('#ratta')) $('#ratta').click(); });
 let instOppen = null;
 /* Panelen ligger fast i vyn (position:fixed) och räknas därför inte in i sidans
    höjd. Det tar bort hela klipp-problemet: ingenting krymper när den stängs, så
@@ -368,15 +365,6 @@ instPar.forEach(([ci, pi]) => {
   });
 });
 
-$('#ratta').addEventListener('click', () => {
-  const b = $('#ratta'), pa = b.getAttribute('aria-pressed') !== 'true';
-  b.setAttribute('aria-pressed', String(pa));
-  b.style.background = pa ? 'var(--accent)' : 'var(--track)';
-  b.style.borderColor = pa ? 'var(--accent)' : 'var(--line)';
-  $('.knopp', b).style.transform = pa ? 'translateX(16px)' : 'translateX(0)';
-  ritaInst();
-});
-
 /* Steg 2 · körningen */
 let klaraFiler = [];
 function kvarText(sek) {
@@ -408,7 +396,7 @@ $('#starta').addEventListener('click', () => {
   const totalSek = rader.reduce((a, r) => a + r.tot, 0);
   /* Foten bär hela sanningen i en mening, i tidsordning: ljudet går ut först,
      tiderna räknas här, och texten går till Claude sist. */
-  const FOTTEXT = 'ljudet skickas till OpenAI för transkribering · tidsstämplar och ljudrättning körs här · sista steget skickar texten till Claude.';
+  const FOTTEXT = 'ljudet skickas till OpenAI för transkribering · tidsstämplarna sätts här · sista steget skickar texten till Claude.';
   $('#korkvar').textContent = `${kvarText(totalSek)} · ${FOTTEXT}`;
   if (window.API && window.API.pa) korRiktigt(rader, FOTTEXT);
   else korFejk(rader, totalSek, FOTTEXT);
@@ -440,7 +428,6 @@ async function korRiktigt(rader, fottext) {
         language: talatSprak() === 'Svenska' ? 'sv' : 'en',
         target_language: valt('resultat') === 'Svenska' ? 'sv' : 'en',
         formats: valda('format').map(x => x.toLowerCase()),
-        audio_correct: $('#ratta').getAttribute('aria-pressed') === 'true',
       }, {
         progress: p => {
           $('.fyll', r.el).style.width = p + '%';
@@ -527,9 +514,9 @@ function sekunder(langd) {
 }
 function mmss(s) { const h = Math.max(0, Math.round(s)); return Math.floor(h / 60) + ':' + String(h % 60).padStart(2, '0'); }
 /* Faserna speglar serverns egna band (app/web/server.py): molnet 0–45,
-   tidsättningen 45–60, ljudrättningen 60–90, efterarbetet resten. Samma lista
-   används av den riktiga körningen och av prototypens klocka — då finns bara ett
-   förlopp att hålla sant.
+   tidsättningen 45–60, efterarbetet resten. Samma lista används av den riktiga
+   körningen och av prototypens klocka — då finns bara ett förlopp att hålla
+   sant.
 
    Två steg lämnar datorn, och de är märkta: ljudet till OpenAI, texten till
    Claude. Det är den ordningen som gäller nu — förr transkriberades allt här och
@@ -539,7 +526,6 @@ function faser(f) {
   const mb = Math.round(sek / 60 * 1.4 * 10) / 10;
   const delar = Math.max(1, Math.ceil(sek / 300));
   const fmt = (valda('format').join(' · ') || 'TXT');
-  const ratta = $('#ratta').getAttribute('aria-pressed') === 'true';
   const lista = [
     { namn: 'Läser in filen', fran: 0, till: 4, d: () => `${mb} MB · ${f.langd || '—'}` },
     { namn: 'Delar upp vid pauserna', fran: 4, till: 8,
@@ -549,9 +535,7 @@ function faser(f) {
     { namn: 'Sätter tidsstämplar mot ljudet', fran: 45, till: 60,
       d: () => 'ordtider ur ljudet · här' },
   ];
-  if (ratta) lista.push({ namn: 'Rättar mot ljudet', fran: 60, till: 90,
-                          d: t => `andra passet · här` });
-  lista.push({ namn: 'Skriver ut resultat', fran: ratta ? 90 : 60, till: 96, d: () => fmt });
+  lista.push({ namn: 'Skriver ut resultat', fran: 60, till: 96, d: () => fmt });
   lista.push({ namn: 'Sammanfattar och letar förslag', fran: 96, till: 100,
                d: () => 'skickas till Claude · ≈ 1 min', moln: true });
   return lista;
@@ -576,7 +560,6 @@ function klar() {
   $('#klartext').textContent = [
     klaraFiler.length === 1 ? f0.langd : null,
     valt('resultat').toLowerCase(),
-    $('#ratta').getAttribute('aria-pressed') === 'true' ? 'rättat mot ljudet' : 'orättat',
     'gpt-transcribe · tidsstämplar satta här'
   ].filter(Boolean).join(' · ');
   const kurs = klaraFiler.map(f => f.kurs).filter(Boolean)[0];

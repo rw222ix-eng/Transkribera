@@ -1,12 +1,12 @@
 """Regressionstest: transkriberingens framsteg får bara gå framåt — en gång.
 
-Bug: andra passet (ljudkorrigering mot ljudet) körde
-``_run_transcribe_subprocess`` utan skalning, så baren nollställdes och
-klättrade 0→100 en andra gång ("kördes två gånger"). Efter fixen har varje pass
-sitt eget framåtriktade delband, så det emitterade ``pct`` aldrig minskar.
+Bug: ett andra pass (ljudrättningen, numera riven) räknade 0→100 i sin egen
+skala, så baren nollställdes och klättrade en andra gång («kördes två gånger»).
+Varje steg äger sedan dess ett eget framåtriktat delband, och det emitterade
+``pct`` minskar aldrig. Kravet står kvar även om just det passet är borta.
 
-Banden efter molnbytet: molnet (gpt-transcribe) 0–45 %, tidsättningen 50–60 %,
-ljudkorrigeringen 60–90 %, efterarbetet 93/98.
+Banden: molnet (gpt-transcribe) 0–45 %, tidsättningen 50–60 %, efterarbetet
+93/98.
 """
 import json
 import types
@@ -52,8 +52,6 @@ def client(tmp_path, monkeypatch):
     # Speltiden: utan den stoppar servern körningen innan molnet (se
     # test_web_server._fejka_kedjan).
     monkeypatch.setattr(server.media_mod, "probe_duration", lambda *_: 60.0)
-    # Ljudmodellen "installerad" så andra passet (ljudkorrigering) faktiskt körs.
-    monkeypatch.setattr(server.audio_model, "is_audio_model_installed", lambda *_: True)
     monkeypatch.setattr(server.postprocess, "should_translate", lambda *a, **k: False)
     monkeypatch.setattr(server.llm_client, "is_running", lambda *a, **k: True)
 
@@ -77,16 +75,6 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(server.alignment, "ar_installerad", lambda *a, **k: True)
     monkeypatch.setattr(server.alignment, "tidsatt", fake_tidsatt)
 
-    # Ljudkorrigeringen kör fortfarande i en isolerad subprocess (Gemma på GPU:n):
-    # emittera framsteg utifrån skala/bas som servern skickar in.
-    def fake_sub(cmd, base, emit, on_proc=None, progress_scale=1.0, progress_base=0.0):
-        emit({"type": "progress", "pct": int(progress_base + 50 * progress_scale)})
-        emit({"type": "progress", "pct": int(progress_base + 100 * progress_scale)})
-        if on_proc:
-            on_proc(None)
-        return ["out.srt"], [{"start": 0.0, "end": 1.0, "text": "hej"}]
-    monkeypatch.setattr(server, "_run_transcribe_subprocess", fake_sub)
-
     # Hoppa över filmontering/thumbnail och SRT-skrivning — inte det som testas.
     monkeypatch.setattr(server.output_store, "assemble_output",
                         lambda *a, **k: {"files": [], "video": None, "folder": str(tmp_path)})
@@ -96,29 +84,27 @@ def client(tmp_path, monkeypatch):
     return TestClient(server.create_app(base_dir=tmp_path, arbiter=_Arb()))
 
 
-def test_progress_is_monotonic_with_audio_correction(client, tmp_path):
+def test_progress_is_monotonic(client, tmp_path):
     src = tmp_path / "lektion.wav"
     src.write_bytes(b"RIFF0000WAVE")                       # källan måste finnas på disk
     r = client.post("/api/transcribe", json={
         "source": str(src), "language": "sv", "target_language": "sv",
-        "formats": ["srt"], "audio_correct": True})
+        "formats": ["srt"]})
     assert r.status_code == 200
 
     pcts = _progress_pcts(r.text)
     assert pcts, "inga framstegshändelser emitterades"
-    # Aldrig bakåt: baren nollställs inte för det andra passet.
+    # Aldrig bakåt: inget steg börjar om från noll i sin egen skala.
     assert pcts == sorted(pcts), f"progress gick bakåt (kördes två gånger): {pcts}"
-    # Tre framåtriktade delband: molnet 0–45, tidsättningen (45, 60],
-    # ljudkorrigeringen (60, 92].
+    # Två framåtriktade delband: molnet 0–45, tidsättningen (45, 60].
     assert any(p <= 45 for p in pcts), f"saknar molnband: {pcts}"
     assert any(45 < p <= 60 for p in pcts), f"saknar tidsättningsband: {pcts}"
-    assert any(60 < p <= 92 for p in pcts), f"saknar ljudkorrigerings-band: {pcts}"
 
 
-def _run_and_get_name(client, source, audio_correct=False):
+def _run_and_get_name(client, source):
     r = client.post("/api/transcribe", json={
         "source": source, "language": "sv",
-        "target_language": "sv", "formats": ["srt"], "audio_correct": audio_correct})
+        "target_language": "sv", "formats": ["srt"]})
     assert r.status_code == 200
     hist = client.get("/api/history").json()
     return hist[0]["name"] if hist else None
@@ -170,23 +156,3 @@ def test_lokal_kalla_behaller_filnamnet_nar_claude_inte_ar_inloggad(client, tmp_
     src = tmp_path / "fysik_lektion.wav"
     src.write_bytes(b"RIFF0000WAVE")
     assert _run_and_get_name(client, str(src)) == "fysik_lektion.wav"
-
-
-def test_run_subprocess_mappar_progress_med_bas_och_skala(tmp_path, monkeypatch):
-    # Direkttest av själva mappningen (server.py) — fejk-servern i fixturen ovan
-    # duplicerar formeln, så anropsplatsen testas men inte mappningsraden.
-    class _FakeProc:
-        def __init__(self, lines):
-            self.stdout = iter(lines)
-        def wait(self):
-            return 0
-    lines = ["PROGRESS 0", "PROGRESS 50", "PROGRESS 100", "SEG 0.0 1.0 hej", "DONE"]
-    monkeypatch.setattr(server.subprocess, "Popen", lambda *a, **k: _FakeProc(lines))
-    monkeypatch.setattr(server, "_child_cwd", lambda base: str(tmp_path))
-    events = []
-    written, segs = server._run_transcribe_subprocess(
-        ["x"], tmp_path, lambda ev: events.append(ev),
-        progress_scale=0.3, progress_base=60)
-    pcts = [e["pct"] for e in events if e["type"] == "progress"]
-    assert pcts == [60, 75, 90]            # 60 + {0,50,100} * 0.3
-    assert segs == [{"start": 0.0, "end": 1.0, "text": "hej"}]
