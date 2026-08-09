@@ -31,7 +31,8 @@ from app import (debug_log, hardware, llm_client,
 # SJÄLVA filen (media = Path(...)) och skuggar modulen — aliaset gör att
 # varaktigheten går att fråga efter även där.
 from app import media as media_mod
-from app.web import routes_bok, routes_exam, routes_planning, routes_tryck, sse
+from app.web import (routes_anteckningar, routes_bok, routes_exam,
+                     routes_planning, routes_tryck, sse)
 
 _MONTHS_SV = ["jan", "feb", "mar", "apr", "maj", "jun", "jul", "aug", "sep", "okt", "nov", "dec"]
 
@@ -297,6 +298,7 @@ def create_app(base_dir: Path | None = None,
     # inte växa i den här filen (se planens riskavsnitt om scope-krypning).
     app.include_router(routes_planning.create_router(base, arb))
     app.include_router(routes_exam.create_router(base, arb))
+    app.include_router(routes_anteckningar.create_router(base, arb))
     app.include_router(routes_bok.create_router(base, arb))
     app.include_router(routes_tryck.create_router(base, arb))
 
