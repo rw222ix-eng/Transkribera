@@ -83,9 +83,8 @@ jobs:
 
   e2e:
     runs-on: windows-latest
-    # 45 i stället för 30: dag 3 får tio minuters tak och två omförsök medan
-    # dess verkliga tid mäts. Sänks igen när siffran är känd.
-    timeout-minutes: 45
+    # Hela sviten tar ~15 min i CI med omförsök inräknade (2026-08-09).
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
