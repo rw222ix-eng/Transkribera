@@ -142,6 +142,11 @@ INSTRUCTION = (
 # reparations-, refine- och latexfix-prompterna, och där ska kravet inte stå.
 # En reparation som får höra «täck vanliga fel» byter uppgifter i stället för
 # att laga det som var trasigt.
+#
+# Blocket kostar inga extra reparationsrundor. Mätt med skarpa körningar
+# (2026-08-09): tavla, arbetsblad och gruppuppgift gick på EN runda, provet på
+# två — och samma prov utan blocket (FALLGROPAR = "") gav två respektive en.
+# Provets extra runda är alltså skelettets vanliga variation, inte det här.
 FALLGROPAR = (
     "Vanliga fel — täck dem MEDVETET:\n"
     "- Tänk ut 2–3 fel som elever verkligen gör på det innehåll uppgifterna "
