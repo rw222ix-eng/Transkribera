@@ -77,9 +77,11 @@ def kor(media: Path, manus: Path | None, format: list[str], sprak: str,
         pct: Callable[[str, int], None] | None = None) -> list[Path]:
     """Hela vägen: ljud → moln → tider → filer. Returnerar det som skrevs.
 
-    De tre återanropen är utbytbara för att manus_studio.py kör samma väg men
-    ritar framstegen i ett fönster i stället för i en terminal. Utan dem skriver
-    de till stdout precis som förut."""
+    De tre återanropen kom till för manus_studio.py, som ritade framstegen i ett
+    fönster i stället för i en terminal. Studion är borttagen — inläsningen görs
+    numera av ElevenLabs i E:\\Manusrost — men krokarna får stå kvar: de kostar
+    ingenting, och nästa fönster behöver dem igen. Utan dem skrivs framstegen
+    till stdout precis som förut."""
     logg = logg or _logg
     strom = strom or _strom
     pct = pct or (lambda etikett, p: _procent(etikett)(p))

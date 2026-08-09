@@ -53,6 +53,32 @@ SCENARIER = {
         "system": lambda: exam_gen.SYSTEM,
         "schema": lambda: None,
     },
+    # Arbetsbladet och gruppuppgiften. Parametrarna speglar de konstruerade
+    # band de ersätter (Matematik nivå 2c, NA25, sex respektive fyra uppgifter)
+    # — annars byter kassetten form samtidigt som den byter innehåll, och de
+    # test som läser den mäter två ändringar på en gång.
+    #
+    # `profil` är det som avgör: fejk-CLI:ts auto-läge väljer band på fraserna
+    # «skriv ett ARBETSBLAD» och «skriv en GRUPPUPPGIFT», som build_prompt
+    # skriver först när profilen är satt (tests/fejk.py _VAL).
+    "arbetsblad": {
+        "vad": "exam_gen.generate_exam (profil arbetsblad) — ett arbetsblad med facit",
+        "prompt": lambda: exam_gen.build_prompt(
+            "Matematik, nivå 2c", "NA25", ["Andragradsekvationer"],
+            antal=6, tid_min=60, delar=False, profil="arbetsblad"),
+        "system": lambda: exam_gen.SYSTEM,
+        "schema": lambda: None,
+    },
+    "gruppuppgift": {
+        "vad": ("exam_gen.generate_exam (profil gruppuppgift) — fyra ingångar "
+                "och ett upplägg"),
+        "prompt": lambda: exam_gen.build_prompt(
+            "Matematik, nivå 2c", "NA25", ["Andragradsfunktioner"],
+            antal=4, tid_min=45, delar=False, profil="gruppuppgift",
+            grupp={"elever": 3, "langd_min": 45, "redovisning": "muntligt"}),
+        "system": lambda: exam_gen.SYSTEM,
+        "schema": lambda: None,
+    },
     "insikter": {
         "vad": "postprocess.extract — insikter ur ett lektionstranskript",
         "prompt": lambda: postprocess.build_extract_prompt(TRANSKRIPT),
