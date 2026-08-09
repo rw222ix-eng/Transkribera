@@ -138,6 +138,21 @@ class _Klient:
 _CLI = r'''
 import json, os, sys, time
 
+# Riktiga `claude` skriver UTF-8, och appen läser strömmen som UTF-8
+# (claude_code.generate, Popen(encoding="utf-8")). Fejken ärvde i stället
+# konsolens teckentabell — cp1252 på svenska Windows — och dog med
+# UnicodeEncodeError mitt i uppspelningen så fort ett band innehöll ett tecken
+# som saknas där. Ett MINUSTECKEN (U+2212, inte bindestreck) i tavelbandet
+# räckte: strömmen kapades mitt i en sträng och fyra kassettester föll på
+# «modellen svarade inte med giltig JSON» — ett fel i fejken, inte i bandet.
+sys.stdout.reconfigure(encoding="utf-8")
+sys.stderr.reconfigure(encoding="utf-8")
+# Samma sak åt andra hållet: appen matar prompten som UTF-8 på stdin, och
+# auto-läget nedan LÄSER den för att välja band. Med cp1252 föll läsningen på
+# ett tecken i fallgropsblocket, auto-läget fick en trasig prompt och la i
+# provbandet när testet bad om ett arbetsblad.
+sys.stdin.reconfigure(encoding="utf-8")
+
 LAGE = os.environ.get("FEJK_CLAUDE", "ok")
 SVAR = os.environ.get("FEJK_CLAUDE_SVAR", "Det här är svaret.")
 KASSETT = os.environ.get("FEJK_KASSETT", "")
