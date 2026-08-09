@@ -1518,6 +1518,31 @@ def test_balanced_skeleton_validerar_rent(antal):
     assert exam_spec.validate_ordning(doc) == [], f"antal={antal}: ordningsfel"
 
 
+@pytest.mark.parametrize("antal", [16, 17, 20, 26, 27, 30, 40])
+def test_balanced_skeleton_kapas_inte_vid_16(antal):
+    """Fyllnadslistan var tio element lång och tog slut vid len(golv) + 10 = 16
+    slots. zip():en kapade då skelettet TYST: läraren som bad om 20 uppgifter
+    fick ett prov på 16, utan fel och utan varning — grammatiken låser
+    minItems/maxItems till skelettets längd, så den motsäger radens «EXAKT 20
+    uppgifter». Från antal ≥ 27 validerade det kapade skelettet inte ens rent
+    (8 fel), så poängsökningen gav upp och lämnade ifrån sig ett obalanserat
+    prov. Fyllnaden cyklar nu, och skelettet når alltid `antal`."""
+    sk = exam_spec.balanced_skeleton(antal, "prov")
+    assert len(sk) == antal, f"antal={antal}: skelettet kapat till {len(sk)}"
+    doc = exam_spec._skeleton_doc(sk)
+    assert exam_spec.validate_balance(doc, profil="prov") == [], \
+        f"antal={antal}: balansfel"
+    assert exam_spec.validate_ordning(doc) == [], f"antal={antal}: ordningsfel"
+    # Det läraren faktiskt drabbades av: grammatikens antal uppgifter.
+    upp = exam_spec.to_response_format(skeleton=sk)["json_schema"]["schema"] \
+        ["properties"]["uppgifter"]
+    assert upp["minItems"] == upp["maxItems"] == antal
+    # K har ingen E-nivå (se balanced_skeleton) — regeln måste överleva
+    # cyklingen, som ger fler K-slots än den gamla fasta fyllnaden gjorde.
+    k_slots = [s for s in sk if s["formaga"] == "K"]
+    assert k_slots and all(s["poang"][0] == 0 for s in k_slots)
+
+
 def test_to_response_format_skeleton_last_per_index():
     """Med skeleton ska del/formaga/typ/poang låsas per uppgift via prefixItems
     (llama.cpp hedrar det — bekräftat i skarp körning)."""
