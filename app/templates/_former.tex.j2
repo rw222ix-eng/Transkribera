@@ -49,9 +49,15 @@
 ((* endmacro *))
 
 ((# Allt som hör till uppgiftens KROPP, i den ordning eleven läser det:
-    tabellen (data att räkna på), stegtabellen (lösningen att granska),
-    kryssruteraden (svaret att kryssa) och ifyllnadsraderna (besluten att
-    skriva). #))
+    tabellen (data att räkna på), stegtabellen (lösningen att granska) och
+    kryssruteraden (svaret att kryssa).
+
+    Ifyllnadsraderna står INTE här. De är svarsplatsen, och svarsplatsen kommer
+    efter frågan — på en uppgift med deluppgifter alltså efter a) och b), inte
+    inklämd mellan stammen och dem. Mallarna sätter dem därför själva, där
+    svarsraden annars hade stått. Första skarpa inspelningen visade varför:
+    modellen lade fälten på FÖRÄLDERN, och «Valt värde på c:» hamnade före den
+    deluppgift som ber om värdet. #))
 ((* macro kropp(u) *))
-((( tabell(u.tabell) )))((( steg(u.stegtabell) )))((( rutor(u.svarsrutor) )))((( falt(u.svarsfalt) )))
+((( tabell(u.tabell) )))((( steg(u.stegtabell) )))((( rutor(u.svarsrutor) )))
 ((* endmacro *))

@@ -156,10 +156,36 @@ def test_ifyllnadsraderna_finns_pa_bade_uppgift_och_deluppgift():
     assert doc.uppgifter[0].svarsfalt == ["Ekvation", "Svar i ord"]
     assert doc.uppgifter[1].deluppgifter[0].svarsfalt == ["Ekvation"]
     assert doc.uppgifter[1].deluppgifter[1].svarsfalt is None
-    # Raderna sätts i ALLA mallar som bär uppgiftskroppen — en form som finns på
-    # fyra ställen glider isär på tre av dem.
-    for namn, tex in _alla_tex(doc).items():
-        assert r"\svarsfaltrad{Ekvation}" in tex, f"{namn} saknar raden"
+    # Raderna sätts i ALLA elevmallar — en form som finns på flera ställen
+    # glider isär på ett av dem. Bedömningen har ingen svarsplats: där står
+    # lösningen, precis som den inte får en svarsrad.
+    tex = _alla_tex(doc)
+    for namn in ("prov", "arbetsblad"):
+        assert r"\svarsfaltrad{Ekvation}" in tex[namn], f"{namn} saknar raden"
+    # (Makrot självt står i den delade preamblen — det är ANROPET som räknas,
+    # precis som för \svarsradmed.)
+    assert r"\svarsfaltrad{Ekvation}" not in tex["bedomning"]
+
+
+def test_ifyllnadsraden_star_efter_fragan_inte_fore():
+    """Svarsplatsen kommer efter frågan. Lägger modellen fälten på FÖRÄLDERN
+    till en uppgift med deluppgifter — vilket den gjorde i den första skarpa
+    inspelningen — hamnade «Valt värde på c:» före den deluppgift som ber om
+    värdet, och deluppgiften fick en tom skrivyta i stället."""
+    doc = _doc({"del": None, "formaga": "PL", "typ": "problem",
+                "poang": [0, 0, 0], "text": "En spelfigurs bana.",
+                "losning": "", "bedomning": "",
+                "svarsfalt": ["Valt värde", "Motivering"],
+                "deluppgifter": [
+                    {"poang": [2, 0, 0], "text": "Enas om ett värde.",
+                     "losning": "c > 4", "bedomning": "+2 E"},
+                    {"poang": [0, 2, 0], "text": "Motivera valet.",
+                     "losning": "…", "bedomning": "+2 C"}]})
+    tex = _alla_tex(doc)
+    for namn in ("prov", "arbetsblad"):   # facit har lösningen, ingen svarsplats
+        assert tex[namn].index("Enas om ett värde") \
+            < tex[namn].index(r"\svarsfaltrad{Valt"), \
+            f"{namn} sätter svarsplatsen före frågan"
 
 
 # ═════════════════════════════════ papperet ══════════════════════════════

@@ -51,12 +51,16 @@ på sista sidan((* if visa_poang *)); poäng anges som totalpoäng((* endif *)).
 ((( d.text )))
 ((( former.kropp(d) )))
 ((* if d.notis *))\notisruta{((( d.notis )))}((* endif *))
-((* if d.flerval *))((* for alt in d.flerval *))\par\kryssruta\ ((( alt.bokstav ))): ((( alt.text )))((* endfor *))\par\vspace{2mm}((* elif d.svarsfalt *))((* elif d.endast_svar *))((* if d.enhet *))\svarsradmed{}{((( d.enhet )))}((* else *))\svarsrad((* endif *))((* else *))\par\vspace{((( d.utrymme_mm )))mm}((* endif *))
+((* if d.flerval *))((* for alt in d.flerval *))\par\kryssruta\ ((( alt.bokstav ))): ((( alt.text )))((* endfor *))\par\vspace{2mm}((* elif d.svarsfalt *))((( former.falt(d.svarsfalt) )))((* elif d.endast_svar *))((* if d.enhet *))\svarsradmed{}{((( d.enhet )))}((* else *))\svarsrad((* endif *))((* else *))\par\vspace{((( d.utrymme_mm )))mm}((* endif *))
 \end{deluppgift}
 ((* endfor *))
+((# Förälderns egna ifyllnadsrader står EFTER deluppgifterna: de är
+    svarsplatsen för hela uppgiften, och en svarsplats före frågan är en rad
+    ingen vet vad hon ska skriva på. #))
+((* if u.svarsfalt *))((( former.falt(u.svarsfalt) )))((* endif *))
 ((* elif u.flerval *))
 ((* for alt in u.flerval *))\par\kryssruta\ ((( alt.bokstav ))): ((( alt.text )))((* endfor *))\par\vspace{2mm}
-((* elif u.svarsfalt *))((* elif u.endast_svar *))((* if u.enhet *))\svarsradmed{}{((( u.enhet )))}((* else *))\svarsrad((* endif *))((* else *))\par\vspace{((( u.utrymme_mm )))mm}((* endif *))
+((* elif u.svarsfalt *))((( former.falt(u.svarsfalt) )))((* elif u.endast_svar *))((* if u.enhet *))\svarsradmed{}{((( u.enhet )))}((* else *))\svarsrad((* endif *))((* else *))\par\vspace{((( u.utrymme_mm )))mm}((* endif *))
 \end{uppgift}
 ((* endfor *))
 ((* endfor *))
