@@ -128,6 +128,37 @@ window.BladBygg = (() => {
     </div>`;
   }
 
+  /* ── Anteckningar: lärarens eget stödpapper ────────
+     Femte dokumenttypen, och den enda som inte är elevmaterial. Inga
+     uppgifter, inga brickor, inga ifyllnadsrader — bara rubriker och löptext,
+     satt så att en blick ner på pappret räcker för att hitta rätt rad. Formen
+     är därför sin egen (data-form="an") och inte en variant av arbetsbladet:
+     det som gör ett arbetsblad läsbart (brickor, svarsytor, täthet) är precis
+     det som gör ett stödpapper oläsbart.
+
+     `ant` är dokumentet servern skrev (app/notes_gen.py). Utan server finns
+     inget — se blad.js anteckningarnaFor, som då sätter lärarens egen text på
+     pappret i stället för att hitta på ett innehåll hon aldrig bett om. */
+  function anteckningar(v, ant) {
+    const a = ant || {};
+    const meta = ['Anteckningar', v.klass, v.datum].filter(Boolean).join(' · ');
+    const sekt = (a.sektioner || []).map(s => `<section class="ansekt">
+      <h2 class="anrubrik">${esc(s.rubrik || '')}</h2>
+      ${(s.stycken || []).map(p => `<p class="anstycke">${mat(p)}</p>`).join('')}
+      ${(s.punkter || []).length ? `<ul class="anpunkter">${
+        s.punkter.map(p => `<li>${mat(p)}</li>`).join('')}</ul>` : ''}
+    </section>`).join('');
+    const kom = (a.kom_ihag || []).length
+      ? `<div class="ankom"><b class="ankomrub">Kom ihåg</b>${
+          a.kom_ihag.map(k => `<p>${mat(k)}</p>`).join('')}</div>`
+      : '';
+    return `<div class="gu" data-form="an">
+      <div class="anhuv"><h1 class="antitel">${esc(a.titel || versal(v.moment || ''))}</h1>
+      <p class="anmeta">${esc(meta)}</p></div>
+      ${sekt}${kom}
+    </div>`;
+  }
+
   /* ── Facit till arbetsbladet ─────────────────────── */
   function arkfacit(v, uppgifter) {
     const post = (u, k) => `<div class="pruppg">
@@ -292,5 +323,5 @@ window.BladBygg = (() => {
     return ut;
   }
 
-  return { mat, ark, arkfacit, provforsatt, provblad, losning, BOKSTAV };
+  return { mat, ark, arkfacit, anteckningar, provforsatt, provblad, losning, BOKSTAV };
 })();

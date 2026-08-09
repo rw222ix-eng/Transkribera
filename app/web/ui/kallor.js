@@ -193,7 +193,7 @@
   const forlagan = () => (window.Dokument && window.Dokument.forlagan ? window.Dokument.forlagan() : null);
   const dokmeta = v => [v.kurs || 'ingen kurs', v.klass || 'ingen klass',
     v.datum ? (window.Kalender && window.Kalender.ord ? window.Kalender.ord(v.datum) : v.datum) : 'utan datum'].filter(Boolean).join(' · ');
-  const dokminis = v => v.typ === 'Tavla' ? 'TA' : v.typ === 'Prov' ? 'PR' : v.typ === 'Gruppuppgift' ? 'GU' : 'AB';
+  const dokminis = v => ({ Tavla: 'TA', Prov: 'PR', Gruppuppgift: 'GU', Anteckningar: 'AN' })[v.typ] || 'AB';
   function ritaSparatVald() {
     ritaSparatlista();
   }

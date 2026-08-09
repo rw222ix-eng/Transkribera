@@ -349,6 +349,11 @@
 .minisida[data-typ='Tavla'] .mslinje{background:rgba(255,255,255,.3)}
 .msrad{display:flex;gap:6px;align-items:center;margin:7px 0 4px}
 .msnr{width:6px;height:6px;border-radius:2px;background:var(--sky-deep);flex:0 0 auto}
+/* Anteckningarnas miniatyr: rubrik och text i block, inga uppgiftsnummer i
+   marginalen. Det är den skillnaden man ser i högen — ett stödpapper har
+   avsnitt, inte uppgifter. */
+.msdel{display:block;margin:9px 0 0}
+.msrub2{display:block;height:5px;width:38%;border-radius:2px;background:#3A4A56;margin-bottom:4px}
 .dokmeta .dnamn{font-size:.92rem;font-weight:600;color:var(--ink);margin:0;line-height:1.3}
 .dokmeta .dmeta2{margin:4px 0 0;font-size:.76rem;color:var(--ink-3);font-family:var(--mono)}
 .dokknappar{display:flex;align-items:center;gap:6px;margin-top:auto}

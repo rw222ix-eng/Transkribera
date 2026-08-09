@@ -8,7 +8,7 @@
   const ruta = $('#tryckruta');
   if (!ruta) return;
 
-  const SIDOR = { Tavla: 1, Prov: 3, Arbetsblad: 2, Gruppuppgift: 1 };
+  const SIDOR = { Tavla: 1, Prov: 3, Arbetsblad: 2, Gruppuppgift: 1, Anteckningar: 1 };
   /* Sidantalet ska vara bladens, inte en tabell som gissar: formen vet exakt hur
      många ark dokumentet består av. En tavla är ett ark — den stod som två. */
   const sidorFor = v => {
@@ -19,15 +19,23 @@
 
   function packa(namnPaPaketet, dokument) {
     titel = namnPaPaketet;
-    const ordning = { Tavla: 0, Prov: 1, Arbetsblad: 1, Facit: 2 };
+    /* Anteckningarna ligger överst i högen, före tavlan: det är pappret läraren
+       håller i medan hon säger det som står på tavlan. */
+    const ordning = { Anteckningar: -1, Tavla: 0, Prov: 1, Arbetsblad: 1, Facit: 2 };
+    /* Elevmaterialet trycks i klassuppsättning, lärarens papper i ETT exemplar.
+       Anteckningarna är lärarens — tjugotvå kopior av hennes stödpapper är
+       tjugoett papper i papperskorgen. */
+    const LARARENS = { Tavla: 1, Anteckningar: 1 };
     rader = dokument.map(v => ({
       v,
       namn: window.Dokument.namn(v),
       typ: v.losningsblad ? 'Facit' : v.typ,
       under: v.losningsblad
         ? 'Din kopia · enkelsidig'
-        : v.typ === 'Tavla' ? 'Din genomgång · enkelsidig' : 'Standard · dubbelsidig',
-      antal: v.losningsblad ? 1 : v.typ === 'Tavla' ? 1 : 22,
+        : v.typ === 'Tavla' ? 'Din genomgång · enkelsidig'
+        : v.typ === 'Anteckningar' ? 'Ditt stödpapper · enkelsidig'
+        : 'Standard · dubbelsidig',
+      antal: v.losningsblad ? 1 : LARARENS[v.typ] || 22,
       sidor: sidorFor(v),
       med: true
     })).sort((a, b) => (ordning[a.typ] ?? 1) - (ordning[b.typ] ?? 1));
@@ -117,6 +125,11 @@
     const med = rader.filter(r => r.med);
     return Promise.all(med.map(r => {
       const d = { namn: r.namn, typ: r.typ, kopior: r.antal };
+      /* Anteckningarna ligger i samma tabell som proven på servern, så
+         paketets exam-gren hämtar deras PDF utan en rad ny kod — men utan
+         bedömning och utan anpassad kopia: det finns ingen bedömning att lägga
+         bredvid, och en anpassad kopia av lärarens eget papper är ingenting. */
+      if (r.v && r.v.antId) d.exam_id = r.v.antId;
       if (r.v && r.v.provId) {
         d.exam_id = r.v.provId;
         if (r.typ === 'Facit') d.bedomning = true;
