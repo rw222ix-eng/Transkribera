@@ -123,7 +123,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
             finally:
                 arbiter.release_gpu()
 
-        return sse_response(job)
+        return sse_response(job, req)
 
     # ------------------------------------------------------------- läs sidor --
 
@@ -171,7 +171,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
             finally:
                 arbiter.release_gpu()
 
-        return sse_response(job)
+        return sse_response(job, req)
 
     # -------------------------------------------------------------- uppslaget --
 

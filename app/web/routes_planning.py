@@ -416,7 +416,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
             finally:
                 arbiter.release_gpu()
 
-        return sse_response(job)
+        return sse_response(job, req)
 
     # ------------------------------------------------------------ generate --
 
@@ -470,7 +470,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
             finally:
                 arbiter.release_gpu()
 
-        return sse_response(job)
+        return sse_response(job, req)
 
     # ------------------------------------------------------- render-report --
 
@@ -508,7 +508,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
             finally:
                 arbiter.release_gpu()
 
-        return sse_response(job)
+        return sse_response(job, req)
 
     # -------------------------------------------------------------- refine --
 
@@ -544,7 +544,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
             finally:
                 arbiter.release_gpu()
 
-        return sse_response(job)
+        return sse_response(job, req)
 
     # ------------------------------------------------------------- approve --
 
@@ -797,7 +797,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                         "Prova att formulera om frågan.")
                 emit({"type": "token", "text": text})
                 return {"text": text, "sources": []}
-            return sse_response(no_hit_job)
+            return sse_response(no_hit_job, req)
         if not arbiter.try_acquire_gpu():
             return JSONResponse(_GPU_BUSY, status_code=409)
 
@@ -845,7 +845,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
             finally:
                 arbiter.release_gpu()
 
-        return sse_response(job)
+        return sse_response(job, req)
 
     # ------------------------------------------------- kalender & minne --
 

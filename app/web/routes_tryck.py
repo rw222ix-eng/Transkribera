@@ -101,6 +101,6 @@ def create_router(base: Path, arbiter) -> APIRouter:
             return {"path": str(fil), "sidor": sidor, "dokument": kvitto,
                     "saknas": saknas}
 
-        return sse_response(job)
+        return sse_response(job, req)
 
     return router

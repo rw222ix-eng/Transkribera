@@ -471,7 +471,7 @@ def create_app(base_dir: Path | None = None,
                 log_cb=lambda m: emit({"type": "log", "msg": m}),
                 progress_cb=lambda p: emit({"type": "progress", "pct": p}))
             return {"installed": alignment.MODELL_ID}
-        return _sse_response(job)
+        return _sse_response(job, req)
 
     @app.post("/api/settings/models-disk")
     async def api_set_models_disk(req: Request):
@@ -510,7 +510,7 @@ def create_app(base_dir: Path | None = None,
                 log_cb=lambda m: emit({"type": "log", "msg": m}),
                 progress_cb=lambda p: emit({"type": "progress", "pct": p}))
             return {"installed": audio_model.AUDIO_MODEL_ID}
-        return _sse_response(job)
+        return _sse_response(job, req)
 
     @app.post("/api/transcribe")
     async def api_transcribe(req: Request):
@@ -762,7 +762,7 @@ def create_app(base_dir: Path | None = None,
                     "transcript": segments,
                     "media": video["path"] if video else str(media),
                     "folder": assembled["folder"]}
-        return _sse_response(job)
+        return _sse_response(job, req)
 
     @app.post("/api/upload")
     async def api_upload(req: Request, name: str = "inspelning.webm"):
@@ -1533,7 +1533,7 @@ def create_app(base_dir: Path | None = None,
             conn.close()
 
     @app.post("/api/lessons/{lesson_id}/extract")
-    async def api_extract(lesson_id: int):
+    async def api_extract(lesson_id: int, req: Request):
         conn = _db()
         try:
             les = db.get_lesson(conn, lesson_id)
@@ -1584,7 +1584,7 @@ def create_app(base_dir: Path | None = None,
                         "content": tagged}
             finally:
                 arb.release_gpu()
-        return _sse_response(job)
+        return _sse_response(job, req)
 
     @app.post("/api/lessons/{lesson_id}/insights")
     async def api_insight_add(lesson_id: int, req: Request):
@@ -1948,7 +1948,7 @@ def create_app(base_dir: Path | None = None,
                     return {"text": text, "sources": []}
                 finally:
                     arb.release_gpu()
-            return _sse_response(cal_job)
+            return _sse_response(cal_job, req)
         conn = _db()
         try:
             # Äkta skanningsbild för live-progressionen: alla transkript i
@@ -2005,7 +2005,7 @@ def create_app(base_dir: Path | None = None,
                     text = f"{intro}{slut}. {rad}"
                     emit({"type": "token", "text": text})
                     return {"text": text, "sources": []}
-                return _sse_response(no_hit_job)
+                return _sse_response(no_hit_job, req)
 
             def semantic_job(emit):
                 try:
@@ -2066,7 +2066,7 @@ def create_app(base_dir: Path | None = None,
                         for e in excerpts2]}
                 finally:
                     arb.release_gpu()
-            return _sse_response(semantic_job)
+            return _sse_response(semantic_job, req)
         if not arb.try_acquire_gpu():
             return JSONResponse(
                 {"error": "GPU upptagen med transkribering – försök igen strax."},
@@ -2102,7 +2102,7 @@ def create_app(base_dir: Path | None = None,
                     for e in excerpts]}
             finally:
                 arb.release_gpu()
-        return _sse_response(job)
+        return _sse_response(job, req)
 
     @app.post("/api/postprocess")
     async def api_postprocess(req: Request):
@@ -2132,7 +2132,7 @@ def create_app(base_dir: Path | None = None,
                 return {"text": text}
             finally:
                 arb.release_gpu()
-        return _sse_response(job)
+        return _sse_response(job, req)
 
     @app.post("/api/chat")
     async def api_chat(req: Request):
@@ -2168,7 +2168,7 @@ def create_app(base_dir: Path | None = None,
                 return {"text": text}
             finally:
                 arb.release_gpu()
-        return _sse_response(job)
+        return _sse_response(job, req)
 
     def _under_base(path: str) -> Path | None:
         """Resolve `path` only if it lives under base_dir (local app; blocks

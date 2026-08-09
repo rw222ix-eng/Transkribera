@@ -286,7 +286,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
             finally:
                 arbiter.release_gpu()
 
-        return sse_response(job)
+        return sse_response(job, req)
 
     # -------------------------------------------------------------- refine --
 
@@ -330,7 +330,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
             finally:
                 arbiter.release_gpu()
 
-        return sse_response(job)
+        return sse_response(job, req)
 
     # ------------------------------------------------------------- approve --
 
@@ -529,7 +529,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 arbiter.release_gpu()
                 raise
 
-        return sse_response(job)
+        return sse_response(job, req)
 
     # ----------------------------------------------------------- artefakter --
 
