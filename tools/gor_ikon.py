@@ -1,6 +1,6 @@
 """Bild → Windows-ikon: `python tools/gor_ikon.py bild.png ut.ico`.
 
-Ikonerna till skrivbordsgenvägarna (Superappen, Manusstudio, Diktera) ritas inte
+Ikonerna till skrivbordsgenvägarna (Superappen, Diktera) ritas inte
 i kod utan genereras som bilder och tas in här. Det som behövs på vägen in är
 tre saker som är lätta att slarva med:
 
