@@ -83,7 +83,9 @@ jobs:
 
   e2e:
     runs-on: windows-latest
-    timeout-minutes: 30
+    # 45 i stället för 30: dag 3 får tio minuters tak och två omförsök medan
+    # dess verkliga tid mäts. Sänks igen när siffran är känd.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

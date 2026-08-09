@@ -102,7 +102,12 @@ test("dag 2 — tre lektioner, två klasser: kön bär dem i tur och ordning",
 // ── Dag 3 ────────────────────────────────────────────────────────────────
 test("dag 3 — provdag: skriv provet, godkänn till PDF, tryck med anpassad kopia",
   async ({ page }) => {
-    test.setTimeout(240_000);
+    /* Tio minuter, och det är en MÄTNING förklädd till gräns. Dagen tar 13
+       sekunder lokalt och föll på 240 s alla tre försöken i CI (2026-08-09) —
+       en faktor arton, alltså inte «långsammare maskin» utan något systematiskt.
+       Taket höjs för att få veta hur lång tid den FAKTISKT tar där; står det
+       kvar när svaret är känt är det fel siffra. */
+    test.setTimeout(600_000);
     const fel = L.vakt(page);
     const anrop = L.spana(page);
     await L.fejkatMoln(page);
