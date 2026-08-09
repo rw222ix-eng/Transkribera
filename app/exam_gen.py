@@ -56,9 +56,12 @@ INSTRUCTION = (
     "- innehall: vilka innehållspunkter uppgiften prövar (korta etiketter).\n"
     "Struktur (använd DÄR DET PASSAR pedagogiskt — inte på varje uppgift):\n"
     "- deluppgifter: dela EN uppgift i a/b/c när den naturligt har flera steg "
-    "eller frågor. Föräldern bär då stammen i text och poang [0, 0, 0]; varje "
+    "eller frågor. Föräldern bär då stammen i text och poang [0, 0, 0] — "
+    "ALLTID [0, 0, 0], summera aldrig deluppgifternas poäng dit; varje "
     "deluppgift har egen poang, text, losning och bedomning (och får ha egen "
-    "formaga/typ). Blanda inte in deluppgifter i rutinuppgifter — de passar "
+    "formaga/typ). Fälten innehall och elevlosningar står BARA på uppgiften, "
+    "aldrig på en deluppgift — en deluppgift som bär dem avvisas. Blanda inte "
+    "in deluppgifter i rutinuppgifter — de passar "
     "redovisnings-, problem- och resonemangsuppgifter. En nivå djupt.\n"
     "- alternativ + ratt_alternativ: gör en uppgift ELLER deluppgift till "
     "flervalsfråga med minst tre alternativ (matte inom $…$) och "
@@ -81,7 +84,8 @@ INSTRUCTION = (
     "priser, antal). Rader och rubriker måste ha lika många celler. Använd när "
     "uppgiften ber eleven LÄSA ur data, och hänvisa till den i texten "
     "('Bestäm med hjälp av tabellen ovan …').\n"
-    "- svarsrutor {etikett, val, ratt}: en ifyllnadsrad där eleven kryssar i "
+    "- svarsrutor {etikett, val, ratt}: ETT objekt (aldrig en lista) — en "
+    "ifyllnadsrad där eleven kryssar i "
     "stället för att skriva — 'Sats: ☐ Randvinkelsatsen ☐ Kordasatsen', "
     "'Alltid? ☐ Ja ☐ Nej ☐ Bara ibland'. Två till fem val. `ratt` är 0-baserat "
     "index och visas bara för läraren; utelämna det när flera svar duger. "
@@ -131,6 +135,56 @@ INSTRUCTION = (
     "rutinuppgifter, 'Motivera ditt svar.' och 'Fullständiga lösningar "
     "krävs.' på redovisnings- och resonemangsuppgifter, 'Svara exakt.' där "
     "ett exakt värde efterfrågas. Skriv aldrig emoji eller utropstecken.\n"
+)
+
+
+# Fallgroparna hör hemma i GENERERINGEN, inte i INSTRUCTION: den delas med
+# reparations-, refine- och latexfix-prompterna, och där ska kravet inte stå.
+# En reparation som får höra «täck vanliga fel» byter uppgifter i stället för
+# att laga det som var trasigt.
+FALLGROPAR = (
+    "Vanliga fel — täck dem MEDVETET:\n"
+    "- Tänk ut 2–3 fel som elever verkligen gör på det innehåll uppgifterna "
+    "prövar: teckenfel vid negativa tal, glömd eller fel enhet, en tappad rot, "
+    "fel prioriteringsordning, avrundning för tidigt, förväxlade begrepp.\n"
+    "- Fallgropen ligger INUTI en uppgift du ändå skulle ha skrivit — den "
+    "kostar ingen egen uppgift och ändrar varken förmåga, typ eller poäng. "
+    "Välj talen så att felet blir frestande: en negativ koefficient som ska "
+    "kvadreras, ett mått i meter när svaret ska anges i cm, en ekvation vars "
+    "andra rot är lätt att tappa. Uppgiftstexten avslöjar aldrig fallgropen "
+    "och varnar aldrig för den.\n"
+    "- Gör INTE om detta till hitta-felet-uppgifter: en stegtabell eller "
+    "elevlosningar är en egen uppgiftsform med egen förmåga och egna poäng, "
+    "och använder du dem här faller balansen — proceduruppgifternas poäng går "
+    "till resonemang i stället. Skriv dem bara när uppgiftsplanen eller "
+    "uppdraget ber om det.\n"
+    "- Skriv ut det väntade felet i bedomning där det är relevant, t.ex. "
+    "\"+1 E korrekt ansats, +1 C fullständig lösning; vanligt fel: minustecknet "
+    "tappas när $-3$ kvadreras\". Läraren ska veta vad hon letar efter."
+)
+
+# Gruppuppgiften kan göra mer än att undvika felet: den kan lägga fram det.
+# Formerna finns redan i schemat (stegtabell, elevlosningar), så det här är
+# ett val av innehåll, inte ett nytt fält.
+#
+# Blocket står INUTI gruppuppdraget, inte bland de allmänna reglerna, och ber
+# om en DELUPPGIFT — inte en uppgift. Båda sakerna är dyrköpta.
+#
+# I toppen, bland de allmänna reglerna, såg modellen inte PL-kravet i samma
+# andetag: PL föll till 12 % och «grupp»-fältet tappades helt. Och som en HEL
+# uppgift åt hitta-felet-momentet upp en av bara fyra platser — då fanns ingen
+# kvar till rutinuppgiften, blandningsregeln föll och E-tyngden gick till 47 %.
+# En gruppuppgift på fyra uppgifter har inte en plats över; en deluppgift
+# kostar ingen.
+FALLGROPAR_GRUPP = (
+    "Här ÄR hitta-felet-formen efterfrågad, men som DELUPPGIFT och inte som en "
+    "egen uppgift — platserna är för få. Lägg i uppgiften som bär R eller K en "
+    "deluppgift med en STEGTABELL där en påhittad elevs lösning innehåller just "
+    "fallgropen: gruppen ska hitta det första felsteget och förklara VARFÖR det "
+    "är fel. Det ska vara stegtabell och inte elevlosningar — elevlosningar "
+    "finns bara på uppgiften, aldrig på en deluppgift. Skriv \"En elev\" eller "
+    "en initial, aldrig ett namn. Lägg den ALDRIG i uppgiften som bär PL, och "
+    "låt den aldrig tränga undan rutinuppgiften."
 )
 
 
@@ -188,6 +242,9 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
     if punkter:
         block.append("Uppgifterna ska pröva följande centrala innehåll:\n- " +
                      "\n- ".join(punkter))
+    # Direkt efter innehållet: fallgroparna är innehållets fallgropar, och
+    # kravet ska läsas i samma andetag som punkterna det gäller.
+    block.append(FALLGROPAR)
     if memory:
         block.append(f"Ur lektionsminnet (vad klassen arbetat med):\n{memory}")
     if utfall:
@@ -233,12 +290,25 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
             "här, och Problemlösning måste bära 15–60 % av poängen. Med så få "
             "uppgifter betyder det att ingen av dem får vara den enda "
             "bäraren av en förmåga som saknas.\n"
+            "Balansen räknas på de poängbärande enheterna, alltså på "
+            "DELUPPGIFTERNA när uppgiften har sådana. Sätter du egen formaga "
+            "på en deluppgift är det den som räknas, inte förälderns — så "
+            "PL-uppgiftens deluppgifter ska ÄRVA PL (utelämna formaga på dem). "
+            "Annars står PL i uppgiften men bär noll poäng.\n"
+            f"{FALLGROPAR_GRUPP}\n"
             "Bygg in ställningen i uppgiften: en uppgift som ska diskuteras "
             "delas i deluppgifter som leder samtalet framåt (undersök, "
-            "formulera, motivera), och den som bara ska besvaras skrivs som "
-            "en rutinuppgift.\n"
+            "formulera, motivera). MINST EN av uppgifterna ska ändå vara en "
+            "rutinuppgift där endast svar krävs — utan den saknar upplägget "
+            "ingången för den som inte kommer igång, och E-tyngden blir för "
+            "stor.\n"
             "Inga delar (del: null på alla uppgifter). Fyll fältet \"grupp\" "
             f"med elever={n}, langd_min={min_}, redovisning=\"{red}\". "
+            # Inspelningen skrev «tid_minuter» bredvid grupp — ett fält som
+            # inte finns, och hela dokumentet föll på extra=forbid. Tiden HAR
+            # två hem i schemat (grupp.langd_min och tid_min), så säg vilka.
+            f"Provtiden hör hemma i tid_min={min_} och ingen annanstans — "
+            "hitta inte på egna fält (tid_minuter, tidsatgang …), de avvisas. "
             "Svara med enbart JSON.")
     elif profil == "arbetsblad":
         block.append(

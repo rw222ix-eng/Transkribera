@@ -3,8 +3,8 @@
 Flödet (spec §1, "två försvarslinjer mot layoutfel"):
 
 1. :func:`generate_board` — bygger prompten (kurs/klass/moment +
-   tavelkonventioner + few-shots + minneskontext), kör llama-server med
-   grammatiktvång (``whiteboard_spec.to_response_format()``) och validerar
+   tavelkonventioner + few-shots + minneskontext), frågar språkmodellen med
+   schemat i prompten (``whiteboard_spec.to_response_format()``) och validerar
    deterministiskt. Schemafel/regelfel skickas tillbaka till modellen som
    korrigeringsprompt i upp till :data:`MAX_ROUNDS` rundor.
 2. :func:`repair_board` — samma loop men driven av klientens renderings-
@@ -75,6 +75,21 @@ INSTRUCTION = (
     "4 kolumner × 5 rader. Text-sektioner max ~80 tecken och listpunkter "
     "max ~70 — dela längre resonemang i flera sektioner. Hellre färre, "
     "tydliga steg än trängsel — motorn skalar innehållet automatiskt.\n"
+    # Innehållskravet, inte ett motorkrav. Det står sist och för sig: en tavla
+    # kan vara felfri mot schemat och ändå tiga om det eleverna faktiskt gör
+    # fel. Kravet är att felet SKRIVS UT, inte att det undviks.
+    "Vanliga fel (innehåll, inte form):\n"
+    "- Tänk ut 2–3 fel som elever verkligen gör på just det här momentet — "
+    "teckenfel vid negativa tal, glömd eller fel enhet, en tappad rot, fel "
+    "prioriteringsordning, avrundning för tidigt, förväxlade begrepp. Ett "
+    "moment där eleven inte kan göra fel finns inte.\n"
+    "- Vänstertavlan SKA ha en callout i rött som inleds med texten "
+    "\"Vanligt fel:\" och visar felet konkret — helst det felaktiga ledet i en "
+    "math-sektion — och säger med en kort mening varför det blir fel. En "
+    "förmaning räcker inte: eleven ska känna igen sitt eget misstag.\n"
+    "- Välj exemplen så att MINST ETT går rakt genom en av fallgroparna. Är "
+    "teckenfel fallgropen ska ett exempel ha en negativ koefficient; är "
+    "enheter fallgropen ska ett exempel byta enhet på vägen.\n"
 )
 
 # Åtgärdsråd som följer med reparationsprompten — motorns varningstexter
@@ -123,11 +138,14 @@ FEW_SHOTS: list[tuple[str, dict]] = [
                                     "inside": "v"}, "gapAfter": 14},
                         {"kind": "callout", "color": "red", "fillOpacity": 0.06,
                          "padding": 12, "children": [
-                             {"kind": "text", "text": "Kom ihåg:", "size": 18,
+                             {"kind": "text", "text": "Vanligt fel:", "size": 18,
                               "color": "red", "gapAfter": 4},
+                             {"kind": "math",
+                              "latex": "c^2 = a^2 + b^2 \\Rightarrow c = a + b",
+                              "size": 19, "color": "red", "gapAfter": 4},
                              {"kind": "text",
-                              "text": "Gäller BARA för rätvinkliga trianglar.",
-                              "size": 18, "color": "red"}]},
+                              "text": "Roten ur en summa är inte summan av rötterna.",
+                              "size": 17, "color": "red"}]},
                     ],
                 },
                 {
@@ -202,7 +220,17 @@ FEW_SHOTS: list[tuple[str, dict]] = [
                              {"kind": "text", "text": "Symmetrilinjen:", "size": 18,
                               "color": "blue", "gapAfter": 4},
                              {"kind": "math", "latex": "x = -\\frac{b}{2a}",
-                              "size": 22, "color": "blue"}]},
+                              "size": 22, "color": "blue"}], "gapAfter": 16},
+                        {"kind": "callout", "color": "red", "fillOpacity": 0.06,
+                         "padding": 12, "children": [
+                             {"kind": "text", "text": "Vanligt fel:", "size": 18,
+                              "color": "red", "gapAfter": 4},
+                             {"kind": "text",
+                              "text": "x = 2 är symmetrilinjen, inte minimipunkten.",
+                              "size": 17, "color": "red", "gapAfter": 4},
+                             {"kind": "text",
+                              "text": "Sätt in x i f(x) — punkten har två tal.",
+                              "size": 17, "color": "red"}]},
                     ],
                 },
                 {
