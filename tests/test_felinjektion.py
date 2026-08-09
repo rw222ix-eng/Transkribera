@@ -109,9 +109,16 @@ def test_ett_andra_forsok_efter_ett_misslyckat_ger_en_lektion_inte_tva(
         llm_ready, monkeypatch):
     """…och när disken städats fungerar samma knapp igen — en gång."""
     pid = _tavla(llm_ready, monkeypatch)
-    _disken_full(monkeypatch, bara="tavla ")
-    assert llm_ready.post(f"/api/planning/{pid}/approve", json={}).status_code == 507
-    monkeypatch.undo()                       # disken städad, stubbarna kvar
+    # Disken fylls i en EGEN monkeypatch-omgivning. `monkeypatch.undo()` stod
+    # här förr med kommentaren «stubbarna kvar» — men `llm_ready` får samma
+    # monkeypatch-instans som testet, så undo tog bort dess stubbar också.
+    # Därefter föll `is_running` tillbaka på den riktiga kontrollen: sann på en
+    # maskin med Claude Code installerat, falsk i CI. Testet var grönt här och
+    # rött där, och det var maskinen som avgjorde, inte koden.
+    with pytest.MonkeyPatch.context() as disken:
+        _disken_full(disken, bara="tavla ")
+        assert llm_ready.post(f"/api/planning/{pid}/approve",
+                              json={}).status_code == 507
 
     pid2 = _tavla(llm_ready, monkeypatch)
     r = llm_ready.post(f"/api/planning/{pid2}/approve", json={})
