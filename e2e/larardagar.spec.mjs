@@ -212,11 +212,17 @@ test("dag 4 — rättningsdag: siffrorna in, utfallet blir källdörr 5",
        minnesvärde. Frågan ställs till SERVERN och inte till högen i webbläsaren:
        högen växer för varje session (soak-körningen kör dagen om och om igen)
        och «det första provet i listan» är inte samma papper i morgon. */
-    const svar = await page.request.get(`/api/dokument/${provId}/rattning`);
-    expect(svar.ok()).toBe(true);
-    const lagrad = await svar.json();
-    expect(lagrad.rattat, JSON.stringify(lagrad).slice(0, 200)).toBeTruthy();
-    expect(lagrad.elever).toBe(22);
+    /* Att anropet GJORDES är inte att det LANDAT. `spana` lyssnar på
+       request-eventet, alltså när webbläsaren skickar — svaret kan dröja. I CI
+       hann dagen läsa tillbaka innan PUT:en skrivit klart: raderna fanns men
+       `rattat` var null, för servern sätter det fältet först när det finns en
+       sparad rättning. Fråga tills servern svarat, inte en gång. */
+    await expect.poll(async () => {
+      const svar = await page.request.get(`/api/dokument/${provId}/rattning`);
+      if (!svar.ok()) return null;
+      const lagrad = await svar.json();
+      return lagrad.rattat ? lagrad.elever : null;
+    }, { timeout: 30_000 }).toBe(22);
     await L.efterOmladdning(page);
 
     // Källdörr 5: utfallet följer med in i nästa skrivning — omprovet ska ta om

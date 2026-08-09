@@ -31,6 +31,26 @@ async function spärraNätet(page, utifrån) {
   });
 }
 
+/** Öppna appen och vänta tills den är LADDAD — inte tills nätet råkar tiga.
+ *
+ * `waitUntil: "networkidle"` stod här och väntade på 500 ms utan en enda öppen
+ * förbindelse. Det är ett tajmingvillkor, inte ett tillståndsvillkor: på CI:s
+ * tvåkärniga runner blev servern så trängd att enskilda rutter tog tiotals
+ * sekunder, och stiltjen infann sig aldrig inom testets gräns. Playwright
+ * avråder själv från flaggan.
+ *
+ * Appens eget redoläge är vad testerna faktiskt menar, och det är samma villkor
+ * som `larardag.oppna` väntar på. Den korta pausen efteråt fångar efterspelet:
+ * bilder och typsnitt som hämtas när dokumentet redan är igång — det är just
+ * dem ett återinfört CDN-anrop skulle gömma sig bland. */
+async function laddad(page) {
+  await page.goto("/");
+  await page.waitForFunction(() =>
+    window.Kalender && window.Kalender.franServern() && window.Dokument
+      && window.API && window.API.pa, null, { timeout: 30_000 });
+  await page.waitForTimeout(500);
+}
+
 test("appen laddar utan ett enda anrop utanför datorn", async ({ page }) => {
   const utifrån = [];
   await spärraNätet(page, utifrån);
@@ -41,7 +61,7 @@ test("appen laddar utan ett enda anrop utanför datorn", async ({ page }) => {
   const misslyckade = [];
   page.on("response", r => { if (r.status() >= 400) misslyckade.push(`${r.status()} ${r.url()}`); });
 
-  await page.goto("/", { waitUntil: "networkidle" });
+  await laddad(page);
 
   expect(utifrån, `appen hämtade från nätet: ${utifrån.join(", ")}`).toEqual([]);
   expect(jsfel, `JS-fel vid start: ${jsfel.join(" | ")}`).toEqual([]);
@@ -57,7 +77,7 @@ test("appen laddar utan ett enda anrop utanför datorn", async ({ page }) => {
 test("typsnitten kommer från appen, inte från Google", async ({ page }) => {
   const utifrån = [];
   await spärraNätet(page, utifrån);
-  await page.goto("/", { waitUntil: "networkidle" });
+  await laddad(page);
 
   const laddade = await page.evaluate(() =>
     [...document.fonts].filter(f => f.status === "loaded").map(f => `${f.family} ${f.weight}`));
@@ -71,7 +91,7 @@ test("displayserifen är Georgia — inte Cormorant Garamond", async ({ page }) 
      godkänd mot Georgia (tredje namnet i --serif). Buntar man Cormorant lokalt
      byter 14 rubrikytor utseende på en gång. Testet finns för att den
      ändringen ska kräva ett beslut, inte ett misstag. Se app/web/ui/typsnitt.css. */
-  await page.goto("/", { waitUntil: "networkidle" });
+  await laddad(page);
 
   const cormorantLaddad = await page.evaluate(() =>
     [...document.fonts].some(f => f.family === "Cormorant Garamond" && f.status === "loaded"));
