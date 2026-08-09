@@ -251,8 +251,8 @@ def test_media_want_video_remuxes_mkv(client, tmp_path, monkeypatch):
 class _BusyArbiter:
     """Stands in for GpuArbiter with the GPU already taken (e.g. by a running
     transcription) so try_acquire_gpu() always fails."""
-    def try_acquire_gpu(self): return False
-    def release_gpu(self): pass
+    def try_acquire_gpu(self): return None
+    def release_gpu(self, nyckel=None): pass
     def ensure_llm(self): return "http://x"
     def ensure_model(self, spec): return "http://x"
     def stop_llm(self): return False
@@ -305,8 +305,8 @@ def test_app_exposes_arbiter_on_state(client):
 class _RecordingArbiter:
     """Släpper fram GPU:n och minns om rutten frågade efter språkmodellen alls."""
     def __init__(self): self.fragad = False
-    def try_acquire_gpu(self): return True
-    def release_gpu(self): pass
+    def try_acquire_gpu(self): return "nyckel"
+    def release_gpu(self, nyckel=None): pass
     def ensure_model(self, spec=None): self.fragad = True; return "claude-code"
     def ensure_llm(self): return self.ensure_model()
     def stop_llm(self): return False
@@ -510,8 +510,8 @@ def test_history_one_endpoint(tmp_path, monkeypatch):
 
 class _ReadyArbiter:
     """GPU free, LLM installed — lets extraction run end-to-end in tests."""
-    def try_acquire_gpu(self): return True
-    def release_gpu(self): pass
+    def try_acquire_gpu(self): return "nyckel"
+    def release_gpu(self, nyckel=None): pass
     def ensure_llm(self): return "http://x"
     def stop_llm(self): return False
     def prewarm_async(self): pass
@@ -870,8 +870,8 @@ def test_patch_history_unknown_404(client):
     assert client.patch("/api/history/nope", json={"summary": "x"}).status_code == 404
 class _TransArbiter:
     """Släpper fram GPU:n; språkmodellen finns inte att fråga i de här testerna."""
-    def try_acquire_gpu(self): return True
-    def release_gpu(self): pass
+    def try_acquire_gpu(self): return "nyckel"
+    def release_gpu(self, nyckel=None): pass
     def stop_llm(self): return False
     def ensure_llm(self): return None
     def ensure_model(self, spec=None): return None
@@ -1120,7 +1120,7 @@ def test_search_ask_matches_lesson_name(tmp_path, monkeypatch):
 
 def test_search_ask_busy_gpu_409(tmp_path, monkeypatch):
     class Busy(_ReadyArbiter):
-        def try_acquire_gpu(self): return False
+        def try_acquire_gpu(self): return None
     c = _lesson_client(tmp_path, monkeypatch, arbiter=Busy())
     assert c.post("/api/search/ask", json={"q": "derivata"}).status_code == 409
 
@@ -1188,7 +1188,7 @@ def test_search_ask_cal_chat_utan_forslag_gar_till_kalendervagen(tmp_path, monke
 
 def test_search_ask_cal_event_busy_gpu_409(tmp_path, monkeypatch):
     class Busy(_ReadyArbiter):
-        def try_acquire_gpu(self): return False
+        def try_acquire_gpu(self): return None
     c = _lesson_client(tmp_path, monkeypatch, arbiter=Busy())
     ev = {"title": "T", "date": "2026-07-21", "time": "08:00",
           "end_date": None, "desc": ""}

@@ -96,7 +96,7 @@ def test_generate_passes_selected_content_and_tags_exam(client, monkeypatch):
 
 
 def test_generate_409_when_busy(client, monkeypatch):
-    monkeypatch.setattr(client.app.state.arbiter, "try_acquire_gpu", lambda: False)
+    monkeypatch.setattr(client.app.state.arbiter, "try_acquire_gpu", lambda: None)
     r = client.post("/api/exams/generate", json={"course_id": _course_id(client)})
     assert r.status_code == 409
 

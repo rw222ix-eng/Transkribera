@@ -28,8 +28,8 @@ from tests.fejk import Moln
 class _Arbiter:
     def __init__(self):
         self.slappt = 0
-    def try_acquire_gpu(self): return True
-    def release_gpu(self): self.slappt += 1
+    def try_acquire_gpu(self): return "nyckel"
+    def release_gpu(self, nyckel=None): self.slappt += 1
     def stop_llm(self): return False
     def ensure_llm(self): return None
     def ensure_model(self, spec=None): return None

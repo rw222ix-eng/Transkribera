@@ -535,7 +535,8 @@ def create_app(base_dir: Path | None = None,
 
         # GPU:n tas fortfarande exklusivt — inte för Whisper (borta) utan för
         # tidsättningen, som lägger en wav2vec2-modell på kortet.
-        if not arb.try_acquire_gpu():
+        gpu = arb.try_acquire_gpu()
+        if not gpu:
             return JSONResponse(
                 {"error": "GPU upptagen – vänta tills pågående jobb är klart."},
                 status_code=409)
@@ -550,7 +551,7 @@ def create_app(base_dir: Path | None = None,
                 job_state["proc"] = None
                 job_state["kor"] = False
                 alignment.frigor()          # släpp tidsmodellens VRAM
-                arb.release_gpu()
+                arb.release_gpu(gpu)
 
         def _transcribe(emit):
             source_is_url = _is_url(source)
@@ -1545,7 +1546,8 @@ def create_app(base_dir: Path | None = None,
         if not transcript:
             return JSONResponse(
                 {"error": "lektionen saknar transkript att analysera"}, status_code=400)
-        if not arb.try_acquire_gpu():
+        gpu = arb.try_acquire_gpu()
+        if not gpu:
             return JSONResponse(
                 {"error": "GPU upptagen med transkribering – försök igen strax."},
                 status_code=409)
@@ -1583,7 +1585,7 @@ def create_app(base_dir: Path | None = None,
                         "kept_previous": kept_previous,
                         "content": tagged}
             finally:
-                arb.release_gpu()
+                arb.release_gpu(gpu)
         return _sse_response(job, req)
 
     @app.post("/api/lessons/{lesson_id}/insights")
@@ -1932,7 +1934,8 @@ def create_app(base_dir: Path | None = None,
             # träffar sällan transkripten. Tidigare svar följer med som
             # innehållsunderlag i stället.
             context = str(body.get("context") or "")[:6000]
-            if not arb.try_acquire_gpu():
+            gpu = arb.try_acquire_gpu()
+            if not gpu:
                 return JSONResponse(
                     {"error": "GPU upptagen med transkribering – försök igen strax."},
                     status_code=409)
@@ -1947,7 +1950,7 @@ def create_app(base_dir: Path | None = None,
                         token_cb=lambda t: emit({"type": "token", "text": t}))
                     return {"text": text, "sources": []}
                 finally:
-                    arb.release_gpu()
+                    arb.release_gpu(gpu)
             return _sse_response(cal_job, req)
         conn = _db()
         try:
@@ -1998,7 +2001,8 @@ def create_app(base_dir: Path | None = None,
                     emit({"type": "scan_result",
                           "key": s["lesson_id"], "hits": s["hits"]})
 
-            if not arb.try_acquire_gpu():
+            gpu = arb.try_acquire_gpu()
+            if not gpu:
                 # GPU:n upptagen — leverera åtminstone det ärliga ordsvaret.
                 def no_hit_job(emit):
                     _emit_scan(emit, scan)
@@ -2065,9 +2069,10 @@ def create_app(base_dir: Path | None = None,
                          "course": e["course"], "datum": e["datum"]}
                         for e in excerpts2]}
                 finally:
-                    arb.release_gpu()
+                    arb.release_gpu(gpu)
             return _sse_response(semantic_job, req)
-        if not arb.try_acquire_gpu():
+        gpu = arb.try_acquire_gpu()
+        if not gpu:
             return JSONResponse(
                 {"error": "GPU upptagen med transkribering – försök igen strax."},
                 status_code=409)
@@ -2101,7 +2106,7 @@ def create_app(base_dir: Path | None = None,
                      "datum": e["datum"]}
                     for e in excerpts]}
             finally:
-                arb.release_gpu()
+                arb.release_gpu(gpu)
         return _sse_response(job, req)
 
     @app.post("/api/postprocess")
@@ -2116,7 +2121,8 @@ def create_app(base_dir: Path | None = None,
         model = body.get("model", "")
         if not transcript:
             return JSONResponse({"error": "text krävs"}, status_code=400)
-        if not arb.try_acquire_gpu():
+        gpu = arb.try_acquire_gpu()
+        if not gpu:
             return JSONResponse(
                 {"error": "GPU upptagen med transkribering – försök igen strax."},
                 status_code=409)
@@ -2131,7 +2137,7 @@ def create_app(base_dir: Path | None = None,
                     log_cb=lambda m: emit({"type": "log", "msg": m}))
                 return {"text": text}
             finally:
-                arb.release_gpu()
+                arb.release_gpu(gpu)
         return _sse_response(job, req)
 
     @app.post("/api/chat")
@@ -2147,7 +2153,8 @@ def create_app(base_dir: Path | None = None,
         cal_event = body.get("cal_event") if isinstance(body.get("cal_event"), dict) else None
         if not messages:
             return JSONResponse({"error": "meddelande krävs"}, status_code=400)
-        if not arb.try_acquire_gpu():
+        gpu = arb.try_acquire_gpu()
+        if not gpu:
             return JSONResponse(
                 {"error": "GPU upptagen med transkribering – försök igen strax."},
                 status_code=409)
@@ -2167,7 +2174,7 @@ def create_app(base_dir: Path | None = None,
                     reason_cb=lambda t: emit({"type": "reasoning", "text": t}))
                 return {"text": text}
             finally:
-                arb.release_gpu()
+                arb.release_gpu(gpu)
         return _sse_response(job, req)
 
     def _under_base(path: str) -> Path | None:

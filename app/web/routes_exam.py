@@ -240,7 +240,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
         if forlaga_block:
             teman = ""
 
-        if not arbiter.try_acquire_gpu():
+        gpu = arbiter.try_acquire_gpu()
+        if not gpu:
             return JSONResponse(_GPU_BUSY, status_code=409)
 
         def job(emit):
@@ -284,7 +285,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     conn.close()
                 return _exam_result(view, res["errors"], res["rounds"])
             finally:
-                arbiter.release_gpu()
+                arbiter.release_gpu(gpu)
 
         return sse_response(job, req)
 
@@ -306,7 +307,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
         if view is None or view.get("exam") is None:
             return JSONResponse({"error": "okänt prov"}, status_code=404)
 
-        if not arbiter.try_acquire_gpu():
+        gpu = arbiter.try_acquire_gpu()
+        if not gpu:
             return JSONResponse(_GPU_BUSY, status_code=409)
 
         def job(emit):
@@ -328,7 +330,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     newview = view
                 return _exam_result(newview, res["errors"], res["rounds"])
             finally:
-                arbiter.release_gpu()
+                arbiter.release_gpu(gpu)
 
         return sse_response(job, req)
 
@@ -372,6 +374,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # kompileringsfel (fix_latex), och släpps direkt efteråt.
 
         def job(emit):
+            gpu = None                  # nyckeln till GPU:n — bara om vi tar den
             try:
                 exam = view["exam"]
                 errors: list = []
@@ -465,10 +468,10 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     # GPU-låset. Är det upptaget av ett annat jobb är det här
                     # sista försöket: felet redovisas ärligt i stället för att
                     # provet står och väntar på ett kort det inte behöver.
-                    kan_fixa = (round_ < exam_gen.MAX_LATEX_ROUNDS
-                                and arbiter.ensure_llm() is not None
-                                and arbiter.try_acquire_gpu())
-                    sista_forsoket = not kan_fixa
+                    if (round_ < exam_gen.MAX_LATEX_ROUNDS
+                            and arbiter.ensure_llm() is not None):
+                        gpu = arbiter.try_acquire_gpu()
+                    sista_forsoket = not gpu
                     if bed_misslyckades:
                         emit({"type": "log",
                               "msg": "Bedömningsanvisningen gick inte att kompilera."
@@ -500,7 +503,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
                             exam, log, model=_model_name(), rounds_used=round_,
                             log_cb=lambda m: emit({"type": "log", "msg": m}))
                     finally:
-                        arbiter.release_gpu()
+                        arbiter.release_gpu(gpu)
+                        gpu = None
                     exam = fix["exam"]
 
                 conn = db.connect(db_file)
@@ -524,9 +528,9 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 return result
             except Exception:
                 # Faller jobbet mitt i en fixrunda ligger låset kvar hos oss.
-                # (release_gpu är idempotent — den som inte håller något
-                # släpper heller ingenting.)
-                arbiter.release_gpu()
+                # `gpu` nollställs efter varje släpp, så det här släpper bara
+                # om vi FAKTISKT håller det — och aldrig någon annans lås.
+                arbiter.release_gpu(gpu)
                 raise
 
         return sse_response(job, req)

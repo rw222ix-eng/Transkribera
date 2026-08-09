@@ -15,6 +15,7 @@ just den frågan, och de fortsätter göra rätt utan att veta att huset bytts.
 """
 from __future__ import annotations
 import threading
+import uuid
 from pathlib import Path
 from typing import Callable
 
@@ -34,19 +35,46 @@ class GpuArbiter:
         self.models_root = Path(models_root)
         self._on_log = on_log
         self._gpu = threading.Lock()          # ett tungt GPU-jobb i taget
+        self._byte = threading.Lock()         # skyddar nyckelbytet
+        self._nyckel: str | None = None       # vem som håller låset just nu
 
     # ---- exklusiv GPU-åtkomst ----------------------------------------------
-    def try_acquire_gpu(self) -> bool:
-        """Icke-blockerande. True om anroparen nu äger GPU:n, False om upptagen.
-        Ägaren MÅSTE anropa release_gpu() (i ett finally) när den är klar."""
-        return self._gpu.acquire(blocking=False)
+    #
+    # Låset har en NYCKEL sedan buggkandidat 9. Förr var release_gpu() öppen för
+    # vem som helst och «idempotent»: den som inte höll något släppte heller
+    # ingenting — utom när någon ANNAN höll det, och då släppte den deras lås.
+    # Det som höll ihop appen var att 409-vägarna returnerar före sitt finally.
+    # Det är testat, men det är en egenskap hos sjutton anropsställen, inte hos
+    # låset, och nästa rutt som skrivs känner inte till regeln.
+    #
+    # Nu lämnar `try_acquire_gpu` ut en nyckel, och bara den nyckeln öppnar. En
+    # release med fel eller ingen nyckel gör ingenting och SÄGER det (False), i
+    # stället för att rycka undan kortet för ett jobb som håller på.
+    def try_acquire_gpu(self) -> str | None:
+        """Icke-blockerande. Nyckeln till GPU:n om anroparen fick den, annars
+        None (upptagen). Sanningsvärdet fungerar som förr — `if not
+        arbiter.try_acquire_gpu()` läser likadant — men ägaren MÅSTE spara
+        nyckeln och lämna tillbaka den till release_gpu() i ett finally."""
+        if not self._gpu.acquire(blocking=False):
+            return None
+        with self._byte:
+            self._nyckel = uuid.uuid4().hex
+            return self._nyckel
 
-    def release_gpu(self) -> None:
-        """Släpp GPU:n. Ofarlig att anropa utan att hålla låset (idempotent)."""
-        try:
-            self._gpu.release()
-        except RuntimeError:
-            pass                               # var inte låst — inget att göra
+    def release_gpu(self, nyckel: str | None) -> bool:
+        """Släpp GPU:n. True om den släpptes, False om nyckeln inte var vår.
+
+        Nyckeln är obligatorisk med flit: ett anropsställe som glömmer den ska
+        falla i sviten, inte tyst låta bli att släppa ute hos läraren."""
+        with self._byte:
+            if nyckel is None or nyckel != self._nyckel:
+                return False
+            self._nyckel = None
+            try:
+                self._gpu.release()
+            except RuntimeError:
+                return False                    # var inte låst — inget att göra
+            return True
 
     # ---- språkmodellen ------------------------------------------------------
     def llm_installed(self) -> bool:

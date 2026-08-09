@@ -17,16 +17,47 @@ def _arb(tmp_path):
 
 def test_gpu_last_slapper_bara_igenom_ett_jobb(tmp_path):
     arb = _arb(tmp_path)
-    assert arb.try_acquire_gpu() is True
-    assert arb.try_acquire_gpu() is False          # upptagen
-    arb.release_gpu()
-    assert arb.try_acquire_gpu() is True
+    nyckel = arb.try_acquire_gpu()
+    assert nyckel                                  # en nyckel, inte bara True
+    assert arb.try_acquire_gpu() is None            # upptagen
+    assert arb.release_gpu(nyckel) is True
+    assert arb.try_acquire_gpu()
 
 
 def test_release_utan_las_ar_ofarligt(tmp_path):
     arb = _arb(tmp_path)
-    arb.release_gpu()                              # aldrig taget — inget att göra
-    assert arb.try_acquire_gpu() is True
+    assert arb.release_gpu(None) is False          # aldrig taget
+    assert arb.release_gpu("hittepå") is False
+    assert arb.try_acquire_gpu()
+
+
+def test_ingen_slapper_nagon_annans_las(tmp_path):
+    """Buggkandidat 9. Förr var release_gpu() öppen för vem som helst: ett jobb
+    som «städade» efter sig kunde rycka undan kortet för ett jobb som höll på.
+    Det som höll ihop appen var att 409-vägarna returnerar före sitt finally —
+    en egenskap hos sjutton anropsställen, inte hos låset."""
+    arb = _arb(tmp_path)
+    mitt = arb.try_acquire_gpu()
+
+    # Någon annan tror sig ha låset och släpper i sitt finally.
+    assert arb.release_gpu(None) is False
+    assert arb.release_gpu("en gammal nyckel") is False
+    assert arb.try_acquire_gpu() is None            # fortfarande MITT
+
+    assert arb.release_gpu(mitt) is True
+    # Och nyckeln går inte att återanvända.
+    assert arb.release_gpu(mitt) is False
+
+
+def test_nyckeln_ar_ny_varje_gang(tmp_path):
+    """Annars öppnar en gammal nyckel nästa jobbs lås."""
+    arb = _arb(tmp_path)
+    forsta = arb.try_acquire_gpu()
+    arb.release_gpu(forsta)
+    andra = arb.try_acquire_gpu()
+    assert andra != forsta
+    assert arb.release_gpu(forsta) is False        # gammal nyckel biter inte
+    assert arb.try_acquire_gpu() is None            # andra jobbet har kvar sitt
 
 
 # ---- Språkmodellen --------------------------------------------------------

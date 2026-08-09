@@ -198,7 +198,7 @@ def test_generate_utan_klass_och_kurs_gar_anda(llm_ready, monkeypatch):
 
 def test_generate_409_when_gpu_busy(llm_ready, monkeypatch):
     monkeypatch.setattr(llm_ready.app.state.arbiter, "try_acquire_gpu",
-                        lambda: False)
+                        lambda: None)
     r = llm_ready.post("/api/planning/generate", json={"moment": "x"})
     assert r.status_code == 409
 
@@ -553,8 +553,8 @@ def test_archive_ask_emits_real_scan_events(client, monkeypatch):
                                 moment="var på berget och jag såg en älg",
                                 datum="2026-06-21")
     conn.close()
-    monkeypatch.setattr(client.app.state.arbiter, "try_acquire_gpu", lambda: True)
-    monkeypatch.setattr(client.app.state.arbiter, "release_gpu", lambda: None)
+    monkeypatch.setattr(client.app.state.arbiter, "try_acquire_gpu", lambda: "nyckel")
+    monkeypatch.setattr(client.app.state.arbiter, "release_gpu", lambda n: True)
     monkeypatch.setattr(client.app.state.arbiter, "ensure_llm",
                         lambda: "http://127.0.0.1:8170")
     monkeypatch.setattr(rp.llm_client, "generate",

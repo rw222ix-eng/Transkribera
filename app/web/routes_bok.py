@@ -106,7 +106,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
         namn = (body.get("namn") or "").strip()
         kurs = (body.get("kurs") or "").strip() or None
 
-        if not arbiter.try_acquire_gpu():
+        gpu = arbiter.try_acquire_gpu()
+        if not gpu:
             return JSONResponse(_GPU_BUSY, status_code=409)
 
         def job(emit):
@@ -121,7 +122,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 finally:
                     conn.close()
             finally:
-                arbiter.release_gpu()
+                arbiter.release_gpu(gpu)
 
         return sse_response(job, req)
 
@@ -149,7 +150,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
         if b is None:
             return JSONResponse({"error": "okänd bok"}, status_code=404)
 
-        if not arbiter.try_acquire_gpu():
+        gpu = arbiter.try_acquire_gpu()
+        if not gpu:
             return JSONResponse(_GPU_BUSY, status_code=409)
 
         def job(emit):
@@ -169,7 +171,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                                    "tecken": len(s.get("text") or "")}
                                   for s in res["sidor"]]}
             finally:
-                arbiter.release_gpu()
+                arbiter.release_gpu(gpu)
 
         return sse_response(job, req)
 

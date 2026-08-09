@@ -34,8 +34,8 @@ from tests.conftest import HW
 # ─────────────────────────────────────────────── 1 · Avbryt under molnet ──
 
 class _Arbiter:
-    def try_acquire_gpu(self): return True
-    def release_gpu(self): self.slappt = True
+    def try_acquire_gpu(self): return "nyckel"
+    def release_gpu(self, nyckel=None): self.slappt = True
     def stop_llm(self): return False
     def ensure_llm(self): return None
     def ensure_model(self, spec=None): return None

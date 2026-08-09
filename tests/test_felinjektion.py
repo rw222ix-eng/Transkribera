@@ -249,13 +249,14 @@ def test_upptagen_gpu_ger_409_och_stjal_inte_nagon_annans_las(
         llm_ready, vag, kropp):
     """Ett tungt jobb i taget: den som kommer sedan får 409.
 
-    Låset har ingen ägarkontroll — vilken tråd som helst KAN släppa det. Det
-    som håller ihop det är att 409-vägen returnerar innan sitt `finally`. Ett
-    `finally` på fel sida om den raden släpper alltså jobbet som pågår, och
-    då kör två tunga jobb samtidigt utan att något syns. Testet står vakt om
-    just den raden."""
+    Låset har en ägarkontroll sedan buggkandidat 9: bara nyckeln som togs ut
+    öppnar. Testet står ändå kvar — det som prövas är att 409-vägen inte ens
+    FÖRSÖKER släppa, och att ett `finally` på fel sida om return-raden numera
+    skulle vara ofarligt i stället för att rycka undan kortet för jobbet som
+    pågår."""
     arb = llm_ready.app.state.arbiter
-    assert arb.try_acquire_gpu(), "låset var upptaget innan testet började"
+    nyckel = arb.try_acquire_gpu()
+    assert nyckel, "låset var upptaget innan testet började"
     try:
         r = llm_ready.post(vag, json=kropp)
         assert r.status_code == 409, (vag, r.status_code)
@@ -264,7 +265,7 @@ def test_upptagen_gpu_ger_409_och_stjal_inte_nagon_annans_las(
         assert not arb.try_acquire_gpu(), \
             f"{vag} släppte ett lås den aldrig tog"
     finally:
-        arb.release_gpu()
+        assert arb.release_gpu(nyckel), f"{vag} släppte vårt lås"
 
 
 def test_godkannandet_vantar_inte_pa_gpun(llm_ready, fejk_claude, monkeypatch):
@@ -278,17 +279,17 @@ def test_godkannandet_vantar_inte_pa_gpun(llm_ready, fejk_claude, monkeypatch):
     monkeypatch.setattr(exam_pdf, "engine_available", lambda: False)
 
     arb = llm_ready.app.state.arbiter
-    assert arb.try_acquire_gpu(), "låset var upptaget innan testet började"
+    nyckel = arb.try_acquire_gpu()
+    assert nyckel, "låset var upptaget innan testet började"
     try:
         r = llm_ready.post(f"/api/exams/{exam_id}/approve", json={})
         assert r.status_code == 200, r.text
         res = _done(r)
         assert res["tex"], "ingen .tex skrevs — godkännandet kom aldrig fram"
     finally:
-        arb.release_gpu()
-    # …och låset är kvar hos den som höll det.
-    assert arb.try_acquire_gpu()
-    arb.release_gpu()
+        assert arb.release_gpu(nyckel), "godkännandet släppte vårt lås"
+    # …och låset är ledigt igen.
+    arb.release_gpu(arb.try_acquire_gpu())
 
 
 def test_ett_jobb_som_kastar_slapper_gpun(llm_ready, monkeypatch):
@@ -302,8 +303,9 @@ def test_ett_jobb_som_kastar_slapper_gpun(llm_ready, monkeypatch):
     assert "kortet försvann" in _fel(r)
 
     arb = llm_ready.app.state.arbiter
-    assert arb.try_acquire_gpu(), "GPU:n låstes fast av ett jobb som dog"
-    arb.release_gpu()
+    nyckel = arb.try_acquire_gpu()
+    assert nyckel, "GPU:n låstes fast av ett jobb som dog"
+    arb.release_gpu(nyckel)
 
 
 def test_gpun_ar_ledig_igen_efter_en_hel_generering(llm_ready, monkeypatch):
@@ -313,5 +315,6 @@ def test_gpun_ar_ledig_igen_efter_en_hel_generering(llm_ready, monkeypatch):
     assert llm_ready.post("/api/planning/generate",
                           json={"moment": "Derivator"}).status_code == 200
     arb = llm_ready.app.state.arbiter
-    assert arb.try_acquire_gpu()
-    arb.release_gpu()
+    nyckel = arb.try_acquire_gpu()
+    assert nyckel
+    arb.release_gpu(nyckel)

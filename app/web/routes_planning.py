@@ -367,7 +367,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 {"error": f"för många sidor — max {_MAX_UNDERLAG_SIDOR} "
                           "bilder/PDF-sidor per underlag"}, status_code=413)
 
-        if not arbiter.try_acquire_gpu():
+        gpu = arbiter.try_acquire_gpu()
+        if not gpu:
             return JSONResponse(_GPU_BUSY, status_code=409)
 
         def job(emit):
@@ -414,7 +415,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                                    "beskrivning": m["beskrivning"]}
                                   for m in meta]}
             finally:
-                arbiter.release_gpu()
+                arbiter.release_gpu(gpu)
 
         return sse_response(job, req)
 
@@ -441,7 +442,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # sagt «Läser förlagan» — nu gör den det.
         forlaga_txt = forlaga_text(db_file, body)
 
-        if not arbiter.try_acquire_gpu():
+        gpu = arbiter.try_acquire_gpu()
+        if not gpu:
             return JSONResponse(_GPU_BUSY, status_code=409)
 
         def job(emit):
@@ -468,7 +470,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 return {"id": pid, "board": res["board"],
                         "errors": res["errors"], "rounds": res["rounds"]}
             finally:
-                arbiter.release_gpu()
+                arbiter.release_gpu(gpu)
 
         return sse_response(job, req)
 
@@ -489,7 +491,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
             # Budgeten slut — varningarna visas ärligt i UI:t i stället.
             return {"ok": True, "repaired": False, "exhausted": True}
 
-        if not arbiter.try_acquire_gpu():
+        gpu = arbiter.try_acquire_gpu()
+        if not gpu:
             return JSONResponse(_GPU_BUSY, status_code=409)
 
         def job(emit):
@@ -506,7 +509,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 return {"id": pid, "board": st["board"], "errors": res["errors"],
                         "rounds": res["rounds"], "repaired": True}
             finally:
-                arbiter.release_gpu()
+                arbiter.release_gpu(gpu)
 
         return sse_response(job, req)
 
@@ -524,7 +527,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
             return JSONResponse({"error": "skriv vad som ska ändras"},
                                 status_code=400)
 
-        if not arbiter.try_acquire_gpu():
+        gpu = arbiter.try_acquire_gpu()
+        if not gpu:
             return JSONResponse(_GPU_BUSY, status_code=409)
 
         def job(emit):
@@ -542,7 +546,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 return {"id": pid, "board": st["board"], "errors": res["errors"],
                         "rounds": res["rounds"]}
             finally:
-                arbiter.release_gpu()
+                arbiter.release_gpu(gpu)
 
         return sse_response(job, req)
 
@@ -798,7 +802,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 emit({"type": "token", "text": text})
                 return {"text": text, "sources": []}
             return sse_response(no_hit_job, req)
-        if not arbiter.try_acquire_gpu():
+        gpu = arbiter.try_acquire_gpu()
+        if not gpu:
             return JSONResponse(_GPU_BUSY, status_code=409)
 
         typ_label = {"tavla": "Tavla", "prov": "Prov", "arbetsblad": "Arbetsblad"}
@@ -843,7 +848,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                      "group": it["group"], "course": it["course"],
                      "datum": it["datum"]} for it in hits]}
             finally:
-                arbiter.release_gpu()
+                arbiter.release_gpu(gpu)
 
         return sse_response(job, req)
 

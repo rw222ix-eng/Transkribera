@@ -119,8 +119,8 @@ def test_delad_inspelning_med_otillaten_session_avvisas(client):
 # felkort — aldrig med en körning som står still.
 
 class _Arbiter:
-    def try_acquire_gpu(self): return True
-    def release_gpu(self): pass
+    def try_acquire_gpu(self): return "nyckel"
+    def release_gpu(self, nyckel=None): pass
     def stop_llm(self): return False
     def ensure_llm(self): return None
     def ensure_model(self, spec=None): return None
