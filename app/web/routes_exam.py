@@ -253,12 +253,20 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 # jobbet, där väntan syns.
                 bok_block = routes_planning.bok_las_text(base, db_file, body,
                                                          emit=emit)
+                # Bokens nivåskala (Del C, C2b): läses efter sidorna, för
+                # faktapasset kan ha fyllt på nivåerna på vägen. Bara för blad
+                # och gruppuppgift — PROVET ska hålla nationell nivå, inte
+                # bokens, och där äger NP-rubriken nivåfrågan.
+                nivaer_block = (
+                    routes_planning.bok_nivaer(db_file, body, profil=typ)
+                    if typ in ("arbetsblad", "gruppuppgift") else "")
                 res = exam_gen.generate_exam(
                     kurs, klass or "klassen", punkter, model=_model_name(),
                     antal=antal, tid_min=tid_min, delar=delar,
                     memory=memory, teman=teman, referens=referens,
                     bilder=bilder_block, utfall=utfall_block, bok=bok_block,
-                    forlaga=forlaga_block, profil=typ, grupp=grupp,
+                    boknivaer=nivaer_block, forlaga=forlaga_block, profil=typ,
+                    grupp=grupp,
                     log_cb=lambda m: emit({"type": "log", "msg": m}))
                 # Upplägget är lärarens val, inte modellens: skriv in det som
                 # valdes även om modellen råkade fylla i något annat.

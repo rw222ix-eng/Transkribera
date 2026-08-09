@@ -199,6 +199,30 @@ def bok_text(db_file: Path, body: dict) -> str:
     return bok.build_bok_block(rad, fran, till, text, uppg)
 
 
+def bok_nivaer(db_file: Path, body: dict, *, profil: str) -> str:
+    """Bokens nivåskala för det valda uppslaget (Del C, C2b) — arbetsbladets
+    och gruppuppgiftens förankring.
+
+    Läser bara vad som redan står i databasen: uppgiftsnivåerna kom med
+    faktapasset när spannet valdes. Tomt när bokdörren är stängd eller när
+    uppslaget saknar nivåmärkning; anroparen faller då tillbaka på NP-rubriken,
+    och skalan utelämnas aldrig tyst."""
+    val = bok_val(body)
+    if val is None:
+        return ""
+    bid, fran, till = val
+    conn = db.connect(db_file)
+    try:
+        rad = db.get_bok(conn, bid)
+        if rad is None:
+            return ""
+        sidor = db.bok_sidor(conn, bid, fran, till, med_text=False)
+        uppg = db.bok_uppgifter(conn, bid, fran, till)
+    finally:
+        conn.close()
+    return bok.build_niva_block(rad, fran, till, sidor, uppg, profil=profil)
+
+
 def _memory_text(prep: dict) -> str:
     """Kompakt minneskontext ur db.next_prep — det tavelprompten behöver.
     (Fas 3 ersätter detta med db.memory_for_prompt.)"""

@@ -88,7 +88,17 @@ def test_provet_ur_kassetten_klarar_balansreglerna(fejk_claude):
     fejk_claude(kassett="prov")
     res = exam_gen.generate_exam("Matematik 3c", "NA25",
                                  ["Derivata", "Gränsvärden"], model="", antal=6)
-    assert res["errors"] == [], res["errors"]
+    # Bandet spelades in FÖRE nivåkalibreringen (Del C) och bär två av de fel
+    # nivåsignalerna finns för att hitta: en kommunikationspoäng på E-nivå (som
+    # nationella provet aldrig delar ut) och en A-poäng på en «Visa att …»-
+    # uppgift (som är C-nivå i underlaget). Att de syns här är inte ett fel i
+    # bandet utan hela poängen med signalerna — och det är samtidigt kvittot på
+    # att en omspelning behövs (planens C6). Balansreglerna ska hållas ändå.
+    koder = {e["code"] for e in res["errors"]}
+    assert koder <= {"nivasignal"}, res["errors"]
+    assert koder == {"nivasignal"}, \
+        "bandet bar nivåfelen när det spelades in — försvann de har " \
+        "signalerna slutat leta"
     exam = res["exam"]
     assert exam["uppgifter"] and exam["titel"]
     from app import exam_spec
@@ -97,6 +107,28 @@ def test_provet_ur_kassetten_klarar_balansreglerna(fejk_claude):
     # Städningen tar toppnivån — och bara den.
     assert "totalpoang" not in exam and "instruktion" not in exam
     assert all("del" in u and "poang" in u for u in exam["uppgifter"])
+
+
+def test_nivadomen_ur_kassetten_gar_hela_vagen(fejk_claude):
+    """Domarbandet genom hela kedjan: CLI → ström → JSON → nivåjämförelse.
+
+    Bandet är KONSTRUERAT (`inspelad: false`) och dömer provbandets uppgifter.
+    Domarna håller med poängsättningen där de är satta, och svarar «oklart» där
+    uppgiftsnumret betyder olika saker i olika band — auto-läget har EN fil per
+    scenario, och uppgift 1 är E i provet men C i gruppuppgiften. Det är
+    samtidigt toleransen som prövas: en uppgift domaren inte är säker på får
+    inte kosta en reparationsrunda."""
+    fejk_claude(kassett="nivadomare")
+    band = fejk.las_kassett("prov")
+    exam = exam_gen._parse_exam(json.loads(band["rader"][-1])["result"])
+    avv = exam_gen.doma_nivaer(exam, model="")
+    assert avv == [], avv
+    # …och domen kom faktiskt fram; ett tomt svar hade också gett tom lista.
+    domar = exam_gen._parse_domar(json.loads(
+        fejk.las_kassett("nivadomare")["rader"][-1])["result"])
+    nummer = {e["nr"] for e in exam_gen.domarenheter(exam)}
+    assert nummer <= set(domar), "domaren hoppade över uppgifter"
+    assert any(d["niva"] == "OKLART" for d in domar.values())
 
 
 def test_insikterna_ur_den_skarpa_kassetten_bar_inga_namn(fejk_claude):
@@ -142,7 +174,11 @@ def test_auto_laget_lagger_i_bandet_prompten_ber_om(fejk_claude):
         res = exam_gen.generate_exam("Matematik, nivå 2c", "NA25",
                                      ["Andragradsekvationer"], model="",
                                      antal=antal, profil=profil, grupp=grupp)
-        assert res["errors"] == [], (profil, res["errors"])
+        # Nivåsignaler får finnas: banden är inspelade före Del C och provets
+        # band bär två kända nivåfel (se testet ovan). Allt ANNAT är ett fel i
+        # kedjan, och det är det som prövas här.
+        fel = [e for e in res["errors"] if e["code"] != "nivasignal"]
+        assert fel == [], (profil, fel)
         assert res["exam"]["titel"], profil
         # Rätt band, inte bara ETT band: profilerna har olika balansregler och
         # provets kassett faller igenom arbetsbladets.

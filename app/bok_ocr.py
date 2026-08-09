@@ -144,6 +144,7 @@ SIDFAKTA_SCHEMA = {
                     "tryckt_sida": {"type": ["integer", "null"]},
                     "avsnitt": {"type": ["string", "null"]},
                     "rubrik": {"type": ["string", "null"]},
+                    "nivasystem": {"type": ["string", "null"]},
                     "uppgifter": {
                         "type": "array",
                         "items": {
@@ -151,6 +152,7 @@ SIDFAKTA_SCHEMA = {
                             "properties": {
                                 "nr": {"type": "integer"},
                                 "niva": {"type": ["integer", "null"]},
+                                "nivamarke": {"type": ["string", "null"]},
                             },
                             "required": ["nr"],
                         },
@@ -173,18 +175,29 @@ Svara med JSON, ett objekt per bild i sidor:
 i marginalen). Null om det inte syns.
 - avsnitt: avsnittsnumret i sidfoten eller sidhuvudet ("1.2"), null om inget står.
 - rubrik: avsnittsrubriken på samma rad, null om ingen står.
+- nivasystem: hur den HÄR boken märker sina uppgifters svårighetsgrad, som du \
+ser det på sidan. Läromedlen gör olika: färgade staplar eller rutor, a/b/c \
+efter uppgiftsnumret, en till tre stjärnor, rubriker som "Nivå 1"/"Nivå 2", \
+blå och röd kurs. Beskriv systemet kort och skriv ut ordningen, t.ex. \
+"färgade staplar: blå lättast, röd svårast" eller "a, b, c där c är svårast". \
+Ser du ingen nivåmärkning alls på sidan: null. Anta INGET system du inte ser.
 - uppgifter: varje UPPGIFTSNUMMER på sidan (de fyrsiffriga numren framför \
-uppgifterna, t.ex. 1215) i fältet "nr", med "niva" = 1, 2 eller 3 efter vilken \
-färgad nivåmarkör uppgiften står under. Står ingen markör: niva null. Exempel \
-och lösta uppgifter i teoritexten är INTE uppgifter — bara de numrerade.
+uppgifterna, t.ex. 1215) i fältet "nr", med:
+  - "nivamarke" = markeringen som den STÅR vid uppgiften ("b", "★★", "blå"), \
+null om uppgiften saknar markering.
+  - "niva" = markeringens ORDNINGSTAL i systemet ovan, 1 för den lättaste \
+nivån och uppåt. Null när uppgiften saknar markering.
+Exempel och lösta uppgifter i teoritexten är INTE uppgifter — bara de numrerade.
 
 Formen, exakt:
 {"sidor": [{"fil": "sida-021.png", "tryckt_sida": 19, "avsnitt": "1.2", \
-"rubrik": "Linjära modeller", "uppgifter": [{"nr": 1215, "niva": 1}]}]}
+"rubrik": "Linjära modeller", "nivasystem": "a, b, c där c är svårast", \
+"uppgifter": [{"nr": 1215, "niva": 1, "nivamarke": "a"}]}]}
 
 Hitta inte på. Ett nummer du inte kan läsa säkert utelämnas hellre än gissas: \
 en uppgiftslista med luckor går att räkna med, en med påhittade nummer skickar \
-klassen till fel uppgift.
+klassen till fel uppgift. Samma sak gäller nivåerna: en påhittad skala är värre \
+än ingen, eftersom arbetsbladet då skrivs mot en svårighetsgrad som inte finns.
 """
 
 
@@ -274,7 +287,7 @@ def _uppgifter(rå) -> list[dict]:
     ut = []
     for u in rå or []:
         if isinstance(u, (int, str)) and str(u).strip().isdigit():
-            ut.append({"nr": int(u), "niva": None})
+            ut.append({"nr": int(u), "niva": None, "nivamarke": None})
             continue
         if not isinstance(u, dict):
             continue
@@ -282,8 +295,13 @@ def _uppgifter(rå) -> list[dict]:
         if not str(nr or "").strip().isdigit():
             continue
         niva = u.get("niva", u.get("nivå"))
+        marke = str(u.get("nivamarke", u.get("nivåmärke", "")) or "").strip()
         ut.append({"nr": int(nr),
-                   "niva": int(niva) if str(niva or "").strip().isdigit() else None})
+                   "niva": int(niva) if str(niva or "").strip().isdigit() else None,
+                   # Märket sparas som det STÅR. Ordningstalet ovan är appens
+                   # tolkning; märket är bokens ord, och det är det som ska
+                   # tillbaka till läraren och in i prompten.
+                   "nivamarke": marke[:24] or None})
     return ut
 
 

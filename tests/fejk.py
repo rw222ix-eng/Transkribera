@@ -138,6 +138,18 @@ class _Klient:
 _CLI = r'''
 import json, os, sys, time
 
+# Rören är UTF-8, alltid. På Windows är sys.stdin/stdout annars den lokala
+# kodsidan (cp1252), och då blir varje å, ä och ö mojibake i BÅDA riktningarna:
+# appens prompt kom in trasig hit, och svaret gick trasigt tillbaka. Det gjorde
+# två saker som såg ut som helt olika buggar — auto-lägets nyckelord matchade
+# aldrig prompter med svenska tecken (bandet «Läs transkriptet» valdes därför
+# aldrig, och sviten fick tomma insikter i stället för kassettens), och ett svar
+# med å/ä/ö kom tillbaka som frågetecken. Riktiga `claude` skriver UTF-8; fejket
+# ska göra detsamma.
+sys.stdin.reconfigure(encoding="utf-8", errors="replace")
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 LAGE = os.environ.get("FEJK_CLAUDE", "ok")
 SVAR = os.environ.get("FEJK_CLAUDE_SVAR", "Det här är svaret.")
 KASSETT = os.environ.get("FEJK_KASSETT", "")
@@ -150,6 +162,10 @@ BAND = os.environ.get("FEJK_KASSETTER", "")     # mappen, för auto-läget
 # exam_gen.build_prompt, postprocess.EXTRACT_INSTRUCTION) — och de gäller även
 # reparations- och iterationsprompterna, som bär samma instruktion överst.
 _VAL = [
+    # Nivådomaren först: den läser ett FÄRDIGT dokument och dess prompt bär
+    # därför spår av alla tre generatorerna. Står den sist hamnar domen i
+    # provets band, och då «svarar» provet på en fråga om sin egen nivå.
+    ("vilken nivå den faktiskt ligger på", "nivadomare"),
     ("skriv en GRUPPUPPGIFT", "gruppuppgift"),
     ("skriv ett ARBETSBLAD", "arbetsblad"),
     ("lektionstavla", "tavla"),

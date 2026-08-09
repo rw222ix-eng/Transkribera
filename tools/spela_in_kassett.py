@@ -27,7 +27,8 @@ from pathlib import Path
 ROT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROT))
 
-from app import claude_code, exam_gen, lesson_board, postprocess   # noqa: E402
+from app import (claude_code, exam_gen, exam_spec, lesson_board,   # noqa: E402
+                 postprocess)
 from tests import fejk                                             # noqa: E402
 
 TRANSKRIPT = (
@@ -85,7 +86,24 @@ SCENARIER = {
         "system": lambda: postprocess.EXTRACT_SYSTEM,
         "schema": lambda: postprocess.EXTRACT_SCHEMA,
     },
+    # Nivådomaren (Del C) bedöms mot ett FÄRDIGT prov, inte mot en tom sida.
+    # Därför läses provbandet in och döms — samma dokument som resten av sviten
+    # arbetar med, så en avvikelse i domen går att slå upp i uppgifterna.
+    "nivadomare": {
+        "vad": "exam_gen.doma_nivaer — blind nivåbedömning av provbandets uppgifter",
+        "prompt": lambda: exam_gen.build_domar_prompt(
+            exam_gen.domarenheter(_provbandets_exam()),
+            skala=exam_gen._skala("prov", "", exam_spec.balanced_skeleton(6))),
+        "system": lambda: exam_gen.DOMAR_SYSTEM,
+        "schema": lambda: exam_gen.DOMAR_SCHEMA,
+    },
 }
+
+
+def _provbandets_exam() -> dict:
+    """Provet ur tests/kassetter/prov.json — result-raden är hela svaret."""
+    band = fejk.las_kassett("prov")
+    return exam_gen._parse_exam(json.loads(band["rader"][-1])["result"])
 
 
 def spela_in(namn: str) -> Path:
