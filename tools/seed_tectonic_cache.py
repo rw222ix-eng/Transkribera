@@ -33,7 +33,7 @@ import base64
 import sys
 from pathlib import Path
 
-from app import exam_latex, exam_pdf, exam_spec
+from app import exam_latex, exam_pdf, exam_spec, notes_gen
 
 # Minimal giltig 1×1-pixels PNG (RGB, okomprimerad enda scanline), bäddad
 # som base64 så vi varken hittar på ett eget filformat eller behöver
@@ -304,6 +304,40 @@ def _representative_doc() -> exam_spec.ExamDoc:
     )
 
 
+def _representativa_anteckningar() -> notes_gen.NoteDoc:
+    """Ett representativt stödpapper: rubriker, löptext, EN punktlista och
+    kom ihåg-rutan. Alla tre formerna måste med — punktlistan drar in
+    enumitem-miljön och rutan \\fcolorbox på en xcolor-blandning, och en form
+    som aldrig kompilerats under seedningen kraschar --only-cached första
+    gången läraren godkänner ett papper som råkar bära den (samma läxa som
+    gruppuppgiftsmallen och de fem formerna gav).
+
+    Matten i sista stycket är avsiktlig: anteckningar är sällan matematik, men
+    fältet TILLÅTER $…$ och då ska fontmetrikerna finnas i cachen."""
+    return notes_gen.NoteDoc(
+        # Ingen tankstreck ens här: stilregeln i notes_gen gäller pappret, och
+        # ett sondpapper som bryter mot den är ett dåligt facit att mäta mot.
+        titel="Sondanteckningar för cacheseedning",
+        datum="2026-08-18",
+        klass="Sond",
+        sektioner=[
+            notes_gen.Sektion(
+                rubrik="Boken",
+                stycken=["Vi arbetar i kursboken hela terminen. Alla får ett "
+                         "eget exemplar idag och skriver numret på insidan."]),
+            notes_gen.Sektion(
+                rubrik="Så räknar vi",
+                stycken=["Du räknar i din egen takt. Jag går runt och hjälper."],
+                punkter=["Blå uppgifter först", "Röda när du känner dig säker"]),
+            notes_gen.Sektion(
+                rubrik="Prov och rättning",
+                stycken=["Provet ligger i vecka 42. Formeln vi använder mest "
+                         "är $a^2 + b^2 = c^2$, och den står på formelbladet."]),
+        ],
+        kom_ihag=["Ta med boken på fredag", "Lämna in blanketten till mentorn"],
+    )
+
+
 def seed(out_dir: Path, *, compile_fn=exam_pdf.compile_pdf) -> tuple[bool, str]:
     """Seeda cachen. Returnerar (lyckades, meddelande).
 
@@ -342,6 +376,12 @@ def seed(out_dir: Path, *, compile_fn=exam_pdf.compile_pdf) -> tuple[bool, str]:
         ("arbetsblad", exam_latex.render_arbetsblad(doc, bilder=bilder)),
         ("bedomning", exam_latex.render_bedomning(doc, bilder=bilder)),
         ("gruppuppgift", exam_latex.render_gruppuppgift(grupp_doc, bilder=bilder)),
+        # Anteckningarna har en EGEN mall med egna sättningar: 22 mm marginal,
+        # \linespread, itemize (enumitem) och en tonad ruta byggd med
+        # \fcolorbox på en xcolor-blandning. Ingen av dem finns i de andra
+        # mallarna, och en mall cachen aldrig sett kraschar --only-cached TYST
+        # första gången läraren godkänner ett papper av den sorten.
+        ("anteckningar", exam_latex.render_anteckningar(_representativa_anteckningar())),
         ("sond", PROBE_TEX),
     )
 
@@ -354,7 +394,7 @@ def seed(out_dir: Path, *, compile_fn=exam_pdf.compile_pdf) -> tuple[bool, str]:
     markor.parent.mkdir(parents=True, exist_ok=True)
     markor.write_text("", encoding="utf-8")
     return True, ("cachen är seedad (prov, arbetsblad, bedömning, "
-                  "gruppuppgift, tikz/pgfplots)")
+                  "gruppuppgift, anteckningar, tikz/pgfplots)")
 
 
 def main() -> int:
