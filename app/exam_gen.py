@@ -131,7 +131,9 @@ INSTRUCTION = (
     '"text": "Vilket tal är ett nollställe till $f(x) = x^2 - 9$?", '
     '"alternativ": ["$x = 0$", "$x = 3$", "$x = 9$"], "ratt_alternativ": 1, '
     '"losning": "$f(3) = 0$.", "bedomning": "+1 E för rätt alternativ."}\n'
-    "Balans: sprid poängen över förmågorna, ha stigande svårighet, blanda "
+    "Balans: alla SEX förmågorna ska täckas och väga ungefär lika — var och en "
+    "runt en sjättedel av poängen, ingen under en tiondel och ingen över en "
+    "fjärdedel. Ha stigande svårighet, blanda "
     "rutinuppgifter med redovisnings- och problemuppgifter, och lägg "
     "E-tyngden tidigt. Varje uppgift ska vara DISTINKT — upprepa aldrig samma "
     "frågeformulering eller kontext; variera moment, tal och situation. "
@@ -225,15 +227,28 @@ def build_bilder(beskrivningar: list[str]) -> str:
             'Alla andra uppgifter har "bild": null.')
 
 
-def _skelett_plan(skeleton: list[dict]) -> str:
+def _skelett_plan(skeleton: list[dict], last: bool = True) -> str:
     """Läsbar uppgiftsplan ur det balanserade skelettet — talar om för modellen
-    vilket innehåll varje (grammatik-låst) rad ska ha."""
-    rader = [
-        f"{i}. Del {s['del']}, {exam_spec.FORMAGA_NAMN[s['formaga']]} "
-        f"({s['formaga']}), {s['typ']}, poäng {s['poang']}"
-        for i, s in enumerate(skeleton, 1)]
-    return ("Uppgiftsplan — del, förmåga, typ och poäng är LÅSTA per uppgift "
-            "(ändra dem inte); skriv en uppgift vars INNEHÅLL matchar varje rad: "
+    vilket innehåll varje rad ska ha.
+
+    `last=True` när grammatiken låser raderna (prov och arbetsblad): då är
+    planen en beskrivning av något modellen ändå inte kan ändra.
+    `last=False` för gruppuppgiften, som INTE grammatiklåses — se
+    build_prompt om varför — och där planen alltså är en instruktion."""
+    rader = []
+    for i, s in enumerate(skeleton, 1):
+        del_txt = f"Del {s['del']}, " if s.get("del") else ""
+        rader.append(f"{i}. {del_txt}{exam_spec.FORMAGA_NAMN[s['formaga']]} "
+                     f"({s['formaga']}), {s['typ']}, poäng {s['poang']}")
+    huvud = ("Uppgiftsplan — del, förmåga, typ och poäng är LÅSTA per uppgift "
+             "(ändra dem inte); skriv en uppgift vars INNEHÅLL matchar varje rad: "
+             if last else
+             "Uppgiftsplan — förmåga, typ och poäng per uppgift. Följ den: den "
+             "är räknad så att alla sex förmågor väger lika och nivåerna "
+             "fördelas rätt. Har en uppgift deluppgifter ska DERAS poäng summera "
+             "till radens, och de ska ärva radens förmåga (utelämna formaga på "
+             "dem). Skriv en uppgift vars innehåll matchar varje rad: ")
+    return (huvud +
             "en R-rad avgör/motiverar ('Avgör om … Motivera.'), en K-rad "
             "förklarar med ord och representation ('Förklara/Redogör med ord och "
             "graf …'), en rutin-rad kräver bara svar.\n" + "\n".join(rader))
@@ -258,6 +273,12 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
     gruppuppgift: läromedlet nivåmärker sina uppgifter, och för just den klassen
     ÄR boken skalan. Provet förankras i stället i NP-rubriken — det är lärarens
     uttryckliga krav att provet ska hålla nationell nivå, inte bokens."""
+    # Skelettet räknas för ALLA tre profilerna (Del D1b): jämn förmågetäckning
+    # ska vara garanterad by construction och inte bero på att modellen råkar
+    # sprida poängen rätt. Bara delarna skiljer — arbetsbladet och
+    # gruppuppgiften är platta papper.
+    if skeleton is None and profil in ("arbetsblad", "gruppuppgift"):
+        skeleton = exam_spec.balanced_skeleton(antal, profil, delar=False)
     block = [INSTRUCTION]
     if punkter:
         block.append("Uppgifterna ska pröva följande centrala innehåll:\n- " +
@@ -302,19 +323,18 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
             f"Uppdrag: skriv en GRUPPUPPGIFT för {kurs}, klass {klass}, med "
             f"EXAKT {antal} uppgifter (varken fler eller färre). {n} elever per "
             f"grupp arbetar tillsammans i {min_} minuter. {REDOV.get(red, REDOV['muntligt'])}\n"
-            "Uppgifterna ska KRÄVA att man pratar: problemlösning, "
-            "modellering, resonemang och kommunikation — inte rutinräkning "
-            "som en elev gör snabbast själv. De är fyra ingångar till samma "
-            "sak, inte en trappa, så de behöver inte bli svårare nedåt. "
-            "MINST EN uppgift ska ha formaga PL: balanskravet gäller också "
-            "här, och Problemlösning måste bära 15–60 % av poängen. Med så få "
-            "uppgifter betyder det att ingen av dem får vara den enda "
-            "bäraren av en förmåga som saknas.\n"
+            "Uppgifterna ska KRÄVA att man pratar: de är fyra ingångar till "
+            "samma sak, inte en trappa, så de behöver inte bli svårare nedåt. "
+            "Formen bär samtalet — en uppgift som är öppen, som kan angripas "
+            "på flera sätt eller som ber gruppen enas om ett svar kräver "
+            "samtal oavsett vilken förmåga den prövar. Kravet ligger alltså "
+            "INTE på förmågefördelningen: en begrepps- eller procedurpoäng är "
+            "fullt legitim här när den är ingången till resonemanget.\n"
             "Balansen räknas på de poängbärande enheterna, alltså på "
             "DELUPPGIFTERNA när uppgiften har sådana. Sätter du egen formaga "
             "på en deluppgift är det den som räknas, inte förälderns — så "
-            "PL-uppgiftens deluppgifter ska ÄRVA PL (utelämna formaga på dem). "
-            "Annars står PL i uppgiften men bär noll poäng.\n"
+            "deluppgifterna ska ÄRVA uppgiftens förmåga (utelämna formaga på "
+            "dem). Annars står förmågan i uppgiften men bär noll poäng.\n"
             f"{FALLGROPAR_GRUPP}\n"
             "Bygg in ställningen i uppgiften: en uppgift som ska diskuteras "
             "delas i deluppgifter som leder samtalet framåt (undersök, "
@@ -330,17 +350,31 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
             f"Provtiden hör hemma i tid_min={min_} och ingen annanstans — "
             "hitta inte på egna fält (tid_minuter, tidsatgang …), de avvisas. "
             "Svara med enbart JSON.")
+        # Gruppuppgiften får sin uppgiftsplan som TEXT, inte som grammatik.
+        # Grammatiklåsningen (to_response_format med skeleton) tvingar varje
+        # uppgift att bära poäng själv, och en uppgift med poäng får per schemat
+        # inga deluppgifter — men det är just deluppgifterna som är gruppens
+        # ställning («undersök, formulera, motivera»). Låsningen skulle alltså
+        # köpa jämnhet för priset av formen. Planen räknas därför fram på samma
+        # sätt som för de andra profilerna, men lämnas som en instruktion, och
+        # balansvalideringen får fälla om modellen frångår den.
+        if skeleton:
+            block.append(_skelett_plan(skeleton, last=False))
         # Nivåförankringen (C2): gruppuppgiften är inte en trappa, så bokens
         # skala används som GOLV och TAK i stället för som stigning.
         block.append(boknivaer or niva_rubrik.build_skala_utan_bok(profil))
     elif profil == "arbetsblad":
+        if skeleton:
+            block.append(_skelett_plan(skeleton))
         block.append(
             f"Uppdrag: skriv ett ARBETSBLAD (övningsblad, inte prov) för "
             f"{kurs}, klass {klass}, med EXAKT {antal} uppgifter (varken fler "
-            f"eller färre). Tyngden "
-            "ligger på rutin- och procedursuppgifter; inga delar behövs "
-            "(del: null på alla uppgifter). Lösningsförslagen blir facit. "
-            "Svara med enbart JSON.")
+            f"eller färre). Tyngden ligger på övning och rutin — men det är "
+            "uppgifternas FORM som ska vara övande, inte förmågefördelningen: "
+            "alla sex förmågor ska vägas lika, och en kommunikationsuppgift på "
+            "ett arbetsblad är «förklara med ord varför …» i drillformat, inte "
+            "en uppsats. Inga delar behövs (del: null på alla uppgifter). "
+            "Lösningsförslagen blir facit. Svara med enbart JSON.")
         # «Stigande svårighet» stod här förut, och det är en instruktion utan
         # skala: svårare ÄN VAD? Nu följer skalan med — bokens egen när läraren
         # slagit upp ett uppslag, annars NP-rubriken.
@@ -349,8 +383,8 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
         # Balanserat skelett: modellen klarar inte den flerdimensionella
         # balansen (förmåga × nivå) själv, så appen låser del/förmåga/typ/poäng
         # per uppgift (grammatik) och ger planen här så innehållet matchar.
-        if skeleton is None and delar:
-            skeleton = exam_spec.balanced_skeleton(antal, profil)
+        if skeleton is None:
+            skeleton = exam_spec.balanced_skeleton(antal, profil, delar=delar)
         if skeleton is not None:
             block.append(_skelett_plan(skeleton))
         # Nivårubriken står omedelbart efter uppgiftsplanen (C3). Planen säger
@@ -923,22 +957,30 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     ogenomforbart = exam_spec.genomforbarhet(antal, profil)
     if ogenomforbart:
         return {"exam": None, "errors": ogenomforbart, "rounds": 0}
-    # Balanserat skelett (prov med delar): appen äger balansen, grammatiken
-    # låser del/förmåga/typ/poäng per uppgift, modellen skriver innehållet.
-    skeleton = (exam_spec.balanced_skeleton(antal, profil)
-                if profil == "prov" and delar else None)
+    # Balanserat skelett: appen äger balansen, modellen skriver innehållet.
+    # Alla tre profilerna får ett (Del D1b) — prov med delar, arbetsblad och
+    # gruppuppgift platta.
+    skeleton = exam_spec.balanced_skeleton(
+        antal, profil, delar=(profil == "prov" and delar))
+    # … men bara två av dem GRAMMATIKLÅSES. En låst rad måste bära sina poäng
+    # själv, och en uppgift med poäng får inga deluppgifter (exam_spec:
+    # föräldern ska ha [0, 0, 0]) — och deluppgifterna ÄR gruppuppgiftens
+    # ställning. Där går planen in i prompten i stället, och balansreglerna
+    # fäller om modellen frångår den. Provet levde redan med den kostnaden, och
+    # arbetsbladet betalar den gärna: en drilluppgift behöver sällan a/b/c.
+    grammatik = None if profil == "gruppuppgift" else skeleton
     prompt = build_prompt(kurs, klass, punkter, antal=antal, tid_min=tid_min,
                           delar=delar, memory=memory, teman=teman,
                           referens=referens, bilder=bilder, utfall=utfall,
                           bok=bok, boknivaer=boknivaer, forlaga=forlaga,
                           profil=profil, grupp=grupp, skeleton=skeleton)
-    exam = _llm_round(prompt, model, llm, antal, skeleton)
+    exam = _llm_round(prompt, model, llm, antal, grammatik)
     rounds = 1
     while exam is None and rounds < max_rounds:
         rounds += 1
         log(f"Modellen svarade inte med giltig JSON — försöker igen "
             f"(runda {rounds} av {max_rounds}) …")
-        exam = _llm_round(prompt, model, llm, antal, skeleton)
+        exam = _llm_round(prompt, model, llm, antal, grammatik)
     if exam is None:
         return {"exam": None,
                 "errors": [{"path": "svar", "code": "json",
@@ -947,13 +989,13 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     _doc, errors = _validate(exam, profil)
     res = _repair_until_valid(exam, errors, model=model, llm=llm,
                               rounds_used=rounds, max_rounds=max_rounds,
-                              profil=profil, antal=antal, skeleton=skeleton,
+                              profil=profil, antal=antal, skeleton=grammatik,
                               log_cb=log_cb)
     if not doma or res["exam"] is None:
         return res
     return _niva_pass(res["exam"], res["errors"], model=model, llm=llm,
                       profil=profil, skala=_skala(profil, boknivaer, skeleton),
-                      antal=antal, skeleton=skeleton,
+                      antal=antal, skeleton=grammatik,
                       rounds_used=res["rounds"], max_rounds=max_rounds,
                       log_cb=log_cb)
 

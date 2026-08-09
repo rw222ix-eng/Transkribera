@@ -58,26 +58,107 @@ ANALYSERADE_PROV: list[str] = [
     "bedömda elevlösningar",
 ]
 
-# Uppmätt nivåfördelning i underlaget, som andel av totalpoängen:
-#   2c vt22  E 36 %  C 34 %  A 29 %   (58 p)
-#   2c vt18  E 35 %  C 35 %  A 30 %   (57 p)
-#   2a vt22  E 42 %  C 36 %  A 22 %   (55 p)
-#   2a vt18  E 42 %  C 36 %  A 21 %   (55 p)
-# exam_spec.NIVA_MAL (E 35–60 %, C 25–45 %, A 10–30 %) rymmer alla fyra, men
-# proven ligger i den nedre kanten på E och den övre på A: ett prov med 55 % E
-# är tillåtet av balansmålen och skulle ändå inte likna ett nationellt prov.
-# Siffrorna står här och inte i exam_spec därför att de är en MÄTNING, inte ett
-# mål — den som vill dra åt målen har underlaget här.
+# ── NP:s fördelning: mätningen (Del D, D2a) ───────────────────────────────
+# Den första omgången (C1) läste nivåandelarna av ögat ur samma fyra prov. Del D
+# behövde dem exakta — och per delprov — så bedömningsanvisningarnas
+# «N. Max e/c/a»-rader räknades i stället maskinellt, uppgift för uppgift, och
+# stämdes av mot provens totalpoäng. Tabellen nedan är den räkningen. Den
+# rättar också C1:s handsatta siffra för 2a vt18 (som stod 42/36/21; rätt är
+# 40/36/24) — resten stämde.
+#
+# «Utan räknare» är NP:s delprov B OCH C, «med räknare» är delprov D. Det är
+# den gräns appen modellerar med Del B / Del C, inte NP:s tredelning: det är
+# räknaren som skiljer, och delprov C är räknarfritt trots att det kräver
+# fullständiga lösningar.
+#
+# Poängen är (E, C, A). «Karaktär» är uppgiftens högsta nivå med poäng — måttet
+# valdes framför svårighetsindex därför att det är stabilt i materialet: 86 % av
+# uppgifterna ger poäng på EN ENDA nivå, så karaktären är för det mesta hela
+# sanningen om uppgiften.
 
-# MÄTNING SOM INTE ÅTGÄRDATS I KODEN: kommunikationspoäng (K) förekommer noll
+NP_MATNING: dict[str, dict] = {
+    "NpMa2a vt 2018": {
+        "uppgifter": 27, "poang": (22, 20, 13), "karaktar": (10, 9, 8),
+        "utan_raknare": {"uppgifter": 16, "poang": (12, 11, 8)},
+        "med_raknare": {"uppgifter": 11, "poang": (10, 9, 5)}},
+    "NpMa2a vt 2022": {
+        "uppgifter": 28, "poang": (23, 20, 12), "karaktar": (10, 10, 8),
+        "utan_raknare": {"uppgifter": 17, "poang": (15, 13, 6)},
+        "med_raknare": {"uppgifter": 11, "poang": (8, 7, 6)}},
+    "NpMa2c vt 2018": {
+        "uppgifter": 26, "poang": (20, 20, 17), "karaktar": (8, 9, 9),
+        "utan_raknare": {"uppgifter": 16, "poang": (11, 12, 10)},
+        "med_raknare": {"uppgifter": 10, "poang": (9, 8, 7)}},
+    "NpMa2c vt 2022": {
+        "uppgifter": 28, "poang": (21, 20, 17), "karaktar": (11, 9, 8),
+        "utan_raknare": {"uppgifter": 15, "poang": (12, 13, 7)},
+        "med_raknare": {"uppgifter": 13, "poang": (9, 7, 10)}},
+}
+
+# Fyra prov ligger inom 26–28 uppgifter och 55–58 poäng, så materialet säger
+# INGENTING om hur NP skalar med provets storlek — det finns bara en storlek.
+# Därför uttrycks allt nedan i ANDELAR, och appen skalar dem mot sitt eget
+# `antal`. Det är ett antagande, och det är medvetet: alternativet vore att
+# hitta på en skalningskurva ur en enda punkt.
+#
+# C-poängen är påfallande stel: exakt 20 i alla fyra proven, oavsett totalpoäng.
+# E och A är det som rör sig (E 20–23, A 12–17), och de rör sig mot varandra —
+# 2a-proven är E-tunga, 2c-proven A-tunga.
+
+NP_FORDELNING: dict[str, dict] = {
+    # Andel av totalpoängen per nivå. Uppmätt spann, inte mål: målen (med
+    # marginal för små prov) byggs av niva_mal_prov() nedan.
+    "poangandel": {"E": (0.35, 0.42), "C": (0.34, 0.37), "A": (0.21, 0.30)},
+    # Andel av UPPGIFTERNA per karaktär — nära en tredjedel var.
+    "karaktarsandel": {"E": (0.31, 0.39), "C": (0.32, 0.36), "A": (0.29, 0.35)},
+    # Delprovsdimensionen: den räknarfria delen bär drygt hälften av både
+    # poängen och uppgifterna, och den är INTE E-delen. Alla tre nivåerna finns
+    # i båda delarna; skillnaden är storlek, inte svårighet. (Appens Del B har
+    # hittills varit en eller två rutinuppgifter — det är inte NP:s form.)
+    "utan_raknare": {"poang": (0.55, 0.62), "uppgifter": (0.54, 0.62)},
+    "poang_per_uppgift": (1.96, 2.19),
+}
+
+# Poängtripplar som faktiskt förekommer, per karaktär och i fallande frekvens.
+# 86 % av uppgifterna är RENA — de ger poäng på en enda nivå. Skelettet ska
+# därför inte strö [1, 1, 1] över provet: en A-uppgift i NP är oftast (0, 0, k),
+# och blandade tripplar är undantaget som bekräftar regeln.
+NP_TRIPPLAR: dict[str, list[tuple[int, int, int]]] = {
+    "E": [(2, 0, 0), (1, 0, 0), (3, 0, 0)],
+    "C": [(0, 2, 0), (1, 1, 0), (0, 1, 0), (0, 3, 0)],
+    "A": [(0, 0, 1), (0, 0, 3), (0, 0, 2), (1, 0, 2), (1, 2, 1)],
+}
+
+# Uppmätt FÖRMÅGEfördelning (andel av poängen, spann över de fyra proven):
+#   P 21–31 %   PL 16–21 %   M 17–21 %   B 13–18 %   R 9–16 %   K 4–9 %
+# Den siffran är medtagen för ärlighetens skull och används INTE som mål:
+# läraren har bestämt att alla sex förmågor ska vägas lika (1/6 ≈ 17 %), vilket
+# är en medveten avvikelse från nationella provet. NP är procedurtungt och
+# kommunikationsfattigt; appens prov ska inte vara det. Nivåfördelningen följer
+# NP, förmågefördelningen följer läraren — och nu står båda skrivna.
+
+
+def niva_mal_prov(marginal: float = 0.05) -> dict[str, tuple[float, float]]:
+    """Provprofilens nivåmål: det uppmätta spannet plus en marginal.
+
+    Marginalen finns för att ett litet prov inte kan träffa ett band som är
+    smalare än en poäng. Ett prov på 20 poäng flyttar fem procentenheter per
+    poäng, så ett C-band på 34–37 % vore omöjligt att träffa med annat än exakt
+    7 poäng. Fem procentenheter åt varje håll gör målen nåbara utan att släppa
+    tillbaka det NP-olika (E 55 % ryms fortfarande inte).
+
+    Nycklarna är gemena — exam_spec.NIVA_MAL:s form, som poangsummor() slår upp
+    med."""
+    return {n.lower(): (round(max(0.0, lo - marginal), 2),
+                        round(min(1.0, hi + marginal), 2))
+            for n, (lo, hi) in NP_FORDELNING["poangandel"].items()}
+
+# KOMMUNIKATION HAR INGEN E-NIVÅ: kommunikationspoäng (K) förekommer noll
 # gånger på E-nivå i alla fyra proven — CK 1–3 och AK 0–3 per prov, EK aldrig.
 # Bedömningsanvisningarna säger det rent ut: skriftlig kommunikation bedöms inte
-# särskilt på E-nivå för enskilda uppgifter. exam_spec.balanced_skeleton kan
-# ändå lägga [1, 1, 0] på en K-uppgift och därmed be om en E-poäng i
-# kommunikation som nationella provet inte delar ut. Det är en strukturfråga i
-# skelettet, inte en innehållsfråga, och därför inte åtgärdad här — men den ska
-# åtgärdas, och rubriken nedan säger därför ingenting om K på E-nivå (att göra
-# det hade satt prompten i strid med grammatiken).
+# särskilt på E-nivå för enskilda uppgifter. Rubriken nedan säger därför
+# ingenting om K på E-nivå, och exam_spec.balanced_skeleton lägger aldrig
+# E-poäng på en K-rad (den lyfter i stället uppgiften till C-karaktär).
 
 # ── Den generella rubriken ────────────────────────────────────────────────
 # Sex dimensioner, samma sex på alla tre nivåerna, så att skillnaden går att

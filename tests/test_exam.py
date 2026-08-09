@@ -7,8 +7,10 @@ import re
 import subprocess
 
 import pytest
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
-from app import exam_gen, exam_latex, exam_pdf, exam_spec
+from app import exam_gen, exam_latex, exam_pdf, exam_spec, niva_rubrik
 
 # Minimal giltig 1×1-pixels PNG (RGB, okomprimerad enda scanline) — samma
 # sond som tools/seed_tectonic_cache.py använder för att motionera
@@ -569,17 +571,58 @@ def test_ordning_arbetsblad_kraver_stigande_svarighet():
 
 # --------------------------------------------------------- genomförbarhet --
 
-def test_genomforbarhet_kraver_en_uppgift_per_formagegolv():
-    """Färre uppgifter än förmågor med positivt golv går inte att balansera."""
-    fel = exam_spec.genomforbarhet(4, "prov")
+def test_genomforbarhet_kraver_plats_for_bada_uppgiftstyperna():
+    """Regeln var «färre uppgifter än förmågor med positivt golv går inte att
+    balansera». Den föll när alla sex förmågor fick golv (Del D1): då hade ett
+    arbetsblad på tre uppgifter blivit ogenomförbart. Täckningsregeln tog över
+    den frågan (och gör den bättre, på ENHETER). Kvar är det som fortfarande är
+    omöjligt: ett prov måste rymma både en rutinuppgift och en med fullständig
+    lösning."""
+    fel = exam_spec.genomforbarhet(1, "prov")
     assert fel and fel[0]["code"] == "genomforbarhet"
-    assert exam_spec.genomforbarhet(6, "prov") == []
-    assert exam_spec.genomforbarhet(10, "prov") == []
+    for antal in (2, 4, 6, 10):
+        assert exam_spec.genomforbarhet(antal, "prov") == []
 
 
 def test_genomforbarhet_arbetsblad_ar_tillatande():
-    """Arbetsbladet har inga golv > 0 utom P — korta arbetsblad är okej."""
+    """Arbetsbladet kräver ingen redovisningsuppgift — ett papper räcker."""
+    assert exam_spec.genomforbarhet(1, "arbetsblad") == []
     assert exam_spec.genomforbarhet(3, "arbetsblad") == []
+
+
+def test_smafallsregeln_kraver_en_formaga_per_uppgift():
+    """Under sex poängbärande enheter kan det jämna bandet inte gälla — då
+    kräver täckningsregeln i stället att varje enhet bär sin egen förmåga."""
+    # Nivåerna hålls innanför arbetsbladets band (E 40–85 %) så att det ENDA
+    # som kan fälla bladet är förmågetäckningen.
+    def blad(formagor):
+        poang = [[2, 0, 0], [1, 1, 0], [0, 1, 0]]
+        return {"titel": "x", "kurs": "Ma2b", "hjalpmedel": "x", "uppgifter": [
+            {"del": None, "formaga": f, "typ": "rutin", "poang": poang[i],
+             "text": f"Uppgift {i + 1}.", "losning": "L.", "bedomning": "B."}
+            for i, f in enumerate(formagor)]}
+
+    _d, fel = exam_spec.validate_exam_json(blad(["P", "P", "P"]), "arbetsblad")
+    assert [e["code"] for e in fel] == ["formagabalans"]
+    assert "3 poängbärande enheter täcker bara 1" in fel[0]["message"]
+    _d, rent = exam_spec.validate_exam_json(blad(["P", "B", "M"]), "arbetsblad")
+    assert rent == []
+    # Deluppgifter räknas som egna enheter: två uppgifter kan bära fyra
+    # förmågor, och då mäts täckningen mot fyra.
+    med_del = {"titel": "x", "kurs": "Ma2b", "hjalpmedel": "x", "uppgifter": [
+        {"del": None, "formaga": "P", "typ": "rutin", "poang": [0, 0, 0],
+         "text": "Stam.", "deluppgifter": [
+             {"formaga": f, "poang": p, "text": f"del {f}",
+              "losning": "L.", "bedomning": "B."}
+             for f, p in (("P", [2, 0, 0]), ("B", [1, 0, 0]))]},
+        {"del": None, "formaga": "M", "typ": "rutin", "poang": [0, 0, 0],
+         "text": "Stam.", "deluppgifter": [
+             {"formaga": f, "poang": p, "text": f"del {f}",
+              "losning": "L.", "bedomning": "B."}
+             for f, p in (("M", [1, 1, 0]), ("R", [0, 1, 0]))]},
+    ]}
+    _d, fel4 = exam_spec.validate_exam_json(med_del, "arbetsblad")
+    assert fel4 == []
 
 
 # ------------------------------------------------------------- kravgränser --
@@ -1275,7 +1318,7 @@ def test_generate_exam_avvisar_ogenomforbart_utan_llm():
         anrop.append(1)
         return "{}"
 
-    res = exam_gen.generate_exam("Ma2b", "SA23", [], model="x", antal=4,
+    res = exam_gen.generate_exam("Ma2b", "SA23", [], model="x", antal=1,
                                  llm=spion_llm)
     assert res["exam"] is None
     assert res["errors"][0]["code"] == "genomforbarhet"
@@ -1309,7 +1352,14 @@ def test_fix_latex_rounds_cap():
 
 def _arbetsblad() -> dict:
     """E-tungt övningsblad utan redovisningsuppgifter — ok som arbetsblad,
-    obalanserat som prov."""
+    obalanserat som prov.
+
+    Bladet hade fyra uppgifter på tre förmågor (P, P, B, PL) och gick igenom så
+    länge arbetsbladsprofilen tillät golv 0 på fem av sex förmågor. Med lärarens
+    jämnhetskrav (Del D1) gäller i stället täckningsregeln för små dokument:
+    varje uppgift ska bära sin egen förmåga. Bladet drillar fortfarande
+    pq-formeln — det är formen, inte förmågefördelningen, som gör det till en
+    övning."""
     return {
         "titel": "Arbetsblad — pq-formeln", "kurs": "Ma2b",
         "hjalpmedel": "Räknare",
@@ -1317,9 +1367,11 @@ def _arbetsblad() -> dict:
             {"del": None, "formaga": "P", "typ": "rutin", "poang": [2, 0, 0],
              "text": "Lös $x^2 - 5x + 6 = 0$.", "innehall": ["pq-formeln"],
              "losning": "$x = 2$ eller $x = 3$.", "bedomning": "+2 E."},
-            {"del": None, "formaga": "P", "typ": "rutin", "poang": [2, 0, 0],
-             "text": "Lös $x^2 + 2x - 8 = 0$.", "innehall": ["pq-formeln"],
-             "losning": "$x = 2$ eller $x = -4$.", "bedomning": "+2 E."},
+            {"del": None, "formaga": "M", "typ": "rutin", "poang": [2, 0, 0],
+             "text": "En rektangel har arean 8 och är 2 längre än den är bred. "
+                     "Teckna en ekvation för bredden.",
+             "innehall": ["pq-formeln"], "losning": "$b(b + 2) = 8$.",
+             "bedomning": "+2 E."},
             {"del": None, "formaga": "B", "typ": "rutin", "poang": [1, 1, 0],
              "text": "Vad kallas talet under rottecknet i pq-formeln?",
              "innehall": ["pq-formeln"], "losning": "Diskriminantuttrycket.",
@@ -1489,7 +1541,7 @@ def test_prompt_kraver_exakt_antal():
     # förekomma i förmågefördelningen — den är en riktlinje, inte ett exakt tal.
     assert "EXAKT 8 uppgifter" in p and "ungefär 8 uppgifter" not in p
     pa = exam_gen.build_prompt("Ma2b", "SA23", [], antal=5, profil="arbetsblad")
-    assert "EXAKT 5 uppgifter" in pa and "ungefär" not in pa
+    assert "EXAKT 5 uppgifter" in pa and "ungefär 5 uppgifter" not in pa
 
 
 def test_instruction_kraver_variation():
@@ -1565,12 +1617,102 @@ def test_to_response_format_skeleton_last_per_index():
     assert "losning" in req and "bedomning" in req
 
 
-def test_prompt_har_skelettplan_for_prov():
-    """Provprompten ska innehålla den balanserade uppgiftsplanen (skelettet)
-    med alla sex förmågor; arbetsbladet får ingen sådan plan."""
+def test_prompt_har_skelettplan_for_alla_profiler():
+    """Alla tre profilerna ska få den balanserade uppgiftsplanen (Del D1b) —
+    jämn förmågetäckning ska vara räknad, inte hoppas på. Provet och
+    arbetsbladet grammatiklåses (planen säger LÅSTA); gruppuppgiften får planen
+    som instruktion, eftersom en låst rad inte kan ha deluppgifter och det är
+    deluppgifterna som bär gruppens samtal."""
     p = exam_gen.build_prompt("Ma2b", "SA23", [], antal=8, profil="prov")
     assert "Uppgiftsplan" in p and "LÅSTA" in p
     for f in ("B", "P", "PL", "M", "R", "K"):
         assert f"({f})" in p
     pa = exam_gen.build_prompt("Ma2b", "SA23", [], antal=6, profil="arbetsblad")
-    assert "Uppgiftsplan" not in pa
+    assert "Uppgiftsplan" in pa and "LÅSTA" in pa
+    assert "Del B" not in pa                      # platt papper, inga delar
+    pg = exam_gen.build_prompt("Ma2b", "SA23", [], antal=6,
+                               profil="gruppuppgift")
+    assert "Uppgiftsplan" in pg and "LÅSTA" not in pg
+    assert "deluppgifter" in pg
+
+
+# ───────────────────────── jämn förmågetäckning + NP-fördelning (Del D) ──
+
+@settings(deadline=None, max_examples=40)
+@given(antal=st.integers(min_value=4, max_value=20),
+       profil=st.sampled_from(["prov", "arbetsblad", "gruppuppgift"]))
+def test_skelettet_ar_balanserat_for_alla_storlekar_och_profiler(antal, profil):
+    """Egenskapen läraren bad om: jämn förmågetäckning i ALLA tre
+    dokumenttyperna, oavsett storlek. Skelettet ska (a) validera rent mot sin
+    profil, (b) inte lämna någon förmåga på noll när dokumentet är stort nog att
+    bära sex, och (c) för prov ligga innanför NP:s nivåband."""
+    sk = exam_spec.balanced_skeleton(antal, profil,
+                                     delar=(profil == "prov"))
+    assert len(sk) == antal
+    doc = exam_spec._skeleton_doc(sk)
+    assert exam_spec.validate_balance(doc, profil=profil) == []
+    s = exam_spec.poangsummor(doc)
+    if antal >= exam_spec.MIN_ENHETER_FOR_BAND:
+        assert all(s["formagor"][f] > 0 for f in exam_spec.FORMAGA_NAMN)
+    else:
+        assert sum(1 for p in s["formagor"].values() if p > 0) >= antal
+    if profil == "prov":
+        for niva, (lo, hi) in niva_rubrik.niva_mal_prov().items():
+            assert lo <= s[niva] / s["total"] <= hi
+
+
+@pytest.mark.parametrize("antal", [6, 9, 12, 15, 18])
+def test_skelettet_delar_provet_som_np(antal):
+    """NP lägger 54–62 % av uppgifterna i den räknarfria delen, och den delen är
+    INTE E-delen: alla tre nivåerna finns i båda delarna. Skelettet lade förut
+    en eller två rutinuppgifter i Del B och resten i Del C."""
+    sk = exam_spec.balanced_skeleton(antal, "prov", delar=True)
+    b = [s for s in sk if s["del"] == "B"]
+    c = [s for s in sk if s["del"] == "C"]
+    assert b and c
+    assert 0.4 <= len(b) / antal <= 0.8
+    if antal >= 9:                       # med färre får inte alla nivåer plats
+        assert any(s["poang"][2] for s in b), "Del B saknar A-poäng"
+
+
+def test_jamna_band_ligger_runt_en_sjattedel():
+    """Lärarens krav, som data: samma band för alla sex förmågor i alla tre
+    profilerna, och 1/6 ska ligga innanför det."""
+    for mal in (exam_spec.FORMAGA_MAL, exam_spec.ARBETSBLAD_FORMAGA_MAL,
+                exam_spec.GRUPP_FORMAGA_MAL):
+        assert set(mal) == set(exam_spec.FORMAGA_NAMN)
+        assert len(set(mal.values())) == 1, "banden ska vara lika för alla sex"
+        (lo, hi), = set(mal.values())
+        assert lo > 0, "ingen förmåga får sakna poäng"
+        assert lo <= exam_spec.JAMN_FORMAGA <= hi
+
+
+def test_np_fordelningen_ar_intern_konsistent():
+    """NP_FORDELNING är mätdata och ska gå att räkna om ur NP_MATNING."""
+    for namn, m in niva_rubrik.NP_MATNING.items():
+        u, r = m["utan_raknare"], m["med_raknare"]
+        assert tuple(a + b for a, b in zip(u["poang"], r["poang"])) \
+            == m["poang"], namn
+        assert u["uppgifter"] + r["uppgifter"] == m["uppgifter"], namn
+        assert sum(m["karaktar"]) == m["uppgifter"], namn
+    assert set(niva_rubrik.NP_MATNING) <= {p.split(" —")[0]
+                                           for p in niva_rubrik.ANALYSERADE_PROV}
+    for niva, (lo, hi) in niva_rubrik.NP_FORDELNING["poangandel"].items():
+        i = niva_rubrik.NIVAER.index(niva)
+        matt = [m["poang"][i] / sum(m["poang"])
+                for m in niva_rubrik.NP_MATNING.values()]
+        # Bandet ska rymma varje mätpunkt (halv procentenhet för avrundningen).
+        assert lo <= min(matt) + 0.005 and max(matt) - 0.005 <= hi, niva
+    # Målen är mätningen plus marginal — aldrig snävare än den.
+    for niva, (lo, hi) in niva_rubrik.NP_FORDELNING["poangandel"].items():
+        mlo, mhi = niva_rubrik.niva_mal_prov()[niva.lower()]
+        assert mlo <= lo and mhi >= hi
+
+
+def test_np_tripplarna_har_ratt_karaktar():
+    """Varje trippel ska ha den karaktär den står under — annars skulle
+    skelettet bygga en A-uppgift av en trippel utan A-poäng."""
+    for kar, tripplar in niva_rubrik.NP_TRIPPLAR.items():
+        assert tripplar
+        for t in tripplar:
+            assert exam_spec._karaktar(list(t)) == kar, (kar, t)

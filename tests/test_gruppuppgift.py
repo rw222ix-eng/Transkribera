@@ -231,6 +231,12 @@ def test_prompten_talar_om_gruppen(monkeypatch):
     assert "GRUPPUPPGIFT" in p
     assert "4 elever per grupp" in p and "30 minuter" in p
     assert "sätts upp i salen" in p
-    assert "inte rutinräkning" in p
+    # Kravet på samtal ligger på FORMEN, inte på förmågefördelningen. Raden löd
+    # förut «inte rutinräkning som en elev gör snabbast själv» och gav
+    # gruppuppgiften egna, sneda förmågemål; med lärarens jämnhetskrav (Del D)
+    # är en begrepps- eller procedurpoäng legitim också här, när den är
+    # ingången till resonemanget.
+    assert "KRÄVA att man pratar" in p
+    assert "flera sätt" in p and "ingången till resonemanget" in p
     # Ställningen ligger i uppgiften, inte i en separat mall.
     assert "deluppgifter som leder samtalet" in p

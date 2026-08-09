@@ -17,12 +17,16 @@ Uppgifterna är alltid egenformulerade; endast strukturen efterliknar NP.
 from __future__ import annotations
 
 import copy
-import itertools
 import math
 import re
 from typing import Annotated, Literal, Union
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+
+# Mätningen av nationella provet (Del C/D) bor i en egen modul: den är DATA och
+# ska gå att ifrågasätta, mätas om och bytas utan att motorreglerna rörs.
+# Beroendet går bara åt det här hållet — niva_rubrik importerar ingenting.
+from app import niva_rubrik
 
 Formaga = Literal["B", "P", "PL", "M", "R", "K"]
 Uppgiftstyp = Literal["rutin", "redovisning", "problem", "resonemang"]
@@ -392,26 +396,37 @@ def to_response_format(antal: int | None = None,
 
 # ------------------------------------------------------------ balansmål ----
 # Andel av totalpoängen per förmåga respektive nivå, som intervall.
-# Hämtade ur publicerade NP-bedömningsanvisningars typiska fördelningar —
-# medvetet breda (styr generatorn utan att tvinga fram konstlade uppgifter).
+#
+# FÖRMÅGORNA (Del D1): läraren har bestämt att alla sex ska täckas LIKA MYCKET
+# så långt det går — i prov, arbetsblad OCH gruppuppgift. Målet är därför
+# 1/6 ≈ 17 % av totalpoängen per förmåga, uttryckt som ett band kring den
+# punkten. Det ersätter de tidigare ojämna intervallen (prov favoriserade
+# Procedur 20–50 %, arbetsbladet var procedurtungt med golv 0 på fem förmågor,
+# gruppuppgiften tryckte ner B och P). De intervallen kallades ägarbeslut i
+# koden; det här är det nya ägarbeslutet.
+#
+# Banden är STARTvärden och ska justeras efter kassettutfall, inte efter tycke.
+# Bandet kan bara gälla när dokumentet är stort nog att bära sex förmågor —
+# under den gränsen tar täckningsregeln vid (se MIN_ENHETER_FOR_BAND).
+#
+# NIVÅERNA: bara provet följer nationella provets fördelning (lärarens andra
+# krav). Måltalen hämtas ur mätningen i app/niva_rubrik och bor DÄR, inte här:
+# empirin och motorreglerna ska gå att ändra var för sig.
 
-FORMAGA_MAL: dict[str, tuple[float, float]] = {
-    "B": (0.10, 0.40), "P": (0.20, 0.50), "PL": (0.10, 0.40),
-    # M och K har golv > 0: alla sex förmågor måste vara representerade
-    # (ägarbeslut). Endast provprofilen — arbetsbladet är procedurtungt.
-    "M": (0.05, 0.30), "R": (0.05, 0.30), "K": (0.05, 0.25),
-}
-NIVA_MAL: dict[str, tuple[float, float]] = {
-    "e": (0.35, 0.60), "c": (0.25, 0.45), "a": (0.10, 0.30),
-}
+JAMN_FORMAGA = 1 / len(FORMAGA_NAMN)     # 1/6 ≈ 16,7 % — målpunkten
 
-# Arbetsblad (Fas 5) — egna, generösare mål: övning i klassrummet/hemma
-# betyder fler rutin- och procedurpoäng, inga kravgränser och inget krav på
-# redovisningsuppgifter.
-ARBETSBLAD_FORMAGA_MAL: dict[str, tuple[float, float]] = {
-    "B": (0.00, 0.50), "P": (0.25, 0.80), "PL": (0.00, 0.45),
-    "M": (0.00, 0.35), "R": (0.00, 0.35), "K": (0.00, 0.30),
-}
+FORMAGA_MAL: dict[str, tuple[float, float]] = {f: (0.10, 0.25)
+                                               for f in FORMAGA_NAMN}
+NIVA_MAL: dict[str, tuple[float, float]] = niva_rubrik.niva_mal_prov()
+
+# Arbetsblad (Fas 5) — samma jämna förmågemål, men bredare band: ett övningsblad
+# är mindre och drillar ett moment, så utfallet svänger mer. Det som ÄR borta är
+# principen «procedurtungt»: rutinkaraktären lever i uppgiftsTYPERNA i stället
+# (en K-uppgift på ett arbetsblad kan vara «förklara med ord varför …» i
+# drillformat). Nivåmålen är fortfarande arbetsbladets egna — E-tyngd, inga
+# kravgränser, inget krav på redovisningsuppgifter.
+ARBETSBLAD_FORMAGA_MAL: dict[str, tuple[float, float]] = {f: (0.05, 0.30)
+                                                          for f in FORMAGA_NAMN}
 ARBETSBLAD_NIVA_MAL: dict[str, tuple[float, float]] = {
     "e": (0.40, 0.85), "c": (0.10, 0.45), "a": (0.00, 0.25),
 }
@@ -421,15 +436,15 @@ ARBETSBLAD_NIVA_MAL: dict[str, tuple[float, float]] = {
 # bara PROV — arbetsbladet får drilla samma uppgiftstyp i rad. Stigande
 # svårighet gäller BÅDA: arbetsbladsmallen lovar eleven att uppgifterna blir
 # svårare längre ner.
-# Gruppuppgift (Fas 0.6) — motsatsen till arbetsbladet. Ett papper som ligger
-# på ett BORD och som fyra elever ska prata sig igenom prövar inte rutin: det
-# prövar problemlösning, modellering, resonemang och kommunikation. Därför
-# golv > 0 på PL, M, R och K, tak på ren procedur, och tyngdpunkten på C/A —
-# en uppgift man löser i huvudet behöver ingen grupp.
-GRUPP_FORMAGA_MAL: dict[str, tuple[float, float]] = {
-    "B": (0.00, 0.35), "P": (0.00, 0.35), "PL": (0.15, 0.60),
-    "M": (0.05, 0.45), "R": (0.10, 0.50), "K": (0.10, 0.45),
-}
+# Gruppuppgift (Fas 0.6) — ett papper som ligger på ett BORD och som fyra elever
+# ska prata sig igenom. Formen krävde förut sin egen förmågefördelning: B och P
+# nedtryckta, PL/M/R/K lyfta. Med lärarens jämnhetskrav flyttar det kravet
+# härifrån till PROMPTEN, som redan säger att uppgifterna ska KRÄVA samtal. En
+# B- eller P-poäng i en gruppuppgift är legitim när den är ingången till
+# resonemanget — det är uppgiftens form som ska bära samtalet, inte
+# poängfördelningen. Tyngdpunkten på C/A står kvar i nivåmålen.
+GRUPP_FORMAGA_MAL: dict[str, tuple[float, float]] = {f: (0.05, 0.30)
+                                                     for f in FORMAGA_NAMN}
 GRUPP_NIVA_MAL: dict[str, tuple[float, float]] = {
     "e": (0.10, 0.45), "c": (0.25, 0.60), "a": (0.10, 0.45),
 }
@@ -516,6 +531,36 @@ def gruppera_per_del(uppgifter: list[ExamItem]
     return grupper
 
 
+# Under så här många poängbärande enheter är det jämna bandet omöjligt: fem
+# enheter kan inte fördela poäng på sex förmågor, och en enda enhet skulle
+# behöva ligga på 100 % av EN förmåga. Då gäller täckningsregeln i stället.
+MIN_ENHETER_FOR_BAND = len(FORMAGA_NAMN)
+
+
+def _smafallsregeln(s: dict, antal_enheter: int) -> list[dict]:
+    """Täckningsregeln för små dokument: varje enhet ska bära SIN EGEN förmåga.
+
+    Regeln är bandets lillebror. Bandet säger «ingen förmåga får sakna poäng»
+    (golvet är > 0 i alla tre profilerna); med färre enheter än förmågor går det
+    inte, så kravet blir i stället att så många förmågor som möjligt täcks —
+    en förmåga får saknas per påbörjat underskott. Fyra enheter ska alltså ligga
+    på fyra olika förmågor, inte tre på samma.
+
+    Deluppgifter räknas som egna enheter (poangenheter räknar löv), så en uppgift
+    med två deluppgifter kan bära två förmågor. Därför mäts regeln på ENHETER
+    och inte på antalet uppgifter."""
+    tackta = [f for f, p in s["formagor"].items() if p > 0]
+    kravs = min(len(FORMAGA_NAMN), antal_enheter)
+    if len(tackta) < kravs:
+        saknas = [f for f in FORMAGA_NAMN if f not in tackta]
+        return [_err("uppgifter", "formagabalans",
+                     f"{antal_enheter} poängbärande enheter täcker bara "
+                     f"{len(tackta)} förmågor ({', '.join(tackta)}) — med så få "
+                     f"uppgifter ska varje uppgift bära sin egen förmåga, så "
+                     f"{kravs} ska vara täckta. Saknas: {', '.join(saknas)}.")]
+    return []
+
+
 def validate_balance(doc: ExamDoc,
                      formaga_mal: dict | None = None,
                      niva_mal: dict | None = None,
@@ -551,12 +596,16 @@ def validate_balance(doc: ExamDoc,
                                f"{niva.upper()}-poängen är {andel:.0%} av totalen — "
                                f"målet är {lo:.0%}–{hi:.0%}."))
 
-    for f, (lo, hi) in fm.items():
-        andel = s["formagor"][f] / total
-        if andel < lo or andel > hi:
-            errors.append(_err(f"förmåga {f}", "formagabalans",
-                               f"{FORMAGA_NAMN[f]} ({f}) har {andel:.0%} av poängen — "
-                               f"målet är {lo:.0%}–{hi:.0%}."))
+    antal_enheter = sum(len(poangenheter(it)) for it in doc.uppgifter)
+    if antal_enheter >= MIN_ENHETER_FOR_BAND:
+        for f, (lo, hi) in fm.items():
+            andel = s["formagor"][f] / total
+            if andel < lo or andel > hi:
+                errors.append(_err(f"förmåga {f}", "formagabalans",
+                                   f"{FORMAGA_NAMN[f]} ({f}) har {andel:.0%} av poängen — "
+                                   f"målet är {lo:.0%}–{hi:.0%}."))
+    else:
+        errors.extend(_smafallsregeln(s, antal_enheter))
 
     typer = {t for it in doc.uppgifter for _f, t, _p in poangenheter(it)}
     if "rutin" not in typer:
@@ -619,19 +668,28 @@ def validate_ordning(doc: ExamDoc, *, kolla_klumpning: bool = True,
 
 
 def genomforbarhet(antal: int, profil: str = "prov") -> list[dict]:
-    """Deterministisk förkontroll: kan ett prov med ~`antal` uppgifter alls
-    balanseras? Varje uppgift har EN primär förmåga, så färre uppgifter än
-    antalet förmågor med positivt golv kan aldrig representera dem alla.
-    Körs före generering så reparationsloopen slipper ett olösligt problem.
-    Deluppgifter kan bära extra förmågor men är okända före generering, så
-    golvet på toppnivåns antal står kvar (medvetet konservativt)."""
-    prof_fm, _nm, _kr, _kk, _ks = PROFILER.get(profil, PROFILER["prov"])
-    golv_formagor = [f for f, (lo, _hi) in prof_fm.items() if lo > 0]
-    if antal < len(golv_formagor):
+    """Deterministisk förkontroll: kan ett dokument med `antal` uppgifter alls
+    balanseras? Körs före generering så reparationsloopen slipper ett olösligt
+    problem.
+
+    Regeln VAR «färre uppgifter än förmågor med positivt golv går inte att
+    balansera», och den föll när alla sex förmågor fick golv (Del D1): då hade
+    ett arbetsblad på tre uppgifter blivit ogenomförbart, och korta arbetsblad
+    är hela poängen med formen. Täckningsregeln (_smafallsregeln) tog över den
+    frågan och löser den bättre — den mäter poängbärande ENHETER, så tre
+    uppgifter med deluppgifter kan mycket väl bära sex förmågor.
+
+    Kvar här är det enda som fortfarande är omöjligt före generering: att få
+    plats med de uppgiftsTYPER profilen kräver. Provet och gruppuppgiften kräver
+    både en rutinuppgift och en med fullständig lösning, alltså minst två."""
+    _fm, _nm, kraver_redovisning, _kk, _ks = PROFILER.get(profil,
+                                                          PROFILER["prov"])
+    minsta = 2 if kraver_redovisning else 1
+    if antal < minsta:
         return [_err("antal", "genomforbarhet",
-                     f"{antal} uppgifter räcker inte för att representera alla "
-                     f"{len(golv_formagor)} förmågor som kräver poäng — "
-                     f"be om minst {len(golv_formagor)}.")]
+                     f"{antal} uppgift(er) räcker inte: dokumentet måste rymma "
+                     f"både en rutinuppgift och en med fullständig lösning — "
+                     f"be om minst {minsta}.")]
     return []
 
 
@@ -674,72 +732,188 @@ def kravgranser(doc: ExamDoc, config: dict | None = None) -> dict:
     return granser
 
 
-def balanced_skeleton(antal: int, profil: str = "prov") -> list[dict]:
+# Karaktärsmix per profil: hur stor andel av UPPGIFTERNA som ska vara E-, C-
+# respektive A-uppgifter. Karaktär = uppgiftens högsta nivå med poäng, måttet
+# nationella provet visade sig vara byggt kring (niva_rubrik.NP_FORDELNING:
+# 86 % av NP:s uppgifter ger poäng på en enda nivå).
+#
+# Provets mix är NP:s egen, mitten av det uppmätta spannet — nära en tredjedel
+# var. Arbetsbladets och gruppuppgiftens är i stället härledda ur deras egna
+# nivåmål: arbetsbladet är E-tungt (övning), gruppuppgiften C-tung (en uppgift
+# man löser i huvudet behöver ingen grupp). Bara PROVET följer NP; det är vad
+# läraren bett om.
+KARAKTARSMIX: dict[str, tuple[float, float, float]] = {
+    "prov": (0.35, 0.34, 0.31),
+    "arbetsblad": (0.55, 0.30, 0.15),
+    "gruppuppgift": (0.25, 0.45, 0.30),
+}
+
+# Andel av uppgifterna som hamnar i Del B (utan räknare). NP lägger 54–62 % av
+# både uppgifterna och poängen i sin räknarfria del, och den delen är INTE
+# E-delen: alla tre nivåerna finns i båda delarna. Skelettet delade förut i «en
+# eller två rutinuppgifter» + «resten» — det är inte nationella provets form.
+DEL_B_ANDEL = 0.58
+
+# Round-robin-ordningen över förmågorna. Listan roteras ett steg per varv, så
+# att en förmåga inte fastnar på samma karaktär varje varv (med sex förmågor och
+# tre karaktärer skulle B annars alltid bli en E-uppgift och K alltid en
+# A-uppgift — jämnt i antal uppgifter, skevt i poäng).
+FORMAGE_ORDNING: tuple[str, ...] = ("B", "P", "PL", "M", "R", "K")
+
+
+NIVAER_STORA: tuple[str, str, str] = ("E", "C", "A")
+
+
+def _karaktarsfoljd(antal: int, mix: tuple[float, float, float]) -> list[str]:
+    """Karaktär per uppgiftsplats, jämnt utspridd enligt `mix`.
+
+    Antalet per karaktär sätts med största-rest-metoden och vävs sedan samman
+    med Sainte-Laguës divisor (mål / (2·utdelade + 1)) — samma metod som
+    fördelar mandat, och av samma skäl: den ger den jämnaste sekvensen utan att
+    klumpa ihop någon karaktär i början."""
+    mal = {k: int(antal * a) for k, a in zip(NIVAER_STORA, mix)}
+    rest = sorted(NIVAER_STORA, key=lambda k: -(antal * mix[NIVAER_STORA.index(k)]
+                                                - mal[k]))
+    for k in rest[:antal - sum(mal.values())]:
+        mal[k] += 1
+    given = {k: 0 for k in NIVAER_STORA}
+    foljd = []
+    for _ in range(antal):
+        k = max(NIVAER_STORA,
+                key=lambda k: mal[k] / (2 * given[k] + 1))
+        given[k] += 1
+        foljd.append(k)
+    return foljd
+
+
+def _varva(kandidater: list[dict]) -> list[dict]:
+    """Ordna en dels uppgifter så att varken typ eller förmåga upprepas fler än
+    MAX_LIKA_I_RAD gånger i rad — utan att bryta karaktärstrappan.
+
+    Bara den lättaste karaktären som finns kvar är valbar i varje steg, så
+    E kommer före C kommer före A oavsett vad varvningen väljer inom gruppen.
+    Behövs därför att typen följer förmågan: Begrepp, Procedur och
+    Kommunikation ger alla «redovisning», och tre sådana i följd plus en fjärde
+    över gruppgränsen fällde antiklumpningen vid 26 uppgifter."""
+    kvar = list(kandidater)
+    ut: list[dict] = []
+
+    def duger(s: dict) -> bool:
+        svans = ut[-MAX_LIKA_I_RAD:]
+        if len(svans) < MAX_LIKA_I_RAD:
+            return True
+        return not (all(x["typ"] == s["typ"] for x in svans)
+                    or all(x["formaga"] == s["formaga"] for x in svans))
+
+    while kvar:
+        lagst = min(NIVAER_STORA.index(s["karaktar"]) for s in kvar)
+        valbara = [s for s in kvar
+                   if NIVAER_STORA.index(s["karaktar"]) == lagst]
+        val = next((s for s in valbara if duger(s)), valbara[0])
+        ut.append(val)
+        # Identitet, inte likhet: två slots kan vara innehållsligt lika, och
+        # list.remove() hade då plockat bort fel objekt.
+        kvar = [s for s in kvar if s is not val]
+    return ut
+
+
+def _skelett_typ(formaga: str, karaktar: str) -> str:
+    """Uppgiftstyp ur förmåga och karaktär. Typen följer förmågan (så att den
+    varierar som förmågorna gör), utom för E-uppgifter i Begrepp och Procedur:
+    de blir rutinuppgifter, precis som nationella provets räknarfria inledning.
+    Det garanterar också att varje dokument HAR en rutinuppgift, vilket
+    validate_balance kräver av alla tre profilerna."""
+    if karaktar == "E" and formaga in ("B", "P"):
+        return "rutin"
+    return {"R": "resonemang", "PL": "problem",
+            "M": "problem"}.get(formaga, "redovisning")
+
+
+def balanced_skeleton(antal: int, profil: str = "prov",
+                      delar: bool | None = None) -> list[dict]:
     """Deterministiskt balanserat skelett: {del, formaga, typ, poang} per
     uppgift, konstruerat så förmåge- OCH nivåbalans + ordningsregler uppfylls
     BY CONSTRUCTION. Grammatiken tvingar modellen till skelettet, så modellen
     behöver bara skriva innehållet — balansen är inte längre modellens ansvar.
 
-    Del B: E-tunga rutinuppgifter (begrepp/procedur). Del C: stigande C/A. En
-    liten sökning justerar poängen tills validate_balance/ordning är rena, så
-    varje giltigt `antal` (≥ antal golv-förmågor) ger ett balanserat skelett."""
-    golv = ["B", "P", "PL", "M", "R", "K"]
-    # Del B: en (antal<8) eller två (annars) rutinuppgifter, E-tunga.
-    slots = [{"del": "B", "formaga": "B", "typ": "rutin", "poang": [2, 0, 0]}]
-    if antal >= 8:
-        slots.append({"del": "B", "formaga": "P", "typ": "rutin", "poang": [1, 0, 0]})
-    have = {s["formaga"] for s in slots}
-    nc = max(0, antal - len(slots))
-    # Del C-förmågor: täck resterande golv, fyll sedan ur ett CYKLISKT mönster.
-    # Fyllnaden var förut en fast lista på tio element, och den tog slut vid
-    # len(golv) + 10 = 16 slots. zip():en nedan kapade då skelettet TYST: den
-    # som bad om 20 uppgifter fick 16, utan fel och utan varning, eftersom
-    # to_response_format låser minItems/maxItems till skelettets längd (och för
-    # antal ≥ 27 slutade det kapade skelettet dessutom validera rent).
-    # Mönstret cyklar därför i stället, och ett varv är vägt mot FORMAGA_MAL:
-    # P 3/10, PL 2/10, B 2/10, M 1/10, R 1/10, K 1/10 — varje andel innanför
-    # sitt målintervall. Ordningen varvar också typerna (P/B/K ger redovisning,
-    # PL/M problem, R resonemang) så att MAX_LIKA_I_RAD håller även över
-    # skarven där mönstret börjar om.
-    c_form = [f for f in golv if f not in have]
-    fyllnad = itertools.cycle(["P", "PL", "B", "P", "M", "K", "R", "P", "PL", "B"])
-    while len(c_form) < nc:
-        c_form.append(next(fyllnad))
-    c_form = c_form[:nc]
-    # Poäng: lättare (C) först, tyngre (C+A) sist → stigande svårighet.
-    m = min(nc, max(1, round(0.45 * antal)))          # antal C+A-uppgifter
-    poangs = [[1, 1, 0]] * (nc - m) + [[1, 1, 1]] * m
+    Tre lager, i den ordningen:
 
-    # Typ FÖLJER förmågan (varierar därmed som förmågorna gör) — annars blir
-    # de lättare uppgifterna en lång redovisning-svans som bryter antiklumpningen.
-    def _typ(f):
-        return ("resonemang" if f == "R"
-                else "problem" if f in ("PL", "M") else "redovisning")
+    1. FÖRMÅGA — round-robin över alla sex, roterad ett steg per varv. Läraren
+       vill ha jämn täckning; det billigaste sättet att få den är att aldrig
+       välja förmåga alls utan bara räkna varvet runt.
+    2. KARAKTÄR — E-, C- och A-uppgifter enligt profilens mix, utspridda med
+       Sainte-Laguë. Poängtripplarna hämtas ur niva_rubrik.NP_TRIPPLAR, alltså
+       ur de tripplar nationella provet faktiskt använder ((2,0,0), (0,2,0),
+       (0,0,1) …) i stället för de (1,1,0)/(1,1,1) skelettet strödde förut.
+    3. DEL — 58 % av varje karaktärsgrupp i Del B (utan räknare), resten i
+       Del C, och inom varje del ordningen E → C → A. Det ger stigande
+       svårighet i BÅDA delarna, som NP.
 
-    # strict=True: en osynkad zip HÄR var hela buggen ovan. Nu är listorna lika
-    # långa by construction, och skulle de någonsin glida isär vill vi ha ett
-    # undantag — inte ett tyst kortare prov.
-    for f, p in zip(c_form, poangs, strict=True):
-        p = list(p)
-        # Kommunikation har ingen E-nivå. Uppmätt över fyra nationella prov
-        # (app/niva_rubrik.ANALYSERADE_PROV): kommunikationspoäng delas ut på
-        # C- och A-nivå men ALDRIG på E — bedömningsanvisningarna säger att
-        # skriftlig kommunikation inte bedöms särskilt på E-nivå för enskilda
-        # uppgifter, eftersom den som klarar E i övrigt anses redovisa
-        # tillräckligt. Skelettet lade ändå [1, 1, 0] på K-raden och bad därmed
-        # om en poäng som inte finns.
-        if f == "K":
-            p[0] = 0
-        slots.append({"del": "C", "formaga": f, "typ": _typ(f), "poang": p})
+    `delar=False` ger ett platt skelett (del: null) — arbetsbladets och
+    gruppuppgiftens form. Default följer profilen.
 
-    # Liten poängsökning: höj poäng på under-mål-förmågan / -nivån tills rent.
-    for _ in range(60):
-        doc = _skeleton_doc(slots)
-        errs = validate_balance(doc, profil=profil) + validate_ordning(doc)
-        if not errs:
-            break
-        if not _justera_skelett(slots, errs):
-            break
+    Sist en liten sökning som flyttar enstaka poäng tills validate_balance och
+    validate_ordning är rena; den är ett skyddsnät, inte huvudmekanismen."""
+    antal = max(1, antal)
+    if delar is None:
+        delar = profil == "prov"
+    mix = KARAKTARSMIX.get(profil, KARAKTARSMIX["prov"])
+    karaktarer = _karaktarsfoljd(antal, mix)
+
+    slots: list[dict] = []
+    raknat = {"E": 0, "C": 0, "A": 0}
+    for i, kar in enumerate(karaktarer):
+        varv, plats = divmod(i, len(FORMAGE_ORDNING))
+        f = FORMAGE_ORDNING[(plats + varv) % len(FORMAGE_ORDNING)]
+        # Kommunikation har ingen E-nivå (uppmätt över de fyra proven i
+        # niva_rubrik.ANALYSERADE_PROV: CK och AK förekommer, EK aldrig). En
+        # K-uppgift som lottats till E-karaktär skulle bli värd noll poäng —
+        # den lyfts till C i stället, och nivåsökningen nedan städar upp
+        # skevheten det ger i nivåandelarna.
+        if f == "K" and kar == "E":
+            kar = "C"
+        tripplar = niva_rubrik.NP_TRIPPLAR[kar]
+        poang = list(tripplar[raknat[kar] % len(tripplar)])
+        raknat[kar] += 1
+        if f == "K" and poang[0]:
+            poang[1] += poang[0]           # samma skäl: ingen EK-poäng finns
+            poang[0] = 0
+        slots.append({"del": None, "formaga": f, "karaktar": kar,
+                      "typ": _skelett_typ(f, kar), "poang": poang})
+
+    if delar:
+        del_b: list[dict] = []
+        del_c: list[dict] = []
+        for kar in NIVAER_STORA:
+            grupp = [s for s in slots if s["karaktar"] == kar]
+            skiljelinje = round(DEL_B_ANDEL * len(grupp))
+            del_b += grupp[:skiljelinje]
+            del_c += grupp[skiljelinje:]
+        for s in del_b:
+            s["del"] = "B"
+        for s in del_c:
+            s["del"] = "C"
+        slots = _varva(del_b) + _varva(del_c)
+    else:
+        # Platt dokument: samma stigande ordning, ingen delindelning.
+        # Gruppuppgiften mäts inte på stigande svårighet (fyra ingångar, inte en
+        # trappa) men tar ingen skada av att ändå ligga lätt först.
+        slots = _varva(slots)
+
+    # Rutinuppgiften: validate_balance kräver EN i varje dokument (också i
+    # gruppuppgiften — läraren ska kunna se att någon del går att svara på
+    # direkt). Med en C-tung mix kan det hända att ingen E-uppgift föll på
+    # Begrepp eller Procedur, och då finns ingen rutinrad. Gör den lättaste
+    # uppgiften till rutin i stället för att låta valideringen fälla skelettet.
+    if not any(s["typ"] == "rutin" for s in slots):
+        lattast = min(slots, key=lambda s: (NIVAER_STORA.index(s["karaktar"]),
+                                            FORMAGE_ORDNING.index(s["formaga"])))
+        lattast["typ"] = "rutin"
+
+    for s in slots:
+        s.pop("karaktar")
+
+    _justera_skelett(slots, profil)
     return slots
 
 
@@ -751,34 +925,137 @@ def _skeleton_doc(slots: list[dict]) -> "ExamDoc":
                             bedomning="_") for s in slots])
 
 
-def _justera_skelett(slots: list[dict], errs: list[dict]) -> bool:
-    """Höj en poäng för att åtgärda det första balansfelet. Returnerar False
-    när inget mer kan göras (undviker oändlig loop)."""
-    for e in errs:
-        code, path = e["code"], e["path"]
-        if code == "formagabalans":                    # "förmåga X har …"
-            f = path.split()[-1]
-            for s in slots:                            # +1 C på en X-uppgift
-                if s["formaga"] == f and s["typ"] != "rutin":
-                    s["poang"][1] += 1
-                    return True
-            for s in slots:                            # annars +1 E
-                if s["formaga"] == f and f != "K":      # K har ingen E-nivå
-                    s["poang"][0] += 1
-                    return True
-        if code == "nivabalans":
-            niva = path.split()[-1].lower()            # "nivå E/C/A"
-            idx = {"e": 0, "c": 1, "a": 2}[niva]
-            # höj nivån på en lämplig Del C-uppgift (rör aldrig typ → bevarar
-            # antiklumpningen); E får höjas överallt utom på K-raden (som inte
-            # har någon E-nivå, se balanced_skeleton), C/A bara på icke-rutin.
-            for s in slots:
-                if s["del"] != "C" or (idx == 0 and s["formaga"] == "K"):
+def _karaktar(poang: list[int]) -> str:
+    """Uppgiftens karaktär: högsta nivå med poäng."""
+    return "A" if poang[2] else ("C" if poang[1] else "E")
+
+
+def _avstand(andel: float, band: tuple[float, float]) -> float:
+    """Hur långt utanför bandet andelen ligger (0 inuti)."""
+    lo, hi = band
+    return max(0.0, lo - andel) + max(0.0, andel - hi)
+
+
+def _straff(slots: list[dict], profil: str) -> float:
+    """Hur långt skelettet ligger från målen, som ETT tal.
+
+    Kvadrerade avstånd till bandkanterna (noll inuti bandet) plus en liten
+    avgift per ordningsfel. Poängen med ett mått i stället för en fellista är
+    att sökningen nedan kan välja det drag som gör MINST fel totalt — den giriga
+    föregångaren lagade det första felet och skapade det andra, om och om igen:
+    +1 C på Procedur-uppgiften lagade nivåbandet och sprängde förmågebandet,
+    −1 C lagade förmågebandet och sprängde nivåbandet. Sextio varv pingpong,
+    och sedan lämnades skelettet obalanserat."""
+    (prof_fm, prof_nm, _kr,
+     kraver_klump, kraver_svar) = PROFILER.get(profil, PROFILER["prov"])
+    doc = _skeleton_doc(slots)
+    s = poangsummor(doc)
+    total = s["total"]
+    if total <= 0:
+        return float("inf")
+
+    def utanfor(andel: float, band: tuple[float, float]) -> float:
+        """0 inuti bandet, annars en fast avgift plus avståndet i kvadrat.
+
+        Den fasta avgiften gör hierarkin absolut: ETT bandbrott, hur litet det
+        än är, kostar mer än allt de mjuka önskemålen nedan kan vinna. Utan den
+        stannade sökningen på ett skelett där C låg på 28,6 % (bandets golv är
+        29) därför att det var en hundradel jämnare mellan förmågorna."""
+        avstand = _avstand(andel, band)
+        return 0.1 + avstand ** 2 if avstand > 0 else 0.0
+
+    straff = sum(utanfor(s[n] / total, prof_nm[n]) for n in ("e", "c", "a"))
+    if len(slots) >= MIN_ENHETER_FOR_BAND:
+        straff += sum(utanfor(s["formagor"][f] / total, prof_fm[f])
+                      for f in prof_fm)
+        # Bandet är kravet, jämnheten är önskemålet: en tiondels vikt på
+        # avståndet till 1/6 gör att sökningen väljer det jämnaste av flera
+        # godkända skelett i stället för att stanna på första bästa. Vikten är
+        # låg med flit — den får aldrig kosta ett bandbrott någon annanstans.
+        straff += 0.1 * sum((s["formagor"][f] / total - JAMN_FORMAGA) ** 2
+                            for f in prof_fm)
+    if profil == "prov":
+        # NIVA_MAL är mätningen PLUS marginal, och marginalen finns bara för att
+        # små prov ska kunna träffa den. Inuti bandet är straffet noll, så utan
+        # det här skulle sökningen stanna var som helst där — systematiskt
+        # E-tungt och C-snålt, eftersom konstruktionen börjar så. Här dras den i
+        # stället mot det UPPMÄTTA spannet: mjukt (ingen fast avgift), men tungt
+        # nog att gå före jämnhetsönskemålet ovan.
+        for niva, band in niva_rubrik.NP_FORDELNING["poangandel"].items():
+            straff += 0.5 * _avstand(s[niva.lower()] / total, band) ** 2
+        # Samma sak för räknargränsen: NP lägger 55–62 % av poängen i den
+        # räknarfria delen.
+        del_b = sum(sum(sl["poang"]) for sl in slots if sl["del"] == "B")
+        if del_b:
+            straff += 0.2 * _avstand(
+                del_b / total,
+                niva_rubrik.NP_FORDELNING["utan_raknare"]["poang"]) ** 2
+        # Håll provet NP-stort. Jämnhetstermen ovan köper jämnhet genom att HÖJA
+        # poäng, och utan motvikt driver den upp provet till 2,5 poäng per
+        # uppgift — nationella provet ligger på 1,96–2,19 (niva_rubrik).
+        mal = sum(niva_rubrik.NP_FORDELNING["poang_per_uppgift"]) / 2
+        straff += 0.05 * ((total / len(slots) - mal) / mal) ** 2
+    # Ordningsreglerna vägs med samma profilflaggor som valideringen använder —
+    # annars hade sökningen straffat gruppuppgiften för att den saknar
+    # svårighetstrappa, vilket är hela dess form.
+    if kraver_klump or kraver_svar:
+        straff += 0.1 * len(validate_ordning(
+            doc, kolla_klumpning=kraver_klump, kolla_svarighet=kraver_svar))
+    return straff
+
+
+def _drag(slots: list[dict]) -> list[tuple[int, int, int]]:
+    """Tillåtna enpoängsdrag: (uppgift, nivå, ±1).
+
+    Dragen får ALDRIG ändra en uppgifts karaktär (högsta nivå med poäng). Det
+    är villkoret som håller resten av konstruktionen stilla: karaktären bestämde
+    uppgiftens typ, dess plats i delen och dess ordning i svårighetstrappan, och
+    ett drag som flyttar en E-uppgift till A-karaktär skulle rasera allt tre för
+    att laga en procentsats."""
+    ut = []
+    for i, sl in enumerate(slots):
+        p = sl["poang"]
+        for idx in range(3):
+            if sl["formaga"] == "K" and idx == 0:
+                continue                  # ingen EK-poäng finns
+            for delta in (1, -1):
+                provad = list(p)
+                provad[idx] += delta
+                if provad[idx] < 0 or sum(provad) < 1 or provad[idx] > 4:
                     continue
-                if idx == 0 or s["typ"] != "rutin":
-                    s["poang"][idx] += 1
-                    return True
-    return False
+                if _karaktar(provad) != _karaktar(p):
+                    continue
+                ut.append((i, idx, delta))
+    return ut
+
+
+def _justera_skelett(slots: list[dict], profil: str = "prov",
+                     varv: int = 200) -> bool:
+    """Sök poängen fria från balansfel med enpoängsdrag, ett i taget, alltid
+    det som sänker straffet mest. Returnerar True när skelettet är rent.
+
+    Backtracking behövs inte: straffet sjunker strikt i varje steg, så sökningen
+    kan inte gå i cirklar, och den stannar när inget drag hjälper. Den kan
+    fastna i ett lokalt minimum — då lämnas skelettet som det är, och
+    reparationsloopen i exam_gen får ta vid. Det är samma kontrakt som förut,
+    fast utan pingpongen."""
+    nuvarande = _straff(slots, profil)
+    for _ in range(varv):
+        if nuvarande <= 0:
+            return True
+        basta = None
+        for i, idx, delta in _drag(slots):
+            slots[i]["poang"][idx] += delta
+            varde = _straff(slots, profil)
+            slots[i]["poang"][idx] -= delta
+            if varde < nuvarande - 1e-12 and (basta is None or varde < basta[0]):
+                basta = (varde, i, idx, delta)
+        if basta is None:
+            break
+        _, i, idx, delta = basta
+        slots[i]["poang"][idx] += delta
+        nuvarande = basta[0]
+    return nuvarande <= 0
 
 
 _VAR_MATH_RE = re.compile(r"\$[^$]*\$")
