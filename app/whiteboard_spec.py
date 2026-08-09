@@ -525,6 +525,23 @@ _COL_GAP = 24.0
 # här ger modellen ett exakt, åtgärdbart fel FÖRE rendering.
 _MAX_TEXT_CHARS = 90
 _MAX_ITEM_CHARS = 80
+# TEXTBUDGETEN (Del F, lärarens fjärde dom). Reglerna ovan mäter en sektion i
+# taget och släpper därför igenom en tavla som är full av korta rader — och det
+# var precis vad läraren fick: hennes egen vänstertavla bar upplägg, nyckelfråga,
+# två vägar OCH en funktion-mot-ekvation-jämförelse, drygt 550 tecken text, och
+# hon skrev aldrig upp det mesta av det. «Det är för mycket att skriva.»
+#
+# Budgeten mäter SUMMAN av läsbar text per tavla — text-sektioner och
+# listpunkter, inte rubriker (de är korta och nödvändiga), inte matte (formler
+# är just det tavlan ska bära) och inte tabellceller (att flytta fyra fall från
+# meningar till en tabell är precis åtgärden budgeten vill framkalla).
+#
+# Talet är MÄTT, inte satt: few-shotarna ligger på 49–194 tecken, förlagans
+# underkända vänstertavla på 603 (23 textrutor) och dess högertavla på 812 —
+# varav ~290 är sammanfattningen, som i WB-JSON blir en table och inte räknas.
+# 400 lämnar alltså gott om luft för en tät men skrivbar tavla och fäller den
+# som blivit ett föredrag.
+_MAX_BOARD_TEXT = 400
 _ASPECT_TOLERANCE = 0.15  # motorn varnar vid >15 % avvikelse
 _VERTEX_EPS = 1e-6
 
@@ -590,6 +607,20 @@ def _check_text_lengths(sections: list, path: str, errors: list[dict]) -> None:
                                        f"(max ~{_MAX_ITEM_CHARS})."))
         elif isinstance(sec, (CalloutSection, RowSection, ColSection)):
             _check_text_lengths(sec.children, f"{spath}.children", errors)
+
+
+def _text_volym(sections: list) -> int:
+    """Summan av läsbar text i ett sektionsflöde — text och listpunkter, ned
+    genom callout/row/col. Rubriker och matte räknas inte: se _MAX_BOARD_TEXT."""
+    summa = 0
+    for sec in sections or []:
+        if isinstance(sec, TextSection):
+            summa += len(sec.text)
+        elif isinstance(sec, ListSection):
+            summa += sum(len(i) for i in sec.items)
+        elif isinstance(sec, (CalloutSection, RowSection, ColSection)):
+            summa += _text_volym(sec.children)
+    return summa
 
 
 def _validate_graph(g: GraphSection, col_width: float, path: str,
@@ -671,10 +702,20 @@ def validate_rules(doc: BoardDoc) -> list[dict]:
             errors.append(_err(bpath, "tom-tavla",
                                "tavlan saknar både sections och columns."))
 
+        volym = 0
         for sections, width, path in flows:
             _check_text_lengths(sections, path, errors)
+            volym += _text_volym(sections)
             for g, col_w, gpath in _iter_graphs(sections, width, path):
                 _validate_graph(g, col_w, gpath, errors)
+        if volym > _MAX_BOARD_TEXT:
+            errors.append(_err(bpath, "textbudget",
+                               f"tavlan bär {volym} tecken löpande text (taket "
+                               f"är ~{_MAX_BOARD_TEXT}) — en tavla ska visa det "
+                               "som SKRIVS under lektionen, inte allt som sägs. "
+                               "Stryk det som bara ska berättas, gör om steg "
+                               "till math-sektioner och samla flera fall i en "
+                               "table-sektion i stället för i meningar."))
 
     _walk_strings(doc.model_dump(exclude_none=True, by_alias=True), "doc", errors)
     return errors

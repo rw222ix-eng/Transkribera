@@ -75,6 +75,21 @@ INSTRUCTION = (
     "4 kolumner × 5 rader. Text-sektioner max ~80 tecken och listpunkter "
     "max ~70 — dela längre resonemang i flera sektioner. Hellre färre, "
     "tydliga steg än trängsel — motorn skalar innehållet automatiskt.\n"
+    # TEXTBUDGETEN. Läraren körde en lektion med två egengjorda tavlor och sa
+    # efteråt att den ena var fylld med text hon aldrig skrev upp på plats: det
+    # är för mycket att skriva. Tavlan ska bära det som FAKTISKT SKRIVS under
+    # lektionen — inte allt som sägs. Regeln ovan säger hur långt ett stycke får
+    # vara; den här säger hur mycket det får vara.
+    "Textbudget — tavlan visar det som SKRIVS, inte allt som sägs:\n"
+    "- En text-sektion är EN rad, ~60 tecken. Skriv aldrig löpande prosa på en "
+    "tavla: ingen lärare hinner skriva upp den, och ingen elev hinner av.\n"
+    "- Hellre math, tabell och figur än text. Ett steg som går att skriva som "
+    "en formel skrivs som en formel.\n"
+    "- Har lektionen flera exempel eller fall som ska jämföras: samla dem i EN "
+    "table-sektion, en rad per fall, med de korta kolumnerna kontext, uttryck, "
+    "typ → metod och svar. Den tabellen är genomgångens samlingspunkt — den "
+    "fylls i tillsammans med klassen. Håll cellerna korta (~25 tecken) och sätt "
+    "INTE cellW: motorn ger varje kolumn bredden ur dess innehåll.\n"
     # Innehållskravet, inte ett motorkrav. Det står sist och för sig: en tavla
     # kan vara felfri mot schemat och ändå tiga om det eleverna faktiskt gör
     # fel. Kravet är att felet SKRIVS UT, inte att det undviks.
@@ -104,11 +119,15 @@ REPAIR_HINTS = (
     "hellre färre, tydliga steg.\n"
     "- 'element-överlapp': öka gapAfter på sektionen före, korta texterna, "
     "eller ta bort annotations som ligger ovanpå annat innehåll.\n"
+    "- 'tavlan bär N tecken löpande text': stryk meningar som bara ska SÄGAS, "
+    "skriv om räknesteg som math-sektioner, och slå ihop flera exempel eller "
+    "fall till EN table-sektion med korta celler. Ta bort hela stycken hellre "
+    "än att korta varje mening — det är mängden som är felet, inte längden.\n"
 )
 
 # Few-shots — kompletta, validerade WB-JSON v1-dokument (testerna kör dem
-# genom validate_board_json). En utan graf och en med graf/expr så modellen
-# ser båda mönstren.
+# genom validate_board_json). En utan graf, en med graf/expr och en med
+# sammanfattningstabell, så modellen ser alla tre mönstren.
 FEW_SHOTS: list[tuple[str, dict]] = [
     (
         "Ma1b, klass 9A — Pythagoras sats (introduktion)",
@@ -263,6 +282,118 @@ FEW_SHOTS: list[tuple[str, dict]] = [
                                          "label": "(2, -1)", "labelGap": 18}],
                              "ticks": [{"axis": "x", "at": 1, "label": "1"},
                                        {"axis": "x", "at": 3, "label": "3"}]},
+                        ]},
+                    ],
+                },
+            ],
+        },
+    ),
+    # ── Destillat ur lärarens egen tavla (docs/forlagor/ ─────────────────────
+    # activity_text_to_equation.html, HÖGRA tavlan). Formen, inte innehållet:
+    # situationsruta på högst två rader → uppställning i få steg →
+    # klassificeringsfrågan med ETT svar på en rad → lösningen i tre mattesteg →
+    # svarsruta → SAMMANFATTNINGSTABELLEN.
+    #
+    # Tabellen är själva poängen. Grupperna löser först var för sig, sedan löser
+    # klassen uppgifterna tillsammans på tavlan och tabellen fylls i gemensamt —
+    # det är lektionens samlingspunkt, och den läraren är stoltast över.
+    #
+    # Momentet är MEDVETET ett annat än förlagans (som handlar om exponential-
+    # mot potensekvationer): modellen ska härma formen, inte skriva av
+    # innehållet. Vänstra tavlan är destillerad ur ingenting — förlagans var
+    # fylld med text läraren aldrig skrev upp, och den är kort här med flit.
+    (
+        "Ma3c, klass NA25 — Derivera: vilken regel gäller?",
+        {
+            "title": "Vilken deriveringsregel?",
+            "boards": [
+                {
+                    "width": 900, "height": 780,
+                    "padding": {"top": 30, "right": 30, "bottom": 30, "left": 40},
+                    "chrome": "aluminium", "tray": True, "name": "vanster",
+                    "sections": [
+                        {"kind": "heading", "text": "Vilken regel?", "size": 32,
+                         "underline": {"color": "red", "amplitude": 2,
+                                       "thickness": 3, "reserve": 16},
+                         "gapAfter": 18},
+                        # Nyckelfrågan: ett beslut, inte en förklaring.
+                        {"kind": "callout", "color": "red", "fillOpacity": 0.06,
+                         "padding": 12, "children": [
+                             {"kind": "text", "text": "Hur är uttrycket byggt?",
+                              "size": 22, "color": "red", "weight": 700}],
+                         "gapAfter": 18},
+                        {"kind": "list", "bullet": "–", "size": 19, "gap": 6,
+                         "items": ["Ren potens → potensregeln",
+                                   "Två faktorer → produktregeln",
+                                   "Funktion i funktion → kedjeregeln"],
+                         "gapAfter": 18},
+                        {"kind": "math", "latex": "(uv)' = u'v + uv'",
+                         "size": 24, "color": "blue", "gapAfter": 8},
+                        {"kind": "math", "latex": "f(g(x))' = f'(g)\\cdot g'",
+                         "size": 24, "color": "blue", "gapAfter": 18},
+                        {"kind": "callout", "color": "red", "fillOpacity": 0.06,
+                         "padding": 12, "children": [
+                             {"kind": "text", "text": "Vanligt fel:", "size": 18,
+                              "color": "red", "gapAfter": 4},
+                             {"kind": "math",
+                              "latex": "(x^2\\sin x)' = 2x\\cos x",
+                              "size": 19, "color": "red", "gapAfter": 4},
+                             {"kind": "text",
+                              "text": "Faktorerna deriveras var för sig.",
+                              "size": 17, "color": "red"}]},
+                    ],
+                },
+                {
+                    "width": 1800, "height": 780,
+                    "padding": {"top": 30, "right": 30, "bottom": 30, "left": 30},
+                    "chrome": "aluminium", "tray": True, "name": "hoger",
+                    "columns": [
+                        {"weight": 1, "sections": [
+                            {"kind": "heading", "text": "Exempel A", "size": 28,
+                             "underline": {"color": "blue"}, "gapAfter": 12},
+                            # Situationsrutan: två rader, aldrig fler.
+                            {"kind": "callout", "color": "black",
+                             "fillOpacity": 0.03, "padding": 10, "children": [
+                                 {"kind": "text",
+                                  "text": "Derivera funktionen nedan.",
+                                  "size": 20}], "gapAfter": 14},
+                            {"kind": "math", "latex": "f(x) = x^2\\sin x",
+                             "size": 26, "gapAfter": 14},
+                            # Klassificeringsfrågan — och svaret på EN rad.
+                            {"kind": "text", "text": "Hur är den byggd?",
+                             "size": 21, "weight": 700, "gapAfter": 4},
+                            {"kind": "text",
+                             "text": "Två faktorer → produktregeln",
+                             "size": 20, "gapAfter": 14},
+                            {"kind": "math", "latex": "u = x^2 \\qquad v = \\sin x",
+                             "size": 22},
+                        ]},
+                        {"weight": 1, "sections": [
+                            {"kind": "heading", "text": "Lösning", "size": 28,
+                             "underline": {"color": "blue"}, "gapAfter": 12},
+                            {"kind": "math", "latex": "u' = 2x \\qquad v' = \\cos x",
+                             "size": 22, "gapAfter": 8},
+                            {"kind": "math",
+                             "latex": "f' = 2x\\sin x + x^2\\cos x",
+                             "size": 24, "color": "green", "gapAfter": 14},
+                            {"kind": "callout", "color": "red",
+                             "fillOpacity": 0.06, "padding": 10, "children": [
+                                 {"kind": "text",
+                                  "text": "Svar: f' = 2x sin x + x² cos x",
+                                  "size": 19, "color": "red"}], "gapAfter": 18},
+                            # SAMMANFATTNINGEN: en rad per fall, fylls i
+                            # tillsammans med klassen. Korta celler, ingen
+                            # cellW — motorn ger varje kolumn sin egen bredd.
+                            {"kind": "text", "text": "Sammanfattning",
+                             "size": 22, "weight": 700, "gapAfter": 8},
+                            {"kind": "table",
+                             "headers": ["Uttryck", "Byggt av", "Regel", "Svar"],
+                             "rows": [
+                                 ["x² sin x", "två faktorer", "produkt",
+                                  "2x sin x + x² cos x"],
+                                 ["(3x + 1)⁵", "funktion i funktion",
+                                  "kedja", "15(3x + 1)⁴"],
+                                 ["4x³", "ren potens", "potens", "12x²"]]},
                         ]},
                     ],
                 },

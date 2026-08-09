@@ -44,6 +44,36 @@ def test_few_shots_are_valid_wb_json():
         assert errors == [], (uppdrag, errors)
 
 
+def test_en_few_shot_visar_sammanfattningstabellen():
+    """Lärarens tavla (docs/forlagor/) samlar lektionens fall i EN tabell som
+    fylls i tillsammans med klassen — det är genomgångens mål. Formen fanns i
+    schemat men i ingen shot, och en form modellen aldrig SETT skriver den
+    inte."""
+    tabeller = [s for _u, doc in lb.FEW_SHOTS
+                for b in doc["boards"]
+                for flow in ([b.get("sections") or []]
+                             + [c["sections"] for c in b.get("columns") or []])
+                for s in flow if s.get("kind") == "table"]
+    assert tabeller, "ingen few-shot visar en table-sektion"
+    for t in tabeller:
+        # Bredden räknas ur innehållet — en satt cellW ger likbreda kolumner,
+        # och en sammanfattning har inte likbreda kolumner.
+        assert "cellW" not in t, "sammanfattningstabellen ska inte låsa cellW"
+        assert all(len(rad) == len(t["headers"]) for rad in t["rows"])
+
+
+def test_few_shotarna_haller_textbudgeten():
+    """Shotarna ÄR budgeten: en modell härmar det den ser, och en shot som
+    ligger över taket lär ut det taket förbjuder."""
+    for uppdrag, doc in lb.FEW_SHOTS:
+        parsed, _fel = ws.validate_board_json(doc)
+        for i, board in enumerate(parsed.boards):
+            flows = ([board.sections or []]
+                     + [c.sections for c in board.columns or []])
+            volym = sum(ws._text_volym(f) for f in flows)
+            assert volym <= ws._MAX_BOARD_TEXT, f"{uppdrag}, tavla {i}: {volym}"
+
+
 # ------------------------------------------------------------------ prompt --
 
 def test_build_prompt_contains_conventions_and_task():
@@ -55,6 +85,17 @@ def test_build_prompt_contains_conventions_and_task():
     assert "Förra lektionen: gränsvärden." in p
     assert "Pythagoras sats" in p          # few-shot 1
     assert "x^2 - 4*x + 3" in p            # few-shot 2 (expr-mönstret)
+    assert "Sammanfattning" in p           # few-shot 3 (tabellmönstret)
+
+
+def test_prompten_bar_textbudgeten():
+    """Lärarens fjärde dom: tavlan ska bära det som SKRIVS, inte allt som sägs.
+    Kravet måste stå i prompten — valideringen kan bara fälla efteråt, och en
+    fällning kostar en reparationsrunda."""
+    p = lb.build_prompt("Ma3c", "NA25", "logaritmer")
+    assert "Textbudget" in p
+    assert "löpande prosa" in p
+    assert "table-sektion" in p
 
 
 def test_build_prompt_without_memory_omits_memory_block():

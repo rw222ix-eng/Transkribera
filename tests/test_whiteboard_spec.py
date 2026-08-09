@@ -213,6 +213,36 @@ def test_long_text_in_callout_flagged():
     assert any(e["code"] == "text-lang" for e in errors)
 
 
+def test_textbudget_faller_en_pratig_tavla():
+    """Lärarens fjärde dom: hennes egen vänstertavla bar 603 tecken text och
+    hon skrev aldrig upp det mesta. Varje RAD var kort nog — det är MÄNGDEN som
+    är felet, och den ser ingen per-sektionsregel."""
+    rader = [{"kind": "text", "text": "En rad som är fullt rimlig i sig själv."}
+             for _ in range(12)]
+    doc, errors = ws.validate_board_json(_doc(_board(sections=rader)))
+    budget = [e for e in errors if e["code"] == "textbudget"]
+    assert budget, errors
+    assert "SKRIVS" in budget[0]["message"]
+    # Ingen enskild rad är för lång — det är just poängen.
+    assert not any(e["code"] == "text-lang" for e in errors)
+
+
+def test_textbudgeten_raknar_inte_matte_rubriker_och_tabellceller():
+    """Åtgärden budgeten vill framkalla är att flytta prosa till formler och en
+    tabell. Räknades tabellcellerna vore åtgärden verkningslös."""
+    tung = _board(sections=[
+        {"kind": "heading", "text": "En ovanligt lång rubrik om extrempunkter"},
+        {"kind": "math", "latex": "f'(x) = 3x^2 - 12x + 9 = 3(x-1)(x-3)"},
+        {"kind": "table", "headers": ["Uttryck", "Byggt av", "Regel", "Svar"],
+         "rows": [["x^2 sin x", "två faktorer", "produktregeln",
+                   "2x sin x + x^2 cos x"],
+                  ["(3x+1)^5", "funktion i funktion", "kedjeregeln",
+                   "15(3x+1)^4"]]},
+    ])
+    doc, errors = ws.validate_board_json(_doc(tung))
+    assert not any(e["code"] == "textbudget" for e in errors), errors
+
+
 def test_latex_in_text_flagged():
     """Bench Fas 2: modellen skrev LaTeX med $-tecken i text-sektioner —
     renderas som rå text på tavlan. Fångas deterministiskt."""
