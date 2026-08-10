@@ -262,3 +262,14 @@
 .uppgfragarad .field{flex:1;min-width:0}
 .uppgsvar{margin-top:10px}
 @media (max-width:560px){.uppgniva{grid-template-columns:1fr}.uppgnivanamn{padding-top:0}}
+
+/* ══════════ ANTECKNINGARNAS TVÅ KÄLLOR ══════════
+   Promptrutan och möteslistan är typvalens första kontroller som inte är ett
+   VAL utan ett INNEHÅLL — man skriver i dem. Därför ligger de under sin
+   etikett i stället för till höger om den: en kontroll i högerkanten är 160 px
+   bred, och det räcker till ett ord. */
+.typfritext{flex:0 0 100%;width:100%;resize:vertical;min-height:74px;line-height:1.5;font-size:.94rem}
+.typtranskript{position:relative;flex:0 0 100%;display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.typtranskript .tkchips{display:flex;flex-wrap:wrap;gap:6px}
+.typtranskript .tkvalj{margin-left:auto}
+.typtranskript[data-oppen] .tkvalj{border-color:var(--atmosphere)}

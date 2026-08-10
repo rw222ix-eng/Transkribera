@@ -122,8 +122,10 @@
   /* Varje dokumenttyp har sina egna val — en tavla läraren skriver av, ett prov med
      provtid och poängnivåer, ett arbetsblad med nivå och facit. */
   /* Bestämd form per dokumenttyp. Fyra typer betyder att '+ et' inte längre
-     räcker: en gruppuppgift blir gruppuppgiften, inte gruppuppgiftet. */
-  const BEST = { Tavla: 'tavlan', Prov: 'provet', Arbetsblad: 'arbetsbladet', Gruppuppgift: 'gruppuppgiften' };
+     räcker: en gruppuppgift blir gruppuppgiften, inte gruppuppgiftet. Och
+     anteckningarna är PLURAL — «skriv anteckningarna», inte «anteckningaren» —
+     så tabellen bär numerus lika mycket som bestämdheten. */
+  const BEST = { Tavla: 'tavlan', Prov: 'provet', Arbetsblad: 'arbetsbladet', Gruppuppgift: 'gruppuppgiften', Anteckningar: 'anteckningarna' };
   const best = t => BEST[t] || String(t || '').toLowerCase();
   const Best = t => { const o = best(t); return o.charAt(0).toUpperCase() + o.slice(1); };
 
@@ -165,29 +167,41 @@
       { id: 'niva', namn: 'Nivå', typ: 'seg', val: ['E-nivå', 'C-nivå', 'A-nivå', 'Blandat'] },
       { id: 'facit', namn: 'Facit', typ: 'seg', val: ['Inget facit', 'Facit i bladet', 'Separat facit'] },
       { id: 'illustration', namn: 'Plats för illustration', typ: 'switch' }
+    ],
+    /* Anteckningarna har inga val om form — de har en fråga: vad ska stå på
+       pappret? Rutan ÄR uppgiften, och möteslistan är den andra vägen dit för
+       den som hellre pekar på ett transkript än skriver av det. */
+    Anteckningar: [
+      { id: 'onskemal', namn: 'Vad ska stå på pappret?', typ: 'text',
+        platshallare: 'Första lektionen: boken vi ska ha, hur vi räknar, provdatumen och vad de ska ta med.' },
+      { id: 'lektioner', namn: 'Bygg på ett möte', typ: 'transkript' }
     ]
   };
   const inst = {
     Tavla: { langd: 45, starttid: '', exempel: 2 },
     Prov: { nar: 'På lektionen', narDatum: '', narTid: '08:15', provminuter: 90, provtid: '90 min', antal: 6, nivamix: 'Balanserat', delprov: 'Del A + Del B', losningar: true, formelblad: true },
     Arbetsblad: { antal: 3, niva: 'Blandat', facit: 'Facit i bladet', illustration: true },
-    Gruppuppgift: { grupp: 3, langd: 60, redovisning: 'Muntligt' }
+    Gruppuppgift: { grupp: 3, langd: 60, redovisning: 'Muntligt' },
+    Anteckningar: { onskemal: '', lektioner: [] }
   };
   /* Utgår pappret från boken är lösningsförslaget till BOKENS uppgifter något
      annat än facit till de uppgifter appen själv skrivit: eleverna räknar i
      boken, läraren räknar dem också, och det är nivå 2 och 3 som behöver en
      skriven lösning — de lätta löser sig i huvudet. Raden hör därför till alla
-     fyra typerna, och den finns bara när ett spann i boken är valt. */
+     typer som bär uppgifter, och den finns bara när ett spann i boken är valt.
+     Anteckningarna bär inga: de är lärarens stödpapper, och ett lösningsblad
+     till bokens uppgifter hör inte dit. */
+  const MED_UPPGIFTER = ['Tavla', 'Prov', 'Arbetsblad', 'Gruppuppgift'];
   const harBokuppg = () => !!(window.Uppgifter && window.Uppgifter.finns());
   /* Att slå PÅ lösningsförslagen och att säga vilka uppgifter som får ett var en
      switch och en segmentväljare på var sin rad — men det är en fråga med ett
      svar: till vilka. «Inga» ÄR av-läget. Fälten under lever kvar oförändrade
      (`boklosning` bool, `boklosniva` sträng) eftersom uppgifter.js läser båda —
      de hålls i takt av normalisera() i ritaTypval(). */
-  Object.keys(TYPVAL).forEach(t => TYPVAL[t].push(
+  MED_UPPGIFTER.forEach(t => TYPVAL[t].push(
     { id: 'boklosniva', namn: 'Lösningar till bokens uppgifter', typ: 'seg', val: ['Inga', 'Alla', 'Nivå 2 och 3', 'Bara nivå 3'], bara: harBokuppg }
   ));
-  Object.keys(inst).forEach(t => Object.assign(inst[t], { boklosning: true, boklosniva: 'Nivå 2 och 3' }));
+  MED_UPPGIFTER.forEach(t => Object.assign(inst[t], { boklosning: true, boklosniva: 'Nivå 2 och 3' }));
   const STANDARD = JSON.parse(JSON.stringify(inst));
   /* Lektionens längd står i schemat: «08:15–09:00» är 45 minuter. */
   function schemaminuter() {
@@ -248,6 +262,92 @@
     else if (s.boklosniva === 'Inga') s.boklosning = false;
     else s.boklosning = true;
   }
+  /* ── Mötena anteckningarna kan byggas på ─────────────
+     Servern listar bara transkriberingar som FAKTISKT har text (se
+     routes_anteckningar) — en väljare som erbjuder tomma möten är en fälla.
+     Listan cachas för sidans livstid: den ändras bara när en ny
+     transkribering blir klar, och en väljare som hämtar om allt vid varje
+     öppning blinkar. */
+  let transkriptLista = null;
+  const transkriptNamn = {}, transkriptLangd = {};
+  function hamtaTranskript() {
+    if (transkriptLista) return Promise.resolve(transkriptLista);
+    if (!serverPa()) return Promise.resolve([]);
+    return window.API.json('/api/anteckningar/transkript').then(d => {
+      transkriptLista = d.transkript || [];
+      transkriptLista.forEach(t => {
+        transkriptNamn[t.id] = t.namn;
+        transkriptLangd[t.id] = !!t.refereras;
+      });
+      return transkriptLista;
+    }).catch(() => []);
+  }
+  function valjTranskript(s, efterat) {
+    const wrap = $('.typtranskript');
+    if (!wrap || $('.valjpanel', wrap)) return;
+    const panel = document.createElement('div');
+    panel.className = 'valjpanel brett';
+    panel.setAttribute('role', 'listbox');
+    panel.setAttribute('aria-multiselectable', 'true');
+    wrap.appendChild(panel);
+    wrap.setAttribute('data-oppen', '');
+    const stang = () => {
+      panel.remove();
+      wrap.removeAttribute('data-oppen');
+      document.removeEventListener('pointerdown', ut, true);
+      document.removeEventListener('keydown', tangent, true);
+    };
+    const ut = e => { if (!wrap.contains(e.target)) stang(); };
+    const tangent = e => { if (e.key === 'Escape') stang(); };
+    document.addEventListener('pointerdown', ut, true);
+    document.addEventListener('keydown', tangent, true);
+    panel.innerHTML = '<p class="ltomsok">Läser biblioteket …</p>';
+    hamtaTranskript().then(lista => {
+      if (!panel.isConnected) return;
+      if (!lista.length) {
+        panel.innerHTML = `<p class="ltomsok">${serverPa()
+          ? 'Inga transkriberade möten ännu — spela in ett möte, så går det att bygga pappret på det.'
+          : 'Utan server finns inget bibliotek att välja ur.'}</p>`;
+        return;
+      }
+      const rita = () => {
+        panel.innerHTML = lista.map(t => `<button class="lrad-val" type="button" role="option" data-id="${t.id}" aria-selected="${(s.lektioner || []).includes(t.id)}">
+            <span class="lkryss">✓</span>
+            <span><span class="lvnamn"></span><span class="lvmeta">${[t.datum, t.klass, t.kurs].filter(Boolean).join(' · ') || 'Utan datum'}</span></span>
+            <span class="lvlangd">${t.refereras ? 'refereras' : 'ordagrant'}</span>
+          </button>`).join('')
+          + `<div class="valjfot"><button class="lank" type="button" data-inga>Rensa</button><span class="summa">${
+            (s.lektioner || []).length ? `${s.lektioner.length} valda` : 'Inget valt'}</span></div>`;
+        $$('.lrad-val', panel).forEach(r => {
+          const t = lista.find(x => String(x.id) === r.dataset.id);
+          $('.lvnamn', r).textContent = t ? t.namn : '';
+          r.addEventListener('click', () => {
+            const id = Number(r.dataset.id);
+            const valda = s.lektioner || (s.lektioner = []);
+            const i = valda.indexOf(id);
+            i < 0 ? valda.push(id) : valda.splice(i, 1);
+            rita();
+            efterat();
+            if (antNotRef) antNotRef();
+            planKoll();
+          });
+        });
+        const inga = $('[data-inga]', panel);
+        if (inga) inga.addEventListener('click', () => {
+          s.lektioner = [];
+          rita();
+          efterat();
+          if (antNotRef) antNotRef();
+          planKoll();
+        });
+      };
+      rita();
+    });
+  }
+  /* Noten under promptrutan uppdateras också av transkriptväljaren, som lever
+     i en annan slutning — därför en pekare i stället för ett argument. */
+  let antNotRef = null;
+
   function ritaTypval() {
     const typ = valt('skrivtyp'), s = inst[typ];
     normalisera(s);
@@ -313,6 +413,11 @@
     const vard = $('#typval');
     vard.innerHTML = `<p class="minietikett">Så ska ${best(typ)} sättas</p><div class="typrader"></div>`;
     const rader = $('.typrader', vard);
+    /* Promptrutans not läses av transkriptraden också: tom ruta är tillåtet
+       OM ett möte är valt, och det är två rader som svarar på samma fråga.
+       Pekaren nollställs vid varje omritning så att en not på en rad som inte
+       längre finns aldrig anropas. */
+    antNotRef = null;
     lista.forEach(k => {
       const rad = document.createElement('div');
       rad.className = 'typrad';
@@ -333,6 +438,17 @@
           ? `<span class="antalgrupp"><span class="stepper"><button class="gzknapp" type="button" data-steg="-1" aria-label="Färre">−</button><span class="steppervarde">${s[k.id]}</span><button class="gzknapp" type="button" data-steg="1" aria-label="Fler">+</button></span></span>`
           : k.typ === 'kryss'
           ? `<span class="kryssval">${k.delar.map(d => `<button class="kryssknapp" type="button" data-del="${d.id}" aria-pressed="${!!s[d.id]}">${d.namn}</button>`).join('')}</span>`
+          /* Fritext. Generisk kontrolltyp och inte anteckningarnas egen: en
+             ruta att skriva meningar i är det första fler typer kommer att
+             vilja ha, och den ska då inte behöva byggas en andra gång.
+             Rutan ligger UNDER etiketten (flex:0 0 100% i app5.css) — en
+             kontroll på 160 px i högerkanten inbjuder till ett ord, och det
+             här fältet ska bära ett stycke. */
+          : k.typ === 'text'
+          ? `<textarea class="field typfritext" rows="3" aria-label="${k.namn}"></textarea>`
+          /* Transkriptdörren: möten ur biblioteket som pappret ska bygga på. */
+          : k.typ === 'transkript'
+          ? '<span class="typtranskript"><span class="tkchips"></span><button class="ghost tkvalj" type="button">Välj möte …</button></span>'
           : `<button class="switch" type="button" aria-pressed="${s[k.id]}" aria-label="${k.namn}" style="background:${s[k.id] ? 'var(--accent)' : 'var(--track)'};border-color:${s[k.id] ? 'var(--accent)' : 'var(--line)'}"><span class="knopp" style="transform:translateX(${s[k.id] ? 16 : 0}px)"></span></button>`;
       rad.innerHTML = `<span class="typnamn">${typeof k.namn === 'function' ? k.namn(s) : k.namn}</span>${kontroll}`;
       if (k.typ === 'minuter') {
@@ -537,6 +653,67 @@
         }));
         const varde = $('.steppervarde', rad);
         if (varde) varde.textContent = String(s[k.id]);
+      }
+      /* ── Promptrutan ──────────────────────────────────
+         Innehållet går ordagrant in i prompten som huvudkälla. Noten under
+         raden är samma löfte som de andra typernas: den säger om valet
+         HÅLLER — ett papper kan inte skrivas ur ingenting, men rutan får vara
+         tom om ett möte är valt i stället. */
+      if (k.typ === 'text') {
+        const falt = $('textarea', rad);
+        falt.value = s[k.id] || '';
+        if (k.platshallare) falt.placeholder = k.platshallare;
+        const not = typnot(rad);
+        antNotRef = () => {
+          const skrivet = (s.onskemal || '').trim();
+          const moten = (s.lektioner || []).length;
+          if (skrivet) return satNot(not, 'ok', moten
+            ? 'Din text väger tyngst, mötet fyller i.'
+            : 'Det här blir uppdraget.');
+          satNot(not, moten ? 'ok' : '', moten
+            ? `Pappret skrivs ur ${moten === 1 ? 'mötet' : 'mötena'} — skriv i rutan om något särskilt ska med.`
+            : 'Skriv vad pappret ska innehålla, eller välj ett möte.');
+        };
+        falt.addEventListener('input', () => { s[k.id] = falt.value; antNotRef(); planKoll(); });
+        antNotRef();
+      }
+      /* ── Transkriptdörren ─────────────────────────────
+         Själva behovet: «jag har transkriberat några möten, använd den
+         informationen». Listan kommer ur servern (bara möten som FAKTISKT har
+         text) och valet ligger i upplägget som en lista av lektions-id. */
+      if (k.typ === 'transkript') {
+        const chips = $('.tkchips', rad), knapp = $('.tkvalj', rad);
+        const not = typnot(rad);
+        const valda = () => (s.lektioner || []);
+        const ritaChips = () => {
+          const namn = valda().map(id => (transkriptNamn[id] || 'Möte'));
+          const gor = (n, i) => {
+            const b = document.createElement('button');
+            b.className = 'lchip';
+            b.type = 'button';
+            b.innerHTML = '<span></span><i>✕</i>';
+            $('span', b).textContent = n;
+            b.dataset.tip = 'Ta bort ur underlaget';
+            b.addEventListener('click', () => {
+              s.lektioner = valda().filter(x => x !== valda()[i]);
+              ritaChips();
+              if (antNotRef) antNotRef();
+              planKoll();
+            });
+            return b;
+          };
+          chips.innerHTML = '';
+          namn.forEach((n, i) => chips.appendChild(gor(n, i)));
+          knapp.textContent = valda().length ? 'Välj fler …' : 'Välj möte …';
+          const refereras = valda().filter(id => transkriptLangd[id]);
+          satNot(not, valda().length ? 'ok' : '', !valda().length
+            ? (serverPa() ? 'Transkriberade möten i biblioteket — mötesanteckningar, upprop, kursstart.' : '')
+            : refereras.length
+              ? `${refereras.length === 1 ? 'Ett möte är' : `${refereras.length} möten är`} för långa att läsa ordagrant och refereras först — det tar en stund extra.`
+              : 'Läses ordagrant.');
+        };
+        knapp.addEventListener('click', () => valjTranskript(s, ritaChips));
+        ritaChips();
       }
       if (k.typ === 'switch') {
         const b = $('.switch', rad);
@@ -927,6 +1104,9 @@
     /* Uppgifterna står på pappret. Rättningen, «8 uppgifter» och poängsummorna
        läser samma lista, annars säger appen en sak och bladet en annan. */
     if (window.Blad) return window.Blad.uppgifter(v);
+    /* Anteckningarna bär inga — och ska inte fyllas med prototypens mallar
+       heller, för då hade «3 uppgifter» stått på ett papper utan en enda. */
+    if (v.typ === 'Anteckningar') return [];
     const m = v.moment.toLowerCase(), k = KONTEXT[v.kontext], i = v.inst || {};
     const nivaText = i.niva || (i.nivamix === 'Bara E' || i.nivamix === 'E-tyngd' ? 'E-nivå' : i.nivamix === 'C/A-tyngd' ? 'A-nivå' : 'Blandat');
     const lyft = nivaText === 'A-nivå' ? 1 : nivaText === 'E-nivå' ? -1 : 0;
@@ -1123,7 +1303,9 @@
   let visarLosning = false;
   /* Facit finns till allt som har uppgifter: provet, arbetsbladet och
      gruppuppgiften. Gruppuppgiften saknade det förut — det var en lucka, inte
-     ett val: det är just gruppuppgifterna läraren går igenom på tavlan efteråt. */
+     ett val: det är just gruppuppgifterna läraren går igenom på tavlan efteråt.
+     Anteckningarna har inga uppgifter och därför inget facit — pappret ÄR
+     lärarens ark, det finns ingen andra hälft att vända på. */
   const harLosning = v => v.typ === 'Prov'
     ? !!(v.inst || {}).losningar
     : v.typ === 'Arbetsblad' ? (v.inst || {}).facit === 'Separat facit'
@@ -1195,7 +1377,28 @@
       window.toast && window.toast('Välj först vad som ska skapas');
       return;
     }
-    if (!moment.value.trim()) {
+    const typ = valt('skrivtyp');
+    /* Anteckningarna kräver inget moment. De handlar sällan om ett avsnitt i
+       boken — kursupplägget, rutinerna, ett möte — och att kräva ett vore att
+       be läraren hitta på ett kapitel för att få skriva ett papper om vilken
+       bok klassen ska köpa. Det de KRÄVER är en av sina två källor, och det
+       säger noten under rutan. */
+    if (typ === 'Anteckningar') {
+      const i = inst.Anteckningar;
+      if (!(i.onskemal || '').trim() && !(i.lektioner || []).length) {
+        if (window.PlanSteg) window.PlanSteg.gaTill(4);
+        const falt = $('.typfritext');
+        if (falt) {
+          falt.focus({ preventScroll: true });
+          falt.classList.remove('pekar');
+          void falt.offsetWidth;
+          falt.classList.add('pekar');
+          setTimeout(() => falt.classList.remove('pekar'), 2400);
+        }
+        window.toast && window.toast('Skriv vad pappret ska innehålla, eller välj ett möte');
+        return;
+      }
+    } else if (!moment.value.trim()) {
       /* Fältet ligger i steg 2 och är fällt ihop när man står här. En puls på ett
          dolt fält är ingen puls — öppna steget där valet görs i stället, och peka
          där först när fältet faktiskt syns. */
@@ -1218,7 +1421,6 @@
       setTimeout(() => moment.classList.remove('pekar'), 2400);
       return;
     }
-    const typ = valt('skrivtyp');
     $('#skriv').disabled = true;
     const not = $('#plannot');
     const gammal = not.textContent;
@@ -1306,6 +1508,20 @@
       }),
     };
     JOBB.Arbetsblad = JOBB.Prov;
+    /* Anteckningarna går sin egen väg: inga uppgifter, inga poäng, ingen
+       balans — men två källor de andra typerna inte har. Rutan läraren skrev i
+       är huvudkällan, mötena är underlaget, och servern väger dem i den
+       ordningen (notes_gen.build_prompt). */
+    JOBB.Anteckningar = ({ signal, log }) => window.API.strom('/api/anteckningar/generate', {
+      kurs: utkast.kurs, klass: utkast.klass,
+      moment: moment.value.trim(),
+      datum: utkast.datum || utkast.lektionsdatum || '',
+      onskemal: (i0.onskemal || '').trim(),
+      lektioner: (i0.lektioner || []).slice(),
+    }, { signal, log }).then(kravDone).then(r => {
+      if (!r.anteckningar) throw new Error('Anteckningarna gick inte att skriva den här gången. Försök igen.');
+      return r;
+    });
     /* Gruppuppgiften går samma väg men bär sitt eget upplägg: namnraderna,
        tiden och redovisningsformen ÄR pappersformen, och de kommer ur
        väljarna här — inte ur modellens fantasi. */
@@ -1376,6 +1592,17 @@
              i PDF:en, annars lovar pappret och skärmen gruppen olika saker. */
           utkast.nyckelfraga = res.exam.nyckelfraga || null;
         }
+        /* Anteckningarna behöver ingen översättning: pappret ritas ur samma
+           JSON servern validerade (blad-bygg.anteckningar). `radtak` följer
+           med så att förhandsvisningen kan säga hur full sidan är. */
+        if (res && res.anteckningar) {
+          utkast.antId = res.id;
+          utkast.ant = res.anteckningar;
+          utkast.antFel = res.errors || [];
+          utkast.antRader = res.rader || null;
+          utkast.antRadtak = res.radtak || null;
+          if (res.anteckningar.titel) utkast.titel = res.anteckningar.titel;
+        }
         versioner = [utkast];
         utkastNytt(utkast);
         /* Ett nytt dokument öppnas alltid på ELEVERNAS ark. Stod växlaren kvar på
@@ -1410,7 +1637,15 @@
      föreslås FÖRST när det första är godkänt och ligger i Sparat — då vet man vad
      det bygger på. Sa man «inte nu» ligger det kvar som en väntande rad högst upp
      i planeringen; ingenting försvinner för alltid. */
-  const OBEST = { Tavla: 'en tavla', Prov: 'ett prov', Arbetsblad: 'ett arbetsblad', Gruppuppgift: 'en gruppuppgift' };
+  const OBEST = { Tavla: 'en tavla', Prov: 'ett prov', Arbetsblad: 'ett arbetsblad', Gruppuppgift: 'en gruppuppgift', Anteckningar: 'anteckningar' };
+  /* Följeslagaren skrivs PÅ det första pappret: samma exempel, samma begrepp,
+     förlagan i prompten. Anteckningarna kan inte det — de har inga uppgifter
+     att ärva och läser varken förlaga eller bok (app/notes_gen.py). De kan
+     däremot fortfarande vara det andra valet: de skrivs då i tur och ordning
+     som vanligt, men ur sina EGNA källor. Skillnaden står i notisen, och
+     förlagan sätts inte — en källruta som visar ett papper prompten aldrig får
+     se är precis den sortens teater appen ska vara fri från. */
+  const arverForlaga = typ => typ !== 'Anteckningar';
   let foljdKvar = null, foljdVantar = null;
   function visaFolje() {
     const rad = $('#foljerad');
@@ -1430,14 +1665,21 @@
     foljdVantar = o;
     const f = o.forlaga;
     $('#foljetitel').textContent = `${Best(o.typ)} till ${best(f.typ)}`;
-    $('#foljebrod').textContent = `${Best(f.typ)} är godkänd och ligger i Sparat. Du valde att skapa ${OBEST[o.typ] || o.typ.toLowerCase()} också — ${best(o.typ)} skrivs på det du just godkände, med samma exempel och begrepp.`;
+    $('#foljebrod').textContent = `${Best(f.typ)} är godkänd och ligger i Sparat. Du valde att skapa ${OBEST[o.typ] || o.typ.toLowerCase()} också — `
+      + (arverForlaga(o.typ)
+        ? `${best(o.typ)} skrivs på det du just godkände, med samma exempel och begrepp.`
+        : `${best(o.typ)} skrivs ur det du själv säger ska stå på pappret, inte ur ${best(f.typ)}.`);
     const nar = f.datum ? (window.Kalender ? window.Kalender.ord(f.datum) : f.datum) : 'utan datum';
     const lekt = [f.klass || 'ingen klass', f.kurs || 'ingen kurs', nar].filter(Boolean).join(' · ');
     const antalLekt = valdaNamn().length;
     const underlag = [f.moment ? versal(f.moment) : null, antalLekt ? `${antalLekt} ${antalLekt === 1 ? 'lektion' : 'lektioner'}` : null]
       .filter(Boolean).join(' · ') || 'inget underlag';
     $('#foljeredan').innerHTML = '';
-    [['Redan valt', lekt], ['Utgår från', underlag], ['Förlaga', dokNamn(f)], ['Kvar att välja', `Upplägget för ${best(o.typ)}${o.typ === 'Prov' ? ' — provet kan ligga en annan dag' : ''}`]]
+    [['Redan valt', lekt], ['Utgår från', underlag],
+      ...(arverForlaga(o.typ) ? [['Förlaga', dokNamn(f)]] : []),
+      ['Kvar att välja', arverForlaga(o.typ)
+        ? `Upplägget för ${best(o.typ)}${o.typ === 'Prov' ? ' — provet kan ligga en annan dag' : ''}`
+        : 'Vad som ska stå på pappret']]
       .forEach(([n, v2]) => {
         const rad = document.createElement('div');
         rad.className = 'nrad';
@@ -1474,8 +1716,10 @@
     foljdVantar = null;
     dokFoljd(o.forlaga, null);
     ritaFoljeVanta();
-    refDok = JSON.parse(JSON.stringify(o.forlaga));
-    $('#refhur').value = `Följer ${best(o.forlaga.typ)}: samma exempel och begrepp, men som ${o.typ.toLowerCase()}.`;
+    if (arverForlaga(o.typ)) {
+      refDok = JSON.parse(JSON.stringify(o.forlaga));
+      $('#refhur').value = `Följer ${best(o.forlaga.typ)}: samma exempel och begrepp, men som ${o.typ.toLowerCase()}.`;
+    }
     sattSkrivtyp(o.typ);
     if (window.SattAndraHand) window.SattAndraHand(o.typ, o.forlaga.typ);
     else if (window.SattLage) window.SattLage(o.typ);
@@ -1530,6 +1774,15 @@
     }
     if (typ === 'Arbetsblad') return `${s.antal} uppgifter · ${s.niva} · ${s.facit}`;
     if (typ === 'Gruppuppgift') return `${s.grupp} per grupp · ${s.langd} min · ${s.redovisning.toLowerCase()}`;
+    /* Anteckningarna har inga inställningar att sammanfatta — raden säger i
+       stället vad pappret byggs AV, för det är hela valet. */
+    if (typ === 'Anteckningar') {
+      const moten = (s.lektioner || []).length;
+      const skrivet = (s.onskemal || '').trim();
+      return [skrivet ? 'egen text' : null,
+        moten ? `${moten} ${moten === 1 ? 'möte' : 'möten'}` : null,
+      ].filter(Boolean).join(' · ') || 'inget underlag valt än';
+    }
     return `${s.starttid ? s.starttid + ' · ' : ''}${s.langd} min · ${s.exempel} exempel`;
   }
   /* ── Provtiden uppskattas på pappret (13) ────────────────────
@@ -1597,7 +1850,12 @@
     /* bygger man vidare på en förlaga ska ingenting ärvas i smyg — valen är nya */
     if (refDok) { rad.hidden = true; arvtFran = null; return; }
     const typ = valt('skrivtyp'), kurs = $('#p-kurs').value;
-    const v = typ === 'Tavla' || !kurs ? null : senasteFor(typ, kurs);
+    /* Arvet är ett UPPLÄGG — antal uppgifter, nivåprofil, provtid — och det är
+       stabilt per lärare och kurs. Anteckningarnas «upplägg» är däremot förra
+       papprets INNEHÅLL: rutan med vad som skulle stå på det. Att ärva det vore
+       att fylla i förra veckans text åt någon som ska skriva en ny. */
+    const arvbar = typ !== 'Tavla' && typ !== 'Anteckningar';
+    const v = !arvbar || !kurs ? null : senasteFor(typ, kurs);
     if (!v) { rad.hidden = true; arvtFran = null; return; }
     if (arvtFran !== v) {
       arvtFran = v;
@@ -1766,7 +2024,7 @@
     const i = refDok.inst || {};
     $('#refmeta').textContent = [refDok.kurs || 'ingen kurs', refDok.klass || 'ingen klass', nar,
       i.antal ? `${i.antal} uppgifter` : null, i.nivamix || i.niva || null].filter(Boolean).join(' · ');
-    $('#refminis').textContent = refDok.typ === 'Tavla' ? 'TA' : refDok.typ === 'Prov' ? 'PR' : 'AB';
+    $('#refminis').textContent = { Tavla: 'TA', Prov: 'PR', Anteckningar: 'AN' }[refDok.typ] || 'AB';
     $('#refminis').dataset.typ = refDok.typ;
     const chips = $('#refchips');
     chips.innerHTML = '';
@@ -1873,6 +2131,13 @@
         return r;
       });
     }
+    if (v.antId) {
+      return window.API.strom(`/api/anteckningar/${v.antId}/refine`,
+                              { message: text }, krokar).then(krav).then(r => {
+        if (!r.anteckningar) throw new Error('Omskrivningen gick inte igenom. Försök igen.');
+        return r;
+      });
+    }
     return null;
   }
   $('#angra').addEventListener('click', angra);
@@ -1952,6 +2217,15 @@
 
   /* ── Sparat ───────────────────────────────────────── */
   function minisida(v) {
+    /* Miniatyren ska säga VAD pappret är på ett ögonkast, och det som skiljer
+       typerna åt är numren i marginalen: uppgifter är numrerade rader,
+       anteckningar är rubriker och text. En miniatyr med uppgiftsnummer på ett
+       stödpapper hade lovat uppgifter som inte finns. */
+    if (v.typ === 'Anteckningar') {
+      const sekt = Math.max(3, Math.min(5, ((v.ant || {}).sektioner || []).length || 4));
+      return `<span class="minisida" data-typ="${v.typ}"><span class="msrub"></span>
+        ${Array.from({ length: sekt }, () => '<span class="msdel"><span class="msrub2"></span><span class="mslinje" style="width:92%"></span><span class="mslinje" style="width:78%"></span></span>').join('')}</span>`;
+    }
     const rader = v.typ === 'Tavla' ? 4 : 6;
     return `<span class="minisida" data-typ="${v.typ}"><span class="msrub"></span><span class="mslinje" style="width:88%"></span><span class="mslinje" style="width:74%"></span>
       ${Array.from({ length: rader }, () => '<span class="msrad"><span class="msnr"></span><span class="mslinje" style="flex:1;margin:0"></span></span><span class="mslinje" style="width:64%"></span>').join('')}</span>`;
@@ -2119,7 +2393,13 @@
       if (v.syskonAv) $('.doksyskon', d).textContent = v.syskontext || ('av ' + v.syskonAv);
       /* Åtgärderna ligger på pappret: en rad som glider in över miniatyrens nederkant
          vid hover. Kortet behåller sin höjd, och rutnätet blir tätare. */
-      const syskonknapp = !v.losningsblad ? `<button class="dsl" type="button" data-a="syskon">${v.typ === 'Tavla' ? 'Klass' : 'Omprov'}</button>` : '';
+      /* Syskonet är en variant av samma papper: tavlan för en annan klass,
+         omprovet på samma innehåll. Anteckningarna har ingen sådan variant —
+         de är lärarens eget papper för EN lektion, och «omprov» på dem betyder
+         ingenting. Knappen utelämnas därför i stället för att erbjuda en
+         handling som inte finns. */
+      const syskonknapp = !v.losningsblad && v.typ !== 'Anteckningar'
+        ? `<button class="dsl" type="button" data-a="syskon">${v.typ === 'Tavla' ? 'Klass' : 'Omprov'}</button>` : '';
       $('.minisida', d).insertAdjacentHTML('beforeend',
         `<span class="dokslojan"><button class="dsl" type="button" data-a="visa">Visa</button>${syskonknapp}<button class="dsl" type="button" data-a="pdf">PDF</button><button class="dsl" type="button" data-a="radera" data-farlig>Radera</button></span>`);
       $('.dnamn', d).textContent = dokNamn(v);
@@ -2373,6 +2653,22 @@
           window.toast && window.toast(r.pdf
             ? `${Best(godkant.typ)} är utskriven som PDF`
             : `${Best(godkant.typ)} är godkänd — PDF:en gick inte att bygga, .tex finns sparad`);
+        })
+        .catch(e => window.toast && window.toast(`PDF:en kunde inte byggas: ${e.message}`));
+    }
+    /* Anteckningarna får sin PDF på samma villkor och samma väg — Tectonic
+       kompilerar den egna mallen lokalt. Skillnaden är att det inte finns
+       någon fixloop bakom: går formeln i ett stycke inte att sätta säger
+       kvittot det, och chattrutan bredvid pappret är vägen vidare. */
+    if (serverPa() && godkant.antId) {
+      window.API.strom(`/api/anteckningar/${godkant.antId}/approve`, {})
+        .then(r => {
+          if (!r) return;
+          godkant.pdf = r.pdf || null;
+          dokUppdatera(godkant);
+          window.toast && window.toast(r.pdf
+            ? 'Anteckningarna är utskrivna som PDF'
+            : 'Anteckningarna är godkända — PDF:en gick inte att bygga, .tex finns sparad');
         })
         .catch(e => window.toast && window.toast(`PDF:en kunde inte byggas: ${e.message}`));
     }

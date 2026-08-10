@@ -163,8 +163,10 @@
     .kallflik{display:flex;flex-direction:column;gap:10px;align-items:flex-end}
     #detaljsam{align-items:baseline}
     #detaljsam .mjuk{flex:1 1 auto}
-    /* lägesval — tre kort i stället för en segmentrad */
-    .kort3{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+    /* lägesval — kort i stället för en segmentrad. Fem typer får inte plats på
+       en rad utan att korten blir remsor: auto-fit lägger dem i två rader när
+       bredden tar slut, och den femte hamnar då under de fyra. */
+    .kort3{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:12px}
     @media (max-width:860px){.kort3{grid-template-columns:repeat(2,1fr)}}
     .lagekort{position:relative;text-align:left;padding:18px 16px;border:1px solid var(--line);border-radius:var(--r-card);background-color:var(--surface);background-image:linear-gradient(100deg,transparent 34%,rgba(255,255,255,.3) 50%,transparent 66%);background-size:260% 100%;background-position:130% 0;background-repeat:no-repeat;cursor:pointer;font-family:inherit;color:var(--ink);transition:border-color var(--dur-2) var(--ease),background-color var(--dur-2) var(--ease),background-position var(--dur-4) var(--ease),box-shadow var(--dur-2) var(--ease),transform var(--dur-1) var(--ease),color var(--dur-2) var(--ease)}
     /* Hovern får aldrig se ut som valet: det valda är mörkblått, hovern ljusnar.
@@ -1033,13 +1035,16 @@
           </div>
         </div>
       </div>
-      <div class="plansteg" data-steg="2" data-visnr="1" data-namn="Skapar" data-vant="Tavla, prov, arbetsblad eller gruppuppgift" data-last>
+      <div class="plansteg" data-steg="2" data-visnr="1" data-namn="Skapar" data-vant="Tavla, prov, arbetsblad, gruppuppgift eller anteckningar" data-last>
         <div class="steghuvud"><span class="stegnr">1</span><p class="stegfraga">Vad ska du skapa?</p><span class="hjalp" id="lagenot">Välj två om de hör ihop — då skrivs de i samklang, med det andra byggt på det första</span></div>
         <div class="kort3" id="lagesval">
           <button class="lagekort" type="button" data-lage="Tavla" aria-pressed="true"><b>Tavla</b><span>Att skriva av under genomgången</span></button>
           <button class="lagekort" type="button" data-lage="Prov" aria-pressed="false"><b>Prov</b><span>Med poäng, delar och lösningsförslag</span></button>
           <button class="lagekort" type="button" data-lage="Arbetsblad" aria-pressed="false"><b>Arbetsblad</b><span>Uppgifter med nivå och facit</span></button>
           <button class="lagekort" type="button" data-lage="Gruppuppgift" aria-pressed="false"><b>Gruppuppgift</b><span>Ifyllnadsställning som följer av uppgiften</span></button>
+          <!-- Femte typen, och den enda som inte är elevmaterial: ett A4 att
+               skriva ut och ha bredvid sig under lektionen. -->
+          <button class="lagekort" type="button" data-lage="Anteckningar" aria-pressed="false"><b>Anteckningar</b><span>Ditt eget stödpapper — ett A4 att tala utifrån</span></button>
         </div>
         <!-- Andra handen: skapar man ett par är typen redan bestämd när det
              andra dokumentet ska skrivas — då står valet som en rad, inte fyra
@@ -1050,7 +1055,7 @@
           <button class="lank" id="andrahandbyt" type="button">Välj något annat</button>
         </div>
         <div class="seg" role="group" data-seg="skrivtyp" hidden>
-          <button aria-pressed="true">Tavla</button><button aria-pressed="false">Prov</button><button aria-pressed="false">Arbetsblad</button><button aria-pressed="false">Gruppuppgift</button>
+          <button aria-pressed="true">Tavla</button><button aria-pressed="false">Prov</button><button aria-pressed="false">Arbetsblad</button><button aria-pressed="false">Gruppuppgift</button><button aria-pressed="false">Anteckningar</button>
         </div>
         <!-- OBS-raden hör till valet man just gjort och står därför i stegets fot,
              till vänster om Nästa. plansteg.js ger den sin plats där, notis.js

@@ -238,3 +238,31 @@
    lägger in en i canvas. */
 .prforsatt{margin-top:26px}
 .prforsatt .prbild{min-height:300px;display:grid;place-items:center}
+
+/* ══════════ ANTECKNINGAR — lärarens eget stödpapper ══════════
+   Femte dokumenttypen, och den enda som inte delas ut. Kravet är ett annat än
+   de andra bladens: eleven LÄSER ett arbetsblad från början till slut, men
+   läraren KASTAR EN BLICK ner på det här mitt i en mening. Därför större grad,
+   mer luft mellan sektionerna och rubriker som sticker ut — det är rubriken
+   ögat hittar, inte texten.
+
+   Pappret är samma A4 som de andra (.gu bär måtten); allt nedan är sättningen. */
+[data-form="an"]{padding:74px 70px 58px;font-size:16.5px;line-height:1.62}
+.anhuv{padding-bottom:6px;border-bottom:1.5px solid #000}
+.antitel{margin:0;font-size:27px;font-weight:700;letter-spacing:-.01em;line-height:1.14}
+.anmeta{margin:7px 0 0;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#000}
+/* Luften mellan sektionerna är det som gör pappret läsbart i en blick — den är
+   större än radavståndet med flit, så att ögat ser fyra block och inte en spalt. */
+.ansekt{margin:24px 0 0}
+.anrubrik{margin:0 0 5px;font-size:18.5px;font-weight:700;line-height:1.25}
+.anstycke{margin:0 0 7px;text-wrap:pretty}
+.anstycke:last-child{margin-bottom:0}
+.anpunkter{margin:8px 0 0;padding-left:20px}
+.anpunkter li{margin:3px 0}
+/* Kom ihåg-rutan ligger i botten: det är det sista läraren tittar på innan
+   klassen går. margin-top:auto trycker ner den — .gu är en flexkolumn — så
+   rutan står vid nederkanten även på ett halvfullt papper, precis som i
+   LaTeX-mallen. Tonen är samma sex procent bläck som tavlans callouts. */
+.ankom{margin-top:auto;padding:13px 16px;background:#F2F1EF;border:1px solid #CDC8BD}
+.ankomrub{display:block;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+.ankom p{margin:5px 0 0;font-size:15.5px;line-height:1.5}

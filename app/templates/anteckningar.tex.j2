@@ -1,0 +1,77 @@
+((# Anteckningsmall (femte dokumenttypen) — lärarens EGET stödpapper.
+
+    Ett A4 att lägga bredvid tangentbordet. Allt här tjänar en enda sak: att
+    läraren ska hitta rätt rad på en sekund med en blick ner på pappret mitt i
+    lektionen. Därför luftigare än de andra mallarna (22 mm marginal i stället
+    för 17, större radavstånd) och därför feta rubriker i egen storlek —
+    rubriken är vägvisaren, inte en överskrift.
+
+    SIDTAKET ÄR HÅRT: det här ska vara EN sida. Blir det två är det
+    LÄNGDVALIDERINGEN i app/notes_gen.py som är för generös (TOTAL_TAK), inte
+    mallen som ska krympa stilen. Läsbarheten är kravet, inte
+    informationsmängden.
+
+    Inga uppgifter, inga poäng, ingen bild- eller svarsradsmaskin — därför är
+    med_grafik och med_svarsrad falska: paketen och kommandona de drar in
+    behövs inte här.
+    Fast preamble; Jinja-avgränsarna är parentesbaserade. #))
+((* set med_grafik = false *))
+((* set med_svarsrad = false *))
+((* include '_preamble.tex.j2' *))
+
+((# Luften. geometry är redan laddat av preamblen — \geometry sätter om
+    marginalen utan ett paket till (varje nytt paket måste ligga i den buntade
+    Tectonic-cachen, annars kraschar trycket offline på lärarens maskin). #))
+\geometry{margin=22mm,top=20mm,bottom=20mm}
+((# \linespread ensamt räcker i preambeln: \normalsize vid \begin{document}
+    väljer om fonten och plockar upp det nya radavståndet. #))
+\linespread{1.12}
+\setlength{\parskip}{6pt}
+
+((# Rubriken i sektionen. Egen storlek och luft ovanför, ingen numrering:
+    \section hade gett båda delarna plus ett nummer ingen läser. #))
+\newcommand{\anrubrik}[1]{\par\vspace{4.5mm}{\large\bfseries #1}\par\vspace{0.5mm}}
+
+((# Kom ihåg-rutan: tonad, inte inramad. Tonen är samma sex procent som
+    tavlans callouts (app/lesson_board.py, fillOpacity 0.06) — xcolor blandar
+    den på plats, så ingen ny färg behöver definieras. #))
+\newcommand{\komihag}[1]{%
+  \par\vspace{5mm}%
+  \begingroup
+  \setlength{\fboxrule}{0.25mm}\setlength{\fboxsep}{4mm}%
+  \noindent\fcolorbox{ink200}{ink900!6!white}{%
+    \begin{minipage}{\dimexpr\linewidth-2\fboxrule-2\fboxsep\relax}#1\end{minipage}}%
+  \endgroup
+  \par}
+
+\begin{document}
+
+\begin{center}
+  {\LARGE\bfseries ((( titel )))}\\[2mm]
+  {\large ((( meta )))}
+\end{center}
+
+((* for s in sektioner *))
+\anrubrik{((( s.rubrik )))}
+((* for p in s.stycken *))
+((( p )))\par
+((* endfor *))
+((* if s.punkter *))
+\begin{itemize}[leftmargin=6mm,itemsep=1mm,topsep=1.5mm,parsep=0pt]
+((* for p in s.punkter *))
+  \item ((( p )))
+((* endfor *))
+\end{itemize}
+((* endif *))
+((* endfor *))
+
+((* if kom_ihag *))
+\komihag{%
+  {\bfseries\small Kom ihåg}\par\vspace{1mm}
+((* for k in kom_ihag *))
+  ((( k )))\par
+((* endfor *))
+}
+((* endif *))
+
+\end{document}

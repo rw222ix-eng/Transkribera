@@ -117,6 +117,10 @@ window.Blad = (() => {
     if (franServern(v)) return v.uppgifter;
     if (v.typ === 'Prov') return provval(v);
     if (v.typ === 'Tavla') return tavuppg(v);
+    /* Anteckningarna har inga uppgifter och ska inte låtsas ha det: hämtades
+       de ur avsnittspoolen skulle rättningen, poängsummorna och «6 uppgifter»
+       räkna på uppgifter som aldrig står på pappret. */
+    if (v.typ === 'Anteckningar') return [];
     return arkval(v);
   }
 
@@ -125,6 +129,7 @@ window.Blad = (() => {
   function bladen(v) {
     const bb = B();
     if (!bb) return [];
+    if (v.typ === 'Anteckningar') return [bb.anteckningar(v, anteckningarnaFor(v))];
     if (v.typ === 'Prov') {
       const u = uppgifter(v);
       if (!u.length) return [];
@@ -149,6 +154,29 @@ window.Blad = (() => {
   function form(v) {
     if (v.typ === 'Tavla') return ['tav'];
     return bladen(v).map((_, i) => 'ark' + i);
+  }
+
+  /* Anteckningarna språkmodellen skrev (notes_gen) — eller, utan server,
+     lärarens egen text lagd på pappret.
+
+     Prototypens andra former hämtar innehåll ur avsnittspoolen (innehall.js),
+     men det går inte här: pappret handlar om boken, upplägget och rutinerna,
+     och ett påhittat sådant innehåll vore ett påstående om lärarens kurs.
+     Det hon SJÄLV skrev i rutan är däremot sant, och att se det satt som ett
+     A4 är precis vad förhandsvisningen ska visa. */
+  function anteckningarnaFor(v) {
+    if (v.ant && (v.ant.sektioner || []).length) return v.ant;
+    const onskad = ((v.inst || {}).onskemal || '').trim();
+    const stycken = onskad.split(/\n{2,}/).map(s => s.trim()).filter(Boolean);
+    return {
+      titel: versal(v.moment || 'Anteckningar'),
+      sektioner: stycken.length
+        ? stycken.map((s, i) => ({ rubrik: i ? 'Att säga' : 'Det här ska med',
+                                   stycken: [s] }))
+        : [{ rubrik: 'Inget skrivet än',
+             stycken: ['Skriv i rutan vad pappret ska innehålla, eller välj '
+                       + 'ett möte att bygga det på.'] }],
+    };
   }
 
   /* ══════ PLANERINGEN PÅ PAPPRET ══════
@@ -394,7 +422,14 @@ window.Blad = (() => {
       el.dataset.namn = namn;
       if (andrat.includes(nyckel)) el.classList.add('andrad');
     };
-    $$('.prhuvud, .guhuv, .lohuvud', rot).forEach(el => salt(el, 'rubrik', 'Sidhuvudet'));
+    $$('.prhuvud, .guhuv, .lohuvud, .anhuv', rot).forEach(el => salt(el, 'rubrik', 'Sidhuvudet'));
+    /* Anteckningarnas sektioner är papprets uppgifter: det är dem läraren
+       pekar på i canvas när hon vill ha en rad ändrad. Nålen får sitt namn ur
+       rubriken, så listan i granskningen säger «Boken» och inte «Avsnitt 2». */
+    $$('.ansekt', rot).forEach((el, n) => salt(
+      el, 'sekt' + (n + 1),
+      (($('.anrubrik', el) || {}).textContent || '').trim() || 'Avsnitt ' + (n + 1)));
+    $$('.ankom', rot).forEach(el => salt(el, 'komihag', 'Kom ihåg-rutan'));
     $$('.probs, .guband', rot).forEach(el => salt(el, 'instr', 'Instruktionen'));
     $$('.gutopp', rot).forEach(el => salt(el, 'namn', 'Namnraderna'));
     $$('.prmeta, .prbetyg', rot).forEach((el, n) => salt(el, 'avtal' + n, n ? 'Betygsgränserna' : 'Provtabellen'));

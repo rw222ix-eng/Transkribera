@@ -106,6 +106,31 @@ def test_provet_ur_kassetten_klarar_balansreglerna(fejk_claude):
     assert all("del" in u and "poang" in u for u in exam["uppgifter"])
 
 
+def test_anteckningarna_ur_kassetten_haller_stilkontraktet(fejk_claude):
+    """Femte dokumenttypen, skarpt inspelad: en riktig modell fick lärarens
+    ruta OCH ett mötestranskript och skrev pappret ur båda.
+
+    Det som prövas är att stilkontraktet HÖLL i en riktig körning — inga
+    tankstreck, rubriker som är vägvisare, en sida — utan att en enda
+    reparationsrunda behövdes. Faller det här har antingen prompten glidit
+    eller taken skruvats, och båda ska märkas här och inte hos läraren."""
+    from app import notes_gen
+    fejk_claude(kassett="anteckningar")
+    res = notes_gen.generate_notes(
+        "Matematik 3c", "NA25", "Första lektionen", model="",
+        onskemal="Boken, hur vi räknar, provdatumen och räknaren")
+    assert res["errors"] == [], res["errors"]
+    assert res["rounds"] == 1, "det skarpa svaret behövde en reparationsrunda"
+    doc, _fel = notes_gen.validate_notes_json(res["notes"])
+    assert doc is not None
+    # Innehållet kom ur MÖTET, inte ur luften: bokens namn, provveckorna och
+    # räknaren stod i transkriptet och ska ha tagit sig hela vägen till pappret.
+    text = json.dumps(res["notes"], ensure_ascii=False)
+    for ur_motet in ("5000+", "42", "räknare"):
+        assert ur_motet in text, ur_motet
+    assert notes_gen.rader(doc) <= notes_gen.RADER_PA_SIDAN
+
+
 @pytest.mark.parametrize("dokument,domarband", [
     ("prov", "nivadomare"),
     ("arbetsblad", "nivadomare-blad"),
@@ -206,6 +231,20 @@ def test_auto_laget_lagger_i_bandet_prompten_ber_om(fejk_claude):
         # Rätt band, inte bara ETT band: profilerna har olika balansregler och
         # provets kassett faller igenom arbetsbladets.
         assert profil.split("upp")[0] in res["exam"]["titel"].lower(), profil
+
+    # Anteckningarna hör till lärardagen de också — och deras prompt bär ett
+    # helt mötestranskript, alltså den text som mest sannolikt råkar innehålla
+    # ett annat bands nyckelord. Går valet fel här får läraren ett prov när hon
+    # bad om ett stödpapper.
+    from app import notes_gen
+    ant = notes_gen.generate_notes(
+        "Matematik, nivå 2c", "NA25", "Första lektionen", model="",
+        onskemal="Boken, rutinerna och provdatumen",
+        transkript=notes_gen.build_transkript(
+            [("Kursstartsmöte", "vi kopierar upp ett arbetsblad till fredag "
+                                "och tar matteprovet i vecka 42")]))
+    assert ant["errors"] == [], ant["errors"]
+    assert ant["notes"]["sektioner"], "anteckningarna hamnade i fel band"
 
     insikter, innehall = postprocess._extract_one("transkript", "modell")
     assert insikter and innehall

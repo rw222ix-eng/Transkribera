@@ -386,6 +386,29 @@ def render_arbetsblad(doc: exam_spec.ExamDoc, visa_poang: bool = False,
         **_build_view(doc, bilder))
 
 
+def render_anteckningar(doc) -> str:
+    """Lärarens stödanteckningar (femte dokumenttypen) — ett A4 löptext.
+
+    `doc` är en app.notes_gen.NoteDoc och inte en ExamDoc: pappret har varken
+    uppgifter, poäng eller delar, så _build_view har ingenting att bidra med.
+    Det escapehantverket delas däremot: rubriker är ren text (escape_latex),
+    styckena får bära matte inom $…$ (escape_mixed) för det innehåll som råkar
+    behöva den."""
+    meta = " \\; · \\; ".join(
+        escape_latex(x) for x in ("Anteckningar", doc.klass, doc.datum) if x)
+    return _environment().get_template("anteckningar.tex.j2").render(
+        sidhuvud=escape_latex(doc.titel),
+        titel=escape_latex(doc.titel),
+        meta=meta,
+        sektioner=[{
+            "rubrik": escape_latex(s.rubrik),
+            "stycken": [escape_mixed(p) for p in s.stycken],
+            "punkter": [escape_mixed(p) for p in (s.punkter or [])],
+        } for s in doc.sektioner],
+        kom_ihag=[escape_mixed(k) for k in (doc.kom_ihag or [])],
+    )
+
+
 def render_gruppuppgift(doc: exam_spec.ExamDoc,
                         bilder: dict[int, str] | None = None) -> str:
     """Gruppuppgift (Fas 0.6): namnrader per elev, tiden och redovisningsformen

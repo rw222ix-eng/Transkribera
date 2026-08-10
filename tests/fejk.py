@@ -172,7 +172,15 @@ BAND = os.environ.get("FEJK_KASSETTER", "")     # mappen, för auto-läget
 # uppdragsraden («skriv ett ARBETSBLAD») och i reparationsprompten («ditt förra
 # ARBETSBLAD»). Förut matchade bara uppdragsraden, så en reparation av ett
 # arbetsblad hamnade i PROVETS band — och arbetsbladet «lagades» till ett prov.
+#
+# Anteckningarna står FÖRST, och det är av motsatt skäl: deras prompt kan bära
+# ett helt mötestranskript, och i talspråk dyker orden upp var som helst — «jag
+# kopierar upp ett arbetsblad till fredag», sagt på ett möte, hade annars lagt
+# i arbetsbladets band. Nyckeln är generatorns egen inledningsrad
+# (notes_gen.INSTRUCTION), som står överst även i reparations- och
+# iterationsprompterna.
 _VAL = [
+    ("Skriv lärarens stödanteckningar", "anteckningar"),
     ("GRUPPUPPGIFT", "gruppuppgift"),
     ("ARBETSBLAD", "arbetsblad"),
     ("lektionstavla", "tavla"),
