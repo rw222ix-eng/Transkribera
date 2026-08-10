@@ -1703,6 +1703,17 @@ def create_app(base_dir: Path | None = None,
     def api_calendar_status():
         return calendar_google.status(base)
 
+    @app.get("/api/calendar/calendars")
+    def api_calendar_calendars():
+        """Kontots kalendrar + vilken synken läser. Läraren kan ha sin egna
+        kalender inlänkad i jobbkontot vid sidan av dess egen."""
+        return calendar_google.kalendrar(base)
+
+    @app.post("/api/calendar/calendar")
+    async def api_calendar_valj(req: Request):
+        body = await req.json()
+        return calendar_google.satt_kalender(base, body.get("id") or "")
+
     @app.post("/api/calendar/disconnect")
     def api_calendar_disconnect():
         """Koppla bort kontot så ett annat kan anslutas. Datan i appen rörs

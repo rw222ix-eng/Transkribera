@@ -22,7 +22,12 @@ import sys
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-SCOPES = ["https://www.googleapis.com/auth/calendar.events"]
+SCOPES = ["https://www.googleapis.com/auth/calendar.events",
+          # Bara för att kunna LISTA kontots kalendrar i väljaren. Läraren kan
+          # ha sin egen kalender inlänkad i jobbkontot vid sidan av dess egen
+          # (så här: den personliga Gmail-kalendern är den som har
+          # lektionerna), och då måste appen kunna visa vilka som finns.
+          "https://www.googleapis.com/auth/calendar.calendarlist.readonly"]
 CLIENT_SECRET_NAME = "google_client_secret.json"
 TOKEN_NAME = "google_token.json"
 TIMEZONE = "Europe/Stockholm"
@@ -132,25 +137,26 @@ def _load_creds(base_dir: Path):
     return None
 
 
-# Kontots e-post per token-fil och ändringstid: en nätrunda per inloggning,
-# inte per fråga.
-_KONTO: dict[tuple[str, float], str] = {}
+# Namnet per token-fil, ändringstid och vald kalender: en nätrunda per
+# inloggning, inte per fråga.
+_KONTO: dict[tuple[str, float, str], str] = {}
 
 
 def konto(base_dir: Path) -> str | None:
-    """E-postadressen för det anslutna kontot, eller None.
+    """Namnet på kalendern synken läser, eller None. För kontots egen kalender
+    är namnet kontots e-postadress; för en inlänkad kalender dess namn.
 
-    Finns för att en synk mot FEL konto ser precis ut som en lyckad synk:
+    Finns för att en synk mot FEL kalender ser precis ut som en lyckad synk:
     appen läste tillbaka sitt eget utskrivna exempelschema ur ett gammalt
-    konto och sa «Synkad 19:07» (2026-08-10). Vilket konto veckan kom ur ska
-    stå i gränssnittet, inte behöva grävas fram ur google_token.json.
+    konto och sa «Synkad 19:07» (2026-08-10). Vad veckan kom ur ska stå i
+    gränssnittet, inte behöva grävas fram ur google_token.json.
 
-    Adressen läses som ``summary`` på primärkalendern i events-svaret —
-    calendars().get svarar 403 på scopet calendar.events, och att be om ett
-    bredare scope bara för en etikett vore fel affär."""
+    Namnet läses som ``summary`` i events-svaret — calendars().get svarar 403
+    på scopet calendar.events, och ett bredare scope bara för en etikett vore
+    fel affär."""
     _, token = _files(base_dir)
     try:
-        nyckel = (str(token), token.stat().st_mtime)
+        nyckel = (str(token), token.stat().st_mtime, vald_kalender(base_dir))
     except OSError:
         return None
     if nyckel in _KONTO:
@@ -162,7 +168,7 @@ def konto(base_dir: Path) -> str | None:
         from googleapiclient.discovery import build
         service = build("calendar", "v3", credentials=creds, cache_discovery=False)
         svar = service.events().list(
-            calendarId="primary", maxResults=1,
+            calendarId=nyckel[2], maxResults=1,
             timeMin=f"{date.today().isoformat()}T00:00:00Z").execute()
     except Exception:                       # nätfel, indraget medgivande, …
         return None                         # namnlöst är bättre än trasigt
@@ -189,8 +195,57 @@ def koppla_bort(base_dir: Path) -> dict:
     return {"connected": False}
 
 
+# Vilken kalender i det anslutna kontot appen läser och skriver. "primary" =
+# kontots egen. Går att peka om, för den kalender läraren FAKTISKT lever i
+# behöver inte vara kontots egen: här ligger den personliga Gmail-kalendern
+# inlänkad i jobbkontot, och det är den som har lektionerna (2026-08-10).
+KALENDER_NYCKEL = "google_kalender"
+
+
+def vald_kalender(base_dir: Path) -> str:
+    from app import settings_store
+    vald = (settings_store.load(Path(base_dir)).get(KALENDER_NYCKEL) or "").strip()
+    return vald or "primary"
+
+
+def satt_kalender(base_dir: Path, kalender_id: str) -> dict:
+    """Peka om synken till en annan kalender i samma konto. Tom sträng =
+    tillbaka till kontots egen."""
+    from app import settings_store
+    data = settings_store.load(Path(base_dir))
+    vald = (kalender_id or "").strip() or "primary"
+    data[KALENDER_NYCKEL] = vald
+    settings_store.save(Path(base_dir), data)
+    _KONTO.clear()
+    return {"kalender": vald}
+
+
+def kalendrar(base_dir: Path) -> dict:
+    """Kontots kalendrar för väljaren: {kalendrar: [{id, namn, egen, skriv}], vald}.
+
+    Kräver scopet calendar.calendarlist.readonly — en token från före det
+    scopet svarar 403, och då säger vi det istället för att visa en tom lista
+    som såg ut som "du har inga kalendrar"."""
+    creds = _load_creds(base_dir)
+    if creds is None:
+        return {"error": status(base_dir).get("hint")
+                or "Inte ansluten till Google Kalender.", "vald": vald_kalender(base_dir)}
+    try:
+        from googleapiclient.discovery import build
+        service = build("calendar", "v3", credentials=creds, cache_discovery=False)
+        svar = service.calendarList().list(maxResults=250).execute()
+    except Exception as exc:
+        return {"error": f"Kunde inte hämta kalenderlistan: {exc}",
+                "vald": vald_kalender(base_dir)}
+    lista = [{"id": k.get("id"), "namn": k.get("summaryOverride") or k.get("summary") or k.get("id"),
+              "egen": bool(k.get("primary")),
+              "skriv": k.get("accessRole") in ("owner", "writer")}
+             for k in svar.get("items") or []]
+    return {"kalendrar": lista, "vald": vald_kalender(base_dir)}
+
+
 def status(base_dir: Path) -> dict:
-    """Anslutningsstatus för UI:t: {connected, client_ready, konto?, hint?}.
+    """Anslutningsstatus för UI:t: {connected, client_ready, konto?, kalender?, hint?}.
     ``client_ready`` = en OAuth-klient finns (inbyggd eller installerad) så det
     som återstår bara är själva Google-inloggningen."""
     try:
@@ -203,7 +258,8 @@ def status(base_dir: Path) -> dict:
         return {"connected": False, "client_ready": True}
     # `konto` bara när det finns ett — en nyckel med None hade sagt "vet inte"
     # om något som inte ens är anslutet.
-    return {"connected": True, "client_ready": True, "konto": konto(base_dir)}
+    return {"connected": True, "client_ready": True, "konto": konto(base_dir),
+            "kalender": vald_kalender(base_dir)}
 
 
 def connect(base_dir: Path) -> dict:
@@ -272,7 +328,10 @@ def create_event(base_dir: Path, title: str, start_iso: str,
     try:
         from googleapiclient.discovery import build
         service = build("calendar", "v3", credentials=creds, cache_discovery=False)
-        created = service.events().insert(calendarId="primary", body=body).execute()
+        # Samma kalender som synken läser — annars hamnar det läraren godkänt
+        # någon annanstans än veckan det hör hemma i.
+        created = service.events().insert(
+            calendarId=vald_kalender(base_dir), body=body).execute()
     except Exception as exc:
         return {"error": f"Kunde inte skapa händelsen: {exc}"}
     return {"ok": True, "id": created.get("id"), "link": created.get("htmlLink")}
@@ -502,9 +561,9 @@ def tolka_handelser(handelser: list[dict], klasser: list[str] | None = None,
 
 
 def list_events(base_dir: Path, fran: str, till: str) -> list[dict]:
-    """Händelser i primärkalendern mellan två ISO-datum. singleEvents=True gör
-    att återkommande serier expanderas till instanser — varje instans bär
-    recurringEventId, som är det som avslöjar veckoschemat."""
+    """Händelser i den valda kalendern mellan två ISO-datum (vald_kalender).
+    singleEvents=True gör att återkommande serier expanderas till instanser —
+    varje instans bär recurringEventId, som är det som avslöjar veckoschemat."""
     creds = _load_creds(base_dir)
     if creds is None:
         raise RuntimeError(
@@ -516,7 +575,7 @@ def list_events(base_dir: Path, fran: str, till: str) -> list[dict]:
     sida = None
     while True:
         svar = service.events().list(
-            calendarId="primary", singleEvents=True, orderBy="startTime",
+            calendarId=vald_kalender(base_dir), singleEvents=True, orderBy="startTime",
             timeMin=f"{fran}T00:00:00Z", timeMax=f"{till}T00:00:00Z",
             maxResults=2500, pageToken=sida).execute()
         ut.extend(svar.get("items") or [])
@@ -561,12 +620,14 @@ def _exdates(start: date, till: date, starttid: str, lov: list[dict]) -> list[st
 def skriv_schema(base_dir: Path, *, schema: list[dict], termin: dict,
                  aterkommande: list[dict] | None = None,
                  lov: list[dict] | None = None) -> dict:
-    """Lägg ut veckoschemat, de återkommande posterna och loven i användarens
-    primära kalender. Returnerar {skapade, fel} eller {error}."""
+    """Lägg ut veckoschemat, de återkommande posterna och loven i den valda
+    kalendern — samma som synken läser. Returnerar {skapade, fel} eller
+    {error}."""
     creds = _load_creds(base_dir)
     if creds is None:
         return {"error": status(base_dir).get("hint")
                 or "Inte ansluten till Google Kalender."}
+    kalender = vald_kalender(base_dir)
     fran, till = (termin or {}).get("fran"), (termin or {}).get("till")
     if not fran or not till:
         return {"error": "Terminens start- och slutdatum krävs."}
@@ -598,7 +659,7 @@ def skriv_schema(base_dir: Path, *, schema: list[dict], termin: dict,
             "recurrence": recurrence,
         }
         try:
-            service.events().insert(calendarId="primary", body=body).execute()
+            service.events().insert(calendarId=kalender, body=body).execute()
             skapade += 1
         except Exception as exc:
             fel.append(f"{titel}: {exc}")
@@ -618,7 +679,7 @@ def skriv_schema(base_dir: Path, *, schema: list[dict], termin: dict,
         except (KeyError, TypeError, ValueError):
             continue
         try:
-            service.events().insert(calendarId="primary", body={
+            service.events().insert(calendarId=kalender, body={
                 "summary": p.get("namn") or "Lov",
                 "start": {"date": p["fran"]}, "end": {"date": slut},
             }).execute()

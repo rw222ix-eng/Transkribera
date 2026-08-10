@@ -166,7 +166,8 @@ def test_konto_star_i_status_nar_ansluten(tmp_path, monkeypatch):
     monkeypatch.setattr(calendar_google, "_load_creds", lambda base: object())
     monkeypatch.setattr(calendar_google, "konto", lambda base: "larare@skolan.se")
     st = calendar_google.status(tmp_path)
-    assert st == {"connected": True, "client_ready": True, "konto": "larare@skolan.se"}
+    assert st == {"connected": True, "client_ready": True,
+                  "konto": "larare@skolan.se", "kalender": "primary"}
 
 
 def test_konto_utan_token_ar_none(tmp_path):
@@ -185,6 +186,37 @@ def test_koppla_bort_tar_bort_token(tmp_path):
 
 def test_koppla_bort_utan_token_ar_ofarligt(tmp_path):
     assert calendar_google.koppla_bort(tmp_path) == {"connected": False}
+
+
+def test_vald_kalender_ar_kontots_egen_som_default(tmp_path):
+    assert calendar_google.vald_kalender(tmp_path) == "primary"
+
+
+def test_satt_kalender_haller_over_omstart(tmp_path):
+    assert calendar_google.satt_kalender(tmp_path, "min@gmail.com") == {"kalender": "min@gmail.com"}
+    assert calendar_google.vald_kalender(tmp_path) == "min@gmail.com"
+    # Tomt värde är vägen tillbaka till kontots egen kalender.
+    calendar_google.satt_kalender(tmp_path, "")
+    assert calendar_google.vald_kalender(tmp_path) == "primary"
+
+
+def test_satt_kalender_behaller_ovriga_installningar(tmp_path):
+    from app import settings_store
+    settings_store.save(tmp_path, {"models_root": "D:/modeller"})
+    calendar_google.satt_kalender(tmp_path, "min@gmail.com")
+    assert settings_store.load(tmp_path)["models_root"] == "D:/modeller"
+
+
+def test_kalenderlistan_utan_anslutning_ger_fel(tmp_path):
+    res = calendar_google.kalendrar(tmp_path)
+    assert "error" in res and res["vald"] == "primary"
+
+
+def test_api_valj_kalender(tmp_path):
+    client = _client(tmp_path)
+    r = client.post("/api/calendar/calendar", json={"id": "min@gmail.com"})
+    assert r.status_code == 200 and r.json() == {"kalender": "min@gmail.com"}
+    assert client.get("/api/calendar/calendars").json()["vald"] == "min@gmail.com"
 
 
 def test_api_disconnect(tmp_path):
