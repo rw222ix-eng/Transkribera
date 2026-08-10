@@ -1064,7 +1064,10 @@ def create_app(base_dir: Path | None = None,
         return post
 
     @app.post("/api/schema/synk")
-    def api_schema_synk(dagar: int = 210):
+    # 330 dagar framåt, inte 210: läsfönstret måste nå LÄSÅRETS slut. Med 210
+    # slutade det i mars, och de nationella proven i maj fanns helt enkelt inte
+    # för appen — en synk i augusti ska se hela året den planerar (2026-08-10).
+    def api_schema_synk(dagar: int = 330):
         """Läs om schemat, salarna, loven och posterna ur Google Kalender.
 
         Bara 'schema'-ursprunget byts ut — lärarens godkända poster ('appen')

@@ -194,6 +194,17 @@ def test_synk_utan_google_lamnar_datan_ororda(client, monkeypatch):
     assert client.get("/api/schema").json()["schema"] == SCHEMA_RADER
 
 
+def test_synken_laser_hela_lasaret_framat(client, monkeypatch):
+    """Skarpt fall (2026-08-10): med 210 dagars fönster slutade läsningen i
+    mars, och de nationella proven i maj fanns inte för appen."""
+    sett = {}
+    monkeypatch.setattr(server.calendar_google, "read_schema",
+                        lambda *a, **k: sett.update(k) or {"schema": [], "lov": [],
+                                                           "poster": []})
+    client.post("/api/schema/synk")
+    assert sett["dagar"] >= 330
+
+
 def test_synk_skriver_in_det_google_svarar(client, monkeypatch):
     monkeypatch.setattr(server.calendar_google, "read_schema", lambda *a, **k: {
         "schema": SCHEMA_RADER,
