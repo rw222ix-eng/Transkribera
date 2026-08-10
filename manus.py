@@ -7,16 +7,15 @@ lektionstavla, pywebview-fönstret). Därför en egen ingång med två filer i s
 för en flik till i appen: `python manus.py inspelning.wav` skriver .srt och .vtt
 bredvid ljudfilen och är klart.
 
-Motorn är däremot exakt appens: app/openai_asr.py (gpt-transcribe i molnet) och
-app/alignment.py (forced alignment lokalt, för tiderna molnet inte ger). Inget av
-det duplicerats här — går de sönder eller blir bättre följer det här programmet med.
+Motorn är däremot exakt appens: app/elevenlabs_asr.py (scribe_v2 i molnet, som
+svarar med tid per ord) och transcriber.segmentera_ord (orden till undertext-
+rader). Inget av det dupliceras här — går de sönder eller blir bättre följer det
+här programmet med.
 
-Manusfilen (`--manus`) är valfri men nästan alltid värd att skicka med: den går
-in som ledtext till modellen, så egennamn, terminologi och stavning i
-undertexterna blir manusets och inte modellens gissning. Den styr däremot inte
-texten — det som hamnar i undertexten är det som faktiskt SÄGS, alltså med
-omtagningar och avvikelser kvar. Det är avsiktligt: tiderna ska stämma mot ljudet
-som ligger i videon, inte mot pappret.
+Manusfilen (`--manus`) accepteras men gör ingenting längre: gpt-transcribe tog
+ett fritextprompt som styrde stavningen, Scribe har inget sådant fält (bara
+keyterms, mot pristillägg). Flaggan står kvar så att gamla .bat-filer inte går
+sönder — den loggar att den ignoreras.
 
 `.ord.json` är den intressanta filen för animationssynk: den bär tid per ORD, och
 det är en finare upplösning än en undertextrad. En animation som ska starta på
@@ -30,7 +29,7 @@ import sys
 from pathlib import Path
 from typing import Callable
 
-from app import alignment, media as media_mod, openai_asr, settings_store, transcriber
+from app import elevenlabs_asr, media as media_mod, transcriber
 
 BASE = Path(__file__).resolve().parent          # nyckelfil och models/ ligger här
 
@@ -87,10 +86,10 @@ def kor(media: Path, manus: Path | None, format: list[str], sprak: str,
     pct = pct or (lambda etikett, p: _procent(etikett)(p))
     if not media.exists():
         raise SystemExit(f"Filen finns inte: {media}")
-    if not openai_asr.har_nyckel(BASE):
+    if not elevenlabs_asr.har_nyckel(BASE):
         raise SystemExit(
-            f"Ingen OpenAI-nyckel. Lägg den i {BASE / openai_asr.NYCKELFIL} "
-            "(eller sätt OPENAI_API_KEY).")
+            f"Ingen ElevenLabs-nyckel. Lägg den i {BASE / elevenlabs_asr.NYCKELFIL} "
+            "(eller sätt ELEVENLABS_API_KEY).")
 
     langd = media_mod.probe_duration(media) or 0.0
     if langd <= 0:
@@ -98,29 +97,24 @@ def kor(media: Path, manus: Path | None, format: list[str], sprak: str,
             raise SystemExit("ffmpeg/ffprobe saknas — de behövs för att läsa ljudet.")
         raise SystemExit(f"Kunde inte läsa någon speltid ur {media.name}.")
 
-    ledtext = ""
     if manus:
-        # Bara texten behövs; radbrytningar och tomrader hjälper inte modellen.
-        ledtext = " ".join(manus.read_text(encoding="utf-8").split())
-        logg(f"Manus: {len(ledtext.split())} ord som ledtext.")
+        logg("Manus som ledtext stöds inte av Scribe — flaggan ignoreras.")
 
-    logg(f"{media.name} — {langd / 60:.1f} min, ca ${openai_asr.kostnad_usd(langd):.2f}.")
-    # Ingen procentmätare för molnet: texten som växer fram ÄR framsteget (samma
-    # skäl som i servern), och den och mätaren kan inte dela rad.
-    moln = openai_asr.transkribera(
-        media, BASE, langd=langd, sprak=sprak, ledtext=ledtext,
+    logg(f"{media.name} — {langd / 60:.1f} min, ca ${elevenlabs_asr.kostnad_usd(langd):.2f}.")
+    # Ingen procentmätare för molnet: batch-API:et svarar i ett svep, och hela
+    # texten skrivs ut när den kommer (delta_cb anropas en gång).
+    moln = elevenlabs_asr.transkribera(
+        media, BASE, langd=langd, sprak=sprak,
         log_cb=logg, delta_cb=strom)
     _ny_rad()
     if not moln.text:
         raise SystemExit("Transkriberingen gav ingen text.")
 
-    if not alignment.ar_installerad(settings_store.get_models_root(BASE)):
-        logg("Hämtar tidsmodellen (engångs, ~1,2 GB) ...")
-        alignment.ladda_ner(settings_store.get_models_root(BASE), log_cb=logg,
-                            progress_cb=lambda p: pct("Modell", p))
-    segment = alignment.tidsatt(media, moln.bitar, settings_store.get_models_root(BASE),
-                                log_cb=logg, progress_cb=lambda p: pct("Tider", p))
-    alignment.frigor()                          # släpp tidsmodellens VRAM direkt
+    # Ordtiderna kom med svaret — inget att ladda ner, ingenting på GPU:n.
+    segment = transcriber.segmentera_ord(moln.ord)
+    if not segment:
+        segment = [{"start": 0.0, "end": round(langd, 3),
+                    "text": moln.text, "words": []}]
 
     stam = (ut_mapp / media.stem) if ut_mapp else media.with_suffix("")
     if ut_mapp:
@@ -156,7 +150,7 @@ def main(argv: list[str] | None = None) -> None:
         description="Ljud/video → SRT, VTT och ordtider. Motorn är Transkriberas.")
     ap.add_argument("media", type=Path, help="inspelningen (wav, mp3, m4a, mp4 ...)")
     ap.add_argument("-m", "--manus", type=Path,
-                    help="manusfilen (.txt) — går in som ledtext, styr stavningen")
+                    help="accepteras men ignoreras — Scribe tar ingen ledtext")
     ap.add_argument("-f", "--format", default="srt,vtt,json",
                     help="srt, vtt, txt, json (ordtider) — kommaseparerat")
     ap.add_argument("-s", "--sprak", default="sv", help="språkkod, tomt = auto")
