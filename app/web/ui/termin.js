@@ -123,7 +123,7 @@ window.Termin = (() => {
   /* Slaget före titeln, av samma skäl som i klass.js: synken märker proven den
      läser, och skolans NP-titlar («NP MAT nivå 1c») innehåller varken «prov»
      eller «nationell». */
-  const arProv = p => p.slag ? p.slag === 'prov' || p.slag === 'np'
+  const arProv = p => p.slag ? ['prov', 'diagnos', 'np'].includes(p.slag)
                              : /prov/i.test(p.titel || '');
   function proven(klass, kurs, fran, till) {
     const egna = kurserFor(klass);

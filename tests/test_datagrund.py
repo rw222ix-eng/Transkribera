@@ -267,6 +267,11 @@ def test_proven_markeras_som_prov():
     ("4UVÄ18 Föreläsning 4: Provteori (Zoom)", None),
     ("Prövning bokad: Malmö – Försvarsmakten", None),
     ("Ämneslagsmöte", None),
+    # Diagnosen skrivs ihop: skolan skriver «Matematikdiagnos åk 1», och
+    # ordgränser hade missat den. Den är också det precisa ordet när båda står.
+    ("Matematikdiagnos åk 1 genomförs under veckan", "diagnos"),
+    ("Diagnos 2 – bråk och procent", "diagnos"),
+    ("Diagnostiskt prov MA 1c", "diagnos"),
 ])
 def test_provslag_pa_ordet_inte_pa_bokstaverna(titel, vantat):
     assert calendar_google.provslag(titel) == vantat

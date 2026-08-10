@@ -444,13 +444,22 @@ def ar_notis(h: dict) -> bool:
 _NP_ORD = re.compile(r"\b(np|nationell\w*\s+prov\w*)\b", re.IGNORECASE)
 _PROV_ORD = re.compile(r"\b(prov|provet|proven|prover|omprov|delprov|provpass)\b",
                        re.IGNORECASE)
+# Diagnosen söks som DEL av ordet, till skillnad från proven: skolan skriver
+# «Matematikdiagnos åk 1», inte «diagnos i matematik». Ordgränser hade missat
+# den helt.
+_DIAGNOS_ORD = re.compile(r"diagnos", re.IGNORECASE)
 
 
 def provslag(titel: str) -> str | None:
-    """'np' | 'prov' | None för en kalenderrubrik."""
+    """'np' | 'diagnos' | 'prov' | None för en kalenderrubrik.
+
+    Diagnosen prövas före provet: «diagnostiskt prov» är en diagnos, och det
+    är diagnosen som är det precisa ordet av de två."""
     t = titel or ""
     if _NP_ORD.search(t):
         return "np"
+    if _DIAGNOS_ORD.search(t):
+        return "diagnos"
     return "prov" if _PROV_ORD.search(t) else None
 
 
