@@ -3,10 +3,9 @@
 > **HISTORISKT DOKUMENT.** Mätningarna gäller den pipeline som fanns i juli
 > 2026: KB-Whisper via CTranslate2 på kortet, ett ljudrättningspass med Gemma
 > och en lokal Qwen via llama.cpp. Ingen av dem finns kvar. Transkriberingen
-> sker hos OpenAI (`app/openai_asr.py`), tidsättningen lokalt med wav2vec2
-> (`app/alignment.py`) och språkmodellsarbetet hos Claude Code
-> (`app/claude_code.py`). Filen står kvar som mätprotokoll — inte som
-> beskrivning av appen och inte som förslagslista.
+> med ordtider sker hos ElevenLabs (`app/elevenlabs_asr.py`) och
+> språkmodellsarbetet hos Claude Code (`app/claude_code.py`). Filen står kvar
+> som mätprotokoll — inte som beskrivning av appen och inte som förslagslista.
 
 QA-genomgång 2026-07-02 på målhårdvaran (RTX 4090, 24 GB). Testdata:
 `tests/download_sv_audio.py` → 7 varianter av riktigt svenskt tal (223 s bas):

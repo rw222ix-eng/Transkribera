@@ -16,17 +16,10 @@ fastapi
 uvicorn
 pydantic            # schemana: exam_spec, whiteboard_spec
 jinja2              # prov- och arbetsbladsmallarna (app/templates/*.tex.j2)
-httpx               # molnanropet (OpenAI) och testklienten
+httpx               # molnanropet (ElevenLabs) och testklienten
 pywebview           # skrivbordsskalet (modulen heter webview)
 starlette           # server.py använder den direkt, inte bara via fastapi
 anyio               # sse.py väntar på kön i en tråd utan att blockera slingan
-
-# Ljudet och tiderna
-torch
-torchaudio
-transformers>=4.53  # alignmentmodellen (wav2vec2) i app/alignment.py
-huggingface_hub     # alignment.ladda_ner → snapshot_download
-numpy
 
 # Filer in och ut
 pypdfium2           # tryckpaketet, bokimporten, PDF-underlaget
@@ -44,4 +37,4 @@ google-auth-oauthlib
 # Testsviten
 pytest
 pytest-cov
-hypothesis          # egenskapstester: styckningen, tiderna, datummatten
+hypothesis          # egenskapstester: segmenteringen, tiderna, datummatten

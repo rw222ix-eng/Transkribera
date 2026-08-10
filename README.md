@@ -14,10 +14,11 @@ enda .md-filen i repot och den ska förbli det.
 och utskrift). Den binder 127.0.0.1 och startas antingen som skrivbordsfönster
 (pywebview, `app/web/desktop.py`) eller som ren server via `transkribera_web.py`.
 
-**Transkriberingen** styckar ljudet vid tystnader (ffmpeg), skickar bitarna till
-OpenAI `gpt-transcribe` (`app/openai_asr.py`) och sätter tidsstämplarna **lokalt**
-med forced alignment (`app/alignment.py`, KBLab wav2vec2). Kostnaden räknas ur
-svarets `usage.seconds` — aldrig ur filens längd.
+**Transkriberingen** kodar om ljudet till 16 kHz Opus (ffmpeg) och skickar hela
+filen till ElevenLabs `scribe_v2` (`app/elevenlabs_asr.py`), som svarar med text
+och tid per ord i samma svep; `transcriber.segmentera_ord` gör undertextrader av
+orden. Kostnaden räknas ur svarets `audio_duration_secs` — aldrig ur filens
+längd.
 
 **Språkmodellen är Claude Code CLI**, headless (`app/claude_code.py`). Ingen
 API-nyckel: appen kör på lärarens egen inloggning. Verktygen är avstängda utom
