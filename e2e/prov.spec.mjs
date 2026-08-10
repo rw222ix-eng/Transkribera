@@ -59,9 +59,14 @@ async function fejka(page, { generate, approve } = {}) {
     const vag = new URL(route.request().url()).pathname;
     anrop.push({ vag, kropp: route.request().postDataJSON() });
     if (vag.endsWith("/approve")) {
+      /* Fälten är rutten's egna: `pdf` och `tex` (routes_exam approve). Mocken
+         sa förut `pdf_path` — DB-kolumnens namn — och då fick klientens fel
+         fält aldrig något att falla på. Namnen hålls mot riktiga rutten av
+         test_routes_exam::test_approve_svaret_bar_falten_plan_js_laser. */
       return route.fulfill({ status: 200, contentType: "text/event-stream",
         body: approve || strom([{ type: "done",
-          result: { id: 9, pdf_path: "C:/Transkriberingar/prov/derivator.pdf", errors: [] } }]) });
+          result: { id: 9, pdf: "C:/Transkriberingar/prov/derivator.pdf",
+                    tex: "C:/Transkriberingar/prov/derivator.tex", errors: [] } }]) });
     }
     return route.fulfill({ status: 200, contentType: "text/event-stream",
       body: generate || strom([
@@ -163,12 +168,21 @@ test("godkännandet bygger PDF:en och säger till", async ({ page }) => {
 
   await page.locator("#godkann").click();
   await expect.poll(() => anrop.some(a => a.vag.endsWith("/approve"))).toBe(true);
-  await expect(page.locator(".toast").last()).toContainText("PDF", { timeout: 15_000 });
+  /* «PDF» ensamt räcker inte: den misslyckade toasten säger också «PDF». Just
+     den luckan lät klienten läsa fel fält ur svaret utan att något sa ifrån —
+     kvittot för LYCKAT bygge måste vara det som prövas. */
+  await expect(page.locator(".toast").last())
+    .toContainText("utskriven som PDF", { timeout: 15_000 });
+  // …och sökvägen ska ha nått dokumentet i Sparat, inte bara toasten.
+  await expect.poll(() => page.evaluate(
+    () => window.Dokument.sparade().map(d => d.pdf).filter(Boolean)[0] || ""))
+    .toContain(".pdf");
 });
 
 test("en PDF som inte går att bygga sägs rakt ut", async ({ page }) => {
   await fejka(page, {
-    approve: strom([{ type: "done", result: { id: 9, pdf_path: null,
+    approve: strom([{ type: "done", result: { id: 9, pdf: null,
+      tex: "C:/Transkriberingar/prov/derivator.tex",
       errors: ["Tectonic: Undefined control sequence"] } }]),
   });
   await page.goto("/");
