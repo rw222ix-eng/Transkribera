@@ -164,9 +164,26 @@ window.Kalender = (() => {
     const ref = inne ? flyttaDag(inne.till, 1) : d;
     const fore = brott.filter(l => l.till < ref).pop() || null;
     const nasta = brott.find(l => l.fran > ref) || null;
-    /* Glappet mellan två brott är terminen. Saknas brottet före (läsåret börjar
-       före det kalendern känner) räknas en normal termin bakåt i stället. */
-    let fran = fore ? flyttaDag(fore.till, 1) : nasta ? flyttaDag(nasta.fran, -130) : ref;
+    /* Glappet mellan två brott är terminen. Saknas brottet före vet SCHEMAT när
+       det självt börjar — serierna bär sin första dag sedan synken. Först då
+       130 dagar bakåt, som är en gissning och inget annat: höstterminen påstods
+       börja 13 augusti, fyra dagar före skolstarten, och räknade in en vecka
+       som aldrig var en skolvecka (2026-08-10). */
+    const schemastart = schema.map(s => s.fran).filter(Boolean).sort()[0] || '';
+    let fran = fore ? flyttaDag(fore.till, 1)
+      : (schemastart && schemastart <= (nasta ? nasta.fran : schemastart)) ? schemastart
+      : nasta ? flyttaDag(nasta.fran, -130) : ref;
+    /* Skolstartsdagarna hör till terminen fast de saknar lektioner: de ligger
+       som uppehåll strax före första lektionen. Ett helt lov är däremot en
+       gräns och ska inte kliva in i terminen. */
+    if (!fore && fran === schemastart) {
+      for (let i = 0; i < 10; i++) {
+        const dagen = flyttaDag(fran, -1);
+        const l = lovFor(dagen);
+        if (!l || l.typ === 'lov') break;
+        fran = dagen;
+      }
+    }
     const krock = brott.find(l => fran >= l.fran && fran <= l.till);
     if (krock) fran = flyttaDag(krock.till, 1);
     /* Terminen börjar på en skoldag, inte på en lördag mitt i lovet. */
