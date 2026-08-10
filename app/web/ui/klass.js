@@ -743,11 +743,27 @@ window.Klass = (() => {
      stannar i appen behöver sägas EN gång, inte varje gång veckan ritas: här står
      bara källan, tiden och vägen att synka om. Resten ligger i knappens titel. */
   let synkad = new Date();
+  /* VILKET Google-konto veckan kom ur. En synk mot fel konto ser annars ut
+     precis som en lyckad synk — appen läste en gång tillbaka sitt eget
+     utskrivna exempelschema ur ett gammalt konto och sa bara «Synkad 19:07».
+     Kontot står i knappens titel, inte i raden: det är svaret på en fråga man
+     ställer när något ser fel ut, inte något man behöver läsa varje vecka. */
+  let konto = '';
+  /* Efter API.redo: sonderingen av servern är async, och frågan är meningslös
+     innan den svarat (api.js). */
+  if (window.API && window.API.redo) {
+    window.API.redo
+      .then(() => window.API.pa && window.API.json('/api/calendar/status'))
+      .then(s => { if (s && s.konto) { konto = s.konto; ritaSynk(); } })
+      .catch(() => { /* kontot är en upplysning, inte ett krav */ });
+  }
   function ritaSynk() {
     const r = $('#synkrad');
     if (!r || r.dataset.lage) return;
     const tid = synkad.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
-    r.innerHTML = `<button class="synkknapp" type="button" data-synk data-tip="Synka med Google Kalender" data-tipstod="Läser om schemat, salarna och loven på nytt. Tavlor och prov du godkänner skrivs tillbaka som poster — PDF:erna stannar i appen."><span class="synkprick"></span><span class="synktext">Synkad ${tid}</span></button>`;
+    const stod = 'Läser om schemat, salarna och loven på nytt. Tavlor och prov du godkänner skrivs tillbaka som poster — PDF:erna stannar i appen.'
+      + (konto ? ` Läser kalendern för ${konto}.` : '');
+    r.innerHTML = `<button class="synkknapp" type="button" data-synk data-tip="Synka med Google Kalender" data-tipstod="${stod}"><span class="synkprick"></span><span class="synktext">Synkad ${tid}</span></button>`;
     $('[data-synk]', r).addEventListener('click', () => {
       r.dataset.lage = 'synkar';
       $('.synktext', r).textContent = 'Synkar …';
@@ -764,14 +780,22 @@ window.Klass = (() => {
          Kalender på riktigt. Utan server är den prototypens uppvisning, i
          samma takt som förut. */
       if (K.synka) {
-        K.synka().then(sv => klar(
-          sv && sv.fel ? sv.fel
-            : sv && sv.prototyp
-              ? 'Kalendern är synkad — schemat, salarna och loven oförändrade'
-              /* Posterna reglerna inte kunde avgöra läste Claude — det ska
-                 stå, inte döljas bakom ett allmänt «synkad». */
-              : `Kalendern är synkad — schemat, salarna och loven är omlästa${
-                  sv && sv.bedomda ? ` · ${sv.bedomda} ${sv.bedomda === 1 ? 'post' : 'poster'} tolkade av Claude` : ''}`));
+        K.synka().then(sv => {
+          if (sv && sv.konto) konto = sv.konto;
+          klar(
+            sv && sv.fel ? sv.fel
+              : sv && sv.prototyp
+                ? 'Kalendern är synkad — schemat, salarna och loven oförändrade'
+                /* VAD som lästes och UR VEMS kalender. Ett blankt «synkad»
+                   såg likadant ut när schemat kom ur fel konto. Posterna
+                   reglerna inte kunde avgöra läste Claude — det ska stå,
+                   inte döljas bakom ett allmänt «synkad». */
+                : `Kalendern är synkad${sv && sv.konto ? ` ur ${sv.konto}` : ''} — ${
+                    sv && sv.lektioner
+                      ? `${sv.lektioner} lektioner i veckoschemat`
+                      : 'inga lektioner i veckoschemat'}${
+                    sv && sv.bedomda ? ` · ${sv.bedomda} ${sv.bedomda === 1 ? 'post' : 'poster'} tolkade av Claude` : ''}`);
+        });
       } else {
         setTimeout(() => klar('Kalendern är synkad — schemat, salarna och loven oförändrade'), 1100);
       }

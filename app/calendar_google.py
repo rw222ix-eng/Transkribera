@@ -132,8 +132,65 @@ def _load_creds(base_dir: Path):
     return None
 
 
+# Kontots e-post per token-fil och ändringstid: en nätrunda per inloggning,
+# inte per fråga.
+_KONTO: dict[tuple[str, float], str] = {}
+
+
+def konto(base_dir: Path) -> str | None:
+    """E-postadressen för det anslutna kontot, eller None.
+
+    Finns för att en synk mot FEL konto ser precis ut som en lyckad synk:
+    appen läste tillbaka sitt eget utskrivna exempelschema ur ett gammalt
+    konto och sa «Synkad 19:07» (2026-08-10). Vilket konto veckan kom ur ska
+    stå i gränssnittet, inte behöva grävas fram ur google_token.json.
+
+    Adressen läses som ``summary`` på primärkalendern i events-svaret —
+    calendars().get svarar 403 på scopet calendar.events, och att be om ett
+    bredare scope bara för en etikett vore fel affär."""
+    _, token = _files(base_dir)
+    try:
+        nyckel = (str(token), token.stat().st_mtime)
+    except OSError:
+        return None
+    if nyckel in _KONTO:
+        return _KONTO[nyckel]
+    creds = _load_creds(base_dir)
+    if creds is None:
+        return None
+    try:
+        from googleapiclient.discovery import build
+        service = build("calendar", "v3", credentials=creds, cache_discovery=False)
+        svar = service.events().list(
+            calendarId="primary", maxResults=1,
+            timeMin=f"{date.today().isoformat()}T00:00:00Z").execute()
+    except Exception:                       # nätfel, indraget medgivande, …
+        return None                         # namnlöst är bättre än trasigt
+    namn = svar.get("summary") or None
+    if namn:
+        _KONTO[nyckel] = namn
+    return namn
+
+
+def koppla_bort(base_dir: Path) -> dict:
+    """Glöm det anslutna kontot: tokenen raderas, klientfilen ligger kvar.
+
+    Utan den här vägen gick kontot inte att BYTA från appen — connect() svarar
+    "redan ansluten" så länge en token finns, och den som råkat logga in med
+    fel konto fick redigera filer för hand."""
+    _, token = _files(base_dir)
+    try:
+        token.unlink()
+    except FileNotFoundError:
+        pass
+    except OSError as exc:
+        return {"connected": False, "error": f"Kunde inte ta bort {TOKEN_NAME}: {exc}"}
+    _KONTO.clear()
+    return {"connected": False}
+
+
 def status(base_dir: Path) -> dict:
-    """Anslutningsstatus för UI:t: {connected, client_ready, hint?}.
+    """Anslutningsstatus för UI:t: {connected, client_ready, konto?, hint?}.
     ``client_ready`` = en OAuth-klient finns (inbyggd eller installerad) så det
     som återstår bara är själva Google-inloggningen."""
     try:
@@ -142,7 +199,11 @@ def status(base_dir: Path) -> dict:
         return {"connected": False, "client_ready": False, "hint": HINT_LIBS}
     if _client_config(base_dir) is None:
         return {"connected": False, "client_ready": False, "hint": _hint_secret(base_dir)}
-    return {"connected": _load_creds(base_dir) is not None, "client_ready": True}
+    if _load_creds(base_dir) is None:
+        return {"connected": False, "client_ready": True}
+    # `konto` bara när det finns ett — en nyckel med None hade sagt "vet inte"
+    # om något som inte ens är anslutet.
+    return {"connected": True, "client_ready": True, "konto": konto(base_dir)}
 
 
 def connect(base_dir: Path) -> dict:

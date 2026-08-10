@@ -228,7 +228,8 @@ window.Kalender = (() => {
       ritaOm();
       /* `bedomda` = hur många osäkra serier Claude fick avgöra. Synken ska
          kunna säga vad den lutade sig mot, inte bara att den lyckades. */
-      return { synkad: d.synkad, bedomda: d.bedomda || 0 };
+      return { synkad: d.synkad, bedomda: d.bedomda || 0, konto: d.konto || '',
+               lektioner: (d.schema || []).length };
     } catch (e) {
       return { fel: e.message };
     }

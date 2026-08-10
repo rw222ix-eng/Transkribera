@@ -155,6 +155,46 @@ def test_api_client_secret_ogiltig_ger_400(tmp_path):
     assert "error" in r.json()
 
 
+# ---- kontot: vilket, och vägen att byta ----------------------------------
+# Kom ur ett skarpt fel (2026-08-10): appen låg kvar mot ett gammalt konto och
+# läste tillbaka sitt eget utskrivna exempelschema. Synken sa "Synkad 19:07" —
+# det gick inte att se VILKET konto veckan kom ur, och inte att byta.
+
+def test_konto_star_i_status_nar_ansluten(tmp_path, monkeypatch):
+    _write_client(tmp_path)
+    (tmp_path / calendar_google.TOKEN_NAME).write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(calendar_google, "_load_creds", lambda base: object())
+    monkeypatch.setattr(calendar_google, "konto", lambda base: "larare@skolan.se")
+    st = calendar_google.status(tmp_path)
+    assert st == {"connected": True, "client_ready": True, "konto": "larare@skolan.se"}
+
+
+def test_konto_utan_token_ar_none(tmp_path):
+    assert calendar_google.konto(tmp_path) is None
+
+
+def test_koppla_bort_tar_bort_token(tmp_path):
+    _write_client(tmp_path)
+    token = tmp_path / calendar_google.TOKEN_NAME
+    token.write_text("{}", encoding="utf-8")
+    assert calendar_google.koppla_bort(tmp_path) == {"connected": False}
+    assert not token.exists()
+    # Klientfilen ligger kvar: det är kontot som ska bytas, inte OAuth-klienten.
+    assert (tmp_path / calendar_google.CLIENT_SECRET_NAME).exists()
+
+
+def test_koppla_bort_utan_token_ar_ofarligt(tmp_path):
+    assert calendar_google.koppla_bort(tmp_path) == {"connected": False}
+
+
+def test_api_disconnect(tmp_path):
+    (tmp_path / calendar_google.TOKEN_NAME).write_text("{}", encoding="utf-8")
+    r = _client(tmp_path).post("/api/calendar/disconnect")
+    assert r.status_code == 200
+    assert r.json()["connected"] is False
+    assert not (tmp_path / calendar_google.TOKEN_NAME).exists()
+
+
 def test_api_open_console_oppnar_console_url(tmp_path, monkeypatch):
     # Meningsfull assert: verifiera att rätt URL faktiskt öppnades — inte bara att
     # endpointen svarar ok (den returnerar ok även om webbrowser.open kastar).

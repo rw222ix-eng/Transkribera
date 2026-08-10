@@ -1124,6 +1124,9 @@ def create_app(base_dir: Path | None = None,
             conn.close()
         return {"synkad": datetime.now().isoformat(timespec="seconds"),
                 "schema": schema, "lov": lov, "poster": poster,
+                # Vilket konto veckan kom ur. En synk mot fel konto ser annars
+                # ut precis som en lyckad synk (se calendar_google.konto).
+                "konto": calendar_google.konto(base),
                 # Hur många osäkra serier Claude fick avgöra — synken ska kunna
                 # säga vad den lutade sig mot, inte bara att den lyckades.
                 "bedomda": len(hamtat.get("beslut") or {}),
@@ -1699,6 +1702,12 @@ def create_app(base_dir: Path | None = None,
     @app.get("/api/calendar/status")
     def api_calendar_status():
         return calendar_google.status(base)
+
+    @app.post("/api/calendar/disconnect")
+    def api_calendar_disconnect():
+        """Koppla bort kontot så ett annat kan anslutas. Datan i appen rörs
+        inte — schemat som redan lästs står kvar tills nästa synk."""
+        return calendar_google.koppla_bort(base)
 
     @app.post("/api/calendar/connect")
     def api_calendar_connect():
