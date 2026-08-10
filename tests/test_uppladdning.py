@@ -149,9 +149,9 @@ def test_en_fil_som_inte_gar_att_lasa_blir_ett_besked(tmp_path, monkeypatch,
 
     monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: HW())
     monkeypatch.setattr(server.llm_client, "is_running", lambda *a, **k: False)
-    monkeypatch.setattr(server.openai_asr, "har_nyckel", lambda *a, **k: True)
+    monkeypatch.setattr(server.elevenlabs_asr, "har_nyckel", lambda *a, **k: True)
     # Molnet får ALDRIG nås med en fil vi inte kunnat läsa en längd ur.
-    monkeypatch.setattr(server.openai_asr, "transkribera",
+    monkeypatch.setattr(server.elevenlabs_asr, "transkribera",
                         lambda *a, **k: pytest.fail("molnet anropades på en trasig fil"))
     c = TestClient(server.create_app(base_dir=tmp_path, arbiter=_Arbiter()))
     fil = tmp_path / namn
@@ -171,7 +171,7 @@ def test_fil_som_inte_finns_sags_rakt_ut(tmp_path, monkeypatch):
 
     monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: HW())
     monkeypatch.setattr(server.llm_client, "is_running", lambda *a, **k: False)
-    monkeypatch.setattr(server.openai_asr, "har_nyckel", lambda *a, **k: True)
+    monkeypatch.setattr(server.elevenlabs_asr, "har_nyckel", lambda *a, **k: True)
     c = TestClient(server.create_app(base_dir=tmp_path, arbiter=_Arbiter()))
     r = c.post("/api/transcribe", json={"source": str(tmp_path / "borta.mp3"),
                                         "language": "sv", "formats": ["srt"]})
@@ -209,7 +209,7 @@ def test_en_url_som_inte_gar_att_hamta_blir_ett_besked(tmp_path, monkeypatch):
 
     monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: HW())
     monkeypatch.setattr(server.llm_client, "is_running", lambda *a, **k: False)
-    monkeypatch.setattr(server.openai_asr, "har_nyckel", lambda *a, **k: True)
+    monkeypatch.setattr(server.elevenlabs_asr, "har_nyckel", lambda *a, **k: True)
 
     def dor(*a, **k):
         raise RuntimeError("Videon är privat eller borttagen.")

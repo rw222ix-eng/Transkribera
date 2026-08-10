@@ -1,10 +1,11 @@
 """Hela molnkörningen med beordringsbara fel (Etapp 2).
 
-Skillnaden mot tests/test_transcribe_progress.py: där är `openai_asr.transkribera`
-utbytt mot en attrapp, här körs den PÅ RIKTIGT. Bara ffmpeg (tystnader,
-urklippet) och tidsättningen är stubbade, så styckningen, omtagen, kostnaden ur
-usage.seconds och strömmen av deltan exekverar som de gör på lärarens maskin —
-mot ett moln vi kan be bete sig hur illa som helst (tests/fejk.py).
+Skillnaden mot tests/test_transcribe_progress.py: där är
+`elevenlabs_asr.transkribera` utbytt mot en attrapp, här körs den PÅ RIKTIGT.
+Bara ffmpeg (omkodningen) är stubbad, så anropet, omtagen, kostnaden ur
+audio_duration_secs och ordtidernas väg till segment exekverar som de gör på
+lärarens maskin — mot ett moln vi kan be bete sig hur illa som helst
+(tests/fejk.py).
 
 Det som prövas är löftena i vägen ut till skärmen:
   * kostnaden kommer ur det API:et debiterar, aldrig ur filens längd,
@@ -19,7 +20,7 @@ import json
 
 import pytest
 
-from app import openai_asr
+from app import elevenlabs_asr
 from app.web import server
 from tests.conftest import HW
 from tests.fejk import Moln
@@ -39,22 +40,14 @@ class _Arbiter:
 
 @pytest.fixture
 def rigg(tmp_path, monkeypatch):
-    """Servern med RIKTIG openai_asr, fejkat moln och stubbad ffmpeg/alignment."""
+    """Servern med RIKTIG elevenlabs_asr, fejkat moln och stubbad ffmpeg."""
     from fastapi.testclient import TestClient
 
     monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: HW())
     monkeypatch.setattr(server.llm_client, "is_running", lambda *a, **k: False)
-    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
-    monkeypatch.setattr(openai_asr, "BACKOFF", (0.0, 0.0, 0.0))
-    monkeypatch.setattr(openai_asr, "tystnader", lambda *a, **k: [])
-    monkeypatch.setattr(openai_asr, "_klipp_ut",
-                        lambda audio, start, end, dest:
-                        (dest.write_bytes(b"ogg"), dest)[1])
-    monkeypatch.setattr(server.alignment, "ar_installerad", lambda *a, **k: True)
-    monkeypatch.setattr(server.alignment, "tidsatt",
-                        lambda audio, bitar, root, **k:
-                        [{"start": b.start, "end": b.end, "text": b.text}
-                         for b in bitar])
+    monkeypatch.setenv("ELEVENLABS_API_KEY", "el-test")
+    monkeypatch.setattr(elevenlabs_asr, "_koda_om",
+                        lambda audio, dest: (dest.write_bytes(b"ogg"), dest)[1])
     monkeypatch.setattr(server.transcriber, "write_outputs",
                         lambda segs, base, fmts: [tmp_path / "ut.srt"])
     monkeypatch.setattr(server.output_store, "assemble_output",
@@ -66,7 +59,8 @@ def rigg(tmp_path, monkeypatch):
     media.write_bytes(b"ljud")
 
     def kor(*, langd=700.0, lagen="ok"):
-        """En körning. `lagen` är ett läge per ljudbit (fejk.Moln)."""
+        """En körning. `lagen` är ett läge per HTTP-anrop (fejk.Moln) —
+        omtagen är de enda som ger fler än ett."""
         moln = Moln(lagen).installera(monkeypatch)
         monkeypatch.setattr(server.media_mod, "probe_duration", lambda *_: langd)
         c = TestClient(server.create_app(base_dir=tmp_path, arbiter=arb))
@@ -90,31 +84,38 @@ def _typ(text, typ):
 
 # ── Kostnaden ────────────────────────────────────────────────────────────
 
-def test_kostnaden_kommer_ur_usage_inte_ur_filens_langd(rigg):
-    """700 s ljud blir tre bitar. Fejken debiterar 6 s per bit — kostnaden ska
-    vara 18 s × priset, inte 700 s. En fil kan innehålla tystnad, och läraren
-    ska aldrig debiteras för mer än det API:et fakturerade."""
+def test_kostnaden_kommer_ur_svaret_inte_ur_filens_langd(rigg):
+    """700 s ljud, men fejken debiterar 6 s — kostnaden ska vara 6 s × priset,
+    inte 700 s. En fil kan innehålla tystnad, och läraren ska aldrig debiteras
+    för mer än det API:et fakturerade."""
     c, r, moln = rigg(langd=700.0)
-    assert len(moln.anrop) == 3
+    assert len(moln.anrop) == 1                    # hela filen i ETT anrop
     kostnad = _typ(r.text, "kostnad")
     assert len(kostnad) == 1
-    assert kostnad[0]["usd"] == pytest.approx(openai_asr.kostnad_usd(18.0))
-    assert kostnad[0]["minuter"] == pytest.approx(0.3, abs=0.05)
+    assert kostnad[0]["usd"] == pytest.approx(elevenlabs_asr.kostnad_usd(6.0))
+    assert kostnad[0]["minuter"] == pytest.approx(0.1, abs=0.05)
 
 
-def test_texten_som_vaxer_fram_stroms_som_deltan(rigg):
+def test_hela_texten_kommer_som_ett_delta(rigg):
     c, r, moln = rigg(langd=100.0)
     delta = _typ(r.text, "delta")
-    assert "".join(d["text"] for d in delta) == "Hej världen"
+    assert [d["text"] for d in delta] == ["Hej världen."]
+
+
+def test_ordtiderna_ur_svaret_blir_segment(rigg):
+    """Molnets ordtider ska bära hela vägen till historiken — ingen lokal
+    tidsättning finns kvar att rädda dem."""
+    c, r, moln = rigg(langd=100.0)
+    assert _typ(r.text, "error") == []
+    post = c.get("/api/history").json()[0]
+    assert post["words"] == 2                      # «Hej världen.»
 
 
 # ── Felmoderna ───────────────────────────────────────────────────────────
 
-def test_429_pa_sista_biten_kostar_en_paus_inte_lektionen(rigg):
-    """Tretton lyckade bitar slängdes förr när den fjortonde fick 429 — och de
-    var redan betalda."""
-    c, r, moln = rigg(langd=700.0, lagen=["ok", "ok", "429", "ok"])
-    assert len(moln.anrop) == 4                    # tre bitar + ett omtag
+def test_429_kostar_en_paus_inte_lektionen(rigg):
+    c, r, moln = rigg(langd=700.0, lagen=["429", "ok"])
+    assert len(moln.anrop) == 2                    # ett omtag
     assert _typ(r.text, "error") == []
     assert len(c.get("/api/history").json()) == 1
 
@@ -136,8 +137,9 @@ def test_avvisad_nyckel_pekar_pa_installningarna(rigg):
     assert len(moln.anrop) == 1                    # 401 tas aldrig om
 
 
-def test_natet_som_dor_mitt_i_strommen_tas_om_och_texten_blir_hel(rigg):
-    """Strömmen dör efter första deltan: den halva texten får inte bli svaret."""
+def test_natet_som_dor_under_uppladdningen_tas_om(rigg):
+    """Uppladdningen dör på vägen: omtaget skickar om hela filen, och texten
+    som till slut kommer är hel."""
     c, r, moln = rigg(langd=100.0, lagen=["dor", "ok"])
     assert len(moln.anrop) == 2
     assert _typ(r.text, "error") == []
@@ -158,12 +160,11 @@ def test_ett_tomt_svar_blir_ett_besked_inte_en_tom_fil(rigg):
     assert c.get("/api/history").json() == []
 
 
-def test_trasig_json_i_strommen_hoppas_over(rigg):
-    """En trasig rad mitt i strömmen är inte ett fel — resten av strömmen är
-    fortfarande giltig. Men blir det ingen text alls sägs det."""
+def test_trasig_json_i_svaret_blir_ett_besked(rigg):
+    """Ett 200 som inte är JSON är ett fel med namn — inte en tyst tom fil."""
     c, r, moln = rigg(langd=100.0, lagen="trasig")
     fel = _typ(r.text, "error")
-    assert fel and "resultat" in fel[0]["message"]
+    assert fel and "JSON" in fel[0]["message"]
 
 
 def test_disken_som_tar_slut_blir_507_och_inte_ett_tyst_tapp(rigg, monkeypatch):
@@ -197,6 +198,6 @@ def test_framsteget_gar_bara_framat(rigg):
     pct = _pcts(r.text)
     assert pct == sorted(pct), pct
     assert pct[0] >= 0 and pct[-1] <= 100
-    # Molnets band är 0–45: tre bitar ska synas som tre steg inom det.
-    molnband = [p for p in pct if p <= 45]
-    assert len(molnband) >= 3
+    # Molnets band är 0–60: omkodningen klar och svaret mottaget ska båda synas.
+    molnband = [p for p in pct if p <= 60]
+    assert len(molnband) >= 2

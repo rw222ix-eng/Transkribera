@@ -32,7 +32,7 @@ test("dag 1 — vanlig dag: spela in, transkribera, granska, planera, godkänn",
     // till fakta — filnamnet bär datum och tid, och tisdag 09:05 är NA25.
     await L.transkribera(page);
     await expect(page.locator("#klarruta")).toBeVisible({ timeout: 20_000 });
-    await expect(page.locator("#korkvar")).toContainText("OpenAI");
+    await expect(page.locator("#korkvar")).toContainText("ElevenLabs");
 
     // Granskningen efter körningen: serverns insikter, inte regexgissningen.
     await expect(page.locator("#forslagnot")).toContainText("kalender", { timeout: 20_000 });
@@ -369,7 +369,7 @@ test("dag 7 — dagen då allt går fel: varje stopp är ett svenskt besked",
       transkribering: route => route.fulfill({
         status: 200, contentType: "text/event-stream",
         body: 'data: {"type":"progress","pct":30}\n\n'
-            + 'data: {"type":"error","message":"OpenAI svarade 429 (för många '
+            + 'data: {"type":"error","message":"ElevenLabs svarade 429 (för många '
             + 'anrop). Vänta en minut och försök igen."}\n\n' }),
     });
     await L.oppna(page);

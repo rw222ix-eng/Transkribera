@@ -256,6 +256,6 @@ def _ordsegment(ord_: list[dict]) -> dict:
     }
 
 
-# Ingen argv byggs här längre: transkriberingen sker hos OpenAI
-# (app/openai_asr.py), tidsstämplarna sätts i serverprocessen
-# (app/alignment.py) och ljudrättningen är riven. Modulen är ren textformning.
+# Ingen argv byggs här längre: transkriberingen sker hos ElevenLabs
+# (app/elevenlabs_asr.py) med ordtider i svaret, och ljudrättningen är riven.
+# Modulen är ren textformning.

@@ -102,7 +102,7 @@ def starta_server(bas: Path, minne=False) -> subprocess.Popen:
     miljo["CLAUDE_CODE_BIN"] = str(fejk.skriv_claude(bas / "fejkbin"))
     miljo["FEJK_CLAUDE"] = "auto"
     miljo["FEJK_KASSETTER"] = str(fejk.KASSETTER)
-    miljo.pop("OPENAI_API_KEY", None)
+    miljo.pop("ELEVENLABS_API_KEY", None)
     miljo["SOAK_BAS"] = str(bas)
     miljo["SOAK_PORT"] = str(PORT)
     miljo["PYTHONIOENCODING"] = "utf-8"

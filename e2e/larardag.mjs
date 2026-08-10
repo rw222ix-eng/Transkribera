@@ -10,8 +10,8 @@
  * Lärardagarna kör därför mot den RIKTIGA servern (e2e/testserver.py, tom bas
  * under temp) och fejkar bara MOLNET:
  *
- *   · OpenAI  — /api/transcribe route:as här. Servern kan inte transkribera på
- *     riktigt i e2e (ingen nyckel, inget ljud, ingen GPU), och ska inte.
+ *   · ElevenLabs — /api/transcribe route:as här. Servern kan inte transkribera
+ *     på riktigt i e2e (ingen nyckel, inget ljud), och ska inte.
  *   · Claude  — fejkas i CLI:t i stället (FEJK_CLAUDE=auto, e2e/testserver.py).
  *     Kassetten väljs ur prompten, så /api/planning/generate,
  *     /api/exams/generate och /api/lessons/{id}/extract kör appens riktiga
@@ -38,22 +38,20 @@ const strom = handelser =>
   handelser.map(h => `data: ${JSON.stringify(h)}\n\n`).join("");
 
 /* En körning som servern skulle ha strömmat: faserna i ordning, kostnaden ur
-   usage.seconds (aldrig ur filens längd) och ett transkript i done. */
+   audio_duration_secs (aldrig ur filens längd) och ett transkript i done. */
 /* lektionId: servern skriver lektionsraden när den transkriberar, och det är
    den granskningen frågar om insikter (app.js hamtaInsikter). Molnet är fejkat
    här, så raden finns inte i basen — därför fejkas extract-rutten med.
    Utan id:t står regexgissningen kvar och dagen prövar prototypen. */
 export function korning({ text = "Vi tittar på derivatans definition. Ändringskvoten när h går mot noll.",
-                          usd = 0.07, minuter = 15.1, lektionId = 1 } = {}) {
+                          usd = 0.06, minuter = 15.1, lektionId = 1 } = {}) {
   return strom([
-    { type: "log", msg: "Delar upp ljudet vid naturliga pauser ..." },
-    { type: "progress", pct: 8 },
-    { type: "log", msg: "Skickar 3 delar till gpt-transcribe ..." },
+    { type: "log", msg: "Komprimerar ljudet för uppladdning ..." },
+    { type: "progress", pct: 6 },
+    { type: "log", msg: "Skickar ljudet (15,1 min) till scribe_v2 ..." },
     { type: "delta", text },
-    { type: "progress", pct: 45 },
-    { type: "kostnad", usd, minuter },
-    { type: "log", msg: "Sätter tidsstämplar lokalt (cuda) ..." },
     { type: "progress", pct: 60 },
+    { type: "kostnad", usd, minuter },
     { type: "progress", pct: 98 },
     { type: "done", result: {
         id: "h1", lesson_id: lektionId, files: [], folder: "C:/Transkriberingar/x",

@@ -271,7 +271,7 @@ def test_chat_busy_returns_409(tmp_path):
 
 def test_transcribe_busy_returns_409(tmp_path, monkeypatch):
     monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: _HW())
-    monkeypatch.setattr(server.openai_asr, "har_nyckel", lambda *a, **k: True)
+    monkeypatch.setattr(server.elevenlabs_asr, "har_nyckel", lambda *a, **k: True)
     r = _busy_client(tmp_path).post(
         "/api/transcribe", json={"source": "/tmp/a.mp3", "formats": ["srt"]})
     assert r.status_code == 409
@@ -853,21 +853,19 @@ class _TransArbiter:
 
 
 def _fejka_kedjan(monkeypatch, tmp_path, moln=None):
-    """Molnet + tidsättningen fejkade: inget nät, ingen GPU, ingen nedladdning."""
+    """Molnet fejkat: inget nät, ingen nedladdning."""
     monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: _HW())
     monkeypatch.setattr(server.llm_client, "is_running", lambda *a, **k: False)
     # Filen i testet är tolv byte "wav" — ffprobe hade sagt noll, och servern
     # avbryter numera med «ffmpeg saknas»/«ingen speltid» i stället för att
-    # skicka noll bitar till molnet och skylla på ljudet. Fixturen säger att
+    # skicka noll byte till molnet och skylla på ljudet. Fixturen säger att
     # filen är läsbar; att den INTE är det testas för sig.
     monkeypatch.setattr(server.media_mod, "probe_duration", lambda *_: 60.0)
-    monkeypatch.setattr(server.openai_asr, "har_nyckel", lambda *a, **k: True)
-    monkeypatch.setattr(server.openai_asr, "transkribera", moln or (
-        lambda audio, base, **k: server.openai_asr.Resultat(
-            bitar=[server.openai_asr.Bit(0.0, 1.0, "hej", 1.0)], sprak="sv")))
-    monkeypatch.setattr(server.alignment, "ar_installerad", lambda *a, **k: True)
-    monkeypatch.setattr(server.alignment, "tidsatt",
-                        lambda *a, **k: [{"start": 0.0, "end": 1.0, "text": "hej"}])
+    monkeypatch.setattr(server.elevenlabs_asr, "har_nyckel", lambda *a, **k: True)
+    monkeypatch.setattr(server.elevenlabs_asr, "transkribera", moln or (
+        lambda audio, base, **k: server.elevenlabs_asr.Resultat(
+            text="hej", ord=[{"text": "hej", "start": 0.0, "end": 1.0}],
+            sprak="sv", sekunder=1.0)))
     folder = tmp_path / "Transkriberingar" / "r"
     monkeypatch.setattr(server.output_store, "assemble_output", lambda *a, **k: {
         "folder": str(folder),
@@ -887,7 +885,7 @@ def test_history_stores_original_source(tmp_path, monkeypatch):
     assert r.status_code == 200
     entry = c.get("/api/history").json()[0]
     assert entry["source"] == str(tmp_path / "lektion.mp3")   # original, not result path
-    assert entry["model"] == server.openai_asr.MODEL          # modellen är förbestämd
+    assert entry["model"] == server.elevenlabs_asr.MODEL      # modellen är förbestämd
 
 
 def test_avbrott_mitt_i_kor_ger_fel_och_slapper_gpun(tmp_path, monkeypatch):
@@ -898,8 +896,9 @@ def test_avbrott_mitt_i_kor_ger_fel_och_slapper_gpun(tmp_path, monkeypatch):
 
     def moln_med_avbrott(audio, base, **k):
         c.app.state.transcribe_job["cancelled"] = True
-        return server.openai_asr.Resultat(
-            bitar=[server.openai_asr.Bit(0.0, 1.0, "hej", 1.0)], sprak="sv")
+        return server.elevenlabs_asr.Resultat(
+            text="hej", ord=[{"text": "hej", "start": 0.0, "end": 1.0}],
+            sprak="sv", sekunder=1.0)
     _fejka_kedjan(monkeypatch, tmp_path, moln=moln_med_avbrott)
     media = tmp_path / "lektion.mp3"
     media.write_text("a", encoding="utf-8")
@@ -915,7 +914,7 @@ def test_avbrott_mitt_i_kor_ger_fel_och_slapper_gpun(tmp_path, monkeypatch):
 def test_transkribering_utan_nyckel_avvisas(tmp_path, monkeypatch):
     from fastapi.testclient import TestClient
     _fejka_kedjan(monkeypatch, tmp_path)
-    monkeypatch.setattr(server.openai_asr, "har_nyckel", lambda *a, **k: False)
+    monkeypatch.setattr(server.elevenlabs_asr, "har_nyckel", lambda *a, **k: False)
     media = tmp_path / "lektion.mp3"
     media.write_text("a", encoding="utf-8")
     c = TestClient(server.create_app(base_dir=tmp_path, arbiter=_TransArbiter()))

@@ -2,7 +2,8 @@
 
 Appen har exakt två gränser mot nätet, och båda går att beordra härifrån:
 
-* **OpenAI** (`app/openai_asr.py`) via `Moln`, som byter ut `httpx.Client`.
+* **ElevenLabs** (`app/elevenlabs_asr.py`) via `Moln`, som byter ut
+  `httpx.Client`.
 * **Claude Code** (`app/claude_code.py`) via `skriv_claude`, som skriver en
   RIKTIG `claude`-fil på disk och pekar `CLAUDE_CODE_BIN` på den. Sömmen finns
   redan i appen, så inget behöver stubbas: argumentraden, strömtolkningen,
@@ -10,7 +11,7 @@ Appen har exakt två gränser mot nätet, och båda går att beordra härifrån:
   precis så illa som vi ber den om.
 
 Lägena är namngivna efter vad läraren råkar ut för, inte efter HTTP-koder:
-ett 429 på sista biten av femton, ett svar som dör mitt i strömmen, en modell
+ett 429 mitt i eftermiddagen, en uppladdning som dör på vägen, en modell
 som svarar tomt, ett CLI som hänger utan att skriva något. Varje sådant fall
 ska ge ett svenskt, åtgärdbart besked — aldrig en hängd bar och aldrig ett
 JS-fel.
@@ -26,71 +27,66 @@ import stat
 import sys
 from pathlib import Path
 
-# ══════════════════════════════════════════════════════════ OpenAI ══════════
+# ══════════════════════════════════════════════════════ ElevenLabs ══════════
 
-STROM_OK = [
-    'data: {"type":"transcript.text.delta","delta":"Hej "}',
-    'data: {"type":"transcript.text.delta","delta":"världen"}',
-    'data: {"type":"transcript.text.done","text":"Hej världen.",'
-    '"usage":{"type":"duration","seconds":6},"languages":[{"code":"sv"}]}',
-    "data: [DONE]",
-]
+# Ett Scribe-svar som API:et skriver det: text plus tid per ord, och en
+# spacing-post som bevisar att filtreringen i elevenlabs_asr gör sitt jobb.
+SVAR_OK = {
+    "language_code": "sv",
+    "language_probability": 0.99,
+    "text": "Hej världen.",
+    "words": [
+        {"text": "Hej", "type": "word", "start": 0.1, "end": 0.4},
+        {"text": " ", "type": "spacing", "start": 0.4, "end": 0.5},
+        {"text": "världen.", "type": "word", "start": 0.5, "end": 1.0},
+    ],
+    "audio_duration_secs": 6,
+    "transcription_id": "fejk-1",
+}
 
 # Felkroppar som API:et faktiskt svarar med — felmeddelandet läraren läser
-# byggs ur dem (openai_asr._felmeddelande).
+# byggs ur dem (elevenlabs_asr._felmeddelande).
 _FELKROPP = {
-    401: {"error": {"message": "Incorrect API key provided."}},
-    429: {"error": {"message": "Rate limit reached for gpt-transcribe."}},
-    500: {"error": {"message": "The server had an error."}},
-    503: {"error": {"message": "Overloaded."}},
+    401: {"detail": {"status": "invalid_api_key", "message": "Invalid API key."}},
+    429: {"detail": {"status": "rate_limited", "message": "Too many requests."}},
+    500: {"detail": {"status": "server_error", "message": "Internal error."}},
+    503: {"detail": {"status": "overloaded", "message": "Overloaded."}},
 }
 
 
 class _Svar:
-    def __init__(self, lage: str, rader: list[str], status: int):
-        self._lage, self._rader, self.status_code = lage, rader, status
-        self.text = "" if status == 200 else json.dumps(
-            _FELKROPP.get(status, {"error": {"message": "fel"}}))
+    def __init__(self, kropp, status: int):
+        self._kropp, self.status_code = kropp, status
+        self.text = kropp if isinstance(kropp, str) else json.dumps(kropp)
 
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *a):
-        return False
-
-    def read(self):
-        return b""
-
-    def iter_lines(self):
-        import httpx
-        if self._lage == "dor":
-            # Strömmen dör mitt i: klienten har redan fått text när nätet tar
-            # slut. Det som räknas är att den halva texten inte tyst blir svaret.
-            yield STROM_OK[0]
-            raise httpx.RemoteProtocolError("peer closed connection")
-        yield from self._rader
+    def json(self):
+        if isinstance(self._kropp, str):
+            return json.loads(self._kropp)
+        return self._kropp
 
 
 class Moln:
-    """OpenAI-gränsen, beordringsbar per anrop.
+    """ElevenLabs-gränsen, beordringsbar per anrop.
 
-    `lagen` är ett läge per ljudbit; det sista gäller resten av körningen. Så
-    uttrycks «429 på sista biten av femton» som `["ok"] * 14 + ["429"]`, och
-    «tar sig efter två försök» som `["429", "429", "ok"]`.
+    `lagen` är ett läge per HTTP-anrop; det sista gäller resten av körningen.
+    Hela filen går numera i ETT anrop, så «tar sig efter två försök» uttrycks
+    som `["429", "429", "ok"]` — omtagen är de enda som ger fler anrop.
 
     Lägen: ok · 401 · 429 · 500 · 503 · timeout · dor · trasig · tomt
     """
 
     def __init__(self, lagen: list[str] | str = "ok", *,
-                 rader: list[str] | None = None):
+                 kropp: dict | None = None):
         self.lagen = [lagen] if isinstance(lagen, str) else list(lagen)
-        self.rader = rader or STROM_OK
+        self.kropp = kropp or SVAR_OK
         self.anrop: list[dict] = []
 
     # -- installation --------------------------------------------------
     def installera(self, monkeypatch) -> "Moln":
-        from app import openai_asr
-        monkeypatch.setattr(openai_asr.httpx, "Client", lambda **k: _Klient(self))
+        from app import elevenlabs_asr
+        monkeypatch.setattr(elevenlabs_asr.httpx, "Client", lambda **k: _Klient(self))
+        # Omtagens backoff är verklig väntetid — i test är den bara långsamhet.
+        monkeypatch.setattr(elevenlabs_asr, "BACKOFF", (0.0, 0.0, 0.0))
         return self
 
     def lage(self, i: int) -> str:
@@ -105,13 +101,19 @@ class Moln:
         lage = self.lage(i)
         if lage == "timeout":
             raise httpx.ReadTimeout("timed out")
+        if lage == "dor":
+            # Uppladdningen dör på vägen: nätet tar slut innan något svar
+            # kommit. TransportError — omtaget ska ta det.
+            raise httpx.RemoteProtocolError("peer closed connection")
         if lage.isdigit():
-            return _Svar(lage, [], int(lage))
+            return _Svar(_FELKROPP.get(int(lage), {"detail": {"message": "fel"}}),
+                         int(lage))
         if lage == "trasig":
-            return _Svar(lage, ["data: {inte json", "data: också trasigt"], 200)
+            return _Svar("<html>inte json</html>", 200)
         if lage == "tomt":
-            return _Svar(lage, ["data: [DONE]"], 200)
-        return _Svar(lage, self.rader, 200)
+            return _Svar({"language_code": "", "text": "", "words": [],
+                          "audio_duration_secs": 0}, 200)
+        return _Svar(self.kropp, 200)
 
 
 class _Klient:
@@ -124,8 +126,8 @@ class _Klient:
     def __exit__(self, *a):
         return False
 
-    def stream(self, metod, url, headers=None, data=None, files=None):
-        return self._moln.svar({"metod": metod, "url": url, "headers": headers,
+    def post(self, url, headers=None, data=None, files=None):
+        return self._moln.svar({"metod": "POST", "url": url, "headers": headers,
                                 "data": data, "files": files})
 
 

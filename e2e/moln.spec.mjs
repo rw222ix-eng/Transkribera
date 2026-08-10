@@ -2,8 +2,8 @@ import { expect, test } from "@playwright/test";
 
 /* MOLNVÄGEN
  *
- * Transkriberingen ligger inte längre på datorn: ljudet går till OpenAI
- * (gpt-transcribe) och bara tidsstämplarna räknas fram här. Två saker måste
+ * Transkriberingen ligger inte längre på datorn: ljudet går till ElevenLabs
+ * (scribe_v2), som svarar med texten OCH ordtiderna i ett svep. Två saker måste
  * därför hålla, och båda går att förstöra utan att något syns:
  *
  * 1. Frontenden hittar servern och kör på riktigt i stället för prototypens
@@ -22,14 +22,12 @@ function strom(handelser) {
 }
 
 const KORNING = strom([
-  { type: "log", msg: "Delar upp ljudet vid naturliga pauser ..." },
-  { type: "progress", pct: 8 },
-  { type: "log", msg: "Skickar 3 delar till gpt-transcribe ..." },
+  { type: "log", msg: "Komprimerar ljudet för uppladdning ..." },
+  { type: "progress", pct: 6 },
+  { type: "log", msg: "Skickar ljudet (15,1 min) till scribe_v2 ..." },
   { type: "delta", text: "Vi tittar på derivatans definition. " },
-  { type: "progress", pct: 45 },
-  { type: "kostnad", usd: 0.07, minuter: 15.1 },
-  { type: "log", msg: "Sätter tidsstämplar lokalt (cuda) ..." },
   { type: "progress", pct: 60 },
+  { type: "kostnad", usd: 0.06, minuter: 15.1 },
   { type: "progress", pct: 98 },
   { type: "done", result: {
       id: "h1", files: [], folder: "C:/Transkriberingar/x", media: "C:/x/lektion.wav",
@@ -46,11 +44,12 @@ test("appen ser servern och kör den riktiga vägen", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator("html")).toHaveAttribute("data-server", "");
   const varKors = await page.evaluate(() => window.API.varKors);
-  expect(varKors.moln.transkribering.modell).toBe("gpt-transcribe");
-  expect(varKors.moln.transkribering.pris_per_minut).toBe(0.0045);
+  expect(varKors.moln.transkribering.modell).toBe("scribe_v2");
+  expect(varKors.moln.transkribering.leverantor).toBe("ElevenLabs");
+  expect(varKors.moln.transkribering.pris_per_minut).toBeCloseTo(0.22 / 60, 6);
 });
 
-test("körningen säger att ljudet går till OpenAI — aldrig att det stannar", async ({ page }) => {
+test("körningen säger att ljudet går till ElevenLabs — aldrig att det stannar", async ({ page }) => {
   await page.route("**/api/transcribe", route =>
     route.fulfill({ status: 200, contentType: "text/event-stream", body: KORNING }));
   await page.goto("/");
@@ -60,19 +59,20 @@ test("körningen säger att ljudet går till OpenAI — aldrig att det stannar",
   await page.locator("#starta").click();
 
   const fot = page.locator("#korkvar");
-  await expect(fot).toContainText("OpenAI");
+  await expect(fot).toContainText("ElevenLabs");
   await expect(fot).not.toContainText("din GPU");
 
-  // Molnsteget är märkt som moln, och de lokala stegen är det inte.
+  // Molnsteget är märkt som moln, och de lokala stegen är det inte. Ingen fas
+  // får längre påstå att tidsstämplarna sätts här — de kommer med svaret.
   const moln = page.locator('#progresslista .fas[data-moln], #progresslista .fas').filter({
-    hasText: "Skickar ljudet till OpenAI" });
+    hasText: "Skickar ljudet till ElevenLabs" });
   await expect(moln).toHaveCount(1);
-  await expect(page.locator("#progresslista")).toContainText("Sätter tidsstämplar mot ljudet");
+  await expect(page.locator("#progresslista")).not.toContainText("tidsstämplar");
 
-  // Kostnaden är OpenAI:s egen siffra, inte en gissning ur filens längd.
-  await expect(fot).toContainText("$0.07", { timeout: 15_000 });
+  // Kostnaden är ElevenLabs egen siffra, inte en gissning ur filens längd.
+  await expect(fot).toContainText("$0.06", { timeout: 15_000 });
   await expect(page.locator("#klarruta")).toBeVisible();
-  await expect(page.locator("#klartext")).toContainText("gpt-transcribe");
+  await expect(page.locator("#klartext")).toContainText("scribe_v2");
 });
 
 test("transkriptet från servern blir appens transkript", async ({ page }) => {
@@ -126,7 +126,7 @@ test("nätet som dör mitt i körningen blir ett besked, inte en bar som står s
     await page.locator("#starta").click();
 
     // Körningen är igång: fasen syns innan nätet försvinner.
-    await expect(page.locator("#progresslista")).toContainText("Skickar ljudet till OpenAI");
+    await expect(page.locator("#progresslista")).toContainText("Skickar ljudet till ElevenLabs");
     await context.setOffline(true);
     bryt();
 
@@ -139,7 +139,7 @@ test("nätet som dör mitt i körningen blir ett besked, inte en bar som står s
 test("ett fel från servern blir en varning läraren kan agera på", async ({ page }) => {
   await page.route("**/api/transcribe", route =>
     route.fulfill({ status: 400, contentType: "application/json",
-                    body: JSON.stringify({ error: "Ingen OpenAI-nyckel. Lägg in den under Inställningar.",
+                    body: JSON.stringify({ error: "Ingen ElevenLabs-nyckel. Lägg in den under Inställningar.",
                                            kod: "nyckel_saknas" }) }));
   await page.goto("/");
   await page.waitForFunction(() => window.API && window.API.pa);
@@ -148,7 +148,7 @@ test("ett fel från servern blir en varning läraren kan agera på", async ({ pa
 
   const varning = page.locator("#korvarningar .varnruta");
   await expect(varning).toBeVisible();
-  await expect(varning).toContainText("OpenAI-nyckel");
+  await expect(varning).toContainText("ElevenLabs-nyckel");
   // Tom utdata är aldrig ett godtagbart utfall — klarrutan får inte visas.
   await expect(page.locator("#klarruta")).toBeHidden();
 });

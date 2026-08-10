@@ -26,7 +26,7 @@ from app import (debug_log, hardware, llm_client,
                  history_store, gpu_arbiter, output_store, media, db,
                  paths, settings_store, ics_export, backup, report,
                  calendar_google, kalender_ai, course_data, lasar_data,
-                 openai_asr, alignment, claude_code, rattning)
+                 elevenlabs_asr, claude_code, rattning)
 # Samma modul som `media` ovan. Inne i transkriberingsjobbet är `media` namnet på
 # SJÄLVA filen (media = Path(...)) och skuggar modulen — aliaset gör att
 # varaktigheten går att fråga efter även där.
@@ -353,9 +353,8 @@ def create_app(base_dir: Path | None = None,
         return {"models_dir": str(models_root)}
 
     # ---- Var arbetet körs -------------------------------------------------
-    # Två hus, och appen ska aldrig behöva gissa vilket som svarar: molnet
-    # (transkribering hos OpenAI, språkmodell via Claude Code) och den här datorn
-    # (tidsättningen). Frontendens «Var arbetet körs» och
+    # Ett hus numera: molnet (transkribering med ordtider hos ElevenLabs,
+    # språkmodell via Claude Code). Frontendens «Var arbetet körs» och
     # härkomstraden vid varje knapp läser den här rutan.
     @app.get("/api/var-kors")
     def api_var_kors():
@@ -363,10 +362,10 @@ def create_app(base_dir: Path | None = None,
         return {
             "moln": {
                 "transkribering": {
-                    "modell": openai_asr.MODEL,
-                    "leverantor": "OpenAI",
-                    "nyckel": openai_asr.har_nyckel(base),
-                    "pris_per_minut": openai_asr.PRIS_USD_PER_MINUT,
+                    "modell": elevenlabs_asr.MODEL,
+                    "leverantor": "ElevenLabs",
+                    "nyckel": elevenlabs_asr.har_nyckel(base),
+                    "pris_per_minut": elevenlabs_asr.PRIS_USD_PER_MINUT,
                 },
                 "sprakmodell": {
                     "leverantor": "Anthropic",
@@ -376,44 +375,23 @@ def create_app(base_dir: Path | None = None,
                     "senaste": dict(claude_code.SENASTE),
                 },
             },
-            "har": {
-                "tidsstamplar": {
-                    "modell": alignment.MODELL_ID,
-                    "installerad": alignment.ar_installerad(models_root),
-                    "download_mb": alignment.MODELL_MB,
-                },
-            },
         }
 
-    @app.post("/api/openai-nyckel")
-    async def api_openai_nyckel(req: Request):
-        """Spara (eller radera) OpenAI-nyckeln. Nyckeln returneras ALDRIG — svaret
-        säger bara om det finns en. Filen ligger i .gitignore."""
+    @app.post("/api/elevenlabs-nyckel")
+    async def api_elevenlabs_nyckel(req: Request):
+        """Spara (eller radera) ElevenLabs-nyckeln. Nyckeln returneras ALDRIG —
+        svaret säger bara om det finns en. Filen ligger i .gitignore."""
         body = await req.json()
         try:
-            openai_asr.spara_nyckel(base, body.get("nyckel") or "")
+            elevenlabs_asr.spara_nyckel(base, body.get("nyckel") or "")
         except OSError as e:
             return JSONResponse({"error": f"kunde inte spara nyckeln: {e}"}, status_code=500)
-        return {"nyckel": openai_asr.har_nyckel(base)}
+        return {"nyckel": elevenlabs_asr.har_nyckel(base)}
 
     @app.post("/api/claude/kontrollera")
     def api_claude_kontrollera():
         """«Kontrollera igen» i felrutan — tvingar fram en färsk statuskoll."""
         return claude_code.status(force=True)
-
-    @app.post("/api/download/tidsmodell")
-    async def api_download_tidsmodell(req: Request):
-        if not _enough_disk(alignment.MODELL_MB):
-            return JSONResponse(
-                {"error": "För lite ledigt diskutrymme för nedladdningen."}, status_code=507)
-
-        def job(emit):
-            alignment.ladda_ner(
-                models_root,
-                log_cb=lambda m: emit({"type": "log", "msg": m}),
-                progress_cb=lambda p: emit({"type": "progress", "pct": p}))
-            return {"installed": alignment.MODELL_ID}
-        return _sse_response(job, req)
 
     @app.post("/api/settings/models-disk")
     async def api_set_models_disk(req: Request):
@@ -450,16 +428,17 @@ def create_app(base_dir: Path | None = None,
         if not source or not formats:
             return JSONResponse({"error": "källa och minst ett format krävs"},
                                 status_code=400)
-        # model_id tas emot men ignoreras: modellen är gpt-transcribe och inget
-        # annat (se app/openai_asr.py). Servern väljer inte, och frontenden får
-        # inte välja åt den.
-        if not openai_asr.har_nyckel(base):
+        # model_id tas emot men ignoreras: modellen är scribe_v2 och inget
+        # annat (se app/elevenlabs_asr.py). Servern väljer inte, och frontenden
+        # får inte välja åt den.
+        if not elevenlabs_asr.har_nyckel(base):
             return JSONResponse(
-                {"error": "Ingen OpenAI-nyckel. Lägg in den under Inställningar.",
+                {"error": "Ingen ElevenLabs-nyckel. Lägg in den under Inställningar.",
                  "kod": "nyckel_saknas"}, status_code=400)
 
-        # GPU:n tas fortfarande exklusivt — inte för Whisper (borta) utan för
-        # tidsättningen, som lägger en wav2vec2-modell på kortet.
+        # GPU:n tas fortfarande exklusivt — inte för tidsättningen (riven) utan
+        # för att serialisera mot övriga Claude-jobb: översättningen och
+        # auto-titeln i slutet av kedjan går genom samma arbiter som resten.
         gpu = arb.try_acquire_gpu()
         if not gpu:
             return JSONResponse(
@@ -474,7 +453,6 @@ def create_app(base_dir: Path | None = None,
                 return _transcribe(emit)
             finally:
                 job_state["kor"] = False
-                alignment.frigor()          # släpp tidsmodellens VRAM
                 arb.release_gpu(gpu)
 
         def _transcribe(emit):
@@ -492,16 +470,17 @@ def create_app(base_dir: Path | None = None,
                     raise RuntimeError(f"Filen finns inte: {media}")
             out_base = media.with_suffix("")
 
-            # ── Molnet: texten ────────────────────────────────────────────────
-            # Ljudet lämnar datorn här, och bara här. Progressbandet 0–45 % är
-            # molnets, 45–60 % tidsättningens; resten är efterarbetet.
+            # ── Molnet: texten och tiderna ────────────────────────────────────
+            # Ljudet lämnar datorn här, och bara här. Progressbandet 0–60 % är
+            # molnets — texten och ordtiderna kommer i samma svar; resten är
+            # efterarbetet.
             langd = media_mod.probe_duration(media) or 0.0
             if langd <= 0:
-                # Utan längd blir styckningen tom, molnet får noll bitar och
-                # felet läraren såg var «Transkriberingen gav inget resultat» —
-                # ett besked som pekar på ljudet när felet i själva verket är
-                # att ffmpeg saknas eller att filen inte går att läsa. Säg vad
-                # som är fel och vad hon kan göra åt det, här och inte senare.
+                # Utan längd kan omkodningen inte lova något och felet läraren
+                # såg var «Transkriberingen gav inget resultat» — ett besked som
+                # pekar på ljudet när felet i själva verket är att ffmpeg saknas
+                # eller att filen inte går att läsa. Säg vad som är fel och vad
+                # hon kan göra åt det, här och inte senare.
                 if not media_mod.ffmpeg_available():
                     raise RuntimeError(
                         "ffmpeg/ffprobe saknas på datorn — de behövs för att "
@@ -510,11 +489,12 @@ def create_app(base_dir: Path | None = None,
                     f"Kunde inte läsa någon speltid ur {media.name}. Filen kan "
                     "vara trasig eller sakna ljudspår.")
             avbruten = lambda: bool(job_state["cancelled"])
-            moln = openai_asr.transkribera(
+            moln = elevenlabs_asr.transkribera(
                 media, base, langd=langd, sprak=language,
                 log_cb=lambda m: emit({"type": "log", "msg": m}),
-                progress_cb=lambda p: emit({"type": "progress", "pct": int(p * 0.45)}),
-                # Texten som växer fram är väntans enda ärliga framsteg.
+                progress_cb=lambda p: emit({"type": "progress", "pct": int(p * 0.60)}),
+                # Hela texten kommer i ett svep när molnet svarat — deltat är
+                # ett enda, men förhandsvisningen fylls fortfarande.
                 delta_cb=lambda t: emit({"type": "delta", "text": t}),
                 avbruten=avbruten)
             if job_state["cancelled"]:
@@ -524,20 +504,15 @@ def create_app(base_dir: Path | None = None,
             emit({"type": "kostnad", "usd": moln.kostnad,
                   "minuter": round(moln.debiterade_sekunder / 60, 1)})
 
-            # ── Datorn: tiderna ───────────────────────────────────────────────
-            # gpt-transcribe svarar utan en enda tidsstämpel. Undertexter,
-            # källmarkörer och 20-sekunderslyssningen får sina tider ur forced
-            # alignment mot ljudet som ligger kvar här.
-            if not alignment.ar_installerad(models_root):
-                emit({"type": "log", "msg": "Hämtar tidsmodellen (engångs) ..."})
-                alignment.ladda_ner(
-                    models_root, log_cb=lambda m: emit({"type": "log", "msg": m}),
-                    progress_cb=lambda p: emit({"type": "progress", "pct": 45 + int(p * 0.05)}))
-            segments = alignment.tidsatt(
-                media, moln.bitar, models_root,
-                log_cb=lambda m: emit({"type": "log", "msg": m}),
-                progress_cb=lambda p: emit({"type": "progress", "pct": 50 + int(p * 0.10)}),
-                avbruten=avbruten)
+            # Ordtiderna ur svaret blir undertextrader. Kom orden utan tider
+            # (borde inte hända, men molnet lovar inget) faller vi tillbaka på
+            # ETT grovt segment — ett transkript utan finkorniga tider är
+            # fortfarande ett transkript, ett tomt resultat vore ett tapp.
+            if moln.ord:
+                segments = transcriber.segmentera_ord(moln.ord)
+            else:
+                segments = [{"start": 0.0, "end": round(langd, 3),
+                             "text": moln.text, "words": []}]
             segments = transcriber.clean_caption_dicts(segments)
             if job_state["cancelled"]:
                 raise RuntimeError("Transkriberingen avbröts.")
@@ -586,7 +561,7 @@ def create_app(base_dir: Path | None = None,
             video = assembled["video"]
             emit({"type": "progress", "pct": 98})
 
-            spec_label = openai_asr.MODEL
+            spec_label = elevenlabs_asr.MODEL
             _lang_lbl = {"en": "Engelska", "sv": "Svenska"}
             lang_label = _lang_lbl.get(language or moln.sprak, "Auto")
             target_label = _lang_lbl.get(target_language, lang_label)

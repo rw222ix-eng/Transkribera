@@ -5,8 +5,7 @@ skala, så baren nollställdes och klättrade en andra gång («kördes två gå
 Varje steg äger sedan dess ett eget framåtriktat delband, och det emitterade
 ``pct`` minskar aldrig. Kravet står kvar även om just det passet är borta.
 
-Banden: molnet (gpt-transcribe) 0–45 %, tidsättningen 50–60 %, efterarbetet
-93/98.
+Banden: molnet (scribe_v2, text och ordtider) 0–60 %, efterarbetet 93/98.
 """
 import json
 import types
@@ -55,25 +54,18 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(server.postprocess, "should_translate", lambda *a, **k: False)
     monkeypatch.setattr(server.llm_client, "is_running", lambda *a, **k: True)
 
-    # Molnet och tidsättningen fejkas — de emitterar via sina progress_cb precis
-    # som i verkligheten, så bandmappningen i servern är det som faktiskt testas.
-    def fake_moln(audio, base, *, langd, sprak="", ledtext="", log_cb=None,
+    # Molnet fejkas — det emitterar via sin progress_cb precis som i
+    # verkligheten, så bandmappningen i servern är det som faktiskt testas.
+    def fake_moln(audio, base, *, langd, sprak="", log_cb=None,
                   progress_cb=None, delta_cb=None, avbruten=None):
         if progress_cb:
-            progress_cb(50)
+            progress_cb(10)
             progress_cb(100)
-        return server.openai_asr.Resultat(
-            bitar=[server.openai_asr.Bit(0.0, 1.0, "hej", 1.0)], sprak="sv")
-    monkeypatch.setattr(server.openai_asr, "har_nyckel", lambda *a, **k: True)
-    monkeypatch.setattr(server.openai_asr, "transkribera", fake_moln)
-
-    def fake_tidsatt(audio, bitar, models_root, *, device="", log_cb=None,
-                     progress_cb=None, avbruten=None):
-        if progress_cb:
-            progress_cb(100)
-        return [{"start": 0.0, "end": 1.0, "text": "hej"}]
-    monkeypatch.setattr(server.alignment, "ar_installerad", lambda *a, **k: True)
-    monkeypatch.setattr(server.alignment, "tidsatt", fake_tidsatt)
+        return server.elevenlabs_asr.Resultat(
+            text="hej", ord=[{"text": "hej", "start": 0.0, "end": 1.0}],
+            sprak="sv", sekunder=1.0)
+    monkeypatch.setattr(server.elevenlabs_asr, "har_nyckel", lambda *a, **k: True)
+    monkeypatch.setattr(server.elevenlabs_asr, "transkribera", fake_moln)
 
     # Hoppa över filmontering/thumbnail och SRT-skrivning — inte det som testas.
     monkeypatch.setattr(server.output_store, "assemble_output",
@@ -96,9 +88,9 @@ def test_progress_is_monotonic(client, tmp_path):
     assert pcts, "inga framstegshändelser emitterades"
     # Aldrig bakåt: inget steg börjar om från noll i sin egen skala.
     assert pcts == sorted(pcts), f"progress gick bakåt (kördes två gånger): {pcts}"
-    # Två framåtriktade delband: molnet 0–45, tidsättningen (45, 60].
-    assert any(p <= 45 for p in pcts), f"saknar molnband: {pcts}"
-    assert any(45 < p <= 60 for p in pcts), f"saknar tidsättningsband: {pcts}"
+    # Molnbandet 0–60 med båda stegen: omkodningen klar och svaret mottaget.
+    assert any(p <= 10 for p in pcts), f"saknar omkodningssteget: {pcts}"
+    assert any(10 < p <= 60 for p in pcts), f"saknar molnsvaret: {pcts}"
 
 
 def _run_and_get_name(client, source):

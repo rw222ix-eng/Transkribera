@@ -1,7 +1,7 @@
 /* ══════════ MOLNET ══════════
-   Två hus utanför datorn, inte ett: ljudet transkriberas hos OpenAI
-   (gpt-transcribe) och språkmodellsarbetet görs av Claude Code hos Anthropic.
-   Tidsstämplarna och alla filer ligger kvar här.
+   Två hus utanför datorn, inte ett: ljudet transkriberas hos ElevenLabs
+   (scribe_v2, som också sätter tidsstämplarna) och språkmodellsarbetet görs av
+   Claude Code hos Anthropic. Alla filer ligger kvar här.
 
    Tre saker: härkomstraden vid knappen som skickar, listan över vad som
    faktiskt går ut, och tillståndet «Claude Code saknas eller är inte inloggad» —
@@ -30,10 +30,10 @@
     if (sidor) poster.push(['Går ut', `Tolkningen av ${sidor} inlästa boksidor — som text, inte som bild`, true]);
     /* Ljudet gick ut vid transkriberingen, inte här. Det står med ändå: läraren
        ska kunna läsa hela sanningen om en lektion på ett ställe. */
-    poster.push(['Gick ut', 'Ljudet, när lektionen transkriberades — till OpenAI', true]);
+    poster.push(['Gick ut', 'Ljudet, när lektionen transkriberades — till ElevenLabs', true]);
     poster.push(['Stannar', 'Ljudfilerna och videon på disken, boksidornas foton och bilden ur videon', false]);
     lista.innerHTML = poster.map(p => rad(p[0], p[1], p[2])).join('') +
-      '<p class="harfot">Texten går till Anthropic via Claude Code på din prenumeration. Ljudet gick till OpenAI. Svaren sparas här och skickas inte vidare.</p>';
+      '<p class="harfot">Texten går till Anthropic via Claude Code på din prenumeration. Ljudet gick till ElevenLabs. Svaren sparas här och skickas inte vidare.</p>';
     [...lista.querySelectorAll('.harvarde')].forEach((el, i) => { el.textContent = poster[i][1]; });
   }
 
@@ -75,7 +75,7 @@
       const t = har.querySelector('.hartext');
       t.innerHTML = ansluten
         ? '<b>Texten skickas till Claude</b> · det här steget skickar inget ljud'
-        : '<b>Claude Code är inte inloggat</b> · transkriberingen påverkas inte, den körs hos OpenAI';
+        : '<b>Claude Code är inte inloggat</b> · transkriberingen påverkas inte, den körs hos ElevenLabs';
       har.querySelector('.harprick').toggleAttribute('data-ut', true);
     }
     if (skriv) {

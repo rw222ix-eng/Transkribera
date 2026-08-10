@@ -5,8 +5,8 @@ jobb (och att låset släpps i finally), FTS5-synk med svenska tecken (åäö),
 säker filhantering (path traversal, radering endast under Transkriberingar/)
 samt chunk-uppladdning av inspelningar.
 
-Molnanropet och tidsättningen fejkas (inget nät, ingen GPU); allt annat är äkta
-kod — servern skriver undertextfilerna, historiken och lektions-DB:n på riktigt.
+Molnanropet fejkas (inget nät); allt annat är äkta kod — servern gör segment av
+ordtiderna och skriver undertextfilerna, historiken och lektions-DB:n på riktigt.
 """
 import json
 import threading
@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from app import gpu_arbiter, history_store, openai_asr, output_store, transcriber
+from app import elevenlabs_asr, gpu_arbiter, history_store, output_store, transcriber
 from app.web import server
 
 
@@ -51,35 +51,38 @@ def _sse_events(text: str) -> list[dict]:
     return events
 
 
+def _ordtider(segments=SEGMENT):
+    """Segmenttexterna som ordtider — jämnt fördelade inom segmentets fönster,
+    som molnet ger dem."""
+    ord_ = []
+    for s in segments:
+        delar = s["text"].split()
+        steg = (s["end"] - s["start"]) / len(delar)
+        for i, o in enumerate(delar):
+            ord_.append({"text": o, "start": round(s["start"] + i * steg, 3),
+                         "end": round(s["start"] + (i + 1) * steg, 3)})
+    return ord_
+
+
 def _fake_moln(segments=SEGMENT, block: "threading.Event | None" = None,
                started: "threading.Event | None" = None):
-    """Fejk med samma kontrakt som openai_asr.transkribera — en bit per segment."""
-    def fake(audio, base, *, langd, sprak="", ledtext="", log_cb=None,
+    """Fejk med samma kontrakt som elevenlabs_asr.transkribera."""
+    def fake(audio, base, *, langd, sprak="", log_cb=None,
              progress_cb=None, delta_cb=None, avbruten=None):
         if started is not None:
             started.set()
         if block is not None:
             assert block.wait(timeout=30), "testet släppte aldrig blockeringen"
         if log_cb:
-            log_cb("Skickar 1 del till gpt-transcribe (fejk) ...")
+            log_cb("Skickar ljudet till scribe_v2 (fejk) ...")
+        text = " ".join(s["text"] for s in segments)
         if delta_cb:
-            delta_cb(segments[0]["text"][:5])
+            delta_cb(text)
         if progress_cb:
             progress_cb(100)
-        return openai_asr.Resultat(
-            bitar=[openai_asr.Bit(s["start"], s["end"], s["text"], s["end"] - s["start"])
-                   for s in segments],
-            sprak=sprak or "sv")
-    return fake
-
-
-def _fake_tidsatt(segments=SEGMENT):
-    """Fejk med samma kontrakt som alignment.tidsatt — molnets text, med tider."""
-    def fake(audio, bitar, models_root, *, device="", log_cb=None,
-             progress_cb=None, avbruten=None):
-        if progress_cb:
-            progress_cb(100)
-        return [dict(s) for s in segments]
+        return elevenlabs_asr.Resultat(
+            text=text, ord=_ordtider(segments), sprak=sprak or "sv",
+            sekunder=segments[-1]["end"])
     return fake
 
 
@@ -90,12 +93,10 @@ def miljo(tmp_path, monkeypatch):
 
     monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: HW())
     monkeypatch.setattr(server.llm_client, "is_running", lambda *a, **k: False)
-    # Nyckeln finns (annars 400 innan jobbet ens startar), molnet och
-    # tidsmodellen fejkas — inget nät, ingen GPU, ingen nedladdning.
-    monkeypatch.setattr(server.openai_asr, "har_nyckel", lambda *a, **k: True)
-    monkeypatch.setattr(server.openai_asr, "transkribera", _fake_moln())
-    monkeypatch.setattr(server.alignment, "ar_installerad", lambda *a, **k: True)
-    monkeypatch.setattr(server.alignment, "tidsatt", _fake_tidsatt())
+    # Nyckeln finns (annars 400 innan jobbet ens startar) och molnet fejkas —
+    # inget nät, ingen nedladdning.
+    monkeypatch.setattr(server.elevenlabs_asr, "har_nyckel", lambda *a, **k: True)
+    monkeypatch.setattr(server.elevenlabs_asr, "transkribera", _fake_moln())
 
     arb = gpu_arbiter.GpuArbiter(tmp_path / "models")
     client = TestClient(server.create_app(base_dir=tmp_path, arbiter=arb))
@@ -138,7 +139,7 @@ def test_sse_ordning_progress_fore_done(miljo):
 def test_gpu_arbiter_409_vid_parallella_jobb_och_slapper_laset(miljo, monkeypatch):
     client, media, _ = miljo
     started, release = threading.Event(), threading.Event()
-    monkeypatch.setattr(server.openai_asr, "transkribera",
+    monkeypatch.setattr(server.elevenlabs_asr, "transkribera",
                         _fake_moln(block=release, started=started))
 
     forsta: dict = {}
@@ -161,7 +162,7 @@ def test_gpu_arbiter_409_vid_parallella_jobb_och_slapper_laset(miljo, monkeypatc
     assert _sse_events(forsta["resp"].text)[-1]["type"] == "done"
 
     # Låset släpptes i finally → ett tredje jobb går igenom direkt.
-    monkeypatch.setattr(server.openai_asr, "transkribera", _fake_moln())
+    monkeypatch.setattr(server.elevenlabs_asr, "transkribera", _fake_moln())
     r3 = client.post("/api/transcribe", json=_transcribe_body(media))
     assert r3.status_code == 200
     assert _sse_events(r3.text)[-1]["type"] == "done"

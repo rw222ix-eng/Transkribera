@@ -60,8 +60,8 @@ def main() -> None:
     os.environ.setdefault("FEJK_CLAUDE", "auto")
     os.environ.setdefault("FEJK_KASSETTER", str(fejk.KASSETTER))
     # Ingen nyckel: ett test som råkar nå molnvägen ska få «lägg in nyckeln»,
-    # inte skicka lärarens ljud till OpenAI för riktiga pengar.
-    os.environ.pop("OPENAI_API_KEY", None)
+    # inte skicka lärarens ljud till ElevenLabs för riktiga pengar.
+    os.environ.pop("ELEVENLABS_API_KEY", None)
 
     from app.web import server
     uvicorn.run(server.create_app(base_dir=b), host="127.0.0.1", port=port,

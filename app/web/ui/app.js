@@ -294,9 +294,9 @@ function sprakNot() {
   const talat = talatSprak(), res = valt('resultat');
   const m = $('#modell');
   /* Ingen modell «väljs automatiskt» längre — det finns ett val och det är
-     gjort. gpt-transcribe kör hos OpenAI, och priset står där så att det inte
+     gjort. scribe_v2 kör hos ElevenLabs, och priset står där så att det inte
      är en överraskning på fakturan. */
-  if (m) m.textContent = `gpt-transcribe hos OpenAI (${talat === 'Svenska' ? 'sv' : 'en'}) · $0,0045/minut`;
+  if (m) m.textContent = `scribe_v2 hos ElevenLabs (${talat === 'Svenska' ? 'sv' : 'en'}) · $0,22/timme`;
   const not = $('#spraknot');
   if (not) not.textContent = talat === res
     ? `Resultatet blir på ${res.toLowerCase()} — samma som det talade språket.`
@@ -394,17 +394,17 @@ $('#starta').addEventListener('click', () => {
              tot: Math.max(35, sekunder(f.langd) * 0.32) };
   });
   const totalSek = rader.reduce((a, r) => a + r.tot, 0);
-  /* Foten bär hela sanningen i en mening, i tidsordning: ljudet går ut först,
-     tiderna räknas här, och texten går till Claude sist. */
-  const FOTTEXT = 'ljudet skickas till OpenAI för transkribering · tidsstämplarna sätts här · sista steget skickar texten till Claude.';
+  /* Foten bär hela sanningen i en mening, i tidsordning: ljudet går ut först
+     (och tiderna kommer med svaret), texten går till Claude sist. */
+  const FOTTEXT = 'ljudet skickas till ElevenLabs, som transkriberar och sätter tidsstämplarna · sista steget skickar texten till Claude.';
   $('#korkvar').textContent = `${kvarText(totalSek)} · ${FOTTEXT}`;
   if (window.API && window.API.pa) korRiktigt(rader, FOTTEXT);
   else korFejk(rader, totalSek, FOTTEXT);
 });
 
 /* ── Riktig körning ───────────────────────────────────────────────────────
-   En fil i taget: servern håller GPU:n exklusivt för tidsättningen, så två
-   parallella jobb hade ändå bara fått vänta på varandra — men här syns kön. */
+   En fil i taget: servern serialiserar jobben mot samma arbiter som övriga
+   Claude-jobb, så två parallella hade ändå bara fått vänta — men här syns kön. */
 async function korRiktigt(rader, fottext) {
   const t0 = Date.now();
   const klockan = setInterval(() => {
@@ -437,13 +437,13 @@ async function korRiktigt(rader, fottext) {
           $('#korkvar').textContent = `${Math.round(p)} % · ${fottext}`;
         },
         log: m => { r.senasteLogg = m; },
-        /* Texten som kommer tillbaka medan den skrivs — det enda ärliga
-           framsteget under ett molnanrop. */
+        /* Batch-API:et svarar i ett svep: hela texten kommer som ETT delta när
+           molnet är klart. Ordräkningen kvitterar att svaret faktiskt kom. */
         delta: t => {
           r.moln = (r.moln || '') + t;
           const fas = $$('.fas', r.el)[2];
           if (fas) $('.fasdetalj', fas).textContent =
-            `${r.moln.trim().split(/\s+/).length} ord hittills`;
+            `${r.moln.trim().split(/\s+/).length} ord mottagna`;
         },
         kostnad: h => { kostnad += h.usd; },
       });
@@ -477,7 +477,7 @@ async function korRiktigt(rader, fottext) {
   clearInterval(klockan);
   taBortPill();
   $('#korkvar').textContent = klaraFiler.length
-    ? `Klart · ${kostnad ? '$' + kostnad.toFixed(2) + ' hos OpenAI · ' : ''}ljudet ligger kvar på datorn, transkriptet är sparat här`
+    ? `Klart · ${kostnad ? '$' + kostnad.toFixed(2) + ' hos ElevenLabs · ' : ''}ljudet ligger kvar på datorn, transkriptet är sparat här`
     : 'Ingen fil blev klar.';
   if (klaraFiler.length) klar();
 }
@@ -501,7 +501,7 @@ function korFejk(rader, totalSek, fottext) {
     });
     const kvarSek = totalSek * (1 - p / 100);
     $('#korkvar').textContent = p >= 100
-      ? 'Klart · ljudet transkriberades hos OpenAI, tiderna sattes här'
+      ? 'Klart · ljudet transkriberades hos ElevenLabs, tiderna kom med svaret'
       : `${kvarText(kvarSek)} · ${fottext}`;
     visaPill(p, p >= 100 ? '' : kvarText(kvarSek));
     if (p > 21 && p < 23) varningar(ko, rader);
@@ -513,27 +513,24 @@ function sekunder(langd) {
   return d.length === 2 && d.every(n => !isNaN(n)) ? d[0] * 60 + d[1] : 600;
 }
 function mmss(s) { const h = Math.max(0, Math.round(s)); return Math.floor(h / 60) + ':' + String(h % 60).padStart(2, '0'); }
-/* Faserna speglar serverns egna band (app/web/server.py): molnet 0–45,
-   tidsättningen 45–60, efterarbetet resten. Samma lista används av den riktiga
-   körningen och av prototypens klocka — då finns bara ett förlopp att hålla
-   sant.
+/* Faserna speglar serverns egna band (app/web/server.py): molnet 0–60 (texten
+   OCH ordtiderna kommer i samma svar), efterarbetet resten. Samma lista används
+   av den riktiga körningen och av prototypens klocka — då finns bara ett
+   förlopp att hålla sant.
 
-   Två steg lämnar datorn, och de är märkta: ljudet till OpenAI, texten till
-   Claude. Det är den ordningen som gäller nu — förr transkriberades allt här och
-   bara sammanfattningen gick ut. */
+   Två steg lämnar datorn, och de är märkta: ljudet till ElevenLabs, texten till
+   Claude. Molnfasen är en väntan utan mellanrapporter — batch-API:et svarar i
+   ett svep, och det ska fastexten vara ärlig med. */
 function faser(f) {
   const sek = sekunder(f.langd);
   const mb = Math.round(sek / 60 * 1.4 * 10) / 10;
-  const delar = Math.max(1, Math.ceil(sek / 300));
   const fmt = (valda('format').join(' · ') || 'TXT');
   const lista = [
     { namn: 'Läser in filen', fran: 0, till: 4, d: () => `${mb} MB · ${f.langd || '—'}` },
-    { namn: 'Delar upp vid pauserna', fran: 4, till: 8,
-      d: () => `${delar} ${delar === 1 ? 'del' : 'delar'} · tystnadsdetektering · här` },
-    { namn: 'Skickar ljudet till OpenAI', fran: 8, till: 45, moln: true,
-      d: t => `gpt-transcribe · ${Math.min(delar, Math.max(1, Math.ceil(t * delar)))} av ${delar}` },
-    { namn: 'Sätter tidsstämplar mot ljudet', fran: 45, till: 60,
-      d: () => 'ordtider ur ljudet · här' },
+    { namn: 'Komprimerar ljudet', fran: 4, till: 8,
+      d: () => '16 kHz Opus · här' },
+    { namn: 'Skickar ljudet till ElevenLabs', fran: 8, till: 60, moln: true,
+      d: () => 'scribe_v2 · text och ordtider · svaret kommer i ett svep' },
   ];
   lista.push({ namn: 'Skriver ut resultat', fran: 60, till: 96, d: () => fmt });
   lista.push({ namn: 'Sammanfattar och letar förslag', fran: 96, till: 100,
@@ -560,7 +557,7 @@ function klar() {
   $('#klartext').textContent = [
     klaraFiler.length === 1 ? f0.langd : null,
     valt('resultat').toLowerCase(),
-    'gpt-transcribe · tidsstämplar satta här'
+    'scribe_v2 · text och ordtider från ElevenLabs'
   ].filter(Boolean).join(' · ');
   const kurs = klaraFiler.map(f => f.kurs).filter(Boolean)[0];
   $('#klarsparat').textContent = `Ligger på sin lektion i veckan${kurs ? ' · ' + kurs : ''}.`;

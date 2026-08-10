@@ -113,8 +113,8 @@ def llm_ready(client, monkeypatch):
 
 @pytest.fixture
 def moln(monkeypatch):
-    """OpenAI-gränsen, beordringsbar. `moln.lagen = ["ok", "429", ...]` sätter
-    ett läge per ljudbit; `moln.anrop` är vad som faktiskt skickades."""
+    """ElevenLabs-gränsen, beordringsbar. `moln.lagen = ["429", "ok", ...]`
+    sätter ett läge per anrop; `moln.anrop` är vad som faktiskt skickades."""
     from tests.fejk import Moln
     return Moln().installera(monkeypatch)
 

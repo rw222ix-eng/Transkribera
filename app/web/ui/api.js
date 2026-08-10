@@ -9,7 +9,7 @@
    kör på riktigt, utan att filerna skiljer sig åt.
 
    Sonderingen går mot /api/var-kors, som också är svaret på frågan appen ställer
-   överallt: var körs det här — hos OpenAI, hos Anthropic, eller på den här
+   överallt: var körs det här — hos ElevenLabs, hos Anthropic, eller på den här
    datorn? */
 (() => {
   const API = {
@@ -32,8 +32,8 @@
 
   /* ── Långa jobb: servern strömmar sina steg som Server-Sent Events ────────
      Ingen falsk procent någonstans i kedjan: pct kommer från jobbet, log är
-     det jobbet faktiskt gör, delta är texten som kommer tillbaka från molnet
-     medan den skrivs, kostnad är det OpenAI debiterar. */
+     det jobbet faktiskt gör, delta är texten som kommer tillbaka från molnet,
+     kostnad är det ElevenLabs debiterar. */
   async function strom(vag, kropp, krokar = {}) {
     const r = await fetch(vag, {
       method: 'POST',

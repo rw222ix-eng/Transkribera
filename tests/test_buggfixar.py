@@ -27,7 +27,7 @@ from pathlib import Path
 
 import pytest
 
-from app import claude_code, openai_asr
+from app import claude_code, elevenlabs_asr
 from app.web import server
 from tests.conftest import HW
 
@@ -64,8 +64,8 @@ def test_avbryt_biter_mitt_i_molnfasen(tmp_path, monkeypatch):
     monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: HW())
     monkeypatch.setattr(server.llm_client, "is_running", lambda *a, **k: False)
     monkeypatch.setattr(server.media_mod, "probe_duration", lambda *_: 60.0)
-    monkeypatch.setattr(server.openai_asr, "har_nyckel", lambda *a, **k: True)
-    monkeypatch.setattr(server.openai_asr, "transkribera", moln_som_dröjer)
+    monkeypatch.setattr(server.elevenlabs_asr, "har_nyckel", lambda *a, **k: True)
+    monkeypatch.setattr(server.elevenlabs_asr, "transkribera", moln_som_dröjer)
     arb = _Arbiter()
     c = TestClient(server.create_app(base_dir=tmp_path, arbiter=arb))
     media = tmp_path / "lektion.mp3"
@@ -90,34 +90,32 @@ def test_avbryt_biter_mitt_i_molnfasen(tmp_path, monkeypatch):
     assert c.post("/api/transcribe/cancel").json() == {"cancelled": False}
 
 
-# ──────────────────────────────────────────────── 2 · Omtag mot OpenAI ──
+# ──────────────────────────────────────────── 2 · Omtag mot ElevenLabs ──
 
 def _molnrigg(monkeypatch, tmp_path, lagen):
-    """openai_asr.transkribera utan ffmpeg: styckningen och urklippet fejkas,
-    så det som testas är omtagslogiken och ingenting annat."""
+    """elevenlabs_asr.transkribera utan ffmpeg: omkodningen fejkas, så det som
+    testas är omtagslogiken och ingenting annat."""
     from tests.fejk import Moln
     moln = Moln(lagen).installera(monkeypatch)
-    monkeypatch.setattr(openai_asr, "BACKOFF", (0.0, 0.0, 0.0))   # ingen väntan
-    monkeypatch.setattr(openai_asr, "tystnader", lambda *a, **k: [])
-    monkeypatch.setattr(openai_asr, "_klipp_ut",
-                        lambda audio, start, end, dest: (dest.write_bytes(b"ogg"), dest)[1])
-    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    monkeypatch.setattr(elevenlabs_asr, "_koda_om",
+                        lambda audio, dest: (dest.write_bytes(b"ogg"), dest)[1])
+    monkeypatch.setenv("ELEVENLABS_API_KEY", "el-test")
     return moln
 
 
 def test_ett_429_kostar_en_paus_inte_hela_lektionen(tmp_path, monkeypatch):
     moln = _molnrigg(monkeypatch, tmp_path, ["429", "429", "ok"])
     loggar: list[str] = []
-    res = openai_asr.transkribera(tmp_path / "a.wav", tmp_path, langd=100.0,
-                                  log_cb=loggar.append)
+    res = elevenlabs_asr.transkribera(tmp_path / "a.wav", tmp_path, langd=100.0,
+                                      log_cb=loggar.append)
     assert res.text == "Hej världen."
     assert len(moln.anrop) == 3                   # två omtag, sedan igenom
     assert any("Försöker igen" in m for m in loggar)   # och läraren fick veta
 
 
-def test_natet_som_dor_mitt_i_strommen_tas_om(tmp_path, monkeypatch):
+def test_natet_som_dor_under_uppladdningen_tas_om(tmp_path, monkeypatch):
     moln = _molnrigg(monkeypatch, tmp_path, ["dor", "ok"])
-    res = openai_asr.transkribera(tmp_path / "a.wav", tmp_path, langd=100.0)
+    res = elevenlabs_asr.transkribera(tmp_path / "a.wav", tmp_path, langd=100.0)
     assert res.text == "Hej världen."
     assert len(moln.anrop) == 2
 
@@ -127,15 +125,15 @@ def test_avvisad_nyckel_tas_aldrig_om(tmp_path, monkeypatch):
     varje försök kostar."""
     moln = _molnrigg(monkeypatch, tmp_path, ["401"])
     with pytest.raises(RuntimeError, match="401"):
-        openai_asr.transkribera(tmp_path / "a.wav", tmp_path, langd=100.0)
+        elevenlabs_asr.transkribera(tmp_path / "a.wav", tmp_path, langd=100.0)
     assert len(moln.anrop) == 1
 
 
-def test_omtagen_ger_upp_till_slut_och_sager_vilken_del(tmp_path, monkeypatch):
+def test_omtagen_ger_upp_till_slut(tmp_path, monkeypatch):
     moln = _molnrigg(monkeypatch, tmp_path, ["500"])
     with pytest.raises(RuntimeError, match="500"):
-        openai_asr.transkribera(tmp_path / "a.wav", tmp_path, langd=100.0)
-    assert len(moln.anrop) == openai_asr.FORSOK   # ett försök + tre omtag
+        elevenlabs_asr.transkribera(tmp_path / "a.wav", tmp_path, langd=100.0)
+    assert len(moln.anrop) == elevenlabs_asr.FORSOK   # ett försök + tre omtag
 
 
 # ─────────────────────────────────────────── 3 · Claude-bryggan hänger ──
@@ -191,7 +189,7 @@ def _transkriberingsrigg(monkeypatch, tmp_path):
     from fastapi.testclient import TestClient
     monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: HW())
     monkeypatch.setattr(server.llm_client, "is_running", lambda *a, **k: False)
-    monkeypatch.setattr(server.openai_asr, "har_nyckel", lambda *a, **k: True)
+    monkeypatch.setattr(server.elevenlabs_asr, "har_nyckel", lambda *a, **k: True)
     c = TestClient(server.create_app(base_dir=tmp_path, arbiter=_Arbiter()))
     media = tmp_path / "lektion.mp3"
     media.write_text("a", encoding="utf-8")
