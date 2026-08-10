@@ -210,6 +210,52 @@ def clean_caption_dicts(segments: list[dict], group: bool = True) -> list[dict]:
     return [{"start": s.start, "end": s.end, "text": s.text} for s in cleaned]
 
 
+# ---- Ordtider till undertextrader -----------------------------------------
+
+
+def segmentera_ord(ord_: list[dict]) -> list[dict]:
+    """Molnets ordtider → segment i undertextstorlek.
+
+    Punkt är förstahandsgränsen, men den kan utebli helt: sångtext, uppläsning
+    i ett svep, en modell som glömmer skiljetecknen. Utan tak blev allt ETT
+    segment på minuter — oanvändbart som undertext och som källmarkör. Därför
+    bryts en för lång rad på ordgräns, och då med ordets EGNA tid i behåll i
+    stället för en interpolering.
+
+    ``ord_`` är [{"text","start","end"}]; ut kommer samma segmentform som
+    resten av appen läser: [{"start","end","text","words":[...]}].
+    """
+    ut: list[dict] = []
+    buffert: list[dict] = []
+
+    def langd(extra: dict | None = None) -> int:
+        return len(" ".join(o["text"] for o in buffert + ([extra] if extra else [])))
+
+    for o in ord_:
+        for_langt = buffert and langd(o) > MAX_CAPTION_CHARS
+        for_lange = buffert and (o["end"] - buffert[0]["start"]) > MAX_CAPTION_SEC
+        if for_langt or for_lange:
+            ut.append(_ordsegment(buffert))
+            buffert = []
+        buffert.append(o)
+        if _SENT_END.search(o["text"]):
+            ut.append(_ordsegment(buffert))
+            buffert = []
+    if buffert:
+        ut.append(_ordsegment(buffert))
+    return ut
+
+
+def _ordsegment(ord_: list[dict]) -> dict:
+    return {
+        "start": round(ord_[0]["start"], 3),
+        "end": round(ord_[-1]["end"], 3),
+        "text": " ".join(o["text"] for o in ord_),
+        "words": [{"text": o["text"], "start": round(o["start"], 3),
+                   "end": round(o["end"], 3)} for o in ord_],
+    }
+
+
 # Ingen argv byggs här längre: transkriberingen sker hos OpenAI
 # (app/openai_asr.py), tidsstämplarna sätts i serverprocessen
 # (app/alignment.py) och ljudrättningen är riven. Modulen är ren textformning.
