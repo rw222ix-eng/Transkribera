@@ -1219,8 +1219,43 @@ def _fts_query(text: str, *, match_all: bool = True) -> str | None:
     return joiner.join(f'"{t}"*' for t in tokens)
 
 
-def _snippet_like(text: str, terms: list[str], width: int = 160) -> str:
-    """A context window around the first matching term, for the LIKE fallback."""
+def _mark_terms(text: str, terms: list[str]) -> str:
+    """Omge varje förekomst av ett sökord med \\x02..\\x03 — samma markörer som
+    FTS5:s snippet() sätter, så UI:t kan highlighta träffen. Överlappande
+    förekomster slås ihop, annars skulle markörerna nästlas."""
+    low = text.lower()
+    spans: list[tuple[int, int]] = []
+    for term in terms:
+        t = (term or "").lower()
+        if not t:
+            continue
+        i = low.find(t)
+        while i >= 0:
+            spans.append((i, i + len(t)))
+            i = low.find(t, i + 1)
+    if not spans:
+        return text
+    merged: list[list[int]] = []
+    for start, end in sorted(spans):
+        if merged and start <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], end)
+        else:
+            merged.append([start, end])
+    out: list[str] = []
+    prev = 0
+    for start, end in merged:
+        out += [text[prev:start], "\x02", text[start:end], "\x03"]
+        prev = end
+    out.append(text[prev:])
+    return "".join(out)
+
+
+def _snippet_like(text: str, terms: list[str], width: int = 160, *,
+                  mark: bool = False) -> str:
+    """A context window around the first matching term, for the LIKE fallback.
+    mark=True omger träffarna med \\x02..\\x03 (samma kontrakt som FTS5-vägens
+    snippet()) och används av vyerna som highlightar. Standard är omarkerat:
+    utdragen som matas till LLM:en ska inte innehålla styrtecken."""
     low = text.lower()
     pos = min((low.find(t.lower()) for t in terms if t.lower() in low), default=-1)
     if pos < 0:
@@ -1228,6 +1263,8 @@ def _snippet_like(text: str, terms: list[str], width: int = 160) -> str:
     start = max(0, pos - width // 2)
     end = min(len(text), pos + width // 2)
     snip = text[start:end].strip().replace("\n", " ")
+    if mark:
+        snip = _mark_terms(snip, terms)
     return ("… " if start > 0 else "") + snip + (" …" if end < len(text) else "")
 
 
@@ -1241,6 +1278,8 @@ def search_transcripts(conn: sqlite3.Connection, query: str, *, limit: int = 50,
     """Search every lesson transcript at once. Returns ranked hits with a context
     snippet (what was said) and which lesson/class/course/date it belongs to.
     Uses FTS5 + bm25 ranking + snippet(); falls back to LIKE when FTS is absent.
+    Snippeten markerar träffarna med \\x02..\\x03 på båda vägarna — UI:t
+    highlightar på den markeringen och får inte tappa den i fallbacken.
     match_all=False (OR) is used for the natural-language RAG retrieval; where
     the query is a natural question, so only its content words (stopwords
     stripped) may match — otherwise "var/jag/och" ranks every lesson."""
@@ -1276,7 +1315,7 @@ def search_transcripts(conn: sqlite3.Connection, query: str, *, limit: int = 50,
     out = []
     for r in rows:
         d = _search_row(r)
-        d["snippet"] = _snippet_like(r["_full"] or "", terms)
+        d["snippet"] = _snippet_like(r["_full"] or "", terms, mark=True)
         out.append(d)
     return out
 
@@ -1321,7 +1360,8 @@ def lessons_excerpts_for(conn: sqlite3.Connection, lesson_ids: list[int],
     """For the RAG 'ask across all lessons' answer: a bounded transcript excerpt
     around the query terms for each given lesson, with its class/course/date
     header — so the LLM is grounded without overflowing the context window.
-    Centered on the question's content words, not on stopwords."""
+    Centered on the question's content words, not on stopwords. Utdraget är
+    medvetet omarkerat: det går till prompten, inte till UI:t."""
     out: list[dict] = []
     terms = content_terms(query)
     for lid in lesson_ids:

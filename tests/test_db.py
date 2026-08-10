@@ -328,6 +328,27 @@ def test_search_index_updates_on_edit_and_delete(tmp_path):
     assert db.search_transcripts(conn, "matriser") == []      # delete trigger fired
 
 
+def test_search_like_fallback_marks_hits_like_fts(tmp_path, monkeypatch):
+    """Utan FTS5 i sqlite-bygget faller söket tillbaka på LIKE — snippeten
+    måste ändå markera träffen med \\x02..\\x03, annars tappar UI:t sin
+    highlight tyst så fort fallbacken används."""
+    conn = _conn(tmp_path)
+    _lesson_with_text(conn, "h1", "idag gick vi igenom derivata och kedjeregeln")
+    monkeypatch.setattr(db, "has_fts", lambda *_a, **_k: False)
+    hits = db.search_transcripts(conn, "derivata")
+    assert len(hits) == 1
+    assert "\x02derivata\x03" in hits[0]["snippet"]
+
+
+def test_snippet_markers_never_nest_on_overlapping_terms(tmp_path):
+    """"derivata derivat" ger två överlappande träffar på samma ord — de ska
+    bli EN markering, annars nästlas styrtecknen och UI:t renderar trasig
+    HTML (<mark><mark>…</mark>)."""
+    snip = db._snippet_like("vi gick igenom derivata idag",
+                            ["derivata", "derivat"], mark=True)
+    assert snip == "vi gick igenom \x02derivata\x03 idag"
+
+
 def test_excerpts_for_rag_have_headers(tmp_path):
     conn = _conn(tmp_path)
     gid = db.get_or_create_group(conn, "NA21")
@@ -338,6 +359,16 @@ def test_excerpts_for_rag_have_headers(tmp_path):
     assert len(ex) == 1
     assert ex[0]["group"] == "NA21"
     assert "derivata" in ex[0]["excerpt"]
+
+
+def test_rag_excerpt_is_never_marked(tmp_path):
+    """RAG-utdraget matas till LLM:en, inte till UI:t — styrtecknen hör inte
+    hemma i prompten och får aldrig smyga in via den delade hjälparen."""
+    conn = _conn(tmp_path)
+    les = _lesson_with_text(conn, "h1", "lång lektion " * 50 + "om derivata mitt i")
+    ex = db.lessons_excerpts_for(conn, [les["id"]], "derivata")
+    assert "derivata" in ex[0]["excerpt"]
+    assert "\x02" not in ex[0]["excerpt"] and "\x03" not in ex[0]["excerpt"]
 
 
 # ---- agenda (kalender tvärs klasser) ----------------------------------------

@@ -615,3 +615,19 @@ def test_refine_utan_meddelande_ar_400(llm_ready, monkeypatch):
 def test_refine_pa_okand_planering_ar_404(llm_ready):
     assert llm_ready.post("/api/planning/finnsinte/refine",
                           json={"message": "byt exempel"}).status_code == 404
+
+
+def test_archive_search_marks_hits_in_snippet(client):
+    """Arkivsökets snippet ska markera träffarna med \\x02..\\x03 — samma
+    kontrakt som /api/search — så att UI:t kan highlighta sökordet."""
+    from app import db as appdb
+    conn = appdb.connect(client.base_dir / "transkribera.db")
+    appdb.create_planned_lesson(conn, titel="Bråk",
+                                moment="idag går vi igenom täljare och nämnare",
+                                datum="2026-06-20")
+    conn.close()
+    r = client.get("/api/planning/archive/search", params={"q": "täljare"})
+    assert r.status_code == 200
+    hits = r.json()["hits"]
+    assert len(hits) == 1
+    assert "\x02täljare\x03" in hits[0]["snippet"]
