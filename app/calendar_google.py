@@ -414,7 +414,8 @@ def serienyckel(h: dict) -> str:
 
 def tolka_handelser(handelser: list[dict], klasser: list[str] | None = None,
                     kurser: list[str] | None = None,
-                    beslut: dict[str, dict] | None = None) -> dict:
+                    beslut: dict[str, dict] | None = None,
+                    idag: str | None = None) -> dict:
     """Ren funktion: Google-händelser in, {schema, lov, poster, osakra} ut i
     exakt de former frontendens window.Kalender håller. Testbar utan Google.
 
@@ -426,6 +427,12 @@ def tolka_handelser(handelser: list[dict], klasser: list[str] | None = None,
     kurser = sorted(kurser or [], key=len, reverse=True)
     schema: list[dict] = []
     sedda: set[tuple] = set()
+    # Sista instansen per schemarad. Läsfönstret går 240 dagar BAKÅT för lovens
+    # och arkivets skull (read_schema), och utan det här hamnade vårterminens
+    # serier i höstens vecka: en lärares kalender har historik i sig. Veckan
+    # ska visa det som GÄLLER — poster och lov får fortsätta minnas.
+    sist: dict[tuple, str] = {}
+    idag = idag or date.today().isoformat()
     lov: list[dict] = []
     poster: list[dict] = []
     osakra: dict[str, dict] = {}
@@ -485,6 +492,7 @@ def tolka_handelser(handelser: list[dict], klasser: list[str] | None = None,
                 if not rad["klass"] or not rad["kurs"]:
                     continue               # en lektion utan klass och kurs är ingen
                 nyckel = (rad["dag"], rad["tid"], rad["klass"], rad["kurs"], rad["sal"])
+                sist[nyckel] = max(sist.get(nyckel, ""), s2[:10])
                 if nyckel not in sedda:
                     sedda.add(nyckel)
                     schema.append(rad)
@@ -541,6 +549,7 @@ def tolka_handelser(handelser: list[dict], klasser: list[str] | None = None,
             rad = {"dag": dag, "tid": _tid(s, e), "kurs": kurs, "klass": klass,
                    "sal": (h.get("location") or "").strip()}
             nyckel = (rad["dag"], rad["tid"], rad["klass"], rad["kurs"], rad["sal"])
+            sist[nyckel] = max(sist.get(nyckel, ""), datum)
             if nyckel not in sedda:                 # samma vecka, många instanser
                 sedda.add(nyckel)
                 schema.append(rad)
@@ -553,6 +562,10 @@ def tolka_handelser(handelser: list[dict], klasser: list[str] | None = None,
         if h.get("recurringEventId"):
             osaker(h, titel, "återkommande men ingen igenkänd kurs",
                    klass=klass, kurs=kurs)
+    # Bara serier som fortfarande pågår: sista instansen i läsfönstret ligger
+    # idag eller senare.
+    schema = [r for r in schema
+              if sist.get((r["dag"], r["tid"], r["klass"], r["kurs"], r["sal"]), "") >= idag]
     schema.sort(key=lambda r: (r["dag"], r["tid"], r["klass"]))
     lov.sort(key=lambda p: (p["fran"], p["till"]))
     poster.sort(key=lambda p: (p["datum"], p["tid"]))

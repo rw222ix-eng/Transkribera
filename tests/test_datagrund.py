@@ -213,6 +213,32 @@ def test_aterkommande_handelse_med_klass_blir_veckoschema():
                              "klass": "9A", "sal": "A214"}]
 
 
+def test_serie_som_tagit_slut_ligger_inte_kvar_i_veckan():
+    """Läsfönstret går 240 dagar BAKÅT för lovens och arkivets skull — men
+    vårterminens serier ska inte dyka upp i höstens vecka. Skarpt fall
+    (2026-08-10): tre lektioner ur april låg kvar bredvid höstens schema."""
+    ut = calendar_google.tolka_handelser([
+        _tid("2026-04-20", "14:40", "15:25", summary="Matematik, nivå 2a IN24prk",
+             location="P807", recurringEventId="vt"),
+        _tid("2026-08-17", "08:10", "09:40", summary="Matematik, nivå 1c TE26A",
+             location="B204", recurringEventId="ht"),
+    ], klasser=["IN24prk", "TE26A"],
+        kurser=["Matematik, nivå 2a", "Matematik, nivå 1c"], idag="2026-08-10")
+    assert [r["klass"] for r in ut["schema"]] == ["TE26A"]
+
+
+def test_serie_som_fortfarande_gar_behalls_fast_den_borjade_i_varas():
+    """Det är sista instansen som avgör, inte den första — en kurs som löper
+    över läsårsskiftet är samma serie hela vägen."""
+    ut = calendar_google.tolka_handelser([
+        _tid("2026-04-20", "14:40", "15:25", summary="Matematik, nivå 2a IN24prk",
+             location="P807", recurringEventId="r"),
+        _tid("2026-09-07", "14:40", "15:25", summary="Matematik, nivå 2a IN24prk",
+             location="P807", recurringEventId="r"),
+    ], klasser=["IN24prk"], kurser=["Matematik, nivå 2a"], idag="2026-08-10")
+    assert [r["klass"] for r in ut["schema"]] == ["IN24prk"]
+
+
 def test_kanda_namn_ur_databasen_vinner_over_monstret():
     ut = calendar_google.tolka_handelser(
         [_tid("2026-08-18", "09:15", "10:00", summary="Matematik, nivå 2 · NA22",
