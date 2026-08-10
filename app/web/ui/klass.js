@@ -794,7 +794,10 @@ window.Klass = (() => {
                     sv && sv.lektioner
                       ? `${sv.lektioner} lektioner i veckoschemat`
                       : 'inga lektioner i veckoschemat'}${
-                    sv && sv.bedomda ? ` · ${sv.bedomda} ${sv.bedomda === 1 ? 'post' : 'poster'} tolkade av Claude` : ''}`);
+                    sv && sv.bedomda ? ` · ${sv.bedomda} ${sv.bedomda === 1 ? 'post' : 'poster'} tolkade av Claude` : ''}${
+                    /* Notiser andra program lagt i kalendern hoppades över —
+                       det ska stå, annars ser det ut som att de tappats bort. */
+                    sv && sv.notiser ? ` · ${sv.notiser} ${sv.notiser === 1 ? 'notis' : 'notiser'} överhoppade` : ''}`);
         });
       } else {
         setTimeout(() => klar('Kalendern är synkad — schemat, salarna och loven oförändrade'), 1100);

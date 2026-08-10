@@ -89,7 +89,10 @@ def test_beslut_gor_en_post_till_en_lektion():
                          "kurs": "Matematik, nivå 2c"}})
     assert med["schema"] == [{"dag": 2, "tid": "10:15–11:00",
                               "kurs": "Matematik, nivå 2c", "klass": "NA25",
-                              "sal": "P807"}]
+                              "sal": "P807",
+                              # Serien sågs bara en gång: den dagen är både
+                              # första och sista instansen.
+                              "fran": "2026-08-18", "till": "2026-08-18"}]
     assert med["poster"] == []
 
 

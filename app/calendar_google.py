@@ -402,6 +402,36 @@ def _tid(start: str, slut: str) -> str:
     return f"{(start or '')[11:16]}–{(slut or '')[11:16]}"
 
 
+def _langd(start: str, slut: str) -> int | None:
+    """Längden i minuter, eller None när tiderna inte går att läsa. Slut före
+    start betyder att händelsen korsar midnatt — då är den inte kort."""
+    try:
+        s = int(start[11:13]) * 60 + int(start[14:16])
+        e = int(slut[11:13]) * 60 + int(slut[14:16])
+    except (TypeError, ValueError, IndexError):
+        return None
+    return e - s if e >= s else None
+
+
+def ar_notis(h: dict) -> bool:
+    """En NOTIS, inte en händelse: en kort tidsatt punkt som är markerad ledig,
+    saknar plats och inte återkommer.
+
+    Andra program skriver sina egna loggrader i kalendern — lärarens
+    automatiska synk mellan skol- och privatkalendern lägger «Synk: 7 nytt –
+    se beskrivning» som en femminuterspunkt markerad ledig (2026-08-10). Det
+    är ingen lektion, inget möte och inget prov, och ska inte bli en post att
+    planera runt. Signaturen är formen, inte ordet «synk», så vilket program
+    som helst fångas."""
+    start, slut = h.get("start") or {}, h.get("end") or {}
+    if start.get("date") or h.get("recurringEventId"):
+        return False                        # heldagar och serier är inga notiser
+    if h.get("transparency") != "transparent" or (h.get("location") or "").strip():
+        return False
+    langd = _langd(start.get("dateTime") or "", slut.get("dateTime") or "")
+    return langd is not None and langd <= 10
+
+
 def serienyckel(h: dict) -> str:
     """Identiteten på en SERIE, inte på en instans: samma titel, samma slag av
     händelse. Mentorstiden varje måndag hela läsåret är en nyckel, inte
@@ -415,7 +445,8 @@ def serienyckel(h: dict) -> str:
 def tolka_handelser(handelser: list[dict], klasser: list[str] | None = None,
                     kurser: list[str] | None = None,
                     beslut: dict[str, dict] | None = None,
-                    idag: str | None = None) -> dict:
+                    idag: str | None = None,
+                    fonster_till: str | None = None) -> dict:
     """Ren funktion: Google-händelser in, {schema, lov, poster, osakra} ut i
     exakt de former frontendens window.Kalender håller. Testbar utan Google.
 
@@ -427,15 +458,21 @@ def tolka_handelser(handelser: list[dict], klasser: list[str] | None = None,
     kurser = sorted(kurser or [], key=len, reverse=True)
     schema: list[dict] = []
     sedda: set[tuple] = set()
-    # Sista instansen per schemarad. Läsfönstret går 240 dagar BAKÅT för lovens
-    # och arkivets skull (read_schema), och utan det här hamnade vårterminens
-    # serier i höstens vecka: en lärares kalender har historik i sig. Veckan
-    # ska visa det som GÄLLER — poster och lov får fortsätta minnas.
+    # FÖRSTA och SISTA instansen per schemarad. Ett veckoschema utan datum är
+    # ett påstående om alla veckor som finns, och det stämmer aldrig: serierna
+    # börjar när terminen börjar och slutar när kursen slutar. Utan det här
+    # ritade appen höstens lektioner på uppstartsveckan i augusti — läraren
+    # hade möten, inte lektioner — och vårterminens serier hamnade i höstens
+    # vecka bara för att läsfönstret går 240 dagar bakåt (read_schema).
+    forst: dict[tuple, str] = {}
     sist: dict[tuple, str] = {}
     idag = idag or date.today().isoformat()
     lov: list[dict] = []
     poster: list[dict] = []
     osakra: dict[str, dict] = {}
+    # Räknas och rapporteras — den som undrar vart notiserna tog vägen ska få
+    # svar av synken i stället för att leta.
+    notiser = 0
 
     def osaker(h: dict, titel: str, varfor: str, **extra) -> None:
         nyckel = serienyckel(h)
@@ -456,6 +493,9 @@ def tolka_handelser(handelser: list[dict], klasser: list[str] | None = None,
     for h in handelser or []:
         titel = (h.get("summary") or "").strip()
         if not titel:
+            continue
+        if ar_notis(h):
+            notiser += 1
             continue
         start, slut = h.get("start") or {}, h.get("end") or {}
         # Ett fattat beslut går före reglerna. Det är ANDRA passet: samma rena
@@ -492,6 +532,7 @@ def tolka_handelser(handelser: list[dict], klasser: list[str] | None = None,
                 if not rad["klass"] or not rad["kurs"]:
                     continue               # en lektion utan klass och kurs är ingen
                 nyckel = (rad["dag"], rad["tid"], rad["klass"], rad["kurs"], rad["sal"])
+                forst[nyckel] = min(forst.get(nyckel, "9999"), s2[:10])
                 sist[nyckel] = max(sist.get(nyckel, ""), s2[:10])
                 if nyckel not in sedda:
                     sedda.add(nyckel)
@@ -549,6 +590,7 @@ def tolka_handelser(handelser: list[dict], klasser: list[str] | None = None,
             rad = {"dag": dag, "tid": _tid(s, e), "kurs": kurs, "klass": klass,
                    "sal": (h.get("location") or "").strip()}
             nyckel = (rad["dag"], rad["tid"], rad["klass"], rad["kurs"], rad["sal"])
+            forst[nyckel] = min(forst.get(nyckel, "9999"), datum)
             sist[nyckel] = max(sist.get(nyckel, ""), datum)
             if nyckel not in sedda:                 # samma vecka, många instanser
                 sedda.add(nyckel)
@@ -566,10 +608,20 @@ def tolka_handelser(handelser: list[dict], klasser: list[str] | None = None,
     # idag eller senare.
     schema = [r for r in schema
               if sist.get((r["dag"], r["tid"], r["klass"], r["kurs"], r["sal"]), "") >= idag]
+    # Serien vars sista instans ligger vid fönstrets kant fortsätter bortom det
+    # vi läst — då är slutet OKÄNT och inte satt. Annars hade veckovyn tömt sig
+    # själv sju månader fram bara för att läsningen tog slut där.
+    kant = ((date.fromisoformat(fonster_till) - timedelta(days=14)).isoformat()
+            if fonster_till else "")
+    for r in schema:
+        n = (r["dag"], r["tid"], r["klass"], r["kurs"], r["sal"])
+        r["fran"] = forst.get(n, "")
+        slut = sist.get(n, "")
+        r["till"] = "" if kant and slut >= kant else slut
     schema.sort(key=lambda r: (r["dag"], r["tid"], r["klass"]))
     lov.sort(key=lambda p: (p["fran"], p["till"]))
     poster.sort(key=lambda p: (p["datum"], p["tid"]))
-    return {"schema": schema, "lov": lov, "poster": poster,
+    return {"schema": schema, "lov": lov, "poster": poster, "notiser": notiser,
             "osakra": sorted(osakra.values(), key=lambda o: o["titel"])}
 
 
@@ -721,13 +773,14 @@ def read_schema(base_dir: Path, dagar: int = 330,
         handelser = list_events(base_dir, fran, till)
     except RuntimeError as e:
         return {"error": str(e)}
-    ut = tolka_handelser(handelser, klasser, kurser)
+    ut = tolka_handelser(handelser, klasser, kurser, fonster_till=till)
     # Andra passet: `bedomare` får de osäkra serierna och svarar med beslut
     # (cache + Claude, se app/kalender_ai.py). Samma rena funktion körs om med
     # besluten, så det finns bara EN väg som placerar en händelse i veckan.
     if bedomare and ut.get("osakra"):
         beslut = bedomare(ut["osakra"]) or {}
         if beslut:
-            ut = dict(tolka_handelser(handelser, klasser, kurser, beslut=beslut),
+            ut = dict(tolka_handelser(handelser, klasser, kurser, beslut=beslut,
+                                      fonster_till=till),
                       beslut=beslut)
     return dict(ut, fran=fran, till=till)

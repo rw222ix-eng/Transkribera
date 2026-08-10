@@ -52,7 +52,14 @@ window.Kalender = (() => {
   const minuter = t => { const m = String(t).match(/(\d{1,2})[:.](\d{2})/); return m ? +m[1] * 60 + +m[2] : null; };
   const omVeckor = n => { const d = new Date(); d.setDate(d.getDate() + n * 7); return iso(d); };
   const forDatum = datum => poster.filter(p => p.datum === datum);
-  const schemaFor = datum => schema.filter(s => s.dag === veckodag(datum));
+  /* Schemaraden gäller mellan sina datum. Ett veckoschema utan giltighet är ett
+     påstående om varenda vecka som finns, och det stämmer aldrig: uppstarts-
+     veckan i augusti har möten, inte lektioner, och en kurs som slutar i
+     december ska inte ligga kvar i januari. Tomma datum = gäller tills vidare
+     (ett handskrivet schema, eller en serie som fortsätter bortom det synken
+     hunnit läsa). */
+  const schemaFor = datum => schema.filter(s => s.dag === veckodag(datum)
+    && (!s.fran || datum >= s.fran) && (!s.till || datum <= s.till));
   const lovFor = datum => lov.find(l => datum >= l.fran && datum <= l.till) || null;
 
   /* Träffar inspelningstiden en lektion i schemat? Då är klass och kurs inte
@@ -229,7 +236,7 @@ window.Kalender = (() => {
       /* `bedomda` = hur många osäkra serier Claude fick avgöra. Synken ska
          kunna säga vad den lutade sig mot, inte bara att den lyckades. */
       return { synkad: d.synkad, bedomda: d.bedomda || 0, konto: d.konto || '',
-               lektioner: (d.schema || []).length };
+               lektioner: (d.schema || []).length, notiser: d.notiser || 0 };
     } catch (e) {
       return { fel: e.message };
     }

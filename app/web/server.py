@@ -1130,7 +1130,9 @@ def create_app(base_dir: Path | None = None,
                 # Hur många osäkra serier Claude fick avgöra — synken ska kunna
                 # säga vad den lutade sig mot, inte bara att den lyckades.
                 "bedomda": len(hamtat.get("beslut") or {}),
-                "osakra": len(hamtat.get("osakra") or [])}
+                "osakra": len(hamtat.get("osakra") or []),
+                # Loggrader från andra kalenderprogram, se calendar_google.ar_notis
+                "notiser": hamtat.get("notiser") or 0}
 
     @app.post("/api/schema/till-google")
     def api_schema_till_google():

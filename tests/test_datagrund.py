@@ -19,10 +19,14 @@ def conn(tmp_path):
     c.close()
 
 
+# Tomma fran/till = gäller tills vidare, formen ett handskrivet schema har.
 SCHEMA_RADER = [
-    {"dag": 1, "tid": "08:15–09:00", "kurs": "Matematik 3c", "klass": "9A", "sal": "A214"},
-    {"dag": 1, "tid": "10:15–11:00", "kurs": "Matematik 4", "klass": "9B", "sal": "B103"},
-    {"dag": 3, "tid": "08:15–09:00", "kurs": "Matematik 3c", "klass": "9A", "sal": "A214"},
+    {"dag": 1, "tid": "08:15–09:00", "kurs": "Matematik 3c", "klass": "9A",
+     "sal": "A214", "fran": "", "till": ""},
+    {"dag": 1, "tid": "10:15–11:00", "kurs": "Matematik 4", "klass": "9B",
+     "sal": "B103", "fran": "", "till": ""},
+    {"dag": 3, "tid": "08:15–09:00", "kurs": "Matematik 3c", "klass": "9A",
+     "sal": "A214", "fran": "", "till": ""},
 ]
 
 
@@ -32,6 +36,15 @@ def test_schema_ror_sig_genom_databasen_med_frontendens_faltnamn(conn):
     ut = db.replace_schema(conn, SCHEMA_RADER)
     assert ut == SCHEMA_RADER                      # samma form in som ut
     assert db.list_schema(conn) == SCHEMA_RADER
+
+
+def test_schemaradens_giltighet_overlever_databasen(conn):
+    """Utan datumen i DB:t vore synkens arbete bortkastat vid nästa omladdning
+    — veckovyn läser giltigheten härifrån, inte ur svaret."""
+    ut = db.replace_schema(conn, [dict(SCHEMA_RADER[0], fran="2026-08-19",
+                                       till="2026-12-16")])
+    assert (ut[0]["fran"], ut[0]["till"]) == ("2026-08-19", "2026-12-16")
+    assert db.list_schema(conn) == ut
 
 
 def test_schema_sorteras_pa_dag_och_klockslag(conn):
@@ -210,7 +223,75 @@ def test_aterkommande_handelse_med_klass_blir_veckoschema():
              location="A214", recurringEventId="r1"),
     ])
     assert ut["schema"] == [{"dag": 1, "tid": "08:15–09:00", "kurs": "Matematik 3c",
-                             "klass": "9A", "sal": "A214"}]
+                             "klass": "9A", "sal": "A214",
+                             # Giltigheten är seriens egna instanser: veckan får
+                             # inte ritas före den första eller efter den sista.
+                             "fran": "2026-08-17", "till": "2026-08-24"}]
+
+
+def test_annat_programs_loggrad_blir_ingen_post():
+    """Skarpt fall (2026-08-10): lärarens automatiska synk mellan skol- och
+    privatkalendern skriver «Synk: 7 nytt – se beskrivning» som en
+    femminuterspunkt markerad ledig. Ingen lektion, inget möte, inget prov."""
+    ut = calendar_google.tolka_handelser([
+        _tid("2026-09-07", "07:30", "07:35", summary="Synk: 7 nytt – se beskrivning.",
+             transparency="transparent"),
+        _tid("2026-09-07", "13:00", "14:30", summary="Ämneslagsmöte"),
+    ])
+    assert [p["titel"] for p in ut["poster"]] == ["Ämneslagsmöte"]
+    assert ut["notiser"] == 1
+
+
+def test_kort_handelse_som_bokar_tid_ar_ingen_notis():
+    """Det är LEDIGmarkeringen som gör en punkt till en notis. En kort
+    händelse som faktiskt tar tid i anspråk är en post som alla andra."""
+    ut = calendar_google.tolka_handelser([
+        _tid("2026-09-07", "07:30", "07:35", summary="Ring rektorn"),
+        _tid("2026-09-08", "08:00", "08:05", summary="Hämta nycklar",
+             transparency="transparent", location="Expeditionen"),
+    ])
+    assert [p["titel"] for p in ut["poster"]] == ["Ring rektorn", "Hämta nycklar"]
+    assert ut["notiser"] == 0
+
+
+def test_lang_ledigmarkerad_handelse_ar_ingen_notis():
+    """Gymnasiemässan och friluftsdagen står som «ledig» men är hela dagar som
+    påverkar undervisningen — de ska inte försvinna."""
+    ut = calendar_google.tolka_handelser([
+        _tid("2026-10-09", "08:00", "16:00", summary="Gymnasiemässa",
+             transparency="transparent"),
+    ])
+    assert [p["titel"] for p in ut["poster"]] == ["Gymnasiemässa"]
+    assert ut["notiser"] == 0
+
+
+def test_schemaraden_bar_seriens_forsta_och_sista_dag():
+    """Skarpt fall (2026-08-10): appen ritade höstens lektioner på
+    uppstartsveckan i augusti — läraren hade möten, inte lektioner. Ett
+    veckoschema utan giltighet gäller varenda vecka som finns."""
+    ut = calendar_google.tolka_handelser([
+        _tid("2026-08-19", "08:10", "09:40", summary="Matematik, nivå 1c TE26A",
+             location="B204", recurringEventId="ht"),
+        _tid("2026-12-16", "08:10", "09:40", summary="Matematik, nivå 1c TE26A",
+             location="B204", recurringEventId="ht"),
+    ], klasser=["TE26A"], kurser=["Matematik, nivå 1c"], idag="2026-08-10",
+        fonster_till="2027-03-08")
+    assert ut["schema"][0]["fran"] == "2026-08-19"
+    assert ut["schema"][0]["till"] == "2026-12-16"
+
+
+def test_serie_som_nar_fonstrets_kant_far_oppet_slut():
+    """Sista instansen ligger vid kanten av det synken hann läsa — då är slutet
+    okänt. Ett satt `till` hade tömt veckovyn sju månader fram."""
+    ut = calendar_google.tolka_handelser([
+        _tid("2026-08-19", "08:10", "09:40", summary="Matematik, nivå 1c TE26A",
+             location="B204", recurringEventId="ht"),
+        _tid("2027-03-03", "08:10", "09:40", summary="Matematik, nivå 1c TE26A",
+             location="B204", recurringEventId="ht"),
+    ], klasser=["TE26A"], kurser=["Matematik, nivå 1c"], idag="2026-08-10",
+        fonster_till="2027-03-08")
+    assert ut["schema"][0]["fran"] == "2026-08-19"
+    assert ut["schema"][0]["till"] == ""
 
 
 def test_serie_som_tagit_slut_ligger_inte_kvar_i_veckan():
@@ -441,7 +522,12 @@ def test_det_som_skrivs_ut_lases_tillbaka_som_samma_schema(google, tmp_path):
                  for i, h in enumerate(google.skapade)]
     ut = calendar_google.tolka_handelser(instanser, klasser=["9A", "9B"],
                                          kurser=["Matematik 3c", "Matematik 4"])
-    assert ut["schema"] == SCHEMA_RADER
+    # Attrappen expanderar inte serierna, så varje rad ses en enda gång och
+    # giltigheten blir den dagen. Testet handlar om att lektionerna kommer
+    # tillbaka som samma vecka — inte om datumen.
+    utan = lambda rader: [{k: v for k, v in r.items() if k not in ("fran", "till")}
+                          for r in rader]
+    assert utan(ut["schema"]) == utan(SCHEMA_RADER)
 
 
 def test_utan_google_kopplig_skrivs_ingenting(tmp_path, monkeypatch):

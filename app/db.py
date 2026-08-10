@@ -21,7 +21,7 @@ import sqlite3
 import threading
 from pathlib import Path
 
-SCHEMA_VERSION = 12
+SCHEMA_VERSION = 13
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS courses (
@@ -491,6 +491,22 @@ ALTER TABLE bok_sidor ADD COLUMN nivasystem TEXT;
 ALTER TABLE bok_uppgifter ADD COLUMN nivamarke TEXT;
 """
 
+# Schemaradernas giltighet (v13) — ENDAST additiv; rollback: kolumnerna kan
+# lämnas kvar (NULL = "vet inte", och läses som gäller-alltid) + PRAGMA
+# user_version=12.
+#
+# Ett veckoschema utan datum är ett påstående om varenda vecka som finns. Det
+# stämmer aldrig: serierna börjar när terminen börjar och slutar när kursen
+# slutar. Utan de här två kolumnerna ritade veckovyn höstens lektioner på
+# uppstartsveckan i augusti, när läraren hade möten och inte lektioner.
+#
+# `fran`/`till` är seriens första och sista instans som synken FAKTISKT såg.
+# Tom `till` betyder öppet slut: serien fortsätter bortom läsfönstret.
+_SCHEMAGILTIGHET_MIGRATION = """
+ALTER TABLE schema_lektioner ADD COLUMN fran TEXT;
+ALTER TABLE schema_lektioner ADD COLUMN till TEXT;
+"""
+
 _MIGRATIONS: dict[int, str] = {2: _FTS_MIGRATION, 3: _MARKERS_MIGRATION,
                                4: _PLANNING_MIGRATION, 5: _EXAMS_MIGRATION,
                                6: _GY25_MIGRATION, 7: _DATAGRUND_MIGRATION,
@@ -498,12 +514,13 @@ _MIGRATIONS: dict[int, str] = {2: _FTS_MIGRATION, 3: _MARKERS_MIGRATION,
                                9: _KALENDERBESLUT_MIGRATION,
                                10: _RATTNING_MIGRATION,
                                11: _BOK_MIGRATION,
-                               12: _NIVAMARKE_MIGRATION}
+                               12: _NIVAMARKE_MIGRATION,
+                               13: _SCHEMAGILTIGHET_MIGRATION}
 
 # Migreringar som bara innehåller ALTER TABLE … ADD COLUMN. De körs sats för
 # sats så att en redan tillagd kolumn hoppas över i stället för att fälla hela
 # migreringen — se _apply_migrations.
-_ALTER_MIGRATIONER = {6, 12}
+_ALTER_MIGRATIONER = {6, 12, 13}
 
 _LESSON_SELECT = """
 SELECT l.*, g.namn AS group_namn, c.namn AS course_namn
@@ -1719,13 +1736,17 @@ def list_schema(conn: sqlite3.Connection) -> list[dict]:
     """Veckoschemat i visningsordning: dag, sedan klockslag. Klass och kurs
     som namn — schemat visas, det joinas aldrig vidare i gränssnittet."""
     rows = conn.execute(
-        "SELECT s.dag, s.tid, s.sal, g.namn AS klass, c.namn AS kurs "
+        "SELECT s.dag, s.tid, s.sal, s.fran, s.till, g.namn AS klass, c.namn AS kurs "
         "FROM schema_lektioner s "
         "LEFT JOIN groups  g ON g.id = s.group_id "
         "LEFT JOIN courses c ON c.id = s.course_id "
         "ORDER BY s.dag, s.tid, s.id").fetchall()
+    # Tomma fran/till = gäller tills vidare. Ett schema som skrivits för hand
+    # (PUT /api/schema) har inga datum, och ska inte försvinna ur veckan för
+    # det — se kalender.js schemaFor.
     return [{"dag": r["dag"], "tid": r["tid"], "kurs": r["kurs"] or "",
-             "klass": r["klass"] or "", "sal": r["sal"] or ""} for r in rows]
+             "klass": r["klass"] or "", "sal": r["sal"] or "",
+             "fran": r["fran"] or "", "till": r["till"] or ""} for r in rows]
 
 
 def replace_schema(conn: sqlite3.Connection, rader: list[dict]) -> list[dict]:
@@ -1747,12 +1768,14 @@ def replace_schema(conn: sqlite3.Connection, rader: list[dict]) -> list[dict]:
             continue
         klara.append((dag, tid, get_or_create_group(conn, r.get("klass") or ""),
                       get_or_create_course(conn, r.get("kurs") or ""),
-                      (r.get("sal") or "").strip() or None))
+                      (r.get("sal") or "").strip() or None,
+                      (r.get("fran") or "").strip() or None,
+                      (r.get("till") or "").strip() or None))
     with conn:
         conn.execute("DELETE FROM schema_lektioner")
         conn.executemany(
-            "INSERT INTO schema_lektioner(dag, tid, group_id, course_id, sal) "
-            "VALUES (?, ?, ?, ?, ?)", klara)
+            "INSERT INTO schema_lektioner(dag, tid, group_id, course_id, sal, fran, till) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)", klara)
     return list_schema(conn)
 
 
