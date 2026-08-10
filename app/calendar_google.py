@@ -463,6 +463,32 @@ def provslag(titel: str) -> str | None:
     return "prov" if _PROV_ORD.search(t) else None
 
 
+def _undantagsdagar(fran: str, till: str, veckodag: int, med_lektion: set[str],
+                    lov: list[dict]) -> list[str]:
+    """Veckodagarna mellan seriens första och sista instans som kalendern INTE
+    har någon lektion på — loven borträknade, för de ritas redan som stängda.
+
+    En inställd enstaka lektion är osynlig i ett mönster: appen ritade tre
+    lektioner som inte fanns (Kaggdagen 3/9 och gymnasiemässan 9/10,
+    2026-08-10). Kalendern visste, mönstret kunde inte bära det.
+
+    Bara fram till sista instansen: efter den vet läsningen ingenting, och en
+    tom framtid är inte samma sak som en inställd lektion."""
+    if not fran or not till:
+        return []
+    ut: list[str] = []
+    dag = date.fromisoformat(fran)
+    stopp = date.fromisoformat(till)
+    while dag <= stopp:
+        if dag.isoweekday() == veckodag:
+            iso = dag.isoformat()
+            if iso not in med_lektion and not any(l["fran"] <= iso <= l["till"]
+                                                  for l in lov):
+                ut.append(iso)
+        dag += timedelta(days=1)
+    return ut
+
+
 def _post(datum: str, tid: str, titel: str, klass: str) -> dict:
     """En kalenderpost i frontendens form. `slag` sätts bara när rubriken
     faktiskt säger något — en post utan slag är en post, inget annat."""
@@ -507,6 +533,9 @@ def tolka_handelser(handelser: list[dict], klasser: list[str] | None = None,
     # vecka bara för att läsfönstret går 240 dagar bakåt (read_schema).
     forst: dict[tuple, str] = {}
     sist: dict[tuple, str] = {}
+    # Varje dag serien FAKTISKT ligger på. Skillnaden mot veckodagarna i
+    # spannet är de inställda lektionerna (_undantagsdagar).
+    dagar_med: dict[tuple, set[str]] = {}
     idag = idag or date.today().isoformat()
     lov: list[dict] = []
     poster: list[dict] = []
@@ -575,6 +604,7 @@ def tolka_handelser(handelser: list[dict], klasser: list[str] | None = None,
                 nyckel = (rad["dag"], rad["tid"], rad["klass"], rad["kurs"], rad["sal"])
                 forst[nyckel] = min(forst.get(nyckel, "9999"), s2[:10])
                 sist[nyckel] = max(sist.get(nyckel, ""), s2[:10])
+                dagar_med.setdefault(nyckel, set()).add(s2[:10])
                 if nyckel not in sedda:
                     sedda.add(nyckel)
                     schema.append(rad)
@@ -632,6 +662,7 @@ def tolka_handelser(handelser: list[dict], klasser: list[str] | None = None,
             nyckel = (rad["dag"], rad["tid"], rad["klass"], rad["kurs"], rad["sal"])
             forst[nyckel] = min(forst.get(nyckel, "9999"), datum)
             sist[nyckel] = max(sist.get(nyckel, ""), datum)
+            dagar_med.setdefault(nyckel, set()).add(datum)
             if nyckel not in sedda:                 # samma vecka, många instanser
                 sedda.add(nyckel)
                 schema.append(rad)
@@ -654,9 +685,14 @@ def tolka_handelser(handelser: list[dict], klasser: list[str] | None = None,
             if fonster_till else "")
     for r in schema:
         n = (r["dag"], r["tid"], r["klass"], r["kurs"], r["sal"])
+        dagar = dagar_med.get(n) or set()
         r["fran"] = forst.get(n, "")
         slut = sist.get(n, "")
-        r["till"] = "" if kant and slut >= kant else slut
+        # Öppet slut bara för en RIKTIG serie. En enstaka flyttad lektion som
+        # råkar landa vid fönstrets kant är ingen serie, och skulle annars
+        # ritas varje vecka därefter.
+        r["till"] = "" if kant and slut >= kant and len(dagar) > 1 else slut
+        r["undantag"] = _undantagsdagar(r["fran"], slut, r["dag"], dagar, lov)
     schema.sort(key=lambda r: (r["dag"], r["tid"], r["klass"]))
     lov.sort(key=lambda p: (p["fran"], p["till"]))
     poster.sort(key=lambda p: (p["datum"], p["tid"]))

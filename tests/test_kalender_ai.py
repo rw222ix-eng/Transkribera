@@ -92,7 +92,8 @@ def test_beslut_gor_en_post_till_en_lektion():
                               "sal": "P807",
                               # Serien sågs bara en gång: den dagen är både
                               # första och sista instansen.
-                              "fran": "2026-08-18", "till": "2026-08-18"}]
+                              "fran": "2026-08-18", "till": "2026-08-18",
+                              "undantag": []}]
     assert med["poster"] == []
 
 

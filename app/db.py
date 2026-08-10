@@ -21,7 +21,7 @@ import sqlite3
 import threading
 from pathlib import Path
 
-SCHEMA_VERSION = 13
+SCHEMA_VERSION = 14
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS courses (
@@ -507,6 +507,18 @@ ALTER TABLE schema_lektioner ADD COLUMN fran TEXT;
 ALTER TABLE schema_lektioner ADD COLUMN till TEXT;
 """
 
+# De inställda lektionerna (v14) — ENDAST additiv; rollback: kolumnen kan
+# lämnas kvar (NULL = inga undantag) + PRAGMA user_version=13.
+#
+# Ett veckoschema är ett mönster, och ett mönster kan inte bära en inställd
+# enstaka lektion. Appen ritade tre lektioner som inte fanns: två på Kaggdagen
+# och en inför gymnasiemässan. Kalendern visste — synken läser varje instans —
+# så undantagen skrivs ner i stället för att kastas: datumen serien SKULLE ha
+# legat på men saknar lektion, kommaseparerade.
+_SCHEMAUNDANTAG_MIGRATION = """
+ALTER TABLE schema_lektioner ADD COLUMN undantag TEXT;
+"""
+
 _MIGRATIONS: dict[int, str] = {2: _FTS_MIGRATION, 3: _MARKERS_MIGRATION,
                                4: _PLANNING_MIGRATION, 5: _EXAMS_MIGRATION,
                                6: _GY25_MIGRATION, 7: _DATAGRUND_MIGRATION,
@@ -515,12 +527,13 @@ _MIGRATIONS: dict[int, str] = {2: _FTS_MIGRATION, 3: _MARKERS_MIGRATION,
                                10: _RATTNING_MIGRATION,
                                11: _BOK_MIGRATION,
                                12: _NIVAMARKE_MIGRATION,
-                               13: _SCHEMAGILTIGHET_MIGRATION}
+                               13: _SCHEMAGILTIGHET_MIGRATION,
+                               14: _SCHEMAUNDANTAG_MIGRATION}
 
 # Migreringar som bara innehåller ALTER TABLE … ADD COLUMN. De körs sats för
 # sats så att en redan tillagd kolumn hoppas över i stället för att fälla hela
 # migreringen — se _apply_migrations.
-_ALTER_MIGRATIONER = {6, 12, 13}
+_ALTER_MIGRATIONER = {6, 12, 13, 14}
 
 _LESSON_SELECT = """
 SELECT l.*, g.namn AS group_namn, c.namn AS course_namn
@@ -1736,7 +1749,8 @@ def list_schema(conn: sqlite3.Connection) -> list[dict]:
     """Veckoschemat i visningsordning: dag, sedan klockslag. Klass och kurs
     som namn — schemat visas, det joinas aldrig vidare i gränssnittet."""
     rows = conn.execute(
-        "SELECT s.dag, s.tid, s.sal, s.fran, s.till, g.namn AS klass, c.namn AS kurs "
+        "SELECT s.dag, s.tid, s.sal, s.fran, s.till, s.undantag, "
+        "g.namn AS klass, c.namn AS kurs "
         "FROM schema_lektioner s "
         "LEFT JOIN groups  g ON g.id = s.group_id "
         "LEFT JOIN courses c ON c.id = s.course_id "
@@ -1746,7 +1760,9 @@ def list_schema(conn: sqlite3.Connection) -> list[dict]:
     # det — se kalender.js schemaFor.
     return [{"dag": r["dag"], "tid": r["tid"], "kurs": r["kurs"] or "",
              "klass": r["klass"] or "", "sal": r["sal"] or "",
-             "fran": r["fran"] or "", "till": r["till"] or ""} for r in rows]
+             "fran": r["fran"] or "", "till": r["till"] or "",
+             "undantag": [d for d in (r["undantag"] or "").split(",") if d]}
+            for r in rows]
 
 
 def replace_schema(conn: sqlite3.Connection, rader: list[dict]) -> list[dict]:
@@ -1770,12 +1786,14 @@ def replace_schema(conn: sqlite3.Connection, rader: list[dict]) -> list[dict]:
                       get_or_create_course(conn, r.get("kurs") or ""),
                       (r.get("sal") or "").strip() or None,
                       (r.get("fran") or "").strip() or None,
-                      (r.get("till") or "").strip() or None))
+                      (r.get("till") or "").strip() or None,
+                      ",".join(r.get("undantag") or []) or None))
     with conn:
         conn.execute("DELETE FROM schema_lektioner")
         conn.executemany(
-            "INSERT INTO schema_lektioner(dag, tid, group_id, course_id, sal, fran, till) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)", klara)
+            "INSERT INTO schema_lektioner"
+            "(dag, tid, group_id, course_id, sal, fran, till, undantag) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)", klara)
     return list_schema(conn)
 
 

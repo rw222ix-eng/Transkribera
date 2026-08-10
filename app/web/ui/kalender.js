@@ -59,7 +59,11 @@ window.Kalender = (() => {
      (ett handskrivet schema, eller en serie som fortsätter bortom det synken
      hunnit läsa). */
   const schemaFor = datum => schema.filter(s => s.dag === veckodag(datum)
-    && (!s.fran || datum >= s.fran) && (!s.till || datum <= s.till));
+    && (!s.fran || datum >= s.fran) && (!s.till || datum <= s.till)
+    /* Enstaka inställda lektioner. Kaggdagen och gymnasiemässan strök tre
+       lektioner ur kalendern som mönstret ändå ritade — undantagen är de
+       dagarna, lästa ur kalendern och inte gissade. */
+    && !(s.undantag || []).includes(datum));
   const lovFor = datum => lov.find(l => datum >= l.fran && datum <= l.till) || null;
 
   /* Träffar inspelningstiden en lektion i schemat? Då är klass och kurs inte

@@ -22,11 +22,11 @@ def conn(tmp_path):
 # Tomma fran/till = gäller tills vidare, formen ett handskrivet schema har.
 SCHEMA_RADER = [
     {"dag": 1, "tid": "08:15–09:00", "kurs": "Matematik 3c", "klass": "9A",
-     "sal": "A214", "fran": "", "till": ""},
+     "sal": "A214", "fran": "", "till": "", "undantag": []},
     {"dag": 1, "tid": "10:15–11:00", "kurs": "Matematik 4", "klass": "9B",
-     "sal": "B103", "fran": "", "till": ""},
+     "sal": "B103", "fran": "", "till": "", "undantag": []},
     {"dag": 3, "tid": "08:15–09:00", "kurs": "Matematik 3c", "klass": "9A",
-     "sal": "A214", "fran": "", "till": ""},
+     "sal": "A214", "fran": "", "till": "", "undantag": []},
 ]
 
 
@@ -42,8 +42,10 @@ def test_schemaradens_giltighet_overlever_databasen(conn):
     """Utan datumen i DB:t vore synkens arbete bortkastat vid nästa omladdning
     — veckovyn läser giltigheten härifrån, inte ur svaret."""
     ut = db.replace_schema(conn, [dict(SCHEMA_RADER[0], fran="2026-08-19",
-                                       till="2026-12-16")])
+                                       till="2026-12-16",
+                                       undantag=["2026-09-03", "2026-10-09"])])
     assert (ut[0]["fran"], ut[0]["till"]) == ("2026-08-19", "2026-12-16")
+    assert ut[0]["undantag"] == ["2026-09-03", "2026-10-09"]
     assert db.list_schema(conn) == ut
 
 
@@ -237,7 +239,8 @@ def test_aterkommande_handelse_med_klass_blir_veckoschema():
                              "klass": "9A", "sal": "A214",
                              # Giltigheten är seriens egna instanser: veckan får
                              # inte ritas före den första eller efter den sista.
-                             "fran": "2026-08-17", "till": "2026-08-24"}]
+                             "fran": "2026-08-17", "till": "2026-08-24",
+                             "undantag": []}]
 
 
 def test_proven_markeras_som_prov():
@@ -326,6 +329,34 @@ def test_schemaraden_bar_seriens_forsta_och_sista_dag():
         fonster_till="2027-03-08")
     assert ut["schema"][0]["fran"] == "2026-08-19"
     assert ut["schema"][0]["till"] == "2026-12-16"
+
+
+def test_installd_lektion_blir_ett_undantag():
+    """Skarpt fall (2026-08-10): Kaggdagen och gymnasiemässan strök tre
+    lektioner ur kalendern, men mönstret ritade dem ändå. Kalendern visste —
+    instansen fanns inte — och nu skrivs den kunskapen ner."""
+    ut = calendar_google.tolka_handelser([
+        _tid("2026-09-07", "08:10", "09:40", summary="Matematik, nivå 1c TE26A",
+             location="B204", recurringEventId="r"),
+        # 14/9 saknas: lektionen är inställd.
+        _tid("2026-09-21", "08:10", "09:40", summary="Matematik, nivå 1c TE26A",
+             location="B204", recurringEventId="r"),
+    ], klasser=["TE26A"], kurser=["Matematik, nivå 1c"], idag="2026-08-10")
+    assert ut["schema"][0]["undantag"] == ["2026-09-14"]
+
+
+def test_lovveckor_raknas_inte_som_undantag():
+    """Loven ritas redan som stängda. Att lista varenda lovdag som ett undantag
+    hade gjort raderna oläsliga utan att ändra en enda vecka."""
+    ut = calendar_google.tolka_handelser([
+        _tid("2026-10-19", "08:10", "09:40", summary="Matematik, nivå 1c TE26A",
+             location="B204", recurringEventId="r"),
+        {"summary": "Höstlov", "start": {"date": "2026-10-26"},
+         "end": {"date": "2026-10-31"}},
+        _tid("2026-11-02", "08:10", "09:40", summary="Matematik, nivå 1c TE26A",
+             location="B204", recurringEventId="r"),
+    ], klasser=["TE26A"], kurser=["Matematik, nivå 1c"], idag="2026-08-10")
+    assert ut["schema"][0]["undantag"] == []
 
 
 def test_serie_som_nar_fonstrets_kant_far_oppet_slut():
@@ -573,7 +604,7 @@ def test_det_som_skrivs_ut_lases_tillbaka_som_samma_schema(google, tmp_path):
     # Attrappen expanderar inte serierna, så varje rad ses en enda gång och
     # giltigheten blir den dagen. Testet handlar om att lektionerna kommer
     # tillbaka som samma vecka — inte om datumen.
-    utan = lambda rader: [{k: v for k, v in r.items() if k not in ("fran", "till")}
+    utan = lambda rader: [{k: v for k, v in r.items() if k not in ("fran", "till", "undantag")}
                           for r in rader]
     assert utan(ut["schema"]) == utan(SCHEMA_RADER)
 
