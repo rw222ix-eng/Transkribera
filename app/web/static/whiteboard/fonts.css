@@ -31,15 +31,7 @@
 @font-face {
   font-family: 'JetBrains Mono';
   font-style: normal;
-  font-weight: 400;
+  font-weight: 400 800;
   font-display: swap;
-  src: url('../fonts/jetbrains-mono-400.woff2') format('woff2');
-}
-
-@font-face {
-  font-family: 'JetBrains Mono';
-  font-style: normal;
-  font-weight: 500;
-  font-display: swap;
-  src: url('../fonts/jetbrains-mono-500.woff2') format('woff2');
+  src: url('../fonts/jetbrains-mono-var.woff2') format('woff2');
 }
