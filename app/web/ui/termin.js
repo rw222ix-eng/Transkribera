@@ -120,14 +120,18 @@ window.Termin = (() => {
      annan kurs — står provet kvar i båda blocken med sitt eget kursnamn: det
      tar en lektion i anspråk oavsett vilken bok den lektionen skulle följa. */
   const provKurs = titel => { const m = String(titel || '').match(/(?:matematik|ma)\s*([1-5][a-e]?)/i); return m ? 'Matematik ' + m[1].toLowerCase() : ''; };
-  const arProv = p => /prov/i.test(p.titel || '');
+  /* Slaget före titeln, av samma skäl som i klass.js: synken märker proven den
+     läser, och skolans NP-titlar («NP MAT nivå 1c») innehåller varken «prov»
+     eller «nationell». */
+  const arProv = p => p.slag ? p.slag === 'prov' || p.slag === 'np'
+                             : /prov/i.test(p.titel || '');
   function proven(klass, kurs, fran, till) {
     const egna = kurserFor(klass);
     return K.poster.filter(x => x.klass === klass && arProv(x) && x.datum >= fran && x.datum <= till)
       .filter(x => { const k = provKurs(x.titel); return !k || k === kurs || !egna.includes(k); })
       .map(x => {
         const k = provKurs(x.titel);
-        const nationellt = /nationell/i.test(x.titel || '');
+        const nationellt = x.slag === 'np' || /nationell/i.test(x.titel || '');
         const m = K.mandagen(x.datum);
         /* Ett nationellt prov skrivs inte här — då är «inte skrivet» inte ett
            krav på läraren utan ett felaktigt påstående. */

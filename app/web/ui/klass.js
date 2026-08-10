@@ -70,10 +70,15 @@ window.Klass = (() => {
   /* Kalenderposter som bara speglar ett sparat dokument ska inte stå två gånger. */
   const spegling = p => dok().some(v => v.datum === p.datum && (v.klass || '') === (p.klass || '')
     && new RegExp('^(' + v.typ + (v.variant ? '|' + v.variant : '') + ')', 'i').test(p.titel || ''));
-  const arProv = p => /prov/i.test((p.titel || '') + ' ' + (p.slag || '')) && !egetProv(p);
+  /* Synken märker proven den läser (calendar_google.provslag), och då är slaget
+     svaret — titeln gissas bara på när slaget saknas: prototypens poster och
+     det läraren själv skrivit in. Skolans NP heter «NP MAT nivå 1c», aldrig
+     «nationellt prov», och gick därför inte att känna igen på titeln alls. */
+  const arProv = p => (p.slag ? p.slag === 'prov' || p.slag === 'np'
+                              : /prov/i.test(p.titel || '')) && !egetProv(p);
   /* Ett nationellt prov är inte lärarens att skriva — det ligger i kalendern som
      en tid att hålla, inte som en uppgift att göra. */
-  const egetProv = p => /nationell/i.test(p.titel || '');
+  const egetProv = p => p.slag === 'np' || /nationell/i.test(p.titel || '');
   const posterFor = d => K.poster.filter(p => p.datum === d.datum && !spegling(p)
     && (vald === 'alla' ? true : p.klass === vald));
 

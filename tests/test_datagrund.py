@@ -240,6 +240,38 @@ def test_aterkommande_handelse_med_klass_blir_veckoschema():
                              "fran": "2026-08-17", "till": "2026-08-24"}]
 
 
+def test_proven_markeras_som_prov():
+    """Ett prov är en tid att hålla, inte ett möte — appen erbjuder att planera
+    det och terminsvyn räknar det. Skolans NP heter «NP MAT nivå 1c» och
+    innehåller varken «prov» eller «nationell», så titelgissningen missade dem
+    helt (2026-08-10)."""
+    ut = calendar_google.tolka_handelser([
+        _tid("2026-12-15", "09:00", "14:20", summary="NP MAT nivå 1c (NA26) – berör NA26F"),
+        _tid("2026-11-05", "08:10", "09:40", summary="Prov kapitel 3 – TE26A"),
+        _tid("2026-09-08", "13:00", "14:30", summary="Ämneslagsmöte"),
+    ], klasser=["NA26F", "TE26A"])
+    slag = {p["titel"]: p.get("slag") for p in ut["poster"]}
+    assert slag == {"NP MAT nivå 1c (NA26) – berör NA26F": "np",
+                    "Prov kapitel 3 – TE26A": "prov",
+                    "Ämneslagsmöte": None}
+
+
+@pytest.mark.parametrize("titel, vantat", [
+    ("NP MAT nivå 1c (NA26)", "np"),
+    ("Nationellt prov MA 2c", "np"),
+    ("Prov kapitel 3", "prov"),
+    ("Omprov bråk", "prov"),
+    ("Provet flyttat till fredag", "prov"),
+    # Ordgränserna är hela poängen: en föreläsning om provteori är ingen
+    # provtid, och en prövning är något helt annat.
+    ("4UVÄ18 Föreläsning 4: Provteori (Zoom)", None),
+    ("Prövning bokad: Malmö – Försvarsmakten", None),
+    ("Ämneslagsmöte", None),
+])
+def test_provslag_pa_ordet_inte_pa_bokstaverna(titel, vantat):
+    assert calendar_google.provslag(titel) == vantat
+
+
 def test_annat_programs_loggrad_blir_ingen_post():
     """Skarpt fall (2026-08-10): lärarens automatiska synk mellan skol- och
     privatkalendern skriver «Synk: 7 nytt – se beskrivning» som en

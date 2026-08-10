@@ -432,6 +432,38 @@ def ar_notis(h: dict) -> bool:
     return langd is not None and langd <= 10
 
 
+# Ett prov i kalendern är en tid som ska HÅLLAS, inte ett möte att gå på:
+# appen erbjuder att planera det, terminsvyn räknar det, och läraren vill se
+# det i en egen färg. Ordgränserna är hela poängen — «Provteori (Zoom)» är en
+# föreläsning och «Prövning» är något helt annat.
+#
+# Nationella provet skiljs ut som eget slag: det är inte lärarens att skriva,
+# och «inte skrivet ännu» vore ett felaktigt påstående om det (klass.js och
+# termin.js har alltid gjort samma skillnad, men på ordet «nationell» — och
+# skolans egna NP-titlar skriver «NP MAT nivå 1c», inte «nationellt prov»).
+_NP_ORD = re.compile(r"\b(np|nationell\w*\s+prov\w*)\b", re.IGNORECASE)
+_PROV_ORD = re.compile(r"\b(prov|provet|proven|prover|omprov|delprov|provpass)\b",
+                       re.IGNORECASE)
+
+
+def provslag(titel: str) -> str | None:
+    """'np' | 'prov' | None för en kalenderrubrik."""
+    t = titel or ""
+    if _NP_ORD.search(t):
+        return "np"
+    return "prov" if _PROV_ORD.search(t) else None
+
+
+def _post(datum: str, tid: str, titel: str, klass: str) -> dict:
+    """En kalenderpost i frontendens form. `slag` sätts bara när rubriken
+    faktiskt säger något — en post utan slag är en post, inget annat."""
+    post = {"datum": datum, "tid": tid, "titel": titel, "klass": klass}
+    slag = provslag(titel)
+    if slag:
+        post["slag"] = slag
+    return post
+
+
 def serienyckel(h: dict) -> str:
     """Identiteten på en SERIE, inte på en instans: samma titel, samma slag av
     händelse. Mentorstiden varje måndag hela läsåret är en nyckel, inte
@@ -543,12 +575,11 @@ def tolka_handelser(handelser: list[dict], klasser: list[str] | None = None,
             # skriver «Hela dagen» när tiden är tom (klass.js).
             datum = start.get("date") or (start.get("dateTime") or "")[:10]
             if datum:
-                poster.append({
-                    "datum": datum,
-                    "tid": "" if start.get("date")
-                           else _tid(start["dateTime"], slut.get("dateTime") or ""),
-                    "titel": titel,
-                    "klass": _klass_och_kurs(titel, klasser, kurser)[0]})
+                poster.append(_post(
+                    datum,
+                    "" if start.get("date")
+                    else _tid(start["dateTime"], slut.get("dateTime") or ""),
+                    titel, _klass_och_kurs(titel, klasser, kurser)[0]))
             continue
         if start.get("date"):                       # heldag
             fran = start["date"]
@@ -596,8 +627,7 @@ def tolka_handelser(handelser: list[dict], klasser: list[str] | None = None,
                 sedda.add(nyckel)
                 schema.append(rad)
             continue
-        poster.append({"datum": datum, "tid": _tid(s, e), "titel": titel,
-                       "klass": klass})
+        poster.append(_post(datum, _tid(s, e), titel, klass))
         # En återkommande tidsatt händelse som INTE blev en lektion är den
         # osäkraste sortens gissning: «Ma2c NA25 halvklass A» är en lektion med
         # en kursstavning vi inte känner, «Mentorstid NA25» är det inte.
