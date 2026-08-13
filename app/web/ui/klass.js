@@ -802,7 +802,7 @@ window.Klass = (() => {
                    inte döljas bakom ett allmänt «synkad». */
                 : `Kalendern är synkad${sv && sv.konto ? ` ur ${sv.konto}` : ''} — ${
                     sv && sv.lektioner
-                      ? `${sv.lektioner} lektioner i veckoschemat`
+                      ? `${sv.lektioner} ${sv.lektioner === 1 ? 'lektion' : 'lektioner'} i veckoschemat`
                       : 'inga lektioner i veckoschemat'}${
                     sv && sv.bedomda ? ` · ${sv.bedomda} ${sv.bedomda === 1 ? 'post' : 'poster'} tolkade av Claude` : ''}${
                     /* Notiser andra program lagt i kalendern hoppades över —

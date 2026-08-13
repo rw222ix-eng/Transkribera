@@ -146,7 +146,7 @@ test("synkknappen läser om schemat ur Google", async ({ page }) => {
     body: JSON.stringify({
       synkad: "2026-08-06T09:00:00",
       schema: [{ dag: 2, tid: "09:15–10:00", kurs: "Matematik, nivå 2c", klass: "NA24", sal: "C201" }],
-      lov: SCHEMA.lov, poster: [], bedomda: 2, osakra: 2 }) }));
+      lov: SCHEMA.lov, poster: [], konto: "larare@skolan.se", bedomda: 2, osakra: 2 }) }));
   await page.goto("/");
   await hydrerad(page);
 
@@ -156,7 +156,10 @@ test("synkknappen läser om schemat ur Google", async ({ page }) => {
 
   await expect.poll(() => page.evaluate(() => window.Kalender.schema.length)).toBe(1);
   expect(await page.evaluate(() => window.Kalender.schema[0].sal)).toBe("C201");
-  await expect(page.locator(".toast")).toContainText("omlästa");
+  /* Beskedet ska säga VAD som lästes om och UR VEMS kalender — ett blankt
+     «synkad» såg likadant ut när schemat kom ur fel konto (klass.js). */
+  await expect(page.locator(".toast")).toContainText("synkad ur larare@skolan.se");
+  await expect(page.locator(".toast")).toContainText("1 lektion i veckoschemat");
   // Det reglerna inte kunde avgöra läste Claude — det ska stå, inte döljas.
   await expect(page.locator(".toast")).toContainText("2 poster tolkade av Claude");
 });
