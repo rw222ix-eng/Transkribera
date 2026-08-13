@@ -1425,6 +1425,10 @@
         <h3 class="chatttitel" id="rattningtitel">Provet</h3>
         <p class="chattmeta">Klassens totalpoäng per uppgift — ingen elev för sig, inga namn.</p>
       </div>
+      <div class="lagevaxel" id="rattlage" role="group" aria-label="Rättningsläge">
+        <button type="button" aria-pressed="true">Klass</button>
+        <button type="button" id="rattilelev" aria-pressed="false">Elev för elev</button>
+      </div>
       <button class="stangx" id="rattstang" aria-label="Stäng rättningen">✕</button>
     </header>
     <div class="rattkropp">
@@ -1445,6 +1449,66 @@
     <div class="fhfot">
       <button class="primar" id="rattningspara" disabled>Spara</button>
       <span class="fhnot" id="rattningsnot"></span>
+    </div>
+  </div>
+</div>
+
+<!-- Elev för elev: samma prov, samma rader, men poängen per nivå och per elev.
+     E/C/A-splitten är RÄTTARENS vy — den står redan i bedömningsanvisningen
+     (bedomning.tex.j2) och elevens papper visar fortfarande bara totalen.
+     Betyget räknas mot provets kravgränser medan läraren klickar. -->
+<div class="modalskal" id="elevskal" hidden>
+  <div class="modal bred" role="dialog" aria-modal="true" aria-labelledby="elevnamn">
+    <header class="chatthuvud">
+      <div>
+        <p class="chattetikett">Elev för elev</p>
+        <h3 class="chatttitel" id="elevnamn">Eleven</h3>
+        <p class="chattmeta" id="elevmeta"></p>
+      </div>
+      <div class="lagevaxel" role="group" aria-label="Rättningsläge">
+        <button type="button" id="elevtillklass" aria-pressed="false">Klass</button>
+        <button type="button" aria-pressed="true">Elev för elev</button>
+      </div>
+      <button class="stangx" id="elevstang" aria-label="Stäng rättningen">✕</button>
+    </header>
+    <div class="elevkropp">
+      <!-- Klasslistan frågas EN gång, första gången klassen rättas. Sedan
+           ligger den kvar och nås bara via länken i foten. -->
+      <div class="elevklass" id="elevklass" hidden>
+        <p class="minietikett">Klassen</p>
+        <p class="mjuk" id="elevklassnot">Ett namn per rad — klistra in från din lista.</p>
+        <textarea class="elevnamnfalt" id="elevnamnfalt" rows="10" aria-label="Ett elevnamn per rad" placeholder="Anna Andersson&#10;Bo Bergström&#10;…"></textarea>
+        <div class="elevklassfot">
+          <button class="primar" id="elevsparaklass" type="button">Spara klassen</button>
+          <button class="lank" id="elevklassavbryt" type="button" hidden>Avbryt</button>
+        </div>
+      </div>
+      <div id="elevvy" hidden>
+        <div class="elevband" id="elevband"></div>
+        <div class="elevtopp">
+          <button class="elevpil" id="elevforra" type="button" aria-label="Föregående elev">‹</button>
+          <div class="elevtoppmitt">
+            <span class="elevbetyg" id="elevbetyg">—</span>
+            <span class="elevsumma" id="elevsumma"></span>
+            <!-- Den som inte skrev provet ska inte bära radernas tak, och inte
+                 få feedback på ett prov hon inte gjorde. -->
+            <button class="lank elevtom" id="elevtom" type="button">Skrev inte provet</button>
+          </div>
+          <button class="elevpil" id="elevnasta" type="button" aria-label="Nästa elev">›</button>
+        </div>
+        <div class="elevhuvud"><span></span><span>Uppgift</span><span>Poäng per nivå</span></div>
+        <div id="elevrader"></div>
+        <div class="elevtext" id="elevtext" hidden>
+          <p class="minietikett">Feedback till eleven</p>
+          <textarea class="elevtextfalt" id="elevtextfalt" rows="4" aria-label="Feedbacktext till eleven"></textarea>
+        </div>
+      </div>
+    </div>
+    <div class="fhfot">
+      <button class="primar" id="elevspara" type="button" disabled>Spara</button>
+      <button class="ghost" id="elevskriv" type="button" hidden>Skriv feedback</button>
+      <button class="lank" id="elevbytklass" type="button" hidden>Ändra klasslistan</button>
+      <span class="fhnot" id="elevnot"></span>
     </div>
   </div>
 </div>
@@ -1538,6 +1602,7 @@
 <script src="termin.js"></script>
 <script src="inspelning.js"></script>
 <script src="rattning.js"></script>
+<script src="elever.js"></script>
 <script src="utgang.js"></script>
 <script src="notis.js"></script>
 <script src="lektionskal.js?v=5"></script>

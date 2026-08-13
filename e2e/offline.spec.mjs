@@ -101,6 +101,32 @@ test("displayserifen är Georgia — inte Cormorant Garamond", async ({ page }) 
   expect(stack).toContain("Georgia");
 });
 
+test("elevrättningen ritas och räknar utan nätet", async ({ page }) => {
+  /* Elevläget räknar betyget SJÄLVT (elever.js granserAv/betygAv) av samma skäl
+     som rättningen räknar sin andel själv: siffran ska stå på skärmen medan
+     läraren klickar, och prototypen i Claude Design har ingen server alls. */
+  const utifrån = [];
+  await spärraNätet(page, utifrån);
+  const jsfel = [];
+  page.on("pageerror", e => jsfel.push(e.message));
+  await laddad(page);
+
+  await page.evaluate(() => window.Elever.oppna({
+    typ: "Prov", moment: "derivata", klass: "NA25",
+    uppgifter: [{ nr: 1, t: "Beräkna arean.", p: 2, peca: [2, 0, 0] },
+                { nr: 2, t: "Avgör om påståendet är sant.", p: 3, peca: [0, 2, 1] }],
+  }));
+
+  await expect(page.locator("#elevvy")).toBeVisible();
+  await expect(page.locator("#elevband .elevprick")).toHaveCount(6);
+  await page.locator("#elevrader .elevknapp").first().focus();
+  for (const s of [2, 2, 1]) await page.keyboard.press(String(s));
+  await expect(page.locator("#elevbetyg")).toHaveText("A");
+
+  expect(utifrån, `elevläget hämtade från nätet: ${utifrån.join(", ")}`).toEqual([]);
+  expect(jsfel, `JS-fel i elevläget: ${jsfel.join(" | ")}`).toEqual([]);
+});
+
 test("figurmotorn kompilerar en figur med nätet avstängt", async ({ page }) => {
   /* Figurerna är CeTZ-källa som kompileras till SVG i webbläsaren av Typst.
      Kedjan har fyra delar som alla låg på nätet i prototypen: bundlen, två

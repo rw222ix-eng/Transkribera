@@ -21,7 +21,7 @@ import sqlite3
 import threading
 from pathlib import Path
 
-SCHEMA_VERSION = 14
+SCHEMA_VERSION = 15
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS courses (
@@ -519,6 +519,53 @@ _SCHEMAUNDANTAG_MIGRATION = """
 ALTER TABLE schema_lektioner ADD COLUMN undantag TEXT;
 """
 
+# Eleverna (v15) — ENDAST additiv; rollback: DROP TABLE elevfeedback,
+# elevresultat, elever + PRAGMA user_version=14.
+#
+# Rättningen (v10) kan bara en klass: en totalsumma per uppgift. Det räcker för
+# planeringen och inte för eleven — ett betyg går inte att räkna ur en
+# klumpsumma (C kräver sin andel av C- och A-poängen), och en feedbacktext går
+# inte att skriva till en klass. Därför:
+#
+# * elever — klasslistan, per grupp. `aktiv` i stället för radering: elevresultat
+#   pekar hit, och en elev som slutat ska inte ta förra terminens prov med sig.
+# * elevresultat — poängen per elev, rad och NIVÅ. Tre kolumner och inte en:
+#   nivåfördelningen ÄR det betyget räknas ur. NULL = ej ifylld, vilket är
+#   skilt från 0 (skrev och fick noll). Nycklarna är rattning_raders — samma
+#   rader, samma papper — och därför hänger tabellen i rattning(dokument_id):
+#   elevrader utan klassrättning kan inte finnas, de SKAPAR den.
+# * elevfeedback — den genererade texten, namnkopplad först här. Modellen såg
+#   bara «Elev 3» (app/elev_feedback.py).
+_ELEVER_MIGRATION = """
+CREATE TABLE IF NOT EXISTS elever (
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    group_id INTEGER NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+    namn     TEXT NOT NULL,
+    sort     INTEGER NOT NULL DEFAULT 0,
+    aktiv    INTEGER NOT NULL DEFAULT 1,
+    UNIQUE(group_id, namn)
+);
+CREATE TABLE IF NOT EXISTS elevresultat (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    dokument_id INTEGER NOT NULL REFERENCES rattning(dokument_id) ON DELETE CASCADE,
+    elev_id     INTEGER NOT NULL REFERENCES elever(id) ON DELETE CASCADE,
+    nyckel      TEXT NOT NULL,
+    varde_e     INTEGER,
+    varde_c     INTEGER,
+    varde_a     INTEGER,
+    UNIQUE(dokument_id, elev_id, nyckel)
+);
+CREATE TABLE IF NOT EXISTS elevfeedback (
+    dokument_id INTEGER NOT NULL,
+    elev_id     INTEGER NOT NULL REFERENCES elever(id) ON DELETE CASCADE,
+    text        TEXT NOT NULL,
+    updated_at  TEXT NOT NULL,
+    PRIMARY KEY (dokument_id, elev_id)
+);
+CREATE INDEX IF NOT EXISTS idx_elever_group ON elever(group_id, sort);
+CREATE INDEX IF NOT EXISTS idx_elevres_dok  ON elevresultat(dokument_id, elev_id);
+"""
+
 _MIGRATIONS: dict[int, str] = {2: _FTS_MIGRATION, 3: _MARKERS_MIGRATION,
                                4: _PLANNING_MIGRATION, 5: _EXAMS_MIGRATION,
                                6: _GY25_MIGRATION, 7: _DATAGRUND_MIGRATION,
@@ -528,7 +575,8 @@ _MIGRATIONS: dict[int, str] = {2: _FTS_MIGRATION, 3: _MARKERS_MIGRATION,
                                11: _BOK_MIGRATION,
                                12: _NIVAMARKE_MIGRATION,
                                13: _SCHEMAGILTIGHET_MIGRATION,
-                               14: _SCHEMAUNDANTAG_MIGRATION}
+                               14: _SCHEMAUNDANTAG_MIGRATION,
+                               15: _ELEVER_MIGRATION}
 
 # Migreringar som bara innehåller ALTER TABLE … ADD COLUMN. De körs sats för
 # sats så att en redan tillagd kolumn hoppas över i stället för att fälla hela
@@ -2128,6 +2176,9 @@ def update_dokument(conn: sqlite3.Connection, dokument_id: int, *,
 
 def delete_dokument(conn: sqlite3.Connection, dokument_id: int) -> bool:
     with conn:
+        # Feedbacken hänger i dokument_id utan främmande nyckel (den finns bara
+        # så länge poängen gör det) och följer därför inte med kaskaden.
+        conn.execute("DELETE FROM elevfeedback WHERE dokument_id = ?", (dokument_id,))
         cur = conn.execute("DELETE FROM dokument WHERE id = ?", (dokument_id,))
     return cur.rowcount > 0
 
@@ -2221,8 +2272,14 @@ def save_rattning(conn: sqlite3.Connection, dokument_id: int, *,
 def delete_rattning(conn: sqlite3.Connection, dokument_id: int) -> bool:
     """Ångra rättningen. Raderna följer med (ON DELETE CASCADE gäller bara med
     PRAGMA foreign_keys=ON, som connect() sätter — men raderas explicit här så
-    att en connection utan den inte lämnar föräldralösa rader kvar)."""
+    att en connection utan den inte lämnar föräldralösa rader kvar).
+
+    Elevernas rader följer med av samma skäl, och feedbacken därför att den
+    inte HAR någon främmande nyckel att följa: texten är skriven ur poängen och
+    överlever dem inte."""
     with conn:
+        conn.execute("DELETE FROM elevfeedback WHERE dokument_id = ?", (dokument_id,))
+        conn.execute("DELETE FROM elevresultat WHERE dokument_id = ?", (dokument_id,))
         conn.execute("DELETE FROM rattning_rader WHERE dokument_id = ?", (dokument_id,))
         cur = conn.execute("DELETE FROM rattning WHERE dokument_id = ?", (dokument_id,))
     return cur.rowcount > 0
@@ -2237,6 +2294,121 @@ def list_rattningar(conn: sqlite3.Connection, *, kurs: str | None = None) -> lis
         params.append(kurs)
     sql += " ORDER BY COALESCE(datum, '') DESC, updated_at DESC"
     return [_rattning_view(conn, r) for r in conn.execute(sql, params).fetchall()]
+
+
+# ------------------------------------------------------------------ eleverna --
+# Klasslistan och elevernas poäng (v15). Samma arbetsdelning som rättningen:
+# databasen lagrar, app/rattning.py räknar. Betyget står ingenstans här — det
+# är en SLUTSATS av poängen mot provets kravgränser och räknas om varje gång,
+# precis som `svaga`.
+
+def list_elever(conn: sqlite3.Connection, group_id: int,
+                *, bara_aktiva: bool = False) -> list[dict]:
+    """Klasslistan i lärarens ordning. Inaktiva följer med som förval: en
+    gammal rättning ska kunna öppnas med de elever som faktiskt skrev."""
+    sql = "SELECT id, namn, sort, aktiv FROM elever WHERE group_id = ?"
+    if bara_aktiva:
+        sql += " AND aktiv = 1"
+    sql += " ORDER BY sort, namn"
+    return [dict(r) | {"aktiv": bool(r["aktiv"])}
+            for r in conn.execute(sql, (int(group_id),)).fetchall()]
+
+
+def save_elever(conn: sqlite3.Connection, group_id: int,
+                namn_lista: list[str]) -> list[dict]:
+    """Synka klasslistan mot namnen läraren klistrade in.
+
+    Ingen elev RADERAS: elevresultat pekar hit, och en elev som strukits ur
+    listan har fortfarande skrivit höstens prov. Hon inaktiveras, och kommer
+    hon tillbaka i listan lever hon upp igen med sina gamla resultat kvar."""
+    gid = int(group_id)
+    rena, sedda = [], set()
+    for n in namn_lista or []:
+        namn = str(n or "").strip()
+        if namn and namn.lower() not in sedda:
+            sedda.add(namn.lower())
+            rena.append(namn)
+    with conn:
+        conn.executemany(
+            "INSERT INTO elever(group_id, namn, sort, aktiv) VALUES (?, ?, ?, 1) "
+            "ON CONFLICT(group_id, namn) DO UPDATE SET sort = excluded.sort, "
+            "aktiv = 1",
+            [(gid, namn, i) for i, namn in enumerate(rena)])
+        if rena:
+            fragor = ",".join("?" * len(rena))
+            conn.execute(
+                f"UPDATE elever SET aktiv = 0 WHERE group_id = ? "
+                f"AND namn NOT IN ({fragor})", (gid, *rena))
+        else:
+            conn.execute("UPDATE elever SET aktiv = 0 WHERE group_id = ?", (gid,))
+    return list_elever(conn, gid)
+
+
+def get_elevresultat(conn: sqlite3.Connection, dokument_id: int) -> dict:
+    """{elev_id: {nyckel: [E, C, A]}} — None i tripeln = ej ifylld."""
+    ut: dict[int, dict[str, list]] = {}
+    for r in conn.execute(
+            "SELECT elev_id, nyckel, varde_e, varde_c, varde_a FROM elevresultat "
+            "WHERE dokument_id = ? ORDER BY elev_id, id", (int(dokument_id),)):
+        ut.setdefault(r["elev_id"], {})[r["nyckel"]] = [
+            r["varde_e"], r["varde_c"], r["varde_a"]]
+    return ut
+
+
+def save_elevresultat(conn: sqlite3.Connection, dokument_id: int,
+                      resultat: dict) -> dict:
+    """Skriv om hela provets elevrader — samma helersättning som
+    save_rattning, och av samma skäl: en rad som tömts ska försvinna."""
+    did = int(dokument_id)
+    rader = []
+    for elev_id, per_nyckel in (resultat or {}).items():
+        for nyckel, trip in (per_nyckel or {}).items():
+            t = list(trip or [])[:3] + [None] * max(0, 3 - len(trip or []))
+            if all(x is None for x in t):
+                continue
+            rader.append((did, int(elev_id), str(nyckel), t[0], t[1], t[2]))
+    with conn:
+        conn.execute("DELETE FROM elevresultat WHERE dokument_id = ?", (did,))
+        conn.executemany(
+            "INSERT INTO elevresultat(dokument_id, elev_id, nyckel, varde_e, "
+            "varde_c, varde_a) VALUES (?, ?, ?, ?, ?, ?)", rader)
+    return get_elevresultat(conn, did)
+
+
+def delete_elevresultat(conn: sqlite3.Connection, dokument_id: int) -> None:
+    """Ångra elevrättningen: siffrorna OCH feedbacken. Texten är skriven ur
+    poängen — står den kvar utan dem beskriver den ett prov som inte finns."""
+    did = int(dokument_id)
+    with conn:
+        conn.execute("DELETE FROM elevresultat WHERE dokument_id = ?", (did,))
+        conn.execute("DELETE FROM elevfeedback WHERE dokument_id = ?", (did,))
+
+
+def get_elevfeedback(conn: sqlite3.Connection, dokument_id: int) -> dict:
+    return {r["elev_id"]: r["text"] for r in conn.execute(
+        "SELECT elev_id, text FROM elevfeedback WHERE dokument_id = ?",
+        (int(dokument_id),)).fetchall()}
+
+
+def save_elevfeedback(conn: sqlite3.Connection, dokument_id: int,
+                      feedback: dict) -> dict:
+    """Texterna per elev. Tom text tas bort i stället för att sparas — en
+    elev utan feedback ska inte ha en tom ruta att undra över."""
+    did = int(dokument_id)
+    nu = _now()
+    with conn:
+        for elev_id, text in (feedback or {}).items():
+            t = str(text or "").strip()
+            if not t:
+                conn.execute("DELETE FROM elevfeedback WHERE dokument_id = ? "
+                             "AND elev_id = ?", (did, int(elev_id)))
+                continue
+            conn.execute(
+                "INSERT INTO elevfeedback(dokument_id, elev_id, text, updated_at) "
+                "VALUES (?, ?, ?, ?) ON CONFLICT(dokument_id, elev_id) DO UPDATE "
+                "SET text = excluded.text, updated_at = excluded.updated_at",
+                (did, int(elev_id), t, nu))
+    return get_elevfeedback(conn, did)
 
 
 # --------------------------------------------------------------------- boken --

@@ -756,11 +756,17 @@ KRAV_DEFAULT = {
 }
 
 
-def kravgranser(doc: ExamDoc, config: dict | None = None) -> dict:
-    """Kravgränser för E/C/A ur provets faktiska poängfördelning."""
+def kravgranser_ur_summor(summor: dict, config: dict | None = None) -> dict:
+    """Kravgränserna ur färdiga poängsummor ({total, e, c, a}).
+
+    Bruten ur :func:`kravgranser` när elevens betyg kom till (app/rattning.py):
+    rättningens rader bär samma poängbärande enheter som poangsummor räknar,
+    men inget ExamDoc — och ett prov vars gränser räknas på två ställen får
+    förr eller senare två kravgränser."""
     cfg = {**KRAV_DEFAULT, **(config or {})}
-    s = poangsummor(doc)
-    total, ca, a = s["total"], s["c"] + s["a"], s["a"]
+    total = int(summor.get("total") or 0)
+    ca = int(summor.get("c") or 0) + int(summor.get("a") or 0)
+    a = int(summor.get("a") or 0)
     granser = {
         "total": total,
         "E": {"minst": math.ceil(total * cfg["e_andel"])},
@@ -777,6 +783,11 @@ def kravgranser(doc: ExamDoc, config: dict | None = None) -> dict:
         ),
     }
     return granser
+
+
+def kravgranser(doc: ExamDoc, config: dict | None = None) -> dict:
+    """Kravgränser för E/C/A ur provets faktiska poängfördelning."""
+    return kravgranser_ur_summor(poangsummor(doc), config)
 
 
 # Karaktärsmix per profil: hur stor andel av UPPGIFTERNA som ska vara E-, C-

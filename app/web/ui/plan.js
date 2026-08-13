@@ -1025,6 +1025,12 @@
         ut: u.typ === 'rutin' ? 'kort' : 'rakna',
         f: u.losning || delar.map((d, k) => `${'abcdef'[k]}) ${d.losning || ''}`).join('   '),
         formaga: u.formaga || '',
+        /* Nivåvektorn följer med hel, inte bara som `niva`. Elevens betyg går
+           inte att räkna ur en klumpsumma — C kräver sin andel av C- och
+           A-poängen — och rättningen elev för elev (elever.js) är den enda
+           läsaren. Elevens papper är orört: `poang_str` trycker fortfarande
+           totalen, E/C/A-splitten är rättarens vy. */
+        peca: nivavektor.slice(0, 3),
       };
       if (u.alternativ) { ut.alt = u.alternativ; ut.ratt = u.ratt_alternativ; }
       /* Figuren följer med till arket. Servern ritar den i PDF:en
@@ -1055,6 +1061,7 @@
         ut.del = delar.map(d => d.text || '');
         /* Deluppgifternas EGNA poäng — arket ska inte dela totalen jämnt. */
         ut.delp = delar.map(d => provSumma(d.poang));
+        ut.delpeca = delar.map(d => (d.poang || [0, 0, 0]).slice(0, 3));
         /* Facitbladets poängsatta väg: varje deluppgift är ett steg med sin
            egen poäng — samma form som prototypens `vag`. */
         ut.vag = delar.map((d, k) => [`${'abcdef'[k]}) ${d.losning || ''}`,

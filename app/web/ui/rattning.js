@@ -29,6 +29,22 @@
   const ren = t => String(t || '').replace(/<[^>]*>/g, '').trim();
   const BOK = 'abcdef';
 
+  /* Radens maxpoäng per NIVÅ — [E, C, A]. Klassrättningen bryr sig inte, men
+     elevens betyg går inte att räkna ur en klumpsumma: C kräver sin andel av
+     C- och A-poängen. Bär pappret tripeln (plan.js franProv) ÄR den radens
+     poäng; annars läggs hela poängen på uppgiftens nivå, som är det bästa som
+     finns på ett handskrivet papper. Samma regel som app/rattning.py. */
+  const tripel = v => {
+    if (!Array.isArray(v) || v.length !== 3) return null;
+    const t = v.map(x => Math.max(0, Math.round(Number(x) || 0)));
+    return t[0] + t[1] + t[2] > 0 ? t : null;
+  };
+  const pecaFall = (p, niva) => {
+    const ut = [0, 0, 0];
+    ut[{ C: 1, A: 2 }[String(niva || 'E').trim().toUpperCase()[0]] || 0] = Math.max(0, p || 0);
+    return ut;
+  };
+
   /* En rad per uppgift — eller per delfråga, eftersom en tvåpoängsuppgift oftast
      är a) räkningen och b) resonemanget, och det är just skillnaden man vill se. */
   function bygg(uppg) {
@@ -41,16 +57,23 @@
       if (del.length > 1) {
         ut.push({ grupp: true, nr: String(nr), text });
         const bas = Math.max(1, Math.floor(p / del.length));
+        const dpeca = Array.isArray(u.delpeca) ? u.delpeca : [];
         del.forEach((d, j) => {
           const sista = j === del.length - 1;
+          const eca = tripel(dpeca[j]);
+          const dp = eca ? eca[0] + eca[1] + eca[2]
+            : (sista ? Math.max(1, p - bas * (del.length - 1)) : bas);
           ut.push({
             nyckel: `${nr}${BOK[j]}`, kod: `${nr}${BOK[j]}`, nr: BOK[j] + ')',
-            text: ren(d), p: sista ? Math.max(1, p - bas * (del.length - 1)) : bas,
+            text: ren(d), p: dp, peca: eca || pecaFall(dp, u.niva),
             formaga: formaga(ren(d) + ' ' + text)
           });
         });
       } else {
-        ut.push({ nyckel: String(nr), kod: String(nr), nr: String(nr), text, p, formaga: formaga(text) });
+        const eca = tripel(u.peca);
+        const up = eca ? eca[0] + eca[1] + eca[2] : p;
+        ut.push({ nyckel: String(nr), kod: String(nr), nr: String(nr), text, p: up,
+                  peca: eca || pecaFall(up, u.niva), formaga: formaga(text) });
       }
     });
     return ut;
@@ -251,6 +274,17 @@
   $('#rattstang').addEventListener('click', stang);
   $('#rattelever').addEventListener('input', rakna);
 
+  /* Lägesväxeln: samma prov, två sätt att rätta det. Klassläget är kvällen då
+     högen ligger framme och man bara vill ha summan; elevläget är när eleverna
+     ska få veta hur det gick. Modalerna är skilda åt för att raderna ser olika
+     ut — en summa per rad mot en knapprad per nivå — och en modal som gör båda
+     hade blivit två modaler i en fil. */
+  $('#rattilelev').addEventListener('click', () => {
+    const v = doc;
+    stang();
+    setTimeout(() => window.Elever && window.Elever.oppna(v), 60);
+  });
+
   $('#rattningspara').addEventListener('click', () => {
     if (!doc) return;
     /* Pappret hålls fast här: modalen kan hinna öppnas på ett annat prov innan
@@ -284,5 +318,7 @@
     stang();
   });
 
-  window.Rattning = { oppna };
+  /* `bygg` delas med elever.js: raderna är samma rader i båda lägena, och två
+     radbyggare hade förr eller senare byggt två olika prov. */
+  window.Rattning = { oppna, bygg };
 })();

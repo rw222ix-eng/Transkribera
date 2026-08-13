@@ -45,6 +45,34 @@ BOK = "abcdef"
 ELEVER_STANDARD = 22
 _TAGG = re.compile(r"<[^>]*>")
 
+# Betygen provet kan ge. F står först och är ett betyg som alla andra: under
+# E-gränsen SKA det stå F, inte en tom ruta.
+BETYG: tuple[str, str, str, str] = ("F", "E", "C", "A")
+
+
+def _tripel(varde) -> tuple[int, int, int] | None:
+    """(E, C, A) ur ett fält på pappret, eller None när tripeln saknas."""
+    if not isinstance(varde, (list, tuple)) or len(varde) != 3:
+        return None
+    try:
+        t = tuple(max(0, int(x or 0)) for x in varde)
+    except (TypeError, ValueError):
+        return None
+    return t if sum(t) > 0 else None            # [0,0,0] är ingen fördelning
+
+
+def _peca_fallback(p: int, niva) -> tuple[int, int, int]:
+    """Raden utan tripel: hela poängen på uppgiftens NIVÅ.
+
+    Prototypens och de handskrivna pappersens uppgifter bär `niva` men ingen
+    E/C/A-fördelning (plan.js provNiva räknar nivån ur poängvektorn och kastar
+    vektorn). Nivån är det bästa som finns, och den är rätt för de 86 % av
+    NP:s uppgifter som ger poäng på en enda nivå."""
+    i = {"C": 1, "A": 2}.get(str(niva or "E").strip().upper()[:1], 0)
+    ut = [0, 0, 0]
+    ut[i] = max(0, int(p or 0))
+    return (ut[0], ut[1], ut[2])
+
 
 def formaga_ur_text(text: str) -> str:
     """Gissningen: vad uppgiften ber om, läst ur uppgiftstexten."""
@@ -75,7 +103,14 @@ def bygg(uppgifter: list[dict] | None) -> list[dict]:
     En uppgift med fler än en deluppgift blir en gruppubrik plus en rad per
     deluppgift, eftersom en tvåpoängsuppgift oftast är a) räkningen och b)
     resonemanget och det är just skillnaden man vill se. Poängen delas jämnt
-    och resten hamnar på den sista raden."""
+    och resten hamnar på den sista raden.
+
+    `peca` är radens maxpoäng per NIVÅ — [E, C, A]. Den kom till med elevernas
+    rättning: elevens betyg går inte att räkna ur en klumpsumma, för C kräver
+    sin andel av C+A-poängen och A sin av A-poängen. Bär pappret tripeln
+    (plan.js franProv skriver `peca`/`delpeca` ur prov-JSON) är den sanningen
+    om radens poäng, och då delas ingenting jämnt: `p` blir tripelns summa.
+    Papper utan tripel — prototypen, handskrivna — delas som förut."""
     ut: list[dict] = []
     for i, u in enumerate(uppgifter or []):
         if not isinstance(u, dict):
@@ -83,23 +118,31 @@ def bygg(uppgifter: list[dict] | None) -> list[dict]:
         nr = u.get("nr") or i + 1
         text = ren(u.get("t") or u.get("text")) or f"Uppgift {nr}"
         p = max(1, int(u.get("p") or 2))
+        niva = u.get("niva")
         kod_formaga = u.get("formaga")
         delar = [d for d in (u.get("del") or []) if d]
         if len(delar) > 1:
             ut.append({"grupp": True, "nr": str(nr), "text": text})
             bas = max(1, p // len(delar))
+            delpeca = u.get("delpeca") if isinstance(u.get("delpeca"), list) else []
             for j, d in enumerate(delar):
                 sista = j == len(delar) - 1
                 deltext = ren(d)
+                eca = _tripel(delpeca[j]) if j < len(delpeca) else None
+                dp = sum(eca) if eca else (
+                    max(1, p - bas * (len(delar) - 1)) if sista else bas)
                 ut.append({
                     "nyckel": f"{nr}{BOK[j]}", "kod": f"{nr}{BOK[j]}",
-                    "nr": BOK[j] + ")", "text": deltext,
-                    "p": max(1, p - bas * (len(delar) - 1)) if sista else bas,
+                    "nr": BOK[j] + ")", "text": deltext, "p": dp,
+                    "peca": list(eca or _peca_fallback(dp, niva)),
                     "formaga": formaga_av(kod_formaga, deltext + " " + text),
                 })
         else:
+            eca = _tripel(u.get("peca"))
+            up = sum(eca) if eca else p
             ut.append({"nyckel": str(nr), "kod": str(nr), "nr": str(nr),
-                       "text": text, "p": p,
+                       "text": text, "p": up,
+                       "peca": list(eca or _peca_fallback(up, niva)),
                        "formaga": formaga_av(kod_formaga, text)})
     return ut
 
@@ -226,3 +269,138 @@ def moment_som_foll(rattat: dict | None) -> list[str]:
     urval som svaga, bara koderna. För korta besked och loggrader."""
     return [str(s.get("kod")) for s in ((rattat or {}).get("svaga") or [])
             if isinstance(s, dict) and s.get("kod")]
+
+
+# ═══════════════════════════════ ELEV FÖR ELEV ═══════════════════════════════
+# Klassrättningen ovan är en summa per rad. Den räcker för planeringen och inte
+# för eleven: ett betyg kan inte räknas ur en klumpsumma, och en feedbacktext
+# kan inte skrivas till en klass. Därför matas poängen in per NIVÅ per elev, och
+# klassens siffror räknas fram ur elevernas i stället för att skrivas två gånger.
+#
+# Ingen elev når språkmodellen vid namn (app/elev_feedback.py) — men här, i
+# räknandet, finns bara id:n ändå.
+
+def granser(rader: list[dict], config: dict | None = None) -> dict:
+    """Provets kravgränser, räknade på RADERNA.
+
+    Samma regel och samma tal som försättsbladet trycker
+    (exam_spec.kravgranser): radernas `peca` är precis de poängbärande enheter
+    poangsummor summerar. Räknas här och inte ur prov-JSON för att gränserna
+    ska finnas även för papper som aldrig gått genom provgeneratorn."""
+    e = c = a = 0
+    for r in rader or []:
+        if r.get("grupp"):
+            continue
+        p = r.get("peca") or _peca_fallback(int(r.get("p") or 0), None)
+        e, c, a = e + int(p[0]), c + int(p[1]), a + int(p[2])
+    return exam_spec.kravgranser_ur_summor(
+        {"total": e + c + a, "e": e, "c": c, "a": a}, config)
+
+
+def _elevtripel(varde, tak: list[int]) -> list[int | None]:
+    """En elevs poäng på en rad, nivå för nivå. None = ej ifylld, och en nivå
+    utan maxpoäng är alltid None — det finns ingen ruta att fylla i."""
+    v = varde if isinstance(varde, (list, tuple)) else []
+    ut: list[int | None] = []
+    for i in range(3):
+        t = int(tak[i]) if i < len(tak) else 0
+        x = v[i] if i < len(v) else None
+        if t <= 0 or x is None or str(x).strip() == "":
+            ut.append(None)
+            continue
+        try:
+            ut.append(max(0, min(t, int(round(float(x))))))
+        except (TypeError, ValueError):
+            ut.append(None)
+    return ut
+
+
+def stada(rader: list[dict], resultat: dict | None) -> dict[int, dict[str, list]]:
+    """Elevernas siffror klampade till radernas tak, utan nycklar som inte
+    finns på pappret. Klienten räknar samma sak medan läraren klickar —
+    servern är facit, och en rad som skrivits bort tar sitt värde med sig."""
+    tak = {r["nyckel"]: (r.get("peca") or [0, 0, 0])
+           for r in rader or [] if not r.get("grupp") and r.get("nyckel")}
+    ut: dict[int, dict[str, list]] = {}
+    for elev, per_nyckel in (resultat or {}).items():
+        try:
+            eid = int(elev)
+        except (TypeError, ValueError):
+            continue
+        if not isinstance(per_nyckel, dict):
+            continue
+        rens = {}
+        for nyckel, varde in per_nyckel.items():
+            if nyckel not in tak:
+                continue
+            trip = _elevtripel(varde, tak[nyckel])
+            if any(x is not None for x in trip):
+                rens[str(nyckel)] = trip
+        ut[eid] = rens
+    return ut
+
+
+def elevsummor(rader: list[dict], varden: dict | None) -> dict:
+    """En elevs poäng per nivå + hur många rader som fortfarande är tomma.
+
+    `kvar` är varför betyget inte visas direkt: ett betyg på halva provet är
+    fejkad precision, och rättningsvyn skriver «— (3 rader kvar)» i stället."""
+    e = c = a = tak = kvar = 0
+    for r in rader or []:
+        if r.get("grupp"):
+            continue
+        rt = r.get("peca") or [0, 0, 0]
+        tak += sum(int(x) for x in rt)
+        trip = _elevtripel((varden or {}).get(r.get("nyckel")), rt)
+        if any(int(rt[i] or 0) > 0 and trip[i] is None for i in range(3)):
+            kvar += 1
+        e += int(trip[0] or 0)
+        c += int(trip[1] or 0)
+        a += int(trip[2] or 0)
+    return {"total": e + c + a, "e": e, "c": c, "a": a, "tak": tak, "kvar": kvar}
+
+
+def betyg(summor: dict, gr: dict) -> str:
+    """Elevens F/E/C/A mot provets kravgränser.
+
+    Ordningen är NP:s: det HÖGSTA betyg vars båda villkor är uppfyllda. En
+    elev som når C-gränsen i total men inte tar sin andel av C- och
+    A-poängen har inte visat det C kräver — hon får E, inte C."""
+    tot = int((summor or {}).get("total") or 0)
+    ca = int((summor or {}).get("c") or 0) + int((summor or {}).get("a") or 0)
+    a = int((summor or {}).get("a") or 0)
+    g = gr or {}
+    A, C, E = g.get("A") or {}, g.get("C") or {}, g.get("E") or {}
+    if tot >= int(A.get("minst") or 0) and a >= int(A.get("varav_a") or 0):
+        return "A"
+    if tot >= int(C.get("minst") or 0) and ca >= int(C.get("varav_ca") or 0):
+        return "C"
+    if tot >= int(E.get("minst") or 0):
+        return "E"
+    return "F"
+
+
+def elevresultat_till_rattning(resultat: dict | None) -> tuple[int, dict]:
+    """(elever, varden) för save_rattning — klassens rättning ur elevernas.
+
+    Läraren matar in EN gång. Klassläget läser samma tabeller som förut och
+    lektionsplaneringens källdörr 5 märker ingen skillnad; det som ändras är
+    att siffrorna inte längre skrivs in två gånger och kan säga olika.
+
+    En elev utan ett enda ifyllt värde räknas inte — hon skrev inte provet, och
+    radernas tak ska inte bära henne."""
+    varden: dict[str, int] = {}
+    elever = 0
+    for _eid, per_nyckel in (resultat or {}).items():
+        if not isinstance(per_nyckel, dict):
+            continue
+        ifylld = False
+        for nyckel, trip in per_nyckel.items():
+            summa = sum(int(x) for x in (trip or []) if isinstance(x, int))
+            if not any(x is not None for x in (trip or [])):
+                continue
+            ifylld = True
+            varden[str(nyckel)] = varden.get(str(nyckel), 0) + summa
+        if ifylld:
+            elever += 1
+    return elever, varden
