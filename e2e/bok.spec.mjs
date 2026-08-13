@@ -168,6 +168,15 @@ test("importen är fyra steg som beskriver något som händer", async ({ page })
   await hydrerad(page);
   await oppnaBoken(page);
 
+  /* Kursen som planeras — knappen sitter i lektionens bokdörr. Den MÅSTE följa
+     med: utan kurs hamnar boken i hyllan men registret läggs aldrig under någon
+     kurs (bok.js taEmot), och «nästa i boken» står tomt om en bok som har ett
+     register. */
+  await page.evaluate(() => {
+    const f = document.querySelector("#p-kurs");
+    f.innerHTML = '<option value="Matematik, nivå 2c">Matematik, nivå 2c</option>';
+    f.value = "Matematik, nivå 2c";
+  });
   await page.setInputFiles("#bokfil", {
     name: "Matematik 5000+ Kurs 2c.pdf", mimeType: "application/pdf",
     buffer: Buffer.from("%PDF-1.4 minimal"),
@@ -178,6 +187,7 @@ test("importen är fyra steg som beskriver något som händer", async ({ page })
   const post = anrop.find(a => a.vag === "/api/bocker" && a.metod === "POST");
   expect(post.kropp.path).toBe("C:/bas/downloads/bok.pdf");
   expect(post.kropp.namn).toBe("Matematik 5000+ Kurs 2c");
+  expect(post.kropp.kurs).toBe("Matematik, nivå 2c");
   // Hyllan läses om när boken är inne.
   await expect.poll(() => anrop.filter(a => a.vag === "/api/bocker" && a.metod === "GET").length,
                     { timeout: 15_000 }).toBeGreaterThan(1);

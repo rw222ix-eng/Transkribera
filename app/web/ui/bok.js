@@ -44,9 +44,20 @@
   const kursNu = () => (($('#p-kurs') || {}).value || '').trim();
   /* Utan server är prototypens 3c-register default. MED server finns bara det
      läraren själv läst in: en kurs utan bok har inget register, och då är tomt
-     det sanna svaret — inte en annan boks kapitel. */
+     det sanna svaret — inte en annan boks kapitel.
+
+     Fallbacken var `REG_BOK[window.Bok.namn]`, alltså FÖRSTA boken i hyllan.
+     Med en bok i hyllan såg det rätt ut. Med tre fick Matematik, nivå 2c —
+     en kurs helt utan bok — Liber 1c:s tjugotvå avsnitt, och «nästa i boken»
+     pekade på en sida i fel kurs. Den enda bok som får svara för en kurs den
+     inte är märkt med är en bok utan kurs alls: den gör inget anspråk, och
+     var enda boken innan uppladdningen började skicka kursen. Är de flera
+     vet ingen vilken som menas, och då är tomt sanningen. */
+  const otaggade = () => (servern || []).filter(b => !b.kurs);
   const registerFor = kurs => REGISTER[kurs || kursNu()]
-    || (franServern() ? (REG_BOK[window.Bok.namn] || []) : AVSNITT);
+    || (franServern()
+      ? (otaggade().length === 1 ? (REG_BOK[otaggade()[0].namn] || []) : [])
+      : AVSNITT);
   const nasta = (kurs, klass) => {
     const A = registerFor(kurs);
     if (!A.length) return null;
@@ -107,7 +118,13 @@
   const franServern = () => Array.isArray(servern);
   const registerForBok = namn => REG_BOK[namn]
     || (franServern() ? [] : (REGISTER[KURS_FOR_BOK[namn]] || AVSNITT));
-  const namnFor = kurs => BOKNAMN[kurs] || window.Bok.namn;
+  /* Samma sak för NAMNET: dörren fick heta «Liber Ma 1c» på en Ma 2c-lektion,
+     eftersom förvalet var första boken i hyllan. Utan bok för kursen är tomt
+     rätt — kallor.js skriver då «Läroboken», som varken lovar eller ljuger. */
+  const namnFor = kurs => BOKNAMN[kurs]
+    || (franServern()
+      ? (otaggade().length === 1 ? otaggade()[0].namn : '')
+      : window.Bok.namn);
 
   function taEmot(bocker) {
     servern = bocker || [];
