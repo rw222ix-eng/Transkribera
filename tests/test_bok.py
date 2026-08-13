@@ -98,7 +98,10 @@ class FejkOCR:
         sidor = []
         for b in bilder:
             pdf_i = bok.pdf_index(b)
-            tryckt = pdf_i + 1 - self.offset
+            # `offset` får vara en funktion av PDF-sidan: en fotograferad bok
+            # som tappat ett uppslag mitt i har inte samma offset i hela boken.
+            tryckt = pdf_i + 1 - (self.offset(pdf_i) if callable(self.offset)
+                                  else self.offset)
             sidor.append({
                 "fil": b.name, "tryckt_sida": tryckt, "avsnitt": "1.1",
                 "rubrik": "Repetition",
@@ -333,6 +336,40 @@ def test_faktapasset_gar_i_knippen(tmp_path, conn, ocr):
     assert [len(k) for k in ocr.fakta] == [8, 3]
 
 
+def test_siktet_rattas_nar_skannen_tappat_ett_uppslag(tmp_path, conn, ocr):
+    """En fotograferad bok har inte samma offset hela vägen: lärarens Liber 1c
+    ligger +1 i kapitel 1, −7 i mitten och −9 på slutet. `sidoffset` är ETT tal
+    och kan inte vara annat — men faktapasset ser vilken sida det renderade, och
+    då ska det sikta om i stället för att lägga fel sidor under rätt nummer."""
+    b = bok.importera(tmp_path, conn, pdf=pdf_fil(tmp_path / "d", sidor=60))
+    assert b["sidoffset"] == 2
+    ocr.fakta.clear()
+    ocr.offset = 6                                  # skannen tappade två uppslag
+    bok.las_spann(tmp_path, conn, b["id"], 20, 21, bara="fakta")
+    assert len(ocr.fakta) == 2                      # ett omtag, inte fler
+    assert {r["sida"]: r["pdf_sida"] for r in db.bok_sidor(conn, b["id"], 20, 21)} \
+        == {20: 26, 21: 27}
+    assert bok.olasta(conn, b["id"], 20, 21, text=False) == []
+
+
+def test_textpasset_laser_sidan_faktapasset_hittade(tmp_path, conn, ocr):
+    """Texten är det dyra passet. Den ska läsas av den sida faktapasset FANN,
+    inte av en sida som räknats fram ur en offset som inte gäller här."""
+    b = bok.importera(tmp_path, conn, pdf=pdf_fil(tmp_path / "d", sidor=60))
+    ocr.offset = 6
+    bok.las_spann(tmp_path, conn, b["id"], 20, 21)
+    assert ocr.text == ["sida-026.png", "sida-027.png"]
+
+
+def test_ingen_omsiktning_nar_siktet_haller(tmp_path, conn, ocr):
+    """Omtaget kostar ett anrop. Det får bara tas när sidfötterna säger att
+    siktet var fel — inte som en rutin."""
+    b = bok.importera(tmp_path, conn, pdf=pdf_fil(tmp_path / "d", sidor=60))
+    ocr.fakta.clear()
+    bok.las_spann(tmp_path, conn, b["id"], 20, 21, bara="fakta")
+    assert len(ocr.fakta) == 1
+
+
 def test_ett_orimligt_spann_kapas(tmp_path, conn, ocr):
     """Ett spann över halva boken är en förfrågan om timmar. Taket klipper —
     och SÄGER att det klippt, i stället för att tyst läsa tio av hundra."""
@@ -446,6 +483,30 @@ def test_las_rutten_laser_och_uppslaget_svarar(client, ocr):
     # Faktapasset lämnar sidorna olästa i textmening — det är avsiktligt.
     assert upp["olasta"] == [10, 11]
     assert all(s["last"] is False for s in upp["sidor"])
+
+
+def test_kursen_gar_att_satta_i_efterhand(client, ocr):
+    """Kursen är bokens nyckel till registret i frontenden. Böcker som lästes
+    in innan uppladdningen skickade kursen — och feltryck — måste gå att rätta
+    utan att importen betalas om."""
+    b = _importera(client)
+    assert b["kurs"] is None
+    r = client.put(f"/api/bocker/{b['id']}", json={"kurs": "Matematik, nivå 1c"})
+    assert r.status_code == 200
+    assert r.json()["kurs"] == "Matematik, nivå 1c"
+    assert client.get("/api/bocker").json()["bocker"][0]["kurs"] == "Matematik, nivå 1c"
+    # Registret följer med — det är hela poängen med att sätta kursen.
+    assert r.json()["avsnitt"] == b["avsnitt"]
+
+
+def test_kursen_gar_att_ta_bort_men_namnet_inte(client, ocr):
+    b = _importera(client)
+    client.put(f"/api/bocker/{b['id']}", json={"kurs": "Matematik, nivå 1c"})
+    assert client.put(f"/api/bocker/{b['id']}", json={"kurs": ""}).json()["kurs"] is None
+    # Namnet lämnas orört när det inte skickas, och får aldrig bli tomt.
+    assert client.get(f"/api/bocker/{b['id']}").json()["namn"] == b["namn"]
+    assert client.put(f"/api/bocker/{b['id']}", json={"namn": "  "}).status_code == 400
+    assert client.put("/api/bocker/9999", json={"kurs": "x"}).status_code == 404
 
 
 def test_raderad_bok_tar_sidbilderna_med_sig(client, ocr):

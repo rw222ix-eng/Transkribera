@@ -180,6 +180,22 @@ def olasta(conn, bok_id: int, fran: int, till: int, *, text: bool = True) -> lis
     return [s for s in range(int(fran), int(till) + 1) if s not in har]
 
 
+def _sikta_om(fakta: list[dict], bilder: list[Path], sikte: int) -> int | None:
+    """Den offset sidorna FAKTISKT hade, när den inte är den vi siktade på.
+
+    En bok som fotograferats sida för sida saknar ibland ett uppslag mitt i, och
+    då gäller inte samma offset i hela boken: lärarens Liber 1c ligger +1 i
+    kapitel 1, −7 i mitten och −9 på slutet (uppmätt 2026-08-13). `sidoffset`
+    är ETT tal, och måste vara det — men faktapasset läser sidfoten på den sida
+    det renderade, och vet därför var det hamnade. Är svaret entydigt och ett
+    annat än siktet är det siktet som är fel, inte boken.
+
+    None betyder «siktet höll» — eller att sidfötterna var oense, och då är en
+    omsiktning bara ett andra anrop på lika osäker grund."""
+    ny = bok_ocr.offset_ur_fakta(fakta, {p.name: pdf_index(p) + 1 for p in bilder})
+    return ny if ny is not None and ny != sikte else None
+
+
 def las_spann(base: Path, conn, bok_id: int, fran: int, till: int, *,
               emit=None, llm=None, avbruten=None, bara: str | None = None,
               max_sidor: int = MAX_SPANN) -> dict:
@@ -224,30 +240,45 @@ def las_spann(base: Path, conn, bok_id: int, fran: int, till: int, *,
                 "lasta": 0}
 
     lasta = 0
+    sikte = offset
     for i in range(0, len(utan_fakta), FAKTA_KNIPPE):
         if avbruten and avbruten():
             raise RuntimeError("Avbruten.")
         knippe = utan_fakta[i:i + FAKTA_KNIPPE]
         logg({"type": "log",
               "msg": f"Slår upp s. {knippe[0]}–{knippe[-1]} …"})
-        bilder = rendera(pdf, [s + offset - 1 for s in knippe], mapp)
-        fakta = bok_ocr.las_sidfakta(bilder, llm=llm)["sidor"]
-        _spara_fakta(conn, bok_id, fakta, offset)
+        for forsok in range(2):
+            bilder = rendera(pdf, [s + sikte - 1 for s in knippe], mapp)
+            fakta = bok_ocr.las_sidfakta(bilder, llm=llm)["sidor"]
+            _spara_fakta(conn, bok_id, fakta, sikte)
+            ratt = _sikta_om(fakta, bilder, sikte)
+            if ratt is None or forsok:
+                break
+            logg({"type": "log", "msg": f"Sidorna låg {abs(ratt - sikte)} steg fel "
+                                        "i skannen — siktar om."})
+            sikte = ratt
         # Faktapasset äger de första 35 procenten när texten också ska läsas —
         # men körs bara fakta är det hela vägen.
         tak = 100 if bara == "fakta" else 35
         logg({"type": "progress",
               "pct": round(tak * (i + len(knippe)) / max(1, len(utan_fakta)))})
 
+    # Vilken PDF-sida en tryckt sida FAKTISKT låg på, när faktapasset har sett
+    # den. Sparat värde slår alltid räknat: texten är det dyra passet, och den
+    # ska inte läsas av en sida som gissats fram ur en offset som kanske inte
+    # gäller just här.
+    pdf_for = {r["sida"]: r.get("pdf_sida")
+               for r in db.bok_sidor(conn, bok_id, fran, till, med_text=False)}
     for n, sida in enumerate(utan_text, 1):
         if avbruten and avbruten():
             raise RuntimeError("Avbruten.")
         logg({"type": "log", "msg": f"Läser s. {sida} …"})
-        bilder = rendera(pdf, [sida + offset - 1], mapp)
+        pdf_sida = pdf_for.get(sida) or (sida + sikte)
+        bilder = rendera(pdf, [pdf_sida - 1], mapp)
         if not bilder:
             continue
         text = bok_ocr.las_sidtext(bilder[0], llm=llm)
-        db.save_bok_sida(conn, bok_id, sida, pdf_sida=sida + offset, text=text)
+        db.save_bok_sida(conn, bok_id, sida, pdf_sida=pdf_sida, text=text)
         lasta += 1
         logg({"type": "progress",
               "pct": 35 + round(65 * n / max(1, len(utan_text)))})

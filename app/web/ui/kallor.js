@@ -576,8 +576,15 @@
        per sida, och de sidor läraren aldrig slår upp ska ingen betala för. */
     function lasInPaServern(file, namn, fyll, text) {
       const stegtext = { 18: `Läser ${namn} …`, 56: 'Hittar kapitel och avsnitt …', 88: 'Indexerar sidorna …' };
+      /* Kursen MÅSTE med. Utan den hamnar boken visserligen i hyllan, men
+         registret läggs aldrig under någon kurs (bok.js taEmot) — «nästa i
+         boken» står tomt och dörren säger «inget register än» om en bok som
+         har ett. Kursen är den som planeras: uppladdningsknappen sitter i
+         lektionens bokdörr, så det är den boken läraren håller på med. Blev
+         det ändå fel går den att rätta: PUT /api/bocker/{id}. */
+      const kurs = (($('#p-kurs') || {}).value || '').trim();
       return window.API.laddaUpp(file)
-        .then(upp => window.API.strom('/api/bocker', { path: upp.path, namn }, {
+        .then(upp => window.API.strom('/api/bocker', { path: upp.path, namn, kurs }, {
           progress: p => { fyll.style.width = Math.max(0, Math.min(100, p)) + '%'; if (stegtext[p]) text.textContent = stegtext[p]; },
           log: m => { text.textContent = String(m || '').slice(0, 70); },
         }))

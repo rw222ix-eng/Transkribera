@@ -199,6 +199,37 @@ def create_router(base: Path, arbiter) -> APIRouter:
                            "rubrik": s.get("rubrik"),
                            "last": bool(s.get("text"))} for s in sidor]}
 
+    # ------------------------------------------------------------ rätta till --
+
+    @router.put("/api/bocker/{bok_id:int}")
+    async def andra(bok_id: int, req: Request):
+        """Bokens namn och KURS i efterhand. Body: {"namn"?, "kurs"?}.
+
+        Kursen är bokens nyckel till registret (`bok.js taEmot`: registret läggs
+        under `b.kurs`), och satt den fel — eller inte alls, som allt som lästes
+        in innan uppladdningen skickade kursen — fanns ingen väg tillbaka utom
+        att radera boken och betala importen om. Tom sträng betyder «ingen
+        kurs»; ett utelämnat fält lämnas orört.
+        """
+        body = await req.json()
+        falt = {}
+        if "namn" in body:
+            namn = (body.get("namn") or "").strip()
+            if not namn:
+                return JSONResponse({"error": "boken måste ha ett namn"},
+                                    status_code=400)
+            falt["namn"] = namn
+        if "kurs" in body:
+            falt["kurs"] = (body.get("kurs") or "").strip() or None
+        conn = _db()
+        try:
+            if db.get_bok(conn, bok_id) is None:
+                return JSONResponse({"error": "okänd bok"}, status_code=404)
+            b = db.update_bok(conn, bok_id, **falt)
+        finally:
+            conn.close()
+        return _vy(b)
+
     # ---------------------------------------------------------------- radera --
 
     @router.delete("/api/bocker/{bok_id:int}")
