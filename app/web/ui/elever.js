@@ -274,6 +274,29 @@
     }).catch(() => {});
   }
 
+  /* Prototypens efternamnssortering — servern gör den riktiga städningen
+     (app/klasslista.py: kolumner, numrering, partiklar), men klassen ska
+     hamna i samma ordning även utan server. Kommat säger vilket som är
+     efternamnet; annars är det sista ordet. */
+  function ordnaNamn(namn) {
+    const stada = n => n.replace(/^\s*(?:\d+\s*[.):]?|[-*•·])\s*/, '')
+      .split(/\s+/).filter(Boolean)
+      .map(o => o.length > 1 && o === o.toUpperCase()
+        ? o.split('-').map(d => d[0] + d.slice(1).toLowerCase()).join('-') : o)
+      .join(' ');
+    const dela = n => {
+      if (n.includes(',')) {
+        const [e, f] = n.split(',');
+        return [stada(`${f.trim()} ${e.trim()}`), stada(e.trim())];
+      }
+      const ord = stada(n).split(' ');
+      return [ord.join(' '), ord[ord.length - 1]];
+    };
+    return namn.map(dela).filter(x => x[0])
+      .sort((a, b) => a[1].localeCompare(b[1], 'sv') || a[0].localeCompare(b[0], 'sv'))
+      .map(x => x[0]);
+  }
+
   function sparaKlassen() {
     const namn = $('#elevnamnfalt').value.split('\n')
       .map(s => s.trim()).filter(Boolean);
@@ -282,7 +305,7 @@
     if (!server() || !gruppId) {
       /* Utan server (Claude Design) finns klassen bara i den här sessionen.
          Prototypen ska ändå gå att visa hela vägen. */
-      elever = namn.map((n, i) => ({ id: -(i + 1), namn: n, aktiv: true }));
+      elever = ordnaNamn(namn).map((n, i) => ({ id: -(i + 1), namn: n, aktiv: true }));
       index = 0;
       rita();
       return;

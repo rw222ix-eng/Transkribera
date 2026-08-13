@@ -22,7 +22,7 @@ from pathlib import Path
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
-from app import db, elev_feedback, rattning
+from app import db, elev_feedback, klasslista, rattning
 from app.web.sse import sse_response
 
 _GPU_BUSY = {"error": "GPU:n är upptagen — försök igen strax."}
@@ -86,9 +86,10 @@ def create_router(base: Path, arbiter) -> APIRouter:
 
     @router.put("/api/groups/{group_id:int}/elever")
     async def spara_elever(group_id: int, req: Request):
-        """Hela klasslistan i ett svep — läraren klistrar in den ur sin lista.
-        Ingen elev raderas: den som stryks inaktiveras och tar sina gamla
-        prov med sig (db.save_elever)."""
+        """Hela klasslistan i ett svep — läraren klistrar in den ur sin lista,
+        precis som den ser ut, och klasslista.ordna städar och sorterar den på
+        efternamn. Ingen elev raderas: den som stryks inaktiveras och tar sina
+        gamla prov med sig (db.save_elever)."""
         body = await req.json()
         namn = body.get("namn") if isinstance(body, dict) else body
         if not isinstance(namn, list):
@@ -96,8 +97,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
                                 status_code=400)
         conn = db.connect(db_file)
         try:
-            return {"elever": db.save_elever(conn, group_id,
-                                             [str(n) for n in namn])}
+            return {"elever": db.save_elever(
+                conn, group_id, klasslista.ordna([str(n) for n in namn]))}
         finally:
             conn.close()
 
