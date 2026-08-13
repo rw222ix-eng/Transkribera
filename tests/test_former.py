@@ -15,6 +15,8 @@ det i handen.
 """
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from app import exam_gen, exam_latex, exam_pdf, exam_spec
@@ -235,6 +237,47 @@ def test_facit_stannar_pa_lararens_papper():
     assert "Första felet står i steg 2" in tex["bedomning"]
     assert "Elevlösning A" in tex["bedomning"]
     assert "\\textbf{\\svarsruteval" in tex["bedomning"]
+
+
+ELEVER_ORD = [
+    {"etikett": "Elevlösning A",
+     "partier": [{"rader": ["$600 / 25 = 24$",
+                            "Tanken är tom efter 24 minuter."],
+                  "poang": [0, 0, 0], "dom": "Påfyllningen används inte."}]},
+    {"etikett": "Elevlösning B",
+     "partier": [{"rader": ["$y = 600 + (p - 25)x$",
+                            "Nettoflödet är $p - 25$ liter per minut."],
+                  "poang": [0, 1, 0], "dom": "Korrekt modell."}]},
+]
+
+
+def test_en_elevlosning_som_borjar_med_ord_klistras_inte_fast_i_par():
+    """Lärarens skarpa 1a-prov föll här: raderna radas upp med \\par emellan,
+    och nästa rad började med en bokstav — «\\parTanken», ett odefinierat
+    kommando, och HELA bedömningsanvisningen kompilerade inte. Provet fick sin
+    PDF, anvisningen ingen. Samma fel var redan fixat i gruppuppgift.tex.j2;
+    det syntes inte här för att elevlösningarnas rader nästan alltid börjar med
+    matematik, och \\( avslutar \\par på egen hand."""
+    doc = _doc(_uppgift(poang=[0, 1, 1], typ="resonemang", formaga="R",
+                        elevlosningar=ELEVER_ORD))
+    tex = exam_latex.render_bedomning(doc)
+    assert "\\parTanken" not in tex
+    # Bara elevpartierna: preamblen har \parindent och \parskip, som är egna
+    # kommandon och inte ett \par med ett ord fastklistrat.
+    partier = re.findall(r"\\begin\{elevparti\}.*?\\end\{elevparti\}", tex, re.S)
+    assert partier
+    for p in partier:
+        assert re.search(r"\\par[A-Za-zÅÄÖåäö]", p) is None, \
+            "\\par klistrat mot ett ord — kommandonamnet blir odefinierat"
+
+
+@pytest.mark.tectonic
+def test_bedomningen_med_ordrader_kompilerar(tmp_path):
+    doc = _doc(_uppgift(poang=[0, 1, 1], typ="resonemang", formaga="R",
+                        elevlosningar=ELEVER_ORD))
+    pdf, logg = exam_pdf.compile_pdf(exam_latex.render_bedomning(doc),
+                                     tmp_path, "bedomning")
+    assert pdf is not None, f"bedömningen föll:\n{logg[-800:]}"
 
 
 def test_stegtabellen_har_en_kryssruta_per_steg():

@@ -55,7 +55,13 @@ av totalt ((( granser.total ))) poäng.}
 \par\vspace{3mm}\noindent\textbf{((( e.etikett )))} \textemdash{} ((( e.poang ))) p
 ((* for pa in e.partier *))
 \begin{elevparti}{((* if pa.poang *))+((( pa.poang ))) p((* else *))0 p((* endif *))}
-((* for r in pa.rader *))((( r )))\par((* endfor *))
+((# \par MÅSTE avslutas, precis som i gruppuppgift.tex.j2: utan mellanslaget
+    klistras NÄSTA rads första ord fast i kommandonamnet. Lärarens skarpa
+    1a-prov gav «\parTanken», ett odefinierat kommando, och HELA
+    bedömningsanvisningen föll — provet fick sin PDF, anvisningen ingen.
+    Att det inte syntes förr är att elevlösningarnas rader oftast börjar med
+    matematik ($…$ → \(), och \( avslutar \par på egen hand. #))
+((* for r in pa.rader *))((( r )))\par ((* endfor *))
 {\small\itshape ((( pa.dom )))}
 \end{elevparti}
 ((* endfor *))
