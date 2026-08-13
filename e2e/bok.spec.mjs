@@ -110,6 +110,33 @@ test("hyllan och registret är lärarens egna", async ({ page }) => {
   expect(await page.evaluate(() => window.Uppslag.sista())).toBe(118);
 });
 
+test("en kurs utan bok får inte en ANNAN boks register", async ({ page }) => {
+  /* Fyndet ur den skarpa inläsningen (2026-08-13): fallbacken var första boken
+     i hyllan, så Matematik nivå 2c — en kurs helt utan bok — fick 1c-bokens
+     avsnitt, och «nästa i boken» pekade på en sida i fel kurs. Med EN bok i
+     hyllan syntes det inte; det krävdes tre. */
+  const ETTA = { ...BOK, id: 7, namn: "Liber Ma 1c", kurs: "Matematik, nivå 1c" };
+  const TVAA = { ...BOK, id: 8, namn: "Origo 2a", kurs: "Matematik, nivå 2a" };
+  await fejka(page, { bocker: [ETTA, TVAA] });
+  await page.goto("/");
+  await hydrerad(page);
+
+  expect(await page.evaluate(() => window.Bok.registerFor("Matematik, nivå 1c")))
+    .toHaveLength(2);
+  expect(await page.evaluate(() => window.Bok.registerFor("Matematik, nivå 2c")))
+    .toEqual([]);
+  expect(await page.evaluate(() => window.Bok.namnFor("Matematik, nivå 2c"))).toBe("");
+  expect(await page.evaluate(() => window.Bok.nasta("Matematik, nivå 2c", ""))).toBe(null);
+});
+
+test("en bok UTAN kurs får däremot stå in — den gör inget anspråk", async ({ page }) => {
+  await fejka(page, { bocker: [{ ...BOK, kurs: null }] });
+  await page.goto("/");
+  await hydrerad(page);
+  expect(await page.evaluate(() => window.Bok.registerFor("Matematik, nivå 2c")))
+    .toHaveLength(2);
+});
+
 test("uppgifterna på uppslaget är de som står där", async ({ page }) => {
   await fejka(page);
   await page.goto("/");
