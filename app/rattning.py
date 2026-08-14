@@ -110,7 +110,13 @@ def bygg(uppgifter: list[dict] | None) -> list[dict]:
     sin andel av C+A-poängen och A sin av A-poängen. Bär pappret tripeln
     (plan.js franProv skriver `peca`/`delpeca` ur prov-JSON) är den sanningen
     om radens poäng, och då delas ingenting jämnt: `p` blir tripelns summa.
-    Papper utan tripel — prototypen, handskrivna — delas som förut."""
+    Papper utan tripel — prototypen, handskrivna — delas som förut.
+
+    `ci` är uppgiftens centrala innehåll som koder (G25-M1C-ALG-3), och den
+    lagras med raden av samma skäl som `formaga`: det som stod på uppgiften när
+    läraren rättade är det som gäller. Deluppgifterna ärver förälderns koder —
+    provets JSON taggar uppgiften, inte delfrågan. Gamla papper saknar den och
+    får en tom lista, vilket CI-profilen läser som «ingen CI-data»."""
     ut: list[dict] = []
     for i, u in enumerate(uppgifter or []):
         if not isinstance(u, dict):
@@ -120,6 +126,7 @@ def bygg(uppgifter: list[dict] | None) -> list[dict]:
         p = max(1, int(u.get("p") or 2))
         niva = u.get("niva")
         kod_formaga = u.get("formaga")
+        ci = [str(k).strip() for k in (u.get("ci") or []) if str(k).strip()]
         delar = [d for d in (u.get("del") or []) if d]
         if len(delar) > 1:
             ut.append({"grupp": True, "nr": str(nr), "text": text})
@@ -136,6 +143,7 @@ def bygg(uppgifter: list[dict] | None) -> list[dict]:
                     "nr": BOK[j] + ")", "text": deltext, "p": dp,
                     "peca": list(eca or _peca_fallback(dp, niva)),
                     "formaga": formaga_av(kod_formaga, deltext + " " + text),
+                    "ci": list(ci),
                 })
         else:
             eca = _tripel(u.get("peca"))
@@ -143,7 +151,8 @@ def bygg(uppgifter: list[dict] | None) -> list[dict]:
             ut.append({"nyckel": str(nr), "kod": str(nr), "nr": str(nr),
                        "text": text, "p": up,
                        "peca": list(eca or _peca_fallback(up, niva)),
-                       "formaga": formaga_av(kod_formaga, text)})
+                       "formaga": formaga_av(kod_formaga, text),
+                       "ci": list(ci)})
     return ut
 
 

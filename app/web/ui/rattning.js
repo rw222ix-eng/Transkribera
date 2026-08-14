@@ -53,6 +53,11 @@
       const nr = u.nr || i + 1;
       const text = ren(u.t || u.text) || 'Uppgift ' + nr;
       const p = Math.max(1, u.p || 2);
+      /* Uppgiftens CI-koder fryses på raden, precis som förmågan: det som stod
+         på uppgiften när läraren rättade är det som gäller. Deluppgifterna ärver
+         förälderns — provet taggar uppgiften, inte delfrågan. Samma regel som
+         app/rattning.py bygg(). */
+      const ci = (u.ci || []).filter(Boolean);
       const del = (u.del || []).filter(Boolean);
       if (del.length > 1) {
         ut.push({ grupp: true, nr: String(nr), text });
@@ -66,14 +71,15 @@
           ut.push({
             nyckel: `${nr}${BOK[j]}`, kod: `${nr}${BOK[j]}`, nr: BOK[j] + ')',
             text: ren(d), p: dp, peca: eca || pecaFall(dp, u.niva),
-            formaga: formaga(ren(d) + ' ' + text)
+            formaga: formaga(ren(d) + ' ' + text), ci: ci.slice()
           });
         });
       } else {
         const eca = tripel(u.peca);
         const up = eca ? eca[0] + eca[1] + eca[2] : p;
         ut.push({ nyckel: String(nr), kod: String(nr), nr: String(nr), text, p: up,
-                  peca: eca || pecaFall(up, u.niva), formaga: formaga(text) });
+                  peca: eca || pecaFall(up, u.niva), formaga: formaga(text),
+                  ci: ci.slice() });
       }
     });
     return ut;

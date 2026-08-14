@@ -86,7 +86,7 @@ def test_generate_passes_selected_content_and_tags_exam(client, monkeypatch):
     conn = appdb.connect(client.base_dir / "transkribera.db")
     punkt = appdb.list_course_content(conn, cid)[0]
     conn.close()
-    result, calls = _make_exam(client, monkeypatch, punkter=[punkt["id"]])
+    result, calls = _make_exam(client, monkeypatch, punkter=[punkt["kod"]])
     assert any(punkt["rubrik"] in p for p in calls[0]["punkter"])
     conn = appdb.connect(client.base_dir / "transkribera.db")
     tagged = conn.execute("SELECT content_id FROM content_tags WHERE exam_id = ?",
@@ -480,7 +480,7 @@ def test_content_status_provad_flag(client, monkeypatch):
     conn = appdb.connect(client.base_dir / "transkribera.db")
     punkt = appdb.list_course_content(conn, cid)[0]
     conn.close()
-    result, _ = _make_exam(client, monkeypatch, punkter=[punkt["id"]])
+    result, _ = _make_exam(client, monkeypatch, punkter=[punkt["kod"]])
     # otestat tills provet är godkänt
     r = client.get("/api/exams/content-status", params={"course_id": cid})
     assert {p["id"]: p["provad"] for p in r.json()["punkter"]}[punkt["id"]] is False

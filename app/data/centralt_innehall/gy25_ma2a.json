@@ -9,86 +9,103 @@
     {
       "kod": "G25-M2A-YRK-1",
       "rubrik": "Program- eller yrkesspecifikt innehåll",
+      "kort": "Yrkesnära fördjupning",
       "text": "Breddning eller fördjupning av matematiska begrepp och metoder som är relevanta för arbetslivet och utbildningens karaktär."
     },
     {
       "kod": "G25-M2A-YRK-2",
       "rubrik": "Program- eller yrkesspecifikt innehåll",
+      "kort": "Hjälpmedel och verktyg",
       "text": "Hjälpmedel och verktyg som är relevanta för att hantera matematik inom arbetslivet och utbildningens karaktär."
     },
     {
       "kod": "G25-M2A-ALG-1",
       "rubrik": "Aritmetik, algebra och funktioner",
+      "kort": "Räta linjens ekvation",
       "text": "Räta linjens ekvation. Metoder för att bestämma linjära funktioner."
     },
     {
       "kod": "G25-M2A-ALG-2",
       "rubrik": "Aritmetik, algebra och funktioner",
+      "kort": "Linjära ekvationssystem",
       "text": "Begreppet linjärt ekvationssystem. Metoder för att lösa linjära ekvationssystem."
     },
     {
       "kod": "G25-M2A-ALG-3",
       "rubrik": "Aritmetik, algebra och funktioner",
+      "kort": "Potensfunktioner",
       "text": "Begreppet potensfunktion."
     },
     {
       "kod": "G25-M2A-ALG-4",
       "rubrik": "Aritmetik, algebra och funktioner",
+      "kort": "Potenser och potensekvationer",
       "text": "Motivering och hantering av räkneregler för potenser. Metoder för att lösa potensekvationer."
     },
     {
       "kod": "G25-M2A-ALG-5",
       "rubrik": "Aritmetik, algebra och funktioner",
+      "kort": "Exponentialekvationer",
       "text": "Digitala metoder för att lösa exponentialekvationer."
     },
     {
       "kod": "G25-M2A-ALG-6",
       "rubrik": "Aritmetik, algebra och funktioner",
+      "kort": "Kvadreringsregler",
       "text": "Motivering och hantering av konjugatregeln och kvadreringsreglerna."
     },
     {
       "kod": "G25-M2A-ALG-7",
       "rubrik": "Aritmetik, algebra och funktioner",
+      "kort": "Andragradsfunktioner",
       "text": "Begreppet andragradsfunktion och egenskaper hos andragradsfunktioner, däribland symmetrilinje, extrempunkt och nollställen."
     },
     {
       "kod": "G25-M2A-ALG-8",
       "rubrik": "Aritmetik, algebra och funktioner",
+      "kort": "Andragradsekvationer",
       "text": "Metoder för att lösa andragradsekvationer."
     },
     {
       "kod": "G25-M2A-STA-1",
       "rubrik": "Statistik",
+      "kort": "Lägesmått och spridning",
       "text": "Lägesmått och spridningsmått, däribland percentiler och standardavvikelse, samt digitala metoder för att bestämma dessa."
     },
     {
       "kod": "G25-M2A-STA-2",
       "rubrik": "Statistik",
+      "kort": "Normalfördelning",
       "text": "Begreppet normalfördelning och egenskaper hos normalfördelat material. Metoder för att göra enklare beräkningar på normalfördelat material."
     },
     {
       "kod": "G25-M2A-GEO-1",
       "rubrik": "Logik och geometri",
+      "kort": "Pythagoras sats",
       "text": "Användning och motivering av Pythagoras sats med exempel som omfattar beräkningar i koordinatsystem."
     },
     {
       "kod": "G25-M2A-DIG-1",
       "rubrik": "Digitala verktyg",
+      "kort": "Digitala verktyg",
       "text": "Användning av digitala verktyg för att effektivisera beräkningar och komplettera metoder, till exempel vid ekvationslösning och problemlösning."
     },
     {
       "kod": "G25-M2A-PRO-1",
       "rubrik": "Problemlösning och tillämpningsområden",
+      "kort": "Problemlösning",
       "text": "Problemlösning med särskild utgångspunkt i arbets- och samhällsliv, däribland frågeställningar som berör hållbar utveckling och hur matematik kan användas för kritisk granskning av fakta och påståenden."
     },
     {
       "kod": "G25-M2A-PRO-2",
       "rubrik": "Problemlösning och tillämpningsområden",
+      "kort": "Matematiska modeller",
       "text": "Tillämpning och formulering av matematiska modeller i realistiska situationer. Utvärdering av matematiska modellers egenskaper och begränsningar."
     },
     {
       "kod": "G25-M2A-PRO-3",
       "rubrik": "Problemlösning och tillämpningsområden",
+      "kort": "Matematikens historia",
       "text": "Orientering om något ur matematikens historia, till exempel hur ett matematiskt begrepp utvecklats, matematikens roll i något historiskt skeende, en betydande person inom matematiken eller ett historiskt matematiskt problem."
     }
   ]

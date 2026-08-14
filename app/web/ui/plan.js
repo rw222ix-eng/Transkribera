@@ -737,6 +737,11 @@
      nivån; hela nivån står i listan där man väljer. */
   let nivaId = window.Gy ? window.Gy.foreslagen('Matematik 3c') : '';
   const gyPunkter = () => (window.Gy ? window.Gy.punkter(nivaId) : []);
+  /* Valet bärs som korta etiketter — de är det läraren ser och det som ligger i
+     sparade dokument sedan tidigare. Servern vill ha KODERNA, för det är de som
+     finns i kursregistret och som en uppgift kan taggas med. Översättningen sker
+     här, i sista stund, mot den nivå väljaren faktiskt står på. */
+  const gyKoder = () => (window.Gy ? window.Gy.koder(nivaId, [...vald]) : []);
   function ritaGy() {
     const n = window.Gy ? window.Gy.niva(nivaId) : null;
     const namn = gyPunkter().map(p => p.kort);
@@ -1031,6 +1036,12 @@
            läsaren. Elevens papper är orört: `poang_str` trycker fortfarande
            totalen, E/C/A-splitten är rättarens vy. */
         peca: nivavektor.slice(0, 3),
+        /* Uppgiftens centrala innehåll som KODER — det provet självt taggade
+           (exam_spec låser fältet till lärarens valda punkter). Den följer med
+           pappret av samma skäl som nivåvektorn: rättningen är enda platsen där
+           man kan se att det är just funktionsuttrycken som faller, och den
+           informationen finns ingen annanstans när provet väl är utskrivet. */
+        ci: (u.innehall || []).slice(),
       };
       if (u.alternativ) { ut.alt = u.alternativ; ut.ratt = u.ratt_alternativ; }
       /* Figuren följer med till arket. Servern ritar den i PDF:en
@@ -1502,7 +1513,7 @@
          dokumentet och ingen bedömningsanvisning (routes_exam approve). */
       Prov: ({ signal, log }) => window.API.strom('/api/exams/generate', {
         kurs: utkast.kurs, klass: utkast.klass,
-        punkter_text: [...vald],
+        punkter: gyKoder(), punkter_text: [...vald],
         antal: Number(i0.antal) || undefined,
         tid_min: Number(i0.provminuter) || undefined,
         delar: i0.delprov !== 'En del',
@@ -1534,7 +1545,7 @@
        väljarna här — inte ur modellens fantasi. */
     JOBB.Gruppuppgift = ({ signal, log }) => window.API.strom('/api/exams/generate', {
       kurs: utkast.kurs, klass: utkast.klass,
-      punkter_text: [...vald],
+      punkter: gyKoder(), punkter_text: [...vald],
       /* Fyra uppgifter — inte en väljare, utan formen: fyra rutor är vad ett
          A4 rymmer med plats att skriva på (gruppark.css). */
       antal: 4,
@@ -3007,17 +3018,17 @@
     Object.assign(JSON.parse(JSON.stringify(provMaj)), { losningsblad: true }),
     fardigt({
       typ: 'Arbetsblad', moment: 'primitiva funktioner', klass: '9A', kurs: 'Matematik 3c', datum: '2026-06-02',
-      gy: ['Primitiva funktioner'], inst: { antal: 6, niva: 'C-nivå', facit: 'Facit i bladet', svar: 'Skrivlinjer', illustration: true }
+      gy: ['Primitiv funktion och integral'], inst: { antal: 6, niva: 'C-nivå', facit: 'Facit i bladet', svar: 'Skrivlinjer', illustration: true }
     }),
     /* Papperen som hör till den transkriberade lektionen 3 juni. De följer med av
        sig själv när man utgår från «förra lektionen» — se lektionsmaterial.js. */
     fardigt({
       typ: 'Gruppuppgift', moment: 'derivatans definition', klass: '9A', kurs: 'Matematik 3c', datum: '2026-06-03', tid: '08:15–09:00',
-      gy: ['Derivatans definition'], inst: { grupp: 3, langd: 45, redovisning: 'Muntligt' }
+      gy: ['Gränsvärde och derivata'], inst: { grupp: 3, langd: 45, redovisning: 'Muntligt' }
     }),
     fardigt({
       typ: 'Arbetsblad', moment: 'sekant och tangent', klass: '9A', kurs: 'Matematik 3c', datum: '2026-06-03', tid: '08:15–09:00',
-      gy: ['Derivatans definition'], inst: { antal: 6, niva: 'Blandat', facit: 'Facit i bladet', svar: 'Skrivlinjer', illustration: true }
+      gy: ['Gränsvärde och derivata'], inst: { antal: 6, niva: 'Blandat', facit: 'Facit i bladet', svar: 'Skrivlinjer', illustration: true }
     }),
     fardigt({
       typ: 'Arbetsblad', moment: 'komplexa tal', klass: '9B', kurs: 'Matematik 4', datum: '2026-06-18',
@@ -3025,18 +3036,18 @@
     }),
     fardigt({
       typ: 'Tavla', moment: 'integraler och areor', klass: '9A', kurs: 'Matematik 3c', datum: '2026-06-20',
-      gy: ['Integraler och areor'], kalla: true, kallor: ['Integraler — introduktion'],
+      gy: ['Integraler i tillämpning'], kalla: true, kallor: ['Integraler — introduktion'],
       inst: { langd: 60, exempel: 3 }
     }),
     /* Terminens första vecka har redan material på några lektioner — klassvyn
        ska visa både det som är gjort och luckorna. */
     fardigt({
       typ: 'Tavla', moment: 'derivatans definition', klass: '9A', kurs: 'Matematik 3c', datum: '2026-08-17', tid: '08:15–09:00',
-      gy: ['Derivatans definition'], kalla: true, kallor: ['Från sekant till tangent'], inst: { langd: 45, exempel: 2 }
+      gy: ['Gränsvärde och derivata'], kalla: true, kallor: ['Från sekant till tangent'], inst: { langd: 45, exempel: 2 }
     }),
     fardigt({
       typ: 'Gruppuppgift', moment: 'derivatans definition', klass: '9A', kurs: 'Matematik 3c', datum: '2026-08-17', tid: '08:15–09:00',
-      gy: ['Derivatans definition'], inst: { grupp: 3, langd: 60, redovisning: 'Muntligt' }
+      gy: ['Gränsvärde och derivata'], inst: { grupp: 3, langd: 60, redovisning: 'Muntligt' }
     }),
     fardigt({
       typ: 'Tavla', moment: 'komplexa tal i polär form', klass: '9B', kurs: 'Matematik 4', datum: '2026-08-18', tid: '09:15–10:00',

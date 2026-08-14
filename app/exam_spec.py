@@ -372,8 +372,16 @@ class ExamDoc(_Model):
     uppgifter: list[ExamItem] = Field(min_length=1)
 
 
+# Hur många innehållspunkter en uppgift får tagga. En uppgift som taggar hela
+# kursen har inte sagt någonting; tre är taket för att en uppgift ÄRLIGT kan
+# ligga i skarven mellan ett par punkter (funktionsbegreppet och linjära
+# funktioner prövas ofta i samma fråga).
+MAX_CI_PER_UPPGIFT = 3
+
+
 def to_response_format(antal: int | None = None,
-                       skeleton: list[dict] | None = None) -> dict:
+                       skeleton: list[dict] | None = None,
+                       koder: list[str] | None = None) -> dict:
     """json_schema-objekt för llama-servers grammatiktvång.
 
     `antal` sätter ett hårt antalstak (minItems=maxItems) — llama.cpp hedrar
@@ -382,8 +390,23 @@ def to_response_format(antal: int | None = None,
     `skeleton` går längre: varje uppgifts del, formaga, typ och poang låses per
     index via prefixItems (samma grammatikmekanism som poang-tupeln redan
     använder). Skelettet är balanserat BY CONSTRUCTION, så förmåge- och
-    nivåbalans blir garanterad — modellen skriver bara innehållet."""
+    nivåbalans blir garanterad — modellen skriver bara innehållet.
+
+    `koder` låser `innehall` till en enum av de centrala innehållspunkter
+    LÄRAREN valde, och gör fältet obligatoriskt. Fältet var fritext förut, och
+    då blev det oanvändbart: modellen skrev sin egen sammanfattning av vad
+    uppgiften handlade om, och ingen kunde matcha den mot en kursplanepunkt.
+    Med enum är taggen antingen en riktig punkt eller inget alls — och då går
+    det att säga vad en elev är svag på."""
     schema = ExamDoc.model_json_schema()
+    if koder:
+        item_def = schema["$defs"]["ExamItem"]
+        item_def["properties"]["innehall"] = {
+            "type": "array", "items": {"type": "string", "enum": list(koder)},
+            "minItems": 1, "maxItems": MAX_CI_PER_UPPGIFT,
+        }
+        item_def["required"] = sorted(set(item_def.get("required", []))
+                                      | {"innehall"})
     upp = schema["properties"]["uppgifter"]
     if skeleton is not None:
         item_def = schema["$defs"]["ExamItem"]
@@ -1149,6 +1172,30 @@ def validate_variation(doc: ExamDoc, troskel: float = 0.8) -> list[dict]:
                     f"uppgift {i + 1} är för lik uppgift {j + 1} — variera "
                     f"frågan (moment, tal eller kontext)"))
                 break
+    return errors
+
+
+def validate_ci(doc: ExamDoc, koder: list[str] | None) -> list[dict]:
+    """Varje uppgift ska tagga minst en av de VALDA innehållskoderna.
+
+    Grammatiken (to_response_format) tvingar redan fram det där den används,
+    men gruppuppgiften genereras utan grammatiklås — dess deluppgifter är hela
+    formen — och där är det här den enda kontrollen. Utan den kan ett dokument
+    komma tillbaka utan CI, och då vet varken pappret eller rättningen vad
+    uppgiften prövade."""
+    if not koder:
+        return []
+    giltiga = set(koder)
+    errors: list[dict] = []
+    for i, it in enumerate(doc.uppgifter):
+        egna = [k for k in (it.innehall or []) if k in giltiga]
+        if egna:
+            continue
+        errors.append(_err(
+            f"uppgifter[{i}]", "innehall",
+            f"uppgift {i + 1} saknar centralt innehåll — sätt \"innehall\" till "
+            f"en till {MAX_CI_PER_UPPGIFT} av koderna "
+            f"{', '.join(sorted(giltiga))}."))
     return errors
 
 

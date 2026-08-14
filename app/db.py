@@ -21,7 +21,7 @@ import sqlite3
 import threading
 from pathlib import Path
 
-SCHEMA_VERSION = 15
+SCHEMA_VERSION = 16
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS courses (
@@ -566,6 +566,30 @@ CREATE INDEX IF NOT EXISTS idx_elever_group ON elever(group_id, sort);
 CREATE INDEX IF NOT EXISTS idx_elevres_dok  ON elevresultat(dokument_id, elev_id);
 """
 
+# Det centrala innehållets identitet (v16) — ENDAST additiv; rollback: lämna
+# kolumnerna (NULL = "vet inte", vilket varje läsare redan tål) + PRAGMA
+# user_version=15.
+#
+# En innehållspunkt fanns i två system som aldrig möttes: väljarens korta
+# etiketter i webbläsaren och `course_content` i databasen. Provet bar därför
+# inget centralt innehåll alls — `ExamItem.innehall` var fritext modellen hittade
+# på, den speglades aldrig ner i exam_items, och rättningens rader visste
+# ingenting om vad uppgiften prövade. Tre kolumner stänger kedjan:
+#
+# * course_content.kort — etiketten läraren ser som bricka. Den bodde i gy.js;
+#   nu bor den i den bundlade JSON:en och seedas in, så att servern kan skriva
+#   ut ett begripligt namn för en kod utan att fråga webbläsaren.
+# * exam_items.innehall — JSON-lista av koder per uppgift, speglad ur prov-JSON.
+#   Utan den går CI-taggen förlorad så fort provet lästes tillbaka ur databasen.
+# * rattning_rader.ci — koderna som stod på uppgiften NÄR LÄRAREN RÄTTADE.
+#   Samma frysningsprincip som `formaga` (v10): det som gällde då är det som
+#   gäller, även om provet skrivs om efteråt.
+_CI_IDENTITET_MIGRATION = """
+ALTER TABLE course_content ADD COLUMN kort TEXT;
+ALTER TABLE exam_items ADD COLUMN innehall TEXT;
+ALTER TABLE rattning_rader ADD COLUMN ci TEXT;
+"""
+
 _MIGRATIONS: dict[int, str] = {2: _FTS_MIGRATION, 3: _MARKERS_MIGRATION,
                                4: _PLANNING_MIGRATION, 5: _EXAMS_MIGRATION,
                                6: _GY25_MIGRATION, 7: _DATAGRUND_MIGRATION,
@@ -576,12 +600,13 @@ _MIGRATIONS: dict[int, str] = {2: _FTS_MIGRATION, 3: _MARKERS_MIGRATION,
                                12: _NIVAMARKE_MIGRATION,
                                13: _SCHEMAGILTIGHET_MIGRATION,
                                14: _SCHEMAUNDANTAG_MIGRATION,
-                               15: _ELEVER_MIGRATION}
+                               15: _ELEVER_MIGRATION,
+                               16: _CI_IDENTITET_MIGRATION}
 
 # Migreringar som bara innehåller ALTER TABLE … ADD COLUMN. De körs sats för
 # sats så att en redan tillagd kolumn hoppas över i stället för att fälla hela
 # migreringen — se _apply_migrations.
-_ALTER_MIGRATIONER = {6, 12, 13, 14}
+_ALTER_MIGRATIONER = {6, 12, 13, 14, 16}
 
 _LESSON_SELECT = """
 SELECT l.*, g.namn AS group_namn, c.namn AS course_namn
@@ -1613,10 +1638,13 @@ def seed_course_content(conn: sqlite3.Connection,
     """Seeda centralt innehåll från bundlad JSON (idempotent via
     UNIQUE(course_id, kod) — jfr migrate_from_history). Varje post:
     {"kurs": "Ma3c", "lasar_version": "Gy11", "innehall":
-    [{"kod", "rubrik", "text"}, ...]}. Befintliga rader uppdateras med
-    aktuell rubrik/text (upsert) så att rättelser i den bundlade
+    [{"kod", "rubrik", "kort", "text"}, ...]}. Befintliga rader uppdateras med
+    aktuell rubrik/kort/text (upsert) så att rättelser i den bundlade
     läroplanstexten når redan seedade databaser utan att raderna byter
-    id — content_tags-kopplingarna överlever. Returnerar antal nya rader."""
+    id — content_tags-kopplingarna överlever. Returnerar antal nya rader.
+
+    `kort` (v16) är visningsetiketten. Gy11-filerna saknar den och får NULL —
+    läsvägen faller då tillbaka på rubriken."""
     added = 0
     for course in courses_data or []:
         cid = get_or_create_course(conn, course.get("kurs") or "")
@@ -1629,12 +1657,13 @@ def seed_course_content(conn: sqlite3.Connection,
                 (cid, item.get("kod"))).fetchone() is not None
             conn.execute(
                 "INSERT INTO course_content "
-                "(course_id, kod, rubrik, text, lasar_version) "
-                "VALUES (?, ?, ?, ?, ?) "
+                "(course_id, kod, rubrik, kort, text, lasar_version) "
+                "VALUES (?, ?, ?, ?, ?, ?) "
                 "ON CONFLICT(course_id, kod) DO UPDATE SET "
-                "rubrik = excluded.rubrik, text = excluded.text, "
+                "rubrik = excluded.rubrik, kort = excluded.kort, "
+                "text = excluded.text, "
                 "lasar_version = excluded.lasar_version",
-                (cid, item.get("kod"), item.get("rubrik"),
+                (cid, item.get("kod"), item.get("rubrik"), item.get("kort"),
                  item.get("text"), version))
             if not fanns:
                 added += 1
@@ -1666,6 +1695,31 @@ def list_course_content(conn: sqlite3.Connection, course_id: int) -> list[dict]:
         "AND (lasar_version = ? OR ? IS NULL) ORDER BY kod, id",
         (course_id, version, version)).fetchall()
     return [dict(r) for r in rows]
+
+
+def content_by_kod(conn: sqlite3.Connection, koder: list[str],
+                   course_id: int | None = None) -> list[dict]:
+    """Innehållsrader för en lista koder, i den ordning koderna kom.
+
+    Kursen får peka ut vilken rad som menas, men söker inte bara i den: läraren
+    kan välja innehåll ur en ANNAN nivå än kursen i steg 1 (nivån är en egen
+    väljare), och koden bär ändå sin nivå i sig (G25-M1C-…). Kursens egen rad
+    vinner när koden finns i flera kurser."""
+    rent = [str(k).strip() for k in (koder or []) if str(k).strip()]
+    if not rent:
+        return []
+    platser = ",".join("?" * len(rent))
+    rows = conn.execute(
+        f"SELECT * FROM course_content WHERE kod IN ({platser})",
+        rent).fetchall()
+    per_kod: dict[str, dict] = {}
+    for r in rows:
+        d = dict(r)
+        tidigare = per_kod.get(d["kod"])
+        if tidigare is None or (course_id is not None
+                                and d["course_id"] == course_id):
+            per_kod[d["kod"]] = d
+    return [per_kod[k] for k in rent if k in per_kod]
 
 
 def tag_content(conn: sqlite3.Connection, content_id: int, *,
@@ -2226,10 +2280,19 @@ def save_klassprofil(conn: sqlite3.Connection, minne: dict) -> dict:
 # databasen har ingen åsikt om vad 27 % betyder.
 
 def _rattning_view(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
-    rader = [dict(r) for r in conn.execute(
-        "SELECT nyckel, kod, text, poang AS p, formaga, varde, andel "
-        "FROM rattning_rader WHERE dokument_id = ? ORDER BY ordning, id",
-        (row["dokument_id"],)).fetchall()]
+    rader = []
+    for r in conn.execute(
+            "SELECT nyckel, kod, text, poang AS p, formaga, ci, varde, andel "
+            "FROM rattning_rader WHERE dokument_id = ? ORDER BY ordning, id",
+            (row["dokument_id"],)).fetchall():
+        d = dict(r)
+        # `ci` lagras som JSON-lista men läses som lista av alla — en sträng
+        # här hade blivit en teckenlista i CI-profilens summering.
+        try:
+            d["ci"] = json.loads(d["ci"]) if d.get("ci") else []
+        except (TypeError, ValueError):
+            d["ci"] = []
+        rader.append(d)
     return dict(row) | {
         "rader": rader,
         "varden": {r["nyckel"]: r["varde"] for r in rader if r["varde"] is not None},
@@ -2262,9 +2325,12 @@ def save_rattning(conn: sqlite3.Connection, dokument_id: int, *,
         conn.execute("DELETE FROM rattning_rader WHERE dokument_id = ?", (dokument_id,))
         conn.executemany(
             "INSERT INTO rattning_rader(dokument_id, ordning, nyckel, kod, text, "
-            "poang, formaga, varde, andel) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "poang, formaga, ci, varde, andel) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [(dokument_id, i, r.get("nyckel"), r.get("kod"), r.get("text"),
-              int(r.get("p") or 1), r.get("formaga"), r.get("varde"), r.get("andel"))
+              int(r.get("p") or 1), r.get("formaga"),
+              json.dumps(r["ci"], ensure_ascii=False) if r.get("ci") else None,
+              r.get("varde"), r.get("andel"))
              for i, r in enumerate(rader) if not r.get("grupp") and r.get("nyckel")])
     return get_rattning(conn, dokument_id)
 
@@ -2658,19 +2724,25 @@ def underlag_bild_path(underlag: str | None, bild) -> str | None:
 def _sync_exam_items(conn: sqlite3.Connection, exam_id: int, exam: dict,
                      underlag: str | None = None) -> None:
     """Spegla aktuella versionens uppgifter till exam_items (utplattat för
-    minneskontexten och Fas 5:s dubblettkontroll)."""
+    minneskontexten och Fas 5:s dubblettkontroll).
+
+    `innehall` (v16) är uppgiftens CI-koder som JSON-lista. Den speglas för att
+    kedjan annars bröts direkt: koderna stod i prov-JSON:en men fanns ingenstans
+    att fråga efter — varken per uppgift eller för kursens täckning."""
     conn.execute("DELETE FROM exam_items WHERE exam_id = ?", (exam_id,))
     for i, item in enumerate(exam.get("uppgifter") or [], 1):
         poang = item.get("poang") or [0, 0, 0]
+        koder = [str(k) for k in (item.get("innehall") or []) if str(k).strip()]
         conn.execute(
             "INSERT INTO exam_items (exam_id, nummer, del, formaga, typ, "
-            "poang_e, poang_c, poang_a, text, bild_path) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "poang_e, poang_c, poang_a, text, bild_path, innehall) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (exam_id, str(item.get("nummer") or i), item.get("del"),
              item.get("formaga"), item.get("typ"),
              int(poang[0] or 0), int(poang[1] or 0), int(poang[2] or 0),
              item.get("text") or "",
-             underlag_bild_path(underlag, item.get("bild"))))
+             underlag_bild_path(underlag, item.get("bild")),
+             json.dumps(koder, ensure_ascii=False) if koder else None))
 
 
 def create_exam(conn: sqlite3.Connection, *, exam: dict, typ: str = "prov",

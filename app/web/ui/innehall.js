@@ -34,7 +34,7 @@ window.Innehall = (() => {
       titel: 'Exponentialfunktioner',
       rubrik: 'Exponentiell förändring',
       begrepp: ['förändringsfaktor', 'startvärde', 'tillväxt och avtagande'],
-      gy: { 'mato/1b': ['Matematiska modeller'], 'mato/2': ['Matematiska modeller'], '*': ['Exponentiell förändring'] },
+      gy: { 'mato/1c': ['Matematiska modeller'], 'mato/2': ['Matematiska modeller'], '*': ['Exponentialfunktioner'] },
       tavla: {
         recept: ['Skriv modellen $y = C \\cdot a^{x}$.', 'C är startvärdet — värdet när $x = 0$.', 'a är förändringsfaktorn per steg.', '$a > 1$ växer, $0 < a < 1$ avtar.'],
         fel: ['Vanligaste felet:', '$a$ sätts till 0,12 i stället för 0,88'],
@@ -87,7 +87,7 @@ window.Innehall = (() => {
       titel: 'Potenslagar och rationella exponenter',
       rubrik: 'Potenslagarna',
       begrepp: ['potenslagar', 'rationella exponenter', 'rötter som potenser'],
-      gy: { 'mato/1b': ['Rationella uttryck'], 'mato/2': ['Faktorisering av polynom'], '*': ['Potenser och rötter'] },
+      gy: { 'mato/1c': ['Rationella uttryck'], 'mato/2': ['Faktorsatsen'], '*': ['Potenser och potensekvationer'] },
       tavla: {
         recept: ['Samma bas, multiplikation → addera exponenterna.', 'Samma bas, division → subtrahera.', 'Potens av potens → multiplicera.', 'Rot är bråkexponent: $\\sqrt[n]{a} = a^{1/n}$.'],
         fel: ['Vanligaste felet:', '$(2x)^{3}$ skrivs som $2x^{3}$'],
@@ -135,7 +135,7 @@ window.Innehall = (() => {
       titel: 'Exponentialekvationer',
       rubrik: 'Ekvationer med okänd exponent',
       begrepp: ['exponentialekvation', 'logaritmering', 'förändringsfaktor'],
-      gy: { 'mato/1b': ['Talet e och ln'], 'mato/2': ['Sammansatta funktioner'], '*': ['Exponentialekvationer'] },
+      gy: { 'mato/1c': ['Deriveringsregler'], 'mato/2': ['Sammansatta funktioner'], '*': ['Exponential- och potensekvationer'] },
       tavla: {
         recept: ['Isolera potensen: $C \\cdot a^{x} = b$ ger $a^{x} = \\frac{b}{C}$.', 'Logaritmera BÅDA leden.', 'Använd $\\lg a^{x} = x \\cdot \\lg a$.', 'Dela med $\\lg a$ och svara med enhet.'],
         fel: ['Vanligaste felet:', '$\\lg a^{x}$ skrivs som $(\\lg a)^{x}$'],
@@ -188,7 +188,7 @@ window.Innehall = (() => {
       titel: 'Tillämpningar med exponentiell modell',
       rubrik: 'Halveringstid och fördubbling',
       begrepp: ['exponentiell modell', 'halveringstid', 'fördubblingstid'],
-      gy: { 'mato/1b': ['Matematiska modeller'], 'mato/2': ['Matematiska modeller'], '*': ['Matematiska modeller'] },
+      gy: { 'mato/1c': ['Matematiska modeller'], 'mato/2': ['Matematiska modeller'], '*': ['Matematiska modeller'] },
       tavla: {
         recept: ['Skriv modellen med rätt tidsenhet.', 'Fördubbling: lös $a^{x} = 2$.', 'Halvering: lös $a^{x} = 0{,}5$.', 'Byt tidsenhet genom att upphöja $a$.'],
         fel: ['Vanligaste felet:', 'konstanten i modellen glöms bort'],
@@ -240,7 +240,7 @@ window.Innehall = (() => {
       titel: 'Logaritmlagar och exponentform',
       rubrik: 'Logaritmlagarna',
       begrepp: ['logaritmlagar', 'exponentform', 'tiologaritm'],
-      gy: { 'mato/1b': ['Talet e och ln'], 'mato/2': ['Sammansatta funktioner'], '*': ['Logaritmer'] },
+      gy: { 'mato/1c': ['Deriveringsregler'], 'mato/2': ['Sammansatta funktioner'], '*': ['Logaritmer'] },
       tavla: {
         recept: ['$\\lg (ab) = \\lg a + \\lg b$', '$\\lg \\frac{a}{b} = \\lg a - \\lg b$', '$\\lg a^{p} = p \\cdot \\lg a$', 'Exponentform: $\\lg x = c$ ger $x = 10^{c}$.'],
         fel: ['Vanligaste felet:', '$\\lg (a+b)$ skrivs som $\\lg a + \\lg b$'],
@@ -289,7 +289,7 @@ window.Innehall = (() => {
       titel: 'Derivatans definition',
       rubrik: 'Från sekant till tangent',
       begrepp: ['ändringskvot', 'gränsvärde', 'derivata'],
-      gy: { 'mato/1b': ['Gränsvärde', 'Derivatans definition'], 'mato/2': ['Deriveringsregler'], '*': ['Derivata'] },
+      gy: { 'mato/1c': ['Gränsvärde och derivata'], 'mato/2': ['Deriveringsregler'], '*': ['Gränsvärde och derivata'] },
       tavla: {
         recept: ['Skriv ändringskvoten $\\frac{f(x+h) - f(x)}{h}$.', 'Utveckla täljaren.', 'Förkorta bort $h$ — det MÅSTE gå.', 'Låt $h \\to 0$. Det som blir kvar är $f\'(x)$.'],
         fel: ['Vanligaste felet:', '$h$ sätts till 0 innan bråket förkortats'],
@@ -342,7 +342,7 @@ window.Innehall = (() => {
       titel: 'Deriveringsregler',
       rubrik: 'Produkt, kvot och kedja',
       begrepp: ['produktregeln', 'kvotregeln', 'kedjeregeln'],
-      gy: { 'mato/1b': ['Deriveringsregler', 'Andraderivata'], 'mato/2': ['Deriveringsregler'], '*': ['Deriveringsregler'] },
+      gy: { 'mato/1c': ['Deriveringsregler', 'Extremvärdesproblem'], 'mato/2': ['Deriveringsregler'], '*': ['Deriveringsregler'] },
       tavla: {
         recept: ['Produkt: $(uv)\' = u\'v + uv\'$', 'Kvot: $\\left(\\frac{u}{v}\\right)\' = \\frac{u\'v - uv\'}{v^{2}}$', 'Kedja: $(f(g(x)))\' = f\'(g(x)) \\cdot g\'(x)$', 'Skriv ut $u$, $v$, $u\'$ och $v\'$ innan du sätter in.'],
         fel: ['Vanligaste felet:', 'den inre derivatan glöms i kedjeregeln'],
@@ -391,7 +391,7 @@ window.Innehall = (() => {
       titel: 'Primitiva funktioner',
       rubrik: 'Motsatsen till derivering',
       begrepp: ['primitiv funktion', 'bestämd integral', 'area'],
-      gy: { 'mato/1b': ['Primitiva funktioner', 'Integraler och areor'], 'mato/2': ['Integraler i tillämpning'], '*': ['Primitiva funktioner'] },
+      gy: { 'mato/1c': ['Primitiv funktion och integral', 'Integraler i tillämpning'], 'mato/2': ['Integraler i tillämpning'], '*': ['Primitiv funktion och integral'] },
       tavla: {
         recept: ['Fråga: vilken funktion deriveras till $f$?', 'Höj exponenten med 1, dela med den nya.', 'Skriv alltid $+\\,C$ — obestämd integral.', 'Bestämd integral: räkna $F(b) - F(a)$.'],
         fel: ['Vanligaste felet:', '$+\\,C$ glöms i den obestämda integralen'],

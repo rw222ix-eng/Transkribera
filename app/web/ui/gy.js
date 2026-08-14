@@ -5,138 +5,226 @@
    VILKEN nivå innehållet läses ur, och sedan nivåns egna punkter, grupperade i
    sina områden precis som i ämnesplanen.
 
-   Punkterna står i ämnesplanens språk («Begreppet gränsvärde») men bär också ett
-   kort namn — det är det korta som ryms som bricka i planeringen och som skrivs
-   in i dokumentet. Motsvarigheten till den gamla kursen står med, för läraren
-   känner igen «Matematik 3c» snabbare än «fortsättning nivå 1b».                */
+   Punkten bär tre saker. `kod` är IDENTITETEN — G25-M1C-ALG-3, samma sträng som
+   `course_content` i databasen bär — och den följer punkten in i prompten, ut i
+   provets JSON, ner på pappret och vidare in i rättningen. `kort` är etiketten
+   som ryms som bricka i planeringen och som skrivs in i dokumentet. `text` är
+   Skolverkets egen formulering, ordagrant.
+
+   Innan koden fanns talade de två halvorna av appen förbi varandra: väljaren
+   skickade sina korta etiketter, databasen bar sina rader, och ingen visste om
+   den andra — så Skolverkets text nådde aldrig prompten och inget prov kunde
+   säga vilket centralt innehåll en uppgift prövade.
+
+   BLOCKET NEDAN ÄR GENERERAT ur app/data/centralt_innehall/gy25_*.json och ska
+   inte handredigeras: rätta i JSON-filerna, som är facit, och kör sedan
+   `python -m tests.gy_spegel`. tests/test_ci_identitet.py fäller sviten om
+   spegeln glidit isär från dem. Datan står här och inte bakom ett API därför att
+   samma filer ÄR designprototypen, där ingen server finns (api.js).
+   Motsvarigheten till den gamla kursen står med, för läraren känner igen
+   «Matematik 3c» snabbare än «fortsättning nivå 1c».                          */
 window.Gy = (() => {
   const A = [
     {
       id: 'mate', namn: 'Matematik', nivaer: [
         {
-          id: '1a', namn: 'nivå 1a', gammal: 'Matematik 1a', omraden: [
+          id: 'mate/1a', namn: 'nivå 1a', kurs: 'Ma1a', kurskod: 'MATE1A00X',
+          fullnamn: 'Matematik, nivå 1a', gammal: 'Matematik 1a', omraden: [
             ['Program- eller yrkesspecifikt innehåll', [
-              ['Yrkesnära begrepp', 'Matematiska begrepp som är relevanta för arbetslivet, till exempel proportionalitet, skala, likformighet, vinklar och Pythagoras sats.'],
-              ['Procent och andelar', 'Procent, andelar, indexmått och vinstmarginal i yrkesnära situationer.'],
-              ['Beräkningsmetoder', 'Uppskattningar, överslagsräkning, avrundning och kontrollberäkning.'],
-              ['Formler', 'Hantering av formler som är relevanta för arbetslivet.'],
-              ['Storheter och enheter', 'Mätning och hantering av storheter, enhetsbyten och säkerhetsmarginaler.']
+              ['G25-M1A-YRK-1', 'Yrkesnära begrepp', 'Matematiska begrepp som är relevanta för arbetslivet, till exempel proportionalitet, skala, likformighet, vinklar, Pythagoras sats, procent och andelar, indexmått, vinstmarginal, jämvikt, felmarginaler, symmetrier, vektorer, trigonometriska funktioner och barns lärande inom matematik.'],
+              ['G25-M1A-YRK-2', 'Beräkningsmetoder i yrket', 'Beräkningsmetoder som är relevanta för arbetslivet, till exempel uppskattningar, beräkningar på störningar eller mätfel, spill- och svinnberäkningar, överslagsräkning, avrundning, användning av kalkylprogram och metoder för kontrollberäkning.'],
+              ['G25-M1A-YRK-3', 'Formler i yrket', 'Hantering av formler som är relevanta för arbetslivet.'],
+              ['G25-M1A-YRK-4', 'Storheter och enheter', 'Mätning och hantering av storheter och enheter som är relevanta för arbetslivet, till exempel enhetsbyten, mätning av vinklar, avrundningsprinciper, tidsuppskattningar, beräkning av förbrukningsmaterial, kostnadsberäkningar, säkerhetsmarginaler, hantering av mätverktyg och hantering av mätosäkerheter.'],
+              ['G25-M1A-YRK-5', 'Hjälpmedel och verktyg', 'Hjälpmedel och verktyg som är relevanta för att hantera matematik inom arbetslivet, till exempel formulär, mallar, tumregler, föreskrifter, manualer, referensverk och handböcker.']
             ]],
-            ['Problemlösning, verktyg och tillämpning', [
-              ['Problemlösning i yrket', 'Problemlösning med utgångspunkt i utbildningens karaktär.'],
-              ['Digitala verktyg', 'Användning av kalkylprogram och digitala verktyg vid beräkningar.']
-            ]]
-          ]
-        },
-        {
-          id: '1b', namn: 'nivå 1b', gammal: 'Matematik 1b', omraden: [
             ['Aritmetik, algebra och funktioner', [
-              ['Talområden', 'De reella talen, deras egenskaper och representationer.'],
-              ['Potenser och rötter', 'Potenser med heltalsexponenter och kvadratrötter.'],
-              ['Algebraiska uttryck', 'Hantering av algebraiska uttryck, linjära ekvationer och olikheter.'],
-              ['Linjära funktioner', 'Begreppet funktion samt linjära funktioner och deras grafer.'],
-              ['Exponentiell förändring', 'Exponentialfunktioner och procentuell förändring över tid.']
-            ]],
-            ['Geometri', [
-              ['Vinklar och trianglar', 'Vinkelsummor, likformighet och Pythagoras sats.'],
-              ['Omkrets, area, volym', 'Beräkning av omkrets, area och volym samt skala.']
+              ['G25-M1A-ALG-1', 'Formler och uttryck', 'Hantering av formler och algebraiska uttryck, däribland faktorisering och multiplicering av uttryck.'],
+              ['G25-M1A-ALG-2', 'Funktionsbegreppet', 'Begreppet funktion. Representationer av funktioner i form av ord, funktionsuttryck, tabeller och grafer. Digitala metoder för att skapa funktionsgrafer.'],
+              ['G25-M1A-ALG-3', 'Funktionsvärden', 'Metoder för att bestämma funktionsvärden. Grafiska metoder för att lösa ekvationer av typen f(x) = a.'],
+              ['G25-M1A-ALG-4', 'Linjära funktioner', 'Begreppet linjär funktion och egenskaper hos linjära funktioner.'],
+              ['G25-M1A-ALG-5', 'Linjära ekvationer', 'Metoder för att lösa linjära ekvationer.'],
+              ['G25-M1A-ALG-6', 'Exponentialfunktioner', 'Begreppet exponentialfunktion och egenskaper hos exponentialfunktioner. Skillnader och likheter med linjära funktioner.'],
+              ['G25-M1A-ALG-7', 'Förändringsfaktor', 'Begreppet förändringsfaktor och beräkning av förändringar i flera steg.']
             ]],
             ['Sannolikhet och statistik', [
-              ['Beskrivande statistik', 'Lägesmått och spridningsmått samt tolkning av tabeller och diagram.'],
-              ['Sannolikhet', 'Enkel sannolikhetsberäkning i slumpförsök.']
+              ['G25-M1A-STA-1', 'Sannolikhet i flera steg', 'Begreppen oberoende och beroende händelse samt komplementhändelse. Metoder för att beräkna sannolikheter i flera steg. Tillämpningar inom spel samt risk- och säkerhetsbedömningar.'],
+              ['G25-M1A-STA-2', 'Statistiska begrepp', 'Exempel på hur några statistiska begrepp används i samhälle och arbetsliv, däribland signifikans, korrelation, kausalitet, urvalsmetoder och felkällor.']
             ]],
-            ['Problemlösning, verktyg och tillämpning', [
-              ['Matematiska modeller', 'Tillämpning och formulering av enkla matematiska modeller.'],
-              ['Digitala verktyg', 'Digitala verktyg vid beräkning, grafritning och problemlösning.']
+            ['Digitala verktyg', [
+              ['G25-M1A-DIG-1', 'Ränta och amortering', 'Användning av kalkylprogram för beräkning av ränta och amortering.'],
+              ['G25-M1A-DIG-2', 'Digitala verktyg', 'Användning av digitala verktyg för att effektivisera beräkningar och komplettera metoder, till exempel vid ekvationslösning och problemlösning.']
+            ]],
+            ['Problemlösning och tillämpningsområden', [
+              ['G25-M1A-PRO-1', 'Generella samband', 'Problemlösning som omfattar att upptäcka och uttrycka generella samband.'],
+              ['G25-M1A-PRO-2', 'Problemlösning i yrket', 'Problemlösning med särskild utgångspunkt i arbetslivet samt privatekonomi och samhällsliv, däribland frågeställningar som berör hållbar utveckling och hur matematik kan användas för kritisk granskning av fakta och påståenden.'],
+              ['G25-M1A-PRO-3', 'Matematiska modeller', 'Tillämpning och formulering av matematiska modeller i realistiska situationer. Utvärdering av matematiska modellers egenskaper och begränsningar.'],
+              ['G25-M1A-PRO-4', 'Matematikens historia', 'Orientering om något ur matematikens historia, till exempel hur ett matematiskt begrepp utvecklats, matematikens roll i något historiskt skeende, en betydande person inom matematiken eller ett historiskt matematiskt problem.']
             ]]
           ]
         },
         {
-          id: '1c', namn: 'nivå 1c', gammal: 'Matematik 1c', omraden: [
+          id: 'mate/1b', namn: 'nivå 1b', kurs: 'Ma1b', kurskod: 'MATE1B00X',
+          fullnamn: 'Matematik, nivå 1b', gammal: 'Matematik 1b', omraden: [
             ['Aritmetik, algebra och funktioner', [
-              ['Talområden', 'De reella talen, deras egenskaper och representationer.'],
-              ['Potenslagar', 'Hantering av potenslagar för heltalsexponenter.'],
-              ['Algebraiska uttryck', 'Förenkling av algebraiska uttryck och lösning av linjära ekvationer.'],
-              ['Funktionsbegreppet', 'Begreppet funktion, definitionsmängd och värdemängd.'],
-              ['Linjära och exponentiella samband', 'Linjära funktioner och exponentialfunktioner samt deras grafer.']
-            ]],
-            ['Geometri', [
-              ['Vektorer i planet', 'Begreppet vektor och räkning med vektorer i planet.'],
-              ['Trigonometri i rätvinkliga trianglar', 'Sinus, cosinus och tangens i rätvinkliga trianglar.']
+              ['G25-M1B-ALG-1', 'Formler och uttryck', 'Hantering av formler och algebraiska uttryck, däribland faktorisering och multiplicering av uttryck.'],
+              ['G25-M1B-ALG-2', 'Funktionsbegreppet', 'Begreppen funktion, definitionsmängd och värdemängd. Representationer av funktioner i form av ord, funktionsuttryck, tabeller och grafer. Digitala metoder för att skapa funktionsgrafer.'],
+              ['G25-M1B-ALG-3', 'Funktionsvärden', 'Metoder för att bestämma funktionsvärden. Digitala och grafiska metoder för att lösa ekvationer av typen f(x) = a.'],
+              ['G25-M1B-ALG-4', 'Linjära funktioner', 'Begreppet linjär funktion och egenskaper hos linjära funktioner. Räta linjens ekvation. Metoder för att bestämma linjära funktioner.'],
+              ['G25-M1B-ALG-5', 'Linjära ekvationer', 'Metoder för att lösa linjära ekvationer.'],
+              ['G25-M1B-ALG-6', 'Linjära olikheter', 'Begreppen intervall och linjär olikhet. Metoder för att lösa linjära olikheter.'],
+              ['G25-M1B-ALG-7', 'Exponentialfunktioner', 'Begreppet exponentialfunktion och egenskaper hos exponentialfunktioner. Skillnader och likheter med linjära funktioner.'],
+              ['G25-M1B-ALG-8', 'Potenser och potensekvationer', 'Motivering och hantering av räkneregler för potenser. Metoder för att lösa potensekvationer.'],
+              ['G25-M1B-ALG-9', 'Potensfunktioner', 'Begreppet potensfunktion.'],
+              ['G25-M1B-ALG-10', 'Förändringsfaktor', 'Begreppet förändringsfaktor och beräkning av förändringar i flera steg.']
             ]],
             ['Sannolikhet och statistik', [
-              ['Beskrivande statistik', 'Lägesmått, spridningsmått och tolkning av diagram.'],
-              ['Sannolikhet', 'Beräkning av sannolikheter i flera steg.']
+              ['G25-M1B-STA-1', 'Index', 'Begreppet index.'],
+              ['G25-M1B-STA-2', 'Sannolikhet i flera steg', 'Begreppen oberoende och beroende händelse samt komplementhändelse. Metoder för att beräkna sannolikheter i flera steg. Tillämpningar inom spel samt risk- och säkerhetsbedömningar.'],
+              ['G25-M1B-STA-3', 'Statistiska begrepp', 'Exempel på hur några statistiska begrepp används i samhälle och inom vetenskap, däribland signifikans, korrelation, kausalitet, urvalsmetoder och felkällor.']
             ]],
-            ['Problemlösning, verktyg och tillämpning', [
-              ['Matematiska modeller', 'Tillämpning och formulering av matematiska modeller.'],
-              ['Digitala verktyg', 'Digitala verktyg vid beräkning och grafritning.']
+            ['Digitala verktyg', [
+              ['G25-M1B-DIG-1', 'Ränta och amortering', 'Användning av kalkylprogram för beräkning av ränta och amortering.'],
+              ['G25-M1B-DIG-2', 'Digitala verktyg', 'Användning av digitala verktyg för att effektivisera beräkningar och komplettera metoder, till exempel vid ekvationslösning och problemlösning.']
+            ]],
+            ['Problemlösning och tillämpningsområden', [
+              ['G25-M1B-PRO-1', 'Generella samband', 'Problemlösning som omfattar att upptäcka och uttrycka generella samband.'],
+              ['G25-M1B-PRO-2', 'Problemlösning', 'Problemlösning med särskild utgångspunkt i utbildningens karaktär, privatekonomi och samhällsliv, däribland frågeställningar som berör hållbar utveckling och hur matematik kan användas för kritisk granskning av fakta och påståenden.'],
+              ['G25-M1B-PRO-3', 'Matematiska modeller', 'Tillämpning och formulering av matematiska modeller i realistiska situationer. Utvärdering av matematiska modellers egenskaper och begränsningar.'],
+              ['G25-M1B-PRO-4', 'Matematikens historia', 'Orientering om något ur matematikens historia, till exempel hur ett matematiskt begrepp utvecklats, matematikens roll i något historiskt skeende, en betydande person inom matematiken eller ett historiskt matematiskt problem.']
             ]]
           ]
         },
         {
-          id: '2a', namn: 'nivå 2a', gammal: 'Matematik 2a', omraden: [
+          id: 'mate/1c', namn: 'nivå 1c', kurs: 'Ma1c', kurskod: 'MATE1C00X',
+          fullnamn: 'Matematik, nivå 1c', gammal: 'Matematik 1c', omraden: [
             ['Aritmetik, algebra och funktioner', [
-              ['Linjära ekvationssystem', 'Begreppet linjärt ekvationssystem och metoder för att lösa sådana.'],
-              ['Andragradsekvationer', 'Metoder för att lösa enkla andragradsekvationer.'],
-              ['Andragradsfunktioner', 'Egenskaper hos andragradsfunktioner, däribland symmetrilinje och extrempunkt.']
+              ['G25-M1C-ALG-1', 'Formler och uttryck', 'Hantering av formler och algebraiska uttryck, däribland faktorisering och multiplicering av uttryck.'],
+              ['G25-M1C-ALG-2', 'Funktionsbegreppet', 'Begreppen funktion, definitionsmängd och värdemängd. Representationer av funktioner i form av ord, funktionsuttryck, tabeller och grafer. Digitala metoder för att skapa funktionsgrafer.'],
+              ['G25-M1C-ALG-3', 'Funktionsvärden', 'Metoder för att bestämma funktionsvärden. Digitala och grafiska metoder för att lösa ekvationer av typen f(x) = a.'],
+              ['G25-M1C-ALG-4', 'Linjära funktioner', 'Begreppet linjär funktion och egenskaper hos linjära funktioner. Räta linjens ekvation. Metoder för att bestämma linjära funktioner.'],
+              ['G25-M1C-ALG-5', 'Linjära ekvationer', 'Metoder för att lösa linjära ekvationer.'],
+              ['G25-M1C-ALG-6', 'Linjära olikheter', 'Begreppen intervall och linjär olikhet. Metoder för att lösa linjära olikheter.'],
+              ['G25-M1C-ALG-7', 'Exponentialfunktioner', 'Begreppet exponentialfunktion och egenskaper hos exponentialfunktioner. Skillnader och likheter med linjära funktioner.'],
+              ['G25-M1C-ALG-8', 'Potenser och potensekvationer', 'Motivering och hantering av räkneregler för potenser. Metoder för att lösa potensekvationer.'],
+              ['G25-M1C-ALG-9', 'Potensfunktioner', 'Begreppet potensfunktion.'],
+              ['G25-M1C-ALG-10', 'Förändringsfaktor', 'Begreppet förändringsfaktor och beräkning av förändringar i flera steg.']
             ]],
-            ['Geometri', [
-              ['Likformighet och skala', 'Likformighet, skala och geometriska satser i yrkesnära situationer.'],
-              ['Trigonometri', 'Sinus, cosinus och tangens samt areasatsen.']
-            ]],
-            ['Problemlösning, verktyg och tillämpning', [
-              ['Yrkesnära problem', 'Problemlösning med utgångspunkt i utbildningens karaktär.'],
-              ['Digitala verktyg', 'Kalkylprogram och digitala verktyg vid beräkningar och modellering.']
-            ]]
-          ]
-        },
-        {
-          id: '2b', namn: 'nivå 2b', gammal: 'Matematik 2b', omraden: [
-            ['Aritmetik, algebra och funktioner', [
-              ['Linjära ekvationssystem', 'Begreppet linjärt ekvationssystem. Metoder för att lösa linjära ekvationssystem.'],
-              ['Logaritmer', 'Begreppet logaritm och räkneregler för logaritmer.'],
-              ['Exponentialekvationer', 'Metoder för att lösa exponentialekvationer samt skillnaden mot potensekvationer.'],
-              ['Kvadreringsregler', 'Motivering och hantering av konjugatregeln och kvadreringsreglerna.'],
-              ['Andragradsfunktioner', 'Begreppet andragradsfunktion samt symmetrilinje, extrempunkt och nollställen.'],
-              ['Andragradsekvationer', 'Metoder för att lösa andragradsekvationer.']
-            ]],
-            ['Geometri', [
-              ['Geometriska satser', 'Bevis och användning av geometriska satser om linjer, vinklar och cirklar.'],
-              ['Klassisk geometri', 'Begreppen sats, bevis och motexempel i klassisk geometri.']
+            ['Trigonometri och vektorer', [
+              ['G25-M1C-TRI-1', 'Trigonometri i trianglar', 'Begreppen sinus, cosinus och tangens. Begreppet invers funktion i samband med arcusfunktioner. Metoder för att beräkna sträckor och vinklar i koordinatsystem och i rätvinkliga trianglar.'],
+              ['G25-M1C-TRI-2', 'Vektorer', 'Begreppet vektor. Representationer av vektorer i koordinatsystem och skrivna i koordinatform. Metoder för beräkningar med vektorer, däribland addition, subtraktion, beräkning av absolutbelopp och multiplikation med skalär.']
             ]],
             ['Sannolikhet och statistik', [
-              ['Normalfördelning', 'Begreppet normalfördelning samt standardavvikelse.'],
-              ['Regression', 'Anpassning av räta linjer och exponentialfunktioner till data.']
+              ['G25-M1C-STA-1', 'Sannolikhet i flera steg', 'Begreppen oberoende och beroende händelse samt komplementhändelse. Metoder för att beräkna sannolikheter i flera steg. Tillämpningar inom spel samt risk- och säkerhetsbedömningar.'],
+              ['G25-M1C-STA-2', 'Statistiska begrepp', 'Exempel på hur några statistiska begrepp används i samhälle och inom vetenskap, däribland signifikans, korrelation, kausalitet, urvalsmetoder och felkällor.']
             ]],
-            ['Problemlösning, verktyg och tillämpning', [
-              ['Matematiska modeller', 'Tillämpning och formulering av matematiska modeller i realistiska situationer.'],
-              ['Digitala verktyg', 'Digitala verktyg vid ekvationslösning, grafritning och statistik.']
+            ['Digitala verktyg', [
+              ['G25-M1C-DIG-1', 'Ränta och amortering', 'Användning av kalkylprogram för beräkning av ränta och amortering.'],
+              ['G25-M1C-DIG-2', 'Digitala verktyg', 'Användning av digitala verktyg för att effektivisera beräkningar och komplettera metoder, till exempel vid ekvationslösning och problemlösning.'],
+              ['G25-M1C-DIG-3', 'Programmering', 'Exempel på hur programmering kan användas som verktyg vid problemlösning, databearbetning eller tillämpning av numeriska metoder.']
+            ]],
+            ['Problemlösning och tillämpningsområden', [
+              ['G25-M1C-PRO-1', 'Generella samband', 'Problemlösning som omfattar att upptäcka och uttrycka generella samband.'],
+              ['G25-M1C-PRO-2', 'Problemlösning', 'Problemlösning med särskild utgångspunkt i utbildningens karaktär, privatekonomi och samhällsliv, däribland frågeställningar som berör hållbar utveckling och hur matematik kan användas för kritisk granskning av fakta och påståenden.'],
+              ['G25-M1C-PRO-3', 'Matematiska modeller', 'Tillämpning och formulering av matematiska modeller i realistiska situationer. Utvärdering av matematiska modellers egenskaper och begränsningar.'],
+              ['G25-M1C-PRO-4', 'Matematikens historia', 'Orientering om något ur matematikens historia, till exempel hur ett matematiskt begrepp utvecklats, matematikens roll i något historiskt skeende, en betydande person inom matematiken eller ett historiskt matematiskt problem.']
             ]]
           ]
         },
         {
-          id: '2c', namn: 'nivå 2c', gammal: 'Matematik 2c', omraden: [
+          id: 'mate/2a', namn: 'nivå 2a', kurs: 'Ma2a', kurskod: 'MATE2A00X',
+          fullnamn: 'Matematik, nivå 2a', gammal: 'Matematik 2a', omraden: [
+            ['Program- eller yrkesspecifikt innehåll', [
+              ['G25-M2A-YRK-1', 'Yrkesnära fördjupning', 'Breddning eller fördjupning av matematiska begrepp och metoder som är relevanta för arbetslivet och utbildningens karaktär.'],
+              ['G25-M2A-YRK-2', 'Hjälpmedel och verktyg', 'Hjälpmedel och verktyg som är relevanta för att hantera matematik inom arbetslivet och utbildningens karaktär.']
+            ]],
             ['Aritmetik, algebra och funktioner', [
-              ['Linjära ekvationssystem', 'Linjära ekvationssystem, även med tre obekanta, och metoder för att lösa dem.'],
-              ['Algebraiska metoder', 'Hantering av algebraiska uttryck samt konjugat- och kvadreringsregler.'],
-              ['Logaritmer', 'Begreppet logaritm och lösning av exponentialekvationer.'],
-              ['Andragradsfunktioner', 'Andragradsfunktioner, nollställen, symmetrilinje och extrempunkt.'],
-              ['Icke-linjära ekvationer', 'Metoder för att lösa andragrads- och potensekvationer.']
+              ['G25-M2A-ALG-1', 'Räta linjens ekvation', 'Räta linjens ekvation. Metoder för att bestämma linjära funktioner.'],
+              ['G25-M2A-ALG-2', 'Linjära ekvationssystem', 'Begreppet linjärt ekvationssystem. Metoder för att lösa linjära ekvationssystem.'],
+              ['G25-M2A-ALG-3', 'Potensfunktioner', 'Begreppet potensfunktion.'],
+              ['G25-M2A-ALG-4', 'Potenser och potensekvationer', 'Motivering och hantering av räkneregler för potenser. Metoder för att lösa potensekvationer.'],
+              ['G25-M2A-ALG-5', 'Exponentialekvationer', 'Digitala metoder för att lösa exponentialekvationer.'],
+              ['G25-M2A-ALG-6', 'Kvadreringsregler', 'Motivering och hantering av konjugatregeln och kvadreringsreglerna.'],
+              ['G25-M2A-ALG-7', 'Andragradsfunktioner', 'Begreppet andragradsfunktion och egenskaper hos andragradsfunktioner, däribland symmetrilinje, extrempunkt och nollställen.'],
+              ['G25-M2A-ALG-8', 'Andragradsekvationer', 'Metoder för att lösa andragradsekvationer.']
             ]],
-            ['Geometri', [
-              ['Bevis i geometri', 'Begreppen sats och bevis samt bevis av geometriska satser.'],
-              ['Trigonometri', 'Areasatsen, sinussatsen och cosinussatsen.'],
-              ['Vektorer', 'Vektorer i planet och räkning med vektorer.']
+            ['Statistik', [
+              ['G25-M2A-STA-1', 'Lägesmått och spridning', 'Lägesmått och spridningsmått, däribland percentiler och standardavvikelse, samt digitala metoder för att bestämma dessa.'],
+              ['G25-M2A-STA-2', 'Normalfördelning', 'Begreppet normalfördelning och egenskaper hos normalfördelat material. Metoder för att göra enklare beräkningar på normalfördelat material.']
             ]],
-            ['Sannolikhet och statistik', [
-              ['Normalfördelning', 'Normalfördelning, standardavvikelse och tolkning av statistiska undersökningar.'],
-              ['Regression', 'Anpassning av funktioner till data och tolkning av modellens giltighet.']
+            ['Logik och geometri', [
+              ['G25-M2A-GEO-1', 'Pythagoras sats', 'Användning och motivering av Pythagoras sats med exempel som omfattar beräkningar i koordinatsystem.']
             ]],
-            ['Problemlösning, verktyg och tillämpning', [
-              ['Matematiska modeller', 'Tillämpning och formulering av matematiska modeller i realistiska situationer.'],
-              ['Bevis och resonemang', 'Matematiska resonemang, bevisföring och motexempel.'],
-              ['Digitala verktyg', 'Digitala verktyg vid ekvationslösning, grafritning och statistik.']
+            ['Digitala verktyg', [
+              ['G25-M2A-DIG-1', 'Digitala verktyg', 'Användning av digitala verktyg för att effektivisera beräkningar och komplettera metoder, till exempel vid ekvationslösning och problemlösning.']
+            ]],
+            ['Problemlösning och tillämpningsområden', [
+              ['G25-M2A-PRO-1', 'Problemlösning', 'Problemlösning med särskild utgångspunkt i arbets- och samhällsliv, däribland frågeställningar som berör hållbar utveckling och hur matematik kan användas för kritisk granskning av fakta och påståenden.'],
+              ['G25-M2A-PRO-2', 'Matematiska modeller', 'Tillämpning och formulering av matematiska modeller i realistiska situationer. Utvärdering av matematiska modellers egenskaper och begränsningar.'],
+              ['G25-M2A-PRO-3', 'Matematikens historia', 'Orientering om något ur matematikens historia, till exempel hur ett matematiskt begrepp utvecklats, matematikens roll i något historiskt skeende, en betydande person inom matematiken eller ett historiskt matematiskt problem.']
+            ]]
+          ]
+        },
+        {
+          id: 'mate/2b', namn: 'nivå 2b', kurs: 'Ma2b', kurskod: 'MATE2B00X',
+          fullnamn: 'Matematik, nivå 2b', gammal: 'Matematik 2b', omraden: [
+            ['Aritmetik, algebra och funktioner', [
+              ['G25-M2B-ALG-1', 'Linjära ekvationssystem', 'Begreppet linjärt ekvationssystem. Metoder för att lösa linjära ekvationssystem.'],
+              ['G25-M2B-ALG-2', 'Logaritmer', 'Begreppet logaritm. Hantering av räkneregler för logaritmer i samband med lösning av exponentialekvationer. Metoder för att lösa exponentialekvationer.'],
+              ['G25-M2B-ALG-3', 'Exponential- och potensekvationer', 'Likheter och skillnader mellan exponential- och potensekvationer.'],
+              ['G25-M2B-ALG-4', 'Kvadreringsregler', 'Motivering och hantering av konjugatregeln och kvadreringsreglerna.'],
+              ['G25-M2B-ALG-5', 'Andragradsfunktioner', 'Begreppet andragradsfunktion och egenskaper hos andragradsfunktioner, däribland symmetrilinje, extrempunkt och nollställen.'],
+              ['G25-M2B-ALG-6', 'Andragradsekvationer', 'Metoder för att lösa andragradsekvationer.']
+            ]],
+            ['Statistik', [
+              ['G25-M2B-STA-1', 'Lägesmått och spridning', 'Lägesmått och spridningsmått, däribland percentiler och standardavvikelse, samt digitala metoder för att bestämma dessa.'],
+              ['G25-M2B-STA-2', 'Normalfördelning', 'Begreppet normalfördelning och egenskaper hos normalfördelat material. Digitala metoder för att göra beräkningar på normalfördelat material.'],
+              ['G25-M2B-STA-3', 'Regressionsanalys', 'Begreppen regressionsanalys och korrelationskoefficient. Digitala metoder för regressionsanalys.']
+            ]],
+            ['Logik och geometri', [
+              ['G25-M2B-GEO-1', 'Implikation och ekvivalens', 'Begreppen implikation och ekvivalens.'],
+              ['G25-M2B-GEO-2', 'Sats och bevis', 'Begreppen definition, sats och bevis.'],
+              ['G25-M2B-GEO-3', 'Geometriska satser', 'Motivering och användning av enklare geometriska satser om vinklar och likformighet samt Pythagoras sats med exempel som omfattar beräkningar i koordinatsystem.']
+            ]],
+            ['Digitala verktyg', [
+              ['G25-M2B-DIG-1', 'Digitala verktyg', 'Användning av digitala verktyg för att effektivisera beräkningar och komplettera metoder, till exempel vid ekvationslösning och problemlösning.']
+            ]],
+            ['Problemlösning och tillämpningsområden', [
+              ['G25-M2B-PRO-1', 'Problemlösning', 'Problemlösning med särskild utgångspunkt i utbildningens karaktär och samhällsliv, däribland frågeställningar som berör hållbar utveckling och hur matematik kan användas för kritisk granskning av fakta och påståenden.'],
+              ['G25-M2B-PRO-2', 'Matematiska modeller', 'Tillämpning och formulering av matematiska modeller i realistiska situationer. Utvärdering av matematiska modellers egenskaper och begränsningar.'],
+              ['G25-M2B-PRO-3', 'Matematikens historia', 'Orientering om något ur matematikens historia, till exempel hur ett matematiskt begrepp utvecklats, matematikens roll i något historiskt skeende, en betydande person inom matematiken eller ett historiskt matematiskt problem.']
+            ]]
+          ]
+        },
+        {
+          id: 'mate/2c', namn: 'nivå 2c', kurs: 'Ma2c', kurskod: 'MATE2C00X',
+          fullnamn: 'Matematik, nivå 2c', gammal: 'Matematik 2c', omraden: [
+            ['Aritmetik, algebra och funktioner', [
+              ['G25-M2C-ALG-1', 'Linjära ekvationssystem', 'Begreppet linjärt ekvationssystem. Metoder för att lösa linjära ekvationssystem.'],
+              ['G25-M2C-ALG-2', 'Logaritmer', 'Begreppet logaritm. Motivering och hantering av räkneregler för logaritmer. Metoder för att lösa exponentialekvationer.'],
+              ['G25-M2C-ALG-3', 'Exponential- och potensekvationer', 'Likheter och skillnader mellan exponential- och potensekvationer.'],
+              ['G25-M2C-ALG-4', 'Kvadreringsregler', 'Motivering och hantering av konjugatregeln och kvadreringsreglerna.'],
+              ['G25-M2C-ALG-5', 'Andragradsfunktioner', 'Begreppet andragradsfunktion och egenskaper hos andragradsfunktioner, däribland symmetrilinje, extrempunkt och nollställen.'],
+              ['G25-M2C-ALG-6', 'Andragradsekvationer', 'Metoder för att lösa andragradsekvationer.'],
+              ['G25-M2C-ALG-7', 'Rotekvationer', 'Metoder för att lösa rotekvationer.']
+            ]],
+            ['Statistik', [
+              ['G25-M2C-STA-1', 'Lägesmått och spridning', 'Lägesmått och spridningsmått, däribland percentiler och standardavvikelse, samt digitala metoder för att bestämma dessa.'],
+              ['G25-M2C-STA-2', 'Normalfördelning', 'Begreppet normalfördelning och egenskaper hos normalfördelat material. Digitala metoder för att göra beräkningar på normalfördelat material.'],
+              ['G25-M2C-STA-3', 'Regressionsanalys', 'Begreppen regressionsanalys och korrelationskoefficient. Digitala metoder för regressionsanalys.']
+            ]],
+            ['Logik och geometri', [
+              ['G25-M2C-GEO-1', 'Implikation och ekvivalens', 'Begreppen implikation och ekvivalens.'],
+              ['G25-M2C-GEO-2', 'Sats och bevis', 'Begreppen definition, sats och bevis.'],
+              ['G25-M2C-GEO-3', 'Geometriska satser', 'Motivering och användning av enklare geometriska satser om vinklar och likformighet samt Pythagoras sats med exempel som omfattar beräkningar i koordinatsystem.']
+            ]],
+            ['Digitala verktyg', [
+              ['G25-M2C-DIG-1', 'Digitala verktyg', 'Användning av digitala verktyg för att effektivisera beräkningar och komplettera metoder, till exempel vid ekvationslösning och problemlösning.'],
+              ['G25-M2C-DIG-2', 'Programmering', 'Exempel på hur programmering kan användas som verktyg vid problemlösning, databearbetning eller tillämpning av numeriska metoder.']
+            ]],
+            ['Problemlösning och tillämpningsområden', [
+              ['G25-M2C-PRO-1', 'Problemlösning', 'Problemlösning med särskild utgångspunkt i utbildningens karaktär och samhällsliv, däribland frågeställningar som berör hållbar utveckling och hur matematik kan användas för kritisk granskning av fakta och påståenden.'],
+              ['G25-M2C-PRO-2', 'Matematiska modeller', 'Tillämpning och formulering av matematiska modeller i realistiska situationer. Utvärdering av matematiska modellers egenskaper och begränsningar.'],
+              ['G25-M2C-PRO-3', 'Matematikens historia', 'Orientering om något ur matematikens historia, till exempel hur ett matematiskt begrepp utvecklats, matematikens roll i något historiskt skeende, en betydande person inom matematiken eller ett historiskt matematiskt problem.']
             ]]
           ]
         }
@@ -145,78 +233,88 @@ window.Gy = (() => {
     {
       id: 'mato', namn: 'Matematik – fortsättning', nivaer: [
         {
-          id: '1a', namn: 'nivå 1a', gammal: 'Matematik 3b', omraden: [
+          id: 'mato/1b', namn: 'nivå 1b', kurs: 'Ma3b', kurskod: 'MATO1B00X',
+          fullnamn: 'Matematik – fortsättning, nivå 1b', gammal: 'Matematik 3b', omraden: [
             ['Aritmetik, algebra och funktioner', [
-              ['Polynom', 'Begreppet polynom och egenskaper hos polynomfunktioner.'],
-              ['Rationella uttryck', 'Begreppet rationella uttryck och hantering av sådana.'],
-              ['Gränsvärde', 'Begreppet gränsvärde.'],
-              ['Derivata', 'Begreppen sekant, tangent, förändringshastighet, ändringskvot och derivata.'],
-              ['Deriveringsregler', 'Deriveringsregler för potens- och exponentialfunktioner samt summor av dessa.'],
-              ['Extremvärdesproblem', 'Metoder för att lösa extremvärdesproblem.'],
-              ['Primitiva funktioner', 'Begreppen primitiv funktion och bestämd integral samt sambandet mellan dem.'],
-              ['Integraler', 'Metoder för att bestämma integraler samt beräkning i enkla situationer.']
+              ['G25-M3B-ALG-1', 'Rationella uttryck', 'Begreppet rationella uttryck. Hantering av rationella uttryck.'],
+              ['G25-M3B-ALG-2', 'Gränsvärde och derivata', 'Begreppet gränsvärde. Begreppen sekant, tangent, förändringshastighet, ändringskvot och derivata för en funktion. Grafiska och digitala metoder för att derivera funktioner. Villkor för deriverbarhet.'],
+              ['G25-M3B-ALG-3', 'Deriveringsregler', 'Motivering och hantering av deriveringsregler för potens- och exponentialfunktioner samt summor av dessa. Begreppen talet e och naturlig logaritm.'],
+              ['G25-M3B-ALG-4', 'Extremvärdesproblem', 'Begreppet andraderivata. Metoder för att lösa extremvärdesproblem.'],
+              ['G25-M3B-ALG-5', 'Polynom och polynomekvationer', 'Begreppet polynom och egenskaper hos polynomfunktioner. Metoder för att lösa enklare polynomekvationer.'],
+              ['G25-M3B-ALG-6', 'Primitiv funktion och integral', 'Begreppen bestämd integral och primitiv funktion och sambandet mellan dessa.'],
+              ['G25-M3B-ALG-7', 'Grafisk integrering', 'Grafiska och digitala metoder för att bestämma integraler.'],
+              ['G25-M3B-ALG-8', 'Integrationsregler', 'Motivering och hantering av metoder för att bestämma integraler för potens- och exponentialfunktioner samt summor av dessa.'],
+              ['G25-M3B-ALG-9', 'Integraler i tillämpning', 'Formulering och beräkning av integraler i enkla situationer.'],
+              ['G25-M3B-ALG-10', 'Linjär optimering', 'Metoder för linjär optimering.'],
+              ['G25-M3B-ALG-11', 'Geometrisk summa', 'Begreppet geometrisk summa. Metoder för att bestämma geometriska summor.']
             ]],
-            ['Problemlösning, verktyg och tillämpning', [
-              ['Matematiska modeller', 'Tillämpning och formulering av matematiska modeller i ekonomiska och samhälleliga situationer.'],
-              ['Digitala verktyg', 'Digitala verktyg vid derivering, integrering och grafritning.']
+            ['Digitala verktyg', [
+              ['G25-M3B-DIG-1', 'Digitala verktyg', 'Användning av digitala verktyg, även symbolhanterande, för att effektivisera beräkningar och komplettera metoder, till exempel vid ekvationslösning, derivering, integrering, hantering av algebraiska uttryck och problemlösning.'],
+              ['G25-M3B-DIG-2', 'Programmering', 'Användning av programmering som verktyg vid problemlösning, databearbetning eller tillämpning av numeriska metoder.']
+            ]],
+            ['Problemlösning och tillämpningsområden', [
+              ['G25-M3B-PRO-1', 'Problemlösning', 'Problemlösning med särskild utgångspunkt i utbildningens karaktär och samhällsliv, däribland frågeställningar som berör hållbar utveckling och hur matematik kan användas för kritisk granskning av fakta och påståenden.'],
+              ['G25-M3B-PRO-2', 'Matematiska modeller', 'Tillämpning och formulering av matematiska modeller i realistiska situationer. Utvärdering av matematiska modellers egenskaper och begränsningar.'],
+              ['G25-M3B-PRO-3', 'Matematikens historia', 'Orientering om något ur matematikens historia, till exempel hur ett matematiskt begrepp utvecklats, matematikens roll i något historiskt skeende, en betydande person inom matematiken eller ett historiskt matematiskt problem.']
             ]]
           ]
         },
         {
-          id: '1b', namn: 'nivå 1b', gammal: 'Matematik 3c', omraden: [
+          id: 'mato/1c', namn: 'nivå 1c', kurs: 'Ma3c', kurskod: 'MATO1C00X',
+          fullnamn: 'Matematik – fortsättning, nivå 1c', gammal: 'Matematik 3c', omraden: [
             ['Aritmetik, algebra och funktioner', [
-              ['Rationella uttryck', 'Begreppet rationella uttryck. Hantering av rationella uttryck.'],
-              ['Gränsvärde', 'Begreppet gränsvärde.'],
-              ['Derivatans definition', 'Begreppen sekant, tangent, förändringshastighet, ändringskvot och derivata för en funktion.'],
-              ['Grafisk derivering', 'Grafiska och digitala metoder för att derivera funktioner.'],
-              ['Deriverbarhet', 'Villkor för deriverbarhet.'],
-              ['Deriveringsregler', 'Motivering och hantering av deriveringsregler för potens- och exponentialfunktioner samt summor av dessa.'],
-              ['Talet e och ln', 'Begreppen talet e och naturlig logaritm.'],
-              ['Andraderivata', 'Begreppet andraderivata.'],
-              ['Extremvärdesproblem', 'Metoder för att lösa extremvärdesproblem.'],
-              ['Polynom', 'Begreppet polynom och egenskaper hos polynomfunktioner.'],
-              ['Polynomekvationer', 'Metoder för att lösa enklare polynomekvationer.'],
-              ['Primitiva funktioner', 'Begreppen bestämd integral och primitiv funktion och sambandet mellan dessa.'],
-              ['Grafisk integrering', 'Grafiska och digitala metoder för att bestämma integraler.'],
-              ['Integrationsregler', 'Motivering och hantering av metoder för att bestämma integraler för potens- och exponentialfunktioner samt summor av dessa.'],
-              ['Integraler och areor', 'Formulering och beräkning av integraler i enkla situationer.']
+              ['G25-M3C-ALG-1', 'Absolutbelopp', 'Begreppet absolutbelopp.'],
+              ['G25-M3C-ALG-2', 'Rationella uttryck', 'Begreppet rationella uttryck. Hantering av rationella uttryck.'],
+              ['G25-M3C-ALG-3', 'Gränsvärde och derivata', 'Begreppet gränsvärde. Begreppen sekant, tangent, förändringshastighet, ändringskvot och derivata för en funktion. Grafiska och digitala metoder för att derivera funktioner. Villkor för deriverbarhet.'],
+              ['G25-M3C-ALG-4', 'Deriveringsregler', 'Motivering och hantering av deriveringsregler för potens- och exponentialfunktioner samt summor av dessa. Begreppen talet e och naturlig logaritm.'],
+              ['G25-M3C-ALG-5', 'Extremvärdesproblem', 'Begreppet andraderivata. Metoder för att lösa extremvärdesproblem.'],
+              ['G25-M3C-ALG-6', 'Polynom och polynomekvationer', 'Begreppet polynom och egenskaper hos polynomfunktioner. Metoder för att lösa enklare polynomekvationer.'],
+              ['G25-M3C-ALG-7', 'Primitiv funktion och integral', 'Begreppen bestämd integral och primitiv funktion och sambandet mellan dessa.'],
+              ['G25-M3C-ALG-8', 'Grafisk integrering', 'Grafiska och digitala metoder för att bestämma integraler.'],
+              ['G25-M3C-ALG-9', 'Integrationsregler', 'Motivering och hantering av metoder för att bestämma integraler för potens- och exponentialfunktioner samt summor av dessa.'],
+              ['G25-M3C-ALG-10', 'Integraler i tillämpning', 'Formulering och beräkning av integraler i enkla situationer.']
             ]],
             ['Trigonometri', [
-              ['Trigonometriska samband', 'Trigonometriska samband i rätvinkliga och icke-rätvinkliga trianglar.'],
-              ['Sinus- och cosinussatsen', 'Areasatsen, sinussatsen och cosinussatsen samt tillämpningar.']
+              ['G25-M3C-TRI-1', 'Enhetscirkeln', 'Begreppet enhetscirkeln. Definition av trigonometriska begrepp utifrån enhetscirkeln.'],
+              ['G25-M3C-TRI-2', 'Sinus-, cosinus- och areasatsen', 'Bevis och användning av cosinus-, sinus- och areasatsen.']
             ]],
-            ['Problemlösning, verktyg och tillämpning', [
-              ['Problemlösning', 'Problemlösning med särskild utgångspunkt i utbildningens karaktär.'],
-              ['Matematiska modeller', 'Tillämpning och formulering av matematiska modeller i realistiska situationer.'],
-              ['Digitala verktyg', 'Användning av digitala verktyg för att effektivisera beräkningar och komplettera metoder.'],
-              ['Programmering', 'Användning av programmering som verktyg vid problemlösning och numeriska metoder.']
+            ['Digitala verktyg', [
+              ['G25-M3C-DIG-1', 'Digitala verktyg', 'Användning av digitala verktyg, även symbolhanterande, för att effektivisera beräkningar och komplettera metoder, till exempel vid ekvationslösning, derivering, integrering, hantering av algebraiska uttryck och problemlösning.'],
+              ['G25-M3C-DIG-2', 'Programmering', 'Användning av programmering som verktyg vid problemlösning, databearbetning eller tillämpning av numeriska metoder.']
+            ]],
+            ['Problemlösning och tillämpningsområden', [
+              ['G25-M3C-PRO-1', 'Problemlösning', 'Problemlösning med särskild utgångspunkt i utbildningens karaktär och samhällsliv, däribland frågeställningar som berör hållbar utveckling och hur matematik kan användas för kritisk granskning av fakta och påståenden.'],
+              ['G25-M3C-PRO-2', 'Matematiska modeller', 'Tillämpning och formulering av matematiska modeller i realistiska situationer. Utvärdering av matematiska modellers egenskaper och begränsningar.'],
+              ['G25-M3C-PRO-3', 'Matematikens historia', 'Orientering om något ur matematikens historia, till exempel hur ett matematiskt begrepp utvecklats, matematikens roll i något historiskt skeende, en betydande person inom matematiken eller ett historiskt matematiskt problem.']
             ]]
           ]
         },
         {
-          id: '2', namn: 'nivå 2', gammal: 'Matematik 4', omraden: [
+          id: 'mato/2', namn: 'nivå 2', kurs: 'Ma4', kurskod: 'MATO2000X',
+          fullnamn: 'Matematik – fortsättning, nivå 2', gammal: 'Matematik 4', omraden: [
             ['Aritmetik, algebra och funktioner', [
-              ['Komplexa tal', 'Begreppen imaginära enheten, komplexa tal och komplexa talplanet.'],
-              ['Rektangulär och polär form', 'Representation av komplexa tal i rektangulär och polär form.'],
-              ['Räkning med komplexa tal', 'Metoder för beräkningar med komplexa tal, däribland konjugat och absolutbelopp.'],
-              ['Faktorisering av polynom', 'Metoder för att faktorisera polynom.'],
-              ['Faktorsatsen', 'Användning av faktorsatsen för att lösa polynomekvationer.'],
-              ['Komplexa lösningar', 'Metoder för att bestämma även komplexa lösningar till andragrads-, potens- och polynomekvationer.'],
-              ['Sammansatta funktioner', 'Fördjupning av funktionsbegreppet, däribland sammansatta funktioner, logaritmfunktioner och linjära asymptoter.'],
-              ['Deriveringsregler', 'Deriveringsregler för logaritmfunktioner, sammansatta funktioner samt produkt och kvot av funktioner.'],
-              ['Integraler i tillämpning', 'Användning av integraler i mer komplexa sammanhang, till exempel rotationsvolymer och täthetsfunktioner.']
+              ['G25-M4-ALG-1', 'Komplexa tal', 'Begreppen imaginära enheten, komplexa tal och komplexa talplanet. Representation av komplexa tal i rektangulär och polär form. Metoder för beräkningar med komplexa tal, däribland beräkning av konjugat och absolutbelopp.'],
+              ['G25-M4-ALG-2', 'Faktorsatsen', 'Metoder för att faktorisera polynom. Användning av faktorsatsen för att lösa polynomekvationer.'],
+              ['G25-M4-ALG-3', 'Komplexa lösningar', 'Metoder för att bestämma även komplexa lösningar till andragradsekvationer, potensekvationer och polynomekvationer.'],
+              ['G25-M4-ALG-4', 'Sammansatta funktioner', 'Fördjupning av funktionsbegreppet, däribland sammansatta funktioner, logaritmfunktioner, linjära asymptoter och skissning av grafer för hand.'],
+              ['G25-M4-ALG-5', 'Deriveringsregler', 'Motivering och hantering av deriveringsregler för logaritmfunktioner, sammansatta funktioner samt produkt och kvot av funktioner.'],
+              ['G25-M4-ALG-6', 'Integraler i tillämpning', 'Användning av integraler i mer komplexa sammanhang, till exempel täthetsfunktioner, sannolikhetsfördelning, rotationsvolymer och beräkning av storheter.']
             ]],
             ['Trigonometri', [
-              ['Trigonometriska funktioner', 'Trigonometriska funktioner, enhetscirkeln och radianbegreppet.'],
-              ['Trigonometriska formler', 'Trigonometriska formler samt lösning av trigonometriska ekvationer.'],
-              ['Derivering av sin och cos', 'Deriveringsregler för sinus- och cosinusfunktioner.'],
-              ['Integrering av sin och cos', 'Metoder för att bestämma integraler för sinus- och cosinusfunktioner.']
+              ['G25-M4-TRI-1', 'Trigonometriska identiteter', 'Hantering av trigonometriska uttryck. Bevis och hantering av trigonometriska identiteter, däribland trigonometriska ettan och additionsformler.'],
+              ['G25-M4-TRI-2', 'Trigonometriska funktioner', 'Egenskaper hos trigonometriska funktioner, däribland period, amplitud och fasförskjutning. Metoder för att bestämma trigonometriska funktioner. Metoder för att lösa trigonometriska ekvationer.'],
+              ['G25-M4-TRI-3', 'Radianer', 'Begreppet radian.'],
+              ['G25-M4-TRI-4', 'Derivering av sin och cos', 'Motivering och hantering av deriveringsregler för sinus-, cosinus- och tangensfunktioner.'],
+              ['G25-M4-TRI-5', 'Integrering av sin och cos', 'Motivering och hantering av metoder för att bestämma integraler för sinus- och cosinusfunktioner.']
             ]],
-            ['Problemlösning, verktyg och tillämpning', [
-              ['Problemlösning', 'Problemlösning med utgångspunkt i utbildningens karaktär och samhällsliv.'],
-              ['Matematiska modeller', 'Tillämpning och formulering av matematiska modeller i realistiska situationer.'],
-              ['Digitala verktyg', 'Digitala verktyg, även symbolhanterande, vid derivering, integrering och ekvationslösning.'],
-              ['Programmering', 'Programmering som verktyg vid problemlösning, databearbetning och numeriska metoder.']
+            ['Digitala verktyg', [
+              ['G25-M4-DIG-1', 'Digitala verktyg', 'Användning av digitala verktyg, även symbolhanterande, för att effektivisera beräkningar och komplettera metoder, till exempel vid ekvationslösning, derivering, integrering, hantering av algebraiska uttryck och problemlösning.'],
+              ['G25-M4-DIG-2', 'Programmering', 'Användning av programmering som verktyg vid problemlösning, databearbetning eller tillämpning av numeriska metoder.']
+            ]],
+            ['Problemlösning och tillämpningsområden', [
+              ['G25-M4-PRO-1', 'Problemlösning', 'Problemlösning med särskild utgångspunkt i utbildningens karaktär och samhällsliv, däribland frågeställningar som berör hållbar utveckling och hur matematik kan användas för kritisk granskning av fakta och påståenden.'],
+              ['G25-M4-PRO-2', 'Matematiska modeller', 'Tillämpning och formulering av matematiska modeller i realistiska situationer. Utvärdering av matematiska modellers egenskaper och begränsningar.'],
+              ['G25-M4-PRO-3', 'Matematikens historia', 'Orientering om något ur matematikens historia, till exempel hur ett matematiskt begrepp utvecklats, matematikens roll i något historiskt skeende, en betydande person inom matematiken eller ett historiskt matematiskt problem.']
             ]]
           ]
         }
@@ -225,25 +323,30 @@ window.Gy = (() => {
     {
       id: 'matf', namn: 'Matematik – fördjupning', nivaer: [
         {
-          id: '1', namn: 'nivå 1', gammal: 'Matematik 5', omraden: [
-            ['Differentialekvationer', [
-              ['Differentialekvationer', 'Begreppet differentialekvation och exempel på tillämpningar.'],
-              ['Verifiering av lösningar', 'Verifiering av lösningar till differentialekvationer.'],
-              ['Uppställning och tolkning', 'Strategier för att ställa upp och tolka differentialekvationer.'],
-              ['Lösningsmetoder', 'Metoder för att lösa enklare linjära differentialekvationer av första och andra ordningen.'],
-              ['Digitala metoder', 'Digitala metoder för att lösa differentialekvationer.']
+          id: 'matf/1', namn: 'nivå 1', kurs: 'Ma5', kurskod: 'MATF1000X',
+          fullnamn: 'Matematik – fördjupning, nivå 1', gammal: 'Matematik 5', omraden: [
+            ['Aritmetik, algebra och funktioner', [
+              ['G25-M5-ALG-1', 'Differentialekvationer', 'Begreppet differentialekvation och exempel på tillämpningar. Verifiering av lösningar till differentialekvationer.'],
+              ['G25-M5-ALG-2', 'Uppställning och tolkning', 'Strategier för att ställa upp och tolka differentialekvationer. Digitala metoder för att lösa differentialekvationer.'],
+              ['G25-M5-ALG-3', 'Lösningsmetoder', 'Metoder för att lösa enklare linjära differentialekvationer av första och andra ordningen för hand.']
             ]],
-            ['Diskret matematik', [
-              ['Talbaser', 'Representation av tal i olika talbaser.'],
-              ['Kongruensräkning', 'Kongruens hos hela tal och metoder för kongruensräkning.'],
-              ['Kombinatorik', 'Begreppen permutation och kombination samt metoder för att bestämma antal.'],
-              ['Rekursion', 'Begreppet rekursion och rekursiva talföljder.'],
-              ['Mängder och grafer', 'Begreppet mängd samt grundläggande grafteori.']
+            ['Logik och diskret matematik', [
+              ['G25-M5-LOG-1', 'Bevismetoder', 'Bevismetoder, däribland motsägelsebevis och induktionsbevis.'],
+              ['G25-M5-LOG-2', 'Talbaser', 'Representation av tal i olika talbaser.'],
+              ['G25-M5-LOG-3', 'Kongruensräkning', 'Kongruens hos hela tal och metoder för kongruensräkning.'],
+              ['G25-M5-LOG-4', 'Kombinatorik', 'Begreppen permutation och kombination. Motivering och hantering av metoder för att bestämma antal permutationer och kombinationer.'],
+              ['G25-M5-LOG-5', 'Rekursion', 'Begreppet rekursion och rekursiva talföljder.'],
+              ['G25-M5-LOG-6', 'Mängdlära', 'Begreppet mängd. Notationer i mängdlära och hantering av operationer på mängder.']
             ]],
-            ['Problemlösning, verktyg och tillämpning', [
-              ['Omfångsrika problem', 'Omfångsrika problemsituationer, däribland problem som fördjupar kunskaper om integraler och derivata.'],
-              ['Modellers begränsningar', 'Utvärdering av matematiska modellers egenskaper och begränsningar.'],
-              ['Matematikens historia', 'Orientering om något ur matematikens historia.']
+            ['Digitala verktyg', [
+              ['G25-M5-DIG-1', 'Digitala verktyg', 'Användning av digitala verktyg, även symbolhanterande, för att effektivisera beräkningar och komplettera metoder, till exempel vid ekvationslösning, derivering, integrering hantering av algebraiska uttryck och problemlösning.'],
+              ['G25-M5-DIG-2', 'Programmering', 'Användning av programmering som verktyg vid problemlösning, databearbetning eller tillämpning av numeriska metoder.']
+            ]],
+            ['Problemlösning och tillämpningsområden', [
+              ['G25-M5-PRO-1', 'Problemlösning', 'Problemlösning med särskild utgångspunkt i utbildningens karaktär och samhällsliv.'],
+              ['G25-M5-PRO-2', 'Omfångsrika problem', 'Omfångsrika problemsituationer som är relevanta för utbildningens karaktär, däribland problem som fördjupar kunskaper om integraler och derivata.'],
+              ['G25-M5-PRO-3', 'Matematiska modeller', 'Tillämpning och formulering av matematiska modeller i realistiska situationer. Utvärdering av matematiska modellers egenskaper och begränsningar.'],
+              ['G25-M5-PRO-4', 'Matematikens historia', 'Orientering om något ur matematikens historia, till exempel hur ett matematiskt begrepp utvecklats, matematikens roll i något historiskt skeende, en betydande person inom matematik eller ett historiskt matematiskt problem.']
             ]]
           ]
         }
@@ -253,15 +356,46 @@ window.Gy = (() => {
 
   const nivaer = [];
   A.forEach(a => a.nivaer.forEach(n => nivaer.push({
-    id: `${a.id}/${n.id}`, amne: a.namn, amneId: a.id, niva: n.namn, gammal: n.gammal,
+    id: n.id, amne: a.namn, amneId: a.id, niva: n.namn, gammal: n.gammal,
+    kurs: n.kurs, kurskod: n.kurskod, fullnamn: n.fullnamn,
     etikett: `${a.namn} · ${n.namn}`,
-    omraden: n.omraden.map(([namn, p]) => ({ namn, punkter: p.map(([kort, text]) => ({ kort, text })) }))
+    omraden: n.omraden.map(([namn, p]) => ({
+      namn, punkter: p.map(([kod, kort, text]) => ({ kod, kort, text }))
+    }))
   })));
-  const niva = id => nivaer.find(n => n.id === id) || nivaer.find(n => n.id === 'mato/1b');
+  /* Nivån appen faller tillbaka på: lärarens egen kurs. */
+  const FALLER = 'mato/1c';
+  const niva = id => nivaer.find(n => n.id === id) || nivaer.find(n => n.id === FALLER);
   const punkter = id => niva(id).omraden.reduce((a, o) => a.concat(o.punkter), []);
-  /* Kursen i steg 1 är den gamla kursbeteckningen — den pekar ut nivån åt läraren. */
-  const foreslagen = kurs => (nivaer.find(n => n.gammal === kurs) || niva('mato/1b')).id;
-  return { nivaer, niva, punkter, foreslagen, lista: () => nivaer.slice() };
+  /* Kursen i steg 1 pekar ut nivån åt läraren — men den kan stå i tre former:
+     den gamla beteckningen på ett gammalt dokument («Matematik 3c»), Gy25-namnet
+     ur kursregistret («Matematik – fortsättning, nivå 1c») eller kurskoden.
+     Matchade vi bara på den gamla föll varje Gy25-döpt kurs tillbaka på 3c. */
+  const foreslagen = kurs => {
+    const k = String(kurs || '').trim();
+    return (nivaer.find(n => n.gammal === k || n.fullnamn === k
+                             || n.kurs === k || n.kurskod === k)
+            || niva(FALLER)).id;
+  };
+  /* Väljaren och planeringen arbetar i korta etiketter — de ryms som brickor och
+     är det läraren känner igen på en rad. Servern arbetar i koder. Växlingen
+     mellan de två bor HÄR, på ett ställe, så att pappret och prompten aldrig kan
+     mena olika punkter. Etiketten är unik inom sin nivå (testet vaktar det), och
+     valet tolkas alltid i den nivå som står i väljaren. */
+  const kodFor = (id, kort) => (punkter(id).find(p => p.kort === kort) || {}).kod || null;
+  const koder = (id, korta) => (korta || []).map(k => kodFor(id, k)).filter(Boolean);
+  /* Tillbaka igen: en kod som kommer ur ett rättat papper ska kunna skrivas ut
+     som etikett även när nivån inte längre står vald. Koden bär sin nivå i sig,
+     så sökningen får gå brett. */
+  const kortFor = kod => {
+    for (const n of nivaer) {
+      const p = punkter(n.id).find(x => x.kod === kod);
+      if (p) return p.kort;
+    }
+    return null;
+  };
+  return { nivaer, niva, punkter, foreslagen, kodFor, koder, kortFor,
+           lista: () => nivaer.slice() };
 })();
 
 /* ══════════ VÄLJAREN ══════════
@@ -351,7 +485,7 @@ window.Gy = (() => {
       const q = nivasok.trim().toLowerCase();
       const alla = G.lista();
       const val = q ? alla.filter(n => (n.etikett + ' ' + (n.gammal || '')).toLowerCase().includes(q)) : alla;
-      const nu = S() ? S().niva() : 'mato/1b';
+      const nu = S() ? S().niva() : G.niva('').id;
       const amnen = [...new Set(val.map(n => n.amne))];
       panel.innerHTML = nivarad(G.niva(nu))
         + `<div class="lsokrad"><input type="text" placeholder="Sök nivå eller gammal kurs …" value="${nivasok.replace(/"/g, '&quot;')}" aria-label="Sök nivå" /></div>`
@@ -389,7 +523,7 @@ window.Gy = (() => {
     }
 
     function ritaInnehall(panel, stang, rita) {
-      const n = G.niva(S() ? S().niva() : 'mato/1b');
+      const n = G.niva(S() ? S().niva() : '');
       const q = sok.trim().toLowerCase();
       const har = t => !!(S() && S().har(t));
       const omraden = n.omraden

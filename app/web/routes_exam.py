@@ -165,10 +165,15 @@ def create_router(base: Path, arbiter) -> APIRouter:
         group_id, course_id = _ids(body)
         if not course_id:
             return JSONResponse({"error": "välj en kurs"}, status_code=400)
-        punkt_ids = [int(p) for p in (body.get("punkter") or [])]
-        # Frontendens Gy25-väljare håller sina egna korta punkttexter (gy.js),
-        # inte kursregistrets rader. Skickas de med används de som de är —
-        # prompten vill ha text, och det ÄR texten läraren valde.
+        # `punkter` är innehållspunkternas KODER (G25-M1C-ALG-3) — samma
+        # identitet i väljaren, i kursregistret, i prompten och på pappret.
+        # Fältet bar förut rad-id:n som frontenden aldrig kände till och därför
+        # aldrig skickade; koden är den enda nyckel båda sidor kan uttala.
+        punkt_koder = [str(p).strip() for p in (body.get("punkter") or [])
+                       if str(p).strip()]
+        # De korta etiketterna följer med som förut och används när koderna
+        # inte går att slå upp (ett äldre dokument, en fritextkurs) — prompten
+        # vill ha text, och det ÄR texten läraren valde.
         punkter_text = [str(p).strip() for p in (body.get("punkter_text") or [])
                         if str(p).strip()]
         antal = int(body.get("antal") or 10)
@@ -216,9 +221,14 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 g = conn.execute("SELECT namn FROM groups WHERE id = ?",
                                  (group_id,)).fetchone()
                 klass = g["namn"] if g else ""
-            innehall = db.list_course_content(conn, int(course_id))
-            valda = [c for c in innehall if c["id"] in punkt_ids]
-            punkter = [f"{c['rubrik']}: {c['text']}" for c in valda] or punkter_text
+            valda = db.content_by_kod(conn, punkt_koder, int(course_id))
+            # Skolverkets ordagranna text in i prompten, med koden först så att
+            # modellen kan tagga uppgiften med den. Föll uppslagningen (okänd
+            # kod, oseedad kurs) går de korta etiketterna som förut — men då
+            # utan kodlås, för det finns inga koder att låsa mot.
+            punkter = [f"{c['kod']} — {c['rubrik']}: {c['text']}"
+                       for c in valda] or punkter_text
+            koder = [c["kod"] for c in valda]
             memory = db.memory_for_prompt(conn, int(group_id), int(course_id)) \
                 if group_id else ""
             teman = db.exam_themes_for_prompt(conn, int(course_id))
@@ -266,7 +276,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     memory=memory, teman=teman, referens=referens,
                     bilder=bilder_block, utfall=utfall_block, bok=bok_block,
                     boknivaer=nivaer_block, forlaga=forlaga_block, profil=typ,
-                    grupp=grupp,
+                    koder=koder, grupp=grupp,
                     log_cb=lambda m: emit({"type": "log", "msg": m}))
                 # Upplägget är lärarens val, inte modellens: skriv in det som
                 # valdes även om modellen råkade fylla i något annat.

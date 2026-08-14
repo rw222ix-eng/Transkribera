@@ -58,7 +58,10 @@ INSTRUCTION = (
     "- losning: kort lösningsförslag för läraren (samma $-regel).\n"
     "- bedomning: bedömningsanvisning, t.ex. '+1 E korrekt ansats, "
     "+1 C fullständig lösning med motivering'.\n"
-    "- innehall: vilka innehållspunkter uppgiften prövar (korta etiketter).\n"
+    "- innehall: KODERNA för de centrala innehållspunkter uppgiften prövar "
+    "(t.ex. [\"G25-M1C-ALG-3\"]) — hämtade ur listan över valt centralt "
+    "innehåll nedan, en till tre stycken, aldrig egen text. Står ingen sådan "
+    "lista: korta etiketter.\n"
     "Struktur (använd DÄR DET PASSAR pedagogiskt — inte på varje uppgift):\n"
     "- deluppgifter: dela EN uppgift i a/b/c när den naturligt har flera steg "
     "eller frågor. Föräldern bär då stammen i text och poang [0, 0, 0] — "
@@ -318,7 +321,8 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
                  memory: str = "", teman: str = "",
                  referens: str = "", bilder: str = "", utfall: str = "",
                  bok: str = "", boknivaer: str = "", forlaga: str = "",
-                 profil: str = "prov", grupp: dict | None = None,
+                 profil: str = "prov", koder: list[str] | None = None,
+                 grupp: dict | None = None,
                  skeleton: list[dict] | None = None) -> str:
     """Genereringsprompt: instruktion + valda innehållspunkter +
     minneskontext + tidigare provs teman (undvik upprepning som default).
@@ -340,8 +344,16 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
         skeleton = exam_spec.balanced_skeleton(antal, profil, delar=False)
     block = [INSTRUCTION]
     if punkter:
-        block.append("Uppgifterna ska pröva följande centrala innehåll:\n- " +
-                     "\n- ".join(punkter))
+        # Med koder står punkterna som «KOD — text», och koden är det modellen
+        # ska skriva i innehall. Utan koder (fritextpunkter från ett äldre
+        # dokument) står de som förut och innehall lämnas fritt.
+        block.append(
+            ("Uppgifterna ska pröva följande centrala innehåll. Koden först på "
+             "raden är punktens namn — det är DEN som ska stå i uppgiftens "
+             "fält \"innehall\", aldrig en egen formulering:\n- "
+             if koder else
+             "Uppgifterna ska pröva följande centrala innehåll:\n- ")
+            + "\n- ".join(punkter))
     # Direkt efter innehållet: fallgroparna är innehållets fallgropar, och
     # kravet ska läsas i samma andetag som punkterna det gäller.
     block.append(FALLGROPAR)
@@ -913,25 +925,32 @@ def _parse_exam(raw: str) -> dict | None:
     return _rensa_toppnycklar(data) if data is not None else None
 
 
-def _validate(exam: dict, profil: str):
-    """validate_exam_json + variationskontroll (BARA prov). Repetition matas in
-    i reparationsloopen precis som balansfel; arbetsbladet undantas (det får
-    drilla samma frågetyp med flit, jfr antiklumpningen)."""
+def _validate(exam: dict, profil: str, koder: list[str] | None = None):
+    """validate_exam_json + variationskontroll (BARA prov) + CI-taggningen.
+    Repetition matas in i reparationsloopen precis som balansfel; arbetsbladet
+    undantas (det får drilla samma frågetyp med flit, jfr antiklumpningen).
+
+    CI-kontrollen behövs vid sidan av grammatiken därför att gruppuppgiften
+    genereras UTAN grammatiklås — se generate_exam."""
     doc, errors = exam_spec.validate_exam_json(exam, profil)
     if doc is not None and profil == "prov":
         errors = errors + exam_spec.validate_variation(doc)
+    if doc is not None:
+        errors = errors + exam_spec.validate_ci(doc, koder)
     return doc, errors
 
 
 def _llm_round(prompt: str, model: str, llm, antal: int | None = None,
-               skeleton: list[dict] | None = None) -> dict | None:
+               skeleton: list[dict] | None = None,
+               koder: list[str] | None = None) -> dict | None:
     raw = llm(
         model, prompt,
         system=SYSTEM,
         options={"temperature": 0.3},
         # antal → grammatik-tak; skeleton → låst del/förmåga/typ/poäng per
-        # uppgift (balans garanterad). Gäller även reparationsrundorna.
-        response_format=exam_spec.to_response_format(antal, skeleton),
+        # uppgift (balans garanterad); koder → innehall låst till lärarens valda
+        # CI-punkter. Gäller även reparationsrundorna.
+        response_format=exam_spec.to_response_format(antal, skeleton, koder),
         max_tokens=EXAM_MAX_TOKENS,
         token_cb=None,
     )
@@ -941,6 +960,7 @@ def _llm_round(prompt: str, model: str, llm, antal: int | None = None,
 def _repair_until_valid(exam: dict | None, errors: list, *, model: str, llm,
                         rounds_used: int, max_rounds: int, profil: str = "prov",
                         antal: int | None = None, skeleton: list[dict] | None = None,
+                        koder: list[str] | None = None,
                         log_cb: Callable[[str], None] | None = None) -> dict:
     log = log_cb or (lambda _m: None)
     while errors and rounds_used < max_rounds and exam is not None:
@@ -948,12 +968,12 @@ def _repair_until_valid(exam: dict | None, errors: list, *, model: str, llm,
         log(f"Justerar provet (runda {rounds_used} av {max_rounds}) — "
             f"{len(errors)} problem …")
         candidate = _llm_round(build_repair_prompt(exam, errors, profil),
-                               model, llm, antal, skeleton)
+                               model, llm, antal, skeleton, koder)
         if candidate is None:
             errors = [{"path": "svar", "code": "json",
                        "message": "modellen svarade inte med giltig JSON"}]
             continue
-        _doc, new_errors = _validate(candidate, profil)
+        _doc, new_errors = _validate(candidate, profil, koder)
         exam = candidate
         errors = new_errors
     return {"exam": exam, "errors": errors, "rounds": rounds_used}
@@ -971,7 +991,7 @@ def _skala(profil: str, boknivaer: str, skeleton: list[dict] | None) -> str:
 
 def _niva_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
                skala: str, antal: int | None, skeleton: list[dict] | None,
-               rounds_used: int, max_rounds: int,
+               rounds_used: int, max_rounds: int, koder: list[str] | None = None,
                log_cb: Callable[[str], None] | None = None) -> dict:
     """Domarrunda + högst EN reparationsrunda på dess fynd (C4).
 
@@ -995,16 +1015,16 @@ def _niva_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
                 "rounds": rounds_used}
     log(f"Justerar nivån på {len(avv)} uppgift(er) …")
     kandidat = _llm_round(build_repair_prompt(exam, avv, profil), model, llm,
-                          antal, skeleton)
+                          antal, skeleton, koder)
     rounds_used += 1
     if kandidat is None:
         return {"exam": exam, "errors": errors + avv + signaler,
                 "rounds": rounds_used}
-    _doc, fel = _validate(kandidat, profil)
+    _doc, fel = _validate(kandidat, profil, koder)
     res = _repair_until_valid(kandidat, fel, model=model, llm=llm,
                               rounds_used=rounds_used, max_rounds=max_rounds,
                               profil=profil, antal=antal, skeleton=skeleton,
-                              log_cb=log_cb)
+                              koder=koder, log_cb=log_cb)
     # Nivåhöjningen får inte kosta strukturen. Var dokumentet rent före domaren
     # och trasigt efter är omskrivningen en försämring: behåll det gamla och
     # visa nivåfynden som varningar i stället.
@@ -1019,6 +1039,7 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                   memory: str = "", teman: str = "", referens: str = "",
                   bilder: str = "", utfall: str = "", bok: str = "",
                   boknivaer: str = "", forlaga: str = "", profil: str = "prov",
+                  koder: list[str] | None = None,
                   grupp: dict | None = None, doma: bool = True,
                   llm=llm_client.generate, max_rounds: int = MAX_ROUNDS,
                   log_cb: Callable[[str], None] | None = None) -> dict:
@@ -1028,7 +1049,12 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     Returnerar {"exam": dict|None, "errors": [...], "rounds": int}.
 
     `doma=False` stänger av nivådomaren (C4). Den kostar ett modellanrop och
-    körs annars alltid — nivån är inget som bara ska begäras i prompten."""
+    körs annars alltid — nivån är inget som bara ska begäras i prompten.
+
+    `koder` är de centrala innehållspunkter läraren kryssade, som koder. De
+    låser `innehall` per uppgift (grammatik + validering) så att varje uppgift
+    säger vad den prövar med kursplanens egen identitet. Utan dem faller
+    fältet tillbaka på fritext, som förut."""
     log = log_cb or (lambda _m: None)
     log({"arbetsblad": "Skriver arbetsbladet …",
          "gruppuppgift": "Skriver gruppuppgiften …"}.get(profil, "Skriver provet …"))
@@ -1051,29 +1077,30 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                           delar=delar, memory=memory, teman=teman,
                           referens=referens, bilder=bilder, utfall=utfall,
                           bok=bok, boknivaer=boknivaer, forlaga=forlaga,
-                          profil=profil, grupp=grupp, skeleton=skeleton)
-    exam = _llm_round(prompt, model, llm, antal, grammatik)
+                          profil=profil, koder=koder, grupp=grupp,
+                          skeleton=skeleton)
+    exam = _llm_round(prompt, model, llm, antal, grammatik, koder)
     rounds = 1
     while exam is None and rounds < max_rounds:
         rounds += 1
         log(f"Modellen svarade inte med giltig JSON — försöker igen "
             f"(runda {rounds} av {max_rounds}) …")
-        exam = _llm_round(prompt, model, llm, antal, grammatik)
+        exam = _llm_round(prompt, model, llm, antal, grammatik, koder)
     if exam is None:
         return {"exam": None,
                 "errors": [{"path": "svar", "code": "json",
                             "message": "modellen svarade inte med giltig JSON"}],
                 "rounds": rounds}
-    _doc, errors = _validate(exam, profil)
+    _doc, errors = _validate(exam, profil, koder)
     res = _repair_until_valid(exam, errors, model=model, llm=llm,
                               rounds_used=rounds, max_rounds=max_rounds,
                               profil=profil, antal=antal, skeleton=grammatik,
-                              log_cb=log_cb)
+                              koder=koder, log_cb=log_cb)
     if not doma or res["exam"] is None:
         return res
     return _niva_pass(res["exam"], res["errors"], model=model, llm=llm,
                       profil=profil, skala=_skala(profil, boknivaer, skeleton),
-                      antal=antal, skeleton=grammatik,
+                      antal=antal, skeleton=grammatik, koder=koder,
                       rounds_used=res["rounds"], max_rounds=max_rounds,
                       log_cb=log_cb)
 

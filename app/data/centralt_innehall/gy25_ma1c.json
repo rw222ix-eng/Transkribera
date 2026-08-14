@@ -9,106 +9,127 @@
     {
       "kod": "G25-M1C-ALG-1",
       "rubrik": "Aritmetik, algebra och funktioner",
+      "kort": "Formler och uttryck",
       "text": "Hantering av formler och algebraiska uttryck, däribland faktorisering och multiplicering av uttryck."
     },
     {
       "kod": "G25-M1C-ALG-2",
       "rubrik": "Aritmetik, algebra och funktioner",
+      "kort": "Funktionsbegreppet",
       "text": "Begreppen funktion, definitionsmängd och värdemängd. Representationer av funktioner i form av ord, funktionsuttryck, tabeller och grafer. Digitala metoder för att skapa funktionsgrafer."
     },
     {
       "kod": "G25-M1C-ALG-3",
       "rubrik": "Aritmetik, algebra och funktioner",
+      "kort": "Funktionsvärden",
       "text": "Metoder för att bestämma funktionsvärden. Digitala och grafiska metoder för att lösa ekvationer av typen f(x) = a."
     },
     {
       "kod": "G25-M1C-ALG-4",
       "rubrik": "Aritmetik, algebra och funktioner",
+      "kort": "Linjära funktioner",
       "text": "Begreppet linjär funktion och egenskaper hos linjära funktioner. Räta linjens ekvation. Metoder för att bestämma linjära funktioner."
     },
     {
       "kod": "G25-M1C-ALG-5",
       "rubrik": "Aritmetik, algebra och funktioner",
+      "kort": "Linjära ekvationer",
       "text": "Metoder för att lösa linjära ekvationer."
     },
     {
       "kod": "G25-M1C-ALG-6",
       "rubrik": "Aritmetik, algebra och funktioner",
+      "kort": "Linjära olikheter",
       "text": "Begreppen intervall och linjär olikhet. Metoder för att lösa linjära olikheter."
     },
     {
       "kod": "G25-M1C-ALG-7",
       "rubrik": "Aritmetik, algebra och funktioner",
+      "kort": "Exponentialfunktioner",
       "text": "Begreppet exponentialfunktion och egenskaper hos exponentialfunktioner. Skillnader och likheter med linjära funktioner."
     },
     {
       "kod": "G25-M1C-ALG-8",
       "rubrik": "Aritmetik, algebra och funktioner",
+      "kort": "Potenser och potensekvationer",
       "text": "Motivering och hantering av räkneregler för potenser. Metoder för att lösa potensekvationer."
     },
     {
       "kod": "G25-M1C-ALG-9",
       "rubrik": "Aritmetik, algebra och funktioner",
+      "kort": "Potensfunktioner",
       "text": "Begreppet potensfunktion."
     },
     {
       "kod": "G25-M1C-ALG-10",
       "rubrik": "Aritmetik, algebra och funktioner",
+      "kort": "Förändringsfaktor",
       "text": "Begreppet förändringsfaktor och beräkning av förändringar i flera steg."
     },
     {
       "kod": "G25-M1C-TRI-1",
       "rubrik": "Trigonometri och vektorer",
+      "kort": "Trigonometri i trianglar",
       "text": "Begreppen sinus, cosinus och tangens. Begreppet invers funktion i samband med arcusfunktioner. Metoder för att beräkna sträckor och vinklar i koordinatsystem och i rätvinkliga trianglar."
     },
     {
       "kod": "G25-M1C-TRI-2",
       "rubrik": "Trigonometri och vektorer",
+      "kort": "Vektorer",
       "text": "Begreppet vektor. Representationer av vektorer i koordinatsystem och skrivna i koordinatform. Metoder för beräkningar med vektorer, däribland addition, subtraktion, beräkning av absolutbelopp och multiplikation med skalär."
     },
     {
       "kod": "G25-M1C-STA-1",
       "rubrik": "Sannolikhet och statistik",
+      "kort": "Sannolikhet i flera steg",
       "text": "Begreppen oberoende och beroende händelse samt komplementhändelse. Metoder för att beräkna sannolikheter i flera steg. Tillämpningar inom spel samt risk- och säkerhetsbedömningar."
     },
     {
       "kod": "G25-M1C-STA-2",
       "rubrik": "Sannolikhet och statistik",
+      "kort": "Statistiska begrepp",
       "text": "Exempel på hur några statistiska begrepp används i samhälle och inom vetenskap, däribland signifikans, korrelation, kausalitet, urvalsmetoder och felkällor."
     },
     {
       "kod": "G25-M1C-DIG-1",
       "rubrik": "Digitala verktyg",
+      "kort": "Ränta och amortering",
       "text": "Användning av kalkylprogram för beräkning av ränta och amortering."
     },
     {
       "kod": "G25-M1C-DIG-2",
       "rubrik": "Digitala verktyg",
+      "kort": "Digitala verktyg",
       "text": "Användning av digitala verktyg för att effektivisera beräkningar och komplettera metoder, till exempel vid ekvationslösning och problemlösning."
     },
     {
       "kod": "G25-M1C-DIG-3",
       "rubrik": "Digitala verktyg",
+      "kort": "Programmering",
       "text": "Exempel på hur programmering kan användas som verktyg vid problemlösning, databearbetning eller tillämpning av numeriska metoder."
     },
     {
       "kod": "G25-M1C-PRO-1",
       "rubrik": "Problemlösning och tillämpningsområden",
+      "kort": "Generella samband",
       "text": "Problemlösning som omfattar att upptäcka och uttrycka generella samband."
     },
     {
       "kod": "G25-M1C-PRO-2",
       "rubrik": "Problemlösning och tillämpningsområden",
+      "kort": "Problemlösning",
       "text": "Problemlösning med särskild utgångspunkt i utbildningens karaktär, privatekonomi och samhällsliv, däribland frågeställningar som berör hållbar utveckling och hur matematik kan användas för kritisk granskning av fakta och påståenden."
     },
     {
       "kod": "G25-M1C-PRO-3",
       "rubrik": "Problemlösning och tillämpningsområden",
+      "kort": "Matematiska modeller",
       "text": "Tillämpning och formulering av matematiska modeller i realistiska situationer. Utvärdering av matematiska modellers egenskaper och begränsningar."
     },
     {
       "kod": "G25-M1C-PRO-4",
       "rubrik": "Problemlösning och tillämpningsområden",
+      "kort": "Matematikens historia",
       "text": "Orientering om något ur matematikens historia, till exempel hur ett matematiskt begrepp utvecklats, matematikens roll i något historiskt skeende, en betydande person inom matematiken eller ett historiskt matematiskt problem."
     }
   ]

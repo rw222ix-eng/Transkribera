@@ -45,11 +45,12 @@ def _stub(monkeypatch, exam=None):
 
     def fake(kurs, klass, punkter, *, model, antal=10, tid_min=120, delar=True,
              memory="", teman="", referens="", bilder="", utfall="", bok="",
-             profil="prov", grupp=None,
+             profil="prov", koder=None, grupp=None,
              llm=None, max_rounds=exam_gen.MAX_ROUNDS, log_cb=None, **_kw):
         calls.append({"kurs": kurs, "klass": klass, "punkter": punkter,
                       "antal": antal, "tid_min": tid_min, "delar": delar,
-                      "utfall": utfall, "bok": bok, "profil": profil})
+                      "utfall": utfall, "bok": bok, "profil": profil,
+                      "koder": koder})
         return {"exam": exam or _exam_doc(), "errors": [], "rounds": 1}
     monkeypatch.setattr(exam_gen, "generate_exam", fake)
     return calls
@@ -78,17 +79,34 @@ def test_utan_kurs_ar_det_400(client, monkeypatch):
 
 
 def test_punkter_ur_registret_vinner_over_fritexten(client, monkeypatch):
-    """Har frontenden riktiga innehålls-id går de före — texten är reservvägen."""
+    """Skickar frontenden KODER går de före — texten är reservvägen.
+
+    Koden är innehållspunktens identitet hela vägen (se course_data), så det
+    som når prompten ska vara Skolverkets ordagranna text, med koden först."""
     calls = _stub(monkeypatch)
     kurs = next(c for c in client.get("/api/courses").json()
                 if c["namn"] == "Matematik, nivå 2c")
     punkter = client.get(f"/api/exams/content-status?course_id={kurs['id']}").json()
-    ids = [p["id"] for p in punkter["punkter"][:2]]
+    koder = [p["kod"] for p in punkter["punkter"][:2]]
     _done(client.post("/api/exams/generate", json={
-        "course_id": kurs["id"], "punkter": ids,
+        "course_id": kurs["id"], "punkter": koder,
         "punkter_text": ["ska inte användas"]}))
     assert len(calls[0]["punkter"]) == 2
     assert "ska inte användas" not in calls[0]["punkter"]
+    assert all(rad.startswith(kod) for kod, rad in zip(koder, calls[0]["punkter"]))
+    # … och koderna följer med som grammatiklås på uppgifternas innehall.
+    assert calls[0]["koder"] == koder
+
+
+def test_okand_kod_faller_tillbaka_pa_etiketterna(client, monkeypatch):
+    """En kod som inte finns i registret får inte tysta ner innehållet helt —
+    då står planeringen kvar med sina korta etiketter, som förut."""
+    calls = _stub(monkeypatch)
+    _done(client.post("/api/exams/generate", json={
+        "kurs": "Matematik, nivå 2c", "punkter": ["G25-FINNS-INTE-1"],
+        "punkter_text": ["Andragradsekvationer"]}))
+    assert calls[0]["punkter"] == ["Andragradsekvationer"]
+    assert calls[0]["koder"] == []
 
 
 def test_arbetsblad_gar_pa_samma_rutt_med_egen_profil(client, monkeypatch):
