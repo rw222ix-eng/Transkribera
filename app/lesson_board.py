@@ -430,8 +430,10 @@ def build_prompt(course: str, group: str, moment: str, memory: str = "",
     bk = f"\n{bok}\n" if bok else ""
     und = (
         "\nUNDERLAG — läraren har laddat upp sidor ur läroboken/uppgifter som "
-        "lektionen SKA bygga på. Utgå från dessa: använd samma begrepp, notation "
-        "och typuppgifter, och låt tavlans exempel ansluta till underlaget:\n"
+        "lektionen SKA bygga på. Utgå från dessa: använd samma begrepp och "
+        "samma notation, och låt tavlans exempel ansluta till underlaget. Men "
+        "skriv HELT EGNA exempel och uppgifter — skriv aldrig av underlagets, "
+        "inte ens med utbytta tal; de visar nivå och typ, inget mer:\n"
         f"{underlag}\n" if underlag else "")
     return (
         f"{INSTRUCTION}\n{_few_shot_block()}\n{mem}{utf}{und}{bk}{forl}\n"

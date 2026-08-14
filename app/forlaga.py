@@ -140,10 +140,12 @@ def build_forlaga(dokument: dict | None, hur: str = "") -> str:
         block.append(("Så här ser förlagan ut:\n" + kropp) if typ != "Tavla"
                      else ("Det här stod på förlagans tavla:\n" + kropp))
     block.append(
-        "Följ förlagans upplägg, svårighetsnivå och begreppsval, och håll dig "
-        "till samma innehåll. Skriv ändå EGNA formuleringar och egna tal — "
-        f"{_TYPORD.get(typ, 'dokumentet')} ska kännas som samma lektion, inte "
-        "som en kopia. Är förlagan av en annan typ än det du skriver nu är det "
-        "innehållet som följer med, inte formen: en tavlas exempel blir "
-        "uppgifter, ett provs uppgifter blir genomgång.")
+        "Förlagan är INSPIRATION, inte innehåll att återanvända: följ dess "
+        "upplägg, svårighetsnivå, begreppsval och antal/poäng, och håll dig "
+        "till samma innehåll — men skriv HELT NYA uppgifter med nya kontexter "
+        "och nya tal. Kopiera aldrig en uppgift ur förlagan, inte ens med "
+        f"utbytta tal — {_TYPORD.get(typ, 'dokumentet')} ska kännas som samma "
+        "lektion, aldrig som en kopia. Är förlagan av en annan typ än det du "
+        "skriver nu är det innehållet som följer med, inte formen: en tavlas "
+        "exempel blir uppgifter, ett provs uppgifter blir genomgång.")
     return "\n".join(block)

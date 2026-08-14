@@ -321,15 +321,19 @@ def build_bok_block(bok: dict, fran: int, till: int, text: str,
                     uppgifter: list[dict] | None = None) -> str:
     """Promptblocket för bokens uppslag. Det står först bland källorna av ett
     skäl: läraren valde de här sidorna, och tavlan ska bygga på DEM — samma
-    begrepp, samma notation, samma typuppgifter som klassen har framför sig."""
+    begrepp och samma notation som klassen har framför sig. Men uppgifterna
+    skrivs alltid helt egna: bokens visar nivå och typ, inget mer."""
     if not text.strip():
         return ""
     namn = (bok or {}).get("namn") or "läroboken"
     rader = [f"UR LÄROBOKEN — {namn}, s. {fran}–{till}. Lektionen SKA bygga på "
-             "de här sidorna: använd samma begrepp, samma notation och samma "
-             "typuppgifter som eleverna har framför sig. Sidorna är avlästa ur "
-             "boken; [oläsligt] betyder att avläsningen inte kunde tyda något "
-             "där, och sådant ska du inte fylla i själv.", text]
+             "de här sidorna: använd samma begrepp och samma notation som "
+             "eleverna har framför sig. Skriv HELT EGNA uppgifter — kopiera "
+             "aldrig bokens uppgifter eller exempel, inte ens med utbytta "
+             "tal. Bokens uppgifter visar nivå och typ, inget mer. Sidorna "
+             "är avlästa ur boken; [oläsligt] betyder att avläsningen inte "
+             "kunde tyda något där, och sådant ska du inte fylla i själv.",
+             text]
     nummer = [str(u["nr"]) for u in (uppgifter or []) if u.get("nr")]
     if nummer:
         rader.append("Uppgiftsnummer på sidorna: " + ", ".join(nummer) + ".")

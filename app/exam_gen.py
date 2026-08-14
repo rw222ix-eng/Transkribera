@@ -25,7 +25,9 @@ EXAM_MAX_TOKENS = 12_000
 SYSTEM = (
     "Du är en erfaren svensk matematiklärare som konstruerar prov i "
     "nationella provets anda. Uppgifterna är ALLTID egenformulerade — "
-    "aldrig kopierade från nationella prov eller läromedel. Du svarar "
+    "aldrig kopierade från nationella prov, läromedel, tidigare papper "
+    "eller förlagor. Boken och förlagan är inspiration för begrepp, "
+    "notation och nivå — uppgifterna hittar du alltid på själv. Du svarar "
     "ALLTID med giltig JSON enligt schemat, ingenting annat.\n"
     "RÖST: skriv i nationella provets register. Varje uppgift drivs av ett "
     "imperativt verb (Beräkna, Bestäm, Lös, Ange, Visa, Avgör, Förenkla, "
@@ -262,11 +264,12 @@ FORLAGA_GRUPP = (
 
 def build_referens(items: list[str]) -> str:
     """Referensläget (Fas 5): tidigare provs uppgifter in i prompten med
-    instruktion att variera och höja svårighetsgraden — aldrig kopiera."""
+    instruktion att skriva helt nya, likvärdiga uppgifter — aldrig kopiera."""
     numrerade = "\n".join(f"{i}. {t}" for i, t in enumerate(items, 1))
     return ("Utgå från det tidigare provets uppgifter nedan: behåll samma "
-            "moment men VARIERA kontexter och siffror och HÖJ "
-            "svårighetsgraden ett snäpp. Kopiera ALDRIG en uppgift rakt av.\n"
+            "moment och samma svårighetsnivå men skriv HELT NYA uppgifter "
+            "med nya kontexter och nya siffror. Kopiera ALDRIG en uppgift "
+            "rakt av.\n"
             f"{numrerade}")
 
 
@@ -347,7 +350,8 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
     if utfall:
         block.append(utfall)
     # Lärobokens uppslag (Etapp 0.8): uppgifterna ska ansluta till de sidor
-    # klassen faktiskt arbetar med — samma notation, samma typuppgifter.
+    # klassen faktiskt arbetar med — samma begrepp och notation, men alltid
+    # egenskrivna uppgifter (blocket självt förbjuder avskrift).
     if bok:
         block.append(bok)
     # Förlagan (källdörr 4, pardokumentets andra hand) står närmast uppdraget:

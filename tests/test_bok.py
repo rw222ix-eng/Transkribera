@@ -423,6 +423,9 @@ def test_blocket_sager_vad_det_ar(tmp_path, conn, ocr):
     assert "UR LÄROBOKEN" in blocket and "s. 10–10" in blocket
     assert "[oläsligt]" in blocket           # regeln om luckor följer med
     assert "Uppgiftsnummer på sidorna:" in blocket
+    # Boken visar nivå och typ — uppgifterna skrivs alltid helt egna.
+    assert "HELT EGNA uppgifter" in blocket
+    assert "kopiera aldrig bokens uppgifter" in blocket
 
 
 def test_inget_block_utan_last_text(tmp_path, conn, ocr):

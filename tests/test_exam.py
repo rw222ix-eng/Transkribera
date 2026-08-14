@@ -1448,7 +1448,9 @@ def test_arbetsblad_utan_poang_ger_tomt_argument_inte_tom_parentes():
 def test_build_referens_numbers_and_instructs():
     ref = exam_gen.build_referens(["Lös $x^2 = 4$.", "Optimera hagen."])
     assert "1. Lös" in ref and "2. Optimera" in ref
-    assert "HÖJ" in ref and "ALDRIG" in ref
+    # Likvärdigt, inte svårare: helt nya uppgifter på samma nivå.
+    assert "HELT NYA" in ref and "ALDRIG" in ref
+    assert "HÖJ" not in ref
 
 
 def test_build_prompt_arbetsblad_profile():

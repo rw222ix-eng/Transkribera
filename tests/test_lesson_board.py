@@ -103,6 +103,15 @@ def test_build_prompt_without_memory_omits_memory_block():
     assert "lektionsminnet" not in p
 
 
+def test_underlaget_ar_niva_och_typ_inte_innehall():
+    """Underlagets uppgifter följer med i prompten som text — då måste blocket
+    också säga att de inte får skrivas av, inte ens med utbytta tal."""
+    p = lb.build_prompt("Ma1b", "9A", "procent",
+                        underlag="Bokuppslag s. 12: 1201) Beräkna 25 % av 80.")
+    assert "HELT EGNA exempel och uppgifter" in p
+    assert "skriv aldrig av underlagets" in p
+
+
 def test_repair_prompt_lists_problems():
     doc = _valid_doc()
     p = lb.build_repair_prompt(doc, [

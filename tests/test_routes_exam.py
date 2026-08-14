@@ -455,7 +455,7 @@ def test_generate_with_referens_builds_reference_prompt(client, monkeypatch):
                     json={"course_id": _course_id(client),
                           "referens_exam_id": result["id"]})
     _done(r)
-    assert "HÖJ" in calls[0]["referens"]
+    assert "HELT NYA" in calls[0]["referens"]
     assert "kvadratkomplettering" in calls[0]["referens"]
     assert calls[0]["teman"] == ""        # referensläget ersätter undvik-listan
 

@@ -96,10 +96,12 @@ def test_lararens_egen_mening_vager_tyngst():
 
 def test_blocket_sager_att_det_inte_ar_en_kopia():
     """En förlaga som läses som «skriv av det här» ger läraren samma papper en
-    gång till — och det är inte vad hon bad om."""
+    gång till — och det är inte vad hon bad om. Förlagan är inspiration:
+    helt nya uppgifter, aldrig originalets med utbytta tal."""
     text = forlaga.build_forlaga(papper())
-    assert "EGNA formuleringar" in text
-    assert "inte" in text and "kopia" in text
+    assert "INSPIRATION" in text
+    assert "HELT NYA uppgifter" in text
+    assert "Kopiera aldrig" in text and "kopia" in text
 
 
 def test_en_jattetavla_ater_inte_hela_prompten():

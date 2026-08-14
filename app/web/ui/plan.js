@@ -1992,7 +1992,7 @@
     const namn = new Set(lektioner().map(l => l.namn));
     (v.kallor || []).filter(n => namn.has(n)).forEach(n => valdaLektioner.add(n));
     const hur = $('#refhur');
-    if (hur) hur.value = 'Omprov: samma centrala innehåll, samma provtid och samma nivåfördelning — nya tal och ny ordning på uppgifterna.';
+    if (hur) hur.value = 'Omprov: likvärdigt prov — samma centrala innehåll, provtid, antal uppgifter, poäng och nivåfördelning, men HELT NYA uppgifter. Ingen uppgift får vara en variant av originalets med bara utbytta tal.';
     if (window.SattLage) window.SattLage(v.typ);
     sattSkrivtyp(v.typ);
     ritaGy();
@@ -2005,15 +2005,16 @@
     if (window.Klass && window.Klass.valjOmprov) window.Klass.valjOmprov(v);
     else if (window.PlanSteg) window.PlanSteg.las(4);
   }
-  /* Omprovet måste faktiskt skilja sig från originalet — annars ljuger pappret.
-     Ordningen kastas om och de fristående talen byts (poäng rörs inte). */
+  /* Omprovet är likvärdigt, inte identiskt: modellen har redan skrivit helt
+     nya uppgifter (förlage-instruktionen kräver det), så här märks bara
+     släktskapet upp. Uppgifterna rörs inte — en regex som byter tal i texten
+     utan att röra facit gör pappret internt inkonsistent. */
   function markeraOmprov(v) {
     if (!omprovAv) return;
     v.syskonAv = omprovAv.namn;
     v.variant = 'Omprov';
     v.syskontext = `omprov av ${omprovAv.namn}`;
-    v.anteckning = 'Omprov — samma skelett, nya tal och ny ordning';
-    v.uppgifter = blanda(v.uppgifter || []).map((u, n) => Object.assign({}, u, { t: nyaTal(u.t), nr: n + 1 }));
+    v.anteckning = 'Omprov — likvärdigt: samma skelett, helt nya uppgifter';
   }
   function sattSkrivtyp(typ) {
     const knappar = $$('[data-seg="skrivtyp"] button');
@@ -2491,17 +2492,6 @@
       .map(s => s.klass).filter(Boolean))];
     return ur.length ? ur : KLASSER_PROTO;
   };
-  /* Varianten måste faktiskt skilja sig — annars ljuger kortet. Ordningen kastas
-     om och de fristående talen i uppgiftstexten byts (poängangivelser rörs inte). */
-  const nyaTal = t => String(t).replace(/(?:^|[^\d(/])(\d{1,3})(?![\d)/])/g, (hel, n) => hel.replace(n, String(((+n * 3 + 5) % 90) + 2)));
-  function blanda(lista) {
-    const a = lista.slice();
-    for (let i = a.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [a[i], a[j]] = [a[j], a[i]];
-    }
-    return a;
-  }
   function skapaSyskon(i, sort) {
     const orig = sparat[i];
     const v = JSON.parse(JSON.stringify(orig));
@@ -2512,7 +2502,6 @@
     if (sort.klass) v.klass = sort.klass;
     if (sort.datum) v.datum = sort.datum;
     v.anteckning = sort.text;
-    v.uppgifter = blanda(v.uppgifter || []).map((u, n) => Object.assign({}, u, { t: nyaTal(u.t), nr: n + 1 }));
     v.andrat = [];
     sparat.splice(i + 1, 0, v);
     dokSpara(v);
@@ -2538,7 +2527,7 @@
     f.className = 'dokfraga';
     f.innerHTML = tavla
       ? `<p class="dfrubrik">Skriv om för en annan klass?</p><p class="dfnamn">Skelettet är samma. Minneskontexten byts till ${annanKlass}:s egna lektioner.</p><div class="dfknappar"><button class="primar" type="button" data-a="klass">För ${annanKlass}</button><button class="lank" type="button" data-a="nej">Avbryt</button></div>`
-      : `<p class="dfrubrik">Omprov på samma sak?</p><p class="dfnamn">Klassen, det centrala innehållet, underlaget och provtiden följer med — nya tal och ny ordning. Du väljer bara dagen.</p><div class="dfknappar"><button class="primar" type="button" data-a="omprov">Välj dag för omprovet</button><button class="lank" type="button" data-a="nej">Avbryt</button></div>`;
+      : `<p class="dfrubrik">Omprov på samma sak?</p><p class="dfnamn">Klassen, det centrala innehållet, underlaget och provtiden följer med — likvärdigt prov med helt nya uppgifter. Du väljer bara dagen.</p><div class="dfknappar"><button class="primar" type="button" data-a="omprov">Välj dag för omprovet</button><button class="lank" type="button" data-a="nej">Avbryt</button></div>`;
     kort.appendChild(f);
     requestAnimationFrame(() => f.setAttribute('data-pa', ''));
     const stang = () => { f.removeAttribute('data-pa'); setTimeout(() => f.remove(), 180); };
