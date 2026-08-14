@@ -62,6 +62,38 @@ def test_en_few_shot_visar_sammanfattningstabellen():
         assert all(len(rad) == len(t["headers"]) for rad in t["rows"])
 
 
+def _vanstersektioner(doc: dict) -> list[dict]:
+    return doc["boards"][0]["sections"]
+
+
+def test_alla_few_shots_foljer_dramaturgin():
+    """Leonard-principen: tavlan ska gå att gå igenom uppifrån och ned som en
+    berättelse. Shotarna ÄR den ordningen — prompttext utan few-shot-stöd följs
+    dåligt, så det är här kravet faktiskt bor."""
+    for uppdrag, doc in lb.FEW_SHOTS:
+        s = _vanstersektioner(doc)
+        arter = [sek["kind"] for sek in s]
+        assert arter[:5] == ["heading", "list", "divider", "callout", "text"], \
+            f"{uppdrag}: {arter}"
+        # Agendan: 3–4 korta punkter i vardaglig svenska.
+        assert 3 <= len(s[1]["items"]) <= 4, uppdrag
+        assert all(len(p.split()) <= 5 for p in s[1]["items"]), uppdrag
+        # Öppningsfrågan är en fråga till klassen, inte en definition.
+        assert s[3]["children"][0]["text"].endswith("?"), uppdrag
+        # Högst EN mening vardagsspråk innan matematiken tar över.
+        assert arter.count("text") == 1, uppdrag
+        # Figuren (eller den generiska uppställningen) FÖRE första formeln.
+        figur = min(i for i, k in enumerate(arter)
+                    if k in ("shape", "graph") or (k == "list" and i > 1))
+        assert figur < arter.index("math"), uppdrag
+        # Och vanligt fel-callouten sist.
+        sista = s[-1]
+        assert sista["kind"] == "callout" and sista["color"] == "red", uppdrag
+        assert sista["children"][0]["text"].startswith("Vanligt fel:"), uppdrag
+        # Tiden lägger systemet dit (satt_tid) — aldrig modellen.
+        assert not any(lb._TID_RE.match(sek.get("text", "")) for sek in s), uppdrag
+
+
 def test_few_shotarna_haller_textbudgeten():
     """Shotarna ÄR budgeten: en modell härmar det den ser, och en shot som
     ligger över taket lär ut det taket förbjuder."""
@@ -86,6 +118,33 @@ def test_build_prompt_contains_conventions_and_task():
     assert "Pythagoras sats" in p          # few-shot 1
     assert "x^2 - 4*x + 3" in p            # few-shot 2 (expr-mönstret)
     assert "Sammanfattning" in p           # few-shot 3 (tabellmönstret)
+
+
+def test_prompten_bar_dramaturgin():
+    """Kraven ur Leonards genomgång: agenda, streck, öppningsfråga, figur före
+    formel — och att modellen INTE ska skriva klockslaget."""
+    p = lb.build_prompt("Ma2c", "TE24", "randvinkelsatsen")
+    assert "Dramaturgi" in p
+    assert "Agenda" in p and "divider-sektion" in p
+    assert "Öppningsfrågan" in p
+    assert "EFTER figuren, aldrig före" in p
+    assert "Skriv INTE något klockslag" in p
+    assert "Fallgalleri" in p
+
+
+def test_build_prompt_bar_fallgalleriet():
+    """Fjärde shoten: högertavlans andra form, med färdiga figurer i stället
+    för uträkningar."""
+    p = lb.build_prompt("Ma2c", "TE24", "randvinkelsatsen")
+    assert "Randvinkelsatsen" in p
+    assert "Tre fall" in p
+    assert "Exempel 4 — uppdrag:" in p
+
+
+def test_prompten_ar_inte_orimligt_lang():
+    """Fyra kompletta few-shots (varav en med tre cirkelpolygoner) — prompten
+    ska ändå rymmas med marginal i kontexten."""
+    assert len(lb.build_prompt("Ma1b", "9A", "procent")) < 40_000
 
 
 def test_prompten_bar_textbudgeten():
@@ -121,6 +180,73 @@ def test_repair_prompt_lists_problems():
     assert "för bred graf" in p
     assert "element-överlapp" in p
     assert json.dumps(doc, ensure_ascii=False)[:60] in p
+
+
+# ---------------------------------------------------------------- satt_tid --
+
+def test_tiden_laggs_forst_pa_vanstertavlan():
+    """Läraren vill ha klockslaget litet uppe till vänster. Det sätts
+    deterministiskt — och tavlan måste fortfarande validera."""
+    ut = lb.satt_tid(_valid_doc(), "08:15")
+    forst = ut["boards"][0]["sections"][0]
+    assert forst == {"kind": "text", "text": "08:15", "size": 16,
+                     "color": "black", "gapAfter": 10}
+    parsed, fel = ws.validate_board_json(ut)
+    assert parsed is not None and fel == []
+    # Högertavlan rörs inte.
+    assert ut["boards"][1] == _valid_doc()["boards"][1]
+
+
+def test_tiden_ar_idempotent():
+    """refine/repair skriver om HELA tavlan; injektionen görs om efteråt och
+    får aldrig ge två klockslag."""
+    ut = lb.satt_tid(lb.satt_tid(_valid_doc(), "08:15"), "08:15")
+    sektioner = ut["boards"][0]["sections"]
+    assert sektioner[0]["text"] == "08:15"
+    assert sektioner[1]["kind"] == "heading"
+    # Ny tid ersätter den gamla.
+    bytt = lb.satt_tid(ut, "13:30")
+    assert bytt["boards"][0]["sections"][0]["text"] == "13:30"
+    assert bytt["boards"][0]["sections"][1]["kind"] == "heading"
+
+
+def test_tiden_skrivs_med_kolon():
+    """Schemat kan lämna 9.10 — och en punkt mellan siffror fälls av
+    decimalkommaregeln i whiteboard_spec."""
+    ut = lb.satt_tid(_valid_doc(), "9.10")
+    assert ut["boards"][0]["sections"][0]["text"] == "9:10"
+    assert ws.validate_board_json(ut)[1] == []
+
+
+def test_utan_starttid_ingen_tidssektion():
+    doc = _valid_doc()
+    assert lb.satt_tid(doc, None) == doc
+    assert lb.satt_tid(doc, "  ") == doc
+    # …och en tid som redan ligger där tas bort igen när starttiden försvinner.
+    assert lb.satt_tid(lb.satt_tid(doc, "08:15"), None) == doc
+
+
+def test_satt_tid_ror_inte_originalet():
+    doc = _valid_doc()
+    lb.satt_tid(doc, "08:15")
+    assert doc["boards"][0]["sections"][0]["kind"] == "heading"
+
+
+def test_tiden_hittar_vanstertavlan_aven_med_kolumner():
+    """Motorn ritar `sections` bara när tavlan saknar `columns` (layout.js) —
+    tiden måste hamna där den faktiskt syns."""
+    doc = _valid_doc()
+    doc["boards"][0] = {"width": 900, "height": 780, "name": "vanster",
+                        "columns": [{"weight": 1, "sections": [
+                            {"kind": "heading", "text": "Rubrik", "size": 30}]}]}
+    ut = lb.satt_tid(doc, "08:15")
+    assert ut["boards"][0]["columns"][0]["sections"][0]["text"] == "08:15"
+
+
+def test_satt_tid_taler_trasig_tavla():
+    assert lb.satt_tid(None, "08:15") is None
+    assert lb.satt_tid({}, "08:15") == {}
+    assert lb.satt_tid({"boards": []}, "08:15") == {"boards": []}
 
 
 # ---------------------------------------------------------- generate_board --
