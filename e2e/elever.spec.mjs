@@ -58,6 +58,21 @@ const ELEVER = [{ id: 11, namn: "Anna Andersson", sort: 0, aktiv: true },
 const TOMT = { group_id: 1, klass: "NA25", rader: RADER, granser: GRANSER,
                elever: [], resultat: {}, summor: {}, betyg: {}, feedback: {} };
 
+/* CI-profilen som app/ci_profil.py räknar den: svagast först, och `styrka`
+   satt av servern (frontenden ska aldrig sätta sin egen tröskel). */
+const ELEVPROFIL = {
+  elev_id: 11, kurs: "Matematik, nivå 2c", dokument: 2, utan_ci: 0, matt: true,
+  punkter: [
+    { kod: "G25-M2C-ALG-6", kort: "Andragradsekvationer", andel: 0.25,
+      styrka: "svag", tagna: 1, max: 4, dokument: 2, niva: {} },
+    { kod: "G25-M2C-STA-1", kort: "Lägesmått och spridning", andel: 0.9,
+      styrka: "stark", tagna: 9, max: 10, dokument: 1, niva: {} },
+  ],
+};
+const KLASSPROFIL = { ...ELEVPROFIL, group_id: 1, elev_id: undefined,
+  punkter: [{ kod: "G25-M2C-GEO-2", kort: "Sats och bevis", andel: 0.4,
+              styrka: "svag", tagna: 8, max: 20, dokument: 2, niva: {} }] };
+
 async function fejka(page, { elever = [] } = {}) {
   const anrop = [];
   const json = (route, kropp) => route.fulfill({
@@ -88,6 +103,14 @@ async function fejka(page, { elever = [] } = {}) {
         rattat: { elever: 2, varden: { "1": 3, "2": 3 }, andel: 0.6, svaga: [] } });
     }
     return json(route, { ...TOMT, elever });
+  });
+  /* CI-profilen (Etapp 3): elevens och klassens centrala innehåll, svagast
+     först. Registreras efter elevresultatet av samma skäl — Playwright provar
+     de senast tillagda mönstren först. */
+  await page.route("**/ci-profil*", route => {
+    const vag = new URL(route.request().url()).pathname;
+    anrop.push({ metod: "GET", vag });
+    return json(route, vag.includes("/groups/") ? KLASSPROFIL : ELEVPROFIL);
   });
   return anrop;
 }
@@ -209,4 +232,44 @@ test("utan server går elevläget ändå, med prototypens klass", async ({ page 
   await page.locator("#elevspara").click();
   await expect(page.locator(".toast")).toContainText("Sparat");
   expect(natanrop.filter(u => u.includes("elevresultat"))).toEqual([]);
+});
+
+test("CI-profilen står under rättningen — svagast först, och klassen bredvid", async ({ page }) => {
+  await fejka(page, { elever: ELEVER });
+  await page.goto("/");
+  await hydrerad(page);
+  await expect.poll(() => page.evaluate(() => window.Dokument.sparade().length)).toBe(1);
+  await oppna(page);
+
+  /* Rättningen ovanför säger hur det gick på DET HÄR pappret. Profilen säger
+     vad som brister i kursen — och den ska stå där läraren redan tittar. */
+  const rader = page.locator("#elevcilista .elevcirad");
+  await expect(rader).toHaveCount(2, { timeout: 15_000 });
+  await expect(rader.first().locator(".elevcinamn")).toHaveText("Andragradsekvationer");
+  await expect(rader.first()).toHaveAttribute("data-styrka", "svag");
+  await expect(rader.first().locator(".elevciandel")).toHaveText("25 %");
+  await expect(rader.last()).toHaveAttribute("data-styrka", "stark");
+  await expect(page.locator("#elevcinot")).toContainText("1 punkt under 50 %");
+  await expect(page.locator("#elevcinot")).toContainText("2 rättade papper");
+
+  // Klassen är samma aggregat, annat urval — underlaget för gemensam repetition.
+  await page.locator('[data-seg="civem"] button', { hasText: "Klassen" }).click();
+  await expect(page.locator("#elevcilista .elevcirad")).toHaveCount(1);
+  await expect(page.locator("#elevcilista .elevcinamn")).toHaveText("Sats och bevis");
+});
+
+test("utan CI-data står det så — aldrig noll procent", async ({ page }) => {
+  await fejka(page, { elever: ELEVER });
+  /* Papper rättade före Etapp 1 bär inga koder. Ett «0 %» där hade sett ut som
+     ett mätvärde på en elev som aldrig prövats på punkten. */
+  await page.route("**/ci-profil*", route => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify({ punkter: [], dokument: 1, utan_ci: 4, matt: false }) }));
+  await page.goto("/");
+  await hydrerad(page);
+  await expect.poll(() => page.evaluate(() => window.Dokument.sparade().length)).toBe(1);
+  await oppna(page);
+
+  await expect(page.locator("#elevcilista .elevcirad")).toHaveCount(0);
+  await expect(page.locator("#elevcinot")).toContainText("Ingen CI-data", { timeout: 15_000 });
 });

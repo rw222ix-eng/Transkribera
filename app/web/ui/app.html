@@ -1502,6 +1502,20 @@
         </div>
         <div class="elevhuvud"><span></span><span>Uppgift</span><span>Poäng per nivå</span></div>
         <div id="elevrader"></div>
+        <!-- CI-profilen: vad eleven kan av kursens centrala innehåll, svagast
+             först. Rättningen ovanför säger hur det gick på DET HÄR pappret;
+             den här listan säger vad som brister i kursen, vägt över alla
+             rättade papper med det senaste tyngst (app/ci_profil.py). -->
+        <div class="elevci" id="elevci" hidden>
+          <div class="elevcitopp">
+            <p class="minietikett">Centralt innehåll</p>
+            <div class="seg" role="group" data-seg="civem">
+              <button type="button" aria-pressed="true">Eleven</button><button type="button" aria-pressed="false">Klassen</button>
+            </div>
+          </div>
+          <div id="elevcilista"></div>
+          <p class="elevcinot" id="elevcinot"></p>
+        </div>
         <div class="elevtext" id="elevtext" hidden>
           <p class="minietikett">Feedback till eleven</p>
           <textarea class="elevtextfalt" id="elevtextfalt" rows="4" aria-label="Feedbacktext till eleven"></textarea>

@@ -1295,13 +1295,19 @@ def create_app(base_dir: Path | None = None,
     def _rattning_svar(papper: dict, varden: dict, elever, sparad: dict | None) -> dict:
         res = rattning.sammanfatta(papper.get("uppgifter"), varden, elever)
         if sparad:
-            gammal = {r["nyckel"]: r.get("formaga") for r in sparad["rader"]}
+            gammal = {r["nyckel"]: r for r in sparad["rader"]}
             for rad in res["rader"]:
-                if gammal.get(rad.get("nyckel")):
-                    rad["formaga"] = gammal[rad["nyckel"]]
+                forra = gammal.get(rad.get("nyckel")) or {}
+                if forra.get("formaga"):
+                    rad["formaga"] = forra["formaga"]
+                # CI-taggen fryses av samma skäl som förmågan: skrivs provet om
+                # efter rättningen ska profilen räknas på det läraren rättade.
+                if forra.get("ci"):
+                    rad["ci"] = list(forra["ci"])
             for s in res["rattat"]["svaga"]:
-                if gammal.get(s["kod"]):
-                    s["formaga"] = gammal[s["kod"]]
+                forra = gammal.get(s["kod"]) or {}
+                if forra.get("formaga"):
+                    s["formaga"] = forra["formaga"]
         return res
 
     @app.get("/api/dokument/{dokument_id}/rattning")

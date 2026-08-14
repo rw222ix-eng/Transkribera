@@ -294,6 +294,24 @@
 .elevtextfalt:focus{outline:none;border-color:var(--atmosphere);box-shadow:0 0 0 3px rgba(96,168,221,.22)}
 @media (max-width:720px){.elevhuvud{display:none}.elevrad{grid-template-columns:34px minmax(0,1fr);row-gap:8px}.elevgrupper{grid-column:2;justify-content:flex-start}}
 
+/* ══════════ CI-PROFILEN ══════════
+   En rad per innehållspunkt, svagast först. Mätaren är ett spår och inte en
+   siffra i första hand: läraren söker efter det KORTA strecket, och ett öga
+   hittar det snabbare än det läser tolv procenttal. Siffran står ändå kvar
+   till höger — det är den som går att citera för eleven. */
+.elevci{margin-top:22px;padding-top:18px;border-top:1px solid var(--line)}
+.elevcitopp{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:10px}
+.elevcirad{display:grid;grid-template-columns:minmax(0,1fr) 92px 46px;gap:14px;align-items:center;padding:6px 0}
+.elevcinamn{font-size:.9rem;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.elevcispar{height:6px;border-radius:3px;background:var(--track);overflow:hidden}
+.elevcifyll{height:100%;border-radius:3px;background:var(--ink-3);transition:width var(--dur-2) var(--ease)}
+.elevcirad[data-styrka='stark'] .elevcifyll{background:var(--fern,#5b8c5a)}
+.elevcirad[data-styrka='ok'] .elevcifyll{background:var(--atmosphere)}
+.elevcirad[data-styrka='svag'] .elevcifyll{background:var(--berry)}
+.elevcirad[data-styrka='svag'] .elevcinamn{font-weight:600}
+.elevciandel{font-family:var(--mono);font-size:.8rem;color:var(--ink-2);text-align:right;font-variant-numeric:tabular-nums}
+.elevcinot{margin-top:8px;font-size:.8rem;color:var(--ink-3)}
+
 /* ══════════ 13 · TIDSRIMLIGHETEN ══════════
    Samma rad som «Provet ärver», men bärröd. Den varnar medan det är billigt att
    ändra och blockerar aldrig. */

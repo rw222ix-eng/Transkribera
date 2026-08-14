@@ -21,7 +21,7 @@ import sqlite3
 import threading
 from pathlib import Path
 
-SCHEMA_VERSION = 16
+SCHEMA_VERSION = 17
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS courses (
@@ -590,6 +590,23 @@ ALTER TABLE exam_items ADD COLUMN innehall TEXT;
 ALTER TABLE rattning_rader ADD COLUMN ci TEXT;
 """
 
+# Radens nivåtak (v17) — ENDAST additiv; rollback: lämna kolumnen (NULL läses
+# som «hela poängen på uppgiftens nivå», precis som gamla papper) + PRAGMA
+# user_version=16.
+#
+# CI-profilen (Etapp 3) svarar på frågan «var brister det?» och måste därför
+# räkna ANDELEN av det som gick att ta — per nivå, för «klarar E men inte C på
+# funktioner» är ett annat besked än «kan inte funktioner». Andelen kräver ett
+# tak, och taket per nivå fanns bara i pappret: raden bar `poang` (summan) men
+# aldrig tripeln. Ett papper som skrivits om efteråt hade då gett en profil mot
+# ett annat tak än det läraren rättade mot.
+#
+# `peca` är JSON-listan [E, C, A], samma frysningsprincip som `formaga` och
+# `ci`: det som stod när läraren rättade är det som gäller.
+_RADTAK_MIGRATION = """
+ALTER TABLE rattning_rader ADD COLUMN peca TEXT;
+"""
+
 _MIGRATIONS: dict[int, str] = {2: _FTS_MIGRATION, 3: _MARKERS_MIGRATION,
                                4: _PLANNING_MIGRATION, 5: _EXAMS_MIGRATION,
                                6: _GY25_MIGRATION, 7: _DATAGRUND_MIGRATION,
@@ -601,12 +618,13 @@ _MIGRATIONS: dict[int, str] = {2: _FTS_MIGRATION, 3: _MARKERS_MIGRATION,
                                13: _SCHEMAGILTIGHET_MIGRATION,
                                14: _SCHEMAUNDANTAG_MIGRATION,
                                15: _ELEVER_MIGRATION,
-                               16: _CI_IDENTITET_MIGRATION}
+                               16: _CI_IDENTITET_MIGRATION,
+                               17: _RADTAK_MIGRATION}
 
 # Migreringar som bara innehåller ALTER TABLE … ADD COLUMN. De körs sats för
 # sats så att en redan tillagd kolumn hoppas över i stället för att fälla hela
 # migreringen — se _apply_migrations.
-_ALTER_MIGRATIONER = {6, 12, 13, 14, 16}
+_ALTER_MIGRATIONER = {6, 12, 13, 14, 16, 17}
 
 _LESSON_SELECT = """
 SELECT l.*, g.namn AS group_namn, c.namn AS course_namn
@@ -2282,16 +2300,24 @@ def save_klassprofil(conn: sqlite3.Connection, minne: dict) -> dict:
 def _rattning_view(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
     rader = []
     for r in conn.execute(
-            "SELECT nyckel, kod, text, poang AS p, formaga, ci, varde, andel "
-            "FROM rattning_rader WHERE dokument_id = ? ORDER BY ordning, id",
+            "SELECT nyckel, kod, text, poang AS p, formaga, ci, peca, varde, "
+            "andel FROM rattning_rader WHERE dokument_id = ? ORDER BY ordning, id",
             (row["dokument_id"],)).fetchall():
         d = dict(r)
-        # `ci` lagras som JSON-lista men läses som lista av alla — en sträng
-        # här hade blivit en teckenlista i CI-profilens summering.
+        # `ci` och `peca` lagras som JSON men läses som listor av alla — en
+        # sträng här hade blivit en teckenlista i CI-profilens summering.
         try:
             d["ci"] = json.loads(d["ci"]) if d.get("ci") else []
         except (TypeError, ValueError):
             d["ci"] = []
+        try:
+            trippel = json.loads(d["peca"]) if d.get("peca") else None
+        except (TypeError, ValueError):
+            trippel = None
+        # Gamla rader saknar tripeln: hela poängen läggs på uppgiftens nivå,
+        # och den vet raden inte längre — E är det ärligaste antagandet, samma
+        # fallback som rattning._peca_fallback utan `niva`.
+        d["peca"] = trippel if isinstance(trippel, list) and len(trippel) == 3             else [int(d.get("p") or 0), 0, 0]
         rader.append(d)
     return dict(row) | {
         "rader": rader,
@@ -2325,14 +2351,64 @@ def save_rattning(conn: sqlite3.Connection, dokument_id: int, *,
         conn.execute("DELETE FROM rattning_rader WHERE dokument_id = ?", (dokument_id,))
         conn.executemany(
             "INSERT INTO rattning_rader(dokument_id, ordning, nyckel, kod, text, "
-            "poang, formaga, ci, varde, andel) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "poang, formaga, ci, peca, varde, andel) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [(dokument_id, i, r.get("nyckel"), r.get("kod"), r.get("text"),
               int(r.get("p") or 1), r.get("formaga"),
               json.dumps(r["ci"], ensure_ascii=False) if r.get("ci") else None,
+              json.dumps([int(x or 0) for x in r["peca"]]) if r.get("peca") else None,
               r.get("varde"), r.get("andel"))
              for i, r in enumerate(rader) if not r.get("grupp") and r.get("nyckel")])
     return get_rattning(conn, dokument_id)
+
+
+def ci_underlag(conn: sqlite3.Connection, *, kurs: str | None = None,
+                klass: str | None = None,
+                group_id: int | None = None) -> list[dict]:
+    """De rättade pappren med sina rader OCH elevernas poäng, ÄLDST FÖRST.
+
+    Underlaget till CI-profilen (app/ci_profil.py). Ordningen är inte
+    kosmetisk: profilen väger det senaste pappret tyngst, för det är det som
+    säger något om var eleven är NU.
+
+    `group_id` slår upp klassens namn — rättningen lagrar klassen som text
+    (den är dokumentets, inte en främmande nyckel)."""
+    if group_id is not None and klass is None:
+        rad = conn.execute("SELECT namn FROM groups WHERE id = ?",
+                           (int(group_id),)).fetchone()
+        klass = rad["namn"] if rad else None
+    villkor, params = [], []
+    if kurs:
+        villkor.append("kurs = ?")
+        params.append(kurs)
+    if klass:
+        villkor.append("klass = ?")
+        params.append(klass)
+    sql = "SELECT dokument_id, kurs, klass, datum, updated_at FROM rattning"
+    if villkor:
+        sql += " WHERE " + " AND ".join(villkor)
+    sql += " ORDER BY COALESCE(datum, ''), updated_at, dokument_id"
+    ut = []
+    for r in conn.execute(sql, params).fetchall():
+        did = r["dokument_id"]
+        rader = [dict(x) for x in conn.execute(
+            "SELECT nyckel, kod, text, poang AS p, formaga, ci, peca "
+            "FROM rattning_rader WHERE dokument_id = ? ORDER BY ordning, id",
+            (did,)).fetchall()]
+        for d in rader:
+            try:
+                d["ci"] = json.loads(d["ci"]) if d.get("ci") else []
+            except (TypeError, ValueError):
+                d["ci"] = []
+            try:
+                trippel = json.loads(d["peca"]) if d.get("peca") else None
+            except (TypeError, ValueError):
+                trippel = None
+            d["peca"] = trippel if isinstance(trippel, list) and len(trippel) == 3 \
+                else [int(d.get("p") or 0), 0, 0]
+        ut.append(dict(r) | {"rader": rader,
+                             "resultat": get_elevresultat(conn, did)})
+    return ut
 
 
 def delete_rattning(conn: sqlite3.Connection, dokument_id: int) -> bool:

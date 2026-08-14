@@ -22,7 +22,7 @@ from pathlib import Path
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
-from app import db, elev_feedback, klasslista, rattning
+from app import ci_profil, course_data, db, elev_feedback, klasslista, rattning
 from app.web.sse import sse_response
 
 _GPU_BUSY = {"error": "GPU:n är upptagen — försök igen strax."}
@@ -169,6 +169,41 @@ def create_router(base: Path, arbiter) -> APIRouter:
         finally:
             conn.close()
         return {"ok": True}
+
+    # ------------------------------------------------------------ CI-profilen --
+    # «Stark överlag men svag på funktionsuttryck» — det läraren ville se efter
+    # rättningen, och det rättningen aldrig kunde säga: den summerade per
+    # UPPGIFT, och en uppgift kommer inte tillbaka nästa termin. Räkningen bor i
+    # app/ci_profil.py; här hämtas bara underlaget.
+
+    def _profil(*, kurs: str | None, elev_id: int | None,
+                group_id: int | None) -> dict:
+        conn = db.connect(db_file)
+        try:
+            dokument = db.ci_underlag(conn, kurs=kurs, group_id=group_id)
+        finally:
+            conn.close()
+        prof = ci_profil.profil(dokument, elev_id=elev_id,
+                                kort=course_data.kod_till_kort())
+        return prof | {"kurs": kurs or ""}
+
+    @router.get("/api/elever/{elev_id:int}/ci-profil")
+    def elevens_ci_profil(elev_id: int, kurs: str | None = None,
+                          group_id: int | None = None):
+        """Elevens centrala innehåll, svagast först.
+
+        Utan `kurs` vägs alla rättade papper eleven har — det är rätt svar när
+        klassen bara läser en kurs och fel så fort den läser två, så
+        frontenden skickar alltid kursen den frågar om."""
+        return _profil(kurs=kurs, elev_id=elev_id, group_id=group_id) | {
+            "elev_id": elev_id}
+
+    @router.get("/api/groups/{group_id:int}/ci-profil")
+    def klassens_ci_profil(group_id: int, kurs: str | None = None):
+        """Samma räkning för hela klassen — underlaget för vad som ska tas om
+        gemensamt i stället för elev för elev."""
+        return _profil(kurs=kurs, elev_id=None, group_id=group_id) | {
+            "group_id": group_id}
 
     # ------------------------------------------------------------- feedbacken --
 

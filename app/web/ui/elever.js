@@ -177,6 +177,7 @@
     const txt = feedback[String(e.id)] || '';
     $('#elevtext').hidden = !txt;
     $('#elevtextfalt').value = txt;
+    ritaCi();
     rakna();
   }
 
@@ -274,6 +275,89 @@
     }).catch(() => {});
   }
 
+  /* ── CI-profilen ──────────────────────────────────────────────────────
+     Rättningen ovanför säger hur det gick på DET HÄR pappret. Profilen säger
+     vad som brister i KURSEN — samma poäng summerade i kursplanens dimension i
+     stället för i uppgifternas, vägda över alla rättade papper med det senaste
+     tyngst. Räkningen bor på servern (app/ci_profil.py) och görs inte om här:
+     utan server finns ingen historik att räkna på, och en påhittad profil vore
+     ett påstående om en riktig elev.
+
+     Svaren cachas per nyckel för sidans livstid — läraren bläddrar fram och
+     tillbaka mellan eleverna, och profilen ändras bara när något sparats. */
+  let civem = 'Eleven';
+  const cicache = new Map();
+
+  function cinyckel() {
+    const e = nuvarande();
+    if (civem === 'Klassen') return gruppId ? `g${gruppId}` : null;
+    return e && e.id > 0 ? `e${e.id}` : null;
+  }
+
+  function cihamta() {
+    const nyckel = cinyckel();
+    if (!server() || !nyckel) return Promise.resolve(null);
+    if (cicache.has(nyckel)) return Promise.resolve(cicache.get(nyckel));
+    const kurs = encodeURIComponent(doc.kurs || '');
+    const vagen = nyckel[0] === 'g'
+      ? `/api/groups/${gruppId}/ci-profil?kurs=${kurs}`
+      : `/api/elever/${nuvarande().id}/ci-profil?kurs=${kurs}`
+        + (gruppId ? `&group_id=${gruppId}` : '');
+    return window.API.json(vagen).then(r => {
+      cicache.set(nyckel, r);
+      return r;
+    }).catch(() => null);
+  }
+
+  /* Hur många punkter som ritas. Listan ska gå att överblicka utan att rulla —
+     det är hålen som söks, och de ligger först. Resten räknas i noten. */
+  const CI_TAK = 6;
+
+  function ritaCi() {
+    const ruta = $('#elevci');
+    if (!ruta) return;
+    const nyckel = cinyckel();
+    if (!server() || !nyckel) { ruta.hidden = true; return; }
+    ruta.hidden = false;
+    const lista = $('#elevcilista'), not = $('#elevcinot');
+    const vald = cicache.get(nyckel);
+    if (!vald) {
+      lista.innerHTML = '';
+      not.textContent = 'Läser …';
+      cihamta().then(() => { if (cinyckel() === nyckel) ritaCi(); });
+      return;
+    }
+    const punkter = (vald.punkter || []).filter(p => p.andel !== null);
+    lista.innerHTML = '';
+    punkter.slice(0, CI_TAK).forEach(p => {
+      const rad = document.createElement('div');
+      rad.className = 'elevcirad';
+      rad.dataset.styrka = p.styrka;
+      rad.innerHTML = '<span class="elevcinamn"></span><span class="elevcispar"><span class="elevcifyll"></span></span><span class="elevciandel"></span>';
+      $('.elevcinamn', rad).textContent = p.kort;
+      $('.elevcinamn', rad).title = p.kod;
+      $('.elevcifyll', rad).style.width = Math.round(p.andel * 100) + '%';
+      $('.elevciandel', rad).textContent = Math.round(p.andel * 100) + ' %';
+      lista.appendChild(rad);
+    });
+    /* Ett papper utan CI-data ska säga det rakt ut. «0 %» på en punkt som
+       aldrig prövats är ett påstående om eleven, och det värsta slaget: det
+       ser ut som ett mätvärde. */
+    if (!punkter.length) {
+      not.textContent = vald.utan_ci
+        ? 'Ingen CI-data — pappren är rättade men uppgifterna saknar centralt innehåll.'
+        : 'Ingen CI-data ännu — profilen fylls när ett prov med centralt innehåll rättats.';
+      return;
+    }
+    const kvar = punkter.length - Math.min(CI_TAK, punkter.length);
+    const svaga = punkter.filter(p => p.styrka === 'svag').length;
+    not.textContent = [
+      svaga ? `${svaga} ${svaga === 1 ? 'punkt' : 'punkter'} under 50 %` : 'Inget under 50 %',
+      kvar ? `${kvar} till som sitter bättre` : '',
+      `vägt över ${vald.dokument} ${vald.dokument === 1 ? 'rättat papper' : 'rättade papper'}, det senaste tyngst`,
+    ].filter(Boolean).join(' · ');
+  }
+
   /* Prototypens efternamnssortering — servern gör den riktiga städningen
      (app/klasslista.py: kolumner, numrering, partiklar), men klassen ska
      hamna i samma ordning även utan server. Kommat säger vilket som är
@@ -334,6 +418,9 @@
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ resultat }),
     }).then(r => {
+      /* Profilen är räknad på de sparade raderna — sparas nya siffror är den
+         gamla profilen ett svar på en fråga som inte längre gäller. */
+      cicache.clear();
       if (doc === v) { las(r); smutsigt = false; rita(); }
       /* Utfallet är fakta om pappret och skrivs rakt på det — «Rättat · NN %»
          på kortet är samma siffra som klassrättningen ger, för det ÄR den. */
@@ -421,6 +508,9 @@
     doc = v;
     granser = null;
     resultat = {}; feedback = {}; index = 0; smutsigt = false;
+    /* Profilen hör till pappret som öppnas — och till kursen det ligger i. */
+    cicache.clear();
+    civem = 'Eleven';
     /* Prototypens klass visas när det inte finns någon serverväg för DET HÄR
        pappret — designprojektet har ingen server alls, och ett papper utan id
        har ingen rättning att hämta. Modalen ska gå att visa hela vägen ändå. */
@@ -461,6 +551,17 @@
     rita();
   });
   $('#elevtextfalt').addEventListener('change', sparaText);
+  /* Eleven eller klassen — samma aggregat, olika urval. Klassens svaga punkt
+     är underlaget för vad som ska tas om gemensamt i stället för elev för elev. */
+  const civaljare = document.querySelector('[data-seg="civem"]');
+  if (civaljare) civaljare.addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    civem = b.textContent.trim();
+    [...civaljare.querySelectorAll('button')].forEach(
+      x => x.setAttribute('aria-pressed', String(x === b)));
+    ritaCi();
+  });
   $('#elevklassavbryt').addEventListener('click', () => {
     delete $('#elevklass').dataset.oppen;
     rita();
