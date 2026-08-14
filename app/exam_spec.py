@@ -352,6 +352,11 @@ class ExamDoc(_Model):
     titel: str
     kurs: str
     klass: str | None = None
+    # Pappret som hör till EN elev (Etapp 4). Ett riktat arbetsblad är skrivet
+    # ur hennes CI-profil, och namnet står på det av två skäl: hon ska veta att
+    # det är hennes, och läraren ska kunna skilja två blad på samma lektion åt
+    # i högen. Sätts av LÄRARENS val i routen, aldrig av modellen.
+    elev: str | None = None
     datum: str | None = None
     tid_min: int | None = None
     hjalpmedel: str

@@ -20,6 +20,9 @@
    ligger på står redan i uppgifterna själva — det behöver ingen egen etikett. */
 .guhuv{padding-bottom:2px}
 .gutitel{margin:0;font-size:25px;font-weight:700;letter-spacing:-.01em;line-height:1.14}
+/* Mottagarens namn på ett riktat blad — under rubriken, i pappersgrått. Det ska
+   synas när läraren delar ut, inte tävla med momentet om blicken. */
+.gumottagare{display:block;margin-top:3px;font-size:13px;letter-spacing:.02em;color:#5a5a54}
 /* Gruppens storlek, tiden och redovisningsformen är elevernas information — en
    stämpelrad under rubriken, inte en mening i brödtext. */
 .gumeta{margin:6px 0 0;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;line-height:1.3;color:#000}

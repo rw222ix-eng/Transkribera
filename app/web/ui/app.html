@@ -1213,6 +1213,15 @@
         <p id="arvtext">Ärvt från förra provet</p>
         <button class="lank" id="arvaterstall" type="button">Börja från standard</button>
       </div>
+      <!-- Bladkön (Etapp 4): nästa mottagares arbetsblad på samma lektion.
+           Raden ligger HÄR och inte i dokumentpanelen — den panelen stängs vid
+           godkännandet, och det är just då kön ska säga ifrån. En toast hade
+           dessutom bytts ut av PDF-kvittot innan läraren hunnit läsa den. -->
+      <div class="arvrad bubbla" id="bladkorad" data-sida="hoger" hidden>
+        <span class="arvprick"></span>
+        <p id="bladkotext">Arbetsblad till nästa mottagare väntar</p>
+        <button class="lank" id="bladkogor" type="button">Skriv det</button>
+      </div>
       <div class="typval" id="typval"></div>
       <div class="refruta" id="refruta" hidden>
         <div class="refhuvud">

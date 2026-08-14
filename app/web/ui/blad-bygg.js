@@ -152,7 +152,11 @@ window.BladBygg = (() => {
     const harSteg = uppgifter.some(u => u && u.stegtabell);
     const form = grupp ? 'gu' : (harFigur && harSteg ? 'gu6' : harFigur ? 'gu2' : 'gu1');
     return `<div class="gu" data-form="${form}">
-      <div class="guhuv"><h1 class="gutitel">${esc(versal(v.moment || o.titel || ''))}</h1></div>
+      <div class="guhuv"><h1 class="gutitel">${esc(versal(v.moment || o.titel || ''))}</h1>${
+        /* Bladet som hör till EN elev säger det överst. Hon ska veta att det är
+           hennes, och läraren ska kunna dela ut rätt papper utan att läsa
+           uppgifterna. */
+        v.elev ? `<span class="gumottagare">${esc(v.elev)}</span>` : ''}</div>
       <div class="gutopp">${rad.repeat(namnrader)}</div>
       ${/* Nyckelfrågan bär ofta matematik ($x = -b/(2a)$) — den ska sättas,
              inte visas som dollartecken. Pappret gör det (escape_mixed), och

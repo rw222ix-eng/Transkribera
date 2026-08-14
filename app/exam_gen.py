@@ -276,6 +276,45 @@ def build_referens(items: list[str]) -> str:
             f"{numrerade}")
 
 
+def build_riktat(elev: str, syfte: str, punkter: list[dict]) -> str:
+    """Promptblocket för ett arbetsblad som hör till EN elev (Etapp 4).
+
+    Två syften och de är varandras motsatser. «Stötta» skriver bladet på det
+    hon INTE kan, med ingångar hon klarar; «utmana» skriver det på det hon
+    redan kan, med krav hon ännu inte mött. Punkterna kommer ur hennes CI-profil
+    (app/ci_profil.py) och bär sin andel — modellen ska veta skillnaden mellan
+    «12 %» och «48 %», för det är två helt olika blad.
+
+    Namnet står med. Bladet är hennes, och ett papper som är skrivet till en
+    elev ska säga det."""
+    rader = "\n".join(
+        f"- {p.get('kort') or p.get('kod')}: "
+        f"{round((p.get('andel') or 0) * 100)} % av poängen"
+        for p in punkter or [])
+    if syfte == "utmana":
+        uppdrag = (
+            f"Det här arbetsbladet skrivs till EN elev, {elev}, som redan kan "
+            "de här punkterna och ska UTMANAS. Skriv uppgifter som går bortom "
+            "standardfallet: fler steg, egna antaganden, motiveringar som "
+            "kräver att hon vet VARFÖR metoden fungerar. Tyngdpunkten ligger "
+            "på C- och A-nivå, och den första uppgiften får gärna vara den "
+            "svåraste — hon behöver ingen uppvärmning på det hon kan.")
+    else:
+        uppdrag = (
+            f"Det här arbetsbladet skrivs till EN elev, {elev}, som INTE "
+            "behärskar punkterna nedan och ska STÖTTAS. Börja på en nivå hon "
+            "säkert klarar och bygg uppåt i små steg: en igenkännbar "
+            "standarduppgift först, sedan samma sak med en variation, sedan en "
+            "tillämpning. Tyngdpunkten ligger på E- och C-nivå. Skriv ut "
+            "metoden i uppgiftens notis när ett steg är lätt att fastna på — "
+            "hon sitter ensam med bladet, utan lärare bredvid sig.")
+    return (uppdrag + "\n"
+            "Punkterna, med hur stor andel av poängen hon tagit på dem "
+            "tidigare:\n" + (rader or "- (ingen mätning ännu)") + "\n"
+            "Skriv INTE om andra moment än de här, och nämn aldrig procenttalen "
+            "på pappret — de är lärarens underlag, inte elevens.")
+
+
 def build_bilder(beskrivningar: list[str]) -> str:
     """Bildunderlagets promptblock: numrerade beskrivningar + regler för
     bild-fältet (1-baserat index; en uppgift per bild; null annars)."""
@@ -327,7 +366,7 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
                  referens: str = "", bilder: str = "", utfall: str = "",
                  bok: str = "", boknivaer: str = "", forlaga: str = "",
                  profil: str = "prov", koder: list[str] | None = None,
-                 grupp: dict | None = None,
+                 grupp: dict | None = None, riktat: str = "",
                  skeleton: list[dict] | None = None) -> str:
     """Genereringsprompt: instruktion + valda innehållspunkter +
     minneskontext + tidigare provs teman (undvik upprepning som default).
@@ -386,6 +425,11 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
         block.append(referens)
     if bilder:
         block.append(bilder)
+    # Det riktade bladet (Etapp 4) står SIST bland källorna och närmast
+    # uppdraget: det är den starkaste ordern på pappret — inte «ett arbetsblad
+    # om derivator» utan «ett arbetsblad till Alva om det Alva inte kan».
+    if riktat:
+        block.append(riktat)
     if profil == "gruppuppgift":
         g = grupp or {}
         REDOV = {
@@ -1080,7 +1124,7 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                   memory: str = "", teman: str = "", referens: str = "",
                   bilder: str = "", utfall: str = "", bok: str = "",
                   boknivaer: str = "", forlaga: str = "", profil: str = "prov",
-                  koder: list[str] | None = None,
+                  koder: list[str] | None = None, riktat: str = "",
                   skeleton: list[dict] | None = None,
                   grupp: dict | None = None, doma: bool = True,
                   llm=llm_client.generate, max_rounds: int = MAX_ROUNDS,
@@ -1128,7 +1172,7 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                           referens=referens, bilder=bilder, utfall=utfall,
                           bok=bok, boknivaer=boknivaer, forlaga=forlaga,
                           profil=profil, koder=koder, grupp=grupp,
-                          skeleton=skeleton)
+                          riktat=riktat, skeleton=skeleton)
     exam = _llm_round(prompt, model, llm, antal, grammatik, koder)
     rounds = 1
     while exam is None and rounds < max_rounds:

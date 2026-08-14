@@ -326,7 +326,11 @@ window.Klass = (() => {
       b.className = 'dokchip';
       if (v.losningsblad) b.setAttribute('data-los', '');
       b.dataset.tip = `${namnPa(v)} — öppna, granska eller ladda ner som PDF`;
-      b.textContent = v.losningsblad ? (v.typ === 'Prov' ? 'Lösningar' : 'Facit') : (v.variant || v.typ);
+      /* Två arbetsblad på samma lektion är inte samma papper: det ena är
+         klassens, det andra hör till en elev (Etapp 4). Brickan säger vem —
+         annars går de inte att skilja åt i remsan. */
+      b.textContent = v.losningsblad ? (v.typ === 'Prov' ? 'Lösningar' : 'Facit')
+        : (v.variant || (v.elev ? `${v.typ} · ${v.elev.split(' ')[0]}` : v.typ));
       b.addEventListener('click', e => { e.stopPropagation(); window.Dokument && window.Dokument.visa && window.Dokument.visa(dok().indexOf(v)); });
       remsa.appendChild(b);
     });

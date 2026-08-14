@@ -21,7 +21,7 @@ import sqlite3
 import threading
 from pathlib import Path
 
-SCHEMA_VERSION = 17
+SCHEMA_VERSION = 18
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS courses (
@@ -607,6 +607,18 @@ _RADTAK_MIGRATION = """
 ALTER TABLE rattning_rader ADD COLUMN peca TEXT;
 """
 
+# Pappret som hör till EN elev (v18) — ENDAST additiv; rollback: lämna
+# kolumnen (NULL = «hela klassen», vilket är vad varje papper var förut) +
+# PRAGMA user_version=17.
+#
+# Ett riktat arbetsblad (Etapp 4) är inte klassens: det är skrivet ur EN elevs
+# CI-profil och ska gå till henne. Utan kolumnen ligger två arbetsblad på samma
+# lektion som två likadana rader i klassvyn — dokument↔lektion är
+# fältmatchning (datum + klass + tid + kurs), och de matchar lika bra båda två.
+_ELEVPAPPER_MIGRATION = """
+ALTER TABLE dokument ADD COLUMN elev_id INTEGER;
+"""
+
 _MIGRATIONS: dict[int, str] = {2: _FTS_MIGRATION, 3: _MARKERS_MIGRATION,
                                4: _PLANNING_MIGRATION, 5: _EXAMS_MIGRATION,
                                6: _GY25_MIGRATION, 7: _DATAGRUND_MIGRATION,
@@ -619,12 +631,13 @@ _MIGRATIONS: dict[int, str] = {2: _FTS_MIGRATION, 3: _MARKERS_MIGRATION,
                                14: _SCHEMAUNDANTAG_MIGRATION,
                                15: _ELEVER_MIGRATION,
                                16: _CI_IDENTITET_MIGRATION,
-                               17: _RADTAK_MIGRATION}
+                               17: _RADTAK_MIGRATION,
+                               18: _ELEVPAPPER_MIGRATION}
 
 # Migreringar som bara innehåller ALTER TABLE … ADD COLUMN. De körs sats för
 # sats så att en redan tillagd kolumn hoppas över i stället för att fälla hela
 # migreringen — se _apply_migrations.
-_ALTER_MIGRATIONER = {6, 12, 13, 14, 16, 17}
+_ALTER_MIGRATIONER = {6, 12, 13, 14, 16, 17, 18}
 
 _LESSON_SELECT = """
 SELECT l.*, g.namn AS group_namn, c.namn AS course_namn
@@ -2067,9 +2080,17 @@ def save_kalenderbeslut(conn: sqlite3.Connection, beslut: dict[str, dict]) -> in
 # papper.
 
 def _dokument_kolumner(dokument: dict) -> dict:
-    """De fält som kopieras ut ur bloben för sortering och sökning."""
+    """De fält som kopieras ut ur bloben för sortering och sökning.
+
+    `elev_id` (v18) hör hit av samma skäl som datum och typ: klassvyn ska kunna
+    skilja två arbetsblad på samma lektion åt utan att packa upp bloben."""
+    try:
+        elev = int(dokument.get("elevId") or 0) or None
+    except (TypeError, ValueError):
+        elev = None
     return {"typ": dokument.get("typ"), "moment": dokument.get("moment"),
-            "datum": dokument.get("datum") or None, "tid": dokument.get("tid") or None}
+            "datum": dokument.get("datum") or None,
+            "tid": dokument.get("tid") or None, "elev_id": elev}
 
 
 def _dokument_view(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
@@ -2169,10 +2190,10 @@ def create_dokument(conn: sqlite3.Connection, *, dokument: dict,
     with conn:
         cur = conn.execute(
             "INSERT INTO dokument(typ, moment, group_id, course_id, datum, tid, "
-            "status, markor, sort, foljd, created_at, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)",
+            "status, markor, sort, foljd, elev_id, created_at, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)",
             (kol["typ"], kol["moment"], gid, cid, kol["datum"], kol["tid"],
-             status, sort, foljd, nu, nu))
+             status, sort, foljd, kol["elev_id"], nu, nu))
         did = cur.lastrowid
         conn.execute(
             "INSERT INTO dokument_versioner(dokument_id, version, data, anteckning, created_at) "
@@ -2205,9 +2226,10 @@ def add_dokument_version(conn: sqlite3.Connection, dokument_id: int, *,
              anteckning or (dokument or {}).get("anteckning"), nu))
         conn.execute(
             "UPDATE dokument SET markor = ?, typ = ?, moment = ?, group_id = ?, "
-            "course_id = ?, datum = ?, tid = ?, updated_at = ? WHERE id = ?",
+            "course_id = ?, datum = ?, tid = ?, elev_id = ?, updated_at = ? "
+            "WHERE id = ?",
             (markor + 1, kol["typ"], kol["moment"], gid, cid, kol["datum"],
-             kol["tid"], nu, dokument_id))
+             kol["tid"], kol["elev_id"], nu, dokument_id))
     return get_dokument(conn, dokument_id)
 
 

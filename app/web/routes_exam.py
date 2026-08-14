@@ -22,7 +22,8 @@ from pathlib import Path
 from fastapi import APIRouter, Request
 from fastapi.responses import FileResponse, JSONResponse
 
-from app import db, exam_gen, exam_latex, exam_pdf, exam_spec
+from app import (ci_profil, course_data, db, exam_gen, exam_latex, exam_pdf,
+                 exam_spec)
 from app.web import routes_planning
 from app.web.sse import sse_response
 
@@ -205,6 +206,23 @@ def create_router(base: Path, arbiter) -> APIRouter:
                                 if str(g.get("redovisning") or "").lower()
                                 in ("muntligt", "skriftligt", "poster") else "muntligt"),
             }
+        # Mottagaren (Etapp 4): ett arbetsblad kan höra till EN elev i stället
+        # för till klassen. Då skrivs det ur hennes CI-profil — «stötta» på det
+        # hon inte kan, «utmana» på det hon redan kan — och namnet står på
+        # pappret. Bara arbetsbladet: ett prov till en enskild elev är något
+        # annat och ska inte gå den här vägen av misstag.
+        # INTE byggt, med flit: en batch-rutt som skriver klassens blad och N
+        # elevblad ur EN spec. Den skulle spara ett anrop och kosta det som är
+        # hela poängen — att läraren läser igenom varje papper innan nästa
+        # skrivs. Kön ligger därför i frontenden (plan.js bladko), ett blad i
+        # taget. Bygg batchen först om läraren själv säger att genomläsningen
+        # är i vägen.
+        elev_id = body.get("elev_id")
+        elev_namn = (body.get("elev") or "").strip()
+        syfte = "utmana" if str(body.get("syfte") or "").lower() == "utmana" \
+            else "stotta"
+        if typ != "arbetsblad":
+            elev_id, elev_namn = None, ""
         referens_id = body.get("referens_exam_id")
         # Bildunderlag (Fas 4): samma uppladdningar som tavlans underlag.
         underlag_pid = body.get("underlag") or None
@@ -244,6 +262,27 @@ def create_router(base: Path, arbiter) -> APIRouter:
             # given och antalet uppgifter faller ut ur den. Ryms inte alla
             # punkter slås närliggande ihop så att TÄCKNINGEN är kvar — det är
             # skillnaden mot att korta ner listan.
+            # Elevens CI-profil in i prompten. Punkterna som VALTS vinner —
+            # läraren kan kryssa själv — men saknas ett val plockas de svaga
+            # (eller starka) ur profilen, för det är hela vitsen med att välja
+            # en mottagare.
+            riktat_block = ""
+            if elev_id and elev_namn:
+                prof = ci_profil.profil(
+                    db.ci_underlag(conn, kurs=kurs, klass=klass),
+                    elev_id=int(elev_id),
+                    kort=course_data.kod_till_kort())
+                ur_profilen = (ci_profil.starka(prof) if syfte == "utmana"
+                               else ci_profil.svaga(prof))
+                fokus = ([p for p in prof["punkter"] if p["kod"] in set(koder)]
+                         if koder else ur_profilen)
+                riktat_block = exam_gen.build_riktat(elev_namn, syfte,
+                                                     fokus or ur_profilen)
+                if not koder and ur_profilen:
+                    koder = [p["kod"] for p in ur_profilen]
+                    valda = db.content_by_kod(conn, koder, int(course_id))
+                    punkter = [f"{c['kod']} — {c['rubrik']}: {c['text']}"
+                               for c in valda] or punkter
             plan = None
             if typ == "diagnos" and valda:
                 plan = exam_spec.diagnosplan(
@@ -299,12 +338,15 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     bilder=bilder_block, utfall=utfall_block, bok=bok_block,
                     boknivaer=nivaer_block, forlaga=forlaga_block, profil=typ,
                     koder=koder, skeleton=plan["skeleton"] if plan else None,
-                    grupp=grupp,
+                    riktat=riktat_block, grupp=grupp,
                     log_cb=lambda m: emit({"type": "log", "msg": m}))
                 # Upplägget är lärarens val, inte modellens: skriv in det som
-                # valdes även om modellen råkade fylla i något annat.
+                # valdes även om modellen råkade fylla i något annat. Samma sak
+                # med mottagaren — namnet på pappret är lärarens beslut.
                 if res["exam"] is not None and grupp:
                     res["exam"]["grupp"] = grupp
+                if res["exam"] is not None and elev_namn:
+                    res["exam"]["elev"] = elev_namn
                 if res["exam"] is None:
                     return {"id": None, "exam": None,
                             "errors": res["errors"], "rounds": res["rounds"]}

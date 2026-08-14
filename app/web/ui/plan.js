@@ -171,6 +171,13 @@
       { id: 'nartid', namn: 'När skrivs diagnosen?', typ: 'nartid' }
     ],
     Arbetsblad: [
+      /* Mottagaren först: den avgör vad bladet HANDLAR om. Väljs en elev
+         skrivs bladet ur hennes CI-profil (app/ci_profil.py) i stället för ur
+         det centrala innehåll läraren kryssat för klassen. Flera mottagare ger
+         flera blad på samma lektion — ett i taget, i tur och ordning. */
+      { id: 'mottagare', namn: 'Vem får bladet?', typ: 'mottagare' },
+      { id: 'syfte', namn: 'Riktningen', typ: 'seg', val: ['Stötta', 'Utmana'],
+        bara: s => (s.elever || []).length > 0 },
       { id: 'antal', namn: 'Antal uppgifter', typ: 'antal', min: 1, max: 6 },
       { id: 'niva', namn: 'Nivå', typ: 'seg', val: ['E-nivå', 'C-nivå', 'A-nivå', 'Blandat'] },
       { id: 'facit', namn: 'Facit', typ: 'seg', val: ['Inget facit', 'Facit i bladet', 'Separat facit'] },
@@ -188,7 +195,8 @@
   const inst = {
     Tavla: { langd: 45, starttid: '', exempel: 2 },
     Prov: { nar: 'På lektionen', narDatum: '', narTid: '08:15', provminuter: 90, provtid: '90 min', antal: 6, nivamix: 'Balanserat', delprov: 'Del A + Del B', losningar: true, formelblad: true },
-    Arbetsblad: { antal: 3, niva: 'Blandat', facit: 'Facit i bladet', illustration: true },
+    Arbetsblad: { antal: 3, niva: 'Blandat', facit: 'Facit i bladet', illustration: true,
+                  klassblad: true, elever: [], syfte: 'Stötta' },
     Gruppuppgift: { grupp: 3, langd: 60, redovisning: 'Muntligt' },
     /* 60 minuter är lärarens genomsnittslektion och därmed diagnosens mått;
        75 är taket, och det är servern som håller det (exam_spec). Fälten är
@@ -281,6 +289,45 @@
      Listan cachas för sidans livstid: den ändras bara när en ny
      transkribering blir klar, och en väljare som hämtar om allt vid varje
      öppning blinkar. */
+  /* ── Klasslistan och elevens profil ───────────────────
+     Ett riktat arbetsblad (Etapp 4) behöver två saker servern äger: VILKA
+     elever klassen har, och vad var och en är svag respektive stark på. Båda
+     cachas per klass för sidans livstid — de ändras när läraren rättar ett
+     prov, inte medan hon planerar en lektion. */
+  const elevCache = new Map(), profilCache = new Map();
+  function elevlista(klass) {
+    const k = (klass || '').trim();
+    if (!k) return Promise.resolve([]);
+    if (elevCache.has(k)) return Promise.resolve(elevCache.get(k));
+    if (!serverPa()) return Promise.resolve([]);
+    return window.API.json('/api/groups')
+      .then(g => {
+        const grupp = (g || []).find(x => x.namn === k);
+        if (!grupp) return { elever: [] };
+        return window.API.json(`/api/groups/${grupp.id}/elever`)
+          .then(r => ({ ...r, gruppId: grupp.id }));
+      })
+      .then(r => {
+        const lista = (r.elever || []).filter(e => e.aktiv);
+        lista.gruppId = r.gruppId;
+        elevCache.set(k, lista);
+        return lista;
+      })
+      .catch(() => []);
+  }
+  /* Elevens svaga eller starka punkter, som korta etiketter — det är den formen
+     `vald` bär. Punkter som inte finns i den valda nivån faller bort av sig
+     själv i ritaGy(). */
+  function elevprofil(elevId, kurs) {
+    const nyckel = `${elevId}|${kurs}`;
+    if (profilCache.has(nyckel)) return Promise.resolve(profilCache.get(nyckel));
+    if (!serverPa()) return Promise.resolve(null);
+    return window.API.json(
+      `/api/elever/${elevId}/ci-profil?kurs=${encodeURIComponent(kurs || '')}`)
+      .then(r => { profilCache.set(nyckel, r); return r; })
+      .catch(() => null);
+  }
+
   let transkriptLista = null;
   const transkriptNamn = {}, transkriptLangd = {};
   function hamtaTranskript() {
@@ -295,6 +342,70 @@
       return transkriptLista;
     }).catch(() => []);
   }
+  /* Elevväljaren: samma panel som transkriptväljaren, samma gester. Bara
+     AKTIVA elever — den som slutat ska inte kunna få nästa veckas arbetsblad. */
+  function valjElev(s, efterat, narStangd) {
+    const wrap = $('.typmottagare');
+    if (!wrap || $('.valjpanel', wrap)) return;
+    const panel = document.createElement('div');
+    panel.className = 'valjpanel brett';
+    panel.setAttribute('role', 'listbox');
+    panel.setAttribute('aria-multiselectable', 'true');
+    wrap.appendChild(panel);
+    wrap.setAttribute('data-oppen', '');
+    /* Raden ritas om FÖRST när panelen stängs. Ritades den om vid varje kryss
+       försvann panelen ur DOM:en mitt i klicket — och «Riktningen» ska ändå bara
+       dyka upp när valet är gjort, inte blinka fram mellan två kryss. */
+    const stang = () => {
+      panel.remove();
+      wrap.removeAttribute('data-oppen');
+      document.removeEventListener('pointerdown', ut, true);
+      document.removeEventListener('keydown', tangent);
+      if (narStangd) narStangd();
+    };
+    const ut = e => { if (!wrap.contains(e.target)) stang(); };
+    const tangent = e => { if (e.key === 'Escape') stang(); };
+    document.addEventListener('pointerdown', ut, true);
+    document.addEventListener('keydown', tangent);
+    panel.innerHTML = '<p class="ltomsok">Läser klasslistan …</p>';
+    elevlista($('#p-klass').value).then(lista => {
+      if (!panel.isConnected) return;
+      if (!lista.length) {
+        panel.innerHTML = `<p class="ltomsok">${serverPa()
+          ? 'Ingen klasslista för klassen ännu — lägg in den när du rättar ett prov elev för elev.'
+          : 'Utan server finns ingen klasslista att välja ur.'}</p>`;
+        return;
+      }
+      const rita = () => {
+        const valda = (s.elever || []).map(e => e.id);
+        panel.innerHTML = lista.map(e => `<button class="lrad-val" type="button" role="option" data-id="${e.id}" aria-selected="${valda.includes(e.id)}">
+            <span class="lkryss">✓</span>
+            <span><span class="lvnamn"></span></span>
+          </button>`).join('')
+          + `<div class="valjfot"><button class="lank" type="button" data-inga>Rensa</button><span class="summa">${
+            valda.length ? `${valda.length} ${valda.length === 1 ? 'elev' : 'elever'} vald` : 'Bara klassen'}</span></div>`;
+        $$('.lrad-val', panel).forEach(r => {
+          const e = lista.find(x => String(x.id) === r.dataset.id);
+          $('.lvnamn', r).textContent = e ? e.namn : '';
+          r.addEventListener('click', () => {
+            const har = (s.elever || []).some(x => x.id === e.id);
+            s.elever = har ? s.elever.filter(x => x.id !== e.id)
+              : (s.elever || []).concat([{ id: e.id, namn: e.namn }]);
+            rita();
+            if (efterat) efterat();
+          });
+        });
+        const inga = $('[data-inga]', panel);
+        if (inga) inga.addEventListener('click', () => {
+          s.elever = [];
+          rita();
+          if (efterat) efterat();
+        });
+      };
+      rita();
+    });
+  }
+
   function valjTranskript(s, efterat) {
     const wrap = $('.typtranskript');
     if (!wrap || $('.valjpanel', wrap)) return;
@@ -362,6 +473,12 @@
   let antNotRef = null;
 
   function ritaTypval() {
+    /* En öppen väljare i raderna får aldrig ritas bort under handen. Raderna
+       byggs om av allt möjligt som inte har med valet att göra —
+       lektionsmaterialets observatör, klassbytet, kön — och en panel som ligger
+       i raden följer med i papperskorgen mitt i ett klick. Omritningen sker i
+       stället när panelen stängs (valjElev/valjTranskript). */
+    if ($('#typval .valjpanel')) return;
     const typ = valt('skrivtyp'), s = inst[typ];
     normalisera(s);
     const lista = (TYPVAL[typ] || []).filter(k => !k.bara || k.bara(s));
@@ -465,6 +582,10 @@
              här fältet ska bära ett stycke. */
           : k.typ === 'text'
           ? `<textarea class="field typfritext" rows="3" aria-label="${k.namn}"></textarea>`
+          /* Mottagarna: klassen och/eller enskilda elever. Varje mottagare
+             blir ett eget blad — det är därför raden är flervalig. */
+          : k.typ === 'mottagare'
+          ? '<span class="typmottagare"><span class="tkchips"></span><button class="ghost tkvalj" type="button">Lägg till elev …</button></span>'
           /* Transkriptdörren: möten ur biblioteket som pappret ska bygga på. */
           : k.typ === 'transkript'
           ? '<span class="typtranskript"><span class="tkchips"></span><button class="ghost tkvalj" type="button">Välj möte …</button></span>'
@@ -546,6 +667,10 @@
         /* Byter man nivå byter också antalet uppgifter som får en lösning — och
            det talet står i noten under raden. */
         if (k.id === 'boklosniva') ritaTypval();
+        /* Riktningen vänder på hela urvalet: «stötta» tar de svaga punkterna,
+           «utmana» de starka. Kryssen måste därför räknas om — annars skrivs ett
+           utmaningsblad om det hon inte kan. */
+        if (k.id === 'syfte') { ritaTypval(); forvaljUrProfilen(); }
       }));
       /* Två kryss på en rad — varje kryss äger sitt eget fält i `s`, så att den
          som läser upplägget längre fram (tryck.js, bladet) inte behöver veta att
@@ -711,6 +836,51 @@
          Själva behovet: «jag har transkriberat några möten, använd den
          informationen». Listan kommer ur servern (bara möten som FAKTISKT har
          text) och valet ligger i upplägget som en lista av lektions-id. */
+      if (k.typ === 'mottagare') {
+        const chips = $('.tkchips', rad), knapp = $('.tkvalj', rad);
+        const not = typnot(rad);
+        const ritaChips = () => {
+          chips.innerHTML = '';
+          /* «Hela klassen» är en bricka som alla andra och går att stänga av:
+             ett blad BARA till en elev är ett riktigt fall — hon behöver något
+             annat än de andra idag. Minst en mottagare måste stå kvar. */
+          const bricka = (namn, av, pa) => {
+            const b = document.createElement('button');
+            b.className = 'lchip';
+            b.type = 'button';
+            b.innerHTML = '<span></span><i>' + (av ? '✕' : '+') + '</i>';
+            $('span', b).textContent = namn;
+            if (!av) b.setAttribute('data-av', '');
+            b.addEventListener('click', pa);
+            return b;
+          };
+          chips.appendChild(bricka('Hela klassen', s.klassblad, () => {
+            if (s.klassblad && !(s.elever || []).length) return;
+            s.klassblad = !s.klassblad;
+            ritaChips();
+            planKoll();
+          }));
+          (s.elever || []).forEach(e => chips.appendChild(
+            bricka(e.namn, true, () => {
+              s.elever = s.elever.filter(x => x.id !== e.id);
+              if (!s.elever.length) s.klassblad = true;
+              ritaTypval();
+              planKoll();
+            })));
+          const n = (s.klassblad ? 1 : 0) + (s.elever || []).length;
+          satNot(not, '', n > 1
+            ? `${n} blad skrivs — ett i taget, i tur och ordning.`
+            : ((s.elever || []).length
+              ? `Bladet skrivs ur ${s.elever[0].namn}s profil — de punkter hon är ${String(s.syfte || 'Stötta').toLowerCase() === 'utmana' ? 'stark' : 'svag'} på.`
+              : ''));
+        };
+        ritaChips();
+        knapp.addEventListener('click', () => valjElev(s, ritaChips, () => {
+          ritaTypval();
+          planKoll();
+          forvaljUrProfilen();
+        }));
+      }
       if (k.typ === 'transkript') {
         const chips = $('.tkchips', rad), knapp = $('.tkvalj', rad);
         const not = typnot(rad);
@@ -861,6 +1031,35 @@
     punkter.forEach(p => vald.add(p.kort));
     ritaGy();
   }
+  /* Väljs en elev som mottagare kryssas HENNES punkter för — de svaga när
+     bladet ska stötta, de starka när det ska utmana. Läraren kan kryssa om;
+     det är hennes val som skickas, och servern faller tillbaka på profilen
+     bara när ingenting är valt (routes_exam). */
+  function forvaljUrProfilen(mottagare) {
+    const s = inst.Arbetsblad;
+    const elev = mottagare || (s.elever || [])[0];
+    if (valt('skrivtyp') !== 'Arbetsblad' || !elev || !elev.id) return;
+    elevprofil(elev.id, $('#p-kurs').value).then(prof => {
+      if (!prof || !(prof.punkter || []).length) return;
+      const utmana = String(s.syfte || '').toLowerCase() === 'utmana';
+      const urval = prof.punkter
+        .filter(p => p.styrka === (utmana ? 'stark' : 'svag'))
+        .slice(0, 3);
+      if (!urval.length) return;
+      vald.clear();
+      const korta = gyPunkter();
+      urval.forEach(p => {
+        const traff = korta.find(x => x.kod === p.kod);
+        if (traff) vald.add(traff.kort);
+      });
+      ritaGy();
+      planKoll();
+    });
+  }
+
+  /* Mottagaren som skrivs NU och de som väntar. `bladNu = {id: null}` är
+     klassens blad; en elev bär sitt id och sitt namn. */
+  let bladNu = null, bladko = [];
   let forraTypen = null;
   window.planKoll = () => {
     const typ = valt('skrivtyp');
@@ -1518,6 +1717,17 @@
       return r;
     };
     const i0 = utkast.inst || {};
+    /* Bladkön (Etapp 4). En körning kan ha flera mottagare — klassen och en
+       eller flera elever — och varje mottagare får sitt eget papper. Bara det
+       FÖRSTA skrivs nu; resten står kvar i kön och erbjuds när det här bladet
+       är godkänt, för läraren ska läsa igenom vart och ett innan nästa. Är kön
+       redan igång (bladNu satt av godkännandet) rörs den inte här. */
+    if (typ === 'Arbetsblad' && !bladNu) {
+      const ko = (i0.klassblad === false ? [] : [{ id: null, namn: '' }])
+        .concat((i0.elever || []).map(e => ({ id: e.id, namn: e.namn })));
+      bladNu = ko[0] || { id: null, namn: '' };
+      bladko = ko.slice(1);
+    }
     /* Källdörr 5 in i prompten: «Läser provets utfall · 4b, 7 föll» stod i
        planen men nådde aldrig servern — modellen fick provet, aldrig hur det
        gick. Id:t är den sanna vägen (servern läser sin egen rättning);
@@ -1582,7 +1792,25 @@
         return r;
       }),
     };
-    JOBB.Arbetsblad = JOBB.Prov;
+    /* Arbetsbladet delar rutt med provet men bär sin MOTTAGARE. Kön står i
+       `bladko`: det första bladet skrivs nu, resten när det här är godkänt —
+       ett papper i taget, för läraren ska läsa igenom varje. */
+    JOBB.Arbetsblad = ({ signal, log }) => window.API.strom('/api/exams/generate', {
+      kurs: utkast.kurs, klass: utkast.klass,
+      punkter: gyKoder(), punkter_text: [...vald],
+      antal: Number(i0.antal) || undefined,
+      delar: false,
+      datum: utkast.datum || '',
+      typ: 'arbetsblad',
+      ...(bladNu && bladNu.id ? {
+        elev_id: bladNu.id, elev: bladNu.namn,
+        syfte: String(i0.syfte || 'Stötta').toLowerCase() === 'utmana' ? 'utmana' : 'stotta',
+      } : {}),
+      ...utfall(), ...bokval(), ...forlagan(),
+    }, { signal, log }).then(kravDone).then(r => {
+      if (!r.exam) throw new Error('Arbetsbladet gick inte att skriva den här gången. Försök igen.');
+      return r;
+    });
     /* Diagnosen skickar INGET antal. Servern räknar det ur de valda punkterna
        och lektionens längd (exam_spec.diagnosplan) och slår ihop närliggande
        punkter om de inte ryms — täckningen är kravet, inte antalet. */
@@ -1678,6 +1906,11 @@
           utkast.summor = res.summor || null;
           utkast.provFel = res.errors || [];
           if (res.exam.titel) utkast.titel = res.exam.titel;
+          /* Mottagaren följer med pappret: namnet står på arket och `elevId`
+             är det klassvyn skiljer två blad på samma lektion åt med
+             (dokument.elev_id, v18). */
+          utkast.elev = res.exam.elev || '';
+          utkast.elevId = (bladNu && bladNu.id) || null;
           /* Nyckelfrågan står i instruktionsbandet — samma text på skärmen som
              i PDF:en, annars lovar pappret och skärmen gruppen olika saker. */
           utkast.nyckelfraga = res.exam.nyckelfraga || null;
@@ -1755,6 +1988,18 @@
     foljdKvar = lagen.length > 1 && v && v.typ === lagen[0] ? lagen[1] : null;
     rad.hidden = !foljdKvar;
     if (foljdKvar) $('#foljetext').textContent = `${Best(foljdKvar)} till ${best(v.typ)} väntar — skrivs när ${best(v.typ)} är godkänd och ligger i Sparat`;
+  }
+
+  /* Bladkön säger sitt i planeringen, inte i dokumentpanelen: den senare
+     stängs av godkännandet, och det är just då kön blir aktuell. */
+  function visaBladko(mottagare) {
+    const rad = $('#bladkorad');
+    if (!rad) return;
+    rad.hidden = !mottagare;
+    if (!mottagare) return;
+    $('#bladkotext').textContent = mottagare.id
+      ? `Arbetsblad till ${mottagare.namn} väntar — samma lektion, hennes egna punkter`
+      : 'Arbetsblad till hela klassen väntar — samma lektion';
   }
 
   /* Notisen: ett stopp med två vägar, ingen kryssruta i hörnet. */
@@ -2270,6 +2515,10 @@
     }
     return null;
   }
+  $('#bladkogor') && $('#bladkogor').addEventListener('click', () => {
+    visaBladko(null);
+    $('#skriv').click();
+  });
   $('#angra').addEventListener('click', angra);
   $('#gorom').addEventListener('click', gorOm);
   $('#g-angra') && $('#g-angra').addEventListener('click', angra);
@@ -2565,9 +2814,11 @@
      Kortet är en förhandsvisning — klick någonstans på det öppnar pappret i full storlek.
      PDF skriver ut på plats (knappen byter läge, inget nytt fönster). Radera frågar i
      kortet, inte i en modal, och går att ångra från toasten. */
+  /* Ett riktat arbetsblad bär elevens namn i sitt eget namn — annars ligger två
+     blad på samma lektion som två identiska rader i högen (Etapp 4). */
   const dokNamn = v => !v || !v.typ ? 'Dokumentet' : v.losningsblad
     ? `${v.typ === 'Prov' ? 'Lösningsförslag' : 'Facit'} — ${versal(v.moment)}`
-    : `${v.variant === 'Omprov' ? 'Omprov' : v.typ} — ${versal(v.moment)}`;
+    : `${v.variant === 'Omprov' ? 'Omprov' : v.typ}${v.elev ? ' · ' + v.elev : ''} — ${versal(v.moment)}`;
 
   /* Figurerna kompileras efter att pappret ligger i DOM:en. Varm kompilering tar
      4–7 ms, så rutan står streckad i ett ögonblick och fylls sedan — sättningen
@@ -2730,6 +2981,9 @@
   $('#godkann').addEventListener('click', () => {
     if (nu < 0) return;
     const v = versioner[nu];
+    /* Momentet töms längre ner (nästa papper är en ny fråga) — bladkön behöver
+       det kvar, för nästa blad handlar om SAMMA lektion. */
+    const momentFore = moment.value;
     const godkant = JSON.parse(JSON.stringify(v));
     delete godkant.id;
     sparat.push(godkant);
@@ -2839,6 +3093,22 @@
     /* Förlagan är det GODKÄNDA pappret självt, inte en kopia av versionen: det
        är på det raden om en väntande följeslagare ska stå, och det är det som
        ligger i Sparat efter en omladdning. */
+    /* Bladkön (Etapp 4): nästa mottagare på samma lektion. Momentet, källorna
+       och upplägget står kvar — bara mottagaren byts. Bladet skrivs inte av sig
+       självt: läraren ska läsa igenom vart och ett, och knappen i beskedet är
+       samma gest som att trycka Skriv. */
+    if (v.typ === 'Arbetsblad' && bladko.length) {
+      const nasta = bladko.shift();
+      bladNu = nasta;
+      moment.value = momentFore;
+      ritaTypval();
+      planKoll();
+      if (nasta.id) forvaljUrProfilen(nasta);
+      visaBladko(nasta);
+      return;
+    }
+    bladNu = null;
+    visaBladko(null);
     const par = foljdKvar ? { typ: foljdKvar, forlaga: godkant } : null;
     foljdKvar = null;
     $('#foljerad').hidden = true;
