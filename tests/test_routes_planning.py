@@ -301,6 +301,62 @@ def test_refine_updates_board(llm_ready, monkeypatch):
     assert captured["instruction"] == "byt exempel 2"
 
 
+# ------------------------------------------------------------ klockslaget --
+
+def _tid(board: dict) -> str:
+    return board["boards"][0]["sections"][0].get("text", "")
+
+
+def _planering_med_tid(llm_ready, monkeypatch, tid="09:10") -> str:
+    _stub_generate(monkeypatch,
+                   {"board": _valid_board(), "errors": [], "rounds": 1})
+    r = llm_ready.post("/api/planning/generate",
+                       json={"moment": "Randvinkelsatsen", "starttid": tid})
+    return _done(r)["id"]
+
+
+def test_starttiden_hamnar_forst_pa_vanstertavlan(llm_ready, monkeypatch):
+    """`starttid` fanns i begäran och i planeringens state men nådde aldrig
+    tavlan. Läraren vill ha klockslaget uppe till vänster — det sätts av
+    systemet, inte av modellen."""
+    _stub_generate(monkeypatch,
+                   {"board": _valid_board(), "errors": [], "rounds": 1})
+    r = llm_ready.post("/api/planning/generate",
+                       json={"moment": "Randvinkelsatsen", "starttid": "09:10"})
+    board = _done(r)["board"]
+    assert _tid(board) == "09:10"
+    assert board["boards"][0]["sections"][1]["kind"] == "heading"
+
+
+def test_utan_starttid_ingen_tid_pa_tavlan(llm_ready, monkeypatch):
+    _stub_generate(monkeypatch,
+                   {"board": _valid_board(), "errors": [], "rounds": 1})
+    r = llm_ready.post("/api/planning/generate", json={"moment": "x"})
+    assert _done(r)["board"]["boards"][0]["sections"][0]["kind"] == "heading"
+
+
+def test_tiden_overlever_en_iteration(llm_ready, monkeypatch):
+    """refine skriver om HELA tavlan och kan tappa tidssektionen — den läggs
+    på igen efteråt i stället för att bevakas."""
+    pid = _planering_med_tid(llm_ready, monkeypatch)
+    monkeypatch.setattr(lesson_board, "refine_board",
+                        lambda board, instruction, **kw: {
+                            "board": _valid_board(), "errors": [], "rounds": 1})
+    r = llm_ready.post(f"/api/planning/{pid}/refine",
+                       json={"message": "byt exempel 2"})
+    assert _tid(_done(r)["board"]) == "09:10"
+
+
+def test_tiden_overlever_en_reparation(llm_ready, monkeypatch):
+    pid = _planering_med_tid(llm_ready, monkeypatch)
+    monkeypatch.setattr(lesson_board, "repair_board",
+                        lambda board, warnings, **kw: {
+                            "board": _valid_board(), "errors": [], "rounds": 2})
+    r = llm_ready.post(f"/api/planning/{pid}/render-report",
+                       json={"warnings": ["[WB] vanster: element-överlapp"]})
+    assert _tid(_done(r)["board"]) == "09:10"
+
+
 # -------------------------------------------------------- Fas 1: approve --
 
 def test_approve_writes_board_json_under_base(llm_ready, monkeypatch):

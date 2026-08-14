@@ -484,14 +484,18 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     utfall=utfall_txt, bok=bok_txt, forlaga=forlaga_txt,
                     log_cb=lambda m: emit({"type": "log", "msg": m}),
                     token_cb=lambda t: emit({"type": "token", "text": t}))
+                # Klockslaget uppe till vänster är lärarens, inte modellens:
+                # det sätts deterministiskt EFTER valideringen, ur den
+                # starttid som redan följer med planeringen.
+                board = lesson_board.satt_tid(res["board"], starttid)
                 pid = uuid.uuid4().hex[:12]
                 spara_planering(pid, {
-                    "board": res["board"], "rounds": res["rounds"],
+                    "board": board, "rounds": res["rounds"],
                     "moment": moment, "group": group, "course": course,
                     "group_id": group_id, "course_id": course_id,
                     "datum": datum, "starttid": starttid,
                 })
-                return {"id": pid, "board": res["board"],
+                return {"id": pid, "board": board,
                         "errors": res["errors"], "rounds": res["rounds"]}
             finally:
                 arbiter.release_gpu(gpu)
@@ -528,7 +532,11 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     rounds_used=st["rounds"],
                     log_cb=lambda m: emit({"type": "log", "msg": m}),
                     token_cb=lambda t: emit({"type": "token", "text": t}))
-                st["board"] = res["board"] or st["board"]
+                # Modellen har skrivit om hela tavlan och kan ha tappat
+                # tidssektionen — injektionen är idempotent, så den läggs på
+                # igen i stället för att bevakas.
+                st["board"] = lesson_board.satt_tid(res["board"] or st["board"],
+                                                    st.get("starttid"))
                 st["rounds"] = res["rounds"]
                 return {"id": pid, "board": st["board"], "errors": res["errors"],
                         "rounds": res["rounds"], "repaired": True}
@@ -564,7 +572,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     log_cb=lambda m: emit({"type": "log", "msg": m}),
                     token_cb=lambda t: emit({"type": "token", "text": t}))
                 if res["board"] is not None:
-                    st["board"] = res["board"]
+                    st["board"] = lesson_board.satt_tid(res["board"],
+                                                        st.get("starttid"))
                 # Varje användariteration får en färsk reparationsbudget.
                 st["rounds"] = res["rounds"]
                 return {"id": pid, "board": st["board"], "errors": res["errors"],
