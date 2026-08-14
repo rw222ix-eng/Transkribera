@@ -9,9 +9,12 @@ kan inte uttryckas i JSON och rå JS från en LLM ska aldrig eval:as. WB-JSON v1
   (``app/web/static/whiteboard/expr.js``). Den här modulen speglar parserns
   grammatik för serversidig syntaxvalidering (:func:`validate_expr`).
 * Nästling är begränsad: ``callout``/``row``/``col`` får bara innehålla
-  "löv"-sektioner (text/math/list/stack/divider/spacer). Det håller
-  json-schemat fritt från rekursion — llama-servers grammatiktvång får en
-  ändlig grammatik — och begränsar samtidigt LLM:ens felyta.
+  "löv"-sektioner (text/math/list/stack/divider/spacer + figurerna
+  graph/shape), och ``row`` dessutom ``col``. Det håller json-schemat fritt
+  från rekursion — llama-servers grammatiktvång får en ändlig grammatik — och
+  begränsar samtidigt LLM:ens felyta. Figurerna släpptes in i behållarna när
+  läraren sa att tavlan inte utnyttjade bredden: en graf till vänster och
+  formlerna till höger om den kräver en ``row`` som får bära en ``graph``.
 
 Tre lager:
 
@@ -161,40 +164,6 @@ class ShapeSection(_SectionBase):
     labels: ShapeLabels | None = None
 
 
-# Löv-sektioner som får ligga inuti callout/row/col (ingen rekursion —
-# json-schemat förblir ändligt för grammatiktvånget).
-LeafSection = Annotated[
-    Union[TextSection, MathSection, ListSection, StackSection,
-          DividerSection, SpacerSection],
-    Field(discriminator="kind"),
-]
-
-
-class CalloutSection(_SectionBase):
-    kind: Literal["callout"]
-    children: list[LeafSection]
-    padding: float | None = None
-    fill: bool | None = None
-    fillOpacity: float | None = None
-
-
-class RowSection(_SectionBase):
-    kind: Literal["row"]
-    children: list[LeafSection]
-    gap: float | None = None
-    justify: Literal["flex-start", "center", "flex-end", "space-between"] | None = None
-    wrap: bool | None = None
-    width: float | None = None
-
-
-class ColSection(_SectionBase):
-    kind: Literal["col"]
-    children: list[LeafSection]
-    gap: float | None = None
-    flex: str | None = None
-    width: float | None = None
-
-
 # ------------------------------------------------------------------- graf --
 
 class PlotSpec(_Model):
@@ -315,6 +284,60 @@ class GraphSection(_SectionBase):
     points: list[PointSpec] | None = None
     texts: list[GraphTextSpec] | None = None
     ticks: list[TickSpec] | None = None
+
+
+# --------------------------------------------------------------- behållare --
+# Definieras EFTER graferna: en behållare får bära en figur (se modulens
+# docstring), och Pydantic behöver klassen innan den refereras.
+
+# Löv-sektioner som får ligga inuti callout/row/col (ingen rekursion —
+# json-schemat förblir ändligt för grammatiktvånget).
+# `underline` är med men INTE `heading`: motorn ritar en headings underline i
+# sidflödet (layoutFlow), inte i renderSection, så en heading inne i en
+# behållare hade tappat sitt streck utan att någon märkte det. Understrykningen
+# som egen sektion fungerar överallt — och det är den läraren gör för hand.
+LeafSection = Annotated[
+    Union[TextSection, MathSection, ListSection, StackSection,
+          DividerSection, UnderlineSection, SpacerSection, GraphSection,
+          ShapeSection],
+    Field(discriminator="kind"),
+]
+
+
+class CalloutSection(_SectionBase):
+    kind: Literal["callout"]
+    children: list[LeafSection]
+    padding: float | None = None
+    fill: bool | None = None
+    fillOpacity: float | None = None
+
+
+class ColSection(_SectionBase):
+    kind: Literal["col"]
+    children: list[LeafSection]
+    gap: float | None = None
+    flex: str | None = None
+    width: float | None = None
+
+
+# En row får bära en col — och bara där. Det är EN nivå djupare än löven och
+# ger mönstret läraren bad om: figur till vänster, en spalt med formler till
+# höger. Djupare än så går inte v1: schemat måste förbli ändligt.
+RowChild = Annotated[
+    Union[TextSection, MathSection, ListSection, StackSection,
+          DividerSection, UnderlineSection, SpacerSection, GraphSection,
+          ShapeSection, ColSection],
+    Field(discriminator="kind"),
+]
+
+
+class RowSection(_SectionBase):
+    kind: Literal["row"]
+    children: list[RowChild]
+    gap: float | None = None
+    justify: Literal["flex-start", "center", "flex-end", "space-between"] | None = None
+    wrap: bool | None = None
+    width: float | None = None
 
 
 Section = Annotated[
@@ -585,10 +608,19 @@ def _walk_strings(value, path: str, out: list[dict], key: str = "") -> None:
 
 
 def _iter_graphs(sections: list, width: float, path: str):
-    """(graph, kolumnbredd, path) för alla grafer i ett sektionsflöde."""
+    """(graph, tillgänglig bredd, path) för alla grafer i ett sektionsflöde.
+
+    Går ned i callout/row/col: sedan figurerna får ligga i en row (figur till
+    vänster, formler till höger) hade en graf inuti en behållare annars sluppit
+    ALLA grafregler — bredd, cirkelaspekt, interior, uttryckssyntax. Bredden
+    som skickas med är flödets, alltså tilltagen för en graf som delar raden
+    med syskon; den fångar den grovt för breda grafen, inte den nätta."""
     for si, sec in enumerate(sections or []):
         if isinstance(sec, GraphSection):
             yield sec, width, f"{path}[{si}]"
+        elif isinstance(sec, (CalloutSection, RowSection, ColSection)):
+            yield from _iter_graphs(sec.children, width,
+                                    f"{path}[{si}].children")
 
 
 def _check_text_lengths(sections: list, path: str, errors: list[dict]) -> None:
@@ -611,6 +643,27 @@ def _check_text_lengths(sections: list, path: str, errors: list[dict]) -> None:
                                        f"(max ~{_MAX_ITEM_CHARS})."))
         elif isinstance(sec, (CalloutSection, RowSection, ColSection)):
             _check_text_lengths(sec.children, f"{spath}.children", errors)
+
+
+def _check_rutor(sections: list, path: str, errors: list[dict]) -> None:
+    """Inringande rutor (callout) är förbjudna på lektionstavlan.
+
+    Lärarens dom när hon såg den första skarpa tavlan: «alla de här blå och
+    röda rutorna, inringande liksom — det ser ganska fult ut, det gör jag inte
+    på tavlan själv. Jag skriver bara tydligare rubriker, kanske i blått, och
+    understrykningar.» Kravet står i prompten, men prompten driver — regeln
+    här fäller ritningen deterministiskt och kostar på sin höjd en runda.
+    Formen finns kvar i schemat så att äldre sparade tavlor fortfarande går
+    att läsa in; det är GENERERINGEN som ska sluta rita rutor."""
+    for si, sec in enumerate(sections or []):
+        if isinstance(sec, CalloutSection):
+            errors.append(_err(f"{path}[{si}]", "ruta",
+                               "callout (inringande ruta) ritar läraren aldrig "
+                               "— skriv i stället en kort rubrik med underline "
+                               "(gärna blå, röd för 'Vanligt fel:') och låt "
+                               "innehållet stå fritt under den."))
+        elif isinstance(sec, (RowSection, ColSection)):
+            _check_rutor(sec.children, f"{path}[{si}].children", errors)
 
 
 def _text_volym(sections: list) -> int:
@@ -709,6 +762,7 @@ def validate_rules(doc: BoardDoc) -> list[dict]:
         volym = 0
         for sections, width, path in flows:
             _check_text_lengths(sections, path, errors)
+            _check_rutor(sections, path, errors)
             volym += _text_volym(sections)
             for g, col_w, gpath in _iter_graphs(sections, width, path):
                 _validate_graph(g, col_w, gpath, errors)

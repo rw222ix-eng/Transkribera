@@ -349,15 +349,44 @@ def test_normalize_pure_inline_math_becomes_math_section():
     assert sec["kind"] == "math" and sec["latex"] == "x^2 + 1"
 
 
-def test_normalize_inline_math_in_callout_stays_leaf():
-    """Inuti callout är bara löv tillåtna — delarna läggs plant, ingen row."""
-    callout = {"kind": "callout", "children": [
+def test_normalize_inline_math_i_behallare_stannar_som_lov():
+    """Inuti en behållare är bara löv tillåtna — delarna läggs plant, ingen row.
+    (Behållaren är en col: callout är förbjuden på tavlan, se rutregeln.)"""
+    col = {"kind": "col", "children": [
         {"kind": "text", "text": "Svar: $\\frac{1}{2}$."}]}
-    norm = ws.normalize_board(_doc(_board(sections=[callout])))
+    norm = ws.normalize_board(_doc(_board(sections=[col])))
     children = norm["boards"][0]["sections"][0]["children"]
     assert [c["kind"] for c in children] == ["text", "math"]
     doc, errors = ws.validate_board_json(norm)
     assert errors == []
+
+
+def test_rutor_falls_deterministiskt():
+    """Lärarens dom: «alla de här blå och röda rutorna, inringande liksom — det
+    gör jag inte på tavlan själv.» Prompten säger det, men prompten driver;
+    regeln fäller."""
+    callout = {"kind": "callout", "children": [
+        {"kind": "text", "text": "Svar: 12 cm"}]}
+    _doc_, errors = ws.validate_board_json(_doc(_board(sections=[callout])))
+    assert [e["code"] for e in errors] == ["ruta"]
+    # …även nedgrävd i en row/col, där den annars sluppit undan.
+    djup = {"kind": "row", "children": [
+        {"kind": "col", "children": [{"kind": "text", "text": "x"}]}]}
+    assert ws.validate_board_json(_doc(_board(sections=[djup])))[1] == []
+
+
+def test_figur_i_row_valideras_som_en_figur():
+    """Figurerna får ligga i en row (figur till vänster, formler till höger).
+    Då måste grafreglerna gälla DÄR INNE också — annars blir raden en dörr
+    förbi bredd, cirkelaspekt och uttryckssyntax."""
+    graf = {"kind": "graph", "width": 2000, "height": 300,
+            "xRange": [0, 5], "yRange": [0, 5],
+            "plots": [{"expr": "x^^2"}]}
+    rad = {"kind": "row", "children": [
+        graf, {"kind": "col", "children": [{"kind": "math", "latex": "k = 2"}]}]}
+    _doc_, errors = ws.validate_board_json(_doc(_board(sections=[rad])))
+    koder = {e["code"] for e in errors}
+    assert "grafbredd" in koder and "uttrycksfel" in koder
 
 
 def test_normalize_leaves_original_untouched():

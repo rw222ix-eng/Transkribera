@@ -66,6 +66,18 @@ def _vanstersektioner(doc: dict) -> list[dict]:
     return doc["boards"][0]["sections"]
 
 
+def _alla_sektioner(doc: dict):
+    """Varje sektion i dokumentet, ned genom row/col/callout."""
+    def ned(flode):
+        for sek in flode or []:
+            yield sek
+            yield from ned(sek.get("children"))
+    for b in doc["boards"]:
+        yield from ned(b.get("sections") or [])
+        for kol in b.get("columns") or []:
+            yield from ned(kol.get("sections") or [])
+
+
 def test_alla_few_shots_foljer_dramaturgin():
     """Leonard-principen: tavlan ska gå att gå igenom uppifrån och ned som en
     berättelse. Shotarna ÄR den ordningen — prompttext utan few-shot-stöd följs
@@ -73,25 +85,52 @@ def test_alla_few_shots_foljer_dramaturgin():
     for uppdrag, doc in lb.FEW_SHOTS:
         s = _vanstersektioner(doc)
         arter = [sek["kind"] for sek in s]
-        assert arter[:5] == ["heading", "list", "divider", "callout", "text"], \
+        assert arter == ["heading", "list", "divider", "heading", "text", "row"], \
             f"{uppdrag}: {arter}"
-        # Agendan: 3–4 korta punkter i vardaglig svenska.
+        # Rubriken och agendan står mitt på tavlan — så skriver läraren dem.
+        assert s[0].get("align") == "center" and s[1].get("align") == "center", uppdrag
+        # Agendan: 3–4 korta punkter i vardaglig svenska, och boksidorna.
         assert 3 <= len(s[1]["items"]) <= 4, uppdrag
         assert all(len(p.split()) <= 5 for p in s[1]["items"]), uppdrag
-        # Öppningsfrågan är en fråga till klassen, inte en definition.
-        assert s[3]["children"][0]["text"].endswith("?"), uppdrag
+        assert any("boken s." in p for p in s[1]["items"]), uppdrag
+        # Öppningsfrågan är en fråga till klassen, inte en definition — och en
+        # blå rubrik, inte en ruta.
+        assert s[3]["text"].endswith("?") and s[3]["color"] == "blue", uppdrag
         # Högst EN mening vardagsspråk innan matematiken tar över.
         assert arter.count("text") == 1, uppdrag
-        # Figuren (eller den generiska uppställningen) FÖRE första formeln.
-        figur = min(i for i, k in enumerate(arter)
-                    if k in ("shape", "graph") or (k == "list" and i > 1))
-        assert figur < arter.index("math"), uppdrag
-        # Och vanligt fel-callouten sist.
-        sista = s[-1]
-        assert sista["kind"] == "callout" and sista["color"] == "red", uppdrag
-        assert sista["children"][0]["text"].startswith("Vanligt fel:"), uppdrag
+        # Raden sist: figuren (eller den generiska uppställningen) till vänster,
+        # formlerna i en col till höger — annars blir tavlan en smal remsa.
+        rad = s[-1]["children"]
+        assert len(rad) == 2 and rad[1]["kind"] == "col", uppdrag
+        assert rad[0]["kind"] in ("shape", "graph", "col"), uppdrag
+        spalt = [c["kind"] for c in rad[1]["children"]]
+        assert spalt[0] == "math", uppdrag
+        # Vanligt fel sist i spalten: röd rubrik + understrykning, ingen ruta.
+        rubrik = next(c for c in rad[1]["children"]
+                      if c.get("text", "").startswith("Vanligt fel:"))
+        i = rad[1]["children"].index(rubrik)
+        assert rubrik["color"] == "red" and rubrik["kind"] == "text", uppdrag
+        assert rad[1]["children"][i + 1]["kind"] == "underline", uppdrag
         # Tiden lägger systemet dit (satt_tid) — aldrig modellen.
         assert not any(lb._TID_RE.match(sek.get("text", "")) for sek in s), uppdrag
+
+
+def test_ingen_few_shot_ritar_rutor():
+    """«Alla de här blå och röda rutorna, inringande liksom — det ser ganska
+    fult ut. Det gör jag inte på tavlan själv.» Shotarna lär ut det de visar,
+    så en enda kvarglömd callout hade lärt ut rutan igen."""
+    for uppdrag, doc in lb.FEW_SHOTS:
+        assert not [s for s in _alla_sektioner(doc) if s["kind"] == "callout"], \
+            uppdrag
+
+
+def test_few_shotarna_haller_exempeltaket():
+    """«Ett enkelt exempel, eller flera enkla — max tre.» Fler än så är för
+    mycket att hinna med, och shotarna får inte visa något annat."""
+    for uppdrag, doc in lb.FEW_SHOTS:
+        rubriker = [s.get("text", "") for s in _alla_sektioner(doc)
+                    if s["kind"] == "heading" and s.get("text", "").startswith("Exempel")]
+        assert len(rubriker) <= 3, (uppdrag, rubriker)
 
 
 def test_few_shotarna_haller_textbudgeten():
@@ -122,14 +161,36 @@ def test_build_prompt_contains_conventions_and_task():
 
 def test_prompten_bar_dramaturgin():
     """Kraven ur Leonards genomgång: agenda, streck, öppningsfråga, figur före
-    formel — och att modellen INTE ska skriva klockslaget."""
+    formel — och att modellen INTE ska skriva lektionstiden."""
     p = lb.build_prompt("Ma2c", "TE24", "randvinkelsatsen")
     assert "Dramaturgi" in p
     assert "Agenda" in p and "divider-sektion" in p
     assert "Öppningsfrågan" in p
-    assert "EFTER figuren, aldrig före" in p
-    assert "Skriv INTE något klockslag" in p
+    assert "EFTER figuren (till höger om den), aldrig före" in p
+    assert "Skriv INTE någon lektionstid" in p
     assert "Fallgalleri" in p
+
+
+def test_prompten_forbjuder_rutor_och_kraver_bredden():
+    """Lärarens två invändningar mot den första skarpa tavlan: rutorna, och
+    att tavlan stod i en smal remsa med tomt utrymme till höger."""
+    p = lb.build_prompt("Ma1b", "9A", "pythagoras sats")
+    assert "Rita ALDRIG rutor" in p
+    assert "callout-sektioner är förbjudna" in p
+    assert "SIDA VID SIDA i en row" in p
+    assert "Arbetar i boken s." in p          # agendan bär boksidorna
+
+
+def test_prompten_bar_exempelkraven():
+    """«Ett enkelt exempel — max tre — med bra siffror, som speglar bokens
+    uppgifter, och där man lätt kan visa ett vanligt fel. Men egna exempel.»"""
+    p = lb.build_prompt("Ma1b", "9A", "pythagoras sats")
+    assert "1–3 exempel, aldrig fler" in p
+    assert "HELTAL" in p
+    assert "TYP och NIVÅ" in p
+    assert "skriv ALLTID egna uppgifter" in p
+    assert "det felaktiga ledet i rött bredvid det rätta" in p
+    assert "Väg 1" in p and "Väg 2" in p
 
 
 def test_build_prompt_bar_fallgalleriet():
@@ -185,7 +246,7 @@ def test_repair_prompt_lists_problems():
 # ---------------------------------------------------------------- satt_tid --
 
 def test_tiden_laggs_forst_pa_vanstertavlan():
-    """Läraren vill ha klockslaget litet uppe till vänster. Det sätts
+    """Läraren vill ha lektionstiden litet uppe till vänster. Den sätts
     deterministiskt — och tavlan måste fortfarande validera."""
     ut = lb.satt_tid(_valid_doc(), "08:15")
     forst = ut["boards"][0]["sections"][0]
@@ -195,6 +256,19 @@ def test_tiden_laggs_forst_pa_vanstertavlan():
     assert parsed is not None and fel == []
     # Högertavlan rörs inte.
     assert ut["boards"][1] == _valid_doc()["boards"][1]
+
+
+def test_hela_passet_star_pa_tavlan():
+    """«Det ska stå starttid och sen bindestreck sluttid.» — och spannet ska
+    kunna bytas ut lika idempotent som ett ensamt klockslag."""
+    ut = lb.satt_tid(_valid_doc(), "09:10", "10:20")
+    assert ut["boards"][0]["sections"][0]["text"] == "09:10–10:20"
+    assert ws.validate_board_json(ut)[1] == []
+    igen = lb.satt_tid(ut, "09:10", "10:20")
+    assert [s.get("text") for s in igen["boards"][0]["sections"][:2]] \
+        == ["09:10–10:20", "Pythagoras sats"]
+    # Utan sluttid blir det bara starten — aldrig ett gissat klockslag.
+    assert lb.satt_tid(ut, "09:10")["boards"][0]["sections"][0]["text"] == "09:10"
 
 
 def test_tiden_ar_idempotent():

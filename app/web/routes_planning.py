@@ -317,6 +317,54 @@ def create_router(base: Path, arbiter) -> APIRouter:
         except Exception:
             return ""
 
+    def _sluttid(body: dict, group: str, datum: str | None,
+                 starttid: str | None) -> str | None:
+        """Lektionens sluttid — tavlan ska bära hela passet, inte bara starten.
+
+        Frontenden skickar bara starten (plan.js delar schemats "09:05–10:20"
+        på bindestrecket), men veckoschemat ligger här: samma rad som gav
+        starttiden bär också sluttiden. Ingen träff → tavlan får bara starten,
+        aldrig ett gissat klockslag."""
+        uttalad = (body.get("sluttid") or "").strip()
+        if uttalad:
+            return uttalad
+        if not starttid:
+            return None
+
+        def delar(tid: str) -> tuple[str, str]:
+            bitar = re.split(r"[–—-]", tid or "", maxsplit=1)
+            return bitar[0].strip(), (bitar[1].strip() if len(bitar) > 1 else "")
+
+        start = starttid.strip().replace(".", ":")
+        try:
+            conn = db.connect(db_file)
+            try:
+                rader = db.list_schema(conn)
+            finally:
+                conn.close()
+        except Exception:
+            return None
+        kandidater = []
+        for r in rader:
+            s, e = delar(r.get("tid") or "")
+            if e and s.replace(".", ":") == start:
+                kandidater.append((r, e))
+        if not kandidater:
+            return None
+        # Samma klockslag kan finnas på flera dagar och för flera klasser —
+        # smalna av med det vi vet, men lita på klockslaget i sista hand.
+        if datum:
+            try:
+                dag = datetime.strptime(datum, "%Y-%m-%d").isoweekday()
+                traff = [k for k in kandidater if k[0].get("dag") == dag]
+                kandidater = traff or kandidater
+            except ValueError:
+                pass
+        if group:
+            traff = [k for k in kandidater if (k[0].get("klass") or "") == group]
+            kandidater = traff or kandidater
+        return kandidater[0][1].replace(".", ":")
+
     def _model_name() -> str:
         # Kosmetiskt sedan Claude Code tog över: det finns ingen modell att
         # namnge (samma mönster som /api/lessons/{id}/extract i server.py).
@@ -457,6 +505,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
         datum = (body.get("datum") or "").strip() or None
         starttid = (body.get("starttid") or "").strip() or None
         group, course = _names(group_id, course_id)
+        sluttid = _sluttid(body, group, datum, starttid)
         memory = _memory(group_id, course_id)
         underlag_txt = _underlag_text(body.get("underlag"))
         # Källdörr 5: tavlan ska ta om det klassen föll på, inte gå igenom
@@ -484,16 +533,16 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     utfall=utfall_txt, bok=bok_txt, forlaga=forlaga_txt,
                     log_cb=lambda m: emit({"type": "log", "msg": m}),
                     token_cb=lambda t: emit({"type": "token", "text": t}))
-                # Klockslaget uppe till vänster är lärarens, inte modellens:
-                # det sätts deterministiskt EFTER valideringen, ur den
-                # starttid som redan följer med planeringen.
-                board = lesson_board.satt_tid(res["board"], starttid)
+                # Lektionstiden uppe till vänster är lärarens, inte modellens:
+                # den sätts deterministiskt EFTER valideringen, ur den
+                # starttid som redan följer med planeringen + schemats sluttid.
+                board = lesson_board.satt_tid(res["board"], starttid, sluttid)
                 pid = uuid.uuid4().hex[:12]
                 spara_planering(pid, {
                     "board": board, "rounds": res["rounds"],
                     "moment": moment, "group": group, "course": course,
                     "group_id": group_id, "course_id": course_id,
-                    "datum": datum, "starttid": starttid,
+                    "datum": datum, "starttid": starttid, "sluttid": sluttid,
                 })
                 return {"id": pid, "board": board,
                         "errors": res["errors"], "rounds": res["rounds"]}
@@ -536,7 +585,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 # tidssektionen — injektionen är idempotent, så den läggs på
                 # igen i stället för att bevakas.
                 st["board"] = lesson_board.satt_tid(res["board"] or st["board"],
-                                                    st.get("starttid"))
+                                                    st.get("starttid"),
+                                                    st.get("sluttid"))
                 st["rounds"] = res["rounds"]
                 return {"id": pid, "board": st["board"], "errors": res["errors"],
                         "rounds": res["rounds"], "repaired": True}
@@ -573,7 +623,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     token_cb=lambda t: emit({"type": "token", "text": t}))
                 if res["board"] is not None:
                     st["board"] = lesson_board.satt_tid(res["board"],
-                                                        st.get("starttid"))
+                                                        st.get("starttid"),
+                                                        st.get("sluttid"))
                 # Varje användariteration får en färsk reparationsbudget.
                 st["rounds"] = res["rounds"]
                 return {"id": pid, "board": st["board"], "errors": res["errors"],

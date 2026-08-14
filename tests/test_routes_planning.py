@@ -335,6 +335,42 @@ def test_utan_starttid_ingen_tid_pa_tavlan(llm_ready, monkeypatch):
     assert _done(r)["board"]["boards"][0]["sections"][0]["kind"] == "heading"
 
 
+def test_sluttiden_hamtas_ur_veckoschemat(llm_ready, monkeypatch):
+    """Frontenden skickar bara starten (plan.js delar schemats "09:05–10:20" på
+    bindestrecket) — men läraren vill ha hela passet på tavlan, och sluttiden
+    står på samma schemarad."""
+    llm_ready.put("/api/schema", json={"schema": [
+        {"dag": 2, "tid": "09:10–10:20", "klass": "NA25",
+         "kurs": "Matematik, nivå 2b", "sal": "P807"},
+        {"dag": 3, "tid": "09:10–09:55", "klass": "TE24", "kurs": "Ma1c"},
+    ]})
+    _stub_generate(monkeypatch,
+                   {"board": _valid_board(), "errors": [], "rounds": 1})
+    r = llm_ready.post("/api/planning/generate",
+                       json={"moment": "Lutning", "klass": "NA25",
+                             "datum": "2026-09-01", "starttid": "09:10"})
+    assert _tid(_done(r)["board"]) == "09:10–10:20"
+
+
+def test_okant_klockslag_ger_bara_starttiden(llm_ready, monkeypatch):
+    """Ingen schemarad matchar → tavlan får starten och inget gissat slut."""
+    _stub_generate(monkeypatch,
+                   {"board": _valid_board(), "errors": [], "rounds": 1})
+    r = llm_ready.post("/api/planning/generate",
+                       json={"moment": "Lutning", "starttid": "07:45"})
+    assert _tid(_done(r)["board"]) == "07:45"
+
+
+def test_sluttid_i_begaran_vinner(llm_ready, monkeypatch):
+    """Skickar frontenden en sluttid ska den gälla — schemat är fallbacken."""
+    _stub_generate(monkeypatch,
+                   {"board": _valid_board(), "errors": [], "rounds": 1})
+    r = llm_ready.post("/api/planning/generate",
+                       json={"moment": "x", "starttid": "13:00",
+                             "sluttid": "14:30"})
+    assert _tid(_done(r)["board"]) == "13:00–14:30"
+
+
 def test_tiden_overlever_en_iteration(llm_ready, monkeypatch):
     """refine skriver om HELA tavlan och kan tappa tidssektionen — den läggs
     på igen efteråt i stället för att bevakas."""
