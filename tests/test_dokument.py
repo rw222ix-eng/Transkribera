@@ -9,10 +9,14 @@ Kontraktet är frontendens (app/web/ui/plan.js). Två regler bär allt:
   2. Att ändra från ett ångrat läge kapar det som låg framåt, precis som i en
      textredigerare.
 """
+from pathlib import Path
+
 import pytest
 
 from app import db
 from app.web import server
+
+PLAN_JS = Path(__file__).resolve().parent.parent / "app" / "web" / "ui" / "plan.js"
 
 
 @pytest.fixture
@@ -291,3 +295,27 @@ def test_dokumenten_overlever_en_omstart_av_servern(tmp_path, monkeypatch):
     with TestClient(server.create_app(base_dir=tmp_path)) as c2:
         assert len(c2.get("/api/dokument").json()["sparade"]) == 1
         assert c2.get("/api/klassprofil").json()["9A"]["kursN"] == 9
+
+
+# ── Omprovet: likvärdigt, inte omrört ────────────────────────────────────
+# Omprovet byggdes en gång deterministiskt i frontenden: uppgifterna blandades
+# och en regex bytte de fristående talen i uppgiftsTEXTEN. Facit rördes aldrig,
+# så pappret blev internt inkonsistent — uppgiften frågade efter ett tal,
+# lösningen svarade på ett annat. Att göra ett omprov är modellens arbete, och
+# vakten här finns för att efterbearbetningen inte ska smyga tillbaka.
+
+def test_omprovet_rakna_inte_om_talen_i_frontenden():
+    js = PLAN_JS.read_text(encoding="utf-8")
+    assert "nyaTal" not in js, "talutbytesregexen är tillbaka i plan.js"
+    assert "function blanda" not in js, "omblandningen är tillbaka i plan.js"
+
+
+def test_omprovets_instruktion_begar_helt_nya_uppgifter():
+    """Texten som hamnar i #refhur ÄR förlage-instruktionen som når modellen —
+    lovar den bara nya tal får läraren originalet med utbytta siffror."""
+    js = PLAN_JS.read_text(encoding="utf-8")
+    assert "Omprov: likvärdigt prov" in js
+    assert "HELT NYA uppgifter" in js
+    assert "bara utbytta tal" in js
+    # Den gamla lögnen får inte stå kvar någonstans i gränssnittet.
+    assert "nya tal och ny ordning" not in js
