@@ -125,7 +125,7 @@
      räcker: en gruppuppgift blir gruppuppgiften, inte gruppuppgiftet. Och
      anteckningarna är PLURAL — «skriv anteckningarna», inte «anteckningaren» —
      så tabellen bär numerus lika mycket som bestämdheten. */
-  const BEST = { Tavla: 'tavlan', Prov: 'provet', Arbetsblad: 'arbetsbladet', Gruppuppgift: 'gruppuppgiften', Anteckningar: 'anteckningarna' };
+  const BEST = { Tavla: 'tavlan', Prov: 'provet', Arbetsblad: 'arbetsbladet', Gruppuppgift: 'gruppuppgiften', Diagnos: 'diagnosen', Anteckningar: 'anteckningarna' };
   const best = t => BEST[t] || String(t || '').toLowerCase();
   const Best = t => { const o = best(t); return o.charAt(0).toUpperCase() + o.slice(1); };
 
@@ -162,6 +162,14 @@
       { id: 'langd', namn: 'Tid på lektionen', typ: 'minuter', snabb: [10, 20, 30, 45], min: 10, max: 180 },
       { id: 'redovisning', namn: 'Redovisning', typ: 'seg', val: ['Muntligt', 'Skriftligt', 'Poster'] }
     ],
+    /* Diagnosen har INGEN antalsväljare — och det är hela formen. Antalet
+       uppgifter räknas ur två saker läraren redan bestämt: hur mycket av
+       kursens centrala innehåll som är kryssat, och hur lång lektionen är.
+       Ryms inte punkterna slås närliggande ihop (exam_spec.diagnosplan), så
+       täckningen är alltid hel. Därför bara tiden här. */
+    Diagnos: [
+      { id: 'nartid', namn: 'När skrivs diagnosen?', typ: 'nartid' }
+    ],
     Arbetsblad: [
       { id: 'antal', namn: 'Antal uppgifter', typ: 'antal', min: 1, max: 6 },
       { id: 'niva', namn: 'Nivå', typ: 'seg', val: ['E-nivå', 'C-nivå', 'A-nivå', 'Blandat'] },
@@ -182,6 +190,11 @@
     Prov: { nar: 'På lektionen', narDatum: '', narTid: '08:15', provminuter: 90, provtid: '90 min', antal: 6, nivamix: 'Balanserat', delprov: 'Del A + Del B', losningar: true, formelblad: true },
     Arbetsblad: { antal: 3, niva: 'Blandat', facit: 'Facit i bladet', illustration: true },
     Gruppuppgift: { grupp: 3, langd: 60, redovisning: 'Muntligt' },
+    /* 60 minuter är lärarens genomsnittslektion och därmed diagnosens mått;
+       75 är taket, och det är servern som håller det (exam_spec). Fälten är
+       provets — diagnosen skrivs på en lektion precis som provet, och `nartid`
+       äger dag, klockslag OCH längd i samma rad. */
+    Diagnos: { nar: 'På lektionen', narDatum: '', narTid: '08:15', provminuter: 60, provtid: '60 min' },
     Anteckningar: { onskemal: '', lektioner: [] }
   };
   /* Utgår pappret från boken är lösningsförslaget till BOKENS uppgifter något
@@ -362,7 +375,10 @@
       if (!st) s.tidSchema = null;
       if (!s.starttid) s.starttid = '08:15';
     }
-    if (typ === 'Prov') {
+    /* Diagnosen skrivs på en lektion precis som provet och delar därför hela
+       nartid-raden: dagen, klockslaget och längden ärvs ur schemat på samma
+       villkor. Skillnaden är taket — se DIAGNOS_TAK nedan. */
+    if (typ === 'Prov' || typ === 'Diagnos') {
       /* Provets dag ärvs ur lektionen tills läraren klickar en annan i kalendern.
          Byter man lektion ska den ärvda dagen följa med — annars står förra
          lektionens datum kvar och läses som «annan dag» på en ny planering. En dag
@@ -429,7 +445,10 @@
         : k.typ === 'nartid'
         /* «Uppskatta tiden» satt vid antalet uppgifter men SÄTTER provtiden —
            knappen stod alltså två rader från det den ändrar. Den hör vid tiden. */
-        ? `<span class="narfalt"><button class="ghost minitid" type="button" data-uppskatta data-tip="Räknar arbetstiden ur uppgifterna och sätter provtiden">Uppskatta tiden</button><span class="valj nartidvalj"><button class="valjknapp" type="button" aria-haspopup="dialog" aria-expanded="false"><span class="valjtext"></span><span class="valjpil"></span></button></span><input type="hidden" class="nardatum" value="${s.narDatum || (($('#p-datum') || {}).value || '')}" /><input type="hidden" class="nartidstart" value="${s.narTid || (($('#p-tid') || {}).value || '').split('–')[0].trim() || '08:15'}" /></span>`
+        /* Diagnosen går åt andra hållet: tiden är GIVEN och antalet uppgifter
+           faller ut ur den (exam_spec.diagnosplan). Knappen sätter därför inget
+           där — den kollar om diagnosen som ligger på skärmen ryms. */
+        ? `<span class="narfalt"><button class="ghost minitid" type="button" data-uppskatta data-tip="${typ === 'Diagnos' ? 'Räknar arbetstiden ur diagnosens uppgifter' : 'Räknar arbetstiden ur uppgifterna och sätter provtiden'}">${typ === 'Diagnos' ? 'Kolla tiden' : 'Uppskatta tiden'}</button><span class="valj nartidvalj"><button class="valjknapp" type="button" aria-haspopup="dialog" aria-expanded="false"><span class="valjtext"></span><span class="valjpil"></span></button></span><input type="hidden" class="nardatum" value="${s.narDatum || (($('#p-datum') || {}).value || '')}" /><input type="hidden" class="nartidstart" value="${s.narTid || (($('#p-tid') || {}).value || '').split('–')[0].trim() || '08:15'}" /></span>`
         : k.typ === 'minuter'
         ? `<span class="minutval"><span class="minutchips">${k.snabb.map(m => `<button class="minutchip" type="button" aria-pressed="${Number(s[k.id]) === m}">${m}</button>`).join('')}</span><span class="minutfalt"><input type="text" inputmode="numeric" maxlength="3" value="${s[k.id]}" aria-label="${k.namn} i minuter" /><span class="minutenhet">min</span></span></span>`
         : k.typ === 'seg'
@@ -597,12 +616,23 @@
         if (!s.provminuter) s.provminuter = parseInt(s.provtid, 10) || 90;
         s.narDatum = dagFalt.value;
         s.narTid = tidFalt.value;
+        /* Diagnosens tak är lärarens: en genomsnittslektion, max 75 minuter.
+           Servern håller det oavsett (exam_spec.DIAGNOS_TID_TAK klipper), så
+           raden här är ett besked om vad som kommer att hända — inte en spärr
+           som tar ifrån läraren väljaren. */
+        const DIAGNOS_TAK = 75;
+        const arDiagnos = typ === 'Diagnos';
+        const not = typnot(rad);
         /* Dagen och längden är ett löfte till kalendern: raden under säger om det
            går att hålla — lov, krock, eller en lektion som är för kort. */
-        const not = typnot(rad);
         const visaNot = () => {
           const min = Number(s.provminuter) || 90;
           const ld = lektionsdag();
+          if (arDiagnos && min > DIAGNOS_TAK) {
+            return satNot(not, 'krock',
+              `Diagnosen är ${min} min — den skrivs för ${DIAGNOS_TAK} min, som är taket för en lektion.`,
+              [{ namn: `Korta till ${DIAGNOS_TAK} min`, gor: () => { s.provminuter = DIAGNOS_TAK; s.provtid = DIAGNOS_TAK + ' min'; ritaTypval(); planKoll(); } }]);
+          }
           /* Vilken dag som är vald avgör VAD raden ska kontrollera: en dag utanför
              lektionen mäts mot kalendern (lov, bokningar), lektionens egen dag mot
              lektionens längd. Segmentet som avgjorde det förr är borta — dagen i
@@ -613,9 +643,9 @@
           }
           if (!s.narDatum && !ld) return satNot(not, '', 'Välj dagen — lov och bokningar läses ur kalendern.');
           const lekt = schemaminuter();
-          if (!lekt) return satNot(not, '', 'Ingen lektionslängd ur schemat — provtiden är fri.');
+          if (!lekt) return satNot(not, '', `Ingen lektionslängd ur schemat — ${arDiagnos ? 'diagnostiden' : 'provtiden'} är fri.`);
           satNot(not, min > lekt ? 'krock' : 'ok', min > lekt
-            ? `Provet är ${min} min men lektionen bara ${lekt} min.`
+            ? `${Best(typ)} är ${min} min men lektionen bara ${lekt} min.`
             : `Får plats på lektionen — ${lekt} min att skriva på.`,
             min > lekt ? [
               /* «Flytta till annan dag» satte förr segmentet. Nu är dagen ett klick i
@@ -629,7 +659,7 @@
           tom: 'Välj dag och klockslag',
           dag: true,
           span: true,
-          snabb: [60, 90, 120],
+          snabb: arDiagnos ? [40, 50, 60, 75] : [60, 90, 120],
           langd: () => Number(s.provminuter) || 90,
           standardTid: schemastart() || '08:15',
           sattLangd: m => { s.provminuter = m; s.provtid = m + ' min'; visaNot(); planKoll(); },
@@ -820,13 +850,38 @@
     not.textContent = v ? '' : `Välj avsnittet i boken i steg 2 — det blir momentet ${best(typ)} skrivs om.`;
     not.hidden = !!v;
   }
-  window.planKoll = () => { ritaTypval(); planKoll(); };
+  /* Diagnosen ÄR hela kursens innehåll — det är dess definition, inte ett
+     förval bland andra. Väljs typen kryssas därför alla nivåns punkter i, och
+     de går att kryssa bort igen: en lärare som bara läst halva kursen ska kunna
+     diagnostisera halva. Bara när ingenting är valt sedan innan — har läraren
+     redan pekat ut punkter är det hennes val som gäller. */
+  function forkryssaAlla() {
+    const punkter = gyPunkter();
+    if (!punkter.length) return;
+    punkter.forEach(p => vald.add(p.kort));
+    ritaGy();
+  }
+  let forraTypen = null;
+  window.planKoll = () => {
+    const typ = valt('skrivtyp');
+    if (typ === 'Diagnos' && forraTypen !== 'Diagnos') forkryssaAlla();
+    forraTypen = typ;
+    ritaTypval();
+    planKoll();
+  };
   moment.addEventListener('input', planKoll);
   $('#p-klass').addEventListener('change', planKoll);
   $('#p-kurs').addEventListener('change', () => {
-    /* Kursen i steg 1 pekar ut nivån — men bara så länge man inte valt innehåll själv. */
+    /* Kursen i steg 1 pekar ut nivån — men bara så länge man inte valt innehåll själv.
+       Diagnosen är undantaget: dess innehåll ÄR kursens, så byter kursen byter
+       också punkterna. Utan det blev en diagnos som skrevs innan kursen valdes
+       en diagnos på fel nivå — och den ser precis lika färdig ut. */
     const foreslagen = window.Gy ? window.Gy.foreslagen($('#p-kurs').value) : nivaId;
-    if (foreslagen && foreslagen !== nivaId && !vald.size) nivaId = foreslagen;
+    const diagnos = valt('skrivtyp') === 'Diagnos';
+    if (foreslagen && foreslagen !== nivaId && (!vald.size || diagnos)) {
+      nivaId = foreslagen;
+      if (diagnos) { vald.clear(); forkryssaAlla(); }
+    }
     ritaGy();
     planKoll();
   });
@@ -987,8 +1042,8 @@
   const franMin = m => `${String(Math.floor((((m % 1440) + 1440) % 1440) / 60)).padStart(2, '0')}:${String(((m % 60) + 60) % 60).padStart(2, '0')}`;
   /* Provet har en egen dag och ett eget klockslag — valen i steg 3, inte
      lektionens. Utan det här sa «Annan dag» en sak och dokumentet en annan. */
-  function provNar() {
-    const s = inst.Prov;
+  function provNar(typ) {
+    const s = inst[typ || 'Prov'];
     const min = Math.max(5, Number(s.provminuter) || 90);
     const start = s.narTid || schemastart() || '08:15';
     const b = tillMin(start);
@@ -1084,7 +1139,9 @@
 
   function nyVersion(bas, andring) {
     const vtyp = valt('skrivtyp');
-    const nar = vtyp === 'Prov' ? provNar() : null;
+    /* Diagnosen skrivs på en lektion precis som provet och har därför också
+       en egen dag och ett eget klockslag i steg 3. */
+    const nar = (vtyp === 'Prov' || vtyp === 'Diagnos') ? provNar(vtyp) : null;
     /* Ingen lektion vald i veckan? Då ärvs klass och kurs ur lektionen utkastet
        UTGÅR FRÅN. «Ingen klass · ingen kurs» hjälper ingen — och appen vet. */
     const ur = valdaNamn()[0] || null;
@@ -1526,6 +1583,21 @@
       }),
     };
     JOBB.Arbetsblad = JOBB.Prov;
+    /* Diagnosen skickar INGET antal. Servern räknar det ur de valda punkterna
+       och lektionens längd (exam_spec.diagnosplan) och slår ihop närliggande
+       punkter om de inte ryms — täckningen är kravet, inte antalet. */
+    JOBB.Diagnos = ({ signal, log }) => window.API.strom('/api/exams/generate', {
+      kurs: utkast.kurs, klass: utkast.klass,
+      punkter: gyKoder(), punkter_text: [...vald],
+      tid_min: Number(i0.provminuter) || 60,
+      delar: false,
+      datum: utkast.datum || '',
+      typ: 'diagnos',
+      ...utfall(), ...forlagan(),
+    }, { signal, log }).then(kravDone).then(r => {
+      if (!r.exam) throw new Error('Diagnosen gick inte att skriva den här gången. Försök igen.');
+      return r;
+    });
     /* Anteckningarna går sin egen väg: inga uppgifter, inga poäng, ingen
        balans — men två källor de andra typerna inte har. Rutan läraren skrev i
        är huvudkällan, mötena är underlaget, och servern väger dem i den
@@ -1609,6 +1681,16 @@
           /* Nyckelfrågan står i instruktionsbandet — samma text på skärmen som
              i PDF:en, annars lovar pappret och skärmen gruppen olika saker. */
           utkast.nyckelfraga = res.exam.nyckelfraga || null;
+          /* Diagnosen skrevs för att RYMMAS på en lektion, och det var servern
+             som bestämde antalet uppgifter. Då är tiden det första läraren vill
+             veta — och den ska stå kvar när statusraden är borta, så den blir en
+             toast och inte en rad i förloppet. */
+          if (typ === 'Diagnos' && res.tid) {
+            const ram = Number(i0.provminuter) || 60;
+            window.toast && window.toast(
+              `Diagnosen tar ca ${res.tid} min av dina ${ram} — `
+              + `${(res.exam.uppgifter || []).length} uppgifter täcker ${vald.size} punkter.`);
+          }
         }
         /* Anteckningarna behöver ingen översättning: pappret ritas ur samma
            JSON servern validerade (blad-bygg.anteckningar). `radtak` följer
@@ -1790,6 +1872,14 @@
         : 'på lektionen';
       return `${s.antal} uppgifter · ${s.nivamix} · ${s.delprov} · ${s.provtid} · ${nar}${s.formelblad ? ' · formelblad' : ''}`;
     }
+    /* Diagnosen har inget antal att sammanfatta — det räknas ur innehållet och
+       tiden när den skrivs. Raden säger därför det som ÄR valt. */
+    if (typ === 'Diagnos') {
+      const nar = s.nar === 'Annan dag' && s.narDatum
+        ? `${window.Kalender ? window.Kalender.ord(s.narDatum) : s.narDatum}${s.narTid ? ' ' + s.narTid : ''}`
+        : 'på lektionen';
+      return `hela kursens innehåll · ${s.provtid} · ${nar}`;
+    }
     if (typ === 'Arbetsblad') return `${s.antal} uppgifter · ${s.niva} · ${s.facit}`;
     if (typ === 'Gruppuppgift') return `${s.grupp} per grupp · ${s.langd} min · ${s.redovisning.toLowerCase()}`;
     /* Anteckningarna har inga inställningar att sammanfatta — raden säger i
@@ -1831,8 +1921,13 @@
     const mix = (v.inst || {}).nivamix || 'Balanserat';
     let e = 0, c = 0, a = 0;
     (v.uppgifter || []).forEach(u => {
-      const [x, y, z] = ecaDel(u.p, mix);
-      e += x; c += y; a += z;
+      /* Bär uppgiften sin nivåvektor (plan.js franProv skriver `peca` ur
+         prov-JSON) är DEN fördelningen, och då ska ingen gissas ur mixen.
+         Gissningen finns kvar för prototypens och de handskrivna pappersens
+         skull. Servern räknar samma sak (exam_spec.tidsatgang). */
+      const p = Array.isArray(u.peca) && u.peca.length === 3
+        && u.peca.some(x => x > 0) ? u.peca : ecaDel(u.p, mix);
+      e += p[0] || 0; c += p[1] || 0; a += p[2] || 0;
     });
     const antal = (v.uppgifter || []).length;
     const rena = e * PER_NIVA.E + c * PER_NIVA.C + a * PER_NIVA.A;
@@ -1849,7 +1944,23 @@
      upplägget som står i formuläret och SÄTTER provtiden — klockslagen väljer man
      sedan själv, men längden är bestämd av det man klickade på. */
   function uppskattaNu() {
-    if (valt('skrivtyp') !== 'Prov') return;
+    const typ = valt('skrivtyp');
+    /* Diagnosen sätter ingen tid — tiden är lärarens ram och antalet uppgifter
+       räknas ur den. Knappen svarar i stället på frågan «rymdes den?», och kan
+       bara göra det när ett papper faktiskt ligger på skärmen. */
+    if (typ === 'Diagnos') {
+      const v = nyVersion(null);
+      const ram = Number(inst.Diagnos.provminuter) || 60;
+      if (!(v.uppgifter || []).length) {
+        window.toast && window.toast(`Skriv diagnosen först — tiden räknas på uppgifterna. Ramen är ${ram} min.`);
+        return;
+      }
+      const u = uppskatta(v);
+      window.toast && window.toast(
+        `Diagnosen tar ca ${u.min} min av dina ${ram} — ${u.antal} uppgifter · ${u.poang} p.`);
+      return;
+    }
+    if (typ !== 'Prov') return;
     const v = nyVersion(null);
     const u = uppskatta(v);
     const forr = Number(inst.Prov.provminuter) || parseInt(inst.Prov.provtid, 10) || 90;
@@ -2208,7 +2319,7 @@
     las.readAsDataURL(fil);
   });
   window.valjBild = valjBild;
-  const arkNamn = v => v.typ === 'Prov' ? ['Provet', 'Lösningsförslag'] : v.typ === 'Gruppuppgift' ? ['Gruppuppgiften', 'Facit'] : ['Arbetsbladet', 'Facit'];
+  const arkNamn = v => v.typ === 'Prov' ? ['Provet', 'Lösningsförslag'] : v.typ === 'Gruppuppgift' ? ['Gruppuppgiften', 'Facit'] : v.typ === 'Diagnos' ? ['Diagnosen', 'Rättning'] : ['Arbetsbladet', 'Facit'];
   const arkLage = v => ({ tva: harLosning(v), namn: arkNamn(v), vald: visarLosning ? 1 : 0, byt: j => byt(j) });
   function byt(j) {
     visarLosning = j === 1;
@@ -2687,7 +2798,7 @@
       const finns = window.Kalender.poster.some(p => p.datum === v.datum && p.titel === namn);
       if (!finns) window.Kalender.lagg({
         datum: v.datum,
-        tid: v.tid || (v.typ === 'Prov' ? (v.inst && v.inst.provtid ? v.inst.provtid : '') : ''),
+        tid: v.tid || ((v.typ === 'Prov' || v.typ === 'Diagnos') ? (v.inst && v.inst.provtid ? v.inst.provtid : '') : ''),
         titel: namn, klass: v.klass || '', slag: v.typ.toLowerCase(),
         antal: v.typ === 'Prov' ? 24 : 1
       });

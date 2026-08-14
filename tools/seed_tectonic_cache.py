@@ -376,6 +376,10 @@ def seed(out_dir: Path, *, compile_fn=exam_pdf.compile_pdf) -> tuple[bool, str]:
         ("arbetsblad", exam_latex.render_arbetsblad(doc, bilder=bilder)),
         ("bedomning", exam_latex.render_bedomning(doc, bilder=bilder)),
         ("gruppuppgift", exam_latex.render_gruppuppgift(grupp_doc, bilder=bilder)),
+        # Diagnosen (Etapp 2) har också en egen mall. Dess särdrag är
+        # \subsection* — en rubriknivå ingen annan mall når — och att
+        # rättningen ligger i samma dokument, grupperad per innehållspunkt.
+        ("diagnos", exam_latex.render_diagnos(doc, bilder=bilder)),
         # Anteckningarna har en EGEN mall med egna sättningar: 22 mm marginal,
         # \linespread, itemize (enumitem) och en tonad ruta byggd med
         # \fcolorbox på en xcolor-blandning. Ingen av dem finns i de andra
@@ -394,7 +398,7 @@ def seed(out_dir: Path, *, compile_fn=exam_pdf.compile_pdf) -> tuple[bool, str]:
     markor.parent.mkdir(parents=True, exist_ok=True)
     markor.write_text("", encoding="utf-8")
     return True, ("cachen är seedad (prov, arbetsblad, bedömning, "
-                  "gruppuppgift, anteckningar, tikz/pgfplots)")
+                  "gruppuppgift, diagnos, anteckningar, tikz/pgfplots)")
 
 
 def main() -> int:

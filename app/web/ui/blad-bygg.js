@@ -120,7 +120,11 @@ window.BladBygg = (() => {
      Det står i uppgifterna. */
   const BAND = {
     Arbetsblad: 'Skriv svaret på svarsraden där det står «Svar». De uppgifter som ska redovisas är märkta — skriv uppgiftens bokstav överst på lösbladet. Visa hur du räknar, inte bara svaret.',
-    Gruppuppgift: 'Läs uppgiften tillsammans innan ni börjar räkna. Bestäm vem som skriver. Alla i gruppen ska kunna förklara lösningen efteråt.'
+    Gruppuppgift: 'Läs uppgiften tillsammans innan ni börjar räkna. Bestäm vem som skriver. Alla i gruppen ska kunna förklara lösningen efteråt.',
+    /* Diagnosens band är det enda som säger åt eleven att HOPPA ÖVER. Det är
+       hela mätningen: ett tomrum som eleven kämpat sig förbi med en gissning
+       ser ut som ett hål som inte finns, och då tas fel moment om. */
+    Diagnos: 'Diagnosen sätter inget betyg — den tar reda på vad som behöver tas om. Svara på det du kan och hoppa över det du inte kan. Korta svar räcker.'
   };
 
   function ark(v, uppgifter, o) {

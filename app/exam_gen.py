@@ -300,8 +300,13 @@ def _skelett_plan(skeleton: list[dict], last: bool = True) -> str:
     rader = []
     for i, s in enumerate(skeleton, 1):
         del_txt = f"Del {s['del']}, " if s.get("del") else ""
+        # Diagnosens rader bär sitt centrala innehåll: raden ÄR punkten, och
+        # utan koden i planen vet modellen inte vilken uppgift som ska handla
+        # om vad — grammatiken låser fältet men säger ingenting om texten.
+        ci_txt = (f", centralt innehåll {', '.join(s['ci'])}"
+                  if s.get("ci") else "")
         rader.append(f"{i}. {del_txt}{exam_spec.FORMAGA_NAMN[s['formaga']]} "
-                     f"({s['formaga']}), {s['typ']}, poäng {s['poang']}")
+                     f"({s['formaga']}), {s['typ']}, poäng {s['poang']}{ci_txt}")
     huvud = ("Uppgiftsplan — del, förmåga, typ och poäng är LÅSTA per uppgift "
              "(ändra dem inte); skriv en uppgift vars INNEHÅLL matchar varje rad: "
              if last else
@@ -342,6 +347,9 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
     # gruppuppgiften är platta papper.
     if skeleton is None and profil in ("arbetsblad", "gruppuppgift"):
         skeleton = exam_spec.balanced_skeleton(antal, profil, delar=False)
+    # Diagnosen får sitt skelett utifrån (exam_spec.diagnosplan): det räknas ur
+    # innehållet och lektionens längd, inte ur ett antal, så det går inte att
+    # bygga här av `antal` allena.
     block = [INSTRUCTION]
     if punkter:
         # Med koder står punkterna som «KOD — text», och koden är det modellen
@@ -453,6 +461,30 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
         # Nivåförankringen (C2): gruppuppgiften är inte en trappa, så bokens
         # skala används som GOLV och TAK i stället för som stigning.
         block.append(boknivaer or niva_rubrik.build_skala_utan_bok(profil))
+    elif profil == "diagnos":
+        if skeleton:
+            block.append(_skelett_plan(skeleton))
+        block.append(
+            f"Uppdrag: skriv en DIAGNOS för {kurs}, klass {klass} — ett brett "
+            f"och grunt sållningspapper på {tid_min} minuter, med EXAKT "
+            f"{antal} uppgifter (varken fler eller färre). Inga delar "
+            "(del: null på alla uppgifter).\n"
+            "Diagnosen är inte ett prov och inte ett arbetsblad. Den ställer "
+            "EN fråga per innehållspunkt — «sitter det här?» — och går sedan "
+            "vidare. Därför:\n"
+            "- Varje uppgift hör till sin punkt i uppgiftsplanen och ska pröva "
+            "just DEN, inte en blandning av kursen.\n"
+            "- Håll uppgifterna KORTA och entydiga. En elev som kan punkten ska "
+            "vara klar på några minuter; en som inte kan den ska fastna direkt, "
+            "så att tomrummet syns.\n"
+            "- Inga flerstegsproblem och inga uppgifter som kräver en lång "
+            "redovisning — läraren ska kunna rätta hela klassens diagnos på en "
+            "håltimme.\n"
+            "- Bedömningsanvisningen ska säga vad ett SVAGT svar på just den "
+            "punkten ser ut som, inte bara var poängen sitter. Det är den "
+            "läraren läser när hon letar efter hålet.\n"
+            "Lösningsförslagen blir facit. Svara med enbart JSON.")
+        block.append(niva_rubrik.build_skala_utan_bok("diagnos"))
     elif profil == "arbetsblad":
         if skeleton:
             block.append(_skelett_plan(skeleton))
@@ -811,6 +843,7 @@ def _format_problems(problems: list) -> str:
 _DOKUMENTNAMN = {
     "arbetsblad": ("ditt förra ARBETSBLAD", "arbetsbladet"),
     "gruppuppgift": ("din förra GRUPPUPPGIFT", "gruppuppgiften"),
+    "diagnos": ("din förra DIAGNOS", "diagnosen"),
 }
 
 
@@ -931,12 +964,16 @@ def _validate(exam: dict, profil: str, koder: list[str] | None = None):
     undantas (det får drilla samma frågetyp med flit, jfr antiklumpningen).
 
     CI-kontrollen behövs vid sidan av grammatiken därför att gruppuppgiften
-    genereras UTAN grammatiklås — se generate_exam."""
+    genereras UTAN grammatiklås — se generate_exam. Diagnosen prövas dessutom
+    på TÄCKNINGEN: en punkt utan uppgift gör hela pappret oläsbart som
+    diagnos."""
     doc, errors = exam_spec.validate_exam_json(exam, profil)
     if doc is not None and profil == "prov":
         errors = errors + exam_spec.validate_variation(doc)
     if doc is not None:
         errors = errors + exam_spec.validate_ci(doc, koder)
+    if doc is not None and profil == "diagnos":
+        errors = errors + exam_spec.validate_tackning(doc, koder)
     return doc, errors
 
 
@@ -982,6 +1019,10 @@ def _repair_until_valid(exam: dict | None, errors: list, *, model: str, llm,
 def _skala(profil: str, boknivaer: str, skeleton: list[dict] | None) -> str:
     """Den nivåskala dokumentet skrevs mot — exakt samma text som prompten
     fick. Domaren måste mäta mot den och inte mot en annan."""
+    if profil == "diagnos":
+        # Diagnosen förankras aldrig i boken: den ska mäta kursen, inte det
+        # uppslag klassen råkar ha framme.
+        return niva_rubrik.build_skala_utan_bok(profil)
     if profil in ("arbetsblad", "gruppuppgift"):
         return boknivaer or niva_rubrik.build_skala_utan_bok(profil)
     return niva_rubrik.build_niva_block(
@@ -1040,6 +1081,7 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                   bilder: str = "", utfall: str = "", bok: str = "",
                   boknivaer: str = "", forlaga: str = "", profil: str = "prov",
                   koder: list[str] | None = None,
+                  skeleton: list[dict] | None = None,
                   grupp: dict | None = None, doma: bool = True,
                   llm=llm_client.generate, max_rounds: int = MAX_ROUNDS,
                   log_cb: Callable[[str], None] | None = None) -> dict:
@@ -1047,6 +1089,10 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     balansfel inom rundbudgeten. `grupp` är gruppuppgiftens upplägg (elever,
     langd_min, redovisning) och ignoreras för de andra profilerna.
     Returnerar {"exam": dict|None, "errors": [...], "rounds": int}.
+
+    `skeleton` låter anroparen lämna ett färdigt skelett i stället för att
+    låta antalet bestämma. Diagnosen gör det: dess platser räknas ur kursens
+    innehåll och lektionens längd (exam_spec.diagnosplan).
 
     `doma=False` stänger av nivådomaren (C4). Den kostar ett modellanrop och
     körs annars alltid — nivån är inget som bara ska begäras i prompten.
@@ -1062,10 +1108,14 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     if ogenomforbart:
         return {"exam": None, "errors": ogenomforbart, "rounds": 0}
     # Balanserat skelett: appen äger balansen, modellen skriver innehållet.
-    # Alla tre profilerna får ett (Del D1b) — prov med delar, arbetsblad och
-    # gruppuppgift platta.
-    skeleton = exam_spec.balanced_skeleton(
-        antal, profil, delar=(profil == "prov" and delar))
+    # Alla profilerna får ett (Del D1b) — prov med delar, arbetsblad,
+    # gruppuppgift och diagnos platta. Diagnosens kommer utifrån
+    # (exam_spec.diagnosplan): dess platser är innehållspunkter, inte ett
+    # antal, och den dimensionen kan bara räknas där punkterna är kända.
+    if skeleton is None:
+        skeleton = exam_spec.balanced_skeleton(
+            antal, profil, delar=(profil == "prov" and delar))
+    antal = len(skeleton) or antal
     # … men bara två av dem GRAMMATIKLÅSES. En låst rad måste bära sina poäng
     # själv, och en uppgift med poäng får inga deluppgifter (exam_spec:
     # föräldern ska ha [0, 0, 0]) — och deluppgifterna ÄR gruppuppgiftens

@@ -568,7 +568,17 @@ def build_skala_utan_bok(profil: str) -> str:
     boknivåskala att förankra i, och då är NP-rubriken skalan i stället. Ett
     arbetsblad utan någon skala alls är precis det läget planen skrevs för —
     «stigande svårighet» utan att någonstans säga vad svårare betyder."""
-    if profil == "gruppuppgift":
+    if profil == "diagnos":
+        # Diagnosen har ingen trappa alls — den frågar om varje punkt en gång.
+        # Skalan behövs ändå: E-uppgiften ska vara igenkännbar rutin och
+        # C-uppgiften ska kräva ett steg till, annars mäter pappret ingenting.
+        ram = ("Diagnosen är INGEN stegring: uppgifterna kommer i kursens "
+               "ordning, inte i svårighetsordning, och uppgift 11 ska inte "
+               "vara svårare än uppgift 1 — den ska handla om något annat. "
+               "Skalan nedan säger i stället vad EN uppgifts nivå betyder: en "
+               "E-uppgift är den igenkännbara standarduppgiften på punkten, en "
+               "C-uppgift kräver ett steg till eller en motivering.")
+    elif profil == "gruppuppgift":
         # Spannet stod redan rätt här (E-ingång, A-fördjupning); det som var
         # fel var ORDNINGEN. «Gruppuppgiften är inte en trappa» sa emot lärarens
         # skarpa lektion, där stegringen var det som fungerade (Del F, dom 1).

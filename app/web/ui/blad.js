@@ -145,7 +145,10 @@ window.Blad = (() => {
     if (!u.length) return [];
     if (v.losningsblad) return [bb.arkfacit(v, u)];
     const ut = [bb.ark(v, u, {})];
-    if ((v.inst || {}).facit === 'Facit i bladet') ut.push(bb.arkfacit(v, u));
+    /* Diagnosen bär ALLTID sin rättning i samma dokument — det är dess form
+       (app/templates/diagnos.tex.j2), och läraren ska inte behöva hålla reda på
+       två papper för att pricka av en klass. */
+    if ((v.inst || {}).facit === 'Facit i bladet' || v.typ === 'Diagnos') ut.push(bb.arkfacit(v, u));
     return ut;
   }
 

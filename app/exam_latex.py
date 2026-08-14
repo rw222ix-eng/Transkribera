@@ -17,7 +17,7 @@ from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
-from app import exam_figures, exam_spec
+from app import course_data, exam_figures, exam_spec
 
 
 def templates_dir() -> Path:
@@ -280,6 +280,10 @@ def _build_view(doc: exam_spec.ExamDoc,
             # förstöra den) — mallen renderar den oescapad.
             item_vy["figur_tex"] = (exam_figures.render_figur(it.figur)
                                     if it.figur is not None else None)
+            # Uppgiftens centrala innehåll som koder. Diagnosmallen grupperar
+            # bedömningen på dem — läraren rättar per punkt, inte per uppgift,
+            # för det är punkten hon letar efter hålet i.
+            item_vy["ci"] = list(it.innehall or [])
             vy_items.append(item_vy)
         delar.append({
             "rubrik": escape_latex(rubrik) if rubrik else None,
@@ -384,6 +388,53 @@ def render_arbetsblad(doc: exam_spec.ExamDoc, visa_poang: bool = False,
     return _environment().get_template("arbetsblad.tex.j2").render(
         visa_poang=visa_poang, dokumentkod=dokumentkod,
         **_build_view(doc, bilder))
+
+
+def _ci_grupper(vy: dict) -> list[dict]:
+    """Uppgifterna grupperade per innehållspunkt, i kursens ordning.
+
+    Det är diagnosens bedömningsblad: läraren läser inte «uppgift 7» utan
+    «linjära olikheter», och vill se alla uppgifter som prövar punkten under
+    samma rubrik. En uppgift som taggar två punkter står under båda — det är
+    samma uppgift, läst med två frågor.
+
+    Uppgifter utan CI (papper som aldrig gått genom väljaren) samlas sist under
+    en egen rubrik i stället för att tappas."""
+    kort = course_data.kod_till_kort()
+    ordning: list[str] = []
+    per_kod: dict[str, list[dict]] = {}
+    utan: list[dict] = []
+    for delen in vy["delar"]:
+        for u in delen["uppgifter"]:
+            if not u["ci"]:
+                utan.append(u)
+                continue
+            for kod in u["ci"]:
+                if kod not in per_kod:
+                    per_kod[kod] = []
+                    ordning.append(kod)
+                per_kod[kod].append(u)
+    grupper = [{"kod": escape_latex(k),
+                "rubrik": escape_latex(kort.get(k) or k),
+                "uppgifter": per_kod[k]} for k in ordning]
+    if utan:
+        grupper.append({"kod": "", "rubrik": "Övriga uppgifter",
+                        "uppgifter": utan})
+    return grupper
+
+
+def render_diagnos(doc: exam_spec.ExamDoc,
+                   bilder: dict[int, str] | None = None,
+                   dokumentkod: str = "") -> str:
+    """Diagnos (Etapp 2): elevens ark i kursens ordning, och lärarens facit
+    grupperat PER INNEHÅLLSPUNKT i stället för per del.
+
+    Skillnaden mot arbetsbladet är just den grupperingen. Ett arbetsblad rättas
+    uppgift för uppgift; en diagnos rättas för att svara på en fråga — vilken
+    punkt sitter inte? — och då ska pappret vara sorterat efter punkterna."""
+    vy = _build_view(doc, bilder, facit=True)
+    return _environment().get_template("diagnos.tex.j2").render(
+        dokumentkod=dokumentkod, ci_grupper=_ci_grupper(vy), **vy)
 
 
 def render_anteckningar(doc) -> str:

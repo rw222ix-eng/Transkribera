@@ -38,7 +38,11 @@ def _safe_component(raw: str, fallback: str) -> str:
 # rutt-familj: den är ett ark med uppgifter, precis som arbetsbladet, och delar
 # därför generering, versionering, iteration och PDF-vägen. Skillnaden ligger i
 # balansprofilen (exam_spec.PROFILER), prompten och mallen.
-_TYPER = ("prov", "arbetsblad", "gruppuppgift")
+# Diagnosen (Etapp 2) är den fjärde. Den delar rutt av samma skäl som de andra
+# — ett ark med uppgifter — men är den enda vars ANTAL uppgifter inte kommer ur
+# en väljare: det räknas ur kursens centrala innehåll och lektionens längd
+# (exam_spec.diagnosplan).
+_TYPER = ("prov", "arbetsblad", "gruppuppgift", "diagnos")
 
 
 def create_router(base: Path, arbiter) -> APIRouter:
@@ -85,6 +89,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
 
     def _exam_result(view: dict, errors: list, rounds: int) -> dict:
         doc, _ = exam_spec.validate_exam_json(view.get("exam") or {})
+        summor = exam_spec.poangsummor(doc) if doc else None
         return {
             "id": view["id"], "exam": view.get("exam"),
             "typ": view.get("typ") or "prov",
@@ -92,7 +97,13 @@ def create_router(base: Path, arbiter) -> APIRouter:
             "status": view["status"], "versions": view["versions"],
             "errors": errors, "rounds": rounds,
             "granser": exam_spec.kravgranser(doc) if doc else None,
-            "summor": exam_spec.poangsummor(doc) if doc else None,
+            "summor": summor,
+            # Tiden pappret tar, räknad på de FÄRDIGA uppgifterna. Frontenden
+            # har samma modell (plan.js uppskatta) men bara efter att arket
+            # ritats; diagnosen behöver siffran med en gång, för den skrevs för
+            # att rymmas på en lektion och läraren ska se om den gjorde det.
+            "tid": (exam_spec.tidsatgang(summor, len(doc.uppgifter))
+                    if doc else None),
             "dubbletter": _dubbletter(view),
         }
 
@@ -229,6 +240,17 @@ def create_router(base: Path, arbiter) -> APIRouter:
             punkter = [f"{c['kod']} — {c['rubrik']}: {c['text']}"
                        for c in valda] or punkter_text
             koder = [c["kod"] for c in valda]
+            # Diagnosen dimensioneras här, före genereringen: lektionen är
+            # given och antalet uppgifter faller ut ur den. Ryms inte alla
+            # punkter slås närliggande ihop så att TÄCKNINGEN är kvar — det är
+            # skillnaden mot att korta ner listan.
+            plan = None
+            if typ == "diagnos" and valda:
+                plan = exam_spec.diagnosplan(
+                    valda, int(body.get("tid_min")
+                               or exam_spec.DIAGNOS_TID_STANDARD))
+                antal = plan["antal"]
+                tid_min = plan["tid_min"]
             memory = db.memory_for_prompt(conn, int(group_id), int(course_id)) \
                 if group_id else ""
             teman = db.exam_themes_for_prompt(conn, int(course_id))
@@ -276,7 +298,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     memory=memory, teman=teman, referens=referens,
                     bilder=bilder_block, utfall=utfall_block, bok=bok_block,
                     boknivaer=nivaer_block, forlaga=forlaga_block, profil=typ,
-                    koder=koder, grupp=grupp,
+                    koder=koder, skeleton=plan["skeleton"] if plan else None,
+                    grupp=grupp,
                     log_cb=lambda m: emit({"type": "log", "msg": m}))
                 # Upplägget är lärarens val, inte modellens: skriv in det som
                 # valdes även om modellen råkade fylla i något annat.
@@ -431,6 +454,13 @@ def create_router(base: Path, arbiter) -> APIRouter:
                         bed = None
                     elif typ == "arbetsblad":
                         tex = exam_latex.render_arbetsblad(doc, bilder=bilder_map)
+                        bed = None
+                    elif typ == "diagnos":
+                        # Diagnosen bär sin rättning i samma dokument, sorterad
+                        # per innehållspunkt — det är det bladet läraren sitter
+                        # med, och ett separat bedömningsdokument hade bara
+                        # varit ett papper till att hålla reda på.
+                        tex = exam_latex.render_diagnos(doc, bilder=bilder_map)
                         bed = None
                     else:
                         tex = exam_latex.render_prov(doc, bilder=bilder_map)

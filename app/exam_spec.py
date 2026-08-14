@@ -419,6 +419,17 @@ def to_response_format(antal: int | None = None,
             it["properties"]["poang"] = {
                 "type": "array", "minItems": 3, "maxItems": 3,
                 "prefixItems": [{"const": p} for p in slot["poang"]]}
+            # Diagnosen dimensioneras PER innehållspunkt: platsen i skelettet
+            # bär redan vilka punkter uppgiften ska pröva, och då ska modellen
+            # inte få välja. Samma const-mekanism som poängtripeln — enum hade
+            # tillåtit att samma kod skrevs två gånger i stället för båda.
+            if slot.get("ci"):
+                it["properties"]["innehall"] = {
+                    "type": "array", "minItems": len(slot["ci"]),
+                    "maxItems": len(slot["ci"]),
+                    "prefixItems": [{"const": k} for k in slot["ci"]]}
+                it["required"] = sorted(set(it.get("required", []))
+                                        | {"innehall"})
             # Skelettuppgifter är platta (nonzero poäng) → text/losning/bedomning
             # MÅSTE vara ifyllda. losning/bedomning har default "" och är därför
             # INTE required → grammatiken lät modellen utelämna/null:a dem (föll
@@ -496,11 +507,32 @@ GRUPP_NIVA_MAL: dict[str, tuple[float, float]] = {
     "e": (0.10, 0.45), "c": (0.25, 0.60), "a": (0.10, 0.45),
 }
 
+# Diagnos (Etapp 2) — TÄCKNING FÖRE DJUP. Ett papper som ska sålla av hela
+# kursens centrala innehåll på en lektion kan inte också vara ett prov: det
+# frågar en gång om varje punkt, mest på E-nivå för att se vad som FINNS, med
+# ett inslag av C för att hitta taket. Ingen A-nivå — den mäter inte om något
+# saknas, den mäter hur långt det räcker, och det är inte diagnosens fråga.
+#
+# Förmågebanden är arbetsbladets breda: diagnosens dimension är innehållet, och
+# att också kräva jämn förmågefördelning över elva korta uppgifter vore att
+# lägga ett andra krav på en form som redan är hårt styrd av det första.
+DIAGNOS_FORMAGA_MAL: dict[str, tuple[float, float]] = {f: (0.05, 0.30)
+                                                       for f in FORMAGA_NAMN}
+DIAGNOS_NIVA_MAL: dict[str, tuple[float, float]] = {
+    "e": (0.55, 0.90), "c": (0.10, 0.45), "a": (0.00, 0.10),
+}
+
 # Balansprofil per dokumenttyp: (förmågemål, nivåmål, kräver redovisning,
 # kräver antiklumpning, kräver stigande svårighet).
 PROFILER: dict[str, tuple[dict, dict, bool, bool, bool]] = {
     "prov": (FORMAGA_MAL, NIVA_MAL, True, True, True),
     "arbetsblad": (ARBETSBLAD_FORMAGA_MAL, ARBETSBLAD_NIVA_MAL, False, False, True),
+    # Diagnosen kräver varken redovisning eller stigande svårighet. Trappan är
+    # hela poängen med ett prov och raka motsatsen till en sållning: uppgift 11
+    # ska inte vara svårare än uppgift 1, den ska handla om något ANNAT. Att
+    # rätta en diagnos ska gå fort, så inga uppgifter kräver fullständig
+    # lösning heller.
+    "diagnos": (DIAGNOS_FORMAGA_MAL, DIAGNOS_NIVA_MAL, False, False, False),
     # Gruppuppgiften kräver redovisning (det är själva formen), men INTE
     # stigande svårighet — än. Läraren körde en gruppuppgift skarpt och sa att
     # STEGRINGEN var det som fungerade: alla klarade den första uppgiften, bara
@@ -827,6 +859,9 @@ KARAKTARSMIX: dict[str, tuple[float, float, float]] = {
     "prov": (0.35, 0.34, 0.31),
     "arbetsblad": (0.55, 0.30, 0.15),
     "gruppuppgift": (0.25, 0.45, 0.30),
+    # Diagnosen: två av tre uppgifter frågar om punkten alls sitter, var tredje
+    # frågar hur långt det räcker. Ingen A-uppgift alls.
+    "diagnos": (0.65, 0.35, 0.00),
 }
 
 # Andel av uppgifterna som hamnar i Del B (utan räknare). NP lägger 54–62 % av
@@ -996,6 +1031,220 @@ def balanced_skeleton(antal: int, profil: str = "prov",
 
     _justera_skelett(slots, profil)
     return slots
+
+
+# ══════════════════════════ TIDEN PAPPRET TAR ══════════════════════════
+# Modellen bodde i frontenden (plan.js PER_NIVA) och räknade på ett FÄRDIGT
+# papper: uppgifterna låg framme och läraren tryckte på knappen. Diagnosen
+# vänder på frågan — tiden är GIVEN (en lektion) och det är antalet uppgifter
+# som ska falla ut ur den — så modellen måste finnas här, före genereringen.
+#
+# Minuter per poäng efter nivå: praxis och lärarerfarenhet ligger på 1,5–3
+# minuter per poäng, tyngre ju högre nivå, plus en dryg minut per uppgift för
+# läsning och byte och åtta minuter för start och avslut.
+MIN_PER_POANG: dict[str, float] = {"e": 1.6, "c": 2.2, "a": 3.1}
+MIN_PER_UPPGIFT = 1.1
+MIN_START_OCH_SLUT = 8.0
+
+# Lärarens egen ram för diagnosen: en genomsnittslektion. 75 är taket hon satte,
+# inte ett förslag — ryms innehållet inte där ska punkter slås ihop, inte tiden
+# tänjas.
+DIAGNOS_TID_STANDARD = 60
+DIAGNOS_TID_TAK = 75
+
+
+def tidsatgang(summor: dict, antal: int) -> int:
+    """Minuter ett papper med de här poängsummorna och det här antalet
+    uppgifter tar, avrundat till närmaste fem. Samma modell som plan.js
+    uppskatta() — ett tal som räknas på två ställen blir förr eller senare två
+    tal, så frontenden ska läsa den här."""
+    rena = sum(MIN_PER_POANG[n] * int(summor.get(n) or 0)
+               for n in MIN_PER_POANG)
+    return max(5, round((rena + antal * MIN_PER_UPPGIFT
+                         + MIN_START_OCH_SLUT) / 5) * 5)
+
+
+def _minuter_per_uppgift(mix: tuple[float, float, float]) -> float:
+    """Vad EN uppgift kostar i snitt med en given karaktärsmix.
+
+    Karaktären bestämmer vilken poängtrippel uppgiften får (NP_TRIPPLAR), och
+    tripplarna kostar olika mycket. Snittet vägs över tripplarna i varje
+    karaktär, eftersom skelettet cyklar genom dem."""
+    kostnad = 0.0
+    for i, kar in enumerate(NIVAER_STORA):
+        tripplar = niva_rubrik.NP_TRIPPLAR[kar]
+        per = sum(sum(MIN_PER_POANG[n] * p
+                      for n, p in zip(("e", "c", "a"), trippel))
+                  for trippel in tripplar) / len(tripplar)
+        kostnad += mix[i] * per
+    return kostnad + MIN_PER_UPPGIFT
+
+
+def uppgifter_som_ryms(tid_min: int, profil: str = "diagnos") -> int:
+    """Hur många uppgifter en given lektionstid rymmer. Minst en."""
+    mix = KARAKTARSMIX.get(profil, KARAKTARSMIX["prov"])
+    kvar = max(0.0, tid_min - MIN_START_OCH_SLUT)
+    return max(1, int(kvar // _minuter_per_uppgift(mix)))
+
+
+def _dela(lista: list, delar: int) -> list[list]:
+    """Dela en lista i `delar` sammanhängande, så jämnstora bitar som möjligt.
+    Resten läggs på de FÖRSTA bitarna, så ordningen bevaras."""
+    delar = max(1, min(delar, len(lista)))
+    bas, rest = divmod(len(lista), delar)
+    ut, i = [], 0
+    for k in range(delar):
+        n = bas + (1 if k < rest else 0)
+        ut.append(lista[i:i + n])
+        i += n
+    return ut
+
+
+def gruppera_innehall(punkter: list[dict], antal: int) -> list[list[str]]:
+    """Slå ihop innehållspunkter tills de ryms på `antal` uppgifter.
+
+    Diagnosen ska täcka HELA kursen, och en kurs kan ha 21 punkter medan
+    lektionen rymmer elva uppgifter. Alternativen är att sålla bort punkter
+    eller att låta en uppgift pröva två närliggande — och att sålla bort
+    punkter är att sluta vara en diagnos.
+
+    Sammanslagningen håller sig inom ett OMRÅDE (`rubrik`) så länge det går:
+    grannar under samma rubrik hör ihop, och «linjära ekvationer och linjära
+    olikheter» är en riktig uppgift medan «olikheter och matematikens historia»
+    inte är det. Varje område får därför sin egen kvot av uppgifterna — minst
+    så många som dess punkter kräver med tak MAX_CI_PER_UPPGIFT, och sedan
+    delas överskottet ut till de områden som annars fått de största grupperna.
+    Räcker uppgifterna inte ens till områdenas minsta behov delas hela listan
+    rakt av i stället; då korsar någon grupp en rubrikgräns, vilket är bättre
+    än att en punkt faller bort.
+
+    Färre grupper än golvet (punkter ÷ tak) går inte att be om — då returneras
+    golvet, och diagnosen blir längre än lektionen. Det är ett ärligare svar än
+    en täckning med hål i."""
+    rena = [p for p in punkter if p.get("kod")]
+    if not rena:
+        return []
+    golv = math.ceil(len(rena) / MAX_CI_PER_UPPGIFT)
+    mal = max(golv, min(max(1, antal), len(rena)))
+
+    omraden: list[tuple[str, list[dict]]] = []
+    for p in rena:
+        if omraden and omraden[-1][0] == p.get("rubrik"):
+            omraden[-1][1].append(p)
+        else:
+            omraden.append((p.get("rubrik"), [p]))
+
+    behov = [math.ceil(len(pts) / MAX_CI_PER_UPPGIFT) for _, pts in omraden]
+    if sum(behov) > mal:
+        grupper = _dela(rena, mal)
+    else:
+        kvar = mal - sum(behov)
+        while kvar > 0:
+            # Det område vars grupper är störst i snitt får nästa uppgift.
+            valbara = [i for i in range(len(omraden))
+                       if behov[i] < len(omraden[i][1])]
+            if not valbara:
+                break
+            i = max(valbara, key=lambda i: len(omraden[i][1]) / behov[i])
+            behov[i] += 1
+            kvar -= 1
+        grupper = [g for (_namn, pts), b in zip(omraden, behov)
+                   for g in _dela(pts, b)]
+    return [[p["kod"] for p in g] for g in grupper]
+
+
+def diagnos_skeleton(grupper: list[list[str]]) -> list[dict]:
+    """Diagnosens skelett: EN uppgift per innehållsgrupp, i kursens ordning.
+
+    Skillnaden mot balanced_skeleton är vilken dimension som styr. Provet
+    dimensioneras efter förmåga × karaktär och innehållet får följa med;
+    diagnosen dimensioneras efter INNEHÅLLET och låter förmåga och karaktär
+    följa med. Därför ingen varvning och ingen delindelning: pappret ska läsas
+    i kursens ordning, för det är i den ordningen läraren letar efter hålet.
+
+    Karaktärerna sprids med samma Sainte-Laguë som provet, förmågorna
+    round-robin:as som där, och poängen justeras sist mot diagnosprofilens
+    nivåband."""
+    antal = len(grupper)
+    if not antal:
+        return []
+    karaktarer = _karaktarsfoljd(antal, KARAKTARSMIX["diagnos"])
+    slots: list[dict] = []
+    raknat = {"E": 0, "C": 0, "A": 0}
+    for i, (kar, ci) in enumerate(zip(karaktarer, grupper)):
+        varv, plats = divmod(i, len(FORMAGE_ORDNING))
+        f = FORMAGE_ORDNING[(plats + varv) % len(FORMAGE_ORDNING)]
+        if f == "K" and kar == "E":
+            kar = "C"                     # ingen EK-poäng finns (se skelettet)
+        tripplar = niva_rubrik.NP_TRIPPLAR[kar]
+        poang = list(tripplar[raknat[kar] % len(tripplar)])
+        raknat[kar] += 1
+        if f == "K" and poang[0]:
+            poang[1] += poang[0]
+            poang[0] = 0
+        slots.append({"del": None, "formaga": f,
+                      "typ": _skelett_typ(f, kar), "poang": poang,
+                      "ci": list(ci)})
+    if not any(s["typ"] == "rutin" for s in slots):
+        slots[0]["typ"] = "rutin"
+    _justera_skelett(slots, "diagnos")
+    return slots
+
+
+def diagnosplan(punkter: list[dict], tid_min: int = DIAGNOS_TID_STANDARD) -> dict:
+    """Hela dimensioneringen av en diagnos: {tid_min, antal, grupper, skeleton,
+    uppskattad_tid, punkter}. Tiden klipps till lärarens tak.
+
+    Antalet uppgifter gissas först ur en SNITTKOSTNAD per uppgift och prövas
+    sedan mot det färdiga skelettet. Gissningen räcker inte: nivåsökningen
+    (_justera_skelett) flyttar poäng för att träffa nivåbanden, och ett skelett
+    som skulle kostat 52 minuter kan komma tillbaka på 60. Därför krymps
+    pappret en uppgift i taget tills det ryms — det är hela villkoret läraren
+    satte, och en diagnos som spräcker lektionen är ingen diagnos.
+
+    Ryms det ändå inte (för många punkter för att slås ihop mer) lämnas den
+    kortaste planen och `uppskattad_tid` säger som det är. Ett ärligt övertramp
+    är bättre än en täckning med hål."""
+    tid = max(10, min(DIAGNOS_TID_TAK, int(tid_min or DIAGNOS_TID_STANDARD)))
+    forra = None
+    bast: dict | None = None
+    for onskat in range(uppgifter_som_ryms(tid, "diagnos"), 0, -1):
+        grupper = gruppera_innehall(punkter, onskat)
+        if forra is not None and len(grupper) >= forra:
+            break                      # sammanslagningen är uttömd
+        forra = len(grupper)
+        skeleton = diagnos_skeleton(grupper)
+        summor = poangsummor(_skeleton_doc(skeleton)) if skeleton else {
+            "total": 0, "e": 0, "c": 0, "a": 0}
+        bast = {
+            "tid_min": tid,
+            "antal": len(skeleton),
+            "grupper": grupper,
+            "skeleton": skeleton,
+            "punkter": sum(len(g) for g in grupper),
+            "uppskattad_tid": tidsatgang(summor, len(skeleton)),
+        }
+        if bast["uppskattad_tid"] <= tid:
+            break
+    return bast or {"tid_min": tid, "antal": 0, "grupper": [], "skeleton": [],
+                    "punkter": 0, "uppskattad_tid": 0}
+
+
+def validate_tackning(doc: ExamDoc, koder: list[str] | None) -> list[dict]:
+    """Diagnosens egen regel: INGEN vald innehållspunkt får sakna uppgift.
+
+    Det är hela skillnaden mot ett prov. Ett prov väljer ut; en diagnos som
+    hoppar över en punkt kan inte svara på frågan den ställdes för — «vad kan
+    de inte?» — och tystnaden ser likadan ut som ett godkänt papper."""
+    if not koder:
+        return []
+    tackt = {k for it in doc.uppgifter for k in (it.innehall or [])}
+    saknas = [k for k in koder if k not in tackt]
+    if not saknas:
+        return []
+    return [_err("uppgifter", "tackning",
+                 f"diagnosen prövar inte {', '.join(saknas)} — varje vald "
+                 "innehållspunkt måste stå i minst en uppgifts \"innehall\".")]
 
 
 def _skeleton_doc(slots: list[dict]) -> "ExamDoc":

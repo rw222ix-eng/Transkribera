@@ -463,7 +463,10 @@ window.Klass = (() => {
     b.type = 'button';
     b.className = 'lektplanera';
     b.textContent = ord === 'Diagnos' ? 'Skriv diagnosen' : 'Skriv provet';
-    b.addEventListener('click', () => planera({ datum: p.datum, tid: p.tid || '', kurs: p.kurs || (K.schemaFor(p.datum).find(s => s.klass === p.klass) || {}).kurs || '', klass: p.klass || '', titel: p.titel, slag: 'prov' }, 'Prov'));
+    /* Står det diagnos i kalendern är det en DIAGNOS som ska skrivas, inte ett
+       prov. Knappen sa redan rätt sak men öppnade fel typ, och läraren fick
+       börja med att välja om i steg 2. */
+    b.addEventListener('click', () => planera({ datum: p.datum, tid: p.tid || '', kurs: p.kurs || (K.schemaFor(p.datum).find(s => s.klass === p.klass) || {}).kurs || '', klass: p.klass || '', titel: p.titel, slag: p.slag === 'diagnos' ? 'diagnos' : 'prov' }, ord === 'Diagnos' ? 'Diagnos' : 'Prov'));
     el.appendChild(b);
     return el;
   }

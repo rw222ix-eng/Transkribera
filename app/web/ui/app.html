@@ -1042,6 +1042,10 @@
           <button class="lagekort" type="button" data-lage="Prov" aria-pressed="false"><b>Prov</b><span>Med poäng, delar och lösningsförslag</span></button>
           <button class="lagekort" type="button" data-lage="Arbetsblad" aria-pressed="false"><b>Arbetsblad</b><span>Uppgifter med nivå och facit</span></button>
           <button class="lagekort" type="button" data-lage="Gruppuppgift" aria-pressed="false"><b>Gruppuppgift</b><span>Ifyllnadsställning som följer av uppgiften</span></button>
+          <!-- Sjätte typen och den enda som mäter HELA kursen: hela det centrala
+               innehållet en gång, brett och grunt, på en lektion. Den sätter
+               inget betyg — den letar efter hålet. -->
+          <button class="lagekort" type="button" data-lage="Diagnos" aria-pressed="false"><b>Diagnos</b><span>Hela kursens innehåll på en lektion</span></button>
           <!-- Femte typen, och den enda som inte är elevmaterial: ett A4 att
                skriva ut och ha bredvid sig under lektionen. -->
           <button class="lagekort" type="button" data-lage="Anteckningar" aria-pressed="false"><b>Anteckningar</b><span>Ditt eget stödpapper — ett A4 att tala utifrån</span></button>
@@ -1055,7 +1059,7 @@
           <button class="lank" id="andrahandbyt" type="button">Välj något annat</button>
         </div>
         <div class="seg" role="group" data-seg="skrivtyp" hidden>
-          <button aria-pressed="true">Tavla</button><button aria-pressed="false">Prov</button><button aria-pressed="false">Arbetsblad</button><button aria-pressed="false">Gruppuppgift</button><button aria-pressed="false">Anteckningar</button>
+          <button aria-pressed="true">Tavla</button><button aria-pressed="false">Prov</button><button aria-pressed="false">Arbetsblad</button><button aria-pressed="false">Gruppuppgift</button><button aria-pressed="false">Diagnos</button><button aria-pressed="false">Anteckningar</button>
         </div>
         <!-- OBS-raden hör till valet man just gjort och står därför i stegets fot,
              till vänster om Nästa. plansteg.js ger den sin plats där, notis.js

@@ -1,0 +1,84 @@
+((# Diagnosmall (Etapp 2) — arbetsbladets form på elevens sida, men lärarens
+    sida är sorterad PER INNEHÅLLSPUNKT i stället för per del.
+
+    Det är hela skillnaden och hela poängen. En diagnos rättas inte för att
+    sätta ett betyg utan för att svara på en fråga: vilken punkt sitter inte?
+    Ligger facit i uppgiftsordning måste läraren själv hålla reda på vilken
+    uppgift som hörde till vad; ligger det i punktordning läser hon svaret
+    direkt. Bedömningsanvisningen står därför under punkten, tillsammans med
+    lösningen, och rubriken är punktens korta namn.
+
+    Fast preamble; Jinja-avgränsarna är parentesbaserade. #))
+((* set med_grafik = true *))
+((* set med_svarsrad = true *))
+((* include '_preamble.tex.j2' *))
+((* import '_former.tex.j2' as former *))
+
+\begin{document}
+
+\begin{center}
+  {\LARGE\bfseries ((( titel )))}\\[2mm]
+  {\large Diagnos — ((( kurs )))((* if klass *)) \; · \; ((( klass )))((* endif *))((* if datum *)) \; · \; ((( datum )))((* endif *))}
+\end{center}
+
+\vspace{4mm}
+{\small Diagnosen sätter inget betyg. Den frågar en gång om varje moment i
+kursen för att ta reda på vad som behöver tas om — svara på det du kan och
+hoppa över det du inte kan, så syns det.((* if tid_min *)) Tid: ((( tid_min ))) minuter.((* endif *))}
+
+\vspace{4mm}
+((* for del in delar *))
+((* for u in del.uppgifter *))
+((# Inga poäng på elevens ark: en diagnos som visar poäng blir ett prov i
+    elevens ögon, och då hoppar den som är osäker över uppgiften i stället för
+    att visa vad hon kan. Samma villkorliga \par-fälla som arbetsbladet — se
+    kommentaren där — men här finns bara den ena grenen. #))
+\begin{uppgift}{((( u.nummer )))}{}
+((( u.text )))
+((* if u.bild_fil *))\par\vspace{2mm}\begin{center}\includegraphics[width=0.72\linewidth,height=90mm,keepaspectratio]{((( u.bild_fil )))}\end{center}((* endif *))
+((* if u.figur_tex *))\par\vspace{2mm}\begin{center}((( u.figur_tex )))\end{center}((* endif *))
+((( former.kropp(u) )))
+((* if u.notis *))\notisruta{((( u.notis )))}((* endif *))
+((* if u.har_deluppgifter *))
+((* for d in u.deluppgifter *))
+\begin{deluppgift}{((( d.bokstav )))}{}
+((( d.text )))
+((( former.kropp(d) )))
+((* if d.notis *))\notisruta{((( d.notis )))}((* endif *))
+((* if d.flerval *))((* for alt in d.flerval *))\par\kryssruta\ ((( alt.bokstav ))): ((( alt.text )))((* endfor *))\par\vspace{2mm}((* elif d.svarsfalt *))((( former.falt(d.svarsfalt) )))((* elif d.endast_svar *))((* if d.enhet *))\svarsradmed{}{((( d.enhet )))}((* else *))\svarsrad((* endif *))((* else *))\par\vspace{((( d.utrymme_mm )))mm}((* endif *))
+\end{deluppgift}
+((* endfor *))
+((* if u.svarsfalt *))((( former.falt(u.svarsfalt) )))((* endif *))
+((* elif u.flerval *))
+((* for alt in u.flerval *))\par\kryssruta\ ((( alt.bokstav ))): ((( alt.text )))((* endfor *))\par\vspace{2mm}
+((* elif u.svarsfalt *))((( former.falt(u.svarsfalt) )))((* elif u.endast_svar *))((* if u.enhet *))\svarsradmed{}{((( u.enhet )))}((* else *))\svarsrad((* endif *))((* else *))\par\vspace{((( u.utrymme_mm )))mm}((* endif *))
+\end{uppgift}
+((* endfor *))
+((* endfor *))
+
+\newpage
+\delprovband{Rättning — moment för moment}
+
+{\small Läs en rubrik i taget och pricka av klassen. Rubriken är kursens
+centrala innehåll; uppgifterna under den är de som prövar just det momentet.
+En uppgift som prövar två moment står under båda.}
+
+\vspace{3mm}
+((* for g in ci_grupper *))
+\subsection*{((( g.rubrik )))}
+((* for u in g.uppgifter *))
+\begin{uppgift}{((( u.nummer )))}{((( u.poang_str )))}\par
+((* if u.har_deluppgifter *))
+((* for d in u.deluppgifter *))
+\begin{deluppgift}{((( d.bokstav )))}{((( d.poang_str )))}\par
+((( d.losning )))\par\vspace{1mm}{\small\itshape ((( d.bedomning )))}
+\end{deluppgift}
+((* endfor *))
+((* else *))
+((( u.losning )))\par\vspace{1mm}{\small\itshape ((( u.bedomning )))}
+((* endif *))
+\end{uppgift}
+((* endfor *))
+((* endfor *))
+
+\end{document}
