@@ -74,6 +74,12 @@ export default defineConfig({
     // Playwrights egen chromium är inte nedladdad i den här miljön; appen körs
     // ändå bara i den Chromium som pywebview bäddar in på Windows.
     channel: "chrome",
+    /* Spåret och `test-results/<test>/error-context.md` skrivs för det test som
+     * FÖLL — och Playwright tömmer test-results i början av NÄSTA körning.
+     * LÄS DEM INNAN DU KÖR OM. En röd apa (2026-08-14) gick inte att förklara
+     * efteråt: sviten kördes om direkt för att se om felet satt kvar, och då
+     * var både spåret och felmeddelandet borta. Sju gröna körningar senare fanns
+     * ingenting kvar att titta på. */
     trace: "retain-on-failure",
   },
   webServer: {
