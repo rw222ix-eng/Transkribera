@@ -13,7 +13,7 @@ anchor) is returned unchanged — only genuinely missing paths are re-rooted.
 from __future__ import annotations
 
 import re
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 # Folders the app owns under base_dir; everything it stores lives under one of these.
 ANCHORS = ("Transkriberingar", "downloads")
@@ -58,10 +58,18 @@ def safe_name(raw: str, fallback: str = "fil", *, max_len: int = 120) -> str:
 
     Ändelsen behålls separat: klipps namnet på längden ska «.mp3» följa med,
     annars vet varken spelaren eller ffmpeg vad filen är."""
-    stam = Path(str(raw or "")).name
+    # PureWindowsPath, inte Path: `Path` betyder POSIX-regler på Mac och Linux,
+    # där `\` är ett vanligt tecken i ett filnamn. `..\..\Windows\evil.mp3` från
+    # en Windows-webbläsare blev då EN namndel, och `x:y.mp3` blev `xy.mp3` i
+    # stället för `y.mp3` — mappdelen och NTFS-dataströmmen överlevde som text i
+    # namnet. Windows-reglerna är strikt hårdare (`\` OCH `/` separerar, `x:` är
+    # en enhet) och är dessutom de enda som är säkra att köra överallt: samma
+    # uppladdning ska ge samma filnamn oavsett var appen kör. På Windows är det
+    # exakt vad `Path` redan gjorde — ingen beteendeskillnad där.
+    stam = PureWindowsPath(str(raw or "")).name
     if stam in (".", ".."):
         stam = ""
-    p = Path(stam)
+    p = PureWindowsPath(stam)
     ext = _OTILLATNA.sub("", p.suffix)[:16]
     namn = _OTILLATNA.sub("", p.stem).strip().strip(".")
     if not namn:
