@@ -55,7 +55,17 @@ INSTRUCTION = (
     "är en PUNKT [x, y] inne i figuren (oftast dess mitt) — etiketten knuffas "
     "bort från den och hamnar utanför figuren. Aldrig true/false: en skarp "
     "körning skrev outward: true och kostade en hel reparationsrunda.\n"
-    "- Färger anges ENDAST med namnen black, blue, red, green, orange, purple.\n"
+    # FÄRGERNA. «Massa blåa färger och röda färger — det känns lite
+    # inkonsekvent. Vi tonar ner på det här. Drastiskt. Endast färger där det
+    # absolut behövs, för att markera någonting viktigt. Eller i grafen, för
+    # att skilja olika linjer åt — det funkar.»
+    "- Färger anges ENDAST med namnen black, blue, red, green, orange, purple, "
+    "men tavlan skrivs i SVART. Färg är ett verktyg, inte dekoration, och "
+    "används bara på två ställen: (1) rött för det som varnar — \"Vanligt "
+    "fel:\" och det felaktiga ledet, (2) inuti grafer och figurer för att "
+    "skilja kurvor, linjer och vinklar åt. Rubriker, formler, exempel, "
+    "metodsteg och svar är svarta. En färg per sektion gör tavlan brokig och "
+    "betyder till slut ingenting.\n"
     "- Grafkurvor skrivs som uttryckssträngar i plots[].expr, t.ex. "
     "\"x^2 - 2*x + 1\" eller \"sin(x)\" (tillåtet: tal, x, + - * / ^, "
     "parenteser, sin cos tan sqrt log ln exp abs, pi, e). Decimalpunkt är ok "
@@ -78,8 +88,8 @@ INSTRUCTION = (
     # färg. Inga sådana rutor. Då gör jag i så fall understrykningar.»
     # Regeln fälls också deterministiskt (whiteboard_spec, koden 'ruta').
     "- Rita ALDRIG rutor: callout-sektioner är förbjudna på lektionstavlan. "
-    "Läraren ringar inte in något — hon markerar med en kort RUBRIK, gärna blå, "
-    "och en understrykning (heading med underline), och låter innehållet stå "
+    "Läraren ringar inte in något — hon markerar med en kort RUBRIK och en "
+    "understrykning (heading med underline), och låter innehållet stå "
     "fritt under den. Samma sak för svar och för vanliga fel: rubrik i färg, "
     "inte ram.\n"
     "- Var koncis: högst ~7 sektioner per tavla/kolumn, korta math-rader "
@@ -109,8 +119,8 @@ INSTRUCTION = (
     "punkt vara \"Arbetar i boken s. X–Y\".\n"
     "3. En divider-sektion (strecket under agendan).\n"
     "4. Öppningsfrågan: EN rad, ställd till klassen och riktad mot det de redan "
-    "kan (\"Vad vet ni om …?\") — skriv den som en blå heading, aldrig i en "
-    "ruta. Begreppet ska väckas, inte presenteras.\n"
+    "kan (\"Vad vet ni om …?\") — skriv den som en heading, aldrig i en ruta "
+    "och aldrig i färg. Begreppet ska väckas, inte presenteras.\n"
     "5. Högst EN mening vardagsspråk om vad begreppet är — sedan inga fler "
     "meningar.\n"
     "6. Figuren och formlerna SIDA VID SIDA i en row: figuren till vänster, "
@@ -139,10 +149,9 @@ INSTRUCTION = (
     "underline-sektion.\n"
     "Skriv INTE någon lektionstid på tavlan — den lägger systemet dit.\n"
     "Högertavlan är antingen EXEMPEL (huvudregeln) eller ett FALLGALLERI:\n"
-    "- Exempel: 1–2 stycken (\"Exempel 1\", \"Exempel 2\"), situationsraden "
-    "högst två rader, lösningen i korta math-steg, svaret på en egen rad som "
-    "inleds med \"Svar:\" (i färg, utan ram). Exempel hör hemma här — aldrig "
-    "på vänstertavlan.\n"
+    "- Exempel: 1–2 stycken (\"Exempel 1\", \"Exempel 2\"), uppgiftsraden högst "
+    "två rader och därunder metodstegen — inte uträkningen och inte svaret. "
+    "Exempel hör hemma här — aldrig på vänstertavlan.\n"
     "- Fallgalleri (när momentet är en sats med klassiska fall, t.ex. "
     "randvinkelsatsen): 3–4 färdiga figurer, var och en med fallets namn och "
     "EN kort rad om vad det säger. Inga uträkningar — läraren pratar och "
@@ -158,21 +167,41 @@ INSTRUCTION = (
     # uppgifter på ett bättre sätt.»
     "Exemplen — de är genomgångens kärna:\n"
     "- 1–3 exempel, aldrig fler. Ett enkelt exempel räcker ofta; tre är taket.\n"
-    "- Välj talen så att svaren blir HELTAL eller enkla decimaltal. Eleven ska "
-    "se metoden, inte fastna i räkningen. Krånglig aritmetik (rötter som inte "
-    "går jämnt ut, långa decimaler) döljer det exemplet skulle visa.\n"
+    # Lärarens tredje dom: «Jag kommer ju göra själva uträkningarna. Det räcker
+    # med en stark utgångspunkt jag kan utgå ifrån, och sen kan det bara stå
+    # rent generellt vad jag ska göra. Massa färdiga uträkningar behövs inte.»
+    "- Ett exempel är en UTGÅNGSPUNKT, inte en färdig lösning. Skriv "
+    "uppgiften (konkret, med tal) och därefter vad man GÖR — korta metodsteg i "
+    "allmänna ord eller allmänna formler. Räkna INTE ut svaret på tavlan: det "
+    "gör läraren tillsammans med klassen, och en färdig uträkning tar bort "
+    "själva genomgången. Ingen kedja av uträknade led, inget facit.\n"
+    "- Välj ändå talen så att uträkningen GÅR JÄMNT UT när läraren räknar den "
+    "på plats — heltal eller enkla decimaltal. Eleven ska se metoden, inte "
+    "fastna i aritmetiken.\n"
     "- Exemplen ska spegla den TYP och NIVÅ av uppgifter eleverna sedan möter i "
     "boken — det är dem de ska klara. Men skriv ALLTID egna uppgifter: bokens "
     "får aldrig skrivas av, inte ens med utbytta tal. Poängen med ett eget "
     "exempel är att det kan göras enklare, renare och mer pedagogiskt än "
     "bokens, så att eleven klarar bokens efteråt.\n"
     "- Visa det vanliga felet INNE i ett exempel när det går: det felaktiga "
-    "ledet i rött bredvid det rätta, i just den uträkning klassen tittar på. "
-    "Ett fel som bara står som en regel känns inte igen; ett fel som står i "
+    "ledet i rött bredvid det rätta, i just den uppgift klassen tittar på. Ett "
+    "fel som bara står som en regel känns inte igen; ett fel som står i "
     "exemplet gör det.\n"
     "- Finns det flera vägar till svaret (som i boken) — visa två: \"Väg 1\" "
-    "och \"Väg 2\" till samma svar, korta steg. Eleverna löser olika, och "
-    "genomgången ska rymma båda.\n"
+    "och \"Väg 2\", ett par ord var om vad vägen går ut på. Eleverna löser "
+    "olika, och genomgången ska rymma båda.\n"
+    # MÅLET NÄR BOKEN ÄR KÄLLAN. «Eleverna ska arbeta mest i boken. När jag
+    # väljer att utgå från boken är syftet med genomgången att den ska vara
+    # kort, lätt att fatta, intressant och naturligt följsam — men också ge
+    # tillräckligt mycket information för att eleverna lätt ska klara SAMTLIGA
+    # uppgifter på de sidor jag utgått ifrån. Det är målet.»
+    "- Är boken källa (sidor eller uppgifter finns i bokblocket nedan) är "
+    "tavlans mål exakt detta: kort, lätt att fatta och följsam, MEN "
+    "tillräcklig för att eleven ska klara SAMTLIGA uppgifter på just de "
+    "sidorna. Gå igenom vilka uppgiftstyper som förekommer där och se till att "
+    "varje typ har det den kräver på tavlan — en formel, ett metodsteg eller "
+    "ett exempel. Saknas något är genomgången för tunn; står det som inte "
+    "behövs för de uppgifterna är den för tjock.\n"
     # TEXTBUDGETEN. Läraren körde en lektion med två egengjorda tavlor och sa
     # efteråt att den ena var fylld med text hon aldrig skrev upp på plats: det
     # är för mycket att skriva. Tavlan ska bära det som FAKTISKT SKRIVS under
@@ -265,13 +294,12 @@ FEW_SHOTS: list[tuple[str, dict]] = [
                     "chrome": "aluminium", "tray": True, "name": "vanster",
                     "sections": [
                         # Rubrik och agenda står MITT på tavlan — det är så
-                        # läraren skriver dem.
+                        # läraren skriver dem. Understrykningen är svart:
+                        # färg används bara där den betyder något.
                         {"kind": "heading", "text": "Pythagoras sats", "size": 34,
                          "align": "center",
-                         "underline": {"color": "red", "amplitude": 2, "thickness": 3,
+                         "underline": {"amplitude": 2, "thickness": 3,
                                        "reserve": 14}, "gapAfter": 16},
-                        # Agendan: dagens resa i vardagliga ord, och sidorna i
-                        # boken som en egen punkt.
                         {"kind": "list", "bullet": "–", "size": 19, "gap": 4,
                          "indent": 22, "align": "center", "items": [
                              "Vad satsen betyder",
@@ -279,11 +307,11 @@ FEW_SHOTS: list[tuple[str, dict]] = [
                              "Arbetar i boken s. 88–90"],
                          "gapAfter": 12},
                         {"kind": "divider", "width": 620, "gapAfter": 16},
-                        # Öppningsfrågan: begreppet väcks ur klassen. En blå
-                        # rubrik — ingen ruta.
+                        # Öppningsfrågan: begreppet väcks ur klassen. En rubrik
+                        # — ingen ruta, ingen färg.
                         {"kind": "heading",
                          "text": "Vad vet ni om rätvinkliga trianglar?",
-                         "size": 22, "color": "blue", "gapAfter": 12},
+                         "size": 22, "gapAfter": 12},
                         {"kind": "text",
                          "text": "Längsta sidan ligger mitt emot räta vinkeln.",
                          "size": 20, "gapAfter": 14},
@@ -298,16 +326,17 @@ FEW_SHOTS: list[tuple[str, dict]] = [
                                         "inside": "v"}},
                             {"kind": "col", "gap": 10, "children": [
                                 {"kind": "math", "latex": "a^2 + b^2 = c^2",
-                                 "size": 30, "color": "blue", "gapAfter": 14},
+                                 "size": 30, "gapAfter": 14},
                                 {"kind": "math", "latex": "c = \\sqrt{a^2 + b^2}",
-                                 "size": 24, "color": "blue", "gapAfter": 18},
+                                 "size": 24, "gapAfter": 18},
+                                # Rött, och bara här: det är varningen.
                                 {"kind": "text", "text": "Vanligt fel:",
                                  "size": 19, "color": "red", "weight": 700,
                                  "gapAfter": 2},
                                 {"kind": "underline", "width": 120,
                                  "color": "red", "gapAfter": 8},
                                 {"kind": "math",
-                                 "latex": "c^2 = a^2 + b^2 \\Rightarrow c = a + b",
+                                 "latex": "c = \\sqrt{a^2} + \\sqrt{b^2}",
                                  "size": 19, "color": "red", "gapAfter": 6},
                                 {"kind": "text",
                                  "text": "Roten ur en summa är inte summan av rötterna.",
@@ -319,46 +348,47 @@ FEW_SHOTS: list[tuple[str, dict]] = [
                     "padding": {"top": 30, "right": 30, "bottom": 30, "left": 30},
                     "chrome": "aluminium", "tray": True, "name": "hoger",
                     "columns": [
+                        # EXEMPLEN ÄR UTGÅNGSPUNKTER, inte lösningar: uppgiften
+                        # och vad man GÖR. Uträkningen gör läraren tillsammans
+                        # med klassen — en färdig lösning tar bort genomgången.
+                        # Talen är ändå valda så att det går jämnt ut på plats.
                         {"weight": 1, "sections": [
                             {"kind": "heading", "text": "Exempel 1", "size": 28,
-                             "underline": {"color": "blue"}, "gapAfter": 14},
+                             "underline": {}, "gapAfter": 14},
                             {"kind": "text",
-                             "text": "Beräkna hypotenusan c om a = 3 och b = 4.",
-                             "size": 20, "gapAfter": 12},
-                            {"kind": "math", "latex": "c^2 = 3^2 + 4^2",
-                             "size": 22, "gapAfter": 6},
-                            {"kind": "math", "latex": "c^2 = 9 + 16 = 25",
-                             "size": 22, "gapAfter": 6},
-                            {"kind": "math", "latex": "c = \\sqrt{25} = 5",
-                             "size": 24, "color": "green", "gapAfter": 18},
+                             "text": "Kateterna är 3 cm och 4 cm. Hur lång är c?",
+                             "size": 20, "gapAfter": 14},
                             {"kind": "shape", "type": "right-triangle",
-                             "width": 220, "height": 170,
-                             "labels": {"left": "a = 3", "bottom": "b = 4",
-                                        "right": "c = 5"}},
+                             "width": 240, "height": 175,
+                             "labels": {"left": "3", "bottom": "4", "right": "c"},
+                             "gapAfter": 16},
+                            {"kind": "list", "bullet": "–", "size": 19, "gap": 6,
+                             "items": ["Sätt in kateterna i satsen",
+                                       "Räkna ut c² först",
+                                       "Dra roten ur — och sätt ut enheten"]},
                         ]},
                         {"weight": 1, "sections": [
                             {"kind": "heading", "text": "Exempel 2", "size": 28,
-                             "underline": {"color": "blue"}, "gapAfter": 14},
+                             "underline": {}, "gapAfter": 14},
                             {"kind": "text",
-                             "text": "En stege på 5 m lutar mot en vägg. Foten är "
-                                     "3 m från väggen. Hur högt når stegen?",
-                             "size": 19, "gapAfter": 12},
-                            {"kind": "math", "latex": "h^2 + 3^2 = 5^2",
-                             "size": 22, "gapAfter": 6},
-                            {"kind": "math", "latex": "h^2 = 25 - 9 = 16",
-                             "size": 22, "gapAfter": 6},
-                            # Talen är valda så att svaret blir ett HELTAL:
-                            # eleven ska se metoden, inte fastna i räkningen.
-                            {"kind": "math",
-                             "latex": "h = \\sqrt{16} = 4 \\text{ m}",
-                             "size": 22, "color": "green", "gapAfter": 14},
-                            # Felet visas i själva exemplet, inte bara som regel.
-                            {"kind": "math", "latex": "h \\ne 5 - 3 = 2",
-                             "size": 20, "color": "red", "gapAfter": 12},
-                            # Svaret är en rad i färg — ingen ram.
+                             "text": "En stege på 5 m står 3 m från väggen.",
+                             "size": 20, "gapAfter": 4},
+                            {"kind": "text", "text": "Hur högt upp når den?",
+                             "size": 20, "gapAfter": 14},
+                            {"kind": "list", "bullet": "–", "size": 19, "gap": 6,
+                             "items": ["Rita och sätt ut det du vet",
+                                       "Stegen är hypotenusan",
+                                       "Här söks en katet — subtrahera"],
+                             "gapAfter": 18},
+                            {"kind": "text", "text": "Vanligt fel:", "size": 19,
+                             "color": "red", "weight": 700, "gapAfter": 2},
+                            {"kind": "underline", "width": 120, "color": "red",
+                             "gapAfter": 8},
+                            {"kind": "math", "latex": "h = 5 - 3",
+                             "size": 20, "color": "red", "gapAfter": 6},
                             {"kind": "text",
-                             "text": "Svar: stegen når 4 m upp.",
-                             "size": 19, "color": "blue", "weight": 700},
+                             "text": "Sidorna i en triangel subtraheras inte rakt av.",
+                             "size": 17, "color": "red"},
                         ]},
                     ],
                 },
@@ -376,8 +406,7 @@ FEW_SHOTS: list[tuple[str, dict]] = [
                     "chrome": "aluminium", "tray": True, "name": "vanster",
                     "sections": [
                         {"kind": "heading", "text": "Andragradsfunktioner", "size": 32,
-                         "align": "center",
-                         "underline": {"color": "red"}, "gapAfter": 14},
+                         "align": "center", "underline": {}, "gapAfter": 14},
                         {"kind": "list", "bullet": "–", "size": 19, "gap": 4,
                          "align": "center", "items": [
                              "Vad grafen berättar",
@@ -387,11 +416,13 @@ FEW_SHOTS: list[tuple[str, dict]] = [
                         {"kind": "divider", "width": 620, "gapAfter": 14},
                         {"kind": "heading",
                          "text": "Vad vet ni om grafen till x²?",
-                         "size": 22, "color": "blue", "gapAfter": 12},
+                         "size": 22, "gapAfter": 12},
                         {"kind": "text",
                          "text": "Kurvan vänder i en punkt och är symmetrisk.",
                          "size": 20, "gapAfter": 14},
                         {"kind": "row", "gap": 26, "children": [
+                            # Färgerna i grafen bär betydelse: kurvan och
+                            # symmetrilinjen ska gå att skilja åt.
                             {"kind": "graph", "width": 330, "height": 330,
                              "xRange": [-4, 2], "yRange": [-3, 3],
                              "grid": False, "axes": True, "gridStep": 1,
@@ -404,19 +435,19 @@ FEW_SHOTS: list[tuple[str, dict]] = [
                              "texts": [{"x": -0.8, "y": 2.2,
                                         "text": "symmetrilinje", "size": 15,
                                         "color": "blue", "anchor": "start"}],
-                             "points": [{"x": -1, "y": -2, "color": "green"}]},
+                             "points": [{"x": -1, "y": -2}]},
                             {"kind": "col", "gap": 10, "children": [
                                 {"kind": "math", "latex": "f(x) = ax^2 + bx + c",
-                                 "size": 24, "color": "blue", "gapAfter": 12},
+                                 "size": 24, "gapAfter": 12},
                                 {"kind": "math", "latex": "x = -\\frac{b}{2a}",
-                                 "size": 24, "color": "blue", "gapAfter": 18},
+                                 "size": 24, "gapAfter": 18},
                                 {"kind": "text", "text": "Vanligt fel:",
                                  "size": 19, "color": "red", "weight": 700,
                                  "gapAfter": 2},
                                 {"kind": "underline", "width": 120,
                                  "color": "red", "gapAfter": 8},
                                 {"kind": "text",
-                                 "text": "x = 2 är symmetrilinjen, inte minimipunkten.",
+                                 "text": "x-värdet är symmetrilinjen, inte punkten.",
                                  "size": 17, "color": "red", "gapAfter": 6},
                                 {"kind": "text",
                                  "text": "Sätt in x i f(x) — punkten har två tal.",
@@ -430,35 +461,37 @@ FEW_SHOTS: list[tuple[str, dict]] = [
                     "columns": [
                         {"weight": 1, "sections": [
                             {"kind": "heading", "text": "Exempel", "size": 28,
-                             "underline": {"color": "blue"}, "gapAfter": 14},
+                             "underline": {}, "gapAfter": 14},
                             {"kind": "text",
-                             "text": "Bestäm minimipunkten till f(x) = x² − 4x + 3.",
-                             "size": 20, "gapAfter": 12},
+                             "text": "Bestäm minimipunkten till funktionen.",
+                             "size": 20, "gapAfter": 10},
+                            {"kind": "math", "latex": "f(x) = x^2 - 4x + 3",
+                             "size": 26, "gapAfter": 18},
                             # TVÅ VÄGAR till samma svar — eleverna löser olika,
-                            # och boken har båda metoderna.
+                            # och boken har båda metoderna. Vägarna säger vad
+                            # man gör; själva räknandet sker på lektionen.
                             {"kind": "text", "text": "Väg 1: symmetrilinjen",
                              "size": 19, "weight": 700, "gapAfter": 6},
-                            {"kind": "math", "latex": "x = -\\frac{-4}{2} = 2",
-                             "size": 22, "gapAfter": 6},
-                            {"kind": "math", "latex": "f(2) = 4 - 8 + 3 = -1",
-                             "size": 22, "gapAfter": 14},
+                            {"kind": "text",
+                             "text": "Räkna x, sätt sedan in x i f(x).",
+                             "size": 19, "gapAfter": 14},
                             {"kind": "text", "text": "Väg 2: kvadratkomplettering",
                              "size": 19, "weight": 700, "gapAfter": 6},
-                            {"kind": "math", "latex": "f(x) = (x - 2)^2 - 1",
-                             "size": 22, "gapAfter": 12},
-                            {"kind": "math",
-                             "latex": "\\text{Minimipunkt } (2, -1)",
-                             "size": 22, "color": "green"},
+                            {"kind": "math", "latex": "f(x) = (x - p)^2 + q",
+                             "size": 22, "gapAfter": 6},
+                            {"kind": "text",
+                             "text": "Vändpunkten avläses direkt: (p, q).",
+                             "size": 19},
                         ]},
                         {"weight": 1, "sections": [
+                            # Grafen är utgångspunkten att peka i — punkten
+                            # märker läraren ut tillsammans med klassen.
                             {"kind": "graph", "width": 520, "height": 380,
                              "xRange": [-1, 5], "yRange": [-2, 4],
                              "grid": True, "axes": True, "gridStep": 1,
                              "xLabel": "x", "yLabel": "y",
                              "plots": [{"expr": "x^2 - 4*x + 3", "color": "red",
                                         "thickness": 2}],
-                             "points": [{"x": 2, "y": -1, "color": "green",
-                                         "label": "(2, -1)", "labelGap": 18}],
                              "ticks": [{"axis": "x", "at": 1, "label": "1"},
                                        {"axis": "x", "at": 3, "label": "3"}]},
                         ]},
@@ -469,13 +502,13 @@ FEW_SHOTS: list[tuple[str, dict]] = [
     ),
     # ── Destillat ur lärarens egen tavla (docs/forlagor/ ─────────────────────
     # activity_text_to_equation.html, HÖGRA tavlan). Formen, inte innehållet:
-    # situationsrad på högst två rader → uppställning i få steg →
-    # klassificeringsfrågan med ETT svar på en rad → lösningen i tre mattesteg →
-    # svarsrad → SAMMANFATTNINGSTABELLEN.
+    # uppgiftsrad på högst två rader → klassificeringsfrågan med ETT svar på en
+    # rad → metodsteg → SAMMANFATTNINGSTABELLEN.
     #
     # Tabellen är själva poängen. Grupperna löser först var för sig, sedan löser
     # klassen uppgifterna tillsammans på tavlan och tabellen fylls i gemensamt —
-    # det är lektionens samlingspunkt, och den läraren är stoltast över.
+    # det är lektionens samlingspunkt, och den läraren är stoltast över. Därför
+    # står bara första raden ifylld: resten skrivs på plats.
     #
     # Momentet är MEDVETET ett annat än förlagans (som handlar om exponential-
     # mot potensekvationer): modellen ska härma formen, inte skriva av
@@ -492,8 +525,8 @@ FEW_SHOTS: list[tuple[str, dict]] = [
                     "sections": [
                         {"kind": "heading", "text": "Vilken regel?", "size": 32,
                          "align": "center",
-                         "underline": {"color": "red", "amplitude": 2,
-                                       "thickness": 3, "reserve": 16},
+                         "underline": {"amplitude": 2, "thickness": 3,
+                                       "reserve": 16},
                          "gapAfter": 14},
                         {"kind": "list", "bullet": "–", "size": 19, "gap": 4,
                          "align": "center", "items": ["Reglerna vi redan kan",
@@ -503,7 +536,7 @@ FEW_SHOTS: list[tuple[str, dict]] = [
                         {"kind": "divider", "width": 620, "gapAfter": 14},
                         {"kind": "heading",
                          "text": "Vilka deriveringsregler minns ni?",
-                         "size": 22, "color": "blue", "gapAfter": 12},
+                         "size": 22, "gapAfter": 12},
                         {"kind": "text",
                          "text": "Regeln väljs efter hur uttrycket är byggt.",
                          "size": 20, "gapAfter": 14},
@@ -523,20 +556,20 @@ FEW_SHOTS: list[tuple[str, dict]] = [
                                            "Funktion i funktion → kedjeregeln"]}]},
                             {"kind": "col", "gap": 10, "children": [
                                 {"kind": "math", "latex": "(uv)' = u'v + uv'",
-                                 "size": 24, "color": "blue", "gapAfter": 12},
+                                 "size": 24, "gapAfter": 12},
                                 {"kind": "math",
                                  "latex": "f(g(x))' = f'(g)\\cdot g'",
-                                 "size": 24, "color": "blue", "gapAfter": 18},
+                                 "size": 24, "gapAfter": 18},
                                 {"kind": "text", "text": "Vanligt fel:",
                                  "size": 19, "color": "red", "weight": 700,
                                  "gapAfter": 2},
                                 {"kind": "underline", "width": 120,
                                  "color": "red", "gapAfter": 8},
                                 {"kind": "math",
-                                 "latex": "(x^2\\sin x)' = 2x\\cos x",
+                                 "latex": "(uv)' = u'v'",
                                  "size": 19, "color": "red", "gapAfter": 6},
                                 {"kind": "text",
-                                 "text": "Faktorerna deriveras var för sig.",
+                                 "text": "Faktorerna deriveras inte var för sig.",
                                  "size": 17, "color": "red"}]}]},
                     ],
                 },
@@ -547,47 +580,36 @@ FEW_SHOTS: list[tuple[str, dict]] = [
                     "columns": [
                         {"weight": 1, "sections": [
                             {"kind": "heading", "text": "Exempel A", "size": 28,
-                             "underline": {"color": "blue"}, "gapAfter": 12},
-                            # Situationsraden: två rader, aldrig fler.
+                             "underline": {}, "gapAfter": 12},
                             {"kind": "text", "text": "Derivera funktionen nedan.",
                              "size": 20, "gapAfter": 14},
                             {"kind": "math", "latex": "f(x) = x^2\\sin x",
-                             "size": 26, "gapAfter": 14},
+                             "size": 26, "gapAfter": 16},
                             # Klassificeringsfrågan — och svaret på EN rad.
                             {"kind": "text", "text": "Hur är den byggd?",
                              "size": 21, "weight": 700, "gapAfter": 4},
                             {"kind": "text",
                              "text": "Två faktorer → produktregeln",
-                             "size": 20, "gapAfter": 14},
-                            {"kind": "math", "latex": "u = x^2 \\qquad v = \\sin x",
-                             "size": 22},
+                             "size": 20, "gapAfter": 16},
+                            {"kind": "list", "bullet": "–", "size": 19, "gap": 6,
+                             "items": ["Namnge u och v",
+                                       "Derivera u och v var för sig",
+                                       "Sätt in i produktregeln"]},
                         ]},
                         {"weight": 1, "sections": [
-                            {"kind": "heading", "text": "Lösning", "size": 28,
-                             "underline": {"color": "blue"}, "gapAfter": 12},
-                            {"kind": "math", "latex": "u' = 2x \\qquad v' = \\cos x",
-                             "size": 22, "gapAfter": 8},
-                            {"kind": "math",
-                             "latex": "f' = 2x\\sin x + x^2\\cos x",
-                             "size": 24, "color": "green", "gapAfter": 12},
-                            {"kind": "text",
-                             "text": "Svar: f' = 2x sin x + x² cos x",
-                             "size": 19, "color": "red", "weight": 700,
-                             "gapAfter": 20},
-                            # SAMMANFATTNINGEN: en rad per fall, fylls i
-                            # tillsammans med klassen. Korta celler, ingen
-                            # cellW — motorn ger varje kolumn sin egen bredd.
-                            {"kind": "heading", "text": "Sammanfattning",
-                             "size": 22, "underline": {"color": "blue"},
-                             "gapAfter": 10},
+                            # SAMMANFATTNINGEN: en rad per fall. Första raden
+                            # visar formen — resten fylls i tillsammans med
+                            # klassen. Korta celler, ingen cellW: motorn ger
+                            # varje kolumn sin egen bredd.
+                            {"kind": "heading", "text": "Fyller vi i tillsammans",
+                             "size": 24, "underline": {}, "gapAfter": 14},
                             {"kind": "table",
                              "headers": ["Uttryck", "Byggt av", "Regel", "Svar"],
                              "rows": [
-                                 ["x² sin x", "två faktorer", "produkt",
-                                  "2x sin x + x² cos x"],
-                                 ["(3x + 1)⁵", "funktion i funktion",
-                                  "kedja", "15(3x + 1)⁴"],
-                                 ["4x³", "ren potens", "potens", "12x²"]]},
+                                 ["x² sin x", "två faktorer", "produkt", ""],
+                                 ["(3x + 1)⁵", "", "", ""],
+                                 ["4x³", "", "", ""],
+                                 ["x² + sin x", "", "", ""]]},
                         ]},
                     ],
                 },
@@ -611,8 +633,7 @@ FEW_SHOTS: list[tuple[str, dict]] = [
                     "chrome": "aluminium", "tray": True, "name": "vanster",
                     "sections": [
                         {"kind": "heading", "text": "Randvinkelsatsen", "size": 32,
-                         "align": "center",
-                         "underline": {"color": "red"}, "gapAfter": 14},
+                         "align": "center", "underline": {}, "gapAfter": 14},
                         {"kind": "list", "bullet": "–", "size": 19, "gap": 4,
                          "align": "center", "items": ["Vinklar inne i en cirkel",
                                                       "Tre fall att känna igen",
@@ -621,14 +642,13 @@ FEW_SHOTS: list[tuple[str, dict]] = [
                         {"kind": "divider", "width": 620, "gapAfter": 14},
                         {"kind": "heading",
                          "text": "Vad vet ni om vinklar i en cirkel?",
-                         "size": 22, "color": "blue", "gapAfter": 12},
+                         "size": 22, "gapAfter": 12},
                         {"kind": "text",
                          "text": "En randvinkel har sitt hörn på cirkeln.",
                          "size": 20, "gapAfter": 14},
                         {"kind": "row", "gap": 26, "children": [
-                            # Bokstäver, inga gradtal: figuren är generisk och
-                            # satsen läses av ur den. Talen hör hemma i
-                            # galleriet till höger.
+                            # I figuren bär färgen betydelse: de två vinklarna
+                            # ska gå att skilja åt när läraren pekar.
                             {"kind": "graph", "width": 300, "height": 300,
                              "xRange": [-1.35, 1.35], "yRange": [-1.35, 1.35],
                              "grid": False, "axes": False,
@@ -639,8 +659,8 @@ FEW_SHOTS: list[tuple[str, dict]] = [
                                   "fill": "blue", "fillOpacity": 0.1,
                                   "stroke": "blue", "strokeWidth": 2},
                                  {"pts": [[-0.94, -0.342], [0, 1], [0.94, -0.342]],
-                                  "fill": "red", "fillOpacity": 0.08,
-                                  "stroke": "red", "strokeWidth": 2}],
+                                  "fillOpacity": 0, "stroke": "black",
+                                  "strokeWidth": 2}],
                              "points": [{"x": 0, "y": 0, "color": "black",
                                          "size": 5}],
                              "texts": [
@@ -648,8 +668,7 @@ FEW_SHOTS: list[tuple[str, dict]] = [
                                   "color": "blue", "anchor": "middle",
                                   "italic": True},
                                  {"x": 0, "y": 0.64, "text": "v", "size": 18,
-                                  "color": "red", "anchor": "middle",
-                                  "italic": True},
+                                  "anchor": "middle", "italic": True},
                                  {"x": -1.05, "y": -0.52, "text": "A", "size": 16,
                                   "anchor": "end"},
                                  {"x": 1.05, "y": -0.52, "text": "B", "size": 16,
@@ -658,9 +677,9 @@ FEW_SHOTS: list[tuple[str, dict]] = [
                                   "anchor": "middle"}]},
                             {"kind": "col", "gap": 10, "children": [
                                 {"kind": "math", "latex": "u = 2v", "size": 28,
-                                 "color": "blue", "gapAfter": 12},
+                                 "gapAfter": 12},
                                 {"kind": "math", "latex": "v = \\frac{u}{2}",
-                                 "size": 24, "color": "blue", "gapAfter": 18},
+                                 "size": 24, "gapAfter": 18},
                                 {"kind": "text", "text": "Vanligt fel:",
                                  "size": 19, "color": "red", "weight": 700,
                                  "gapAfter": 2},
@@ -680,9 +699,9 @@ FEW_SHOTS: list[tuple[str, dict]] = [
                     "columns": [
                         {"weight": 1, "sections": [
                             {"kind": "heading", "text": "Tre fall", "size": 28,
-                             "underline": {"color": "blue"}, "gapAfter": 12},
+                             "underline": {}, "gapAfter": 12},
                             {"kind": "heading", "text": "Medelpunktsvinkeln",
-                             "size": 22, "color": "blue", "gapAfter": 8},
+                             "size": 22, "gapAfter": 8},
                             {"kind": "graph", "width": 380, "height": 380,
                              "xRange": [-1.35, 1.35], "yRange": [-1.35, 1.35],
                              "grid": False, "axes": False,
@@ -693,23 +712,23 @@ FEW_SHOTS: list[tuple[str, dict]] = [
                                   "fill": "blue", "fillOpacity": 0.1,
                                   "stroke": "blue", "strokeWidth": 2},
                                  {"pts": [[-0.94, -0.342], [0, 1], [0.94, -0.342]],
-                                  "fill": "red", "fillOpacity": 0.08,
-                                  "stroke": "red", "strokeWidth": 2}],
+                                  "fillOpacity": 0, "stroke": "black",
+                                  "strokeWidth": 2}],
                              "texts": [
-                                 {"x": 0, "y": -0.33, "text": "140°", "size": 17,
-                                  "color": "blue", "anchor": "middle"},
-                                 {"x": 0, "y": 0.64, "text": "70°", "size": 17,
-                                  "color": "red", "anchor": "middle"}],
+                                 {"x": 0, "y": -0.33, "text": "u", "size": 18,
+                                  "color": "blue", "anchor": "middle",
+                                  "italic": True},
+                                 {"x": 0, "y": 0.64, "text": "v", "size": 18,
+                                  "anchor": "middle", "italic": True}],
                              "gapAfter": 10},
                             {"kind": "text",
                              "text": "Vinkeln från centrum är dubbelt så stor.",
                              "size": 19, "gapAfter": 12},
-                            {"kind": "math", "latex": "u = 2v", "size": 24,
-                             "color": "blue"},
+                            {"kind": "math", "latex": "u = 2v", "size": 24},
                         ]},
                         {"weight": 1, "sections": [
                             {"kind": "heading", "text": "Samma båge", "size": 22,
-                             "color": "blue", "gapAfter": 8},
+                             "gapAfter": 8},
                             {"kind": "graph", "width": 260, "height": 260,
                              "xRange": [-1.35, 1.35], "yRange": [-1.35, 1.35],
                              "grid": False, "axes": False,
@@ -718,16 +737,15 @@ FEW_SHOTS: list[tuple[str, dict]] = [
                                   "stroke": "black", "strokeWidth": 2},
                                  {"pts": [[-0.94, -0.342], [-0.5, 0.866],
                                           [0.94, -0.342]],
-                                  "fill": "red", "fillOpacity": 0.08,
-                                  "stroke": "red", "strokeWidth": 2},
+                                  "fillOpacity": 0, "stroke": "black",
+                                  "strokeWidth": 2},
                                  {"pts": [[-0.94, -0.342], [0.5, 0.866],
                                           [0.94, -0.342]],
                                   "fill": "blue", "fillOpacity": 0.08,
                                   "stroke": "blue", "strokeWidth": 2}],
                              "texts": [
                                  {"x": -0.36, "y": 0.52, "text": "v", "size": 17,
-                                  "color": "red", "anchor": "middle",
-                                  "italic": True},
+                                  "anchor": "middle", "italic": True},
                                  {"x": 0.36, "y": 0.52, "text": "v", "size": 17,
                                   "color": "blue", "anchor": "middle",
                                   "italic": True}],
@@ -736,7 +754,7 @@ FEW_SHOTS: list[tuple[str, dict]] = [
                              "text": "Vinklar på samma båge är lika stora.",
                              "size": 19, "gapAfter": 18},
                             {"kind": "heading", "text": "Thales sats", "size": 22,
-                             "color": "blue", "gapAfter": 8},
+                             "gapAfter": 8},
                             {"kind": "graph", "width": 260, "height": 260,
                              "xRange": [-1.35, 1.35], "yRange": [-1.35, 1.35],
                              "grid": False, "axes": False,
@@ -744,11 +762,11 @@ FEW_SHOTS: list[tuple[str, dict]] = [
                                  {"pts": _cirkel(0, 0, 1), "fillOpacity": 0,
                                   "stroke": "black", "strokeWidth": 2},
                                  {"pts": [[-1, 0], [0, 1], [1, 0]],
-                                  "fill": "blue", "fillOpacity": 0.08,
-                                  "stroke": "blue", "strokeWidth": 2}],
+                                  "fillOpacity": 0, "stroke": "black",
+                                  "strokeWidth": 2}],
                              "rightAngles": [
                                  {"x": 0, "y": 1, "leg1": [-1, -1],
-                                  "leg2": [1, -1], "size": 12, "color": "red"}],
+                                  "leg2": [1, -1], "size": 12}],
                              "gapAfter": 10},
                             {"kind": "text",
                              "text": "Står vinkeln på diametern är den rät.",

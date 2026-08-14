@@ -94,8 +94,8 @@ def test_alla_few_shots_foljer_dramaturgin():
         assert all(len(p.split()) <= 5 for p in s[1]["items"]), uppdrag
         assert any("boken s." in p for p in s[1]["items"]), uppdrag
         # Öppningsfrågan är en fråga till klassen, inte en definition — och en
-        # blå rubrik, inte en ruta.
-        assert s[3]["text"].endswith("?") and s[3]["color"] == "blue", uppdrag
+        # rubrik, inte en ruta. Utan färg: färgen betyder något annat nu.
+        assert s[3]["text"].endswith("?") and "color" not in s[3], uppdrag
         # Högst EN mening vardagsspråk innan matematiken tar över.
         assert arter.count("text") == 1, uppdrag
         # Raden sist: figuren (eller den generiska uppställningen) till vänster,
@@ -122,6 +122,29 @@ def test_ingen_few_shot_ritar_rutor():
     for uppdrag, doc in lb.FEW_SHOTS:
         assert not [s for s in _alla_sektioner(doc) if s["kind"] == "callout"], \
             uppdrag
+
+
+def test_few_shotarna_ar_svarta_utom_dar_fargen_betyder_nagot():
+    """«Massa blåa färger och röda färger — det känns lite inkonsekvent. Vi
+    tonar ner på det här. Drastiskt.» Kvar är två ställen: rött för det som
+    varnar, och färg inne i figurer för att skilja linjer och vinklar åt."""
+    for uppdrag, doc in lb.FEW_SHOTS:
+        for sek in _alla_sektioner(doc):
+            if sek["kind"] == "graph":
+                continue                 # figurens färger skiljer linjer åt
+            assert sek.get("color") in (None, "red"), (uppdrag, sek)
+            strecket = sek.get("underline")
+            if isinstance(strecket, dict):
+                assert strecket.get("color") in (None, "red"), (uppdrag, sek)
+
+
+def test_exemplen_ar_utgangspunkter_inte_losningar():
+    """«Jag kommer ju göra själva uträkningarna. Det räcker med en stark
+    utgångspunkt jag kan utgå ifrån, och sen kan det bara stå rent generellt
+    vad jag ska göra.» Alltså: ingen färdig lösning, inget facit på tavlan."""
+    for uppdrag, doc in lb.FEW_SHOTS:
+        texter = [s.get("text", "") for s in _alla_sektioner(doc)]
+        assert not [t for t in texter if t.startswith("Svar")], uppdrag
 
 
 def test_few_shotarna_haller_exempeltaket():
@@ -156,7 +179,8 @@ def test_build_prompt_contains_conventions_and_task():
     assert "Förra lektionen: gränsvärden." in p
     assert "Pythagoras sats" in p          # few-shot 1
     assert "x^2 - 4*x + 3" in p            # few-shot 2 (expr-mönstret)
-    assert "Sammanfattning" in p           # few-shot 3 (tabellmönstret)
+    # few-shot 3: tabellen som fylls i tillsammans med klassen
+    assert "Fyller vi i tillsammans" in p
 
 
 def test_prompten_bar_dramaturgin():
@@ -186,11 +210,24 @@ def test_prompten_bar_exempelkraven():
     uppgifter, och där man lätt kan visa ett vanligt fel. Men egna exempel.»"""
     p = lb.build_prompt("Ma1b", "9A", "pythagoras sats")
     assert "1–3 exempel, aldrig fler" in p
-    assert "HELTAL" in p
+    assert "GÅR JÄMNT UT" in p
     assert "TYP och NIVÅ" in p
     assert "skriv ALLTID egna uppgifter" in p
     assert "det felaktiga ledet i rött bredvid det rätta" in p
     assert "Väg 1" in p and "Väg 2" in p
+    # Utgångspunkt, inte facit — läraren räknar på plats.
+    assert "UTGÅNGSPUNKT, inte en färdig lösning" in p
+    assert "Räkna INTE ut svaret" in p
+    # Och när boken är källan: tavlan ska räcka för sidornas alla uppgifter.
+    assert "SAMTLIGA uppgifter på just de" in p
+
+
+def test_prompten_tonar_ner_fargerna():
+    """Färg är ett verktyg, inte dekoration: rött varnar, figurens färger
+    skiljer linjer åt, allt annat är svart."""
+    p = lb.build_prompt("Ma1b", "9A", "pythagoras sats")
+    assert "tavlan skrivs i SVART" in p
+    assert "skilja kurvor, linjer och vinklar åt" in p
 
 
 def test_build_prompt_bar_fallgalleriet():
