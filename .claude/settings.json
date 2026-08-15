@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash tools/miljo.sh",
+            "timeout": 300,
+            "statusMessage": "Gör behållaren redo att köra appen ..."
+          }
+        ]
+      }
+    ]
+  }
+}

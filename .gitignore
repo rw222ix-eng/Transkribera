@@ -62,8 +62,13 @@ nul
 /bin/tectonic/
 /_spike/
 
-# Lokala Claude Code-inställningar
-.claude/
+# Lokala Claude Code-inställningar — utom settings.json, som är delad.
+# Den bär SessionStart-kroken som gör en tom behållare körklar (tools/miljo.sh),
+# och det hör till koden: en ny behållare ska kunna starta appen direkt, inte
+# efter tio minuters pip. Personliga inställningar hamnar i settings.local.json
+# och ignoreras fortfarande.
+.claude/*
+!.claude/settings.json
 
 # Worktrees
 /.worktrees/
