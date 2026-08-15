@@ -19,6 +19,7 @@ cd "$(dirname "$0")/.." || exit 0
 
 if python -c "import fastapi, uvicorn, pydantic, jinja2, httpx, pytest" 2>/dev/null; then
   echo "miljö: klar"
+  bash "$(dirname "$0")/hamta_tectonic.sh"
   exit 0
 fi
 
@@ -27,8 +28,12 @@ python -m pip install -q \
   fastapi uvicorn pydantic jinja2 httpx starlette anyio \
   pypdfium2 pillow psutil pytest pytest-cov hypothesis 2>&1 | tail -3
 
-python -c "import fastapi, uvicorn" 2>/dev/null \
-  && echo "miljö: klar — python tools/skarp.py startar appen" \
-  || echo "miljö: MISSLYCKADES — kör pip för hand"
+if python -c "import fastapi, uvicorn" 2>/dev/null; then
+  echo "miljö: klar — python tools/skarp.py startar appen"
+  # PDF-motorn sist: den är tung och får inte hindra att servern går att starta.
+  bash "$(dirname "$0")/hamta_tectonic.sh"
+else
+  echo "miljö: MISSLYCKADES — kör pip för hand"
+fi
 
 exit 0
