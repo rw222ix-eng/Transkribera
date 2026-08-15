@@ -244,7 +244,27 @@ export async function skriv(page, { typ = "Tavla", moment = "derivatans definiti
         { timeout: 60_000 })
     : Promise.resolve(null);
   await page.locator("#skriv").click();
+  await forbiNivavarningen(page);
   return svar;
+}
+
+/**
+ * Trycker Skriv en gång till när nivåvarningen står i vägen.
+ *
+ * Dagarnas moment är skrivna för sina kassetter, inte för ämnesplanen: flera av
+ * dem beställer «derivator» i en 2c-lektion. Det är precis det plan.js numera
+ * varnar för (och rätt varnat — fyndet kom ur en skarp körning), så första
+ * klicket blir en varning i stället för ett anrop.
+ *
+ * Dagarna prövar planeringen, inte varningen; själva varningen har sin egen
+ * svit i nivavarning.spec.mjs, där det VIKTIGA kravet står — att inget
+ * /generate hunnit gå i väg när den syns. Här klickar vi därför bara vidare,
+ * precis som läraren gör när hon vet vad hon vill.
+ */
+export async function forbiNivavarningen(page) {
+  const varning = page.locator(".toast, [class*=toast]")
+    .filter({ hasText: "Tryck igen för att skriva ändå" });
+  if (await varning.count()) await page.locator("#skriv").click();
 }
 
 /** Löftet om nästa generering — ska hämtas FÖRE klicket som startar den. */

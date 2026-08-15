@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { forbiNivavarningen } from "./larardag.mjs";
 
 /* PROVET OCH ARBETSBLADET PÅ RIKTIGT
  *
@@ -98,6 +99,11 @@ async function skriv(page, typ, moment = "derivator") {
     window.PlanSteg.gaTill(4);
   }, [typ, moment]);
   await page.locator("#skriv").click();
+  /* «derivator» är 3c-innehåll och kursen här är 2c — plan.js varnar för det
+     innan den anropar, och första klicket blir alltså varningen. Se
+     larardag.mjs och nivavarning.spec.mjs; provet som prövas här är rutten, inte
+     ämnesplanen. */
+  await forbiNivavarningen(page);
 }
 
 const hydrerad = page => page.waitForFunction(() =>
@@ -231,6 +237,7 @@ test("gruppuppgiften går samma väg och bär sitt upplägg", async ({ page }) =
     window.PlanSteg.gaTill(4);
   });
   await page.locator("#skriv").click();
+  await forbiNivavarningen(page);          // «derivator» i 2c — se helpern
   await expect(page.locator("#dokument")).toBeVisible({ timeout: 15_000 });
 
   const gen = anrop.find(a => a.vag.endsWith("/generate"));
