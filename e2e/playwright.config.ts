@@ -1,4 +1,8 @@
 import { defineConfig } from "@playwright/test";
+import { existsSync } from "node:fs";
+
+/* Webbläsaren sviten kör i — se kommentaren vid `channel` nedan. */
+const CHROME = process.env.CHROME_PATH || "/opt/pw-browsers/chromium";
 
 /* E2E för Transkriberas frontend.
  *
@@ -71,9 +75,15 @@ export default defineConfig({
     // skärmbild olik den förra. Utan detta mäter man animeringen, inte designen.
     reducedMotion: "reduce",
     viewport: { width: 1440, height: 950 },
-    // Playwrights egen chromium är inte nedladdad i den här miljön; appen körs
-    // ändå bara i den Chromium som pywebview bäddar in på Windows.
-    channel: "chrome",
+    // Playwrights egen chromium är inte nedladdad på lärarens maskiner; appen
+    // körs ändå bara i den Chromium som pywebview bäddar in på Windows.
+    //
+    // I en Linuxbehållare finns ingen Chrome att välja kanal på, och sviten gick
+    // därför inte att köra där alls — vilket är illa, för det är i behållare
+    // utvecklingen numera delvis sker. Finns en Chromium på plats (CHROME_PATH,
+    // annars den förinstallerade) körs den; annars står kanalen kvar som förut.
+    ...(existsSync(CHROME) ? { launchOptions: { executablePath: CHROME } }
+                           : { channel: "chrome" as const }),
     /* Spåret och `test-results/<test>/error-context.md` skrivs för det test som
      * FÖLL — och Playwright tömmer test-results i början av NÄSTA körning.
      * LÄS DEM INNAN DU KÖR OM. En röd apa (2026-08-14) gick inte att förklara
