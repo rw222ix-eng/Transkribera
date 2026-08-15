@@ -1645,6 +1645,10 @@
     utkastMarkor(nu);
   }
 
+  /* Momentet läraren senast varnades för. Nollställs av att hon skriver om det,
+     så varningen kommer tillbaka för ett nytt moment men aldrig två gånger för
+     samma. */
+  let momentVarnat = '';
   $('#skriv').addEventListener('click', () => {
     if (window.Lagen && !window.Lagen().length) {
       if (window.PlanSteg) window.PlanSteg.gaTill(2);
@@ -1694,6 +1698,31 @@
       window.toast && window.toast('Säg vad lektionen handlar om — eller välj ett avsnitt i boken');
       setTimeout(() => moment.classList.remove('pekar'), 2400);
       return;
+    }
+    /* ── Momentet mot ämnesplanen, INNAN Claude får frågan ──────────────────
+       Fyndet: ett prov beställdes på «derivator» i en 2c-lektion. Derivator
+       ligger i 3c, så modellen skrev det enda den kunde — ett 2c-prov — medan
+       rubriken sattes ur momentfältet. Pappret hette «Derivator» och innehöll
+       funktioner, trigonometri och sannolikhet, och det syntes först efter 230
+       sekunders generering.
+
+       Kontrollen är därför här och inte efteråt: den kostar ingenting och den
+       hinner före pengarna. Andra klicket skriver ändå — läraren, inte
+       ämnesplanen, bestämmer vad hennes lektion handlar om, och repetition av
+       en lägre nivå är ett fullt giltigt skäl. Anteckningarna hoppas över: de
+       har inget moment att pröva. */
+    if (typ !== 'Anteckningar' && window.Gy && window.Gy.utanfor
+        && momentVarnat !== moment.value.trim()) {
+      const ute = window.Gy.utanfor(moment.value, nivaId);
+      if (ute) {
+        momentVarnat = moment.value.trim();
+        const dit = ute.niva.gammal || ute.niva.etikett;
+        const har = window.Gy.niva(nivaId);
+        window.toast && window.toast(
+          `Det här ligger i ${ute.fler ? 'bland annat ' : ''}${dit}, inte i `
+          + `${har.gammal || har.etikett}. Tryck igen för att skriva ändå.`);
+        return;
+      }
     }
     $('#skriv').disabled = true;
     const not = $('#plannot');

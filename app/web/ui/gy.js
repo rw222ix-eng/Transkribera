@@ -394,7 +394,112 @@ window.Gy = (() => {
     }
     return null;
   };
-  return { nivaer, niva, punkter, foreslagen, kodFor, koder, kortFor,
+  /* ── Ligger momentet i en ANNAN nivå än den valda? ──────────────────────
+     Fyndet som gjorde det här nödvändigt: ett prov beställdes på «derivator» i
+     Matematik 2c. Derivator finns inte i 2c utan i 3c, så språkmodellen gjorde
+     det enda rimliga och skrev ett 2c-prov — funktioner, trigonometri,
+     sannolikhet. Men rubriken sätts ur MOMENTFÄLTET. Pappret hette alltså
+     «Derivator» och innehöll något annat, utan ett ord om saken, och det tog
+     230 sekunders generering innan någon kunde se det.
+
+     Kontrollen är med FLIT tyst om den är osäker: den varnar bara när ordet
+     finns i en annan nivås centrala innehåll och INTE i den valda. Ett moment
+     läraren formulerat med egna ord («repetition inför provet», «det som föll
+     förra veckan») nämns aldrig i ämnesplanen och ska aldrig ge en varning —
+     bara ord som bevisligen hör hemma någon annanstans.
+
+     Två mätningar formade jämförelsen, och båda gjordes mot den här filens
+     riktiga data — inte gissade:
+
+     1. STAMNING RÄCKER INTE. «trigonometri» och «trigonometriska» får olika
+        stammar hur man än klipper ändelser, och nivån såg då ut att sakna ett
+        innehåll den har. Därför matchas orden på PREFIX i stället: det korta
+        ordet ska inleda det långa, och minst fem tecken ska vara gemensamma.
+        «derivat» möter «derivata» och «deriveringsregler»; «tangent» möter
+        fortfarande inte «tangens», vilket är hela poängen.
+
+     2. VANLIGA ORD DRUNKNAR SIGNALEN. Första försöket tystnade om «derivator i
+        2c» därför att ordet «definition» stod i 2c — ett enda allmänord räckte
+        för att momentet skulle se hemtamt ut. Ord som finns i mer än en
+        tredjedel av nivåerna bär ingen nivåinformation och sållas därför bort
+        innan räkningen. Kvar blir det som faktiskt skiljer nivåerna åt. */
+  const STOPP = new Set(['detta', 'dessa', 'denna', 'genom', 'olika', 'andra', 'samma',
+                         'begreppet', 'begrepp', 'metoder', 'metod', 'enkla', 'inför',
+                         'repetition', 'prov', 'provet', 'lektion', 'lektionen', 'kapitel',
+                         'avsnitt', 'uppgifter', 'uppgift', 'exempel', 'däribland',
+                         'former', 'form', 'samband', 'egenskaper', 'hantering']);
+
+  const stam = ord => {
+    let o = ord;
+    for (const s of ['ernas', 'arnas', 'ornas', 'erna', 'arna', 'orna', 'ande', 'ende',
+                     'else', 'ning', 'erne', 'en', 'et', 'er', 'ar', 'or', 'na', 'ns',
+                     'n', 't', 's', 'a', 'e']) {
+      if (o.length - s.length >= 5 && o.endsWith(s)) { o = o.slice(0, -s.length); break; }
+    }
+    return o;
+  };
+
+  const ord = text => String(text || '').toLowerCase()
+    .split(/[^a-zà-öø-ÿ]+/i)
+    .filter(o => o.length >= 5 && !STOPP.has(o))
+    .map(stam);
+
+  /* Orden i en nivås hela centrala innehåll — etiketterna OCH Skolverkets text,
+     för läraren skriver sällan etikettens ord. Räknas en gång per nivå. */
+  const stammar = {};
+  const nivaOrd = id => (stammar[id] || (stammar[id] = new Set(
+    punkter(id).flatMap(p => ord(p.kort + ' ' + p.text)))));
+
+  /* Prefixmötet: det kortare ordet ska inleda det längre, och minst fem tecken
+     gemensamt. Se punkt 1 i noten ovan. */
+  const moter = (a, b) => (a.length <= b.length ? b.startsWith(a) : a.startsWith(b))
+                          && Math.min(a.length, b.length) >= 5;
+  const finnsI = (o, id) => { for (const x of nivaOrd(id)) if (moter(o, x)) return true; return false; };
+
+  /* Hur många nivåer känner ordet? Ett ord som nästan alla känner säger inget om
+     var innehållet hör hemma. Se punkt 2. */
+  const spridning = {};
+  const spridd = o => (spridning[o] !== undefined ? spridning[o]
+    : (spridning[o] = nivaer.filter(n => finnsI(o, n.id)).length)) > nivaer.length / 3;
+
+  /**
+   * Nivån där momentets ord hör hemma, när de INTE hör hemma i `nivaId`.
+   * `{ niva, fler }` eller null. `fler` är sant när flera nivåer känner igen
+   * momentet lika väl — då är VARNINGEN lika sann men NIVÅN en av flera, och
+   * texten måste säga «bland annat».
+   *
+   * Tystnad i tre fall, alla mätta: momentet har inga skiljande ord, det passar
+   * nivån det står i, eller ingen nivå alls känner igen det (lärarens egna ord).
+   *
+   * Att oavgjort INTE tystar var ett rättat fel. «Derivator» finns i tre högre
+   * nivåer, aldrig i 2c — och den första versionen teg om precis det fallet den
+   * skrevs för, eftersom den tolkade oavgjort som osäkerhet. Oavgjort betyder
+   * bara att det är oklart VILKEN nivå momentet hör till; att det inte hör till
+   * den valda är då redan avgjort.
+   */
+  const utanfor = (moment, nivaId) => {
+    const har = niva(nivaId);
+    const mina = [...new Set(ord(moment))].filter(o => !spridd(o));
+    if (!mina.length) return null;                             // inget skiljande ord
+    if (mina.some(o => finnsI(o, har.id))) return null;        // passar där den står
+    const traffar = nivaer
+      .filter(n => n.id !== har.id)
+      .map(n => ({ n, antal: mina.filter(o => finnsI(o, n.id)).length }))
+      .filter(x => x.antal > 0)
+      .sort((a, b) => b.antal - a.antal);
+    if (!traffar.length) return null;                          // lärarens egna ord
+    /* Vid oavgjort: håll dig i lärarens spår. «Derivator» finns lika mycket i
+       3b som i 3c, och för den som står i en c-kurs är 3c svaret som betyder
+       något — 3b är sant men obrukbart. Spåret är bokstaven i den gamla
+       kursbeteckningen, den läraren själv säger. */
+    const topp = traffar.filter(x => x.antal === traffar[0].antal);
+    const spar = s => (String(s || '').match(/([a-c])\s*$/i) || [])[1];
+    const mitt = spar(har.kurs);
+    const vald = topp.find(x => mitt && spar(x.n.kurs) === mitt) || topp[0];
+    return { niva: vald.n, fler: topp.length > 1 };
+  };
+
+  return { nivaer, niva, punkter, foreslagen, kodFor, koder, kortFor, utanfor,
            lista: () => nivaer.slice() };
 })();
 
