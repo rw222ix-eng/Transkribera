@@ -262,6 +262,12 @@ export async function skriv(page, { typ = "Tavla", moment = "derivatans definiti
  * precis som läraren gör när hon vet vad hon vill.
  */
 export async function forbiNivavarningen(page) {
+  /* Knappen, inte toasten, är beviset. En toast lever några sekunder och kan
+     stå kvar från FÖREGÅENDE papper — en dag som skriver två blad i rad hade då
+     klickat en andra gång på en skrivning som redan gått i väg, och beställt
+     två. plan.js släcker `#skriv` i samma ögonblick som anropet startar, så en
+     knapp som fortfarande går att trycka betyder att klicket stoppades. */
+  if (await page.locator("#skriv").isDisabled()) return;
   const varning = page.locator(".toast, [class*=toast]")
     .filter({ hasText: "Tryck igen för att skriva ändå" });
   if (await varning.count()) await page.locator("#skriv").click();
