@@ -383,6 +383,9 @@ def _klass_och_kurs(titel: str, klasser: list[str],
                     kurser: list[str]) -> tuple[str, str]:
     t = titel or ""
     tl = t.lower()
+    # Listorna kommer längdsorterade från tolka_handelser, och det är villkoret
+    # för att första träffen är rätt: klasslistan har både «TE26» och «TE26A»,
+    # och «TE26A: Kvadratrötter» är TE26A:s lektion — inte TE26:s.
     klass = next((k for k in klasser if k and k.lower() in tl), "")
     kurs = next((k for k in kurser if k and k.lower() in tl), "")
     if not klass:
@@ -563,7 +566,8 @@ def tolka_handelser(handelser: list[dict], klasser: list[str] | None = None,
                     kurser: list[str] | None = None,
                     beslut: dict[str, dict] | None = None,
                     idag: str | None = None,
-                    fonster_till: str | None = None) -> dict:
+                    fonster_till: str | None = None,
+                    schema_nu: list[dict] | None = None) -> dict:
     """Ren funktion: Google-händelser in, {schema, lov, poster, innehall,
     osakra} ut i exakt de former frontendens window.Kalender håller. Testbar
     utan Google.
@@ -574,9 +578,19 @@ def tolka_handelser(handelser: list[dict], klasser: list[str] | None = None,
     `osakra` är de händelser reglerna PLACERADE men inte är säkra på — en
     heldag utan lovord, en återkommande lektionstid utan igenkänd kurs. De
     ligger kvar där reglerna satte dem (inget försvinner om ingen frågar
-    vidare) och skickas till Claude i ett andra steg, se app/kalender_ai.py."""
+    vidare) och skickas till Claude i ett andra steg, se app/kalender_ai.py.
+
+    `schema_nu` är schemat appen redan har. Det används BARA för att känna igen
+    lektioner vars rubrik säger ämnet i stället för kursen — se rutorna nedan —
+    och aldrig för att hitta på rader: en ruta som inte har någon händelse i
+    kalendern längre försvinner ur svaret precis som förut."""
     klasser = sorted(klasser or [], key=len, reverse=True)
     kurser = sorted(kurser or [], key=len, reverse=True)
+    # Rutorna i lärarens schema: (veckodag, klockslag, klass) → kursen som står
+    # där. Tomma rutor hoppas över — en rad utan kurs säger ingenting.
+    rutor = {(int(r.get("dag") or 0), (r.get("tid") or "").strip(),
+              (r.get("klass") or "").strip()): (r.get("kurs") or "").strip()
+             for r in (schema_nu or []) if (r.get("kurs") or "").strip()}
     schema: list[dict] = []
     sedda: set[tuple] = set()
     # FÖRSTA och SISTA instansen per schemarad. Ett veckoschema utan datum är
@@ -718,10 +732,26 @@ def tolka_handelser(handelser: list[dict], klasser: list[str] | None = None,
         # jämföra mot (tester, en tom installation) räcker klassen.
         lektion = bool(h.get("recurringEventId") and klass
                        and (not kurser or any(k.lower() in titel.lower() for k in kurser)))
+        try:
+            veckodag = date.fromisoformat(datum).isoweekday()
+        except ValueError:
+            veckodag = 0
+        # Läraren som skriver ämnet i rubriken — «NA26F: Kvadratrötter och
+        # kubikrötter» — får aldrig med kursnamnet, och föll därför ut som
+        # osäker: en fråga till modellen per lektion, varje synk, och aldrig en
+        # cacheträff eftersom rubriken byts varje vecka. Men platsen är känd.
+        # Ligger händelsen på en tid som REDAN står i lärarens schema (samma
+        # veckodag, samma klockslag, samma klass) och beskrivningen bär sidor,
+        # då är den lektionen i den rutan och kursen är rutans kurs. Bägge
+        # villkoren behövs: mentorstiden ligger också i schemat hos den som lagt
+        # in den, men den har inga sidor.
+        if not lektion and h.get("recurringEventId") and klass and veckodag:
+            rutan = rutor.get((veckodag, _tid(s, e), klass))
+            if rutan and sidor_ur_beskrivning(h.get("description")):
+                lektion, kurs = True, rutan
         if lektion:
-            try:
-                dag = date.fromisoformat(datum).isoweekday()
-            except ValueError:
+            dag = veckodag
+            if not dag:
                 continue
             rad = {"dag": dag, "tid": _tid(s, e), "kurs": kurs, "klass": klass,
                    "sal": (h.get("location") or "").strip()}
@@ -901,7 +931,8 @@ def skriv_schema(base_dir: Path, *, schema: list[dict], termin: dict,
 def read_schema(base_dir: Path, dagar: int = 330,
                 klasser: list[str] | None = None,
                 kurser: list[str] | None = None,
-                bedomare=None) -> dict:
+                bedomare=None,
+                schema_nu: list[dict] | None = None) -> dict:
     """{schema, lov, poster, innehall, fran, till} ur Google Kalender, eller
     {error} när kopplingen saknas.
 
@@ -917,7 +948,8 @@ def read_schema(base_dir: Path, dagar: int = 330,
         handelser = list_events(base_dir, fran, till)
     except RuntimeError as e:
         return {"error": str(e)}
-    ut = tolka_handelser(handelser, klasser, kurser, fonster_till=till)
+    ut = tolka_handelser(handelser, klasser, kurser, fonster_till=till,
+                         schema_nu=schema_nu)
     # Andra passet: `bedomare` får de osäkra serierna och svarar med beslut
     # (cache + Claude, se app/kalender_ai.py). Samma rena funktion körs om med
     # besluten, så det finns bara EN väg som placerar en händelse i veckan.
@@ -925,6 +957,6 @@ def read_schema(base_dir: Path, dagar: int = 330,
         beslut = bedomare(ut["osakra"]) or {}
         if beslut:
             ut = dict(tolka_handelser(handelser, klasser, kurser, beslut=beslut,
-                                      fonster_till=till),
+                                      fonster_till=till, schema_nu=schema_nu),
                       beslut=beslut)
     return dict(ut, fran=fran, till=till)

@@ -1083,6 +1083,7 @@ def create_app(base_dir: Path | None = None,
         try:
             klasser = [g["namn"] for g in db.list_groups(conn)]
             kurser = [c["namn"] for c in db.list_courses(conn)]
+            schema_nu = db.list_schema(conn)
         finally:
             conn.close()
         # Andra passet i tolkningen (Etapp 0.1b): reglerna klarar det mesta och
@@ -1111,7 +1112,12 @@ def create_app(base_dir: Path | None = None,
         try:
             hamtat = calendar_google.read_schema(base, dagar=dagar,
                                                  klasser=klasser, kurser=kurser,
-                                                 bedomare=bedomare)
+                                                 bedomare=bedomare,
+                                                 # Schemat läraren redan har: det
+                                                 # känner igen lektioner vars
+                                                 # rubrik säger ämnet i stället
+                                                 # för kursen (tolka_handelser).
+                                                 schema_nu=schema_nu)
         except Exception as e:                       # nätfel, trasig token, …
             debug_log.get_logger().exception("Kalendersynk misslyckades")
             return JSONResponse({"error": str(e) or "synken misslyckades"},

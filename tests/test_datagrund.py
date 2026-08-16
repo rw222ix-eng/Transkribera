@@ -371,6 +371,51 @@ def test_innehallet_hanger_pa_lektionstillfallet_inte_pa_serien():
     ]
 
 
+SCHEMAT = [{"dag": 1, "tid": "10:00–11:30", "klass": "NA26F",
+            "kurs": "Matematik, nivå 1c", "sal": "E107"},
+           {"dag": 1, "tid": "13:00–14:00", "klass": "NA26F", "kurs": "", "sal": ""}]
+
+
+def test_rubriken_som_sager_amnet_kanns_igen_pa_rutan_i_schemat():
+    """«NA26F: Kvadratrötter och kubikrötter» — läraren skriver ämnet, aldrig
+    kursnamnet. Utan schemat blir varje sådan lektion en osäker SERIE (rubriken
+    byts varje vecka, så inget beslut går att cacha) och sidorna når aldrig
+    fram. Ligger den i en ruta appen redan har, och bär beskrivningen sidor, är
+    saken avgjord utan att någon behöver frågas."""
+    ut = calendar_google.tolka_handelser([
+        _tid("2026-08-24", "10:00", "11:30",
+             summary="NA26F: Kvadratrötter och kubikrötter", location="E107",
+             recurringEventId="r1", description=BESKRIVNING),
+    ], klasser=["NA26F"], kurser=["Matematik, nivå 1c"],
+        idag="2026-08-24", schema_nu=SCHEMAT)
+    assert ut["osakra"] == []
+    assert ut["poster"] == []
+    assert ut["schema"][0]["kurs"] == "Matematik, nivå 1c"
+    assert ut["innehall"] == [
+        {"datum": "2026-08-24", "tid": "10:00–11:30", "klass": "NA26F",
+         "kurs": "Matematik, nivå 1c", "fran": 2, "till": 6,
+         "uppg": "1101–1103, 1105–1119"}]
+
+
+@pytest.mark.parametrize("summary, tid, beskrivning, schema", [
+    # Mentorstiden ligger också i en ruta — men den har inga sidor.
+    ("Mentorstid NA26F", "10:00", "Vi går igenom frånvaron", SCHEMAT),
+    # Sidor, men ingen ruta på den tiden: appen hittar inte på en lektion.
+    ("NA26F: Potenser", "15:00", BESKRIVNING, SCHEMAT),
+    # Rutan finns men står utan kurs — då säger den ingenting.
+    ("NA26F: Potenser", "13:00", BESKRIVNING, SCHEMAT),
+    ("NA26F: Potenser", "10:00", BESKRIVNING, []),
+])
+def test_rutan_avgor_bara_nar_bagge_villkoren_haller(summary, tid, beskrivning, schema):
+    ut = calendar_google.tolka_handelser([
+        _tid("2026-08-24", tid, "16:00", summary=summary,
+             recurringEventId="r1", description=beskrivning),
+    ], klasser=["NA26F"], kurser=["Matematik, nivå 1c"],
+        idag="2026-08-24", schema_nu=schema)
+    assert ut["schema"] == [] and ut["innehall"] == []
+    assert len(ut["osakra"]) == 1           # ligger kvar som en fråga till Claude
+
+
 def test_lektion_utan_sidor_ger_inget_innehall():
     """Ingen gissning: står det inga sidor i kalendern gäller klassprofilens
     förval, precis som innan."""
