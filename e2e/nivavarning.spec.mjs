@@ -23,6 +23,7 @@ import { oppna, rent, spana, traff, vakt, valjKlass } from "./larardag.mjs";
  */
 
 const UTANFOR = "derivator: definition, deriveringsregler, tangent";
+const BLANDAT = "derivator och andragradsfunktioner";
 const INOM = "andragradsfunktioner och nollställen";
 
 /** Ställer typ och moment utan att trycka Skriv. */
@@ -44,10 +45,35 @@ test("moment ur en annan nivå varnar — och anropet uteblir", async ({ page })
 
   await page.locator("#skriv").click();
   /* Nivåerna sägs med lärarens egna beteckningar — «Matematik 3c», inte
-     Gy25-etiketten hon aldrig säger högt. */
+     Gy25-etiketten hon aldrig säger högt. Domen är ordvis: «definition» står
+     faktiskt i 2c, så varningen pekar ut de främmande orden i stället för att
+     döma hela momentet. */
   await expect(page.locator(".toast, [class*=toast]").first())
-    .toContainText(/Matematik 3c.*inte i.*Matematik 2c/s);
+    .toContainText(/«derivator».*Matematik 3c.*resten passar Matematik 2c/s);
   /* Det här är hela poängen: kontrollen hann före. */
+  expect(traff(anrop, "/generate")).toEqual([]);
+  rent(fel);
+});
+
+test("ett hemtamt ord tystar inte de främmande — och helt utanför dömer helt", async ({ page }) => {
+  const fel = vakt(page);
+  const anrop = spana(page);
+  await oppna(page);
+  await valjKlass(page, "NA25");
+  /* Blandmomentet var första versionens blinda fläck: «andragradsfunktioner»
+     finns i 2c och tystade hela kontrollen, fast rubriken lovar derivator som
+     aldrig kommer. */
+  await stall(page, BLANDAT);
+  await page.locator("#skriv").click();
+  await expect(page.locator(".toast, [class*=toast]").first())
+    .toContainText(/«derivator».*Matematik 3c.*resten passar Matematik 2c/s);
+  expect(traff(anrop, "/generate")).toEqual([]);
+  /* Ett moment HELT utan hemtama ord döms fortfarande i sin helhet —
+     «inte i», utan ordcitat. */
+  await stall(page, "Derivator");
+  await page.locator("#skriv").click();
+  await expect(page.locator(".toast, [class*=toast]").first())
+    .toContainText(/Matematik 3c, inte i Matematik 2c/s);
   expect(traff(anrop, "/generate")).toEqual([]);
   rent(fel);
 });
@@ -88,5 +114,23 @@ test("lärarens egna ord varnar aldrig", async ({ page }) => {
     expect(await page.evaluate(
       t => !!window.Gy.utanfor(t, window.Gy.foreslagen("Matematik, nivå 2c")), m),
       `varnade för «${m}»`).toBe(false);
+  }
+});
+
+test("spridd-tröskeln skiljer allmänord från innehållsord", async ({ page }) => {
+  await oppna(page);
+  const doms = m => page.evaluate(
+    t => !!window.Gy.utanfor(t, window.Gy.foreslagen("Matematik, nivå 2c")), m);
+  /* Innehåll 2c bevisligen saknar men som finns i 4 av 10 nivåer — orden som
+     den gamla tredjedelströskeln kastade som «allmänna». Mätt i gy.js punkt 2. */
+  for (const m of ["integraler", "trigonometri", "sannolikhet"]) {
+    expect(await doms(m), `teg om «${m}»`).toBe(true);
+  }
+  /* Innehåll 2c HAR förblir tyst — och riktiga allmänord (7–10 nivåer) bär
+     fortfarande ingen varning. */
+  for (const m of ["logaritmer och exponentialekvationer", "normalfördelning",
+                   "geometriska satser och likformighet", "pythagoras sats",
+                   "problemlösning", "matematikens historia"]) {
+    expect(await doms(m), `varnade för «${m}»`).toBe(false);
   }
 });
