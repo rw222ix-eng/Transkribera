@@ -1029,7 +1029,11 @@ def create_app(base_dir: Path | None = None,
         conn = _db()
         try:
             return {"schema": db.list_schema(conn), "lov": db.list_lov(conn),
-                    "poster": db.list_kalenderposter(conn)}
+                    "poster": db.list_kalenderposter(conn),
+                    # Sidorna som står på en enskild lektion. Följer med här och
+                    # inte i en egen rutt: förvalen sätts i samma andetag som
+                    # veckan ritas, och ett andra anrop hade hunnit komma efter.
+                    "innehall": db.list_lektionsinnehall(conn)}
         finally:
             conn.close()
 
@@ -1124,10 +1128,13 @@ def create_app(base_dir: Path | None = None,
             lov = db.replace_lov(conn, hamtat.get("lov") or [], fran=fran, till=till)
             poster = db.replace_kalenderposter(conn, hamtat.get("poster") or [],
                                                kalla="schema", fran=fran, till=till)
+            innehall = db.replace_lektionsinnehall(conn, hamtat.get("innehall") or [],
+                                                   fran=fran, till=till)
         finally:
             conn.close()
         return {"synkad": datetime.now().isoformat(timespec="seconds"),
                 "schema": schema, "lov": lov, "poster": poster,
+                "innehall": innehall,
                 # Vilket konto veckan kom ur. En synk mot fel konto ser annars
                 # ut precis som en lyckad synk (se calendar_google.konto).
                 "konto": calendar_google.konto(base),

@@ -145,7 +145,9 @@ def test_api_schema_ger_de_tre_listorna(client):
     r = client.get("/api/schema")
     assert r.status_code == 200
     d = r.json()
-    assert set(d) == {"schema", "lov", "poster"}
+    # …och sidorna på de enskilda lektionerna, som hämtas i samma svar: förvalen
+    # sätts när veckan ritas, och ett andra anrop hade hunnit komma efter.
+    assert set(d) == {"schema", "lov", "poster", "innehall"}
     # Loven seedas vid appstart — en färsk installation utan Google-konto ska
     # ändå veta när skolan är stängd.
     assert d["lov"], "loven seedas ur app/data/lasar vid create_app"

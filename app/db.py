@@ -21,7 +21,7 @@ import sqlite3
 import threading
 from pathlib import Path
 
-SCHEMA_VERSION = 18
+SCHEMA_VERSION = 19
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS courses (
@@ -619,6 +619,36 @@ _ELEVPAPPER_MIGRATION = """
 ALTER TABLE dokument ADD COLUMN elev_id INTEGER;
 """
 
+# Lektionens eget innehåll (v19) — ENDAST additiv; rollback: DROP TABLE
+# lektionsinnehall + PRAGMA user_version=18.
+#
+# Veckoschemat är EN rad per serie: «måndag 08:15, NA26F, Matematik 1c». Vad
+# klassen ska göra är inte seriens sak utan DAGENS — «s. 2–6 · uppg.
+# 1101–1103» står i lektionshändelsens beskrivning och byts varje vecka. Den
+# raden kan därför inte bo i schema_lektioner utan behöver sitt eget datum.
+#
+# Klass och kurs refereras som i schema_lektioner och kalenderposter (group_id
+# / course_id), så att en omdöpt klass följer med i stället för att lämna en
+# föräldralös textsträng. UNIQUE på tillfället gör synken idempotent: samma
+# lektion läst två gånger är en rad.
+#
+# Boken står ALDRIG i händelsen — den slås upp via bocker.kurs, och därför
+# finns ingen bokkolumn här.
+_LEKTIONSINNEHALL_MIGRATION = """
+CREATE TABLE IF NOT EXISTS lektionsinnehall (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    datum     TEXT NOT NULL,
+    tid       TEXT NOT NULL DEFAULT '',    -- "08:15–09:00", som schemat skriver den
+    group_id  INTEGER REFERENCES groups(id)  ON DELETE CASCADE,
+    course_id INTEGER REFERENCES courses(id) ON DELETE SET NULL,
+    fran      INTEGER NOT NULL,            -- första sidan
+    till      INTEGER NOT NULL,            -- sista sidan (= fran för en ensam sida)
+    uppg      TEXT,                        -- "1101–1103, 1105–1119", som i boken
+    UNIQUE(datum, tid, group_id, course_id)
+);
+CREATE INDEX IF NOT EXISTS idx_lektinnehall_datum ON lektionsinnehall(datum);
+"""
+
 _MIGRATIONS: dict[int, str] = {2: _FTS_MIGRATION, 3: _MARKERS_MIGRATION,
                                4: _PLANNING_MIGRATION, 5: _EXAMS_MIGRATION,
                                6: _GY25_MIGRATION, 7: _DATAGRUND_MIGRATION,
@@ -632,7 +662,8 @@ _MIGRATIONS: dict[int, str] = {2: _FTS_MIGRATION, 3: _MARKERS_MIGRATION,
                                15: _ELEVER_MIGRATION,
                                16: _CI_IDENTITET_MIGRATION,
                                17: _RADTAK_MIGRATION,
-                               18: _ELEVPAPPER_MIGRATION}
+                               18: _ELEVPAPPER_MIGRATION,
+                               19: _LEKTIONSINNEHALL_MIGRATION}
 
 # Migreringar som bara innehåller ALTER TABLE … ADD COLUMN. De körs sats för
 # sats så att en redan tillagd kolumn hoppas över i stället för att fälla hela
@@ -2041,6 +2072,65 @@ def replace_kalenderposter(conn: sqlite3.Connection, poster: list[dict],
             "(datum, tid, titel, group_id, slag, kalla) VALUES (?, ?, ?, ?, ?, ?)",
             klara)
     return list_kalenderposter(conn)
+
+
+def list_lektionsinnehall(conn: sqlite3.Connection) -> list[dict]:
+    """Sidorna och uppgifterna per lektionstillfälle, i frontendens form
+    (klass/kurs som namn — window.Kalender slår upp dem på datum, klass och
+    kurs, precis som lektionskortet är byggt)."""
+    rows = conn.execute(
+        "SELECT i.datum, i.tid, i.fran, i.till, i.uppg, "
+        "g.namn AS klass, c.namn AS kurs "
+        "FROM lektionsinnehall i "
+        "LEFT JOIN groups  g ON g.id = i.group_id "
+        "LEFT JOIN courses c ON c.id = i.course_id "
+        "ORDER BY i.datum, i.tid, i.id").fetchall()
+    ut = []
+    for r in rows:
+        p = {"datum": r["datum"], "tid": r["tid"] or "", "klass": r["klass"] or "",
+             "kurs": r["kurs"] or "", "fran": r["fran"], "till": r["till"]}
+        if r["uppg"]:
+            p["uppg"] = r["uppg"]
+        ut.append(p)
+    return ut
+
+
+def replace_lektionsinnehall(conn: sqlite3.Connection, poster: list[dict], *,
+                             fran: str | None = None,
+                             till: str | None = None) -> list[dict]:
+    """Byt ut innehållet Google äger. Fönsterbytet är detsamma som i
+    replace_lov och replace_kalenderposter: bara det som ligger INOM det lästa
+    fönstret får ersättas, annars raderade en synk i augusti vårens lektioner
+    bara för att läsningen inte nådde dit.
+
+    Klass och kurs slås upp FÖRE transaktionen, av samma skäl som i
+    replace_schema: _get_or_create committar när den skapar en rad."""
+    klara = []
+    for p in poster or []:
+        datum = (p.get("datum") or "").strip()
+        try:
+            sid_fran = int(p.get("fran"))
+            sid_till = int(p.get("till") or p.get("fran"))
+        except (TypeError, ValueError):
+            continue                    # utan sidor finns ingenting att bära
+        if not datum:
+            continue
+        klara.append((datum, (p.get("tid") or "").strip(),
+                      get_or_create_group(conn, p.get("klass") or ""),
+                      get_or_create_course(conn, p.get("kurs") or ""),
+                      sid_fran, max(sid_fran, sid_till),
+                      (p.get("uppg") or "").strip() or None))
+    with conn:
+        if fran and till:
+            conn.execute("DELETE FROM lektionsinnehall WHERE datum BETWEEN ? AND ?",
+                         (fran, till))
+        else:
+            conn.execute("DELETE FROM lektionsinnehall")
+        conn.executemany(
+            "INSERT OR REPLACE INTO lektionsinnehall"
+            "(datum, tid, group_id, course_id, fran, till, uppg) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)", klara)
+    return list_lektionsinnehall(conn)
 
 
 def get_kalenderbeslut(conn: sqlite3.Connection) -> dict[str, dict]:
