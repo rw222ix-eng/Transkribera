@@ -32,8 +32,6 @@ set -u
 ROT="$(cd "$(dirname "$0")/.." && pwd)"
 MOTOR="$ROT/bin/tectonic"
 VERSION="0.15.0"
-FIL="tectonic-${VERSION}-x86_64-unknown-linux-musl.tar.gz"
-URL="https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic%40${VERSION}/${FIL}"
 
 VARDAR="github.com, objects.githubusercontent.com, relay.fullyjustified.net, data1.fullyjustified.net, archive.org"
 
@@ -42,10 +40,22 @@ if [ -x "$MOTOR/tectonic" ]; then
   exit 0
 fi
 
-if [ "$(uname -s)" != "Linux" ]; then
-  echo "tectonic: det här skriptet är för Linuxbehållare — på Windows och Mac packas motorn upp för hand"
-  exit 0
-fi
+# Målet står inte i skriptet utan i maskinen. Skriptet var Linux-bara och sa åt
+# Mac att packa upp för hand — men bin/tectonic/ är gitignorerad, så VARJE ny
+# maskin står inför samma moment, och det ska vara ett kommando överallt.
+# Windows har ingen bash här; där gäller fortfarande uppackning för hand.
+case "$(uname -s)/$(uname -m)" in
+  Linux/x86_64)         MAL="x86_64-unknown-linux-musl" ;;
+  Linux/aarch64|Linux/arm64) MAL="aarch64-unknown-linux-musl" ;;
+  Darwin/arm64)         MAL="aarch64-apple-darwin" ;;      # Apple Silicon
+  Darwin/x86_64)        MAL="x86_64-apple-darwin" ;;       # Intel-Mac
+  *)
+    echo "tectonic: ingen färdig binär för $(uname -s)/$(uname -m) — packa upp motorn i bin/tectonic/ för hand"
+    exit 0 ;;
+esac
+
+FIL="tectonic-${VERSION}-${MAL}.tar.gz"
+URL="https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic%40${VERSION}/${FIL}"
 
 mkdir -p "$MOTOR"
 tmp="$(mktemp -d)"
@@ -60,7 +70,9 @@ if ! curl -fsSL --max-time 300 -o "$tmp/t.tar.gz" "$URL"; then
 fi
 
 tar -xzf "$tmp/t.tar.gz" -C "$tmp" || { echo "tectonic: arkivet gick inte att packa upp"; exit 0; }
-bin="$(find "$tmp" -type f -name tectonic -perm -u+x | head -1)"
+# Bara namnet, inget -perm: BSD:s find (Mac) och GNU:s tolkar rättighetsuttryck
+# olika, och körflaggan sätts ändå av chmod nedan.
+bin="$(find "$tmp" -type f -name tectonic | head -1)"
 [ -n "$bin" ] || { echo "tectonic: hittade ingen binär i arkivet"; exit 0; }
 cp "$bin" "$MOTOR/tectonic"
 chmod +x "$MOTOR/tectonic"
@@ -72,7 +84,10 @@ echo "tectonic: $("$MOTOR/tectonic" --version 2>&1 | head -1)"
 # egna mallar och skriver .seeded när det gick igenom; exam_pdf.py läser den
 # markören och kör --only-cached först då.
 echo "tectonic: seedar paketcachen (kan ta några minuter) ..."
-cd "$ROT" && python -m tools.seed_tectonic_cache \
+# `python` finns inte på en Mac med Homebrew-python — bara `python3`.
+PY="$(command -v python3 || command -v python || true)"
+[ -n "$PY" ] || { echo "tectonic: ingen python hittad — seedningen hoppas över"; exit 0; }
+cd "$ROT" && "$PY" -m tools.seed_tectonic_cache \
   || echo "tectonic: seedningen gick inte igenom — motorn finns, men första provet hämtar sina paket över nätet"
 
 exit 0
