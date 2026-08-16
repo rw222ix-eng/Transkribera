@@ -259,6 +259,12 @@
 .uppgforslag::before{content:'';flex:0 0 auto;width:6px;height:6px;margin-top:.55em;border-radius:50%;background:var(--atmosphere)}
 .uppgater{margin:8px 0 0;font-size:.8rem}
 .uppgnivaer{display:grid;gap:8px;margin:14px 0 0}
+/* Spänner uppslaget över två avsnitt får varje avsnitt sina egna nivårader —
+   boken börjar om på NIVÅ 1 i nästa avsnitt, och då är det två listor, inte en.
+   Rubriken står i nivåkolumnens spår så att chipsen ligger kvar i sin linje. */
+.uppgavsnitt{display:grid;gap:8px}
+.uppgavsnitt + .uppgavsnitt{margin-top:12px;padding-top:12px;border-top:1px solid var(--line-2)}
+.uppgavsnittnamn{font-size:.78rem;font-weight:600;color:var(--ink-2)}
 .uppgniva{display:grid;grid-template-columns:64px minmax(0,1fr);gap:10px;align-items:start}
 .uppgnivanamn{padding-top:6px;font-size:.78rem;color:var(--ink-3)}
 .uppgchips{display:flex;flex-wrap:wrap;gap:6px}

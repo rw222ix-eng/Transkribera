@@ -264,30 +264,63 @@
     $('#uppgater').hidden = !rort();
     const rader = $('#uppgnivaer');
     rader.innerHTML = '';
-    NIVA.forEach(n => {
-      const del = u.filter(x => x.niva === n);
-      if (!del.length) return;
-      const rad = document.createElement('div');
-      rad.className = 'uppgniva';
-      rad.innerHTML = `<span class="uppgnivanamn">Nivå ${n}</span><div class="uppgchips"></div>`;
-      const box = $('.uppgchips', rad);
-      del.forEach(x => {
-        const b = document.createElement('button');
-        b.className = 'uppgchip';
-        b.type = 'button';
-        b.textContent = x.nr;
-        const av = bort.has(x.nr);
-        b.setAttribute('aria-pressed', String(!av));
-        b.toggleAttribute('data-bort', av);
-        b.dataset.tip = `s. ${x.sida} · ${av ? 'klicka för att räkna den ändå' : 'klicka för att hoppa över'}`;
-        b.addEventListener('click', () => {
-          if (bort.has(x.nr)) bort.delete(x.nr); else bort.add(x.nr);
-          rita();
-          window.planKoll && window.planKoll();
+    /* Ett block i taget, nivåerna inuti blocket. Boken lägger uppgifterna i
+       block efter varje teoridel och börjar om på NIVÅ 1 i nästa — «1101 … 1110,
+       1116, 1117» på samma rad var bokens ordning men inte bokens mening: 1116
+       är lätt i kubikrötter, inte en fortsättning på kvadratrötternas nivå 1.
+       Blocket byts när avsnittet byts ELLER när nivån faller tillbaka, och det
+       senare är det som fångar två block inuti samma avsnitt — 1.1 heter
+       «Kvadratrötter och kubikrötter» och har ett block för vardera. Ett enda
+       block får ingen rubrik: den hade upprepat det som står över remsan. */
+    const block = [];
+    u.forEach(x => {
+      const f = block[block.length - 1];
+      const nytt = !f || (x.avsnitt || {}).nr !== (f.avsnitt || {}).nr || x.niva < f.niva;
+      if (nytt) block.push({ avsnitt: x.avsnitt, niva: x.niva, uppg: [x] });
+      else { f.uppg.push(x); f.niva = x.niva; }
+    });
+    block.forEach((g, i) => {
+      let host = rader;
+      if (block.length > 1) {
+        host = document.createElement('div');
+        host.className = 'uppgavsnitt';
+        const namn = document.createElement('span');
+        namn.className = 'uppgavsnittnamn';
+        /* Sidorna alltid — de skiljer två block i samma avsnitt åt. Avsnittet
+           bara när det faktiskt byts, annars står samma rubrik två gånger. */
+        const sidor = g.uppg.map(x => x.sida);
+        const s1 = Math.min(...sidor), s2 = Math.max(...sidor);
+        const bytt = !i || (g.avsnitt || {}).nr !== (block[i - 1].avsnitt || {}).nr;
+        namn.textContent = (bytt && g.avsnitt ? `${g.avsnitt.nr} ${g.avsnitt.titel} · ` : '')
+          + `s. ${s1 === s2 ? s1 : s1 + '–' + s2}`;
+        host.appendChild(namn);
+        rader.appendChild(host);
+      }
+      NIVA.forEach(n => {
+        const del = g.uppg.filter(x => x.niva === n);
+        if (!del.length) return;
+        const rad = document.createElement('div');
+        rad.className = 'uppgniva';
+        rad.innerHTML = `<span class="uppgnivanamn">Nivå ${n}</span><div class="uppgchips"></div>`;
+        const box = $('.uppgchips', rad);
+        del.forEach(x => {
+          const b = document.createElement('button');
+          b.className = 'uppgchip';
+          b.type = 'button';
+          b.textContent = x.nr;
+          const av = bort.has(x.nr);
+          b.setAttribute('aria-pressed', String(!av));
+          b.toggleAttribute('data-bort', av);
+          b.dataset.tip = `s. ${x.sida} · ${av ? 'klicka för att räkna den ändå' : 'klicka för att hoppa över'}`;
+          b.addEventListener('click', () => {
+            if (bort.has(x.nr)) bort.delete(x.nr); else bort.add(x.nr);
+            rita();
+            window.planKoll && window.planKoll();
+          });
+          box.appendChild(b);
         });
-        box.appendChild(b);
+        host.appendChild(rad);
       });
-      rader.appendChild(rad);
     });
   }
 

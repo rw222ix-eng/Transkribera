@@ -152,6 +152,65 @@ test("uppgifterna på uppslaget är de som står där", async ({ page }) => {
   await expect(page.locator("#uppgant")).toContainText("av 4 att räkna");
 });
 
+test("ett uppslag över två avsnitt delas i block — boken börjar om på nivå 1",
+  async ({ page }) => {
+    /* Sidorna 14–16 korsar gränsen 1.1/1.2. Utan uppdelningen hamnade 1.2:s
+       nivå 1 på samma rad som 1.1:s, och «1114, 1215» såg ut som en fortsättning
+       fast det är två olika avsnitts lätta uppgifter. */
+    await fejka(page, { uppslag: { fran: 14, till: 16, olasta: [], utan_fakta: [],
+      sidor: [], uppgifter: [
+        { nr: 1114, sida: 14, niva: 1 }, { nr: 1118, sida: 14, niva: 3 },
+        { nr: 1215, sida: 15, niva: 1 }, { nr: 1221, sida: 16, niva: 2 }] } });
+    await page.goto("/");
+    await hydrerad(page);
+    await oppnaBoken(page);
+    await page.evaluate(() => window.Uppslag.satt(14, 16));
+
+    const grupper = page.locator("#uppgnivaer .uppgavsnitt");
+    await expect.poll(() => grupper.count()).toBe(2);
+    await expect(grupper.nth(0).locator(".uppgavsnittnamn")).toHaveText("1.1 Repetition · s. 14");
+    await expect(grupper.nth(1).locator(".uppgavsnittnamn"))
+      .toHaveText("1.2 Linjära modeller · s. 15–16");
+    // Varje block bär sina egna nivårader, och 1.1 har ingen nivå 2.
+    await expect(grupper.nth(0).locator(".uppgnivanamn")).toHaveText(["Nivå 1", "Nivå 3"]);
+    await expect(grupper.nth(0).locator(".uppgchip")).toHaveText(["1114", "1118"]);
+    await expect(grupper.nth(1).locator(".uppgchip")).toHaveText(["1215", "1221"]);
+  });
+
+test("två uppgiftsblock i SAMMA avsnitt delas också — avsnittsnamnet skrivs en gång",
+  async ({ page }) => {
+    /* Lärarens Liber: «1.1 Kvadratrötter och kubikrötter» har ett block efter
+       vardera teoridelen, och det andra börjar om på NIVÅ 1. Rubriken skiljer
+       dem på sidorna, för avsnittet är detsamma. */
+    await fejka(page, { uppslag: { fran: 15, till: 18, olasta: [], utan_fakta: [],
+      sidor: [], uppgifter: [
+        { nr: 1201, sida: 15, niva: 1 }, { nr: 1205, sida: 16, niva: 2 },
+        { nr: 1208, sida: 16, niva: 3 },
+        { nr: 1209, sida: 18, niva: 1 }, { nr: 1212, sida: 18, niva: 2 }] } });
+    await page.goto("/");
+    await hydrerad(page);
+    await oppnaBoken(page);
+    await page.evaluate(() => window.Uppslag.satt(15, 18));
+
+    const grupper = page.locator("#uppgnivaer .uppgavsnitt");
+    await expect.poll(() => grupper.count()).toBe(2);
+    await expect(grupper.nth(0).locator(".uppgavsnittnamn"))
+      .toHaveText("1.2 Linjära modeller · s. 15–16");
+    await expect(grupper.nth(1).locator(".uppgavsnittnamn")).toHaveText("s. 18");
+    await expect(grupper.nth(1).locator(".uppgchip")).toHaveText(["1209", "1212"]);
+  });
+
+test("ett uppslag inom ETT block får ingen rubrik", async ({ page }) => {
+  await fejka(page);
+  await page.goto("/");
+  await hydrerad(page);
+  await oppnaBoken(page);
+  await page.evaluate(() => window.Uppslag.satt(15, 16));
+  await expect.poll(() => page.locator("#uppgnivaer .uppgchip").count()).toBe(4);
+  // Rubriken hade bara upprepat det som redan står över remsan.
+  await expect(page.locator("#uppgnivaer .uppgavsnitt")).toHaveCount(0);
+});
+
 test("olästa sidor läses, och listan gissar inte under tiden", async ({ page }) => {
   let vanda = false;
   const anrop = await fejka(page, {
