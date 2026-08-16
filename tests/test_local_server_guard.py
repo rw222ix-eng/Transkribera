@@ -7,7 +7,9 @@ from app.web import server
 
 
 def _client(tmp_path, monkeypatch):
-    monkeypatch.setattr(server.os, "startfile", lambda p: None, raising=False)
+    # Se test_open_endpoints: `os.startfile` finns bara på Windows, sömmen som
+    # gäller på alla system är app.filhanterare.
+    monkeypatch.setattr(server.filhanterare, "oppna", lambda p: None)
     return TestClient(server.create_app(base_dir=tmp_path))
 
 

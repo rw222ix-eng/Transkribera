@@ -26,7 +26,7 @@ from app import (debug_log, hardware, llm_client,
                  history_store, gpu_arbiter, output_store, media, db,
                  paths, settings_store, ics_export, backup, report,
                  calendar_google, kalender_ai, course_data, lasar_data,
-                 elevenlabs_asr, claude_code, rattning)
+                 elevenlabs_asr, claude_code, rattning, filhanterare)
 # Samma modul som `media` ovan. Inne i transkriberingsjobbet är `media` namnet på
 # SJÄLVA filen (media = Path(...)) och skuggar modulen — aliaset gör att
 # varaktigheten går att fråga efter även där.
@@ -2157,14 +2157,16 @@ def create_app(base_dir: Path | None = None,
         if not p.exists():
             return JSONResponse({"error": "finns inte"}, status_code=404)
         try:
-            os.startfile(str(p))  # noqa: S606 — local Windows desktop app
+            # Via filhanterare, inte os.startfile: attributet finns bara på
+            # Windows och gav AttributeError → 500 på Mac.
+            filhanterare.oppna(p)
             return {"ok": True}
         except Exception as e:
             return JSONResponse({"error": str(e)}, status_code=500)
 
     @app.post("/api/open")
     async def api_open(req: Request):
-        """Open a result file/folder in the OS file manager (Windows desktop app)."""
+        """Open a result file/folder in the OS file manager (local desktop app)."""
         return _open_path((await req.json()).get("path") or "")
 
     @app.post("/api/reveal")

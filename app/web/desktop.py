@@ -7,13 +7,13 @@ from __future__ import annotations
 import os
 import shutil
 import socket
-import subprocess
 import threading
 import time
 
 import uvicorn
 import webview
 
+from app import filhanterare
 from app.web.server import create_app
 
 _MEDIA_TYPES = (
@@ -56,13 +56,13 @@ class Api:
             return False
 
     def reveal(self, path):
+        # Systemvalet ligger i app.filhanterare — mappen öppnas, filen markeras,
+        # och det fungerar på Mac och Linux också (os.startfile och explorer
+        # finns bara på Windows).
         try:
-            if path and os.path.isdir(path):
-                os.startfile(path)  # noqa: S606 (Windows-only desktop app)
-            elif path and os.path.exists(path):
-                subprocess.Popen(["explorer", "/select,", os.path.normpath(path)])
-            else:
+            if not path or not os.path.exists(path):
                 return False
+            filhanterare.markera(path)
             return True
         except Exception:
             return False

@@ -4,7 +4,10 @@ from app.web import server
 
 
 def _client(tmp_path, monkeypatch):
-    monkeypatch.setattr(server.os, "startfile", lambda p: None, raising=False)
+    # Sömmen är filhanteraren, inte `os.startfile`: den senare finns bara på
+    # Windows, och att stoppa in den på ett system som saknar den provade en
+    # kodväg som inte var appens. Här stoppas systemets öppnare i stället.
+    monkeypatch.setattr(server.filhanterare, "oppna", lambda p: None)
     return TestClient(server.create_app(base_dir=tmp_path))
 
 
