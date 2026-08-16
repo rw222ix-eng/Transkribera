@@ -523,21 +523,29 @@ _UPPGIFTER = re.compile(r"\buppg(?:ift(?:er(?:na)?)?)?\.?[ \t]*(\d[\d ,;.\t–�
 def sidor_ur_beskrivning(description: str | None) -> dict:
     """{fran, till, uppg} ur beskrivningens FÖRSTA del, eller {} när det inte
     står några sidor där. Ingen gissning: står det ingenting säger funktionen
-    ingenting, och då gäller appens vanliga förval (klassprofilen)."""
+    ingenting, och då gäller appens vanliga förval (klassprofilen).
+
+    ALLA spann räknas, inte bara det första: en lektion som avslutar ett
+    avsnitt och börjar nästa skrivs som två rader — «Kubikrötter: s. 5–6 ·
+    uppg. 1116–1119» och «Potenser: s. 7–9 · uppg. 1201–1212» — och lektionens
+    sidor är hela sträckan, uppgifterna båda listorna."""
     text = _AVDELARE.split(str(description or ""), 1)[0]
-    m = _SIDOR.search(text)
-    if not m:
+    sidor = [(int(m.group(1)),
+              int(m.group(2)) if m.group(2) else int(m.group(1)))
+             for m in _SIDOR.finditer(text)]
+    if not sidor:
         return {}                       # ingen sida → inget innehåll, punkt
-    fran = int(m.group(1))
-    till = int(m.group(2)) if m.group(2) else fran
-    ut = {"fran": fran, "till": max(fran, till)}
-    u = _UPPGIFTER.search(text)
-    if u:
+    fran = min(f for f, _ in sidor)
+    ut = {"fran": fran, "till": max(fran, max(t for _, t in sidor))}
+    listor = []
+    for u in _UPPGIFTER.finditer(text):
         # En form på spannen, samma som resten av appen skriver dem.
         lista = re.sub(r"\s*[–—-]\s*", "–", u.group(1).strip())
         lista = re.sub(r"\s*,\s*", ", ", lista).strip(" ,;.–")
         if lista:
-            ut["uppg"] = lista
+            listor.append(lista)
+    if listor:
+        ut["uppg"] = ", ".join(listor)
     return ut
 
 

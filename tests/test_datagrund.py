@@ -325,6 +325,16 @@ def test_texten_under_avdelaren_lases_aldrig():
         "———\n👤 Eleven läser s. 88–92 enligt sitt åtgärdsprogram") == {}
 
 
+def test_tva_avsnitt_pa_samma_lektion_ger_hela_strackan():
+    """Lektionen som avslutar ett avsnitt och börjar nästa skrivs som två
+    rader i kalendern — sidorna är hela sträckan, uppgifterna båda listorna."""
+    assert calendar_google.sidor_ur_beskrivning(
+        "Kubikrötter: s. 5–6 · uppg. 1116–1119\n"
+        "Potenser: s. 7–9 · uppg. 1201–1203, 1205–1212\n"
+        "OBS! ta med miniräknare") == {
+        "fran": 5, "till": 9, "uppg": "1116–1119, 1201–1203, 1205–1212"}
+
+
 @pytest.mark.parametrize("text, vantat", [
     ("s. 7", {"fran": 7, "till": 7}),                      # en ensam sida
     ("s. 2-6", {"fran": 2, "till": 6}),                    # vanligt bindestreck
