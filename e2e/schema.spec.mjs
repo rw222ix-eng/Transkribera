@@ -164,6 +164,61 @@ test("synkknappen läser om schemat ur Google", async ({ page }) => {
   await expect(page.locator(".toast")).toContainText("2 poster tolkade av Claude");
 });
 
+/* Sidorna står PÅ lektionen i lärarens kalender — «s. 24–29 · uppg. 2401–2412»
+   i beskrivningen — och de gäller den dagen, inte serien. Klickar hon lektionen
+   ska planeringen utgå från dem i stället för att räkna fram nästa spann ur
+   klassprofilen: läraren har redan svarat på frågan. */
+const INNEHALL = [{
+  datum: "2026-08-17", tid: "08:15–09:00", klass: "NA24",
+  kurs: "Matematik, nivå 2c", fran: 24, till: 29, uppg: "2401–2412",
+}];
+
+test("sidorna på lektionen i kalendern blir planeringens förval", async ({ page }) => {
+  await fejkaDatagrunden(page);
+  await page.route("**/api/schema/synk", route => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify({
+      synkad: "2026-08-17T07:00:00", schema: SCHEMA.schema, lov: SCHEMA.lov,
+      poster: [], innehall: INNEHALL, konto: "larare@skolan.se",
+      bedomda: 0, osakra: 0 }) }));
+  // Måndag morgon: veckans lektioner ligger framför läraren, inte bakom.
+  await page.clock.install({ time: new Date("2026-08-17T07:00:00") });
+  await page.goto("/");
+  await hydrerad(page);
+  await page.getByRole("tab", { name: "Planering" }).click();
+  await page.locator("#synkrad [data-synk]").click();
+  await expect.poll(() => page.evaluate(() => window.Kalender.innehall.length)).toBe(1);
+  /* Synkens kvittotoast ligger fast längst ner i mitten, och med fryst klocka
+     försvinner den aldrig av sig själv — låt dess fem sekunder gå ut först. */
+  await page.clock.runFor(6000);
+
+  await page.locator("#schemagrid .lekt[data-valjbar]").filter({ hasText: "NA24" })
+    .first().click();
+
+  // Uppslaget står på kalenderns sidor — inte på gissningen ur klassprofilen …
+  await expect.poll(() => page.evaluate(() => window.Uppslag.spann().fran)).toBe(24);
+  expect(await page.evaluate(() => window.Uppslag.spann().till)).toBe(29);
+  // … och bokdörren är öppen, så att sidorna följer med i det som skrivs
+  // (plan.js bokval() läser Uppslag bara när dörren är öppen).
+  await expect(page.locator('.kalla[data-dorr="bok"]'))
+    .toHaveAttribute("aria-pressed", "true");
+});
+
+test("utan innehåll i kalendern gissar appen som förut", async ({ page }) => {
+  await fejkaDatagrunden(page);
+  await page.clock.install({ time: new Date("2026-08-17T07:00:00") });
+  await page.goto("/");
+  await hydrerad(page);
+  await page.getByRole("tab", { name: "Planering" }).click();
+  await page.locator("#schemagrid .lekt[data-valjbar]").filter({ hasText: "NA24" })
+    .first().click();
+
+  // Ett spann sätts — men det är klassprofilens, och det är inte kalenderns.
+  const spann = await page.evaluate(() => window.Uppslag.spann());
+  expect(spann.fran).toBeGreaterThan(0);
+  expect([spann.fran, spann.till]).not.toEqual([24, 29]);
+});
+
 test("utan server står prototypen kvar", async ({ page }) => {
   // Designprojektet har ingen server: sonderingen faller, och då är veckan,
   // loven och korten prototypens egna igen.

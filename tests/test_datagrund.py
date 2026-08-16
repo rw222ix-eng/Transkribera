@@ -139,6 +139,50 @@ def test_synk_ror_bara_schemats_poster_inte_lararens(conn):
     assert titlar == ["Prov Ma4", "Utvecklingssamtal"]
 
 
+# ------------------------------------------------- lektionens eget innehåll --
+# Sidorna gäller per LEKTIONSTILLFÄLLE. Veckoschemat är en rad per serie och
+# kan inte bära dem — den här listan är dagens, och den har därför datum.
+
+INNEHALL = [
+    {"datum": "2026-08-17", "tid": "08:15–09:00", "klass": "NA26F",
+     "kurs": "Matematik 1c", "fran": 2, "till": 6, "uppg": "1101–1103, 1105–1119"},
+    {"datum": "2026-08-19", "tid": "10:15–11:00", "klass": "NA26F",
+     "kurs": "Matematik 1c", "fran": 7, "till": 7},
+]
+
+
+def test_innehallet_ror_sig_genom_databasen_med_frontendens_faltnamn(conn):
+    assert db.replace_lektionsinnehall(conn, INNEHALL) == INNEHALL
+    assert db.list_lektionsinnehall(conn) == INNEHALL
+
+
+def test_samma_lektion_last_tva_ganger_ar_en_rad(conn):
+    """Synken är idempotent: UNIQUE på tillfället, inte på raden."""
+    db.replace_lektionsinnehall(conn, INNEHALL + [dict(INNEHALL[0], fran=3, till=9)])
+    ut = db.list_lektionsinnehall(conn)
+    assert len(ut) == 2
+    assert (ut[0]["fran"], ut[0]["till"]) == (3, 9)     # den sist lästa gäller
+
+
+def test_rader_utan_sidor_hoppas_over(conn):
+    """Utan sidor finns ingenting att bära — och ingen gissning görs här."""
+    db.replace_lektionsinnehall(conn, [
+        {"datum": "2026-08-17", "klass": "NA26F", "kurs": "Matematik 1c"},
+        {"datum": "", "klass": "NA26F", "kurs": "Matematik 1c", "fran": 2, "till": 6},
+    ])
+    assert db.list_lektionsinnehall(conn) == []
+
+
+def test_synk_utanfor_fonstret_raderar_inte_innehallet(conn):
+    """Samma fönsterregel som loven och posterna: en synk i augusti får inte
+    stryka sidorna som står på vårterminens lektioner."""
+    db.replace_lektionsinnehall(conn, INNEHALL + [
+        {"datum": "2027-03-02", "tid": "08:15–09:00", "klass": "NA26F",
+         "kurs": "Matematik 1c", "fran": 210, "till": 216}])
+    kvar = db.replace_lektionsinnehall(conn, [], fran="2026-08-01", till="2026-12-20")
+    assert [p["datum"] for p in kvar] == ["2027-03-02"]
+
+
 # ---------------------------------------------------------------- rutterna --
 
 def test_api_schema_ger_de_tre_listorna(client):
@@ -222,6 +266,16 @@ def test_synk_skriver_in_det_google_svarar(client, monkeypatch):
     assert d["synkad"]
 
 
+def test_synk_skriver_in_lektionernas_sidor(client, monkeypatch):
+    """Sidorna ska ligga kvar efter synken — förvalen läser dem ur /api/schema,
+    inte ur synksvaret."""
+    monkeypatch.setattr(server.calendar_google, "read_schema", lambda *a, **k: {
+        "schema": SCHEMA_RADER, "lov": [], "poster": [], "innehall": INNEHALL})
+    d = client.post("/api/schema/synk").json()
+    assert d["innehall"] == INNEHALL
+    assert client.get("/api/schema").json()["innehall"] == INNEHALL
+
+
 # ------------------------------------------------- tolkningen av Google-data --
 
 def _tid(datum, fran, till, **extra):
@@ -243,6 +297,92 @@ def test_aterkommande_handelse_med_klass_blir_veckoschema():
                              # inte ritas före den första eller efter den sista.
                              "fran": "2026-08-17", "till": "2026-08-24",
                              "undantag": []}]
+
+
+# ------------------------------------- sidorna som står på lektionen --
+
+# Beskrivningen som den ser ut i lärarens kalender: innehållet överst, sedan
+# avdelaren, och under den anteckningar om ENSKILDA ELEVER.
+BESKRIVNING = """s. 2–6 · uppg. 1101–1103, 1105–1119
+OBS! ta med miniräknare
+———
+MATE1C00X. HT-schema (period 35).
+👤 Elev som behöver extra tid, se s. 400 i pärmen"""
+
+
+def test_sidorna_och_uppgifterna_lases_ur_beskrivningen():
+    assert calendar_google.sidor_ur_beskrivning(BESKRIVNING) == {
+        "fran": 2, "till": 6, "uppg": "1101–1103, 1105–1119"}
+
+
+def test_texten_under_avdelaren_lases_aldrig():
+    """Integritetskravet, och villkoret för att beskrivningen läses alls:
+    elevanteckningarna under ——— får varken tolkas eller komma ut. Sidan 400
+    där nere finns inte för appen — sidorna är de som står ÖVER avdelaren."""
+    assert calendar_google.sidor_ur_beskrivning(BESKRIVNING)["till"] == 6
+    # Och en beskrivning som BARA är anteckningar ger ingenting alls.
+    assert calendar_google.sidor_ur_beskrivning(
+        "———\n👤 Eleven läser s. 88–92 enligt sitt åtgärdsprogram") == {}
+
+
+@pytest.mark.parametrize("text, vantat", [
+    ("s. 7", {"fran": 7, "till": 7}),                      # en ensam sida
+    ("s. 2-6", {"fran": 2, "till": 6}),                    # vanligt bindestreck
+    ("sid. 40–48", {"fran": 40, "till": 48}),
+    ("Sidorna 12–14 · uppg 3101-3110",
+     {"fran": 12, "till": 14, "uppg": "3101–3110"}),       # en form på spannen
+    ("s. 5 · uppg. 1101, 1103,1109",
+     {"fran": 5, "till": 5, "uppg": "1101, 1103, 1109"}),
+    ("Genomgång av kvadratrötter", {}),                    # inga sidor → inget
+    ("uppg. 1101–1103", {}),                               # uppgifter utan sidor
+    ("", {}),
+    (None, {}),
+])
+def test_sidformerna_som_star_i_kalendern(text, vantat):
+    assert calendar_google.sidor_ur_beskrivning(text) == vantat
+
+
+def test_innehallet_hanger_pa_lektionstillfallet_inte_pa_serien():
+    """Samma serie, två veckor, olika sidor. Schemaraden är EN — innehållet
+    är två, ett per datum."""
+    ut = calendar_google.tolka_handelser([
+        _tid("2026-08-17", "08:15", "09:00", summary="Matematik 3c 9A",
+             location="A214", recurringEventId="r1", description=BESKRIVNING),
+        _tid("2026-08-24", "08:15", "09:00", summary="Matematik 3c 9A",
+             location="A214", recurringEventId="r1", description="s. 7–11"),
+    ], idag="2026-08-17")
+    assert len(ut["schema"]) == 1
+    assert ut["innehall"] == [
+        {"datum": "2026-08-17", "tid": "08:15–09:00", "klass": "9A",
+         "kurs": "Matematik 3c", "fran": 2, "till": 6,
+         "uppg": "1101–1103, 1105–1119"},
+        {"datum": "2026-08-24", "tid": "08:15–09:00", "klass": "9A",
+         "kurs": "Matematik 3c", "fran": 7, "till": 11},
+    ]
+
+
+def test_lektion_utan_sidor_ger_inget_innehall():
+    """Ingen gissning: står det inga sidor i kalendern gäller klassprofilens
+    förval, precis som innan."""
+    ut = calendar_google.tolka_handelser([
+        _tid("2026-08-17", "08:15", "09:00", summary="Matematik 3c 9A",
+             recurringEventId="r1"),
+        _tid("2026-08-24", "08:15", "09:00", summary="Matematik 3c 9A",
+             recurringEventId="r1", description="Vi fortsätter där vi slutade"),
+    ], idag="2026-08-17")
+    assert ut["innehall"] == []
+
+
+def test_bara_lektioner_bar_innehall():
+    """Mötet på tisdag är ingen lektion, och «s. 3–4» i dess beskrivning är
+    dagordningen — den ska inte bli ett sidspann i planeringen."""
+    ut = calendar_google.tolka_handelser([
+        _tid("2026-08-18", "13:00", "14:30", summary="Ämneslagsmöte",
+             recurringEventId="r9", description="s. 3–4 i handlingarna"),
+        _tid("2026-08-18", "15:00", "16:00", summary="Utvecklingssamtal",
+             description="s. 12"),
+    ], idag="2026-08-18")
+    assert ut["innehall"] == []
 
 
 def test_proven_markeras_som_prov():
