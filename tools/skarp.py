@@ -60,6 +60,7 @@ from __future__ import annotations
 import argparse
 import shutil
 import socket
+import sqlite3
 import sys
 from pathlib import Path
 
@@ -83,6 +84,20 @@ BAS = ROT / ".skarp"
 # ny installation.
 HEMLIGHETER = ("cookies.txt", "google_client_secret.json", "google_token.json",
                "openai_key.txt", "elevenlabs_key.txt")
+
+# Bokhyllan följer med, och till skillnad från allt annat i lärarens bas är det
+# rätt. Böckerna är INTE hennes arbete — de är läromedlet, hundratals megabyte
+# inskannade sidor plus timmar av OCR som redan är betald. En bas utan dem gör
+# bokdörren obrukbar: väljaren står kvar på platshållaren i app.html och varje
+# källruta säger «inget register än», så tavlor och prov kan inte skrivas mot
+# boken alls.
+#
+# Bara raderna kopieras, aldrig sidbilderna. `bocker.mapp` och `bocker.fil` bär
+# ABSOLUTA sökvägar till Transkriberingar/bocker/<id>/ och downloads/*.pdf i
+# reporoten, och app/bok.py:229 använder kolumnen före den basrelativa
+# gissningen — så de 95 MB PNG som redan ligger på disken läses där de ligger i
+# stället för att dubbleras.
+BOKTABELLER = ("bocker", "bok_avsnitt", "bok_sidor", "bok_uppgifter")
 
 
 def _upptagen(port: int) -> bool:
@@ -111,6 +126,36 @@ def _res_bas(bas: Path, tom: bool) -> Path:
     return bas
 
 
+def _hamta_bocker(db_fil: Path) -> str:
+    """Kopiera lärarens bokhylla hit om den här basen saknar en.
+
+    Villkoret är «tom hylla», inte «ny bas». En bas som skapades innan det här
+    fanns ska också få böckerna, och nästa start ska inte lägga dem två gånger.
+    Priset är att en bok man raderat med flit kommer tillbaka vid omstart — det
+    är ett dev-verktyg, och en tom hylla är mycket oftare ett misstag."""
+    kalla = ROT / "transkribera.db"
+    if not kalla.is_file() or kalla.resolve() == db_fil.resolve():
+        return "ingen hylla att hämta"
+    con = sqlite3.connect(db_fil)
+    try:
+        if con.execute("SELECT count(*) FROM bocker").fetchone()[0]:
+            return "hyllan fanns redan"
+        con.execute("ATTACH DATABASE ? AS larare", (str(kalla),))
+        # Föräldern först: bok_avsnitt/-sidor/-uppgifter pekar på bocker.id.
+        for tabell in BOKTABELLER:
+            con.execute(f"INSERT INTO {tabell} SELECT * FROM larare.{tabell}")
+        con.commit()
+        n = con.execute("SELECT count(*) FROM bocker").fetchone()[0]
+        return f"{n} böcker hämtade från lärarens bas"
+    except sqlite3.Error as e:
+        # Mjukt fel med flit: skiljer sig scheman åt mellan baserna är det värt
+        # att veta, men servern ska starta ändå — allt utom boken fungerar.
+        con.rollback()
+        return f"kunde inte hämtas ({e})"
+    finally:
+        con.close()
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(
         description="Servern utan fönster, på en fast port, mot en egen bas")
@@ -137,11 +182,15 @@ def main() -> int:
     from app.web.server import create_app
 
     bas = _res_bas(a.bas.expanduser().resolve(), a.tom)
+    # create_app FÖRST: den lägger schemat i en tom bas, och böckerna kan inte
+    # skrivas in i tabeller som ännu inte finns.
     app = create_app(base_dir=bas)
+    bokbesked = _hamta_bocker(bas / "transkribera.db")
     # Webbläsaren öppnas inte härifrån. En ny flik är en flik utan DevTools, och
     # vid frontendarbete startas servern om många gånger i rad — poängen med den
     # fasta porten är att fliken som redan står öppen räcker.
     print(f"bas:    {bas}")
+    print(f"böcker: {bokbesked}")
     print(f"claude: {claude_code.binar() or 'SAKNAS — genereringen fungerar inte'}")
     print(f"öppna:  http://127.0.0.1:{port}/   (Ctrl+C stänger)", flush=True)
     try:
