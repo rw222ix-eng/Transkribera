@@ -17,6 +17,14 @@ set -u
 
 cd "$(dirname "$0")/.." || exit 0
 
+# macOS har inget `python`, bara `python3` — och på lärarens maskiner ligger
+# beroendena i .venv, inte systemvitt. Behållaren har `python` i PATH som förr.
+if [ -x .venv/bin/python ]; then
+  python() { .venv/bin/python "$@"; }
+elif ! command -v python >/dev/null 2>&1; then
+  python() { python3 "$@"; }
+fi
+
 if python -c "import fastapi, uvicorn, pydantic, jinja2, httpx, pytest" 2>/dev/null; then
   echo "miljö: klar"
   bash "$(dirname "$0")/hamta_tectonic.sh"
