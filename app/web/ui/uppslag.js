@@ -45,12 +45,28 @@
   const avsnittFor = sida => reg().find(a => { const [f, t] = grans(a); return sida >= f && sida <= t; }) || null;
   const rullaLada = (box, mal) => (window.rullaLada || ((b, y) => { b.scrollTop = y; }))(box, mal, 520);
 
-  /* ── Uppslaget: första och sista sidan som två blad ── */
+  /* ── Uppslaget: första och sista sidan som två blad ──
+     Bladen var ritade attrapper: fem grå streck på hårdkodade bredder, lika
+     för varje sida i varje bok. De såg ut som en förhandsvisning och var det
+     inte, vilket är sämre än att inte visa något alls — läraren klickar fram
+     ett spann i remsan för att SE om hon träffat rätt uppslag, och strecken
+     svarade likadant om hon träffat eller inte.
+
+     Strecken ligger kvar som underlägg. De syns medan bilden hämtas, och de
+     blir kvar som enda innehåll när ingen bild går att få: prototypens böcker
+     har inget id, och en importerad bok vars PDF flyttats kan bara visa de
+     sidor som redan renderats. Bladet ska säga sidnummer och avsnitt även då. */
   function ritaUppslag() {
+    const id = window.Bok.bokId ? window.Bok.bokId(bok) : null;
     const blad = (nr, roll) => {
       const a = avsnittFor(nr);
       const rader = [92, 78, 96, 64, 88].map(w => `<i style="width:${w}%"></i>`).join('');
-      return `<div class="bkblad"><span class="bkbrub"></span>${rader}<span class="bkbnr">${nr} · ${roll}</span><span class="bkbavs">${a ? a.nr + ' ' + a.titel : 'utanför registret'}</span></div>`;
+      /* onerror tar bort bilden i stället för att lämna en trasig ikon —
+         underlägget under den är redan ett fullgott blad. */
+      const bild = id
+        ? `<img class="bkbild" alt="Sida ${nr}" src="/api/bocker/${id}/sida/${nr}.png" onerror="this.remove()">`
+        : '';
+      return `<div class="bkblad"><span class="bkark"><span class="bkbrub"></span>${rader}${bild}</span><span class="bkbnr">${nr} · ${roll}</span><span class="bkbavs">${a ? a.nr + ' ' + a.titel : 'utanför registret'}</span></div>`;
     };
     uppslag.innerHTML = blad(fran, 'första sidan') + blad(till, 'sista sidan');
   }

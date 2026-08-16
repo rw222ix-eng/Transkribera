@@ -566,3 +566,84 @@ def test_utan_bokdorr_ingen_bok_i_prompten(client, ocr):
     assert routes_planning.bok_text(client.base_dir / "transkribera.db", {}) == ""
     assert routes_planning.bok_val({"bok": {"id": b["id"], "fran": 0}}) is None
     assert routes_planning.bok_val({"bok": {"id": b["id"], "fran": 10}}) == (b["id"], 10, 10)
+
+
+# ------------------------------------------------------------- sidbilden --
+# Bladen i väljaren var ritade attrapper (fem grå streck på hårdkodade
+# bredder) och sa därför lika mycket om ett träffat uppslag som om ett missat.
+# Rutten nedan ger sidan som bild; testerna håller de tre saker som gör den
+# användbar: rätt sida, en billig bild, och ett ärligt nej.
+
+def _bild(data: bytes):
+    import io
+
+    from PIL import Image
+    return Image.open(io.BytesIO(data))
+
+
+def test_sidbilden_oversatter_boksida_till_pdfsida(client, ocr):
+    """Tryckt s. 10 är inte PDF-sida 10. `pdf_fil` ger offset 9 (registret
+    börjar på s. 10 i PDF-sida 1), och bilden ska komma därifrån."""
+    b = _importera(client)
+    r = client.get(f"/api/bocker/{b['id']}/sida/10.png")
+    assert r.status_code == 200 and r.headers["content-type"] == "image/png"
+    offset = db.get_bok(db.connect(client.base_dir / "transkribera.db"),
+                        b["id"])["sidoffset"]
+    mapp = client.base_dir / "Transkriberingar" / "bocker" / str(b["id"])
+    assert (mapp / f"sida-{10 + offset:03d}.png").exists()
+
+
+def test_miniatyren_ar_gra_och_liten(client, ocr, monkeypatch):
+    """1025 px i färg är OCR:ens sida, inte väljarens: 1,6 MB för ett blad som
+    är 150 px brett. Originalet finns kvar bakom ?full=1.
+
+    Sidorna måste vara STÖRRE än taket för att något ska hända, så den här
+    boken får riktiga bokmått i stället för `pdf_fil`:s 200×300 punkter."""
+    import pypdfium2 as pdfium
+    mapp = client.base_dir / "downloads"
+    mapp.mkdir(parents=True, exist_ok=True)
+    doc = pdfium.PdfDocument.new()
+    for _ in range(30):
+        doc.new_page(600, 900)                    # ×2.0 → 1200×1800 px
+    stor_pdf = mapp / "Stor bok.pdf"
+    doc.save(str(stor_pdf))
+    doc.close()
+    b = _done(client.post("/api/bocker", json={"path": str(stor_pdf)}))
+
+    liten = _bild(client.get(f"/api/bocker/{b['id']}/sida/10.png").content)
+    stor = _bild(client.get(f"/api/bocker/{b['id']}/sida/10.png?full=1").content)
+    assert (liten.width, liten.mode) == (420, "L")
+    assert stor.width == 1200
+
+
+def test_en_sida_mindre_an_taket_skalas_inte_upp(client, ocr):
+    """`pdf_fil` ger 400 px breda sidor — under taket. Att skala UPP dem hade
+    kostat en fil och en omkodning för en suddigare bild."""
+    b = _importera(client)
+    liten = _bild(client.get(f"/api/bocker/{b['id']}/sida/10.png").content)
+    assert liten.width == 400
+
+
+def test_sidbilden_sager_nej_i_stallet_for_att_gissa(client, ocr):
+    """Ett blad utan bild är ett fullgott blad (uppslag.js tar bort <img> på
+    fel). Ett blad med FEL sida är en lärare som slår upp fel uppslag i
+    klassrummet — därför nej i stället för närmaste gissning."""
+    b = _importera(client, sidor=30)
+    assert client.get("/api/bocker/9999/sida/10.png").status_code == 404
+    assert client.get(f"/api/bocker/{b['id']}/sida/900.png").status_code == 404
+    # Sidan ligger före PDF:ens början när offseten drar den dit.
+    conn = db.connect(client.base_dir / "transkribera.db")
+    db.update_bok(conn, b["id"], sidoffset=-40)
+    conn.commit()
+    conn.close()
+    assert client.get(f"/api/bocker/{b['id']}/sida/10.png").status_code == 404
+
+
+def test_sidbilden_utan_kallfil_ger_nej_inte_krasch(client, ocr):
+    """Boken importerad på en annan maskin, eller PDF:en flyttad. De sidor som
+    redan renderats fungerar; resten kan inte hämtas — och ska inte spränga."""
+    b = _importera(client, sidor=30)
+    assert client.get(f"/api/bocker/{b['id']}/sida/10.png").status_code == 200
+    (client.base_dir / "downloads").rename(client.base_dir / "flyttad")
+    assert client.get(f"/api/bocker/{b['id']}/sida/10.png").status_code == 200
+    assert client.get(f"/api/bocker/{b['id']}/sida/25.png").status_code == 404

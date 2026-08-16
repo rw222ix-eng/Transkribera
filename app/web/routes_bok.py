@@ -20,7 +20,7 @@ import shutil
 from pathlib import Path
 
 from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from app import bok as bok_mod
 from app import db
@@ -198,6 +198,96 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 "sidor": [{"sida": s["sida"], "avsnitt": s.get("avsnitt"),
                            "rubrik": s.get("rubrik"),
                            "last": bool(s.get("text"))} for s in sidor]}
+
+    # ----------------------------------------------------------- sidbilden --
+
+    # Bredden på miniatyren. Sidorna renderas i 1025×1584 för OCR:ens skull
+    # (bok.PDF_SKALA), alltså ~1,6 MB PNG — och bladet i väljaren är 150 px
+    # brett. Att skicka originalet dit är 3,2 MB per klick i remsan för två
+    # blad som ändå skalas ner i webbläsaren. 420 px räcker på en hidpi-skärm
+    # och väger en tjugondel.
+    FORHANDS_BREDD = 420
+
+    def _miniatyr(full: Path) -> Path:
+        """Nedskalad kopia bredvid originalet, skapad en gång.
+
+        Faller tillbaka på originalet om skalningen inte går: en tung bild är
+        ett bättre svar än ingen bild, och OCR-sidan bredvid är oberörd."""
+        liten = full.with_name(f"{full.stem}-f{FORHANDS_BREDD}.png")
+        if liten.exists():
+            return liten
+        try:
+            from PIL import Image
+            with Image.open(full) as im:
+                if im.width <= FORHANDS_BREDD:
+                    return full
+                h = round(im.height * FORHANDS_BREDD / im.width)
+                # Gråskala, inte färg. En tryckt matematiksida är svart på vitt
+                # — mätt på s. 87 i Ma 1a väger den nedskalade sidan 343 kB i
+                # RGB och 132 kB i grått, med samma läsbarhet. Färgen bär
+                # ingenting i en miniatyr som ska säga «rätt uppslag?».
+                im.resize((FORHANDS_BREDD, h), Image.LANCZOS) \
+                  .convert("L").save(liten, optimize=True)
+            return liten
+        except Exception:
+            return full
+
+    @router.get("/api/bocker/{bok_id:int}/sida/{sida:int}.png")
+    def sidbild(bok_id: int, sida: int, full: int = 0):
+        """Sidan som BILD, för förhandsvisningen i remsan (uppslag.js).
+
+        Bladen i väljaren var ritade attrapper — fem grå streck på hårdkodade
+        bredder — och läraren som klickar fram ett spann fick alltså ingen
+        aning om hon träffat rätt uppslag. Sidan finns på disken; det som
+        saknades var en väg ut till sidan.
+
+        SIDNUMRET ÄR BOKENS, inte PDF:ens. Skillnaden är hela poängen med
+        `sidoffset`: pärmar och förord gör att tryckt s. 92 kan vara PDF-sida
+        87. Är sidan redan läst står översättningen i `bok_sidor.pdf_sida` och
+        den vinner — den är MÄTT ur sidfoten (bok._sikta_om), medan offseten är
+        ett medelvärde över hela boken och driver isär mot slutet.
+
+        Saknas bilden renderas den ur PDF:en och blir kvar på disken.
+        Kostnaden är en pdfium-öppning av en fil på ett par hundra megabyte, så
+        rutten får bara anropas för de två bladen i uppslaget — ALDRIG för
+        remsan, som är 300+ sidor och skulle rendera hela boken.
+        """
+        conn = _db()
+        try:
+            b = db.get_bok(conn, bok_id)
+            if b is None:
+                return JSONResponse({"error": "okänd bok"}, status_code=404)
+            rader = db.bok_sidor(conn, bok_id, sida, sida, med_text=False)
+        finally:
+            conn.close()
+        pdf_sida = next((r["pdf_sida"] for r in rader if r.get("pdf_sida")),
+                        None) or sida + int(b.get("sidoffset") or 0)
+        if pdf_sida < 1:
+            return JSONResponse({"error": "sidan ligger före bokens början"},
+                                status_code=404)
+        mapp = Path(b.get("mapp") or bok_mod.bok_mapp(base, bok_id))
+        fil = mapp / f"sida-{pdf_sida:03d}.png"
+        if not fil.exists():
+            pdf = Path(b.get("fil") or "")
+            if not pdf.is_file():
+                # Boken importerad på en annan maskin, eller PDF:en flyttad.
+                # De sidor som redan renderats fungerar; resten kan inte.
+                return JSONResponse({"error": "källfilen saknas"},
+                                    status_code=404)
+            try:
+                if not bok_mod.rendera(pdf, [pdf_sida - 1], mapp):
+                    return JSONResponse({"error": "sidan finns inte i PDF:en"},
+                                        status_code=404)
+            except Exception:
+                return JSONResponse({"error": "kunde inte rendera sidan"},
+                                    status_code=500)
+        if not full:
+            fil = _miniatyr(fil)
+        # Bilden ändras aldrig för ett givet (bok, sida) — den är renderad ur en
+        # PDF som ligger still. Utan cache-huvudet hämtar remsan om båda bladen
+        # vid varje klick.
+        return FileResponse(str(fil), media_type="image/png",
+                            headers={"Cache-Control": "max-age=86400"})
 
     # ------------------------------------------------------------ rätta till --
 
