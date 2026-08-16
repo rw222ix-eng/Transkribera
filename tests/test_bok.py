@@ -486,6 +486,10 @@ def test_las_rutten_laser_och_uppslaget_svarar(client, ocr):
     # Faktapasset lämnar sidorna olästa i textmening — det är avsiktligt.
     assert upp["olasta"] == [10, 11]
     assert all(s["last"] is False for s in upp["sidor"])
+    # Men fakta ÄR lästa, och det är den siffran uppgiftspanelen triggar på.
+    # Triggade den på `olasta` blev det hämta → läs → hämta i evighet, för det
+    # passet skriver aldrig text.
+    assert upp["utan_fakta"] == []
 
 
 def test_kursen_gar_att_satta_i_efterhand(client, ocr):

@@ -191,10 +191,18 @@ def create_router(base: Path, arbiter) -> APIRouter:
             sidor = db.bok_sidor(conn, bok_id, fran, t)
             uppg = db.bok_uppgifter(conn, bok_id, fran, t)
             olasta = bok_mod.olasta(conn, bok_id, fran, t)
+            utan_fakta = bok_mod.olasta(conn, bok_id, fran, t, text=False)
         finally:
             conn.close()
+        # Två sorters oläst, och den som frågar måste välja rätt: `olasta` är
+        # sidor utan TEXT (det dyra passet), `utan_fakta` sidor utan
+        # uppgiftsnummer. Uppgiftspanelen kör faktapasset, och den som lät den
+        # trigga på `olasta` fick en evig slinga — faktapasset skriver aldrig
+        # text, så sidorna förblev olästa i textmening hur många gånger det än
+        # kördes.
         return {"fran": fran, "till": t, "uppgifter": uppg,
                 "olasta": olasta,
+                "utan_fakta": utan_fakta,
                 "sidor": [{"sida": s["sida"], "avsnitt": s.get("avsnitt"),
                            "rubrik": s.get("rubrik"),
                            "last": bool(s.get("text"))} for s in sidor]}

@@ -444,7 +444,7 @@ test("dag 8 — boken: slå upp ett uppslag och skriv tavlan ur det",
     await page.route("**/api/bocker**", route => {
       const url = new URL(route.request().url());
       const svar = url.pathname.endsWith("/uppslag")
-        ? { fran: 15, till: 16, uppgifter: UPPG, olasta: [], sidor: [] }
+        ? { fran: 15, till: 16, uppgifter: UPPG, olasta: [], utan_fakta: [], sidor: [] }
         : { bocker: [BOK] };
       return route.fulfill({ status: 200, contentType: "application/json",
                              body: JSON.stringify(svar) });

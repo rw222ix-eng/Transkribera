@@ -183,15 +183,22 @@
         bort = standardbort();
         rita();
         window.planKoll && window.planKoll();
-        if ((d.olasta || []).length) lasSidorna(id, s, nyck);
+        if ((d.utan_fakta || []).length) lasSidorna(id, s, nyck);
       })
       .catch(() => {});
   }
 
+  /* Ett faktapass per spann, aldrig fler. Passet är gratis andra gången —
+     servern svarar «redan lästa» direkt — och just därför skulle en sida det
+     inte fick fram (modellen hoppade den) annars ge hämta → läs → hämta i
+     evighet, hundra anrop i sekunden. Nollställs vid fel så att ett avbrutet
+     pass går att göra om när man kommer tillbaka till spannet. */
+  let bett = '';
   function lasSidorna(id, s, nyck) {
     const host = $('#uppgsvar');
-    if (!host || laser) return;
+    if (!host || laser || bett === nyck) return;
     laser = true;
+    bett = nyck;
     const klart = () => { laser = false; if (nyckelNu() === nyck) hamta(); };
     const jobb = ({ signal, log }) => window.API.strom(
       `/api/bocker/${id}/las`,
@@ -203,10 +210,10 @@
         svar: r => r && r.uppgifter && r.uppgifter.length
           ? `Sidorna är uppslagna — ${r.uppgifter.length} uppgifter står där.`
           : 'Sidorna är uppslagna.',
-        efterKlar: klart, efterFel: () => { laser = false; },
+        efterKlar: klart, efterFel: () => { laser = false; bett = ''; },
       });
     } else {
-      jobb({}).then(klart, () => { laser = false; });
+      jobb({}).then(klart, () => { laser = false; bett = ''; });
     }
   }
   const rort = () => {

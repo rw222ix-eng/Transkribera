@@ -68,7 +68,8 @@ async function fejka(page, { bocker = [BOK], uppslag = null, las = null } = {}) 
     anrop.push({ vag: url.pathname, metod: r.method(),
                  sok: url.search, kropp: r.method() === "POST" ? r.postDataJSON() : null });
     if (url.pathname.endsWith("/uppslag")) {
-      return json(route, uppslag || { fran: 15, till: 16, uppgifter: UPPG, olasta: [], sidor: [] });
+      return json(route, uppslag || { fran: 15, till: 16, uppgifter: UPPG,
+                                      olasta: [], utan_fakta: [], sidor: [] });
     }
     if (url.pathname.endsWith("/las")) {
       return route.fulfill({ status: 200, contentType: "text/event-stream",
@@ -154,9 +155,12 @@ test("uppgifterna på uppslaget är de som står där", async ({ page }) => {
 test("olästa sidor läses, och listan gissar inte under tiden", async ({ page }) => {
   let vanda = false;
   const anrop = await fejka(page, {
-    uppslag: { fran: 15, till: 16, uppgifter: [], olasta: [15, 16], sidor: [] },
+    uppslag: { fran: 15, till: 16, uppgifter: [],
+               olasta: [15, 16], utan_fakta: [15, 16], sidor: [] },
   });
-  // Andra gången uppslaget frågas är sidorna lästa.
+  // Andra gången uppslaget frågas är sidorna lästa. Notera att `olasta` står
+  // kvar: faktapasset skriver aldrig sidtexten, och det är precis så servern
+  // svarar. Panelen ska ändå nöja sig — den läser `utan_fakta`.
   await page.unroute("**/api/bocker**");
   await page.route("**/api/bocker**", route => {
     const r = route.request();
@@ -166,7 +170,8 @@ test("olästa sidor läses, och listan gissar inte under tiden", async ({ page }
       const klart = vanda;
       return route.fulfill({ status: 200, contentType: "application/json",
         body: JSON.stringify({ fran: 15, till: 16, uppgifter: klart ? UPPG : [],
-                               olasta: klart ? [] : [15, 16], sidor: [] }) });
+                               olasta: [15, 16],
+                               utan_fakta: klart ? [] : [15, 16], sidor: [] }) });
     }
     if (url.pathname.endsWith("/las")) {
       vanda = true;
@@ -187,6 +192,10 @@ test("olästa sidor läses, och listan gissar inte under tiden", async ({ page }
   // Och när den är klar står bokens riktiga nummer i listan.
   await expect.poll(() => page.locator("#uppgnivaer .uppgchip").count(),
                     { timeout: 15_000 }).toBe(4);
+  // ETT läsanrop, inte hundra: hämta → läs → hämta gick i evig slinga så länge
+  // panelen triggade på `olasta`, som faktapasset aldrig tömmer.
+  await page.waitForTimeout(1500);
+  expect(anrop.filter(a => a.vag.endsWith("/las")).length).toBe(1);
 });
 
 test("importen är fyra steg som beskriver något som händer", async ({ page }) => {
