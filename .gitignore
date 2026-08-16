@@ -134,3 +134,10 @@ htmlcov/
 
 # Playwright-spår från soakvarv som föll (tools/soak.py)
 soak-fall/
+
+# Den skarpa körningens egen bas (tools/skarp.py) — databas, logg och kopior av
+# hemligheterna. Regeln måste stå här trots att cookies.txt och google_*.json
+# redan är ignorerade ovan: de raderna är namn utan snedstreck och gäller på
+# alla djup, men transkribera.db-raderna gäller också bara namnet, och
+# .skarp/ innehåller dessutom transkriberingar och PDF:er som ingen fångar.
+.skarp/

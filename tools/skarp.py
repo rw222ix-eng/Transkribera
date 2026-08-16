@@ -1,65 +1,155 @@
-"""Startar den RIKTIGA appen utan skrivbordsfönster — för skarpa prov på en
-maskin som inte är lärarens.
+"""Skarp körning utan skrivbordsfönster: samma app som läraren kör, men serverad
+till en vanlig webbläsare.
 
-`python transkribera_web.py` öppnar appen i ett pywebview-fönster. Det förutsätter
-en skrivbordsmiljö, och pywebview går inte ens att installera i en behållare
-(dess beroende proxy_tools bygger inte). Utvecklingen sker numera delvis i sådana
-behållare, och då behövs samma app utan fönstret: servern är hela appen, fönstret
-är bara ett skal runt den.
+Två behov möts här, och det är samma server som löser båda:
 
-Skiljer sig från e2e/testserver.py på det som är hela poängen: HÄR FEJKAS
-INGENTING. `claude` tas från PATH och genereringen kostar riktiga pengar på det
-konto som är inloggat. Det är avsikten — ett prov som fejkar molnet svarar inte
-på frågan «fungerar appen på riktigt?».
+* **DevTools.** `python transkribera_web.py` öppnar appen i ett pywebview-
+  fönster. Det går att öppna en inspektör i, men den är WebKits egen, den tappar
+  sitt tillstånd när fönstret stängs, och den kan varken strypa nätverket eller
+  spela in en prestandaprofil. Frontendarbete görs därför i Chrome.
+* **Maskiner utan skrivbord.** pywebview går inte ens att installera i en
+  behållare (beroendet proxy_tools bygger inte), och utvecklingen sker delvis i
+  sådana. Servern ÄR hela appen; fönstret är ett skal runt den.
 
-Basen är en egen katalog (default under temp) och den TÖMS ALDRIG: papper som
-skrivs ska ligga kvar mellan starter, precis som på lärarens dator. Peka den
-aldrig på reporoten — där ligger hennes egen transkribera.db.
+`python -m app.web` gör nästan det här, men två saker gör den olämplig:
 
-Två saker fungerar inte här och det är väntat, inte trasigt:
-  · transkribering — kräver ELEVENLABS_API_KEY, och ljudet är lärarens
+* **Porten flyttar sig.** Den tar första lediga av 8731-8733. En ny port är en
+  ny origin, och webbläsaren knyter allt till origin: breakpoints, Sources-
+  mappningar, localStorage, DevTools-inställningar. Efter varje omstart står man
+  därför i en tom inspektör igen. Den här filen tar 8760 och BARA 8760 — är den
+  upptagen är svaret ett fel, inte en annan port, för en annan port är precis
+  felet.
+* **Basen är lärarens.** `python -m app.web` kör mot repo-roten, alltså den
+  riktiga `transkribera.db` med den riktiga planeringen i. Att prova sig fram
+  innebär att skapa och slänga prov, tavlor och elever, och det ska inte kunna
+  drabba hennes data. Reporoten VÄGRAS därför uttryckligen nedan.
+
+Basen ligger i `.skarp/` (gitignorerad) och TÖMS ALDRIG av sig själv: papper som
+skrivs ska ligga kvar mellan starter, precis som på lärarens dator, och man ska
+slippa klicka fram en lektion varje gång innan man kan felsöka den. Systemets
+temp-katalog dög inte till det — den städas bort under en. En ny bas seedas med
+exempelveckan, precis som en ny installation.
+
+Skarp betyder skarp: HÄR FEJKAS INGENTING. `claude` tas från PATH och
+genereringen kostar riktiga pengar på det inloggade kontot; Tectonic kompilerar
+på riktigt. Kassetter och fejkbinär hör hemma i e2e-sviten och i soaken
+(tools/soak.py) — ett prov som fejkar molnet svarar inte på frågan «fungerar
+appen på riktigt?».
+
+Två saker kan sakna förutsättningar, och det är väntat snarare än trasigt:
+  · transkribering — kräver elevenlabs_key.txt i basen (kopieras in nedan om
+    den finns bredvid repot)
   · PDF — Tectonic ligger i bin/tectonic/ som är gitignorerad (för stor för
-    repot), så den finns bara på maskiner som packat upp den
+    repot), så motorn finns bara där tools/hamta_tectonic.sh körts
 
-    python tools/skarp.py [port] [--bas KATALOG]
+Frontenden klarar en vanlig webbläsare. `window.pywebview.api` (filväljaren och
+"visa i mappen" i app/web/desktop.py) anropas inte från någon fil under
+app/web/ui/ — det som finns kvar där är drag-and-drop och `<input type=file>`,
+som webbläsaren gör själv. Sidan serveras dessutom av StaticFiles direkt från
+disk, så en ändring i app/web/ui/ syns vid en omladdning i webbläsaren; bara
+Python-ändringar kräver omstart härifrån.
+
+Kör:
+    python tools/skarp.py
+    python tools/skarp.py --tom          # börja om från en tom bas
+    python tools/skarp.py 8761           # annan port (samma sak som --port)
+    python tools/skarp.py --bas /nagon/annan/mapp
 """
 from __future__ import annotations
 
+import argparse
+import shutil
+import socket
 import sys
-import tempfile
 from pathlib import Path
 
 ROT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROT))
 
+# 8760 är vald för att stå fri från allt annat som lyssnar i det här repot:
+# fönstret tar 8731-8733, e2e-sviten 8751 och soaken 8752. Ingen av dem ska
+# behöva stängas för att den här ska kunna köras samtidigt.
+PORT = 8760
+BAS = ROT / ".skarp"
 
-def main() -> None:
-    import uvicorn
+# Hemligheterna bor i basmappen, och en tom bas har dem inte: utan dem är
+# Google-kalendern frånkopplad, ElevenLabs svarar inte och yt-dlp saknar kakor.
+# De kopieras därför in EN gång när basen skapas. Kopior, inte länkar — en
+# förnyad OAuth-token ska skrivas i .skarp/ och inte i lärarens fil.
+#
+# settings.json kopieras med FLIT inte. Den bär `exempelschema_seedat`, och med
+# den flaggan satt hoppar create_app över seedningen — resultatet blir en bas
+# helt utan vecka, alltså ingenting att klicka på. En tom bas ska se ut som en
+# ny installation.
+HEMLIGHETER = ("cookies.txt", "google_client_secret.json", "google_token.json",
+               "openai_key.txt", "elevenlabs_key.txt")
 
-    argv = sys.argv[1:]
-    bas = None
-    if "--bas" in argv:
-        i = argv.index("--bas")
-        bas = Path(argv[i + 1]).expanduser().resolve()
-        del argv[i:i + 2]
-    port = int(argv[0]) if argv else 8760
 
-    if bas is None:
-        bas = Path(tempfile.gettempdir()) / "transkribera-skarp"
+def _upptagen(port: int) -> bool:
+    s = socket.socket()
+    try:
+        s.bind(("127.0.0.1", port))
+        return False
+    except OSError:
+        return True
+    finally:
+        s.close()
+
+
+def _res_bas(bas: Path, tom: bool) -> Path:
     if bas == ROT:
         raise SystemExit("vägrar köra mot reporoten — där ligger lärarens egen bas")
+    if tom and bas.exists():
+        shutil.rmtree(bas, ignore_errors=True)
+    ny = not bas.exists()
     bas.mkdir(parents=True, exist_ok=True)
+    if ny:
+        for namn in HEMLIGHETER:
+            kalla = ROT / namn
+            if kalla.is_file():
+                shutil.copy2(kalla, bas / namn)
+    return bas
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(
+        description="Servern utan fönster, på en fast port, mot en egen bas")
+    ap.add_argument("port_pos", nargs="?", type=int, metavar="PORT",
+                    help=argparse.SUPPRESS)      # `skarp.py 8761` som förut
+    ap.add_argument("--bas", default=str(BAS), type=Path,
+                    help=f"basmapp (standard: {BAS})")
+    ap.add_argument("--port", default=PORT, type=int)
+    ap.add_argument("--tom", action="store_true",
+                    help="radera basen först och börja om från en ny "
+                         "installation")
+    a = ap.parse_args()
+    port = a.port_pos or a.port
+
+    if _upptagen(port):
+        print(f"skarp: 127.0.0.1:{port} är upptagen — troligen en skarp körning "
+              f"som redan lever. Stäng den; en annan port skulle nollställa "
+              f"DevTools.", file=sys.stderr)
+        return 1
+
+    import uvicorn
 
     from app import claude_code
-    from app.web import server
+    from app.web.server import create_app
 
-    binar = claude_code.binar()
+    bas = _res_bas(a.bas.expanduser().resolve(), a.tom)
+    app = create_app(base_dir=bas)
+    # Webbläsaren öppnas inte härifrån. En ny flik är en flik utan DevTools, och
+    # vid frontendarbete startas servern om många gånger i rad — poängen med den
+    # fasta porten är att fliken som redan står öppen räcker.
     print(f"bas:    {bas}")
-    print(f"claude: {binar or 'SAKNAS — genereringen kommer inte att fungera'}")
-    print(f"öppna:  http://127.0.0.1:{port}/")
-    uvicorn.run(server.create_app(base_dir=bas), host="127.0.0.1", port=port,
-                log_level="info")
+    print(f"claude: {claude_code.binar() or 'SAKNAS — genereringen fungerar inte'}")
+    print(f"öppna:  http://127.0.0.1:{port}/   (Ctrl+C stänger)", flush=True)
+    try:
+        uvicorn.run(app, host="127.0.0.1", port=port, log_level="info")
+    finally:
+        app.state.arbiter.stop_llm()
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
