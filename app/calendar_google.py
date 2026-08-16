@@ -499,6 +499,48 @@ def _post(datum: str, tid: str, titel: str, klass: str) -> dict:
     return post
 
 
+# ----------------------------------------------- lektionens eget innehåll --
+# Sidorna och uppgifterna står i händelsens BESKRIVNING, och de gäller per
+# LEKTIONSTILLFÄLLE: «s. 2–6 · uppg. 1101–1103» är den 17 augusti, inte varje
+# måndag hela terminen. Veckoschemat kan inte bära dem — det är en rad per
+# serie — så de går sin egen väg ut, se tolka_handelser["innehall"].
+#
+# INTEGRITET, och det är villkoret för att beskrivningen läses alls: allt
+# UNDER avdelaren (———) är lärarens egna anteckningar om enskilda elever.
+# Parsern skär bort den delen FÖRST och tittar bara på texten ovanför, och det
+# som kommer ut är dessutom bara heltal och en uppgiftslista — aldrig fri text
+# ur kalendern. Ingenting härifrån får någonsin persisteras i annan form.
+_AVDELARE = re.compile(r"[—–\-_=]{3,}")
+# «s. 2–6», «s 2-6», «sid. 12», «sidorna 40–48» — och den ensamma sidan «s. 7».
+_SIDOR = re.compile(r"\bs(?:id(?:a|or|orna)?)?\.?\s*(\d{1,4})"
+                    r"(?:\s*[–—-]\s*(\d{1,4}))?", re.IGNORECASE)
+# Uppgiftslistan skrivs som den står i boken: «1101–1103, 1105–1119». Radslut
+# avslutar den — nästa rad är en annan sorts anteckning («OBS! miniräknare»).
+_UPPGIFTER = re.compile(r"\buppg(?:ift(?:er(?:na)?)?)?\.?[ \t]*(\d[\d ,;.\t–—-]*)",
+                        re.IGNORECASE)
+
+
+def sidor_ur_beskrivning(description: str | None) -> dict:
+    """{fran, till, uppg} ur beskrivningens FÖRSTA del, eller {} när det inte
+    står några sidor där. Ingen gissning: står det ingenting säger funktionen
+    ingenting, och då gäller appens vanliga förval (klassprofilen)."""
+    text = _AVDELARE.split(str(description or ""), 1)[0]
+    m = _SIDOR.search(text)
+    if not m:
+        return {}                       # ingen sida → inget innehåll, punkt
+    fran = int(m.group(1))
+    till = int(m.group(2)) if m.group(2) else fran
+    ut = {"fran": fran, "till": max(fran, till)}
+    u = _UPPGIFTER.search(text)
+    if u:
+        # En form på spannen, samma som resten av appen skriver dem.
+        lista = re.sub(r"\s*[–—-]\s*", "–", u.group(1).strip())
+        lista = re.sub(r"\s*,\s*", ", ", lista).strip(" ,;.–")
+        if lista:
+            ut["uppg"] = lista
+    return ut
+
+
 def serienyckel(h: dict) -> str:
     """Identiteten på en SERIE, inte på en instans: samma titel, samma slag av
     händelse. Mentorstiden varje måndag hela läsåret är en nyckel, inte
@@ -514,8 +556,12 @@ def tolka_handelser(handelser: list[dict], klasser: list[str] | None = None,
                     beslut: dict[str, dict] | None = None,
                     idag: str | None = None,
                     fonster_till: str | None = None) -> dict:
-    """Ren funktion: Google-händelser in, {schema, lov, poster, osakra} ut i
-    exakt de former frontendens window.Kalender håller. Testbar utan Google.
+    """Ren funktion: Google-händelser in, {schema, lov, poster, innehall,
+    osakra} ut i exakt de former frontendens window.Kalender håller. Testbar
+    utan Google.
+
+    `innehall` är sidorna och uppgifterna som står på EN lektion en viss dag
+    (sidor_ur_beskrivning) — schemaraden är serien och kan inte bära dem.
 
     `osakra` är de händelser reglerna PLACERADE men inte är säkra på — en
     heldag utan lovord, en återkommande lektionstid utan igenkänd kurs. De
@@ -540,9 +586,20 @@ def tolka_handelser(handelser: list[dict], klasser: list[str] | None = None,
     lov: list[dict] = []
     poster: list[dict] = []
     osakra: dict[str, dict] = {}
+    # Sidorna och uppgifterna PER LEKTIONSTILLFÄLLE, nyckel (datum, tid, klass,
+    # kurs). Skild från schemat med flit: schemaraden är serien, den här är
+    # dagen. Bara lektioner hamnar här, och bara de som faktiskt bär sidor.
+    innehall: dict[tuple, dict] = {}
     # Räknas och rapporteras — den som undrar vart notiserna tog vägen ska få
     # svar av synken i stället för att leta.
     notiser = 0
+
+    def notera_innehall(h: dict, datum: str, tid: str, klass: str, kurs: str) -> None:
+        sidor = sidor_ur_beskrivning(h.get("description"))
+        if not sidor:
+            return                          # ingen sida skriven → inget att bära
+        innehall[(datum, tid, klass, kurs)] = dict(
+            {"datum": datum, "tid": tid, "klass": klass, "kurs": kurs}, **sidor)
 
     def osaker(h: dict, titel: str, varfor: str, **extra) -> None:
         nyckel = serienyckel(h)
@@ -605,6 +662,7 @@ def tolka_handelser(handelser: list[dict], klasser: list[str] | None = None,
                 forst[nyckel] = min(forst.get(nyckel, "9999"), s2[:10])
                 sist[nyckel] = max(sist.get(nyckel, ""), s2[:10])
                 dagar_med.setdefault(nyckel, set()).add(s2[:10])
+                notera_innehall(h, s2[:10], rad["tid"], rad["klass"], rad["kurs"])
                 if nyckel not in sedda:
                     sedda.add(nyckel)
                     schema.append(rad)
@@ -663,6 +721,7 @@ def tolka_handelser(handelser: list[dict], klasser: list[str] | None = None,
             forst[nyckel] = min(forst.get(nyckel, "9999"), datum)
             sist[nyckel] = max(sist.get(nyckel, ""), datum)
             dagar_med.setdefault(nyckel, set()).add(datum)
+            notera_innehall(h, datum, rad["tid"], rad["klass"], rad["kurs"])
             if nyckel not in sedda:                 # samma vecka, många instanser
                 sedda.add(nyckel)
                 schema.append(rad)
@@ -697,6 +756,8 @@ def tolka_handelser(handelser: list[dict], klasser: list[str] | None = None,
     lov.sort(key=lambda p: (p["fran"], p["till"]))
     poster.sort(key=lambda p: (p["datum"], p["tid"]))
     return {"schema": schema, "lov": lov, "poster": poster, "notiser": notiser,
+            "innehall": sorted(innehall.values(),
+                               key=lambda i: (i["datum"], i["tid"], i["klass"])),
             "osakra": sorted(osakra.values(), key=lambda o: o["titel"])}
 
 
@@ -833,8 +894,8 @@ def read_schema(base_dir: Path, dagar: int = 330,
                 klasser: list[str] | None = None,
                 kurser: list[str] | None = None,
                 bedomare=None) -> dict:
-    """{schema, lov, poster, fran, till} ur Google Kalender, eller {error} när
-    kopplingen saknas.
+    """{schema, lov, poster, innehall, fran, till} ur Google Kalender, eller
+    {error} när kopplingen saknas.
 
     Fönstret spänner ett helt läsår åt båda håll: arkivets lovband ritar
     terminen som den VAR, och planeringen behöver loven som kommer. `fran` och
