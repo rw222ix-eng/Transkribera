@@ -85,6 +85,16 @@ window.Klass = (() => {
   const egetProv = p => p.slag === 'np' || /nationell/i.test(p.titel || '');
   const posterFor = d => K.poster.filter(p => p.datum === d.datum && !spegling(p)
     && (vald === 'alla' ? true : p.klass === vald));
+  /* Ligger posten i en lektionsruta? Då handlar den OM lektionen och ska inte
+     stå som ett eget kort bredvid ett tomt lektionskort — schemaraden säger
+     att det brukar vara lektion måndag 08:10, kalendern säger vad det är den
+     24 augusti («Hämta läromedel i läromedelscentralen, hela passet»).
+     Provet får matcha utan klockslag — en heldagspost är ändå provet — men
+     allt annat måste ligga på lektionens tid: «Öppet hus» hela dagen är inte
+     klassens lektion. */
+  const iRutan = (p, s) => (p.klass || '') === (s.klass || '')
+    && (arProv(p) ? (!p.tid || !s.tid || start(p.tid) === start(s.tid))
+                  : !!(p.tid && s.tid && start(p.tid) === start(s.tid)));
 
   /* ── Att gå från schemat till planeringen ──────────
      Klicket väljer lektionen i kön, låser upp steg 2 och rullar upp. Ingen ny
@@ -394,13 +404,21 @@ window.Klass = (() => {
        före materialet som skrevs efteråt. */
     const insp = (window.Inspelningar && window.Inspelningar.forLektion) ? window.Inspelningar.forLektion(d.datum, s) : [];
     const post = { datum: d.datum, tid: s.tid, kurs: s.kurs, klass: s.klass, sal: s.sal };
-    const bokatProv = K.poster.find(p => p.datum === d.datum && p.klass === s.klass && arProv(p) && !spegling(p)
-      && (!p.tid || !s.tid || start(p.tid) === start(s.tid)));
+    const bokatProv = K.poster.find(p => p.datum === d.datum && arProv(p) && !spegling(p) && iRutan(p, s));
+    /* Vad kalendern säger att rutan är just den här dagen, när det inte är ett
+       prov. Följer med i posten: förvalen ska inte gissa fram en sidsträcka ur
+       klassprofilen på en lektion där läraren skrivit att klassen hämtar
+       böcker — tystnaden om sidor är ett besked, inte ett tomrum (profil.js). */
+    const rutan = bokatProv ? null
+      : (K.poster.find(p => p.datum === d.datum && !spegling(p) && iRutan(p, s)) || null);
+    if (rutan) post.rutan = rutan.titel;
     const el = document.createElement('article');
     el.className = 'lekt';
     if (d.datum < K.idag()) el.setAttribute('data-forbi', '');
     if (docs.length) el.setAttribute('data-klar', '');
-    else el.setAttribute('data-tom', '');
+    /* Streckad kant betyder «här saknas material». Säger kalendern vad rutan
+       är gör den inte det — det är ingen lucka att fylla. */
+    else if (!rutan) el.setAttribute('data-tom', '');
     if (bokatProv || docs.some(v => v.typ === 'Prov')) el.setAttribute('data-prov', '');
     if (window.PlanKo && window.PlanKo.har(post)) el.setAttribute('data-vald', '');
     if (arKlar(post)) el.setAttribute('data-koklar', '');
@@ -426,6 +444,14 @@ window.Klass = (() => {
       b.textContent = 'Skriv provet';
       b.addEventListener('click', e => { e.stopPropagation(); planera(Object.assign({}, post, { slag: 'prov' }), 'Prov'); });
       el.appendChild(b);
+    } else if (rutan) {
+      /* Kalenderns egen rubrik, ordagrant — den säger vad timmen är, och det är
+         ett bättre besked än «Tavla saknas» på en lektion som inte ska ha en
+         tavla. Titeln är lärarens text och sätts som text, aldrig som HTML. */
+      const t = document.createElement('span');
+      t.className = 'lektbokat';
+      t.textContent = rutan.titel;
+      el.appendChild(t);
     } else {
       const nara = kvarTill(d.datum);
       if (nara >= 0 && nara <= 3) {
@@ -509,7 +535,7 @@ window.Klass = (() => {
         return;
       }
       const lekt = lektionerna(d);
-      const poster = posterFor(d).filter(p => !lekt.some(s => p.klass === s.klass && arProv(p) && (!p.tid || !s.tid || start(p.tid) === start(s.tid))));
+      const poster = posterFor(d).filter(p => !lekt.some(s => iRutan(p, s)));
       /* Dokument som inte hänger på någon lektion den dagen — provet som lades
          på en annan dag. De får ett eget kort, ett per klass och klockslag. */
       const losa = {};

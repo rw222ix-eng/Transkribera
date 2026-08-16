@@ -245,3 +245,63 @@ test("en klassprofil av fel form skriver inte sönder planeringen",
     await expect(page.locator("#schemavecka")).toContainText("Vecka");
     expect(jsfel, jsfel.join(" | ")).toEqual([]);
   });
+
+// ── Rutan som kalendern har fyllt med något annat ───────────────────────
+// Schemaraden är serien: att den finns betyder att det brukar vara lektion
+// måndag 08:10 — inte att det är lektion just den måndagen. Står det «Hämta
+// läromedel» i lektionens timme ritade appen både ett tomt lektionskort och
+// postens eget kort, och det tomma kortet erbjöd en sidsträcka gissad ur
+// klassprofilen på en dag klassen bara hämtar böcker.
+
+const BOKHAMTNING = {
+  schema: [{ dag: 1, tid: "09:05–10:20", kurs: "Matematik, nivå 2c",
+             klass: "NA25", sal: "P807" }],
+  lov: [],
+  poster: [{ datum: "2026-11-02", tid: "09:05–10:20", klass: "NA25",
+             titel: "📚 Hämta läromedel i läromedelscentralen, hela passet",
+             slag: "annat", antal: 1 }],
+  innehall: [],
+};
+
+test("posten i lektionens timme ersätter lektionskortet — ett kort, inga gissade sidor",
+  async ({ page }) => {
+    await fejka(page, BOKHAMTNING);
+    await vid(page, "2026-11-02");
+    await page.goto("/");
+    await hydrerad(page);
+    await page.getByRole("tab", { name: "Planering" }).click();
+    await stillaVecka(page);
+
+    // ETT kort för timmen, och det bär kalenderns egen rubrik.
+    const kort = page.locator("#schemagrid article.lekt");
+    await expect(kort).toHaveCount(1);
+    await expect(kort).toContainText("Hämta läromedel");
+    // Ingen streckad kant och ingen «Tavla saknas»: det är ingen lucka.
+    await expect(kort).not.toHaveAttribute("data-tom", "");
+    await expect(kort.locator(".lektsaknas")).toHaveCount(0);
+
+    // Och förvalen rör inte bokdörren när lektionen väljs: spannet står kvar
+    // som det stod, i stället för att flyttas till «sidorna efter förra
+    // lektionen» på en dag klassen bara hämtar böcker.
+    const fore = await page.evaluate(() => JSON.stringify(window.Uppslag.spann()));
+    await kort.click();
+    await page.waitForTimeout(500);
+    const efter = await page.evaluate(() => JSON.stringify(window.Uppslag.spann()));
+    expect(efter).toBe(fore);
+  });
+
+test("provet i lektionens timme går fortfarande sin egen väg",
+  async ({ page }) => {
+    await fejka(page, { ...BOKHAMTNING,
+      poster: [{ datum: "2026-11-02", tid: "09:05–10:20", klass: "NA25",
+                 titel: "NA25: PROV 1 (kap 1)", slag: "prov", antal: 1 }] });
+    await vid(page, "2026-11-02");
+    await page.goto("/");
+    await hydrerad(page);
+    await page.getByRole("tab", { name: "Planering" }).click();
+    await stillaVecka(page);
+    const kort = page.locator("#schemagrid article.lekt");
+    await expect(kort).toHaveCount(1);
+    await expect(kort).toContainText("Prov bokat");
+    await expect(kort.getByRole("button", { name: "Skriv provet" })).toBeVisible();
+  });

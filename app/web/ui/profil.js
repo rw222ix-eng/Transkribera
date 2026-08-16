@@ -358,9 +358,19 @@ window.Profil = (() => {
        innehåll för just den lektionen är allt precis som förut. */
     const kal = (post && post.datum && window.Kalender && window.Kalender.innehallFor)
       ? window.Kalender.innehallFor(post.datum, klass, kurs) : null;
+    /* Kalendern kan också säga att rutan INTE är en boklektion: «Hämta
+       läromedel i läromedelscentralen, hela passet» står i lektionens timme och
+       följer med i posten (klass.js). Då ska ingen sidsträcka gissas fram —
+       tystnaden om sidor är ett besked, inte ett tomrum, och «sidorna efter
+       förra lektionen» på en dag klassen hämtar böcker är ett påhitt. Provet
+       har sitt eget spann och rörs inte. */
+    const rutan = (!kal && typ !== 'Prov' && post) ? (post.rutan || '') : '';
+    if (rutan) {
+      forval[2] = { text: rutan, kalla: 'Ur kalendern:',
+                    efter: '— den timmen är inte en boklektion, så inga sidor är förvalda.' };
     /* Boken kan saknas för kursen — sidorna sätts ändå. `bokval()` i plan.js
        skickar ingen bok när id:t saknas, och sidorna är sanna oavsett. */
-    if ((boken || kal) && window.Uppslag && window.Uppslag.satt) {
+    } else if ((boken || kal) && window.Uppslag && window.Uppslag.satt) {
       if (boken && window.Uppslag.laggBok) window.Uppslag.laggBok(boken);
       const { fran, till } = kal ? kal
         : (typ === 'Prov' ? provSpann(p) : nastaSpann(p));
