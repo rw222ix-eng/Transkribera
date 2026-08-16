@@ -142,12 +142,27 @@
   let nyckel = '';
   let bort = new Set();
   let forslag = [];
+  /* Uppgifterna läraren SJÄLV skrivit på lektionen i kalendern («uppg.
+     1101–1103, 1105–1119»). Finns de är det de som gäller, och allt annat på
+     sidorna hoppas över — modellen ska inte föreslå bort något ur en lista
+     läraren redan gjort. null = ingen sådan lista, förslaget gäller som förut. */
+  let onskade = null;
+  /* Utgångsläget för `bort`, och det enda stället som avgör vad «tillbaka till
+     förslaget» betyder. Numren ur kalendern gäller bara om de faktiskt står på
+     sidorna — annars pekar de på ett annat spann, och då hade allt strukits. */
+  function standardbort() {
+    const u = alla();
+    if (onskade && u.some(x => onskade.has(x.nr))) return new Set(u.filter(x => !onskade.has(x.nr)).map(x => x.nr));
+    return new Set(forslag.map(f => f.nr));
+  }
   function synka() {
     const ny = nyckelNu();
     if (ny === nyckel) return false;
     nyckel = ny;
+    /* Nytt spann är en ny lektion: kalenderns lista hörde till det förra. */
+    onskade = null;
     forslag = forslaget();
-    bort = new Set(forslag.map(f => f.nr));
+    bort = standardbort();
     hamta();
     return true;
   }
@@ -165,7 +180,7 @@
         if (nyckelNu() !== nyck) return;         // spannet hann bytas
         serverdata = { nyckel: nyck, uppgifter: d.uppgifter || [] };
         forslag = forslaget();
-        bort = new Set(forslag.map(f => f.nr));
+        bort = standardbort();
         rita();
         window.planKoll && window.planKoll();
         if ((d.olasta || []).length) lasSidorna(id, s, nyck);
@@ -195,7 +210,7 @@
     }
   }
   const rort = () => {
-    const f = new Set(forslag.map(x => x.nr));
+    const f = standardbort();
     return bort.size !== f.size || [...bort].some(n => !f.has(n));
   };
 
@@ -218,7 +233,7 @@
         <div class="uppgfragarad"><input class="field" id="uppgfraga" autocomplete="off" aria-label="Ändra urvalet av uppgifter" /><button class="ghost" id="uppgskicka" type="button">Fråga</button></div>
         <div class="uppgsvar" id="uppgsvar" hidden></div>`;
       $('#uppgater').addEventListener('click', () => {
-        bort = new Set(forslag.map(f => f.nr));
+        bort = standardbort();
         $('#uppgsvar').hidden = true;
         rita();
         window.planKoll && window.planKoll();
@@ -234,7 +249,11 @@
        listan ovanför, och ett exempel på just det i platshållaren fick läraren att
        skriva det i onödan. */
     $('#uppgfraga').placeholder = 'T.ex. «hoppa nivå 1» eller «bara de tillämpade uppgifterna»';
-    if (!rort()) $('#uppgforslag').textContent = forslagsText(forslag);
+    /* Kom urvalet ur kalendern är det inte ett förslag att ta ställning till —
+       raden säger var det kommer ifrån, så att ingen tror att appen valt. */
+    if (!rort()) $('#uppgforslag').textContent = (onskade && u.some(x => onskade.has(x.nr)))
+      ? `Uppgifterna du skrivit på lektionen i kalendern: ${remsa(u.filter(x => onskade.has(x.nr)).map(x => x.nr))}.`
+      : forslagsText(forslag);
     $('#uppgater').hidden = !rort();
     const rader = $('#uppgnivaer');
     rader.innerHTML = '';
@@ -346,6 +365,28 @@
     /* Steg 3 frågar om raden ska finnas alls: lösningsförslag till bokens
        uppgifter går bara att välja när boken faktiskt är en av källorna. */
     finns: () => !!(dorr && dorr.getAttribute('aria-pressed') === 'true' && alla().length),
+    /* Uppgifterna som stod på lektionen i kalendern, i bokens egen skrivning:
+       «1101–1103, 1105–1119». Anropas när en lektion väljs (profil.js) — spannet
+       är redan satt då, så listan gäller de sidor som just slogs upp. Sidorna
+       kan komma från servern i efterhand; `onskade` ligger kvar och slår till
+       när uppgifterna dyker upp (standardbort). */
+    franKalendern(text) {
+      const t = String(text || '');
+      const vill = new Set();
+      /* Ett spann är alla numren i det: «1101–1103» är tre uppgifter, inte två.
+         Boken numrerar dem i följd, så mellanrummen finns på sidorna. */
+      t.split(/[,;]/).forEach(del => {
+        const par = del.match(/(\d{3,4})\s*[–—-]\s*(\d{3,4})/);
+        if (par) { for (let n = +par[1]; n <= +par[2] && n - +par[1] < 200; n++) vill.add(n); return; }
+        (del.match(/\d{3,4}/g) || []).forEach(n => vill.add(+n));
+      });
+      if (!vill.size) return false;
+      onskade = vill;
+      bort = standardbort();
+      rita();
+      window.planKoll && window.planKoll();
+      return true;
+    },
     losningsantal: niva => losningarna(niva).length,
     avsnittsnamn: () => { const a = avsnittet(); return a ? `${a.nr} ${a.titel}` : 'avsnittet'; },
     /* Noten i steg 3 får bara plats på en rad, och där duger numret: rubriken står

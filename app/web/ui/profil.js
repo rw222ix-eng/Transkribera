@@ -352,14 +352,26 @@ window.Profil = (() => {
     const boken = !hyllan ? p.bok
       : (window.Bok.bokId(p.bok) ? p.bok
         : (window.Bok.bokId(window.Bok.namnFor(kurs)) ? window.Bok.namnFor(kurs) : ''));
-    if (boken && window.Uppslag && window.Uppslag.satt) {
-      if (window.Uppslag.laggBok) window.Uppslag.laggBok(boken);
-      const { fran, till } = typ === 'Prov' ? provSpann(p) : nastaSpann(p);
+    /* Står sidorna PÅ lektionen i kalendern är de inte en gissning längre, och
+       då gäller de före `nastaSpann`: läraren har redan skrivit vad klassen ska
+       göra den dagen, och appen ska inte räkna fram ett annat svar. Utan
+       innehåll för just den lektionen är allt precis som förut. */
+    const kal = (post && post.datum && window.Kalender && window.Kalender.innehallFor)
+      ? window.Kalender.innehallFor(post.datum, klass, kurs) : null;
+    /* Boken kan saknas för kursen — sidorna sätts ändå. `bokval()` i plan.js
+       skickar ingen bok när id:t saknas, och sidorna är sanna oavsett. */
+    if ((boken || kal) && window.Uppslag && window.Uppslag.satt) {
+      if (boken && window.Uppslag.laggBok) window.Uppslag.laggBok(boken);
+      const { fran, till } = kal ? kal
+        : (typ === 'Prov' ? provSpann(p) : nastaSpann(p));
       window.Uppslag.satt(fran, till);
       window.Kallor && window.Kallor.satt && window.Kallor.satt('bok', true, true);
-      spannText = `${boken} · s. ${fran}–${till}`;
+      /* Uppgifterna står i samma rad i kalendern som sidorna. De är lärarens
+         urval, och de vinner över modellens förslag (uppgifter.js). */
+      if (kal && kal.uppg && window.Uppgifter && window.Uppgifter.franKalendern) window.Uppgifter.franKalendern(kal.uppg);
+      spannText = `${boken ? boken + ' · ' : ''}s. ${fran}–${till}`;
       gjort.push(spannText);
-      forval[2] = { text: spannText, efter: typ === 'Prov' ? '— hela avsnittet klassen läst.' : '— sidorna efter förra lektionen.' };
+      forval[2] = { text: spannText, efter: kal ? '— sidorna som står på lektionen i din kalender.' : (typ === 'Prov' ? '— hela avsnittet klassen läst.' : '— sidorna efter förra lektionen.') };
       /* Centralt innehåll ur sidorna — läromedlet och ämnesplanen säger samma sak. */
       /* Nivån först — den bestämmer vilka punkter som ens finns att välja. */
       const nivaId = window.Gy ? window.Gy.foreslagen(kurs) : null;

@@ -42,6 +42,13 @@ window.Kalender = (() => {
     { fran: '2027-02-22', till: '2027-02-26', namn: 'Sportlov', typ: 'lov' }
   ];
 
+  /* Vad klassen ska göra PÅ EN VISS LEKTION: «s. 2–6 · uppg. 1101–1103», läst
+     ur lektionshändelsens beskrivning i Google (calendar_google). Skild från
+     schemat med flit — schemaraden är serien, den här listan är dagen, och
+     sidorna byts varje vecka. Tom i prototypen: utan server har läraren inte
+     skrivit några sidor någonstans, och då gissar appen som den alltid gjort. */
+  const innehall = [];
+
   const iso = d => d.toISOString().slice(0, 10);
   const dat = s => new Date(String(s) + 'T12:00:00');
   const ord = s => {
@@ -65,6 +72,13 @@ window.Kalender = (() => {
        dagarna, lästa ur kalendern och inte gissade. */
     && !(s.undantag || []).includes(datum));
   const lovFor = datum => lov.find(l => datum >= l.fran && datum <= l.till) || null;
+  /* Lektionen känns igen på datum + klass + kurs — samma fält som lektionskortets
+     post bär (klass.js). Kursen får saknas i posten utan att träffen går förlorad:
+     en klass har sällan två lektioner samma dag i olika kurser, och står det bara
+     en rad på dagen är det den som gäller. */
+  const innehallFor = (datum, klass, kurs) => innehall.find(i => i.datum === datum
+    && (!klass || !i.klass || i.klass === klass)
+    && (!kurs || !i.kurs || i.kurs === kurs)) || null;
 
   /* Träffar inspelningstiden en lektion i schemat? Då är klass och kurs inte
      längre en gissning — de är fakta, och ramen ska vara solid. */
@@ -226,6 +240,7 @@ window.Kalender = (() => {
     ersatt(schema, d.schema);
     ersatt(lov, d.lov);
     ersatt(poster, d.poster);
+    ersatt(innehall, d.innehall);
     franServern = true;
   }
   /* Allt som ritar veckan ritar om sig. Klass.rita drar med sig terminen,
@@ -282,5 +297,5 @@ window.Kalender = (() => {
     .then(d => { if (d) { ta(d); ritaOm(); } })
     .catch(() => { /* servern svarar inte: prototypens vecka står kvar */ });
 
-  return { poster, schema, lov, omVeckor, forDatum, schemaFor, lovFor, traff, krockrad, veckan, veckoBild, veckonr, mandagen, nastaSkolvecka, terminen, lagg, ord, synka, redo, franServern: () => franServern, idag: () => iso(new Date()) };
+  return { poster, schema, lov, innehall, innehallFor, omVeckor, forDatum, schemaFor, lovFor, traff, krockrad, veckan, veckoBild, veckonr, mandagen, nastaSkolvecka, terminen, lagg, ord, synka, redo, franServern: () => franServern, idag: () => iso(new Date()) };
 })();
