@@ -586,13 +586,20 @@ window.Blad = (() => {
     const tavla = host.firstElementChild;
     if (!tavla) return;
     taggaTavla(host, v);
-    const nat = tavla.getBoundingClientRect();
-    if (naturlig) { ruta.style.height = Math.round(nat.height) + 'px'; return; }
+    /* LAYOUTPIXLAR, inte skärmpixlar — samma regel som `ledigt` nedan, och den
+       gäller dubbelt här. Granskningens duk står i en egen transform-skala som
+       läraren byter med Bredd/100%/Hela, så getBoundingClientRect() gav tavlans
+       höjd i den skalan medan `ruta.style.height` läses som oskalad layout.
+       Rutan blev då för låg och nästa blad ritades ovanpå tavlan — och måttet
+       ändrade sig varje gång zoomen byttes. offsetWidth/offsetHeight är
+       oskalade och ger samma tal oavsett duk. */
+    const natB = tavla.offsetWidth, natH = tavla.offsetHeight;
+    if (naturlig) { ruta.style.height = natH + 'px'; return; }
     const bredd = ruta.clientWidth || (ruta.parentElement || {}).clientWidth || 794;
-    const k = Math.min(1, bredd / (nat.width || 1440));
+    const k = Math.min(1, bredd / (natB || 1440));
     host.style.transformOrigin = 'top left';
     host.style.transform = `scale(${k})`;
-    ruta.style.height = Math.round(nat.height * k) + 'px';
+    ruta.style.height = Math.round(natH * k) + 'px';
   }
 
   function ritaTavla(ruta, host, spec, v) {
