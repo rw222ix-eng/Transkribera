@@ -161,6 +161,15 @@
       if (!b || !b.sidor) return 0;
       return Math.max(1, b.sidor - (b.sidoffset || 0));
     },
+    /* Var boken börjar. Ett NEGATIVT sidoffset betyder att PDF:en saknar bokens
+       första blad — i Matematik 5000+ 1a är tryckt s. 6 PDF-sida 1, och s. 1–5
+       finns ingenstans. Remsan får inte erbjuda dem: sidbilden svarar 404
+       «sidan ligger före bokens början» och bladet blir tomt. */
+    forstaFor: namn => {
+      const b = (servern || []).find(x => x.namn === namn);
+      const off = b ? Number(b.sidoffset || 0) : 0;
+      return off < 0 ? 1 - off : 1;
+    },
     hamta: () => {
       if (!(window.API && window.API.pa)) return Promise.resolve(null);
       return window.API.json('/api/bocker')

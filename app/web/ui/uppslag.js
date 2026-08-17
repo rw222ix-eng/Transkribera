@@ -29,6 +29,22 @@
     const A = reg();
     return A.length ? Math.max(320, ...A.map(a => grans(a)[1] + 40)) : 320;
   };
+  /* …och var den BÖRJAR. Ett negativt sidoffset betyder att PDF:en saknar
+     bokens första blad: i Matematik 5000+ 1a är tryckt s. 6 PDF-sida 1, och
+     s. 1–5 finns ingenstans att hämta. Remsan ska inte erbjuda sidor som bara
+     kan bli tomma blad — routes_bok.sidbild svarar 404 «sidan ligger före
+     bokens början», och `onerror` tar då bort bilden utan att säga varför. */
+  const forsta = () => (window.Bok.forstaFor ? window.Bok.forstaFor(bok) : 1);
+  /* Spannet hålls innanför BOKENS pärmar, och byter man bok byter man pärmar.
+     Ett spann som slutade på s. 349 i en bok på 349 sidor pekar utanför en bok
+     på 303: servern svarar 404, bilden tas bort och bladet står tomt. Det var
+     precis vad läraren såg när hon bytte till rätt bok efter att fel bok
+     stått förvald — uppslaget «laddade inte» för den nya boken. */
+  function klampa() {
+    const F = forsta(), S = Math.max(F, sista());
+    fran = Math.max(F, Math.min(S, fran));
+    till = Math.max(fran, Math.min(S, till));
+  }
 
   const knapp = $('#bokvalj'), knapptext = $('.valjtext', knapp);
   const avsnittsknapp = $('#bokavsnitt'), lista = $('#bkkapitel');
@@ -75,7 +91,7 @@
   function ritaRemsa() {
     let ut = '';
     const A = reg(), SISTA = sista();
-    for (let s = 1; s <= SISTA; s++) {
+    for (let s = forsta(); s <= SISTA; s++) {
       const i = s >= fran && s <= till;
       const kant = s === fran || s === till;
       const start = A.some(a => grans(a)[0] === s);
@@ -115,9 +131,10 @@
     ['#bkfran', '#bktill'].forEach(id => {
       const f = $(id, spann);
       f.addEventListener('change', () => {
-        const v = Math.max(1, Math.min(sista(), Number(f.value) || 1));
+        const v = Number(f.value) || forsta();
         if (id === '#bkfran') fran = v; else till = v;
         if (till < fran) { const x = fran; fran = till; till = x; }
+        klampa();
         halv = false;
         rita(); skrivMoment();
       });
@@ -236,6 +253,9 @@
     window.Bok.namn = namn;
     knapptext.textContent = namn;
     [...bokpanel.children].forEach(x => x.toggleAttribute('data-pa', x.textContent.trim() === namn));
+    /* FÖRE omritningen: bladen ritas ur `fran`/`till`, och pekar de utanför den
+       nya boken hämtas två sidbilder som bara kan bli 404. */
+    klampa();
     ritaRemsa();
     rita();
     skrivMoment(tvinga);
@@ -323,7 +343,12 @@
     if (!steg2.hidden) requestAnimationFrame(() => centrera(false));
   }).observe(steg2, { attributes: true, attributeFilter: ['hidden'] });
   /* Boken som laddas upp i steg 3 läggs till i hyllan och blir vald direkt. */
-  function laggBok(namn) {
+  /* `spann` är valfritt, och finns det byts boken OCH sidorna i EN gest. Utan
+     det ritades uppslaget först om med förra spannets sidnummer i den nya
+     boken innan det rätta spannet hann sättas — två sidbilder ingen bad om,
+     och en sidbild kostar en pdfium-öppning av en fil på ett par hundra
+     megabyte (app/web/routes_bok.py: sidbild). */
+  function laggBok(namn, spann) {
     if (!BOCKER.includes(namn)) {
       BOCKER.push(namn);
       const r = document.createElement('button');
@@ -332,14 +357,19 @@
       r.textContent = namn;
       bokpanel.appendChild(r);
     }
+    if (spann && spann.fran) {
+      fran = Math.round(spann.fran);
+      till = Math.round(spann.till || spann.fran);
+      halv = false;
+    }
     valjBok(namn);
   }
   /* Klassprofilen sätter spannet åt läraren: boken minns var klassen slutade.
      Samma väg som ett klick i remsan, bara utan klicket. */
   function sattSpann(f, t) {
-    const SISTA = sista();
-    fran = Math.max(1, Math.min(SISTA, Math.round(f || fran)));
-    till = Math.max(fran, Math.min(SISTA, Math.round(t || fran)));
+    fran = Math.round(f || fran);
+    till = Math.round(t || fran);
+    klampa();
     halv = false;
     ritaRemsa();
     rita();
