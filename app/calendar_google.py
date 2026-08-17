@@ -688,10 +688,14 @@ def centralt_innehall_ur_text(description: str | None, titel: str | None,
       3. Skolverkets ORDAGRANNA punkttext, när raden ligger inuti den. Den som
          klistrar in ämnesplanen ska bli förstådd.
 
-    Tvetydighet tystar: matchar en rad punkter på FLERA av gruppens nivåer går
-    det inte att avgöra vilken nivå läraren menar («Programmering» finns i både
-    1c och 2c), och då räknas raden som okänd i stället för att gissa. Koder är
-    undantagna — de bär sin nivå i sig.
+    Tvetydighet tystar — men BESKRIVNINGEN får avgöra först. En grupp läser ofta
+    två nivåer samma läsår (NA26F har både 1c och 2c i schemat), och fem punkter
+    heter likadant på båda: «Programmering», «Problemlösning», «Digitala
+    verktyg», «Matematiska modeller», «Matematikens historia». En sådan rad kan
+    inte avgöras för sig. Har provets ÖVRIGA rader entydigt pekat ut EN nivå är
+    den däremot avgjord av texten själv, och då läses den tvetydiga raden i den
+    nivån. Pekar de åt olika håll, eller åt inget håll alls, räknas raden som
+    okänd i stället för att gissas.
 
     Okända rader räknas bara när NÅGOT kändes igen. En beskrivning där ingenting
     matchar handlar om något annat än centralt innehåll («Sal E107, ta med
@@ -701,26 +705,25 @@ def centralt_innehall_ur_text(description: str | None, titel: str | None,
     if not nivaer:
         return [], 0
     text = _AVDELARE.split(str(description or ""), 1)[0]
-    koder: list[str] = []
-    kanda = {kod for _, punkter in nivaer for kod, _, _ in punkter}
+    kodens_niva = {kod: niva_id for niva_id, punkter in nivaer for kod, _, _ in punkter}
 
-    def lagg(kod: str) -> None:
-        if kod not in koder:
-            koder.append(kod)
+    def ur_koder(rad: str) -> list[str]:
+        return [m.group(0).upper() for m in _CI_KOD.finditer(str(rad or ""))
+                if m.group(0).upper() in kodens_niva]
 
+    # Raderna vägs var för sig först: {niva_id: [kod, …]} per rad. Sedan — och
+    # först då — avgörs de tvetydiga, för det är hela beskrivningen som vet
+    # vilken nivå provet ligger på.
+    rader: list[dict[str, list[str]]] = []
     # Rubriken bidrar med koder men räknas aldrig som en okänd rad: den är en
     # rubrik («NA26F: PROV 1 (kap 1 och 2)»), inte ett påstående om innehåll.
-    for m in _CI_KOD.finditer(str(titel or "")):
-        if m.group(0).upper() in kanda:
-            lagg(m.group(0).upper())
-
-    okanda = 0
+    for kod in ur_koder(titel):
+        rader.append({kodens_niva[kod]: [kod]})
     for rad in text.splitlines():
-        traffar = [m.group(0).upper() for m in _CI_KOD.finditer(rad)
-                   if m.group(0).upper() in kanda]
-        if traffar:
+        traffar = ur_koder(rad)
+        if traffar:                     # koden bär sin nivå i sig — aldrig tvetydig
             for kod in traffar:
-                lagg(kod)
+                rader.append({kodens_niva[kod]: [kod]})
             continue
         karna = _radens_karna(rad)
         if len(karna) < _MINSTA_RAD:
@@ -730,17 +733,31 @@ def centralt_innehall_ur_text(description: str | None, titel: str | None,
         # ska varken matchas eller anmälas som obegriplig.
         if hjalpmedel_ur_text(rad):
             continue
-        per_niva = {}
+        per_niva: dict[str, list[str]] = {}
         for niva_id, punkter in nivaer:
             for kod, kort, ptext in punkter:
                 if (_fras_i(kort, karna) or _fras_i(karna, kort)
                         or (len(karna) >= _MINSTA_TEXTRAD and _fras_i(karna, ptext))):
                     per_niva.setdefault(niva_id, []).append(kod)
-        if len(per_niva) == 1:
-            for kod in next(iter(per_niva.values())):
-                lagg(kod)
-        else:
+        rader.append(per_niva)
+
+    # Nivån beskrivningen SJÄLV pekat ut: den som entydiga rader gav träff i. Är
+    # de fler än en vet vi bara att provet spänner över två nivåer, och då är
+    # ingen tvetydig rad avgjord av något.
+    sakra = {next(iter(p)) for p in rader if len(p) == 1}
+    avgorande = next(iter(sakra)) if len(sakra) == 1 else None
+
+    koder: list[str] = []
+    okanda = 0
+    for per_niva in rader:
+        valda = (next(iter(per_niva.values())) if len(per_niva) == 1
+                 else per_niva.get(avgorande) if avgorande else None)
+        if not valda:
             okanda += 1                 # inget alls, eller flera nivåer på en gång
+            continue
+        for kod in valda:
+            if kod not in koder:
+                koder.append(kod)
     return koder, (okanda if koder else 0)
 
 

@@ -554,16 +554,38 @@ def test_punkterna_hor_till_gruppens_egen_niva():
             "Logaritmer", "", [form])[0] == ["G25-M2C-ALG-2"]
 
 
+BADA = ["Matematik, nivå 1c", "Matematik, nivå 2c"]
+
+
 def test_tvetydig_rad_hoppas_over_och_raknas_som_okand():
-    """«Programmering» är en punkt i BÅDE 1c och 2c. Läser gruppen båda går det
-    inte att avgöra vilken läraren menar, och då är tystnad rätt svar: hellre
-    för få förvalda punkter än fel. Raden räknas i stället som okänd, så att
-    förvalet kan säga att den fanns."""
+    """«Programmering» är en punkt i BÅDE 1c och 2c, och lärarens klasser läser
+    faktiskt båda samma läsår (NA26F och TE26A i den riktiga basen). Står raden
+    ensam går det inte att avgöra vilken nivå hon menar, och då är tystnad rätt
+    svar: hellre för få förvalda punkter än fel. Raden räknas i stället som
+    okänd, så att förvalet kan säga att den fanns."""
+    assert calendar_google.centralt_innehall_ur_text(
+        "Programmering", "", BADA) == ([], 0)
+    # Pekar beskrivningens övriga rader åt VAR SITT håll är den fortfarande
+    # oavgjord — då vet vi bara att provet spänner över två nivåer.
     koder, okanda = calendar_google.centralt_innehall_ur_text(
-        "Logaritmer\nProgrammering", "",
-        ["Matematik, nivå 1c", "Matematik, nivå 2c"])
-    assert koder == ["G25-M2C-ALG-2"]
+        "Logaritmer\nFunktionsbegreppet\nProgrammering", "", BADA)
+    assert koder == ["G25-M2C-ALG-2", "G25-M1C-ALG-2"]
     assert okanda == 1
+
+
+def test_beskrivningen_sjalv_avgor_den_tvetydiga_raden():
+    """Har de entydiga raderna pekat ut EN nivå är provets nivå avgjord av
+    texten själv, och då läses den delade punkten där. Utan det här hade fem
+    punkter — programmering, problemlösning, digitala verktyg, matematiska
+    modeller, matematikens historia — aldrig kunnat förväljas för de två klasser
+    som läser både 1c och 2c."""
+    assert calendar_google.centralt_innehall_ur_text(
+        "Logaritmer\nProgrammering", "", BADA) == (
+        ["G25-M2C-ALG-2", "G25-M2C-DIG-2"], 0)
+    # Koden i rubriken duger lika bra som avgörare — den bär sin nivå i sig.
+    assert calendar_google.centralt_innehall_ur_text(
+        "Programmering", "PROV 1 · G25-M1C-ALG-2", BADA) == (
+        ["G25-M1C-ALG-2", "G25-M1C-DIG-3"], 0)
 
 
 def test_okanda_rader_raknas_bara_nar_nagot_kandes_igen():
