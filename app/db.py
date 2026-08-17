@@ -2440,6 +2440,35 @@ def delete_dokument(conn: sqlite3.Connection, dokument_id: int) -> bool:
     return cur.rowcount > 0
 
 
+def stada_utkast_for_lektion(conn: sqlite3.Connection, dokument_id: int) -> list[int]:
+    """Godkänner läraren ett papper blir äldre utkast för SAMMA lektion skräp.
+
+    Godkännandet byter status på den rad som låg framme (utkastGodkann) — men
+    ett utkast som blivit övergivet på vägen dit har ingen som byter status på
+    det, och det plockas upp igen vid varje laddning (plan.js aterstallUtkast).
+    Läraren såg alltså sin färdiga, nedladdade tavla i högen OCH ett halvfärdigt
+    utkast av samma tavla liggande framme, utan att förstå varför.
+
+    Matchningen sker på KOLUMNERNA typ, datum och group_id, inte på bloben:
+    de plockas ut ur pappret när det skrivs (_dokument_kolumner) och är exakt
+    lektionens identitet — samma slag av papper, samma dag, samma klass. Alla
+    tre måste finnas: ett papper utan datum eller utan klass hör inte till en
+    lektion alls, och då städas ingenting. Varsamheten är hela poängen — ett
+    halvskrivet prov för nästa vecka får ALDRIG försvinna för att en tavla
+    godkändes i dag."""
+    rad = conn.execute("SELECT typ, datum, group_id FROM dokument WHERE id = ?",
+                       (dokument_id,)).fetchone()
+    if rad is None or not rad["typ"] or not rad["datum"] or rad["group_id"] is None:
+        return []
+    borta = [r["id"] for r in conn.execute(
+        "SELECT id FROM dokument WHERE status = 'utkast' AND id <> ? "
+        "AND typ = ? AND datum = ? AND group_id = ?",
+        (dokument_id, rad["typ"], rad["datum"], rad["group_id"])).fetchall()]
+    for i in borta:
+        delete_dokument(conn, i)
+    return borta
+
+
 def set_dokument_ordning(conn: sqlite3.Connection, ids: list[int]) -> list[dict]:
     """Högens ordning som klienten håller den. Ett syskon ligger direkt efter
     sitt original, och en ångrad radering hamnar tillbaka på sin plats — det är

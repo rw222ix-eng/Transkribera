@@ -536,3 +536,40 @@ test("Ångra tar tillbaka utkastet med hela sin ångra-historik", async ({ page 
     .toEqual(["Svårare uppgifter", "Fysikaliskt sammanhang"]);
   await expect.poll(() => anrop.some(a => a.metod === "PATCH" && a.kropp && a.kropp.markor === 1)).toBe(true);
 });
+
+// ── Godkännandet städar det övergivna utkastet ──────────────────────────────
+// Godkännandet bytte status på det AKTUELLA utkastet och lämnade äldre rader för
+// samma lektion med status utkast för evigt — och de plockas upp igen vid varje
+// laddning. Städningen sker på servern; det appen svarar för är att den ber om
+// den, och bara vid godkännande.
+
+test("godkännandet ber servern städa — och säger till när något städades", async ({ page }) => {
+  await medUtkast(page, treVersioner());
+  /* Egen rutt för utkastraden: den svarar att en föräldralös rad för samma
+     lektion gick bort, och den fångar samtidigt anropet — en senare rutt tar
+     över helt i Playwright, så fejkans egen loggning når inte hit. */
+  const patchar = [];
+  await page.route("**/api/dokument/7", route => {
+    const r = route.request();
+    if (r.method() === "PATCH") patchar.push(r.postDataJSON());
+    return route.fulfill({ status: 200, contentType: "application/json",
+      body: JSON.stringify({ ...rad(7, papper(), { status: "godkant" }), stadade: 1 }) });
+  });
+
+  await page.locator("#godkann").click();
+  await expect.poll(() => patchar.some(k => k.status === "godkant" && k.stada === true)).toBe(true);
+  await expect(page.locator(".toast").last()).toContainText("Det gamla utkastet lades undan");
+});
+
+test("städades inget sägs inget", async ({ page }) => {
+  /* Läraren godkände ett papper. Att appen letade efter skräp och inte hittade
+     något är inte en nyhet — det är bakgrundsbrus vid varje godkännande. */
+  await medUtkast(page, treVersioner());
+  await page.route("**/api/dokument/7", route => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify({ ...rad(7, papper(), { status: "godkant" }), stadade: 0 }) }));
+
+  await page.locator("#godkann").click();
+  await expect(page.locator("#dokument")).toBeHidden();
+  await expect(page.locator(".toast", { hasText: "Det gamla utkastet" })).toHaveCount(0);
+});

@@ -60,14 +60,25 @@
   });
   const dokKlart = v => sparasNu.get(v) || Promise.resolve(null);
 
-  function dokSpara(v) {
+  /* `stada` skickas BARA av godkännandet (se utkastGodkann). Lösningsbladet,
+     den ångrade raderingen och bibliotekskopian sparas ofta medan ett utkast
+     ligger under händerna — de får inte städa bort det. */
+  function dokSpara(v, stada) {
     if (!serverPa() || !v) return Promise.resolve(null);
     delete v.id;
-    const p = skicka('/api/dokument', 'POST', { dokument: v, status: 'godkant' })
-      .then(d => { v.id = d.id; return d; })
+    const p = skicka('/api/dokument', 'POST',
+                     Object.assign({ dokument: v, status: 'godkant' }, stada ? { stada: true } : {}))
+      .then(d => { v.id = d.id; stadatBesked(d); return d; })
       .catch(() => null);
     sparasNu.set(v, p);
     return p;
+  }
+  /* Städningen är tyst så länge den inte gjorde något: läraren godkände just
+     ett papper och ska inte få veta att appen städade tomt. Hittade den ett
+     övergivet utkast för samma lektion sägs det — annars hade en ruta läraren
+     kanske väntade sig försvunnit utan förklaring. */
+  function stadatBesked(d) {
+    if (d && d.stadade) window.toast && window.toast('Det gamla utkastet lades undan');
   }
   /* Rättningen, återbruksräknaren och syskonmärkningen skrivs rakt på pappret:
      de är fakta om det, inte ändringar att ångra, och får därför ingen ny
@@ -118,11 +129,17 @@
     const id = utkastId;
     utkastId = null;
     if (!serverPa()) return Promise.resolve(null);
-    if (!id) return dokSpara(v);          // utkastet hann aldrig skrivas
+    if (!id) return dokSpara(v, true);     // utkastet hann aldrig skrivas
     delete v.id;
+    /* `stada: true` — och bara här. Godkännandet är det enda ögonblick då
+       appen VET att inget utkast ligger under händerna (utkastId nollades på
+       raden ovan), och därmed det enda ögonblick då en kvarliggande utkastrad
+       för samma lektion säkert är övergiven. Förr blev den föräldralös: den
+       här PATCH:en rörde bara det AKTUELLA utkastet, och äldre rader låg kvar
+       med status utkast för evigt och plockades upp vid varje laddning. */
     const p = skicka('/api/dokument/' + id, 'PATCH',
-                     { status: 'godkant', dokument: v, foljd: null })
-      .then(d => { v.id = d.id; return d; })
+                     { status: 'godkant', dokument: v, foljd: null, stada: true })
+      .then(d => { v.id = d.id; stadatBesked(d); return d; })
       .catch(() => null);
     sparasNu.set(v, p);
     return p;

@@ -357,3 +357,125 @@ def test_stadningen_ror_aldrig_hogen(client):
     client.post("/api/dokument", json={"dokument": {"typ": "Tavla", "moment": "nytt"}})
     d = client.get("/api/dokument").json()
     assert [x["id"] for x in d["sparade"]] == [godkant["id"]]
+
+
+# ------------------------------------- godkännandet städar föräldralösa utkast --
+# Ett övergivet utkast låg framme i planeringens dokumentruta för evigt. Godkännandet
+# bytte status på den rad som låg framme (utkastGodkann PATCHar utkastId) — men ett
+# utkast som blivit övergivet på vägen dit hade ingen som bytte status på det, och det
+# plockas upp igen vid varje laddning. Läraren såg sin färdiga, nedladdade tavla i
+# högen OCH ett halvfärdigt utkast av samma tavla liggande framme.
+
+
+def _tavla(**extra):
+    """Lärarens riktiga fall: en tavla på lektionen 2026-08-24, NA26F, Matte 1c."""
+    return papper(**dict({"typ": "Tavla", "moment": "derivatans definition",
+                          "klass": "NA26F", "kurs": "Matematik 1c",
+                          "datum": "2026-08-24"}, **extra))
+
+
+def test_godkannandet_stadar_ett_overgivet_utkast_for_samma_lektion(client):
+    """Godkännandet går via PATCH: raden som låg framme byter status. Ligger det
+    en ANNAN utkastrad för samma lektion kvar är den övergiven — ingen kommer
+    någonsin att byta status på den, och den plockas upp vid varje laddning.
+
+    Den föräldralösa raden planteras direkt i basen, för POST-vägen håller
+    numera «ett utkast i taget» (den städningen kom i v20). Lärarens egen bas
+    hade ändå en: raden skrevs innan invarianten fanns. Det är precis sådana
+    rader som annars ligger kvar för evigt."""
+    nytt = client.post("/api/dokument", json={"dokument": _tavla()}).json()
+    conn = db.connect(client.base_dir / "transkribera.db")
+    try:
+        # Efter POST:en, annars hade «ett utkast i taget» tagit den på vägen in
+        # — och då hade testet mätt den gamla städningen, inte den nya.
+        overgivet = db.create_dokument(conn, dokument=_tavla(moment="halvskrivet"))
+    finally:
+        conn.close()
+    svar = client.patch(f"/api/dokument/{nytt['id']}", json={
+        "status": "godkant", "dokument": _tavla(), "stada": True}).json()
+
+    assert svar["stadade"] == 1
+    kvar = client.get("/api/dokument").json()
+    assert kvar["utkast"] is None
+    assert [d["id"] for d in kvar["sparade"]] == [nytt["id"]]
+    assert overgivet["id"] not in [d["id"] for d in kvar["sparade"]]
+
+
+def test_stadningen_ror_aldrig_ett_utkast_for_en_ANNAN_lektion(client):
+    """Läraren kan ha ett halvskrivet prov för nästa vecka liggande. Det får
+    ALDRIG försvinna för att en tavla godkändes i dag."""
+    prov = client.post("/api/dokument", json={"dokument": papper(
+        typ="Prov", moment="kap 3", klass="NA26F", datum="2026-09-01")}).json()
+    tavla = client.post("/api/dokument", json={
+        "dokument": _tavla(), "status": "godkant", "stada": True}).json()
+
+    assert tavla["stadade"] == 0
+    assert client.get("/api/dokument").json()["utkast"]["id"] == prov["id"]
+
+
+@pytest.mark.parametrize("skillnad", [
+    {"typ": "Prov"},                       # annat slag av papper
+    {"datum": "2026-08-25"},               # annan dag
+    {"klass": "NA26G"},                    # annan klass
+])
+def test_stadningen_kraver_exakt_match_pa_datum_klass_och_typ(client, skillnad):
+    utkast = client.post("/api/dokument", json={"dokument": _tavla(**skillnad)}).json()
+    svar = client.post("/api/dokument", json={
+        "dokument": _tavla(), "status": "godkant", "stada": True}).json()
+
+    assert svar["stadade"] == 0
+    assert client.get("/api/dokument").json()["utkast"]["id"] == utkast["id"]
+
+
+def test_ett_papper_utan_lektion_stadar_ingenting(client):
+    """Utan datum eller utan klass hör pappret inte till en lektion alls — och
+    då finns ingen lektion att städa för."""
+    utkast = client.post("/api/dokument", json={"dokument": _tavla(datum="")}).json()
+    svar = client.post("/api/dokument", json={
+        "dokument": _tavla(datum=""), "status": "godkant", "stada": True}).json()
+    assert svar["stadade"] == 0
+    assert client.get("/api/dokument").json()["utkast"]["id"] == utkast["id"]
+
+    utkast2 = client.post("/api/dokument", json={"dokument": _tavla(klass="")}).json()
+    svar2 = client.post("/api/dokument", json={
+        "dokument": _tavla(klass=""), "status": "godkant", "stada": True}).json()
+    assert svar2["stadade"] == 0
+    assert client.get("/api/dokument").json()["utkast"]["id"] == utkast2["id"]
+
+
+def test_utan_stada_flaggan_ror_sparningen_inget_utkast(client):
+    """Lösningsbladet, den ångrade raderingen och bibliotekskopian sparas ofta
+    MEDAN ett utkast ligger under händerna. De skickar ingen flagga — och då
+    får utkastet ligga kvar."""
+    utkast = client.post("/api/dokument", json={"dokument": _tavla()}).json()
+    svar = client.post("/api/dokument", json={
+        "dokument": _tavla(losningsblad=True), "status": "godkant"}).json()
+
+    assert "stadade" not in svar
+    assert client.get("/api/dokument").json()["utkast"]["id"] == utkast["id"]
+
+
+def test_stadningen_ror_aldrig_hogen_heller(client):
+    """De godkända ÄR högen — även ett papper för exakt samma lektion."""
+    syskon = client.post("/api/dokument", json={
+        "dokument": _tavla(losningsblad=True), "status": "godkant"}).json()
+    nytt = client.post("/api/dokument", json={
+        "dokument": _tavla(), "status": "godkant", "stada": True}).json()
+
+    assert nytt["stadade"] == 0
+    assert sorted(d["id"] for d in client.get("/api/dokument").json()["sparade"]) \
+        == sorted([syskon["id"], nytt["id"]])
+
+
+def test_plan_js_skickar_stada_bara_fran_godkannandet():
+    """Kontraktet står i plan.js: flaggan hör till utkastGodkann, ingen annan
+    väg. Skulle dokSpara börja skicka den alltid vore ett utkast under händerna
+    inte längre säkert."""
+    js = PLAN_JS.read_text(encoding="utf-8")
+    # Ett enda anrop bär flaggan: PATCH:en i utkastGodkann. Fallbacket när
+    # utkastet aldrig hann skrivas går via dokSpara(v, true) — samma gest.
+    assert js.count("foljd: null, stada: true") == 1
+    assert "dokSpara(v, true)" in js
+    # Och ingen annan sparning gör det: de fyra andra dokSpara-anropen (blad,
+    # kopia, ångrad radering, uppgiftsbanken) skickar inget andra argument.
+    assert "dokSpara(v, true)" not in js.replace("if (!id) return dokSpara(v, true);", "")

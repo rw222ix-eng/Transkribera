@@ -1234,6 +1234,14 @@ def create_app(base_dir: Path | None = None,
                 for d in db.list_dokument(conn, status="utkast", versioner=False):
                     if d["id"] != ny["id"]:
                         db.delete_dokument(conn, d["id"])
+            # `stada` är GODKÄNNANDETS flagga, inte varje sparnings. Klienten
+            # sätter den bara på vägen genom utkastGodkann — då är utkastId just
+            # nollat, och en utkastrad som ändå ligger kvar för samma lektion är
+            # med säkerhet övergiven. Lösningsbladet, den ångrade raderingen och
+            # bibliotekskopian går samma rutt utan flaggan: de sparas ofta MEDAN
+            # ett utkast ligger under händerna, och det får inte dras undan.
+            if status == "godkant" and body.get("stada"):
+                ny["stadade"] = len(db.stada_utkast_for_lektion(conn, ny["id"]))
             return ny
         finally:
             conn.close()
@@ -1251,6 +1259,11 @@ def create_app(base_dir: Path | None = None,
                 dokument=body.get("dokument") if isinstance(body.get("dokument"), dict) else None,
                 markor=body.get("markor"), status=body.get("status"),
                 foljd=body.get("foljd", ...))
+            # Godkännandet byter status på RADEN som låg framme — och först här
+            # vet servern vilken lektion pappret hör till. Se POST-rutten ovan
+            # om varför städningen kräver klientens `stada`.
+            if d is not None and body.get("status") == "godkant" and body.get("stada"):
+                d["stadade"] = len(db.stada_utkast_for_lektion(conn, dokument_id))
         finally:
             conn.close()
         if d is None:
