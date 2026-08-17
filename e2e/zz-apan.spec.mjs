@@ -113,9 +113,14 @@ async function levande(page) {
      sedan helskärmsläget, sedan rutan (lektion.js tangent) — och står
      markören i ett fält går första Escape till att lämna fältet. Fyra tryck
      räcker för varje kedja appen har. Att rutan GÅR att stänga är en del av
-     det testet frågar om; en modal som inte lyssnar hade fastnat här. */
+     det testet frågar om; en modal som inte lyssnar hade fastnat här.
+     Granskningens skal heter .granskaskal, inte .modalskal — utan den i
+     urvalet bröt slingan direkt, och stod markören i granskningschatten gick
+     den enda Escapen nedanför åt till att lämna fältet: modalen stod kvar och
+     fångade flikklicket. Appen stänger på Escape; det var städaren som slutade
+     trycka för tidigt. */
   for (let i = 0; i < 4; i++) {
-    if (!await page.locator(".modalskal[data-pa], .modalskal:not([hidden])")
+    if (!await page.locator(".modalskal[data-pa], .modalskal:not([hidden]), .granskaskal[data-pa]")
       .first().isVisible().catch(() => false)) break;
     await page.keyboard.press("Escape");
     await page.waitForTimeout(250);
