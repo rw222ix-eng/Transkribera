@@ -21,7 +21,7 @@ import sqlite3
 import threading
 from pathlib import Path
 
-SCHEMA_VERSION = 19
+SCHEMA_VERSION = 20
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS courses (
@@ -649,6 +649,28 @@ CREATE TABLE IF NOT EXISTS lektionsinnehall (
 CREATE INDEX IF NOT EXISTS idx_lektinnehall_datum ON lektionsinnehall(datum);
 """
 
+# Planeringen som ligger under händerna (v20) — ENDAST additiv; rollback:
+# DROP TABLE planeringar + PRAGMA user_version=19.
+#
+# Tavlans arbetsläge (JSON:en, reparationsbudgeten, tiderna, klass och kurs)
+# levde bara i serverns minne. Läraren som skrev en tavla på kvällen, stängde
+# appen och öppnade den på morgonen fick «okänd planering» när hon försökte
+# ändra något: pappret låg kvar i dokument-tabellen, men id:t den skulle
+# ändras via fanns inte längre. Provet och anteckningarna hade aldrig det
+# problemet — de har bott i exams sedan v5.
+#
+# Hela läget ligger som JSON i en kolumn, med flit: fälten är frontendens och
+# lesson_boards egna och byts oftare än en tabell bör göra. `andrad` finns för
+# gallringen — de äldsta faller bort när taket nås, precis som minnet gjorde.
+_PLANERINGAR_MIGRATION = """
+CREATE TABLE IF NOT EXISTS planeringar (
+    pid    TEXT PRIMARY KEY,
+    andrad TEXT NOT NULL,
+    data   TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_planeringar_andrad ON planeringar(andrad);
+"""
+
 _MIGRATIONS: dict[int, str] = {2: _FTS_MIGRATION, 3: _MARKERS_MIGRATION,
                                4: _PLANNING_MIGRATION, 5: _EXAMS_MIGRATION,
                                6: _GY25_MIGRATION, 7: _DATAGRUND_MIGRATION,
@@ -663,7 +685,8 @@ _MIGRATIONS: dict[int, str] = {2: _FTS_MIGRATION, 3: _MARKERS_MIGRATION,
                                16: _CI_IDENTITET_MIGRATION,
                                17: _RADTAK_MIGRATION,
                                18: _ELEVPAPPER_MIGRATION,
-                               19: _LEKTIONSINNEHALL_MIGRATION}
+                               19: _LEKTIONSINNEHALL_MIGRATION,
+                               20: _PLANERINGAR_MIGRATION}
 
 # Migreringar som bara innehåller ALTER TABLE … ADD COLUMN. De körs sats för
 # sats så att en redan tillagd kolumn hoppas över i stället för att fälla hela
@@ -1582,6 +1605,56 @@ def _planned_view(row) -> dict:
     d["group"] = d.pop("group_namn", None)
     d["course"] = d.pop("course_namn", None)
     return d
+
+
+# ── Planeringen som ligger under händerna ───────────────────────────────────
+# Skild från planned_lessons med flit: DEN raden är en GODKÄND tavla på en
+# lektion i kalendern, den här är arbetsläget för en tavla som inte är klar.
+# Läraren som skriver halvt på kvällen ska kunna ändra vidare på morgonen —
+# tidigare låg läget i serverns minne och var borta vid omstart (v20).
+#
+# Taket är samma tanke som minnets: iterationen, reparationsrundan och
+# godkännandet gäller den tavla man har under händerna, inte en från i mars.
+# Men taket är rundare här — en rad kostar några kilobyte på disk, inte i RAM.
+PLANERINGSTAK = 200
+
+
+def save_planering(conn: sqlite3.Connection, pid: str, data: dict, *,
+                   behall: int = PLANERINGSTAK) -> None:
+    """Skriv arbetsläget för `pid`. Idempotent: samma pid skriver över sig."""
+    # MIKROSEKUNDER, inte sekunder: gallringen sorterar på den här, och en
+    # generering följd av två iterationer ligger inom samma sekund. Med
+    # sekundupplösning blev ordningen godtycklig och gallringen kastade den
+    # nyaste tavlan — den läraren har under händerna. `rowid DESC` bryter en
+    # kvarvarande lika: den som skrevs sist ligger sist i tabellen.
+    from datetime import datetime
+    nu = datetime.now().isoformat(timespec="microseconds")
+    conn.execute(
+        "INSERT INTO planeringar (pid, andrad, data) VALUES (?, ?, ?) "
+        "ON CONFLICT(pid) DO UPDATE SET andrad = excluded.andrad, "
+        "data = excluded.data",
+        (str(pid), nu, json.dumps(data, ensure_ascii=False)))
+    # Gallra först när det finns något att gallra — en DELETE per skrivning
+    # kostar mer än den städar.
+    if conn.execute("SELECT COUNT(*) FROM planeringar").fetchone()[0] > behall:
+        conn.execute(
+            "DELETE FROM planeringar WHERE pid IN ("
+            "  SELECT pid FROM planeringar ORDER BY andrad DESC, rowid DESC "
+            f" LIMIT -1 OFFSET {int(behall)})")
+    conn.commit()
+
+
+def get_planering(conn: sqlite3.Connection, pid: str) -> dict | None:
+    """Arbetsläget, eller None när pid:t är okänt (aldrig sparat, eller gallrat)."""
+    row = conn.execute("SELECT data FROM planeringar WHERE pid = ?",
+                       (str(pid),)).fetchone()
+    if row is None:
+        return None
+    try:
+        data = json.loads(row["data"])
+    except (ValueError, TypeError):
+        return None
+    return data if isinstance(data, dict) else None
 
 
 def create_planned_lesson(conn: sqlite3.Connection, *, titel: str,

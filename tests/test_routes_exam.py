@@ -642,3 +642,32 @@ def test_approve_copies_bilder_and_includes_graphics(client, monkeypatch):
     tex = Path(result["tex"]).read_text(encoding="utf-8")
     assert r"\includegraphics" in tex and "bild-01.png" in tex
     assert (Path(result["tex"]).parent / "bild-01.png").exists()
+
+
+def test_provet_gar_att_andra_efter_en_omstart(client, monkeypatch):
+    """Provet har bott i databasen sedan v5 och ska därför tåla en omstart —
+    samma sak som tavlan fick i v20. Läraren som skriver halvt på kvällen ska
+    kunna ändra vidare på morgonen."""
+    from fastapi.testclient import TestClient
+    result, _ = _make_exam(client, monkeypatch)
+    ny = TestClient(server.create_app(base_dir=client.base_dir))
+    monkeypatch.setattr(ny.app.state.arbiter, "ensure_llm",
+                        lambda: "http://127.0.0.1:8170")
+
+    uppdaterad = _exam_doc()
+    uppdaterad["uppgifter"][0]["text"] = "Efter omstarten."
+    sett = {}
+
+    def fake_refine(exam, message, *, model, nummer=None, profil="prov",
+                    mal=None, llm=None, max_rounds=exam_gen.MAX_ROUNDS,
+                    log_cb=None):
+        sett["uppgifter"] = len(exam.get("uppgifter") or [])
+        return {"exam": uppdaterad, "errors": [], "rounds": 1}
+    monkeypatch.setattr(exam_gen, "refine_exam", fake_refine)
+
+    r = ny.post(f"/api/exams/{result['id']}/refine",
+                json={"message": "skriv om den", "nummer": 1})
+    assert r.status_code == 200
+    assert _done(r)["exam"]["uppgifter"][0]["text"] == "Efter omstarten."
+    # Och provet som skickades in var det som låg i databasen, inte ett tomt.
+    assert sett["uppgifter"] == len(_exam_doc()["uppgifter"])

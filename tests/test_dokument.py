@@ -319,3 +319,41 @@ def test_omprovets_instruktion_begar_helt_nya_uppgifter():
     assert "bara utbytta tal" in js
     # Den gamla lögnen får inte stå kvar någonstans i gränssnittet.
     assert "nya tal och ny ordning" not in js
+
+
+def test_utkastet_som_ligger_framme_ar_det_SENASTE(client):
+    """Högen sorteras på `sort` och ett nytt papper får MAX(sort)+1 — den första
+    träffen var alltså det ÄLDSTA utkastet. Läraren som skrev en tavla i går,
+    stängde appen och skrev en ny i dag fick i går tillbaka: gammalt papper,
+    gammalt planerings-id, «okänd planering» när hon ville ändra något."""
+    forsta = client.post("/api/dokument", json={
+        "dokument": {"typ": "Tavla", "moment": "i går", "wbId": "gammalt"}}).json()
+    andra = client.post("/api/dokument", json={
+        "dokument": {"typ": "Tavla", "moment": "i dag", "wbId": "nytt"}}).json()
+    u = client.get("/api/dokument").json()["utkast"]
+    assert u["id"] == andra["id"] != forsta["id"]
+    assert u["dokument"]["wbId"] == "nytt"
+
+
+def test_ett_utkast_i_taget(client):
+    """plan.js glömmer det förra utkastet i samma andetag som den skriver ett
+    nytt. Utan städningen låg de kvar med hela sin ångra-historik — ett per
+    skrivet papper, för alltid."""
+    client.post("/api/dokument", json={"dokument": {"typ": "Tavla", "moment": "a"}})
+    b = client.post("/api/dokument", json={"dokument": {"typ": "Tavla", "moment": "b"}}).json()
+    conn = db.connect(client.base_dir / "transkribera.db")
+    try:
+        kvar = [(d["id"], d["dokument"]["moment"]) for d in db.list_dokument(
+            conn, status="utkast", versioner=False)]
+    finally:
+        conn.close()
+    assert kvar == [(b["id"], "b")]
+
+
+def test_stadningen_ror_aldrig_hogen(client):
+    """De godkända ÄR högen — ett nytt utkast får inte städa bort dem."""
+    godkant = client.post("/api/dokument", json={
+        "dokument": {"typ": "Prov", "moment": "kap 1"}, "status": "godkant"}).json()
+    client.post("/api/dokument", json={"dokument": {"typ": "Tavla", "moment": "nytt"}})
+    d = client.get("/api/dokument").json()
+    assert [x["id"] for x in d["sparade"]] == [godkant["id"]]

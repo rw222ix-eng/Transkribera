@@ -244,27 +244,56 @@ def create_router(base: Path, arbiter) -> APIRouter:
     router = APIRouter()
     db_file = base / "transkribera.db"
 
-    # Pågående planeringar (Fas 1): id -> {board, errors, rounds, titel-fält}.
-    # Processlokalt av samma skäl som transcribe-jobben — appen är en lokal
-    # enanvändarapp; Fas 3 flyttar godkända tavlor till SQLite.
+    # Pågående planeringar: id -> {board, rounds, titel-fält}. Läget ligger i
+    # DATABASEN (planeringar, v20) och minnet är en cache framför den.
+    #
+    # Förr var minnet allt som fanns. Läraren som skrev en tavla på kvällen,
+    # stängde appen och öppnade den på morgonen fick «okänd planering» när hon
+    # ville ändra en ruta: pappret låg kvar i dokument-tabellen, men id:t den
+    # ändras via dog med processen. Provet och anteckningarna hade aldrig det
+    # problemet — de har bott i exams sedan v5, och nu bor tavlan också hemma.
     #
     # TAKAT sedan soaknatten 2026-08-08. Posterna lades in och togs aldrig bort:
-    # varje genererad tavla lämnade hela sin JSON kvar för processens livstid.
-    # Det var läckan soaken larmade om — 0,3 MB per varv, 136 MB över en natt,
-    # utan platå. Läraren som startar appen i augusti och stänger den i juni
-    # betalar samma sak, långsammare.
-    #
-    # Femtio räcker: pid:t används av render-report, iterationen, chatten och
-    # godkännandet — alla på tavlan som ligger under händerna just nu, inte på
-    # en från i förrgår.
+    # varje genererad tavla lämnade hela sin JSON kvar för processens livstid —
+    # 0,3 MB per varv, 136 MB över en natt, utan platå. Taket står kvar i minnet
+    # av det skälet; på disken gallrar db.save_planering på samma sätt.
     plannings: dict[str, dict] = {}
     MAX_PLANERINGAR = 50
+    # Cachen hänger på routern så att soakvakten går att TESTA. Förr syntes
+    # gallringen som en 404 på en gammal tavla — det svaret finns inte längre
+    # (den läses från disken i stället), och utan den här kroken hade taket
+    # kunnat försvinna utan att ett test sa något.
+    router.planeringscache = plannings
 
     def spara_planering(pid: str, st: dict) -> None:
+        """Skriv läget — i minnet OCH på disken. Varje ändring av `st` (ny
+        board, förbrukad rundbudget, godkännande) måste gå genom den här, annars
+        är det bara den här processen som vet om den."""
         plannings[pid] = st
         while len(plannings) > MAX_PLANERINGAR:
             # dict behåller insättningsordning — den äldsta ligger först.
             plannings.pop(next(iter(plannings)))
+        conn = db.connect(db_file)
+        try:
+            db.save_planering(conn, pid, st)
+        finally:
+            conn.close()
+
+    def hamta_planering(pid: str) -> dict | None:
+        """Läget för `pid`: ur minnet om det ligger där, annars ur databasen —
+        och då värms minnet, för nästa anrop i samma runda kommer direkt."""
+        st = plannings.get(pid)
+        if st is not None:
+            return st
+        conn = db.connect(db_file)
+        try:
+            st = db.get_planering(conn, pid)
+        finally:
+            conn.close()
+        if st is None:
+            return None
+        plannings[pid] = st
+        return st
 
     def _names(group_id, course_id) -> tuple[str, str]:
         group = course = ""
@@ -557,7 +586,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
     async def render_report(pid: str, req: Request):
         """Klienten rapporterar motorns [WB]-varningar efter rendering.
         Finns varningar och rundbudget kvar körs en reparationsrunda."""
-        st = plannings.get(pid)
+        st = hamta_planering(pid)
         if st is None or st.get("board") is None:
             return JSONResponse({"error": "okänd planering"}, status_code=404)
         body = await req.json()
@@ -588,6 +617,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                                                     st.get("starttid"),
                                                     st.get("sluttid"))
                 st["rounds"] = res["rounds"]
+                spara_planering(pid, st)
                 return {"id": pid, "board": st["board"], "errors": res["errors"],
                         "rounds": res["rounds"], "repaired": True}
             finally:
@@ -600,7 +630,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
     @router.post("/api/planning/{pid}/refine")
     async def refine(pid: str, req: Request):
         """Chatt-iteration: 'byt exempel 2 …' — ny version av tavlan."""
-        st = plannings.get(pid)
+        st = hamta_planering(pid)
         if st is None or st.get("board") is None:
             return JSONResponse({"error": "okänd planering"}, status_code=404)
         body = await req.json()
@@ -630,6 +660,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                                                         st.get("sluttid"))
                 # Varje användariteration får en färsk reparationsbudget.
                 st["rounds"] = res["rounds"]
+                spara_planering(pid, st)
                 return {"id": pid, "board": st["board"], "errors": res["errors"],
                         "rounds": res["rounds"]}
             finally:
@@ -656,7 +687,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
         """Godkänn & spara: planeringen skrivs till DB:n (planned_lessons,
         status 'planerad' — Fas 3-minnet) och WB-JSON exporteras som artefakt
         under Transkriberingar/<lektion>/planering/."""
-        st = plannings.get(pid)
+        st = hamta_planering(pid)
         if st is None or st.get("board") is None:
             return JSONResponse({"error": "okänd planering"}, status_code=404)
         title = (st["board"].get("title") if isinstance(st["board"], dict) else "") \
@@ -705,6 +736,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
 
         st["approved_path"] = str(path)
         st["planned_id"] = planned["id"]
+        spara_planering(pid, st)
         return {"ok": True, "path": str(path), "planned_id": planned["id"]}
 
     # ------------------------------------------------- arkiv & sök (RAG) --
@@ -1032,7 +1064,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
             return JSONResponse({"error": "innehållet är inte en PNG"}, status_code=400)
 
         titel = str(body.get("title") or "")
-        st = plannings.get(str(body.get("pid") or ""))
+        st = hamta_planering(str(body.get("pid") or ""))
         if st is not None:
             board = st.get("board")
             titel = ((board.get("title") if isinstance(board, dict) else "")

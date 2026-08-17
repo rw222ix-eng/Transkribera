@@ -664,3 +664,34 @@ def test_antalet_moten_ar_takat(client, monkeypatch):
     med = anrop[0]["transkript"]
     assert sum(f"innehåll {i}" in med for i in range(8)) == \
         routes_anteckningar.MAX_TRANSKRIPT
+
+
+def test_anteckningarna_gar_att_andra_efter_en_omstart(client, monkeypatch):
+    """Samma krav som tavlan fick i v20 och provet haft sedan v5: pappret som
+    inte blev klart i går ska gå att ändra i dag."""
+    from fastapi.testclient import TestClient
+    from app.web import server as srv
+    _stubba(monkeypatch)
+    res = _done(client.post("/api/anteckningar/generate",
+                            json={"onskemal": "x", "kurs": "Matematik 3c"}))
+    ny = TestClient(srv.create_app(base_dir=client.base_dir))
+    monkeypatch.setattr(ny.app.state.arbiter, "ensure_llm",
+                        lambda: "http://127.0.0.1:8170")
+
+    nytt = _anteckningar()
+    nytt["sektioner"][0]["stycken"][0] = "Efter omstarten."
+    sett = {}
+
+    def fake_refine(notes, message, **kw):
+        sett["sektioner"] = len(notes.get("sektioner") or [])
+        sett["mal"] = kw.get("mal")
+        return {"notes": nytt, "errors": [], "rounds": 1}
+    monkeypatch.setattr(routes_anteckningar.notes_gen, "refine_notes", fake_refine)
+
+    r = ny.post(f"/api/anteckningar/{res['id']}/refine",
+                json={"message": "skriv om den",
+                      "mal": {"namn": "Boken", "innehall": "Vi läser s. 2–6."}})
+    assert r.status_code == 200
+    assert "Efter omstarten." in _done(r)["anteckningar"]["sektioner"][0]["stycken"][0]
+    assert sett["sektioner"] == len(_anteckningar()["sektioner"])
+    assert sett["mal"] == {"namn": "Boken", "innehall": "Vi läser s. 2–6."}

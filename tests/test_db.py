@@ -994,3 +994,52 @@ def test_scan_transcripts_counts_name_and_course(tmp_path):
                      transcript_text="idag repeterar vi formler med exempel")
     scan = db.scan_transcripts(conn, "nämns matematik?")
     assert scan[0]["hits"] >= 1        # träff via namnet trots tyst transkript
+
+
+# ---------------------------------- planeringens arbetsläge (v20) --
+
+def test_v20_ger_planeringstabellen(tmp_path):
+    conn = _conn(tmp_path)
+    tables = {r[0] for r in conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+    assert "planeringar" in tables
+
+
+def test_planeringen_sparas_och_lases_tillbaka(tmp_path):
+    """Hela arbetsläget, inte bara tavlan: reparationsbudgeten och tiderna hör
+    till pid:t och behövs för nästa iteration."""
+    conn = _conn(tmp_path)
+    st = {"board": {"title": "Kvadratrötter", "boards": [{"name": "vanster"}]},
+          "rounds": 2, "moment": "1.1", "starttid": "10:00", "sluttid": "11:30",
+          "group_id": 3, "course_id": None}
+    db.save_planering(conn, "abc123", st)
+    assert db.get_planering(conn, "abc123") == st
+    assert db.get_planering(conn, "finns-inte") is None
+
+
+def test_planeringen_skrivs_over_av_sig_sjalv(tmp_path):
+    conn = _conn(tmp_path)
+    db.save_planering(conn, "p", {"board": {"title": "ett"}, "rounds": 1})
+    db.save_planering(conn, "p", {"board": {"title": "två"}, "rounds": 2})
+    assert db.get_planering(conn, "p")["board"]["title"] == "två"
+    assert conn.execute("SELECT COUNT(*) FROM planeringar").fetchone()[0] == 1
+
+
+def test_planeringarna_gallras_vid_taket(tmp_path):
+    """Samma tanke som minnets tak: de senaste lever, de äldsta faller bort.
+    Annars växer tabellen med en tavla per genererad tavla, för alltid."""
+    conn = _conn(tmp_path)
+    for i in range(6):
+        db.save_planering(conn, f"p{i}", {"board": {"title": str(i)}}, behall=3)
+    kvar = {r[0] for r in conn.execute("SELECT pid FROM planeringar")}
+    assert len(kvar) == 3
+    assert "p5" in kvar and "p0" not in kvar
+
+
+def test_trasig_planering_ar_inget_lage_alls(tmp_path):
+    """En rad som inte går att läsa ska svara «okänd», inte fälla rutten."""
+    conn = _conn(tmp_path)
+    conn.execute("INSERT INTO planeringar (pid, andrad, data) VALUES (?, ?, ?)",
+                 ("trasig", "2026-08-17T10:00:00", "{inte json"))
+    conn.commit()
+    assert db.get_planering(conn, "trasig") is None

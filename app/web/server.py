@@ -296,7 +296,11 @@ def create_app(base_dir: Path | None = None,
 
     # Planering (Fas 0/1) + prov (Fas 4): egna routers — nya funktioner ska
     # inte växa i den här filen (se planens riskavsnitt om scope-krypning).
-    app.include_router(routes_planning.create_router(base, arb))
+    planering = routes_planning.create_router(base, arb)
+    # Minnescachen framför planeringstabellen (v20). Ligger på app.state så att
+    # taket går att kontrollera i test — se routes_planning.planeringscache.
+    app.state.planeringscache = getattr(planering, "planeringscache", None)
+    app.include_router(planering)
     app.include_router(routes_exam.create_router(base, arb))
     app.include_router(routes_anteckningar.create_router(base, arb))
     app.include_router(routes_elever.create_router(base, arb))
@@ -1193,7 +1197,12 @@ def create_app(base_dir: Path | None = None,
         conn = _db()
         try:
             alla = db.list_dokument(conn, versioner=False)
-            utkast = next((d for d in alla if d["status"] == "utkast"), None)
+            # DET SENASTE utkastet, inte det första. Högen sorteras på `sort`
+            # och ett nytt papper får MAX(sort)+1 — den första träffen var alltså
+            # det ÄLDSTA utkastet. Läraren som skrev en tavla i går, stängde
+            # appen och skrev en ny i dag fick i går tillbaka: gammalt papper,
+            # gammalt planerings-id, «okänd planering» när hon ville ändra något.
+            utkast = next((d for d in reversed(alla) if d["status"] == "utkast"), None)
             if utkast:
                 utkast = db.get_dokument(conn, utkast["id"])
         finally:
@@ -1213,9 +1222,19 @@ def create_app(base_dir: Path | None = None,
                                 status_code=400)
         conn = _db()
         try:
-            return db.create_dokument(conn, dokument=dok, status=status,
-                                      sort=body.get("sort"), foljd=body.get("foljd"),
-                                      anteckning=body.get("anteckning"))
+            ny = db.create_dokument(conn, dokument=dok, status=status,
+                                    sort=body.get("sort"), foljd=body.get("foljd"),
+                                    anteckning=body.get("anteckning"))
+            # ETT utkast i taget. Appen visar bara ett («det utkast som låg
+            # framme») och plan.js glömmer det förra i samma andetag som den
+            # skriver ett nytt — utan städningen låg de kvar med hela sin
+            # ångra-historik, ett per skrivet papper, för alltid. De godkända
+            # rörs aldrig: de är högen.
+            if status == "utkast":
+                for d in db.list_dokument(conn, status="utkast", versioner=False):
+                    if d["id"] != ny["id"]:
+                        db.delete_dokument(conn, d["id"])
+            return ny
         finally:
             conn.close()
 

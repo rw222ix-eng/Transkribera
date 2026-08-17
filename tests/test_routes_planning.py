@@ -124,7 +124,10 @@ def test_planeringarna_ar_takade(llm_ready, monkeypatch):
     tappade aldrig någon. Hela tavlans JSON blev kvar för processens livstid —
     0,3 MB per soakvarv, utan platå. Appen startas i augusti och stängs i juni.
 
-    Taket får inte ta den tavla läraren arbetar med; den nyaste ska leva.
+    Taket står kvar, men gallringen syns inte längre som en 404: sedan v20 bor
+    läget i databasen och minnet är en cache framför den. En gammal tavla svarar
+    alltså fortfarande — den läses från disken — och det är RAM-taket som är
+    soakvaktens sak.
     """
     _stub_generate(monkeypatch, {"board": _valid_board(), "errors": [], "rounds": 1})
     ider = []
@@ -132,15 +135,14 @@ def test_planeringarna_ar_takade(llm_ready, monkeypatch):
         r = llm_ready.post("/api/planning/generate", json={"moment": f"moment {i}"})
         ider.append(_done(r)["id"])
 
+    cache = llm_ready.app.state.planeringscache
+    assert cache is not None and len(cache) == 50      # femtio, inte femtiofem
+    assert ider[-1] in cache and ider[0] not in cache  # de senaste ligger kvar
+    # Och den gallrade tavlan är inte borta — den ligger på disken.
+    assert llm_ready.post(f"/api/planning/{ider[0]}/render-report",
+                          json={"warnings": []}).status_code == 200
     assert llm_ready.post(f"/api/planning/{ider[-1]}/render-report",
                           json={"warnings": []}).status_code == 200
-    assert llm_ready.post(f"/api/planning/{ider[0]}/render-report",
-                          json={"warnings": []}).status_code == 404
-    # Femtio kvar, inte femtiofem — och det är de femtio senaste.
-    assert llm_ready.post(f"/api/planning/{ider[-50]}/render-report",
-                          json={"warnings": []}).status_code == 200
-    assert llm_ready.post(f"/api/planning/{ider[-51]}/render-report",
-                          json={"warnings": []}).status_code == 404
 
 
 def test_generate_streams_board_and_stores_planning(llm_ready, monkeypatch):
@@ -732,3 +734,77 @@ def test_archive_search_marks_hits_in_snippet(client):
     hits = r.json()["hits"]
     assert len(hits) == 1
     assert "\x02täljare\x03" in hits[0]["snippet"]
+
+
+# ── Planeringen överlever en omstart (v20) ───────────────────────────────────
+# Läget låg bara i processens minne. Läraren som skrev en tavla på kvällen,
+# stängde appen och öppnade den på morgonen fick «okänd planering» när hon ville
+# ändra en ruta: pappret låg kvar i dokument-tabellen, men id:t den ändras via
+# dog med processen.
+
+def _ny_process(gammal, monkeypatch):
+    """Samma katalog, ny app: allt minne borta, databasen kvar."""
+    from fastapi.testclient import TestClient
+    from app.web import server as srv
+    ny = TestClient(srv.create_app(base_dir=gammal.base_dir))
+    monkeypatch.setattr(ny.app.state.arbiter, "ensure_llm",
+                        lambda: "http://127.0.0.1:8170")
+    ny.base_dir = gammal.base_dir
+    return ny
+
+
+def test_tavlan_gar_att_andra_efter_en_omstart(llm_ready, monkeypatch):
+    pid = _make_planning(llm_ready, monkeypatch)
+    ny = _ny_process(llm_ready, monkeypatch)
+
+    uppdaterad = _valid_board()
+    uppdaterad["title"] = "Efter omstarten"
+    sett = {}
+
+    def fake_refine(board, instruction, *, model, mal=None, llm=None,
+                    max_rounds=lesson_board.MAX_ROUNDS, log_cb=None, token_cb=None):
+        sett["board"] = board
+        return {"board": uppdaterad, "errors": [], "rounds": 1}
+    monkeypatch.setattr(lesson_board, "refine_board", fake_refine)
+
+    r = ny.post(f"/api/planning/{pid}/refine", json={"message": "gör den kortare"})
+    assert r.status_code == 200
+    assert _done(r)["board"]["title"] == "Efter omstarten"
+    # Och det är TAVLAN som låg där, inte en tom — hela JSON:en följde med.
+    assert sett["board"]["boards"][0]["name"] == _valid_board()["boards"][0]["name"]
+
+
+def test_godkannandet_gar_ocksa_efter_en_omstart(llm_ready, monkeypatch):
+    pid = _make_planning(llm_ready, monkeypatch)
+    ny = _ny_process(llm_ready, monkeypatch)
+    r = ny.post(f"/api/planning/{pid}/approve", json={})
+    assert r.status_code == 200
+    assert r.json()["planned_id"]
+
+
+def test_omskrivningen_sparas_ner_och_galler_nasta_process(llm_ready, monkeypatch):
+    """Andra iterationen ska utgå från den FÖRSTA omskrivningen, inte från det
+    första utkastet — annars tappar en omstart mitt i arbetet en runda."""
+    pid = _make_planning(llm_ready, monkeypatch)
+    ett = _valid_board()
+    ett["title"] = "Första omskrivningen"
+    monkeypatch.setattr(
+        lesson_board, "refine_board",
+        lambda board, instruction, **kw: {"board": ett, "errors": [], "rounds": 1})
+    _done(llm_ready.post(f"/api/planning/{pid}/refine", json={"message": "ett"}))
+
+    ny = _ny_process(llm_ready, monkeypatch)
+    sett = {}
+
+    def fake_refine(board, instruction, **kw):
+        sett["titel"] = board.get("title")
+        return {"board": board, "errors": [], "rounds": 1}
+    monkeypatch.setattr(lesson_board, "refine_board", fake_refine)
+    _done(ny.post(f"/api/planning/{pid}/refine", json={"message": "två"}))
+    assert sett["titel"] == "Första omskrivningen"
+
+
+def test_okand_planering_ar_fortfarande_404(llm_ready):
+    r = llm_ready.post("/api/planning/finns-inte-alls/refine",
+                       json={"message": "x"})
+    assert r.status_code == 404
