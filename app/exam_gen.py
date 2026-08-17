@@ -365,6 +365,7 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
                  memory: str = "", teman: str = "",
                  referens: str = "", bilder: str = "", utfall: str = "",
                  bok: str = "", boknivaer: str = "", forlaga: str = "",
+                 svart: str = "", fokus: str = "",
                  profil: str = "prov", koder: list[str] | None = None,
                  grupp: dict | None = None, riktat: str = "",
                  skeleton: list[dict] | None = None) -> str:
@@ -404,6 +405,12 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
     # Direkt efter innehållet: fallgroparna är innehållets fallgropar, och
     # kravet ska läsas i samma andetag som punkterna det gäller.
     block.append(FALLGROPAR)
+    # Lärarens egna ord om vad klassen hade svårt för står FÖRE minnet och
+    # utfallet: de säger samma sak sett utifrån — vad klassen gick igenom, vad
+    # den föll på — medan det här är hon som var i rummet. Blocket finns bara
+    # när rutan är ifylld; ett tomt fält lämnar inget spår i prompten.
+    if svart:
+        block.append(svart)
     if memory:
         block.append(f"Ur lektionsminnet (vad klassen arbetat med):\n{memory}")
     if utfall:
@@ -430,6 +437,10 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
     # om derivator» utan «ett arbetsblad till Alva om det Alva inte kan».
     if riktat:
         block.append(riktat)
+    # Viktningen sist av källorna: «mest ur provet, lite ur boken» är en dom
+    # över dem alla och går inte att läsa innan de står där.
+    if fokus:
+        block.append(fokus)
     if profil == "gruppuppgift":
         g = grupp or {}
         REDOV = {
@@ -1132,7 +1143,8 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                   antal: int = 10, tid_min: int = 120, delar: bool = True,
                   memory: str = "", teman: str = "", referens: str = "",
                   bilder: str = "", utfall: str = "", bok: str = "",
-                  boknivaer: str = "", forlaga: str = "", profil: str = "prov",
+                  boknivaer: str = "", forlaga: str = "",
+                  svart: str = "", fokus: str = "", profil: str = "prov",
                   koder: list[str] | None = None, riktat: str = "",
                   skeleton: list[dict] | None = None,
                   grupp: dict | None = None, doma: bool = True,
@@ -1180,6 +1192,7 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                           delar=delar, memory=memory, teman=teman,
                           referens=referens, bilder=bilder, utfall=utfall,
                           bok=bok, boknivaer=boknivaer, forlaga=forlaga,
+                          svart=svart, fokus=fokus,
                           profil=profil, koder=koder, grupp=grupp,
                           riktat=riktat, skeleton=skeleton)
     exam = _llm_round(prompt, model, llm, antal, grammatik, koder)

@@ -318,7 +318,8 @@ def build_transkript(referat: list[tuple[str, str]]) -> str:
 
 
 def build_prompt(kurs: str, klass: str, moment: str, *, onskemal: str = "",
-                 transkript: str = "", memory: str = "", datum: str = "") -> str:
+                 transkript: str = "", memory: str = "", datum: str = "",
+                 svart: str = "", fokus: str = "") -> str:
     """Genereringsprompt: instruktion + källor + uppdraget.
 
     Källorna står i stigande styrka och lärarens egen ruta SIST, närmast
@@ -326,6 +327,12 @@ def build_prompt(kurs: str, klass: str, moment: str, *, onskemal: str = "",
     inte tappas bakom ett möte eller ett minne (samma ordningsprincip som
     förlagan i exam_gen.build_prompt)."""
     block = [INSTRUCTION]
+    # Stödpappret är det läraren har framför sig när hon går igenom något igen,
+    # så vad klassen hade svårt för är rakt på sak dess ärende. Det står först
+    # bland källorna av samma skäl som i de andra prompterna: minnet och mötena
+    # är andrahandsuppgifter om samma lektion.
+    if svart:
+        block.append(svart)
     if memory:
         block.append(f"Ur lektionsminnet (vad klassen arbetat med):\n{memory}")
     if transkript:
@@ -334,6 +341,9 @@ def build_prompt(kurs: str, klass: str, moment: str, *, onskemal: str = "",
         block.append("LÄRAREN HAR SKRIVIT vad som ska stå på pappret. Det här "
                      "är uppdraget — följ det, och fyll bara i det som "
                      "behövs runt omkring:\n" + onskemal)
+    # Viktningen sist bland källorna, precis som i tavlans och provets prompt.
+    if fokus:
+        block.append(fokus)
     vem = " ".join(x for x in (f"{kurs}," if kurs else "", klass) if x).strip()
     block.append(
         f"Uppdrag: skriv lärarens stödanteckningar{f' för {vem}' if vem else ''}"
@@ -436,7 +446,8 @@ def _repair_until_valid(notes: dict | None, errors: list, *, model: str, llm,
 
 def generate_notes(kurs: str, klass: str, moment: str, *, model: str,
                    onskemal: str = "", transkript: str = "", memory: str = "",
-                   datum: str = "", llm=llm_client.generate,
+                   datum: str = "", svart: str = "", fokus: str = "",
+                   llm=llm_client.generate,
                    max_rounds: int = MAX_ROUNDS,
                    log_cb: Callable[[str], None] | None = None,
                    token_cb: Callable[[str], None] | None = None) -> dict:
@@ -445,7 +456,8 @@ def generate_notes(kurs: str, klass: str, moment: str, *, model: str,
     log = log_cb or (lambda _m: None)
     log("Skriver anteckningarna …")
     prompt = build_prompt(kurs, klass, moment, onskemal=onskemal,
-                          transkript=transkript, memory=memory, datum=datum)
+                          transkript=transkript, memory=memory, datum=datum,
+                          svart=svart, fokus=fokus)
     notes = _llm_round(prompt, model, llm, token_cb=token_cb)
     rounds = 1
     while notes is None and rounds < max_rounds:

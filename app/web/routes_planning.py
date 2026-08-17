@@ -18,7 +18,7 @@ from pathlib import Path
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
-from app import bok, db, forlaga, lesson_board, llm_client, rattning
+from app import bok, db, forlaga, lararord, lesson_board, llm_client, rattning
 from app.web.sse import sse_response
 
 # Två tavlor i 2× blir ett par MB; 30 MB är väl tilltaget men stoppar missbruk.
@@ -136,6 +136,19 @@ def forlaga_text(db_file: Path, body: dict) -> str:
         if rad and rad.get("dokument"):
             dok = rad["dokument"]
     return forlaga.build_forlaga(dok, hur)
+
+
+def lararens_ord(body: dict) -> tuple[str, str]:
+    """(svårighetsblocket, viktningsblocket) ur begäran — lärarens två rutor i
+    steg 3. Delas av alla tre generatorerna (tavla, prov/blad, anteckningar):
+    fälten står på samma ställe i UI:t och ska väga likadant vart de än går.
+
+    Båda är tomma strängar när rutan är tom, och anroparen lägger då inte till
+    något block alls. Den regeln är hela poängen: prompten för en tom ruta ska
+    vara ord för ord den som gick i väg innan fälten fanns — annars vore varje
+    inspelad kassett omspelningsmogen."""
+    return (lararord.build_svart(body.get("svart")),
+            lararord.build_fokus(body.get("fokus")))
 
 
 def bok_val(body: dict) -> tuple[int, int, int] | None:
@@ -557,6 +570,12 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # Källdörr 4: det tidigare pappret läraren pekade ut. Planen har alltid
         # sagt «Läser förlagan» — nu gör den det.
         forlaga_txt = forlaga_text(db_file, body)
+        # Lärarens egna två rutor. Svårigheten är den enda källan som finns när
+        # lektionen INTE spelades in: minnets «Svårighet att följa upp» kommer
+        # ur transkriptet, och utan inspelning står den tom hur mycket läraren
+        # än vet. Viktningen har funnits i steg 3 hela tiden — planen skrev
+        # «Väger källorna» — men aldrig nått hit.
+        svart_txt, fokus_txt = lararens_ord(body)
 
         gpu = arbiter.try_acquire_gpu()
         if not gpu:
@@ -574,6 +593,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     course or "matematik", group or "klassen", moment,
                     model=_model_name(), memory=memory, underlag=underlag_txt,
                     utfall=utfall_txt, bok=bok_txt, forlaga=forlaga_txt,
+                    svart=svart_txt, fokus=fokus_txt,
                     log_cb=lambda m: emit({"type": "log", "msg": m}),
                     token_cb=lambda t: emit({"type": "token", "text": t}))
                 # Lektionstiden uppe till vänster är lärarens, inte modellens:

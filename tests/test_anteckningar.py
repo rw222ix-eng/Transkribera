@@ -459,12 +459,17 @@ def _stubba(monkeypatch, notes=None, errors=None):
     """Stubba generatorn — rutten prövas, inte modellen."""
     anrop = []
 
+    # `**ovrigt` fångar de källor som tillkommit efter att stubben skrevs
+    # (svart, fokus — lärarens egna rutor). Utan den föll hela filen på en
+    # signaturändring i generatorn, vilket inte är vad de här testerna prövar:
+    # de prövar RUTTEN. Vad rutan faktiskt gör i prompten står i
+    # tests/test_lararord.py.
     def fake(kurs, klass, moment, *, model, onskemal="", transkript="",
              memory="", datum="", llm=None, max_rounds=3, log_cb=None,
-             token_cb=None):
+             token_cb=None, **ovrigt):
         anrop.append({"kurs": kurs, "klass": klass, "moment": moment,
                       "onskemal": onskemal, "transkript": transkript,
-                      "memory": memory, "datum": datum})
+                      "memory": memory, "datum": datum, **ovrigt})
         if log_cb:
             log_cb("Skriver anteckningarna …")
         return {"notes": copy.deepcopy(notes or _anteckningar()),

@@ -384,6 +384,11 @@
 .fokusruta[hidden]{display:none}
 .fokusruta .minietikett{margin:0;flex:0 0 auto}
 .fokusruta .field{flex:1;min-width:240px}
+/* Svårighetsrutan delar form med fokusrutan men INTE dess villkor: den står
+   alltid framme, för den är den enda svårighetskällan som finns när lektionen
+   inte spelades in. Den enda skillnaden är luften — två fält i rad utan den
+   läses som ett enda tvåradigt fält. */
+.svartruta{margin-bottom:12px}
 
 /* ══════════ EN RUTA MINDRE I STEG 2 ══════════
    Förr: fyra dörrar, ett kvitto i egen ram, och en panel med sitt eget

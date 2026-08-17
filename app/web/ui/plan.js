@@ -1384,6 +1384,11 @@
            källor, och nästa ändring vet vad som vägde tyngst när det skrevs. */
         resultat: resDok ? { namn: dokNamn(resDok), datum: resDok.datum, klass: resDok.klass || '', rattat: JSON.parse(JSON.stringify(resDok.rattat || {})) } : null,
         fokus: ($('#fokus') || {}).value ? $('#fokus').value.trim() : '',
+        /* Lärarens egna ord om vad klassen hade svårt för. Ligger bredvid
+           viktningen av samma skäl: canvasens källor ska kunna visa vad pappret
+           skrevs UR, och det här är den enda källan appen inte kan härleda ur
+           ett spår — utan inspelning finns ingen transkript-svårighet alls. */
+        svart: ($('#svart') || {}).value ? $('#svart').value.trim() : '',
         kontext: 'start', niva: false, svarighet: 0, andrat: [], anteckning: 'Första utkastet'
       };
     v.andrat = [];
@@ -1819,13 +1824,27 @@
        prompten — det är hela poängen med att boken finns i appen. Skickas bara
        när dörren är öppen och boken är en riktig, inläst bok. */
     const bokval = () => bokKalla();
+    /* Lärarens två rutor längst ner i steg 3. `svart` är svårigheten i hennes
+       egna ord — den enda svårighetskällan som finns när lektionen inte
+       spelades in — och `fokus` viktningen mellan de valda källorna.
+       Viktningen SPARADES på pappret men skickades aldrig med begäran, trots
+       att planen skrev «Väger källorna»: samma tomma löfte som förlagan var
+       före app/forlaga.py.
+       Fälten skickas bara när de är ifyllda, och det är inte snålhet — servern
+       lägger till sitt promptblock först när fältet finns, så att en tom ruta
+       ger exakt den prompt som gick i väg innan rutorna byggdes. */
+    const egnaOrd = () => {
+       const t = id => (($(id) || {}).value || '').trim();
+       const s = t('#svart'), f = t('#fokus');
+       return { ...(s ? { svart: s } : {}), ...(f ? { fokus: f } : {}) };
+    };
     const JOBB = {
       Tavla: ({ signal, log }) => window.API.strom('/api/planning/generate', {
         moment: moment.value.trim(),
         klass: utkast.klass, kurs: utkast.kurs,
         datum: utkast.datum || utkast.lektionsdatum || '',
         starttid: String(utkast.tid || utkast.lektionstid || '').split('–')[0].trim(),
-        ...utfall(), ...bokval(), ...forlagan(),
+        ...utfall(), ...bokval(), ...forlagan(), ...egnaOrd(),
       }, { signal, log }).then(kravDone),
       /* Provet och arbetsbladet delar rutt och skiljs åt av `typ`: samma
          skelett och samma balansvalidering, men arbetsbladet får sitt facit i
@@ -1838,7 +1857,7 @@
         delar: i0.delprov !== 'En del',
         datum: utkast.datum || '',
         typ: typ === 'Arbetsblad' ? 'arbetsblad' : 'prov',
-        ...utfall(), ...bokval(), ...forlagan(),
+        ...utfall(), ...bokval(), ...forlagan(), ...egnaOrd(),
       }, { signal, log }).then(kravDone).then(r => {
         if (!r.exam) throw new Error('Provet gick inte att skriva den här gången. Försök igen.');
         return r;
@@ -1858,7 +1877,7 @@
         elev_id: bladNu.id, elev: bladNu.namn,
         syfte: String(i0.syfte || 'Stötta').toLowerCase() === 'utmana' ? 'utmana' : 'stotta',
       } : {}),
-      ...utfall(), ...bokval(), ...forlagan(),
+      ...utfall(), ...bokval(), ...forlagan(), ...egnaOrd(),
     }, { signal, log }).then(kravDone).then(r => {
       if (!r.exam) throw new Error('Arbetsbladet gick inte att skriva den här gången. Försök igen.');
       return r;
@@ -1873,7 +1892,7 @@
       delar: false,
       datum: utkast.datum || '',
       typ: 'diagnos',
-      ...utfall(), ...forlagan(),
+      ...utfall(), ...forlagan(), ...egnaOrd(),
     }, { signal, log }).then(kravDone).then(r => {
       if (!r.exam) throw new Error('Diagnosen gick inte att skriva den här gången. Försök igen.');
       return r;
@@ -1888,6 +1907,7 @@
       datum: utkast.datum || utkast.lektionsdatum || '',
       onskemal: (i0.onskemal || '').trim(),
       lektioner: (i0.lektioner || []).slice(),
+      ...egnaOrd(),
     }, { signal, log }).then(kravDone).then(r => {
       if (!r.anteckningar) throw new Error('Anteckningarna gick inte att skriva den här gången. Försök igen.');
       return r;
@@ -1903,7 +1923,7 @@
       antal: 4,
       datum: utkast.datum || '',
       typ: 'gruppuppgift',
-      ...utfall(), ...bokval(), ...forlagan(),
+      ...utfall(), ...bokval(), ...forlagan(), ...egnaOrd(),
       grupp: {
         elever: Number(i0.grupp) || 3,
         langd_min: Number(i0.langd) || 45,
@@ -1933,6 +1953,11 @@
         { namn: 'Läser centralt innehåll (Gy25)', detalj: (vald.size || 0) + ' moment' },
         ...(refDok ? [{ namn: 'Läser förlagan', detalj: dokNamn(refDok) + (($('#refhur') || {}).value ? ' · ' + $('#refhur').value.trim().slice(0, 40) : '') }] : []),
         ...(resDok ? [{ namn: 'Läser provets utfall', detalj: (((resDok.rattat || {}).svaga || []).map(s => s.kod).filter(Boolean).join(', ') || dokNamn(resDok)) + ' föll' }] : []),
+        /* Raden står bara när rutan är ifylld, och den lovar precis det som
+           sker: fältet går med i begäran och blir ett eget block i prompten.
+           «Läser lärarens svårigheter» på en tom ruta hade varit samma tomma
+           löfte som «Läser förlagan» en gång var. */
+        ...((($('#svart') || {}).value || '').trim() ? [{ namn: 'Läser vad du sett var svårt', detalj: $('#svart').value.trim().slice(0, 46) }] : []),
         ...(($('#fokus') || {}).value && $('#fokus').value.trim() ? [{ namn: 'Väger källorna', detalj: $('#fokus').value.trim().slice(0, 46) }] : []),
         { namn: underlag.length ? 'Läser vad klassen hann med' : 'Hoppar över transkripten', detalj: underlag.length ? underlag.map(l => l.namn).join(' · ') : 'inga lektioner valda' },
         { namn: 'Skriver och poängsätter', detalj: typ }
@@ -3281,6 +3306,10 @@
     if (resDok) { resDok = null; window.Kallor && window.Kallor.speglaResultat && window.Kallor.speglaResultat(); }
     const fk = $('#fokus');
     if (fk) fk.value = '';
+    /* Svårigheten hörde till DEN lektionen. Står den kvar skrivs nästa papper —
+       ofta i en annan klass — mot ett problem som klassen aldrig hade. */
+    const sv = $('#svart');
+    if (sv) sv.value = '';
     /* Klassprofilen lär sig av valet: typen, boken, sidorna och takten. */
     window.Profil && window.Profil.lar(v);
     $('#dokument').hidden = true;

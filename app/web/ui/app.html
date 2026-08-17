@@ -1238,6 +1238,15 @@
         <p class="fot"><span class="prick"></span><span>Förlagan läses som referens, inte som mall — skriv vad som ska följa med och vad som ska bli nytt.</span></p>
       </div>
       <div class="cta">
+        <!-- Svårigheten i lärarens egna ord. Till skillnad från viktningen nedan
+             står den ALLTID framme, för den är inte ett svar på vilka källor man
+             valt — den är den enda källan som finns när lektionen inte spelades
+             in. Appen vet vad klassen frågade om bara om mikrofonen var på;
+             läraren var där oavsett, och rutan är stället att säga det. -->
+        <div class="fokusruta svartruta" id="svartruta">
+          <span class="minietikett">Vad var svårt?</span>
+          <input class="field" id="svart" placeholder="T.ex. kvadratkomplettering satt inte — flera blandade ihop roten ur produkt och summa" autocomplete="off" />
+        </div>
         <!-- Viktningen sägs i ord, inte med reglage: har man valt både boken och ett
              rättat prov är det här man säger vilket som ska väga tyngst. Fältet står
              före knappen — det är det sista man säger innan pappret skrivs. -->

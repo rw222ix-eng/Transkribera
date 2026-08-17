@@ -239,6 +239,11 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # Källdörr 4 / pardokumentets andra hand: arbetsbladet som ska skrivas
         # PÅ den godkända tavlan, eller provet som följer ett tidigare papper.
         forlaga_block = routes_planning.forlaga_text(db_file, body)
+        # Lärarens egna ord om vad som var svårt, och hennes viktning av
+        # källorna. Samma två rutor som tavlan får — provet som ska pröva just
+        # det klassen inte kunde behöver dem lika mycket, och arbetsbladet mest
+        # av allt. Tomma rutor lägger ingenting till prompten.
+        svart_block, fokus_block = routes_planning.lararens_ord(body)
 
         conn = db.connect(db_file)
         try:
@@ -336,7 +341,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     antal=antal, tid_min=tid_min, delar=delar,
                     memory=memory, teman=teman, referens=referens,
                     bilder=bilder_block, utfall=utfall_block, bok=bok_block,
-                    boknivaer=nivaer_block, forlaga=forlaga_block, profil=typ,
+                    boknivaer=nivaer_block, forlaga=forlaga_block,
+                    svart=svart_block, fokus=fokus_block, profil=typ,
                     koder=koder, skeleton=plan["skeleton"] if plan else None,
                     riktat=riktat_block, grupp=grupp,
                     log_cb=lambda m: emit({"type": "log", "msg": m}))

@@ -181,6 +181,11 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     int(course_id) if course_id else None)
             finally:
                 conn.close()
+        # Lärarens två rutor i steg 3. Stödpappret är det hon har i handen när
+        # något ska tas om, så «vad var svårt?» är rakt på sak dess ärende —
+        # och rutorna står på samma ställe i UI:t oavsett vilken typ som ska
+        # skrivas, så de ska nå fram lika väl här som i tavlan.
+        svart_txt, fokus_txt = routes_planning.lararens_ord(body)
 
         gpu = arbiter.try_acquire_gpu()
         if not gpu:
@@ -196,7 +201,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 res = notes_gen.generate_notes(
                     kurs, klass, moment, model=_model_name(),
                     onskemal=onskemal, transkript=transkript, memory=memory,
-                    datum=datum,
+                    datum=datum, svart=svart_txt, fokus=fokus_txt,
                     log_cb=lambda m: emit({"type": "log", "msg": m}),
                     token_cb=lambda t: emit({"type": "token", "text": t}))
                 if res["notes"] is None:

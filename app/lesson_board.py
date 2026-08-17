@@ -791,12 +791,19 @@ def _few_shot_block() -> str:
 
 def build_prompt(course: str, group: str, moment: str, memory: str = "",
                  underlag: str = "", utfall: str = "", bok: str = "",
-                 forlaga: str = "") -> str:
-    """Genereringsprompt: instruktion + few-shots + minneskontext + ev.
-    uppladdat underlag (bokssidor/uppgifter) + ev. rättat provs utfall
-    (Etapp 0.7) + ev. lärobokens uppslag (Etapp 0.8) + ev. förlaga (källdörr 4)
-    + uppdraget."""
+                 forlaga: str = "", svart: str = "", fokus: str = "") -> str:
+    """Genereringsprompt: instruktion + few-shots + lärarens egna ord om vad som
+    var svårt + minneskontext + ev. uppladdat underlag (bokssidor/uppgifter) +
+    ev. rättat provs utfall (Etapp 0.7) + ev. lärobokens uppslag (Etapp 0.8) +
+    ev. förlaga (källdörr 4) + ev. lärarens viktning + uppdraget."""
     mem = f"\nUr lektionsminnet (senaste lektionerna med klassen):\n{memory}\n" if memory else ""
+    # Lärarens egna ord om svårigheten står FÖRE minnet, för det är i minnet
+    # transkriptets «Svårighet att följa upp» ligger (routes_planning) — och när
+    # de två talar om samma lektion ska förstahandsuppgiften läsas först. Egen
+    # rad och inte inbakad i minnessträngen: minnesblocket har en rubrik som
+    # säger «senaste lektionerna med klassen», och det hon skriver NU är inget
+    # minne. Utan klass finns inget minne alls, och då hade rubriken ljugit.
+    sva = f"\n{svart}\n" if svart else ""
     utf = f"\n{utfall}\n" if utfall else ""
     # Förlagan står NÄRMAST uppdraget av källorna: den är det starkaste
     # önskemålet läraren kan ge — «gör som det här pappret» — och den ska inte
@@ -812,8 +819,11 @@ def build_prompt(course: str, group: str, moment: str, memory: str = "",
         "skriv HELT EGNA exempel och uppgifter — skriv aldrig av underlagets, "
         "inte ens med utbytta tal; de visar nivå och typ, inget mer:\n"
         f"{underlag}\n" if underlag else "")
+    # Viktningen står SIST bland källorna: den är en dom över allt ovanför —
+    # «mest ur provet, lite ur boken» — och kan inte fällas innan de lästs.
+    fok = f"\n{fokus}\n" if fokus else ""
     return (
-        f"{INSTRUCTION}\n{_few_shot_block()}\n{mem}{utf}{und}{bk}{forl}\n"
+        f"{INSTRUCTION}\n{_few_shot_block()}\n{sva}{mem}{utf}{und}{bk}{forl}{fok}\n"
         f"Uppdrag: skriv lektionstavlan för {course}, klass {group} — {moment}.\n"
         "Svara med enbart JSON."
     )
@@ -1001,6 +1011,7 @@ def _repair_until_valid(board: dict | None, errors: list, *, model: str, llm,
 def generate_board(course: str, group: str, moment: str, *, model: str,
                    memory: str = "", underlag: str = "", utfall: str = "",
                    bok: str = "", forlaga: str = "",
+                   svart: str = "", fokus: str = "",
                    llm=llm_client.generate,
                    max_rounds: int = MAX_ROUNDS,
                    log_cb: Callable[[str], None] | None = None,
@@ -1013,7 +1024,7 @@ def generate_board(course: str, group: str, moment: str, *, model: str,
     log = log_cb or (lambda _m: None)
     log("Genererar lektionstavlan …")
     prompt = build_prompt(course, group, moment, memory, underlag, utfall, bok,
-                          forlaga)
+                          forlaga, svart, fokus)
     board = _llm_round(prompt, model, llm, token_cb=token_cb)
     rounds = 1
     # Ogiltig JSON (t.ex. trunkerat svar) → kör om från början inom budgeten
