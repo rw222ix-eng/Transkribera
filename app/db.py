@@ -21,7 +21,7 @@ import sqlite3
 import threading
 from pathlib import Path
 
-SCHEMA_VERSION = 21
+SCHEMA_VERSION = 22
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS courses (
@@ -692,6 +692,29 @@ _HJALPMEDEL_MIGRATION = """
 ALTER TABLE lektionsinnehall ADD COLUMN hjalpmedel TEXT;
 """
 
+# Provets centrala innehåll (v22) — ENDAST additiv; rollback: lämna kolumnerna
+# (NULL = «ingen synk har läst posten med Gy25-ögon», vilket är vad varje rad var
+# förut) + PRAGMA user_version=21.
+#
+# Läraren skriver i provhändelsens beskrivning vilket centralt innehåll provet
+# berör. Det är samma punkter som gy-väljaren i planeringen håller, och när hon
+# skapar provet ska de redan vara ikryssade — hon har svarat på frågan en gång.
+#
+# INTEGRITETSREGELN ÄR OFÖRÄNDRAD (se calendar_google rad ~505): beskrivningen
+# läses, bara ovanför avdelaren, och det som lagras är KODER ur en känd
+# punktlista (G25-M2C-ALG-4) — aldrig lärarens egna ord. `ci` är kommaseparerade
+# koder, tom sträng när beskrivningen är läst utan träff, NULL när ingen synk
+# har tittat.
+#
+# `ci_okant` är antalet rader som såg ut att påstå något men inte kändes igen.
+# Den finns för att förvalet ska kunna säga «2 rader kändes inte igen» i stället
+# för att tyst påstå att fyra punkter var hela provet. Ett tal och inte en text:
+# raderna själva är lärarens ord och lagras aldrig.
+_PROVETS_CI_MIGRATION = """
+ALTER TABLE kalenderposter ADD COLUMN ci TEXT;
+ALTER TABLE kalenderposter ADD COLUMN ci_okant INTEGER;
+"""
+
 _MIGRATIONS: dict[int, str] = {2: _FTS_MIGRATION, 3: _MARKERS_MIGRATION,
                                4: _PLANNING_MIGRATION, 5: _EXAMS_MIGRATION,
                                6: _GY25_MIGRATION, 7: _DATAGRUND_MIGRATION,
@@ -708,12 +731,13 @@ _MIGRATIONS: dict[int, str] = {2: _FTS_MIGRATION, 3: _MARKERS_MIGRATION,
                                18: _ELEVPAPPER_MIGRATION,
                                19: _LEKTIONSINNEHALL_MIGRATION,
                                20: _PLANERINGAR_MIGRATION,
-                               21: _HJALPMEDEL_MIGRATION}
+                               21: _HJALPMEDEL_MIGRATION,
+                               22: _PROVETS_CI_MIGRATION}
 
 # Migreringar som bara innehåller ALTER TABLE … ADD COLUMN. De körs sats för
 # sats så att en redan tillagd kolumn hoppas över i stället för att fälla hela
 # migreringen — se _apply_migrations.
-_ALTER_MIGRATIONER = {6, 12, 13, 14, 16, 17, 18, 21}
+_ALTER_MIGRATIONER = {6, 12, 13, 14, 16, 17, 18, 21, 22}
 
 _LESSON_SELECT = """
 SELECT l.*, g.namn AS group_namn, c.namn AS course_namn
@@ -2099,19 +2123,33 @@ def replace_lov(conn: sqlite3.Connection, poster: list[dict], *,
     return list_lov(conn)
 
 
+_KALPOST_SELECT = ("SELECT k.datum, k.tid, k.titel, k.slag, k.kalla, k.ci, "
+                   "k.ci_okant, g.namn AS klass "
+                   "FROM kalenderposter k LEFT JOIN groups g ON g.id = k.group_id ")
+
+
+def _kalenderpost(r: sqlite3.Row) -> dict:
+    """En rad i frontendens form (app/web/ui/kalender.js)."""
+    p = {"datum": r["datum"], "tid": r["tid"] or "", "titel": r["titel"],
+         "klass": r["klass"] or "", "kalla": r["kalla"]}
+    if r["slag"]:
+        p["slag"] = r["slag"]
+    # Samma NULL/''-skillnad som hjälpmedlen (se _PROVETS_CI_MIGRATION): NULL
+    # utelämnas — ingen synk har läst posten med Gy25-ögon — medan tom sträng
+    # kommer ut som en TOM LISTA, svaret «läst, inget centralt innehåll nämnt».
+    # Frontenden får koderna som en lista; kommatecknet är basens sätt att
+    # lagra dem, inte kalenderns sätt att bära dem.
+    if r["ci"] is not None:
+        p["ci"] = [k for k in str(r["ci"]).split(",") if k]
+    if r["ci_okant"]:
+        p["ci_okant"] = int(r["ci_okant"])
+    return p
+
+
 def list_kalenderposter(conn: sqlite3.Connection) -> list[dict]:
-    rows = conn.execute(
-        "SELECT k.datum, k.tid, k.titel, k.slag, k.kalla, g.namn AS klass "
-        "FROM kalenderposter k LEFT JOIN groups g ON g.id = k.group_id "
-        "ORDER BY k.datum, k.tid, k.id").fetchall()
-    out = []
-    for r in rows:
-        p = {"datum": r["datum"], "tid": r["tid"] or "", "titel": r["titel"],
-             "klass": r["klass"] or "", "kalla": r["kalla"]}
-        if r["slag"]:
-            p["slag"] = r["slag"]
-        out.append(p)
-    return out
+    rows = conn.execute(_KALPOST_SELECT
+                        + "ORDER BY k.datum, k.tid, k.id").fetchall()
+    return [_kalenderpost(r) for r in rows]
 
 
 def add_kalenderpost(conn: sqlite3.Connection, *, datum: str, titel: str,
@@ -2131,17 +2169,12 @@ def add_kalenderpost(conn: sqlite3.Connection, *, datum: str, titel: str,
             "VALUES (?, ?, ?, ?, ?, ?)",
             (datum, (tid or "").strip(), titel, group_id, slag or None, kalla))
     row = conn.execute(
-        "SELECT k.datum, k.tid, k.titel, k.slag, k.kalla, g.namn AS klass "
-        "FROM kalenderposter k LEFT JOIN groups g ON g.id = k.group_id "
-        "WHERE k.datum = ? AND k.tid = ? AND k.titel = ?",
+        _KALPOST_SELECT + "WHERE k.datum = ? AND k.tid = ? AND k.titel = ?",
         (datum, (tid or "").strip(), titel)).fetchone()
-    if row is None:
-        return None
-    p = {"datum": row["datum"], "tid": row["tid"] or "", "titel": row["titel"],
-         "klass": row["klass"] or "", "kalla": row["kalla"]}
-    if row["slag"]:
-        p["slag"] = row["slag"]
-    return p
+    # `ci` lämnas NULL: det här är posten LÄRAREN lade in i appen, inte en
+    # kalenderhändelse med en beskrivning att läsa. Punkterna hon vill ha står
+    # redan i dokumentet hon just godkände.
+    return None if row is None else _kalenderpost(row)
 
 
 def replace_kalenderposter(conn: sqlite3.Connection, poster: list[dict],
@@ -2152,10 +2185,21 @@ def replace_kalenderposter(conn: sqlite3.Connection, poster: list[dict],
     lärarens egna 'appen'-poster (godkända prov, tavlor) överlever — och bara
     inom det lästa fönstret, av samma skäl som i replace_lov.
     Klasserna slås upp före transaktionen, av samma skäl som i replace_schema."""
-    klara = [(p["datum"], (p.get("tid") or "").strip(), p["titel"],
-              get_or_create_group(conn, p.get("klass") or ""),
-              p.get("slag") or None, kalla)
-             for p in (poster or []) if p.get("datum") and p.get("titel")]
+    klara = []
+    for p in (poster or []):
+        if not p.get("datum") or not p.get("titel"):
+            continue
+        # Koderna skrivs bara när posten HAR nyckeln. En anropare som inte känner
+        # till kolumnen (ett äldre skript, ett test) ska lämna NULL kvar — inte
+        # råka påstå att beskrivningen är läst och tom. Samma resonemang som
+        # hjälpmedlen i replace_lektionsinnehall.
+        ci = p.get("ci")
+        klara.append((p["datum"], (p.get("tid") or "").strip(), p["titel"],
+                      get_or_create_group(conn, p.get("klass") or ""),
+                      p.get("slag") or None, kalla,
+                      None if ci is None else ",".join(ci) if isinstance(ci, (list, tuple))
+                      else str(ci).strip(),
+                      int(p.get("ci_okant") or 0) or None))
     with conn:
         if fran and till:
             conn.execute("DELETE FROM kalenderposter WHERE kalla = ? "
@@ -2164,8 +2208,8 @@ def replace_kalenderposter(conn: sqlite3.Connection, poster: list[dict],
             conn.execute("DELETE FROM kalenderposter WHERE kalla = ?", (kalla,))
         conn.executemany(
             "INSERT OR IGNORE INTO kalenderposter"
-            "(datum, tid, titel, group_id, slag, kalla) VALUES (?, ?, ?, ?, ?, ?)",
-            klara)
+            "(datum, tid, titel, group_id, slag, kalla, ci, ci_okant) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)", klara)
     return list_kalenderposter(conn)
 
 

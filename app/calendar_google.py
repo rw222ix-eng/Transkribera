@@ -20,7 +20,10 @@ import os
 import re
 import sys
 from datetime import date, datetime, timedelta
+from functools import lru_cache
 from pathlib import Path
+
+from app import course_data
 
 SCOPES = ["https://www.googleapis.com/auth/calendar.events",
           # Bara för att kunna LISTA kontots kalendrar i väljaren. Läraren kan
@@ -588,6 +591,159 @@ def hjalpmedel_ur_text(description: str | None, titel: str | None = None) -> str
     return ""
 
 
+# ------------------------------------------ provets centrala innehåll (v22) --
+# Läraren skriver i PROVETS beskrivning vilket centralt innehåll provet berör.
+# Det är samma punkter som gy-väljaren i planeringen håller (Gy25), och när hon
+# sedan skapar provet i appen ska de redan vara ikryssade — hon har ju redan
+# svarat på frågan, i kalendern, en gång.
+#
+# INTEGRITETSREGELN GÄLLER OFÖRÄNDRAD (se raden ~505): bara texten ÖVER
+# avdelaren läses, och det som lagras är en lista KODER ur en känd punktlista —
+# aldrig lärarens egna ord. En rad som inte känns igen lämnar inget spår mer än
+# att den räknas.
+#
+# INGEN MODELL i synken. Synken körs varje gång läraren trycker på knappen, ska
+# vara gratis och fungera utan nät; en språkmodell här hade gjort kalenderns
+# innehåll till en kostnad per läsning. Textmatchning räcker, och gränsen sätts
+# hellre för högt: ett förval med FÄRRE punkter rättar läraren med ett klick,
+# ett förval med FEL punkter kan hon inte se att hon behöver rätta.
+_CI_KOD = re.compile(r"\bG25-[A-Z0-9]{2,8}-[A-ZÅÄÖ]{2,6}-\d{1,2}\b", re.IGNORECASE)
+# Radens administrativa svans skalas bort innan den vägs: «Kap 3 · s. 40–48 ·
+# uppg. 3101–3130» säger ingenting om centralt innehåll, och en rad som bara
+# består av sådant ska inte räknas som «kändes inte igen».
+_KAPITEL = re.compile(r"\bkap(?:itel)?\.?\s*[\d.]+\s*(?:och\s*[\d.]+)?", re.IGNORECASE)
+_PUNKTLISTA = re.compile(r"^\s*[-*•·–—>•]+\s*")
+# En rad som är kortare än så säger för lite för att vägas mot en punktlista.
+_MINSTA_RAD = 6
+# … och en rad som ska matchas mot Skolverkets ORDAGRANNA text måste vara lång
+# nog att inte råka ligga i den: läraren som klistrar in punkten skriver hela
+# meningen, den som skriver «samband» gör det inte.
+_MINSTA_TEXTRAD = 30
+
+
+def _normalisera(text: str | None) -> str:
+    """Gemener, siffror och bokstäver, ett mellanslag mellan orden. Allt annat
+    är skiljetecken läraren och Skolverket sätter olika."""
+    return " ".join(re.sub(r"[^0-9a-zåäöéèü]+", " ", str(text or "").lower()).split())
+
+
+def _fras_i(kort: str, lang: str) -> bool:
+    """Står `kort` som en HEL ordföljd i `lang`? Ordgränserna är hela poängen:
+    «linjära ekvationer» får inte hittas i «linjära ekvationssystem», som är en
+    annan punkt på en annan nivå."""
+    if not kort or not lang:
+        return False
+    return f" {lang} ".find(f" {kort} ") >= 0
+
+
+@lru_cache(maxsize=1)
+def _gy25_nivaer() -> tuple[tuple[str, tuple[str, ...], tuple[tuple[str, str, str], ...]], ...]:
+    """Gy25-nivåerna som matchningen behöver dem:
+    (niva_id, kursens namnformer normaliserade, ((kod, kort, text) …)).
+
+    Punkterna kommer ur app/data/centralt_innehall/gy25_*.json via course_data —
+    SAMMA källa som seedas in i `course_content` och som gy.js speglas ur. Aldrig
+    ur gy.js: den filen är en generad kopia för webbläsaren, och att läsa en
+    spegel är att skaffa sig en andra sanning."""
+    ut = []
+    for n in course_data.gy_nivaer():
+        # Kursen står i lärarens schema i vilken som helst av sina former —
+        # «Ma2c» på en handskriven rad, «Matematik 2c» på en gammal, «Matematik,
+        # nivå 2c» ur kursregistret, kurskoden i en importfil.
+        namn = tuple(sorted({_normalisera(x) for x in (
+            n["kurs"], n["kurskod"], n["fullnamn"], n["gammal"],
+            f'{n["amne"]} {n["niva"]}') if x}))
+        punkter = tuple((p["kod"], _normalisera(p["kort"]), _normalisera(p["text"]))
+                        for o in n["omraden"] for p in o["punkter"])
+        ut.append((n["niva_id"], namn, punkter))
+    return tuple(ut)
+
+
+def _nivaer_for(kurser) -> list[tuple[str, tuple[tuple[str, str, str], ...]]]:
+    """Nivåerna gruppen faktiskt läser. Utan kurser blir listan tom och
+    ingenting matchas — appen gissar hellre ingen nivå än fel nivå."""
+    sokta = {_normalisera(k) for k in (kurser or []) if str(k or "").strip()}
+    return [(niva_id, punkter) for niva_id, namn, punkter in _gy25_nivaer()
+            if sokta & set(namn)]
+
+
+def _radens_karna(rad: str) -> str:
+    """Raden utan sidhänvisningar, uppgiftslistor, kapitelnummer och
+    listprickar — det som är kvar är det raden PÅSTÅR."""
+    kvar = _PUNKTLISTA.sub("", str(rad or ""))
+    kvar = _SIDOR.sub(" ", _UPPGIFTER.sub(" ", _KAPITEL.sub(" ", kvar)))
+    return _normalisera(kvar)
+
+
+def centralt_innehall_ur_text(description: str | None, titel: str | None,
+                              kurser) -> tuple[list[str], int]:
+    """(koder, okända rader) — vilka Gy25-punkter provets beskrivning nämner.
+
+    Tre vägar in, i fallande säkerhet:
+      1. KODEN själv (G25-M2C-ALG-4) — identitet, ingen tolkning alls. Läses
+         också ur rubriken, som är en rad läraren skriver lika medvetet.
+      2. Punktens KORTA etikett som en hel ordföljd, åt endera hållet:
+         «Andragradsekvationer» i raden, eller raden i «Potenser och
+         potensekvationer». Det är etiketten läraren själv ser i väljaren.
+      3. Skolverkets ORDAGRANNA punkttext, när raden ligger inuti den. Den som
+         klistrar in ämnesplanen ska bli förstådd.
+
+    Tvetydighet tystar: matchar en rad punkter på FLERA av gruppens nivåer går
+    det inte att avgöra vilken nivå läraren menar («Programmering» finns i både
+    1c och 2c), och då räknas raden som okänd i stället för att gissa. Koder är
+    undantagna — de bär sin nivå i sig.
+
+    Okända rader räknas bara när NÅGOT kändes igen. En beskrivning där ingenting
+    matchar handlar om något annat än centralt innehåll («Sal E107, ta med
+    räknare»), och att rapportera den som «5 rader kändes inte igen» hade varit
+    att klaga på en text som aldrig lovade något."""
+    nivaer = _nivaer_for(kurser)
+    if not nivaer:
+        return [], 0
+    text = _AVDELARE.split(str(description or ""), 1)[0]
+    koder: list[str] = []
+    kanda = {kod for _, punkter in nivaer for kod, _, _ in punkter}
+
+    def lagg(kod: str) -> None:
+        if kod not in koder:
+            koder.append(kod)
+
+    # Rubriken bidrar med koder men räknas aldrig som en okänd rad: den är en
+    # rubrik («NA26F: PROV 1 (kap 1 och 2)»), inte ett påstående om innehåll.
+    for m in _CI_KOD.finditer(str(titel or "")):
+        if m.group(0).upper() in kanda:
+            lagg(m.group(0).upper())
+
+    okanda = 0
+    for rad in text.splitlines():
+        traffar = [m.group(0).upper() for m in _CI_KOD.finditer(rad)
+                   if m.group(0).upper() in kanda]
+        if traffar:
+            for kod in traffar:
+                lagg(kod)
+            continue
+        karna = _radens_karna(rad)
+        if len(karna) < _MINSTA_RAD:
+            continue                    # sidor, uppgifter, en ensam kapitelsiffra
+        # «Ta med räknaren» är en fråga synken redan besvarar på annat håll
+        # (hjalpmedel_ur_text) och inget påstående om centralt innehåll — raden
+        # ska varken matchas eller anmälas som obegriplig.
+        if hjalpmedel_ur_text(rad):
+            continue
+        per_niva = {}
+        for niva_id, punkter in nivaer:
+            for kod, kort, ptext in punkter:
+                if (_fras_i(kort, karna) or _fras_i(karna, kort)
+                        or (len(karna) >= _MINSTA_TEXTRAD and _fras_i(karna, ptext))):
+                    per_niva.setdefault(niva_id, []).append(kod)
+        if len(per_niva) == 1:
+            for kod in next(iter(per_niva.values())):
+                lagg(kod)
+        else:
+            okanda += 1                 # inget alls, eller flera nivåer på en gång
+    return koder, (okanda if koder else 0)
+
+
 def serienyckel(h: dict) -> str:
     """Identiteten på en SERIE, inte på en instans: samma titel, samma slag av
     händelse. Mentorstiden varje måndag hela läsåret är en nyckel, inte
@@ -651,6 +807,25 @@ def tolka_handelser(handelser: list[dict], klasser: list[str] | None = None,
     # Räknas och rapporteras — den som undrar vart notiserna tog vägen ska få
     # svar av synken i stället för att leta.
     notiser = 0
+    # Provens beskrivningar, i minnet och bara under den här funktionen: det
+    # centrala innehållet kan inte avgöras förrän vi vet vilka KURSER klassen
+    # läser, och det vet vi först när schemat är genomgånget. Posten själv (en
+    # muterbar dict som redan ligger i `poster`) fylls i efterhand, se nedan.
+    provrader: list[tuple[dict, str, str, str]] = []
+    # Klassens kurser, som de kommer ur veckoschemat och ur rutorna appen redan
+    # har (schema_lektioner). Motsvarar group_id → course_id i basen.
+    kurser_per_klass: dict[str, set[str]] = {}
+    for (_, _, rut_klass), rut_kurs in rutor.items():
+        if rut_klass:
+            kurser_per_klass.setdefault(rut_klass, set()).add(rut_kurs)
+
+    def notera_post(h: dict, datum: str, tid: str, titel: str, klass: str) -> None:
+        """Lägg posten i listan och kom ihåg provens beskrivningar."""
+        p = _post(datum, tid, titel, klass)
+        poster.append(p)
+        # Nationella provet är inte lärarens att skriva och får inget förval.
+        if p.get("slag") in ("prov", "diagnos"):
+            provrader.append((p, h.get("description") or "", titel, klass))
 
     def notera_innehall(h: dict, datum: str, tid: str, klass: str, kurs: str) -> None:
         sidor = sidor_ur_beskrivning(h.get("description"))
@@ -728,6 +903,7 @@ def tolka_handelser(handelser: list[dict], klasser: list[str] | None = None,
                 sist[nyckel] = max(sist.get(nyckel, ""), s2[:10])
                 dagar_med.setdefault(nyckel, set()).add(s2[:10])
                 notera_innehall(h, s2[:10], rad["tid"], rad["klass"], rad["kurs"])
+                kurser_per_klass.setdefault(rad["klass"], set()).add(rad["kurs"])
                 if nyckel not in sedda:
                     sedda.add(nyckel)
                     schema.append(rad)
@@ -737,11 +913,11 @@ def tolka_handelser(handelser: list[dict], klasser: list[str] | None = None,
             # skriver «Hela dagen» när tiden är tom (klass.js).
             datum = start.get("date") or (start.get("dateTime") or "")[:10]
             if datum:
-                poster.append(_post(
-                    datum,
+                notera_post(
+                    h, datum,
                     "" if start.get("date")
                     else _tid(start["dateTime"], slut.get("dateTime") or ""),
-                    titel, _klass_och_kurs(titel, klasser, kurser)[0]))
+                    titel, _klass_och_kurs(titel, klasser, kurser)[0])
             continue
         if start.get("date"):                       # heldag
             fran = start["date"]
@@ -803,11 +979,12 @@ def tolka_handelser(handelser: list[dict], klasser: list[str] | None = None,
             sist[nyckel] = max(sist.get(nyckel, ""), datum)
             dagar_med.setdefault(nyckel, set()).add(datum)
             notera_innehall(h, datum, rad["tid"], rad["klass"], rad["kurs"])
+            kurser_per_klass.setdefault(rad["klass"], set()).add(rad["kurs"])
             if nyckel not in sedda:                 # samma vecka, många instanser
                 sedda.add(nyckel)
                 schema.append(rad)
             continue
-        poster.append(_post(datum, _tid(s, e), titel, klass))
+        notera_post(h, datum, _tid(s, e), titel, klass)
         # En återkommande tidsatt händelse som INTE blev en lektion är den
         # osäkraste sortens gissning: «Ma2c NA25 halvklass A» är en lektion med
         # en kursstavning vi inte känner, «Mentorstid NA25» är det inte.
@@ -835,6 +1012,21 @@ def tolka_handelser(handelser: list[dict], klasser: list[str] | None = None,
         r["undantag"] = _undantagsdagar(r["fran"], slut, r["dag"], dagar, lov)
     schema.sort(key=lambda r: (r["dag"], r["tid"], r["klass"]))
     lov.sort(key=lambda p: (p["fran"], p["till"]))
+    # Provens centrala innehåll, sist av allt: först nu vet vi vilka kurser
+    # klassen läser, och punktlistan hör till NIVÅN — ett prov i 2c ska aldrig
+    # kunna förvälja en punkt ur 1c bara för att orden liknar varandra.
+    #
+    # `ci` sätts på VARJE prov och diagnos, också när ingenting kändes igen: tom
+    # lista är svaret «beskrivningen är läst, den nämnde inget centralt
+    # innehåll», och det är ett annat svar än att posten aldrig lästs alls (se
+    # _PROVETS_CI_MIGRATION i app/db.py — samma NULL/''-skillnad som
+    # hjälpmedlen).
+    for post, beskrivning, provtitel, klass in provrader:
+        koder, okanda = centralt_innehall_ur_text(
+            beskrivning, provtitel, kurser_per_klass.get(klass) or [])
+        post["ci"] = koder
+        if okanda:
+            post["ci_okant"] = okanda
     poster.sort(key=lambda p: (p["datum"], p["tid"]))
     return {"schema": schema, "lov": lov, "poster": poster, "notiser": notiser,
             "innehall": sorted(innehall.values(),

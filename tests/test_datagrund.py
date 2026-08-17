@@ -42,6 +42,26 @@ def conn_v20(tmp_path):
     c.close()
 
 
+@pytest.fixture
+def conn_v21(tmp_path):
+    """Samma sak en version senare: en bas FÖRE v22, alltså kalenderposter utan
+    ci-kolumnerna och med ett prov redan i sig."""
+    fil = tmp_path / "gammal21.db"
+    c = db.connect(fil)
+    db.replace_kalenderposter(c, [
+        {"datum": "2026-10-01", "tid": "09:05–10:20", "titel": "PROV 1",
+         "klass": "NA25", "slag": "prov"}])
+    c.execute("ALTER TABLE kalenderposter DROP COLUMN ci")
+    c.execute("ALTER TABLE kalenderposter DROP COLUMN ci_okant")
+    c.execute("PRAGMA user_version=21")
+    c.commit()
+    c.close()
+    db._initialized.discard(str(fil))
+    c = db.connect(fil)
+    yield c
+    c.close()
+
+
 # Tomma fran/till = gäller tills vidare, formen ett handskrivet schema har.
 SCHEMA_RADER = [
     {"dag": 1, "tid": "08:15–09:00", "kurs": "Matematik 3c", "klass": "9A",
@@ -227,6 +247,48 @@ def test_migrationen_till_v21_lamnar_gamla_rader_osynkade(conn_v20):
     assert len(ut) == 1
     assert "hjalpmedel" not in ut[0]
     assert ut[0]["fran"] == 2
+
+
+def test_provets_innehall_ror_sig_genom_databasen_som_en_lista(conn):
+    """Koderna lagras kommaseparerade (en kolumn, ingen tabell — det är fyra
+    strängar per prov) men kommer ut som en LISTA, för det är formen
+    window.Kalender bär dem i."""
+    db.replace_kalenderposter(conn, [
+        {"datum": "2026-10-01", "tid": "09:05–10:20", "titel": "PROV 1",
+         "klass": "NA25", "slag": "prov",
+         "ci": ["G25-M2C-ALG-2", "G25-M2C-ALG-6"], "ci_okant": 2},
+        {"datum": "2026-10-02", "tid": "", "titel": "PROV 2", "klass": "NA25",
+         "slag": "prov", "ci": []},
+        {"datum": "2026-10-03", "tid": "", "titel": "Ämneslagsmöte", "klass": ""},
+    ])
+    ut = db.list_kalenderposter(conn)
+    assert ut[0]["ci"] == ["G25-M2C-ALG-2", "G25-M2C-ALG-6"]
+    assert ut[0]["ci_okant"] == 2
+    # Läst utan träff: tom lista, och ingen okänd-räkning att visa.
+    assert ut[1]["ci"] == []
+    assert "ci_okant" not in ut[1]
+    # Aldrig läst med Gy25-ögon: nyckeln finns inte alls.
+    assert "ci" not in ut[2]
+
+
+def test_lararens_egen_kalenderpost_far_inget_pastaende_om_innehall(conn):
+    """Posten läraren godkänner i appen (Kalender.lagg) är ingen
+    kalenderhändelse med en beskrivning att läsa — den ska komma ut UTAN
+    ci-nyckeln, inte med en tom lista."""
+    p = db.add_kalenderpost(conn, datum="2026-10-01", titel="Prov · NA25",
+                            klass="NA25", slag="prov")
+    assert "ci" not in p
+
+
+def test_migrationen_till_v22_lamnar_gamla_poster_osynkade(conn_v21):
+    """Kolumnerna läggs till på en bas som redan har prov i sig, och de posterna
+    ska komma ut UTAN nyckeln — inte med en tom lista. En migration som fyller i
+    '' hade påstått att varje gammalt prov är läst och saknar centralt
+    innehåll."""
+    ut = db.list_kalenderposter(conn_v21)
+    assert len(ut) == 1
+    assert "ci" not in ut[0]
+    assert ut[0]["titel"] == "PROV 1"
 
 
 def test_synk_utanfor_fonstret_raderar_inte_innehallet(conn):
@@ -437,6 +499,168 @@ def test_hjalpmedlen_lases_aldrig_under_avdelaren():
     klassens prov tvådelat — och framför allt får texten aldrig läsas."""
     assert calendar_google.hjalpmedel_ur_text(
         "s. 2–6\n———\n👤 Eleven skriver på dator enligt sitt åtgärdsprogram") == ""
+
+
+# ------------------------------- provets centrala innehåll ur beskrivningen --
+# Läraren har skrivit in vilket centralt innehåll varje PROV berör, i provets
+# egen kalenderhändelse. Punkterna är Gy25:s och hör till en NIVÅ — därför är
+# gruppens kurser en del av frågan, inte en detalj: «Programmering» finns i både
+# 1c och 2c, och ett prov i 2c får aldrig förvälja en punkt ur 1c.
+#
+# Testerna nedan låser KALIBRERINGEN, inte bara funktionen: vad som ska matcha,
+# och lika viktigt vad som medvetet INTE ska göra det.
+
+TVAC = ["Matematik, nivå 2c"]
+
+
+@pytest.mark.parametrize("text, vantat", [
+    # 1. Koden själv — identitet, ingen tolkning.
+    ("G25-M2C-ALG-2", ["G25-M2C-ALG-2"]),
+    ("g25-m2c-alg-2 och g25-m2c-sta-3", ["G25-M2C-ALG-2", "G25-M2C-STA-3"]),
+    # 2. Etiketten läraren ser i väljaren, som en hel ordföljd.
+    ("Andragradsekvationer", ["G25-M2C-ALG-6"]),
+    ("- Logaritmer\n- Rotekvationer", ["G25-M2C-ALG-2", "G25-M2C-ALG-7"]),
+    ("Provet handlar om kvadreringsregler.", ["G25-M2C-ALG-4"]),
+    # Åt andra hållet också: raden är kortare än etiketten men står i den.
+    ("Normalfördelning", ["G25-M2C-STA-2"]),
+    # 3. Skolverkets ordagranna text, för den som klistrar in ämnesplanen.
+    ("Metoder för att lösa andragradsekvationer och rotekvationer samt "
+     "bestämning av polynomfunktioners nollställen.",
+     ["G25-M2C-ALG-6", "G25-M2C-ALG-7"]),
+    # Ordgränsen: ekvationSSYSTEM är en annan punkt än ekvationer.
+    ("Linjära ekvationssystem", ["G25-M2C-ALG-1"]),
+    # Det som inte är innehåll säger ingenting: sidor, uppgifter, kapitel, sal.
+    ("s. 2–48 · uppg. 1101–1230", []),
+    ("Kap 1 och 2", []),
+    ("Sal E107", []),
+    ("", []),
+    (None, []),
+])
+def test_punkterna_som_kanns_igen_i_provets_beskrivning(text, vantat):
+    assert calendar_google.centralt_innehall_ur_text(text, "", TVAC)[0] == vantat
+
+
+def test_punkterna_hor_till_gruppens_egen_niva():
+    """Kalibreringens viktigaste gräns. «Logaritmer» finns i 2c, inte i 1c — och
+    en grupp som bara läser 1c ska inte få 2c:s punkt förvald bara för att ordet
+    står i kalendern. Utan kurser alls matchas ingenting: appen gissar hellre
+    ingen nivå än fel."""
+    assert calendar_google.centralt_innehall_ur_text(
+        "Logaritmer", "", ["Matematik, nivå 1c"]) == ([], 0)
+    assert calendar_google.centralt_innehall_ur_text("Logaritmer", "", []) == ([], 0)
+    # Kursen står i lärarens schema i flera former — alla ska duga.
+    for form in ("Ma2c", "Matematik 2c", "MATE2C00X", "Matematik, nivå 2c"):
+        assert calendar_google.centralt_innehall_ur_text(
+            "Logaritmer", "", [form])[0] == ["G25-M2C-ALG-2"]
+
+
+def test_tvetydig_rad_hoppas_over_och_raknas_som_okand():
+    """«Programmering» är en punkt i BÅDE 1c och 2c. Läser gruppen båda går det
+    inte att avgöra vilken läraren menar, och då är tystnad rätt svar: hellre
+    för få förvalda punkter än fel. Raden räknas i stället som okänd, så att
+    förvalet kan säga att den fanns."""
+    koder, okanda = calendar_google.centralt_innehall_ur_text(
+        "Logaritmer\nProgrammering", "",
+        ["Matematik, nivå 1c", "Matematik, nivå 2c"])
+    assert koder == ["G25-M2C-ALG-2"]
+    assert okanda == 1
+
+
+def test_okanda_rader_raknas_bara_nar_nagot_kandes_igen():
+    """En beskrivning där INGENTING matchar handlar om något annat än centralt
+    innehåll — att anmäla den som «tre rader kändes inte igen» vore att klaga på
+    en text som aldrig lovade något. Räkningen börjar först när minst en punkt
+    är funnen."""
+    assert calendar_google.centralt_innehall_ur_text(
+        "Vi ses i E107\nTa med legitimation\nProvet börjar 08:15", "", TVAC) == ([], 0)
+    koder, okanda = calendar_google.centralt_innehall_ur_text(
+        "Logaritmer\nAllt vi hann med i höstas\nOch lite till", "", TVAC)
+    assert koder == ["G25-M2C-ALG-2"]
+    assert okanda == 2
+    # Hjälpmedelsraden är inte en obegriplig innehållsrad: den frågan besvarar
+    # synken på annat håll (hjalpmedel_ur_text).
+    assert calendar_google.centralt_innehall_ur_text(
+        "Logaritmer\nTa med räknare", "", TVAC) == (["G25-M2C-ALG-2"], 0)
+
+
+def test_rubriken_bidrar_med_koder_men_aldrig_med_okanda_rader():
+    """Rubriken är en rubrik («NA26F: PROV 1 (kap 1 och 2)»), inte ett påstående
+    om innehåll — den får ge en kod men aldrig anmäla sig som obegriplig."""
+    assert calendar_google.centralt_innehall_ur_text(
+        "Logaritmer", "PROV 1 · G25-M2C-STA-2", TVAC) == (
+        ["G25-M2C-STA-2", "G25-M2C-ALG-2"], 0)
+    assert calendar_google.centralt_innehall_ur_text(
+        "Logaritmer", "NA26F: PROV 1 (kap 1 och 2)", TVAC) == (
+        ["G25-M2C-ALG-2"], 0)
+
+
+def test_innehallet_lases_aldrig_under_avdelaren():
+    """Samma integritetsregel som sidorna och hjälpmedlen: allt under ——— är
+    anteckningar om ENSKILDA ELEVER och får varken tolkas eller komma ut. Att en
+    elev kämpar med normalfördelningen är inte provets centrala innehåll."""
+    assert calendar_google.centralt_innehall_ur_text(
+        "Logaritmer\n———\n👤 Eleven klarar inte normalfördelning", "", TVAC) == (
+        ["G25-M2C-ALG-2"], 0)
+
+
+def test_provets_innehall_faller_ut_ur_synken():
+    """Hela vägen: två lektioner ger klassens kurs, provhändelsen ger
+    beskrivningen, och posten kommer ut med sina koder. `ci` sätts på VARJE prov
+    — tom lista är svaret «läst, ingenting nämnt» — men aldrig på något annat i
+    kalendern."""
+    ut = calendar_google.tolka_handelser([
+        _tid("2026-09-07", "09:05", "10:20", summary="Matematik, nivå 2c NA25",
+             location="E107", recurringEventId="r1"),
+        _tid("2026-09-14", "09:05", "10:20", summary="Matematik, nivå 2c NA25",
+             location="E107", recurringEventId="r1"),
+        _tid("2026-10-01", "09:05", "10:20", summary="NA25: PROV 1 (kap 1 och 2)",
+             description="Logaritmer\nAndragradsekvationer\nTa med räknare"),
+        _tid("2026-10-02", "13:00", "14:30", summary="Ämneslagsmöte"),
+    ], klasser=["NA25"], kurser=["Matematik, nivå 2c"], idag="2026-09-07")
+    prov = [p for p in ut["poster"] if p.get("slag") == "prov"]
+    assert len(prov) == 1
+    assert prov[0]["ci"] == ["G25-M2C-ALG-2", "G25-M2C-ALG-6"]
+    assert "ci_okant" not in prov[0]
+    # Mötet är inget prov och läses aldrig med Gy25-ögon.
+    assert all("ci" not in p for p in ut["poster"] if p.get("slag") != "prov")
+
+
+def test_provet_utan_igenkant_innehall_far_tom_lista_inte_ingen():
+    """Skillnaden mellan «läst utan träff» och «aldrig läst» måste bära hela
+    vägen ut — det är den som avgör om förvalet får säga något alls."""
+    ut = calendar_google.tolka_handelser([
+        _tid("2026-09-07", "09:05", "10:20", summary="Matematik, nivå 2c NA25",
+             recurringEventId="r1"),
+        _tid("2026-10-01", "09:05", "10:20", summary="NA25: PROV 1",
+             description="Vi ses i E107"),
+    ], klasser=["NA25"], kurser=["Matematik, nivå 2c"], idag="2026-09-07")
+    prov = [p for p in ut["poster"] if p.get("slag") == "prov"][0]
+    assert prov["ci"] == []
+
+
+def test_nationella_provet_far_inget_forval():
+    """NP är inte lärarens att skriva — det ligger i kalendern som en tid att
+    hålla, inte som en uppgift att göra (samma skäl som klass.js `egetProv`)."""
+    ut = calendar_google.tolka_handelser([
+        _tid("2026-09-07", "09:05", "10:20", summary="Matematik, nivå 2c NA25",
+             recurringEventId="r1"),
+        _tid("2026-11-10", "09:00", "12:00", summary="NP MAT nivå 2c NA25",
+             description="Logaritmer"),
+    ], klasser=["NA25"], kurser=["Matematik, nivå 2c"], idag="2026-09-07")
+    np = [p for p in ut["poster"] if p.get("slag") == "np"][0]
+    assert "ci" not in np
+
+
+def test_rutan_i_schemat_racker_som_kurskalla_for_provet():
+    """Gruppens kurs behöver inte stå i en lektionshändelse den här veckan —
+    schemat appen redan har (schema_lektioner) vet vad NA26F läser, och det är
+    det som gör provets punkter avgörbara även när kalendern bara bär provet."""
+    ut = calendar_google.tolka_handelser([
+        _tid("2026-10-01", "10:00", "11:30", summary="NA26F: PROV 1",
+             description="Funktionsbegreppet"),
+    ], klasser=["NA26F"], idag="2026-09-07", schema_nu=SCHEMAT)
+    prov = [p for p in ut["poster"] if p.get("slag") == "prov"][0]
+    assert prov["ci"] == ["G25-M1C-ALG-2"]
 
 
 def test_innehallet_hanger_pa_lektionstillfallet_inte_pa_serien():
