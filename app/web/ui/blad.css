@@ -183,6 +183,17 @@
 /* Tavlan ritas i sin verkliga bredd och krymps efteråt med transform (se
    blad.js). Rutan bär den skalade höjden så traven inte får ett hål under sig. */
 .tavruta{position:relative;width:100%;overflow:hidden}
+/* …men höjden höll inte i förhandsvisningen. #fh-ark är en flexlåda, så traven
+   blir ett flex-item som kläms till rutans höjd i stället för att växa med sitt
+   innehåll. Krympningen fördelas på travens barn, och det enda krympbara barnet
+   är tavrutan: `overflow:hidden` ger den min-height 0, medan bladen har sin
+   min-content-höjd (~933px) i botten. Hela överskottet landade alltså på tavlan,
+   som mätte 0 px trots sin inline-höjd — lösningsbladen syntes, tavlan inte.
+   Ingen enskild regel var boven, det var flexalgoritmen; `!important` på höjden
+   hjälper inte eftersom flex-basis/min-height styr huvudaxeln. Det här är fixen:
+   tavlan får inte krympa. (Granskningens .gdok.bladtrav har egen kontext och
+   ska inte röras.) */
+.bladtrav .tavruta{flex-shrink:0}
 .bladtrav .tavhost{width:1440px}
 .bladtrav .tavhost .boards-container{justify-content:flex-start}
 /* Spaltlinjen på en riktig tavla är dragen, inte streckad. */
