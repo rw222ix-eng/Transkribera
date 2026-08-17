@@ -177,6 +177,47 @@ test("facit ber om sin egen fil — och bokens lösningar om ingen alls", async 
   expect(boken.exam_id).toBeUndefined();
 });
 
+test("bokens lösningsförslag följer med som ark, inte som ett saknas", async ({ page }) => {
+  /* Raden fanns i högen men skickades utan id och hamnade i `saknas` — sant,
+     men till ingen nytta: läraren såg arken på skärmen och fick dem aldrig på
+     papper. De ritas nu av som tavlan och skickas som en LISTA PNG:er, ett ark
+     per sida, i EN rad (svarsfacit och bedömd elevlösning är samma papper för
+     läraren). Skillnaden mot testet ovanför är `poster`: utan nivåerna vet
+     BokLosning inte vilken form uppgifterna ska få och sätter inget ark. */
+  const blad = papper({
+    typ: "Arbetsblad", moment: "derivata", wb: null, provId: 7,
+    bokuppg: {
+      bok: "Matematik 5000+ 3c", sidor: "244–247", avsnitt: "3.2 Derivata",
+      uppg: [3101, 3102, 3110], bort: [], remsa: "3101–3102, 3110",
+      losning: { niva: "Nivå 2 och 3", antal: 3, uppg: [3101, 3102, 3110],
+                 remsa: "3101–3102, 3110",
+                 poster: [{ nr: 3101, niva: 1 }, { nr: 3102, niva: 2 },
+                          { nr: 3110, niva: 3 }] },
+    },
+  });
+  const anrop = await fejka(page, [rad(1, blad)]);
+  await page.goto("/");
+  await hydrerad(page);
+  await expect.poll(() => page.evaluate(() => window.Dokument.sparade().length)).toBe(1);
+
+  await page.getByRole("tab", { name: "Planering" }).click();
+  await page.evaluate(() => window.Tryck.oppna());
+  await expect(page.locator("#tryckruta")).toBeVisible();
+  await page.locator("#tryckskicka").click();
+  await expect.poll(() => anrop.length, { timeout: 30_000 }).toBe(1);
+
+  const boken = anrop[0].dokument.find(d => d.namn.includes("boken"));
+  expect(boken, JSON.stringify(anrop[0].dokument)).toBeTruthy();
+  expect(boken.exam_id).toBeUndefined();      // aldrig originalets egen pdf
+  expect(Array.isArray(boken.png)).toBe(true);
+  expect(boken.png).toHaveLength(2);          // svarsfacit + bedömd elevlösning
+  boken.png.forEach(p => {
+    const m = png(p);
+    expect(m.bredd).toBe(794 * 2);            // arket i tryckt bredd, 2×
+    expect(m.byte).toBeGreaterThan(20_000);
+  });
+});
+
 test("utan server spelas prototypens kvittering upp som förut", async ({ page }) => {
   await page.route("**/api/var-kors", route => route.abort());
   const natanrop = [];

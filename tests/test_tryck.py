@@ -245,6 +245,38 @@ def test_tavlan_som_bild_kraver_en_riktig_png(tmp_path):
     assert tryck.png_till_pdf(trasig, tmp_path, "t2") is None
     assert tryck.png_till_pdf("data:image/png;base64,aGVq", tmp_path, "t3") is None
     assert tryck.png_till_pdf("inte en dataurl", tmp_path, "t4") is None
+    assert tryck.png_till_pdf([], tmp_path, "t5") is None
+
+
+def test_bokens_losningsforslag_blir_flera_sidor_i_en_fil(tmp_path):
+    """Bokens lösningsförslag är inte ETT ark utan flera — svarsfacit, bedömd
+    elevlösning, nivå 3 — och de hör till EN rad i utskriftsrutan. Raden ska
+    därför bli en fil med ett ark per sida, inte tre rader i kvittot.
+
+    Och: alla eller ingen. Ett lösningsförslag som tyst tappade sin andra sida
+    upptäcks i klassrummet, med klassen på väg in."""
+    ut = tryck.png_till_pdf([_DATA_URL, _DATA_URL, _DATA_URL], tmp_path, "b")
+    assert ut is not None and tryck._sidor(ut) == 3
+    trasig = tryck._DATA_PREFIX + base64.b64encode(
+        tryck._PNG_MAGIC + b"resten spelar ingen roll").decode()
+    assert tryck.png_till_pdf([_DATA_URL, trasig], tmp_path, "b2") is None
+    # Taket är mot en klient som skickar en hel bok, inte mot lärarens papper.
+    assert tryck.png_till_pdf(
+        [_DATA_URL] * (tryck.MAX_SIDOR + 1), tmp_path, "b3") is None
+
+
+def test_bokens_ark_kommer_med_i_paketet_som_en_rad(client, monkeypatch):
+    """Raden skickades förut utan id och hamnade i `saknas`. Nu bär den sina
+    ark som en lista PNG:er — en rad i kvittot, tre sidor i filen."""
+    eid = _prov(client, monkeypatch, sidor=2)
+    res = _done(client.post("/api/tryck", json={"dokument": [
+        {"namn": "Arbetsbladet", "exam_id": eid, "kopior": 1},
+        {"namn": "Lösningsförslag · boken s. 244–247", "typ": "Facit",
+         "png": [_DATA_URL, _DATA_URL], "kopior": 1}]}))
+    assert res["saknas"] == []
+    assert [d["namn"] for d in res["dokument"]] == [
+        "Arbetsbladet", "Lösningsförslag · boken s. 244–247"]
+    assert res["dokument"][1]["sidor"] == 2
 
 
 def test_tavlans_sida_ar_ett_a4_och_bilden_forlustfri(tmp_path):

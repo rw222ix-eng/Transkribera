@@ -58,7 +58,13 @@
           v: r.v, bok: true,
           namn: `Lösningsförslag · boken s. ${r.v.bokuppg.sidor}`, typ: 'Facit',
           under: `${l.antal} uppgifter (${l.niva.toLowerCase()}) · uppg ${l.remsa} · din kopia · enkelsidig`,
-          antal: 1, sidor: Math.max(1, Math.ceil(l.antal / 4)), med: true
+          /* Sidorna är arken BokLosning faktiskt sätter — svarsfacit, bedömd
+             elevlösning per nivå 3-uppgift, nivå 3-facit — inte en gissning ur
+             uppgiftsantalet. Paginerar ett ark sig blir det ändå en sida till;
+             raden är alltså en undre gräns, och kvittot räknar det riktiga. */
+          antal: 1, med: true,
+          sidor: Math.max(1, (window.BladBild && window.BladBild.antal(r.v))
+                              || Math.ceil(l.antal / 4))
         });
       });
     rita();
@@ -129,9 +135,19 @@
       /* Lösningsförslaget till BOKENS uppgifter ritas bara i webbläsaren
          (BokLosning) — det finns ingen byggd fil på servern. Raden delar
          dokument med sitt original, så utan den här avfarten skulle den få
-         originalets EGEN pdf under bokens namn. Utan id hamnar den i `saknas`
-         och kvittot säger det, vilket är sant. */
-      if (r.bok) return d;
+         originalets EGEN pdf under bokens namn.
+         Förr slutade avfarten här: utan id hamnade raden i `saknas`, och
+         kvittot sa det. Sant, men inte till någon nytta — läraren såg arken på
+         skärmen och fick dem aldrig på papper. Nu ritas de av precis som
+         tavlan (blad-bild.js) och skickas som en lista PNG:er, ett ark per
+         sida. `saknas`-vägen står kvar som fallback: går avritningen inte
+         igenom skickas ingen bild, och kvittot säger det igen. */
+      if (r.bok) {
+        if (!window.BladBild) return d;
+        return window.BladBild.boklos(r.v)
+          .then(ark => (ark.length ? Object.assign(d, { png: ark.map(a => a.png) }) : d))
+          .catch(() => d);
+      }
       /* Anteckningarna ligger i samma tabell som proven på servern, så
          paketets exam-gren hämtar deras PDF utan en rad ny kod — men utan
          bedömning och utan anpassad kopia: det finns ingen bedömning att lägga
@@ -163,8 +179,8 @@
     knapp.disabled = true;
     /* Avritningen av tavlan tar sina hundradelar och sker före anropet —
        knappen ska säga vad den gör, inte stå tyst. */
-    knapp.textContent = rader.some(r => r.med && r.typ === 'Tavla')
-      ? 'Ritar av tavlan …' : 'Bygger paketet …';
+    knapp.textContent = rader.some(r => r.med && (r.typ === 'Tavla' || r.bok))
+      ? 'Ritar av …' : 'Bygger paketet …';
     const ater = () => { knapp.textContent = text; knapp.disabled = false; };
     paketkropp().then(kropp => {
       knapp.textContent = 'Bygger paketet …';

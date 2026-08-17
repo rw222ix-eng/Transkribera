@@ -86,7 +86,10 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 emit({"type": "log", "msg": f"Hämtar {namn} …"})
                 pdf = None
                 if rad.get("png"):
-                    pdf = tryck.png_till_pdf(str(rad["png"]), arbete, f"tavla-{i:02d}")
+                    # En sträng är tavlan, en lista är bokens lösningsförslag:
+                    # flera ark som hör till EN rad i högen. png_till_pdf tar
+                    # båda och lägger ett ark per sida.
+                    pdf = tryck.png_till_pdf(rad["png"], arbete, f"tavla-{i:02d}")
                 elif rad.get("exam_id"):
                     provpdf, view = _exam_pdf(rad["exam_id"])
                     if rad.get("anpassad") and view and view.get("exam"):

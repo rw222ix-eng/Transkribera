@@ -43,6 +43,9 @@ MAX_PNG_BYTES = 30 * 1024 * 1024
 # Taket i PIXLAR, inte bara i byte: en PNG på några kilobyte kan packa upp till
 # gigabyte (en «dekompressionsbomb»). Tavlan i 2× är omkring 3 Mpx.
 MAX_PIXLAR = 60_000_000
+# Ett lösningsförslag är två–fyra ark. Taket är mot skrivfel och mot en klient
+# som skickar en hel bok, inte mot lärarens papper.
+MAX_SIDOR = 40
 # A4 i punkter (72 dpi) — PDF:ens eget mått. Tavlan läggs på sidan, inte
 # tvärtom: en sida i bildens storlek går inte att stoppa i en skrivare.
 A4_PT = (595.276, 841.89)
@@ -66,19 +69,10 @@ def _platta(bild):
     return bild if bild.mode == "RGB" else bild.convert("RGB")
 
 
-def png_till_pdf(dataurl: str, ut_dir: Path, stam: str) -> Path | None:
-    """Tavlans bild på ett A4. Returnerar None om PNG:en inte är en PNG.
-
-    Ingen LaTeX. Sidan byggdes förut genom att skriva PNG:en till disk och
-    köra Tectonic på ett ``\\includegraphics`` — vilket band tavlans
-    nedladdning till en 100 MB motor som bara skulle lägga en bild på ett
-    papper, och gjorde den omöjlig på en maskin där cachen inte är seedad.
-    pdfium (pypdfium2, redan här för sidräkningen och hopfogningen) lägger
-    bilden på sidan direkt och komprimerar den FlateDecode — alltså
-    FÖRLUSTFRITT. Det är inte en detalj: en tavla är tunn handstil på vitt, och
-    JPEG — som Pillows egen PDF-export hade gett — ringlar runt varje streck.
-    """
-    if not dataurl.startswith(_DATA_PREFIX):
+def _oppna_png(dataurl: str):
+    """En data:-URI till en Pillow-bild, eller None. Allt som inte är en PNG
+    faller här: fel prefix, trasig base64, fel magiska byte, för stor fil."""
+    if not isinstance(dataurl, str) or not dataurl.startswith(_DATA_PREFIX):
         return None
     try:
         rå = base64.b64decode(dataurl[len(_DATA_PREFIX):], validate=True)
@@ -86,7 +80,6 @@ def png_till_pdf(dataurl: str, ut_dir: Path, stam: str) -> Path | None:
         return None
     if not rå.startswith(_PNG_MAGIC) or len(rå) > MAX_PNG_BYTES:
         return None
-    import pypdfium2 as pdfium
     from PIL import Image, UnidentifiedImageError
     try:
         bild = Image.open(io.BytesIO(rå))
@@ -102,24 +95,53 @@ def png_till_pdf(dataurl: str, ut_dir: Path, stam: str) -> Path | None:
         # Rätt magiska byte men trasig resten — klienten har ritat av något
         # annat än tavlan, och det ska sägas, inte sparas.
         return None
-    bild = _platta(bild)
-    b, h = bild.size
-    skala = min(A4_PT[0] / b, A4_PT[1] / h)
+    return _platta(bild)
+
+
+def png_till_pdf(dataurl, ut_dir: Path, stam: str) -> Path | None:
+    """Bilder på var sitt A4. Returnerar None om någon inte är en PNG.
+
+    Ingen LaTeX. Sidan byggdes förut genom att skriva PNG:en till disk och
+    köra Tectonic på ett ``\\includegraphics`` — vilket band tavlans
+    nedladdning till en 100 MB motor som bara skulle lägga en bild på ett
+    papper, och gjorde den omöjlig på en maskin där cachen inte är seedad.
+    pdfium (pypdfium2, redan här för sidräkningen och hopfogningen) lägger
+    bilden på sidan direkt och komprimerar den FlateDecode — alltså
+    FÖRLUSTFRITT. Det är inte en detalj: en tavla är tunn handstil på vitt, och
+    JPEG — som Pillows egen PDF-export hade gett — ringlar runt varje streck.
+
+    ``dataurl`` får vara en lista. Bokens lösningsförslag är inte ETT ark utan
+    flera — svarsfacit, bedömd elevlösning, nivå 3 — och de hör till EN rad i
+    utskriftsrutan. Ett anrop per ark hade gjort raden till tre rader i
+    kvittot och tre filer i separatmappen för något läraren ser som ett
+    papper. Alla eller ingen: en enda trasig bild fäller hela raden, för ett
+    lösningsförslag som tyst tappade sin andra sida upptäcks i klassrummet.
+    """
+    lista = [dataurl] if isinstance(dataurl, str) else list(dataurl or [])
+    if not lista or len(lista) > MAX_SIDOR:
+        return None
+    bilder = [_oppna_png(d) for d in lista]
+    if any(b is None for b in bilder):
+        return None
+    import pypdfium2 as pdfium
     ut_dir.mkdir(parents=True, exist_ok=True)
     mal = ut_dir / f"{stam}.pdf"
     doc = pdfium.PdfDocument.new()
     try:
-        sida = doc.new_page(*A4_PT)
-        objekt = pdfium.PdfImage.new(doc)
-        objekt.set_bitmap(pdfium.PdfBitmap.from_pil(bild))
-        # Matrisen ÄR placeringen: pdfium ritar bilden i enhetskvadraten, så
-        # matrisen bär både storleken och hörnet. Största möjliga med bevarad
-        # proportion, centrerad — samma sida som mallen satte.
-        objekt.set_matrix(pdfium.PdfMatrix(
-            b * skala, 0, 0, h * skala,
-            (A4_PT[0] - b * skala) / 2, (A4_PT[1] - h * skala) / 2))
-        sida.insert_obj(objekt)
-        sida.gen_content()
+        for bild in bilder:
+            b, h = bild.size
+            skala = min(A4_PT[0] / b, A4_PT[1] / h)
+            sida = doc.new_page(*A4_PT)
+            objekt = pdfium.PdfImage.new(doc)
+            objekt.set_bitmap(pdfium.PdfBitmap.from_pil(bild))
+            # Matrisen ÄR placeringen: pdfium ritar bilden i enhetskvadraten,
+            # så matrisen bär både storleken och hörnet. Största möjliga med
+            # bevarad proportion, centrerad — samma sida som mallen satte.
+            objekt.set_matrix(pdfium.PdfMatrix(
+                b * skala, 0, 0, h * skala,
+                (A4_PT[0] - b * skala) / 2, (A4_PT[1] - h * skala) / 2))
+            sida.insert_obj(objekt)
+            sida.gen_content()
         doc.save(str(mal))
     finally:
         doc.close()
