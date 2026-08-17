@@ -753,8 +753,16 @@
   function ritaFokus() {
     const ruta = $('#fokusruta');
     if (!ruta) return;
+    /* Provet och diagnosen mäter — de frågar varken vad som var svårt eller
+       vad som ska väga tyngst. Ett prov som lutas åt det klassen inte kunde
+       är inte representativt, åt något håll, och en diagnos som vinklas mäter
+       inte läget. Båda rutorna går därför ner tillsammans; plan.js utelämnar
+       samtidigt fälten ur begäran (window.Helhetstyp äger regeln). */
+    const helhet = !!(window.Helhetstyp && window.Helhetstyp());
+    const svart = $('#svartruta');
+    if (svart) svart.hidden = helhet;
     const n = $('#kvittoextra').children.length;
-    ruta.hidden = n < 1;
+    ruta.hidden = helhet || n < 1;
     const f = $('#fokus');
     /* Med en enda källa finns inget att väga mot något annat — frågan är då vad
        som ska hållas, inte vad som ska väga tyngst. */
@@ -767,5 +775,5 @@
   new MutationObserver(ritaFokus).observe($('#kvittoextra'), { childList: true });
   new MutationObserver(ritaFokus).observe($('#valdalektioner'), { childList: true });
   ritaFokus();
-  window.Kallor = { satt, ritaKvitto, ritaDorrar, speglaForlaga, ritaProvlista, speglaResultat };
+  window.Kallor = { satt, ritaKvitto, ritaDorrar, speglaForlaga, ritaProvlista, speglaResultat, ritaFokus };
 })();

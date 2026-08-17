@@ -36,6 +36,24 @@
      hade följt med in i varje JSON.stringify-kopia och ut till servern. */
   const sparasNu = new WeakMap();
   const serverPa = () => !!(window.API && window.API.pa);
+
+  /* ══════════ TYPER SOM MÄTER I STÄLLET FÖR ATT ÖVA ══════════
+     Provet och diagnosen ska pröva HELHETEN klassen tränat på. Allt som
+     smalnar av underlaget till en lektionsgest hör därför inte hemma i dem:
+     uppgiftsurvalet på de uppslagna sidorna («de här sex hoppar vi över»),
+     lärarens ord om vad som var svårt, och viktningen mellan källorna. Ett
+     prov som skrivs efter vad som kändes svårt är inte längre representativt
+     — åt något håll — och en diagnos som vinklas mäter inte läget utan
+     bekräftar en gissning.
+     Tavlan, arbetsbladet, gruppuppgiften och anteckningarna är övning och
+     stöd: där ÄR lärarens blick underlaget, och de rörs inte. */
+  const HELHETSTYPER = ['Prov', 'Diagnos'];
+  const helhetstyp = t => HELHETSTYPER.includes(t || valt('skrivtyp'));
+  /* Rutorna och urvalsblocket bor i andra filer (kallor.js, uppgifter.js) men
+     frågan om de ska stå framme är den här filens — den är den enda som vet
+     vilken typ som skrivs. */
+  window.Helhetstyp = helhetstyp;
+
   /* Bokdörren som KÄLLA, i den form varje rutt läser den: `bok: {id, fran,
      till, remsa, bortremsa}`. Ligger här uppe och inte i skrivknappens
      hanterare för att OMSKRIVNINGEN behöver den lika mycket som skrivningen —
@@ -43,13 +61,19 @@
      förr fick iterationen ingen bok alls med sig.
      `remsa` är lärarens eget urval («1101–1103, 1105–1119»), `bortremsa` de
      medvetet överhoppade. Skickas bara när dörren är öppen och boken är en
-     riktig, inläst bok — annars finns inga sidor att läsa på servern. */
+     riktig, inläst bok — annars finns inga sidor att läsa på servern.
+     SPANNET går alltid, remsorna aldrig för provet och diagnosen: sidorna är
+     helheten, uppgifterna på dem har klassen redan räknat. Servern lägger till
+     sitt urvalsblock först när `remsa` finns (routes_planning.bok_urval), så
+     utelämnandet ger ord för ord den prompt som gick i väg innan panelen
+     fanns — inga kassetter blir omspelningsmogna. */
   function bokKalla() {
     const s = window.Uppslag && window.Uppslag.spann ? window.Uppslag.spann() : null;
     const id = s && window.Bok && window.Bok.bokId ? window.Bok.bokId(s.bok) : null;
     const oppen = document.querySelector('.kalla[data-dorr="bok"][aria-pressed="true"]');
     if (!id || !oppen) return {};
-    const u = window.Uppgifter && window.Uppgifter.urval ? window.Uppgifter.urval() : null;
+    const u = helhetstyp() || !(window.Uppgifter && window.Uppgifter.urval)
+      ? null : window.Uppgifter.urval();
     return { bok: Object.assign({ id, fran: s.fran, till: s.till },
       u ? { remsa: u.remsa || '', bortremsa: u.bortremsa || '' } : {}) };
   }
@@ -288,21 +312,25 @@
   /* Utgår pappret från boken är lösningsförslaget till BOKENS uppgifter något
      annat än facit till de uppgifter appen själv skrivit: eleverna räknar i
      boken, läraren räknar dem också, och det är nivå 2 och 3 som behöver en
-     skriven lösning — de lätta löser sig i huvudet. Raden hör därför till alla
-     typer som bär uppgifter, och den finns bara när ett spann i boken är valt.
+     skriven lösning — de lätta löser sig i huvudet. Raden hör därför till de
+     typer som är LEKTIONSMATERIAL, och den finns bara när ett spann i boken är
+     valt.
      Anteckningarna bär inga: de är lärarens stödpapper, och ett lösningsblad
-     till bokens uppgifter hör inte dit. */
-  const MED_UPPGIFTER = ['Tavla', 'Prov', 'Arbetsblad', 'Gruppuppgift'];
+     till bokens uppgifter hör inte dit. Provet stod med i listan förut och
+     hörde aldrig hemma där: provet har sitt eget lösningsförslag och sitt
+     formelblad (bilagor-raden ovan), och bokens lösningsblad är det klassen
+     övade med — inte det de prövas på. Diagnosen har aldrig haft raden. */
+  const MED_BOKLOSNING = ['Tavla', 'Arbetsblad', 'Gruppuppgift'];
   const harBokuppg = () => !!(window.Uppgifter && window.Uppgifter.finns());
   /* Att slå PÅ lösningsförslagen och att säga vilka uppgifter som får ett var en
      switch och en segmentväljare på var sin rad — men det är en fråga med ett
      svar: till vilka. «Inga» ÄR av-läget. Fälten under lever kvar oförändrade
      (`boklosning` bool, `boklosniva` sträng) eftersom uppgifter.js läser båda —
      de hålls i takt av normalisera() i ritaTypval(). */
-  MED_UPPGIFTER.forEach(t => TYPVAL[t].push(
+  MED_BOKLOSNING.forEach(t => TYPVAL[t].push(
     { id: 'boklosniva', namn: 'Lösningar till bokens uppgifter', typ: 'seg', val: ['Inga', 'Alla', 'Nivå 2 och 3', 'Bara nivå 3'], bara: harBokuppg }
   ));
-  MED_UPPGIFTER.forEach(t => Object.assign(inst[t], { boklosning: true, boklosniva: 'Nivå 2 och 3' }));
+  MED_BOKLOSNING.forEach(t => Object.assign(inst[t], { boklosning: true, boklosniva: 'Nivå 2 och 3' }));
   const STANDARD = JSON.parse(JSON.stringify(inst));
   /* Lektionens längd står i schemat: «08:15–09:00» är 45 minuter. */
   function schemaminuter() {
@@ -359,6 +387,13 @@
      ihop här så att raden och pappret aldrig säger olika saker. */
   function normalisera(s) {
     if (!s) return;
+    /* Typer utan raden ska inte FÅ fälten av att vägas ihop. Provet ärvde dem
+       annars tillbaka på första omritningen — «boklosning: true» på ett upplägg
+       som inte har någon nivåväljare — och ett sparat prov hade fått ett
+       lösningsblad till bokens uppgifter som ingen bett om. Ett gammalt prov som
+       bär fälten sedan tidigare vägs däremot ihop som förut, så att pappret och
+       raden aldrig säger olika saker. */
+    if (s.boklosning === undefined && s.boklosniva === undefined) return;
     if (s.boklosning === false) s.boklosniva = 'Inga';
     else if (s.boklosniva === 'Inga') s.boklosning = false;
     else s.boklosning = true;
@@ -560,6 +595,14 @@
        stället när panelen stängs (valjElev/valjTranskript). */
     if ($('#typval .valjpanel')) return;
     const typ = valt('skrivtyp'), s = inst[typ];
+    /* Ett ÄRVT upplägg kan bära fält typen inte längre har: ett prov skrivet
+       innan bokens lösningsblad togs bort ur provets rader (och ett omprov på
+       det) lägger sin `boklosning`/`boklosniva` i inst.Prov, och
+       `Object.assign(inst[typ], STANDARD[typ])` städar inte bort det som inte
+       står i standarden. Fälten stryks här, vid det enda ställe som vet vilka
+       rader typen faktiskt har — annars hade normalisera() vägt ihop dem igen
+       och ett nyskrivet prov fått ett lösningsblad ingen bett om. */
+    if (!MED_BOKLOSNING.includes(typ)) { delete s.boklosning; delete s.boklosniva; }
     normalisera(s);
     const lista = (TYPVAL[typ] || []).filter(k => !k.bara || k.bara(s));
     if (typ === 'Tavla') {
@@ -1141,11 +1184,21 @@
      klassens blad; en elev bär sitt id och sitt namn. */
   let bladNu = null, bladko = [];
   let forraTypen = null;
+  /* Kontrollerna som hör till en ÖVNING och inte till en mätning. De bor i
+     kallor.js (de två rutorna längst ner i steg 3) och uppgifter.js
+     (urvalsblocket i bokdörren), men bara den här filen vet vilken typ som
+     skrivs — så frågan ställs härifrån och besvaras där. Båda funktionerna är
+     idempotenta och får anropas hur ofta som helst. */
+  function speglaHelheten() {
+    if (window.Kallor && window.Kallor.ritaFokus) window.Kallor.ritaFokus();
+    if (window.Uppgifter && window.Uppgifter.spegla) window.Uppgifter.spegla();
+  }
   window.planKoll = () => {
     const typ = valt('skrivtyp');
     if (typ === 'Diagnos' && forraTypen !== 'Diagnos') forkryssaAlla();
     forraTypen = typ;
     ritaTypval();
+    speglaHelheten();
     planKoll();
   };
   moment.addEventListener('input', planKoll);
@@ -1446,12 +1499,15 @@
         /* Utfallet och viktningen följer med pappret: canvasen visar dem som
            källor, och nästa ändring vet vad som vägde tyngst när det skrevs. */
         resultat: resDok ? { namn: dokNamn(resDok), datum: resDok.datum, klass: resDok.klass || '', rattat: JSON.parse(JSON.stringify(resDok.rattat || {})) } : null,
-        fokus: ($('#fokus') || {}).value ? $('#fokus').value.trim() : '',
+        /* Provet och diagnosen bär dem inte ens på pappret: canvasens källrutor
+           ska visa vad dokumentet FAKTISKT skrevs ur, och de två fälten gick
+           aldrig med i begäran för de typerna (se egnaOrd). */
+        fokus: !helhetstyp(vtyp) && ($('#fokus') || {}).value ? $('#fokus').value.trim() : '',
         /* Lärarens egna ord om vad klassen hade svårt för. Ligger bredvid
            viktningen av samma skäl: canvasens källor ska kunna visa vad pappret
            skrevs UR, och det här är den enda källan appen inte kan härleda ur
            ett spår — utan inspelning finns ingen transkript-svårighet alls. */
-        svart: ($('#svart') || {}).value ? $('#svart').value.trim() : '',
+        svart: !helhetstyp(vtyp) && ($('#svart') || {}).value ? $('#svart').value.trim() : '',
         kontext: 'start', niva: false, svarighet: 0, andrat: [], anteckning: 'Första utkastet'
       };
     v.andrat = [];
@@ -1896,7 +1952,14 @@
        Fälten skickas bara när de är ifyllda, och det är inte snålhet — servern
        lägger till sitt promptblock först när fältet finns, så att en tom ruta
        ger exakt den prompt som gick i väg innan rutorna byggdes. */
+    /* Provet och diagnosen får INGEN av dem — och det är inte bara rutorna som
+       göms (se speglaHelheten): fälten kan bära text från en tidigare typ i
+       samma session, och en gömd ruta som ändå skickas är den värsta sorten.
+       Utelämnandet är gratis mot kassetterna av samma skäl som bokurvalets:
+       routes_planning.lararens_ord ger tom sträng för ett fält som inte finns,
+       och anroparen lägger då inget block alls. */
     const egnaOrd = () => {
+       if (helhetstyp(typ)) return {};
        const t = id => (($(id) || {}).value || '').trim();
        const s = t('#svart'), f = t('#fokus');
        return { ...(s ? { svart: s } : {}), ...(f ? { fokus: f } : {}) };
@@ -2020,8 +2083,12 @@
            sker: fältet går med i begäran och blir ett eget block i prompten.
            «Läser lärarens svårigheter» på en tom ruta hade varit samma tomma
            löfte som «Läser förlagan» en gång var. */
-        ...((($('#svart') || {}).value || '').trim() ? [{ namn: 'Läser vad du sett var svårt', detalj: $('#svart').value.trim().slice(0, 46) }] : []),
-        ...(($('#fokus') || {}).value && $('#fokus').value.trim() ? [{ namn: 'Väger källorna', detalj: $('#fokus').value.trim().slice(0, 46) }] : []),
+        /* Raderna följer fälten: skickas de inte (provet, diagnosen) får planen
+           inte lova dem heller. En plan som säger «Läser vad du sett var svårt»
+           om ett prov som medvetet INTE läser det är samma tomma löfte, bara
+           vänt åt andra hållet. */
+        ...(!helhetstyp(typ) && (($('#svart') || {}).value || '').trim() ? [{ namn: 'Läser vad du sett var svårt', detalj: $('#svart').value.trim().slice(0, 46) }] : []),
+        ...(!helhetstyp(typ) && ($('#fokus') || {}).value && $('#fokus').value.trim() ? [{ namn: 'Väger källorna', detalj: $('#fokus').value.trim().slice(0, 46) }] : []),
         { namn: underlag.length ? 'Läser vad klassen hann med' : 'Hoppar över transkripten', detalj: underlag.length ? underlag.map(l => l.namn).join(' · ') : 'inga lektioner valda' },
         { namn: 'Skriver och poängsätter', detalj: typ }
       ],

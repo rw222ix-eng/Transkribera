@@ -228,8 +228,15 @@
   const NIVA = [1, 2, 3];
   function rita() {
     const u = alla();
-    vard.hidden = !u.length;
-    if (!u.length) return;
+    /* «Uppgifterna på sidorna» är en LEKTIONSGEST: det här räknar vi, det här
+       hoppar vi över. Provet och diagnosen utgår från helheten klassen tränat
+       på, och där hör blocket inte hemma — dessutom listar det bara uppgifter
+       på de sidor som hunnit läsas in, så på ett provspann över trettio sidor
+       visade det tre av dem och såg ut som ett svar. Bokdörren visar spannet
+       som förut; det är urvalet som går ner. plan.js äger regeln
+       (window.Helhetstyp) och ropar hit via window.Uppgifter.spegla. */
+    vard.hidden = !u.length || !!(window.Helhetstyp && window.Helhetstyp());
+    if (!u.length || vard.hidden) return;
     const kvar = u.filter(x => !bort.has(x.nr));
     const fanns = !!$('#uppgfraga');
     if (!fanns) {
@@ -405,6 +412,9 @@
     /* Steg 3 frågar om raden ska finnas alls: lösningsförslag till bokens
        uppgifter går bara att välja när boken faktiskt är en av källorna. */
     finns: () => !!(dorr && dorr.getAttribute('aria-pressed') === 'true' && alla().length),
+    /* Skrivtypen bytte — rita om så att blocket följer med ner (prov, diagnos)
+       eller upp igen (tavla, arbetsblad, gruppuppgift). */
+    spegla: rita,
     /* Uppgifterna som stod på lektionen i kalendern, i bokens egen skrivning:
        «1101–1103, 1105–1119». Anropas när en lektion väljs (profil.js) — spannet
        är redan satt då, så listan gäller de sidor som just slogs upp. Sidorna
@@ -451,7 +461,16 @@
         /* Posterna bär NIVÅN, inte bara numret: lösningsbladet sätter nivå 3 som
            bedömd elevlösning och nivå 1–2 som svarsfacit, och utan nivån här kan
            det inte veta vilken form uppgiften ska få. */
-        losning: i.boklosning === false ? null : { niva: i.boklosniva || 'Nivå 2 och 3', antal: los.length, uppg: los.map(x => x.nr), poster: los.map(x => ({ nr: x.nr, niva: x.niva })), remsa: remsa(los.map(x => x.nr)) }
+        /* Inget lösningsblad till bokens uppgifter för provet och diagnosen:
+           de har sitt eget lösningsförslag och sitt formelblad, och bokens
+           lösningar är det klassen ÖVADE med. Utan raden här hade tryck.js
+           lagt en «Lösningsförslag · boken»-flik i provets paket, eftersom
+           bokuppg.losning är det enda den läser. Upplägget kan sakna fälten
+           helt (typen har ingen sådan rad) — också det är ett nej. */
+        losning: (i.boklosning === false || i.boklosniva === undefined
+                  || (window.Helhetstyp && window.Helhetstyp()))
+          ? null
+          : { niva: i.boklosniva || 'Nivå 2 och 3', antal: los.length, uppg: los.map(x => x.nr), poster: los.map(x => ({ nr: x.nr, niva: x.niva })), remsa: remsa(los.map(x => x.nr)) }
       };
     }
   };

@@ -157,13 +157,11 @@ test("tomma rutor lägger inga nycklar i begäran", async ({ page }) => {
   expect("fokus" in anrop[0].kropp).toBe(false);
 });
 
-/* Fälten står i steget oavsett vad som ska skrivas, så de ska nå fram oavsett
-   vilken rutt som svarar. Provet och arbetsbladet delar rutt med diagnosen och
-   gruppuppgiften; anteckningarna har en egen. */
-for (const [typ, vag] of [["Prov", "/api/exams/generate"],
-                          ["Arbetsblad", "/api/exams/generate"],
+/* Fälten står i steget för det som ska ÖVAS, och de ska nå fram oavsett vilken
+   rutt som svarar. Arbetsbladet och gruppuppgiften delar rutt med provet;
+   anteckningarna har en egen. */
+for (const [typ, vag] of [["Arbetsblad", "/api/exams/generate"],
                           ["Gruppuppgift", "/api/exams/generate"],
-                          ["Diagnos", "/api/exams/generate"],
                           ["Anteckningar", "/api/anteckningar/generate"]]) {
   test(`${typ} bär också lärarens egna ord`, async ({ page }) => {
     const anrop = await fejka(page);
@@ -179,5 +177,32 @@ for (const [typ, vag] of [["Prov", "/api/exams/generate"],
     expect(anrop[0].vag).toBe(vag);
     expect(anrop[0].kropp.svart).toBe(SVART);
     expect(anrop[0].kropp.fokus).toBe(FOKUS);
+  });
+}
+
+/* … men PROVET och DIAGNOSEN mäter, och ett mätinstrument som lutas efter vad
+   läraren sett var svårt är inte representativt — åt något håll. Båda rutorna
+   går därför ner när typen väljs, och fälten utelämnas ur begäran även om de
+   bär text från en tidigare typ i samma session. Det senare är hela poängen:
+   en gömd ruta som ändå skickas är den värsta sorten. */
+for (const typ of ["Prov", "Diagnos"]) {
+  test(`${typ} varken visar eller skickar lärarens egna ord`, async ({ page }) => {
+    const anrop = await fejka(page);
+    await planering(page);
+    // Först en tavla, med båda rutorna ifyllda — texten ligger kvar i fälten.
+    await page.evaluate(() => { window.SattLage("Tavla"); window.PlanSteg.las(4, false); window.PlanSteg.gaTill(4); });
+    await fyll(page, "#svart", SVART);
+    await fyll(page, "#fokus", FOKUS);
+    await expect(page.locator("#svartruta")).toBeVisible();
+
+    await page.evaluate(t => window.SattLage(t), typ);
+    await expect(page.locator("#svartruta")).toBeHidden();
+    await expect(page.locator("#fokusruta")).toBeHidden();
+
+    await skriv(page, typ);
+    await expect.poll(() => anrop.length).toBe(1);
+    expect(anrop[0].vag).toBe("/api/exams/generate");
+    expect("svart" in anrop[0].kropp).toBe(false);
+    expect("fokus" in anrop[0].kropp).toBe(false);
   });
 }
