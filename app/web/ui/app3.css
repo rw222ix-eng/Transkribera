@@ -65,6 +65,10 @@ html{font-size:clamp(14.5px,13px + .3vw,18.5px)}
 .hknapp:disabled{opacity:.32;cursor:default}
 .histnot{font-size:.76rem;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:min(34ch,30vw)}
 .dokhuvud .historik{margin-left:auto}
+/* Slängen står längst ut till höger, efter ångra/gör om: den hör till pappret
+   som helhet, inte till en enskild ändring — och den ska inte råka träffas när
+   man siktar på ↶. */
+.dokhuvud .dokslang{font-size:.8rem;color:var(--ink-2);white-space:nowrap}
 @media (max-width:640px){.histnot{display:none}}
 
 /* ══════════ VÄLJ PLATS FÖR SÄKERHETSKOPIAN ══════════

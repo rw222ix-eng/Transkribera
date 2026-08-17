@@ -127,6 +127,52 @@
     sparasNu.set(v, p);
     return p;
   }
+  /* Ångra på en slängning måste skriva tillbaka HELA utkastet, inte bara den
+     version som råkade ligga framme: ångra-historiken är utkastets halva värde
+     (det är den som gör rutan till ett arbetsbord och inte ett kvitto). Raden
+     skapas med den första versionen och får resten påskrivna i tur och ordning
+     — samma väg de skrevs första gången — och markören sätts sist, när alla
+     versioner finns att ställa den på.
+     Skrivningarna kedjas med reduce och inte med Promise.all: servern lägger
+     varje version EFTER markören och kapar det som låg framåt, så två samtidiga
+     påskrifter hade kapat varandra. */
+  function utkastAterskapa(vs, markor) {
+    if (!serverPa() || !vs.length) return Promise.resolve(null);
+    return skicka('/api/dokument', 'POST', { dokument: vs[0], status: 'utkast' })
+      .then(d => {
+        utkastId = d.id;
+        return vs.slice(1).reduce(
+          (p, v) => p.then(() => skicka('/api/dokument/' + d.id + '/versioner', 'POST', { dokument: v })),
+          Promise.resolve())
+          .then(() => skicka('/api/dokument/' + d.id, 'PATCH', { markor }));
+      })
+      .catch(() => null);
+  }
+  /* ── Att slänga utkastet ─────────────────────────────
+     Serverraden går bort MED EN GÅNG, inte när toasten tickat ut: det är just
+     omladdningen som är buggen — ett utkast som ligger kvar tills fliken
+     stängs har inte slängts, det har gömts. Ångra betalar priset i stället och
+     skriver tillbaka pappret som en ny rad (samma pris som raderaDok betalar:
+     nytt id, samma innehåll). */
+  function slangUtkast(tyst) {
+    if (!versioner.length) return false;
+    const vs = versioner.slice(), markor = Math.max(0, nu), id = utkastId;
+    utkastId = null;
+    versioner = []; nu = -1;
+    visarLosning = false;
+    $('#dokument').hidden = true;
+    planKoll();
+    if (id && serverPa()) window.API.json('/api/dokument/' + id, { method: 'DELETE' }).catch(() => {});
+    if (!tyst) {
+      window.toast && window.toast('Utkastet slängt', 'Ångra', () => {
+        versioner = vs;
+        utkastAterskapa(vs, markor);
+        visa(markor);
+        planKoll();
+      });
+    }
+    return true;
+  }
   /* Det parkerade parförslaget hör till pappret som väntar på sin följeslagare
      — inte till sessionen. Därför bor det på det godkända dokumentet. */
   function dokFoljd(v, typ) {
@@ -2682,6 +2728,7 @@
   $('#gorom').addEventListener('click', gorOm);
   $('#g-angra') && $('#g-angra').addEventListener('click', angra);
   $('#g-gorom') && $('#g-gorom').addEventListener('click', gorOm);
+  $('#dokslang') && $('#dokslang').addEventListener('click', () => slangUtkast());
   $('#g-godkann') && $('#g-godkann').addEventListener('click', () => {
     window.Granska && window.Granska.stang();
     $('#godkann').click();
@@ -2871,6 +2918,11 @@
     /* Med tiden vet man vad som inte fungerade. Det ska gå att kasta — pappret
        OCH dess facit, för ett facit utan sitt blad är skräp. */
     radera: v => raderaDok(v),
+    /* Utkastet är inte högen och kastas därför inte som den: ingen fråga, ingen
+       plats att lägga tillbaka på. «Börja om» slänger det tyst (tyst=true) —
+       där är slängningen en detalj i en större rensning och har sin egen
+       toast. Returnerar om något faktiskt låg framme. */
+    slangUtkast: tyst => slangUtkast(tyst),
     /* «Börja om» släpper också den väntande följeslagaren — allt rensat betyder allt. */
     slappFoljd() { dokFoljd(foljdVantar && foljdVantar.forlaga, null); foljdVantar = null; foljdKvar = null; ritaFoljeVanta(); const r = $('#foljerad'); if (r) r.hidden = true; },
     /* Något skrevs rakt på pappret — rättningen är den som gör det. Skickas det

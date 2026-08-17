@@ -463,3 +463,76 @@ test("ett papper utan byggd PDF ger serverns besked, inte «Sparad»", async ({ 
   await expect(page.locator(".toast").last()).toContainText("ingen pdf ännu");
   await expect(page.locator("#fh-pdf")).toHaveText("Ladda ner PDF");
 });
+
+// ── Att slänga utkastet ─────────────────────────────────────────────────────
+// Ett övergivet utkast låg framme i planeringens dokumentruta för evigt: det
+// plockas upp igen vid varje laddning (v20-designen, som ska vara kvar) och det
+// fanns ingen väg alls att kasta det. Rutan hade ångra, gör om och godkänn —
+// men ingen papperskorg.
+
+/** Ett utkast med tre versioner, markören på den mittersta. */
+const treVersioner = () => [
+  papper({ anteckning: "Första utkastet" }),
+  papper({ svarighet: 1, anteckning: "Svårare uppgifter" }),
+  papper({ kontext: "fysik", anteckning: "Fysikaliskt sammanhang" }),
+];
+
+const utkastrad = versioner => ({
+  id: 7, status: "utkast", markor: 1, sort: 0, foljd: null,
+  versioner, dokument: versioner[1],
+});
+
+/** Öppnar planeringen med ett utkast liggande i rutan. */
+async function medUtkast(page, versioner) {
+  const anrop = await fejka(page, { utkast: utkastrad(versioner) });
+  await page.goto("/");
+  await hydrerad(page);
+  await page.getByRole("tab", { name: "Planering" }).click();
+  await expect(page.locator("#dokument")).toBeVisible();
+  return anrop;
+}
+
+test("«Släng utkastet» tömmer rutan och tar bort serverraden", async ({ page }) => {
+  const anrop = await medUtkast(page, treVersioner());
+
+  await page.locator("#dokslang").click();
+  await expect(page.locator("#dokument")).toBeHidden();
+  /* Raden går bort MED EN GÅNG. Väntade slängningen på att toasten skulle
+     ticka ut vore utkastet bara gömt, och en omladdning hade lagt fram det
+     igen — vilket är precis buggen. */
+  await expect.poll(() => anrop.some(a => a.metod === "DELETE" && a.vag === "/api/dokument/7")).toBe(true);
+});
+
+test("ett slängt utkast är borta efter omladdningen", async ({ page }) => {
+  /* Servern har raden kvar i fejken (den svarar med samma utkast igen) — så
+     det här mäter det appen själv kan garantera: att DELETE:n gick i väg mot
+     RÄTT rad. Sanningsprovet mot en riktig bas görs i den skarpa körningen. */
+  const anrop = await medUtkast(page, treVersioner());
+  await page.locator("#dokslang").click();
+  await expect.poll(() => anrop.filter(a => a.metod === "DELETE").length).toBe(1);
+  expect(anrop.filter(a => a.metod === "DELETE").map(a => a.vag)).toEqual(["/api/dokument/7"]);
+});
+
+test("Ångra tar tillbaka utkastet med hela sin ångra-historik", async ({ page }) => {
+  const anrop = await medUtkast(page, treVersioner());
+  await page.locator("#dokslang").click();
+  await expect(page.locator("#dokument")).toBeHidden();
+
+  await page.locator(".toast button", { hasText: "Ångra" }).click();
+  await expect(page.locator("#dokument")).toBeVisible();
+  // Markören stod på ändring 1 av 2 och ska stå där igen — inte på den sista.
+  await expect(page.locator("#histnot")).toHaveText("Ändring 1 av 2 · Svårare uppgifter");
+  await expect(page.locator("#angra")).toBeEnabled();
+  await expect(page.locator("#gorom")).toBeEnabled();
+
+  // Och på servern: en ny utkastrad med den första versionen, de två andra
+  // påskrivna i tur och ordning, och markören satt sist.
+  await expect.poll(() => anrop.some(a => a.vag.endsWith("/versioner"))).toBe(true);
+  const post = anrop.find(a => a.metod === "POST" && a.vag === "/api/dokument");
+  expect(post.kropp.status).toBe("utkast");
+  expect(post.kropp.dokument.anteckning).toBe("Första utkastet");
+  const versionsposter = anrop.filter(a => a.vag.endsWith("/versioner"));
+  expect(versionsposter.map(a => a.kropp.dokument.anteckning))
+    .toEqual(["Svårare uppgifter", "Fysikaliskt sammanhang"]);
+  await expect.poll(() => anrop.some(a => a.metod === "PATCH" && a.kropp && a.kropp.markor === 1)).toBe(true);
+});
