@@ -132,6 +132,37 @@ test("förvalet är ett förval — läraren kryssar om och noten ljuger inte",
     await expect(page.locator("#gykalender")).toBeVisible();
   });
 
+/* Förvalet körs om när lektionen ändras — inte bara vid typbytet. Då måste
+   omkörningen också respektera att läraren hunnit kryssa om, annars är
+   «förvalet är ett förval» sant bara till nästa datumändring. */
+test("kryssen överlever att provdagen flyttas", async ({ page }) => {
+  await fejka(page);
+  await planeringen(page);
+  await skriver(page, "Prov");
+  await page.evaluate(() => window.GyVal.vaxla("Logaritmer"));
+  expect(await valda(page)).not.toContain("Logaritmer");
+
+  // Provet flyttas till en dag med ETT eget innehåll i kalendern.
+  await staller(page, { klass: "NA25", kurs: "Matematik, nivå 2c",
+                        datum: "2026-10-20" });
+  await expect.poll(() => valda(page)).not.toContain("Logaritmer");
+  await expect.poll(() => valda(page)).not.toContain("Normalfördelning");
+});
+
+test("förvalet följer med när provdagen flyttas — om läraren inte rört kryssen",
+  async ({ page }) => {
+    await fejka(page);
+    await planeringen(page, "2026-10-15");   // posten utan koder: inget förval
+    await skriver(page, "Prov");
+    expect(await valda(page)).toEqual([]);
+
+    await staller(page, { klass: "NA25", kurs: "Matematik, nivå 2c",
+                          datum: "2026-10-01" });
+    await expect.poll(async () => (await valda(page)).sort())
+      .toEqual(["Andragradsekvationer", "Logaritmer", "Rotekvationer"]);
+    await expect(page.locator("#gykalender")).toContainText("Ur kalendern: 3 punkter");
+  });
+
 test("diagnosen tar kalenderns punkter framför hela kursen", async ({ page }) => {
   /* Diagnosen kryssar annars i ALLA nivåns punkter — det är dess definition.
      Men har läraren skrivit vad just den här diagnosen mäter är det hennes

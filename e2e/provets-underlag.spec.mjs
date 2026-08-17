@@ -67,8 +67,19 @@ const PROV = {
 
 const strom = h => h.map(x => `data: ${JSON.stringify(x)}\n\n`).join("");
 
+/* En ANNAN bok i hyllan, kortare och märkt med en annan kurs. Den behövs för
+   två frågor som bara går att ställa med en hylla på flera böcker: står dörren
+   på kursens bok eller på hyllans FÖRSTA, och överlever uppslaget att spannet
+   byter till en bok där de sista sidorna inte finns? */
+const BOK_1C = {
+  id: 4, namn: "Exponent 1c", kurs: "Matematik, nivå 1c",
+  sidor: 40, sidoffset: 0, status: "klar", lasta: 0,
+  avsnitt: [{ nr: "1.1", titel: "Tal och räkning", kap: "Kapitel 1 · Tal",
+              vag: "De fyra räknesätten", sid: "2–9", uppg: 12 }],
+};
+
 /** Fejkar datagrunden, hyllan och generatorrutten. `anrop` samlar kropparna. */
-async function fejka(page, { sparade = [] } = {}) {
+async function fejka(page, { sparade = [], bocker = null, sidbilder = null } = {}) {
   const anrop = [];
   const json = (route, kropp) => route.fulfill({
     status: 200, contentType: "application/json", body: JSON.stringify(kropp) });
@@ -88,8 +99,24 @@ async function fejka(page, { sparade = [] } = {}) {
       return route.fulfill({ status: 200, contentType: "text/event-stream",
         body: strom([{ type: "done", result: { uppgifter: UPPG, lasta: 0 } }]) });
     }
-    return json(route, { bocker: [BOK] });
+    return json(route, { bocker: bocker || [BOK] });
   });
+  /* Sidbilderna: en genomskinlig PNG räcker — det som prövas är VILKA sidor i
+     VILKEN bok uppslaget ber om, inte hur de ser ut. Rutten registreras SIST
+     och vinner därför över hyllans bredare bok-rutt ovan (Playwright matchar i
+     omvänd ordning); annars hade varje blad fått hyllans JSON och ett
+     `onerror`. */
+  if (sidbilder) {
+    const PNG = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+      "base64");
+    await page.route("**/api/bocker/*/sida/*.png", route => {
+      const m = new URL(route.request().url()).pathname
+        .match(/\/api\/bocker\/(\d+)\/sida\/(\d+)\.png/);
+      sidbilder.push(`${m[1]}:${m[2]}`);
+      return route.fulfill({ status: 200, contentType: "image/png", body: PNG });
+    });
+  }
   await page.route("**/api/exams/**", route => {
     const vag = new URL(route.request().url()).pathname;
     if (!vag.endsWith("/generate")) return json(route, { ok: true });
@@ -310,6 +337,175 @@ test("ett godkänt prov kapar sträckan — det som redan prövats prövas inte 
 
     await expect(page.locator("#bkplanering"))
       .toHaveText("Ur planeringen: 1 lektion, s. 7–12");
+  });
+
+/* ── 4a · Förvalet följer med när lektionen ändras ───
+ *
+ * Förvalet satt bara vid TYPBYTET, och läraren väljer inte alltid i den
+ * ordningen. Valde hon Prov först och lektionen sedan läste förvalet en tom
+ * kurs: bokdörren blev stående på hyllans FÖRSTA bok och spannet räknades ur
+ * kalenderns alla rader — och sedan hände ingenting mer.
+ *
+ * Gränsen mot lärarens egen hand är det svåra, och den prövas i BÅDA
+ * riktningar: förvalet ska skriva om sitt eget, aldrig hennes.
+ */
+
+/** Hyllan med två böcker: 1c-boken FÖRST, så att «hyllans första» och «kursens
+    bok» är olika svar och testet kan skilja dem åt. */
+const HYLLAN = [BOK_1C, BOK];
+
+test("kursen sätts EFTER typbytet — förvalet följer med till rätt bok",
+  async ({ page }) => {
+    await fejka(page, { bocker: HYLLAN });
+    await page.goto("/");
+    await hydrerad(page);
+    await page.getByRole("tab", { name: "Planering" }).click();
+
+    // Prov först, medan steg 1 är tomt: hyllans första bok står i dörren.
+    await page.evaluate(() => window.SattLage("Prov"));
+    await tillSteg(page, 3);
+    await expect(page.locator("#bokvalj .valjtext")).toHaveText("Exponent 1c");
+
+    // …och SEDAN lektionen. Förr var det för sent.
+    await staller(page, { klass: "NA25", kurs: "Matematik, nivå 2c",
+                          datum: "2026-09-07" });
+    await expect(page.locator("#bokvalj .valjtext"))
+      .toHaveText("Matematik 5000+ Kurs 2c");
+    await expect(page.locator("#bkplanering"))
+      .toHaveText("Ur planeringen: 3 lektioner, s. 2–12");
+    await expect.poll(() => page.evaluate(() => window.Uppslag.spann()))
+      .toMatchObject({ fran: 2, till: 12, bok: "Matematik 5000+ Kurs 2c" });
+  });
+
+test("förvalet skriver om sitt EGET spann när provdagen flyttas",
+  async ({ page }) => {
+    await fejka(page, { bocker: HYLLAN });
+    await planeringen(page);
+    await page.evaluate(() => window.SattLage("Prov"));
+    await tillSteg(page, 3);
+    await expect(page.locator("#bkplanering"))
+      .toHaveText("Ur planeringen: 3 lektioner, s. 2–12");
+
+    /* Provet flyttas till den 25 augusti: bara lektionen den 24 ligger före,
+       och spannet ska krympa med fönstret. */
+    await staller(page, { klass: "NA25", kurs: "Matematik, nivå 2c",
+                          datum: "2026-08-25" });
+    await expect(page.locator("#bkplanering"))
+      .toHaveText("Ur planeringen: 1 lektion, s. 2–6");
+    await expect.poll(() => page.evaluate(() => window.Uppslag.spann()))
+      .toMatchObject({ fran: 2, till: 6 });
+  });
+
+test("lärarens eget spann överlever ett senare förval", async ({ page }) => {
+  await fejka(page, { bocker: HYLLAN });
+  await planeringen(page);
+  await page.evaluate(() => window.SattLage("Prov"));
+  await tillSteg(page, 3);
+  await expect.poll(() => page.evaluate(() => window.Uppslag.spann()))
+    .toMatchObject({ fran: 2, till: 12 });
+
+  /* Hon drar i remsan själv — första sidan, sedan sista, precis som i huset. */
+  await page.locator('#bkremsa .bksida[data-s="8"]').click();
+  await page.locator('#bkremsa .bksida[data-s="9"]').click();
+  await expect.poll(() => page.evaluate(() => window.Uppslag.spann()))
+    .toMatchObject({ fran: 8, till: 9 });
+
+  // Provdagen flyttas. Noten följer planeringen — remsan följer LÄRAREN.
+  await staller(page, { klass: "NA25", kurs: "Matematik, nivå 2c",
+                        datum: "2026-08-25" });
+  await expect(page.locator("#bkplanering"))
+    .toHaveText("Ur planeringen: 1 lektion, s. 2–6");
+  await expect.poll(() => page.evaluate(() => window.Uppslag.spann()))
+    .toMatchObject({ fran: 8, till: 9 });
+});
+
+/* ── 4c · Uppslaget överlever ett bokbyte ───────────── */
+
+test("bokbytet ritar om båda bladen med den nya bokens id", async ({ page }) => {
+  const sidbilder = [];
+  await fejka(page, { bocker: HYLLAN, sidbilder });
+  await planeringen(page);
+  await page.evaluate(() => window.SattLage("Prov"));
+  await tillSteg(page, 3);
+  await page.evaluate(() => window.Kallor.satt("bok", true));
+  await expect.poll(() => page.evaluate(() => window.Uppslag.spann()))
+    .toMatchObject({ fran: 2, till: 12, bok: "Matematik 5000+ Kurs 2c" });
+  await expect.poll(() => sidbilder.filter(x => x === "3:2").length).toBe(1);
+  await expect.poll(() => sidbilder.filter(x => x === "3:12").length).toBe(1);
+
+  // Läraren byter bok i panelen. Båda bladen ska hämtas ur den NYA boken.
+  sidbilder.length = 0;
+  await page.locator("#bokvalj").click();
+  await page.locator(".bkbokrad", { hasText: "Exponent 1c" }).click();
+  await expect.poll(() => page.evaluate(() => window.Uppslag.spann().bok))
+    .toBe("Exponent 1c");
+  await expect.poll(() => sidbilder.slice().sort()).toEqual(["4:12", "4:2"]);
+  /* …och ingen sida ur den gamla boken. Ett halvt uppslag — ett blad ur den
+     nya boken och ett ur den gamla — är precis vad läraren såg. */
+  expect(sidbilder.some(x => x.startsWith("3:"))).toBe(false);
+});
+
+test("spannet klampas mot den nya bokens sista sida", async ({ page }) => {
+  const sidbilder = [];
+  await fejka(page, { bocker: HYLLAN, sidbilder });
+  await page.goto("/");
+  await hydrerad(page);
+  await page.getByRole("tab", { name: "Planering" }).click();
+  await tillSteg(page, 3);
+  await page.evaluate(() => window.Kallor.satt("bok", true));
+
+  /* Ett spann långt inne i den TJOCKA boken (120 sidor) … */
+  await page.evaluate(() => {
+    window.Uppslag.laggBok("Matematik 5000+ Kurs 2c");
+    window.Uppslag.satt(100, 110);
+  });
+  await expect.poll(() => page.evaluate(() => window.Uppslag.spann()))
+    .toMatchObject({ fran: 100, till: 110 });
+
+  /* … och så en bok på fyrtio sidor. Utan klampning bad uppslaget om s. 110 i
+     en bok som slutar på 40: servern svarar 404, `onerror` tar bort bilden och
+     bladet står tomt utan att säga varför. */
+  sidbilder.length = 0;
+  await page.evaluate(() => window.Uppslag.laggBok("Exponent 1c"));
+  await expect.poll(() => page.evaluate(() => window.Uppslag.spann()))
+    .toMatchObject({ fran: 40, till: 40, bok: "Exponent 1c" });
+  /* Bladen är det som räknas — vilken sida de PEKAR på. Nätverket räcker inte
+     som mätare här: en sidbild som redan hämtats en gång serveras ur webbläsarens
+     cache och syns aldrig som en begäran. */
+  await expect.poll(() => page.evaluate(() =>
+    [...document.querySelectorAll("#bkuppslag img")].map(i => i.getAttribute("src"))))
+    .toEqual(["/api/bocker/4/sida/40.png", "/api/bocker/4/sida/40.png"]);
+  expect(sidbilder.every(x => Number(x.split(":")[1]) <= 40)).toBe(true);
+});
+
+test("remsan börjar där boken börjar — sidorna före pärmen finns inte",
+  async ({ page }) => {
+    /* Ett negativt sidoffset betyder att PDF:en saknar bokens första blad:
+       tryckt s. 6 är PDF-sida 1, och s. 1–5 kan bara bli 404 och ett tomt
+       blad (routes_bok.sidbild: «sidan ligger före bokens början»). */
+    const KAPAD = { ...BOK_1C, namn: "Kapad bok", sidoffset: -5, sidor: 40 };
+    const sidbilder = [];
+    await fejka(page, { bocker: [BOK, KAPAD], sidbilder });
+    await page.goto("/");
+    await hydrerad(page);
+    await page.getByRole("tab", { name: "Planering" }).click();
+    await tillSteg(page, 3);
+    await page.evaluate(() => window.Kallor.satt("bok", true));
+
+    await page.evaluate(() => {
+      window.Uppslag.laggBok("Matematik 5000+ Kurs 2c");
+      window.Uppslag.satt(2, 4);
+    });
+    sidbilder.length = 0;
+    await page.evaluate(() => window.Uppslag.laggBok("Kapad bok"));
+    await expect.poll(() => page.evaluate(() => window.Uppslag.spann()))
+      .toMatchObject({ fran: 6, till: 6, bok: "Kapad bok" });
+    // Första knappen i remsan är s. 6, inte s. 1.
+    await expect(page.locator("#bkremsa .bksida").first()).toHaveAttribute("data-s", "6");
+    await expect.poll(() => page.evaluate(() =>
+      [...document.querySelectorAll("#bkuppslag img")].map(i => i.getAttribute("src"))))
+      .toEqual(["/api/bocker/4/sida/6.png", "/api/bocker/4/sida/6.png"]);
+    expect(sidbilder.every(x => Number(x.split(":")[1]) >= 6)).toBe(true);
   });
 
 /* ── 4b · Faktapasset väntar till skrivningen ───────── */
