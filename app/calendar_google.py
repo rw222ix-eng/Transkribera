@@ -659,6 +659,34 @@ def _gy25_nivaer() -> tuple[tuple[str, tuple[str, ...], tuple[tuple[str, str, st
     return tuple(ut)
 
 
+@lru_cache(maxsize=64)
+def _kursens_former(kurs: str) -> tuple[str, ...]:
+    """Namnformerna en kurs skrivs i — «Ma1c», «Matematik 1c», kurskoden — ur
+    Gy25-registret, plus varianten med mellanslag före nivån («Ma 1c»), som
+    skolans kalender skriver den. Tom när kursen inte finns i registret."""
+    sokt = _normalisera(kurs)
+    for _, namn, _ in _gy25_nivaer():
+        if sokt in namn:
+            return tuple(sorted(set(namn) | {
+                re.sub(r"(?<=[a-zåäö])(?=\d)", " ", f) for f in namn}))
+    return ()
+
+
+@lru_cache(maxsize=4096)
+def _kurs_i_titeln(titel: str, kurser: tuple[str, ...]) -> str:
+    """Kursen som RUBRIKEN själv bär, i vilken som helst av sina namnformer:
+    «Ma 1c · TE26A · B203» bär Matematik, nivå 1c fast appens kursnamn aldrig
+    står där. Tom när rubriken inte säger något — det här är lärarens egna ord,
+    inte en gissning, och skiljer sig därmed från ett kalenderbeslut."""
+    tl = (titel or "").lower()
+    ntitel = f" {_normalisera(titel)} "
+    for k in kurser:
+        if k and (k.lower() in tl
+                  or any(f" {f} " in ntitel for f in _kursens_former(k))):
+            return k
+    return ""
+
+
 def _nivaer_for(kurser) -> list[tuple[str, tuple[tuple[str, str, str], ...]]]:
     """Nivåerna gruppen faktiskt läser. Utan kurser blir listan tom och
     ingenting matchas — appen gissar hellre ingen nivå än fel nivå."""
@@ -789,17 +817,83 @@ def tolka_handelser(handelser: list[dict], klasser: list[str] | None = None,
     ligger kvar där reglerna satte dem (inget försvinner om ingen frågar
     vidare) och skickas till Claude i ett andra steg, se app/kalender_ai.py.
 
-    `schema_nu` är schemat appen redan har. Det används BARA för att känna igen
+    `schema_nu` är schemat appen redan har. Det används för att känna igen
     lektioner vars rubrik säger ämnet i stället för kursen — se rutorna nedan —
-    och aldrig för att hitta på rader: en ruta som inte har någon händelse i
-    kalendern längre försvinner ur svaret precis som förut."""
+    och som kurskälla när ett kalenderbeslut bara gissat kursen. Aldrig för att
+    hitta på rader: en ruta som inte har någon händelse i kalendern längre
+    försvinner ur svaret precis som förut."""
     klasser = sorted(klasser or [], key=len, reverse=True)
     kurser = sorted(kurser or [], key=len, reverse=True)
-    # Rutorna i lärarens schema: (veckodag, klockslag, klass) → kursen som står
-    # där. Tomma rutor hoppas över — en rad utan kurs säger ingenting.
-    rutor = {(int(r.get("dag") or 0), (r.get("tid") or "").strip(),
-              (r.get("klass") or "").strip()): (r.get("kurs") or "").strip()
-             for r in (schema_nu or []) if (r.get("kurs") or "").strip()}
+    # Rutorna i lärarens schema: (veckodag, klockslag, klass) → raderna som
+    # står där, med sina datumintervall. Samma ruta kan bära FLERA serier —
+    # skolans kalender lägger nästa läsårs kurs i samma tid (TE26A läser 1c nu
+    # och 2c från 2027, schema_lektioner har båda raderna) — och då är det
+    # intervallet som avgör vilken serie en lektion faktiskt träffar. En platt
+    # ruta → kurs hade låtit sista raden vinna, och varje 1c-lektion fick 2c.
+    # Tomma rutor hoppas över — en rad utan kurs säger ingenting.
+    rutor: dict[tuple, list[dict]] = {}
+    for r in (schema_nu or []):
+        if (r.get("kurs") or "").strip():
+            rutor.setdefault((int(r.get("dag") or 0), (r.get("tid") or "").strip(),
+                              (r.get("klass") or "").strip()), []).append(r)
+
+    def tacker(r: dict, datum: str) -> bool:
+        """Ligger datumet i radens intervall? Tomt fran/till är öppet åt det
+        hållet — ett handskrivet schema har inga datum alls (db.list_schema)."""
+        return ((r.get("fran") or "") <= datum
+                and (not (r.get("till") or "") or datum <= r["till"]))
+
+    def rutans_kurs(dag: int, tid: str, klass: str, datum: str) -> str:
+        """Kursen i rutan DEN dagen: första raden vars intervall täcker datumet,
+        i schemats egen ordning."""
+        return next(((r.get("kurs") or "").strip()
+                     for r in rutor.get((dag, tid, klass), []) if tacker(r, datum)),
+                    "")
+
+    # ANKARSERIERNA: rubriker som SJÄLVA bär kursen — «Ma 1c · TE26A · B203»,
+    # skolschemats egen serie — lägger fast vilken kurs som läses i en ruta
+    # under vilka veckor. Det är dem de omdöpta instanserna («TE26A: Räkna
+    # ifatt» — samma serie, ny rubrik varje vecka och därmed en egen serienyckel)
+    # ärver sin kurs av: Claudes bedömning av en sådan rubrik är en gissning,
+    # och den gissade «nivå 2c» på klasser som läser 1c (2026-08-17). Kursen i
+    # titeln räknas, aldrig beslutet — annars vore ankaret sin egen cirkel.
+    ankare: dict[tuple, dict[str, list[str]]] = {}
+    ankare_klass: dict[str, dict[str, list[str]]] = {}
+    kurstupel = tuple(kurser)
+    for h in handelser or []:
+        s0 = ((h.get("start") or {}).get("dateTime") or "")
+        if not h.get("recurringEventId") or not s0:
+            continue
+        titel0 = (h.get("summary") or "").strip()
+        kurs0 = _kurs_i_titeln(titel0, kurstupel)
+        klass0 = _klass_och_kurs(titel0, klasser, kurser)[0] if kurs0 else ""
+        if not kurs0 or not klass0:
+            continue
+        try:
+            dag0 = date.fromisoformat(s0[:10]).isoweekday()
+        except ValueError:
+            continue
+        tid0 = _tid(s0, (h.get("end") or {}).get("dateTime") or "")
+        ankare.setdefault((dag0, tid0, klass0), {}).setdefault(kurs0, []).append(s0[:10])
+        ankare_klass.setdefault(klass0, {}).setdefault(kurs0, []).append(s0[:10])
+
+    def _tackande(kandidater: dict[str, list[str]], datum: str) -> str:
+        """Kursen vars ankarinstanser omsluter datumet. Omsluter två
+        (läsårsskarven, där nästa kurs börjar innan repetitionen tagit slut)
+        avgör den närmaste instansen."""
+        traff = {k: d for k, d in kandidater.items() if min(d) <= datum <= max(d)}
+        if len(traff) <= 1:
+            return next(iter(traff), "")
+        dat = date.fromisoformat(datum)
+        return min(traff, key=lambda k: min(
+            abs((dat - date.fromisoformat(x)).days) for x in traff[k]))
+
+    def ankarkurs(dag: int, tid: str, klass: str, datum: str) -> str:
+        """Rutans egna ankare först; annars klassens som helhet — rutan kan stå
+        utan ankare när varenda instans i den är omdöpt, men klassen läser en
+        kurs i taget och de andra rutornas ankare vet vilken."""
+        return (_tackande(ankare.get((dag, tid, klass)) or {}, datum)
+                or _tackande(ankare_klass.get(klass) or {}, datum))
     schema: list[dict] = []
     sedda: set[tuple] = set()
     # FÖRSTA och SISTA instansen per schemarad. Ett veckoschema utan datum är
@@ -829,12 +923,16 @@ def tolka_handelser(handelser: list[dict], klasser: list[str] | None = None,
     # läser, och det vet vi först när schemat är genomgånget. Posten själv (en
     # muterbar dict som redan ligger i `poster`) fylls i efterhand, se nedan.
     provrader: list[tuple[dict, str, str, str]] = []
-    # Klassens kurser, som de kommer ur veckoschemat och ur rutorna appen redan
-    # har (schema_lektioner). Motsvarar group_id → course_id i basen.
+    # Klassens kurser, som de kommer ur veckoschemat. Motsvarar group_id →
+    # course_id i basen. Rutorna räknas in först vid uppslag, per DATUM —
+    # 2c-serien som börjar nästa läsår ska inte ge höstens 1c-prov 2c-punkter.
     kurser_per_klass: dict[str, set[str]] = {}
-    for (_, _, rut_klass), rut_kurs in rutor.items():
-        if rut_klass:
-            kurser_per_klass.setdefault(rut_klass, set()).add(rut_kurs)
+
+    def klassens_kurser(klass: str, datum: str) -> set[str]:
+        ur_rutorna = {(r.get("kurs") or "").strip()
+                      for (_, _, k), rader in rutor.items() if k == klass
+                      for r in rader if tacker(r, datum)}
+        return (kurser_per_klass.get(klass) or set()) | ur_rutorna
 
     def notera_post(h: dict, datum: str, tid: str, titel: str, klass: str) -> None:
         """Lägg posten i listan och kom ihåg provens beskrivningar."""
@@ -909,9 +1007,19 @@ def tolka_handelser(handelser: list[dict], klasser: list[str] | None = None,
                     dag = date.fromisoformat(s2[:10]).isoweekday()
                 except ValueError:
                     continue
-                rad = {"dag": dag, "tid": _tid(s2, e2),
-                       "kurs": (b.get("kurs") or "").strip(),
-                       "klass": (b.get("klass") or "").strip(),
+                bklass = (b.get("klass") or "").strip()
+                # Beslutets KURS är en gissning när rubriken inte bär den själv
+                # («TE26A: Räkna ifatt» säger ingen kurs, och Claude gissade
+                # 2c på en klass som läser 1c). Lektionen ärver därför kursen i
+                # fallande säkerhet: lärarens egen rubrik, ankarserien som
+                # täcker instansens datum, schemarutan som täcker det — och
+                # först när ingen av dem vet något står gissningen kvar.
+                bkurs = (_kurs_i_titeln(titel, kurstupel)
+                         or ankarkurs(dag, _tid(s2, e2), bklass, s2[:10])
+                         or rutans_kurs(dag, _tid(s2, e2), bklass, s2[:10])
+                         or (b.get("kurs") or "").strip())
+                rad = {"dag": dag, "tid": _tid(s2, e2), "kurs": bkurs,
+                       "klass": bklass,
                        "sal": (h.get("location") or "").strip()}
                 if not rad["klass"] or not rad["kurs"]:
                     continue               # en lektion utan klass och kurs är ingen
@@ -982,7 +1090,8 @@ def tolka_handelser(handelser: list[dict], klasser: list[str] | None = None,
         # villkoren behövs: mentorstiden ligger också i schemat hos den som lagt
         # in den, men den har inga sidor.
         if not lektion and h.get("recurringEventId") and klass and veckodag:
-            rutan = rutor.get((veckodag, _tid(s, e), klass))
+            rutan = (ankarkurs(veckodag, _tid(s, e), klass, datum)
+                     or rutans_kurs(veckodag, _tid(s, e), klass, datum))
             if rutan and sidor_ur_beskrivning(h.get("description")):
                 lektion, kurs = True, rutan
         if lektion:
@@ -1040,7 +1149,7 @@ def tolka_handelser(handelser: list[dict], klasser: list[str] | None = None,
     # hjälpmedlen).
     for post, beskrivning, provtitel, klass in provrader:
         koder, okanda = centralt_innehall_ur_text(
-            beskrivning, provtitel, kurser_per_klass.get(klass) or [])
+            beskrivning, provtitel, klassens_kurser(klass, post["datum"]))
         post["ci"] = koder
         if okanda:
             post["ci_okant"] = okanda

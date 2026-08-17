@@ -752,6 +752,101 @@ def test_rutan_avgor_bara_nar_bagge_villkoren_haller(summary, tid, beskrivning, 
     assert len(ut["osakra"]) == 1           # ligger kvar som en fråga till Claude
 
 
+"""Samma ruta, TVÅ serier: skolans kalender lägger nästa läsårs kurs på samma
+tid (grupp 324/325 bär både 1c-serien och 2c-serien från 2027). Raden som
+täcker lektionens datum är den som gäller — en platt ruta → kurs lät sista
+raden vinna, och varje 1c-lektion märktes «Matematik, nivå 2c»."""
+SCHEMAT_TVA = [
+    {"dag": 1, "tid": "10:00–11:30", "klass": "TE26A",
+     "kurs": "Matematik, nivå 1c", "sal": "E107",
+     "fran": "2026-08-17", "till": "2027-06-11"},
+    {"dag": 1, "tid": "10:00–11:30", "klass": "TE26A",
+     "kurs": "Matematik, nivå 2c", "sal": "E107",
+     "fran": "2027-08-16", "till": "2028-06-09"},
+]
+
+
+@pytest.mark.parametrize("datum, idag, kurs", [
+    ("2026-08-24", "2026-08-24", "Matematik, nivå 1c"),   # höstens lektion
+    ("2027-08-23", "2027-08-23", "Matematik, nivå 2c"),   # nästa läsårs
+])
+def test_rutan_med_tva_serier_valjs_pa_datumintervallet(datum, idag, kurs):
+    ut = calendar_google.tolka_handelser([
+        _tid(datum, "10:00", "11:30", summary="TE26A: Kvadratrötter",
+             location="E107", recurringEventId="r1", description=BESKRIVNING),
+    ], klasser=["TE26A"], kurser=["Matematik, nivå 1c", "Matematik, nivå 2c"],
+        idag=idag, schema_nu=SCHEMAT_TVA)
+    assert ut["schema"][0]["kurs"] == kurs
+    assert ut["innehall"][0]["kurs"] == kurs
+
+
+def test_omdopta_instanser_arver_kursen_av_ankarserien():
+    """Skolschemats serie heter «Ma 1c · TE26A · B205» — en namnform appen inte
+    har som kursnamn — och läraren döper om instanser till veckans ämne. Varje
+    omdöpt rubrik blir en egen serienyckel, och Claudes cachade bedömning av
+    den GISSADE «nivå 2c» på en klass som läser 1c (repro 2026-08-17). Kursen
+    ska ärvas av ankarserien som täcker instansens datum — i rutan om den har
+    ankare kvar, annars av klassens — aldrig av gissningen."""
+    handelser = [
+        _tid(d, "11:40", "12:40", summary="Ma 1c · TE26A · B205",
+             location="B205", recurringEventId="r1")
+        for d in ("2026-08-24", "2026-10-12", "2027-05-31")
+    ] + [
+        _tid("2026-10-05", "11:40", "12:40", summary="TE26A: Räkna ifatt",
+             location="B205", recurringEventId="r1", description="s. 2–6"),
+        # Tisdagsrutan har inga ankare alls — varenda instans är omdöpt.
+        _tid("2026-10-06", "10:00", "11:20", summary="TE26A: Gamla provuppgifter",
+             location="B203", recurringEventId="r2"),
+    ]
+    beslut = {
+        "ma 1c · te26a · b205|tid|serie": {
+            "slag": "lektion", "klass": "TE26A", "kurs": "Matematik, nivå 1c"},
+        "te26a: räkna ifatt|tid|serie": {
+            "slag": "lektion", "klass": "TE26A", "kurs": "Matematik, nivå 2c"},
+        "te26a: gamla provuppgifter|tid|serie": {
+            "slag": "lektion", "klass": "TE26A", "kurs": "Matematik, nivå 2c"},
+    }
+    ut = calendar_google.tolka_handelser(
+        handelser, klasser=["TE26A"],
+        kurser=["Matematik, nivå 1c", "Matematik, nivå 2c"],
+        beslut=beslut, idag="2026-08-24")
+    assert {r["kurs"] for r in ut["schema"]} == {"Matematik, nivå 1c"}
+    assert ut["innehall"][0]["kurs"] == "Matematik, nivå 1c"
+
+
+def test_rubriken_som_bar_kursens_kortform_vinner_over_beslutet():
+    """«TE26A: Introduktion till Ma 2c, bokbyte» i maj — lärarens egen rubrik
+    säger 2c, och den vinner över både ankare och gissning."""
+    handelser = [
+        _tid(d, "11:40", "12:40", summary="Ma 1c · TE26A · B205",
+             location="B205", recurringEventId="r1")
+        for d in ("2026-08-24", "2027-05-31")
+    ] + [
+        _tid("2027-05-31", "10:00", "11:20", location="B203",
+             summary="TE26A: Introduktion till Ma 2c, bokbyte",
+             recurringEventId="r2"),
+    ]
+    ut = calendar_google.tolka_handelser(
+        handelser, klasser=["TE26A"],
+        kurser=["Matematik, nivå 1c", "Matematik, nivå 2c"],
+        beslut={"te26a: introduktion till ma 2c, bokbyte|tid|serie": {
+            "slag": "lektion", "klass": "TE26A", "kurs": "Matematik, nivå 1c"}},
+        idag="2026-08-24")
+    kurser = {r["tid"]: r["kurs"] for r in ut["schema"]}
+    assert kurser["10:00–11:20"] == "Matematik, nivå 2c"
+
+
+def test_provets_punkter_foljer_kursen_som_galler_pa_provdagen():
+    """2c-serien från 2027 får inte ge höstens prov 2c-punkter: klassens kurser
+    slås upp per provDATUM, inte som en klump över alla rutor."""
+    ut = calendar_google.tolka_handelser([
+        _tid("2026-10-01", "10:00", "11:30", summary="TE26A: PROV 1",
+             description="Funktionsbegreppet"),
+    ], klasser=["TE26A"], idag="2026-09-07", schema_nu=SCHEMAT_TVA)
+    prov = [p for p in ut["poster"] if p.get("slag") == "prov"][0]
+    assert prov["ci"] == ["G25-M1C-ALG-2"]
+
+
 def test_lektion_utan_sidor_ger_inget_innehall():
     """Ingen gissning: står det inga sidor i kalendern gäller klassprofilens
     förval, precis som innan."""
