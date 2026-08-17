@@ -298,6 +298,75 @@ def test_tavlans_sida_ar_ett_a4_och_bilden_forlustfri(tmp_path):
         doc.close()
 
 
+def _png(bredd, hojd):
+    """En vit PNG i ett givet mått — det som avgör sidans orientering."""
+    import io
+    from PIL import Image
+    buf = io.BytesIO()
+    Image.new("RGB", (bredd, hojd), "white").save(buf, "PNG")
+    return tryck._DATA_PREFIX + base64.b64encode(buf.getvalue()).decode()
+
+
+def _sidmatt(pdf):
+    import pypdfium2 as pdfium
+    doc = pdfium.PdfDocument(str(pdf))
+    try:
+        return [tuple(round(v) for v in doc[i].get_size()) for i in range(len(doc))]
+    finally:
+        doc.close()
+
+
+def test_ett_brett_brade_laggs_pa_liggande_a4(tmp_path):
+    """Lärarens första rapport efter en riktig utskrift: den breda remsan (två
+    bräden sida vid sida) låg på stående A4 — en liten rand i mitten och
+    jättemycket vitt över och under. «Man skulle kunna vända den 90 grader.»
+
+    Orienteringen är alltså bildens, inte fackets. Kvadratiskt räknas som
+    stående (1×1-bilden i de andra fallen), och blandade orienteringar i samma
+    fil är fria: sidstorleken sitter på sidan, inte på dokumentet."""
+    assert _sidmatt(tryck.png_till_pdf(_png(1800, 780), tmp_path, "bred")) == [(842, 595)]
+    assert _sidmatt(tryck.png_till_pdf(_png(794, 1123), tmp_path, "hog")) == [(595, 842)]
+    assert _sidmatt(tryck.png_till_pdf(_png(500, 500), tmp_path, "kvadrat")) == [(595, 842)]
+    blandat = tryck.png_till_pdf([_png(1800, 780), _png(794, 1123)], tmp_path, "bl")
+    assert _sidmatt(blandat) == [(842, 595), (595, 842)]
+
+
+def test_bilden_haller_sig_innanfor_utskriftsmarginalen(tmp_path):
+    """Innehållet låg dikt an papperskanten — skrivaren klipper där, och ett
+    ark utan luft ser billigt ut även när det inte klipps. Bilden ska skalas
+    mot MARGINALBOXEN och ligga centrerad i den, på båda orienteringarna."""
+    import pypdfium2 as pdfium
+    m = tryck.MARGINAL_PT
+    pdf = tryck.png_till_pdf([_png(1800, 780), _png(794, 1123)], tmp_path, "m")
+    doc = pdfium.PdfDocument(str(pdf))
+    try:
+        for i in range(len(doc)):
+            papper = doc[i].get_size()
+            mat = next(o.get_matrix() for o in doc[i].get_objects()
+                       if isinstance(o, pdfium.PdfImage))
+            # Matrisen bär bilden: a/d är bredd och höjd, e/f är nedre vänstra
+            # hörnet. Ingen kant får ligga innanför marginalen …
+            assert mat.e >= m - 0.5 and mat.f >= m - 0.5
+            assert mat.e + mat.a <= papper[0] - m + 0.5
+            assert mat.f + mat.d <= papper[1] - m + 0.5
+            # … och en av dem ska NÅ den: annars är pappret onödigt tomt.
+            assert (abs(mat.a - (papper[0] - 2 * m)) < 0.5
+                    or abs(mat.d - (papper[1] - 2 * m)) < 0.5)
+    finally:
+        doc.close()
+
+
+def test_hopfogningen_bevarar_bladade_sidstorlekar(tmp_path):
+    """Tavlan ligger liggande mitt bland stående elevpapper i samma hög. Det
+    är OK — skrivare vänder själva — men bara om hopfogningen bär sidstorleken
+    med sig i stället för att räta upp allt efter första sidan."""
+    tavla = tryck.png_till_pdf(_png(1800, 780), tmp_path, "tavla")
+    prov = pdf_fil(tmp_path / "prov.pdf", 2)
+    ut = tmp_path / "hog.pdf"
+    assert tryck.foga_ihop([(tavla, 1), (prov, 1)], ut) == 3
+    assert _sidmatt(ut) == [(842, 595), (595, 842), (595, 842)]
+
+
 # --------------------------------------------------- tavlan som egen fil --
 
 def test_tavlan_laddas_ner_som_egen_pdf(client):

@@ -49,6 +49,12 @@ MAX_SIDOR = 40
 # A4 i punkter (72 dpi) — PDF:ens eget mått. Tavlan läggs på sidan, inte
 # tvärtom: en sida i bildens storlek går inte att stoppa i en skrivare.
 A4_PT = (595.276, 841.89)
+# Utskriftsmarginalen. Bilden skalades förut mot PAPPERSKANTEN, och läraren såg
+# det direkt när hon skrev ut på riktigt: rubriken låg dikt an vänsterkanten och
+# skrivaren klippte den. En hemmaskrivare kan inte skriva i de yttersta
+# millimetrarna, och ett papper utan luft ser billigt ut även när det trycks. 12
+# mm är luft nog utan att göra texten liten.
+MARGINAL_PT = 12 * 72 / 25.4        # ≈ 34 pt
 
 
 def _safe(namn: str, fallback: str = "utskrift") -> str:
@@ -99,7 +105,11 @@ def _oppna_png(dataurl: str):
 
 
 def png_till_pdf(dataurl, ut_dir: Path, stam: str) -> Path | None:
-    """Bilder på var sitt A4. Returnerar None om någon inte är en PNG.
+    """Bilder på var sitt A4, med utskriftsmarginal. Returnerar None om någon
+    inte är en PNG.
+
+    Orienteringen väljs per bild (se nedan) och marginalen är alltid
+    ``MARGINAL_PT`` — pappret ska gå att skriva ut, inte bara att titta på.
 
     Ingen LaTeX. Sidan byggdes förut genom att skriva PNG:en till disk och
     köra Tectonic på ett ``\\includegraphics`` — vilket band tavlans
@@ -130,16 +140,28 @@ def png_till_pdf(dataurl, ut_dir: Path, stam: str) -> Path | None:
     try:
         for bild in bilder:
             b, h = bild.size
-            skala = min(A4_PT[0] / b, A4_PT[1] / h)
-            sida = doc.new_page(*A4_PT)
+            # ORIENTERINGEN är bildens, inte pappersfackets. Ett bräde är
+            # bredare än högt, och på stående A4 blev tavlan en remsa i mitten
+            # med halva pappret vitt över och under — läraren såg det och sa
+            # «man skulle kunna vända den 90 grader». Sidstorleken sätts per
+            # sida i PDF:en, så blandade orienteringar i samma fil är fria; en
+            # skrivare vänder själv. Kvadratiskt räknas som stående: den
+            # naturliga vilan för ett papper.
+            papper = (A4_PT[1], A4_PT[0]) if b > h else A4_PT
+            # Marginalboxen, inte papperskanten. Skalan mäts mot den — det är
+            # hela skillnaden mot förut.
+            ruta = (papper[0] - 2 * MARGINAL_PT, papper[1] - 2 * MARGINAL_PT)
+            skala = min(ruta[0] / b, ruta[1] / h)
+            sida = doc.new_page(*papper)
             objekt = pdfium.PdfImage.new(doc)
             objekt.set_bitmap(pdfium.PdfBitmap.from_pil(bild))
             # Matrisen ÄR placeringen: pdfium ritar bilden i enhetskvadraten,
             # så matrisen bär både storleken och hörnet. Största möjliga med
-            # bevarad proportion, centrerad — samma sida som mallen satte.
+            # bevarad proportion, centrerad i marginalboxen — som av sig själv
+            # är centrerad på pappret.
             objekt.set_matrix(pdfium.PdfMatrix(
                 b * skala, 0, 0, h * skala,
-                (A4_PT[0] - b * skala) / 2, (A4_PT[1] - h * skala) / 2))
+                (papper[0] - b * skala) / 2, (papper[1] - h * skala) / 2))
             sida.insert_obj(objekt)
             sida.gen_content()
         doc.save(str(mal))
