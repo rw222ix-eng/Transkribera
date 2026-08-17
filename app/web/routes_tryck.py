@@ -61,6 +61,10 @@ def create_router(base: Path, arbiter) -> APIRouter:
             return JSONResponse({"error": "för många dokument i ett paket"},
                                 status_code=400)
         titel = tryck._safe(str(body.get("titel") or "utskrift"))
+        # «Skriv ut» och «Ladda ner» är två gester med samma hög men olika
+        # form: den ena ska bli en bunt ur skrivaren, den andra en mapp med
+        # skilda filer läraren kan lägga undan (se tryck.dela_upp).
+        separat = bool(body.get("separat"))
         ut_dir = base / "Transkriberingar" / "utskrift"
         stampel = datetime.now().strftime("%Y-%m-%d %H%M%S")
 
@@ -106,6 +110,20 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     "Inget av dokumenten har en byggd PDF än. Godkänn provet "
                     "eller arbetsbladet först — då byggs den." if saknas
                     else "Inget att skriva ut.")
+            if separat:
+                emit({"type": "log",
+                      "msg": "Lägger varje dokument som egen fil …"})
+                mapp = ut_dir / f"{titel} {stampel}"
+                filer = tryck.dela_upp(
+                    [(pdf, rad["namn"]) for (pdf, _kop), rad in zip(delar, kvitto)],
+                    mapp)
+                for rad, fil in zip(kvitto, filer):
+                    rad["fil"] = fil
+                # `path` är MAPPEN här — /api/reveal öppnar den, och läraren
+                # ser filerna ligga i den ordning högen hade.
+                return {"path": str(mapp), "mapp": True, "filer": filer,
+                        "sidor": sum(rad["sidor"] for rad in kvitto),
+                        "dokument": kvitto, "saknas": saknas}
             emit({"type": "log", "msg": "Fogar ihop paketet …"})
             fil = ut_dir / f"{titel} {stampel}.pdf"
             sidor = tryck.foga_ihop(delar, fil)

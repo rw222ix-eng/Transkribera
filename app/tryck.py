@@ -27,6 +27,7 @@ from __future__ import annotations
 import base64
 import io
 import re
+import shutil
 from pathlib import Path
 
 from app import exam_gen, exam_latex, exam_pdf, exam_spec
@@ -179,6 +180,31 @@ def foga_ihop(delar: list[tuple[Path, int]], ut: Path) -> int:
             d.close()
         paket.close()
     return antal
+
+
+def dela_upp(delar: list[tuple[Path, str]], mapp: Path) -> list[str]:
+    """Varje dokument som EGEN fil i en egen mapp — nedladdningens form.
+
+    Utskriften är en hopfogad hög, för det är så papperen ska komma ur
+    skrivaren. Nedladdningen är motsatsen: läraren som sparar undan lektionens
+    material vill ha tavlan, provet och facit som skilda filer att lägga i sin
+    egen mapp — inte en enda PDF att bläddra i när hon letar efter facit.
+
+    Kopieantalet följer INTE med. Tjugotvå exemplar av samma fil i en mapp är
+    tjugoen filer för mycket; kopiorna hör hemma i högen (`foga_ihop`), där de
+    faktiskt kommer ut ur maskinen.
+
+    Numret först i filnamnet är högens ordning. En mapp sorteras alfabetiskt,
+    och utan numret hamnar facit före provet — precis den ordning paketet finns
+    till för att undvika. Returnerar filnamnen, i ordning, till kvittot.
+    """
+    mapp.mkdir(parents=True, exist_ok=True)
+    filnamn: list[str] = []
+    for i, (pdf, namn) in enumerate(delar, 1):
+        fil = mapp / f"{i:02d} {_safe(namn, f'dokument {i}')}.pdf"
+        shutil.copyfile(pdf, fil)
+        filnamn.append(fil.name)
+    return filnamn
 
 
 def _bredvid(pdf: Path, andelse: str) -> Path | None:

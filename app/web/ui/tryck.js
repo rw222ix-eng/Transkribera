@@ -147,7 +147,7 @@
     })).then(dokument => ({ titel, dokument }));
   }
 
-  function bygg(knapp, efterat) {
+  function bygg(knapp, tillagg, efterat) {
     const text = knapp.textContent;
     knapp.disabled = true;
     /* Avritningen av tavlan tar sina hundradelar och sker före anropet —
@@ -157,7 +157,7 @@
     const ater = () => { knapp.textContent = text; knapp.disabled = false; };
     paketkropp().then(kropp => {
       knapp.textContent = 'Bygger paketet …';
-      return window.API.strom('/api/tryck', kropp, {
+      return window.API.strom('/api/tryck', Object.assign(kropp, tillagg), {
         log: m => { knapp.textContent = String(m || '').slice(0, 40); },
       });
     }).then(res => {
@@ -183,7 +183,9 @@
       }, 900);
       return;
     }
-    bygg(b, res => {
+    /* «Skriv ut» förblir EN hopfogad fil — det är hela poängen med högen:
+       kopiorna ligger i den och bunten är rätt när den kommer ur maskinen. */
+    bygg(b, {}, res => {
       /* Paketet öppnas i systemets PDF-läsare — där skrivardialogen bor.
          Appen har ingen egen skrivarkö och ska inte låtsas ha det. */
       window.API.json('/api/open', {
@@ -193,10 +195,15 @@
       window.toast && window.toast(kvittotext(res));
     });
   });
+  /* Nedladdningen är motsatsen: skilda filer i en egen mapp. En lärare som
+     sparar undan lektionens material vill ha tavlan, provet och facit var för
+     sig — inte en enda PDF att bläddra i när hon letar efter facit. Zip valdes
+     bort (ett steg till att packa upp) och likaså flera nedladdningar i rad
+     (webbläsare stoppar dem som «multipla nedladdningar»). */
   $('#trycksampdf').addEventListener('click', () => {
     const b = $('#trycksampdf');
-    if (!serverPa()) { window.toast && window.toast('Nedladdad som en PDF — alla dokument i ordning'); return; }
-    bygg(b, res => {
+    if (!serverPa()) { window.toast && window.toast('Nedladdade — ett dokument per fil'); return; }
+    bygg(b, { separat: true }, res => {
       window.API.json('/api/reveal', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path: res.path }),
@@ -209,9 +216,14 @@
      det. Ett paket som tyst blev en sida kortare upptäcks framför kopiatorn. */
   const kvittotext = res => {
     const sidor = `${res.sidor} ${res.sidor === 1 ? 'sida' : 'sidor'}`;
-    return (res.saknas || []).length
-      ? `Paketet är byggt — ${sidor}. ${res.saknas.join(', ')} kom inte med: ett papper som inte är godkänt har ingen PDF än.`
-      : `Paketet är byggt — ${sidor} i rätt ordning.`;
+    const antal = (res.filer || []).length;
+    const brist = (res.saknas || []).length
+      ? ` ${res.saknas.join(', ')} kom inte med: ett papper som inte är godkänt har ingen PDF än.`
+      : '';
+    if (res.mapp) return `${antal} ${antal === 1 ? 'fil' : 'filer'} i en egen mapp — ${sidor}, mappen är öppnad.${brist}`;
+    /* «I rätt ordning» sägs bara när ordningen faktiskt är hel. */
+    return brist ? `Paketet är byggt — ${sidor}.${brist}`
+                 : `Paketet är byggt — ${sidor} i rätt ordning.`;
   };
 
   function fram() {

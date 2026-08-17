@@ -105,6 +105,57 @@ def test_kopieantalet_har_ett_tak(client, monkeypatch):
     assert res["sidor"] == tryck.MAX_KOPIOR
 
 
+# -------------------------------------------- nedladdningen som egna filer --
+
+def test_nedladdningen_lamnar_delarna_som_egna_filer(client, monkeypatch):
+    """«Ladda ner» är inte «skriv ut»: läraren som sparar undan lektionens
+    material vill ha tavlan, provet och facit var för sig — inte en enda PDF
+    att bläddra i när hon letar efter facit."""
+    from pathlib import Path
+    eid = _prov(client, monkeypatch, sidor=3)
+    res = _done(client.post("/api/tryck", json={
+        "titel": "NA25 · 12 maj", "separat": True, "dokument": [
+            {"namn": "Tavla — derivator", "typ": "Tavla", "png": _DATA_URL,
+             "kopior": 1},
+            {"namn": "Prov — derivator", "exam_id": eid, "kopior": 22},
+            {"namn": "Lösningsförslag", "exam_id": eid, "bedomning": True,
+             "kopior": 1}]}))
+    mapp = Path(res["path"])
+    assert res["mapp"] is True
+    assert mapp.is_dir() and mapp.parent.name == "utskrift"
+    # Numret först är högens ordning: en mapp sorteras alfabetiskt, och utan
+    # det hamnar facit före provet.
+    assert res["filer"] == ["01 Tavla — derivator.pdf",
+                            "02 Prov — derivator.pdf",
+                            "03 Lösningsförslag.pdf"]
+    assert sorted(p.name for p in mapp.glob("*.pdf")) == sorted(res["filer"])
+    assert [d["fil"] for d in res["dokument"]] == res["filer"]
+    # Kopieantalet följer INTE med — 22 exemplar av samma fil i en mapp är 21
+    # filer för mycket.
+    assert res["sidor"] == 1 + 3 + 1
+
+
+def test_skriv_ut_fogar_fortfarande_ihop_till_en_fil(client, monkeypatch):
+    """Utan `separat` är paketet EN PDF med kopiorna i sig — det är hela
+    poängen med högen, och nedladdningen får inte ta den ifrån den."""
+    from pathlib import Path
+    eid = _prov(client, monkeypatch, sidor=2)
+    res = _done(client.post("/api/tryck", json={"dokument": [
+        {"namn": "Provet", "exam_id": eid, "kopior": 3}]}))
+    assert "mapp" not in res and "filer" not in res
+    assert Path(res["path"]).is_file() and res["sidor"] == 6
+
+
+def test_tva_rader_med_samma_namn_blir_tva_filer(client, monkeypatch):
+    """Provet och dess anpassade kopia heter samma sak i rutan. Numret gör
+    dem till två filer i stället för en som skriver över den andra."""
+    eid = _prov(client, monkeypatch, sidor=1)
+    res = _done(client.post("/api/tryck", json={"separat": True, "dokument": [
+        {"namn": "Prov", "exam_id": eid, "kopior": 1},
+        {"namn": "Prov", "exam_id": eid, "kopior": 1}]}))
+    assert res["filer"] == ["01 Prov.pdf", "02 Prov.pdf"]
+
+
 # ------------------------------------------------------- den anpassade kopian --
 
 def test_anpassad_kopia_har_farre_uppgifter_och_langre_tid(monkeypatch, tmp_path):

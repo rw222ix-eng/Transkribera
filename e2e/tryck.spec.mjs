@@ -58,13 +58,21 @@ async function fejka(page, sparade) {
   await page.route("**/api/dokument", route => json(route, { sparade, utkast: null }));
   await page.route("**/api/dokument/**", route => json(route, { ok: true, id: 1 }));
   await page.route("**/api/open", route => json(route, { ok: true }));
+  await page.route("**/api/reveal", route => json(route, { ok: true }));
   await page.route("**/api/tryck", route => {
-    anrop.push(route.request().postDataJSON());
+    const kropp = route.request().postDataJSON();
+    anrop.push(kropp);
+    /* Servern svarar olika på de två gesterna: en hopfogad fil för utskriften,
+       en mapp med skilda filer för nedladdningen (routes_tryck, `separat`). */
+    const resultat = kropp.separat
+      ? { path: "C:\\\\Transkriberingar\\\\utskrift\\\\NA25 2026-06-02 101500",
+          mapp: true, filer: ["01 Tavla — derivator.pdf", "02 Prov.pdf"],
+          sidor: 4, dokument: [], saknas: [] }
+      : { path: "C:\\\\Transkriberingar\\\\utskrift\\\\paket.pdf", sidor: 45,
+          dokument: [], saknas: [] };
     return route.fulfill({
       status: 200, contentType: "text/event-stream",
-      body: strom([{ type: "done", result: {
-        path: "C:\\\\Transkriberingar\\\\utskrift\\\\paket.pdf", sidor: 45,
-        dokument: [], saknas: [] } }]),
+      body: strom([{ type: "done", result: resultat }]),
     });
   });
   return anrop;
@@ -104,8 +112,33 @@ test("tavlan följer med i paketet som en riktig bild", async ({ page }) => {
   expect(bild.byte).toBeGreaterThan(10_000);
   // Överst i paketet — läraren bär in högen i den ordningen.
   expect(anrop[0].dokument[0].typ).toBe("Tavla");
+  // «Skriv ut» förblir EN hopfogad fil: kopiorna ligger i den.
+  expect(anrop[0].separat).toBeUndefined();
   // Kvittot säger inte längre att tavlan blev kvar.
   await expect(page.locator(".toast")).toContainText("i rätt ordning");
+});
+
+test("nedladdningen ber om skilda filer, inte om högen", async ({ page }) => {
+  /* Läraren som sparar undan lektionens material vill ha tavlan, provet och
+     facit var för sig — inte en enda PDF att bläddra i. Zip valdes bort (ett
+     steg till att packa upp) och flera nedladdningar i rad likaså (webbläsare
+     stoppar dem som «multipla nedladdningar»); servern lägger filerna i en
+     mapp och /api/reveal öppnar den. */
+  const anrop = await fejka(page, [rad(1, papper())]);
+  await page.goto("/");
+  await hydrerad(page);
+  await expect.poll(() => page.evaluate(() => window.Dokument.sparade().length)).toBe(1);
+
+  await page.getByRole("tab", { name: "Planering" }).click();
+  await page.evaluate(() => window.Tryck.oppna());
+  await expect(page.locator("#tryckruta")).toBeVisible();
+  await page.locator("#trycksampdf").click();
+
+  await expect.poll(() => anrop.length, { timeout: 30_000 }).toBe(1);
+  expect(anrop[0].separat).toBe(true);
+  // Samma hög som utskriften — det är bara formen som skiljer.
+  expect(anrop[0].dokument[0].typ).toBe("Tavla");
+  await expect(page.locator(".toast")).toContainText("egen mapp");
 });
 
 test("utan server spelas prototypens kvittering upp som förut", async ({ page }) => {

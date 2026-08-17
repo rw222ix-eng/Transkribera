@@ -1295,7 +1295,10 @@
     <div id="trycklista" style="margin-top:10px"></div>
     <div class="tryckfot">
       <button class="primar" id="tryckskicka">Skriv ut</button>
-      <button class="ghost" id="trycksampdf">Ladda ner som PDF</button>
+      <!-- «som PDF» stod här och blev osant när nedladdningen slutade vara en
+           hopfogad fil: det som kommer nu är en mapp med ett dokument per fil
+           (app/tryck.py dela_upp). Kvittot säger resten. -->
+      <button class="ghost" id="trycksampdf">Ladda ner</button>
       <button class="lank" id="tryckanpassad">Lägg till anpassad kopia</button>
     </div>
   </div>
