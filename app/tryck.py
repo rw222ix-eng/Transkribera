@@ -9,6 +9,10 @@ skrivardialogen utan hela poängen: en lärare som ska ha 22 elevark, 1 tavla oc
 1 facit kan inte säga det i en dialog som bara har ett kopieantal för hela
 jobbet. Ligger kopiorna i filen är högen redan rätt när den kommer ur skrivaren.
 
+NEDLADDNINGEN är den andra gesten och har motsatt form: skilda filer i en egen
+mapp (``dela_upp``). Läraren som sparar undan lektionens material letar efter
+facit, inte efter sida 47 i en bunt.
+
 Källorna är olika för olika papper, och det är därför den här modulen finns:
 
 * **Prov, arbetsblad och gruppuppgifter** har redan en PDF — den Tectonic
@@ -86,12 +90,17 @@ def png_till_pdf(dataurl: str, ut_dir: Path, stam: str) -> Path | None:
     from PIL import Image, UnidentifiedImageError
     try:
         bild = Image.open(io.BytesIO(rå))
+        # Måtten läses ur huvudet och prövas FÖRE avkodningen: några kilobyte
+        # PNG kan packa upp till gigabyte, och `load()` nedan är det som
+        # betalar. (Pillow har en egen bomb-vakt vid 179 Mpx som slår redan i
+        # `open` — den kastar DecompressionBombError och fångas här.)
+        if bild.width * bild.height > MAX_PIXLAR:
+            return None
         bild.load()
-    except (UnidentifiedImageError, OSError, ValueError):
+    except (UnidentifiedImageError, OSError, ValueError,
+            Image.DecompressionBombError):
         # Rätt magiska byte men trasig resten — klienten har ritat av något
         # annat än tavlan, och det ska sägas, inte sparas.
-        return None
-    if bild.width * bild.height > MAX_PIXLAR:
         return None
     bild = _platta(bild)
     b, h = bild.size

@@ -1,9 +1,14 @@
 """Utskriftspaketet — rutt (Etapp 0.9).
 
-Ett anrop, en PDF: hela lektionens hög i rätt ordning med rätt antal kopior
+Ett anrop, hela lektionens hög i rätt ordning med rätt antal kopior
 (app/tryck.py). Egen router av samma skäl som de andra — och för att paketet
 kan ta tiotals sekunder när en anpassad kopia ska renderas om, och då ska
 förloppet strömma i stället för att begäran stå tyst.
+
+Högen har TVÅ former och det är begäran som väljer: utskriften fogar ihop den
+till en enda PDF med kopiorna i sig, nedladdningen (`separat`) lägger varje
+dokument som egen fil i en mapp. Här bor också tavlans egen nedladdning, som
+inte är ett paket alls men delar bildvägen med det.
 """
 from __future__ import annotations
 
@@ -94,6 +99,11 @@ def create_router(base: Path, arbiter) -> APIRouter:
                             kod=str(a.get("kod") or f"{titel[:12]}-{i + 1:02d}"))
                     elif rad.get("bedomning") and provpdf:
                         pdf = tryck.bedomning_bredvid(provpdf)
+                    elif rad.get("facit") and provpdf:
+                        # Arbetsbladets separata facit. Raden bad förut om
+                        # bedömningen även för bladet — som aldrig har någon —
+                        # och lärarens lösningsblad hamnade alltid i `saknas`.
+                        pdf = tryck.facit_bredvid(provpdf)
                     else:
                         pdf = provpdf
                 if pdf is None:
@@ -115,14 +125,15 @@ def create_router(base: Path, arbiter) -> APIRouter:
                       "msg": "Lägger varje dokument som egen fil …"})
                 mapp = ut_dir / f"{titel} {stampel}"
                 filer = tryck.dela_upp(
-                    [(pdf, rad["namn"]) for (pdf, _kop), rad in zip(delar, kvitto)],
+                    [(pdf, kv["namn"]) for (pdf, _kop), kv in zip(delar, kvitto)],
                     mapp)
-                for rad, fil in zip(kvitto, filer):
-                    rad["fil"] = fil
+                for kv, fil in zip(kvitto, filer):
+                    kv["fil"] = fil
                 # `path` är MAPPEN här — /api/reveal öppnar den, och läraren
-                # ser filerna ligga i den ordning högen hade.
+                # ser filerna ligga i den ordning högen hade. `sidor` räknas
+                # utan kopiorna, för de finns inte här: en fil per dokument.
                 return {"path": str(mapp), "mapp": True, "filer": filer,
-                        "sidor": sum(rad["sidor"] for rad in kvitto),
+                        "sidor": sum(kv["sidor"] for kv in kvitto),
                         "dokument": kvitto, "saknas": saknas}
             emit({"type": "log", "msg": "Fogar ihop paketet …"})
             fil = ut_dir / f"{titel} {stampel}.pdf"

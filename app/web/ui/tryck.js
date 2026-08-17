@@ -55,7 +55,8 @@
       .forEach(r => {
         const l = r.v.bokuppg.losning;
         rader.push({
-          v: r.v, namn: `Lösningsförslag · boken s. ${r.v.bokuppg.sidor}`, typ: 'Facit',
+          v: r.v, bok: true,
+          namn: `Lösningsförslag · boken s. ${r.v.bokuppg.sidor}`, typ: 'Facit',
           under: `${l.antal} uppgifter (${l.niva.toLowerCase()}) · uppg ${l.remsa} · din kopia · enkelsidig`,
           antal: 1, sidor: Math.max(1, Math.ceil(l.antal / 4)), med: true
         });
@@ -125,6 +126,12 @@
     const med = rader.filter(r => r.med);
     return Promise.all(med.map(r => {
       const d = { namn: r.namn, typ: r.typ, kopior: r.antal };
+      /* Lösningsförslaget till BOKENS uppgifter ritas bara i webbläsaren
+         (BokLosning) — det finns ingen byggd fil på servern. Raden delar
+         dokument med sitt original, så utan den här avfarten skulle den få
+         originalets EGEN pdf under bokens namn. Utan id hamnar den i `saknas`
+         och kvittot säger det, vilket är sant. */
+      if (r.bok) return d;
       /* Anteckningarna ligger i samma tabell som proven på servern, så
          paketets exam-gren hämtar deras PDF utan en rad ny kod — men utan
          bedömning och utan anpassad kopia: det finns ingen bedömning att lägga
@@ -132,7 +139,11 @@
       if (r.v && r.v.antId) d.exam_id = r.v.antId;
       if (r.v && r.v.provId) {
         d.exam_id = r.v.provId;
-        if (r.typ === 'Facit') d.bedomning = true;
+        /* Provets lösningsförslag ÄR bedömningsanvisningen; arbetsbladets är
+           det separata facit. Två skilda filer, båda bredvid dokumentets egen
+           PDF. Raden bad förut om bedömningen för båda, och arbetsbladets
+           facit hamnade därför alltid i `saknas`. */
+        if (r.typ === 'Facit') d[r.v.typ === 'Prov' ? 'bedomning' : 'facit'] = true;
         if (r.anpassad) d.anpassad = {
           /* Samma anpassning som raden beskriver: förlängd tid, färre
              uppgifter, och en kod i foten som skiljer kopian. */

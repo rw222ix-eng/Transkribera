@@ -141,6 +141,42 @@ test("nedladdningen ber om skilda filer, inte om högen", async ({ page }) => {
   await expect(page.locator(".toast")).toContainText("egen mapp");
 });
 
+test("facit ber om sin egen fil — och bokens lösningar om ingen alls", async ({ page }) => {
+  /* Två fällor i samma rad. Lärarens lösningsblad är en KLON av bladet och bar
+     samma id, så paketet bad om provets bedömningsanvisning — som ett
+     arbetsblad aldrig har. Och lösningsförslaget till BOKENS uppgifter ritas
+     bara i webbläsaren: delar den raden id med sitt original får paketet
+     bladets egen pdf under bokens namn. */
+  const blad = papper({
+    typ: "Arbetsblad", moment: "primitiva funktioner", wb: null, provId: 7,
+    bokuppg: { sidor: "244–247",
+               losning: { antal: 4, niva: "Blå", remsa: "3101–3104" } },
+  });
+  const anrop = await fejka(page, [rad(1, blad),
+                                   rad(2, { ...blad, losningsblad: true })]);
+  await page.goto("/");
+  await hydrerad(page);
+  await expect.poll(() => page.evaluate(() => window.Dokument.sparade().length)).toBe(2);
+
+  await page.getByRole("tab", { name: "Planering" }).click();
+  await page.evaluate(() => window.Tryck.oppna());
+  await expect(page.locator("#tryckruta")).toBeVisible();
+  await page.locator("#tryckskicka").click();
+  await expect.poll(() => anrop.length, { timeout: 30_000 }).toBe(1);
+
+  const dok = anrop[0].dokument;
+  const bladet = dok.find(d => d.typ === "Arbetsblad");
+  expect(bladet.exam_id).toBe(7);
+  expect(bladet.facit).toBeUndefined();
+  const larargen = dok.find(d => d.typ === "Facit" && d.exam_id);
+  expect(larargen, JSON.stringify(dok)).toBeTruthy();
+  expect(larargen.facit).toBe(true);
+  expect(larargen.bedomning).toBeUndefined();
+  const boken = dok.find(d => d.namn.includes("boken"));
+  expect(boken, JSON.stringify(dok)).toBeTruthy();
+  expect(boken.exam_id).toBeUndefined();
+});
+
 test("utan server spelas prototypens kvittering upp som förut", async ({ page }) => {
   await page.route("**/api/var-kors", route => route.abort());
   const natanrop = [];

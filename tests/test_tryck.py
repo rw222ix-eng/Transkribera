@@ -34,8 +34,11 @@ def pdf_fil(sokvag, sidor=2):
     return sokvag
 
 
-def _prov(client, monkeypatch, sidor=3, bedomning=True):
-    """Ett godkänt prov med en byggd PDF — det paketet hämtar."""
+def _prov(client, monkeypatch, sidor=3, bedomning=True, facit=False):
+    """Ett godkänt prov med en byggd PDF — det paketet hämtar.
+
+    `bedomning` och `facit` är systerdokumenten bredvid: provets
+    bedömningsanvisning respektive arbetsbladets separata facit."""
     from app import db as appdb
     from tests.test_exam import _exam
     conn = appdb.connect(client.base_dir / "transkribera.db")
@@ -45,6 +48,8 @@ def _prov(client, monkeypatch, sidor=3, bedomning=True):
         pdf = pdf_fil(client.base_dir / "Transkriberingar" / "prov" / "p.pdf", sidor)
         if bedomning:
             pdf_fil(pdf.with_name("p - bedomning.pdf"), 1)
+        if facit:
+            pdf_fil(pdf.with_name("p - facit.pdf"), 1)
         appdb.set_exam_artifacts(conn, view["id"], tex_path=None,
                                  pdf_path=str(pdf), approve=True)
     finally:
@@ -103,6 +108,24 @@ def test_kopieantalet_har_ett_tak(client, monkeypatch):
     res = _done(client.post("/api/tryck", json={"dokument": [
         {"namn": "Provet", "exam_id": eid, "kopior": 5000}]}))
     assert res["sidor"] == tryck.MAX_KOPIOR
+
+
+def test_arbetsbladets_facit_kommer_med_i_paketet(client, monkeypatch):
+    """Bladets lösningsblad är en EGEN fil bredvid bladet (Etapp 2). Raden bad
+    förut om bedömningsanvisningen — som ett arbetsblad aldrig har — och
+    lärarens facit hamnade därför alltid i `saknas`."""
+    eid = _prov(client, monkeypatch, sidor=2, bedomning=False, facit=True)
+    res = _done(client.post("/api/tryck", json={"dokument": [
+        {"namn": "Arbetsblad", "exam_id": eid, "kopior": 22},
+        {"namn": "Facit", "exam_id": eid, "facit": True, "kopior": 1}]}))
+    assert res["saknas"] == []
+    assert res["sidor"] == 22 * 2 + 1
+    # De två systerdokumenten byts inte ut mot varandra: bladet har ingen
+    # bedömningsanvisning, och då ska raden saknas synligt.
+    res2 = _done(client.post("/api/tryck", json={"dokument": [
+        {"namn": "Arbetsblad", "exam_id": eid, "kopior": 1},
+        {"namn": "Bedömning", "exam_id": eid, "bedomning": True, "kopior": 1}]}))
+    assert res2["saknas"] == ["Bedömning"]
 
 
 # -------------------------------------------- nedladdningen som egna filer --
