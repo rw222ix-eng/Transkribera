@@ -598,6 +598,37 @@ def test_ett_blad_som_kompilerat_falls_inte_av_sitt_eget_facit(client, monkeypat
     assert client.get(f"/api/exams/{result['id']}/facit").status_code == 404
 
 
+@pytest.mark.tectonic
+def test_arbetsbladets_facit_kompilerar_och_bar_bara_losningarna(client, monkeypatch):
+    """Skarp körning: riktig Tectonic, riktig cache, samma väg som lärarens
+    maskin — och sedan läses PDF:en. Strängtesterna ovan kan inte se det som
+    faktiskt avgör: att pappret läraren delar ut bär lösningarna och INTE
+    uppgifterna. En mall cachen aldrig sett kraschar dessutom tyst första
+    gången ett papper av den sorten godkänns, och det syns bara här."""
+    from pathlib import Path
+
+    from tests.test_pdf_kontrakt import text_ur
+
+    result = _arbetsblad(client, monkeypatch)
+    res = _done(client.post(f"/api/exams/{result['id']}/approve", json={}))
+    assert res["pdf"], res["errors"]
+    blad = Path(res["pdf"])
+    facit = blad.with_name(f"{blad.stem} - facit{blad.suffix}")
+    assert facit.is_file()
+
+    r = client.get(f"/api/exams/{result['id']}/facit")
+    assert r.status_code == 200 and r.content.startswith(b"%PDF")
+
+    text = text_ur(facit)
+    assert "Facit" in text
+    for u in _exam_doc()["uppgifter"]:
+        stam = u["text"].split("$")[0].strip()
+        if len(stam) > 12:                    # en stam som går att söka efter
+            assert stam not in text, stam
+    # Lösningarna är kvar — det är hela pappret.
+    assert "Kravgränser" not in text
+
+
 def test_systerdokumenten_lyder_provets_sokvagssparr(client, monkeypatch):
     """Sökvägen ärvs ur pdf_path och prövas där. En pdf_path utanför basen
     får inte gå att nå via en systerrutt heller — den vore annars en väg runt
