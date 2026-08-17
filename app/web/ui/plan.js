@@ -2959,11 +2959,27 @@
     /* Släpps direkt smiter webbläsaren ifrån sparandet i Chrome. */
     setTimeout(() => URL.revokeObjectURL(url), 30000);
   }
+  /* Bilden på ett A4, hos servern. Samma rutt som tavlan använder: {namn, png}
+     in, en PDF ut (routes_tryck → tryck.png_till_pdf, ingen LaTeX). */
+  const sattPaSida = (arknamn, png) => fetch('/api/tavla/pdf', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ namn: arknamn, png }),
+  }).then(blobEller).then(blob => laggIHamtat(blob, arknamn));
+
   function skrivUt(b, namn, v) {
     if (b.dataset.lage) return;
     const tavla = !!(v && v.typ === 'Tavla');
     const vag = tavla ? '/api/tavla/pdf' : pdfVag(v);
-    if (!vag || !serverPa()) {
+    /* Bokens lösningsförslag ritas i webbläsaren (blad-boklos.js) och har ingen
+       fil på servern. De ligger sist i dokumentets trav, läraren SER dem i
+       förhandsvisningen — och hade ingen väg att få ut dem: tavlans knapp gav
+       tavlan, provets gav provet. De laddas nu ner som EGNA filer bredvid
+       originalet. Skilda filer och inte en hopslagen PDF, för de används vid
+       olika tillfällen: svarsfacit under genomgången, den bedömda elevlösningen
+       när någon frågar varför det blev fel. Chrome frågar en gång om «flera
+       filer» — det är ett billigare pris än en fil att klippa isär. */
+    const bok = (serverPa() && window.BladBild) ? window.BladBild.antal(v) : 0;
+    if (!serverPa() || (!vag && !bok)) {
       window.toast && window.toast(tavla
         ? `${namn} kan bli en PDF när appen kör — sidan sätts på servern`
         : `${namn} har ingen PDF än — godkänn pappret, då byggs den`);
@@ -2972,33 +2988,47 @@
     const text = b.textContent;
     b.dataset.lage = 'skriver';
     /* Avritningen tar sina hundradelar och sker före anropet — knappen ska
-       säga vad den gör, inte stå tyst (samma som i utskriftsrutan). */
-    b.textContent = tavla ? 'Ritar av …' : 'Hämtar …';
+       säga vad den gör, inte stå tyst (samma som i utskriftsrutan). Är det
+       flera filer räknar den också UPP: «Ritar av 2/4 …». En knapp som står på
+       samma ord i fem sekunder ser trasig ut. */
+    const totalt = (vag ? 1 : 0) + bok;
+    const av = i => (totalt > 1 ? ` ${i}/${totalt} ` : ' ');
     const ater = klart => {
       b.dataset.lage = klart ? 'klar' : '';
       b.textContent = klart ? 'Sparad' : text;
       if (klart) setTimeout(() => { b.removeAttribute('data-lage'); b.textContent = text; }, 1700);
       else b.removeAttribute('data-lage');
     };
-    /* Tavlan skickas som PNG och kommer tillbaka som ett A4; de andra
-       pappren ligger redan som filer och hämtas rakt av. */
-    const svaret = tavla
-      ? (window.TavlaBild
-          ? window.TavlaBild.png(v).then(png => {
-              b.textContent = 'Sätter sidan …';
-              return fetch(vag, {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ namn, png }),
-              });
-            })
-          : Promise.reject(new Error('Tavelmotorn är inte laddad.')))
-      : fetch(vag);
-    svaret
-      .then(blobEller)
-      .then(blob => {
-        laggIHamtat(blob, namn);
+    /* Originalet först — det är det pappret läraren bad om. Tavlan skickas som
+       PNG och kommer tillbaka som ett A4; de andra ligger redan som filer. */
+    const gjorda = vag ? 1 : 0;
+    let forst;
+    if (!vag) forst = Promise.resolve();
+    else if (!tavla) {
+      b.textContent = 'Hämtar' + av(1) + '…';
+      forst = fetch(vag).then(blobEller).then(blob => laggIHamtat(blob, namn));
+    } else if (window.TavlaBild) {
+      b.textContent = 'Ritar av' + av(1) + '…';
+      forst = window.TavlaBild.png(v).then(png => {
+        b.textContent = 'Sätter sidan' + av(1) + '…';
+        return sattPaSida(namn, png);
+      });
+    } else forst = Promise.reject(new Error('Tavelmotorn är inte laddad.'));
+
+    forst
+      .then(() => (bok ? window.BladBild.boklos(v, {
+        steg: i => { b.textContent = 'Ritar av' + av(gjorda + i + 1) + '…'; },
+      }) : []))
+      /* Sekventiellt: varje ark blir sin egen sida och sin egen fil. */
+      .then(ark => ark.reduce((kedja, a, i) => kedja.then(() => {
+        b.textContent = 'Sätter sidan' + av(gjorda + i + 1) + '…';
+        return sattPaSida(a.namn, a.png);
+      }), Promise.resolve()))
+      .then(() => {
         ater(true);
-        window.toast && window.toast(`${namn} · PDF:en ligger i Hämtat`);
+        window.toast && window.toast(totalt > 1
+          ? `${namn} · ${totalt} PDF:er ligger i Hämtat`
+          : `${namn} · PDF:en ligger i Hämtat`);
       })
       .catch(e => { ater(false); window.toast && window.toast(e.message); });
   }

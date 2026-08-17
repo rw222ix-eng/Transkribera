@@ -165,7 +165,13 @@ window.TavlaBild = (() => {
         bild.onload = () => ja();
         bild.onerror = () => nej(new Error('Tavlan gick inte att rita av.'));
       });
-      return klar.then(() => {
+      /* Femte fällan, hittad på bladen (blad-bild.js) och sann här också:
+         `decode()` lovar att BILDEN är avkodad — inte att SVG:ens egna
+         @font-face hunnit tas i bruk. Ritar man direkt är snitten kvar i sin
+         blockperiod inne i bilden, och den texten blir osynlig utan att något
+         felar. Ett varv till räcker; `rutor` släpper efter 600 ms om rAF står
+         stilla i en dold flik. */
+      return klar.then(() => rutor(2)).then(() => {
         const duk = document.createElement('canvas');
         duk.width = Math.round(b * skala);
         duk.height = Math.round(h * skala);

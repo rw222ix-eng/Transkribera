@@ -340,6 +340,42 @@ test("tavlan laddas ner som en PDF — inte som ett besked om att den är en bil
   await expect(page.locator("#fh-pdf")).toHaveText("Sparad");
 });
 
+test("tavlans nedladdning ger lösningsbladen som EGNA filer", async ({ page }) => {
+  /* «Ladda ner PDF» på en tavla gav tavlan — men bokens lösningsförslag, som
+     läraren just sett i samma trav, följde inte med. De har ingen fil på
+     servern: de ritas i webbläsaren. Nu ritas de av och sätts på var sitt A4,
+     ett papper per fil. */
+  const skickat = [];
+  await fejka(page, { sparade: [rad(1, papper({
+    typ: "Tavla", wbId: "abc", wb: tavla(), bokuppg: bokuppg() }))] });
+  await page.route("**/api/tavla/pdf", route => {
+    skickat.push(route.request().postDataJSON());
+    return route.fulfill({ status: 200, contentType: "application/pdf",
+                           body: Buffer.from("%PDF-1.7 en sida") });
+  });
+  await page.goto("/");
+  await hydrerad(page);
+  await oppnaForhandsvisning(page);
+
+  const filer = [];
+  page.on("download", d => filer.push(d.suggestedFilename()));
+  await page.locator("#fh-pdf").click();
+  await expect(page.locator("#fh-pdf")).toHaveText("Sparad", { timeout: 60_000 });
+
+  // Tavlan + svarsfacit + den bedömda elevlösningen: tre filer, tre anrop.
+  expect(skickat).toHaveLength(3);
+  expect(filer).toHaveLength(3);
+  skickat.forEach(s => {
+    expect(s.png.startsWith("data:image/png;base64,")).toBe(true);
+    expect(s.png.length).toBeGreaterThan(10_000);
+  });
+  // Namnen kommer ur arkens egna huvuden, inte ur dokumentets.
+  const namn = skickat.map(s => s.namn);
+  expect(namn.some(n => /Lösningsförslag · boken/.test(n))).toBe(true);
+  expect(namn.some(n => /Bedömd elevlösning/.test(n))).toBe(true);
+  expect(new Set(filer).size).toBe(3);   // ingen fil skriver över en annan
+});
+
 test("lösningsbladet laddar ner sin EGEN fil, inte originalets", async ({ page }) => {
   // Lösningsbladet är en KLON av sitt original och bär samma provId, så
   // knappen laddade ner provet när läraren bad om lösningsförslaget. De två

@@ -922,6 +922,33 @@ window.Blad = (() => {
     return $('.boards-container', ruta);
   }
 
+  /* Bokens lösningsförslag ritade FÖR SIG, någon annanstans än i traven.
+     Bildproducenten (blad-bild.js) ska rita av exakt de ark läraren ser, och
+     arken sätter sig inte själva: matematiken måste kompileras och ett
+     svarsfacit med tolv uppgifter PAGINERAS till två blad. Byggde man arken ur
+     de råa HTML-strängarna i stället hade det tolfte svaret klippts bort ur
+     PDF:en utan att något felade. Målet måste sitta i dokumentet — paginera
+     mäter — och typsnitten ska vara laddade innan den här kallas, annars mäts
+     fallbackens metriker. Returnerar bladen i ordning. */
+  function bokTill(mal, v) {
+    if (!mal || !v || v.losningsblad || !window.BokLosning) return [];
+    const ark = window.BokLosning.blad(v);
+    if (!ark.length) return [];
+    const trav = document.createElement('div');
+    trav.className = 'bladtrav';
+    trav.dataset.typ = v.typ;
+    mal.appendChild(trav);
+    ark.forEach(html => {
+      const skal = document.createElement('div');
+      skal.className = 'blad';
+      skal.innerHTML = html;
+      trav.appendChild(skal);
+    });
+    kompilera(trav);
+    paginera(trav);
+    return $$('.blad', trav);
+  }
+
   function rita(mal, v) {
     if (!mal || !v) return;
     mal.innerHTML = '';
@@ -983,5 +1010,5 @@ window.Blad = (() => {
     return trav;
   }
 
-  return { rita, form, uppgifter, skala, omritaTavlor, tavlaTill };
+  return { rita, form, uppgifter, skala, omritaTavlor, tavlaTill, bokTill };
 })();
