@@ -111,6 +111,36 @@ window.Kalender = (() => {
              hjalpmedel: { med, utan, okand: rader.length - med - utan } };
   }
 
+  /* ── PROVETS CENTRALA INNEHÅLL ────────────────────────
+     Läraren har skrivit i provhändelsens beskrivning vilket centralt innehåll
+     provet berör, och synken har översatt det till Gy25-koder utan att spara ett
+     ord av texten (calendar_google.centralt_innehall_ur_text). Skapar hon sedan
+     provet i appen ska punkterna redan vara ikryssade — hon har svarat på frågan
+     en gång, i kalendern.
+
+     `ci` saknas helt på en post ingen synk läst med Gy25-ögon, är en TOM lista
+     när beskrivningen är läst utan träff, och `ci_okant` räknar raderna som såg
+     ut att påstå något men inte kändes igen. Bara den första formen — en post
+     med minst en kod — säger något värt att förvälja på.
+
+     Rubriken följer med som grund, utan klassnamnet: «NA26F: PROV 1 (kap 1 och
+     2)» säger «PROV 1 (kap 1 och 2)» i en app där klassen redan står i steg 1. */
+  const PROVSLAG = ['prov', 'diagnos'];
+  const utanKlass = (titel, klass) => {
+    const t = String(titel || '').trim();
+    if (!klass) return t;
+    const i = t.toLowerCase().indexOf(String(klass).toLowerCase());
+    return (i === 0 ? t.slice(String(klass).length).replace(/^\s*[:·\-–—]\s*/, '') : t).trim();
+  };
+  function provpunkter(klass, datum) {
+    if (!datum) return null;
+    const p = poster.find(x => x.datum === datum && PROVSLAG.includes(x.slag)
+      && (!klass || !x.klass || x.klass === klass)
+      && Array.isArray(x.ci) && x.ci.length);
+    return p ? { koder: p.ci.slice(), okant: p.ci_okant || 0,
+                 rubrik: utanKlass(p.titel, p.klass), slag: p.slag } : null;
+  }
+
   /* Träffar inspelningstiden en lektion i schemat? Då är klass och kurs inte
      längre en gissning — de är fakta, och ramen ska vara solid. */
   function traff(datum, klockslag) {
@@ -328,5 +358,5 @@ window.Kalender = (() => {
     .then(d => { if (d) { ta(d); ritaOm(); } })
     .catch(() => { /* servern svarar inte: prototypens vecka står kvar */ });
 
-  return { poster, schema, lov, innehall, innehallFor, planeringen, omVeckor, forDatum, schemaFor, lovFor, traff, krockrad, veckan, veckoBild, veckonr, mandagen, nastaSkolvecka, terminen, lagg, ord, synka, redo, franServern: () => franServern, idag: () => iso(new Date()) };
+  return { poster, schema, lov, innehall, innehallFor, planeringen, provpunkter, omVeckor, forDatum, schemaFor, lovFor, traff, krockrad, veckan, veckoBild, veckonr, mandagen, nastaSkolvecka, terminen, lagg, ord, synka, redo, franServern: () => franServern, idag: () => iso(new Date()) };
 })();

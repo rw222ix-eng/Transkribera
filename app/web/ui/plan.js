@@ -1274,6 +1274,49 @@
             + `s. ${p.fran}–${p.till}`);
   }
 
+  /* ══════════ PROVETS PUNKTER STÅR I KALENDERN ══════════
+     Läraren har lagt Gy25-punkterna i provhändelsens beskrivning, och synken har
+     översatt dem till koder utan att spara ett ord av texten (se
+     calendar_google.centralt_innehall_ur_text och _PROVETS_CI_MIGRATION). Har
+     hon svarat på frågan där ska hon inte behöva svara igen här.
+
+     Koderna tolkas i den nivå väljaren står på — samma regel som `gyKoder()`,
+     och samma skäl: en kod hör hemma i en nivå, och det är nivån i väljaren som
+     avgör vad ett kryss betyder. Ligger provets punkter i en annan nivå än den
+     valda hittas inga brickor, och då sägs ingenting alls: ett tyst förval är
+     bättre än ett halvt.
+
+     Ett FÖRVAL, aldrig ett lås. Noten under täckningen säger varifrån punkterna
+     kom och hur många rader som INTE kändes igen — fyra punkter av sex ser
+     precis lika färdigt ut som sex, och läraren är den enda som kan se
+     skillnaden. */
+  function gynot(text) {
+    const p = $('#gykalender');
+    if (!p) return;
+    p.hidden = !text;
+    p.textContent = text || '';
+  }
+  function kalenderpunkter() {
+    const K = window.Kalender;
+    if (!K || !K.provpunkter) return gynot('');
+    const typ = valt('skrivtyp');
+    const klass = $('#p-klass').value || '';
+    /* Provets egen dag står i upplägget (steg 3), lektionens i steg 1 — samma
+       ordning som resten av begäran läser dem. */
+    const dag = ((inst[typ] || {}).narDatum) || ($('#p-datum') || {}).value || '';
+    const p = K.provpunkter(klass, dag);
+    if (!p) return gynot('');
+    const korta = gyPunkter().filter(x => p.koder.includes(x.kod)).map(x => x.kort);
+    if (!korta.length) return gynot('');
+    vald.clear();
+    korta.forEach(k => vald.add(k));
+    ritaGy();
+    gynot(`Ur kalendern: ${korta.length} ${korta.length === 1 ? 'punkt' : 'punkter'}`
+          + (p.rubrik ? ` (${p.rubrik})` : '')
+          + (p.okant ? ` · ${p.okant} ${p.okant === 1 ? 'rad kändes' : 'rader kändes'} inte igen`
+                     : ''));
+  }
+
   /* Väljs en elev som mottagare kryssas HENNES punkter för — de svaga när
      bladet ska stötta, de starka när det ska utmana. Läraren kan kryssa om;
      det är hennes val som skickas, och servern faller tillbaka på profilen
@@ -1328,6 +1371,14 @@
        underlag och ljuger om en tavlas. */
     if (typ === 'Prov' && forra !== 'Prov') provetsUnderlag();
     if (typ !== 'Prov') { provnot(''); provgrund = ''; }
+    /* Kalenderns punkter sätts SIST av förvalen, och det är med flit: står det
+       ett prov på dagen med innehåll skrivet i beskrivningen är det lärarens
+       eget svar, och det går före både diagnosens «hela kursen» och den nivå
+       kursen råkade föreslå. Utan träff rörs ingenting — förvalet ovanför står
+       kvar precis som förut. */
+    if (typ === 'Prov' || typ === 'Diagnos') {
+      if (forra !== typ) kalenderpunkter();
+    } else gynot('');
     ritaTypval();
     speglaHelheten();
     planKoll();
