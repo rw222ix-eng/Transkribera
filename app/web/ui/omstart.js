@@ -32,6 +32,13 @@
     if (window.Kallor) ['lektion', 'bok', 'foton', 'sparat'].forEach(d => window.Kallor.satt(d, false, true));
     qq('#valdalektioner .lchip').forEach(c => c.click());
     qq('#sidminis .sidbort').forEach(b => b.click());
+    /* Utkastet hörde hit lika mycket som källorna och lektionen: «Allt rensat»
+       lämnade pappret liggande i rutan, och eftersom utkastet plockas upp igen
+       vid varje laddning var det tillbaka nästa gång appen öppnades — efter att
+       läraren uttryckligen bett om ett tomt bord. Tyst slängning: rensningen
+       har en egen toast, och den säger det i stället. */
+    const slangt = window.Dokument && window.Dokument.slangUtkast
+      ? window.Dokument.slangUtkast(true) : false;
     if (window.Dokument && window.Dokument.slappForlaga) window.Dokument.slappForlaga();
     if (window.Dokument && window.Dokument.slappFoljd) window.Dokument.slappFoljd();
     if (window.Dokument && window.Dokument.slappOmprov) window.Dokument.slappOmprov();
@@ -61,7 +68,11 @@
     window.Utgang && window.Utgang.rita();
     window.PlanSteg && window.PlanSteg.omstart();
     spegla();
-    window.toast && window.toast('Allt rensat — välj lektionen i veckan igen');
+    /* Slängningen sägs bara när det fanns något att slänga — annars påstår
+       toasten att ett papper försvann som aldrig låg framme. */
+    window.toast && window.toast(slangt
+      ? 'Allt rensat — utkastet är slängt, välj lektionen i veckan igen'
+      : 'Allt rensat — välj lektionen i veckan igen');
   }
 
   knapp.addEventListener('click', rensa);

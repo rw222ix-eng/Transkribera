@@ -573,3 +573,27 @@ test("städades inget sägs inget", async ({ page }) => {
   await expect(page.locator("#dokument")).toBeHidden();
   await expect(page.locator(".toast", { hasText: "Det gamla utkastet" })).toHaveCount(0);
 });
+
+// ── «Börja om» lägger undan utkastet ────────────────────────────────────────
+// «Allt rensat» rensade panelen men lämnade pappret liggande i rutan — och
+// eftersom utkastet plockas upp igen vid varje laddning var det tillbaka nästa
+// gång appen öppnades, efter att läraren uttryckligen bett om ett tomt bord.
+
+test("«Börja om» slänger utkastet och säger det", async ({ page }) => {
+  const anrop = await medUtkast(page, treVersioner());
+
+  await page.locator(".omstartknapp").click();
+  await expect(page.locator("#dokument")).toBeHidden();
+  await expect.poll(() => anrop.some(a => a.metod === "DELETE" && a.vag === "/api/dokument/7")).toBe(true);
+  await expect(page.locator(".toast").last()).toContainText("utkastet är slängt");
+});
+
+test("«Börja om» utan utkast påstår inte att något slängdes", async ({ page }) => {
+  await fejka(page);
+  await page.goto("/");
+  await hydrerad(page);
+  await page.getByRole("tab", { name: "Planering" }).click();
+
+  await page.locator(".omstartknapp").click();
+  await expect(page.locator(".toast").last()).toHaveText("Allt rensat — välj lektionen i veckan igen");
+});
