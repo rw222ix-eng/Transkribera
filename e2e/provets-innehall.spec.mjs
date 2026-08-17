@@ -174,6 +174,35 @@ test("diagnosen tar kalenderns punkter framför hela kursen", async ({ page }) =
   await expect(page.locator("#gykalender")).toContainText("Ur kalendern: 1 punkt");
 });
 
+/* ── 1b · Punkterna hör till PROVET, inte till lektionen ─
+ *
+ * Provet planeras oftast från en lektion — kortet i veckan — och då står
+ * lektionens dag i steg 1. Punkterna läses ur den post som ska skrivas: nästa
+ * bokade prov för klassen (samma kant som sidförvalets fönster, plan.js
+ * provkanten). Diagnosen läser diagnosposter av samma skäl: det är två sorters
+ * dagar och två sorters papper.
+ */
+test("punkterna kommer ur nästa bokade prov när dagen är lektionens",
+  async ({ page }) => {
+    await fejka(page);
+    await planeringen(page, "2026-09-28");      // en lektion, ingen post
+    await skriver(page, "Prov");
+    expect((await valda(page)).sort()).toEqual(
+      ["Andragradsekvationer", "Logaritmer", "Rotekvationer"]);
+    await expect(page.locator("#gykalender"))
+      .toContainText("Ur kalendern: 3 punkter (PROV 1 (kap 1 och 2))");
+  });
+
+test("diagnosen läser diagnosposten, inte provet", async ({ page }) => {
+  await fejka(page);
+  await planeringen(page, "2026-09-28");
+  await skriver(page, "Diagnos");
+  /* Provet den 1 oktober ligger närmast i tiden, men det är en DIAGNOS som
+     skrivs — och den bokade diagnosen står den 20 oktober. */
+  expect(await valda(page)).toEqual(["Normalfördelning"]);
+  await expect(page.locator("#gykalender")).toContainText("(Diagnos 2)");
+});
+
 /* ── 2 · Frånvaron ──────────────────────────────────── */
 
 test("prov utan igenkänt innehåll rör inte väljaren", async ({ page }) => {

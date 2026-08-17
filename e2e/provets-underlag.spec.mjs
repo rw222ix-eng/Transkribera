@@ -419,6 +419,188 @@ test("lärarens eget spann överlever ett senare förval", async ({ page }) => {
     .toMatchObject({ fran: 8, till: 9 });
 });
 
+/* ── 4d · Fönstrets högra kant är provdagen i kalendern ─
+ *
+ * Provet är bokat innan det är skrivet: läraren la in det när hon la terminen.
+ * Planerar hon det sedan FRÅN en lektion — kortet i veckan, den vanliga vägen
+ * in — vet steg 1 bara lektionens dag, och fönstret stängdes då mitt i
+ * sträckan. TE26A:s prov den 16 september fick «s. 2–5» i stället för
+ * planeringens s. 2–39.
+ *
+ * Poster: ett prov för klassen den 16 september, och ett äldre den 26 augusti
+ * som prövar vänsterkanten. Den fjärde innehållsraden (20–26, den 14
+ * september) ligger före provdagen men efter lektionen — det är precis den
+ * raden som visar vilken kant som gäller.
+ */
+const PROVPOSTER = [
+  { datum: "2026-08-26", tid: "09:05–10:20", titel: "NA25: PROV 1", klass: "NA25",
+    slag: "prov", kalla: "schema" },
+  { datum: "2026-09-16", tid: "09:05–10:20", titel: "NA25: PROV 2 (kap 1)",
+    klass: "NA25", slag: "prov", kalla: "schema" },
+];
+
+/** Samma fejk som ovan, men med provposterna i kalendern. */
+async function medProvpost(page, { poster = PROVPOSTER, bocker = null } = {}) {
+  await fejka(page, { bocker });
+  await page.unroute("**/api/schema");
+  await page.route("**/api/schema", route => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify({ ...SCHEMA, poster }) }));
+}
+
+/** Lärarens egen provdag: samma gest som väljaren i upplägget gör. */
+const valjProvdag = (page, datum) => page.evaluate(d => {
+  const f = document.querySelector('.typrad[data-id="nartid"] .nardatum');
+  f.value = d;
+  f.dispatchEvent(new Event("change", { bubbles: true }));
+}, datum);
+
+test("provdagen kommer ur den bokade posten, inte ur lektionen", async ({ page }) => {
+  await medProvpost(page);
+  await planeringen(page);                     // lektionen den 7 september
+  await page.evaluate(() => window.SattLage("Prov"));
+  await tillSteg(page, 3);
+
+  /* Fönstret slutar den 16 september och inte den 7:e, så lektionen den 14
+     räknas med: 2–12 blir 2–26. Vänsterkanten är provet den 26 augusti —
+     det klassen redan prövats på prövas inte igen — och de två första
+     lektionerna faller därför bort. */
+  await expect(page.locator("#bkplanering"))
+    .toHaveText("Ur planeringen: 2 lektioner, s. 7–26 — fram till provet 16 september.");
+  await expect.poll(() => page.evaluate(() => window.Uppslag.spann()))
+    .toMatchObject({ fran: 7, till: 26 });
+});
+
+test("dagen läraren själv väljer vinner över posten", async ({ page }) => {
+  await medProvpost(page);
+  await planeringen(page);
+  await page.evaluate(() => window.SattLage("Prov"));
+  await tillSteg(page, 4);
+  await valjProvdag(page, "2026-09-08");
+
+  /* Hennes dag stänger fönstret före den 14:e — och noten säger inte längre
+     «fram till provet», för kanten är inte kalenderns. */
+  await tillSteg(page, 3);
+  await expect(page.locator("#bkplanering"))
+    .toHaveText("Ur planeringen: 1 lektion, s. 7–12");
+});
+
+test("ett prov BAKÅT i kalendern är ingen högerkant", async ({ page }) => {
+    /* Golvet för sökningen är lektionens egen dag: annars hade en lektion i
+       november fått terminens första bokade prov som högerkant. */
+    await medProvpost(page, { poster: [PROVPOSTER[0]] });
+    await planeringen(page);                   // lektionen den 7 september
+    await page.evaluate(() => window.SattLage("Prov"));
+    await tillSteg(page, 3);
+    // Enda posten ligger BAKÅT (26 augusti) — då gäller lektionens dag.
+    await expect(page.locator("#bkplanering"))
+      .toHaveText("Ur planeringen: 1 lektion, s. 7–12");
+  });
+
+test("lärarens remsa överlever att kanten kommer ur kalendern", async ({ page }) => {
+  await medProvpost(page);
+  await planeringen(page);
+  await page.evaluate(() => window.SattLage("Prov"));
+  await tillSteg(page, 3);
+  await expect.poll(() => page.evaluate(() => window.Uppslag.spann()))
+    .toMatchObject({ fran: 7, till: 26 });
+
+  await page.locator('#bkremsa .bksida[data-s="8"]').click();
+  await page.locator('#bkremsa .bksida[data-s="9"]').click();
+  await staller(page, { klass: "NA25", kurs: "Matematik, nivå 2c",
+                        datum: "2026-08-31" });
+  await expect.poll(() => page.evaluate(() => window.Uppslag.spann()))
+    .toMatchObject({ fran: 8, till: 9 });
+});
+
+/* ── 4e · Kursnamnet på raderna är synkens gissning ──
+ *
+ * Rubriken i skolans kalender säger «nivå 2c» på en klass som läser 1c, och
+ * kursfiltret tystade då hela unionen: provet fick klassprofilens gissning
+ * «s. 2–5» i stället för planeringens sträcka. Klassen och fönstret är det
+ * läraren själv pekat ut — etiketten är en gissning ovanpå.
+ */
+test("kursetiketten på raderna tystar inte klassens planering", async ({ page }) => {
+  await fejka(page);
+  await planeringen(page);
+  // Lektionen säger 1c, raderna i kalendern är märkta 2c. Sidorna är samma.
+  await staller(page, { klass: "NA25", kurs: "Matematik, nivå 1c",
+                        datum: "2026-09-07" });
+  await page.evaluate(() => window.SattLage("Prov"));
+  await tillSteg(page, 3);
+  await expect(page.locator("#bkplanering"))
+    .toHaveText("Ur planeringen: 3 lektioner, s. 2–12");
+});
+
+test("en annan klass planering är fortfarande ingens", async ({ page }) => {
+  /* Motstycket: klassen är det enda filtret som finns kvar, och det håller. */
+  await fejka(page);
+  await planeringen(page);
+  await staller(page, { klass: "SA25", kurs: "Matematik, nivå 2c",
+                        datum: "2026-09-07" });
+  await page.evaluate(() => window.SattLage("Prov"));
+  await tillSteg(page, 3);
+  await expect(page.locator("#bkplanering")).toBeHidden();
+});
+
+/* ── 4f · Förvalsminnet noteras i EN bok ─────────────
+ *
+ * Steg 1 fylls i tur och ordning: klassen först, kursen strax efter. Mellan
+ * dem satte förvalet spannet i den bok som råkade stå i dörren, och en bok
+ * vars PDF saknar sina första blad KLAMPAR spannet (s. 2 blir s. 6). När
+ * kursens bok sedan kom in läste förvalet skillnaden som lärarens hand — och
+ * rörde aldrig spannet igen. Provet som flyttades behöll då förra fönstrets
+ * sidor fast noten under remsan sa något annat.
+ */
+test("förvalet skriver om sitt eget spann fast boken bytts under det",
+  async ({ page }) => {
+    /* «Kapad bok» är en bok vars PDF saknar sina fem första blad: tryckt s. 6
+       är PDF-sida 1, och uppslaget klampar därför varje spann till s. 6 och
+       uppåt (se «remsan börjar där boken börjar»). */
+    const KAPAD = { ...BOK_1C, namn: "Kapad bok", sidoffset: -5, sidor: 40 };
+    await fejka(page, { bocker: [BOK, KAPAD] });
+    await page.goto("/");
+    await hydrerad(page);
+    await page.getByRole("tab", { name: "Planering" }).click();
+    await page.evaluate(() => window.SattLage("Prov"));
+    await tillSteg(page, 3);
+
+    // Klassen först — kursen är ännu tom, och dörren står på hyllans första bok.
+    await page.evaluate(() => {
+      const f = document.querySelector("#p-klass");
+      if (![...f.options].some(o => o.value === "NA25" || o.textContent === "NA25")) {
+        f.appendChild(Object.assign(document.createElement("option"),
+                                    { textContent: "NA25" }));
+      }
+      f.value = "NA25";
+      f.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await expect.poll(() => page.evaluate(() => window.Uppslag.spann()))
+      .toMatchObject({ fran: 2, till: 26, bok: "Matematik 5000+ Kurs 2c" });
+
+    /* Klassprofilens egen förvalsgest lägger kursens bok i dörren en bråkdel
+       senare (profil.js anvand: `laggBok(boken)`) — och spannet klampas om.
+       Det är INTE lärarens hand, och förvalet får inte tolka det så. */
+    await page.evaluate(() => window.Uppslag.laggBok("Kapad bok"));
+    await expect.poll(() => page.evaluate(() => window.Uppslag.spann()))
+      .toMatchObject({ fran: 6, till: 26, bok: "Kapad bok" });
+
+    // …och sedan kursen och dagen. Förvalet ska skriva om sitt eget spann.
+    await staller(page, { klass: "NA25", kurs: "Matematik, nivå 1c",
+                          datum: "2026-09-07" });
+    await expect(page.locator("#bkplanering"))
+      .toHaveText("Ur planeringen: 3 lektioner, s. 2–12");
+    // Noten säger planeringens sidor, remsan bokens: s. 2 finns inte i den här.
+    await expect.poll(() => page.evaluate(() => window.Uppslag.spann()))
+      .toMatchObject({ fran: 6, till: 12, bok: "Kapad bok" });
+
+    // Provet flyttas: förvalet är fortfarande sitt eget och följer med.
+    await staller(page, { klass: "NA25", kurs: "Matematik, nivå 1c",
+                          datum: "2026-08-31" });
+    await expect.poll(() => page.evaluate(() => window.Uppslag.spann()))
+      .toMatchObject({ fran: 6, till: 9 });
+  });
+
 /* ── 4c · Uppslaget överlever ett bokbyte ───────────── */
 
 test("bokbytet ritar om båda bladen med den nya bokens id", async ({ page }) => {
