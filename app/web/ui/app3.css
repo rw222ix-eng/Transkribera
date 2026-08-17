@@ -227,6 +227,18 @@ html{font-size:clamp(14.5px,13px + .3vw,18.5px)}
 .dfknappar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:10px}
 .dfknappar .primar.farlig{background:var(--berry);border-color:var(--berry);padding:9px 16px;font-size:.84rem}
 .dfknappar .lank{font-size:.84rem;color:var(--ink-2)}
+/* Samma fråga, en annan bärare. I förhandsvisningen finns inget kort att lägga
+   sig över, så rutan själv blir bäraren: den klipper redan sitt innehåll, och
+   `position:relative` här är det enda som behövs för att `inset:0` ska syfta på
+   modalen och inte på hela skärmen. Frågan mitt på pappret, inte i ett hörn. */
+.modal{position:relative}
+.modal>.dokfraga{border-radius:0;padding:clamp(24px,5vw,64px);align-items:center;text-align:center}
+.modal>.dokfraga .dfnamn{max-width:52ch}
+/* Radera står sist på raden, bortom noten (som redan tar margin-left:auto), och
+   bär berry först när handen ligger på den. En röd knapp som alltid lyser drar
+   blicken till det man minst vill råka göra. */
+#fh-radera{color:var(--ink-2)}
+#fh-radera:hover,#fh-radera:focus-visible{background:var(--berry);border-color:var(--berry);color:#fff}
 
 /* canvas-verktygen: historik, zoom och godkännandet på samma rad, radbryter vid behov */
 .gverktyg{flex-wrap:wrap;justify-content:flex-end;row-gap:8px}

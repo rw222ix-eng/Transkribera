@@ -2681,6 +2681,33 @@
     return `<span class="minisida" data-typ="${v.typ}"><span class="msrub"></span><span class="mslinje" style="width:88%"></span><span class="mslinje" style="width:74%"></span>
       ${Array.from({ length: rader }, () => '<span class="msrad"><span class="msnr"></span><span class="mslinje" style="flex:1;margin:0"></span></span><span class="mslinje" style="width:64%"></span>').join('')}</span>`;
   }
+  /* ── Att kasta ett papper ────────────────────────────
+     Raderingen bor här ute och inte som en metod på window.Dokument, för den
+     har två ingångar: kortets radera-knapp i den gamla högen och «Radera» i
+     förhandsvisningens fot. Två kopior av samma splice hade glidit isär, och
+     det som skulle glida isär är just facitet: pappret OCH dess lösningsblad
+     ska följas åt, för ett facit utan sitt blad är skräp. */
+  function raderaDok(v) {
+    const i = sparat.indexOf(v);
+    if (i < 0) return false;
+    const syskon = sparat.filter(x => x !== v && x.losningsblad && x.typ === v.typ && x.moment === v.moment && x.datum === v.datum);
+    const bort = [{ i, v }].concat(syskon.map(s => ({ i: sparat.indexOf(s), v: s })));
+    bort.sort((a, b) => b.i - a.i).forEach(b => sparat.splice(b.i, 1));
+    bort.forEach(b => dokTaBort(b.v));
+    ritaSparat();
+    window.Klass && window.Klass.rita();
+    window.toast && window.toast(`${dokNamn(v)} raderad${syskon.length ? ' med sitt facit' : ''}`, 'Ångra', () => {
+      bort.slice().sort((a, b) => a.i - b.i).forEach(b => sparat.splice(b.i, 0, b.v));
+      /* Ångrandet skriver tillbaka pappret — det får ett nytt id, men ligger
+         på sin gamla plats i högen. */
+      bort.forEach(b => dokSpara(b.v));
+      dokOrdna();
+      ritaSparat();
+      window.Klass && window.Klass.rita();
+    });
+    return true;
+  }
+
   window.Dokument = {
     sparade: () => sparat,
     /* Utgångspunkterna i steg 3 väljer källor åt planeringen — samma tillstånd
@@ -2750,25 +2777,7 @@
     },
     /* Med tiden vet man vad som inte fungerade. Det ska gå att kasta — pappret
        OCH dess facit, för ett facit utan sitt blad är skräp. */
-    radera(v) {
-      const i = sparat.indexOf(v);
-      if (i < 0) return;
-      const syskon = sparat.filter(x => x !== v && x.losningsblad && x.typ === v.typ && x.moment === v.moment && x.datum === v.datum);
-      const bort = [{ i, v }].concat(syskon.map(s => ({ i: sparat.indexOf(s), v: s })));
-      bort.sort((a, b) => b.i - a.i).forEach(b => sparat.splice(b.i, 1));
-      bort.forEach(b => dokTaBort(b.v));
-      ritaSparat();
-      window.Klass && window.Klass.rita();
-      window.toast && window.toast(`${dokNamn(v)} raderad${syskon.length ? ' med sitt facit' : ''}`, 'Ångra', () => {
-        bort.slice().sort((a, b) => a.i - b.i).forEach(b => sparat.splice(b.i, 0, b.v));
-        /* Ångrandet skriver tillbaka pappret — det får ett nytt id, men ligger
-           på sin gamla plats i högen. */
-        bort.forEach(b => dokSpara(b.v));
-        dokOrdna();
-        ritaSparat();
-        window.Klass && window.Klass.rita();
-      });
-    },
+    radera: v => raderaDok(v),
     /* «Börja om» släpper också den väntande följeslagaren — allt rensat betyder allt. */
     slappFoljd() { dokFoljd(foljdVantar && foljdVantar.forlaga, null); foljdVantar = null; foljdKvar = null; ritaFoljeVanta(); const r = $('#foljerad'); if (r) r.hidden = true; },
     /* Något skrevs rakt på pappret — rättningen är den som gör det. Skickas det
@@ -2868,7 +2877,7 @@
         const b = e.target.closest('[data-a]');
         const namn = dokNamn(v);
         if (b && b.dataset.a === 'pdf') { skrivUt(b, namn, v); return; }
-        if (b && b.dataset.a === 'radera') { fragaRadera(d, i, namn); return; }
+        if (b && b.dataset.a === 'radera') { fragaRadera(d, v); return; }
         if (b && b.dataset.a === 'syskon') { fragaSyskon(d, i); return; }
         if (b && b.dataset.a === 'ratta') { e.stopPropagation(); window.Rattning && window.Rattning.oppna(v); return; }
         if (b && (b.dataset.a === 'ja' || b.dataset.a === 'nej')) return;
@@ -3058,34 +3067,29 @@
     });
   }
 
-  function fragaRadera(kort, i, namn) {
-    if ($('.dokfraga', kort)) return;
+  /* Frågan ställs I bäraren — kortet eller förhandsvisningsrutan — och aldrig i
+     en egen modal ovanpå en modal. Bäraren är också det som svarar på vad man
+     raderar: man ser pappret bakom frågan.
+
+     Förr låg både frågan och själva raderandet här, och raderandet gick via
+     `#sparatnat`: den rutan finns inte i app.html längre, så knappen ritades
+     aldrig och koden var död. Nu delas flödet med window.Dokument.radera. */
+  function fragaRadera(barare, v, efterat) {
+    if (!barare || !v || $('.dokfraga', barare)) return;
     const f = document.createElement('div');
     f.className = 'dokfraga';
     f.innerHTML = '<p class="dfrubrik">Radera dokumentet?</p><p class="dfnamn"></p><div class="dfknappar"><button class="primar farlig" type="button" data-a="ja">Radera</button><button class="lank" type="button" data-a="nej">Behåll</button></div>';
-    $('.dfnamn', f).textContent = namn;
-    kort.appendChild(f);
+    $('.dfnamn', f).textContent = dokNamn(v);
+    barare.appendChild(f);
     requestAnimationFrame(() => f.setAttribute('data-pa', ''));
-    $('[data-a="ja"]', f).addEventListener('click', ev => { ev.stopPropagation(); taBort(i, namn); });
-    $('[data-a="nej"]', f).addEventListener('click', ev => {
+    const stang = () => { f.removeAttribute('data-pa'); setTimeout(() => f.remove(), 180); };
+    $('[data-a="ja"]', f).addEventListener('click', ev => {
       ev.stopPropagation();
-      f.removeAttribute('data-pa');
-      setTimeout(() => f.remove(), 180);
+      stang();
+      raderaDok(v);
+      if (efterat) efterat();
     });
-  }
-  function taBort(i, namn) {
-    const bort = sparat.splice(i, 1)[0];
-    dokTaBort(bort);
-    ritaSparat();
-    window.toast && window.toast(`${namn} raderades`, 'Ångra', () => {
-      sparat.splice(i, 0, bort);
-      dokSpara(bort);
-      dokOrdna();
-      ritaSparat();
-      const kort = $$('#sparatnat .dokkort')[i];
-      if (kort) { kort.setAttribute('data-traff', ''); setTimeout(() => kort.removeAttribute('data-traff'), 2400); }
-      window.toast && window.toast(`${namn} är tillbaka`);
-    });
+    $('[data-a="nej"]', f).addEventListener('click', ev => { ev.stopPropagation(); stang(); });
   }
 
   const fhskal = $('#forhandsskal');
@@ -3122,6 +3126,14 @@
       const i = fhIndex;
       fhStang();
       byggVidare(i);
+    });
+    /* Frågan ställs i modalen, ovanpå pappret man är på väg att kasta. Går det
+       igenom stängs rutan — det som visades finns inte längre — och veckovyn
+       ritas om av raderaDok, så chippet på lektionen försvinner i samma gest.
+       Ångrar man sig ligger Ångra kvar i toasten. */
+    $('#fh-radera').addEventListener('click', () => {
+      if (fhIndex < 0 || !sparat[fhIndex]) return;
+      fragaRadera($('.modal', fhskal), sparat[fhIndex], fhStang);
     });
   }
   $('#godkann').addEventListener('click', () => {

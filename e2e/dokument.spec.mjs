@@ -276,6 +276,45 @@ test("förhandsvisningen visar tavlan — och lösningsbladen ligger kvar under 
   await expect(page.locator("#fh-ark .bladtrav .blad")).toHaveCount(2);
 });
 
+test("«Radera» i förhandsvisningen kastar pappret — och Ångra tar tillbaka det", async ({ page }) => {
+  /* Det fanns ingen väg alls att kasta ett dokument: kortens radera-knapp
+     ritades bara i #sparatnat, som inte finns i app.html längre. Vägen går nu
+     via förhandsvisningen, där man SER vad man raderar. */
+  const anrop = await fejka(page, { sparade: [rad(1, papper({ moment: "integraler" }))] });
+  await page.goto("/");
+  await hydrerad(page);
+  await expect.poll(() => page.evaluate(() => window.Dokument.sparade().length)).toBe(1);
+  await oppnaForhandsvisning(page);
+
+  // Ett klick raderar inte: frågan står i modalen, ovanpå pappret.
+  await page.locator("#fh-radera").click();
+  await expect(page.locator("#forhandsskal .dokfraga")).toBeVisible();
+  expect(anrop.some(a => a.metod === "DELETE")).toBe(false);
+
+  await page.locator("#forhandsskal .dokfraga [data-a='ja']").click();
+  await expect.poll(() => anrop.some(a => a.metod === "DELETE")).toBe(true);
+  // Rutan stängs: det som visades finns inte längre.
+  await expect(page.locator("#forhandsskal")).toBeHidden();
+  await expect.poll(() => page.evaluate(() => window.Dokument.sparade().length)).toBe(0);
+
+  await page.locator(".toast button", { hasText: "Ångra" }).click();
+  await expect.poll(() => page.evaluate(() => window.Dokument.sparade().length)).toBe(1);
+  await expect.poll(() => anrop.some(a => a.metod === "POST")).toBe(true);
+});
+
+test("«Behåll» i förhandsvisningen raderar ingenting", async ({ page }) => {
+  const anrop = await fejka(page, { sparade: [rad(1, papper())] });
+  await page.goto("/");
+  await hydrerad(page);
+  await oppnaForhandsvisning(page);
+
+  await page.locator("#fh-radera").click();
+  await page.locator("#forhandsskal .dokfraga [data-a='nej']").click();
+  await expect(page.locator("#forhandsskal .dokfraga")).toBeHidden();
+  await expect(page.locator("#forhandsskal")).toBeVisible();
+  expect(anrop.some(a => a.metod === "DELETE")).toBe(false);
+});
+
 test("tavlan laddas ner som en PDF — inte som ett besked om att den är en bild", async ({ page }) => {
   // Knappen sa «lägg den i Skriv ut för en PDF»: tavlan var det enda pappret i
   // högen utan nedladdning. Den ritas av här och sätts på ett A4 på servern.
