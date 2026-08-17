@@ -246,6 +246,36 @@ const tavla = () => ({
   }],
 });
 
+/* Bokens uppgifter som ett dokument bär dem (Uppgifter.urval). Två poster under
+   nivå 3 blir ett svarsfacit, den tredje en bedömd elevlösning: två ark. */
+const bokuppg = () => ({
+  bok: "Matematik 5000+ 3c", sidor: "244–247", avsnitt: "3.2 Derivata", bokId: null,
+  uppg: [3101, 3102, 3110], bort: [], remsa: "3101–3102, 3110", bortremsa: "",
+  losning: {
+    niva: "Nivå 2 och 3", antal: 3, uppg: [3101, 3102, 3110], remsa: "3101–3102, 3110",
+    poster: [{ nr: 3101, niva: 1 }, { nr: 3102, niva: 2 }, { nr: 3110, niva: 3 }],
+  },
+});
+
+test("förhandsvisningen visar tavlan — och lösningsbladen ligger kvar under den", async ({ page }) => {
+  /* Läraren såg BARA lösningsförslagen när hon klickade på tavlan i schemat.
+     #fh-ark är en flexlåda, traven blir dess flex-item, och krympningen lades
+     helt på tavrutan (enda barnet med min-height 0). Tavlan mätte 0 px trots
+     sin inline-höjd. Båda halvorna av buggen mäts här: tavlan ska ha höjd OCH
+     bladen ska fortfarande ligga under den. */
+  await fejka(page, { sparade: [rad(1, papper({
+    typ: "Tavla", wbId: "abc", wb: tavla(), bokuppg: bokuppg() }))] });
+  await page.goto("/");
+  await hydrerad(page);
+  await oppnaForhandsvisning(page);
+
+  await expect.poll(() => page.evaluate(() => {
+    const r = document.querySelector("#fh-ark .tavruta");
+    return r ? Math.round(r.getBoundingClientRect().height) : 0;
+  }), { timeout: 20_000 }).toBeGreaterThan(100);
+  await expect(page.locator("#fh-ark .bladtrav .blad")).toHaveCount(2);
+});
+
 test("tavlan laddas ner som en PDF — inte som ett besked om att den är en bild", async ({ page }) => {
   // Knappen sa «lägg den i Skriv ut för en PDF»: tavlan var det enda pappret i
   // högen utan nedladdning. Den ritas av här och sätts på ett A4 på servern.
