@@ -939,9 +939,12 @@
           sattLangd: m => { s.provminuter = m; s.provtid = m + ' min'; visaNot(); planKoll(); },
           /* Återställningen tömmer dagen, och en tom dag LÄSES som lektionens — så
              «tillbaka till lektionen» och «rensa» är samma gest här. */
-          aterstall: () => { s.narDatum = ''; s.dagSchema = null; ritaTypval(); planKoll(); }
+          aterstall: () => { s.narDatum = ''; s.dagSchema = null; ritaTypval(); planKoll(); forvalenOm(); }
         });
-        dagFalt.addEventListener('change', () => { s.narDatum = dagFalt.value; s.nar = !dagFalt.value || dagFalt.value === lektionsdag() ? 'På lektionen' : 'Annan dag'; visaNot(); planKoll(); });
+        /* Provdagen är fönstrets högra kant (provetsUnderlag läser `narDatum`
+           före lektionens dag) — flyttas den flyttas också vad klassen hunnit
+           gå igenom, och förvalet ska följa med. */
+        dagFalt.addEventListener('change', () => { s.narDatum = dagFalt.value; s.nar = !dagFalt.value || dagFalt.value === lektionsdag() ? 'På lektionen' : 'Annan dag'; visaNot(); planKoll(); forvalenOm(); });
         tidFalt.addEventListener('change', () => { s.narTid = tidFalt.value; visaNot(); planKoll(); });
         visaNot();
       }
@@ -1192,6 +1195,9 @@
     if (!punkter.length) return;
     punkter.forEach(p => vald.add(p.kort));
     ritaGy();
+    /* Också detta är ett förval, och det ska kunna kryssas bort utan att en
+       senare omkörning (`forvalenOm`) kryssar tillbaka det. */
+    punktforval = punktnyckel();
   }
   /* ══════════ PROVETS UNDERLAG ÄR GROVPLANERINGEN ══════════
      Läraren skriver in sidorna vecka för vecka i kalendern innan terminen
@@ -1241,11 +1247,36 @@
      Och det är ett FÖRVAL: segmentväljaren står kvar och läraren byter fritt.
      Raden under den säger vad förslaget vilade på. */
   let provgrund = '';
+  /* ── Gränsen mot lärarens egen hand ──────────────────
+     Förvalen körs inte längre bara vid typbytet utan varje gång lektionen
+     ändras (`forvalenOm`). Då måste gränsen vara skarp: det förvalet får
+     skriva om är det som fortfarande står precis som förvalet lämnade det.
+     Har läraren dragit i remsan, bytt bok eller kryssat om är det HENNES, och
+     ett förval som uteblir är alltid bättre än ett som raderar ett lärarval.
+     Minnet nollställs när typen lämnar Prov/Diagnos — nästa gång är en ny
+     gest, och då får förvalet börja om från början. */
+  let provforval = null;      // {bok, fran, till} som förvalet satte
+  let delprovforval = '';     // upplägget förvalet satte
+  let punktforval = null;     // punkterna förvalet kryssade, som nyckel
+  const punktnyckel = () => [...vald].sort().join('|');
+  function lararensSpann() {
+    if (!provforval) return false;
+    const s = window.Uppslag && window.Uppslag.spann ? window.Uppslag.spann() : null;
+    return !s || s.bok !== provforval.bok || s.fran !== provforval.fran
+        || s.till !== provforval.till;
+  }
+  function glomForvalen() { provforval = null; delprovforval = ''; punktforval = null; }
   function hjalpmedelsforval(p) {
     const h = p.hjalpmedel || { med: 0, utan: 0, okand: 0 };
     const lasta = h.med + h.utan;
     if (!lasta) return '';
-    inst.Prov.delprov = h.med ? 'Del A + Del B' : 'En del';
+    const forslag = h.med ? 'Del A + Del B' : 'En del';
+    /* Har läraren själv bytt upplägg står hennes val kvar — noten säger ändå
+       vad planeringen visste, så hon ser vad hon valde bort. */
+    if (!delprovforval || inst.Prov.delprov === delprovforval) {
+      inst.Prov.delprov = forslag;
+      delprovforval = forslag;
+    }
     return h.med
       ? `Dator eller räknare står på ${h.med} av ${lasta} lektioner i planeringen.`
       : `Inga digitala verktyg i planeringens ${lasta} ${lasta === 1 ? 'lektion' : 'lektioner'}.`;
@@ -1254,20 +1285,55 @@
     const K = window.Kalender;
     if (!K || !K.planeringen) return;
     const klass = $('#p-klass').value || '', kurs = $('#p-kurs').value || '';
+    const eget = lararensSpann();
+    /* BOKEN FÖRST, och oberoende av vad planeringen har att säga. Bokvalet satt
+       förr inne i planeringens gren, så en kurs utan grovplanering — eller ett
+       typbyte innan kursen var vald — lämnade dörren stående på hyllans FÖRSTA
+       bok (bok.js taEmot: `window.Bok.namn = servern[0].namn`). Läraren fick
+       «Matematik 5000+ 1a» förvald på ett prov i Matematik, nivå 1c.
+       Saknar hyllan en bok för kursen ger `namnFor` tomt, och då rörs dörren
+       inte alls: en bok märkt med en ANNAN kurs är inget bättre svar. */
+    const namn = window.Bok && window.Bok.namnFor ? window.Bok.namnFor(kurs) : '';
+    /* …och bär hyllan ingen bok för kursen ska förvalet inte kliva in i en bok
+       som är märkt med en ANNAN. Bokdörren följer med i begäran (bokKalla
+       skickar boken så fort dörren står öppen och boken har ett id), så ett
+       prov i Matematik, nivå 2c hade fått Matematik 5000+ 1a:s sidor i
+       prompten bara för att den boken råkar stå först i hyllan. Då är
+       tystnaden det sanna svaret: noten säger ändå vilka sidor planeringen
+       täcker, och läraren väljer bok själv. */
+    const framme = window.Uppslag && window.Uppslag.spann ? window.Uppslag.spann().bok : '';
+    const framKurs = window.Bok && window.Bok.kursForBok ? window.Bok.kursForBok(framme) : '';
+    const frammande = !namn && !!kurs && !!framKurs && framKurs !== kurs;
     /* Provdagen är den läraren satt i steg 3, annars lektionens. Utan dag alls
        gäller hela planeringen — det är sannare än att låtsas att den slutar
        idag. */
     const fore = inst.Prov.narDatum || ($('#p-datum') || {}).value || '';
-    const p = K.planeringen(klass, kurs, { fore, efter: forraProvet(klass, kurs, fore) });
-    if (!p) { provgrund = ''; return provnot(''); }
+    /* Utan både klass och kurs är planeringen ingens: filtret släpper då igenom
+       kalenderns SAMTLIGA rader, och provet ärvde ett spann över hela boken ur
+       andra klassers lektioner («305 lektioner, s. 2–349»). */
+    const p = (klass || kurs)
+      ? K.planeringen(klass, kurs, { fore, efter: forraProvet(klass, kurs, fore) })
+      : null;
+    if (!p) {
+      provgrund = '';
+      if (namn && !eget && window.Uppslag && window.Uppslag.laggBok) {
+        window.Uppslag.laggBok(namn);
+        provforval = window.Uppslag.spann();
+      }
+      return provnot('');
+    }
     provgrund = hjalpmedelsforval(p);
     /* Boken sätts bara om den finns på hyllan för kursen. Saknas den är sidorna
        sanna ändå — `bokval()` skickar ingen bok utan id, och spannet står kvar
        i pappret (se profil.js, samma resonemang). */
-    if (window.Uppslag && window.Uppslag.satt) {
-      const namn = window.Bok && window.Bok.namnFor ? window.Bok.namnFor(kurs) : '';
-      if (namn && window.Uppslag.laggBok) window.Uppslag.laggBok(namn);
-      window.Uppslag.satt(p.fran, p.till);
+    if (!eget && !frammande && window.Uppslag && window.Uppslag.satt) {
+      /* Boken OCH spannet i en enda gest. Sattes de var för sig ritades
+         uppslaget först om med förra spannets sidnummer i den NYA boken, och
+         de två bladen renderades ur PDF:en i onödan — en sidbild kostar en
+         pdfium-öppning av en fil på ett par hundra megabyte (routes_bok). */
+      if (namn && window.Uppslag.laggBok) window.Uppslag.laggBok(namn, { fran: p.fran, till: p.till });
+      else window.Uppslag.satt(p.fran, p.till);
+      provforval = window.Uppslag.spann();
       window.Kallor && window.Kallor.satt && window.Kallor.satt('bok', true, true);
     }
     provnot(`Ur planeringen: ${p.lektioner} ${p.lektioner === 1 ? 'lektion' : 'lektioner'}, `
@@ -1308,9 +1374,15 @@
     if (!p) return gynot('');
     const korta = gyPunkter().filter(x => p.koder.includes(x.kod)).map(x => x.kort);
     if (!korta.length) return gynot('');
-    vald.clear();
-    korta.forEach(k => vald.add(k));
-    ritaGy();
+    /* Har läraren kryssat om sedan förvalet lade sitt urval är brickorna
+       hennes, och en omkörning (`forvalenOm`) får inte sudda dem. Noten skrivs
+       ändå: den säger vad kalendern visste, inte vad som är ikryssat. */
+    if (punktforval === null || punktnyckel() === punktforval) {
+      vald.clear();
+      korta.forEach(k => vald.add(k));
+      ritaGy();
+      punktforval = punktnyckel();
+    }
     gynot(`Ur kalendern: ${korta.length} ${korta.length === 1 ? 'punkt' : 'punkter'}`
           + (p.rubrik ? ` (${p.rubrik})` : '')
           + (p.okant ? ` · ${p.okant} ${p.okant === 1 ? 'rad kändes' : 'rader kändes'} inte igen`
@@ -1371,6 +1443,9 @@
        underlag och ljuger om en tavlas. */
     if (typ === 'Prov' && forra !== 'Prov') provetsUnderlag();
     if (typ !== 'Prov') { provnot(''); provgrund = ''; }
+    /* Lämnar typen mätningen är förvalens minne förbrukat: nästa gång är en ny
+       gest, och då ska förvalet få sätta allt på nytt. */
+    if (typ !== 'Prov' && typ !== 'Diagnos') glomForvalen();
     /* Kalenderns punkter sätts SIST av förvalen, och det är med flit: står det
        ett prov på dagen med innehåll skrivet i beskrivningen är det lärarens
        eget svar, och det går före både diagnosens «hela kursen» och den nivå
@@ -1383,6 +1458,38 @@
     speglaHelheten();
     planKoll();
   };
+  /* ══════════ FÖRVALEN FÖLJER MED NÄR LEKTIONEN ÄNDRAS ══════════
+     Förvalen satt bara vid TYPBYTET, och läraren väljer inte alltid i den
+     ordningen. Valde hon Prov först och lektionen sedan läste förvalet en TOM
+     kurs: `namnFor('')` ger tomt, bokdörren blev stående på hyllans första bok,
+     och spannet räknades ur kalenderns alla rader. Sedan hände ingenting mer —
+     kursen som sattes efteråt hade ingen som lyssnade.
+     Nu körs förvalen om när klass, kurs eller dag ändras medan typen är Prov
+     eller Diagnos. Gesten samlas ihop i en tick: plankon.fyll sätter kurs,
+     klass, datum och tid i ett svep, och varje omkörning ritar om uppslaget —
+     två sidbilder ur en PDF på ett par hundra megabyte. En gång räcker. */
+  let forvalT = null;
+  function forvalenOm() {
+    clearTimeout(forvalT);
+    forvalT = setTimeout(() => {
+      const typ = valt('skrivtyp');
+      if (typ !== 'Prov' && typ !== 'Diagnos') return;
+      /* Typraderna ritas FÖRST: provdagen ärvs ur lektionen (`s.narDatum` mot
+         `s.dagSchema` i ritaTypval), och både fönstret och kalenderposten läses
+         ur den. Utan omritningen först räknade förvalet på FÖRRA lektionens
+         dag — och stod kvar med förra svaret. Sedan en gång till, så att det
+         upplägg förvalet nyss satte syns i väljaren. */
+      ritaTypval();
+      if (typ === 'Prov') provetsUnderlag();
+      kalenderpunkter();
+      ritaTypval();
+      planKoll();
+    }, 0);
+  }
+  ['#p-klass', '#p-kurs', '#p-datum'].forEach(s => {
+    const f = $(s);
+    if (f) f.addEventListener('change', forvalenOm);
+  });
   moment.addEventListener('input', planKoll);
   $('#p-klass').addEventListener('change', planKoll);
   $('#p-kurs').addEventListener('change', () => {

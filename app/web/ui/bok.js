@@ -150,6 +150,10 @@
     /* Bokens id på servern — uppslaget och skrivningen behöver det för att
        kunna be om sidorna. null för prototypens böcker: de finns ingenstans. */
     bokId: namn => ID_BOK[namn] || null,
+    /* Vilken kurs en bok i hyllan är märkt med. Tom sträng betyder «gör inget
+       anspråk» — en sådan bok får svara för vilken kurs som helst (namnFor),
+       en märkt bok bara för sin egen. */
+    kursForBok: namn => KURS_FOR_BOK[namn] || '',
     /* Sidantalet i den tryckta boken (PDF:ens sidor minus omslag och förord).
        Remsan går genom hela boken och måste veta var den slutar. */
     sidorFor: namn => {
