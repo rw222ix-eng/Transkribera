@@ -21,7 +21,7 @@ import sqlite3
 import threading
 from pathlib import Path
 
-SCHEMA_VERSION = 20
+SCHEMA_VERSION = 21
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS courses (
@@ -671,6 +671,27 @@ CREATE TABLE IF NOT EXISTS planeringar (
 CREATE INDEX IF NOT EXISTS idx_planeringar_andrad ON planeringar(andrad);
 """
 
+# Hjälpmedlen på lektionen (v21) — ENDAST additiv; rollback: lämna kolumnen
+# (NULL = «ingen synk har läst den här raden med hjälpmedelsögon», vilket är
+# vad varje rad var förut) + PRAGMA user_version=20.
+#
+# Provets upplägg — «En del» (papper och penna) eller «Del A + Del B» (B med
+# digitala verktyg) — är en fråga om vad klassen ARBETAT med. Står det «ta med
+# datorn» eller «miniräknare» i lektionens beskrivning vet kalendern svaret, och
+# läraren ska inte behöva svara en gång till.
+#
+# INTEGRITETSREGELN ÄR OFÖRÄNDRAD (se calendar_google rad ~505): beskrivningen
+# läses, men bara det som står ovanför avdelaren, och det som lagras är en
+# FLAGGA — 'dator', 'raknare' eller tom sträng. Aldrig texten.
+#
+# Tom sträng och NULL är två olika svar och måste förbli det: '' betyder «den
+# här raden är läst, och inga verktyg nämndes», NULL betyder «raden skrevs innan
+# kolumnen fanns». Ett förval som säger «inga digitala verktyg i planeringen»
+# om NULL påstår något ingen har kollat.
+_HJALPMEDEL_MIGRATION = """
+ALTER TABLE lektionsinnehall ADD COLUMN hjalpmedel TEXT;
+"""
+
 _MIGRATIONS: dict[int, str] = {2: _FTS_MIGRATION, 3: _MARKERS_MIGRATION,
                                4: _PLANNING_MIGRATION, 5: _EXAMS_MIGRATION,
                                6: _GY25_MIGRATION, 7: _DATAGRUND_MIGRATION,
@@ -686,12 +707,13 @@ _MIGRATIONS: dict[int, str] = {2: _FTS_MIGRATION, 3: _MARKERS_MIGRATION,
                                17: _RADTAK_MIGRATION,
                                18: _ELEVPAPPER_MIGRATION,
                                19: _LEKTIONSINNEHALL_MIGRATION,
-                               20: _PLANERINGAR_MIGRATION}
+                               20: _PLANERINGAR_MIGRATION,
+                               21: _HJALPMEDEL_MIGRATION}
 
 # Migreringar som bara innehåller ALTER TABLE … ADD COLUMN. De körs sats för
 # sats så att en redan tillagd kolumn hoppas över i stället för att fälla hela
 # migreringen — se _apply_migrations.
-_ALTER_MIGRATIONER = {6, 12, 13, 14, 16, 17, 18}
+_ALTER_MIGRATIONER = {6, 12, 13, 14, 16, 17, 18, 21}
 
 _LESSON_SELECT = """
 SELECT l.*, g.namn AS group_namn, c.namn AS course_namn
@@ -2152,7 +2174,7 @@ def list_lektionsinnehall(conn: sqlite3.Connection) -> list[dict]:
     (klass/kurs som namn — window.Kalender slår upp dem på datum, klass och
     kurs, precis som lektionskortet är byggt)."""
     rows = conn.execute(
-        "SELECT i.datum, i.tid, i.fran, i.till, i.uppg, "
+        "SELECT i.datum, i.tid, i.fran, i.till, i.uppg, i.hjalpmedel, "
         "g.namn AS klass, c.namn AS kurs "
         "FROM lektionsinnehall i "
         "LEFT JOIN groups  g ON g.id = i.group_id "
@@ -2164,6 +2186,12 @@ def list_lektionsinnehall(conn: sqlite3.Connection) -> list[dict]:
              "kurs": r["kurs"] or "", "fran": r["fran"], "till": r["till"]}
         if r["uppg"]:
             p["uppg"] = r["uppg"]
+        # NULL utelämnas, tom sträng följer med. Skillnaden är hela poängen (se
+        # _HJALPMEDEL_MIGRATION): utan nyckel har ingen synk tittat, med tom
+        # nyckel har en synk tittat och inte hittat något. Frontenden räknar dem
+        # i var sin hög (kalender.js planeringen).
+        if r["hjalpmedel"] is not None:
+            p["hjalpmedel"] = r["hjalpmedel"]
         ut.append(p)
     return ut
 
@@ -2188,11 +2216,16 @@ def replace_lektionsinnehall(conn: sqlite3.Connection, poster: list[dict], *,
             continue                    # utan sidor finns ingenting att bära
         if not datum:
             continue
+        # Hjälpmedelsflaggan skrivs bara när posten HAR nyckeln. En anropare som
+        # inte känner till kolumnen (ett äldre skript, ett test) ska lämna NULL
+        # kvar — inte råka påstå att inga verktyg nämndes.
+        hjm = p.get("hjalpmedel")
         klara.append((datum, (p.get("tid") or "").strip(),
                       get_or_create_group(conn, p.get("klass") or ""),
                       get_or_create_course(conn, p.get("kurs") or ""),
                       sid_fran, max(sid_fran, sid_till),
-                      (p.get("uppg") or "").strip() or None))
+                      (p.get("uppg") or "").strip() or None,
+                      None if hjm is None else str(hjm).strip()))
     with conn:
         if fran and till:
             conn.execute("DELETE FROM lektionsinnehall WHERE datum BETWEEN ? AND ?",
@@ -2201,8 +2234,8 @@ def replace_lektionsinnehall(conn: sqlite3.Connection, poster: list[dict], *,
             conn.execute("DELETE FROM lektionsinnehall")
         conn.executemany(
             "INSERT OR REPLACE INTO lektionsinnehall"
-            "(datum, tid, group_id, course_id, fran, till, uppg) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)", klara)
+            "(datum, tid, group_id, course_id, fran, till, uppg, hjalpmedel) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)", klara)
     return list_lektionsinnehall(conn)
 
 

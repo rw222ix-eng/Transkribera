@@ -552,6 +552,42 @@ def sidor_ur_beskrivning(description: str | None) -> dict:
     return ut
 
 
+# Verktygen som avgör provets upplägg. «Del A + Del B» finns för att det finns
+# en gräns mellan det som ska gå utan hjälpmedel och det som får göras med dem —
+# och vilken sida klassen har arbetat på står ofta i lektionens beskrivning
+# («ta med datorn», «GeoGebra-övning», «miniräknare behövs»).
+#
+# Två lägen och inte fem: 'dator' väger tyngst (dator och GeoGebra öppnar hela
+# verktygslådan), 'raknare' är den lättare varianten. Tom sträng betyder att
+# raden ÄR läst och inget nämndes — se _HJALPMEDEL_MIGRATION i app/db.py om
+# varför tomt och osynkat måste vara två olika svar.
+#
+# Böjningarna är svenska och gemena: «datorn», «datorer», «miniräknaren»,
+# «räknare». Ordstammarna räcker, och ordgränsen framför hindrar att
+# «kalkylatorn» blir en dator. GeoGebra fångas separat: programnamnet säger
+# «dator» utan att ordet dator står där.
+_DATORORD = re.compile(r"\b(dator\w*|geogebra|laptop\w*|chromebook\w*)",
+                       re.IGNORECASE)
+_RAKNARORD = re.compile(r"\b(mini)?r[aä]knar\w*", re.IGNORECASE)
+
+
+def hjalpmedel_ur_text(description: str | None, titel: str | None = None) -> str:
+    """'dator' | 'raknare' | '' — vilka verktyg lektionen nämner.
+
+    Läser SAMMA första del av beskrivningen som sidor_ur_beskrivning: allt under
+    avdelaren är lärarens anteckningar om enskilda elever och rörs aldrig.
+    Rubriken läses också — «Ma1c NA26F · GeoGebra» säger saken i titeln.
+
+    Det som kommer ut är en av tre konstanter. Ingen fri text lämnar den här
+    funktionen, och det är villkoret för att beskrivningen läses alls."""
+    text = _AVDELARE.split(str(description or ""), 1)[0] + " " + str(titel or "")
+    if _DATORORD.search(text):
+        return "dator"
+    if _RAKNARORD.search(text):
+        return "raknare"
+    return ""
+
+
 def serienyckel(h: dict) -> str:
     """Identiteten på en SERIE, inte på en instans: samma titel, samma slag av
     händelse. Mentorstiden varje måndag hela läsåret är en nyckel, inte
@@ -620,8 +656,15 @@ def tolka_handelser(handelser: list[dict], klasser: list[str] | None = None,
         sidor = sidor_ur_beskrivning(h.get("description"))
         if not sidor:
             return                          # ingen sida skriven → inget att bära
+        # Flaggan sätts ALLTID när raden skapas, också när den blir tom: tom
+        # sträng är svaret «läst, inget nämndes», och det är ett annat svar än
+        # NULL (raden har aldrig lästs med hjälpmedelsögon). Provets förval
+        # skiljer på dem, se kalender.js planeringen.
         innehall[(datum, tid, klass, kurs)] = dict(
-            {"datum": datum, "tid": tid, "klass": klass, "kurs": kurs}, **sidor)
+            {"datum": datum, "tid": tid, "klass": klass, "kurs": kurs,
+             "hjalpmedel": hjalpmedel_ur_text(h.get("description"),
+                                              h.get("summary"))},
+            **sidor)
 
     def osaker(h: dict, titel: str, varfor: str, **extra) -> None:
         nyckel = serienyckel(h)

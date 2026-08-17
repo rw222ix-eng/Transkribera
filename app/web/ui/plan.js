@@ -832,6 +832,10 @@
          först i Matematik 4 — och då är förslaget oanvändbart i klassrummet.
          Noten måste rymmas på EN rad: `.typnot` är en flexrad som wrappar, och en
          längre text sköt pricken upp på en rad för sig själv. */
+      /* Upplägget föreslogs ur kalendern — raden säger vad förslaget vilade på,
+         så att läraren vet vad hon ändrar när hon byter. Tyst när planeringen
+         inte hade något att säga (se hjalpmedelsforval). */
+      if (k.id === 'delprov' && provgrund) satNot(typnot(rad), '', provgrund);
       if (k.id === 'boklosniva') {
         const not = typnot(rad);
         const U = window.Uppgifter;
@@ -1220,6 +1224,32 @@
     p.hidden = !text;
     p.textContent = text || '';
   }
+  /* ── Upplägget faller ut ur hjälpmedlen ──────────────
+     «En del» är papper och penna, «Del A + Del B» delar provet vid gränsen mot
+     de digitala verktygen. Vilken sida klassen arbetat på står i kalendern:
+     synken härleder en flagga per lektion ur beskrivningen (dator / räknare /
+     inget) utan att någonsin lagra texten — se calendar_google.hjalpmedel_ur_text
+     och _HJALPMEDEL_MIGRATION i app/db.py.
+
+     Tre högar, och skillnaden mellan de två sista är hela finessen: `med` är
+     lektioner där något verktyg nämndes, `utan` lektioner som ÄR lästa utan
+     träff, `okand` rader som skrevs innan kolumnen fanns. Bara de två första
+     får bestämma. Är allt okänt står lärarens förval kvar orört — ett förval
+     som säger «inga digitala verktyg i planeringen» om något ingen har läst är
+     ett påhitt, inte ett förslag.
+
+     Och det är ett FÖRVAL: segmentväljaren står kvar och läraren byter fritt.
+     Raden under den säger vad förslaget vilade på. */
+  let provgrund = '';
+  function hjalpmedelsforval(p) {
+    const h = p.hjalpmedel || { med: 0, utan: 0, okand: 0 };
+    const lasta = h.med + h.utan;
+    if (!lasta) return '';
+    inst.Prov.delprov = h.med ? 'Del A + Del B' : 'En del';
+    return h.med
+      ? `Dator eller räknare står på ${h.med} av ${lasta} lektioner i planeringen.`
+      : `Inga digitala verktyg i planeringens ${lasta} ${lasta === 1 ? 'lektion' : 'lektioner'}.`;
+  }
   function provetsUnderlag() {
     const K = window.Kalender;
     if (!K || !K.planeringen) return;
@@ -1229,7 +1259,8 @@
        idag. */
     const fore = inst.Prov.narDatum || ($('#p-datum') || {}).value || '';
     const p = K.planeringen(klass, kurs, { fore, efter: forraProvet(klass, kurs, fore) });
-    if (!p) return provnot('');
+    if (!p) { provgrund = ''; return provnot(''); }
+    provgrund = hjalpmedelsforval(p);
     /* Boken sätts bara om den finns på hyllan för kursen. Saknas den är sidorna
        sanna ändå — `bokval()` skickar ingen bok utan id, och spannet står kvar
        i pappret (se profil.js, samma resonemang). */
@@ -1284,14 +1315,19 @@
   }
   window.planKoll = () => {
     const typ = valt('skrivtyp');
-    if (typ === 'Diagnos' && forraTypen !== 'Diagnos') forkryssaAlla();
+    /* `forraTypen` skrivs FÖRE förvalen och inte efter. Förvalen rör vid
+       bokdörren och momentfältet, och de anropar i sin tur hit tillbaka
+       (uppgifter.js speglar steg 3 på varje momentändring) — med skrivningen
+       efteråt hade varje varv sett samma typbyte igen, i all oändlighet. */
+    const forra = forraTypen;
+    forraTypen = typ;
+    if (typ === 'Diagnos' && forra !== 'Diagnos') forkryssaAlla();
     /* Provets förval ur grovplaneringen sätts när typen BLIR prov, inte vid
        varje omritning — annars hade läraren aldrig kunnat ändra spannet. Noten
        under remsan följer med ner när något annat skrivs: den talar om provets
        underlag och ljuger om en tavlas. */
-    if (typ === 'Prov' && forraTypen !== 'Prov') provetsUnderlag();
-    if (typ !== 'Prov') provnot('');
-    forraTypen = typ;
+    if (typ === 'Prov' && forra !== 'Prov') provetsUnderlag();
+    if (typ !== 'Prov') { provnot(''); provgrund = ''; }
     ritaTypval();
     speglaHelheten();
     planKoll();

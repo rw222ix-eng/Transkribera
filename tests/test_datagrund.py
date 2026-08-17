@@ -19,6 +19,29 @@ def conn(tmp_path):
     c.close()
 
 
+@pytest.fixture
+def conn_v20(tmp_path):
+    """En bas som den såg ut FÖRE v21: lektionsinnehall utan hjalpmedel-kolumn,
+    med en rad redan i sig. Byggd genom att köra migrationerna, släppa kolumnen
+    och stämpla tillbaka versionen — samma väg lärarens riktiga bas kommer att
+    gå när den öppnas första gången efter uppdateringen."""
+    fil = tmp_path / "gammal.db"
+    c = db.connect(fil)
+    db.replace_lektionsinnehall(c, [
+        {"datum": "2026-08-17", "tid": "08:15–09:00", "klass": "NA26F",
+         "kurs": "Matematik 1c", "fran": 2, "till": 6}])
+    # SQLite kan släppa kolumner sedan 3.35; misslyckas det finns ingen v20 att
+    # migrera FRÅN och testet har inget att säga.
+    c.execute("ALTER TABLE lektionsinnehall DROP COLUMN hjalpmedel")
+    c.execute("PRAGMA user_version=20")
+    c.commit()
+    c.close()
+    db._initialized.discard(str(fil))     # tvinga migrationerna att köra igen
+    c = db.connect(fil)
+    yield c
+    c.close()
+
+
 # Tomma fran/till = gäller tills vidare, formen ett handskrivet schema har.
 SCHEMA_RADER = [
     {"dag": 1, "tid": "08:15–09:00", "kurs": "Matematik 3c", "klass": "9A",
@@ -171,6 +194,39 @@ def test_rader_utan_sidor_hoppas_over(conn):
         {"datum": "", "klass": "NA26F", "kurs": "Matematik 1c", "fran": 2, "till": 6},
     ])
     assert db.list_lektionsinnehall(conn) == []
+
+
+def test_hjalpmedlet_skiljer_pa_tomt_och_osynkat(conn):
+    """Provets upplägg («En del» / «Del A + Del B») förvalas ur hjälpmedlen som
+    står på lektionerna. Då måste två svar hållas isär, och det är hela skälet
+    till att kolumnen får vara NULL:
+
+      ''    — synken HAR läst raden och inget verktyg nämndes.
+      NULL  — raden skrevs innan kolumnen fanns (v21), ingen har tittat.
+
+    Utan skillnaden hade appen sagt «inga digitala verktyg i planeringen» om en
+    termin som aldrig lästs med hjälpmedelsögon. NULL utelämnas därför ur
+    svaret, tom sträng följer med."""
+    db.replace_lektionsinnehall(conn, [
+        dict(INNEHALL[0], hjalpmedel="dator"),
+        dict(INNEHALL[1], hjalpmedel=""),
+        {"datum": "2026-08-21", "tid": "13:00–14:00", "klass": "NA26F",
+         "kurs": "Matematik 1c", "fran": 8, "till": 9},      # nyckeln saknas
+    ])
+    ut = db.list_lektionsinnehall(conn)
+    assert ut[0]["hjalpmedel"] == "dator"
+    assert ut[1]["hjalpmedel"] == ""
+    assert "hjalpmedel" not in ut[2]
+
+
+def test_migrationen_till_v21_lamnar_gamla_rader_osynkade(conn_v20):
+    """Kolumnen läggs till på en bas som redan har lektioner i sig, och de
+    raderna ska komma ut UTAN nyckeln — inte med tom sträng. En migration som
+    fyller i '' hade förvandlat hela terminen till «inga verktyg»."""
+    ut = db.list_lektionsinnehall(conn_v20)
+    assert len(ut) == 1
+    assert "hjalpmedel" not in ut[0]
+    assert ut[0]["fran"] == 2
 
 
 def test_synk_utanfor_fonstret_raderar_inte_innehallet(conn):
@@ -352,6 +408,37 @@ def test_sidformerna_som_star_i_kalendern(text, vantat):
     assert calendar_google.sidor_ur_beskrivning(text) == vantat
 
 
+@pytest.mark.parametrize("text, titel, vantat", [
+    ("OBS! ta med miniräknare", "", "raknare"),
+    ("s. 2–6, räknaren behövs", "", "raknare"),
+    ("Ta med räknare", "", "raknare"),
+    ("Vi kör GeoGebra hela passet", "", "dator"),
+    ("ta med datorn", "", "dator"),
+    ("Alla datorer laddade!", "", "dator"),
+    # Rubriken räknas också: läraren skriver ofta verktyget där.
+    ("s. 12–14", "Ma1c NA26F · GeoGebra", "dator"),
+    ("s. 12–14", "NA26F miniräknarpass", "raknare"),
+    # Datorn väger tyngst när båda nämns — den öppnar hela verktygslådan.
+    ("Räknare och dator", "", "dator"),
+    # Inget verktyg är ett SVAR, inte ett tomrum: tom sträng, inte None.
+    ("Genomgång av kvadratrötter", "", ""),
+    ("", "", ""),
+    (None, None, ""),
+    # Ordgränsen: en kalkylator är inte en dator.
+    ("Kalkylatorn på tavlan", "", ""),
+])
+def test_hjalpmedlen_lases_ur_lektionens_ord(text, titel, vantat):
+    assert calendar_google.hjalpmedel_ur_text(text, titel) == vantat
+
+
+def test_hjalpmedlen_lases_aldrig_under_avdelaren():
+    """Samma integritetsregel som sidorna: allt under ——— är anteckningar om
+    ENSKILDA ELEVER. En elev som har rätt till dator på prov får inte göra hela
+    klassens prov tvådelat — och framför allt får texten aldrig läsas."""
+    assert calendar_google.hjalpmedel_ur_text(
+        "s. 2–6\n———\n👤 Eleven skriver på dator enligt sitt åtgärdsprogram") == ""
+
+
 def test_innehallet_hanger_pa_lektionstillfallet_inte_pa_serien():
     """Samma serie, två veckor, olika sidor. Schemaraden är EN — innehållet
     är två, ett per datum."""
@@ -362,12 +449,15 @@ def test_innehallet_hanger_pa_lektionstillfallet_inte_pa_serien():
              location="A214", recurringEventId="r1", description="s. 7–11"),
     ], idag="2026-08-17")
     assert len(ut["schema"]) == 1
+    # `hjalpmedel` sätts på VARJE rad, också när ingenting nämns: tom sträng
+    # betyder «läst, inget hittat» och är ett annat svar än NULL i basen (raden
+    # skrevs innan kolumnen fanns). Provets upplägg skiljer på dem.
     assert ut["innehall"] == [
         {"datum": "2026-08-17", "tid": "08:15–09:00", "klass": "9A",
          "kurs": "Matematik 3c", "fran": 2, "till": 6,
-         "uppg": "1101–1103, 1105–1119"},
+         "hjalpmedel": "raknare", "uppg": "1101–1103, 1105–1119"},
         {"datum": "2026-08-24", "tid": "08:15–09:00", "klass": "9A",
-         "kurs": "Matematik 3c", "fran": 7, "till": 11},
+         "kurs": "Matematik 3c", "fran": 7, "till": 11, "hjalpmedel": ""},
     ]
 
 
@@ -394,7 +484,7 @@ def test_rubriken_som_sager_amnet_kanns_igen_pa_rutan_i_schemat():
     assert ut["innehall"] == [
         {"datum": "2026-08-24", "tid": "10:00–11:30", "klass": "NA26F",
          "kurs": "Matematik, nivå 1c", "fran": 2, "till": 6,
-         "uppg": "1101–1103, 1105–1119"}]
+         "hjalpmedel": "raknare", "uppg": "1101–1103, 1105–1119"}]
 
 
 @pytest.mark.parametrize("summary, tid, beskrivning, schema", [

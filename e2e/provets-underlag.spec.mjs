@@ -357,3 +357,62 @@ test("antalet läraren satte är det som skickas", async ({ page }) => {
   await expect.poll(() => anrop.length).toBe(1);
   expect(anrop[0].antal).toBe(15);
 });
+
+/* ── 6 · Hjälpmedlen ur kalendern ───────────────────── */
+
+const delprovet = page =>
+  page.locator('.typrad[data-id="delprov"] [aria-pressed="true"]');
+const delprovnot = page => page.locator('.typrad[data-id="delprov"] .typnot');
+
+/** Samma sidor, bara en annan hjälpmedelsflagga per lektion. */
+const medHjalpmedel = flaggor => INNEHALL.map((i, n) =>
+  flaggor[n] === undefined ? i : { ...i, hjalpmedel: flaggor[n] });
+
+async function medPlanering(page, innehall) {
+  await page.route("**/api/schema", route => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify({ ...SCHEMA, innehall }) }));
+  await page.goto("/");
+  await hydrerad(page);
+  await page.getByRole("tab", { name: "Planering" }).click();
+  await staller(page, { klass: "NA25", kurs: "Matematik, nivå 2c",
+                        datum: "2026-09-07" });
+  await page.evaluate(() => window.SattLage("Prov"));
+  await tillSteg(page, 4);
+}
+
+test("datorn i planeringen föreslår Del A + Del B", async ({ page }) => {
+  await fejka(page);
+  await medPlanering(page, medHjalpmedel(["dator", "", "raknare"]));
+  await expect(delprovet(page)).toHaveText("Del A + Del B");
+  await expect(delprovnot(page))
+    .toHaveText("Dator eller räknare står på 2 av 3 lektioner i planeringen.");
+});
+
+test("papper och penna hela vägen föreslår En del", async ({ page }) => {
+  await fejka(page);
+  await medPlanering(page, medHjalpmedel(["", "", ""]));
+  await expect(delprovet(page)).toHaveText("En del");
+  await expect(delprovnot(page))
+    .toHaveText("Inga digitala verktyg i planeringens 3 lektioner.");
+});
+
+test("osynkade rader påstår ingenting — standarden står kvar", async ({ page }) => {
+  await fejka(page);
+  // Ingen rad bär nyckeln: basen är skriven före v21 och ingen har läst dem med
+  // hjälpmedelsögon. Då ska appen tiga, inte säga «inga digitala verktyg».
+  await medPlanering(page, INNEHALL);
+  await expect(delprovet(page)).toHaveText("Del A + Del B");   // standarden
+  await expect(delprovnot(page)).toHaveCount(0);
+});
+
+test("förvalet är ett förslag — läraren byter fritt", async ({ page }) => {
+  await fejka(page);
+  await medPlanering(page, medHjalpmedel(["dator", "dator", "dator"]));
+  await expect(delprovet(page)).toHaveText("Del A + Del B");
+  await page.locator('.typrad[data-id="delprov"] button', { hasText: "En del" })
+    .click();
+  await expect(delprovet(page)).toHaveText("En del");
+  // Grunden står kvar och säger varför förslaget var det andra.
+  await expect(delprovnot(page)).toContainText("Dator eller räknare står på 3");
+});
