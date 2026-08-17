@@ -2856,7 +2856,7 @@
       d.addEventListener('click', e => {
         const b = e.target.closest('[data-a]');
         const namn = dokNamn(v);
-        if (b && b.dataset.a === 'pdf') { skrivUt(b, namn); return; }
+        if (b && b.dataset.a === 'pdf') { skrivUt(b, namn, v); return; }
         if (b && b.dataset.a === 'radera') { fragaRadera(d, i, namn); return; }
         if (b && b.dataset.a === 'syskon') { fragaSyskon(d, i); return; }
         if (b && b.dataset.a === 'ratta') { e.stopPropagation(); window.Rattning && window.Rattning.oppna(v); return; }
@@ -2899,17 +2899,55 @@
     mal.innerHTML = '';
   }
 
-  function skrivUt(b, namn) {
+  /* ── Ladda ner PDF ───────────────────────────────────
+     Knappen laddade inte ner något. Den väntade 850 ms, sa «Sparad» och
+     toastade «PDF:en ligger i Hämtat» — ingen fil, ingen begäran, inget i
+     Hämtat. En prototypknapp som stod kvar när papperen fick riktiga PDF:er.
+
+     Provet, arbetsbladet, diagnosen och anteckningarna HAR en: Tectonic bygger
+     den vid godkännandet och `/api/exams/{id}/pdf` svarar med filen (routes_exam
+     _serve_artifact sätter Content-Disposition, så namnet blir bokens eget).
+     Tavlan har ingen — den sparas som bild och blir PDF först i ett tryckpaket
+     — och då ska knappen säga det i stället för att låtsas. */
+  const pdfId = v => (v && (v.provId || v.antId)) || null;
+  function skrivUt(b, namn, v) {
     if (b.dataset.lage) return;
+    const id = pdfId(v);
+    if (!id || !serverPa()) {
+      window.toast && window.toast(v && v.typ === 'Tavla'
+        ? `${namn} är sparad som bild — lägg den i Skriv ut för en PDF`
+        : `${namn} har ingen PDF än — godkänn pappret, då byggs den`);
+      return;
+    }
     const text = b.textContent;
     b.dataset.lage = 'skriver';
-    b.textContent = 'Skriver …';
-    setTimeout(() => {
-      b.dataset.lage = 'klar';
-      b.textContent = 'Sparad';
-      window.toast && window.toast(`${namn} · PDF:en ligger i Hämtat`, 'Öppna', () => window.toast && window.toast('Öppnar PDF:en i din läsare'));
-      setTimeout(() => { b.removeAttribute('data-lage'); b.textContent = text; }, 1700);
-    }, 850);
+    b.textContent = 'Hämtar …';
+    const ater = klart => {
+      b.dataset.lage = klart ? 'klar' : '';
+      b.textContent = klart ? 'Sparad' : text;
+      if (klart) setTimeout(() => { b.removeAttribute('data-lage'); b.textContent = text; }, 1700);
+      else b.removeAttribute('data-lage');
+    };
+    /* Hämtas som blob i stället för att fönstret navigeras dit: ett 404 blir då
+       ett svenskt besked i stället för en flik med serverns JSON i. */
+    fetch(`/api/exams/${id}/pdf`)
+      .then(r => r.ok ? r.blob() : r.json().then(
+        d => { throw new Error((d && d.error) || 'PDF:en gick inte att hämta'); },
+        () => { throw new Error('PDF:en gick inte att hämta'); }))
+      .then(blob => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${namn}.pdf`.replace(/[\\/:*?"<>|]/g, '');
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        /* Släpps direkt smiter webbläsaren ifrån sparandet i Chrome. */
+        setTimeout(() => URL.revokeObjectURL(url), 30000);
+        ater(true);
+        window.toast && window.toast(`${namn} · PDF:en ligger i Hämtat`);
+      })
+      .catch(e => { ater(false); window.toast && window.toast(e.message); });
   }
 
   /* ── Syskondokument (10 + 17) ────────────────────────────────
@@ -3031,7 +3069,10 @@
   if (fhskal) {
     $('#fh-stang').addEventListener('click', fhStang);
     fhskal.addEventListener('pointerdown', e => { if (e.target === fhskal) fhStang(); });
-    $('#fh-pdf').addEventListener('click', e => skrivUt(e.currentTarget, dokNamn(sparat[fhIndex])));
+    $('#fh-pdf').addEventListener('click', e => {
+      if (fhIndex < 0 || !sparat[fhIndex]) return;
+      skrivUt(e.currentTarget, dokNamn(sparat[fhIndex]), sparat[fhIndex]);
+    });
     $('#fh-oppna').addEventListener('click', () => {
       if (fhIndex < 0 || !sparat[fhIndex]) return;
       const i = fhIndex;

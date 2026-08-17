@@ -193,3 +193,64 @@ test("utan server står prototypens hög kvar", async ({ page }) => {
   // Ingenting av det här skrivs någonstans — och det är sant om prototypen.
   expect(await page.evaluate(() => window.Dokument.sparade()[0].id)).toBeUndefined();
 });
+
+// ── Ladda ner PDF ───────────────────────────────────────────────────────────
+// Knappen laddade inte ner något: den väntade 850 ms, sa «Sparad» och toastade
+// «PDF:en ligger i Hämtat». Ingen fil, ingen begäran, inget i Hämtat.
+
+/** Öppnar förhandsvisningen av det första sparade pappret. Högen har ingen
+ *  egen vy längre — materialet ligger på sin lektion i veckan — så vägen in är
+ *  den appen själv använder: window.Dokument.visa(i). */
+async function oppnaForhandsvisning(page) {
+  await page.getByRole("tab", { name: "Planering" }).click();
+  await page.evaluate(() => window.Dokument.visa(0));
+  await expect(page.locator("#forhandsskal")).toBeVisible();
+}
+
+test("PDF-knappen hämtar provets riktiga PDF och sparar den", async ({ page }) => {
+  const hamtat = [];
+  await fejka(page, { sparade: [rad(1, papper({ typ: "Prov", provId: 42 }))] });
+  await page.route("**/api/exams/42/pdf", route => {
+    hamtat.push(route.request().url());
+    return route.fulfill({ status: 200, contentType: "application/pdf",
+                           body: Buffer.from("%PDF-1.5 riktig pdf") });
+  });
+  await page.goto("/");
+  await hydrerad(page);
+  await oppnaForhandsvisning(page);
+
+  const nedladdning = page.waitForEvent("download", { timeout: 15_000 });
+  await page.locator("#fh-pdf").click();
+  const fil = await nedladdning;
+  expect(hamtat).toHaveLength(1);
+  expect(fil.suggestedFilename()).toMatch(/\.pdf$/);
+});
+
+test("en tavla säger att den är en bild — den låtsas inte ladda ner", async ({ page }) => {
+  const anropade = [];
+  await fejka(page, { sparade: [rad(1, papper({ typ: "Tavla", wbId: "abc" }))] });
+  await page.route("**/api/exams/**", route => { anropade.push(route.request().url()); return route.abort(); });
+  await page.goto("/");
+  await hydrerad(page);
+  await oppnaForhandsvisning(page);
+
+  await page.locator("#fh-pdf").click();
+  await expect(page.locator(".toast").last()).toContainText(/bild|Skriv ut/i);
+  expect(anropade).toEqual([]);
+  // Och knappen ljuger inte om att något sparats.
+  await expect(page.locator("#fh-pdf")).toHaveText("Ladda ner PDF");
+});
+
+test("ett papper utan byggd PDF ger serverns besked, inte «Sparad»", async ({ page }) => {
+  await fejka(page, { sparade: [rad(1, papper({ typ: "Arbetsblad", provId: 7 }))] });
+  await page.route("**/api/exams/7/pdf", route => route.fulfill({
+    status: 404, contentType: "application/json",
+    body: JSON.stringify({ error: "ingen pdf ännu — godkänn provet" }) }));
+  await page.goto("/");
+  await hydrerad(page);
+  await oppnaForhandsvisning(page);
+
+  await page.locator("#fh-pdf").click();
+  await expect(page.locator(".toast").last()).toContainText("ingen pdf ännu");
+  await expect(page.locator("#fh-pdf")).toHaveText("Ladda ner PDF");
+});
