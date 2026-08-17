@@ -94,9 +94,22 @@ window.Kalender = (() => {
      Ingen träff ger null, aldrig ett tomt spann: «s. 0–0» är ett påhitt, och
      tystnad är ett bättre besked än en gissning. */
   function planeringen(klass, kurs, { fore, efter } = {}) {
+    /* KLASSEN och FÖNSTRET äger unionen. Kursnamnet på raderna är SYNKENS —
+       det kommer ur kalenderhändelsens rubrik — och det är fel så fort skolan
+       skrivit «nivå 2c» i rubriken på en klass som läser 1c. TE26A hösten 2026
+       är precis det: alla tolv raderna före provet den 16 september bär «nivå
+       2c», lektionen och klassprofilen säger «nivå 1c», och kursfiltret tystade
+       därför hela unionen. Provet fick då «s. 2–5» ur klassprofilens gissning
+       (profil.js nastaSpann) i stället för planeringens s. 2–39.
+       Sidorna är sidorna i klassens bok oavsett vad rubriken kallar kursen, och
+       läraren beskriver själv fönstret som «första och sista lektionen innan
+       provet» — ingen kurs i den meningen.
+       Utan klass är kursen enda filtret som finns kvar, och då gäller det som
+       förut: annars släpps kalenderns SAMTLIGA rader igenom och provet ärver
+       ett spann över hela boken ur andra klassers lektioner (plan.js). */
     const rader = innehall.filter(i =>
       (!klass || !i.klass || i.klass === klass)
-      && (!kurs || !i.kurs || i.kurs === kurs)
+      && (klass || !kurs || !i.kurs || i.kurs === kurs)
       && (!fore || i.datum < fore)
       && (!efter || i.datum > efter));
     if (!rader.length) return null;
@@ -139,6 +152,34 @@ window.Kalender = (() => {
       && Array.isArray(x.ci) && x.ci.length);
     return p ? { koder: p.ci.slice(), okant: p.ci_okant || 0,
                  rubrik: utanKlass(p.titel, p.klass), slag: p.slag } : null;
+  }
+
+  /* ── PROVDAGEN STÅR OCKSÅ I KALENDERN ─────────────────
+     Provet är bokat innan det är skrivet: läraren la in proven när hon la
+     terminen, och DEN dagen är fönstrets högra kant — allt klassen hunnit gå
+     igenom fram till provet. Planeras provet från en LEKTION, som är den
+     vanliga vägen in, vet steg 1 bara lektionens dag, och fönstret stängdes
+     förr mitt i sträckan.
+
+     FÖRSTA posten på eller efter `fran`, aldrig den sista: det som skrivs nu är
+     nästa prov, inte terminens. Posten måste bära klassen — en post utan klass
+     («Avstämning av matematikdiagnoser åk1») är ingens provdag. */
+  function nastaProv(klass, fran, slag) {
+    const s = slag === 'diagnos' ? 'diagnos' : 'prov';
+    return poster.filter(p => p.slag === s && p.datum
+                          && (!fran || p.datum >= fran)
+                          && (!klass || p.klass === klass))
+      .sort((a, b) => a.datum.localeCompare(b.datum))[0] || null;
+  }
+  /* Vänsterkanten av samma skäl: det klassen redan prövats på är avklarat. Ett
+     godkänt prov i appen väger tyngre (plan.js forraProvet) — det här är svaret
+     när förra provet aldrig skrevs här. Bara riktiga prov: en diagnos mäter,
+     den avslutar ingenting. */
+  function forraProv(klass, fore) {
+    return poster.filter(p => p.slag === 'prov' && p.datum
+                          && (!fore || p.datum < fore)
+                          && (!klass || p.klass === klass))
+      .sort((a, b) => a.datum.localeCompare(b.datum)).pop() || null;
   }
 
   /* Träffar inspelningstiden en lektion i schemat? Då är klass och kurs inte
@@ -358,5 +399,5 @@ window.Kalender = (() => {
     .then(d => { if (d) { ta(d); ritaOm(); } })
     .catch(() => { /* servern svarar inte: prototypens vecka står kvar */ });
 
-  return { poster, schema, lov, innehall, innehallFor, planeringen, provpunkter, omVeckor, forDatum, schemaFor, lovFor, traff, krockrad, veckan, veckoBild, veckonr, mandagen, nastaSkolvecka, terminen, lagg, ord, synka, redo, franServern: () => franServern, idag: () => iso(new Date()) };
+  return { poster, schema, lov, innehall, innehallFor, planeringen, provpunkter, nastaProv, forraProv, omVeckor, forDatum, schemaFor, lovFor, traff, krockrad, veckan, veckoBild, veckonr, mandagen, nastaSkolvecka, terminen, lagg, ord, synka, redo, franServern: () => franServern, idag: () => iso(new Date()) };
 })();

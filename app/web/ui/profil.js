@@ -365,9 +365,18 @@ window.Profil = (() => {
        kvar precis som förut. plan.js gör om samma uträkning när typen väljs
        (provetsUnderlag) och kan då också kapa vid förra provet — här finns
        ingen dokumenthög att fråga. */
+    /* Högra kanten är PROVDAGEN, inte lektionens dag. Planeras provet från en
+       lektion — kortet i veckan, «Skriv provet» på den bokade posten — är
+       `post.datum` lektionens, och fönstret stängdes då mitt i sträckan.
+       Kalendern vet provdagen: nästa bokade provpost för klassen på eller efter
+       dagen (kalender.js nastaProv). Samma kant som plan.js provkanten räknar
+       fram — den här raden körs FÖRST och skriver spannet, så två olika fönster
+       hade betytt att lärarens remsa visade ett annat spann än noten. */
+    const provdag = (typ === 'Prov' && K && K.nastaProv)
+      ? ((K.nastaProv(klass, (post && post.datum) || K.idag(), 'prov') || {}).datum || '') : '';
     const planering = (typ === 'Prov' && window.Kalender && window.Kalender.planeringen)
       ? window.Kalender.planeringen(klass, kurs,
-                                    { fore: (post && post.datum) || '' }) : null;
+                                    { fore: provdag || (post && post.datum) || '' }) : null;
     /* Kalendern kan också säga att rutan INTE är en boklektion: «Hämta
        läromedel i läromedelscentralen, hela passet» står i lektionens timme och
        följer med i posten (klass.js). Då ska ingen sidsträcka gissas fram —

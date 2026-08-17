@@ -1255,15 +1255,25 @@
      ett förval som uteblir är alltid bättre än ett som raderar ett lärarval.
      Minnet nollställs när typen lämnar Prov/Diagnos — nästa gång är en ny
      gest, och då får förvalet börja om från början. */
-  let provforval = null;      // {bok, fran, till} som förvalet satte
+  let provforval = null;      // {bok, fran, till, egenBok} som förvalet satte
   let delprovforval = '';     // upplägget förvalet satte
   let punktforval = null;     // punkterna förvalet kryssade, som nyckel
   const punktnyckel = () => [...vald].sort().join('|');
+  /* `egenBok` säger om förvalet SJÄLVT valde boken. Hittade hyllan ingen bok för
+     kursen lämnas dörren orörd — och då byter klassprofilens egen förvalsgest
+     (profil.js laggBok) boken en bråkdel senare. Den bokändringen lästes som
+     lärarens, och spannet låstes för resten av planeringen: provet som flyttades
+     till november behöll septemberprovets sidor fast noten sa något annat. En
+     bok förvalet aldrig satte får därför inte heller vittna om vem som ändrat. */
+  const minnsForvalet = bokval => {
+    provforval = Object.assign({}, window.Uppslag.spann(), { egenBok: !!bokval });
+  };
   function lararensSpann() {
     if (!provforval) return false;
     const s = window.Uppslag && window.Uppslag.spann ? window.Uppslag.spann() : null;
-    return !s || s.bok !== provforval.bok || s.fran !== provforval.fran
-        || s.till !== provforval.till;
+    if (!s) return true;
+    return s.fran !== provforval.fran || s.till !== provforval.till
+        || (provforval.egenBok && s.bok !== provforval.bok);
   }
   function glomForvalen() { provforval = null; delprovforval = ''; punktforval = null; }
   function hjalpmedelsforval(p) {
@@ -1281,10 +1291,46 @@
       ? `Dator eller räknare står på ${h.med} av ${lasta} lektioner i planeringen.`
       : `Inga digitala verktyg i planeringens ${lasta} ${lasta === 1 ? 'lektion' : 'lektioner'}.`;
   }
+  /* ── FÖNSTRETS HÖGRA KANT ÄR PROVDAGEN ───────────────
+     Tre svar i tur och ordning, och det första som finns gäller:
+       1. dagen läraren själv satte i steg 3. Den skiljs från den ÄRVDA på
+          `dagSchema`: ritaTypval fyller `narDatum` med lektionens dag åt henne,
+          så ett ifyllt fält är inte i sig ett val.
+       2. NÄSTA bokade provpost i kalendern för klassen — det är där hon skrev
+          provdagen när hon la terminen, och det är precis därför posten finns.
+       3. lektionens dag, som förut.
+     Kanten var förr lektionens dag så fort provdagen inte satts för hand, och
+     ett prov planerat FRÅN en lektion fick då bara sträckan fram till just den
+     lektionen i stället för fram till provet.
+
+     Sökningen börjar på lektionens egen dag och inte på idag: en lektion i
+     november ska inte få provet i september som kant. Diagnosen läser
+     diagnosposter — samma resonemang, en annan sorts dag. */
+  function provkanten(typ, klass) {
+    const K = window.Kalender, s = inst[typ] || {};
+    const ld = ($('#p-datum') || {}).value || '';
+    const egen = s.narDatum && s.narDatum !== s.dagSchema ? s.narDatum : '';
+    if (egen) return { dag: egen, bokad: null };
+    const golv = s.narDatum || ld || (K && K.idag ? K.idag() : '');
+    const bokad = K && K.nastaProv
+      ? K.nastaProv(klass, golv, typ === 'Diagnos' ? 'diagnos' : 'prov') : null;
+    return { dag: bokad ? bokad.datum : (s.narDatum || ld), bokad };
+  }
   function provetsUnderlag() {
     const K = window.Kalender;
     if (!K || !K.planeringen) return;
     const klass = $('#p-klass').value || '', kurs = $('#p-kurs').value || '';
+    /* Minnet är noterat I EN BOK. Byter dörren bok under förvalet — hyllan hade
+       ingen bok för kursen när spannet sattes, och klassprofilen la in kursens
+       bok en bråkdel senare — går sidorna inte längre att jämföra: uppslaget
+       klampar spannet mot den nya bokens pärmar (s. 2 blev s. 6 i en bok vars
+       PDF saknar de fem första bladen, sidoffset −5). Skillnaden lästes som
+       lärarens hand, och spannet låstes för resten av planeringen: provet som
+       flyttades till november behöll septemberprovets sidor fast noten under
+       remsan sa 272–303. Ett minne ur en bok som inte längre står i dörren är
+       förbrukat — inte ett lärarval. */
+    if (provforval && !provforval.egenBok && window.Uppslag && window.Uppslag.spann
+        && window.Uppslag.spann().bok !== provforval.bok) provforval = null;
     const eget = lararensSpann();
     /* BOKEN FÖRST, och oberoende av vad planeringen har att säga. Bokvalet satt
        förr inne i planeringens gren, så en kurs utan grovplanering — eller ett
@@ -1304,21 +1350,24 @@
     const framme = window.Uppslag && window.Uppslag.spann ? window.Uppslag.spann().bok : '';
     const framKurs = window.Bok && window.Bok.kursForBok ? window.Bok.kursForBok(framme) : '';
     const frammande = !namn && !!kurs && !!framKurs && framKurs !== kurs;
-    /* Provdagen är den läraren satt i steg 3, annars lektionens. Utan dag alls
-       gäller hela planeringen — det är sannare än att låtsas att den slutar
-       idag. */
-    const fore = inst.Prov.narDatum || ($('#p-datum') || {}).value || '';
+    /* Provdagen: lärarens egen, kalenderns bokade prov, annars lektionens (se
+       provkanten). Utan dag alls gäller hela planeringen — det är sannare än
+       att låtsas att den slutar idag. */
+    const { dag: fore, bokad } = provkanten('Prov', klass);
+    /* Vänsterkanten: förra provet. Det som skrivits och godkänts i appen väger
+       tyngst — där vet vi vad provet faktiskt täckte — och först därefter förra
+       PROVPOSTEN i kalendern, för läraren som inte skrev förra provet här. */
+    const efter = forraProvet(klass, kurs, fore)
+      || ((K.forraProv ? K.forraProv(klass, fore) : null) || {}).datum || '';
     /* Utan både klass och kurs är planeringen ingens: filtret släpper då igenom
        kalenderns SAMTLIGA rader, och provet ärvde ett spann över hela boken ur
        andra klassers lektioner («305 lektioner, s. 2–349»). */
-    const p = (klass || kurs)
-      ? K.planeringen(klass, kurs, { fore, efter: forraProvet(klass, kurs, fore) })
-      : null;
+    const p = (klass || kurs) ? K.planeringen(klass, kurs, { fore, efter }) : null;
     if (!p) {
       provgrund = '';
       if (namn && !eget && window.Uppslag && window.Uppslag.laggBok) {
         window.Uppslag.laggBok(namn);
-        provforval = window.Uppslag.spann();
+        minnsForvalet(namn);
       }
       return provnot('');
     }
@@ -1333,11 +1382,16 @@
          pdfium-öppning av en fil på ett par hundra megabyte (routes_bok). */
       if (namn && window.Uppslag.laggBok) window.Uppslag.laggBok(namn, { fran: p.fran, till: p.till });
       else window.Uppslag.satt(p.fran, p.till);
-      provforval = window.Uppslag.spann();
+      minnsForvalet(namn);
       window.Kallor && window.Kallor.satt && window.Kallor.satt('bok', true, true);
     }
+    /* Kom kanten ur kalendern ska noten säga det: «fram till provet 16
+       september» är skillnaden mellan ett spann läraren känner igen och ett hon
+       måste räkna efter. Är dagen hennes egen — eller lektionens — säger noten
+       som förut bara vad planeringen täcker. */
     provnot(`Ur planeringen: ${p.lektioner} ${p.lektioner === 1 ? 'lektion' : 'lektioner'}, `
-            + `s. ${p.fran}–${p.till}`);
+            + `s. ${p.fran}–${p.till}`
+            + (bokad ? ` — fram till provet ${K.ord(bokad.datum)}.` : ''));
   }
 
   /* ══════════ PROVETS PUNKTER STÅR I KALENDERN ══════════
@@ -1367,9 +1421,11 @@
     if (!K || !K.provpunkter) return gynot('');
     const typ = valt('skrivtyp');
     const klass = $('#p-klass').value || '';
-    /* Provets egen dag står i upplägget (steg 3), lektionens i steg 1 — samma
-       ordning som resten av begäran läser dem. */
-    const dag = ((inst[typ] || {}).narDatum) || ($('#p-datum') || {}).value || '';
+    /* SAMMA dag som fönstrets högra kant (provkanten): lärarens egen, annars
+       den bokade provpostens, annars lektionens. Punkterna hör till det prov
+       som skrivs — planeras det från en lektion står innehållet i provets post,
+       inte i lektionens dag. */
+    const { dag } = provkanten(typ, klass);
     const p = K.provpunkter(klass, dag);
     if (!p) return gynot('');
     const korta = gyPunkter().filter(x => p.koder.includes(x.kod)).map(x => x.kort);
