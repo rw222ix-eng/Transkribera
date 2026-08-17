@@ -163,10 +163,15 @@ window.Kalender = (() => {
 
      FÖRSTA posten på eller efter `fran`, aldrig den sista: det som skrivs nu är
      nästa prov, inte terminens. Posten måste bära klassen — en post utan klass
-     («Avstämning av matematikdiagnoser åk1») är ingens provdag. */
+     («Avstämning av matematikdiagnoser åk1») är ingens provdag.
+
+     «Komplettering och omprov» är slag 'prov' i kalendern (ordet omprov), men
+     det prövar GAMMALT stoff igen: som högerkant hade det kapat fönstret mitt i
+     sträckan, och som vänsterkant avslutar det ingenting nytt. Ingen kant. */
+  const omprov = p => /\b(omprov|komplettering\w*)\b/i.test(p.titel || '');
   function nastaProv(klass, fran, slag) {
     const s = slag === 'diagnos' ? 'diagnos' : 'prov';
-    return poster.filter(p => p.slag === s && p.datum
+    return poster.filter(p => p.slag === s && p.datum && !omprov(p)
                           && (!fran || p.datum >= fran)
                           && (!klass || p.klass === klass))
       .sort((a, b) => a.datum.localeCompare(b.datum))[0] || null;
@@ -176,7 +181,7 @@ window.Kalender = (() => {
      när förra provet aldrig skrevs här. Bara riktiga prov: en diagnos mäter,
      den avslutar ingenting. */
   function forraProv(klass, fore) {
-    return poster.filter(p => p.slag === 'prov' && p.datum
+    return poster.filter(p => p.slag === 'prov' && p.datum && !omprov(p)
                           && (!fore || p.datum < fore)
                           && (!klass || p.klass === klass))
       .sort((a, b) => a.datum.localeCompare(b.datum)).pop() || null;

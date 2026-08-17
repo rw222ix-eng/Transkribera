@@ -497,6 +497,24 @@ test("ett prov BAKÅT i kalendern är ingen högerkant", async ({ page }) => {
       .toHaveText("Ur planeringen: 1 lektion, s. 7–12");
   });
 
+test("«Komplettering och omprov» är ingen kant — åt något håll", async ({ page }) => {
+  /* Omprovet är slag 'prov' i kalendern (ordet omprov), men det prövar GAMMALT
+     stoff: den 2 september fick det inte avsluta sträckan (vänsterkanten är
+     fortfarande provet den 26 augusti), och den 9 september fick det inte kapa
+     fönstret före lektionen den 14 (högerkanten är provet den 16). */
+  await medProvpost(page, { poster: [...PROVPOSTER,
+    { datum: "2026-09-02", tid: "09:05–10:20", klass: "NA25", slag: "prov",
+      titel: "NA25: Komplettering och omprov", kalla: "schema" },
+    { datum: "2026-09-09", tid: "09:05–10:20", klass: "NA25", slag: "prov",
+      titel: "NA25: Omprov kap 1", kalla: "schema" },
+  ] });
+  await planeringen(page);
+  await page.evaluate(() => window.SattLage("Prov"));
+  await tillSteg(page, 3);
+  await expect(page.locator("#bkplanering"))
+    .toHaveText("Ur planeringen: 2 lektioner, s. 7–26 — fram till provet 16 september.");
+});
+
 test("lärarens remsa överlever att kanten kommer ur kalendern", async ({ page }) => {
   await medProvpost(page);
   await planeringen(page);
