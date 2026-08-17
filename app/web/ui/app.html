@@ -1121,6 +1121,12 @@
                 <div class="bkuppslag" id="bkuppslag"></div>
                 <div class="bkremsa" id="bkremsa"></div>
                 <p class="bkspann" id="bkspann"></p>
+                <!-- Provets förval kommer ur grovplaneringen i kalendern (en rad
+                     per lektion, se app/db.py lektionsinnehall). Raden säger
+                     varifrån — «Ur planeringen: 5 lektioner, s. 2–18» — precis
+                     som kalenderförvalet gör i steg 1. Det är ett förval, inget
+                     lås: remsan ovanför är fortfarande lärarens att dra i. -->
+                <p class="bknot" id="bkplanering" hidden></p>
                 <!-- Uppgifterna på de valda sidorna. Boken ligger inläst, så
                      modellen har redan läst dem när panelen öppnas och lämnar ett
                      förslag på vad som ska hoppas över. uppgifter.js äger blocket. -->

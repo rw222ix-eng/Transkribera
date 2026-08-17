@@ -80,6 +80,37 @@ window.Kalender = (() => {
     && (!klass || !i.klass || i.klass === klass)
     && (!kurs || !i.kurs || i.kurs === kurs)) || null;
 
+  /* ── GROVPLANERINGEN ──────────────────────────────────
+     Raderna ovan, en per lektion, ÄR lärarens grovplanering: hon skriver in
+     sidorna och uppgifterna vecka för vecka i sina kalenderhändelser innan
+     terminen börjar. Ett prov utgår från hela den sträckan — inte från den
+     lektion som råkar vara vald i veckan — så provet behöver läsa listan som
+     en PERIOD i stället för som en dag.
+
+     `fore` är provdagen (lektioner PÅ provdagen hör inte till underlaget) och
+     `efter` förra provets dag: det klassen prövades på förra gången är avklarat
+     och ska inte prövas igen. Utan `efter` gäller allt appen har.
+
+     Ingen träff ger null, aldrig ett tomt spann: «s. 0–0» är ett påhitt, och
+     tystnad är ett bättre besked än en gissning. */
+  function planeringen(klass, kurs, { fore, efter } = {}) {
+    const rader = innehall.filter(i =>
+      (!klass || !i.klass || i.klass === klass)
+      && (!kurs || !i.kurs || i.kurs === kurs)
+      && (!fore || i.datum < fore)
+      && (!efter || i.datum > efter));
+    if (!rader.length) return null;
+    const fran = Math.min(...rader.map(i => i.fran));
+    const till = Math.max(...rader.map(i => Math.max(i.fran, i.till)));
+    /* Hjälpmedelsflaggan skiljer på tomt och OSYNKAT (se app/db.py v21):
+       saknas nyckeln har raden aldrig lästs med hjälpmedelsögon, och då får
+       ingen påstå att inga verktyg var med. Räknas därför i tre högar. */
+    const med = rader.filter(i => i.hjalpmedel).length;
+    const utan = rader.filter(i => i.hjalpmedel === '').length;
+    return { lektioner: rader.length, fran, till, rader: rader.slice(),
+             hjalpmedel: { med, utan, okand: rader.length - med - utan } };
+  }
+
   /* Träffar inspelningstiden en lektion i schemat? Då är klass och kurs inte
      längre en gissning — de är fakta, och ramen ska vara solid. */
   function traff(datum, klockslag) {
@@ -297,5 +328,5 @@ window.Kalender = (() => {
     .then(d => { if (d) { ta(d); ritaOm(); } })
     .catch(() => { /* servern svarar inte: prototypens vecka står kvar */ });
 
-  return { poster, schema, lov, innehall, innehallFor, omVeckor, forDatum, schemaFor, lovFor, traff, krockrad, veckan, veckoBild, veckonr, mandagen, nastaSkolvecka, terminen, lagg, ord, synka, redo, franServern: () => franServern, idag: () => iso(new Date()) };
+  return { poster, schema, lov, innehall, innehallFor, planeringen, omVeckor, forDatum, schemaFor, lovFor, traff, krockrad, veckan, veckoBild, veckonr, mandagen, nastaSkolvecka, terminen, lagg, ord, synka, redo, franServern: () => franServern, idag: () => iso(new Date()) };
 })();

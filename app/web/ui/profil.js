@@ -358,6 +358,16 @@ window.Profil = (() => {
        innehåll för just den lektionen är allt precis som förut. */
     const kal = (post && post.datum && window.Kalender && window.Kalender.innehallFor)
       ? window.Kalender.innehallFor(post.datum, klass, kurs) : null;
+    /* PROVET läser samma tabell men som en PERIOD: allt klassen gått igenom
+       fram till provdagen, inte den enda lektion provet råkar ligga på. Det är
+       lärarens egen grovplanering, och den slår både `provSpann` (räknat ur
+       klassprofilen) och dagens rad. Finns ingen planering står `provSpann`
+       kvar precis som förut. plan.js gör om samma uträkning när typen väljs
+       (provetsUnderlag) och kan då också kapa vid förra provet — här finns
+       ingen dokumenthög att fråga. */
+    const planering = (typ === 'Prov' && window.Kalender && window.Kalender.planeringen)
+      ? window.Kalender.planeringen(klass, kurs,
+                                    { fore: (post && post.datum) || '' }) : null;
     /* Kalendern kan också säga att rutan INTE är en boklektion: «Hämta
        läromedel i läromedelscentralen, hela passet» står i lektionens timme och
        följer med i posten (klass.js). Då ska ingen sidsträcka gissas fram —
@@ -370,18 +380,25 @@ window.Profil = (() => {
                     efter: '— den timmen är inte en boklektion, så inga sidor är förvalda.' };
     /* Boken kan saknas för kursen — sidorna sätts ändå. `bokval()` i plan.js
        skickar ingen bok när id:t saknas, och sidorna är sanna oavsett. */
-    } else if ((boken || kal) && window.Uppslag && window.Uppslag.satt) {
+    } else if ((boken || kal || planering) && window.Uppslag && window.Uppslag.satt) {
       if (boken && window.Uppslag.laggBok) window.Uppslag.laggBok(boken);
-      const { fran, till } = kal ? kal
+      const { fran, till } = planering ? planering : kal ? kal
         : (typ === 'Prov' ? provSpann(p) : nastaSpann(p));
       window.Uppslag.satt(fran, till);
       window.Kallor && window.Kallor.satt && window.Kallor.satt('bok', true, true);
       /* Uppgifterna står i samma rad i kalendern som sidorna. De är lärarens
-         urval, och de vinner över modellens förslag (uppgifter.js). */
-      if (kal && kal.uppg && window.Uppgifter && window.Uppgifter.franKalendern) window.Uppgifter.franKalendern(kal.uppg);
+         urval, och de vinner över modellens förslag (uppgifter.js). Provet
+         hoppar över dem: uppgifterna på sidorna har klassen redan räknat, och
+         provet prövar innehållet — inte urvalet (se plan.js HELHETSTYPER). */
+      if (kal && kal.uppg && !planering && typ !== 'Prov'
+          && window.Uppgifter && window.Uppgifter.franKalendern) window.Uppgifter.franKalendern(kal.uppg);
       spannText = `${boken ? boken + ' · ' : ''}s. ${fran}–${till}`;
       gjort.push(spannText);
-      forval[2] = { text: spannText, efter: kal ? '— sidorna som står på lektionen i din kalender.' : (typ === 'Prov' ? '— hela avsnittet klassen läst.' : '— sidorna efter förra lektionen.') };
+      forval[2] = { text: spannText,
+                    efter: planering
+                      ? `— ur din planering: ${planering.lektioner} ${planering.lektioner === 1 ? 'lektion' : 'lektioner'} fram till provet.`
+                      : kal ? '— sidorna som står på lektionen i din kalender.'
+                      : (typ === 'Prov' ? '— hela avsnittet klassen läst.' : '— sidorna efter förra lektionen.') };
       /* Centralt innehåll ur sidorna — läromedlet och ämnesplanen säger samma sak. */
       /* Nivån först — den bestämmer vilka punkter som ens finns att välja. */
       const nivaId = window.Gy ? window.Gy.foreslagen(kurs) : null;

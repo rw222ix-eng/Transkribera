@@ -1154,6 +1154,60 @@
     punkter.forEach(p => vald.add(p.kort));
     ritaGy();
   }
+  /* ══════════ PROVETS UNDERLAG ÄR GROVPLANERINGEN ══════════
+     Läraren skriver in sidorna vecka för vecka i kalendern innan terminen
+     börjar — «s. 2–6 · uppg. 1101–1119» i lektionshändelsens beskrivning — och
+     synken lägger dem som en rad per lektion (lektionsinnehall). DET är vad
+     klassen tränat på, och det är därför provet ska utgå från.
+     Förr ärvde provet i stället sidorna efter förra lektionen (klassprofilens
+     `nastaSpann`), alltså EN veckas sidor på ett prov som täcker sju.
+
+     Fönstret: allt före provdagen, och efter förra provet om det finns ett.
+     Det klassen redan prövats på är avklarat.
+
+     Ett FÖRVAL, aldrig ett lås: remsan i bokdörren är fortfarande lärarens att
+     dra i, och noten under den säger varifrån talen kom så att hon vet vad hon
+     ändrar på. Hittas ingen planering sägs ingenting alls — appen hittar inte
+     på ett spann, den låter det förval som redan står stå kvar. */
+  function forraProvet(klass, kurs, fore) {
+    const dagar = sparat
+      .filter(v => !v.losningsblad && v.typ === 'Prov' && v.datum
+        && (!klass || !v.klass || v.klass === klass)
+        && (!kurs || !v.kurs || v.kurs === kurs)
+        && (!fore || v.datum < fore))
+      .map(v => v.datum)
+      .sort();
+    return dagar.length ? dagar[dagar.length - 1] : '';
+  }
+  function provnot(text) {
+    const p = $('#bkplanering');
+    if (!p) return;
+    p.hidden = !text;
+    p.textContent = text || '';
+  }
+  function provetsUnderlag() {
+    const K = window.Kalender;
+    if (!K || !K.planeringen) return;
+    const klass = $('#p-klass').value || '', kurs = $('#p-kurs').value || '';
+    /* Provdagen är den läraren satt i steg 3, annars lektionens. Utan dag alls
+       gäller hela planeringen — det är sannare än att låtsas att den slutar
+       idag. */
+    const fore = inst.Prov.narDatum || ($('#p-datum') || {}).value || '';
+    const p = K.planeringen(klass, kurs, { fore, efter: forraProvet(klass, kurs, fore) });
+    if (!p) return provnot('');
+    /* Boken sätts bara om den finns på hyllan för kursen. Saknas den är sidorna
+       sanna ändå — `bokval()` skickar ingen bok utan id, och spannet står kvar
+       i pappret (se profil.js, samma resonemang). */
+    if (window.Uppslag && window.Uppslag.satt) {
+      const namn = window.Bok && window.Bok.namnFor ? window.Bok.namnFor(kurs) : '';
+      if (namn && window.Uppslag.laggBok) window.Uppslag.laggBok(namn);
+      window.Uppslag.satt(p.fran, p.till);
+      window.Kallor && window.Kallor.satt && window.Kallor.satt('bok', true, true);
+    }
+    provnot(`Ur planeringen: ${p.lektioner} ${p.lektioner === 1 ? 'lektion' : 'lektioner'}, `
+            + `s. ${p.fran}–${p.till}`);
+  }
+
   /* Väljs en elev som mottagare kryssas HENNES punkter för — de svaga när
      bladet ska stötta, de starka när det ska utmana. Läraren kan kryssa om;
      det är hennes val som skickas, och servern faller tillbaka på profilen
@@ -1196,6 +1250,12 @@
   window.planKoll = () => {
     const typ = valt('skrivtyp');
     if (typ === 'Diagnos' && forraTypen !== 'Diagnos') forkryssaAlla();
+    /* Provets förval ur grovplaneringen sätts när typen BLIR prov, inte vid
+       varje omritning — annars hade läraren aldrig kunnat ändra spannet. Noten
+       under remsan följer med ner när något annat skrivs: den talar om provets
+       underlag och ljuger om en tavlas. */
+    if (typ === 'Prov' && forraTypen !== 'Prov') provetsUnderlag();
+    if (typ !== 'Prov') provnot('');
     forraTypen = typ;
     ritaTypval();
     speglaHelheten();

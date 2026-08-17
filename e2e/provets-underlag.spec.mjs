@@ -23,7 +23,23 @@ import { expect, test } from "@playwright/test";
  * påstående om provet har därför sitt motstycke för en övningstyp.
  */
 
-const SCHEMA = { schema: [], lov: [], poster: [], innehall: [] };
+/* Grovplaneringen: lärarens egna rader, en per lektion, som synken läst dem ur
+   kalenderhändelsernas beskrivningar. Tre lektioner före provet — spannen
+   överlappar precis som verkliga gör, så unionen (2–12) är det enda rätta
+   svaret och inte råkar vara sista radens `till`. Den fjärde raden ligger EFTER
+   provdagen och ska inte räknas: klassen har inte varit där än. */
+const INNEHALL = [
+  { datum: "2026-08-24", tid: "09:05–10:20", klass: "NA25",
+    kurs: "Matematik, nivå 2c", fran: 2, till: 6, uppg: "1101–1119" },
+  { datum: "2026-08-25", tid: "09:05–10:20", klass: "NA25",
+    kurs: "Matematik, nivå 2c", fran: 5, till: 9, uppg: "1120–1140" },
+  { datum: "2026-08-31", tid: "09:05–10:20", klass: "NA25",
+    kurs: "Matematik, nivå 2c", fran: 7, till: 12, uppg: "1201–1230" },
+  { datum: "2026-09-14", tid: "09:05–10:20", klass: "NA25",
+    kurs: "Matematik, nivå 2c", fran: 20, till: 26, uppg: "1301–1320" },
+];
+
+const SCHEMA = { schema: [], lov: [], poster: [], innehall: INNEHALL };
 
 const AVSNITT = [
   { nr: "1.1", titel: "Repetition", kap: "Kapitel 1 · Algebra",
@@ -52,7 +68,7 @@ const PROV = {
 const strom = h => h.map(x => `data: ${JSON.stringify(x)}\n\n`).join("");
 
 /** Fejkar datagrunden, hyllan och generatorrutten. `anrop` samlar kropparna. */
-async function fejka(page) {
+async function fejka(page, { sparade = [] } = {}) {
   const anrop = [];
   const json = (route, kropp) => route.fulfill({
     status: 200, contentType: "application/json", body: JSON.stringify(kropp) });
@@ -60,7 +76,7 @@ async function fejka(page) {
   await page.route("**/api/lessons", route => json(route, []));
   await page.route("**/api/history", route => json(route, []));
   await page.route("**/api/klassprofil", route => json(route, {}));
-  await page.route("**/api/dokument", route => json(route, { sparade: [], utkast: null }));
+  await page.route("**/api/dokument", route => json(route, { sparade, utkast: null }));
   await page.route("**/api/dokument/**", route => json(route, { ok: true, id: 1 }));
   await page.route("**/api/bocker**", route => {
     const url = new URL(route.request().url());
@@ -198,3 +214,100 @@ test("ett sparat prov får inget lösningsblad till bokens uppgifter", async ({ 
     (window.Uppgifter.urval({ boklosning: true, boklosniva: "Alla" }) || {}).losning);
   expect(losning).toBe(null);
 });
+
+/* ── 4 · Grovplaneringen som provets förval ─────────── */
+
+/** Ställer lektionens klass, kurs och dag utan att gå via veckorutan. */
+const staller = (page, { klass, kurs, datum }) => page.evaluate(v => {
+  const satt = (id, varde) => {
+    const f = document.querySelector(id);
+    if (f.tagName === "SELECT" && ![...f.options].some(o => o.value === varde
+                                                      || o.textContent === varde)) {
+      f.appendChild(Object.assign(document.createElement("option"),
+                                  { textContent: varde }));
+    }
+    f.value = varde;
+    f.dispatchEvent(new Event("change", { bubbles: true }));
+  };
+  satt("#p-klass", v.klass);
+  satt("#p-kurs", v.kurs);
+  satt("#p-datum", v.datum);
+}, { klass, kurs, datum });
+
+async function planeringen(page, datum = "2026-09-07") {
+  await page.goto("/");
+  await hydrerad(page);
+  await page.getByRole("tab", { name: "Planering" }).click();
+  await staller(page, { klass: "NA25", kurs: "Matematik, nivå 2c", datum });
+}
+
+test("provet ärver hela sträckan klassen gått igenom, inte förra lektionens sidor",
+  async ({ page }) => {
+    await fejka(page);
+    await planeringen(page);
+    await page.evaluate(() => window.SattLage("Prov"));
+    await tillSteg(page, 3);
+
+    /* Unionen av de tre lektionerna före provdagen: 2–6, 5–9 och 7–12 blir
+       2–12. Den fjärde raden (20–26) ligger efter provet och räknas inte. */
+    await expect(page.locator("#bkplanering"))
+      .toHaveText("Ur planeringen: 3 lektioner, s. 2–12");
+    const spann = await page.evaluate(() => window.Uppslag.spann());
+    expect(spann.fran).toBe(2);
+    expect(spann.till).toBe(12);
+  });
+
+test("noten står bara vid provet — en tavla har ett annat underlag",
+  async ({ page }) => {
+    await fejka(page);
+    await planeringen(page);
+    await page.evaluate(() => window.SattLage("Prov"));
+    await tillSteg(page, 3);
+    await expect(page.locator("#bkplanering")).toBeVisible();
+
+    await page.evaluate(() => window.SattLage("Tavla"));
+    await expect(page.locator("#bkplanering")).toBeHidden();
+  });
+
+test("utan planering för klassen sägs ingenting alls", async ({ page }) => {
+  await fejka(page);
+  await page.goto("/");
+  await hydrerad(page);
+  await page.getByRole("tab", { name: "Planering" }).click();
+  // Annan klass: raderna i kalendern är NA25:s, och appen hittar inte på ett
+  // spann åt någon annan.
+  await staller(page, { klass: "SA25", kurs: "Matematik, nivå 2c",
+                        datum: "2026-09-07" });
+  await page.evaluate(() => window.SattLage("Prov"));
+  await tillSteg(page, 3);
+  await expect(page.locator("#bkplanering")).toBeHidden();
+});
+
+test("ett godkänt prov kapar sträckan — det som redan prövats prövas inte igen",
+  async ({ page }) => {
+    /* Klassen skrev ett prov den 26 augusti. Nästa prov ska utgå från det som
+       kom EFTER det — 7–12 ur lektionen den 31 — och inte pröva om s. 2–9.
+       Det är den enda regeln som gör två prov i rad till två olika prov. */
+    const forra = {
+      typ: "Prov", moment: "1.1 Repetition", klass: "NA25",
+      kurs: "Matematik, nivå 2c", datum: "2026-08-26", tid: "09:05–10:20",
+      gy: [], kalla: false, kallor: [], sidor: "2–9", inst: {}, bilder: {},
+      referenser: [], forlaga: null, resultat: null, fokus: "", svart: "",
+      kontext: "start", niva: false, svarighet: 0, andrat: [],
+      anteckning: "Sparat tidigare", uppgifter: [], bokuppg: null,
+    };
+    await fejka(page, { sparade: [{
+      id: 1, status: "godkant", markor: 0, sort: 1, foljd: null,
+      versioner: [forra], dokument: { ...forra, id: 1 } }] });
+    await page.goto("/");
+    await page.waitForFunction(() => window.Kalender && window.Kalender.franServern()
+      && window.Dokument && window.Dokument.sparade().length > 0);
+    await page.getByRole("tab", { name: "Planering" }).click();
+    await staller(page, { klass: "NA25", kurs: "Matematik, nivå 2c",
+                          datum: "2026-09-07" });
+    await page.evaluate(() => window.SattLage("Prov"));
+    await tillSteg(page, 3);
+
+    await expect(page.locator("#bkplanering"))
+      .toHaveText("Ur planeringen: 1 lektion, s. 7–12");
+  });
