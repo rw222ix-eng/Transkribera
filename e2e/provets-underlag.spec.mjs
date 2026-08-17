@@ -312,6 +312,63 @@ test("ett godkänt prov kapar sträckan — det som redan prövats prövas inte 
       .toHaveText("Ur planeringen: 1 lektion, s. 7–12");
   });
 
+/* ── 4b · Faktapasset väntar till skrivningen ───────── */
+
+test("provets förval slår inte upp sidorna — passet tas när det skrivs",
+  async ({ page }) => {
+    /* Förvalet ur grovplaneringen öppnar bokdörren och sätter spannet — och
+       panelen drog då igång faktapasset fast den är fälld: på ett riktigt
+       provspann över trettio sidor är det minuters LLM-anrop för en lista
+       ingen ser. Passet ska vänta till skrivningen, där servern tar det
+       (routes_planning.bok_las_text) och väntan syns i molnraden. */
+    /* `anrop` märker varje läsning med sitt `fran`: remsan står på prototypens
+       standardspann tills förvalet skriver det, och det spannets egen läsning
+       (en tavlegest, helt riktig) får inte förväxlas med provets. */
+    const anrop = [];
+    await fejka(page);
+    await page.unroute("**/api/bocker**");
+    await page.route("**/api/bocker**", route => {
+      const r = route.request();
+      const url = new URL(r.url());
+      if (url.pathname.endsWith("/uppslag")) {
+        const fran = Number(url.searchParams.get("fran"));
+        const till = Number(url.searchParams.get("till"));
+        anrop.push(`uppslag:${fran}`);
+        // Provspannet (2–12) är oläst: det är precis läget som drog igång
+        // läsningen. Alla andra spann svarar lästa och tysta.
+        const olast = fran === 2;
+        return route.fulfill({ status: 200, contentType: "application/json",
+          body: JSON.stringify({ fran, till, uppgifter: [],
+                                 olasta: olast ? [2, 3] : [],
+                                 utan_fakta: olast ? [2, 3] : [],
+                                 sidor: [] }) });
+      }
+      if (url.pathname.endsWith("/las")) {
+        anrop.push(`las:${(r.postDataJSON() || {}).fran}`);
+        return route.fulfill({ status: 200, contentType: "text/event-stream",
+          body: strom([{ type: "done",
+                         result: { uppgifter: UPPG, lasta: 0 } }]) });
+      }
+      return route.fulfill({ status: 200, contentType: "application/json",
+                             body: JSON.stringify({ bocker: [BOK] }) });
+    });
+    await planeringen(page);
+    await page.evaluate(() => window.SattLage("Prov"));
+    await tillSteg(page, 3);
+    await expect(page.locator("#bkplanering")).toBeVisible();
+
+    // Uppslaget frågades — men läsningen begärdes aldrig.
+    await expect.poll(() => anrop.includes("uppslag:2")).toBe(true);
+    await page.waitForTimeout(1000);
+    expect(anrop.filter(a => a === "las:2").length).toBe(0);
+
+    /* Tillbaka till lektionsmaterialet: panelen är uppe igen och behöver sina
+       uppgifter — nu ska passet tas direkt, inte förbli hoppat. */
+    await page.evaluate(() => window.SattLage("Tavla"));
+    await expect.poll(() => anrop.filter(a => a === "las:2").length,
+                      { timeout: 15_000 }).toBe(1);
+  });
+
 /* ── 5 · Antalet uppgifter ──────────────────────────── */
 
 const antalet = page => page.locator('.typrad[data-id="antal"] .steppervarde');

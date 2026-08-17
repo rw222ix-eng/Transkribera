@@ -597,6 +597,51 @@ def test_skrivningen_laser_de_sidor_som_saknas(client, ocr, monkeypatch):
     assert any("Läser s. 10" in m for m in loggar)
 
 
+def test_skrivningen_tar_faktapasset_nar_panelen_hoppat_det(client, ocr,
+                                                            monkeypatch):
+    """Provet och diagnosen fäller uppgiftspanelen, och panelen hoppar då
+    faktapasset (uppgifter.js hamta — minuters läsning för en lista ingen ser).
+    Skrivningen måste därför ta passet själv: prompten vill ha uppgiftsnumren,
+    och textpasset ska läsa på faktapassets sidplacering, inte gissad offset."""
+    from app import lesson_board
+    b = _importera(client)
+    fangat = {}
+
+    def fake(course, group, moment, *, model, bok="", log_cb=None, **kw):
+        fangat["bok"] = bok
+        return {"board": {"schema": "wb-json-v1", "title": moment, "slides": []},
+                "errors": [], "rounds": 1}
+
+    monkeypatch.setattr(lesson_board, "generate_board", fake)
+    fore = len(ocr.fakta)                # importen läser egna provsidor
+    r = client.post("/api/planning/generate", json={
+        "moment": "Repetition", "bok": {"id": b["id"], "fran": 10, "till": 12}})
+    _done(r)
+    assert len(ocr.fakta) > fore         # faktapasset togs i skrivningen
+    assert "Uppgiftsnummer på sidorna:" in fangat["bok"]
+
+
+def test_skrivningen_laser_inte_om_fakta_panelen_redan_tagit(client, ocr,
+                                                             monkeypatch):
+    """Lektionsflödet: panelen tog faktapasset när spannet valdes. Skrivningen
+    får inte betala det igen — bara texten återstår."""
+    from app import lesson_board
+    b = _importera(client)
+    client.post(f"/api/bocker/{b['id']}/las",
+                json={"fran": 10, "till": 12, "bara": "fakta"})
+    antal = len(ocr.fakta)
+    assert antal > 0
+    monkeypatch.setattr(lesson_board, "generate_board",
+                        lambda *a, **k: {"board": {"schema": "wb-json-v1",
+                                                   "title": "x", "slides": []},
+                                         "errors": [], "rounds": 1})
+    r = client.post("/api/planning/generate", json={
+        "moment": "Repetition", "bok": {"id": b["id"], "fran": 10, "till": 12}})
+    _done(r)
+    assert len(ocr.fakta) == antal       # inga nya faktaanrop
+    assert len(ocr.text) == 3            # texten lästes, sida för sida
+
+
 def test_utan_bokdorr_ingen_bok_i_prompten(client, ocr):
     b = _importera(client)
     assert routes_planning.bok_text(client.base_dir / "transkribera.db", {}) == ""

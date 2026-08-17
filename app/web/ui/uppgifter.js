@@ -183,10 +183,19 @@
         bort = standardbort();
         rita();
         window.planKoll && window.planKoll();
-        if ((d.utan_fakta || []).length) lasSidorna(id, s, nyck);
+        /* Faktapasset fyller panelen — och för provet och diagnosen är panelen
+           fälld (rita ovan). Ett provspann över trettio sidor hade blivit
+           minuters LLM-anrop för en lista ingen ser, så passet hoppas här och
+           tas av servern när det skrivs (routes_planning.bok_las_text), där
+           väntan redan syns i molnraden. `hoppat` minns hoppet så att ett byte
+           tillbaka till lektionsmaterial tar passet direkt (spegla). */
+        const helhet = !!(window.Helhetstyp && window.Helhetstyp());
+        hoppat = helhet && (d.utan_fakta || []).length > 0;
+        if ((d.utan_fakta || []).length && !helhet) lasSidorna(id, s, nyck);
       })
       .catch(() => {});
   }
+  let hoppat = false;
 
   /* Ett faktapass per spann, aldrig fler. Passet är gratis andra gången —
      servern svarar «redan lästa» direkt — och just därför skulle en sida det
@@ -413,8 +422,14 @@
        uppgifter går bara att välja när boken faktiskt är en av källorna. */
     finns: () => !!(dorr && dorr.getAttribute('aria-pressed') === 'true' && alla().length),
     /* Skrivtypen bytte — rita om så att blocket följer med ner (prov, diagnos)
-       eller upp igen (tavla, arbetsblad, gruppuppgift). */
-    spegla: rita,
+       eller upp igen (tavla, arbetsblad, gruppuppgift). Hoppades faktapasset
+       för att en mätning skrevs tas det nu: panelen är uppe igen och behöver
+       sina uppgifter. `hoppat` skrivs om av hämtningen själv, så varvet
+       stannar. */
+    spegla: () => {
+      rita();
+      if (hoppat && !(window.Helhetstyp && window.Helhetstyp())) hamta();
+    },
     /* Uppgifterna som stod på lektionen i kalendern, i bokens egen skrivning:
        «1101–1103, 1105–1119». Anropas när en lektion väljs (profil.js) — spannet
        är redan satt då, så listan gäller de sidor som just slogs upp. Sidorna

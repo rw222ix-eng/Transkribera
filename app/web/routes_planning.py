@@ -180,12 +180,17 @@ def bok_urval(body: dict) -> dict | None:
 
 
 def bok_las_text(base: Path, db_file: Path, body: dict, emit=None) -> str:
-    """Samma block som `bok_text`, men läser först de sidor som saknar text.
+    """Samma block som `bok_text`, men läser först de sidor som saknar något.
 
     Det är HÄR sidorna faktiskt kostar sina 96 sekunder, och det är rätt ställe:
-    läraren har tryckt Skriv och väntar på en tavla. Uppslagets uppgiftsnummer
-    lästes redan när spannet valdes (faktapasset), så det som återstår är
-    innehållet — och bara för sidor ingen läst förut.
+    läraren har tryckt Skriv och väntar på ett papper. För lektionsmaterialet
+    lästes uppslagets uppgiftsnummer redan när spannet valdes (uppgiftspanelens
+    faktapass), så det som återstår är innehållet. Provet och diagnosen fäller
+    panelen och hoppar det passet (uppgifter.js hamta — ett provspann på trettio
+    sidor hade fyllt en panel ingen ser), så för dem tas faktan HÄR i stället:
+    prompten vill ha uppgiftsnumren, och textpasset vill ha faktapassets
+    sidplacering (bok.las_spann läser annars på gissad offset). Redan läst
+    fakta kostar ingenting — las_spann läser bara det som saknas.
     """
     val = bok_val(body)
     if val is None:
@@ -195,8 +200,9 @@ def bok_las_text(base: Path, db_file: Path, body: dict, emit=None) -> str:
     try:
         if db.get_bok(conn, bid) is None:
             return ""
-        if bok.olasta(conn, bid, fran, till):
-            bok.las_spann(base, conn, bid, fran, till, emit=emit, bara="text")
+        if (bok.olasta(conn, bid, fran, till, text=False)
+                or bok.olasta(conn, bid, fran, till)):
+            bok.las_spann(base, conn, bid, fran, till, emit=emit)
     finally:
         conn.close()
     return bok_text(db_file, body)

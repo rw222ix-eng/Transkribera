@@ -207,8 +207,10 @@ def las_spann(base: Path, conn, bok_id: int, fran: int, till: int, *,
 
     `bara="fakta"` stannar efter faktapasset (bokdörren gör det när ett uppslag
     väljs — uppgiftslistan ska stå framme på en minut, inte på en kvart), och
-    `bara="text"` hoppar över det (skrivningen gör det: då är fakta redan lästa
-    och det som fattas är sidornas innehåll).
+    `bara="text"` hoppar över det. Skrivningen skickar inget `bara`: har
+    panelen redan tagit faktapasset är det gratis, och har den inte det (provet
+    och diagnosen fäller panelen) måste det tas här — textpasset läser annars
+    på gissad offset, se `pdf_for` nedan.
     """
     logg = emit or (lambda _h: None)
     bok = db.get_bok(conn, bok_id)
