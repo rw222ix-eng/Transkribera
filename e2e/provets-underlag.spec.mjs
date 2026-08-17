@@ -311,3 +311,49 @@ test("ett godkänt prov kapar sträckan — det som redan prövats prövas inte 
     await expect(page.locator("#bkplanering"))
       .toHaveText("Ur planeringen: 1 lektion, s. 7–12");
   });
+
+/* ── 5 · Antalet uppgifter ──────────────────────────── */
+
+const antalet = page => page.locator('.typrad[data-id="antal"] .steppervarde');
+const stepp = (page, riktning) =>
+  page.locator(`.typrad[data-id="antal"] [data-steg="${riktning}"]`);
+
+test("provets antal går från tre till tjugo — och säger varför vid kanten",
+  async ({ page }) => {
+    await fejka(page);
+    await page.goto("/");
+    await hydrerad(page);
+    await page.getByRole("tab", { name: "Planering" }).click();
+    await page.evaluate(() => window.SattLage("Prov"));
+    await tillSteg(page, 4);
+
+    // Standarden rörs inte: sex uppgifter, som förut.
+    await expect(antalet(page)).toHaveText("6");
+    await expect(page.locator('.typrad[data-id="antal"] .typnot')).toBeHidden();
+
+    /* Ner till golvet. Det gamla golvet var 4 — nu ska tre gå, och raden ska
+       säga vad kanten är i stället för att bara ta emot. */
+    for (let i = 0; i < 5; i++) await stepp(page, "-1").click();
+    await expect(antalet(page)).toHaveText("3");
+    await expect(page.locator('.typrad[data-id="antal"] .typnot'))
+      .toContainText("Färre än tre går inte att balansera");
+
+    // Och upp till taket: 20, långt över de gamla tolv.
+    for (let i = 0; i < 30; i++) await stepp(page, "1").click();
+    await expect(antalet(page)).toHaveText("20");
+    await expect(page.locator('.typrad[data-id="antal"] .typnot'))
+      .toContainText("Tjugo är appens tak");
+  });
+
+test("antalet läraren satte är det som skickas", async ({ page }) => {
+  const anrop = await fejka(page);
+  // Boken ger momentet, som knappen kräver — samma väg som läraren går.
+  await medBoken(page, "Prov");
+  await tillSteg(page, 4);
+  for (let i = 0; i < 9; i++) await stepp(page, "1").click();
+  await expect(antalet(page)).toHaveText("15");
+  await page.locator("#skriv").click();
+
+  await expect.poll(() => anrop.length).toBe(1);
+  expect(anrop[0].antal).toBe(15);
+});

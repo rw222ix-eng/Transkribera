@@ -1591,6 +1591,43 @@ def test_balanced_skeleton_validerar_rent(antal):
     assert exam_spec.validate_ordning(doc) == [], f"antal={antal}: ordningsfel"
 
 
+@pytest.mark.parametrize("antal", list(range(3, 21)))
+@pytest.mark.parametrize("delar", [True, False])
+def test_provets_antalsgranser_ar_serverns_och_inte_en_smaksak(antal, delar):
+    """Väljaren i planeringen (plan.js TYPVAL.Prov.antal) står på 3–20, och den
+    siffran är inte vald — den är MÄTT här.
+
+    Förut stod den på 4–12 och klampade tyst: en lärare som ville ha ett kort
+    diagnostiskt prov eller ett långt terminsprov fick inte veta varför vredet
+    tog emot. Nu ska varje antal i spannet ge ett skelett som validerar rent i
+    BÅDA uppläggen — «En del» och «Del A + Del B» — för det är de två väljaren
+    erbjuder. Faller något av dem ljuger raden i appen, och då ska det synas
+    här och inte hos läraren."""
+    sk = exam_spec.balanced_skeleton(antal, "prov", delar=delar)
+    assert len(sk) == antal
+    assert exam_spec.genomforbarhet(antal, "prov") == []
+    doc = exam_spec._skeleton_doc(sk)
+    assert exam_spec.validate_balance(doc, profil="prov") == [], \
+        f"antal={antal} delar={delar}: balansfel"
+    assert exam_spec.validate_ordning(doc) == [], \
+        f"antal={antal} delar={delar}: ordningsfel"
+
+
+def test_golvet_tre_ar_serverns_eget_krav():
+    """Varför just 3 — och varför appen inte får erbjuda mindre.
+
+    1 fälls av förkontrollen: provet måste rymma både en rutinuppgift och en
+    med fullständig lösning. 2 tar sig förbi den men går inte att balansera —
+    två poängtripplar räcker inte för att träffa NP:s nivåband, och skelettets
+    poängsökning ger upp. Läraren hade fått ett prov med balansfel på pappret,
+    vilket är värre än en gräns som säger vad den är."""
+    assert exam_spec.genomforbarhet(1, "prov"), "en uppgift borde fällas"
+    assert exam_spec.genomforbarhet(2, "prov") == []      # förkontrollen släpper
+    tva = exam_spec._skeleton_doc(exam_spec.balanced_skeleton(2, "prov"))
+    assert exam_spec.validate_balance(tva, profil="prov"), \
+        "två uppgifter borde INTE kunna balanseras — flyttades bandet?"
+
+
 @pytest.mark.parametrize("antal", [16, 17, 20, 26, 27, 30, 40])
 def test_balanced_skeleton_kapas_inte_vid_16(antal):
     """Fyllnadslistan var tio element lång och tog slut vid len(golv) + 10 = 16

@@ -249,7 +249,29 @@
          klockslag och längd i samma panel. `s.nar` finns kvar i upplägget, men som
          avläsning (se ritaTypval) — sammanfattningen och provNar() läser den. */
       { id: 'nartid', namn: 'När skrivs provet?', typ: 'nartid' },
-      { id: 'antal', namn: 'Antal uppgifter', typ: 'antal', min: 4, max: 12 },
+      /* ── Hur många uppgifter provet får ha ────────────
+         Gränserna var 4–12 och var ingens beslut — de klampade tyst, och en
+         lärare som ville ha ett kort diagnostiskt prov eller ett långt
+         terminsprov fick inte veta varför vredet tog emot.
+         Nu är de MÄTTA på servern (app/exam_spec.py balanced_skeleton +
+         validate_balance + validate_ordning, profil «prov», båda uppläggen):
+
+           1 uppgift  — genomforbarhet fäller: provet måste rymma både en
+                        rutinuppgift och en med fullständig lösning.
+           2 uppgifter — skelettet blir 60 % E-poäng och 0 % A. Nivåbanden går
+                        inte att träffa med två uppgifter, hur de än flyttas.
+           3–51       — rent, varje antal, med och utan Del A + Del B.
+
+         Golvet är alltså 3 och det är serverns, inte en smaksak. Taket 20 är
+         lärarens: sträckan är prövad ända upp till 51 utan anmärkning, men ett
+         prov på tjugo uppgifter är redan tre timmar långt. Noten under raden
+         säger vilket som är vilket när man står vid kanten. */
+      { id: 'antal', namn: 'Antal uppgifter', typ: 'antal', min: 3, max: 20,
+        vidMin: 'Färre än tre går inte att balansera — provet måste rymma både '
+                + 'en rutinuppgift och en med fullständig lösning, och nivåbanden '
+                + 'kräver en tredje.',
+        vidMax: 'Tjugo är appens tak. Fler går att skriva men blir sällan ett '
+                + 'prov som hinns med på en lektion.' },
       { id: 'nivamix', namn: 'Poängnivåer', typ: 'seg', val: ['Bara E', 'E-tyngd', 'Balanserat', 'C/A-tyngd'] },
       /* Del A är utan digitala hjälpmedel, del B med räknare och GeoGebra.
          Skillnaden är hjälpmedlen — båda delarna bär korta svar och uppgifter
@@ -924,13 +946,26 @@
       if (k.typ === 'antal') {
         /* Ärvda uppägg kan bära ett antal som den här typen inte rymmer. */
         s[k.id] = Math.min(k.max, Math.max(k.min, Number(s[k.id]) || k.min));
+        /* En kontroll som tar emot utan att säga varför är en gåta. Står man
+           vid kanten säger raden under vad kanten ÄR — serverns krav eller
+           appens tak — i stället för att bara vägra. Bara typer som har något
+           att säga får en not (`vidMin`/`vidMax`); de andra ser ingen rad. */
+        const gransnot = (k.vidMin || k.vidMax) ? typnot(rad) : null;
+        const visaGrans = () => {
+          if (!gransnot) return;
+          satNot(gransnot, '',
+                 s[k.id] <= k.min ? (k.vidMin || '')
+                 : s[k.id] >= k.max ? (k.vidMax || '') : '');
+        };
         $$('[data-steg]', rad).forEach(b => b.addEventListener('click', () => {
           s[k.id] = Math.min(k.max, Math.max(k.min, s[k.id] + Number(b.dataset.steg)));
           $('.steppervarde', rad).textContent = String(s[k.id]);
+          visaGrans();
           planKoll();
         }));
         const varde = $('.steppervarde', rad);
         if (varde) varde.textContent = String(s[k.id]);
+        visaGrans();
       }
       /* ── Promptrutan ──────────────────────────────────
          Innehållet går ordagrant in i prompten som huvudkälla. Noten under
