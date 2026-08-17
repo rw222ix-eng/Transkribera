@@ -374,6 +374,14 @@ def seed(out_dir: Path, *, compile_fn=exam_pdf.compile_pdf) -> tuple[bool, str]:
     jobb = (
         ("prov", exam_latex.render_prov(doc, bilder=bilder)),
         ("arbetsblad", exam_latex.render_arbetsblad(doc, bilder=bilder)),
+        # Det separata facit (Etapp 2) är samma mall med elevernas del släckt,
+        # så det borde inte kräva något nytt — men «borde» är just det ordet
+        # gruppuppgiften och de fem formerna också stod bakom när de kraschade
+        # --only-cached första gången läraren godkände ett sådant papper. Ett
+        # dokument som börjar med \delprovband och inte har en enda \svarsrad
+        # är en egen sättning, och den kostar en kompilering här.
+        ("arbetsblad-facit",
+         exam_latex.render_arbetsblad(doc, bilder=bilder, only_facit=True)),
         ("bedomning", exam_latex.render_bedomning(doc, bilder=bilder)),
         ("gruppuppgift", exam_latex.render_gruppuppgift(grupp_doc, bilder=bilder)),
         # Diagnosen (Etapp 2) har också en egen mall. Dess särdrag är

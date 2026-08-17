@@ -383,11 +383,16 @@ def render_bedomning(doc: exam_spec.ExamDoc,
 
 def render_arbetsblad(doc: exam_spec.ExamDoc, visa_poang: bool = False,
                       bilder: dict[int, str] | None = None,
-                      dokumentkod: str = "") -> str:
+                      dokumentkod: str = "", only_facit: bool = False) -> str:
     """Arbetsblad (Fas 5): inga kravgränser, valfri poängvisning, facit på
-    egen sida (lösningsförslagen)."""
+    egen sida (lösningsförslagen).
+
+    `only_facit` ger facit ENSAMT som ett eget papper — det «Separat facit»
+    lovar i planeringen. Samma mall och därmed samma sättning som facitsidan i
+    bladet: vyn byggs som vanligt (facit=False), för facitbandet läser bara
+    numret och lösningen, och de fälten bryr sig inte om lärarläget."""
     return _environment().get_template("arbetsblad.tex.j2").render(
-        visa_poang=visa_poang, dokumentkod=dokumentkod,
+        visa_poang=visa_poang, dokumentkod=dokumentkod, only_facit=only_facit,
         **_build_view(doc, bilder))
 
 

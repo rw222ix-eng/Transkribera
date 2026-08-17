@@ -203,7 +203,13 @@ test("utan server står prototypens hög kvar", async ({ page }) => {
  *  den appen själv använder: window.Dokument.visa(i). */
 async function oppnaForhandsvisning(page) {
   await page.getByRole("tab", { name: "Planering" }).click();
-  await page.evaluate(() => window.Dokument.visa(0));
+  await visa(page, 0);
+}
+
+/** Byter papper i den öppna förhandsvisningen. Fliken klickas INTE här: när
+ *  rutan redan står framme ligger dess skal över flikraden och fångar klicket. */
+async function visa(page, i) {
+  await page.evaluate(n => window.Dokument.visa(n), i);
   await expect(page.locator("#forhandsskal")).toBeVisible();
 }
 
@@ -263,6 +269,37 @@ test("tavlan laddas ner som en PDF — inte som ett besked om att den är en bil
   expect(skickat[0].png.startsWith("data:image/png;base64,")).toBe(true);
   expect(skickat[0].png.length).toBeGreaterThan(10_000);
   await expect(page.locator("#fh-pdf")).toHaveText("Sparad");
+});
+
+test("lösningsbladet laddar ner sin EGEN fil, inte originalets", async ({ page }) => {
+  // Lösningsbladet är en KLON av sitt original och bär samma provId, så
+  // knappen laddade ner provet när läraren bad om lösningsförslaget. De två
+  // har egna filer bredvid: bedömningsanvisningen och det separata facit.
+  const hamtat = [];
+  await fejka(page, { sparade: [
+    rad(1, papper({ typ: "Prov", provId: 42, losningsblad: true })),
+    rad(2, papper({ typ: "Arbetsblad", provId: 43, losningsblad: true })),
+  ] });
+  await page.route("**/api/exams/**", route => {
+    hamtat.push(new URL(route.request().url()).pathname);
+    return route.fulfill({ status: 200, contentType: "application/pdf",
+                           body: Buffer.from("%PDF-1.5 losningarna") });
+  });
+  await page.goto("/");
+  await hydrerad(page);
+  await expect.poll(() => page.evaluate(() => window.Dokument.sparade().length)).toBe(2);
+
+  await page.getByRole("tab", { name: "Planering" }).click();
+  for (const i of [0, 1]) {
+    await visa(page, i);
+    const nedladdning = page.waitForEvent("download", { timeout: 15_000 });
+    await page.locator("#fh-pdf").click();
+    await nedladdning;
+    // Knappen står kvar på «Sparad» i knappt två sekunder och tar inga nya
+    // klick under tiden — vänta ut den i stället för att missa nästa hämtning.
+    await expect(page.locator("#fh-pdf")).toHaveText("Ladda ner PDF");
+  }
+  expect(hamtat).toEqual(["/api/exams/42/bedomning", "/api/exams/43/facit"]);
 });
 
 test("ett papper utan byggd PDF ger serverns besked, inte «Sparad»", async ({ page }) => {

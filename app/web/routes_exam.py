@@ -23,7 +23,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import FileResponse, JSONResponse
 
 from app import (ci_profil, course_data, db, exam_gen, exam_latex, exam_pdf,
-                 exam_spec)
+                 exam_spec, tryck)
 from app.web import routes_planning
 from app.web.sse import sse_response
 
@@ -514,6 +514,18 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     else:
                         tex = exam_latex.render_prov(doc, bilder=bilder_map)
                         bed = exam_latex.render_bedomning(doc, bilder=bilder_map)
+                    # Arbetsbladets separata facit: samma facitband som ligger
+                    # sist i bladet, som ETT eget papper bredvid. Det är filen
+                    # «Separat facit» lovar i planeringen — lösningsbladet i
+                    # dokumenthögen hade ingen egen PDF, och knappen gav bladet
+                    # självt i stället. Byggs för VARJE arbetsblad, inte bara
+                    # när rutan är kryssad: valet bor i webbläsarens dokument
+                    # och inte i provets JSON, och en fil som redan ligger där
+                    # kostar ingenting jämfört med ett godkännande som måste
+                    # göras om för att läraren ändrade sig efteråt.
+                    facit = (exam_latex.render_arbetsblad(
+                        doc, bilder=bilder_map, only_facit=True)
+                        if typ == "arbetsblad" else None)
                     slug = _safe_component(doc.titel, typ)
                     out_dir.mkdir(parents=True, exist_ok=True)
                     tex_path = out_dir / f"{slug}.tex"
@@ -521,6 +533,9 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     if bed is not None:
                         (out_dir / f"{slug} - bedomning.tex").write_text(
                             bed, encoding="utf-8")
+                    if facit is not None:
+                        (out_dir / f"{slug} - facit.tex").write_text(
+                            facit, encoding="utf-8")
                     if not exam_pdf.engine_available():
                         emit({"type": "log",
                               "msg": "PDF-motorn saknas — sparar .tex utan PDF."})
@@ -539,6 +554,20 @@ def create_router(base: Path, arbiter) -> APIRouter:
                         pdf_path = prov_pdf
                     elif pdf_path is not None and not pdf_path.exists():
                         pdf_path = None
+                    # Facit GATEAR inte godkännandet, till skillnad från
+                    # bedömningen nedan. Skälet är att innehållet är exakt det
+                    # som just kompilerat på bladets sista sida — samma mall,
+                    # samma fält — så ett fel här kan inte vara ett fel i
+                    # uppgifterna, och ett blad som byggts felfritt ska inte
+                    # fällas av sin egen kopia. Saknas filen säger rutten det
+                    # på svenska när läraren ber om den.
+                    if prov_pdf is not None and facit is not None:
+                        if exam_pdf.compile_pdf(
+                                facit, out_dir, f"{slug} - facit")[0] is None:
+                            emit({"type": "log",
+                                  "msg": "Det separata facit gick inte att "
+                                         "bygga — bladet bär det ändå på "
+                                         "sista sidan."})
                     # En runda är lyckad först när SAMTLIGA dokument som ska
                     # produceras har kompilerat. Bedömningens returvärde
                     # kastades tidigare bort: föll den syntes ingenting alls
@@ -634,33 +663,63 @@ def create_router(base: Path, arbiter) -> APIRouter:
 
     # ----------------------------------------------------------- artefakter --
 
-    def _serve_artifact(exam_id: int, kind: str):
+    def _artefaktvag(exam_id: int, kind: str) -> tuple[Path | None, JSONResponse | None]:
+        """Den lagrade sökvägen, prövad mot sökvägsspärrarna. Antingen en
+        sökväg eller ett färdigt felsvar — aldrig båda.
+
+        Delad av /pdf, /tex och systerdokumenten nedan: spärren (under basen,
+        upplösbar) ska prövas på ETT ställe, annars är det bara en tidsfråga
+        innan en ny rutt får en egen kopia utan sista raden."""
         conn = db.connect(db_file)
         try:
             view = db.get_exam(conn, exam_id)
         finally:
             conn.close()
         if view is None:
-            return JSONResponse({"error": "okänt prov"}, status_code=404)
+            return None, JSONResponse({"error": "okänt prov"}, status_code=404)
         cur = next((v for v in view["versions"]
                     if v["id"] == view.get("current_version")), None)
         raw = (cur or {}).get(f"{kind}_path")
         if not raw:
-            return JSONResponse({"error": f"ingen {kind} ännu — godkänn provet"},
-                                status_code=404)
+            return None, JSONResponse(
+                {"error": f"ingen {kind} ännu — godkänn provet"}, status_code=404)
         p = Path(raw)
         try:
             resolved = p.resolve()
         except OSError:
-            return JSONResponse({"error": "ogiltig sökväg"}, status_code=404)
+            return None, JSONResponse({"error": "ogiltig sökväg"}, status_code=404)
         root = base.resolve()
         if resolved != root and root not in resolved.parents:
-            return JSONResponse({"error": "otillåten sökväg"}, status_code=403)
+            return None, JSONResponse({"error": "otillåten sökväg"},
+                                      status_code=403)
+        return resolved, None
+
+    def _serve_artifact(exam_id: int, kind: str):
+        resolved, fel = _artefaktvag(exam_id, kind)
+        if fel is not None:
+            return fel
         if not resolved.exists():
             return JSONResponse({"error": "filen saknas"}, status_code=404)
         media = "application/pdf" if kind == "pdf" else "text/x-tex"
         return FileResponse(str(resolved), media_type=media,
                             filename=resolved.name)
+
+    def _serve_bredvid(exam_id: int, hitta, saknas: str):
+        """Systerdokumentet bredvid provets PDF: bedömningsanvisningen och
+        arbetsbladets separata facit.
+
+        De har ingen egen kolumn i databasen och ska inte ha en heller — de är
+        BILDER av samma godkännande och skulle bara kunna glida isär från
+        pdf_path. Stammen är därför källan (tryck._bredvid), och sökvägen ärver
+        provets spärrprövning: `with_name` kan inte lämna katalogen."""
+        resolved, fel = _artefaktvag(exam_id, "pdf")
+        if fel is not None:
+            return fel
+        sido = hitta(resolved)
+        if sido is None:
+            return JSONResponse({"error": saknas}, status_code=404)
+        return FileResponse(str(sido), media_type="application/pdf",
+                            filename=sido.name)
 
     @router.get("/api/exams/{exam_id:int}/pdf")
     def get_pdf(exam_id: int):
@@ -670,12 +729,29 @@ def create_router(base: Path, arbiter) -> APIRouter:
     def get_tex(exam_id: int):
         return _serve_artifact(exam_id, "tex")
 
+    @router.get("/api/exams/{exam_id:int}/bedomning")
+    def get_bedomning(exam_id: int):
+        """Provets lösningsförslag. Filen kompilerades vid godkännandet men
+        hade ingen rutt: lösningsbladet i dokumenthögen är en klon av provet
+        och bär samma id, så «Ladda ner PDF» på det gav PROVET."""
+        return _serve_bredvid(
+            exam_id, tryck.bedomning_bredvid,
+            "Lösningsförslaget är inte byggt — godkänn provet på nytt, "
+            "då kompileras det bredvid.")
+
+    @router.get("/api/exams/{exam_id:int}/facit")
+    def get_facit(exam_id: int):
+        return _serve_bredvid(
+            exam_id, tryck.facit_bredvid,
+            "Facit finns inte som egen fil — arbetsbladet bär det på sista "
+            "sidan. Godkänn bladet på nytt, då byggs det separat också.")
+
     # -------------------------------------------------------------- radera --
 
     @router.delete("/api/exams/{exam_id:int}")
     def delete_exam(exam_id: int):
         """Radera ett prov/arbetsblad permanent: databasraderna och de
-        sparade artefakterna (.tex/.pdf + bedömningsanvisningen bredvid).
+        sparade artefakterna (.tex/.pdf + systerdokumenten bredvid).
         Filer tas endast bort strikt under Transkriberingar/ — sökvägar
         utanför lämnas orörda. Delade filer i utkatalogen (t.ex. kopierade
         bildsidor) rörs inte, eftersom katalogen delas per kurs och datum."""
@@ -691,8 +767,11 @@ def create_router(base: Path, arbiter) -> APIRouter:
         for raw in paths:
             p = Path(raw)
             kandidater.add(p)
-            # Bedömningsanvisningen ligger bredvid med samma stam.
-            kandidater.add(p.with_name(f"{p.stem} - bedomning{p.suffix}"))
+            # Bedömningsanvisningen och arbetsbladets separata facit ligger
+            # bredvid med samma stam (tryck._bredvid). Lämnas de kvar blir de
+            # föräldralösa filer i en katalog läraren själv öppnar.
+            for andelse in ("bedomning", "facit"):
+                kandidater.add(p.with_name(f"{p.stem} - {andelse}{p.suffix}"))
         removed = 0
         for k in kandidater:
             try:

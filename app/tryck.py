@@ -181,9 +181,23 @@ def foga_ihop(delar: list[tuple[Path, int]], ut: Path) -> int:
     return antal
 
 
+def _bredvid(pdf: Path, andelse: str) -> Path | None:
+    """Systerdokumentet med samma stam. Regeln bor HÄR därför att tre ställen
+    behöver den — paketet, nedladdningsrutterna (routes_exam) och raderingen —
+    och tre kopior av en namnregel är tre ställen att glömma."""
+    kandidat = pdf.with_name(f"{pdf.stem} - {andelse}{pdf.suffix}")
+    return kandidat if kandidat.is_file() else None
+
+
 def bedomning_bredvid(pdf: Path) -> Path | None:
     """Bedömningsanvisningen ligger bredvid provet med samma stam
     (routes_exam approve). Finns den inte är den inte byggd — och då ska den
     inte tyst utelämnas utan saknas synligt i kvittot."""
-    kandidat = pdf.with_name(f"{pdf.stem} - bedomning{pdf.suffix}")
-    return kandidat if kandidat.is_file() else None
+    return _bredvid(pdf, "bedomning")
+
+
+def facit_bredvid(pdf: Path) -> Path | None:
+    """Arbetsbladets separata facit, samma regel som bedömningen. Bladet bär
+    facit på sista sidan ändå — den här filen är för läraren som valde att ha
+    lösningarna på ett eget papper."""
+    return _bredvid(pdf, "facit")

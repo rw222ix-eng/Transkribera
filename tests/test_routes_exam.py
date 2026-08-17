@@ -453,6 +453,171 @@ def test_approve_arbetsblad_renders_facit_without_bedomning(client, monkeypatch)
     assert not list(Path(res["tex"]).parent.glob("* - bedomning.tex"))
 
 
+# ------------------------------------- Etapp 2: lösningsbladets egen fil --
+# Lösningsbladet i dokumenthögen är en KLON av sitt original och bär samma id.
+# «Ladda ner PDF» på det gav därför provet självt: knappen kunde inte skilja
+# dem åt, för det fanns ingen annan fil att peka på. Bedömningsanvisningen
+# kompilerades redan bredvid provet men hade ingen rutt; arbetsbladets facit
+# fanns bara som sista sida i bladet.
+
+def _bygger_varje_dokument(monkeypatch):
+    """Motorn stubbad så att VARJE jobname lämnar en fil — annars uppstår
+    systerdokumenten aldrig och testet mäter stubben, inte rutten."""
+    monkeypatch.setattr(exam_pdf, "engine_available", lambda: True)
+
+    def fake_compile(tex, out_dir, jobname, **kw):
+        out_dir.mkdir(parents=True, exist_ok=True)
+        p = out_dir / f"{jobname}.pdf"
+        p.write_bytes(b"%PDF-1.5 " + jobname.encode("utf-8"))
+        return p, ""
+    monkeypatch.setattr(exam_pdf, "compile_pdf", fake_compile)
+
+
+def _arbetsblad(client, monkeypatch, **extra):
+    _stub_generate(monkeypatch)
+    return _done(client.post("/api/exams/generate", json={
+        "course_id": _course_id(client), "typ": "arbetsblad",
+        "datum": "2026-10-05", **extra}))
+
+
+def test_provets_losningsforslag_har_en_egen_rutt(client, monkeypatch):
+    result, _ = _make_exam(client, monkeypatch, datum="2026-10-05")
+    _bygger_varje_dokument(monkeypatch)
+    _done(client.post(f"/api/exams/{result['id']}/approve", json={}))
+
+    r = client.get(f"/api/exams/{result['id']}/bedomning")
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "application/pdf"
+    assert b"bedomning" in r.content
+    assert "bedomning" in r.headers.get("content-disposition", "")
+    # Och provets egen rutt ger fortfarande PROVET — det var buggen.
+    assert b"bedomning" not in client.get(f"/api/exams/{result['id']}/pdf").content
+
+
+def test_bedomning_utan_byggd_pdf_ger_provets_besked(client, monkeypatch):
+    result, _ = _make_exam(client, monkeypatch, datum="2026-10-05")
+    monkeypatch.setattr(exam_pdf, "engine_available", lambda: False)
+    _done(client.post(f"/api/exams/{result['id']}/approve", json={}))
+    r = client.get(f"/api/exams/{result['id']}/bedomning")
+    assert r.status_code == 404 and "godkänn provet" in r.json()["error"]
+    assert client.get("/api/exams/99999/bedomning").status_code == 404
+    assert client.get("/api/exams/99999/facit").status_code == 404
+
+
+def test_bedomning_som_saknas_bredvid_provet_sags_pa_svenska(client, monkeypatch):
+    """Provet kompilerade, anvisningen inte. Beskedet ska säga just det —
+    inte «okänt prov» och inte serverns engelska LaTeX-logg."""
+    from pathlib import Path
+    result, _ = _make_exam(client, monkeypatch, datum="2026-10-05")
+    _bygger_varje_dokument(monkeypatch)
+    res = _done(client.post(f"/api/exams/{result['id']}/approve", json={}))
+    pdf = Path(res["pdf"])
+    pdf.with_name(f"{pdf.stem} - bedomning{pdf.suffix}").unlink()
+    r = client.get(f"/api/exams/{result['id']}/bedomning")
+    assert r.status_code == 404
+    assert r.json()["error"].startswith("Lösningsförslaget är inte byggt")
+
+
+def test_arbetsbladets_separata_facit_byggs_och_serveras(client, monkeypatch):
+    from pathlib import Path
+    result = _arbetsblad(client, monkeypatch)
+    _bygger_varje_dokument(monkeypatch)
+    res = _done(client.post(f"/api/exams/{result['id']}/approve", json={}))
+    ut = Path(res["pdf"]).parent
+    assert list(ut.glob("* - facit.pdf")), sorted(p.name for p in ut.iterdir())
+    # Källan ligger bredvid som provets — ett papper ska gå att sätta för hand.
+    assert list(ut.glob("* - facit.tex"))
+    r = client.get(f"/api/exams/{result['id']}/facit")
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "application/pdf"
+    assert b"facit" in r.content
+
+
+def test_facitfilen_ar_facit_ensamt_inte_hela_bladet(client, monkeypatch):
+    """Kontraktet mot mallen: filen bär facitbandet och lösningarna men inte
+    uppgifterna. Ett «separat facit» som ändå har elevernas ark i sig är inte
+    ett facit, det är ett andra exemplar av bladet."""
+    from pathlib import Path
+    result = _arbetsblad(client, monkeypatch)
+    monkeypatch.setattr(exam_pdf, "engine_available", lambda: False)
+    res = _done(client.post(f"/api/exams/{result['id']}/approve", json={}))
+    # Bara kroppen jämförs: preamblen DEFINIERAR \svarsrad i båda filerna,
+    # och det är användningen som skiljer dem åt.
+    kropp = lambda t: t.split(r"\begin{document}", 1)[1]
+    blad = kropp(Path(res["tex"]).read_text(encoding="utf-8"))
+    facit = kropp(next(Path(res["tex"]).parent.glob("* - facit.tex")
+                       ).read_text(encoding="utf-8"))
+    assert r"\delprovband{Facit}" in facit
+    assert r"{\large Facit" in facit and r"{\large Arbetsblad" in blad
+    # Elevernas del är släckt: instruktionsraden, sidbrytningen och
+    # svarsutrymmet hör till bladet, inte till lärarens lösningar.
+    assert "Öva i egen takt" in blad and "Öva i egen takt" not in facit
+    assert r"\newpage" in blad and r"\newpage" not in facit
+    assert r"\svarsrad" in blad and r"\svarsrad" not in facit
+    # …men lösningarna är kvar, ordagrant desamma som på bladets sista sida.
+    from app import exam_latex
+    for u in _exam_doc()["uppgifter"]:
+        satt = exam_latex.escape_mixed(u["losning"])
+        assert satt in blad and satt in facit, satt
+
+
+def test_provet_far_inget_separat_facit(client, monkeypatch):
+    """Provet har sin bedömningsanvisning. Ett facit bredvid vore ett tredje
+    papper som säger samma sak, och läraren skulle få välja mellan dem."""
+    from pathlib import Path
+    result, _ = _make_exam(client, monkeypatch, datum="2026-10-05")
+    _bygger_varje_dokument(monkeypatch)
+    res = _done(client.post(f"/api/exams/{result['id']}/approve", json={}))
+    assert not list(Path(res["pdf"]).parent.glob("* - facit.pdf"))
+    assert client.get(f"/api/exams/{result['id']}/facit").status_code == 404
+
+
+def test_ett_blad_som_kompilerat_falls_inte_av_sitt_eget_facit(client, monkeypatch):
+    """Facit gatear INTE godkännandet, till skillnad från bedömningen: dess
+    innehåll är exakt det som just kompilerat på bladets sista sida, så ett
+    fel där kan inte vara ett fel i uppgifterna."""
+    result = _arbetsblad(client, monkeypatch)
+    monkeypatch.setattr(exam_pdf, "engine_available", lambda: True)
+
+    def fake_compile(tex, out_dir, jobname, **kw):
+        if jobname.endswith(" - facit"):
+            return None, "! Undefined control sequence."
+        out_dir.mkdir(parents=True, exist_ok=True)
+        p = out_dir / f"{jobname}.pdf"
+        p.write_bytes(b"%PDF-1.5 fejk")
+        return p, ""
+    monkeypatch.setattr(exam_pdf, "compile_pdf", fake_compile)
+
+    r = client.post(f"/api/exams/{result['id']}/approve", json={})
+    res = _done(r)
+    assert res["status"] == "godkänt" and res["pdf"] and res["errors"] == []
+    # Men det SÄGS — ett papper som tyst inte blev byggt är just det som
+    # upptäcks framför kopiatorn.
+    assert any("separata facit" in e.get("msg", "")
+               for e in _events(r) if e["type"] == "log")
+    assert client.get(f"/api/exams/{result['id']}/facit").status_code == 404
+
+
+def test_systerdokumenten_lyder_provets_sokvagssparr(client, monkeypatch):
+    """Sökvägen ärvs ur pdf_path och prövas där. En pdf_path utanför basen
+    får inte gå att nå via en systerrutt heller — den vore annars en väg runt
+    spärren snarare än en väg till ett papper."""
+    result, _ = _make_exam(client, monkeypatch)
+    utanfor = client.base_dir.parent / "utanfor.pdf"
+    utanfor.write_bytes(b"%PDF-1.5 utanfor basen")
+    conn = appdb.connect(client.base_dir / "transkribera.db")
+    try:
+        row = conn.execute("SELECT current_version FROM exams WHERE id = ?",
+                           (result["id"],)).fetchone()
+        conn.execute("UPDATE exam_versions SET pdf_path = ? WHERE id = ?",
+                     (str(utanfor), row["current_version"]))
+        conn.commit()
+    finally:
+        conn.close()
+    for vag in ("pdf", "bedomning", "facit"):
+        assert client.get(f"/api/exams/{result['id']}/{vag}").status_code == 403, vag
+
+
 def test_generate_with_referens_builds_reference_prompt(client, monkeypatch):
     # skapa + godkänn ett referensprov först
     result, _ = _make_exam(client, monkeypatch, datum="2026-09-01")
@@ -592,11 +757,15 @@ def test_delete_exam_removes_rows_and_files(client, monkeypatch):
     tex.write_text("x", encoding="utf-8")
     bed = out / "Prov - bedomning.tex"
     bed.write_text("x", encoding="utf-8")
+    # Arbetsbladets separata facit ligger bredvid med samma regel — lämnas det
+    # kvar blir det en föräldralös fil i en katalog läraren själv öppnar.
+    facit = out / "Prov - facit.tex"
+    facit.write_text("x", encoding="utf-8")
     _set_tex_path(client, exam_id, tex)
 
     r = client.delete(f"/api/exams/{exam_id}")
     assert r.status_code == 200 and r.json()["ok"] is True
-    assert not tex.exists() and not bed.exists()
+    assert not tex.exists() and not bed.exists() and not facit.exists()
     assert client.get(f"/api/exams/{exam_id}").status_code == 404
     conn = appdb.connect(client.base_dir / "transkribera.db")
     try:
