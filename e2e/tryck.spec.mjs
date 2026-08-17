@@ -89,6 +89,32 @@ function png(dataurl) {
   return { bredd: rå.readUInt32BE(16), hojd: rå.readUInt32BE(20), byte: rå.length };
 }
 
+/** Var bläcket börjar, i andel av bildens bredd. Mätt i webbläsaren: bilden är
+ *  en data-URL och duken kan läsa den pixel för pixel. */
+async function vansterkant(page, dataurl) {
+  return page.evaluate(url => new Promise((ja, nej) => {
+    const bild = new Image();
+    bild.onerror = () => nej(new Error('bilden gick inte att läsa'));
+    bild.onload = () => {
+      const duk = document.createElement('canvas');
+      duk.width = bild.width; duk.height = bild.height;
+      const c = duk.getContext('2d');
+      c.fillStyle = '#ffffff';
+      c.fillRect(0, 0, duk.width, duk.height);
+      c.drawImage(bild, 0, 0);
+      const px = c.getImageData(0, 0, duk.width, duk.height).data;
+      for (let x = 0; x < duk.width; x++) {
+        for (let y = 0; y < duk.height; y++) {
+          const i = (y * duk.width + x) * 4;
+          if (px[i] < 200 || px[i + 1] < 200 || px[i + 2] < 200) return ja(x / duk.width);
+        }
+      }
+      ja(1);
+    };
+    bild.src = url;
+  }), dataurl);
+}
+
 test("tavlan följer med i paketet som en riktig bild", async ({ page }) => {
   const anrop = await fejka(page, [rad(1, papper())]);
   await page.goto("/");
@@ -262,6 +288,13 @@ test("bokens lösningsförslag följer med som ark, inte som ett saknas", async 
     expect(m.bredd).toBe(794 * 2);            // arket i tryckt bredd, 2×
     expect(m.byte).toBeGreaterThan(20_000);
   });
+  /* Arkets egen luft ska vara MED i bilden. Den var det inte: exporten tar
+     inte med styles.css, och det är där `*{box-sizing:border-box}` står — utan
+     regeln blev arket 794 px plus sin padding inne i en 794 px bred bild, och
+     traven centrerade överskottet så att exakt padding-bredden hyvlades av på
+     båda sidor. Läraren såg rubriken ligga dikt an papperskanten. Padding-left
+     är 62 av 794 px ≈ 7,8 %; mätpunkten ligger under det med marginal. */
+  expect(await vansterkant(page, boken.png[0])).toBeGreaterThan(0.04);
 });
 
 test("utan server spelas prototypens kvittering upp som förut", async ({ page }) => {

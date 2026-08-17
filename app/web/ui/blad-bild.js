@@ -57,8 +57,20 @@ window.BladBild = (() => {
                  '400 15px KaTeX_Size2', '400 15px KaTeX_AMS'];
 
   /* Skuggan under bladet är skärmens, inte papprets. Den ligger utanför arkets
-     egen ruta och skulle bara bli en grå kant i PNG:n. */
+     egen ruta och skulle bara bli en grå kant i PNG:n.
+
+     `box-sizing` är den SJUNDE fällan, och den dyraste sedan snitten: arkens
+     CSS skriver aldrig regeln själv utan ärver den globala (styles.css
+     `*{box-sizing:border-box}`), och styles.css följer med vilje INTE hit.
+     Utan den blev `.ark` 794 px PLUS sin padding — 918 px — inne i en 794 px
+     bred SVG, och traven centrerade överskottet: exakt padding-bredden hyvlades
+     av på varje sida. Läraren såg det på pappret hon skrev ut, rubriken låg
+     dikt an vänsterkanten där skrivaren klipper. Och det var inte bara luften
+     som försvann: texten sattes 794 px bred i stället för 670 och bröt sina
+     rader på andra ställen än i förhandsvisningen. Regeln har specificitet
+     noll — arkens egna regler vinner fortfarande över den. */
   const PLATT =
+    '*{box-sizing:border-box}' +
     '.blad{zoom:1!important}' +
     '.ark,.gu{box-shadow:none!important;margin:0!important}';
 
