@@ -2352,6 +2352,51 @@
      nästa papper SER UT, resultatet styr vad det HANDLAR OM — därför två platser
      och aldrig samma variabel. */
   let resDok = null;
+  /* ── Bokarvet ─────────────────────────────────────────────────
+     Förlagan bär `bokuppg` — boken, sidspannet och lärarens uppgiftsurval, som
+     `Uppgifter.urval()` la på pappret när det skrevs. Att bygga vidare på en
+     tavla om s. 2–6 och sedan behöva slå upp s. 2–6 för hand igen är att låta
+     appen glömma något den har skrivet.
+
+     Men arvet får inte ske i smyg (raden ovan: «ingenting ska ärvas i smyg —
+     valen är nya»). Därför två krav: bokdörren ska stå ÖPPEN så att valet syns
+     där alla andra källval syns, och förlage-rutan säger vad som följde med.
+     Allt är redigerbart efteråt — spannet i remsan, urvalet i panelen.
+
+     `bokArvet` är vad som FAKTISKT ärvdes, inte vad förlagan bar: står det
+     null hände ingenting, och då ska ingen rad påstå att det gjorde det. */
+  let bokArvet = null;
+  function arvBok(v) {
+    bokArvet = null;
+    const b = v && v.bokuppg;
+    /* Bara en riktig, inläst bok. `bokId` är null för prototypens hylla, och
+       plan.js `bokval()` kastar ändå tyst bort en bok utan id — då hade dörren
+       stått öppen och lovat sidor som aldrig nådde prompten. */
+    if (!b || !b.bokId || !b.bok || !b.sidor) return;
+    if (!window.Uppslag || !window.Uppslag.satt) return;
+    const [fran, till] = String(b.sidor).split(/[–—-]/).map(n => parseInt(n, 10));
+    if (!fran) return;
+    /* Uppslaget SKRIVER momentfältet (uppslag.js skrivMoment) — det är rätt när
+       sidorna är det man utgår från, men här är momentet förlagans och redan
+       satt. Det lånas därför ut och lämnas tillbaka. */
+    const momentFore = moment.value;
+    if (window.Uppslag.laggBok) window.Uppslag.laggBok(b.bok);
+    window.Uppslag.satt(fran, till || fran);
+    /* Samma väg som kalenderförvalet (profil.js): dörren öppnas programmatiskt,
+       tyst, och kvittot ritar om sig själv. */
+    window.Kallor && window.Kallor.satt && window.Kallor.satt('bok', true, true);
+    /* Remsan är de uppgifter som SKA räknas, och att sätta den återställer
+       också de medvetna bortvalen: `franKalendern` lägger numren som «önskade»,
+       och standardbort gör allt annat på sidorna bortvalt. Förlagans `remsa`
+       och `bortremsa` täcker tillsammans hela uppslaget, så komplementet ÄR
+       bortremsan — ingen extra gest behövs, och 1104 som läraren strök en gång
+       är struken igen. */
+    if (b.remsa && window.Uppgifter && window.Uppgifter.franKalendern) {
+      window.Uppgifter.franKalendern(b.remsa);
+    }
+    moment.value = momentFore;
+    bokArvet = { bok: b.bok, sidor: `${fran}–${till || fran}`, remsa: b.remsa || '' };
+  }
   function byggVidare(i) {
     const v = sparat[i];
     if (!v) return;
@@ -2380,6 +2425,9 @@
     Object.assign(inst[typ], JSON.parse(JSON.stringify(STANDARD[typ])));
     arvtFran = null;
     valdaLektioner.clear();
+    /* Efter klass och kurs: bokhyllan ritar om sig när kursen byts (bok.js), och
+       spannet ska sättas i den hylla som gäller. */
+    arvBok(v);
     ritaGy();
     ritaTypval();
     ritaKallval();
@@ -2439,6 +2487,9 @@
     if (hur) hur.value = 'Omprov: likvärdigt prov — samma centrala innehåll, provtid, antal uppgifter, poäng och nivåfördelning, men HELT NYA uppgifter. Ingen uppgift får vara en variant av originalets med bara utbytta tal.';
     if (window.SattLage) window.SattLage(v.typ);
     sattSkrivtyp(v.typ);
+    /* Omprovet ärver upplägget; då ska det också ärva sidorna. Ett omprov på
+       s. 2–6 prövas på s. 2–6 — allt annat vore ett annat prov. */
+    arvBok(v);
     ritaGy();
     ritaTypval();
     ritaKallval();
@@ -2478,6 +2529,18 @@
       i.antal ? `${i.antal} uppgifter` : null, i.nivamix || i.niva || null].filter(Boolean).join(' · ');
     $('#refminis').textContent = { Tavla: 'TA', Prov: 'PR', Anteckningar: 'AN' }[refDok.typ] || 'AB';
     $('#refminis').dataset.typ = refDok.typ;
+    /* Bokarvet skrivs ut. Raden säger tre saker: att något följde med, exakt
+       vad, och var det ändras — för allt är fortfarande lärarens att ändra. */
+    const bokrad = $('#refbok');
+    if (bokrad) {
+      bokrad.hidden = !bokArvet;
+      if (bokArvet) {
+        $('#refboktext').textContent =
+          `Boken följer med: s. ${bokArvet.sidor}`
+          + (bokArvet.remsa ? ` · uppg ${bokArvet.remsa}` : '')
+          + ' — ändra i bokdörren.';
+      }
+    }
     const chips = $('#refchips');
     chips.innerHTML = '';
     REFCHIPS.forEach(t => {
@@ -2496,6 +2559,7 @@
   }
   $('#reftabort') && $('#reftabort').addEventListener('click', () => {
     refDok = null;
+    bokArvet = null;
     $('#refhur').value = '';
     ritaRef();
     planKoll();
@@ -2740,14 +2804,18 @@
     valjLektion(namn) { valdaLektioner.add(namn); ritaKallval(); planKoll(); },
     slappLektion(namn) { valdaLektioner.delete(namn); ritaKallval(); planKoll(); },
     harLektion(namn) { return valdaLektioner.has(namn); },
+    /* Pekas en förlaga ut härifrån (pardokumentet, biblioteket) ärvs INGEN bok:
+       det är en annan gest än «bygg vidare», och `bokArvet` får inte hänga kvar
+       från förra gången och påstå att sidorna följde med. */
     sattForlaga(v, hur) {
       refDok = JSON.parse(JSON.stringify(v));
+      bokArvet = null;
       const f = $('#refhur');
       if (f && hur) f.value = hur;
       ritaRef();
       planKoll();
     },
-    slappForlaga() { refDok = null; const f = $('#refhur'); if (f) f.value = ''; ritaRef(); planKoll(); },
+    slappForlaga() { refDok = null; bokArvet = null; const f = $('#refhur'); if (f) f.value = ''; ritaRef(); planKoll(); },
     sattResultat(v) { resDok = JSON.parse(JSON.stringify(v)); planKoll(); },
     slappResultat() { resDok = null; planKoll(); },
     resultatet: () => resDok,
@@ -3300,7 +3368,7 @@
     /* Förlagan hör till dokumentet som just skrevs. Står den kvar bygger nästa
        dokument — ofta i en annan klass — vidare på ett papper läraren aldrig
        pekade ut, och «Därför ärvt»-raden tystnar på köpet. */
-    if (refDok) { refDok = null; const rh = $('#refhur'); if (rh) rh.value = ''; ritaRef(); }
+    if (refDok) { refDok = null; bokArvet = null; const rh = $('#refhur'); if (rh) rh.value = ''; ritaRef(); }
     /* Utfallet och viktningen hör till det papper som just skrevs, inte till
        nästa — de släpps i samma gest som förlagan. */
     if (resDok) { resDok = null; window.Kallor && window.Kallor.speglaResultat && window.Kallor.speglaResultat(); }
