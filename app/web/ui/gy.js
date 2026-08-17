@@ -408,7 +408,7 @@ window.Gy = (() => {
      förra veckan») nämns aldrig i ämnesplanen och ska aldrig ge en varning —
      bara ord som bevisligen hör hemma någon annanstans.
 
-     Två mätningar formade jämförelsen, och båda gjordes mot den här filens
+     Tre mätningar formade jämförelsen, och alla gjordes mot den här filens
      riktiga data — inte gissade:
 
      1. STAMNING RÄCKER INTE. «trigonometri» och «trigonometriska» får olika
@@ -418,11 +418,24 @@ window.Gy = (() => {
         «derivat» möter «derivata» och «deriveringsregler»; «tangent» möter
         fortfarande inte «tangens», vilket är hela poängen.
 
-     2. VANLIGA ORD DRUNKNAR SIGNALEN. Första försöket tystnade om «derivator i
-        2c» därför att ordet «definition» stod i 2c — ett enda allmänord räckte
-        för att momentet skulle se hemtamt ut. Ord som finns i mer än en
-        tredjedel av nivåerna bär ingen nivåinformation och sållas därför bort
-        innan räkningen. Kvar blir det som faktiskt skiljer nivåerna åt. */
+     2. VANLIGA ORD DRUNKNAR SIGNALEN — MEN TRÖSKELN FÅR INTE SITTA I
+        INNEHÅLLET. Ord som nästan alla nivåer känner säger inget om var ett
+        moment hör hemma och sållas bort. Första gränsen låg vid en tredjedel
+        av nivåerna och kastade då «integraler», «trigonometri» och
+        «sannolikhet» (4 av 10 nivåer) — moment som 2c bevisligen saknar blev
+        tysta, samma felklass som fyndet självt. Mätt mot filens data ligger
+        de riktiga allmänorden (problemlösning, ekvation, digitala, historia,
+        modeller) på 7–10 nivåer och innehållsorden på 1–5, med klyftan vid
+        6–7. Tröskeln är därför TVÅ tredjedelar.
+
+     3. ETT HEMTAMT ORD FÅR INTE TYSTA HELHETEN. Första versionen teg så fort
+        NÅGOT ord i momentet fanns i den valda nivån — och «derivator och
+        andragradsfunktioner» i 2c blev då tyst: andragradsdelen skrivs, men
+        rubriken lovar derivator som aldrig kommer. Fyndets fel i halvskala.
+        Domen är därför ORDVIS: varje skiljande ord prövas för sig, och det
+        räcker att ett ord bevisligen hör hemma någon annanstans. Att andra
+        ord passar nivån gör inte varningen falsk — det gör den precisare, och
+        texten kan då säga VILKET ord som sticker ut. */
   const STOPP = new Set(['detta', 'dessa', 'denna', 'genom', 'olika', 'andra', 'samma',
                          'begreppet', 'begrepp', 'metoder', 'metod', 'enkla', 'inför',
                          'repetition', 'prov', 'provet', 'lektion', 'lektionen', 'kapitel',
@@ -439,10 +452,13 @@ window.Gy = (() => {
     return o;
   };
 
-  const ord = text => String(text || '').toLowerCase()
+  /* Paret [originalord, stam] — varningen ska kunna citera lärarens eget ord,
+     inte stammen den räknade på. */
+  const ordPar = text => String(text || '').toLowerCase()
     .split(/[^a-zà-öø-ÿ]+/i)
     .filter(o => o.length >= 5 && !STOPP.has(o))
-    .map(stam);
+    .map(o => [o, stam(o)]);
+  const ord = text => ordPar(text).map(([, s]) => s);
 
   /* Orden i en nivås hela centrala innehåll — etiketterna OCH Skolverkets text,
      för läraren skriver sällan etikettens ord. Räknas en gång per nivå. */
@@ -460,16 +476,21 @@ window.Gy = (() => {
      var innehållet hör hemma. Se punkt 2. */
   const spridning = {};
   const spridd = o => (spridning[o] !== undefined ? spridning[o]
-    : (spridning[o] = nivaer.filter(n => finnsI(o, n.id)).length)) > nivaer.length / 3;
+    : (spridning[o] = nivaer.filter(n => finnsI(o, n.id)).length)) > nivaer.length * 2 / 3;
 
   /**
-   * Nivån där momentets ord hör hemma, när de INTE hör hemma i `nivaId`.
-   * `{ niva, fler }` eller null. `fler` är sant när flera nivåer känner igen
-   * momentet lika väl — då är VARNINGEN lika sann men NIVÅN en av flera, och
-   * texten måste säga «bland annat».
+   * Nivån där momentets främmande ord hör hemma. `{ niva, fler, ord, delvis }`
+   * eller null. `ord` är lärarens egna ord (inte stammarna) som bevisligen
+   * ligger i en annan nivå än den valda; `delvis` är sant när andra ord i
+   * momentet passar nivån — texten ska då peka ut orden i stället för att döma
+   * hela momentet. `fler` är sant när flera nivåer känner igen orden lika väl —
+   * då är VARNINGEN lika sann men NIVÅN en av flera, och texten måste säga
+   * «bland annat».
    *
-   * Tystnad i tre fall, alla mätta: momentet har inga skiljande ord, det passar
-   * nivån det står i, eller ingen nivå alls känner igen det (lärarens egna ord).
+   * Tystnad i tre fall, alla mätta: momentet har inga skiljande ord, varje
+   * skiljande ord passar nivån det står i, eller inget av dem känns igen av
+   * någon nivå alls (lärarens egna ord). Se punkt 3 i noten ovan: att ETT ord
+   * passar tystar inte längre de andra.
    *
    * Att oavgjort INTE tystar var ett rättat fel. «Derivator» finns i tre högre
    * nivåer, aldrig i 2c — och den första versionen teg om precis det fallet den
@@ -479,15 +500,18 @@ window.Gy = (() => {
    */
   const utanfor = (moment, nivaId) => {
     const har = niva(nivaId);
-    const mina = [...new Set(ord(moment))].filter(o => !spridd(o));
+    /* Unika på stammen, med första originalordet som ansikte utåt. */
+    const mina = [...new Map(ordPar(moment).map(([o, s]) => [s, o]))]
+      .filter(([s]) => !spridd(s));
     if (!mina.length) return null;                             // inget skiljande ord
-    if (mina.some(o => finnsI(o, har.id))) return null;        // passar där den står
+    const framlingar = mina.filter(([s]) => !finnsI(s, har.id)
+      && nivaer.some(n => n.id !== har.id && finnsI(s, n.id)));
+    if (!framlingar.length) return null;                       // passar, eller lärarens egna ord
     const traffar = nivaer
       .filter(n => n.id !== har.id)
-      .map(n => ({ n, antal: mina.filter(o => finnsI(o, n.id)).length }))
+      .map(n => ({ n, antal: framlingar.filter(([s]) => finnsI(s, n.id)).length }))
       .filter(x => x.antal > 0)
       .sort((a, b) => b.antal - a.antal);
-    if (!traffar.length) return null;                          // lärarens egna ord
     /* Vid oavgjort: håll dig i lärarens spår. «Derivator» finns lika mycket i
        3b som i 3c, och för den som står i en c-kurs är 3c svaret som betyder
        något — 3b är sant men obrukbart. Spåret är bokstaven i den gamla
@@ -496,7 +520,9 @@ window.Gy = (() => {
     const spar = s => (String(s || '').match(/([a-c])\s*$/i) || [])[1];
     const mitt = spar(har.kurs);
     const vald = topp.find(x => mitt && spar(x.n.kurs) === mitt) || topp[0];
-    return { niva: vald.n, fler: topp.length > 1 };
+    return { niva: vald.n, fler: topp.length > 1,
+             ord: framlingar.map(([, o]) => o),
+             delvis: mina.some(([s]) => finnsI(s, har.id)) };
   };
 
   return { nivaer, niva, punkter, foreslagen, kodFor, koder, kortFor, utanfor,

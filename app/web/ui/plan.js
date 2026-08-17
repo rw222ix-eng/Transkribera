@@ -1735,9 +1735,20 @@
         momentVarnat = moment.value.trim();
         const dit = ute.niva.gammal || ute.niva.etikett;
         const har = window.Gy.niva(nivaId);
+        const hemma = har.gammal || har.etikett;
+        const bland = ute.fler ? 'bland annat ' : '';
+        /* Blandmoment döms ordvis (gy.js, punkt 3): passar en del av momentet
+           nivån pekas bara de främmande orden ut — annars låter varningen som
+           att hela lektionen är fel, och den slutar läsas. Toasten bär sin
+           åtgärd (samma princip som typnot-raderna): ett klick byter nivån i
+           väljaren, och sattNiva säger själv till om punkter faller bort. */
         window.toast && window.toast(
-          `Det här ligger i ${ute.fler ? 'bland annat ' : ''}${dit}, inte i `
-          + `${har.gammal || har.etikett}. Tryck igen för att skriva ändå.`);
+          (ute.delvis
+            ? `«${ute.ord.join('», «')}» ligger i ${bland}${dit} — resten passar ${hemma}.`
+            : `Det här ligger i ${bland}${dit}, inte i ${hemma}.`)
+          + ' Tryck igen för att skriva ändå.',
+          'Byt till ' + dit,
+          () => window.GyVal && window.GyVal.sattNiva(ute.niva.id));
         return;
       }
     }
