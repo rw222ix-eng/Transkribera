@@ -381,6 +381,18 @@ def test_tavlan_laddas_ner_som_egen_pdf(client):
     assert r.content.startswith(b"%PDF")
 
 
+def test_tavlans_brader_blir_en_fil_med_en_sida_var(client, tmp_path):
+    """Tavlan laddas ner bräde för bräde: hela remsan på ett A4 blev en rand
+    med papperet vitt runt om. Sidorna hör ihop och ska bli EN fil — läraren
+    bad om ett papper, inte om fyra nedladdningar."""
+    r = client.post("/api/tavla/pdf", json={
+        "namn": "Tavla — derivator", "png": [_png(900, 780), _png(1800, 780)]})
+    assert r.status_code == 200
+    fil = tmp_path / "tavla.pdf"
+    fil.write_bytes(r.content)
+    assert _sidmatt(fil) == [(842, 595), (842, 595)]
+
+
 def test_tavlans_pdf_lamnar_ingen_kopia_i_utskriftsmappen(client):
     """Filen är en LEVERANS, inte en artefakt: den ligger i webbläsarens
     Hämtat efteråt, och en kopia per klick i utskriftsmappen är skräp läraren

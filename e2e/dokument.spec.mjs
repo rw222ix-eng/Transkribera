@@ -334,9 +334,13 @@ test("tavlan laddas ner som en PDF — inte som ett besked om att den är en bil
   const fil = await nedladdning;
   expect(fil.suggestedFilename()).toMatch(/\.pdf$/);
   expect(skickat).toHaveLength(1);
-  // Det som skickas är tavlans egen avritning i full storlek — inte en tom duk.
-  expect(skickat[0].png.startsWith("data:image/png;base64,")).toBe(true);
-  expect(skickat[0].png.length).toBeGreaterThan(10_000);
+  /* Det som skickas är tavlans egen avritning i full storlek — inte en tom
+     duk. Och det är en LISTA: ett bräde per sida, i EN fil. Tavlan här har ett
+     bräde, så listan är ett långt. */
+  expect(Array.isArray(skickat[0].png)).toBe(true);
+  expect(skickat[0].png).toHaveLength(1);
+  expect(skickat[0].png[0].startsWith("data:image/png;base64,")).toBe(true);
+  expect(skickat[0].png[0].length).toBeGreaterThan(10_000);
   await expect(page.locator("#fh-pdf")).toHaveText("Sparad");
 });
 
@@ -365,9 +369,13 @@ test("tavlans nedladdning ger lösningsbladen som EGNA filer", async ({ page }) 
   // Tavlan + svarsfacit + den bedömda elevlösningen: tre filer, tre anrop.
   expect(skickat).toHaveLength(3);
   expect(filer).toHaveLength(3);
+  /* Tavlan skickas som en lista (ett bräde per sida), bladen som var sin
+     sträng — ett ark är ett papper och delas inte. */
   skickat.forEach(s => {
-    expect(s.png.startsWith("data:image/png;base64,")).toBe(true);
-    expect(s.png.length).toBeGreaterThan(10_000);
+    [].concat(s.png).forEach(p => {
+      expect(p.startsWith("data:image/png;base64,")).toBe(true);
+      expect(p.length).toBeGreaterThan(10_000);
+    });
   });
   // Namnen kommer ur arkens egna huvuden, inte ur dokumentets.
   const namn = skickat.map(s => s.namn);

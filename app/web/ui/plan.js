@@ -2960,7 +2960,9 @@
     setTimeout(() => URL.revokeObjectURL(url), 30000);
   }
   /* Bilden på ett A4, hos servern. Samma rutt som tavlan använder: {namn, png}
-     in, en PDF ut (routes_tryck → tryck.png_till_pdf, ingen LaTeX). */
+     in, en PDF ut (routes_tryck → tryck.png_till_pdf, ingen LaTeX). `png` får
+     vara en LISTA — då blir det en fil med ett ark per bild, vilket är precis
+     vad tavlans bräden ska bli. */
   const sattPaSida = (arknamn, png) => fetch('/api/tavla/pdf', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ namn: arknamn, png }),
@@ -3012,9 +3014,12 @@
       forst = fetch(vag).then(blobEller).then(blob => laggIHamtat(blob, namn));
     } else if (window.TavlaBild) {
       b.textContent = 'Ritar av' + av(1) + '…';
-      forst = window.TavlaBild.png(v).then(png => {
+      /* Bräde för bräde, EN fil: tavlan är ett papper i lärarens huvud, men
+         fyra bräden på ett A4 är en rand ingen kan läsa. Sidorna hör ihop och
+         ska inte bli fyra nedladdningar. */
+      forst = window.TavlaBild.sidor(v).then(sidorna => {
         b.textContent = 'Sätter sidan' + av(1) + '…';
-        return sattPaSida(namn, png);
+        return sattPaSida(namn, sidorna);
       });
     } else forst = Promise.reject(new Error('Tavelmotorn är inte laddad.'));
 

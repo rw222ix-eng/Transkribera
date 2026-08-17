@@ -12,6 +12,9 @@
   /* Sidantalet ska vara bladens, inte en tabell som gissar: formen vet exakt hur
      många ark dokumentet består av. En tavla är ett ark — den stod som två. */
   const sidorFor = v => {
+    /* Tavlan är ETT papper i förhandsvisningen men ett bräde per sida i
+       utskriften — räkningen ska vara högens, inte skärmens. */
+    if (v.typ === 'Tavla' && window.TavlaBild) return window.TavlaBild.antal(v);
     const f = window.Blad && window.Blad.form ? window.Blad.form(v) : null;
     return (f && f.length) || SIDOR[v.typ] || 2;
   };
@@ -168,7 +171,10 @@
         };
       }
       if (r.typ !== 'Tavla' || !window.TavlaBild) return d;
-      return window.TavlaBild.png(r.v)
+      /* Ett bräde per sida, som en lista — samma väg som bokens ark. Hela
+         remsan i en bild blev en rand mitt på ett A4; nu fyller varje bräde
+         sin egen liggande sida (tryck.png_till_pdf väljer orienteringen). */
+      return window.TavlaBild.sidor(r.v)
         .then(png => Object.assign(d, { png }))
         .catch(() => d);      /* utan bild går raden till `saknas` — och sägs */
     })).then(dokument => ({ titel, dokument }));

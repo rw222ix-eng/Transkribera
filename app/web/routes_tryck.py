@@ -163,7 +163,13 @@ def create_router(base: Path, arbiter) -> APIRouter:
         tiotals sekunder, och svaret ÄR filen."""
         body = await req.json()
         namn = tryck._safe(str(body.get("namn") or "Tavla"), "Tavla")
-        png = str(body.get("png") or "")
+        # En sträng är hela tavlan i ett stycke, en lista är dess bräden — ett
+        # per sida, i EN fil. Listan får inte gå igenom `str()`: då hade
+        # Pythons egen listrepr skickats vidare som «bilden» och nedladdningen
+        # svarat att avritningen inte blev någon bild.
+        rå = body.get("png")
+        png = ([str(p) for p in rå] if isinstance(rå, list)
+               else str(rå or ""))
         if not png:
             return JSONResponse({"error": "tavlans bild kom inte fram"},
                                 status_code=400)

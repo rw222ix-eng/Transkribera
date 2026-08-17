@@ -913,13 +913,28 @@ window.Blad = (() => {
      förhandsvisningen — annars är bilden av en annan tavla än den läraren
      godkände. Returnerar brädenas container, eller null om tavlan inte gick
      att rita. Målet måste sitta i dokumentet: motorn mäter. */
-  function tavlaTill(mal, v) {
+  function tavlaTill(mal, v, spec) {
     if (!mal || !v || v.typ !== 'Tavla') return null;
     const ruta = document.createElement('div');
     ruta.className = 'tavruta';
     mal.appendChild(ruta);
-    ritaTavlan(ruta, tavlanFor(v), v, true);
+    ritaTavlan(ruta, spec || tavlanFor(v), v, true);
     return $('.boards-container', ruta);
+  }
+
+  /* Tavlan uppdelad i sina bräden, ETT PER SPEC — en sida var i utskriften.
+     Hela remsan i ett stycke är rätt på skärmen (läraren ser lektionen svepa
+     från vänster till höger) men fel på papper: fyra bräden bredvid varandra
+     blev en centimeterhög rand mitt på ett A4. Splitten sker på boards[], och
+     ALDRIG inuti en post: ligger två bräden i samma post är de ett par som
+     läraren satt ihop, och de ska stå bredvid varandra även på pappret.
+     Dokumentets egna fält (tema, ram, mått) följer med varje del — det är samma
+     spec, med en post i taget. */
+  function tavlaDelar(v) {
+    const spec = tavlanFor(v);
+    if (!spec) return [];
+    if (!spec.boards || !spec.boards.length) return [spec];
+    return spec.boards.map(b => Object.assign({}, spec, { boards: [b] }));
   }
 
   /* Bokens lösningsförslag ritade FÖR SIG, någon annanstans än i traven.
@@ -1010,5 +1025,5 @@ window.Blad = (() => {
     return trav;
   }
 
-  return { rita, form, uppgifter, skala, omritaTavlor, tavlaTill, bokTill };
+  return { rita, form, uppgifter, skala, omritaTavlor, tavlaTill, tavlaDelar, bokTill };
 })();

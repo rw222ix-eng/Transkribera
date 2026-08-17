@@ -104,7 +104,10 @@ test("tavlan följer med i paketet som en riktig bild", async ({ page }) => {
   await expect.poll(() => anrop.length, { timeout: 30_000 }).toBe(1);
   const tavlerad = anrop[0].dokument.find(d => d.typ === "Tavla");
   expect(tavlerad, JSON.stringify(anrop[0].dokument)).toBeTruthy();
-  const bild = png(tavlerad.png);
+  // Ett bräde per sida: raden bär en LISTA, här ett bräde lång.
+  expect(Array.isArray(tavlerad.png)).toBe(true);
+  expect(tavlerad.png).toHaveLength(1);
+  const bild = png(tavlerad.png[0]);
   // Tavlan är 1400 px bred och ritas i 2×: en krympt förhandsvisning eller en
   // tom duk skulle synas här.
   expect(bild.bredd).toBeGreaterThan(2000);
@@ -116,6 +119,49 @@ test("tavlan följer med i paketet som en riktig bild", async ({ page }) => {
   expect(anrop[0].separat).toBeUndefined();
   // Kvittot säger inte längre att tavlan blev kvar.
   await expect(page.locator(".toast")).toContainText("i rätt ordning");
+});
+
+test("varje bräde blir en egen sida i högen", async ({ page }) => {
+  /* Läraren skrev ut på riktigt: två bräden sida vid sida låg som EN bild på
+     ett stående A4 — en centimeterhög rand i mitten med resten vitt. Brädena
+     ritas nu av ett och ett och blir var sin sida. Splitten sker på boards[]
+     och aldrig inuti en post: ett bräde in, ett bräde ut, i ordning. */
+  const tva = {
+    title: "Derivatans definition",
+    boards: [
+      { name: "titel", width: 900, height: 780, chrome: "aluminium",
+        padding: { top: 24, right: 26, bottom: 24, left: 30 },
+        sections: [{ kind: "heading", text: "Derivatans definition", size: 30 },
+                   { kind: "text", text: "Ändringskvoten när h går mot noll.", size: 19 }] },
+      { name: "exempel", width: 1800, height: 780, chrome: "aluminium",
+        padding: { top: 24, right: 26, bottom: 24, left: 30 },
+        sections: [{ kind: "heading", text: "Exempel", size: 30 },
+                   { kind: "math", latex: "f'(x)=\\lim_{h\\to 0}\\frac{f(x+h)-f(x)}{h}", size: 21 }] },
+    ],
+  };
+  const anrop = await fejka(page, [rad(1, papper({ wb: tva }))]);
+  await page.goto("/");
+  await hydrerad(page);
+  await expect.poll(() => page.evaluate(() => window.Dokument.sparade().length)).toBe(1);
+
+  await page.getByRole("tab", { name: "Planering" }).click();
+  await page.evaluate(() => window.Tryck.oppna());
+  await expect(page.locator("#tryckruta")).toBeVisible();
+  // Räkningen är högens, inte skärmens: tavlan är ett papper i
+  // förhandsvisningen men två sidor i skrivaren.
+  await expect(page.locator(".tryckrad").first().locator(".tryckantal"))
+    .toHaveText("1 ex · 2 sid");
+  await page.locator("#tryckskicka").click();
+
+  await expect.poll(() => anrop.length, { timeout: 30_000 }).toBe(1);
+  const tavlerad = anrop[0].dokument.find(d => d.typ === "Tavla");
+  expect(tavlerad.png).toHaveLength(2);
+  const [ett, tva_] = tavlerad.png.map(png);
+  // Smalt bräde först, brett sedan — brädordningen, och inte två avritningar
+  // av hela remsan.
+  expect(ett.bredd).toBeLessThan(tva_.bredd);
+  expect(ett.byte).toBeGreaterThan(10_000);
+  expect(tva_.byte).toBeGreaterThan(10_000);
 });
 
 test("nedladdningen ber om skilda filer, inte om högen", async ({ page }) => {

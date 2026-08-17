@@ -17,6 +17,10 @@
       Blad.tavlaTill ger oss samma spec och samma motor som pappret använder.
    3. `.boards-container` är en flexlåda på hela sin förälders bredd; dess egen
       rect duger inte som mått. Bredden är brädenas summa plus mellanrummen.
+   3b. Vad som är EN bild är två frågor, inte en. Arkivkopian är hela tavlan i
+      ett stycke (`png`) — så stod den i klassrummet. Utskriften är brädena var
+      för sig (`sidor`), ett per papper: hela remsan på ett A4 blev en
+      centimeterhög rand med resten vitt.
    4. Canvas interpolerar gradienter mot genomskinligt SVART. Papprets
       lågalfa-texturer och highlight-gradienter blir svarta pluppar och moaré i
       PNG:n trots att samma SVG ser perfekt ut som <img> i DOM. Exporten plattar
@@ -190,31 +194,77 @@ window.TavlaBild = (() => {
   /* ── Bilden ──
      Tavlan ritas i en låda utanför skärmen (inte display:none — motorn mäter,
      och en gömd låda mäter nollor) och rivs alltid, även när något går fel. */
-  function png(v, val) {
-    const skala = (val && val.skala) || SKALA;
-    if (!v || v.typ !== 'Tavla') return Promise.reject(new Error('Bara en tavla kan bli en bild.'));
-    if (!window.Blad || !window.Blad.tavlaTill || !window.WBLayout) {
-      return Promise.reject(new Error('Tavelmotorn är inte laddad.'));
-    }
+  function lada() {
     const bo = document.createElement('div');
     bo.setAttribute('aria-hidden', 'true');
     bo.style.cssText = 'position:fixed;left:-30000px;top:0;width:' + BO_BREDD +
                        'px;pointer-events:none';
     document.body.appendChild(bo);
-    const riv = () => { bo.remove(); };
-    return snitten()
-      .then(() => {
-        const container = window.Blad.tavlaTill(bo, v);
-        if (!container || !container.children.length) throw new Error('Tavlan gick inte att rita.');
-        return rutor(3).then(() => container);
-      })
-      .then(container => {
+    return bo;
+  }
+
+  const motorn = () => !!(window.Blad && window.Blad.tavlaTill && window.WBLayout);
+
+  /* En avritning: rita specen i lådan, mät brädena, rastrera. Lådan töms först
+     — samma låda används om och om igen när sidorna ritas en och en. */
+  function enBild(bo, v, spec, skala) {
+    return Promise.resolve().then(() => {
+      bo.innerHTML = '';
+      const container = window.Blad.tavlaTill(bo, v, spec);
+      if (!container || !container.children.length) throw new Error('Tavlan gick inte att rita.');
+      return rutor(3).then(() => {
         const m = matt(container);
         if (!m.b || !m.h) throw new Error('Tavlan mätte noll.');
         return rastrera(container, m.b, m.h, skala);
-      })
+      });
+    });
+  }
+
+  /* Hela tavlan i EN bild. Arkivkopian (/api/planning/export) är fortfarande
+     just det: en bild av tavlan så som den stod, inte en bunt sidor. */
+  function png(v, val) {
+    const skala = (val && val.skala) || SKALA;
+    if (!v || v.typ !== 'Tavla') return Promise.reject(new Error('Bara en tavla kan bli en bild.'));
+    if (!motorn()) return Promise.reject(new Error('Tavelmotorn är inte laddad.'));
+    const bo = lada();
+    const riv = () => { bo.remove(); };
+    return snitten()
+      .then(() => enBild(bo, v, null, skala))
       .then(url => { riv(); return url; }, fel => { riv(); throw fel; });
   }
 
-  return { png };
+  /* ── Sidorna ──
+     Ett bräde per bild, i brädordning — utskriftens form. Hela remsan på ett
+     A4 blev en rand med papperet vitt runt om; ett bräde i taget fyller sin
+     sida (och servern lägger det liggande, se tryck.png_till_pdf). Brädena
+     ritas EN OCH EN i samma låda: motorn skalar upp innehållet mot den bredd
+     den får, och ritas alla samtidigt mäter den mot remsan i stället för mot
+     brädet. `steg(i, n)` ropas före varje avritning så knappen kan räkna upp.
+     Faller uppdelningen (ingen spec att dela) blir det en enda bild — samma
+     papper som förut, aldrig noll. */
+  function sidor(v, val) {
+    const skala = (val && val.skala) || SKALA;
+    const steg = (val && val.steg) || null;
+    if (!v || v.typ !== 'Tavla') return Promise.reject(new Error('Bara en tavla kan bli en bild.'));
+    if (!motorn()) return Promise.reject(new Error('Tavelmotorn är inte laddad.'));
+    const specar = (window.Blad.tavlaDelar && window.Blad.tavlaDelar(v)) || [];
+    if (specar.length < 2) return png(v, val).then(url => [url]);
+    const bo = lada();
+    const riv = () => { bo.remove(); };
+    return snitten()
+      .then(() => specar.reduce((kedja, spec, i) => kedja.then(ut => {
+        if (steg) steg(i, specar.length);
+        return enBild(bo, v, spec, skala).then(url => ut.concat([url]));
+      }), Promise.resolve([])))
+      .then(ut => { riv(); return ut; }, fel => { riv(); throw fel; });
+  }
+
+  /* Hur många sidor tavlan blir — utan att rita av något. Utskriftsrutan ska
+     kunna räkna högen innan avritningen börjar. */
+  function antal(v) {
+    if (!v || v.typ !== 'Tavla' || !window.Blad || !window.Blad.tavlaDelar) return 1;
+    try { return Math.max(1, window.Blad.tavlaDelar(v).length); } catch (e) { return 1; }
+  }
+
+  return { png, sidor, antal };
 })();
