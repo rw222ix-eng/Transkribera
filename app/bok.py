@@ -318,11 +318,18 @@ def uppslag_text(conn, bok_id: int, fran: int, till: int,
 
 
 def build_bok_block(bok: dict, fran: int, till: int, text: str,
-                    uppgifter: list[dict] | None = None) -> str:
+                    uppgifter: list[dict] | None = None,
+                    urval: dict | None = None) -> str:
     """Promptblocket för bokens uppslag. Det står först bland källorna av ett
     skäl: läraren valde de här sidorna, och tavlan ska bygga på DEM — samma
     begrepp och samma notation som klassen har framför sig. Men uppgifterna
-    skrivs alltid helt egna: bokens visar nivå och typ, inget mer."""
+    skrivs alltid helt egna: bokens visar nivå och typ, inget mer.
+
+    `urval` är LÄRARENS EGET urval ur uppgiftspanelen: {remsa, bortremsa}, alltså
+    «1101–1103, 1105–1119» och de överhoppade. Utan det visste modellen bara
+    vilka nummer som STOD på sidorna, och «lägg till vilka uppgifter vi ska göra»
+    blev därför en allmän mening om att räkna i boken — läraren hade valt, men
+    valet nådde aldrig prompten."""
     if not text.strip():
         return ""
     namn = (bok or {}).get("namn") or "läroboken"
@@ -337,6 +344,19 @@ def build_bok_block(bok: dict, fran: int, till: int, text: str,
     nummer = [str(u["nr"]) for u in (uppgifter or []) if u.get("nr")]
     if nummer:
         rader.append("Uppgiftsnummer på sidorna: " + ", ".join(nummer) + ".")
+    # Förbudet ovan gäller uppgifternas INNEHÅLL. Numren är tvärtom det klassen
+    # ska få se: står det «Arbetar i boken s. 2–4» på tavlan ska det stå VILKA.
+    valda = " ".join(str((urval or {}).get("remsa") or "").split())
+    bortvalda = " ".join(str((urval or {}).get("bortremsa") or "").split())
+    if valda:
+        rad = (f"LÄRARENS URVAL: klassen ska räkna uppg. {valda} på de här "
+               "sidorna. Skriv de numren precis så när tavlan säger vad klassen "
+               "ska arbeta med — de är lärarens beslut, inte något att räkna om "
+               "eller runda av. Uppgifternas TEXT skrivs fortfarande aldrig av.")
+        if bortvalda:
+            rad += (f" Uppg. {bortvalda} är medvetet överhoppade och ska inte "
+                    "nämnas som något klassen gör.")
+        rader.append(rad)
     return "\n\n".join(rader)
 
 

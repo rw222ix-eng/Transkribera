@@ -25,6 +25,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from app import db, exam_latex, exam_pdf, notes_gen, postprocess
+from app.web import routes_planning
 from app.web.sse import sse_response
 
 _GPU_BUSY = {"error": "GPU:n är upptagen — försök igen strax."}
@@ -229,6 +230,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
                                 status_code=400)
         # Avsnittet läraren pekade på i granskningen (llm_client.malrad).
         mal = body.get("mal") if isinstance(body.get("mal"), dict) else None
+        # Bokdörren följer med omskrivningen som med genereringen.
+        bok_block = routes_planning.bok_text(db_file, body)
         conn = db.connect(db_file)
         try:
             view = db.get_exam(conn, note_id)
@@ -247,6 +250,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     raise RuntimeError("Språkmodellen är inte installerad.")
                 res = notes_gen.refine_notes(
                     view["exam"], message, model=_model_name(), mal=mal,
+                    bok=bok_block,
                     log_cb=lambda m: emit({"type": "log", "msg": m}),
                     token_cb=lambda t: emit({"type": "token", "text": t}))
                 if res["notes"] is not None and res["notes"] != view["exam"]:

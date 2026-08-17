@@ -844,16 +844,23 @@ def build_repair_prompt(board_json: dict, problems: list) -> str:
 
 
 def build_refine_prompt(board_json: dict, instruction: str,
-                        mal: dict | None = None) -> str:
+                        mal: dict | None = None, bok: str = "") -> str:
     """Chatt-iteration: lärarens ändringsönskemål ovanpå befintlig tavla.
 
     `mal` är elementet läraren PEKADE PÅ i granskningen: {"namn", "innehall"}.
     Utan det gick bara meningen ut, och «gör den kortare» kunde gälla vilken
     som helst av tavlans rutor — modellen ändrade en annan. Namnet är lärarens
     etikett («Formel 3»), innehållet är den text som går att hitta i JSON:en
-    ovan, och det är innehållet som pekar ut rutan."""
+    ovan, och det är innehållet som pekar ut rutan.
+
+    `bok` är bokdörrens block: de uppslagna sidorna, uppgiftsnumren och lärarens
+    urval (bok.build_bok_block). Genereringen har alltid fått det — iterationen
+    fick det inte, och därför kunde «lägg till vilka uppgifter vi ska göra» bara
+    bli en allmän mening om att räkna i boken. Numren fanns inte i prompten."""
+    kallor = f"{bok.strip()}\n\n" if bok and bok.strip() else ""
     return (
         f"{INSTRUCTION}\n"
+        f"{kallor}"
         "Här är den nuvarande lektionstavlan:\n"
         f"{json.dumps(board_json, ensure_ascii=False)}\n\n"
         f"{llm_client.malrad(mal)}Lärarens önskemål: {instruction}\n\n"
@@ -1043,18 +1050,19 @@ def repair_board(board: dict, warnings: list[str], *, model: str,
 
 
 def refine_board(board: dict, instruction: str, *, model: str,
-                 mal: dict | None = None,
+                 mal: dict | None = None, bok: str = "",
                  llm=llm_client.generate,
                  max_rounds: int = MAX_ROUNDS,
                  log_cb: Callable[[str], None] | None = None,
                  token_cb: Callable[[str], None] | None = None) -> dict:
     """Chatt-iteration: genomför lärarens önskemål, validera, auto-reparera.
 
-    `mal` är rutan läraren pekade på i granskningen (llm_client.malrad)."""
+    `mal` är rutan läraren pekade på i granskningen (llm_client.malrad) och
+    `bok` bokdörrens block — sidorna och lärarens uppgiftsurval."""
     log = log_cb or (lambda _m: None)
     log("Uppdaterar tavlan …")
-    candidate = _llm_round(build_refine_prompt(board, instruction, mal), model, llm,
-                           token_cb=token_cb)
+    candidate = _llm_round(build_refine_prompt(board, instruction, mal, bok),
+                           model, llm, token_cb=token_cb)
     if candidate is None:
         return {"board": board,
                 "errors": [{"path": "svar", "code": "json",

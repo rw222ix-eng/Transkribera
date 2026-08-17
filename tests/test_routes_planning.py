@@ -289,7 +289,7 @@ def test_refine_updates_board(llm_ready, monkeypatch):
     updated["title"] = "Uppdaterad"
     captured = {}
 
-    def fake_refine(board, instruction, *, model, mal=None, llm=None,
+    def fake_refine(board, instruction, *, model, mal=None, bok="", llm=None,
                     max_rounds=lesson_board.MAX_ROUNDS, log_cb=None,
                     token_cb=None):
         captured["instruction"] = instruction
@@ -694,7 +694,7 @@ def test_refine_far_hela_meddelandet_inklusive_kallviktningen(llm_ready, monkeyp
 
     sett = {}
 
-    def fake_refine(board, message, *, model, mal=None, llm=None,
+    def fake_refine(board, message, *, model, mal=None, bok="", llm=None,
                     max_rounds=lesson_board.MAX_ROUNDS, log_cb=None, token_cb=None):
         sett["message"] = message
         return {"board": _valid_board(), "errors": [], "rounds": 1}
@@ -761,7 +761,7 @@ def test_tavlan_gar_att_andra_efter_en_omstart(llm_ready, monkeypatch):
     uppdaterad["title"] = "Efter omstarten"
     sett = {}
 
-    def fake_refine(board, instruction, *, model, mal=None, llm=None,
+    def fake_refine(board, instruction, *, model, mal=None, bok="", llm=None,
                     max_rounds=lesson_board.MAX_ROUNDS, log_cb=None, token_cb=None):
         sett["board"] = board
         return {"board": uppdaterad, "errors": [], "rounds": 1}
@@ -808,3 +808,35 @@ def test_okand_planering_ar_fortfarande_404(llm_ready):
     r = llm_ready.post("/api/planning/finns-inte-alls/refine",
                        json={"message": "x"})
     assert r.status_code == 404
+
+
+def test_omskrivningen_far_boken_och_urvalet(llm_ready, monkeypatch):
+    """Klienten skickar bokdörren också till iterationen (plan.js bokKalla).
+    Utan det kunde «lägg till vilka uppgifter vi ska göra» bara bli en allmän
+    mening: numren fanns inte i prompten."""
+    pid = _make_planning(llm_ready, monkeypatch)
+    sett = {}
+
+    def fake_refine(board, instruction, *, model, mal=None, bok="", **kw):
+        sett["bok"] = bok
+        return {"board": _valid_board(), "errors": [], "rounds": 1}
+    monkeypatch.setattr(lesson_board, "refine_board", fake_refine)
+    monkeypatch.setattr(
+        "app.web.routes_planning.bok_text",
+        lambda db_file, body: f"UR LÄROBOKEN … LÄRARENS URVAL: {body['bok']['remsa']}")
+
+    _done(llm_ready.post(f"/api/planning/{pid}/refine", json={
+        "message": "lägg till vilka uppgifter vi ska göra",
+        "bok": {"id": 1, "fran": 2, "till": 6, "remsa": "1101–1103, 1105–1119",
+                "bortremsa": "1104"}}))
+    assert "1101–1103, 1105–1119" in sett["bok"]
+
+
+def test_urvalet_lases_ur_kroppen(llm_ready):
+    """`bok_urval` är kontraktet mellan panelen och prompten."""
+    from app.web import routes_planning as rp
+    assert rp.bok_urval({"bok": {"id": 1, "remsa": "1101–1103", "bortremsa": "1104"}}) \
+        == {"remsa": "1101–1103", "bortremsa": "1104"}
+    # Utan urval (dörren öppen men panelen tom) säger den ingenting.
+    assert rp.bok_urval({"bok": {"id": 1, "fran": 2, "till": 6}}) is None
+    assert rp.bok_urval({}) is None

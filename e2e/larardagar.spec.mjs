@@ -486,7 +486,9 @@ test("dag 8 — boken: slå upp ett uppslag och skriv tavlan ur det",
     // i prompten (routes_planning bok_las_text).
     const gen = L.traff(anrop, "/api/planning/generate").pop();
     expect(gen.kropp.bok, "uppslaget nådde aldrig servern").toBeTruthy();
-    expect(gen.kropp.bok).toEqual({ id: 3, fran: 15, till: 16 });
+    expect(gen.kropp.bok).toMatchObject({ id: 3, fran: 15, till: 16 });
+    // Urvalet följer med — utan det vet modellen inte vilka uppgifter som gäller.
+    expect(gen.kropp.bok.remsa).toBeTruthy();
     L.rent(fel);
   });
 

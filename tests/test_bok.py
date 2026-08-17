@@ -428,6 +428,38 @@ def test_blocket_sager_vad_det_ar(tmp_path, conn, ocr):
     assert "kopiera aldrig bokens uppgifter" in blocket
 
 
+def test_blocket_bar_lararens_eget_uppgiftsurval(tmp_path, conn, ocr):
+    """Panelen har alltid vetat vilka uppgifter klassen ska räkna, men urvalet
+    stannade i webbläsaren: bara sidspannet gick till servern. «Lägg till vilka
+    uppgifter vi ska göra» blev därför en allmän mening om att räkna i boken."""
+    b = bok.importera(tmp_path, conn, pdf=pdf_fil(tmp_path / "d"))
+    bok.las_spann(tmp_path, conn, b["id"], 10, 10)
+    blocket = bok.build_bok_block(
+        db.get_bok(conn, b["id"]), 10, 10,
+        bok.uppslag_text(conn, b["id"], 10, 10),
+        db.bok_uppgifter(conn, b["id"], 10, 10),
+        {"remsa": "1101–1103, 1105–1119", "bortremsa": "1104"})
+    assert "LÄRARENS URVAL" in blocket
+    assert "uppg. 1101–1103, 1105–1119" in blocket
+    assert "1104 är medvetet överhoppade" in blocket
+    # Förbudet mot att skriva av uppgifterna gäller fortfarande texten.
+    assert "TEXT skrivs fortfarande aldrig av" in blocket
+
+
+def test_blocket_star_som_forut_utan_urval(tmp_path, conn, ocr):
+    b = bok.importera(tmp_path, conn, pdf=pdf_fil(tmp_path / "d"))
+    bok.las_spann(tmp_path, conn, b["id"], 10, 10)
+    utan = bok.build_bok_block(db.get_bok(conn, b["id"]), 10, 10,
+                               bok.uppslag_text(conn, b["id"], 10, 10),
+                               db.bok_uppgifter(conn, b["id"], 10, 10))
+    assert "LÄRARENS URVAL" not in utan
+    # Och ett urval utan valda uppgifter säger ingenting alls.
+    tomt = bok.build_bok_block(db.get_bok(conn, b["id"]), 10, 10,
+                               bok.uppslag_text(conn, b["id"], 10, 10), [],
+                               {"remsa": "", "bortremsa": "1104"})
+    assert "LÄRARENS URVAL" not in tomt
+
+
 def test_inget_block_utan_last_text(tmp_path, conn, ocr):
     b = bok.importera(tmp_path, conn, pdf=pdf_fil(tmp_path / "d"))
     assert bok.build_bok_block(b, 10, 14, "", []) == ""

@@ -907,16 +907,20 @@ def build_repair_prompt(exam: dict, problems: list, profil: str = "prov") -> str
 
 def build_refine_prompt(exam: dict, instruction: str,
                         nummer: int | None = None,
-                        mal: dict | None = None) -> str:
+                        mal: dict | None = None, bok: str = "") -> str:
     """Riktad omgenerering: 'byt uppgift 4', 'gör 7 svårare' …
 
     `nummer` är uppgiften önskemålet gäller. `mal` är det läraren PEKADE PÅ i
     granskningen när det inte är en uppgift — sidhuvudet, instruktionen,
-    namnraderna, en post i facit (llm_client.malrad)."""
+    namnraderna, en post i facit (llm_client.malrad). `bok` är bokdörrens block:
+    genereringen har alltid fått det, iterationen fick det inte, och därför
+    kunde ett önskemål om bokens uppgifter bara besvaras allmänt."""
     onskemal = (f"Lärarens önskemål gäller uppgift {nummer}: {instruction}"
                 if nummer else f"Lärarens önskemål: {instruction}")
+    kallor = f"{bok.strip()}\n\n" if bok and bok.strip() else ""
     return (
         f"{INSTRUCTION}\n"
+        f"{kallor}"
         "Här är det nuvarande provet:\n"
         f"{json.dumps(exam, ensure_ascii=False)}\n\n"
         f"{'' if nummer else llm_client.malrad(mal)}{onskemal}\n\n"
@@ -1206,15 +1210,15 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
 
 def refine_exam(exam: dict, instruction: str, *, model: str,
                 nummer: int | None = None, profil: str = "prov",
-                mal: dict | None = None,
+                mal: dict | None = None, bok: str = "",
                 llm=llm_client.generate,
                 max_rounds: int = MAX_ROUNDS,
                 log_cb: Callable[[str], None] | None = None) -> dict:
     """Riktad omgenerering (per-uppgift-chatt); validera + auto-reparera."""
     log = log_cb or (lambda _m: None)
     log("Uppdaterar provet …")
-    candidate = _llm_round(build_refine_prompt(exam, instruction, nummer, mal),
-                           model, llm)
+    candidate = _llm_round(
+        build_refine_prompt(exam, instruction, nummer, mal, bok), model, llm)
     if candidate is None:
         return {"exam": exam,
                 "errors": [{"path": "svar", "code": "json",

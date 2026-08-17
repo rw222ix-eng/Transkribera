@@ -36,6 +36,23 @@
      hade följt med in i varje JSON.stringify-kopia och ut till servern. */
   const sparasNu = new WeakMap();
   const serverPa = () => !!(window.API && window.API.pa);
+  /* Bokdörren som KÄLLA, i den form varje rutt läser den: `bok: {id, fran,
+     till, remsa, bortremsa}`. Ligger här uppe och inte i skrivknappens
+     hanterare för att OMSKRIVNINGEN behöver den lika mycket som skrivningen —
+     «lägg till vilka uppgifter vi ska göra» kan inte svaras utan urvalet, och
+     förr fick iterationen ingen bok alls med sig.
+     `remsa` är lärarens eget urval («1101–1103, 1105–1119»), `bortremsa` de
+     medvetet överhoppade. Skickas bara när dörren är öppen och boken är en
+     riktig, inläst bok — annars finns inga sidor att läsa på servern. */
+  function bokKalla() {
+    const s = window.Uppslag && window.Uppslag.spann ? window.Uppslag.spann() : null;
+    const id = s && window.Bok && window.Bok.bokId ? window.Bok.bokId(s.bok) : null;
+    const oppen = document.querySelector('.kalla[data-dorr="bok"][aria-pressed="true"]');
+    if (!id || !oppen) return {};
+    const u = window.Uppgifter && window.Uppgifter.urval ? window.Uppgifter.urval() : null;
+    return { bok: Object.assign({ id, fran: s.fran, till: s.till },
+      u ? { remsa: u.remsa || '', bortremsa: u.bortremsa || '' } : {}) };
+  }
   const skicka = (vag, metod, kropp) => window.API.json(vag, {
     method: metod,
     headers: { 'Content-Type': 'application/json' },
@@ -1790,12 +1807,7 @@
        inte redan är lästa (~96 s per sida) och lägger deras innehåll i
        prompten — det är hela poängen med att boken finns i appen. Skickas bara
        när dörren är öppen och boken är en riktig, inläst bok. */
-    const bokval = () => {
-      const s = window.Uppslag && window.Uppslag.spann ? window.Uppslag.spann() : null;
-      const id = s && window.Bok && window.Bok.bokId ? window.Bok.bokId(s.bok) : null;
-      const oppen = document.querySelector('.kalla[data-dorr="bok"][aria-pressed="true"]');
-      return id && oppen ? { bok: { id, fran: s.fran, till: s.till } } : {};
-    };
+    const bokval = () => bokKalla();
     const JOBB = {
       Tavla: ({ signal, log }) => window.API.strom('/api/planning/generate', {
         moment: moment.value.trim(),
@@ -2531,7 +2543,12 @@
        läraren, innehållet är det som går att hitta i dokumentets JSON. */
     const mal = valt && valt.namn
       ? { namn: valt.namn, innehall: valt.innehall || '' } : null;
-    const kropp = mal ? { message: text, mal } : { message: text };
+    /* KÄLLORNA MÅSTE OCKSÅ MED. Genereringen skickar boken, urvalet och de
+       uppslagna sidorna; omskrivningen skickade bara meningen, och därför kunde
+       «lägg till vilka uppgifter vi ska göra under lektionen» bara bli en allmän
+       mening — numren fanns inte i prompten. Servern läser inga nya sidor för
+       en omskrivning (bok_text, inte bok_las_text): de lästes när spannet valdes. */
+    const kropp = Object.assign({ message: text }, bokKalla(), mal ? { mal } : {});
     if (v.wbId) {
       return window.API.strom(`/api/planning/${v.wbId}/refine`,
                               kropp, krokar).then(krav);

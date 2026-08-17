@@ -305,7 +305,10 @@ test("uppslaget följer med skrivningen", async ({ page }) => {
   await expect.poll(() => anrop.some(a => a.vag.endsWith("/generate")),
                     { timeout: 15_000 }).toBe(true);
   const gen = anrop.find(a => a.vag.endsWith("/generate"));
-  expect(gen.kropp.bok).toEqual({ id: 3, fran: 15, till: 16 });
+  // Sidorna OCH lärarens urval: «lägg till vilka uppgifter vi ska göra» kan
+  // inte besvaras utan numren, och de stannade förr i webbläsaren.
+  expect(gen.kropp.bok).toMatchObject({ id: 3, fran: 15, till: 16 });
+  expect(gen.kropp.bok.remsa).toBe("1215, 1216, 1221, 1225");
 });
 
 test("utan server står prototypens bokhylla kvar", async ({ page }) => {

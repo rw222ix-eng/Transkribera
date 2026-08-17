@@ -491,3 +491,22 @@ def test_refine_board_autorepairs_invalid_result():
     res = lb.refine_board(_valid_doc(), "gör om", model="m", llm=llm)
     assert res["errors"] == []
     assert res["rounds"] == 2
+
+
+def test_refine_board_far_bokdorren_med_sig():
+    """«Lägg till vilka uppgifter vi ska göra under lektionen» kunde bara bli en
+    allmän mening: genereringen fick bokens sidor och lärarens urval, men
+    iterationen fick ingenting — numren stod inte i prompten."""
+    llm, calls = _stub_llm([json.dumps(_valid_doc())])
+    lb.refine_board(_valid_doc(), "lägg till vilka uppgifter vi ska göra",
+                    model="m", llm=llm,
+                    bok="UR LÄROBOKEN — Liber Ma 1c, s. 2–6.\n\nLÄRARENS URVAL: "
+                        "klassen ska räkna uppg. 1101–1103, 1105–1119.")
+    prompt = calls[0]["prompt"]
+    assert "LÄRARENS URVAL" in prompt and "1101–1103, 1105–1119" in prompt
+    # Källan står FÖRE tavlan: det är underlaget, inte något att ändra i.
+    assert prompt.index("LÄRARENS URVAL") < prompt.index("nuvarande lektionstavlan")
+    # Och utan bok står prompten som förut.
+    llm2, calls2 = _stub_llm([json.dumps(_valid_doc())])
+    lb.refine_board(_valid_doc(), "gör om", model="m", llm=llm2)
+    assert "UR LÄROBOKEN" not in calls2[0]["prompt"]

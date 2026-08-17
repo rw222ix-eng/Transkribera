@@ -386,6 +386,9 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # instruktionen, en post i facit (llm_client.malrad). Bär önskemålet ett
         # uppgiftsnummer är det numret som gäller — det är precisare.
         mal = body.get("mal") if isinstance(body.get("mal"), dict) else None
+        # Bokdörren följer med omskrivningen som med genereringen: sidorna,
+        # uppgiftsnumren och lärarens urval. `bok_text` läser inga nya sidor.
+        bok_block = routes_planning.bok_text(db_file, body)
         conn = db.connect(db_file)
         try:
             view = db.get_exam(conn, exam_id)
@@ -405,7 +408,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 res = exam_gen.refine_exam(
                     view["exam"], message, model=_model_name(),
                     nummer=int(nummer) if nummer else None, mal=mal,
-                    profil=view.get("typ") or "prov",
+                    bok=bok_block, profil=view.get("typ") or "prov",
                     log_cb=lambda m: emit({"type": "log", "msg": m}))
                 if res["exam"] is not None and res["exam"] != view["exam"]:
                     conn = db.connect(db_file)

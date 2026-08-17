@@ -108,7 +108,7 @@ def test_refine_adds_version(client, monkeypatch):
     captured = {}
 
     def fake_refine(exam, message, *, model, nummer=None, profil="prov",
-                    mal=None, llm=None, max_rounds=exam_gen.MAX_ROUNDS,
+                    mal=None, bok="", llm=None, max_rounds=exam_gen.MAX_ROUNDS,
                     log_cb=None):
         captured["message"] = message
         captured["nummer"] = nummer
@@ -659,7 +659,7 @@ def test_provet_gar_att_andra_efter_en_omstart(client, monkeypatch):
     sett = {}
 
     def fake_refine(exam, message, *, model, nummer=None, profil="prov",
-                    mal=None, llm=None, max_rounds=exam_gen.MAX_ROUNDS,
+                    mal=None, bok="", llm=None, max_rounds=exam_gen.MAX_ROUNDS,
                     log_cb=None):
         sett["uppgifter"] = len(exam.get("uppgifter") or [])
         return {"exam": uppdaterad, "errors": [], "rounds": 1}

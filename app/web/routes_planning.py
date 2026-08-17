@@ -152,6 +152,20 @@ def bok_val(body: dict) -> tuple[int, int, int] | None:
     return (bid, fran, max(fran, till)) if fran > 0 else None
 
 
+def bok_urval(body: dict) -> dict | None:
+    """Lärarens eget urval ur uppgiftspanelen, som klienten skickar det:
+    `bok: {…, remsa, bortremsa}` — «1101–1103, 1105–1119» och de överhoppade.
+
+    Panelen har alltid vetat vilka uppgifter klassen ska räkna, men urvalet
+    stannade i webbläsaren: bara sidspannet gick till servern. «Lägg till vilka
+    uppgifter vi ska göra» blev därför en allmän mening om att räkna i boken."""
+    b = body.get("bok") if isinstance(body.get("bok"), dict) else None
+    if not b:
+        return None
+    ut = {k: str(b.get(k) or "").strip() for k in ("remsa", "bortremsa")}
+    return ut if ut["remsa"] else None
+
+
 def bok_las_text(base: Path, db_file: Path, body: dict, emit=None) -> str:
     """Samma block som `bok_text`, men läser först de sidor som saknar text.
 
@@ -196,7 +210,7 @@ def bok_text(db_file: Path, body: dict) -> str:
         uppg = db.bok_uppgifter(conn, bid, fran, till)
     finally:
         conn.close()
-    return bok.build_bok_block(rad, fran, till, text, uppg)
+    return bok.build_bok_block(rad, fran, till, text, uppg, bok_urval(body))
 
 
 def bok_nivaer(db_file: Path, body: dict, *, profil: str) -> str:
@@ -641,6 +655,12 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # Rutan läraren pekade på i granskningen — {"namn", "innehall"}, se
         # llm_client.malrad. Saknas den gäller önskemålet hela tavlan, som förut.
         mal = body.get("mal") if isinstance(body.get("mal"), dict) else None
+        # Bokdörren följer med omskrivningen, precis som med genereringen —
+        # sidorna, uppgiftsnumren och LÄRARENS URVAL. Utan det kunde «lägg till
+        # vilka uppgifter vi ska göra» bara bli en allmän mening: numren stod
+        # inte i prompten. `bok_text` läser inga nya sidor (de lästes när
+        # spannet valdes), så en omskrivning kostar ingen bokläsning.
+        bok_txt = bok_text(db_file, body)
 
         gpu = arbiter.try_acquire_gpu()
         if not gpu:
@@ -652,6 +672,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     raise RuntimeError("Språkmodellen är inte installerad.")
                 res = lesson_board.refine_board(
                     st["board"], message, model=_model_name(), mal=mal,
+                    bok=bok_txt,
                     log_cb=lambda m: emit({"type": "log", "msg": m}),
                     token_cb=lambda t: emit({"type": "token", "text": t}))
                 if res["board"] is not None:
