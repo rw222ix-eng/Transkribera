@@ -22,8 +22,9 @@ starlette           # server.py använder den direkt, inte bara via fastapi
 anyio               # sse.py väntar på kön i en tråd utan att blockera slingan
 
 # Filer in och ut
-pypdfium2           # tryckpaketet, bokimporten, PDF-underlaget
-pillow              # pypdfium2 lämnar ut sidbilder som PIL-objekt (lazy import)
+pypdfium2           # tryckpaketet, bokimporten, PDF-underlaget, tavlans sida
+pillow              # tavlans PNG läses här (app/tryck.py); pypdfium2 lämnar
+                    # dessutom ut sidbilder som PIL-objekt (lazy import)
 yt-dlp
 requests
 

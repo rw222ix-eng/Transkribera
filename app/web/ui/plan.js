@@ -2907,43 +2907,76 @@
      Provet, arbetsbladet, diagnosen och anteckningarna HAR en: Tectonic bygger
      den vid godkännandet och `/api/exams/{id}/pdf` svarar med filen (routes_exam
      _serve_artifact sätter Content-Disposition, så namnet blir bokens eget).
-     Tavlan har ingen — den sparas som bild och blir PDF först i ett tryckpaket
-     — och då ska knappen säga det i stället för att låtsas. */
+     Tavlan hade ingen och knappen sa det: «lägg den i Skriv ut för en PDF».
+     Den ritas nu av på klienten och blir en sida på servern i samma gest
+     (POST /api/tavla/pdf) — ett papper i högen som inte gick att ladda ner var
+     ett hål, inte ett val. */
   const pdfId = v => (v && (v.provId || v.antId)) || null;
+  /* Var pappret hämtas. Lösningsbladet är en KLON av sitt original och bär
+     därför samma provId — knappen laddade ner provet när läraren bad om
+     lösningsförslaget, för `pdfId` är samma på båda. De två har egna filer
+     bredvid provets: bedömningsanvisningen (prov) och det separata facit
+     (arbetsblad), båda kompilerade vid godkännandet. */
+  const pdfVag = v => {
+    const id = pdfId(v);
+    if (!id) return null;
+    if (!v.losningsblad) return `/api/exams/${id}/pdf`;
+    return `/api/exams/${id}/${v.typ === 'Prov' ? 'bedomning' : 'facit'}`;
+  };
+  /* Hämtas som blob i stället för att fönstret navigeras dit: ett 404 blir då
+     ett svenskt besked i stället för en flik med serverns JSON i. */
+  const blobEller = r => r.ok ? r.blob() : r.json().then(
+    d => { throw new Error((d && d.error) || 'PDF:en gick inte att hämta'); },
+    () => { throw new Error('PDF:en gick inte att hämta'); });
+  function laggIHamtat(blob, namn) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${namn}.pdf`.replace(/[\\/:*?"<>|]/g, '');
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    /* Släpps direkt smiter webbläsaren ifrån sparandet i Chrome. */
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+  }
   function skrivUt(b, namn, v) {
     if (b.dataset.lage) return;
-    const id = pdfId(v);
-    if (!id || !serverPa()) {
-      window.toast && window.toast(v && v.typ === 'Tavla'
-        ? `${namn} är sparad som bild — lägg den i Skriv ut för en PDF`
+    const tavla = !!(v && v.typ === 'Tavla');
+    const vag = tavla ? '/api/tavla/pdf' : pdfVag(v);
+    if (!vag || !serverPa()) {
+      window.toast && window.toast(tavla
+        ? `${namn} kan bli en PDF när appen kör — sidan sätts på servern`
         : `${namn} har ingen PDF än — godkänn pappret, då byggs den`);
       return;
     }
     const text = b.textContent;
     b.dataset.lage = 'skriver';
-    b.textContent = 'Hämtar …';
+    /* Avritningen tar sina hundradelar och sker före anropet — knappen ska
+       säga vad den gör, inte stå tyst (samma som i utskriftsrutan). */
+    b.textContent = tavla ? 'Ritar av …' : 'Hämtar …';
     const ater = klart => {
       b.dataset.lage = klart ? 'klar' : '';
       b.textContent = klart ? 'Sparad' : text;
       if (klart) setTimeout(() => { b.removeAttribute('data-lage'); b.textContent = text; }, 1700);
       else b.removeAttribute('data-lage');
     };
-    /* Hämtas som blob i stället för att fönstret navigeras dit: ett 404 blir då
-       ett svenskt besked i stället för en flik med serverns JSON i. */
-    fetch(`/api/exams/${id}/pdf`)
-      .then(r => r.ok ? r.blob() : r.json().then(
-        d => { throw new Error((d && d.error) || 'PDF:en gick inte att hämta'); },
-        () => { throw new Error('PDF:en gick inte att hämta'); }))
+    /* Tavlan skickas som PNG och kommer tillbaka som ett A4; de andra
+       pappren ligger redan som filer och hämtas rakt av. */
+    const svaret = tavla
+      ? (window.TavlaBild
+          ? window.TavlaBild.png(v).then(png => {
+              b.textContent = 'Sätter sidan …';
+              return fetch(vag, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ namn, png }),
+              });
+            })
+          : Promise.reject(new Error('Tavelmotorn är inte laddad.')))
+      : fetch(vag);
+    svaret
+      .then(blobEller)
       .then(blob => {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${namn}.pdf`.replace(/[\\/:*?"<>|]/g, '');
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        /* Släpps direkt smiter webbläsaren ifrån sparandet i Chrome. */
-        setTimeout(() => URL.revokeObjectURL(url), 30000);
+        laggIHamtat(blob, namn);
         ater(true);
         window.toast && window.toast(`${namn} · PDF:en ligger i Hämtat`);
       })

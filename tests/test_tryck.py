@@ -146,10 +146,10 @@ _DATA_URL = "data:image/png;base64," + base64.b64encode(_PNG_1PX).decode()
 def test_tavlan_foljer_med_nar_klienten_skickar_bilden(client, monkeypatch):
     """Tavlan finns bara som ritad DOM i webbläsaren. Klienten ritar av den
     (app/web/ui/tavla-bild.js) och skickar PNG:en — då ska den ligga överst i
-    paketet, inte i `saknas`."""
-    monkeypatch.setattr(tryck.exam_pdf, "engine_available", lambda: True)
-    monkeypatch.setattr(tryck.exam_pdf, "compile_pdf",
-                        lambda tex, ut, stam, **kw: (pdf_fil(ut / f"{stam}.pdf", 1), ""))
+    paketet, inte i `saknas`.
+
+    Ingen stubbad motor här längre: sidan sätts av pdfium, inte av LaTeX, så
+    det som körs i testet är samma kod som kör på lärarens maskin."""
     eid = _prov(client, monkeypatch, sidor=2)
     res = _done(client.post("/api/tryck", json={"dokument": [
         {"namn": "Tavla — derivator", "typ": "Tavla", "png": _DATA_URL, "kopior": 1},
@@ -160,13 +160,67 @@ def test_tavlan_foljer_med_nar_klienten_skickar_bilden(client, monkeypatch):
     assert res["sidor"] == 1 + 2 * 2
 
 
-def test_tavlan_som_bild_kraver_en_riktig_png(tmp_path, monkeypatch):
-    monkeypatch.setattr(tryck.exam_pdf, "engine_available", lambda: True)
-    monkeypatch.setattr(tryck.exam_pdf, "compile_pdf",
-                        lambda tex, ut, stam, **kw: (pdf_fil(ut / f"{stam}.pdf", 1), ""))
-    png = tryck._PNG_MAGIC + b"resten spelar ingen roll"
-    dataurl = tryck._DATA_PREFIX + base64.b64encode(png).decode()
-    assert tryck.png_till_pdf(dataurl, tmp_path, "t") is not None
-    # Något som inte är en PNG blir ingen sida — och inget tyst fel.
-    assert tryck.png_till_pdf("data:image/png;base64,aGVq", tmp_path, "t2") is None
-    assert tryck.png_till_pdf("inte en dataurl", tmp_path, "t3") is None
+def test_tavlan_som_bild_kraver_en_riktig_png(tmp_path):
+    ut = tryck.png_till_pdf(_DATA_URL, tmp_path, "t")
+    assert ut is not None and ut.is_file()
+    assert tryck._sidor(ut) == 1
+    # Rätt magiska byte men trasig resten: klienten har ritat av något annat än
+    # tavlan, och då ska det bli ingen sida — inte en tom.
+    trasig = tryck._DATA_PREFIX + base64.b64encode(
+        tryck._PNG_MAGIC + b"resten spelar ingen roll").decode()
+    assert tryck.png_till_pdf(trasig, tmp_path, "t2") is None
+    assert tryck.png_till_pdf("data:image/png;base64,aGVq", tmp_path, "t3") is None
+    assert tryck.png_till_pdf("inte en dataurl", tmp_path, "t4") is None
+
+
+def test_tavlans_sida_ar_ett_a4_och_bilden_forlustfri(tmp_path):
+    """Två saker som inte syns i en sidräkning: att sidan är ett A4 (en sida i
+    bildens storlek går inte att stoppa i en skrivare) och att bilden ligger
+    FlateDecode-komprimerad. En tavla är tunn handstil på vitt, och JPEG —
+    som Pillows egen PDF-export hade gett — ringlar runt varje streck."""
+    import pypdfium2 as pdfium
+    ut = tryck.png_till_pdf(_DATA_URL, tmp_path, "t")
+    doc = pdfium.PdfDocument(str(ut))
+    try:
+        bredd, hojd = doc[0].get_size()
+        assert round(bredd) == 595 and round(hojd) == 842
+        bilder = [o for o in doc[0].get_objects()
+                  if isinstance(o, pdfium.PdfImage)]
+        assert len(bilder) == 1
+        assert bilder[0].get_filters() == ["FlateDecode"]
+    finally:
+        doc.close()
+
+
+# --------------------------------------------------- tavlan som egen fil --
+
+def test_tavlan_laddas_ner_som_egen_pdf(client):
+    """Tavlan var det enda pappret i högen utan nedladdning — knappen sa att
+    den var en bild och hänvisade till utskriftshögen. Nu svarar rutten med
+    filen, och namnet läraren ser är dokumentets eget."""
+    r = client.post("/api/tavla/pdf", json={"namn": "Tavla — derivator",
+                                            "png": _DATA_URL})
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "application/pdf"
+    assert "Tavla" in r.headers.get("content-disposition", "")
+    assert r.content.startswith(b"%PDF")
+
+
+def test_tavlans_pdf_lamnar_ingen_kopia_i_utskriftsmappen(client):
+    """Filen är en LEVERANS, inte en artefakt: den ligger i webbläsarens
+    Hämtat efteråt, och en kopia per klick i utskriftsmappen är skräp läraren
+    får rensa."""
+    assert client.post("/api/tavla/pdf",
+                       json={"png": _DATA_URL}).status_code == 200
+    mapp = client.base_dir / "Transkriberingar" / "utskrift" / ".tavla"
+    assert list(mapp.glob("*.pdf")) == []
+
+
+def test_en_avritning_som_inte_blev_en_bild_sags(client):
+    """Avritningen kan falla på klienten (typsnitt som inte laddat, en tavla
+    som mätte noll). Då ska svaret säga det — inte spara en tom sida."""
+    r = client.post("/api/tavla/pdf", json={"namn": "Tavlan",
+                                            "png": "data:image/png;base64,aGVq"})
+    assert r.status_code == 400
+    assert "ingen bild" in r.json()["error"]
+    assert client.post("/api/tavla/pdf", json={"namn": "Tavlan"}).status_code == 400

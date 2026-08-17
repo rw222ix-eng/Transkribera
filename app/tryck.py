@@ -16,7 +16,7 @@ Källorna är olika för olika papper, och det är därför den här modulen fin
 * **Facit och bedömningsanvisning** ligger bredvid provet med samma stam.
 * **Tavlan** finns bara som en ritad sida i webbläsaren. Klienten skickar den
   som PNG (samma bild som /api/planning/export sparar) och den läggs på ett A4
-  här.
+  här — utan LaTeX, se ``png_till_pdf``.
 * **Den anpassade kopian** renderas om ur provets egen JSON med längre tid,
   färre uppgifter och en dokumentkod i foten. Ingen etikett, ingen text på
   pappret som säger att det är en anpassning — koden i foten är det enda som
@@ -25,6 +25,7 @@ Källorna är olika för olika papper, och det är därför den här modulen fin
 from __future__ import annotations
 
 import base64
+import io
 import re
 from pathlib import Path
 
@@ -34,16 +35,12 @@ _PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 _DATA_PREFIX = "data:image/png;base64,"
 MAX_KOPIOR = 60          # 22 elevark är normalt; 60 är taket mot skrivfel
 MAX_PNG_BYTES = 30 * 1024 * 1024
-
-# En bild på ett A4, utan marginaler och utan sidhuvud. Tavlan ÄR sidan.
-_BILD_TEX = r"""\documentclass[a4paper]{article}
-\usepackage[margin=0pt]{geometry}
-\usepackage{graphicx}
-\pagestyle{empty}
-\begin{document}
-\noindent\includegraphics[width=\paperwidth,height=\paperheight,keepaspectratio]{%s}
-\end{document}
-"""
+# Taket i PIXLAR, inte bara i byte: en PNG på några kilobyte kan packa upp till
+# gigabyte (en «dekompressionsbomb»). Tavlan i 2× är omkring 3 Mpx.
+MAX_PIXLAR = 60_000_000
+# A4 i punkter (72 dpi) — PDF:ens eget mått. Tavlan läggs på sidan, inte
+# tvärtom: en sida i bildens storlek går inte att stoppa i en skrivare.
+A4_PT = (595.276, 841.89)
 
 
 def _safe(namn: str, fallback: str = "utskrift") -> str:
@@ -51,8 +48,31 @@ def _safe(namn: str, fallback: str = "utskrift") -> str:
     return rent[:80] or fallback
 
 
+def _platta(bild):
+    """Bilden mot vitt, i RGB. Genomskinligt blir SVART i en PDF utan
+    alfakanal, och tavlans mellanrum mellan två bräden är just genomskinligt
+    (samma fälla som tavla-bild.js fyller duken vit för)."""
+    if "A" in bild.getbands():
+        from PIL import Image
+        rgba = bild.convert("RGBA")
+        botten = Image.new("RGB", rgba.size, "white")
+        botten.paste(rgba, mask=rgba.getchannel("A"))
+        return botten
+    return bild if bild.mode == "RGB" else bild.convert("RGB")
+
+
 def png_till_pdf(dataurl: str, ut_dir: Path, stam: str) -> Path | None:
-    """Tavlans bild på ett A4. Returnerar None om PNG:en inte är en PNG."""
+    """Tavlans bild på ett A4. Returnerar None om PNG:en inte är en PNG.
+
+    Ingen LaTeX. Sidan byggdes förut genom att skriva PNG:en till disk och
+    köra Tectonic på ett ``\\includegraphics`` — vilket band tavlans
+    nedladdning till en 100 MB motor som bara skulle lägga en bild på ett
+    papper, och gjorde den omöjlig på en maskin där cachen inte är seedad.
+    pdfium (pypdfium2, redan här för sidräkningen och hopfogningen) lägger
+    bilden på sidan direkt och komprimerar den FlateDecode — alltså
+    FÖRLUSTFRITT. Det är inte en detalj: en tavla är tunn handstil på vitt, och
+    JPEG — som Pillows egen PDF-export hade gett — ringlar runt varje streck.
+    """
     if not dataurl.startswith(_DATA_PREFIX):
         return None
     try:
@@ -61,13 +81,39 @@ def png_till_pdf(dataurl: str, ut_dir: Path, stam: str) -> Path | None:
         return None
     if not rå.startswith(_PNG_MAGIC) or len(rå) > MAX_PNG_BYTES:
         return None
-    ut_dir.mkdir(parents=True, exist_ok=True)
-    bild = ut_dir / f"{stam}.png"
-    bild.write_bytes(rå)
-    if not exam_pdf.engine_available():
+    import pypdfium2 as pdfium
+    from PIL import Image, UnidentifiedImageError
+    try:
+        bild = Image.open(io.BytesIO(rå))
+        bild.load()
+    except (UnidentifiedImageError, OSError, ValueError):
+        # Rätt magiska byte men trasig resten — klienten har ritat av något
+        # annat än tavlan, och det ska sägas, inte sparas.
         return None
-    pdf, _logg = exam_pdf.compile_pdf(_BILD_TEX % bild.name, ut_dir, stam)
-    return pdf
+    if bild.width * bild.height > MAX_PIXLAR:
+        return None
+    bild = _platta(bild)
+    b, h = bild.size
+    skala = min(A4_PT[0] / b, A4_PT[1] / h)
+    ut_dir.mkdir(parents=True, exist_ok=True)
+    mal = ut_dir / f"{stam}.pdf"
+    doc = pdfium.PdfDocument.new()
+    try:
+        sida = doc.new_page(*A4_PT)
+        objekt = pdfium.PdfImage.new(doc)
+        objekt.set_bitmap(pdfium.PdfBitmap.from_pil(bild))
+        # Matrisen ÄR placeringen: pdfium ritar bilden i enhetskvadraten, så
+        # matrisen bär både storleken och hörnet. Största möjliga med bevarad
+        # proportion, centrerad — samma sida som mallen satte.
+        objekt.set_matrix(pdfium.PdfMatrix(
+            b * skala, 0, 0, h * skala,
+            (A4_PT[0] - b * skala) / 2, (A4_PT[1] - h * skala) / 2))
+        sida.insert_obj(objekt)
+        sida.gen_content()
+        doc.save(str(mal))
+    finally:
+        doc.close()
+    return mal
 
 
 def anpassad_pdf(exam: dict, typ: str, ut_dir: Path, stam: str, *,

@@ -226,19 +226,43 @@ test("PDF-knappen hämtar provets riktiga PDF och sparar den", async ({ page }) 
   expect(fil.suggestedFilename()).toMatch(/\.pdf$/);
 });
 
-test("en tavla säger att den är en bild — den låtsas inte ladda ner", async ({ page }) => {
-  const anropade = [];
-  await fejka(page, { sparade: [rad(1, papper({ typ: "Tavla", wbId: "abc" }))] });
-  await page.route("**/api/exams/**", route => { anropade.push(route.request().url()); return route.abort(); });
+/* En tavla i wb-json-v1, som lesson_board skriver dem (jfr e2e/tryck.spec.mjs). */
+const tavla = () => ({
+  title: "Derivatans definition",
+  boards: [{
+    name: "genomgang", width: 1400, height: 460, chrome: "aluminium",
+    padding: { top: 24, right: 26, bottom: 24, left: 30 },
+    sections: [
+      { kind: "heading", text: "Derivatans definition", size: 30 },
+      { kind: "text", text: "Ändringskvoten när h går mot noll.", size: 19 },
+      { kind: "math", latex: "f'(x)=\\lim_{h\\to 0}\\frac{f(x+h)-f(x)}{h}", size: 21 },
+    ],
+  }],
+});
+
+test("tavlan laddas ner som en PDF — inte som ett besked om att den är en bild", async ({ page }) => {
+  // Knappen sa «lägg den i Skriv ut för en PDF»: tavlan var det enda pappret i
+  // högen utan nedladdning. Den ritas av här och sätts på ett A4 på servern.
+  const skickat = [];
+  await fejka(page, { sparade: [rad(1, papper({ typ: "Tavla", wbId: "abc", wb: tavla() }))] });
+  await page.route("**/api/tavla/pdf", route => {
+    skickat.push(route.request().postDataJSON());
+    return route.fulfill({ status: 200, contentType: "application/pdf",
+                           body: Buffer.from("%PDF-1.7 tavlan som sida") });
+  });
   await page.goto("/");
   await hydrerad(page);
   await oppnaForhandsvisning(page);
 
+  const nedladdning = page.waitForEvent("download", { timeout: 30_000 });
   await page.locator("#fh-pdf").click();
-  await expect(page.locator(".toast").last()).toContainText(/bild|Skriv ut/i);
-  expect(anropade).toEqual([]);
-  // Och knappen ljuger inte om att något sparats.
-  await expect(page.locator("#fh-pdf")).toHaveText("Ladda ner PDF");
+  const fil = await nedladdning;
+  expect(fil.suggestedFilename()).toMatch(/\.pdf$/);
+  expect(skickat).toHaveLength(1);
+  // Det som skickas är tavlans egen avritning i full storlek — inte en tom duk.
+  expect(skickat[0].png.startsWith("data:image/png;base64,")).toBe(true);
+  expect(skickat[0].png.length).toBeGreaterThan(10_000);
+  await expect(page.locator("#fh-pdf")).toHaveText("Sparad");
 });
 
 test("ett papper utan byggd PDF ger serverns besked, inte «Sparad»", async ({ page }) => {

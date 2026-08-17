@@ -11,12 +11,23 @@ from datetime import datetime
 from pathlib import Path
 
 from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from starlette.background import BackgroundTask
 
 from app import db, tryck
 from app.web.sse import sse_response
 
 MAX_DOKUMENT = 20
+
+
+def _stada(pdf: Path) -> None:
+    """Leveransen städas när svaret är skickat. Filen ligger i webbläsarens
+    Hämtat efteråt — en kopia per klick kvar i utskriftsmappen är bara skräp
+    läraren får rensa."""
+    try:
+        pdf.unlink()
+    except OSError:
+        pass
 
 
 def create_router(base: Path, arbiter) -> APIRouter:
@@ -102,5 +113,39 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     "saknas": saknas}
 
         return sse_response(job, req)
+
+    @router.post("/api/tavla/pdf")
+    async def tavla_pdf(req: Request):
+        """Tavlan som EGEN PDF — inte som en rad i ett paket.
+
+        Tavlan är det enda dokumentet utan en byggd fil. Prov, arbetsblad,
+        diagnos och anteckningar får sin PDF vid godkännandet och serveras ur
+        databasen (routes_exam ``_serve_artifact``); tavlan finns bara som
+        ritad DOM i webbläsaren, och motorn som ritar den bor DÄR, inte här.
+        Klienten ritar därför av den (app/web/ui/tavla-bild.js) och skickar
+        bilden — samma PNG som tryckpaketet och arkivkopian får — och den läggs
+        på ett A4 här. Utan den här rutten kunde «Ladda ner PDF» på en tavla
+        bara säga att pappret var en bild och hänvisa till utskriftshögen.
+
+        Ingen SSE: det är ett bildbyte och en sida, inte ett bygge som tar
+        tiotals sekunder, och svaret ÄR filen."""
+        body = await req.json()
+        namn = tryck._safe(str(body.get("namn") or "Tavla"), "Tavla")
+        png = str(body.get("png") or "")
+        if not png:
+            return JSONResponse({"error": "tavlans bild kom inte fram"},
+                                status_code=400)
+        arbete = base / "Transkriberingar" / "utskrift" / ".tavla"
+        # Egen stämpel per anrop (med mikrosekunder): två snabba klick får inte
+        # skriva över varandras fil medan den första fortfarande skickas.
+        stampel = datetime.now().strftime("%Y-%m-%d %H%M%S%f")
+        pdf = tryck.png_till_pdf(png, arbete, stampel)
+        if pdf is None:
+            return JSONResponse(
+                {"error": "Tavlan gick inte att göra om till en PDF — "
+                          "avritningen blev ingen bild."}, status_code=400)
+        return FileResponse(str(pdf), media_type="application/pdf",
+                            filename=f"{namn}.pdf",
+                            background=BackgroundTask(_stada, pdf))
 
     return router
