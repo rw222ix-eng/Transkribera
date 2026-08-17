@@ -2991,7 +2991,10 @@
        säga vad den gör, inte stå tyst (samma som i utskriftsrutan). Är det
        flera filer räknar den också UPP: «Ritar av 2/4 …». En knapp som står på
        samma ord i fem sekunder ser trasig ut. */
-    const totalt = (vag ? 1 : 0) + bok;
+    /* Nämnaren är en GISSNING tills arken är satta: BladBild.antal räknar de
+       ark BokLosning skriver, och ett av dem kan paginera till två. Den rättas
+       därför när avritningen vet, i stället för att räkna «5/4». */
+    let totalt = (vag ? 1 : 0) + bok;
     const av = i => (totalt > 1 ? ` ${i}/${totalt} ` : ' ');
     const ater = klart => {
       b.dataset.lage = klart ? 'klar' : '';
@@ -3020,6 +3023,7 @@
         steg: i => { b.textContent = 'Ritar av' + av(gjorda + i + 1) + '…'; },
       }) : []))
       /* Sekventiellt: varje ark blir sin egen sida och sin egen fil. */
+      .then(ark => { totalt = gjorda + ark.length; return ark; })
       .then(ark => ark.reduce((kedja, a, i) => kedja.then(() => {
         b.textContent = 'Sätter sidan' + av(gjorda + i + 1) + '…';
         return sattPaSida(a.namn, a.png);
