@@ -139,6 +139,12 @@ def test_arbetsbladet_bar_sitt_facit_provet_inte():
     # Och bedömningsanvisningen — lärarens eget papper — hör inte till eleven.
     assert doc.uppgifter[0].bedomning not in ark
     assert doc.uppgifter[0].bedomning in bedomning
+    # «Separat facit»: elevbladet släcker bandet, lösningarna finns då bara på
+    # lärarens separata blad (only_facit). Utan flaggan fick eleverna dem
+    # dubbelt — en gång i bladet, en gång i facit-PDF:en.
+    utan = exam_latex.render_arbetsblad(doc, utan_facit=True)
+    assert losning not in utan
+    assert losning in exam_latex.render_arbetsblad(doc, only_facit=True)
 
 
 def test_bedomningsanvisning_skrivs_bara_for_prov(client, monkeypatch):

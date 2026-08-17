@@ -443,6 +443,16 @@ def create_router(base: Path, arbiter) -> APIRouter:
         kompilera PDF lokalt och spara i minnet. Kompileringsfel går
         tillbaka till modellen (max 2 rundor); kvarstående fel redovisas
         ärligt och provet godkänns då med enbart .tex."""
+        # «Separat facit» bor i webbläsarens dokument (inst.facit i plan.js)
+        # och finns inte i provets JSON — flaggan måste därför resa med
+        # anropet. Utan den kompilerades elevbladet ALLTID med facit på sista
+        # sidan, och eleverna fick lösningarna dubbelt när facit-PDF:en
+        # dessutom byggdes bredvid.
+        try:
+            body = await req.json()
+        except Exception:
+            body = {}
+        separat_facit = bool(isinstance(body, dict) and body.get("separat_facit"))
         conn = db.connect(db_file)
         try:
             view = db.get_exam(conn, exam_id)
@@ -502,7 +512,11 @@ def create_router(base: Path, arbiter) -> APIRouter:
                         tex = exam_latex.render_gruppuppgift(doc, bilder=bilder_map)
                         bed = None
                     elif typ == "arbetsblad":
-                        tex = exam_latex.render_arbetsblad(doc, bilder=bilder_map)
+                        # utan_facit följer lärarens val: med separat facit
+                        # släcks bandet på elevbladets sista sida — lösningarna
+                        # finns då bara i facit-filen bredvid.
+                        tex = exam_latex.render_arbetsblad(
+                            doc, bilder=bilder_map, utan_facit=separat_facit)
                         bed = None
                     elif typ == "diagnos":
                         # Diagnosen bär sin rättning i samma dokument, sorterad
@@ -555,17 +569,25 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     elif pdf_path is not None and not pdf_path.exists():
                         pdf_path = None
                     # Facit GATEAR inte godkännandet, till skillnad från
-                    # bedömningen nedan. Skälet är att innehållet är exakt det
-                    # som just kompilerat på bladets sista sida — samma mall,
-                    # samma fält — så ett fel här kan inte vara ett fel i
-                    # uppgifterna, och ett blad som byggts felfritt ska inte
-                    # fällas av sin egen kopia. Saknas filen säger rutten det
-                    # på svenska när läraren ber om den.
+                    # bedömningen nedan. Skälet är att innehållet är exakt
+                    # samma fält genom samma mall som bladets facitband, så
+                    # ett fel här kan inte vara ett fel i uppgifterna, och ett
+                    # blad som byggts felfritt ska inte fällas av sin egen
+                    # kopia. Med separat facit kompileras lösningsfälten dock
+                    # BARA här (bandet är släckt i bladet) — då måste loggen
+                    # säga att lösningarna saknas helt, inte lova en sista
+                    # sida som inte finns. Saknas filen säger rutten det på
+                    # svenska när läraren ber om den.
                     if prov_pdf is not None and facit is not None:
                         if exam_pdf.compile_pdf(
                                 facit, out_dir, f"{slug} - facit")[0] is None:
                             emit({"type": "log",
                                   "msg": "Det separata facit gick inte att "
+                                         "bygga — och elevbladet bär inga "
+                                         "lösningar. Godkänn igen för ett "
+                                         "nytt försök."
+                                         if separat_facit else
+                                         "Det separata facit gick inte att "
                                          "bygga — bladet bär det ändå på "
                                          "sista sidan."})
                     # En runda är lyckad först när SAMTLIGA dokument som ska

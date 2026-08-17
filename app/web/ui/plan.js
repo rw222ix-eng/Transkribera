@@ -3144,7 +3144,14 @@
        Det tar tid och sker i bakgrunden: pappret ligger redan i Sparat, och
        toasten säger när PDF:en är på plats eller varför den inte blev det. */
     if (serverPa() && godkant.provId) {
-      window.API.strom(`/api/exams/${godkant.provId}/approve`, {})
+      /* «Separat facit» bor bara här i webbläsarens dokument (inst.facit) —
+         provets JSON vet inget om det. Reser flaggan inte med anropet trycker
+         mallen facit på elevbladets sista sida ändå, och eleverna får
+         lösningarna dubbelt: en gång i bladet, en gång i facit-PDF:en. */
+      window.API.strom(`/api/exams/${godkant.provId}/approve`, {
+        separat_facit: godkant.typ === 'Arbetsblad'
+          && (godkant.inst || {}).facit === 'Separat facit',
+      })
         .then(r => {
           if (!r) return;
           /* Fälten heter `pdf` och `tex` — det är vad routes_exam approve

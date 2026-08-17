@@ -17,11 +17,14 @@
     och då hör uppgifterna inte hemma på det. only_facit släcker elevernas del
     och lämnar facitbandet nedan, som då blir sida ett. Ingen egen mallfil, med
     flit: sattes facit av två mallar skulle de glida isär, och det är precis den
-    sortens skillnad ingen upptäcker förrän klassen har papperet i handen. #))
+    sortens skillnad ingen upptäcker förrän klassen har papperet i handen.
+    utan_facit är spegelbilden: elevbladet UTAN facitbandet. Löftet i «Separat
+    facit» är ju att läraren behåller lösningarna — bar bladet dem ändå på
+    sista sidan fick eleverna dem dubbelt, och valet i planeringen var tomt. #))
 ((* if not only_facit *))
 \vspace{4mm}
-{\small Öva i egen takt — uppgifterna blir svårare längre ner. Facit finns
-på sista sidan((* if visa_poang *)); poäng anges som totalpoäng((* endif *)).}
+{\small Öva i egen takt — uppgifterna blir svårare längre ner. ((* if utan_facit *))Facit delas ut separat((* else *))Facit finns
+på sista sidan((* endif *))((* if visa_poang *)); poäng anges som totalpoäng((* endif *)).}
 
 \vspace{4mm}
 ((* for del in delar *))
@@ -71,8 +74,11 @@ på sista sidan((* if visa_poang *)); poäng anges som totalpoäng((* endif *)).
 ((* endfor *))
 ((* endfor *))
 
+((* if not utan_facit *))
 \newpage
 ((* endif *))
+((* endif *))
+((* if not utan_facit *))
 \delprovband{Facit}
 ((* for del in delar *))
 ((* for u in del.uppgifter *))
@@ -85,5 +91,6 @@ på sista sidan((* if visa_poang *)); poäng anges som totalpoäng((* endif *)).
 \end{uppgift}
 ((* endfor *))
 ((* endfor *))
+((* endif *))
 
 \end{document}

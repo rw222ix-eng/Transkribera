@@ -561,6 +561,46 @@ def test_facitfilen_ar_facit_ensamt_inte_hela_bladet(client, monkeypatch):
         assert satt in blad and satt in facit, satt
 
 
+def test_separat_facit_slacker_bandet_i_elevbladet(client, monkeypatch):
+    """«Separat facit» valt i planeringen: elevbladet ska INTE bära facit på
+    sista sidan — annars får eleverna lösningarna dubbelt (i bladet OCH i
+    facit-PDF:en bredvid). Valet bor i webbläsarens dokument och reser med
+    approve-anropet som `separat_facit`."""
+    from pathlib import Path
+    from app import exam_latex
+    result = _arbetsblad(client, monkeypatch)
+    monkeypatch.setattr(exam_pdf, "engine_available", lambda: False)
+    res = _done(client.post(f"/api/exams/{result['id']}/approve",
+                            json={"separat_facit": True}))
+    kropp = lambda t: t.split(r"\begin{document}", 1)[1]
+    blad = kropp(Path(res["tex"]).read_text(encoding="utf-8"))
+    assert r"\delprovband{Facit}" not in blad
+    # Instruktionsraden lovar inte längre något som inte finns i bladet.
+    assert "sista sidan" not in blad and "delas ut separat" in blad
+    for u in _exam_doc()["uppgifter"]:
+        assert exam_latex.escape_mixed(u["losning"]) not in blad
+    # …och lösningarna finns kvar — men BARA i det separata facit-bladet.
+    facit = kropp(next(Path(res["tex"]).parent.glob("* - facit.tex")
+                       ).read_text(encoding="utf-8"))
+    assert r"\delprovband{Facit}" in facit
+    for u in _exam_doc()["uppgifter"]:
+        assert exam_latex.escape_mixed(u["losning"]) in facit
+
+
+def test_plan_js_skickar_separat_facit_med_approve():
+    """Flaggan finns bara om frontenden skickar den: valet bor i webbläsarens
+    dokument (inst.facit) och står inte i provets JSON. Utan den här raden i
+    plan.js är serverflaggan död kod och bladet bär facit igen."""
+    import re
+    from pathlib import Path
+    js = (Path(routes_exam.__file__).parent / "ui" / "plan.js"
+          ).read_text(encoding="utf-8")
+    start = js.index("/api/exams/${godkant.provId}/approve")
+    kod = re.sub(r"/\*.*?\*/", "", js[start:js.index(".then(", start)], flags=re.S)
+    assert "separat_facit" in kod, kod
+    assert "'Separat facit'" in kod, kod
+
+
 def test_provet_far_inget_separat_facit(client, monkeypatch):
     """Provet har sin bedömningsanvisning. Ett facit bredvid vore ett tredje
     papper som säger samma sak, och läraren skulle få välja mellan dem."""

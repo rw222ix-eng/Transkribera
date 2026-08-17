@@ -383,17 +383,23 @@ def render_bedomning(doc: exam_spec.ExamDoc,
 
 def render_arbetsblad(doc: exam_spec.ExamDoc, visa_poang: bool = False,
                       bilder: dict[int, str] | None = None,
-                      dokumentkod: str = "", only_facit: bool = False) -> str:
+                      dokumentkod: str = "", only_facit: bool = False,
+                      utan_facit: bool = False) -> str:
     """Arbetsblad (Fas 5): inga kravgränser, valfri poängvisning, facit på
     egen sida (lösningsförslagen).
 
     `only_facit` ger facit ENSAMT som ett eget papper — det «Separat facit»
     lovar i planeringen. Samma mall och därmed samma sättning som facitsidan i
     bladet: vyn byggs som vanligt (facit=False), för facitbandet läser bara
-    numret och lösningen, och de fälten bryr sig inte om lärarläget."""
+    numret och lösningen, och de fälten bryr sig inte om lärarläget.
+
+    `utan_facit` är andra halvan av samma löfte: ELEVBLADET utan facitbandet.
+    Utan den bar bladet lösningarna på sista sidan även när läraren valt
+    separat facit, och eleverna fick dem dubbelt. Flaggorna kombineras aldrig
+    — only_facit ÄR facitbandet, och ett facit utan sitt band är tomt."""
     return _environment().get_template("arbetsblad.tex.j2").render(
         visa_poang=visa_poang, dokumentkod=dokumentkod, only_facit=only_facit,
-        **_build_view(doc, bilder))
+        utan_facit=utan_facit, **_build_view(doc, bilder))
 
 
 def _ci_grupper(vy: dict) -> list[dict]:
