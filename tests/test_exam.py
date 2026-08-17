@@ -1337,6 +1337,23 @@ def test_refine_exam_targets_item():
     assert "uppgift 4" in calls[0]["prompt"]
 
 
+def test_refine_exam_bar_elementet_som_inte_ar_en_uppgift():
+    """Läraren pekar också på sidhuvudet, instruktionen och namnraderna — de har
+    inget uppgiftsnummer, och utan elementet gick önskemålet ut som «gör den
+    kortare» utan att säga vad «den» var. Bär önskemålet ett nummer är numret
+    precisare och elementet tigs om."""
+    llm, calls = _stub_llm([json.dumps(_exam()), json.dumps(_exam())])
+    exam_gen.refine_exam(_exam(), "skriv om den", model="m", llm=llm,
+                         mal={"namn": "Instruktionen",
+                              "innehall": "Miniräknare får användas på del B."})
+    assert "PEKADE PÅ «Instruktionen»" in calls[0]["prompt"]
+    assert "Miniräknare får användas" in calls[0]["prompt"]
+    exam_gen.refine_exam(_exam(), "gör den svårare", model="m", llm=llm,
+                         nummer=4, mal={"namn": "Uppgift 4", "innehall": "…"})
+    assert "uppgift 4" in calls[1]["prompt"]
+    assert "PEKADE PÅ" not in calls[1]["prompt"]
+
+
 def test_fix_latex_rounds_cap():
     llm, calls = _stub_llm([json.dumps(_exam())])
     res = exam_gen.fix_latex(_exam(), "! Missing $ inserted.", model="m", llm=llm)

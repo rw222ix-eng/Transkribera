@@ -906,15 +906,20 @@ def build_repair_prompt(exam: dict, problems: list, profil: str = "prov") -> str
 
 
 def build_refine_prompt(exam: dict, instruction: str,
-                        nummer: int | None = None) -> str:
-    """Riktad omgenerering: 'byt uppgift 4', 'gör 7 svårare' …"""
-    mal = (f"Lärarens önskemål gäller uppgift {nummer}: {instruction}"
-           if nummer else f"Lärarens önskemål: {instruction}")
+                        nummer: int | None = None,
+                        mal: dict | None = None) -> str:
+    """Riktad omgenerering: 'byt uppgift 4', 'gör 7 svårare' …
+
+    `nummer` är uppgiften önskemålet gäller. `mal` är det läraren PEKADE PÅ i
+    granskningen när det inte är en uppgift — sidhuvudet, instruktionen,
+    namnraderna, en post i facit (llm_client.malrad)."""
+    onskemal = (f"Lärarens önskemål gäller uppgift {nummer}: {instruction}"
+                if nummer else f"Lärarens önskemål: {instruction}")
     return (
         f"{INSTRUCTION}\n"
         "Här är det nuvarande provet:\n"
         f"{json.dumps(exam, ensure_ascii=False)}\n\n"
-        f"{mal}\n\n"
+        f"{'' if nummer else llm_client.malrad(mal)}{onskemal}\n\n"
         "Skriv om HELA provet som JSON med önskemålet genomfört. Övriga "
         "uppgifter lämnas oförändrade. Svara med enbart JSON."
     )
@@ -1201,13 +1206,14 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
 
 def refine_exam(exam: dict, instruction: str, *, model: str,
                 nummer: int | None = None, profil: str = "prov",
+                mal: dict | None = None,
                 llm=llm_client.generate,
                 max_rounds: int = MAX_ROUNDS,
                 log_cb: Callable[[str], None] | None = None) -> dict:
     """Riktad omgenerering (per-uppgift-chatt); validera + auto-reparera."""
     log = log_cb or (lambda _m: None)
     log("Uppdaterar provet …")
-    candidate = _llm_round(build_refine_prompt(exam, instruction, nummer),
+    candidate = _llm_round(build_refine_prompt(exam, instruction, nummer, mal),
                            model, llm)
     if candidate is None:
         return {"exam": exam,

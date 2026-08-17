@@ -287,10 +287,11 @@ def test_refine_updates_board(llm_ready, monkeypatch):
     updated["title"] = "Uppdaterad"
     captured = {}
 
-    def fake_refine(board, instruction, *, model, llm=None,
+    def fake_refine(board, instruction, *, model, mal=None, llm=None,
                     max_rounds=lesson_board.MAX_ROUNDS, log_cb=None,
                     token_cb=None):
         captured["instruction"] = instruction
+        captured["mal"] = mal
         return {"board": updated, "errors": [], "rounds": 1}
     monkeypatch.setattr(lesson_board, "refine_board", fake_refine)
 
@@ -299,6 +300,14 @@ def test_refine_updates_board(llm_ready, monkeypatch):
     result = _done(r)
     assert result["board"]["title"] == "Uppdaterad"
     assert captured["instruction"] == "byt exempel 2"
+    assert captured["mal"] is None          # inget klick → hela tavlan, som förut
+
+    # Pekade läraren på en ruta i granskningen ska den följa hela vägen ner.
+    r2 = llm_ready.post(f"/api/planning/{pid}/refine",
+                        json={"message": "gör den kortare",
+                              "mal": {"namn": "Formel 3", "innehall": "a^2+b^2=c^2"}})
+    _done(r2)
+    assert captured["mal"] == {"namn": "Formel 3", "innehall": "a^2+b^2=c^2"}
 
 
 # ------------------------------------------------------------ klockslaget --
@@ -683,7 +692,7 @@ def test_refine_far_hela_meddelandet_inklusive_kallviktningen(llm_ready, monkeyp
 
     sett = {}
 
-    def fake_refine(board, message, *, model, llm=None,
+    def fake_refine(board, message, *, model, mal=None, llm=None,
                     max_rounds=lesson_board.MAX_ROUNDS, log_cb=None, token_cb=None):
         sett["message"] = message
         return {"board": _valid_board(), "errors": [], "rounds": 1}

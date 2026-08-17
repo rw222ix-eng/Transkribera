@@ -110,8 +110,14 @@
      en flik, frågan i fältet är svenska. */
   const BEST = { 'hela dokumentet': 'dokumentet', 'lösningsförslag': 'lösningsförslaget', 'provet': 'provet' };
   const bestamd = namn => { const n = String(namn || '').toLowerCase(); return BEST[n] || n; };
+  /* Namnet räcker för läraren men inte för modellen: «Formel 3» och «Uppgift B»
+     står ingenstans i dokumentet den skriver om. Innehållet gör det — det är
+     det enda som pekar ut elementet i JSON:en. Kapat, för ett block kan vara
+     långt och prompten har annat att bära. */
+  const innehall = el => (el.dataset.text || el.textContent || '')
+    .replace(/\s+/g, ' ').trim().slice(0, 300);
   function satMal(el) {
-    mal = el ? { el: el.dataset.el, namn: etikett(el) } : null;
+    mal = el ? { el: el.dataset.el, namn: etikett(el), text: innehall(el) } : null;
     const bred = arkNamn();
     $('.gmaltext', $('#g-mal')).textContent = mal ? mal.namn : bred;
     $('#g-mal').toggleAttribute('data-satt', !!mal);
@@ -127,7 +133,10 @@
     const el = e.target.closest('[data-el]');
     if (!el) return;
     e.stopPropagation();
-    satMal(el);
+    /* Samma element igen betyder «inte det här heller». Utan det satt
+       markeringen kvar hur mycket man än klickade, och enda vägen ur den var
+       krysset i målrutan — som man ska behöva hitta först. */
+    satMal(mal && mal.el === el.dataset.el ? null : el);
   });
 
   /* en nål per skickad ändring, numrerad i trådens ordning */
@@ -248,7 +257,10 @@
     const tom = $('#g-tom');
     if (tom) tom.hidden = true;
     nr++;
-    const post = { id: nr, el: mal ? mal.el : '', namn: mal ? mal.namn : arkNamn(), text };
+    const post = { id: nr, el: mal ? mal.el : '', namn: mal ? mal.namn : arkNamn(),
+                   /* Vad elementet FAKTISKT innehåller. Följer med till servern
+                      så att omskrivningen gäller det läraren pekade på. */
+                   innehall: mal ? mal.text : '', text };
     kommentarer.push(post);
     const varv = document.createElement('div');
     varv.className = 'gvarv';
@@ -273,7 +285,8 @@
       /* Skrevs pappret av servern går ändringen dit — hela texten, inklusive
          det ett klick på en källa la till («Ta mer ur boken …»), är prompten.
          Annars är det prototypens omskrivning, som förut. */
-      jobb: host && host.onJobb ? k => host.onJobb(text, post.namn, post.el, k)
+      jobb: host && host.onJobb ? k => host.onJobb(text, post.namn, post.el, k,
+        post.el ? { el: post.el, namn: post.namn, innehall: post.innehall } : null)
         /* Inget riktigt anrop — prototypen, eller ett papper appen skrev själv.
            Då är väntan prototypens egen, precis som förut. */
         || new Promise(r => setTimeout(r, 1400)) : null,

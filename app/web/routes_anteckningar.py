@@ -227,6 +227,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
         if not message:
             return JSONResponse({"error": "skriv vad som ska ändras"},
                                 status_code=400)
+        # Avsnittet läraren pekade på i granskningen (llm_client.malrad).
+        mal = body.get("mal") if isinstance(body.get("mal"), dict) else None
         conn = db.connect(db_file)
         try:
             view = db.get_exam(conn, note_id)
@@ -244,7 +246,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 if arbiter.ensure_llm() is None:
                     raise RuntimeError("Språkmodellen är inte installerad.")
                 res = notes_gen.refine_notes(
-                    view["exam"], message, model=_model_name(),
+                    view["exam"], message, model=_model_name(), mal=mal,
                     log_cb=lambda m: emit({"type": "log", "msg": m}),
                     token_cb=lambda t: emit({"type": "token", "text": t}))
                 if res["notes"] is not None and res["notes"] != view["exam"]:

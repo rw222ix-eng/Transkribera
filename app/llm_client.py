@@ -63,6 +63,31 @@ _CHAT_SYSTEM_CITED = (
     "\n\nTRANSKRIPT:\n"
 )
 
+# ── Elementet läraren pekade på ──────────────────────────────────────────────
+# Granskningen låter läraren klicka på en ruta i tavlan, en uppgift på bladet
+# eller en rad i anteckningarna och sedan skriva vad som ska ändras. Klicket
+# fastnade förr i webbläsaren: bara meningen gick till modellen, som fick gissa
+# vilken av tjugo rutor «gör den kortare» handlade om — och ändrade en annan.
+#
+# Namnet är lärarens etikett («Formel 3», «Uppgift B») och finns inte i
+# dokumentets JSON. Innehållet gör det, och det är därför innehållet som pekar
+# ut elementet. Delas av tavlan, provet och anteckningarna: alla tre skriver om
+# ett helt JSON-dokument och behöver samma mening om vad som ska röras.
+
+def malrad(mal: dict | None) -> str:
+    """En rad om elementet läraren pekade på, eller "" när hon inte pekade."""
+    if not isinstance(mal, dict):
+        return ""
+    namn = str(mal.get("namn") or "").strip()
+    innehall = " ".join(str(mal.get("innehall") or "").split())[:300].strip()
+    if not namn and not innehall:
+        return ""
+    vad = f"«{namn}»" if namn else "ett element"
+    om = f' — som innehåller: "{innehall}"' if innehall else ""
+    return (f"Läraren PEKADE PÅ {vad}{om}. Önskemålet gäller det elementet: "
+            "ändra det och låt allt annat i dokumentet stå oförändrat.\n")
+
+
 # Kalenderförmågan i lektionschatten: modellen skapar/ändrar kalenderförslaget
 # genom att avsluta svaret med en maskinläsbar rad som frontenden tolkar och
 # döljer. Instruktionen läggs bara på när anroparen skickar calendar=True.

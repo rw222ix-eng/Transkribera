@@ -608,6 +608,9 @@ def create_router(base: Path, arbiter) -> APIRouter:
         if not message:
             return JSONResponse({"error": "skriv vad som ska ändras"},
                                 status_code=400)
+        # Rutan läraren pekade på i granskningen — {"namn", "innehall"}, se
+        # llm_client.malrad. Saknas den gäller önskemålet hela tavlan, som förut.
+        mal = body.get("mal") if isinstance(body.get("mal"), dict) else None
 
         gpu = arbiter.try_acquire_gpu()
         if not gpu:
@@ -618,7 +621,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 if arbiter.ensure_llm() is None:
                     raise RuntimeError("Språkmodellen är inte installerad.")
                 res = lesson_board.refine_board(
-                    st["board"], message, model=_model_name(),
+                    st["board"], message, model=_model_name(), mal=mal,
                     log_cb=lambda m: emit({"type": "log", "msg": m}),
                     token_cb=lambda t: emit({"type": "token", "text": t}))
                 if res["board"] is not None:

@@ -2517,27 +2517,40 @@
   /* Anropet bakom en ändring i canvas. Hela meddelandet går som prompt — också
      det ett klick på en källa la till («Ta mer ur boken …»), för viktningen ÄR
      en mening läraren skrev. */
-  function iterationsJobb(text, _etikett, _elId, krokar) {
+  function iterationsJobb(text, _etikett, elId, krokar, valt) {
     const v = versioner[nu];
     if (!serverPa() || !v) return null;
     const krav = r => {
       if (!r) throw new Error('Servern slutade svara mitt i omskrivningen. Försök igen.');
       return r;
     };
+    /* MÅLET MÅSTE MED. Klickade läraren på ett element i pappret skickades
+       ändå bara meningen, och modellen fick gissa vilken av tjugo rutor «gör
+       den kortare» handlade om — den ändrade något annat, och markeringen i
+       canvas pekade på ett element servern aldrig hört om. Namnet är för
+       läraren, innehållet är det som går att hitta i dokumentets JSON. */
+    const mal = valt && valt.namn
+      ? { namn: valt.namn, innehall: valt.innehall || '' } : null;
+    const kropp = mal ? { message: text, mal } : { message: text };
     if (v.wbId) {
       return window.API.strom(`/api/planning/${v.wbId}/refine`,
-                              { message: text }, krokar).then(krav);
+                              kropp, krokar).then(krav);
     }
     if (v.provId) {
+      /* Provet har en riktad väg sedan tidigare: `nummer` låser omskrivningen
+         till EN uppgift. Elementets id bär numret («uppg3»), så klicket kan
+         använda den i stället för att modellen ska läsa ut det ur meningen. */
+      const nr = (String(elId || '').match(/^uppg(\d+)$/) || [])[1];
       return window.API.strom(`/api/exams/${v.provId}/refine`,
-                              { message: text }, krokar).then(krav).then(r => {
+                              nr ? Object.assign({ nummer: Number(nr) }, kropp) : kropp,
+                              krokar).then(krav).then(r => {
         if (!r.exam) throw new Error('Omskrivningen gick inte igenom. Försök igen.');
         return r;
       });
     }
     if (v.antId) {
       return window.API.strom(`/api/anteckningar/${v.antId}/refine`,
-                              { message: text }, krokar).then(krav).then(r => {
+                              kropp, krokar).then(krav).then(r => {
         if (!r.anteckningar) throw new Error('Omskrivningen gick inte igenom. Försök igen.');
         return r;
       });
@@ -2617,7 +2630,9 @@
       onAndra: (text, etikett, elId, res) => iterera(text, etikett, elId, res),
       /* Finns ingen server, eller är pappret prototypens, returneras null och
          canvas kör sin egen takt precis som förut. */
-      onJobb: (text, etikett, elId, krokar) => iterationsJobb(text, etikett, elId, krokar),
+      /* `valt` är elementet läraren pekade på i pappret — det MÅSTE hela vägen
+         fram, annars gissar modellen vad «gör den kortare» gäller. */
+      onJobb: (text, etikett, elId, krokar, valt) => iterationsJobb(text, etikett, elId, krokar, valt),
       onBild: elId => valjBild(elId)
     });
   });

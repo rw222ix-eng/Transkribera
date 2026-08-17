@@ -125,3 +125,32 @@ def test_bildfraga_far_egen_systemtext_och_bilderna_med(fangat, tmp_path):
     assert "bifogade bilder" in fangat["system"]
     assert "TRANSKRIPT:" not in fangat["system"]
     assert fangat["bilder"] == [str(bild)]
+
+
+# ── Elementet läraren pekade på ──────────────────────────────────────────────
+# Raden delas av tavlan, provet och anteckningarna. Den ska säga något bara när
+# läraren faktiskt pekade — en tom rad i prompten är en instruktion om ingenting.
+
+def test_malraden_namnger_elementet_och_dess_innehall():
+    rad = lc.malrad({"namn": "Formel 3", "innehall": "a^2 + b^2 = c^2"})
+    assert "PEKADE PÅ «Formel 3»" in rad
+    assert 'innehåller: "a^2 + b^2 = c^2"' in rad
+    assert rad.endswith("\n")
+
+
+def test_malraden_klarar_ett_element_utan_text():
+    """En figur eller en graf har inget innehåll att citera — namnet får bära."""
+    rad = lc.malrad({"namn": "Figuren", "innehall": ""})
+    assert "«Figuren»" in rad and "innehåller" not in rad
+
+
+def test_malraden_ar_tom_utan_mal():
+    assert lc.malrad(None) == ""
+    assert lc.malrad({}) == ""
+    assert lc.malrad({"namn": "  ", "innehall": ""}) == ""
+    assert lc.malrad("Formel 3") == ""          # fel form → ingen rad
+
+
+def test_malraden_kapar_ett_langt_block():
+    rad = lc.malrad({"namn": "Blocket", "innehall": "x" * 900})
+    assert "x" * 300 in rad and "x" * 301 not in rad

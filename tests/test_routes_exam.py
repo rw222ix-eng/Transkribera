@@ -108,18 +108,27 @@ def test_refine_adds_version(client, monkeypatch):
     captured = {}
 
     def fake_refine(exam, message, *, model, nummer=None, profil="prov",
-                    llm=None, max_rounds=exam_gen.MAX_ROUNDS, log_cb=None):
+                    mal=None, llm=None, max_rounds=exam_gen.MAX_ROUNDS,
+                    log_cb=None):
         captured["message"] = message
         captured["nummer"] = nummer
+        captured["mal"] = mal
         return {"exam": updated, "errors": [], "rounds": 1}
     monkeypatch.setattr(exam_gen, "refine_exam", fake_refine)
 
     r = client.post(f"/api/exams/{result['id']}/refine",
                     json={"message": "byt uppgift 1", "nummer": 1})
     res = _done(r)
-    assert captured == {"message": "byt uppgift 1", "nummer": 1}
+    assert captured == {"message": "byt uppgift 1", "nummer": 1, "mal": None}
     assert len(res["versions"]) == 2
     assert res["exam"]["uppgifter"][0]["text"] == "Ny uppgift $x = 2$."
+
+    # Elementet läraren pekade på — sidhuvudet har inget uppgiftsnummer.
+    _done(client.post(f"/api/exams/{result['id']}/refine",
+                      json={"message": "skriv om den",
+                            "mal": {"namn": "Sidhuvudet", "innehall": "Ma 1c · NA26F"}}))
+    assert captured["nummer"] is None
+    assert captured["mal"] == {"namn": "Sidhuvudet", "innehall": "Ma 1c · NA26F"}
 
 
 def test_refine_requires_message(client, monkeypatch):

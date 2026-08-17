@@ -382,6 +382,10 @@ def create_router(base: Path, arbiter) -> APIRouter:
             return JSONResponse({"error": "skriv vad som ska ändras"},
                                 status_code=400)
         nummer = body.get("nummer")
+        # Elementet läraren pekade på när det INTE är en uppgift: sidhuvudet,
+        # instruktionen, en post i facit (llm_client.malrad). Bär önskemålet ett
+        # uppgiftsnummer är det numret som gäller — det är precisare.
+        mal = body.get("mal") if isinstance(body.get("mal"), dict) else None
         conn = db.connect(db_file)
         try:
             view = db.get_exam(conn, exam_id)
@@ -400,7 +404,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     raise RuntimeError("Språkmodellen är inte installerad.")
                 res = exam_gen.refine_exam(
                     view["exam"], message, model=_model_name(),
-                    nummer=int(nummer) if nummer else None,
+                    nummer=int(nummer) if nummer else None, mal=mal,
                     profil=view.get("typ") or "prov",
                     log_cb=lambda m: emit({"type": "log", "msg": m}))
                 if res["exam"] is not None and res["exam"] != view["exam"]:

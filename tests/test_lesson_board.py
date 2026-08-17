@@ -468,6 +468,24 @@ def test_refine_board_applies_instruction():
     assert "byt exempel 2" in calls[0]["prompt"]
 
 
+def test_refine_board_bar_elementet_lararen_pekade_pa():
+    """Klicket i granskningen fastnade i webbläsaren: bara meningen gick till
+    modellen, som fick gissa vilken av tjugo rutor «gör den kortare» gällde.
+    Namnet är lärarens etikett och finns inte i JSON:en — innehållet gör det,
+    och det är innehållet som pekar ut rutan."""
+    llm, calls = _stub_llm([json.dumps(_valid_doc())])
+    lb.refine_board(_valid_doc(), "gör den kortare", model="m", llm=llm,
+                    mal={"namn": "Formel 3", "innehall": "a^2 + b^2 = c^2"})
+    prompt = calls[0]["prompt"]
+    assert "PEKADE PÅ «Formel 3»" in prompt
+    assert "a^2 + b^2 = c^2" in prompt
+    assert "låt allt annat i dokumentet stå oförändrat" in prompt
+    # Och utan klick står prompten som förut — ingen rad om något element.
+    llm2, calls2 = _stub_llm([json.dumps(_valid_doc())])
+    lb.refine_board(_valid_doc(), "gör den kortare", model="m", llm=llm2)
+    assert "PEKADE PÅ" not in calls2[0]["prompt"]
+
+
 def test_refine_board_autorepairs_invalid_result():
     llm, calls = _stub_llm([json.dumps(_broken_doc()), json.dumps(_valid_doc())])
     res = lb.refine_board(_valid_doc(), "gör om", model="m", llm=llm)

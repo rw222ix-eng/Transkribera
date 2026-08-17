@@ -182,3 +182,74 @@ test("utan server kör canvas prototypens omskrivning som förut", async ({ page
   await expect(page.locator("#g-antal")).toHaveText("1 ändring", { timeout: 20_000 });
   expect(natanrop).toEqual([]);
 });
+
+// ── Elementet läraren pekade på ─────────────────────────────────────────────
+// Klicket i pappret fastnade i webbläsaren: bara meningen gick till servern, så
+// modellen fick gissa vilken av tjugo rutor «gör den kortare» gällde. Och
+// markeringen gick inte att klicka bort igen.
+
+async function valjElement(page, n = 0) {
+  await page.locator("#g-valj").click();          // «Välj element» på
+  const el = page.locator("#granskaskal .gdok [data-el]").nth(n);
+  await el.click();
+  return el;
+}
+
+test("elementet läraren pekade på följer med till servern", async ({ page }) => {
+  const anrop = await fejka(page);
+  await page.goto("/");
+  await hydrerad(page);
+  await skrivTavla(page);
+  await oppnaCanvas(page);
+
+  const el = await valjElement(page);
+  const vantat = await el.evaluate(e => ({
+    namn: e.dataset.namn,
+    text: (e.textContent || "").replace(/\s+/g, " ").trim().slice(0, 300),
+  }));
+  // Målrutan visar vad ändringen gäller, med elementets eget namn.
+  await expect(page.locator("#g-mal")).toHaveAttribute("data-satt", "");
+  await expect(page.locator("#g-mal .gmaltext")).toHaveText(vantat.namn);
+
+  await page.locator("#g-falt").fill("Gör den kortare");
+  await page.locator("#g-form").evaluate(f => f.requestSubmit());
+  await expect.poll(() => anrop.some(a => a.vag.endsWith("/refine")),
+                    { timeout: 20_000 }).toBe(true);
+  const kropp = anrop.find(a => a.vag.endsWith("/refine")).kropp;
+  expect(kropp.message).toBe("Gör den kortare");
+  expect(kropp.mal.namn).toBe(vantat.namn);
+  // Innehållet är det som pekar ut rutan i dokumentets JSON — namnet finns inte där.
+  expect(kropp.mal.innehall).toBe(vantat.text);
+});
+
+test("ett andra klick på samma element tar bort markeringen", async ({ page }) => {
+  await fejka(page);
+  await page.goto("/");
+  await hydrerad(page);
+  await skrivTavla(page);
+  await oppnaCanvas(page);
+
+  const el = await valjElement(page);
+  await expect(page.locator("#g-mal")).toHaveAttribute("data-satt", "");
+  await expect(el).toHaveAttribute("data-mal", "");
+
+  await el.click();                               // samma element igen
+  await expect(page.locator("#g-mal")).not.toHaveAttribute("data-satt", "");
+  await expect(el).not.toHaveAttribute("data-mal", "");
+  // Och då gäller ändringen arket igen, inte den gamla rutan.
+  await expect(page.locator("#g-falt")).toHaveAttribute("placeholder", /dokumentet|provet|lösningsförslaget/);
+});
+
+test("utan klick skickas inget mål — önskemålet gäller hela pappret", async ({ page }) => {
+  const anrop = await fejka(page);
+  await page.goto("/");
+  await hydrerad(page);
+  await skrivTavla(page);
+  await oppnaCanvas(page);
+
+  await page.locator("#g-falt").fill("Byt ut alla exemplen");
+  await page.locator("#g-form").evaluate(f => f.requestSubmit());
+  await expect.poll(() => anrop.some(a => a.vag.endsWith("/refine")),
+                    { timeout: 20_000 }).toBe(true);
+  expect(anrop.find(a => a.vag.endsWith("/refine")).kropp.mal).toBeUndefined();
+});

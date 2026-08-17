@@ -843,13 +843,20 @@ def build_repair_prompt(board_json: dict, problems: list) -> str:
     )
 
 
-def build_refine_prompt(board_json: dict, instruction: str) -> str:
-    """Chatt-iteration: lärarens ändringsönskemål ovanpå befintlig tavla."""
+def build_refine_prompt(board_json: dict, instruction: str,
+                        mal: dict | None = None) -> str:
+    """Chatt-iteration: lärarens ändringsönskemål ovanpå befintlig tavla.
+
+    `mal` är elementet läraren PEKADE PÅ i granskningen: {"namn", "innehall"}.
+    Utan det gick bara meningen ut, och «gör den kortare» kunde gälla vilken
+    som helst av tavlans rutor — modellen ändrade en annan. Namnet är lärarens
+    etikett («Formel 3»), innehållet är den text som går att hitta i JSON:en
+    ovan, och det är innehållet som pekar ut rutan."""
     return (
         f"{INSTRUCTION}\n"
         "Här är den nuvarande lektionstavlan:\n"
         f"{json.dumps(board_json, ensure_ascii=False)}\n\n"
-        f"Lärarens önskemål: {instruction}\n\n"
+        f"{llm_client.malrad(mal)}Lärarens önskemål: {instruction}\n\n"
         "Skriv om HELA tavlan som JSON med önskemålet genomfört. Ändra så "
         "lite som möjligt i övrigt. Svara med enbart JSON."
     )
@@ -1036,14 +1043,17 @@ def repair_board(board: dict, warnings: list[str], *, model: str,
 
 
 def refine_board(board: dict, instruction: str, *, model: str,
+                 mal: dict | None = None,
                  llm=llm_client.generate,
                  max_rounds: int = MAX_ROUNDS,
                  log_cb: Callable[[str], None] | None = None,
                  token_cb: Callable[[str], None] | None = None) -> dict:
-    """Chatt-iteration: genomför lärarens önskemål, validera, auto-reparera."""
+    """Chatt-iteration: genomför lärarens önskemål, validera, auto-reparera.
+
+    `mal` är rutan läraren pekade på i granskningen (llm_client.malrad)."""
     log = log_cb or (lambda _m: None)
     log("Uppdaterar tavlan …")
-    candidate = _llm_round(build_refine_prompt(board, instruction), model, llm,
+    candidate = _llm_round(build_refine_prompt(board, instruction, mal), model, llm,
                            token_cb=token_cb)
     if candidate is None:
         return {"board": board,
