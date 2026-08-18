@@ -358,3 +358,43 @@ test("klassprofilens bok är KURSENS, inte hyllans första", async ({ page }) =>
   // En klass appen aldrig sett ärver kursens bok, inte hyllans första.
   expect(await page.evaluate(() => window.Profil.forKlass("NA26F").bok)).toBe("");
 });
+
+test("kalenderraden citerar HELA lärarens lista — också det som inte står på sidorna",
+  async ({ page }) => {
+    /* Fyndet ur den skarpa körningen (2026-08-18): i kalendern stod «uppg.
+       1101–1103, 1105–1119», och raden i panelen sa «… i kalendern: 1101–1103,
+       1105–1115». Den skrevs ur skärningen mellan lärarens lista och de
+       uppgifter som HUNNIT läsas ur sidorna, så en sida som inte var inläst
+       kortade av hennes egen mening utan att säga det. */
+    await fejka(page, { uppslag: { fran: 2, till: 6, olasta: [], utan_fakta: [],
+      sidor: [], uppgifter: [
+        { nr: 1101, sida: 2, niva: 1 }, { nr: 1102, sida: 2, niva: 1 },
+        { nr: 1103, sida: 3, niva: 2 }, { nr: 1105, sida: 4, niva: 2 },
+        { nr: 1115, sida: 6, niva: 3 }] } });
+    await page.goto("/");
+    await hydrerad(page);
+    await oppnaBoken(page);
+    await page.evaluate(() => window.Uppslag.satt(2, 6));
+    await expect.poll(() => page.locator("#uppgnivaer .uppgchip").count()).toBe(5);
+
+    await page.evaluate(() => window.Uppgifter.franKalendern("1101–1103, 1105–1119"));
+    const rad = page.locator("#uppgforslag");
+    await expect(rad).toContainText("i kalendern: 1101–1103, 1105–1119.");
+    // …och det som inte gick att hitta sägs rakt ut i stället för att tystas bort.
+    await expect(rad).toContainText("1106–1114, 1116–1119 står inte på s. 2–6.");
+  });
+
+test("är sidorna inte inlästa säger raden DET — inte att uppgifterna saknas",
+  async ({ page }) => {
+    await fejka(page, { uppslag: { fran: 2, till: 6, olasta: [5, 6], utan_fakta: [],
+      sidor: [], uppgifter: [
+        { nr: 1101, sida: 2, niva: 1 }, { nr: 1105, sida: 4, niva: 2 }] } });
+    await page.goto("/");
+    await hydrerad(page);
+    await oppnaBoken(page);
+    await page.evaluate(() => window.Uppslag.satt(2, 6));
+    await expect.poll(() => page.locator("#uppgnivaer .uppgchip").count()).toBe(2);
+
+    await page.evaluate(() => window.Uppgifter.franKalendern("1101, 1105, 1119"));
+    await expect(page.locator("#uppgforslag")).toContainText("1119 har inte lästs in än.");
+  });

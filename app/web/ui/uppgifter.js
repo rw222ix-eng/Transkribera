@@ -178,7 +178,8 @@
     window.API.json(`/api/bocker/${id}/uppslag?fran=${s.fran}&till=${s.till}`)
       .then(d => {
         if (nyckelNu() !== nyck) return;         // spannet hann bytas
-        serverdata = { nyckel: nyck, uppgifter: d.uppgifter || [] };
+        serverdata = { nyckel: nyck, uppgifter: d.uppgifter || [],
+                       olasta: (d.olasta || []).length };
         forslag = forslaget();
         bort = standardbort();
         rita();
@@ -225,6 +226,24 @@
       jobb({}).then(klart, () => { laser = false; bett = ''; });
     }
   }
+  /* Raden citerar LÄRAREN, och då måste den citera rätt.
+     Den skrevs förr ur SKÄRNINGEN mellan hennes lista och de uppgifter som
+     hunnit läsas ur sidorna: stod «1101–1103, 1105–1119» i kalendern och sidan
+     med 1116–1119 inte var inläst sa raden «… i kalendern: 1101–1103,
+     1105–1115» — hennes egen mening, med hennes siffror, ändrad utan att någon
+     sa det. Hela listan står här nu, och det som inte gick att hitta på
+     uppslaget sägs rakt ut i stället för att tystas bort. Chipsen nedanför är
+     kvar som de var: de kan bara visa uppgifter som faktiskt lästs. */
+  function kalendertext(u) {
+    const bas = `Uppgifterna du skrivit på lektionen i kalendern: ${remsa([...onskade])}.`;
+    const saknas = [...onskade].filter(n => !u.some(x => x.nr === n));
+    if (!saknas.length) return bas;
+    const s = spann();
+    return serverdata && serverdata.olasta
+      ? `${bas} ${remsa(saknas)} har inte lästs in än.`
+      : `${bas} ${remsa(saknas)} står inte på s. ${s.fran}–${s.till}.`;
+  }
+
   const rort = () => {
     const f = standardbort();
     return bort.size !== f.size || [...bort].some(n => !f.has(n));
@@ -275,8 +294,7 @@
     /* Kom urvalet ur kalendern är det inte ett förslag att ta ställning till —
        raden säger var det kommer ifrån, så att ingen tror att appen valt. */
     if (!rort()) $('#uppgforslag').textContent = (onskade && u.some(x => onskade.has(x.nr)))
-      ? `Uppgifterna du skrivit på lektionen i kalendern: ${remsa(u.filter(x => onskade.has(x.nr)).map(x => x.nr))}.`
-      : forslagsText(forslag);
+      ? kalendertext(u) : forslagsText(forslag);
     $('#uppgater').hidden = !rort();
     const rader = $('#uppgnivaer');
     rader.innerHTML = '';
