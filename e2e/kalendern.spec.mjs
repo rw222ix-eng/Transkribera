@@ -351,7 +351,7 @@ test("varje lektion säger vad den handlar om — avsnittet när boken vet, anna
     await expect(kort).toHaveCount(2);
     /* Boken för Ma 2c står på hyllan: s. 210–215 ÄR «5.4 Extrempunkter och
        andraderivatan», och avsnittet säger mer än sidnumren. */
-    await expect(kort.nth(0).locator(".lektinnehall")).toHaveText("5.4 Extrempunkter och andraderivatan · s. 210–215");
+    await expect(kort.nth(0).locator(".lektinnehall")).toHaveText("5.4 Extrempunkter och andraderivatan, s. 210–215");
     /* Fysik 1a har ingen bok på hyllan. Då står sidorna för sig själva —
        sant, och mer än ingenting. Inget avsnitt ur en annan kurs lånas in. */
     await expect(kort.nth(1).locator(".lektinnehall")).toHaveText("s. 40–44");
@@ -373,3 +373,23 @@ test("lärarens egen rubrik i timmen står ensam — raden sägs inte två gång
     await expect(nu.locator(".lektbokat")).toHaveText("Tavla — 5.4 Extrempunkter");
     await expect(nu.locator(".lektinnehall")).toHaveCount(0);
   });
+
+test("ett spann över två avsnitt namnger båda — med sina egna sidor", async ({ page }) => {
+  /* Lektionen slutar ett avsnitt och börjar nästa: s. 200–210 är slutet på
+     «5.3 Deriveringsregler» (s. 198–206) och början på «5.4 Extrempunkter»
+     (s. 207–215). Kortet läste avsnittet på FÖRSTA sidan och stannade där —
+     halva lektionen fanns inte i texten. */
+  await fejka(page, { ...INNEHALLET,
+    innehall: [{ datum: "2026-11-02", tid: "09:05–10:20", klass: "NA25",
+                 kurs: "Matematik, nivå 2c", fran: 200, till: 210, uppg: "", hjalpmedel: "" }] });
+  await page.route("**/api/bocker", route => json(route, { bocker: HYLLAN }));
+  await vid(page, "2026-11-02");
+  await page.goto("/");
+  await hydrerad(page);
+  await page.getByRole("tab", { name: "Planering" }).click();
+  await stillaVecka(page);
+
+  const nu = page.locator("#schemagrid article.lekt").filter({ hasText: "NA25" });
+  await expect(nu.locator(".lektinnehall")).toHaveText(
+    "5.3 Deriveringsregler, s. 200–206 · 5.4 Extrempunkter och andraderivatan, s. 207–210");
+});

@@ -424,12 +424,19 @@ window.Klass = (() => {
      Sidorna säger sitt riktiga namn när kursens bok finns på hyllan: registret
      översätter s. 2–4 till «1.1 Kvadratrötter och kubikrötter». Utan bok för
      kursen står sidorna för sig själva — sant, och mer än ingenting. */
-  const parm = a => String(a.sid).split('–').map(n => Number(String(n).trim()));
+  const sidorna = (f, t) => f === t ? `s. ${f}` : `s. ${f}–${t}`;
   function innehallsrad(inn, kurs) {
-    const sid = inn.fran === inn.till ? `s. ${inn.fran}` : `s. ${inn.fran}–${inn.till}`;
     const A = (kurs && window.Bok && window.Bok.registerFor) ? (window.Bok.registerFor(kurs) || []) : [];
-    const a = A.find(x => { const [f, t] = parm(x); return inn.fran >= f && inn.fran <= t; });
-    return a ? `${a.nr} ${a.titel} · ${sid}` : sid;
+    const del = (window.Bok && window.Bok.avsnitten) ? window.Bok.avsnitten(A, inn.fran, inn.till) : [];
+    if (!del.length) return sidorna(inn.fran, inn.till);
+    /* Ett spann över ett halvt kapitel ska inte rada upp åtta rubriker på ett
+       kort — då säger första och sista mer än alla däremellan. */
+    if (del.length > 3) {
+      return `${del[0].a.nr}–${del[del.length - 1].a.nr} ${del[del.length - 1].a.titel}, ${sidorna(inn.fran, inn.till)}`;
+    }
+    /* Kommat binder avsnittet till SINA sidor, mittpunkten skiljer avsnitten åt:
+       «1.1 Kvadratrötter och kubikrötter, s. 5–6 · 1.2 Tal i potensform, s. 7–9». */
+    return del.map(d => `${d.a.nr} ${d.a.titel}, ${sidorna(d.fran, d.till)}`).join(' · ');
   }
 
   /* ── Lektionskortet ────────────────────────────────── */

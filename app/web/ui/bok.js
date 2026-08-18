@@ -150,6 +150,20 @@
     /* Bokens id på servern — uppslaget och skrivningen behöver det för att
        kunna be om sidorna. null för prototypens böcker: de finns ingenstans. */
     bokId: namn => ID_BOK[namn] || null,
+    /* ── Alla avsnitt ett sidspann rör vid ──
+       Ett spann stannar sällan i ETT avsnitt. TE26A:s s. 5–9 är slutet på
+       «1.1 Kvadratrötter och kubikrötter» (s. 5–6) och början på «1.2 Tal i
+       potensform» (s. 7–9) — men allt som läste registret slog upp avsnittet på
+       FÖRSTA sidan och stannade där. Veckans kort, uppslagets faktarad och
+       momentfältet sa alla «1.1», och momentet går vidare in i prompten: tavlan
+       byggdes för kubikrötter på en lektion som till hälften handlar om
+       potenser. Varje avsnitt får med sin DEL av spannet, så att sidorna kan
+       sägas per avsnitt och inte bara som en klump. */
+    avsnitten: (A, fran, till) => (A || []).map(a => {
+      const [f, t] = String(a.sid).split('–').map(Number);
+      const F = Math.max(f, fran), T = Math.min(t, till);
+      return T >= F ? { a, fran: F, till: T, hela: F === f && T === t } : null;
+    }).filter(Boolean),
     /* Vilken kurs en bok i hyllan är märkt med. Tom sträng betyder «gör inget
        anspråk» — en sådan bok får svara för vilken kurs som helst (namnFor),
        en märkt bok bara för sin egen. */

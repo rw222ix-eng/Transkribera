@@ -115,15 +115,22 @@
     });
   }
 
+  /* Alla avsnitt spannet rör vid, inte bara det på första sidan (bok.js
+     avsnitten). s. 5–9 är slutet på 1.1 OCH början på 1.2, och läraren som ser
+     «del av 1.1» tror att hon valt en halv lektion. */
+  const delarna = () => (window.Bok.avsnitten ? window.Bok.avsnitten(reg(), fran, till) : []);
+  const avsnittsnamn = () => delarna().map(d => `${d.a.nr} ${d.a.titel}`).join(' · ');
   function ritaSpann() {
     const antal = till - fran + 1;
+    const D = delarna();
     const a = avsnittFor(fran);
-    const hela = a && grans(a)[0] === fran && grans(a)[1] === till;
+    const hela = D.length === 1 && D[0].hela;
     spann.innerHTML = `<b></b><span class="bkfakta"></span><span class="bknyckla">från <input class="bknr" id="bkfran" type="text" inputmode="numeric" maxlength="3" aria-label="Från sida" /> till <input class="bknr" id="bktill" type="text" inputmode="numeric" maxlength="3" aria-label="Till sida" /></span>`;
     $('b', spann).textContent = `s. ${fran}–${till}`;
     $('.bkfakta', spann).textContent = [
       `${antal} ${antal === 1 ? 'sida' : 'sidor'}`,
-      a ? (hela ? `hela ${a.nr} ${a.titel} · ${a.uppg} uppgifter` : `del av ${a.nr} ${a.titel}`) : 'utanför registret',
+      D.length ? (hela ? `hela ${a.nr} ${a.titel} · ${a.uppg} uppgifter`
+        : `${D.length > 1 ? 'över' : 'del av'} ${D.map(d => `${d.a.nr} ${d.a.titel}`).join(' och ')}`) : 'utanför registret',
       halv ? 'klicka sista sidan' : 'rulla i remsan för att bläddra'
     ].filter(Boolean).join(' · ');
     $('#bkfran', spann).setAttribute('value', fran);
@@ -171,8 +178,10 @@
   }
 
   function ritaAvsnitt() {
-    const a = avsnittFor(fran);
-    avsnittsknapp.textContent = a ? `${a.nr} ${a.titel}` : 'Välj avsnitt';
+    /* Dörren säger vad spannet ÄR, alla avsnitt det rör vid — inte bara det på
+       första sidan. Knappen är ändå vägen till listan; att den namnger två
+       avsnitt betyder bara att spannet gör det. */
+    avsnittsknapp.textContent = avsnittsnamn() || 'Välj avsnitt';
   }
 
   function rita() { ritaUppslag(); markera(); ritaSpann(); ritaAvsnitt(); }
@@ -190,13 +199,20 @@
     if (!moment) return;
     if (!tvinga && (moment.value || '').trim() && moment.value !== skrivet) return;
     const a = avsnittFor(fran);
-    moment.value = a ? `${a.nr} ${a.titel}` : `s. ${fran}–${till} ur ${bok}`;
+    /* MOMENTET går vidare in i prompten. Stod bara avsnittet på första sidan
+       där byggdes tavlan för kubikrötter på en lektion som till hälften handlar
+       om potenser — hälften av lektionen fanns inte i begäran. */
+    const namn = avsnittsnamn();
+    moment.value = namn || `s. ${fran}–${till} ur ${bok}`;
     skrivet = moment.value;
     moment.dataset.sidor = `s. ${fran}–${till}`;
     moment.removeAttribute('data-gissad');
     const g = $('#momentgissat'); if (g) g.hidden = true;
     const f = $('#momentfakta');
-    if (f) { f.hidden = false; f.querySelector('span:last-child').textContent = `${bok} · s. ${fran}–${till}${a ? ' · ' + a.uppg + ' uppgifter i avsnittet' : ''}`; }
+    /* Uppgiftsantalet gäller ETT avsnitt. Rör spannet flera är summan inte
+       avsnittets, och ett tal som inte betyder något är sämre än inget. */
+    const ettAvsnitt = delarna().length === 1;
+    if (f) { f.hidden = false; f.querySelector('span:last-child').textContent = `${bok} · s. ${fran}–${till}${a && ettAvsnitt ? ' · ' + a.uppg + ' uppgifter i avsnittet' : ''}`; }
     /* Bara 'input': det markerar steget som ifyllt utan att kasta en framåt.
        Vägen till steg 3 är knappen Nästa — en enda väg, som i riktning 02. */
     moment.dispatchEvent(new Event('input', { bubbles: true }));
