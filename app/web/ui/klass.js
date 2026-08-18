@@ -435,8 +435,17 @@ window.Klass = (() => {
       return `${del[0].a.nr}–${del[del.length - 1].a.nr} ${del[del.length - 1].a.titel}, ${sidorna(inn.fran, inn.till)}`;
     }
     /* Kommat binder avsnittet till SINA sidor, mittpunkten skiljer avsnitten åt:
-       «1.1 Kvadratrötter och kubikrötter, s. 5–6 · 1.2 Tal i potensform, s. 7–9». */
-    return del.map(d => `${d.a.nr} ${d.a.titel}, ${sidorna(d.fran, d.till)}`).join(' · ');
+       «1.1 Kvadratrötter och kubikrötter, s. 5–6 · 1.2 Tal i potensform, s. 7–9».
+
+       «Del av» är inte pynt. Avsnitt 1.1 heter «Kvadratrötter och kubikrötter»
+       och går över s. 2–6; lektionen på s. 2–4 är kvadratrötterna. Kortet
+       påstod hela rubriken och sa alltså mer än kalendern gjorde — läraren såg
+       «kubikrötter» på en lektion hon skrivit «kvadratrötter» om. Rubriken är
+       bokens, sidorna är lektionens, och att de inte täcker varandra ska
+       synas. (Vilken HALVA av avsnittet det är vet appen inte: registret är
+       innehållsförteckningen, och lärarens egna ord i beskrivningen får inte
+       sparas — se INTEGRITET i calendar_google.) */
+    return del.map(d => `${d.hela ? '' : 'del av '}${d.a.nr} ${d.a.titel}, ${sidorna(d.fran, d.till)}`).join(' · ');
   }
 
   /* ── Lektionskortet ────────────────────────────────── */
