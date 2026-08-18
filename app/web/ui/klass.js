@@ -397,6 +397,25 @@ window.Klass = (() => {
     return el;
   }
 
+  /* ── Vad lektionen handlar om ──────────────────────
+     Lärarens egen grovplanering står i kalendern, rad för rad: sidorna,
+     uppgifterna och hjälpmedlen per lektion (calendar_google → innehallFor).
+     Förvalen har alltid läst den — men VECKAN sa ingenting. Kortet fick en text
+     bara när läraren råkat lägga en egen post i lektionens timme, så av tolv
+     lektioner med sidor i kalendern visade två vad de handlade om, och resten
+     stod som anonyma rutor med tid och klass.
+
+     Sidorna säger sitt riktiga namn när kursens bok finns på hyllan: registret
+     översätter s. 2–4 till «1.1 Kvadratrötter och kubikrötter». Utan bok för
+     kursen står sidorna för sig själva — sant, och mer än ingenting. */
+  const parm = a => String(a.sid).split('–').map(n => Number(String(n).trim()));
+  function innehallsrad(inn, kurs) {
+    const sid = inn.fran === inn.till ? `s. ${inn.fran}` : `s. ${inn.fran}–${inn.till}`;
+    const A = (kurs && window.Bok && window.Bok.registerFor) ? (window.Bok.registerFor(kurs) || []) : [];
+    const a = A.find(x => { const [f, t] = parm(x); return inn.fran >= f && inn.fran <= t; });
+    return a ? `${a.nr} ${a.titel} · ${sid}` : sid;
+  }
+
   /* ── Lektionskortet ────────────────────────────────── */
   function lektkort(d, s) {
     const docs = dokFor(d.datum, s);
@@ -433,6 +452,16 @@ window.Klass = (() => {
     el.innerHTML = `<div class="lekttopp"><span class="lekttid">${start(s.tid) || ''}</span>${s.sal ? `<span class="lektsal">${s.sal}</span>` : ''}<span class="lektklass"></span></div><p class="lektnamn"></p>`;
     $('.lektklass', el).textContent = s.klass || '—';
     $('.lektnamn', el).textContent = kort(s.kurs) || 'Lektion';
+    /* Har läraren skrivit en egen rubrik i timmen står den redan längre ner,
+       ordagrant — då säger raden här samma sak en gång till. Provet har sitt
+       eget besked och ska inte få en sidsträcka bredvid sig. */
+    const inn = (rutan || bokatProv || !K.innehallFor) ? null : K.innehallFor(d.datum, s.klass, s.kurs);
+    if (inn) {
+      const r = document.createElement('p');
+      r.className = 'lektinnehall';
+      r.textContent = innehallsrad(inn, s.kurs);
+      el.appendChild(r);
+    }
 
     if (docs.length || insp.length) {
       el.appendChild(dokremsa(docs, insp, post));
@@ -878,6 +907,11 @@ window.Klass = (() => {
     window.Brief && window.Brief.rita();
   }
   rita();
+  /* Hyllan kommer ur servern och är sällan inne när veckan ritas första gången.
+     Innehållsraden på korten läser bokens register för att kunna säga
+     «5.4 Extrempunkter» i stället för «s. 210–215» — utan omritning stod
+     veckan kvar med bara sidnummer tills något annat råkade rita om den. */
+  document.addEventListener('bok-redo', () => rita());
   /* ritaVal: bara markeringarna. Planeringskön ropar på den när kön ändras eller
      släpps — utan den satt «Vald» kvar på korten efter «Börja om». */
   /* Terminsvyn har EN meny: kursraden. Den namnger klass OCH kurs, alltså allt

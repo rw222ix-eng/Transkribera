@@ -305,3 +305,71 @@ test("provet i lektionens timme går fortfarande sin egen väg",
     await expect(kort).toContainText("Prov bokat");
     await expect(kort.getByRole("button", { name: "Skriv provet" })).toBeVisible();
   });
+
+// ── Lektionens innehåll står på kortet ──────────────────────────────────
+// Lärarens grovplanering ligger i kalendern rad för rad: sidorna, uppgifterna
+// och hjälpmedlen per lektion. Förvalen har alltid läst den — men veckan sa
+// ingenting, så en lektion med sidor i kalendern stod som en anonym ruta med
+// tid och klass. Bara den timme läraren råkat lägga en EGEN post i fick text.
+
+/* Hyllan i testet: EN bok, märkt med Ma 2c. Registret är bokens egen
+   innehållsförteckning — det är den som översätter sidnummer till avsnitt. */
+const HYLLAN = [{
+  id: 1, namn: "Origo 2c", kurs: "Matematik, nivå 2c", sidor: 320, sidoffset: 0,
+  avsnitt: [
+    { nr: "5.3", titel: "Deriveringsregler", kap: "Kapitel 5 · Derivata", vag: "Produkt, kvot och kedja", sid: "198–206", uppg: 26 },
+    { nr: "5.4", titel: "Extrempunkter och andraderivatan", kap: "Kapitel 5 · Derivata", vag: "Teckenschema", sid: "207–215", uppg: 24 },
+  ],
+}];
+
+const INNEHALLET = {
+  schema: [
+    { dag: 1, tid: "09:05–10:20", kurs: "Matematik, nivå 2c", klass: "NA25", sal: "P807" },
+    { dag: 1, tid: "11:00–12:15", kurs: "Fysik 1a", klass: "TE25", sal: "I210" },
+  ],
+  lov: [],
+  poster: [],
+  innehall: [
+    { datum: "2026-11-02", tid: "09:05–10:20", klass: "NA25", kurs: "Matematik, nivå 2c",
+      fran: 210, till: 215, uppg: "3101–3110", hjalpmedel: "raknare" },
+    { datum: "2026-11-02", tid: "11:00–12:15", klass: "TE25", kurs: "Fysik 1a",
+      fran: 40, till: 44, uppg: "2201–2208", hjalpmedel: "" },
+  ],
+};
+
+test("varje lektion säger vad den handlar om — avsnittet när boken vet, annars sidorna",
+  async ({ page }) => {
+    await fejka(page, INNEHALLET);
+    await page.route("**/api/bocker", route => json(route, { bocker: HYLLAN }));
+    await vid(page, "2026-11-02");
+    await page.goto("/");
+    await hydrerad(page);
+    await page.getByRole("tab", { name: "Planering" }).click();
+    await stillaVecka(page);
+
+    const kort = page.locator("#schemagrid article.lekt");
+    await expect(kort).toHaveCount(2);
+    /* Boken för Ma 2c står på hyllan: s. 210–215 ÄR «5.4 Extrempunkter och
+       andraderivatan», och avsnittet säger mer än sidnumren. */
+    await expect(kort.nth(0).locator(".lektinnehall")).toHaveText("5.4 Extrempunkter och andraderivatan · s. 210–215");
+    /* Fysik 1a har ingen bok på hyllan. Då står sidorna för sig själva —
+       sant, och mer än ingenting. Inget avsnitt ur en annan kurs lånas in. */
+    await expect(kort.nth(1).locator(".lektinnehall")).toHaveText("s. 40–44");
+  });
+
+test("lärarens egen rubrik i timmen står ensam — raden sägs inte två gånger",
+  async ({ page }) => {
+    await fejka(page, { ...INNEHALLET,
+      poster: [{ datum: "2026-11-02", tid: "09:05–10:20", klass: "NA25",
+                 titel: "Tavla — 5.4 Extrempunkter", slag: "tavla", antal: 1 }] });
+    await page.route("**/api/bocker", route => json(route, { bocker: HYLLAN }));
+    await vid(page, "2026-11-02");
+    await page.goto("/");
+    await hydrerad(page);
+    await page.getByRole("tab", { name: "Planering" }).click();
+    await stillaVecka(page);
+
+    const nu = page.locator("#schemagrid article.lekt").filter({ hasText: "NA25" });
+    await expect(nu.locator(".lektbokat")).toHaveText("Tavla — 5.4 Extrempunkter");
+    await expect(nu.locator(".lektinnehall")).toHaveCount(0);
+  });
