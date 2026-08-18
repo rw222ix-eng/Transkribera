@@ -1,5 +1,6 @@
 import { defineConfig } from "@playwright/test";
 import { existsSync } from "node:fs";
+import { join } from "node:path";
 
 /* Webbläsaren sviten kör i — se kommentaren vid `channel` nedan. */
 const CHROME = process.env.CHROME_PATH || "/opt/pw-browsers/chromium";
@@ -16,6 +17,18 @@ const CHROME = process.env.CHROME_PATH || "/opt/pw-browsers/chromium";
  * Egen port (8751), skild från utvecklingsserverns 8750, så en igångvarande
  * dev-server inte tystar en trasig svit genom att svara i dess ställe.
  */
+/* Pythonen sviten startar servern med. Macen har ingen `python` alls — bara
+ * `python3` — och beroendena ligger i .venv, inte systemvitt: hela sviten föll
+ * på «python: command not found» innan den hunnit starta. Samma ordning som
+ * tools/miljo.sh: venv först, sedan plattformens namn. Behållaren har `python`
+ * i PATH som förr. */
+const ROT = join(__dirname, "..");
+const PY = existsSync(join(ROT, ".venv/bin/python"))
+  ? ".venv/bin/python"
+  : existsSync(join(ROT, ".venv/Scripts/python.exe"))
+    ? ".venv\\Scripts\\python.exe"
+    : process.platform === "darwin" ? "python3" : "python";
+
 /* Soak-körningen (tools/soak.py) startar EN server med en bas som lever kvar
  * mellan varven — det är hela poängen: läckor syns bara i ett hus som inte rivs
  * varje gång. Då ska sviten återanvända den servern i stället för att starta en
@@ -97,7 +110,7 @@ export default defineConfig({
     // base_dir pekar på reporoten — alltså lärarens riktiga transkribera.db,
     // history.json och Transkriberingar/ — och varje skrivande test hade
     // skrivit där. Se e2e/testserver.py.
-    command: `python e2e/testserver.py ${PORT}`,
+    command: `${PY} e2e/testserver.py ${PORT}`,
     cwd: "..",
     url: `http://127.0.0.1:${PORT}/`,
     reuseExistingServer: SOAK,
