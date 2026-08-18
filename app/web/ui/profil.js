@@ -384,7 +384,7 @@ window.Profil = (() => {
        göra den dagen, och appen ska inte räkna fram ett annat svar. Utan
        innehåll för just den lektionen är allt precis som förut. */
     const kal = (post && post.datum && window.Kalender && window.Kalender.innehallFor)
-      ? window.Kalender.innehallFor(post.datum, klass, kurs) : null;
+      ? window.Kalender.innehallFor(post.datum, klass, kurs, post.tid) : null;
     /* PROVET läser samma tabell men som en PERIOD: allt klassen gått igenom
        fram till provdagen, inte den enda lektion provet råkar ligga på. Det är
        lärarens egen grovplanering, och den slår både `provSpann` (räknat ur

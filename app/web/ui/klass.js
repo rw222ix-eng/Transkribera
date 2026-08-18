@@ -137,6 +137,9 @@ window.Klass = (() => {
      till den man råkade klicka sist. Annars fick man 9A ur kön och Matematik 4
      ur klicket: en kombination som inte finns i schemat. */
   const planeras = post => (window.PlanKo && window.PlanKo.aktiv && window.PlanKo.aktiv()) || post;
+  /* Är det samma lektion? Dag, timme och klass räcker — kursen kan skrivas om
+     under kön när schemat läses om (plankon farsk). */
+  const nyckeln = p => p ? `${p.datum}|${p.tid}|${p.klass}` : '';
   /* Vad lektionen redan har på sig — så att steg 1 kan säga det i stället för att
      föreslå en kopia. */
   function speglaFinns(post) {
@@ -175,6 +178,8 @@ window.Klass = (() => {
   function markera(post, el) {
     if (omprovDok) return omprovDag(post);
     if (!window.PlanKo) return;
+    /* Vilken lektion som planerades INNAN klicket — se avmarkeringen nedan. */
+    const fore = planeras(null);
     const pa = window.PlanKo.vaxla(post);
     if (el) el.toggleAttribute('data-vald', pa);
     const valda = window.PlanKo.valda ? window.PlanKo.valda() : [];
@@ -182,6 +187,17 @@ window.Klass = (() => {
       /* Sista lektionen avmarkerad: förvalen som appen själv satte släpper med. */
       if (!valda.length && window.Profil && window.Profil.slapp) window.Profil.slapp(true);
       if (!valda.length) speglaFinns(null);
+      /* Tog man bort den lektion som PLANERADES tar nästa i kön över. Fälten
+         fylldes om av kön (plankon fyll), men förvalen stod kvar hos den
+         borttagna: TE26A:s lektion blev stående med NA26F:s s. 2–6 fast
+         kalendern säger s. 2–4 om den. Den nya lektionen ska ha sina egna. */
+      else {
+        const nu = planeras(null);
+        if (nu && (!fore || nyckeln(nu) !== nyckeln(fore))) {
+          window.Profil && window.Profil.anvand && window.Profil.anvand(nu, nu.slag === 'prov' ? 'Prov' : null);
+          speglaFinns(nu);
+        }
+      }
       rita(true);
       return;
     }
@@ -455,7 +471,7 @@ window.Klass = (() => {
     /* Har läraren skrivit en egen rubrik i timmen står den redan längre ner,
        ordagrant — då säger raden här samma sak en gång till. Provet har sitt
        eget besked och ska inte få en sidsträcka bredvid sig. */
-    const inn = (rutan || bokatProv || !K.innehallFor) ? null : K.innehallFor(d.datum, s.klass, s.kurs);
+    const inn = (rutan || bokatProv || !K.innehallFor) ? null : K.innehallFor(d.datum, s.klass, s.kurs, s.tid);
     if (inn) {
       const r = document.createElement('p');
       r.className = 'lektinnehall';

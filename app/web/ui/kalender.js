@@ -75,10 +75,21 @@ window.Kalender = (() => {
   /* Lektionen känns igen på datum + klass + kurs — samma fält som lektionskortets
      post bär (klass.js). Kursen får saknas i posten utan att träffen går förlorad:
      en klass har sällan två lektioner samma dag i olika kurser, och står det bara
-     en rad på dagen är det den som gäller. */
-  const innehallFor = (datum, klass, kurs) => innehall.find(i => i.datum === datum
-    && (!klass || !i.klass || i.klass === klass)
-    && (!kurs || !i.kurs || i.kurs === kurs)) || null;
+     en rad på dagen är det den som gäller.
+
+     Men den SAMMA kursen två gånger på en dag är vanligt — och då skiljer bara
+     TIMMEN raderna åt. Utan den fick eftermiddagslektionen förmiddagens sidor,
+     eftersom `find` tog den första raden som passade dagen och kursen. Timmen
+     avgör när det finns flera att välja på; med en enda rad gäller den ändå,
+     också när tiden är skriven på ett annat sätt eller saknas. */
+  const innehallFor = (datum, klass, kurs, tid) => {
+    const kandidater = innehall.filter(i => i.datum === datum
+      && (!klass || !i.klass || i.klass === klass)
+      && (!kurs || !i.kurs || i.kurs === kurs));
+    if (kandidater.length < 2) return kandidater[0] || null;
+    const t = minuter(tid);
+    return (t != null && kandidater.find(i => minuter(i.tid) === t)) || kandidater[0];
+  };
 
   /* ── GROVPLANERINGEN ──────────────────────────────────
      Raderna ovan, en per lektion, ÄR lärarens grovplanering: hon skriver in

@@ -31,8 +31,8 @@ const SCHEMA = {
 const json = (route, kropp) => route.fulfill({
   status: 200, contentType: "application/json", body: JSON.stringify(kropp) });
 
-async function fejka(page) {
-  await page.route("**/api/schema", route => json(route, SCHEMA));
+async function fejka(page, schema = SCHEMA) {
+  await page.route("**/api/schema", route => json(route, schema));
   await page.route("**/api/lessons", route => json(route, []));
   await page.route("**/api/history", route => json(route, []));
   await page.route("**/api/klassprofil", route => json(route, {}));
@@ -45,8 +45,8 @@ const hydrerad = page => page.waitForFunction(() =>
   window.Kalender && window.Kalender.franServern() && window.PlanKo);
 
 /** Öppnar planeringen i en vecka med lektioner (klockan fryst på en torsdag). */
-async function planeringen(page) {
-  await fejka(page);
+async function planeringen(page, schema = SCHEMA) {
+  await fejka(page, schema);
   await page.clock.install({ time: new Date("2026-09-08T08:00:00") });  // tisdag v37
   await page.goto("/");
   await hydrerad(page);
@@ -209,4 +209,48 @@ test("en post som blivit äldre än schemat rättas mot schemat — inte dubbler
   // Kortet är sin egen lektion: klicket tar bort den ur kön, dubblerar den inte.
   await valj(page, 1);
   expect(await page.evaluate(() => window.PlanKo.valda().length)).toBe(0);
+});
+
+/* Kalendern säger vad varje ENSKILD lektion ska göra — lärarens grovplanering,
+   rad för rad. Två lektioner i samma kurs samma dag är därför sällan samma
+   sidor: NA26F har nittio minuter och s. 2–6, TE26A sextio och s. 2–4, båda i
+   Matematik, nivå 1c. Förvalet bar ändå med sig den förras spann. */
+const INNEHALLET = {
+  ...SCHEMA,
+  innehall: [
+    { datum: "2026-09-10", tid: "09:05–10:20", klass: "NA25", kurs: "Matematik, nivå 2c",
+      fran: 210, till: 217, uppg: "", hjalpmedel: "" },
+    { datum: "2026-09-10", tid: "13:10–14:25", klass: "NA25", kurs: "Matematik, nivå 2c",
+      fran: 218, till: 221, uppg: "", hjalpmedel: "" },
+  ],
+};
+
+test("samma kurs igen tar ändå kalenderns sidor för DEN lektionen", async ({ page }) => {
+  await planeringen(page, INNEHALLET);
+  await valj(page, 0, 2);                 // NA25 → NA25, samma kurs, olika sidor
+
+  await page.evaluate(() => window.PlanKo.starta());
+  await expect.poll(() => page.evaluate(() => window.Uppslag.spann().fran)).toBe(210);
+
+  await page.evaluate(() => window.PlanKo.nasta());
+  /* Boköppningen följer med — men sidorna är den nya lektionens, inte den
+     förras. Utan detta fick eftermiddagslektionen förmiddagens s. 210–217. */
+  const efter = await page.evaluate(() => window.Uppslag.spann());
+  expect(efter.fran).toBe(218);
+  expect(efter.till).toBe(221);
+});
+
+test("tas den planerade lektionen bort ur kön ärver nästa dess plats — och sina egna sidor", async ({ page }) => {
+  await planeringen(page, INNEHALLET);
+  await valj(page, 0, 2);
+  await expect.poll(() => page.evaluate(() => window.Uppslag.spann().fran)).toBe(210);
+
+  // Ångrar förmiddagen: eftermiddagen tar över kön — med SINA sidor.
+  await valj(page, 0);
+
+  expect(await page.evaluate(() => window.PlanKo.valda().length)).toBe(1);
+  expect(await page.evaluate(() => document.querySelector("#p-tid").value)).toBe("13:10–14:25");
+  const efter = await page.evaluate(() => window.Uppslag.spann());
+  expect(efter.fran).toBe(218);
+  expect(efter.till).toBe(221);
 });

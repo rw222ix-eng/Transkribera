@@ -225,6 +225,15 @@ window.PlanKo = (() => {
     const forra = ko[i];
     i++;
     const samma = !!(forra && ko[i] && forra.kurs === ko[i].kurs);
+    /* Men kalendern kan säga vad just DEN lektionen ska göra — lärarens egen
+       grovplanering, rad för rad (innehallFor). Då är «samma kurs» inget skäl
+       att låta förra lektionens spann stå kvar: NA26F har nittio minuter och
+       s. 2–6, TE26A har sextio och s. 2–4, båda i Matematik, nivå 1c samma dag.
+       Förvalet blev NA26F:s sidor på TE26A:s lektion. Står ingenting om den nya
+       lektionen gäller boköppningen som förut — det är då det enda vi vet. */
+    const kalendern = !!(K && K.innehallFor && ko[i]
+      && K.innehallFor(ko[i].datum, ko[i].klass, ko[i].kurs, ko[i].tid));
+    const bevara = samma && !kalendern;
     fyll(ko[i]);
     const m = $('#moment');
     if (m) { m.value = ''; m.dispatchEvent(new Event('input', { bubbles: true })); }
@@ -241,13 +250,13 @@ window.PlanKo = (() => {
     /* Momentet följer INTE med till nästa lektion: nästa klass är ofta en annan
        kurs, och «5.1 Derivatans definition» i Matematik 4 är fel bok. Uppslaget
        sätts om bara när kursen är densamma. */
-    if (samma && window.Uppslag && window.Uppslag.satt) {
+    if (bevara && window.Uppslag && window.Uppslag.satt) {
       const s = window.Uppslag.spann();
       if (s && s.fran) window.Uppslag.satt(s.fran, s.till);
     }
     /* Samma förval som när man klickar lektionen i veckan — klassens bok, sidorna
        efter dess förra lektion, dess centrala innehåll och det den brukar få. */
-    if (!samma && window.Profil && window.Profil.anvand) window.Profil.anvand(ko[i], ko[i].slag === 'prov' ? 'Prov' : null);
+    if (!bevara && window.Profil && window.Profil.anvand) window.Profil.anvand(ko[i], ko[i].slag === 'prov' ? 'Prov' : null);
     window.Klass && window.Klass.speglaFinns && window.Klass.speglaFinns(ko[i]);
     window.toast && window.toast(`Planerar ${kortnamn(ko[i])} — ${ko.length - i - 1} kvar efter den`);
     /* Man ska landa i steg 1 för nästa klass, inte där förra dokumentet låg. */
