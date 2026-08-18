@@ -416,7 +416,14 @@ window.Profil = (() => {
                     efter: '— den timmen är inte en boklektion, så inga sidor är förvalda.' };
     /* Boken kan saknas för kursen — sidorna sätts ändå. `bokval()` i plan.js
        skickar ingen bok när id:t saknas, och sidorna är sanna oavsett. */
-    } else if ((boken || kal || planering) && window.Uppslag && window.Uppslag.satt) {
+    /* SIDORNA sätts oavsett om en bok kunde väljas. `boken` stod med i villkoret
+       och höll så länge minnet ALLTID hade en bok — hyllans första dög. Nu är
+       den tom när kursen saknar bok på hyllan (BOK_FOR/arvdBok svarar «vet
+       inte»), och då stod förra lektionens spann kvar: klassbytet i kön bar med
+       sig s. 210–217 ur NA25:s Ma2c-bok in i TE25:s Ma1c-lektion — precis den
+       tysta katastrofen kön finns för att undvika. Sidorna är den nya klassens;
+       det vi inte vet är bara vad boken heter. */
+    } else if (window.Uppslag && window.Uppslag.satt) {
       if (boken && window.Uppslag.laggBok) window.Uppslag.laggBok(boken);
       const { fran, till } = planering ? planering : kal ? kal
         : (typ === 'Prov' ? provSpann(p) : nastaSpann(p));
