@@ -16,6 +16,29 @@ window.PlanKo = (() => {
   const etikett = p => [p.titel || p.kurs, p.klass, `${dagtext(p.datum)} ${p.tid}`].filter(Boolean).join(' · ');
   const kortnamn = p => `${(p.titel || p.kurs).replace('Matematik ', 'Ma ')}${p.klass ? ' · ' + p.klass : ''} ${p.tid.split('–')[0]}`;
 
+  /* ── Schemat äger kursen ──
+     En post i kön kan bli ÄLDRE än schemat: kalendern synkas om medan man
+     planerar, och rutan som var «Matematik, nivå 2c» när man klickade är
+     «Matematik, nivå 1c» nästa gång veckan ritas. Posten låg kvar med sin gamla
+     kurs, och eftersom `nyckel` bär kursen kände `har()` inte igen kortet — ett
+     nytt klick la in samma lektion en gång till, och den GAMLA sorterades först
+     och blev den som planerades. Följderna var tysta: remsan sa 2c på en
+     1c-lektion, hyllan har ingen bok märkt 2c så boken föll tillbaka på den
+     inlärda, och kalenderns sidor för dagen hittades inte alls (innehallFor
+     slår på kursen — «sidorna var inte förvalda»).
+
+     Finns en schemarad för dagen, klassen och timmen är dess kurs sanningen.
+     Utanför schemat — prov på annan dag, ett eget kort — står postens egen kvar. */
+  const minut = t => { const m = String(t || '').match(/(\d{1,2})[:.](\d{2})/); return m ? +m[1] * 60 + +m[2] : null; };
+  function farsk(post) {
+    if (!post || !post.datum || !K || !K.schemaFor) return post;
+    const t = minut(post.tid);
+    const rad = K.schemaFor(post.datum)
+      .find(s => s.klass === post.klass && (t == null || minut(s.tid) === t));
+    if (!rad || !rad.kurs || rad.kurs === post.kurs) return post;
+    return Object.assign({}, post, { kurs: rad.kurs, sal: rad.sal || post.sal });
+  }
+
   let valda = [], ko = [], i = -1, slutfort = false;
 
   const remsa = document.createElement('div');
@@ -24,9 +47,29 @@ window.PlanKo = (() => {
   remsa.innerHTML = '<span class="konnu"></span><span class="konlekt"></span><span class="konprickar"></span><span class="konknappar"></span>';
   panel.insertBefore(remsa, panel.firstChild);
 
-  const ordna = () => valda.sort((a, b) => (a.datum + a.tid).localeCompare(b.datum + b.tid));
+  /* Läses schemat om medan kön står kvar ska kön följa med — och två poster som
+     visar sig vara SAMMA lektion blir en. Utan hopslagningen låg den gamla kvar
+     först i turordningen (samma dag och timme sorterar lika) och var den som
+     planerades. */
+  function friska(lista) {
+    const ut = [];
+    lista.forEach(p => {
+      const f = farsk(p);
+      if (!ut.some(x => nyckel(x) === nyckel(f))) ut.push(f);
+    });
+    return ut;
+  }
+  const ordna = () => {
+    valda = friska(valda).sort((a, b) => (a.datum + a.tid).localeCompare(b.datum + b.tid));
+    if (i > -1 && ko.length) {
+      const forra = ko[i];
+      ko = friska(ko);
+      i = ko.length ? Math.max(0, ko.findIndex(p => nyckel(p) === nyckel(farsk(forra)))) : -1;
+    }
+  };
 
-  function fyll(p) {
+  function fyll(post) {
+    const p = farsk(post);
     const k = $('#p-klass'), ku = $('#p-kurs'), d = $('#p-datum'), t = $('#p-tid');
     /* Ingen lektion vald betyder tomma fält. Står de kvar stämplas nästa dokument
        med en lektion läraren just tagit bort. */
@@ -103,21 +146,26 @@ window.PlanKo = (() => {
     window.Klass && window.Klass.rita && window.Klass.rita();
   }
   function vaxla(post) {
-    const n = nyckel(post);
+    valda = friska(valda);
+    const n = nyckel(farsk(post));
     const fanns = valda.findIndex(p => nyckel(p) === n);
     if (fanns > -1) valda.splice(fanns, 1);
-    else valda.push(Object.assign({}, post));
+    else valda.push(Object.assign({}, farsk(post)));
     ordna();
     synk();
     ritaVal();
     return fanns === -1;
   }
-  const har = post => valda.some(p => nyckel(p) === nyckel(post));
-  const arNu = post => i > -1 && ko[i] && nyckel(ko[i]) === nyckel(post);
+  /* Igenkänningen går genom `farsk` på BÅDA sidor: annars slutar kortet i veckan
+     matcha sin egen post i kön så fort schemat läses om, och lektionen ser
+     omarkerad ut trots att den ligger i kön. */
+  const samma = (a, b) => nyckel(farsk(a)) === nyckel(farsk(b));
+  const har = post => valda.some(p => samma(p, post));
+  const arNu = post => i > -1 && ko[i] && samma(ko[i], post);
   /* Avklarade lektioner är de kön redan passerat. Veckan läser av dem för att
      kunna säga «Klar» i stället för «Vald» — med två klasser i kön är det den
      enda platsen där man ser var man är. */
-  const arKlar = post => (slutfort ? ko : ko.slice(0, Math.max(0, i))).some(p => nyckel(p) === nyckel(post));
+  const arKlar = post => (slutfort ? ko : ko.slice(0, Math.max(0, i))).some(p => samma(p, post));
 
   /* ── Kön ── */
   function starta() {
@@ -239,7 +287,7 @@ window.PlanKo = (() => {
   /* Omprovet väljer EN dag och startar direkt. Kön sätts om i ett svep — utan
      avbryt(), som också skulle släppa förvalen omprovet just har fyllt i. */
   function enbart(post) {
-    valda = [Object.assign({}, post)];
+    valda = [Object.assign({}, farsk(post))];
     ko = valda.slice();
     i = 0;
     fyll(ko[0]);

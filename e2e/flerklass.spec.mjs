@@ -182,3 +182,31 @@ test("veckan visar var i kön man står — vald, nu och klar", async ({ page })
   });
   expect(efter).toEqual({ forra: false, nu: true });
 });
+
+/* Kalendern läses om medan kön står kvar: rutan som var «Matematik, nivå 2c»
+   när man klickade är «Matematik, nivå 1c» nästa gång veckan ritas. Posten i kön
+   är då ÄLDRE än schemat — och eftersom nyckeln bär kursen kände veckan inte
+   igen sitt eget kort. Ett nytt klick la in samma lektion en gång till, den
+   gamla sorterades först (samma dag och timme sorterar lika) och blev den som
+   planerades. Följderna var tysta: remsan sa en kurs klassen inte läser, boken
+   föll tillbaka på minnets, och kalenderns sidor för dagen hittades inte alls —
+   innehallFor slår på kursen. Schemat äger kursen (plankon.js farsk). */
+test("en post som blivit äldre än schemat rättas mot schemat — inte dubblerad", async ({ page }) => {
+  await planeringen(page);
+
+  // Så såg rutan ut före omsynken: samma dag, klass och timme, annan kurs.
+  await page.evaluate(() => window.PlanKo.vaxla({
+    datum: "2026-09-10", tid: "11:00–12:15", kurs: "Matematik, nivå 2c",
+    klass: "TE25", sal: "I210",
+  }));
+
+  expect(await page.evaluate(() => window.PlanKo.valda().map(p => p.kurs)))
+    .toEqual(["Matematik, nivå 1c"]);
+  expect(await page.evaluate(() => document.querySelector("#p-kurs").value))
+    .toBe("Matematik, nivå 1c");
+  await expect(page.locator("#schemagrid .lekt").nth(1)).toHaveAttribute("data-vald", "");
+
+  // Kortet är sin egen lektion: klicket tar bort den ur kön, dubblerar den inte.
+  await valj(page, 1);
+  expect(await page.evaluate(() => window.PlanKo.valda().length)).toBe(0);
+});
