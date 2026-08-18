@@ -435,6 +435,23 @@ window.Profil = (() => {
          provet prövar innehållet — inte urvalet (se plan.js HELHETSTYPER). */
       if (kal && kal.uppg && !planering && typ !== 'Prov'
           && window.Uppgifter && window.Uppgifter.franKalendern) window.Uppgifter.franKalendern(kal.uppg);
+      /* MOMENTET är lärarens ord när hon skrivit några. Uppslaget härleder annars
+         momentet ur registret (uppslag.js skrivMoment), och registret känner bara
+         hela avsnitt: «1.1 Kvadratrötter och kubikrötter» på en lektion hon
+         skrivit «Kvadratrötter» om. Momentet går vidare in i prompten, så det
+         är inte bara en etikett — tavlan byggdes för kubikrötter också.
+         Bara när spannet ÄR lektionens: flyttar hon remsan själv är hennes rubrik
+         inte längre ett svar om de sidorna. */
+      const rubriker = (kal && !planering ? (kal.delar || []) : [])
+        .filter(d => d && d.rubrik && d.fran >= fran && d.till <= till)
+        .map(d => d.rubrik);
+      const mf = $('#moment');
+      if (rubriker.length && mf) {
+        mf.value = rubriker.join(' · ');
+        mf.dataset.sidor = `s. ${fran}–${till}`;
+        mf.removeAttribute('data-gissad');
+        mf.dispatchEvent(new Event('input', { bubbles: true }));
+      }
       spannText = `${boken ? boken + ' · ' : ''}s. ${fran}–${till}`;
       gjort.push(spannText);
       forval[2] = { text: spannText,

@@ -513,9 +513,19 @@ def _post(datum: str, tid: str, titel: str, klass: str) -> dict:
 #
 # INTEGRITET, och det är villkoret för att beskrivningen läses alls: allt
 # UNDER avdelaren (———) är lärarens egna anteckningar om enskilda elever.
-# Parsern skär bort den delen FÖRST och tittar bara på texten ovanför, och det
-# som kommer ut är dessutom bara heltal och en uppgiftslista — aldrig fri text
-# ur kalendern. Ingenting härifrån får någonsin persisteras i annan form.
+# Parsern skär bort den delen FÖRST och tittar bara på texten ovanför.
+#
+# Ovanför avdelaren får sedan 2026-08-18 också RUBRIKEN framför ett sidspann
+# läsas och sparas — orden «Kubikrötter» i «Kubikrötter: s. 5–6 · uppg. …».
+# Läraren bad om det själv, och skälet är att boken inte kan svara: avsnitt 1.1
+# i Liber Ma 1c heter «Kvadratrötter och kubikrötter» och går över s. 2–6, så
+# lektionen på s. 2–4 fick en rubrik som lovade dubbelt så mycket som läraren
+# skrivit. Hennes egna ord är det enda som vet vilken halva det är.
+#
+# Gränsen är smal och ska förbli det: bara texten FÖRE ett sidspann på samma
+# rad, ovanför avdelaren, kapad vid _RUBRIKTAK tecken. Raderna under avdelaren,
+# rader utan sidspann och beskrivningen som helhet lagras aldrig — de är
+# fortfarande lärarens anteckningar om enskilda elever.
 _AVDELARE = re.compile(r"[—–\-_=]{3,}")
 # «s. 2–6», «s 2-6», «sid. 12», «sidorna 40–48» — och den ensamma sidan «s. 7».
 _SIDOR = re.compile(r"\bs(?:id(?:a|or|orna)?)?\.?\s*(\d{1,4})"
@@ -526,23 +536,77 @@ _UPPGIFTER = re.compile(r"\buppg(?:ift(?:er(?:na)?)?)?\.?[ \t]*(\d[\d ,;.\t–�
                         re.IGNORECASE)
 
 
+# Rubriken är en etikett, inte en anteckning. Taket finns för att en rad som
+# svämmar över inte ska bli en väg att smuggla ut hela beskrivningen: det som
+# står före sidspannet på en rad är i praktiken ett par ord.
+_RUBRIKTAK = 60
+# Ledtecknen läraren skiljer rubrik från sidor med. Tas bort från slutet, så att
+# «Kubikrötter:» och «Kubikrötter –» båda blir «Kubikrötter».
+_RUBRIKSKRAP = " 	:–—-·•,;."
+
+
+def _rubrik(text: str) -> str:
+    """Orden framför sidspannet på raden, städade — eller tom sträng.
+
+    Bara sista raden räknas: står rubriken tre rader upp hör den till något
+    annat. Ett inledande listtecken eller avsnittsnummer får stå kvar; det är
+    lärarens sätt att skriva och säger något."""
+    rad = str(text or "").splitlines()[-1] if str(text or "").strip() else ""
+    # Uppgiftslistan och ett tidigare sidspann på samma rad är inte rubriker —
+    # «s. 2–4 · uppg. 1101–1103 · s. 7–9» har en rubrik för det första spannet
+    # (ingen) och ingen för det andra, inte «uppg. 1101–1103».
+    rad = _SIDOR.sub(" ", _UPPGIFTER.sub(" ", rad))
+    rubrik = rad.strip().strip(_RUBRIKSKRAP).strip()
+    # En rubrik som bara är siffror eller skiljetecken är ingen rubrik — det är
+    # resten av föregående spann («… 1116–1119 ·»).
+    if not re.search(r"[^\W\d_]", rubrik, re.UNICODE):
+        return ""
+    return rubrik[:_RUBRIKTAK].strip(_RUBRIKSKRAP).strip()
+
+
 def sidor_ur_beskrivning(description: str | None) -> dict:
-    """{fran, till, uppg} ur beskrivningens FÖRSTA del, eller {} när det inte
-    står några sidor där. Ingen gissning: står det ingenting säger funktionen
-    ingenting, och då gäller appens vanliga förval (klassprofilen).
+    """{fran, till, uppg, delar} ur beskrivningens FÖRSTA del, eller {} när det
+    inte står några sidor där. Ingen gissning: står det ingenting säger
+    funktionen ingenting, och då gäller appens vanliga förval (klassprofilen).
 
     ALLA spann räknas, inte bara det första: en lektion som avslutar ett
     avsnitt och börjar nästa skrivs som två rader — «Kubikrötter: s. 5–6 ·
     uppg. 1116–1119» och «Potenser: s. 7–9 · uppg. 1201–1212» — och lektionens
-    sidor är hela sträckan, uppgifterna båda listorna."""
+    sidor är hela sträckan, uppgifterna båda listorna.
+
+    `delar` bär spannen var för sig med lärarens egen rubrik framför var och
+    ett. Sammanslagningen till fran/till står kvar: allt som räknar sidor
+    (provets underlag, klassprofilens takt) ska fortsätta se lektionen som en
+    sträcka."""
     text = _AVDELARE.split(str(description or ""), 1)[0]
-    sidor = [(int(m.group(1)),
-              int(m.group(2)) if m.group(2) else int(m.group(1)))
-             for m in _SIDOR.finditer(text)]
-    if not sidor:
+    traffar = list(_SIDOR.finditer(text))
+    if not traffar:
         return {}                       # ingen sida → inget innehåll, punkt
-    fran = min(f for f, _ in sidor)
-    ut = {"fran": fran, "till": max(fran, max(t for _, t in sidor))}
+    delar = []
+    for n, m in enumerate(traffar):
+        f = int(m.group(1))
+        t = int(m.group(2)) if m.group(2) else f
+        # Uppgifterna som står EFTER det här spannet men före nästa hör till det.
+        slut = traffar[n + 1].start() if n + 1 < len(traffar) else len(text)
+        del_uppg = _uppgifterna(text[m.end():slut])
+        d = {"fran": f, "till": max(f, t)}
+        rubrik = _rubrik(text[traffar[n - 1].end() if n else 0:m.start()])
+        if rubrik:
+            d["rubrik"] = rubrik
+        if del_uppg:
+            d["uppg"] = del_uppg
+        delar.append(d)
+    fran = min(d["fran"] for d in delar)
+    ut = {"fran": fran, "till": max(fran, max(d["till"] for d in delar)),
+          "delar": delar}
+    listor = [d["uppg"] for d in delar if d.get("uppg")]
+    if listor:
+        ut["uppg"] = ", ".join(listor)
+    return ut
+
+
+def _uppgifterna(text: str) -> str:
+    """Uppgiftslistorna i en textbit, i appens form. Tom sträng när ingen står."""
     listor = []
     for u in _UPPGIFTER.finditer(text):
         # En form på spannen, samma som resten av appen skriver dem.
@@ -550,9 +614,7 @@ def sidor_ur_beskrivning(description: str | None) -> dict:
         lista = re.sub(r"\s*,\s*", ", ", lista).strip(" ,;.–")
         if lista:
             listor.append(lista)
-    if listor:
-        ut["uppg"] = ", ".join(listor)
-    return ut
+    return ", ".join(listor)
 
 
 # Verktygen som avgör provets upplägg. «Del A + Del B» finns för att det finns
@@ -670,6 +732,23 @@ def _kursens_former(kurs: str) -> tuple[str, ...]:
             return tuple(sorted(set(namn) | {
                 re.sub(r"(?<=[a-zåäö])(?=\d)", " ", f) for f in namn}))
     return ()
+
+
+def ar_rubrik_inte_kurs(namn: str, klasser) -> bool:
+    """Ar "TE26A: Genomgang av prov 4" en KURS? Nej - det ar rubriken pa en
+    lektion, och den hamnade i kursfaltet for att Claudes bedomning av en omdopt
+    instans togs rakt av (se kursarvet nedan).
+
+    Det gjorde felet sjalvforstarkande: kursen skrevs in i courses, kom tillbaka
+    i `kurser` vid nasta synk, och da matchade `_kurs_i_titeln` rubriken mot sig
+    sjalv - alltsa steg ETT i arvet, det som ska vara lararens egna ord. En hel
+    termins fredagar for TE26A stod som kursen "TE26A: Genomgang av prov 4".
+
+    Formen ar lararens egen: klassens namn, kolon, vad timmen ar. Riktiga kurser
+    heter "Matematik, niva 1c" och kan inte borja med ett klassnamn och kolon."""
+    n = (namn or "").strip().lower()
+    return bool(n) and any(n.startswith(f"{k.strip().lower()}:")
+                           for k in (klasser or []) if (k or "").strip())
 
 
 @lru_cache(maxsize=4096)
@@ -823,7 +902,10 @@ def tolka_handelser(handelser: list[dict], klasser: list[str] | None = None,
     hitta på rader: en ruta som inte har någon händelse i kalendern längre
     försvinner ur svaret precis som förut."""
     klasser = sorted(klasser or [], key=len, reverse=True)
-    kurser = sorted(kurser or [], key=len, reverse=True)
+    # Rubriker som en gang skrivits in som kurser far aldrig rakna som kurser
+    # igen - varken har, i ankarserierna eller i rutorna (ar_rubrik_inte_kurs).
+    kurser = sorted((k for k in (kurser or []) if not ar_rubrik_inte_kurs(k, klasser)),
+                    key=len, reverse=True)
     # Rutorna i lärarens schema: (veckodag, klockslag, klass) → raderna som
     # står där, med sina datumintervall. Samma ruta kan bära FLERA serier —
     # skolans kalender lägger nästa läsårs kurs i samma tid (TE26A läser 1c nu
@@ -833,7 +915,8 @@ def tolka_handelser(handelser: list[dict], klasser: list[str] | None = None,
     # Tomma rutor hoppas över — en rad utan kurs säger ingenting.
     rutor: dict[tuple, list[dict]] = {}
     for r in (schema_nu or []):
-        if (r.get("kurs") or "").strip():
+        if ((r.get("kurs") or "").strip()
+                and not ar_rubrik_inte_kurs(r.get("kurs"), klasser)):
             rutor.setdefault((int(r.get("dag") or 0), (r.get("tid") or "").strip(),
                               (r.get("klass") or "").strip()), []).append(r)
 
@@ -1014,10 +1097,14 @@ def tolka_handelser(handelser: list[dict], klasser: list[str] | None = None,
                 # fallande säkerhet: lärarens egen rubrik, ankarserien som
                 # täcker instansens datum, schemarutan som täcker det — och
                 # först när ingen av dem vet något står gissningen kvar.
+                # Sista steget ar Claudes gissning, och den far bara vara en
+                # KAND kurs. Svarade han med handelsens egen rubrik skrevs den
+                # in i courses och blev en kurs - se ar_rubrik_inte_kurs.
+                bgissning = (b.get("kurs") or "").strip()
                 bkurs = (_kurs_i_titeln(titel, kurstupel)
                          or ankarkurs(dag, _tid(s2, e2), bklass, s2[:10])
                          or rutans_kurs(dag, _tid(s2, e2), bklass, s2[:10])
-                         or (b.get("kurs") or "").strip())
+                         or (bgissning if bgissning in kurstupel else ""))
                 rad = {"dag": dag, "tid": _tid(s2, e2), "kurs": bkurs,
                        "klass": bklass,
                        "sal": (h.get("location") or "").strip()}

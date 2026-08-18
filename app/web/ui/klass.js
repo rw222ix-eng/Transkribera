@@ -426,6 +426,13 @@ window.Klass = (() => {
      kursen står sidorna för sig själva — sant, och mer än ingenting. */
   const sidorna = (f, t) => f === t ? `s. ${f}` : `s. ${f}–${t}`;
   function innehallsrad(inn, kurs) {
+    /* LÄRARENS EGNA RUBRIKER FÖRST. Hon skriver dem framför sidspannet i
+       kalenderhändelsen — «Kvadratrötter: s. 2–4» — och de vet något boken inte
+       kan veta: avsnitt 1.1 heter «Kvadratrötter och kubikrötter» och går över
+       s. 2–6, så registret lovade dubbelt så mycket som hon skrivit. Delar utan
+       rubrik faller tillbaka på boken, som förut. */
+    const egna = (inn.delar || []).filter(d => d && d.rubrik);
+    if (egna.length) return egna.map(d => `${d.rubrik}, ${sidorna(d.fran, d.till)}`).join(' · ');
     const A = (kurs && window.Bok && window.Bok.registerFor) ? (window.Bok.registerFor(kurs) || []) : [];
     const del = (window.Bok && window.Bok.avsnitten) ? window.Bok.avsnitten(A, inn.fran, inn.till) : [];
     if (!del.length) return sidorna(inn.fran, inn.till);

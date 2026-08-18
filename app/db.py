@@ -21,7 +21,7 @@ import sqlite3
 import threading
 from pathlib import Path
 
-SCHEMA_VERSION = 22
+SCHEMA_VERSION = 23
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS courses (
@@ -715,6 +715,28 @@ ALTER TABLE kalenderposter ADD COLUMN ci TEXT;
 ALTER TABLE kalenderposter ADD COLUMN ci_okant INTEGER;
 """
 
+# Lektionens delar med lararens egna rubriker (v23) - ENDAST additiv; rollback:
+# lamna kolumnen (NULL = ingen synk har last raden med rubrikogon) + PRAGMA
+# user_version=22.
+#
+# INTEGRITETSREGELN AR ANDRAD HAR, och det ar lararen som bad om det (se
+# calendar_google, avsnittet INTEGRITET): rubriken framfor ett sidspann ovanfor
+# avdelaren far sparas. Skalet ar att boken inte kan svara. Avsnitt 1.1 i Liber
+# Ma 1c heter "Kvadratrotter och kubikrotter" och gar over s. 2-6, sa lektionen
+# pa s. 2-4 fick en rubrik som lovade dubbelt sa mycket som lararen skrivit.
+#
+# Allt UNDER avdelaren ar oforandrat forbjudet, liksom beskrivningen som helhet
+# och rader utan sidspann. Det som lagras ar en lista av {fran, till, rubrik,
+# uppg} - heltal, en uppgiftslista och hogst 60 tecken rubrik per spann.
+#
+# JSON i en kolumn och inte en egen tabell, av samma skal som planeringar (v20):
+# formen ar frontendens och byts oftare an en tabell bor gora. fran/till/uppg pa
+# raden star kvar som SUMMAN - allt som raknar sidor (provets underlag,
+# klassprofilens takt) ska fortsatta se lektionen som en stracka.
+_LEKTIONSDELAR_MIGRATION = """
+ALTER TABLE lektionsinnehall ADD COLUMN delar TEXT;
+"""
+
 _MIGRATIONS: dict[int, str] = {2: _FTS_MIGRATION, 3: _MARKERS_MIGRATION,
                                4: _PLANNING_MIGRATION, 5: _EXAMS_MIGRATION,
                                6: _GY25_MIGRATION, 7: _DATAGRUND_MIGRATION,
@@ -732,12 +754,13 @@ _MIGRATIONS: dict[int, str] = {2: _FTS_MIGRATION, 3: _MARKERS_MIGRATION,
                                19: _LEKTIONSINNEHALL_MIGRATION,
                                20: _PLANERINGAR_MIGRATION,
                                21: _HJALPMEDEL_MIGRATION,
-                               22: _PROVETS_CI_MIGRATION}
+                               22: _PROVETS_CI_MIGRATION,
+                               23: _LEKTIONSDELAR_MIGRATION}
 
 # Migreringar som bara innehåller ALTER TABLE … ADD COLUMN. De körs sats för
 # sats så att en redan tillagd kolumn hoppas över i stället för att fälla hela
 # migreringen — se _apply_migrations.
-_ALTER_MIGRATIONER = {6, 12, 13, 14, 16, 17, 18, 21, 22}
+_ALTER_MIGRATIONER = {6, 12, 13, 14, 16, 17, 18, 21, 22, 23}
 
 _LESSON_SELECT = """
 SELECT l.*, g.namn AS group_namn, c.namn AS course_namn
@@ -2218,7 +2241,7 @@ def list_lektionsinnehall(conn: sqlite3.Connection) -> list[dict]:
     (klass/kurs som namn — window.Kalender slår upp dem på datum, klass och
     kurs, precis som lektionskortet är byggt)."""
     rows = conn.execute(
-        "SELECT i.datum, i.tid, i.fran, i.till, i.uppg, i.hjalpmedel, "
+        "SELECT i.datum, i.tid, i.fran, i.till, i.uppg, i.hjalpmedel, i.delar, "
         "g.namn AS klass, c.namn AS kurs "
         "FROM lektionsinnehall i "
         "LEFT JOIN groups  g ON g.id = i.group_id "
@@ -2236,8 +2259,52 @@ def list_lektionsinnehall(conn: sqlite3.Connection) -> list[dict]:
         # i var sin hög (kalender.js planeringen).
         if r["hjalpmedel"] is not None:
             p["hjalpmedel"] = r["hjalpmedel"]
+        # Delarna med lararens egna rubriker (v23). Trasig JSON tystas: raden ar
+        # anda sann i fran/till, och en halv rubrik ar samre an ingen.
+        if r["delar"]:
+            try:
+                delar = json.loads(r["delar"])
+            except (ValueError, TypeError):
+                delar = None
+            if isinstance(delar, list) and delar:
+                p["delar"] = delar
         ut.append(p)
     return ut
+
+
+# Samma tak som synken kapar vid (calendar_google._RUBRIKTAK). Star har for att
+# basen inte ska lita pa att anroparen redan gjort det.
+_RUBRIKTAK = 60
+
+
+def _delar_json(delar) -> str | None:
+    """Delarna som JSON, med bara de falt som far lagras (se
+    _LEKTIONSDELAR_MIGRATION). En anropare som inte kanner till kolumnen lamnar
+    NULL kvar i stallet for att pasta att inga rubriker fanns.
+
+    Rubriken kapas har OCKSA, inte bara i parsern: den har vagen ar den enda in
+    i basen, och integritetsgransen ska halla aven for en anropare som skickar
+    nagot annat an synken."""
+    if not isinstance(delar, list) or not delar:
+        return None
+    ut = []
+    for d in delar:
+        if not isinstance(d, dict):
+            continue
+        try:
+            f = int(d.get("fran"))
+            t = int(d.get("till") or d.get("fran"))
+        except (TypeError, ValueError):
+            continue
+        rad = {"fran": f, "till": max(f, t)}
+        rubrik = str(d.get("rubrik") or "").strip()[:_RUBRIKTAK].strip()
+        if rubrik:
+            rad["rubrik"] = rubrik
+        uppg = str(d.get("uppg") or "").strip()
+        if uppg:
+            rad["uppg"] = uppg
+        ut.append(rad)
+    return json.dumps(ut, ensure_ascii=False) if ut else None
 
 
 def replace_lektionsinnehall(conn: sqlite3.Connection, poster: list[dict], *,
@@ -2269,7 +2336,8 @@ def replace_lektionsinnehall(conn: sqlite3.Connection, poster: list[dict], *,
                       get_or_create_course(conn, p.get("kurs") or ""),
                       sid_fran, max(sid_fran, sid_till),
                       (p.get("uppg") or "").strip() or None,
-                      None if hjm is None else str(hjm).strip()))
+                      None if hjm is None else str(hjm).strip(),
+                      _delar_json(p.get("delar"))))
     with conn:
         if fran and till:
             conn.execute("DELETE FROM lektionsinnehall WHERE datum BETWEEN ? AND ?",
@@ -2278,9 +2346,50 @@ def replace_lektionsinnehall(conn: sqlite3.Connection, poster: list[dict], *,
             conn.execute("DELETE FROM lektionsinnehall")
         conn.executemany(
             "INSERT OR REPLACE INTO lektionsinnehall"
-            "(datum, tid, group_id, course_id, fran, till, uppg, hjalpmedel) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)", klara)
+            "(datum, tid, group_id, course_id, fran, till, uppg, hjalpmedel, delar) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", klara)
     return list_lektionsinnehall(conn)
+
+
+def stada_rubrikkurser(conn: sqlite3.Connection) -> list[str]:
+    """Ta bort "kurser" som egentligen ar lektionsrubriker, och de beslut som
+    bar dem. Returnerar namnen som togs bort.
+
+    Rubriken hamnade i kursfaltet for att Claudes bedomning av en omdopt instans
+    togs rakt av (calendar_google.ar_rubrik_inte_kurs). Synken skapar dem inte
+    langre, men de som redan star i basen maste bort: sa lange de ligger kvar
+    star de i kursvaljaren, och det cachade beslutet skriver tillbaka dem i
+    schemat vid varje synk.
+
+    Bara OANVANDA rader tas bort. Ett papper, ett prov eller ett elevresultat
+    som pekar pa kursen ar lararens arbete, och det vager tyngre an en stadning
+    - da far raden ligga kvar och stadas nasta gang, om den blir fri."""
+    grupper = [g["namn"] for g in list_groups(conn)]
+    if not grupper:
+        return []
+    # Tabellerna som pekar pa courses. En kurs som nagon av dem anvander ror vi
+    # inte; de ovriga referenserna ar ON DELETE SET NULL och skulle tyst tomma
+    # ett falt lararen fyllt i.
+    anvander = ("SELECT course_id FROM schema_lektioner UNION "
+                "SELECT course_id FROM lektionsinnehall UNION "
+                "SELECT course_id FROM dokument UNION "
+                "SELECT course_id FROM exams UNION "
+                "SELECT course_id FROM lessons UNION "
+                "SELECT course_id FROM planned_lessons")
+    borttagna = []
+    with conn:
+        for r in conn.execute("SELECT id, namn FROM courses").fetchall():
+            namn = (r["namn"] or "").strip()
+            if not any(namn.lower().startswith(f"{g.strip().lower()}:")
+                       for g in grupper if (g or "").strip()):
+                continue
+            if conn.execute(f"SELECT 1 FROM ({anvander}) WHERE course_id = ? LIMIT 1",
+                            (r["id"],)).fetchone():
+                continue
+            conn.execute("DELETE FROM courses WHERE id = ?", (r["id"],))
+            conn.execute("DELETE FROM kalenderbeslut WHERE kurs = ?", (namn,))
+            borttagna.append(namn)
+    return borttagna
 
 
 def get_kalenderbeslut(conn: sqlite3.Connection) -> dict[str, dict]:

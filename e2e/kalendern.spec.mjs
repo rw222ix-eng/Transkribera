@@ -412,3 +412,31 @@ test("täcker lektionen bara en del av avsnittet säger kortet det", async ({ pa
   await expect(nu.locator(".lektinnehall"))
     .toHaveText("del av 5.4 Extrempunkter och andraderivatan, s. 207–210");
 });
+
+test("lärarens egna rubriker vinner över bokens avsnittsnamn", async ({ page }) => {
+  /* Hon skriver rubriken framför sidspannet i kalenderhändelsen —
+     «Kubikrötter: s. 207–210 · Potenser: s. 211–215» — och sedan hon öppnade
+     för dem (2026-08-18) bärs orden hela vägen ut på kortet. Boken kan inte
+     svara: avsnitt 5.4 heter «Extrempunkter och andraderivatan» och går över
+     hela s. 207–215, så registret lovade dubbelt så mycket som hon skrivit. */
+  await fejka(page, { ...INNEHALLET,
+    innehall: [{ datum: "2026-11-02", tid: "09:05–10:20", klass: "NA25",
+                 kurs: "Matematik, nivå 2c", fran: 207, till: 215, uppg: "", hjalpmedel: "",
+                 delar: [{ fran: 207, till: 210, rubrik: "Kubikrötter" },
+                         { fran: 211, till: 215, rubrik: "Potenser" }] }] });
+  await page.route("**/api/bocker", route => json(route, { bocker: HYLLAN }));
+  await vid(page, "2026-11-02");
+  await page.goto("/");
+  await hydrerad(page);
+  await page.getByRole("tab", { name: "Planering" }).click();
+  await stillaVecka(page);
+
+  const nu = page.locator("#schemagrid article.lekt").filter({ hasText: "NA25" });
+  await expect(nu.locator(".lektinnehall"))
+    .toHaveText("Kubikrötter, s. 207–210 · Potenser, s. 211–215");
+
+  /* Och momentet — det som går vidare in i prompten — blir hennes ord, inte
+     avsnittsnamnet. Tavlan byggdes annars för hela 5.4. */
+  await nu.click();
+  await expect(page.locator("#moment")).toHaveValue("Kubikrötter · Potenser");
+});

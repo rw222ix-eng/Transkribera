@@ -199,6 +199,35 @@ def test_innehallet_ror_sig_genom_databasen_med_frontendens_faltnamn(conn):
     assert db.list_lektionsinnehall(conn) == INNEHALL
 
 
+def test_delarna_med_lararens_rubriker_gar_genom_databasen(conn):
+    """Rubriken framför sidspannet är lärarens egna ord, och sedan hon öppnade
+    för dem (2026-08-18) bärs de hela vägen: boken kan inte svara på vilken
+    HALVA av «1.1 Kvadratrötter och kubikrötter» en lektion på s. 2–4 är."""
+    rad = dict(INNEHALL[0], fran=5, till=9,
+               delar=[{"fran": 5, "till": 6, "rubrik": "Kubikrötter",
+                       "uppg": "1116–1119"},
+                      {"fran": 7, "till": 9, "rubrik": "Potenser"}])
+    ut = db.replace_lektionsinnehall(conn, [rad])
+    assert ut[0]["delar"] == rad["delar"]
+    assert db.list_lektionsinnehall(conn)[0]["delar"] == rad["delar"]
+
+
+def test_bara_falten_som_far_lagras_foljer_med_ur_delarna(conn):
+    """Integritetsgränsen håller också för en anropare som inte är synken:
+    rubriken kapas, och allt annat i en del kastas."""
+    ut = db.replace_lektionsinnehall(conn, [dict(
+        INNEHALL[0], delar=[{"fran": 2, "till": 6, "rubrik": "A" * 200,
+                             "anteckning": "Erik har dyslexi"}])])
+    assert ut[0]["delar"] == [{"fran": 2, "till": 6, "rubrik": "A" * 60}]
+    assert "dyslexi" not in str(ut)
+
+
+def test_utan_delar_star_kolumnen_tom(conn):
+    """NULL betyder «ingen synk har läst raden med rubrikögon» — samma skillnad
+    som hjälpmedlen gör, och ett äldre skript ska inte påstå något."""
+    assert "delar" not in db.replace_lektionsinnehall(conn, INNEHALL)[0]
+
+
 def test_samma_lektion_last_tva_ganger_ar_en_rad(conn):
     """Synken är idempotent: UNIQUE på tillfället, inte på raden."""
     db.replace_lektionsinnehall(conn, INNEHALL + [dict(INNEHALL[0], fran=3, till=9)])
@@ -430,7 +459,8 @@ MATE1C00X. HT-schema (period 35).
 
 def test_sidorna_och_uppgifterna_lases_ur_beskrivningen():
     assert calendar_google.sidor_ur_beskrivning(BESKRIVNING) == {
-        "fran": 2, "till": 6, "uppg": "1101–1103, 1105–1119"}
+        "fran": 2, "till": 6, "uppg": "1101–1103, 1105–1119",
+        "delar": [{"fran": 2, "till": 6, "uppg": "1101–1103, 1105–1119"}]}
 
 
 def test_texten_under_avdelaren_lases_aldrig():
@@ -445,22 +475,57 @@ def test_texten_under_avdelaren_lases_aldrig():
 
 def test_tva_avsnitt_pa_samma_lektion_ger_hela_strackan():
     """Lektionen som avslutar ett avsnitt och börjar nästa skrivs som två
-    rader i kalendern — sidorna är hela sträckan, uppgifterna båda listorna."""
+    rader i kalendern — sidorna är hela sträckan, uppgifterna båda listorna.
+
+    Delarna står kvar var för sig, med lärarens EGNA rubriker: registret känner
+    bara hela avsnitt, och «1.1 Kvadratrötter och kubikrötter» på en lektion hon
+    skrivit «Kubikrötter» om lovar dubbelt så mycket som hon gjort."""
     assert calendar_google.sidor_ur_beskrivning(
         "Kubikrötter: s. 5–6 · uppg. 1116–1119\n"
         "Potenser: s. 7–9 · uppg. 1201–1203, 1205–1212\n"
         "OBS! ta med miniräknare") == {
-        "fran": 5, "till": 9, "uppg": "1116–1119, 1201–1203, 1205–1212"}
+        "fran": 5, "till": 9, "uppg": "1116–1119, 1201–1203, 1205–1212",
+        "delar": [
+            {"fran": 5, "till": 6, "rubrik": "Kubikrötter", "uppg": "1116–1119"},
+            {"fran": 7, "till": 9, "rubrik": "Potenser",
+             "uppg": "1201–1203, 1205–1212"}]}
+
+
+def test_rubriken_over_avdelaren_far_folja_med_men_aldrig_texten_under():
+    """Gränsen efter att läraren öppnade för rubrikerna (2026-08-18): orden
+    FRAMFÖR ett sidspann ovanför avdelaren följer med. Allt under den — och
+    varje rad utan sidspann — är fortfarande hennes anteckningar om enskilda
+    elever och lämnar aldrig kalendern."""
+    ut = calendar_google.sidor_ur_beskrivning(BESKRIVNING)
+    assert ut["delar"] == [{"fran": 2, "till": 6,
+                            "uppg": "1101–1103, 1105–1119"}]
+    for hemligt in ("400", "pärmen", "miniräknare", "MATE1C00X"):
+        assert hemligt not in str(ut)
+
+
+def test_rubriken_kapas_och_siffror_ar_ingen_rubrik():
+    """Rubriken är en etikett, inte en anteckning: taket finns för att en rad
+    som svämmar över inte ska bli en väg ut för hela beskrivningen."""
+    ut = calendar_google.sidor_ur_beskrivning("A" * 200 + ": s. 2–4")
+    assert len(ut["delar"][0]["rubrik"]) <= 60
+    # Resten av föregående spann är ingen rubrik för nästa.
+    ut2 = calendar_google.sidor_ur_beskrivning("s. 2–4 · uppg. 1101–1103 · s. 7–9")
+    assert "rubrik" not in ut2["delar"][1]
 
 
 @pytest.mark.parametrize("text, vantat", [
-    ("s. 7", {"fran": 7, "till": 7}),                      # en ensam sida
-    ("s. 2-6", {"fran": 2, "till": 6}),                    # vanligt bindestreck
-    ("sid. 40–48", {"fran": 40, "till": 48}),
-    ("Sidorna 12–14 · uppg 3101-3110",
-     {"fran": 12, "till": 14, "uppg": "3101–3110"}),       # en form på spannen
+    ("s. 7", {"fran": 7, "till": 7,                        # en ensam sida
+              "delar": [{"fran": 7, "till": 7}]}),
+    ("s. 2-6", {"fran": 2, "till": 6,                      # vanligt bindestreck
+                "delar": [{"fran": 2, "till": 6}]}),
+    ("sid. 40–48", {"fran": 40, "till": 48,
+                    "delar": [{"fran": 40, "till": 48}]}),
+    ("Sidorna 12–14 · uppg 3101-3110",                     # en form på spannen
+     {"fran": 12, "till": 14, "uppg": "3101–3110",
+      "delar": [{"fran": 12, "till": 14, "uppg": "3101–3110"}]}),
     ("s. 5 · uppg. 1101, 1103,1109",
-     {"fran": 5, "till": 5, "uppg": "1101, 1103, 1109"}),
+     {"fran": 5, "till": 5, "uppg": "1101, 1103, 1109",
+      "delar": [{"fran": 5, "till": 5, "uppg": "1101, 1103, 1109"}]}),
     ("Genomgång av kvadratrötter", {}),                    # inga sidor → inget
     ("uppg. 1101–1103", {}),                               # uppgifter utan sidor
     ("", {}),
@@ -701,9 +766,11 @@ def test_innehallet_hanger_pa_lektionstillfallet_inte_pa_serien():
     assert ut["innehall"] == [
         {"datum": "2026-08-17", "tid": "08:15–09:00", "klass": "9A",
          "kurs": "Matematik 3c", "fran": 2, "till": 6,
-         "hjalpmedel": "raknare", "uppg": "1101–1103, 1105–1119"},
+         "hjalpmedel": "raknare", "uppg": "1101–1103, 1105–1119",
+         "delar": [{"fran": 2, "till": 6, "uppg": "1101–1103, 1105–1119"}]},
         {"datum": "2026-08-24", "tid": "08:15–09:00", "klass": "9A",
-         "kurs": "Matematik 3c", "fran": 7, "till": 11, "hjalpmedel": ""},
+         "kurs": "Matematik 3c", "fran": 7, "till": 11, "hjalpmedel": "",
+         "delar": [{"fran": 7, "till": 11}]},
     ]
 
 
@@ -730,7 +797,8 @@ def test_rubriken_som_sager_amnet_kanns_igen_pa_rutan_i_schemat():
     assert ut["innehall"] == [
         {"datum": "2026-08-24", "tid": "10:00–11:30", "klass": "NA26F",
          "kurs": "Matematik, nivå 1c", "fran": 2, "till": 6,
-         "hjalpmedel": "raknare", "uppg": "1101–1103, 1105–1119"}]
+         "hjalpmedel": "raknare", "uppg": "1101–1103, 1105–1119",
+         "delar": [{"fran": 2, "till": 6, "uppg": "1101–1103, 1105–1119"}]}]
 
 
 @pytest.mark.parametrize("summary, tid, beskrivning, schema", [
@@ -810,6 +878,41 @@ def test_omdopta_instanser_arver_kursen_av_ankarserien():
         handelser, klasser=["TE26A"],
         kurser=["Matematik, nivå 1c", "Matematik, nivå 2c"],
         beslut=beslut, idag="2026-08-24")
+    assert {r["kurs"] for r in ut["schema"]} == {"Matematik, nivå 1c"}
+    assert ut["innehall"][0]["kurs"] == "Matematik, nivå 1c"
+
+
+def test_rubriken_blir_aldrig_en_kurs_och_slar_aldrig_tillbaka():
+    """Felet som satt i basen i tre dygn (repro 2026-08-18): Claudes bedömning
+    av en omdöpt instans svarade med HÄNDELSENS EGEN RUBRIK som kurs. Den skrevs
+    in i courses, kom tillbaka i `kurser` vid nästa synk — och då matchade
+    `_kurs_i_titeln` rubriken mot sig själv, alltså STEG ETT i kursarvet, det
+    som ska vara lärarens egna ord. En hel termins fredagar för TE26A stod som
+    kursen «TE26A: Genomgång av prov 4», och nio schemarader hade rubriker i
+    kursfältet.
+
+    Gissningen måste vara en KÄND kurs, och en rubrik som redan hunnit bli en
+    kurs får aldrig räknas som kurs igen — varken i titeln eller i rutan."""
+    handelser = [
+        _tid(d, "11:10", "12:20", summary="Ma 1c · TE26A · B203",
+             location="B203", recurringEventId="r1")
+        for d in ("2026-08-21", "2026-12-11")
+    ] + [
+        _tid("2026-08-28", "11:10", "12:20", summary="TE26A: Genomgång av prov 4",
+             location="B203", recurringEventId="r1", description="s. 12–13"),
+    ]
+    ut = calendar_google.tolka_handelser(
+        handelser, klasser=["TE26A"],
+        # Hyllan har redan blivit förgiftad: rubriken STÅR som en kurs i basen.
+        kurser=["Matematik, nivå 1c", "TE26A: Genomgång av prov 4"],
+        beslut={"te26a: genomgång av prov 4|tid|serie": {
+            "slag": "lektion", "klass": "TE26A",
+            "kurs": "TE26A: Genomgång av prov 4"}},
+        # …och står i schemarutan, som en tidigare synk skrev den.
+        schema_nu=[{"dag": 5, "tid": "11:10–12:20", "klass": "TE26A",
+                    "kurs": "TE26A: Genomgång av prov 4", "sal": "B203",
+                    "fran": "2026-08-28", "till": "2027-01-22"}],
+        idag="2026-08-24")
     assert {r["kurs"] for r in ut["schema"]} == {"Matematik, nivå 1c"}
     assert ut["innehall"][0]["kurs"] == "Matematik, nivå 1c"
 
@@ -1271,3 +1374,27 @@ def test_heldagshandelse_utan_lovord_ignoreras():
         "summary": "Öppet hus", "start": {"date": "2026-09-10"},
         "end": {"date": "2026-09-11"}}])
     assert ut["lov"] == [] and ut["poster"] == []
+
+
+def test_rubriker_som_blivit_kurser_stadas_bort_men_bara_de_fria(conn):
+    """Nio schemarader i lärarens bas hade en rubrik i kursfältet, och sex
+    «kurser» som «TE26A: Genomgång av prov 4» stod i kursväljaren. Synken skapar
+    dem inte längre — men de som redan står där måste bort, annars skriver det
+    cachade beslutet tillbaka dem vid varje synk.
+
+    En rubrikkurs som ett PAPPER pekar på är lärarens arbete och rörs inte: en
+    tyst städning som tömmer ett fält hon fyllt i är värre än en skräprad."""
+    db.get_or_create_group(conn, "TE26A")
+    fri = db.get_or_create_course(conn, "TE26A: Genomgång av prov 4")
+    anvand = db.get_or_create_course(conn, "TE26A: Repetition kap 3")
+    riktig = db.get_or_create_course(conn, "Matematik, nivå 1c")
+    with conn:
+        conn.execute("INSERT INTO dokument (typ, datum, course_id) "
+                     "VALUES ('Tavla', '2026-08-28', ?)", (anvand,))
+
+    assert db.stada_rubrikkurser(conn) == ["TE26A: Genomgång av prov 4"]
+    kvar = {c["namn"] for c in db.list_courses(conn)}
+    assert "TE26A: Genomgång av prov 4" not in kvar
+    assert "TE26A: Repetition kap 3" in kvar      # pappret väger tyngre
+    assert "Matematik, nivå 1c" in kvar
+    assert fri and riktig                          # id:na fanns, båda skapades

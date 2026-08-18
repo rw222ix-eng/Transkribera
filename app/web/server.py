@@ -1140,6 +1140,10 @@ def create_app(base_dir: Path | None = None,
                                                kalla="schema", fran=fran, till=till)
             innehall = db.replace_lektionsinnehall(conn, hamtat.get("innehall") or [],
                                                    fran=fran, till=till)
+            # Rubriker som en tidigare synk skrev in i kursfaltet stadas bort
+            # nar de blivit fria - schemat ovan har just skrivits om utan dem.
+            # Bara oanvanda rader tas, se db.stada_rubrikkurser.
+            stadade = db.stada_rubrikkurser(conn)
         finally:
             conn.close()
         return {"synkad": datetime.now().isoformat(timespec="seconds"),
@@ -1153,7 +1157,10 @@ def create_app(base_dir: Path | None = None,
                 "bedomda": len(hamtat.get("beslut") or {}),
                 "osakra": len(hamtat.get("osakra") or []),
                 # Loggrader från andra kalenderprogram, se calendar_google.ar_notis
-                "notiser": hamtat.get("notiser") or 0}
+                "notiser": hamtat.get("notiser") or 0,
+                # Rubriker som stod som kurser och nu är borta. Räknas och sägs
+                # — en tyst städning ser ut som att inget hände.
+                "stadade": stadade}
 
     @app.post("/api/schema/till-google")
     def api_schema_till_google():
