@@ -154,6 +154,12 @@
        anspråk» — en sådan bok får svara för vilken kurs som helst (namnFor),
        en märkt bok bara för sin egen. */
     kursForBok: namn => KURS_FOR_BOK[namn] || '',
+    /* Kursens bok, och bara när den är KÄND: hyllans bok märkt med kursen, eller
+       prototypens par. Tomt betyder «vet inte» — till skillnad från `namnFor`,
+       som svarar med appens förstabok när ingen server finns. Klassprofilens
+       läkning (profil.js) måste kunna skilja de två: en bok den inte vet något
+       om ska den inte skriva om minnet med. */
+    bokFor: kurs => BOKNAMN[kurs] || '',
     /* Sidantalet i den tryckta boken (PDF:ens sidor minus omslag och förord).
        Remsan går genom hela boken och måste veta var den slutar. */
     sidorFor: namn => {

@@ -14,8 +14,17 @@ window.Profil = (() => {
   const NYCKEL = 'transkribera.klassprofil.v1';
   const K = window.Kalender;
 
-  /* Boken per kurs — det som en ny klass ärver innan något är inlärt. */
-  const BOK_FOR = { 'Matematik 3c': 'Matematik 5000+ 3c', 'Matematik 4': 'Matematik 5000+ 4', 'Matematik 5': 'Exponent 5' };
+  /* Boken per kurs — det som en ny klass ärver innan något är inlärt.
+
+     Kartan var HÅRDKODAD på prototypens tre kurser, och lärarens kurser heter
+     inte så: en klass i «Matematik, nivå 2a» fann ingen bok här, ärvde hyllans
+     FÖRSTA bok (`window.Bok.namn`, bok.js taEmot) och fick «Matematik 5000+ 1a»
+     förvald — och läkningen nedan kunde inte rätta det, för utan träff i kartan
+     står den still. Hyllan äger frågan nu (bok.js `bokFor`: boken som är märkt
+     med kursen); prototypens par står kvar för Claude Design, där ingen server
+     svarar. Tomt betyder «vet inte», och då rörs minnet inte. */
+  const BOK_PROTO = { 'Matematik 3c': 'Matematik 5000+ 3c', 'Matematik 4': 'Matematik 5000+ 4', 'Matematik 5': 'Exponent 5' };
+  const BOK_FOR = kurs => (window.Bok && window.Bok.bokFor ? window.Bok.bokFor(kurs) : '') || BOK_PROTO[kurs] || '';
 
   /* Sidorna säger vilket centralt innehåll det handlar om. Kopplingen står i
      avsnittet självt (innehall.js) och är skriven PER NIVÅ: samma avsnitt
@@ -69,7 +78,7 @@ window.Profil = (() => {
     if (skurs && p.kurs !== skurs && !(K && K.schema.some(s => s.klass === k && s.kurs === p.kurs))) { p.kurs = skurs; p.kursN = 0; }
     /* Varje kurs klassen läser ska ha sin egen bok — den kursens, inte grannens. */
     Object.keys(p.kurser || {}).forEach(kurs => {
-      const ratt = BOK_FOR[kurs];
+      const ratt = BOK_FOR(kurs);
       const f = p.kurser[kurs];
       if (!ratt || !f || f.bok === ratt) return;
       f.bok = ratt;
@@ -81,7 +90,7 @@ window.Profil = (() => {
     /* Toppnivån är en spegel av kursNu. Har den glidit i sär läses den tillbaka
        ur facket i stället för att skrivas över med en annan kurs bok. */
     const nu = (p.kursNu && p.kurser && p.kurser[p.kursNu]) ? p.kursNu : p.kurs;
-    const ratt = BOK_FOR[nu];
+    const ratt = BOK_FOR(nu);
     if (!ratt || p.bok === ratt) return;
     if (p.kurser && p.kurser[nu]) {
       ['bok', 'bokN', 'senasteSida', 'sidorPerLektion', 'taktN'].forEach(f => { p[f] = p.kurser[nu][f]; });
@@ -89,7 +98,7 @@ window.Profil = (() => {
     }
     p.bok = ratt;
     p.bokN = 0;
-    p.senasteSida = (BOK_FOR[(GRUND[k] || {}).kurs] === ratt ? (GRUND[k] || {}).senasteSida : 0) || 0;
+    p.senasteSida = (BOK_FOR((GRUND[k] || {}).kurs) === ratt ? (GRUND[k] || {}).senasteSida : 0) || 0;
     p.sidorPerLektion = (GRUND[k] || {}).sidorPerLektion || 4;
     p.taktN = 0;
   });
@@ -110,6 +119,7 @@ window.Profil = (() => {
      Självläkningen körs om efter hämtningen: schemat kan ha ändrats sedan
      minnet skrevs, och det är schemat som avgör vilken kurs en klass läser. */
   let franServern = false;
+  let serverminne = false;      // servern hade ett minne — då skrivs läkningen tillbaka
   const spara = () => {
     lokaltSpara();
     if (!franServern || !window.API) return;
@@ -125,6 +135,7 @@ window.Profil = (() => {
       if (!d) return;
       franServern = true;
       const hade = Object.keys(d).length > 0;
+      serverminne = hade;
       if (hade) minne = d;
       grundvalar();
       laka();
@@ -136,6 +147,15 @@ window.Profil = (() => {
       rita();
     })
     .catch(() => { /* ingen server: minnet är webbläsarens, som förut */ });
+  /* Hyllan kommer också ur servern, och de två svaren kommer i den ordning de
+     kommer. Läks minnet innan hyllan är inne vet läkningen ingen bok för någon
+     kurs och står still — klassen blir stående med en bok ur en annan kurs
+     tills sidan laddas om. Därför läks det EN gång till när hyllan är inne. */
+  document.addEventListener('bok-redo', () => {
+    laka();
+    if (serverminne) spara(); else lokaltSpara();
+    rita();
+  });
 
   const dok = () => (window.Dokument && window.Dokument.sparade ? window.Dokument.sparade() : []);
   /* Två dokument på samma lektion täcker samma sidor. Bara det första flyttar
@@ -200,12 +220,19 @@ window.Profil = (() => {
     return { fran: g[0], till: g[1], avsnitt: a };
   }
 
+  /* Boken en NY klass ärver när kursen inte har någon egen på hyllan. `namnFor`
+     är svaret: utan server appens förstabok (Claude Design fungerar som förut),
+     med server tomt — utom när hyllan bär EN omärkt bok, som får svara för vad
+     som helst. Hyllans första bok togs förr rakt av, och därför fick varje klass
+     samma bok oavsett kurs. */
+  const arvdBok = kurs => (window.Bok && window.Bok.namnFor ? window.Bok.namnFor(kurs) : '') || '';
+
   function forKlass(klass) {
     if (!klass) return null;
     if (!minne[klass]) {
       const kurs = (K && (K.schema.find(s => s.klass === klass) || {}).kurs) || '';
       minne[klass] = {
-        kurs, kursN: kurs ? 1 : 0, bok: BOK_FOR[kurs] || (window.Bok && window.Bok.namn) || '', bokN: 0,
+        kurs, kursN: kurs ? 1 : 0, bok: BOK_FOR(kurs) || arvdBok(kurs), bokN: 0,
         sidorPerLektion: 4, taktN: 0, senasteSida: 0, typer: {}, par: 0, n: 0,
         svart: [], svartN: 0, grupp: '', gruppN: 0
       };
@@ -226,7 +253,7 @@ window.Profil = (() => {
     if (!p || !kurs) return p;
     p.kurser = p.kurser || {};
     if (!p.kurser[kurs]) p.kurser[kurs] = {
-      bok: (p.kurs === kurs && p.bok) || BOK_FOR[kurs] || '',
+      bok: (p.kurs === kurs && p.bok) || BOK_FOR(kurs) || '',
       bokN: p.kurs === kurs ? (p.bokN || 0) : 0,
       senasteSida: p.kurs === kurs ? (p.senasteSida || 0) : 0,
       sidorPerLektion: p.kurs === kurs ? (p.sidorPerLektion || 4) : 4,

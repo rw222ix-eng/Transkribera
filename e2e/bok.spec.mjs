@@ -37,14 +37,14 @@ const UPPG = [
 
 const strom = h => h.map(x => `data: ${JSON.stringify(x)}\n\n`).join("");
 
-async function fejka(page, { bocker = [BOK], uppslag = null, las = null } = {}) {
+async function fejka(page, { bocker = [BOK], uppslag = null, las = null, profil = {} } = {}) {
   const anrop = [];
   const json = (route, kropp) => route.fulfill({
     status: 200, contentType: "application/json", body: JSON.stringify(kropp) });
   await page.route("**/api/schema", route => json(route, SCHEMA));
   await page.route("**/api/lessons", route => json(route, []));
   await page.route("**/api/history", route => json(route, []));
-  await page.route("**/api/klassprofil", route => json(route, {}));
+  await page.route("**/api/klassprofil", route => json(route, profil));
   await page.route("**/api/dokument", route => json(route, { sparade: [], utkast: null }));
   await page.route("**/api/dokument/**", route => json(route, { ok: true, id: 1 }));
   await page.route("**/api/planning/**", route => {
@@ -322,4 +322,39 @@ test("utan server står prototypens bokhylla kvar", async ({ page }) => {
   const reg = await page.evaluate(() => window.Bok.registerForBok("Matematik 5000+ 3c"));
   expect(reg.length).toBeGreaterThan(20);          // prototypens 24 avsnitt
   expect(natanrop).toEqual([]);
+});
+
+test("klassprofilens bok är KURSENS, inte hyllans första", async ({ page }) => {
+  /* Fyndet ur den skarpa körningen (2026-08-18): en lektion i Matematik, nivå
+     2a fick «Matematik 5000+ 1a» förvald. Profilens karta över kursernas
+     böcker var hårdkodad på prototypens tre kurser, så lärarens kurser fann
+     ingen bok där: en ny klass ärvde hyllans FÖRSTA bok (bok.js taEmot sätter
+     `window.Bok.namn` till den), och profilens självläkning — den som just ska
+     rätta en bok ur fel kurs — stod still av samma skäl. Hyllan äger frågan
+     nu, och det gäller båda hållen: minnet läks OCH den nya klassen ärver
+     rätt. */
+  const ETTA = { ...BOK, id: 7, namn: "Matematik 5000+ 1a", kurs: "Matematik, nivå 1a" };
+  const TVAA = { ...BOK, id: 8, namn: "Origo 2a", kurs: "Matematik, nivå 2a" };
+  const minne = {
+    IndA: {
+      kurs: "Matematik, nivå 2a", kursN: 1, kursNu: "Matematik, nivå 2a",
+      bok: "Matematik 5000+ 1a", bokN: 0, senasteSida: 40,
+      sidorPerLektion: 4, taktN: 0, typer: {}, par: 0, n: 1,
+      kurser: { "Matematik, nivå 2a": { bok: "Matematik 5000+ 1a", bokN: 0,
+                                        senasteSida: 40, sidorPerLektion: 4, taktN: 0 } },
+    },
+  };
+  await fejka(page, { bocker: [ETTA, TVAA], profil: minne });
+  await page.goto("/");
+  await hydrerad(page);
+
+  await expect.poll(() => page.evaluate(() => window.Profil.minne().IndA.bok))
+    .toBe("Origo 2a");
+  // Kursfacket läks med — det är det förvalen läser när klassen byter kurs.
+  expect(await page.evaluate(() => window.Profil.minne().IndA.kurser["Matematik, nivå 2a"].bok))
+    .toBe("Origo 2a");
+  // Sidan följer inte med in i en annan bok: s. 40 i 1a är inte s. 40 i 2a.
+  expect(await page.evaluate(() => window.Profil.minne().IndA.senasteSida)).toBe(0);
+  // En klass appen aldrig sett ärver kursens bok, inte hyllans första.
+  expect(await page.evaluate(() => window.Profil.forKlass("NA26F").bok)).toBe("");
 });
