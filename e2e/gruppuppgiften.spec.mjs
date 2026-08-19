@@ -244,6 +244,190 @@ test("arkväxeln ritar om utkastet på en varm sida — packningen håller",
     satt.gu.forEach(g => expect(g.ledigt).toBeGreaterThanOrEqual(0));
   });
 
+/* ── INSTRUKTIONSRUTAN ÄR DOKUMENTETS ───────────────────────────
+   Läraren pekade på rutan i canvas och skrev att «ett gemensamt svar per grupp
+   lämnas in vid lektionens slut» skulle bort. Ingenting hände på pappret —
+   rutan var en hårdkodad mall i två halvor (blad-bygg.js BAND + blad.js
+   grupphuvud, som klistrade på redovisningslöftet ur inställningen) och stod
+   inte i dokumentets JSON, så det fanns ingenting att skriva om. Panelen
+   svarade ändå «Skrivet om … markerad i pappret».
+
+   Nu äger dokumentet bandet (exam_spec.instruktion). De två testen nedan låser
+   båda halvorna: fältet vinner OCH löftet klistras inte på igen — annars kommer
+   just den mening hon strök tillbaka. */
+
+const skriftligt = { grupp: 3, langd: 45, redovisning: "Skriftligt" };
+
+test("bandet läraren skrev om står på pappret — löftet klistras inte på igen",
+  async ({ page }) => {
+    const eget = "Läs uppgiften tillsammans. Bestäm vem som skriver.";
+    await fejka(page, [rad(1, papper({ instruktion: eget, inst: skriftligt }))]);
+    await page.goto("/");
+    await hydrerad(page);
+    await visa(page);
+
+    const band = page.locator("#fh-ark .guband").first();
+    await expect(band).toContainText("Bestäm vem som skriver");
+    // Meningen hon strök får inte komma tillbaka ur inställningen.
+    await expect(band).not.toContainText("lämnas in vid lektionens slut");
+    // Ägarskapstecknet — det grupphuvud() läser för att hålla fingrarna borta.
+    await expect(band).toHaveAttribute("data-egen", "");
+  });
+
+test("ett papper utan fältet ser ut precis som förut", async ({ page }) => {
+  // Ingen migrering: allt som sparades innan fältet fanns ska se likadant ut.
+  await fejka(page, [rad(1, papper({ inst: skriftligt }))]);
+  await page.goto("/");
+  await hydrerad(page);
+  await visa(page);
+
+  const band = page.locator("#fh-ark .guband").first();
+  await expect(band).toContainText("Läs uppgiften tillsammans");
+  await expect(band).toContainText("lämnas in vid lektionens slut");
+  await expect(band).not.toHaveAttribute("data-egen", "");
+});
+
+/* ── OMSKRIVNINGEN, OCH VAD PANELEN PÅSTÅR OM DEN ───────────────
+   Andra halvan av samma bugg: svarsraden i granskningen var en KLIENTSIDIG
+   mall som alltid skrevs. Servern skickar `andrade` (app/dokumentdiff.py), och
+   det är den listan som ska tala — också när den är tom. */
+
+const strom = h => h.map(x => `data: ${JSON.stringify(x)}\n\n`).join("");
+
+/** Dokumentet så som servern svarar med det: JSON i exam_spec:s form. */
+const exam = (extra = {}) => ({
+  titel: "1.1 Tal i olika former", kurs: "Matematik, nivå 1a",
+  hjalpmedel: "miniräknare",
+  grupp: { elever: 3, langd_min: 45, redovisning: "skriftligt" },
+  uppgifter: UPPGIFTER.map(u => ({
+    text: u.t, poang: [2, 0, 0], typ: "rutin", formaga: "P",
+    losning: "Svaret.", bedomning: "+2 E",
+  })),
+  ...extra,
+});
+
+async function fejkaRefine(page, { doc, andrade }) {
+  const anrop = [];
+  await page.route("**/api/exams/**", route => {
+    const vag = new URL(route.request().url()).pathname;
+    if (!vag.endsWith("/refine")) return route.continue();
+    anrop.push(route.request().postDataJSON());
+    const klar = { id: 12, exam: doc, errors: [], rounds: 1 };
+    if (andrade) klar.andrade = andrade;
+    return route.fulfill({ status: 200, contentType: "text/event-stream",
+                           body: strom([{ type: "done", result: klar }]) });
+  });
+  return anrop;
+}
+
+/** Utkastet plockas upp, planeringen öppnas och canvasen med den — samma väg
+ *  läraren tog när hon hittade buggen. */
+async function iCanvas(page, dok) {
+  await fejka(page, [], { id: 10, markor: 0, versioner: [dok] });
+  await page.goto("/");
+  await hydrerad(page);
+  await page.getByRole("tab", { name: "Planering" }).click();
+  await expect.poll(() => antalGu(page), { timeout: 15_000 }).toBeGreaterThan(0);
+  await page.locator("#granska").click();
+  await expect(page.locator("#g-falt")).toBeVisible({ timeout: 10_000 });
+}
+
+async function pekaPa(page, valjare) {
+  await page.locator("#g-valj").click();
+  await page.locator(valjare).first().click();
+  await expect(page.locator("#g-mal")).toHaveAttribute("data-satt", "");
+}
+
+async function skickaOnskemal(page, mening) {
+  await page.locator("#g-falt").fill(mening);
+  await page.locator("#g-form").evaluate(f => f.requestSubmit());
+  await expect(page.locator("#g-antal")).toHaveText("1 ändring", { timeout: 20_000 });
+}
+
+const svarsrad = page => page.locator(".gvarv .fsvar .ftext").first();
+
+test("en ändrad instruktion ändrar bandet på pappret — och märks", async ({ page }) => {
+  const utan = "Läs uppgiften tillsammans. Bestäm vem som skriver.";
+  await fejkaRefine(page, {
+    doc: exam({ instruktion: utan }), andrade: ["instr"] });
+  await iCanvas(page, papper({
+    instruktion: "Läs uppgiften tillsammans. Bestäm vem som skriver. "
+      + "Redovisas skriftligt: ett gemensamt svar per grupp lämnas in vid "
+      + "lektionens slut.",
+    inst: skriftligt }));
+
+  await pekaPa(page, '#granskaskal .gdok [data-el="instr"]');
+  await skickaOnskemal(page, "Ta bort meningen om att svaret lämnas in.");
+
+  const band = page.locator("#arkskal .guband").first();
+  await expect(band).not.toContainText("lämnas in vid lektionens slut",
+                                       { timeout: 20_000 });
+  await expect(band).toHaveClass(/andrad/);
+  await expect(svarsrad(page)).toContainText("Skrivet om");
+});
+
+test("en omskrivning som inte ändrade något säger det rakt ut", async ({ page }) => {
+  await fejkaRefine(page, { doc: exam(), andrade: [] });
+  await iCanvas(page, papper({ inst: skriftligt }));
+
+  await pekaPa(page, '#granskaskal .gdok [data-el="instr"]');
+  await skickaOnskemal(page, "Ta bort meningen om att svaret lämnas in.");
+
+  // Den gamla mallen påstod «Skrivet om … markerad i pappret» här. Den lögnen
+  // är hela buggen, och det här testet är vakten.
+  const svar = svarsrad(page);
+  await expect(svar).toContainText("Ingenting på pappret ändrades", { timeout: 20_000 });
+  await expect(svar).not.toContainText("Skrivet om");
+});
+
+test("ändrades något annat än det läraren pekade på säger panelen det",
+  async ({ page }) => {
+    await fejkaRefine(page, {
+      doc: exam({ uppgifter: exam().uppgifter.map((u, k) =>
+        k === 0 ? { ...u, text: "Beräkna $1 + 1$." } : u) }),
+      andrade: ["uppg1"] });
+    await iCanvas(page, papper({ inst: skriftligt }));
+
+    await pekaPa(page, '#granskaskal .gdok [data-el="instr"]');
+    await skickaOnskemal(page, "Ta bort meningen om att svaret lämnas in.");
+
+    const svar = svarsrad(page);
+    await expect(svar).toContainText("står kvar oförändrad", { timeout: 20_000 });
+    await expect(svar).toContainText("uppgift a");
+  });
+
+/* ── FACITPOSTEN ÄR SIN UPPGIFT ─────────────────────────────────
+   «Om jag ändrar något i facit så ska uppgiften också ändras.» Första steget är
+   att facitposten alls går att peka på: dess bricka är en BOKSTAV («D.»), och
+   markera() läste den med parseInt — NaN, alltså inget data-el, alltså ingen
+   `nummer`-låsning till servern. Facit i bladet lägger båda arken i samma
+   trave, och då syns det andra kravet också: ändringen märks på båda. */
+
+test("ett klick på facitposten låser omskrivningen till uppgiftens nummer",
+  async ({ page }) => {
+    const anrop = await fejkaRefine(page, {
+      doc: exam({ uppgifter: exam().uppgifter.map((u, k) => k === 3
+        ? { ...u, text: "Beräkna $6 : 2$.", losning: "$3$" } : u) }),
+      andrade: ["uppg4"] });
+    await iCanvas(page, papper({
+      inst: { ...skriftligt, facit: "Facit i bladet" } }));
+
+    // Facitets fjärde post heter «D.» — och är uppgift 4.
+    await pekaPa(page, '#granskaskal .gdok .pruppg[data-el="uppg4"]');
+    await expect(page.locator("#g-mal .gmaltext")).toHaveText("Facit D");
+    await skickaOnskemal(page, "Mindre tal, och svaret ska bli ett heltal.");
+
+    // Låsningen läses ur elementets id — utan den fick modellen gissa vilken
+    // av fyra uppgifter «mindre tal» gällde.
+    expect(anrop[0].nummer).toBe(4);
+    expect(anrop[0].mal.namn).toBe("Facit D");
+    // Uppgiften och dess facit är samma sak sedd från två håll: båda märks.
+    await expect(page.locator('#arkskal .gukort[data-el="uppg4"]'))
+      .toHaveClass(/andrad/, { timeout: 20_000 });
+    await expect(page.locator('#arkskal .pruppg[data-el="uppg4"]'))
+      .toHaveClass(/andrad/);
+  });
+
 test("tre radbrytningar i data blir EN tomrad på arket — inte noll",
   async ({ page }) => {
     await fejka(page, [rad(1, papper())]);
