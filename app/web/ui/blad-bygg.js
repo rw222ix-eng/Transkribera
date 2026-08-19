@@ -203,7 +203,7 @@ window.BladBygg = (() => {
     const post = (u, k) => `<div class="pruppg">
       <span class="prnr">${BOKSTAV[k] || k + 1}.<span class="prvarde">${u.p} p</span></span>
       <div><p class="prtext">${mat(u.t)}</p>
-        <div class="losvar"><b class="losetikett">Svar</b><span>${mat(u.f)}</span>${u.enhet ? `<em>${esc(u.enhet)}</em>` : ''}</div>
+        ${u.f ? `<div class="losvar"><b class="losetikett">Svar</b><span>${mat(u.f)}</span>${u.enhet ? `<em>${esc(u.enhet)}</em>` : ''}</div>` : ''}
         ${u.vag ? `<ul class="lovag">${u.vag.map(s => `<li><span class="losteg">${mat(s[0])}<em>${esc(s[1])}</em></span></li>`).join('')}</ul>` : ''}
       </div></div>`;
     /* data-brytbar: facit är lika långt som sina lösningar, och ett svar på

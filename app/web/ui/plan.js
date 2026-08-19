@@ -1760,7 +1760,12 @@
         t: u.text || '',
         niva: provNiva(nivavektor),
         ut: u.typ === 'rutin' ? 'kort' : 'rakna',
-        f: u.losning || delar.map((d, k) => `${'abcdef'[k]}) ${d.losning || ''}`).join('   '),
+        /* Med deluppgifter bär `vag` lösningarna (poängsatta steg nedanför) —
+           samma text i `f` skrev hela lösningsgången TVÅ gånger på facitbladet:
+           först som ett stycke på SVAR-raden, sedan som steg. `f` är därför
+           bara uppgiftens EGEN sammanfattning när den finns; utan delar är
+           lösningen svaret, som förut. Tom `f` → arkfacit hoppar raden. */
+        f: u.losning || '',
         formaga: u.formaga || '',
         /* Nivåvektorn följer med hel, inte bara som `niva`. Elevens betyg går
            inte att räkna ur en klumpsumma — C kräver sin andel av C- och
