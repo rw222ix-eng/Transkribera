@@ -110,10 +110,13 @@ class FejkOCR:
             sidor.append({
                 "fil": b.name, "tryckt_sida": tryckt, "avsnitt": "1.1",
                 "rubrik": "Repetition",
+                # Numren löper I FÖLJD över sidorna, som i en riktig bok — det
+                # är den följden luckvakten läser, och ett hopp mellan två
+                # sidor hade sett ut som en miss på varje uppslag.
                 "uppgifter": [{"nr": nr, "niva": i + 1,
                                "exempel": nr in self.exempel}
                               for i in range(self.uppg_per_sida)
-                              for nr in [1100 + tryckt * 10 + i]
+                              for nr in [1100 + (tryckt - 1) * self.uppg_per_sida + i]
                               if nr not in self.hoppa],
             })
         return {"sidor": sidor}
@@ -817,12 +820,104 @@ def test_en_bas_fran_v23_far_exempelkolumnen(tmp_path):
 def test_exemplet_bars_fran_avlasningen_till_uppslaget(client, ocr):
     """Hela vägen: faktapasset märker posten, basen bär flaggan, och rutten
     uppgiftspanelen frågar skickar med den."""
-    ocr.exempel = {1200, 1201}                # s. 10, de två första numren
+    ocr.exempel = {1127, 1128}                # s. 10, de två första numren
     b = _importera(client)
     _done(client.post(f"/api/bocker/{b['id']}/las",
                       json={"fran": 10, "till": 11, "bara": "fakta"}))
     d = client.get(f"/api/bocker/{b['id']}/uppslag?fran=10&till=11").json()
     flaggor = {u["nr"]: u["exempel"] for u in d["uppgifter"]}
-    assert flaggor[1200] == 1 and flaggor[1201] == 1 and flaggor[1202] == 0
+    assert flaggor[1127] == 1 and flaggor[1128] == 1 and flaggor[1129] == 0
     # Sidan bredvid är orörd: exempelfrågan ställs per uppgift, inte per bok.
-    assert flaggor[1210] == 0
+    assert flaggor[1130] == 0
+
+
+# ─────────────────────────────────────────────────────── luckvakten ──────────
+# Böcker numrerar i följd. Saknas 1102 mellan två lästa grannar är det nästan
+# alltid avläsningen som missade det — och det ska upptäckas medan sidorna ändå
+# ligger renderade, inte framför klassen.
+
+def _u(nr, sida):
+    return {"nr": nr, "sida": sida}
+
+
+def test_ett_nummer_som_saknas_mitt_i_foljden_ar_en_lucka():
+    rader = [_u(1101, 11), _u(1103, 11), _u(1104, 12)]
+    assert bok.luckor(rader) == [1102]
+
+
+def test_avsnittsgransen_ar_ingen_lucka():
+    """1120 → 1201 är boken som börjar om i nästa avsnitt, inte åttio missade
+    uppgifter. Bara nummer i samma hundratalsserie jämförs."""
+    rader = [_u(1118, 14), _u(1120, 14), _u(1201, 15), _u(1202, 15)]
+    assert bok.luckor(rader) == [1119]
+
+
+def test_ett_orimligt_stort_hal_ar_ett_serieskifte_inte_en_lucka():
+    rader = [_u(1101, 11), _u(1180, 12)]
+    assert bok.luckor(rader) == []
+
+
+def test_en_olast_sida_mellan_grannarna_ar_inte_en_lucka():
+    """Numren mellan 1101 och 1121 ligger på s. 12, som ingen läst. De är inte
+    missade — de är olästa, och det är en annan mening för läraren."""
+    rader = [_u(1101, 11), _u(1121, 13)]
+    assert bok.luckor(rader, {11, 12, 13}) == list(range(1102, 1121))
+    assert bok.luckor(rader, {11, 13}) == []
+
+
+def test_luckvakten_laser_om_sidan_en_gang(tmp_path, conn, ocr):
+    """Modellen missade ett nummer. Vakten ska ta ETT omtag — sidbilderna
+    ligger redan på disken, så det kostar ett faktaanrop — och inte fler."""
+    b = bok.importera(tmp_path, conn, pdf=pdf_fil(tmp_path / "d"))
+    ocr.hoppa = {1128}                       # s. 10 har 1127, (1128), 1129
+    handelser = []
+    ocr.fakta.clear()
+    bok.las_spann(tmp_path, conn, b["id"], 10, 11, bara="fakta",
+                  emit=handelser.append)
+    assert len(ocr.fakta) == 2               # ett knippe + ett omtag
+    assert any("1128 saknas mitt i följden" in h.get("msg", "") for h in handelser)
+    # Omtaget lyckades inte heller (modellen ser fortfarande inte numret) —
+    # och då accepteras luckan, men den syns.
+    uppg = db.bok_uppgifter(conn, b["id"], 10, 11)
+    assert 1128 not in {u["nr"] for u in uppg}
+    assert bok.luckor(uppg) == [1128]
+
+
+def test_luckvakten_tar_omtaget_bara_nar_det_finns_en_lucka(tmp_path, conn, ocr):
+    """Omtaget kostar ett anrop. Det får inte bli en rutin."""
+    b = bok.importera(tmp_path, conn, pdf=pdf_fil(tmp_path / "d"))
+    ocr.fakta.clear()
+    bok.las_spann(tmp_path, conn, b["id"], 10, 11, bara="fakta")
+    assert len(ocr.fakta) == 1
+
+
+def test_omtaget_fyller_luckan_nar_modellen_ser_numret_andra_gangen(
+        tmp_path, conn, ocr):
+    b = bok.importera(tmp_path, conn, pdf=pdf_fil(tmp_path / "d"))
+    ocr.hoppa = {1128}
+    riktig = ocr.las_sidfakta
+
+    def andra_gangen(bilder, llm=None):
+        # Omtaget är det andra faktaanropet i spannet — då ser modellen numret.
+        if len(ocr.fakta) >= 1:
+            ocr.hoppa = set()
+        return riktig(bilder, llm=llm)
+
+    import app.bok_ocr as _bo
+    _bo.las_sidfakta = andra_gangen
+    try:
+        bok.las_spann(tmp_path, conn, b["id"], 10, 11, bara="fakta")
+    finally:
+        _bo.las_sidfakta = riktig
+    uppg = db.bok_uppgifter(conn, b["id"], 10, 11)
+    assert 1128 in {u["nr"] for u in uppg}
+    assert bok.luckor(uppg) == []
+
+
+def test_uppslaget_svarar_med_luckorna(client, ocr):
+    b = _importera(client)
+    ocr.hoppa = {1128}
+    _done(client.post(f"/api/bocker/{b['id']}/las",
+                      json={"fran": 10, "till": 11, "bara": "fakta"}))
+    d = client.get(f"/api/bocker/{b['id']}/uppslag?fran=10&till=11").json()
+    assert d["luckor"] == [1128]

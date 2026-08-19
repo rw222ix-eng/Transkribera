@@ -200,9 +200,16 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # trigga på `olasta` fick en evig slinga — faktapasset skriver aldrig
         # text, så sidorna förblev olästa i textmening hur många gånger det än
         # kördes.
+        # Luckorna räknas fram HÄR, inte lagras: uppgifterna på sidorna är
+        # sanningen, och luckan är bara det man ser mellan dem. Ett nummer som
+        # saknas mitt i en följd av lästa grannar blev troligen missat i
+        # avläsningen — panelen säger då «kunde inte läsas från sidan» i stället
+        # för att påstå att numret inte finns i boken (uppgifter.js
+        # kalendertext). Läsningen har redan tagit sitt enda omtag (bok.las_spann).
         return {"fran": fran, "till": t, "uppgifter": uppg,
                 "olasta": olasta,
                 "utan_fakta": utan_fakta,
+                "luckor": bok_mod.luckor(uppg, {s["sida"] for s in sidor}),
                 "sidor": [{"sida": s["sida"], "avsnitt": s.get("avsnitt"),
                            "rubrik": s.get("rubrik"),
                            "last": bool(s.get("text"))} for s in sidor]}

@@ -196,6 +196,65 @@ def _sikta_om(fakta: list[dict], bilder: list[Path], sikte: int) -> int | None:
     return ny if ny is not None and ny != sikte else None
 
 
+# ── Luckvakten ────────────────────────────────────────────────────────────
+#
+# Läroböcker numrerar i följd inom sitt block: 1101, 1102, 1103 … Saknas 1102
+# mitt emellan två lästa grannar är det nästan alltid AVLÄSNINGEN som missade
+# det, inte boken som hoppade över numret. Det är samma fel som
+# konsekvensregeln (db.py v24) skrevs mot — modellen tog 1101 men hoppade 1102 —
+# och vakten är dess andra hälft: regeln gör att ett numrerat exempel inte
+# hoppas, vakten märker när något ändå gjorde det.
+#
+# Avsnittsgränsen är INGEN lucka. 1120 → 1201 är boken som börjar om i nästa
+# avsnitt, inte åttio missade uppgifter. Därför jämförs bara nummer inom samma
+# hundratalsserie: 1101 och 1120 hör ihop, 1201 gör det inte.
+MAX_LUCKA = 20        # större hål är inte en miss, det är ett serieskifte
+
+
+def _mellan_lasta(a: dict, b: dict, lasta: set[int]) -> bool:
+    """Ligger BÅDA grannarna — och allt mellan dem — på sidor som faktiskt
+    lästs? Annars är de saknade numren inte missade utan olästa, och det är en
+    annan mening för läraren (uppgifter.js kalendertext)."""
+    s1, s2 = a.get("sida"), b.get("sida")
+    if not isinstance(s1, int) or not isinstance(s2, int):
+        return False
+    return all(s in lasta for s in range(min(s1, s2), max(s1, s2) + 1))
+
+
+def _luckpar(uppgifter: list[dict],
+             lasta: set[int] | None) -> list[tuple[dict, dict, list[int]]]:
+    """Luckorna som (granne under, granne över, de saknade numren)."""
+    per_serie: dict[int, list[dict]] = {}
+    for u in uppgifter or []:
+        if isinstance(u.get("nr"), int):
+            per_serie.setdefault(u["nr"] // 100, []).append(u)
+    par = []
+    for rader in per_serie.values():
+        rader = sorted(rader, key=lambda r: r["nr"])
+        for a, b in zip(rader, rader[1:]):
+            if not 2 <= b["nr"] - a["nr"] <= MAX_LUCKA + 1:
+                continue
+            if lasta is not None and not _mellan_lasta(a, b, lasta):
+                continue
+            par.append((a, b, list(range(a["nr"] + 1, b["nr"]))))
+    return par
+
+
+def luckor(uppgifter: list[dict], lasta: set[int] | None = None) -> list[int]:
+    """Uppgiftsnummer som saknas mitt i en följd — troligen missade i läsningen.
+
+    Härledd, aldrig lagrad: uppgifterna på sidorna är sanningen, och luckan är
+    bara det man ser mellan dem. Ett omtag som lyckas gör den borta av sig
+    själv."""
+    return sorted({n for _a, _b, nn in _luckpar(uppgifter, lasta) for n in nn})
+
+
+def _kort(nummer: list[int], tak: int = 6) -> str:
+    """Numren i en loggrad. Ett halvdussin räcker för att säga vad som hände."""
+    txt = ", ".join(str(n) for n in nummer[:tak])
+    return txt + (" …" if len(nummer) > tak else "")
+
+
 def las_spann(base: Path, conn, bok_id: int, fran: int, till: int, *,
               emit=None, llm=None, avbruten=None, bara: str | None = None,
               max_sidor: int = MAX_SPANN) -> dict:
@@ -264,6 +323,36 @@ def las_spann(base: Path, conn, bok_id: int, fran: int, till: int, *,
         tak = 100 if bara == "fakta" else 35
         logg({"type": "progress",
               "pct": round(tak * (i + len(knippe)) / max(1, len(utan_fakta)))})
+
+    # Luckvakten, EN gång — aldrig i slinga. Sidbilderna ligger redan på disken
+    # (rendera hoppar över dem), så omtaget kostar ett faktaanrop och inget mer.
+    # Kvarstår luckan efteråt accepteras den: den kan vara ett nummer boken inte
+    # har, eller ett exempel modellen övertygat hoppar. Den TYSTAS dock inte —
+    # uppslagsrutten räknar fram den på nytt vid varje fråga och panelen säger
+    # «kunde inte läsas från sidan» i stället för «står inte på sidorna».
+    if utan_fakta and not (avbruten and avbruten()):
+        rader = db.bok_uppgifter(conn, bok_id, fran, till)
+        lasta_sidor = {r["sida"] for r in
+                       db.bok_sidor(conn, bok_id, fran, till, med_text=False)}
+        par = _luckpar(rader, lasta_sidor)
+        if par:
+            saknade = sorted({n for _a, _b, nn in par for n in nn})
+            # Bara sidorna som rymmer luckans GRANNAR läses om. Numret som
+            # saknas står på en av dem — hela spannet vore en omläsning av
+            # sidor som redan svarat.
+            om = sorted({s for a, b, _n in par
+                         for s in (a.get("sida"), b.get("sida"))
+                         if isinstance(s, int)})
+            logg({"type": "log",
+                  "msg": f"Uppg. {_kort(saknade)} saknas mitt i följden — "
+                         f"läser om s. {', '.join(str(s) for s in om)} …"})
+            pdf_har = {r["sida"]: r.get("pdf_sida") for r in
+                       db.bok_sidor(conn, bok_id, fran, till, med_text=False)}
+            bilder = rendera(pdf, [(pdf_har.get(s) or (s + sikte)) - 1
+                                   for s in om], mapp)
+            if bilder:
+                _spara_fakta(conn, bok_id,
+                             bok_ocr.las_sidfakta(bilder, llm=llm)["sidor"], sikte)
 
     # Vilken PDF-sida en tryckt sida FAKTISKT låg på, när faktapasset har sett
     # den. Sparat värde slår alltid räknat: texten är det dyra passet, och den
