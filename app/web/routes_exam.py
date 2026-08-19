@@ -91,6 +91,22 @@ def create_router(base: Path, arbiter) -> APIRouter:
         finally:
             conn.close()
 
+    def _satt_lararens_datum(exam: dict | None, datum: str | None) -> None:
+        """Pappersdatumet är LÄRARENS, aldrig modellens.
+
+        `datum` står i INSTRUCTION:s fältlista men har ingen källa där, så
+        modellen fyllde i den dag den råkade skriva. Lärarens dag ligger i
+        stället i exams.datum — den kommer ur planeringens väljare — och de två
+        gick isär: skärmen läser DB-kolumnen, PDF:en läste exam-JSON:en, och en
+        gruppuppgift till den 20:e trycktes med den 19:e i huvudet.
+
+        Kolumnen vinner alltid. Har läraren inte satt någon dag bär pappret
+        ingen: ett hittepådatum i huvudet är värre än inget, för det är det
+        eleverna skriver av. Samma idiom som `grupp` och `elev` nedan — det
+        läraren valde skrivs in i dokumentet även om modellen tyckte annat."""
+        if isinstance(exam, dict):
+            exam["datum"] = (datum or "").strip() or None
+
     def _exam_result(view: dict, errors: list, rounds: int) -> dict:
         doc, _ = exam_spec.validate_exam_json(view.get("exam") or {})
         summor = exam_spec.poangsummor(doc) if doc else None
@@ -356,6 +372,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     res["exam"]["grupp"] = grupp
                 if res["exam"] is not None and elev_namn:
                     res["exam"]["elev"] = elev_namn
+                _satt_lararens_datum(res["exam"], datum)
                 if res["exam"] is None:
                     return {"id": None, "exam": None,
                             "errors": res["errors"], "rounds": res["rounds"]}
@@ -409,6 +426,11 @@ def create_router(base: Path, arbiter) -> APIRouter:
             conn.close()
         if view is None or view.get("exam") is None:
             return JSONResponse({"error": "okänt prov"}, status_code=404)
+        # Dagen är lärarens också GENOM en omskrivning: modellen skriver om
+        # hela dokumentet och satte tillbaka sin egen dag i varje varv. Båda
+        # sidor av diffen stämplas, annars märks sidhuvudet som ändrat i ett
+        # varv som inte rörde det.
+        _satt_lararens_datum(view["exam"], view.get("datum"))
 
         llm = arbiter.try_acquire_llm()
         if not llm:
@@ -424,6 +446,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     bok=bok_block, historik=historik,
                     profil=view.get("typ") or "prov",
                     log_cb=lambda m: emit({"type": "log", "msg": m}))
+                _satt_lararens_datum(res["exam"], view.get("datum"))
                 if res["exam"] is not None and res["exam"] != view["exam"]:
                     conn = db.connect(db_file)
                     try:
@@ -480,6 +503,11 @@ def create_router(base: Path, arbiter) -> APIRouter:
         if view is None or view.get("exam") is None:
             return JSONResponse({"error": "okänt prov"}, status_code=404)
         view["exam"] = exam_gen._repair_ctrl_chars(view["exam"])
+        # Också HÄR, och inte bara vid genereringen: pappren som redan ligger i
+        # basen bär modellens dag, och det är dem läraren skriver ut i morgon.
+        # Sker före `exam = view["exam"]` i jobbet, så jämförelsen som avgör om
+        # en ny version ska sparas ser samma dokument på båda sidor.
+        _satt_lararens_datum(view["exam"], view.get("datum"))
         out_dir = _artifact_dir(view)
         if out_dir is None:
             return JSONResponse({"error": "otillåten sökväg"}, status_code=400)

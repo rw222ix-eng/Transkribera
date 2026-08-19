@@ -165,6 +165,54 @@ def test_refine_requires_message(client, monkeypatch):
                        json={"message": "x"}).status_code == 404
 
 
+def test_pappret_bar_lararens_datum_inte_modellens(client, monkeypatch):
+    """Modellen fyller i `datum` — fältet står i INSTRUCTION:s lista utan
+    källa — och skrev den dag den råkade köra. Lärarens dag ligger i
+    exams.datum, ur planeringens väljare. Skärmen läste kolumnen och PDF:en
+    läste JSON:en, så en gruppuppgift till den 20:e trycktes med den 19:e i
+    huvudet. Kolumnen vinner, i dokumentet och därmed på pappret."""
+    modellens = _exam_doc() | {"datum": "2026-08-19"}
+    monkeypatch.setattr(exam_gen, "generate_exam",
+                        lambda *a, **kw: {"exam": copy.deepcopy(modellens),
+                                          "errors": [], "rounds": 1})
+    r = client.post("/api/exams/generate",
+                    json={"course_id": _course_id(client), "antal": 6,
+                          "datum": "2026-08-20"})
+    result = _done(r)
+    assert result["exam"]["datum"] == "2026-08-20"
+
+    # Och pappret: den lagrade JSON:en kan bära modellens dag sedan tidigare
+    # (alla dokument i basen gör det), så renderingen stämplar om den också.
+    conn = appdb.connect(client.base_dir / "transkribera.db")
+    appdb.add_exam_version(conn, result["id"], copy.deepcopy(modellens))
+    conn.close()
+    sedda = {}
+
+    def fake_compile(tex, out_dir, jobname, **kw):
+        sedda.setdefault(jobname, tex)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        p = out_dir / f"{jobname}.pdf"
+        p.write_bytes(b"%PDF-1.5 fejk")
+        return p, ""
+    monkeypatch.setattr(exam_pdf, "engine_available", lambda: True)
+    monkeypatch.setattr(exam_pdf, "compile_pdf", fake_compile)
+    _done(client.post(f"/api/exams/{result['id']}/approve", json={}))
+    prov = next(t for n, t in sedda.items() if "bedomning" not in n)
+    assert "2026-08-20" in prov and "2026-08-19" not in prov
+
+
+def test_utan_valt_datum_bar_pappret_inget(client, monkeypatch):
+    """Ingen dag vald → ingen dag på pappret. Ett hittepådatum i huvudet är
+    värre än inget: det är det eleverna skriver av."""
+    monkeypatch.setattr(
+        exam_gen, "generate_exam",
+        lambda *a, **kw: {"exam": _exam_doc() | {"datum": "2026-08-19"},
+                          "errors": [], "rounds": 1})
+    result = _done(client.post("/api/exams/generate",
+                               json={"course_id": _course_id(client), "antal": 6}))
+    assert result["exam"]["datum"] is None
+
+
 def test_approve_without_engine_saves_tex(client, monkeypatch):
     result, _ = _make_exam(client, monkeypatch, datum="2026-10-05")
     monkeypatch.setattr(exam_pdf, "engine_available", lambda: False)
