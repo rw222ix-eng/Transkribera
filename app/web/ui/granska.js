@@ -320,6 +320,44 @@
     });
   }
 
+  /* Elementets namn så som det står i pappret — samma etikett läraren ser i
+     målrutan. Läses ur canvasens klon, och den är fortfarande den gamla när
+     svaret skrivs: fraga.js kör `svar` FÖRE `efterKlar`, alltså före
+     omritningen. Hittas inget namn svarar vi tomt hellre än «uppg3». */
+  function namnFor(id) {
+    const el = $(`.gdok [data-el="${id}"]`, plan);
+    const n = el && el.dataset.namn;
+    return n ? n.toLowerCase() : '';
+  }
+  /* «sidhuvudet, uppgift B och namnraderna» — en uppräkning på svenska, inte en
+     lista med id:n. Fler än tre blir «med flera»: meningen ska gå att läsa. */
+  function raknaUpp(namn) {
+    const n = namn.slice(0, 3);
+    const svans = namn.length > 3 ? ' med flera' : '';
+    if (n.length === 1) return n[0] + svans;
+    return n.slice(0, -1).join(', ') + ' och ' + n[n.length - 1] + svans;
+  }
+  /* Vad panelen SÄGER att som hände, byggt ur serverns diff. Se kommentaren
+     vid `svar:` nedan — det här är hela poängen med den. */
+  function svarText(post, text, res) {
+    const gjort = `Skrivet om. ${post.namn} följer nu ”${text.trim()}” — ändringen är markerad i pappret.`;
+    /* `Array.isArray` och inte sanningsvärde: en TOM lista är ett svar
+       («ingenting på pappret ändrades»), inte ett saknat fält. Samma regel som
+       plan.js iterera följer när den avgör vilka rutor som märks. */
+    const sagt = res && Array.isArray(res.andrade) ? res.andrade : null;
+    if (!sagt) return gjort;
+    if (!sagt.length) {
+      return `Ingenting på pappret ändrades. ${post.namn} står kvar som förut — säg gärna vad som ska stå i stället, eller peka på en annan del av pappret.`;
+    }
+    if (!post.el || sagt.includes(post.el)) return gjort;
+    /* Servern ändrade något — men inte det läraren pekade på. Då är det den
+       skillnaden som är beskedet, och inget annat. */
+    const namn = [...new Set(sagt.map(namnFor).filter(Boolean))];
+    return namn.length
+      ? `${post.namn} står kvar oförändrad. Det som ändrades var ${raknaUpp(namn)} — markerat i pappret.`
+      : `${post.namn} står kvar oförändrad. Något annat på pappret skrevs om i stället, och det är markerat.`;
+  }
+
   function skicka(text) {
     if (!text.trim()) return;
     const fore = ogonblick();
@@ -366,7 +404,20 @@
         /* Inget riktigt anrop — prototypen, eller ett papper appen skrev själv.
            Då är väntan prototypens egen, precis som förut. */
         || new Promise(r => setTimeout(r, 1400)) : null,
-      svar: `Skrivet om. ${post.namn} följer nu ”${text.trim()}” — ändringen är markerad i pappret.`,
+      /* ── ÄRLIGT SVAR ────────────────────────────────
+         Raden här var en MALL som alltid skrevs: «Skrivet om. Instruktionen
+         följer nu ”…” — ändringen är markerad i pappret.» Den påstod alltså
+         att ändringen var gjord oavsett vad servern gjort. Läraren bad att en
+         mening skulle bort ur instruktionsrutan, ingenting hände på pappret,
+         och panelen svarade ändå att det var klart — det värsta en app kan
+         göra, för då slutar man kontrollera.
+
+         Servern diffar dokumentets JSON och skickar `andrade`
+         (app/dokumentdiff.py). Finns listan är det den som talar, också när
+         den är TOM. Saknas fältet — prototypens papper, gamla utkast,
+         kassettsvar — står dagens fras kvar; den är inte sann, men det är det
+         enda vi vet där, och att börja gissa åt andra hållet vore lika illa. */
+      svar: res => svarText(post, text, res),
       efterKlar: (_el, res) => {
         if (host && host.onAndra) host.onAndra(text, post.namn, post.el, res);
         vantaDiff(varv, fore, 0);
