@@ -62,14 +62,14 @@ const rad = (id, dok) => ({
   versioner: [dok], dokument: { ...dok, id },
 });
 
-async function fejka(page, sparade) {
+async function fejka(page, sparade, utkast = null) {
   const json = (route, kropp) => route.fulfill({
     status: 200, contentType: "application/json", body: JSON.stringify(kropp) });
   await page.route("**/api/schema", route => json(route, SCHEMA));
   await page.route("**/api/lessons", route => json(route, []));
   await page.route("**/api/history", route => json(route, []));
   await page.route("**/api/klassprofil", route => json(route, {}));
-  await page.route("**/api/dokument", route => json(route, { sparade, utkast: null }));
+  await page.route("**/api/dokument", route => json(route, { sparade, utkast }));
   await page.route("**/api/dokument/**", route => json(route, { ok: true, id: 1 }));
 }
 
@@ -164,6 +164,84 @@ test("fortsättningsbladet bär forts-raden — inte huvudet en gång till",
     // Rubriken på första bladet är ren — inget «— forts.» klistrat på den.
     const titel = await page.locator("#fh-ark .gu .guhuv .gutitel").first().textContent();
     expect(titel.trim()).toBe("1.1 Tal i olika former");
+  });
+
+/* ── APPENS EGNA VÄGAR ──────────────────────────────────
+   Testen ovan går genom förhandsvisningen, där traven är synlig när den ritas.
+   Läraren möter pappret på en annan väg: utkastet plockas upp vid SIDLADDNINGEN
+   (plan.js aterstallUtkast), och då ligger #dokument i planeringsvyn — som är
+   `hidden` tills hon byter flik. Traven ritades alltså i en gömd vy där varje
+   .gu rapporterar clientHeight 0, ledigt() blir −54 på varje blad, och delaArk
+   delade tills ett kort låg kvar per papper. Mätt i den skarpa appen: fyra blad
+   med 466, 703, 699 och 758 px ledigt.
+
+   De två testen nedan går den vägen: gömd rita, sedan flikbyte. Och den varma
+   omritningen efter den — arkväxeln ritar samma utkast en gång till på en sida
+   där typsnitten redan är inne. */
+const traven = page => page.evaluate(() => ({
+  vyDold: document.querySelector("#vy-planering").hidden,
+  gu: Array.from(document.querySelectorAll("#arkskal .gu")).map(g => ({
+    kort: g.querySelectorAll(".gukort").length,
+    ch: g.clientHeight,
+    ledigt: (() => {
+      const k = g.querySelectorAll(".gukort");
+      const s = k[k.length - 1];
+      if (!s) return null;
+      return Math.floor(g.clientHeight - parseFloat(getComputedStyle(g).paddingBottom)
+        - (s.offsetTop + s.offsetHeight));
+    })(),
+  })),
+}));
+const antalGu = page => page.evaluate(() => document.querySelectorAll("#arkskal .gu").length);
+
+test("utkastet som plockas upp i en gömd flik delas inte alls — och packas när den öppnas",
+  async ({ page }) => {
+    await fejka(page, [], { id: 10, markor: 0, versioner: [papper()] });
+    await page.goto("/");
+    await hydrerad(page);
+    await expect.poll(() => antalGu(page), { timeout: 15_000 }).toBeGreaterThan(0);
+    await page.waitForTimeout(1200);
+
+    const gomt = await traven(page);
+    // Appen står kvar på transkriberingsvyn — pappret är ritat men omätbart.
+    expect(gomt.vyDold).toBe(true);
+    expect(gomt.gu[0].ch).toBe(0);
+    // En gömd mätning får ALDRIG bli en maxdelning: ett blad, alla fyra korten.
+    expect(gomt.gu.length).toBe(1);
+    expect(gomt.gu[0].kort).toBe(4);
+
+    // Läraren byter flik. Nu har pappret en layout, och nu — först nu — mäts det.
+    await page.getByRole("tab", { name: "Planering" }).click();
+    await expect.poll(() => antalGu(page), { timeout: 15_000 }).toBe(2);
+
+    const satt = await traven(page);
+    expect(satt.vyDold).toBe(false);
+    expect(satt.gu.map(g => g.kort)).toEqual([2, 2]);
+    // Inget blad står halvtomt medan nästa bär en ensam uppgift.
+    satt.gu.forEach(g => expect(g.ledigt).toBeGreaterThanOrEqual(0));
+  });
+
+test("arkväxeln ritar om utkastet på en varm sida — packningen håller",
+  async ({ page }) => {
+    await fejka(page, [], { id: 10, markor: 0, versioner: [papper()] });
+    await page.goto("/");
+    await hydrerad(page);
+    await page.getByRole("tab", { name: "Planering" }).click();
+    await expect.poll(() => antalGu(page), { timeout: 15_000 }).toBe(2);
+
+    /* Fram till facit och tillbaka: `byt` kallar visa() som ritar traven på nytt.
+       Typsnitten är redan laddade, så den varma ritningen får inte färre
+       mätvarv än den kalla — det var vad villkoret på document.fonts.status
+       orsakade. */
+    await page.locator("#arkval button").nth(1).click();
+    await expect.poll(() => page.locator("#arkskal .ark[data-form='fa']").count(),
+      { timeout: 15_000 }).toBeGreaterThan(0);
+    await page.locator("#arkval button").nth(0).click();
+    await expect.poll(() => antalGu(page), { timeout: 15_000 }).toBe(2);
+
+    const satt = await traven(page);
+    expect(satt.gu.map(g => g.kort)).toEqual([2, 2]);
+    satt.gu.forEach(g => expect(g.ledigt).toBeGreaterThanOrEqual(0));
   });
 
 test("tre radbrytningar i data blir EN tomrad på arket — inte noll",
