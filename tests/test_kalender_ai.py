@@ -11,6 +11,7 @@ SÄMRE än reglerna:
 * samma serie frågas en gång, inte per instans och inte per synk.
 """
 import json
+from datetime import date, timedelta
 
 import pytest
 
@@ -35,6 +36,15 @@ def _heldag(namn, fran, till):
     return {"summary": namn, "start": {"date": fran}, "end": {"date": till}}
 
 
+def _framover(veckodag):
+    """Nästa datum med den veckodagen, alltid FRAMFÖR idag. Synk-testerna går
+    via read_schema, som inte tar `idag` — ett hårdkodat datum blev dåtid och
+    lektionsserien filtrerades som avslutad (sista instansen < idag,
+    tolka_handelser). Serienycklarna bär inga datum, så besluten träffar ändå."""
+    d = date.today()
+    return (d + timedelta(days=(veckodag - d.isoweekday()) % 7 or 7)).isoformat()
+
+
 # --------------------------------------------------- vad som blir osäkert --
 
 def test_reglerna_markerar_det_de_inte_kan_avgora():
@@ -49,7 +59,9 @@ def test_reglerna_markerar_det_de_inte_kan_avgora():
         _heldag("APL-vecka åk 2", "2026-09-14", "2026-09-19"),
         # Säkert: enstaka möte.
         _tid("2026-08-20", "13:00", "14:30", summary="Ämneslagsmöte"),
-    ], klasser=["NA25"], kurser=["Matematik, nivå 2c"])
+        # `idag` skickas alltid i testerna — annars ruttnar de när kalender-
+        # datumet blir dåtid och serien filtreras som avslutad.
+    ], klasser=["NA25"], kurser=["Matematik, nivå 2c"], idag="2026-08-17")
 
     assert len(ut["schema"]) == 1
     varfor = {o["titel"]: o["varfor"] for o in ut["osakra"]}
@@ -81,10 +93,11 @@ def test_beslut_gor_en_post_till_en_lektion():
     handelser = [_tid("2026-08-18", "10:15", "11:00", summary="Ma2c NA25 halvklass A",
                       location="P807", recurringEventId="r5")]
     kanda = ["Matematik, nivå 2c"]          # «Ma2c» är kalenderns egen kortform
-    ut = calendar_google.tolka_handelser(handelser, klasser=["NA25"], kurser=kanda)
+    ut = calendar_google.tolka_handelser(handelser, klasser=["NA25"], kurser=kanda,
+                                         idag="2026-08-18")
     nyckel = ut["osakra"][0]["nyckel"]
     med = calendar_google.tolka_handelser(
-        handelser, klasser=["NA25"], kurser=kanda,
+        handelser, klasser=["NA25"], kurser=kanda, idag="2026-08-18",
         beslut={nyckel: {"slag": "lektion", "klass": "NA25",
                          "kurs": "Matematik, nivå 2c"}})
     assert med["schema"] == [{"dag": 2, "tid": "10:15–11:00",
@@ -234,12 +247,15 @@ def test_synken_fragar_en_gang_och_kommer_ihag(tmp_path, monkeypatch):
     client = TestClient(server.create_app(base_dir=tmp_path))
     monkeypatch.setattr(client.app.state.arbiter, "ensure_llm", lambda: "http://x")
 
+    mandag = _framover(1)
+    fredag = _framover(5)
     handelser = [
-        _tid("2026-08-17", "09:05", "10:20", summary="Matematik, nivå 2c NA25",
+        _tid(mandag, "09:05", "10:20", summary="Matematik, nivå 2c NA25",
              location="P807", recurringEventId="r1"),
-        _tid("2026-08-17", "08:25", "08:55", summary="Mentorstid NA25",
+        _tid(mandag, "08:25", "08:55", summary="Mentorstid NA25",
              recurringEventId="r2"),
-        _heldag("Friluftsdag", "2026-09-11", "2026-09-12"),
+        _heldag("Friluftsdag", fredag,
+                (date.fromisoformat(fredag) + timedelta(days=1)).isoformat()),
     ]
     monkeypatch.setattr(calendar_google, "_load_creds", lambda *a, **k: object())
     monkeypatch.setattr(calendar_google, "list_events", lambda *a, **k: handelser)
@@ -285,11 +301,13 @@ def test_synken_gar_igenom_utan_claude(tmp_path, monkeypatch):
     monkeypatch.setattr(server.llm_client, "is_running", lambda *a, **k: False)
     client = TestClient(server.create_app(base_dir=tmp_path))
     monkeypatch.setattr(client.app.state.arbiter, "ensure_llm", lambda: None)
+    fredag = _framover(5)
     monkeypatch.setattr(calendar_google, "_load_creds", lambda *a, **k: object())
     monkeypatch.setattr(calendar_google, "list_events", lambda *a, **k: [
-        _tid("2026-08-17", "09:05", "10:20", summary="Matematik, nivå 2c NA25",
+        _tid(_framover(1), "09:05", "10:20", summary="Matematik, nivå 2c NA25",
              recurringEventId="r1"),
-        _heldag("Friluftsdag", "2026-09-11", "2026-09-12"),
+        _heldag("Friluftsdag", fredag,
+                (date.fromisoformat(fredag) + timedelta(days=1)).isoformat()),
     ])
     d = client.post("/api/schema/synk").json()
     assert d["bedomda"] == 0 and d["osakra"] == 1

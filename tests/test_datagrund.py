@@ -1131,10 +1131,12 @@ def test_serie_som_fortfarande_gar_behalls_fast_den_borjade_i_varas():
 
 
 def test_kanda_namn_ur_databasen_vinner_over_monstret():
+    # `idag` skickas alltid i testerna — annars ruttnar de när kalenderdatumet
+    # blir dåtid och serien filtreras som avslutad (sista instansen < idag).
     ut = calendar_google.tolka_handelser(
         [_tid("2026-08-18", "09:15", "10:00", summary="Matematik, nivå 2 · NA22",
               recurringEventId="r2")],
-        klasser=["NA22"], kurser=["Matematik, nivå 2"])
+        klasser=["NA22"], kurser=["Matematik, nivå 2"], idag="2026-08-18")
     assert ut["schema"][0]["klass"] == "NA22"
     assert ut["schema"][0]["kurs"] == "Matematik, nivå 2"
 
@@ -1148,7 +1150,7 @@ def test_aterkommande_utan_kant_kurs_blir_post_inte_lektion():
               recurringEventId="r9"),
          _tid("2026-08-17", "09:05", "10:20", summary="Matematik, nivå 2c NA25",
               location="P807", recurringEventId="r8")],
-        klasser=["NA25"], kurser=["Matematik, nivå 2c"])
+        klasser=["NA25"], kurser=["Matematik, nivå 2c"], idag="2026-08-17")
     assert [r["kurs"] for r in ut["schema"]] == ["Matematik, nivå 2c"]
     assert [p["titel"] for p in ut["poster"]] == ["Mentorstid NA25"]
 
@@ -1331,7 +1333,8 @@ def test_det_som_skrivs_ut_lases_tillbaka_som_samma_schema(google, tmp_path):
     instanser = [dict(h, recurringEventId="r" + str(i))
                  for i, h in enumerate(google.skapade)]
     ut = calendar_google.tolka_handelser(instanser, klasser=["9A", "9B"],
-                                         kurser=["Matematik 3c", "Matematik 4"])
+                                         kurser=["Matematik 3c", "Matematik 4"],
+                                         idag="2026-08-17")
     # Attrappen expanderar inte serierna, så varje rad ses en enda gång och
     # giltigheten blir den dagen. Testet handlar om att lektionerna kommer
     # tillbaka som samma vecka — inte om datumen.
