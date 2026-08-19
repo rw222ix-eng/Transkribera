@@ -164,7 +164,12 @@ def test_gruppuppgiftens_ark_bar_namnrader_men_inga_poang(tmp_path):
     assert pdf is not None, logg
     text = text_ur(pdf)
     assert text.count("Namn:") == 3, "en namnrad per elev i gruppen"
-    assert "45 minuter" in text and "muntligt" in text.lower()
+    # Metaraden är borttagen (lärarens beslut 2026-08-20): hon säger
+    # gruppstorlek, tid och redovisningsform själv i klassrummet. Upplägget syns
+    # på pappret ändå — antalet namnrader räknas ur `elever` och
+    # redovisningsformen står i klartext i instruktionsbandet.
+    assert "45 minuter" not in text and "elever per grupp" not in text
+    assert "muntligt" in text.lower()
     # Facit och bedömning ligger sist — lärarens ark, inte gruppens.
     assert "Facit" in text
     assert sidor(pdf) >= 2
