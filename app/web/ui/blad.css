@@ -27,6 +27,21 @@
    stämpelrad under rubriken, inte en mening i brödtext. */
 .gumeta{margin:6px 0 0;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;line-height:1.3;color:#000}
 
+/* ── Fortsättningsbladet ──
+   Rubriken, metaraden, namnraderna och instruktionsbandet står EN gång, på
+   första bladet: det är samma gruppuppgift, och fyra upprepade huvuden är fyra
+   uppgifter mindre plats att räkna på (blad.js delaArk).
+   Kvar behövs bara en identitet — lösa papper på ett bord ska gå att para ihop.
+   Den är satt i samma tre delar som resten av bladet: titeln i halv grad,
+   forts-numret som stämpelrad (samma 11 px versaler som .gumeta) och en hårlinje
+   under. Ingen ny grammatik; en mindre variant av den som redan finns. */
+.gufortsrad{flex:0 0 auto;display:flex;align-items:baseline;justify-content:space-between;gap:18px;padding-bottom:6px;border-bottom:1px solid #9A9A9A}
+.gufortstitel{font-size:14px;font-weight:700;letter-spacing:-.005em;line-height:1.2}
+.gufortsnr{flex:0 0 auto;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;line-height:1.3;color:#000}
+/* Första kortet på fortsättningen ska inte hänga en tredjedel ner på pappret —
+   luften mellan huvudet och uppgiften är forts-radens, inte kortets. */
+.gu[data-forts] .gufortsrad+.gukort{margin-top:22px}
+
 /* ── Instruktionsbandet ── */
 .guband{margin:16px 0 0;padding:10px 13px;border:1.5px solid #000;font-size:13.5px;font-weight:700;line-height:1.5;color:#000;text-wrap:pretty}
 .guband b{font-weight:700}

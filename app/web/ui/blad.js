@@ -724,7 +724,9 @@ window.Blad = (() => {
       $$('.gukort', del).forEach(k => forra.appendChild(k));
       (del.closest('.blad') || del).remove();
     }
-    $$('.gu .gutitel[data-titel]', trav).forEach(t => { t.textContent = t.dataset.titel; });
+    /* Huvudet behöver inte återställas: det klonades aldrig. Originalet — rubrik,
+       metarad, namnrader, instruktionsband — har hela tiden bott på FÖRSTA
+       bladet, och forts-raden försvinner med det blad den satt på. */
   }
 
   /* ── Passningen ──────────────────────────────────────
@@ -756,8 +758,26 @@ window.Blad = (() => {
      spiller inom mätfelet — figurer och formler sätter sig ett par pixlar hit
      eller dit — och ska inte bli två sidor. */
   const SPILL = 10;
+  /* Fortsättningsbladet bär INTE huvudet en gång till. Läraren, om fyra blad ur
+     en gruppuppgift: «Rubriken behöver bara stå på första bladet» och «rutan med
+     beskrivningarna behövs bara en gång — det är samma gruppuppgift». Hon har
+     rätt två gånger om: det är samma papper, OCH varje upprepning kostade
+     ~264 px överst — rubriken, metaraden, namnraderna och instruktionsbandet —
+     alltså nästan en uppgift per blad. Fortsättningen får därför hela satsytan
+     och packar de kort som ryms.
+     Kvar står EN identitet, för lösa papper på ett bord måste gå att para ihop:
+     titeln i halv grad och «forts. 2 av 3» som stämpelrad, med hårlinje under.
+     Samma svart-grå språk som resten av bladet — se .gufortsrad i blad.css. */
+  function fortshuvud() {
+    const rad = document.createElement('div');
+    rad.className = 'gufortsrad';
+    rad.innerHTML = '<span class="gufortstitel"></span><span class="gufortsnr"></span>';
+    return rad;
+  }
   function delaArk(trav) {
-    for (let varv = 0; varv < 4; varv++) {
+    /* Sex varv: varje varv föder som mest ett blad, och ett dokument som
+       verkligen behöver fler än fyra ska inte tappa sina sista kort. */
+    for (let varv = 0; varv < 6; varv++) {
       const gu = $$('.gu', trav).find(g => ledigt(g) < -SPILL && $$('.gukort', g).length > 1);
       if (!gu) break;
       const blad = gu.closest('.blad');
@@ -765,9 +785,12 @@ window.Blad = (() => {
       nytt.className = 'blad';
       const kopia = gu.cloneNode(false);
       kopia.dataset.forts = '';
-      ['.guhuv', '.gutopp', '.guband'].forEach(sel => { const el = $(sel, gu); if (el) kopia.appendChild(el.cloneNode(true)); });
+      kopia.appendChild(fortshuvud());
       nytt.appendChild(kopia);
       (blad || gu).insertAdjacentElement('afterend', nytt);
+      /* Flytta bakifrån tills bladet ryms — och packa alltså så många uppgifter
+         som får plats, aldrig en per blad. Minst ett kort stannar kvar: ett blad
+         utan uppgifter är ett tomt papper i traven. */
       for (let n = 0; n < 12; n++) {
         const kort = $$('.gukort', gu);
         if (kort.length <= 1 || ledigt(gu) >= 0) break;
@@ -776,18 +799,19 @@ window.Blad = (() => {
         if (forsta) forsta.before(sist); else kopia.appendChild(sist);
       }
     }
-    /* Rubrikerna sätts EFTERÅT, ur den färdiga travens ordning: «forts. 2 (av 3)»
-       säger var man är. Förr fick varje delning ' — fortsättning' klistrat på
-       förra bladets redan klistrade rubrik — fyra staplade suffix i en 25 px
-       rubrik. Originaltiteln sparas i data-titel så återvändningen kan läsa den. */
+    /* Forts-raden sätts EFTERÅT, ur den färdiga travens ordning: «forts. 2 av 3»
+       säger var man är. Titeln läses ur FÖRSTA bladets rubrik — den är originalet
+       och rörs aldrig, så inget suffix kan stapla sig på ett suffix. */
     const gruppen = $$('.gu', trav);
     const sidor = gruppen.length;
     if (sidor < 2) return;
+    const titeln = (($('.guhuv .gutitel', gruppen[0]) || {}).textContent || '').trim();
     gruppen.forEach((g, n) => {
-      const t = $('.guhuv .gutitel', g);
-      if (!t) return;
-      if (!t.dataset.titel) t.dataset.titel = t.textContent;
-      t.textContent = n ? `${t.dataset.titel} — forts. ${n + 1} (av ${sidor})` : t.dataset.titel;
+      const rad = $('.gufortsrad', g);
+      if (!rad) return;
+      const t = $('.gufortstitel', rad), nr = $('.gufortsnr', rad);
+      if (t) t.textContent = titeln;
+      if (nr) nr.textContent = `forts. ${n + 1} av ${sidor}`;
     });
   }
 
