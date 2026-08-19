@@ -74,7 +74,11 @@
    så fetstil hade gjort «2 400 laddpunkter/år» fet och «F(x) = 2x³ − 2x²» mager:
    samma rad, två vikter. Graden gäller båda lika. */
 .losvar{margin:8px 0 0;display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 14px}
-.losvar>span{flex:0 0 auto;font-size:17.5px;color:#000}
+/* `0 1 auto`, inte `0 0`: ett facitsvar kan vara flera meningar långt, och ett
+   spann som vägrar krympa blir så brett som sin text — utanför A4-arket. Med
+   krympning radbryts texten inne i spannet; min-width:0 låter flexen ge den
+   radens plats i stället för innehållets bredd. Korta svar står som förut. */
+.losvar>span{flex:0 1 auto;min-width:0;font-size:17.5px;color:#000}
 /* Etiketten som skiljer svaret från frågan. Utan den läses de två raderna som
    ett stycke — frågan är satt i löptext och svaret är ofta bara en formel till. */
 .losetikett{flex:0 0 auto;min-width:40px;font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#000}
