@@ -182,6 +182,12 @@ def create_router(base: Path, arbiter) -> APIRouter:
             return JSONResponse(
                 {"error": "Tavlan gick inte att göra om till en PDF — "
                           "avritningen blev ingen bild."}, status_code=400)
+        # `spara` låter filen ligga kvar i utskriftsmappen i stället för att
+        # städas efter svaret — för den som vill hämta pappret ur mappen
+        # (eller mejla det) i stället för genom webbläsarens nedladdning.
+        if body.get("spara"):
+            return FileResponse(str(pdf), media_type="application/pdf",
+                                filename=f"{namn}.pdf")
         return FileResponse(str(pdf), media_type="application/pdf",
                             filename=f"{namn}.pdf",
                             background=BackgroundTask(_stada, pdf))
