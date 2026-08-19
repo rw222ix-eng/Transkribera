@@ -153,6 +153,7 @@ SIDFAKTA_SCHEMA = {
                                 "nr": {"type": "integer"},
                                 "niva": {"type": ["integer", "null"]},
                                 "nivamarke": {"type": ["string", "null"]},
+                                "exempel": {"type": ["boolean", "null"]},
                             },
                             "required": ["nr"],
                         },
@@ -187,12 +188,19 @@ uppgifterna, t.ex. 1215) i fältet "nr", med:
 null om uppgiften saknar markering.
   - "niva" = markeringens ORDNINGSTAL i systemet ovan, 1 för den lättaste \
 nivån och uppåt. Null när uppgiften saknar markering.
-Exempel och lösta uppgifter i teoritexten är INTE uppgifter — bara de numrerade.
+  - "exempel" = true om numret står vid ett GENOMRÄKNAT EXEMPEL, alltså en \
+uppgift som boken själv löser med fullständig lösning och svar i teoritexten. \
+false om det är en uppgift eleverna ska räkna själva.
+NUMRET avgör om posten finns med, lösningen avgör vad den är: har exemplet ett \
+uppgiftsnummer ska det ALLTID med i listan, märkt "exempel": true. Hoppa aldrig \
+över ett nummer för att det står vid ett exempel — en lista där 1101 finns och \
+1102 saknas ser ut som en läsning som missade 1102. Exempel och lösta uppgifter \
+UTAN eget nummer listas inte alls.
 
 Formen, exakt:
 {"sidor": [{"fil": "sida-021.png", "tryckt_sida": 19, "avsnitt": "1.2", \
 "rubrik": "Linjära modeller", "nivasystem": "a, b, c där c är svårast", \
-"uppgifter": [{"nr": 1215, "niva": 1, "nivamarke": "a"}]}]}
+"uppgifter": [{"nr": 1215, "niva": 1, "nivamarke": "a", "exempel": false}]}]}
 
 Hitta inte på. Ett nummer du inte kan läsa säkert utelämnas hellre än gissas: \
 en uppgiftslista med luckor går att räkna med, en med påhittade nummer skickar \
@@ -287,7 +295,8 @@ def _uppgifter(rå) -> list[dict]:
     ut = []
     for u in rå or []:
         if isinstance(u, (int, str)) and str(u).strip().isdigit():
-            ut.append({"nr": int(u), "niva": None, "nivamarke": None})
+            ut.append({"nr": int(u), "niva": None, "nivamarke": None,
+                       "exempel": None})
             continue
         if not isinstance(u, dict):
             continue
@@ -301,8 +310,25 @@ def _uppgifter(rå) -> list[dict]:
                    # Märket sparas som det STÅR. Ordningstalet ovan är appens
                    # tolkning; märket är bokens ord, och det är det som ska
                    # tillbaka till läraren och in i prompten.
-                   "nivamarke": marke[:24] or None})
+                   "nivamarke": marke[:24] or None,
+                   "exempel": _exempel(u)})
     return ut
+
+
+def _exempel(u: dict) -> bool | None:
+    """Är posten ett genomräknat exempel?
+
+    None när modellen inte sa något — och det är INTE samma sak som false. En
+    sida läst före konsekvensregeln har ingen uppfattning i frågan, och den
+    tystnaden ska bäras hela vägen till panelen, som då behandlar posten som en
+    vanlig uppgift. Ett false hade påstått att modellen tittat efter."""
+    v = u.get("exempel", u.get("ar_exempel", u.get("är_exempel")))
+    if v is None:
+        return None
+    if isinstance(v, str):
+        # Modellen svarar ibland i ord i stället för i JSON-boolean.
+        return v.strip().lower() in ("true", "ja", "1", "yes", "exempel")
+    return bool(v)
 
 
 def las_sidtext(bild: Path, *, llm=None, token_cb=None) -> str:

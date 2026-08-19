@@ -305,11 +305,13 @@ def test_uppgiftsraderna_bar_bokens_egen_markering():
         {"nr": 1217},                       # omarkerad uppgift
         1218,                               # bara ett tal
     ])
+    # `exempel` är None när modellen inte sa något om saken (konsekvensregeln i
+    # test_bok.py) — okänt, och det läses som en vanlig uppgift.
     assert ut == [
-        {"nr": 1215, "niva": 1, "nivamarke": "a"},
-        {"nr": 1216, "niva": 3, "nivamarke": "★★★"},
-        {"nr": 1217, "niva": None, "nivamarke": None},
-        {"nr": 1218, "niva": None, "nivamarke": None},
+        {"nr": 1215, "niva": 1, "nivamarke": "a", "exempel": None},
+        {"nr": 1216, "niva": 3, "nivamarke": "★★★", "exempel": None},
+        {"nr": 1217, "niva": None, "nivamarke": None, "exempel": None},
+        {"nr": 1218, "niva": None, "nivamarke": None, "exempel": None},
     ]
 
 

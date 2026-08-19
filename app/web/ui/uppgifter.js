@@ -62,6 +62,10 @@
       const a = avsnittet();
       return serverdata.uppgifter.map(u => ({
         nr: u.nr, sida: u.sida || s.fran, niva: u.niva || 1,
+        /* Genomräknat exempel — numrerat som en uppgift, men löst i boken.
+           Saknas fältet (sidor lästa före konsekvensregeln) är svaret okänt,
+           och okänt behandlas som vanlig uppgift: så såg panelen ut förut. */
+        exempel: !!u.exempel,
         avsnitt: reg().find(x => { const [f, t] = grans(x); return u.sida >= f && u.sida <= t; }) || a,
       }));
     }
@@ -80,6 +84,13 @@
     });
     return ut;
   }
+  /* Uppgifterna klassen ska RÄKNA — allt utom bokens genomräknade exempel.
+     1101 och 1102 i Matematik 5000+ 1a är numrerade som uppgifter men lösta i
+     teoritexten; de står kvar i listan (de STÅR på sidorna, och en lucka i
+     numren hade sett ut som en misslyckad läsning) men de är ingenting att dela
+     ut. Allt som räknar, väljer bort eller föreslår går därför genom den här,
+     och bara ritningen ser hela `alla()`. */
+  const raknade = () => alla().filter(x => !x.exempel);
   const avsnittet = () => {
     const s = spann();
     if (!s) return null;
@@ -109,7 +120,7 @@
      samma sidor ska ge samma förslag varje gång. */
   const hash = s => { let h = 7; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) % 99991; return h; };
   function forslaget() {
-    const u = alla();
+    const u = raknade();
     if (u.length < 6) return [];
     const s = spann();
     const nyckel = `${s.bok}|${s.fran}|${s.till}`;
@@ -155,7 +166,7 @@
      förslaget» betyder. Numren ur kalendern gäller bara om de faktiskt står på
      sidorna — annars pekar de på ett annat spann, och då hade allt strukits. */
   function standardbort() {
-    const u = alla();
+    const u = raknade();
     if (onskade && u.some(x => onskade.has(x.nr))) return new Set(u.filter(x => !onskade.has(x.nr)).map(x => x.nr));
     return new Set(forslag.map(f => f.nr));
   }
@@ -331,7 +342,11 @@
        (window.Helhetstyp) och ropar hit via window.Uppgifter.spegla. */
     vard.hidden = !u.length || !!(window.Helhetstyp && window.Helhetstyp());
     if (!u.length || vard.hidden) return;
-    const kvar = u.filter(x => !bort.has(x.nr));
+    /* Räkningen gäller det klassen ska GÖRA. Bokens genomräknade exempel står
+       kvar bland chipsen men hör inte hemma i «X av Y att räkna» — de är redan
+       lösta på sidan. */
+    const rakn = raknade();
+    const kvar = rakn.filter(x => !bort.has(x.nr));
     const fanns = !!$('#uppgfraga');
     if (!fanns) {
       vard.innerHTML = `<div class="uppghuvud"><span class="minietikett" style="margin:0">Uppgifterna på sidorna</span><span class="uppgant" id="uppgant"></span></div>
@@ -351,7 +366,7 @@
         if (e.key === 'Enter') { e.preventDefault(); fraga($('#uppgfraga').value); }
       });
     }
-    $('#uppgant').textContent = `${kvar.length} av ${u.length} att räkna`;
+    $('#uppgant').textContent = `${kvar.length} av ${rakn.length} att räkna`;
     /* Fältet är för det man INTE kan klicka fram: att hoppa en hel nivå, att
        hålla sig till de tillämpade uppgifterna. En enskild uppgift klickas i
        listan ovanför, och ett exempel på just det i platshållaren fick läraren att
@@ -408,6 +423,16 @@
           b.className = 'uppgchip';
           b.type = 'button';
           b.textContent = x.nr;
+          /* Bokens eget exempel: numret står där, så det ska synas — annars
+             ser listan ut att sakna 1102 — men det är ingenting att välja bort
+             eller dela ut. Gråat och dött, med sitt skäl i tipset. */
+          if (x.exempel) {
+            b.toggleAttribute('data-exempel', true);
+            b.disabled = true;
+            b.dataset.tip = `s. ${x.sida} · genomräknat exempel i boken`;
+            box.appendChild(b);
+            return;
+          }
           const av = bort.has(x.nr);
           b.setAttribute('aria-pressed', String(!av));
           b.toggleAttribute('data-bort', av);
@@ -432,7 +457,7 @@
   function fraga(text) {
     const t = String(text || '').trim();
     if (!t) return;
-    const u = alla();
+    const u = raknade();
     const namnda = (t.match(/\d{3,4}/g) || []).map(Number).filter(n => u.some(x => x.nr === n));
     const tarMed = /(ta med|behåll|tillbaka|inkludera|kör|räkna)/i.test(t);
     const hoppar = /(hoppa|skippa|ta bort|strunta|utan)/i.test(t);
@@ -498,7 +523,7 @@
   const NIVAFILTER = { 'Inga': [], 'Alla': [1, 2, 3], 'Nivå 2 och 3': [2, 3], 'Bara nivå 3': [3] };
   const losningarna = niva => {
     const f = NIVAFILTER[niva] || NIVAFILTER['Nivå 2 och 3'];
-    return alla().filter(x => !bort.has(x.nr) && f.includes(x.niva));
+    return raknade().filter(x => !bort.has(x.nr) && f.includes(x.niva));
   };
 
   window.Uppgifter = {
@@ -530,7 +555,7 @@
        skrevs för, även efter att spannet ändrats i planeringen. */
     urval(instans) {
       if (!window.Uppgifter.finns()) return null;
-      const s = spann(), u = alla();
+      const s = spann(), u = raknade();
       const kvar = u.filter(x => !bort.has(x.nr));
       const i = instans || {};
       const los = losningarna(i.boklosniva);

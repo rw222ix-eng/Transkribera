@@ -88,6 +88,11 @@ class FejkOCR:
         self.text = []
         self.offset = offset
         self.uppg_per_sida = uppg_per_sida
+        # Uppgiftsnummer som är GENOMRÄKNADE EXEMPEL i den fejkade boken.
+        self.exempel = set()
+        # Uppgiftsnummer modellen inte får syn på — det är så en lucka i
+        # numren uppstår i verkligheten, och luckvakten prövas mot det.
+        self.hoppa = set()
 
     def las_innehall(self, bilder, llm=None):
         self.innehall += 1
@@ -105,8 +110,11 @@ class FejkOCR:
             sidor.append({
                 "fil": b.name, "tryckt_sida": tryckt, "avsnitt": "1.1",
                 "rubrik": "Repetition",
-                "uppgifter": [{"nr": 1100 + tryckt * 10 + i, "niva": i + 1}
-                              for i in range(self.uppg_per_sida)],
+                "uppgifter": [{"nr": nr, "niva": i + 1,
+                               "exempel": nr in self.exempel}
+                              for i in range(self.uppg_per_sida)
+                              for nr in [1100 + tryckt * 10 + i]
+                              if nr not in self.hoppa],
             })
         return {"sidor": sidor}
 
@@ -728,3 +736,93 @@ def test_sidbilden_utan_kallfil_ger_nej_inte_krasch(client, ocr):
     (client.base_dir / "downloads").rename(client.base_dir / "flyttad")
     assert client.get(f"/api/bocker/{b['id']}/sida/10.png").status_code == 200
     assert client.get(f"/api/bocker/{b['id']}/sida/25.png").status_code == 404
+
+
+# ──────────────────────────── numrerade exempel (konsekvensregeln) ───────────
+# Matematik 5000+ 1a numrerar sina genomräknade exempel som uppgifter: 1101 på
+# s. 11 och 1102 på s. 12 står med fullständig lösning och svar. Faktapassets
+# gamla regel — «exempel och lösta uppgifter i teoritexten är INTE uppgifter,
+# bara de numrerade» — sa emot sig själv precis där, och modellen tog med 1101
+# men hoppade 1102, deterministiskt över två läsningar. Panelen visade ett
+# ensamt «1101, nivå 1» och såg ut som en avläsning som tappat resten.
+
+def test_ett_numrerat_exempel_kommer_med_och_marks(monkeypatch):
+    """Numret avgör om posten finns, lösningen avgör vad den är."""
+    monkeypatch.setattr(bok_ocr, "_las", lambda *a, **k: json.dumps({"sidor": [
+        {"fil": "sida-012.png", "uppgifter": [
+            {"nr": 1101, "exempel": True},
+            {"nr": 1102, "exempel": "ja"},          # modellen svarade i ord
+            {"nr": 1103, "niva": 1, "exempel": False},
+            {"nr": 1104},                            # sa ingenting alls
+            1105]}]}))
+    from pathlib import Path
+    ut = bok_ocr.las_sidfakta([Path("sida-012.png")])["sidor"][0]["uppgifter"]
+    assert [(u["nr"], u["exempel"]) for u in ut] == [
+        (1101, True), (1102, True), (1103, False), (1104, None), (1105, None)]
+
+
+def test_prompten_bar_konsekvensregeln():
+    p = bok_ocr.SIDFAKTA_PROMPT
+    assert "ALLTID med" in p and '"exempel": true' in p
+    # …men ONUMRERADE exempel listas fortfarande inte.
+    assert "UTAN eget nummer listas inte alls" in p
+
+
+def test_exempelflaggan_overlever_databasen(tmp_path):
+    conn = db.connect(tmp_path / "t.db")
+    try:
+        b = db.create_bok(conn, namn="Boken", sidor=300)
+        db.save_bok_uppgifter(conn, b["id"], [
+            {"nr": 1101, "sida": 11, "exempel": True},
+            {"nr": 1103, "sida": 11, "exempel": False},
+            {"nr": 1104, "sida": 11},                   # okänt, inte nej
+        ])
+        rader = {r["nr"]: r["exempel"]
+                 for r in db.bok_uppgifter(conn, b["id"], 11, 11)}
+        assert rader == {1101: 1, 1103: 0, 1104: None}
+        # En omläsning utan uppfattning får inte radera en som hade det …
+        db.save_bok_uppgifter(conn, b["id"], [{"nr": 1101, "sida": 11}])
+        assert db.bok_uppgifter(conn, b["id"], 11, 11)[0]["exempel"] == 1
+        # … men ett uttalat nej skriver över.
+        db.save_bok_uppgifter(conn, b["id"],
+                              [{"nr": 1101, "sida": 11, "exempel": False}])
+        assert db.bok_uppgifter(conn, b["id"], 11, 11)[0]["exempel"] == 0
+    finally:
+        conn.close()
+
+
+def test_en_bas_fran_v23_far_exempelkolumnen(tmp_path):
+    """Samma väg lärarens riktiga bas går när den öppnas första gången efter
+    uppdateringen: kolumnen släpps, versionen stämplas tillbaka, och
+    migreringen ska lägga till den igen utan att röra raderna."""
+    fil = tmp_path / "gammal.db"
+    c = db.connect(fil)
+    b = db.create_bok(c, namn="Boken", sidor=300)
+    db.save_bok_uppgifter(c, b["id"], [{"nr": 1101, "sida": 11, "niva": 1}])
+    c.execute("ALTER TABLE bok_uppgifter DROP COLUMN exempel")
+    c.execute("PRAGMA user_version=23")
+    c.commit()
+    c.close()
+    db._initialized.discard(str(fil))     # tvinga migrationerna att köra igen
+    c = db.connect(fil)
+    try:
+        assert c.execute("PRAGMA user_version").fetchone()[0] == db.SCHEMA_VERSION
+        rad = db.bok_uppgifter(c, b["id"], 11, 11)[0]
+        # NULL = läst före konsekvensregeln. Okänt, inte «ingen exempel».
+        assert rad["nr"] == 1101 and rad["niva"] == 1 and rad["exempel"] is None
+    finally:
+        c.close()
+
+
+def test_exemplet_bars_fran_avlasningen_till_uppslaget(client, ocr):
+    """Hela vägen: faktapasset märker posten, basen bär flaggan, och rutten
+    uppgiftspanelen frågar skickar med den."""
+    ocr.exempel = {1200, 1201}                # s. 10, de två första numren
+    b = _importera(client)
+    _done(client.post(f"/api/bocker/{b['id']}/las",
+                      json={"fran": 10, "till": 11, "bara": "fakta"}))
+    d = client.get(f"/api/bocker/{b['id']}/uppslag?fran=10&till=11").json()
+    flaggor = {u["nr"]: u["exempel"] for u in d["uppgifter"]}
+    assert flaggor[1200] == 1 and flaggor[1201] == 1 and flaggor[1202] == 0
+    # Sidan bredvid är orörd: exempelfrågan ställs per uppgift, inte per bok.
+    assert flaggor[1210] == 0

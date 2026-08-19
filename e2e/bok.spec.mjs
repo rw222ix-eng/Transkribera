@@ -163,6 +163,38 @@ test("uppgifterna på uppslaget är de som står där", async ({ page }) => {
   await expect(page.locator("#uppgant")).toContainText("av 4 att räkna");
 });
 
+test("bokens genomräknade exempel står kvar men räknas inte", async ({ page }) => {
+  /* Fyndet ur den skarpa avläsningen: 1101 (s. 11) och 1102 (s. 12) i Matematik
+     5000+ 1a är GENOMRÄKNADE EXEMPEL — numrerade som uppgifter, lösta med svar i
+     teoritexten. Faktapassets gamla regel var tvetydig där och modellen tog med
+     1101 men hoppade 1102, så panelen visade ett ensamt «1101». Numret ska synas
+     — annars ser listan ut att ha tappat resten — men det är ingenting klassen
+     ska räkna, och ingenting som ska följa med till pappret. */
+  await fejka(page, { uppslag: { fran: 11, till: 12, olasta: [], utan_fakta: [],
+    sidor: [], uppgifter: [
+      { nr: 1101, sida: 11, niva: 1, exempel: 1 },
+      { nr: 1102, sida: 12, niva: 1, exempel: 1 },
+      { nr: 1103, sida: 12, niva: 1, exempel: 0 },
+      { nr: 1104, sida: 12, niva: 2, exempel: 0 }] } });
+  await page.goto("/");
+  await hydrerad(page);
+  await oppnaBoken(page);
+  await page.evaluate(() => { window.Uppslag.satt(11, 12); window.Kallor.satt("bok", true, true); });
+
+  await expect.poll(() => page.locator("#uppgnivaer .uppgchip").count()).toBe(4);
+  const ex = page.locator("#uppgnivaer .uppgchip[data-exempel]");
+  await expect(ex).toHaveText(["1101", "1102"]);
+  await expect(ex.first()).toBeDisabled();
+  await expect(ex.first()).toHaveAttribute("data-tip", /genomräknat exempel/);
+  // Två uppgifter att räkna — inte fyra.
+  await expect(page.locator("#uppgant")).toHaveText("2 av 2 att räkna");
+  // Och exemplen följer inte med pappret, varken som valda eller bortvalda.
+  const urval = await page.evaluate(() => window.Uppgifter.urval({}));
+  expect(urval.uppg).toEqual([1103, 1104]);
+  expect(urval.remsa).toBe("1103, 1104");
+  expect(urval.bort).toEqual([]);
+});
+
 test("ett uppslag över två avsnitt delas i block — boken börjar om på nivå 1",
   async ({ page }) => {
     /* Sidorna 14–16 korsar gränsen 1.1/1.2. Utan uppdelningen hamnade 1.2:s

@@ -274,6 +274,12 @@
 /* En bortvald uppgift ska gå att LÄSA — den står kvar med streck över. Det är
    boken man läser av, och boken byter inte ordning för att man hoppar en uppgift. */
 .uppgchip[data-bort]{background:var(--sunken);border-style:dashed;color:var(--ink-3);text-decoration:line-through}
+/* Bokens genomräknade exempel. Det STÅR på sidan och har ett uppgiftsnummer, så
+   det syns — en lista där 1101 finns och 1102 fattas ser ut som en misslyckad
+   avläsning. Men det är inget att välja: gråat, utan hovring, utan streck (det
+   är inte bortvalt, det är redan löst). */
+.uppgchip[data-exempel]{background:transparent;border-style:dotted;color:var(--ink-3);cursor:default;opacity:.72}
+.uppgchip[data-exempel]:hover{border-color:var(--line);color:var(--ink-3)}
 .uppgfragarad{display:flex;gap:10px;margin:14px 0 0}
 .uppgfragarad .field{flex:1;min-width:0}
 .uppgsvar{margin-top:10px}

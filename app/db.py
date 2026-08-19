@@ -21,7 +21,7 @@ import sqlite3
 import threading
 from pathlib import Path
 
-SCHEMA_VERSION = 23
+SCHEMA_VERSION = 24
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS courses (
@@ -737,6 +737,25 @@ _LEKTIONSDELAR_MIGRATION = """
 ALTER TABLE lektionsinnehall ADD COLUMN delar TEXT;
 """
 
+# Bokens genomräknade exempel (v24) — ENDAST additiv; rollback: kolumnen kan
+# lämnas kvar (NULL är giltigt) + PRAGMA user_version=23.
+#
+# Matematik 5000+ 1a numrerar sina genomräknade exempel som uppgifter: 1101 på
+# s. 11 och 1102 på s. 12 står med fullständig lösning och svar. Faktapassets
+# gamla regel — «exempel är INTE uppgifter, bara de numrerade» — blev tvetydig
+# precis där, och modellen tog deterministiskt med 1101 men hoppade 1102.
+# Panelen visade då ett ensamt «1101» och såg ut som en läsning som tappat
+# resten.
+#
+# Regeln är därför omvänd: ett numrerat exempel kommer ALLTID med, och bär i
+# stället en flagga om vad det är. `exempel` är 1 för genomräknat exempel, 0 för
+# vanlig uppgift och NULL för sidor lästa före den här versionen — okänt, inte
+# nej. Ingen omläsning: 96 sekunder per sida är för dyrt för att betala om, och
+# NULL läses som vanlig uppgift precis som förut.
+_BOKEXEMPEL_MIGRATION = """
+ALTER TABLE bok_uppgifter ADD COLUMN exempel INTEGER;
+"""
+
 _MIGRATIONS: dict[int, str] = {2: _FTS_MIGRATION, 3: _MARKERS_MIGRATION,
                                4: _PLANNING_MIGRATION, 5: _EXAMS_MIGRATION,
                                6: _GY25_MIGRATION, 7: _DATAGRUND_MIGRATION,
@@ -755,12 +774,13 @@ _MIGRATIONS: dict[int, str] = {2: _FTS_MIGRATION, 3: _MARKERS_MIGRATION,
                                20: _PLANERINGAR_MIGRATION,
                                21: _HJALPMEDEL_MIGRATION,
                                22: _PROVETS_CI_MIGRATION,
-                               23: _LEKTIONSDELAR_MIGRATION}
+                               23: _LEKTIONSDELAR_MIGRATION,
+                               24: _BOKEXEMPEL_MIGRATION}
 
 # Migreringar som bara innehåller ALTER TABLE … ADD COLUMN. De körs sats för
 # sats så att en redan tillagd kolumn hoppas över i stället för att fälla hela
 # migreringen — se _apply_migrations.
-_ALTER_MIGRATIONER = {6, 12, 13, 14, 16, 17, 18, 21, 22, 23}
+_ALTER_MIGRATIONER = {6, 12, 13, 14, 16, 17, 18, 21, 22, 23, 24}
 
 _LESSON_SELECT = """
 SELECT l.*, g.namn AS group_namn, c.namn AS course_namn
@@ -3050,13 +3070,18 @@ def save_bok_uppgifter(conn: sqlite3.Connection, bok_id: int,
                        uppgifter: list[dict]) -> None:
     with conn:
         conn.executemany(
-            "INSERT INTO bok_uppgifter(bok_id, nr, sida, niva, nivamarke) "
-            "VALUES (?, ?, ?, ?, ?) "
+            "INSERT INTO bok_uppgifter(bok_id, nr, sida, niva, nivamarke, exempel) "
+            "VALUES (?, ?, ?, ?, ?, ?) "
             "ON CONFLICT(bok_id, nr) DO UPDATE SET sida = excluded.sida, "
             "niva = COALESCE(excluded.niva, niva), "
-            "nivamarke = COALESCE(excluded.nivamarke, nivamarke)",
+            "nivamarke = COALESCE(excluded.nivamarke, nivamarke), "
+            # Samma COALESCE som märket: en omläsning som inte hade någon
+            # uppfattning om exempelfrågan får inte radera en som hade det.
+            # Ett uttalat «nej» (0) skriver däremot över, som sig bör.
+            "exempel = COALESCE(excluded.exempel, exempel)",
             [(bok_id, int(u["nr"]), u.get("sida"), u.get("niva"),
-              u.get("nivamarke"))
+              u.get("nivamarke"),
+              None if u.get("exempel") is None else int(bool(u["exempel"])))
              for u in uppgifter if str(u.get("nr", "")).strip().isdigit()])
 
 
@@ -3071,7 +3096,8 @@ def bok_sidor(conn: sqlite3.Connection, bok_id: int, fran: int, till: int,
 
 def bok_uppgifter(conn: sqlite3.Connection, bok_id: int,
                   fran: int | None = None, till: int | None = None) -> list[dict]:
-    sql = "SELECT nr, sida, niva, nivamarke FROM bok_uppgifter WHERE bok_id = ?"
+    sql = ("SELECT nr, sida, niva, nivamarke, exempel FROM bok_uppgifter "
+           "WHERE bok_id = ?")
     params: list = [bok_id]
     if fran is not None and till is not None:
         sql += " AND sida BETWEEN ? AND ?"

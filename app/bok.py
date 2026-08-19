@@ -165,7 +165,7 @@ def _spara_fakta(conn, bok_id: int, fakta: list[dict], offset: int | None) -> No
                          nivasystem=rad.get("nivasystem"))
         db.save_bok_uppgifter(conn, bok_id, [
             {"nr": u.get("nr"), "sida": tryckt, "niva": u.get("niva"),
-             "nivamarke": u.get("nivamarke")}
+             "nivamarke": u.get("nivamarke"), "exempel": u.get("exempel")}
             for u in (rad.get("uppgifter") or []) if isinstance(u, dict)])
     db.rakna_om_uppg(conn, bok_id)
 
