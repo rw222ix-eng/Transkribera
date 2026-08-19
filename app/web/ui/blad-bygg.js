@@ -11,6 +11,26 @@ window.BladBygg = (() => {
      så att en formel aldrig kan halveras av HTML-escapen. */
   const mat = s => String(s == null ? '' : s).split('$').map((bit, i) =>
     i % 2 ? `<span class="mat" data-tex="${attr(bit)}"></span>` : esc(bit)).join('');
+  /* ── Tomraderna ──
+     Modellens radbrytningar SKA synas: läraren bad om «A:» och «B:» på var sin
+     rad och fick det (white-space:pre-line i blad.css och prov.css). Men den
+     lagrade texten bär ofta tre, fyra eller fem radbrytningar i rad — «… Endast
+     svar krävs.\n\n\nA: …\n\n\nB: …» — och varje extra tomrad är 24 px höjd.
+     Fyra uppgifter växte då förbi bladkanten en och en, och delningen gav ett
+     papper per uppgift. En tom rad är avstånd; tre är ett mätfel.
+
+     Kollapsas vid RENDERING, aldrig i lagringen — texten läraren godkände rörs
+     inte, och LaTeX-vägen gör ändå ett enda stycke av flera tomrader. Görs per
+     TEXTBIT och aldrig inuti $…$: samma delning som mat() gör, för en formel
+     som råkar bära radbrytningar är TeX-källa och inte sättning. */
+  const luft = s => String(s == null ? '' : s)
+    .split('$')
+    .map((bit, i) => (i % 2 ? bit
+      : bit.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n')))
+    .join('$')
+    .replace(/^\s+/, '').replace(/\s+$/, '');
+  /* Uppgiftstext: tomraderna först, matematiken sedan. */
+  const brodtext = s => mat(luft(s));
   const BOKSTAV = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
   const versal = s => String(s || '').charAt(0).toUpperCase() + String(s || '').slice(1);
 
@@ -100,8 +120,10 @@ window.BladBygg = (() => {
     }
     return ut.replace(/[\s,;:]+$/, '') + ' …';
   }
-  /* Facitets uppgiftsrad: brickan bär numret, referensen bär matematiken. */
-  const ref = (t, tak) => mat(kortref(t, tak));
+  /* Facitets uppgiftsrad: brickan bär numret, referensen bär matematiken.
+     Tomraderna kollapsas först — .prtext bär pre-line även här, och ett facit
+     där varje referens drar med sig tre tomrader fyller bladet med ingenting. */
+  const ref = (t, tak) => mat(kortref(luft(t), tak));
 
   /* ── DE FEM FORMERNA ──────────────────────────────
      Datatabellen, kryssruteraden och stegtabellen är samma former som i
@@ -181,7 +203,7 @@ window.BladBygg = (() => {
     const alt = u.alt
       ? `<ul class="gudel guval">${u.alt.map((a, k) => `<li><i>${BOKSTAV[k]}.</i> ${mat(a)}</li>`).join('')}</ul>` : '';
     const del = u.del && u.del.length
-      ? `<ul class="gudel">${u.del.map((d, k) => `<li>${'abcdef'[k]}) ${mat(d)}</li>`).join('')}</ul>` : '';
+      ? `<ul class="gudel">${u.del.map((d, k) => `<li>${'abcdef'[k]}) ${brodtext(d)}</li>`).join('')}</ul>` : '';
     const fig = illustration && !u.fig
       ? '<div class="gufigur guplats" style="height:110px"><span class="gufigtext">plats för illustration</span></div>' : '';
     /* Figuren står BREDVID frågan, aldrig ovanför den — det är hela skillnaden
@@ -196,9 +218,9 @@ window.BladBygg = (() => {
     // att granska, och sedan svarsytan.
     const former = tabell(u.tabell, 'gutab') + stegtabell(u.stegtabell);
     const kropp = egen
-      ? `<div class="gutva"><div><p class="gufraga">${mat(u.t)}</p>${alt}${del}${former}${svarsyta(u)}</div>`
+      ? `<div class="gutva"><div><p class="gufraga">${brodtext(u.t)}</p>${alt}${del}${former}${svarsyta(u)}</div>`
         + `<div>${egen}</div></div>`
-      : `<p class="gufraga">${mat(u.t)}</p>${alt}${del}${former}${fig}${svarsyta(u)}`;
+      : `<p class="gufraga">${brodtext(u.t)}</p>${alt}${del}${former}${fig}${svarsyta(u)}`;
     return `<div class="gukort" data-ut="${u.ut || 'rakna'}">
       <span class="gubricka">${bricka}</span>
       ${kropp}
@@ -327,7 +349,7 @@ window.BladBygg = (() => {
     const delpoang = k => (u.delp && u.delp[k] != null
       ? u.delp[k] : Math.max(1, Math.round(u.p / u.del.length)));
     const del = u.del && u.del.length
-      ? `<ul class="prdel" data-avdelad="">${u.del.map((d, k) => `<li><i>${'abcdef'[k]})</i><span>${mat(d)}</span><span class="prpo">${delpoang(k)} p</span></li>`).join('')}</ul>` : '';
+      ? `<ul class="prdel" data-avdelad="">${u.del.map((d, k) => `<li><i>${'abcdef'[k]})</i><span>${brodtext(d)}</span><span class="prpo">${delpoang(k)} p</span></li>`).join('')}</ul>` : '';
     /* FIGUREN. Provets uppgift kan bära en ritad figur (exam_spec figur) — en
        graf, en triangel, en enhetscirkel — och den ritas i PDF:en av
        exam_figures. På skärmarket saknades den helt: uppgiften hänvisade till
@@ -361,7 +383,7 @@ window.BladBygg = (() => {
     const former = tabell(u.tabell, 'prtab') + stegtabell(u.stegtabell);
     return `<div class="pruppg">
       <span class="prnr">${u.nr}.<span class="prvarde">${varde}</span>${losblad}</span>
-      <div><p class="prtext">${mat(u.t)}</p>${alt}${del}${former}${figur}${svarsrad}</div>
+      <div><p class="prtext">${brodtext(u.t)}</p>${alt}${del}${former}${figur}${svarsrad}</div>
     </div>`;
   }
   function provforsatt(v) {
