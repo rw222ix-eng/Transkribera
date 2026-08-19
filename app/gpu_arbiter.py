@@ -8,6 +8,13 @@ transkriberingen sker hos OpenAI och språkmodellsarbetet hos Claude Code.
 Kvar finns ett litet GPU-jobb — tidsättningen (wav2vec2) — och två sådana ska
 fortfarande inte köra samtidigt på kortet. Låset finns därför kvar.
 
+Men det ÄRVDES av alla molnjobb också, och där var det bara i vägen: läraren
+som bad om en omskrivning medan ett prov skrevs fick «GPU:n är upptagen» om en
+GPU som inte gjorde någonting. Molnet tål flera samtal samtidigt, så de har nu
+en egen grind — en räknande semafor med tak (LLM_TAK) i stället för ett
+exklusivt lås. Taket finns för att skydda plånboken och Claude Codes
+hastighetsgränser, inte kortet.
+
 Livscykelmetoderna står också kvar, men betyder något annat nu: de svarar på
 frågan «går det att fråga språkmodellen?» i stället för att starta en process.
 Ett tjugotal anropsställen i provet, planeringen, chatten och sökningen ställer
@@ -25,9 +32,17 @@ from app import llm_client
 # llama-serverns bas-URL; ingen läser värdet, alla jämför det mot None.
 TILLGANGLIG = "claude-code"
 
+# Hur många molnjobb som får skriva samtidigt. Tre är valt så att läraren kan
+# ha en tavla, ett prov och en omskrivning igång utan att märka någon grind,
+# men så att ett skript inte kan öppna hundra samtal.
+LLM_TAK = 3
+
+# Beskedet över taket. Numret följer LLM_TAK — ändras taket ska meningen med.
+LLM_UPPTAGET = "Modellen skriver redan tre saker — vänta en stund."
+
 
 class GpuArbiter:
-    """Ägare av GPU-exklusiviteten för webbappen.
+    """Ägare av appens två grindar: kortets exklusiva lås och molnets tak.
 
     Byggs av create_app() och ligger på app.state.arbiter."""
 
@@ -37,6 +52,8 @@ class GpuArbiter:
         self._gpu = threading.Lock()          # ett tungt GPU-jobb i taget
         self._byte = threading.Lock()         # skyddar nyckelbytet
         self._nyckel: str | None = None       # vem som håller låset just nu
+        self._llm = threading.BoundedSemaphore(LLM_TAK)   # molnjobben
+        self._llm_nycklar: set[str] = set()   # vilka som håller en plats
 
     # ---- exklusiv GPU-åtkomst ----------------------------------------------
     #
@@ -74,6 +91,38 @@ class GpuArbiter:
                 self._gpu.release()
             except RuntimeError:
                 return False                    # var inte låst — inget att göra
+            return True
+
+    # ---- molnjobbens grind --------------------------------------------------
+    #
+    # Samma nyckeldisciplin som GPU-låset, av samma skäl (buggkandidat 9): en
+    # release utan giltig nyckel ska INTE öppna en plats som någon annan håller.
+    # Skillnaden mot låset är bara att här ryms LLM_TAK stycken samtidigt, så
+    # nyckeln är en av flera och lever i en mängd i stället för i ett fält.
+    #
+    # Semaforen är BoundedSemaphore med flit: en release för mycket är en bugg
+    # i ett anropsställe, och då ska sviten falla — inte taket tyst växa.
+    def try_acquire_llm(self) -> str | None:
+        """Icke-blockerande. En nyckel till en av molnplatserna, eller None när
+        taket är nått. Ägaren MÅSTE lämna tillbaka nyckeln i ett finally."""
+        if not self._llm.acquire(blocking=False):
+            return None
+        with self._byte:
+            nyckel = uuid.uuid4().hex
+            self._llm_nycklar.add(nyckel)
+            return nyckel
+
+    def release_llm(self, nyckel: str | None) -> bool:
+        """Lämna tillbaka platsen. True om den släpptes, False om nyckeln inte
+        var en av våra (aldrig tagen, redan lämnad, eller någon annans)."""
+        with self._byte:
+            if nyckel is None or nyckel not in self._llm_nycklar:
+                return False
+            self._llm_nycklar.discard(nyckel)
+            try:
+                self._llm.release()
+            except ValueError:                  # fler släpp än tag — omöjligt
+                return False
             return True
 
     # ---- språkmodellen ------------------------------------------------------

@@ -1,12 +1,13 @@
 """Prov & arbetsblad — rutter (Fas 4).
 
 Egen router (samma skäl som routes_planning): generering/iteration följer
-GPU-arbiterns 409-mönster; PDF-kompileringen är CPU (Tectonic) och behöver
-inte arbitern. Godkännandet tar därför INTE låset — det gjorde det förr, och då
-låg appen obrukbar i tiotals sekunder efter varje godkänt prov: läraren som
-skrev nästa dokument direkt fick «GPU:n är upptagen» medan gränssnittet sa att
-PDF:en byggdes i bakgrunden. Låset tas nu bara runt de LLM-rundor som kan följa
-på ett kompileringsfel (fix_latex, max 2 rundor), och släpps direkt efteråt.
+arbiterns 409-mönster — molnsemaforen, för jobben går till Claude och inte till
+GPU:n; PDF-kompileringen är CPU (Tectonic) och behöver ingen grind alls.
+Godkännandet tar därför INGEN — det tog låset förr, och då låg appen obrukbar i
+tiotals sekunder efter varje godkänt prov: läraren som skrev nästa dokument
+direkt fick «upptagen» medan gränssnittet sa att PDF:en byggdes i bakgrunden.
+Grinden tas nu bara runt de LLM-rundor som kan följa på ett kompileringsfel
+(fix_latex, max 2 rundor), och släpps direkt efteråt.
 
 Artefakter (.tex/.pdf + bedömningsanvisning) skrivs under
 ``Transkriberingar/prov/<kurs>/<datum>/`` — alltid under base_dir.
@@ -23,11 +24,13 @@ from fastapi import APIRouter, Request
 from fastapi.responses import FileResponse, JSONResponse
 
 from app import (ci_profil, course_data, db, exam_gen, exam_latex, exam_pdf,
-                 exam_spec, tryck)
+                 exam_spec, gpu_arbiter, tryck)
 from app.web import routes_planning
 from app.web.sse import sse_response
 
-_GPU_BUSY = {"error": "GPU:n är upptagen — försök igen strax."}
+# Molnjobben köar inte bakom kortet längre (se gpu_arbiter): de delar en
+# semafor med tak, och beskedet över taket säger vad som faktiskt pågår.
+_LLM_BUSY = {"error": gpu_arbiter.LLM_UPPTAGET}
 
 
 def _safe_component(raw: str, fallback: str) -> str:
@@ -316,9 +319,9 @@ def create_router(base: Path, arbiter) -> APIRouter:
         if forlaga_block:
             teman = ""
 
-        gpu = arbiter.try_acquire_gpu()
-        if not gpu:
-            return JSONResponse(_GPU_BUSY, status_code=409)
+        llm = arbiter.try_acquire_llm()
+        if not llm:
+            return JSONResponse(_LLM_BUSY, status_code=409)
 
         def job(emit):
             try:
@@ -374,7 +377,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     conn.close()
                 return _exam_result(view, res["errors"], res["rounds"])
             finally:
-                arbiter.release_gpu(gpu)
+                arbiter.release_llm(llm)
 
         return sse_response(job, req)
 
@@ -403,9 +406,9 @@ def create_router(base: Path, arbiter) -> APIRouter:
         if view is None or view.get("exam") is None:
             return JSONResponse({"error": "okänt prov"}, status_code=404)
 
-        gpu = arbiter.try_acquire_gpu()
-        if not gpu:
-            return JSONResponse(_GPU_BUSY, status_code=409)
+        llm = arbiter.try_acquire_llm()
+        if not llm:
+            return JSONResponse(_LLM_BUSY, status_code=409)
 
         def job(emit):
             try:
@@ -426,7 +429,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     newview = view
                 return _exam_result(newview, res["errors"], res["rounds"])
             finally:
-                arbiter.release_gpu(gpu)
+                arbiter.release_llm(llm)
 
         return sse_response(job, req)
 
@@ -471,16 +474,16 @@ def create_router(base: Path, arbiter) -> APIRouter:
         if out_dir is None:
             return JSONResponse({"error": "otillåten sökväg"}, status_code=400)
 
-        # Godkännandet tar INTE GPU-låset. Det som händer här är LaTeX-rendering
-        # och Tectonic-kompilering — CPU-arbete som inte rör kortet — och att
-        # hålla låset under det gjorde appen obrukbar i tiotals sekunder efter
-        # varje godkänt prov: läraren som skrev nästa dokument direkt fick
-        # «GPU:n är upptagen» medan gränssnittet samtidigt sa att PDF:en byggs i
-        # bakgrunden. Låset tas nu bara runt de LLM-rundor som kan följa på ett
-        # kompileringsfel (fix_latex), och släpps direkt efteråt.
+        # Godkännandet tar INGEN grind alls. Det som händer här är LaTeX-
+        # rendering och Tectonic-kompilering — CPU-arbete — och att hålla en
+        # grind under det gjorde appen obrukbar i tiotals sekunder efter varje
+        # godkänt prov: läraren som skrev nästa dokument direkt fick «upptagen»
+        # medan gränssnittet samtidigt sa att PDF:en byggs i bakgrunden. Grinden
+        # tas nu bara runt de LLM-rundor som kan följa på ett kompileringsfel
+        # (fix_latex), och släpps direkt efteråt.
 
         def job(emit):
-            gpu = None                  # nyckeln till GPU:n — bara om vi tar den
+            llm = None                  # molnplatsens nyckel — bara om vi tar den
             try:
                 exam = view["exam"]
                 errors: list = []
@@ -619,13 +622,13 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     # annars lovar strömmen ett omförsök som aldrig sker, vilket
                     # är precis den sortens osanning den här rutten ska bort med.
                     # Fixrundan behöver språkmodellen — och DÅ, först då, tas
-                    # GPU-låset. Är det upptaget av ett annat jobb är det här
-                    # sista försöket: felet redovisas ärligt i stället för att
-                    # provet står och väntar på ett kort det inte behöver.
+                    # en molnplats. Är taket nått är det här sista försöket:
+                    # felet redovisas ärligt i stället för att provet står och
+                    # väntar på en grind det knappt behöver.
                     if (round_ < exam_gen.MAX_LATEX_ROUNDS
                             and arbiter.ensure_llm() is not None):
-                        gpu = arbiter.try_acquire_gpu()
-                    sista_forsoket = not gpu
+                        llm = arbiter.try_acquire_llm()
+                    sista_forsoket = not llm
                     if bed_misslyckades:
                         emit({"type": "log",
                               "msg": "Bedömningsanvisningen gick inte att kompilera."
@@ -657,8 +660,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
                             exam, log, model=_model_name(), rounds_used=round_,
                             log_cb=lambda m: emit({"type": "log", "msg": m}))
                     finally:
-                        arbiter.release_gpu(gpu)
-                        gpu = None
+                        arbiter.release_llm(llm)
+                        llm = None
                     exam = fix["exam"]
 
                 conn = db.connect(db_file)
@@ -681,10 +684,10 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 result["tex"] = str(tex_path) if tex_path else None
                 return result
             except Exception:
-                # Faller jobbet mitt i en fixrunda ligger låset kvar hos oss.
-                # `gpu` nollställs efter varje släpp, så det här släpper bara
-                # om vi FAKTISKT håller det — och aldrig någon annans lås.
-                arbiter.release_gpu(gpu)
+                # Faller jobbet mitt i en fixrunda ligger platsen kvar hos oss.
+                # `llm` nollställs efter varje släpp, så det här släpper bara
+                # om vi FAKTISKT håller den — och aldrig någon annans plats.
+                arbiter.release_llm(llm)
                 raise
 
         return sse_response(job, req)

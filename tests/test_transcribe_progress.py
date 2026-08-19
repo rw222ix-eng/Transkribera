@@ -27,7 +27,9 @@ class _HW:
 
 class _Arb:
     def try_acquire_gpu(self): return "nyckel"
+    def try_acquire_llm(self): return "nyckel"
     def release_gpu(self, nyckel=None): pass
+    def release_llm(self, nyckel=None): pass
     def stop_llm(self): return False
     def ensure_llm(self): return "http://fake"
     def ensure_model(self, spec): return "http://fake"

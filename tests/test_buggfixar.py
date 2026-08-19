@@ -36,7 +36,9 @@ from tests.conftest import HW
 
 class _Arbiter:
     def try_acquire_gpu(self): return "nyckel"
+    def try_acquire_llm(self): return "nyckel"
     def release_gpu(self, nyckel=None): self.slappt = True
+    def release_llm(self, nyckel=None): self.slappt = True
     def stop_llm(self): return False
     def ensure_llm(self): return None
     def ensure_model(self, spec=None): return None

@@ -1,8 +1,9 @@
 """Anteckningar — rutter för lärarens stödpapper (femte dokumenttypen).
 
 Egen router av samma skäl som routes_exam och routes_planning: generering och
-iteration följer GPU-arbiterns 409-mönster, godkännandet är CPU (Tectonic) och
-tar inget lås.
+iteration följer arbiterns 409-mönster — numera molnsemaforen, inte GPU-låset,
+för jobben går till Claude och inte till kortet — medan godkännandet är CPU
+(Tectonic) och inte tar någon grind alls.
 
 Pappret lagras i exams-tabellen med ``typ='anteckningar'``. Det är ingen
 genväg: tabellen bär redan versionering, artefaktsökvägar (.tex/.pdf),
@@ -24,11 +25,13 @@ from pathlib import Path
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
-from app import db, exam_latex, exam_pdf, notes_gen, postprocess
+from app import db, exam_latex, exam_pdf, gpu_arbiter, notes_gen, postprocess
 from app.web import routes_planning
 from app.web.sse import sse_response
 
-_GPU_BUSY = {"error": "GPU:n är upptagen — försök igen strax."}
+# Molnjobben köar inte bakom kortet längre (se gpu_arbiter): de delar en
+# semafor med tak, och beskedet över taket säger vad som faktiskt pågår.
+_LLM_BUSY = {"error": gpu_arbiter.LLM_UPPTAGET}
 
 # Hur långt ett möte får vara innan det refereras i stället för att gå in i
 # prompten ordagrant.
@@ -187,9 +190,9 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # skrivas, så de ska nå fram lika väl här som i tavlan.
         svart_txt, fokus_txt = routes_planning.lararens_ord(body)
 
-        gpu = arbiter.try_acquire_gpu()
-        if not gpu:
-            return JSONResponse(_GPU_BUSY, status_code=409)
+        llm = arbiter.try_acquire_llm()
+        if not llm:
+            return JSONResponse(_LLM_BUSY, status_code=409)
 
         def job(emit):
             try:
@@ -219,7 +222,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     conn.close()
                 return _resultat(view, res["errors"], res["rounds"])
             finally:
-                arbiter.release_gpu(gpu)
+                arbiter.release_llm(llm)
 
         return sse_response(job, req)
 
@@ -245,9 +248,9 @@ def create_router(base: Path, arbiter) -> APIRouter:
         if view is None or view.get("exam") is None:
             return JSONResponse({"error": "okända anteckningar"}, status_code=404)
 
-        gpu = arbiter.try_acquire_gpu()
-        if not gpu:
-            return JSONResponse(_GPU_BUSY, status_code=409)
+        llm = arbiter.try_acquire_llm()
+        if not llm:
+            return JSONResponse(_LLM_BUSY, status_code=409)
 
         def job(emit):
             try:
@@ -268,7 +271,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     ny = view
                 return _resultat(ny, res["errors"], res["rounds"])
             finally:
-                arbiter.release_gpu(gpu)
+                arbiter.release_llm(llm)
 
         return sse_response(job, req)
 

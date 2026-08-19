@@ -10,9 +10,10 @@ Två jobb, två priser (se app/bok.py):
 * `POST /api/bocker/{id}/las` läser sidorna i ett uppslag. ~96 s per sida, och
   bara sidor som inte redan är lästa.
 
-Båda håller GPU-arbiterns lås — inte för GPU:ns skull (avläsningen sker i
-molnet) utan för att `ensure_llm()` är samma grind: är Claude Code inte
-inloggat finns ingen bok att läsa, och det ska sägas direkt.
+Båda tar en plats i arbiterns molnsemafor — inte GPU-låset: avläsningen sker
+i molnet, och att köa bakom kortet var ett arv från llama.cpp-tiden. Grinden
+finns kvar för takets skull, och för att `ensure_llm()` sitter på samma ställe:
+är Claude Code inte inloggat finns ingen bok att läsa, och det ska sägas direkt.
 """
 from __future__ import annotations
 
@@ -23,10 +24,12 @@ from fastapi import APIRouter, Request
 from fastapi.responses import FileResponse, JSONResponse
 
 from app import bok as bok_mod
-from app import db
+from app import db, gpu_arbiter
 from app.web.sse import sse_response
 
-_GPU_BUSY = {"error": "GPU:n är upptagen — försök igen strax."}
+# Molnjobben köar inte bakom kortet längre (se gpu_arbiter): de delar en
+# semafor med tak, och beskedet över taket säger vad som faktiskt pågår.
+_LLM_BUSY = {"error": gpu_arbiter.LLM_UPPTAGET}
 
 
 def create_router(base: Path, arbiter) -> APIRouter:
@@ -106,9 +109,9 @@ def create_router(base: Path, arbiter) -> APIRouter:
         namn = (body.get("namn") or "").strip()
         kurs = (body.get("kurs") or "").strip() or None
 
-        gpu = arbiter.try_acquire_gpu()
-        if not gpu:
-            return JSONResponse(_GPU_BUSY, status_code=409)
+        llm = arbiter.try_acquire_llm()
+        if not llm:
+            return JSONResponse(_LLM_BUSY, status_code=409)
 
         def job(emit):
             try:
@@ -122,7 +125,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 finally:
                     conn.close()
             finally:
-                arbiter.release_gpu(gpu)
+                arbiter.release_llm(llm)
 
         return sse_response(job, req)
 
@@ -150,9 +153,9 @@ def create_router(base: Path, arbiter) -> APIRouter:
         if b is None:
             return JSONResponse({"error": "okänd bok"}, status_code=404)
 
-        gpu = arbiter.try_acquire_gpu()
-        if not gpu:
-            return JSONResponse(_GPU_BUSY, status_code=409)
+        llm = arbiter.try_acquire_llm()
+        if not llm:
+            return JSONResponse(_LLM_BUSY, status_code=409)
 
         def job(emit):
             try:
@@ -171,7 +174,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                                    "tecken": len(s.get("text") or "")}
                                   for s in res["sidor"]]}
             finally:
-                arbiter.release_gpu(gpu)
+                arbiter.release_llm(llm)
 
         return sse_response(job, req)
 

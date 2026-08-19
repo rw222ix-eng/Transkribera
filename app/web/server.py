@@ -441,9 +441,12 @@ def create_app(base_dir: Path | None = None,
                 {"error": "Ingen ElevenLabs-nyckel. Lägg in den under Inställningar.",
                  "kod": "nyckel_saknas"}, status_code=400)
 
-        # GPU:n tas fortfarande exklusivt — inte för tidsättningen (riven) utan
-        # för att serialisera mot övriga Claude-jobb: översättningen och
-        # auto-titeln i slutet av kedjan går genom samma arbiter som resten.
+        # Här — och bara här — tas det exklusiva låset. Molnjobben flyttade till
+        # semaforen, men transkriberingen kan ändå bara köra en i taget, och
+        # skälet är inte kortet: `job_state` är EN ordbok för hela processen
+        # (avbrytning, förlopp, «kor»). Två samtidiga körningar skulle skriva i
+        # varandras förlopp och Avbryt skulle träffa fel jobb. Låset är alltså
+        # jobbtillståndets grind, inte GPU:ns — namnet är arv.
         gpu = arb.try_acquire_gpu()
         if not gpu:
             return JSONResponse(
@@ -1469,11 +1472,10 @@ def create_app(base_dir: Path | None = None,
         if not transcript:
             return JSONResponse(
                 {"error": "lektionen saknar transkript att analysera"}, status_code=400)
-        gpu = arb.try_acquire_gpu()
-        if not gpu:
-            return JSONResponse(
-                {"error": "GPU upptagen med transkribering – försök igen strax."},
-                status_code=409)
+        llm = arb.try_acquire_llm()
+        if not llm:
+            return JSONResponse({"error": gpu_arbiter.LLM_UPPTAGET},
+                                status_code=409)
 
         def job(emit):
             try:
@@ -1508,7 +1510,7 @@ def create_app(base_dir: Path | None = None,
                         "kept_previous": kept_previous,
                         "content": tagged}
             finally:
-                arb.release_gpu(gpu)
+                arb.release_llm(llm)
         return _sse_response(job, req)
 
     @app.post("/api/lessons/{lesson_id}/insights")
@@ -1874,11 +1876,10 @@ def create_app(base_dir: Path | None = None,
             # träffar sällan transkripten. Tidigare svar följer med som
             # innehållsunderlag i stället.
             context = str(body.get("context") or "")[:6000]
-            gpu = arb.try_acquire_gpu()
-            if not gpu:
-                return JSONResponse(
-                    {"error": "GPU upptagen med transkribering – försök igen strax."},
-                    status_code=409)
+            llm = arb.try_acquire_llm()
+            if not llm:
+                return JSONResponse({"error": gpu_arbiter.LLM_UPPTAGET},
+                                    status_code=409)
 
             def cal_job(emit):
                 try:
@@ -1890,7 +1891,7 @@ def create_app(base_dir: Path | None = None,
                         token_cb=lambda t: emit({"type": "token", "text": t}))
                     return {"text": text, "sources": []}
                 finally:
-                    arb.release_gpu(gpu)
+                    arb.release_llm(llm)
             return _sse_response(cal_job, req)
         conn = _db()
         try:
@@ -1941,9 +1942,9 @@ def create_app(base_dir: Path | None = None,
                     emit({"type": "scan_result",
                           "key": s["lesson_id"], "hits": s["hits"]})
 
-            gpu = arb.try_acquire_gpu()
-            if not gpu:
-                # GPU:n upptagen — leverera åtminstone det ärliga ordsvaret.
+            llm = arb.try_acquire_llm()
+            if not llm:
+                # Taket nått — leverera åtminstone det ärliga ordsvaret.
                 def no_hit_job(emit):
                     _emit_scan(emit, scan)
                     text = f"{intro}{slut}. {rad}"
@@ -2009,13 +2010,12 @@ def create_app(base_dir: Path | None = None,
                          "course": e["course"], "datum": e["datum"]}
                         for e in excerpts2]}
                 finally:
-                    arb.release_gpu(gpu)
+                    arb.release_llm(llm)
             return _sse_response(semantic_job, req)
-        gpu = arb.try_acquire_gpu()
-        if not gpu:
-            return JSONResponse(
-                {"error": "GPU upptagen med transkribering – försök igen strax."},
-                status_code=409)
+        llm = arb.try_acquire_llm()
+        if not llm:
+            return JSONResponse({"error": gpu_arbiter.LLM_UPPTAGET},
+                                status_code=409)
 
         def job(emit):
             try:
@@ -2046,7 +2046,7 @@ def create_app(base_dir: Path | None = None,
                      "datum": e["datum"]}
                     for e in excerpts]}
             finally:
-                arb.release_gpu(gpu)
+                arb.release_llm(llm)
         return _sse_response(job, req)
 
     @app.post("/api/postprocess")
@@ -2061,11 +2061,10 @@ def create_app(base_dir: Path | None = None,
         model = body.get("model", "")
         if not transcript:
             return JSONResponse({"error": "text krävs"}, status_code=400)
-        gpu = arb.try_acquire_gpu()
-        if not gpu:
-            return JSONResponse(
-                {"error": "GPU upptagen med transkribering – försök igen strax."},
-                status_code=409)
+        llm = arb.try_acquire_llm()
+        if not llm:
+            return JSONResponse({"error": gpu_arbiter.LLM_UPPTAGET},
+                                status_code=409)
 
         def job(emit):
             try:
@@ -2077,7 +2076,7 @@ def create_app(base_dir: Path | None = None,
                     log_cb=lambda m: emit({"type": "log", "msg": m}))
                 return {"text": text}
             finally:
-                arb.release_gpu(gpu)
+                arb.release_llm(llm)
         return _sse_response(job, req)
 
     @app.post("/api/chat")
@@ -2092,11 +2091,10 @@ def create_app(base_dir: Path | None = None,
         cal_event = body.get("cal_event") if isinstance(body.get("cal_event"), dict) else None
         if not messages:
             return JSONResponse({"error": "meddelande krävs"}, status_code=400)
-        gpu = arb.try_acquire_gpu()
-        if not gpu:
-            return JSONResponse(
-                {"error": "GPU upptagen med transkribering – försök igen strax."},
-                status_code=409)
+        llm = arb.try_acquire_llm()
+        if not llm:
+            return JSONResponse({"error": gpu_arbiter.LLM_UPPTAGET},
+                                status_code=409)
 
         def job(emit):
             try:
@@ -2115,7 +2113,7 @@ def create_app(base_dir: Path | None = None,
                     reason_cb=lambda t: emit({"type": "reasoning", "text": t}))
                 return {"text": text}
             finally:
-                arb.release_gpu(gpu)
+                arb.release_llm(llm)
         return _sse_response(job, req)
 
     def _under_base(path: str) -> Path | None:

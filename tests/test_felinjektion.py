@@ -24,7 +24,7 @@ from pathlib import Path
 
 import pytest
 
-from app import db, exam_pdf, lesson_board
+from app import db, exam_pdf, gpu_arbiter, lesson_board
 
 
 def _events(resp) -> list[dict]:
@@ -242,7 +242,7 @@ def test_alla_stromjobb_oversatter_full_disk_till_svenska():
         OSError(errno.ENOENT, "No such file")).lower()
 
 
-# ═══════════════════════════════ GPU-låset ═════════════════════════════════
+# ══════════════════════════ Grindarna (kort & moln) ═══════════════════════════
 
 GENERERANDE = [
     ("/api/planning/generate", {"moment": "Derivator"}),
@@ -252,56 +252,72 @@ GENERERANDE = [
 
 
 @pytest.mark.parametrize("vag,kropp", GENERERANDE)
-def test_upptagen_gpu_ger_409_och_stjal_inte_nagon_annans_las(
+def test_fullt_tak_ger_409_och_stjal_inte_nagon_annans_plats(
         llm_ready, vag, kropp):
-    """Ett tungt jobb i taget: den som kommer sedan får 409.
+    """LLM_TAK jobb samtidigt: den som kommer sedan får 409.
 
-    Låset har en ägarkontroll sedan buggkandidat 9: bara nyckeln som togs ut
-    öppnar. Testet står ändå kvar — det som prövas är att 409-vägen inte ens
-    FÖRSÖKER släppa, och att ett `finally` på fel sida om return-raden numera
-    skulle vara ofarligt i stället för att rycka undan kortet för jobbet som
-    pågår."""
+    Grinden har en ägarkontroll sedan buggkandidat 9 — samma nyckeldisciplin som
+    GPU-låset, ärvd därifrån: bara en nyckel som togs ut öppnar. Testet står ändå
+    kvar — det som prövas är att 409-vägen inte ens FÖRSÖKER släppa, och att ett
+    `finally` på fel sida om return-raden numera skulle vara ofarligt i stället
+    för att rycka undan platsen för jobbet som pågår."""
+    arb = llm_ready.app.state.arbiter
+    nycklar = [arb.try_acquire_llm() for _ in range(gpu_arbiter.LLM_TAK)]
+    assert all(nycklar), "taket var redan nått innan testet började"
+    try:
+        r = llm_ready.post(vag, json=kropp)
+        assert r.status_code == 409, (vag, r.status_code)
+        assert r.json()["error"] == gpu_arbiter.LLM_UPPTAGET
+        # …och platserna är kvar hos den som höll dem.
+        assert not arb.try_acquire_llm(), \
+            f"{vag} släppte en plats den aldrig tog"
+    finally:
+        for n in nycklar:
+            assert arb.release_llm(n), f"{vag} släppte vår plats"
+
+
+def test_gpu_laset_stanger_inte_langre_molnjobben(llm_ready):
+    """Arvet som skulle bort: förr räckte en pågående transkribering för att
+    läraren skulle mötas av «GPU:n är upptagen» när hon bad om en tavla. Kortet
+    och molnet är två skilda grindar nu."""
     arb = llm_ready.app.state.arbiter
     nyckel = arb.try_acquire_gpu()
     assert nyckel, "låset var upptaget innan testet började"
     try:
-        r = llm_ready.post(vag, json=kropp)
-        assert r.status_code == 409, (vag, r.status_code)
-        assert "upptagen" in r.json()["error"].lower()
-        # …och låset är kvar hos den som höll det.
-        assert not arb.try_acquire_gpu(), \
-            f"{vag} släppte ett lås den aldrig tog"
+        r = llm_ready.post("/api/planning/generate", json={"moment": "Derivator"})
+        assert r.status_code == 200, r.status_code
     finally:
-        assert arb.release_gpu(nyckel), f"{vag} släppte vårt lås"
+        assert arb.release_gpu(nyckel), "planeringen släppte vårt GPU-lås"
 
 
-def test_godkannandet_vantar_inte_pa_gpun(llm_ready, fejk_claude, monkeypatch):
-    """PDF-bygget är CPU-arbete (Tectonic) och ska inte köa bakom kortet.
+def test_godkannandet_vantar_inte_pa_grinden(llm_ready, fejk_claude, monkeypatch):
+    """PDF-bygget är CPU-arbete (Tectonic) och ska inte köa bakom någon grind.
 
     Förr tog godkännandet låset och höll det genom hela kompileringen: läraren
-    som skrev nästa dokument direkt efter ett godkänt prov fick «GPU:n är
-    upptagen» — samtidigt som gränssnittet sa att PDF:en byggdes i bakgrunden.
-    Låset tas nu bara runt en eventuell LaTeX-fixrunda, som är ett LLM-anrop."""
+    som skrev nästa dokument direkt efter ett godkänt prov fick «upptagen» —
+    samtidigt som gränssnittet sa att PDF:en byggdes i bakgrunden. Grinden tas
+    nu bara runt en eventuell LaTeX-fixrunda, som är ett LLM-anrop."""
     exam_id = _prov(llm_ready, fejk_claude)
     monkeypatch.setattr(exam_pdf, "engine_available", lambda: False)
 
     arb = llm_ready.app.state.arbiter
-    nyckel = arb.try_acquire_gpu()
-    assert nyckel, "låset var upptaget innan testet började"
+    nycklar = [arb.try_acquire_llm() for _ in range(gpu_arbiter.LLM_TAK)]
+    assert all(nycklar), "taket var redan nått innan testet började"
     try:
         r = llm_ready.post(f"/api/exams/{exam_id}/approve", json={})
         assert r.status_code == 200, r.text
         res = _done(r)
         assert res["tex"], "ingen .tex skrevs — godkännandet kom aldrig fram"
     finally:
-        assert arb.release_gpu(nyckel), "godkännandet släppte vårt lås"
-    # …och låset är ledigt igen.
-    arb.release_gpu(arb.try_acquire_gpu())
+        for n in nycklar:
+            assert arb.release_llm(n), "godkännandet släppte vår plats"
+    # …och taket är fritt igen.
+    arb.release_llm(arb.try_acquire_llm())
 
 
-def test_ett_jobb_som_kastar_slapper_gpun(llm_ready, monkeypatch):
-    """Ett jobb som dör mitt i får inte lämna GPU:n låst — då är appen slut
-    för dagen och läraren måste starta om den."""
+def test_ett_jobb_som_kastar_slapper_platsen(llm_ready, monkeypatch):
+    """Ett jobb som dör mitt i får inte lämna sin plats tagen — läcker alla tre
+    är appen slut för dagen och läraren måste starta om den."""
     def sprangs(*a, **k):
         raise RuntimeError("kortet försvann mitt i")
 
@@ -310,18 +326,20 @@ def test_ett_jobb_som_kastar_slapper_gpun(llm_ready, monkeypatch):
     assert "kortet försvann" in _fel(r)
 
     arb = llm_ready.app.state.arbiter
-    nyckel = arb.try_acquire_gpu()
-    assert nyckel, "GPU:n låstes fast av ett jobb som dog"
-    arb.release_gpu(nyckel)
+    nycklar = [arb.try_acquire_llm() for _ in range(gpu_arbiter.LLM_TAK)]
+    assert all(nycklar), "en plats låstes fast av ett jobb som dog"
+    for n in nycklar:
+        arb.release_llm(n)
 
 
-def test_gpun_ar_ledig_igen_efter_en_hel_generering(llm_ready, monkeypatch):
+def test_grinden_ar_fri_igen_efter_en_hel_generering(llm_ready, monkeypatch):
     board = copy.deepcopy(lesson_board.FEW_SHOTS[0][1])
     monkeypatch.setattr(lesson_board, "generate_board",
                         lambda *a, **k: {"board": board, "errors": [], "rounds": 1})
     assert llm_ready.post("/api/planning/generate",
                           json={"moment": "Derivator"}).status_code == 200
     arb = llm_ready.app.state.arbiter
-    nyckel = arb.try_acquire_gpu()
-    assert nyckel
-    arb.release_gpu(nyckel)
+    nycklar = [arb.try_acquire_llm() for _ in range(gpu_arbiter.LLM_TAK)]
+    assert all(nycklar)
+    for n in nycklar:
+        arb.release_llm(n)

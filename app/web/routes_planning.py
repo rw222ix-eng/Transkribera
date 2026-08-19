@@ -2,7 +2,9 @@
 
 Egen router i stället för fler endpoints i server.py (se planens riskavsnitt
 om scope-krypning). Fas 1: generera/reparera/iterera tavlor med LLM:en under
-GPU-arbitern (409-mönstret), godkänn & spara under base_dir. Pågående
+arbiterns molnsemafor (409-mönstret — förr det exklusiva GPU-låset, som gjorde
+att två tavlor aldrig kunde skrivas samtidigt fast ingen rörde kortet),
+godkänn & spara under base_dir. Pågående
 planeringar hålls i ett processlokalt minne — persistensen (planned_lessons,
 DB v4) kommer i Fas 3.
 """
@@ -18,7 +20,8 @@ from pathlib import Path
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
-from app import bok, db, forlaga, lararord, lesson_board, llm_client, rattning
+from app import (bok, db, forlaga, gpu_arbiter, lararord, lesson_board,
+                 llm_client, rattning)
 from app.web.sse import sse_response
 
 # Två tavlor i 2× blir ett par MB; 30 MB är väl tilltaget men stoppar missbruk.
@@ -26,7 +29,9 @@ _MAX_PNG_BYTES = 30 * 1024 * 1024
 _PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 _DATA_PREFIX = "data:image/png;base64,"
 _MAX_WARNINGS = 20          # klientens [WB]-lista begränsas (promptstorlek)
-_GPU_BUSY = {"error": "GPU:n är upptagen — försök igen strax."}
+# Molnjobben köar inte bakom kortet längre (se gpu_arbiter): de delar en
+# semafor med tak, och beskedet över taket säger vad som faktiskt pågår.
+_LLM_BUSY = {"error": gpu_arbiter.LLM_UPPTAGET}
 
 # Underlag (bokssidor/uppgifter som lektionen ska bygga på): tillåtna format,
 # storleks- och sidbudget. Allt sparas och behandlas lokalt under base_dir.
@@ -501,9 +506,9 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 {"error": f"för många sidor — max {_MAX_UNDERLAG_SIDOR} "
                           "bilder/PDF-sidor per underlag"}, status_code=413)
 
-        gpu = arbiter.try_acquire_gpu()
-        if not gpu:
-            return JSONResponse(_GPU_BUSY, status_code=409)
+        llm = arbiter.try_acquire_llm()
+        if not llm:
+            return JSONResponse(_LLM_BUSY, status_code=409)
 
         def job(emit):
             try:
@@ -549,7 +554,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                                    "beskrivning": m["beskrivning"]}
                                   for m in meta]}
             finally:
-                arbiter.release_gpu(gpu)
+                arbiter.release_llm(llm)
 
         return sse_response(job, req)
 
@@ -583,9 +588,9 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # «Väger källorna» — men aldrig nått hit.
         svart_txt, fokus_txt = lararens_ord(body)
 
-        gpu = arbiter.try_acquire_gpu()
-        if not gpu:
-            return JSONResponse(_GPU_BUSY, status_code=409)
+        llm = arbiter.try_acquire_llm()
+        if not llm:
+            return JSONResponse(_LLM_BUSY, status_code=409)
 
         def job(emit):
             try:
@@ -616,7 +621,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 return {"id": pid, "board": board,
                         "errors": res["errors"], "rounds": res["rounds"]}
             finally:
-                arbiter.release_gpu(gpu)
+                arbiter.release_llm(llm)
 
         return sse_response(job, req)
 
@@ -637,9 +642,9 @@ def create_router(base: Path, arbiter) -> APIRouter:
             # Budgeten slut — varningarna visas ärligt i UI:t i stället.
             return {"ok": True, "repaired": False, "exhausted": True}
 
-        gpu = arbiter.try_acquire_gpu()
-        if not gpu:
-            return JSONResponse(_GPU_BUSY, status_code=409)
+        llm = arbiter.try_acquire_llm()
+        if not llm:
+            return JSONResponse(_LLM_BUSY, status_code=409)
 
         def job(emit):
             try:
@@ -661,7 +666,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 return {"id": pid, "board": st["board"], "errors": res["errors"],
                         "rounds": res["rounds"], "repaired": True}
             finally:
-                arbiter.release_gpu(gpu)
+                arbiter.release_llm(llm)
 
         return sse_response(job, req)
 
@@ -688,9 +693,9 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # spannet valdes), så en omskrivning kostar ingen bokläsning.
         bok_txt = bok_text(db_file, body)
 
-        gpu = arbiter.try_acquire_gpu()
-        if not gpu:
-            return JSONResponse(_GPU_BUSY, status_code=409)
+        llm = arbiter.try_acquire_llm()
+        if not llm:
+            return JSONResponse(_LLM_BUSY, status_code=409)
 
         def job(emit):
             try:
@@ -711,7 +716,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 return {"id": pid, "board": st["board"], "errors": res["errors"],
                         "rounds": res["rounds"]}
             finally:
-                arbiter.release_gpu(gpu)
+                arbiter.release_llm(llm)
 
         return sse_response(job, req)
 
@@ -968,9 +973,9 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 emit({"type": "token", "text": text})
                 return {"text": text, "sources": []}
             return sse_response(no_hit_job, req)
-        gpu = arbiter.try_acquire_gpu()
-        if not gpu:
-            return JSONResponse(_GPU_BUSY, status_code=409)
+        llm = arbiter.try_acquire_llm()
+        if not llm:
+            return JSONResponse(_LLM_BUSY, status_code=409)
 
         typ_label = {"tavla": "Tavla", "prov": "Prov", "arbetsblad": "Arbetsblad"}
 
@@ -1014,7 +1019,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                      "group": it["group"], "course": it["course"],
                      "datum": it["datum"]} for it in hits]}
             finally:
-                arbiter.release_gpu(gpu)
+                arbiter.release_llm(llm)
 
         return sse_response(job, req)
 

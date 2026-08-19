@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+from app import gpu_arbiter
 from app.web import server
 
 
@@ -228,13 +229,19 @@ def test_media_want_video_remuxes_mkv(client, tmp_path, monkeypatch):
     assert r.text == "remuxed"
 
 
-# ---- GPU coexistence: LLM requests are rejected while the GPU is busy --------
+# ---- Taket: LLM-rutter nekas när molnsemaforen är full ----------------------
+#
+# Förr stod det «medan GPU:n är upptagen» här, och fejken tog kortet för att
+# stänga chatten. Kortet stänger ingenting längre — molnjobben har ett eget tak
+# (gpu_arbiter.LLM_TAK), och det är DET som ger 409.
 
 class _BusyArbiter:
-    """Stands in for GpuArbiter with the GPU already taken (e.g. by a running
-    transcription) so try_acquire_gpu() always fails."""
-    def try_acquire_gpu(self): return None
+    """GpuArbiter med molnsemaforen full — try_acquire_llm() nekar alltid.
+    GPU-låset är ledigt, som det är i verkligheten när tre svar skrivs."""
+    def try_acquire_gpu(self): return "nyckel"
+    def try_acquire_llm(self): return None
     def release_gpu(self, nyckel=None): pass
+    def release_llm(self, nyckel=None): pass
     def ensure_llm(self): return "http://x"
     def ensure_model(self, spec): return "http://x"
     def stop_llm(self): return False
@@ -259,21 +266,29 @@ def test_postprocess_busy_returns_409(tmp_path):
     r = _busy_client(tmp_path).post("/api/postprocess",
                                     json={"transcript": "hej", "model": "m"})
     assert r.status_code == 409
-    assert "upptagen" in r.json()["error"]
+    assert r.json()["error"] == gpu_arbiter.LLM_UPPTAGET
 
 
 def test_chat_busy_returns_409(tmp_path):
     r = _busy_client(tmp_path).post(
         "/api/chat", json={"model": "m", "messages": [{"role": "user", "content": "hej"}]})
     assert r.status_code == 409
-    assert "upptagen" in r.json()["error"]
+    assert r.json()["error"] == gpu_arbiter.LLM_UPPTAGET
 
 
 def test_transcribe_busy_returns_409(tmp_path, monkeypatch):
+    """Transkriberingen är den enda som fortfarande tar det EXKLUSIVA låset —
+    inte för kortets skull utan för `job_state`, som är en per process. Den
+    grinden är alltså kvar, och taket för molnjobben rör den inte."""
+    class GpuTagen(_BusyArbiter):
+        def try_acquire_gpu(self): return None
+        def try_acquire_llm(self): return "nyckel"
+
+    from fastapi.testclient import TestClient
     monkeypatch.setattr(server.hardware, "scan_hardware", lambda *_: _HW())
     monkeypatch.setattr(server.elevenlabs_asr, "har_nyckel", lambda *a, **k: True)
-    r = _busy_client(tmp_path).post(
-        "/api/transcribe", json={"source": "/tmp/a.mp3", "formats": ["srt"]})
+    c = TestClient(server.create_app(base_dir=tmp_path, arbiter=GpuTagen()))
+    r = c.post("/api/transcribe", json={"source": "/tmp/a.mp3", "formats": ["srt"]})
     assert r.status_code == 409
     assert "upptagen" in r.json()["error"]
 
@@ -288,7 +303,9 @@ class _RecordingArbiter:
     """Släpper fram GPU:n och minns om rutten frågade efter språkmodellen alls."""
     def __init__(self): self.fragad = False
     def try_acquire_gpu(self): return "nyckel"
+    def try_acquire_llm(self): return "nyckel"
     def release_gpu(self, nyckel=None): pass
+    def release_llm(self, nyckel=None): pass
     def ensure_model(self, spec=None): self.fragad = True; return "claude-code"
     def ensure_llm(self): return self.ensure_model()
     def stop_llm(self): return False
@@ -491,9 +508,12 @@ def test_history_one_endpoint(tmp_path, monkeypatch):
 # ---- Insikter: LLM-extraktion + redigerbara kort (Fas 2) --------------------
 
 class _ReadyArbiter:
-    """GPU free, LLM installed — lets extraction run end-to-end in tests."""
+    """Ingen grind i vägen (varken kort eller tak), språkmodellen finns —
+    låter extraktionen köra hela vägen i testerna."""
     def try_acquire_gpu(self): return "nyckel"
+    def try_acquire_llm(self): return "nyckel"
     def release_gpu(self, nyckel=None): pass
+    def release_llm(self, nyckel=None): pass
     def ensure_llm(self): return "http://x"
     def stop_llm(self): return False
     def prewarm_async(self): pass
@@ -844,7 +864,9 @@ def test_patch_history_unknown_404(client):
 class _TransArbiter:
     """Släpper fram GPU:n; språkmodellen finns inte att fråga i de här testerna."""
     def try_acquire_gpu(self): return "nyckel"
+    def try_acquire_llm(self): return "nyckel"
     def release_gpu(self, nyckel=None): pass
+    def release_llm(self, nyckel=None): pass
     def stop_llm(self): return False
     def ensure_llm(self): return None
     def ensure_model(self, spec=None): return None
@@ -1090,9 +1112,9 @@ def test_search_ask_matches_lesson_name(tmp_path, monkeypatch):
     assert captured["names"] == ["Matematik 4 - dubbla vinkeln.mp4"]
 
 
-def test_search_ask_busy_gpu_409(tmp_path, monkeypatch):
+def test_search_ask_over_taket_409(tmp_path, monkeypatch):
     class Busy(_ReadyArbiter):
-        def try_acquire_gpu(self): return None
+        def try_acquire_llm(self): return None
     c = _lesson_client(tmp_path, monkeypatch, arbiter=Busy())
     assert c.post("/api/search/ask", json={"q": "derivata"}).status_code == 409
 
@@ -1158,9 +1180,9 @@ def test_search_ask_cal_chat_utan_forslag_gar_till_kalendervagen(tmp_path, monke
     assert captured["q"].startswith("Svar: fredag")
 
 
-def test_search_ask_cal_event_busy_gpu_409(tmp_path, monkeypatch):
+def test_search_ask_cal_event_over_taket_409(tmp_path, monkeypatch):
     class Busy(_ReadyArbiter):
-        def try_acquire_gpu(self): return None
+        def try_acquire_llm(self): return None
     c = _lesson_client(tmp_path, monkeypatch, arbiter=Busy())
     ev = {"title": "T", "date": "2026-07-21", "time": "08:00",
           "end_date": None, "desc": ""}

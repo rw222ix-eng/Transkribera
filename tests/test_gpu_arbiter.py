@@ -1,10 +1,11 @@
-"""GPU-låset och frågan «går det att fråga språkmodellen?».
+"""Grindarna — och frågan «går det att fråga språkmodellen?».
 
 Arbitern startade förr llama-servern och växlade mellan text- och bildmodell på
-ett 24 GB-kort. Ingen av modellerna finns kvar. Kvar är två saker: ett lås så att
-bara ett tungt GPU-jobb (tidsättningen) kör i taget, och ett ärligt svar på om
-Claude Code går att nå — det är det svaret ett tjugotal rutter läser innan de
-lovar läraren ett resultat.
+ett 24 GB-kort. Ingen av modellerna finns kvar. Kvar är tre saker: ett lås så att
+bara ett tungt GPU-jobb (tidsättningen) kör i taget, en semafor med tak för
+molnjobben — som förr trängdes om samma lås helt i onödan — och ett ärligt svar
+på om Claude Code går att nå. Det svaret läser ett tjugotal rutter innan de lovar
+läraren ett resultat.
 """
 from app import gpu_arbiter as ga
 
@@ -58,6 +59,55 @@ def test_nyckeln_ar_ny_varje_gang(tmp_path):
     assert andra != forsta
     assert arb.release_gpu(forsta) is False        # gammal nyckel biter inte
     assert arb.try_acquire_gpu() is None            # andra jobbet har kvar sitt
+
+
+# ---- Molnsemaforen --------------------------------------------------------
+
+def test_taket_slapper_in_precis_llm_tak_jobb(tmp_path):
+    arb = _arb(tmp_path)
+    nycklar = [arb.try_acquire_llm() for _ in range(ga.LLM_TAK)]
+    assert all(nycklar)
+    assert len(set(nycklar)) == ga.LLM_TAK          # varsin nyckel, inte samma
+    assert arb.try_acquire_llm() is None            # taket nått
+    assert arb.release_llm(nycklar[0]) is True
+    assert arb.try_acquire_llm()                    # en plats blev fri
+
+
+def test_molnjobben_koar_inte_bakom_kortet(tmp_path):
+    """Själva poängen med delningen: en pågående transkribering (GPU-låset) ska
+    inte längre stänga dörren för en tavla som skrivs i molnet."""
+    arb = _arb(tmp_path)
+    kort = arb.try_acquire_gpu()
+    assert arb.try_acquire_llm(), "molnjobbet blockerades av GPU-låset"
+    # …och tvärtom: fullt tak tar inte kortet ifrån tidsättningen.
+    arb.release_gpu(kort)
+    for _ in range(ga.LLM_TAK - 1):
+        arb.try_acquire_llm()
+    assert arb.try_acquire_llm() is None
+    assert arb.try_acquire_gpu(), "kortet stängdes av molnets tak"
+
+
+def test_ingen_slapper_nagon_annans_plats(tmp_path):
+    """Samma nyckeldisciplin som låset (buggkandidat 9). Utan den skulle ett
+    jobb som «städade» efter sig öppna en plats som någon annan höll — och taket
+    skulle sakta växa förbi LLM_TAK."""
+    arb = _arb(tmp_path)
+    mitt = arb.try_acquire_llm()
+    assert arb.release_llm(None) is False
+    assert arb.release_llm("hittepå") is False
+    assert arb.release_llm(mitt) is True
+    assert arb.release_llm(mitt) is False           # nyckeln biter bara en gång
+
+    # Och taket står kvar där det ska efter alla misslyckade släpp.
+    nycklar = [arb.try_acquire_llm() for _ in range(ga.LLM_TAK)]
+    assert all(nycklar)
+    assert arb.try_acquire_llm() is None
+
+
+def test_beskedet_over_taket_sager_vad_som_pagar(tmp_path):
+    """Läraren ska inte längre få höra om en GPU som inte gör något."""
+    assert "GPU" not in ga.LLM_UPPTAGET
+    assert "Modellen" in ga.LLM_UPPTAGET
 
 
 # ---- Språkmodellen --------------------------------------------------------

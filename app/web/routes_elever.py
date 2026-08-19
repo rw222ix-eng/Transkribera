@@ -1,8 +1,9 @@
 """Eleverna: klasslistan, poängen elev för elev och feedbacken (v15).
 
 Egen router av samma skäl som routes_exam: feedbacken är ett LLM-jobb och
-följer GPU-arbiterns 409-mönster och SSE-strömmen, medan klasslistan och
-poängen är vanliga synkrona rutter.
+följer arbiterns 409-mönster (molnsemaforen — jobbet går till Claude, inte till
+kortet) och SSE-strömmen, medan klasslistan och poängen är vanliga synkrona
+rutter.
 
 **Klassrättningen (server.py) rörs inte.** Den läser `rattning` som förut, och
 lektionsplaneringens källdörr 5 märker inte att elevläget finns. Skillnaden är
@@ -22,10 +23,13 @@ from pathlib import Path
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
-from app import ci_profil, course_data, db, elev_feedback, klasslista, rattning
+from app import (ci_profil, course_data, db, elev_feedback, gpu_arbiter,
+                 klasslista, rattning)
 from app.web.sse import sse_response
 
-_GPU_BUSY = {"error": "GPU:n är upptagen — försök igen strax."}
+# Molnjobben köar inte bakom kortet längre (se gpu_arbiter): de delar en
+# semafor med tak, och beskedet över taket säger vad som faktiskt pågår.
+_LLM_BUSY = {"error": gpu_arbiter.LLM_UPPTAGET}
 
 
 def create_router(base: Path, arbiter) -> APIRouter:
@@ -236,9 +240,9 @@ def create_router(base: Path, arbiter) -> APIRouter:
                      "betyg": rattning.betyg(summor[eid], granser),
                      "varden": resultat[eid]} for eid in ordning]
 
-        gpu = arbiter.try_acquire_gpu()
-        if not gpu:
-            return JSONResponse(_GPU_BUSY, status_code=409)
+        llm = arbiter.try_acquire_llm()
+        if not llm:
+            return JSONResponse(_LLM_BUSY, status_code=409)
 
         def job(emit):
             try:
@@ -259,7 +263,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 return {"feedback": sparat, "errors": res["errors"],
                         "rounds": res["rounds"]}
             finally:
-                arbiter.release_gpu(gpu)
+                arbiter.release_llm(llm)
 
         return sse_response(job, req)
 
