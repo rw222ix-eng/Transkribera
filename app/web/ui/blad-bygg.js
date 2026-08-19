@@ -206,7 +206,11 @@ window.BladBygg = (() => {
         <div class="losvar"><b class="losetikett">Svar</b><span>${mat(u.f)}</span>${u.enhet ? `<em>${esc(u.enhet)}</em>` : ''}</div>
         ${u.vag ? `<ul class="lovag">${u.vag.map(s => `<li><span class="losteg">${mat(s[0])}<em>${esc(s[1])}</em></span></li>`).join('')}</ul>` : ''}
       </div></div>`;
-    return `<div class="ark" data-form="fa">
+    /* data-brytbar: facit är lika långt som sina lösningar, och ett svar på
+       flera meningar sköt D-uppgiften ut under arkets nederkant. paginera
+       (blad.js) mäter och flyttar det som inte ryms till ett nytt blad med
+       samma huvud — precis som provet och lösningsförslaget. */
+    return `<div class="ark" data-form="fa" data-brytbar="">
       <div class="lohuvud"><b>Facit</b><span>${esc(versal(v.moment || ''))}</span></div>
       <h1 class="lotitel">Svar och lösningsgång</h1>
       <p class="lolede">Poängen står vid det steg den delas ut på. Ett svar utan uträkning ger inte full poäng på uppgifter som kräver lösning.</p>
