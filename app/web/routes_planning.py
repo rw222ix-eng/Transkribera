@@ -144,6 +144,23 @@ def forlaga_text(db_file: Path, body: dict) -> str:
     return forlaga.build_forlaga(dok, hur)
 
 
+# Varvhistoriken kommer från KLIENTEN och inte ur databasen, och skälet är att
+# det är där den finns: lärarens ändringsmeningar står i utkastets versioner
+# (`anteckning`-fältet, plan.js nyVersion) och i granskningens tråd. Databasens
+# `exam_versions` bär bara dokumenten — vad som BADS om står inte där.
+#
+# Den är alltså användarinmatning och behöver samma sanering som allt annat som
+# går in i en prompt: bara strängar, kapade, och ett tak på antalet.
+def varvhistorik(body: dict) -> list[str]:
+    """Lärarens tidigare ändringsmeningar för utkastet, i ordning."""
+    rader = body.get("historik")
+    if not isinstance(rader, list):
+        return []
+    return [" ".join(str(r).split())[:llm_client.MAX_VARVTECKEN]
+            for r in rader[-llm_client.MAX_VARV:]
+            if isinstance(r, (str, int, float)) and str(r).strip()]
+
+
 def lararens_ord(body: dict) -> tuple[str, str]:
     """(svårighetsblocket, viktningsblocket) ur begäran — lärarens två rutor i
     steg 3. Delas av alla tre generatorerna (tavla, prov/blad, anteckningar):
@@ -693,6 +710,9 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # inte i prompten. `bok_text` läser inga nya sidor (de lästes när
         # spannet valdes), så en omskrivning kostar ingen bokläsning.
         bok_txt = bok_text(db_file, body)
+        # Vad läraren redan bett om för det här utkastet. Utan den började varje
+        # varv om från noll: «kortare än så» hade inget «så» att gå efter.
+        historik = varvhistorik(body)
 
         llm = arbiter.try_acquire_llm()
         if not llm:
@@ -706,7 +726,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     raise RuntimeError("Språkmodellen är inte installerad.")
                 res = lesson_board.refine_board(
                     st["board"], message, model=_model_name(), mal=mal,
-                    bok=bok_txt,
+                    bok=bok_txt, historik=historik,
                     log_cb=lambda m: emit({"type": "log", "msg": m}),
                     token_cb=lambda t: emit({"type": "token", "text": t}))
                 if res["board"] is not None:

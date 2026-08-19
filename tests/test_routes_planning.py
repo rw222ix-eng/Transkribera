@@ -289,8 +289,8 @@ def test_refine_updates_board(llm_ready, monkeypatch):
     updated["title"] = "Uppdaterad"
     captured = {}
 
-    def fake_refine(board, instruction, *, model, mal=None, bok="", llm=None,
-                    max_rounds=lesson_board.MAX_ROUNDS, log_cb=None,
+    def fake_refine(board, instruction, *, model, mal=None, bok="", historik=None,
+                    llm=None, max_rounds=lesson_board.MAX_ROUNDS, log_cb=None,
                     token_cb=None):
         captured["instruction"] = instruction
         captured["mal"] = mal
@@ -721,8 +721,9 @@ def test_refine_far_hela_meddelandet_inklusive_kallviktningen(llm_ready, monkeyp
 
     sett = {}
 
-    def fake_refine(board, message, *, model, mal=None, bok="", llm=None,
-                    max_rounds=lesson_board.MAX_ROUNDS, log_cb=None, token_cb=None):
+    def fake_refine(board, message, *, model, mal=None, bok="", historik=None,
+                    llm=None, max_rounds=lesson_board.MAX_ROUNDS, log_cb=None,
+                    token_cb=None):
         sett["message"] = message
         return {"board": _valid_board(), "errors": [], "rounds": 1}
     monkeypatch.setattr(lesson_board, "refine_board", fake_refine)
@@ -788,8 +789,9 @@ def test_tavlan_gar_att_andra_efter_en_omstart(llm_ready, monkeypatch):
     uppdaterad["title"] = "Efter omstarten"
     sett = {}
 
-    def fake_refine(board, instruction, *, model, mal=None, bok="", llm=None,
-                    max_rounds=lesson_board.MAX_ROUNDS, log_cb=None, token_cb=None):
+    def fake_refine(board, instruction, *, model, mal=None, bok="", historik=None,
+                    llm=None, max_rounds=lesson_board.MAX_ROUNDS, log_cb=None,
+                    token_cb=None):
         sett["board"] = board
         return {"board": uppdaterad, "errors": [], "rounds": 1}
     monkeypatch.setattr(lesson_board, "refine_board", fake_refine)
@@ -867,3 +869,74 @@ def test_urvalet_lases_ur_kroppen(llm_ready):
     # Utan urval (dörren öppen men panelen tom) säger den ingenting.
     assert rp.bok_urval({"bok": {"id": 1, "fran": 2, "till": 6}}) is None
     assert rp.bok_urval({}) is None
+
+
+# ── Hela sammanhanget till modellen (varvhistoriken) ─────────────────────────
+
+def test_refine_far_lararens_tidigare_onskemal(llm_ready, monkeypatch):
+    """Omskrivningen hade inget minne: tredje varvets «kortare än så» hade inget
+    «så» att gå efter, och ett villkor från varv ett kunde rivas i varv två utan
+    att någon bett om det."""
+    pid = _make_planning(llm_ready, monkeypatch)
+    sett = {}
+
+    def fake_refine(board, instruction, *, model, mal=None, bok="", historik=None,
+                    **kw):
+        sett["historik"] = historik
+        sett["mal"] = mal
+        return {"board": _valid_board(), "errors": [], "rounds": 1}
+    monkeypatch.setattr(lesson_board, "refine_board", fake_refine)
+
+    _done(llm_ready.post(f"/api/planning/{pid}/refine", json={
+        "message": "kortare än så",
+        "historik": ["Byt exempel 2 mot ett ur fysiken", "Gör den kortare"],
+        "mal": {"namn": "Formel 3", "innehall": "a^2+b^2=c^2",
+                "renderat": "a2+b2=c2 a^2+b^2=c^2"}}))
+    assert sett["historik"] == ["Byt exempel 2 mot ett ur fysiken",
+                                "Gör den kortare"]
+    # Den renderade texten följer med målet — det är den bilden läraren ser.
+    assert sett["mal"]["renderat"] == "a2+b2=c2 a^2+b^2=c^2"
+
+
+def test_varvhistoriken_saneras_som_all_annan_inmatning(llm_ready, monkeypatch):
+    """Historiken kommer från klienten och går rakt in i en prompt: bara
+    strängar, kapade, och ett tak på antalet."""
+    from app import llm_client
+    pid = _make_planning(llm_ready, monkeypatch)
+    sett = {}
+    monkeypatch.setattr(lesson_board, "refine_board",
+                        lambda *a, historik=None, **k: sett.update(h=historik)
+                        or {"board": _valid_board(), "errors": [], "rounds": 1})
+
+    _done(llm_ready.post(f"/api/planning/{pid}/refine", json={
+        "message": "x",
+        "historik": [{"inte": "en sträng"}, None, "  ", "y" * 900]
+                    + [f"varv{i}" for i in range(20)]}))
+    h = sett["h"]
+    assert len(h) <= llm_client.MAX_VARV
+    assert all(isinstance(x, str) for x in h)
+    assert all(len(x) <= llm_client.MAX_VARVTECKEN for x in h)
+
+
+def test_utan_historik_skickas_ingen(llm_ready, monkeypatch):
+    pid = _make_planning(llm_ready, monkeypatch)
+    sett = {}
+    monkeypatch.setattr(lesson_board, "refine_board",
+                        lambda *a, historik=None, **k: sett.update(h=historik)
+                        or {"board": _valid_board(), "errors": [], "rounds": 1})
+    _done(llm_ready.post(f"/api/planning/{pid}/refine", json={"message": "x"}))
+    assert sett["h"] == []
+
+
+def test_prompten_bar_hela_tavlan_historiken_och_skarmtexten():
+    """Prompten är det som faktiskt når modellen — inte rutten. Hela
+    dokumentet har alltid legat i den; historiken och skärmtexten är nytt."""
+    board = _valid_board()
+    p = lesson_board.build_refine_prompt(
+        board, "kortare än så",
+        mal={"namn": "Formel 3", "innehall": "a^2", "renderat": "a2 a^2"},
+        historik=["Gör den kortare"])
+    assert json.dumps(board, ensure_ascii=False) in p     # HELA tavlan
+    assert "1. Gör den kortare" in p
+    assert "a2 a^2" in p
+    assert "kortare än så" in p

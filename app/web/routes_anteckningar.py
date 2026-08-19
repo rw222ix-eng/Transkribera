@@ -241,6 +241,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
         mal = body.get("mal") if isinstance(body.get("mal"), dict) else None
         # Bokdörren följer med omskrivningen som med genereringen.
         bok_block = routes_planning.bok_text(db_file, body)
+        # Se routes_exam: lärarens tidigare önskemål för utkastet.
+        historik = routes_planning.varvhistorik(body)
         conn = db.connect(db_file)
         try:
             view = db.get_exam(conn, note_id)
@@ -259,7 +261,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     raise RuntimeError("Språkmodellen är inte installerad.")
                 res = notes_gen.refine_notes(
                     view["exam"], message, model=_model_name(), mal=mal,
-                    bok=bok_block,
+                    bok=bok_block, historik=historik,
                     log_cb=lambda m: emit({"type": "log", "msg": m}),
                     token_cb=lambda t: emit({"type": "token", "text": t}))
                 if res["notes"] is not None and res["notes"] != view["exam"]:

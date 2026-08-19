@@ -398,6 +398,10 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # Bokdörren följer med omskrivningen som med genereringen: sidorna,
         # uppgiftsnumren och lärarens urval. `bok_text` läser inga nya sidor.
         bok_block = routes_planning.bok_text(db_file, body)
+        # Varvhistoriken följer med av samma skäl som boken: omskrivningen ska
+        # veta vad läraren redan bett om, annars bryter varv tre villkoret från
+        # varv ett utan att någon bett om det.
+        historik = routes_planning.varvhistorik(body)
         conn = db.connect(db_file)
         try:
             view = db.get_exam(conn, exam_id)
@@ -417,7 +421,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 res = exam_gen.refine_exam(
                     view["exam"], message, model=_model_name(),
                     nummer=int(nummer) if nummer else None, mal=mal,
-                    bok=bok_block, profil=view.get("typ") or "prov",
+                    bok=bok_block, historik=historik,
+                    profil=view.get("typ") or "prov",
                     log_cb=lambda m: emit({"type": "log", "msg": m}))
                 if res["exam"] is not None and res["exam"] != view["exam"]:
                     conn = db.connect(db_file)

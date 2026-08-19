@@ -75,17 +75,68 @@ _CHAT_SYSTEM_CITED = (
 # ett helt JSON-dokument och behöver samma mening om vad som ska röras.
 
 def malrad(mal: dict | None) -> str:
-    """En rad om elementet läraren pekade på, eller "" när hon inte pekade."""
+    """En rad om elementet läraren pekade på, eller "" när hon inte pekade.
+
+    `renderat` är rutans text SÅ SOM DEN STÅR PÅ SKÄRMEN. Den behövs för att
+    läraren beskriver det hon SER, och skärmen och JSON:en är inte samma sak:
+    KaTeX lämnar kvar sin egen källa i en MathML-annotation, så en formel står
+    där två gånger — en gång satt och en gång som «x^2». «Det står ett
+    dollartecken mitt i raden» gäller alltså något som inte finns i fältet, och
+    utan den här raden letade modellen efter ett tecken som aldrig fanns."""
     if not isinstance(mal, dict):
         return ""
     namn = str(mal.get("namn") or "").strip()
     innehall = " ".join(str(mal.get("innehall") or "").split())[:300].strip()
-    if not namn and not innehall:
+    renderat = " ".join(str(mal.get("renderat") or "").split())[:600].strip()
+    if not namn and not innehall and not renderat:
         return ""
     vad = f"«{namn}»" if namn else "ett element"
     om = f' — som innehåller: "{innehall}"' if innehall else ""
-    return (f"Läraren PEKADE PÅ {vad}{om}. Önskemålet gäller det elementet: "
+    # Bara när den säger något NYTT: är skärmtexten densamma som innehållet är
+    # en andra kopia av den bara promptutrymme.
+    sett = ""
+    if renderat and renderat != innehall:
+        sett = (f'\nSå här ser rutan ut på skärmen: "{renderat}". Det är den bilden '
+                "läraren beskriver. Sättningen kan upprepa matematiken — en gång "
+                "satt och en gång som LaTeX-källa — så dubbla formler och lösa "
+                "dollartecken där behöver inte finnas i JSON-fältet.")
+    return (f"Läraren PEKADE PÅ {vad}{om}.{sett} Önskemålet gäller det elementet: "
             "ändra det och låt allt annat i dokumentet stå oförändrat.\n")
+
+
+# Varvhistoriken — vad läraren redan bett om för DET HÄR utkastet.
+#
+# Omskrivningen fick förr en enda mening och inget minne. Tredje varvet
+# «kortare än så» hade ingen «som så» att gå efter, och «lite mer som förra
+# förslaget» var obegripligt — modellen såg bara dokumentet som det blev, inte
+# vägen dit. Varje varv skrev därför om samma sak från noll, och läraren fick
+# upprepa villkor hon redan ställt.
+#
+# Historiken är LÄRARENS EGNA meningar, i ordning, och inget annat: modellens
+# svar står redan i dokumentet. Taket är satt för att ett långt arbetspass inte
+# ska tränga ut själva dokumentet ur prompten.
+MAX_VARV = 8
+MAX_VARVTECKEN = 200
+
+
+def varvrad(historik) -> str:
+    """Rader om tidigare önskemål för utkastet, eller "" när det är första varvet."""
+    if not isinstance(historik, (list, tuple)):
+        return ""
+    rader = []
+    for post in historik:
+        text = " ".join(str(post or "").split())[:MAX_VARVTECKEN].strip()
+        if text:
+            rader.append(text)
+    if not rader:
+        return ""
+    rader = rader[-MAX_VARV:]           # de senaste — de äldsta är oftast avklarade
+    punkter = "\n".join(f"{i}. {t}" for i, t in enumerate(rader, 1))
+    return ("Läraren har redan bett om detta för det här utkastet, i ordning:\n"
+            f"{punkter}\n"
+            "De är genomförda i dokumentet ovan och ska INTE göras om — de står här "
+            "för att det nya önskemålet kan bygga vidare på dem («kortare än så», "
+            "«samma sak för nästa uppgift»). Bryt inte något av dem.\n\n")
 
 
 # Kalenderförmågan i lektionschatten: modellen skapar/ändrar kalenderförslaget

@@ -518,6 +518,13 @@
 
 /* skrivrutan — hela kolumnens bredd, plats att skriva två meningar */
 .gskriv{border-top:1px solid var(--line);padding:18px 26px 22px}
+/* Snabbknapparna står ovanför målrutan och ser ut som källbrickorna — de är
+   samma sorts sak: ett klick som skriver en mening åt läraren. */
+.gsnabb{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px}
+.gsnabbknapp{padding:5px 12px;border:1px solid var(--line);border-radius:var(--r-pill);background:var(--surface);font-family:inherit;font-size:.76rem;font-weight:600;color:var(--ink-2);cursor:pointer;transition:background var(--dur-2) var(--ease),color var(--dur-2) var(--ease),transform var(--dur-1) var(--ease)}
+.gsnabbknapp:hover{background:var(--btn-bg);color:#fff;border-color:transparent}
+.gsnabbknapp:active{transform:scale(.97)}
+.gsnabbknapp:focus-visible{outline:2px solid var(--sky-deep);outline-offset:2px}
 .gmal{display:inline-flex;align-items:center;gap:8px;border-radius:var(--r-pill);background:var(--sunken);color:var(--ink-2);font-size:.78rem;font-weight:600;padding:6px 13px;margin:0 0 12px}
 .gmal[data-satt]{background:var(--accent-weak);color:var(--sky-deep)}
 .gmalx{border:none;background:transparent;color:inherit;font-size:.74rem;cursor:pointer;padding:0 2px;opacity:.7}

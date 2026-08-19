@@ -854,7 +854,8 @@ def build_repair_prompt(board_json: dict, problems: list) -> str:
 
 
 def build_refine_prompt(board_json: dict, instruction: str,
-                        mal: dict | None = None, bok: str = "") -> str:
+                        mal: dict | None = None, bok: str = "",
+                        historik=None) -> str:
     """Chatt-iteration: lärarens ändringsönskemål ovanpå befintlig tavla.
 
     `mal` är elementet läraren PEKADE PÅ i granskningen: {"namn", "innehall"}.
@@ -866,13 +867,17 @@ def build_refine_prompt(board_json: dict, instruction: str,
     `bok` är bokdörrens block: de uppslagna sidorna, uppgiftsnumren och lärarens
     urval (bok.build_bok_block). Genereringen har alltid fått det — iterationen
     fick det inte, och därför kunde «lägg till vilka uppgifter vi ska göra» bara
-    bli en allmän mening om att räkna i boken. Numren fanns inte i prompten."""
+    bli en allmän mening om att räkna i boken. Numren fanns inte i prompten.
+
+    `historik` är lärarens TIDIGARE önskemål för utkastet (llm_client.varvrad).
+    Utan den hade tredje varvets «kortare än så» inget «så» att gå efter."""
     kallor = f"{bok.strip()}\n\n" if bok and bok.strip() else ""
     return (
         f"{INSTRUCTION}\n"
         f"{kallor}"
         "Här är den nuvarande lektionstavlan:\n"
         f"{json.dumps(board_json, ensure_ascii=False)}\n\n"
+        f"{llm_client.varvrad(historik)}"
         f"{llm_client.malrad(mal)}Lärarens önskemål: {instruction}\n\n"
         "Skriv om HELA tavlan som JSON med önskemålet genomfört. Ändra så "
         "lite som möjligt i övrigt. Svara med enbart JSON."
@@ -1061,7 +1066,7 @@ def repair_board(board: dict, warnings: list[str], *, model: str,
 
 
 def refine_board(board: dict, instruction: str, *, model: str,
-                 mal: dict | None = None, bok: str = "",
+                 mal: dict | None = None, bok: str = "", historik=None,
                  llm=llm_client.generate,
                  max_rounds: int = MAX_ROUNDS,
                  log_cb: Callable[[str], None] | None = None,
@@ -1072,8 +1077,9 @@ def refine_board(board: dict, instruction: str, *, model: str,
     `bok` bokdörrens block — sidorna och lärarens uppgiftsurval."""
     log = log_cb or (lambda _m: None)
     log("Uppdaterar tavlan …")
-    candidate = _llm_round(build_refine_prompt(board, instruction, mal, bok),
-                           model, llm, token_cb=token_cb)
+    candidate = _llm_round(
+        build_refine_prompt(board, instruction, mal, bok, historik),
+        model, llm, token_cb=token_cb)
     if candidate is None:
         return {"board": board,
                 "errors": [{"path": "svar", "code": "json",

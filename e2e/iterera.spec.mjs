@@ -390,3 +390,94 @@ test("bilden av tavlan bär inga markeringar", async ({ page }) => {
   });
   expect(kvar).toEqual({ prickar: 0, andrad: false, pappret: 1 });
 });
+
+/* ── HELA SAMMANHANGET, OCH SNABBKNAPPARNA ─────────────────────────────────
+ * Omskrivningen fick en enda mening och inget minne: tredje varvets «kortare
+ * än så» hade inget «så» att gå efter. Nu följer lärarens tidigare önskemål
+ * med, och rutans text SÅ SOM DEN SYNS (KaTeX skriver sin källa en gång till,
+ * och det är den bilden läraren beskriver).
+ *
+ * Snabbknapparna går genom SAMMA väg som fritext — det är hela poängen med
+ * dem, och det testet vaktar: ingen egen kodväg, ingen egen prompt.
+ */
+
+test("varvhistoriken följer med till servern", async ({ page }) => {
+  const anrop = await fejka(page, { andrade: ["tav2"] });
+  await page.goto("/");
+  await hydrerad(page);
+  await skrivTavla(page);
+  await oppnaCanvas(page);
+
+  await page.locator("#g-falt").fill("Byt exempel 2 mot ett ur fysiken");
+  await page.locator("#g-form").evaluate(f => f.requestSubmit());
+  await expect(page.locator("#g-antal")).toHaveText("1 ändring", { timeout: 20_000 });
+
+  await page.locator("#g-falt").fill("Kortare än så");
+  await page.locator("#g-form").evaluate(f => f.requestSubmit());
+  await expect(page.locator("#g-antal")).toHaveText("2 ändringar", { timeout: 20_000 });
+
+  const varv = anrop.filter(a => a.vag.endsWith("/refine"));
+  expect(varv[0].kropp.historik).toBeUndefined();      // första varvet har inget
+  expect(varv[1].kropp.historik).toEqual(["Byt exempel 2 mot ett ur fysiken"]);
+  // Den nya meningen står som önskemål, inte som «redan gjort».
+  expect(varv[1].kropp.message).toBe("Kortare än så");
+});
+
+test("elementets renderade text går med — det är den läraren ser", async ({ page }) => {
+  const anrop = await fejka(page, { andrade: ["tav2"] });
+  await page.goto("/");
+  await hydrerad(page);
+  await skrivTavla(page);
+  await oppnaCanvas(page);
+
+  const el = await valjElement(page);
+  const sett = await el.evaluate(e => (e.textContent || "").replace(/\s+/g, " ").trim());
+  await page.locator("#g-falt").fill("Gör den kortare");
+  await page.locator("#g-form").evaluate(f => f.requestSubmit());
+  await expect.poll(() => anrop.some(a => a.vag.endsWith("/refine")),
+                    { timeout: 20_000 }).toBe(true);
+  const mal = anrop.find(a => a.vag.endsWith("/refine")).kropp.mal;
+  expect(mal.renderat).toBe(sett.slice(0, 600));
+});
+
+test("snabbknapparna visas bara när ett element är valt", async ({ page }) => {
+  await fejka(page);
+  await page.goto("/");
+  await hydrerad(page);
+  await skrivTavla(page);
+  await oppnaCanvas(page);
+
+  const rad = page.locator("#g-snabb");
+  await expect(rad).toBeHidden();
+  await valjElement(page);
+  await expect(rad).toBeVisible();
+  await expect(rad.locator(".gsnabbknapp")).toHaveText(
+    ["Kortare", "Enklare", "Svårare", "Byt sammanhang"]);
+
+  // Krysset i målrutan tar bort valet — och knapparna med det.
+  await page.locator("#g-malx").click();
+  await expect(rad).toBeHidden();
+});
+
+test("en snabbknapp skickar sin mening samma väg som fritext", async ({ page }) => {
+  const anrop = await fejka(page, { andrade: ["tav2"] });
+  await page.goto("/");
+  await hydrerad(page);
+  await skrivTavla(page);
+  await oppnaCanvas(page);
+
+  const el = await valjElement(page);
+  const namn = await el.evaluate(e => e.dataset.namn);
+  await page.locator("#g-snabb .gsnabbknapp", { hasText: "Svårare" }).click();
+
+  await expect.poll(() => anrop.some(a => a.vag.endsWith("/refine")),
+                    { timeout: 20_000 }).toBe(true);
+  const kropp = anrop.find(a => a.vag.endsWith("/refine")).kropp;
+  // En färdig svensk mening — och SAMMA kropp som fritexten bygger: målet med,
+  // den renderade texten med. Ingen egen kodväg betyder ingen egen form.
+  expect(kropp.message).toContain("svårare");
+  expect(kropp.mal.namn).toBe(namn);
+  expect(typeof kropp.mal.renderat).toBe("string");
+  // …och varvet står i tråden som vilken ändring som helst.
+  await expect(page.locator(".gvarv .gfraga").first()).toHaveText(kropp.message);
+});

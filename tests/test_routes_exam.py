@@ -108,8 +108,8 @@ def test_refine_adds_version(client, monkeypatch):
     captured = {}
 
     def fake_refine(exam, message, *, model, nummer=None, profil="prov",
-                    mal=None, bok="", llm=None, max_rounds=exam_gen.MAX_ROUNDS,
-                    log_cb=None):
+                    mal=None, bok="", historik=None, llm=None,
+                    max_rounds=exam_gen.MAX_ROUNDS, log_cb=None):
         captured["message"] = message
         captured["nummer"] = nummer
         captured["mal"] = mal
@@ -925,8 +925,8 @@ def test_provet_gar_att_andra_efter_en_omstart(client, monkeypatch):
     sett = {}
 
     def fake_refine(exam, message, *, model, nummer=None, profil="prov",
-                    mal=None, bok="", llm=None, max_rounds=exam_gen.MAX_ROUNDS,
-                    log_cb=None):
+                    mal=None, bok="", historik=None, llm=None,
+                    max_rounds=exam_gen.MAX_ROUNDS, log_cb=None):
         sett["uppgifter"] = len(exam.get("uppgifter") or [])
         return {"exam": uppdaterad, "errors": [], "rounds": 1}
     monkeypatch.setattr(exam_gen, "refine_exam", fake_refine)
@@ -937,3 +937,25 @@ def test_provet_gar_att_andra_efter_en_omstart(client, monkeypatch):
     assert _done(r)["exam"]["uppgifter"][0]["text"] == "Efter omstarten."
     # Och provet som skickades in var det som låg i databasen, inte ett tomt.
     assert sett["uppgifter"] == len(_exam_doc()["uppgifter"])
+
+
+def test_refine_far_varvhistoriken_och_skarmtexten(client, monkeypatch):
+    """Samma sammanhang som tavlan får: vad läraren redan bett om, och hur
+    rutan ser ut på skärmen (KaTeX skriver sin källa en gång till)."""
+    result, _ = _make_exam(client, monkeypatch)
+    sett = {}
+
+    def fake_refine(exam, message, *, model, nummer=None, profil="prov",
+                    mal=None, bok="", historik=None, **kw):
+        sett["historik"] = historik
+        sett["mal"] = mal
+        return {"exam": _exam_doc(), "errors": [], "rounds": 1}
+    monkeypatch.setattr(exam_gen, "refine_exam", fake_refine)
+
+    _done(client.post(f"/api/exams/{result['id']}/refine", json={
+        "message": "ännu kortare",
+        "historik": ["Gör uppgift 1 kortare"],
+        "mal": {"namn": "Uppgift 1", "innehall": "$x=2$",
+                "renderat": "x=2 x=2"}}))
+    assert sett["historik"] == ["Gör uppgift 1 kortare"]
+    assert sett["mal"]["renderat"] == "x=2 x=2"

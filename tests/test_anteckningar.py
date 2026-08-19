@@ -703,3 +703,20 @@ def test_anteckningarna_gar_att_andra_efter_en_omstart(client, monkeypatch):
     assert "Efter omstarten." in _done(r)["anteckningar"]["sektioner"][0]["stycken"][0]
     assert sett["sektioner"] == len(_anteckningar()["sektioner"])
     assert sett["mal"] == {"namn": "Boken", "innehall": "Vi läser s. 2–6."}
+
+
+def test_refine_far_varvhistoriken(client, monkeypatch):
+    """Stödpappret skrivs om i samma takt som allt annat — och ska minnas vad
+    läraren redan bett om för utkastet."""
+    _stubba(monkeypatch)
+    res = _done(client.post("/api/anteckningar/generate",
+                            json={"onskemal": "x", "kurs": "Matematik 3c"}))
+    sett = {}
+    monkeypatch.setattr(
+        routes_anteckningar.notes_gen, "refine_notes",
+        lambda notes, message, *, historik=None, **kw: sett.update(h=historik)
+        or {"notes": _anteckningar(), "errors": [], "rounds": 1})
+    _done(client.post(f"/api/anteckningar/{res['id']}/refine",
+                      json={"message": "kortare än så",
+                            "historik": ["Lägg till en rad om miniräknarna"]}))
+    assert sett["h"] == ["Lägg till en rad om miniräknarna"]

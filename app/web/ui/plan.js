@@ -3125,7 +3125,7 @@
   /* Anropet bakom en ändring i canvas. Hela meddelandet går som prompt — också
      det ett klick på en källa la till («Ta mer ur boken …»), för viktningen ÄR
      en mening läraren skrev. */
-  function iterationsJobb(text, _etikett, elId, krokar, valt) {
+  function iterationsJobb(text, _etikett, elId, krokar, valt, historik) {
     const v = versioner[nu];
     if (!serverPa() || !v) return null;
     const krav = r => {
@@ -3137,14 +3137,25 @@
        den kortare» handlade om — den ändrade något annat, och markeringen i
        canvas pekade på ett element servern aldrig hört om. Namnet är för
        läraren, innehållet är det som går att hitta i dokumentets JSON. */
+    /* `renderat` är rutan som den SYNS — KaTeX lämnar kvar sin LaTeX-källa i
+       småtryck, så en formel står där två gånger. «Det står ett dollartecken
+       mitt i raden» gäller den bilden och inte JSON-fältet, och utan den letade
+       modellen efter ett tecken som aldrig fanns (llm_client.malrad). */
     const mal = valt && valt.namn
-      ? { namn: valt.namn, innehall: valt.innehall || '' } : null;
+      ? { namn: valt.namn, innehall: valt.innehall || '',
+          renderat: valt.renderat || '' } : null;
     /* KÄLLORNA MÅSTE OCKSÅ MED. Genereringen skickar boken, urvalet och de
        uppslagna sidorna; omskrivningen skickade bara meningen, och därför kunde
        «lägg till vilka uppgifter vi ska göra under lektionen» bara bli en allmän
        mening — numren fanns inte i prompten. Servern läser inga nya sidor för
        en omskrivning (bok_text, inte bok_las_text): de lästes när spannet valdes. */
-    const kropp = Object.assign({ message: text }, bokKalla(), mal ? { mal } : {});
+    /* VARVHISTORIKEN MÅSTE OCKSÅ MED. Omskrivningen hade inget minne: tredje
+       varvets «kortare än så» hade inget «så» att gå efter, och villkor från
+       varv ett revs i varv två utan att någon bett om det. Meningarna är
+       lärarens egna — modellens svar står redan i dokumentet. */
+    const kropp = Object.assign({ message: text }, bokKalla(),
+                                mal ? { mal } : {},
+                                historik && historik.length ? { historik } : {});
     if (v.wbId) {
       return window.API.strom(`/api/planning/${v.wbId}/refine`,
                               kropp, krokar).then(krav);
@@ -3246,7 +3257,7 @@
          canvas kör sin egen takt precis som förut. */
       /* `valt` är elementet läraren pekade på i pappret — det MÅSTE hela vägen
          fram, annars gissar modellen vad «gör den kortare» gäller. */
-      onJobb: (text, etikett, elId, krokar, valt) => iterationsJobb(text, etikett, elId, krokar, valt),
+      onJobb: (text, etikett, elId, krokar, valt, historik) => iterationsJobb(text, etikett, elId, krokar, valt, historik),
       onBild: elId => valjBild(elId)
     });
   });

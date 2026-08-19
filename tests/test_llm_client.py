@@ -154,3 +154,54 @@ def test_malraden_ar_tom_utan_mal():
 def test_malraden_kapar_ett_langt_block():
     rad = lc.malrad({"namn": "Blocket", "innehall": "x" * 900})
     assert "x" * 300 in rad and "x" * 301 not in rad
+
+
+# ── Vad läraren SER och vad hon REDAN bett om ────────────────────────────────
+
+def test_malraden_tar_med_rutan_som_den_ser_ut_pa_skarmen():
+    """KaTeX lämnar kvar sin LaTeX-källa i en MathML-annotation, så en satt
+    formel står på skärmen två gånger. «Det står ett dollartecken mitt i raden»
+    gäller den bilden — inte JSON-fältet — och utan den här raden letade
+    modellen efter ett tecken som aldrig fanns."""
+    rad = lc.malrad({"namn": "Formel 3", "innehall": "$a^2+b^2=c^2$",
+                     "renderat": "a2+b2=c2 a^2+b^2=c^2"})
+    assert "a2+b2=c2 a^2+b^2=c^2" in rad
+    assert "skärmen" in rad
+    assert "$a^2+b^2=c^2$" in rad          # JSON-fältet står kvar också
+
+
+def test_malraden_upprepar_inte_samma_text_tva_ganger():
+    """Är skärmtexten identisk med innehållet säger den inget nytt, och då är
+    en andra kopia bara promptutrymme."""
+    lika = "Repetera bråkräkning"
+    rad = lc.malrad({"namn": "Rutan", "innehall": lika, "renderat": lika})
+    assert rad.count(lika) == 1
+
+
+def test_malraden_klarar_ett_mal_som_bara_har_skarmtext():
+    assert lc.malrad({"namn": "", "innehall": "", "renderat": "x"}) != ""
+
+
+def test_varvraden_listar_lararens_tidigare_onskemal_i_ordning():
+    rad = lc.varvrad(["Gör den kortare", "Byt till fysik"])
+    assert "1. Gör den kortare" in rad
+    assert "2. Byt till fysik" in rad
+    # Den ska INTE be modellen göra om dem — de står redan i dokumentet.
+    assert "INTE göras om" in rad
+
+
+def test_varvraden_ar_tom_pa_forsta_varvet():
+    assert lc.varvrad([]) == ""
+    assert lc.varvrad(None) == ""
+    assert lc.varvrad(["   ", ""]) == ""
+
+
+def test_varvraden_haller_sig_inom_taken():
+    """Ett långt arbetspass får inte tränga ut själva dokumentet ur prompten."""
+    rad = lc.varvrad([f"varv{i}" for i in range(30)])
+    assert rad.count("varv") == lc.MAX_VARV
+    # …och det är de SENASTE varven som ryms, inte de första.
+    assert "varv29" in rad and "varv0" not in rad
+    lang = lc.varvrad(["x" * 900])
+    assert "x" * lc.MAX_VARVTECKEN in lang
+    assert "x" * (lc.MAX_VARVTECKEN + 1) not in lang

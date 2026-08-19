@@ -119,8 +119,16 @@
      långt och prompten har annat att bära. */
   const innehall = el => (el.dataset.text || el.textContent || '')
     .replace(/\s+/g, ' ').trim().slice(0, 300);
+  /* Rutans text SÅ SOM DEN STÅR PÅ SKÄRMEN, oförkortat av `data-text`. Den
+     skiljer sig från JSON:en på ett sätt som betyder något: KaTeX lämnar kvar
+     sin LaTeX-källa i en MathML-annotation, så en satt formel står här två
+     gånger — och det är DEN bilden läraren beskriver när hon skriver «det står
+     ett dollartecken mitt i raden». Går med som `mal.renderat`. */
+  const renderat = el => (el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 600);
   function satMal(el) {
-    mal = el ? { el: el.dataset.el, namn: etikett(el), text: innehall(el) } : null;
+    mal = el ? { el: el.dataset.el, namn: etikett(el), text: innehall(el),
+                 renderat: renderat(el) } : null;
+    satSnabb(!!mal);
     const bred = arkNamn();
     $('.gmaltext', $('#g-mal')).textContent = mal ? mal.namn : bred;
     $('#g-mal').toggleAttribute('data-satt', !!mal);
@@ -129,6 +137,44 @@
     const f = $('#g-falt');
     f.placeholder = `Vad ska ändras i ${bestamd(mal ? mal.namn : bred)}?`;
     f.focus({ preventScroll: true });
+  }
+  /* ── SNABBKNAPPARNA ───────────────────────────────────────
+     Fyra ändringar återkommer i nästan varje granskning, och de skrevs för hand
+     varje gång. Knapparna skriver meningen åt läraren — och skickar den GENOM
+     SAMMA `skicka()` som formuläret. Ingen egen kodväg och ingen egen prompt:
+     en snabbknapp som gick en genväg hade blivit en andra sanning att hålla i
+     takt med fritexten.
+
+     Meningarna är skrivna som läraren själv hade sagt dem, och de står i
+     fältet ett ögonblick innan de skickas — hon ska se vad som gick i väg och
+     kunna känna igen den i tråden efteråt. */
+  const SNABBA = [
+    ['Kortare', 'Gör den kortare — samma innehåll, färre ord.'],
+    ['Enklare', 'Gör den enklare — samma sak, men på en nivå som fler hänger med på.'],
+    ['Svårare', 'Gör den svårare — höj kravet ett steg utan att byta ämne.'],
+    ['Byt sammanhang', 'Byt sammanhang — samma matematik, men i en annan situation.'],
+  ];
+  const snabbrad = $('#g-snabb');
+  if (snabbrad) {
+    SNABBA.forEach(([namn, mening]) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'gsnabbknapp';
+      b.textContent = namn;
+      b.addEventListener('click', () => {
+        const f = $('#g-falt');
+        f.value = mening;
+        skicka(mening);
+        f.value = '';
+        f.style.height = 'auto';
+      });
+      snabbrad.appendChild(b);
+    });
+  }
+  /* Bara när ett element är valt: «Kortare» om hela pappret är inte en
+     snabbändring, det är en omskrivning. */
+  function satSnabb(pa) {
+    if (snabbrad) snabbrad.hidden = !pa;
   }
   $('#g-malx').addEventListener('click', () => satMal(null));
   plan.addEventListener('click', e => {
@@ -283,7 +329,8 @@
     const post = { id: nr, el: mal ? mal.el : '', namn: mal ? mal.namn : arkNamn(),
                    /* Vad elementet FAKTISKT innehåller. Följer med till servern
                       så att omskrivningen gäller det läraren pekade på. */
-                   innehall: mal ? mal.text : '', text };
+                   innehall: mal ? mal.text : '',
+                   renderat: mal ? mal.renderat : '', text };
     kommentarer.push(post);
     const varv = document.createElement('div');
     varv.className = 'gvarv';
@@ -308,8 +355,14 @@
       /* Skrevs pappret av servern går ändringen dit — hela texten, inklusive
          det ett klick på en källa la till («Ta mer ur boken …»), är prompten.
          Annars är det prototypens omskrivning, som förut. */
+      /* Varvhistoriken är trådens EGNA meningar, i ordning, och tas här och inte
+         i plan.js: det är granskningen som håller samtalet. Den nya meningen är
+         redan påskjuten, så den räknas bort — den står som önskemål längre ner
+         i prompten och ska inte också stå som «redan gjort». */
       jobb: host && host.onJobb ? k => host.onJobb(text, post.namn, post.el, k,
-        post.el ? { el: post.el, namn: post.namn, innehall: post.innehall } : null)
+        post.el ? { el: post.el, namn: post.namn, innehall: post.innehall,
+                    renderat: post.renderat } : null,
+        kommentarer.filter(x => x.id !== post.id).map(x => x.text))
         /* Inget riktigt anrop — prototypen, eller ett papper appen skrev själv.
            Då är väntan prototypens egen, precis som förut. */
         || new Promise(r => setTimeout(r, 1400)) : null,
@@ -371,6 +424,7 @@
     $('#g-titel').textContent = o.titel || 'Utkast';
     $('#g-meta').textContent = o.meta || '';
     kommentarer = []; nr = 0; mal = null; senaste = { varv: 0, par: {} };
+    satSnabb(false);          // nytt papper, inget element valt än
     $$('.gvarv', lista).forEach(v => v.remove());
     $('#g-tom').hidden = false;
     $('#g-antal').textContent = 'Inga ändringar än';
