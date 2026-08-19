@@ -2466,6 +2466,13 @@
            ska inte räknas om här. */
         if (res && res.exam) {
           utkast.provId = res.id;
+          /* VILKEN version varvet byggdes ur. Utkastets ångra-markör och
+             provets versionspekare i basen var två historier utan koppling:
+             ångrade läraren ett dåligt varv backade skärmen, men pekaren stod
+             kvar — och godkännandet tryckte PDF:en ur det varv hon just
+             kastade. Numret följer varvet (nyVersion klonar det), och skickas
+             tillbaka när varvet godkänns eller skrivs om. */
+          utkast.provVersion = res.current_version || null;
           utkast.uppgifter = franProv(res.exam);
           utkast.granser = res.granser || null;
           utkast.summor = res.summor || null;
@@ -3139,6 +3146,9 @@
     });
     if (res && res.board) { v.wb = res.board; v.wbFel = res.errors || []; }
     if (res && res.exam) {
+      /* Varvets egen exam-version — se generationen ovan. Det är den som gör
+         att ett ångrat varv kan säga vilken text det gällde. */
+      v.provVersion = res.current_version || v.provVersion || null;
       v.uppgifter = franProv(res.exam);
       v.granser = res.granser || v.granser || null;
       v.summor = res.summor || v.summor || null;
@@ -3213,8 +3223,11 @@
          till EN uppgift. Elementets id bär numret («uppg3»), så klicket kan
          använda den i stället för att modellen ska läsa ut det ur meningen. */
       const nr = (String(elId || '').match(/^uppg(\d+)$/) || [])[1];
+      /* Varvet som SKRIVS OM är det läraren ser. Utan versionen byggde ett
+         önskemål efter en ångring vidare på det varv hon nyss kastade. */
+      const bas = Object.assign(v.provVersion ? { version: v.provVersion } : {}, kropp);
       return window.API.strom(`/api/exams/${v.provId}/refine`,
-                              nr ? Object.assign({ nummer: Number(nr) }, kropp) : kropp,
+                              nr ? Object.assign({ nummer: Number(nr) }, bas) : bas,
                               krokar).then(krav).then(r => {
         if (!r.exam) throw new Error('Omskrivningen gick inte igenom. Försök igen.');
         return r;
@@ -3864,9 +3877,14 @@
          provets JSON vet inget om det. Reser flaggan inte med anropet trycker
          mallen facit på elevbladets sista sida ändå, och eleverna får
          lösningarna dubbelt: en gång i bladet, en gång i facit-PDF:en. */
+      /* `version` säger vilket varv som ska tryckas. Ångrade läraren ett
+         dåligt varv backade skärmen men inte provets pekare i basen, och PDF:en
+         byggdes ur det förkastade varvet — sex pizzauppgifter på ett papper som
+         visade fyra om byggställningar. */
       window.API.strom(`/api/exams/${godkant.provId}/approve`, {
         separat_facit: godkant.typ === 'Arbetsblad'
           && (godkant.inst || {}).facit === 'Separat facit',
+        version: godkant.provVersion || null,
       })
         .then(r => {
           if (!r) return;

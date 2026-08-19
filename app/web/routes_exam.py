@@ -107,11 +107,37 @@ def create_router(base: Path, arbiter) -> APIRouter:
         if isinstance(exam, dict):
             exam["datum"] = (datum or "").strip() or None
 
+    def _peka_pa_versionen(exam_id: int, version) -> None:
+        """Låt provet peka på den version klienten SER innan något byggs.
+
+        Utkastets ångra-markör och provets versionspekare var två historier utan
+        koppling: läraren ångrade ett dåligt varv, skärmen backade — och
+        godkännandet byggde ändå PDF:en ur det förkastade varvet, för det var
+        det current_version stod på. Klienten skickar därför med vilken
+        exam-version varvet den visar byggdes ur, och rutten pekar om FÖRE den
+        läser dokumentet.
+
+        Tyst när fältet saknas (äldre utkast har det inte) eller när versionen
+        inte hör till provet — pekaren står då kvar där den stod, som förut."""
+        try:
+            v = int(version)
+        except (TypeError, ValueError):
+            return
+        conn = db.connect(db_file)
+        try:
+            db.set_current_exam_version(conn, exam_id, v)
+        finally:
+            conn.close()
+
     def _exam_result(view: dict, errors: list, rounds: int) -> dict:
         doc, _ = exam_spec.validate_exam_json(view.get("exam") or {})
         summor = exam_spec.poangsummor(doc) if doc else None
         return {
             "id": view["id"], "exam": view.get("exam"),
+            # Vilken exam-version JSON:en ovan kom ur. Klienten fäster den på
+            # sitt utkastvarv, så att ett ångrat varv kan säga vilken version
+            # det gällde när det godkänns eller skrivs om.
+            "current_version": view.get("current_version"),
             "typ": view.get("typ") or "prov",
             "underlag": view.get("underlag"),
             "status": view["status"], "versions": view["versions"],
@@ -419,6 +445,10 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # veta vad läraren redan bett om, annars bryter varv tre villkoret från
         # varv ett utan att någon bett om det.
         historik = routes_planning.varvhistorik(body)
+        # Skrivs om GÖR det varv läraren ser, inte det senaste som skrevs. Utan
+        # den här raden byggde ett önskemål efter en ångring vidare på just det
+        # varv hon kastade.
+        _peka_pa_versionen(exam_id, body.get("version"))
         conn = db.connect(db_file)
         try:
             view = db.get_exam(conn, exam_id)
@@ -495,6 +525,12 @@ def create_router(base: Path, arbiter) -> APIRouter:
         except Exception:
             body = {}
         separat_facit = bool(isinstance(body, dict) and body.get("separat_facit"))
+        # Det som trycks är det läraren SER. Ångrade hon ett varv backade bara
+        # utkastets markör; provets pekare stod kvar på det förkastade varvet,
+        # och PDF:en byggdes ur det. Klienten säger vilken version varvet gällde
+        # och pekaren flyttas hit FÖRE dokumentet läses.
+        _peka_pa_versionen(exam_id, (body or {}).get("version")
+                           if isinstance(body, dict) else None)
         conn = db.connect(db_file)
         try:
             view = db.get_exam(conn, exam_id)

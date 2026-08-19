@@ -238,6 +238,101 @@ def test_utan_valt_datum_bar_pappret_inget(client, monkeypatch):
     assert result["exam"]["datum"] is None
 
 
+# ── Det som trycks är det läraren SER ──────────────────────────────────────
+#
+# Utkastets ångra-markör (dokument.markor) och provets versionspekare
+# (exams.current_version) var två historier utan koppling. Läraren ångrade ett
+# dåligt omskrivningsvarv: skärmen backade till byggställningarna, medan
+# pekaren stod kvar på det förkastade pizzavarvet. Godkännandet läser pekaren —
+# PDF:en trycktes ur varvet hon just kastat, och pekaren fick rättas för hand.
+
+def _varv(client, monkeypatch, exam_id, text):
+    """Ett omskrivningsvarv. Returnerar exam-versionen varvet gav."""
+    ny = _exam_doc()
+    ny["uppgifter"][0]["text"] = text
+    monkeypatch.setattr(exam_gen, "refine_exam",
+                        lambda *a, **k: {"exam": ny, "errors": [], "rounds": 1})
+    res = _done(client.post(f"/api/exams/{exam_id}/refine",
+                            json={"message": text}))
+    return res["current_version"]
+
+
+def _fangar_tex(monkeypatch):
+    sedda = {}
+
+    def fake_compile(tex, out_dir, jobname, **kw):
+        sedda.setdefault(jobname, tex)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        p = out_dir / f"{jobname}.pdf"
+        p.write_bytes(b"%PDF-1.5 fejk")
+        return p, ""
+    monkeypatch.setattr(exam_pdf, "engine_available", lambda: True)
+    monkeypatch.setattr(exam_pdf, "compile_pdf", fake_compile)
+    return sedda
+
+
+def test_godkannandet_trycker_varvet_lararen_ser(client, monkeypatch):
+    """Två varv, ångra, godkänn: PDF:en byggs ur FÖRSTA varvet."""
+    result, _ = _make_exam(client, monkeypatch)
+    forsta = _varv(client, monkeypatch, result["id"], "Byggställningens höjd.")
+    andra = _varv(client, monkeypatch, result["id"], "Pizzerians intäkt.")
+    assert forsta != andra
+
+    sedda = _fangar_tex(monkeypatch)
+    # Ångra: klienten visar första varvet igen och säger vilken version det var.
+    _done(client.post(f"/api/exams/{result['id']}/approve",
+                      json={"version": forsta}))
+    prov = next(t for n, t in sedda.items() if "bedomning" not in n)
+    assert "Byggställningens" in prov
+    assert "Pizzerians" not in prov
+
+
+def test_omskrivningen_bygger_vidare_pa_varvet_lararen_ser(client, monkeypatch):
+    """Samma hål på andra sidan: ett önskemål EFTER en ångring byggde vidare på
+    det varv läraren kastade."""
+    result, _ = _make_exam(client, monkeypatch)
+    forsta = _varv(client, monkeypatch, result["id"], "Byggställningens höjd.")
+    _varv(client, monkeypatch, result["id"], "Pizzerians intäkt.")
+
+    sett = {}
+
+    def fake_refine(exam, message, *a, **k):
+        sett["text"] = exam["uppgifter"][0]["text"]
+        return {"exam": exam, "errors": [], "rounds": 1}
+    monkeypatch.setattr(exam_gen, "refine_exam", fake_refine)
+    _done(client.post(f"/api/exams/{result['id']}/refine",
+                      json={"message": "gör den kortare", "version": forsta}))
+    assert sett["text"] == "Byggställningens höjd."
+
+
+def test_utan_version_star_pekaren_kvar(client, monkeypatch):
+    """Äldre utkast bär ingen version — då gäller senaste varvet som förut."""
+    result, _ = _make_exam(client, monkeypatch)
+    _varv(client, monkeypatch, result["id"], "Byggställningens höjd.")
+    _varv(client, monkeypatch, result["id"], "Pizzerians intäkt.")
+    sedda = _fangar_tex(monkeypatch)
+    _done(client.post(f"/api/exams/{result['id']}/approve", json={}))
+    prov = next(t for n, t in sedda.items() if "bedomning" not in n)
+    assert "Pizzerians" in prov
+
+
+def test_ett_annat_provs_version_flyttar_ingenting(client, monkeypatch):
+    """Versionsnumret kommer från klienten. Ett prov ska inte gå att peka på
+    ett annat provs text."""
+    ett, _ = _make_exam(client, monkeypatch)
+    tva, _ = _make_exam(client, monkeypatch)
+    frammande = _varv(client, monkeypatch, tva["id"], "Ett annat provs text.")
+    egen = _varv(client, monkeypatch, ett["id"], "Byggställningens höjd.")
+
+    conn = appdb.connect(client.base_dir / "transkribera.db")
+    try:
+        assert appdb.set_current_exam_version(conn, ett["id"], frammande) is None
+        vy = appdb.get_exam(conn, ett["id"])
+        assert vy["current_version"] == egen
+    finally:
+        conn.close()
+
+
 def test_approve_without_engine_saves_tex(client, monkeypatch):
     result, _ = _make_exam(client, monkeypatch, datum="2026-10-05")
     monkeypatch.setattr(exam_pdf, "engine_available", lambda: False)

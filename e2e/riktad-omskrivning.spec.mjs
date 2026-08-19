@@ -55,8 +55,13 @@ const EFTER = {
 
 const strom = h => h.map(x => `data: ${JSON.stringify(x)}\n\n`).join("");
 
+/* Varje varv får sin egen exam-version i basen — det är den pekaren
+   godkännandet läser (exams.current_version). */
+let versionsraknare = 0;
+
 async function fejka(page) {
   const anrop = [];
+  versionsraknare = 100;
   const json = (route, kropp) => route.fulfill({
     status: 200, contentType: "application/json", body: JSON.stringify(kropp) });
   await page.route("**/api/schema", route => json(route, SCHEMA));
@@ -69,13 +74,20 @@ async function fejka(page) {
   await page.route("**/api/exams/**", route => {
     const vag = new URL(route.request().url()).pathname;
     anrop.push({ vag, kropp: route.request().postDataJSON() });
+    if (vag.endsWith("/approve")) {
+      return route.fulfill({ status: 200, contentType: "text/event-stream",
+        body: strom([{ type: "done", result: {
+          id: 9, pdf: "C:/Transkriberingar/prov/skala.pdf",
+          tex: "C:/Transkriberingar/prov/skala.tex", errors: [] } }]) });
+    }
     const svar = vag.endsWith("/refine")
       /* `andrade` är serverns egen diff mot det som faktiskt sparades — och
          den blir ärlig av sig själv när sammanfogningen är det som sparas. */
       ? { id: 9, exam: EFTER, typ: "prov", status: "utkast", errors: [],
-          rounds: 1, andrade: ["uppg4"] }
+          rounds: 1, andrade: ["uppg4"], current_version: ++versionsraknare }
       : { id: 9, exam: EXAM, typ: "prov", status: "utkast", errors: [],
-          rounds: 1, granser: { E: 4, C: 7, A: 9 }, summor: { totalt: 12 } };
+          rounds: 1, granser: { E: 4, C: 7, A: 9 }, summor: { totalt: 12 },
+          current_version: ++versionsraknare };
     return route.fulfill({ status: 200, contentType: "text/event-stream",
                            body: strom([{ type: "done", result: svar }]) });
   });
@@ -169,4 +181,56 @@ test("bara målet ändras på pappret, och panelen märker den rutan ensam",
     expect(marks).not.toContain("uppg1");
     expect(marks).not.toContain("uppg2");
     expect(marks).not.toContain("uppg3");
+  });
+
+/* ── DET SOM TRYCKS ÄR DET LÄRAREN SER ────────────────────────────
+ * Utkastets ångra-markör och provets versionspekare i basen var två historier
+ * utan koppling. Läraren ångrade ett dåligt varv: skärmen backade, pekaren
+ * stod kvar — och godkännandet byggde PDF:en ur varvet hon just kastade.
+ * Varvet bär numera sin exam-version, och den följer med till godkännandet.
+ */
+
+async function skrivOm(page, text) {
+  await page.locator("#g-falt").fill(text);
+  await page.locator("#g-form").evaluate(f => f.requestSubmit());
+}
+
+test("två varv, ångra, godkänn — det är första varvets version som trycks",
+  async ({ page }) => {
+    const anrop = await fejka(page);
+    await page.goto("/");
+    await hydrerad(page);
+    await skrivProv(page);
+    await oppnaCanvas(page);
+
+    await skrivOm(page, "Gör uppgift 4 kortare");
+    await expect(page.locator("#g-antal")).toHaveText("1 ändring", { timeout: 20_000 });
+    await skrivOm(page, "Byt sammanhang på alltihop");
+    await expect(page.locator("#g-antal")).toHaveText("2 ändringar", { timeout: 20_000 });
+
+    /* Versionerna i ordning: 101 föddes med genereringen, 102 med första
+       varvet, 103 med andra. Varje anrop bär den version som stod på skärmen
+       när läraren tryckte. */
+    const varv = anrop.filter(a => a.vag.endsWith("/refine"));
+    expect(varv.length).toBe(2);
+    expect(varv[0].kropp.version).toBe(101);
+    expect(varv[1].kropp.version).toBe(102);
+
+    /* `#g-antal` räknar hur många gånger läraren FRÅGAT och backar inte av en
+       ångring — det är historikraden som säger var markören står. */
+    await expect(page.locator("#g-histnot")).toHaveText("Ändring 2 av 2");
+    await page.locator("#g-angra").click();          // tillbaka till första varvet
+    await expect(page.locator("#g-histnot")).toHaveText("Ändring 1 av 2",
+                                                        { timeout: 20_000 });
+    // Godkännandet görs i pappersvyn, inte i canvas — stäng den först.
+    await page.locator("#g-stang").click();
+    await expect(page.locator("#granskaskal")).toBeHidden({ timeout: 10_000 });
+    await page.locator("#godkann").click();
+
+    await expect.poll(() => anrop.some(a => a.vag.endsWith("/approve")),
+                      { timeout: 20_000 }).toBe(true);
+    const godkant = anrop.find(a => a.vag.endsWith("/approve")).kropp;
+    /* 102 — varvet läraren SER. 103 är det hon nyss kastade, och det var det
+       som trycktes förut. */
+    expect(godkant.version).toBe(102);
   });

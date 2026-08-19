@@ -3313,6 +3313,43 @@ def add_exam_version(conn: sqlite3.Connection, exam_id: int,
     return get_exam(conn, exam_id)
 
 
+def set_current_exam_version(conn: sqlite3.Connection, exam_id: int,
+                             version_id: int) -> dict | None:
+    """Peka provet på en TIDIGARE version — det läraren ser är det som gäller.
+
+    Utkastets ångra-markör (dokument.markor) och provets pekare
+    (exams.current_version) var två historier utan koppling. Läraren ångrade ett
+    dåligt omskrivningsvarv: markören backade och skärmen visade byggställningen
+    med fyra uppgifter igen, medan current_version stod kvar på det förkastade
+    varvet med sex. Godkännandet läser current_version — så PDF:en trycktes ur
+    just det varv hon nyss kastade, och pekaren fick rättas för hand i basen.
+
+    Versionen måste tillhöra provet: id:t kommer från klienten, och ett prov ska
+    inte gå att peka på ett annat provs text. Okänd version → None, och rutten
+    låter pekaren stå.
+
+    exam_items speglas om: de bar det förkastade varvets uppgifter, och det är
+    dem dubblettkontrollen och minneskontexten läser."""
+    rad = conn.execute(
+        "SELECT v.exam_json, e.underlag, e.current_version "
+        "FROM exam_versions v JOIN exams e ON e.id = v.exam_id "
+        "WHERE v.id = ? AND v.exam_id = ?", (version_id, exam_id)).fetchone()
+    if rad is None:
+        return None
+    if rad["current_version"] == version_id:
+        return get_exam(conn, exam_id)
+    conn.execute("UPDATE exams SET current_version = ?, updated_at = ? "
+                 "WHERE id = ?", (version_id, _now(), exam_id))
+    try:
+        exam = json.loads(rad["exam_json"]) if rad["exam_json"] else None
+    except (TypeError, ValueError):
+        exam = None
+    if isinstance(exam, dict):
+        _sync_exam_items(conn, exam_id, exam, rad["underlag"])
+    conn.commit()
+    return get_exam(conn, exam_id)
+
+
 def set_exam_artifacts(conn: sqlite3.Connection, exam_id: int, *,
                        tex_path: str | None = None,
                        pdf_path: str | None = None,
