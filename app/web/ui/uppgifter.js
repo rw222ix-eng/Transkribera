@@ -147,6 +147,10 @@
      sidorna hoppas över — modellen ska inte föreslå bort något ur en lista
      läraren redan gjort. null = ingen sådan lista, förslaget gäller som förut. */
   let onskade = null;
+  /* VARIFRÅN listan kom, som en dag att citera: tomt = lektionens egen
+     kalenderrad, ett datum = grovplaneringens rad för samma sidor men en annan
+     dag. Raden ovanför chipsen säger läraren vilket det är (kalendertext). */
+  let onskadNar = '';
   /* Utgångsläget för `bort`, och det enda stället som avgör vad «tillbaka till
      förslaget» betyder. Numren ur kalendern gäller bara om de faktiskt står på
      sidorna — annars pekar de på ett annat spann, och då hade allt strukits. */
@@ -155,14 +159,70 @@
     if (onskade && u.some(x => onskade.has(x.nr))) return new Set(u.filter(x => !onskade.has(x.nr)).map(x => x.nr));
     return new Set(forslag.map(f => f.nr));
   }
+  /* Lärarens egen lista, läst ur hennes skrivning. Två vägar hit — lektionens
+     kalenderrad (profil.js) och grovplaneringen för sidorna (nedan) — och de
+     skiljs bara åt av `nar`, dagen raden ska citera. */
+  function las(text, nar) {
+    const t = String(text || '');
+    const vill = new Set();
+    /* Ett spann är alla numren i det: «1101–1103» är tre uppgifter, inte två.
+       Boken numrerar dem i följd, så mellanrummen finns på sidorna. */
+    t.split(/[,;]/).forEach(del => {
+      const par = del.match(/(\d{3,4})\s*[–—-]\s*(\d{3,4})/);
+      if (par) { for (let n = +par[1]; n <= +par[2] && n - +par[1] < 200; n++) vill.add(n); return; }
+      (del.match(/\d{3,4}/g) || []).forEach(n => vill.add(+n));
+    });
+    if (!vill.size) return false;
+    onskade = vill;
+    onskadNar = nar || '';
+    bort = standardbort();
+    rita();
+    window.planKoll && window.planKoll();
+    return true;
+  }
+
+  /* ── NÄR LÄRAREN VÄLJER SPANNET SJÄLV ──────────────
+     Lektionen hon planerar har inte alltid en bokplanering i kalendern — och
+     drar hon remsan till andra sidor än de kalendern gav har den ingen heller.
+     Panelen föll då tillbaka på modellens hoppa-över-förslag, fast svaret stod
+     skrivet i hennes GROVPLANERING sedan i somras: någon annan lektion täcker
+     just de sidorna och bär uppgifterna. Hennes eget urval slår modellens,
+     vilken dag hon än skrev det (kalender.js uppgifterForSpann).
+
+     Lektionens EGEN rad vinner ändå: profil.js sätter spannet först — då körs
+     det här — och ropar franKalendern efter. Den ordningen är kontraktet.
+
+     Klass och kurs står i steg 1, och steg 1 är ifyllt innan förvalen sätts
+     (plankon.js fyll). Utan dem gör kalendern ingenting: en annan klass
+     uppgifter är värre än inga.
+
+     Provet och diagnosen hoppas över. Panelen är fälld där, och uppgifterna på
+     sidorna är det klassen ÖVADE med — inte det den prövas på (plan.js
+     HELHETSTYPER). */
+  function franPlaneringen() {
+    const K = window.Kalender, s = spann();
+    if (!K || !K.uppgifterForSpann || !s || !s.fran) return;
+    if (window.Helhetstyp && window.Helhetstyp()) return;
+    const p = K.uppgifterForSpann(($('#p-klass') || {}).value || '',
+                                  ($('#p-kurs') || {}).value || '', s.fran, s.till);
+    if (p) las(p.uppg, p.nar);
+  }
+
   function synka() {
     const ny = nyckelNu();
     if (ny === nyckel) return false;
     nyckel = ny;
     /* Nytt spann är en ny lektion: kalenderns lista hörde till det förra. */
     onskade = null;
+    onskadNar = '';
     forslag = forslaget();
     bort = standardbort();
+    /* …men grovplaneringen har ofta ett svar om de NYA sidorna också. Frågas
+       här, alltså vid varje spannbyte — remsan, avsnittslistan, bokbytet och
+       lektionsvalet går alla genom `synka`. Före `hamta`: `onskade` behöver
+       inte uppgifterna för att gälla, standardbort slår till av sig själv när
+       sidorna kommer. */
+    franPlaneringen();
     hamta();
     return true;
   }
@@ -235,7 +295,13 @@
      uppslaget sägs rakt ut i stället för att tystas bort. Chipsen nedanför är
      kvar som de var: de kan bara visa uppgifter som faktiskt lästs. */
   function kalendertext(u) {
-    const bas = `Uppgifterna du skrivit på lektionen i kalendern: ${remsa([...onskade])}.`;
+    /* Två källor, två meningar — och den andra får inte låtsas vara den första.
+       Lektionens egen kalenderrad är det läraren skrev om DEN dagen; kommer
+       numren i stället ur grovplaneringens rad för samma sidor är det en annan
+       dag hon citeras från, och raden säger vilken. */
+    const bas = onskadNar
+      ? `Ur din planering (${onskadNar}): ${remsa([...onskade])}.`
+      : `Uppgifterna du skrivit på lektionen i kalendern: ${remsa([...onskade])}.`;
     const saknas = [...onskade].filter(n => !u.some(x => x.nr === n));
     if (!saknas.length) return bas;
     const s = spann();
@@ -452,24 +518,9 @@
        «1101–1103, 1105–1119». Anropas när en lektion väljs (profil.js) — spannet
        är redan satt då, så listan gäller de sidor som just slogs upp. Sidorna
        kan komma från servern i efterhand; `onskade` ligger kvar och slår till
-       när uppgifterna dyker upp (standardbort). */
-    franKalendern(text) {
-      const t = String(text || '');
-      const vill = new Set();
-      /* Ett spann är alla numren i det: «1101–1103» är tre uppgifter, inte två.
-         Boken numrerar dem i följd, så mellanrummen finns på sidorna. */
-      t.split(/[,;]/).forEach(del => {
-        const par = del.match(/(\d{3,4})\s*[–—-]\s*(\d{3,4})/);
-        if (par) { for (let n = +par[1]; n <= +par[2] && n - +par[1] < 200; n++) vill.add(n); return; }
-        (del.match(/\d{3,4}/g) || []).forEach(n => vill.add(+n));
-      });
-      if (!vill.size) return false;
-      onskade = vill;
-      bort = standardbort();
-      rita();
-      window.planKoll && window.planKoll();
-      return true;
-    },
+       när uppgifterna dyker upp (standardbort). Tom källdag med flit: den här
+       vägen ÄR lektionens egen rad, och raden citerar henne därefter. */
+    franKalendern: text => las(text, ''),
     losningsantal: niva => losningarna(niva).length,
     avsnittsnamn: () => { const a = avsnittet(); return a ? `${a.nr} ${a.titel}` : 'avsnittet'; },
     /* Noten i steg 3 får bara plats på en rad, och där duger numret: rubriken står

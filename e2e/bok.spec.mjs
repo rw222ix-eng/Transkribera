@@ -18,6 +18,17 @@ import { expect, test } from "@playwright/test";
 
 const SCHEMA = { schema: [], lov: [], poster: [] };
 
+/* Grovplaneringen: en schemarad så att klassen och kursen finns att välja i
+   steg 1, och en innehallsrad som säger vad BA26B ska göra på s. 10–13. */
+const GROVT = {
+  ...SCHEMA,
+  schema: [{ dag: 3, tid: "09:05–10:20", kurs: "Matematik, nivå 1a",
+             klass: "BA26B", sal: "P807" }],
+  innehall: [{ datum: "2026-08-26", tid: "09:05–10:20", klass: "BA26B",
+               kurs: "Matematik, nivå 1a", fran: 10, till: 13,
+               uppg: "1103–1105, 1107", hjalpmedel: "" }],
+};
+
 const AVSNITT = [
   { nr: "1.1", titel: "Repetition", kap: "Kapitel 1 · Algebra",
     vag: "Algebraiska uttryck och Ekvationer", sid: "10–14", uppg: "…" },
@@ -37,11 +48,11 @@ const UPPG = [
 
 const strom = h => h.map(x => `data: ${JSON.stringify(x)}\n\n`).join("");
 
-async function fejka(page, { bocker = [BOK], uppslag = null, las = null, profil = {} } = {}) {
+async function fejka(page, { bocker = [BOK], uppslag = null, las = null, profil = {}, schema = SCHEMA } = {}) {
   const anrop = [];
   const json = (route, kropp) => route.fulfill({
     status: 200, contentType: "application/json", body: JSON.stringify(kropp) });
-  await page.route("**/api/schema", route => json(route, SCHEMA));
+  await page.route("**/api/schema", route => json(route, schema));
   await page.route("**/api/lessons", route => json(route, []));
   await page.route("**/api/history", route => json(route, []));
   await page.route("**/api/klassprofil", route => json(route, profil));
@@ -383,6 +394,79 @@ test("kalenderraden citerar HELA lärarens lista — också det som inte står p
     // …och det som inte gick att hitta sägs rakt ut i stället för att tystas bort.
     await expect(rad).toContainText("1106–1114, 1116–1119 står inte på s. 2–6.");
   });
+
+test("lektionen utan bokplanering får ändå uppgifterna ur din grovplanering",
+  async ({ page }) => {
+    /* Fyndet ur den skarpa körningen: BA26B:s lektion har ingen bokplanering i
+       kalendern, så läraren väljer bok och s. 10–13 själv i sidremsan — och
+       panelen föll då tillbaka på modellens hoppa-över-förslag. Men hennes
+       GROVPLANERING har en rad som täcker precis de sidorna, med uppgifterna
+       skrivna. Sidorna är nyckeln, inte dagen (kalender.js uppgifterForSpann). */
+    await fejka(page, { schema: GROVT, uppslag: {
+      fran: 10, till: 13, olasta: [], utan_fakta: [], sidor: [], uppgifter: [
+        { nr: 1103, sida: 10, niva: 1 }, { nr: 1104, sida: 11, niva: 1 },
+        { nr: 1105, sida: 11, niva: 2 }, { nr: 1106, sida: 12, niva: 2 },
+        { nr: 1107, sida: 13, niva: 3 }, { nr: 1108, sida: 13, niva: 3 }] } });
+    await page.goto("/");
+    await hydrerad(page);
+    await oppnaBoken(page);
+
+    /* Steg 1 är ifyllt innan förvalen sätts (plankon.js fyll) — klassen och
+       kursen är det uppslaget slår på. */
+    await page.evaluate(() => {
+      const satt = (id, v) => {
+        const f = document.querySelector(id);
+        if (![...f.options].some(o => o.value === v || o.textContent === v)) {
+          f.appendChild(Object.assign(document.createElement("option"), { textContent: v }));
+        }
+        f.value = v;
+        f.dispatchEvent(new Event("change", { bubbles: true }));
+      };
+      satt("#p-klass", "BA26B");
+      satt("#p-kurs", "Matematik, nivå 1a");
+    });
+    // Lärarens eget spannval i remsan — ingen lektionsrad bakom det.
+    await page.evaluate(() => window.Uppslag.satt(10, 13));
+    await expect.poll(() => page.locator("#uppgnivaer .uppgchip").count()).toBe(6);
+
+    // Hennes urval gäller: allt annat på sidorna är bortvalt, inte modellens två.
+    await expect(page.locator("#uppgnivaer .uppgchip:not([data-bort])"))
+      .toHaveText(["1103", "1104", "1105", "1107"]);
+    await expect(page.locator("#uppgnivaer .uppgchip[data-bort]"))
+      .toHaveText(["1106", "1108"]);
+    /* Och raden ljuger inte om varifrån det kom: det här är en ANNAN dags rad,
+       inte något hon skrev på den här lektionen. */
+    await expect(page.locator("#uppgforslag"))
+      .toHaveText("Ur din planering (26 augusti): 1103–1105, 1107.");
+
+    /* Lektionens EGEN kalenderrad vinner ändå — profil.js sätter spannet först
+       och ropar franKalendern efter, och då är det hon skrev på lektionen som
+       citeras. */
+    await page.evaluate(() => window.Uppgifter.franKalendern("1104, 1106"));
+    await expect(page.locator("#uppgforslag"))
+      .toHaveText("Uppgifterna du skrivit på lektionen i kalendern: 1104, 1106.");
+    await expect(page.locator("#uppgnivaer .uppgchip:not([data-bort])"))
+      .toHaveText(["1104", "1106"]);
+  });
+
+test("grovplaneringen slår bara till på sidor den faktiskt täcker", async ({ page }) => {
+  /* Raden gäller s. 10–13. Drar läraren remsan till 15–16 finns inget svar i
+     planeringen, och då är modellens förslag tillbaka — inte grannsidornas
+     uppgifter. */
+  await fejka(page, { schema: GROVT });
+  await page.goto("/");
+  await hydrerad(page);
+  await oppnaBoken(page);
+  await page.evaluate(() => {
+    const f = document.querySelector("#p-klass");
+    f.appendChild(Object.assign(document.createElement("option"), { textContent: "BA26B" }));
+    f.value = "BA26B";
+    f.dispatchEvent(new Event("change", { bubbles: true }));
+    window.Uppslag.satt(15, 16);
+  });
+  await expect.poll(() => page.locator("#uppgnivaer .uppgchip").count()).toBe(4);
+  await expect(page.locator("#uppgforslag")).not.toContainText("Ur din planering");
+});
 
 test("är sidorna inte inlästa säger raden DET — inte att uppgifterna saknas",
   async ({ page }) => {

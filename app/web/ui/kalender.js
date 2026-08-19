@@ -135,6 +135,50 @@ window.Kalender = (() => {
              hjalpmedel: { med, utan, okand: rader.length - med - utan } };
   }
 
+  /* ── UPPGIFTERNA SOM ÄR PLANERADE PÅ SIDORNA ──────────
+     Grovplaneringen säger inte bara VILKA sidor klassen ska gå igenom utan
+     också vilka uppgifter som hör till dem. Väljer läraren spannet SJÄLV —
+     i sidremsan, i avsnittslistan, eller för att lektionen hon planerar
+     saknar bokplanering i kalendern — finns ingen lektionsrad att läsa
+     uppgifterna ur, och panelen föll då tillbaka på modellens
+     hoppa-över-förslag fast svaret stod skrivet i kalendern sedan i somras.
+     SIDORNA är nyckeln: raden som täcker dem bär uppgifterna, vilken dag den
+     än råkar ligga på.
+
+     Överlapp, inte likhet. Hon flyttar remsan en sida hit eller dit, och ett
+     spann som sträcker sig över två planerade lektioner ska ha bådas
+     uppgifter. Samma klass/kurs-semantik som `planeringen` ovan — läs den
+     kommentaren: KLASSEN äger filtret, kursnamnet på raderna är synkens och
+     kan vara fel, så kursen filtrerar bara när klassen saknas. Utan både
+     klass och kurs är planeringen ingens, och då släpps hela kalendern
+     igenom — en annan klass uppgifter är värre än inga.
+
+     Källan följer med. Raden i panelen citerar läraren, och ett citat måste
+     kunna säga vilken dag det är hämtat ifrån. Ingen träff ger null, aldrig
+     en tom lista: en uppgiftslista appen hittat på är precis det panelen
+     finns för att slippa. */
+  function uppgifterForSpann(klass, kurs, fran, till) {
+    if (!fran || !till || (!klass && !kurs)) return null;
+    const rader = innehall.filter(i => i.uppg && i.fran
+      && (!klass || !i.klass || i.klass === klass)
+      && (klass || !kurs || !i.kurs || i.kurs === kurs)
+      && i.fran <= till && Math.max(i.fran, i.till) >= fran)
+      .sort((a, b) => String(a.datum).localeCompare(String(b.datum)));
+    if (!rader.length) return null;
+    const dagar = [...new Set(rader.map(i => i.datum).filter(Boolean))];
+    return {
+      /* Flera rader blir en lista — uppgifter.js läser numren, inte skrivningen. */
+      uppg: rader.map(i => i.uppg).join(', '),
+      rader: rader.slice(),
+      dagar,
+      /* «26 augusti», eller «26 augusti–2 september» när spannet spänner över
+         flera planerade lektioner. Utan datum ingen källa att citera. */
+      nar: !dagar.length ? ''
+        : dagar.length === 1 ? ord(dagar[0])
+        : `${ord(dagar[0])}–${ord(dagar[dagar.length - 1])}`,
+    };
+  }
+
   /* ── PROVETS CENTRALA INNEHÅLL ────────────────────────
      Läraren har skrivit i provhändelsens beskrivning vilket centralt innehåll
      provet berör, och synken har översatt det till Gy25-koder utan att spara ett
@@ -415,5 +459,5 @@ window.Kalender = (() => {
     .then(d => { if (d) { ta(d); ritaOm(); } })
     .catch(() => { /* servern svarar inte: prototypens vecka står kvar */ });
 
-  return { poster, schema, lov, innehall, innehallFor, planeringen, provpunkter, nastaProv, forraProv, omVeckor, forDatum, schemaFor, lovFor, traff, krockrad, veckan, veckoBild, veckonr, mandagen, nastaSkolvecka, terminen, lagg, ord, synka, redo, franServern: () => franServern, idag: () => iso(new Date()) };
+  return { poster, schema, lov, innehall, innehallFor, planeringen, uppgifterForSpann, provpunkter, nastaProv, forraProv, omVeckor, forDatum, schemaFor, lovFor, traff, krockrad, veckan, veckoBild, veckonr, mandagen, nastaSkolvecka, terminen, lagg, ord, synka, redo, franServern: () => franServern, idag: () => iso(new Date()) };
 })();
