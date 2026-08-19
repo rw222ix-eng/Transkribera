@@ -21,6 +21,11 @@
 window.BokLosning = (() => {
   const B = () => window.BladBygg || { mat: s => String(s == null ? '' : s) };
   const mat = s => B().mat(s);
+  /* Samma korta referens som provets och arbetsbladets facit (blad-bygg.js):
+     uppgiften identifieras av sitt nummer i marginalen och av matematiken —
+     inte av hela texten en gång till. Utan BladBygg (bara i prototypläge) står
+     texten kvar som förut. */
+  const ref = s => (B().ref ? B().ref(s) : mat(s));
   const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
   /* ── Mallarna, en familj per avsnittsområde ──
@@ -194,7 +199,7 @@ window.BokLosning = (() => {
   function kortpost(u, nr, niva) {
     return `<div class="pruppg">
       <span class="prnr">${nr}.<span class="prvarde">nivå ${niva}</span></span>
-      <div><p class="prtext">${mat(u.t)}</p>
+      <div><p class="prtext" data-ref="">${ref(u.t)}</p>
         <div class="losvar"><b class="losetikett">Svar</b><span>${mat(u.svar)}</span>${u.enhet ? `<em>${mat(u.enhet)}</em>` : ''}</div>
         ${(u.vag || []).length ? `<ul class="lovag">${u.vag.map(s => `<li><span class="losteg">${mat(s[0])}<em>${mat(s[1])}</em></span></li>`).join('')}</ul>` : ''}
       </div></div>`;
@@ -210,6 +215,10 @@ window.BokLosning = (() => {
         </div>
       </div>`;
   }
+  /* Den bedömda elevlösningen bär hela uppgiftstexten som rubrik, och det är
+     med flit: arket handlar om EN uppgift, texten står ingen annanstans på
+     pappret, och de tre vägarna nedanför går inte att läsa utan den. Kortandet
+     gäller listorna, där samma text redan står på elevens ark bredvid. */
   function vagark(s, v, nr, niva) {
     const b = v.bokuppg;
     return `<div class="ark" data-form="fe-bok" data-brytbar="">

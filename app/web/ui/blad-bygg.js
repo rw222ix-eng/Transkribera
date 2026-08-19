@@ -14,6 +14,95 @@ window.BladBygg = (() => {
   const BOKSTAV = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
   const versal = s => String(s || '').charAt(0).toUpperCase() + String(s || '').slice(1);
 
+  /* ── KORT REFERENS ─────────────────────────────────
+     Facit läses BREDVID uppgiftsarket, aldrig i stället för det — läraren har
+     båda pappren i handen. Att trycka hela uppgiftstexten en gång till på facit
+     var därför bara text att leta förbi: «Beräkna utan räknare. Gruppen ska
+     enas om ett gemensamt svar på varje uttryck innan ni skriver ner det.
+     A: … B: …» fyllde tre rader innan svaret ens började.
+
+     Kvar blir det som IDENTIFIERAR uppgiften: brickan (som står i marginalen
+     ändå) och det matematiska innehållet. Instruktionsprosan mitt i texten —
+     arbetsordningen, hur man redovisar, vem som skriver — hör till elevens
+     papper och kastas här.
+
+     Reglerna, i ordning:
+       1. Meningar som bär matematik ($…$) behålls: det är dem uppgiften
+          handlar om.
+       2. Den FÖRSTA meningen behålls alltid — det är där det imperativa verbet
+          står («Bestäm arean.»), och utan den vet man inte vad som frågas.
+       3. Allt däremellan faller.
+       4. Resten kortas till TAK tecken, aldrig mitt i en formel.
+     Föll något bort sätts «…» sist, så att det syns att texten är beskuren.
+
+     Klipps ALDRIG inuti $…$: delningen görs på hela strängen, precis som mat()
+     gör, och en formel tas med hel eller inte alls. En halv formel är obalanserade
+     dollartecken, och då sätter mat() resten av arket som matematik. */
+  const REF_TAK = 80;
+  /* Meningsslut i den icke-matematiska delen. Punkt efter en ensam versal
+     («A. ») är en bricka, inte ett meningsslut — men den vanliga formen på ett
+     sånt led är «A: …», så det räcker att kräva blanksteg eller strängslut. */
+  const MENING = /([^.!?]*[.!?]+)(?=\s|$)|([^.!?]+)$/g;
+  function meningar(text) {
+    /* Bitarna växlar text/matematik: jämnt index är text, udda är formel.
+       Meningarna får bara brytas i textbitarna. */
+    const bitar = String(text == null ? '' : text).split('$');
+    const ut = [];
+    let nu = '';
+    bitar.forEach((bit, i) => {
+      if (i % 2) { nu += '$' + bit + '$'; return; }
+      const delar = String(bit).match(MENING) || [bit];
+      delar.forEach((d, k) => {
+        nu += d;
+        /* Sista biten i en textdel fortsätter in i nästa formel — den avslutar
+           bara meningen om den själv slutade på skiljetecken. */
+        if (k < delar.length - 1 || /[.!?]\s*$/.test(d)) { ut.push(nu); nu = ''; }
+      });
+    });
+    if (nu.trim()) ut.push(nu);
+    return ut.filter(m => m.trim());
+  }
+  function kortref(text, tak) {
+    const alla = meningar(text);
+    if (alla.length < 2) return klipp(alla.join('') || String(text || ''), tak);
+    /* Bär INGEN mening matematik finns ingenting att ankra i — då är prosan
+       uppgiften («Två elever räknar olika och får olika svar. Avgör vem som har
+       rätt.») och taket får sköta kortandet ensamt. Filtret slår bara till när
+       det finns matematik att behålla i stället. */
+    /* Meningarna bär sitt eget inledande blanksteg — de fogas därför ihop utan
+       skarv, och bara där en mening HOPPATS ÖVER behövs ett mellanrum. */
+    if (!alla.some(m => m.indexOf('$') >= 0)) return klipp(alla.join(''), tak);
+    const valda = alla.filter((m, i) => i === 0 || m.indexOf('$') >= 0);
+    const kortad = klipp(valda.join(' ').replace(/ {2,}/g, ' ').trim(), tak);
+    return valda.length < alla.length && !/…$/.test(kortad) ? kortad + ' …' : kortad;
+  }
+  /* Klipper på ordgräns i en textbit; en formel tas med hel eller lämnas. */
+  function klipp(text, tak) {
+    const gr = Math.max(20, Number(tak) || REF_TAK);
+    const s = String(text == null ? '' : text).trim();
+    if (s.replace(/\$/g, '').length <= gr) return s;
+    const bitar = s.split('$');
+    let ut = '';
+    let langd = 0;
+    for (let i = 0; i < bitar.length; i++) {
+      const bit = bitar[i];
+      if (i % 2) {
+        if (langd + bit.length > gr && ut.trim()) break;
+        ut += '$' + bit + '$';
+        langd += bit.length;
+        continue;
+      }
+      if (langd + bit.length <= gr) { ut += bit; langd += bit.length; continue; }
+      const rest = bit.slice(0, Math.max(0, gr - langd));
+      const brott = rest.lastIndexOf(' ');
+      ut += brott > 0 ? rest.slice(0, brott) : rest;
+      break;
+    }
+    return ut.replace(/[\s,;:]+$/, '') + ' …';
+  }
+  /* Facitets uppgiftsrad: brickan bär numret, referensen bär matematiken. */
+  const ref = (t, tak) => mat(kortref(t, tak));
+
   /* ── DE FEM FORMERNA ──────────────────────────────
      Datatabellen, kryssruteraden och stegtabellen är samma former som i
      förlagan («Arbetsblad prov och tavlor — femton former») och samma som
@@ -202,7 +291,7 @@ window.BladBygg = (() => {
   function arkfacit(v, uppgifter) {
     const post = (u, k) => `<div class="pruppg">
       <span class="prnr">${BOKSTAV[k] || k + 1}.<span class="prvarde">${u.p} p</span></span>
-      <div><p class="prtext">${mat(u.t)}</p>
+      <div><p class="prtext" data-ref="">${ref(u.t)}</p>
         ${u.f ? `<div class="losvar"><b class="losetikett">Svar</b><span>${mat(u.f)}</span>${u.enhet ? `<em>${esc(u.enhet)}</em>` : ''}</div>` : ''}
         ${u.vag ? `<ul class="lovag">${u.vag.map(s => `<li><span class="losteg">${mat(s[0])}<em>${esc(s[1])}</em></span></li>`).join('')}</ul>` : ''}
       </div></div>`;
@@ -210,10 +299,13 @@ window.BladBygg = (() => {
        flera meningar sköt D-uppgiften ut under arkets nederkant. paginera
        (blad.js) mäter och flyttar det som inte ryms till ett nytt blad med
        samma huvud — precis som provet och lösningsförslaget. */
+    /* Ledtexten är borta. Den sa två saker läraren redan vet — att poängen står
+       vid steget den delas ut på, och att svar utan uträkning inte ger full
+       poäng — och båda syns i sättningen: poängen STÅR vid steget. Två rader
+       hon läser förbi varje gång är två rader svaren kunde ha haft. */
     return `<div class="ark" data-form="fa" data-brytbar="">
       <div class="lohuvud"><b>Facit</b><span>${esc(versal(v.moment || ''))}</span></div>
       <h1 class="lotitel">Svar och lösningsgång</h1>
-      <p class="lolede">Poängen står vid det steg den delas ut på. Ett svar utan uträkning ger inte full poäng på uppgifter som kräver lösning.</p>
       ${uppgifter.map(post).join('')}
     </div>`;
   }
@@ -316,7 +408,7 @@ window.BladBygg = (() => {
   function losKort(u) {
     return `<div class="pruppg">
       <span class="prnr">${u.nr}.<span class="prvarde">${u.p} p</span></span>
-      <div><p class="prtext">${mat(u.t)}</p>
+      <div><p class="prtext" data-ref="">${ref(u.t)}</p>
         <div class="losvar"><b class="losetikett">Svar</b><span>${mat(u.f)}</span>${u.enhet ? `<em>${esc(u.enhet)}</em>` : ''}</div>
       </div></div>`;
   }
@@ -352,7 +444,7 @@ window.BladBygg = (() => {
   function losVag(u) {
     return `<div class="pruppg">
       <span class="prnr">${u.nr}.<span class="prvarde">${u.p} p</span></span>
-      <div><p class="prtext">${mat(u.t)}</p>
+      <div><p class="prtext" data-ref="">${ref(u.t)}</p>
         <ul class="lovag">${(u.vag || []).map(s => `<li><span class="losteg">${mat(s[0])}<em>${esc(s[1])}</em></span></li>`).join('')}</ul>
         <div class="losvar"><b class="losetikett">Svar</b><span>${mat(u.f)}</span></div>
         ${elevlosningar(u)}
@@ -376,5 +468,8 @@ window.BladBygg = (() => {
     return ut;
   }
 
-  return { mat, ark, arkfacit, anteckningar, provforsatt, provblad, losning, BOKSTAV };
+  /* `kortref` delas med blad-boklos.js: bokens lösningsark ska korta på samma
+     sätt som provets och arbetsbladets, annars är det två olika facit. */
+  return { mat, kortref, ref, ark, arkfacit, anteckningar, provforsatt, provblad,
+           losning, BOKSTAV };
 })();

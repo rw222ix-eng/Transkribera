@@ -55,7 +55,20 @@ INSTRUCTION = (
     "för enskilda uppgifter; den som klarar E i övrigt anses redovisa nog.\n"
     "- text: uppgiftstexten. Matematik skrivs inom $…$ (t.ex. "
     "$x^2 - 4x + 3 = 0$); övrig text är vanlig svenska utan LaTeX-kommandon.\n"
-    "- losning: kort lösningsförslag för läraren (samma $-regel).\n"
+    # Facit ska gå att läsa på en armlängds avstånd, och det gör det bara om
+    # texten är kort. Modellen skrev annars resonerande meningar om vad ett led
+    # betyder («Täljaren är en summa av termerna … Bråkstrecket håller ihop …»)
+    # — läraren kallade det «så jävla mycket text och svårläst». Svaret först,
+    # sedan tavlans egna rader, och inte ett ord till.
+    "- losning: facittexten, och den ska vara KORT: svaret först, sedan högst "
+    "ett par räkneled — de rader en lärare skriver på tavlan när hon går "
+    "igenom uppgiften. Skriv aldrig resonerande prosa om vad ett led betyder "
+    "eller varför notationen ser ut som den gör, och upprepa aldrig "
+    "uppgiftstexten: facit läses BREDVID uppgiften, inte i stället för den. En "
+    "rutinuppgift klarar sig på svaret ensamt. Har uppgiften deluppgifter bär "
+    "DE lösningsgången — förälderns losning lämnas då tom eller är en enda "
+    "sammanfattande rad, aldrig samma text en gång till. Samma $-regel som "
+    "text.\n"
     "- bedomning: bedömningsanvisning, t.ex. '+1 E korrekt ansats, "
     "+1 C fullständig lösning med motivering'.\n"
     "- innehall: KODERNA för de centrala innehållspunkter uppgiften prövar "
@@ -147,7 +160,7 @@ INSTRUCTION = (
     "Exempel på EN uppgift:\n"
     '{"del": "B", "formaga": "P", "typ": "rutin", "poang": [1, 0, 0], '
     '"text": "Lös ekvationen $2x + 7 = 19$.", "innehall": ["linjära ekvationer"], '
-    '"losning": "$2x = 12$ ger $x = 6$.", '
+    '"losning": "$x = 6$ ur $2x = 12$.", '
     '"bedomning": "+1 E för korrekt svar."}\n'
     "Fasta fraser (använd ordagrant där de passar): 'Endast svar krävs.' på "
     "rutinuppgifter, 'Motivera ditt svar.' och 'Fullständiga lösningar "
@@ -256,9 +269,8 @@ FORLAGA_GRUPP = (
     '"text": "En båt ska gå från fyren till bojen. Sträckan fyr–hamn är 420 m, '
     'sträckan hamn–boj 260 m, och vinkeln vid hamnen är 68 grader. Hur långt är '
     'det mellan fyren och bojen?", "svarsfalt": ["Uppställning", "Svar i ord"], '
-    '"losning": "Två sidor och mellanliggande vinkel ger cosinussatsen: '
-    '$c^2 = 420^2 + 260^2 - 2 \\\\cdot 420 \\\\cdot 260 \\\\cos 68^\\\\circ$, '
-    'alltså $c \\\\approx 410$ m.", '
+    '"losning": "$c \\\\approx 410$ m ur cosinussatsen: '
+    '$c^2 = 420^2 + 260^2 - 2 \\\\cdot 420 \\\\cdot 260 \\\\cos 68^\\\\circ$.", '
     '"bedomning": "+1 E rätt sats vald, +2 C fullständig uppställning och svar '
     'i meter; vanligt fel: sinussatsen väljs fast den motstående vinkeln är '
     'okänd."}'
@@ -538,7 +550,7 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
             "- Bedömningsanvisningen ska säga vad ett SVAGT svar på just den "
             "punkten ser ut som, inte bara var poängen sitter. Det är den "
             "läraren läser när hon letar efter hålet.\n"
-            "Lösningsförslagen blir facit. Svara med enbart JSON.")
+            "Lösningsförslagen blir facit, och facit ska vara kort: svaret och på sin höjd ett par led. Svara med enbart JSON.")
         block.append(niva_rubrik.build_skala_utan_bok("diagnos"))
     elif profil == "arbetsblad":
         if skeleton:
@@ -551,7 +563,7 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
             "alla sex förmågor ska vägas lika, och en kommunikationsuppgift på "
             "ett arbetsblad är «förklara med ord varför …» i drillformat, inte "
             "en uppsats. Inga delar behövs (del: null på alla uppgifter). "
-            "Lösningsförslagen blir facit. Svara med enbart JSON.")
+            "Lösningsförslagen blir facit, och facit ska vara kort: svaret och på sin höjd ett par led. Svara med enbart JSON.")
         # «Stigande svårighet» stod här förut, och det är en instruktion utan
         # skala: svårare ÄN VAD? Nu följer skalan med — bokens egen när läraren
         # slagit upp ett uppslag, annars NP-rubriken.
