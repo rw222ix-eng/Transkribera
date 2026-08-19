@@ -951,7 +951,10 @@ def build_refine_prompt(exam: dict, instruction: str,
         f"{llm_client.varvrad(historik)}"
         f"{'' if nummer else llm_client.malrad(mal)}{onskemal}\n\n"
         "Skriv om HELA provet som JSON med önskemålet genomfört. Övriga "
-        "uppgifter lämnas oförändrade. Svara med enbart JSON."
+        "uppgifter lämnas oförändrade. Ändrar du en uppgifts text eller tal "
+        "ska uppgiftens losning, bedomning och deluppgifternas lösningar "
+        "skrivas om så att de stämmer med den nya lydelsen — facit får aldrig "
+        "beskriva en tidigare version av uppgiften. Svara med enbart JSON."
     )
 
 
