@@ -402,28 +402,22 @@ test("ändrades något annat än det läraren pekade på säger panelen det",
    bara nådde PDF:en. «Gör grupperna om 4» skrev alltså om pappret men inte
    skärmen — och namnraderna, som räknas ur samma tal, stod kvar på tre. */
 
-test("metaraden och namnraderna följer dokumentets upplägg", async ({ page }) => {
+test("namnraderna följer dokumentets upplägg — och metaraden är borta", async ({ page }) => {
   await fejkaRefine(page, {
     doc: exam({ grupp: { elever: 4, langd_min: 60, redovisning: "poster" } }),
-    andrade: ["meta", "namn"] });
+    andrade: ["namn"] });
   await iCanvas(page, papper({ inst: skriftligt }));
 
-  // Utgångsläget är väljarens: tre elever, 45 minuter, skriftligt.
-  const meta = page.locator("#arkskal .gumeta").first();
-  await expect(meta).toContainText("3 elever per grupp");
+  // Metaraden trycks inte längre (lärarens beslut 2026-08-20): hon säger
+  // villkoren själv i klassrummet. Fälten lever kvar och styr namnraderna.
+  await expect(page.locator("#arkskal .gumeta")).toHaveCount(0);
+  await expect(page.locator("#arkskal .gutopp .gurad")).toHaveCount(3);
 
-  // Metaraden är en EGEN ruta — förr träffade klicket Sidhuvudet, och modellen
-  // fick höra att det var rubriken läraren ville ändra.
-  await pekaPa(page, '#granskaskal .gdok [data-el="meta"]');
-  await expect(page.locator("#g-mal .gmaltext")).toHaveText("Metaraden");
   await skickaOnskemal(page, "Gör grupperna om 4, och en timme.");
 
-  await expect(meta).toContainText("4 elever per grupp", { timeout: 20_000 });
-  await expect(meta).toContainText("60 minuter");
-  await expect(meta).toContainText("redovisas som poster");
-  await expect(meta).toHaveClass(/andrad/);
-  // Namnraderna räknas ur gruppstorleken och ska följa med.
-  await expect(page.locator("#arkskal .gutopp .gurad")).toHaveCount(4);
+  // Namnraderna räknas ur gruppstorleken och ska följa med dokumentet.
+  await expect(page.locator("#arkskal .gutopp .gurad")).toHaveCount(4, { timeout: 20_000 });
+  await expect(page.locator("#arkskal .gumeta")).toHaveCount(0);
 });
 
 /* ── RUBRIKEN ÄR DOKUMENTETS ────────────────────────────────────

@@ -107,16 +107,19 @@ def _prov(fore: dict, efter: dict) -> list[str]:
     # märkas på tabellen och inte bara på uppgiften som bytte poäng.
     if _kanon(_granser(fore)) != _kanon(_granser(efter)):
         ut.append("avtal1")
-    # METARADEN (`meta`) är gruppuppgiftens tre villkor i klartext: «3 elever
-    # per grupp · 60 minuter · muntlig redovisning». Den ritades ur planeringens
-    # väljare medan `grupp` bara nådde PDF:en, så fälten mappades hit till
-    # `instr` — instruktionsbandet, som är en helt annan ruta på pappret.
+    # METARADEN är borttagen från pappret (lärarens beslut 2026-08-20: hon
+    # säger villkoren själv i klassrummet). `grupp`-fälten syns nu bara genom
+    # NAMNRADERNA (antalet räknas ur gruppstorleken) och instruktionsbandets
+    # löftesrad — så det är de noderna en ändring ska märkas på. `langd_min`
+    # har ingen synlig rad längre och märks därför inte alls: en nål på ett
+    # element som inte ändrats är precis den oärlighet diffen finns för att
+    # stoppa.
     grupp_f = fore.get("grupp") or {}
     grupp_e = efter.get("grupp") or {}
-    if _falt(grupp_f, grupp_e, ("elever", "langd_min", "redovisning")):
-        ut.append("meta")
     if _falt(grupp_f, grupp_e, ("elever",)):
         ut.append("namn")           # namnraderna räknas ur gruppstorleken
+    if _falt(grupp_f, grupp_e, ("redovisning",)) and "instr" not in ut:
+        ut.append("instr")          # löftesraden i bandet följer formen
     # Instruktionsbandet bär nyckelfrågan och — sedan dokumentet äger rutan
     # (exam_spec.ExamDoc.instruktion) — själva bandtexten. `hjalpmedel` står
     # med här OCKSÅ: provets OBS-band skriver hjälpmedelsregeln en gång till,

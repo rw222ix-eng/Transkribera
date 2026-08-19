@@ -149,12 +149,14 @@ def test_samma_ark_gar_igenom_som_arbetsblad():
 
 # ------------------------------------------------------------ pappersformen --
 
-def test_arket_bar_namnrader_tid_och_redovisning():
+def test_arket_bar_namnrader_men_ingen_metarad():
     doc, _ = exam_spec.validate_exam_json(_doc(), "gruppuppgift")
     tex = exam_latex.render_gruppuppgift(doc)
     assert tex.count(r"\noindent Namn:") == 4        # en rad per elev
-    assert "4 elever per grupp" in tex and "45 minuter" in tex
-    assert "redovisas som poster" in tex
+    # Metaraden är borttagen (lärarens beslut 2026-08-20): hon säger
+    # gruppstorlek, tid och redovisningsform själv i klassrummet. Fälten
+    # styr fortfarande namnraderna och instruktionsbandet.
+    assert "elever per grupp" not in tex and "45 minuter" not in tex
     # Instruktionsbandet säger i klartext hur det slutar — samma text som
     # webbversionen skriver (blad.js, grupphuvud).
     assert "sätts upp i salen" in tex
@@ -356,7 +358,10 @@ def test_godkannandet_skriver_ett_dokument_utan_separat_bedomning(client, monkey
     tex = sorted(p.name for p in client.base_dir.rglob("*.tex"))
     assert tex and not any(n.endswith(" - bedomning.tex") for n in tex), tex
     innehall = next(p for p in client.base_dir.rglob("*.tex")).read_text(encoding="utf-8")
-    assert "elever per grupp" in innehall
+    # Metaraden trycks inte längre (se test_arket_bar_namnrader_men_ingen_metarad)
+    # — men namnraderna, som räknas ur samma gruppfält, ska stå där.
+    assert "elever per grupp" not in innehall
+    assert innehall.count(r"\noindent Namn:") == 4
 
 
 def test_prompten_talar_om_gruppen(monkeypatch):

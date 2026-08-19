@@ -421,7 +421,6 @@ window.Blad = (() => {
        hit i stället för att tabellerna får två uppsättningar nycklar. */
     const redovisning = (s => s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : '')(
       String(g.redovisning || i.redovisning || '').trim());
-    const REDOV = { 'Muntligt': 'muntlig redovisning', 'Skriftligt': 'skriftlig redovisning', 'Poster': 'redovisas som poster' };
     /* Redovisningsformen är ett löfte till gruppen om hur det slutar. Står den
        bara som en etikett vet ingen vad som förväntas — så den sägs i klartext i
        instruktionsbandet också. */
@@ -430,14 +429,14 @@ window.Blad = (() => {
       'Skriftligt': 'Redovisas skriftligt: ett gemensamt svar per grupp lämnas in vid lektionens slut.',
       'Poster': 'Redovisas som poster: skriv lösningen stort på ett blad som sätts upp i salen.'
     };
-    const rad = [`${n} elever per grupp`, `${langd} minuter`, REDOV[redovisning] || 'muntlig redovisning'].join(' · ');
+    /* Ingen metarad på gruppuppgiften: läraren säger gruppstorlek, tid och
+       redovisningsform själv i klassrummet, och raden blev bara text att läsa
+       förbi (lärarens eget beslut 2026-08-20). Fälten finns kvar i dokumentet
+       och styr fortfarande namnradernas antal och instruktionsbandets löfte —
+       det är bara STÄMPELRADEN som ryker, på skärmen och i PDF:en. */
     $$('.gu', trav).forEach(gu => {
       const huv = $('.guhuv', gu);
-      if (huv) {
-        let p = $('.gumeta', huv);
-        if (!p) { p = document.createElement('p'); p.className = 'gumeta'; huv.appendChild(p); }
-        p.textContent = rad;
-      }
+      if (huv) { const p = $('.gumeta', huv); if (p) p.remove(); }
       const topp = $('.gutopp', gu);
       const mall = topp && $('.gurad', topp);
       const band = $('.guband', gu);

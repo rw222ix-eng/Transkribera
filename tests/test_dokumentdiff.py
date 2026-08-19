@@ -83,20 +83,21 @@ def test_betygsgranserna_marks_nar_poangen_flyttar_dem():
     assert dd.andrade_element("prov", fore, ny_text) == ["uppg2"]
 
 
-def test_gruppuppgiftens_metarad_och_namnrader():
-    """Metaraden («3 elever per grupp · 60 minuter · muntlig redovisning») är
-    en EGEN ruta överst på pappret — inte instruktionsbandet, som fälten
-    pekade på när de bara nådde PDF:en."""
+def test_gruppuppgiftens_namnrader_och_loftesrad():
+    """Metaraden är borttagen från pappret (läraren säger villkoren själv) —
+    grupp-fälten syns bara genom namnraderna och bandets löftesrad, och det är
+    dit en ändring ska peka. Tiden har ingen synlig rad och märks inte alls."""
     fore = _prov("a") | {"grupp": {"elever": 3, "langd_min": 40,
                                    "redovisning": "muntligt"}}
     efter = _prov("a") | {"grupp": {"elever": 4, "langd_min": 60,
                                     "redovisning": "muntligt"}}
-    assert dd.andrade_element("gruppuppgift", fore, efter) == ["meta", "namn"]
-    # Tiden och redovisningsformen står bara på metaraden — namnraderna räknas
-    # ur gruppstorleken och rörs inte.
+    assert dd.andrade_element("gruppuppgift", fore, efter) == ["namn"]
     bara_tid = _prov("a") | {"grupp": {"elever": 3, "langd_min": 60,
                                        "redovisning": "muntligt"}}
-    assert dd.andrade_element("gruppuppgift", fore, bara_tid) == ["meta"]
+    assert dd.andrade_element("gruppuppgift", fore, bara_tid) == []
+    ny_form = _prov("a") | {"grupp": {"elever": 3, "langd_min": 40,
+                                      "redovisning": "poster"}}
+    assert dd.andrade_element("gruppuppgift", fore, ny_form) == ["instr"]
 
 
 def test_diagnosen_diffas_som_arbetsbladet():
