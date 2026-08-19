@@ -84,7 +84,9 @@
    symmetriskt runt mitten, frågans första baslinje glider nedåt — och
    uppgiftsnumret i marginalen står plötsligt ovanför sin egen fråga. Samma
    grepp som blad.css använder i tabellcellerna. */
-.prtext{margin:0;max-width:62ch}
+/* pre-line av samma skäl som .gufraga (blad.css): modellens radbrytningar i
+   uppgiftstexten är medvetna och ska synas — LaTeX-vägen bryter redan. */
+.prtext{margin:0;max-width:62ch;white-space:pre-line}
 .prtext:has(.brak){line-height:1.95}
 .prtext i{font-style:italic}
 .prdel{margin:9px 0 0;padding:0;list-style:none;display:grid;gap:8px}

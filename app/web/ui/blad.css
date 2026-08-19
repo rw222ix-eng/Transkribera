@@ -40,7 +40,12 @@
    uppgift blev bara ett extra streck bland skrivlinjerna. */
 .gukort{margin:34px 0 0;padding:0}
 .gubricka{display:inline-block;align-self:flex-start;min-width:28px;padding:3px 9px;border-radius:3px;background:#000;color:#fff;font-size:13px;font-weight:700;text-align:center;letter-spacing:.02em}
-.gufraga{margin:12px 0 0;font-size:15px;line-height:1.6}
+/* pre-line: modellen radbryter i uppgiftstexten med flit — «A: …» och «B: …»
+   på var sin rad när uttrycken annars står för tätt. Utan pre-line kollapsade
+   radbrytningarna till mellanslag, och lärarens «öka avståndet mellan dem»
+   skrevs om i dokumentet utan att någonsin synas på arket. LaTeX-vägen gör
+   redan nytt stycke av en tom rad, så pappret och skärmen säger samma sak. */
+.gufraga{margin:12px 0 0;font-size:15px;line-height:1.6;white-space:pre-line}
 .gufraga i{font-style:italic}
 .gudel{margin:9px 0 0 18px;padding:0;list-style:none;font-size:13.5px}
 .gudel li{margin:2px 0}
