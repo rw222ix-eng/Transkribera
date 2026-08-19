@@ -426,6 +426,30 @@ test("metaraden och namnraderna följer dokumentets upplägg", async ({ page }) 
   await expect(page.locator("#arkskal .gutopp .gurad")).toHaveCount(4);
 });
 
+/* ── RUBRIKEN ÄR DOKUMENTETS ────────────────────────────────────
+   `titel` sparades ur serverns svar men ritades aldrig: pappret satte alltid
+   momentets namn. «Döp om det» var alltså ett önskemål utan verkan — modellen
+   skrev fältet, appen läste det inte. */
+
+test("dokumentets titel står på arket — och på fortsättningsbladet",
+  async ({ page }) => {
+    await fejkaRefine(page, {
+      doc: exam({ titel: "Repetition inför provet" }), andrade: ["rubrik"] });
+    await iCanvas(page, papper({ inst: skriftligt }));
+
+    await expect(page.locator("#arkskal .gutitel").first())
+      .toHaveText("1.1 Tal i olika former");
+
+    await pekaPa(page, '#granskaskal .gdok [data-el="rubrik"]');
+    await skickaOnskemal(page, "Döp om det till Repetition inför provet.");
+
+    await expect(page.locator("#arkskal .gutitel").first())
+      .toHaveText("Repetition inför provet", { timeout: 20_000 });
+    // Stämpelraden på blad två läser första bladets rubrik och följer med.
+    await expect(page.locator("#arkskal .gufortstitel").first())
+      .toHaveText("Repetition inför provet");
+  });
+
 /* ── FACITPOSTEN ÄR SIN UPPGIFT ─────────────────────────────────
    «Om jag ändrar något i facit så ska uppgiften också ändras.» Första steget är
    att facitposten alls går att peka på: dess bricka är en BOKSTAV («D.»), och

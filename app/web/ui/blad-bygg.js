@@ -272,11 +272,19 @@ window.BladBygg = (() => {
        kunna byta den utan att röra arbetsregeln (samma delning som i PDF:en,
        exam_latex._grupp_vy). */
     const bandtext = (v.instruktion || '').trim();
+    /* RUBRIKEN ÄR DOKUMENTETS. `titel` sparades ur serverns svar men ritades
+       aldrig: pappret satte alltid momentets namn, så «döp om det till
+       Repetition inför provet» var ett önskemål utan verkan — modellen skrev
+       fältet, appen läste det inte. Tomt fält betyder som alltid «appens val
+       gäller», och då står momentet där precis som förut. Fortsättningsbladets
+       stämpelrad läser första bladets rubrik (blad.js delaArk) och följer
+       därför med av sig själv. */
+    const rubrik = (v.titel || '').trim() || versal(v.moment || o.titel || '');
     const harFigur = uppgifter.some(u => u && u.fig);
     const harSteg = uppgifter.some(u => u && u.stegtabell);
     const form = grupp ? 'gu' : (harFigur && harSteg ? 'gu6' : harFigur ? 'gu2' : 'gu1');
     return `<div class="gu" data-form="${form}">
-      <div class="guhuv"><h1 class="gutitel">${esc(versal(v.moment || o.titel || ''))}</h1>${
+      <div class="guhuv"><h1 class="gutitel">${esc(rubrik)}</h1>${
         /* Bladet som hör till EN elev säger det överst. Hon ska veta att det är
            hennes, och läraren ska kunna dela ut rätt papper utan att läsa
            uppgifterna. */
@@ -404,10 +412,18 @@ window.BladBygg = (() => {
       <div><p class="prtext">${brodtext(u.t)}</p>${alt}${del}${former}${figur}${svarsrad}</div>
     </div>`;
   }
+  /* Provets rubrik, med dokumentets egen först. Samma regel som arkets: skrev
+     modellen en titel är det den som står på pappret, annars appens «Prov —
+     momentet». blad.js planvalProv skriver om raden efter planeringen och
+     följer samma ordning — annars fick titeln stå i en bildruta och försvinna i
+     nästa. */
+  const provtitel = v => (v.titel || '').trim()
+    || `${v.variant === 'Omprov' ? 'Omprov' : 'Prov'} — ${versal(v.moment || '')}`;
+
   function provforsatt(v) {
     return `<div class="ark" data-form="pr1">
       ${huvud(v)}
-      <h1 class="prtitel">${v.variant === 'Omprov' ? 'Omprov' : 'Prov'} — ${esc(versal(v.moment || ''))}</h1>
+      <h1 class="prtitel">${esc(provtitel(v))}</h1>
       <div class="prrad"><b>Namn</b><span class="prlinje"></span></div>
       <table class="prmeta"><tbody></tbody></table>
       <p class="prnot"></p>
@@ -529,5 +545,5 @@ window.BladBygg = (() => {
   /* `kortref` delas med blad-boklos.js: bokens lösningsark ska korta på samma
      sätt som provets och arbetsbladets, annars är det två olika facit. */
   return { mat, kortref, ref, ark, arkfacit, anteckningar, provforsatt, provblad,
-           losning, BOKSTAV };
+           losning, provtitel, BOKSTAV };
 })();

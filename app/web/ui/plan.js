@@ -3145,6 +3145,7 @@
          det här varvet står förra varvets kvar. Utan reserven hade en
          omskrivning som tappade `grupp` lämnat tillbaka planeringens förval,
          och gruppstorleken läraren nyss bett om hade tystnat på pappret. */
+      v.titel = res.exam.titel || v.titel || null;
       v.grupp = res.exam.grupp || v.grupp || null;
       v.tid_min = res.exam.tid_min || v.tid_min || null;
       v.hjalpmedel = res.exam.hjalpmedel || v.hjalpmedel || null;

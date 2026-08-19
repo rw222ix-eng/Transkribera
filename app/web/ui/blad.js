@@ -303,7 +303,11 @@ window.Blad = (() => {
     }
 
     const titel = $('.prtitel', trav);
-    if (titel && v.moment) titel.textContent = `${v.variant === 'Omprov' ? 'Omprov' : 'Prov'} — ${versal(v.moment)}`;
+    /* Dokumentets titel först — samma ordning som byggaren satte raden med
+       (blad-bygg.provtitel). Stod momentet här hade rubriken läraren just bytt
+       skrivits över så fort planeringen ritade om pappret. */
+    if (titel && (B() || v.moment)) titel.textContent = B() ? B().provtitel(v)
+      : `${v.variant === 'Omprov' ? 'Omprov' : 'Prov'} — ${versal(v.moment)}`;
 
     const meta = $('.prmeta tbody', trav);
     if (meta) {
@@ -336,18 +340,44 @@ window.Blad = (() => {
     const not = $('.prnot', trav);
     if (not) not.innerHTML = `Provet ger högst <b>${summa} poäng</b>${enDel ? '' : ` — ${sumB} på del A och ${summa - sumB} på del B`}. Efter varje uppgift står hur många poäng den kan ge.${enDel ? '' : ' Uppgifter märkta «lösblad» redovisas på separat lösblad — visa hur du räknar och förklara varför.'} Skriv ditt namn på alla papper du lämnar in.${plock.some(u => !arE(u)) ? '' : ' Provet prövar E-nivån — det finns inga uppgifter för C och A på det här provet.'}`;
 
+    /* ── BETYGSGRÄNSERNA ÄR SERVERNS, INTE SKÄRMENS ──────
+       Här räknades gränserna med egna procentsatser — 30 % för E, 53 för C,
+       77 för A, plus 23 och 45 procent av del B som varav-krav. Serverns regel
+       (exam_spec.KRAV_DEFAULT) är en annan: 25, 45 och 65 procent av totalen,
+       varav 30 % av C- och A-poängen respektive 40 % av A-poängen. Talen räknas
+       redan och följer med pappret som `granser` — de trycks på PDF:ens
+       försättsblad (prov.tex.j2) — men skärmen ritade sina egna.
+
+       Ett prov lovade alltså klassen en E-gräns på skärmen och en annan på det
+       utdelade pappret. Det är inte en avvikelse i sättningen; det är två olika
+       löften om vad som krävs för ett betyg, och bara ett av dem gäller.
+
+       Servern äger regeln, och den räknas på ETT ställe. Saknas `granser` —
+       prototypens prov, ett papper skrivet utan server — tas tabellen bort i
+       stället för att fyllas med tal appen hittat på. Maxpoängen står kvar i
+       noten ovanför, så försättsbladet säger fortfarande vad provet är värt. */
     const betyg = $('.prbetyg', trav);
-    if (betyg) {
-      const g = a => Math.max(1, Math.round(summa * a));
-      const kravC = enDel ? '' : `, minst ${Math.max(1, Math.round((summa - sumB) * .23))} av dem på del B`;
-      const kravA = enDel ? '' : `, minst ${Math.max(1, Math.round((summa - sumB) * .45))} av dem på del B`;
+    const gr = v.granser;
+    const giltig = gr && gr.E && gr.E.minst != null
+      && gr.C && gr.C.minst != null && gr.A && gr.A.minst != null;
+    if (betyg && !giltig) betyg.remove();
+    else if (betyg) {
       const kropp = $('tbody', betyg), fot = $('tfoot td:last-child', betyg);
+      /* Varav-kraven i förlagans form: «C: minst 24 poäng, varav minst 8 C-
+         eller A-poäng». Är kravet noll — ett prov utan C/A-poäng att kräva —
+         står bara gränsen, för «varav minst 0» är ingen upplysning. */
+      const varav = (n, text) => (n ? `, varav minst ${n} ${text}` : '');
       /* Ett prov som bara bär E-uppgifter kan inte ge C eller A. Står gränserna
          där ändå lovar pappret ett betyg uppgifterna inte kan bära. */
       const harC = plock.some(u => !arE(u));
-      if (kropp) kropp.innerHTML = `<tr><td>E</td><td>${g(.3)} poäng</td></tr>`
-        + (harC ? `<tr><td>C</td><td>${g(.53)} poäng${kravC}</td></tr><tr><td>A</td><td>${g(.77)} poäng${kravA}</td></tr>` : '');
-      if (fot) fot.textContent = `${summa} poäng`;
+      if (kropp) kropp.innerHTML = `<tr><td>E</td><td>${gr.E.minst} poäng</td></tr>`
+        + (harC
+          ? `<tr><td>C</td><td>${gr.C.minst} poäng${varav(gr.C.varav_ca, 'C- eller A-poäng')}</td></tr>`
+            + `<tr><td>A</td><td>${gr.A.minst} poäng${varav(gr.A.varav_a, 'A-poäng')}</td></tr>`
+          : '');
+      /* Maxpoängen är provets, och den kommer ur samma räkning som gränserna —
+         inte ur skärmens egen summa, som kan räkna på andra uppgifter. */
+      if (fot) fot.textContent = `${gr.total != null ? gr.total : summa} poäng`;
     }
 
     /* Försättsbladet slutar i en halv sida tomt papper. Där hör lektionens bild
@@ -498,7 +528,12 @@ window.Blad = (() => {
     $$('.gumeta', rot).forEach(el => salt(el, 'meta', 'Metaraden'));
     $$('.probs, .guband', rot).forEach(el => salt(el, 'instr', 'Instruktionen'));
     $$('.gutopp', rot).forEach(el => salt(el, 'namn', 'Namnraderna'));
-    $$('.prmeta, .prbetyg', rot).forEach((el, n) => salt(el, 'avtal' + n, n ? 'Betygsgränserna' : 'Provtabellen'));
+    /* Provtabellen och betygsgränserna hämtades förr ur EN lista och numrerades
+       på plats — `avtal0` var «den första av de två». Betygstabellen tas bort
+       när servern inte skickat några gränser (se planvalProv), och då hade
+       provtabellen ärvt betygsgränsernas namn. Klassen avgör, inte ordningen. */
+    $$('.prmeta', rot).forEach(el => salt(el, 'avtal0', 'Provtabellen'));
+    $$('.prbetyg', rot).forEach(el => salt(el, 'avtal1', 'Betygsgränserna'));
     $$('.prforsatt', rot).forEach(el => salt(el, 'forsatt', 'Bilden på försättsbladet'));
     /* FACITETS POSTER RÄKNAS I BOKSTÄVER. Arbetsbladets och gruppuppgiftens
        facit numrerar med A, B, C (blad-bygg arkfacit) — provet med siffror.
