@@ -321,8 +321,38 @@
 .ark:not([data-facit]) .afacit{display:none}
 .aniva{margin:20px 0 0;padding-top:12px;border-top:1px dashed #C7D2DA}
 .anivarubrik{font-size:9.5px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:#000;margin:0 0 10px}
-.andrad{background:color-mix(in srgb,var(--atmosphere) 30%,transparent);border-radius:3px;box-shadow:0 0 0 3px color-mix(in srgb,var(--atmosphere) 30%,transparent);animation:blink var(--dur-4) var(--ease) 3 alternate}
+/* ÄNDRINGSMARKERINGEN — tydlig, sedan en prick (se prickar.js)
+   Förr blinkade den tre gånger och låg därefter kvar för evigt: efter fem
+   omskrivningar lyste halva pappret och ingen kunde se vilken ändring som var
+   den nya. Nu är `[data-lugn]` andra akten — attributet sätts av en timer i
+   prickar.js, så övergången går att pröva på TILLSTÅNDET och inte på en tid.
+   `position:relative` är prickens fäste. Tavlans rutor sätter sin egen
+   `position:absolute` INLINE (tavla-wb.js) och rörs därför inte av regeln. */
+.andrad{position:relative;background:color-mix(in srgb,var(--atmosphere) 30%,transparent);border-radius:3px;box-shadow:0 0 0 3px color-mix(in srgb,var(--atmosphere) 30%,transparent);animation:blink var(--dur-4) var(--ease) 3 alternate;transition:background var(--dur-4) var(--ease),box-shadow var(--dur-4) var(--ease)}
 @keyframes blink{from{background:color-mix(in srgb,var(--atmosphere) 34%,transparent)}to{background:color-mix(in srgb,var(--atmosphere) 12%,transparent)}}
+/* Lugnad: ytan släpps helt, kvar står bara pricken i kanten. */
+.andrad[data-lugn]{background:transparent;box-shadow:none;animation:none}
+/* Pricken sitter i elementets övre vänsterhörn, en aning utanför. Inte längre
+   ut än så: tavlan har `overflow:hidden` och 24–30 px innermarginal, så en
+   prick på -20 px hade klippts bort för rutorna längst till vänster. Den är
+   större än den syns — 18 px träffyta runt en 9 px prick — för den ska gå att
+   träffa också när canvasen är nedzoomad. */
+.aprick{position:absolute;left:-13px;top:-9px;width:18px;height:18px;padding:0;border:0;border-radius:50%;background:none;cursor:pointer;opacity:0;transition:opacity var(--dur-4) var(--ease);z-index:2}
+.aprick::before{content:"";position:absolute;left:5px;top:5px;width:9px;height:9px;border-radius:50%;background:var(--atmosphere);box-shadow:0 0 0 2px color-mix(in srgb,var(--atmosphere) 25%,transparent)}
+.andrad[data-lugn]>.aprick{opacity:1}
+.aprick:hover::before,.aprick:focus-visible::before{box-shadow:0 0 0 4px color-mix(in srgb,var(--atmosphere) 35%,transparent)}
+/* Bubblan ligger på <body> och ärver `.gdiff` från panelen — samma före/efter,
+   samma kapning, samma utseende. Den får inte skalas med canvasens zoom. */
+.aprickbubbla{position:fixed;z-index:60;max-width:min(360px,90vw);pointer-events:none;box-shadow:0 18px 40px -22px rgba(4,26,42,.55);border:1px solid var(--line)}
+@media (prefers-reduced-motion:reduce){
+  .andrad{animation:none;transition:none}
+  .aprick{transition:none}
+}
+/* Utskriften är lärarens papper, inte appens anteckningsbok. */
+@media print{
+  .andrad{background:transparent;box-shadow:none;animation:none}
+  .aprick,.aprickbubbla{display:none}
+}
 /* Tavlan är inte ett A4 — den är en tavla */
 .tavla{width:100%;background:#fff;border:1px solid var(--line);border-radius:14px;padding:32px 34px;color:var(--ink);box-shadow:0 24px 48px -30px rgba(4,26,42,.4);animation:stigin var(--dur-4) var(--ease) both}
 .tavla .ttitel{font-family:var(--serif);font-size:26px;line-height:1.14;margin:0;color:var(--ink)}

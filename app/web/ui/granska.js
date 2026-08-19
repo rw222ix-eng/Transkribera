@@ -59,7 +59,10 @@
   let drar = null;
   duk.addEventListener('pointerdown', e => {
     if (valjLage && e.target.closest('[data-el]')) return;
-    if (e.target.closest('.gpin,.gfab,.gpanel')) return;
+    /* `.aprick` med i listan: pekarfångsten nedan äter annars klicket på
+       prickarna i pappret — panoreringen tog gesten och knappen fick aldrig
+       veta att någon tryckte på den. Samma skäl som nålarna står här. */
+    if (e.target.closest('.gpin,.gfab,.gpanel,.aprick')) return;
     e.preventDefault();
     const val = window.getSelection && window.getSelection();
     if (val && !val.isCollapsed) val.removeAllRanges();
@@ -168,6 +171,10 @@
   /* Före och efter. Att godkänna en ändring utan att se exakt vad som blev annorlunda
      tvingar en att läsa om hela uppgiften — diffen står därför i ändringsposten. */
   const platt = n => n.textContent.replace(/\s+/g, ' ').trim();
+  /* Senaste varvets före/efter, per element-id. Prickarna i pappret läser den
+     här (window.Granska.diffFor) i stället för att hålla en egen kopia som kan
+     säga emot panelen. Nollställs när canvasen öppnas på ett nytt papper. */
+  let senaste = { varv: 0, par: {} };
   const kapa = s => s.length > 160 ? s.slice(0, 159) + '…' : s;
   function ogonblick() {
     const m = {};
@@ -180,6 +187,13 @@
     andrade = andrade.filter(id => (fore[id] || '').trim() !== (efter[id] || '').trim());
     if (!andrade.length) return;
     if ($('.gdiff', varv)) return;
+    /* SAMMA par som rutan nedan ritar — prickarna i pappret visar dem i sin
+       popover, och de får inte kunna säga något annat än panelen. Sparas här,
+       där paret först finns, i stället för att räknas fram en gång till. */
+    senaste = { varv: Number(varv.dataset.id) || 0, par: {} };
+    andrade.forEach(id => {
+      senaste.par[id] = { fore: kapa(fore[id] || ''), efter: kapa(efter[id] || '') };
+    });
     const d = document.createElement('div');
     d.className = 'gdiff';
     andrade.slice(0, 2).forEach(id => {
@@ -201,7 +215,16 @@
   }
   function vantaDiff(varv, fore, n) {
     const efter = ogonblick();
-    const andrade = Object.keys(efter).filter(id => fore[id] !== undefined && (fore[id] || '').trim() !== (efter[id] || '').trim());
+    /* Ett element som HADE text och nu är tomt är nästan alltid en halvritad
+       tavla, inte en ändring: motorn tömmer sin värd och ritar om, och en
+       ögonblicksbild tagen mitt i det gav «före: hela rubriken / efter: (tomt)»
+       — en diff som ser ut som en radering av något som står kvar på skärmen.
+       Vänta i stället ut ritningen; är elementet borta på riktigt försvinner
+       också dess data-el, och då står det inte kvar i `efter` alls. */
+    const andrade = Object.keys(efter).filter(id =>
+      fore[id] !== undefined
+      && (fore[id] || '').trim() !== (efter[id] || '').trim()
+      && !((fore[id] || '').trim() && !(efter[id] || '').trim()));
     if (andrade.length) return ritaDiff(varv, fore, efter, andrade);
     if ((n || 0) > 40) return;
     requestAnimationFrame(() => vantaDiff(varv, fore, (n || 0) + 1));
@@ -347,7 +370,7 @@
     plan.appendChild(klon);
     $('#g-titel').textContent = o.titel || 'Utkast';
     $('#g-meta').textContent = o.meta || '';
-    kommentarer = []; nr = 0; mal = null;
+    kommentarer = []; nr = 0; mal = null; senaste = { varv: 0, par: {} };
     $$('.gvarv', lista).forEach(v => v.remove());
     $('#g-tom').hidden = false;
     $('#g-antal').textContent = 'Inga ändringar än';
@@ -414,5 +437,21 @@
     if (mal) $$('.gdok [data-el]', plan).forEach(x => x.toggleAttribute('data-mal', x.dataset.el === mal.el));
     satVy();
   }
-  window.Granska = { oppna, stang, sattOm, get oppen() { return !skal.hidden; }, get kommentarer() { return kommentarer; } };
+  /* Vad prickarna i pappret behöver av granskningen: paret att visa, och vägen
+     till raden i listan. Ingen egen kopia av någondera — en prick som visade en
+     annan text än panelen hade varit värre än ingen prick alls. */
+  function diffFor(elId) {
+    const par = senaste.par[elId];
+    return par ? { fore: par.fore, efter: par.efter, varv: senaste.varv } : null;
+  }
+  function visaVarv(n) {
+    if (!n) return false;
+    if (!kommentarer.some(k => k.id === n)) return false;
+    fokusera(n);
+    return true;
+  }
+  window.Granska = { oppna, stang, sattOm, diffFor, visaVarv,
+                     get oppen() { return !skal.hidden; },
+                     get senasteVarv() { return senaste.varv; },
+                     get kommentarer() { return kommentarer; } };
 })();

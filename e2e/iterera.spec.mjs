@@ -301,3 +301,92 @@ test("en omskrivning som inte ändrade något märker ingen ruta", async ({ page
   await expect(page.locator("#g-antal")).toHaveText("1 ändring", { timeout: 20_000 });
   expect(await markerade(page)).toEqual([]);
 });
+
+/* ── MARKERINGEN SOM LUGNAR SIG ─────────────────────────────────────
+ * `.andrad` blinkade och låg sedan kvar för evigt — efter fem omskrivningar
+ * lyste halva pappret. Nu är markeringen tydlig några sekunder och krymper till
+ * en prick i kanten, med före/efter i en bubbla och en väg till varvets rad.
+ *
+ * Testerna frågar efter TILLSTÅNDET (`data-lugn`, `.aprick`) och aldrig efter
+ * en animationstid: sviten kör med reducerad rörelse, så övergångarna finns
+ * inte ens — men attributet ska sitta där ändå, för det sätts av en timer.
+ */
+
+async function skrivOm(page, mening) {
+  await page.locator("#g-falt").fill(mening || "Skriv om rubriken");
+  await page.locator("#g-form").evaluate(f => f.requestSubmit());
+  await expect(page.locator("#g-antal")).toHaveText("1 ändring", { timeout: 20_000 });
+}
+
+/* `tav2` och inte `tav0`: tavlans FÖRSTA ruta är lektionens egen titelrad, som
+   `tavlaSpec` injicerar ur planeringen — den ändras aldrig av en omskrivning.
+   Rubriken som modellen faktiskt skriver om är andra brädets, tav2. */
+const RUTA = '#granskaskal .gdok [data-el="tav2"]';
+const prick = page => page.locator(RUTA + " .aprick").first();
+
+test("markeringen krymper till en prick i kanten", async ({ page }) => {
+  await fejka(page, { andrade: ["tav2"] });
+  await page.goto("/");
+  await hydrerad(page);
+  await skrivTavla(page);
+  await oppnaCanvas(page);
+  await skrivOm(page);
+
+  const el = page.locator(RUTA).first();
+  await expect(el).toHaveClass(/andrad/, { timeout: 20_000 });
+  // Prickens fäste finns från början; det som byts är akten.
+  await expect(el.locator(".aprick")).toHaveCount(1);
+  await expect(el).toHaveAttribute("data-lugn", "", { timeout: 20_000 });
+});
+
+test("hovra pricken visar före och efter", async ({ page }) => {
+  await fejka(page, { andrade: ["tav2"] });
+  await page.goto("/");
+  await hydrerad(page);
+  await skrivTavla(page);
+  await oppnaCanvas(page);
+  await skrivOm(page);
+
+  const p = prick(page);
+  await expect(p).toBeVisible({ timeout: 20_000 });
+  await p.hover();
+  const bubbla = page.locator(".aprickbubbla");
+  await expect(bubbla).toBeVisible({ timeout: 10_000 });
+  // Samma kapade par som panelens `.gdiff` — gamla rubriken överstruken, nya under.
+  await expect(bubbla.locator(".gfore")).toContainText("Derivatans definition");
+  await expect(bubbla.locator(".gefter")).toContainText("Omskriven tavla");
+});
+
+test("klick på pricken öppnar varvets rad i granskningen", async ({ page }) => {
+  await fejka(page, { andrade: ["tav2"] });
+  await page.goto("/");
+  await hydrerad(page);
+  await skrivTavla(page);
+  await oppnaCanvas(page);
+  await skrivOm(page);
+
+  const rad = page.locator('.gvarv[data-id="1"]');
+  await rad.evaluate(r => r.removeAttribute("data-pa"));   // börja från oval
+  await prick(page).click();
+  await expect(rad).toHaveAttribute("data-pa", "", { timeout: 10_000 });
+});
+
+test("bilden av tavlan bär inga markeringar", async ({ page }) => {
+  await fejka(page, { andrade: ["tav2"] });
+  await page.goto("/");
+  await hydrerad(page);
+  await skrivTavla(page);
+  await oppnaCanvas(page);
+  await skrivOm(page);
+
+  // Bildproducenterna river markeringarna ur SIN kopia — pappret på skärmen
+  // behåller sina. En kvarglommd prick hade blivit en ostylad knapp i PDF:en.
+  const kvar = await page.evaluate(() => {
+    const el = document.querySelector('#granskaskal .gdok [data-el="tav2"]');
+    const kopia = window.Prickar.riv(el.cloneNode(true));
+    return { prickar: kopia.querySelectorAll(".aprick").length,
+             andrad: kopia.classList.contains("andrad"),
+             pappret: el.querySelectorAll(".aprick").length };
+  });
+  expect(kvar).toEqual({ prickar: 0, andrad: false, pappret: 1 });
+});

@@ -150,6 +150,9 @@ window.TavlaBild = (() => {
 
   function rastrera(container, b, h, skala) {
     const kopia = container.cloneNode(true);
+    /* Bilden är tavlan, inte appens anteckningsbok: ändringsmarkeringar och
+       prickar hör till skärmen och följer aldrig med ut (prickar.js). */
+    if (window.Prickar) window.Prickar.riv(kopia);
     kopia.style.transform = 'none';
     kopia.style.width = b + 'px';
     return css().then(regelverk => {

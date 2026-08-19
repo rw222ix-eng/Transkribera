@@ -3102,6 +3102,12 @@
       /* Sist, så att `svarighet`/`kontext`/`niva` ovan hinner sättas — de styr
          prototypens omskrivning och hör inte ihop med markeringen. */
       if (sagt) x.andrat = sagt.slice();
+      /* NÄR varvet skedde. Markeringen är tydlig några sekunder och krymper
+         sedan till en prick (prickar.js), och tiden räknas härifrån och inte
+         från renderingen — annars blossar den upp igen vid varje zoom,
+         versionsbyte och typsnittsladdning. Bläddrar läraren tillbaka till ett
+         gammalt varv står dess prickar därför lugna med en gång. */
+      x.andradVid = Date.now();
     });
     if (res && res.board) { v.wb = res.board; v.wbFel = res.errors || []; }
     if (res && res.exam) {

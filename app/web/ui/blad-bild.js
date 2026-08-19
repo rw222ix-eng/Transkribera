@@ -166,7 +166,9 @@ window.BladBild = (() => {
     const trav = document.createElement('div');
     trav.className = 'bladtrav';
     trav.style.cssText = 'width:' + b + 'px;gap:0';
-    trav.appendChild(blad.cloneNode(true));
+    /* Samma regel som tavla-bild.js: markeringarna stannar på skärmen. */
+    trav.appendChild(window.Prickar ? window.Prickar.riv(blad.cloneNode(true))
+                                    : blad.cloneNode(true));
     return css().then(regelverk => {
       /* XML-säkra CSS:en: & och < får inte stå råa i XML. */
       const trygg = regelverk.replace(/&/g, '&amp;').replace(/</g, '&lt;');

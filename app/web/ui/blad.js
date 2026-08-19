@@ -448,6 +448,9 @@ window.Blad = (() => {
     $$('.gutab', rot).forEach(el => salt(el, 'tabell', 'Jämförelsetabellen'));
     $$('.lopost', rot).forEach((el, n) => salt(el, 'facit' + (n + 1), 'Facit ' + (n + 1)));
     $$('.loskann', rot).forEach((el, n) => salt(el, 'elev' + (n + 1), 'Elevlösning ' + BOKSTAV[n]));
+    /* Markeringen lugnar sig: tydlig i några sekunder, sedan en prick i kanten
+       med före/efter och en väg till varvets rad i granskningen (prickar.js). */
+    if (window.Prickar) window.Prickar.pa(rot, v);
   }
 
   /* ── Figurerna och matematiken ───────────────────────
@@ -524,6 +527,10 @@ window.Blad = (() => {
       if (el.classList.contains('wb-text') && t && t.length <= 24) rubrik = t.replace(/[:.]+$/, '');
       if (andrat.includes('tav' + n)) el.classList.add('andrad');
     });
+    /* EFTER slingan: `tavnamn` läser elementets textContent, och en prick som
+       satts först hade kunnat hamna i namnet. Prickarna rör inte layouten —
+       motorn har redan mätt, och de ligger absolut inne i en absolut ruta. */
+    if (window.Prickar) window.Prickar.pa(host, v);
   }
 
   /* Specen bär funktioner (graferna) och överlever därför inte JSON i ett
