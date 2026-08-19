@@ -12,6 +12,7 @@ någonstans i prompterna).
 """
 from __future__ import annotations
 
+import copy
 import json
 import re
 from typing import Callable
@@ -1136,10 +1137,90 @@ def _llm_round(prompt: str, model: str, llm, antal: int | None = None,
     return _parse_exam(raw)
 
 
+# ── Riktad omskrivning: målet är spelplanen ────────────────────────────────
+#
+# Prompten lovar «Övriga uppgifter lämnas oförändrade», och ett löfte som bara
+# står i en prompt är inget löfte. Läraren pekade på uppgift D och bad att
+# deluppgift b) skulle bort. Modellen skrev om ALLA fyra uppgifterna och bytte
+# hela sammanhanget — bygg blev pizza — och hon fick ångra varvet. Servern
+# håller löftet i stället för att be om det: pekade hon på något avgränsat
+# byggs svaret som ORIGINALET plus kandidatens ändring av just det målet, och
+# resten tas ordagrant ur originalet. Kandidatens övriga påhitt slängs.
+#
+# Utan mål är hela dokumentet spelplanen som förut — «gör hela provet lättare»
+# ska få röra allt, och det är då läraren VET att allt kan ändras.
+#
+# Nycklarna är klientens element-id (blad.js markera(), samma schema som
+# dokumentdiff läser) och kommer in som `mal.el`.
+_MALETS_FALT = {
+    # Sidhuvudet: bara titeln är modellens. Kurs, klass, elev och datum är
+    # lärarens val och skrivs av routen — modellen ska inte kunna döpa om
+    # klassen för att den bad om en ny rubrik.
+    "rubrik": ("titel",),
+    # Instruktionsbandet: bandtexten och nyckelfrågan. Hjälpmedelsregeln står
+    # visserligen också i bandet på provet, men den ÄR provtabellens fält och
+    # ändras genom den — två mål som äger samma rad drar den fram och tillbaka.
+    "instr": ("instruktion", "nyckelfraga"),
+    # Metaraden och namnraderna läses båda ur gruppupplägget.
+    "meta": ("grupp", "tid_min", "hjalpmedel"),
+    "namn": ("grupp",),
+    # Provtabellen: skrivtiden och hjälpmedelsregeln.
+    "avtal0": ("tid_min", "hjalpmedel"),
+    # avtal1 (betygsgränserna) står INTE här, och ska inte göra det: gränserna
+    # RÄKNAS ur poängen (exam_spec.kravgranser) och går bara att flytta genom
+    # att uppgifternas poäng ändras. Målet är alltså hela dokumentet, inte ett
+    # fält, och då gäller den fria vägen nedan.
+}
+
+
+def riktat_mal(nummer: int | None, mal: dict | None):
+    """Vad omskrivningen får röra.
+
+    ``("uppgift", n)`` — bara uppgift n. ``("falt", nycklar)`` — bara de
+    toppnycklarna. ``None`` — hela dokumentet, som förut. Numret vinner över
+    elementet: det är precisare, och klienten skickar båda när läraren pekat
+    på en uppgift."""
+    if nummer:
+        return ("uppgift", int(nummer))
+    falt = _MALETS_FALT.get(str((mal or {}).get("el") or "").strip())
+    return ("falt", falt) if falt else None
+
+
+def sammanfoga_riktat(original: dict, kandidat: dict,
+                      riktning) -> tuple[dict | None, str]:
+    """Originalet med kandidatens MÅL inskrivet. ``(dokument, "")`` eller
+    ``(None, skäl)`` när kandidaten inte bär målet alls."""
+    sort, vad = riktning
+    ihop = copy.deepcopy(original)
+    if sort == "uppgift":
+        kandidatens = kandidat.get("uppgifter")
+        egna = ihop.get("uppgifter")
+        if not isinstance(kandidatens, list) or not isinstance(egna, list):
+            return None, "svaret bar inga uppgifter"
+        if not 1 <= vad <= len(kandidatens) or vad > len(egna):
+            return None, f"svaret bar ingen uppgift {vad}"
+        # HELA uppgiften följer med: texten, poängen, deluppgifterna, lösningen
+        # och bedömningen är samma sak sedd från olika håll och hör ihop med
+        # målet. Härledda tal (gränser, summor) räknas om ur poängen där de
+        # visas (exam_spec.kravgranser/poangsummor) och behöver inget eget
+        # bokföringssteg här.
+        egna[vad - 1] = copy.deepcopy(kandidatens[vad - 1])
+        return ihop, ""
+    for nyckel in vad:
+        # Bara fält kandidaten FAKTISKT skickade skrivs över. Utelämnar den ett
+        # fält är det inget beslut om att ta bort det — och `hjalpmedel` är
+        # obligatoriskt, så en utelämning hade gjort dokumentet ogiltigt för att
+        # modellen råkade tiga. Ett uttalat null tas däremot på orden.
+        if nyckel in kandidat:
+            ihop[nyckel] = copy.deepcopy(kandidat[nyckel])
+    return ihop, ""
+
+
 def _repair_until_valid(exam: dict | None, errors: list, *, model: str, llm,
                         rounds_used: int, max_rounds: int, profil: str = "prov",
                         antal: int | None = None, skeleton: list[dict] | None = None,
                         koder: list[str] | None = None,
+                        riktning=None,
                         log_cb: Callable[[str], None] | None = None) -> dict:
     log = log_cb or (lambda _m: None)
     while errors and rounds_used < max_rounds and exam is not None:
@@ -1152,6 +1233,15 @@ def _repair_until_valid(exam: dict | None, errors: list, *, model: str, llm,
             errors = [{"path": "svar", "code": "json",
                        "message": "modellen svarade inte med giltig JSON"}]
             continue
+        # Reparationen är också en omskrivning av HELA dokumentet, och därför
+        # samma grind: har omskrivningen ett mål får rättningsrundan bara röra
+        # målet den med. Annars smiter det förbjudna in genom bakdörren i runda
+        # två — och det är just den rundan läraren aldrig ser.
+        if riktning is not None:
+            candidate, skal = sammanfoga_riktat(exam, candidate, riktning)
+            if candidate is None:
+                errors = [{"path": "mal", "code": "mal", "message": skal}]
+                continue
         _doc, new_errors = _validate(candidate, profil, koder)
         exam = candidate
         errors = new_errors
@@ -1316,10 +1406,28 @@ def refine_exam(exam: dict, instruction: str, *, model: str,
                 "errors": [{"path": "svar", "code": "json",
                             "message": "modellen svarade inte med giltig JSON"}],
                 "rounds": 1}
+    # Är önskemålet riktat är det bara målet som får resa med tillbaka —
+    # se _MALETS_FALT. Valideringen körs på SAMMANFOGNINGEN, för det är den
+    # som blir papper.
+    riktning = riktat_mal(nummer, mal)
+    if riktning is not None:
+        candidate, skal = sammanfoga_riktat(exam, candidate, riktning)
+        if candidate is None:
+            return {"exam": exam,
+                    "errors": [{"path": "mal", "code": "mal", "message": skal}],
+                    "rounds": 1}
     _doc, errors = _validate(candidate, profil)
-    return _repair_until_valid(candidate, errors, model=model, llm=llm,
-                               rounds_used=1, max_rounds=max_rounds,
-                               profil=profil, log_cb=log_cb)
+    res = _repair_until_valid(candidate, errors, model=model, llm=llm,
+                              rounds_used=1, max_rounds=max_rounds,
+                              profil=profil, riktning=riktning, log_cb=log_cb)
+    # Gick målets ändring inte igenom grinden ens efter reparation lämnas
+    # ORIGINALET tillbaka, med felen kvar i svaret. Ett halvt genomfört
+    # önskemål på ett papper läraren tror är helt är värre än ett önskemål som
+    # inte gick igenom: det senare syns (klienten säger det när `andrade` är
+    # tom), det förra upptäcks framför klassen.
+    if riktning is not None and res["errors"]:
+        res["exam"] = exam
+    return res
 
 
 def fix_latex(exam: dict, error_log: str, *, model: str,

@@ -3182,8 +3182,15 @@
        småtryck, så en formel står där två gånger. «Det står ett dollartecken
        mitt i raden» gäller den bilden och inte JSON-fältet, och utan den letade
        modellen efter ett tecken som aldrig fanns (llm_client.malrad). */
+    /* `el` är elementets id, och det går med av ett annat skäl än de tre
+       andra: namnet och texterna är till för PROMPTEN, men id:t är till för
+       SERVERN. Med det vet den vad önskemålet avgränsar och kan bygga svaret
+       som originalet plus ändringen av just den rutan (exam_gen.riktat_mal) —
+       i stället för att lita på att modellen håller promptens löfte om att
+       låta resten vara. Det gjorde den inte: «ta bort deluppgift b)» skrev om
+       alla fyra uppgifterna. */
     const mal = valt && valt.namn
-      ? { namn: valt.namn, innehall: valt.innehall || '',
+      ? { el: valt.el || '', namn: valt.namn, innehall: valt.innehall || '',
           renderat: valt.renderat || '' } : null;
     /* KÄLLORNA MÅSTE OCKSÅ MED. Genereringen skickar boken, urvalet och de
        uppslagna sidorna; omskrivningen skickade bara meningen, och därför kunde

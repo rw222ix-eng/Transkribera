@@ -157,6 +157,31 @@ def test_refine_som_inte_andrade_nagot_marker_ingenting(client, monkeypatch):
     assert res["andrade"] == []
 
 
+def test_riktad_omskrivning_slapper_bara_igenom_malet(client, monkeypatch):
+    """Hela vägen genom rutten, med den RIKTIGA sammanfogningen: modellen
+    skriver om alla uppgifter, servern släpper igenom en. Då blir `andrade`
+    ärlig av sig själv — den diffas mot det som faktiskt sparades."""
+    result, _ = _make_exam(client, monkeypatch)
+    allt_omskrivet = _exam_doc()
+    for i, u in enumerate(allt_omskrivet["uppgifter"], start=1):
+        u["text"] = f"På pizzerian säljs {i} pizzor. Beräkna intäkten."
+        u["losning"] = f"Svaret är {i}."
+    allt_omskrivet["titel"] = "Prov — Pizzor"
+    monkeypatch.setattr(exam_gen, "_llm_round",
+                        lambda *a, **k: copy.deepcopy(allt_omskrivet))
+
+    res = _done(client.post(f"/api/exams/{result['id']}/refine",
+                            json={"message": "ta bort deluppgift b)",
+                                  "nummer": 4,
+                                  "mal": {"el": "uppg4", "namn": "Uppgift 4"}}))
+    assert res["andrade"] == ["uppg4"]
+    assert res["exam"]["uppgifter"][3]["text"].startswith("På pizzerian")
+    assert res["exam"]["titel"] == _exam_doc()["titel"]
+    for i, u in enumerate(_exam_doc()["uppgifter"]):
+        if i != 3:
+            assert res["exam"]["uppgifter"][i] == u
+
+
 def test_refine_requires_message(client, monkeypatch):
     result, _ = _make_exam(client, monkeypatch)
     assert client.post(f"/api/exams/{result['id']}/refine",

@@ -1385,6 +1385,142 @@ def test_refine_exam_bar_elementet_som_inte_ar_en_uppgift():
     assert "PEKADE PÅ" not in calls[1]["prompt"]
 
 
+# ── Riktad omskrivning: servern håller promptens löfte ─────────────────────
+#
+# Skarpa fallet: läraren pekade på uppgift D och bad «ta bort deluppgift b)».
+# Modellen skrev om alla fyra uppgifterna och bytte sammanhanget (bygg → pizza)
+# trots promptens «Övriga uppgifter lämnas oförändrade». Hon fick ångra allt.
+# Sviten nedan låser att SERVERN håller löftet, inte prompten.
+
+def _skriv_om_allt(**topp) -> dict:
+    """Kandidaten som modellen «råkade» svara med: varje uppgift utbytt mot ett
+    annat sammanhang, och toppfälten med."""
+    d = _exam()
+    for i, u in enumerate(d["uppgifter"], start=1):
+        u["text"] = f"På pizzerian säljs {i} pizzor. Beräkna intäkten."
+        u["losning"] = f"Svaret är {i}."
+        u["bedomning"] = "Rätt svar ger poängen."
+    d.update({"titel": "Prov — Pizzor", "instruktion": "Arbeta i par.",
+              "hjalpmedel": "Inga hjälpmedel.", "tid_min": 60})
+    d.update(topp)
+    return d
+
+
+def test_riktad_omskrivning_ror_bara_maluppgiften():
+    """Kandidatens uppgift N skrivs in i originalet; övriga uppgifter tas
+    ORDAGRANT ur originalet, hur mycket modellen än skrev om dem."""
+    llm, _calls = _stub_llm([json.dumps(_skriv_om_allt())])
+    fore = _exam()
+    res = exam_gen.refine_exam(fore, "ta bort deluppgift b)", nummer=4,
+                               model="m", llm=llm)
+    assert res["errors"] == []
+    efter = res["exam"]
+    assert efter["uppgifter"][3]["text"].startswith("På pizzerian")
+    for i, u in enumerate(fore["uppgifter"]):
+        if i != 3:
+            assert efter["uppgifter"][i] == u, f"uppgift {i + 1} rördes"
+    # Toppfälten hör inte till en uppgift och står kvar.
+    assert efter["titel"] == fore["titel"]
+    assert efter["hjalpmedel"] == fore["hjalpmedel"]
+
+
+def test_riktat_falt_ror_inte_uppgifterna():
+    """Pekar läraren på instruktionsbandet är det bandet som ändras — inte
+    uppgifterna, inte hjälpmedelsregeln (den är provtabellens fält)."""
+    llm, _calls = _stub_llm([json.dumps(
+        _skriv_om_allt(instruktion="Läs tillsammans först.",
+                       nyckelfraga="Var sitter den okända?"))])
+    fore = _exam()
+    res = exam_gen.refine_exam(fore, "skriv om den", model="m", llm=llm,
+                               mal={"el": "instr", "namn": "Instruktionen"})
+    efter = res["exam"]
+    assert efter["instruktion"] == "Läs tillsammans först."
+    assert efter["nyckelfraga"] == "Var sitter den okända?"
+    assert efter["uppgifter"] == fore["uppgifter"]
+    assert efter["titel"] == fore["titel"]
+    assert efter["hjalpmedel"] == fore["hjalpmedel"]
+    assert efter["tid_min"] == fore["tid_min"]
+
+
+def test_riktad_rubrik_byter_bara_titeln():
+    """Sidhuvudet visar kurs, klass och datum också — men de är lärarens val,
+    inte modellens, och ett önskemål om rubriken får inte döpa om klassen."""
+    llm, _calls = _stub_llm([json.dumps(
+        _skriv_om_allt(titel="Prov — Pizzor", klass="XX99", datum="2026-01-01"))])
+    fore = _exam()
+    res = exam_gen.refine_exam(fore, "kortare rubrik", model="m", llm=llm,
+                               mal={"el": "rubrik", "namn": "Sidhuvudet"})
+    assert res["exam"]["titel"] == "Prov — Pizzor"
+    assert res["exam"]["klass"] == fore["klass"]
+    assert res["exam"]["datum"] == fore["datum"]
+    assert res["exam"]["uppgifter"] == fore["uppgifter"]
+
+
+def test_utan_mal_ar_hela_dokumentet_spelplanen():
+    """«Gör hela provet lättare» ska få röra allt — och då VET läraren det."""
+    kandidat = _skriv_om_allt()
+    llm, _calls = _stub_llm([json.dumps(kandidat)])
+    res = exam_gen.refine_exam(_exam(), "gör hela provet lättare",
+                               model="m", llm=llm)
+    assert res["exam"]["uppgifter"] == kandidat["uppgifter"]
+    assert res["exam"]["titel"] == "Prov — Pizzor"
+
+
+def test_omalat_element_ar_ocksa_hela_dokumentet():
+    """Betygsgränserna räknas ur poängen och går bara att flytta genom att
+    uppgifterna ändras — de avgränsar alltså inget fält."""
+    kandidat = _skriv_om_allt()
+    llm, _calls = _stub_llm([json.dumps(kandidat)])
+    res = exam_gen.refine_exam(_exam(), "höj gränsen för C", model="m", llm=llm,
+                               mal={"el": "avtal1", "namn": "Betygsgränserna"})
+    assert res["exam"]["uppgifter"] == kandidat["uppgifter"]
+
+
+def test_reparationsrundan_far_ocksa_bara_rora_malet():
+    """Rättningsrundan är också en omskrivning av hela dokumentet. Utan samma
+    grind smiter det förbjudna in i runda två — den runda läraren aldrig ser."""
+    trasig = _skriv_om_allt()
+    trasig["uppgifter"][3]["poang"] = [99, 0, 0]        # spräcker balansen
+    llm, calls = _stub_llm([json.dumps(trasig),
+                            json.dumps(_skriv_om_allt())])
+    fore = _exam()
+    res = exam_gen.refine_exam(fore, "gör den svårare", nummer=4,
+                               model="m", llm=llm)
+    assert len(calls) == 2, "reparationsrundan kördes inte"
+    assert res["errors"] == []
+    for i, u in enumerate(fore["uppgifter"]):
+        if i != 3:
+            assert res["exam"]["uppgifter"][i] == u, f"uppgift {i + 1} rördes"
+
+
+def test_malet_som_inte_gar_igenom_ger_originalet_tillbaka():
+    """Går målets ändring inte att validera ens efter reparation lämnas
+    ORIGINALET tillbaka med felen kvar. Ett halvt genomfört önskemål på ett
+    papper läraren tror är helt upptäcks först framför klassen."""
+    trasig = _skriv_om_allt()
+    trasig["uppgifter"][3]["poang"] = [99, 0, 0]
+    llm, _calls = _stub_llm([json.dumps(trasig)])
+    fore = _exam()
+    res = exam_gen.refine_exam(fore, "gör den svårare", nummer=4,
+                               model="m", llm=llm)
+    assert res["errors"], "felen ska redovisas"
+    assert res["exam"] == fore
+
+
+def test_svar_utan_maluppgiften_ror_ingenting():
+    """Bär svaret ingen uppgift 4 finns målet inte i det — och då är originalet
+    svaret, med skälet skrivet."""
+    kort = _exam()
+    kort["uppgifter"] = kort["uppgifter"][:2]
+    llm, _calls = _stub_llm([json.dumps(kort)])
+    fore = _exam()
+    res = exam_gen.refine_exam(fore, "gör den svårare", nummer=4,
+                               model="m", llm=llm)
+    assert res["exam"] == fore
+    assert res["errors"][0]["code"] == "mal"
+    assert "uppgift 4" in res["errors"][0]["message"]
+
+
 def test_fix_latex_rounds_cap():
     llm, calls = _stub_llm([json.dumps(_exam())])
     res = exam_gen.fix_latex(_exam(), "! Missing $ inserted.", model="m", llm=llm)
