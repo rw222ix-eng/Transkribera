@@ -372,6 +372,26 @@ class ExamDoc(_Model):
     # stället för en, fetstilta i en liten ruta överst på pappret. Rutan är det
     # gruppen läser när de fastnar; blir den ett stycke läses den inte alls.
     nyckelfraga: str | None = Field(default=None, max_length=240)
+    # INSTRUKTIONSBANDET, och det är dokumentets — inte appens.
+    #
+    # Rutan överst på arbetsbladet och gruppuppgiften («Läs uppgiften
+    # tillsammans …», «Redovisas skriftligt: ett gemensamt svar per grupp
+    # lämnas in vid lektionens slut.») var en HÅRDKODAD mall i två halvor:
+    # blad-bygg.js BAND per dokumenttyp, plus redovisningslöftet som blad.js
+    # grupphuvud klistrade på ur inställningen. Läraren pekade på rutan i
+    # canvas och bad att sista meningen skulle bort; modellen svarade att det
+    # var gjort, och rutan stod kvar — texten fanns inte i dokumentets JSON, så
+    # det fanns ingenting att skriva om. Nu bor den här, och då kan den ändras.
+    #
+    # TOMT betyder «appens mall gäller», inte «tomt band». Alla papper som
+    # sparades innan fältet fanns ska se likadana ut som förut, så renderarna
+    # (blad-bygg.js ark, exam_latex._grupp_vy) faller tillbaka på mallen när
+    # fältet är tomt — ingen migrering av gamla dokument.
+    #
+    # Taket rymmer bandets två meningar plus redovisningslöftet med marginal.
+    # Nyckelfrågan står KVAR i sitt eget fält och sätts fet efter bandet: den är
+    # momentets metodregel och ska kunna bytas utan att arbetsregeln rörs.
+    instruktion: str | None = Field(default=None, max_length=600)
     # Bara gruppuppgiften har den; prov och arbetsblad lämnar den tom.
     grupp: GruppUpplagg | None = None
     uppgifter: list[ExamItem] = Field(min_length=1)

@@ -209,6 +209,68 @@ def test_utan_nyckelfraga_star_bandet_som_forut():
     assert r"\textbf{" not in tex.split(r"\notisruta{")[1].split("}")[0]
 
 
+# ── INSTRUKTIONSBANDET ÄR DOKUMENTETS ────────────────────────────────────────
+# Läraren pekade på rutan i canvas och skrev att «ett gemensamt svar per grupp
+# lämnas in vid lektionens slut» skulle bort. Ingenting hände på pappret —
+# rutan var en hårdkodad mall (blad-bygg.js BAND + blad.js grupphuvud) och stod
+# inte i dokumentets JSON, så det fanns ingenting att skriva om. Panelen svarade
+# ändå att det var gjort. Testerna nedan låser båda halvorna av rättelsen:
+# fältet finns, och den gamla mallen är kvar som reserv för gamla papper.
+
+def test_bandet_kommer_ur_dokumentet_nar_det_ar_ifyllt():
+    eget = ("Läs uppgiften tillsammans innan ni börjar räkna. Bestäm vem som "
+            "skriver.")
+    doc, fel = exam_spec.validate_exam_json(_doc(instruktion=eget),
+                                            "gruppuppgift")
+    assert doc is not None, fel
+    tex = exam_latex.render_gruppuppgift(doc)
+    band = tex.split(r"\notisruta{")[1].split("}")[0]
+    assert "Bestäm vem som skriver" in band
+    # Och löftet läraren strök kommer INTE tillbaka ur mallen.
+    assert "sätts upp i salen" not in band
+
+
+def test_tomt_falt_ger_appens_mall_som_forut():
+    """Ingen migrering av gamla papper: ett dokument utan fältet ska se
+    likadant ut som innan fältet fanns."""
+    doc, _ = exam_spec.validate_exam_json(_doc(), "gruppuppgift")
+    assert doc.instruktion is None
+    band = exam_latex.render_gruppuppgift(doc).split(r"\notisruta{")[1]
+    assert "Alla i gruppen ska kunna förklara" in band
+    assert "sätts upp i salen" in band
+
+
+def test_nyckelfragan_star_kvar_efter_lararens_eget_band():
+    """De två fälten delar bandet men inte varandra: arbetsregeln kan skrivas
+    om utan att metodregeln rörs, och tvärtom."""
+    doc, fel = exam_spec.validate_exam_json(
+        _doc(instruktion="Arbeta två och två.",
+             nyckelfraga="Var sitter den okända?"), "gruppuppgift")
+    assert doc is not None, fel
+    band = exam_latex.render_gruppuppgift(doc).split(r"\notisruta{")[1]
+    assert band.index("Arbeta två och två") < band.index("Var sitter")
+
+
+def test_prompten_ber_om_bandet_med_redovisningsloftet():
+    p = exam_gen.build_prompt(
+        "Matematik, nivå 1a", "BA26B", ["Tal"], antal=4,
+        profil="gruppuppgift",
+        grupp={"elever": 3, "langd_min": 45, "redovisning": "skriftligt"})
+    assert '"instruktion"' in p
+    assert "lämnas in vid lektionens slut" in p
+
+
+def test_omskrivningen_far_veta_att_bandet_finns():
+    """Det avgörande fallet. build_refine_prompt bär BARA INSTRUCTION — stod
+    fältregeln i uppdragsblocket kunde modellen skriva rutan när dokumentet
+    föddes men aldrig ändra den efteråt, vilket är precis vad läraren bad om."""
+    p = exam_gen.build_refine_prompt(
+        {"titel": "Gruppuppgift", "uppgifter": []},
+        "ta bort meningen om att svaret lämnas in")
+    assert "- instruktion:" in p
+    assert "HELA bandets text" in p
+
+
 def test_uppgifterna_heter_bokstaver_inte_siffror():
     doc, _ = exam_spec.validate_exam_json(_doc(), "gruppuppgift")
     tex = exam_latex.render_gruppuppgift(doc)

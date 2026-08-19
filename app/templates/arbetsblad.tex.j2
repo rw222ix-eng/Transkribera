@@ -22,8 +22,14 @@
     facit» är ju att läraren behåller lösningarna — bar bladet dem ändå på
     sista sidan fick eleverna dem dubbelt, och valet i planeringen var tomt. #))
 ((* if not only_facit *))
+((# Instruktionsbandet är DOKUMENTETS när det är ifyllt (exam_spec
+    .instruktion) — samma regel som gruppuppgiftens notisruta och som skärmen
+    (blad-bygg.js ark). Skrev läraren om rutan i granskningen ska hennes text
+    stå här; tomt fält ger raden som förut. Facit-löftet står kvar i båda
+    grenarna: det är papprets eget besked om var lösningarna hamnar, inte en
+    del av arbetsregeln, och det ska inte kunna skrivas bort av misstag. #))
 \vspace{4mm}
-{\small Öva i egen takt — uppgifterna blir svårare längre ner. ((* if utan_facit *))Facit delas ut separat((* else *))Facit finns
+{\small ((* if instruktion *))((( instruktion )))((* else *))Öva i egen takt — uppgifterna blir svårare längre ner.((* endif *)) ((* if utan_facit *))Facit delas ut separat((* else *))Facit finns
 på sista sidan((* endif *))((* if visa_poang *)); poäng anges som totalpoäng((* endif *)).}
 
 \vspace{4mm}

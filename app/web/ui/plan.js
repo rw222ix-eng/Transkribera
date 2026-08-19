@@ -2471,6 +2471,10 @@
           /* Nyckelfrågan står i instruktionsbandet — samma text på skärmen som
              i PDF:en, annars lovar pappret och skärmen gruppen olika saker. */
           utkast.nyckelfraga = res.exam.nyckelfraga || null;
+          /* Instruktionsbandet är dokumentets, inte appens (exam_spec
+             .instruktion). Följer det inte med hit ritas mallen, och då är
+             rutan oåtkomlig för granskningen igen. */
+          utkast.instruktion = res.exam.instruktion || null;
           /* Diagnosen skrevs för att RYMMAS på en lektion, och det var servern
              som bestämde antalet uppgifter. Då är tiden det första läraren vill
              veta — och den ska stå kvar när statusraden är borta, så den blir en
@@ -3121,6 +3125,11 @@
       v.summor = res.summor || v.summor || null;
       v.provFel = res.errors || [];
       v.nyckelfraga = res.exam.nyckelfraga || v.nyckelfraga || null;
+      /* Samma reserv som nyckelfrågan: skrev modellen inget band i det här
+         varvet står det förra kvar. Utan reserven hade en omskrivning som
+         tappade fältet lämnat tillbaka appens mall — och den mening läraren
+         strök hade stått där igen. */
+      v.instruktion = res.exam.instruktion || v.instruktion || null;
     }
     versioner = versioner.slice(0, nu + 1).concat([v]);
     visa(versioner.length - 1);

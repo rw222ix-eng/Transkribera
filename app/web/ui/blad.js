@@ -367,7 +367,16 @@ window.Blad = (() => {
       const mall = topp && $('.gurad', topp);
       const band = $('.guband', gu);
       const hur = HUR[i.redovisning] || HUR.Muntligt;
-      if (band && !/redovisas/i.test(band.textContent)) band.insertAdjacentHTML('beforeend', ` ${hur}`);
+      /* `data-egen` betyder att DOKUMENTET skrev bandet (exam_spec.instruktion,
+         satt i blad-bygg ark) — och då klistrar vi ingenting på det. Läraren
+         strök «ett gemensamt svar per grupp lämnas in vid lektionens slut» ur
+         rutan; klistrades löftet på igen stod meningen där, hur rätt modellen
+         än hade svarat. Vakten `/redovisas/i` nedan gäller fortfarande
+         mallbandet, som inte bär löftet förrän vi lagt dit det. */
+      if (band && !band.hasAttribute('data-egen')
+          && !/redovisas/i.test(band.textContent)) {
+        band.insertAdjacentHTML('beforeend', ` ${hur}`);
+      }
       if (!topp || !mall) return;
       let rader = $$('.gurad', topp);
       while (rader.length > n) { rader.pop().remove(); }
@@ -437,9 +446,25 @@ window.Blad = (() => {
     $$('.gutopp', rot).forEach(el => salt(el, 'namn', 'Namnraderna'));
     $$('.prmeta, .prbetyg', rot).forEach((el, n) => salt(el, 'avtal' + n, n ? 'Betygsgränserna' : 'Provtabellen'));
     $$('.prforsatt', rot).forEach(el => salt(el, 'forsatt', 'Bilden på försättsbladet'));
+    /* FACITETS POSTER RÄKNAS I BOKSTÄVER. Arbetsbladets och gruppuppgiftens
+       facit numrerar med A, B, C (blad-bygg arkfacit) — provet med siffror.
+       parseInt('A.2 p') är NaN, så facitposterna fick INGET data-el alls: de
+       gick inte att peka på i granskningen, och pekade läraren ändå (via
+       bladet) skickades ingen `nummer`-låsning till /refine, för den läses ur
+       id:t (plan.js iterationsJobb). Bokstaven är uppgiftens ordning — samma
+       BOKSTAV-serie som .gukort — så D är uppgift 4, och en ändring i facit D
+       låser omskrivningen till samma uppgift som ett klick på kortet D.
+
+       Ligger facit i samma blad som uppgifterna («Facit i bladet») bär BÅDA
+       noderna samma id. Det är avsiktligt: de är samma uppgift sedd från två
+       håll, och en omskrivning som rör den ska märkas på båda. */
     $$('.pruppg', rot).forEach(el => {
-      const nr = parseInt(($('.prnr', el) || {}).textContent || '', 10);
-      if (nr) salt(el, 'uppg' + nr, 'Uppgift ' + nr);
+      const rad = ($('.prnr', el) || {}).textContent || '';
+      const nr = parseInt(rad, 10);
+      if (nr) return salt(el, 'uppg' + nr, 'Uppgift ' + nr);
+      const b = (rad.trim()[0] || '').toUpperCase();
+      const k = BOKSTAV.indexOf(b);
+      if (k >= 0) salt(el, 'uppg' + (k + 1), 'Facit ' + b);
     });
     $$('.gukort', rot).forEach((el, n) => {
       const b = ($('.gubricka', el) || {}).textContent || BOKSTAV[n];

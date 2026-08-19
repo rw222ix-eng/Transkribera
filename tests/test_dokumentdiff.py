@@ -56,6 +56,18 @@ def test_gruppuppgiftens_arbetsregel_och_namnrader():
     assert dd.andrade_element("gruppuppgift", fore, efter) == ["instr", "namn"]
 
 
+def test_bandtexten_ar_instruktionen():
+    """Läraren pekade på instruktionsrutan och bad att en mening skulle bort.
+    Rutan var appens mall och fanns inte i JSON:en — nu gör den det
+    (exam_spec.ExamDoc.instruktion), och ändras den ska nålen sitta på
+    bandet."""
+    fore = _prov("a") | {"instruktion": "Läs uppgiften tillsammans. "
+                                        "Redovisas skriftligt: ett gemensamt "
+                                        "svar lämnas in vid lektionens slut."}
+    efter = _prov("a") | {"instruktion": "Läs uppgiften tillsammans."}
+    assert dd.andrade_element("gruppuppgift", fore, efter) == ["instr"]
+
+
 def test_arbetsblad_diffas_som_prov():
     assert dd.andrade_element("arbetsblad", _prov("a"), _prov("b")) == ["uppg1"]
 

@@ -40,9 +40,22 @@ SYSTEM = (
 
 INSTRUCTION = (
     "Skriv ett matteprov som JSON enligt schemat. Dokumentets egna fält är "
-    "titel, kurs, klass, datum, tid_minuter, hjalpmedel och uppgifter — "
+    "titel, kurs, klass, datum, tid_minuter, hjalpmedel, instruktion och "
+    "uppgifter — "
     "hjalpmedel KRÄVS (t.ex. \"Formelblad och digitala verktyg\"), och lägg "
     "inte till egna toppnycklar. Fältregler:\n"
+    # Bandet står i INSTRUCTION och inte bara i uppdragsblocken, och det är
+    # hela poängen: omskrivningen (build_refine_prompt) får BARA den här texten
+    # med sig. Stod regeln i gruppuppgiftens uppdrag kunde modellen skriva
+    # rutan när dokumentet föddes men aldrig ändra den efteråt — och det var
+    # just det läraren bad om när hon strök en mening ur rutan.
+    "- instruktion: instruktionsbandet överst på arbetsbladet, gruppuppgiften "
+    "eller diagnosen — den grå rutan som säger HUR eleverna ska arbeta (läsa "
+    "tillsammans, skriva svaret på svarsraden, hur det redovisas), aldrig vad "
+    "uppgifterna handlar om. Två till tre korta meningar. Är fältet tomt sätter "
+    "appen sin egen standardtext; ber läraren om en ändring i rutan skriver du "
+    "HELA bandets text i fältet, med hennes ändring införd. Provet har inget "
+    "band — där lämnas fältet tomt, dess motsvarighet är hjalpmedel.\n"
     "- del: \"B\" (utan räknare), \"C\" eller \"D\" (med räknare) — eller null "
     "om provet saknar delar.\n"
     "- formaga: primär förmåga per uppgift — B Begrepp, P Procedur, "
@@ -507,6 +520,15 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
             "kommer i mål är den fel skriven, och är den lika lätt som den "
             "första finns ingen stegring.\n"
             f"{FORLAGA_GRUPP}\n"
+            # Bandet är dokumentets från och med nu (exam_spec.instruktion).
+            # Skrivs det inte här får pappret appens mall, och då är rutan
+            # oåtkomlig för läraren: hon kan peka på den i granskningen, men
+            # det finns ingen text i JSON:en att skriva om.
+            "Skriv instruktionsbandet i fältet \"instruktion\": arbetsregeln "
+            "först — läs uppgiften tillsammans, bestäm vem som skriver, alla i "
+            "gruppen ska kunna förklara lösningen efteråt — och sedan "
+            f"redovisningslöftet ordagrant: \"{REDOV.get(red, REDOV['muntligt'])}\" "
+            "Skriv inte nyckelfrågan där; den har ett eget fält.\n"
             "Inga delar (del: null på alla uppgifter). Fyll fältet \"grupp\" "
             f"med elever={n}, langd_min={min_}, redovisning=\"{red}\". "
             # Inspelningen skrev «tid_minuter» bredvid grupp — ett fält som
@@ -563,6 +585,12 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
             "alla sex förmågor ska vägas lika, och en kommunikationsuppgift på "
             "ett arbetsblad är «förklara med ord varför …» i drillformat, inte "
             "en uppsats. Inga delar behövs (del: null på alla uppgifter). "
+            # Samma skäl som på gruppuppgiften: rutan måste stå i dokumentet
+            # för att kunna ändras (exam_spec.instruktion).
+            "Skriv instruktionsbandet i fältet \"instruktion\": svaret skrivs "
+            "på svarsraden, de uppgifter som ska redovisas är märkta och "
+            "uppgiftens bokstav skrivs överst på lösbladet, och räkningen ska "
+            "visas — inte bara svaret. "
             "Lösningsförslagen blir facit, och facit ska vara kort: svaret och på sin höjd ett par led. Svara med enbart JSON.")
         # «Stigande svårighet» stod här förut, och det är en instruktion utan
         # skala: svårare ÄN VAD? Nu följer skalan med — bokens egen när läraren
@@ -954,7 +982,19 @@ def build_refine_prompt(exam: dict, instruction: str,
         "uppgifter lämnas oförändrade. Ändrar du en uppgifts text eller tal "
         "ska uppgiftens losning, bedomning och deluppgifternas lösningar "
         "skrivas om så att de stämmer med den nya lydelsen — facit får aldrig "
-        "beskriva en tidigare version av uppgiften. Svara med enbart JSON."
+        "beskriva en tidigare version av uppgiften. "
+        # Och åt ANDRA hållet, som är lärarens egna ord: «Om jag ändrar något i
+        # facit så ska uppgiften också ändras. Exempelvis om jag efterfrågar
+        # att det ska vara enklare, mindre tal, och svaret ska bli ett heltal —
+        # då bör uppgiften också reflektera det.» Hon pekar på facitposten och
+        # beskriver SVARET, för det är svaret hon har framför sig; men det som
+        # bestämmer svaret är uppgiftens tal. Skrevs bara facit om räknade det
+        # på andra tal än uppgiften, och då är facit värre än inget.
+        "Det gäller åt BÅDA håll: gäller önskemålet lösningen eller facit "
+        "(enklare tal, ett heltal som svar, en annan metod) ska uppgiftens "
+        "text och TAL ändras så att de ger just det — uppgift och facit är "
+        "samma sak sedd från två håll, och ett facit som räknar på andra tal "
+        "än uppgiften är värre än inget facit alls. Svara med enbart JSON."
     )
 
 
@@ -1005,7 +1045,9 @@ def _rensa_toppnycklar(exam: dict | None) -> dict | None:
     Sedan schemat flyttade in i PROMPTEN (app/claude_code.SCHEMA_TAK — det får
     inte plats på kommandoraden) finns inget grammatiktvång kvar, och modellen
     lägger gärna till fält den tycker hör hemma på ett prov: `totalpoang`,
-    `instruktion`, `tid_minuter`. Schemat förbjuder extra fält, så ETT sådant
+    `tid_minuter`. (`instruktion` stod i den listan och städades bort — då ägde
+    appen instruktionsbandet. Nu är det ett riktigt fält i ExamDoc och
+    passerar.) Schemat förbjuder extra fält, så ETT sådant
     ord kostade en hel reparationsrunda — en ny 12 000-token-generering för att
     ta bort tre rader appen ändå räknar ut själv (observerat i en skarp
     inspelning, tests/kassetter/prov.json).

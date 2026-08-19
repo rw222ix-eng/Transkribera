@@ -973,6 +973,37 @@ def test_arbetsblad_facit_har_deluppgifternas_losningar():
     assert "Facit" in tex
 
 
+def test_arbetsbladets_instruktionsband_ar_dokumentets():
+    """Skärmen och pappret får inte lova olika saker: skriver läraren om
+    instruktionsrutan i granskningen (exam_spec.instruktion) ska HENNES text
+    stå på arket, inte mallens rad. Facit-löftet står kvar i båda fallen — det
+    är papprets besked om var lösningarna hamnar, inte en arbetsregel."""
+    data = _exam()
+    data["instruktion"] = "Arbeta i par. Skriv svaret på svarsraden."
+    doc, fel = exam_spec.validate_exam_json(data)
+    assert doc is not None, fel
+    tex = exam_latex.render_arbetsblad(doc)
+    assert "Arbeta i par." in tex
+    assert "Öva i egen takt" not in tex
+    assert "Facit finns" in tex
+    # Tomt fält → raden som förut, för alla papper som skrevs innan fältet fanns.
+    utan, _ = exam_spec.validate_exam_json(_exam())
+    assert "Öva i egen takt" in exam_latex.render_arbetsblad(utan)
+
+
+def test_omskrivningen_haller_ihop_uppgift_och_facit_at_bada_hall():
+    """Lärarens ord: «Om jag ändrar något i facit så ska uppgiften också
+    ändras … enklare, mindre tal, och svaret ska bli ett heltal.» Hon pekar på
+    facitposten och beskriver SVARET — men det är uppgiftens tal som bestämmer
+    svaret, och ett facit som räknar på andra tal än uppgiften är värre än
+    inget."""
+    p = exam_gen.build_refine_prompt({"titel": "Prov", "uppgifter": []},
+                                     "gör talen mindre så svaret blir ett heltal")
+    assert "facit får aldrig beskriva en tidigare version" in p   # uppgift→facit
+    assert "BÅDA håll" in p                                       # facit→uppgift
+    assert "text och TAL ändras" in p
+
+
 def test_bedomning_platt_oforandrad():
     doc, _ = exam_spec.validate_exam_json(_exam())
     tex = exam_latex.render_bedomning(doc)

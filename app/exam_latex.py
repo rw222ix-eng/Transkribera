@@ -319,7 +319,13 @@ def _build_view(doc: exam_spec.ExamDoc,
         # klartext och instruktionsbandet är samma texter som webbversionen
         # skriver (app/web/ui/blad.js, grupphuvud) — ett papper och en skärm
         # ska inte lova gruppen olika saker.
-        "grupp": _grupp_vy(doc.grupp, doc.nyckelfraga),
+        "grupp": _grupp_vy(doc.grupp, doc.nyckelfraga, doc.instruktion),
+        # Arbetsbladets band. Mallen har ingen notisruta utan en liten rad
+        # («Öva i egen takt …») — skriver läraren om bandet i granskningen är
+        # det HENNES text som ska stå där, annars lovar pappret och skärmen
+        # olika saker. Tomt fält → raden som förut.
+        "instruktion": (escape_mixed(doc.instruktion.strip())
+                        if (doc.instruktion or "").strip() else None),
     }
 
 
@@ -340,18 +346,26 @@ _GRUPPBAND = ("Läs uppgiften tillsammans innan ni börjar räkna. Bestäm vem s
               "skriver. Alla i gruppen ska kunna förklara lösningen efteråt.")
 
 
-def _grupp_vy(grupp, nyckelfraga: str | None = None) -> dict | None:
+def _grupp_vy(grupp, nyckelfraga: str | None = None,
+              instruktion: str | None = None) -> dict | None:
     """Gruppens villkor + instruktionsbandet.
 
     Bandet bär TVÅ saker och i den ordningen: arbetsregeln (hur gruppen jobbar,
     samma text som skärmen skriver) och sedan metodregeln som en fråga —
     lärarens nyckelfråga för just det här momentet. Den är momentets, inte
     appens, så den kommer från dokumentet; saknas den står bandet som förut.
-    Frågan sätts fet: det är den som ska läsas först när gruppen fastnar."""
+    Frågan sätts fet: det är den som ska läsas först när gruppen fastnar.
+
+    ARBETSREGELN kommer numera också ur dokumentet (`instruktion`). Mallen
+    nedan är reserven för papper som skrevs innan fältet fanns — annars säger
+    PDF:en en sak och skärmen en annan, och det är den värsta sortens skillnad:
+    läraren stryker en mening i granskningen, ser den försvinna på skärmen och
+    delar sedan ut ett papper där den står kvar."""
     if grupp is None:
         return None
     red = grupp.redovisning
-    band = escape_latex(f"{_GRUPPBAND} {_REDOVISNING_HUR[red]}")
+    band = (escape_mixed(instruktion.strip()) if (instruktion or "").strip()
+            else escape_latex(f"{_GRUPPBAND} {_REDOVISNING_HUR[red]}"))
     if nyckelfraga:
         band += r" \textbf{" + escape_mixed(nyckelfraga) + "}"
     return {

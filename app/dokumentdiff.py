@@ -75,10 +75,13 @@ def _prov(fore: dict, efter: dict) -> list[str]:
     if _falt(fore, efter, ("titel", "kurs", "klass", "elev", "datum", "tid_min")):
         ut.append("rubrik")
     # Instruktionsbandet bär hjälpmedlen och — på gruppuppgiften — nyckelfrågan
-    # och arbetsregeln (längd + redovisningsform).
+    # och arbetsregeln (längd + redovisningsform). `instruktion` är själva
+    # bandtexten sedan dokumentet äger rutan (exam_spec.ExamDoc): utan den här
+    # raden ändrades bandet på pappret utan att någon nål pekade på det, och
+    # panelen kunde inte säga vad som hänt.
     grupp_f = fore.get("grupp") or {}
     grupp_e = efter.get("grupp") or {}
-    if (_falt(fore, efter, ("hjalpmedel", "nyckelfraga"))
+    if (_falt(fore, efter, ("hjalpmedel", "nyckelfraga", "instruktion"))
             or _falt(grupp_f, grupp_e, ("langd_min", "redovisning"))):
         ut.append("instr")
     if _falt(grupp_f, grupp_e, ("elever",)):

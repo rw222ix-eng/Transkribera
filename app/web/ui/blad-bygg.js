@@ -228,7 +228,15 @@ window.BladBygg = (() => {
   }
 
   /* Instruktionsbandet säger hur man arbetar — inte vad uppgifterna handlar om.
-     Det står i uppgifterna. */
+     Det står i uppgifterna.
+
+     MALLEN ÄR RESERVEN, INTE SANNINGEN. Texterna nedan var hela bandet en
+     gång, och då var rutan appens: läraren pekade på den i granskningen, bad
+     att en mening skulle bort, och ingenting hände på pappret — det fanns
+     ingen text i dokumentets JSON att skriva om. Nu äger dokumentet bandet
+     (exam_spec.instruktion), och de här texterna gäller bara när fältet är
+     tomt: gamla papper, prototypens egna och allt som skrevs innan fältet
+     fanns ska se likadana ut som förut. */
   const BAND = {
     Arbetsblad: 'Skriv svaret på svarsraden där det står «Svar». De uppgifter som ska redovisas är märkta — skriv uppgiftens bokstav överst på lösbladet. Visa hur du räknar, inte bara svaret.',
     Gruppuppgift: 'Läs uppgiften tillsammans innan ni börjar räkna. Bestäm vem som skriver. Alla i gruppen ska kunna förklara lösningen efteråt.',
@@ -259,6 +267,11 @@ window.BladBygg = (() => {
        som är satt för ETT figurtungt blad och spiller när tabellen läggs till.
        Samma sorts fel som «ab» var — en form som fanns i stilbladet men inte i
        nyckeln. */
+    /* Dokumentets eget band vinner. Nyckelfrågan står KVAR som eget fält och
+       sätts fet efter texten — den är momentets metodregel, och läraren ska
+       kunna byta den utan att röra arbetsregeln (samma delning som i PDF:en,
+       exam_latex._grupp_vy). */
+    const bandtext = (v.instruktion || '').trim();
     const harFigur = uppgifter.some(u => u && u.fig);
     const harSteg = uppgifter.some(u => u && u.stegtabell);
     const form = grupp ? 'gu' : (harFigur && harSteg ? 'gu6' : harFigur ? 'gu2' : 'gu1');
@@ -272,7 +285,12 @@ window.BladBygg = (() => {
       ${/* Nyckelfrågan bär ofta matematik ($x = -b/(2a)$) — den ska sättas,
              inte visas som dollartecken. Pappret gör det (escape_mixed), och
              skärmen ska lova gruppen samma sak. */''}
-      <div class="guband">${esc(BAND[v.typ] || BAND.Arbetsblad)}${
+      ${/* `data-egen` är ÄGARSKAPSTECKNET, och det behövs: blad.js grupphuvud
+             klistrar annars på redovisningslöftet en gång till, och den mening
+             läraren just strukit ur bandet kommer tillbaka. Vakten där var
+             `/redovisas/i` — den räcker inte, för ett band hon skrivit om kan
+             mycket väl sakna ordet. */''}
+      <div class="guband"${bandtext ? ' data-egen' : ''}>${esc(bandtext || BAND[v.typ] || BAND.Arbetsblad)}${
         v.nyckelfraga ? ` <b>${mat(v.nyckelfraga)}</b>` : ''}</div>
       ${uppgifter.map((u, k) => kort(u, k, !!i.illustration)).join('')}
     </div>`;
