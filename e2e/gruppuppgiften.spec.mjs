@@ -306,13 +306,13 @@ const exam = (extra = {}) => ({
   ...extra,
 });
 
-async function fejkaRefine(page, { doc, andrade }) {
+async function fejkaRefine(page, { doc, andrade, errors }) {
   const anrop = [];
   await page.route("**/api/exams/**", route => {
     const vag = new URL(route.request().url()).pathname;
     if (!vag.endsWith("/refine")) return route.continue();
     anrop.push(route.request().postDataJSON());
-    const klar = { id: 12, exam: doc, errors: [], rounds: 1 };
+    const klar = { id: 12, exam: doc, errors: errors || [], rounds: 1 };
     if (andrade) klar.andrade = andrade;
     return route.fulfill({ status: 200, contentType: "text/event-stream",
                            body: strom([{ type: "done", result: klar }]) });
@@ -448,6 +448,87 @@ test("dokumentets titel står på arket — och på fortsättningsbladet",
     // Stämpelraden på blad två läser första bladets rubrik och följer med.
     await expect(page.locator("#arkskal .gufortstitel").first())
       .toHaveText("Repetition inför provet");
+  });
+
+test("en begäran servern inte kan gå med på får sitt skäl", async ({ page }) => {
+  /* Reparationsloopen validerar varje varv: «ta bort poängen» faller på regeln
+     att varje uppgift måste ge minst en poäng, dokumentet lämnas orört och
+     `andrade` blir tom. «Ingenting ändrades» är sant men till ingen hjälp —
+     läraren vet inte om modellen missförstod henne eller om det var förbjudet,
+     och det avgör om hon ska skriva om meningen eller släppa det. */
+  await fejkaRefine(page, {
+    doc: exam(), andrade: [],
+    errors: [{ path: "uppgifter[0]", code: "poang",
+               message: "Uppgiften har 0 poäng — ge minst 1 poäng." }] });
+  await iCanvas(page, papper({ inst: skriftligt }));
+
+  await pekaPa(page, '#granskaskal .gdok [data-el="uppg1"]');
+  await skickaOnskemal(page, "Ta bort poängen på den här.");
+
+  const svar = svarsrad(page);
+  await expect(svar).toContainText("uppgiften har 0 poäng — ge minst 1 poäng",
+                                   { timeout: 20_000 });
+  await expect(svar).not.toContainText("Skrivet om");
+});
+
+/* ── TABELLEN, NOTISEN OCH BOKENS ARK ───────────────────────────
+   Tre element som pekade fel eller inte fanns: alla jämförelsetabeller delade
+   id:t «tabell», notisen gick aldrig från JSON:en till skärmen, och bokens
+   lösningsark bar sina boknummer i dokumentets uppgiftsserie. */
+
+const medTabell = () => UPPGIFTER.map((u, k) => k === 1
+  ? { ...u, tabell: { rubriker: ["År", "Antal"], rader: [["2020", "12"]] } } : u);
+
+test("ett klick i tabellen låser omskrivningen till uppgiftens nummer",
+  async ({ page }) => {
+    const anrop = await fejkaRefine(page, { doc: exam(), andrade: ["uppg2"] });
+    await iCanvas(page, papper({ inst: skriftligt, uppgifter: medTabell() }));
+
+    await pekaPa(page, "#granskaskal .gdok .gutab");
+    // Namnet säger fortfarande att det var tabellen — id:t är uppgiftens.
+    await expect(page.locator("#g-mal .gmaltext")).toHaveText("Tabellen · Uppgift B");
+    await skickaOnskemal(page, "Lägg till en rad för 2021.");
+    expect(anrop[0].nummer).toBe(2);
+  });
+
+test("notisen på uppgiften ritas på arket", async ({ page }) => {
+  await fejkaRefine(page, {
+    doc: exam({ uppgifter: exam().uppgifter.map((u, k) =>
+      k === 0 ? { ...u, notis: "Rita en teckenrad som stöd." } : u) }),
+    andrade: ["uppg1"] });
+  await iCanvas(page, papper({ inst: skriftligt }));
+
+  await expect(page.locator("#arkskal .gunotis")).toHaveCount(0);
+  await pekaPa(page, '#granskaskal .gdok [data-el="uppg1"]');
+  await skickaOnskemal(page, "Påminn om teckenraden.");
+
+  await expect(page.locator("#arkskal .gunotis").first())
+    .toHaveText("Rita en teckenrad som stöd.", { timeout: 20_000 });
+});
+
+const BOKUPPG = {
+  bok: "Matematik 5000+ 1a", sidor: "12–15", avsnitt: "1.1 Tal", bokId: null,
+  uppg: [3101, 3102], bort: [], remsa: "3101–3102", bortremsa: "",
+  losning: { niva: "Nivå 2 och 3", antal: 2, uppg: [3101, 3102],
+             remsa: "3101–3102",
+             poster: [{ nr: 3101, niva: 1 }, { nr: 3102, niva: 2 }] },
+};
+
+test("bokens lösningsark skickar inget uppgiftsnummer till servern",
+  async ({ page }) => {
+    /* Arket är mallgenererat ur bokens uppgiftsnummer och finns inte i provets
+       JSON. Posterna bar ändå dokumentets serie: 3101 blev `uppg3101`, och
+       nummerlåsningen skickade «uppgift 3101» till ett dokument med fyra
+       uppgifter. Modellen fick ett mål som inte finns. */
+    const anrop = await fejkaRefine(page, { doc: exam(), andrade: [] });
+    await iCanvas(page, papper({ inst: skriftligt, bokuppg: BOKUPPG }));
+
+    await pekaPa(page, '#granskaskal .gdok [data-el="bokuppg3101"]');
+    await expect(page.locator("#g-mal .gmaltext")).toHaveText("Bokens uppgift 3101");
+    await skickaOnskemal(page, "Skriv ut hela uträkningen.");
+
+    expect(anrop[0].nummer).toBeUndefined();
+    expect(anrop[0].mal.namn).toBe("Bokens uppgift 3101");
   });
 
 /* ── FACITPOSTEN ÄR SIN UPPGIFT ─────────────────────────────────

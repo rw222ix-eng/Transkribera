@@ -1787,6 +1787,14 @@
          och på papperet. */
       if (u.figur) ut.fig = u.figur;
       if (u.bild) ut.bild = u.bild;
+      /* NOTISEN — den lilla inramade påminnelsen under uppgiftstexten («Rita en
+         teckenrad som stöd.»). Den finns i schemat, prompten ber om den och
+         alla fyra LaTeX-mallarna sätter den med \notisruta — men den gick
+         aldrig hit, så skärmarket saknade en ruta som stod på det utdelade
+         pappret. Deluppgifternas egna notiser stannar i JSON:en: arket sätter
+         deluppgifter som en rad text var, och en inramad ruta inne i den raden
+         är en form varken förlagan eller mallen har. */
+      if (u.notis) ut.notis = u.notis;
       /* De fem formerna. Facit följer INTE med till arket: `ratt` och
          `forsta_fel` stannar i provets JSON och trycks bara i
          bedömningsanvisningen (bedomning.tex.j2). Ett ark som råkar bära

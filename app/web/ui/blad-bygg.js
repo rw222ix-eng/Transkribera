@@ -204,8 +204,18 @@ window.BladBygg = (() => {
       ? `<ul class="gudel guval">${u.alt.map((a, k) => `<li><i>${BOKSTAV[k]}.</i> ${mat(a)}</li>`).join('')}</ul>` : '';
     const del = u.del && u.del.length
       ? `<ul class="gudel">${u.del.map((d, k) => `<li>${'abcdef'[k]}) ${brodtext(d)}</li>`).join('')}</ul>` : '';
-    const fig = illustration && !u.fig
-      ? '<div class="gufigur guplats" style="height:110px"><span class="gufigtext">plats för illustration</span></div>' : '';
+    /* Bildplatsen. `illustration` är lärarens kryss «plats för illustration»;
+       `u.bild` är uppgiftens egen hänvisning till bildunderlaget (exam_spec:
+       ett 1-baserat index bland de uppladdade bilderna). Den senare mappades
+       till arket men ritades aldrig — PDF:en satte bilden och skärmen visade
+       ingenting, så uppgiften hänvisade till en bild som inte fanns. Rutan är
+       dessutom den yta lärarens egen bild landar i (blad.js rita, v.bilder). */
+    const fig = u.fig ? ''
+      : u.bild ? `<div class="gufigur guplats" style="height:110px"><span class="gufigtext">bild ${Number(u.bild)} ur underlaget — läggs in i canvas</span></div>`
+        : illustration ? '<div class="gufigur guplats" style="height:110px"><span class="gufigtext">plats för illustration</span></div>' : '';
+    /* Notisen står EFTER uppgiftens former och före svarsytan — samma plats som
+       \notisruta har i mallarna (arbetsblad.tex.j2, gruppuppgift.tex.j2). */
+    const notis = u.notis ? `<p class="gunotis">${brodtext(u.notis)}</p>` : '';
     /* Figuren står BREDVID frågan, aldrig ovanför den — det är hela skillnaden
        mellan förlagans form 1 (radbunden) och form 2 (figurspalt), och eleven
        måste kunna läsa båda samtidigt. Förr lades figuren under uppgiften utan
@@ -218,9 +228,9 @@ window.BladBygg = (() => {
     // att granska, och sedan svarsytan.
     const former = tabell(u.tabell, 'gutab') + stegtabell(u.stegtabell);
     const kropp = egen
-      ? `<div class="gutva"><div><p class="gufraga">${brodtext(u.t)}</p>${alt}${del}${former}${svarsyta(u)}</div>`
+      ? `<div class="gutva"><div><p class="gufraga">${brodtext(u.t)}</p>${alt}${del}${former}${notis}${svarsyta(u)}</div>`
         + `<div>${egen}</div></div>`
-      : `<p class="gufraga">${brodtext(u.t)}</p>${alt}${del}${former}${fig}${svarsyta(u)}`;
+      : `<p class="gufraga">${brodtext(u.t)}</p>${alt}${del}${former}${fig}${notis}${svarsyta(u)}`;
     return `<div class="gukort" data-ut="${u.ut || 'rakna'}">
       <span class="gubricka">${bricka}</span>
       ${kropp}
@@ -384,7 +394,16 @@ window.BladBygg = (() => {
     const figur = u.fig
       ? `<div class="prfig" data-vantar="" data-figur="${attr(JSON.stringify(u.fig))}"></div>`
         + (u.figkap ? `<p class="prfigkap">${mat(u.figkap)}</p>` : '')
-      : '';
+      /* Uppgiftens bild ur underlaget (exam_spec: index bland de uppladdade
+         bilderna). Den nådde arket men ritades aldrig, så provet hänvisade till
+         en bild som bara fanns i PDF:en. Rutan är också den yta lärarens egen
+         bild landar i (blad.js rita, v.bilder). */
+      : u.bild
+        ? `<div class="prbild gufigur" style="min-height:110px"><span class="gufigtext">bild ${Number(u.bild)} ur underlaget — läggs in i canvas</span></div>`
+        : '';
+    /* Notisen: samma lilla inramade ruta som \notisruta i prov.tex.j2, och på
+       samma plats — efter uppgiftens former, före svarsraden. */
+    const notis = u.notis ? `<p class="prnotis">${brodtext(u.notis)}</p>` : '';
     /* SVARET står alltid i provet — på båda delarna, på varje uppgift. Förr
        hängde raden på u.ut === 'kort', och en uppgift som saknade den märkningen
        blev en fråga utan svarsplats mitt bland två som hade det. Alternativ
@@ -409,7 +428,7 @@ window.BladBygg = (() => {
     const former = tabell(u.tabell, 'prtab') + stegtabell(u.stegtabell);
     return `<div class="pruppg">
       <span class="prnr">${u.nr}.<span class="prvarde">${varde}</span>${losblad}</span>
-      <div><p class="prtext">${brodtext(u.t)}</p>${alt}${del}${former}${figur}${svarsrad}</div>
+      <div><p class="prtext">${brodtext(u.t)}</p>${alt}${del}${former}${figur}${notis}${svarsrad}</div>
     </div>`;
   }
   /* Provets rubrik, med dokumentets egen först. Samma regel som arkets: skrev

@@ -502,6 +502,23 @@ window.Blad = (() => {
      Granskningen fäster kommentarer och bilder på [data-el]. Bladen är sättning,
      så nålarna sätts här i stället för i markupen. */
   const BOKSTAV = 'ABCDEFGH';
+  /* ── BOKENS LÖSNINGSARK ÄR INTE DOKUMENTETS UPPGIFTER ──
+     De tre arken nedan skrivs av blad-boklos.js ur bokens uppgiftsnummer och
+     appens egna mallar — de finns inte i provets JSON, och servern kan därför
+     inte skriva om dem hur väl den än förstår önskemålet. Ändå bar deras poster
+     samma `uppg{n}`-serie som dokumentets: bokens uppgift 5211 blev
+     `data-el="uppg5211"`, och plan.js iterationsJobb läser numret ur id:t och
+     låser omskrivningen till «uppgift 5211» i ett dokument med sex uppgifter.
+     Modellen fick alltså ett mål som inte finns. Egen prefix — som INTE matchar
+     nummerlåsningens `^uppg(\d+)$` — gör målet ärligt: önskemålet går oriktat
+     med elementets namn i `mal`, och serverns diff märker aldrig arket, så
+     panelen säger av sig själv att ingenting på pappret ändrades. */
+  const BOKARK = '.ark[data-form="lo-bok"], .ark[data-form="lo-bok3"], .ark[data-form="fe-bok"]';
+  const iBoken = el => !!el.closest(BOKARK);
+  /* Rutan som ÄGER en inre nod: den närmaste förfadern som redan bär ett
+     data-el. Tabeller och elevlösningar är delar av sin uppgift, inte egna
+     element — se salten längre ner. */
+  const agaren = el => (el.parentElement && el.parentElement.closest('[data-el]')) || null;
   function markera(rot, v) {
     const andrat = v.andrat || [];
     const salt = (el, nyckel, namn) => {
@@ -550,6 +567,8 @@ window.Blad = (() => {
     $$('.pruppg', rot).forEach(el => {
       const rad = ($('.prnr', el) || {}).textContent || '';
       const nr = parseInt(rad, 10);
+      if (iBoken(el)) return salt(el, 'bokuppg' + (nr || 0),
+                                  nr ? 'Bokens uppgift ' + nr : 'Bokens uppgift');
       if (nr) return salt(el, 'uppg' + nr, 'Uppgift ' + nr);
       const b = (rad.trim()[0] || '').toUpperCase();
       const k = BOKSTAV.indexOf(b);
@@ -559,9 +578,36 @@ window.Blad = (() => {
       const b = ($('.gubricka', el) || {}).textContent || BOKSTAV[n];
       salt(el, 'uppg' + (BOKSTAV.indexOf(b) + 1 || n + 1), 'Uppgift ' + b);
     });
-    $$('.gutab', rot).forEach(el => salt(el, 'tabell', 'Jämförelsetabellen'));
-    $$('.lopost', rot).forEach((el, n) => salt(el, 'facit' + (n + 1), 'Facit ' + (n + 1)));
-    $$('.loskann', rot).forEach((el, n) => salt(el, 'elev' + (n + 1), 'Elevlösning ' + BOKSTAV[n]));
+    /* TABELLEN TILLHÖR SIN UPPGIFT. Alla tabeller på pappret fick samma id —
+       `tabell` — hur många de än var. Två uppgifter med jämförelsetabell blev
+       alltså ETT element för granskningen: klicket sa inte vilken, och
+       nummerlåsningen till servern uteblev helt (`tabell` matchar inget
+       uppgiftsnummer). Nu ärver tabellen sin uppgifts id, så ett klick i
+       tabellen är ett klick på uppgiften den hör till — och namnet säger
+       fortfarande att det var tabellen läraren pekade på. Salten körs efter
+       uppgiftsslingorna ovan, annars finns ingen ägare att ärva av. */
+    $$('.gutab, .prtab', rot).forEach(el => {
+      const a = agaren(el);
+      salt(el, (a && a.dataset.el) || 'tabell',
+           a && a.dataset.namn ? `Tabellen · ${a.dataset.namn}` : 'Jämförelsetabellen');
+    });
+    /* ELEVLÖSNINGARNA hör till sin uppgift på samma sätt (lärarens ord: «om jag
+       ändrar något i facit ska uppgiften också ändras»). `elev{n}` var en egen
+       serie som ingen diff någonsin märkte och som inte bar något
+       uppgiftsnummer till servern. Etiketten läses ur raden ovanför — den är
+       lösningens eget namn («Elevlösning B»), inte en bokstav vi räknar fram.
+       Bokens bedömda lösningsark har ingen uppgift att ärva av och är dessutom
+       mallgenererat: det får bokprefixet, som inte låser något nummer.
+       `.lopost` stod här också — en klass som ingen renderare producerar. */
+    $$('.loskann', rot).forEach((el, n) => {
+      const fore = el.previousElementSibling;
+      const etikett = fore && fore.classList.contains('loelev')
+        ? (($('b', fore) || {}).textContent || '').trim() : '';
+      const namn = etikett || ('Elevlösning ' + (BOKSTAV[n] || n + 1));
+      if (iBoken(el)) return salt(el, 'bokelev' + (n + 1), namn);
+      const a = agaren(el);
+      salt(el, (a && a.dataset.el) || 'elev' + (n + 1), namn);
+    });
     /* Markeringen lugnar sig: tydlig i några sekunder, sedan en prick i kanten
        med före/efter och en väg till varvets rad i granskningen (prickar.js). */
     if (window.Prickar) window.Prickar.pa(rot, v);

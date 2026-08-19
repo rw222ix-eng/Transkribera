@@ -161,6 +161,11 @@
    meningen är ett villkor; ingen platta som konkurrerar med pappret. */
 .probs{margin:14px 0 0;padding:11px 14px;border:1.5px solid #000;font-size:15px;font-weight:700;line-height:1.5;color:#000;text-wrap:pretty}
 
+/* Uppgiftens notis: samma \notisruta som mallen sätter (_preamble.tex.j2) —
+   hårlinje, mindre grad, luft omkring. Skild från OBS-rutan ovan med flit:
+   den är fet och gäller hela delen, den här är en påminnelse på EN uppgift. */
+.prnotis{margin:10px 0 0;padding:7px 11px;border:1px solid #000;font-size:13.5px;line-height:1.45;color:#000;white-space:pre-line;text-wrap:pretty}
+
 /* Figurplats och ritad figur — samma två tillstånd som på arbetsbladen. */
 .prfig{position:relative;display:grid;place-items:center;margin-top:12px;margin-inline:auto}
 .prfig[data-vantar]{min-height:150px;border:1px solid #CFCFCF;background:repeating-linear-gradient(135deg,#F2F2F2 0 1px,#fff 1px 7px)}

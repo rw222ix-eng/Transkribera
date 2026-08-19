@@ -337,6 +337,23 @@
     if (n.length === 1) return n[0] + svans;
     return n.slice(0, -1).join(', ') + ' och ' + n[n.length - 1] + svans;
   }
+  /* SKÄLET, när servern FÄLLDE begäran. Reparationsloopen validerar varje varv
+     (exam_spec.validate_balance), och en del önskemål kan den inte gå med på:
+     «ta bort poängen från uppgift 3» faller på regeln att varje uppgift måste
+     ge minst en poäng, dokumentet lämnas orört och `andrade` blir tom. «Ingenting
+     på pappret ändrades» är då sant men till ingen hjälp — läraren vet inte om
+     modellen missförstod henne eller om det var förbjudet, och det avgör om hon
+     ska skriva om meningen eller släppa det. Skälet står redan i `errors`, i
+     klartext; det ska bara sägas. */
+  function skalet(res) {
+    const fel = (res && Array.isArray(res.errors) ? res.errors : [])
+      .map(f => String((f && f.message) || '').trim()).filter(Boolean);
+    if (!fel.length) return '';
+    /* Ett skäl räcker. Fem rader felmeddelanden i en chattbubbla läses inte, och
+       det första är det som fällde begäran. */
+    const ett = fel[0];
+    return ett.charAt(0).toLowerCase() + ett.slice(1);
+  }
   /* Vad panelen SÄGER att som hände, byggt ur serverns diff. Se kommentaren
      vid `svar:` nedan — det här är hela poängen med den. */
   function svarText(post, text, res) {
@@ -347,7 +364,10 @@
     const sagt = res && Array.isArray(res.andrade) ? res.andrade : null;
     if (!sagt) return gjort;
     if (!sagt.length) {
-      return `Ingenting på pappret ändrades. ${post.namn} står kvar som förut — säg gärna vad som ska stå i stället, eller peka på en annan del av pappret.`;
+      const skal = skalet(res);
+      return skal
+        ? `Ingenting på pappret ändrades: ${skal} ${post.namn} står alltså kvar som förut — formulera om önskemålet, eller låt det stå.`
+        : `Ingenting på pappret ändrades. ${post.namn} står kvar som förut — säg gärna vad som ska stå i stället, eller peka på en annan del av pappret.`;
     }
     if (!post.el || sagt.includes(post.el)) return gjort;
     /* Servern ändrade något — men inte det läraren pekade på. Då är det den
