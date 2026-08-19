@@ -29,6 +29,8 @@ import json
 from difflib import SequenceMatcher
 from typing import Any, Iterable
 
+from . import exam_spec
+
 
 def _kanon(v: Any) -> str:
     """Ett jämförbart avtryck av ett värde. Nyckelordningen får inte avgöra om
@@ -66,26 +68,61 @@ def _lista(fore: list, efter: list, id_for) -> list[str]:
 
 # ---------------------------------------------------------------- provet ----
 #
-# blad.js markera(): sidhuvudet är `rubrik`, instruktionsbandet `instr`,
-# namnraderna `namn`, och uppgifterna numreras `uppg1`, `uppg2` … i papprets
-# ordning (`.prnr` är listindex + 1, se plan.js franProv).
+# blad.js markera(): sidhuvudet är `rubrik`, metaraden `meta`, namnraderna
+# `namn`, instruktionsbandet `instr`, provtabellen `avtal0`, betygsgränserna
+# `avtal1`, och uppgifterna numreras `uppg1`, `uppg2` … i papprets ordning
+# (`.prnr` är listindex + 1, se plan.js franProv).
+
+
+def _granser(doc: dict) -> Any:
+    """Kravgränserna pappret LOVAR (E/C/A), räknade ur poängen.
+
+    De står inte som ett fält i dokumentet — de är en ren funktion av
+    poängfördelningen (exam_spec.kravgranser) och räknas därför här på samma
+    sätt som försättsbladet och PDF:en räknar dem. Utan den här jämförelsen
+    kunde «sänk E-gränsen» flytta gränsen på pappret utan att någon nål pekade
+    på tabellen, och panelen sa «ingenting ändrades» om en ändring läraren
+    själv bett om. Går dokumentet inte att läsa svarar vi None: två olästa
+    dokument är lika, och då märks ingenting."""
+    try:
+        return exam_spec.kravgranser(exam_spec.ExamDoc.model_validate(doc))
+    except Exception:
+        return None
+
 
 def _prov(fore: dict, efter: dict) -> list[str]:
     ut: list[str] = []
-    if _falt(fore, efter, ("titel", "kurs", "klass", "elev", "datum", "tid_min")):
+    if _falt(fore, efter, ("titel", "kurs", "klass", "elev", "datum")):
         ut.append("rubrik")
-    # Instruktionsbandet bär hjälpmedlen och — på gruppuppgiften — nyckelfrågan
-    # och arbetsregeln (längd + redovisningsform). `instruktion` är själva
-    # bandtexten sedan dokumentet äger rutan (exam_spec.ExamDoc): utan den här
-    # raden ändrades bandet på pappret utan att någon nål pekade på det, och
-    # panelen kunde inte säga vad som hänt.
+    # PROVTABELLEN (`avtal0`) är provtid + hjälpmedel, och de två fälten nådde
+    # förr bara PDF:en: skärmen räknade sin egen provtid ur inställningen och
+    # sin egen hjälpmedelsrad ur formelbladskrysset. `tid_min` mappades därför
+    # till `rubrik` (sidhuvudet, som inte bär tiden alls) och `hjalpmedel` till
+    # `instr`. Nu ritar tabellen dokumentets fält, och nålen ska sitta där.
+    if _falt(fore, efter, ("tid_min", "hjalpmedel")):
+        ut.append("avtal0")
+    # BETYGSGRÄNSERNA (`avtal1`). Skärmen räknade dem själv ur andra procent-
+    # satser än servern — pappret och skärmen lovade klassen olika gränser. Nu
+    # renderas serverns tal, och en poängändring som flyttar en gräns ska
+    # märkas på tabellen och inte bara på uppgiften som bytte poäng.
+    if _kanon(_granser(fore)) != _kanon(_granser(efter)):
+        ut.append("avtal1")
+    # METARADEN (`meta`) är gruppuppgiftens tre villkor i klartext: «3 elever
+    # per grupp · 60 minuter · muntlig redovisning». Den ritades ur planeringens
+    # väljare medan `grupp` bara nådde PDF:en, så fälten mappades hit till
+    # `instr` — instruktionsbandet, som är en helt annan ruta på pappret.
     grupp_f = fore.get("grupp") or {}
     grupp_e = efter.get("grupp") or {}
-    if (_falt(fore, efter, ("hjalpmedel", "nyckelfraga", "instruktion"))
-            or _falt(grupp_f, grupp_e, ("langd_min", "redovisning"))):
-        ut.append("instr")
+    if _falt(grupp_f, grupp_e, ("elever", "langd_min", "redovisning")):
+        ut.append("meta")
     if _falt(grupp_f, grupp_e, ("elever",)):
         ut.append("namn")           # namnraderna räknas ur gruppstorleken
+    # Instruktionsbandet bär nyckelfrågan och — sedan dokumentet äger rutan
+    # (exam_spec.ExamDoc.instruktion) — själva bandtexten. `hjalpmedel` står
+    # med här OCKSÅ: provets OBS-band skriver hjälpmedelsregeln en gång till,
+    # och båda noderna ändrar sig när fältet gör det.
+    if _falt(fore, efter, ("hjalpmedel", "nyckelfraga", "instruktion")):
+        ut.append("instr")
     ut += _lista(fore.get("uppgifter") or [], efter.get("uppgifter") or [],
                  lambda j: f"uppg{j + 1}")
     return ut
@@ -162,8 +199,15 @@ def _tavla(fore: dict, efter: dict) -> list[str]:
     return ut
 
 
+# Diagnosen saknades i listan, och tystnaden var inte harmlös: `andrade_element`
+# svarar tomt på en okänd typ, klienten läser tom lista som «ingenting på
+# pappret ändrades» (plan.js iterera, granska.js svarText) — och alltså sa
+# panelen just det efter VARJE omskrivning av en diagnos, hur mycket servern än
+# skrivit om. Diagnosen ritas som arbetsbladet (blad.js bladen) och diffas som
+# det.
 _DIFFAR = {"tavla": _tavla, "prov": _prov, "arbetsblad": _prov,
-           "gruppuppgift": _prov, "anteckningar": _anteckningar}
+           "gruppuppgift": _prov, "diagnos": _prov,
+           "anteckningar": _anteckningar}
 
 
 def andrade_element(typ: str, fore: Any, efter: Any) -> list[str]:

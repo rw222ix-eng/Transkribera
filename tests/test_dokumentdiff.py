@@ -40,20 +40,70 @@ def test_en_borttagen_uppgift_marks_pa_den_som_tog_platsen():
                               _prov("a", "c")) == ["uppg2"]
 
 
-def test_sidhuvudet_och_instruktionen_har_egna_id():
+def test_sidhuvudet_har_eget_id():
     fore = _prov("a")
     efter = _prov("a") | {"titel": "Nytt namn"}
     assert dd.andrade_element("prov", fore, efter) == ["rubrik"]
-    efter2 = _prov("a") | {"hjalpmedel": "inga"}
-    assert dd.andrade_element("prov", fore, efter2) == ["instr"]
 
 
-def test_gruppuppgiftens_arbetsregel_och_namnrader():
+def test_provtiden_och_hjalpmedlen_sitter_i_provtabellen():
+    """Båda fälten nådde förr bara PDF:en, och nålarna satt därefter: `tid_min`
+    på sidhuvudet (som inte bär tiden alls) och `hjalpmedel` på
+    instruktionsbandet. Nu ritar provtabellen dokumentets fält, och
+    hjälpmedelsregeln står EN gång till i OBS-bandet — därför två id."""
+    fore = _prov("a")
+    assert dd.andrade_element("prov", fore, _prov("a") | {"tid_min": 100}) \
+        == ["avtal0"]
+    assert dd.andrade_element("prov", fore, _prov("a") | {"hjalpmedel": "inga"}) \
+        == ["avtal0", "instr"]
+
+
+def _giltigt(*poang, **extra):
+    """Ett dokument som ExamDoc verkligen kan läsa — kravgränserna räknas ur
+    poängen, så de går inte att pröva på ett skelett."""
+    return {"titel": "Prov", "kurs": "Ma2c", "hjalpmedel": "miniräknare",
+            "uppgifter": [{"text": f"uppgift {i + 1}", "poang": list(p),
+                           "losning": "svar", "bedomning": "+1",
+                           "formaga": "P", "typ": "rutin"}
+                          for i, p in enumerate(poang)]} | extra
+
+
+def test_betygsgranserna_marks_nar_poangen_flyttar_dem():
+    """Gränserna är ingen fältrad i JSON:en — de RÄKNAS ur poängen
+    (exam_spec.kravgranser) och står i sin egen tabell på försättsbladet. Utan
+    den här jämförelsen flyttade «sänk E-gränsen» talen på pappret medan
+    panelen sa att ingenting hänt."""
+    fore = _giltigt((2, 0, 0), (0, 2, 0))
+    efter = _giltigt((2, 0, 0), (0, 6, 0))
+    ut = dd.andrade_element("prov", fore, efter)
+    assert "avtal1" in ut and "uppg2" in ut
+    # Samma poäng, ny lydelse: uppgiften märks, gränserna står stilla.
+    ny_text = _giltigt((2, 0, 0), (0, 2, 0))
+    ny_text["uppgifter"][1]["text"] = "en annan fråga"
+    assert dd.andrade_element("prov", fore, ny_text) == ["uppg2"]
+
+
+def test_gruppuppgiftens_metarad_och_namnrader():
+    """Metaraden («3 elever per grupp · 60 minuter · muntlig redovisning») är
+    en EGEN ruta överst på pappret — inte instruktionsbandet, som fälten
+    pekade på när de bara nådde PDF:en."""
     fore = _prov("a") | {"grupp": {"elever": 3, "langd_min": 40,
                                    "redovisning": "muntligt"}}
     efter = _prov("a") | {"grupp": {"elever": 4, "langd_min": 60,
                                     "redovisning": "muntligt"}}
-    assert dd.andrade_element("gruppuppgift", fore, efter) == ["instr", "namn"]
+    assert dd.andrade_element("gruppuppgift", fore, efter) == ["meta", "namn"]
+    # Tiden och redovisningsformen står bara på metaraden — namnraderna räknas
+    # ur gruppstorleken och rörs inte.
+    bara_tid = _prov("a") | {"grupp": {"elever": 3, "langd_min": 60,
+                                       "redovisning": "muntligt"}}
+    assert dd.andrade_element("gruppuppgift", fore, bara_tid) == ["meta"]
+
+
+def test_diagnosen_diffas_som_arbetsbladet():
+    """Typen saknades i tabellen, och tystnaden var inte harmlös: okänd typ ger
+    tom lista, och klienten läser tom lista som «ingenting på pappret ändrades»
+    — alltså sa panelen just det efter varje omskrivning av en diagnos."""
+    assert dd.andrade_element("diagnos", _prov("a"), _prov("b")) == ["uppg1"]
 
 
 def test_bandtexten_ar_instruktionen():
@@ -169,4 +219,4 @@ def test_okand_typ_och_trasiga_dokument_ger_tom_lista():
 def test_samma_id_kommer_bara_en_gang():
     fore = _prov("a") | {"hjalpmedel": "x", "nyckelfraga": "y"}
     efter = _prov("a") | {"hjalpmedel": "X", "nyckelfraga": "Y"}
-    assert dd.andrade_element("prov", fore, efter) == ["instr"]
+    assert dd.andrade_element("prov", fore, efter) == ["avtal0", "instr"]

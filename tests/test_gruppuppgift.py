@@ -271,6 +271,26 @@ def test_omskrivningen_far_veta_att_bandet_finns():
     assert "HELA bandets text" in p
 
 
+def test_omskrivningen_far_veta_att_upplagget_gar_att_andra():
+    """Samma sak för de tre villkoren överst på pappret. `grupp` fanns i
+    schemat men stod inte i INSTRUCTION, och omskrivningen får bara den texten
+    med sig — «gör grupperna om 4» kunde alltså inte nå fältet, och metaraden
+    och namnraderna stod kvar på tre."""
+    p = exam_gen.build_refine_prompt(
+        {"titel": "Gruppuppgift", "uppgifter": []}, "gör grupperna om 4")
+    assert "- grupp {elever, langd_min, redovisning}" in p
+    assert "namnrader" in p
+
+
+def test_provtiden_heter_tid_min_i_instruktionen():
+    """Fältnamnet stod fel: INSTRUCTION bad om «tid_minuter», som inte finns i
+    ExamDoc — _rensa_toppnycklar slängde det som en påhittad toppnyckel, och en
+    ändrad provtid kunde aldrig fastna i dokumentet."""
+    assert "tid_min:" in exam_gen.INSTRUCTION
+    assert "tid_minuter," not in exam_gen.INSTRUCTION
+    assert "tid_min" in exam_spec.ExamDoc.model_fields
+
+
 def test_uppgifterna_heter_bokstaver_inte_siffror():
     doc, _ = exam_spec.validate_exam_json(_doc(), "gruppuppgift")
     tex = exam_latex.render_gruppuppgift(doc)

@@ -355,6 +355,16 @@ test("provets försättsblad bär avtalet, och lösningsbladet sin OBS-ruta",
     const meta = await forsatt.locator(".prmeta th").allTextContents();
     expect(meta.slice(0, 2)).toEqual(["Provtid", "Hjälpmedel"]);
     expect(meta.length).toBeGreaterThanOrEqual(3);
+    /* Och raderna bär DOKUMENTETS tal, inte planeringens väljare: provtiden
+       räknades förr ur minutväljaren (90) och hjälpmedelsraden ur
+       formelbladskrysset, så «ge dem tio minuter till» ändrade PDF:en och
+       lämnade förhandsvisningen orörd. */
+    const varden = await forsatt.locator(".prmeta td").allTextContents();
+    expect(varden[0]).toContain("100 minuter");
+    expect(varden[1]).toContain("Formelblad och linjal");
+    // Äger dokumentet regeln säger pappret den EN gång — delraderna tappar sina
+    // egna hjälpmedelsfraser, som annars kan säga emot den.
+    expect(varden.slice(2).join(" ")).not.toContain("digitala hjälpmedel");
     // Poängsumman står i noten, gränserna i tabellen, maxpoängen i foten.
     await expect(forsatt.locator(".prnot")).toContainText("poäng");
     const betyg = await forsatt.locator(".prbetyg tbody td:first-child")
@@ -367,6 +377,10 @@ test("provets försättsblad bär avtalet, och lösningsbladet sin OBS-ruta",
     // Uppgiftsbladen: OBS-rutan en gång per del, och foten som säger var delen
     // slutar och vad den är värd — annars slutar bladet bara i tomt papper.
     await expect(page.locator("#dokument .probs")).toHaveCount(2);
+    // OBS-rutan var en hårdkodad mall per del; nu står dokumentets regel där,
+    // så «tillåt räknare på del A» faktiskt syns över uppgifterna.
+    await expect(page.locator("#dokument .probs").first())
+      .toContainText("Hjälpmedel: Formelblad och linjal.");
     await expect(page.locator("#dokument .prslut[data-slut]").first())
       .toContainText("Slut på del");
 

@@ -2475,6 +2475,17 @@
              .instruktion). Följer det inte med hit ritas mallen, och då är
              rutan oåtkomlig för granskningen igen. */
           utkast.instruktion = res.exam.instruktion || null;
+          /* ── DOKUMENTETS EGNA RADER ────────────────────
+             De tre fälten nedan fanns i JSON:en och nådde PDF:en, men aldrig
+             skärmen: gruppuppgiftens metarad och namnrader ritades ur
+             planeringens väljare, provtabellens provtid och hjälpmedelsrad ur
+             minutväljaren och formelbladskrysset. «Gör grupperna om 4» och
+             «tillåt räknare på del A» ändrade alltså pappret utan att
+             förhandsvisningen rörde sig — och det är förhandsvisningen läraren
+             godkänner. Följer de inte med hit ritas appens förval igen. */
+          utkast.grupp = res.exam.grupp || null;
+          utkast.tid_min = res.exam.tid_min || null;
+          utkast.hjalpmedel = res.exam.hjalpmedel || null;
           /* Diagnosen skrevs för att RYMMAS på en lektion, och det var servern
              som bestämde antalet uppgifter. Då är tiden det första läraren vill
              veta — och den ska stå kvar när statusraden är borta, så den blir en
@@ -3130,6 +3141,13 @@
          tappade fältet lämnat tillbaka appens mall — och den mening läraren
          strök hade stått där igen. */
       v.instruktion = res.exam.instruktion || v.instruktion || null;
+      /* Samma reserv för dokumentets egna rader: skrev modellen inte om dem i
+         det här varvet står förra varvets kvar. Utan reserven hade en
+         omskrivning som tappade `grupp` lämnat tillbaka planeringens förval,
+         och gruppstorleken läraren nyss bett om hade tystnat på pappret. */
+      v.grupp = res.exam.grupp || v.grupp || null;
+      v.tid_min = res.exam.tid_min || v.tid_min || null;
+      v.hjalpmedel = res.exam.hjalpmedel || v.hjalpmedel || null;
     }
     versioner = versioner.slice(0, nu + 1).concat([v]);
     visa(versioner.length - 1);

@@ -396,6 +396,36 @@ test("ändrades något annat än det läraren pekade på säger panelen det",
     await expect(svar).toContainText("uppgift a");
   });
 
+/* ── METARADEN ÄR DOKUMENTETS ───────────────────────────────────
+   «3 elever per grupp · 60 minuter · muntlig redovisning» ritades ur
+   planeringens väljare medan dokumentets egna fält (exam_spec.GruppUpplagg)
+   bara nådde PDF:en. «Gör grupperna om 4» skrev alltså om pappret men inte
+   skärmen — och namnraderna, som räknas ur samma tal, stod kvar på tre. */
+
+test("metaraden och namnraderna följer dokumentets upplägg", async ({ page }) => {
+  await fejkaRefine(page, {
+    doc: exam({ grupp: { elever: 4, langd_min: 60, redovisning: "poster" } }),
+    andrade: ["meta", "namn"] });
+  await iCanvas(page, papper({ inst: skriftligt }));
+
+  // Utgångsläget är väljarens: tre elever, 45 minuter, skriftligt.
+  const meta = page.locator("#arkskal .gumeta").first();
+  await expect(meta).toContainText("3 elever per grupp");
+
+  // Metaraden är en EGEN ruta — förr träffade klicket Sidhuvudet, och modellen
+  // fick höra att det var rubriken läraren ville ändra.
+  await pekaPa(page, '#granskaskal .gdok [data-el="meta"]');
+  await expect(page.locator("#g-mal .gmaltext")).toHaveText("Metaraden");
+  await skickaOnskemal(page, "Gör grupperna om 4, och en timme.");
+
+  await expect(meta).toContainText("4 elever per grupp", { timeout: 20_000 });
+  await expect(meta).toContainText("60 minuter");
+  await expect(meta).toContainText("redovisas som poster");
+  await expect(meta).toHaveClass(/andrad/);
+  // Namnraderna räknas ur gruppstorleken och ska följa med.
+  await expect(page.locator("#arkskal .gutopp .gurad")).toHaveCount(4);
+});
+
 /* ── FACITPOSTEN ÄR SIN UPPGIFT ─────────────────────────────────
    «Om jag ändrar något i facit så ska uppgiften också ändras.» Första steget är
    att facitposten alls går att peka på: dess bricka är en BOKSTAV («D.»), och

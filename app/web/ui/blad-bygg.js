@@ -433,12 +433,30 @@ window.BladBygg = (() => {
   const DELNAMN = { B: 'Del A', C: 'Del B' };
   function provblad(v, uppgifter, del, forsta) {
     const medHjalp = del === 'C';
-    const obs = forsta && del !== '-'
-      ? `<p class="probs"><b>OBS!</b> ${medHjalp
+    /* HJÄLPMEDELSREGELN ÄR DOKUMENTETS (exam_spec.ExamDoc.hjalpmedel). Bandet
+       var en hårdkodad mall per del, och därför hände ingenting när läraren bad
+       om att räknare skulle tillåtas på del A: regeln fanns inte i dokumentets
+       JSON, den fanns i den här strängen. Fältet nådde bara PDF:ens
+       försättsblad (prov.tex.j2, Hjälpmedel-raden).
+
+       Äger dokumentet regeln säger pappret den EN gång, och appen slutar
+       påstå något eget: delnamnet står naket i huvudet i stället för «Del A ·
+       utan digitala hjälpmedel», och provtabellens delrader tappar sina fraser
+       (blad.js planvalProv). Två regler som kan säga emot varandra är värre än
+       en — eleven vet inte vilken som gäller. Tomt fält, prototypens papper:
+       mallen nedan, precis som förut. */
+    const hjalp = (v.hjalpmedel || '').trim();
+    const regel = hjalp
+      ? `Hjälpmedel: ${esc(hjalp)}${/[.!?»)]$/.test(hjalp) ? '' : '.'}`
+      : (medHjalp
         ? 'Räknare och digitala hjälpmedel (t.ex. GeoGebra) är tillåtna.'
-        : 'Räknare och digitala hjälpmedel är inte tillåtna.'} Svaret skrivs på raden här i provet. Uppgifter märkta «lösblad» redovisas på separat rutat lösblad — en uppgift per sida, med uppgiftens nummer och ditt namn.</p>`
+        : 'Räknare och digitala hjälpmedel är inte tillåtna.');
+    const obs = forsta && del !== '-'
+      ? `<p class="probs"><b>OBS!</b> ${regel} Svaret skrivs på raden här i provet. Uppgifter märkta «lösblad» redovisas på separat rutat lösblad — en uppgift per sida, med uppgiftens nummer och ditt namn.</p>`
       : '';
-    const etikett = del === '-' ? '' : `${DELNAMN[del]} · ${medHjalp ? 'räknare och digitala hjälpmedel' : 'utan digitala hjälpmedel'}`;
+    const etikett = del === '-' ? ''
+      : hjalp ? DELNAMN[del]
+        : `${DELNAMN[del]} · ${medHjalp ? 'räknare och digitala hjälpmedel' : 'utan digitala hjälpmedel'}`;
     return `<div class="ark" data-form="pr1${del.toLowerCase()}" data-brytbar="">
       ${huvud(v, etikett)}${obs}${uppgifter.map(provuppg).join('')}
     </div>`;

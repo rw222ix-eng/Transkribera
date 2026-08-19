@@ -40,10 +40,28 @@ SYSTEM = (
 
 INSTRUCTION = (
     "Skriv ett matteprov som JSON enligt schemat. Dokumentets egna fält är "
-    "titel, kurs, klass, datum, tid_minuter, hjalpmedel, instruktion och "
+    # Fältet HETER tid_min. Här stod «tid_minuter», och det är inget fält i
+    # ExamDoc: _rensa_toppnycklar slängde det som en påhittad toppnyckel, och
+    # «ge dem tio minuter till» kunde alltså aldrig fastna i dokumentet —
+    # instruktionen bad om ett namn appen själv städar bort.
+    "titel, kurs, klass, datum, tid_min, hjalpmedel, instruktion, grupp och "
     "uppgifter — "
     "hjalpmedel KRÄVS (t.ex. \"Formelblad och digitala verktyg\"), och lägg "
     "inte till egna toppnycklar. Fältregler:\n"
+    "- tid_min: skrivtiden i minuter som ett heltal. Står på försättsbladet "
+    "och i förhandsvisningens provtabell.\n"
+    "- hjalpmedel: hjälpmedelsregeln i klartext, EN mening för hela provet — "
+    "den står i provtabellen och i OBS-rutan över uppgifterna. Ber läraren om "
+    "en ändring av vad som är tillåtet är det HÄR den skrivs.\n"
+    # Gruppuppgiftens upplägg ÄR pappersformen: namnraderna räknas ur `elever`,
+    # metaraden överst säger alla tre. Utan raden här kunde modellen inte ändra
+    # dem i en omskrivning — build_refine_prompt får bara INSTRUCTION med sig —
+    # och «gör grupperna om 4» blev ett svar utan verkan.
+    "- grupp {elever, langd_min, redovisning}: BARA gruppuppgiften har det. "
+    "elever är 2–5 (det är antalet namnrader på pappret), langd_min är "
+    "10–180, redovisning är \"muntligt\", \"skriftligt\" eller \"poster\". "
+    "Raden överst på pappret läses ur dem; ändrar läraren gruppstorleken, "
+    "tiden eller redovisningsformen ändras fältet.\n"
     # Bandet står i INSTRUCTION och inte bara i uppdragsblocken, och det är
     # hela poängen: omskrivningen (build_refine_prompt) får BARA den här texten
     # med sig. Stod regeln i gruppuppgiftens uppdrag kunde modellen skriva
