@@ -250,7 +250,11 @@
       .then(d => {
         if (nyckelNu() !== nyck) return;         // spannet hann bytas
         serverdata = { nyckel: nyck, uppgifter: d.uppgifter || [],
-                       olasta: (d.olasta || []).length };
+                       olasta: (d.olasta || []).length,
+                       /* Numren servern SÅG saknas mitt i följden på lästa
+                          sidor. Odefinierat från en äldre server — då härleds
+                          frågan här i stället (iLucka). */
+                       luckor: d.luckor };
         forslag = forslaget();
         bort = standardbort();
         rita();
@@ -316,9 +320,40 @@
     const saknas = [...onskade].filter(n => !u.some(x => x.nr === n));
     if (!saknas.length) return bas;
     const s = spann();
-    return serverdata && serverdata.olasta
-      ? `${bas} ${remsa(saknas)} har inte lästs in än.`
-      : `${bas} ${remsa(saknas)} står inte på s. ${s.fran}–${s.till}.`;
+    /* Tre skäl att ett planerat nummer inte står bland chipsen, och de betyder
+       helt olika saker för läraren:
+
+       * det ligger i en LUCKA mellan lästa grannummer — då finns det på sidan
+         och avläsningen missade det (servern räknar fram luckorna, bok.luckor),
+       * sidorna är inte inlästa än,
+       * eller numret finns helt enkelt inte på uppslaget.
+
+       Att säga «står inte på s. 2–6» om en lucka är ett påstående om BOKEN som
+       bygger på ett fel i läsningen — läraren letar då efter en uppgift hon
+       skrivit och tror att hon mindes fel. */
+    const luckna = saknas.filter(iLucka);
+    const rest = saknas.filter(n => !iLucka(n));
+    const rader = [bas];
+    if (luckna.length) rader.push(`${remsa(luckna)} kunde inte läsas från sidan.`);
+    if (rest.length) rader.push(serverdata && serverdata.olasta
+      ? `${remsa(rest)} har inte lästs in än.`
+      : `${remsa(rest)} står inte på s. ${s.fran}–${s.till}.`);
+    return rader.join(' ');
+  }
+  /* Ligger numret i en lucka? Servern svarar när den kan (uppslagsrutten
+     räknar fram `luckor` ur det den läst). En äldre server — eller ett svar
+     utan fältet — får samma fråga ställd här: numret ska ha ett läst grannummer
+     på var sida i SAMMA hundratalsserie, och hålet får inte vara orimligt stort
+     (då är det ett serieskifte, inte en miss). Samma regel som app/bok.py. */
+  const LUCKTAK = 20;
+  function iLucka(n) {
+    if (serverdata && Array.isArray(serverdata.luckor)) return serverdata.luckor.includes(n);
+    const serie = Math.floor(n / 100);
+    const syskon = alla().filter(x => Math.floor(x.nr / 100) === serie).map(x => x.nr);
+    const under = syskon.filter(x => x < n);
+    const over = syskon.filter(x => x > n);
+    if (!under.length || !over.length) return false;
+    return Math.min(...over) - Math.max(...under) - 1 <= LUCKTAK;
   }
 
   const rort = () => {

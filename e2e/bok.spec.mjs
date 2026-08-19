@@ -423,8 +423,36 @@ test("kalenderraden citerar HELA lärarens lista — också det som inte står p
     await page.evaluate(() => window.Uppgifter.franKalendern("1101–1103, 1105–1119"));
     const rad = page.locator("#uppgforslag");
     await expect(rad).toContainText("i kalendern: 1101–1103, 1105–1119.");
-    // …och det som inte gick att hitta sägs rakt ut i stället för att tystas bort.
-    await expect(rad).toContainText("1106–1114, 1116–1119 står inte på s. 2–6.");
+    /* …och det som inte gick att hitta sägs rakt ut i stället för att tystas
+       bort — men i två meningar, för det är två olika saker. 1106–1114 ligger
+       MELLAN lästa nummer (1105 och 1115) på lästa sidor: de står i boken, och
+       det var avläsningen som missade dem. 1116–1119 ligger efter det sista
+       numret på uppslaget och finns helt enkelt inte där. */
+    await expect(rad).toContainText("1106–1114 kunde inte läsas från sidan.");
+    await expect(rad).toContainText("1116–1119 står inte på s. 2–6.");
+  });
+
+test("en lucka servern SETT sägs som en lucka, inte som en uppgift som saknas",
+  async ({ page }) => {
+    /* Uppslagsrutten räknar fram luckorna ur det den läst (app/bok.py luckor).
+       Säger servern att 1102 saknas mitt i följden ska raden säga DET — «står
+       inte på s. 11–12» hade skickat läraren att leta efter en uppgift hon
+       skrivit rätt, och tro att hon mindes fel. */
+    await fejka(page, { uppslag: { fran: 11, till: 12, olasta: [], utan_fakta: [],
+      sidor: [], luckor: [1102], uppgifter: [
+        { nr: 1101, sida: 11, niva: 1 }, { nr: 1103, sida: 12, niva: 1 },
+        { nr: 1104, sida: 12, niva: 2 }] } });
+    await page.goto("/");
+    await hydrerad(page);
+    await oppnaBoken(page);
+    await page.evaluate(() => window.Uppslag.satt(11, 12));
+    await expect.poll(() => page.locator("#uppgnivaer .uppgchip").count()).toBe(3);
+
+    await page.evaluate(() => window.Uppgifter.franKalendern("1101–1104, 1130"));
+    const rad = page.locator("#uppgforslag");
+    await expect(rad).toContainText("1102 kunde inte läsas från sidan.");
+    // 1130 ligger utanför följden — det är en annan sak, och sägs som förut.
+    await expect(rad).toContainText("1130 står inte på s. 11–12.");
   });
 
 test("lektionen utan bokplanering får ändå uppgifterna ur din grovplanering",
