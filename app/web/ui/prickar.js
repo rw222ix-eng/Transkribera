@@ -104,10 +104,19 @@ window.Prickar = (() => {
      tavlan. */
   function pa(rot, v) {
     if (!rot) return;
-    const vid = (v && v.andradVid) || 0;
-    const gatt = vid ? Date.now() - vid : LUGN_MS;
     $$('.andrad', rot).forEach(el => {
-      if (!$(':scope > .aprick', el)) el.appendChild(prick(el.dataset.el));
+      /* Tiden stämplas PÅ elementet: canvasen visar en KLON av pappret, och
+         cloneNode kopierar attribut men varken timers eller lyssnare. Utan
+         stämpeln stod klonens markering tydlig för evigt — originalet lugnade
+         sig bakom överlägget medan läraren såg på klonen. Granskningen ropar
+         pa(klon) utan version; då räknas resttiden ur stämpeln i stället. */
+      if (v && v.andradVid) el.dataset.andradVid = v.andradVid;
+      const vid = (v && v.andradVid) || Number(el.dataset.andradVid) || 0;
+      const gatt = vid ? Date.now() - vid : LUGN_MS;
+      /* En medklonad prick är en död knapp — byt den mot en levande. */
+      const gammal = $(':scope > .aprick', el);
+      if (gammal) gammal.remove();
+      el.appendChild(prick(el.dataset.el));
       if (gatt >= LUGN_MS) { el.setAttribute('data-lugn', ''); return; }
       el.removeAttribute('data-lugn');
       /* Noden kan vara borta när timern går — då gör setAttribute ingenting,
@@ -128,6 +137,7 @@ window.Prickar = (() => {
       if (!el.classList) return;
       el.classList.remove('andrad');
       el.removeAttribute('data-lugn');
+      el.removeAttribute('data-andrad-vid');
     });
     return kopia;
   }

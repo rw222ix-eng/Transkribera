@@ -421,6 +421,10 @@
     const klon = o.nod.cloneNode(true);
     klon.classList.add('gdok');
     plan.appendChild(klon);
+    /* Klonens prickar är döda knappar (cloneNode kopierar inga lyssnare) och
+       dess timers blev kvar i originalet. pa() utan version läser resttiden ur
+       elementens stämpel och byter prickarna mot levande (prickar.js). */
+    if (window.Prickar) window.Prickar.pa(klon);
     $('#g-titel').textContent = o.titel || 'Utkast';
     $('#g-meta').textContent = o.meta || '';
     kommentarer = []; nr = 0; mal = null; senaste = { varv: 0, par: {} };
@@ -486,6 +490,8 @@
     const klon = nod.cloneNode(true);
     klon.classList.add('gdok');
     plan.appendChild(klon);
+    /* Samma väckning som i oppna() — omritningen efter ett varv går här. */
+    if (window.Prickar) window.Prickar.pa(klon);
     if (window.Blad && window.Blad.omritaTavlor) window.Blad.omritaTavlor(plan);
     kommentarer.forEach(k => { if (k.el) satNal(k.el, k.id); });
     if (mal) $$('.gdok [data-el]', plan).forEach(x => x.toggleAttribute('data-mal', x.dataset.el === mal.el));
