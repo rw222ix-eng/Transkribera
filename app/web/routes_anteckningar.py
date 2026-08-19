@@ -25,7 +25,8 @@ from pathlib import Path
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
-from app import db, exam_latex, exam_pdf, gpu_arbiter, notes_gen, postprocess
+from app import (db, dokumentdiff, exam_latex, exam_pdf, gpu_arbiter,
+                 notes_gen, postprocess)
 from app.web import routes_planning
 from app.web.sse import sse_response
 
@@ -269,7 +270,12 @@ def create_router(base: Path, arbiter) -> APIRouter:
                         conn.close()
                 else:
                     ny = view
-                return _resultat(ny, res["errors"], res["rounds"])
+                svar = _resultat(ny, res["errors"], res["rounds"])
+                # Se routes_exam: markeringarna kommer ur diffen, inte ur
+                # lärarens formulering.
+                svar["andrade"] = dokumentdiff.andrade_element(
+                    "anteckningar", view["exam"], ny.get("exam"))
+                return svar
             finally:
                 arbiter.release_llm(llm)
 

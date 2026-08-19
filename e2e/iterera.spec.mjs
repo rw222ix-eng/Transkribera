@@ -30,7 +30,7 @@ function tavla(rubrik) {
 
 const strom = h => h.map(x => `data: ${JSON.stringify(x)}\n\n`).join("");
 
-async function fejka(page, { refine } = {}) {
+async function fejka(page, { refine, andrade } = {}) {
   const anrop = [];
   const json = (route, kropp) => route.fulfill({
     status: 200, contentType: "application/json", body: JSON.stringify(kropp) });
@@ -44,9 +44,14 @@ async function fejka(page, { refine } = {}) {
     const vag = new URL(route.request().url()).pathname;
     anrop.push({ vag, kropp: route.request().postDataJSON() });
     if (vag.endsWith("/refine")) {
+      /* `andrade` är serverns egen diff av dokumentets JSON (Etapp: ärliga
+         markeringar). Skickas den inte alls förblir svaret det gamla — och
+         klienten ska då falla tillbaka på sin regexp, precis som förr. */
+      const klar = { id: "abc123def456", board: tavla("Omskriven tavla"),
+                     errors: [], rounds: 1 };
+      if (andrade) klar.andrade = andrade;
       return route.fulfill({ status: 200, contentType: "text/event-stream",
-        body: refine || strom([{ type: "done", result: {
-          id: "abc123def456", board: tavla("Omskriven tavla"), errors: [], rounds: 1 } }]) });
+        body: refine || strom([{ type: "done", result: klar }]) });
     }
     if (vag.endsWith("/render-report")) return json(route, { ok: true, repaired: false });
     return route.fulfill({ status: 200, contentType: "text/event-stream",
@@ -252,4 +257,47 @@ test("utan klick skickas inget mål — önskemålet gäller hela pappret", asyn
   await expect.poll(() => anrop.some(a => a.vag.endsWith("/refine")),
                     { timeout: 20_000 }).toBe(true);
   expect(anrop.find(a => a.vag.endsWith("/refine")).kropp.mal).toBeUndefined();
+});
+
+/* ── ÄRLIGA MARKERINGAR ───────────────────────────────────────────
+ * Vilka rutor som märks kom förr ur en regexp på lärarens mening — en
+ * avläsning av önskemålet, inte av resultatet. Servern diffar nu dokumentets
+ * JSON och skickar `andrade`; finns fältet styr det, annars gäller regexpen.
+ */
+
+const markerade = page => page.evaluate(() => Array.from(
+  document.querySelectorAll("#granskaskal .gdok .andrad, #arkskal .andrad"),
+  el => el.dataset.el).filter(Boolean));
+
+test("serverns lista styr vilka rutor som märks", async ({ page }) => {
+  await fejka(page, { andrade: ["tav2"] });
+  await page.goto("/");
+  await hydrerad(page);
+  await skrivTavla(page);
+  await oppnaCanvas(page);
+
+  // Meningen nämner «uppgift 3» och «svårare» — regexpen hade målat uppg3 och
+  // uppg5. Servern säger tav2, och det är servern som skrev om tavlan.
+  await page.locator("#g-falt").fill("Gör uppgift 3 svårare");
+  await page.locator("#g-form").evaluate(f => f.requestSubmit());
+  await expect(page.locator("#g-antal")).toHaveText("1 ändring", { timeout: 20_000 });
+
+  await expect.poll(() => markerade(page), { timeout: 20_000 })
+    .toEqual(expect.arrayContaining(["tav2"]));
+  expect(await markerade(page)).not.toContain("tav0");
+  expect(await markerade(page)).not.toContain("uppg3");
+});
+
+test("en omskrivning som inte ändrade något märker ingen ruta", async ({ page }) => {
+  await fejka(page, { andrade: [] });
+  await page.goto("/");
+  await hydrerad(page);
+  await skrivTavla(page);
+  await oppnaCanvas(page);
+
+  await page.locator("#g-falt").fill("Gör den svårare");
+  await page.locator("#g-form").evaluate(f => f.requestSubmit());
+  // Varvet räknas ändå — läraren frågade, och frågan står i panelen.
+  await expect(page.locator("#g-antal")).toHaveText("1 ändring", { timeout: 20_000 });
+  expect(await markerade(page)).toEqual([]);
 });

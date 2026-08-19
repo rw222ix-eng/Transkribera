@@ -312,6 +312,33 @@ def test_refine_updates_board(llm_ready, monkeypatch):
     assert captured["mal"] == {"namn": "Formel 3", "innehall": "a^2+b^2=c^2"}
 
 
+def test_refine_svaret_bar_de_rutor_som_skrevs_om(llm_ready, monkeypatch):
+    """Serverns diff, i tavlans egen id-serie — samma numrering som
+    `taggaTavla` sätter när motorn ritat, och den är INTE sektionslistans
+    index: förlagans första rubrik är understruken, och understrykningen är en
+    egen `.wb-element`. Sjätte sektionen (index 5) blir därför tav6."""
+    pid = _make_planning(llm_ready, monkeypatch)
+    ny = copy.deepcopy(_valid_board())
+    sektioner = ny["boards"][0]["sections"]
+    sektioner[-1] = dict(sektioner[-1])
+    sektioner[-1]["text"] = "Helt ny rad på tavlan"
+    monkeypatch.setattr(lesson_board, "refine_board",
+                        lambda *a, **k: {"board": ny, "errors": [], "rounds": 1})
+    res = _done(llm_ready.post(f"/api/planning/{pid}/refine",
+                               json={"message": "byt sista raden"}))
+    assert res["andrade"] == ["tav6"]
+
+
+def test_refine_utan_andring_marker_ingen_ruta(llm_ready, monkeypatch):
+    pid = _make_planning(llm_ready, monkeypatch)
+    monkeypatch.setattr(lesson_board, "refine_board",
+                        lambda board, *a, **k: {"board": board, "errors": [],
+                                                "rounds": 1})
+    res = _done(llm_ready.post(f"/api/planning/{pid}/refine",
+                               json={"message": "gör den kortare"}))
+    assert res["andrade"] == []
+
+
 # ------------------------------------------------------------ klockslaget --
 
 def _tid(board: dict) -> str:

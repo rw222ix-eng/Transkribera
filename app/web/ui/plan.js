@@ -3055,19 +3055,31 @@
     if ((forsok || 0) > 30) return;
     requestAnimationFrame(() => omGranska(ark, (forsok || 0) + 1));
   }
-  /* ── ITERATIONEN ────────────────────────────────────
-     Nålarna, diffen och källomviktningen är oförändrade: `andrat` styr vilka
-     element som får en numrerad nål i canvas, och den listan härleds ur vad
-     läraren SKREV — det är en avläsning av meningen, inte en gissning om
-     innehållet, och den ska göras här oavsett vem som skrev om pappret.
+  /* ── ITERATIONEN ──────────────────────────────────
+     `andrat` styr vilka element som får en numrerad nål i canvas.
 
-     Det som ÄNDRATS är varifrån innehållet kommer: skrevs pappret av servern
-     ligger den omskrivna tavlan respektive provet i `res`, och de heuristiska
-     reglerna nedan (svårighet, kontext, nivå) rör då inte det som ritas — de
-     lever kvar för prototypen, där de är hela omskrivningen. */
+     FÖRR härleddes listan ur vad läraren SKREV: en regexp letade «uppgift 3» i
+     etiketten, «svårare» antogs röra uppgift 3 och 5, «fysik» uppgift 3 och
+     block 1. Det är en avläsning av önskemålet, inte av resultatet — tolkade
+     modellen meningen annorlunda pekade nålarna på orörda rutor medan det som
+     verkligen skrevs om stod omarkerat.
+
+     NU diffar servern dokumentets JSON före och efter och skickar `andrade`
+     (app/dokumentdiff.py). Finns fältet vinner det — också när det är TOMT:
+     en omskrivning som inte ändrade något på pappret ska inte måla ett element
+     rött för syns skull.
+
+     Regexp-reglerna står kvar som reserv, och behövs än: prototypens papper
+     skrivs om här i klienten och har ingen server att diffa, gamla utkast och
+     kassettsvar bär inget `andrade`, och `svarighet`/`kontext`/`niva` är där
+     hela omskrivningen. De rör inte det servern ritat. */
   function iterera(text, etikett, elId, res) {
     if (nu < 0) return;
     const l = (etikett ? etikett + ' ' : '') + text.toLowerCase();
+    /* Serverns egen lista, när den finns. `Array.isArray` och inte sanningsvärde:
+       en tom lista är ett SVAR («ingenting på pappret ändrades»), inte ett
+       saknat fält. */
+    const sagt = res && Array.isArray(res.andrade) ? res.andrade : null;
     const v = nyVersion(versioner[nu], x => {
       x.anteckning = etikett ? `${etikett}: ${text}` : text;
       /* Elementet canvas pekade på är det som ska märkas — en uppgift som heter
@@ -3087,6 +3099,9 @@
       if (/natur|biologi/.test(l)) { x.kontext = 'natur'; x.andrat.push('uppg3', 'block1'); }
       if (/instruktion|regler|räknare/.test(l)) x.andrat.push('instr');
       if (!x.andrat.length) x.andrat.push('uppg1', 'block0');
+      /* Sist, så att `svarighet`/`kontext`/`niva` ovan hinner sättas — de styr
+         prototypens omskrivning och hör inte ihop med markeringen. */
+      if (sagt) x.andrat = sagt.slice();
     });
     if (res && res.board) { v.wb = res.board; v.wbFel = res.errors || []; }
     if (res && res.exam) {

@@ -11,6 +11,7 @@ DB v4) kommer i Fas 3.
 from __future__ import annotations
 
 import base64
+import copy
 import json
 import re
 import uuid
@@ -20,8 +21,8 @@ from pathlib import Path
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
-from app import (bok, db, forlaga, gpu_arbiter, lararord, lesson_board,
-                 llm_client, rattning)
+from app import (bok, db, dokumentdiff, forlaga, gpu_arbiter, lararord,
+                 lesson_board, llm_client, rattning)
 from app.web.sse import sse_response
 
 # Två tavlor i 2× blir ett par MB; 30 MB är väl tilltaget men stoppar missbruk.
@@ -697,6 +698,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
         if not llm:
             return JSONResponse(_LLM_BUSY, status_code=409)
 
+        fore = copy.deepcopy(st["board"])       # jämförelsen behöver den orörd
+
         def job(emit):
             try:
                 if arbiter.ensure_llm() is None:
@@ -714,7 +717,13 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 st["rounds"] = res["rounds"]
                 spara_planering(pid, st)
                 return {"id": pid, "board": st["board"], "errors": res["errors"],
-                        "rounds": res["rounds"]}
+                        "rounds": res["rounds"],
+                        # Rutorna som faktiskt skrevs om, i tavlans egen
+                        # id-serie (app/dokumentdiff.py). Tidssektionen sätts
+                        # om deterministiskt varje varv och märks bara när dess
+                        # innehåll verkligen skiljer sig.
+                        "andrade": dokumentdiff.andrade_element(
+                            "tavla", fore, st["board"])}
             finally:
                 arbiter.release_llm(llm)
 

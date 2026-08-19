@@ -527,6 +527,9 @@ def test_refine_ger_en_ny_version(client, monkeypatch):
     ny = _done(r)
     assert len(ny["versions"]) == 2
     assert "nya upplagan" in ny["anteckningar"]["sektioner"][0]["stycken"][0]
+    # …och svaret säger VILKEN sektion som skrevs om, så canvas slipper gissa
+    # ur lärarens mening (app/dokumentdiff.py).
+    assert ny["andrade"] == ["sekt1"]
 
 
 def test_refine_kraver_ett_onskemal(client, monkeypatch):

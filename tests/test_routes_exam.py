@@ -131,6 +131,32 @@ def test_refine_adds_version(client, monkeypatch):
     assert captured["mal"] == {"namn": "Sidhuvudet", "innehall": "Ma 1c · NA26F"}
 
 
+def test_refine_svaret_bar_vad_som_faktiskt_andrades(client, monkeypatch):
+    """Markeringen ska inte längre gissas ur lärarens mening. Servern har båda
+    versionerna och säger vilka element som skiljer sig — här: bara uppgift 1,
+    fast meningen nämner både «svårare» och «uppgift 3» (som regexpen i plan.js
+    hade målat röda)."""
+    result, _ = _make_exam(client, monkeypatch)
+    updated = _exam_doc()
+    updated["uppgifter"][0]["text"] = "Ny uppgift $x = 2$."
+    monkeypatch.setattr(exam_gen, "refine_exam",
+                        lambda *a, **k: {"exam": updated, "errors": [], "rounds": 1})
+    res = _done(client.post(f"/api/exams/{result['id']}/refine",
+                            json={"message": "gör uppgift 3 svårare"}))
+    assert res["andrade"] == ["uppg1"]
+
+
+def test_refine_som_inte_andrade_nagot_marker_ingenting(client, monkeypatch):
+    """En tom lista är ett svar, inte ett saknat fält: ingenting på pappret ska
+    målas rött för syns skull."""
+    result, doc = _make_exam(client, monkeypatch)
+    monkeypatch.setattr(exam_gen, "refine_exam",
+                        lambda exam, *a, **k: {"exam": exam, "errors": [], "rounds": 1})
+    res = _done(client.post(f"/api/exams/{result['id']}/refine",
+                            json={"message": "gör den svårare"}))
+    assert res["andrade"] == []
+
+
 def test_refine_requires_message(client, monkeypatch):
     result, _ = _make_exam(client, monkeypatch)
     assert client.post(f"/api/exams/{result['id']}/refine",

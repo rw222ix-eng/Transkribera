@@ -23,8 +23,8 @@ from pathlib import Path
 from fastapi import APIRouter, Request
 from fastapi.responses import FileResponse, JSONResponse
 
-from app import (ci_profil, course_data, db, exam_gen, exam_latex, exam_pdf,
-                 exam_spec, gpu_arbiter, tryck)
+from app import (ci_profil, course_data, db, dokumentdiff, exam_gen,
+                 exam_latex, exam_pdf, exam_spec, gpu_arbiter, tryck)
 from app.web import routes_planning
 from app.web.sse import sse_response
 
@@ -427,7 +427,12 @@ def create_router(base: Path, arbiter) -> APIRouter:
                         conn.close()
                 else:
                     newview = view
-                return _exam_result(newview, res["errors"], res["rounds"])
+                svar = _exam_result(newview, res["errors"], res["rounds"])
+                # Vilka element som faktiskt ändrades — diffat, inte utläst ur
+                # lärarens mening (app/dokumentdiff.py). Klienten märker dem.
+                svar["andrade"] = dokumentdiff.andrade_element(
+                    newview.get("typ") or "prov", view["exam"], newview.get("exam"))
+                return svar
             finally:
                 arbiter.release_llm(llm)
 
