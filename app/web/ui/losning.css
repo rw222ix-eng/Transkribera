@@ -9,16 +9,53 @@
 
    Bladet ärver .ark från prov.css — samma papper, samma trave. */
 
+/* ══════════ --fsk · EN RATT FÖR HELA ARKET ══════════
+   Läraren: «Texten på facit ska fylla hela A4-bladet … dynamiskt justera
+   texten … en minimistorlek på texten, typ storlek 12 — texten kan bara bli
+   större från 12.»
+
+   Ett facit med fyra svar lämnade halva pappret tomt medan texten satt i sin
+   minsta grad. Måtten nedan är därför inte längre absoluta px utan px GÅNGER
+   `--fsk`, arkets egen skalfaktor. blad.js mäter det färdigpaginerade arket och
+   skruvar upp ratten tills pappret är fullt.
+
+   Tre regler bor i talen:
+     · Fallbacken är 1. Ett ark ingen mätt — designsidan, en klon, ett gammalt
+       dokument — sätts exakt som förut. Golvet är alltså basgraderna, och de
+       ligger på eller över lärarens tolva (löptexten 13,5 px). Under dem går
+       ratten aldrig; den skruvar bara UPP.
+     · EN ratt, inte en per element. Rubrik, löptext, steg, faksimil och KaTeX
+       (som ärver font-size) växer ihop, annars glider proportionerna isär vid
+       varje grad.
+     · Marginalspalten är med. Numret i marginalen växer med graden, och en
+       spalt som står kvar på 66 px trycker in «10.» i frågan.
+
+   Ratten gäller BARA facit- och lösningsarken (fa, lo-*, fe-*). Elevens
+   uppgiftsark har luft med flit — se blad.js passa(). */
+
+/* Tre mått bor i prov.css och ärvs hit — facit lånar provets grammatik med
+   vilje, så att de två pappren går att läsa bredvid varandra. De måste följa
+   ratten här, annars växer svaren medan uppgiftsraden och marginalsiffran står
+   stilla:
+     · arkets löptext (15 px), som .prtext och allt annat utan egen grad ärver,
+     · numret i marginalen (23 px) och uppgiftens värde under det (12,5 px),
+     · marginalspaltens bredd (66 px), som numret ska rymmas i.
+   Bokens egna former har egna tal längre ned i den här filen och skalas där. */
+.ark[data-form="fa"],.ark[data-form^="lo-"],.ark[data-form^="fe-"]{font-size:calc(15px * var(--fsk, 1))}
+[data-form="fa"] .pruppg,[data-form^="lo-"] .pruppg,[data-form^="fe-"] .pruppg{grid-template-columns:calc(66px * var(--fsk, 1)) minmax(0,1fr)}
+[data-form="fa"] .prnr,[data-form^="lo-"] .prnr,[data-form^="fe-"] .prnr{font-size:calc(23px * var(--fsk, 1))}
+[data-form="fa"] .prvarde,[data-form^="lo-"] .prvarde,[data-form^="fe-"] .prvarde{font-size:calc(12.5px * var(--fsk, 1))}
+
 /* ── Huvudet ──
    Ett lösningsförslag är ett internt dokument. Därför en etikett i stället för
    en titel: den säger vad man håller i innan man börjat läsa, och uppgiftens
    tak står i svart till höger — det är det första man vill veta. */
 .lohuvud>b:first-child{white-space:nowrap}
-.lohuvud{display:flex;justify-content:space-between;align-items:baseline;gap:16px;padding-bottom:0;font-size:12.5px;letter-spacing:.06em;text-transform:uppercase;font-weight:700;color:#000}
-.lohuvud span{font-weight:700;font-size:13.5px;letter-spacing:.04em;text-transform:none;color:#000}
-.lotitel{margin:18px 0 0;font-size:25px;font-weight:700;letter-spacing:-.015em;line-height:1.14}
-.lolede{margin:7px 0 0;font-size:13.5px;line-height:1.5;color:#000;max-width:62ch}
-.lokomm{margin:9px 0 0;font-size:13.5px;line-height:1.5;color:#000}
+.lohuvud{display:flex;justify-content:space-between;align-items:baseline;gap:16px;padding-bottom:0;font-size:calc(12.5px * var(--fsk, 1));letter-spacing:.06em;text-transform:uppercase;font-weight:700;color:#000}
+.lohuvud span{font-weight:700;font-size:calc(13.5px * var(--fsk, 1));letter-spacing:.04em;text-transform:none;color:#000}
+.lotitel{margin:18px 0 0;font-size:calc(25px * var(--fsk, 1));font-weight:700;letter-spacing:-.015em;line-height:1.14}
+.lolede{margin:7px 0 0;font-size:calc(13.5px * var(--fsk, 1));line-height:1.5;color:#000;max-width:62ch}
+.lokomm{margin:9px 0 0;font-size:calc(13.5px * var(--fsk, 1));line-height:1.5;color:#000}
 .lokomm b{font-weight:700}
 
 /* ══════════ 1 · KOMMENTERAD ELEVLÖSNING (långsvar) ══════════ */
@@ -27,13 +64,13 @@
    vara känt innan man börjar läsa — därför står bedömningen här och inte som en
    summering längst ner. */
 #lo4 .loelev,[data-form="lo4"] .loelev,[data-form^="fe-"] .loelev{display:flex;align-items:baseline;justify-content:space-between;gap:18px;margin:16px 0 0;color:#000}
-#lo4 .loelev b,[data-form="lo4"] .loelev b,[data-form^="fe-"] .loelev b{font-size:17.5px;font-weight:700}
-#lo4 .loelev span,[data-form="lo4"] .loelev span,[data-form^="fe-"] .loelev span{font-size:15px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+#lo4 .loelev b,[data-form="lo4"] .loelev b,[data-form^="fe-"] .loelev b{font-size:calc(17.5px * var(--fsk, 1));font-weight:700}
+#lo4 .loelev span,[data-form="lo4"] .loelev span,[data-form^="fe-"] .loelev span{font-size:calc(15px * var(--fsk, 1));font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
 #lo4 .loelev span[data-utan],[data-form="lo4"] .loelev span[data-utan],[data-form^="fe-"] .loelev span[data-utan]{color:#C0392B}
 #lo4 .loelev span[data-full],[data-form="lo4"] .loelev span[data-full],[data-form^="fe-"] .loelev span[data-full]{color:#1B7A46}
 
 /* Faksimilen: elevens egen hand, på papper som inte är bladets papper. */
-#lo4 .loskann,[data-form="lo4"] .loskann,[data-form^="fe-"] .loskann{position:relative;margin-top:9px;padding:12px 20px 12px 24px;background:#FBFAF7;border:1px solid #E2DFD8;font-family:Caveat,'Shadows Into Light Two',cursive;font-size:22px;line-height:1.38;color:#22303F}
+#lo4 .loskann,[data-form="lo4"] .loskann,[data-form^="fe-"] .loskann{position:relative;margin-top:9px;padding:12px 20px 12px 24px;background:#FBFAF7;border:1px solid #E2DFD8;font-family:Caveat,'Shadows Into Light Two',cursive;font-size:calc(22px * var(--fsk, 1));line-height:1.38;color:#22303F}
 #lo4 .loskann .katex,[data-form="lo4"] .loskann .katex,[data-form^="fe-"] .loskann .katex{font-size:1.02em}
 #lo4 .loskannrad,[data-form="lo4"] .loskannrad,[data-form^="fe-"] .loskannrad{display:flex;align-items:baseline;gap:14px}
 
@@ -50,9 +87,9 @@
    appen är det Switzer, och bedömningen blev då den enda texten på pappret som
    inte var Arimo. */
 #lo4 .lodom,[data-form="lo4"] .lodom,[data-form^="fe-"] .lodom{margin:7px 0 1px;display:grid;grid-template-columns:auto minmax(0,1fr);align-items:baseline;gap:0 10px;font-family:Arimo,Arial,'Helvetica Neue',Helvetica,sans-serif}
-#lo4 .lodom>i,[data-form="lo4"] .lodom>i,[data-form^="fe-"] .lodom>i{font-style:normal;font-weight:700;font-size:13.5px;letter-spacing:.02em;color:#1B7A46;white-space:nowrap;font-variant-numeric:tabular-nums}
+#lo4 .lodom>i,[data-form="lo4"] .lodom>i,[data-form^="fe-"] .lodom>i{font-style:normal;font-weight:700;font-size:calc(13.5px * var(--fsk, 1));letter-spacing:.02em;color:#1B7A46;white-space:nowrap;font-variant-numeric:tabular-nums}
 #lo4 .lodom>i[data-utan],[data-form="lo4"] .lodom>i[data-utan],[data-form^="fe-"] .lodom>i[data-utan]{color:#C0392B}
-#lo4 .lodom>p,[data-form="lo4"] .lodom>p,[data-form^="fe-"] .lodom>p{margin:0;font-size:13.5px;line-height:1.42;color:#000}
+#lo4 .lodom>p,[data-form="lo4"] .lodom>p,[data-form^="fe-"] .lodom>p{margin:0;font-size:calc(13.5px * var(--fsk, 1));line-height:1.42;color:#000}
 #lo4 .lodom .katex,[data-form="lo4"] .lodom .katex,[data-form^="fe-"] .lodom .katex{font-size:1.06em}
 #lo4 .loparti[data-utan],[data-form="lo4"] .loparti[data-utan],[data-form^="fe-"] .loparti[data-utan]{border-left-color:#C0392B}
 #lo4 .loparti[data-utan]>b,[data-form="lo4"] .loparti[data-utan]>b,[data-form^="fe-"] .loparti[data-utan]>b,#lo4 .lomark[data-utan],[data-form="lo4"] .lomark[data-utan],[data-form^="fe-"] .lomark[data-utan]{background:#C0392B}
@@ -78,20 +115,20 @@
    spann som vägrar krympa blir så brett som sin text — utanför A4-arket. Med
    krympning radbryts texten inne i spannet; min-width:0 låter flexen ge den
    radens plats i stället för innehållets bredd. Korta svar står som förut. */
-.losvar>span{flex:0 1 auto;min-width:0;font-size:17.5px;color:#000}
+.losvar>span{flex:0 1 auto;min-width:0;font-size:calc(17.5px * var(--fsk, 1));color:#000}
 /* Etiketten som skiljer svaret från frågan. Utan den läses de två raderna som
    ett stycke — frågan är satt i löptext och svaret är ofta bara en formel till. */
-.losetikett{flex:0 0 auto;min-width:40px;font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#000}
+.losetikett{flex:0 0 auto;min-width:40px;font-size:calc(11px * var(--fsk, 1));font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:#000}
 /* I en deluppgift bär a) b) c) redan navigeringen; en etikett till blir brus. */
 .prdel .losvar{margin-top:0;padding-left:0}
 .losvar>span .katex{font-size:1.05em}
-.losvar>em{font-style:normal;font-size:12.5px;font-weight:400;color:#000}
+.losvar>em{font-style:normal;font-size:calc(12.5px * var(--fsk, 1));font-weight:400;color:#000}
 
 /* ── Lösningsgången i facit ──
    Vägen till svaret, inte en fullständig redovisning: de rader en lärare skulle
    skriva på tavlan för att visa hur man kommer dit. Ingen numrering — stegen
    läses uppifrån och ner, och en siffra till hade konkurrerat med uppgiftens. */
-.lovag{margin:9px 0 0;padding:0;list-style:none;display:grid;gap:5px;font-size:13.5px;line-height:1.5;color:#000}
+.lovag{margin:9px 0 0;padding:0;list-style:none;display:grid;gap:5px;font-size:calc(13.5px * var(--fsk, 1));line-height:1.5;color:#000}
 .lovag>li{display:grid;grid-template-columns:auto minmax(0,1fr);gap:0 9px}
 .lovag>li::before{content:'';align-self:center;width:11px;height:1px;background:#000}
 
@@ -105,14 +142,14 @@
 /* Poängen per steg i lösningsgången: det är dem läraren delar ut, så de står i
    marginalen av steget — inte i en summering under. */
 .losteg{display:block}
-.lovag>li em{font-style:normal;font-weight:700;font-size:11.5px;letter-spacing:.02em;color:#1B7A46;white-space:nowrap;margin-left:8px}
+.lovag>li em{font-style:normal;font-weight:700;font-size:calc(11.5px * var(--fsk, 1));letter-spacing:.02em;color:#1B7A46;white-space:nowrap;margin-left:8px}
 
 /* Lösningsgången till delprov C bär tre fullständiga lösningar per blad. Den
    luft ett kortsvarsfacit har råd med finns inte här — måtten är stramare, och
    A4 går ihop utan att något steg faller utanför. */
-[data-form^="lo-c"] .lotitel{margin-top:12px;font-size:23px}
+[data-form^="lo-c"] .lotitel{margin-top:12px;font-size:calc(23px * var(--fsk, 1))}
 [data-form^="lo-c"] .pruppg{margin-top:16px}
-[data-form^="lo-c"] .lovag{margin-top:6px;gap:3px;font-size:13.5px;line-height:1.42}
+[data-form^="lo-c"] .lovag{margin-top:6px;gap:3px;font-size:calc(13.5px * var(--fsk, 1));line-height:1.42}
 [data-form^="lo-c"] .losvar{margin-top:6px}
 
 /* ══════════ BOKENS UPPGIFTER ══════════
@@ -122,8 +159,8 @@
    och 23 px. Fyra siffror i samma grad tryckte numret in i frågan, så bokens
    papper får en egen grad och en bredare marginal. Låg regeln på lo-c ändrade den
    tyst provets lösningsförslag också — samma nyckel, två olika papper. */
-[data-form="lo-bok"] .pruppg,[data-form="lo-bok3"] .pruppg{grid-template-columns:82px minmax(0,1fr)}
-[data-form="lo-bok"] .prnr,[data-form="lo-bok3"] .prnr{font-size:19px;font-variant-numeric:tabular-nums}
+[data-form="lo-bok"] .pruppg,[data-form="lo-bok3"] .pruppg{grid-template-columns:calc(82px * var(--fsk, 1)) minmax(0,1fr)}
+[data-form="lo-bok"] .prnr,[data-form="lo-bok3"] .prnr{font-size:calc(19px * var(--fsk, 1));font-variant-numeric:tabular-nums}
 [data-form="lo-bok"] .prvarde,[data-form="lo-bok3"] .prvarde{text-transform:lowercase;letter-spacing:.02em}
 /* Faksimilen är satt i skrivstil på 22 px, och en staplad bråkdel är då högre än
    radens linjehöjd: numeratorn klev upp i «Väg B»-raden ovanför. Bokens papper får

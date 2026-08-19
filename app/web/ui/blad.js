@@ -825,6 +825,64 @@ window.Blad = (() => {
     }
   }
 
+  /* ── Facit ska fylla A4:an ───────────────────────────
+     Läraren: «Texten på facit ska fylla hela A4-bladet … dynamiskt justera
+     texten … en minimistorlek på texten, typ storlek 12 — texten kan bara bli
+     större från 12.»
+
+     Ett facit med fyra svar satt i samma grad som ett med fjorton och lämnade
+     halva pappret vitt. Ratten är CSS-variabeln --fsk (losning.css): EN
+     skalfaktor som rubrik, löptext, steg, marginalsiffra och KaTeX hänger i.
+     Här mäts arket och ratten skruvas upp tills pappret är fullt.
+
+     Fyra villkor, och alla fyra är lärarens:
+       · ALDRIG under basen. Golvet är 1 — facitets egen sättning, som ligger på
+         eller över hennes tolva. Ratten skruvar bara UPP.
+       · ALDRIG över kanten: scrollHeight ska rymmas i clientHeight. Ett svar
+         som halkar under nederkanten är värre än ett halvtomt blad.
+       · Ett TAK, för ett halvtomt blad ska inte bli en affisch. TAK är satt så
+         att löptextens 13,5 px stannar under 20 px — ungefär tre gradsteg, som
+         är vad ett kortsvarsfacit på tre uppgifter behöver för att se satt ut i
+         stället för uppblåst. Bortom det läser man inte snabbare, man bläddrar
+         bara mer: taket biter först när arket är så tomt att graden ändå inte
+         var problemet.
+       · ARKET, inte bladet. Varje ark mäts för sig, så sida två ur en
+         paginering får sin egen grad — det är just den som brukar vara tom.
+
+     Ordningen är låst: paginera FÖRST (som mäter i basgraden), fyll sedan. Går
+     stegen omvänt delar pagineringen ett ark den själv blåst upp, och läraren
+     får två blad där ett räckte. Av samma skäl nollställs ratten före varje ny
+     mätning — formge() körs fyra gånger, och en kvarglömd skala hade mätts som
+     om den vore innehållet. */
+  const FSK_TAK = 1.45;
+  const FSK_VARV = 6;                 /* binärsök: 1,45 → under en procents steg */
+  const FACIT = '.ark[data-form="fa"], .ark[data-form^="lo-"], .ark[data-form^="fe-"]';
+  const spiller = ark => ark.scrollHeight - ark.clientHeight > 0;
+
+  function nollskala(trav) {
+    $$(FACIT, trav).forEach(ark => { ark.style.removeProperty('--fsk'); });
+  }
+
+  function fyll(trav) {
+    $$(FACIT, trav).forEach(ark => {
+      ark.style.removeProperty('--fsk');
+      /* Redan fullt i basgraden: ratten har ingenting att ge. Skrivs ändå ut,
+         så att ett mätt ark alltid bär sin faktor — det är den BladBild klonar
+         med sig och den e2e läser. */
+      if (spiller(ark)) { ark.style.setProperty('--fsk', '1'); return; }
+      let lag = 1;
+      let hog = FSK_TAK;
+      for (let varv = 0; varv < FSK_VARV; varv++) {
+        const mitt = (lag + hog) / 2;
+        ark.style.setProperty('--fsk', mitt.toFixed(3));
+        if (spiller(ark)) hog = mitt; else lag = mitt;
+      }
+      /* Den sista prövade graden kan vara den som spillde — sätt tillbaka den
+         största som RYMDES. */
+      ark.style.setProperty('--fsk', lag.toFixed(3));
+    });
+  }
+
   /* ── Ritningen ───────────────────────────────────── */
   /* Tavlans hörnrad och rubrik.
      Förlagan bär en egen dag, längd och boksida. Står de kvar säger tavlan
@@ -968,6 +1026,9 @@ window.Blad = (() => {
     });
     kompilera(trav);
     paginera(trav);
+    /* Bilden ska visa samma papper som skärmen: skalan sätts inline på arket
+       och följer därför med i BladBilds klon. */
+    fyll(trav);
     return $$('.blad', trav);
   }
 
@@ -1019,7 +1080,13 @@ window.Blad = (() => {
     /* Ångra, dela på de FULLA ytorna, passa sedan varje blad för sig. Delade man
        efter passningen såg delaArk ett blad som «nästan rymdes» — därför att
        passningen kastat ut alla skrivytor till lösblad. */
-    const formge = () => { atervand(trav, v); delaArk(trav); passa(trav, v); paginera(trav); };
+    const formge = () => {
+      atervand(trav, v);
+      /* Ratten nollas FÖRE pagineringen: den mäter i basgraden, aldrig i den
+         uppskruvade från förra varvet. */
+      nollskala(trav);
+      delaArk(trav); passa(trav, v); paginera(trav); fyll(trav);
+    };
     formge();
     requestAnimationFrame(formge);
     setTimeout(formge, 260);
