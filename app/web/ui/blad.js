@@ -672,6 +672,67 @@ window.Blad = (() => {
     nar(trav, satt);
   }
 
+  /* ══════════ MÄTBARHETEN — det gömda papprets fälla ══════════
+     Allt nedan MÄTER: delningen, passningen, pagineringen och facitets fyllning.
+     Och allt mätande förutsätter att pappret har en layout att mäta i.
+
+     Det har det inte alltid, och det var precis det som gav läraren fyra blad
+     med en uppgift på varje. `#dokument` bor i planeringsvyn, och vyn är
+     `hidden` tills hon byter flik — men utkastet plockas upp DIREKT vid
+     sidladdningen (plan.js aterstallUtkast → visa → Blad.rita). Hela traven
+     ritades alltså i en gömd vy, där varje .gu rapporterar clientHeight 0.
+
+     Då blir ledigt() = −paddingBottom ≈ −54 för VARJE blad: alltid mindre än
+     −SPILL, aldrig ≥ 0. delaArk flyttade därför kort tills ett enda låg kvar,
+     såg samma −54 på fortsättningen och delade den likadant. Fyra uppgifter
+     blev fyra blad — och när läraren sedan bytte flik mätte ingen om: bladen
+     stod kvar med 466, 703, 699 och 758 px ledigt var.
+
+     Regeln är därför två saker, och båda behövs:
+       · En gömd trav mäts INTE. Ingen delning, ingen paginering, ingen
+         fyllning — hellre osatt en stund än maxdelad för alltid.
+       · Formgivningen körs om när traven får en layout. Utkastet kan ligga i en
+         gömd flik hur länge som helst, så vakten har ingen tidsgräns.
+
+     clientHeight är måttet: ett blad har fast höjd (794×1123), så noll betyder
+     «ingen layout» och aldrig «tomt blad». */
+  const matbar = el => !!(el && el.isConnected && el.clientHeight > 0);
+  function travMatbar(trav) {
+    if (!matbar(trav)) return false;
+    const ark = $$('.gu, .ark', trav);
+    return ark.length > 0 && ark.every(matbar);
+  }
+
+  /* Traven som väntar på sin layout. Dubbelt grepp av samma skäl som `nar()`
+     ovan är dubbel — den kommentaren är dyrköpt: en vakt som svarar i samma
+     ögonblick rutan får en storlek, och en långsam tickare bredvid som inte
+     litar på vakten. Ingen tidsgräns, men posten faller bort så snart traven
+     lämnat dokumentet, så listan kan inte växa sig lång. */
+  const vantande = new Map();
+  let tickaren = null;
+  function ticka() {
+    vantande.forEach((fn, trav) => {
+      if (!trav.isConnected) { vantande.delete(trav); return; }
+      if (travMatbar(trav)) { vantande.delete(trav); fn(); }
+    });
+    if (!vantande.size && tickaren) { clearInterval(tickaren); tickaren = null; }
+  }
+  function narMatbar(trav, fn) {
+    if (vantande.has(trav)) return;
+    vantande.set(trav, fn);
+    if (typeof ResizeObserver === 'function') {
+      const vakt = new ResizeObserver(() => {
+        if (!vantande.has(trav)) { vakt.disconnect(); return; }
+        if (!travMatbar(trav)) return;
+        vantande.delete(trav);
+        vakt.disconnect();
+        fn();
+      });
+      vakt.observe(trav);
+    }
+    if (!tickaren) tickaren = setInterval(ticka, 300);
+  }
+
   /* ── Att få bladet att gå ihop med pappret ───────────
      Bladet bär bara uppgifter, svarsrader och lösbladshänvisningar — ingen
      skrivyta att krympa eller blåsa upp. Spiller det ändå delas det i två. */
@@ -737,6 +798,7 @@ window.Blad = (() => {
   function passa(trav, v) {
     if (v.typ !== 'Arbetsblad' && v.typ !== 'Gruppuppgift') return;
     $$('.gu', trav).forEach(gu => {
+      if (!matbar(gu)) return;              /* gömt blad mäts inte — se MÄTBARHETEN */
       ater(gu);
       /* Bildplatsen är det enda på bladet som kan ge vika, och den krymper i steg.
          Räcker inte det får bladet spilla — då delar delaArk() det. Att tyst
@@ -778,7 +840,10 @@ window.Blad = (() => {
     /* Sex varv: varje varv föder som mest ett blad, och ett dokument som
        verkligen behöver fler än fyra ska inte tappa sina sista kort. */
     for (let varv = 0; varv < 6; varv++) {
-      const gu = $$('.gu', trav).find(g => ledigt(g) < -SPILL && $$('.gukort', g).length > 1);
+      /* matbar() FÖRST: ett gömt blad rapporterar clientHeight 0, och då säger
+         ledigt() «−54» om ett blad som kanske är halvtomt. En gömd mätning får
+         aldrig bli en delning — se MÄTBARHETEN. */
+      const gu = $$('.gu', trav).find(g => matbar(g) && ledigt(g) < -SPILL && $$('.gukort', g).length > 1);
       if (!gu) break;
       const blad = gu.closest('.blad');
       const nytt = document.createElement('div');
@@ -823,7 +888,9 @@ window.Blad = (() => {
     for (let varv = 0; varv < 8; varv++) {
       const trangt = $$('.blad', trav).find(bl => {
         const ark = $('.ark[data-brytbar]', bl);
-        return ark && ark.scrollHeight - ark.clientHeight > 0 && $$('.pruppg', ark).length > 1;
+        /* Gömt ark: clientHeight 0 medan scrollHeight bär innehållet, alltså
+           «spiller» även ett halvtomt blad. Samma fälla som delaArk gick i. */
+        return ark && matbar(ark) && ark.scrollHeight - ark.clientHeight > 0 && $$('.pruppg', ark).length > 1;
       });
       if (!trangt) break;
       const ark = $('.ark[data-brytbar]', trangt);
@@ -890,6 +957,9 @@ window.Blad = (() => {
   function fyll(trav) {
     $$(FACIT, trav).forEach(ark => {
       ark.style.removeProperty('--fsk');
+      /* Ett gömt ark spiller alltid (clientHeight 0) och hade fått --fsk:1 för
+         evigt — basgraden på ett papper som kanske är halvtomt. */
+      if (!matbar(ark)) return;
       /* Redan fullt i basgraden: ratten har ingenting att ge. Skrivs ändå ut,
          så att ett mätt ark alltid bär sin faktor — det är den BladBild klonar
          med sig och den e2e läser. */
@@ -1105,6 +1175,16 @@ window.Blad = (() => {
        efter passningen såg delaArk ett blad som «nästan rymdes» — därför att
        passningen kastat ut alla skrivytor till lösblad. */
     const formge = () => {
+      /* GÖMD TRAV MÄTS INTE. Utkastet plockas upp medan planeringsvyn ännu är
+         hidden, och en mätning där ger maxdelning — se MÄTBARHETEN. I stället
+         ställer sig traven i kö och formges i det ögonblick den får en layout. */
+      /* Två varv när traven vaknar: det första sätter bladen, det andra mäter om
+         dem när sättningen fallit på plats — samma dubbla mätning som en färsk
+         ritning får. */
+      if (!travMatbar(trav)) {
+        narMatbar(trav, () => { formge(); requestAnimationFrame(formge); });
+        return;
+      }
       atervand(trav, v);
       /* Ratten nollas FÖRE pagineringen: den mäter i basgraden, aldrig i den
          uppskruvade från förra varvet. */
@@ -1114,7 +1194,12 @@ window.Blad = (() => {
     formge();
     requestAnimationFrame(formge);
     setTimeout(formge, 260);
-    if (document.fonts && document.fonts.status !== 'loaded') document.fonts.ready.then(() => setTimeout(formge, 60));
+    /* Och en gång till när typsnitten är inne — men UTAN villkoret «bara om de
+       inte redan är laddade». Det gjorde att en VARM omritning (läraren bläddrar
+       tillbaka till samma utkast) fick ett mätvarv färre än den kalla: samma
+       papper mättes olika många gånger beroende på om sidan nyss laddats om.
+       Är promisen redan löst kostar raden en mikrotask. */
+    if (document.fonts) document.fonts.ready.then(() => setTimeout(formge, 60));
     /* Bilderna läraren själv lagt in på en uppgift följer dokumentet, inte formen. */
     Object.entries(v.bilder || {}).forEach(([nyckel, src]) => {
       const el = $(`[data-el="${nyckel}"] .prbild, [data-el="${nyckel}"] .gufigur`, trav);
