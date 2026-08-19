@@ -81,14 +81,26 @@
 ((# Hängande uppgiftsnummer: numret i 10,5 mm gutter, brödtexten
     indragen. list-miljön klarar flerstyckesinnehåll, vilket en
     \makebox-lösning inte gör. #))
+((# GUTTERN ÄR DELAD I TVÅ: brickan får 7,5 mm och mellanrummet 3 mm, och
+    tillsammans är de fortfarande 10,5 mm — brödtexten står alltså kvar på
+    exakt samma indrag som förut. Här stod labelsep 0pt med labelwidth =
+    hela guttern, och LaTeX sätter etiketten HÖGERSTÄLLD i sin box: brickan
+    hamnade tätt mot vänsterkanten på texten och satt ihop med den.
+    «\textbf{A}Räkna var för sig …», «\textbf{B}I verkstaden …» — läraren
+    fick ett papper där bokstaven läste som första bokstaven i meningen.
+    Måttet är gutterns, inte ett gap på måfå: \labelsep är det TeX själv
+    skjuter in EFTER etikettboxen, så mellanrummet finns även när brickan är
+    bredare än sin box (uppgift 10 och framåt). #))
 \newlength{\uppgiftgutter}
 \setlength{\uppgiftgutter}{10.5mm}
+\newlength{\uppgiftbricka}
+\setlength{\uppgiftbricka}{7.5mm}
 \newenvironment{uppgift}[2]{%
   \par\vspace{8.5mm}%
   \begin{list}{}{%
     \setlength{\leftmargin}{\uppgiftgutter}%
-    \setlength{\labelwidth}{\uppgiftgutter}%
-    \setlength{\labelsep}{0pt}%
+    \setlength{\labelwidth}{\uppgiftbricka}%
+    \setlength{\labelsep}{\dimexpr\uppgiftgutter-\uppgiftbricka\relax}%
     \setlength{\itemindent}{0pt}%
     \setlength{\listparindent}{0pt}%
     \setlength{\topsep}{0pt}%
@@ -124,12 +136,15 @@
 ((# Deluppgift: lettrerad (a/b/c) hängande rad inne i uppgift-miljön, med
     egen poängmarkör i högermarginalen. Egen inre lista så bokstaven hänger
     som numret gör på toppnivån. Tomt poängargument → ingen markör. #))
+((# Samma delning som uppgiftens gutter, och av samma skäl: «a)Vilket är
+    rampens höjdökning» stod på lärarens papper i kväll. 4,5 mm åt markören
+    och 2,5 mm åt mellanrummet — 7 mm ihop, alltså oförändrat indrag. #))
 \newenvironment{deluppgift}[2]{%
   \par\vspace{2.5mm}%
   \begin{list}{}{%
     \setlength{\leftmargin}{7mm}%
-    \setlength{\labelwidth}{7mm}%
-    \setlength{\labelsep}{0pt}%
+    \setlength{\labelwidth}{4.5mm}%
+    \setlength{\labelsep}{2.5mm}%
     \setlength{\itemindent}{0pt}%
     \setlength{\listparindent}{0pt}%
     \setlength{\topsep}{0pt}\setlength{\partopsep}{0pt}%

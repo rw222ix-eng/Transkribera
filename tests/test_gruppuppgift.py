@@ -327,6 +327,49 @@ def test_pappret_gar_att_kompilera(tmp_path):
     assert "Var sitter den okända? I exponenten → logaritmera." in text
 
 
+@pytest.mark.tectonic
+def test_brickan_star_fri_fran_texten(tmp_path):
+    """Bokstavsbrickan satt IHOP med uppgiftstexten på lärarens utskrift:
+    «ARäkna var för sig …», «BI verkstaden …», och deluppgifterna likaså
+    («a)Vilket», «b)Ali»). Guttern i _preamble gav hela sin bredd åt etiketten
+    och noll åt mellanrummet, och LaTeX högerställer etiketten i sin box —
+    brickan hamnade alltså tätt mot textens vänsterkant. På ett papper där
+    varje uppgift börjar med ett imperativt verb läser bokstaven då som
+    meningens första bokstav.
+
+    Testet läser den KOMPILERADE PDF:en och inte .tex-källan: mellanrummet
+    finns inte i källan alls, det uppstår i sättningen, och en assert på
+    \\labelsep hade bara upprepat koden."""
+    import pypdfium2
+
+    d = _doc()
+    d["uppgifter"][0]["text"] = "Räkna var för sig och jämför sedan svaren."
+    d["uppgifter"][1]["text"] = "I verkstaden byggs en ramp med lutningen 1:12."
+    d["uppgifter"][1]["poang"] = [0, 0, 0]
+    d["uppgifter"][1].pop("losning", None)
+    d["uppgifter"][1].pop("bedomning", None)
+    d["uppgifter"][1]["deluppgifter"] = [
+        {"text": "Vilket är rampens höjdökning per meter?", "poang": [1, 0, 0],
+         "losning": "Kvoten $1/12$.", "bedomning": "Rätt kvot ger 1 p."},
+        {"text": "Ali vill ha 0,5 m höjd. Hur lång blir rampen?",
+         "poang": [1, 0, 0], "losning": "$6$ m.", "bedomning": "Rätt längd ger 1 p."},
+    ]
+    doc, fel = exam_spec.validate_exam_json(d, "gruppuppgift")
+    assert doc is not None, fel
+    pdf, log = exam_pdf.compile_pdf(exam_latex.render_gruppuppgift(doc),
+                                    tmp_path, "gruppuppgift")
+    assert pdf is not None, log[-2000:]
+    sidor = pypdfium2.PdfDocument(str(pdf))
+    text = "".join(sidor[i].get_textpage().get_text_range()
+                   for i in range(len(sidor)))
+    for hopsatt, fritt in (("ARäkna", "A Räkna"),
+                           ("BI verkstaden", "B I verkstaden"),
+                           ("a)Vilket", "a) Vilket"),
+                           ("b)Ali", "b) Ali")):
+        assert hopsatt not in text, f"brickan sitter ihop: {hopsatt!r}"
+        assert fritt in text, f"brickan saknas helt: {fritt!r}"
+
+
 # ---------------------------------------------------------------- rutten --
 
 def test_rutten_ger_typ_och_profil(client, monkeypatch):
