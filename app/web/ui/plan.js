@@ -216,6 +216,10 @@
   function slangUtkast(tyst) {
     if (!versioner.length) return false;
     const vs = versioner.slice(), markor = Math.max(0, nu), id = utkastId;
+    /* Bladkön hör till pappret som slängs. Låg den kvar skrev nästa «Skriv»
+       bladet till FÖRRA mottagaren — även om läraren just bytt i väljaren. */
+    const koVar = bladko.slice(), nuVar = bladNu;
+    bladNu = null; bladko = [];
     utkastId = null;
     versioner = []; nu = -1;
     visarLosning = false;
@@ -224,6 +228,7 @@
     if (id && serverPa()) window.API.json('/api/dokument/' + id, { method: 'DELETE' }).catch(() => {});
     const ater = () => {
       versioner = vs;
+      bladNu = nuVar; bladko = koVar;
       utkastAterskapa(vs, markor);
       visa(markor);
       planKoll();
@@ -2489,6 +2494,22 @@
         { namn: underlag.length ? 'Läser vad klassen hann med' : 'Hoppar över transkripten', detalj: underlag.length ? underlag.map(l => l.namn).join(' · ') : 'inga lektioner valda' },
         { namn: 'Skriver och poängsätter', detalj: typ }
       ],
+      /* Utan de här stod «Skriv» kvar död efter ett 409 från molnsemaforen,
+         ett serverfel eller ett tryck på Avbryt — enda vägen tillbaka var att
+         råka trigga planKoll. Bladkön nollställs av samma skäl som i
+         slangUtkast: en död kö pekar på förra mottagaren. */
+      efterFel: () => {
+        $('#skriv').disabled = false;
+        bladNu = null; bladko = [];
+        planKoll();
+        not.textContent = gammal;
+      },
+      efterStopp: () => {
+        $('#skriv').disabled = false;
+        bladNu = null; bladko = [];
+        planKoll();
+        not.textContent = gammal;
+      },
       efterKlar: (_el, res) => {
         /* Tavlan servern skrev följer med pappret: den ritas av samma motor som
            prototypens form, och den ligger kvar i Sparat efteråt. `wbId` är
@@ -4080,8 +4101,13 @@
          visade fyra om byggställningar. */
       avritade(godkant)
         .then(blad => window.API.strom(`/api/exams/${godkant.provId}/approve`, {
+          /* «Inget facit» reser samma flagga: den styr bara facitbandet på
+             elevbladets sista sida i LaTeX-reserven, och båda valen betyder
+             «inte på elevens papper». Utan den fick ett blad läraren bad ha
+             INGET facit ändå lösningarna tryckta — men bara när avritningen
+             föll och LaTeX-vägen tog över. */
           separat_facit: godkant.typ === 'Arbetsblad'
-            && (godkant.inst || {}).facit === 'Separat facit',
+            && (godkant.inst || {}).facit !== 'Facit i bladet',
           version: godkant.provVersion || null,
           blad,
         }))

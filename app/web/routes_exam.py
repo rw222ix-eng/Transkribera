@@ -434,6 +434,13 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     res["exam"]["grupp"] = grupp
                 if res["exam"] is not None and elev_namn:
                     res["exam"]["elev"] = elev_namn
+                # Provtiden också: läraren valde minuterna, kalenderposten
+                # använder dem — försättsbladet får inte säga något annat bara
+                # för att modellen skrev sitt eget tal i dokumentet. Diagnosen
+                # undantas inte: dess tid_min är redan framräknad ur lektionen
+                # (diagnosplan ovan skriver över variabeln).
+                if res["exam"] is not None and res["exam"].get("tid_min"):
+                    res["exam"]["tid_min"] = tid_min
                 _satt_lararens_datum(res["exam"], datum)
                 if res["exam"] is None:
                     return {"id": None, "exam": None,

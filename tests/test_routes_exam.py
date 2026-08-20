@@ -796,7 +796,11 @@ def test_separat_facit_slacker_bandet_i_elevbladet(client, monkeypatch):
 def test_plan_js_skickar_separat_facit_med_approve():
     """Flaggan finns bara om frontenden skickar den: valet bor i webbläsarens
     dokument (inst.facit) och står inte i provets JSON. Utan den här raden i
-    plan.js är serverflaggan död kod och bladet bär facit igen."""
+    plan.js är serverflaggan död kod och bladet bär facit igen.
+
+    Kontraktet är negativt: bandet trycks BARA för «Facit i bladet». Både
+    «Separat facit» och «Inget facit» reser flaggan — annars fick ett blad
+    läraren bad ha inget facit ändå lösningarna, fast bara i LaTeX-reserven."""
     import re
     from pathlib import Path
     js = (Path(routes_exam.__file__).parent / "ui" / "plan.js"
@@ -804,7 +808,7 @@ def test_plan_js_skickar_separat_facit_med_approve():
     start = js.index("/api/exams/${godkant.provId}/approve")
     kod = re.sub(r"/\*.*?\*/", "", js[start:js.index(".then(", start)], flags=re.S)
     assert "separat_facit" in kod, kod
-    assert "'Separat facit'" in kod, kod
+    assert "!== 'Facit i bladet'" in kod, kod
 
 
 def test_provet_far_inget_separat_facit(client, monkeypatch):
