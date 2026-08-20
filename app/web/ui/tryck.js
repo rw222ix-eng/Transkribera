@@ -57,17 +57,29 @@
     rader.filter(r => !r.v.losningsblad && r.v.bokuppg && r.v.bokuppg.losning && r.v.bokuppg.losning.antal)
       .forEach(r => {
         const l = r.v.bokuppg.losning;
+        /* Antalet är de uppgifter arket FAKTISKT bär en lösning till, inte hela
+           urvalet. Allt över bok_losning.MAX_UPPGIFTER — och allt på olästa
+           sidor — kommer tillbaka utan innehåll, och BokLosning ritar inte
+           tomma poster. Raden lovade förr hela urvalet, så kvittot i handen sa
+           en annan sak än pappret i skrivaren. Utan server (Claude Design) är
+           posterna prototypmallar och alla ritas: då gäller urvalet. */
+        const skrivna = (window.API && window.API.pa)
+          ? (l.poster || []).filter(p => p.text && p.svar).length
+          : l.antal;
+        const raknat = skrivna === l.antal
+          ? `${l.antal} ${l.antal === 1 ? 'uppgift' : 'uppgifter'}`
+          : `${skrivna} av ${l.antal} uppgifter`;
         rader.push({
           v: r.v, bok: true,
           namn: `Lösningsförslag · boken s. ${r.v.bokuppg.sidor}`, typ: 'Facit',
-          under: `${l.antal} uppgifter (${l.niva.toLowerCase()}) · uppg ${l.remsa} · din kopia · enkelsidig`,
+          under: `${raknat} (${l.niva.toLowerCase()}) · uppg ${l.remsa} · din kopia · enkelsidig`,
           /* Sidorna är arken BokLosning faktiskt sätter — svarsfacit, bedömd
              elevlösning per nivå 3-uppgift, nivå 3-facit — inte en gissning ur
              uppgiftsantalet. Paginerar ett ark sig blir det ändå en sida till;
              raden är alltså en undre gräns, och kvittot räknar det riktiga. */
           antal: 1, med: true,
           sidor: Math.max(1, (window.BladBild && window.BladBild.antal(r.v))
-                              || Math.ceil(l.antal / 4))
+                              || Math.ceil(Math.max(skrivna, 1) / 4))
         });
       });
     rita();

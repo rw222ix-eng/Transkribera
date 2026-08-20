@@ -268,16 +268,30 @@ window.BokLosning = (() => {
                      vag: p.vag || [] }, p.nr, p.niva, true));
       const latta = riktiga.filter(p => p.niva < 3);
       const svara = riktiga.filter(p => p.niva === 3);
+      /* ── DE SOM INTE FICK NÅGON LÖSNING ────────────────
+         En vald uppgift kan komma tillbaka tom: fler än servern skriver i ett
+         anrop (bok_losning.MAX_UPPGIFTER), en sida som inte är inläst, eller
+         en post modellen hoppade över. Filtret ovan tar bort dem, och FÖRR
+         försvann de spårlöst — läraren valde tjugo uppgifter, fick tolv poster
+         på arket och hade inget sätt att se vilka åtta som fattades. Numren
+         står därför sist på det sista arket: ett papper som säger vad det inte
+         täcker är värt mer än ett som tiger. */
+      const utan = l.poster.filter(p => !(p.text && p.svar)).map(p => p.nr);
+      const notrad = utan.length
+        ? `<p class="lokomm"><b>Utan lösning här:</b> uppgift ${esc(utan.join(', '))} — ${utan.length === 1 ? 'den' : 'de'} rymdes inte i skrivningen eller ligger på sidor som inte är inlästa.</p>`
+        : '';
       if (latta.length) ut2.push(`<div class="ark" data-form="lo-bok" data-brytbar="">
         <div class="lohuvud"><b>Lösningsförslag · boken</b><span>${esc(b.bok)} · s. ${esc(b.sidor)} · ${latta.length} ${latta.length === 1 ? 'uppgift' : 'uppgifter'}</span></div>
         <h1 class="lotitel">Endast svar krävs</h1>
         <p class="lolede">Uppgifterna är bokens egna, lösta med metoderna till och med ${esc(b.avsnitt)}. Vägen under svaret är de rader du skulle skriva på tavlan, inte en fullständig redovisning.</p>
         ${latta.map(post).join('')}
+        ${svara.length ? '' : notrad}
       </div>`);
       if (svara.length) ut2.push(`<div class="ark" data-form="lo-bok3" data-brytbar="">
         <div class="lohuvud"><b>Lösningsförslag · nivå 3</b><span>${esc(b.bok)} · s. ${esc(b.sidor)} · ${svara.length} ${svara.length === 1 ? 'uppgift' : 'uppgifter'}</span></div>
         <h1 class="lotitel">Hela lösningen krävs</h1>
         ${svara.map(post).join('')}
+        ${notrad}
       </div>`);
       return ut2;
     }

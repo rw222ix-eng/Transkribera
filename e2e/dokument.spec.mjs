@@ -675,3 +675,140 @@ test("«Börja om» utan utkast påstår inte att något slängdes", async ({ pa
   await page.locator(".omstartknapp").click();
   await expect(page.locator(".toast").last()).toHaveText("Allt rensat — välj lektionen i veckan igen");
 });
+
+// ── BOKENS LÖSNINGSARK FÅR SITT INNEHÅLL ────────────────────────────────────
+// Posterna skrivs ur bokens lästa sidor (/api/bocker/{id}/losningar) och
+// PATCH:as på pappret. Tre saker gick fel i den vägen, och alla tre var TYSTA:
+// överskottet över serverns tak försvann, PATCH:en kunde skriva över en
+// omskrivning som skedde under minuten, och «en skrivning pågår»-flaggan
+// hamnade i dokumentets JSON och blev därmed permanent.
+
+/* Urvalet som Uppgifter.urval lämnar det INNAN någon lösning är skriven:
+   posterna bär nummer och nivå, ingenting mer. `bokId` är satt — utan det är
+   boken prototypens och skrivningen sker aldrig. */
+const oskrivetBokurval = (nr) => ({
+  bok: "Matematik 5000+ 3c", sidor: "244–247", avsnitt: "3.2 Derivata", bokId: 4,
+  uppg: nr, bort: [], remsa: `${nr[0]}–${nr[nr.length - 1]}`, bortremsa: "",
+  losning: {
+    niva: "Nivå 2 och 3", antal: nr.length, uppg: nr,
+    remsa: `${nr[0]}–${nr[nr.length - 1]}`,
+    poster: nr.map((n, i) => ({ nr: n, niva: 1 + (i % 2) })),
+  },
+});
+
+const skriven = nr => ({
+  nr, niva: 1, skriven: 3, text: `Bestäm $f'(x)$ när $f(x) = ${nr}x$.`,
+  svar: `$${nr}$`, vag: [["derivera", "potensregeln"]],
+});
+
+/** Fejkar lösningsrutten (bocker → losningar) som en SSE-ström. `grind` (en
+    Promise) håller svaret öppet tills testet släpper det. */
+async function fejkaLosningar(page, resultat, grind) {
+  const anrop = [];
+  await page.route("**/api/bocker/*/losningar", async route => {
+    anrop.push(route.request().postDataJSON());
+    if (grind) await grind;
+    return route.fulfill({
+      status: 200, contentType: "text/event-stream",
+      body: `data: ${JSON.stringify({ type: "done", result: resultat })}\n\n`,
+    });
+  });
+  return anrop;
+}
+
+const utkastMed = (versioner, markor = 0) => ({
+  id: 7, status: "utkast", markor, sort: 0, foljd: null,
+  versioner, dokument: versioner[markor],
+});
+
+test("en kvarglömd «skriver»-flagga hindrar inte lösningarna för alltid", async ({ page }) => {
+  /* Flaggan satt på `bokuppg.losning` — inne i dokumentets JSON — och en
+     omskrivning djupkopierar versionen, så «en skrivning pågår» skrevs till
+     servern. Stängdes fliken innan skrivningen hann nolla den plockades
+     utkastet upp med flaggan kvar, och anropet hoppades över vid varje
+     laddning: arket sa «Lösningarna är inte skrivna än» till tidens ände. */
+  const bok = oskrivetBokurval([3101, 3102]);
+  bok.losning.skriver = true;               // arvet från en skrivning som dog
+  const v = papper({ typ: "Tavla", bokuppg: bok });
+  const anrop = await fejkaLosningar(page, {
+    poster: [skriven(3101), skriven(3102)],
+    olasta_uppg: [], okanda: [], over_taket: [] });
+  await fejka(page, { utkast: utkastMed([v]) });
+  await page.goto("/");
+  await hydrerad(page);
+  await page.getByRole("tab", { name: "Planering" }).click();
+  await expect(page.locator("#dokument")).toBeVisible();
+
+  await expect.poll(() => anrop.length).toBe(1);
+  expect(anrop[0].uppg).toEqual([3101, 3102]);
+});
+
+test("uppgifterna som inte fick plats sägs i klartext", async ({ page }) => {
+  /* Servern skriver högst bok_losning.MAX_UPPGIFTER i ett anrop. Överskottet
+     kom hem varken som `okanda` eller som `olasta_uppg`, nollades till
+     platshållare i klienten och filtrerades bort av arket — läraren valde
+     femton uppgifter, fick tolv och fick inget veta. */
+  const nr = Array.from({ length: 15 }, (_, i) => 3101 + i);
+  const v = papper({ typ: "Tavla", bokuppg: oskrivetBokurval(nr) });
+  await fejkaLosningar(page, {
+    poster: nr.slice(0, 12).map(skriven),
+    olasta_uppg: [], okanda: [], over_taket: nr.slice(12) });
+  await fejka(page, { utkast: utkastMed([v]) });
+  await page.goto("/");
+  await hydrerad(page);
+  await page.getByRole("tab", { name: "Planering" }).click();
+
+  await expect(page.locator(".toast").last())
+    .toContainText("3 uppgifter till rymdes inte i skrivningen");
+});
+
+test("arket räknar upp de uppgifter det inte har någon lösning till", async ({ page }) => {
+  /* Samma tystnad en gång till, men på pappret: posterna utan innehåll
+     filtreras bort av renderaren, och utan raden gick det inte att se VILKA
+     som fattades. */
+  await fejka(page);
+  await page.goto("/");
+  await hydrerad(page);
+  const nr = [3101, 3102, 3103];
+  const dok = papper({ typ: "Tavla", bokuppg: oskrivetBokurval(nr) });
+  dok.bokuppg.losning.poster = [skriven(3101), { nr: 3102, niva: 2 },
+                                { nr: 3103, niva: 1 }];
+  const html = await page.evaluate(
+    v => window.BokLosning.blad(v).join(""), dok);
+  expect(html).toContain("Utan lösning här");
+  expect(html).toContain("uppgift 3102, 3103");
+});
+
+test("lösningarna skriver inte över en omskrivning som skedde under tiden", async ({ page }) => {
+  /* PATCH:en bär versionen från när skrivningen STARTADE, och
+     db.update_dokument skriver den version markören står på. Flyttade läraren
+     markören under minuten (en omskrivning, ett gör om) hamnade alltså det
+     gamla varvet ovanpå det nya — tyst, för omritningen är en nolloperation i
+     samma läge och skärmen såg rätt ut till nästa laddning. */
+  const bok = oskrivetBokurval([3101, 3102]);
+  const v0 = papper({ typ: "Tavla", bokuppg: bok, anteckning: "Första utkastet" });
+  const v1 = papper({ typ: "Tavla", bokuppg: JSON.parse(JSON.stringify(bok)),
+                      svarighet: 1, anteckning: "Svårare uppgifter" });
+  let slapp;
+  const grind = new Promise(r => { slapp = r; });
+  const skrivningar = await fejkaLosningar(page, {
+    poster: [skriven(3101), skriven(3102)],
+    olasta_uppg: [], okanda: [], over_taket: [] }, grind);
+  const anrop = await fejka(page, { utkast: utkastMed([v0, v1], 0) });
+  await page.goto("/");
+  await hydrerad(page);
+  await page.getByRole("tab", { name: "Planering" }).click();
+  await expect(page.locator("#dokument")).toBeVisible();
+  await expect.poll(() => skrivningar.length).toBe(1);
+
+  // Läraren går fram till det nyare varvet medan lösningarna skrivs.
+  await page.locator("#gorom").click();
+  await expect(page.locator("#histnot")).toContainText("Ändring 1 av 1");
+  slapp();
+
+  await expect(page.locator(".toast").last())
+    .toContainText("hade hunnit skrivas om");
+  // Och INGET papper skrevs till raden: markören står på ett annat varv.
+  expect(anrop.filter(a => a.metod === "PATCH" && a.kropp && a.kropp.dokument))
+    .toEqual([]);
+});

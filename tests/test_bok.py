@@ -982,3 +982,98 @@ def test_boklosningarnas_prompt_bar_sidtexten_ordagrant():
     assert "KÄLLTEXTEN STÅR HÄR" in p
     assert "1111" in p
     assert "Hitta ALDRIG på en uppgift" in p
+
+
+# ── TAKET FÅR INTE VARA TYST ────────────────────────────────────────────────
+# MAX_UPPGIFTER kapade urvalet inne i generate_losningar, och överskottet fanns
+# sedan varken i `olasta_uppg` eller i `okanda`. Klienten gjorde platshållare av
+# posterna, arket ritade inte platshållare, och läraren som valt tjugo uppgifter
+# fick tolv utan ett ord om de åtta. Kapningen är rätt — tystnaden var buggen.
+
+def test_overskottet_over_taket_kommer_hem_med_namn():
+    from app import bok_losning
+    valda = [{"nr": 1100 + i, "niva": 1} for i in range(bok_losning.MAX_UPPGIFTER + 3)]
+    inom, over = bok_losning.dela_pa_taket(valda)
+    assert len(inom) == bok_losning.MAX_UPPGIFTER
+    assert over == [1112, 1113, 1114]
+
+    # Och samma sanning ur hela vägen: modellen svarar på ALLA, men bara de som
+    # ryms är begärda — resten står namngivna i `over_taket`.
+    fejk = json.dumps({"poster": [
+        {"nr": u["nr"], "text": f"Uppgift {u['nr']}.", "svar": "$1$", "vag": []}
+        for u in valda]})
+    res = bok_losning.generate_losningar(
+        "Liber Ma 1c", "1.1", [{"sida": 4, "text": "…"}], valda,
+        llm=lambda *a, **k: fejk)
+    assert len(res["poster"]) == bok_losning.MAX_UPPGIFTER
+    assert res["over_taket"] == [1112, 1113, 1114]
+
+
+def test_losningsrutten_sager_vilka_uppgifter_som_inte_fick_plats(
+        client, ocr, monkeypatch):
+    """Rutten svarar för TRE sorters uppgift utan lösning: okänd, oläst — och
+    över taket. Den sista saknades helt, och då var kapningen tyst hela vägen
+    ut till arket."""
+    from app import bok_losning
+
+    b = _importera(client)
+    # Sex sidor med text: tre uppgifter per sida, alltså arton valda.
+    _done(client.post(f"/api/bocker/{b['id']}/las", json={"fran": 10, "till": 15}))
+    uppg = [u["nr"] for u in
+            client.get(f"/api/bocker/{b['id']}/uppslag?fran=10&till=15")
+            .json()["uppgifter"]]
+    assert len(uppg) == 18
+
+    # Bara modellen stubbas — kapningen och rapporteringen körs på riktigt.
+    riktig = bok_losning.generate_losningar
+    prompter = []
+
+    def fejk_llm(model, prompt, **k):
+        prompter.append(prompt)
+        return json.dumps({"poster": [
+            {"nr": nr, "text": f"Uppgift {nr}.", "svar": "$1$", "vag": []}
+            for nr in uppg]})
+
+    monkeypatch.setattr(bok_losning, "generate_losningar",
+                        lambda *a, **k: riktig(*a, **dict(k, llm=fejk_llm)))
+    res = _done(client.post(f"/api/bocker/{b['id']}/losningar",
+                            json={"uppg": uppg + [99999]}))
+    # Modellen ombads aldrig lösa fler än taket — men de andra ska sägas.
+    assert str(uppg[0]) in prompter[0]
+    assert str(uppg[-1]) not in prompter[0]
+    assert [p["nr"] for p in res["poster"]] == uppg[:bok_losning.MAX_UPPGIFTER]
+    assert res["over_taket"] == uppg[bok_losning.MAX_UPPGIFTER:]
+    assert res["okanda"] == [99999]
+    assert res["olasta_uppg"] == []
+
+
+def test_losningsrutten_svarar_med_taket_ocksa_nar_sidorna_ar_olasta(client, ocr):
+    """Fältet är alltid med — toasten räknar på det utan att först fråga om det
+    finns."""
+    b = _importera(client)
+    _done(client.post(f"/api/bocker/{b['id']}/las",
+                      json={"fran": 10, "till": 11, "bara": "fakta"}))
+    uppg = [u["nr"] for u in
+            client.get(f"/api/bocker/{b['id']}/uppslag?fran=10&till=11")
+            .json()["uppgifter"]]
+    res = _done(client.post(f"/api/bocker/{b['id']}/losningar",
+                            json={"uppg": uppg}))
+    assert res["poster"] == [] and res["over_taket"] == []
+    assert res["olasta_uppg"] == uppg
+
+
+# ── MARKDOWN-STÄDNINGEN FÅR INTE RÖRA MATTEN ────────────────────────────────
+# «**a**» blev «*$a$*» (en asterisk kvar på var sida av lärarens ark) och
+# «$2*3*4 = 24$» blev «$2$3$4 = 24$» — ett matteuttryck splittrat i tre, för
+# bladet delar på $ (blad-bygg.js).
+
+def test_fetstil_stadas_helt_och_matten_lamnas_i_fred():
+    from app import bok_losning
+    stada = bok_losning._stada_text
+    assert stada("Vilket tal ska stå i stället för **a**?") \
+        == "Vilket tal ska stå i stället för $a$?"
+    assert stada("*a* och **b**") == "$a$ och $b$"
+    # Stjärnan inne i $…$ är en multiplikation, inte markdown.
+    assert stada("Beräkna $2*3*4 = 24$.") == "Beräkna $2*3*4 = 24$."
+    # Markdown UTANFÖR matten städas fortfarande, med matten orörd bredvid.
+    assert stada("*n* är udda när $2*k+1$") == "$n$ är udda när $2*k+1$"

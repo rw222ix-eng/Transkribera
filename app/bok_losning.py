@@ -91,6 +91,19 @@ SCHEMA = {
 }
 
 
+def dela_pa_taket(uppgifter: list[dict]) -> tuple[list[dict], list]:
+    """(de som ryms under taket, NUMREN på dem som inte gör det).
+
+    Taket är avsiktligt (se MAX_UPPGIFTER) — det som inte var det är att
+    överskottet försvann tyst. Kapningen skedde här, rutten svarade varken
+    `olasta_uppg` eller `okanda` för de kapade, klienten nollade dem till
+    platshållare och arket filtrerade bort platshållare. Läraren som valde
+    tjugo uppgifter fick tolv, och ingenstans stod det. Numren åker därför
+    hem samma väg som `okanda`, och sägs i klartext."""
+    return (list(uppgifter[:MAX_UPPGIFTER]),
+            [u.get("nr") for u in uppgifter[MAX_UPPGIFTER:]])
+
+
 def build_prompt(bok_namn: str, avsnitt: str,
                  sidor: list[dict], uppgifter: list[dict]) -> str:
     """Sidtexterna + uppdraget. `sidor` är db.bok_sidor-rader MED text;
@@ -137,11 +150,22 @@ def build_prompt(bok_namn: str, avsnitt: str,
 
 # Modellen halkar ibland in i markdown trots instruktionen — «*a*» på ett
 # tryckt ark är asterisker, inte kursiv. Variabeln sätts som matte i stället.
-_MD_KURSIV = re.compile(r"\*([^*\s][^*]{0,24}?)\*")
+#
+# Två saker städningen INTE fick göra, och gjorde:
+# · Fetstil är samma markdown. «**a**» matchade bara det inre paret och blev
+#   «*$a$*» — en asterisk kvar på vardera sidan, mitt på lärarens ark. Därför
+#   `\*{1,2}`, och greedy: fetstilens båda stjärnor tas i samma tugga.
+# · Matematiken skulle lämnas i fred. «$2*3*4 = 24$» är en produkt, och
+#   stjärnorna där blev dollartecken: «$2$3$4 = 24$» — tre fragment, för
+#   bladet delar uttrycken på $ (blad-bygg.js). Ett $…$-alternativ först i
+#   mönstret äter därför upp matten innan asteriskgrenen får se den; den
+#   grenen returneras oförändrad.
+_MD_KURSIV = re.compile(r"(\$[^$]*\$)|\*{1,2}([^*\s][^*]{0,24}?)\*{1,2}")
 
 
 def _stada_text(s) -> str:
-    return _MD_KURSIV.sub(r"$\1$", str(s or "").strip())
+    return _MD_KURSIV.sub(lambda m: m.group(1) or f"${m.group(2)}$",
+                          str(s or "").strip())
 
 
 def _stada_vag(rader) -> list[list[str]]:
@@ -190,15 +214,20 @@ def generate_losningar(bok_namn: str, avsnitt: str, sidor: list[dict],
                        uppgifter: list[dict], *, model: str = "",
                        llm=llm_client.generate,
                        log_cb: Callable[[str], None] | None = None) -> dict:
-    """{poster: […]} för de uppgifter som gick att lösa ur sidorna.
+    """{poster: […], over_taket: […]} för de uppgifter som gick att lösa.
 
     Poster vars nummer inte fanns bland de begärda kastas — modellen ska
     inte kunna smyga in en uppgift läraren inte bad om — och nivån sätts ur
     DATABASENS uppgiftsrad, inte ur modellens svar: nivån styr vilket ark
-    posten hamnar på, och den är ett faktum om boken."""
+    posten hamnar på, och den är ett faktum om boken.
+
+    `over_taket` är numren som kapades av MAX_UPPGIFTER (se dela_pa_taket).
+    Fältet är alltid med, också tomt: rutten och toasten ska kunna räkna på
+    det utan att först fråga om det finns."""
     log = log_cb or (lambda _m: None)
-    val = uppgifter[:MAX_UPPGIFTER]
-    log(f"Skriver lösningar till {len(val)} uppgifter ur boken …")
+    val, over = dela_pa_taket(uppgifter)
+    log(f"Skriver lösningar till {len(val)} uppgifter ur boken …"
+        + (f" — och {len(over)} uppgifter till fick inte plats." if over else ""))
     raw = llm(model, build_prompt(bok_namn, avsnitt, sidor, val),
               system=SYSTEM,
               response_format={"type": "json_schema",
@@ -214,4 +243,4 @@ def generate_losningar(bok_namn: str, avsnitt: str, sidor: list[dict],
         rensad["skriven"] = SKRIVEN
         poster.append(rensad)
     poster.sort(key=lambda p: p["nr"])
-    return {"poster": poster}
+    return {"poster": poster, "over_taket": over}
