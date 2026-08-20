@@ -393,7 +393,8 @@ test("ändrades något annat än det läraren pekade på säger panelen det",
 
     const svar = svarsrad(page);
     await expect(svar).toContainText("står kvar oförändrad", { timeout: 20_000 });
-    await expect(svar).toContainText("uppgift a");
+    // «uppgift 1» sedan brickorna blev siffror (lärarens val 2026-08-20).
+    await expect(svar).toContainText("uppgift 1");
   });
 
 /* ── METARADEN ÄR DOKUMENTETS ───────────────────────────────────
@@ -480,7 +481,8 @@ test("ett klick i tabellen låser omskrivningen till uppgiftens nummer",
 
     await pekaPa(page, "#granskaskal .gdok .gutab");
     // Namnet säger fortfarande att det var tabellen — id:t är uppgiftens.
-    await expect(page.locator("#g-mal .gmaltext")).toHaveText("Tabellen · Uppgift B");
+    // «Uppgift 2» sedan brickorna blev siffror (lärarens val 2026-08-20).
+    await expect(page.locator("#g-mal .gmaltext")).toHaveText("Tabellen · Uppgift 2");
     await skickaOnskemal(page, "Lägg till en rad för 2021.");
     expect(anrop[0].nummer).toBe(2);
   });
