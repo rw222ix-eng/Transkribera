@@ -502,18 +502,25 @@ test("notisen på uppgiften ritas på arket", async ({ page }) => {
     .toHaveText("Rita en teckenrad som stöd.", { timeout: 20_000 });
 });
 
+/* Posterna bär SKRIVET innehåll, så som /api/bocker/{id}/losningar lämnar dem
+   (fb4a47d): utan text och svar ritar blad-boklos bara platshållararket
+   «Lösningarna är inte skrivna än», och då finns ingen post att peka på. */
 const BOKUPPG = {
   bok: "Matematik 5000+ 1a", sidor: "12–15", avsnitt: "1.1 Tal", bokId: null,
   uppg: [3101, 3102], bort: [], remsa: "3101–3102", bortremsa: "",
   losning: { niva: "Nivå 2 och 3", antal: 2, uppg: [3101, 3102],
              remsa: "3101–3102",
-             poster: [{ nr: 3101, niva: 1 }, { nr: 3102, niva: 2 }] },
+             poster: [
+               { nr: 3101, niva: 1, text: "Beräkna $7 + 3 \\cdot 6$.",
+                 svar: "$25$", vag: [["$3 \\cdot 6 = 18$", "multiplikation före addition"]] },
+               { nr: 3102, niva: 2, text: "Beräkna $(6 + 2) \\cdot 3$.",
+                 svar: "$24$", vag: [["$6 + 2 = 8$", "parentesen först"]] }] },
 };
 
 test("bokens lösningsark skickar inget uppgiftsnummer till servern",
   async ({ page }) => {
-    /* Arket är mallgenererat ur bokens uppgiftsnummer och finns inte i provets
-       JSON. Posterna bar ändå dokumentets serie: 3101 blev `uppg3101`, och
+    /* Arket skrivs ur bokens lästa sidor och finns inte i provets JSON.
+       Posterna bar ändå dokumentets serie: 3101 blev `uppg3101`, och
        nummerlåsningen skickade «uppgift 3101» till ett dokument med fyra
        uppgifter. Modellen fick ett mål som inte finns. */
     const anrop = await fejkaRefine(page, { doc: exam(), andrade: [] });
