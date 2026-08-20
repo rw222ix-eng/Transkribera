@@ -110,11 +110,30 @@ _DELNAMN_RE = [(re.compile(r"\b([Dd]el)\s+B\b"), r"\1 A"),
                (re.compile(r"\b([Dd]el)\s+C\b"), r"\1 B"),
                (re.compile(r"\b([Dd]el)\s+D\b"), r"\1 C")]
 
+# Internt finns ingen «Del A» — delarna heter B/C/D (exam_spec, prompten,
+# grammatiken). Står bokstaven ändå där är texten alltså REDAN papprets, och då
+# ska den lämnas i fred.
+_DELNAMN_REDAN_RE = re.compile(r"\b[Dd]el\s+A\b")
+
 
 def _delnamn_visning(text: str) -> str:
-    """Interna delnamn → papprets. Ordningen B→A, C→B, D→C är säker: ett
-    redan översatt «del A» matchar inget senare mönster."""
+    """Interna delnamn → papprets, EN gång.
+
+    Ordningen B→A, C→B, D→C räcker inte för att göra översättningen säker att
+    köra om: kedjan skjuter varje namn ett steg neråt, så en text som redan är
+    översatt översätts en gång till och två delar smälter ihop. Läraren pekade
+    på provtabellen och bad om en ändring; granskningen skickar SKÄRMENS text
+    till modellen, modellen svarade med papprets namn, och nästa rendering
+    gjorde «Del A utan räknare. Del B med räknare.» till «Del A utan räknare.
+    Del A med räknare.» — två delar med samma namn, på elevens försättsblad.
+
+    «Del A» är den entydiga markören för att arbetet redan är gjort, för den
+    bokstaven finns inte i det interna namnrummet. Samma regel i skärmens
+    spegel (blad-bygg.js delnamnVisning) — glider de isär säger PDF och skärm
+    olika saker om samma prov."""
     ut = str(text or "")
+    if _DELNAMN_REDAN_RE.search(ut):
+        return ut
     for monster, ersatt in _DELNAMN_RE:
         ut = monster.sub(ersatt, ut)
     return ut

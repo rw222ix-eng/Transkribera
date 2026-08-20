@@ -230,6 +230,46 @@ def test_pappret_bar_lararens_datum_inte_modellens(client, monkeypatch):
     assert "2026-08-20" in prov and "2026-08-19" not in prov
 
 
+def test_pappret_bar_lararens_provtid_aven_nar_modellen_teg(client, monkeypatch):
+    """`tid_min` är VALFRITT i schemat (exam_spec.ExamDoc), och rutten satte
+    lärarens minuter bara om modellen råkat fylla i fältet. Teg modellen föll
+    minuterna bort: prov.tex.j2 utelämnar Provtid-raden på försättsbladet
+    medan skärmen (blad.js) stod och sa «90 minuter, kl. …». Samma regel som
+    lärarens datum — kolumnen vinner, ovillkorligt."""
+    tyst = {k: v for k, v in _exam_doc().items() if k != "tid_min"}
+    monkeypatch.setattr(exam_gen, "generate_exam",
+                        lambda *a, **kw: {"exam": copy.deepcopy(tyst),
+                                          "errors": [], "rounds": 1})
+    result = _done(client.post("/api/exams/generate",
+                               json={"course_id": _course_id(client),
+                                     "antal": 6, "tid_min": 90}))
+    assert result["exam"]["tid_min"] == 90
+
+    # Och lärarens tal vinner även när modellen skrev ett eget.
+    monkeypatch.setattr(exam_gen, "generate_exam",
+                        lambda *a, **kw: {"exam": _exam_doc() | {"tid_min": 45},
+                                          "errors": [], "rounds": 1})
+    andra = _done(client.post("/api/exams/generate",
+                              json={"course_id": _course_id(client),
+                                    "antal": 6, "tid_min": 90}))
+    assert andra["exam"]["tid_min"] == 90
+
+    # Hela vägen ut på pappret: Provtid-raden ska stå där.
+    sedda = {}
+
+    def fake_compile(tex, out_dir, jobname, **kw):
+        sedda.setdefault(jobname, tex)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        p = out_dir / f"{jobname}.pdf"
+        p.write_bytes(b"%PDF-1.5 fejk")
+        return p, ""
+    monkeypatch.setattr(exam_pdf, "engine_available", lambda: True)
+    monkeypatch.setattr(exam_pdf, "compile_pdf", fake_compile)
+    _done(client.post(f"/api/exams/{result['id']}/approve", json={}))
+    prov = next(t for n, t in sedda.items() if "bedomning" not in n)
+    assert "Provtid" in prov and "90 minuter" in prov
+
+
 def test_utan_valt_datum_bar_pappret_inget(client, monkeypatch):
     """Ingen dag vald → ingen dag på pappret. Ett hittepådatum i huvudet är
     värre än inget: det är det eleverna skriver av."""

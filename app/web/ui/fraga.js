@@ -224,6 +224,12 @@
       stoppad = true;
       if (styrning) { try { styrning.abort(); } catch (e) { /* redan klar */ } }
       timers.forEach(clearTimeout);
+      /* Samma kontrakt som i korEnkel ovan: den som håller ett lås medan varvet
+         går måste få veta att det är över, oavsett vilket läge raden kördes i.
+         Här saknades anropet, och det är DET HÄR läget skrivvägen använder
+         (smal:true) — läraren tryckte Avbryt, «Skriv» förblev disabled och
+         bladkön pekade kvar på förra mottagaren tills sidan laddades om. */
+      if (o.efterStopp) o.efterStopp();
       smalUt();
       el.dataset.lage = 'stoppad';
       $('.fstopp', el).hidden = true;

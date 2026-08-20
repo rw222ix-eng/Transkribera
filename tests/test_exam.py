@@ -5,6 +5,7 @@ import copy
 import json
 import re
 import subprocess
+from pathlib import Path
 
 import pytest
 from hypothesis import given, settings
@@ -755,6 +756,39 @@ def test_hjalpmedelsraden_oversatts_till_papprets_delnamn():
     tex = exam_latex.render_prov(doc)
     assert "Del A utan räknare. Del B med räknare och formelblad." in tex
     assert "Del C" not in tex
+
+
+def test_hjalpmedelsraden_oversatts_bara_en_gang():
+    """Regression: kedjan B→A, C→B, D→C skjuter varje namn ett steg neråt, så
+    en text som REDAN bär papprets namn översattes en gång till och två delar
+    smälte ihop. Vägen in är verklig: läraren pekar på provtabellen,
+    granskningen skickar skärmtexten, modellen svarar med det den såg — och
+    försättsbladet fick «Del A utan räknare. Del A med räknare.»"""
+    papprets = "Del A utan räknare. Del B med räknare och formelblad."
+    assert exam_latex._delnamn_visning(papprets) == papprets
+    # Idempotens, inte bara en specialfall: f(f(x)) == f(x) för det interna.
+    internt = "Del B utan räknare. Del C med räknare och formelblad."
+    en_gang = exam_latex._delnamn_visning(internt)
+    assert en_gang == papprets
+    assert exam_latex._delnamn_visning(en_gang) == papprets
+    # Trepartsprovet också: B/C/D → A/B/C, och sedan stilla.
+    tre = exam_latex._delnamn_visning("Del B, del C och Del D.")
+    assert tre == "Del A, del B och Del C."
+    assert exam_latex._delnamn_visning(tre) == tre
+    # Hela vägen ut på pappret: dokumentet bär redan papprets namn.
+    doc, _ = exam_spec.validate_exam_json(_exam() | {"hjalpmedel": papprets})
+    tex = exam_latex.render_prov(doc)
+    assert papprets in tex
+
+
+def test_blad_bygg_speglar_delnamnsoversattningen():
+    """Skärmen och PDF:en måste säga samma sak om samma prov — glider
+    speglarna isär står «Del A» på skärmen och «Del A/Del A» i PDF:en. Vakten
+    mot att bara den ena sidan får idempotensfixen."""
+    js = (Path(__file__).resolve().parent.parent / "app" / "web" / "ui"
+          / "blad-bygg.js").read_text(encoding="utf-8")
+    assert "DELNAMN_REDAN" in js, "blad-bygg.js saknar redan-översatt-vakten"
+    assert "DELNAMN_REDAN.test(s) ? s :" in js
 
 
 def test_render_prov_golden_markers():

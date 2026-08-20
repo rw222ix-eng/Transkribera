@@ -463,7 +463,14 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 # för att modellen skrev sitt eget tal i dokumentet. Diagnosen
                 # undantas inte: dess tid_min är redan framräknad ur lektionen
                 # (diagnosplan ovan skriver över variabeln).
-                if res["exam"] is not None and res["exam"].get("tid_min"):
+                #
+                # OVILLKORLIGT, precis som _satt_lararens_datum: fältet är
+                # valfritt i schemat (exam_spec.ExamDoc.tid_min), så en vakt på
+                # modellens värde hoppade över lärarens minuter varje gång
+                # modellen råkade tiga. Då utelämnade prov.tex.j2 Provtid-raden
+                # på försättsbladet medan skärmen (blad.js) stod och sa «90
+                # minuter, kl. …» — pappret och skärmen om samma prov.
+                if res["exam"] is not None:
                     res["exam"]["tid_min"] = tid_min
                 _satt_lararens_datum(res["exam"], datum)
                 if res["exam"] is None:

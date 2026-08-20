@@ -477,12 +477,23 @@ window.BladBygg = (() => {
      Det är ett VAL vilken av förlagans fyra arbetsbladsformer appens arbetsblad
      ska vara — inte en bugg att rätta blint. */
   const DELNAMN = { B: 'Del A', C: 'Del B' };
-  /* Interna delnamn i löptext → papprets. B→A före C→B: ett redan översatt
-     «del A» matchar inget senare mönster. Spegel av exam_latex._delnamn_visning. */
-  const delnamnVisning = t => String(t || '')
-    .replace(/\b([Dd]el)\s+B\b/g, '$1 A')
-    .replace(/\b([Dd]el)\s+C\b/g, '$1 B')
-    .replace(/\b([Dd]el)\s+D\b/g, '$1 C');
+  /* Interna delnamn i löptext → papprets, EN gång. Kedjan B→A, C→B, D→C skjuter
+     varje namn ett steg neråt, så en redan översatt text översätts en gång till
+     och två delar smälter ihop: «Del A utan räknare. Del B med räknare.» blev
+     «Del A … Del A …». Det händer på riktigt — granskningen skickar SKÄRMENS
+     text till modellen, som svarar med papprets namn. «Del A» finns inte i det
+     interna namnrummet (delarna heter B/C/D) och är därför den entydiga
+     markören för att arbetet redan är gjort. Spegel av
+     exam_latex._delnamn_visning — samma regel, annars säger skärm och PDF
+     olika saker om samma prov. */
+  const DELNAMN_REDAN = /\b[Dd]el\s+A\b/;
+  const delnamnVisning = t => {
+    const s = String(t || '');
+    return DELNAMN_REDAN.test(s) ? s : s
+      .replace(/\b([Dd]el)\s+B\b/g, '$1 A')
+      .replace(/\b([Dd]el)\s+C\b/g, '$1 B')
+      .replace(/\b([Dd]el)\s+D\b/g, '$1 C');
+  };
   function provblad(v, uppgifter, del, forsta) {
     const medHjalp = del === 'C';
     /* HJÄLPMEDELSREGELN ÄR DOKUMENTETS (exam_spec.ExamDoc.hjalpmedel). Bandet
