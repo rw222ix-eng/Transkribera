@@ -264,8 +264,11 @@ def generate(prompt: str, *, system: str | None = None,
     argv = _argv(exe, system=system, schema=schema, modell=modell or MODELL,
                  verktyg="Read" if bilder else "", extra_dirs=mappar)
     # Taket mäts på HELA kommandoraden, inte bara schemat: en stor systemprompt
-    # kan tippa över den lika tyst som ett stort schema.
-    tak = SCHEMA_TAK_EXE if str(exe).lower().endswith(".exe") else SCHEMA_TAK
+    # kan tippa över den lika tyst som ett stort schema. Det snåla taket gäller
+    # BARA .CMD/.BAT-vägen (cmd.exe:s 8191) — en direktstartad binär, Mac och
+    # Linux inräknade, har CreateProcess/ARG_MAX-utrymme och får det stora.
+    tak = (SCHEMA_TAK if Path(str(exe)).suffix.lower() in (".cmd", ".bat")
+           else SCHEMA_TAK_EXE)
     if schema is not None and _radlangd(argv) > tak:
         prompt = prompt + _SCHEMA_I_PROMPT + json.dumps(
             schema, ensure_ascii=False, separators=(",", ":"))

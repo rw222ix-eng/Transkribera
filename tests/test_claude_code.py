@@ -260,7 +260,7 @@ def test_ett_stort_schema_flyttas_till_prompten(monkeypatch):
     # Tyngden måste ligga i sådant som TVINGAR (pattern), inte i beskrivningar —
     # de strippas numera bort innan taket mäts.
     stort = {"type": "object", "properties": {
-        f"f{i}": {"type": "string", "pattern": "x" * 40} for i in range(200)}}
+        f"f{i}": {"type": "string", "pattern": "x" * 40} for i in range(600)}}
     matat = {}
     monkeypatch.setattr(claude_code, "_neutral_cwd", lambda: ".")
     proc = _FejkProc(_strom("{}"))
@@ -283,7 +283,10 @@ def test_appens_egna_scheman_far_plats_i_ett_anrop(monkeypatch):
     cmd.exe ska tavlans och provets scheman ALDRIG hamna på kommandoraden, hur
     de än växer."""
     from app import exam_spec, whiteboard_spec
-    _inloggad(monkeypatch)                      # binar() → "claude", ingen .exe
+    _inloggad(monkeypatch)
+    # Just .CMD-vägen: en suffixlös «claude» är Mac/Linux och får det stora
+    # taket — det snåla gäller bara genom cmd.exe.
+    monkeypatch.setattr(claude_code, "binar", lambda: "C:/npm/claude.CMD")
     sett = _fanga_argv(monkeypatch)
     for schema in (whiteboard_spec.to_response_format()["json_schema"]["schema"],
                    exam_spec.to_response_format(
