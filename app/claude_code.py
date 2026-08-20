@@ -51,13 +51,28 @@ class InteInloggad(RuntimeError):
     """Claude Code finns men är inte inloggat — kör `claude login`."""
 
 
+def _forbi_cmd(vag: str) -> str:
+    """npm lägger en claude.CMD i PATH, och en .CMD kan bara startas GENOM
+    cmd.exe — vars kommandorad tar slut vid 8191 tecken. Den riktiga binären
+    ligger bredvid i node_modules och startas direkt av CreateProcess, som tar
+    32767. Samma program, fyra gånger mer plats åt --json-schema (och en
+    processtart mindre per anrop). Finns den inte — annan installation, native
+    build, Mac — lämnas sökvägen orörd och det gamla taket gäller."""
+    p = Path(vag)
+    if p.suffix.lower() not in (".cmd", ".bat"):
+        return vag
+    exe = p.parent / "node_modules" / "@anthropic-ai" / "claude-code" / "bin" / "claude.exe"
+    return str(exe) if exe.exists() else vag
+
+
 def binar() -> str | None:
     """Sökvägen till claude-kommandot, eller None. Respekterar en explicit
     CLAUDE_CODE_BIN för installationer utanför PATH."""
     egen = (os.environ.get("CLAUDE_CODE_BIN") or "").strip()
     if egen and Path(egen).exists():
         return egen
-    return shutil.which("claude")
+    hittad = shutil.which("claude")
+    return _forbi_cmd(hittad) if hittad else None
 
 
 def _neutral_cwd() -> str:
@@ -103,7 +118,15 @@ def kravs() -> None:
         raise InteInloggad(s["fel"])
 
 
-# ── Schemat som inte får plats på kommandoraden ────────────────────────────
+# ── Modellen ───────────────────────────────────────────────────────────────
+# Anroparna skickar modell="" och fick då Claude Codes egen förvalsmodell — som
+# på lärarens maskin löser ut till `claude-opus-5[1m]`, 1M-kontextvarianten.
+# Samma modell, men den långa kontextvägen: appens prompter är ~25k tokens och
+# behöver den aldrig. Pinnas här i stället för att bero på en inställning i
+# CLI:n som ingen i appen ser.
+MODELL = "claude-opus-5"
+
+# ── Schemat och kommandoradens tak ─────────────────────────────────────────
 # `claude` installeras på Windows som claude.CMD, och cmd.exe:s kommandorad tar
 # slut vid 8191 tecken (CreateProcess vid 32767). Tavelschemat är 34 kB och
 # provschemat 24 kB — skickade som `--json-schema` startade processen inte ens:
@@ -111,17 +134,90 @@ def kravs() -> None:
 # Tavlan och provet kunde alltså aldrig genereras på lärarens maskin, och det
 # syntes inte i någon svit eftersom alla stubbar satt innanför den här sömmen.
 #
-# Ett schema som inte får plats går därför i PROMPTEN i stället — den matas på
-# stdin och har inget tak. Grammatiktvånget förloras, men valideringen och
-# reparationsrundorna (lesson_board/exam_gen) finns kvar och är just till för
-# det. Ett svar som går att reparera är oändligt mycket bättre än ett anrop som
-# aldrig sker.
-SCHEMA_TAK = 6000
+# Två saker köper tillbaka grammatiktvånget:
+#   * _forbi_cmd() startar claude.exe direkt → taket blir 32767, inte 8191.
+#   * _minifiera() strippar det som bara är metadata (Pydantic sätter en `title`
+#     på VARJE fält) → tavlans schema går från 35 152 till 23 775 tecken.
+# Tillsammans får både tavlan och provet plats som `--json-schema` igen. Mätt
+# och kört skarpt: 23 914 tecken schema, argv 24 134, returncode 0.
+#
+# Ryms det ändå inte — .CMD-installation, jättelik systemprompt — går schemat i
+# PROMPTEN i stället, den matas på stdin och har inget tak. Grammatiktvånget
+# förloras då, men valideringen och reparationsrundorna (lesson_board/exam_gen)
+# finns kvar och är just till för det. Ett svar som går att reparera är oändligt
+# mycket bättre än ett anrop som aldrig sker.
+SCHEMA_TAK = 6000              # claude.CMD: cmd.exe 8191, med plats för resten
+SCHEMA_TAK_EXE = 30000         # claude.exe: CreateProcess 32767, med marginal
 
 _SCHEMA_I_PROMPT = (
     "\n\nSvara med JSON som följer det här JSON-schemat EXAKT — inga extra "
     "fält, inga utelämnade obligatoriska fält, och ingen text runt omkring:\n"
 )
+
+# Rena beskrivningar av schemat, utan tvingande verkan. `title` står för nästan
+# hela besparingen: Pydantic sätter en på varje fält, och den säger bara
+# fältnamnet en gång till («X1» för x1).
+_METADATA = frozenset({"description", "title", "$comment", "examples",
+                       "default", "readOnly", "writeOnly", "deprecated",
+                       "markdownDescription"})
+
+# I de här nycklarna är undernycklarna FÄLTNAMN, inte schemanyckelord — ett fält
+# som faktiskt heter "title" eller "description" får aldrig strippas bort.
+_FALTKARTOR = frozenset({"properties", "$defs", "definitions",
+                         "patternProperties", "dependentSchemas"})
+
+
+def _minifiera(nod):
+    """Samma constraints, färre tecken: metadata bort, allt tvingande kvar."""
+    if isinstance(nod, dict):
+        ut = {}
+        for k, v in nod.items():
+            if k in _METADATA:
+                continue
+            if k in _FALTKARTOR and isinstance(v, dict):
+                ut[k] = {namn: _minifiera(d) for namn, d in v.items()}
+            elif k in ("enum", "const"):
+                ut[k] = v                 # värden, inte scheman — rörs aldrig
+            else:
+                ut[k] = _minifiera(v)
+        return ut
+    if isinstance(nod, list):
+        return [_minifiera(v) for v in nod]
+    return nod
+
+
+def _vagledning(nod, namn: str = "", ut: dict | None = None) -> dict:
+    """De `description`-texter som minifieringen tar bort. De är få (tavlan har
+    en, provet fem) men de är det enda i metadatan som faktiskt vägleder — de
+    läggs tillbaka i prompten som en kort formatsammanfattning."""
+    if ut is None:
+        ut = {}
+    if isinstance(nod, dict):
+        d = nod.get("description")
+        if isinstance(d, str) and d.strip():
+            ut.setdefault(namn or "svaret", d.strip())
+        for k, v in nod.items():
+            if k in _FALTKARTOR and isinstance(v, dict):
+                for faltnamn, under in v.items():
+                    _vagledning(under, faltnamn, ut)
+            elif k not in ("enum", "const"):
+                _vagledning(v, namn, ut)
+    elif isinstance(nod, list):
+        for v in nod:
+            _vagledning(v, namn, ut)
+    return ut
+
+
+def _formatsammanfattning(schema: dict) -> str:
+    rader = [f"- {namn}: {text}" for namn, text in _vagledning(schema).items()]
+    if not rader:
+        return ""
+    return "\n\nOm fälten:\n" + "\n".join(rader)[:2000]
+
+
+def _radlangd(argv: list[str]) -> int:
+    """Ungefär det Windows sätter ihop: argumenten plus citattecken och mellanrum."""
+    return sum(len(a) + 3 for a in argv)
 
 
 def _argv(exe: str, *, system: str | None, schema: dict | None,
@@ -132,7 +228,9 @@ def _argv(exe: str, *, system: str | None, schema: dict | None,
     if system:
         argv += ["--system-prompt", system]
     if schema:
-        argv += ["--json-schema", json.dumps(schema, ensure_ascii=False)]
+        # Kompakt: mellanrummen i json.dumps förvalet är 3 kB av tavlans schema.
+        argv += ["--json-schema", json.dumps(schema, ensure_ascii=False,
+                                             separators=(",", ":"))]
     if modell:
         argv += ["--model", modell]
     for d in extra_dirs:
@@ -157,14 +255,22 @@ def generate(prompt: str, *, system: str | None = None,
     exe = binar()
     bilder = [str(Path(b)) for b in (bilder or []) if Path(b).exists()]
     mappar = sorted({str(Path(b).parent) for b in bilder})
-    # Ett stort schema flyttas till prompten — se SCHEMA_TAK.
+    # Schemat minifieras alltid: samma constraints, en tredjedel färre tecken —
+    # och när det ryms på kommandoraden är grammatiktvånget kvar. Beskrivningarna
+    # som strippas läggs tillbaka i prompten. Se SCHEMA_TAK.
     if schema is not None:
-        schema_json = json.dumps(schema, ensure_ascii=False)
-        if len(schema_json) > SCHEMA_TAK:
-            prompt = prompt + _SCHEMA_I_PROMPT + schema_json
-            schema = None
-    argv = _argv(exe, system=system, schema=schema, modell=modell,
+        prompt = prompt + _formatsammanfattning(schema)
+        schema = _minifiera(schema)
+    argv = _argv(exe, system=system, schema=schema, modell=modell or MODELL,
                  verktyg="Read" if bilder else "", extra_dirs=mappar)
+    # Taket mäts på HELA kommandoraden, inte bara schemat: en stor systemprompt
+    # kan tippa över den lika tyst som ett stort schema.
+    tak = SCHEMA_TAK_EXE if str(exe).lower().endswith(".exe") else SCHEMA_TAK
+    if schema is not None and _radlangd(argv) > tak:
+        prompt = prompt + _SCHEMA_I_PROMPT + json.dumps(
+            schema, ensure_ascii=False, separators=(",", ":"))
+        argv = _argv(exe, system=system, schema=None, modell=modell or MODELL,
+                     verktyg="Read" if bilder else "", extra_dirs=mappar)
     if bilder:
         prompt = prompt + "\n\nBilder att läsa:\n" + "\n".join(bilder)
 

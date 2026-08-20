@@ -257,8 +257,10 @@ def test_ett_stort_schema_flyttas_till_prompten(monkeypatch):
     """Det som inte får plats går på stdin i stället — prompten har inget tak."""
     _inloggad(monkeypatch)
     sett = _fanga_argv(monkeypatch)
+    # Tyngden måste ligga i sådant som TVINGAR (pattern), inte i beskrivningar —
+    # de strippas numera bort innan taket mäts.
     stort = {"type": "object", "properties": {
-        f"f{i}": {"type": "string", "description": "x" * 40} for i in range(200)}}
+        f"f{i}": {"type": "string", "pattern": "x" * 40} for i in range(200)}}
     matat = {}
     monkeypatch.setattr(claude_code, "_neutral_cwd", lambda: ".")
     proc = _FejkProc(_strom("{}"))
@@ -277,10 +279,11 @@ def test_ett_stort_schema_flyttas_till_prompten(monkeypatch):
 
 
 def test_appens_egna_scheman_far_plats_i_ett_anrop(monkeypatch):
-    """Regressionsvakten: tavlans och provets scheman ska ALDRIG hamna på
-    kommandoraden igen, hur de än växer."""
+    """Regressionsvakten för .CMD-vägen: när claude bara går att nå genom
+    cmd.exe ska tavlans och provets scheman ALDRIG hamna på kommandoraden, hur
+    de än växer."""
     from app import exam_spec, whiteboard_spec
-    _inloggad(monkeypatch)
+    _inloggad(monkeypatch)                      # binar() → "claude", ingen .exe
     sett = _fanga_argv(monkeypatch)
     for schema in (whiteboard_spec.to_response_format()["json_schema"]["schema"],
                    exam_spec.to_response_format(
@@ -289,3 +292,125 @@ def test_appens_egna_scheman_far_plats_i_ett_anrop(monkeypatch):
         rad = " ".join(sett["argv"])
         # Windows: cmd.exe 8191, CreateProcess 32767. Med marginal för sökvägar.
         assert len(rad) < 8000, f"kommandoraden är {len(rad)} tecken"
+
+
+# ── Grammatiktvånget tillbaka (minifiering + claude.exe) ───────────────────
+# Metadatan i schemat tvingar ingenting — Pydantics `title` säger bara
+# fältnamnet en gång till. Strippad krymper tavlans schema från 35 kB till
+# 24 kB, och startas claude.exe direkt (förbi cmd.exe:s 8191) ryms det som
+# --json-schema igen. Skarpt verifierat: 23 914 tecken schema, argv 24 134,
+# returncode 0.
+
+def _fanga_prompt(monkeypatch, sett=None):
+    sett = sett if sett is not None else {}
+
+    def fejk(argv, **kw):
+        sett["argv"] = argv
+        proc = _FejkProc(_strom("{}"))
+        delar = []
+        proc.stdin = type("S", (), {"write": delar.append,
+                                    "close": lambda self=None: None})()
+        sett["delar"] = delar
+        return proc
+    monkeypatch.setattr(claude_code.subprocess, "Popen", fejk)
+    return sett
+
+
+def test_minifieringen_tar_metadatan_men_ror_inte_tvanget():
+    schema = {"type": "object", "title": "Tavla", "description": "Toppnivån",
+              "additionalProperties": False, "required": ["sort"],
+              "properties": {
+                  "sort": {"type": "string", "enum": ["figur", "text"],
+                           "title": "Sort", "description": "Vilken sorts ruta"},
+                  "n": {"type": "integer", "minimum": 1, "maximum": 9,
+                        "default": 3, "title": "N"}}}
+    m = claude_code._minifiera(schema)
+    assert m["required"] == ["sort"] and m["additionalProperties"] is False
+    assert m["properties"]["sort"]["enum"] == ["figur", "text"]
+    assert m["properties"]["n"]["minimum"] == 1 and m["properties"]["n"]["maximum"] == 9
+    assert "title" not in m and "description" not in m
+    assert "default" not in m["properties"]["n"]
+
+
+def test_ett_falt_som_HETER_title_overlever_minifieringen():
+    """Nycklarna under `properties` är fältnamn, inte schemanyckelord."""
+    schema = {"type": "object", "required": ["title"], "properties": {
+        "title": {"type": "string", "title": "Rubrik"},
+        "description": {"type": "string"}}}
+    m = claude_code._minifiera(schema)
+    assert set(m["properties"]) == {"title", "description"}
+    assert m["properties"]["title"] == {"type": "string"}
+
+
+def test_direkt_mot_exe_far_tavlan_plats_som_json_schema(monkeypatch):
+    """Det som var poängen: grammatiktvånget tillbaka för tavlan och provet."""
+    from app import exam_spec, whiteboard_spec
+    _inloggad(monkeypatch)
+    monkeypatch.setattr(claude_code, "binar", lambda: r"C:\npm\bin\claude.exe")
+    sett = _fanga_prompt(monkeypatch)
+    for schema in (whiteboard_spec.to_response_format()["json_schema"]["schema"],
+                   exam_spec.to_response_format(
+                       7, exam_spec.balanced_skeleton(7))["json_schema"]["schema"]):
+        claude_code.generate("fråga", schema=schema)
+        argv = sett["argv"]
+        assert "--json-schema" in argv
+        skickat = json.loads(argv[argv.index("--json-schema") + 1])
+        assert skickat["required"] == schema["required"]
+        assert claude_code._radlangd(argv) <= claude_code.SCHEMA_TAK_EXE
+        assert "JSON-schema" not in "".join(sett["delar"])   # inte i prompten
+
+
+def test_ett_schema_som_inte_ryms_ens_forbi_cmd_gar_i_prompten(monkeypatch):
+    _inloggad(monkeypatch)
+    monkeypatch.setattr(claude_code, "binar", lambda: r"C:\npm\bin\claude.exe")
+    sett = _fanga_prompt(monkeypatch)
+    stort = {"type": "object", "properties": {
+        f"f{i}": {"type": "string", "pattern": "x" * 60} for i in range(600)}}
+    claude_code.generate("fråga", schema=stort)
+    assert "--json-schema" not in sett["argv"]
+    prompt = "".join(sett["delar"])
+    assert "JSON-schema" in prompt and '"f599"' in prompt
+
+
+def test_beskrivningarna_foljer_med_i_prompten_nar_schemat_minifieras(monkeypatch):
+    """Metadatan får kosta tokens bara där den vägleder — i prompten, en gång."""
+    _inloggad(monkeypatch)
+    monkeypatch.setattr(claude_code, "binar", lambda: r"C:\npm\bin\claude.exe")
+    sett = _fanga_prompt(monkeypatch)
+    claude_code.generate("fråga", schema={"type": "object", "properties": {
+        "kant": {"type": "string", "description": "Alltid vänsterkant"}}})
+    prompt = "".join(sett["delar"])
+    assert "kant: Alltid vänsterkant" in prompt
+    assert "Alltid vänsterkant" not in " ".join(sett["argv"])
+
+
+def test_forbi_cmd_valjer_exe_bredvid_men_bara_om_den_finns(tmp_path):
+    cmd = tmp_path / "claude.CMD"
+    cmd.write_text("")
+    assert claude_code._forbi_cmd(str(cmd)) == str(cmd)     # ingen exe bredvid
+    exe = tmp_path / "node_modules" / "@anthropic-ai" / "claude-code" / "bin" / "claude.exe"
+    exe.parent.mkdir(parents=True)
+    exe.write_text("")
+    assert claude_code._forbi_cmd(str(cmd)) == str(exe)
+    # En sökväg som redan är binären lämnas orörd (native build, Mac).
+    assert claude_code._forbi_cmd("/usr/local/bin/claude") == "/usr/local/bin/claude"
+
+
+# ── Modellen ───────────────────────────────────────────────────────────────
+
+def test_tom_modell_pinnas_till_opus_5(monkeypatch):
+    """Förvalet löste ut till claude-opus-5[1m] — samma modell, men den långa
+    kontextvägen som appens ~25k-prompter aldrig behöver."""
+    _inloggad(monkeypatch)
+    sett = _fanga_argv(monkeypatch)
+    claude_code.generate("fråga")
+    argv = sett["argv"]
+    assert argv[argv.index("--model") + 1] == claude_code.MODELL == "claude-opus-5"
+
+
+def test_en_utpekad_modell_far_gå_före(monkeypatch):
+    _inloggad(monkeypatch)
+    sett = _fanga_argv(monkeypatch)
+    claude_code.generate("fråga", modell="claude-haiku-4-5")
+    argv = sett["argv"]
+    assert argv[argv.index("--model") + 1] == "claude-haiku-4-5"
