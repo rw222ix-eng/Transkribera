@@ -681,3 +681,192 @@ def test_natfel_i_kompletteringen_behaller_tavlan_med_fynden():
     res = lb._tackning_pass(doc, [], model="m", llm=llm, bok=BOKBLOCK)
     assert res["board"] == doc
     assert any(f["code"] == "tackning" for f in res["errors"])
+
+
+# ------------------------------------------------------------------ lappar --
+# Reparationen skrev om HELA tavlan varje runda — 5–9k tokens ut, flera
+# minuter. Nu skickar modellen bara de element som ändras och koden syr in dem
+# deterministiskt. Testerna nedan prövar båda halvorna: att mergen gör rätt,
+# och att varje sätt en lapp kan vara dålig på faller tillbaka på
+# helomskrivningen i stället för att lämna läraren med en sämre tavla.
+
+def _graf(x: float = 2) -> dict:
+    return {"kind": "graph", "width": 400, "height": 300,
+            "xRange": [-1, 5], "yRange": [-1, 5],
+            "points": [{"x": x, "y": 1, "label": "A"}]}
+
+
+def _lapp(lappar=(), ta_bort=()) -> str:
+    return json.dumps({"lappar": list(lappar), "ta_bort": list(ta_bort)},
+                      ensure_ascii=False)
+
+
+def test_lappen_byter_ut_elementet_pa_nyckeln():
+    doc = _valid_doc()
+    ny = {"kind": "heading", "text": "Rotmärket"}
+    ut = lb.applicera_lappar(doc, [{"nyckel": "boards[0].sections[0]",
+                                    "element": ny}], [])
+    assert ut["boards"][0]["sections"][0] == ny
+    assert ut["boards"][0]["sections"][1:] == doc["boards"][0]["sections"][1:]
+    assert doc == _valid_doc()           # originalet rörs inte
+
+
+def test_lappen_satter_in_efter_och_tar_bort():
+    doc = _valid_doc()
+    langd = len(doc["boards"][0]["sections"])
+    ny = {"kind": "math", "latex": "c^2 = a^2 + b^2"}
+    ut = lb.applicera_lappar(
+        doc,
+        [{"efter": "boards[0].sections[0]", "element": ny}],
+        ["boards[0].sections[2]"])
+    sek = ut["boards"][0]["sections"]
+    assert len(sek) == langd            # ett in, ett ut
+    assert sek[1] == ny                 # direkt efter rubriken
+    # Elementet på plats 2 är borta, och resten står i sin gamla ordning.
+    assert doc["boards"][0]["sections"][2] not in sek
+    assert sek[2] == doc["boards"][0]["sections"][1]
+
+
+def test_nyckeln_nar_in_i_en_row():
+    """Figuren och formlerna ligger i en row — och det är just formelkedjan
+    som rättas oftast. Nyckeln måste därför gå ned genom children."""
+    doc = _valid_doc()
+    ny = {"kind": "math", "latex": "c = \\sqrt{a^2 + b^2}"}
+    ut = lb.applicera_lappar(
+        doc, [{"nyckel": "boards[0].sections[5].children[1].children[0]",
+               "element": ny}], [])
+    assert ut["boards"][0]["sections"][5]["children"][1]["children"][0] == ny
+
+
+def test_nyckeln_taler_bade_pydantics_punktvag_och_en_svans():
+    """Modellen härmar den väg den ser i problemlistan: regelfelen skriver
+    'boards[0].sections[3]', Pydantic 'boards.0.sections.3.text' och
+    _walk_strings 'doc.boards[0]…'. Alla tre pekar på samma element."""
+    doc = _valid_doc()
+    ny = {"kind": "heading", "text": "Ny rubrik"}
+    for nyckel in ("boards.0.sections.3",
+                   "doc.boards[0].sections[3].text",
+                   "boards[0].sections[3]"):
+        ut = lb.applicera_lappar(doc, [{"nyckel": nyckel, "element": ny}], [])
+        assert ut["boards"][0]["sections"][3] == ny, nyckel
+
+
+def test_nyckeln_far_peka_pa_platsen_efter_sista_elementet():
+    doc = _valid_doc()
+    n = len(doc["boards"][1]["columns"][0]["sections"])
+    ny = {"kind": "text", "text": "Svara med enhet."}
+    ut = lb.applicera_lappar(
+        doc, [{"nyckel": f"boards[1].columns[0].sections[{n}]",
+               "element": ny}], [])
+    assert ut["boards"][1]["columns"][0]["sections"][-1] == ny
+
+
+def test_en_okand_nyckel_faller_hela_lappen():
+    """En halvt applicerad lapp — bytet gjort, borttaget missat — ger en tavla
+    ingen bett om. Hellre helomskrivning."""
+    doc = _valid_doc()
+    ny = {"kind": "heading", "text": "x"}
+    assert lb.applicera_lappar(
+        doc, [{"nyckel": "boards[0].sections[0]", "element": ny}],
+        ["boards[0].sections[99]"]) is None
+    assert lb.applicera_lappar(
+        doc, [{"nyckel": "vänstertavlan.rubriken", "element": ny}], []) is None
+    # Element utan kind är inget element.
+    assert lb.applicera_lappar(
+        doc, [{"nyckel": "boards[0].sections[0]", "element": {"text": "x"}}],
+        []) is None
+    # Och en tom lapp har inte rättat något.
+    assert lb.applicera_lappar(doc, [], []) is None
+
+
+def test_reparationsrundan_ar_en_lapp():
+    """Runda 1 skriver tavlan, runda 2 skickar BARA det ändrade elementet."""
+    llm, calls = _stub_llm([
+        json.dumps(_broken_doc()),
+        _lapp([{"nyckel": "boards[0].sections[0]", "element": _graf()}]),
+    ])
+    res = lb.generate_board("Ma1b", "9A", "x", model="m", llm=llm)
+    assert res["errors"] == [] and res["rounds"] == 2
+    assert res["board"]["boards"][0]["sections"][0] == _graf()
+    # Högertavlan kom oförändrad genom mergen — den skrevs aldrig om.
+    assert res["board"]["boards"][1] == _broken_doc()["boards"][1]
+    lappprompt = calls[1]["prompt"]
+    assert "Elementkarta" in lappprompt and "boards[0].sections[0]" in lappprompt
+    assert "utanför" in lappprompt          # felet följer med som förut
+    assert "\"ta_bort\"" in lappprompt
+    assert "Skriv om HELA tavlan som JSON" not in lappprompt
+    assert calls[1]["response_format"]["json_schema"]["name"] == "tavellappar"
+    assert calls[1]["max_tokens"] == lb.LAPP_MAX_TOKENS < lb.BOARD_MAX_TOKENS
+
+
+def test_ett_trasigt_lappsvar_faller_tillbaka_pa_helomskrivningen():
+    """Lappen kostade en runda och gav ingenting — då skriver rundorna som är
+    kvar om hela tavlan, precis som förut. Ingen gratisruta för misslyckandet."""
+    llm, calls = _stub_llm([
+        json.dumps(_broken_doc()),
+        "jag kan tyvärr inte lappa det här",
+        json.dumps(_valid_doc()),
+    ])
+    res = lb.generate_board("Ma1b", "9A", "x", model="m", llm=llm)
+    assert res["errors"] == [] and res["rounds"] == 3
+    assert len(calls) == 3
+    assert "Skriv om HELA tavlan som JSON" in calls[2]["prompt"]
+    assert "Elementkarta" not in calls[2]["prompt"]
+
+
+def test_en_lapp_som_bar_nya_fel_kastas():
+    """Tavlan får ALDRIG bli sämre av en lapp. Den lappade tavlan bär ett fel
+    originalet inte hade → den kastas, och nästa runda skriver om alltihop."""
+    llm, calls = _stub_llm([
+        _lapp([{"nyckel": "boards[0].sections[0]", "element": _graf(x=99)}]),
+        json.dumps(_valid_doc()),
+    ])
+    res = lb.repair_board(_valid_doc(), ["[WB] hoger: 1 element-överlapp"],
+                          model="m", llm=llm)
+    assert res["errors"] == []
+    assert res["board"] == _valid_doc()          # helomskrivningens svar
+    assert res["rounds"] == 3                    # 1 (generering) + 2 rundor
+    assert "Skriv om HELA tavlan som JSON" in calls[1]["prompt"]
+
+
+def test_en_hel_tavla_i_lappsvaret_tas_emot_som_forut():
+    """Modellen får skriva om alltihop när ordningen måste göras om — och en
+    modell som inte förstod lappformen gör det ändå. Svaret ska tas emot."""
+    llm, _ = _stub_llm([json.dumps(_broken_doc()), json.dumps(_valid_doc())])
+    res = lb.generate_board("Ma1b", "9A", "x", model="m", llm=llm)
+    assert res["errors"] == [] and res["rounds"] == 2
+    assert res["board"]["boards"][0]["sections"][0]["kind"] == "heading"
+
+
+def test_kompletteringen_ar_ocksa_en_lapp():
+    """Täckningsdomarens lucka fylls med en rad — inte med en ny tavla."""
+    doc = _valid_doc()
+    ny = {"kind": "math", "latex": "\\sqrt[3]{-8} = -2"}
+    llm, calls = _stub_llm([
+        _dom([{"uppgifter": [1116], "vad": "kubikroten ur negativa tal",
+               "forslag": "en rad med kubikroten ur -8"}]),
+        _lapp([{"efter": "boards[0].sections[4]", "element": ny}]),
+    ])
+    res = lb._tackning_pass(doc, [], model="m", llm=llm, bok=BOKBLOCK)
+    assert res["errors"] == [] and res["rounds"] == 1
+    assert res["board"]["boards"][0]["sections"][5] == ny
+    assert "Elementkarta" in calls[1]["prompt"]
+    assert "kubikroten ur negativa tal" in calls[1]["prompt"]
+
+
+def test_kompletteringens_lapp_faller_tillbaka_inom_domarens_budget():
+    """Går lappen inte att använda skrivs kompletteringen som hel tavla — men
+    ur domarens EGNA budget, inte ur den delade."""
+    doc = _valid_doc()
+    komplett = _valid_doc()
+    komplett["title"] = "Kompletterad"
+    llm, calls = _stub_llm([
+        _dom([{"uppgifter": [1116], "vad": "kubikroten ur negativa tal"}]),
+        "det där kan jag inte lappa",
+        json.dumps(komplett),
+    ])
+    res = lb._tackning_pass(doc, [], model="m", llm=llm, bok=BOKBLOCK)
+    assert res["board"]["title"] == "Kompletterad"
+    assert res["errors"] == [] and res["rounds"] == 2
+    assert len(calls) == 3
+    assert "Skriv om HELA tavlan som JSON" in calls[2]["prompt"]
