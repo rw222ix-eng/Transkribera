@@ -289,6 +289,20 @@
 .elevknapp:hover{border-color:var(--ink-3);color:var(--ink)}
 .elevknapp:focus-visible{outline:none;border-color:var(--atmosphere);box-shadow:0 0 0 3px rgba(96,168,221,.22)}
 .elevknapp[data-vald]{background:var(--ink);border-color:var(--ink);color:var(--surface)}
+/* Klassbilden: samma hårstrecksspråk som raderna — mono för siffrorna,
+   serif för betyget, precis som elevvyns topp. Raden är klickbar (öppnar
+   eleven), därför hovertonen. */
+.elevtabellskal{margin-top:12px;overflow-x:auto}
+.elevtabell{width:100%;border-collapse:collapse}
+.elevtabell th{padding:7px 10px 9px 0;text-align:left;font-size:.72rem;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3)}
+.elevtabell th:not(:first-child),.elevtabell td:not(:first-child){text-align:right}
+.elevtabell td{padding:7px 10px 7px 0;border-top:1px solid var(--line);font-family:var(--mono);font-size:.82rem;color:var(--ink-2);font-variant-numeric:tabular-nums;white-space:nowrap}
+.elevtabell tbody tr{cursor:pointer}
+.elevtabell tbody tr:hover td{background:var(--sunken,#f4f1ea)}
+.elevtabell .etnamn{font-family:inherit;font-size:.9rem;color:var(--ink)}
+.elevtabell .etbetyg{font-family:var(--serif);font-size:1.02rem;color:var(--ink-3)}
+.elevtabell .etbetyg[data-b]{color:var(--ink)}
+.elevtabell .etbetyg[data-b=F]{color:var(--berry)}
 .elevtext{margin-top:22px;padding-top:18px;border-top:1px solid var(--line)}
 .elevtextfalt{display:block;width:100%;margin-top:9px;border:1px solid var(--line);border-radius:11px;background:var(--surface);padding:12px 14px;font-family:inherit;font-size:.94rem;line-height:1.6;color:var(--ink);resize:vertical}
 .elevtextfalt:focus{outline:none;border-color:var(--atmosphere);box-shadow:0 0 0 3px rgba(96,168,221,.22)}
