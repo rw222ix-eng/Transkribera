@@ -25,6 +25,8 @@ import re
 import time
 from typing import Callable
 
+from pydantic import BaseModel, ConfigDict
+
 from app import llm_client
 from app import whiteboard_spec as ws
 
@@ -960,6 +962,301 @@ def build_repair_prompt(board_json: dict, problems: list) -> str:
     )
 
 
+# ── Lappar ───────────────────────────────────────────────────────────────────
+# Reparationen skrev förr om HELA tavlan: 5–9k tokens ut per runda, flera
+# minuter styck — för att rätta en punkt utanför range eller lägga till en rad.
+# Modellen får därför i stället skicka LAPPAR, bara de element som ändras, och
+# koden syr in dem deterministiskt. Utdatat blir tiondelen, och tiden med det.
+#
+# Ingen kvalitetsrisk: går lappen inte att tolka eller sy in, eller validerar
+# den lappade tavlan SÄMRE än den den ersätter, kastas den och nästa runda
+# skriver om hela tavlan som förut — inom samma rundbudget. Tavlan kan alltså
+# bli snabbare, aldrig sämre.
+
+# Ett lappsvar är några element, inte en tavla. Taket är satt därefter (det
+# ignoreras av Claude Code-bryggan, men säger vad rundan är tänkt att kosta).
+LAPP_MAX_TOKENS = 3_000
+
+
+class _LappPost(BaseModel):
+    """En lapp: VAR den ska sitta (nyckel = byt ut, efter = sätt in efter) och
+    HELA det nya elementet. Halva element går inte att sy in — då måste koden
+    gissa vad som ärvs från det gamla, och tyst arv är precis den sortens
+    osynliga skada lappvägen inte får kunna införa."""
+    model_config = ConfigDict(extra="forbid")
+    nyckel: str | None = None
+    efter: str | None = None
+    element: ws.Section
+
+
+class _LappSvar(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    lappar: list[_LappPost] = []
+    ta_bort: list[str] = []
+
+
+def lapp_response_format() -> dict:
+    """Grammatiktvång för lappsvaret. Schemat bär ws.Section, så varje element
+    modellen skriver är en riktig WB-JSON-sektion — samma tvång som tavlan
+    har, fast en sektion i taget."""
+    return {"type": "json_schema",
+            "json_schema": {"name": "tavellappar",
+                            "schema": _LappSvar.model_json_schema()}}
+
+
+def _elementtext(sec: dict) -> str:
+    """Kort igenkänningstext till elementkartan — det läraren hade läst i
+    rutan. Modellen ska kunna peka ut RÄTT nyckel utan att räkna index i en
+    JSON-sträng på tiotusen tecken; kartan är hela lappvägens träffsäkerhet."""
+    kind = sec.get("kind")
+    if kind in ("heading", "text", "circle"):
+        t = sec.get("text")
+    elif kind == "math":
+        t = sec.get("latex")
+    elif kind == "list":
+        t = " · ".join(str(i) for i in (sec.get("items") or [])[:3])
+    elif kind == "table":
+        rader = sec.get("rows") or [[]]
+        t = " | ".join(str(c) for c in (sec.get("headers") or rader[0])[:4])
+    elif kind in ("graph", "shape"):
+        t = f"{sec.get('type') or 'figur'} {sec.get('width')}×{sec.get('height')}"
+    elif kind in ("row", "col", "callout"):
+        t = f"{len(sec.get('children') or [])} element"
+    elif kind == "stack":
+        t = " ".join(str(r.get("value")) for r in (sec.get("rows") or [])[:3]
+                     if isinstance(r, dict))
+    else:
+        t = ""
+    t = " ".join(str(t or "").split())
+    return t[:60] + "…" if len(t) > 60 else t
+
+
+def _karta_rader(sections: list, path: str, ut: list[str]) -> None:
+    for i, sec in enumerate(sections or []):
+        if not isinstance(sec, dict):
+            continue
+        p = f"{path}[{i}]"
+        text = _elementtext(sec)
+        ut.append(f"{p}  {sec.get('kind')}{': ' + text if text else ''}")
+        if isinstance(sec.get("children"), list):
+            _karta_rader(sec["children"], f"{p}.children", ut)
+
+
+def elementkarta(board: dict) -> str:
+    """Nyckel → element, rad för rad. Barnen i row/col/callout står med: det
+    är där figur-och-formler-raden bor, och den rättas ofta."""
+    ut: list[str] = []
+    for bi, b in enumerate(board.get("boards") or []):
+        if not isinstance(b, dict):
+            continue
+        namn = b.get("name") or ("vänstertavlan" if bi == 0 else "högertavlan")
+        ut.append(f"— {namn} (boards[{bi}])")
+        if isinstance(b.get("sections"), list):
+            _karta_rader(b["sections"], f"boards[{bi}].sections", ut)
+        for ci, col in enumerate(b.get("columns") or []):
+            if isinstance(col, dict) and isinstance(col.get("sections"), list):
+                _karta_rader(col["sections"],
+                             f"boards[{bi}].columns[{ci}].sections", ut)
+    return "\n".join(ut)
+
+
+LAPP_INSTRUKTION = (
+    "Rätta tavlan med LAPPAR — skriv INTE om hela tavlan.\n"
+    "Varje element har en NYCKEL: vägen till det i JSON:en, exakt som i "
+    "problemlistan och elementkartan — \"boards[0].sections[3]\", "
+    "\"boards[1].columns[0].sections[2]\", och för ett element inuti en "
+    "row/col/callout \"boards[0].sections[5].children[1]\". Nycklarna räknas i "
+    "tavlan OVAN och ändras aldrig av dina egna lappar.\n"
+    "Svara ENDAST med JSON, exakt så här:\n"
+    "{\"lappar\": [{\"nyckel\": \"<nyckel>\", \"element\": {…}}, "
+    "{\"efter\": \"<nyckel>\", \"element\": {…}}], "
+    "\"ta_bort\": [\"<nyckel>\", …]}\n"
+    "- \"nyckel\" BYTER UT elementet på den vägen. Skriv elementet i sin "
+    "HELHET, med \"kind\" och allt annat det ska ha — det ersätter det gamla "
+    "rakt av, ingenting ärvs.\n"
+    "- \"efter\" SÄTTER IN ett nytt element direkt efter elementet på vägen.\n"
+    "- \"ta_bort\" tar bort elementen på vägarna.\n"
+    "- Skicka BARA det du ändrar. Allt du inte nämner står kvar orört — skriv "
+    "aldrig ut oförändrade element.\n"
+    "- Alla regler ovan gäller fortfarande för de element du skriver.\n"
+    "Går rättningen inte att uttrycka som lappar (hela ordningen på tavlan "
+    "måste göras om) — skriv då om HELA tavlan som vanlig WB-JSON (\"title\" + "
+    "\"boards\") i stället. Blanda aldrig de två formerna."
+)
+
+
+def build_lapp_prompt(board_json: dict, problems: list) -> str:
+    """Lappprompten: samma underlag som build_repair_prompt — instruktionen,
+    tavlan, felen, åtgärdsråden — plus en elementkarta, och ett svarsformat
+    som bara bär det som ändras."""
+    return (
+        f"{INSTRUCTION}\n"
+        "Din förra lektionstavla har problem som måste rättas. Här är tavlan:\n"
+        f"{json.dumps(board_json, ensure_ascii=False)}\n\n"
+        "Elementkarta (nyckel → element):\n"
+        f"{elementkarta(board_json)}\n\n"
+        "Problem att åtgärda:\n"
+        f"{_format_problems(problems)}\n\n"
+        f"{REPAIR_HINTS}\n"
+        f"{LAPP_INSTRUKTION}\n"
+    )
+
+
+_INDEX_RE = re.compile(r"\[(\d+)\]")
+
+
+def _nyckeldelar(nyckel: str) -> list[str]:
+    """'doc.boards[0].columns[1].sections[2].text' → ett steg per del. Båda
+    skrivsätten tas: hakparenteser (regelfelens vägar) och punkter (Pydantics
+    'boards.0.sections.2'). Modellen ser båda i problemlistan och ska inte
+    fällas för att den härmade den ena."""
+    s = str(nyckel or "").strip().strip('"')
+    if s.startswith("doc."):
+        s = s[4:]
+    return [d for d in _INDEX_RE.sub(r".\1", s).split(".") if d]
+
+
+def _slot(board: dict, nyckel: str) -> tuple[list, int] | None:
+    """(sektionslistan, indexet) nyckeln pekar på — annars None.
+
+    Vandringen går så långt vägen bär och minns det SISTA steget som landade i
+    ett sektionsflöde (sections/children). En svans som pekar in i elementet
+    ('.text', '.items[3]') stoppar vandringen men fäller inte nyckeln: felet
+    gäller elementet, och det är elementet som byts."""
+    cur = board
+    lista: list | None = None
+    idx = -1
+    listnamn = ""
+    for del_ in _nyckeldelar(nyckel):
+        if isinstance(cur, list):
+            if not del_.isdigit():
+                break
+            i = int(del_)
+            if listnamn in ("sections", "children"):
+                # i == len är platsen EFTER sista elementet — dit får ett nytt
+                # element sättas (append), och bara dit.
+                if not 0 <= i <= len(cur):
+                    break
+                lista, idx = cur, i
+                cur = cur[i] if i < len(cur) else None
+            else:
+                if not 0 <= i < len(cur):
+                    break
+                cur = cur[i]
+        elif isinstance(cur, dict):
+            if del_ not in cur:
+                break
+            listnamn = del_
+            cur = cur[del_]
+        else:
+            break
+    return (lista, idx) if lista is not None else None
+
+
+def applicera_lappar(board: dict, lappar, ta_bort) -> dict | None:
+    """Sy in lapparna deterministiskt. None = lappen går inte att lita på.
+
+    Alla nycklar slås upp mot ORIGINALET först och sys in sedan, så att en
+    lapp aldrig flyttar en annan lapps mål. HELA lappen förkastas om EN nyckel
+    inte går att slå upp: en halvt applicerad lapp (bytet gjort, borttaget
+    missat) ger en tavla ingen bett om, och den sortens skada får den här
+    vägen inte kunna göra."""
+    ny = copy.deepcopy(board)
+    listor: dict[int, list] = {}
+    byten: dict[int, dict[int, dict]] = {}
+    infogade: dict[int, dict[int, list]] = {}
+    bort: dict[int, set[int]] = {}
+
+    def _reg(lista: list) -> int:
+        n = id(lista)
+        listor.setdefault(n, lista)   # håller listan vid liv: id() återanvänds
+        byten.setdefault(n, {})
+        infogade.setdefault(n, {})
+        bort.setdefault(n, set())
+        return n
+
+    for lapp in lappar if isinstance(lappar, list) else []:
+        if not isinstance(lapp, dict):
+            return None
+        el = lapp.get("element")
+        if not isinstance(el, dict) or not el.get("kind"):
+            return None
+        efter = lapp.get("efter")
+        ar_efter = isinstance(efter, str) and bool(efter.strip())
+        nyckel = efter if ar_efter else lapp.get("nyckel")
+        plats = _slot(ny, nyckel) if isinstance(nyckel, str) else None
+        if plats is None:
+            return None
+        lista, i = plats
+        n = _reg(lista)
+        if ar_efter:
+            infogade[n].setdefault(min(i + 1, len(lista)), []).append(el)
+        elif i < len(lista):
+            byten[n][i] = el
+        else:
+            infogade[n].setdefault(len(lista), []).append(el)
+
+    for nyckel in ta_bort if isinstance(ta_bort, list) else []:
+        plats = _slot(ny, nyckel) if isinstance(nyckel, str) else None
+        if plats is None:
+            return None
+        lista, i = plats
+        if not 0 <= i < len(lista):
+            return None
+        bort[_reg(lista)].add(i)
+
+    if not any(byten[n] or infogade[n] or bort[n] for n in listor):
+        return None                        # tom lapp — ingenting blev rättat
+    for n, lista in listor.items():
+        ut: list = []
+        for i in range(len(lista) + 1):
+            ut.extend(infogade[n].get(i, []))
+            if i < len(lista) and i not in bort[n]:
+                ut.append(byten[n].get(i, lista[i]))
+        lista[:] = ut                      # på plats: listan sitter i `ny`
+    return ny
+
+
+def _kodrakning(fel: list) -> dict[str, int]:
+    """Antal fel per kod. Koden — inte vägen — är jämförelsens enhet: en
+    rättning flyttar index, och då ser varje kvarstående fel ut som ett nytt
+    om man jämför vägar."""
+    ut: dict[str, int] = {}
+    for f in fel or []:
+        kod = f.get("code", "?") if isinstance(f, dict) else "rendering"
+        ut[kod] = ut.get(kod, 0) + 1
+    return ut
+
+
+def _inte_samre(bas: dict[str, int], ny: dict[str, int]) -> bool:
+    """Sant när den lappade tavlan inte bär FLER fel av något slag än den den
+    ersätter. En lapp får lämna kvar fel — den får aldrig införa nya."""
+    return all(antal <= bas.get(kod, 0) for kod, antal in ny.items())
+
+
+def _lapp_runda(board: dict, problems: list, *, model: str, llm) -> tuple | None:
+    """En lappruta mot modellen. Returnerar ("lapp", tavla), ("hel", tavla) om
+    modellen valde att skriva om alltihop ändå — det är tillåtet, och det är
+    också vad en modell som inte förstod lappformen gör — eller None när
+    svaret inte gick att använda.
+
+    `token_cb` skickas INTE med: strömmen finns för tavelbygget i UI:t, och en
+    halv lapp är ingen tavla."""
+    raw = llm(model, build_lapp_prompt(board, problems),
+              system=SYSTEM,
+              options={"temperature": 0.2},
+              response_format=lapp_response_format(),
+              max_tokens=LAPP_MAX_TOKENS)
+    data = _json_objekt(raw)
+    if data is None:
+        return None
+    if isinstance(data.get("boards"), list):
+        hel = ws.normalize_board(_rensa_toppnycklar(data))
+        return ("hel", hel) if isinstance(hel, dict) else None
+    lappad = applicera_lappar(board, data.get("lappar"), data.get("ta_bort"))
+    return ("lapp", ws.normalize_board(lappad)) if lappad is not None else None
+
+
 def build_refine_prompt(board_json: dict, instruction: str,
                         mal: dict | None = None, bok: str = "",
                         historik=None) -> str:
@@ -1066,19 +1363,26 @@ def _rensa_toppnycklar(board: dict | None) -> dict | None:
     return {k: v for k, v in board.items() if k in tillatna}
 
 
-def _parse_board(raw: str) -> dict | None:
+def _json_objekt(raw: str) -> dict | None:
     """Robust JSON-parse (jfr _parse_extract i postprocess.py): modellen kan
-    lämna skräp runt JSON-objektet trots grammatiktvånget i skarp drift."""
+    lämna skräp runt JSON-objektet trots grammatiktvånget i skarp drift.
+    Delas av tavlan och lappsvaret — samma skräp kommer runt båda."""
     try:
-        return _rensa_toppnycklar(json.loads(raw))
+        varde = json.loads(raw)
     except (json.JSONDecodeError, TypeError):
         m = re.search(r"\{.*\}", raw or "", re.DOTALL)
-        if m:
-            try:
-                return _rensa_toppnycklar(json.loads(m.group(0)))
-            except json.JSONDecodeError:
-                return None
-    return None
+        if not m:
+            return None
+        try:
+            varde = json.loads(m.group(0))
+        except json.JSONDecodeError:
+            return None
+    return varde if isinstance(varde, dict) else None
+
+
+def _parse_board(raw: str) -> dict | None:
+    doc = _json_objekt(raw)
+    return _rensa_toppnycklar(doc) if doc is not None else None
 
 
 def _llm_round(prompt: str, model: str, llm, token_cb=None) -> dict | None:
@@ -1099,15 +1403,49 @@ def _llm_round(prompt: str, model: str, llm, token_cb=None) -> dict | None:
 def _repair_until_valid(board: dict | None, errors: list, *, model: str, llm,
                         rounds_used: int, max_rounds: int,
                         log_cb: Callable[[str], None] | None = None,
-                        token_cb: Callable[[str], None] | None = None) -> dict:
+                        token_cb: Callable[[str], None] | None = None,
+                        lapp: bool = True) -> dict:
     """Kör korrigeringsrundor tills fellistan är tom eller rundorna är slut.
     Returnerar {"board", "errors", "rounds"} — kvarstående fel redovisas
-    ärligt (UI:t visar dem i stället för att dölja dem)."""
+    ärligt (UI:t visar dem i stället för att dölja dem).
+
+    Första rundorna är LAPPAR (se avsnittet ovan): modellen skickar bara de
+    element som ändras. Duger lappen inte — den går inte att tolka, den går
+    inte att sy in, den bär nya fel, eller den lämnade fel kvar — stängs
+    lappvägen av och rundorna som är kvar skriver om hela tavlan som förut.
+    En misslyckad lapp får INGEN gratisruta: den kostade ett modellanrop och
+    räknas som rundan, precis som en omskrivning som misslyckas gör."""
     log = log_cb or (lambda _m: None)
     while errors and rounds_used < max_rounds and board is not None:
         rounds_used += 1
-        log(f"Rättar tavlan (runda {rounds_used} av {max_rounds}) — "
-            f"{len(errors)} problem …")
+        log(f"Rättar tavlan{' med lappar' if lapp else ''} (runda "
+            f"{rounds_used} av {max_rounds}) — {len(errors)} problem …")
+        if lapp:
+            svar = _lapp_runda(board, errors, model=model, llm=llm)
+            if svar is None:
+                lapp = False
+                log("Lappsvaret gick inte att använda — nästa runda skriver "
+                    "om hela tavlan.")
+                continue
+            sort, kandidat = svar
+            _doc, nya_fel = ws.validate_board_json(kandidat)
+            if sort == "lapp":
+                # Aldrig sämre än den tavla lappen ersätter. Jämförelsen görs
+                # mot en FÄRSK validering av originalet: fellistan i loopen kan
+                # vara klientens renderingsvarningar eller domarens fynd, som
+                # validatorn inte kan se.
+                bas = _kodrakning(ws.validate_board_json(board)[1])
+                if not _inte_samre(bas, _kodrakning(nya_fel)):
+                    lapp = False
+                    log("Den lappade tavlan bar nya fel — den kastas, och "
+                        "nästa runda skriver om hela tavlan.")
+                    continue
+                # En lapp som lämnade fel kvar har inte hittat rätt; då är
+                # helomskrivningen den bättre användningen av nästa runda.
+                if nya_fel:
+                    lapp = False
+            board, errors = kandidat, nya_fel
+            continue
         candidate = _llm_round(build_repair_prompt(board, errors), model, llm,
                                token_cb=token_cb)
         if candidate is None:
@@ -1242,23 +1580,35 @@ def _tackning_pass(board: dict, errors: list, *, model: str, llm, bok: str,
         f"{'lucka' if len(fynd) == 1 else 'luckor'} i täckningen …")
     # Samma fail-open för kompletteringen: dör nätet mitt i den står den
     # färdiga tavlan kvar och luckorna redovisas som varningar.
+    #
+    # Kompletteringen är en LAPP (se avsnittet Lappar): en lucka fylls med en
+    # rad, en formel eller ett exempel — inte med en ny tavla. Går lappen inte
+    # att använda skrivs tavlan om i sin helhet i stället, men INOM domarens
+    # egen budget: den misslyckade lappen har redan kostat runda 1.
+    rundor = 1
     try:
-        kandidat = _llm_round(build_repair_prompt(board, fynd), model, llm,
-                              token_cb=token_cb)
+        svar = _lapp_runda(board, fynd, model=model, llm=llm)
+        kandidat = svar[1] if svar is not None else None
+        if kandidat is None and budget > rundor:
+            rundor += 1
+            log("Lappsvaret gick inte att använda — kompletteringen skrivs "
+                "som en hel tavla i stället …")
+            kandidat = _llm_round(build_repair_prompt(board, fynd), model, llm,
+                                  token_cb=token_cb)
     except Exception as e:
         log(f"Kompletteringen kunde inte nås ({e}) — luckorna visas i stället.")
         kandidat = None
     if kandidat is None:
-        return {"board": board, "errors": errors + fynd, "rounds": 1}
+        return {"board": board, "errors": errors + fynd, "rounds": rundor}
     _doc, fel = ws.validate_board_json(kandidat)
     try:
         res = _repair_until_valid(kandidat, fel, model=model, llm=llm,
-                                  rounds_used=1, max_rounds=budget,
+                                  rounds_used=rundor, max_rounds=budget,
                                   log_cb=log_cb, token_cb=token_cb)
     except Exception as e:
         log(f"Rättningen av kompletteringen föll ({e}) — den gamla tavlan "
             "behålls.")
-        return {"board": board, "errors": errors + fynd, "rounds": 1}
+        return {"board": board, "errors": errors + fynd, "rounds": rundor}
     # Kompletteringen får inte kosta strukturen: var tavlan ren före domaren
     # och trasig efter är omskrivningen en försämring — behåll den gamla och
     # visa fynden som varningar.
