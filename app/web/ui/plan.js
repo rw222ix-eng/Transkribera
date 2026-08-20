@@ -3378,6 +3378,16 @@
   function valjBild(mal) {
     if (nu < 0) return;
     bildmal = mal || 'rubrik';
+    /* Ärlighetsvakt: sidhuvud, metarad och instruktionsband har ingen
+       bildplats. Förr öppnades väljaren ändå, kvittot sa «Bilden lades in» —
+       och rita() fann ingen .prbild/.gufigur att lägga den i, så ingenting
+       hände på pappret. Samma familj som granska.js svarText bekämpar. */
+    const nod = arkNod();
+    if (nod && !$(`[data-el="${bildmal}"] .prbild, [data-el="${bildmal}"] .gufigur`, nod)) {
+      window.toast && window.toast(
+        'Elementet har ingen bildplats — markera en uppgift med bildruta i canvas (K) och försök igen.');
+      return;
+    }
     const inp = $('#bildfil');
     inp.value = '';
     inp.click();
@@ -3387,11 +3397,18 @@
     if (!fil || nu < 0) return;
     const las = new FileReader();
     las.onload = () => {
-      const v = versioner[nu];
-      v.bilder = v.bilder || {};
-      v.bilder[bildmal] = las.result;
-      v.andrat = [bildmal];
-      visa(nu);
+      /* Ett EGET varv i historiken. Bilden var förut en mutation av versionen
+         som låg framme: inget steg i ångra, och #angra stod kvar släckt fast
+         pappret just ändrats. */
+      const v = nyVersion(versioner[nu], x => {
+        x.anteckning = `Bild inlagd — ${fil.name}`;
+        x.bilder = Object.assign({}, x.bilder, { [bildmal]: las.result });
+        x.andrat = [bildmal];
+        x.andradVid = Date.now();
+      });
+      versioner = versioner.slice(0, nu + 1).concat([v]);
+      visa(versioner.length - 1);
+      utkastVersion(v);
       window.toast && window.toast(`Bilden lades in — ${fil.name}`);
     };
     las.readAsDataURL(fil);

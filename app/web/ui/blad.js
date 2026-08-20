@@ -1481,10 +1481,16 @@ window.Blad = (() => {
     /* Kall cache: hämta, lägg in, mät om. Den som ska rita AV bladet väntar in
        `Blad.underlag` först (blad-bild.js) och hamnar aldrig här. */
     if (!komplett) underlag(v).then(() => { laggInUnderlag(trav, v); formge(); });
-    /* Bilderna läraren själv lagt in på en uppgift följer dokumentet, inte formen. */
+    /* Bilderna läraren själv lagt in på en uppgift följer dokumentet, inte
+       formen. Samma höjdtak som underlagssidorna (mallens 90 mm ≈ 340 px) —
+       utan det tryckte ett 1200 px-foto innehållet under A4-kanten. Och ett
+       formge-svep när bilden avkodats: höjden fanns inte när arket mättes. */
     Object.entries(v.bilder || {}).forEach(([nyckel, src]) => {
       const el = $(`[data-el="${nyckel}"] .prbild, [data-el="${nyckel}"] .gufigur`, trav);
-      if (el) el.innerHTML = `<img src="${src}" alt="" style="display:block;width:100%;height:auto" />`;
+      if (!el) return;
+      el.innerHTML = `<img src="${src}" alt="" style="display:block;margin:0 auto;max-width:100%;max-height:340px;width:auto;height:auto" />`;
+      const img = $('img', el);
+      if (img && !img.complete) img.addEventListener('load', () => formge(), { once: true });
     });
     return trav;
   }

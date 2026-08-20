@@ -179,6 +179,18 @@
       knapp.textContent = skickarNu ? 'Skriver …' : 'Ändra';
     }
     $$('.gsnabbknapp').forEach(b => { b.disabled = skickarNu; });
+    /* Ångra/gör om låses också: backar läraren mitt i ett varv byggs svaret
+       in i fel bas — servern skrev om den version som var framme när
+       meningen skickades, inte den hon backat till. */
+    ['#g-angra', '#g-gorom'].forEach(id => {
+      const b = $(id);
+      if (!b) return;
+      if (skickarNu) { b.dataset.lastVarv = b.disabled ? '' : '1'; b.disabled = true; }
+      else if (b.dataset.lastVarv !== undefined) {
+        if (b.dataset.lastVarv === '1') b.disabled = false;
+        delete b.dataset.lastVarv;
+      }
+    });
   }
   /* ── SNABBKNAPPARNA ───────────────────────────────────────
      Fyra ändringar återkommer i nästan varje granskning, och de skrevs för hand
@@ -234,20 +246,22 @@
      ark den hör till (se arkIndex) */
   function satNal(elId, n, ark) {
     if ((ark || 0) !== arkIndex()) return;
-    const el = $(`[data-el="${elId}"]`, plan);
-    if (!el) return;
-    const pin = document.createElement('span');
-    pin.className = 'gpin';
-    pin.dataset.id = String(n);
-    pin.textContent = String(n);
-    pin.style.transform = `translate(-50%,-50%) scale(${1 / vy.z})`;
-    pin.addEventListener('click', ev => { ev.stopPropagation(); fokusera(n); });
-    el.appendChild(pin);
+    /* ALLA förekomster: facit-i-bladet delar id med sin uppgift med flit
+       (blad.js), och en nål bara på den första lämnade facitets ändring
+       omärkt. */
+    $$(`[data-el="${elId}"]`, plan).forEach(el => {
+      const pin = document.createElement('span');
+      pin.className = 'gpin';
+      pin.dataset.id = String(n);
+      pin.textContent = String(n);
+      pin.style.transform = `translate(-50%,-50%) scale(${1 / vy.z})`;
+      pin.addEventListener('click', ev => { ev.stopPropagation(); fokusera(n); });
+      el.appendChild(pin);
+    });
   }
   const markera = (elId, pa) => {
     if (!elId) return;
-    const el = $(`[data-el="${elId}"]`, plan);
-    if (el) el.toggleAttribute('data-pekad', pa);
+    $$(`[data-el="${elId}"]`, plan).forEach(el => el.toggleAttribute('data-pekad', pa));
   };
   function fokusera(n) {
     const post = kommentarer.find(k => k.id === n);
@@ -607,6 +621,15 @@
   function tangent(e) {
     if (e.target.matches('textarea,input')) { if (e.key === 'Escape') e.target.blur(); return; }
     if (e.key === 'Escape') return stang();
+    /* Ctrl/Cmd+Z och Ctrl/Cmd+Skift+Z går genom KNAPPARNA, inte direkt till
+       plan.js — knapparna är låsta medan ett varv går, och genvägen ska
+       lyda samma lås. */
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) {
+      e.preventDefault();
+      const b = $(e.shiftKey ? '#g-gorom' : '#g-angra');
+      if (b && !b.disabled) b.click();
+      return;
+    }
     if (e.key === '+' || e.key === '=') zooma(1.2);
     if (e.key === '-') zooma(1 / 1.2);
     if (e.key === '0') anpassa();
