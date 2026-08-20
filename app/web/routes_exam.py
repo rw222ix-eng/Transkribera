@@ -921,7 +921,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
                         break
                     try:
                         fix = exam_gen.fix_latex(
-                            exam, log, model=_model_name(), rounds_used=round_,
+                            exam, log, model=_model_name(), profil=typ,
+                            rounds_used=round_,
                             log_cb=lambda m: emit({"type": "log", "msg": m}))
                     finally:
                         arbiter.release_llm(llm)

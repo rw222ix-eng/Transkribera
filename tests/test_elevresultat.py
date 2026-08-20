@@ -261,6 +261,24 @@ def test_bara_aktiva_pa_begaran(conn):
     assert len(db.list_elever(conn, gid, bara_aktiva=True)) == 1
 
 
+def test_lararens_rorda_feedback_star_kvar(conn):
+    """«Skriv feedback» igen får skriva om modellens texter — aldrig den
+    läraren rört (rord, v25). Samma filtrering som routes_elever gör."""
+    gid = db.get_or_create_group(conn, "NA25")
+    elever = db.save_elever(conn, gid, ["Anna A", "Bo B"])
+    d = db.create_dokument(conn, dokument=prov(), status="godkant")
+    a, b = elever[0]["id"], elever[1]["id"]
+    db.save_elevfeedback(conn, d["id"], {a: "modellens", b: "modellens"})
+    db.save_elevfeedback(conn, d["id"], {a: "lärarens egen"}, rord=True)
+    rorda = db.elevfeedback_rorda(conn, d["id"])
+    assert rorda == {a}
+    ny = {a: "ny modelltext", b: "ny modelltext"}
+    db.save_elevfeedback(conn, d["id"],
+                         {e: t for e, t in ny.items() if e not in rorda})
+    fb = db.get_elevfeedback(conn, d["id"])
+    assert fb[a] == "lärarens egen" and fb[b] == "ny modelltext"
+
+
 # -------------------------------------------------------------- databasen --
 
 def _rattat_dokument(conn):
