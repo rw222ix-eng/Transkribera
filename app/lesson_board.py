@@ -183,6 +183,23 @@ INSTRUCTION = (
     # uppgifter på ett bättre sätt.»
     "Exemplen — de är genomgångens kärna:\n"
     "- 1–3 exempel, aldrig fler. Ett enkelt exempel räcker ofta; tre är taket.\n"
+    # RÖDA TRÅDEN. Lärarens dom (2026-08-20): «exemplen måste bygga på
+    # varandra, så att det blir en röd tråd. Dels för att inte hoppa för
+    # mycket, men även vara så pass smarta att vi kan återanvända uträkningar
+    # — exempel 2 bygger på exempel 1, exempel 3 på exempel 2. Det kommer
+    # vara en utmaning, men det går säkert att få till på ett smart sätt.»
+    # Tavlan hittade formen själv en gång — samma kvadrat, arean 36 byttes
+    # mot 30 för exakt-mot-närmevärde — och det är den formen som är regeln.
+    "- Exemplen bildar EN berättelse, inte tre världar: exempel 2 utgår från "
+    "exempel 1:s situation eller resultat (samma figur, samma tal där det "
+    "går — «samma kvadrat, men nu …»), exempel 3 från exempel 2. En NY "
+    "vändning per exempel, inte en ny värld. Ett tal som redan räknats fram "
+    "får bli nästa exempels ingång — det sparar tavlyta och låter läraren "
+    "peka bakåt.\n"
+    "- Tråden får ALDRIG kosta täckningen: varje metodtyp urvalet kräver ska "
+    "fortfarande beröras — välj vändningarna så att nästa metodtyp landar i "
+    "samma berättelse. Går berättelsen inte att förlänga naturligt: byt "
+    "hellre situation rent än att tvinga en krystad koppling.\n"
     # Lärarens tredje dom: «Jag kommer ju göra själva uträkningarna. Det räcker
     # med en stark utgångspunkt jag kan utgå ifrån, och sen kan det bara stå
     # rent generellt vad jag ska göra. Massa färdiga uträkningar behövs inte.»
