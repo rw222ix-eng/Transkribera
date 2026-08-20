@@ -145,6 +145,10 @@ INSTRUCTION = (
     "(a, b, c, x_1, y_1), aldrig konkreta tal, gärna med arrows och korta "
     "etiketter att peka på. Saknar momentet naturlig figur står den generiska "
     "uppställningen där i stället — bokstäver, inte siffror.\n"
+    "7b. EN bokstavsuppsättning för hela tavlan: de bokstäver figuren inför "
+    "(a, b …) är de som används i varje formel och exempel därefter. En ny "
+    "bokstav får aldrig dyka upp från ingenstans — behövs den ska den "
+    "introduceras i figuren eller definitionsmeningen först.\n"
     "8. Formlerna kommer EFTER figuren (till höger om den), aldrig före. "
     "Formeln ska se ut att komma ur figuren. Står flera formler på tavlan ska "
     "de stå i den ordning de härleds, så att läraren kan peka sig fram genom "
@@ -200,6 +204,23 @@ INSTRUCTION = (
     "fortfarande beröras — välj vändningarna så att nästa metodtyp landar i "
     "samma berättelse. Går berättelsen inte att förlänga naturligt: byt "
     "hellre situation rent än att tvinga en krystad koppling.\n"
+    # Trådens första skarpa försök (2026-08-20) gick fel på fyra sätt, och
+    # läraren pekade ut vart och ett: en tredje kvadratvändning som prövade
+    # SAMMA metod igen («tre lika kvadrater i rad — lite onödigt, det är ju
+    # lite samma sak»), en serie stödomskrivningar där en räckte («det räcker
+    # med 3 = √9, vi behöver inte 2 = √4 och 5 = √25»), bokens formulering
+    # oöversatt («bryt ut kvadratfaktorn — då måste man förklara vad
+    # kvadratfaktorn menas med»), och en bokstav från ingenstans («var kommer
+    # K ifrån? Vi har använt a och b överallt»).
+    "- En vändning ska tillföra en NY metodtyp ur urvalet. En vändning som "
+    "prövar samma metod igen med nya tal är utfyllnad — stryk den; boken har "
+    "redan drillen.\n"
+    "- Behöver ett steg en stödomskrivning (som $3 = \\sqrt{9}$) visas den EN "
+    "gång, med exakt det tal steget använder — aldrig en serie av samma "
+    "omskrivning med olika tal.\n"
+    "- Bokens uppgiftsformuleringar importeras inte oöversatta: en term "
+    "eleverna möter först i boken (»kvadratfaktor») ska antingen förklaras "
+    "kort där den används eller skrivas om till ord tavlan redan gett dem.\n"
     # Lärarens tredje dom: «Jag kommer ju göra själva uträkningarna. Det räcker
     # med en stark utgångspunkt jag kan utgå ifrån, och sen kan det bara stå
     # rent generellt vad jag ska göra. Massa färdiga uträkningar behövs inte.»
