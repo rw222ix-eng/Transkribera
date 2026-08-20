@@ -294,6 +294,107 @@ test("lärarens inlagda bild följer med till PDF:en", async ({ page }) => {
   expect(xml.some(s => s.indexOf(BILD.slice(0, 60)) >= 0)).toBe(true);
 });
 
+/* ── SÄTTNINGEN I BILDEN ÄR SÄTTNINGEN PÅ SKÄRMEN ──────────────────
+   Avritningen bakar in arkens egna stilark men INTE styles.css: appens
+   variabler hör inte till pappret. Det tog med sig en sak som gör det:
+   `letter-spacing:-0.006em`, som styles.css sätter på `body` och som arken
+   ärver utan att någonsin skriva den själva. Utan den blev varje rad en halv
+   procent bredare i bilden — fyra pixlar, alltså ett ord — och bröt på ett
+   annat ställe än på skärmen. På ett facit, som blad.js skruvar upp tills
+   A4:an är exakt full, sköt varje extra rad den sista UNDER arkets nederkant:
+   läraren fick ett facit med sista svaret avklippt.
+
+   Mätningen: SVG:en avritningen bygger ritas i en iframe — ett eget dokument,
+   precis som <foreignObject> är — och SATSYTANS höjd jämförs med originalets.
+   Bryter texten likadant är höjderna lika på pixeln.
+
+   Satsytan, inte `scrollHeight`: arket har fast höjd (794×1123) och göms det
+   som spiller, så scrollHeight visar 1123 vare sig innehållet ryms eller
+   svämmar över. Avståndet från arkets överkant till sista postens underkant
+   växer däremot med varje rad som brutits om — och när det passerar arkets
+   höjd är det precis den avklippta sista raden läraren såg. */
+async function hojdparitet(page, v) {
+  return page.evaluate(async dok => {
+    /* Fånga SVG:en. Den byggs som en data-URI på ett <img> inne i
+       BladBild.rastrera och lämnar aldrig modulen på något annat sätt. */
+    const bild = Object.getOwnPropertyDescriptor(
+      HTMLImageElement.prototype, "src");
+    const fangat = [];
+    Object.defineProperty(HTMLImageElement.prototype, "src", {
+      configurable: true,
+      get() { return bild.get.call(this); },
+      set(varde) { fangat.push(varde); bild.set.call(this, varde); },
+    });
+    const bo = document.createElement("div");
+    bo.style.cssText = "position:fixed;left:-30000px;top:0;width:900px";
+    document.body.appendChild(bo);
+    /* Bredden på en KÄND textrad, mätt med ett Range: det är glyfernas
+       framflyttning och ingenting annat. Ombrytningen är följden av den, och
+       att mäta följden hade gjort provet beroende av att just den här texten
+       råkar hamna på gränsen. Probet är `.prtext` — arkets löptext, som INTE
+       skriver någon egen `letter-spacing` och därför ärver den som frågan
+       gäller. Rubrikerna duger inte: de sätter sin egen. */
+    const bredden = ark => {
+      const el = ark && ark.querySelector(".prtext");
+      if (!el) return -1;
+      const r = el.ownerDocument.createRange();
+      r.selectNodeContents(el);
+      return Math.round(r.getBoundingClientRect().width * 10) / 10;
+    };
+    let svg = "";
+    let egen = 0;
+    try {
+      const trav = window.Blad.rita(bo, dok);
+      await new Promise(r => setTimeout(r, 900));
+      egen = bredden(trav.querySelector(".ark"));
+      await window.BladBild.png(trav.querySelector(".blad"), { skala: 1 });
+      const url = fangat.filter(
+        s => String(s).indexOf("data:image/svg+xml") === 0).pop();
+      if (!url) throw new Error("ingen SVG fångades — " + fangat.length
+                                + " src-sättningar");
+      svg = decodeURIComponent(url.slice(url.indexOf(",") + 1));
+    } finally {
+      Object.defineProperty(HTMLImageElement.prototype, "src", bild);
+      bo.remove();
+    }
+    /* Samma SVG i ett eget dokument — utan appens styles.css, precis som i
+       bilden — och arket mäts där. */
+    const ram = document.createElement("iframe");
+    ram.style.cssText = "position:fixed;left:-30000px;top:0;width:1000px;"
+      + "height:1400px;border:0";
+    document.body.appendChild(ram);
+    ram.srcdoc = '<!doctype html><body style="margin:0">' + svg + "</body>";
+    await new Promise(r => { ram.onload = r; });
+    await new Promise(r => setTimeout(r, 500));
+    const iBild = bredden(ram.contentDocument.querySelector(".ark"));
+    ram.remove();
+    return { egen, iBild };
+  }, v);
+}
+
+test("bilden bryter raderna där skärmen bryter dem", async ({ page }) => {
+  await fejka(page);
+  await page.goto("/");
+  await hydrerad(page);
+
+  /* Långa svar, så en halv procents bredd blir ett ombrutet ord. Korta svar
+     hade inte avslöjat något: bryts ingen rad om är höjden lika ändå. */
+  const lang = i => "Sätt in värdena i formeln och förenkla steg för steg "
+    + `innan du svarar, annars försvinner faktorn $${i}x$ i mellanledet och `
+    + "svaret blir en tiopotens fel — kontrollera alltid rimligheten mot "
+    + "uppgiftens egen storleksordning innan du skriver ner det.";
+  const v = papper({
+    inst: { antal: 6, niva: "Blandat", facit: "Separat facit" },
+    uppgifter: [1, 2, 3, 4, 5, 6].map(i => ({
+      nr: i, p: 2, t: `Beräkna $${i}x + ${i}$ när $x = ${i}$.`, f: lang(i),
+      niva: "E" })),
+    losningsblad: true,
+  });
+  const { egen, iBild } = await hojdparitet(page, v);
+  expect(egen).toBeGreaterThan(0);
+  expect(iBild).toBe(egen);
+});
+
 test("bokens lösningsförslag följer INTE med till elevernas ark",
   async ({ page }) => {
     /* Bokuppgifternas svarsfacit står i samma trav på skärmen — läraren ser

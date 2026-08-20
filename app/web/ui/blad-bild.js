@@ -69,8 +69,21 @@ window.BladBild = (() => {
      som försvann: texten sattes 794 px bred i stället för 670 och bröt sina
      rader på andra ställen än i förhandsvisningen. Regeln har specificitet
      noll — arkens egna regler vinner fortfarande över den. */
+  /* ÅTTONDE FÄLLAN, och den syntes först på ett riktigt facit: `letter-spacing`.
+     styles.css sätter `-0.006em` på `body`, arken skriver aldrig egenskapen
+     själva, och den ÄRVS — alltså gäller den på skärmen. Utan styles.css i
+     SVG:en står den på `normal`, och varje rad blev en halv procent bredare.
+     En halv procent på 670 px är fyra pixlar, och fyra pixlar är ett ord:
+     brödtexten bröt en rad tidigare, och «Svar»-etiketten (en flexlåda med
+     wrap) tappade sitt svar till nästa rad. Facitet är dessutom uppskruvat
+     till att fylla A4:an exakt (blad.js fyll), så varje extra rad puttade
+     sista raden UNDER arkets nederkant — läraren fick ett facit där sista
+     svaret var avklippt. Sättningen mätte rätt; det var bilden som ljög.
+     `font-smoothing` står här av samma skäl: pappret ska se ut som på
+     skärmen, inte som en tjockare version av det. */
   const PLATT =
     '*{box-sizing:border-box}' +
+    '.bladtrav{letter-spacing:-.006em;-webkit-font-smoothing:antialiased}' +
     '.blad{zoom:1!important}' +
     '.ark,.gu{box-shadow:none!important;margin:0!important}';
 
