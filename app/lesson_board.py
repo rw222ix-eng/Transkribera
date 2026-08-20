@@ -161,7 +161,9 @@ INSTRUCTION = (
     "exempel bor på högertavlan. Ett ensamt tal får stå bara som minsta "
     "illustration av en regel som annars inte syns ($\\sqrt[3]{-8} = -2$) — "
     "aldrig en uträkning, aldrig en parentes som visar hur talet räknades "
-    "fram.\n"
+    "fram. Detsamma gäller jämförelser som exakt-mot-närmevärde: de bärs "
+    "naturligt av ett exempel på högertavlan («låt roten stå kvar — det är "
+    "det exakta svaret»), aldrig av en egen sifferruta på vänstern.\n"
     "9. Sist i den högra spalten: \"Vanligt fel:\" i rött (text med weight 700) "
     "följt av en underline-sektion i rött, sedan det felaktiga ledet i en "
     "math-sektion och en kort rad om varför. Inne i en row/col ritar motorn "
@@ -215,6 +217,15 @@ INSTRUCTION = (
     "- En vändning ska tillföra en NY metodtyp ur urvalet. En vändning som "
     "prövar samma metod igen med nya tal är utfyllnad — stryk den; boken har "
     "redan drillen.\n"
+    # Trådens dyraste fälla, uppmätt på tredje varvet: «samma kvadrat delad
+    # av en diagonal — triangelns area är 20 cm²» när kvadraten var 36.
+    # Återbruk gör talen BEROENDE av varandra, och ett felräknat återbruk
+    # framför klassen är värre än ett nytt tal.
+    "- Återanvänds ett tal MÅSTE det stämma: räkna efter varje siffra som "
+    "följer ur ett tidigare exempel (kvadraten med arean 36 delad av en "
+    "diagonal ger trianglar på 18 — aldrig något annat), och skriv ledet åt "
+    "det håll klassen räknar det (arean ur sidorna, halvan ur helheten). Är "
+    "du osäker på härledningen: ta ett nytt rent tal i stället.\n"
     "- Behöver ett steg en stödomskrivning (som $3 = \\sqrt{9}$) visas den EN "
     "gång, med exakt det tal steget använder — aldrig en serie av samma "
     "omskrivning med olika tal.\n"
@@ -1115,10 +1126,16 @@ TACKNING_INSTRUKTION = (
     "inte att varje uppgift har ett eget exempel. Döm på innehåll som "
     "saknas helt (en regel, ett begrepp, en metodtyp — t.ex. roten ur ett "
     "negativt tal, exakt värde mot närmevärde), aldrig på detaljer.\n"
+    "Flagga också RÄKNEFEL: räkna efter varje siffra på tavlan, särskilt "
+    "tal som sägs följa ur ett tidigare exempel («samma kvadrat, delad av "
+    "en diagonal») — en halvering som inte är hälften, ett led skrivet åt "
+    "fel håll, ett svar som inte stämmer. Ett räknefel på en genomgångstavla "
+    "är alltid ett fynd, aldrig en detalj.\n"
     "Svara med enbart JSON: {\"saknas\": [{\"uppgifter\": [nummer, …], "
-    "\"vad\": \"det som saknas, kort\", \"forslag\": \"vad som ska läggas "
-    "till på tavlan — en formel, en rad, ett exempel, konkret\"}]} — tom "
-    "lista när tavlan täcker urvalet."
+    "\"vad\": \"det som saknas eller är felräknat, kort\", \"forslag\": "
+    "\"vad som ska läggas till eller rättas på tavlan — en formel, en rad, "
+    "ett exempel, konkret\"}]} — räknefel utan uppgiftsnummer får tom "
+    "nummerlista. Tom lista när tavlan täcker urvalet och räknar rätt."
 )
 
 
