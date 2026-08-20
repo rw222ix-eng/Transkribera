@@ -4,16 +4,18 @@ The whole thing is one process: uvicorn runs on a background thread, pywebview s
 the local URL in a native window, and closing the window stops the server and exits.
 """
 from __future__ import annotations
+import json
 import os
 import shutil
 import socket
 import threading
 import time
+from urllib.request import urlopen
 
 import uvicorn
 import webview
 
-from app import filhanterare
+from app import debug_log, filhanterare
 from app.web.server import create_app
 
 _MEDIA_TYPES = (
@@ -81,6 +83,24 @@ def _free_port(candidates=(8731, 8732, 8733, 0)) -> int:
     return 8731
 
 
+def _vem_har(port: int) -> str:
+    """Vem sitter redan på porten? En annan Transkribera svarar på
+    /api/var-kors med sitt hus (läge, pid, starttid); allt annat får heta
+    något annat.
+
+    Kvällen 2026-08-20 höll en förhandsvisningsserver som ingen visste om
+    port 8750 i tre timmar medan läraren trodde att hon satt i appen. Blir
+    förstahandsporten upptagen ska namnet på ockupanten stå i loggen — inte
+    bara att appen tyst gled en port åt sidan."""
+    try:
+        with urlopen(f"http://127.0.0.1:{port}/api/var-kors", timeout=0.5) as svar:
+            hus = (json.loads(svar.read().decode("utf-8")) or {}).get("hus") or {}
+        return (f"en annan Transkribera (läge={hus.get('lage')} "
+                f"pid={hus.get('pid')} startad={hus.get('startad')})")
+    except Exception:
+        return "något som inte svarar som Transkribera"
+
+
 class _ThreadedServer(uvicorn.Server):
     # Signal handlers can only be installed on the main thread; we run on a worker.
     def install_signal_handlers(self) -> None:
@@ -89,7 +109,17 @@ class _ThreadedServer(uvicorn.Server):
 
 def main() -> None:
     port = _free_port()
+    # Appen stämplar sig i miljön INNAN servern byggs: create_app läser
+    # TRANSKRIBERA_START och skriver läge, port och pid i transkribera.log, och
+    # varje server som INTE kan säga att den är appen märker sin egen sida med
+    # en svart list (app/web/server.py, _hus och _banderoll).
+    os.environ["TRANSKRIBERA_START"] = "app"
+    os.environ["TRANSKRIBERA_PORT"] = str(port)
     app = create_app()
+    if port != 8731:
+        debug_log.get_logger().warning(
+            "8731 var upptagen av %s — appen startade på %s i stället",
+            _vem_har(8731), port)
     config = uvicorn.Config(app, host="127.0.0.1", port=port,
                             log_level="warning")
     server = _ThreadedServer(config)

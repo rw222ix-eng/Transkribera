@@ -63,6 +63,12 @@ def main() -> None:
     # inte skicka lärarens ljud till ElevenLabs för riktiga pengar.
     os.environ.pop("ELEVENLABS_API_KEY", None)
 
+    # Sviten är en känd startväg och ska INTE få spökbanderollen överst i
+    # sidan (app/web/server.py, _hus): den hade legat över appens huvud i varje
+    # skärmtroget test.
+    os.environ["TRANSKRIBERA_START"] = "e2e"
+    os.environ["TRANSKRIBERA_PORT"] = str(port)
+
     from app.web import server
     uvicorn.run(server.create_app(base_dir=b), host="127.0.0.1", port=port,
                 log_level="warning")

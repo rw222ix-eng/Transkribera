@@ -12,12 +12,14 @@ import threading
 import time
 import uuid
 from datetime import datetime
+from html import escape as _escape
 from pathlib import Path
 
 from urllib.parse import urlsplit
 
 from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, StreamingResponse
+from fastapi.responses import (FileResponse, HTMLResponse, JSONResponse,
+                               PlainTextResponse, StreamingResponse)
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
@@ -134,6 +136,68 @@ def _hw_view(hw) -> dict:
     }
 
 
+# ── Vem är servern som svarar? ───────────────────────────────────────────────
+# Kvällen 2026-08-20 satt läraren i tre timmar i ett fönster som pratade med en
+# ANNAN server än appen: Claude Codes förhandsvisning på 8750, startad ur
+# .claude/launch.json och automatiskt ÅTERSTARTAD av Claude-appen varje gång den
+# dog (dess main.log: «[Preview] Process exited … Starting server with config»).
+# Den körde gammal kod — uvicorns --reload startar aldrig om på riktigt här —
+# mot lärarens RIKTIGA bas, och ingenting sa vilken server fönstret pratade med:
+# varken UI:t, /api/var-kors eller transkribera.log nämnde port eller pid.
+#
+# Startvägen stämplar sig därför i miljön: «app» (Superappen, app/web/desktop.py),
+# «webb» (python -m app.web), «e2e» (e2e/testserver.py), «dev» (.claude/launch.json).
+# Allt annat är okänt — en handstartad uvicorn, ett spöke som ärvt porten. Dev
+# och okänt får INTE se ut som appen: de skriver ut vad de är överst i sidan (se
+# index) och i loggraden vid start.
+_HUSNAMN = {
+    "app": "Superappen",
+    "webb": "appen i webbläsaren",
+    "e2e": "e2e-sviten",
+    "dev": "UTVECKLINGSSERVERN — Claude Codes förhandsvisning",
+}
+_TYSTA = ("app", "webb", "e2e")          # de som ÄR appen eller sviten
+# Modulen importeras när serverprocessen startar — nära nog processens födelse,
+# och det är födelsetiden som skiljer spöket från den nystartade appen.
+_STARTAD = time.strftime("%H:%M")
+
+
+def _hus(base: Path, request: Request | None = None) -> dict:
+    """Läge, port, pid och starttid för DEN HÄR serverprocessen.
+
+    Porten tas i första hand ur begäran: det är porten läraren faktiskt pratar
+    med, oavsett vad processen tror att den startade på."""
+    lage = (os.environ.get("TRANSKRIBERA_START") or "").strip().lower() or "okänd"
+    port = request.url.port if request is not None else None
+    if not port:
+        port = os.environ.get("TRANSKRIBERA_PORT") or os.environ.get("PORT") or "?"
+    return {"lage": lage, "namn": _HUSNAMN.get(lage, "OKÄND SERVER"),
+            "port": str(port), "pid": os.getpid(), "startad": _STARTAD,
+            "bas": str(base), "varna": lage not in _TYSTA}
+
+
+def _banderoll(sida: str, hus: dict) -> str:
+    """Svart list överst + «⚠» i fliktiteln på varje server som inte är appen.
+
+    Servern märker sin EGEN sida — designfilerna i app/web/ui rörs inte, så
+    nästa synk från Claude Design har inget undantag att komma ihåg. Listen är
+    `pointer-events: none` och kan därför aldrig svälja ett klick."""
+    text = (f"{hus['namn']} · port {hus['port']} · pid {hus['pid']} · "
+            f"startad {hus['startad']} · bas {hus['bas']}")
+    bit = (
+        '<div id="hus-banderoll" style="position:fixed;left:0;right:0;top:0;'
+        'z-index:2147483647;background:#1a1a1a;color:#fff;text-align:center;'
+        'padding:4px 10px;pointer-events:none;letter-spacing:.03em;'
+        'font:600 12px/1.5 ui-sans-serif,system-ui,sans-serif">'
+        f'INTE APPEN · {_escape(text)}</div>'
+        '<script>document.title = "⚠ " + '
+        f'{json.dumps(hus["port"])} + " · " + document.title;</script>'
+    )
+    if "</body>" in sida:
+        return sida.replace("</body>", bit + "</body>", 1)
+    return sida + bit
+
+
 # Utbruten till app/web/sse.py (delas med routers i egna moduler, t.ex.
 # routes_planning) — aliaset behålls så alla anrop i den här filen står kvar.
 _sse_response = sse.sse_response
@@ -151,6 +215,11 @@ def create_app(base_dir: Path | None = None,
     cookies = base / "cookies.txt"
     cookies_file = cookies if cookies.exists() else None
     debug_log.setup(base, "web")
+    # Raden som gör en spökserver identifierbar i efterhand. «start (web)»
+    # ensamt sa ingenting: tio starter på en kväll, ingen med port eller pid.
+    _h = _hus(base)
+    debug_log.get_logger().info("server läge=%s port=%s pid=%s bas=%s",
+                                _h["lage"], _h["port"], _h["pid"], base)
 
     def _db():
         return db.connect(db_file)
@@ -319,7 +388,7 @@ def create_app(base_dir: Path | None = None,
     app.state.transcribe_job = job_state
 
     @app.get("/")
-    def index():
+    def index(request: Request):
         """Appen.
 
         Filen heter app.html och inte index.html med flit: mappen är en rak
@@ -331,6 +400,12 @@ def create_app(base_dir: Path | None = None,
         — en utcheckning där app/web/ui inte kommit med ska säga vad som fattas.
         """
         if UI_READY:
+            hus = _hus(base, request)
+            if hus["varna"]:
+                # Bara den okända servern betalar för läsningen — appen svarar
+                # med filen precis som förr.
+                return HTMLResponse(_banderoll(
+                    (UI_DIR / "app.html").read_text(encoding="utf-8"), hus))
             return FileResponse(str(UI_DIR / "app.html"))
         return PlainTextResponse(
             "Frontenden saknas: app/web/ui/app.html finns inte i den här "
@@ -362,9 +437,12 @@ def create_app(base_dir: Path | None = None,
     # språkmodell via Claude Code). Frontendens «Var arbetet körs» och
     # härkomstraden vid varje knapp läser den här rutan.
     @app.get("/api/var-kors")
-    def api_var_kors():
+    def api_var_kors(request: Request):
         cc = claude_code.status()
         return {
+            # Vilken server svarade? Frågan «var körs det här» gäller också
+            # huset man står i — se _hus.
+            "hus": _hus(base, request),
             "moln": {
                 "transkribering": {
                     "modell": elevenlabs_asr.MODEL,

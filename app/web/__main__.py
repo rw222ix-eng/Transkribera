@@ -1,5 +1,6 @@
 """python -m app.web — start the local web UI and open the browser."""
 from __future__ import annotations
+import os
 import socket
 import threading
 import time
@@ -26,6 +27,10 @@ def _free_port(candidates=(8731, 8732, 8733, 0)) -> int:
 def main() -> None:
     port = _free_port()
     url = f"http://127.0.0.1:{port}"
+    # Samma stämpel som desktop-starten sätter: den här vägen ÄR appen, bara i
+    # en vanlig flik i stället för i fönstret. Se app/web/server.py, _hus.
+    os.environ["TRANSKRIBERA_START"] = "webb"
+    os.environ["TRANSKRIBERA_PORT"] = str(port)
     app = create_app()
 
     def open_browser():

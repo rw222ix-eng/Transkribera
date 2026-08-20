@@ -1,0 +1,38 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "transkribera-dev",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-c",
+        "import os, uvicorn; os.environ['TRANSKRIBERA_START'] = 'dev'; os.environ['TRANSKRIBERA_PORT'] = os.environ.get('PORT', '8750'); uvicorn.run('app.web.server:create_app', factory=True, host='127.0.0.1', port=int(os.environ.get('PORT', '8750')), timeout_graceful_shutdown=3)"
+      ],
+      "port": 8750,
+      "autoPort": true
+    },
+    {
+      "name": "mapp",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8123",
+        "--bind",
+        "127.0.0.1",
+        "--directory",
+        "."
+      ],
+      "port": 8123
+    },
+    {
+      "name": "transkribera-tom-bas",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "e2e/testserver.py",
+        "8765"
+      ],
+      "port": 8765
+    }
+  ]
+}

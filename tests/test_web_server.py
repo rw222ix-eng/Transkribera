@@ -13,6 +13,37 @@ def test_index_served(client):
     assert "Transkribera" in r.text
 
 
+# ── Vem lyssnar? ────────────────────────────────────────────────────────────
+# Kvällen 2026-08-20 satt läraren i tre timmar i ett fönster som pratade med en
+# annan server än appen (Claude Codes förhandsvisning på 8750, gammal kod, samma
+# riktiga bas). Ingenting sa det. Nu säger varje server vem den är.
+def test_hus_beskriver_servern(client, monkeypatch):
+    monkeypatch.delenv("TRANSKRIBERA_START", raising=False)
+    monkeypatch.setenv("TRANSKRIBERA_PORT", "8750")
+    hus = client.get("/api/var-kors").json()["hus"]
+    assert hus["lage"] == "okänd"
+    assert hus["varna"] is True            # okänd startväg = säg det högt
+    assert hus["port"] == "8750"
+    assert hus["pid"] > 0 and hus["startad"]
+
+
+def test_okand_server_markerar_sin_egen_sida(client, monkeypatch):
+    """Banderollen skrivs av SERVERN, inte av frontenden: app/web/ui är en rak
+    spegel av designprojektet och ska inte behöva veta att spöken finns."""
+    monkeypatch.delenv("TRANSKRIBERA_START", raising=False)
+    r = client.get("/")
+    assert "hus-banderoll" in r.text
+    assert "INTE APPEN" in r.text
+
+
+def test_appen_ser_ut_som_appen(client, monkeypatch):
+    monkeypatch.setenv("TRANSKRIBERA_START", "app")
+    r = client.get("/")
+    assert r.status_code == 200
+    assert "hus-banderoll" not in r.text
+    assert client.get("/api/var-kors").json()["hus"]["varna"] is False
+
+
 def test_whiteboard_static_served(client):
     """Fas 0: whiteboard-motorn och tavel-dokumentet serveras lokalt."""
     for path, marker in [
