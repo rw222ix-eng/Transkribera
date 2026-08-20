@@ -21,6 +21,18 @@ def test_komma_ar_efternamnet_forst():
         "Bo Alm", "Anna Ceder"]
 
 
+def test_komma_fore_klasskod_ar_inte_ett_efternamn():
+    # «Anna Ceder, NA25» är ett namn med klasskod — inte efternamnet
+    # «Anna Ceder». Icke-namnsdelar filtreras före komma-tolkningen.
+    assert klasslista.ordna(["Anna Ceder, NA25", "Bo Alm, 9A"]) == [
+        "Bo Alm", "Anna Ceder"]
+
+
+def test_csvrad_laser_efternamn_fornamn_och_slapper_resten():
+    assert klasslista.ordna(["Ceder,Anna,20080101-1234", "Alm,Bo,20081231-5678"]) == [
+        "Bo Alm", "Anna Ceder"]
+
+
 def test_numrering_och_punkter_stads():
     assert klasslista.ordna(["1. Anna Ceder", "2) Bo Alm", "- Vera Berg"]) == [
         "Bo Alm", "Vera Berg", "Anna Ceder"]
