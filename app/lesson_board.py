@@ -121,8 +121,15 @@ INSTRUCTION = (
     "4. Öppningsfrågan: EN rad, ställd till klassen och riktad mot det de redan "
     "kan (\"Vad vet ni om …?\") — skriv den som en heading, aldrig i en ruta "
     "och aldrig i färg. Begreppet ska väckas, inte presenteras.\n"
-    "5. Högst EN mening vardagsspråk om vad begreppet är — sedan inga fler "
-    "meningar.\n"
+    # Lärarens dom (2026-08-20): «eftersom vi snackar om kvadratrötter OCH
+    # kubikrötter vore det bra om vi nämnde det från början också, lite mer
+    # konkret.» En vardagsmening som bär idén räcker inte ensam när momentet
+    # bär två begrepp — båda ska få sin definition, kort och tidigt.
+    "5. Vardagsspråket om vad begreppet ÄR — konkret från början: en kort "
+    "definitionsmening per begrepp momentet bär («Kvadratroten ur A: talet "
+    "som gånger sig självt ger A» — och handlar lektionen också om kubikroten "
+    "får den sin egen rad). En vardagsmening som bär idén får följa. Sedan "
+    "inga fler meningar.\n"
     "6. Figuren och formlerna SIDA VID SIDA i en row: figuren till vänster, "
     "och till höger om den en col med formelkedjan och \"Vanligt fel:\". "
     "Vänstertavlan är 900 px bred — staplas allt under varandra blir den en "
@@ -142,6 +149,15 @@ INSTRUCTION = (
     "Formeln ska se ut att komma ur figuren. Står flera formler på tavlan ska "
     "de stå i den ordning de härleds, så att läraren kan peka sig fram genom "
     "kedjan; ingenting får dyka upp från ingenstans.\n"
+    # Samma dom, andra halvan: ett uträknat «∛125 = 5 (5·5·5 = 125)» hade
+    # smugit sig in bland reglerna — «vi har exempel på högra tavlan som
+    # täcker det. Vi behöver inte ha med det alls.»
+    "8b. Formlerna är REGLER i bokstäver — inga uträknade sifferexempel på "
+    "vänstertavlan: en rad med siffror och mellanled är ett exempel, och "
+    "exempel bor på högertavlan. Ett ensamt tal får stå bara som minsta "
+    "illustration av en regel som annars inte syns ($\\sqrt[3]{-8} = -2$) — "
+    "aldrig en uträkning, aldrig en parentes som visar hur talet räknades "
+    "fram.\n"
     "9. Sist i den högra spalten: \"Vanligt fel:\" i rött (text med weight 700) "
     "följt av en underline-sektion i rött, sedan det felaktiga ledet i en "
     "math-sektion och en kort rad om varför. Inne i en row/col ritar motorn "
