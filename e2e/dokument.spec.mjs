@@ -302,6 +302,73 @@ test("«Radera» i förhandsvisningen kastar pappret — och Ångra tar tillbaka
   await expect.poll(() => anrop.some(a => a.metod === "POST")).toBe(true);
 });
 
+test("raderingen tar provraden med sig — och Ångra märker pappret", async ({ page }) => {
+  /* Bara dokumentraden raderades. Provet låg kvar i basen med sina uppgifter,
+     och det är DEN raden minnet läser: ett kastat papper räknades i täckningen
+     och gick in i nästa prompt som «undvik det du gjort förut».
+     Ångra kan inte skriva tillbaka provraden — den och dess filer är borta — så
+     pappret märks i stället. Att bära id:t vidare vore värre: SQLite
+     återanvänder radnummer, och sökvägen hade förr eller senare hämtat någon
+     annans PDF. */
+  const examBort = [];
+  await page.route("**/api/exams/**", route => {
+    if (route.request().method() === "DELETE") {
+      examBort.push(new URL(route.request().url()).pathname);
+    }
+    return route.fulfill({ status: 200, contentType: "application/json",
+                           body: JSON.stringify({ ok: true }) });
+  });
+  await fejka(page, { sparade: [rad(1, papper({ typ: "Prov", provId: 42,
+                                                pdf: "C:/prov.pdf" }))] });
+  await page.goto("/");
+  await hydrerad(page);
+  await oppnaForhandsvisning(page);
+  await page.locator("#fh-radera").click();
+  await page.locator("#forhandsskal .dokfraga [data-a='ja']").click();
+
+  await expect.poll(() => examBort).toEqual(["/api/exams/42"]);
+
+  await page.locator(".toast button", { hasText: "Ångra" }).click();
+  await expect.poll(() => page.evaluate(() => window.Dokument.sparade().length)).toBe(1);
+  const v = await page.evaluate(() => window.Dokument.sparade()[0]);
+  expect(v.provBorta).toBe(true);
+  expect(v.pdf).toBeUndefined();
+  // Uppgifterna står kvar: de är dokumentets egna, och det är dem hon ville ha.
+  expect(v.uppgifter).toHaveLength(1);
+});
+
+test("«Fortsätt ändra» lägger tillbaka pappret som utkast", async ({ page }) => {
+  /* Godkännandet var en enkelriktad dörr: pappret gick inte att skriva om, och
+     det enda gränssnittet erbjöd var «Bygg vidare» — en helt ny körning, alltså
+     ett nytt papper och en ny nota, för att rätta en siffra i uppgift 3. */
+  const oppnade = [];
+  await page.route("**/api/exams/**", route => {
+    const vag = new URL(route.request().url()).pathname;
+    if (vag.endsWith("/oppna")) oppnade.push(vag);
+    return route.fulfill({ status: 200, contentType: "application/json",
+                           body: JSON.stringify({ id: 42, status: "utkast" }) });
+  });
+  const anrop = await fejka(page, {
+    sparade: [rad(1, papper({ typ: "Prov", provId: 42 }))] });
+  await page.goto("/");
+  await hydrerad(page);
+  await oppnaForhandsvisning(page);
+  // Raden som säger varför knappen finns.
+  await expect(page.locator("#fh-last")).toContainText("Godkänt är låst");
+
+  await page.locator("#fh-fortsatt").click();
+  await expect(page.locator("#forhandsskal")).toBeHidden();
+  // Ur högen, tillbaka i rutan — och provet är upplåst på servern.
+  await expect.poll(() => page.evaluate(() => window.Dokument.sparade().length)).toBe(0);
+  await expect(page.locator("#dokument")).toBeVisible();
+  await expect.poll(() => oppnade).toEqual(["/api/exams/42/oppna"]);
+  await expect.poll(() => anrop.some(
+    a => a.metod === "PATCH" && a.kropp && a.kropp.status === "utkast")).toBe(true);
+  // Det är pappret självt som ligger framme — med sina uppgifter, inte en tom
+  // ruta som bara ser ut som ett utkast.
+  await expect(page.locator("#arkskal")).toContainText("Beräkna");
+});
+
 test("«Behåll» i förhandsvisningen raderar ingenting", async ({ page }) => {
   const anrop = await fejka(page, { sparade: [rad(1, papper())] });
   await page.goto("/");
