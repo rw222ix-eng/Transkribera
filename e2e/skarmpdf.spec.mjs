@@ -16,8 +16,11 @@ import { forbiNivavarningen } from "./larardag.mjs";
  *
  *   1. ALLA ARKLÄGEN följer med, inte bara det som råkar stå framme. Facit är
  *      ett eget dokument (`losningsblad`) och blir en egen fil.
- *   2. Provets facit gör det INTE: knappen där hämtar bedömningsanvisningen,
- *      som är lärarens rättningsdokument och aldrig ett blad på skärmen.
+ *   2. Nyckeln säger VILKEN fil: arbetsbladets facitläge går i `facit`
+ *      ({stam} - facit.pdf), provets i `losningar` ({stam} - losningar.pdf),
+ *      och gruppuppgiftens är ingen fil alls utan en sida till i `uppgift`.
+ *      Bedömningsanvisningen är kvar i LaTeX bredvid provet — den har aldrig
+ *      varit ett blad på skärmen och har ingen bild att skicka.
  *   3. Markeringarna stannar på skärmen. Ett papper ur skrivaren är lärarens,
  *      inte appens anteckningsbok.
  *   4. Lärarens inlagda bild ÄR med — den satt i DOM:en hela tiden.
@@ -166,13 +169,19 @@ test("arbetsbladets godkännande bär med sig BÅDA arklägena", async ({ page }
   expect(blad.facit.every(arPng)).toBe(true);
   // Två olika papper, inte samma bild två gånger.
   expect(blad.facit[0]).not.toBe(blad.uppgift[0]);
+  // Och inte i provets fack: bladets fil heter «- facit.pdf», inte
+  // «- losningar.pdf», och en bild i fel nyckel blir en fil ingen rutt hämtar.
+  expect(blad.losningar).toEqual([]);
 });
 
-test("provets godkännande skickar bladen — men inget facit", async ({ page }) => {
-  /* Provets lösningsförslag har ingen egen fil på servern: knappen hämtar
-     bedömningsanvisningen, som bär kravgränser, bedömning och kommenterade
-     elevlösningar och aldrig varit ett av bladen i högen. Den sätts i LaTeX
-     som förut — och då finns det ingen bild att skicka. */
+test("provets godkännande bär med sig BÅDA arklägena", async ({ page }) => {
+  /* «Lösningar» i Sparat gav bedömningsanvisningen: lärarens LaTeX-satta
+     rättningsdokument med kravgränser och kommenterade elevlösningar. Det är
+     ett ANNAT papper än lösningsarket i förhandsvisningen, och läraren bad om
+     skärmens. Facitläget ritas därför av som allt annat — men i `losningar`,
+     inte i `facit`: provets fil heter «{stam} - losningar.pdf» och
+     arbetsbladets «{stam} - facit.pdf», och nyckeln säger vilken det blir.
+     Anvisningen byggs kvar bredvid och har ingen bild att skicka. */
   const anrop = await fejka(page);
   await page.goto("/");
   await hydrerad(page);
@@ -181,8 +190,15 @@ test("provets godkännande skickar bladen — men inget facit", async ({ page })
 
   await page.locator("#godkann").click();
   const blad = await bladenIApprove(page, anrop);
+  // Elevernas ark …
   expect(blad.uppgift.length).toBeGreaterThan(0);
   expect(blad.uppgift.every(arPng)).toBe(true);
+  /* … och lösningsarket. Det stod INTE framme: växlaren visade provet. Ritas
+     bara det som visas blir lösningsfilen provets kopia. */
+  expect(blad.losningar.length).toBeGreaterThan(0);
+  expect(blad.losningar.every(arPng)).toBe(true);
+  expect(blad.losningar[0]).not.toBe(blad.uppgift[0]);
+  // Och inte i arbetsbladets fack: den filen finns inte för ett prov.
   expect(blad.facit).toEqual([]);
 });
 
@@ -223,6 +239,7 @@ test("gruppuppgiftens facit läggs SIST i samma fil", async ({ page }) => {
   await page.locator("#godkann").click();
   const blad = await bladenIApprove(page, anrop);
   expect(blad.facit).toEqual([]);
+  expect(blad.losningar).toEqual([]);
   // Facitarket ligger som en sida till i dokumentets egen fil.
   expect(blad.uppgift.length).toBeGreaterThan(1);
   expect(blad.uppgift.every(arPng)).toBe(true);

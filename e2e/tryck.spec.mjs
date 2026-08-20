@@ -249,6 +249,42 @@ test("facit ber om sin egen fil — och bokens lösningar om ingen alls", async 
   expect(boken.exam_id).toBeUndefined();
 });
 
+test("provets lösningsblad ber om skärmfilen, inte om anvisningen", async ({ page }) => {
+  /* «Lösningar» i högen bad om `bedomning` — lärarens LaTeX-satta
+     rättningsdokument med kravgränser och kommenterade elevlösningar. Det är
+     ett annat papper än lösningsarket läraren ser i appen, och det är
+     skärmens hon vill dela ut. Raden ber nu om `losningar`, som servern
+     hämtar ur avritningen vid godkännandet (och faller tillbaka på
+     anvisningen om den inte finns — tryck.losningar_bredvid). */
+  const prov = papper({
+    typ: "Prov", moment: "derivator", wb: null, provId: 7,
+    inst: { antal: 6, provtid: "90 min", delprov: "Del A + Del B",
+            losningar: true },
+    uppgifter: [{ nr: 1, p: 2, t: "Derivera $3x^2$.", f: "$6x$", niva: "E" }],
+  });
+  const anrop = await fejka(page, [rad(1, prov),
+                                   rad(2, { ...prov, losningsblad: true })]);
+  await page.goto("/");
+  await hydrerad(page);
+  await expect.poll(() => page.evaluate(() => window.Dokument.sparade().length)).toBe(2);
+
+  await page.getByRole("tab", { name: "Planering" }).click();
+  await page.evaluate(() => window.Tryck.oppna());
+  await expect(page.locator("#tryckruta")).toBeVisible();
+  await page.locator("#tryckskicka").click();
+  await expect.poll(() => anrop.length, { timeout: 30_000 }).toBe(1);
+
+  const dok = anrop[0].dokument;
+  const provet = dok.find(d => d.typ === "Prov");
+  expect(provet.exam_id).toBe(7);
+  expect(provet.losningar).toBeUndefined();
+  const losningarna = dok.find(d => d.typ === "Facit" && d.exam_id);
+  expect(losningarna, JSON.stringify(dok)).toBeTruthy();
+  expect(losningarna.losningar).toBe(true);
+  expect(losningarna.bedomning).toBeUndefined();
+  expect(losningarna.facit).toBeUndefined();
+});
+
 test("bokens lösningsförslag följer med som ark, inte som ett saknas", async ({ page }) => {
   /* Raden fanns i högen men skickades utan id och hamnade i `saknas` — sant,
      men till ingen nytta: läraren såg arken på skärmen och fick dem aldrig på

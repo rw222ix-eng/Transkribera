@@ -100,7 +100,17 @@ def create_router(base: Path, arbiter) -> APIRouter:
                             f"anpassad-{i:02d}",
                             tid_min=a.get("tid_min"), antal=a.get("antal"),
                             kod=str(a.get("kod") or f"{titel[:12]}-{i + 1:02d}"))
+                    elif rad.get("losningar") and provpdf:
+                        # Provets lösningsförslag: skärmens ark om det ritades
+                        # av vid godkännandet, annars bedömningsanvisningen
+                        # (tryck.losningar_bredvid). Det är raden «Lösningar»
+                        # i utskriftsrutan.
+                        pdf = tryck.losningar_bredvid(provpdf)
                     elif rad.get("bedomning") and provpdf:
+                        # Bedömningsanvisningen som EGET dokument. Raden ligger
+                        # inte i rutan längre, men flaggan står kvar: den är
+                        # kontraktet mot äldre klienter och mot den som ber om
+                        # rättningsunderlaget och ingenting annat.
                         pdf = tryck.bedomning_bredvid(provpdf)
                     elif rad.get("facit") and provpdf:
                         # Arbetsbladets separata facit. Raden bad förut om

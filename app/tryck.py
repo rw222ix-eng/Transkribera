@@ -302,3 +302,21 @@ def facit_bredvid(pdf: Path) -> Path | None:
     facit på sista sidan ändå — den här filen är för läraren som valde att ha
     lösningarna på ett eget papper."""
     return _bredvid(pdf, "facit")
+
+
+def losningar_bredvid(pdf: Path) -> Path | None:
+    """Provets lösningsförslag — det ark läraren SER när växlaren står på
+    facitläget, avritat vid godkännandet (blad-bild.js `dokument`).
+
+    Fram till nu pekade «Lösningar» i Sparat och i tryckpaketet på
+    bedömningsanvisningen: lärarens LaTeX-satta rättningsdokument med
+    kravgränser och kommenterade elevlösningar. Det är ett annat papper än det
+    på skärmen, och läraren bad om skärmens.
+
+    Anvisningen är INTE borta — den byggs som förut bredvid provet
+    (``{stam} - bedomning.pdf``, routes_exam approve) och har sin egen rutt.
+    Den är också reserven här: kommer godkännandet utan bilder (API-anrop,
+    pytest, en äldre klient) finns ingen ``- losningar.pdf`` att hämta, och
+    då ska knappen ge det dokument som faktiskt bär lösningarna i stället för
+    ett 404 på ett prov som byggts felfritt."""
+    return _bredvid(pdf, "losningar") or _bredvid(pdf, "bedomning")

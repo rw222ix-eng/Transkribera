@@ -232,7 +232,7 @@ for (const vy of VYER) {
            det första jobbet och servern svarar «upptagen», precis som den ska.
            Att det bara syns ibland är tajming — på CI:s långsammare maskin
            landar andra klicket oftare innan första jobbet släppt (2026-08-09). */
-    /*   · /api/exams/{id}/pdf, /bedomning, /facit och /tex 404 — apan trycker
+    /*   · /api/exams/{id}/pdf, /losningar, /bedomning, /facit och /tex 404 — apan trycker
      *     «Ladda ner PDF» på ett papper vars fil inte är byggd: provet är inte
      *     godkänt, eller lösningsförslaget kompilerades aldrig. Servern svarar
      *     på svenska och knappen visar beskedet som en toast (plan.js skrivUt
@@ -242,7 +242,7 @@ for (const vy of VYER) {
      *     visst id står här. */
     L.rent(fel, { tillat: [/api\/sample/, /api\/schema\/synk/,
                            /api\/exams\/generate/, /api\/planning\/generate/,
-                           /api\/exams\/\d+\/(pdf|tex|bedomning|facit)/] });
+                           /api\/exams\/\d+\/(pdf|tex|bedomning|facit|losningar)/] });
     await levande(page);
   });
 }

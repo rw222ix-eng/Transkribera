@@ -337,10 +337,11 @@ window.BladBild = (() => {
      5. Sidorna ur bildunderlaget måste vara HÄMTADE innan bladet ritas. Se
         kommentaren vid `Blad.underlag` nedan.
 
-     Returnerar `{uppgift: [png, …], facit: [png, …]}` — namnen rutten läser,
-     och `uppgift` är hela dokumentets fil medan `facit` blir filen bredvid.
-     Fel fångas INTE här: den som anropar väljer själv om ett papper utan
-     avritning ska falla tillbaka på LaTeX (det gör plan.js). */
+     Returnerar `{uppgift: […], facit: […], losningar: […]}` — namnen rutten
+     läser, och de säger VILKEN FIL bilderna blir: `uppgift` är dokumentets
+     egen, `facit` är «{stam} - facit.pdf» och `losningar` «{stam} -
+     losningar.pdf». Fel fångas INTE här: den som anropar väljer själv om ett
+     papper utan avritning ska falla tillbaka på LaTeX (det gör plan.js). */
   const BOKARK = '[data-form="lo-bok"], [data-form="lo-bok3"], [data-form="fe-bok"]';
   /* ── VART FACITLÄGET TAR VÄGEN ──
      Växlaren i canvas erbjuder ett facitläge för prov, arbetsblad OCH
@@ -355,13 +356,17 @@ window.BladBild = (() => {
        lärarens ark, inte gruppens. Facitläget läggs därför sist i `uppgift`.
        Har läraren redan valt «Facit i bladet» står arket där; då läggs det
        inte dit en andra gång (`harFacitArk`).
-     · PROVET har ingen facit-fil alls. Knappen på lösningsbladet hämtar
-       bedömningsanvisningen — lärarens rättningsdokument med kravgränser och
-       kommenterade elevlösningar, som aldrig varit ett blad på skärmen och
-       fortsatt sätts i LaTeX.
+     · PROVET får också en egen fil, men under ett annat namn: «{stam} -
+       losningar.pdf». Knappen gav förut bedömningsanvisningen — lärarens
+       LaTeX-satta rättningsdokument med kravgränser och kommenterade
+       elevlösningar — och det är ett ANNAT papper än lösningsarket på
+       skärmen. Läraren bad om skärmens. Anvisningen byggs kvar bredvid
+       (routes_exam approve) och har sin egen rutt; den är också reserven när
+       godkännandet kommer utan bilder.
      Diagnosen bär alltid sin rättning i huvuddokumentet (blad.js `bladen`)
      och har inget eget läge att hämta. */
   const EGEN_FACITFIL = v => v && v.typ === 'Arbetsblad';
+  const EGEN_LOSNINGSFIL = v => v && v.typ === 'Prov';
   const FACIT_SIST = v => v && v.typ === 'Gruppuppgift';
   const harFacitArk = former => former.indexOf('fa') >= 0;
 
@@ -404,7 +409,7 @@ window.BladBild = (() => {
 
   function dokument(v, val) {
     const skala = (val && val.skala) || SKALA;
-    const tom = { uppgift: [], facit: [] };
+    const tom = { uppgift: [], facit: [], losningar: [] };
     /* Tavlan har sin egen väg sedan tidigare (tavla-bild.js) och ritas inte
        som blad. Ett dokument utan typ är inget papper. */
     if (!v || !window.Blad || !window.Blad.rita || v.typ === 'Tavla'
@@ -434,13 +439,18 @@ window.BladBild = (() => {
       .then(u => {
         if (EGEN_FACITFIL(v)) {
           return lage(bo, facitlaget(), skala)
-            .then(f => ({ uppgift: u.png, facit: f.png }));
+            .then(f => ({ uppgift: u.png, facit: f.png, losningar: [] }));
+        }
+        if (EGEN_LOSNINGSFIL(v)) {
+          return lage(bo, facitlaget(), skala)
+            .then(f => ({ uppgift: u.png, facit: [], losningar: f.png }));
         }
         if (FACIT_SIST(v) && !harFacitArk(u.former)) {
           return lage(bo, facitlaget(), skala)
-            .then(f => ({ uppgift: u.png.concat(f.png), facit: [] }));
+            .then(f => ({ uppgift: u.png.concat(f.png), facit: [],
+                          losningar: [] }));
         }
-        return { uppgift: u.png, facit: [] };
+        return { uppgift: u.png, facit: [], losningar: [] };
       })
       .then(ut => { riv(); return ut; }, fel => { riv(); throw fel; });
   }

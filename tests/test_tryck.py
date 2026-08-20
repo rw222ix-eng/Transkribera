@@ -34,11 +34,13 @@ def pdf_fil(sokvag, sidor=2):
     return sokvag
 
 
-def _prov(client, monkeypatch, sidor=3, bedomning=True, facit=False):
+def _prov(client, monkeypatch, sidor=3, bedomning=True, facit=False,
+          losningar=False):
     """Ett godkänt prov med en byggd PDF — det paketet hämtar.
 
-    `bedomning` och `facit` är systerdokumenten bredvid: provets
-    bedömningsanvisning respektive arbetsbladets separata facit."""
+    `bedomning`, `facit` och `losningar` är systerdokumenten bredvid: provets
+    bedömningsanvisning, arbetsbladets separata facit och provets avritade
+    lösningsark."""
     from app import db as appdb
     from tests.test_exam import _exam
     conn = appdb.connect(client.base_dir / "transkribera.db")
@@ -50,6 +52,8 @@ def _prov(client, monkeypatch, sidor=3, bedomning=True, facit=False):
             pdf_fil(pdf.with_name("p - bedomning.pdf"), 1)
         if facit:
             pdf_fil(pdf.with_name("p - facit.pdf"), 1)
+        if losningar:
+            pdf_fil(pdf.with_name("p - losningar.pdf"), 4)
         appdb.set_exam_artifacts(conn, view["id"], tex_path=None,
                                  pdf_path=str(pdf), approve=True)
     finally:
@@ -126,6 +130,43 @@ def test_arbetsbladets_facit_kommer_med_i_paketet(client, monkeypatch):
         {"namn": "Arbetsblad", "exam_id": eid, "kopior": 1},
         {"namn": "Bedömning", "exam_id": eid, "bedomning": True, "kopior": 1}]}))
     assert res2["saknas"] == ["Bedömning"]
+
+
+def test_provets_losningar_hamtar_skarmfilen(client, monkeypatch):
+    """«Lösningar» i utskriftsrutan hämtade bedömningsanvisningen — lärarens
+    LaTeX-satta rättningsdokument, inte lösningsarket hon ser i appen. Raden
+    ber nu om `losningar`, och den filen är avritningen av skärmen."""
+    eid = _prov(client, monkeypatch, sidor=3, losningar=True)
+    res = _done(client.post("/api/tryck", json={"dokument": [
+        {"namn": "Lösningar", "exam_id": eid, "losningar": True,
+         "kopior": 1}]}))
+    assert res["saknas"] == []
+    # Lösningsarket är fyra sidor, anvisningen en — sidantalet säger vilken
+    # fil paketet faktiskt tog.
+    assert res["dokument"][0]["sidor"] == 4
+
+
+def test_losningsraden_faller_tillbaka_pa_bedomningen(client, monkeypatch):
+    """Ett prov godkänt utan avritning (API-anrop, äldre klient) har ingen
+    losningar.pdf. Raden ska då ge anvisningen — den bär lösningarna — i
+    stället för att hamna i `saknas` framför kopiatorn."""
+    eid = _prov(client, monkeypatch, sidor=3, losningar=False)
+    res = _done(client.post("/api/tryck", json={"dokument": [
+        {"namn": "Lösningar", "exam_id": eid, "losningar": True,
+         "kopior": 1}]}))
+    assert res["saknas"] == []
+    assert res["dokument"][0]["sidor"] == 1        # anvisningens enda sida
+
+
+def test_bedomningsraden_ger_alltid_anvisningen(client, monkeypatch):
+    """Rättningsunderlaget får inte försvinna ur världen bara för att
+    «Lösningar» slutade peka på det. Ber någon om `bedomning` är det
+    anvisningen som kommer, aldrig lösningsarket."""
+    eid = _prov(client, monkeypatch, sidor=3, losningar=True)
+    res = _done(client.post("/api/tryck", json={"dokument": [
+        {"namn": "Bedömning", "exam_id": eid, "bedomning": True,
+         "kopior": 1}]}))
+    assert res["dokument"][0]["sidor"] == 1
 
 
 # -------------------------------------------- nedladdningen som egna filer --

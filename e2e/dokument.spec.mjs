@@ -454,7 +454,9 @@ test("tavlans nedladdning ger lösningsbladen som EGNA filer", async ({ page }) 
 test("lösningsbladet laddar ner sin EGEN fil, inte originalets", async ({ page }) => {
   // Lösningsbladet är en KLON av sitt original och bär samma provId, så
   // knappen laddade ner provet när läraren bad om lösningsförslaget. De två
-  // har egna filer bredvid: bedömningsanvisningen och det separata facit.
+  // har egna filer bredvid: provets avritade lösningsark och bladets separata
+  // facit. Provet hämtade förut `/bedomning` — lärarens LaTeX-satta
+  // rättningsdokument, ett annat papper än det på skärmen.
   const hamtat = [];
   await fejka(page, { sparade: [
     rad(1, papper({ typ: "Prov", provId: 42, losningsblad: true })),
@@ -479,7 +481,7 @@ test("lösningsbladet laddar ner sin EGEN fil, inte originalets", async ({ page 
     // klick under tiden — vänta ut den i stället för att missa nästa hämtning.
     await expect(page.locator("#fh-pdf")).toHaveText("Ladda ner PDF");
   }
-  expect(hamtat).toEqual(["/api/exams/42/bedomning", "/api/exams/43/facit"]);
+  expect(hamtat).toEqual(["/api/exams/42/losningar", "/api/exams/43/facit"]);
 });
 
 test("varje pappersort hämtar sin egen byggda fil", async ({ page }) => {

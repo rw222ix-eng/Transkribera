@@ -623,13 +623,17 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # i provets JSON och kom därför aldrig med alls.
         # Klienten ritar därför av varje blad i dokumentet vid godkännandet
         # (app/web/ui/blad-bild.js, samma grepp som tavlan redan går) och
-        # skickar bilderna hit: `uppgift` är elevernas ark, `facit` är
-        # facit-/lösningsarket som blir en egen fil bredvid. Är de med ÄR de
-        # pappret. Kommer godkännandet utan bilder — API-anrop, pytest, en
-        # gammal klient — går allt den gamla vägen, rad för rad.
+        # skickar bilderna hit. Nycklarna säger var de landar, för de tre
+        # dokumenttyperna lägger sitt facit på tre olika ställen:
+        #   `uppgift`   → elevernas ark, dokumentets egen fil
+        #   `facit`     → arbetsbladets separata facit, {stam} - facit.pdf
+        #   `losningar` → provets lösningsförslag, {stam} - losningar.pdf
+        # Är de med ÄR de pappret. Kommer godkännandet utan bilder — API-anrop,
+        # pytest, en gammal klient — går allt den gamla vägen, rad för rad.
         blad = body.get("blad") if isinstance(body, dict) else None
         bild_uppgift = tryck.bladbilder(blad, "uppgift")
         bild_facit = tryck.bladbilder(blad, "facit")
+        bild_losningar = tryck.bladbilder(blad, "losningar")
         # Det som trycks är det läraren SER. Ångrade hon ett varv backade bara
         # utkastets markör; provets pekare stod kvar på det förkastade varvet,
         # och PDF:en byggdes ur det. Klienten säger vilken version varvet gällde
@@ -778,11 +782,29 @@ def create_router(base: Path, arbiter) -> APIRouter:
                         elif facit is not None and exam_pdf.engine_available():
                             exam_pdf.compile_pdf(facit, out_dir,
                                                  f"{slug} - facit")
+                        # ── PROVETS LÖSNINGSFÖRSLAG ───────────────────
+                        # Växlaren i canvas har ett facitläge för provet också,
+                        # och det är det arket «Lösningar» i Sparat ska ge.
+                        # Förut gav knappen bedömningsanvisningen — ett annat
+                        # papper, satt i LaTeX. Nu blir skärmens ark en egen
+                        # fil, {stam} - losningar.pdf, som rutten
+                        # /api/exams/{id}/losningar serverar.
+                        if bild_losningar:
+                            if tryck.png_till_pdf(
+                                    bild_losningar, out_dir,
+                                    f"{slug} - losningar") is None:
+                                emit({"type": "log",
+                                      "msg": "Lösningsförslaget blev ingen "
+                                             "bild — knappen ger bedömnings"
+                                             "anvisningen tills provet "
+                                             "godkänns på nytt."})
                         # Bedömningsanvisningen står INTE på skärmen: den är
                         # lärarens rättningsdokument med kravgränser, bedömning
                         # och kommenterade elevlösningar, och har aldrig varit
                         # ett av bladen i högen. Den sätts därför i LaTeX som
-                        # förut — utan fixrunda, av samma skäl som ovan.
+                        # förut — utan fixrunda, av samma skäl som ovan. Den är
+                        # kvar även när lösningsarket ovan byggdes: läraren
+                        # rättar med den, hon delar bara inte ut den.
                         if bed is not None and exam_pdf.engine_available():
                             emit({"type": "log",
                                   "msg": "Kompilerar bedömningsanvisningen …"})
@@ -1042,13 +1064,27 @@ def create_router(base: Path, arbiter) -> APIRouter:
 
     @router.get("/api/exams/{exam_id:int}/bedomning")
     def get_bedomning(exam_id: int):
-        """Provets lösningsförslag. Filen kompilerades vid godkännandet men
-        hade ingen rutt: lösningsbladet i dokumenthögen är en klon av provet
-        och bär samma id, så «Ladda ner PDF» på det gav PROVET."""
+        """Lärarens rättningsdokument: kravgränser, bedömningsanvisning och
+        kommenterade elevlösningar, satt i LaTeX vid godkännandet.
+
+        Den var en gång också «Lösningar» i Sparat — det är den inte längre
+        (se /losningar). Rutten står kvar därför att dokumentet står kvar: det
+        är underlaget läraren rättar med."""
         return _serve_bredvid(
             exam_id, tryck.bedomning_bredvid,
+            "Bedömningsanvisningen är inte byggd — godkänn provet på nytt, "
+            "då kompileras den bredvid.")
+
+    @router.get("/api/exams/{exam_id:int}/losningar")
+    def get_losningar(exam_id: int):
+        """Provets lösningsförslag som det SER UT i appen — facitläget avritat
+        vid godkännandet. Saknas bilden faller den tillbaka på
+        bedömningsanvisningen (tryck.losningar_bredvid): ett godkännande utan
+        avritning ska ge lösningarna, inte ett 404."""
+        return _serve_bredvid(
+            exam_id, tryck.losningar_bredvid,
             "Lösningsförslaget är inte byggt — godkänn provet på nytt, "
-            "då kompileras det bredvid.")
+            "då ritas det av.")
 
     @router.get("/api/exams/{exam_id:int}/facit")
     def get_facit(exam_id: int):
@@ -1078,10 +1114,11 @@ def create_router(base: Path, arbiter) -> APIRouter:
         for raw in paths:
             p = Path(raw)
             kandidater.add(p)
-            # Bedömningsanvisningen och arbetsbladets separata facit ligger
-            # bredvid med samma stam (tryck._bredvid). Lämnas de kvar blir de
-            # föräldralösa filer i en katalog läraren själv öppnar.
-            for andelse in ("bedomning", "facit"):
+            # Bedömningsanvisningen, arbetsbladets separata facit och provets
+            # avritade lösningsförslag ligger bredvid med samma stam
+            # (tryck._bredvid). Lämnas de kvar blir de föräldralösa filer i en
+            # katalog läraren själv öppnar.
+            for andelse in ("bedomning", "facit", "losningar"):
                 kandidater.add(p.with_name(f"{p.stem} - {andelse}{p.suffix}"))
         removed = 0
         for k in kandidater:

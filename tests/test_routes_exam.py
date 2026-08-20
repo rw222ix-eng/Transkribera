@@ -686,6 +686,11 @@ def test_provets_losningsforslag_har_en_egen_rutt(client, monkeypatch):
     assert "bedomning" in r.headers.get("content-disposition", "")
     # Och provets egen rutt ger fortfarande PROVET — det var buggen.
     assert b"bedomning" not in client.get(f"/api/exams/{result['id']}/pdf").content
+    # «Lösningar» är en EGEN rutt sedan skärmversionen kom. Här finns ingen
+    # avritning (godkännandet skickade inga blad), så den ger anvisningen —
+    # reserven, och samma papper som förut.
+    los = client.get(f"/api/exams/{result['id']}/losningar")
+    assert los.status_code == 200 and b"bedomning" in los.content
 
 
 def test_bedomning_utan_byggd_pdf_ger_provets_besked(client, monkeypatch):
@@ -700,7 +705,11 @@ def test_bedomning_utan_byggd_pdf_ger_provets_besked(client, monkeypatch):
 
 def test_bedomning_som_saknas_bredvid_provet_sags_pa_svenska(client, monkeypatch):
     """Provet kompilerade, anvisningen inte. Beskedet ska säga just det —
-    inte «okänt prov» och inte serverns engelska LaTeX-logg."""
+    inte «okänt prov» och inte serverns engelska LaTeX-logg.
+
+    Och lösningsrutten faller på samma sak: dess reserv ÄR anvisningen (se
+    tryck.losningar_bredvid), så utan avritning och utan anvisning finns
+    ingenting att ge."""
     from pathlib import Path
     result, _ = _make_exam(client, monkeypatch, datum="2026-10-05")
     _bygger_varje_dokument(monkeypatch)
@@ -709,7 +718,10 @@ def test_bedomning_som_saknas_bredvid_provet_sags_pa_svenska(client, monkeypatch
     pdf.with_name(f"{pdf.stem} - bedomning{pdf.suffix}").unlink()
     r = client.get(f"/api/exams/{result['id']}/bedomning")
     assert r.status_code == 404
-    assert r.json()["error"].startswith("Lösningsförslaget är inte byggt")
+    assert r.json()["error"].startswith("Bedömningsanvisningen är inte byggd")
+    los = client.get(f"/api/exams/{result['id']}/losningar")
+    assert los.status_code == 404
+    assert los.json()["error"].startswith("Lösningsförslaget är inte byggt")
 
 
 def test_arbetsbladets_separata_facit_byggs_och_serveras(client, monkeypatch):

@@ -3710,13 +3710,18 @@
   /* Var pappret hämtas. Lösningsbladet är en KLON av sitt original och bär
      därför samma provId — knappen laddade ner provet när läraren bad om
      lösningsförslaget, för `pdfId` är samma på båda. De två har egna filer
-     bredvid provets: bedömningsanvisningen (prov) och det separata facit
-     (arbetsblad), båda kompilerade vid godkännandet. */
+     bredvid originalets, båda byggda vid godkännandet: provets lösningsark
+     ({stam} - losningar.pdf, avritat ur skärmens facitläge) och arbetsbladets
+     separata facit.
+     `losningar` och inte `bedomning`: knappen gav förut bedömningsanvisningen,
+     lärarens LaTeX-satta rättningsdokument, och det är ett annat papper än det
+     läraren ser i förhandsvisningen. Anvisningen finns kvar på disk och är
+     rutens egen reserv när avritningen saknas (tryck.losningar_bredvid). */
   const pdfVag = v => {
     const id = pdfId(v);
     if (!id) return null;
     if (!v.losningsblad) return `/api/exams/${id}/pdf`;
-    return `/api/exams/${id}/${v.typ === 'Prov' ? 'bedomning' : 'facit'}`;
+    return `/api/exams/${id}/${v.typ === 'Prov' ? 'losningar' : 'facit'}`;
   };
   /* Hämtas som blob i stället för att fönstret navigeras dit: ett 404 blir då
      ett svenskt besked i stället för en flik med serverns JSON i. */

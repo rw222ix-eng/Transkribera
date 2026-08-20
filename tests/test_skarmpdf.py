@@ -14,8 +14,11 @@ Klienten ritar därför av varje blad och skickar bilderna med godkännandet
   * utan bilder — API-anrop, pytest, en gammal klient — går allt den gamla
     vägen, rad för rad,
   * facit blir en egen fil, samma uppsättning som LaTeX-vägen lämnade bredvid,
-  * bedömningsanvisningen är kvar i LaTeX: den är lärarens rättningsdokument
-    och har aldrig varit ett av bladen på skärmen,
+  * provets lösningsförslag likaså — «{stam} - losningar.pdf», som «Lösningar»
+    i Sparat numera hämtar i stället för bedömningsanvisningen,
+  * bedömningsanvisningen är kvar i LaTeX bredvid: den är lärarens
+    rättningsdokument, har aldrig varit ett av bladen på skärmen, och är
+    reserven på lösningsrutten när godkännandet kom utan bilder,
   * .tex skrivs ALLTID — arkivet, och reserven.
 
 Det som skiljer de två sorternas PDF åt är textlagret: pdfium läser text ur en
@@ -244,6 +247,98 @@ def test_bedomningsanvisningen_ar_kvar_i_latex(client, monkeypatch):
     assert byggda == [f"{Path(res['pdf']).stem} - bedomning"], byggda
     r = client.get(f"/api/exams/{result['id']}/bedomning")
     assert r.status_code == 200 and b"bedomning" in r.content
+
+
+# ── Provets lösningsförslag ─────────────────────────────────────────────
+
+def test_provets_losningar_blir_en_egen_bildfil(client, monkeypatch):
+    """«Lösningar» i Sparat gav bedömningsanvisningen: lärarens LaTeX-satta
+    rättningsdokument, ett ANNAT papper än lösningsarket på skärmen. Nu ritas
+    facitläget av som allt annat och blir «{stam} - losningar.pdf»."""
+    from pathlib import Path
+    result = _skriv(client, monkeypatch)
+    _tectonic(monkeypatch)
+    res = _done(client.post(f"/api/exams/{result['id']}/approve", json={
+        "blad": {"uppgift": [_png()],
+                 "losningar": [_png(), _png()]}}))
+
+    pdf = Path(res["pdf"])
+    los = pdf.with_name(f"{pdf.stem} - losningar.pdf")
+    assert los.is_file() and _sidor(los) == 2
+    assert _ar_bild(los)
+    # Och rutten läraren klickar hämtar just den filen — inte anvisningen.
+    r = client.get(f"/api/exams/{result['id']}/losningar")
+    assert r.status_code == 200 and r.content.startswith(b"%PDF")
+    assert len(r.content) == los.stat().st_size
+
+
+def test_bedomningen_lever_kvar_bredvid_losningsarket(client, monkeypatch):
+    """Skärmversionen får INTE ta rättningsunderlaget ur världen. Båda filerna
+    ska ligga i mappen efter samma godkännande, och var och en på sin rutt."""
+    from pathlib import Path
+    result = _skriv(client, monkeypatch)
+    byggda = _tectonic(monkeypatch)
+    res = _done(client.post(f"/api/exams/{result['id']}/approve", json={
+        "blad": {"uppgift": [_png()], "losningar": [_png()]}}))
+
+    stam = Path(res["pdf"]).stem
+    assert byggda == [f"{stam} - bedomning"], byggda
+    assert Path(res["pdf"]).with_name(f"{stam} - bedomning.pdf").is_file()
+    # Rutterna pekar på var sitt dokument: den ena är Tectonic-stubbens fil
+    # (som skriver sitt jobname i sig), den andra bilden av skärmen.
+    assert b"bedomning" in client.get(
+        f"/api/exams/{result['id']}/bedomning").content
+    assert _ar_bild(Path(res["pdf"]).with_name(f"{stam} - losningar.pdf"))
+    assert b"bedomning" not in client.get(
+        f"/api/exams/{result['id']}/losningar").content[:64]
+
+
+def test_utan_avritning_ger_losningsrutten_bedomningen(client, monkeypatch):
+    """Reserven, och den viktigaste raden här: ett godkännande utan bilder
+    (API-anrop, pytest, en äldre klient) bygger ingen losningar.pdf. Då ska
+    knappen ge det dokument som faktiskt bär lösningarna — inte ett 404 på ett
+    prov som byggts felfritt."""
+    from pathlib import Path
+    result = _skriv(client, monkeypatch)
+    _tectonic(monkeypatch)
+    res = _done(client.post(f"/api/exams/{result['id']}/approve", json={}))
+    pdf = Path(res["pdf"])
+    assert not pdf.with_name(f"{pdf.stem} - losningar.pdf").exists()
+    r = client.get(f"/api/exams/{result['id']}/losningar")
+    assert r.status_code == 200 and b"bedomning" in r.content
+
+
+def test_trasigt_losningsark_faller_tillbaka_och_sags(client, monkeypatch):
+    """En data-URI som inte är en PNG får inte bli ett halvt papper. Provet
+    står kvar, anvisningen tar över, och loggen säger vad som hände."""
+    from pathlib import Path
+    result = _skriv(client, monkeypatch)
+    _tectonic(monkeypatch)
+    r = client.post(f"/api/exams/{result['id']}/approve", json={
+        "blad": {"uppgift": [_png()],
+                 "losningar": [_png(), "data:image/png;base64,aGVq"]}})
+    res = _done(r)
+    pdf = Path(res["pdf"])
+    assert _ar_bild(pdf)                      # elevernas ark blev ändå bilden
+    assert not pdf.with_name(f"{pdf.stem} - losningar.pdf").exists()
+    loggar = " ".join(e.get("msg", "") for e in _events(r) if e["type"] == "log")
+    assert "Lösningsförslaget blev ingen bild" in loggar
+    assert client.get(f"/api/exams/{result['id']}/losningar").status_code == 200
+
+
+def test_raderingen_tar_med_losningsarket(client, monkeypatch):
+    """Filen ligger bredvid provet med samma stam. Lämnas den kvar blir den ett
+    föräldralöst papper i en katalog läraren själv öppnar."""
+    from pathlib import Path
+    result = _skriv(client, monkeypatch)
+    _tectonic(monkeypatch)
+    res = _done(client.post(f"/api/exams/{result['id']}/approve", json={
+        "blad": {"uppgift": [_png()], "losningar": [_png()]}}))
+    pdf = Path(res["pdf"])
+    los = pdf.with_name(f"{pdf.stem} - losningar.pdf")
+    assert los.is_file()
+    assert client.delete(f"/api/exams/{result['id']}").status_code == 200
+    assert not los.exists()
 
 
 # ── Versionen och paketet ───────────────────────────────────────────────

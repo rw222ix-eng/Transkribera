@@ -162,11 +162,12 @@
       if (r.v && r.v.antId) d.exam_id = r.v.antId;
       if (r.v && r.v.provId) {
         d.exam_id = r.v.provId;
-        /* Provets lösningsförslag ÄR bedömningsanvisningen; arbetsbladets är
+        /* Provets lösningsförslag är det avritade facitläget; arbetsbladets är
            det separata facit. Två skilda filer, båda bredvid dokumentets egen
-           PDF. Raden bad förut om bedömningen för båda, och arbetsbladets
-           facit hamnade därför alltid i `saknas`. */
-        if (r.typ === 'Facit') d[r.v.typ === 'Prov' ? 'bedomning' : 'facit'] = true;
+           PDF. Raden bad förut om bedömningen för båda: arbetsbladets facit
+           hamnade därför alltid i `saknas`, och provet fick lärarens
+           rättningsdokument i stället för arket hon såg på skärmen. */
+        if (r.typ === 'Facit') d[r.v.typ === 'Prov' ? 'losningar' : 'facit'] = true;
         if (r.anpassad) d.anpassad = {
           /* Samma anpassning som raden beskriver: förlängd tid, färre
              uppgifter, och en kod i foten som skiljer kopian. */
