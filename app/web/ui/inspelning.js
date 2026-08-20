@@ -201,7 +201,7 @@ window.Inspelningar = (() => {
     const tim = alla.reduce((a, p) => a + minuter(p.langd), 0);
     const synliga = alla.filter(p => !sok || `${p.namn} ${p.klass} ${p.kurs}`.toLowerCase().includes(sok.toLowerCase()));
     lada.innerHTML = `<div class="ilyta"><div class="ilinner"><div class="ilkropp">
-      <div class="iltopp"><span class="ilnamn">Alla inspelningar</span><span class="ilant">${alla.length} · ${Math.floor(tim / 60)} tim ${tim % 60} min${sok ? ` · ${synliga.length} matchar «${sok}»` : ''}</span></div><div class="illista"></div>
+      <div class="iltopp"><span class="ilnamn">Alla inspelningar</span><span class="ilant">${alla.length} · ${tim >= 60 ? `${Math.floor(tim / 60)} tim ${tim % 60} min` : `${tim} min`}${sok ? ` · ${synliga.length} matchar «${sok}»` : ''}</span></div><div class="illista"></div>
       <div class="ilfot"><button class="radera" type="button">${markt.size ? `Radera ${markt.size} markerad${markt.size === 1 ? '' : 'e'}` : 'Radera'}</button><button class="ghost" type="button" data-backup>Säkerhetskopiera alla</button><span class="mjuk ilnot">Ljudet ligger kvar på datorn tills du raderar det</span></div></div></div></div>`;
     /* Öppningen är en rörelse, inte ett hopp: ytan växer och innehållet tonar in
        — samma mjuka fällning som veckobriefen. */

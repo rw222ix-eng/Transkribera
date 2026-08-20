@@ -4625,6 +4625,10 @@
     /* Upplägget är pappersts eget — provtiden och nivåmixen står på det, inte i
        de förval som råkade ligga i panelen när sidan laddades. */
     if (v.inst && inst[v.typ]) Object.assign(inst[v.typ], JSON.parse(JSON.stringify(v.inst)));
+    /* Steg 1 ägs av lägeskorten (planlage.js), inte av spegelsegmentet:
+       utan raden stod kortet kvar på «Tavla» medan steg 3 sa gruppuppgift —
+       två steg i samma guide om två olika papper. */
+    if (window.SattLage) window.SattLage(v.typ);
     sattSkrivtyp(v.typ);
     visarLosning = false;
     $('#dokument').setAttribute('data-litet', '');

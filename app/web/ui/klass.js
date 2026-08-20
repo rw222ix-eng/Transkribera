@@ -214,6 +214,16 @@ window.Klass = (() => {
     if (remsan && !remsan.hidden) {
       const r = remsan.getBoundingClientRect();
       if (r.height && r.top > 60 && r.bottom < window.innerHeight - 90) return;
+      /* Första valet, och skapandet ligger under vikningen: ta med läraren
+         dit i stället för att bara berätta om det i ett piller nere i hörnet.
+         En ny användare såg annars en kalender och inget mer — prov och
+         arbetsblad fanns inte förrän hon råkade rulla. */
+      if (valda.length === 1 && r.height && r.top >= window.innerHeight - 90) {
+        const mal = Math.max(0, r.top + window.scrollY - 120);
+        if (window.rullaTill) window.rullaTill(mal);
+        else window.scrollTo({ top: mal, behavior: 'smooth' });
+        return;
+      }
     }
     window.toast && window.toast(valda.length > 1
       ? `${valda.length} lektioner valda — de planeras en i taget, först ${nu.klass || 'lektionen'} ${narOrd(nu)} ${start(nu.tid) || ''}`
