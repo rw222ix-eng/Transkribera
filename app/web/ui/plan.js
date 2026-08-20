@@ -2637,6 +2637,9 @@
         if (omprovAv && versioner[0].typ === omprovAv.typ) markeraOmprov(versioner[0]);
         $('#dokument').setAttribute('data-litet', '');
         visa(0);
+        /* Bokens lösningsark fylls ur de lästa sidorna — efter genereringen,
+           så att ett fel där aldrig fäller pappret. */
+        skrivBokLosningar(utkast);
         $('#skriv').disabled = false;
         planKoll();
         not.textContent = gammal;
@@ -3374,6 +3377,40 @@
     }
     return null;
   }
+  /* ── Bokens lösningsark får sitt INNEHÅLL ───────────
+     Arken bar prototypmallar som hittade på uppgifter («Faktorisera x² − 9»
+     i ett avsnitt om kvadratrötter). Posterna skrivs nu ur bokens LÄSTA
+     sidor (/api/bocker/{id}/losningar) och läggs på dokumentet — så att en
+     tavla i Sparat bär sina lösningar också nästa termin. Anropet går EFTER
+     genereringen, inte i den: lösningarna är lärarens eget ark och ska inte
+     kunna fälla tavlan, och vägen är villkorad så en körning utan bokurval
+     ger exakt samma begäran som förut (kassettregeln). */
+  function skrivBokLosningar(v) {
+    const l = v && v.bokuppg && v.bokuppg.losning;
+    if (!serverPa() || !l || !(l.poster || []).length) return;
+    if (!v.bokuppg.bokId) return;                  // prototypens bok
+    if (l.poster.some(p => p.text)) return;        // redan skrivna
+    if (l.skriver) return;
+    l.skriver = true;
+    window.API.strom(`/api/bocker/${v.bokuppg.bokId}/losningar`, {
+      uppg: l.poster.map(p => p.nr),
+    }, {}).then(r => {
+      delete l.skriver;
+      if (!r || !(r.poster || []).length) return;
+      const per = new Map(r.poster.map(p => [p.nr, p]));
+      l.poster = l.poster.map(p => Object.assign({}, p, per.get(p.nr) || {}));
+      /* Rakt på pappret, inte som ett varv: lösningarna är fakta om boken,
+         inget att ångra (samma väg som `rattat`). Hann pappret godkännas bär
+         det ett eget id; annars är det utkastraden. */
+      const id = v.id || utkastId;
+      if (id) skicka('/api/dokument/' + id, 'PATCH', { dokument: v }).catch(() => {});
+      if (versioner[nu] === v) visa(nu);
+      const saknas = (r.olasta_uppg || []).length;
+      window.toast && window.toast('Lösningsförslagen är skrivna ur bokens sidor'
+        + (saknas ? ` — ${saknas} uppgift${saknas === 1 ? '' : 'er'} ligger på olästa sidor och hoppades över` : '') + '.');
+    }).catch(() => { delete l.skriver; });
+  }
+
   $('#bladkogor') && $('#bladkogor').addEventListener('click', () => {
     visaBladko(null);
     $('#skriv').click();
@@ -4657,6 +4694,10 @@
     ritaTypval();
     visa(u.markor);
     planKoll();
+    /* Ett upplockat utkast från mall-eran läker sig självt: saknar bokens
+       lösningsposter innehåll skrivs de nu och PATCH:as på raden — en gång,
+       sedan bär pappret dem. */
+    skrivBokLosningar(v);
     if (window.PlanSteg) { window.PlanSteg.las(4, false); window.PlanSteg.gaTill(4); }
   }
   (window.Kalender && window.Kalender.redo ? window.Kalender.redo : Promise.resolve())

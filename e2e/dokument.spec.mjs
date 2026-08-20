@@ -246,14 +246,23 @@ const tavla = () => ({
   }],
 });
 
-/* Bokens uppgifter som ett dokument bär dem (Uppgifter.urval). Två poster under
-   nivå 3 blir ett svarsfacit, den tredje en bedömd elevlösning: två ark. */
+/* Bokens uppgifter som ett dokument bär dem (Uppgifter.urval) — med SKRIVET
+   innehåll, som /api/bocker/{id}/losningar lämnar det. Nivå 1–2 blir ett
+   svarsfacit, nivå 3 ett eget lösningsark: två ark. */
 const bokuppg = () => ({
   bok: "Matematik 5000+ 3c", sidor: "244–247", avsnitt: "3.2 Derivata", bokId: null,
   uppg: [3101, 3102, 3110], bort: [], remsa: "3101–3102, 3110", bortremsa: "",
   losning: {
     niva: "Nivå 2 och 3", antal: 3, uppg: [3101, 3102, 3110], remsa: "3101–3102, 3110",
-    poster: [{ nr: 3101, niva: 1 }, { nr: 3102, niva: 2 }, { nr: 3110, niva: 3 }],
+    poster: [
+      { nr: 3101, niva: 1, text: "Bestäm $f'(x)$ när $f(x) = x^2$.",
+        svar: "$2x$", vag: [["$x^2 \\to 2x$", "potensregeln"]] },
+      { nr: 3102, niva: 2, text: "Beräkna $f'(3)$ när $f(x) = x^2$.",
+        svar: "$6$", vag: [["$f'(x) = 2x$", "derivera först"]] },
+      { nr: 3110, niva: 3, text: "Bestäm tangentens ekvation i $x = 1$.",
+        svar: "$y = 2x - 1$", vag: [["$k = f'(1) = 2$", "lutningen är derivatan"],
+                                    ["$y - 1 = 2(x - 1)$", "enpunktsformen"]] },
+    ],
   },
 });
 
@@ -433,7 +442,7 @@ test("tavlans nedladdning ger lösningsbladen som EGNA filer", async ({ page }) 
   await page.locator("#fh-pdf").click();
   await expect(page.locator("#fh-pdf")).toHaveText("Sparad", { timeout: 60_000 });
 
-  // Tavlan + svarsfacit + den bedömda elevlösningen: tre filer, tre anrop.
+  // Tavlan + svarsfacit + nivå 3-arket: tre filer, tre anrop.
   expect(skickat).toHaveLength(3);
   expect(filer).toHaveLength(3);
   /* Tavlan skickas som en lista (ett bräde per sida), bladen som var sin
@@ -447,7 +456,7 @@ test("tavlans nedladdning ger lösningsbladen som EGNA filer", async ({ page }) 
   // Namnen kommer ur arkens egna huvuden, inte ur dokumentets.
   const namn = skickat.map(s => s.namn);
   expect(namn.some(n => /Lösningsförslag · boken/.test(n))).toBe(true);
-  expect(namn.some(n => /Bedömd elevlösning/.test(n))).toBe(true);
+  expect(namn.some(n => /Lösningsförslag · nivå 3/.test(n))).toBe(true);
   expect(new Set(filer).size).toBe(3);   // ingen fil skriver över en annan
 });
 

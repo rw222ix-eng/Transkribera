@@ -299,8 +299,16 @@ test("bokens lösningsförslag följer med som ark, inte som ett saknas", async 
       uppg: [3101, 3102, 3110], bort: [], remsa: "3101–3102, 3110",
       losning: { niva: "Nivå 2 och 3", antal: 3, uppg: [3101, 3102, 3110],
                  remsa: "3101–3102, 3110",
-                 poster: [{ nr: 3101, niva: 1 }, { nr: 3102, niva: 2 },
-                          { nr: 3110, niva: 3 }] },
+                 /* Skrivna poster (som /api/bocker/{id}/losningar lämnar dem)
+                    — mallposter utan text ger numera bara platshållararket. */
+                 poster: [
+                   { nr: 3101, niva: 1, text: "Bestäm $f'(x)$ när $f(x) = x^2$.",
+                     svar: "$2x$", vag: [["$x^2 \\to 2x$", "potensregeln"]] },
+                   { nr: 3102, niva: 2, text: "Beräkna $f'(3)$ när $f(x) = x^2$.",
+                     svar: "$6$", vag: [["$f'(x) = 2x$", "derivera först"]] },
+                   { nr: 3110, niva: 3, text: "Bestäm tangentens ekvation i $x = 1$.",
+                     svar: "$y = 2x - 1$",
+                     vag: [["$k = f'(1) = 2$", "lutningen är derivatan"]] }] },
     },
   });
   const anrop = await fejka(page, [rad(1, blad)]);
@@ -318,7 +326,7 @@ test("bokens lösningsförslag följer med som ark, inte som ett saknas", async 
   expect(boken, JSON.stringify(anrop[0].dokument)).toBeTruthy();
   expect(boken.exam_id).toBeUndefined();      // aldrig originalets egen pdf
   expect(Array.isArray(boken.png)).toBe(true);
-  expect(boken.png).toHaveLength(2);          // svarsfacit + bedömd elevlösning
+  expect(boken.png).toHaveLength(2);          // svarsfacit + nivå 3-arket
   boken.png.forEach(p => {
     const m = png(p);
     expect(m.bredd).toBe(794 * 2);            // arket i tryckt bredd, 2×

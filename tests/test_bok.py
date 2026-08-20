@@ -921,3 +921,40 @@ def test_uppslaget_svarar_med_luckorna(client, ocr):
                       json={"fran": 10, "till": 11, "bara": "fakta"}))
     d = client.get(f"/api/bocker/{b['id']}/uppslag?fran=10&till=11").json()
     assert d["luckor"] == [1128]
+
+
+# ------------------------------------------------- lösningsförslagen (bok) --
+# Arken bar prototypmallar som hittade på uppgifter («Faktorisera x² − 9» i
+# ett avsnitt om kvadratrötter). Posterna skrivs nu ur bokens lästa sidtext
+# (app/bok_losning.py) — och kontraktet är att modellen aldrig får smyga in
+# en uppgift läraren inte bad om, och att nivån är databasens, inte modellens.
+
+def test_boklosningar_haller_sig_till_de_begarda():
+    from app import bok_losning
+    fejk = json.dumps({"poster": [
+        {"nr": 1111, "text": "Beräkna $\sqrt{49}$.", "svar": "$7$",
+         "vag": [["$7^2 = 49$", "kvadratrotens definition"]], "niva": 3},
+        {"nr": 9999, "text": "Påhittad uppgift.", "svar": "$1$", "vag": []},
+        {"nr": 1113, "text": "", "svar": "$2$", "vag": []},
+    ]})
+    res = bok_losning.generate_losningar(
+        "Liber Ma 1c", "1.1 Kvadratrötter",
+        [{"sida": 4, "rubrik": "Kvadratrötter", "text": "1111 Beräkna …"}],
+        [{"nr": 1111, "niva": 2}, {"nr": 1113, "niva": 1}],
+        llm=lambda *a, **k: fejk)
+    # 9999 var inte begärd, 1113 saknar text — bara 1111 duger, och nivån är
+    # databasens (2), inte modellens (3).
+    assert [p["nr"] for p in res["poster"]] == [1111]
+    assert res["poster"][0]["niva"] == 2
+    assert res["poster"][0]["svar"] == "$7$"
+
+
+def test_boklosningarnas_prompt_bar_sidtexten_ordagrant():
+    from app import bok_losning
+    p = bok_losning.build_prompt(
+        "Liber Ma 1c", "1.1",
+        [{"sida": 4, "rubrik": "Kvadratrötter", "text": "KÄLLTEXTEN STÅR HÄR"}],
+        [{"nr": 1111, "niva": 2}])
+    assert "KÄLLTEXTEN STÅR HÄR" in p
+    assert "1111" in p
+    assert "Hitta ALDRIG på en uppgift" in p

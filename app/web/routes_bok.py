@@ -24,7 +24,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import FileResponse, JSONResponse
 
 from app import bok as bok_mod
-from app import db, gpu_arbiter
+from app import bok_losning, db, gpu_arbiter
 from app.web.sse import sse_response
 
 # Molnjobben köar inte bakom kortet längre (se gpu_arbiter): de delar en
@@ -173,6 +173,75 @@ def create_router(base: Path, arbiter) -> APIRouter:
                         "sidor": [{"sida": s["sida"], "avsnitt": s.get("avsnitt"),
                                    "tecken": len(s.get("text") or "")}
                                   for s in res["sidor"]]}
+            finally:
+                arbiter.release_llm(llm)
+
+        return sse_response(job, req)
+
+    # ------------------------------------------------------ lösningsförslagen --
+
+    @router.post("/api/bocker/{bok_id:int}/losningar")
+    async def losningar(bok_id: int, req: Request):
+        """Lösningsförslag till valda uppgifter — ur de LÄSTA sidorna.
+
+        Arken bar prototypmallar («Faktorisera x² − 9» i ett avsnitt om
+        kvadratrötter); nu skriver modellen posterna ur bokens egen sidtext
+        (app/bok_losning.py). Uppgifter på olästa sidor gissas ALDRIG fram —
+        de returneras i `olasta_uppg` och arket säger det i stället."""
+        body = await req.json()
+        try:
+            begarda = [int(n) for n in (body.get("uppg") or [])]
+        except (TypeError, ValueError):
+            return JSONResponse({"error": "uppg måste vara nummer"},
+                                status_code=400)
+        if not begarda:
+            return JSONResponse({"error": "inga uppgifter valda"},
+                                status_code=400)
+        conn = _db()
+        try:
+            b = db.get_bok(conn, bok_id)
+            if b is None:
+                return JSONResponse({"error": "okänd bok"}, status_code=404)
+            alla = {u["nr"]: u for u in db.bok_uppgifter(conn, bok_id)}
+        finally:
+            conn.close()
+        val = [alla[n] for n in begarda if n in alla]
+        okanda = [n for n in begarda if n not in alla]
+        if not val:
+            return JSONResponse({"error": "uppgifterna finns inte bland de "
+                                          "lästa sidorna"}, status_code=400)
+        sidnr = sorted({u["sida"] for u in val})
+
+        llm = arbiter.try_acquire_llm()
+        if not llm:
+            return JSONResponse(_LLM_BUSY, status_code=409)
+
+        def job(emit):
+            try:
+                if arbiter.ensure_llm() is None:
+                    raise RuntimeError("Språkmodellen är inte installerad.")
+                conn2 = _db()
+                try:
+                    sidor = [s for s in db.bok_sidor(
+                        conn2, bok_id, sidnr[0], sidnr[-1])
+                        if s["sida"] in set(sidnr)]
+                finally:
+                    conn2.close()
+                lasta = {s["sida"] for s in sidor if s.get("text")}
+                med_text = [s for s in sidor if s.get("text")]
+                kan = [u for u in val if u["sida"] in lasta]
+                olasta_uppg = [u["nr"] for u in val if u["sida"] not in lasta]
+                if not kan:
+                    return {"poster": [], "olasta_uppg": olasta_uppg,
+                            "okanda": okanda}
+                avsnitt = next((s.get("avsnitt") or s.get("rubrik")
+                                for s in med_text
+                                if s.get("avsnitt") or s.get("rubrik")), "")
+                res = bok_losning.generate_losningar(
+                    b["namn"], avsnitt, med_text, kan,
+                    log_cb=lambda m: emit({"type": "log", "msg": m}))
+                return {"poster": res["poster"],
+                        "olasta_uppg": olasta_uppg, "okanda": okanda}
             finally:
                 arbiter.release_llm(llm)
 

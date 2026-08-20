@@ -238,6 +238,43 @@ window.BokLosning = (() => {
     const b = v && v.bokuppg;
     const l = b && b.losning;
     if (!l || !(l.poster || []).length) return [];
+    /* ── RIKTIGA POSTER FÖRST ──────────────────────────
+       Bär posterna bokens eget innehåll (text/svar/vag, skrivna ur de lästa
+       sidorna av /api/bocker/{id}/losningar) ritas DET — mallarna nedanför
+       är prototypens och hittade på uppgifter som inte finns i boken:
+       «Faktorisera x² − 9» i ett avsnitt om kvadratrötter. Nivå 3 får
+       lösningsgången utskriven i sitt eget ark; den bedömda elevlösningens
+       flervägsform kräver mer än posterna bär och är kvar som prototypform. */
+    const riktiga = l.poster.filter(p => p.text && p.svar);
+    if (riktiga.length) {
+      const ut2 = [];
+      const post = p => kortpost({ t: p.text, svar: p.svar, enhet: p.enhet,
+                                   vag: p.vag || [] }, p.nr, p.niva);
+      const latta = riktiga.filter(p => p.niva < 3);
+      const svara = riktiga.filter(p => p.niva === 3);
+      if (latta.length) ut2.push(`<div class="ark" data-form="lo-bok" data-brytbar="">
+        <div class="lohuvud"><b>Lösningsförslag · boken</b><span>${esc(b.bok)} · s. ${esc(b.sidor)} · ${latta.length} ${latta.length === 1 ? 'uppgift' : 'uppgifter'}</span></div>
+        <h1 class="lotitel">Endast svar krävs</h1>
+        <p class="lolede">Uppgifterna är bokens egna, lösta med metoderna till och med ${esc(b.avsnitt)}. Vägen under svaret är de rader du skulle skriva på tavlan, inte en fullständig redovisning.</p>
+        ${latta.map(post).join('')}
+      </div>`);
+      if (svara.length) ut2.push(`<div class="ark" data-form="lo-bok3" data-brytbar="">
+        <div class="lohuvud"><b>Lösningsförslag · nivå 3</b><span>${esc(b.bok)} · s. ${esc(b.sidor)} · ${svara.length} ${svara.length === 1 ? 'uppgift' : 'uppgifter'}</span></div>
+        <h1 class="lotitel">Hela lösningen krävs</h1>
+        ${svara.map(post).join('')}
+      </div>`);
+      return ut2;
+    }
+    /* Server på men inga skrivna poster: ett ärligt besked i stället för
+       mallarnas påhittade uppgifter. Utan server (Claude Design) är mallarna
+       hela poängen — prototypen ska gå att visa. */
+    if (window.API && window.API.pa) {
+      return [`<div class="ark" data-form="lo-bok" data-brytbar="">
+        <div class="lohuvud"><b>Lösningsförslag · boken</b><span>${esc(b.bok)} · s. ${esc(b.sidor)} · ${l.poster.length} ${l.poster.length === 1 ? 'uppgift' : 'uppgifter'}</span></div>
+        <h1 class="lotitel">Lösningarna är inte skrivna än</h1>
+        <p class="lolede">Uppgift ${esc(l.remsa || l.poster.map(p => p.nr).join(', '))} är vald, men lösningsposterna saknas på det här pappret. De skrivs ur bokens lästa sidor när pappret genereras — generera om pappret så följer de med.</p>
+      </div>`];
+    }
     const f = familjen(v);
     const ut = [];
     const korta = l.poster.filter(p => p.niva < 3);
