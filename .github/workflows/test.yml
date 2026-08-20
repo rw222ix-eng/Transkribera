@@ -83,8 +83,8 @@ jobs:
 
   e2e:
     runs-on: windows-latest
-    # Hela sviten tar ~15 min i CI med omförsök inräknade (2026-08-09).
-    timeout-minutes: 30
+    # Hela sviten tar ~26 min i CI; fallande tester med omförsök behöver marginal (2026-08-20).
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
