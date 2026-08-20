@@ -3396,27 +3396,57 @@
     if (l.poster.some(p => p.text && p.skriven >= 3)) return;
     if (l.skriver) return;
     l.skriver = true;
-    window.API.strom(`/api/bocker/${v.bokuppg.bokId}/losningar`, {
-      uppg: l.poster.map(p => p.nr),
-    }, {}).then(r => {
-      delete l.skriver;
-      if (!r || !(r.poster || []).length) return;
-      const per = new Map(r.poster.map(p => [p.nr, p]));
-      /* En post utan täckning i svaret tappar sitt gamla innehåll — hellre
-         platshållarens ärlighet än en kvarbliven post ur en äldre skrivning. */
-      l.poster = l.poster.map(p => (per.get(p.nr)
-        ? Object.assign({}, p, per.get(p.nr))
-        : { nr: p.nr, niva: p.niva }));
-      /* Rakt på pappret, inte som ett varv: lösningarna är fakta om boken,
-         inget att ångra (samma väg som `rattat`). Hann pappret godkännas bär
-         det ett eget id; annars är det utkastraden. */
-      const id = v.id || utkastId;
-      if (id) skicka('/api/dokument/' + id, 'PATCH', { dokument: v }).catch(() => {});
-      if (versioner[nu] === v) visa(nu);
-      const saknas = (r.olasta_uppg || []).length;
-      window.toast && window.toast('Lösningsförslagen är skrivna ur bokens sidor'
-        + (saknas ? ` — ${saknas} uppgift${saknas === 1 ? '' : 'er'} ligger på olästa sidor och hoppades över` : '') + '.');
-    }).catch(() => { delete l.skriver; });
+    const visaNya = () => { if (versioner[nu] === v) visa(nu); };
+    /* En annan flik — eller en tidigare laddning av samma sida — kan redan ha
+       skrivit posterna: laddar man om mitt i skrivningen står den nya sidan
+       med de gamla, dess eget anrop får semaforens 409, och det färdiga
+       resultatet PATCH:as av en sida som inte längre finns. Därför läses
+       RADEN först: bär den färska poster tas de rakt av, utan LLM-anrop. */
+    const id0 = v.id || utkastId;
+    (id0 ? window.API.json('/api/dokument').catch(() => null)
+         : Promise.resolve(null)).then(svar => {
+      const rad = svar
+        ? [svar.utkast].concat(svar.sparade || []).filter(Boolean)
+            .find(r => r.id === id0)
+        : null;
+      const dok = rad && (rad.dokument || (rad.versioner || [])[rad.markor || 0]);
+      const pa = (((dok || {}).bokuppg || {}).losning || {}).poster || [];
+      if (pa.some(p => p.text && p.skriven >= 3)) {
+        delete l.skriver;
+        l.poster = pa;
+        visaNya();
+        return;
+      }
+      window.toast && window.toast(
+        'Skriver bokens lösningsförslag ur de lästa sidorna — tar en minut eller två.');
+      window.API.strom(`/api/bocker/${v.bokuppg.bokId}/losningar`, {
+        uppg: l.poster.map(p => p.nr),
+      }, {}).then(r => {
+        delete l.skriver;
+        if (!r || !(r.poster || []).length) return;
+        const per = new Map(r.poster.map(p => [p.nr, p]));
+        /* En post utan täckning i svaret tappar sitt gamla innehåll — hellre
+           platshållarens ärlighet än en kvarbliven post ur en äldre skrivning. */
+        l.poster = l.poster.map(p => (per.get(p.nr)
+          ? Object.assign({}, p, per.get(p.nr))
+          : { nr: p.nr, niva: p.niva }));
+        /* Rakt på pappret, inte som ett varv: lösningarna är fakta om boken,
+           inget att ångra (samma väg som `rattat`). Hann pappret godkännas bär
+           det ett eget id; annars är det utkastraden. */
+        const id = v.id || utkastId;
+        if (id) skicka('/api/dokument/' + id, 'PATCH', { dokument: v }).catch(() => {});
+        visaNya();
+        const saknas = (r.olasta_uppg || []).length;
+        window.toast && window.toast('Lösningsförslagen är skrivna ur bokens sidor'
+          + (saknas ? ` — ${saknas} uppgift${saknas === 1 ? '' : 'er'} ligger på olästa sidor och hoppades över` : '') + '.');
+      }).catch(e => {
+        /* Tystnaden var buggen: ett 409 («en skrivning pågår redan») såg ut
+           som ingenting alls, och läraren stod med gamla ark utan besked. */
+        delete l.skriver;
+        window.toast && window.toast(
+          `Bokens lösningar kunde inte skrivas nu: ${(e && e.message) || 'okänt fel'} — ladda om om en stund, så hämtas de.`);
+      });
+    });
   }
 
   $('#bladkogor') && $('#bladkogor').addEventListener('click', () => {
