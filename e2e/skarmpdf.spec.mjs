@@ -202,6 +202,33 @@ test("anteckningarna går samma väg", async ({ page }) => {
   expect(blad.facit).toEqual([]);
 });
 
+test("gruppuppgiftens facit läggs SIST i samma fil", async ({ page }) => {
+  /* Gruppuppgiften har ingen fil bredvid: gruppuppgift.tex.j2 skriver alltid
+     ut «Facit och bedömning» på sista sidan, och det är lärarens ark i samma
+     dokument. Växlaren erbjuder det som ett eget läge på skärmen — men i
+     mappen är det en sida, inte en fil. Hamnade det i `facit` hade servern
+     lagt det i en fil ingen rutt hämtar, och gruppens papper hade kommit ur
+     skrivaren utan facit. */
+  const anrop = await fejka(page, { typ: "gruppuppgift" });
+  await page.goto("/");
+  await hydrerad(page);
+  await skriv(page, "Gruppuppgift", "primitiva funktioner");
+  await expect(page.locator("#dokument")).toBeVisible({ timeout: 15_000 });
+
+  const utan = await page.evaluate(() =>
+    document.querySelectorAll('#arkskal .ark[data-form="fa"]').length);
+  expect(utan, "gruppuppgiften bar redan sitt facit — testet mäter inget")
+    .toBe(0);
+
+  await page.locator("#godkann").click();
+  const blad = await bladenIApprove(page, anrop);
+  expect(blad.facit).toEqual([]);
+  // Facitarket ligger som en sida till i dokumentets egen fil.
+  expect(blad.uppgift.length).toBeGreaterThan(1);
+  expect(blad.uppgift.every(arPng)).toBe(true);
+  expect(blad.uppgift.at(-1)).not.toBe(blad.uppgift[0]);
+});
+
 /* ── Vad som faktiskt går in i bilden ────────────────────────────────
    Avritningen serialiserar sin klon till XML och lägger den i ett
    <foreignObject>. Fångar man serialiseringen har man pappret, tagg för tagg —
