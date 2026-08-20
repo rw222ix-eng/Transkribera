@@ -33,8 +33,11 @@ MAX_UPPGIFTER = 12
 # Postens form-version, stämplad av servern (aldrig av modellen). Höjs när
 # prompten ändrats så att redan skrivna poster är sämre än en omskrivning —
 # klienten (plan.js skrivBokLosningar) skriver om poster med äldre stämpel.
-# v2: deluppgifternas uttryck kravs i texten, ett steg per vag-rad.
-SKRIVEN = 2
+# v2: deluppgifternas uttryck krävs i texten, ett steg per vag-rad.
+# v3: deluppgifterna blir `delar` — en i taget, kedjan slutar i svaret
+#     (lärarens granskning: alla uttryck på en rad + samlad svarsrad +
+#     lösningar med svaren en gång till var tre lager av samma sak).
+SKRIVEN = 3
 
 SYSTEM = (
     "Du skriver lärarens lösningsförslag till uppgifter ur en svensk "
@@ -43,6 +46,13 @@ SYSTEM = (
     "mellan $-tecken. Decimaltecken är komma ({,} i LaTeX). Håll dig till "
     "metoder boken tagit upp till och med det aktuella avsnittet."
 )
+
+_VAG = {
+    "type": "array", "maxItems": 6,
+    "items": {"type": "array",
+              "items": {"type": "string", "maxLength": 200},
+              "minItems": 2, "maxItems": 2},
+}
 
 SCHEMA = {
     "type": "object",
@@ -53,18 +63,24 @@ SCHEMA = {
                 "type": "object",
                 "properties": {
                     "nr": {"type": "integer"},
-                    # Rymmer fyra deluppgifter med LaTeX-uttryck — 400 tvingade
-                    # modellen att korta «a) …», och en uppgift utan sina
-                    # uttryck går inte att lösa från arket.
-                    "text": {"type": "string", "maxLength": 700},
+                    "text": {"type": "string", "maxLength": 400},
                     "svar": {"type": "string", "maxLength": 300},
                     "enhet": {"type": "string", "maxLength": 120},
-                    "vag": {
-                        "type": "array", "maxItems": 6,
-                        "items": {"type": "array",
-                                  "items": {"type": "string",
-                                            "maxLength": 200},
-                                  "minItems": 2, "maxItems": 2},
+                    "vag": _VAG,
+                    # Uppgift med deluppgifter: EN del i taget, med sin egen
+                    # väg vars kedja börjar i delens uttryck och slutar i
+                    # svaret. Arket ritar delarna under varandra och hoppar
+                    # den samlade svarsraden — kedjan ÄR svaret.
+                    "delar": {
+                        "type": "array", "maxItems": 8,
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "bokstav": {"type": "string", "maxLength": 3},
+                                "vag": _VAG,
+                            },
+                            "required": ["bokstav", "vag"],
+                        },
                     },
                 },
                 "required": ["nr", "text", "svar", "vag"],
@@ -92,28 +108,47 @@ def build_prompt(bok_namn: str, avsnitt: str,
         f"UPPGIFTERNA SOM SKA LÖSAS: {nrn}",
         "",
         "Skriv en post per uppgift, i nummerordning:",
-        "· `text` — uppgiftens text SOM DEN STÅR PÅ SIDAN. Har uppgiften "
-        "deluppgifter MÅSTE varje deluppgifts uttryck med: «a) $\\sqrt{8}$  "
-        "b) $\\sqrt{0{,}25}$ …» — utan uttrycken går uppgiften inte att lösa "
-        "från arket. Skriv aldrig «…» i stället för innehåll. Hitta ALDRIG "
-        "på en uppgift: står numret inte på sidorna ovan, hoppa över det.",
-        "· `svar` — det färdiga svaret. Deluppgifternas svar åtskilda: "
-        "«a) $8$ · b) $0{,}5$». Exakt form när boken arbetar exakt "
-        "($\\sqrt{21}$, inte 4,58) — närmevärde bara när uppgiften ber om "
-        "det.",
+        "· `text` — uppgiftens fråga SOM DEN STÅR PÅ SIDAN. För en uppgift "
+        "MED deluppgifter: bara stammen (den gemensamma frågan), INTE "
+        "deluppgifternas uttryck — de bor i `delar`. Skriv aldrig «…» i "
+        "stället för innehåll, och aldrig markdown (*asterisker*): variabler "
+        "och matematik alltid i $…$. Hitta ALDRIG på en uppgift: står numret "
+        "inte på sidorna ovan, hoppa över det.",
+        "· `delar` — för en uppgift med deluppgifter: en post per del, med "
+        "bokstaven («a») och delens EGEN väg. Vägens första rad UTGÅR från "
+        "delens uttryck ur boken och kedjan SLUTAR i svaret: «$\\dfrac"
+        "{\\sqrt{2}\\cdot\\sqrt{4}}{\\sqrt{a}} = 1 \\Rightarrow \\sqrt{a} = "
+        "\\sqrt{8} \\Rightarrow a = 8$». En eller två rader per del räcker. "
+        "`vag` på posten lämnas då tom.",
+        "· `svar` — det färdiga svaret; för deluppgifter åtskilda «a) $8$ · "
+        "b) $0{,}5$». Exakt form när boken arbetar exakt ($\\sqrt{21}$, inte "
+        "4,58) — närmevärde bara när uppgiften ber om det.",
         "· `enhet` — bara när svaret bär en enhet eller ett villkor värt att "
         "säga («avrundat till heltal»). Annars utelämnas fältet.",
-        "· `vag` — raderna du skulle skriva på tavlan, som man skriver för "
-        "hand: EN uträkning per rad, sedan nästa steg på nästa rad. En rad "
-        "är [uträkningen, orden om vad som händer]. Aldrig en hel kedja med "
-        "flera $\\Rightarrow$ i samma rad — dela den i steg. 1–4 rader för "
-        "nivå 1–2, upp till 6 för nivå 3. Inte en fullständig redovisning — "
-        "tavlans rader.",
-        "· Deluppgifter (a, b, c …) löses alla, i samma post: märk raden med "
-        "sin bokstav («a) $\\sqrt{2}\\cdot\\sqrt{4} = \\sqrt{8}$»), och en "
-        "rad per deluppgift räcker när de är likartade.",
+        "· `vag` (uppgift utan deluppgifter) — raderna du skulle skriva på "
+        "tavlan, som man skriver för hand: EN uträkning per rad, orden om "
+        "vad som händer som radens andra led, nästa steg på nästa rad. "
+        "Aldrig en hel kedja med flera $\\Rightarrow$ i samma rad. 1–4 "
+        "rader för nivå 1–2, upp till 6 för nivå 3. Inte en fullständig "
+        "redovisning — tavlans rader.",
     ]
     return "\n".join(delar)
+
+
+# Modellen halkar ibland in i markdown trots instruktionen — «*a*» på ett
+# tryckt ark är asterisker, inte kursiv. Variabeln sätts som matte i stället.
+_MD_KURSIV = re.compile(r"\*([^*\s][^*]{0,24}?)\*")
+
+
+def _stada_text(s) -> str:
+    return _MD_KURSIV.sub(r"$\1$", str(s or "").strip())
+
+
+def _stada_vag(rader) -> list[list[str]]:
+    return [[_stada_text(r[0]), _stada_text(r[1])]
+            for r in (rader or [])
+            if isinstance(r, (list, tuple)) and len(r) >= 2
+            and str(r[0]).strip()]
 
 
 def _rensa(post: dict) -> dict | None:
@@ -122,16 +157,19 @@ def _rensa(post: dict) -> dict | None:
         nr = int(post.get("nr"))
     except (TypeError, ValueError):
         return None
-    text = str(post.get("text") or "").strip()
-    svar = str(post.get("svar") or "").strip()
+    text = _stada_text(post.get("text"))
+    svar = _stada_text(post.get("svar"))
     if not text or not svar:
         return None
-    vag = [[str(r[0]).strip(), str(r[1]).strip()]
-           for r in (post.get("vag") or [])
-           if isinstance(r, (list, tuple)) and len(r) >= 2
-           and str(r[0]).strip()]
-    ut = {"nr": nr, "text": text, "svar": svar, "vag": vag}
-    enhet = str(post.get("enhet") or "").strip()
+    ut = {"nr": nr, "text": text, "svar": svar,
+          "vag": _stada_vag(post.get("vag"))}
+    delar = [{"bokstav": _stada_text(d.get("bokstav")).rstrip(")"),
+              "vag": _stada_vag(d.get("vag"))}
+             for d in (post.get("delar") or []) if isinstance(d, dict)]
+    delar = [d for d in delar if d["bokstav"] and d["vag"]]
+    if delar:
+        ut["delar"] = delar
+    enhet = _stada_text(post.get("enhet"))
     if enhet:
         ut["enhet"] = enhet
     return ut

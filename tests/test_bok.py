@@ -951,6 +951,28 @@ def test_boklosningar_haller_sig_till_de_begarda():
     assert res["poster"][0]["skriven"] == bok_losning.SKRIVEN
 
 
+def test_boklosningar_delar_och_markdown_stadas():
+    from app import bok_losning
+    fejk = json.dumps({"poster": [
+        {"nr": 1111, "text": "Vilket tal ska stå i stället för *a*?",
+         "svar": "a) $8$", "vag": [],
+         "delar": [
+             {"bokstav": "a)", "vag": [
+                 ["$\\sqrt{2}\\cdot\\sqrt{4} = \\sqrt{8} \\Rightarrow a = 8$",
+                  "räknelagen för rötter"]]},
+             {"bokstav": "b", "vag": []},          # utan väg — duger inte
+         ]},
+    ]})
+    res = bok_losning.generate_losningar(
+        "Liber Ma 1c", "1.1", [{"sida": 4, "text": "…"}],
+        [{"nr": 1111, "niva": 2}], llm=lambda *a, **k: fejk)
+    p = res["poster"][0]
+    # *a* är markdown, inte kursiv — variabeln sätts som matte.
+    assert p["text"] == "Vilket tal ska stå i stället för $a$?"
+    # Bokstaven städas («a)» → «a»), och en del utan väg ryker.
+    assert [d["bokstav"] for d in p["delar"]] == ["a"]
+
+
 def test_boklosningarnas_prompt_bar_sidtexten_ordagrant():
     from app import bok_losning
     p = bok_losning.build_prompt(

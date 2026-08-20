@@ -252,8 +252,20 @@ window.BokLosning = (() => {
     const riktiga = l.poster.filter(p => p.text && p.svar);
     if (riktiga.length) {
       const ut2 = [];
-      const post = p => kortpost({ t: p.text, svar: p.svar, enhet: p.enhet,
-                                   vag: p.vag || [] }, p.nr, p.niva, true);
+      /* En uppgift med deluppgifter ritas EN del i taget: stammen, sedan
+         varje bokstav med sin kedja som slutar i svaret. Ingen samlad
+         svarsrad och ingen uttryckslista i frågan — det var tre lager av
+         samma innehåll (lärarens granskning 2026-08-21). */
+      const stegrad = s => `<div class="losteg">${mat(s[0])}${s[1] ? `<em>${mat(s[1])}</em>` : ''}</div>`;
+      const delpost = p => `<div class="pruppg">
+        <span class="prnr">${p.nr}.<span class="prvarde">nivå ${p.niva}</span></span>
+        <div><p class="prtext">${mat(p.text)}</p>
+          ${p.delar.map(d => `<div class="lodel"><span class="lodelbokstav">${esc(d.bokstav)})</span><div class="lodelsteg">${(d.vag || []).map(stegrad).join('')}</div></div>`).join('')}
+        </div></div>`;
+      const post = p => ((p.delar || []).length
+        ? delpost(p)
+        : kortpost({ t: p.text, svar: p.svar, enhet: p.enhet,
+                     vag: p.vag || [] }, p.nr, p.niva, true));
       const latta = riktiga.filter(p => p.niva < 3);
       const svara = riktiga.filter(p => p.niva === 3);
       if (latta.length) ut2.push(`<div class="ark" data-form="lo-bok" data-brytbar="">

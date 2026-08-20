@@ -3391,8 +3391,9 @@
     if (!v.bokuppg.bokId) return;                  // prototypens bok
     /* Stämpeln är serverns form-version (bok_losning.SKRIVEN): poster skrivna
        före ett promptlyft — t.ex. de med «a) …» i stället för deluppgifternas
-       uttryck — skrivs om en gång, sedan bär pappret de nya. */
-    if (l.poster.some(p => p.text && p.skriven >= 2)) return;
+       uttryck, eller utan delar-strukturen — skrivs om en gång, sedan bär
+       pappret de nya. Talet följer SKRIVEN i app/bok_losning.py. */
+    if (l.poster.some(p => p.text && p.skriven >= 3)) return;
     if (l.skriver) return;
     l.skriver = true;
     window.API.strom(`/api/bocker/${v.bokuppg.bokId}/losningar`, {
