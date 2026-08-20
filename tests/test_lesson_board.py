@@ -518,8 +518,14 @@ def test_refine_board_far_bokdorren_med_sig():
 # mot urvalet. Kontraktet är nivådomarens: EN dom, högst EN reparation, och
 # ofixade fynd blir varningar i stället för tystnad.
 
-BOKBLOCK = ("Boken: Liber Ma 1c, s. 2-6. Valda uppgifter: 1101-1103, "
-            "1105-1119.")
+# Fixturerna speglar bok.build_bok_block: sidblocket skrivs så snart sidorna
+# är lästa, medan urvalsraden läggs till FÖRST när uppgiftspanelen skickat sin
+# remsa. Skillnaden är hela domarens grind — se testet om urvalet nedan.
+BOKBLOCK_UTAN_URVAL = ("UR LÄROBOKEN — Liber Ma 1c, s. 2–6. Lektionen SKA "
+                       "bygga på de här sidorna.\n\nRötter och potenser …\n\n"
+                       "Uppgiftsnummer på sidorna: 1101, 1102, 1103, 1116.")
+BOKBLOCK = (BOKBLOCK_UTAN_URVAL + "\n\nLÄRARENS URVAL: klassen ska räkna "
+            "uppg. 1101–1103, 1105–1119 på de här sidorna.")
 
 
 def _dom(saknas):
@@ -529,10 +535,9 @@ def _dom(saknas):
 def test_ren_dom_ror_inte_tavlan():
     doc = _valid_doc()
     llm, calls = _stub_llm([_dom([])])
-    res = lb._tackning_pass(doc, [], model="m", llm=llm, bok=BOKBLOCK,
-                            rounds_used=1, max_rounds=3)
+    res = lb._tackning_pass(doc, [], model="m", llm=llm, bok=BOKBLOCK)
     assert res["board"] == doc and res["errors"] == []
-    assert res["rounds"] == 1               # domen kostar ingen runda
+    assert res["rounds"] == 0               # domen kostar ingen runda
     assert len(calls) == 1                  # och ingen reparation kördes
     assert "täckningsdomare" in calls[0]["prompt"]
     assert BOKBLOCK in calls[0]["prompt"]
@@ -543,9 +548,8 @@ def test_fynd_ger_en_reparationsrunda_med_forslaget_i_prompten():
     fynd = [{"uppgifter": [1116, 1117], "vad": "kubikroten ur negativa tal",
              "forslag": "en rad med kubikroten ur -8"}]
     llm, calls = _stub_llm([_dom(fynd), json.dumps(_valid_doc())])
-    res = lb._tackning_pass(doc, [], model="m", llm=llm, bok=BOKBLOCK,
-                            rounds_used=1, max_rounds=3)
-    assert res["errors"] == [] and res["rounds"] == 2
+    res = lb._tackning_pass(doc, [], model="m", llm=llm, bok=BOKBLOCK)
+    assert res["errors"] == [] and res["rounds"] == 1
     assert len(calls) == 2
     assert "kubikroten ur negativa tal" in calls[1]["prompt"]
     assert "1116" in calls[1]["prompt"]
@@ -555,8 +559,7 @@ def test_slut_budget_visar_fynden_i_stallet_for_att_reparera():
     doc = _valid_doc()
     llm, calls = _stub_llm([_dom([{"uppgifter": [1118], "vad": "närmevärden",
                                    "forslag": "en rad om avrundning"}])])
-    res = lb._tackning_pass(doc, [], model="m", llm=llm, bok=BOKBLOCK,
-                            rounds_used=3, max_rounds=3)
+    res = lb._tackning_pass(doc, [], model="m", llm=llm, bok=BOKBLOCK, budget=0)
     assert res["board"] == doc and len(calls) == 1
     assert any(f["code"] == "tackning" for f in res["errors"])
 
@@ -568,8 +571,7 @@ def test_trasig_komplettering_behaller_tavlan_och_visar_fynden():
     llm, _ = _stub_llm([_dom([{"vad": "exakt värde mot närmevärde"}]),
                         json.dumps(_broken_doc()),
                         json.dumps(_broken_doc())])
-    res = lb._tackning_pass(doc, [], model="m", llm=llm, bok=BOKBLOCK,
-                            rounds_used=1, max_rounds=3)
+    res = lb._tackning_pass(doc, [], model="m", llm=llm, bok=BOKBLOCK)
     assert res["board"] == doc
     assert any(f["code"] == "tackning" for f in res["errors"])
 
@@ -577,8 +579,7 @@ def test_trasig_komplettering_behaller_tavlan_och_visar_fynden():
 def test_otydlig_dom_faller_ingen_tavla():
     doc = _valid_doc()
     llm, _ = _stub_llm(["jag är osäker, kanske saknas något?"])
-    res = lb._tackning_pass(doc, [], model="m", llm=llm, bok=BOKBLOCK,
-                            rounds_used=1, max_rounds=3)
+    res = lb._tackning_pass(doc, [], model="m", llm=llm, bok=BOKBLOCK)
     assert res["board"] == doc and res["errors"] == []
 
 
@@ -598,3 +599,85 @@ def test_generate_board_domer_bara_nar_boken_ar_kalla():
     lb.generate_board("Ma 1c", "NA26F", "rötter", model="m", llm=llm3,
                       bok=BOKBLOCK, doma=False)
     assert len(calls3) == 1
+
+
+def test_domaren_kraver_urvalet_inte_bara_bokblocket():
+    """Grinden satt på bokblocket, men blocket skrivs så snart sidorna är
+    lästa. Byter läraren sidspann och trycker Skriv innan uppgiftspanelens
+    faktapass svarat saknas remsan (uppgifter.urval → null), och det urval
+    domaren ska döma mot finns inte i prompten. Domaren dömde då mot
+    «Uppgiftsnummer på sidorna» — hela uppslaget — och drev en
+    reparationsrunda för uppgifter läraren aldrig valt, plus ett modellanrop."""
+    svar = json.dumps(_valid_doc())
+    llm, calls = _stub_llm([svar, _dom([{"uppgifter": [1116], "vad": "x"}])])
+    res = lb.generate_board("Ma 1c", "NA26F", "rötter", model="m", llm=llm,
+                            bok=BOKBLOCK_UTAN_URVAL)
+    assert len(calls) == 1 and res["errors"] == []
+    # Med urvalsraden i blocket körs domaren som förut.
+    llm2, calls2 = _stub_llm([svar, _dom([])])
+    lb.generate_board("Ma 1c", "NA26F", "rötter", model="m", llm=llm2,
+                      bok=BOKBLOCK)
+    assert len(calls2) == 2
+
+
+def test_domarens_rundor_ater_inte_renderingsreparationens_budget():
+    """MAX_ROUNDS delas av generering och renderingsreparation. Förr betalade
+    domaren ur den delade budgeten: fynd kostade runda 2, en trasig
+    komplettering runda 3 — och när kompletteringen slängdes fick läraren
+    ORIGINALTAVLAN med rounds=3, varpå render-report svarade exhausted och
+    lämnade ett uppmätt överlapp olagat på en tavla som validerat direkt."""
+    svar = json.dumps(_valid_doc())
+    fynd = _dom([{"uppgifter": [1116], "vad": "kubikroten ur negativa tal",
+                  "forslag": "en rad med kubikroten ur -8"}])
+    # Generering (giltig) → dom (fynd) → komplettering (trasig) → rättning
+    # (fortfarande trasig) → kompletteringen slängs.
+    llm, calls = _stub_llm([svar, fynd, json.dumps(_broken_doc()),
+                            json.dumps(_broken_doc())])
+    res = lb.generate_board("Ma 1c", "NA26F", "rötter", model="m", llm=llm,
+                            bok=BOKBLOCK)
+    # Samma tavla som utan domare — och samma rundbudget kvar som då.
+    llm_ren, _ = _stub_llm([svar])
+    ren = lb.generate_board("Ma 1c", "NA26F", "rötter", model="m", llm=llm_ren)
+    assert res["board"] == ren["board"]
+    assert res["rounds"] == ren["rounds"] < lb.MAX_ROUNDS
+    assert any(f["code"] == "tackning" for f in res["errors"])
+    assert len(calls) == 4
+
+
+def test_lyckad_komplettering_kostar_inte_heller_delade_budgeten():
+    svar = json.dumps(_valid_doc())
+    llm, calls = _stub_llm([svar, _dom([{"uppgifter": [1116], "vad": "x",
+                                         "forslag": "y"}]), svar])
+    res = lb.generate_board("Ma 1c", "NA26F", "rötter", model="m", llm=llm,
+                            bok=BOKBLOCK)
+    assert len(calls) == 3 and res["errors"] == []
+    # Tre modellanrop, men bara genereringens runda belastar budgeten —
+    # domarens redovisas för sig.
+    assert res["rounds"] == 1 and res["domarrundor"] == 1
+
+
+def test_natfel_i_domaren_faller_ingen_tavla():
+    """Domaren körs EFTER att tavlan är färdig — ett nätfel i det extra
+    anropet fick inte bli «network error» på hela jobbet, men blev det."""
+    doc = _valid_doc()
+
+    def dott_nat(*_a, **_k):
+        raise RuntimeError("network error")
+
+    res = lb._tackning_pass(doc, [], model="m", llm=dott_nat, bok=BOKBLOCK)
+    assert res["board"] == doc and res["errors"] == []
+
+
+def test_natfel_i_kompletteringen_behaller_tavlan_med_fynden():
+    doc = _valid_doc()
+    anrop = {"n": 0}
+
+    def llm(*_a, **_k):
+        anrop["n"] += 1
+        if anrop["n"] == 1:
+            return _dom([{"uppgifter": [1116], "vad": "kubikroten ur negativa tal"}])
+        raise RuntimeError("network error")
+
+    res = lb._tackning_pass(doc, [], model="m", llm=llm, bok=BOKBLOCK)
+    assert res["board"] == doc
+    assert any(f["code"] == "tackning" for f in res["errors"])

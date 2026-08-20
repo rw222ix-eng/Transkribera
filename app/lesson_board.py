@@ -1116,6 +1116,17 @@ def _repair_until_valid(board: dict | None, errors: list, *, model: str, llm,
 # reparationsrunda. Samma kontrakt som nivådomaren (exam_gen._niva_pass):
 # EN dom, högst EN reparation, aldrig en loop — och ofixade fynd redovisas
 # som varningar i stället för att tystas.
+
+# Raden bok.build_bok_block lägger in FÖRST när uppgiftspanelen skickat sin
+# remsa (routes_planning.bok_urval). Den — inte bokblocket — är domarens
+# kontrakt: sidorna finns i blocket så snart de är lästa, men urvalet är
+# lärarens beslut, och bara det säger vad tavlan lovar att bära.
+URVALSMARKOR = "LÄRARENS URVAL"
+
+# Domarens EGNA rundor: kompletteringen + en rättning om den bröt schemat.
+# Ligger utanför MAX_ROUNDS med flit — se _tackning_pass.
+TACKNING_MAX_ROUNDS = 2
+
 TACKNING_INSTRUKTION = (
     "Du är täckningsdomare för en genomgångstavla i matematik. Nedan står "
     "bokens uppslagna sidor med lärarens VALDA uppgifter, och därefter "
@@ -1153,8 +1164,17 @@ def doma_tackning(board: dict, *, model: str, llm, bok: str,
     aldrig fällas av att domaren svarade otydligt."""
     log = log_cb or (lambda _m: None)
     log("Täckningsdomaren läser urvalet mot tavlan …")
-    raw = llm(model, build_tackning_prompt(board, bok),
-              options={"temperature": 0.2})
+    # FAIL-OPEN, också mot nätet. Domaren körs EFTER att tavlan är färdig och
+    # godkänd — ett nätfel i det extra anropet fällde ändå hela jobbet, och
+    # läraren fick «network error» på en tavla som redan var skriven. Samma
+    # regel som för en otydlig dom: tavlan lämnas som den är, och skälet syns
+    # i loggen i stället för att kosta genereringen.
+    try:
+        raw = llm(model, build_tackning_prompt(board, bok),
+                  options={"temperature": 0.2})
+    except Exception as e:
+        log(f"Täckningsdomaren kunde inte nås ({e}) — tavlan lämnas som den är.")
+        return []
     m = re.search(r"\{.*\}", raw or "", re.DOTALL)
     try:
         data = json.loads(m.group(0)) if m else {}
@@ -1179,32 +1199,51 @@ def doma_tackning(board: dict, *, model: str, llm, bok: str,
 
 
 def _tackning_pass(board: dict, errors: list, *, model: str, llm, bok: str,
-                   rounds_used: int, max_rounds: int,
+                   budget: int = TACKNING_MAX_ROUNDS,
                    log_cb: Callable[[str], None] | None = None,
                    token_cb: Callable[[str], None] | None = None) -> dict:
-    """Dom + högst EN reparationsrunda på fynden.
+    """Dom + högst EN reparationsrunda på fynden. `rounds` är domarens EGNA.
 
     Ligger efter valideringsreparationen med flit: domaren ska läsa den
-    tavla läraren annars hade fått, inte ett halvfärdigt mellanläge."""
+    tavla läraren annars hade fått, inte ett halvfärdigt mellanläge.
+
+    `budget` är skild från MAX_ROUNDS, som generering och renderingsreparation
+    delar (se repair_board). Förr betalade domaren ur den delade budgeten:
+    fyndet kostade runda 2, en komplettering som bröt schemat runda 3 — och
+    när kompletteringen slängdes nedan fick läraren originaltavlan tillbaka
+    med rounds=3. Klientens render-report svarade då exhausted och lämnade ett
+    uppmätt överlapp olagat på en tavla som validerade direkt. Ett pass som
+    körs EFTER att tavlan är godkänd får inte tömma budgeten för det som
+    kommer efter."""
     log = log_cb or (lambda _m: None)
     fynd = doma_tackning(board, model=model, llm=llm, bok=bok, log_cb=log_cb)
     if not fynd:
-        return {"board": board, "errors": errors, "rounds": rounds_used}
-    if rounds_used >= max_rounds:
+        return {"board": board, "errors": errors, "rounds": 0}
+    if budget < 1:
         # Budgeten slut: luckorna visas för läraren i stället — en tyst lucka
         # är värre än en synlig (samma regel som nivådomarens).
-        return {"board": board, "errors": errors + fynd, "rounds": rounds_used}
+        return {"board": board, "errors": errors + fynd, "rounds": 0}
     log(f"Kompletterar tavlan — {len(fynd)} "
         f"{'lucka' if len(fynd) == 1 else 'luckor'} i täckningen …")
-    kandidat = _llm_round(build_repair_prompt(board, fynd), model, llm,
-                          token_cb=token_cb)
-    rounds_used += 1
+    # Samma fail-open för kompletteringen: dör nätet mitt i den står den
+    # färdiga tavlan kvar och luckorna redovisas som varningar.
+    try:
+        kandidat = _llm_round(build_repair_prompt(board, fynd), model, llm,
+                              token_cb=token_cb)
+    except Exception as e:
+        log(f"Kompletteringen kunde inte nås ({e}) — luckorna visas i stället.")
+        kandidat = None
     if kandidat is None:
-        return {"board": board, "errors": errors + fynd, "rounds": rounds_used}
+        return {"board": board, "errors": errors + fynd, "rounds": 1}
     _doc, fel = ws.validate_board_json(kandidat)
-    res = _repair_until_valid(kandidat, fel, model=model, llm=llm,
-                              rounds_used=rounds_used, max_rounds=max_rounds,
-                              log_cb=log_cb, token_cb=token_cb)
+    try:
+        res = _repair_until_valid(kandidat, fel, model=model, llm=llm,
+                                  rounds_used=1, max_rounds=budget,
+                                  log_cb=log_cb, token_cb=token_cb)
+    except Exception as e:
+        log(f"Rättningen av kompletteringen föll ({e}) — den gamla tavlan "
+            "behålls.")
+        return {"board": board, "errors": errors + fynd, "rounds": 1}
     # Kompletteringen får inte kosta strukturen: var tavlan ren före domaren
     # och trasig efter är omskrivningen en försämring — behåll den gamla och
     # visa fynden som varningar.
@@ -1229,8 +1268,15 @@ def generate_board(course: str, group: str, moment: str, *, model: str,
     råa tokens medan den skriver — UI:t bygger upp tavlan live ur dem.
 
     `doma=False` stänger av täckningsdomaren. Den kostar ett modellanrop och
-    körs annars när BOKEN är källa — utan urval finns inget kontrakt att
-    döma mot, så en tavla utan bokblock rörs aldrig."""
+    körs annars när LÄRARENS URVAL står i bokblocket — utan urval finns inget
+    kontrakt att döma mot. Grinden satt förr på blocket i stort, men blocket
+    skrivs så snart sidorna är lästa: byter läraren sidspann och trycker Skriv
+    innan uppgiftspanelens faktapass svarat följer ingen remsa med, och
+    domaren dömde då mot uppslagets ALLA nummer och drev en reparationsrunda
+    för uppgifter läraren aldrig valt.
+
+    Domarens rundor räknas inte in i `rounds` — se _tackning_pass — men
+    redovisas som `domarrundor`."""
     log = log_cb or (lambda _m: None)
     log("Genererar lektionstavlan …")
     prompt = build_prompt(course, group, moment, memory, underlag, utfall, bok,
@@ -1253,11 +1299,13 @@ def generate_board(course: str, group: str, moment: str, *, model: str,
     res = _repair_until_valid(board, errors, model=model, llm=llm,
                               rounds_used=rounds, max_rounds=max_rounds,
                               log_cb=log_cb, token_cb=token_cb)
-    if doma and bok.strip() and res.get("board") is not None:
-        res = _tackning_pass(res["board"], res["errors"], model=model, llm=llm,
-                             bok=bok, rounds_used=res["rounds"],
-                             max_rounds=max_rounds,
-                             log_cb=log_cb, token_cb=token_cb)
+    if doma and URVALSMARKOR in (bok or "") and res.get("board") is not None:
+        dom = _tackning_pass(res["board"], res["errors"], model=model, llm=llm,
+                             bok=bok, log_cb=log_cb, token_cb=token_cb)
+        # `rounds` är den budget generering och renderingsreparation delar:
+        # domaren har sin egen och lämnar därför siffran orörd.
+        res = {"board": dom["board"], "errors": dom["errors"],
+               "rounds": res["rounds"], "domarrundor": dom["rounds"]}
     return res
 
 
