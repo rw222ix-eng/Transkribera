@@ -189,6 +189,20 @@ INSTRUCTION = (
     # uppgifter på ett bättre sätt.»
     "Exemplen — de är genomgångens kärna:\n"
     "- 1–3 exempel, aldrig fler. Ett enkelt exempel räcker ofta; tre är taket.\n"
+    # LÄSRIKTNINGEN. Lärarens dom (2026-08-20), på en tavla med två figurer
+    # och «Hel area: A = 2·18   A = 50/2» i samma rad: «man får kolla korsvis
+    # med ögonen för att hänga med. Onödigt komplicerat. Och arean finns i en
+    # delfigur fast det egentligen är ett till exempel — men det skriver de
+    # inte ut.» Tråden fick inte bli en ursäkt för att klämma ihop scenarier.
+    "- Ett exempel är EN uppgift, EN figur och EN uträkningsväg, läst "
+    "uppifrån och ned. Aldrig två figurer sida vid sida i samma exempel, "
+    "aldrig två parallella uträkningar i samma rad («A = 2·18   A = 50/2») "
+    "— ögat ska aldrig behöva läsa korsvis. Är det andra scenariot värt att "
+    "visa är det ett EGET exempel med egen rubrik, och det räknas mot taket; "
+    "annars stryks det. En vändning i tråden fortsätter NEDÅT i samma "
+    "exempel eller öppnar nästa — aldrig bredvid.\n"
+    "- Två alternativ visas som \"Väg 1\" och \"Väg 2\" under varandra — "
+    "aldrig ihopklämda på en rad med «resp.».\n"
     # RÖDA TRÅDEN. Lärarens dom (2026-08-20): «exemplen måste bygga på
     # varandra, så att det blir en röd tråd. Dels för att inte hoppa för
     # mycket, men även vara så pass smarta att vi kan återanvända uträkningar
