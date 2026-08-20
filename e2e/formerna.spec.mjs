@@ -632,3 +632,35 @@ test("tavlans spaltlinje är dragen, inte streckad", async ({ page }) => {
   expect(Number(linjen.bredd)).toBeGreaterThan(1.5);
   expect(Number(linjen.opacitet)).toBeGreaterThan(0.5);
 });
+
+test("ett bråk inuti ett rottecken spricker inte i röda TeX-fragment", async ({ page }) => {
+  await L.fejkatMoln(page);
+  await L.oppna(page);
+  /* Bråkstaplingen (matte.js ettUttryck) klippte ut \dfrac också när det låg
+     INUTI en annan konstruktions klamrar: «\sqrt{\dfrac{3}{a}}» blev
+     «\sf =\sqrt{»-fragment i rött på bokens lösningsark. Ligger ett bråk på
+     klamerdjup > 0 ska KaTeX sätta hela raden. */
+  const ut = await page.evaluate(() => {
+    const el = document.createElement("span");
+    el.className = "mat";
+    el.dataset.tex = "\\dfrac{\\sqrt{3}}{\\sqrt{a}}=\\sqrt{\\dfrac{3}{a}}=\\sqrt{\\dfrac{1}{2}}\\Rightarrow a=6";
+    document.body.appendChild(el);
+    window.Matte.satt(document.body);
+    /* Det SYNLIGA lagret — .katex-mathml-annotationen bär alltid rå TeX och
+       säger inget om vad som står på pappret. */
+    const synligt = [...el.querySelectorAll(".katex-html")]
+      .map(k => k.textContent).join(" ");
+    const svar = { synligt, katex: !!el.querySelector(".katex"),
+                   brak: !!el.querySelector(".brak"),
+                   fel: !!el.querySelector(".katex-error") };
+    el.remove();
+    return svar;
+  });
+  expect(ut.katex).toBe(true);
+  expect(ut.brak).toBe(false);       // ingen isärplockning — hela raden i KaTeX
+  expect(ut.fel).toBe(false);        // inga röda fragment
+  /* Fragmenten som stod i rött på arket började med «\sf » — själva
+     kontrollen är att inget backslash-kommando når det synliga lagret. */
+  expect(ut.synligt).not.toContain("\\");
+  expect(ut.synligt).not.toContain("sf ");
+});

@@ -195,11 +195,15 @@ window.BokLosning = (() => {
     return FAMILJ[tr ? tr[1] : 'algebra'];
   }
 
-  /* ── Svarsfacit: uppgift, svar, kort väg dit ── */
-  function kortpost(u, nr, niva) {
+  /* ── Svarsfacit: uppgift, svar, kort väg dit ──
+     `hel` skriver hela uppgiftstexten. Kortningen (ref) är provets regel —
+     texten står på elevens ark bredvid — men bokens ark är lärarens ENDA
+     papper för uppgiften, och «b) …» utan b:s uttryck går inte att rätta
+     efter. */
+  function kortpost(u, nr, niva, hel) {
     return `<div class="pruppg">
       <span class="prnr">${nr}.<span class="prvarde">nivå ${niva}</span></span>
-      <div><p class="prtext" data-ref="">${ref(u.t)}</p>
+      <div><p class="prtext"${hel ? '' : ' data-ref=""'}>${hel ? mat(u.t) : ref(u.t)}</p>
         <div class="losvar"><b class="losetikett">Svar</b><span>${mat(u.svar)}</span>${u.enhet ? `<em>${mat(u.enhet)}</em>` : ''}</div>
         ${(u.vag || []).length ? `<ul class="lovag">${u.vag.map(s => `<li><span class="losteg">${mat(s[0])}<em>${mat(s[1])}</em></span></li>`).join('')}</ul>` : ''}
       </div></div>`;
@@ -249,7 +253,7 @@ window.BokLosning = (() => {
     if (riktiga.length) {
       const ut2 = [];
       const post = p => kortpost({ t: p.text, svar: p.svar, enhet: p.enhet,
-                                   vag: p.vag || [] }, p.nr, p.niva);
+                                   vag: p.vag || [] }, p.nr, p.niva, true);
       const latta = riktiga.filter(p => p.niva < 3);
       const svara = riktiga.filter(p => p.niva === 3);
       if (latta.length) ut2.push(`<div class="ark" data-form="lo-bok" data-brytbar="">

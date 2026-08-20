@@ -51,6 +51,19 @@
   };
   const spann = (el, tex) => { const s = document.createElement('span'); rendera(s, balansera(tex), true); el.append(s); };
 
+  /* Finns ett bråk på klamerdjup > 0? Då tillhör det en annan konstruktion
+     (\sqrt, \overline, ett yttre bråk) och får inte klippas ut. */
+  function nastlatFrac(tex) {
+    let djup = 0;
+    for (let i = 0; i < tex.length; i++) {
+      const c = tex[i];
+      if (c === '{') djup++;
+      else if (c === '}') { if (djup) djup--; }
+      else if (c === '\\' && djup > 0 && /^\\[dt]?frac\s*\{/.test(tex.slice(i))) return true;
+    }
+    return false;
+  }
+
   function ettUttryck(el) {
     const tex = el.dataset.tex;
     if (!FRAC.test(tex)) { rendera(el, tex, true); return; }
@@ -63,6 +76,13 @@
        utan den sätter KaTeX bråken i inline-läge, alltså i skriptgrad — 7 px på
        ett tryckt blad, bredvid staplade bråk i full grad. */
     if (/\\left|\\right/.test(tex)) { rendera(el, '\\displaystyle ' + tex, true); return; }
+    /* Samma regel för ett bråk INUTI en annan konstruktions klamrar:
+       «\sqrt{\dfrac{3}{a}}» klipptes vid det inre bråket och lämnade
+       «\sf =\sqrt{» som röda TeX-fragment på bokens lösningsark. Ligger
+       NÅGOT bråk på klamerdjup > 0 får KaTeX sätta hela raden — och alla
+       bråk i uttrycket får samma grad, i stället för att de staplade och
+       de KaTeX-satta stod i var sin. */
+    if (nastlatFrac(tex)) { rendera(el, '\\displaystyle ' + tex, true); return; }
     el.textContent = '';
     let rest = tex, varv = 0;
     while (varv++ < 8) {

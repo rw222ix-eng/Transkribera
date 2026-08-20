@@ -162,6 +162,20 @@
 [data-form="lo-bok"] .pruppg,[data-form="lo-bok3"] .pruppg{grid-template-columns:calc(82px * var(--fsk, 1)) minmax(0,1fr)}
 [data-form="lo-bok"] .prnr,[data-form="lo-bok3"] .prnr{font-size:calc(19px * var(--fsk, 1));font-variant-numeric:tabular-nums}
 [data-form="lo-bok"] .prvarde,[data-form="lo-bok3"] .prvarde{text-transform:lowercase;letter-spacing:.02em}
+/* ── Handskriftens rytm (lärarens ord 2026-08-21) ──
+   «Oftast när man skriver för hand … skriver man en uträkning och sen några
+   ord efteråt, vad som händer. Och sen undertill i nästa rad med lite
+   utrymme mellan gör man nästa steg.» Stegen sattes som en tät lista med
+   motivet inklämt efter raden i grönt — huller om buller. Nu: uträkningen på
+   sin egen rad, orden UNDER den i mindre grad, och luft mellan stegen.
+   Gäller bara bokens former — provets facit är tätare med flit (A4-
+   passningen ovanför äger dess mått). */
+[data-form="lo-bok"] .pruppg+.pruppg,[data-form="lo-bok3"] .pruppg+.pruppg{margin-top:calc(20px * var(--fsk, 1))}
+[data-form="lo-bok"] .lovag,[data-form="lo-bok3"] .lovag{margin-top:calc(12px * var(--fsk, 1));gap:calc(12px * var(--fsk, 1));font-size:calc(15px * var(--fsk, 1))}
+[data-form="lo-bok"] .lovag>li::before,[data-form="lo-bok3"] .lovag>li::before{align-self:start;margin-top:calc(11px * var(--fsk, 1))}
+[data-form="lo-bok"] .lovag>li em,[data-form="lo-bok3"] .lovag>li em{display:block;margin:calc(3px * var(--fsk, 1)) 0 0;font-weight:400;font-size:calc(12px * var(--fsk, 1));letter-spacing:0;white-space:normal;color:#000;max-width:58ch}
+[data-form="lo-bok"] .losvar,[data-form="lo-bok3"] .losvar{margin-top:calc(10px * var(--fsk, 1))}
+
 /* Faksimilen är satt i skrivstil på 22 px, och en staplad bråkdel är då högre än
    radens linjehöjd: numeratorn klev upp i «Väg B»-raden ovanför. Bokens papper får
    därför luftigare rader än förlagans, som bara bär formler på en nivå. */

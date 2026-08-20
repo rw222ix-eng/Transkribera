@@ -30,6 +30,12 @@ from app import llm_client
 # igenom innan lektionen.
 MAX_UPPGIFTER = 12
 
+# Postens form-version, stämplad av servern (aldrig av modellen). Höjs när
+# prompten ändrats så att redan skrivna poster är sämre än en omskrivning —
+# klienten (plan.js skrivBokLosningar) skriver om poster med äldre stämpel.
+# v2: deluppgifternas uttryck kravs i texten, ett steg per vag-rad.
+SKRIVEN = 2
+
 SYSTEM = (
     "Du skriver lärarens lösningsförslag till uppgifter ur en svensk "
     "gymnasiebok i matematik. Du får bokens egna sidor ordagrant. Svara med "
@@ -47,7 +53,10 @@ SCHEMA = {
                 "type": "object",
                 "properties": {
                     "nr": {"type": "integer"},
-                    "text": {"type": "string", "maxLength": 400},
+                    # Rymmer fyra deluppgifter med LaTeX-uttryck — 400 tvingade
+                    # modellen att korta «a) …», och en uppgift utan sina
+                    # uttryck går inte att lösa från arket.
+                    "text": {"type": "string", "maxLength": 700},
                     "svar": {"type": "string", "maxLength": 300},
                     "enhet": {"type": "string", "maxLength": 120},
                     "vag": {
@@ -83,20 +92,26 @@ def build_prompt(bok_namn: str, avsnitt: str,
         f"UPPGIFTERNA SOM SKA LÖSAS: {nrn}",
         "",
         "Skriv en post per uppgift, i nummerordning:",
-        "· `text` — uppgiftens text SOM DEN STÅR PÅ SIDAN, kortad till det "
-        "som behövs för att lösa den. Hitta ALDRIG på en uppgift: står "
-        "numret inte på sidorna ovan, hoppa över det.",
-        "· `svar` — det färdiga svaret. Exakt form när boken arbetar exakt "
+        "· `text` — uppgiftens text SOM DEN STÅR PÅ SIDAN. Har uppgiften "
+        "deluppgifter MÅSTE varje deluppgifts uttryck med: «a) $\\sqrt{8}$  "
+        "b) $\\sqrt{0{,}25}$ …» — utan uttrycken går uppgiften inte att lösa "
+        "från arket. Skriv aldrig «…» i stället för innehåll. Hitta ALDRIG "
+        "på en uppgift: står numret inte på sidorna ovan, hoppa över det.",
+        "· `svar` — det färdiga svaret. Deluppgifternas svar åtskilda: "
+        "«a) $8$ · b) $0{,}5$». Exakt form när boken arbetar exakt "
         "($\\sqrt{21}$, inte 4,58) — närmevärde bara när uppgiften ber om "
         "det.",
         "· `enhet` — bara när svaret bär en enhet eller ett villkor värt att "
         "säga («avrundat till heltal»). Annars utelämnas fältet.",
-        "· `vag` — raderna du skulle skriva på tavlan, 1–4 för nivå 1–2 och "
-        "upp till 6 för nivå 3. Varje rad är [raden, motivet]: motivet är "
-        "regeln eller tanken bakom raden, kort. Inte en fullständig "
-        "redovisning — tavlans rader.",
-        "· Deluppgifter (a, b, c …) löses alla, i samma post: en vag-rad per "
-        "deluppgift räcker när de är likartade.",
+        "· `vag` — raderna du skulle skriva på tavlan, som man skriver för "
+        "hand: EN uträkning per rad, sedan nästa steg på nästa rad. En rad "
+        "är [uträkningen, orden om vad som händer]. Aldrig en hel kedja med "
+        "flera $\\Rightarrow$ i samma rad — dela den i steg. 1–4 rader för "
+        "nivå 1–2, upp till 6 för nivå 3. Inte en fullständig redovisning — "
+        "tavlans rader.",
+        "· Deluppgifter (a, b, c …) löses alla, i samma post: märk raden med "
+        "sin bokstav («a) $\\sqrt{2}\\cdot\\sqrt{4} = \\sqrt{8}$»), och en "
+        "rad per deluppgift räcker när de är likartade.",
     ]
     return "\n".join(delar)
 
@@ -158,6 +173,7 @@ def generate_losningar(bok_namn: str, avsnitt: str, sidor: list[dict],
         if rensad is None or rensad["nr"] not in niva_for:
             continue
         rensad["niva"] = niva_for[rensad["nr"]] or 1
+        rensad["skriven"] = SKRIVEN
         poster.append(rensad)
     poster.sort(key=lambda p: p["nr"])
     return {"poster": poster}

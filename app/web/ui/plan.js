@@ -3389,7 +3389,10 @@
     const l = v && v.bokuppg && v.bokuppg.losning;
     if (!serverPa() || !l || !(l.poster || []).length) return;
     if (!v.bokuppg.bokId) return;                  // prototypens bok
-    if (l.poster.some(p => p.text)) return;        // redan skrivna
+    /* Stämpeln är serverns form-version (bok_losning.SKRIVEN): poster skrivna
+       före ett promptlyft — t.ex. de med «a) …» i stället för deluppgifternas
+       uttryck — skrivs om en gång, sedan bär pappret de nya. */
+    if (l.poster.some(p => p.text && p.skriven >= 2)) return;
     if (l.skriver) return;
     l.skriver = true;
     window.API.strom(`/api/bocker/${v.bokuppg.bokId}/losningar`, {
@@ -3398,7 +3401,11 @@
       delete l.skriver;
       if (!r || !(r.poster || []).length) return;
       const per = new Map(r.poster.map(p => [p.nr, p]));
-      l.poster = l.poster.map(p => Object.assign({}, p, per.get(p.nr) || {}));
+      /* En post utan täckning i svaret tappar sitt gamla innehåll — hellre
+         platshållarens ärlighet än en kvarbliven post ur en äldre skrivning. */
+      l.poster = l.poster.map(p => (per.get(p.nr)
+        ? Object.assign({}, p, per.get(p.nr))
+        : { nr: p.nr, niva: p.niva }));
       /* Rakt på pappret, inte som ett varv: lösningarna är fakta om boken,
          inget att ångra (samma väg som `rattat`). Hann pappret godkännas bär
          det ett eget id; annars är det utkastraden. */

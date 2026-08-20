@@ -947,6 +947,8 @@ def test_boklosningar_haller_sig_till_de_begarda():
     assert [p["nr"] for p in res["poster"]] == [1111]
     assert res["poster"][0]["niva"] == 2
     assert res["poster"][0]["svar"] == "$7$"
+    # Form-stämpeln är serverns — klienten skriver om poster med äldre.
+    assert res["poster"][0]["skriven"] == bok_losning.SKRIVEN
 
 
 def test_boklosningarnas_prompt_bar_sidtexten_ordagrant():
