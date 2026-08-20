@@ -36,7 +36,11 @@
        lämnade pappret liggande i rutan, och eftersom utkastet plockas upp igen
        vid varje laddning var det tillbaka nästa gång appen öppnades — efter att
        läraren uttryckligen bett om ett tomt bord. Tyst slängning: rensningen
-       har en egen toast, och den säger det i stället. */
+       har en egen toast, och den säger det i stället.
+       Men den ska ha en väg tillbaka. Varje annan slängning i appen bär Ångra;
+       den här var den enda som var slutgiltig — ett felklick på «Börja om» tog
+       pappret och hela dess ångra-historik för gott. `slangUtkast` lämnar
+       tillbaka återställningen, och den hängs i rensningens egen toast. */
     const slangt = window.Dokument && window.Dokument.slangUtkast
       ? window.Dokument.slangUtkast(true) : false;
     if (window.Dokument && window.Dokument.slappForlaga) window.Dokument.slappForlaga();
@@ -69,10 +73,17 @@
     window.PlanSteg && window.PlanSteg.omstart();
     spegla();
     /* Slängningen sägs bara när det fanns något att slänga — annars påstår
-       toasten att ett papper försvann som aldrig låg framme. */
-    window.toast && window.toast(slangt
-      ? 'Allt rensat — utkastet är slängt, välj lektionen i veckan igen'
-      : 'Allt rensat — välj lektionen i veckan igen');
+       toasten att ett papper försvann som aldrig låg framme. Ångra-knappen
+       lägger tillbaka just pappret; det övriga (klass, källor, moment) är redan
+       rensat och det var det knappen hette. Därför «Ångra utkastet» och inte
+       «Ångra» — den ska inte lova mer än den gör. */
+    if (slangt) {
+      window.toast && window.toast(
+        'Allt rensat — utkastet är slängt, välj lektionen i veckan igen',
+        'Ångra utkastet', slangt);
+    } else {
+      window.toast && window.toast('Allt rensat — välj lektionen i veckan igen');
+    }
   }
 
   knapp.addEventListener('click', rensa);

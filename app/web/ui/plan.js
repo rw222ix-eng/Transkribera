@@ -143,7 +143,13 @@
   }
   function utkastVersion(v) {
     if (!serverPa() || !utkastId) return;
-    skicka('/api/dokument/' + utkastId + '/versioner', 'POST', { dokument: v }).catch(() => {});
+    const id = utkastId;
+    skicka('/api/dokument/' + id + '/versioner', 'POST', { dokument: v })
+      /* Är raden borta (den andra flikens utkast tog den) släpper vi id:t här.
+         Då vet godkännandet att det inte har någon rad att byta status på och
+         skriver en ny i stället — i tystnad skulle varje varv annars skrivas
+         till ett hål, och pappret försvinna vid godkännandet. */
+      .catch(e => { if (e && e.status === 404 && utkastId === id) utkastId = null; });
   }
   function utkastMarkor(i) {
     if (!serverPa() || !utkastId) return;
@@ -164,7 +170,15 @@
     const p = skicka('/api/dokument/' + id, 'PATCH',
                      { status: 'godkant', dokument: v, foljd: null, stada: true })
       .then(d => { v.id = d.id; stadatBesked(d); return d; })
-      .catch(() => null);
+      /* ── RADEN KAN VARA BORTA ──────────────────────────
+         Två flikar (eller två datorer) på samma app: den andra flikens nya
+         utkast raderar den härs rad (server.py «ett utkast i taget»), och då
+         pekar `utkastId` på något som inte finns. Svaret sväljdes förr rakt av
+         — godkännandet sparade alltså TYST ingenting. Pappret försvann ur
+         högen, och för ett prov blev bara lösningsbladet kvar, för det sparas
+         en egen väg. En 404 betyder inte «ge upp», den betyder «skriv en ny
+         rad»: samma väg som ett papper som aldrig hann bli utkast. */
+      .catch(e => (e && e.status === 404) ? dokSpara(v, true) : null);
     sparasNu.set(v, p);
     return p;
   }
@@ -195,6 +209,10 @@
      stängs har inte slängts, det har gömts. Ångra betalar priset i stället och
      skriver tillbaka pappret som en ny rad (samma pris som raderaDok betalar:
      nytt id, samma innehåll). */
+  /* Returnerar ÅNGRA-VÄGEN (en funktion) när något faktiskt slängdes, annars
+     false. Tyst slängning betyder «säg det inte i en egen toast» — inte «utan
+     återvändo»: den som slänger tyst har oftast en egen toast att hänga Ångra
+     i, och «Börja om» hade ingen väg tillbaka alls innan. */
   function slangUtkast(tyst) {
     if (!versioner.length) return false;
     const vs = versioner.slice(), markor = Math.max(0, nu), id = utkastId;
@@ -204,15 +222,14 @@
     $('#dokument').hidden = true;
     planKoll();
     if (id && serverPa()) window.API.json('/api/dokument/' + id, { method: 'DELETE' }).catch(() => {});
-    if (!tyst) {
-      window.toast && window.toast('Utkastet slängt', 'Ångra', () => {
-        versioner = vs;
-        utkastAterskapa(vs, markor);
-        visa(markor);
-        planKoll();
-      });
-    }
-    return true;
+    const ater = () => {
+      versioner = vs;
+      utkastAterskapa(vs, markor);
+      visa(markor);
+      planKoll();
+    };
+    if (!tyst) window.toast && window.toast('Utkastet slängt', 'Ångra', ater);
+    return ater;
   }
   /* Det parkerade parförslaget hör till pappret som väntar på sin följeslagare
      — inte till sessionen. Därför bor det på det godkända dokumentet. */
@@ -2148,6 +2165,9 @@
      så varningen kommer tillbaka för ett nytt moment men aldrig två gånger för
      samma. */
   let momentVarnat = '';
+  /* Hur många varv utkastet hade när läraren senast varnades om att «Skriv om»
+     kastar det. Noll = inte varnad; ändras utkastet igen frågas det på nytt. */
+  let skrivVarnat = 0;
   $('#skriv').addEventListener('click', () => {
     if (window.Lagen && !window.Lagen().length) {
       if (window.PlanSteg) window.PlanSteg.gaTill(2);
@@ -2234,6 +2254,25 @@
         return;
       }
     }
+    /* ── «SKRIV OM» KASTAR DET SOM LIGGER FRAMME ───────
+       Knappen byter text till «Skriv om arbetsbladet» så fort ett utkast ligger
+       i rutan (planKoll) — och den skriver ett HELT NYTT papper. Utkastet med
+       alla sina varv försvann utan en fråga: läraren som ändrat fyra gånger och
+       tryckte på det som såg ut som «gör om det där sista» förlorade hela
+       ångra-historiken, och den är utkastets halva värde.
+       Samma «tryck igen» som nivåvarningen ovan: första klicket säger vad som
+       står på spel, andra skriver. Ett varv är inget att varna om — då finns
+       ingen historia att tappa. */
+    if (!$('#dokument').hidden && versioner.length > 1
+        && skrivVarnat !== versioner.length) {
+      skrivVarnat = versioner.length;
+      window.toast && window.toast(
+        `Utkastet har ${versioner.length} varv i ångra-historiken, och de följer `
+        + 'inte med till ett nytt papper. Tryck igen för att skriva om från '
+        + 'början — eller ändra det som ligger framme i canvas.');
+      return;
+    }
+    skrivVarnat = 0;
     $('#skriv').disabled = true;
     const not = $('#plannot');
     const gammal = not.textContent;
@@ -2523,6 +2562,12 @@
           utkast.antRadtak = res.radtak || null;
           if (res.anteckningar.titel) utkast.titel = res.anteckningar.titel;
         }
+        /* Det gamla utkastet går bort ORDENTLIGT: serverraden med. Förr byttes
+           bara appens lista ut, och raden städades av serverns «ett utkast i
+           taget» när det nya utkastet POST:ades — samma resultat i det vanliga
+           fallet, men inget alls om skrivningen aldrig kom fram. Tyst: läraren
+           bekräftade slängningen när hon tryckte Skriv om (se varningen där). */
+        slangUtkast(true);
         versioner = [utkast];
         utkastNytt(utkast);
         /* Ett nytt dokument öppnas alltid på ELEVERNAS ark. Stod växlaren kvar på
@@ -3108,8 +3153,25 @@
      skrivs om här i klienten och har ingen server att diffa, gamla utkast och
      kassettsvar bär inget `andrade`, och `svarighet`/`kontext`/`niva` är där
      hela omskrivningen. De rör inte det servern ritat. */
+  /* Två papper är samma papper när deras id:n är det. `papper` sätts på svaret
+     av iterationsJobb (nedan) — det är stämpeln från AVSÄNDNINGEN. */
+  const sammaPapper = (a, b) => !!a && !!b
+    && (a.provId || null) === (b.provId || null)
+    && (a.antId || null) === (b.antId || null)
+    && (a.wbId || null) === (b.wbId || null);
   function iterera(text, etikett, elId, res) {
     if (nu < 0) return;
+    /* ── SVARET GÄLLER SITT EGET PAPPER ────────────────
+       Omskrivningen tar tid. Hann läraren stänga canvasen och öppna ett annat
+       papper under tiden landade svaret på DET — versionerna lästes vid svaret,
+       inte vid avsändningen, och utan id-jämförelse märktes ingenting. Provets
+       uppgifter skrevs alltså in i arbetsbladet, och ångra-historiken sa att
+       det var hon som gjort det. */
+    if (res && res.papper && !sammaPapper(res.papper, versioner[nu])) {
+      window.toast && window.toast(
+        'Omskrivningen gällde ett annat papper och lades undan — det du ser nu är orört.');
+      return;
+    }
     const l = (etikett ? etikett + ' ' : '') + text.toLowerCase();
     /* Serverns egen lista, när den finns. `Array.isArray` och inte sanningsvärde:
        en tom lista är ett SVAR («ingenting på pappret ändrades»), inte ett
@@ -3179,8 +3241,14 @@
   function iterationsJobb(text, _etikett, elId, krokar, valt, historik) {
     const v = versioner[nu];
     if (!serverPa() || !v) return null;
+    /* Vilket papper önskemålet gällde NÄR det skickades. Stämpeln följer med
+       svaret hem, och `iterera` vägrar tillämpa ett svar som hör till ett annat
+       papper än det som ligger framme (se sammaPapper). */
+    const papper = { provId: v.provId || null, antId: v.antId || null,
+                     wbId: v.wbId || null };
     const krav = r => {
       if (!r) throw new Error('Servern slutade svara mitt i omskrivningen. Försök igen.');
+      r.papper = papper;
       return r;
     };
     /* MÅLET MÅSTE MED. Klickade läraren på ett element i pappret skickades
@@ -3352,12 +3420,36 @@
     const bort = [{ i, v }].concat(syskon.map(s => ({ i: sparat.indexOf(s), v: s })));
     bort.sort((a, b) => b.i - a.i).forEach(b => sparat.splice(b.i, 1));
     bort.forEach(b => dokTaBort(b.v));
+    /* ── PROVRADEN FÖLJER MED PAPPRET ──────────────────
+       Bara dokumentraden raderades. Provet låg kvar i basen med sina versioner,
+       sina uppgifter och sin status — och det är DEN raden minnet läser:
+       ett kastat papper räknades som «behandlat innehåll» i täckningen, dess
+       uppgifter gick in i nästa prompt som «undvik det du gjort förut», och
+       dubblettkontrollen jämförde mot uppgifter som inte finns någonstans.
+       .tex och .pdf blev liggande i utkatalogen på köpet.
+       Lösningsbladet är en klon och bär SAMMA provId — därav mängden. */
+    const examIds = [...new Set(bort.map(b => b.v.provId || b.v.antId)
+      .filter(Boolean))];
+    if (serverPa()) {
+      examIds.forEach(id => window.API.json('/api/exams/' + id,
+                                            { method: 'DELETE' }).catch(() => {}));
+    }
     ritaSparat();
     window.Klass && window.Klass.rita();
     window.toast && window.toast(`${dokNamn(v)} raderad${syskon.length ? ' med sitt facit' : ''}`, 'Ångra', () => {
       bort.slice().sort((a, b) => a.i - b.i).forEach(b => sparat.splice(b.i, 0, b.v));
       /* Ångrandet skriver tillbaka pappret — det får ett nytt id, men ligger
-         på sin gamla plats i högen. */
+         på sin gamla plats i högen. Provraden går INTE att skriva tillbaka:
+         den och dess filer är borta. Pappret märks därför som «provet är
+         raderat» i stället för att bära ett id som pekar in i tomma intet —
+         id:n återanvänds i SQLite, och en gammal sökväg hade förr eller senare
+         hämtat någon annans PDF. Uppgifterna står kvar på pappret: de är
+         dokumentets egna, och det är dem läraren ville ha tillbaka. */
+      bort.forEach(b => {
+        if (b.v.provId || b.v.antId) b.v.provBorta = true;
+        delete b.v.pdf;
+        delete b.v.tex;
+      });
       bort.forEach(b => dokSpara(b.v));
       dokOrdna();
       ritaSparat();
@@ -3598,7 +3690,11 @@
      Den ritas nu av på klienten och blir en sida på servern i samma gest
      (POST /api/tavla/pdf) — ett papper i högen som inte gick att ladda ner var
      ett hål, inte ett val. */
-  const pdfId = v => (v && (v.provId || v.antId)) || null;
+  /* `provBorta`: pappret har överlevt en radering med Ångra, men provraden och
+     dess filer gjorde det inte. Då finns ingen fil att hämta — och id:t får
+     inte användas, för SQLite återanvänder radnummer och nästa prov kan ha
+     fått just det. */
+  const pdfId = v => (v && !v.provBorta && (v.provId || v.antId)) || null;
   /* Var pappret hämtas. Lösningsbladet är en KLON av sitt original och bär
      därför samma provId — knappen laddade ner provet när läraren bad om
      lösningsförslaget, för `pdfId` är samma på båda. De två har egna filer
@@ -3798,6 +3894,46 @@
     $('[data-a="nej"]', f).addEventListener('click', ev => { ev.stopPropagation(); stang(); });
   }
 
+  /* ── VÄGEN TILLBAKA FRÅN GODKÄNT ────────────────────
+     Efter godkännandet fanns ingen. Pappret gick inte att skriva om — servern
+     säger numera det rakt ut (409) — och det enda gränssnittet erbjöd var
+     «Bygg vidare», som startar en ny körning: ett nytt papper och en ny nota
+     för att rätta en siffra i uppgift 3.
+     Här läggs pappret tillbaka som det utkast det var: högen släpper det,
+     dokumentraden byter status, provraden låses upp, och versionen läraren
+     tittade på blir utkastets första varv. Historiken från förra rundan följer
+     inte med — det är ett nytt arbetspass på samma papper. */
+  function fortsattAndra(i) {
+    const v = sparat[i];
+    if (!v) return;
+    /* Ett utkast i taget: appen visar ett papper i rutan, och två hade betytt
+       att det ena tyst skrevs över. */
+    if (versioner.length) {
+      window.toast && window.toast('Ett utkast ligger redan framme — godkänn '
+        + 'eller släng det först, sedan går det här pappret att ändra.');
+      return;
+    }
+    const id = v.id;
+    sparat.splice(i, 1);
+    ritaSparat();
+    window.Klass && window.Klass.rita && window.Klass.rita();
+    if (serverPa() && id) {
+      skicka('/api/dokument/' + id, 'PATCH', { status: 'utkast', markor: 0 })
+        .catch(() => null);
+    }
+    /* Provet är låst i basen efter godkännandet (exams.status) — utan den här
+       raden skulle varje omskrivning mötas av 409:an och läraren stå med ett
+       utkast hon inte kan ändra. Filerna rörs inte: godkänner hon igen skrivs
+       de över, ångrar hon sig ligger de kvar. */
+    const examId = v.provBorta ? null : (v.provId || v.antId);
+    if (serverPa() && examId) {
+      skicka(`/api/exams/${examId}/oppna`, 'POST', {}).catch(() => null);
+    }
+    aterstallUtkast({ id, versioner: [v], markor: 0 });
+    window.toast && window.toast(
+      `${dokNamn(v)} ligger framme igen — ändra i canvas och godkänn på nytt.`);
+  }
+
   const fhskal = $('#forhandsskal');
   let fhIndex = -1;
   const fhTangent = e => { if (e.key === 'Escape') fhStang(); };
@@ -3809,6 +3945,12 @@
     $('#fh-titel').textContent = dokNamn(v);
     $('#fh-meta').textContent = [v.kurs || 'ingen kurs', v.klass || 'ingen klass', (v.datum ? (window.Kalender && window.Kalender.ord ? window.Kalender.ord(v.datum) : v.datum) : 'utan datum'),
       typeof beskriv === 'function' ? beskriv(v) : ''].filter(Boolean).join(' · ');
+    /* Lösningsbladet är en KLON av sitt original och har inget eget liv som
+       utkast — att lägga tillbaka det hade gett två papper i rutan som säger
+       emot varandra. Raden om låset hör ihop med knappen och följer den. */
+    const kanAndras = !v.losningsblad;
+    if ($('#fh-fortsatt')) $('#fh-fortsatt').hidden = !kanAndras;
+    if ($('#fh-last')) $('#fh-last').hidden = !kanAndras;
     ritaIn($('#fh-ark'), v);
     fhskal.hidden = false;
     requestAnimationFrame(() => fhskal.setAttribute('data-pa', ''));
@@ -3832,6 +3974,12 @@
       const i = fhIndex;
       fhStang();
       byggVidare(i);
+    });
+    $('#fh-fortsatt') && $('#fh-fortsatt').addEventListener('click', () => {
+      if (fhIndex < 0 || !sparat[fhIndex]) return;
+      const i = fhIndex;
+      fhStang();
+      fortsattAndra(i);
     });
     /* Frågan ställs i modalen, ovanpå pappret man är på väg att kasta. Går det
        igenom stängs rutan — det som visades finns inte längre — och veckovyn
@@ -3868,6 +4016,24 @@
         }))
         .catch(() => { /* pappret ligger i Sparat; arkivkopian får vänta */ });
     }
+    /* ── STRÖMMEN SOM TAR SLUT UTAN SITT DONE ──────────
+       Servern kan dö, anslutningen brytas — då lämnar `API.strom` tillbaka
+       null. Raden var «if (!r) return;»: godkännandet tystnade, dokumentet i
+       Sparat fick aldrig sin PDF-sökväg, och läraren stod med ett papper hon
+       trodde var utskrivet. Samma krav som skrivningen och omskrivningen redan
+       ställer (kravDone) — beskedet är eget, för här är det inte kompileringen
+       som fallerade utan kontakten. */
+    const kravGodkant = r => {
+      if (!r) {
+        const fel = new Error('Servern slutade svara mitt i godkännandet. '
+          + 'Pappret ligger i Sparat — godkänn igen för PDF:en.');
+        fel.avbrott = true;
+        throw fel;
+      }
+      return r;
+    };
+    const pdfFel = e => window.toast && window.toast(
+      e && e.avbrott ? e.message : `PDF:en kunde inte byggas: ${e.message}`);
     /* Provet och arbetsbladet får sin PDF vid godkännandet — Tectonic
        kompilerar LaTeX:en lokalt, med en fixloop när den inte går igenom.
        Det tar tid och sker i bakgrunden: pappret ligger redan i Sparat, och
@@ -3886,8 +4052,8 @@
           && (godkant.inst || {}).facit === 'Separat facit',
         version: godkant.provVersion || null,
       })
+        .then(kravGodkant)
         .then(r => {
-          if (!r) return;
           /* Fälten heter `pdf` och `tex` — det är vad routes_exam approve
              lägger på resultatet (sökvägarna som kompilerades just nu).
              `pdf_path` är DB-kolumnens namn och finns aldrig i svaret: läste
@@ -3902,7 +4068,7 @@
             ? `${Best(godkant.typ)} är utskriven som PDF`
             : `${Best(godkant.typ)} är godkänd — PDF:en gick inte att bygga, .tex finns sparad`);
         })
-        .catch(e => window.toast && window.toast(`PDF:en kunde inte byggas: ${e.message}`));
+        .catch(pdfFel);
     }
     /* Anteckningarna får sin PDF på samma villkor och samma väg — Tectonic
        kompilerar den egna mallen lokalt. Skillnaden är att det inte finns
@@ -3910,15 +4076,15 @@
        kvittot det, och chattrutan bredvid pappret är vägen vidare. */
     if (serverPa() && godkant.antId) {
       window.API.strom(`/api/anteckningar/${godkant.antId}/approve`, {})
+        .then(kravGodkant)
         .then(r => {
-          if (!r) return;
           godkant.pdf = r.pdf || null;
           dokUppdatera(godkant);
           window.toast && window.toast(r.pdf
             ? 'Anteckningarna är utskrivna som PDF'
             : 'Anteckningarna är godkända — PDF:en gick inte att bygga, .tex finns sparad');
         })
-        .catch(e => window.toast && window.toast(`PDF:en kunde inte byggas: ${e.message}`));
+        .catch(pdfFel);
     }
     /* Ett godkänt dokument hör hemma i tiden. Provet blir en post med bläck-
        kontur och en tryckskyldighet några dagar innan; tavlan bara en post som

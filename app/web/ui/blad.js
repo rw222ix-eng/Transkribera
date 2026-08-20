@@ -117,7 +117,12 @@ window.Blad = (() => {
      vid varje ändring, och utan den här grinden hade en itererad tavla eller
      ett rättat prov tappat allt Claude skrev och tyst fyllts med prototypens
      uppgifter i stället. */
-  const franServern = v => !!(v && v.provId && (v.uppgifter || []).length);
+  /* `provBorta` räknas som ett provId här och bara här: pappret skrevs av
+     servern, men provraden är raderad (plan.js raderaDok, ångrad). Uppgifterna
+     står kvar på dokumentet och ska ritas — utan undantaget hade en ångrad
+     radering tyst bytt Claudes uppgifter mot prototypens. */
+  const franServern = v => !!(v && (v.provId || v.provBorta)
+    && (v.uppgifter || []).length);
   function uppgifter(v) {
     if (franServern(v)) return v.uppgifter;
     if (v.typ === 'Prov') return provval(v);

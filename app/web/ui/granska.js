@@ -8,6 +8,10 @@
   if (!skal) return;
   const duk = $('#g-duk'), plan = $('#g-plan'), lista = $('#g-lista');
   let vy = { x: 0, y: 0, z: 1 }, valjLage = false, kommentarer = [], nr = 0, host = null, forraOverflow = '';
+  /* Går ett varv just nu? Se `skicka` — ett dokument skrivs om en gång i taget,
+     och medan det pågår är formuläret låst i stället för att skicka en mening
+     som bygger på ett papper som håller på att ändras. */
+  let skickarNu = false;
 
   const satVy = () => {
     plan.style.transform = `translate3d(${vy.x}px,${vy.y}px,0) scale(${vy.z})`;
@@ -109,6 +113,19 @@
     const pa = $('button[aria-pressed="true"]', a);
     return pa ? pa.textContent.trim() : 'Hela dokumentet';
   }
+  /* VILKET ark som ligger framme, som index. Ett dokument utan växlare har
+     bara ett ark och är alltid 0. Nålarna, diffen och ögonblicksbilderna
+     stämplas med det: uppgiftsarket och facitarket bär SAMMA element-id:n
+     (uppg3 finns på båda), så utan arknumret hamnade nål 1 — satt på uppgift 3
+     — på facits uppgift 3 så fort läraren bytte flik, och diffen jämförde
+     provets text med lösningsförslagets. */
+  function arkIndex() {
+    const a = $('#g-arkval');
+    if (!a || a.hidden) return 0;
+    const knappar = $$('button', a);
+    const i = knappar.findIndex(b => b.getAttribute('aria-pressed') === 'true');
+    return i < 0 ? 0 : i;
+  }
   /* «Lösningsförslag» blir «lösningsförslaget» i en mening — arkets etikett är
      en flik, frågan i fältet är svenska. */
   const BEST = { 'hela dokumentet': 'dokumentet', 'lösningsförslag': 'lösningsförslaget', 'provet': 'provet' };
@@ -135,8 +152,33 @@
     $('#g-malx').hidden = !mal;
     $$('.gdok [data-el]', plan).forEach(x => x.toggleAttribute('data-mal', !!mal && x.dataset.el === mal.el));
     const f = $('#g-falt');
-    f.placeholder = `Vad ska ändras i ${bestamd(mal ? mal.namn : bred)}?`;
+    f.placeholder = faltPlaceholder();
     f.focus({ preventScroll: true });
+  }
+  /* Frågan i fältet, på ett ställe: målrutan sätter den när valet ändras, och
+     låset nedan sätter tillbaka den när varvet är över. */
+  const faltPlaceholder = () =>
+    `Vad ska ändras i ${bestamd(mal ? mal.namn : arkNamn())}?`;
+  /* ── LÅSET MEDAN ETT VARV GÅR ──────────────────────
+     Inte en kö: en kö hade betytt att lärarens andra mening skrivs mot ett
+     papper hon inte sett. Fältet står stilla, knappen säger vad som pågår, och
+     så fort svaret landat är rutan hennes igen. */
+  function satSkickar(pa) {
+    skickarNu = !!pa;
+    const form = $('#g-form');
+    if (form) form.toggleAttribute('data-vantar', skickarNu);
+    const f = $('#g-falt');
+    if (f) {
+      f.disabled = skickarNu;
+      f.placeholder = skickarNu
+        ? 'Ett varv i taget — pappret skrivs om just nu …' : faltPlaceholder();
+    }
+    const knapp = form && $('button[type="submit"]', form);
+    if (knapp) {
+      knapp.disabled = skickarNu;
+      knapp.textContent = skickarNu ? 'Skriver …' : 'Ändra';
+    }
+    $$('.gsnabbknapp').forEach(b => { b.disabled = skickarNu; });
   }
   /* ── SNABBKNAPPARNA ───────────────────────────────────────
      Fyra ändringar återkommer i nästan varje granskning, och de skrevs för hand
@@ -188,8 +230,10 @@
     satMal(mal && mal.el === el.dataset.el ? null : el);
   });
 
-  /* en nål per skickad ändring, numrerad i trådens ordning */
-  function satNal(elId, n) {
+  /* en nål per skickad ändring, numrerad i trådens ordning — och bara på det
+     ark den hör till (se arkIndex) */
+  function satNal(elId, n, ark) {
+    if ((ark || 0) !== arkIndex()) return;
     const el = $(`[data-el="${elId}"]`, plan);
     if (!el) return;
     const pin = document.createElement('span');
@@ -220,7 +264,7 @@
   /* Senaste varvets före/efter, per element-id. Prickarna i pappret läser den
      här (window.Granska.diffFor) i stället för att hålla en egen kopia som kan
      säga emot panelen. Nollställs när canvasen öppnas på ett nytt papper. */
-  let senaste = { varv: 0, par: {} };
+  let senaste = { varv: 0, ark: 0, par: {} };
   const kapa = s => s.length > 160 ? s.slice(0, 159) + '…' : s;
   function ogonblick() {
     const m = {};
@@ -229,14 +273,14 @@
   }
   /* En diff som visar samma text två gånger är ingen diff — den får läraren att
      tro att något ändrats som inte gjort det. Bara verkliga skillnader står kvar. */
-  function ritaDiff(varv, fore, efter, andrade) {
+  function ritaDiff(varv, fore, efter, andrade, ark) {
     andrade = andrade.filter(id => (fore[id] || '').trim() !== (efter[id] || '').trim());
     if (!andrade.length) return;
     if ($('.gdiff', varv)) return;
     /* SAMMA par som rutan nedan ritar — prickarna i pappret visar dem i sin
        popover, och de får inte kunna säga något annat än panelen. Sparas här,
        där paret först finns, i stället för att räknas fram en gång till. */
-    senaste = { varv: Number(varv.dataset.id) || 0, par: {} };
+    senaste = { varv: Number(varv.dataset.id) || 0, ark: ark || 0, par: {} };
     andrade.forEach(id => {
       senaste.par[id] = { fore: kapa(fore[id] || ''), efter: kapa(efter[id] || '') };
     });
@@ -259,7 +303,12 @@
     }
     varv.appendChild(d);
   }
-  function vantaDiff(varv, fore, n) {
+  function vantaDiff(varv, fore, n, ark) {
+    /* Ögonblicksbilden togs på ETT ark. Bytte läraren flik medan varvet gick
+       hade «före» varit provets rutor och «efter» facitets — en diff som visar
+       två olika papper och kallar skillnaden en ändring. Då är det bättre att
+       inte visa någon diff alls. */
+    if (arkIndex() !== (ark || 0)) return;
     const efter = ogonblick();
     /* Ett element som HADE text och nu är tomt är nästan alltid en halvritad
        tavla, inte en ändring: motorn tömmer sin värd och ritar om, och en
@@ -271,9 +320,9 @@
       fore[id] !== undefined
       && (fore[id] || '').trim() !== (efter[id] || '').trim()
       && !((fore[id] || '').trim() && !(efter[id] || '').trim()));
-    if (andrade.length) return ritaDiff(varv, fore, efter, andrade);
+    if (andrade.length) return ritaDiff(varv, fore, efter, andrade, ark);
     if ((n || 0) > 40) return;
-    requestAnimationFrame(() => vantaDiff(varv, fore, (n || 0) + 1));
+    requestAnimationFrame(() => vantaDiff(varv, fore, (n || 0) + 1, ark));
   }
 
   /* ── Underlaget som kontext ─────────────────────────
@@ -380,11 +429,23 @@
 
   function skicka(text) {
     if (!text.trim()) return;
-    const fore = ogonblick();
+    /* ── ETT VARV I TAGET ──────────────────────────────
+       Två meningar efter varandra blev två omskrivningar av SAMMA text: båda
+       läste dokumentet innan någon sparat, och den som kom sist vann. Den
+       förstas ändring fanns sedan varken på pappret eller i ångra-historiken.
+       Servern säger numera nej (409), men ett nej läraren aldrig borde få se
+       är ett sämre svar än en ruta som väntar: fältet är låst medan varvet går,
+       och det står varför. */
+    if (skickarNu) return;
+    const fore = ogonblick(), foreArk = arkIndex();
     const tom = $('#g-tom');
     if (tom) tom.hidden = true;
     nr++;
     const post = { id: nr, el: mal ? mal.el : '', namn: mal ? mal.namn : arkNamn(),
+                   /* Vilket ARK önskemålet gällde. Provet och lösningsförslaget
+                      bär samma id:n (uppg3 finns på båda), så en nål utan ark
+                      hamnade på det ark som råkade ligga framme. */
+                   ark: foreArk,
                    /* Vad elementet FAKTISKT innehåller. Följer med till servern
                       så att omskrivningen gäller det läraren pekade på. */
                    innehall: mal ? mal.text : '',
@@ -396,12 +457,14 @@
     varv.innerHTML = `<div class="gvarvhuvud"><span class="gnotnr">${nr}</span><span class="gvarvel"></span></div><p class="gfraga"></p><div class="gsvar"></div>`;
     $('.gvarvel', varv).textContent = post.namn;
     $('.gfraga', varv).textContent = text;
-    /* hovra ett meddelande — elementet lyser upp i pappret */
-    varv.addEventListener('pointerenter', () => markera(post.el, true));
+    /* hovra ett meddelande — elementet lyser upp i pappret, men bara när det
+       är dess eget ark som ligger framme */
+    const pekbart = () => (post.ark || 0) === arkIndex();
+    varv.addEventListener('pointerenter', () => pekbart() && markera(post.el, true));
     varv.addEventListener('pointerleave', () => markera(post.el, false));
     varv.addEventListener('click', () => fokusera(post.id));
     lista.appendChild(varv);
-    if (post.el) satNal(post.el, nr);
+    if (post.el) satNal(post.el, nr, post.ark);
     (window.rullaLada || ((b, y) => { b.scrollTop = y; }))(lista, lista.scrollHeight);
 
     window.Fraga.kor($('.gsvar', varv), {
@@ -439,12 +502,19 @@
          enda vi vet där, och att börja gissa åt andra hållet vore lika illa. */
       svar: res => svarText(post, text, res),
       efterKlar: (_el, res) => {
+        satSkickar(false);
         if (host && host.onAndra) host.onAndra(text, post.namn, post.el, res);
-        vantaDiff(varv, fore, 0);
+        vantaDiff(varv, fore, 0, foreArk);
         (window.rullaLada || ((b, y) => { b.scrollTop = y; }))(lista, lista.scrollHeight);
         fokusera(nr);
-      }
+      },
+      /* Låset släpps oavsett hur varvet slutade: klart, fel eller avbrutet. En
+         ruta som står låst för att servern svarade fel är ett andra fel ovanpå
+         det första. */
+      efterFel: () => satSkickar(false),
+      efterStopp: () => satSkickar(false)
     });
+    satSkickar(true);
     $('#g-antal').textContent = kommentarer.length === 1 ? '1 ändring' : `${kommentarer.length} ändringar`;
   }
   $('#g-form').addEventListener('submit', e => {
@@ -498,8 +568,11 @@
     if (window.Prickar) window.Prickar.pa(klon);
     $('#g-titel').textContent = o.titel || 'Utkast';
     $('#g-meta').textContent = o.meta || '';
-    kommentarer = []; nr = 0; mal = null; senaste = { varv: 0, par: {} };
+    kommentarer = []; nr = 0; mal = null; senaste = { varv: 0, ark: 0, par: {} };
     satSnabb(false);          // nytt papper, inget element valt än
+    /* Nytt papper, nytt lås. Ett varv som fortfarande går hör till det förra
+       pappret — plan.js slänger dess svar (se sammaPapper där). */
+    satSkickar(false);
     $$('.gvarv', lista).forEach(v => v.remove());
     $('#g-tom').hidden = false;
     $('#g-antal').textContent = 'Inga ändringar än';
@@ -543,9 +616,13 @@
   /* hovra ett element i pappret — dess ändringar lyser upp i kolumnen */
   plan.addEventListener('pointerover', e => {
     const el = e.target.closest('[data-el]');
+    const ark = arkIndex();
     $$('.gvarv', lista).forEach(v => {
       const post = kommentarer.find(k => k.id === Number(v.dataset.id));
-      v.toggleAttribute('data-pekad', !!(el && post && post.el === el.dataset.el));
+      /* Arket måste stämma: uppg3 finns på båda arken, och att hovra facitets
+         uppgift 3 lyste annars upp en kommentar som gällde provets. */
+      v.toggleAttribute('data-pekad', !!(el && post && post.el === el.dataset.el
+        && (post.ark || 0) === ark));
     });
   });
   plan.addEventListener('pointerleave', () => $$('.gvarv', lista).forEach(v => v.removeAttribute('data-pekad')));
@@ -564,7 +641,10 @@
     /* Samma väckning som i oppna() — omritningen efter ett varv går här. */
     if (window.Prickar) window.Prickar.pa(klon);
     if (window.Blad && window.Blad.omritaTavlor) window.Blad.omritaTavlor(plan);
-    kommentarer.forEach(k => { if (k.el) satNal(k.el, k.id); });
+    /* Nålarna sätts tillbaka på SITT ark. Raden satte förut alla nålar på det
+       ark som råkade ritas, så ett byte till lösningsförslaget flyttade dit
+       hela trådens markeringar — och de pekade på uppgifter ingen kommenterat. */
+    kommentarer.forEach(k => { if (k.el) satNal(k.el, k.id, k.ark); });
     if (mal) $$('.gdok [data-el]', plan).forEach(x => x.toggleAttribute('data-mal', x.dataset.el === mal.el));
     satVy();
   }
@@ -572,6 +652,9 @@
      till raden i listan. Ingen egen kopia av någondera — en prick som visade en
      annan text än panelen hade varit värre än ingen prick alls. */
   function diffFor(elId) {
+    /* Paret hör till det ark det mättes på. Prickarna på facitets uppgift 3 ska
+       inte visa provets före/efter — samma id, annat papper. */
+    if (senaste.ark !== arkIndex()) return null;
     const par = senaste.par[elId];
     return par ? { fore: par.fore, efter: par.efter, varv: senaste.varv } : null;
   }

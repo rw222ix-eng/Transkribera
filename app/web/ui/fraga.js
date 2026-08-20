@@ -114,6 +114,10 @@
       stoppad = true;
       if (styrning) { try { styrning.abort(); } catch (e) { /* redan klar */ } }
       clearTimeout(t);
+      /* Avbrytandet är varken klart eller fel, och den som håller ett lås
+         medan varvet går måste ändå få veta att det är över — annars satt
+         granskningens formulär låst tills sidan laddades om. */
+      if (o.efterStopp) o.efterStopp();
       jobb.remove();
       el.dataset.lage = 'stoppad';
       const a = $('.fatgard', el);

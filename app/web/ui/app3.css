@@ -217,6 +217,10 @@ html{font-size:clamp(14.5px,13px + .3vw,18.5px)}
 .fhark::-webkit-scrollbar{width:0;display:none}
 .fhark>*,.fhark .provvard>*{width:100%;max-width:min(100%,660px);margin:0 auto}
 .fhfot{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:14px 22px 18px;border-top:1px solid var(--line);background:var(--surface)}
+/* Raden som säger att godkänt är låst — står ovanför knapparna, där man läser
+   den innan man trycker, och i samma dämpade ton som noten i foten. */
+.fhlast{margin:0;padding:12px 22px 0;font-size:.78rem;line-height:1.5;color:var(--ink-3);background:var(--surface)}
+.fhlast b{color:var(--ink-2);font-weight:600}
 .fhnot{display:inline-flex;align-items:center;gap:8px;margin-left:auto;font-size:.76rem;color:var(--ink-3)}
 .fhnot .pk{width:6px;height:6px;border-radius:50%;background:var(--ok)}
 @media (max-width:560px){.fhnot{margin-left:0;flex:1 1 100%;order:3}}

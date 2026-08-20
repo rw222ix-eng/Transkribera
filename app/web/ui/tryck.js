@@ -155,6 +155,10 @@
          paketets exam-gren hämtar deras PDF utan en rad ny kod — men utan
          bedömning och utan anpassad kopia: det finns ingen bedömning att lägga
          bredvid, och en anpassad kopia av lärarens eget papper är ingenting. */
+      /* `provBorta`: provraden är raderad (en ångrad radering i planeringen).
+         Id:t duger då inte att hämta filer med — radnummer återanvänds — och
+         raden hamnar i `saknas`, vilket är sant: det finns ingen PDF. */
+      if (r.v && r.v.provBorta) return d;
       if (r.v && r.v.antId) d.exam_id = r.v.antId;
       if (r.v && r.v.provId) {
         d.exam_id = r.v.provId;
