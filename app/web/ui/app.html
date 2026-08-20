@@ -1154,7 +1154,7 @@
             <div class="kpkropp">
               <div class="dropzon" id="dropzon">
                 <p>Dra hit PDF:er eller foton av sidorna</p>
-                <span class="mjuk" id="sidnot">PDF, JPG, PNG eller HEIC — flera åt gången. Ett helt kapitel går bra.</span>
+                <span class="mjuk" id="sidnot">PDF, JPG, PNG eller WebP — flera åt gången. Ett helt kapitel går bra.</span>
                 <div class="dzlankar">
                   <button class="lank" id="dzfiler" type="button">bläddra bland filer</button>
                   <button class="lank" id="dzlektioner" type="button" hidden>välj lektioner i stället</button>
@@ -1195,7 +1195,8 @@
         <div class="utanrad" id="utanrad" hidden>
           <button class="valjknapp" id="hoppaunderlag" type="button"><span class="valjtext">Skriv utan underlag</span></button>
         </div>
-        <input id="sidfil" type="file" accept="application/pdf,image/*" multiple hidden />
+        <!-- Inte image/*: filväljaren erbjöd då HEIC, som servern inte kan avkoda. -->
+        <input id="sidfil" type="file" accept="application/pdf,image/png,image/jpeg,image/webp" multiple hidden />
         <input id="bokfil" type="file" accept="application/pdf" hidden />
       </div>
       <div class="plansteg" data-steg="4" data-visnr="3" data-namn="Upplägg" data-vant="Längd, nivå och centralt innehåll" data-last>

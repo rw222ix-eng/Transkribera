@@ -609,6 +609,57 @@ def test_underlag_rejects_bad_format_and_empty(client):
     assert r.status_code == 400
 
 
+def _pdf_data_url(sidor: int) -> str:
+    """En tom PDF på `sidor` sidor — det som prövas är expansionen, inte
+    innehållet."""
+    import io
+
+    import pypdfium2 as pdfium
+    doc = pdfium.PdfDocument.new()
+    for _ in range(sidor):
+        doc.new_page(120, 160)
+    buf = io.BytesIO()
+    doc.save(buf)
+    return ("data:application/pdf;base64,"
+            + base64.b64encode(buf.getvalue()).decode())
+
+
+def test_underlag_ger_en_post_per_sida_inte_per_fil(client, monkeypatch):
+    """Kontraktet plan-sidor.js mappar på: en PDF blir EN post per sida, med
+    « — sida N» efter filnamnet, och posterna ligger i filernas ordning.
+
+    Klienten läste förr svaret index för index och antog en post per fil. Med
+    ett kapitel på flera sidor plus ett foto fick fotot alltså PDF-sidans
+    beskrivning under sig — läraren såg fel tolkning under fel papper. Ändras
+    namnformen här måste tolkningarna() i plan-sidor.js ändras med den."""
+    from app.web import routes_planning as rp
+    monkeypatch.setattr(client.app.state.arbiter, "ensure_model",
+                        lambda spec=None: "claude-code")
+    monkeypatch.setattr(rp.llm_client, "chat", lambda *a, **k: "Beskrivning.")
+    r = client.post("/api/planning/underlag", json={"filer": [
+        {"namn": "kapitel3.pdf", "data": _pdf_data_url(3)},
+        {"namn": "uppgift.png", "data": _DATA_URL},
+    ]})
+    assert r.status_code == 200
+    assert [f["namn"] for f in _done(r)["filer"]] == [
+        "kapitel3.pdf — sida 1", "kapitel3.pdf — sida 2",
+        "kapitel3.pdf — sida 3", "uppgift.png"]
+
+
+def test_underlag_faller_hela_begaran_pa_ett_okant_format(client):
+    """EN fil i ett format servern inte tar fäller ALLA sidor — därför stoppar
+    plan-sidor.js filen redan i dörren. HEIC är fallet som händer på riktigt:
+    telefonens kamerarulle är full av dem. Felmeningen måste namnge filen och
+    formaten, för det är den läraren får se när uppladdningen avvisar."""
+    r = client.post("/api/planning/underlag", json={"filer": [
+        {"namn": "kap3.png", "data": _DATA_URL},
+        {"namn": "IMG_0421.HEIC", "data": "data:image/heic;base64,AAAA"},
+    ]})
+    assert r.status_code == 400
+    fel = r.json()["error"]
+    assert "IMG_0421.HEIC" in fel and "PDF" in fel
+
+
 def test_underlag_without_vision_model_degrades(client, monkeypatch):
     monkeypatch.setattr(client.app.state.arbiter, "ensure_model", lambda spec=None: None)
     r = client.post("/api/planning/underlag",
