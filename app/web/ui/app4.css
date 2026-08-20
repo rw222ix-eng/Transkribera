@@ -266,6 +266,8 @@
 .elevprick[data-halv]{color:var(--ink-2);border-color:var(--ink-3)}
 .elevprick[data-klar]{color:var(--ink);border-color:var(--sky-deep)}
 .elevprick[data-nu]{background:var(--ink);border-color:var(--ink);color:var(--surface)}
+/* Den som slutat men skrev provet: synlig — hennes poäng räknas — men märkt. */
+.elevprick[data-slutat]{border-style:dashed;text-decoration:line-through;text-decoration-thickness:1px}
 .elevtopp{display:grid;grid-template-columns:36px minmax(0,1fr) 36px;gap:10px;align-items:center;padding:16px 0 4px}
 .elevpil{border:1px solid var(--line);border-radius:9px;background:none;padding:4px 0;font-size:1.05rem;line-height:1;color:var(--ink-2);cursor:pointer}
 .elevpil:hover{border-color:var(--ink-3);color:var(--ink)}

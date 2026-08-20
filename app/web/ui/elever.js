@@ -23,6 +23,8 @@
   let doc = null, rader = [], granser = null, elever = [], gruppId = null;
   let resultat = {}, feedback = {}, index = 0, smutsigt = false, harServer = false;
   let oversikt = false;
+  /* Vilken inklistring läraren senast varnades för — «tryck igen»-mönstret. */
+  let klassVarnat = '';
 
   /* Kravgränserna räknas också här, inte bara på servern (app/rattning.py
      granser). Samma skäl som FORMAGA_MONSTER i rattning.js: betyget ska stå
@@ -92,7 +94,8 @@
       b.type = 'button';
       b.className = 'elevprick';
       b.textContent = e.namn;
-      b.setAttribute('aria-label', `Gå till ${e.namn}`);
+      if (e.aktiv === false) b.setAttribute('data-slutat', '');
+      b.setAttribute('aria-label', `Gå till ${e.namn}${e.aktiv === false ? ' (har slutat)' : ''}`);
       if (i === index) b.setAttribute('data-nu', '');
       const s = summorAv(varden(e));
       if (skrev(e) && !s.kvar) b.setAttribute('data-klar', '');
@@ -176,7 +179,7 @@
     }
     index = Math.max(0, Math.min(elever.length - 1, index));
     const e = nuvarande();
-    $('#elevnamn').textContent = e.namn;
+    $('#elevnamn').textContent = e.namn + (e.aktiv === false ? ' · har slutat' : '');
     $('#elevmeta').textContent = `Elev ${index + 1} av ${elever.length} · ${provet}`;
 
     const lista = $('#elevrader');
@@ -333,10 +336,16 @@
     if (!r) return;
     if ((r.rader || []).length) rader = r.rader;
     if (r.granser) granser = r.granser;
-    if (r.elever) elever = r.elever.filter(e => e.aktiv);
-    if (r.group_id) gruppId = r.group_id;
     resultat = Object.assign({}, r.resultat || {});
     feedback = Object.assign({}, r.feedback || {});
+    /* Databasen skickar med inaktiva elever MED FLIT — «en gammal rättning
+       ska kunna öppnas med de elever som faktiskt skrev» (db.list_elever).
+       Att filtrera bort dem helt gjorde deras poäng osynliga men räknade:
+       de låg kvar i resultatet, PUT:ades tillbaka och drog i klassandelen
+       utan att gå att se eller rätta. Den som slutat men SKREV det här
+       provet visas därför, märkt — den som slutat utan poäng göms. */
+    if (r.elever) elever = r.elever.filter(e => e.aktiv || skrev(e));
+    if (r.group_id) gruppId = r.group_id;
   }
 
   function hamta() {
@@ -476,6 +485,21 @@
         'Pappret saknar klass — sätt klassen på pappret och öppna igen.';
       return;
     }
+    /* Diffen före bytet: fältet ERSÄTTER listan, och den som saknas
+       inaktiveras. En ofullständig inklistring ska inte tyst plocka bort
+       halva klassen — samma «tryck igen»-mönster som Skriv om-varningen. */
+    const nyaNamn = ordnaNamn(namn).map(n => n.toLowerCase());
+    const bort = elever.filter(e => e.aktiv !== false
+      && !nyaNamn.includes(e.namn.toLowerCase()));
+    if (bort.length && klassVarnat !== namn.join('|')) {
+      klassVarnat = namn.join('|');
+      $('#elevklassnot').textContent =
+        `${bort.length} ${bort.length === 1 ? 'elev' : 'elever'} försvinner ur listan: `
+        + `${bort.map(e => e.namn).join(', ')} — de inaktiveras men behåller sina `
+        + 'gamla prov. Tryck igen för att spara.';
+      return;
+    }
+    klassVarnat = '';
     delete $('#elevklass').dataset.oppen;
     if (!server()) {
       /* Utan server (Claude Design) finns klassen bara i den här sessionen.
@@ -494,6 +518,11 @@
       index = 0;
       rita();
       fokusera();
+      /* Städningen är tyst i basen (dubbletter och icke-namn stryks) — men
+         inte mot läraren: 24 inklistrade rader som blev 23 ska säga det. */
+      const strukna = namn.length - elever.length;
+      if (strukna > 0) $('#elevnot').textContent =
+        `${strukna} ${strukna === 1 ? 'rad' : 'rader'} ströks vid städningen — dubbletter eller sådant som inte är namn.`;
     }).catch(e => {
       $('#elevnot').textContent = (e && e.message) || 'Klassen gick inte att spara.';
     });
@@ -725,7 +754,12 @@
   $('#elevkopiera').addEventListener('click', kopieraOversikt);
   $('#elevbytklass').addEventListener('click', () => {
     $('#elevklass').dataset.oppen = '1';
-    $('#elevnamnfalt').value = elever.map(e => e.namn).join('\n');
+    klassVarnat = '';
+    $('#elevklassnot').textContent = 'Ett namn per rad — klistra in som listan '
+      + 'ser ut, appen städar och sorterar på efternamn.';
+    /* Bara de aktiva: en slutad elev som visas för sitt gamla prov ska inte
+       följa med i fältet och aktiveras igen av ett Spara. */
+    $('#elevnamnfalt').value = elever.filter(e => e.aktiv !== false).map(e => e.namn).join('\n');
     rita();
     $('#elevnamnfalt').focus();
   });
