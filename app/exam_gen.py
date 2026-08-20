@@ -36,7 +36,9 @@ SYSTEM = (
     "INGA utropstecken. Ingen hedging ('kanske', 'försök gärna'). Använd "
     "decimalkomma och svenska enheter (4{,}0 cm, 15,9 %), med mellanslag "
     "mellan tal och enhet respektive procenttecken.\n"
-    "INTEGRITET: inga elevnamn någonstans."
+    "NAMN: påhittade förnamn är välkomna i uppgifterna — de gör sammanhangen "
+    "levande (lärarens beslut 2026-08-20). Men aldrig namn ur underlag, "
+    "transkript eller klasslistor: riktiga elever ska inte stå på pappret."
 )
 
 INSTRUCTION = (
@@ -250,8 +252,8 @@ FALLGROPAR_GRUPP = (
     "deluppgift med en STEGTABELL där en påhittad elevs lösning innehåller just "
     "fallgropen: gruppen ska hitta det första felsteget och förklara VARFÖR det "
     "är fel. Det ska vara stegtabell och inte elevlosningar — elevlosningar "
-    "finns bara på uppgiften, aldrig på en deluppgift. Skriv \"En elev\" eller "
-    "en initial, aldrig ett namn. Lägg den ALDRIG i uppgiften som bär PL, och "
+    "finns bara på uppgiften, aldrig på en deluppgift. Ge gärna eleven ett "
+    "påhittat förnamn. Lägg den ALDRIG i uppgiften som bär PL, och "
     "låt den aldrig tränga undan rutinuppgiften."
 )
 
@@ -314,9 +316,10 @@ _UTDRAG_GRUPP = [
     # ligger — som deluppgift i uppgiften som bär R eller K — bestäms av
     # FALLGROPAR_GRUPP ovan, som är uppmätt. Här visas bara formen.
     #
-    # Lärarens papper skriver «Ali räknar …». Ett förnamn bryter mot
-    # integritetsregeln i SYSTEM och mot FALLGROPAR_GRUPP, så utdraget säger
-    # «En elev» — mallen får inte lära ut det appen förbjuder.
+    # Lärarens papper skriver «Ali räknar …» — påhittade förnamn är tillåtna
+    # sedan 2026-08-20 (lärarens beslut; gränsen som består är RIKTIGA
+    # elevnamn ur underlag och klasslistor). Utdraget behåller «En elev» som
+    # neutral form; FALLGROPAR_GRUPP uppmuntrar namnet.
     {"typ": "resonemang",
      "text": "En elev har beräknat $5 + 2 \\cdot (4 - 1)^2$ enligt tabellen. "
              "Markera den första rad som är fel, skriv rätt värde och förklara "

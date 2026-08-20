@@ -6,8 +6,10 @@ skolsystemet. Här blir den «Förnamn Efternamn», en per rad, i bokstavsordnin
 efter efternamnets första bokstav — ordningen proven ligger i när de rättas.
 
 Tolkningen är KOD och ingen språkmodell, fast modellen hade varit «smartare»:
-regeln att inga elevnamn lämnar maskinen är hård (exam_gen.py:36,
+regeln att RIKTIGA elevnamn aldrig lämnar maskinen är hård (exam_gen SYSTEM,
 lesson_board.py:36, elev_feedback.py) och rättningsvyn lovar det i klartext.
+(Påhittade förnamn i uppgiftstexter är däremot tillåtna sedan 2026-08-20 —
+det är en annan sak än listan här, som är riktiga elever.)
 Priset är en ambiguitet: «Andersson<TAB>Anna» utan komma går inte att skilja
 från «Anna<TAB>Andersson», och då vinner ordningen orden står i. Kommat är
 lärarens sätt att säga vilket som är efternamnet.

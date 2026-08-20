@@ -511,10 +511,10 @@ def test_utdragen_ur_pappret_ar_med_och_ar_giltig_json():
     assert any("tabell" in f for f in former)
     assert any("stegtabell" in f for f in former)
     assert all("svarsfalt" in f or "deluppgifter" in f for f in former)
-    # Inga namn i mönstret. Lärarens papper skrev «Ali räknar …», och det
-    # bryter mot integritetsregeln i SYSTEM — mallen får inte lära ut det
-    # appen förbjuder.
-    assert "Ali" not in p
+    # Påhittade förnamn är tillåtna sedan 2026-08-20 (lärarens beslut) — men
+    # gränsen mot RIKTIGA elevnamn består, och SYSTEM ska säga båda halvorna.
+    assert "påhittade förnamn är välkomna" in exam_gen.SYSTEM.lower()
+    assert "riktiga elever" in exam_gen.SYSTEM.lower()
     assert "En elev har beräknat" in p
 
 
