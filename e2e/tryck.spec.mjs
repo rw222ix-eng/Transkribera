@@ -311,3 +311,118 @@ test("utan server spelas prototypens kvittering upp som förut", async ({ page }
   await expect(page.locator("#tryckskicka")).toHaveText("Utskrivet");
   expect(natanrop).toEqual([]);
 });
+
+/* ── SÄTTNINGEN I BILDEN ÄR SÄTTNINGEN PÅ SKÄRMEN ──────────────────
+   Samma hål som bladen hade (blad-bild.js, åttonde fällan), och det bor i
+   samma grepp: avritningen bakar in tavlans egna stilark men INTE styles.css,
+   och styles.css sätter `letter-spacing:-0.006em` på `body`. Tavlan skriver
+   aldrig egenskapen själv, alltså ÄRVER den — på skärmen, där motorn mäter
+   sina bredder och sedan lägger ut varje element på absoluta koordinater.
+   Utan raden i bilden står `letter-spacing` på `normal`, och samma innehåll
+   blir bredare än måttet det placerades efter. `.wb-text` klarar sig (den
+   sätter sin egen), men matematiken gör det inte — KaTeX rör aldrig
+   egenskapen — och `.whiteboard` har `overflow: hidden`: det som spiller ut
+   klipps bort ur tavlan läraren skriver ut.
+
+   Mätningen är bladens: SVG:en avritningen bygger ritas i en iframe — ett
+   eget dokument, precis som <foreignObject> är — och en KÄND formels bredd
+   jämförs med originalets. Det är glyfernas framflyttning och ingenting
+   annat. Tavlans FORM rörs inte; det som prövas är att bilden inte ljuger. */
+async function formelparitet(page, dok) {
+  return page.evaluate(async v => {
+    /* Fånga SVG:en. Den byggs som en data-URI på ett <img> inne i
+       TavlaBild.rastrera och lämnar aldrig modulen på något annat sätt. */
+    const bild = Object.getOwnPropertyDescriptor(
+      HTMLImageElement.prototype, "src");
+    const fangat = [];
+    Object.defineProperty(HTMLImageElement.prototype, "src", {
+      configurable: true,
+      get() { return bild.get.call(this); },
+      set(varde) { fangat.push(varde); bild.set.call(this, varde); },
+    });
+    /* Probet är formeln: `.wb-math` sätter ingen egen `letter-spacing` och
+       ärver därför den som frågan gäller. `.wb-text` duger inte — tavla-wb.css
+       ger den 0.3px, och en egen regel vinner över arvet i båda dokumenten.
+       Tabellen duger heller inte: dess bredd räknas ur canvas `measureText`
+       (tavla-wb.js `textbredd`), som inte känner till `letter-spacing` alls.
+
+       RUTAN, inte ett Range över innehållet: KaTeX bär en gömd MathML-kopia
+       av formeln, och den kommer med i ett Range — måttet blev då detsamma
+       vad än sättningen gjorde. `.katex` egen ruta är den satta formeln. */
+    const matt = rot => {
+      const el = rot && rot.querySelector(".wb-math .katex");
+      if (!el) return null;
+      const d = el.ownerDocument.defaultView.getComputedStyle(el);
+      return { bredd: el.getBoundingClientRect().width,
+               ls: d.letterSpacing };
+    };
+    /* Samma lådbredd som TavlaBild använder (BO_BREDD) — motorn skalar mot
+       den bredd den får, och en annan låda ger en annan tavla att jämföra. */
+    const bo = document.createElement("div");
+    bo.style.cssText = "position:fixed;left:-30000px;top:0;width:4000px";
+    document.body.appendChild(bo);
+    let svg = "";
+    let egen = null;
+    try {
+      /* Snitten FÖRST, som TavlaBild själv gör: motorn mäter sina bredder med
+         canvas, och en fallback-metrik ger en annan tavla att jämföra med. */
+      if (document.fonts) await document.fonts.ready;
+      const container = window.Blad.tavlaTill(bo, v, null);
+      await new Promise(r => setTimeout(r, 700));
+      egen = matt(container);
+      await window.TavlaBild.png(v, { skala: 1 });
+      const url = fangat.filter(
+        s => String(s).indexOf("data:image/svg+xml") === 0).pop();
+      if (!url) throw new Error("ingen SVG fångades — " + fangat.length
+                                + " src-sättningar");
+      svg = decodeURIComponent(url.slice(url.indexOf(",") + 1));
+    } finally {
+      Object.defineProperty(HTMLImageElement.prototype, "src", bild);
+      bo.remove();
+    }
+    /* Samma SVG i ett eget dokument — utan appens styles.css, precis som i
+       bilden — och formeln mäts där. */
+    const ram = document.createElement("iframe");
+    ram.style.cssText = "position:fixed;left:-30000px;top:0;width:4000px;"
+      + "height:1400px;border:0";
+    document.body.appendChild(ram);
+    ram.srcdoc = '<!doctype html><body style="margin:0">' + svg + "</body>";
+    await new Promise(r => { ram.onload = r; });
+    await new Promise(r => setTimeout(r, 700));
+    const iBild = matt(ram.contentDocument.body);
+    ram.remove();
+    return { egen, iBild };
+  }, dok);
+}
+
+test("tavlans bild sätter formeln som skärmen gör", async ({ page }) => {
+  await fejka(page, []);
+  await page.goto("/");
+  await hydrerad(page);
+
+  /* En lång formel: bredden växer med varje tecken, och en halv promilles
+     skillnad per glyf syns bara när det finns glyfer att räkna. */
+  const v = papper({ wb: {
+    title: "Derivatans definition",
+    boards: [{
+      name: "genomgang", width: 1400, height: 460, chrome: "aluminium",
+      padding: { top: 24, right: 26, bottom: 24, left: 30 },
+      sections: [
+        { kind: "heading", text: "Derivatans definition", size: 30 },
+        { kind: "math", size: 21, latex:
+          "f'(x)=\\lim_{h\\to 0}\\frac{f(x+h)-f(x)}{h}"
+          + "=\\lim_{h\\to 0}\\frac{3(x+h)^2-3x^2}{h}=6x" },
+      ],
+    }],
+  } });
+  const { egen, iBild } = await formelparitet(page, v);
+  expect(egen, "ingen formel att mäta").not.toBeNull();
+  expect(iBild, "formeln kom inte med i bilden").not.toBeNull();
+  // Arvet nådde fram: samma sättning i bilden som på skärmen.
+  expect(iBild.ls).toBe(egen.ls);
+  expect(egen.ls).not.toBe("normal");
+  /* Och bredden följer med. Utan raden i PLATT mätte samma formel fyra pixlar
+     bredare i bilden (43 glyfer × 0,096 px); toleransen är en halv pixel, för
+     två skilda ritningar av samma tavla skiljer sig på hundradelen. */
+  expect(iBild.bredd).toBeCloseTo(egen.bredd, 0);
+});

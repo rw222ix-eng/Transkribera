@@ -7,7 +7,7 @@
 
    Greppet är den pensionerade tavelvärdens (app/web/static/whiteboard/board.js):
    tavlan serialiseras in i ett <foreignObject>, rastreras via canvas och kommer
-   ut som en PNG. Fyra saker måste stämma, och alla fyra kostade en runda:
+   ut som en PNG. Fem saker måste stämma, och alla fem kostade en runda:
 
    1. En SVG-bild får INTE hämta något utifrån. CSS:en följer därför med inbakad
       och varje typsnittsfil ligger som data:-URI i den. Missas ett snitt byter
@@ -25,7 +25,10 @@
       lågalfa-texturer och highlight-gradienter blir svarta pluppar och moaré i
       PNG:n trots att samma SVG ser perfekt ut som <img> i DOM. Exporten plattar
       därför till papperet — matt yta, enfärgad ram. Bara exporten: tavlan på
-      skärmen behåller motorns fulla utseende. */
+      skärmen behåller motorns fulla utseende.
+   5. Sättningen i bilden måste vara sättningen på skärmen. styles.css följer
+      inte med hit, och två av dess arvda egenskaper gäller ändå på tavlan —
+      se PLATT nedan. */
 window.TavlaBild = (() => {
   const SKALA = 2;              /* 1400 px tavla → 2800 px bild */
   const BO_BREDD = 4000;        /* rymmer 900 + 1800-paret utan att flexen klämmer */
@@ -44,7 +47,24 @@ window.TavlaBild = (() => {
                  '400 21px KaTeX_Main', 'italic 400 21px KaTeX_Math',
                  '400 21px KaTeX_Size2', '400 21px KaTeX_AMS'];
 
+  /* 5. `letter-spacing`, samma hål som bladen hade (blad-bild.js åttonde
+        fällan). styles.css sätter `-0.006em` på `body` och `font-smoothing`
+        till antialiased; tavlan skriver ingendera själv och ÄRVER dem — så
+        gäller de på skärmen, där motorn mäter. Här följer styles.css med
+        vilje inte med, och utan raden nedan står de på `normal` respektive
+        `auto` inne i SVG:en. `.wb-text` klarar sig: den sätter sin egen
+        `letter-spacing: 0.3px` (tavla-wb.css) och den vinner över arvet.
+        Matematiken gör det inte — KaTeX rör aldrig egenskapen — och inte
+        tabellcellerna heller, för `.wb-table` är en ren typklass utan
+        sättning. Men motorn placerar varje element ABSOLUT, på koordinater
+        den räknat ur bredder mätta i DOM:en (`measure`, offsetWidth). Blir
+        samma innehåll bredare inne i bilden växer det ur måttet det fick:
+        formeln spiller över sin spalt, tabellcellen ur sin ruta, och
+        `.whiteboard` har `overflow: hidden` — det som spiller klipps bort.
+        Tavlans FORM är orörd; det här är bara att bilden ska ljuga lika lite
+        som bladen. */
   const PLATT =
+    '.boards-container { letter-spacing: -.006em; -webkit-font-smoothing: antialiased; }' +
     '.whiteboard { background-image: none !important; box-shadow: none !important; }' +
     '.whiteboard::before, .whiteboard::after { display: none !important; }' +
     '.board-wrapper.tray::after { display: none !important; }' +
