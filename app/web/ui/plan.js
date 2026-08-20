@@ -2562,12 +2562,14 @@
           utkast.antRadtak = res.radtak || null;
           if (res.anteckningar.titel) utkast.titel = res.anteckningar.titel;
         }
-        /* Det gamla utkastet går bort ORDENTLIGT: serverraden med. Förr byttes
-           bara appens lista ut, och raden städades av serverns «ett utkast i
-           taget» när det nya utkastet POST:ades — samma resultat i det vanliga
-           fallet, men inget alls om skrivningen aldrig kom fram. Tyst: läraren
-           bekräftade slängningen när hon tryckte Skriv om (se varningen där). */
-        slangUtkast(true);
+        /* Det gamla utkastet byts ut här, och dess serverrad städas av
+           «ett utkast i taget» när POST:en nedan landar (server.py). Frågan om
+           läraren VILL kasta det ställs där gesten görs — vid Skriv om-knappen
+           ovan — och inte här.
+           En egen DELETE härifrån prövades och togs bort igen: den och POST:en
+           går i väg i samma andetag, servern hann städa raden först, och
+           slängningen svarade 404 rakt ut i konsolen (e2e dag 5). Två vägar
+           som raderar samma rad är en för mycket. */
         versioner = [utkast];
         utkastNytt(utkast);
         /* Ett nytt dokument öppnas alltid på ELEVERNAS ark. Stod växlaren kvar på
