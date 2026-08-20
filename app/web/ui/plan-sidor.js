@@ -4,7 +4,44 @@
   const knapp = q('#sidknapp'), fil = q('#sidfil'), ut = q('#sidminis'), not = q('#sidnot'), ruta = q('#sidrad');
   if (!knapp) return;
   const lista = [], grund = not.textContent;
-  window.Sidor = { lista: () => lista.map(r => ({ namn: r.namn, typ: r.typ })) };
+  /* ── Uppladdningen ────────────────────────────────────
+     Dörren SÅG kopplad ut men var det inte: filerna levde bara i den här
+     listan, ingen JOBB-kropp bar dem, och noten lovade ändå att «tolkningen
+     skickas». Hela servervägen fanns (POST /api/planning/underlag →
+     bildtolkning → underlag-fältet i generate → boksidan på arket) — det som
+     saknades var anropet. Uppladdningen görs LATT vid Skriv (sakra nedan):
+     tolkningen kostar ett visionsanrop per sida, och den ska inte betalas
+     för filer läraren hinner ångra. Samma filer i samma ordning laddas inte
+     upp två gånger. */
+  let uppladdat = null;             /* { nyckel, pid } när sidorna ligger uppe */
+  let laddar = null;                /* pågående uppladdning (löfte) */
+  const nyckel = () => lista.map(r => `${r.namn}:${(r.data || '').length}`).join('|');
+  function sakra(val) {
+    if (!lista.length || !(window.API && window.API.pa)) return Promise.resolve(null);
+    const nu = nyckel();
+    if (uppladdat && uppladdat.nyckel === nu) return Promise.resolve(uppladdat.pid);
+    if (laddar) return laddar;
+    laddar = window.API.strom('/api/planning/underlag', {
+      filer: lista.map(r => ({ namn: r.namn, data: r.data })),
+    }, { log: (val || {}).log }).then(r => {
+      laddar = null;
+      if (!r || !r.id) return null;
+      uppladdat = { nyckel: nu, pid: r.id };
+      /* Tolkningsraden under varje mini är från och med nu APPENS lästa
+         beskrivning, inte filnamnsgissningen. */
+      (r.filer || []).forEach((f, i) => {
+        if (lista[i] && f.beskrivning) lista[i].tolkning = f.beskrivning.split('\n')[0].slice(0, 90);
+      });
+      rita();
+      return r.id;
+    }).catch(() => { laddar = null; return null; });
+    return laddar;
+  }
+  window.Sidor = {
+    lista: () => lista.map(r => ({ namn: r.namn, typ: r.typ })),
+    antal: () => lista.length,
+    sakra,
+  };
   /* Sidorna ligger som små papper i en rad — dragbara, med appens tolkning under.
      Utan tolkningsraden vet läraren aldrig varför utkastet blev som det blev. */
   function rita() {
@@ -35,7 +72,13 @@
     [...filer].forEach(f => {
       const bild = (f.type || '').startsWith('image/');
       const tolkat = window.Bok ? window.Bok.tolka(f.name, lista.length) : null;
-      lista.push({ namn: f.name, typ: bild ? 'foto' : 'pdf', url: bild ? URL.createObjectURL(f) : '', tolkning: tolkat ? tolkat.text : '' });
+      const rad = { namn: f.name, typ: bild ? 'foto' : 'pdf', url: bild ? URL.createObjectURL(f) : '', tolkning: tolkat ? tolkat.text : '', data: '' };
+      lista.push(rad);
+      /* Fildatat läses direkt (uppladdningen vid Skriv är synkron i sin
+         kropp) — som data-URL, samma form servern validerar. */
+      const las = new FileReader();
+      las.onload = () => { rad.data = String(las.result || ''); };
+      las.readAsDataURL(f);
       if (!forsta) forsta = tolkat;
     });
     rita();
