@@ -93,11 +93,31 @@ def _environment() -> Environment:
     return _env
 
 
+# PAPPRET RÄKNAR FRÅN A — lärarens beslut (2026-08-20): ett prov som börjar på
+# «Del B» ser stympat ut för eleven. Internt heter delarna B/C/D (exam_spec,
+# prompten, grammatiken — de namnen är NP-mätningens och står i kassetterna),
+# men ALLT som trycks eller visas översätter: B→A, C→B, D→C. Skärmen gör samma
+# sak (blad-bygg.js DELNAMN), så bedömningsanvisningen och elevbladet säger
+# äntligen samma namn. Dokumentets egen hjälpmedelstext kan nämna de interna
+# namnen («Del B utan räknare …») — den översätts i _delnamn_visning nedan.
 _DEL_INSTRUKTION = {
-    "B": "Del B löses utan räknare. Endast svar krävs om inget annat anges.",
-    "C": "Del C löses med räknare. Fullständig redovisning krävs.",
-    "D": "Del D löses med räknare. Fullständig redovisning krävs.",
+    "B": "Del A löses utan räknare. Endast svar krävs om inget annat anges.",
+    "C": "Del B löses med räknare. Fullständig redovisning krävs.",
+    "D": "Del C löses med räknare. Fullständig redovisning krävs.",
 }
+
+_DELNAMN_RE = [(re.compile(r"\b([Dd]el)\s+B\b"), r"\1 A"),
+               (re.compile(r"\b([Dd]el)\s+C\b"), r"\1 B"),
+               (re.compile(r"\b([Dd]el)\s+D\b"), r"\1 C")]
+
+
+def _delnamn_visning(text: str) -> str:
+    """Interna delnamn → papprets. Ordningen B→A, C→B, D→C är säker: ett
+    redan översatt «del A» matchar inget senare mönster."""
+    ut = str(text or "")
+    for monster, ersatt in _DELNAMN_RE:
+        ut = monster.sub(ersatt, ut)
+    return ut
 
 
 def _utrymme_mm(poang: tuple[int, int, int], typ: str) -> int:
@@ -198,7 +218,8 @@ def _build_view(doc: exam_spec.ExamDoc,
     eftersom Tectonic kompilerar med utkatalogen som arbetskatalog."""
     # Delgrupperingen ligger i exam_spec (delad med balansens ordningsregler,
     # så båda mäter samma sekvens). Rubriken härleds här — en ren vy-detalj.
-    _RUBRIK = {"B": "Del B", "C": "Del C", "D": "Del D", None: None}
+    # Visningsnamnen räknar från A — se _DEL_INSTRUKTION-kommentaren.
+    _RUBRIK = {"B": "Del A", "C": "Del B", "D": "Del C", None: None}
     delar = []
     nummer = 0
     for del_kod, items in exam_spec.gruppera_per_del(doc.uppgifter):
@@ -297,7 +318,9 @@ def _build_view(doc: exam_spec.ExamDoc,
         "elev": escape_latex(doc.elev) if doc.elev else None,
         "datum": escape_latex(doc.datum) if doc.datum else None,
         "tid_min": doc.tid_min,
-        "hjalpmedel": escape_mixed(doc.hjalpmedel),
+        # Modellen skriver hjälpmedelsregeln med de INTERNA delnamnen (prompten
+        # säger Del B/Del C) — pappret räknar från A, så raden översätts.
+        "hjalpmedel": escape_mixed(_delnamn_visning(doc.hjalpmedel)),
         # regel-texten innehåller %-tecken (LaTeX-kommentar) — escapas här;
         # sifferfälten används råa av mallen.
         "granser": (lambda g: {**g, "regel": escape_latex(g["regel"])})(

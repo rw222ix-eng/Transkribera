@@ -477,6 +477,12 @@ window.BladBygg = (() => {
      Det är ett VAL vilken av förlagans fyra arbetsbladsformer appens arbetsblad
      ska vara — inte en bugg att rätta blint. */
   const DELNAMN = { B: 'Del A', C: 'Del B' };
+  /* Interna delnamn i löptext → papprets. B→A före C→B: ett redan översatt
+     «del A» matchar inget senare mönster. Spegel av exam_latex._delnamn_visning. */
+  const delnamnVisning = t => String(t || '')
+    .replace(/\b([Dd]el)\s+B\b/g, '$1 A')
+    .replace(/\b([Dd]el)\s+C\b/g, '$1 B')
+    .replace(/\b([Dd]el)\s+D\b/g, '$1 C');
   function provblad(v, uppgifter, del, forsta) {
     const medHjalp = del === 'C';
     /* HJÄLPMEDELSREGELN ÄR DOKUMENTETS (exam_spec.ExamDoc.hjalpmedel). Bandet
@@ -491,7 +497,10 @@ window.BladBygg = (() => {
        (blad.js planvalProv). Två regler som kan säga emot varandra är värre än
        en — eleven vet inte vilken som gäller. Tomt fält, prototypens papper:
        mallen nedan, precis som förut. */
-    const hjalp = (v.hjalpmedel || '').trim();
+    /* Modellen skriver regeln med de INTERNA delnamnen (prompten säger
+       Del B/Del C) — pappret räknar från A. Samma översättning som
+       exam_latex._delnamn_visning, så skärm och PDF säger samma namn. */
+    const hjalp = delnamnVisning((v.hjalpmedel || '').trim());
     const regel = hjalp
       ? `Hjälpmedel: ${esc(hjalp)}${/[.!?»)]$/.test(hjalp) ? '' : '.'}`
       : (medHjalp
@@ -575,5 +584,5 @@ window.BladBygg = (() => {
   /* `kortref` delas med blad-boklos.js: bokens lösningsark ska korta på samma
      sätt som provets och arbetsbladets, annars är det två olika facit. */
   return { mat, kortref, ref, ark, arkfacit, anteckningar, provforsatt, provblad,
-           losning, provtitel, BOKSTAV };
+           losning, provtitel, BOKSTAV, delnamnVisning };
 })();

@@ -747,6 +747,16 @@ def test_render_alla_mallar_pa_deluppgifter_utan_krasch():
 
 # --------------------------------------------------------------- rendering --
 
+def test_hjalpmedelsraden_oversatts_till_papprets_delnamn():
+    """Modellen skriver regeln med de interna namnen (prompten säger Del B/
+    Del C) — pappret räknar från A, så försättsbladets rad översätts. Kedjan
+    B→A, C→B är ordnad: ett redan översatt «Del A» rörs inte igen."""
+    doc, _ = exam_spec.validate_exam_json(_exam())
+    tex = exam_latex.render_prov(doc)
+    assert "Del A utan räknare. Del B med räknare och formelblad." in tex
+    assert "Del C" not in tex
+
+
 def test_render_prov_golden_markers():
     doc, _ = exam_spec.validate_exam_json(_exam())
     tex = exam_latex.render_prov(doc)
@@ -771,7 +781,8 @@ def test_render_prov_golden_markers():
     # elevens prov visar endast totalsumman — E/C/A hör till bedömningsanvisningen
     assert "20 poäng" in tex and "(9/6/5)" not in tex
     # delar + numrerade uppgifter med poängrutor
-    assert r"\delprovband{Del B}" in tex and r"\delprovband{Del C}" in tex
+    # pappret räknar från A (lärarens beslut 2026-08-20) — internt heter delarna B/C
+    assert r"\delprovband{Del A}" in tex and r"\delprovband{Del B}" in tex
     # numret bärs av uppgift-miljöns hängande etikett
     assert r"\begin{uppgift}{1}" in tex and r"\begin{uppgift}{6}" in tex
     # poängen bärs nu av uppgift-miljöns andra argument (som i sin tur
@@ -864,10 +875,10 @@ def test_prov_anvander_layoutmakron():
     # passera även om mallen slutade anropa dem.
     kropp = tex.split(r"\begin{document}", 1)[1]
     assert r"\elevruta" in kropp
-    assert r"\delprovband{Del B}" in kropp and r"\delprovband{Del C}" in kropp
+    assert r"\delprovband{Del A}" in kropp and r"\delprovband{Del B}" in kropp
     assert r"\begin{uppgift}{1}{3p}" in tex
     # \section* ersatt av bandet
-    assert r"\section*{Del B}" not in tex
+    assert r"\section*{Del A}" not in tex and r"\section*{Del B}" not in tex
     # oförändrat: elevens prov visar bara totalpoäng
     assert "20 poäng" in tex and "(9/6/5)" not in tex
 

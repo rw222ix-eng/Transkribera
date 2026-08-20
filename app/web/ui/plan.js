@@ -4643,6 +4643,9 @@
     /* Upplägget är pappersts eget — provtiden och nivåmixen står på det, inte i
        de förval som råkade ligga i panelen när sidan laddades. */
     if (v.inst && inst[v.typ]) Object.assign(inst[v.typ], JSON.parse(JSON.stringify(v.inst)));
+    /* Ett papper sparat under den korta stund upplägget hette «Del B + Del C»
+       (2026-08-20, återgånget samma dag) ska ändå träffa väljarens knapp. */
+    if (inst[v.typ] && inst[v.typ].delprov === 'Del B + Del C') inst[v.typ].delprov = 'Del A + Del B';
     /* Steg 1 ägs av lägeskorten (planlage.js), inte av spegelsegmentet:
        utan raden stod kortet kvar på «Tavla» medan steg 3 sa gruppuppgift —
        två steg i samma guide om två olika papper. */

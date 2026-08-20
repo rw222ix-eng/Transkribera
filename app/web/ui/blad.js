@@ -278,7 +278,11 @@ window.Blad = (() => {
          ingen — de kan säga emot varandra, och eleven vet inte vilken som
          gäller. Delraderna behåller uppgiftsspannet och redovisningen, som är
          papprets egen indelning och inte en hjälpmedelsregel. */
-      const hjalp = (v.hjalpmedel || '').trim();
+      /* Dokumentets regel kan nämna de INTERNA delnamnen (Del B/Del C) —
+         pappret räknar från A, så raden översätts (blad-bygg delnamnVisning). */
+      const hjalp = (B() && B().delnamnVisning
+        ? B().delnamnVisning((v.hjalpmedel || '').trim())
+        : (v.hjalpmedel || '').trim());
       const delA = hjalp ? '' : ' Utan digitala hjälpmedel.';
       const delB = hjalp ? '' : ' Räknare och digitala hjälpmedel tillåtna.';
       meta.innerHTML = rad('Provtid', provtidText(v))
