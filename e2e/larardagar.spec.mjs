@@ -125,8 +125,13 @@ test("dag 3 — provdag: skriv provet, godkänn till PDF, tryck med anpassad kop
     const fore = await L.antalSparade(page);
     await page.locator("#godkann").click();
     await expect.poll(() => L.antalSparade(page), { timeout: 120_000 }).toBeGreaterThan(fore);
-    // Godkännandet byggde PDF:en på riktigt (Tectonic, bunden i bin/tectonic).
-    expect(L.traff(anrop, "/approve").length).toBeGreaterThan(0);
+    /* Godkännandet byggde PDF:en på riktigt. Anropet går INTE i samma
+       ögonblick som pappret hamnar i Sparat: klienten ritar först av bladen,
+       för det är bilderna som blir PDF:en (blad-bild.js `dokument`). Poll,
+       som dag 1 redan gör — pappret i högen och anropet till servern är två
+       händelser, och de har aldrig varit samma. */
+    await expect.poll(() => L.traff(anrop, "/approve").length, { timeout: 30_000 })
+      .toBeGreaterThan(0);
 
     // Utskriftsrutan: provet, facit och en anpassad kopia — förlängd tid och
     // färre uppgifter, märkt bara med dokumentkod i sidfoten.
