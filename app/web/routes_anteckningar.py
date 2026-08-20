@@ -26,7 +26,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from app import (db, dokumentdiff, exam_latex, exam_pdf, gpu_arbiter,
-                 notes_gen, postprocess)
+                 notes_gen, postprocess, tryck)
 from app.web import routes_planning
 from app.web.sse import sse_response
 
@@ -304,7 +304,11 @@ def create_router(base: Path, arbiter) -> APIRouter:
 
     @router.post("/api/anteckningar/{note_id:int}/approve")
     async def approve(note_id: int, req: Request):
-        """Lås versionen: rendera .tex, kompilera PDF lokalt och godkänn.
+        """Lås versionen och lägg pappret på disk.
+
+        Samma två vägar som provets godkännande (routes_exam approve): kom
+        bladet med som avritad bild ÄR bilden pappret, och PDF:en läggs av den
+        (tryck.png_till_pdf). .tex skrivs alltid — arkivet och reserven.
 
         Ingen LaTeX-fixloop och därför inget GPU-lås. Anteckningarna bär nästan
         ingen LaTeX: löptexten escapas av exam_latex, och ett udda dollartecken
@@ -312,6 +316,14 @@ def create_router(base: Path, arbiter) -> APIRouter:
         Det som ändå kan falla är en trasig formel INUTI $…$, och då är
         chattrutan bredvid pappret en rakare väg än en modellrunda som skriver
         om hela sidan — beskedet säger det."""
+        try:
+            body = await req.json()
+        except Exception:
+            body = {}
+        # Anteckningarna har inget facitläge — pappret ÄR lärarens ark, det
+        # finns ingen andra hälft att vända på (blad.js harLosning).
+        bild = tryck.bladbilder(
+            body.get("blad") if isinstance(body, dict) else None, "uppgift")
         conn = db.connect(db_file)
         try:
             view = db.get_exam(conn, note_id)
@@ -337,10 +349,19 @@ def create_router(base: Path, arbiter) -> APIRouter:
             tex_path.write_text(tex, encoding="utf-8")
             pdf_path = None
             errors: list = list(fel)
-            if not exam_pdf.engine_available():
+            if bild:
+                emit({"type": "log", "msg": "Lägger bladet på A4 …"})
+                pdf_path = tryck.png_till_pdf(bild, ut_dir, slug)
+                if pdf_path is None:
+                    emit({"type": "log",
+                          "msg": "Avritningen blev ingen bild — sätter pappret "
+                                 "i LaTeX i stället."})
+            # LaTeX-reserven: ingen bild kom fram, eller den gick inte att
+            # läsa. Raden nedan är alltså den GAMLA vägen, ord för ord.
+            if pdf_path is None and not exam_pdf.engine_available():
                 emit({"type": "log",
                       "msg": "PDF-motorn saknas — sparar .tex utan PDF."})
-            else:
+            elif pdf_path is None:
                 emit({"type": "log", "msg": "Kompilerar PDF …"})
                 pdf_path, logg = exam_pdf.compile_pdf(tex, ut_dir, slug)
                 if pdf_path is None:

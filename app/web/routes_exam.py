@@ -598,10 +598,14 @@ def create_router(base: Path, arbiter) -> APIRouter:
 
     @router.post("/api/exams/{exam_id:int}/approve")
     async def approve(exam_id: int, req: Request):
-        """Lås versionen: rendera .tex (prov + bedömningsanvisning),
-        kompilera PDF lokalt och spara i minnet. Kompileringsfel går
-        tillbaka till modellen (max 2 rundor); kvarstående fel redovisas
-        ärligt och provet godkänns då med enbart .tex."""
+        """Lås versionen och lägg pappret på disk.
+
+        PDF:en byggs i första hand av de blad klienten ritade av (``blad`` i
+        kroppen) — då är filen en bild av skärmen, pixel för pixel. .tex skrivs
+        alltid ändå: den är arkivet, och den är reserven. Utan bilder renderas
+        och kompileras allt som förut (prov + bedömningsanvisning), med
+        kompileringsfel tillbaka till modellen (max 2 rundor); kvarstående fel
+        redovisas ärligt och provet godkänns då med enbart .tex."""
         # «Separat facit» bor i webbläsarens dokument (inst.facit i plan.js)
         # och finns inte i provets JSON — flaggan måste därför resa med
         # anropet. Utan den kompilerades elevbladet ALLTID med facit på sista
@@ -612,6 +616,20 @@ def create_router(base: Path, arbiter) -> APIRouter:
         except Exception:
             body = {}
         separat_facit = bool(isinstance(body, dict) and body.get("separat_facit"))
+        # ── SKÄRMEN ÄR PDF:ENS FÖRLAGA ────────────────────────────────
+        # «Jag vill ha PDF-filerna exakt som de ser ut i appen.» LaTeX-mallen
+        # var snarlik men aldrig identisk — brickorna satt ihop, tabellerna såg
+        # annorlunda ut, och lärarens egna inlagda bilder (v.bilder) fanns inte
+        # i provets JSON och kom därför aldrig med alls.
+        # Klienten ritar därför av varje blad i dokumentet vid godkännandet
+        # (app/web/ui/blad-bild.js, samma grepp som tavlan redan går) och
+        # skickar bilderna hit: `uppgift` är elevernas ark, `facit` är
+        # facit-/lösningsarket som blir en egen fil bredvid. Är de med ÄR de
+        # pappret. Kommer godkännandet utan bilder — API-anrop, pytest, en
+        # gammal klient — går allt den gamla vägen, rad för rad.
+        blad = body.get("blad") if isinstance(body, dict) else None
+        bild_uppgift = tryck.bladbilder(blad, "uppgift")
+        bild_facit = tryck.bladbilder(blad, "facit")
         # Det som trycks är det läraren SER. Ångrade hon ett varv backade bara
         # utkastets markör; provets pekare stod kvar på det förkastade varvet,
         # och PDF:en byggdes ur det. Klienten säger vilken version varvet gällde
@@ -720,6 +738,62 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     if facit is not None:
                         (out_dir / f"{slug} - facit.tex").write_text(
                             facit, encoding="utf-8")
+                    # ── PAPPRET SOM SKÄRMEN VISADE ────────────────────
+                    # Bilderna läggs på A4 av samma funktion som tavlans
+                    # nedladdning använder (tryck.png_till_pdf, pdfium, ingen
+                    # LaTeX). Ingen fixrunda följer: bilderna visar det läraren
+                    # SÅG, och en modellrunda som skriver om provet efteråt
+                    # hade gjort bilden till ett annat papper än JSON:en.
+                    # Faller avritningen — en trasig data-URI, en bild som inte
+                    # är en PNG — sägs det och LaTeX-vägen nedanför tar över.
+                    # Hellre ett papper som är snarlikt än inget papper alls.
+                    if bild_uppgift:
+                        emit({"type": "log", "msg": "Lägger bladen på A4 …"})
+                    skarm = (tryck.png_till_pdf(bild_uppgift, out_dir, slug)
+                             if bild_uppgift else None)
+                    if bild_uppgift and skarm is None:
+                        emit({"type": "log",
+                              "msg": "Avritningen av bladen blev ingen bild — "
+                                     "sätter pappret i LaTeX i stället."})
+                    if skarm is not None:
+                        pdf_path = skarm
+                        # Facit blir en EGEN fil, samma uppsättning som
+                        # LaTeX-vägen lämnar bredvid ({slug} - facit.pdf, den
+                        # rutten /api/exams/{id}/facit serverar). Skärmens
+                        # facit går före mallens; skickade klienten inget
+                        # (äldre klient, en typ utan facitläge) kompileras
+                        # mallens som förut.
+                        if bild_facit:
+                            if tryck.png_till_pdf(bild_facit, out_dir,
+                                                  f"{slug} - facit") is None:
+                                emit({"type": "log",
+                                      "msg": "Det separata facit blev ingen "
+                                             "bild — och elevbladet bär inga "
+                                             "lösningar. Godkänn igen för ett "
+                                             "nytt försök."
+                                             if separat_facit else
+                                             "Det separata facit blev ingen "
+                                             "bild — bladet bär det ändå på "
+                                             "sista sidan."})
+                        elif facit is not None and exam_pdf.engine_available():
+                            exam_pdf.compile_pdf(facit, out_dir,
+                                                 f"{slug} - facit")
+                        # Bedömningsanvisningen står INTE på skärmen: den är
+                        # lärarens rättningsdokument med kravgränser, bedömning
+                        # och kommenterade elevlösningar, och har aldrig varit
+                        # ett av bladen i högen. Den sätts därför i LaTeX som
+                        # förut — utan fixrunda, av samma skäl som ovan.
+                        if bed is not None and exam_pdf.engine_available():
+                            emit({"type": "log",
+                                  "msg": "Kompilerar bedömningsanvisningen …"})
+                            if exam_pdf.compile_pdf(
+                                    bed, out_dir,
+                                    f"{slug} - bedomning")[0] is None:
+                                emit({"type": "log",
+                                      "msg": "Bedömningsanvisningen gick inte "
+                                             "att kompilera."})
+                        errors = []
+                        break
                     if not exam_pdf.engine_available():
                         emit({"type": "log",
                               "msg": "PDF-motorn saknas — sparar .tex utan PDF."})

@@ -295,6 +295,104 @@ window.BladBild = (() => {
       .then(ut => { riv(); return ut; }, fel => { riv(); throw fel; });
   }
 
+  /* ══════════ HELA DOKUMENTET, VID GODKÄNNANDET ══════════
+     «Jag vill ha PDF-filerna EXAKT som de ser ut i appen.»
+
+     Fram till nu byggdes prov, arbetsblad, diagnos och gruppuppgift om i LaTeX
+     vid godkännandet — snarlikt, aldrig identiskt. Brickorna satt ihop,
+     tabellerna hade andra linjer, och lärarens egna inlagda bilder (v.bilder)
+     fanns bara i webbläsarens dokument och kom aldrig med alls. Här ritas
+     bladen av i stället, och servern lägger dem på A4 (routes_exam approve →
+     tryck.png_till_pdf). Fyra saker gör det svårare än det låter:
+
+     1. ALLA ARKLÄGEN, inte bara det som visas. Växlaren i canvas visar
+        antingen uppgiftsbladet eller facit (plan.js `visarLosning`), och
+        facitläget är ett EGET dokument: `{...v, losningsblad:true}`. Ritar man
+        bara av det som råkar stå framme blir den ena filen den andras kopia.
+     2. Lådan måste MÄTAS. Sättningen delar, paginerar och skruvar upp graden
+        med clientHeight i handen (blad.js MÄTBARHETEN), och en gömd låda mäter
+        nollor. Fastlådan står därför utanför skärmen, aldrig display:none —
+        samma grepp som `boklos` ovan.
+     3. Sättningen är inte klar när `Blad.rita` returnerar. Den kör om sig i
+        fyra svep (rAF, 260 ms, och en gång till när typsnitten är inne). Vi
+        laddar snitten FÖRST, så första svepet mäter rätt, och väntar sedan ut
+        det sena svepet ändå — mätningen som gäller är den sista.
+     4. Bokens lösningsförslag står i SAMMA trav på skärmen men är lärarens
+        egna papper och laddas ner som egna filer (`boklos`). Följde de med i
+        elevernas ark hade eleverna fått lösningarna på köpet. De rensas
+        därför bort — på `data-form`, samma lista som blad.js BOKARK.
+
+     Returnerar `{uppgift: [png, …], facit: [png, …]}` — namnen rutten läser.
+     Fel fångas INTE här: den som anropar väljer själv om ett papper utan
+     avritning ska falla tillbaka på LaTeX (det gör plan.js). */
+  const BOKARK = '[data-form="lo-bok"], [data-form="lo-bok3"], [data-form="fe-bok"]';
+  /* Vilka typer som har ett facitläge med en EGEN fil på servern. Det är
+     dagens filuppsättning: arbetsbladet får «{stam} - facit.pdf» bredvid
+     bladet. Provets lösningsförslag har ingen egen fil — knappen där hämtar
+     bedömningsanvisningen, som är lärarens rättningsdokument och inte ett av
+     bladen på skärmen. Diagnosen och gruppuppgiften bär sitt facit i samma
+     dokument och ligger därför redan i `uppgift`. */
+  const HAR_FACITFIL = v => v && v.typ === 'Arbetsblad';
+
+  const vila = ms => new Promise(ja => setTimeout(ja, ms));
+  /* Sättningens sista svep ligger på 260 ms (blad.js `rita`). Vänta ut det och
+     mät en bildruta efteråt — annars fotograferas ett papper mitt i sin egen
+     ommätning, med en uppgift på fel blad. */
+  const satt = () => rutor(2).then(() => vila(320)).then(() => rutor(2));
+
+  const $$ = (s, r) => Array.prototype.slice.call((r || document).querySelectorAll(s));
+  function bladenI(trav) {
+    if (!trav) return [];
+    return $$('.blad', trav).filter(b => !b.querySelector(BOKARK));
+  }
+
+  function lage(bo, v, skala) {
+    const mal = document.createElement('div');
+    bo.appendChild(mal);
+    const trav = window.Blad.rita(mal, v);
+    return satt().then(() => {
+      const blad = bladenI(trav);
+      let kedja = Promise.resolve([]);
+      blad.forEach(b => {
+        kedja = kedja.then(ut => {
+          const m = matt(b);
+          return rastrera(b, m.b, m.h, skala)
+            .then(bild => ut.concat([bild]));
+        });
+      });
+      return kedja;
+    });
+  }
+
+  function dokument(v, val) {
+    const skala = (val && val.skala) || SKALA;
+    const tom = { uppgift: [], facit: [] };
+    /* Tavlan har sin egen väg sedan tidigare (tavla-bild.js) och ritas inte
+       som blad. Ett dokument utan typ är inget papper. */
+    if (!v || !window.Blad || !window.Blad.rita || v.typ === 'Tavla'
+        || v.losningsblad) {
+      return Promise.resolve(tom);
+    }
+    const bo = document.createElement('div');
+    bo.setAttribute('aria-hidden', 'true');
+    bo.style.cssText = 'position:fixed;left:-30000px;top:0;width:' + BO_BREDD +
+                       'px;pointer-events:none';
+    document.body.appendChild(bo);
+    const riv = () => { bo.remove(); };
+    return snitten()
+      .then(() => lage(bo, v, skala))
+      .then(uppgift => {
+        if (!HAR_FACITFIL(v)) return { uppgift, facit: [] };
+        /* Facitläget är dokumentet en gång till, med flaggan satt — exakt det
+           objekt canvasens växlare ritar (plan.js `visa`). Djup kopia, för
+           `Blad.rita` skriver i dokumentet den får. */
+        const d = Object.assign(JSON.parse(JSON.stringify(v)),
+                                { losningsblad: true });
+        return lage(bo, d, skala).then(facit => ({ uppgift, facit }));
+      })
+      .then(ut => { riv(); return ut; }, fel => { riv(); throw fel; });
+  }
+
   /* Hur många filer det blir — utan att rita av något. Knappen och
      utskriftsrutan behöver antalet innan avritningen börjar, och
      pagineringen kan bara gissas här: den räknas ur uppgifternas antal, samma
@@ -305,5 +403,5 @@ window.BladBild = (() => {
     try { return window.BokLosning.blad(v).length; } catch (e) { return 0; }
   }
 
-  return { png, boklos, namn, antal };
+  return { png, boklos, dokument, namn, antal };
 })();

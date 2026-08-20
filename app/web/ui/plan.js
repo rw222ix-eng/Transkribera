@@ -4036,6 +4036,20 @@
     };
     const pdfFel = e => window.toast && window.toast(
       e && e.avbrott ? e.message : `PDF:en kunde inte byggas: ${e.message}`);
+    /* ── SKÄRMEN SOM PDF:ENS FÖRLAGA ──────────────────────
+       «Jag vill ha PDF-filerna EXAKT som de ser ut i appen.» Bladen ritas av
+       här — alla ark i alla arklägen, i en fastlåda utanför skärmen
+       (blad-bild.js) — och följer med godkännandet som bilder. Servern lägger
+       dem på A4 i stället för att sätta om pappret i LaTeX.
+
+       Avritningen sker FÖRE anropet, för bilderna måste ligga i kroppen. Det
+       kostar sitt ögonblick, men inte lärarens: pappret ligger redan i Sparat,
+       rutan är stängd och nästa dokument går att börja på. Går avritningen fel
+       skickas ingenting och servern sätter pappret i LaTeX som förut — ett
+       snarlikt papper är bättre än inget. */
+    const avritade = v => (window.BladBild && window.BladBild.dokument
+      ? window.BladBild.dokument(v).catch(() => null)
+      : Promise.resolve(null));
     /* Provet och arbetsbladet får sin PDF vid godkännandet — Tectonic
        kompilerar LaTeX:en lokalt, med en fixloop när den inte går igenom.
        Det tar tid och sker i bakgrunden: pappret ligger redan i Sparat, och
@@ -4049,11 +4063,13 @@
          dåligt varv backade skärmen men inte provets pekare i basen, och PDF:en
          byggdes ur det förkastade varvet — sex pizzauppgifter på ett papper som
          visade fyra om byggställningar. */
-      window.API.strom(`/api/exams/${godkant.provId}/approve`, {
-        separat_facit: godkant.typ === 'Arbetsblad'
-          && (godkant.inst || {}).facit === 'Separat facit',
-        version: godkant.provVersion || null,
-      })
+      avritade(godkant)
+        .then(blad => window.API.strom(`/api/exams/${godkant.provId}/approve`, {
+          separat_facit: godkant.typ === 'Arbetsblad'
+            && (godkant.inst || {}).facit === 'Separat facit',
+          version: godkant.provVersion || null,
+          blad,
+        }))
         .then(kravGodkant)
         .then(r => {
           /* Fälten heter `pdf` och `tex` — det är vad routes_exam approve
@@ -4077,7 +4093,9 @@
        någon fixloop bakom: går formeln i ett stycke inte att sätta säger
        kvittot det, och chattrutan bredvid pappret är vägen vidare. */
     if (serverPa() && godkant.antId) {
-      window.API.strom(`/api/anteckningar/${godkant.antId}/approve`, {})
+      avritade(godkant)
+        .then(blad => window.API.strom(
+          `/api/anteckningar/${godkant.antId}/approve`, { blad }))
         .then(kravGodkant)
         .then(r => {
           godkant.pdf = r.pdf || null;

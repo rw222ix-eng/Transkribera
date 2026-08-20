@@ -15,8 +15,12 @@ facit, inte efter sida 47 i en bunt.
 
 Källorna är olika för olika papper, och det är därför den här modulen finns:
 
-* **Prov, arbetsblad och gruppuppgifter** har redan en PDF — den Tectonic
-  byggde vid godkännandet (app/exam_pdf.py). Den tas som den är.
+* **Prov, arbetsblad och gruppuppgifter** har redan en PDF — den som byggdes
+  vid godkännandet. Den är numera en bild av SKÄRMEN: klienten ritar av varje
+  blad (app/web/ui/blad-bild.js) och rutten lägger bilderna på A4 här nere
+  (``png_till_pdf``, samma väg som tavlan). Tectonic är kvar som reserv när
+  godkännandet kommer utan bilder, och för bedömningsanvisningen. Den tas som
+  den är.
 * **Facit och bedömningsanvisning** ligger bredvid provet med samma stam.
 * **Tavlan** finns bara som en ritad sida i webbläsaren. Klienten skickar den
   som PNG (samma bild som /api/planning/export sparar) och den läggs på ett A4
@@ -102,6 +106,24 @@ def _oppna_png(dataurl: str):
         # annat än tavlan, och det ska sägas, inte sparas.
         return None
     return _platta(bild)
+
+
+def bladbilder(blad, nyckel: str) -> list[str]:
+    """Bladbilderna klienten skickade med godkännandet, ett arkläge i taget.
+
+    Formen är ``{"uppgift": [png, …], "facit": [png, …]}`` — uppgiftsbladen och
+    facit-/lösningsarken var för sig, för de blir två filer (se routes_exam
+    approve). Allt som inte är en icke-tom sträng faller bort HÄR i stället för
+    nere i ``png_till_pdf``: en klient som skickar tal, listor i listor eller
+    null ska mötas av «inga bilder» och LaTeX-reserven, inte av ett halvbyggt
+    papper. Tom lista betyder därför alltid samma sak — gå den gamla vägen.
+    """
+    if not isinstance(blad, dict):
+        return []
+    rå = blad.get(nyckel)
+    if not isinstance(rå, list):
+        return []
+    return [b for b in rå if isinstance(b, str) and b]
 
 
 def png_till_pdf(dataurl, ut_dir: Path, stam: str) -> Path | None:
