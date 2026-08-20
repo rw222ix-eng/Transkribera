@@ -183,6 +183,16 @@ INSTRUCTION = (
     "får aldrig skrivas av, inte ens med utbytta tal. Poängen med ett eget "
     "exempel är att det kan göras enklare, renare och mer pedagogiskt än "
     "bokens, så att eleven klarar bokens efteråt.\n"
+    # FÖRANKRINGEN. Lärarens dom efter första skarpa tavlan (2026-08-20):
+    # «när vi väljer våra exempel ska de relatera till det vi har skrivit på
+    # vänstra delen av tavlan — de ska finnas där helt enkelt.» Exemplet är
+    # där teorin används; en metod som dyker upp först i exemplet har ingen
+    # rad att peka tillbaka på, och då hänger genomgången inte ihop.
+    "- Exemplet får bara VILA på det som står på vänstertavlan: varje formel "
+    "och metodsteg exemplet använder ska finnas bland vänsterns formler och "
+    "metoder, så att läraren kan peka från exemplets rad tillbaka till raden "
+    "där den står. Kräver exemplet något som inte står där — komplettera "
+    "vänstertavlan först, eller välj ett annat exempel.\n"
     "- Visa det vanliga felet INNE i ett exempel när det går: det felaktiga "
     "ledet i rött bredvid det rätta, i just den uppgift klassen tittar på. Ett "
     "fel som bara står som en regel känns inte igen; ett fel som står i "
@@ -202,6 +212,23 @@ INSTRUCTION = (
     "varje typ har det den kräver på tavlan — en formel, ett metodsteg eller "
     "ett exempel. Saknas något är genomgången för tunn; står det som inte "
     "behövs för de uppgifterna är den för tjock.\n"
+    # TÄCKNINGEN PRÖVAS BAKLÄNGES. Samma dom, andra halvan: «målet är att
+    # eleverna efter genomgången ska kunna klara av alla uppgifter på de
+    # sidor jag valt att utgå ifrån.» Ett svep över sidorna räcker inte —
+    # det är URVALET som är kontraktet, uppgift för uppgift.
+    "- Pröva täckningen BAKLÄNGES: gå uppgift för uppgift genom det VALDA "
+    "urvalet i bokblocket (uppgiftsraden, inte bara sidorna) och fråga «står "
+    "det den här uppgiften kräver på tavlan?». Först när svaret är ja för "
+    "varje vald uppgift är genomgången klar.\n"
+    # PEDAGOGISK FRIHET ÄVEN I FÖRKLARINGEN, inte bara i exemplen. «Boken är
+    # jättebra. Men om man är smart och har lite fantasi så kan man göra det
+    # bättre.» Lärarens eget exempel på formen: «roten går baklänges — från
+    # arean tillbaka till sidan.»
+    "- Bokens förklaring är UTGÅNGSPUNKTEN, inte taket: finns en enklare och "
+    "mer pedagogisk väg in — en vardagsmening som bär idén («roten går "
+    "baklänges: från arean tillbaka till sidan»), en bättre bild, en "
+    "tydligare ordning — ta den, med bokens notation och begrepp. Finns "
+    "ingen bättre är bokens rätt. Aldrig metoder klassen inte mött.\n"
     # TEXTBUDGETEN. Läraren körde en lektion med två egengjorda tavlor och sa
     # efteråt att den ena var fylld med text hon aldrig skrev upp på plats: det
     # är för mycket att skriva. Tavlan ska bära det som FAKTISKT SKRIVS under
