@@ -293,11 +293,14 @@ def test_provtiden_heter_tid_min_i_instruktionen():
     assert "tid_min" in exam_spec.ExamDoc.model_fields
 
 
-def test_uppgifterna_heter_bokstaver_inte_siffror():
+def test_uppgifterna_heter_siffror_och_delarna_bokstaver():
+    """Lärarens val 2026-08-20: brickorna är 1, 2, 3 … så att deluppgifterna
+    kan heta a) b) utan att två bokstavsserier blandas på samma papper."""
     doc, _ = exam_spec.validate_exam_json(_doc(), "gruppuppgift")
     tex = exam_latex.render_gruppuppgift(doc)
-    assert r"\begin{uppgift}{A}" in tex and r"\begin{uppgift}{B}" in tex
-    assert r"\begin{uppgift}{1}" not in tex
+    assert r"\begin{uppgift}{1}" in tex and r"\begin{uppgift}{2}" in tex
+    assert r"\begin{uppgift}{A}" not in tex
+    # Deluppgifternas a) b) prövas där delar finns: test_brickan_star_fri_…
 
 
 @pytest.mark.tectonic
@@ -362,8 +365,10 @@ def test_brickan_star_fri_fran_texten(tmp_path):
     sidor = pypdfium2.PdfDocument(str(pdf))
     text = "".join(sidor[i].get_textpage().get_text_range()
                    for i in range(len(sidor)))
-    for hopsatt, fritt in (("ARäkna", "A Räkna"),
-                           ("BI verkstaden", "B I verkstaden"),
+    # Brickorna är siffror sedan lärarens val 2026-08-20 — mellanrumskravet
+    # är detsamma: «1Räkna» läser som ett tal i meningen.
+    for hopsatt, fritt in (("1Räkna", "1 Räkna"),
+                           ("2I verkstaden", "2 I verkstaden"),
                            ("a)Vilket", "a) Vilket"),
                            ("b)Ali", "b) Ali")):
         assert hopsatt not in text, f"brickan sitter ihop: {hopsatt!r}"

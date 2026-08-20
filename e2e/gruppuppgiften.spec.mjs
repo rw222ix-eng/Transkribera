@@ -541,15 +541,16 @@ test("ett klick på facitposten låser omskrivningen till uppgiftens nummer",
     await iCanvas(page, papper({
       inst: { ...skriftligt, facit: "Facit i bladet" } }));
 
-    // Facitets fjärde post heter «D.» — och är uppgift 4.
+    // Facitets fjärde post heter «4.» sedan gruppuppgiften bytte till siffer-
+    // brickor (lärarens val 2026-08-20) — och är uppgift 4.
     await pekaPa(page, '#granskaskal .gdok .pruppg[data-el="uppg4"]');
-    await expect(page.locator("#g-mal .gmaltext")).toHaveText("Facit D");
+    await expect(page.locator("#g-mal .gmaltext")).toHaveText("Uppgift 4");
     await skickaOnskemal(page, "Mindre tal, och svaret ska bli ett heltal.");
 
     // Låsningen läses ur elementets id — utan den fick modellen gissa vilken
     // av fyra uppgifter «mindre tal» gällde.
     expect(anrop[0].nummer).toBe(4);
-    expect(anrop[0].mal.namn).toBe("Facit D");
+    expect(anrop[0].mal.namn).toBe("Uppgift 4");
     // Uppgiften och dess facit är samma sak sedd från två håll: båda märks.
     await expect(page.locator('#arkskal .gukort[data-el="uppg4"]'))
       .toHaveClass(/andrad/, { timeout: 20_000 });

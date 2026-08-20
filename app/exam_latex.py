@@ -266,11 +266,11 @@ def _build_view(doc: exam_spec.ExamDoc,
                               "dom": escape_mixed(pa.dom)} for pa in e.partier]}
                 for e in (it.elevlosningar or [])] if facit else []
             item_vy["nummer"] = nummer
-            # Gruppuppgiftens uppgifter heter A, B, C — inte 1, 2, 3. Brickan
-            # är en bokstav på pappret som ligger på bordet (gruppark.css), och
-            # numret finns kvar för de mallar som räknar.
-            item_vy["bokstav"] = (_BOKSTAV[nummer - 1].upper()
-                                  if nummer <= len(_BOKSTAV) else str(nummer))
+            # Gruppuppgiftens uppgifter heter 1, 2, 3 (lärarens val 2026-08-20)
+            # — då kan deluppgifterna heta a) b) utan att två bokstavsserier
+            # blandas på samma papper. Fältet heter `bokstav` av historiska
+            # skäl; det är brickans TEXT, och mallen läser den rakt av.
+            item_vy["bokstav"] = str(nummer)
             item_vy["poang_str"] = f"{sum(agg)}p"
             item_vy["poang_eca"] = f"{agg[0]}/{agg[1]}/{agg[2]}"
             # Figuren ligger på uppgiftsnivå (ExamItem), inte på deluppgift/

@@ -198,8 +198,11 @@ window.BladBygg = (() => {
   }
 
   /* ── Arbetsbladet och gruppuppgiften ─────────────── */
-  function kort(u, i, illustration) {
-    const bricka = BOKSTAV[i] || String(i + 1);
+  /* `siffra`: gruppuppgiftens brickor är 1, 2, 3 … (lärarens val 2026-08-20) —
+     då kan deluppgifterna heta a) b) utan att två bokstavsserier blandas på
+     samma papper. Arbetsbladet behåller bokstäverna. */
+  function kort(u, i, illustration, siffra) {
+    const bricka = siffra ? String(i + 1) : (BOKSTAV[i] || String(i + 1));
     const alt = u.alt
       ? `<ul class="gudel guval">${u.alt.map((a, k) => `<li><i>${BOKSTAV[k]}.</i> ${mat(a)}</li>`).join('')}</ul>` : '';
     const del = u.del && u.del.length
@@ -314,7 +317,7 @@ window.BladBygg = (() => {
              mycket väl sakna ordet. */''}
       <div class="guband"${bandtext ? ' data-egen' : ''}>${esc(bandtext || BAND[v.typ] || BAND.Arbetsblad)}${
         v.nyckelfraga ? ` <b>${mat(v.nyckelfraga)}</b>` : ''}</div>
-      ${uppgifter.map((u, k) => kort(u, k, !!i.illustration)).join('')}
+      ${uppgifter.map((u, k) => kort(u, k, !!i.illustration, v.typ === 'Gruppuppgift')).join('')}
     </div>`;
   }
 
@@ -351,8 +354,11 @@ window.BladBygg = (() => {
 
   /* ── Facit till arbetsbladet ─────────────────────── */
   function arkfacit(v, uppgifter) {
+    /* Facit numrerar som uppgiftsarket: gruppuppgiftens siffror, arbetsbladets
+       bokstäver — annars pekar «1.» och «A.» på samma uppgift på två papper. */
+    const siffra = v.typ === 'Gruppuppgift';
     const post = (u, k) => `<div class="pruppg">
-      <span class="prnr">${BOKSTAV[k] || k + 1}.<span class="prvarde">${u.p} p</span></span>
+      <span class="prnr">${siffra ? k + 1 : (BOKSTAV[k] || k + 1)}.<span class="prvarde">${u.p} p</span></span>
       <div><p class="prtext" data-ref="">${ref(u.t)}</p>
         ${u.f ? `<div class="losvar"><b class="losetikett">Svar</b><span>${mat(u.f)}</span>${u.enhet ? `<em>${esc(u.enhet)}</em>` : ''}</div>` : ''}
         ${u.vag ? `<ul class="lovag">${u.vag.map(s => `<li><span class="losteg">${mat(s[0])}<em>${esc(s[1])}</em></span></li>`).join('')}</ul>` : ''}
