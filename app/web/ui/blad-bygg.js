@@ -209,9 +209,13 @@ window.BladBygg = (() => {
        ett 1-baserat index bland de uppladdade bilderna). Den senare mappades
        till arket men ritades aldrig — PDF:en satte bilden och skärmen visade
        ingenting, så uppgiften hänvisade till en bild som inte fanns. Rutan är
-       dessutom den yta lärarens egen bild landar i (blad.js rita, v.bilder). */
+       dessutom den yta lärarens egen bild landar i (blad.js rita, v.bilder).
+
+       `data-bild` är rutans HANDTAG: blad.js hämtar sidan ur underlaget och
+       lägger den här (Blad.underlag). Texten nedanför är vad som står kvar när
+       dokumentet inte bär något underlag att hämta ur. */
     const fig = u.fig ? ''
-      : u.bild ? `<div class="gufigur guplats" style="height:110px"><span class="gufigtext">bild ${Number(u.bild)} ur underlaget — läggs in i canvas</span></div>`
+      : u.bild ? `<div class="gufigur guplats" data-bild="${Number(u.bild)}" style="height:110px"><span class="gufigtext">bild ${Number(u.bild)} ur underlaget — läggs in i canvas</span></div>`
         : illustration ? '<div class="gufigur guplats" style="height:110px"><span class="gufigtext">plats för illustration</span></div>' : '';
     /* Notisen står EFTER uppgiftens former och före svarsytan — samma plats som
        \notisruta har i mallarna (arbetsblad.tex.j2, gruppuppgift.tex.j2). */
@@ -397,9 +401,10 @@ window.BladBygg = (() => {
       /* Uppgiftens bild ur underlaget (exam_spec: index bland de uppladdade
          bilderna). Den nådde arket men ritades aldrig, så provet hänvisade till
          en bild som bara fanns i PDF:en. Rutan är också den yta lärarens egen
-         bild landar i (blad.js rita, v.bilder). */
+         bild landar i (blad.js rita, v.bilder). `data-bild` är handtaget
+         blad.js hämtar sidan till — se motsvarande ruta i `kort` ovan. */
       : u.bild
-        ? `<div class="prbild gufigur" style="min-height:110px"><span class="gufigtext">bild ${Number(u.bild)} ur underlaget — läggs in i canvas</span></div>`
+        ? `<div class="prbild gufigur" data-bild="${Number(u.bild)}" style="min-height:110px"><span class="gufigtext">bild ${Number(u.bild)} ur underlaget — läggs in i canvas</span></div>`
         : '';
     /* Notisen: samma lilla inramade ruta som \notisruta i prov.tex.j2, och på
        samma plats — efter uppgiftens former, före svarsraden. */

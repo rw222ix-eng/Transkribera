@@ -940,3 +940,52 @@ def test_prompten_bar_hela_tavlan_historiken_och_skarmtexten():
     assert "1. Gör den kortare" in p
     assert "a2 a^2" in p
     assert "kortare än så" in p
+
+
+# ── Sidorna ur bildunderlaget ────────────────────────────────────────────
+# LaTeX-vägen har alltid haft dem: godkännandet kopierar `sida-NN.png` till
+# ut-katalogen och mallen sätter in filen (routes_exam approve, `bilder_map`).
+# Skärmen hade dem inte — där stod en streckad ruta med «bild N ur underlaget»,
+# och sedan bladen ritas av till PDF blev platshållaren det läraren fick i
+# handen. Rutten nedan är den skärmen hämtar sidan ur.
+
+def _lagg_underlag(client, pid="0123456789ab", sidor=1):
+    d = client.base_dir / "Transkriberingar" / "underlag" / pid
+    d.mkdir(parents=True, exist_ok=True)
+    for i in range(1, sidor + 1):
+        (d / f"sida-{i:02d}.png").write_bytes(_PNG_1PX)
+    return pid
+
+
+def test_underlagssidan_serveras_som_png(client):
+    pid = _lagg_underlag(client, sidor=2)
+    r = client.get(f"/api/underlag/{pid}/sida/02.png")
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "image/png"
+    assert r.content == _PNG_1PX
+
+
+def test_underlagssidan_som_inte_finns_ar_404(client):
+    pid = _lagg_underlag(client, sidor=1)
+    # Sidan finns inte i mappen …
+    assert client.get(f"/api/underlag/{pid}/sida/02.png").status_code == 404
+    # … underlaget finns inte alls …
+    assert client.get("/api/underlag/ffffffffffff/sida/01.png").status_code == 404
+    # … och sidnumret ligger utanför uppladdningens egen sidbudget.
+    assert client.get(f"/api/underlag/{pid}/sida/99.png").status_code == 404
+
+
+def test_underlagsrutten_slapper_inte_ut_ur_base_dir(client):
+    """pid är hårt validerat ([a-f0-9]{12}) och sidnumret är ett heltal — en
+    väg uppåt ska varken matcha rutten eller nå en fil."""
+    _lagg_underlag(client)
+    utanfor = client.base_dir.parent / "hemligt.png"
+    utanfor.write_bytes(_PNG_1PX)
+    for pid in ("../../..", "..%2f..%2f..", "0123456789AB", "0123456789a",
+                "0123456789abc", "en mapp"):
+        r = client.get(f"/api/underlag/{pid}/sida/01.png")
+        assert r.status_code == 404, pid
+        assert r.content != _PNG_1PX, pid
+    # Och sidnumret måste vara siffror — annars matchar rutten inte alls.
+    assert client.get("/api/underlag/0123456789ab/sida/..%2f..%2fx.png") \
+        .status_code == 404

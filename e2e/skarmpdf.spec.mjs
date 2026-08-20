@@ -422,6 +422,68 @@ test("bilden bryter raderna där skärmen bryter dem", async ({ page }) => {
   expect(iBild).toBe(egen);
 });
 
+/* ── SIDAN UR BILDUNDERLAGET ────────────────────────────────────────
+   Läraren laddar upp bokssidor, och modellen får hänvisa till dem: uppgiften
+   bär `bild: N` (exam_spec). LaTeX-vägen satte in sidan för länge sedan —
+   godkännandet kopierar `sida-NN.png` till ut-katalogen och mallen skriver
+   \includegraphics (routes_exam approve, `bilder_map`). Skärmen hade bara en
+   streckad ruta med «bild N ur underlaget — läggs in i canvas», och den dagen
+   bladen började ritas AV till PDF blev platshållaren pappret: läraren fick ut
+   ett prov som hänvisade till en bild som inte stod där.
+
+   Två saker prövas, och det är två olika hål:
+     · Rutan bär bilden på SKÄRMEN — nätanropet gjordes, och rutan har en img.
+     · Och bilden som blir PDF bär den också, som DATA-URL. En SVG i ett <img>
+       hämtar ingenting utifrån (blad-bild.js fälla 1), så en /api-adress hade
+       gett en tom ruta i just den bild det handlar om. */
+test("uppgiftens bild ur underlaget står på arket — och i bilden",
+  async ({ page }) => {
+    await fejka(page);
+    const hamtat = [];
+    await page.route("**/api/underlag/**", route => {
+      hamtat.push(new URL(route.request().url()).pathname);
+      return route.fulfill({
+        status: 200, contentType: "image/png",
+        body: Buffer.from(BILD.slice(BILD.indexOf(",") + 1), "base64") });
+    });
+    await page.goto("/");
+    await hydrerad(page);
+
+    const v = papper({
+      underlag: "0123456789ab",
+      inst: { antal: 1, niva: "Blandat", facit: "Separat facit" },
+      uppgifter: [{ nr: 1, p: 2, niva: "E", bild: 1,
+                    t: "Lös uppgift 12 på sidan ur boken.", f: "$25$" }],
+    });
+
+    await page.evaluate(dok => {
+      const bo = document.createElement("div");
+      bo.id = "underlagsprov";
+      bo.style.cssText = "position:fixed;left:-30000px;top:0;width:900px";
+      document.body.appendChild(bo);
+      window.Blad.rita(bo, dok);
+    }, v);
+    /* Hämtningen är kall första gången — rutan fylls när den landat, och
+       arket mäts om. */
+    await expect.poll(() => page.evaluate(() => {
+      const r = document.querySelector("#underlagsprov [data-bild='1']");
+      if (!r) return "ingen ruta";
+      const i = r.querySelector("img");
+      return i ? String(i.getAttribute("src")).slice(0, 14) : "tom ruta";
+    }), { timeout: 15_000 }).toBe("data:image/png");
+    expect(hamtat).toContain("/api/underlag/0123456789ab/sida/01.png");
+    await page.evaluate(() => document.querySelector("#underlagsprov").remove());
+
+    const xml = await xmlUr(page, v);
+    expect(xml.length).toBeGreaterThan(0);
+    // Bilden är MED, och den är inbakad — ingen adress att hämta.
+    expect(xml.some(s => s.indexOf('data-underlag="1"') >= 0)).toBe(true);
+    expect(xml.some(s => s.indexOf("data:image/png") >= 0)).toBe(true);
+    for (const s of xml) expect(s).not.toContain("/api/underlag/");
+    // Och platshållaren är borta: rutan säger inte längre att bilden kommer.
+    for (const s of xml) expect(s).not.toContain("ur underlaget");
+  });
+
 test("bokens lösningsförslag följer INTE med till elevernas ark",
   async ({ page }) => {
     /* Bokuppgifternas svarsfacit står i samma trav på skärmen — läraren ser

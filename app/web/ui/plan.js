@@ -2512,6 +2512,12 @@
              kastade. Numret följer varvet (nyVersion klonar det), och skickas
              tillbaka när varvet godkänns eller skrivs om. */
           utkast.provVersion = res.current_version || null;
+          /* VILKET bildunderlag uppgifternas `bild: N` pekar in i. Servern har
+             känt id:t hela tiden (routes_exam approve slår upp sidorna där),
+             men klienten fick det aldrig — så skärmen kunde bara rita en
+             streckad ruta där PDF:en satte boksidan. Nu ritar den bilden
+             (blad.js Blad.underlag). */
+          utkast.underlag = res.underlag || null;
           utkast.uppgifter = franProv(res.exam);
           utkast.granser = res.granser || null;
           utkast.summor = res.summor || null;
@@ -3213,6 +3219,10 @@
       /* Varvets egen exam-version — se generationen ovan. Det är den som gör
          att ett ångrat varv kan säga vilken text det gällde. */
       v.provVersion = res.current_version || v.provVersion || null;
+      /* Underlaget byts inte av en omskrivning — samma reserv som fälten
+         nedan, annars tappade varvet boksidorna och rutorna blev streckade
+         igen mitt i en iteration. */
+      v.underlag = res.underlag || v.underlag || null;
       v.uppgifter = franProv(res.exam);
       v.granser = res.granser || v.granser || null;
       v.summor = res.summor || v.summor || null;

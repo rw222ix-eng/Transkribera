@@ -316,7 +316,7 @@ window.BladBild = (() => {
      tabellerna hade andra linjer, och lärarens egna inlagda bilder (v.bilder)
      fanns bara i webbläsarens dokument och kom aldrig med alls. Här ritas
      bladen av i stället, och servern lägger dem på A4 (routes_exam approve →
-     tryck.png_till_pdf). Fyra saker gör det svårare än det låter:
+     tryck.png_till_pdf). Fem saker gör det svårare än det låter:
 
      1. ALLA ARKLÄGEN, inte bara det som visas. Växlaren i canvas visar
         antingen uppgiftsbladet eller facit (plan.js `visarLosning`), och
@@ -334,6 +334,8 @@ window.BladBild = (() => {
         egna papper och laddas ner som egna filer (`boklos`). Följde de med i
         elevernas ark hade eleverna fått lösningarna på köpet. De rensas
         därför bort — på `data-form`, samma lista som blad.js BOKARK.
+     5. Sidorna ur bildunderlaget måste vara HÄMTADE innan bladet ritas. Se
+        kommentaren vid `Blad.underlag` nedan.
 
      Returnerar `{uppgift: [png, …], facit: [png, …]}` — namnen rutten läser,
      och `uppgift` är hela dokumentets fil medan `facit` blir filen bredvid.
@@ -420,7 +422,14 @@ window.BladBild = (() => {
        `Blad.rita` skriver i dokumentet den får. */
     const facitlaget = () => Object.assign(JSON.parse(JSON.stringify(v)),
                                            { losningsblad: true });
+    /* FEMTE SAKEN: sidorna ur bildunderlaget hämtas FÖRE ritningen. En SVG
+       i ett <img> laddar ingenting utifrån (punkt 1 ovan), så bilden måste
+       vara en data-URL redan när arket serialiseras — och den ändrar arkets
+       höjd, alltså måste den sitta där när sättningen mäter. Kommer den efter
+       fotograferas ett papper med en streckad ruta där boksidan skulle stå.
+       `Blad.underlag` värmer cachen; `Blad.rita` läser den synkront. */
     return snitten()
+      .then(() => (window.Blad.underlag ? window.Blad.underlag(v) : null))
       .then(() => lage(bo, v, skala))
       .then(u => {
         if (EGEN_FACITFIL(v)) {

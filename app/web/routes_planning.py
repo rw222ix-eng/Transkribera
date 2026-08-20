@@ -19,7 +19,7 @@ from datetime import datetime
 from pathlib import Path
 
 from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from app import (bok, db, dokumentdiff, forlaga, gpu_arbiter, lararord,
                  lesson_board, llm_client, rattning)
@@ -575,6 +575,39 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 arbiter.release_llm(llm)
 
         return sse_response(job, req)
+
+    @router.get("/api/underlag/{pid}/sida/{n:int}.png")
+    def underlag_sida(pid: str, n: int):
+        """En sida ur ett uppladdat underlag, som den ligger på disk.
+
+        LaTeX-vägen hade den redan: godkännandet kopierar `sida-NN.png` till
+        ut-katalogen och mallen sätter in den (routes_exam approve,
+        `bilder_map`). SKÄRMEN hade den inte — där stod en streckad ruta med
+        «bild N ur underlaget», och sedan bladen ritas av till PDF blev
+        platshållaren det läraren fick i handen. Rutten är hålet som gjorde
+        att skärmen inte kunde visa samma bild som pappret.
+
+        Tre vakter, i den ordningen:
+        · `underlag_dir` släpper bara igenom ett pid på formen [a-f0-9]{12} —
+          en punkt eller ett snedstreck ger None, inte en väg uppåt.
+        · `{n:int}` matchar bara siffror, och sidnumret ska ligga inom
+          sidbudgeten uppladdningen själv höll.
+        · Och ändå, sist: den färdiga sökvägen måste ligga UNDER base_dir.
+          Samma bältesregel som `_under_base` i server.py — en symlänk i
+          underlagsmappen ska inte kunna peka ut ur den.
+        """
+        d = underlag_dir(base, pid)
+        if d is None or not (1 <= n <= _MAX_UNDERLAG_SIDOR):
+            return JSONResponse({"error": "okänt underlag"}, status_code=404)
+        fil = d / f"sida-{n:02d}.png"
+        try:
+            p = fil.resolve()
+            root = base.resolve()
+        except OSError:
+            return JSONResponse({"error": "okänt underlag"}, status_code=404)
+        if root not in p.parents or not p.is_file():
+            return JSONResponse({"error": "okänt underlag"}, status_code=404)
+        return FileResponse(str(p), media_type="image/png")
 
     # ------------------------------------------------------------ generate --
 

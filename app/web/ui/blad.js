@@ -1290,6 +1290,97 @@ window.Blad = (() => {
     return $$('.blad', trav);
   }
 
+  /* ══════════ SIDORNA UR BILDUNDERLAGET ══════════
+     Läraren laddar upp bokssidor, och modellen får hänvisa till dem: uppgiften
+     bär `bild: N`, ett 1-baserat index bland sidorna (exam_spec). LaTeX-vägen
+     satte in dem för länge sedan — godkännandet kopierar `sida-NN.png` till
+     ut-katalogen och mallen skriver \includegraphics (routes_exam approve). På
+     SKÄRMEN stod bara en streckad ruta med «bild N ur underlaget», och den
+     dagen bladen började ritas av till PDF blev platshållaren pappret. Skärmen
+     var förlagan, och förlagan ljög.
+
+     Tre saker gör det mer än en `<img src>`:
+
+     1. AVRITNINGEN FÅR INTE HÄMTA NÅGOT. En SVG i ett <img> laddar inga
+        externa adresser (blad-bild.js fälla 1), så en `/api/underlag/…`-URL
+        hade gett en tom ruta i just den bild det handlar om. Sidan hämtas
+        därför EN gång och blir en data-URL, precis som lärarens egna bilder
+        (v.bilder) redan är.
+     2. SÄTTNINGEN MÄTER. Bilden ändrar arkets höjd, och höjden styr delning,
+        paginering och uppskruvning. Kommer den efter mätningen bryts arket på
+        fel ställe. Cachen är därför synkron när den är varm, och `rita`
+        mäter OM när en kall hämtning landar.
+     3. MÅTTEN ÄR MALLENS. `\includegraphics[width=0.72\linewidth,height=90mm,
+        keepaspectratio]` — 90 mm är 340 px vid 96 dpi. Utan taket sträcker en
+        bokssida på 1200 px arket långt förbi A4:ans nederkant. */
+  const underlagscache = {};        /* 'pid/n' → data-URL, null = fanns inte */
+  const underlagslopande = {};      /* samma nyckel → löftet som hämtar */
+
+  const underlagsnyckel = (pid, n) => pid + '/' + n;
+  /* Vilka sidor dokumentet faktiskt hänvisar till. Ett dokument utan underlag
+     har inga — då står platshållaren kvar, som förut. */
+  function underlagsidor(v) {
+    if (!v || !v.underlag) return [];
+    const sedd = {};
+    return uppgifter(v).map(u => Number(u.bild))
+      .filter(n => n > 0 && !sedd[n] && (sedd[n] = true));
+  }
+
+  function hamtaSida(pid, n) {
+    const nyckel = underlagsnyckel(pid, n);
+    if (nyckel in underlagscache) return Promise.resolve(underlagscache[nyckel]);
+    if (underlagslopande[nyckel]) return underlagslopande[nyckel];
+    const tva = n < 10 ? '0' + n : String(n);
+    const p = fetch(`/api/underlag/${encodeURIComponent(pid)}/sida/${tva}.png`)
+      .then(svar => { if (!svar.ok) throw new Error(String(svar.status)); return svar.blob(); })
+      .then(blob => new Promise((ja, nej) => {
+        const l = new FileReader();
+        l.onload = () => ja(l.result);
+        l.onerror = nej;
+        l.readAsDataURL(blob);
+      }))
+      /* En sida som inte finns (raderat underlag, fel index) är inget fel att
+         kasta vidare: rutan behåller sin text och pappret blir som förut. */
+      .catch(() => null)
+      .then(url => { underlagscache[nyckel] = url; delete underlagslopande[nyckel]; return url; });
+    underlagslopande[nyckel] = p;
+    return p;
+  }
+
+  /* Hämtar allt dokumentet behöver och löser när cachen är varm. Den som ska
+     RITA AV bladet (blad-bild.js) väntar in den här före sin ritning — då är
+     första mätningen den rätta och ingen bild kommer efter fotografiet. */
+  function underlag(v) {
+    const pid = v && v.underlag;
+    const sidor = underlagsidor(v);
+    if (!pid || !sidor.length) return Promise.resolve(false);
+    return Promise.all(sidor.map(n => hamtaSida(pid, n))).then(() => true);
+  }
+
+  /* Lägger in de sidor som ligger i cachen. Returnerar false så fort en ruta
+     blev stående tom — då är hämtningen inte klar och `rita` mäter om. */
+  function laggInUnderlag(trav, v) {
+    const pid = v && v.underlag;
+    if (!pid) return true;
+    let alla = true;
+    $$('[data-bild]', trav).forEach(ruta => {
+      const n = Number(ruta.dataset.bild);
+      const url = underlagscache[underlagsnyckel(pid, n)];
+      if (url === undefined) { alla = false; return; }
+      if (url === null) return;                  /* fanns inte — texten står kvar */
+      /* Rutans egen platshållarhöjd ska INTE styra bilden: den är satt för en
+         tom ruta, och en bokssida i den blir en remsa. Streckningen (guplats)
+         går av samma skäl. */
+      ruta.classList.remove('guplats');
+      ruta.style.height = '';
+      ruta.style.minHeight = '';
+      ruta.innerHTML = '<img src="' + url + '" alt="" data-underlag="' + n
+        + '" style="display:block;margin:0 auto;max-width:72%;max-height:340px;'
+        + 'width:auto;height:auto" />';
+    });
+    return alla;
+  }
+
   function rita(mal, v) {
     if (!mal || !v) return;
     mal.innerHTML = '';
@@ -1333,6 +1424,11 @@ window.Blad = (() => {
     markera(trav, v);
     skala(trav);
     kompilera(trav);
+    /* Sidorna ur bildunderlaget läggs in FÖRE första mätningen när cachen är
+       varm — en bokssida är högre än sin platshållare, och höjden bestämmer
+       var arket bryts. `komplett` är false när något ännu inte hämtats; då
+       mäts det om nedanför, när hämtningen landat. */
+    const komplett = laggInUnderlag(trav, v);
     /* Sättningen måste vara klar innan bladet mäts: en KaTeX-formel är högre än
        platshållaren, och en figur högre än sin tomma ruta. */
     /* Ångra, dela på de FULLA ytorna, passa sedan varje blad för sig. Delade man
@@ -1364,6 +1460,9 @@ window.Blad = (() => {
        papper mättes olika många gånger beroende på om sidan nyss laddats om.
        Är promisen redan löst kostar raden en mikrotask. */
     if (document.fonts) document.fonts.ready.then(() => setTimeout(formge, 60));
+    /* Kall cache: hämta, lägg in, mät om. Den som ska rita AV bladet väntar in
+       `Blad.underlag` först (blad-bild.js) och hamnar aldrig här. */
+    if (!komplett) underlag(v).then(() => { laggInUnderlag(trav, v); formge(); });
     /* Bilderna läraren själv lagt in på en uppgift följer dokumentet, inte formen. */
     Object.entries(v.bilder || {}).forEach(([nyckel, src]) => {
       const el = $(`[data-el="${nyckel}"] .prbild, [data-el="${nyckel}"] .gufigur`, trav);
@@ -1372,5 +1471,6 @@ window.Blad = (() => {
     return trav;
   }
 
-  return { rita, form, uppgifter, skala, omritaTavlor, tavlaTill, tavlaDelar, bokTill };
+  return { rita, form, uppgifter, skala, omritaTavlor, tavlaTill, tavlaDelar, bokTill,
+           underlag };
 })();
