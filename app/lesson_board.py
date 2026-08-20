@@ -1040,10 +1040,113 @@ def _repair_until_valid(board: dict | None, errors: list, *, model: str, llm,
     return {"board": board, "errors": errors, "rounds": rounds_used}
 
 
+# ── Täckningsdomaren ────────────────────────────────────────────────────────
+# Lärarens beställning (2026-08-20): «målet är att eleverna efter genomgången
+# ska kunna klara av alla uppgifter på de sidor jag valt att utgå ifrån» —
+# och prompten bär kravet, men ingen grind räknade efter. Första skarpa
+# tavlan saknade kubikroten ur negativa tal och exakt-mot-närmevärde, båda
+# krävda av valda uppgifter, båda osynliga tills läraren själv jämförde med
+# boken. Domaren gör jämförelsen: ett extra pass som går uppgift för uppgift
+# genom URVALET mot tavlan och skickar tillbaka det som saknas som en
+# reparationsrunda. Samma kontrakt som nivådomaren (exam_gen._niva_pass):
+# EN dom, högst EN reparation, aldrig en loop — och ofixade fynd redovisas
+# som varningar i stället för att tystas.
+TACKNING_INSTRUKTION = (
+    "Du är täckningsdomare för en genomgångstavla i matematik. Nedan står "
+    "bokens uppslagna sidor med lärarens VALDA uppgifter, och därefter "
+    "tavlan som JSON. Gå uppgift för uppgift genom urvalet och fråga: kan "
+    "en elev PÅBÖRJA den här uppgiften med det som står på tavlan — "
+    "begreppen, formlerna, metodstegen eller ett exempel av samma slag? "
+    "Läraren pratar och räknar också: kravet är att metoden STÅR på tavlan, "
+    "inte att varje uppgift har ett eget exempel. Döm på innehåll som "
+    "saknas helt (en regel, ett begrepp, en metodtyp — t.ex. roten ur ett "
+    "negativt tal, exakt värde mot närmevärde), aldrig på detaljer.\n"
+    "Svara med enbart JSON: {\"saknas\": [{\"uppgifter\": [nummer, …], "
+    "\"vad\": \"det som saknas, kort\", \"forslag\": \"vad som ska läggas "
+    "till på tavlan — en formel, en rad, ett exempel, konkret\"}]} — tom "
+    "lista när tavlan täcker urvalet."
+)
+
+
+def build_tackning_prompt(board_json: dict, bok: str) -> str:
+    return (
+        f"{TACKNING_INSTRUKTION}\n\n{bok.strip()}\n\nTavlan:\n"
+        f"{json.dumps(board_json, ensure_ascii=False)}\n"
+    )
+
+
+def doma_tackning(board: dict, *, model: str, llm, bok: str,
+                  log_cb: Callable[[str], None] | None = None) -> list[dict]:
+    """Domens fynd som problemposter för build_repair_prompt — [] när tavlan
+    täcker urvalet, och [] också när domen inte gick att läsa: en tavla ska
+    aldrig fällas av att domaren svarade otydligt."""
+    log = log_cb or (lambda _m: None)
+    log("Täckningsdomaren läser urvalet mot tavlan …")
+    raw = llm(model, build_tackning_prompt(board, bok),
+              options={"temperature": 0.2})
+    m = re.search(r"\{.*\}", raw or "", re.DOTALL)
+    try:
+        data = json.loads(m.group(0)) if m else {}
+    except json.JSONDecodeError:
+        return []
+    fynd: list[dict] = []
+    for s in (data.get("saknas") or []) if isinstance(data, dict) else []:
+        if not isinstance(s, dict):
+            continue
+        vad = str(s.get("vad") or "").strip()
+        if not vad:
+            continue
+        upp = ", ".join(str(u) for u in (s.get("uppgifter") or [])[:12])
+        forslag = str(s.get("forslag") or "").strip()
+        fynd.append({"path": f"täckning (uppgift {upp})" if upp else "täckning",
+                     "code": "tackning",
+                     "message": f"{vad} — lägg till: {forslag}" if forslag
+                     else vad})
+    # Fler än så är inte en lucka utan en annan lektion — då ska läraren se
+    # domen och döma själv, inte få tavlan omskriven i grunden.
+    return fynd[:5]
+
+
+def _tackning_pass(board: dict, errors: list, *, model: str, llm, bok: str,
+                   rounds_used: int, max_rounds: int,
+                   log_cb: Callable[[str], None] | None = None,
+                   token_cb: Callable[[str], None] | None = None) -> dict:
+    """Dom + högst EN reparationsrunda på fynden.
+
+    Ligger efter valideringsreparationen med flit: domaren ska läsa den
+    tavla läraren annars hade fått, inte ett halvfärdigt mellanläge."""
+    log = log_cb or (lambda _m: None)
+    fynd = doma_tackning(board, model=model, llm=llm, bok=bok, log_cb=log_cb)
+    if not fynd:
+        return {"board": board, "errors": errors, "rounds": rounds_used}
+    if rounds_used >= max_rounds:
+        # Budgeten slut: luckorna visas för läraren i stället — en tyst lucka
+        # är värre än en synlig (samma regel som nivådomarens).
+        return {"board": board, "errors": errors + fynd, "rounds": rounds_used}
+    log(f"Kompletterar tavlan — {len(fynd)} "
+        f"{'lucka' if len(fynd) == 1 else 'luckor'} i täckningen …")
+    kandidat = _llm_round(build_repair_prompt(board, fynd), model, llm,
+                          token_cb=token_cb)
+    rounds_used += 1
+    if kandidat is None:
+        return {"board": board, "errors": errors + fynd, "rounds": rounds_used}
+    _doc, fel = ws.validate_board_json(kandidat)
+    res = _repair_until_valid(kandidat, fel, model=model, llm=llm,
+                              rounds_used=rounds_used, max_rounds=max_rounds,
+                              log_cb=log_cb, token_cb=token_cb)
+    # Kompletteringen får inte kosta strukturen: var tavlan ren före domaren
+    # och trasig efter är omskrivningen en försämring — behåll den gamla och
+    # visa fynden som varningar.
+    if res["errors"] and not errors:
+        return {"board": board, "errors": fynd, "rounds": res["rounds"]}
+    return res
+
+
 def generate_board(course: str, group: str, moment: str, *, model: str,
                    memory: str = "", underlag: str = "", utfall: str = "",
                    bok: str = "", forlaga: str = "",
                    svart: str = "", fokus: str = "",
+                   doma: bool = True,
                    llm=llm_client.generate,
                    max_rounds: int = MAX_ROUNDS,
                    log_cb: Callable[[str], None] | None = None,
@@ -1052,7 +1155,11 @@ def generate_board(course: str, group: str, moment: str, *, model: str,
 
     Returnerar {"board": dict|None, "errors": [...], "rounds": int}.
     Anroparen (rutterna) äger GPU-arbiterlåset. `token_cb` får modellens
-    råa tokens medan den skriver — UI:t bygger upp tavlan live ur dem."""
+    råa tokens medan den skriver — UI:t bygger upp tavlan live ur dem.
+
+    `doma=False` stänger av täckningsdomaren. Den kostar ett modellanrop och
+    körs annars när BOKEN är källa — utan urval finns inget kontrakt att
+    döma mot, så en tavla utan bokblock rörs aldrig."""
     log = log_cb or (lambda _m: None)
     log("Genererar lektionstavlan …")
     prompt = build_prompt(course, group, moment, memory, underlag, utfall, bok,
@@ -1072,9 +1179,15 @@ def generate_board(course: str, group: str, moment: str, *, model: str,
                             "message": "modellen svarade inte med giltig JSON"}],
                 "rounds": rounds}
     _doc, errors = ws.validate_board_json(board)
-    return _repair_until_valid(board, errors, model=model, llm=llm,
-                               rounds_used=rounds, max_rounds=max_rounds,
-                               log_cb=log_cb, token_cb=token_cb)
+    res = _repair_until_valid(board, errors, model=model, llm=llm,
+                              rounds_used=rounds, max_rounds=max_rounds,
+                              log_cb=log_cb, token_cb=token_cb)
+    if doma and bok.strip() and res.get("board") is not None:
+        res = _tackning_pass(res["board"], res["errors"], model=model, llm=llm,
+                             bok=bok, rounds_used=res["rounds"],
+                             max_rounds=max_rounds,
+                             log_cb=log_cb, token_cb=token_cb)
+    return res
 
 
 def repair_board(board: dict, warnings: list[str], *, model: str,

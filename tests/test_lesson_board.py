@@ -510,3 +510,91 @@ def test_refine_board_far_bokdorren_med_sig():
     llm2, calls2 = _stub_llm([json.dumps(_valid_doc())])
     lb.refine_board(_valid_doc(), "gör om", model="m", llm=llm2)
     assert "UR LÄROBOKEN" not in calls2[0]["prompt"]
+
+
+# ------------------------------------------------------- täckningsdomaren --
+# Lärarens beställning 2026-08-20: prompten bar «klara SAMTLIGA uppgifter»
+# men ingen grind räknade efter — domaren gör jämförelsen uppgift för uppgift
+# mot urvalet. Kontraktet är nivådomarens: EN dom, högst EN reparation, och
+# ofixade fynd blir varningar i stället för tystnad.
+
+BOKBLOCK = ("Boken: Liber Ma 1c, s. 2-6. Valda uppgifter: 1101-1103, "
+            "1105-1119.")
+
+
+def _dom(saknas):
+    return json.dumps({"saknas": saknas}, ensure_ascii=False)
+
+
+def test_ren_dom_ror_inte_tavlan():
+    doc = _valid_doc()
+    llm, calls = _stub_llm([_dom([])])
+    res = lb._tackning_pass(doc, [], model="m", llm=llm, bok=BOKBLOCK,
+                            rounds_used=1, max_rounds=3)
+    assert res["board"] == doc and res["errors"] == []
+    assert res["rounds"] == 1               # domen kostar ingen runda
+    assert len(calls) == 1                  # och ingen reparation kördes
+    assert "täckningsdomare" in calls[0]["prompt"]
+    assert BOKBLOCK in calls[0]["prompt"]
+
+
+def test_fynd_ger_en_reparationsrunda_med_forslaget_i_prompten():
+    doc = _valid_doc()
+    fynd = [{"uppgifter": [1116, 1117], "vad": "kubikroten ur negativa tal",
+             "forslag": "en rad med kubikroten ur -8"}]
+    llm, calls = _stub_llm([_dom(fynd), json.dumps(_valid_doc())])
+    res = lb._tackning_pass(doc, [], model="m", llm=llm, bok=BOKBLOCK,
+                            rounds_used=1, max_rounds=3)
+    assert res["errors"] == [] and res["rounds"] == 2
+    assert len(calls) == 2
+    assert "kubikroten ur negativa tal" in calls[1]["prompt"]
+    assert "1116" in calls[1]["prompt"]
+
+
+def test_slut_budget_visar_fynden_i_stallet_for_att_reparera():
+    doc = _valid_doc()
+    llm, calls = _stub_llm([_dom([{"uppgifter": [1118], "vad": "närmevärden",
+                                   "forslag": "en rad om avrundning"}])])
+    res = lb._tackning_pass(doc, [], model="m", llm=llm, bok=BOKBLOCK,
+                            rounds_used=3, max_rounds=3)
+    assert res["board"] == doc and len(calls) == 1
+    assert any(f["code"] == "tackning" for f in res["errors"])
+
+
+def test_trasig_komplettering_behaller_tavlan_och_visar_fynden():
+    """Var tavlan ren före domaren och trasig efter är omskrivningen en
+    försämring — den gamla behålls och luckorna blir varningar."""
+    doc = _valid_doc()
+    llm, _ = _stub_llm([_dom([{"vad": "exakt värde mot närmevärde"}]),
+                        json.dumps(_broken_doc()),
+                        json.dumps(_broken_doc())])
+    res = lb._tackning_pass(doc, [], model="m", llm=llm, bok=BOKBLOCK,
+                            rounds_used=1, max_rounds=3)
+    assert res["board"] == doc
+    assert any(f["code"] == "tackning" for f in res["errors"])
+
+
+def test_otydlig_dom_faller_ingen_tavla():
+    doc = _valid_doc()
+    llm, _ = _stub_llm(["jag är osäker, kanske saknas något?"])
+    res = lb._tackning_pass(doc, [], model="m", llm=llm, bok=BOKBLOCK,
+                            rounds_used=1, max_rounds=3)
+    assert res["board"] == doc and res["errors"] == []
+
+
+def test_generate_board_domer_bara_nar_boken_ar_kalla():
+    svar = json.dumps(_valid_doc())
+    # Utan bok: en enda LLM-runda — ingen dom.
+    llm, calls = _stub_llm([svar])
+    lb.generate_board("Ma 1c", "NA26F", "rötter", model="m", llm=llm)
+    assert len(calls) == 1
+    # Med bok: genereringen + domen (ren) — två anrop, inga extra rundor.
+    llm2, calls2 = _stub_llm([svar, _dom([])])
+    res = lb.generate_board("Ma 1c", "NA26F", "rötter", model="m", llm=llm2,
+                            bok=BOKBLOCK)
+    assert len(calls2) == 2 and res["rounds"] == 1 and res["errors"] == []
+    # doma=False stänger av den helt.
+    llm3, calls3 = _stub_llm([svar])
+    lb.generate_board("Ma 1c", "NA26F", "rötter", model="m", llm=llm3,
+                      bok=BOKBLOCK, doma=False)
+    assert len(calls3) == 1

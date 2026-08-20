@@ -1,0 +1,10 @@
+{
+ "namn": "tackningsdomare",
+ "vad": "Täckningsdomarens rena dom — tavlan täcker urvalet. Handskriven, inte CLI-inspelad: svaret är ett enda result-event (samma form som fejk-lägets ok), och domen är tom så kassettflödena får noll extra reparationsrundor.",
+ "inspelad": false,
+ "modell": "-",
+ "rader": [
+  "{\"type\": \"result\", \"result\": \"{\\\"saknas\\\": []}\", \"is_error\": false, \"total_cost_usd\": 0.0}"
+ ],
+ "inspelad_datum": "2026-08-20"
+}

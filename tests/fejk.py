@@ -205,7 +205,15 @@ _DOMAR_VAL = [
 ]
 
 
+# Täckningsdomaren (tavlan) prövas FÖRST, av samma skäl som nivådomaren:
+# dess prompt bär hela tavlans JSON och bokblocket, och hade annars matchat
+# «lektionstavla» och fått tavlan tillbaka som svar på en fråga om täckning.
+_TACKNING = "täckningsdomare"
+
+
 def _auto(prompt):
+    if _TACKNING in prompt:
+        return os.path.join(BAND, "tackningsdomare.json")
     if _DOMARE in prompt:
         for nyckel, namn in _DOMAR_VAL:
             if nyckel in prompt:
