@@ -5,8 +5,9 @@ kursens första lektioner, där innehållet är information (boken, upplägget,
 rutinerna) snarare än matematik, och underlaget är sådant som transkriberade
 möten.
 
-Samma mönster som app/lesson_board.py och app/exam_gen.py — schema i prompten
-(app.claude_code.SCHEMA_TAK), deterministisk validering, reparationsrundor —
+Samma mönster som app/lesson_board.py och app/exam_gen.py — schematvång när
+kommandoraden rymmer det, annars schema i prompten (app.claude_code.SCHEMA_TAK),
+deterministisk validering, reparationsrundor —
 men med en skillnad som är hela poängen: här är det SPRÅKET som valideras.
 Läraren ska hitta rätt rad på en sekund med en blick ner på pappret, och det
 kravet överlever inte som en from önskan i en prompt. Tankstrecken, längden och

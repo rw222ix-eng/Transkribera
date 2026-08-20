@@ -1295,10 +1295,11 @@ def _repair_ctrl_chars(x):
 def _rensa_toppnycklar(exam: dict | None) -> dict | None:
     """Släng toppnycklar som inte hör till dokumentet.
 
-    Sedan schemat flyttade in i PROMPTEN (app/claude_code.SCHEMA_TAK — det får
-    inte plats på kommandoraden) finns inget grammatiktvång kvar, och modellen
-    lägger gärna till fält den tycker hör hemma på ett prov: `totalpoang`,
-    `tid_minuter`. (`instruktion` stod i den listan och städades bort — då ägde
+    På .CMD-vägen ligger schemat i PROMPTEN (app/claude_code.SCHEMA_TAK) utan
+    grammatiktvång — numera bara en fallback: claude_code minifierar schemat
+    och går förbi cmd.exe, så tvånget gäller på lärarens maskin. Utan tvång
+    lägger modellen gärna till fält den tycker hör hemma på ett prov:
+    `totalpoang`, `tid_minuter`. (`instruktion` stod i den listan och städades bort — då ägde
     appen instruktionsbandet. Nu är det ett riktigt fält i ExamDoc och
     passerar.) Schemat förbjuder extra fält, så ETT sådant
     ord kostade en hel reparationsrunda — en ny 12 000-token-generering för att

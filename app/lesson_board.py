@@ -1354,8 +1354,10 @@ def satt_tid(board: dict | None, starttid: str | None,
 
 def _rensa_toppnycklar(board: dict | None) -> dict | None:
     """Samma städning som i exam_gen: toppnycklar utanför dokumentet slängs.
-    Utan grammatiktvång (schemat ligger i prompten — se claude_code.SCHEMA_TAK)
-    kostar ett påhittat toppfält annars en hel reparationsrunda. Sektionerna
+    Grammatiktvånget är tillbaka på lärarens maskin (claude_code minifierar
+    schemat och går förbi cmd.exe), men .CMD-fallbacken lägger fortfarande
+    schemat i prompten — och då kostar ett påhittat toppfält en hel
+    reparationsrunda. Städningen är gratis och skyddar båda vägarna. Sektionerna
     städas INTE: ett extra fält där betyder att formen missförståtts."""
     if not isinstance(board, dict):
         return board
