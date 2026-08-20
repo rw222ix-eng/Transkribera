@@ -84,6 +84,16 @@
     const v = resultat[String(e && e.id)] || {};
     return Object.keys(v).some(k => (v[k] || []).some(x => x != null));
   };
+  /* Vilka av klasslistans elever som ska SYNAS. Databasen skickar med de
+     inaktiva med flit — «en gammal rättning ska kunna öppnas med de elever som
+     faktiskt skrev» (db.list_elever). Att filtrera bort dem helt gjorde deras
+     poäng osynliga men räknade: de låg kvar i resultatet, PUT:ades tillbaka och
+     drog i klassandelen utan att gå att se eller rätta. Den som slutat men
+     SKREV det här provet visas därför, märkt — den som slutat utan poäng göms.
+     Urvalet är EN funktion för att båda vägarna in i `elever` ska vara samma:
+     las() och klasslistans PUT-svar. Filtrerade den senare på bara `aktiv`
+     försvann hon igen så fort läraren rörde klasslistan. */
+  const synliga = lista => (lista || []).filter(e => e.aktiv || skrev(e));
 
   /* ── Ritandet ─────────────────────────────────────────────────────────── */
 
@@ -345,13 +355,9 @@
     if (r.granser) granser = r.granser;
     resultat = Object.assign({}, r.resultat || {});
     feedback = Object.assign({}, r.feedback || {});
-    /* Databasen skickar med inaktiva elever MED FLIT — «en gammal rättning
-       ska kunna öppnas med de elever som faktiskt skrev» (db.list_elever).
-       Att filtrera bort dem helt gjorde deras poäng osynliga men räknade:
-       de låg kvar i resultatet, PUT:ades tillbaka och drog i klassandelen
-       utan att gå att se eller rätta. Den som slutat men SKREV det här
-       provet visas därför, märkt — den som slutat utan poäng göms. */
-    if (r.elever) elever = r.elever.filter(e => e.aktiv || skrev(e));
+    /* Urvalet står vid `synliga` — resultatet måste läsas först, för det är
+       poängen som avgör om den som slutat får synas. */
+    if (r.elever) elever = synliga(r.elever);
     if (r.group_id) gruppId = r.group_id;
   }
 
@@ -456,23 +462,54 @@
 
   /* Prototypens efternamnssortering — servern gör den riktiga städningen
      (app/klasslista.py: kolumner, numrering, partiklar), men klassen ska
-     hamna i samma ordning även utan server. Kommat säger vilket som är
-     efternamnet; annars är det sista ordet. */
+     hamna i samma ordning även utan server.
+
+     Städningen är kopierad rad för rad ur klasslista.py och inte förenklad,
+     för den används till mer än ordningen: diffen i sparaKlassen jämför de här
+     namnen med serverns LAGRADE. En förenklad kopia läste en tabbseparerad
+     Excel-rad som «Anna Andersson 20050101-1234 Na25», matchade ingen enda
+     lagrad elev, och varnade att hela klassen försvann — läraren tryckte igen
+     och allt sparades ändå rätt, alltså en varning som lär ut att den ljuger.
+     Sorteringsnyckeln får däremot skilja sig (localeCompare mot _SVENSK): den
+     syns bara i prototypen, med server kommer ordningen med i svaret. */
+  const INTE_NAMN = /[@0-9]/;
+  const PARTIKLAR = new Set(['af', 'al', 'bin', 'da', 'de', 'del', 'den',
+                             'der', 'di', 'el', 'la', 'le', 'van', 'von']);
+  /* Namnet ur en rad som kan ha fler kolumner: en kolumn med siffror eller @
+     är personnummer, klasskod eller adress — inte namn. */
+  const namnkolumn = rad => rad.split(/\t|;|\s{2,}/)
+    .map(k => k.trim()).filter(k => k && !INTE_NAMN.test(k)).join(' ');
+  /* ANNA-KARIN → Anna-Karin. Bara helversala ord röres: «von» och «McLeod» är
+     rätt som de står. Bokstavskravet är Pythons isupper() — ett ord utan
+     bokstäver är inte versalt. */
+  const versalisera = o => o.length > 1 && o === o.toUpperCase() && /\p{L}/u.test(o)
+    ? o.split('-').map(d => d[0] + d.slice(1).toLowerCase()).join('-') : o;
+  const orden = t => t.split(/\s+/).filter(Boolean).map(versalisera);
+
+  /* [visningsnamn, efternamn] ur en rad, eller null för en rad utan namn. */
+  function dela(rad) {
+    const ra = rad.replace(/^\s*(?:\d+\s*[.):]?|[-*•·])\s*/, '');
+    let text = '', efternamn = '';
+    if (ra.includes(',')) {
+      /* Kommat säger vilket ord som är efternamnet — men bara mellan NAMN:
+         «Anna Andersson, 9A» är ett namn med klasskod, inte ett efternamn. */
+      const delar = ra.split(',').map(namnkolumn).filter(Boolean);
+      if (delar.length >= 2) { text = `${delar[1]} ${delar[0]}`; efternamn = delar[0]; }
+      else text = delar[0] || '';
+    } else {
+      text = namnkolumn(ra);
+    }
+    const ord = orden(text);
+    if (!ord.length) return null;
+    if (efternamn) return [ord.join(' '), orden(efternamn).join(' ')];
+    // Sista ordet, plus partiklarna framför: «von Sydow» är ett efternamn.
+    let i = ord.length - 1;
+    while (i > 0 && PARTIKLAR.has(ord[i - 1].toLowerCase())) i--;
+    return [ord.join(' '), ord.slice(i).join(' ')];
+  }
+
   function ordnaNamn(namn) {
-    const stada = n => n.replace(/^\s*(?:\d+\s*[.):]?|[-*•·])\s*/, '')
-      .split(/\s+/).filter(Boolean)
-      .map(o => o.length > 1 && o === o.toUpperCase()
-        ? o.split('-').map(d => d[0] + d.slice(1).toLowerCase()).join('-') : o)
-      .join(' ');
-    const dela = n => {
-      if (n.includes(',')) {
-        const [e, f] = n.split(',');
-        return [stada(`${f.trim()} ${e.trim()}`), stada(e.trim())];
-      }
-      const ord = stada(n).split(' ');
-      return [ord.join(' '), ord[ord.length - 1]];
-    };
-    return namn.map(dela).filter(x => x[0])
+    return namn.map(dela).filter(Boolean)
       .sort((a, b) => a[1].localeCompare(b[1], 'sv') || a[0].localeCompare(b[0], 'sv'))
       .map(x => x[0]);
   }
@@ -521,13 +558,16 @@
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ namn }),
     }).then(r => {
-      elever = (r.elever || []).filter(e => e.aktiv);
+      elever = synliga(r.elever);
       index = 0;
       rita();
       fokusera();
       /* Städningen är tyst i basen (dubbletter och icke-namn stryks) — men
-         inte mot läraren: 24 inklistrade rader som blev 23 ska säga det. */
-      const strukna = namn.length - elever.length;
+         inte mot läraren: 24 inklistrade rader som blev 23 ska säga det.
+         Räknat mot de AKTIVA, inte mot `elever`: den som slutat men skrev
+         pappret står kvar i bandet utan att ha stått i inklistringen, och
+         hade annars dolt en struken rad. */
+      const strukna = namn.length - (r.elever || []).filter(e => e.aktiv).length;
       if (strukna > 0) $('#elevnot').textContent =
         `${strukna} ${strukna === 1 ? 'rad' : 'rader'} ströks vid städningen — dubbletter eller sådant som inte är namn.`;
     }).catch(e => {

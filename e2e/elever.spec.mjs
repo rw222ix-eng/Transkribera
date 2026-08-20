@@ -55,6 +55,11 @@ const GRANSER = {
 const ELEVER = [{ id: 11, namn: "Anna Andersson", sort: 0, aktiv: true },
                 { id: 12, namn: "Bo Bergström", sort: 1, aktiv: true }];
 
+/* Hon har slutat men skrev PROVET. db.list_elever skickar med henne med flit,
+   och save_elever svarar med samma lista — inaktiva och allt. */
+const SLUTAT = { id: 13, namn: "Cissi Colding", sort: 2, aktiv: false };
+const SKREV_SLUTAT = { 13: { 1: [2, null, null], 2: [null, 2, 1] } };
+
 const TOMT = { group_id: 1, klass: "NA25", rader: RADER, granser: GRANSER,
                elever: [], resultat: {}, summor: {}, betyg: {}, feedback: {} };
 
@@ -73,7 +78,9 @@ const KLASSPROFIL = { ...ELEVPROFIL, group_id: 1, elev_id: undefined,
   punkter: [{ kod: "G25-M2C-GEO-2", kort: "Sats och bevis", andel: 0.4,
               styrka: "svag", tagna: 8, max: 20, dokument: 2, niva: {} }] };
 
-async function fejka(page, { elever = [] } = {}) {
+/* `klass` är vad PUT /elever svarar — serverns hela klasslista, inte bara de
+   aktiva. `resultat` är poängen som redan ligger i basen. */
+async function fejka(page, { elever = [], resultat = {}, klass = ELEVER } = {}) {
   const anrop = [];
   const json = (route, kropp) => route.fulfill({
     status: 200, contentType: "application/json", body: JSON.stringify(kropp) });
@@ -88,7 +95,7 @@ async function fejka(page, { elever = [] } = {}) {
     const r = route.request();
     anrop.push({ metod: r.method(), vag: new URL(r.url()).pathname,
                  kropp: r.method() === "PUT" ? r.postDataJSON() : null });
-    return json(route, { elever: ELEVER });
+    return json(route, { elever: klass });
   });
   /* Elevresultatet registreras SIST: Playwright provar de senast tillagda
      först, och den generella dokumentvägen ovan matchar annars den här med. */
@@ -102,7 +109,7 @@ async function fejka(page, { elever = [] } = {}) {
         resultat: r.postDataJSON().resultat,
         rattat: { elever: 2, varden: { "1": 3, "2": 3 }, andel: 0.6, svaga: [] } });
     }
-    return json(route, { ...TOMT, elever });
+    return json(route, { ...TOMT, elever, resultat });
   });
   /* CI-profilen (Etapp 3): elevens och klassens centrala innehåll, svagast
      först. Registreras efter elevresultatet av samma skäl — Playwright provar
@@ -147,6 +154,73 @@ test("klasslistan frågas en gång och sparas", async ({ page }) => {
   await expect(page.locator("#elevklass")).toBeHidden();
   await expect(page.locator("#elevnamn")).toHaveText("Anna Andersson");
   await expect(page.locator("#elevmeta")).toContainText("Elev 1 av 2");
+});
+
+test("den som slutat men skrev provet överlever att klasslistan sparas om", async ({ page }) => {
+  /* Poängen finns kvar i basen vad läraren än gör med klasslistan: de PUT:as
+     tillbaka och räknas in i klassandelen. Göms hon i bandet är de räknade men
+     osynliga — går varken att öppna, rätta eller rensa. Urvalet måste därför
+     vara detsamma när listan LÄSES och när den SPARAS OM. */
+  await fejka(page, { elever: [...ELEVER, SLUTAT], resultat: SKREV_SLUTAT,
+                      klass: [...ELEVER, SLUTAT] });
+  await page.goto("/");
+  await hydrerad(page);
+  await expect.poll(() => page.evaluate(() => window.Dokument.sparade().length)).toBe(1);
+  await oppna(page);
+
+  await expect(page.locator("#elevband .elevprick")).toHaveCount(3);
+  await expect(page.locator("#elevband .elevprick[data-slutat]")).toHaveText("Cissi Colding");
+
+  // Ändra klasslistan → Spara, utan att röra namnen.
+  await page.locator("#elevbytklass").click();
+  // Fältet bär bara de aktiva — annars hade ett Spara väckt henne till liv igen.
+  await expect(page.locator("#elevnamnfalt")).toHaveValue("Anna Andersson\nBo Bergström");
+  await page.locator("#elevsparaklass").click();
+
+  await expect(page.locator("#elevklass")).toBeHidden();
+  await expect(page.locator("#elevband .elevprick")).toHaveCount(3);
+  await expect(page.locator("#elevband .elevprick[data-slutat]")).toHaveText("Cissi Colding");
+  // Och hon går att öppna: poängen syns och kan rensas.
+  await page.locator("#elevband .elevprick[data-slutat]").click();
+  await expect(page.locator("#elevnamn")).toHaveText("Cissi Colding · har slutat");
+  await expect(page.locator("#elevsumma")).toHaveText("5 av 5 p");
+  await expect(page.locator("#elevtom")).toBeEnabled();
+});
+
+test("Excel-inklistringen varnar inte falskt — men en kortare lista varnar", async ({ page }) => {
+  const anrop = await fejka(page, { elever: ELEVER });
+  await page.goto("/");
+  await hydrerad(page);
+  await expect.poll(() => page.evaluate(() => window.Dokument.sparade().length)).toBe(1);
+  await oppna(page);
+  const puts = () => anrop.filter(a => a.metod === "PUT" && a.vag.endsWith("/elever"));
+
+  /* Först den varning som SKA komma: fältet ersätter listan, och en halv
+     inklistring får inte tyst inaktivera resten av klassen. */
+  await page.locator("#elevbytklass").click();
+  await page.locator("#elevnamnfalt").fill("Anna Andersson");
+  await page.locator("#elevsparaklass").click();
+  await expect(page.locator("#elevklassnot")).toContainText("Bo Bergström");
+  expect(puts()).toHaveLength(0);
+
+  /* Och så den som INTE ska komma. Ur Excel följer personnummer och klasskod
+     med i egna kolumner; servern (klasslista._namnkolumn) plockar bort dem och
+     lagrar «Anna Andersson». Räknar klienten diffen på en egen, förenklad
+     städning matchar ingen enda lagrad elev, och noten påstår att hela klassen
+     försvinner — trycker läraren igen sparas allt korrekt, alltså en varning
+     som lär läraren att varningar ljuger. */
+  await page.locator("#elevnamnfalt").fill(
+    "Anna Andersson\t20050101-1234\tNA25\nBo Bergström\t20050202-2345\tNA25");
+  await page.locator("#elevsparaklass").click();
+
+  await expect(page.locator("#elevklass")).toBeHidden();
+  expect(puts()).toHaveLength(1);
+  // Raderna skickas OSTÄDADE — städningen är serverns, klienten bara speglar den.
+  expect(puts()[0].kropp.namn).toEqual([
+    "Anna Andersson\t20050101-1234\tNA25", "Bo Bergström\t20050202-2345\tNA25"]);
+  await expect(page.locator("#elevband .elevprick")).toHaveCount(2);
+  // Ingen falsk «2 rader ströks» heller: två inklistrade rader blev två elever.
+  await expect(page.locator("#elevnot")).not.toContainText("ströks");
 });
 
 test("hela rättningen går på tangentbordet och betyget står live", async ({ page }) => {
