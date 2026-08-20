@@ -290,8 +290,10 @@ window.BladBild = (() => {
         const blad = window.Blad.bokTill(bo, v);
         if (!blad.length) return [];
         /* Ett varv till efter kompileringen: KaTeX sätter sig i samma
-           andetag, men figurer och sista mätningen hinner först nu. */
-        return rutor(2).then(() => {
+           andetag, men figurerna väntas in på riktigt (Blad.figurer) och
+           sista mätningen hinner först nu. */
+        return (window.Blad.figurer ? window.Blad.figurer(blad[0])
+          : Promise.resolve()).then(() => rutor(2)).then(() => {
           const namnen = sarskilj(blad.map((b, i) => namn(b, `Lösningsförslag ${i + 1}`)));
           let kedja = Promise.resolve([]);
           blad.forEach((b, i) => {
@@ -373,8 +375,12 @@ window.BladBild = (() => {
   const vila = ms => new Promise(ja => setTimeout(ja, ms));
   /* Sättningens sista svep ligger på 260 ms (blad.js `rita`). Vänta ut det och
      mät en bildruta efteråt — annars fotograferas ett papper mitt i sin egen
-     ommätning, med en uppgift på fel blad. */
-  const satt = () => rutor(2).then(() => vila(320)).then(() => rutor(2));
+     ommätning, med en uppgift på fel blad. Figurerna först: Typst kan ta
+     sekunder vid kall cache, och utan väntan rastrerades den streckade
+     väntrutan i stället för figuren — i den tryckta filen. */
+  const satt = trav => (window.Blad && window.Blad.figurer
+    ? window.Blad.figurer(trav) : Promise.resolve())
+    .then(() => rutor(2)).then(() => vila(320)).then(() => rutor(2));
 
   const $$ = (s, r) => Array.prototype.slice.call((r || document).querySelectorAll(s));
   function bladenI(trav) {
@@ -389,7 +395,7 @@ window.BladBild = (() => {
     const mal = document.createElement('div');
     bo.appendChild(mal);
     const trav = window.Blad.rita(mal, v);
-    return satt().then(() => {
+    return satt(trav).then(() => {
       const blad = bladenI(trav);
       const former = blad.map(b => {
         const ark = b.querySelector('.ark, .gu');

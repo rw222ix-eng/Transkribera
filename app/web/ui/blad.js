@@ -248,64 +248,11 @@ window.Blad = (() => {
       if (!ark || ark.dataset.form === 'pr1') return;
       if (!$('.pruppg', ark)) bl.remove();
     });
-    const sista = $$('.blad', trav).pop();
-    /* Vändpilen betyder «det finns mer» och hör därför till varje blad UTOM det
-       sista. Förr tog första raden bort pilen från alla blad som INTE var det
-       sista, och andra raden tog bort den från det sista också — nettot var att
-       pilen försvann överallt. */
-    $$('[data-vand]', trav).forEach(p => { if (sista && sista.contains(p)) p.remove(); });
-
-    if (enDel) {
-      $$('.prhuvud b:nth-child(2)', trav).forEach(b => b.remove());
-      /* «En del» betyder att delarna inte finns — då får ingen fot säga «Slut
-         på del A». Placeringen bestäms av TRAVEN, inte av vilka rader som
-         råkade matcha: slutraden hör till det sista bladet som bär uppgifter. */
-      $$('.prslut[data-slut]', trav).forEach(p => { if (/slut på del /i.test(p.textContent)) p.remove(); });
-      const sistaMedUppg = $$('.blad', trav).filter(bl => $('.pruppg', bl)).pop();
-      const ark = sistaMedUppg && $('.ark[data-form]', sistaMedUppg);
-      if (ark) {
-        const rad = document.createElement('p');
-        rad.className = 'prslut';
-        rad.setAttribute('data-slut', '');
-        rad.textContent = 'Slut på provet';
-        ark.appendChild(rad);
-      }
-    } else {
-      /* Varje delprov ska säga var det slutar och vad det är värt. Förr saknade
-         delproven fot helt: bladet slutade i tomt papper och eleven fick själv
-         räkna ut hur mycket delen kunde ge. Foten pinnas till bladkanten av
-         .prslut{margin:auto 0 0} — den ramar in den tomma ytan i stället för att
-         låta bladet bara ta slut. */
-      [['pr1b', 'A', sumB], ['pr1c', 'B', summa - sumB]].forEach(([form, namn, po]) => {
-        const blad = $$('.blad', trav).filter(bl => {
-          const a = $('.ark[data-form]', bl);
-          return a && a.dataset.form === form && $('.pruppg', a);
-        }).pop();
-        const ark = blad && $('.ark[data-form]', blad);
-        if (!ark || $('.prslut[data-slut]', ark)) return;
-        const rad = document.createElement('p');
-        rad.className = 'prslut';
-        rad.setAttribute('data-slut', '');
-        rad.textContent = `Slut på del ${namn} — delen ger högst ${po} poäng`;
-        ark.appendChild(rad);
-      });
-      /* Och varje blad som inte är sista i sin del får vändpilen. */
-      ['pr1b', 'pr1c'].forEach(form => {
-        const blad = $$('.blad', trav).filter(bl => {
-          const a = $('.ark[data-form]', bl);
-          return a && a.dataset.form === form;
-        });
-        blad.slice(0, -1).forEach(bl => {
-          const ark = $('.ark[data-form]', bl);
-          if (!ark || $('.prslut[data-vand]', ark)) return;
-          const rad = document.createElement('p');
-          rad.className = 'prslut';
-          rad.setAttribute('data-vand', '');
-          rad.textContent = 'Fortsätter på nästa sida';
-          ark.appendChild(rad);
-        });
-      });
-    }
+    /* «En del» betyder att delarna inte finns — då ska huvudet inte bära en
+       delbokstav heller. Strukturellt och görs en gång; fotnoterna sätts i
+       provfotter, som körs om efter varje mätsvep. */
+    if (enDel) $$('.prhuvud b:nth-child(2)', trav).forEach(b => b.remove());
+    provfotter(trav, v);
 
     const titel = $('.prtitel', trav);
     /* Dokumentets titel först — samma ordning som byggaren satte raden med
@@ -486,6 +433,53 @@ window.Blad = (() => {
     if (v.typ === 'Prov' && !v.losningsblad) planvalProv(trav, v);
   }
 
+  /* ── Provets fotnoter — EFTER pagineringen ──────────
+     «Slut på del B» hör till delens SISTA blad, och vilket det är vet man
+     först när paginera flyttat färdigt. Sattes raden bara i planvalProv (en
+     gång, före mätsvepen) stod den kvar på blad 1 av 2 när delen spillde —
+     pinnad mot bladkanten av .prslut{margin:auto 0 0} — och det nya sista
+     bladet slutade i tomt papper. Eleven läste att delen var slut mitt i
+     delen. Därför rivs allt och sätts om i slutet av varje formge-svep;
+     riv-först gör omkörningen ofarlig, samma regel som atervand(). */
+  function provfotter(trav, v) {
+    if (!v || v.typ !== 'Prov' || v.losningsblad) return;
+    const i = v.inst || {};
+    const plock = uppgifter(v);
+    const antalB = plock.filter(arE).length;
+    const summa = plock.reduce((a, u) => a + u.p, 0);
+    const sumB = plock.filter(arE).reduce((a, u) => a + u.p, 0);
+    const enDel = i.delprov === 'En del' || !antalB || antalB === plock.length;
+    $$('.prslut', trav).forEach(p => p.remove());
+    const rad = (ark, attr, text) => {
+      const p = document.createElement('p');
+      p.className = 'prslut';
+      p.setAttribute(attr, '');
+      p.textContent = text;
+      ark.appendChild(p);
+    };
+    /* Vändpilen betyder «det finns mer»: varje uppgiftsblad utom det sista i
+       sin del får den, slutraden står på delens sista. Foten pinnas till
+       bladkanten och ramar in den tomma ytan i stället för att låta bladet
+       bara ta slut. */
+    if (enDel) {
+      const medUppg = $$('.blad', trav)
+        .map(bl => $('.ark[data-form]', bl))
+        .filter(a => a && $('.pruppg', a));
+      medUppg.slice(0, -1).forEach(a => rad(a, 'data-vand', 'Fortsätter på nästa sida'));
+      const sist = medUppg.pop();
+      if (sist) rad(sist, 'data-slut', 'Slut på provet');
+      return;
+    }
+    [['pr1b', 'A', sumB], ['pr1c', 'B', summa - sumB]].forEach(([form, namn, po]) => {
+      const ark = $$('.blad', trav)
+        .map(bl => $('.ark[data-form]', bl))
+        .filter(a => a && a.dataset.form === form && $('.pruppg', a));
+      ark.slice(0, -1).forEach(a => rad(a, 'data-vand', 'Fortsätter på nästa sida'));
+      const sist = ark.pop();
+      if (sist) rad(sist, 'data-slut', `Slut på del ${namn} — delen ger högst ${po} poäng`);
+    });
+  }
+
   /* ── Sidhuvudet är dokumentets, inte förlagans ──────
      Uppgifterna och sättningen står fast; kurs, klass och termin kommer ur
      planeringen, så bladet är lärarens eget papper.
@@ -631,8 +625,15 @@ window.Blad = (() => {
         if (kalla) el.dataset.cetz = kalla;
       } catch (e) { console.warn('Figuren kunde inte läsas:', e && e.message); }
     });
-    if (window.Figur) window.Figur.ritaAlla(rot);
+    /* Figurernas löfte får inte kastas: SVG:n är högre än platshållarrutan,
+       och den som mäter bladet FÖRE figurerna landat bryter arket på fel
+       ställe — och rastrerar väntrutan i PDF:en. rita() formger om när löftet
+       löser, och blad-bild väntar in det via Blad.figurer. */
+    const figurer = window.Figur
+      ? window.Figur.ritaAlla(rot).catch(() => 0)
+      : Promise.resolve(0);
     if (window.Matte) window.Matte.satt(rot);
+    return figurer;
   }
 
   /* ── Tavlan ──
@@ -1282,12 +1283,22 @@ window.Blad = (() => {
       skal.innerHTML = html;
       trav.appendChild(skal);
     });
-    kompilera(trav);
+    FIGURLOFTE.set(trav, kompilera(trav));
     paginera(trav);
     /* Bilden ska visa samma papper som skärmen: skalan sätts inline på arket
        och följer därför med i BladBilds klon. */
     fyll(trav);
     return $$('.blad', trav);
+  }
+
+  /* Figurernas löfte för en trav — den som ska rita AV bladet väntar in det
+     (blad-bild.js) i stället för att gissa med en klocka. Tar vilken nod som
+     helst i traven. */
+  const FIGURLOFTE = new WeakMap();
+  function figurer(el) {
+    const trav = el && el.classList && el.classList.contains('bladtrav')
+      ? el : (el && el.closest ? el.closest('.bladtrav') : null);
+    return (trav && FIGURLOFTE.get(trav)) || Promise.resolve(0);
   }
 
   /* ══════════ SIDORNA UR BILDUNDERLAGET ══════════
@@ -1423,7 +1434,8 @@ window.Blad = (() => {
     arkhuvud(trav, v);
     markera(trav, v);
     skala(trav);
-    kompilera(trav);
+    const figurklart = kompilera(trav);
+    FIGURLOFTE.set(trav, figurklart);
     /* Sidorna ur bildunderlaget läggs in FÖRE första mätningen när cachen är
        varm — en bokssida är högre än sin platshållare, och höjden bestämmer
        var arket bryts. `komplett` är false när något ännu inte hämtats; då
@@ -1450,6 +1462,9 @@ window.Blad = (() => {
          uppskruvade från förra varvet. */
       nollskala(trav);
       delaArk(trav); passa(trav, v); paginera(trav); fyll(trav);
+      /* Fotnoterna sist: slutraden hör till delens sista blad, och vilket det
+         är avgjordes av paginera på raden ovanför. */
+      provfotter(trav, v);
     };
     formge();
     requestAnimationFrame(formge);
@@ -1460,6 +1475,9 @@ window.Blad = (() => {
        papper mättes olika många gånger beroende på om sidan nyss laddats om.
        Är promisen redan löst kostar raden en mikrotask. */
     if (document.fonts) document.fonts.ready.then(() => setTimeout(formge, 60));
+    /* Och när figurerna landat: Typst-kompileringen kan ta sekunder vid kall
+       cache, långt efter alla svepen ovan — och SVG:n är högre än rutan. */
+    figurklart.then(n => { if (n) formge(); });
     /* Kall cache: hämta, lägg in, mät om. Den som ska rita AV bladet väntar in
        `Blad.underlag` först (blad-bild.js) och hamnar aldrig här. */
     if (!komplett) underlag(v).then(() => { laggInUnderlag(trav, v); formge(); });
@@ -1472,5 +1490,5 @@ window.Blad = (() => {
   }
 
   return { rita, form, uppgifter, skala, omritaTavlor, tavlaTill, tavlaDelar, bokTill,
-           underlag };
+           underlag, figurer };
 })();
