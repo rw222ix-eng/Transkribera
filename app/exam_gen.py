@@ -1685,12 +1685,18 @@ def refine_exam(exam: dict, instruction: str, *, model: str,
 
 
 def fix_latex(exam: dict, error_log: str, *, model: str,
+              profil: str = "prov",
               llm=llm_client.generate,
               max_rounds: int = MAX_LATEX_ROUNDS,
               log_cb: Callable[[str], None] | None = None,
               rounds_used: int = 0) -> dict:
     """Kompileringsfel → korrigeringsrunda (max 2). Returnerar nytt prov
-    (schema-/balansvaliderat) eller det gamla med felen redovisade."""
+    (schema-/balansvaliderat) eller det gamla med felen redovisade.
+
+    `profil` styr balansmålen: ett arbetsblad som föll på kompilering ska
+    inte få sin korrigering prövad mot PROVETS mix — kandidaten överlevde
+    (bara schemafel förkastar den), men fellistan som returnerades var fel
+    dokuments."""
     log = log_cb or (lambda _m: None)
     if rounds_used >= max_rounds:
         return {"exam": exam, "errors": [{"path": "latex", "code": "kompilering",
@@ -1702,6 +1708,6 @@ def fix_latex(exam: dict, error_log: str, *, model: str,
         return {"exam": exam, "errors": [{"path": "svar", "code": "json",
                                           "message": "modellen svarade inte med giltig JSON"}],
                 "rounds": rounds_used + 1}
-    _doc, errors = exam_spec.validate_exam_json(candidate)
+    _doc, errors = exam_spec.validate_exam_json(candidate, profil)
     return {"exam": candidate if _doc is not None else exam,
             "errors": errors, "rounds": rounds_used + 1}

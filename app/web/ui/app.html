@@ -1549,6 +1549,24 @@
           <button class="lank" id="elevklassavbryt" type="button" hidden>Avbryt</button>
         </div>
       </div>
+      <!-- Klassbilden: hela klassen i en tabell — poäng, nivåer, betyg —
+           räknad ur samma resultat som elevvyn. Ren läsning: själva rättandet
+           görs elev för elev. Kopieringsknappen ger tabbavgränsad text som
+           landar rätt i betygskatalogens kalkylark. -->
+      <div class="elevklass" id="elevoversikt" hidden>
+        <p class="minietikett">Klassbilden</p>
+        <div class="elevtabellskal">
+          <table class="elevtabell">
+            <thead><tr><th>Elev</th><th>Poäng</th><th>E</th><th>C</th><th>A</th><th>Betyg</th></tr></thead>
+            <tbody id="elevtabellrader"></tbody>
+          </table>
+        </div>
+        <p class="mjuk" id="elevoversiktnot"></p>
+        <div class="elevklassfot">
+          <button class="ghost" id="elevkopiera" type="button">Kopiera som tabell</button>
+          <button class="lank" id="elevoversiktstang" type="button">Tillbaka till rättningen</button>
+        </div>
+      </div>
       <div id="elevvy" hidden>
         <div class="elevband" id="elevband"></div>
         <div class="elevtopp">
@@ -1587,6 +1605,7 @@
     <div class="fhfot">
       <button class="primar" id="elevspara" type="button" disabled>Spara</button>
       <button class="ghost" id="elevskriv" type="button" hidden>Skriv feedback</button>
+      <button class="lank" id="elevvisaoversikt" type="button" hidden>Klassbilden</button>
       <button class="lank" id="elevbytklass" type="button" hidden>Ändra klasslistan</button>
       <span class="fhnot" id="elevnot"></span>
     </div>

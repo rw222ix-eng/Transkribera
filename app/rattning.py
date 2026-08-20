@@ -310,7 +310,12 @@ def granser(rader: list[dict], config: dict | None = None) -> dict:
         p = r.get("peca") or _peca_fallback(int(r.get("p") or 0), None)
         e, c, a = e + int(p[0]), c + int(p[1]), a + int(p[2])
     return exam_spec.kravgranser_ur_summor(
-        {"total": e + c + a, "e": e, "c": c, "a": a}, config)
+        {"total": e + c + a, "e": e, "c": c, "a": a}, config) | {
+        # Utan C- och A-poäng (gamla papper utan tripel, allt föll på E) är
+        # varav-kraven noll och A kan nås på enbart E-poäng. Sant enligt
+        # fallbacken — men UI:t ska kunna SÄGA det i stället för att låta
+        # betyget se fullvärdigt ut.
+        "tripel": (c + a) > 0}
 
 
 def _elevtripel(varde, tak: list[int]) -> list[int | None]:

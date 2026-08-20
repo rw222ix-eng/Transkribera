@@ -22,6 +22,9 @@
   const NIVA = ['E', 'C', 'A'];
   let doc = null, rader = [], granser = null, elever = [], gruppId = null;
   let resultat = {}, feedback = {}, index = 0, smutsigt = false, harServer = false;
+  let oversikt = false;
+  /* Vilken inklistring läraren senast varnades för — «tryck igen»-mönstret. */
+  let klassVarnat = '';
 
   /* Kravgränserna räknas också här, inte bara på servern (app/rattning.py
      granser). Samma skäl som FORMAGA_MONSTER i rattning.js: betyget ska stå
@@ -37,6 +40,7 @@
     const total = e + c + a;
     return {
       total,
+      tripel: (c + a) > 0,
       E: { minst: Math.ceil(total * KRAV.e) },
       C: { minst: Math.ceil(total * KRAV.c), varav_ca: Math.ceil((c + a) * KRAV.cCa) },
       A: { minst: Math.ceil(total * KRAV.a), varav_a: Math.ceil(a * KRAV.aA) }
@@ -91,7 +95,8 @@
       b.type = 'button';
       b.className = 'elevprick';
       b.textContent = e.namn;
-      b.setAttribute('aria-label', `Gå till ${e.namn}`);
+      if (e.aktiv === false) b.setAttribute('data-slutat', '');
+      b.setAttribute('aria-label', `Gå till ${e.namn}${e.aktiv === false ? ' (har slutat)' : ''}`);
       if (i === index) b.setAttribute('data-nu', '');
       const s = summorAv(varden(e));
       if (skrev(e) && !s.kvar) b.setAttribute('data-klar', '');
@@ -154,11 +159,15 @@
     if (!doc) return;
     const harKlass = elever.length > 0;
     const redigerar = !!$('#elevklass').dataset.oppen;
+    const bilden = oversikt && harKlass && !redigerar;
     $('#elevklass').hidden = harKlass && !redigerar;
-    $('#elevvy').hidden = !harKlass || redigerar;
+    $('#elevvy').hidden = !harKlass || redigerar || bilden;
+    $('#elevoversikt').hidden = !bilden;
+    $('#elevvisaoversikt').hidden = !harKlass || redigerar || bilden;
     $('#elevbytklass').hidden = !harKlass || redigerar;
     $('#elevklassavbryt').hidden = !harKlass;
     $('#elevspara').hidden = redigerar;
+    if (bilden) ritaOversikt();
     const provet = (window.Dokument ? window.Dokument.namn(doc) : 'Provet')
       .replace(/^Prov — /, 'Prov · ') + (doc.klass ? ' · ' + doc.klass : '');
     if (!harKlass) {
@@ -171,8 +180,14 @@
     }
     index = Math.max(0, Math.min(elever.length - 1, index));
     const e = nuvarande();
-    $('#elevnamn').textContent = e.namn;
-    $('#elevmeta').textContent = `Elev ${index + 1} av ${elever.length} · ${provet}`;
+    $('#elevnamn').textContent = e.namn + (e.aktiv === false ? ' · har slutat' : '');
+    /* Degenererade gränser ska SYNAS: utan tripel föll all poäng på E,
+       varav-kraven är noll och A kan nås på enbart E-poäng. Sant enligt
+       fallbacken (rattning._peca_fallback) — men inte något att dölja. */
+    const g0 = granser || granserAv(rader);
+    $('#elevmeta').textContent = `Elev ${index + 1} av ${elever.length} · ${provet}`
+      + (g0 && g0.tripel === false
+        ? ' · utan E/C/A-fördelning — betyget räknas på totalpoängen' : '');
 
     const lista = $('#elevrader');
     lista.innerHTML = '';
@@ -219,6 +234,59 @@
     ritaBand();
   }
 
+  /* ── Klassbilden ──────────────────────────────────────
+     Samma summor och samma betygsregler som elevvyn — bara alla på en gång.
+     Serverns aggregat frågas inte: siffrorna på skärmen kan vara osparade,
+     och bilden ska visa det läraren ser, inte det som senast sparades. */
+  function ritaOversikt() {
+    const kropp = $('#elevtabellrader');
+    if (!kropp) return;
+    const g = granser || granserAv(rader);
+    kropp.innerHTML = '';
+    const fordelning = {};
+    elever.forEach((e, i) => {
+      const s = summorAv(varden(e));
+      const klar = skrev(e) && !s.kvar;
+      const betyg = klar ? betygAv(s, g) : '';
+      if (klar) fordelning[betyg] = (fordelning[betyg] || 0) + 1;
+      const tr = document.createElement('tr');
+      tr.innerHTML = '<td class="etnamn"></td><td class="etpoang"></td><td></td><td></td><td></td><td class="etbetyg"></td>';
+      $('.etnamn', tr).textContent = e.namn;
+      $('.etpoang', tr).textContent = skrev(e) ? `${s.total} av ${s.tak}` : '—';
+      const celler = tr.children;
+      celler[2].textContent = skrev(e) ? String(s.e) : '';
+      celler[3].textContent = skrev(e) ? String(s.c) : '';
+      celler[4].textContent = skrev(e) ? String(s.a) : '';
+      $('.etbetyg', tr).textContent = klar ? betyg
+        : skrev(e) ? `${s.kvar} ${s.kvar === 1 ? 'rad' : 'rader'} kvar` : 'skrev inte';
+      if (klar) $('.etbetyg', tr).dataset.b = betyg;
+      /* Raden är en väg in: klick öppnar eleven i rättningsvyn. */
+      tr.addEventListener('click', () => { oversikt = false; index = i; rita(); fokusera(); });
+      kropp.appendChild(tr);
+    });
+    const ordning = ['A', 'C', 'E', 'F'];
+    const delar = ordning.filter(b => fordelning[b])
+      .map(b => `${fordelning[b]} ${b}`);
+    const rattade = elever.filter(skrev).length;
+    $('#elevoversiktnot').textContent = [
+      `${rattade} av ${elever.length} har något ifyllt`,
+      delar.length ? delar.join(' · ') : '',
+      'klick på en rad öppnar eleven',
+    ].filter(Boolean).join(' · ');
+  }
+  function kopieraOversikt() {
+    const g = granser || granserAv(rader);
+    const text = elever.map(e => {
+      const s = summorAv(varden(e));
+      const klar = skrev(e) && !s.kvar;
+      return [e.namn, skrev(e) ? s.total : '', klar ? betygAv(s, g) : ''].join('\t');
+    }).join('\n');
+    (navigator.clipboard && navigator.clipboard.writeText
+      ? navigator.clipboard.writeText(text) : Promise.reject())
+      .then(() => window.toast && window.toast('Kopierat — klistra in i betygskatalogen'))
+      .catch(() => { $('#elevnot').textContent = 'Kunde inte kopiera — markera i tabellen i stället.'; });
+  }
+
   function satt(r, niva, poang, knapp) {
     const e = nuvarande();
     if (!e) return;
@@ -239,15 +307,15 @@
   }
 
   /* Nästa grupp att fylla i — nästa nivå på raden, annars nästa rads första.
-     Efter sista gruppen: är eleven färdigrättad går turen till nästa elev, så
-     en klass rättas i ett svep utan att röra musen. */
+     Efter sista gruppen stannar fokus kvar: betyget som just tändes ska hinna
+     läsas, och Enter är redan vägen till nästa elev. Ett automatiskt hopp
+     prövades och togs bort — det ryckte undan betyget i samma ögonblick som
+     sista poängen sattes. */
   function nasta(grupp) {
     const alla = [...skal.querySelectorAll('.elevgrupp')];
     const i = alla.indexOf(grupp);
     const n = alla[i + 1];
-    if (n) { n.querySelector('.elevknapp').focus(); return; }
-    const s = summorAv(varden(nuvarande()));
-    if (!s.kvar && elever.length > 1) byt(1);
+    if (n) n.querySelector('.elevknapp').focus();
   }
 
   /* Första ofyllda gruppen — där rättandet ska fortsätta. */
@@ -275,10 +343,16 @@
     if (!r) return;
     if ((r.rader || []).length) rader = r.rader;
     if (r.granser) granser = r.granser;
-    if (r.elever) elever = r.elever.filter(e => e.aktiv);
-    if (r.group_id) gruppId = r.group_id;
     resultat = Object.assign({}, r.resultat || {});
     feedback = Object.assign({}, r.feedback || {});
+    /* Databasen skickar med inaktiva elever MED FLIT — «en gammal rättning
+       ska kunna öppnas med de elever som faktiskt skrev» (db.list_elever).
+       Att filtrera bort dem helt gjorde deras poäng osynliga men räknade:
+       de låg kvar i resultatet, PUT:ades tillbaka och drog i klassandelen
+       utan att gå att se eller rätta. Den som slutat men SKREV det här
+       provet visas därför, märkt — den som slutat utan poäng göms. */
+    if (r.elever) elever = r.elever.filter(e => e.aktiv || skrev(e));
+    if (r.group_id) gruppId = r.group_id;
   }
 
   function hamta() {
@@ -418,6 +492,21 @@
         'Pappret saknar klass — sätt klassen på pappret och öppna igen.';
       return;
     }
+    /* Diffen före bytet: fältet ERSÄTTER listan, och den som saknas
+       inaktiveras. En ofullständig inklistring ska inte tyst plocka bort
+       halva klassen — samma «tryck igen»-mönster som Skriv om-varningen. */
+    const nyaNamn = ordnaNamn(namn).map(n => n.toLowerCase());
+    const bort = elever.filter(e => e.aktiv !== false
+      && !nyaNamn.includes(e.namn.toLowerCase()));
+    if (bort.length && klassVarnat !== namn.join('|')) {
+      klassVarnat = namn.join('|');
+      $('#elevklassnot').textContent =
+        `${bort.length} ${bort.length === 1 ? 'elev' : 'elever'} försvinner ur listan: `
+        + `${bort.map(e => e.namn).join(', ')} — de inaktiveras men behåller sina `
+        + 'gamla prov. Tryck igen för att spara.';
+      return;
+    }
+    klassVarnat = '';
     delete $('#elevklass').dataset.oppen;
     if (!server()) {
       /* Utan server (Claude Design) finns klassen bara i den här sessionen.
@@ -436,6 +525,11 @@
       index = 0;
       rita();
       fokusera();
+      /* Städningen är tyst i basen (dubbletter och icke-namn stryks) — men
+         inte mot läraren: 24 inklistrade rader som blev 23 ska säga det. */
+      const strukna = namn.length - elever.length;
+      if (strukna > 0) $('#elevnot').textContent =
+        `${strukna} ${strukna === 1 ? 'rad' : 'rader'} ströks vid städningen — dubbletter eller sådant som inte är namn.`;
     }).catch(e => {
       $('#elevnot').textContent = (e && e.message) || 'Klassen gick inte att spara.';
     });
@@ -563,6 +657,7 @@
         rita();
         return;
       }
+      if (oversikt) { oversikt = false; rita(); fokusera(); return; }
       stang();
       return;
     }
@@ -592,7 +687,7 @@
     if (!v) return;
     doc = v;
     granser = null;
-    resultat = {}; feedback = {}; index = 0; smutsigt = false;
+    resultat = {}; feedback = {}; index = 0; smutsigt = false; oversikt = false;
     /* Profilen hör till pappret som öppnas — och till kursen det ligger i. */
     cicache.clear();
     civem = 'Eleven';
@@ -661,9 +756,17 @@
     delete $('#elevklass').dataset.oppen;
     rita();
   });
+  $('#elevvisaoversikt').addEventListener('click', () => { oversikt = true; rita(); });
+  $('#elevoversiktstang').addEventListener('click', () => { oversikt = false; rita(); fokusera(); });
+  $('#elevkopiera').addEventListener('click', kopieraOversikt);
   $('#elevbytklass').addEventListener('click', () => {
     $('#elevklass').dataset.oppen = '1';
-    $('#elevnamnfalt').value = elever.map(e => e.namn).join('\n');
+    klassVarnat = '';
+    $('#elevklassnot').textContent = 'Ett namn per rad — klistra in som listan '
+      + 'ser ut, appen städar och sorterar på efternamn.';
+    /* Bara de aktiva: en slutad elev som visas för sitt gamla prov ska inte
+       följa med i fältet och aktiveras igen av ett Spara. */
+    $('#elevnamnfalt').value = elever.filter(e => e.aktiv !== false).map(e => e.namn).join('\n');
     rita();
     $('#elevnamnfalt').focus();
   });

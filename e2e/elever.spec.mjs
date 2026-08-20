@@ -177,6 +177,31 @@ test("hela rättningen går på tangentbordet och betyget står live", async ({ 
   await expect(page.locator("#elevbetyg")).toHaveText("F");
 });
 
+test("klassbilden visar hela klassen — också det osparade", async ({ page }) => {
+  await fejka(page, { elever: ELEVER });
+  await page.goto("/");
+  await hydrerad(page);
+  await expect.poll(() => page.evaluate(() => window.Dokument.sparade().length)).toBe(1);
+  await oppna(page);
+  await knappa(page, [2, 2, 1]);                  // Anna: 5 av 5 → A, osparat
+
+  await page.locator("#elevvisaoversikt").click();
+  await expect(page.locator("#elevoversikt")).toBeVisible();
+  await expect(page.locator("#elevvy")).toBeHidden();
+  const rader = page.locator("#elevtabellrader tr");
+  await expect(rader).toHaveCount(2);
+  await expect(rader.nth(0)).toContainText("Anna Andersson");
+  // Bilden läser skärmens siffror, inte serverns — inget är sparat än.
+  await expect(rader.nth(0).locator(".etbetyg")).toHaveText("A");
+  await expect(rader.nth(1).locator(".etbetyg")).toHaveText("skrev inte");
+  await expect(page.locator("#elevoversiktnot")).toContainText("1 av 2");
+
+  // Raden är en väg in: klick öppnar eleven i rättningsvyn.
+  await rader.nth(1).click();
+  await expect(page.locator("#elevvy")).toBeVisible();
+  await expect(page.locator("#elevnamn")).toHaveText("Bo Bergström");
+});
+
 test("klassens siffra hamnar på kortet utan att någon skrivit in den", async ({ page }) => {
   const anrop = await fejka(page, { elever: ELEVER });
   await page.goto("/");
@@ -189,7 +214,10 @@ test("klassens siffra hamnar på kortet utan att någon skrivit in den", async (
   await knappa(page, [1, 0, 0]);
   await page.locator("#elevspara").click();
 
-  const put = anrop.find(a => a.metod === "PUT" && a.vag.endsWith("/elevresultat"));
+  /* Elevbytet autosparar tyst (förlustskyddet), så första PUT:en bär bara
+     Anna. Kontraktet här är Spara-knappens: SISTA anropet bär hela klassen. */
+  const puts = anrop.filter(a => a.metod === "PUT" && a.vag.endsWith("/elevresultat"));
+  const put = puts[puts.length - 1];
   expect(put.vag).toBe("/api/dokument/1/elevresultat");
   expect(put.kropp.resultat["11"]).toEqual({ "1": [2, null, null], "2": [null, 2, 1] });
   expect(put.kropp.resultat["12"]).toEqual({ "1": [1, null, null], "2": [null, 0, 0] });

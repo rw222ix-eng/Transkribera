@@ -257,7 +257,13 @@ def create_router(base: Path, arbiter) -> APIRouter:
                           if 0 <= i < len(ordning)}
                 conn2 = db.connect(db_file)
                 try:
-                    db.save_elevfeedback(conn2, dokument_id, texter)
+                    # Texten är lärarens när hon rört den (rord, v25) — en
+                    # omkörning efter en rättad poäng får skriva om modellens
+                    # texter men aldrig hennes.
+                    rorda = db.elevfeedback_rorda(conn2, dokument_id)
+                    db.save_elevfeedback(conn2, dokument_id,
+                                         {e: t for e, t in texter.items()
+                                          if e not in rorda})
                     sparat = db.get_elevfeedback(conn2, dokument_id)
                 finally:
                     conn2.close()
@@ -277,7 +283,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
             return JSONResponse({"error": "feedback krävs"}, status_code=400)
         conn = db.connect(db_file)
         try:
-            return {"feedback": db.save_elevfeedback(conn, dokument_id, feedback)}
+            return {"feedback": db.save_elevfeedback(conn, dokument_id, feedback,
+                                                     rord=True)}
         finally:
             conn.close()
 

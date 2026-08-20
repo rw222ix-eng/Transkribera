@@ -99,7 +99,9 @@ def test_granserna_ar_forsattsbladets():
     g = rattning.granser(rattning.bygg(UPPGIFTER))
     ur_summor = exam_spec.kravgranser_ur_summor(
         {"total": 11, "e": 3, "c": 4, "a": 4})
-    assert g == ur_summor
+    # `tripel` är rättningens egen flagga (degenererade gränser ska synas i
+    # UI:t) — talen är fortfarande försättsbladets, ograverade.
+    assert g == ur_summor | {"tripel": True}
     assert g["total"] == 11
     assert g["E"]["minst"] == 3          # ceil(11 · 0,25)
     assert g["C"] == {"minst": 5, "varav_ca": 3}   # ceil(11·0,45), ceil(8·0,30)
@@ -259,6 +261,31 @@ def test_bara_aktiva_pa_begaran(conn):
     db.save_elever(conn, gid, ["Anna A"])
     assert len(db.list_elever(conn, gid)) == 2
     assert len(db.list_elever(conn, gid, bara_aktiva=True)) == 1
+
+
+def test_gransernas_tripelflagga_faller_utan_ca_poang():
+    """Papper utan tripel och nivå: allt föll på E, varav-kraven är noll och
+    A nås på E-poäng. Flaggan är UI:ts chans att säga det."""
+    rader = rattning.bygg([{"nr": 1, "t": "Beräkna.", "p": 4}])
+    assert rattning.granser(rader)["tripel"] is False
+
+
+def test_lararens_rorda_feedback_star_kvar(conn):
+    """«Skriv feedback» igen får skriva om modellens texter — aldrig den
+    läraren rört (rord, v25). Samma filtrering som routes_elever gör."""
+    gid = db.get_or_create_group(conn, "NA25")
+    elever = db.save_elever(conn, gid, ["Anna A", "Bo B"])
+    d = db.create_dokument(conn, dokument=prov(), status="godkant")
+    a, b = elever[0]["id"], elever[1]["id"]
+    db.save_elevfeedback(conn, d["id"], {a: "modellens", b: "modellens"})
+    db.save_elevfeedback(conn, d["id"], {a: "lärarens egen"}, rord=True)
+    rorda = db.elevfeedback_rorda(conn, d["id"])
+    assert rorda == {a}
+    ny = {a: "ny modelltext", b: "ny modelltext"}
+    db.save_elevfeedback(conn, d["id"],
+                         {e: t for e, t in ny.items() if e not in rorda})
+    fb = db.get_elevfeedback(conn, d["id"])
+    assert fb[a] == "lärarens egen" and fb[b] == "ny modelltext"
 
 
 # -------------------------------------------------------------- databasen --

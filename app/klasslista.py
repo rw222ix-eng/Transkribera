@@ -50,14 +50,22 @@ def _namnkolumn(rad: str) -> str:
 
 def _tolka(rad: str) -> tuple[str, str] | None:
     """(visningsnamn, efternamn) ur en rad, eller None för en rad utan namn."""
-    text = _namnkolumn(_PREFIX.sub("", rad or ""))
-    if "," in text:
-        # «Efternamn, Förnamn» — kommat är det otvetydiga formatet.
-        efter, _, fore = text.partition(",")
-        text = f"{fore.strip()} {efter.strip()}".strip()
-        efternamn = efter.strip()
+    ra = _PREFIX.sub("", rad or "")
+    efternamn = ""
+    if "," in ra:
+        # «Efternamn, Förnamn» — kommat är det otvetydiga formatet. Men bara
+        # mellan NAMN: «Anna Andersson, 9A» är ett namn med klasskod, inte ett
+        # efternamn «Anna Andersson». Varje kommadel städas därför med samma
+        # kolumnfilter som resten — klasskoden blir tom och faller bort. Fler
+        # än två namndelar (CSV) läses som Efternamn, Förnamn, resten skräp.
+        namn = [d for d in (_namnkolumn(d) for d in ra.split(",")) if d]
+        if len(namn) >= 2:
+            text = f"{namn[1]} {namn[0]}"
+            efternamn = namn[0]
+        else:
+            text = namn[0] if namn else ""
     else:
-        efternamn = ""
+        text = _namnkolumn(ra)
     ord_ = [_versalisera(o) for o in text.split() if o]
     if not ord_:
         return None

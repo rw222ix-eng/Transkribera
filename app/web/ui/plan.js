@@ -2366,18 +2366,26 @@
        const s = t('#svart'), f = t('#fokus');
        return { ...(s ? { svart: s } : {}), ...(f ? { fokus: f } : {}) };
     };
+    /* «Egna filer» (plan-sidor.js): sidorna laddas upp och bildtolkas FÖRST,
+       sedan går underlags-id:t med i begäran — samma fält som tavlan och
+       routes_exam läst hela tiden utan att någon klient skickade det. Skickas
+       bara när filer finns: en tom rad ger exakt den begäran som gick i väg
+       innan dörren kopplades (kassettregeln, samma som egnaOrd). */
+    const sidor = log => (window.Sidor && window.Sidor.sakra
+      ? window.Sidor.sakra({ log }) : Promise.resolve(null))
+      .then(pid => (pid ? { underlag: pid } : {}));
     const JOBB = {
-      Tavla: ({ signal, log }) => window.API.strom('/api/planning/generate', {
+      Tavla: ({ signal, log }) => sidor(log).then(u => window.API.strom('/api/planning/generate', {
         moment: moment.value.trim(),
         klass: utkast.klass, kurs: utkast.kurs,
         datum: utkast.datum || utkast.lektionsdatum || '',
         starttid: String(utkast.tid || utkast.lektionstid || '').split('–')[0].trim(),
-        ...utfall(), ...bokval(), ...forlagan(), ...egnaOrd(),
-      }, { signal, log }).then(kravDone),
+        ...utfall(), ...bokval(), ...forlagan(), ...egnaOrd(), ...u,
+      }, { signal, log })).then(kravDone),
       /* Provet och arbetsbladet delar rutt och skiljs åt av `typ`: samma
          skelett och samma balansvalidering, men arbetsbladet får sitt facit i
          dokumentet och ingen bedömningsanvisning (routes_exam approve). */
-      Prov: ({ signal, log }) => window.API.strom('/api/exams/generate', {
+      Prov: ({ signal, log }) => sidor(log).then(u => window.API.strom('/api/exams/generate', {
         kurs: utkast.kurs, klass: utkast.klass,
         punkter: gyKoder(), punkter_text: [...vald],
         antal: Number(i0.antal) || undefined,
@@ -2389,8 +2397,8 @@
            inte står i defaultläget: en orörd väljare ska ge exakt samma
            begäran som före fältet, annars ryker kassetterna. */
         ...(i0.nivamix && i0.nivamix !== 'Balanserat' ? { nivamix: i0.nivamix } : {}),
-        ...utfall(), ...bokval(), ...forlagan(), ...egnaOrd(),
-      }, { signal, log }).then(kravDone).then(r => {
+        ...utfall(), ...bokval(), ...forlagan(), ...egnaOrd(), ...u,
+      }, { signal, log })).then(kravDone).then(r => {
         if (!r.exam) throw new Error('Provet gick inte att skriva den här gången. Försök igen.');
         return r;
       }),
@@ -2398,7 +2406,7 @@
     /* Arbetsbladet delar rutt med provet men bär sin MOTTAGARE. Kön står i
        `bladko`: det första bladet skrivs nu, resten när det här är godkänt —
        ett papper i taget, för läraren ska läsa igenom varje. */
-    JOBB.Arbetsblad = ({ signal, log }) => window.API.strom('/api/exams/generate', {
+    JOBB.Arbetsblad = ({ signal, log }) => sidor(log).then(u => window.API.strom('/api/exams/generate', {
       kurs: utkast.kurs, klass: utkast.klass,
       punkter: gyKoder(), punkter_text: [...vald],
       antal: Number(i0.antal) || undefined,
@@ -2411,23 +2419,23 @@
         elev_id: bladNu.id, elev: bladNu.namn,
         syfte: String(i0.syfte || 'Stötta').toLowerCase() === 'utmana' ? 'utmana' : 'stotta',
       } : {}),
-      ...utfall(), ...bokval(), ...forlagan(), ...egnaOrd(),
-    }, { signal, log }).then(kravDone).then(r => {
+      ...utfall(), ...bokval(), ...forlagan(), ...egnaOrd(), ...u,
+    }, { signal, log })).then(kravDone).then(r => {
       if (!r.exam) throw new Error('Arbetsbladet gick inte att skriva den här gången. Försök igen.');
       return r;
     });
     /* Diagnosen skickar INGET antal. Servern räknar det ur de valda punkterna
        och lektionens längd (exam_spec.diagnosplan) och slår ihop närliggande
        punkter om de inte ryms — täckningen är kravet, inte antalet. */
-    JOBB.Diagnos = ({ signal, log }) => window.API.strom('/api/exams/generate', {
+    JOBB.Diagnos = ({ signal, log }) => sidor(log).then(u => window.API.strom('/api/exams/generate', {
       kurs: utkast.kurs, klass: utkast.klass,
       punkter: gyKoder(), punkter_text: [...vald],
       tid_min: Number(i0.provminuter) || 60,
       delar: false,
       datum: utkast.datum || '',
       typ: 'diagnos',
-      ...utfall(), ...forlagan(), ...egnaOrd(),
-    }, { signal, log }).then(kravDone).then(r => {
+      ...utfall(), ...forlagan(), ...egnaOrd(), ...u,
+    }, { signal, log })).then(kravDone).then(r => {
       if (!r.exam) throw new Error('Diagnosen gick inte att skriva den här gången. Försök igen.');
       return r;
     });
@@ -2449,7 +2457,7 @@
     /* Gruppuppgiften går samma väg men bär sitt eget upplägg: namnraderna,
        tiden och redovisningsformen ÄR pappersformen, och de kommer ur
        väljarna här — inte ur modellens fantasi. */
-    JOBB.Gruppuppgift = ({ signal, log }) => window.API.strom('/api/exams/generate', {
+    JOBB.Gruppuppgift = ({ signal, log }) => sidor(log).then(u => window.API.strom('/api/exams/generate', {
       kurs: utkast.kurs, klass: utkast.klass,
       punkter: gyKoder(), punkter_text: [...vald],
       /* Fyra uppgifter — inte en väljare, utan formen: fyra rutor är vad ett
@@ -2457,13 +2465,13 @@
       antal: 4,
       datum: utkast.datum || '',
       typ: 'gruppuppgift',
-      ...utfall(), ...bokval(), ...forlagan(), ...egnaOrd(),
+      ...utfall(), ...bokval(), ...forlagan(), ...egnaOrd(), ...u,
       grupp: {
         elever: Number(i0.grupp) || 3,
         langd_min: Number(i0.langd) || 45,
         redovisning: String(i0.redovisning || 'Muntligt').toLowerCase(),
       },
-    }, { signal, log }).then(kravDone).then(r => {
+    }, { signal, log })).then(kravDone).then(r => {
       if (!r.exam) throw new Error('Gruppuppgiften gick inte att skriva den här gången. Försök igen.');
       return r;
     });
@@ -2485,6 +2493,11 @@
         : `Utkastet är skrivet. ${Best(typ)} täcker ${vald.size || 'inga'} valda moment — läs igenom och skriv vad som ska bli annorlunda.`,
       plan: [
         { namn: 'Läser centralt innehåll (Gy25)', detalj: (vald.size || 0) + ' moment' },
+        /* Raden står bara när filer ligger i dörren — då sker uppladdningen
+           och bildtolkningen på riktigt, före själva skrivningen. */
+        ...(window.Sidor && window.Sidor.antal && window.Sidor.antal()
+          ? [{ namn: 'Tolkar dina sidor',
+               detalj: `${window.Sidor.antal()} ${window.Sidor.antal() === 1 ? 'fil' : 'filer'}` }] : []),
         ...(refDok ? [{ namn: 'Läser förlagan', detalj: dokNamn(refDok) + (($('#refhur') || {}).value ? ' · ' + $('#refhur').value.trim().slice(0, 40) : '') }] : []),
         ...(resDok ? [{ namn: 'Läser provets utfall', detalj: (((resDok.rattat || {}).svaga || []).map(s => s.kod).filter(Boolean).join(', ') || dokNamn(resDok)) + ' föll' }] : []),
         /* Raden står bara när rutan är ifylld, och den lovar precis det som
@@ -4618,6 +4631,10 @@
     /* Upplägget är pappersts eget — provtiden och nivåmixen står på det, inte i
        de förval som råkade ligga i panelen när sidan laddades. */
     if (v.inst && inst[v.typ]) Object.assign(inst[v.typ], JSON.parse(JSON.stringify(v.inst)));
+    /* Steg 1 ägs av lägeskorten (planlage.js), inte av spegelsegmentet:
+       utan raden stod kortet kvar på «Tavla» medan steg 3 sa gruppuppgift —
+       två steg i samma guide om två olika papper. */
+    if (window.SattLage) window.SattLage(v.typ);
     sattSkrivtyp(v.typ);
     visarLosning = false;
     $('#dokument').setAttribute('data-litet', '');

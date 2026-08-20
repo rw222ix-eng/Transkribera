@@ -21,7 +21,7 @@ import sqlite3
 import threading
 from pathlib import Path
 
-SCHEMA_VERSION = 25
+SCHEMA_VERSION = 26
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS courses (
@@ -560,6 +560,7 @@ CREATE TABLE IF NOT EXISTS elevfeedback (
     elev_id     INTEGER NOT NULL REFERENCES elever(id) ON DELETE CASCADE,
     text        TEXT NOT NULL,
     updated_at  TEXT NOT NULL,
+    rord        INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (dokument_id, elev_id)
 );
 CREATE INDEX IF NOT EXISTS idx_elever_group ON elever(group_id, sort);
@@ -756,8 +757,21 @@ _BOKEXEMPEL_MIGRATION = """
 ALTER TABLE bok_uppgifter ADD COLUMN exempel INTEGER;
 """
 
-# Lärarens nivåval på pappret (v25) — ENDAST additiv; rollback: kolumnen kan
-# lämnas kvar (NULL är giltigt) + PRAGMA user_version=24.
+# Lärarens hand på feedbacktexten (v25) — ENDAST additiv; rollback: lämna
+# kolumnen (0 = "modellens", vilket varje läsare redan tål) + PRAGMA
+# user_version=24.
+#
+# «Skriv feedback» genererade för hela klassen och skrev över allt — även den
+# text läraren finslipat. Texten är hennes när hon rört den (PUT:ens docstring
+# har sagt det hela tiden); flaggan gör att genereringen kan hålla löftet.
+_FEEDBACKRORD_MIGRATION = """
+ALTER TABLE elevfeedback ADD COLUMN rord INTEGER NOT NULL DEFAULT 0;
+"""
+
+# Lärarens nivåval på pappret (v26) — ENDAST additiv; rollback: kolumnen kan
+# lämnas kvar (NULL är giltigt) + PRAGMA user_version=25.
+# (v26 och inte v25: Macen tog v25 till feedbackflaggan ovan i samma veva —
+# två maskiner, samma main, numret är det som inte får kollidera.)
 #
 # Väljarens ordagranna etikett («Bara E», «C-nivå» …), NULL för defaultläget
 # och alla äldre papper. En DB-kolumn och INTE ett fält i exam-JSON, med flit:
@@ -791,12 +805,13 @@ _MIGRATIONS: dict[int, str] = {2: _FTS_MIGRATION, 3: _MARKERS_MIGRATION,
                                22: _PROVETS_CI_MIGRATION,
                                23: _LEKTIONSDELAR_MIGRATION,
                                24: _BOKEXEMPEL_MIGRATION,
-                               25: _NIVAVAL_MIGRATION}
+                               25: _FEEDBACKRORD_MIGRATION,
+                               26: _NIVAVAL_MIGRATION}
 
 # Migreringar som bara innehåller ALTER TABLE … ADD COLUMN. De körs sats för
 # sats så att en redan tillagd kolumn hoppas över i stället för att fälla hela
 # migreringen — se _apply_migrations.
-_ALTER_MIGRATIONER = {6, 12, 13, 14, 16, 17, 18, 21, 22, 23, 24, 25}
+_ALTER_MIGRATIONER = {6, 12, 13, 14, 16, 17, 18, 21, 22, 23, 24, 25, 26}
 
 _LESSON_SELECT = """
 SELECT l.*, g.namn AS group_namn, c.namn AS course_namn
@@ -2968,10 +2983,22 @@ def get_elevfeedback(conn: sqlite3.Connection, dokument_id: int) -> dict:
         (int(dokument_id),)).fetchall()}
 
 
+def elevfeedback_rorda(conn: sqlite3.Connection, dokument_id: int) -> set[int]:
+    """Eleverna vars text läraren själv rört (v25) — genereringen ska inte
+    skriva över dem."""
+    return {r["elev_id"] for r in conn.execute(
+        "SELECT elev_id FROM elevfeedback WHERE dokument_id = ? AND rord = 1",
+        (int(dokument_id),)).fetchall()}
+
+
 def save_elevfeedback(conn: sqlite3.Connection, dokument_id: int,
-                      feedback: dict) -> dict:
+                      feedback: dict, rord: bool = False) -> dict:
     """Texterna per elev. Tom text tas bort i stället för att sparas — en
-    elev utan feedback ska inte ha en tom ruta att undra över."""
+    elev utan feedback ska inte ha en tom ruta att undra över.
+
+    `rord=True` är lärarens egen redigering (PUT-rutten): texten märks som
+    hennes och genereringen låter den stå. Modellens skrivningar (rord=False)
+    får skrivas om av nästa körning."""
     did = int(dokument_id)
     nu = _now()
     with conn:
@@ -2982,10 +3009,12 @@ def save_elevfeedback(conn: sqlite3.Connection, dokument_id: int,
                              "AND elev_id = ?", (did, int(elev_id)))
                 continue
             conn.execute(
-                "INSERT INTO elevfeedback(dokument_id, elev_id, text, updated_at) "
-                "VALUES (?, ?, ?, ?) ON CONFLICT(dokument_id, elev_id) DO UPDATE "
-                "SET text = excluded.text, updated_at = excluded.updated_at",
-                (did, int(elev_id), t, nu))
+                "INSERT INTO elevfeedback(dokument_id, elev_id, text, "
+                "updated_at, rord) VALUES (?, ?, ?, ?, ?) "
+                "ON CONFLICT(dokument_id, elev_id) DO UPDATE "
+                "SET text = excluded.text, updated_at = excluded.updated_at, "
+                "rord = excluded.rord",
+                (did, int(elev_id), t, nu, 1 if rord else 0))
     return get_elevfeedback(conn, did)
 
 
