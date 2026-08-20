@@ -265,6 +265,11 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     log_cb=lambda m: emit({"type": "log", "msg": m}),
                     token_cb=lambda t: emit({"type": "token", "text": t}))
                 if res["notes"] is not None and res["notes"] != view["exam"]:
+                    # Se routes_exam: ett livstecken FÖRE skrivningen. Läraren
+                    # som stängde fliken mitt i fick annars varvet sparat ändå —
+                    # tråden lever, strömmen gör det inte. `emit` kastar
+                    # KlientBorta när ingen lyssnar.
+                    emit({"type": "log", "msg": "Sparar varvet …"})
                     conn = db.connect(db_file)
                     try:
                         ny = db.add_exam_version(conn, note_id, res["notes"])

@@ -1127,3 +1127,306 @@ def test_refine_far_varvhistoriken_och_skarmtexten(client, monkeypatch):
                 "renderat": "x=2 x=2"}}))
     assert sett["historik"] == ["Gör uppgift 1 kortare"]
     assert sett["mal"]["renderat"] == "x=2 x=2"
+
+
+# ══════════ NÄR TVÅ SAKER SKER SAMTIDIGT ══════════
+#
+# Rutterna prövades förr en i taget, i tur och ordning — och det är inte så en
+# lärare använder appen. Hon godkänner ett prov och skickar en sista ändring i
+# samma andetag; hon har appen öppen i två flikar; hon stänger locket mitt i ett
+# varv. Testerna nedan är de lägena.
+
+
+def _kompilerar(monkeypatch, *, innan_kompilering=None):
+    """PDF-motorn, fejkad. `innan_kompilering` körs FÖRE varje kompilering —
+    där ställer sig ett varv från en annan flik i vägen."""
+    monkeypatch.setattr(exam_pdf, "engine_available", lambda: True)
+
+    def fake_compile(tex, out_dir, jobname, **kw):
+        if innan_kompilering:
+            innan_kompilering()
+        out_dir.mkdir(parents=True, exist_ok=True)
+        p = out_dir / f"{jobname}.pdf"
+        p.write_bytes(b"%PDF-1.5 fejk")
+        return p, ""
+    monkeypatch.setattr(exam_pdf, "compile_pdf", fake_compile)
+
+
+def _versioner(client, exam_id):
+    conn = appdb.connect(client.base_dir / "transkribera.db")
+    try:
+        return [dict(r) for r in conn.execute(
+            "SELECT id, version, tex_path, pdf_path FROM exam_versions "
+            "WHERE exam_id = ? ORDER BY version", (exam_id,)).fetchall()]
+    finally:
+        conn.close()
+
+
+def test_refine_pa_godkant_papper_ger_409(client, monkeypatch):
+    """Ett refine-svar som landade EFTER godkännandet la en ny version, flyttade
+    pekaren dit — och den versionen har ingen PDF. «Ladda ner PDF» sa då «ingen
+    pdf ännu, godkänn provet» om ett prov som låg utskrivet på skärmen. Godkänt
+    är låst, och nejet säger vägen tillbaka."""
+    result, _ = _make_exam(client, monkeypatch)
+    _kompilerar(monkeypatch)
+    _done(client.post(f"/api/exams/{result['id']}/approve", json={}))
+
+    monkeypatch.setattr(exam_gen, "refine_exam",
+                        lambda exam, *a, **k: {"exam": _exam_doc(),
+                                               "errors": [], "rounds": 1})
+    r = client.post(f"/api/exams/{result['id']}/refine",
+                    json={"message": "gör den kortare"})
+    assert r.status_code == 409
+    assert "låst" in r.json()["error"] and "Fortsätt ändra" in r.json()["error"]
+    # Och ingen ny version smög in: pekaren står kvar på det som trycktes.
+    assert len(_versioner(client, result["id"])) == 1
+    assert client.get(f"/api/exams/{result['id']}/pdf").status_code == 200
+
+
+def test_oppna_lagger_tillbaka_pappret_som_utkast(client, monkeypatch):
+    """Efter godkännandet fanns ingen väg tillbaka — «Bygg vidare» startade en
+    ny körning, alltså ett nytt papper och en ny nota, när det läraren ville var
+    att rätta en siffra i uppgift 3."""
+    result, _ = _make_exam(client, monkeypatch)
+    _kompilerar(monkeypatch)
+    _done(client.post(f"/api/exams/{result['id']}/approve", json={}))
+    assert client.get(f"/api/exams/{result['id']}").json()["status"] == "godkänt"
+
+    r = client.post(f"/api/exams/{result['id']}/oppna")
+    assert r.status_code == 200 and r.json()["status"] == "utkast"
+    # Artefakterna ligger kvar: en ångrad omöppning ska inte kosta en
+    # kompilering till.
+    assert _versioner(client, result["id"])[0]["pdf_path"]
+    # Och nu går pappret att skriva om igen.
+    ny = _exam_doc()
+    ny["uppgifter"][0]["text"] = "Rättad uppgift $x = 3$."
+    monkeypatch.setattr(exam_gen, "refine_exam",
+                        lambda *a, **k: {"exam": ny, "errors": [], "rounds": 1})
+    res = _done(client.post(f"/api/exams/{result['id']}/refine",
+                            json={"message": "rätta siffran"}))
+    assert res["exam"]["uppgifter"][0]["text"] == "Rättad uppgift $x = 3$."
+    assert client.post("/api/exams/99999/oppna").status_code == 404
+
+
+def test_pdf_hittas_aven_nar_pekaren_gatt_vidare(client, monkeypatch):
+    """Filen som SENAST byggdes är svaret när pekaren står på ett varv utan
+    artefakter — att låta pappret försvinna för att pekaren gått vidare är inte
+    försiktighet, det är att tappa bort det."""
+    from pathlib import Path
+
+    result, _ = _make_exam(client, monkeypatch)
+    _kompilerar(monkeypatch)
+    _done(client.post(f"/api/exams/{result['id']}/approve", json={}))
+    tryckt = _versioner(client, result["id"])[0]
+
+    # Ett varv som lades till efteråt — pekaren står nu på en version utan
+    # pdf_path.
+    conn = appdb.connect(client.base_dir / "transkribera.db")
+    try:
+        appdb.add_exam_version(conn, result["id"],
+                               _exam_doc() | {"titel": "Efter"})
+    finally:
+        conn.close()
+    vs = _versioner(client, result["id"])
+    assert len(vs) == 2 and not vs[1]["pdf_path"]
+
+    r = client.get(f"/api/exams/{result['id']}/pdf")
+    assert r.status_code == 200
+    from urllib.parse import quote
+    assert quote(Path(tryckt["pdf_path"]).name) \
+        in r.headers["content-disposition"]
+
+
+def test_artefakterna_skrivs_pa_varvet_som_renderades(client, monkeypatch):
+    """Godkännandet renderar det dokument handlern läste, men sökvägarna slogs
+    upp mot pekaren NÄR kompileringen var klar. Hann ett refine i en annan flik
+    flytta pekaren under tiden hamnade .tex/.pdf på ett varv de inte hörde till:
+    filen på disk var ett annat papper än det databasen pekade ut."""
+    result, _ = _make_exam(client, monkeypatch)
+    trycktes = result["current_version"]
+    smugit = {}
+
+    def annan_flik():
+        if smugit:
+            return
+        conn = appdb.connect(client.base_dir / "transkribera.db")
+        try:
+            vy = appdb.add_exam_version(
+                conn, result["id"], _exam_doc() | {"titel": "Ett annat varv"})
+        finally:
+            conn.close()
+        smugit["version"] = vy["current_version"]
+
+    _kompilerar(monkeypatch, innan_kompilering=annan_flik)
+    _done(client.post(f"/api/exams/{result['id']}/approve", json={}))
+
+    vs = {v["id"]: v for v in _versioner(client, result["id"])}
+    assert vs[trycktes]["pdf_path"] and vs[trycktes]["tex_path"]
+    assert not vs[smugit["version"]]["pdf_path"]
+    # Och läraren kommer ändå åt filen (fallbacken ovan).
+    assert client.get(f"/api/exams/{result['id']}/pdf").status_code == 200
+
+
+def test_tva_varv_pa_samma_papper_ger_409(client, monkeypatch):
+    """Två samtidiga omskrivningar läste båda dokumentet innan någon sparat,
+    byggde ur samma text, och den som kom sist vann — den förstas ändring fanns
+    sedan varken på pappret eller i ångra-historiken."""
+    import threading
+
+    result, _ = _make_exam(client, monkeypatch)
+    inne, slapp = threading.Event(), threading.Event()
+    ny = _exam_doc()
+    ny["uppgifter"][0]["text"] = "Det första varvets text."
+
+    def fake_refine(exam, message, *a, **k):
+        inne.set()
+        assert slapp.wait(20)
+        return {"exam": ny, "errors": [], "rounds": 1}
+    monkeypatch.setattr(exam_gen, "refine_exam", fake_refine)
+
+    svar = {}
+    t = threading.Thread(target=lambda: svar.update(
+        forsta=client.post(f"/api/exams/{result['id']}/refine",
+                           json={"message": "gör den kortare"})))
+    t.start()
+    try:
+        assert inne.wait(20), "första varvet kom aldrig fram till modellen"
+        andra = client.post(f"/api/exams/{result['id']}/refine",
+                            json={"message": "gör den svårare"})
+        assert andra.status_code == 409
+        assert "skrivs redan om" in andra.json()["error"]
+    finally:
+        slapp.set()
+        t.join(20)
+    assert _done(svar["forsta"])["exam"]["uppgifter"][0]["text"] \
+        == "Det första varvets text."
+    # Låset släpps när varvet landat — nästa ändring går igenom.
+    assert client.post(f"/api/exams/{result['id']}/refine",
+                       json={"message": "en till"}).status_code == 200
+
+
+def test_ett_annat_papper_far_skrivas_om_samtidigt(client, monkeypatch):
+    """Låset är per dokument, inte per app: två olika papper ska gå att skriva
+    om parallellt — det är vad molnsemaforens tak finns till för."""
+    import threading
+
+    ett, _ = _make_exam(client, monkeypatch)
+    tva, _ = _make_exam(client, monkeypatch)
+    inne, slapp = threading.Event(), threading.Event()
+
+    def fake_refine(exam, message, *a, **k):
+        if message == "det långa varvet":
+            inne.set()
+            assert slapp.wait(20)
+        return {"exam": exam, "errors": [], "rounds": 1}
+    monkeypatch.setattr(exam_gen, "refine_exam", fake_refine)
+
+    t = threading.Thread(target=lambda: client.post(
+        f"/api/exams/{ett['id']}/refine", json={"message": "det långa varvet"}))
+    t.start()
+    try:
+        assert inne.wait(20)
+        r = client.post(f"/api/exams/{tva['id']}/refine",
+                        json={"message": "ett annat papper"})
+        assert r.status_code == 200
+    finally:
+        slapp.set()
+        t.join(20)
+
+
+def test_varv_som_bygger_pa_en_overkord_version_sparas_inte(client, monkeypatch):
+    """Låset gäller den här processen; pekaren kan ha flyttats av något annat
+    medan modellen skrev. Att spara då vore last-write-wins — den andres ändring
+    försvann även ur ångra-historiken."""
+    result, _ = _make_exam(client, monkeypatch)
+    mitt = _exam_doc()
+    mitt["uppgifter"][0]["text"] = "Mitt varv."
+    annans = _exam_doc()
+    annans["uppgifter"][0]["text"] = "Någon annans varv."
+
+    def fake_refine(exam, message, *a, **k):
+        conn = appdb.connect(client.base_dir / "transkribera.db")
+        try:
+            appdb.add_exam_version(conn, result["id"], annans)
+        finally:
+            conn.close()
+        return {"exam": mitt, "errors": [], "rounds": 1}
+    monkeypatch.setattr(exam_gen, "refine_exam", fake_refine)
+
+    r = client.post(f"/api/exams/{result['id']}/refine",
+                    json={"message": "gör den kortare"})
+    fel = [e for e in _events(r) if e["type"] == "error"]
+    assert fel and "annat varv" in fel[0]["message"]
+    vy = client.get(f"/api/exams/{result['id']}").json()
+    assert vy["exam"]["uppgifter"][0]["text"] == "Någon annans varv."
+    assert len(vy["versions"]) == 2
+
+
+def test_avbrutet_varv_committas_inte(client, monkeypatch):
+    """Läraren tryckte Avbryt eller stängde fliken: strömmen är död men tråden
+    kör vidare, och mellan sista loggraden och skrivningen fanns inget livstecken
+    att avbryta VID — versionen sparades ändå, och nästa gång hon öppnade appen
+    låg ett varv hon aldrig sett överst i ångra-historiken."""
+    from fastapi.responses import JSONResponse as _JSON
+
+    from app.web import sse
+
+    result, _ = _make_exam(client, monkeypatch)
+    laget = {"modellen_klar": False, "avbrutet": False}
+
+    def fejkad_strom(job, req):
+        """Strömmen som redan tappat sin lyssnare: varje livstecken efter att
+        modellen svarat kastar KlientBorta, precis som sse.emit gör."""
+        def emit(ev):
+            if laget["modellen_klar"]:
+                laget["avbrutet"] = True
+                raise sse.KlientBorta
+        try:
+            job(emit)
+        except sse.KlientBorta:
+            pass
+        return _JSON({"avbrutet": laget["avbrutet"]})
+    monkeypatch.setattr(routes_exam, "sse_response", fejkad_strom)
+
+    ny = _exam_doc()
+    ny["uppgifter"][0]["text"] = "Varvet ingen väntar på."
+
+    def fake_refine(exam, message, *a, **k):
+        laget["modellen_klar"] = True
+        return {"exam": ny, "errors": [], "rounds": 1}
+    monkeypatch.setattr(exam_gen, "refine_exam", fake_refine)
+
+    r = client.post(f"/api/exams/{result['id']}/refine",
+                    json={"message": "gör den kortare"})
+    assert r.json()["avbrutet"] is True
+    assert len(_versioner(client, result["id"])) == 1
+    # Och låset släpptes trots avbrottet — annars vore pappret dött för alltid.
+    laget["modellen_klar"] = False
+    monkeypatch.setattr(routes_exam, "sse_response", sse.sse_response)
+    assert client.post(f"/api/exams/{result['id']}/refine",
+                       json={"message": "en till"}).status_code == 200
+
+
+def test_refine_far_reparerad_json(client, monkeypatch):
+    """Modellen skriver "\\times" oescapat, json.loads gör TAB+imes av det, och
+    GET-rutten och godkännandet reparerar det. Omskrivningen gjorde det inte —
+    den skickade skräpet till modellen som «så här står det», modellen skrev av
+    det, och varje varv bar det vidare."""
+    result, _ = _make_exam(client, monkeypatch)
+    trasig = _exam_doc()
+    trasig["uppgifter"][0]["text"] = "Beräkna $2 \times (3 + 4)$."
+    conn = appdb.connect(client.base_dir / "transkribera.db")
+    try:
+        appdb.add_exam_version(conn, result["id"], trasig)
+    finally:
+        conn.close()
+
+    sett = {}
+
+    def fake_refine(exam, message, *a, **k):
+        sett["text"] = exam["uppgifter"][0]["text"]
+        return {"exam": exam, "errors": [], "rounds": 1}
+    monkeypatch.setattr(exam_gen, "refine_exam", fake_refine)
+    client.post(f"/api/exams/{result['id']}/refine", json={"message": "kortare"})
+    assert sett["text"] == "Beräkna $2 \\times (3 + 4)$."
+    assert "\t" not in sett["text"]

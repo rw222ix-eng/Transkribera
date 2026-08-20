@@ -729,6 +729,12 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     bok=bok_txt, historik=historik,
                     log_cb=lambda m: emit({"type": "log", "msg": m}),
                     token_cb=lambda t: emit({"type": "token", "text": t}))
+                # Lyssnar någon än? Läraren som tryckte Avbryt eller stängde
+                # fliken fick tavlan omskriven ändå: strömmen var avbruten men
+                # tråden körde vidare, och mellan sista tecknet och skrivningen
+                # fanns inget livstecken att avbryta VID. `emit` kastar
+                # KlientBorta när ingen lyssnar — då sparas ingenting.
+                emit({"type": "log", "msg": "Sparar varvet …"})
                 if res["board"] is not None:
                     st["board"] = lesson_board.satt_tid(res["board"],
                                                         st.get("starttid"),

@@ -3350,20 +3350,44 @@ def set_current_exam_version(conn: sqlite3.Connection, exam_id: int,
     return get_exam(conn, exam_id)
 
 
+def set_exam_status(conn: sqlite3.Connection, exam_id: int,
+                    status: str) -> dict | None:
+    """Byt provets status — i praktiken: lägg tillbaka ett godkänt papper som
+    utkast så det går att skriva om igen (routes_exam /oppna).
+
+    Versionerna och deras artefaktsökvägar rörs inte. Pappret är detsamma; det
+    är bara låset som lyfts."""
+    if conn.execute("SELECT 1 FROM exams WHERE id = ?",
+                    (exam_id,)).fetchone() is None:
+        return None
+    conn.execute("UPDATE exams SET status = ?, updated_at = ? WHERE id = ?",
+                 (status, _now(), exam_id))
+    conn.commit()
+    return get_exam(conn, exam_id)
+
+
 def set_exam_artifacts(conn: sqlite3.Connection, exam_id: int, *,
                        tex_path: str | None = None,
                        pdf_path: str | None = None,
+                       version_id: int | None = None,
                        approve: bool = False) -> dict | None:
-    """Skriv artefaktsökvägar på aktuella versionen; approve låser provet
-    (status 'godkänt') så det syns i minnet/kalendern."""
+    """Skriv artefaktsökvägar på den version som renderades; approve låser
+    provet (status 'godkänt') så det syns i minnet/kalendern.
+
+    `version_id` är den version anroparen FAKTISKT byggde filerna ur. Utan den
+    slogs pekaren upp här, när kompileringen redan var klar — och hade ett
+    refine i en annan flik flyttat den under tiden hamnade .tex/.pdf på ett varv
+    de inte hörde till: filen på disk var ett annat papper än det databasen
+    pekade ut. Utelämnas den gäller pekaren som förut (äldre anropare)."""
     row = conn.execute("SELECT current_version FROM exams WHERE id = ?",
                        (exam_id,)).fetchone()
     if row is None:
         return None
+    mal = version_id if version_id is not None else row["current_version"]
     conn.execute(
         "UPDATE exam_versions SET tex_path = COALESCE(?, tex_path), "
-        "pdf_path = COALESCE(?, pdf_path) WHERE id = ?",
-        (tex_path, pdf_path, row["current_version"]))
+        "pdf_path = COALESCE(?, pdf_path) WHERE id = ? AND exam_id = ?",
+        (tex_path, pdf_path, mal, exam_id))
     if approve:
         conn.execute("UPDATE exams SET status = 'godkänt', updated_at = ? "
                      "WHERE id = ?", (_now(), exam_id))

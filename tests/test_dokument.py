@@ -350,6 +350,38 @@ def test_ett_utkast_i_taget(client):
     assert kvar == [(b["id"], "b")]
 
 
+def test_den_andra_flikens_utkast_ar_borta_och_sager_det(client):
+    """Två flikar (eller två datorer) på samma app: den andra flikens POST tar
+    bort den förstas utkastrad, och den förstas `utkastId` pekar sedan på en rad
+    som inte finns.
+
+    Rutten måste då säga 404 — högt. Klienten svalde svaret («.catch(() => null)»)
+    och godkännandet sparade alltså TYST ingenting: pappret försvann ur högen,
+    och för ett prov blev bara lösningsbladet kvar (det sparas en egen väg).
+    Beskedet är det klienten faller tillbaka på (plan.js utkastGodkann → dokSpara
+    med `stada`), så det prövas hela vägen fram här."""
+    a = client.post("/api/dokument",
+                    json={"dokument": {"typ": "Tavla", "moment": "a"}}).json()
+    client.post("/api/dokument",
+                json={"dokument": {"typ": "Tavla", "moment": "b"}})
+
+    borta = client.patch(f"/api/dokument/{a['id']}",
+                         json={"status": "godkant", "stada": True,
+                               "dokument": {"typ": "Tavla", "moment": "a"}})
+    assert borta.status_code == 404
+    assert client.post(f"/api/dokument/{a['id']}/versioner",
+                       json={"dokument": {"typ": "Tavla", "moment": "a"}}
+                       ).status_code == 404
+
+    # Klientens reservväg: pappret sparas som en NY godkänd rad i stället för
+    # att tystna. Då ligger det i högen, vilket är hela poängen med att godkänna.
+    ny = client.post("/api/dokument", json={
+        "dokument": {"typ": "Tavla", "moment": "a"},
+        "status": "godkant", "stada": True}).json()
+    hog = client.get("/api/dokument").json()["sparade"]
+    assert [x["id"] for x in hog] == [ny["id"]]
+
+
 def test_stadningen_ror_aldrig_hogen(client):
     """De godkända ÄR högen — ett nytt utkast får inte städa bort dem."""
     godkant = client.post("/api/dokument", json={

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import re
+import threading
 from pathlib import Path
 
 from fastapi import APIRouter, Request
@@ -52,6 +53,41 @@ _TYPER = ("prov", "arbetsblad", "gruppuppgift", "diagnos")
 def create_router(base: Path, arbiter) -> APIRouter:
     router = APIRouter()
     db_file = base / "transkribera.db"
+    # ── ETT VARV I TAGET PER DOKUMENT ────────────────────────────
+    # Molnsemaforen släpper igenom flera jobb samtidigt, och det ska den: två
+    # OLIKA papper får gärna skrivas om parallellt. Två varv på SAMMA papper får
+    # det inte. Båda läste dokumentet innan något av dem sparat, båda byggde sin
+    # nya version ur samma text, och den som kom sist vann — den förstas ändring
+    # fanns sedan varken på pappret eller i ångra-historiken (den låg i en
+    # version ingen pekade på). Läraren såg två «Skrivet om» och en ändring.
+    # Registret är routerns eget och inte modulens: två appar i samma process
+    # (testerna) har egna databaser, och prov-id 1 i den ena är inte prov-id 1 i
+    # den andra.
+    pagaende: set[int] = set()
+    pagaende_las = threading.Lock()
+
+    def _ta_varvet(exam_id: int) -> bool:
+        with pagaende_las:
+            if exam_id in pagaende:
+                return False
+            pagaende.add(exam_id)
+            return True
+
+    def _slapp_varvet(exam_id: int) -> None:
+        with pagaende_las:
+            pagaende.discard(exam_id)
+
+    def _kolumn(exam_id: int, namn: str):
+        """En kolumn ur exams — status eller pekaren — utan att läsa hela
+        dokumentet. Vakterna nedan frågar om EN sak och ska inte betala för
+        JSON-avkodning av varje version för att få veta den."""
+        conn = db.connect(db_file)
+        try:
+            rad = conn.execute(f"SELECT {namn} FROM exams WHERE id = ?",
+                               (exam_id,)).fetchone()
+        finally:
+            conn.close()
+        return rad[namn] if rad is not None else None
 
     def _model_name() -> str:
         # Modellnamnet är kosmetiskt sedan språkmodellen flyttade till Claude
@@ -445,6 +481,19 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # veta vad läraren redan bett om, annars bryter varv tre villkoret från
         # varv ett utan att någon bett om det.
         historik = routes_planning.varvhistorik(body)
+        # ── GODKÄNT ÄR LÅST ──────────────────────────────────────
+        # Ett refine-svar som landade EFTER godkännandet gjorde PDF:en onåbar:
+        # jobbet la en ny version, pekaren flyttades dit — och den versionen har
+        # ingen pdf_path, så «Ladda ner PDF» svarade «ingen pdf ännu — godkänn
+        # provet» om ett prov som stod utskrivet på skärmen. Frågan ställs FÖRE
+        # `_peka_pa_versionen`: att flytta pekaren på ett godkänt prov är precis
+        # det som gör skadan, och en vakt som gör den först är ingen vakt.
+        if _kolumn(exam_id, "status") == "godkänt":
+            return JSONResponse(
+                {"error": "Pappret är godkänt och låst. Tryck «Fortsätt ändra» "
+                          "i förhandsvisningen om det ska skrivas om — då "
+                          "läggs det tillbaka som utkast."},
+                status_code=409)
         # Skrivs om GÖR det varv läraren ser, inte det senaste som skrevs. Utan
         # den här raden byggde ett önskemål efter en ångring vidare på just det
         # varv hon kastade.
@@ -456,14 +505,35 @@ def create_router(base: Path, arbiter) -> APIRouter:
             conn.close()
         if view is None or view.get("exam") is None:
             return JSONResponse({"error": "okänt prov"}, status_code=404)
+        # Äldre utkast bär uppätna LaTeX-backslashes ("\times" → TAB+imes, se
+        # exam_gen._repair_ctrl_chars). GET-rutten och godkännandet reparerar
+        # dem; omskrivningen gjorde det inte, och skickade alltså skräpet till
+        # modellen som «så här står det» — den skrev av det, och varje varv
+        # sedan bar det vidare. Repareras här är diffen dessutom ärlig: annars
+        # märks en ruta som ändrad i ett varv som bara rätade ut ett tecken.
+        view["exam"] = exam_gen._repair_ctrl_chars(view["exam"])
         # Dagen är lärarens också GENOM en omskrivning: modellen skriver om
         # hela dokumentet och satte tillbaka sin egen dag i varje varv. Båda
         # sidor av diffen stämplas, annars märks sidhuvudet som ändrat i ett
         # varv som inte rörde det.
         _satt_lararens_datum(view["exam"], view.get("datum"))
+        # Varvet skrivs ur DEN här versionen. Ligger pekaren någon annanstans när
+        # svaret ska sparas har ett annat varv hunnit före (se vakten i jobbet).
+        basversion = view.get("current_version")
+
+        # Två varv på samma papper köar inte — det andra får ett ärligt nej med
+        # en gång. En kö hade betytt att läraren står och väntar på en runda hon
+        # redan glömt att hon startade, och att hennes andra mening skrivs mot
+        # ett papper hon inte sett.
+        if not _ta_varvet(exam_id):
+            return JSONResponse(
+                {"error": "Pappret skrivs redan om — vänta tills det varvet "
+                          "landat innan du skickar nästa ändring."},
+                status_code=409)
 
         llm = arbiter.try_acquire_llm()
         if not llm:
+            _slapp_varvet(exam_id)
             return JSONResponse(_LLM_BUSY, status_code=409)
 
         def job(emit):
@@ -478,6 +548,22 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     log_cb=lambda m: emit({"type": "log", "msg": m}))
                 _satt_lararens_datum(res["exam"], view.get("datum"))
                 if res["exam"] is not None and res["exam"] != view["exam"]:
+                    # ── LYSSNAR NÅGON ÄN? ────────────────────────
+                    # Läraren som tryckte Avbryt eller stängde fliken fick
+                    # versionen sparad ändå: strömmen är avbruten men tråden
+                    # kör vidare, och mellan sista loggraden och skrivningen
+                    # fanns inget livstecken att avbryta VID. Ett emit precis
+                    # före skrivningen är det livstecknet — `emit` kastar
+                    # KlientBorta när ingen lyssnar, och då committas inget.
+                    emit({"type": "log", "msg": "Sparar varvet …"})
+                    # Och: har någon annan hunnit skriva om samma papper medan
+                    # vi väntade på modellen är vår text byggd på en version som
+                    # inte längre gäller. Att spara den vore last-write-wins —
+                    # den andres ändring försvann då även ur ångra-historiken.
+                    if _kolumn(exam_id, "current_version") != basversion:
+                        raise RuntimeError(
+                            "Pappret skrevs om i ett annat varv medan det här "
+                            "pågick. Läs om sidan och skicka ändringen igen.")
                     conn = db.connect(db_file)
                     try:
                         newview = db.add_exam_version(conn, exam_id, res["exam"])
@@ -493,6 +579,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 return svar
             finally:
                 arbiter.release_llm(llm)
+                _slapp_varvet(exam_id)
 
         return sse_response(job, req)
 
@@ -740,14 +827,23 @@ def create_router(base: Path, arbiter) -> APIRouter:
 
                 conn = db.connect(db_file)
                 try:
+                    # Sökvägarna hör till den version som FAKTISKT renderades.
+                    # `_peka_pa_versionen` pekade rätt i början, men pekaren är
+                    # inte vår att lita på när kompileringen är klar: en
+                    # fixrunda kan ha lagt en ny version, och ett refine i en
+                    # annan flik kunde ha flyttat den under tiden. Då skrevs
+                    # .tex/.pdf på ett varv de inte hörde till — filen på disk
+                    # var ett annat papper än det databasen pekade ut.
+                    version_id = view.get("current_version")
                     if exam != view["exam"]:
-                        db.add_exam_version(conn, exam_id, exam)
+                        ny = db.add_exam_version(conn, exam_id, exam)
+                        version_id = (ny or {}).get("current_version") or version_id
                     # Godkänt MED ENBART .tex är ärligt: LaTeX:en finns och går
                     # att kompilera för hand. Godkänt UTAN någon fil alls är
                     # det inte — föll redan valideringen skrevs ingenting, och
                     # provet stod ändå som godkänt i kalendern med tom hand.
                     newview = db.set_exam_artifacts(
-                        conn, exam_id,
+                        conn, exam_id, version_id=version_id,
                         tex_path=str(tex_path) if tex_path else None,
                         pdf_path=str(pdf_path) if pdf_path else None,
                         approve=tex_path is not None)
@@ -765,6 +861,31 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 raise
 
         return sse_response(job, req)
+
+    # ------------------------------------------------------ tillbaka igen --
+
+    @router.post("/api/exams/{exam_id:int}/oppna")
+    def oppna(exam_id: int):
+        """Lägg tillbaka ett godkänt papper som utkast.
+
+        Godkännandet var en enkelriktad dörr: efter det gick pappret inte att
+        skriva om, och gränssnittet sa ingenting om varför — «Bygg vidare»
+        startade en HELT ny körning, alltså ett nytt papper och en ny nota. Det
+        läraren nästan alltid vill är mindre än så: rätta en siffra i uppgift 3
+        på det papper som redan finns.
+
+        Artefakterna rörs inte. .tex och .pdf ligger kvar på disk och versionerna
+        bär sina sökvägar — godkänner hon igen skrivs de över, ångrar hon sig är
+        de kvar. Att radera dem här hade betytt att en ångrad omöppning kostar
+        en kompilering till."""
+        conn = db.connect(db_file)
+        try:
+            vy = db.set_exam_status(conn, exam_id, "utkast")
+        finally:
+            conn.close()
+        if vy is None:
+            return JSONResponse({"error": "okänt prov"}, status_code=404)
+        return {"id": exam_id, "status": vy["status"]}
 
     # ----------------------------------------------------------- artefakter --
 
@@ -785,6 +906,17 @@ def create_router(base: Path, arbiter) -> APIRouter:
         cur = next((v for v in view["versions"]
                     if v["id"] == view.get("current_version")), None)
         raw = (cur or {}).get(f"{kind}_path")
+        if not raw:
+            # Pekaren står inte alltid på det varv som trycktes: ett refine som
+            # landade efter godkännandet flyttar den till en version utan filer,
+            # och då fanns PDF:en på disk men var onåbar — «ingen pdf ännu,
+            # godkänn provet» om ett prov läraren just skrivit ut. Filen som
+            # SENAST byggdes är svaret i det läget; att låta pappret försvinna
+            # för att pekaren gått vidare är inte att vara försiktig, det är att
+            # tappa bort det.
+            raw = next((v.get(f"{kind}_path")
+                        for v in reversed(view["versions"])
+                        if v.get(f"{kind}_path")), None)
         if not raw:
             return None, JSONResponse(
                 {"error": f"ingen {kind} ännu — godkänn provet"}, status_code=404)
