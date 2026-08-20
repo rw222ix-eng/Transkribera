@@ -40,6 +40,7 @@
     const total = e + c + a;
     return {
       total,
+      tripel: (c + a) > 0,
       E: { minst: Math.ceil(total * KRAV.e) },
       C: { minst: Math.ceil(total * KRAV.c), varav_ca: Math.ceil((c + a) * KRAV.cCa) },
       A: { minst: Math.ceil(total * KRAV.a), varav_a: Math.ceil(a * KRAV.aA) }
@@ -180,7 +181,13 @@
     index = Math.max(0, Math.min(elever.length - 1, index));
     const e = nuvarande();
     $('#elevnamn').textContent = e.namn + (e.aktiv === false ? ' · har slutat' : '');
-    $('#elevmeta').textContent = `Elev ${index + 1} av ${elever.length} · ${provet}`;
+    /* Degenererade gränser ska SYNAS: utan tripel föll all poäng på E,
+       varav-kraven är noll och A kan nås på enbart E-poäng. Sant enligt
+       fallbacken (rattning._peca_fallback) — men inte något att dölja. */
+    const g0 = granser || granserAv(rader);
+    $('#elevmeta').textContent = `Elev ${index + 1} av ${elever.length} · ${provet}`
+      + (g0 && g0.tripel === false
+        ? ' · utan E/C/A-fördelning — betyget räknas på totalpoängen' : '');
 
     const lista = $('#elevrader');
     lista.innerHTML = '';
