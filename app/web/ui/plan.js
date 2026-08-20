@@ -2596,6 +2596,18 @@
               `Diagnosen tar ca ${res.tid} min av dina ${ram} — `
               + `${(res.exam.uppgifter || []).length} uppgifter täcker ${vald.size} punkter.`);
           }
+          /* Dubblettkontrollen (Fas 5) räknades vid varje anrop men visades
+             aldrig — en tabellskanning i onödan och ett besked läraren aldrig
+             fick. En rad räcker: vilken uppgift och mot vilket papper. */
+          const dubbla = res.dubbletter || [];
+          if (dubbla.length) {
+            const rader = dubbla.slice(0, 3).map(d =>
+              `uppgift ${(d.index || 0) + 1} liknar «${d.mot_titel || 'ett tidigare prov'}»`);
+            window.toast && window.toast(
+              `${dubbla.length === 1 ? 'En uppgift' : dubbla.length + ' uppgifter'} `
+              + `påminner om tidigare papper i kursen: ${rader.join(' · ')}`
+              + `${dubbla.length > 3 ? ' · …' : ''} — byt ut i canvas om det är samma tal.`);
+          }
         }
         /* Anteckningarna behöver ingen översättning: pappret ritas ur samma
            JSON servern validerade (blad-bygg.anteckningar). `radtak` följer

@@ -53,18 +53,28 @@
     el.className = 'fsvar';
     el.dataset.lage = 'kor';
     el.dataset.enkel = '';
-    el.innerHTML = '<div class="fjobb"><span class="fjobbprickar"><i></i><i></i><i></i></span><span class="fjobbtext"></span><button class="lank fstopp" type="button">Avbryt</button></div><p class="ftext"></p><div class="fatgard" hidden></div>';
+    el.innerHTML = '<div class="fjobb"><span class="fjobbprickar"><i></i><i></i><i></i></span><span class="fjobbtext"></span><span class="fjobbklocka"></span><button class="lank fstopp" type="button">Avbryt</button></div><p class="ftext"></p><div class="fatgard" hidden></div>';
     $('.fjobbtext', el).textContent = o.jobbtext || `Skriver om ${o.omfang || 'dokumentet'} …`;
     if (o.lagg) host.appendChild(el); else { host.innerHTML = ''; host.appendChild(el); }
     host.hidden = false;
     let stoppad = false;
     const jobb = $('.fjobb', el);
+    /* En uppräknande klocka — inte fasmätning (det vore osant, se ovan), bara
+       hur länge det pågått. En omskrivning tar 1–4 min; utan siffran går det
+       inte att skilja «det jobbar» från «det hänger». */
+    const start = Date.now();
+    const klocka = setInterval(() => {
+      const s = Math.floor((Date.now() - start) / 1000);
+      const k = $('.fjobbklocka', el);
+      if (k) k.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+    }, 1000);
     /* Samma `o.jobb` som i det stora läget: finns det väntar raden på ett
        riktigt anrop i stället för på en klocka, och Avbryt avbryter det. */
     const styrning = o.jobb ? new AbortController() : null;
     let svaret = null;
     const klarna = () => {
       if (stoppad) return;
+      clearInterval(klocka);
       jobb.setAttribute('data-ut', '');
       setTimeout(() => jobb.remove(), 220);
       el.dataset.lage = 'klar';
@@ -86,6 +96,7 @@
        ändring som ser gjord ut men aldrig skedde. */
     const felade = e => {
       if (stoppad || (e && e.name === 'AbortError')) return;
+      clearInterval(klocka);
       jobb.remove();
       el.dataset.lage = 'stoppad';
       malaText((e && e.message) || 'Det gick inte att skriva om.', $('.ftext', el));
@@ -114,6 +125,7 @@
       stoppad = true;
       if (styrning) { try { styrning.abort(); } catch (e) { /* redan klar */ } }
       clearTimeout(t);
+      clearInterval(klocka);
       /* Avbrytandet är varken klart eller fel, och den som håller ett lås
          medan varvet går måste ändå få veta att det är över — annars satt
          granskningens formulär låst tills sidan laddades om. */

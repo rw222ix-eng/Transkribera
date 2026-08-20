@@ -474,6 +474,11 @@
 .granskaskal[data-valj] .gduk{cursor:crosshair}
 .granskaskal[data-valj] .gdok [data-el]{outline:1px dashed rgba(96,168,221,.5);outline-offset:4px;transition:outline-color var(--dur-2) var(--ease),background-color var(--dur-2) var(--ease)}
 .granskaskal[data-valj] .gdok [data-el]:hover{outline:2px solid var(--atmosphere);background:color-mix(in srgb,var(--atmosphere) 12%,transparent)}
+/* Också UTAN väljläget: en svag kontur under pekaren är det enda som säger
+   att pappret går att peka i. Klicket kräver fortfarande K/knappen — canvasen
+   panoreras med samma hand, och ett val av misstag är dyrare än ett extra
+   tangenttryck. */
+.granskaskal:not([data-valj]) .gdok [data-el]:hover{outline:1px dashed rgba(96,168,221,.45);outline-offset:4px}
 .gdok [data-el][data-mal]{outline:2px solid var(--sky-deep);outline-offset:4px;background:color-mix(in srgb,var(--atmosphere) 14%,transparent)}
 .gdok [data-el][data-pekad]{outline:2px solid var(--atmosphere);outline-offset:4px;background:color-mix(in srgb,var(--atmosphere) 18%,transparent)}
 .gpin{position:absolute;left:-14px;top:6px;width:22px;height:22px;border-radius:50% 50% 50% 3px;background:var(--sky-deep);color:#fff;display:grid;place-items:center;font-family:var(--sans);font-size:.72rem;font-weight:600;box-shadow:0 4px 10px rgba(0,0,0,.35);cursor:pointer;z-index:5}
@@ -508,6 +513,7 @@
 .fjobb{display:flex;align-items:center;gap:9px;font-size:.86rem;color:var(--ink-2);opacity:1;transform:none;transition:opacity var(--dur-2) var(--ease),transform var(--dur-2) var(--ease)}
 .fjobb[data-ut]{opacity:0;transform:translateY(-4px)}
 .fjobbtext{min-width:0}
+.fjobbklocka{flex:0 0 auto;font-family:var(--mono);font-size:.72rem;color:var(--ink-3);font-variant-numeric:tabular-nums}
 .fjobbprickar{display:inline-flex;gap:4px;flex:0 0 auto}
 .fjobbprickar i{width:5px;height:5px;border-radius:50%;background:var(--atmosphere);animation:hoppa 1.1s var(--ease) infinite}
 .fjobbprickar i:nth-child(2){animation-delay:.14s}

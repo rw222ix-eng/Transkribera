@@ -206,7 +206,11 @@
 .bladtrav{display:flex;flex-direction:column;align-items:center;gap:22px;width:100%}
 .blad{flex:0 0 auto;zoom:var(--bladskala,1)}
 /* prov.css lägger bladen absolut för kanvasen — i appen står de i traven. */
-.bladtrav .ark,.bladtrav .gu{position:relative;left:auto;top:auto;margin:0}
+/* overflow:hidden gör skärmen ärlig mot filen: avritningen klipper vid arkets
+   exakta höjd, och SPILL-toleransen (blad.js) lät annars upp till 10 px sticka
+   ut nedanför pappret på skärmen men försvinna i PDF:en. Mätningarna rörs
+   inte — scrollHeight räknar innehållet oavsett. */
+.bladtrav .ark,.bladtrav .gu{position:relative;left:auto;top:auto;margin:0;overflow:hidden}
 .bladlapp{width:794px;margin:0 auto;font:600 11px/1.3 var(--sans,Arimo),Arial,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3)}
 /* Tavlan ritas i sin verkliga bredd och krymps efteråt med transform (se
    blad.js). Rutan bär den skalade höjden så traven inte får ett hål under sig. */
