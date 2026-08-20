@@ -132,6 +132,16 @@
   const mimen = f => (f.type || '').toLowerCase()
     || ANDELSER[String(f.name || '').split('.').pop().toLowerCase()] || '';
   let avvisade = [];
+  /* Rubrikgissningen är en BEKVÄMLIGHET, aldrig ett villkor för att filen ska
+     komma in. Bok.tolka slår upp kursens register och kastar på en kurs UTAN
+     bok (bok.js: namnet(A[0]) på en tom lista) — och eftersom kastet skedde
+     mitt i lägget dog hela dörren med den: ingen mini, ingen not, inget fel
+     läraren kunde se. Med en riktig server och ingen inläst bok var det varje
+     gång. */
+  function gissaSidan(namn, i) {
+    if (!(window.Bok && window.Bok.tolka)) return null;
+    try { return window.Bok.tolka(namn, i); } catch (e) { return null; }
+  }
   function lagg(filer) {
     let forsta = null;
     avvisade = [];
@@ -139,7 +149,7 @@
       const mime = mimen(f);
       if (!FORMAT[mime]) { avvisade.push(f.name); return; }
       const bild = mime !== 'application/pdf';
-      const tolkat = window.Bok ? window.Bok.tolka(f.name, lista.length) : null;
+      const tolkat = gissaSidan(f.name, lista.length);
       const rad = { namn: f.name, typ: bild ? 'foto' : 'pdf', url: bild ? URL.createObjectURL(f) : '', tolkning: tolkat ? tolkat.text : '', data: '' };
       lista.push(rad);
       /* Fildatat läses direkt (uppladdningen vid Skriv är synkron i sin

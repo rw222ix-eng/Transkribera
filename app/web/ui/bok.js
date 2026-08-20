@@ -203,6 +203,10 @@
   const SIDTYP = ['teori och två exempel', 'uppgifter, blandad svårighet', 'facit till uppgifterna', 'sammanfattning av avsnittet'];
   function tolka(filnamn, i) {
     const A = registerFor();
+    /* Tomt register — ingen bok inläst för kursen. Samma tomkoll som nasta():
+       utan den dog anroparens hela lyssnare på a.nr, och Egna filer-dörren
+       blev tyst obrukbar. */
+    if (!A.length) return null;
     const m = String(filnamn).match(/(\d+)[.,](\d+)/);
     const träff = m && A.find(a => a.nr === `${m[1]}.${m[2]}`);
     const a = träff || A.find(x => x.nr === senast) || A[0];

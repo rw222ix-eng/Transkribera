@@ -3,8 +3,8 @@ import { expect, test } from "@playwright/test";
 /* EGNA FILER — sidorna läraren lägger i dörren
  *
  * Dörren «Egna filer» (plan-sidor.js) laddar upp bokssidor och foton, låter
- * servern bildtolka dem och skriver tolkningen under varje litet papper. Två
- * fel bodde i den kedjan, och båda visade sig först på lektionen:
+ * servern bildtolka dem och skriver tolkningen under varje litet papper. Tre
+ * fel bodde i den kedjan, och alla visade sig först på lektionen:
  *
  *   1. Svaret lästes index för index, som om servern gav EN post per uppladdad
  *      fil. Den ger en post per SIDA: varje PDF expanderas till
@@ -16,6 +16,10 @@ import { expect, test } from "@playwright/test";
  *      «Tolkar dina sidor · N filer». En HEIC rakt ur telefonens kamerarulle
  *      fäller HELA begäran med 400 (servern tar PNG/JPG/WebP/PDF), så ETT
  *      felaktigt format tog alla sidor med sig — utan ett ord.
+ *   3. Rubrikgissningen fällde dörren. Bok.tolka slår upp kursens register och
+ *      kastar när det är tomt; kastet skedde mitt i lägget, så INGEN fil kom
+ *      in och ingenting sades. Det är läget på varje maskin där kursen ännu
+ *      inte har någon inläst bok — alltså det vanliga.
  *
  * Servern fejkas här: det som prövas är klientens läsning av svaret och dess
  * uppträdande när svaret uteblir.
@@ -59,21 +63,24 @@ async function fejkaUnderlag(page, { svar = SVAR, fel = null } = {}) {
   return anrop;
 }
 
-/* Filerna läses som data-URL:er av en FileReader — sakra() skickar det som
-   hunnit läsas, så uppladdningen får inte startas innan datat finns. */
-const oppnaPlaneringen = async (page, filer) => {
+/* Ett kast i en lyssnare syns inte i DOM:en — det blir bara ingenting alls, och
+   det var precis så fel 3 gömde sig. Sidfelen samlas därför i varje körning. */
+async function oppnaPlaneringen(page, filer) {
+  const felen = [];
+  page.on("pageerror", e => felen.push(e.message));
   await page.goto("/");
   await page.waitForFunction(() => window.Sidor && window.API && window.API.pa);
   await page.getByRole("tab", { name: "Planering" }).click();
-  await page.setInputFiles("#sidfil", filer);
-};
+  if (filer) await page.setInputFiles("#sidfil", filer);
+  return felen;
+}
 
 const tolkningarna = page =>
   page.locator("#sidminis .sidnamn").allTextContents();
 
 test("tolkningen under fotot är fotots — inte PDF:ens andra sida", async ({ page }) => {
   await fejkaUnderlag(page);
-  await oppnaPlaneringen(page, [PDF, FOTO]);
+  const felen = await oppnaPlaneringen(page, [PDF, FOTO]);
   await expect(page.locator("#sidminis .sidmini")).toHaveCount(2);
 
   const pid = await page.evaluate(() => window.Sidor.sakra());
@@ -85,6 +92,7 @@ test("tolkningen under fotot är fotots — inte PDF:ens andra sida", async ({ p
   expect(namn[0]).toContain("Logaritmlagar");
   // … och fotot sin egen. Förr stod «Exempel 3» här, ur PDF:ens sida 2.
   expect(namn[1]).toContain("Elevens uppgift 1204");
+  expect(felen).toEqual([]);
 });
 
 test("en HEIC stoppas i dörren — de andra sidorna går upp ändå", async ({ page }) => {
@@ -118,4 +126,21 @@ test("en uppladdning som faller ger serverns mening, inte tystnad", async ({ pag
   const fel = await page.evaluate(() =>
     window.Sidor.sakra().then(() => null, e => e.message));
   expect(fel).toBe(MENING);
+});
+
+test("en gissning som kastar får inte fälla dörren", async ({ page }) => {
+  /* Fel 3, pinnat oberoende av vad basen råkar innehålla: kursen utan bok gav
+     ett kast ur Bok.tolka mitt i lägget, och då kom INGEN fil in — varken den
+     som gissningen gällde eller de efter. Gissningen är en bekvämlighet;
+     faller den ska sidan ändå ligga i dörren, med filnamnet under sig. */
+  await fejkaUnderlag(page);
+  const felen = await oppnaPlaneringen(page, null);
+  await page.evaluate(() => {
+    window.Bok.tolka = () => { throw new TypeError("registret är tomt"); };
+  });
+  await page.setInputFiles("#sidfil", [PDF, FOTO]);
+
+  await expect(page.locator("#sidminis .sidmini")).toHaveCount(2);
+  expect(await tolkningarna(page)).toEqual(["kapitel3.pdf", "uppgift.jpg"]);
+  expect(felen).toEqual([]);
 });
