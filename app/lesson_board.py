@@ -22,6 +22,7 @@ import copy
 import json
 import math
 import re
+import time
 from typing import Callable
 
 from app import llm_client
@@ -1291,7 +1292,17 @@ def generate_board(course: str, group: str, moment: str, *, model: str,
 
     Domarens rundor räknas inte in i `rounds` — se _tackning_pass — men
     redovisas som `domarrundor`."""
-    log = log_cb or (lambda _m: None)
+    # Var tiden tar vägen. En tavla är numera en KEDJA av anrop — skrivning,
+    # eventuella reparationer, dom, eventuell komplettering — och när hela
+    # kedjan tog femton minuter fanns bara en klocka för alltihop. Varje
+    # loggrad stämplas med förfluten tid, så nästa långsamma körning säger
+    # själv vilket steg som åt den.
+    t0 = time.monotonic()
+    def _stamplad(m: str) -> str:
+        s = int(time.monotonic() - t0)
+        return f"{m} ({s // 60}:{s % 60:02d})"
+    _log = log_cb or (lambda _m: None)
+    log = lambda m: _log(_stamplad(m))
     log("Genererar lektionstavlan …")
     prompt = build_prompt(course, group, moment, memory, underlag, utfall, bok,
                           forlaga, svart, fokus)
@@ -1309,13 +1320,14 @@ def generate_board(course: str, group: str, moment: str, *, model: str,
                 "errors": [{"path": "svar", "code": "json",
                             "message": "modellen svarade inte med giltig JSON"}],
                 "rounds": rounds}
+    log("Tavlan är skriven — validerar …")
     _doc, errors = ws.validate_board_json(board)
     res = _repair_until_valid(board, errors, model=model, llm=llm,
                               rounds_used=rounds, max_rounds=max_rounds,
-                              log_cb=log_cb, token_cb=token_cb)
+                              log_cb=log, token_cb=token_cb)
     if doma and URVALSMARKOR in (bok or "") and res.get("board") is not None:
         dom = _tackning_pass(res["board"], res["errors"], model=model, llm=llm,
-                             bok=bok, log_cb=log_cb, token_cb=token_cb)
+                             bok=bok, log_cb=log, token_cb=token_cb)
         # `rounds` är den budget generering och renderingsreparation delar:
         # domaren har sin egen och lämnar därför siffran orörd.
         res = {"board": dom["board"], "errors": dom["errors"],
