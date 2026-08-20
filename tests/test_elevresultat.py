@@ -213,6 +213,19 @@ def test_klassaggregatet_ar_samma_som_manuell_klassrattning():
         assert ur_elever["summa"] == hand["summa"] == 10
 
 
+def test_halvrattad_rad_bar_bara_de_ifyllda_eleverna():
+    """Autosparningen skriver mitt i klassen. Raden elev 2 inte nått ska inte
+    späda ut andelen — taket är de som faktiskt är rättade på just den raden."""
+    resultat = {1: {"1": [2, None, None], "2a": [1, 2, None]},
+                2: {"1": [1, None, None]}}
+    elever, varden = rattning.elevresultat_till_rattning(resultat)
+    per_rad = rattning.rader_per_nyckel(resultat)
+    assert per_rad == {"1": 2, "2a": 1}
+    res = rattning.sammanfatta(UPPGIFTER, varden, elever, per_rad)
+    # Rad 1: 3 av 2·2. Rad 2a: 3 av 3·1 — en elev, inte två.
+    assert res["rattat"]["andel"] == (3 + 3) / (4 + 3)
+
+
 # ------------------------------------------------------------- klasslistan --
 
 def test_klasslistan_sparas_i_ordning(conn):

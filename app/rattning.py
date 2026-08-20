@@ -164,10 +164,15 @@ def _elever(varde) -> int:
     return max(1, min(40, n or ELEVER_STANDARD))
 
 
-def rakna(rader: list[dict], varden: dict | None, elever=ELEVER_STANDARD) -> dict:
+def rakna(rader: list[dict], varden: dict | None, elever=ELEVER_STANDARD,
+          per_rad: dict[str, int] | None = None) -> dict:
     """Andelen per rad och för de ifyllda raderna tillsammans. Ett värde
     klampas till radens tak precis som fältet gör — en femtiopoängare på en
-    rad som kan ge tolv är ett skrivfel, inte ett resultat."""
+    rad som kan ge tolv är ett skrivfel, inte ett resultat.
+
+    `per_rad` är antalet elever som har JUST DEN raden ifylld (elevläget vet
+    det, klassläget inte). Utan den bär varje rad hela klassen — och en
+    halvrättad klass ser ut att ha tagit 21 % när de rättade tog 80."""
     n = _elever(elever)
     ifyllda: dict[str, int] = {}
     ut: list[dict] = []
@@ -176,7 +181,8 @@ def rakna(rader: list[dict], varden: dict | None, elever=ELEVER_STANDARD) -> dic
         if r.get("grupp"):
             ut.append(dict(r))
             continue
-        radmax = int(r["p"]) * n
+        radmax = int(r["p"]) * (
+            min(n, (per_rad or {}).get(r["nyckel"]) or n))
         rad = dict(r, max=radmax, varde=None, andel=None)
         v = (varden or {}).get(r["nyckel"])
         if v is not None and str(v).strip() != "":
@@ -210,11 +216,12 @@ def svagaste(rader: list[dict]) -> dict | None:
 
 
 def sammanfatta(uppgifter: list[dict] | None, varden: dict | None,
-                elever=ELEVER_STANDARD) -> dict:
+                elever=ELEVER_STANDARD,
+                per_rad: dict[str, int] | None = None) -> dict:
     """Hela rättningen i ett svep: raderna, klassens andel och de svaga
     momenten. `rattat` är exakt den form frontenden lägger på pappret
     (rattning.js:204-207) — servern räknar den, klienten skriver den."""
-    r = rakna(bygg(uppgifter), varden, elever)
+    r = rakna(bygg(uppgifter), varden, elever, per_rad)
     s = svagaste(r["rader"])
     return {
         "rader": r["rader"], "elever": r["elever"],
@@ -413,3 +420,19 @@ def elevresultat_till_rattning(resultat: dict | None) -> tuple[int, dict]:
         if ifylld:
             elever += 1
     return elever, varden
+
+
+def rader_per_nyckel(resultat: dict | None) -> dict[str, int]:
+    """Antal elever med raden ifylld — taket i `rakna` när elevläget sparar.
+
+    Sparas halvvägs genom klassen (autosparningen gör det ofta) bär varje rad
+    annars alla elever som skrivit NÅGOT, och andelen späds ut av rader ingen
+    hunnit rätta."""
+    per_rad: dict[str, int] = {}
+    for _eid, per_nyckel in (resultat or {}).items():
+        if not isinstance(per_nyckel, dict):
+            continue
+        for nyckel, trip in per_nyckel.items():
+            if any(x is not None for x in (trip or [])):
+                per_rad[str(nyckel)] = per_rad.get(str(nyckel), 0) + 1
+    return per_rad

@@ -141,7 +141,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
         conn = db.connect(db_file)
         try:
             if elever:
-                res = rattning.sammanfatta(papper.get("uppgifter"), varden, elever)
+                res = rattning.sammanfatta(papper.get("uppgifter"), varden, elever,
+                                           rattning.rader_per_nyckel(rent))
                 db.save_rattning(
                     conn, dokument_id, elever=res["elever"],
                     andel=res["rattat"]["andel"], rader=res["rader"],

@@ -130,12 +130,16 @@
       g.dataset.niva = String(i);
       g.innerHTML = '<span class="elevniva"></span>';
       $('.elevniva', g).textContent = namn;
+      /* Ett tabstopp per grupp, inte per knapp: den valda (annars första)
+         siffran bär tabindex 0 — pilarna når resten. */
+      const stopp = v[i] != null ? v[i] : 0;
       for (let p = 0; p <= peca[i]; p++) {
         const k = document.createElement('button');
         k.type = 'button';
         k.className = 'elevknapp';
         k.dataset.v = String(p);
         k.textContent = String(p);
+        k.tabIndex = p === stopp ? 0 : -1;
         k.setAttribute('aria-label', `${p} av ${peca[i]} ${namn}-poäng på uppgift ${r.kod}`);
         if (v[i] === p) k.setAttribute('data-vald', '');
         k.addEventListener('click', () => satt(r, i, p, k));
@@ -224,28 +228,42 @@
     v[r.nyckel] = nu;
     const grupp = knapp.closest('.elevgrupp');
     [...grupp.querySelectorAll('.elevknapp')].forEach(k => {
-      if (Number(k.dataset.v) === nu[niva]) k.setAttribute('data-vald', '');
+      const vald = Number(k.dataset.v) === nu[niva];
+      if (vald) k.setAttribute('data-vald', '');
       else k.removeAttribute('data-vald');
+      k.tabIndex = (nu[niva] != null ? vald : k.dataset.v === '0') ? 0 : -1;
     });
     smutsigt = true;
     rakna();
     if (nu[niva] != null) nasta(grupp);
   }
 
-  /* Nästa grupp att fylla i — nästa nivå på raden, annars nästa rads första. */
+  /* Nästa grupp att fylla i — nästa nivå på raden, annars nästa rads första.
+     Efter sista gruppen: är eleven färdigrättad går turen till nästa elev, så
+     en klass rättas i ett svep utan att röra musen. */
   function nasta(grupp) {
     const alla = [...skal.querySelectorAll('.elevgrupp')];
     const i = alla.indexOf(grupp);
     const n = alla[i + 1];
-    if (n) n.querySelector('.elevknapp').focus();
+    if (n) { n.querySelector('.elevknapp').focus(); return; }
+    const s = summorAv(varden(nuvarande()));
+    if (!s.kvar && elever.length > 1) byt(1);
+  }
+
+  /* Första ofyllda gruppen — där rättandet ska fortsätta. */
+  function fokusera() {
+    if (skal.hidden || $('#elevvy').hidden) return;
+    const grupper = [...skal.querySelectorAll('.elevgrupp')];
+    const g = grupper.find(x => !x.querySelector('[data-vald]')) || grupper[0];
+    if (g) g.querySelector('.elevknapp').focus();
   }
 
   function byt(steg) {
     if (!elever.length) return;
+    sparaTyst();
     index = (index + steg + elever.length) % elever.length;
     rita();
-    const forsta = skal.querySelector('.elevknapp');
-    if (forsta) forsta.focus();
+    fokusera();
   }
 
   /* ── Servern ──────────────────────────────────────────────────────────── */
@@ -272,6 +290,10 @@
       las(r);
       smutsigt = false;
       rita();
+      /* Omritningen slog undan fokus — utan det är siffertangenterna döda
+         och läraren måste klicka innan hon kan börja. Textfält lämnas ifred. */
+      const aktiv = document.activeElement;
+      if (!aktiv || aktiv.tagName !== 'TEXTAREA') fokusera();
     }).catch(() => {});
   }
 
@@ -384,9 +406,20 @@
   function sparaKlassen() {
     const namn = $('#elevnamnfalt').value.split('\n')
       .map(s => s.trim()).filter(Boolean);
-    if (!namn.length) return;
+    if (!namn.length) {
+      $('#elevnot').textContent = 'Klistra in klasslistan först — ett namn per rad.';
+      return;
+    }
+    /* Med server men utan grupp: pappret saknar klass, och prototypgrenen
+       hade skapat elever med negativa id:n som servern sedan fäller på FK.
+       Bättre ett rakt besked än en halvsparad rättning. */
+    if (server() && !gruppId) {
+      $('#elevnot').textContent =
+        'Pappret saknar klass — sätt klassen på pappret och öppna igen.';
+      return;
+    }
     delete $('#elevklass').dataset.oppen;
-    if (!server() || !gruppId) {
+    if (!server()) {
       /* Utan server (Claude Design) finns klassen bara i den här sessionen.
          Prototypen ska ändå gå att visa hela vägen. */
       elever = ordnaNamn(namn).map((n, i) => ({ id: -(i + 1), namn: n, aktiv: true }));
@@ -402,6 +435,33 @@
       elever = (r.elever || []).filter(e => e.aktiv);
       index = 0;
       rita();
+      fokusera();
+    }).catch(e => {
+      $('#elevnot').textContent = (e && e.message) || 'Klassen gick inte att spara.';
+    });
+  }
+
+  /* Autosparningen vid elevbyte och stängning. Ingen toast, ingen omritning —
+     PUT:en är samma idempotenta helstate som Spara-knappens, men svaret får
+     inte skrivas tillbaka: hinner läraren klicka medan anropet är ute vore
+     ekot äldre än skärmen. Flaggan släcks bara om ingenting hann ändras. */
+  function sparaTyst() {
+    if (!smutsigt || !server()) return;
+    const v = doc, bild = JSON.stringify(resultat);
+    window.API.json(vag(v), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ resultat }),
+    }).then(r => {
+      cicache.clear();
+      v.rattat = r.rattat || null;
+      window.Dokument && window.Dokument.andrad && window.Dokument.andrad(v);
+      window.Dokument && window.Dokument.rita && window.Dokument.rita();
+      window.Utgang && window.Utgang.rita();
+      if (doc === v && JSON.stringify(resultat) === bild) {
+        smutsigt = false;
+        rakna();
+      }
     }).catch(() => {});
   }
 
@@ -437,7 +497,11 @@
           window.Utgang && window.Utgang.rita();
           window.API.json(vag(v), { method: 'DELETE' }).catch(() => {});
         });
-    }).catch(() => {});
+    }).catch(e => {
+      /* Ett svalt fel här är en förlorad rättning som SER sparad ut. */
+      if (doc === v) $('#elevnot').textContent =
+        (e && e.message) || 'Kunde inte spara — siffrorna står kvar, försök igen.';
+    });
   }
 
   function skrivFeedback() {
@@ -490,10 +554,31 @@
   /* ── Modalen ──────────────────────────────────────────────────────────── */
 
   const tangent = e => {
-    if (e.key === 'Escape') { stang(); return; }
+    if (e.key === 'Escape') {
+      /* Escape trappar sig utåt: fältet släpper fokus, klasseditorn stängs,
+         modalen sist. En inklistrad klasslista ska inte ryka på en tangent. */
+      if (e.target && e.target.tagName === 'TEXTAREA') { e.target.blur(); return; }
+      if ($('#elevklass').dataset.oppen && elever.length) {
+        delete $('#elevklass').dataset.oppen;
+        rita();
+        return;
+      }
+      stang();
+      return;
+    }
     if (skal.hidden || $('#elevvy').hidden) return;
     if (e.target && e.target.tagName === 'TEXTAREA') return;
     if (e.key === 'Enter') { e.preventDefault(); byt(1); return; }
+    /* Pilarna går inom gruppen — Tab går mellan grupperna (roving tabindex i
+       ritaRad), så ett femtonradersprov är femton tabtryck, inte femtio. */
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      const grupp = e.target && e.target.closest && e.target.closest('.elevgrupp');
+      if (!grupp) return;
+      const knappar = [...grupp.querySelectorAll('.elevknapp')];
+      const n = knappar[knappar.indexOf(e.target) + (e.key === 'ArrowRight' ? 1 : -1)];
+      if (n) { e.preventDefault(); n.focus(); }
+      return;
+    }
     if (!/^[0-9]$/.test(e.key)) return;
     const grupp = e.target && e.target.closest && e.target.closest('.elevgrupp');
     if (!grupp) return;
@@ -525,16 +610,26 @@
     rita();
     hamta();
     skal.hidden = false;
-    requestAnimationFrame(() => skal.setAttribute('data-pa', ''));
+    requestAnimationFrame(() => { skal.setAttribute('data-pa', ''); fokusera(); });
     document.addEventListener('keydown', tangent);
   }
 
   function stang() {
     if (skal.hidden) return;
+    /* Osparat följer med ut — Escape, ✕ och klick utanför ska aldrig kasta en
+       kvälls rättning. Utan server finns inget att skriva till; då står
+       siffrorna kvar i minnet tills modalen öppnas om. */
+    sparaTyst();
     skal.removeAttribute('data-pa');
     setTimeout(() => { skal.hidden = true; }, 220);
     document.removeEventListener('keydown', tangent);
   }
+
+  /* Sista utvägen: stängs hela fliken med osparade poäng får webbläsaren
+     fråga. Autosparningen gör att det nästan aldrig händer — nästan. */
+  window.addEventListener('beforeunload', e => {
+    if (smutsigt && server()) { e.preventDefault(); e.returnValue = ''; }
+  });
 
   skal.addEventListener('click', e => { if (e.target === skal) stang(); });
   $('#elevstang').addEventListener('click', stang);
