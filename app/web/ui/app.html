@@ -56,6 +56,10 @@
     /* ── DUK ─────────────────────────────────────────── */
     .duk{position:fixed;inset:0;z-index:0;overflow:hidden;pointer-events:none}
     .topbar,.vy{position:relative;z-index:1}
+    /* .vy är en stackningskontext (z-index:1) — panelernas egna z-index når
+       aldrig över topbaren (z-index:20). En öppen flytande panel måste därför
+       lyfta hela vyn, annars fångar den halvgenomskinliga topbaren klicken. */
+    .vy:has(.valjpanel,.kalpanel,.minipanel,.radmeny,.rad .bokpanel,.bkbokpanel:not([hidden])){z-index:30}
     .himmel{position:absolute;inset:0;background:radial-gradient(46% 34% at 80% 2%,rgba(255,255,255,.32),rgba(255,255,255,0) 70%),linear-gradient(180deg,#0C64A8 0%,#1276BD 16%,#1E85CB 34%,#3C9CD8 56%,#66B5E3 74%,#93CBEC 88%,#BADDF3 100%);transition:background var(--dur-4) var(--ease)}
     /* Målad himmel per flik: bilden ligger stilla i botten och andas långsamt (Ken Burns),
        lagret ovanför tonar mellan flikarna. Diset håller svart text läsbar. */
