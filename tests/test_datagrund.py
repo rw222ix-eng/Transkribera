@@ -246,7 +246,7 @@ def test_rader_utan_sidor_hoppas_over(conn):
 
 
 def test_hjalpmedlet_skiljer_pa_tomt_och_osynkat(conn):
-    """Provets upplägg («En del» / «Del A + Del B») förvalas ur hjälpmedlen som
+    """Provets upplägg («En del» / «Del B + Del C») förvalas ur hjälpmedlen som
     står på lektionerna. Då måste två svar hållas isär, och det är hela skälet
     till att kolumnen får vara NULL:
 

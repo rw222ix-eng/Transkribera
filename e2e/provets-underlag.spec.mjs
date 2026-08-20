@@ -834,10 +834,10 @@ async function medPlanering(page, innehall) {
   await tillSteg(page, 4);
 }
 
-test("datorn i planeringen föreslår Del A + Del B", async ({ page }) => {
+test("datorn i planeringen föreslår Del B + Del C", async ({ page }) => {
   await fejka(page);
   await medPlanering(page, medHjalpmedel(["dator", "", "raknare"]));
-  await expect(delprovet(page)).toHaveText("Del A + Del B");
+  await expect(delprovet(page)).toHaveText("Del B + Del C");
   await expect(delprovnot(page))
     .toHaveText("Dator eller räknare står på 2 av 3 lektioner i planeringen.");
 });
@@ -855,14 +855,14 @@ test("osynkade rader påstår ingenting — standarden står kvar", async ({ pag
   // Ingen rad bär nyckeln: basen är skriven före v21 och ingen har läst dem med
   // hjälpmedelsögon. Då ska appen tiga, inte säga «inga digitala verktyg».
   await medPlanering(page, INNEHALL);
-  await expect(delprovet(page)).toHaveText("Del A + Del B");   // standarden
+  await expect(delprovet(page)).toHaveText("Del B + Del C");   // standarden
   await expect(delprovnot(page)).toHaveCount(0);
 });
 
 test("förvalet är ett förslag — läraren byter fritt", async ({ page }) => {
   await fejka(page);
   await medPlanering(page, medHjalpmedel(["dator", "dator", "dator"]));
-  await expect(delprovet(page)).toHaveText("Del A + Del B");
+  await expect(delprovet(page)).toHaveText("Del B + Del C");
   await page.locator('.typrad[data-id="delprov"] button', { hasText: "En del" })
     .click();
   await expect(delprovet(page)).toHaveText("En del");

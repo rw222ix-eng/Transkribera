@@ -34,7 +34,7 @@ def papper(**extra):
         "lektionsdatum": "2026-05-14", "lektionstid": "08:15–09:00",
         "gy": ["Deriveringsregler"], "kalla": True, "kallor": ["Produktregeln"],
         "sidor": "204–208", "bokuppg": None,
-        "inst": {"antal": 8, "nivamix": "Balanserat", "delprov": "Del A + Del B",
+        "inst": {"antal": 8, "nivamix": "Balanserat", "delprov": "Del B + Del C",
                  "losningar": True, "formelblad": True, "provtid": "120 min"},
         "bilder": {}, "referenser": [], "forlaga": None, "resultat": None,
         "fokus": "", "kontext": "start", "niva": False, "svarighet": 0,

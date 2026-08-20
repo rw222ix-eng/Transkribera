@@ -258,7 +258,7 @@ test("provets lösningsblad ber om skärmfilen, inte om anvisningen", async ({ p
      anvisningen om den inte finns — tryck.losningar_bredvid). */
   const prov = papper({
     typ: "Prov", moment: "derivator", wb: null, provId: 7,
-    inst: { antal: 6, provtid: "90 min", delprov: "Del A + Del B",
+    inst: { antal: 6, provtid: "90 min", delprov: "Del B + Del C",
             losningar: true },
     uppgifter: [{ nr: 1, p: 2, t: "Derivera $3x^2$.", f: "$6x$", niva: "E" }],
   });

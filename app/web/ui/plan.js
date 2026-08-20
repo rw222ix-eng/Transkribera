@@ -282,7 +282,7 @@
                         rutinuppgift och en med fullständig lösning.
            2 uppgifter — skelettet blir 60 % E-poäng och 0 % A. Nivåbanden går
                         inte att träffa med två uppgifter, hur de än flyttas.
-           3–51       — rent, varje antal, med och utan Del A + Del B.
+           3–51       — rent, varje antal, med och utan Del B + Del C.
 
          Golvet är alltså 3 och det är serverns, inte en smaksak. Taket 20 är
          lärarens: sträckan är prövad ända upp till 51 utan anmärkning, men ett
@@ -295,10 +295,12 @@
         vidMax: 'Tjugo är appens tak. Fler går att skriva men blir sällan ett '
                 + 'prov som hinns med på en lektion.' },
       { id: 'nivamix', namn: 'Poängnivåer', typ: 'seg', val: ['Bara E', 'E-tyngd', 'Balanserat', 'C/A-tyngd'] },
-      /* Del A är utan digitala hjälpmedel, del B med räknare och GeoGebra.
+      /* Del B är utan digitala hjälpmedel, del C med räknare och GeoGebra —
+         NP:s namn, samma som dokumentet och bedömningsanvisningen trycker
+         (skärmen sa förr «Del A + Del B», se DELNAMN i blad-bygg.js).
          Skillnaden är hjälpmedlen — båda delarna bär korta svar och uppgifter
          som redovisas på lösblad. */
-      { id: 'delprov', namn: 'Upplägg', typ: 'seg', val: ['En del', 'Del A + Del B'] },
+      { id: 'delprov', namn: 'Upplägg', typ: 'seg', val: ['En del', 'Del B + Del C'] },
       /* Lösningsförslaget och formelbladet är samma beslut — vad som skrivs ut
          UTÖVER provet — och stod som två switchar på var sin rad. En rad med två
          kryss säger det på halva höjden. Fälten under är oförändrade: tryck.js
@@ -342,7 +344,7 @@
   };
   const inst = {
     Tavla: { langd: 45, starttid: '', exempel: 2 },
-    Prov: { nar: 'På lektionen', narDatum: '', narTid: '08:15', provminuter: 90, provtid: '90 min', antal: 6, nivamix: 'Balanserat', delprov: 'Del A + Del B', losningar: true, formelblad: true },
+    Prov: { nar: 'På lektionen', narDatum: '', narTid: '08:15', provminuter: 90, provtid: '90 min', antal: 6, nivamix: 'Balanserat', delprov: 'Del B + Del C', losningar: true, formelblad: true },
     Arbetsblad: { antal: 3, niva: 'Blandat', facit: 'Facit i bladet', illustration: true,
                   klassblad: true, elever: [], syfte: 'Stötta' },
     Gruppuppgift: { grupp: 3, langd: 60, redovisning: 'Muntligt' },
@@ -353,6 +355,13 @@
     Diagnos: { nar: 'På lektionen', narDatum: '', narTid: '08:15', provminuter: 60, provtid: '60 min' },
     Anteckningar: { onskemal: '', lektioner: [] }
   };
+  /* Upplägget hette «Del A + Del B» innan delnamnen följde dokumentet (Del B
+     utan räknare, Del C med — NP:s namn, samma som bedömningsanvisningen).
+     Strängen ligger sparad i gamla dokuments och utkasts `inst`, och utan
+     lagningen stod segmentväljaren utan tryckt knapp när ett gammalt upplägg
+     ärvdes eller byggdes vidare på. Körs där sparade inst läses in och där
+     de visas — jämförelser mot 'En del' klarar sig själva. */
+  const lagaDelprov = s => (s === 'Del A + Del B' ? 'Del B + Del C' : s);
   /* Utgår pappret från boken är lösningsförslaget till BOKENS uppgifter något
      annat än facit till de uppgifter appen själv skrivit: eleverna räknar i
      boken, läraren räknar dem också, och det är nivå 2 och 3 som behöver en
@@ -1253,7 +1262,7 @@
     p.textContent = text || '';
   }
   /* ── Upplägget faller ut ur hjälpmedlen ──────────────
-     «En del» är papper och penna, «Del A + Del B» delar provet vid gränsen mot
+     «En del» är papper och penna, «Del B + Del C» delar provet vid gränsen mot
      de digitala verktygen. Vilken sida klassen arbetat på står i kalendern:
      synken härleder en flagga per lektion ur beskrivningen (dator / räknare /
      inget) utan att någonsin lagra texten — se calendar_google.hjalpmedel_ur_text
@@ -1302,7 +1311,7 @@
     const h = p.hjalpmedel || { med: 0, utan: 0, okand: 0 };
     const lasta = h.med + h.utan;
     if (!lasta) return '';
-    const forslag = h.med ? 'Del A + Del B' : 'En del';
+    const forslag = h.med ? 'Del B + Del C' : 'En del';
     /* Har läraren själv bytt upplägg står hennes val kvar — noten säger ändå
        vad planeringen visste, så hon ser vad hon valde bort. */
     if (!delprovforval || inst.Prov.delprov === delprovforval) {
@@ -1926,7 +1935,9 @@
       bas.forEach(u => { u.p = Math.max(1, u.p - 1); });
       if (bas[2]) bas[2].t = `Ett ${k} sammanhang: sambandet är givet. Bestäm förändringen och tolka svaret.`;
     }
-    if (v.niva || i.delprov === 'Del A + Del B') {
+    /* startsWith och inte strängjämförelse: sparade dokument kan bära gamla
+       namnet «Del A + Del B», och båda betyder tvådelat prov. */
+    if (v.niva || (i.delprov || '').startsWith('Del')) {
       bas.push({ t: 'Fördjupning: visa varför metoden fungerar även när villkoret inte är uppfyllt.', p: 4, f: 'Resonemang som håller generellt.', niva: true });
       if (v.typ === 'Prov') bas.push({ t: `Modellera situationen, lös den med ${m} och värdera rimligheten i svaret.`, p: 6, f: 'Modell, lösning och värdering.', niva: true });
     }
@@ -2580,7 +2591,7 @@
              skärmen: gruppuppgiftens metarad och namnrader ritades ur
              planeringens väljare, provtabellens provtid och hjälpmedelsrad ur
              minutväljaren och formelbladskrysset. «Gör grupperna om 4» och
-             «tillåt räknare på del A» ändrade alltså pappret utan att
+             «tillåt räknare på del B» ändrade alltså pappret utan att
              förhandsvisningen rörde sig — och det är förhandsvisningen läraren
              godkänner. Följer de inte med hit ritas appens förval igen. */
           utkast.grupp = res.exam.grupp || null;
@@ -2807,7 +2818,7 @@
       const nar = s.nar === 'Annan dag' && s.narDatum
         ? `${window.Kalender ? window.Kalender.ord(s.narDatum) : s.narDatum}${s.narTid ? ' ' + s.narTid : ''}`
         : 'på lektionen';
-      return `${s.antal} uppgifter · ${s.nivamix} · ${s.delprov} · ${s.provtid} · ${nar}${s.formelblad ? ' · formelblad' : ''}`;
+      return `${s.antal} uppgifter · ${s.nivamix} · ${lagaDelprov(s.delprov)} · ${s.provtid} · ${nar}${s.formelblad ? ' · formelblad' : ''}`;
     }
     /* Diagnosen har inget antal att sammanfatta — det räknas ur innehållet och
        tiden när den skrivs. Raden säger därför det som ÄR valt. */
@@ -2926,6 +2937,7 @@
     if (arvtFran !== v) {
       arvtFran = v;
       Object.assign(inst[typ], JSON.parse(JSON.stringify(v.inst || {})));
+      if (inst[typ].delprov) inst[typ].delprov = lagaDelprov(inst[typ].delprov);
       /* Ärvda upplägg bär förra lektionens minuter. Schemat ska ändå få säga sitt
          om längden — annars ärver en 45-minuterslektion ett 60-minutersblock.
          Nycklarna för alla tre måtten måste bort, inte två: står `minSchema`
@@ -3087,6 +3099,7 @@
     /* Upplägget ÄRVS här, till skillnad från «bygg vidare»: provtiden, antalet
        uppgifter, nivåfördelningen och lösningsbladet var redan avgjorda en gång. */
     Object.assign(inst[v.typ], JSON.parse(JSON.stringify(v.inst || STANDARD[v.typ])));
+    if (inst[v.typ].delprov) inst[v.typ].delprov = lagaDelprov(inst[v.typ].delprov);
     /* Samma sak som vid arvet: det ärvda upplägget får inte bära med sig nyckeln
        som säger att längden redan är läst ur schemat. */
     delete inst[v.typ].langdSchema;
@@ -4332,7 +4345,7 @@
     const datumOrd = v => v.datum ? new Date(v.datum + 'T12:00:00').toLocaleDateString('sv-SE', { day: 'numeric', month: 'long' }) : 'utan datum';
     const beskriv = v => {
       const i = v.inst || {};
-      if (v.typ === 'Prov') return `${v.uppgifter.length} uppgifter, ${i.provtid || '90 min'}, ${i.delprov || 'Del A + Del B'}`;
+      if (v.typ === 'Prov') return `${v.uppgifter.length} uppgifter, ${i.provtid || '90 min'}, ${lagaDelprov(i.delprov) || 'Del B + Del C'}`;
       if (v.typ === 'Arbetsblad') return `${v.uppgifter.length} uppgifter, ${i.niva || 'Blandat'}, ${(i.facit || 'Facit i bladet').toLowerCase()}`;
       return `${i.langd || 45} minuter, ${i.exempel || 2} exempel på tavlan`;
     };
@@ -4421,7 +4434,7 @@
     if (!v) return;
     const i = v.inst || {};
     const rad = v.typ === 'Prov'
-      ? `${v.uppgifter.length} uppgifter · ${i.provtid || '90 min'} · ${i.delprov || 'Del A + Del B'}${i.formelblad && !v.losningsblad ? ' · formelblad som bilaga' : ''}${v.losningsblad ? ' · lösningsförslag' : ''}`
+      ? `${v.uppgifter.length} uppgifter · ${i.provtid || '90 min'} · ${lagaDelprov(i.delprov) || 'Del B + Del C'}${i.formelblad && !v.losningsblad ? ' · formelblad som bilaga' : ''}${v.losningsblad ? ' · lösningsförslag' : ''}`
       : v.typ === 'Arbetsblad'
         ? `${v.uppgifter.length} uppgifter · ${i.niva || 'Blandat'}${v.losningsblad ? ' · facit' : ''}`
         : `${i.langd || 45} minuter · ${i.exempel || 2} exempel på tavlan`;
@@ -4537,7 +4550,7 @@
   const provMaj = fardigt({
     typ: 'Prov', moment: 'deriveringsregler', klass: '9A', kurs: 'Matematik 3c', datum: '2026-05-14',
     gy: ['Deriveringsregler', 'Extremvärdesproblem'], kalla: true, kallor: ['Deriveringsregler', 'Produktregeln'],
-    inst: { provtid: '120 min', antal: 8, nivamix: 'Balanserat', delprov: 'Del A + Del B', losningar: true, formelblad: true }
+    inst: { provtid: '120 min', antal: 8, nivamix: 'Balanserat', delprov: 'Del B + Del C', losningar: true, formelblad: true }
   });
   /* Majprovet är rättat: klassens poäng per uppgift ligger på pappret, och därmed
      går det att utgå från utfallet när nästa tavla eller gruppuppgift skrivs. */

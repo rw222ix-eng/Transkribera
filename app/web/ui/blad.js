@@ -48,9 +48,9 @@ window.Blad = (() => {
   }
 
   /* Provet prövar det klassen har läst — dagens avsnitt och de före det.
-     Del A är E-uppgifterna (utan digitala hjälpmedel), del B resten (med räknare
+     Del B är E-uppgifterna (utan digitala hjälpmedel), del C resten (med räknare
      och GeoGebra); gränsen räknas ur listan och inte ur ett fast uppgiftsnummer,
-     så ett prov utan C- och A-uppgifter helt enkelt saknar del B. */
+     så ett prov utan C- och A-uppgifter helt enkelt saknar del C. */
   function provplock(v) {
     const i = v.inst || {};
     const pool = I() ? I().provpool(v.moment, 12) : [];
@@ -264,14 +264,14 @@ window.Blad = (() => {
     const meta = $('.prmeta tbody', trav);
     if (meta) {
       const rad = (n, t) => `<tr><th>${n}</th><td>${t}</td></tr>`;
-      /* Hjälpmedlen är det som skiljer del A från del B — därför står de i
+      /* Hjälpmedlen är det som skiljer del B från del C — därför står de i
          delraderna och inte som ett blankt förbud på hjälpmedelsraden. Svaret
          skrivs i provet på båda delarna; redovisningen på lösblad på båda. */
       const redovisas = 'Svaret skrivs i provet, redovisningen på lösblad.';
       /* DOKUMENTETS HJÄLPMEDELSREGEL VINNER — och då säger pappret den EN gång.
          `hjalpmedel` är ett obligatoriskt fält i ExamDoc och står på PDF:ens
          försättsblad; skärmen härledde i stället sin egen rad ur
-         formelbladskrysset i planeringen. «Tillåt räknare på del A» skrev alltså
+         formelbladskrysset i planeringen. «Tillåt räknare på del B» skrev alltså
          om PDF:en medan förhandsvisningen stod kvar med sitt gamla förbud.
          Äger dokumentet regeln tas appens per-del-fraser bort ur delraderna:
          en regel ur dokumentet och en av appen på samma papper är värre än
@@ -279,18 +279,18 @@ window.Blad = (() => {
          gäller. Delraderna behåller uppgiftsspannet och redovisningen, som är
          papprets egen indelning och inte en hjälpmedelsregel. */
       const hjalp = (v.hjalpmedel || '').trim();
-      const delA = hjalp ? '' : ' Utan digitala hjälpmedel.';
-      const delB = hjalp ? '' : ' Räknare och digitala hjälpmedel tillåtna.';
+      const utanHjalp = hjalp ? '' : ' Utan digitala hjälpmedel.';
+      const medHjalp = hjalp ? '' : ' Räknare och digitala hjälpmedel tillåtna.';
       meta.innerHTML = rad('Provtid', provtidText(v))
         + rad('Hjälpmedel', hjalp ? esc(hjalp)
           : `${i.formelblad ? 'Formelblad och linjal' : 'Linjal'}.${enDel ? ' Inga digitala hjälpmedel.' : ''}`)
         + (enDel
           ? rad('Uppgifter', `${versal(omrade(1, plock.length))}. ${redovisas}`)
-          : rad('Del A', `${versal(omrade(1, antalB))}.${delA} ${redovisas}`)
-            + rad('Del B', `${versal(omrade(antalB + 1, plock.length))}.${delB} ${redovisas}`));
+          : rad('Del B', `${versal(omrade(1, antalB))}.${utanHjalp} ${redovisas}`)
+            + rad('Del C', `${versal(omrade(antalB + 1, plock.length))}.${medHjalp} ${redovisas}`));
     }
     const not = $('.prnot', trav);
-    if (not) not.innerHTML = `Provet ger högst <b>${summa} poäng</b>${enDel ? '' : ` — ${sumB} på del A och ${summa - sumB} på del B`}. Efter varje uppgift står hur många poäng den kan ge.${enDel ? '' : ' Uppgifter märkta «lösblad» redovisas på separat lösblad — visa hur du räknar och förklara varför.'} Skriv ditt namn på alla papper du lämnar in.${plock.some(u => !arE(u)) ? '' : ' Provet prövar E-nivån — det finns inga uppgifter för C och A på det här provet.'}`;
+    if (not) not.innerHTML = `Provet ger högst <b>${summa} poäng</b>${enDel ? '' : ` — ${sumB} på del B och ${summa - sumB} på del C`}. Efter varje uppgift står hur många poäng den kan ge.${enDel ? '' : ' Uppgifter märkta «lösblad» redovisas på separat lösblad — visa hur du räknar och förklara varför.'} Skriv ditt namn på alla papper du lämnar in.${plock.some(u => !arE(u)) ? '' : ' Provet prövar E-nivån — det finns inga uppgifter för C och A på det här provet.'}`;
 
     /* ── BETYGSGRÄNSERNA ÄR SERVERNS, INTE SKÄRMENS ──────
        Här räknades gränserna med egna procentsatser — 30 % för E, 53 för C,
@@ -470,7 +470,7 @@ window.Blad = (() => {
       if (sist) rad(sist, 'data-slut', 'Slut på provet');
       return;
     }
-    [['pr1b', 'A', sumB], ['pr1c', 'B', summa - sumB]].forEach(([form, namn, po]) => {
+    [['pr1b', 'B', sumB], ['pr1c', 'C', summa - sumB]].forEach(([form, namn, po]) => {
       const ark = $$('.blad', trav)
         .map(bl => $('.ark[data-form]', bl))
         .filter(a => a && a.dataset.form === form && $('.pruppg', a));
