@@ -2385,6 +2385,10 @@
         delar: i0.delprov !== 'En del',
         datum: utkast.datum || '',
         typ: typ === 'Arbetsblad' ? 'arbetsblad' : 'prov',
+        /* «Poängnivåer» når pappret (exam_spec.NIVAVAL) — men BARA när den
+           inte står i defaultläget: en orörd väljare ska ge exakt samma
+           begäran som före fältet, annars ryker kassetterna. */
+        ...(i0.nivamix && i0.nivamix !== 'Balanserat' ? { nivamix: i0.nivamix } : {}),
         ...utfall(), ...bokval(), ...forlagan(), ...egnaOrd(),
       }, { signal, log }).then(kravDone).then(r => {
         if (!r.exam) throw new Error('Provet gick inte att skriva den här gången. Försök igen.');
@@ -2401,6 +2405,8 @@
       delar: false,
       datum: utkast.datum || '',
       typ: 'arbetsblad',
+      /* «Nivå» — samma regel som provets Poängnivåer: bara icke-default. */
+      ...(i0.niva && i0.niva !== 'Blandat' ? { niva: i0.niva } : {}),
       ...(bladNu && bladNu.id ? {
         elev_id: bladNu.id, elev: bladNu.namn,
         syfte: String(i0.syfte || 'Stötta').toLowerCase() === 'utmana' ? 'utmana' : 'stotta',

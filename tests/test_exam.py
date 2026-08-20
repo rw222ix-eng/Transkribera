@@ -1979,3 +1979,117 @@ def test_arvande_deluppgifter_hojer_inte_kravet():
     d2, fel2 = exam_spec.validate_exam_json(doc2, "gruppuppgift")
     assert exam_spec.formagebarare(d2) == 5
     assert any(e["code"] == "formagabalans" for e in fel2), fel2
+
+
+# ───────────────────────── lärarens nivåval (NIVAVAL) ────────────────────
+
+def _bara_e_prov() -> dict:
+    """_exam() omlagd till «Bara E»: nästan alla poäng på E, K-uppgiften bär C
+    (ingen EK-poäng finns). 16 p (E 14 / C 2 / A 0) — träffar Bara E-banden
+    men INTE NP-banden, så samma dokument skiljer de två målvärldarna åt."""
+    data = _exam()
+    for u, poang in zip(data["uppgifter"],
+                        [[3, 0, 0], [2, 0, 0], [2, 0, 0], [3, 0, 0],
+                         [2, 0, 0], [2, 0, 0], [0, 2, 0]]):
+        u["poang"] = poang
+    return data
+
+
+def test_nivaval_defaultlagen_ar_none():
+    """Defaultlägena («Balanserat»/«Blandat»), okända etiketter och profiler
+    utan väljare ska alla ge None — det är regeln som gör en tom ruta till
+    exakt samma begäran som före fältet (kassettregeln)."""
+    assert exam_spec.nivaval("prov", "Balanserat") is None
+    assert exam_spec.nivaval("arbetsblad", "Blandat") is None
+    assert exam_spec.nivaval("prov", "") is None
+    assert exam_spec.nivaval("prov", None) is None
+    assert exam_spec.nivaval("prov", "påhittat läge") is None
+    assert exam_spec.nivaval("diagnos", "Bara E") is None
+    assert exam_spec.nivaval("gruppuppgift", "Bara E") is None
+    # …och de riktiga etiketterna ger mix + band.
+    for profil, val in (("prov", "Bara E"), ("prov", "E-tyngd"),
+                        ("prov", "C/A-tyngd"), ("arbetsblad", "E-nivå"),
+                        ("arbetsblad", "C-nivå"), ("arbetsblad", "A-nivå")):
+        nv = exam_spec.nivaval(profil, val)
+        assert nv and set(nv) == {"mix", "mal"}, (profil, val)
+
+
+@pytest.mark.parametrize("profil,val", [
+    (p, v) for p, valen in exam_spec.NIVAVAL.items() for v in valen])
+@pytest.mark.parametrize("antal", [3, 6, 9, 12, 16, 20])
+def test_nivaval_skelettet_traffar_lararens_band(profil, val, antal):
+    """Väljaren var en dekoration: inget av värdena nådde servern, och
+    fördelningen kom alltid ur profilens KARAKTARSMIX. Nu ska varje val ge
+    ett skelett som validerar rent mot VALETS band — i väljarens hela
+    antalsspann, för det är de kombinationer appen erbjuder."""
+    nv = exam_spec.NIVAVAL[profil][val]
+    for delar in ((True, False) if profil == "prov" else (False,)):
+        sk = exam_spec.balanced_skeleton(antal, profil, delar=delar,
+                                         mix=nv["mix"], niva_mal=nv["mal"])
+        assert len(sk) == antal
+        doc = exam_spec._skeleton_doc(sk)
+        assert exam_spec.validate_balance(
+            doc, niva_mal=nv["mal"], profil=profil) == [], \
+            f"{profil}/{val} antal={antal} delar={delar}"
+
+
+def test_nivaval_bara_e_ger_inga_a_poang_och_k_bar_c():
+    """«Bara E» är inte riktigt bara E — K-uppgifter har ingen E-nivå och
+    lyfts till C i skelettet. Men A-poäng ska det aldrig bli, och varje
+    K-rad ska bära sina poäng på C."""
+    nv = exam_spec.NIVAVAL["prov"]["Bara E"]
+    sk = exam_spec.balanced_skeleton(12, "prov", delar=True,
+                                     mix=nv["mix"], niva_mal=nv["mal"])
+    assert all(s["poang"][2] == 0 for s in sk), "Bara E fick A-poäng"
+    k = [s for s in sk if s["formaga"] == "K"]
+    assert k and all(s["poang"][0] == 0 and s["poang"][1] > 0 for s in k)
+
+
+def test_validate_exam_json_mater_mot_lararens_band():
+    """Samma dokument, två domar: ett Bara E-prov ska fällas av NP-banden
+    (det ÄR inte NP-format) men frias av sitt eget nivåval. Det är exakt
+    skillnaden som gör att reparationsloopen inte slåss mot skelettet."""
+    data = _bara_e_prov()
+    mal = exam_spec.NIVAVAL["prov"]["Bara E"]["mal"]
+    doc, fel_default = exam_spec.validate_exam_json(data, "prov")
+    assert doc is not None
+    assert any(e["code"] == "nivabalans" for e in fel_default)
+    doc2, fel_val = exam_spec.validate_exam_json(data, "prov", mal)
+    assert doc2 is not None and fel_val == [], fel_val
+
+
+def test_generate_exam_reparerar_mot_nivavalets_band():
+    """Kedjans mitt: med niva_mal ska ett Bara E-svar gå rent igenom
+    valideringen — utan hade samma svar fått nivabalansfel och bränt
+    reparationsrundor på att dra pappret mot NP."""
+    nv = exam_spec.NIVAVAL["prov"]["Bara E"]
+    llm, _calls = _stub_llm([json.dumps(_bara_e_prov())])
+    res = exam_gen.generate_exam("Ma2b", "SA23", [], model="m", llm=llm,
+                                 antal=7, niva_mal=nv["mal"])
+    assert res["errors"] == [] and res["rounds"] == 1
+    # Kontrastet: utan bandet fastnar exakt samma svar i nivabalansen.
+    llm2, _ = _stub_llm([json.dumps(_bara_e_prov())])
+    res2 = exam_gen.generate_exam("Ma2b", "SA23", [], model="m", llm=llm2,
+                                  antal=7)
+    assert any(e["code"] == "nivabalans" for e in res2["errors"])
+
+
+def test_refine_exam_mater_mot_dokumentets_nivaval():
+    """REFINE-fällan: ett Bara E-prov som skrivs om ska dömas mot sitt eget
+    val, inte profilens defaultband — annars får varje varv nivabalansfel
+    och riktade ändringar vägras («ingenting ändrades»)."""
+    nv = exam_spec.NIVAVAL["prov"]["Bara E"]
+    fore = _bara_e_prov()
+    efter = _bara_e_prov()
+    efter["uppgifter"][0]["text"] = "Ange nollställena till $g(x) = (x-2)(x+5)$."
+    llm, _ = _stub_llm([json.dumps(efter)])
+    res = exam_gen.refine_exam(fore, "byt tal i uppgift 1", nummer=1,
+                               model="m", llm=llm, niva_mal=nv["mal"])
+    assert res["errors"] == []
+    assert res["exam"]["uppgifter"][0]["text"] == efter["uppgifter"][0]["text"]
+    # Utan valet: samma varv fälls, och den riktade ändringen backas.
+    llm2, _ = _stub_llm([json.dumps(efter)])
+    res2 = exam_gen.refine_exam(fore, "byt tal i uppgift 1", nummer=1,
+                                model="m", llm=llm2)
+    assert any(e["code"] == "nivabalans" for e in res2["errors"])
+    assert res2["exam"] == fore, "riktad ändring utan mål-band ska backas"

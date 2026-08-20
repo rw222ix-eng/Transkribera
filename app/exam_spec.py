@@ -889,6 +889,54 @@ KARAKTARSMIX: dict[str, tuple[float, float, float]] = {
     "diagnos": (0.65, 0.35, 0.00),
 }
 
+# Lärarens eget nivåval — väljarna «Poängnivåer» (prov) och «Nivå» (arbetsblad)
+# i planeringen. Nycklarna är väljarnas ordagranna etiketter: det är strängen
+# klienten skickar och strängen som persisteras på exams-raden, och en
+# översättningstabell till hade bara varit ett ställe till att glida på.
+# Defaultlägena (Balanserat/Blandat) står INTE här — då skickas inget fält och
+# profilens KARAKTARSMIX ovan gäller precis som förut (kassettregeln).
+#
+# `mix` byter karaktärsfördelningen i skelettet; `mal` är nivåbanden som ersätter
+# profilens NIVA_MAL i sökning, validering och reparation. Banden är breda
+# (±15 % runt mixens förväntade poängutfall) med flit: K-uppgifter har ingen
+# E-nivå och lyfts till C i skelettet, så «Bara E» bär alltid lite C-poäng, och
+# ett litet papper flyttar flera procentenheter per poäng.
+NIVAVAL: dict[str, dict[str, dict]] = {
+    "prov": {
+        "Bara E": {"mix": (1.00, 0.00, 0.00),
+                   "mal": {"e": (0.70, 1.00), "c": (0.00, 0.30),
+                           "a": (0.00, 0.05)}},
+        "E-tyngd": {"mix": (0.60, 0.30, 0.10),
+                    "mal": {"e": (0.45, 0.80), "c": (0.15, 0.45),
+                            "a": (0.00, 0.20)}},
+        # 20 % E och inte mindre: med 15 % fastnade poängsökningen vid nio
+        # uppgifter (M-bandet + Del C:s E-start gick inte att laga med endrag).
+        # Lite E hör dessutom hemma även i ett svårt prov — trappan behöver
+        # ett första steg.
+        "C/A-tyngd": {"mix": (0.20, 0.45, 0.35),
+                      "mal": {"e": (0.05, 0.35), "c": (0.25, 0.60),
+                              "a": (0.20, 0.55)}},
+    },
+    "arbetsblad": {
+        "E-nivå": {"mix": (0.85, 0.15, 0.00),
+                   "mal": {"e": (0.55, 1.00), "c": (0.00, 0.40),
+                           "a": (0.00, 0.05)}},
+        "C-nivå": {"mix": (0.15, 0.70, 0.15),
+                   "mal": {"e": (0.00, 0.40), "c": (0.40, 0.85),
+                           "a": (0.00, 0.30)}},
+        "A-nivå": {"mix": (0.10, 0.35, 0.55),
+                   "mal": {"e": (0.00, 0.30), "c": (0.10, 0.55),
+                           "a": (0.30, 0.80)}},
+    },
+}
+
+
+def nivaval(profil: str, val: str | None) -> dict | None:
+    """Slå upp lärarens nivåval: {"mix", "mal"} eller None när valet är
+    defaultläget, okänt eller hör till en profil utan väljare. None betyder
+    «gör som före väljaren» — det är regeln som håller kassetterna giltiga."""
+    return NIVAVAL.get(profil, {}).get((val or "").strip() or None)
+
 # Andel av uppgifterna som hamnar i Del B (utan räknare). NP lägger 54–62 % av
 # både uppgifterna och poängen i sin räknarfria del, och den delen är INTE
 # E-delen: alla tre nivåerna finns i båda delarna. Skelettet delade förut i «en
@@ -950,6 +998,13 @@ def _varva(kandidater: list[dict]) -> list[dict]:
         lagst = min(NIVAER_STORA.index(s["karaktar"]) for s in kvar)
         valbara = [s for s in kvar
                    if NIVAER_STORA.index(s["karaktar"]) == lagst]
+        # Delens FÖRSTA uppgift ska kunna bära E-poäng (MIN_START_E), och en
+        # K-rad kan aldrig få dem (ingen EK-poäng finns) — börjar delen på K
+        # ligger ordningsfelet utom räckhåll för poängsökningen, hur den än
+        # flyttar. Defaultmixarna börjar alltid på en E-rad (K är aldrig E),
+        # så förturen ändrar bara skelett med eget nivåval (NIVAVAL).
+        if not ut:
+            valbara = [s for s in valbara if s["formaga"] != "K"] or valbara
         val = next((s for s in valbara if duger(s)), valbara[0])
         ut.append(val)
         # Identitet, inte likhet: två slots kan vara innehållsligt lika, och
@@ -971,7 +1026,9 @@ def _skelett_typ(formaga: str, karaktar: str) -> str:
 
 
 def balanced_skeleton(antal: int, profil: str = "prov",
-                      delar: bool | None = None) -> list[dict]:
+                      delar: bool | None = None,
+                      mix: tuple[float, float, float] | None = None,
+                      niva_mal: dict | None = None) -> list[dict]:
     """Deterministiskt balanserat skelett: {del, formaga, typ, poang} per
     uppgift, konstruerat så förmåge- OCH nivåbalans + ordningsregler uppfylls
     BY CONSTRUCTION. Grammatiken tvingar modellen till skelettet, så modellen
@@ -993,12 +1050,16 @@ def balanced_skeleton(antal: int, profil: str = "prov",
     `delar=False` ger ett platt skelett (del: null) — arbetsbladets och
     gruppuppgiftens form. Default följer profilen.
 
+    `mix`/`niva_mal` är lärarens nivåval (NIVAVAL): mixen byter
+    karaktärsfördelningen, banden byter sökningens mål. Utelämnade gäller
+    profilens egna — exakt samma skelett som före väljaren.
+
     Sist en liten sökning som flyttar enstaka poäng tills validate_balance och
     validate_ordning är rena; den är ett skyddsnät, inte huvudmekanismen."""
     antal = max(1, antal)
     if delar is None:
         delar = profil == "prov"
-    mix = KARAKTARSMIX.get(profil, KARAKTARSMIX["prov"])
+    mix = mix or KARAKTARSMIX.get(profil, KARAKTARSMIX["prov"])
     karaktarer = _karaktarsfoljd(antal, mix)
 
     slots: list[dict] = []
@@ -1054,7 +1115,7 @@ def balanced_skeleton(antal: int, profil: str = "prov",
     for s in slots:
         s.pop("karaktar")
 
-    _justera_skelett(slots, profil)
+    _justera_skelett(slots, profil, niva_mal=niva_mal)
     return slots
 
 
@@ -1291,7 +1352,8 @@ def _avstand(andel: float, band: tuple[float, float]) -> float:
     return max(0.0, lo - andel) + max(0.0, andel - hi)
 
 
-def _straff(slots: list[dict], profil: str) -> float:
+def _straff(slots: list[dict], profil: str,
+            niva_mal: dict | None = None) -> float:
     """Hur långt skelettet ligger från målen, som ETT tal.
 
     Kvadrerade avstånd till bandkanterna (noll inuti bandet) plus en liten
@@ -1303,6 +1365,7 @@ def _straff(slots: list[dict], profil: str) -> float:
     och sedan lämnades skelettet obalanserat."""
     (prof_fm, prof_nm, _kr,
      kraver_klump, kraver_svar) = PROFILER.get(profil, PROFILER["prov"])
+    nm = niva_mal or prof_nm
     doc = _skeleton_doc(slots)
     s = poangsummor(doc)
     total = s["total"]
@@ -1319,7 +1382,7 @@ def _straff(slots: list[dict], profil: str) -> float:
         avstand = _avstand(andel, band)
         return 0.1 + avstand ** 2 if avstand > 0 else 0.0
 
-    straff = sum(utanfor(s[n] / total, prof_nm[n]) for n in ("e", "c", "a"))
+    straff = sum(utanfor(s[n] / total, nm[n]) for n in ("e", "c", "a"))
     if len(slots) >= MIN_BARARE_FOR_BAND:
         straff += sum(utanfor(s["formagor"][f] / total, prof_fm[f])
                       for f in prof_fm)
@@ -1329,15 +1392,18 @@ def _straff(slots: list[dict], profil: str) -> float:
         # låg med flit — den får aldrig kosta ett bandbrott någon annanstans.
         straff += 0.1 * sum((s["formagor"][f] / total - JAMN_FORMAGA) ** 2
                             for f in prof_fm)
-    if profil == "prov":
+    if profil == "prov" and niva_mal is None:
         # NIVA_MAL är mätningen PLUS marginal, och marginalen finns bara för att
         # små prov ska kunna träffa den. Inuti bandet är straffet noll, så utan
         # det här skulle sökningen stanna var som helst där — systematiskt
         # E-tungt och C-snålt, eftersom konstruktionen börjar så. Här dras den i
         # stället mot det UPPMÄTTA spannet: mjukt (ingen fast avgift), men tungt
         # nog att gå före jämnhetsönskemålet ovan.
+        # BARA utan eget nivåval: har läraren bett om «Bara E» är NP-spannet
+        # fel mål, och en dragning dit hade slagits med hennes band för evigt.
         for niva, band in niva_rubrik.NP_FORDELNING["poangandel"].items():
             straff += 0.5 * _avstand(s[niva.lower()] / total, band) ** 2
+    if profil == "prov":
         # Samma sak för räknargränsen: NP lägger 55–62 % av poängen i den
         # räknarfria delen.
         del_b = sum(sum(sl["poang"]) for sl in slots if sl["del"] == "B")
@@ -1385,7 +1451,7 @@ def _drag(slots: list[dict]) -> list[tuple[int, int, int]]:
 
 
 def _justera_skelett(slots: list[dict], profil: str = "prov",
-                     varv: int = 200) -> bool:
+                     varv: int = 200, niva_mal: dict | None = None) -> bool:
     """Sök poängen fria från balansfel med enpoängsdrag, ett i taget, alltid
     det som sänker straffet mest. Returnerar True när skelettet är rent.
 
@@ -1394,14 +1460,14 @@ def _justera_skelett(slots: list[dict], profil: str = "prov",
     fastna i ett lokalt minimum — då lämnas skelettet som det är, och
     reparationsloopen i exam_gen får ta vid. Det är samma kontrakt som förut,
     fast utan pingpongen."""
-    nuvarande = _straff(slots, profil)
+    nuvarande = _straff(slots, profil, niva_mal)
     for _ in range(varv):
         if nuvarande <= 0:
             return True
         basta = None
         for i, idx, delta in _drag(slots):
             slots[i]["poang"][idx] += delta
-            varde = _straff(slots, profil)
+            varde = _straff(slots, profil, niva_mal)
             slots[i]["poang"][idx] -= delta
             if varde < nuvarande - 1e-12 and (basta is None or varde < basta[0]):
                 basta = (varde, i, idx, delta)
@@ -1473,9 +1539,13 @@ def validate_ci(doc: ExamDoc, koder: list[str] | None) -> list[dict]:
     return errors
 
 
-def validate_exam_json(data, profil: str = "prov") -> tuple[ExamDoc | None, list[dict]]:
+def validate_exam_json(data, profil: str = "prov",
+                       niva_mal: dict | None = None
+                       ) -> tuple[ExamDoc | None, list[dict]]:
     """Rå JSON → (ExamDoc, fellista). Schemafel och balansfel i samma
-    maskinläsbara form (jfr whiteboard_spec.validate_board_json)."""
+    maskinläsbara form (jfr whiteboard_spec.validate_board_json). `niva_mal`
+    är lärarens nivåval (NIVAVAL) och ersätter profilens band — samma band som
+    skelettet söktes mot, annars slåss reparationsloopen med konstruktionen."""
     try:
         doc = ExamDoc.model_validate(data)
     except ValidationError as e:
@@ -1483,7 +1553,7 @@ def validate_exam_json(data, profil: str = "prov") -> tuple[ExamDoc | None, list
             _err(".".join(str(p) for p in err["loc"]), "schema", err["msg"])
             for err in e.errors()
         ]
-    fel = validate_balance(doc, profil=profil)
+    fel = validate_balance(doc, niva_mal=niva_mal, profil=profil)
     # Gruppuppgiften är inget papper utan sitt upplägg: namnraderna, tiden och
     # redovisningsformen ÄR formen (se gruppark.css). Saknas de blir arket ett
     # arbetsblad med fel instruktionsband.

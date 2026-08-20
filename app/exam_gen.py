@@ -1335,16 +1335,21 @@ def _parse_exam(raw: str) -> dict | None:
     return _rensa_toppnycklar(data) if data is not None else None
 
 
-def _validate(exam: dict, profil: str, koder: list[str] | None = None):
+def _validate(exam: dict, profil: str, koder: list[str] | None = None,
+              niva_mal: dict | None = None):
     """validate_exam_json + variationskontroll (BARA prov) + CI-taggningen.
     Repetition matas in i reparationsloopen precis som balansfel; arbetsbladet
     undantas (det får drilla samma frågetyp med flit, jfr antiklumpningen).
+
+    `niva_mal` är lärarens nivåval (exam_spec.NIVAVAL) — samma band som
+    skelettet söktes mot. Utan dem hade reparationsloopen mätt ett «Bara
+    E»-prov mot NP-banden och slagits med skelettet varv efter varv.
 
     CI-kontrollen behövs vid sidan av grammatiken därför att gruppuppgiften
     genereras UTAN grammatiklås — se generate_exam. Diagnosen prövas dessutom
     på TÄCKNINGEN: en punkt utan uppgift gör hela pappret oläsbart som
     diagnos."""
-    doc, errors = exam_spec.validate_exam_json(exam, profil)
+    doc, errors = exam_spec.validate_exam_json(exam, profil, niva_mal)
     if doc is not None and profil == "prov":
         errors = errors + exam_spec.validate_variation(doc)
     if doc is not None:
@@ -1454,6 +1459,7 @@ def _repair_until_valid(exam: dict | None, errors: list, *, model: str, llm,
                         rounds_used: int, max_rounds: int, profil: str = "prov",
                         antal: int | None = None, skeleton: list[dict] | None = None,
                         koder: list[str] | None = None,
+                        niva_mal: dict | None = None,
                         riktning=None,
                         log_cb: Callable[[str], None] | None = None) -> dict:
     log = log_cb or (lambda _m: None)
@@ -1476,7 +1482,7 @@ def _repair_until_valid(exam: dict | None, errors: list, *, model: str, llm,
             if candidate is None:
                 errors = [{"path": "mal", "code": "mal", "message": skal}]
                 continue
-        _doc, new_errors = _validate(candidate, profil, koder)
+        _doc, new_errors = _validate(candidate, profil, koder, niva_mal)
         exam = candidate
         errors = new_errors
     return {"exam": exam, "errors": errors, "rounds": rounds_used}
@@ -1499,6 +1505,7 @@ def _skala(profil: str, boknivaer: str, skeleton: list[dict] | None) -> str:
 def _niva_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
                skala: str, antal: int | None, skeleton: list[dict] | None,
                rounds_used: int, max_rounds: int, koder: list[str] | None = None,
+               niva_mal: dict | None = None,
                log_cb: Callable[[str], None] | None = None) -> dict:
     """Domarrunda + högst EN reparationsrunda på dess fynd (C4).
 
@@ -1527,11 +1534,11 @@ def _niva_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
     if kandidat is None:
         return {"exam": exam, "errors": errors + avv + signaler,
                 "rounds": rounds_used}
-    _doc, fel = _validate(kandidat, profil, koder)
+    _doc, fel = _validate(kandidat, profil, koder, niva_mal)
     res = _repair_until_valid(kandidat, fel, model=model, llm=llm,
                               rounds_used=rounds_used, max_rounds=max_rounds,
                               profil=profil, antal=antal, skeleton=skeleton,
-                              koder=koder, log_cb=log_cb)
+                              koder=koder, niva_mal=niva_mal, log_cb=log_cb)
     # Nivåhöjningen får inte kosta strukturen. Var dokumentet rent före domaren
     # och trasigt efter är omskrivningen en försämring: behåll det gamla och
     # visa nivåfynden som varningar i stället.
@@ -1549,6 +1556,7 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                   svart: str = "", fokus: str = "", profil: str = "prov",
                   koder: list[str] | None = None, riktat: str = "",
                   skeleton: list[dict] | None = None,
+                  niva_mal: dict | None = None,
                   grupp: dict | None = None, doma: bool = True,
                   llm=llm_client.generate, max_rounds: int = MAX_ROUNDS,
                   log_cb: Callable[[str], None] | None = None) -> dict:
@@ -1559,7 +1567,11 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
 
     `skeleton` låter anroparen lämna ett färdigt skelett i stället för att
     låta antalet bestämma. Diagnosen gör det: dess platser räknas ur kursens
-    innehåll och lektionens längd (exam_spec.diagnosplan).
+    innehåll och lektionens längd (exam_spec.diagnosplan). Lärarens nivåval
+    gör det också (routes_exam): skelettet byggs då med NIVAVAL-mixen, och
+    `niva_mal` MÅSTE följa med som samma vals band — validering och
+    reparation mäter annars mot profilens defaultband och river upp det
+    skelettet garanterade.
 
     `doma=False` stänger av nivådomaren (C4). Den kostar ett modellanrop och
     körs annars alltid — nivån är inget som bara ska begäras i prompten.
@@ -1609,16 +1621,17 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
                 "errors": [{"path": "svar", "code": "json",
                             "message": "modellen svarade inte med giltig JSON"}],
                 "rounds": rounds}
-    _doc, errors = _validate(exam, profil, koder)
+    _doc, errors = _validate(exam, profil, koder, niva_mal)
     res = _repair_until_valid(exam, errors, model=model, llm=llm,
                               rounds_used=rounds, max_rounds=max_rounds,
                               profil=profil, antal=antal, skeleton=grammatik,
-                              koder=koder, log_cb=log_cb)
+                              koder=koder, niva_mal=niva_mal, log_cb=log_cb)
     if not doma or res["exam"] is None:
         return res
     return _niva_pass(res["exam"], res["errors"], model=model, llm=llm,
                       profil=profil, skala=_skala(profil, boknivaer, skeleton),
                       antal=antal, skeleton=grammatik, koder=koder,
+                      niva_mal=niva_mal,
                       rounds_used=res["rounds"], max_rounds=max_rounds,
                       log_cb=log_cb)
 
@@ -1626,10 +1639,16 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
 def refine_exam(exam: dict, instruction: str, *, model: str,
                 nummer: int | None = None, profil: str = "prov",
                 mal: dict | None = None, bok: str = "", historik=None,
+                niva_mal: dict | None = None,
                 llm=llm_client.generate,
                 max_rounds: int = MAX_ROUNDS,
                 log_cb: Callable[[str], None] | None = None) -> dict:
-    """Riktad omgenerering (per-uppgift-chatt); validera + auto-reparera."""
+    """Riktad omgenerering (per-uppgift-chatt); validera + auto-reparera.
+
+    `niva_mal` är dokumentets PERSISTERADE nivåval (exams.nivaval →
+    exam_spec.NIVAVAL) — utan det mäts ett «Bara E»-prov mot NP-banden i
+    varje varv: nivabalansfel jämt, och riktade ändringar vägras med
+    «ingenting ändrades» fast pappret är precis som läraren bad om det."""
     log = log_cb or (lambda _m: None)
     log("Uppdaterar provet …")
     candidate = _llm_round(
@@ -1650,10 +1669,11 @@ def refine_exam(exam: dict, instruction: str, *, model: str,
             return {"exam": exam,
                     "errors": [{"path": "mal", "code": "mal", "message": skal}],
                     "rounds": 1}
-    _doc, errors = _validate(candidate, profil)
+    _doc, errors = _validate(candidate, profil, niva_mal=niva_mal)
     res = _repair_until_valid(candidate, errors, model=model, llm=llm,
                               rounds_used=1, max_rounds=max_rounds,
-                              profil=profil, riktning=riktning, log_cb=log_cb)
+                              profil=profil, niva_mal=niva_mal,
+                              riktning=riktning, log_cb=log_cb)
     # Gick målets ändring inte igenom grinden ens efter reparation lämnas
     # ORIGINALET tillbaka, med felen kvar i svaret. Ett halvt genomfört
     # önskemål på ett papper läraren tror är helt är värre än ett önskemål som

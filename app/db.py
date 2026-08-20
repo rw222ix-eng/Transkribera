@@ -21,7 +21,7 @@ import sqlite3
 import threading
 from pathlib import Path
 
-SCHEMA_VERSION = 24
+SCHEMA_VERSION = 25
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS courses (
@@ -756,6 +756,21 @@ _BOKEXEMPEL_MIGRATION = """
 ALTER TABLE bok_uppgifter ADD COLUMN exempel INTEGER;
 """
 
+# Lärarens nivåval på pappret (v25) — ENDAST additiv; rollback: kolumnen kan
+# lämnas kvar (NULL är giltigt) + PRAGMA user_version=24.
+#
+# Väljarens ordagranna etikett («Bara E», «C-nivå» …), NULL för defaultläget
+# och alla äldre papper. En DB-kolumn och INTE ett fält i exam-JSON, med flit:
+# ett fält i ExamDoc ändrar model_json_schema → to_response_format-grammatiken,
+# och då blir varje inspelad LLM-kassett i tests/ ogiltig (se minnesregeln i
+# matteprov-designsystemet). Valet måste ändå överleva dokumentet: refine
+# validerar varje varv mot nivåband, och utan kolumnen mäts ett «Bara E»-prov
+# mot NP-banden och får nivabalansfel för evigt. Etiketten slås upp i
+# exam_spec.NIVAVAL vid läsning — okänd/NULL betyder profilens default.
+_NIVAVAL_MIGRATION = """
+ALTER TABLE exams ADD COLUMN nivaval TEXT;
+"""
+
 _MIGRATIONS: dict[int, str] = {2: _FTS_MIGRATION, 3: _MARKERS_MIGRATION,
                                4: _PLANNING_MIGRATION, 5: _EXAMS_MIGRATION,
                                6: _GY25_MIGRATION, 7: _DATAGRUND_MIGRATION,
@@ -775,12 +790,13 @@ _MIGRATIONS: dict[int, str] = {2: _FTS_MIGRATION, 3: _MARKERS_MIGRATION,
                                21: _HJALPMEDEL_MIGRATION,
                                22: _PROVETS_CI_MIGRATION,
                                23: _LEKTIONSDELAR_MIGRATION,
-                               24: _BOKEXEMPEL_MIGRATION}
+                               24: _BOKEXEMPEL_MIGRATION,
+                               25: _NIVAVAL_MIGRATION}
 
 # Migreringar som bara innehåller ALTER TABLE … ADD COLUMN. De körs sats för
 # sats så att en redan tillagd kolumn hoppas över i stället för att fälla hela
 # migreringen — se _apply_migrations.
-_ALTER_MIGRATIONER = {6, 12, 13, 14, 16, 17, 18, 21, 22, 23, 24}
+_ALTER_MIGRATIONER = {6, 12, 13, 14, 16, 17, 18, 21, 22, 23, 24, 25}
 
 _LESSON_SELECT = """
 SELECT l.*, g.namn AS group_namn, c.namn AS course_namn
@@ -3251,14 +3267,19 @@ def create_exam(conn: sqlite3.Connection, *, exam: dict, typ: str = "prov",
                 titel: str = "", datum: str | None = None,
                 group_id: int | None = None,
                 course_id: int | None = None,
-                underlag: str | None = None) -> dict:
-    """Skapa ett prov/arbetsblad med version 1 av dess prov-JSON."""
+                underlag: str | None = None,
+                nivaval: str | None = None) -> dict:
+    """Skapa ett prov/arbetsblad med version 1 av dess prov-JSON.
+
+    `nivaval` är lärarens nivåväljar-etikett (v25) — den ska överleva
+    dokumentet, för refine mäter varje varv mot valets band."""
     now = _now()
     cur = conn.execute(
         "INSERT INTO exams (typ, titel, datum, group_id, course_id, status, "
-        "underlag, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'utkast', ?, ?, ?)",
+        "underlag, nivaval, created_at, updated_at) "
+        "VALUES (?, ?, ?, ?, ?, 'utkast', ?, ?, ?, ?)",
         (typ, titel or exam.get("titel") or "", datum, group_id, course_id,
-         underlag, now, now))
+         underlag, nivaval, now, now))
     exam_id = cur.lastrowid
     ver = conn.execute(
         "INSERT INTO exam_versions (exam_id, version, exam_json, created_at) "

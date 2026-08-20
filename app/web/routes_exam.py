@@ -175,6 +175,9 @@ def create_router(base: Path, arbiter) -> APIRouter:
             # det gällde när det godkänns eller skrivs om.
             "current_version": view.get("current_version"),
             "typ": view.get("typ") or "prov",
+            # Lärarens nivåval (v25) — med i svaret så skärmen kan visa vad
+            # pappret skrevs mot, och tester se att valet överlevde.
+            "nivaval": view.get("nivaval"),
             "underlag": view.get("underlag"),
             "status": view["status"], "versions": view["versions"],
             "errors": errors, "rounds": rounds,
@@ -274,6 +277,18 @@ def create_router(base: Path, arbiter) -> APIRouter:
         delar = bool(body.get("delar", True))
         datum = (body.get("datum") or "").strip() or None
         typ = body.get("typ") if body.get("typ") in _TYPER else "prov"
+        # Lärarens nivåval (exam_spec.NIVAVAL): «Poängnivåer» på provet,
+        # «Nivå» på arbetsbladet. Fältet skickas BARA när det inte står i
+        # defaultläget (plan.js) — en tom ruta ger exakt samma begäran som
+        # före väljaren, och kassetterna står orörda. Okänd etikett tolkas
+        # likadant: som default, inte som fel. Valet gör tre saker som måste
+        # hänga ihop: mixen bygger skelettet HÄR (som diagnosen bygger sitt),
+        # banden följer med genereringens validering, och etiketten
+        # persisteras på exams-raden så refine mäter mot samma band.
+        nivaval_etikett = str(body.get("nivamix") or body.get("niva")
+                              or "").strip()
+        nivaval = exam_spec.nivaval(typ, nivaval_etikett)
+        niva_mal = nivaval["mal"] if nivaval else None
         # Gruppuppgiftens upplägg (Fas 0.6): namnraderna, tiden och
         # redovisningsformen ÄR pappersformen (se gruppark.css) — de kommer ur
         # planeringens väljare och ska in i både prompten och dokumentet.
@@ -376,6 +391,15 @@ def create_router(base: Path, arbiter) -> APIRouter:
                                or exam_spec.DIAGNOS_TID_STANDARD))
                 antal = plan["antal"]
                 tid_min = plan["tid_min"]
+            # Nivåvalets skelett byggs här, inte i exam_gen: mixen är känd
+            # bara där valet är känt (samma mönster som diagnosplanen ovan).
+            # Utan val lämnas None och generate_exam bygger profilens
+            # defaultskelett precis som förut.
+            skelett = plan["skeleton"] if plan else None
+            if skelett is None and nivaval:
+                skelett = exam_spec.balanced_skeleton(
+                    antal, typ, delar=(typ == "prov" and delar),
+                    mix=nivaval["mix"], niva_mal=niva_mal)
             memory = db.memory_for_prompt(conn, int(group_id), int(course_id)) \
                 if group_id else ""
             teman = db.exam_themes_for_prompt(conn, int(course_id))
@@ -424,7 +448,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     bilder=bilder_block, utfall=utfall_block, bok=bok_block,
                     boknivaer=nivaer_block, forlaga=forlaga_block,
                     svart=svart_block, fokus=fokus_block, profil=typ,
-                    koder=koder, skeleton=plan["skeleton"] if plan else None,
+                    koder=koder, skeleton=skelett, niva_mal=niva_mal,
                     riktat=riktat_block, grupp=grupp,
                     log_cb=lambda m: emit({"type": "log", "msg": m}))
                 # Upplägget är lärarens val, inte modellens: skriv in det som
@@ -456,7 +480,10 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     view = db.create_exam(
                         conn, exam=res["exam"], typ=typ, datum=datum,
                         group_id=int(group_id) if group_id else None,
-                        course_id=int(course_id), underlag=underlag_pid)
+                        course_id=int(course_id), underlag=underlag_pid,
+                        # Etiketten, inte banden: banden bor i exam_spec och
+                        # kan justeras utan att gamla papper byter mening.
+                        nivaval=nivaval_etikett if nivaval else None)
                     for c in valda:
                         db.tag_content(conn, c["id"], exam_id=view["id"])
                 finally:
@@ -543,6 +570,13 @@ def create_router(base: Path, arbiter) -> APIRouter:
             _slapp_varvet(exam_id)
             return JSONResponse(_LLM_BUSY, status_code=409)
 
+        # Nivåvalet reser med VARJE varv, ur kolumnen och inte ur begäran:
+        # klienten valde en gång, vid genereringen, och ska inte behöva säga
+        # om det — ett «Bara E»-prov som mäts mot NP-banden får nivabalansfel
+        # varv efter varv, och riktade ändringar vägras («ingenting ändrades»).
+        nivaval = exam_spec.nivaval(view.get("typ") or "prov",
+                                    view.get("nivaval"))
+
         def job(emit):
             try:
                 if arbiter.ensure_llm() is None:
@@ -552,6 +586,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     nummer=int(nummer) if nummer else None, mal=mal,
                     bok=bok_block, historik=historik,
                     profil=view.get("typ") or "prov",
+                    niva_mal=nivaval["mal"] if nivaval else None,
                     log_cb=lambda m: emit({"type": "log", "msg": m}))
                 _satt_lararens_datum(res["exam"], view.get("datum"))
                 if res["exam"] is not None and res["exam"] != view["exam"]:

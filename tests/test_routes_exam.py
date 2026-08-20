@@ -41,7 +41,11 @@ def _stub_generate(monkeypatch, result=None):
              llm=None, max_rounds=exam_gen.MAX_ROUNDS, log_cb=None, **_kw):
         calls.append({"kurs": kurs, "punkter": punkter, "memory": memory,
                       "teman": teman, "antal": antal, "utfall": utfall,
-                      "referens": referens, "bilder": bilder, "profil": profil})
+                      "referens": referens, "bilder": bilder, "profil": profil,
+                      # nivåvalet (v25): rutten ska bygga skelettet och skicka
+                      # banden — eller inget av dem, när väljaren står i default
+                      "skeleton": _kw.get("skeleton"),
+                      "niva_mal": _kw.get("niva_mal")})
         if log_cb:
             log_cb("Skriver provet …")
         return result or {"exam": _exam_doc(), "errors": [], "rounds": 1}
@@ -109,7 +113,7 @@ def test_refine_adds_version(client, monkeypatch):
 
     def fake_refine(exam, message, *, model, nummer=None, profil="prov",
                     mal=None, bok="", historik=None, llm=None,
-                    max_rounds=exam_gen.MAX_ROUNDS, log_cb=None):
+                    max_rounds=exam_gen.MAX_ROUNDS, log_cb=None, **_kw):
         captured["message"] = message
         captured["nummer"] = nummer
         captured["mal"] = mal
@@ -1110,7 +1114,7 @@ def test_provet_gar_att_andra_efter_en_omstart(client, monkeypatch):
 
     def fake_refine(exam, message, *, model, nummer=None, profil="prov",
                     mal=None, bok="", historik=None, llm=None,
-                    max_rounds=exam_gen.MAX_ROUNDS, log_cb=None):
+                    max_rounds=exam_gen.MAX_ROUNDS, log_cb=None, **_kw):
         sett["uppgifter"] = len(exam.get("uppgifter") or [])
         return {"exam": uppdaterad, "errors": [], "rounds": 1}
     monkeypatch.setattr(exam_gen, "refine_exam", fake_refine)
@@ -1446,3 +1450,79 @@ def test_refine_far_reparerad_json(client, monkeypatch):
     client.post(f"/api/exams/{result['id']}/refine", json={"message": "kortare"})
     assert sett["text"] == "Beräkna $2 \\times (3 + 4)$."
     assert "\t" not in sett["text"]
+
+
+# ───────────────────────── lärarens nivåval (v25) ─────────────────────────
+
+def test_nivaval_bygger_skelettet_och_persisteras(client, monkeypatch):
+    """«Poängnivåer» var en dekoration — värdet nådde aldrig servern. Nu ska
+    rutten (1) bygga skelettet ur valets mix (som diagnosen bygger sitt),
+    (2) skicka valets band till genereringen och (3) persistera etiketten på
+    exams-raden, för refine mäter varje varv mot den."""
+    from app import exam_spec
+    result, calls = _make_exam(client, monkeypatch, nivamix="Bara E")
+    nv = exam_spec.NIVAVAL["prov"]["Bara E"]
+    assert calls[0]["niva_mal"] == nv["mal"]
+    sk = calls[0]["skeleton"]
+    assert sk and len(sk) == 6
+    assert all(s["poang"][2] == 0 for s in sk), "Bara E-skelett med A-poäng"
+    assert result["nivaval"] == "Bara E"
+    conn = appdb.connect(client.base_dir / "transkribera.db")
+    try:
+        rad = conn.execute("SELECT nivaval FROM exams WHERE id = ?",
+                           (result["id"],)).fetchone()
+    finally:
+        conn.close()
+    assert rad["nivaval"] == "Bara E"
+
+
+def test_nivaval_default_ger_exakt_samma_begaran_som_forut(client, monkeypatch):
+    """Kassettregeln: en orörd väljare (inget fält alls) ska ge inget skelett
+    och inga band — genereringen bygger då profilens default precis som före
+    väljaren. Okänd etikett behandlas likadant: default, inte fel."""
+    result, calls = _make_exam(client, monkeypatch)
+    assert calls[0]["skeleton"] is None and calls[0]["niva_mal"] is None
+    assert result["nivaval"] is None
+    _res2, calls2 = _make_exam(client, monkeypatch, nivamix="Balanserat")
+    assert calls2[0]["skeleton"] is None and calls2[0]["niva_mal"] is None
+    _res3, calls3 = _make_exam(client, monkeypatch, nivamix="påhittat")
+    assert calls3[0]["skeleton"] is None and calls3[0]["niva_mal"] is None
+
+
+def test_nivaval_arbetsbladets_niva_gar_samma_vag(client, monkeypatch):
+    """Arbetsbladets väljare heter «Nivå» och skickar `niva` — samma kedja,
+    arbetsbladets etiketter."""
+    from app import exam_spec
+    result, calls = _make_exam(client, monkeypatch, typ="arbetsblad",
+                               niva="A-nivå", delar=False)
+    nv = exam_spec.NIVAVAL["arbetsblad"]["A-nivå"]
+    assert calls[0]["niva_mal"] == nv["mal"]
+    assert calls[0]["skeleton"] and all(
+        s["del"] is None for s in calls[0]["skeleton"]), "arbetsbladet är platt"
+    assert result["nivaval"] == "A-nivå"
+    # …men på ett PROV är arbetsbladets etikett inget val alls.
+    res2, calls2 = _make_exam(client, monkeypatch, niva="A-nivå")
+    assert calls2[0]["niva_mal"] is None and res2["nivaval"] is None
+
+
+def test_refine_mater_mot_dokumentets_nivaval(client, monkeypatch):
+    """REFINE-fällan: valet ska läsas ur exams-raden och nå refine_exam som
+    band — klienten valde en gång och ska inte behöva säga om det."""
+    from app import exam_spec
+    result, _ = _make_exam(client, monkeypatch, nivamix="Bara E")
+    sett = {}
+
+    def fake_refine(exam, message, *a, **k):
+        sett["niva_mal"] = k.get("niva_mal")
+        return {"exam": exam, "errors": [], "rounds": 1}
+    monkeypatch.setattr(exam_gen, "refine_exam", fake_refine)
+    _done(client.post(f"/api/exams/{result['id']}/refine",
+                      json={"message": "kortare"}))
+    assert sett["niva_mal"] == exam_spec.NIVAVAL["prov"]["Bara E"]["mal"]
+
+    # Ett papper utan val skickar inga band — profilens default gäller.
+    result2, _ = _make_exam(client, monkeypatch)
+    sett.clear()
+    _done(client.post(f"/api/exams/{result2['id']}/refine",
+                      json={"message": "kortare"}))
+    assert sett["niva_mal"] is None
