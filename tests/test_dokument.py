@@ -508,6 +508,11 @@ def test_plan_js_skickar_stada_bara_fran_godkannandet():
     # utkastet aldrig hann skrivas går via dokSpara(v, true) — samma gest.
     assert js.count("foljd: null, stada: true") == 1
     assert "dokSpara(v, true)" in js
-    # Och ingen annan sparning gör det: de fyra andra dokSpara-anropen (blad,
-    # kopia, ångrad radering, uppgiftsbanken) skickar inget andra argument.
-    assert "dokSpara(v, true)" not in js.replace("if (!id) return dokSpara(v, true);", "")
+    # TVÅ anrop bär den, och båda står i utkastGodkann: utkastet som aldrig
+    # hann skrivas, och utkastraden som en ANNAN FLIK hann radera (404:an —
+    # svaret sväljdes förr, och godkännandet sparade då tyst ingenting).
+    # Ingen annan sparning gör det: de fyra andra dokSpara-anropen (blad, kopia,
+    # ångrad radering, uppgiftsbanken) skickar inget andra argument.
+    kvar = js.replace("if (!id) return dokSpara(v, true);", "").replace(
+        "(e && e.status === 404) ? dokSpara(v, true) : null", "")
+    assert "dokSpara(v, true)" not in kvar
