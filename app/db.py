@@ -676,7 +676,7 @@ CREATE INDEX IF NOT EXISTS idx_planeringar_andrad ON planeringar(andrad);
 # (NULL = «ingen synk har läst den här raden med hjälpmedelsögon», vilket är
 # vad varje rad var förut) + PRAGMA user_version=20.
 #
-# Provets upplägg — «En del» (papper och penna) eller «Del B + Del C» (C med
+# Provets upplägg — «En del» (papper och penna) eller «Del A + Del B» (B med
 # digitala verktyg) — är en fråga om vad klassen ARBETAT med. Står det «ta med
 # datorn» eller «miniräknare» i lektionens beskrivning vet kalendern svaret, och
 # läraren ska inte behöva svara en gång till.

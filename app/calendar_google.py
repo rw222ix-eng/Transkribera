@@ -617,7 +617,7 @@ def _uppgifterna(text: str) -> str:
     return ", ".join(listor)
 
 
-# Verktygen som avgör provets upplägg. «Del B + Del C» finns för att det finns
+# Verktygen som avgör provets upplägg. «Del A + Del B» finns för att det finns
 # en gräns mellan det som ska gå utan hjälpmedel och det som får göras med dem —
 # och vilken sida klassen har arbetat på står ofta i lektionens beskrivning
 # («ta med datorn», «GeoGebra-övning», «miniräknare behövs»).

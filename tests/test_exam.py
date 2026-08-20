@@ -1767,7 +1767,7 @@ def test_provets_antalsgranser_ar_serverns_och_inte_en_smaksak(antal, delar):
     Förut stod den på 4–12 och klampade tyst: en lärare som ville ha ett kort
     diagnostiskt prov eller ett långt terminsprov fick inte veta varför vredet
     tog emot. Nu ska varje antal i spannet ge ett skelett som validerar rent i
-    BÅDA uppläggen — «En del» och «Del B + Del C» — för det är de två väljaren
+    BÅDA uppläggen — «En del» och «Del A + Del B» — för det är de två väljaren
     erbjuder. Faller något av dem ljuger raden i appen, och då ska det synas
     här och inte hos läraren."""
     sk = exam_spec.balanced_skeleton(antal, "prov", delar=delar)

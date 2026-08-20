@@ -461,7 +461,7 @@ window.BladBygg = (() => {
     </div>`;
   }
   /* Provet har TVÅ delar och skillnaden mellan dem är HJÄLPMEDLEN, inte
-     svarsformen: del B utan digitala hjälpmedel, del C med räknare och GeoGebra.
+     svarsformen: del A utan digitala hjälpmedel, del B med räknare och GeoGebra.
      Båda delarna bär korta svar OCH uppgifter som ska redovisas — och
      redovisningen görs på separat lösblad, aldrig i provet.
 
@@ -469,31 +469,24 @@ window.BladBygg = (() => {
      och tavlor — femton former»), och det är dem prov.css sätter uppgiftsavstånd,
      svarsrad och deluppgifter efter. Förr hette de prb/prc — namn som ingen regel
      kände — och då fick appens provblad basvärdena i stället för mallens
-     sättning. DELNAMN är det enda som syns — och det säger samma namn som
-     dokumentet. Skärmen döpte om B/C till «Del A»/«Del B», men
-     bedömningsanvisningen och LaTeX-reserven (exam_latex._RUBRIK) trycker
-     «Del B»/«Del C», och dokumentets egen hjälpmedelstext kan själv säga
-     «Del B utan räknare. Del C med räknare» — på försättsbladet i samma
-     papper. Läraren rättade alltså «Del B» i ett dokument där eleverna skrev
-     «Del A». Namnen är NP:s (delprov B utan räknare, C med) och följer nu
-     dokumentet överallt.
+     sättning. DELNAMN är det enda som syns.
 
      Kvar att avgöra: 'ab' (arbetsblad), 'gu' (gruppuppgift), 'fa' (facit) och
      'lo-b'/'lo-c' har ingen motsvarighet bland förlagans former (gu1, gu2, gu6,
      lo4) och får därför basvärdena ur blad.css i stället för en per-form-sättning.
      Det är ett VAL vilken av förlagans fyra arbetsbladsformer appens arbetsblad
      ska vara — inte en bugg att rätta blint. */
-  const DELNAMN = { B: 'Del B', C: 'Del C' };
+  const DELNAMN = { B: 'Del A', C: 'Del B' };
   function provblad(v, uppgifter, del, forsta) {
     const medHjalp = del === 'C';
     /* HJÄLPMEDELSREGELN ÄR DOKUMENTETS (exam_spec.ExamDoc.hjalpmedel). Bandet
        var en hårdkodad mall per del, och därför hände ingenting när läraren bad
-       om att räknare skulle tillåtas på del B: regeln fanns inte i dokumentets
+       om att räknare skulle tillåtas på del A: regeln fanns inte i dokumentets
        JSON, den fanns i den här strängen. Fältet nådde bara PDF:ens
        försättsblad (prov.tex.j2, Hjälpmedel-raden).
 
        Äger dokumentet regeln säger pappret den EN gång, och appen slutar
-       påstå något eget: delnamnet står naket i huvudet i stället för «Del B ·
+       påstå något eget: delnamnet står naket i huvudet i stället för «Del A ·
        utan digitala hjälpmedel», och provtabellens delrader tappar sina fraser
        (blad.js planvalProv). Två regler som kan säga emot varandra är värre än
        en — eleven vet inte vilken som gäller. Tomt fält, prototypens papper:
@@ -561,7 +554,7 @@ window.BladBygg = (() => {
         ${elevlosningar(u)}
       </div></div>`;
   }
-  /* Kortsvarsfacit för del B, utskriven lösningsgång för del C. Ett facit som
+  /* Kortsvarsfacit för del A, utskriven lösningsgång för del B. Ett facit som
      bara svarar på halva provet ska säga det — därför räknas uppgifterna. */
   function losning(v, uppgifter, delB) {
     const b = uppgifter.filter(u => u.nr <= delB);

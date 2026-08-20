@@ -395,7 +395,7 @@ test("provets försättsblad bär avtalet, och lösningsbladet sin OBS-ruta",
     // slutar och vad den är värd — annars slutar bladet bara i tomt papper.
     await expect(page.locator("#dokument .probs")).toHaveCount(2);
     // OBS-rutan var en hårdkodad mall per del; nu står dokumentets regel där,
-    // så «tillåt räknare på del B» faktiskt syns över uppgifterna.
+    // så «tillåt räknare på del A» faktiskt syns över uppgifterna.
     await expect(page.locator("#dokument .probs").first())
       .toContainText("Hjälpmedel: Formelblad och linjal.");
     await expect(page.locator("#dokument .prslut[data-slut]").first())
