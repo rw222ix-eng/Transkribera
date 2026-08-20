@@ -256,57 +256,271 @@ FALLGROPAR_GRUPP = (
 )
 
 
-# ── Förlagan som mönster (Del F) ─────────────────────────────────────────────
-# Läraren körde en riktig lektion på en egengjord gruppuppgift och kallade den
-# en av de bästa hon haft. Pappret ligger arkiverat i docs/forlagor/ och
-# blocket nedan är destillatet: STRUKTUR, FRÅGOR och PEDAGOGIK — aldrig
-# utseendet, som appen äger själv.
+# ── Förlagan som mönster (Del F, omskriven 2026-08-20) ───────────────────────
+# Läraren satt natten mellan 19 och 20 augusti och slipade en gruppuppgift i
+# tjugotvå vändor tills hon var nöjd: «Räkneordning, parenteser och formler»,
+# Matematik nivå 1a, byggklass (exams.id 17). Den är hennes mall från och med
+# nu, och hennes egna anteckningar på vägen är kravlistan bakom varje rad
+# nedan — «talen är för svåra», «svaret ska bli heltal», «korta uppgiftstexten
+# rejält», «så mycket text», «ointressant för en byggklass», «ta bort uppgift E
+# och F», «prioriteringsreglerna kort som stöd i instruktionsrutan».
 #
-# Skillnaden mot källdörr 4 (forlaga=) är att den är lärarens VAL för ett
-# enskilt jobb; det här är alltid med. Gruppuppgiften har ett mönster nu.
+# Den ersätter den gamla förlagan (exponential- mot potensekvationer, med
+# cosinussatsen som handskrivet exempel). Den var ETT bra papper; det här är
+# det hon SLIPADE, och skillnaden är kravlistan.
 #
-# JSON-exemplet är HANDSKRIVET ur förlagan men på ett ANNAT moment — förlagan
-# handlar om exponential- mot potensekvationer, exemplet om sinus- mot
-# cosinussatsen. Modellen ska härma formen, inte skriva av innehållet.
+# Reglerna beskriver FORMEN och MÅTTEN, inte nivån: hennes klasser är 1a i
+# byggklass, 1c och 2c i naturklass, och samma mall ska bära alla tre. Hur
+# stora talen och hur abstrakta uttrycken får vara skalas därför ur kursen —
+# se _nivastegen — och kontexten ur klassens program. Skrivs 1a:s mått in här
+# får 2c ett 1a-papper.
+#
+# Utdragen nedan är UPPGIFTER UR HENNES PAPPER, inte hela dokumentet
+# (promptbudget: formen syns i fyra utdrag lika väl som i fyra hela uppgifter
+# med elevlösningar och bedömningsanvisningar). De byggs ur dictar och
+# json.dumpas så att LaTeX-snedstrecken inte kan bli fel i en handskriven
+# sträng.
+_UTDRAG_GRUPP = [
+    # Ingången: alla grupper kommer in här. Två uttryck UNDER varandra i en
+    # tabell — läraren fällde den första versionen där de stod bredvid
+    # varandra på samma rad: «annars blir det så otydligt att utläsa».
+    {"formaga": "P", "typ": "rutin", "poang": [2, 0, 0],
+     "text": "Räkna var för sig och jämför sedan era svar i gruppen. Beräkna "
+             "de två uttrycken i tabellen utan räknare. Endast svar krävs.",
+     "tabell": {"rubriker": ["Uppgift", "Uttryck"],
+                "rader": [["a)", "$9 + 3 \\cdot 4^2$"],
+                          ["b)", "$\\dfrac{48 - 12}{2 + 4}$"]]},
+     "svarsfalt": ["Svar a)", "Svar b)"],
+     "losning": "a) $57$, ur $9 + 3 \\cdot 16$. b) $6$, ur $\\dfrac{36}{6}$.",
+     "bedomning": "+1 E rätt svar i a), +1 E rätt svar i b); vanligt fel: "
+                  "$3 \\cdot 4$ kvadreras i a) ($153$)."},
+    # Begreppsuppgiften: uttrycket står färdigt i texten, och gruppen ska
+    # NAMNGE dess delar innan den räknar. Situationen är verkstaden, alltså
+    # klassens egen värld.
+    {"formaga": "B", "typ": "redovisning", "poang": [0, 0, 0],
+     "text": "I verkstaden finns $86$ skruvar. $14$ av dem är trasiga och "
+             "slängs. Resten delas lika i $2$ lådor med $4$ fack i varje låda. "
+             "Då blir det $\\dfrac{86 - 14}{2 \\cdot 4}$ skruvar i varje fack. "
+             "Fullständiga lösningar krävs.",
+     "deluppgifter": [
+         {"poang": [1, 1, 0],
+          "text": "Vilket tal är täljaren i uttrycket och vilket tal är "
+                  "nämnaren? Räkna sedan ut hur många skruvar det blir i "
+                  "varje fack. Motivera ditt svar.",
+          "svarsfalt": ["Täljare och nämnare", "Antal skruvar per fack"],
+          "losning": "Täljaren är $86 - 14 = 72$, nämnaren är "
+                     "$2 \\cdot 4 = 8$. Kvoten blir $9$ skruvar per fack."}]},
+    # Felsökningen. Utdraget bär medvetet INGEN poang och ingen del: VAR den
+    # ligger — som deluppgift i uppgiften som bär R eller K — bestäms av
+    # FALLGROPAR_GRUPP ovan, som är uppmätt. Här visas bara formen.
+    #
+    # Lärarens papper skriver «Ali räknar …». Ett förnamn bryter mot
+    # integritetsregeln i SYSTEM och mot FALLGROPAR_GRUPP, så utdraget säger
+    # «En elev» — mallen får inte lära ut det appen förbjuder.
+    {"typ": "resonemang",
+     "text": "En elev har beräknat $5 + 2 \\cdot (4 - 1)^2$ enligt tabellen. "
+             "Markera den första rad som är fel, skriv rätt värde och förklara "
+             "hur man ska tänka i stället. Motivera ditt svar.",
+     "stegtabell": {"kolumner": ["Elevens lösning"],
+                    "steg": [{"celler": ["$5 + 2 \\cdot (4 - 1)^2$"]},
+                             {"celler": ["$= 5 + 2 \\cdot 3^2$"]},
+                             {"celler": ["$= 5 + 6^2$"]},
+                             {"celler": ["$= 5 + 36$"]},
+                             {"celler": ["$= 41$"]}],
+                    "forsta_fel": 2},
+     "svarsfalt": ["Förklaring av felet", "Rätt värde",
+                   "Så ska man tänka i stället"],
+     "losning": "Första felet är raden $= 5 + 6^2$: potensen $3^2 = 9$ ska "
+                "beräknas före multiplikationen. Rätt värde: $23$."},
+    # Formeluppgiften: fast avgift plus rörligt pris, tecknas som formel och
+    # används sedan baklänges. Läraren strök föregångaren — «hyra en släpvagn
+    # till ett skolprojekt» — med orden «ointressant för en byggklass».
+    {"formaga": "M", "typ": "problem", "poang": [0, 0, 0],
+     "text": "Gruppen hyr en byggställning till ett husbygge. Uthyraren tar "
+             "$500$ kr i startavgift och sedan $200$ kr per dag. Fullständiga "
+             "lösningar krävs.",
+     "deluppgifter": [
+         {"poang": [1, 1, 0],
+          "text": "Teckna en formel för kostnaden $K$ kr när ställningen hyrs "
+                  "$d$ dagar. Hur många dagar räcker $2500$ kr till? Motivera "
+                  "ditt svar.",
+          "svarsfalt": ["Formel", "Antal dagar"], "enhet": "dagar",
+          "losning": "$K = 500 + 200d$. $500 + 200d = 2500$ ger $d = 10$ "
+                     "dagar.",
+          "bedomning": "+1 E korrekt formel $K = 500 + 200d$, +1 C rätt svar "
+                       "$10$ dagar; vanligt fel: startavgiften $500$ "
+                       "multipliceras med $d$."}]},
+]
+
 FORLAGA_GRUPP = (
-    "MÖNSTRET (lärarens egen gruppuppgift, den som fungerade — följ dess form, "
-    "inte dess innehåll):\n"
-    "- NYCKELFRÅGAN: hitta momentets egen «var sitter den okända?» — den ENA "
-    "fråga som avgör vilken metod som gäller — och skriv den i dokumentets "
-    "fält \"nyckelfraga\", som en fråga följd av vägarna den öppnar — EN fråga "
-    "och högst ~160 tecken. Den sätts fet i en liten ruta överst på pappret och "
-    "är det gruppen läser när de fastnar; tre frågor i rad läses inte alls. "
-    "Nyckelfrågan är i regel momentets vanligaste fallgrop vänd till ett "
-    "beslut.\n"
-    "- FÅ SITUATIONER, VERKLIGA OCH OLIKA: varje uppgift är en egen konkret "
-    "situation ur skilda världar (ett labb, ett fritt fall, en olycka) kring "
-    "SAMMA matematiska val. Minst en av dem ska BRYTA mönstret, så att gruppen "
-    "inte kan gissa sig till metoden av att uppgifterna liknar varandra.\n"
+    "MÖNSTRET (lärarens egen gruppuppgift, den hon slipade i tjugotvå vändor "
+    "tills hon var nöjd — följ dess form och dess mått, aldrig dess "
+    "innehåll):\n"
+    "- KORT UPPGIFTSTEXT. Två eller tre meningar, vardagliga ord, korta "
+    "huvudsatser. Uppgiften ställer FRÅGAN och ingenting annat: hur gruppen "
+    "ska arbeta med hela pappret står i instruktionsrutan, inte i uppgiften. "
+    "Gäller en arbetsform bara EN uppgift («Räkna var för sig och jämför sedan "
+    "era svar i gruppen») får den stå kort först i just den. Lärarens dom på "
+    "de långa versionerna var «så mycket text» och «alldeles för omfattande» — "
+    "en uppgiftstext som måste läsas två gånger är fel skriven.\n"
+    "- SMÅ TAL, ENKLA MELLANLED. Välj talen så att VARJE mellanled blir ett "
+    "enkelt tal som går att räkna i huvudet, och så att svaret går att känna "
+    "igen som rätt. Läraren strök $16^2$ ur ett uttryck — inte för att "
+    "kvadrater är svåra att förstå utan för att räknandet då tar över tanken. "
+    "Hur stora talen får vara står under NIVÅN nedan; att mellanleden ska bli "
+    "enkla gäller på alla nivåer.\n"
+    "- KONTEXTEN ÄR KLASSENS. Uppdraget säger vilken klass pappret skrivs "
+    "till, och klassbeteckningen bär programmet (bygg och anläggning, natur, "
+    "teknik, ekonomi, vård …). Hämta situationerna DÄR: byggklassen räknar på "
+    "verkstaden, materialet, maskinhyran och måtten på ritningen; naturklassen "
+    "på mätvärden, koncentrationer och samband; teknikklassen på komponenter "
+    "och toleranser. Ett påhittat «skolprojekt» är ingens värld — läraren strök "
+    "en sådan uppgift med orden «ointressant för en byggklass». Säger "
+    "beteckningen dig ingenting: välj en vardagssituation som gäller alla, "
+    "aldrig en skoluppgift om en skoluppgift.\n"
+    "- FYRA UPPGIFTER ÄR PAPPRETS FORM. Uppdraget säger antalet och det är "
+    "exakt; blir de fler får de aldrig betalas med längre uppgiftstexter. "
+    "Läraren strök två uppgifter ur ett papper på sex med orden «ta bort "
+    "uppgift E och F helt» — hellre fyra uppgifter som hinns med och pratas "
+    "igenom än sex som gruppen rusar förbi.\n"
+    "- FORMERNA SOM BAR PAPPRET, en per förmåga i uppgiftsplanen:\n"
+    "  * rutin-raden blir INGÅNGEN: två korta uttryck i en \"tabell\" med "
+    "kolumnerna «Uppgift» och «Uttryck» och raderna a) och b), ett svarsfält "
+    "per rad. Uttrycken står UNDER varandra, aldrig bredvid varandra på samma "
+    "rad — läraren fällde den formen: «annars blir det så otydligt att "
+    "utläsa».\n"
+    "  * begreppsraden (B): en kort situation där uttrycket redan står "
+    "färdigskrivet i texten, och gruppen ska NAMNGE dess delar (täljare, "
+    "nämnare, term, faktor) innan den räknar ut det.\n"
+    "  * resonemangs- och kommunikationsraderna (R, K): felsökningen — en "
+    "\"stegtabell\" med en påhittad elevs lösning där gruppen ska hitta den "
+    "FÖRSTA raden som är fel, skriva rätt värde och säga hur man ska tänka i "
+    "stället. Be aldrig om den färdiga åtgärden («sätt in en parentes här») — "
+    "det är svaret, och gruppen ska hitta det själv.\n"
+    "  * modellerings- och problemraderna (M, PL): en verklig kostnad eller "
+    "ett verkligt samband med ett fast och ett rörligt led, som gruppen först "
+    "tecknar som formel och sedan använder baklänges — $K = 500 + 200d$; hur "
+    "länge räcker $2500$ kr?\n"
+    "  Minst en uppgift ska ändå BRYTA mönstret: ställer alla fyra samma sorts "
+    "fråga gissar gruppen sig till metoden utan att välja den.\n"
+    "- NYCKELFRÅGAN: momentets ENA avgörande fråga, skriven i dokumentets fält "
+    "\"nyckelfraga\". Lärarens egen var fyra ord — «Vad ska räknas först?» — "
+    "och så kort ska den vara; följ den med vägarna den öppnar bara när "
+    "momentet har två metoder att välja mellan, och aldrig längre än en rad "
+    "(~160 tecken). Den sätts fet i en liten ruta överst och är det gruppen "
+    "läser när de fastnar; tre frågor i rad läses inte alls. Nyckelfrågan är i "
+    "regel momentets vanligaste fallgrop vänd till ett beslut.\n"
     "- BESLUTEN PÅ PAPPRET, RÄKNINGEN PÅ LÖSBLAD: ge uppgiften fältet "
-    "\"svarsfalt\" med de rader gruppen ska fylla i — vanligen uppställningen "
-    "och svaret i ord (t.ex. [\"Ekvation\", \"Svar i ord\"]). Det som skrivs på "
-    "pappret är alltså BESLUTEN; uträkningen görs på lösblad. Fältet hör till "
-    "den fråga som ska besvaras: har uppgiften deluppgifter sätts det på "
-    "DELUPPGIFTEN, inte på föräldern — annars står raden före frågan den "
-    "gäller, och deluppgiften får en tom skrivyta i stället.\n"
+    "\"svarsfalt\" med de rader gruppen ska fylla i — det som ska BESVARAS, "
+    "kort och namngivet ([\"Svar a)\", \"Svar b)\"], [\"Täljare och nämnare\", "
+    "\"Antal skruvar per fack\"], [\"Formel\", \"Antal dagar\"]). Räknetunga "
+    "led görs på lösblad, inte på pappret. Fältet hör till den fråga som ska "
+    "besvaras: har uppgiften deluppgifter sätts det på DELUPPGIFTEN, inte på "
+    "föräldern — annars står raden före frågan den gäller, och deluppgiften "
+    "får en tom skrivyta i stället.\n"
     "- INGA TYP-KRYSSRUTOR. Klassificeringen är ett tankesteg, inte ett svar "
     "att kryssa: nyckelfrågan tvingar fram den, och den REDOVISAS genom "
     "uppställningen. Använd inte svarsrutor för att låta gruppen kryssa vilken "
     "sorts uppgift det är.\n"
-    "- TVÅ VÄGAR PÅ MINST EN UPPGIFT: dela den i a) lös algebraiskt och "
-    "b) lös grafiskt (eller momentets motsvarande andra representation), så att "
-    "gruppen får se att vägarna möts.\n"
-    "Exempel på EN uppgift i mönstret (annat moment än ditt):\n"
-    '{"del": null, "formaga": "PL", "typ": "problem", "poang": [1, 2, 0], '
-    '"text": "En båt ska gå från fyren till bojen. Sträckan fyr–hamn är 420 m, '
-    'sträckan hamn–boj 260 m, och vinkeln vid hamnen är 68 grader. Hur långt är '
-    'det mellan fyren och bojen?", "svarsfalt": ["Uppställning", "Svar i ord"], '
-    '"losning": "$c \\\\approx 410$ m ur cosinussatsen: '
-    '$c^2 = 420^2 + 260^2 - 2 \\\\cdot 420 \\\\cdot 260 \\\\cos 68^\\\\circ$.", '
-    '"bedomning": "+1 E rätt sats vald, +2 C fullständig uppställning och svar '
-    'i meter; vanligt fel: sinussatsen väljs fast den motstående vinkeln är '
-    'okänd."}'
+    "- HJÄLPMEDLET STYRS PER UPPGIFT. Skriv i \"hjalpmedel\" vilka uppgifter "
+    "räknaren får användas på och vilka som ska göras utan — huvudräkningen är "
+    "halva poängen med ett moment som räkneordning, medan tillämpningen gärna "
+    "får ha räknaren. Uppgifterna heter sina SIFFROR där (\"… på uppgift 4, "
+    "men inte på uppgift 1, 2 och 3\").\n"
+    "- BRICKORNA SÄTTER ARKET. Skriv aldrig uppgiftens eget nummer eller "
+    "bokstav i texten och aldrig deluppgiftens a)/b) — mallen sätter dem. "
+    "Bokstäverna i en rutinuppgifts tabell är något annat: de är radernas "
+    "etiketter och paras med svarsfältens «Svar a)» och «Svar b)».\n"
+    "Utdrag ur lärarens papper — formen, inte innehållet. Skriv aldrig av dess "
+    "tal, kontexter eller formuleringar; möter du samma moment igen ska "
+    "situationen och talen vara nya:\n"
+    + "\n".join(json.dumps(u, ensure_ascii=False) for u in _UTDRAG_GRUPP)
 )
+
+
+# Nivåskalningen: samma mall, olika klasser. Lärarens papper är slipat för
+# nivå 1a — små heltal, konkret kontext — och hennes andra klasser läser 1c
+# och 2c. Skrivs 1a:s mått in i MÖNSTRET som siffror får naturettan och
+# tvåan ett byggpapper, och det är precis vad hon INTE bad om: «olika nivåer
+# för olika elever».
+#
+# Måtten hämtas därför ur kursnamnet. Det här är en ANNAN axel än nivåskalan i
+# niva_rubrik/bok: den säger var E, C och A ligger INOM pappret (golv, tak,
+# stegring), den här säger hur stora talen och hur abstrakta uttrycken får
+# vara i kursen över huvud taget.
+#
+# Gy25 skriver kursen som «Matematik, nivå 1a» och fortsättningskurserna som
+# «Matematik – fortsättning, nivå 1c» (gamla Ma3c). Steget räknas därför upp
+# två för fortsättningen och fyra för fördjupningen, så att Ma3c hamnar på
+# steg 3 och Ma5 på steg 5. Spåret (a, b, c) är sista bokstaven; saknas den
+# (Ma4, Ma5) är kursen c-spårets fortsättning.
+_KURSNIVA = re.compile(r"niv[åa]\s*([1-5])\s*([abc])?|(?<![0-9])([1-5])([abc])",
+                       re.IGNORECASE)
+
+
+def _kursniva(kurs: str) -> tuple[int, str] | None:
+    """(steg, spår) ur kursnamnet, eller None när namnet inte säger något."""
+    m = _KURSNIVA.search(kurs or "")
+    if not m:
+        return None
+    steg = int(m.group(1) or m.group(3))
+    spar = (m.group(2) or m.group(4) or "c").lower()
+    lag = (kurs or "").lower()
+    if "fortsättning" in lag:
+        steg += 2
+    elif "fördjupning" in lag:
+        steg += 4
+    return min(steg, 5), spar
+
+
+_TALRUM = {
+    1: "Talen är små: hela tal, i regel under hundra. Varje mellanled blir ett "
+       "enkelt heltal och SVARET är ett heltal — läraren skrev «svaret ska bli "
+       "heltal» och «använd mindre tal så alla mellanled blir enkla heltal». "
+       "En kvadrat som $16^2$ hör inte hemma på den här nivån.",
+    2: "Talrummet är större, och bråk, procent och negativa tal hör hemma här. "
+       "Mellanleden ska ändå bli enkla, och svaret är i regel ett heltal eller "
+       "ett kort exakt uttryck — inte ett decimaltal med fyra siffror.",
+    3: "Talen är underordnade: här bär uttrycken. Potenser, rötter och exakta "
+       "svar ($2\\sqrt{3}$, $\\ln 5$) är normalfallet och svaret behöver inte "
+       "vara ett heltal — men talen ska ändå väljas så att räkningen inte "
+       "skymmer tanken.",
+}
+_SPAR = {
+    "a": "Spåret är a, yrkesprogrammens matematik: konkret språk och en "
+         "situation eleverna känner igen från sitt program. Bokstäver "
+         "förekommer i en enkel formel av typen $K = 500 + 200d$ — ett fast "
+         "belopp plus ett rörligt — inte som uttryck att förenkla för sin egen "
+         "skull.",
+    "b": "Spåret är b, samhälls- och ekonomiprogrammens matematik: formellt "
+         "matematiskt språk, tabeller, diagram, procent och förändring, och "
+         "uttryck med bokstäver får stå för sig själva.",
+    "c": "Spåret är c, natur- och teknikprogrammens matematik: formellt "
+         "matematiskt språk och algebraiska uttryck som står för sig själva. "
+         "En uppgift får kräva att gruppen skriver om ett uttryck innan den "
+         "räknar, och exakta former är att föredra framför avrundade.",
+}
+
+
+def _nivastegen(kurs: str) -> str:
+    """Talens storlek och uttryckens abstraktion — skalade ur KURSEN.
+
+    Mönstret ovan är hämtat ur ett 1a-papper. Utan det här blocket ärver
+    naturklassens 2c byggettans mått."""
+    niva = _kursniva(kurs)
+    if not niva:
+        return ("NIVÅN: kursnamnet säger inte vilken nivå det gäller. Håll "
+                "talen små och mellanleden enkla, som i mönstrets utdrag, och "
+                "låt uppgifternas innehåll avgöra abstraktionen.")
+    steg, spar = niva
+    return (f"NIVÅN — måtten skalas ur kursen, inte ur mönstrets utdrag (de är "
+            f"skrivna för nivå 1a). Kursen här är {kurs}, alltså steg {steg} i "
+            f"spår {spar}:\n"
+            f"- {_TALRUM[min(steg, 3)]}\n"
+            f"- {_SPAR[spar]}\n"
+            "- Mellanleden ska på ALLA nivåer gå att räkna utan räknare. "
+            "«Talen är för svåra» var lärarens dom, och den gällde tanken som "
+            "drunknade i räknandet — inte nybörjarkursen.")
 
 
 def build_referens(items: list[str]) -> str:
@@ -539,14 +753,31 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
             "kommer i mål är den fel skriven, och är den lika lätt som den "
             "första finns ingen stegring.\n"
             f"{FORLAGA_GRUPP}\n"
+            # Nivån står EFTER mönstret och inte före: utdragen är ett
+            # 1a-papper, och raden här är den som säger att måtten i dem gäller
+            # 1a och ingen annan kurs. Läses den först är den en abstraktion
+            # utan något att korrigera.
+            f"{_nivastegen(kurs)}\n"
             # Bandet är dokumentets från och med nu (exam_spec.instruktion).
             # Skrivs det inte här får pappret appens mall, och då är rutan
             # oåtkomlig för läraren: hon kan peka på den i granskningen, men
             # det finns ingen text i JSON:en att skriva om.
+            #
+            # MINNESREGELN är lärarens egen begäran, skriven tre gånger samma
+            # natt: «prioriteringsreglerna ska stå kort här i den här
+            # instruktionsrutan». Rutan är det gruppen har framför sig när den
+            # fastnar, och en rad om momentet där är billigare än en lärare som
+            # går runt och säger samma sak fyra gånger.
             "Skriv instruktionsbandet i fältet \"instruktion\": arbetsregeln "
             "först — läs uppgiften tillsammans, bestäm vem som skriver, alla i "
-            "gruppen ska kunna förklara lösningen efteråt — och sedan "
+            "gruppen ska kunna förklara lösningen efteråt — sedan "
             f"redovisningslöftet ordagrant: \"{REDOV.get(red, REDOV['muntligt'])}\" "
+            "och sist EN kort minnesregel för momentet, den lärarens egen röst "
+            "skulle säga vid tavlan («Kom ihåg räkneordningen: parenteser "
+            "först, sedan potenser, sedan gånger och delat, sist plus och "
+            "minus.»). Korta meningar, vardagliga ord, inga tankstreck — "
+            "läraren strök den första versionen med orden «skriv mycket "
+            "kortare och mycket enklare». "
             "Skriv inte nyckelfrågan där; den har ett eget fält.\n"
             "Inga delar (del: null på alla uppgifter). Fyll fältet \"grupp\" "
             f"med elever={n}, langd_min={min_}, redovisning=\"{red}\". "

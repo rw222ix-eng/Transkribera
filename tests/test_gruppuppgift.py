@@ -432,29 +432,172 @@ def test_prompten_talar_om_gruppen(monkeypatch):
     assert "deluppgifter som leder samtalet" in p
 
 
-# ─────────────────────────── förlagan som mönster (Del F) ───────────────────
-# Läraren körde en egengjord gruppuppgift skarpt och kallade den en av de bästa
-# lektioner hon haft (pappret ligger i docs/forlagor/). Det som fungerade —
-# nyckelfrågan, de olika kontexterna, besluten på pappret och stegringen — är
-# nu gruppuppgiftens mönster. Det som INTE fungerade är lika viktigt: typ-
-# kryssrutorna behövdes inte.
+# ─────────────────────── förlagan som mönster (Del F, omskriven) ────────────
+# Förlagan var till 2026-08-20 ett papper läraren kört skarpt och kallat en av
+# de bästa lektioner hon haft (docs/forlagor/, exponential- mot
+# potensekvationer, med cosinussatsen som handskrivet exempel). Den natten
+# slipade hon i stället en gruppuppgift i tjugotvå vändor tills hon var nöjd —
+# «Räkneordning, parenteser och formler», nivå 1a, byggklass — och bad om att
+# DEN ska bära all framtida generering. Hennes anteckningar på vägen är
+# kravlistan, och den här sviten är kravlistan i testform.
 
 def test_prompten_bar_forlagans_monster():
     p = exam_gen.build_prompt(
-        "Matematik, nivå 3c", "NA25", ["Trigonometri"], antal=4,
+        "Matematik, nivå 1c", "NA25", ["Trigonometri"], antal=4,
         profil="gruppuppgift", grupp={"elever": 3, "langd_min": 45,
                                       "redovisning": "muntligt"})
     assert "MÖNSTRET" in p
     assert "nyckelfraga" in p          # fältet, inte bara idén
-    assert "BRYTA mönstret" in p       # en situation som inte går att gissa
+    assert "BRYTA mönstret" in p       # en fråga som inte går att gissa
     assert "svarsfalt" in p            # besluten skrivs på pappret
     assert "lösblad" in p              # räkningen görs inte där
-    # Dom 2: kryssrutorna behövdes inte, och det ska stå UTTRYCKLIGEN — annars
+    # Dom: kryssrutorna behövdes inte, och det ska stå UTTRYCKLIGEN — annars
     # griper modellen efter svarsrutor, som finns i schemat.
     assert "INGA TYP-KRYSSRUTOR" in p
-    # Exemplet ska visa formen på ETT ANNAT moment, aldrig förlagans eget.
-    assert "cosinussatsen" in p
+    # Den gamla förlagan är ersatt, inte kompletterad. Står båda kvar drar de
+    # åt olika håll: den ena vill ha situationer ur skilda världar, den andra
+    # ur klassens egen.
+    assert "cosinussatsen" not in p
     assert "potensekvation" not in p.lower()
+
+
+def test_prompten_bar_lararens_egna_domar_om_text_tal_och_kontext():
+    """De fyra anteckningar hon skrev om och om igen: kortare text, mindre
+    tal, heltalssvar och en kontext som angår klassen."""
+    p = exam_gen.build_prompt(
+        "Matematik, nivå 1a", "BA26B", ["Räkneordning"], antal=4,
+        profil="gruppuppgift", grupp={"elever": 3, "langd_min": 50,
+                                      "redovisning": "skriftligt"})
+    assert "KORT UPPGIFTSTEXT" in p and "läsas två gånger" in p
+    assert "SMÅ TAL, ENKLA MELLANLED" in p
+    assert "SVARET är ett heltal" in p
+    assert "KONTEXTEN ÄR KLASSENS" in p and "skolprojekt" in p
+    # Fyra uppgifter är formen — hon strök ner från sex.
+    assert "FYRA UPPGIFTER" in p
+    # Arbetsgången bor i rutan, inte i uppgiften.
+    assert "står i instruktionsrutan, inte i uppgiften" in p
+
+
+def test_instruktionsrutan_far_momentets_minnesregel():
+    """«Prioriteringsreglerna ska stå kort här i den här instruktionsrutan» —
+    skrivet tre gånger samma natt. Rutan är det gruppen läser när den fastnar."""
+    p = exam_gen.build_prompt(
+        "Matematik, nivå 1a", "BA26B", ["Räkneordning"], antal=4,
+        profil="gruppuppgift", grupp={"elever": 3, "langd_min": 50,
+                                      "redovisning": "skriftligt"})
+    assert "EN kort minnesregel för momentet" in p
+    assert "inga tankstreck" in p          # «utan M-Dash»
+    # Bandet ska fortfarande bära arbetsregeln och redovisningslöftet.
+    assert "läs uppgiften tillsammans" in p
+    assert "lämnas in vid lektionens slut" in p
+
+
+def test_utdragen_ur_pappret_ar_med_och_ar_giltig_json():
+    """Exemplaret är UTDRAG ur hennes papper, inte hela dokumentet
+    (promptbudget). Utdragen byggs ur dictar och json.dumpas — annars kan ett
+    LaTeX-snedstreck bli fel i en handskriven sträng och exemplet lära ut en
+    form appen inte kan läsa."""
+    p = exam_gen.build_prompt(
+        "Matematik, nivå 1a", "BA26B", ["Räkneordning"], antal=4,
+        profil="gruppuppgift", grupp={"elever": 3, "langd_min": 50,
+                                      "redovisning": "skriftligt"})
+    assert len(exam_gen._UTDRAG_GRUPP) == 4
+    for u in exam_gen._UTDRAG_GRUPP:
+        rad = json.dumps(u, ensure_ascii=False)
+        assert rad in p
+        assert json.loads(rad) == u
+    # De fyra formerna hon behöll: ingången, begreppen, felsökningen, formeln.
+    former = [set(u) for u in exam_gen._UTDRAG_GRUPP]
+    assert any("tabell" in f for f in former)
+    assert any("stegtabell" in f for f in former)
+    assert all("svarsfalt" in f or "deluppgifter" in f for f in former)
+    # Inga namn i mönstret. Lärarens papper skrev «Ali räknar …», och det
+    # bryter mot integritetsregeln i SYSTEM — mallen får inte lära ut det
+    # appen förbjuder.
+    assert "Ali" not in p
+    assert "En elev har beräknat" in p
+
+
+def test_nivaskalningen_skiljer_byggettan_fran_naturtvaan():
+    """«Olika nivåer för olika elever»: samma mall, men talen och uttrycken
+    skalas ur KURSEN. Utan blocket ärver 2c byggettans mått, för utdragen är
+    ett 1a-papper."""
+    def prompt(kurs):
+        return exam_gen.build_prompt(
+            kurs, "X26", ["Räkneordning"], antal=4, profil="gruppuppgift",
+            grupp={"elever": 3, "langd_min": 45, "redovisning": "muntligt"})
+
+    ett_a, ett_c, tva_c = (prompt("Matematik, nivå 1a"),
+                           prompt("Matematik, nivå 1c"),
+                           prompt("Matematik, nivå 2c"))
+    assert ett_a != ett_c != tva_c and ett_a != tva_c
+    # Byggettan: heltal, konkret, formeln är fast plus rörligt.
+    assert "steg 1 i spår a" in ett_a
+    assert "SVARET är ett heltal" in ett_a
+    assert "yrkesprogrammens matematik" in ett_a
+    # Naturettan: samma talrum, annat språk.
+    assert "steg 1 i spår c" in ett_c
+    assert "natur- och teknikprogrammens matematik" in ett_c
+    assert "yrkesprogrammens matematik" not in ett_c
+    # Naturtvåan: större talrum, bråk och negativa tal — inte heltalskravet.
+    assert "steg 2 i spår c" in tva_c
+    assert "SVARET är ett heltal" not in tva_c
+    assert "bråk, procent och negativa tal" in tva_c
+    # Mellanleden ska vara enkla överallt — det var domen «för svåra tal».
+    for p in (ett_a, ett_c, tva_c):
+        assert "Mellanleden ska på ALLA nivåer" in p
+
+
+@pytest.mark.parametrize("kurs, vantat", [
+    ("Matematik, nivå 1a", (1, "a")),
+    ("Matematik, nivå 2b", (2, "b")),
+    ("Ma1c", (1, "c")),
+    # Gy25 döpte om Ma3c till «fortsättning, nivå 1c» — steget är ändå 3.
+    ("Matematik – fortsättning, nivå 1c", (3, "c")),
+    ("Matematik – fortsättning, nivå 2", (4, "c")),
+    ("Matematik – fördjupning, nivå 1", (5, "c")),
+    ("Fysik", None),
+])
+def test_kursnamnet_bar_nivan(kurs, vantat):
+    assert exam_gen._kursniva(kurs) == vantat
+
+
+def test_en_okand_kurs_faller_tillbaka_pa_matten_i_monstret():
+    p = exam_gen.build_prompt(
+        "Naturkunskap", "NA25", ["Enheter"], antal=4, profil="gruppuppgift",
+        grupp={"elever": 3, "langd_min": 45, "redovisning": "muntligt"})
+    assert "kursnamnet säger inte vilken nivå det gäller" in p
+    assert "MÖNSTRET" in p
+
+
+def test_monstret_ror_inte_provet_eller_arbetsbladet():
+    """Förlagan är gruppuppgiftens. Prov och arbetsblad har egna uppdrag och
+    egna nivåskalor, och ett byggpapper får inte läcka in i dem."""
+    for profil in ("prov", "arbetsblad", "diagnos"):
+        p = exam_gen.build_prompt(
+            "Matematik, nivå 1a", "BA26B", ["Räkneordning"], antal=6,
+            profil=profil)
+        assert "MÖNSTRET" not in p, profil
+        assert "byggställning" not in p, profil
+        assert "NIVÅN — måtten skalas ur kursen" not in p, profil
+
+
+def test_uppdragsraden_som_kassetterna_matchar_pa_star_kvar():
+    """Uppspelningen väljer band på generatorernas egna versalord
+    (tests/fejk.py _VAL). Glider mönstret in ett annat bands nyckelord — eller
+    ut ur sitt eget — får en lärardag tyst fel papper."""
+    p = exam_gen.build_prompt(
+        "Matematik, nivå 1a", "BA26B", ["Räkneordning"], antal=4,
+        profil="gruppuppgift", grupp={"elever": 3, "langd_min": 50,
+                                      "redovisning": "skriftligt"})
+    assert ("Uppdrag: skriv en GRUPPUPPGIFT för Matematik, nivå 1a, klass "
+            "BA26B, med EXAKT 4 uppgifter") in p
+    # Listan är ordnad, och «matteprov» står i INSTRUCTION som alla profiler
+    # delar — det är alltså inte frånvaron av andras nyckelord som avgör utan
+    # att inget HÖGRE prioriterat ord råkar dyka upp här.
+    assert "Skriv lärarens stödanteckningar" not in p
+    # Nivådomaren prövas före hela listan och skulle kapa valet helt.
+    assert "vilken nivå den faktiskt ligger på" not in p
 
 
 def test_prompten_ber_om_stegringen_som_fungerade():
