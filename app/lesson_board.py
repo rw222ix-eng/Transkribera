@@ -170,12 +170,21 @@ INSTRUCTION = (
     # täcker det. Vi behöver inte ha med det alls.»
     "8b. Formlerna är REGLER i bokstäver — inga uträknade sifferexempel på "
     "vänstertavlan: en rad med siffror och mellanled är ett exempel, och "
-    "exempel bor på högertavlan. Ett ensamt tal får stå bara som minsta "
-    "illustration av en regel som annars inte syns ($\\sqrt[3]{-8} = -2$) — "
-    "aldrig en uträkning, aldrig en parentes som visar hur talet räknades "
-    "fram. Detsamma gäller jämförelser som exakt-mot-närmevärde: de bärs "
+    "exempel bor på högertavlan. Även en minsta sifferillustration av en "
+    "regel ($\\sqrt[3]{-8} = -2$) hör till exemplen — på vänstern står bara "
+    "bokstäver. Detsamma gäller jämförelser som exakt-mot-närmevärde: de bärs "
     "naturligt av ett exempel på högertavlan («låt roten stå kvar — det är "
     "det exakta svaret»), aldrig av en egen sifferruta på vänstern.\n"
+    # ALLMÄNT PÅ VÄNSTERN, TILLÄMPAT I EXEMPLET. Lärarens dom (2026-08-21
+    # kväll), på en vänstertavla med både räknelagarna och A=a²⇒a=√A: «väldigt
+    # mycket fram och tillbaka. Allmänna reglerna, absolut — men att arean är
+    # a² och sidan roten ur A, det kommer när vi tar upp exemplen på högra
+    # sidan. Det ska inte komma här.»
+    "8c. Vänsterns formelkedja är de ALLMÄNNA reglerna: definitioner och "
+    "räknelagar i bokstäver. Momentets tillämpningsformel (A = a^2 "
+    "\\Rightarrow a = \\sqrt{A}) skrivs som FÖRSTA led i det exempel som "
+    "använder den — inte på vänstern. Vänstern säger vad roten ÄR och hur "
+    "den räknas; exemplet visar vad den används till.\n"
     "9. Sist i den högra spalten: \"Vanligt fel:\" i rött (text med weight 700) "
     "följt av en underline-sektion i rött, sedan det felaktiga ledet i en "
     "math-sektion och en kort rad om varför. Inne i en row/col ritar motorn "
@@ -256,6 +265,13 @@ INSTRUCTION = (
     "och faller på regeln ovan: samma metod åt andra hållet (dela i stället "
     "för att dubbla före roten) är samma metod — stryk raden. Är vändningen "
     "verkligen ny får den ett eget exempel med egen rubrik och egen fråga.\n"
+    # MINIFALLEN. Samma dom, samma kväll, på en rad småfigurer under exempel
+    # 1 («Halva kvadraten: dubbla arean», «Två i rad: dela arean»): «så pass
+    # enkla och oväsentliga — de kan eleverna själva upptäcka i boken. De ska
+    # tas bort helt och hållet, de tar bara onödigt mycket plats.»
+    "- Samma fälla i galleriform: en rad småfigurer med varsin trivial "
+    "variant under ett exempel. Varianter eleverna upptäcker själva i boken "
+    "skrivs inte på tavlan — stryk hela raden.\n"
     # Trådens dyraste fälla, uppmätt på tredje varvet: «samma kvadrat delad
     # av en diagonal — triangelns area är 20 cm²» när kvadraten var 36.
     # Återbruk gör talen BEROENDE av varandra, och ett felräknat återbruk
@@ -316,8 +332,16 @@ INSTRUCTION = (
     "fel som bara står som en regel känns inte igen; ett fel som står i "
     "exemplet gör det.\n"
     "- Finns det flera vägar till svaret (som i boken) — visa två: \"Väg 1\" "
-    "och \"Väg 2\", ett par ord var om vad vägen går ut på. Eleverna löser "
-    "olika, och genomgången ska rymma båda.\n"
+    "och \"Väg 2\", ett par ord var om vad vägen går ut på, som TVÅ egna "
+    "rader. En punktlista som väver ihop stegen ur båda vägarna visar ingen "
+    "av dem («slå ihop rötterna» och «bryt ut och stryk» är två vägar, inte "
+    "tre steg). Eleverna löser olika, och genomgången ska rymma båda.\n"
+    # EXAKT OCH NÄRMEVÄRDE. Lärarens dom (2026-08-21 kväll), på ett exempel
+    # som bara visade ≈: «vi har inte nämnt det här med att svara exakt eller
+    # med närmevärde — det har vi glömt, och det kommer på bokuppgifterna.»
+    "- Blir svaret en rot ska exemplet visa BÅDA svarsformerna: det exakta "
+    "($4\\sqrt{20}$) och närmevärdet, med en kort rad om vilket som är "
+    "vilket. Bokens uppgifter frågar efter båda.\n"
     # MÅLET NÄR BOKEN ÄR KÄLLAN. «Eleverna ska arbeta mest i boken. När jag
     # väljer att utgå från boken är syftet med genomgången att den ska vara
     # kort, lätt att fatta, intressant och naturligt följsam — men också ge
@@ -343,8 +367,9 @@ INSTRUCTION = (
     # det är i kubik? Vad händer då?»
     "- Momentets RANDFALL ska upp: fråga var begreppet tar slut eller "
     "överraskar (negativt tal under rotmärket — stopp för kvadratroten, helt "
-    "lagligt för kubikroten: $\\sqrt[3]{-27} = -3$) och ge det en regelrad "
-    "på vänstern eller en egen vändning i ett exempel.\n"
+    "lagligt för kubikroten: $\\sqrt[3]{-27} = -3$) och ge det en egen "
+    "vändning i det exempel där det hör hemma («och ett negativt tal under "
+    "roten?») — aldrig en regelrad på vänstern (se 8b).\n"
     # PEDAGOGISK FRIHET ÄVEN I FÖRKLARINGEN, inte bara i exemplen. «Boken är
     # jättebra. Men om man är smart och har lite fantasi så kan man göra det
     # bättre.» Lärarens eget exempel på formen: «roten går baklänges — från

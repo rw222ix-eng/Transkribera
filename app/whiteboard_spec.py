@@ -568,7 +568,16 @@ _MAX_ITEM_CHARS = 80
 # Och den kostar inga rundor. Omspelningen efter Del F (2026-08-09) gav en
 # skarp tavla på 154 respektive 26 tecken — med en table-sektion på högertavlan
 # — och den gick igenom på EN runda, precis som före budgeten.
+#
+# OMMÄTT 2026-08-21: lärarens egna nya krav på exemplen — Väg 1/Väg 2 som två
+# rader, exakt-mot-närmevärde utskrivet, randfallet som egen vändning — landar
+# på 430–500 tecken över en tvåkolumnstavla, och fyra inspelningar i rad föll
+# på 400-taket trots att varje rad var beställd. Taket är per FLÖDE: en tavla
+# med columns bär flera exempelspalter och får 250 per spalt (två kolumner →
+# 500); en sections-tavla behåller 400. Fortfarande mätt, inte satt: lärarens
+# underkända högertavla på 812 fälls med god marginal.
 _MAX_BOARD_TEXT = 400
+_MAX_COLUMN_TEXT = 250
 _ASPECT_TOLERANCE = 0.15  # motorn varnar vid >15 % avvikelse
 _VERTEX_EPS = 1e-6
 
@@ -766,10 +775,14 @@ def validate_rules(doc: BoardDoc) -> list[dict]:
             volym += _text_volym(sections)
             for g, col_w, gpath in _iter_graphs(sections, width, path):
                 _validate_graph(g, col_w, gpath, errors)
-        if volym > _MAX_BOARD_TEXT:
+        # Kolumntavlan bär flera exempelspalter — taket skalar per spalt
+        # (se OMMÄTT-kommentaren vid _MAX_BOARD_TEXT).
+        tak = (_MAX_COLUMN_TEXT * len(board.columns) if board.columns
+               else _MAX_BOARD_TEXT)
+        if volym > tak:
             errors.append(_err(bpath, "textbudget",
                                f"tavlan bär {volym} tecken löpande text (taket "
-                               f"är ~{_MAX_BOARD_TEXT}) — en tavla ska visa det "
+                               f"är ~{tak}) — en tavla ska visa det "
                                "som SKRIVS under lektionen, inte allt som sägs. "
                                "Stryk det som bara ska berättas, gör om steg "
                                "till math-sektioner och samla flera fall i en "
