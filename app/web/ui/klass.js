@@ -235,6 +235,10 @@ window.Klass = (() => {
      Därför är omprovet inget nytt formulär: bandet står över veckan och nästa
      klick på en lektion är dagen. */
   let omprovDok = null;
+  /* Chipet som just nu dras mot en annan lektion. Draget är kopiering, aldrig
+     flytt: NA-klassen och TE-klassen läser samma kapitel i otakt, och samma
+     tavla ska kunna läggas på båda utan att skrivas om (Dokument.aterAnvand). */
+  let dragDok = null;
   function valjOmprov(v) {
     omprovDok = v;
     if (v.klass) vald = v.klass;
@@ -368,6 +372,22 @@ window.Klass = (() => {
       b.textContent = v.losningsblad ? (v.typ === 'Prov' ? 'Lösningar' : 'Facit')
         : (v.variant || (v.elev ? `${v.typ} · ${v.elev.split(' ')[0]}` : v.typ));
       b.addEventListener('click', e => { e.stopPropagation(); window.Dokument && window.Dokument.visa && window.Dokument.visa(dok().indexOf(v)); });
+      /* Chipet går att DRA till en annan lektion i veckan — släpp, och kopian
+         lägger sig där (aterAnvand). Prov sprids inte mellan klasser, facit
+         hör till sitt blad och elevpapper till sin elev — de dras inte. */
+      if (!v.losningsblad && !v.elev && v.typ !== 'Prov') {
+        b.draggable = true;
+        b.dataset.tip += ' — eller dra till en annan lektion för att återanvända';
+        b.addEventListener('dragstart', e => {
+          dragDok = v;
+          e.dataTransfer.setData('text/plain', namnPa(v));
+          e.dataTransfer.effectAllowed = 'copy';
+        });
+        b.addEventListener('dragend', () => {
+          dragDok = null;
+          $$('.lekt[data-drop]', grid).forEach(x => x.removeAttribute('data-drop'));
+        });
+      }
       remsa.appendChild(b);
     });
     /* Provet bär sina två skyldigheter där det ligger: rättningen efteråt och
@@ -498,6 +518,28 @@ window.Klass = (() => {
     el.dataset.post = JSON.stringify(post);
     el.dataset.tip = omprovDok ? 'Klicka för att lägga omprovet här' : 'Klicka för att välja lektionen — flera går bra';
     el.addEventListener('click', e => { if (e.target.closest('button')) return; markera(post, el); });
+    /* Släppytan för ett draget chip. Kopiering, aldrig flytt — och aldrig till
+       samma lektion som originalet redan ligger på. */
+    el.addEventListener('dragover', e => {
+      if (!dragDok) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+      el.setAttribute('data-drop', '');
+    });
+    el.addEventListener('dragleave', () => el.removeAttribute('data-drop'));
+    el.addEventListener('drop', e => {
+      if (!dragDok) return;
+      e.preventDefault();
+      el.removeAttribute('data-drop');
+      const v = dragDok;
+      dragDok = null;
+      if (v.datum === post.datum && (v.klass || '') === (post.klass || '')
+          && (!v.tid || !post.tid || start(v.tid) === start(post.tid))) {
+        window.toast && window.toast(`${namnPa(v)} ligger redan på den här lektionen`);
+        return;
+      }
+      window.Dokument && window.Dokument.aterAnvand && window.Dokument.aterAnvand(v, post);
+    });
     el.innerHTML = `<div class="lekttopp"><span class="lekttid">${start(s.tid) || ''}</span>${s.sal ? `<span class="lektsal">${s.sal}</span>` : ''}<span class="lektklass"></span></div><p class="lektnamn"></p>`;
     $('.lektklass', el).textContent = s.klass || '—';
     $('.lektnamn', el).textContent = kort(s.kurs) || 'Lektion';

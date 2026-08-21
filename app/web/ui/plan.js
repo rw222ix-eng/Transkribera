@@ -3713,6 +3713,18 @@
       kopia.kurs = p.kurs || kopia.kurs;
       kopia.datum = p.datum;
       kopia.tid = p.tid || '';
+      kopia.lektionsdatum = p.datum;
+      kopia.lektionstid = kopia.tid;
+      /* Tavlans klockslag uppe till vänster är LEKTIONENS, inte originalets —
+         samma regel som satt_tid på servern: en tidsrad först i flödet byts
+         mot den nya lektionens tid, eller tas bort om tiden är okänd. */
+      const flode = kopia.wb && kopia.wb.boards && kopia.wb.boards[0]
+        && kopia.wb.boards[0].sections;
+      if (flode && flode[0] && flode[0].kind === 'text'
+          && /^\d{1,2}[:.]\d{2}(\s*[–—-]\s*\d{1,2}[:.]\d{2})?$/.test(String(flode[0].text || '').trim())) {
+        if (kopia.tid) flode[0].text = kopia.tid;
+        else flode.shift();
+      }
       v.anvand = (v.anvand || 1) + 1;
       sparat.push(kopia);
       dokSpara(kopia);

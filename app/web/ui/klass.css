@@ -109,6 +109,11 @@
 .lekt[data-vald]{outline:2px solid var(--navy);outline-offset:2px;opacity:1;animation:valjpopp 340ms cubic-bezier(.22,.61,.36,1),ringin 340ms cubic-bezier(.22,.61,.36,1)}
 @media (prefers-reduced-motion:reduce){.lekt[data-vald]{animation:none}}
 .lekt[data-nu]{outline:2px solid var(--navy);outline-offset:2px;box-shadow:inset 0 0 0 1px var(--line),0 0 0 6px var(--accent-weak)}
+/* Släppytan under ett draget chip: samma ring som valet, streckad — «här
+   lägger sig kopian». */
+.lekt[data-drop]{outline:2px dashed var(--navy);outline-offset:2px;box-shadow:inset 0 0 0 1px var(--line),0 0 0 6px var(--accent-weak)}
+.dokchip[draggable="true"]{cursor:grab}
+.dokchip[draggable="true"]:active{cursor:grabbing}
 .lekttopp{display:flex;align-items:baseline;gap:8px}
 .lekttid{font-size:.74rem;font-weight:500;font-variant-numeric:tabular-nums;color:var(--ink-2)}
 .lektklass{margin-left:auto;padding:2px 8px;border-radius:var(--r-pill);background:var(--track);font-size:.7rem;font-weight:600;letter-spacing:.02em;color:var(--ink-2)}
