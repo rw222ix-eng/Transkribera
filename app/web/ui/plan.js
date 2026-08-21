@@ -2846,10 +2846,23 @@
      uppgifter på samma poäng kan skilja fem minuter i arbete. Uppskattningen bor
      därför i canvasen, där uppgifterna ligger framme, och görs på begäran.
 
-     Modellen: minuter per poäng efter nivå — praxis och lärarerfarenhet ligger
-     på 1,5–3 min per poäng, tyngre ju högre nivå — plus en dryg minut per
-     uppgift för läsning och byte, plus åtta minuter för start och avslut. */
-  const PER_NIVA = { E: 1.6, C: 2.2, A: 3.1 };
+     Modellen: minuter per poäng efter nivå, plus en dryg minut per uppgift för
+     läsning och byte, plus åtta minuter för start och avslut.
+
+     Siffrorna är MÄTTA (2026-08-21), inte gissade ur lärarerfarenhet som förut.
+     Källan är NpMa2a vt 2017 och vt 2022 — fyra delprov med känd provtid:
+     vt17 B+C 15 uppg / 28 p (12 E, 9 C, 7 A) på 120 min, vt17 D 9 / 27
+     (11/10/6) på 120, vt22 B+C 17 / 34 (15/13/6) på 120, vt22 D 11 / 21
+     (8/7/6) på 120. Det ger 4,36 min per poäng över ett helt prov, och de
+     gamla vikterna 1,6/2,2/3,1 var 25–51 % för snabba. Nivåernas ordning höll
+     däremot, så vikterna nedan är den gamla formen skalad 1,75 och avrundad.
+
+     Härledningen i sin helhet — jämförelsen mot NP:s ramtid, den förkastade
+     kortsvarsrabatten och vad modellen inte kan — står i exam_spec.py vid
+     MIN_PER_POANG. Servern räknar samma sak (exam_spec.tidsatgang); ett tal som
+     räknas på två ställen blir förr eller senare två tal, så ändras det ena
+     måste det andra ändras i samma andetag. */
+  const PER_NIVA = { E: 2.8, C: 3.9, A: 5.5 };
   /* Samma poängfördelning som provet trycker i marginalen. */
   function ecaDel(poang, mix) {
     const p = Math.max(1, poang);
@@ -2878,6 +2891,11 @@
     });
     const antal = (v.uppgifter || []).length;
     const rena = e * PER_NIVA.E + c * PER_NIVA.C + a * PER_NIVA.A;
+    /* 1,1 och 8 står kvar orörda av NP-kalibreringen, med flit. NP-provens
+       poängtäthet (2,0–2,3 poäng per uppgift) är för lik våra pappers för att
+       skilja uppgiftstermen från poängtermen, och åttan är lärarens overhead
+       runt lektionen — den ligger utanför NP:s ramtid och går inte att mäta
+       där. Samma tal som exam_spec.MIN_PER_UPPGIFT / MIN_START_OCH_SLUT. */
     return { min: Math.max(20, Math.round((rena + antal * 1.1 + 8) / 5) * 5), e, c, a, antal, poang: e + c + a };
   }
   function sattProvtid(m) {

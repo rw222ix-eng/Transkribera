@@ -1125,10 +1125,47 @@ def balanced_skeleton(antal: int, profil: str = "prov",
 # vänder på frågan — tiden är GIVEN (en lektion) och det är antalet uppgifter
 # som ska falla ut ur den — så modellen måste finnas här, före genereringen.
 #
-# Minuter per poäng efter nivå: praxis och lärarerfarenhet ligger på 1,5–3
-# minuter per poäng, tyngre ju högre nivå, plus en dryg minut per uppgift för
-# läsning och byte och åtta minuter för start och avslut.
-MIN_PER_POANG: dict[str, float] = {"e": 1.6, "c": 2.2, "a": 3.1}
+# MÄTT, INTE GISSAT. Siffrorna var 1,6/2,2/3,1 minuter per E/C/A-poäng och
+# hämtade ur «praxis och lärarerfarenhet» — aldrig prövade mot ett riktigt prov.
+# De är nu räknade ur NpMa2a vt 2017 och vt 2022 (uppgiftshäfte +
+# bedömningsanvisningar), fyra delprov med känd provtid:
+#
+#   delprov     uppg  deluppg  poäng (E/C/A)  provtid  min/uppg  min/poäng
+#   vt17 B+C     15     22     28 (12/9/7)    120 min     8,0      4,29
+#   vt17 D        9     13     27 (11/10/6)   120 min    13,3      4,44
+#   vt22 B+C     17     28     34 (15/13/6)   120 min     7,1      3,53
+#   vt22 D       11     12     21 (8/7/6)     120 min    10,9      5,71
+#   ──────────────────────────────────────────────────────────────────────
+#   vt17 hela    24     35     55 (23/19/13)  240 min    10,0      4,36
+#   vt22 hela    28     40     55 (23/20/12)  240 min     8,6      4,36
+#
+# Två saker föll ut. Den gamla modellen var för SNABB: den gav delproven 59–90
+# minuter där de har 120, alltså 25–51 % för lite. Men nivåernas inbördes
+# ordning höll — en A-poäng kostar knappt två E-poäng. Konstanterna nedan är
+# därför den gamla FORMEN skalad 1,75 gånger och avrundad, inte en ny form.
+#
+# JÄMFÖRELSEN. NP:s provtid är ren arbetstid; Skolverket delar inte ut häften i
+# den. MIN_START_OCH_SLUT är lärarens egen overhead runt lektionen och ligger
+# därför UTANFÖR passningen — poäng- och uppgiftstermerna ska träffa provtiden,
+# åttan läggs på efteråt. Den är alltså fortfarande ogissad; NP kan inte mäta
+# den, och den lämnas som den var.
+#
+# VAD MODELLEN INTE KAN. NP:s egen tidstäthet spretar: 3,53 till 5,71 minuter
+# per poäng mellan delproven. Ingen rak modell i poäng + antal uppgifter träffar
+# alla fyra inom ±15 % — bäst möjliga med rimliga nivåvikter är ±19 %, och det
+# kostar en A-poäng värd tre E-poäng. Vikterna nedan träffar i stället HELA
+# provet inom 2 % båda åren (236 resp. 239 minuter mot 240) och de enskilda
+# delproven inom 21 %. Spretet är provets, inte modellens.
+#
+# En kortsvarsrabatt (uppgifter där «Endast svar krävs» — typ rutin) prövades
+# och föll: den hade tryckt maxfelet till 15 %, men bara genom att skilja
+# delprov B/C från delprov D. vt22:s delprov D har 19 % kortsvarspoäng och är
+# ändå det delprov modellen underskattar MEST — tvärtemot rabattens mekanism.
+# Fyra mätpunkter räcker inte till en term till.
+MIN_PER_POANG: dict[str, float] = {"e": 2.8, "c": 3.9, "a": 5.5}
+# Läsning och byte mellan uppgifter. NP-datat kan inte skilja den här termen
+# från poängtermen — proven har ungefär lika många poäng per uppgift som våra
+# papper (1,96–2,29 mot ~1,9) — så den lämnas där läraren satte den.
 MIN_PER_UPPGIFT = 1.1
 MIN_START_OCH_SLUT = 8.0
 
@@ -1167,7 +1204,18 @@ def _minuter_per_uppgift(mix: tuple[float, float, float]) -> float:
 
 
 def uppgifter_som_ryms(tid_min: int, profil: str = "diagnos") -> int:
-    """Hur många uppgifter en given lektionstid rymmer. Minst en."""
+    """Hur många uppgifter en given lektionstid rymmer. Minst en.
+
+    NP-kalibreringen kostade här: en 60-minuterslektion rymde elva
+    diagnosuppgifter med de gissade vikterna och rymmer sju med de mätta (75
+    min: 14 → 8; ett prov på 60 min: 8 → 5). Skiftet går inte att skruva bort —
+    diagnosen är E-tung, så antalet följer E-vikten rakt av, och varje
+    nivåfördelning som håller sig inom 25 % av NP:s tider landar på 7–8
+    uppgifter. Att behålla elva krävde ett fel på 33 %. Sju uppgifter är alltså
+    inte en försämring utan mätningen: elva var aldrig sanna.
+
+    Täckningen överlever ändå — Ma1c:s 21 punkter går ihop till precis sju
+    grupper med tak MAX_CI_PER_UPPGIFT, så ingen kurs spräcker sin lektion."""
     mix = KARAKTARSMIX.get(profil, KARAKTARSMIX["prov"])
     kvar = max(0.0, tid_min - MIN_START_OCH_SLUT)
     return max(1, int(kvar // _minuter_per_uppgift(mix)))

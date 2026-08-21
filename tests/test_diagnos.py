@@ -89,11 +89,14 @@ def test_taket_ar_75_minuter():
 
 
 def test_tidsatgangen_ar_samma_modell_som_frontendens():
-    """plan.js uppskatta() räknar 1,6/2,2/3,1 min per E/C/A-poäng plus 1,1 per
+    """plan.js uppskatta() räknar 2,8/3,9/5,5 min per E/C/A-poäng plus 1,1 per
     uppgift och 8 minuter för start och avslut. Servern måste räkna likadant —
-    annars säger skärmen och pappret olika saker om samma diagnos."""
+    annars säger skärmen och pappret olika saker om samma diagnos.
+
+    Vikterna är mätta ur NpMa2a vt17+vt22 (exam_spec.MIN_PER_POANG);
+    tests/test_tidsmodell.py håller dem mot proven och mot plan.js källkod."""
     summor = {"total": 10, "e": 6, "c": 3, "a": 1}
-    vantat = round((6 * 1.6 + 3 * 2.2 + 1 * 3.1 + 5 * 1.1 + 8) / 5) * 5
+    vantat = round((6 * 2.8 + 3 * 3.9 + 1 * 5.5 + 5 * 1.1 + 8) / 5) * 5
     assert exam_spec.tidsatgang(summor, 5) == vantat
 
 
