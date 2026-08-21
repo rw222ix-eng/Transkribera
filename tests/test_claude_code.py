@@ -299,10 +299,13 @@ def test_appens_egna_scheman_far_plats_i_ett_anrop(monkeypatch):
 
 # ── Grammatiktvånget tillbaka (minifiering + claude.exe) ───────────────────
 # Metadatan i schemat tvingar ingenting — Pydantics `title` säger bara
-# fältnamnet en gång till. Strippad krymper tavlans schema från 35 kB till
-# 24 kB, och startas claude.exe direkt (förbi cmd.exe:s 8191) ryms det som
-# --json-schema igen. Skarpt verifierat: 23 914 tecken schema, argv 24 134,
-# returncode 0.
+# fältnamnet en gång till. Strippad krymper tavlans schema från 32 kB till
+# 21 kB, och startas claude.exe direkt (förbi cmd.exe:s 8191) ryms det som
+# --json-schema igen. Skarpt verifierat mot claude.exe: argv 21 542 (tavlan)
+# och 20 612 (provet), returncode 0.
+#
+# Två av nycklarna handlar inte om plats utan om att CLI:n ska ta emot schemat
+# över huvud taget — se testerna för discriminator och prefixItems nedan.
 
 def _fanga_prompt(monkeypatch, sett=None):
     sett = sett if sett is not None else {}
@@ -343,6 +346,98 @@ def test_ett_falt_som_HETER_title_overlever_minifieringen():
     m = claude_code._minifiera(schema)
     assert set(m["properties"]) == {"title", "description"}
     assert m["properties"]["title"] == {"type": "string"}
+
+
+def test_discriminator_stryks_cli_ns_ajv_vagrar_schemat_annars():
+    """CLI:n validerar schemat med ajv i strict mode och stannar på
+    «unknown keyword: "discriminator"» — inget svar alls. Nyckeln är Pydantics
+    (Field(discriminator=...)), och den tvingar ingenting: `const` på taggfältet
+    inuti varje `oneOf`-gren gör hela jobbet och måste överleva."""
+    schema = {"type": "object", "properties": {"ruta": {
+        "oneOf": [{"type": "object", "properties": {
+                       "typ": {"const": "text"}, "text": {"type": "string"}}},
+                  {"type": "object", "properties": {
+                       "typ": {"const": "figur"}, "figur": {"type": "string"}}}],
+        "discriminator": {"propertyName": "typ",
+                          "mapping": {"text": "#/$defs/Text",
+                                      "figur": "#/$defs/Figur"}}}}}
+    m = claude_code._minifiera(schema)
+    ruta = m["properties"]["ruta"]
+    assert "discriminator" not in ruta
+    assert [g["properties"]["typ"]["const"] for g in ruta["oneOf"]] == ["text", "figur"]
+    assert "discriminator" not in json.dumps(m)
+
+
+def test_tupeln_blir_items_cli_ns_ajv_kanner_inte_prefixItems():
+    """Schemat måste passera två validerare med olika mening: CLI:ns ajv kör
+    draft-07 strict och vägrar `prefixItems`, API:t bakom kräver 2020-12 och
+    vägrar draft-07:s tupel (`items` som lista). Kvar finns bara vanliga
+    `items` — längden bevaras, positionerna kan inte."""
+    tal = {"type": "number"}
+    # Lika positioner (tavlans koordinatpar): omskrivningen är exakt.
+    m = claude_code._minifiera({"type": "array", "prefixItems": [tal, tal],
+                                "minItems": 2, "maxItems": 2})
+    assert m == {"type": "array", "items": tal, "minItems": 2, "maxItems": 2}
+    # Olika positioner (provets skelett): anyOf av grenarna, längden kvar.
+    m = claude_code._minifiera({"type": "array", "minItems": 3, "maxItems": 3,
+                                "prefixItems": [{"const": 2}, {"const": 0},
+                                                {"const": 1}]})
+    assert m["items"] == {"anyOf": [{"const": 2}, {"const": 0}, {"const": 1}]}
+    assert m["minItems"] == 3 and m["maxItems"] == 3 and "prefixItems" not in m
+    # Utan gränser är listan ändå en tupel — längden får inte tappas bort.
+    m = claude_code._minifiera({"type": "array", "prefixItems": [tal, tal]})
+    assert m["minItems"] == 2 and m["maxItems"] == 2
+    # Med svans (`items` bredvid) gäller svansen resten: den ska med, och då
+    # är listan inte en tupel och gränserna hittas inte på.
+    m = claude_code._minifiera({"type": "array", "prefixItems": [{"const": 1}],
+                                "items": {"type": "string"}})
+    assert m["items"] == {"anyOf": [{"const": 1}, {"type": "string"}]}
+    assert "minItems" not in m and "maxItems" not in m
+
+
+def test_de_skarpa_schemana_bar_bara_nyckelord_cli_ns_ajv_slapper_igenom():
+    """Vokabuläret är skärningen av de två validerarna, mätt mot skarp
+    claude.exe: `discriminator`, `prefixItems`, `unevaluatedProperties`,
+    `dependentRequired` och `minContains` avvisades var för sig med «strict
+    mode: unknown keyword», medan draft-07:s tupel och `additionalItems` föll
+    på API:ts «must match JSON Schema draft 2020-12».
+
+    Faller det här testet har en ny Pydantic-modell fått in ett nyckelord som
+    stoppar HELA anropet i skarp drift — utan det syns det först som ett
+    misslyckat prov hos läraren."""
+    from app import exam_spec, whiteboard_spec
+    slapps_igenom = {
+        "$schema", "$id", "$ref", "$comment", "$defs", "definitions",
+        "allOf", "anyOf", "oneOf", "not", "if", "then", "else",
+        "items", "contains", "properties", "patternProperties",
+        "additionalProperties", "propertyNames",
+        "type", "enum", "const", "multipleOf", "maximum", "exclusiveMaximum",
+        "minimum", "exclusiveMinimum", "maxLength", "minLength", "pattern",
+        "maxItems", "minItems", "uniqueItems", "maxProperties",
+        "minProperties", "required",
+        "format", "contentEncoding", "contentMediaType",
+        "title", "description", "default", "readOnly", "writeOnly", "examples",
+    }
+
+    def nycklar(nod, ut, i_faltkarta=False):
+        # Under properties/$defs är nycklarna FÄLTNAMN och betyder ingenting
+        # för validatorn — bara nivåerna däremellan räknas som nyckelord.
+        if isinstance(nod, dict):
+            for k, v in nod.items():
+                if not i_faltkarta:
+                    ut.add(k)
+                nycklar(v, ut, not i_faltkarta and k in claude_code._FALTKARTOR)
+        elif isinstance(nod, list):
+            for v in nod:
+                nycklar(v, ut)
+        return ut
+
+    for schema in (whiteboard_spec.to_response_format()["json_schema"]["schema"],
+                   exam_spec.to_response_format(
+                       7, exam_spec.balanced_skeleton(7))["json_schema"]["schema"]):
+        rått = nycklar(schema, set())
+        assert {"discriminator", "prefixItems"} <= rått      # Pydantics egna
+        assert not nycklar(claude_code._minifiera(schema), set()) - slapps_igenom
 
 
 def test_direkt_mot_exe_far_tavlan_plats_som_json_schema(monkeypatch):

@@ -137,9 +137,16 @@ MODELL = "claude-opus-5"
 # Två saker köper tillbaka grammatiktvånget:
 #   * _forbi_cmd() startar claude.exe direkt → taket blir 32767, inte 8191.
 #   * _minifiera() strippar det som bara är metadata (Pydantic sätter en `title`
-#     på VARJE fält) → tavlans schema går från 35 152 till 23 775 tecken.
-# Tillsammans får både tavlan och provet plats som `--json-schema` igen. Mätt
-# och kört skarpt: 23 914 tecken schema, argv 24 134, returncode 0.
+#     på VARJE fält) → tavlans schema går från 31 784 till 21 347 tecken, provets
+#     från 31 108 till 20 417.
+# Tillsammans får både tavlan och provet plats som `--json-schema` igen. Mätt och
+# kört skarpt mot claude.exe: argv 21 542 respektive 20 612, returncode 0 — och
+# rått startar de inte ens (WinError 206, argv ~32 000).
+#
+# Minifieringen bär numera också det som avgör om CLI:n TAR EMOT schemat alls:
+# `discriminator` bort och `prefixItems` omskrivet (se _METADATA och
+# _utan_tupler). Utan dem svarar CLI:n «--json-schema is not a valid JSON
+# Schema: strict mode: unknown keyword» och genererar ingenting.
 #
 # Ryms det ändå inte — .CMD-installation, jättelik systemprompt — går schemat i
 # PROMPTEN i stället, den matas på stdin och har inget tak. Grammatiktvånget
@@ -157,14 +164,60 @@ _SCHEMA_I_PROMPT = (
 # Rena beskrivningar av schemat, utan tvingande verkan. `title` står för nästan
 # hela besparingen: Pydantic sätter en på varje fält, och den säger bara
 # fältnamnet en gång till («X1» för x1).
+#
+# `discriminator` är inte metadata utan ett OpenAPI-nyckelord, och det står här
+# av ett hårdare skäl: CLI:ns ajv kör strict mode och VÄGRAR schemat med
+# «unknown keyword: "discriminator"» — tavlan och provet gick alltså inte att
+# generera alls. Pydantic lägger dit det för varje Field(discriminator=...)
+# (exam_spec, whiteboard_spec), och det är bara en genväg för validerare: det
+# `oneOf` det sitter bredvid har redan `const` på taggfältet, så strukturen
+# tvingas lika hårt utan det. Molnvägen (app/*_spec.py → response_format) rörs
+# inte — där är discriminator giltigt och testat.
 _METADATA = frozenset({"description", "title", "$comment", "examples",
                        "default", "readOnly", "writeOnly", "deprecated",
-                       "markdownDescription"})
+                       "markdownDescription", "discriminator"})
 
 # I de här nycklarna är undernycklarna FÄLTNAMN, inte schemanyckelord — ett fält
 # som faktiskt heter "title" eller "description" får aldrig strippas bort.
 _FALTKARTOR = frozenset({"properties", "$defs", "definitions",
                          "patternProperties", "dependentSchemas"})
+
+
+def _utan_tupler(nod: dict) -> dict:
+    """`prefixItems` (tupeln) → `items`, för att CLI:n ska ta emot schemat alls.
+
+    Schemat passerar TVÅ validerare med olika mening om vad JSON Schema är:
+    CLI:ns ajv kör strict mode mot draft-07 och stannar på «unknown keyword:
+    "prefixItems"», medan API:t bakom kräver draft 2020-12 och vägrar draft-07:s
+    egen tupelform (`items` som lista). Skärningen mellan dem har inget
+    positionsnyckelord alls — tupeln MÅSTE bli ett vanligt `items`.
+
+    Så här lite kostar det:
+      * Är alla positioner lika — tavlans koordinatpar [number, number], och
+        det är varenda tupel i tavlan — är omskrivningen exakt. Längden bar
+        `minItems`/`maxItems` redan, och de rörs inte.
+      * Skiljer de sig blir `items` ett `anyOf` av grenarna: antalet och vilka
+        former som är tillåtna står kvar, men inte VILKEN position som tar
+        vilken. Det gäller provets balanserade skelett, där grenarna skiljer
+        sig bara i poängtripeln. Skelettet står kvar rad för rad i prompten
+        (exam_gen._skelett_plan) och exam_gen mäter svaret mot det och
+        reparerar — ett prov som får repareras är oändligt mycket bättre än ett
+        anrop CLI:n aldrig släpper igenom.
+    Molnvägen rör vi inte: där är prefixItems giltigt och rätt.
+    """
+    grenar = nod.pop("prefixItems")
+    svans = nod.get("items")            # 2020-12: schemat för resten av listan
+    unika: list = []
+    for g in grenar + ([svans] if svans is not None else []):
+        if g not in unika:
+            unika.append(g)
+    nod["items"] = unika[0] if len(unika) == 1 else {"anyOf": unika}
+    if svans is None:
+        # Utan svans är listan en tupel: exakt så många element som grenar.
+        # Pydantic sätter redan gränserna själv — setdefault rör dem inte.
+        nod.setdefault("minItems", len(grenar))
+        nod.setdefault("maxItems", len(grenar))
+    return nod
 
 
 def _minifiera(nod):
@@ -180,7 +233,7 @@ def _minifiera(nod):
                 ut[k] = v                 # värden, inte scheman — rörs aldrig
             else:
                 ut[k] = _minifiera(v)
-        return ut
+        return _utan_tupler(ut) if "prefixItems" in ut else ut
     if isinstance(nod, list):
         return [_minifiera(v) for v in nod]
     return nod
