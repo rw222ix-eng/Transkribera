@@ -152,6 +152,15 @@ INSTRUCTION = (
     "(a, b …) är de som används i varje formel och exempel därefter. En ny "
     "bokstav får aldrig dyka upp från ingenstans — behövs den ska den "
     "introduceras i figuren eller definitionsmeningen först.\n"
+    # TVÅ KROPPAR, DÖPTA TIDIGT. Lärarens dom (2026-08-21), på en tavla där
+    # exempel 2:s kub dök upp från ingenstans: «volymen 216 — var kommer den
+    # ifrån? Bättre att man på vänstra delen av tavlan redan har döpt den här
+    # kvadraten och den här kuben, och återanvänder de figurerna. Benämn dem
+    # som kvadraten och kuben bara, med lite mått, lite kort.»
+    "7c. Bär momentet två begrepp med varsin naturlig kropp (kvadraten och "
+    "kuben) ritas BÅDA i figurraden — små, döpta med sitt vardagsnamn "
+    "(«kvadraten», «kuben») och med bokstavsmått. Det är de kropparna "
+    "exemplen sedan pekar tillbaka på.\n"
     "8. Formlerna kommer EFTER figuren (till höger om den), aldrig före. "
     "Formeln ska se ut att komma ur figuren. Står flera formler på tavlan ska "
     "de stå i den ordning de härleds, så att läraren kan peka sig fram genom "
@@ -219,6 +228,10 @@ INSTRUCTION = (
     "vändning per exempel, inte en ny värld. Ett tal som redan räknats fram "
     "får bli nästa exempels ingång — det sparar tavlyta och låter läraren "
     "peka bakåt.\n"
+    "- Exemplens kroppar HÄMTAS från vänstertavlan: «kvadraten, nu med arean "
+    "108 cm²» — exemplets figur är en liten kopia med bara måttet, inget mer. "
+    "En kropp som inte synts på vänstern (en kub med volymen 216 från "
+    "ingenstans) får inte bära ett exempel.\n"
     "- Tråden får ALDRIG kosta täckningen: varje metodtyp urvalet kräver ska "
     "fortfarande beröras — välj vändningarna så att nästa metodtyp landar i "
     "samma berättelse. Går berättelsen inte att förlänga naturligt: byt "
@@ -257,6 +270,20 @@ INSTRUCTION = (
     "allmänna ord eller allmänna formler. Räkna INTE ut svaret på tavlan: det "
     "gör läraren tillsammans med klassen, och en färdig uträkning tar bort "
     "själva genomgången. Ingen kedja av uträknade led, inget facit.\n"
+    # FÖR UPPENBART FÖR TAVLAN. Lärarens dom (2026-08-21): «att arean är
+    # rektangelns delat på tre — det är uppenbart, för enkelt. Och triangelns
+    # area är A delat på två — det ska de kunna innan; det kan jag säga till
+    # dem. Vi behöver inte skriva det på tavlan.»
+    "- Metodstegen är BARA de som bär momentet. Steg klassen behärskar sedan "
+    "förr (arean delat på antalet lika delar, triangelns area som halva) sägs "
+    "av läraren och skrivs inte: på en rotlektion är $a = \\sqrt{A}$ värd "
+    "tavlan, $A = A_{rekt}/3$ är det inte.\n"
+    # OVIDKOMMANDE STORHETER. Samma dom: «egentligen hjälper inte triangeln
+    # någonting här — vi ska fokusera på kvadratrötter och kubikrötter, inte
+    # något annat.»
+    "- Varje storhet uppgiften frågar efter ska ÖVA momentet. En delfråga som "
+    "övar något annat (den skuggade triangelns area på en rotlektion) stryks "
+    "ur uppgiften.\n"
     "- Välj ändå talen så att uträkningen GÅR JÄMNT UT när läraren räknar den "
     "på plats — heltal eller enkla decimaltal. Eleven ska se metoden, inte "
     "fastna i aritmetiken.\n"
@@ -302,6 +329,13 @@ INSTRUCTION = (
     "urvalet i bokblocket (uppgiftsraden, inte bara sidorna) och fråga «står "
     "det den här uppgiften kräver på tavlan?». Först när svaret är ja för "
     "varje vald uppgift är genomgången klar.\n"
+    # RANDFALLET. Samma dom (2026-08-21): «en sak jag saknar, speciellt för
+    # kuben: vad gör man om det står ett negativt tal under rotstecknet, fast
+    # det är i kubik? Vad händer då?»
+    "- Momentets RANDFALL ska upp: fråga var begreppet tar slut eller "
+    "överraskar (negativt tal under rotmärket — stopp för kvadratroten, helt "
+    "lagligt för kubikroten: $\\sqrt[3]{-27} = -3$) och ge det en regelrad "
+    "på vänstern eller en egen vändning i ett exempel.\n"
     # PEDAGOGISK FRIHET ÄVEN I FÖRKLARINGEN, inte bara i exemplen. «Boken är
     # jättebra. Men om man är smart och har lite fantasi så kan man göra det
     # bättre.» Lärarens eget exempel på formen: «roten går baklänges — från
@@ -321,6 +355,14 @@ INSTRUCTION = (
     "tavla: ingen lärare hinner skriva upp den, och ingen elev hinner av.\n"
     "- Hellre math, tabell och figur än text. Ett steg som går att skriva som "
     "en formel skrivs som en formel.\n"
+    # Kedjans pris, uppmätt när röda tråden kom: uppföljarnas «Samma kurva,
+    # men nu …»-rader och en avslutande kontrollrad sprängde budgeten två
+    # inspelningar i rad (473 och 445 tecken mot taket ~400).
+    "- I en exempelkedja är uppföljarens uppgiftsrad KORT («Samma kurva, nu "
+    "x = 3») — förgångaren bär kontexten. Skriv bara det NYA metodsteget; "
+    "steg som redan står i ett tidigare exempel skrivs inte om, läraren "
+    "pekar bakåt. Ingen kontroll- eller jämförelserad: den sägs, inte "
+    "skrivs.\n"
     "- Har lektionen flera exempel eller fall som ska jämföras: samla dem i EN "
     "table-sektion, en rad per fall, med de korta kolumnerna kontext, uttryck, "
     "typ → metod och svar. Den tabellen är genomgångens samlingspunkt — den "
@@ -476,24 +518,26 @@ FEW_SHOTS: list[tuple[str, dict]] = [
                                        "Räkna ut c² först",
                                        "Dra roten ur — och sätt ut enheten"]},
                         ]},
+                        # KEDJANS UPPFÖLJARE (domen 2026-08-21): samma triangel
+                        # som exempel 1 — c är redan framräknad till 5 — och en
+                        # KORT uppgiftsrad, ingen ny figur, bara det NYA steget.
+                        # Steg som redan står i exempel 1 pekas på, skrivs inte
+                        # om: det är så tavlan håller textbudgeten.
                         {"weight": 1, "sections": [
                             {"kind": "heading", "text": "Exempel 2", "size": 28,
                              "underline": {}, "gapAfter": 14},
                             {"kind": "text",
-                             "text": "En stege på 5 m står 3 m från väggen.",
-                             "size": 20, "gapAfter": 4},
-                            {"kind": "text", "text": "Hur högt upp når den?",
+                             "text": "Samma triangel: c = 5. Hur lång är kateten?",
                              "size": 20, "gapAfter": 14},
                             {"kind": "list", "bullet": "–", "size": 19, "gap": 6,
-                             "items": ["Rita och sätt ut det du vet",
-                                       "Stegen är hypotenusan",
-                                       "Här söks en katet — subtrahera"],
+                             "items": ["Samma sats — lös ut kateten",
+                                       "Subtrahera, dra sedan roten ur"],
                              "gapAfter": 18},
                             {"kind": "text", "text": "Vanligt fel:", "size": 19,
                              "color": "red", "weight": 700, "gapAfter": 2},
                             {"kind": "underline", "width": 120, "color": "red",
                              "gapAfter": 8},
-                            {"kind": "math", "latex": "h = 5 - 3",
+                            {"kind": "math", "latex": "a = 5 - 4",
                              "size": 20, "color": "red", "gapAfter": 6},
                             {"kind": "text",
                              "text": "Sidorna i en triangel subtraheras inte rakt av.",
