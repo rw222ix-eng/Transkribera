@@ -247,6 +247,15 @@ INSTRUCTION = (
     "- En vändning ska tillföra en NY metodtyp ur urvalet. En vändning som "
     "prövar samma metod igen med nya tal är utfyllnad — stryk den; boken har "
     "redan drillen.\n"
+    # OMVÄNT-FÄLLAN. Lärarens dom (2026-08-21), på en «Omvänt: fyra lika
+    # kvadrater, ihop 100 cm²» inklämd sist i exempel 1: «jag fattar inte
+    # riktigt detta exempel — vad ska den visa egentligen?» Samma metod
+    # baklänges är fortfarande samma metod, och raden hade ingen egen fråga —
+    # den bara stod där.
+    "- En «Omvänt:»-rad inklämd i ett färdigt exempel är ett andra scenario "
+    "och faller på regeln ovan: samma metod åt andra hållet (dela i stället "
+    "för att dubbla före roten) är samma metod — stryk raden. Är vändningen "
+    "verkligen ny får den ett eget exempel med egen rubrik och egen fråga.\n"
     # Trådens dyraste fälla, uppmätt på tredje varvet: «samma kvadrat delad
     # av en diagonal — triangelns area är 20 cm²» när kvadraten var 36.
     # Återbruk gör talen BEROENDE av varandra, och ett felräknat återbruk

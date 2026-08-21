@@ -872,6 +872,22 @@ def _normalize_sections(sections: list, in_container: bool = False) -> list:
     return out
 
 
+def _byt_thickness(nod) -> None:
+    """arrows[].thickness → strokeWidth, rekursivt. Bara i arrows-listor och
+    bara när strokeWidth inte redan står där — allt annat okänt ska fortsatt
+    fällas av schemat, inte städas undan."""
+    if isinstance(nod, dict):
+        for pil in (nod.get("arrows") or []):
+            if isinstance(pil, dict) and "thickness" in pil:
+                pil.setdefault("strokeWidth", pil["thickness"])
+                del pil["thickness"]
+        for v in nod.values():
+            _byt_thickness(v)
+    elif isinstance(nod, list):
+        for v in nod:
+            _byt_thickness(v)
+
+
 def normalize_board(data: dict) -> dict:
     """Deterministisk normalisering FÖRE validering/rendering (bench Fas 2):
 
@@ -879,13 +895,18 @@ def normalize_board(data: dict) -> dict:
       på fristående text — långa löptexter spränger annars kolumnbredden,
       och LLM-reparationer kortade dem inte pålitligt),
     * identiska konsekutiva sektioner dedupas (reparationsrundor har
-      duplicerat sektioner).
+      duplicerat sektioner),
+    * arrows[].thickness döps om till strokeWidth (modellen skriver envist
+      thickness — två inspelningar av tre 2026-08-21 — och en entydig synonym
+      ska inte kosta en reparationsrunda; okända nycklar i övrigt fälls
+      fortfarande av extra="forbid").
 
     Ren dict-transform — påverkar inte listpunkter (att korta dem är ett
     innehållsbeslut som lämnas till modellen via text-lang-regeln)."""
     if not isinstance(data, dict):
         return data
     data = json.loads(json.dumps(data))          # djupkopia, rör ej original
+    _byt_thickness(data)
     for board in data.get("boards") or []:
         if not isinstance(board, dict):
             continue

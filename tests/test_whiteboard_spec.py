@@ -315,6 +315,32 @@ def test_normalize_dedupes_consecutive_duplicates():
     assert len(norm["boards"][0]["sections"]) == 1
 
 
+def test_normalize_byter_thickness_till_strokewidth():
+    """Modellen skriver envist thickness på pilar (två inspelningar av tre
+    2026-08-21) — synonymen döps om deterministiskt i stället för att kosta
+    en reparationsrunda. Andra okända nycklar ska fortfarande fällas."""
+    data = _doc(_board(sections=[
+        {"kind": "graph", "width": 400, "height": 300,
+         "xRange": [-5, 5], "yRange": [-5, 5],
+         "arrows": [{"from": [0, 0], "to": [2, 2], "thickness": 3},
+                    {"from": [0, 0], "to": [1, 2],
+                     "thickness": 9, "strokeWidth": 2}]}]))
+    norm = ws.normalize_board(data)
+    pilar = norm["boards"][0]["sections"][0]["arrows"]
+    assert pilar[0] == {"from": [0, 0], "to": [2, 2], "strokeWidth": 3}
+    # står strokeWidth redan där vinner den — thickness slängs bara
+    assert pilar[1] == {"from": [0, 0], "to": [1, 2], "strokeWidth": 2}
+    _, errors = ws.validate_board_json(norm)
+    assert errors == []
+    # en annan okänd nyckel städas INTE — den ska ge schemafel
+    data2 = _doc(_board(sections=[
+        {"kind": "graph", "width": 400, "height": 300,
+         "xRange": [-5, 5], "yRange": [-5, 5],
+         "arrows": [{"from": [0, 0], "to": [2, 2], "glow": True}]}]))
+    _, errors2 = ws.validate_board_json(ws.normalize_board(data2))
+    assert any(f["code"] == "schema" for f in errors2)
+
+
 def test_normalize_handles_columns_and_callouts():
     lang = "x" * 60 + " " + "y" * 60
     board = _board(sections=None, columns=[
