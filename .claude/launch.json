@@ -2,6 +2,15 @@
   "version": "0.0.1",
   "configurations": [
     {
+      "name": "transkribera-appen",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-c",
+        "import os, uvicorn; os.environ['TRANSKRIBERA_START'] = 'webb'; os.environ['TRANSKRIBERA_PORT'] = os.environ.get('PORT', '8731'); uvicorn.run('app.web.server:create_app', factory=True, host='127.0.0.1', port=int(os.environ.get('PORT', '8731')), timeout_graceful_shutdown=3)"
+      ],
+      "port": 8731
+    },
+    {
       "name": "transkribera-dev",
       "runtimeExecutable": "python",
       "runtimeArgs": [
