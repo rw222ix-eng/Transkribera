@@ -634,13 +634,67 @@ def test_kravgranser_np_model():
     doc, _ = exam_spec.validate_exam_json(_exam())
     g = exam_spec.kravgranser(doc)
     assert g["total"] == 20
-    assert g["E"]["minst"] == 5            # ceil(20 * 0.25)
-    assert g["C"]["minst"] == 9            # ceil(20 * 0.45)
-    assert g["C"]["varav_ca"] == 4         # ceil((6+5) * 0.30) = ceil(3,3)
-    assert g["A"]["minst"] == 13           # ceil(20 * 0.65)
-    assert g["A"]["varav_a"] == 2          # ceil(5 * 0.40)
+    assert g["E"]["minst"] == 6            # ceil(20 * 0.26)
+    assert g["C"]["minst"] == 11           # ceil(20 * 0.54)
+    assert g["C"]["varav_ca"] == 4         # ceil((6+5) * 0.34) = ceil(3,74)
+    assert g["A"]["minst"] == 16           # ceil(20 * 0.79)
+    assert g["A"]["varav_a"] == 3          # ceil(5 * 0.50)
     assert "reproducerbar" not in g["regel"]   # regeln är själva texten
-    assert "25" in g["regel"] and "65" in g["regel"]
+    assert "26" in g["regel"] and "79" in g["regel"]
+    # Papprets betygstabell har fyra rader (F/E/C/A) — mellanbetygen räknas
+    # bara på begäran och får aldrig smyga sig in i regeltexten.
+    assert "D:" not in g["regel"] and "B:" not in g["regel"]
+    assert "D" not in g and "B" not in g
+
+
+# ── Kalibreringen mot nationella provet ──────────────────────────────────────
+# NpMa2a vt2017 och vt2022, gränserna på provets sida 1. Båda 55 poäng. Testet
+# är hela skälet till att KRAV_DEFAULT har de tal den har: ändrar någon en
+# procentsats faller det här och inte elevens betyg ett halvår senare.
+#
+# ±1 poäng är golvet och inte slarv: E var 14 p vt17 och 15 p vt22 på samma
+# totalpoäng, alltså kan ingen fast procentsats träffa båda åren exakt.
+
+_NP = {
+    #        summor {total,e,c,a}                     facit: E, D(+varav), C(+varav), B(+varav), A(+varav)
+    "vt17": ({"total": 55, "e": 23, "c": 19, "a": 13},
+             {"E": 14, "D": (22, 6), "C": (29, 11), "B": (37, 4), "A": (43, 6)}),
+    "vt22": ({"total": 55, "e": 23, "c": 20, "a": 12},
+             {"E": 15, "D": (23, 6), "C": (30, 11), "B": (38, 4), "A": (44, 7)}),
+}
+
+
+@pytest.mark.parametrize("ar", ["vt17", "vt22"])
+def test_np_kalibrering_traffar_riktiga_provets_granser(ar):
+    summor, facit = _NP[ar]
+    g = exam_spec.kravgranser_ur_summor(summor, {"mellanbetyg": True})
+    assert abs(g["E"]["minst"] - facit["E"]) <= 1
+    for b, (minst, varav) in ((k, v) for k, v in facit.items() if k != "E"):
+        falt = "varav_a" if b in ("A", "B") else "varav_ca"
+        assert abs(g[b]["minst"] - minst) <= 1, f"{ar} {b} total"
+        assert abs(g[b][falt] - varav) <= 1, f"{ar} {b} varav"
+
+
+def test_np_kalibrering_varav_kraven_ar_exakta():
+    """C:s varav-krav är 11 av 32 C+A-poäng båda åren, D:s 6 och B:s 4 — där
+    finns inget spann att missa, och där är gränsen alltså exakt NP:s."""
+    for ar in ("vt17", "vt22"):
+        summor, facit = _NP[ar]
+        g = exam_spec.kravgranser_ur_summor(summor, {"mellanbetyg": True})
+        assert g["C"]["varav_ca"] == facit["C"][1]
+        assert g["D"]["varav_ca"] == facit["D"][1]
+        assert g["B"]["varav_a"] == facit["B"][1]
+
+
+def test_np_kalibrering_ligger_aldrig_mer_an_en_poang_under():
+    """Gränsen får hamna ett snäpp över NP:s (ceil rundar uppåt) men aldrig
+    lägre än ett poäng under — då hade provet delat ut betyg NP inte ger."""
+    for ar in ("vt17", "vt22"):
+        summor, facit = _NP[ar]
+        g = exam_spec.kravgranser_ur_summor(summor, {"mellanbetyg": True})
+        for b in ("E", "C", "A"):
+            minst = facit[b] if b == "E" else facit[b][0]
+            assert g[b]["minst"] >= minst - 1
 
 
 def test_kravgranser_configurable():

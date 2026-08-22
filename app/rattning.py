@@ -296,21 +296,48 @@ def moment_som_foll(rattat: dict | None) -> list[str]:
 # Ingen elev når språkmodellen vid namn (app/elev_feedback.py) — men här, i
 # räknandet, finns bara id:n ändå.
 
-def granser(rader: list[dict], config: dict | None = None) -> dict:
+def _bar_granser(sparade, total: int) -> bool:
+    """Bär pappret färdiga kravgränser som fortfarande gäller för det?
+
+    Gäller = samma totalpoäng. Gränserna följer med det sparade dokumentet
+    (plan.js sätter `granser` på pappret ur serverns svar), men uppgifterna går
+    att redigera efteråt — och gränser räknade på 27 poäng säger ingenting om
+    ett papper som numera ger 31. Stämmer inte summan räknas de om; stämmer den
+    är de sparade talen provets egna."""
+    if not isinstance(sparade, dict):
+        return False
+    for b, falt in (("E", "minst"), ("C", "minst"), ("A", "minst")):
+        d = sparade.get(b)
+        if not isinstance(d, dict) or not isinstance(d.get(falt), int):
+            return False
+    return sparade.get("total") == total
+
+
+def granser(rader: list[dict], config: dict | None = None,
+            sparade: dict | None = None) -> dict:
     """Provets kravgränser, räknade på RADERNA.
 
     Samma regel och samma tal som försättsbladet trycker
     (exam_spec.kravgranser): radernas `peca` är precis de poängbärande enheter
     poangsummor summerar. Räknas här och inte ur prov-JSON för att gränserna
-    ska finnas även för papper som aldrig gått genom provgeneratorn."""
+    ska finnas även för papper som aldrig gått genom provgeneratorn.
+
+    ETT SKRIVET PROV BÄR SINA EGNA GRÄNSER. `sparade` är pappret dokumentets
+    egna `granser`, och de vinner över den här räkningen. Annars hade en
+    kalibrering av KRAV_DEFAULT (NP-kalibreringen 2026-08-22 flyttade C med
+    nio procentenheter) räknat om betygen på prov klassen redan skrivit — och
+    en elev som fick C i maj hade blivit E i juni utan att någon rört hennes
+    papper. Nya dokument får de nya gränserna; gamla behåller sina."""
     e = c = a = 0
     for r in rader or []:
         if r.get("grupp"):
             continue
         p = r.get("peca") or _peca_fallback(int(r.get("p") or 0), None)
         e, c, a = e + int(p[0]), c + int(p[1]), a + int(p[2])
-    return exam_spec.kravgranser_ur_summor(
-        {"total": e + c + a, "e": e, "c": c, "a": a}, config) | {
+    grund = (dict(sparade) if _bar_granser(sparade, e + c + a)
+             else exam_spec.kravgranser_ur_summor(
+                 {"total": e + c + a, "e": e, "c": c, "a": a}, config))
+    return grund | {
         # Utan C- och A-poäng (gamla papper utan tripel, allt föll på E) är
         # varav-kraven noll och A kan nås på enbart E-poäng. Sant enligt
         # fallbacken — men UI:t ska kunna SÄGA det i stället för att låta
@@ -392,10 +419,18 @@ def betyg(summor: dict, gr: dict) -> str:
     a = int((summor or {}).get("a") or 0)
     g = gr or {}
     A, C, E = g.get("A") or {}, g.get("C") or {}, g.get("E") or {}
+    # MELLANBETYGEN prövas bara om gränserna bär dem. NP har fem gränser,
+    # lärarens papper trycker fyra (exam_spec.KRAV_DEFAULT «mellanbetyg»), och
+    # ett B kan aldrig uppstå ur ett dokument som inte deklarerat B-gränsen.
+    B, D = g.get("B") or {}, g.get("D") or {}
     if tot >= int(A.get("minst") or 0) and a >= int(A.get("varav_a") or 0):
         return "A"
+    if B and tot >= int(B.get("minst") or 0) and a >= int(B.get("varav_a") or 0):
+        return "B"
     if tot >= int(C.get("minst") or 0) and ca >= int(C.get("varav_ca") or 0):
         return "C"
+    if D and tot >= int(D.get("minst") or 0) and ca >= int(D.get("varav_ca") or 0):
+        return "D"
     if tot >= int(E.get("minst") or 0):
         return "E"
     return "F"

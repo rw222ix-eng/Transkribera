@@ -321,8 +321,9 @@ window.Blad = (() => {
     /* ── BETYGSGRÄNSERNA ÄR SERVERNS, INTE SKÄRMENS ──────
        Här räknades gränserna med egna procentsatser — 30 % för E, 53 för C,
        77 för A, plus 23 och 45 procent av del B som varav-krav. Serverns regel
-       (exam_spec.KRAV_DEFAULT) är en annan: 25, 45 och 65 procent av totalen,
-       varav 30 % av C- och A-poängen respektive 40 % av A-poängen. Talen räknas
+       (exam_spec.KRAV_DEFAULT) är en annan: 26, 54 och 79 procent av totalen,
+       varav 34 % av C- och A-poängen respektive 50 % av A-poängen — mätta på
+       NpMa2a vt17 och vt22, inte valda. Talen räknas
        redan och följer med pappret som `granser` — de trycks på PDF:ens
        försättsblad (prov.tex.j2) — men skärmen ritade sina egna.
 

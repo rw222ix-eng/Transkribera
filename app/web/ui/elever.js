@@ -29,8 +29,13 @@
   /* Kravgränserna räknas också här, inte bara på servern (app/rattning.py
      granser). Samma skäl som FORMAGA_MONSTER i rattning.js: betyget ska stå
      på skärmen medan läraren klickar, och prototypen har ingen server. Serverns
-     tal vinner när de finns — den läste provets egen JSON. */
-  const KRAV = { e: 0.25, c: 0.45, cCa: 0.30, a: 0.65, aA: 0.40 };
+     tal vinner när de finns — den läste provets egen JSON.
+
+     TALEN ÄR SERVERNS (exam_spec.KRAV_DEFAULT), kalibrerade mot NpMa2a vt17 och
+     vt22. Står de två uppsättningarna isär lovar skärmen ett betyg pappret inte
+     ger — det var precis felet blad.js beskriver längre ned. Ändras KRAV_DEFAULT
+     ändras raden här i samma commit. */
+  const KRAV = { e: 0.26, c: 0.54, cCa: 0.34, a: 0.79, aA: 0.50 };
   function granserAv(rad) {
     let e = 0, c = 0, a = 0;
     rad.filter(r => !r.grupp).forEach(r => {

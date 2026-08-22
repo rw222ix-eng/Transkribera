@@ -53,7 +53,12 @@ def create_router(base: Path, arbiter) -> APIRouter:
             papper = d.get("dokument") or {}
             rader = rattning.bygg(papper.get("uppgifter"))
             gid = db.get_or_create_group(conn, papper.get("klass") or "")
-            return papper, rader, rattning.granser(rader), gid
+            # Pappret egna `granser` går före: ett prov som redan skrivits har
+            # sina gränser, och en kalibrering av regeln får inte räkna om
+            # betyg i efterhand (rattning.granser).
+            return (papper, rader,
+                    rattning.granser(rader, sparade=papper.get("granser")),
+                    gid)
         finally:
             conn.close()
 

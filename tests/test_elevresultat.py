@@ -12,6 +12,9 @@ Två kontrakt hålls här och de är hela poängen med etappen:
 
 Betygets gränsfall står i egen sektion: reglerna är NP:s och de är ≥, inte >.
 """
+import re
+from pathlib import Path
+
 import pytest
 
 from app import db, exam_spec, rattning
@@ -103,47 +106,80 @@ def test_granserna_ar_forsattsbladets():
     # UI:t) — talen är fortfarande försättsbladets, ograverade.
     assert g == ur_summor | {"tripel": True}
     assert g["total"] == 11
-    assert g["E"]["minst"] == 3          # ceil(11 · 0,25)
-    assert g["C"] == {"minst": 5, "varav_ca": 3}   # ceil(11·0,45), ceil(8·0,30)
-    assert g["A"] == {"minst": 8, "varav_a": 2}    # ceil(11·0,65), ceil(4·0,40)
+    assert g["E"]["minst"] == 3          # ceil(11 · 0,26)
+    assert g["C"] == {"minst": 6, "varav_ca": 3}   # ceil(11·0,54), ceil(8·0,34)
+    assert g["A"] == {"minst": 9, "varav_a": 2}    # ceil(11·0,79), ceil(4·0,50)
 
 
 # ------------------------------------------------------------------ betyget --
 
 GRANSER = exam_spec.kravgranser_ur_summor({"total": 100, "e": 30, "c": 35,
                                            "a": 35})
-# E ≥ 25, C ≥ 45 varav ≥ 21 av C+A, A ≥ 65 varav ≥ 14 av A.
+# E ≥ 26, C ≥ 54 varav ≥ 24 av C+A, A ≥ 79 varav ≥ 18 av A (NP-kalibrerat).
 
 
 def test_de_fyra_utfallen():
-    assert rattning.betyg({"total": 24, "e": 24, "c": 0, "a": 0}, GRANSER) == "F"
+    assert rattning.betyg({"total": 25, "e": 25, "c": 0, "a": 0}, GRANSER) == "F"
     assert rattning.betyg({"total": 30, "e": 30, "c": 0, "a": 0}, GRANSER) == "E"
-    assert rattning.betyg({"total": 50, "e": 25, "c": 20, "a": 5}, GRANSER) == "C"
-    assert rattning.betyg({"total": 70, "e": 30, "c": 25, "a": 15}, GRANSER) == "A"
+    assert rattning.betyg({"total": 60, "e": 26, "c": 28, "a": 6}, GRANSER) == "C"
+    assert rattning.betyg({"total": 85, "e": 30, "c": 35, "a": 20}, GRANSER) == "A"
 
 
 def test_exakt_pa_gransen_ger_betyget():
     """Regeln är «minst» — ≥, inte >. En elev som ligger exakt på gränsen har
     nått den."""
-    assert rattning.betyg({"total": 25, "e": 25, "c": 0, "a": 0}, GRANSER) == "E"
-    assert rattning.betyg({"total": 45, "e": 24, "c": 21, "a": 0}, GRANSER) == "C"
-    assert rattning.betyg({"total": 65, "e": 30, "c": 21, "a": 14}, GRANSER) == "A"
+    assert rattning.betyg({"total": 26, "e": 26, "c": 0, "a": 0}, GRANSER) == "E"
+    assert rattning.betyg({"total": 54, "e": 30, "c": 24, "a": 0}, GRANSER) == "C"
+    assert rattning.betyg({"total": 79, "e": 30, "c": 31, "a": 18}, GRANSER) == "A"
 
 
 def test_c_totalen_utan_c_villkoret_ar_e():
-    """45 poäng tagna på enbart E-uppgifter är inte C. Eleven har visat
+    """54 poäng tagna på nästan enbart E-uppgifter är inte C. Eleven har visat
     mängd, inte det C kräver."""
-    assert rattning.betyg({"total": 46, "e": 30, "c": 16, "a": 0}, GRANSER) == "E"
+    assert rattning.betyg({"total": 55, "e": 32, "c": 23, "a": 0}, GRANSER) == "E"
 
 
 def test_a_totalen_utan_a_villkoret_ar_c():
     """Motsvarande för A: totalen räcker, A-poängen gör det inte."""
-    assert rattning.betyg({"total": 70, "e": 30, "c": 35, "a": 5}, GRANSER) == "C"
+    assert rattning.betyg({"total": 85, "e": 30, "c": 50, "a": 5}, GRANSER) == "C"
 
 
 def test_betyget_ar_alltid_ett_av_fyra():
     assert set(rattning.BETYG) == {"F", "E", "C", "A"}
     assert rattning.betyg({}, GRANSER) == "F"
+
+
+# ------------------------------------------------------------ mellanbetygen --
+# NP har fem gränser, pappret trycker fyra. D och B räknas bara när gränserna
+# bär dem (exam_spec.KRAV_DEFAULT «mellanbetyg») — annars kan de inte uppstå.
+
+MELLAN = exam_spec.kravgranser_ur_summor({"total": 100, "e": 30, "c": 35,
+                                          "a": 35}, {"mellanbetyg": True})
+# D ≥ 41 varav ≥ 14 av C+A, B ≥ 68 varav ≥ 11 av A.
+
+
+def test_mellanbetygen_kravs_in_for_att_finnas():
+    assert "D" not in GRANSER and "B" not in GRANSER
+    assert MELLAN["D"] == {"minst": 41, "varav_ca": 14}
+    assert MELLAN["B"] == {"minst": 68, "varav_a": 11}
+    assert "D: minst 41%" in MELLAN["regel"] and "B: minst 68%" in MELLAN["regel"]
+
+
+def test_samma_elev_far_d_eller_e_beroende_pa_flaggan():
+    """Mellan E- och C-gränsen: utan flaggan är hon E, med den D. Betygen under
+    ändras inte — D ligger i glappet, den tar inget från C."""
+    s = {"total": 45, "e": 30, "c": 15, "a": 0}
+    assert rattning.betyg(s, GRANSER) == "E"
+    assert rattning.betyg(s, MELLAN) == "D"
+
+
+def test_b_ligger_mellan_c_och_a():
+    s = {"total": 70, "e": 30, "c": 28, "a": 12}
+    assert rattning.betyg(s, GRANSER) == "C"
+    assert rattning.betyg(s, MELLAN) == "B"
+    # A-gränsen står kvar: 79 poäng varav 18 A-poäng.
+    assert rattning.betyg({"total": 85, "e": 30, "c": 35, "a": 20},
+                          MELLAN) == "A"
 
 
 # ---------------------------------------------------------- elevens summor --
@@ -261,6 +297,56 @@ def test_bara_aktiva_pa_begaran(conn):
     db.save_elever(conn, gid, ["Anna A"])
     assert len(db.list_elever(conn, gid)) == 2
     assert len(db.list_elever(conn, gid, bara_aktiva=True)) == 1
+
+
+def test_skarmens_krav_ar_serverns():
+    """elever.js räknar gränser själv medan läraren klickar (prototypen har
+    ingen server). Står talen isär lovar skärmen ett annat betyg än pappret —
+    exakt felet blad.js beskriver. Raden pinnas här."""
+    js = (Path(__file__).resolve().parents[1] / "app" / "web" / "ui"
+          / "elever.js").read_text(encoding="utf-8")
+    rad = re.search(r"const KRAV = \{([^}]*)\}", js)
+    assert rad, "elever.js KRAV hittades inte"
+    ur_js = {k: float(v) for k, v in re.findall(r"(\w+):\s*([\d.]+)", rad[1])}
+    assert ur_js == {"e": exam_spec.KRAV_DEFAULT["e_andel"],
+                     "c": exam_spec.KRAV_DEFAULT["c_andel"],
+                     "cCa": exam_spec.KRAV_DEFAULT["c_varav_ca"],
+                     "a": exam_spec.KRAV_DEFAULT["a_andel"],
+                     "aA": exam_spec.KRAV_DEFAULT["a_varav_a"]}
+
+
+def test_pappret_bar_sina_egna_granser_och_de_raknas_inte_om():
+    """Ett prov som redan skrivits har SINA gränser.
+
+    Kalibreringen av KRAV_DEFAULT mot NP (2026-08-22) flyttade C-gränsen nio
+    procentenheter. Utan den här regeln hade en elev som fick C i maj blivit E
+    i juni utan att någon rört hennes papper — appen hade räknat om ett
+    utdelat prov i efterhand. Dokumentet bär `granser` (plan.js sätter dem ur
+    serverns svar när pappret skrivs), och de vinner."""
+    gamla = {"total": 11, "E": {"minst": 3}, "C": {"minst": 5, "varav_ca": 3},
+             "A": {"minst": 8, "varav_a": 2}, "regel": "Gamla regeln."}
+    g = rattning.granser(rattning.bygg(UPPGIFTER), sparade=gamla)
+    assert g["C"] == {"minst": 5, "varav_ca": 3}   # inte dagens 6/3
+    assert g["A"] == {"minst": 8, "varav_a": 2}    # inte dagens 9/2
+    assert g["regel"] == "Gamla regeln." and g["tripel"] is True
+
+
+def test_granser_for_en_annan_poangsumma_raknas_om():
+    """Uppgifterna går att redigera efter att gränserna sparades. Gränser
+    räknade på 20 poäng säger ingenting om ett papper som ger 11 — då är den
+    sparade raden skräp och inte ett löfte."""
+    fel_summa = {"total": 20, "E": {"minst": 6}, "C": {"minst": 11, "varav_ca": 4},
+                 "A": {"minst": 16, "varav_a": 3}, "regel": "Annat papper."}
+    g = rattning.granser(rattning.bygg(UPPGIFTER), sparade=fel_summa)
+    assert g["total"] == 11 and g["C"] == {"minst": 6, "varav_ca": 3}
+
+
+def test_sparade_granser_nar_hela_vagen_till_elevvyn(client):
+    gamla = {"total": 11, "E": {"minst": 3}, "C": {"minst": 5, "varav_ca": 3},
+             "A": {"minst": 8, "varav_a": 2}, "regel": "Gamla regeln."}
+    did = _spara(client, prov(granser=gamla))
+    d = client.get(f"/api/dokument/{did}/elevresultat").json()
+    assert d["granser"]["C"] == {"minst": 5, "varav_ca": 3}
 
 
 def test_gransernas_tripelflagga_faller_utan_ca_poang():

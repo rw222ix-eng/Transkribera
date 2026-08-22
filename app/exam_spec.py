@@ -1178,16 +1178,56 @@ def genomforbarhet(antal: int, profil: str = "prov") -> list[dict]:
 # ----------------------------------------------------------- kravgränser --
 # NP-modellen: E = minst x % av totalpoängen; C = minst y % av totalen VARAV
 # minst c % av C+A-poängen; A = minst z % av totalen VARAV minst a % av
-# A-poängen. Procentsatserna är konfigurerbara; defaultvärdena är NP-typiska
-# nivåer. Det rättssäkra är att regeln är deklarerad och reproducerbar och
-# redovisas på försättsbladet — inte att den är exakt ett visst provs.
+# A-poängen. Procentsatserna är konfigurerbara.
+#
+# ══ KALIBRERADE MOT NATIONELLA PROVET, 2026-08-22 ══
+# Talen VAR appens egna (25/45/65) med kommentaren att det rättssäkra är att
+# regeln är deklarerad och reproducerbar — inte att den är exakt ett visst
+# provs. Läraren höll inte med: ett prov som säger «NP-modellen» och sätter C
+# åtta procentenheter lägre än NP lovar eleven ett C som NP inte hade gett.
+# Gränserna är därför MÄTTA på riktiga prov i stället för valda.
+#
+# Källa: NpMa2a vt2017 och vt2022, betygsgränserna på provets sida 1 (bilderna
+# i «Nationella prov matte», vt17.txt/vt22.txt). Båda proven ger 55 poäng.
+#
+#            total   E     C           A                  E/C/A-poäng
+#   vt17     55 p    14    29 (11 C+)  43 (6 A-poäng)     23/19/13
+#   vt22     55 p    15    30 (11 C+)  44 (7 A-poäng)     23/20/12
+#
+# I andelar: E 25–27 % av totalen; C 53–55 % varav 34 % av C+A-poängen (11 av
+# 32 båda åren); A 78–80 % varav 46 % (vt17) respektive 58 % (vt22) av
+# A-poängen. Defaultvärdena nedan ligger mitt i de spannen.
+#
+# AVRUNDNINGEN är `math.ceil` och den ändrades inte: gränsen är minsta heltal
+# ≥ andel · summa, alltså aldrig UNDER den deklarerade andelen. Med de valda
+# andelarna träffar formeln NP:s egna tal exakt eller på ±1 poäng för båda
+# årgångarna (tests/test_exam.py::test_np_kalibrering_vt17_vt22) — och ±1 är
+# GOLVET, inte slarv: E var 14 p vt17 och 15 p vt22 på samma totalpoäng, så
+# ingen fast procentsats kan träffa båda åren exakt. Varav-kravet på C träffar
+# exakt båda åren.
 
 KRAV_DEFAULT = {
-    "e_andel": 0.25,       # E: minst 25 % av totalpoängen
-    "c_andel": 0.45,       # C: minst 45 % av totalpoängen ...
-    "c_varav_ca": 0.30,    # ... varav minst 30 % av C+A-poängen
-    "a_andel": 0.65,       # A: minst 65 % av totalpoängen ...
-    "a_varav_a": 0.40,     # ... varav minst 40 % av A-poängen
+    "e_andel": 0.26,       # E: minst 26 % av totalpoängen (NP: 25–27 %)
+    "c_andel": 0.54,       # C: minst 54 % av totalpoängen (NP: 53–55 %) ...
+    "c_varav_ca": 0.34,    # ... varav minst 34 % av C+A-poängen (NP: 11/32)
+    "a_andel": 0.79,       # A: minst 79 % av totalpoängen (NP: 78–80 %) ...
+    "a_varav_a": 0.50,     # ... varav minst 50 % av A-poängen (NP: 46 %/58 %)
+
+    # ── MELLANBETYGEN D OCH B: räknas, trycks inte ──
+    # NP har fem gränser (E, D, C, B, A). Lärarens förlaga (docs/forlagor/) har
+    # fyra rader i betygstabellen — F, E, C, A — och det är den formen provet
+    # trycker. Pappret ändras alltså INTE. Men rättningen ska kunna säga «hon
+    # tog D» den dag läraren vill se det, och då ska talen redan vara NP:s och
+    # inte hittas på i stunden. Slås på med config={"mellanbetyg": True}.
+    #
+    # Samma mätning som ovan: D 22 p (vt17) / 23 p (vt22), båda varav 6 poäng
+    # på minst C-nivå; B 37/38 p, båda varav 4 A-poäng. Andelarna nedan träffar
+    # D:s och B:s VARAV-krav exakt båda åren, och totalgränserna på ±1.
+    "mellanbetyg": False,
+    "d_andel": 0.41,       # D: minst 41 % av totalpoängen (NP: 40 %/42 %) ...
+    "d_varav_ca": 0.1875,  # ... varav minst 19 % av C+A-poängen (NP: 6/32)
+    "b_andel": 0.68,       # B: minst 68 % av totalpoängen (NP: 67 %/69 %) ...
+    "b_varav_a": 0.30,     # ... varav minst 30 % av A-poängen (NP: 4/13, 4/12)
 }
 
 
@@ -1217,6 +1257,20 @@ def kravgranser_ur_summor(summor: dict, config: dict | None = None) -> dict:
             f"{cfg['a_varav_a']:.0%} av A-poängen."
         ),
     }
+    # Mellanbetygen bara när de begärts — se KRAV_DEFAULT. Utan flaggan är
+    # dokumentet bokstavligen oförändrat, och betygstabellen på försättsbladet
+    # har fortfarande fyra rader.
+    if cfg.get("mellanbetyg"):
+        granser["D"] = {"minst": math.ceil(total * cfg["d_andel"]),
+                        "varav_ca": math.ceil(ca * cfg["d_varav_ca"])}
+        granser["B"] = {"minst": math.ceil(total * cfg["b_andel"]),
+                        "varav_a": math.ceil(a * cfg["b_varav_a"])}
+        granser["regel"] += (
+            f" D: minst {cfg['d_andel']:.0%} av totalpoängen, varav minst "
+            f"{cfg['d_varav_ca']:.0%} av C- och A-poängen. "
+            f"B: minst {cfg['b_andel']:.0%} av totalpoängen, varav minst "
+            f"{cfg['b_varav_a']:.0%} av A-poängen."
+        )
     return granser
 
 
