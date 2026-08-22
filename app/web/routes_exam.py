@@ -430,21 +430,31 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 if arbiter.ensure_llm() is None:
                     raise RuntimeError("Språkmodellen är inte installerad.")
                 # Bokdörren (Etapp 0.8): uppgifterna ska ansluta till de sidor
-                # klassen arbetar med. Här går URVALET in, inte hela uppslaget:
-                # provspannet är ett kapitel, och den gamla vägen läste varje
-                # oläst sida à 96 sekunder för att sedan skicka de tre första.
-                # Se routes_planning.bok_prov_text. Faktapasset kan fortfarande
-                # köras (uppgiftsnumren finns inte utan det) och syns i loggen.
-                bok_block = routes_planning.bok_prov_text(base, db_file, body,
-                                                          emit=emit)
+                # klassen arbetar med. Hur mycket av boken som går in beror på
+                # PAPPRET — lärarens dom (2026-08-22): «tavlan måste ha en
+                # noggrann analys av sidorna man valt. Provet är mer
+                # översiktligt vad man gått igenom. Gruppuppgifter är likaså
+                # mer detaljerade i sin analys av bokens uppgifter än provet.»
+                #   * prov och diagnos: URVALET (routes_planning.bok_prov_text)
+                #     — spannet är ett kapitel, och den gamla vägen läste varje
+                #     oläst sida à 96 s för att sedan skicka de tre första.
+                #   * arbetsblad och gruppuppgift: HELA uppslaget, samma väg som
+                #     tavlan (bok_las_text) — spannet är en lektion och
+                #     uppgifterna ska spegla bokens i detalj.
+                oversikt = typ in ("prov", "diagnos")
+                bok_block = (routes_planning.bok_prov_text(base, db_file, body,
+                                                           emit=emit)
+                             if oversikt else
+                             routes_planning.bok_las_text(base, db_file, body,
+                                                          emit=emit))
                 # Bokens nivåskala (Del C, C2b): läses efter sidorna, för
                 # faktapasset kan ha fyllt på nivåerna på vägen. Bara för blad
                 # och gruppuppgift — PROVET ska hålla nationell nivå, inte
-                # bokens, och där äger NP-rubriken nivåfrågan. `urval=True`:
-                # måttstockens nummer måste vara de som står i blocket ovan.
+                # bokens, och där äger NP-rubriken nivåfrågan. `urval` följer
+                # blocket: måttstockens nummer måste vara de som står i det.
                 nivaer_block = (
                     routes_planning.bok_nivaer(db_file, body, profil=typ,
-                                               urval=True)
+                                               urval=oversikt)
                     if typ in ("arbetsblad", "gruppuppgift") else "")
                 res = exam_gen.generate_exam(
                     kurs, klass or "klassen", punkter, model=_model_name(),
@@ -523,7 +533,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # Bokdörren följer med omskrivningen som med genereringen: sidorna,
         # uppgiftsnumren och lärarens urval — och SAMMA urval som skrivningen
         # fick, annars byter modellen bok mitt i arbetspasset. Läser inga sidor.
-        bok_block = routes_planning.bok_urval_text(db_file, body)
+        # Bokblocket byggs först när pappret är läst (typen avgör urval eller
+        # hela uppslaget — se genereringen ovan); inget läses i omskrivningen.
         # Varvhistoriken följer med av samma skäl som boken: omskrivningen ska
         # veta vad läraren redan bett om, annars bryter varv tre villkoret från
         # varv ett utan att någon bett om det.
@@ -589,6 +600,12 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # varv efter varv, och riktade ändringar vägras («ingenting ändrades»).
         nivaval = exam_spec.nivaval(view.get("typ") or "prov",
                                     view.get("nivaval"))
+        # SAMMA bokblock som skrivningen fick, annars byter modellen bok mitt i
+        # arbetspasset: urvalet för prov/diagnos, hela (redan lästa) uppslaget
+        # för arbetsblad/gruppuppgift. Läser inga sidor.
+        bok_block = (routes_planning.bok_urval_text(db_file, body)
+                     if (view.get("typ") or "prov") in ("prov", "diagnos")
+                     else routes_planning.bok_text(db_file, body))
 
         def job(emit):
             try:

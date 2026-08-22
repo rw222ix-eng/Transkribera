@@ -1329,3 +1329,32 @@ def test_provets_modellanrop_far_varken_read_eller_add_dir(monkeypatch):
     argv = fangat["argv"]
     assert "--add-dir" not in argv
     assert argv[argv.index("--tools") + 1] == ""
+
+
+def test_bokdorren_foljer_pappret(client, monkeypatch):
+    """Lärarens dom (2026-08-22): «tavlan måste ha en noggrann analys av
+    sidorna. Provet är mer översiktligt. Gruppuppgifter är likaså mer
+    detaljerade i sin analys av bokens uppgifter än provet.»
+
+    Samma rutt skriver prov, diagnos, arbetsblad och gruppuppgift — så valet
+    mellan urvalet och hela uppslaget måste göras PER PAPPER, inte per rutt."""
+    from app import exam_gen
+    from app.web import routes_planning
+    vag = []
+    monkeypatch.setattr(routes_planning, "bok_prov_text",
+                        lambda *a, **k: vag.append("urval") or "")
+    monkeypatch.setattr(routes_planning, "bok_las_text",
+                        lambda *a, **k: vag.append("hela") or "")
+    monkeypatch.setattr(routes_planning, "bok_nivaer", lambda *a, **k: "")
+    monkeypatch.setattr(exam_gen, "generate_exam",
+                        lambda *a, **k: {"exam": None, "errors": ["stopp"],
+                                         "rounds": 1})
+    kurs = next(c for c in client.get("/api/courses").json()
+                if c["namn"] == "Matematik, nivå 1c")
+    for typ in ("prov", "diagnos", "arbetsblad", "gruppuppgift"):
+        vag.clear()
+        client.post("/api/exams/generate",
+                       json={"course_id": kurs["id"], "typ": typ,
+                             "punkter": [], "antal": 4})
+        vantat = "urval" if typ in ("prov", "diagnos") else "hela"
+        assert vag == [vantat], (typ, vag)
