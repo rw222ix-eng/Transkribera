@@ -50,6 +50,12 @@ def _safe_component(raw: str, fallback: str) -> str:
 _TYPER = ("prov", "arbetsblad", "gruppuppgift", "diagnos")
 
 
+def _profil(typ: str) -> str:
+    """Skärmens typnamn («Prov», «Diagnos») till exam_spec-profilen. Diagnosen
+    är den enda som byter modell — den räknas med NP:s takt."""
+    return "diagnos" if str(typ or "").lower().startswith("diagnos") else "prov"
+
+
 def create_router(base: Path, arbiter) -> APIRouter:
     router = APIRouter()
     db_file = base / "transkribera.db"
@@ -212,7 +218,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
     # ----------------------------------------------------- föreslaget antal --
 
     @router.get("/api/exams/foreslag-antal")
-    def foreslag_antal(tid: int, typ: str = "prov", nivamix: str | None = None):
+    def foreslag_antal(tid: int, typ: str = "prov", nivamix: str | None = None,
+                       takt: float | None = None):
         """Hur många uppgifter provtiden rymmer — lärarens motsvarighet till
         diagnosens dimensionering, fast åt andra hållet.
 
@@ -223,10 +230,34 @@ def create_router(base: Path, arbiter) -> APIRouter:
         behöva en andra, ungefärlig modell, och två modeller för samma tal
         glider isär. Med takten från exam_spec landar «Föreslå antal» följt av
         «Uppskatta tiden» inom fem minuter från ingångstiden."""
-        profil = "diagnos" if str(typ).lower().startswith("diagnos") else "prov"
+        profil = _profil(typ)
         val = exam_spec.nivaval(profil, nivamix)
+        # TAKTEN FÖLJER MED. Skärmen skrev den i toasten men skickade den inte,
+        # så en lärare som satte 2,4 min/p fick ett antal räknat på 3,5 med
+        # «takt 2,4 min/p» tryckt bredvid.
         return exam_spec.foreslag_antal(
-            tid, profil,
+            tid, profil, takt=takt,
+            mix=(val or {}).get("mix"), niva_mal=(val or {}).get("mal"))
+
+    # -------------------------------------------------- skelettets summor --
+
+    @router.get("/api/exams/skelett")
+    def skelett(antal: int, typ: str = "prov", nivamix: str | None = None,
+                takt: float | None = None, delar: bool | None = None):
+        """Vad upplägget skulle ge INNAN pappret är skrivet: {antal, poang,
+        summor {e, c, a}, tid, takt}.
+
+        LÄRARENS FYND 2026-08-22: «Föreslå antal» sa tio uppgifter och 24
+        poäng, «Uppskatta tiden» svarade 16/8/0 E/C/A — noll A-poäng på ett
+        balanserat prov. Förslaget räknade på skelettet (NP_TRIPPLAR),
+        skärmen gissade fördelningen ur poängen per uppgift. Två modeller för
+        samma tal glider isär, och den här rutten är den enda kvar: skärmen
+        frågar hit så länge provet är oskrivet, och räknar på dokumentets egna
+        tripplar (`peca`) så fort det ÄR skrivet."""
+        profil = _profil(typ)
+        val = exam_spec.nivaval(profil, nivamix)
+        return exam_spec.skelettsummor(
+            antal, profil, delar=delar, takt=takt,
             mix=(val or {}).get("mix"), niva_mal=(val or {}).get("mal"))
 
     # ---------------------------------------------------- innehållsstatus --

@@ -326,3 +326,115 @@ def test_tidsatgang_ar_arbetstiden_plus_overhead():
               "e": rad["e"], "c": rad["c"], "a": rad["a"]}
     vantat = round((_arbetstid(rad) + exam_spec.MIN_START_OCH_SLUT) / 5) * 5
     assert exam_spec.tidsatgang(summor, rad["uppgifter"]) == vantat
+
+
+# ── EN SANNING FÖRE SKRIVNINGEN ───────────────────────────────────────────
+#
+# LÄRAREN 2026-08-22: «Föreslå antal» gav tio uppgifter och 24 poäng, och
+# «Uppskatta tiden» svarade sedan 16/8/0 E/C/A. Noll A-poäng på ett balanserat
+# prov — omöjligt, och ändå var båda talen «rätt» i sin egen modell. Förslaget
+# räknade på skelettet (balanced_skeleton med NP_TRIPPLAR), skärmen gissade
+# fördelningen ur poängen per uppgift (plan.js ecaDel, som ger A först vid fem
+# poäng på EN uppgift). Testerna nedan låser att det bara finns en modell kvar.
+
+def test_skelettet_bar_a_poang_pa_ett_balanserat_prov():
+    """Regressionen läraren såg: tio uppgifter, Balanserat, noll A-poäng."""
+    r = exam_spec.skelettsummor(10, "prov")
+    assert r["summor"]["a"] > 0, r
+    assert r["summor"]["e"] > 0 and r["summor"]["c"] > 0, r
+    assert sum(r["summor"].values()) == r["poang"]
+
+
+@pytest.mark.parametrize("antal", range(1, 21))
+def test_skelettsummor_ar_samma_skelett_som_byggs(antal):
+    """Summorna får inte komma ur en egen räkning vid sidan av skelettet."""
+    r = exam_spec.skelettsummor(antal, "prov")
+    slots = exam_spec.balanced_skeleton(antal, "prov", delar=True)
+    summor = exam_spec.poangsummor(exam_spec._skeleton_doc(slots))
+    assert r["antal"] == len(slots)
+    assert r["poang"] == summor["total"]
+    assert r["summor"] == {n: summor[n] for n in ("e", "c", "a")}
+    assert r["tid"] == exam_spec.tidsatgang(
+        summor, len(slots), takt=exam_spec.PROV_MIN_PER_POANG)
+
+
+@pytest.mark.parametrize("tid", range(40, 125, 5))
+def test_de_tva_knapparna_sager_samma_sak(tid):
+    """«Föreslå antal» och «Uppskatta tiden» ska ge SAMMA poäng, samma E/C/A
+    och samma tid för samma antal, mix och takt — det är hela buggen."""
+    forslag = exam_spec.foreslag_antal(tid, "prov")
+    uppskattning = exam_spec.skelettsummor(forslag["antal"], "prov",
+                                           takt=forslag["takt"])
+    assert uppskattning["poang"] == forslag["poang"]
+    assert uppskattning["summor"] == forslag["summor"]
+    assert uppskattning["tid"] == forslag["tid"]
+
+
+@pytest.mark.parametrize("mix", ["Bara E", "E-tyngd", "C/A-tyngd"])
+def test_nivamixen_foljer_med_till_skelettet(mix):
+    """Väljaren ska synas i fördelningen. Gör den inte det svarar knappen på
+    ett annat prov än det som står i panelen."""
+    val = exam_spec.nivaval("prov", mix)
+    egen = exam_spec.skelettsummor(10, "prov", mix=val["mix"],
+                                   niva_mal=val["mal"])["summor"]
+    balanserat = exam_spec.skelettsummor(10, "prov")["summor"]
+    assert egen != balanserat, (mix, egen)
+    if mix == "Bara E":
+        assert egen["a"] == 0 and egen["e"] > balanserat["e"]
+    if mix == "C/A-tyngd":
+        assert egen["e"] < balanserat["e"]
+
+
+def test_takten_andrar_tiden_men_inte_poangen():
+    """Takten sitter på poängtermen. Ett tätare prov är inte ett annat prov."""
+    np = exam_spec.skelettsummor(10, "prov", takt=exam_spec.NP_MIN_PER_POANG)
+    hennes = exam_spec.skelettsummor(10, "prov",
+                                     takt=exam_spec.FORLAGA_MIN_PER_POANG)
+    assert np["summor"] == hennes["summor"]
+    assert np["poang"] == hennes["poang"]
+    assert hennes["tid"] < np["tid"]
+
+
+def test_uppskattningen_gissar_inte_pa_oskrivna_prov():
+    """Skärmen ska fråga rutten så länge pappret är oskrivet, och ecaDel bara
+    finnas kvar som nödutgång när servern inte svarar."""
+    js = PLAN_JS.read_text(encoding="utf-8")
+    assert "/api/exams/skelett?antal=" in js
+    # Mixen och takten måste med i frågan — annars svarar rutten på ett annat
+    # prov än det som står i panelen.
+    assert "&nivamix=${encodeURIComponent(i.nivamix" in js
+    assert "&takt=${taktFor(v)}" in js
+    # ecaDel får anropas på exakt ETT ställe: inuti uppskatta(), som numera är
+    # fallbacken. Dyker den upp någon annanstans har gissningen krupit tillbaka.
+    assert js.count("ecaDel(") == 2, "ecaDel ska definieras och anropas en gång"
+    # Fallbacken ska synas för läraren.
+    assert "(uppskattad fördelning)" in js
+    # Skrivna prov räknar på dokumentets egna tripplar.
+    assert "barPeca(u) ? (skrivna++, u.peca) : ecaDel(u.p, mix)" in js
+    assert "if (!lokalt.gissat) { visaUppskattning(v, lokalt); return; }" in js
+
+
+def test_foreslag_antal_far_lararens_takt_med_sig():
+    """Takten stod i toasten men inte i frågan — 2,4 min/p gav ett antal
+    räknat på 3,5 med «takt 2,4 min/p» tryckt bredvid."""
+    js = PLAN_JS.read_text(encoding="utf-8")
+    assert "/api/exams/foreslag-antal?tid=" in js
+    assert "+ `&takt=${takt}`" in js
+
+
+def test_rutten_svarar_med_summor(client):
+    """Skelettrutten och förslagsrutten ska bära E/C/A, och samma E/C/A."""
+    r = client.get("/api/exams/skelett?antal=10&typ=prov&takt=3.5")
+    assert r.status_code == 200, r.text
+    kropp = r.json()
+    assert kropp["antal"] == 10
+    assert kropp["summor"]["a"] > 0, kropp
+    f = client.get("/api/exams/foreslag-antal?tid=%d&typ=prov&takt=3.5"
+                   % kropp["tid"]).json()
+    assert f["antal"] == 10
+    assert f["summor"] == kropp["summor"]
+    assert f["poang"] == kropp["poang"]
+    # Nivåmixen når fram hela vägen genom rutten.
+    bara_e = client.get(
+        "/api/exams/skelett?antal=10&typ=prov&nivamix=Bara%20E").json()
+    assert bara_e["summor"]["a"] == 0, bara_e

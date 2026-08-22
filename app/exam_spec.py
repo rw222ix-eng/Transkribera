@@ -1858,6 +1858,38 @@ def uppgifter_som_ryms(tid_min: int, profil: str = "diagnos",
 MAX_FORESLAGET_ANTAL = 20
 
 
+def skelettsummor(antal: int, profil: str = "prov",
+                  delar: bool | None = None,
+                  mix: tuple[float, float, float] | None = None,
+                  niva_mal: dict | None = None,
+                  takt: float | None = None) -> dict:
+    """Vad ett upplägg SKULLE ge, räknat på skelettet som faktiskt byggs:
+    {antal, poang, summor {e, c, a}, tid, takt}.
+
+    LÄRAREN 2026-08-22: «Föreslå antal» gav tio uppgifter och 24 poäng, och
+    «Uppskatta tiden» svarade sedan 16/8/0 E/C/A — noll A-poäng på ett
+    balanserat prov. Två knappar, två modeller: förslaget räknade på
+    `balanced_skeleton` (NP_TRIPPLAR, alltså A-poäng redan på (1,1,1)-raden)
+    medan skärmen gissade fördelningen ur poängen per uppgift med en regel som
+    bara gav A vid fem poäng eller mer. Ett tal som räknas på två ställen blir
+    förr eller senare två tal.
+
+    Den här funktionen är det ENA stället. `foreslag_antal` nedan söker antal
+    med den, och plan.js frågar rutten /api/exams/skelett innan provet är
+    skrivet. Är provet väl skrivet räknar skärmen på dokumentets egna tripplar
+    (`peca`) — då är skelettet inte längre en gissning utan en historia."""
+    takt = takt_for(profil) if takt is None else takt
+    if delar is None:
+        delar = profil == "prov"
+    skelett = balanced_skeleton(max(1, int(antal or 1)), profil, delar=delar,
+                                mix=mix, niva_mal=niva_mal)
+    summor = poangsummor(_skeleton_doc(skelett))
+    return {"antal": len(skelett), "poang": summor["total"],
+            "summor": {n: int(summor.get(n) or 0) for n in ("e", "c", "a")},
+            "tid": tidsatgang(summor, len(skelett), takt=takt),
+            "takt": takt}
+
+
 def foreslag_antal(tid_min: int, profil: str = "prov",
                    takt: float | None = None,
                    mix: tuple[float, float, float] | None = None,
@@ -1887,12 +1919,11 @@ def foreslag_antal(tid_min: int, profil: str = "prov",
     tid_min = max(5, int(tid_min or 0))
     bast: dict | None = None
     for n in range(1, MAX_FORESLAGET_ANTAL + 1):
-        skelett = balanced_skeleton(n, profil, delar=(profil == "prov"),
-                                    mix=mix, niva_mal=niva_mal)
-        summor = poangsummor(_skeleton_doc(skelett))
-        tid = tidsatgang(summor, len(skelett), takt=takt)
-        kandidat = {"antal": len(skelett), "poang": summor["total"],
-                    "tid": tid, "takt": takt}
+        # Samma funktion som «Uppskatta tiden» frågar (skelettsummor), så att
+        # de två knapparna inte kan svara olika på samma upplägg.
+        kandidat = skelettsummor(n, profil, delar=(profil == "prov"),
+                                 mix=mix, niva_mal=niva_mal, takt=takt)
+        tid = kandidat["tid"]
         # Närmast vinner; står två lika nära vinner det MINDRE provet. Ett prov
         # som ryms är alltid bättre än ett som spiller över lika mycket åt andra
         # hållet — hon kan lägga till en uppgift, men inte lägga till en
@@ -1901,7 +1932,9 @@ def foreslag_antal(tid_min: int, profil: str = "prov",
             bast = kandidat
         if tid > tid_min + 10:
             break
-    return bast or {"antal": 1, "poang": 0, "tid": tid_min, "takt": takt}
+    return bast or {"antal": 1, "poang": 0,
+                    "summor": {"e": 0, "c": 0, "a": 0},
+                    "tid": tid_min, "takt": takt}
 
 
 def _dela(lista: list, delar: int) -> list[list]:

@@ -2969,7 +2969,22 @@
      lektion och ska inte pressas). Samma val som exam_spec.takt_for. */
   const taktFor = v => (v && v.typ === 'Diagnos' ? NP_TAKT
     : Number((v && v.inst || {}).takt) || PROV_TAKT);
-  /* Samma poängfördelning som provet trycker i marginalen. */
+  /* ── ecaDel: BARA FALLBACK ─────────────────────────────────
+     Grov regel som delar en uppgifts poäng på E/C/A ur nivåmixen. Den var en
+     gång skärmens svar på «vad blir fördelningen?» — och det var fel svar.
+
+     LÄRAREN 2026-08-22: «Föreslå antal» gav tio uppgifter och 24 poäng, och
+     «Uppskatta tiden» svarade sedan 16/8/0 E/C/A. Noll A-poäng på ett
+     balanserat prov, för regeln nedan ger A först vid fem poäng på EN uppgift
+     och prototypens uppgifter ligger på två till fyra. Förslaget räknade
+     samtidigt på det riktiga skelettet (exam_spec.balanced_skeleton med
+     NP_TRIPPLAR, som bär A-poäng redan på (1,1,1)-raden). Två modeller, två
+     svar på samma fråga.
+
+     Nu frågar skärmen servern (skelettFraga → /api/exams/skelett) så länge
+     provet är OSKRIVET, och räknar på dokumentets egna tripplar (`peca`) så
+     fort det ÄR skrivet. Regeln här används bara när servern inte svarar —
+     och då säger toasten att fördelningen är uppskattad. */
   function ecaDel(poang, mix) {
     const p = Math.max(1, poang);
     /* «Bara E» är ett prov där varje poäng ligger på E — inget C, inget A. */
@@ -2983,16 +2998,16 @@
     if (p === 6) return [1, 3, 2];
     return [1, 3, 3];
   }
+  const barPeca = u => Array.isArray(u.peca) && u.peca.length === 3
+    && u.peca.some(x => x > 0);
   function uppskatta(v) {
     const mix = (v.inst || {}).nivamix || 'Balanserat';
-    let e = 0, c = 0, a = 0;
+    let e = 0, c = 0, a = 0, skrivna = 0;
     (v.uppgifter || []).forEach(u => {
       /* Bär uppgiften sin nivåvektor (plan.js franProv skriver `peca` ur
          prov-JSON) är DEN fördelningen, och då ska ingen gissas ur mixen.
-         Gissningen finns kvar för prototypens och de handskrivna pappersens
-         skull. Servern räknar samma sak (exam_spec.tidsatgang). */
-      const p = Array.isArray(u.peca) && u.peca.length === 3
-        && u.peca.some(x => x > 0) ? u.peca : ecaDel(u.p, mix);
+         Servern räknar samma sak (exam_spec.tidsatgang). */
+      const p = barPeca(u) ? (skrivna++, u.peca) : ecaDel(u.p, mix);
       e += p[0] || 0; c += p[1] || 0; a += p[2] || 0;
     });
     const antal = (v.uppgifter || []).length;
@@ -3003,7 +3018,11 @@
        skilja uppgiftstermen från poängtermen, och åttan är lärarens overhead
        runt lektionen — den ligger utanför NP:s ramtid och går inte att mäta
        där. Samma tal som exam_spec.MIN_PER_UPPGIFT / MIN_START_OCH_SLUT. */
-    return { min: Math.max(20, Math.round((rena + antal * 1.1 + 8) / 5) * 5), e, c, a, antal, poang: e + c + a };
+    /* `gissat` = ingen enda uppgift bar sin nivåvektor, alltså är pappret
+       inte skrivet än och E/C/A kommer ur ecaDel. Då ska svaret hämtas från
+       servern i stället — och står toasten ändå här ska den säga det. */
+    return { min: Math.max(20, Math.round((rena + antal * 1.1 + 8) / 5) * 5),
+             e, c, a, antal, poang: e + c + a, gissat: skrivna === 0 };
   }
   function sattProvtid(m) {
     inst.Prov.provminuter = m;
@@ -3015,6 +3034,32 @@
      där provets storlek bestäms, och innan något är skrivet. Knappen räknar på
      upplägget som står i formuläret och SÄTTER provtiden — klockslagen väljer man
      sedan själv, men längden är bestämd av det man klickade på. */
+  /* ── EN SANNING FÖRE SKRIVNINGEN ──────────────────────────
+     Är pappret oskrivet finns ingen fördelning att läsa — bara ett upplägg.
+     Då frågar skärmen SERVERN vad skelettet skulle ge (exam_spec.skelettsummor,
+     samma funktion «Föreslå antal» söker antal med), i stället för att gissa
+     med ecaDel. Antal, nivåmix och takt följer med, annars svarar rutten på ett
+     annat prov än det som står i panelen. */
+  function skelettFraga(v) {
+    /* Ingen server alls (prototypläget, api.js ej laddad) är samma sak som en
+       server som inte svarar — då tar ecaDel över och toasten säger det. */
+    if (!(window.API && window.API.json)) {
+      return Promise.reject(new Error('ingen server'));
+    }
+    const i = v.inst || {};
+    const antal = Math.max(1, Number(i.antal) || 1);
+    return window.API.json(`/api/exams/skelett?antal=${antal}`
+      + `&typ=${v.typ === 'Diagnos' ? 'diagnos' : 'prov'}`
+      + `&nivamix=${encodeURIComponent(i.nivamix || '')}`
+      + `&takt=${taktFor(v)}`)
+      .then(r => {
+        const sum = r && r.summor;
+        if (!r || !Number(r.antal) || !sum) throw new Error('inget skelett');
+        return { min: Number(r.tid), antal: Number(r.antal),
+                 poang: Number(r.poang), e: Number(sum.e) || 0,
+                 c: Number(sum.c) || 0, a: Number(sum.a) || 0, gissat: false };
+      });
+  }
   function uppskattaNu() {
     const typ = valt('skrivtyp');
     /* Diagnosen sätter ingen tid — tiden är lärarens ram och antalet uppgifter
@@ -3029,12 +3074,20 @@
       }
       const u = uppskatta(v);
       window.toast && window.toast(
-        `Diagnosen tar ca ${u.min} min av dina ${ram} — ${u.antal} uppgifter · ${u.poang} p.`);
+        `Diagnosen tar ca ${u.min} min av dina ${ram} — ${u.antal} uppgifter · ${u.poang} p${u.gissat ? ' (uppskattad fördelning)' : ''}.`);
       return;
     }
     if (typ !== 'Prov') return;
     const v = nyVersion(null);
-    const u = uppskatta(v);
+    const lokalt = uppskatta(v);
+    /* Skrivet prov: dokumentets egna tripplar är sanningen, ingen server
+       behövs. Oskrivet: skelettet på servern, med ecaDel som nödutgång när
+       den inte svarar (offline) — och då märks toasten. */
+    if (!lokalt.gissat) { visaUppskattning(v, lokalt); return; }
+    skelettFraga(v).then(u => visaUppskattning(v, u))
+      .catch(() => visaUppskattning(v, lokalt));
+  }
+  function visaUppskattning(v, u) {
     /* PROVTIDEN ÄR LEKTIONEN, INTE UPPSKATTNINGEN. Förr SATTE knappen provtiden
        till uppskattningen — och läraren (2026-08-22) fick «08:10–09:00 · 50 min»
        på en 90-minuterslektion utan att förstå varför: fem uppgifter tog 50
@@ -3049,7 +3102,7 @@
        tid med olika takt, och siffran är det enda som förklarar varför. */
     const takt = String(taktFor(v)).replace('.', ',');
     const lage = u.min > ram ? `ryms inte på provtidens ${ram} min` : `av provtidens ${ram} min`;
-    const text = `Uppgifterna tar ca ${u.min} min ${lage} — ${u.antal} uppgifter · ${u.poang} p · ${u.e}/${u.c}/${u.a} E/C/A · takt ${takt} min/p.`;
+    const text = `Uppgifterna tar ca ${u.min} min ${lage} — ${u.antal} uppgifter · ${u.poang} p · ${u.e}/${u.c}/${u.a} E/C/A${u.gissat ? ' (uppskattad fördelning)' : ''} · takt ${takt} min/p.`;
     if (!window.toast) return;
     if (u.min !== ram) window.toast(text, `Sätt provtiden till ${u.min} min`, () => sattProvtid(u.min));
     else window.toast(text);
@@ -3080,16 +3133,26 @@
       if (ord && window.toast) window.toast(ord, `Ångra (${forr} uppgifter)`,
         () => satt(forr, ''));
     };
+    /* TAKTEN SKICKAS MED. Den stod i toasten men inte i frågan — satte läraren
+       2,4 min/p fick hon ett antal räknat på 3,5 med «takt 2,4» tryckt bredvid.
+       Nivåmixen likaså: fördelningen ska svara mot valet. */
     window.API.json(`/api/exams/foreslag-antal?tid=${tid}`
-      + `&typ=prov&nivamix=${encodeURIComponent(s.nivamix || '')}`)
+      + `&typ=prov&nivamix=${encodeURIComponent(s.nivamix || '')}`
+      + `&takt=${takt}`)
       .then(r => {
         const n = Number(r && r.antal);
         if (!n) throw new Error('inget svar');
         /* Taket är appens (20) och kan ligga under det tiden rymmer — då ska
            toasten säga det, inte tyst leverera ett annat antal. */
         const kapat = n > k.max;
+        /* E/C/A står här av samma skäl som i «Uppskatta tiden»: läraren
+           jämförde de två toasterna 2026-08-22 och fann att de sa olika. Nu
+           kommer båda ur samma skelett, och då ska båda visa det. */
+        const sum = r.summor || {};
+        const eca = sum.e == null ? ''
+          : ` · ${sum.e}/${sum.c}/${sum.a} E/C/A`;
         satt(n, `${Math.min(n, k.max)} uppgifter ryms på ${tid} min · ca `
-          + `${r.poang} p · takt ${String(takt).replace('.', ',')} min/p`
+          + `${r.poang} p${eca} · takt ${String(takt).replace('.', ',')} min/p`
           + (kapat ? ` (${n} skulle rymmas, men tjugo är appens tak)` : ''));
       })
       .catch(() => window.toast && window.toast(
