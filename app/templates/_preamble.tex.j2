@@ -57,8 +57,16 @@
 ((# is defined-vakten krävs: prov.tex.j2/arbetsblad.tex.j2/bedomning.tex.j2
     sätter ännu inte med_tikz (kommer i ett senare steg) — utan vakten
     skulle StrictUndefined få deras befintliga include att krascha. #))
-((* if med_tikz is defined and med_tikz *))
-((* if forlaga is defined and forlaga *))
+((# TVÅ SKÄL ATT LADDA TIKZ, och de är olika stora.
+    `med_tikz` = pappret har en FIGUR: då behövs pgfplots och biblioteken
+    angles/quotes, för figurrecepten ritar vinkelbågar med \pic.
+    `med_vand` = pappret har VÄNDMÄRKET (se nedan), och det är en enda rak pil
+    — den behöver `tikz` men varken pgfplots eller ett bibliotek. Skillnaden
+    står kvar därför att den kostar: pgfplots är det tyngsta paketet i hela
+    bunten, och ett prov utan figurer ska inte betala för det. #))
+((* set tikz_pa = (med_tikz is defined and med_tikz) or (med_vand is defined and med_vand) *))
+((* if tikz_pa *))
+((* if forlaga is defined and forlaga and med_tikz is defined and med_tikz *))
 ((# Förlagan drar in pgfplots (och därmed tikz) för funktionsgrafen. Appens
     figurrecept skriver ren tikz, men paketet laddas ändå: det är hennes
     preamble, det ligger i den seedade cachen, och en figurtyp som en dag
@@ -67,7 +75,9 @@
 \pgfplotsset{compat=1.18}
 ((* endif *))
 \usepackage{tikz}
+((* if med_tikz is defined and med_tikz *))
 \usetikzlibrary{angles,quotes}
+((* endif *))
 ((* endif *))
 ((* if not (forlaga is defined and forlaga) *))
 ((# fancyhdr laddas INTE i förlagaläget, trots att lärarens fil gör det.
@@ -81,6 +91,8 @@
 \usepackage{tabularx}
 \usepackage{enumitem}
 \usepackage[swedish]{babel}
+((# Bara `med_tikz`, inte `tikz_pa`: det är biblioteket quotes som slåss med
+    babels genvägstecken, och vändmärket laddar inget bibliotek. #))
 ((* if med_tikz is defined and med_tikz *))
 ((# Svensk babel gör " till ett aktivt genvägstecken. tikz-biblioteket
     quotes använder också " för \pic-etiketter (t.ex. "$v$") — utan att
@@ -119,7 +131,52 @@
 \firstpageheader{}{}{}
 \runningheader{((( sidhuvud )))}{\rightmark}{}
 \runningheadrule
-\footer{}{}{}
+
+((# ── VÄNDMÄRKET ──────────────────────────────────────────────────────
+    LÄRARENS BEGÄRAN (2026-08-22): «så eleverna inte gör en sida, tror att de
+    är klara och lämnar in». Kursivt «Vänd» i \small följt av en tunn pil,
+    nedre högra hörnet. Formen är MÄTT och sedd — sex förslag renderades och
+    det här valdes; ändra den inte utan att rendera om och fråga.
+
+    PILEN RITAS MED KÄRNANS `->`, inte med Stealth-spetsen. Biblioteket
+    arrows.meta ligger INTE i den seedade Tectonic-cachen, och ett prov som
+    inte kompilerar offline är värre än en pil med enklare spets.
+
+    REGELN: märket står på VARJE sida utom den SISTA i varje del — där lämnar
+    man in, och en «Vänd» där skulle skicka eleven till nästa dels försättssida
+    eller ut ur häftet. Försättsbladet får det (det finns alltid mer efter det).
+
+    HUR VI VET VILKEN SIDA SOM ÄR SIST I EN DEL. Det går inte att veta när
+    delen sätts — sidbrytningen avgörs senare — så det tar två kompileringar,
+    precis som \pageref. `\slutsida` (prov.tex.j2, sist i varje del) skjuter
+    upp ett `\write` till sidan skickas ut, och då ÄR sidnumret känt. Nästa
+    körning läser .aux och `\pfvand` frågar bara: är den här sidan utpekad?
+
+    Nyckeln är SIDNUMRET och inte delens namn. Med sidnummer behövs ingen
+    lista att loopa över i sidfoten och inget paket (refcount finns inte
+    heller i seeden) — ett `\@ifundefined` räcker, och det fungerar likadant
+    för ett prov med tre delar som för ett utan delar alls. #))
+((* if med_vand is defined and med_vand *))
+\newcommand{\vandmarke}{{\small\itshape Vänd\,}\tikz[baseline=-0.6ex]\draw[->, line width=0.7pt] (0,0) -- (6mm,0);}
+\makeatletter
+\newcommand{\pfsattslut}[1]{\expandafter\gdef\csname pfslut@#1\endcsname{1}}
+\newcommand{\slutsida}{\write\@auxout{\string\pfsattslut{\thepage}}}
+\newcommand{\pfvand}{\@ifundefined{pfslut@\the\value{page}}{\vandmarke}{}}
+\makeatother
+((* else *))
+((# Bedömningsanvisningen delar den här preamblen men är LÄRARENS papper —
+    ingen elev bläddrar i den, och «Vänd» hör inte hemma där. Makrona finns
+    ändå, tomma, så foten nedan ser likadan ut i båda fallen. #))
+\newcommand{\slutsida}{}
+\newcommand{\pfvand}{}
+((* endif *))
+
+((# Dokumentkoden och vändmärket delar sidfotens högra fält. Foten sätts
+    därför EN gång, här, och koden fylls i nedan när det finns en. #))
+\newcommand{\pfkod}{}
+\newcommand{\pffot}{\pfkod\pfvand}
+\footer{}{}{\pffot}
+\firstpagefooter{}{}{\pffot}
 
 ((# ── Poäng i marginalen ──────────────────────────────────────────── #))
 \pointsinrightmargin
@@ -145,9 +202,10 @@
     men läraren ska kunna se vilken kopia hon håller i. #))
 ((* if forlaga is defined and forlaga *))
 ((# exam-klassens headandfoot har en egen fot; fancyhdr styr den inte, och en
-    \fancyfoot här hade tyst inte visats alls. #))
-\footer{}{}{\tiny\textcolor{ink200}{((( dokumentkod )))}}
-\firstpagefooter{}{}{\tiny\textcolor{ink200}{((( dokumentkod )))}}
+    \fancyfoot här hade tyst inte visats alls. Koden fyller \pfkod i stället
+    för att sätta foten själv: vändmärket bor i samma fält, och den som satte
+    foten SIST hade annars tagit hela hörnet. #))
+\renewcommand{\pfkod}{\tiny\textcolor{ink200}{((( dokumentkod )))}\hspace{2em}}
 ((* else *))
 \fancyfoot[R]{\tiny\textcolor{ink200}{((( dokumentkod )))}}
 ((* endif *))

@@ -259,3 +259,99 @@ def test_ett_svar_per_rad(rader):
     assert abs(x1 - x2) < TAL, (
         f"andra svarsraden börjar på x={x2:.1f}, inte vid vänsterkanten "
         f"{x1:.1f}")
+
+
+# ── VÄNDMÄRKET ────────────────────────────────────────────────────────
+# LÄRARENS BEGÄRAN 2026-08-22: «så eleverna inte gör en sida, tror att de är
+# klara och lämnar in». Kursivt «Vänd» plus en tunn pil i nedre högra hörnet,
+# på varje sida UTOM den sista i varje del — där lämnar man in.
+#
+# Måtten: sidfoten sitter på förlagans egen bottenmarginal, och pilen är det
+# som når ut i högerkanten. Ordet «Vänd» slutar därför en pilbredd (6 mm plus
+# ett tunt mellanrum) innanför satsytans högerkant — det är avsiktligt, och
+# därför mäts ordet mot 35 mm och inte mot 25.
+VAND_HOGERKANT_MAX = 35 * 72 / 25.4       # ≈ 99 pt: ordet + pilen
+VAND_NEDERKANT_MAX = 25 * 72 / 25.4       # ≈ 71 pt: bottenmarginalen
+
+
+def _langt_prov(delar=("B", "C"), per_del=9):
+    """Ett prov som säkert blir flera sidor i varje del — vändmärket säger
+    ingenting på ett prov som får plats på ett blad."""
+    def uppg(nr, kod):
+        return {"del": kod, "formaga": "P", "typ": "redovisning",
+                "poang": [1, 1, 0],
+                "text": f"Uppgift {nr}. " + "Bestäm konstanten $a$. " * 12,
+                "losning": "Svar.", "bedomning": "+1 E, +1 C."}
+    uppgifter, nr = [], 1
+    for kod in delar:
+        for _ in range(per_del):
+            uppgifter.append(uppg(nr, kod))
+            nr += 1
+    return {"titel": "Kapitel 2", "kurs": "Matematik 2c", "klass": "NA25",
+            "tid_min": 90, "hjalpmedel": "Formelblad.",
+            "uppgifter": uppgifter}
+
+
+def _vandsidor(spec, tmp_path):
+    fitz = pytest.importorskip("fitz")
+    doc, fel = exam_spec.validate_exam_json(spec, "prov")
+    assert doc is not None, fel
+    pdf, logg = exam_pdf.compile_pdf(exam_latex.render_prov(doc), tmp_path,
+                                     "vand", epoch=EPOK)
+    assert pdf is not None, logg
+    d = fitz.open(pdf)
+    ut = []
+    for sida in d:
+        traff = [b for b in sida.get_text("blocks") if "Vänd" in b[4]]
+        if not traff:
+            ut.append(None)
+            continue
+        x0, y0, x1, y1 = traff[0][:4]
+        ut.append((sida.rect.width - x1, sida.rect.height - y1))
+    d.close()
+    return ut
+
+
+@pytest.mark.tectonic
+def test_vandmarket_star_pa_alla_sidor_utom_delens_sista(tmp_path):
+    """Tvådelsprov på flera sidor per del. Sista sidan i Del A och sista sidan
+    i Del B ska sakna märket; alla andra ska ha det i nedre högra hörnet —
+    försättsbladet inräknat, för efter det kommer alltid mer."""
+    sidor = _vandsidor(_langt_prov(), tmp_path)
+    assert len(sidor) >= 4, f"provet blev bara {len(sidor)} sidor"
+    # Delarnas sista sidor är de utan märke; de ska vara EXAKT två (en per del)
+    # och den sista av dem ska vara dokumentets sista sida.
+    utan = [i for i, v in enumerate(sidor) if v is None]
+    assert len(utan) == 2, f"märket saknas på sidorna {utan}"
+    assert utan[-1] == len(sidor) - 1, "sista sidan bär «Vänd»"
+    for i, v in enumerate(sidor):
+        if v is None:
+            continue
+        hoger, nedre = v
+        assert hoger < VAND_HOGERKANT_MAX,             f"s.{i + 1}: «Vänd» {hoger:.1f} pt från högerkanten"
+        assert nedre < VAND_NEDERKANT_MAX,             f"s.{i + 1}: «Vänd» {nedre:.1f} pt från nederkanten"
+
+
+@pytest.mark.tectonic
+def test_vandmarket_pa_ett_prov_utan_delar(tmp_path):
+    """En del: märket på alla sidor utom den sista."""
+    spec = _langt_prov(delar=(None,), per_del=14)
+    sidor = _vandsidor(spec, tmp_path)
+    assert len(sidor) >= 3
+    assert sidor[-1] is None, "sista sidan bär «Vänd»"
+    assert all(v is not None for v in sidor[:-1]),         f"märket saknas mitt i provet: {[i for i, v in enumerate(sidor) if v is None]}"
+
+
+@pytest.mark.tectonic
+def test_bedomningsanvisningen_har_inget_vandmarke(tmp_path):
+    """Bedömningsanvisningen delar preamblen men är LÄRARENS papper — ingen
+    elev bläddrar i den, och «Vänd» hör inte hemma där."""
+    fitz = pytest.importorskip("fitz")
+    doc, fel = exam_spec.validate_exam_json(_langt_prov(), "prov")
+    assert doc is not None, fel
+    pdf, logg = exam_pdf.compile_pdf(exam_latex.render_bedomning(doc),
+                                     tmp_path, "bed", epoch=EPOK)
+    assert pdf is not None, logg
+    d = fitz.open(pdf)
+    assert not any("Vänd" in s.get_text() for s in d)
+    d.close()

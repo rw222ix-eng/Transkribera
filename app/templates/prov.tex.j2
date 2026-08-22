@@ -25,6 +25,10 @@
 ((* set med_grafik = true *))
 ((* set med_svarsrad = true *))
 ((* set forlaga = true *))
+((# VÄNDMÄRKET är elevens papper och bara elevens: «så eleverna inte gör en
+    sida, tror att de är klara och lämnar in» (läraren, 2026-08-22).
+    Bedömningsanvisningen delar preamblen men inte flaggan. #))
+((* set med_vand = true *))
 ((# Sidhuvudets vänsterrad ÄR provets namn. Delen står i mitten och kommer ur
     \markboth. #))
 ((* set sidhuvud = forsatt.sidhuvud *))
@@ -229,6 +233,12 @@ Provet kan ge totalt \textbf{((( forsatt.total ))) poäng}.
 ((* endfor *))
 
 \end{questions}
+((# DELEN TAR SLUT HÄR, och det är den sidan som INTE ska säga «Vänd» — där
+    lämnar eleven in. \slutsida skjuter upp ett \write till sidan skickas ut;
+    då är sidnumret känt och nästa kompilering vet vilken sida det var (se
+    VÄNDMÄRKET i _preamble.tex.j2). \nobreak håller ihop det med delens sista
+    rad, så märket inte skrivs för en sida som bara bär whatsiten. #))
+\par\nobreak\slutsida
 ((* endfor *))
 
 \end{document}
