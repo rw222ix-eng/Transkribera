@@ -27,6 +27,24 @@ def test_rubriken_sager_vad_den_vilar_pa():
     och det här testet är skälet att det inte går att glömma."""
     assert niva_rubrik.ANALYSERADE_PROV, \
         "rubriken saknar underlag — fyll ANALYSERADE_PROV eller märk den som hypotes"
+    # Varje prov som är MÄTT ska också stå som källa (och tvärtom vaktar
+    # test_exam.test_np_fordelningen_ar_intern_konsistent). Läraren har fyra
+    # kurser, och alla fyra ska ha minst ett läst prov — annars gäller rubriken
+    # bevisligen inte den klass hon skriver provet till.
+    kallor = " ".join(niva_rubrik.ANALYSERADE_PROV)
+    for kurs in ("1a", "1c", "2a", "2c"):
+        assert f"NpMa{kurs}" in kallor, kurs
+
+
+def test_ingen_np_uppgift_aterges_i_koden():
+    """Regeln som gör materialet lagligt att använda: ankaren är EGENSKRIVNA
+    parafraser, aldrig provens egna uppgifter. Regeln kan inte kontrolleras
+    maskinellt utan att proven läggs i repot (vilket vore samma brott), så det
+    som vaktas här är att regeln STÅR — den som stryker meningen ska behöva
+    stryka det här testet också, och då syns beslutet i diffen."""
+    doc = niva_rubrik.__doc__ or ""
+    assert "EGENSKRIVNA parafraser" in doc
+    assert "Ingen NP-uppgift återges" in doc
 
 
 def test_alla_nivaer_beskrivs_generellt():
@@ -59,7 +77,8 @@ def test_varje_formaga_har_en_stege_och_K_saknar_E():
 def test_ankarna_ar_hela_och_taecker_varje_niva():
     typer = set(exam_spec.Uppgiftstyp.__args__)
     for a in niva_rubrik.ANKARE:
-        assert set(a) == {"typ", "niva", "text", "varfor"}
+        assert set(a) == {"kurs", "typ", "niva", "text", "varfor"}
+        assert a["kurs"] in {"1", "2"}
         assert a["typ"] in typer and a["niva"] in niva_rubrik.NIVAER
         assert a["text"].strip() and a["varfor"].strip()
     for niva in niva_rubrik.NIVAER:
@@ -69,6 +88,11 @@ def test_ankarna_ar_hela_och_taecker_varje_niva():
     for typ in typer:
         nivaer = {a["niva"] for a in niva_rubrik.ANKARE if a["typ"] == typ}
         assert len(nivaer) >= 2, typ
+    # Båda kursstegen ska täcka alla tre nivåerna. Ett 1a-papper som bara har
+    # kurs-2-ankare för A får logaritmer och diskriminanter till förebild.
+    for steg in ("1", "2"):
+        egna = {a["niva"] for a in niva_rubrik.ANKARE if a["kurs"] == steg}
+        assert egna == set(niva_rubrik.NIVAER), steg
 
 
 def test_ankarurvalet_foljer_typerna_och_faller_tillbaka():
@@ -76,6 +100,18 @@ def test_ankarurvalet_foljer_typerna_och_faller_tillbaka():
     assert valda and all(a["typ"] == "resonemang" for a in valda)
     # En typ som inte finns ska ge ankare ändå — fel typ styr bättre än inget.
     assert niva_rubrik.ankare(["finns-inte"])
+
+
+def test_ankarurvalet_valjer_kursens_egna_forst():
+    """Kursbreddningen: ett 1a-papper ska inte få kurs 2:s logaritmer till
+    förebild, och ett 2c-papper ska inte få kurs 1:s vardagsprocent."""
+    ettan = niva_rubrik.ankare(per_niva=1, kurs="Matematik, nivå 1a")
+    assert ettan and all(a["kurs"] == "1" for a in ettan)
+    tvaan = niva_rubrik.ankare(per_niva=1, kurs="Matematik, nivå 2c")
+    assert tvaan and all(a["kurs"] == "2" for a in tvaan)
+    # Utan kurs står ordningen i listan kvar — ingen tyst omsortering.
+    assert niva_rubrik.ankare(per_niva=1) == niva_rubrik.ankare(
+        per_niva=1, kurs="Matematik – fortsättning, nivå 1c")
 
 
 def test_promptblocket_bar_rubrik_steg_och_ankare():
@@ -89,6 +125,67 @@ def test_promptblocket_bar_rubrik_steg_och_ankare():
     # Bara den begärda typen och förmågan — blocket ska inte svälla.
     assert niva_rubrik.RUBRIK_PER_TYP["resonemang"]["C"] not in block
     assert niva_rubrik.RUBRIK_PER_FORMAGA["M"]["C"] not in block
+    # Utan kurs sägs ingenting om kursen — det är ärligare än att gissa 2a.
+    assert niva_rubrik.RUBRIK_KURSNIVA not in block
+
+
+# ─────────────────────────────────────────────── kursbreddningen (D3) ─────
+# Fyndet som ska överleva nästa omskrivning: mätningen sa att E, C och A
+# betyder SAMMA sak i 1a, 1c, 2a och 2c — tolv uppgifter som förekommer i både
+# 1a- och 1c-provet vt 2022 har samma poängsättning i båda. Det som skiljer är
+# hur mycket av varje nivå provet innehåller. Testerna nedan håller den
+# skillnaden på plats åt båda hållen: rubriken får inte delas per kurs, och
+# mixen får inte slås ihop.
+
+def test_kursrubriken_ar_mix_och_form_inte_en_egen_nivadefinition():
+    """Rubriken per kurs får INTE definiera om E, C eller A. Skulle någon
+    skriva «i 1a räcker det med …» hör det inte hemma här — det motsägs av
+    materialet, och det är precis det felet en språkmodell gör spontant."""
+    assert set(niva_rubrik.RUBRIK_PER_KURS) == {"1a", "1c", "2a", "2c"}
+    for kurs, text in niva_rubrik.RUBRIK_PER_KURS.items():
+        assert text.strip() and "Mix:" in text, kurs
+    assert "samma poängsättning i båda proven" in niva_rubrik.RUBRIK_KURSNIVA
+
+
+def test_kursens_band_ar_snavare_an_det_gemensamma():
+    """Om alla fyra kurserna får samma band är delningen meningslös. 1c:s
+    C-band (42–43 %) och 2a:s (34–37 %) överlappar inte ens."""
+    gemensamt = niva_rubrik.NP_FORDELNING["poangandel"]
+    for kurs, band in niva_rubrik.NP_FORDELNING_PER_KURS.items():
+        assert set(band) == set(niva_rubrik.NIVAER), kurs
+        for niva, (lo, hi) in band.items():
+            glo, ghi = gemensamt[niva]
+            assert glo <= lo and hi <= ghi, (kurs, niva)
+    ettc = niva_rubrik.NP_FORDELNING_PER_KURS["1c"]["C"]
+    tvaa = niva_rubrik.NP_FORDELNING_PER_KURS["2a"]["C"]
+    assert ettc[0] > tvaa[1], "1c ska vara C-tyngre än 2a"
+
+
+def test_kursen_naar_prompten_och_domaren():
+    for kurs, nyckel in (("Matematik, nivå 1a", "1a"),
+                         ("Matematik, nivå 2c", "2c")):
+        block = niva_rubrik.build_niva_block(["rutin"], ["P"], kurs=kurs)
+        assert niva_rubrik.RUBRIK_KURSNIVA in block
+        assert niva_rubrik.RUBRIK_PER_KURS[nyckel] in block
+        andra = "2c" if nyckel == "1a" else "1a"
+        assert niva_rubrik.RUBRIK_PER_KURS[andra] not in block
+    # Domaren mäter mot samma text som prompten skrevs mot.
+    sk = exam_spec.balanced_skeleton(8, "prov", delar=True)
+    assert exam_gen._skala("prov", "", sk, "Matematik, nivå 1c") == \
+        niva_rubrik.build_niva_block(
+            sorted({s["typ"] for s in sk}), sorted({s["formaga"] for s in sk}),
+            kurs="Matematik, nivå 1c")
+
+
+def test_okand_kurs_ger_det_breda_bandet_och_ingen_kursrubrik():
+    """Ma4 och Ma5 är INTE mätta. En rubrik som ändå påstod sig veta hur A ser
+    ut där vore hittepå — då står det generella kvar."""
+    assert niva_rubrik.kursnyckel("Matematik – fördjupning, nivå 1c") is None
+    assert niva_rubrik.kursnyckel("") is None
+    block = niva_rubrik.build_niva_block(kurs="Matematik, nivå 4")
+    assert niva_rubrik.RUBRIK_KURSNIVA not in block
+    assert niva_rubrik.niva_mal_prov(kurs="Matematik, nivå 4") == \
+        niva_rubrik.niva_mal_prov()
 
 
 # ────────────────────────────────────────────────────── domaren (C4) ──────
@@ -424,12 +521,15 @@ def test_provet_far_np_rubriken_intill_uppgiftsplanen():
 
 def test_provet_domas_mot_samma_skala_som_det_skrevs_mot():
     """Bedöms dokumentet mot en annan skala än den skrevs mot mäter domaren
-    fel sak."""
-    skeleton = exam_spec.balanced_skeleton(8)
+    fel sak. Sedan kursbreddningen bär skalan också KURSEN, så den ska följa
+    med hit — annars döms ett 1a-papper mot 2c:s ankarexempel."""
+    skeleton = exam_spec.balanced_skeleton(8, kurs="Ma2c")
     prompt = exam_gen.build_prompt("Ma2c", "NA25", [], antal=8,
                                    skeleton=skeleton)
-    skala = exam_gen._skala("prov", "", skeleton)
+    skala = exam_gen._skala("prov", "", skeleton, "Ma2c")
     assert skala and skala in prompt
+    # Utan kursen är det en annan text — det är just det felet raden hindrar.
+    assert exam_gen._skala("prov", "", skeleton) not in prompt
 
 
 def test_bokens_skala_ar_ocksa_domarens(monkeypatch):

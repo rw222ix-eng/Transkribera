@@ -296,13 +296,22 @@ def test_foreslag_antal_raknar_samma_tid_som_uppskattningen():
 
 
 def test_lararens_exempel():
-    """Talen ur kommentaren, så att de inte kan glida: med 3,5-takten ger 80
-    minuter 9 uppgifter och 20 poäng, 90 ger 10 och 21, 100 ger 11 och 24 —
-    och 9 uppgifter på 20 poäng kostar ~80 minuter tillbaka."""
+    """Lärarens dom är TAKTEN (3,5 min/poäng), och den ger 9 uppgifter på 80
+    minuter. Antalet är det hon räknade på; poängsumman är en följd av
+    nivåmixen och rörde sig när mixen blev per kurs (kursbreddningen, D3):
+    utan kurs siktar skelettet numera mot hela materialets spann, som är
+    bredare, och stannar en poäng lägre. Med en kurs — och appen känner alltid
+    kursen — ligger 80 minuter kvar på 20 poäng."""
     assert exam_spec.foreslag_antal(80, "prov")["antal"] == 9
-    assert exam_spec.foreslag_antal(80, "prov")["poang"] == 20
+    assert exam_spec.foreslag_antal(80, "prov")["poang"] == 19
+    for kurs in ("Ma1c", "Ma2a", "Ma2c"):
+        r = exam_spec.foreslag_antal(80, "prov", kurs=kurs)
+        assert (r["antal"], r["poang"]) == (9, 20), kurs
+    # 1a är E-tungt och köper därför en uppgift till för samma tid: fler och
+    # billigare uppgifter är precis vad a-spårets prov består av.
+    assert exam_spec.foreslag_antal(80, "prov", kurs="Ma1a")["antal"] == 10
     assert exam_spec.foreslag_antal(90, "prov")["antal"] == 10
-    assert exam_spec.foreslag_antal(100, "prov")["antal"] == 11
+    assert exam_spec.foreslag_antal(100, "prov")["antal"] == 12
     slots = exam_spec.balanced_skeleton(9, "prov", delar=True)
     summor = exam_spec.poangsummor(exam_spec._skeleton_doc(slots))
     assert exam_spec.tidsatgang(

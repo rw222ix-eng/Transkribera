@@ -641,23 +641,11 @@ FORLAGA_GRUPP = (
 # två för fortsättningen och fyra för fördjupningen, så att Ma3c hamnar på
 # steg 3 och Ma5 på steg 5. Spåret (a, b, c) är sista bokstaven; saknas den
 # (Ma4, Ma5) är kursen c-spårets fortsättning.
-_KURSNIVA = re.compile(r"niv[åa]\s*([1-5])\s*([abc])?|(?<![0-9])([1-5])([abc])",
-                       re.IGNORECASE)
-
-
-def _kursniva(kurs: str) -> tuple[int, str] | None:
-    """(steg, spår) ur kursnamnet, eller None när namnet inte säger något."""
-    m = _KURSNIVA.search(kurs or "")
-    if not m:
-        return None
-    steg = int(m.group(1) or m.group(3))
-    spar = (m.group(2) or m.group(4) or "c").lower()
-    lag = (kurs or "").lower()
-    if "fortsättning" in lag:
-        steg += 2
-    elif "fördjupning" in lag:
-        steg += 4
-    return min(steg, 5), spar
+#
+# Läsningen bor i niva_rubrik sedan kursbreddningen, för nivårubriken slår upp
+# kursens uppmätta band med samma nyckel. Två kopior av regexet hade glidit
+# isär första gången någon döpte om en kurs.
+_kursniva = niva_rubrik.kursniva
 
 
 _TALRUM = {
@@ -861,7 +849,8 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
     # sprida poängen rätt. Bara delarna skiljer — arbetsbladet och
     # gruppuppgiften är platta papper.
     if skeleton is None and profil in ("arbetsblad", "gruppuppgift"):
-        skeleton = exam_spec.balanced_skeleton(antal, profil, delar=False)
+        skeleton = exam_spec.balanced_skeleton(antal, profil, delar=False,
+                                               kurs=kurs)
     # Diagnosen får sitt skelett utifrån (exam_spec.diagnosplan): det räknas ur
     # innehållet och lektionens längd, inte ur ett antal, så det går inte att
     # bygga här av `antal` allena.
@@ -1016,7 +1005,7 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
             block.append(_skelett_plan(skeleton, last=False))
         # Nivåförankringen (C2): gruppuppgiften är inte en trappa, så bokens
         # skala används som GOLV och TAK i stället för som stigning.
-        block.append(boknivaer or niva_rubrik.build_skala_utan_bok(profil))
+        block.append(boknivaer or niva_rubrik.build_skala_utan_bok(profil, kurs))
     elif profil == "diagnos":
         if skeleton:
             block.append(_skelett_plan(skeleton))
@@ -1040,7 +1029,7 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
             "punkten ser ut som, inte bara var poängen sitter. Det är den "
             "läraren läser när hon letar efter hålet.\n"
             "Lösningsförslagen blir facit, och facit ska vara kort: svaret och på sin höjd ett par led. Svara med enbart JSON.")
-        block.append(niva_rubrik.build_skala_utan_bok("diagnos"))
+        block.append(niva_rubrik.build_skala_utan_bok("diagnos", kurs))
     elif profil == "arbetsblad":
         if skeleton:
             block.append(_skelett_plan(skeleton))
@@ -1062,13 +1051,14 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
         # «Stigande svårighet» stod här förut, och det är en instruktion utan
         # skala: svårare ÄN VAD? Nu följer skalan med — bokens egen när läraren
         # slagit upp ett uppslag, annars NP-rubriken.
-        block.append(boknivaer or niva_rubrik.build_skala_utan_bok(profil))
+        block.append(boknivaer or niva_rubrik.build_skala_utan_bok(profil, kurs))
     else:
         # Balanserat skelett: modellen klarar inte den flerdimensionella
         # balansen (förmåga × nivå) själv, så appen låser del/förmåga/typ/poäng
         # per uppgift (grammatik) och ger planen här så innehållet matchar.
         if skeleton is None:
-            skeleton = exam_spec.balanced_skeleton(antal, profil, delar=delar)
+            skeleton = exam_spec.balanced_skeleton(antal, profil,
+                                                   delar=delar, kurs=kurs)
         if skeleton is not None:
             block.append(_skelett_plan(skeleton))
         # Nivårubriken står omedelbart efter uppgiftsplanen (C3). Planen säger
@@ -1076,7 +1066,8 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
         # KRÄVER av innehållet. Var för sig är de en siffra och en abstraktion.
         block.append(niva_rubrik.build_niva_block(
             sorted({s["typ"] for s in skeleton}) if skeleton else None,
-            sorted({s["formaga"] for s in skeleton}) if skeleton else None))
+            sorted({s["formaga"] for s in skeleton}) if skeleton else None,
+            kurs=kurs))
         # ── NP:S DELMÖNSTER, SAGT TILL MODELLEN ──────────────────────────
         # Källa: NpMa2a vt 2017 och vt 2022, sidan 1. Delprov B «Endast svar
         # krävs», delprov C «Fullständiga lösningar krävs» — båda utan digitala
@@ -1757,18 +1748,24 @@ def _repair_until_valid(exam: dict | None, errors: list, *, model: str, llm,
     return {"exam": exam, "errors": errors, "rounds": rounds_used}
 
 
-def _skala(profil: str, boknivaer: str, skeleton: list[dict] | None) -> str:
+def _skala(profil: str, boknivaer: str, skeleton: list[dict] | None,
+           kurs: str = "") -> str:
     """Den nivåskala dokumentet skrevs mot — exakt samma text som prompten
-    fick. Domaren måste mäta mot den och inte mot en annan."""
+    fick. Domaren måste mäta mot den och inte mot en annan.
+
+    Därför står `kurs` här också: sedan kursbreddningen bär skalan kursens
+    uppmätta mix och kursens egna ankarexempel, och en domare som får kurs 2:s
+    ankare till ett 1a-papper dömer efter fel exempel."""
     if profil == "diagnos":
         # Diagnosen förankras aldrig i boken: den ska mäta kursen, inte det
         # uppslag klassen råkar ha framme.
-        return niva_rubrik.build_skala_utan_bok(profil)
+        return niva_rubrik.build_skala_utan_bok(profil, kurs)
     if profil in ("arbetsblad", "gruppuppgift"):
-        return boknivaer or niva_rubrik.build_skala_utan_bok(profil)
+        return boknivaer or niva_rubrik.build_skala_utan_bok(profil, kurs)
     return niva_rubrik.build_niva_block(
         sorted({s["typ"] for s in skeleton}) if skeleton else None,
-        sorted({s["formaga"] for s in skeleton}) if skeleton else None)
+        sorted({s["formaga"] for s in skeleton}) if skeleton else None,
+        kurs=kurs)
 
 
 def _niva_pass(exam: dict, errors: list, *, model: str, llm, profil: str,
@@ -1861,8 +1858,12 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     # (exam_spec.diagnosplan): dess platser är innehållspunkter, inte ett
     # antal, och den dimensionen kan bara räknas där punkterna är kända.
     if skeleton is None:
+        # KURSEN styr nivåmixen: 1c:s prov ska vara C-tungt och 2a:s E-tungt,
+        # och båda är uppmätta (niva_rubrik.NP_FORDELNING_PER_KURS). Utan den
+        # här raden byggs alla fyra kurserna mot hela materialets spann, som är
+        # så brett att det inte drar någonstans.
         skeleton = exam_spec.balanced_skeleton(
-            antal, profil, delar=(profil == "prov" and delar))
+            antal, profil, delar=(profil == "prov" and delar), kurs=kurs)
     antal = len(skeleton) or antal
     # … men bara två av dem GRAMMATIKLÅSES. En låst rad måste bära sina poäng
     # själv, och en uppgift med poäng får inga deluppgifter (exam_spec:
@@ -1898,7 +1899,8 @@ def generate_exam(kurs: str, klass: str, punkter: list[str], *, model: str,
     if not doma or res["exam"] is None:
         return res
     return _niva_pass(res["exam"], res["errors"], model=model, llm=llm,
-                      profil=profil, skala=_skala(profil, boknivaer, skeleton),
+                      profil=profil,
+                      skala=_skala(profil, boknivaer, skeleton, kurs),
                       antal=antal, skeleton=grammatik, koder=koder,
                       niva_mal=niva_mal,
                       rounds_used=res["rounds"], max_rounds=max_rounds,

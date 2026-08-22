@@ -505,7 +505,7 @@ def create_router(base: Path, arbiter) -> APIRouter:
             if skelett is None and nivaval:
                 skelett = exam_spec.balanced_skeleton(
                     antal, typ, delar=(typ == "prov" and delar),
-                    mix=nivaval["mix"], niva_mal=niva_mal)
+                    mix=nivaval["mix"], niva_mal=niva_mal, kurs=kurs)
             memory = db.memory_for_prompt(conn, int(group_id), int(course_id)) \
                 if group_id else ""
             teman = db.exam_themes_for_prompt(conn, int(course_id))

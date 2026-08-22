@@ -1606,7 +1606,8 @@ def _dela_del_b(grupper: list[list[dict]]) -> list[int]:
 def balanced_skeleton(antal: int, profil: str = "prov",
                       delar: bool | None = None,
                       mix: tuple[float, float, float] | None = None,
-                      niva_mal: dict | None = None) -> list[dict]:
+                      niva_mal: dict | None = None,
+                      kurs: str = "") -> list[dict]:
     """Deterministiskt balanserat skelett: {del, formaga, typ, poang} per
     uppgift, konstruerat så förmåge- OCH nivåbalans + ordningsregler uppfylls
     BY CONSTRUCTION. Grammatiken tvingar modellen till skelettet, så modellen
@@ -1725,7 +1726,7 @@ def balanced_skeleton(antal: int, profil: str = "prov",
     for s in slots:
         s.pop("karaktar")
 
-    _justera_skelett(slots, profil, niva_mal=niva_mal)
+    _justera_skelett(slots, profil, niva_mal=niva_mal, kurs=kurs)
     if profil == "prov":
         _dela_i_deluppgifter(slots)
     return slots
@@ -1999,7 +2000,8 @@ def skelettsummor(antal: int, profil: str = "prov",
                   delar: bool | None = None,
                   mix: tuple[float, float, float] | None = None,
                   niva_mal: dict | None = None,
-                  takt: float | None = None) -> dict:
+                  takt: float | None = None,
+                  kurs: str = "") -> dict:
     """Vad ett upplägg SKULLE ge, räknat på skelettet som faktiskt byggs:
     {antal, poang, summor {e, c, a}, tid, takt}.
 
@@ -2019,7 +2021,7 @@ def skelettsummor(antal: int, profil: str = "prov",
     if delar is None:
         delar = profil == "prov"
     skelett = balanced_skeleton(max(1, int(antal or 1)), profil, delar=delar,
-                                mix=mix, niva_mal=niva_mal)
+                                mix=mix, niva_mal=niva_mal, kurs=kurs)
     summor = poangsummor(_skeleton_doc(skelett))
     return {"antal": len(skelett), "poang": summor["total"],
             "summor": {n: int(summor.get(n) or 0) for n in ("e", "c", "a")},
@@ -2030,7 +2032,8 @@ def skelettsummor(antal: int, profil: str = "prov",
 def foreslag_antal(tid_min: int, profil: str = "prov",
                    takt: float | None = None,
                    mix: tuple[float, float, float] | None = None,
-                   niva_mal: dict | None = None) -> dict:
+                   niva_mal: dict | None = None,
+                   kurs: str = "") -> dict:
     """Hur många uppgifter en given provtid rymmer — räknat på det SKELETT som
     faktiskt skulle byggas. {antal, poang, tid, takt}.
 
@@ -2049,9 +2052,15 @@ def foreslag_antal(tid_min: int, profil: str = "prov",
     hon flyttar gränsen eller stryker en uppgift.
 
     MED LÄRARENS TAKT (PROV_MIN_PER_POANG = 3,5 min/poäng, 2026-08-22):
-    80 minuter ger 9 uppgifter och 20 poäng, 90 ger 10 och 21, 100 ger 11 och
-    24. Med NP:s 4,4 gav samma 80 minuter 8 uppgifter och 17 poäng — och på 17
-    poäng ligger betygsgränserna tätare än läraren vill ha dem."""
+    80 minuter ger 9 uppgifter. Med NP:s 4,4 gav samma 80 minuter 8 uppgifter
+    och 17 poäng — och på 17 poäng ligger betygsgränserna tätare än läraren
+    vill ha dem.
+
+    POÄNGSUMMAN BEROR PÅ KURSEN sedan kursbreddningen: skelettet siktar mot
+    kursens uppmätta nivåmix, och ett E-tungt 1a-prov får fler och billigare
+    uppgifter än ett C-tungt 1c-prov på samma tid. 80 minuter ger 9 uppgifter
+    och 20 poäng i 1c, 2a och 2c, och 10 uppgifter i 1a. Utan kurs siktas det
+    mot hela materialets spann, och då blir det 9 uppgifter och 19 poäng."""
     takt = takt_for(profil) if takt is None else takt
     tid_min = max(5, int(tid_min or 0))
     bast: dict | None = None
@@ -2059,7 +2068,8 @@ def foreslag_antal(tid_min: int, profil: str = "prov",
         # Samma funktion som «Uppskatta tiden» frågar (skelettsummor), så att
         # de två knapparna inte kan svara olika på samma upplägg.
         kandidat = skelettsummor(n, profil, delar=(profil == "prov"),
-                                 mix=mix, niva_mal=niva_mal, takt=takt)
+                                 mix=mix, niva_mal=niva_mal, takt=takt,
+                                 kurs=kurs)
         tid = kandidat["tid"]
         # Närmast vinner; står två lika nära vinner det MINDRE provet. Ett prov
         # som ryms är alltid bättre än ett som spiller över lika mycket åt andra
@@ -2254,7 +2264,7 @@ def _avstand(andel: float, band: tuple[float, float]) -> float:
 
 
 def _straff(slots: list[dict], profil: str,
-            niva_mal: dict | None = None) -> float:
+            niva_mal: dict | None = None, kurs: str = "") -> float:
     """Hur långt skelettet ligger från målen, som ETT tal.
 
     Kvadrerade avstånd till bandkanterna (noll inuti bandet) plus en liten
@@ -2266,6 +2276,14 @@ def _straff(slots: list[dict], profil: str,
     och sedan lämnades skelettet obalanserat."""
     (prof_fm, prof_nm, _kr,
      kraver_klump, kraver_svar) = PROFILER.get(profil, PROFILER["prov"])
+    # Bandet är kursens eget när kursen är känd och läraren inte valt själv.
+    # NIVA_MAL i PROFILER är hela materialets spann och släpper igenom både
+    # 1a:s E-tyngd och 1c:s C-tyngd; sökningen ska inte nöja sig med det när
+    # den vet vilken av dem den bygger. Valideringen behåller det breda bandet
+    # — den ska fälla ett prov som är fel, inte ett som är en annan kurs.
+    eget_val = niva_mal is not None
+    if not eget_val and profil == "prov" and niva_rubrik.kursnyckel(kurs):
+        niva_mal = niva_rubrik.niva_mal_prov(kurs=kurs)
     nm = niva_mal or prof_nm
     doc = _skeleton_doc(slots)
     s = poangsummor(doc)
@@ -2293,7 +2311,7 @@ def _straff(slots: list[dict], profil: str,
         # låg med flit — den får aldrig kosta ett bandbrott någon annanstans.
         straff += 0.1 * sum((s["formagor"][f] / total - JAMN_FORMAGA) ** 2
                             for f in prof_fm)
-    if profil == "prov" and niva_mal is None:
+    if profil == "prov" and not eget_val:
         # NIVA_MAL är mätningen PLUS marginal, och marginalen finns bara för att
         # små prov ska kunna träffa den. Inuti bandet är straffet noll, så utan
         # det här skulle sökningen stanna var som helst där — systematiskt
@@ -2302,7 +2320,11 @@ def _straff(slots: list[dict], profil: str,
         # nog att gå före jämnhetsönskemålet ovan.
         # BARA utan eget nivåval: har läraren bett om «Bara E» är NP-spannet
         # fel mål, och en dragning dit hade slagits med hennes band för evigt.
-        for niva, band in niva_rubrik.NP_FORDELNING["poangandel"].items():
+        # KURSENS EGET SPANN när kursen är känd. Sedan kursbreddningen är
+        # NP_FORDELNING hela materialets spann — 1a ligger på 38–45 % E och 1c
+        # på 29–31 %, och ett band som rymmer båda drar ingenstans. Vet appen
+        # kursen drar den mot kursens egna siffror i stället.
+        for niva, band in niva_rubrik.fordelning(kurs).items():
             straff += 0.5 * _avstand(s[niva.lower()] / total, band) ** 2
     if profil == "prov":
         # Samma sak för räknargränsen: NP lägger 55–62 % av poängen i den
@@ -2345,6 +2367,15 @@ def _drag(slots: list[dict]) -> list[tuple[int, int, int]]:
                 provad[idx] += delta
                 if provad[idx] < 0 or sum(provad) < 1 or provad[idx] > 4:
                     continue
+                # KORTSVARSTAKET. Ett kortsvar är värt en till tre poäng i
+                # nationella provet — i alla tio lästa proven, kurs 1 som kurs
+                # 2 (niva_rubrik.ANALYSERADE_PROV). Taket stod bara i testet
+                # förut och höll av sig själv, tills nivåbandet vidgades med
+                # kurs 1 och sökningen började blåsa upp en rutinrad till fyra
+                # E-poäng för att nå E-andelen. Ett drag som bryter NP:s form
+                # för att träffa NP:s andel är inget drag.
+                if sl["typ"] == "rutin" and sum(provad) > 3:
+                    continue
                 if _karaktar(provad) != _karaktar(p):
                     continue
                 ut.append((i, idx, delta))
@@ -2352,7 +2383,8 @@ def _drag(slots: list[dict]) -> list[tuple[int, int, int]]:
 
 
 def _justera_skelett(slots: list[dict], profil: str = "prov",
-                     varv: int = 200, niva_mal: dict | None = None) -> bool:
+                     varv: int = 200, niva_mal: dict | None = None,
+                     kurs: str = "") -> bool:
     """Sök poängen fria från balansfel med enpoängsdrag, ett i taget, alltid
     det som sänker straffet mest. Returnerar True när skelettet är rent.
 
@@ -2361,14 +2393,14 @@ def _justera_skelett(slots: list[dict], profil: str = "prov",
     fastna i ett lokalt minimum — då lämnas skelettet som det är, och
     reparationsloopen i exam_gen får ta vid. Det är samma kontrakt som förut,
     fast utan pingpongen."""
-    nuvarande = _straff(slots, profil, niva_mal)
+    nuvarande = _straff(slots, profil, niva_mal, kurs)
     for _ in range(varv):
         if nuvarande <= 0:
             return True
         basta = None
         for i, idx, delta in _drag(slots):
             slots[i]["poang"][idx] += delta
-            varde = _straff(slots, profil, niva_mal)
+            varde = _straff(slots, profil, niva_mal, kurs)
             slots[i]["poang"][idx] -= delta
             if varde < nuvarande - 1e-12 and (basta is None or varde < basta[0]):
                 basta = (varde, i, idx, delta)
