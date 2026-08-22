@@ -270,9 +270,8 @@ def test_ett_svar_per_rad(rader):
 
 
 # ── SVARSRADEN HÖR TILL KRAVET ────────────────────────────────────────
-# LÄRARENS DOM 2026-08-22, om uppgift 7 på hennes prov («Undersök vilka tal a …
-# Ange villkoret och förklara varför övriga fall måste uteslutas», 2 p,
-# Fullständig lösning krävs): «Fullständig lösning krävs ⇒ eleven skriver på
+# LÄRARENS DOM 2026-08-22, om en redovisningsuppgift (2 p, Fullständig
+# lösning krävs) på hennes prov som ändå fick en svarsrad: «Fullständig lösning krävs ⇒ eleven skriver på
 # lösblad ⇒ INGEN svarsrad på provpappret. Svar: ____ finns BARA på
 # uppgifter/deluppgifter med Endast svar krävs.»
 #
@@ -294,9 +293,7 @@ def test_ingen_svarsrad_pa_redovisningsuppgift(tmp_path):
              "text": "Beräkna $2^5$.", "losning": "32.", "bedomning": "+1 E."},
             # Modellen har lagt svarsfält på en uppgift som ska redovisas.
             {"formaga": "R", "typ": "redovisning", "poang": [0, 0, 2],
-             "text": "Undersök vilka tal $a$ som kan ges potensen "
-                     "$a^0 = 1$. Ange villkoret och förklara varför övriga "
-                     "fall måste uteslutas.",
+             "text": "Visa att $(n+1)^2 - n^2$ alltid är ett udda tal när $n$ är ett heltal. Motivera varje steg.",
              "svarsfalt": ["Villkor", "Motivering"],
              "enhet": "kr",
              "losning": "$a \\neq 0$.", "bedomning": "+2 A."},

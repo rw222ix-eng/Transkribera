@@ -795,7 +795,7 @@ test("svarsraden står bara på de uppgifter som bara kräver ett svar", async (
   const html = await page.evaluate(() => window.BladBygg.provblad(
     { typ: "Prov", moment: "potenser", kurs: "Matematik 1c", klass: "NA25" },
     [{ nr: 1, p: 1, t: "Beräkna $2^5$.", ut: "kort", niva: "E", enhet: "kr" },
-     { nr: 2, p: 2, t: "Undersök vilka tal $a$ … Ange villkoret och förklara.",
+     { nr: 2, p: 2, t: "Visa att $(n+1)^2 - n^2$ alltid är ett udda tal när $n$ är ett heltal. Motivera varje steg.",
        ut: "rakna", niva: "A" }],
     "B"));
   await satt(page, html);

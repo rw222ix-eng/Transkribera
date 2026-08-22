@@ -405,9 +405,8 @@ def test_har_bild_raknas_i_python_och_inte_i_mallen():
 
 # ── 7. SVARSRADEN HÖR TILL KRAVET ──────────────────────────────────────
 #
-# LÄRARENS DOM 2026-08-22, om uppgift 7 på hennes nya prov («Undersök vilka tal
-# $a$ … Ange villkoret på $a$ och förklara varför övriga fall måste uteslutas»,
-# 2 p, Fullständig lösning krävs): «Fullständig lösning krävs ⇒ eleven skriver
+# LÄRARENS DOM 2026-08-22, om en redovisningsuppgift (2 p, Fullständig
+# lösning krävs) på hennes nya prov som ändå fick en svarsrad: «Fullständig lösning krävs ⇒ eleven skriver
 # på lösblad ⇒ INGEN svarsrad på provpappret. Svar: ____ finns BARA på
 # uppgifter/deluppgifter med Endast svar krävs.»
 #
@@ -422,8 +421,7 @@ def test_har_bild_raknas_i_python_och_inte_i_mallen():
 def test_svarsraden_star_bara_pa_kortsvaren():
     html = _canvasprov([
         _uppg(nr=1, ut="kort", enhet="kr"),
-        _uppg(nr=2, ut="rakna", t="Undersök vilka tal $a$ som kan ges "
-                                  "potensen $a^{0} = 1$. Ange villkoret."),
+        _uppg(nr=2, ut="rakna", t="Visa att $(n+1)^2 - n^2$ alltid är ett udda tal när $n$ är ett heltal. Motivera varje steg."),
     ])
     assert html.count("prsvarnamn") == 1, "fel antal svarsrader i arket"
     # Raden hör till uppgift 1 — den som säger «Endast svar krävs».
