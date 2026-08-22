@@ -101,8 +101,14 @@ def test_provet_ur_kassetten_klarar_balansreglerna(fejk_claude):
     from app import exam_spec
     doc, fel = exam_spec.validate_exam_json(exam)
     assert doc is not None and fel == []
-    # Städningen tar toppnivån — och bara den.
-    assert "totalpoang" not in exam and "instruktion" not in exam
+    # Städningen tar de PÅHITTADE toppnycklarna — och bara dem. `instruktion`
+    # står inte längre i listan: fältet blev ett riktigt ExamDoc-fält när
+    # instruktionsbandet flyttade in i dokumentet, och modellen skriver det
+    # (tomt) på ett prov. Vakten mäter därför mot schemat i stället för mot en
+    # handskriven lista som glider ur fas med det.
+    assert "totalpoang" not in exam and "tid_minuter" not in exam
+    tillatna = set(exam_spec.ExamDoc.model_fields) | {"del"}
+    assert set(exam) <= tillatna, sorted(set(exam) - tillatna)
     assert all("del" in u and "poang" in u for u in exam["uppgifter"])
 
 

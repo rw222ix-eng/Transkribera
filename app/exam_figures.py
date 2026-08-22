@@ -122,7 +122,11 @@ def _funktionsgraf(fn, xlo: float, xhi: float, samples: int = 80) -> str:
     pts = " ".join(f"({_f(X(x))},{_f(Y(y))})" for x, y in zip(xs, ys))
     rader += [
         rf"\begin{{scope}}\clip (0,0) rectangle ({_f(BOXW)},{_f(BOXH)});",
-        rf"\draw[very thick] plot coordinates {{{pts}}};",
+        # BLÅ KURVA — lärarens förlaga sätter sin graf med
+        # \addplot[blue, very thick], och det är den kurvan hon känner igen.
+        # Rutnätet är grått, axlarna svarta; kurvan är det enda färgade på
+        # pappret och syns därför även i en trött kopiator.
+        rf"\draw[blue,very thick] plot coordinates {{{pts}}};",
         r"\end{scope}",
     ]
     # y=f(x)-etiketten placeras i den övre kant-region (vänster/mitt/höger) som

@@ -114,6 +114,24 @@ $\left(\frac{n(n+1)}{2}\right)$ och $\sqrt{\frac{x}{2}}$.
   \pic["$v$",draw,angle radius=8mm,angle eccentricity=1.35]{angle=X--O--P};
   \draw[domain=-2:2,smooth,samples=40] plot(\x,{exp(\x*ln(2))});
 \end{tikzpicture}
+% ── TS1-GLYFERNA I VARJE GRAD OCH VARJE SNITT ────────────────────────────
+% Tankstreck, typografiska citattecken och den centrerade punkten ligger i
+% TS1-kodningen, inte i T1 — och TS1 har EGNA fontfiler per grad och snitt
+% (ts1-lmbx12, ts1-lmr10 …). app/exam_latex escapar dem ur modellens och
+% lärarens text, så de kan dyka upp var som helst på pappret: i titeln
+% (\LARGE\bfseries), i delrubriken (\Large\bfseries), i löptexten, i kursiven.
+% En titel som «Prov · former» fällde --only-cached på exakt det: «Font
+% TS1/lmr/bx/n/20.74=ts1-lmbx12 at 20.74pt not loadable». Alla grader och
+% snitt mallarna använder måste därför kompileras HÄR en gång.
+\newcommand{\tsprov}{\textendash{} \textemdash{} \textperiodcentered{}
+  \textquotedblleft x\textquotedblright{} \textquoteleft x\textquoteright{}
+  \textquotedbl{} \guillemotleft x\guillemotright{} \ldots}
+{\LARGE\bfseries\tsprov}\par {\LARGE\tsprov}\par
+{\Large\bfseries\tsprov}\par {\Large\tsprov}\par
+{\large\bfseries\tsprov}\par {\large\tsprov}\par
+{\bfseries\tsprov}\par {\itshape\tsprov}\par \tsprov\par
+{\small\tsprov}\par {\small\bfseries\tsprov}\par {\small\itshape\tsprov}\par
+{\footnotesize\tsprov}\par {\tiny\tsprov}\par
 \colorbox{ink700}{\textcolor{white}{Band}}
 \begin{tabularx}{\linewidth}{@{}lX@{}}A & B \\\end{tabularx}
 \begin{tabular}{lc}\toprule \textbf{Betyg} & \textbf{Poäng} \\ \midrule
@@ -148,7 +166,12 @@ def _representative_doc() -> exam_spec.ExamDoc:
     exponentialmodeller — vanliga i riktiga Ma2/Ma3-prov — verkligen dras
     in i cachen både i uppgift- och deluppgift-miljön."""
     return exam_spec.ExamDoc(
-        titel="Sondprov — cacheseedning",
+        # Titeln bär med FLIT de tecken som escapas till TS1-kommandon
+        # (tankstreck, centrerad punkt, citattecken). Den sätts i \LARGE\bfseries
+        # på försättsbladet och i \normalsize i sidhuvudet, alltså precis de
+        # två grader som en lärartitel med ett tankstreck i skulle kräva — och
+        # som fällde --only-cached innan sonden kompilerade dem.
+        titel="Sondprov — «cacheseedning» · del 1–2",
         kurs="Matematik 1c",
         klass="Sond",
         datum="2026-07-20",

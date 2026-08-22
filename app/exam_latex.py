@@ -299,7 +299,11 @@ def _svarsrutor_vy(r, *, facit: bool):
     if r is None:
         return None
     return {
-        "etikett": escape_mixed(r.etikett),
+        # Makrot sätter själv kolonet (\svarsrutor skriver \textbf{#1:}), så en
+        # etikett som redan slutar på ett fick två: «Milos slutsats är riktig::»
+        # stod på lärarens papper. Kolonet hör till SÄTTNINGEN, inte till
+        # texten, och strippas därför här.
+        "etikett": escape_mixed(str(r.etikett or "").rstrip(": ")),
         "val": [{"text": escape_mixed(v),
                  "ratt": facit and r.ratt is not None and i == r.ratt}
                 for i, v in enumerate(r.val)],
