@@ -296,23 +296,6 @@ def moment_som_foll(rattat: dict | None) -> list[str]:
 # Ingen elev når språkmodellen vid namn (app/elev_feedback.py) — men här, i
 # räknandet, finns bara id:n ändå.
 
-def _bar_granser(sparade, total: int) -> bool:
-    """Bär pappret färdiga kravgränser som fortfarande gäller för det?
-
-    Gäller = samma totalpoäng. Gränserna följer med det sparade dokumentet
-    (plan.js sätter `granser` på pappret ur serverns svar), men uppgifterna går
-    att redigera efteråt — och gränser räknade på 27 poäng säger ingenting om
-    ett papper som numera ger 31. Stämmer inte summan räknas de om; stämmer den
-    är de sparade talen provets egna."""
-    if not isinstance(sparade, dict):
-        return False
-    for b, falt in (("E", "minst"), ("C", "minst"), ("A", "minst")):
-        d = sparade.get(b)
-        if not isinstance(d, dict) or not isinstance(d.get(falt), int):
-            return False
-    return sparade.get("total") == total
-
-
 def granser(rader: list[dict], config: dict | None = None,
             sparade: dict | None = None) -> dict:
     """Provets kravgränser, räknade på RADERNA.
@@ -334,7 +317,7 @@ def granser(rader: list[dict], config: dict | None = None,
             continue
         p = r.get("peca") or _peca_fallback(int(r.get("p") or 0), None)
         e, c, a = e + int(p[0]), c + int(p[1]), a + int(p[2])
-    grund = (dict(sparade) if _bar_granser(sparade, e + c + a)
+    grund = (dict(sparade) if exam_spec.giltiga_granser(sparade, e + c + a)
              else exam_spec.kravgranser_ur_summor(
                  {"total": e + c + a, "e": e, "c": c, "a": a}, config))
     return grund | {

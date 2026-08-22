@@ -3363,6 +3363,35 @@ def add_exam_version(conn: sqlite3.Connection, exam_id: int,
     return get_exam(conn, exam_id)
 
 
+def stampla_exam_granser(conn: sqlite3.Connection, exam_id: int,
+                         version_id: int | None, granser: dict) -> dict | None:
+    """Skriv kravgränserna i en BEFINTLIG versions JSON — ingen ny version.
+
+    Gränserna är inte en ändring av pappret; de är en anteckning om vad som
+    gällde när det trycktes (exam_spec.ExamDoc.granser). En ny version hade
+    flyttat pekaren och lagt .tex/.pdf på ett varv läraren aldrig pekade ut —
+    hela poängen med `version_id` i set_exam_artifacts — och gett en ångra-
+    historik full av varv som ser identiska ut.
+
+    Stämplas bara en gång: bär versionen redan gränser rörs den inte."""
+    if version_id is None:
+        return None
+    row = conn.execute(
+        "SELECT exam_json FROM exam_versions WHERE id = ? AND exam_id = ?",
+        (version_id, exam_id)).fetchone()
+    if row is None:
+        return None
+    data = json.loads(row["exam_json"])
+    if data.get("granser"):
+        return data
+    data["granser"] = granser
+    conn.execute("UPDATE exam_versions SET exam_json = ? WHERE id = ? "
+                 "AND exam_id = ?",
+                 (json.dumps(data, ensure_ascii=False), version_id, exam_id))
+    conn.commit()
+    return data
+
+
 def set_current_exam_version(conn: sqlite3.Connection, exam_id: int,
                              version_id: int) -> dict | None:
     """Peka provet på en TIDIGARE version — det läraren ser är det som gäller.

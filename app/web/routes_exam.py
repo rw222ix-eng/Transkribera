@@ -933,6 +933,29 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     if doc is None:
                         errors = val_errors
                         break
+                    # ── KRAVGRÄNSERNA STÄMPLAS HÄR, EN GÅNG ───────────
+                    # Det här är stunden pappret blir ett papper: gränserna som
+                    # trycks på försättsbladet skrivs in i dokumentet i stället
+                    # för att räknas om vid varje framtida tryck. Ändras regeln
+                    # (KRAV_DEFAULT) gäller den nya bara nya papper — ett prov
+                    # som redan skrivits bär sina egna gränser, och ett återtryck
+                    # ger samma PDF som klassen fick. Se ExamDoc.granser.
+                    #
+                    # Bara när fältet är TOMT: ett godkänt prov som godkänns om
+                    # (rättad text, ny bild) behåller de gränser det trycktes
+                    # med första gången. Är poängsumman en annan efteråt räknar
+                    # kravgranser om ändå — den prövar totalen.
+                    #
+                    # Ingen ny version: gränserna är inte en ändring av
+                    # pappret utan en anteckning om vad som gällde när det
+                    # trycktes. De skrivs in i den version som FAKTISKT
+                    # renderades (db.stampla_exam_granser), efter att
+                    # version_id är avgjort längre ner — annars hade .tex/.pdf
+                    # hamnat på ett varv läraren aldrig pekade ut.
+                    if not exam.get("granser"):
+                        exam["granser"] = exam_spec.kravgranser_ur_summor(
+                            exam_spec.poangsummor(doc))
+                    doc.granser = exam["granser"]
                     emit({"type": "log", "msg": "Renderar LaTeX …"})
                     # Typflaggan styr mallen (Fas 5): arbetsblad får facit-
                     # sida i samma dokument och ingen bedömningsanvisning.
@@ -1178,6 +1201,15 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     if exam != view["exam"]:
                         ny = db.add_exam_version(conn, exam_id, exam)
                         version_id = (ny or {}).get("current_version") or version_id
+                    # Kravgränserna skrivs in i det varv som renderades. Se
+                    # stämpeln i renderingsloopen: ett skrivet prov äger sina
+                    # gränser, och nästa tryck ska ge samma PDF även om regeln
+                    # ändrats. En fixrunda kan ha tappat fältet på vägen genom
+                    # modellen — därför stämplas det HÄR, på det varv som
+                    # faktiskt blev papper, och inte bara i JSON:en ovan.
+                    if exam.get("granser"):
+                        db.stampla_exam_granser(conn, exam_id, version_id,
+                                                exam["granser"])
                     # Godkänt MED ENBART .tex är ärligt: LaTeX:en finns och går
                     # att kompilera för hand. Godkänt UTAN någon fil alls är
                     # det inte — föll redan valideringen skrevs ingenting, och

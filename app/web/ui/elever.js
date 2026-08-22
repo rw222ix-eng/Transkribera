@@ -35,7 +35,7 @@
      vt22. Står de två uppsättningarna isär lovar skärmen ett betyg pappret inte
      ger — det var precis felet blad.js beskriver längre ned. Ändras KRAV_DEFAULT
      ändras raden här i samma commit. */
-  const KRAV = { e: 0.26, c: 0.54, cCa: 0.34, a: 0.79, aA: 0.50 };
+  const KRAV = { e: 0.26, c: 0.54, cCa: 0.34, a: 0.79, aA: 0.52 };
   function granserAv(rad) {
     let e = 0, c = 0, a = 0;
     rad.filter(r => !r.grupp).forEach(r => {

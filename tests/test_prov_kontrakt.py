@@ -167,6 +167,33 @@ def test_bedomningsanvisning_skrivs_bara_for_prov(client, monkeypatch):
     assert ark and not any(n.endswith(" - bedomning.tex") for n in ark), ark
 
 
+def test_godkannandet_stamplar_kravgranserna_i_dokumentet(client, monkeypatch):
+    """Godkännandet är stunden pappret blir ett papper: gränserna skrivs in i
+    prov-JSON:en i stället för att räknas om vid varje framtida tryck.
+
+    Utan stämpeln bar ett återtryck DAGENS regel — och NP-kalibreringen
+    2026-08-22 flyttade C-gränsen nio procentenheter. Ett prov från i maj hade
+    tryckts om i juni med andra gränser än klassen skrev det med."""
+    monkeypatch.setattr(exam_pdf, "engine_available", lambda: False)
+    _stub(monkeypatch)
+    ex = _done(client.post("/api/exams/generate", json={
+        "kurs": "Matematik, nivå 2c", "punkter_text": ["Derivator"]}))
+    assert ex["exam"].get("granser") is None      # inte modellens fält
+    r = _done(client.post(f"/api/exams/{ex['id']}/approve", json={}))
+    g = r["exam"]["granser"]
+    assert g["total"] == 20 and g["E"]["minst"] == 6 and g["C"]["minst"] == 11
+    assert g["regel"] and r["granser"] == g
+    # Stämpeln är en anteckning, inte en ändring: inget nytt varv i ångra-
+    # historiken, och pekaren står kvar där läraren lämnade den.
+    assert len(r["versions"]) == len(ex["versions"])
+    assert r["current_version"] == ex["current_version"]
+
+    # Regeln görs om — det godkända pappret bryr sig inte.
+    monkeypatch.setitem(exam_spec.KRAV_DEFAULT, "e_andel", 0.90)
+    r2 = _done(client.post(f"/api/exams/{ex['id']}/approve", json={}))
+    assert r2["exam"]["granser"] == g and r2["granser"]["E"]["minst"] == 6
+
+
 # ----------------------------------------------- formen frontenden läser --
 
 def test_svaret_bar_det_arket_behover(client, monkeypatch):

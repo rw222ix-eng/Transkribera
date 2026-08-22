@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import copy
 import json
+import logging
 import math
 import re
 from typing import Annotated, Literal, Union
@@ -28,6 +29,8 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 # ska gå att ifrågasätta, mätas om och bytas utan att motorreglerna rörs.
 # Beroendet går bara åt det här hållet — niva_rubrik importerar ingenting.
 from app import niva_rubrik
+
+_LOG = logging.getLogger(__name__)
 
 Formaga = Literal["B", "P", "PL", "M", "R", "K"]
 Uppgiftstyp = Literal["rutin", "redovisning", "problem", "resonemang"]
@@ -442,6 +445,22 @@ class ExamDoc(_Model):
     # aldrig av modellen — samma regel som `datum` och av samma skäl: modellen
     # fyllde i den tid den råkade skriva.
     klockslag: str | None = None         # «12:45–14:15»
+    # KRAVGRÄNSERNA SOM GÄLLDE NÄR PAPPRET SKREVS.
+    #
+    # Appens fält, aldrig modellens — poppas ur grammatiken i
+    # to_response_format av samma skäl som `klockslag` och `scen.plat`.
+    #
+    # Gränserna räknades förut fram vid VARJE anrop ur KRAV_DEFAULT. Det gjorde
+    # regeln till en global variabel med retroaktiv verkan: NP-kalibreringen
+    # 2026-08-22 flyttade C-gränsen nio procentenheter, och nästa gång ett prov
+    # från i maj trycktes om hade PDF:en burit andra gränser än det papper
+    # klassen faktiskt skrev. Ett skrivet prov äger sina gränser; regeln får
+    # ändras för nya papper och bara för dem.
+    #
+    # Stämplas vid godkännandet/första trycket (routes_exam) och läses därefter
+    # alltid av kravgranser() — försättsbladet, betygstabellen och
+    # bedömningsanvisningen går alla den vägen.
+    granser: dict | None = None
     hjalpmedel: str
     # Metodregeln som ETT beslut, överst på pappret: «Ställ upp ekvationen. Var
     # sitter den okända? I exponenten → logaritmera. I basen → upphöj till 1/n.»
@@ -512,6 +531,11 @@ def to_response_format(antal: int | None = None,
     # fält modellen fyller i — den skulle hitta på en starttid precis som den
     # hittade på ett datum. Bort ur schemat, kvar i modellen.
     schema["properties"].pop("klockslag", None)
+    # KRAVGRÄNSERNA STÅR INTE HELLER I GRAMMATIKEN. De RÄKNAS ur provets egna
+    # poäng (kravgranser) och stämplas av appen vid godkännandet. Såg modellen
+    # fältet skulle den skriva en betygstabell den hittat på — och den hade
+    # stått på försättsbladet.
+    schema["properties"].pop("granser", None)
     # PLÅTVALET STÅR INTE HELLER I GRAMMATIKEN. `scen.plat` är appens egen
     # matchning mot lärarens plåtkatalog (app/platar) och sätts efter
     # genereringen, precis som klockslaget. Står fältet i schemat fyller
@@ -1199,19 +1223,28 @@ def genomforbarhet(antal: int, profil: str = "prov") -> list[dict]:
 # A-poängen. Defaultvärdena nedan ligger mitt i de spannen.
 #
 # AVRUNDNINGEN är `math.ceil` och den ändrades inte: gränsen är minsta heltal
-# ≥ andel · summa, alltså aldrig UNDER den deklarerade andelen. Med de valda
-# andelarna träffar formeln NP:s egna tal exakt eller på ±1 poäng för båda
-# årgångarna (tests/test_exam.py::test_np_kalibrering_vt17_vt22) — och ±1 är
-# GOLVET, inte slarv: E var 14 p vt17 och 15 p vt22 på samma totalpoäng, så
-# ingen fast procentsats kan träffa båda åren exakt. Varav-kravet på C träffar
-# exakt båda åren.
+# ≥ andel · summa, alltså aldrig UNDER den deklarerade andelen.
+#
+# ══ PRINCIPEN: INGEN GRÄNS FÅR LIGGA UNDER NP:S ══
+# Ingen fast procentsats kan träffa båda årgångarna exakt — E var 14 p vt17 och
+# 15 p vt22 på samma totalpoäng — så varje andel måste välja sida i sitt spann.
+# Den ligger då över: en gräns UNDER NP:s delar ut ett betyg NP inte hade gett,
+# och det är felet som inte får göras på ett papper som säger «NP-modellen».
+# En gräns ett poäng över är strängare än NP och kan försvaras för en elev; en
+# under kan inte försvaras för nästa elev som fick samma betyg av rätt skäl.
+#
+# Talen nedan uppfyller därför 0 ≤ appens gräns − NP:s gräns ≤ 1 för ALLA fem
+# betygsgränser och båda årgångarna, låst i
+# tests/test_exam.py::test_np_kalibrering_ligger_aldrig_under_np. Det var
+# `a_varav_a` som styrde valet: 0,50 gav 7 av 13 (vt17, +1) men 6 av 12 (vt22,
+# −1) — ett snäpp UNDER NP:s sju. 0,52 ger 7 båda åren.
 
 KRAV_DEFAULT = {
     "e_andel": 0.26,       # E: minst 26 % av totalpoängen (NP: 25–27 %)
     "c_andel": 0.54,       # C: minst 54 % av totalpoängen (NP: 53–55 %) ...
     "c_varav_ca": 0.34,    # ... varav minst 34 % av C+A-poängen (NP: 11/32)
     "a_andel": 0.79,       # A: minst 79 % av totalpoängen (NP: 78–80 %) ...
-    "a_varav_a": 0.50,     # ... varav minst 50 % av A-poängen (NP: 46 %/58 %)
+    "a_varav_a": 0.52,     # ... varav minst 52 % av A-poängen (NP: 46 %/58 %)
 
     # ── MELLANBETYGEN D OCH B: räknas, trycks inte ──
     # NP har fem gränser (E, D, C, B, A). Lärarens förlaga (docs/forlagor/) har
@@ -1274,9 +1307,59 @@ def kravgranser_ur_summor(summor: dict, config: dict | None = None) -> dict:
     return granser
 
 
-def kravgranser(doc: ExamDoc, config: dict | None = None) -> dict:
-    """Kravgränser för E/C/A ur provets faktiska poängfördelning."""
-    return kravgranser_ur_summor(poangsummor(doc), config)
+def giltiga_granser(granser, total: int) -> bool:
+    """Bär `granser` färdiga tal som fortfarande gäller för ett papper på
+    `total` poäng?
+
+    Gäller = samma totalpoäng. Uppgifterna går att redigera efter att gränserna
+    stämplades, och gränser räknade på 27 poäng säger ingenting om ett papper
+    som numera ger 31. Stämmer inte summan räknas de om.
+
+    Delas med app/rattning.py: elevens betyg och försättsbladets tabell måste
+    ställa exakt samma fråga om exakt samma tal."""
+    if not isinstance(granser, dict):
+        return False
+    for b, falt in (("E", "minst"), ("C", "minst"), ("A", "minst")):
+        d = granser.get(b)
+        if not isinstance(d, dict) or not isinstance(d.get(falt), int):
+            return False
+    return granser.get("total") == total
+
+
+def kravgranser(doc: ExamDoc, config: dict | None = None,
+                papper: dict | None = None) -> dict:
+    """Kravgränser för E/C/A — provets egna om det bär några.
+
+    Ordningen är en rangordning i tid, och den finns för att ett SKRIVET prov
+    äger sina gränser (se ExamDoc.granser):
+
+    1. `doc.granser` — stämplade när pappret godkändes. Gäller.
+    2. `papper["granser"]` — dokumentets, satta av plan.js ur serverns svar.
+       Gamla papper från före stämpeln har dem, och de är samma tal som stod på
+       PDF:en den dagen.
+    3. Räknat ur KRAV_DEFAULT, med en loggrad. Det är ett papper ingen vet
+       gränserna för, och då är dagens regel det ärligaste svaret — men det ska
+       synas i loggen att det HÄNDE, för det betyder att ett gammalt prov kan
+       ha tryckts om med andra gränser än det skrevs med.
+
+    `config` gäller bara steg 3: sparade gränser är tal, inte en regel att
+    räkna om."""
+    summor = poangsummor(doc)
+    total = int(summor.get("total") or 0)
+    egna = getattr(doc, "granser", None)
+    if giltiga_granser(egna, total):
+        return dict(egna)
+    ur_papper = (papper or {}).get("granser")
+    if giltiga_granser(ur_papper, total):
+        return dict(ur_papper)
+    if egna is not None or ur_papper is not None:
+        _LOG.info("Kravgränserna på «%s» gällde en annan poängsumma än "
+                  "papprets %d p — räknas om ur dagens regel.", doc.titel, total)
+    else:
+        _LOG.info("«%s» bär inga sparade kravgränser — räknas ur KRAV_DEFAULT "
+                  "(%d p). Ett gammalt papper kan ha skrivits med andra.",
+                  doc.titel, total)
+    return kravgranser_ur_summor(summor, config)
 
 
 # Karaktärsmix per profil: hur stor andel av UPPGIFTERNA som ska vara E-, C-

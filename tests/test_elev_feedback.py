@@ -63,7 +63,7 @@ def test_prompten_bar_uppgifterna_med_nivapoang():
 def test_prompten_bar_kravgranserna():
     txt = elev_feedback.build_granser(GRANSER)
     assert "Provet är 11 p" in txt and "E från 3 p" in txt
-    assert "C från 6 p varav 3 p" in txt and "A från 9 p varav 2 p" in txt
+    assert "C från 6 p varav 3 p" in txt and "A från 9 p varav 3 p" in txt
 
 
 def test_prompten_bar_klassens_utfall():

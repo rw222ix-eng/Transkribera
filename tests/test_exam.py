@@ -686,15 +686,95 @@ def test_np_kalibrering_varav_kraven_ar_exakta():
         assert g["B"]["varav_a"] == facit["B"][1]
 
 
-def test_np_kalibrering_ligger_aldrig_mer_an_en_poang_under():
-    """Gränsen får hamna ett snäpp över NP:s (ceil rundar uppåt) men aldrig
-    lägre än ett poäng under — då hade provet delat ut betyg NP inte ger."""
+def test_np_kalibrering_ligger_aldrig_under_np():
+    """PRINCIPEN, och den är hela kalibreringens dom: 0 ≤ appens gräns − NP:s
+    gräns ≤ 1, för varje gräns och båda årgångarna.
+
+    En gräns UNDER NP:s delar ut ett betyg NP inte hade gett — det får inte
+    hända på ett papper som säger «NP-modellen». Ett snäpp ÖVER är strängare än
+    NP och går att försvara. Faller det här testet är det inte talen som ska
+    justeras förrän någon förklarat vilken elev som ska förlora på det."""
     for ar in ("vt17", "vt22"):
         summor, facit = _NP[ar]
         g = exam_spec.kravgranser_ur_summor(summor, {"mellanbetyg": True})
-        for b in ("E", "C", "A"):
-            minst = facit[b] if b == "E" else facit[b][0]
-            assert g[b]["minst"] >= minst - 1
+        krav = [("E", "minst", facit["E"])]
+        for b in ("D", "C", "B", "A"):
+            falt = "varav_a" if b in ("A", "B") else "varav_ca"
+            krav += [(b, "minst", facit[b][0]), (b, falt, facit[b][1])]
+        for b, falt, np in krav:
+            assert 0 <= g[b][falt] - np <= 1, f"{ar} {b}.{falt}: {g[b][falt]} mot NP:s {np}"
+
+
+# ── Provet bär sina egna gränser ─────────────────────────────────────────────
+
+def test_pappret_trycks_med_sina_sparade_granser(monkeypatch):
+    """Ett godkänt prov bär `granser` i JSON:en, och DE talen står i TeX:en —
+    även efter att KRAV_DEFAULT ändrats.
+
+    Utan fältet räknades gränserna om vid varje tryck: ett prov från i maj hade
+    tryckts om i juni med juni-regelns siffror, och PDF:en i högen hade sagt
+    något annat än pappret klassen skrev."""
+    rad = _exam()
+    rad["granser"] = {"total": 20, "E": {"minst": 5},
+                      "C": {"minst": 9, "varav_ca": 4},
+                      "A": {"minst": 13, "varav_a": 2},
+                      "regel": "Regeln som gällde i maj."}
+    doc, fel = exam_spec.validate_exam_json(rad)
+    assert fel == [] and doc is not None
+    # Regeln görs om helt under fötterna på pappret.
+    monkeypatch.setitem(exam_spec.KRAV_DEFAULT, "e_andel", 0.90)
+    monkeypatch.setitem(exam_spec.KRAV_DEFAULT, "c_andel", 0.95)
+    assert exam_spec.kravgranser(doc)["E"]["minst"] == 5      # inte 18
+    tex = exam_latex.render_prov(doc)
+    # Betygstabellens spann byggs ur gränserna: F 0–4, E 5–8, C 9–12, A 13–20.
+    # Med dagens regel hade E-raden börjat på 6 och C på 11.
+    for spann in (r"0\textendash{}4", r"5\textendash{}8",
+                  r"9\textendash{}12", r"13\textendash{}20"):
+        assert spann in tex, spann
+    # Bedömningsanvisningen läser samma gränser och ska säga samma sak.
+    bed = exam_latex.render_bedomning(doc)
+    assert "E minst 5" in bed and "C minst 9 varav 4 C/A" in bed
+    assert "A minst 13 varav 2 A" in bed
+
+
+def test_papper_utan_sparade_granser_raknas_ur_dagens_regel():
+    """Gamla dokument — skrivna före stämpeln — har inget fält. Då gäller
+    KRAV_DEFAULT, och det är allt appen kan veta."""
+    doc, _ = exam_spec.validate_exam_json(_exam())
+    assert doc.granser is None
+    assert exam_spec.kravgranser(doc) ==         exam_spec.kravgranser_ur_summor(exam_spec.poangsummor(doc))
+
+
+def test_papprets_egna_granser_gar_fore_nar_dokumentet_bar_dem():
+    """Mellansteget: dokumentet i basen bär `granser` (plan.js sätter dem) men
+    prov-JSON:en gör det inte. Papprets tal gäller ändå."""
+    doc, _ = exam_spec.validate_exam_json(_exam())
+    papper = {"granser": {"total": 20, "E": {"minst": 5},
+                          "C": {"minst": 9, "varav_ca": 4},
+                          "A": {"minst": 13, "varav_a": 2},
+                          "regel": "Papprets regel."}}
+    assert exam_spec.kravgranser(doc, papper=papper)["C"]["minst"] == 9
+
+
+def test_granser_for_en_annan_poangsumma_raknas_om():
+    """Uppgifterna går att redigera efter stämpeln. Gränser för 55 poäng säger
+    ingenting om ett prov som ger 20 — då är raden skräp, inte ett löfte."""
+    rad = _exam()
+    rad["granser"] = {"total": 55, "E": {"minst": 15},
+                      "C": {"minst": 30, "varav_ca": 11},
+                      "A": {"minst": 44, "varav_a": 7}, "regel": "Annat papper."}
+    doc, _ = exam_spec.validate_exam_json(rad)
+    g = exam_spec.kravgranser(doc)
+    assert g["total"] == 20 and g["E"]["minst"] == 6
+
+
+def test_granserna_star_inte_i_grammatiken():
+    """Ser modellen fältet fyller den i det — och då hade den skrivit en
+    betygstabell den hittat på, rakt på försättsbladet. Samma regel som
+    `klockslag` och `scen.plat`."""
+    schema = exam_spec.to_response_format()["json_schema"]["schema"]
+    assert "granser" not in schema["properties"]
+    assert "klockslag" not in schema["properties"]
 
 
 def test_kravgranser_configurable():

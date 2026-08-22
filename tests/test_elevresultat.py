@@ -108,14 +108,14 @@ def test_granserna_ar_forsattsbladets():
     assert g["total"] == 11
     assert g["E"]["minst"] == 3          # ceil(11 · 0,26)
     assert g["C"] == {"minst": 6, "varav_ca": 3}   # ceil(11·0,54), ceil(8·0,34)
-    assert g["A"] == {"minst": 9, "varav_a": 2}    # ceil(11·0,79), ceil(4·0,50)
+    assert g["A"] == {"minst": 9, "varav_a": 3}    # ceil(11·0,79), ceil(4·0,52)
 
 
 # ------------------------------------------------------------------ betyget --
 
 GRANSER = exam_spec.kravgranser_ur_summor({"total": 100, "e": 30, "c": 35,
                                            "a": 35})
-# E ≥ 26, C ≥ 54 varav ≥ 24 av C+A, A ≥ 79 varav ≥ 18 av A (NP-kalibrerat).
+# E ≥ 26, C ≥ 54 varav ≥ 24 av C+A, A ≥ 79 varav ≥ 19 av A (NP-kalibrerat).
 
 
 def test_de_fyra_utfallen():
@@ -130,7 +130,7 @@ def test_exakt_pa_gransen_ger_betyget():
     nått den."""
     assert rattning.betyg({"total": 26, "e": 26, "c": 0, "a": 0}, GRANSER) == "E"
     assert rattning.betyg({"total": 54, "e": 30, "c": 24, "a": 0}, GRANSER) == "C"
-    assert rattning.betyg({"total": 79, "e": 30, "c": 31, "a": 18}, GRANSER) == "A"
+    assert rattning.betyg({"total": 79, "e": 30, "c": 30, "a": 19}, GRANSER) == "A"
 
 
 def test_c_totalen_utan_c_villkoret_ar_e():
