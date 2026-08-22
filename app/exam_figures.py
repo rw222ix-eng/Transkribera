@@ -119,22 +119,31 @@ def _funktionsgraf(fn, xlo: float, xhi: float, samples: int = 80) -> str:
         rf"\draw[->] (0,{_f(y0)})--({_f(BOXW + 0.3)},{_f(y0)}) node[right]{{$x$}};",
         rf"\draw[->] ({_f(x0)},0)--({_f(x0)},{_f(BOXH + 0.3)}) node[above]{{$y$}};",
     ]
-    # TICK-ETIKETTERNA LIGGER PÅ RUTNÄTET, inte utanför det: med
-    # `axis lines = center` går axlarna genom origo och etiketterna hamnar mitt
-    # i rutnätet. Utan en vit platta bakom drar major-linjen ett streck rakt
-    # genom «-10», och en avläsningsuppgift blir omöjlig att läsa av. Plattan
-    # är precis så stor som siffran (inner sep=1pt) och flyttar ingenting.
-    _PLATTA = "fill=white,inner sep=1pt"
+    # ── TICK-ETIKETTERNA LIGGER UTANFÖR AXLARNA ───────────────────────
+    # Lärarens dom över den första skarpa renderingen (2026-08-22): «2 4 6»
+    # stod PÅ x-axeln och «-5»/«-10» ovanpå y-axeln, med «-5» dessutom rakt
+    # över kurvan. Etiketterna satt vid axeln (som `axis lines = center` ger)
+    # med en vit platta bakom sig, och plattan bet av axellinjen på fem
+    # ställen — en avläsningsuppgift där man inte kan följa axeln.
+    #
+    # Nu står SIFFRORNA utanför ritrutan, som i förlagans pgfplots-recept:
+    # x-talen under rutans nederkant, y-talen till vänster om dess vänsterkant.
+    # STRECKEN sitter kvar på axeln, så det syns var axeln korsar; rutnätet är
+    # det som binder ihop strecket med siffran. Ingen vit platta behövs, och
+    # ingen etikett kan längre hamna ovanpå kurvan.
+    _UT = 0.18                            # luft mellan ruta och siffra (cm)
     for xt, gx in zip(xticks, xmaj):
         if abs(xt) < 1e-9:
             continue
-        rader.append(rf"\draw ({_f(gx)},{_f(y0 - 0.08)})--({_f(gx)},{_f(y0 + 0.08)}) "
-                     rf"node[below,{_PLATTA}]{{\footnotesize {_flabel(xt)}}};")
+        rader.append(rf"\draw ({_f(gx)},{_f(y0 - 0.08)})--({_f(gx)},{_f(y0 + 0.08)});")
+        rader.append(rf"\node[below] at ({_f(gx)},{_f(-_UT)}) "
+                     rf"{{\footnotesize {_flabel(xt)}}};")
     for yt, gy in zip(yticks, ymaj):
         if abs(yt) < 1e-9:
             continue
-        rader.append(rf"\draw ({_f(x0 - 0.08)},{_f(gy)})--({_f(x0 + 0.08)},{_f(gy)}) "
-                     rf"node[left,{_PLATTA}]{{\footnotesize {_flabel(yt)}}};")
+        rader.append(rf"\draw ({_f(x0 - 0.08)},{_f(gy)})--({_f(x0 + 0.08)},{_f(gy)});")
+        rader.append(rf"\node[left] at ({_f(-_UT)},{_f(gy)}) "
+                     rf"{{\footnotesize {_flabel(yt)}}};")
     pts = " ".join(f"({_f(X(x))},{_f(Y(y))})" for x, y in zip(xs, ys))
     rader += [
         rf"\begin{{scope}}\clip (0,0) rectangle ({_f(BOXW)},{_f(BOXH)});",
