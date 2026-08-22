@@ -4310,6 +4310,14 @@
             && (godkant.inst || {}).facit !== 'Facit i bladet',
           version: godkant.provVersion || null,
           blad,
+          /* LÄRARENS EGNA BILDER. De bor bara här i webbläsarens dokument
+             (valjBild skriver v.bilder) och har aldrig funnits i provets JSON.
+             Så länge PDF:en var en avritning av skärmen räckte det — bilden
+             fanns ju på skärmen. Provet sätts numera i LaTeX efter lärarens
+             egen förlaga, och utan den här raden tappar ett prov med ett
+             inlagt foto fotot i tryck. Servern plockar ut «uppgN» och lägger
+             dem i mallens bildplats (app/tryck.egna_bilder). */
+          bilder: godkant.bilder || {},
         }))
         .then(kravGodkant)
         .then(r => {

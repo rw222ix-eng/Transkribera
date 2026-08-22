@@ -294,7 +294,7 @@ window.Blad = (() => {
             + rad('Del B', `${versal(omrade(antalB + 1, plock.length))}.${delB} ${redovisas}`));
     }
     const not = $('.prnot', trav);
-    if (not) not.innerHTML = `Provet ger högst <b>${summa} poäng</b>${enDel ? '' : ` — ${sumB} på del A och ${summa - sumB} på del B`}. Efter varje uppgift står hur många poäng den kan ge.${enDel ? '' : ' Uppgifter märkta «lösblad» redovisas på separat lösblad — visa hur du räknar och förklara varför.'} Skriv ditt namn på alla papper du lämnar in.${plock.some(u => !arE(u)) ? '' : ' Provet prövar E-nivån — det finns inga uppgifter för C och A på det här provet.'}`;
+    if (not) not.innerHTML = `Provet ger högst <b>${summa} poäng</b>${enDel ? '' : ` — ${sumB} på del A och ${summa - sumB} på del B`}. Efter varje uppgift står hur många poäng den kan ge.${enDel ? '' : ' Uppgifter märkta «Fullständig lösning krävs» redovisas på separat lösblad — visa hur du räknar och förklara varför.'} Skriv ditt namn på alla papper du lämnar in.${plock.some(u => !arE(u)) ? '' : ' Provet prövar E-nivån — det finns inga uppgifter för C och A på det här provet.'}`;
 
     /* ── BETYGSGRÄNSERNA ÄR SERVERNS, INTE SKÄRMENS ──────
        Här räknades gränserna med egna procentsatser — 30 % för E, 53 för C,

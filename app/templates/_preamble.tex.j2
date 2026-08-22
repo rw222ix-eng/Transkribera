@@ -1,14 +1,55 @@
 ((# Delad preamble för prov, arbetsblad och bedömningsanvisning.
     FAST — modellen genererar aldrig preamble, bara uppgiftsinnehåll.
     Variabler: sidhuvud (str), med_grafik (bool), med_svarsrad (bool),
-    med_tikz (bool). #))
+    med_tikz (bool), forlaga (bool).
+
+    ── FÖRLAGAN ÄR LÄRARENS EGET OVERLEAF-PROV ────────────────────────────
+    «Typ exakt så här vill jag att mina prov ska se ut.» Läraren lämnade först
+    in PDF:en och sedan LaTeX-källan till sitt eget prov (Ma 2c, kapitel 2,
+    NA25). Uppdraget blev därmed inte «efterlikna» utan «reproducera», och
+    `forlaga=true` nedan ÄR hennes preamble: exam-klassen med addpoints,
+    25 mm marginaler runt om, Computer Modern (ingen newtx), poängen i
+    högermarginalen via \pointsinrightmargin, 8 mm mellan uppgifter och 4 mm
+    mellan deluppgifter, och \svarsrad som ritar «Svar: ______».
+
+    RÖR INGENTING HÄR UTAN ATT JÄMFÖRA MOT KÄLLAN. Raderna är hennes val,
+    inte appens; det som skiljer sig från hennes fil står som kommentar med
+    skälet. tests/test_forlaga_matt.py låser de mått som pappret känns igen på.
+
+    TVÅ SKILLNADER MOT HENNES FIL, BÅDA TVUNGNA:
+      1. Hon kompilerar med pdfLaTeX och laddar inputenc; appens motor är
+         Tectonic (XeTeX), där inputenc inte gör något. Det inputenc gjorde åt
+         henne — «–» → \textendash — görs i stället i app/exam_latex.py
+         (_LATEX_SPECIALS), för Computer Modern har ingen glyf på U+2013 och
+         tecknet försvinner annars spårlöst.
+      2. Hon har ETT dokument per del; appen bygger ett dokument med båda
+         delarna, så delen i sidhuvudet kommer ur \markboth i stället för ur en
+         fast \runningheader, och Del B får \setcounter{question} så
+         numreringen löper vidare — precis som hennes andra fil gör.
+
+    Övriga papper (arbetsblad, gruppuppgift, diagnos, anteckningar) lämnas
+    orörda: de har sin egen form och sitt eget designsystem, och förlagan
+    gäller PROVET. #))
+((* if forlaga is defined and forlaga *))
+\documentclass[12pt, a4paper, addpoints]{exam}
+((* else *))
 \documentclass[12pt,a4paper]{article}
+((* endif *))
 \usepackage[T1]{fontenc}
 ((# amssymb FÖRE newtxmath — omvänd ordning ger
     "Command \openbox already defined". #))
 \usepackage{amsmath,amssymb}
+((* if not (forlaga is defined and forlaga) *))
 \usepackage{newtxtext,newtxmath}
+((* endif *))
+((* if forlaga is defined and forlaga *))
+((# Förlagans egen sättyta: 25 mm runt om (595,28 − 2·70,87 pt = 453,5 pt
+    textbredd, exakt lärarens). #))
+\usepackage[top=25mm, bottom=25mm, left=25mm, right=25mm]{geometry}
+\usepackage{booktabs}
+((* else *))
 \usepackage[margin=17mm,bottom=22mm]{geometry}
+((* endif *))
 \usepackage{xcolor}
 ((* if med_grafik *))
 \usepackage{graphicx}
@@ -17,10 +58,25 @@
     sätter ännu inte med_tikz (kommer i ett senare steg) — utan vakten
     skulle StrictUndefined få deras befintliga include att krascha. #))
 ((* if med_tikz is defined and med_tikz *))
+((* if forlaga is defined and forlaga *))
+((# Förlagan drar in pgfplots (och därmed tikz) för funktionsgrafen. Appens
+    figurrecept skriver ren tikz, men paketet laddas ändå: det är hennes
+    preamble, det ligger i den seedade cachen, och en figurtyp som en dag
+    behöver en axis-miljö ska inte falla på ett saknat paket offline. #))
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+((* endif *))
 \usepackage{tikz}
 \usetikzlibrary{angles,quotes}
 ((* endif *))
+((* if not (forlaga is defined and forlaga) *))
+((# fancyhdr laddas INTE i förlagaläget, trots att lärarens fil gör det.
+    exam-klassen definierar redan \lhead/\chead/\rhead, och den fancyhdr som
+    ligger i appens Tectonic-bunt avbryter med «Command \lhead already
+    defined». Paketet användes ändå aldrig: sidhuvudet sätts av exam-klassens
+    \pagestyle{headandfoot}. Hennes Overleaf har en äldre fancyhdr som teg. #))
 \usepackage{fancyhdr}
+((* endif *))
 \usepackage{lastpage}
 \usepackage{tabularx}
 \usepackage{enumitem}
@@ -42,6 +98,38 @@
 \definecolor{ink700}{HTML}{3A3835}
 \definecolor{ink500}{HTML}{6B6862}
 \definecolor{ink200}{HTML}{CDC8BD}
+((* if forlaga is defined and forlaga *))
+((# ── Sidhuvud / sidfot — förlagans egna rader ────────────────────────
+    Skillnaden mot hennes fil: delen står som \rightmark i stället för som en
+    fast sträng. Hon har ett dokument per del och kan hårdkoda «Del A»; appen
+    bygger ett dokument med båda, och en \runningheader som sätts om mitt i
+    löptexten gäller HELA den sida den råkar sättas på — alltså fel del på den
+    sida där en del tar slut. \markboth är det enda som är sidsäkert.
+
+    Försättsbladet är dokumentets första sida och får därför inget huvud alls
+    (\firstpageheader{}{}{}), precis som i hennes Del A-fil. #))
+((# Förlagan skriver \noindent på varje toppnivåstycke; bedömningsanvisningen
+    delar den här preamblen men inte den vanan, och dess första stycke stod
+    indraget. \parindent = 0 gör vanan onödig och ändrar INGENTING i provet:
+    dess stycken inne i \question styrs av listans \listparindent, som
+    exam-klassen redan sätter till noll (mätt: samma x = 91,7 pt före och
+    efter). #))
+\setlength{\parindent}{0pt}
+\pagestyle{headandfoot}
+\firstpageheader{}{}{}
+\runningheader{((( sidhuvud )))}{\rightmark}{}
+\runningheadrule
+\footer{}{}{}
+
+((# ── Poäng i marginalen ──────────────────────────────────────────── #))
+\pointsinrightmargin
+\pointformat{\thepoints~p}
+\pointname{}
+
+((# ── Avstånd mellan uppgifter ────────────────────────────────────── #))
+\renewcommand{\questionshook}{\setlength{\itemsep}{8mm}}
+\renewcommand{\partshook}{\setlength{\itemsep}{4mm}}
+((* else *))
 \color{ink900}
 \setlength{\parindent}{0pt}
 \setlength{\parskip}{4pt}
@@ -50,16 +138,79 @@
 \fancyhead[C]{\small\textcolor{ink500}{((( sidhuvud )))}}
 \fancyhead[R]{\small\textcolor{ink500}{\thepage\ av \pageref{LastPage}}}
 \renewcommand{\headrulewidth}{0pt}
+((* endif *))
 ((* if dokumentkod is defined and dokumentkod *))
 ((# Dokumentkoden: den anpassade kopians enda kännetecken. Liten, grå, i
     foten — den som får pappret ska inte kunna läsa av att det är anpassat,
     men läraren ska kunna se vilken kopia hon håller i. #))
+((* if forlaga is defined and forlaga *))
+((# exam-klassens headandfoot har en egen fot; fancyhdr styr den inte, och en
+    \fancyfoot här hade tyst inte visats alls. #))
+\footer{}{}{\tiny\textcolor{ink200}{((( dokumentkod )))}}
+\firstpagefooter{}{}{\tiny\textcolor{ink200}{((( dokumentkod )))}}
+((* else *))
 \fancyfoot[R]{\tiny\textcolor{ink200}{((( dokumentkod )))}}
 ((* endif *))
+((* endif *))
 
+((* if forlaga is defined and forlaga *))
+((# ══════════ FÖRLAGANS MÅTT (mätta i lärarens PDF, punkter) ══════════
+    Avlästa ur Ma_2c_prov_i_kapitel_2_Na25.pdf. Namnen säger vad de styr;
+    kommentaren efter varje säger var mätningen gjordes. #))
+((# Poängspalten: «1 p» börjar på x = 551,8 pt, alltså 27,4 pt UTANFÖR
+    satsytans högerkant (524,4 pt). Samma spalt för uppgift och deluppgift —
+    poängen är sidans, inte styckets. #))
+\newlength{\pfpoangskjut}\setlength{\pfpoangskjut}{27.4pt}
+((# Uppgiftens hängande nummer: brödtexten på x = 91,7 (20,8 pt in),
+    etikettboxen 14,9 pt bred med 5,9 pt mellanrum — «10.» fyller boxen exakt
+    och «1.» står högerställd i den. #))
+\newlength{\pfuppgindrag}\setlength{\pfuppgindrag}{20.8pt}
+\newlength{\pfuppgetikett}\setlength{\pfuppgetikett}{14.9pt}
+((# Deluppgiften: «(a)» högerställd i en 18,8 pt bred box, texten 24,7 pt in
+    från uppgiftens text (x = 116,4). #))
+\newlength{\pfdelindrag}\setlength{\pfdelindrag}{24.7pt}
+\newlength{\pfdeletikett}\setlength{\pfdeletikett}{18.8pt}
+\newlength{\pfetikettgap}\setlength{\pfetikettgap}{5.9pt}
+((# Uppgift → uppgift mäter 42,1 pt mellan baslinjerna. 14,5 av dem är
+    radavståndet självt, resten är listans \itemsep + \parsep. #))
+\newlength{\pfuppgluft}\setlength{\pfuppgluft}{22.6pt}
+((# Deluppgift → deluppgift mäter 28,3 pt mellan baslinjerna. #))
+\newlength{\pfdelluft}\setlength{\pfdelluft}{8.8pt}
+((# Stycke → stycke inne i en uppgift mäter 19,4 pt: radavstånd + 5 pt. #))
+\newlength{\pfstyckeluft}\setlength{\pfstyckeluft}{5pt}
+((# Uppgiftens första rad → första deluppgiften mäter 19,4 pt, alltså exakt
+    ett styckeavstånd: listan får samma \topsep som ett stycke. #))
+\newlength{\pflistluft}\setlength{\pflistluft}{4.9pt}
+((# Svarsraden: 22,6 pt från frågans sista rad ner till «Svar:», och 5,7 pt
+    extra under linjen innan nästa deluppgift. #))
+\newlength{\pfsvarover}\setlength{\pfsvarover}{8.1pt}
+\newlength{\pfsvarunder}\setlength{\pfsvarunder}{5.7pt}
+
+((# Poängen i högermarginalen för de papper som INTE går genom exam-klassens
+    \question (bedömningsanvisningen sätter uppgifterna med uppgift-miljön
+    nedan och visar poängtripeln E/C/A, som ingen \points kan uttrycka).
+    INTE \hfill: med \hfill hamnar poängen sist på den rad den råkar stå på,
+    och förlagan har den i en egen spalt utanför satsytan, i lod med
+    uppgiftens FÖRSTA rad. #))
+\newcommand{\poang}[1]{%
+  \makebox[0pt][l]{\hspace{\dimexpr\linewidth+\pfpoangskjut\relax}#1}}
+((* if med_svarsrad *))
+((# FÖRLAGANS EGET MAKRO, ordagrant. Notera att det saknar \par: två svarsrader
+    i rad hamnar därför på SAMMA rad och delar den lediga bredden lika — det är
+    så «Svar $p =$ ______  Svar andra lösningen: ______» och «Svar (i): ___
+    Svar (ii): ___» blir till. Ett \par här hade brutit isär dem, och det tog
+    en mätning i hennes PDF att förstå att det var meningen. #))
+\newcommand{\svarsrad}[1]{%
+  \vspace{2mm}%
+  \noindent #1 \hrulefill%
+  \vspace{2mm}%
+}
+((* endif *))
+((* else *))
 \newcommand{\poang}[1]{\hfill\mbox{\small(#1)}}
 ((* if med_svarsrad *))
 \newcommand{\svarsrad}{\par\vspace{4mm}\makebox[0.6\linewidth]{Svar: \dotfill}}
+((* endif *))
 ((* endif *))
 
 ((# ── Designsystemets layoutprimitiver ──────────────────────────────
@@ -95,6 +246,35 @@
 \setlength{\uppgiftgutter}{10.5mm}
 \newlength{\uppgiftbricka}
 \setlength{\uppgiftbricka}{7.5mm}
+((* if forlaga is defined and forlaga *))
+((# Förlagans uppgiftslista. Numret är ROMANT och följt av punkt («1.»,
+    «10.») — inte fetstilt som appens bricka; det är en numrerad lista, inte
+    en etikett. \makelabel med \hfil framför gör etiketten HÖGERSTÄLLD i sin
+    box, vilket är det som gör att ental och tiotal står i lod på förlagan.
+
+    \vspace{0pt} före listan och inte 8,5 mm: avståndet mellan uppgifterna
+    bärs av \itemsep, och en fast lucka före varje miljö hade lagts ovanpå
+    den. Uppgifterna sätts som separata uppgift-miljöer (mallen är byggd så),
+    så luften mellan två uppgifter är \pfuppgluft + \parsep — samma summa som
+    en riktig lista hade gett mellan två \item. #))
+\newenvironment{uppgift}[2]{%
+  \par\vspace{\dimexpr\pfuppgluft+\pfstyckeluft\relax}%
+  \begin{list}{}{%
+    \setlength{\leftmargin}{\pfuppgindrag}%
+    \setlength{\labelwidth}{\pfuppgetikett}%
+    \setlength{\labelsep}{\pfetikettgap}%
+    \setlength{\itemindent}{0pt}%
+    \setlength{\listparindent}{0pt}%
+    \setlength{\rightmargin}{0pt}%
+    \setlength{\topsep}{0pt}%
+    \setlength{\partopsep}{0pt}%
+    \setlength{\parsep}{\pfstyckeluft}%
+    \setlength{\itemsep}{0pt}%
+    \renewcommand{\makelabel}[1]{\hfil ##1}}%
+  \item[#1.]\if\relax\detokenize{#2}\relax\else\poang{#2}\fi
+  \ignorespaces}%
+  {\end{list}}
+((* else *))
 \newenvironment{uppgift}[2]{%
   \par\vspace{8.5mm}%
   \begin{list}{}{%
@@ -113,6 +293,7 @@
   \item[\bfseries #1]\if\relax\detokenize{#2}\relax\else\poang{#2}\fi
   \ignorespaces}%
   {\end{list}}
+((* endif *))
 
 ((# Kvadratisk bläckram, 0,4 mm (1,5 px). Inga rundade hörn — det är papper. #))
 \newcommand{\ramruta}[1]{%
@@ -139,6 +320,28 @@
 ((# Samma delning som uppgiftens gutter, och av samma skäl: «a)Vilket är
     rampens höjdökning» stod på lärarens papper i kväll. 4,5 mm åt markören
     och 2,5 mm åt mellanrummet — 7 mm ihop, alltså oförändrat indrag. #))
+((* if forlaga is defined and forlaga *))
+((# Förlagans deluppgift: «(a)», högerställd i sin box, poängen i sidans
+    spalt. Miljöerna sätts en och en (mallen loopar), så avståndet mellan två
+    deluppgifter är \pfdelluft + \parsep = förlagans 13,8 pt över
+    radavståndet; luften ner till den FÖRSTA är \pflistluft, alltså exakt ett
+    styckeavstånd, precis som i förlagan. #))
+\newenvironment{deluppgift}[2]{%
+  \par\vspace{\dimexpr\pfdelluft+\pfstyckeluft\relax}%
+  \begin{list}{}{%
+    \setlength{\leftmargin}{\pfdelindrag}%
+    \setlength{\labelwidth}{\pfdeletikett}%
+    \setlength{\labelsep}{\pfetikettgap}%
+    \setlength{\itemindent}{0pt}%
+    \setlength{\listparindent}{0pt}%
+    \setlength{\rightmargin}{0pt}%
+    \setlength{\topsep}{0pt}\setlength{\partopsep}{0pt}%
+    \setlength{\parsep}{\pfstyckeluft}\setlength{\itemsep}{0pt}%
+    \renewcommand{\makelabel}[1]{\hfil ##1}}%
+  \item[(#1)]\if\relax\detokenize{#2}\relax\else\poang{#2}\fi
+  \ignorespaces}%
+  {\end{list}}
+((* else *))
 \newenvironment{deluppgift}[2]{%
   \par\vspace{2.5mm}%
   \begin{list}{}{%
@@ -152,6 +355,7 @@
   \item[#1)]\if\relax\detokenize{#2}\relax\else\poang{#2}\fi
   \ignorespaces}%
   {\end{list}}
+((* endif *))
 
 ((# Kvadratisk kryssruta för flerval — tom ruta, inget typsnittsberoende
     (bygger på \fbox + \rule, alltid tillgängligt). #))
@@ -160,11 +364,23 @@
 ((# Svarsraden med led och/eller enhet: «$f'(x) =$ …………» och «………… kr».
     Ledet står FÖRE linjen (det hör till uttrycket), enheten EFTER den (den hör
     till svaret). Utan båda är den vanliga \svarsrad. #))
+((* if forlaga is defined and forlaga *))
+((# Samma svarsrad som \svarsrad, men med led före linjen och enhet efter:
+    «Svar $f'(x) =$ ______» och «Svar: ______ kr». Enheten är appens tillägg —
+    förlagan har ingen uppgift som ber om ett svar med enhet — men den sätts i
+    samma rad och med samma linje. #))
+\newcommand{\svarsradmed}[2]{%
+  \vspace{2mm}%
+  \noindent\if\relax\detokenize{#1}\relax Svar:\else Svar #1\fi\ \hrulefill
+  \if\relax\detokenize{#2}\relax\else\ #2\fi
+  \vspace{2mm}}
+((* else *))
 \newcommand{\svarsradmed}[2]{%
   \par\vspace{4mm}%
   \noindent\if\relax\detokenize{#1}\relax\else#1\ \fi
   \makebox[0.45\linewidth]{\dotfill}%
   \if\relax\detokenize{#2}\relax\else\ #2\fi\par}
+((* endif *))
 
 ((# Den namngivna ifyllnadsraden: «Ekvation: ………………». Etiketten är fet och står
     före linjen, som går ut i resten av satsytan — samma sättning som
@@ -218,3 +434,31 @@
       {\small #1}\end{minipage}}%
   \endgroup
   \par\vspace{2.5mm}}
+
+((* if forlaga is defined and forlaga *))
+((# ══════════ FÖRLAGANS EGNA SÄTTGREPP ══════════ #))
+
+((# Kravetiketten direkt efter numret: «Endast svar krävs.» / «Fullständig
+    lösning krävs.» Kursiv, på uppgiftens första rad, i lod med poängen.
+    Förlagan skriver den på VARJE uppgift — det är den eleven läser för att
+    veta om hon ska skriva svaret på pappret eller lösningen på lösblad. #))
+\newcommand{\pfkrav}[1]{\emph{#1}}
+
+((# Ledtråden: kursiv, egen rad, ingen ram. «Tips: Gör en skiss och kalla
+    bredden för $x$ cm.» Appens \notisruta ritar en låda runt samma text, och
+    en låda mitt i en uppgift läser som ett villkor i stället för som en
+    hjälpande hand. #))
+\newcommand{\pftips}[1]{\par\emph{#1}\par}
+
+((# Namnraden: fet etikett, linjen ut till satsytans kant — förlagans
+    «\noindent\textbf{Namn:} \hrulefill». #))
+\newcommand{\pfnamnrad}[1]{\par\noindent\textbf{#1:} \hrulefill\par}
+
+((# Hjälpmedelsradens hängande indrag. Förlagan har två färdiga rader och
+    skjuter in den andra med \hphantom{\textbf{Hjälpmedel:}}; appens
+    hjälpmedelsregel är EN mening som bryter var den vill, så samma bredd mäts
+    upp här och används som \hangindent. Samma indrag, oavsett hur lång
+    meningen blir. #))
+\newlength{\widthofhjalpmedel}
+\settowidth{\widthofhjalpmedel}{\textbf{Hjälpmedel:} }
+((* endif *))

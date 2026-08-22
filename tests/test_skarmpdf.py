@@ -21,6 +21,18 @@ Klienten ritar därför av varje blad och skickar bilderna med godkännandet
     reserven på lösningsrutten när godkännandet kom utan bilder,
   * .tex skrivs ALLTID — arkivet, och reserven.
 
+PROVET ÄR UNDANTAGET, och det är ett medvetet undantag. Läraren lämnade in
+sitt eget Overleaf-prov och sa «typ exakt så här vill jag att mina prov ska se
+ut» — provmallen är sedan dess en reproduktion av den filen (exam-klassen,
+25 mm marginaler, poängen i högermarginalen). En avritning av canvas kan per
+definition inte se ut som den: skärmen sätter Arimo i 794 px, LaTeX sätter
+Computer Modern på A4. Provet sätts därför ALLTID i LaTeX, även när klienten
+skickar blad, och lärarens egna inlagda bilder reser med anropet i stället
+(`bilder` i kroppen → app.tryck.egna_bilder). Övriga papper — arbetsblad,
+gruppuppgift, diagnos, anteckningar — har sin form på skärmen och ritas av som
+förut. Provets LÖSNINGSARK är också kvar på skärmvägen: det är lärarens eget
+papper och inte elevens.
+
 Det som skiljer de två sorternas PDF åt är textlagret: pdfium läser text ur en
 Tectonic-PDF och ingenting ur en bild. Det är hela mätningen i `_ar_bild`.
 """
@@ -127,11 +139,11 @@ def _tectonic(monkeypatch):
 def test_bladen_blir_pdfen_och_tectonic_far_vara(client, monkeypatch):
     """Tre avritade blad in — en PDF på tre sidor ut, utan textlager.
 
-    Och provet kompileras INTE: motorn rörs bara för bedömningsanvisningen.
-    Det är inte en optimering utan hela poängen — sätts pappret om i LaTeX är
-    det inte längre det läraren såg."""
+    Och Tectonic rörs inte: sätts pappret om i LaTeX är det inte längre det
+    läraren såg. Mätt på ARBETSBLADET, för det är där formen bor på skärmen —
+    provet har en egen mall (lärarens förlaga) och sitt eget test nedan."""
     from pathlib import Path
-    result = _skriv(client, monkeypatch)
+    result = _skriv(client, monkeypatch, typ="arbetsblad")
     byggda = _tectonic(monkeypatch)
 
     res = _done(client.post(f"/api/exams/{result['id']}/approve", json={
@@ -140,8 +152,9 @@ def test_bladen_blir_pdfen_och_tectonic_far_vara(client, monkeypatch):
     pdf = Path(res["pdf"])
     assert pdf.is_file() and _sidor(pdf) == 3
     assert _ar_bild(pdf)
-    # Provets egen stam byggdes aldrig av Tectonic — bara bedömningen.
-    assert all(j.endswith(" - bedomning") for j in byggda), byggda
+    # Bladets egen stam byggdes aldrig av Tectonic. Arbetsbladet har ingen
+    # bedömningsanvisning, så motorn rördes inte alls.
+    assert byggda == [] or all(j.endswith(" - facit") for j in byggda), byggda
     # .tex ligger kvar bredvid: arkivet, och reserven.
     assert Path(res["tex"]).is_file()
     # Och rutten serverar den — samma väg som förut, inget nytt kontrakt.
@@ -165,8 +178,9 @@ def test_utan_bilder_gar_allt_den_gamla_vagen(client, monkeypatch):
 
 def test_tomma_och_trasiga_bilder_faller_tillbaka_pa_latex(client, monkeypatch):
     """En data-URI som inte är en PNG får inte bli ett halvt papper. Beskedet
-    går i loggen och LaTeX tar över — ett snarlikt papper är bättre än inget."""
-    result = _skriv(client, monkeypatch)
+    går i loggen och LaTeX tar över — ett snarlikt papper är bättre än inget.
+    Mätt på arbetsbladet: provet går alltid LaTeX-vägen ändå."""
+    result = _skriv(client, monkeypatch, typ="arbetsblad")
     byggda = _tectonic(monkeypatch)
     r = client.post(f"/api/exams/{result['id']}/approve", json={
         "blad": {"uppgift": ["data:image/png;base64,aGVq"]}})
@@ -179,14 +193,74 @@ def test_tomma_och_trasiga_bilder_faller_tillbaka_pa_latex(client, monkeypatch):
 
 def test_bilder_utan_pdfmotor_ger_anda_ett_papper(client, monkeypatch):
     """Tectonic behövs inte längre för elevernas ark. På en maskin utan motor
-    — eller med en tom cache — fick läraren förut bara en .tex."""
-    result = _skriv(client, monkeypatch)
+    — eller med en tom cache — fick läraren förut bara en .tex. Gäller de
+    papper vars form bor på skärmen; provet sätts alltid i LaTeX."""
+    result = _skriv(client, monkeypatch, typ="arbetsblad")
     monkeypatch.setattr(exam_pdf, "engine_available", lambda: False)
     res = _done(client.post(f"/api/exams/{result['id']}/approve", json={
         "blad": {"uppgift": [_png()]}}))
     assert res["pdf"] and res["tex"]
     from pathlib import Path
     assert _ar_bild(Path(res["pdf"]))
+
+
+# ── Provet är undantaget ────────────────────────────────────────────────
+
+def test_provet_satts_alltid_i_latex_aven_med_avritning(client, monkeypatch):
+    """«Typ exakt så här vill jag att mina prov ska se ut» — och det hon pekade
+    på var sitt eget Overleaf-prov, inte appens canvas.
+
+    Provmallen är sedan dess en reproduktion av hennes fil. En avritning av
+    skärmen kan inte se ut som den, så avritningen gäller inte för PROVET: de
+    blad klienten skickar tas emot (den ritar av alla papper likadant) men
+    pappret sätts i LaTeX ändå. Utan den här vakten räcker det att någon
+    återinför skärmvägen «för alla typer» för att formen ska försvinna igen
+    utan att ett enda test blir rött."""
+    from pathlib import Path
+    result = _skriv(client, monkeypatch)          # typ="prov"
+    byggda = _tectonic(monkeypatch)
+    res = _done(client.post(f"/api/exams/{result['id']}/approve", json={
+        "blad": {"uppgift": [_png(), _png()]}}))
+    assert res["errors"] == []
+    pdf = Path(res["pdf"])
+    # Stubben skriver sitt jobname i filen: pappret kom ur Tectonic.
+    assert pdf.read_bytes().startswith(b"%PDF-1.5 Prov")
+    assert any(not j.endswith(" - bedomning") for j in byggda), byggda
+
+
+def test_lararens_egna_bilder_foljer_med_till_mallen(client, monkeypatch):
+    """Bilden läraren själv lade in på en uppgift bor i webbläsarens dokument
+    (plan.js valjBild → v.bilder) och har aldrig funnits i provets JSON. Så
+    länge PDF:en var en avritning av skärmen spelade det ingen roll — bilden
+    fanns ju på skärmen. Nu när provet sätts i LaTeX måste den resa hela vägen,
+    annars tappar ett prov med ett inlagt foto fotot i tryck."""
+    from pathlib import Path
+    result = _skriv(client, monkeypatch)
+    byggda = _tectonic(monkeypatch)
+    res = _done(client.post(f"/api/exams/{result['id']}/approve", json={
+        "bilder": {"uppg2": _png(200, 120), "rubrik": _png(50, 50)}}))
+    ut = Path(res["pdf"]).parent
+    # Uppgiftens bild skrivs till utkatalogen med sitt nummer i namnet …
+    assert (ut / "egen-02.png").is_file(), sorted(p.name for p in ut.iterdir())
+    # … och sidhuvudets bild är inte en uppgift och lämnas därför.
+    assert not (ut / "egen-00.png").exists()
+    # Mallen ska verkligen inkludera filen, inte bara ha den liggande.
+    tex = Path(res["tex"]).read_text(encoding="utf-8")
+    assert r"\includegraphics[width=0.7\textwidth]{egen-02.png}" in tex
+    assert byggda, "provet kompilerades inte alls"
+
+
+def test_skraputforma_bilder_ignoreras():
+    """`bilder` kommer från en klient vi inte skrev. Nycklar som inte är en
+    uppgift, värden som inte är data-URI:er och rena skräpformer ska betyda
+    «inga bilder», inte ett undantag mitt i ett godkännande."""
+    assert tryck.egna_bilder(None) == {}
+    assert tryck.egna_bilder("uppg1") == {}
+    assert tryck.egna_bilder({"uppg1": 7, "rubrik": "data:image/png;base64,x",
+                              "uppgA": "data:image/png;base64,x",
+                              "uppg1x": "data:image/png;base64,x"}) == {}
+    assert tryck.egna_bilder({"uppg12": "data:image/png;base64,x"}) == {
+        12: "data:image/png;base64,x"}
 
 
 def test_skraputforma_blad_ignoreras(client, monkeypatch):
@@ -244,7 +318,10 @@ def test_bedomningsanvisningen_ar_kvar_i_latex(client, monkeypatch):
     byggda = _tectonic(monkeypatch)
     res = _done(client.post(f"/api/exams/{result['id']}/approve", json={
         "blad": {"uppgift": [_png()]}}))
-    assert byggda == [f"{Path(res['pdf']).stem} - bedomning"], byggda
+    # Provet självt kompileras också — det är lärarens förlaga som är mallen,
+    # och avritningen gäller inte för det pappret. Anvisningen ligger bredvid.
+    stam = Path(res["pdf"]).stem
+    assert f"{stam} - bedomning" in byggda, byggda
     r = client.get(f"/api/exams/{result['id']}/bedomning")
     assert r.status_code == 200 and b"bedomning" in r.content
 
@@ -282,7 +359,7 @@ def test_bedomningen_lever_kvar_bredvid_losningsarket(client, monkeypatch):
         "blad": {"uppgift": [_png()], "losningar": [_png()]}}))
 
     stam = Path(res["pdf"]).stem
-    assert byggda == [f"{stam} - bedomning"], byggda
+    assert f"{stam} - bedomning" in byggda, byggda
     assert Path(res["pdf"]).with_name(f"{stam} - bedomning.pdf").is_file()
     # Rutterna pekar på var sitt dokument: den ena är Tectonic-stubbens fil
     # (som skriver sitt jobname i sig), den andra bilden av skärmen.
@@ -319,7 +396,9 @@ def test_trasigt_losningsark_faller_tillbaka_och_sags(client, monkeypatch):
                  "losningar": [_png(), "data:image/png;base64,aGVq"]}})
     res = _done(r)
     pdf = Path(res["pdf"])
-    assert _ar_bild(pdf)                      # elevernas ark blev ändå bilden
+    # Elevernas ark står kvar — det sätts i LaTeX efter lärarens förlaga och
+    # rörs inte av att lösningsarket föll.
+    assert pdf.is_file() and pdf.read_bytes().startswith(b"%PDF")
     assert not pdf.with_name(f"{pdf.stem} - losningar.pdf").exists()
     loggar = " ".join(e.get("msg", "") for e in _events(r) if e["type"] == "log")
     assert "Lösningsförslaget blev ingen bild" in loggar
@@ -363,7 +442,7 @@ def test_skarmpdfen_skrivs_pa_versionen_klienten_pekade_ut(client, monkeypatch):
 def test_tryckpaketet_tar_skarmens_pdf(client, monkeypatch):
     """Paketet läser pdf_path och ska följa med av sig självt — men «bör» är
     inte «gör», och det är utskriftshögen läraren bär in till klassen."""
-    result = _skriv(client, monkeypatch)
+    result = _skriv(client, monkeypatch, typ="arbetsblad")
     _tectonic(monkeypatch)
     _done(client.post(f"/api/exams/{result['id']}/approve", json={
         "blad": {"uppgift": [_png(), _png()]}}))

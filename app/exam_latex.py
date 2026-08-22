@@ -37,6 +37,29 @@ _LATEX_SPECIALS = {
     # kategorinamn med " inte tolkas som babel-genväg (försvar på djupet:
     # figurpreamblen släcker " men löptexten förlitade sig annars på tur).
     '"': r"\textquotedbl{}",
+    # ── TYPOGRAFISKA TECKEN SOM MÅSTE BLI KOMMANDON ────────────────────
+    # Tectonic är XeTeX: ett tecken i källan slås upp DIREKT i typsnittet, och
+    # Latin Modern (ec-lmr) — Computer Modern-familjen förlagan sätts i — har
+    # inget tankstreck, inga typografiska citattecken och ingen ellips på sin
+    # egen kodpunkt. Tecknet försvann då spårlöst: «Uppgift 1–6» trycktes
+    # «Uppgift 16» och betygstabellens «0–8» blev «04». Det syntes bara som en
+    # varning i en logg ingen läser.
+    #
+    # Kommandona däremot finns i T1 och sätter rätt glyf. Mappningen gäller
+    # ALLA papper, inte bara provet: att den inte fällde de andra mallarna
+    # berodde på att de laddar newtx, och det är tur och inte konstruktion.
+    "–": r"\textendash{}",          # –
+    "—": r"\textemdash{}",          # —
+    "−": r"\textendash{}",          # − (matematiskt minus i löptext)
+    "“": r"\textquotedblleft{}",    # “
+    "”": r"\textquotedblright{}",   # ”
+    "‘": r"\textquoteleft{}",       # ‘
+    "’": r"\textquoteright{}",      # ’
+    "·": r"\textperiodcentered{}",  # ·
+    "…": r"\ldots{}",               # …
+    "«": r"\guillemotleft{}",       # «
+    "»": r"\guillemotright{}",      # »
+    " ": "~",                       # hårt mellanslag
 }
 _CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
 _MATH_SPLIT_RE = re.compile(r"\$([^$]*)\$")
@@ -149,6 +172,90 @@ def _utrymme_mm(poang: tuple[int, int, int], typ: str) -> int:
 _BOKSTAV = "abcdefghijkl"
 _VERSAL = "ABCDEFGHIJKL"
 
+# ── LÄRARENS FÖRLAGA: DE FYRA DOMARNA OM PROVETS FORM ──────────────────
+# Läraren lämnade in sitt eget Overleaf-prov och sa: «Typ exakt så här vill jag
+# att mina prov ska se ut.» Domarna nedan är hennes, ordagrant, och de styr
+# funktionerna i det här avsnittet.
+#
+#   1. «Inte innehållet — formen.» Mallen ändrar aldrig vad uppgiften frågar
+#      efter. Den bestämmer var numret, kravet, poängen och svarslinjen står.
+#   2. «Lika mycket mellanrum mellan uppgifterna.» Rytmen är mätt i förlagans
+#      PDF och ligger som längder i _preamble.tex.j2 — inte som tycke.
+#   3. «För mycket text blir svårt att läsa, tar lång tid och ser fult ut.»
+#      Uppgiftstexten sätts som STYCKEN, en formel på egen rad, och prompten
+#      håller den vid en till tre rader (app/exam_gen.py).
+#   4. «Och var poängen står.» I högermarginalen, i en egen spalt, i lod med
+#      uppgiftens första rad — aldrig sist på en textrad.
+#
+# Kravetiketten står på VARJE uppgift i förlagan, inte bara på kortsvaren: det
+# är den eleven läser för att veta om svaret skrivs på pappret eller lösningen
+# på lösblad.
+_KRAV_TEXT = {"rutin": "Endast svar krävs."}
+_KRAV_ANNARS = "Fullständig lösning krävs."
+
+# En rad i uppgiftstexten som ÄR en formel och inget annat sätts som
+# displayformel — förlagan gör det med $h(t) = -5t^2 + 20t + 700$ mitt i
+# uppgift 5. Villkoret är avsiktligt snålt: hela raden ska vara ett enda
+# $…$-spann, annars är den en mening som råkar innehålla matematik.
+_ENSAM_FORMEL_RE = re.compile(r"^\$([^$]+)\$$")
+
+
+def _krav(typ: str | None) -> str:
+    return _KRAV_TEXT.get(typ or "", _KRAV_ANNARS)
+
+
+def _stycken(text: str) -> list[dict]:
+    """Uppgiftstexten som stycken, och formelrader som displayformler.
+
+    Modellen skriver sina medvetna radbrytningar i `text` (skärmen sätter
+    white-space:pre-line av samma skäl). Här blir varje rad ett eget stycke —
+    utan det klumpades förlagans «Låt $x$ meter vara …» ihop med meningen före
+    och rytmen på pappret blev en vägg."""
+    ut: list[dict] = []
+    for rad in str(text or "").replace("\r\n", "\n").split("\n"):
+        rad = rad.strip()
+        if not rad:
+            continue
+        m = _ENSAM_FORMEL_RE.match(rad)
+        if m:
+            ut.append({"formel": True, "text": m.group(1)})
+        else:
+            ut.append({"formel": False, "text": escape_mixed(rad)})
+    # DISPLAYFORMELN HÖR TILL SITT STYCKE. Förlagan skriver «… ges av» och
+    # sedan \[…\] UTAN tom rad emellan, så formeln får sitt \abovedisplayskip
+    # och ingenting mer. Med ett \par före hamnade den 7,5 pt för långt ner —
+    # mätbart, och exakt den sortens glidning som gör att pappret inte längre
+    # ser ut som hennes. Samma sak efter formeln: texten som följer fortsätter
+    # stycket, den börjar inget nytt.
+    for i, s in enumerate(ut):
+        nasta = ut[i + 1] if i + 1 < len(ut) else None
+        if s["formel"]:
+            # Efter en displayformel fortsätter stycket. Ett \par här gav
+            # förlagans «Visa algebraiskt …» ett eget stycke i stället för det
+            # \belowdisplayskip hon har.
+            s["par_efter"] = nasta is None
+        else:
+            s["par_efter"] = not (nasta and nasta["formel"])
+    return ut
+
+
+# Etiketten på en ifyllnadsrad får kolon — men bara när den inte redan slutar
+# på ett skiljetecken som bär samma funktion. Modellen skriver fält som
+# «$(-4)^2 =$», och «$(-4)^2 =$:» är inte en etikett, det är ett skrivfel.
+_FALT_SLUT = (":", "=", "?", "$")
+
+
+def _faltrad(svarsfalt) -> list[str] | None:
+    """Ifyllnadsradernas etiketter, färdiga att sätta på EN rad."""
+    if not svarsfalt:
+        return None
+    ut = []
+    for e in svarsfalt:
+        raw = str(e or "").strip()
+        kolon = "" if raw.endswith(_FALT_SLUT) else ":"
+        ut.append(escape_mixed(raw) + kolon)
+    return ut
+
 
 def _flerval_vy(alternativ, ratt):
     """Flervalsalternativ som [{bokstav, text}], A/B/C… i ordning."""
@@ -210,11 +317,22 @@ def _enhet_vy(*, poang, typ, formaga, text, losning, bedomning,
     return {
         "enhet": escape_mixed(enhet) if enhet else None,
         "svarsfalt": [escape_mixed(e) for e in svarsfalt] if svarsfalt else None,
+        # Förlagans egen variant: samma etiketter, men med kolon där de behövs
+        # och avsedda att sättas på EN rad (prov.tex.j2). Den gamla listan står
+        # kvar för arbetsblad, gruppuppgift och diagnos — de sätter en rad per
+        # etikett, och den formen är deras.
+        "svarsfalt_rad": _faltrad(svarsfalt),
+        "stycken": _stycken(text),
         "tabell": _tabell_vy(tabell),
         "svarsrutor": _svarsrutor_vy(svarsrutor, facit=facit),
         "stegtabell": _stegtabell_vy(stegtabell, facit=facit),
         "poang_str": f"{sum(poang)}p",
+        # exam-klassen (provets mall) tar poängen som ETT TAL i \question[…]
+        # respektive \part[…] och sätter «2 p» i marginalen själv via
+        # \pointformat. Övriga papper får poängen färdigsatt som «3p» ovan.
+        "poang_tal": sum(poang),
         "poang_eca": f"{poang[0]}/{poang[1]}/{poang[2]}",
+        "krav": _krav(typ),
         "endast_svar": typ == "rutin",
         "flerval": flerval,
         "ratt_bokstav": ratt_bokstav,
@@ -228,13 +346,104 @@ def _enhet_vy(*, poang, typ, formaga, text, losning, bedomning,
     }
 
 
+def _korta(text: str, tecken: int) -> str:
+    """Korta av vid ordgränsen och sätt ut ellips. Används bara för sidhuvudet
+    — pappret självt kortar aldrig en text läraren skrivit."""
+    text = str(text or "").strip()
+    if len(text) <= tecken:
+        return text
+    kapad = text[:tecken].rsplit(" ", 1)[0].rstrip(" ,-–")
+    return f"{kapad}…"
+
+
+def _forsatt_vy(doc: exam_spec.ExamDoc, delar: list[dict]) -> dict:
+    """Försättsbladet, rad för rad i förlagans ordning.
+
+    Titel och klass, en linje, delöversikten, provtiden, hjälpmedlen,
+    inlämningsregeln, totalpoängen, betygstabellen, instruktionerna och
+    namnraderna. Ordningen är förlagans och inget annat: det är den läraren
+    känner igen pappret på."""
+    titel = doc.titel.strip()
+    kurs = (doc.kurs or "").strip()
+    # «Prov Kapitel 2 – Matematik 2c». Kursen läggs till bara när titeln inte
+    # redan bär den — annars står «Matematik 2c» två gånger på samma rad.
+    titelrad = titel if (not kurs or kurs.lower() in titel.lower()) \
+        else f"{titel} – {kurs}"
+    under = []
+    if doc.klass:
+        under.append(f"Klass: {doc.klass}")
+    if doc.datum:
+        under.append(doc.datum)
+
+    delrader = []
+    for d in delar:
+        if not d["rubrik"]:
+            continue
+        f, s = d["_forsta_nr"], d["_sista_nr"]
+        spann = f"Uppgift {f}." if f == s else f"Uppgift {f}–{s}."
+        if d["_alla_kortsvar"]:
+            vad = "Endast svar krävs."
+        elif d["_nagot_kortsvar"]:
+            vad = "Kortsvar och fullständiga lösningar."
+        else:
+            vad = "Fullständiga lösningar krävs."
+        delrader.append({"namn": escape_latex(d["rubrik"]),
+                         "text": escape_latex(f"{spann} {vad}")})
+
+    # «Du lämnar in Del A innan du hämtar Del B.» — bara när det FINNS en del
+    # att lämna in innan nästa. Ett prov i en enda del har ingen sådan regel,
+    # och en rad som beskriver något som inte händer är en rad som lärs bort.
+    inlamning = None
+    if len(delrader) >= 2:
+        forsta = delar[0]["rubrik"]
+        nasta = [d["rubrik"] for d in delar if d["rubrik"]][1]
+        inlamning = escape_latex(
+            f"Du lämnar in {forsta} innan du hämtar {nasta}.")
+
+    g = exam_spec.kravgranser(doc)
+    total = int(g["total"])
+    # Betygstabellens spann. Förlagan har «F 0–9» och «E 9–18» — nio poäng kan
+    # inte vara två betyg samtidigt, och det är det ENDA i förlagan som rättas
+    # här: varje gräns börjar där den förra slutade plus ett.
+    granser = [("F", 0, max(int(g["E"]["minst"]) - 1, 0)),
+               ("E", int(g["E"]["minst"]), max(int(g["C"]["minst"]) - 1, 0)),
+               ("C", int(g["C"]["minst"]), max(int(g["A"]["minst"]) - 1, 0)),
+               ("A", int(g["A"]["minst"]), total)]
+    betyg = [{"betyg": b, "spann": escape_latex(f"{lo}–{hi}")}
+             for b, lo, hi in granser]
+
+    return {
+        "titelrad": escape_latex(titelrad),
+        # Sidhuvudets vänsterrad. KORTAD, och det är inte kosmetik: förlagans
+        # titel är «Prov Kapitel 2 – Matematik 2c» och får plats till vänster om
+        # den centrerade delrutan. Appens titlar är modellens och blir dubbelt
+        # så långa — första renderingen gav «… algebraiska uttDelckA Matematik
+        # 1c», alltså titeln tryckt RAKT IGENOM delnamnet. Taket är mätt: 42
+        # tecken i 12 pt Computer Modern slutar strax före delrutans vänsterkant
+        # (x = 282,7 pt).
+        "sidhuvud": escape_latex(_korta(titelrad, 42)),
+        "underrad": escape_latex(" · ".join(under)) if under else None,
+        "delrader": delrader,
+        "provtid": escape_latex(f"{doc.tid_min} minuter.") if doc.tid_min else None,
+        "inlamningsrad": inlamning,
+        "total": total,
+        "betyg": betyg,
+    }
+
+
 def _build_view(doc: exam_spec.ExamDoc,
                 bilder: dict[int, str] | None = None,
-                *, facit: bool = False) -> dict:
+                *, facit: bool = False,
+                egna: dict[int, str] | None = None) -> dict:
     """Mallens vy: uppgifter numrerade löpande, grupperade per del
     (B, C, D, sedan del-lösa). `bilder` mappar uppgiftens bildindex
     (1-baserat) till filnamn i utkatalogen — filnamnet, inte sökvägen,
-    eftersom Tectonic kompilerar med utkatalogen som arbetskatalog."""
+    eftersom Tectonic kompilerar med utkatalogen som arbetskatalog.
+
+    `egna` är LÄRARENS egna inlagda bilder och nycklas på uppgiftens NUMMER
+    (app/tryck.egna_bilder). De vinner över underlagets sida: hon har lagt in
+    just den bilden på just den uppgiften, och det valet är senare än
+    modellens."""
     # Delgrupperingen ligger i exam_spec (delad med balansens ordningsregler,
     # så båda mäter samma sekvens). Rubriken härleds här — en ren vy-detalj.
     # Visningsnamnen räknar från A — se _DEL_INSTRUKTION-kommentaren.
@@ -247,7 +456,8 @@ def _build_view(doc: exam_spec.ExamDoc,
         for it in items:
             nummer += 1
             agg = exam_spec.uppg_poang(it)
-            bild_fil = (bilder or {}).get(it.bild) if it.bild else None
+            bild_fil = ((egna or {}).get(nummer)
+                        or ((bilder or {}).get(it.bild) if it.bild else None))
             if it.deluppgifter:
                 deluppg = []
                 for j, d in enumerate(it.deluppgifter):
@@ -271,6 +481,8 @@ def _build_view(doc: exam_spec.ExamDoc,
                     "stegtabell": _stegtabell_vy(it.stegtabell, facit=facit),
                     "svarsfalt": [escape_mixed(e) for e in it.svarsfalt]
                                  if it.svarsfalt else None,
+                    "svarsfalt_rad": _faltrad(it.svarsfalt),
+                    "stycken": _stycken(it.text),
                     "notis": escape_mixed(it.notis) if it.notis else None,
                     "flerval": None, "ratt_bokstav": None,
                     # endast_svar/utrymme_mm nås av mallen för VARJE uppgift
@@ -312,6 +524,8 @@ def _build_view(doc: exam_spec.ExamDoc,
             # skäl; det är brickans TEXT, och mallen läser den rakt av.
             item_vy["bokstav"] = str(nummer)
             item_vy["poang_str"] = f"{sum(agg)}p"
+            item_vy["poang_tal"] = sum(agg)
+            item_vy["krav"] = _krav(it.typ)
             item_vy["poang_eca"] = f"{agg[0]}/{agg[1]}/{agg[2]}"
             # Figuren ligger på uppgiftsnivå (ExamItem), inte på deluppgift/
             # enhet — sätts sist så BÅDE löv- och förälder-grenens item_vy
@@ -325,11 +539,46 @@ def _build_view(doc: exam_spec.ExamDoc,
             # för det är punkten hon letar efter hålet i.
             item_vy["ci"] = list(it.innehall or [])
             vy_items.append(item_vy)
+        # Förlagans delrubrik är EN mening: «Del A – Digitala verktyg är inte
+        # tillåtna». Räknaren är det enda som skiljer delarna åt på pappret, så
+        # den står i rubriken och inte i en kursivrad under den.
+        utan_raknare = del_kod == "B"
+        alla_kortsvar = all(_krav(i.typ) == _KRAV_TEXT["rutin"] for i in items)
+        nagot_kortsvar = any(_krav(i.typ) == _KRAV_TEXT["rutin"] for i in items)
         delar.append({
             "rubrik": escape_latex(rubrik) if rubrik else None,
+            "titelrad": (escape_latex(
+                f"{rubrik} – Digitala verktyg är "
+                f"{'inte tillåtna' if utan_raknare else 'tillåtna'}")
+                if rubrik else None),
+            # Den FÖRSTA delen behöver ingen egen hjälpmedels- och namnrad:
+            # försättsbladet ligger kvar i elevens hand. De följande delarna
+            # delas ut för sig, och då måste pappret själv säga vad som gäller
+            # och vem som skrev det (förlagans Del B-sida).
+            "hjalpmedelsrad": None,
+            # «Fullständiga lösningar krävs på samtliga uppgifter.» — bara när
+            # det STÄMMER. Delen som också bär en kortsvarsuppgift får den inte:
+            # då säger sidhuvudet en sak och uppgift 7 en annan, och det är
+            # uppgiften eleven tror på.
+            "kravrad": (None if nagot_kortsvar else
+                        escape_latex("Fullständiga lösningar krävs på "
+                                     "samtliga uppgifter.")),
             "instruktion": escape_latex(_DEL_INSTRUKTION.get(del_kod or "", "")) or None,
             "uppgifter": vy_items,
+            # exam-klassens räknare sätts till numret FÖRE delens första
+            # uppgift, precis som förlagans «\setcounter{question}{6} %
+            # Numrering börjar på 7». Utan den skulle varje del börja om på 1,
+            # och uppgift 7 skulle heta 1 på sitt eget papper.
+            "forsta_nr_minus_ett": (vy_items[0]["nummer"] - 1) if vy_items else 0,
+            "_kod": del_kod,
+            "_forsta_nr": vy_items[0]["nummer"] if vy_items else None,
+            "_sista_nr": vy_items[-1]["nummer"] if vy_items else None,
+            "_alla_kortsvar": alla_kortsvar,
+            "_nagot_kortsvar": nagot_kortsvar,
         })
+    for i, d in enumerate(delar):
+        if i and d["rubrik"]:
+            d["hjalpmedelsrad"] = escape_mixed(_delnamn_visning(doc.hjalpmedel))
     return {
         "titel": escape_latex(doc.titel),
         "kurs": escape_latex(doc.kurs),
@@ -351,9 +600,15 @@ def _build_view(doc: exam_spec.ExamDoc,
         "poang_rad_eca": (lambda s: f"{s['total']} poäng ({s['e']}/{s['c']}/{s['a']})")(
             exam_spec.poangsummor(doc)),
         "delar": delar,
+        "forsatt": _forsatt_vy(doc, delar),
         # Delad preamble (PR 1). kurs/titel escapas här på nytt ur doc —
         # inte ur vyns redan escapade fält, som skulle dubbelescapas.
-        "sidhuvud": f"{escape_latex(doc.kurs)} — {escape_latex(doc.titel)}",
+        # Tankstrecket skrivs som KOMMANDO och inte som tecken: Computer Modern
+        # har ingen glyf på U+2014, och tecknet försvinner spårlöst (se
+        # _LATEX_SPECIALS). Här går strängen inte genom escape_latex, så
+        # mappningen där hjälper inte — den måste skrivas rätt på plats.
+        "sidhuvud": (rf"{escape_latex(doc.kurs)} \textemdash{{}} "
+                     rf"{escape_latex(doc.titel)}"),
         # PR 4: tikz + angles/quotes laddas bara när provet har minst en
         # figur (jfr med_grafik/med_svarsrad-mönstret för includegraphics).
         "med_tikz": any(it.figur is not None for it in doc.uppgifter),
@@ -421,12 +676,18 @@ def _grupp_vy(grupp, nyckelfraga: str | None = None,
 
 def render_prov(doc: exam_spec.ExamDoc,
                 bilder: dict[int, str] | None = None,
-                dokumentkod: str = "") -> str:
+                dokumentkod: str = "",
+                egna_bilder: dict[int, str] | None = None) -> str:
     """`dokumentkod` sätts bara av den anpassade kopian (app/tryck.py). Den
     står i foten och är det ENDA som skiljer kopian från provet — ingen
-    etikett, ingen text som talar om för klassen vem som fick den."""
+    etikett, ingen text som talar om för klassen vem som fick den.
+
+    `egna_bilder` är de bilder läraren själv lagt in på en uppgift i canvas,
+    nycklade på uppgiftens nummer. De bodde tidigare bara i webbläsaren och
+    kom med på pappret genom avritningen; nu när provet sätts i LaTeX måste de
+    resa hela vägen hit."""
     return _environment().get_template("prov.tex.j2").render(
-        dokumentkod=dokumentkod, **_build_view(doc, bilder))
+        dokumentkod=dokumentkod, **_build_view(doc, bilder, egna=egna_bilder))
 
 
 def render_bedomning(doc: exam_spec.ExamDoc,

@@ -15,12 +15,16 @@ facit, inte efter sida 47 i en bunt.
 
 Källorna är olika för olika papper, och det är därför den här modulen finns:
 
-* **Prov, arbetsblad och gruppuppgifter** har redan en PDF — den som byggdes
-  vid godkännandet. Den är numera en bild av SKÄRMEN: klienten ritar av varje
+* **Arbetsblad, gruppuppgifter och diagnoser** har redan en PDF — den som
+  byggdes vid godkännandet. Den är en bild av SKÄRMEN: klienten ritar av varje
   blad (app/web/ui/blad-bild.js) och rutten lägger bilderna på A4 här nere
   (``png_till_pdf``, samma väg som tavlan). Tectonic är kvar som reserv när
-  godkännandet kommer utan bilder, och för bedömningsanvisningen. Den tas som
-  den är.
+  godkännandet kommer utan bilder. Den tas som den är.
+* **Provet** går INTE den vägen. Dess mall är en reproduktion av lärarens eget
+  Overleaf-prov (app/templates/prov.tex.j2), och en avritning av canvas kan
+  inte se ut som den — skärmen sätter Arimo i 794 px, LaTeX sätter Computer
+  Modern på A4. Provet kompileras alltid, och lärarens egna inlagda bilder
+  reser med godkännandet i stället (``egna_bilder`` nedan).
 * **Facit och bedömningsanvisning** ligger bredvid provet med samma stam.
 * **Tavlan** finns bara som en ritad sida i webbläsaren. Klienten skickar den
   som PNG (samma bild som /api/planning/export sparar) och den läggs på ett A4
@@ -106,6 +110,53 @@ def _oppna_png(dataurl: str):
         # annat än tavlan, och det ska sägas, inte sparas.
         return None
     return _platta(bild)
+
+
+# Läraren lägger själv in en bild på en uppgift i canvas (plan.js valjBild).
+# Nyckeln är elementets namn på skärmen — «uppg7» för uppgift 7 — och det är
+# den serien blad.js markera() sätter. Mönstret här är alltså inte en gissning
+# utan skärmens eget id, och det ska inte glida isär.
+_UPPGIFTSNYCKEL = re.compile(r"^uppg(\d{1,3})$")
+
+
+def egna_bilder(bilder) -> dict[int, str]:
+    """Lärarens egna inlagda bilder, per uppgiftsnummer.
+
+    Bilderna bor i webbläsarens dokument (``v.bilder``) och har aldrig funnits
+    i provets JSON. Så länge PDF:en var en avritning av skärmen spelade det
+    ingen roll — bilden fanns ju på skärmen. När provet flyttades till
+    LaTeX-mallen (lärarens förlaga) blev det plötsligt avgörande: utan den här
+    vägen tappar ett prov med ett inlagt foto fotot i tryck.
+
+    Allt som inte är «uppgN» → data:-URI faller bort. Rutten skriver dem till
+    utkatalogen och lägger dem i samma bildindex som underlagets sidor."""
+    if not isinstance(bilder, dict):
+        return {}
+    ut: dict[int, str] = {}
+    for nyckel, varde in bilder.items():
+        m = _UPPGIFTSNYCKEL.match(str(nyckel))
+        if m and isinstance(varde, str) and varde.startswith(_DATA_PREFIX):
+            ut[int(m.group(1))] = varde
+    return ut
+
+
+def spara_egna_bilder(bilder: dict[int, str], ut_dir: Path) -> dict[int, str]:
+    """Skriv lärarens bilder till utkatalogen och returnera nummer → filnamn.
+
+    Filnamnet, inte sökvägen: Tectonic kompilerar med utkatalogen som
+    arbetskatalog (jfr underlagets ``bild-NN.png``). En bild som inte går att
+    avkoda hoppas över tyst — mallen sätter då uppgiften utan bild, vilket är
+    bättre än ett prov som inte kompilerar alls."""
+    ut: dict[int, str] = {}
+    for nr, dataurl in sorted(bilder.items()):
+        bild = _oppna_png(dataurl)
+        if bild is None:
+            continue
+        ut_dir.mkdir(parents=True, exist_ok=True)
+        namn = f"egen-{nr:02d}.png"
+        bild.save(ut_dir / namn, format="PNG")
+        ut[nr] = namn
+    return ut
 
 
 def bladbilder(blad, nyckel: str) -> list[str]:

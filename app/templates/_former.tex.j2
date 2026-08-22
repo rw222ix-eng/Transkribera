@@ -61,3 +61,87 @@
 ((* macro kropp(u) *))
 ((( tabell(u.tabell) )))((( steg(u.stegtabell) )))((( rutor(u.svarsrutor) )))
 ((* endmacro *))
+
+((# ══════════ PROVETS EGNA TVÅ FORMER (lärarens förlaga) ══════════ #))
+
+((# exam-klassens frågehuvud, satt som i förlagan: «\question[2] \emph{Endast
+    svar krävs.}». Poängen står bara på den uppgift som BÄR dem — har uppgiften
+    deluppgifter sitter poängen på a), b), c), och en summa i marginalen
+    bredvid numret hade bara varit ett tredje tal att läsa. #))
+((* macro fraga(u) *))
+\question((* if u.poang_tal and not u.har_deluppgifter *))[((( u.poang_tal )))]((* endif *)) \pfkrav{((( u.krav )))}\par
+((* endmacro *))
+
+((# Deluppgiftens huvud: «\part[1]» och texten på nästa rad. Ingen kravetikett
+    — den står på uppgiften och gäller alla dess deluppgifter, precis som i
+    förlagan. #))
+((* macro delfraga(d) *))
+\part((* if d.poang_tal *))[((( d.poang_tal )))]((* endif *))
+((* endmacro *))
+
+((# Svarsplatsen under ett kortsvar. #))
+((* macro svarsplats(u) *))
+((* if u.enhet *))\par\svarsradmed{}{((( u.enhet )))}
+((* else *))\par\svarsrad{Svar:}
+((* endif *))
+((* endmacro *))
+
+((# De namngivna ifyllnadsraderna. En \svarsrad per etikett, back-to-back utan
+    \par emellan — då hamnar de på SAMMA rad och delar bredden lika, som
+    förlagans «Svar $p =$ ______  Svar andra lösningen: ______». #))
+((# Mellanslaget mellan två \svarsrad är INTE kosmetik: i förlagans källa står
+    anropen på var sin rad, och radbrytningen blir ett mellanslag som skiljer
+    första linjen från nästa etikett («Svar (i): ____  Svar (ii): ____»). Utan
+    det klistras de ihop till «Svar (i): ____Svar (ii):». #))
+((* macro svarsrader(f) *))
+((* if f *))\par((* for e in f *))\svarsrad{((( e )))} ((* endfor *))
+((* endif *))
+((* endmacro *))
+
+((# Datatabellen i förlagans sättning: booktabs, centrerad, 4 mm luft omkring.
+    Skild från `tabell` ovan, som ritar hela rutnätet med \hline och hör till
+    arbetsbladen — provet är lärarens förlaga och den har inga lodräta linjer. #))
+((* macro tabellbok(t) *))
+((* if t *))
+\vspace{4mm}
+\begin{center}
+\begin{tabular}{((( t.spec )))}
+  \toprule
+((# Ingen fetstil i rubrikraden: förlagans tabell är helt omarkerad, och
+    booktabs midrule gör redan skillnaden mellan rubrik och data. Fet rubrik
+    hör till arbetsbladens tabell (\tabrubrik), inte till provets. #))
+  ((* for r in t.rubriker *))((( r )))((* if not loop.last *)) & ((* endif *))((* endfor *)) \\
+  \midrule
+((* for rad in t.rader *))
+  ((* for c in rad *))((( c )))((* if not loop.last *)) & ((* endif *))((* endfor *)) \\
+((* endfor *))
+  \bottomrule
+\end{tabular}
+\end{center}
+\vspace{4mm}
+((* endif *))
+((* endmacro *))
+
+((# Uppgiftstexten som STYCKEN, inte som en klump. Förlagan sätter en formel
+    på egen rad centrerad («$h(t) = -5t^2 + 20t + 700$») och bryter
+    berättelsen i två stycken där den byter tanke. Modellen skriver samma sak
+    med radbrytningar i `text`, och exam_latex delar på dem: en rad som ÄR en
+    formel blir en displayformel, övriga blir stycken. #))
+((# RADBRYTNINGARNA I DEN HÄR MAKRON ÄR SÄTTNING, INTE FORMATERING. En
+    displayformel som klistras direkt efter texten (utan \par) får förlagans
+    \abovedisplayskip; ett \par emellan sköt ner den 7,5 pt. Därför står \par
+    på egen rad och bara där exam_latex._stycken säger att det ska stå. #))
+((* macro stycken(st) *))
+((* for s in st *))
+((* if s.formel *))
+\[ ((( s.text ))) \]
+((* if s.par_efter *))\par
+((* endif *))
+((* else *))
+((( s.text )))
+((* if s.par_efter *))\par
+((* endif *))
+((* endif *))
+((* endfor *))
+((* endmacro *))
+

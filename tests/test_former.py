@@ -162,11 +162,15 @@ def test_ifyllnadsraderna_finns_pa_bade_uppgift_och_deluppgift():
     # glider isär på ett av dem. Bedömningen har ingen svarsplats: där står
     # lösningen, precis som den inte får en svarsrad.
     tex = _alla_tex(doc)
-    for namn in ("prov", "arbetsblad"):
-        assert r"\svarsfaltrad{Ekvation}" in tex[namn], f"{namn} saknar raden"
+    # PROVET sätter raden som förlagans \svarsrad — samma linje som «Svar:»,
+    # men namngiven, och flera på samma rad delar bredden lika. Arbetsbladet
+    # har kvar sin egen \svarsfaltrad. Samma fält, två papper, två former.
+    assert r"\svarsrad{Ekvation:}" in tex["prov"], "provet saknar raden"
+    assert r"\svarsfaltrad{Ekvation}" in tex["arbetsblad"], "arbetsbladet saknar raden"
     # (Makrot självt står i den delade preamblen — det är ANROPET som räknas,
     # precis som för \svarsradmed.)
     assert r"\svarsfaltrad{Ekvation}" not in tex["bedomning"]
+    assert r"\svarsrad{Ekvation:}" not in tex["bedomning"]
 
 
 def test_ifyllnadsraden_star_efter_fragan_inte_fore():
@@ -184,10 +188,15 @@ def test_ifyllnadsraden_star_efter_fragan_inte_fore():
                     {"poang": [0, 2, 0], "text": "Motivera valet.",
                      "losning": "…", "bedomning": "+2 C"}]})
     tex = _alla_tex(doc)
-    for namn in ("prov", "arbetsblad"):   # facit har lösningen, ingen svarsplats
-        assert tex[namn].index("Enas om ett värde") \
-            < tex[namn].index(r"\svarsfaltrad{Valt"), \
-            f"{namn} sätter svarsplatsen före frågan"
+    # Facit har lösningen och därmed ingen svarsplats. Provet och arbetsbladet
+    # sätter raden i var sin form — provet som förlagans \svarsrad, bladet som
+    # sin egen \svarsfaltrad — men BÅDA efter frågan.
+    assert tex["prov"].index("Enas om ett värde") \
+        < tex["prov"].index(r"\svarsrad{Valt värde:}"), \
+        "provet sätter svarsplatsen före frågan"
+    assert tex["arbetsblad"].index("Enas om ett värde") \
+        < tex["arbetsblad"].index(r"\svarsfaltrad{Valt"), \
+        "arbetsbladet sätter svarsplatsen före frågan"
 
 
 # ═════════════════════════════════ papperet ══════════════════════════════

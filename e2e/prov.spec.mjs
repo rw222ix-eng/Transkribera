@@ -127,8 +127,14 @@ test("provet på arket är serverns uppgifter, i arkets form", async ({ page }) 
   expect(arket[0]).toContain("2 p");
   expect(arket[1]).toContain("4 p");          // 1+2+1
   expect(arket[2]).toContain("5 p");          // 2 + 3 ur deluppgifterna
-  // En rutinuppgift svaras på; de andra redovisas på lösblad.
-  await expect(page.locator("#dokument .pruppg .prlosblad")).toHaveCount(2);
+  // Kravet står som på pappret: «Endast svar krävs.» på rutinuppgiften,
+  // «Fullständig lösning krävs.» på de två andra. Skärmen skrev förut ordet
+  // «lösblad» litet i marginalen — samma sak sagd med andra ord på en annan
+  // plats än lärarens förlaga, som appen numera sätter provet efter.
+  await expect(page.locator("#dokument .pruppg .prkrav")).toHaveCount(3);
+  await expect(page.locator(
+    "#dokument .pruppg .prkrav", { hasText: "Fullständig lösning krävs." }
+  )).toHaveCount(2);
   // Deluppgifterna står som a) och b).
   await expect(page.locator("#dokument .pruppg .prdel[data-avdelad] li")).toHaveCount(2);
 });

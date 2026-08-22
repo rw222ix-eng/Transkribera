@@ -412,9 +412,12 @@ window.BladBygg = (() => {
       : u.bild
         ? `<div class="prbild gufigur" data-bild="${Number(u.bild)}" style="min-height:110px"><span class="gufigtext">bild ${Number(u.bild)} ur underlaget — läggs in i canvas</span></div>`
         : '';
-    /* Notisen: samma lilla inramade ruta som \notisruta i prov.tex.j2, och på
-       samma plats — efter uppgiftens former, före svarsraden. */
-    const notis = u.notis ? `<p class="prnotis">${brodtext(u.notis)}</p>` : '';
+    /* LEDTRÅDEN, INTE EN LÅDA. Provets mall är sedan lärarens förlaga kom in
+       exam-klassen, och där är notisen en KURSIV rad under frågan («Tips: Gör
+       en skiss och kalla bredden för x cm.») — ingen ram. Skärmen ritade en
+       inramad ruta, och då lovade förhandsvisningen en form pappret inte har.
+       Arbetsbladets .gunotis är kvar som ruta: det är dess egen form. */
+    const notis = u.notis ? `<p class="prtips">${brodtext(u.notis)}</p>` : '';
     /* SVARET står alltid i provet — på båda delarna, på varje uppgift. Förr
        hängde raden på u.ut === 'kort', och en uppgift som saknade den märkningen
        blev en fråga utan svarsplats mitt bland två som hade det. Alternativ
@@ -422,24 +425,30 @@ window.BladBygg = (() => {
     const behoverRad = !u.alt && !(u.del && u.del.length) && !u.rutor;
     /* Enheten står EFTER linjen på provet, som i förlagan: «………… laddpunkter/år».
        Kryssrutorna ersätter raden helt — den som kryssar skriver inte. */
+    /* «Svar:» STÅR FRAMFÖR LINJEN. Pappret skriver den etiketten (förlagans
+       \svarsrad{Svar:}); en naken linje på skärmen och en märkt på pappret är
+       två olika löften om samma ruta. */
     const svarsrad = u.rutor
       ? `<div class="prsvar"><b>${esc(u.rutor.etikett)}:</b><span class="gurutor">${
           (u.rutor.val || []).map(v => `<span class="guruta">${mat(v)}</span>`).join('')}</span></div>`
       : behoverRad
-        ? `<div class="prsvar"><span class="prlinje"></span>${
+        ? `<div class="prsvar"><b class="prsvarnamn">Svar:</b><span class="prlinje"></span>${
             u.enhet ? `<span class="prenhet">${esc(u.enhet)}</span>` : ''}</div>`
         : '';
-    /* REDOVISNINGEN görs aldrig i provet, alltid på separat lösblad. Uppgifter
-       som kräver en redovisad lösning märks i marginalen under numret — samma
-       plats som poängen, för båda avgörs innan man läst uppgiften. */
-    const losblad = !u.alt && u.ut !== 'kort' ? '<span class="prlosblad">lösblad</span>' : '';
+    /* KRAVET STÅR SOM PÅ PAPPRET. Förlagan skriver «Endast svar krävs.» eller
+       «Fullständig lösning krävs.» i kursiv på uppgiftens första rad — det är
+       den raden eleven läser för att veta om svaret skrivs här eller lösningen
+       på lösblad. Skärmen satte i stället ordet «lösblad» litet i marginalen,
+       och sa alltså samma sak med andra ord på en annan plats. */
+    const krav = `<p class="prkrav">${u.ut === 'kort'
+      ? 'Endast svar krävs.' : 'Fullständig lösning krävs.'}</p>`;
     /* Marginalen bär ETT format. «(totalt 3 p)» bredvid «1 p» läste sig som två
        olika fält; att poängen är en summa framgår av deluppgifternas egna. */
     const varde = `${u.p} p`;
     const former = tabell(u.tabell, 'prtab') + stegtabell(u.stegtabell);
     return `<div class="pruppg">
-      <span class="prnr">${u.nr}.<span class="prvarde">${varde}</span>${losblad}</span>
-      <div><p class="prtext">${brodtext(u.t)}</p>${alt}${del}${former}${figur}${notis}${svarsrad}</div>
+      <span class="prnr">${u.nr}.<span class="prvarde">${varde}</span></span>
+      <div>${krav}<p class="prtext">${brodtext(u.t)}</p>${alt}${del}${former}${figur}${notis}${svarsrad}</div>
     </div>`;
   }
   /* Provets rubrik, med dokumentets egen först. Samma regel som arkets: skrev
@@ -518,7 +527,7 @@ window.BladBygg = (() => {
         ? 'Räknare och digitala hjälpmedel (t.ex. GeoGebra) är tillåtna.'
         : 'Räknare och digitala hjälpmedel är inte tillåtna.');
     const obs = forsta && del !== '-'
-      ? `<p class="probs"><b>OBS!</b> ${regel} Svaret skrivs på raden här i provet. Uppgifter märkta «lösblad» redovisas på separat rutat lösblad — en uppgift per sida, med uppgiftens nummer och ditt namn.</p>`
+      ? `<p class="probs"><b>OBS!</b> ${regel} Uppgifter märkta «Endast svar krävs» besvaras på raden här i provet. Övriga redovisas på separat rutat lösblad — en uppgift per sida, med uppgiftens nummer och ditt namn.</p>`
       : '';
     const etikett = del === '-' ? ''
       : hjalp ? DELNAMN[del]

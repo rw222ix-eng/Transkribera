@@ -89,6 +89,39 @@ INSTRUCTION = (
     "för enskilda uppgifter; den som klarar E i övrigt anses redovisa nog.\n"
     "- text: uppgiftstexten. Matematik skrivs inom $…$ (t.ex. "
     "$x^2 - 4x + 3 = 0$); övrig text är vanlig svenska utan LaTeX-kommandon.\n"
+    # ── TEXTMÄNGDEN ÄR EN DEL AV FORMEN ──────────────────────────────────
+    # Läraren lämnade in sitt eget prov som förlaga och sa: «för mycket text
+    # blir svårt att läsa, tar lång tid och ser fult ut» och «texten kan bli
+    # ännu enklare för eleverna att förstå». Hennes egna uppgifter är en till
+    # tre rader. Modellens var fem till sju, med bisatser i rad — och på ett
+    # papper där varje uppgift har samma luft omkring sig syns det direkt.
+    #
+    # Regeln står här och inte bara i provuppdraget: den gäller varje papper
+    # eleverna läser, och den måste följa med i omskrivningen (build_refine_-
+    # prompt får bara INSTRUCTION med sig).
+    "  LÄNGD OCH SPRÅK: uppgiftstexten är HÖGST tre rader — ungefär 40 ord. "
+    "Skriv korta huvudsatser, en tanke per mening, och aldrig två bisatser i "
+    "rad. Använd vardagliga ord där de duger; facktermen ska stå kvar men "
+    "resten av meningen ska vara enkel svenska. Stryk allt som inte behövs "
+    "för att lösa uppgiften: stämningsmålning, upprepade villkor och "
+    "förklaringar av vad eleven ska göra sedan. En berättelseuppgift har ett "
+    "till tre raders scenario och sedan EN tydlig fråga.\n"
+    # Papprets krav-etikett skrivs av mallen (app/templates/prov.tex.j2,
+    # \pfkrav) på varje uppgift, i kursiv, direkt efter numret — precis som i
+    # lärarens förlaga. Står frasen dessutom i texten trycks den två gånger på
+    # samma uppgift, och det såg första skarpa renderingen: «1. Endast svar
+    # krävs.» och sist i frågan «… Endast svar krävs.»
+    "  SKRIV ALDRIG «Endast svar krävs», «Fullständig lösning krävs», "
+    "«Fullständiga lösningar krävs» eller «Motivera ditt svar» i texten. "
+    "Pappret sätter den raden självt ur uppgiftens typ. Frågan ska säga vad "
+    "som ska räknas ut, inte hur den ska redovisas.\n"
+    # Radbrytningen i `text` är sättning: exam_latex._stycken gör varje rad
+    # till ett eget stycke, och en rad som ÄR en formel blir en centrerad
+    # displayformel — förlagans «$h(t) = -5t^2 + 20t + 700$» på egen rad.
+    "  EN FORMEL SOM UPPGIFTEN BYGGER PÅ skrivs på EGEN RAD i text (radbryt "
+    "med \\n), ensam inom $…$ och utan ord omkring: då sätts den centrerad "
+    "på pappret, som i ett riktigt prov. Bryt också raden där berättelsen "
+    "byter tanke — varje rad blir ett eget stycke.\n"
     # Facit ska gå att läsa på en armlängds avstånd, och det gör det bara om
     # texten är kort. Modellen skrev annars resonerande meningar om vad ett led
     # betyder («Täljaren är en summa av termerna … Bråkstrecket håller ihop …»)
@@ -128,8 +161,18 @@ INSTRUCTION = (
     "ratt_alternativ som 0-baserat index på det rätta — aldrig på en uppgift "
     "som redan har deluppgifter. Använd sparsamt, för begreppskoll; "
     "ratt_alternativ visas bara för läraren.\n"
-    "- notis: en kort inramad påminnelse/instruktion på en uppgift eller "
-    "deluppgift (t.ex. 'Rita en teckenrad som stöd.'). Valfri, använd sällan.\n"
+    # Fältet ritade förr en LÅDA runt texten. På provet är det i stället en
+    # kursiv rad — lärarens förlaga har «Tips: Gör en skiss och kalla bredden
+    # för $x$ cm.» och «Börja gärna med att testa påståendet för något
+    # specifikt värde på $a$.» En låda mitt i en uppgift läser som ett villkor;
+    # kursiven läser som en hjälpande hand, och det är vad den är.
+    "- notis: EN kort ledtråd till uppgiften eller deluppgiften, satt i kursiv "
+    "på egen rad under frågan: 'Tips: Gör en skiss och kalla bredden för "
+    "$x$ cm.', 'Bestäm först vid vilken tidpunkt $t$ raketen når sin högsta "
+    "punkt.', 'Börja gärna med att testa påståendet för något värde på $a$.' "
+    "Den ska ge vägen in, aldrig svaret. Skriv den på de flerstegsuppgifter "
+    "där en elev annars fastnar redan på första steget — inte på "
+    "rutinuppgifter, och aldrig på fler än ungefär var tredje uppgift.\n"
     "- figur: lägg en matematisk figur på en uppgift genom att välja typ och "
     "sätta talen (aldrig fri kod): linjar {k, m}, andragrad {a, b, c}, "
     "exponential {C, bas}, normalfordelning {mu, sigma}, triangel {a, b, c}, "
@@ -196,10 +239,14 @@ INSTRUCTION = (
     '"text": "Lös ekvationen $2x + 7 = 19$.", "innehall": ["linjära ekvationer"], '
     '"losning": "$x = 6$ ur $2x = 12$.", '
     '"bedomning": "+1 E för korrekt svar."}\n'
-    "Fasta fraser (använd ordagrant där de passar): 'Endast svar krävs.' på "
-    "rutinuppgifter, 'Motivera ditt svar.' och 'Fullständiga lösningar "
-    "krävs.' på redovisnings- och resonemangsuppgifter, 'Svara exakt.' där "
-    "ett exakt värde efterfrågas. Skriv aldrig emoji eller utropstecken.\n"
+    # «Endast svar krävs» och «Fullständiga lösningar krävs» stod här som fasta
+    # fraser ATT SKRIVA I TEXTEN. De sätts numera av pappret självt, ur typen,
+    # på varje uppgift (prov.tex.j2 \pfkrav) — skrivs de dessutom i texten står
+    # de två gånger på samma uppgift. Kvar är de fraser som handlar om SVARET
+    # och alltså hör till frågan.
+    "Fasta fraser (använd ordagrant där de passar): 'Svara exakt.' där ett "
+    "exakt värde efterfrågas, 'Avrunda till två decimaler.' där ett närmevärde "
+    "duger. Skriv aldrig emoji eller utropstecken.\n"
 )
 
 
@@ -865,10 +912,33 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
             sorted({s["formaga"] for s in skeleton}) if skeleton else None))
         delar_txt = ("Dela provet i Del B (utan räknare) och Del C (med räknare)."
                      if delar else "Provet har inga delar (del: null på alla uppgifter).")
+        # ── PAPPRETS FORM, SAGD TILL MODELLEN ────────────────────────────
+        # Provet sätts efter lärarens egen Overleaf-förlaga (se
+        # app/templates/prov.tex.j2). Formen är alltså given; det som avgör om
+        # PAPPRET ser ut som hennes är om INNEHÅLLET passar formen. Raderna
+        # nedan är hennes prov beskrivet som krav — inte allmänna råd.
         block.append(
             f"Uppdrag: skriv ett prov för {kurs}, klass {klass}, med EXAKT "
             f"{antal} uppgifter (varken fler eller färre) för {tid_min} "
-            f"minuters provtid. {delar_txt} Svara med enbart JSON.")
+            f"minuters provtid. {delar_txt}\n"
+            "Pappret sätts efter en fast mall: numret och kravet står överst "
+            "på uppgiften, poängen i högermarginalen, och kortsvaren får en "
+            "«Svar: ______»-linje. Skriv innehållet så att det passar den "
+            "formen:\n"
+            "- KORTSVAREN FÖRST. De första uppgifterna i varje del är korta "
+            "frågor med ett entydigt svar — en ekvation att lösa, ett värde "
+            "att beräkna, en formel att teckna. En rad text, ingen berättelse.\n"
+            "- Ber en kortsvarsuppgift om TVÅ värden: skriv fältnamnen i "
+            "svarsfalt (t.ex. [\"Svar $p =$\", \"Svar andra lösningen\"]) i "
+            "stället för att be om båda på en enda svarsrad.\n"
+            "- BERÄTTELSEUPPGIFTERNA kommer sedan, och de är korta: ett till "
+            "tre raders scenario och sedan en tydlig fråga. Namn och "
+            "sammanhang gör dem levande — men ett sammanhang är en mening, "
+            "inte ett stycke.\n"
+            "- Sist i varje del står den uppgift som kräver mest: ett "
+            "resonemang, ett påstående att pröva, ett samband att visa "
+            "algebraiskt.\n"
+            "Svara med enbart JSON.")
     return "\n\n".join(block)
 
 

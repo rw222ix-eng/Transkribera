@@ -706,6 +706,28 @@ def create_router(base: Path, arbiter) -> APIRouter:
         bild_uppgift = tryck.bladbilder(blad, "uppgift")
         bild_facit = tryck.bladbilder(blad, "facit")
         bild_losningar = tryck.bladbilder(blad, "losningar")
+        # ── PROVET SÄTTS I LaTeX, INTE AV SKÄRMEN ─────────────────────
+        # «Typ exakt så här vill jag att mina prov ska se ut» — och det hon
+        # pekade på var sitt eget Overleaf-prov, inte appens canvas. Provets
+        # mall är sedan dess en reproduktion av hennes fil (exam-klassen, 25 mm
+        # marginaler, poängen i högermarginalen, «Svar: ______»), och en
+        # avritning av skärmen kan per definition inte se ut som den: skärmen
+        # sätter Arimo i 794 px, LaTeX sätter Computer Modern på A4.
+        #
+        # Avritningen gäller alltså inte längre för PROVET. Övriga papper —
+        # arbetsblad, gruppuppgift, diagnos — har sin egen form på skärmen och
+        # ritas av precis som förut. Faller LaTeX-vägen (ingen PDF-motor, ett
+        # kompileringsfel som inte går att laga) tas skärmens bild ändå emot
+        # längre ner: hellre ett papper som är snarlikt än inget papper alls.
+        # Grinden står i jobbet nedan, där dokumentets typ är läst.
+        #
+        # LÄRARENS EGNA BILDER följer med hit i stället (`bilder` i kroppen).
+        # De bor i webbläsarens dokument (plan.js valjBild → v.bilder) och
+        # fanns aldrig i provets JSON, så de kom med bara på avritningen. Utan
+        # den vägen hade ett prov med ett inlagt foto tappat fotot i samma
+        # stund som mallen tog över.
+        egna_bilder = tryck.egna_bilder(body.get("bilder")
+                                        if isinstance(body, dict) else None)
         # Det som trycks är det läraren SER. Ångrade hon ett varv backade bara
         # utkastets markör; provets pekare stod kvar på det förkastade varvet,
         # och PDF:en byggdes ur det. Klienten säger vilken version varvet gällde
@@ -761,6 +783,12 @@ def create_router(base: Path, arbiter) -> APIRouter:
                             dst = out_dir / f"bild-{n:02d}.png"
                             dst.write_bytes(src.read_bytes())
                             bilder_map[n] = dst.name
+                # Lärarens egna inlagda bilder, nycklade på uppgiftsnummer.
+                egna_map = tryck.spara_egna_bilder(egna_bilder, out_dir)
+                # PROVET SÄTTS I LaTeX. Se kommentaren där avritningen tas
+                # emot: mallen är lärarens egen förlaga, och skärmen kan inte
+                # se ut som den. Övriga papper ritas av precis som förut.
+                skarmen_galler = typ != "prov"
                 for round_ in range(exam_gen.MAX_LATEX_ROUNDS + 1):
                     doc, val_errors = exam_spec.validate_exam_json(exam, typ)
                     if doc is None:
@@ -790,7 +818,8 @@ def create_router(base: Path, arbiter) -> APIRouter:
                         tex = exam_latex.render_diagnos(doc, bilder=bilder_map)
                         bed = None
                     else:
-                        tex = exam_latex.render_prov(doc, bilder=bilder_map)
+                        tex = exam_latex.render_prov(doc, bilder=bilder_map,
+                                                     egna_bilder=egna_map)
                         bed = exam_latex.render_bedomning(doc, bilder=bilder_map)
                     # Arbetsbladets separata facit: samma facitband som ligger
                     # sist i bladet, som ETT eget papper bredvid. Det är filen
@@ -823,14 +852,33 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     # Faller avritningen — en trasig data-URI, en bild som inte
                     # är en PNG — sägs det och LaTeX-vägen nedanför tar över.
                     # Hellre ett papper som är snarlikt än inget papper alls.
-                    if bild_uppgift:
+                    # PROVET GÅR INTE DEN HÄR VÄGEN. Dess mall ÄR lärarens
+                    # egen Overleaf-fil, och en avritning av canvas kan inte
+                    # se ut som den — då hade appen lovat en form och tryckt
+                    # en annan. Skärmens ark tas därför bara emot för de
+                    # papper vars form BOR på skärmen.
+                    if bild_uppgift and skarmen_galler:
                         emit({"type": "log", "msg": "Lägger bladen på A4 …"})
                     skarm = (tryck.png_till_pdf(bild_uppgift, out_dir, slug)
-                             if bild_uppgift else None)
-                    if bild_uppgift and skarm is None:
+                             if (bild_uppgift and skarmen_galler) else None)
+                    if bild_uppgift and skarmen_galler and skarm is None:
                         emit({"type": "log",
                               "msg": "Avritningen av bladen blev ingen bild — "
                                      "sätter pappret i LaTeX i stället."})
+                    # ── PROVETS LÖSNINGSFÖRSLAG ───────────────────────
+                    # Växlaren i canvas har ett facitläge för provet också, och
+                    # det är det arket «Lösningar» i Sparat ska ge. Det är
+                    # LÄRARENS eget ark och inte elevens papper, så det ritas
+                    # av skärmen även när provet självt sätts i LaTeX — annars
+                    # gav knappen bedömningsanvisningen igen, ett annat papper.
+                    if bild_losningar:
+                        if tryck.png_till_pdf(
+                                bild_losningar, out_dir,
+                                f"{slug} - losningar") is None:
+                            emit({"type": "log",
+                                  "msg": "Lösningsförslaget blev ingen bild — "
+                                         "knappen ger bedömningsanvisningen "
+                                         "tills provet godkänns på nytt."})
                     if skarm is not None:
                         pdf_path = skarm
                         # Facit blir en EGEN fil, samma uppsättning som
@@ -854,22 +902,6 @@ def create_router(base: Path, arbiter) -> APIRouter:
                         elif facit is not None and exam_pdf.engine_available():
                             exam_pdf.compile_pdf(facit, out_dir,
                                                  f"{slug} - facit")
-                        # ── PROVETS LÖSNINGSFÖRSLAG ───────────────────
-                        # Växlaren i canvas har ett facitläge för provet också,
-                        # och det är det arket «Lösningar» i Sparat ska ge.
-                        # Förut gav knappen bedömningsanvisningen — ett annat
-                        # papper, satt i LaTeX. Nu blir skärmens ark en egen
-                        # fil, {stam} - losningar.pdf, som rutten
-                        # /api/exams/{id}/losningar serverar.
-                        if bild_losningar:
-                            if tryck.png_till_pdf(
-                                    bild_losningar, out_dir,
-                                    f"{slug} - losningar") is None:
-                                emit({"type": "log",
-                                      "msg": "Lösningsförslaget blev ingen "
-                                             "bild — knappen ger bedömnings"
-                                             "anvisningen tills provet "
-                                             "godkänns på nytt."})
                         # Bedömningsanvisningen står INTE på skärmen: den är
                         # lärarens rättningsdokument med kravgränser, bedömning
                         # och kommenterade elevlösningar, och har aldrig varit

@@ -2,7 +2,12 @@
     Fast preamble; se _preamble.tex.j2. #))
 ((* set med_grafik = false *))
 ((* set med_svarsrad = false *))
-((* set sidhuvud = kurs ~ ' — ' ~ titel ~ ' · Bedömningsanvisning' *))
+((# SAMMA TYPOGRAFI SOM PROVET. Bedömningsanvisningen läses BREDVID elevens
+    papper när läraren rättar — samma uppgift, samma nummer, samma indrag. Var
+    de satta i två typsnitt med två uppgiftsrytmer fick hon leta efter uppgift
+    7 i två olika layouter samtidigt. #))
+((* set forlaga = true *))
+((* set sidhuvud = kurs ~ ' \textemdash{} ' ~ titel ~ ' \textperiodcentered{} Bedömningsanvisning' *))
 ((* include '_preamble.tex.j2' *))
 ((* import '_former.tex.j2' as former *))
 
@@ -10,13 +15,15 @@
 
 \begin{center}
   {\LARGE\bfseries Bedömningsanvisning}\\[2mm]
-  {\large ((( titel ))) — ((( kurs )))((* if datum *)) \; · \; ((( datum )))((* endif *))}
+((# Tankstreck och punkt som KOMMANDON: Computer Modern har inga glyfer på
+    U+2014/U+00B7, och tecknen försvinner (eller blir «ů») rakt av. #))
+  {\large ((( titel ))) \textemdash{} ((( kurs )))((* if datum *)) \enspace\textperiodcentered\enspace ((( datum )))((* endif *))}
 \end{center}
 
 \vspace{4mm}
 {\small Poäng anges som (E/C/A). Kravgränser: E minst ((( granser.E.minst ))),
 C minst ((( granser.C.minst ))) varav ((( granser.C.varav_ca ))) C/A,
-A minst ((( granser.A.minst ))) varav ((( granser.A.varav_a ))) A —
+A minst ((( granser.A.minst ))) varav ((( granser.A.varav_a ))) A \textemdash{}
 av totalt ((( granser.total ))) poäng.}
 
 \vspace{4mm}

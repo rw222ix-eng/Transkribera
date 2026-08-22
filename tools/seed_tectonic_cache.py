@@ -19,11 +19,18 @@ tyst igen — vad mallarna faktiskt producerar är vad som seedas.
 TikZ används numera av mallarna: figurrecepten (app.exam_figures) bygger
 ren tikz som renderas genom de riktiga mallarna, och det representativa
 dokumentet nedan har en figur (enhetscirkel) som seedar tikz-vägen via
-render_prov/render_arbetsblad/render_bedomning. pgfplots används däremot
-INTE av mallarna (recepten är ren tikz) — PROBE_TEX drar ändå in det
-separat (plus \\usetikzlibrary{angles,quotes}, en \\pic angle-figur och en
-exp-kurva) så att glyferna finns cachade om en framtida figurtyp behöver
+render_prov/render_arbetsblad/render_bedomning. pgfplots laddas också av
+provmallen (det är lärarens förlaga som drar in det) och PROBE_TEX drar in
+det separat (plus \\usetikzlibrary{angles,quotes}, en \\pic angle-figur och
+en exp-kurva) så att glyferna finns cachade om en framtida figurtyp behöver
 dem under --only-cached.
+
+PROVET GÅR NUMERA GENOM exam-KLASSEN. Mallen är en reproduktion av lärarens
+eget Overleaf-prov: ``\\documentclass{exam}`` med ``addpoints``, booktabs och
+25 mm marginaler. Klassen och paketen finns inte i cachen förrän provmallen
+kompilerats HÄR — och en klass som saknas ger under ``--only-cached`` samma
+tysta krasch som en saknad fontmetrik. Provets jobb nedan är alltså inte en
+formalitet; det är det enda som seedar exam.cls.
 
     python -m tools.seed_tectonic_cache
 """
@@ -59,6 +66,12 @@ PROBE_TEX = r"""
 \usepackage{lastpage}
 \usepackage{tabularx}
 \usepackage{enumitem}
+% booktabs kom in med provmallen (lärarens förlaga sätter både betygstabellen
+% och datatabellen med \toprule/\midrule/\bottomrule). Provets eget jobb drar
+% in det ändå, men sonden ska nämna VARJE paket mallarna använder —
+% tests/test_tectonic_seed.py håller den regeln, och den finns för att ett
+% paket som bara ett jobb råkar dra in försvinner tyst den dagen jobbet ändras.
+\usepackage{booktabs}
 \usepackage{tikz}
 \usetikzlibrary{angles,quotes}
 \usepackage{pgfplots}
@@ -103,6 +116,8 @@ $\left(\frac{n(n+1)}{2}\right)$ och $\sqrt{\frac{x}{2}}$.
 \end{tikzpicture}
 \colorbox{ink700}{\textcolor{white}{Band}}
 \begin{tabularx}{\linewidth}{@{}lX@{}}A & B \\\end{tabularx}
+\begin{tabular}{lc}\toprule \textbf{Betyg} & \textbf{Poäng} \\ \midrule
+F & 0--8 \\ A & 29--37 \\ \bottomrule\end{tabular}
 \end{document}
 """
 

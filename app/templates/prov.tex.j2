@@ -1,90 +1,219 @@
-((# Provmall (Fas 4) — FAST preamble: modellen genererar aldrig fri LaTeX-
-    preamble, bara uppgiftsinnehåll som escapas in i den här mallen.
-    Jinja-avgränsarna är parentesbaserade (se exam_latex._environment)
-    och krockar inte med LaTeX-klamrar. #))
+((# ══════════ PROVMALLEN — LÄRARENS EGEN FÖRLAGA, REPRODUCERAD ══════════
+    «Typ exakt så här vill jag att mina prov ska se ut.» Läraren lämnade in
+    LaTeX-källan till sitt eget prov (Ma 2c, kapitel 2, NA25, v5), och den här
+    mallen ÄR den filen med appens innehåll instoppat. Recept, ordning och
+    mått är hennes; det som avviker står som kommentar med skälet.
+
+    HENNES STRUKTUR, i tur och ordning:
+      · försättsblad — titel, klass, linje, delöversikt, provtid, hjälpmedel,
+        inlämningsregel, totalpoäng, betygstabell, instruktioner, namnrader
+      · ny sida per del — centrerad delrubrik, 0,5 pt-linje, och (från och med
+        andra delen) hjälpmedel, kravrad och egna namnrader
+      · uppgifterna i exam-klassens \begin{questions}: \question[p] för en
+        uppgift som bär sina poäng själv, \question utan poäng när
+        deluppgifterna bär dem, och \part[p] för varje deluppgift
+      · kravetiketten i \emph direkt efter numret, tipset i \emph på egen rad
+      · \svarsrad{Svar:} under kortsvaren, ingenting under de uppgifter som
+        redovisas på lösblad
+
+    HON HAR ETT DOKUMENT PER DEL; APPEN HAR ETT. Därför \setcounter{question}
+    vid varje ny del (precis som hennes Del B-fil gör) och \markboth för att
+    sidhuvudets del ska bli rätt även på den sida där en del tar slut.
+
+    FAST preamble som förut: modellen genererar aldrig LaTeX, bara innehåll
+    som escapas in här (app/exam_latex.py). #))
 ((* set med_grafik = true *))
 ((* set med_svarsrad = true *))
+((* set forlaga = true *))
+((# Sidhuvudets vänsterrad ÄR provets namn. Delen står i mitten och kommer ur
+    \markboth. #))
+((* set sidhuvud = forsatt.sidhuvud *))
 ((* include '_preamble.tex.j2' *))
 ((* import '_former.tex.j2' as former *))
 
 \begin{document}
 
-((# ------------------------------------------------ försättsblad ------ #))
+((# ═══════════════════════════════════════════ FÖRSÄTTSBLAD ═══════════ #))
 \begin{center}
-  {\LARGE\bfseries ((( titel )))}\\[3mm]
-  {\large ((( kurs )))((* if klass *)) \; · \; ((( klass )))((* endif *))((* if datum *)) \; · \; ((( datum )))((* endif *))}
+  {\LARGE\bfseries ((( forsatt.titelrad )))}\\[6pt]
+  ((* if forsatt.underrad *)){\large ((( forsatt.underrad )))}((* endif *))
 \end{center}
 
-\vspace{8mm}
-\elevruta
-
+\vspace{4mm}
+\hrule height 0.8pt
 \vspace{6mm}
-\begin{tabularx}{\linewidth}{@{}lX@{}}
-((* if tid_min *))\textbf{Provtid} & ((( tid_min ))) minuter \\((* endif *))
-\textbf{Hjälpmedel} & ((( hjalpmedel ))) \\
-\textbf{Totalpoäng} & ((( poang_rad ))) \\
-\end{tabularx}
 
-\vspace{6mm}
-\textbf{Kravgränser}
-
-\begin{tabularx}{\linewidth}{@{}lX@{}}
-E & minst ((( granser.E.minst ))) poäng \\
-C & minst ((( granser.C.minst ))) poäng, varav minst ((( granser.C.varav_ca ))) C- eller A-poäng \\
-A & minst ((( granser.A.minst ))) poäng, varav minst ((( granser.A.varav_a ))) A-poäng \\
-\end{tabularx}
-
-{\small\textcolor{ink500}{((( granser.regel )))}}
-
-\vspace{6mm}
-{\small Poängen för varje uppgift anges i högermarginalen vid uppgiftens
-början. Till uppgifter märkta \emph{Endast svar krävs} behöver du bara ge
-svar. Övriga uppgifter
-kräver fullständig redovisning — visa hur du löser uppgiften och motivera
-dina steg.}
-
-\newpage
-
-((# ------------------------------------------------ uppgifter --------- #))
-((* for del in delar *))
-((* if del.rubrik *))
-\delprovband{((( del.rubrik )))}
-((* if del.instruktion *)){\small\itshape ((( del.instruktion )))}\par\vspace{3mm}((* endif *))
-((* endif *))
-((* for u in del.uppgifter *))
-((# \par avslutar ALLTID poäng-raden DIREKT efter \begin{uppgift} — annars
-    flyter \poangs \hfill in i nästa stycke (den villkorade "Endast svar
-    krävs"-texten, eller uppgiftstexten) och poängen hamnar inline i
-    stället för isolerad i högermarginalen. Detta \par måste stå FÖRE
-    kursivtexten, inte efter den (det var precis den ordningen som gav
-    bugen: poängen glidande in i "Endast svar krävs"-texten). Den andra
-    \par:en nedan (efter (* endif *)) är oförändrad sedan tidigare och
-    avslutar i stället den villkorade kursivraden innan uppgiftstexten. #))
-\begin{uppgift}{((( u.nummer )))}{((( u.poang_str )))}\par
-((* if u.endast_svar and not u.har_deluppgifter and not u.flerval *)){\small\itshape Endast svar krävs.}((* endif *))\par
-((( u.text )))
-((* if u.bild_fil *))\par\vspace{2mm}\begin{center}\includegraphics[width=0.72\linewidth,height=90mm,keepaspectratio]{((( u.bild_fil )))}\end{center}((* endif *))
-((* if u.figur_tex *))\par\vspace{2mm}\begin{center}((( u.figur_tex )))\end{center}((* endif *))
-((( former.kropp(u) )))
-((* if u.notis *))\notisruta{((( u.notis )))}((* endif *))
-((* if u.har_deluppgifter *))
-((* for d in u.deluppgifter *))
-\begin{deluppgift}{((( d.bokstav )))}{((( d.poang_str )))}\par
-((( d.text )))
-((( former.kropp(d) )))
-((* if d.notis *))\notisruta{((( d.notis )))}((* endif *))
-((* if d.flerval *))((* for alt in d.flerval *))\par\kryssruta\ ((( alt.bokstav ))): ((( alt.text )))((* endfor *))\par\vspace{2mm}((* elif d.svarsfalt *))((( former.falt(d.svarsfalt) )))((* elif d.endast_svar *))((* if d.enhet *))\svarsradmed{}{((( d.enhet )))}((* else *))\svarsrad((* endif *))((* else *))\par\vspace{((( d.utrymme_mm )))mm}((* endif *))
-\end{deluppgift}
+((* if forsatt.delrader *))
+\noindent
+((* for d in forsatt.delrader *))\textbf{((( d.namn )))} \textemdash{} ((( d.text )))((* if not loop.last *))\\((* endif *))
 ((* endfor *))
+
+\vspace{4mm}
+((* endif *))
+
+((* if forsatt.provtid *))
+\noindent\textbf{Provtid:} ((( forsatt.provtid )))\par
+\vspace{2pt}
+((* endif *))
+((# Hjälpmedelsraden hänger in under sin egen etikett när den bryter — samma
+    grepp som förlagans \hphantom{\textbf{Hjälpmedel:}} på andra raden, men
+    som \hangindent, för appens hjälpmedelsregel är EN mening som bryter var
+    den vill och inte två färdiga rader.
+
+    EGET STYCKE, inte samma som provtidsraden. \hangindent gäller HELA
+    stycket, och med provtiden i samma stycke (som förlagans \\ ger) räknades
+    hjälpmedelsraden som stycketes andra rad — då drog \hangafter=1 in den
+    med en gång, och «Hjälpmedel:» stod indraget mitt på sidan. Luften blir
+    densamma: 2 pt ovanpå radavståndet, precis som hennes \\[2pt]. #))
+{\hangindent=\widthofhjalpmedel\hangafter=1\noindent\textbf{Hjälpmedel:} ((( hjalpmedel )))\par}
+
+((* if forsatt.inlamningsrad *))
+\vspace{4mm}
+
+\noindent
+\textbf{((( forsatt.inlamningsrad )))}
+((* endif *))
+
+\vspace{4mm}
+
+\noindent
+Provet kan ge totalt \textbf{((( forsatt.total ))) poäng}.
+
+\vspace{6mm}
+
+((# ---------- Betygstabell ----------
+    Förlagans tabell, med EN rättelse: hon har «F 0–9» och «E 9–18», och nio
+    poäng kan inte vara två betyg samtidigt. Spannen räknas ur provets egna
+    kravgränser (exam_spec.kravgranser) och varje gräns börjar där den förra
+    slutade plus ett. Det är det enda i förlagan som ändras. #))
+\begin{center}
+\begin{tabular}{lc}
+  \toprule
+  \textbf{Betyg} & \textbf{Poäng} \\
+  \midrule
+((* for r in forsatt.betyg *))
+  ((( r.betyg ))) & ((( r.spann ))) \\
+((* endfor *))
+  \bottomrule
+\end{tabular}
+\end{center}
+
+\vspace{6mm}
+
+((# ---------- Instruktioner ---------- #))
+{\noindent\textbf{Instruktioner}}
+
+\vspace{2mm}
+
+\begin{itemize}[nosep, leftmargin=*]
+  \item Poängen för varje uppgift anges i högermarginalen.
+  \item \emph{\textquotedblleft Endast svar krävs\textquotedblright} \textemdash{} skriv bara svaret.
+  \item Övriga uppgifter \textemdash{} visa tydliga beräkningar och motivera dina svar.
+  \item Skriv lösningar på lösblad. Skriv ditt namn på alla blad du lämnar in.
+\end{itemize}
+
+\vspace{10mm}
+
+\noindent
+\textbf{Namn:} \hrulefill
+
+\vspace{6mm}
+
+\noindent
+\textbf{Klass:} \hrulefill
+
+((# ═══════════════════════════════════════════ UPPGIFTERNA ════════════ #))
+((* for del in delar *))
+\newpage
+((* if del.titelrad *))
+((# \markboth och inte en ny \runningheader: se _preamble.tex.j2. #))
+\markboth{((( del.rubrik )))}{((( del.rubrik )))}
+\begin{center}
+  {\Large\bfseries ((( del.titelrad )))}
+\end{center}
+\vspace{2mm}
+\hrule height 0.5pt
+((* if del.hjalpmedelsrad *))
+\vspace{4mm}
+
+((# Den ANDRA delen och framåt delas ut för sig — försättsbladet ligger kvar i
+    elevens hand — så sidan måste själv säga vad som är tillåtet, vad som krävs
+    och vem som skrev den. Den första delen går rakt på uppgifterna. #))
+\noindent
+\textbf{Hjälpmedel:} ((( del.hjalpmedelsrad )))((* if del.kravrad *))\\[2pt]
+((( del.kravrad )))((* endif *))
+
+\vspace{2mm}
+
+\noindent
+\textbf{Namn:} \hrulefill
+
+\vspace{4mm}
+
+\noindent
+\textbf{Klass:} \hrulefill
+
+\vspace{6mm}
+((* else *))
+\vspace{6mm}
+((* endif *))
+((* else *))
+\markboth{}{}
+((* endif *))
+
+\begin{questions}
+((# Numreringen löper vidare över delarna — samma \setcounter som hennes
+    Del B-fil («Numrering börjar på 7»). #))
+\setcounter{question}{((( del.forsta_nr_minus_ett )))}
+((* for u in del.uppgifter *))
+
+((( former.fraga(u) )))
+((( former.stycken(u.stycken) )))
+((* if u.bild_fil *))
+\begin{center}
+  \includegraphics[width=0.7\textwidth]{((( u.bild_fil )))}
+\end{center}
+((* endif *))
+((* if u.figur_tex *))
+\vspace{4mm}
+\begin{center}
+((( u.figur_tex )))
+\end{center}
+\vspace{2mm}
+((* endif *))
+((( former.tabellbok(u.tabell) )))((( former.steg(u.stegtabell) )))((( former.rutor(u.svarsrutor) )))
+((* if u.notis *))\pftips{((( u.notis )))}
+((* endif *))
+((* if u.har_deluppgifter *))
+\begin{parts}
+((* for d in u.deluppgifter *))
+
+((( former.delfraga(d) )))
+((( former.stycken(d.stycken) )))
+((( former.tabellbok(d.tabell) )))((( former.steg(d.stegtabell) )))((( former.rutor(d.svarsrutor) )))
+((* if d.notis *))\pftips{((( d.notis )))}
+((* endif *))
+((* if d.flerval *))((* for alt in d.flerval *))\par\kryssruta\ ((( alt.bokstav ))): ((( alt.text )))((* endfor *))\par\vspace{2mm}
+((* elif d.svarsfalt_rad *))((( former.svarsrader(d.svarsfalt_rad) )))
+((* elif d.endast_svar *))((( former.svarsplats(d) )))
+((* endif *))
+((* endfor *))
+
+\end{parts}
 ((# Förälderns egna ifyllnadsrader står EFTER deluppgifterna: de är
     svarsplatsen för hela uppgiften, och en svarsplats före frågan är en rad
     ingen vet vad hon ska skriva på. #))
-((* if u.svarsfalt *))((( former.falt(u.svarsfalt) )))((* endif *))
+((* if u.svarsfalt_rad *))
+((( former.svarsrader(u.svarsfalt_rad) )))
+((* endif *))
 ((* elif u.flerval *))
 ((* for alt in u.flerval *))\par\kryssruta\ ((( alt.bokstav ))): ((( alt.text )))((* endfor *))\par\vspace{2mm}
-((* elif u.svarsfalt *))((( former.falt(u.svarsfalt) )))((* elif u.endast_svar *))((* if u.enhet *))\svarsradmed{}{((( u.enhet )))}((* else *))\svarsrad((* endif *))((* else *))\par\vspace{((( u.utrymme_mm )))mm}((* endif *))
-\end{uppgift}
+((* elif u.svarsfalt_rad *))((( former.svarsrader(u.svarsfalt_rad) )))
+((* elif u.endast_svar *))((( former.svarsplats(u) )))
+((* endif *))
 ((* endfor *))
+
+\end{questions}
 ((* endfor *))
 
 \end{document}

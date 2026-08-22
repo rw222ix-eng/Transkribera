@@ -87,17 +87,24 @@ def test_varje_uppgift_star_pa_elevernas_ark(dokument, provpdf):
 @pytest.mark.tectonic
 def test_totalpoangen_och_betygsgranserna_star_pa_provet(dokument, provpdf):
     """Poängen utan gränser är bara en siffra: eleven ska kunna läsa av vad
-    som krävs för E, C och A på sitt eget papper."""
+    som krävs för E, C och A på sitt eget papper.
+
+    Formen är lärarens egen förlaga: en centrerad betygstabell med F, E, C och
+    A och ett poängspann per betyg — inte den kravgränslista appen satte förut.
+    SPANNEN MÖTS ALDRIG. Lärarens eget prov har «F 0–9» och «E 9–18», och nio
+    poäng kan inte vara två betyg samtidigt; det är det enda i hennes papper
+    som appen rättar."""
     text = text_ur(provpdf)
     granser = exam_spec.kravgranser(dokument)
     summor = exam_spec.poangsummor(dokument)
     # Totalpoängen som mallen skriver den — «20 poäng» — inte bara talet 20,
     # som också står i datumet.
-    assert f"Totalpoäng {summor['total']} poäng" in text, text[:600]
-    assert f"minst {granser['E']['minst']} poäng" in text
-    assert f"minst {granser['C']['minst']} poäng" in text
-    assert f"minst {granser['A']['minst']} poäng" in text
-    assert "Kravgränser" in text
+    assert f"totalt {summor['total']} poäng" in text, text[:600]
+    assert "Betyg" in text and "Poäng" in text
+    e, c, a = (int(granser[b]["minst"]) for b in ("E", "C", "A"))
+    for spann in (f"0–{e - 1}", f"{e}–{c - 1}", f"{c}–{a - 1}",
+                  f"{a}–{summor['total']}"):
+        assert spann in text, f"betygsspannet {spann!r} saknas: {text[:600]}"
 
 
 @pytest.mark.tectonic

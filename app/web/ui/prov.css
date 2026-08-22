@@ -163,8 +163,22 @@
 
 /* Uppgiftens notis: samma \notisruta som mallen sätter (_preamble.tex.j2) —
    hårlinje, mindre grad, luft omkring. Skild från OBS-rutan ovan med flit:
-   den är fet och gäller hela delen, den här är en påminnelse på EN uppgift. */
+   den är fet och gäller hela delen, den här är en påminnelse på EN uppgift.
+   Används inte längre av provet (se .prtips) men står kvar för de former som
+   ärver klassen. */
 .prnotis{margin:10px 0 0;padding:7px 11px;border:1px solid #000;font-size:13.5px;line-height:1.45;color:#000;white-space:pre-line;text-wrap:pretty}
+
+/* ── Kravet och ledtråden ──
+   Lärarens förlaga skriver «Endast svar krävs.» / «Fullständig lösning krävs.»
+   i kursiv på uppgiftens första rad, och tipset i kursiv på egen rad under
+   frågan. Skärmen sa samma saker med andra ord på andra platser — «lösblad»
+   litet i marginalen och tipset i en inramad ruta — och förhandsvisningen lovade
+   då en form pappret inte har. Samma ord, samma plats, samma stil. */
+.prkrav{margin:0 0 6px;font-style:italic;font-size:15px;line-height:1.45;color:#000}
+.prtips{margin:9px 0 0;font-style:italic;font-size:15px;line-height:1.5;color:#000;white-space:pre-line;text-wrap:pretty}
+/* «Svar:» framför linjen — förlagans \svarsrad{Svar:}. En naken linje på
+   skärmen och en märkt på pappret är två löften om samma ruta. */
+.prsvarnamn{flex:0 0 auto;font-weight:400;font-size:15px}
 
 /* Figurplats och ritad figur — samma två tillstånd som på arbetsbladen. */
 .prfig{position:relative;display:grid;place-items:center;margin-top:12px;margin-inline:auto}

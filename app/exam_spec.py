@@ -68,7 +68,12 @@ class Tabell(_Model):
     """Datatabell inuti en uppgift — mätvärden, årtal, priser. Uppgiften
     hänvisar till den («Bestäm med hjälp av tabellen ovan …»), så den är en del
     av uppgiften och inte en figur bredvid."""
-    rubriker: list[str] = Field(min_length=2, max_length=6)
+    # Taket är 8 och inte 6 sedan lärarens egen förlaga mättes: hennes
+    # regressionstabell har «$t$ (månader)» plus sex mätpunkter, alltså sju
+    # kolumner, och med taket på sex gick hennes egen uppgift inte att uttrycka
+    # i appen. Åtta rymmer den med marginal och ryms fortfarande på bredden
+    # (booktabs, ingen ram, 12 pt).
+    rubriker: list[str] = Field(min_length=2, max_length=8)
     rader: list[list[str]] = Field(min_length=1, max_length=8)
 
     @model_validator(mode="after")

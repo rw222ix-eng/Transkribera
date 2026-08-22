@@ -792,49 +792,58 @@ def test_blad_bygg_speglar_delnamnsoversattningen():
 
 
 def test_render_prov_golden_markers():
+    """PROVET ÄR LÄRARENS EGEN FÖRLAGA. Hon lämnade in LaTeX-källan till sitt
+    Overleaf-prov (Ma 2c, kapitel 2, NA25) och sa «typ exakt så här vill jag
+    att mina prov ska se ut». Markörerna nedan är hennes recept, rad för rad —
+    ändras något av dem ser pappret inte längre ut som hennes."""
     doc, _ = exam_spec.validate_exam_json(_exam())
     tex = exam_latex.render_prov(doc)
-    # fast preamble — modellen styr aldrig den
-    # Designsystemet: 12 pt Times, 17 mm marginal (PR 1)
-    assert tex.lstrip().startswith("\\documentclass[12pt,a4paper]{article}")
-    assert "\\usepackage{newtxtext,newtxmath}" in tex
-    assert "margin=17mm" in tex
-    # amssymb MÅSTE ligga före newtxmath — omvänd ordning ger
-    # "Command \openbox already defined"
-    assert tex.index("amssymb") < tex.index("newtxmath")
-    # bläckfärgerna ur designsystemets colors.css
-    assert "\\definecolor{ink900}{HTML}{1C1B19}" in tex
-    assert "\\definecolor{ink700}{HTML}{3A3835}" in tex
+    # exam-klassen med addpoints — och INTE newtx: förlagan är Computer Modern
+    assert tex.lstrip().startswith("\\documentclass[12pt, a4paper, addpoints]{exam}")
+    assert "newtxtext" not in tex
+    assert "top=25mm, bottom=25mm, left=25mm, right=25mm" in tex
+    assert "\\usepackage{booktabs}" in tex
     assert "\\usepackage[swedish]{babel}" in tex
-    # försättsblad med kravgränser och poäng
-    assert "Kravgränser" in tex
-    assert "minst 5 poäng" in tex and "minst 13 poäng" in tex
-    # regelns %-tecken är escapade (annars kommenterar de bort resten av raden)
-    assert r"25\?" not in tex
-    assert r"25\% av totalpoängen" in tex
-    # elevens prov visar endast totalsumman — E/C/A hör till bedömningsanvisningen
-    assert "20 poäng" in tex and "(9/6/5)" not in tex
-    # delar + numrerade uppgifter med poängrutor
-    # pappret räknar från A (lärarens beslut 2026-08-20) — internt heter delarna B/C
-    assert r"\delprovband{Del A}" in tex and r"\delprovband{Del B}" in tex
-    # numret bärs av uppgift-miljöns hängande etikett
-    assert r"\begin{uppgift}{1}" in tex and r"\begin{uppgift}{6}" in tex
-    # poängen bärs nu av uppgift-miljöns andra argument (som i sin tur
-    # anropar \poang-makrot internt) — endast totalpoäng i elevens prov
-    assert r"\begin{uppgift}{3}{3p}" in tex and r"\begin{uppgift}{7}{4p}" in tex
-    assert r"\poang{1/1/1}" not in tex and "{1/1/1}" not in tex
-    # matte bevarad, rutinuppgift får svarsrad
+    # poängen i högermarginalen, formaterade «2 p» och utan ordet «poäng»
+    assert "\\pointsinrightmargin" in tex
+    assert "\\pointformat{\\thepoints~p}" in tex
+    assert "\\pointname{}" in tex
+    # sidhuvudet: provets namn till vänster, delen i mitten, linje under
+    assert "\\pagestyle{headandfoot}" in tex
+    assert "\\runningheadrule" in tex
+    assert "\\firstpageheader{}{}{}" in tex
+    # försättsbladets ordning
+    assert "Provtid:" in tex and "Hjälpmedel:" in tex
+    assert "Du lämnar in Del A innan du hämtar Del B." in tex
+    assert "Provet kan ge totalt \\textbf{20 poäng}" in tex
+    assert "Instruktioner" in tex and "Poängen för varje uppgift anges" in tex
+    assert "\\textbf{Namn:} \\hrulefill" in tex
+    # elevens prov visar endast totalsumman — E/C/A hör till bedömningen
+    assert "(9/6/5)" not in tex and "3/0/0" not in tex
+    # delrubrikerna räknar från A (lärarens beslut 2026-08-20)
+    assert (r"Del A \textendash{} Digitala verktyg är inte tillåtna"
+            in tex)
+    assert r"Del B \textendash{} Digitala verktyg är tillåtna" in tex
+    # uppgifterna i exam-klassens questions/parts, med kravetiketten i kursiv
+    assert "\\begin{questions}" in tex and "\\setcounter{question}{0}" in tex
+    assert "\\question[3] \\pfkrav{Endast svar krävs.}" in tex
+    assert "\\question[4] \\pfkrav{Fullständig lösning krävs.}" in tex
+    # matte bevarad, kortsvarsuppgiften får förlagans svarslinje
     assert r"\(x^2 - 4x + 3 = 0\)" in tex
-    assert "\\svarsrad" in tex
+    assert "\\svarsrad{Svar:}" in tex
     # lösningar hör INTE hemma i provet
     assert "lösningsförslag" not in tex.lower()
 
 
 def test_preamble_definierar_layoutmakron():
     """Designsystemets layoutprimitiver ska finnas som makron, så att
-    mallarna anropar dem i stället för att upprepa formateringen."""
+    mallarna anropar dem i stället för att upprepa formateringen.
+
+    Mätt på ARBETSBLADET och inte på provet: provet lämnade designsystemet när
+    lärarens förlaga blev mall (exam-klassen, egna mått), medan arbetsbladet,
+    gruppuppgiften och diagnosen har kvar sin egen form."""
     doc, _ = exam_spec.validate_exam_json(_exam())
-    tex = exam_latex.render_prov(doc)
+    tex = exam_latex.render_arbetsblad(doc)
     assert r"\newcommand{\delprovband}" in tex
     assert r"\newenvironment{uppgift}" in tex
     assert r"\newcommand{\ramruta}" in tex
@@ -901,17 +910,23 @@ def test_prov_utan_figur_laddar_inte_tikz():
 
 
 def test_prov_anvander_layoutmakron():
-    """Provmallen ska anropa makrona, inte upprepa formateringen."""
+    """Provmallen ska anropa makrona, inte upprepa formateringen.
+
+    Makrona är numera förlagans: \\pfkrav för kravetiketten, \\svarsrad för
+    svarslinjen och exam-klassens egna question/parts. Designsystemets band och
+    elevruta hör till de andra pappren."""
     doc, _ = exam_spec.validate_exam_json(_exam())
     tex = exam_latex.render_prov(doc)
     # Sök i dokumentkroppen, inte i preambeln: makrodefinitionerna ligger
     # i den delade _preamble.tex.j2, så en sökning i hela strängen skulle
     # passera även om mallen slutade anropa dem.
     kropp = tex.split(r"\begin{document}", 1)[1]
-    assert r"\elevruta" in kropp
-    assert r"\delprovband{Del A}" in kropp and r"\delprovband{Del B}" in kropp
-    assert r"\begin{uppgift}{1}{3p}" in tex
-    # \section* ersatt av bandet
+    assert r"\pfkrav{" in kropp
+    assert r"\svarsrad{" in kropp
+    assert r"\begin{questions}" in kropp and r"\question" in kropp
+    # designsystemets grepp ska INTE stå på provet längre
+    assert r"\elevruta" not in kropp
+    assert r"\delprovband" not in kropp
     assert r"\section*{Del A}" not in tex and r"\section*{Del B}" not in tex
     # oförändrat: elevens prov visar bara totalpoäng
     assert "20 poäng" in tex and "(9/6/5)" not in tex
@@ -954,11 +969,16 @@ def test_render_escapes_model_text():
 
 
 def test_prov_renderar_deluppgifter_utan_facit():
+    """Deluppgifterna sätts av exam-klassens parts, som i förlagan: «(a)»,
+    «(b)» och poängen på DELUPPGIFTEN. Uppgiften själv bär ingen poäng då —
+    en summa i marginalen bredvid numret hade bara varit ett tredje tal."""
     doc, _ = exam_spec.validate_exam_json(_exam_med_deluppgifter())
     tex = exam_latex.render_prov(doc)
-    assert r"\begin{deluppgift}{a}" in tex and r"\begin{deluppgift}{b}" in tex
-    # elevens prov visar aggregatet på uppgiften, aldrig E/C/A
-    assert r"\begin{uppgift}{7}{4p}" in tex
+    assert r"\begin{parts}" in tex and r"\end{parts}" in tex
+    assert r"\part[" in tex
+    # föräldern får INGEN poängmarkör
+    assert r"\question \pfkrav{" in tex
+    # elevens prov visar aldrig E/C/A
     assert "0/3/1" not in tex
 
 
@@ -971,9 +991,13 @@ def test_prov_renderar_flerval_utan_ratt_svar():
 
 
 def test_prov_renderar_notis():
+    """På PROVET är notisen förlagans kursiva ledtråd, inte en inramad ruta:
+    «Tips: Gör en skiss och kalla bredden för $x$ cm.» En låda mitt i en
+    uppgift läser som ett villkor, kursiven som en hjälpande hand."""
     doc, _ = exam_spec.validate_exam_json(_exam_med_notis())
     tex = exam_latex.render_prov(doc)
-    assert r"\notisruta{" in tex
+    assert r"\pftips{" in tex
+    assert r"\notisruta{" not in tex.split(r"\begin{document}", 1)[1]
 
 
 def test_deluppgifts_notis_renderas_i_prov_och_arbetsblad():
@@ -991,7 +1015,9 @@ def test_deluppgifts_notis_renderas_i_prov_och_arbetsblad():
     prov = exam_latex.render_prov(doc)
     arbetsblad = exam_latex.render_arbetsblad(doc)
     bedomning = exam_latex.render_bedomning(doc)
-    assert r"\notisruta{Tänk på tecknet.}" in prov
+    # Provet sätter den som förlagans kursiva ledtråd, arbetsbladet som sin
+    # egen inramade ruta — samma fält, två papper, två former.
+    assert r"\pftips{Tänk på tecknet.}" in prov
     assert r"\notisruta{Tänk på tecknet.}" in arbetsblad
     # bedömningsanvisningen ska inte innehålla notisrutan
     assert r"\notisruta{Tänk på tecknet.}" not in bedomning
@@ -1096,9 +1122,11 @@ def test_par_avslutar_poangraden_dar_markor_renderas():
                     r"\par, vilket flyttar ned uppgiftstexten i onödan"
                 )
 
-    # prov: både rutinuppgifter (med "Endast svar krävs") och
-    # redovisningsuppgifter — båda bär en poängmarkör och kräver \par.
-    kontrollera(exam_latex.render_prov(doc), "prov")
+    # PROVET MÄTS INTE HÄR LÄNGRE. Det sätts sedan lärarens förlaga blev mall
+    # av exam-klassen, som placerar poängen med \pointsinrightmargin i stället
+    # för med \hfill — \hfill-fällan finns alltså inte där, och det finns inga
+    # \begin{uppgift}-rader att mäta. Bedömningsanvisningen använder däremot
+    # kvar miljön och mäts nedan.
     # arbetsblad: visa_poang=True ska kräva \par, visa_poang=False (default,
     # och alltid i facit-sektionen) ska INTE ha det.
     kontrollera(exam_latex.render_arbetsblad(doc, visa_poang=True),
@@ -1111,7 +1139,6 @@ def test_par_avslutar_poangraden_dar_markor_renderas():
     # Samma disciplin för deluppgifts-miljön — exakt den nya riskytan. Alla
     # tre mallar renderas mot deluppgifts-fixturen så att en framtida
     # deluppgift utan (eller med felplacerat) \par fångas.
-    kontrollera(exam_latex.render_prov(doc_del), "prov (deluppgifter)")
     kontrollera(exam_latex.render_arbetsblad(doc_del, visa_poang=True),
                 "arbetsblad deluppg (visa_poang=True)")
     kontrollera(exam_latex.render_arbetsblad(doc_del, visa_poang=False),
@@ -1750,7 +1777,9 @@ def test_prompt_beskriver_strukturkomponenterna():
     # signaler ska finnas kvar (deluppgifter, flerval, notis)
     assert "pedagogiskt" in txt
     assert "sparsamt" in txt        # flerval
-    assert "sällan" in txt          # notis
+    # notisen är numera förlagans kursiva ledtråd, och måttfullheten står som
+    # ett tak i stället för som ordet «sällan»
+    assert "var tredje uppgift" in txt
     # flerval får inte kombineras med deluppgifter — förbudet ska stå i prompten
     assert "aldrig på en uppgift som redan har deluppgifter" in txt
 
