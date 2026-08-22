@@ -927,9 +927,22 @@ def test_prov_renderar_figuren():
     assert r"\usetikzlibrary{angles,quotes}" in tex   # med_tikz slogs på
 
 
-def test_prov_utan_figur_laddar_inte_tikz():
-    doc, _ = exam_spec.validate_exam_json(_exam())
-    assert r"\usepackage{tikz}" not in exam_latex.render_prov(doc)
+def test_prov_utan_figur_laddar_tikz_men_inte_pgfplots():
+    """Provet laddar numera ALLTID tikz: vändmärket i sidfoten ritar sin pil
+    med det (lärarens begäran 2026-08-22, se _preamble.tex.j2 VÄNDMÄRKET).
+
+    Det som fortfarande hänger på figurerna är det DYRA — pgfplots är buntens
+    tyngsta paket, och biblioteken angles/quotes behövs bara av figurreceptens
+    vinkelbågar. Ett prov utan figurer ska inte betala för dem, och bara det
+    provet slipper babels genvägsavstängning."""
+    tex = exam_latex.render_prov(exam_spec.validate_exam_json(_exam())[0])
+    assert r"\usepackage{tikz}" in tex
+    assert r"\usepackage{pgfplots}" not in tex
+    assert r"\usetikzlibrary" not in tex
+    assert r"\shorthandoff" not in tex
+    # Bedömningsanvisningen (samma preamble, inget vändmärke) laddar det inte.
+    bed = exam_latex.render_bedomning(exam_spec.validate_exam_json(_exam())[0])
+    assert r"\usepackage{tikz}" not in bed
 
 
 def test_prov_anvander_layoutmakron():
@@ -2238,9 +2251,10 @@ def _doc_med_delar(sk: list[dict]) -> exam_spec.ExamDoc:
 def test_skelettet_ger_provet_deluppgifter(antal):
     """Provet SKA få deluppgifter, och de ska summera till radens poäng.
 
-    Två mönster, båda lärarens: kortsvarssamlingen (en rutinrad blir a), b),
-    c) à en poäng — förlagans uppgift 1 och 3) och stegringen inne i uppgiften
-    (a) tar de lägre nivåerna, b) den högsta — förlagans uppgift 5)."""
+    Två mönster, båda nationella provets: kortsvarsparet (en rutinrad värd två
+    poäng på en nivå blir a) och b) om SAMMA sak — NpMa2a vt17 delprov B,
+    uppgift 1, 2, 3, 4 och 9) och stegringen inne i uppgiften (a) tar de lägre
+    nivåerna, b) den högsta — förlagans uppgift 5)."""
     sk = exam_spec.balanced_skeleton(antal, "prov")
     delade = [s for s in sk if s.get("delar")]
     assert delade, f"antal={antal}: inte en enda uppgift fick deluppgifter"
@@ -2250,10 +2264,13 @@ def test_skelettet_ger_provet_deluppgifter(antal):
             f"{s['delar']} summerar till {summa}, inte {s['poang']}"
         assert all(sum(d) > 0 for d in s["delar"]), "en deluppgift utan poäng"
         assert len(s["delar"]) >= 2, "en ensam deluppgift är ingen deluppgift"
-    # Kortsvarssamlingen: bara enpoängsfrågor, alla på E.
+    # Kortsvarsparet: enpoängsfrågor, alla på SAMMA nivå (NP:s (1/0/0)+(1/0/0),
+    # (0/1/0)+(0/1/0), (0/0/1)+(0/0/1)) — aldrig en E-fråga bredvid en A-fråga
+    # under samma nummer.
     for s in delade:
         if s["typ"] == "rutin":
-            assert all(d == [1, 0, 0] for d in s["delar"]), s["delar"]
+            assert all(sum(d) == 1 for d in s["delar"]), s["delar"]
+            assert len({tuple(d) for d in s["delar"]}) == 1, s["delar"]
 
 
 @pytest.mark.parametrize("antal", [6, 8, 10, 12, 16, 20])
@@ -2337,11 +2354,51 @@ def test_skelettets_deluppgifter_tvingas_av_grammatiken():
             assert prefix[i]["properties"]["deluppgifter"] == {"const": None}
 
 
-def test_kortsvarssamlingen_behover_ingen_stam():
-    r"""Förlagans uppgift 1 går rakt från «\question \emph{Endast svar krävs.}»
-    till a) — de fem frågorna handlar om olika saker och har ingen gemensam
-    stam. Grammatiken tvingar därför ingen text på just den formen, och
-    prompten ber uttryckligen om en tom."""
+@pytest.mark.parametrize("antal", [6, 8, 10, 12, 16, 20])
+def test_kortsvaren_ar_egna_numrerade_uppgifter(antal):
+    """LÄRARENS DOM 2026-08-22: «Uppgift 1 har deluppgift a och b men de är
+    inte relaterade till varandra. Om det ska vara deluppgifter då ska det
+    handla om samma sak. Kolla hur nationella provet är gjort.»
+
+    NpMa2a vt17 delprov B (s. 2–7): nio kortsvarsuppgifter med EGET NUMMER,
+    värda en eller två poäng. Fyra är enkla frågor; fem har a) och b), och
+    varje par delar en graf, en ekvationstyp eller ett uttryck. «Samlingen» —
+    en hög orelaterade E-frågor under ett nummer — finns inte i NP och finns
+    inte längre här."""
+    sk = exam_spec.balanced_skeleton(antal, "prov")
+    kort = [s for s in sk if s["typ"] == "rutin"]
+    assert kort, "provet fick inga kortsvar alls"
+    for s in kort:
+        assert 1 <= sum(s["poang"]) <= 3,             f"kortsvaret är värt {sum(s['poang'])} p — NP:s ger en till tre"
+        delar = s.get("delar")
+        if delar is None:
+            continue
+        # Paret är NP:s: två (eller tre) frågor à en poäng på SAMMA nivå.
+        assert 2 <= len(delar) <= 3, delar
+        assert all(sum(d) == 1 for d in delar), delar
+        assert len({tuple(d) for d in delar}) == 1,             f"kortsvarets delar ligger på olika nivåer: {delar}"
+
+
+def test_kortsvarsparet_foljer_np_tripplarna():
+    """NP:s egna par, rad för rad (vt17 delprov B): uppgift 1 och 2 är
+    (1/0/0)+(1/0/0), uppgift 4 är (0/1/0)+(0/1/0), uppgift 9 är
+    (0/0/1)+(0/0/1). En ensam poäng är en enkel fråga (uppgift 5, 7, 8), och
+    en trippel över två nivåer är inget kortsvar alls."""
+    d = exam_spec._dela_poang
+    assert d([2, 0, 0], "rutin") == [[1, 0, 0], [1, 0, 0]]
+    assert d([0, 2, 0], "rutin") == [[0, 1, 0], [0, 1, 0]]
+    assert d([0, 0, 2], "rutin") == [[0, 0, 1], [0, 0, 1]]
+    assert d([3, 0, 0], "rutin") == [[1, 0, 0]] * 3
+    assert d([1, 0, 0], "rutin") is None
+    assert d([0, 1, 0], "rutin") is None
+    assert d([1, 1, 0], "rutin") is None
+
+
+def test_kortsvaret_kraver_en_stam():
+    """Stammen är det som gör a) och b) till SAMMA uppgift — «Figuren visar
+    grafen till andragradsfunktionen f», «Lös ekvationerna och svara exakt».
+    Grammatiken lät förut en kortsvarsrad lämna texten tom; det var
+    samlingens undantag, och samlingen är borta."""
     sk = exam_spec.balanced_skeleton(10, "prov")
     schema = exam_spec.to_response_format(skeleton=sk)["json_schema"]["schema"]
     prefix = schema["properties"]["uppgifter"]["prefixItems"]
@@ -2349,12 +2406,25 @@ def test_kortsvarssamlingen_behover_ingen_stam():
             if s.get("delar") and s["typ"] == "rutin"]
     assert kort
     for i in kort:
-        assert "minLength" not in _los(schema, prefix[i]["properties"]["text"])
+        assert _los(schema, prefix[i]["properties"]["text"])["minLength"] == 1
     plan = exam_gen._skelett_plan(sk)
-    assert "KORTSVARSSAMLING" in plan and 'text TOM' in plan
+    assert "KORTSVAR MED a) OCH b)" in plan and "SAMMA sak" in plan
+    assert "text TOM" not in plan
     # Deluppgifternas poäng står i planen — grammatiken låser dem, men bara
     # planen säger vad de ska handla om.
     assert "deluppgifter: a) [1, 0, 0]" in plan
+
+
+def test_prompten_kraver_att_deluppgifter_hor_ihop():
+    """Regeln kan inte tvingas av grammatiken: poängtripplar vet ingenting om
+    innehåll. Den står därför i prompten, med NP:s eget exempel som form, och
+    den måste stå i INSTRUCTION — omskrivningen (build_refine_prompt) får bara
+    den texten med sig, och «gör om uppgift 1» ska inte kunna återinföra två
+    orelaterade frågor under samma nummer."""
+    i = exam_gen.INSTRUCTION
+    assert "DELUPPGIFTERNA HÖR ALLTID TILL SAMMA SAK" in i
+    assert "Bestäm funktionens största värde" in i
+    assert "TVÅ" in i and "numrerade uppgifter" in i
 
 
 def test_deluppgift_far_bara_egen_figur_eller_bild():

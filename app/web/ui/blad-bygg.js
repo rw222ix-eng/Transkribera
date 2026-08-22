@@ -465,7 +465,49 @@ window.BladBygg = (() => {
     const former = tabell(u.tabell, 'prtab') + stegtabell(u.stegtabell);
     return `<div class="pruppg">
       <span class="prnr">${u.nr}.<span class="prvarde">${varde}</span></span>
-      <div>${krav}<p class="prtext">${brodtext(u.t)}</p>${alt}${del}${former}${figur}${notis}${svarsrad}</div>
+      <div>${krav}<p class="prtext">${brodtext(u.t)}</p>${alt}${del}${former}${scenruta(u)}${figur}${notis}${svarsrad}</div>
+    </div>`;
+  }
+  /* ══════════ BILDSTÖDET PÅ SKÄRMEN ══════════
+     LÄRARENS BESLUT: «Skit i nyckeln, ingen API. Prompt bara, så skapar jag
+     bilden med min prenumeration.» Appen genererar alltså ingen bild. Rutan
+     nedan har därför två lägen, och det är hela funktionen:
+
+       TRÄFF   — en plåt ur hennes egen katalog (E:\\Bildstil) ligger redan
+                 målad för begreppet. Den visas, och väljaren låter henne byta
+                 till en annan eller ta bort den. Hennes val vinner alltid.
+       INGEN   — SCENE-stycket står framme med «Kopiera scen» och ett
+                 filnamnsförslag. Hon klistrar in stycket i sitt eget
+                 ChatGPT-projekt (projektet lägger basprompten framför själv,
+                 så BARA stycket kopieras), och släpper sedan den färdiga
+                 bilden på rutan. Släppytan är samma väg som alla andra bilder
+                 går (plan.js valjBild → v.bilder), inte en ny.
+
+     Rutan bär `data-plat` = uppgiftens nummer. Klickarna sitter delegerade i
+     plan.js; markup:en här är ren och ritas om vid varje omritning. */
+  function scenruta(u) {
+    const s = u.scen;
+    if (!s) return '';
+    /* Tom sträng är «läraren valde bort plåten» och är INTE samma sak som
+       att ingen plåt fanns: då ska SCENE-stycket fram igen, för hon ska kunna
+       måla en egen. `null`/saknad betyder «appen hittade ingen». */
+    const plat = s.plat || '';
+    if (plat) {
+      return `<div class="prbild gufigur prplat" data-plat="${u.nr}">
+        <img src="/api/platar/${encodeURIComponent(plat)}" alt="" loading="lazy" />
+        <div class="prplatfot"><span class="prplatnamn">${esc(plat)}</span>
+          <button type="button" class="prplatbyt" data-plat-byt="${u.nr}">Byt plåt</button>
+          <button type="button" class="prplatbort" data-plat-bort="${u.nr}">Ta bort</button>
+        </div></div>`;
+    }
+    return `<div class="prbild gufigur prscen" data-plat="${u.nr}">
+      <p class="prscenrub">Bild att skapa — ${esc(s.begrepp || '')}</p>
+      <pre class="prscentext">${esc(s.scene || '')}</pre>
+      <div class="prplatfot"><span class="prplatnamn">${esc(s.filnamn || '')}</span>
+        <button type="button" class="prscenkopiera" data-plat-kopiera="${u.nr}">Kopiera scen</button>
+        <button type="button" class="prplatbyt" data-plat-byt="${u.nr}">Välj plåt</button>
+      </div>
+      <p class="prscenhint">Släpp bilden här när den är klar — eller klicka.</p>
     </div>`;
   }
   /* Provets rubrik, med dokumentets egen först. Samma regel som arkets: skrev

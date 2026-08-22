@@ -1816,6 +1816,12 @@
          och på papperet. */
       if (u.figur) ut.fig = u.figur;
       if (u.bild) ut.bild = u.bild;
+      /* BILDSTÖDET (exam_spec.Scen). Uppgiften bär en bildbeställning i
+         lärarens eget format, och `plat` är den plåt appen matchade ur hennes
+         katalog (app/platar.py). Objektet följer med RAKT — väljaren i canvas
+         skriver i det, och det är samma objekt som reser tillbaka i
+         godkännandet. En kopia här hade blivit två sanningar om samma bild. */
+      if (u.scen) ut.scen = u.scen;
       /* NOTISEN — den lilla inramade påminnelsen under uppgiftstexten («Rita en
          teckenrad som stöd.»). Den finns i schemat, prompten ber om den och
          alla fyra LaTeX-mallarna sätter den med \notisruta — men den gick
@@ -3599,6 +3605,112 @@
     las.readAsDataURL(fil);
   });
   window.valjBild = valjBild;
+
+  /* ══════════ PLÅTVÄLJAREN ══════════
+     LÄRARENS BESLUT (2026-08-22): «Skit i nyckeln, ingen API. Prompt bara, så
+     skapar jag bilden med min prenumeration.» Appen ritar alltså ingen bild.
+     Provet bär en bildbeställning per scenariouppgift (exam_spec.Scen), och
+     servern har redan slagit upp den i lärarens egen plåtkatalog
+     (app/platar.py). Det som saknas är HENNES sista ord: behåll plåten, byt
+     till en annan, eller ta bort den och måla en egen.
+
+     Valet skrivs RAKT IN i dokumentets `scen.plat` och inte i en sidokarta.
+     Två sanningar om samma bild hade glidit isär första gången läraren
+     ångrade ett varv — nu åker plåtvalet med i historiken som allt annat.
+     Tom sträng betyder «bortvald», null betyder «appen hittade ingen». */
+  let platkatalogen = null;
+  function platkatalog() {
+    if (platkatalogen) return platkatalogen;
+    platkatalogen = (serverPa()
+      ? window.API.json('/api/platar').then(r => (r.platar || []))
+      : Promise.resolve([])).catch(() => []);
+    return platkatalogen;
+  }
+  function scenFor(nr) {
+    const v = versioner[nu];
+    const u = v && (v.uppg || [])[nr - 1];
+    return u && u.scen ? u.scen : null;
+  }
+  function sattPlat(nr, namn) {
+    if (nu < 0 || !scenFor(nr)) return;
+    const v = nyVersion(versioner[nu], x => {
+      const u = (x.uppg || [])[nr - 1];
+      if (u && u.scen) u.scen.plat = namn;
+      x.anteckning = namn ? `Plåt vald — ${namn}` : 'Plåten borttagen';
+      x.andrat = ['uppg' + nr];
+      x.andradVid = Date.now();
+    });
+    versioner = versioner.slice(0, nu + 1).concat([v]);
+    visa(versioner.length - 1);
+    utkastVersion(v);
+    window.toast && window.toast(namn
+      ? `Plåten ${namn} ligger på uppgift ${nr}`
+      : `Uppgift ${nr} har ingen plåt — scenen står framme igen`);
+  }
+  /* Väljaren är en <select> som fälls ut där knappen stod. Ingen modal: rutan
+     sitter mitt i pappret och läraren ska kunna se uppgiften medan hon väljer.
+     Listan är katalogens spår A — en b-plåt är ett tomt målat papper och hör
+     inte hemma ovanför en provuppgift (app/platar.MATCHBARA_SPAR). */
+  function oppnaPlatval(knapp, nr) {
+    const fot = knapp.parentElement;
+    if (!fot || $('.prplatvalj', fot)) return;
+    const nuvarande = (scenFor(nr) || {}).plat || '';
+    platkatalog().then(lista => {
+      const val = lista.filter(p => p.valjbar && p.finns);
+      if (!val.length) {
+        window.toast && window.toast(
+          'Plåtkatalogen är inte tillgänglig — visa sökvägen i inställningarna.');
+        return;
+      }
+      const sel = document.createElement('select');
+      sel.className = 'prplatvalj';
+      sel.innerHTML = '<option value="">— ingen plåt —</option>'
+        + val.map(p => `<option value="${p.namn}"${p.namn === nuvarande ? ' selected' : ''}>${p.namn} · ${p.motiv}</option>`).join('');
+      sel.addEventListener('change', () => sattPlat(nr, sel.value));
+      fot.appendChild(sel);
+      sel.focus();
+    });
+  }
+  function kopieraScen(nr) {
+    const s = scenFor(nr);
+    if (!s) return;
+    /* BARA SCENE-STYCKET. Lärarens ChatGPT-projekt lägger basprompten framför
+       själv (hennes projektinstruktion, steg 4) — skickar vi med något eget
+       runt omkring blir basprompten citerad två gånger eller inte alls, och
+       det är negationerna i den som håller text och pilar borta ur bilden. */
+    const text = s.scene || '';
+    const klart = () => window.toast && window.toast(
+      `Scenen kopierad — klistra in i plåtprojektet. Filnamn: ${s.filnamn || ''}`);
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(klart, () => reservkopia(text, klart));
+    } else reservkopia(text, klart);
+  }
+  function reservkopia(text, klart) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.cssText = 'position:fixed;left:-9999px;top:0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); klart(); } catch (e) { /* tyst */ }
+    ta.remove();
+  }
+  /* EN delegerad lyssnare, inte en per ruta: arket ritas om vid varje
+     omritning (blad.js rita) och lyssnare på noderna hade läckt ett varv per
+     ritning. Den fångar både förhandsvisningen och canvas — samma markup. */
+  document.addEventListener('click', e => {
+    const byt = e.target.closest && e.target.closest('[data-plat-byt]');
+    if (byt) { e.preventDefault(); return oppnaPlatval(byt, +byt.dataset.platByt); }
+    const bort = e.target.closest && e.target.closest('[data-plat-bort]');
+    if (bort) { e.preventDefault(); return sattPlat(+bort.dataset.platBort, ''); }
+    const kop = e.target.closest && e.target.closest('[data-plat-kopiera]');
+    if (kop) { e.preventDefault(); return kopieraScen(+kop.dataset.platKopiera); }
+    /* Släppytan: klick på scenrutan öppnar filväljaren för uppgiften — samma
+       väg som alla andra bilder går (v.bilder), inte en ny. */
+    const scen = e.target.closest && e.target.closest('.prscen');
+    if (scen && !e.target.closest('button')) valjBild('uppg' + scen.dataset.plat);
+  });
+
   const arkNamn = v => v.typ === 'Prov' ? ['Provet', 'Lösningsförslag'] : v.typ === 'Gruppuppgift' ? ['Gruppuppgiften', 'Facit'] : v.typ === 'Diagnos' ? ['Diagnosen', 'Rättning'] : ['Arbetsbladet', 'Facit'];
   const arkLage = v => ({ tva: harLosning(v), namn: arkNamn(v), vald: visarLosning ? 1 : 0, byt: j => byt(j) });
   function byt(j) {
@@ -4332,6 +4444,15 @@
              inlagt foto fotot i tryck. Servern plockar ut «uppgN» och lägger
              dem i mallens bildplats (app/tryck.egna_bilder). */
           bilder: godkant.bilder || {},
+          /* PLÅTVALEN. De bor i dokumentets `scen.plat` (plåtväljaren ovan),
+             men servern har sin EGEN kopia av provet i basen — och den kopian
+             känner bara den plåt appen matchade vid genereringen. Utan den
+             här raden trycktes alltså den automatiska plåten även på den
+             uppgift läraren just tagit bort den från. Tom sträng = ingen
+             plåt; det är skillnaden mot att inte skicka nyckeln alls. */
+          platar: Object.fromEntries(
+            (godkant.uppg || []).filter(u => u.scen)
+              .map(u => ['uppg' + u.nr, u.scen.plat || ''])),
         }))
         .then(kravGodkant)
         .then(r => {

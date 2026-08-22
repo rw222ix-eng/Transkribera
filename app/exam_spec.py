@@ -282,6 +282,48 @@ Figur = Annotated[
 ]
 
 
+# ── BILDSTÖDET: EN PLÅT ELLER ETT SCENE-STYCKE ────────────────────────
+# LÄRARENS DOM (2026-08-22): «Skit i nyckeln, ingen API. Prompt bara, så skapar
+# jag bilden med min prenumeration.» Appen ritar alltså ingen bild och anropar
+# inget bild-API. Den skriver en BESTÄLLNING i lärarens eget format — och när
+# beställningen redan är målad (app/platar.py matchar mot plåtkatalogen) läggs
+# den befintliga plåten på uppgiften i stället.
+#
+# Formen är hennes projektinstruktions: SCENE-stycke på engelska, 4–8 meningar,
+# ingen text/siffror/pilar/axlar i motivet, en avslutande svensk rad
+# «Intended use: <begrepp>», och ett filnamn i systemets form (a-25-hangbro).
+# Engelskan är inte en stilfråga: bildmodellen följer engelska märkbart mer
+# exakt, och etiketterna ritas ändå i kod ovanpå.
+class Scen(_Model):
+    """Bildbeställningen för EN uppgift."""
+    # Kort svensk nyckel — «optimering inhägnad», «kast», «exponentiell
+    # tillväxt». Den är matchningens ingång (platar.matcha) och står sist i
+    # SCENE-stycket som «Intended use:»-raden.
+    begrepp: str = Field(min_length=3, max_length=60)
+    # Själva stycket. Taket är mätt mot lärarens egna scenfiler: den längsta
+    # (a-19) är 640 tecken, och åtta meningar ryms i tusen med marginal.
+    scene: str = Field(min_length=80, max_length=1200)
+    filnamn: str = Field(min_length=3, max_length=48)
+    # APPENS FÄLT, aldrig modellens: namnet på den plåt katalogen matchade
+    # (app/platar). Det poppas ur grammatiken i to_response_format av samma
+    # skäl som `klockslag` — ett fält modellen ser är ett fält modellen fyller
+    # i, och den skulle hitta på ett plåtnummer som inte finns.
+    plat: str | None = None
+
+    @model_validator(mode="after")
+    def _stada(self):
+        # Filnamnet är ett FÖRSLAG till läraren, inte något som bär last —
+        # därför normaliseras det i stället för att avvisas. En reparations-
+        # runda för ett understreck vore att betala en modellvända för en
+        # sträng som ändå bara ska visas i en ruta i canvas.
+        rent = re.sub(r"[^a-z0-9]+", "-",
+                      self.filnamn.strip().lower()
+                      .replace("å", "a").replace("ä", "a").replace("ö", "o")
+                      ).strip("-")
+        object.__setattr__(self, "filnamn", rent[:48] or "a-ny-scen")
+        return self
+
+
 class SubItem(_Uppgiftsbas):
     formaga: Formaga | None = None       # ärver förälderns när None
     typ: Uppgiftstyp | None = None       # ärver förälderns när None
@@ -321,6 +363,16 @@ class ExamItem(_Uppgiftsbas):
     # max_length=12: samma _BOKSTAV-gräns (a–l) som alternativ ovan.
     deluppgifter: list[SubItem] | None = Field(default=None, max_length=12)
     figur: Figur | None = None
+    # BILDSTÖDET (se Scen ovan). Bara på uppgiften, aldrig på en deluppgift:
+    # en scenariouppgift har EN situation, och deluppgifterna är frågor om
+    # samma situation. Ett scenfält per deluppgift hade dessutom kostat en
+    # egen definition per poängtrippel i grammatiken (se _delref) på ett
+    # schema som redan har ett tak.
+    #
+    # Utesluter INTE figur eller bild. En kastbana kan mycket väl ha både en
+    # målad äng och en graf — plåten är sammanhanget, figuren är matematiken,
+    # och tvålagersprincipen säger att de två aldrig ska vara samma bild.
+    scen: Scen | None = None
     # Kommenterade elevlösningar (förlagans lo4): samma uppgift löst två eller
     # tre gånger, i stigande ordning, med domen inne i det parti den gäller.
     # Hör till BEDÖMNINGEN, inte till elevens ark — den som skriver provet ska
@@ -460,6 +512,12 @@ def to_response_format(antal: int | None = None,
     # fält modellen fyller i — den skulle hitta på en starttid precis som den
     # hittade på ett datum. Bort ur schemat, kvar i modellen.
     schema["properties"].pop("klockslag", None)
+    # PLÅTVALET STÅR INTE HELLER I GRAMMATIKEN. `scen.plat` är appens egen
+    # matchning mot lärarens plåtkatalog (app/platar) och sätts efter
+    # genereringen, precis som klockslaget. Står fältet i schemat fyller
+    # modellen i det — och den skulle skriva ett plåtnummer den hittat på.
+    if "Scen" in schema.get("$defs", {}):
+        schema["$defs"]["Scen"]["properties"].pop("plat", None)
     if koder:
         item_def = schema["$defs"]["ExamItem"]
         item_def["properties"]["innehall"] = {
@@ -520,13 +578,18 @@ def to_response_format(antal: int | None = None,
             # deluppgifterna (prompten säger det, och skrivs den ändå en gång
             # till står facit två gånger på samma papper).
             #
-            # KORTSVARSSAMLINGEN har ingen stam alls. Förlagans uppgift 1 går
-            # rakt från «\question \emph{Endast svar krävs.}» till a) — de fem
-            # frågorna handlar om olika saker och har ingenting gemensamt att
-            # säga. Därför tvingas ingen text på just den formen; på alla andra
-            # rader är en tom text ett fel.
-            if not (slot.get("delar") and slot["typ"] == "rutin"):
-                it["properties"]["text"]["minLength"] = 1
+            # STAMMEN KRÄVS PÅ VARJE UPPGIFT, också på kortsvaren.
+            #
+            # Här stod ett undantag: en rutinrad med deluppgifter fick lämna
+            # texten tom, därför att «kortsvarssamlingen» var en hög
+            # orelaterade frågor utan något gemensamt att säga. Läraren strök
+            # den formen (se _dela_i_deluppgifter). NP:s kortsvarsuppgifter har
+            # alla en stam — «Figuren visar grafen till andragradsfunktionen
+            # f», «Lös ekvationerna och svara exakt», «Fyll i de tomma
+            # parenteserna så att respektive likhet gäller» — och det är
+            # PRECIS stammen som gör a) och b) till samma uppgift. En tom stam
+            # är därför inte längre en tillåten form utan felet självt.
+            it["properties"]["text"]["minLength"] = 1
             if not slot.get("delar"):
                 for fld in ("losning", "bedomning"):
                     it["properties"][fld]["minLength"] = 1
@@ -719,9 +782,30 @@ MAX_LIKA_I_RAD = 3              # max uppgifter i rad med samma typ/förmåga
 MIN_DELPROV_FOR_ORDNING = 4     # kortare delar mäts inte på ordning
 
 
-# Minsta delschema som är värt en egen definition. Under den gränsen kostar
-# $ref:en (≈30 tecken) nästan lika mycket som den sparar.
-_HYVEL_MIN = 70
+# Minsta delschema som ÖVER HUVUD TAGET prövas. Under den gränsen är noden så
+# liten att bokföringen kostar mer än den kan spara.
+_HYVEL_MIN = 30
+# Vad en referens kostar i tecken: `{"$ref":"#/$defs/D12"},` plus definitionens
+# egen nyckel i $defs. Räknat, inte gissat — se _lonar_hyvla.
+_REF_KOSTNAD = 24
+_DEF_KOSTNAD = 8
+
+
+def _lonar_hyvla(langd: int, antal: int) -> bool:
+    """Sparar en gemensam definition fler tecken än den kostar?
+
+    Gränsen var ett FAST tal (70 tecken) och det var för trubbigt. `scen`-
+    fältets `anyOf` mot Scen-definitionen är 66 tecken — precis under — och
+    stod alltså ordagrant en gång per uppgift. På ett prov med tjugo uppgifter
+    var det 1 100 tecken som räckte för att spränga kommandoradens tak
+    (claude_code.SCHEMA_TAK_EXE) och tappa grammatiktvånget för hela provet.
+
+    Räkningen är enkel: `antal` kopior à `langd` tecken blir en definition
+    (`langd` + nyckeln) plus `antal` referenser. Ju fler kopior desto mindre
+    spelar nodens storlek roll, och det är precis skelettvägens fall."""
+    fore = antal * langd
+    efter = langd + _DEF_KOSTNAD + antal * _REF_KOSTNAD
+    return fore > efter
 
 
 def _hyvla(schema: dict) -> None:
@@ -769,7 +853,8 @@ def _hyvla(schema: dict) -> None:
     for d in defs.values():
         rakna(d, rot=True)
 
-    valda = sorted((n for n, c in rakning.items() if c >= 2),
+    valda = sorted((n for n, c in rakning.items()
+                    if c >= 2 and _lonar_hyvla(len(n), c)),
                    key=len, reverse=True)
     if not valda:
         return
@@ -986,7 +1071,24 @@ def validate_ordning(doc: ExamDoc, *, kolla_klumpning: bool = True,
         etikett = f"Del {kod}" if kod else "del-lösa uppgifter"
 
         if kolla_klumpning:
-            if _langsta_rad([it.typ for it in items]) > MAX_LIKA_I_RAD:
+            # KORTSVARSBLOCKET ÄR INTE KLUMPNING — det är NP:s delprov B.
+            # NpMa2a vt17 har uppgift 1–9 «Endast svar krävs» i följd, vt22
+            # uppgift 1–11. Att varva in en redovisningsuppgift bland dem vore
+            # att bryta upp den enda form eleven känner igen: kortsvaren först,
+            # räkningen sedan. Undantaget gäller BARA den inledande raden av
+            # rutinuppgifter i en del — en rutinklump mitt inne i delen fälls
+            # som förut, för då är det slarv och inte form.
+            #
+            # Undantaget gäller inte en del som är BARA kortsvar. NP:s
+            # kortsvarsblock följs alltid av de uppgifter som ska redovisas;
+            # en del utan en enda sådan är inget delprov utan ett övningsblad,
+            # och då är klumpningen verklig.
+            typer = [it.typ for it in items]
+            i = 0
+            if any(t != "rutin" for t in typer):
+                while i < len(typer) and typer[i] == "rutin":
+                    i += 1
+            if _langsta_rad(typer[i:]) > MAX_LIKA_I_RAD:
                 errors.append(_err(etikett, "klumpning",
                                    f"{etikett} har fler än {MAX_LIKA_I_RAD} "
                                    "uppgifter i rad av samma typ — varva dem."))
@@ -1160,6 +1262,11 @@ def nivaval(profil: str, val: str | None) -> dict | None:
 # E-delen: alla tre nivåerna finns i båda delarna. Skelettet delade förut i «en
 # eller två rutinuppgifter» + «resten» — det är inte nationella provets form.
 DEL_B_ANDEL = 0.58
+
+# Hur stor del av Del A som är kortsvar («Endast svar krävs»). MÄTT på NP:
+# NpMa2a vt17 delprov B+C har 9 kortsvarsuppgifter av 15 (60 %), vt22 11 av 17
+# (65 %). Den lägre av de två — ett prov ska inte råka bli bara kortsvar.
+KORTSVAR_ANDEL_DEL_A = 0.60
 
 # Round-robin-ordningen över förmågorna. Listan roteras ett steg per varv, så
 # att en förmåga inte fastnar på samma karaktär varje varv (med sex förmågor och
@@ -1350,16 +1457,24 @@ def balanced_skeleton(antal: int, profil: str = "prov",
             # krävs»-rad i räknardelen säger emot delens egen kravrad.
             if s["typ"] == "rutin":
                 s["typ"] = _EJ_RUTIN.get(s["formaga"], "redovisning")
-        # Kortsvaren står först i Del A, som i NP:s delprov B. Blocket kapas
-        # vid MAX_LIKA_I_RAD: antiklumpningen gäller provet, och fyra rutinrader
-        # i följd fäller sin egen del. Kapningen kostar ingenting i praktiken —
-        # varje kortsvarsrad blir en SAMLING med två eller tre frågor (se
-        # _dela_i_deluppgifter), så tre rader är sex till nio kortsvar, och
-        # förlagan har åtta.
+        # Kortsvaren står först i Del A, som i NP:s delprov B, och de är EGNA
+        # NUMRERADE UPPGIFTER — inte en samling under ett nummer.
+        #
+        # Blocket kapades förut vid MAX_LIKA_I_RAD (tre rader), och skälet var
+        # att varje rad blev en samling med två eller tre frågor. Samlingen är
+        # borta (se _dela_i_deluppgifter), och då stämmer inte kapningen
+        # längre: tre rader vore tre kortsvar på ett helt prov.
+        #
+        # MÄTT PÅ NP, inte satt: NpMa2a vt17 har 9 kortsvarsuppgifter av 15 i
+        # delprov B+C (60 %), vt22 11 av 17 (65 %). Andelen nedan är den lägre
+        # av de två — hellre ett kortsvar för lite än ett prov som bara är
+        # kortsvar. Antiklumpningen fäller inte längre blocket: den inledande
+        # raden av rutinuppgifter är NP:s egen form (validate_ordning).
         del_b_kort = [s for s in del_b if s["typ"] == "rutin"]
-        for s in del_b_kort[MAX_LIKA_I_RAD:]:
+        tak = max(1, round(KORTSVAR_ANDEL_DEL_A * len(del_b)))
+        for s in del_b_kort[tak:]:
             s["typ"] = _EJ_RUTIN.get(s["formaga"], "redovisning")
-        del_b_kort = del_b_kort[:MAX_LIKA_I_RAD]
+        del_b_kort = del_b_kort[:tak]
         slots = (del_b_kort
                  + _varva([s for s in del_b if s["typ"] != "rutin"])
                  + _varva(del_c))
@@ -1404,23 +1519,44 @@ def balanced_skeleton(antal: int, profil: str = "prov",
 #   * tidsmodellen (tidsatgang tar poängsummorna plus antalet HUVUDuppgifter,
 #     och antalet huvuduppgifter är orört — se MIN_PER_UPPGIFT).
 #
-# SAMMANSLAGNING PRÖVADES OCH VALDES BORT. Förlagans uppgift 1 har fem kortsvar
-# och uppgift 3 har sex; för att komma dit hade två eller tre skelettrader
+# SAMMANSLAGNING PRÖVADES OCH VALDES BORT. Två eller tre skelettrader hade
 # behövt smälta ihop till en uppgift. Det hade brutit två löften på en gång:
 # antalet uppgifter läraren bad om i panelen, och tidsmodellens uppgiftsterm
 # (som är mätt på NP:s HUVUDuppgifter — vt17 15 uppgifter / 22 deluppgifter,
-# vt22 17/28). En kortsvarssamling med två eller tre frågor är förlagans form,
-# bara kortare; ett prov som tyst blir två uppgifter mindre är det inte.
+# vt22 17/28).
+#
+# ── LÄRARENS DOM 2026-08-22, och den rev en form ──────────────────────
+# Om det första skarpa provet: «Uppgift 1 har deluppgift a och b men de är inte
+# relaterade till varandra. Om det ska vara deluppgifter då ska det handla om
+# samma sak. Kolla hur nationella provet är gjort.»
+#
+# KÄLLA: NpMa2a vt 2017, delprov B, sidan 2–7. Nio kortsvarsuppgifter, var och
+# en med EGET NUMMER. Fyra av dem är enkla frågor (5, 6, 7, 8); fem har a) och
+# b) (1, 2, 3, 4, 9) — och varje sådant par delar EN sak:
+#     1 a/b  samma graf: nollställena, sedan största värdet     (1/0/0)+(1/0/0)
+#     2 a/b  «Lös ekvationerna», samma ekvationstyp             (1/0/0)+(1/0/0)
+#     3 a/b  samma ekvationssystem: vilket koordinatsystem,
+#            sedan markera lösningen i det                      (1/0/0)+(1/0/0)
+#     4 a/b  «Fyll i de tomma parenteserna», samma form         (0/1/0)+(0/1/0)
+#     9 a/b  samma graf: bestäm g, ange värdemängden för g      (0/0/1)+(0/0/1)
+# Aldrig två orelaterade frågor under samma nummer. Och kortsvar är INTE bara
+# E-poäng: (0/1/0), (0/2/0) och (0/0/1) förekommer i delprov B.
+#
+# «KORTSVARSSAMLINGEN» ÄR DÄRMED BORTA. Den samlade orelaterade E-frågor under
+# ett nummer och lämnade stammen tom — motsatsen till NP:s form och till det
+# läraren bad om. Kortsvaren är egna numrerade uppgifter; delningen finns kvar
+# men bara i NP:s form, och prompten säger vad «samma sak» betyder.
 def _dela_i_deluppgifter(slots: list[dict]) -> None:
     """Sätt `delar` — deluppgifternas poängtripplar — på de rader som ska bära
     dem. Muterar `slots` på plats; en rad utan `delar` är en vanlig uppgift.
 
-    Två mönster, båda lärarens egna:
+    Två mönster, båda nationella provets:
 
-    1. KORTSVARSSAMLINGEN. En rutinrad vars poäng ligger helt på E och är värd
-       mer än en poäng blir a), b), c) … à en poäng styck — förlagans uppgift 1
-       och 3, och NP:s delprov B. Ett kortsvar är värt en poäng; en rutinrad på
-       tre poäng är alltså tre frågor, inte en fråga som ger tre.
+    1. KORTSVARSPARET. En kortsvarsuppgift värd två poäng på EN nivå blir a)
+       och b) à en poäng — NP:s uppgift 1, 2, 3, 4 och 9 i delprov B. De två
+       frågorna delar samma graf, samma ekvationstyp, samma uttryck; det är
+       PROMPTEN som bär det kravet, för poängtripplar kan inte uttrycka det.
+       En kortsvarsuppgift värd en poäng är en enkel fråga och delas inte.
 
     2. STEGRINGEN INNE I UPPGIFTEN. En fullständig uppgift vars trippel bär mer
        än en nivå delas i två: a) tar de lägre nivåernas poäng, b) den högsta.
@@ -1438,12 +1574,24 @@ def _dela_i_deluppgifter(slots: list[dict]) -> None:
 
 def _dela_poang(poang: list[int], typ: str) -> list[list[int]] | None:
     """Trippeln → deluppgifternas tripplar, eller None när raden inte delas."""
-    e, c, a = poang
     if typ == "rutin":
-        # Bara E-poäng kan bli kortsvar: ett kortsvar prövar att man KAN göra
-        # det, och det är E-nivåns fråga. En rutinrad som (efter nivåsökningen)
-        # bär C- eller A-poäng delas därför inte alls.
-        return [[1, 0, 0]] * e if e >= 2 and not c and not a else None
+        # NP:S KORTSVARSPAR. Exakt två poäng på EN nivå → a) och b) à en poäng
+        # på den nivån: (2/0/0)→(1/0/0)+(1/0/0) som NP:s uppgift 1 och 2,
+        # (0/2/0)→(0/1/0)+(0/1/0) som uppgift 4, (0/0/2)→(0/0/1)+(0/0/1) som
+        # uppgift 9. Allt annat är en enkel fråga med ett svar (uppgift 5, 6,
+        # 7, 8) — och en trippel som bär TVÅ nivåer är ingen kortsvarsfråga
+        # alls, den delas inte här.
+        #
+        # Tre poäng på en nivå blir a), b), c) av samma skäl: en enda
+        # kortsvarsfråga värd tre poäng finns inte i NP:s delprov B, där varje
+        # kortsvar ger en eller två. Taket är tre — fler delfrågor om samma sak
+        # blir en samling igen, och det var just samlingen läraren strök.
+        nivaer = [i for i, p in enumerate(poang) if p]
+        if len(nivaer) == 1 and 2 <= poang[nivaer[0]] <= 3:
+            en = [0, 0, 0]
+            en[nivaer[0]] = 1
+            return [list(en) for _ in range(poang[nivaer[0]])]
+        return None
     nivaer = [i for i, p in enumerate(poang) if p]
     if len(nivaer) < 2:
         return None                      # en nivå = en fråga
@@ -1921,6 +2069,43 @@ def validate_ci(doc: ExamDoc, koder: list[str] | None) -> list[dict]:
     return errors
 
 
+def validate_stam(doc: ExamDoc) -> list[dict]:
+    """En uppgift med deluppgifter måste ha något som HÅLLER IHOP dem.
+
+    LÄRARENS DOM 2026-08-22: «Uppgift 1 har deluppgift a och b men de är inte
+    relaterade till varandra. Om det ska vara deluppgifter då ska det handla om
+    samma sak. Kolla hur nationella provet är gjort.»
+
+    Att två frågor handlar om samma sak går inte att avgöra i kod. Det som GÅR
+    att avgöra är om uppgiften ens PÅSTÅR att de gör det: NP:s alla delade
+    uppgifter (NpMa2a vt17 delprov B) har en stam — «Figuren visar grafen till
+    andragradsfunktionen f», «Lös ekvationerna och svara exakt», «Fyll i de
+    tomma parenteserna» — eller en figur som deluppgifterna läser. Saknas både
+    stam och figur finns det ingenting som binder ihop a) och b), och då är det
+    två uppgifter som råkat hamna under samma nummer.
+
+    Regeln är MJUK och ligger inte i modellen: proven som redan står i basen
+    bär den gamla stamlösa kortsvarssamlingen, och de ska gå att skriva ut i
+    morgon. Här blir den ett problem bland andra i reparationsloopen; på ett
+    gammalt papper syns den i granskningen och stoppar ingenting."""
+    errors: list[dict] = []
+    for i, it in enumerate(doc.uppgifter):
+        if not it.deluppgifter:
+            continue
+        harstam = bool((it.text or "").strip())
+        harfigur = it.figur is not None or it.bild is not None \
+            or it.tabell is not None or it.stegtabell is not None
+        if harstam or harfigur:
+            continue
+        errors.append(_err(
+            f"uppgifter[{i}].text", "stam",
+            f"uppgift {i + 1} har deluppgifter men ingen stam — skriv vad "
+            "a), b) och c) delar (samma figur, samma funktion, samma "
+            "ekvationstyp). Handlar de om olika saker ska de vara egna "
+            "numrerade uppgifter."))
+    return errors
+
+
 def validate_exam_json(data, profil: str = "prov",
                        niva_mal: dict | None = None
                        ) -> tuple[ExamDoc | None, list[dict]]:
@@ -1936,6 +2121,7 @@ def validate_exam_json(data, profil: str = "prov",
             for err in e.errors()
         ]
     fel = validate_balance(doc, niva_mal=niva_mal, profil=profil)
+    fel = fel + validate_stam(doc)
     # Gruppuppgiften är inget papper utan sitt upplägg: namnraderna, tiden och
     # redovisningsformen ÄR formen (se gruppark.css). Saknas de blir arket ett
     # arbetsblad med fel instruktionsband.

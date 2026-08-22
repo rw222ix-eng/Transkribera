@@ -25,7 +25,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import FileResponse, JSONResponse
 
 from app import (ci_profil, course_data, db, dokumentdiff, exam_gen,
-                 exam_latex, exam_pdf, exam_spec, gpu_arbiter, tryck)
+                 exam_latex, exam_pdf, exam_spec, gpu_arbiter, platar, tryck)
 from app.web import routes_planning
 from app.web.sse import sse_response
 
@@ -234,6 +234,40 @@ def create_router(base: Path, arbiter) -> APIRouter:
                                 for r in rows]}
         finally:
             conn.close()
+
+    # ------------------------------------------------------------ plåtar --
+    # Lärarens målade bakgrunder (app/platar.py). Katalogen är LÄSNING och
+    # inget annat: appen skriver aldrig i E:\Bildstil och genererar aldrig en
+    # bild. Rutterna finns för väljaren i canvas — hon ska kunna byta plåt
+    # eller välja bort den, och för att kunna det måste hon se dem.
+
+    def _platcache() -> Path:
+        # Under Transkriberingar/, som redan är gitignorerad: cachade
+        # nedskalningar är härledd data och hör inte hemma i repot.
+        return base / "Transkriberingar" / ".platcache"
+
+    @router.get("/api/platar")
+    def list_platar():
+        """Katalogen, med `finns` för de plåtar som ligger på disk.
+
+        Saknas katalogroten svarar rutten ändå — med hela spegeln och
+        `finns: false` rakt igenom. Det är en ärlig skillnad mot ett 404:
+        katalogen FINNS, det är bilderna som inte är monterade."""
+        rader = platar.katalog(base)
+        return {"rot": str(platar.rot(base)),
+                "platar": [{"namn": p["namn"], "spar": p["spar"],
+                            "motiv": p["motiv"], "begrepp": p["begrepp"],
+                            "valjbar": p["spar"] in platar.MATCHBARA_SPAR,
+                            "finns": bool(p["fil"])} for p in rader]}
+
+    @router.get("/api/platar/{namn}")
+    def plat_bild(namn: str):
+        """Plåten i skärmstorlek. `namn` valideras mot plåtnamnets form i
+        platar.bildfil — en sträng ur ett anrop får aldrig bli en sökväg."""
+        fil = platar.forhandsbild(namn, _platcache(), base=base)
+        if fil is None or not fil.is_file():
+            return JSONResponse({"error": "okänd plåt"}, status_code=404)
+        return FileResponse(fil, media_type="image/jpeg")
 
     # -------------------------------------------------------------- lista --
 
@@ -512,6 +546,13 @@ def create_router(base: Path, arbiter) -> APIRouter:
                     if b is not None and not (isinstance(b, int)
                                               and 1 <= b <= len(underlag_filer)):
                         u["bild"] = None
+                # ── PLÅTKATALOGEN ────────────────────────────────
+                # Modellen skrev en bildbeställning (`scen`); finns motivet
+                # redan målat i lärarens katalog läggs DEN plåten på
+                # uppgiften i stället, och hon slipper måla om samma äng.
+                # Ingen bild genereras här och inget bild-API anropas — det
+                # är hennes uttryckliga beslut (se app/platar.py).
+                platar.matcha_exam(res["exam"], base=base)
                 conn = db.connect(db_file)
                 try:
                     view = db.create_exam(
@@ -639,6 +680,11 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 _satt_lararens_datum(
                     res["exam"], view.get("datum"),
                     (view.get("exam") or {}).get("klockslag") or "")
+                # Plåtvalet överlever inte omskrivningen av sig självt:
+                # modellen skriver om hela dokumentet, och `scen.plat` står
+                # inte i grammatiken. Matchningen körs därför om — den är ren
+                # ordmatchning och kostar ingenting.
+                platar.matcha_exam(res["exam"], base=base)
                 if res["exam"] is not None and res["exam"] != view["exam"]:
                     # ── LYSSNAR NÅGON ÄN? ────────────────────────
                     # Läraren som tryckte Avbryt eller stängde fliken fick
@@ -748,6 +794,12 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # stund som mallen tog över.
         egna_bilder = tryck.egna_bilder(body.get("bilder")
                                         if isinstance(body, dict) else None)
+        # PLÅTVÄLJAREN i canvas. Appen matchade en plåt vid genereringen
+        # (`scen.plat`); läraren kan byta till en annan ur katalogen eller
+        # välja bort den helt, och det valet bor bara i webbläsarens dokument
+        # — samma sak som `bilder` ovan, och det reser samma väg.
+        # {"uppg7": "a-19-hage-flod"} byter, {"uppg7": ""} tar bort.
+        platval = body.get("platar") if isinstance(body, dict) else None
         # Det som trycks är det läraren SER. Ångrade hon ett varv backade bara
         # utkastets markör; provets pekare stod kvar på det förkastade varvet,
         # och PDF:en byggdes ur det. Klienten säger vilken version varvet gällde
@@ -803,8 +855,18 @@ def create_router(base: Path, arbiter) -> APIRouter:
                             dst = out_dir / f"bild-{n:02d}.png"
                             dst.write_bytes(src.read_bytes())
                             bilder_map[n] = dst.name
-                # Lärarens egna inlagda bilder, nycklade på uppgiftsnummer.
-                egna_map = tryck.spara_egna_bilder(egna_bilder, out_dir)
+                # Lärarens egna inlagda bilder, nycklade på uppgiftsnummer —
+                # och under dem plåtarna ur katalogen (nedskalade till
+                # tryckstorlek; originalet i E:\Bildstil rörs aldrig).
+                #
+                # ORDNINGEN ÄR EN RANGORDNING. Plåten läggs först och den
+                # bild läraren SLÄPPT på uppgiften skriver över den: hon har
+                # tittat på just den uppgiften och lagt dit just den bilden,
+                # och det valet är senare än både appens matchning och
+                # underlagets sida.
+                egna_map = dict(platar.plat_bilder(exam, platval, out_dir,
+                                                   base=base))
+                egna_map.update(tryck.spara_egna_bilder(egna_bilder, out_dir))
                 # PROVET SÄTTS I LaTeX. Se kommentaren där avritningen tas
                 # emot: mallen är lärarens egen förlaga, och skärmen kan inte
                 # se ut som den. Övriga papper ritas av precis som förut.

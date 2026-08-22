@@ -41,6 +41,71 @@ SYSTEM = (
     "transkript eller klasslistor: riktiga elever ska inte stå på pappret."
 )
 
+# ── SCEN-REGELN ───────────────────────────────────────────────────────────
+# Lärarens bildsystem, sagt till modellen. Blocket bor i en egen konstant och
+# inte inne i INSTRUCTION därför att det har en egen KÄLLA: hennes
+# projektinstruktion för plåtgeneratorn plus ritbarhetsreglerna i
+# E:\Bildstil\designsystem\prompter\. Ändras systemet ändras den här texten,
+# och då ska det synas som en ändring av bildsystemet — inte som en ändring
+# av provet.
+#
+# Exemplen är hennes egna scenfiler (a-01 och a-19), förkortade till de rader
+# som bär formen. De står med av samma skäl som förlagan står med på andra
+# ställen i den här filen: en modell härmar ett exempel bättre än den följer
+# en regel.
+SCEN_REGEL = (
+    "- scen {begrepp, scene, filnamn}: BILDSTÖD till en berättelseuppgift — "
+    "en målad bild av situationen som trycks ovanför uppgiften. Sätt det BARA "
+    "där bilden tillför något: raketens bana, inhägnaden vid floden, dammen "
+    "som växer igen, skuggan från tallen. Rutinuppgifter, kortsvar, "
+    "ekvationer att lösa och rena räknefrågor får ALDRIG scen — en bild som "
+    "inte behövs stjäl plats på pappret. Högst ungefär var tredje uppgift, "
+    "och gärna färre.\n"
+    "  begrepp: kort svensk nyckel, ett till tre ord — \"optimering "
+    "inhägnad\", \"kast\", \"exponentiell tillväxt\", \"höjdbestämning med "
+    "skugga\". Den är nyckeln appen slår upp i sin bildkatalog.\n"
+    "  filnamn: formen a-NN-slug med små bokstäver och bindestreck, "
+    "t.ex. \"a-25-hangbro\" — ett förslag på vad bilden ska heta.\n"
+    "  scene: bildbeskrivningen, på ENGELSKA, fyra till åtta meningar, och "
+    "den börjar med ordet SCENE. Engelska följs märkbart mer exakt av "
+    "bildverktyget; etiketterna är ändå svenska och ritas i ett eget lager "
+    "ovanpå.\n"
+    "  BILDEN ÄR BARA MÅLNING. Den får INTE innehålla text, bokstäver, "
+    "siffror, matematiska symboler, etiketter, ritade linjer, pilar, "
+    "streckade linjer, vinkelbågar, koordinataxlar, rutnät eller ringar. "
+    "Matematiken ritas ovanpå efteråt. Det är en riktighetsfråga och inte en "
+    "stilfråga: ett bildverktyg ritar en vinkelbåge som dekor, på fel sida om "
+    "lodlinjen, och felet upptäcks först av en elev mitt i ett prov.\n"
+    "  MOTIVET SKA GÅ ATT MÄTA: ett tydligt huvudmotiv, rakt från sidan eller "
+    "rakt framifrån (aldrig snett), helt inom bilden med luft omkring, båda "
+    "ändar synliga, marklinjen under det obruten, och det som är lodrätt är "
+    "lodrätt. Säg uttryckligen var himlen eller vattnet är TOMT och lugnt — "
+    "en sammanhängande tredjedel av bilden ska vara fri, för det är dit "
+    "notationen ritas. Måla människor som små gestalter för skalans skull.\n"
+    "  Sista raden är svensk och lyder «Intended use: » följt av begreppen.\n"
+    "  Två exempel, och de är formen:\n"
+    "  \"SCENE. A wide summer meadow under a deep cobalt sky, seen from the "
+    "side at eye level. One enormous cumulus tower stands in the right half "
+    "of the sky, its crown lit cream-white. A tiny faceless silhouette of a "
+    "person stands on the meadow at the lower left, feet on the grass, one "
+    "arm raised straight up, having just thrown a small ball. The ball is a "
+    "single small bright dab of paint high in the sky, roughly a third in "
+    "from the left and a third down from the top, against clear open blue. "
+    "The whole middle and left of the sky is clean uninterrupted cobalt.\\n"
+    "Intended use: kastbanan, andragradsfunktion, maximipunkt.\"\n"
+    "  \"SCENE. A wide straight river runs across the bottom quarter of the "
+    "frame from the left edge to the right edge, deep blue with visible "
+    "current strokes. Directly above it on the meadow stands a paddock "
+    "enclosed by a simple wooden fence on exactly THREE sides: one long "
+    "straight fence running parallel to the river, and two short straight "
+    "fences running from each end of it straight down to the river bank. The "
+    "fourth side is the river itself. The three fences meet at clean right "
+    "angles so the enclosure reads as a rectangle whose bottom edge is the "
+    "river. Deep cobalt sky in the upper half with one cumulus tower far "
+    "right, open and calm on the left.\\n"
+    "Intended use: optimering, största area vid given omkrets.\"\n"
+)
+
 INSTRUCTION = (
     "Skriv ett matteprov som JSON enligt schemat. Dokumentets egna fält är "
     # Fältet HETER tid_min. Här stod «tid_minuter», och det är inget fält i
@@ -153,8 +218,26 @@ INSTRUCTION = (
     "innehåll nedan, en till tre stycken, aldrig egen text. Står ingen sådan "
     "lista: korta etiketter.\n"
     "Struktur (använd DÄR DET PASSAR pedagogiskt — inte på varje uppgift):\n"
+    # ── DELUPPGIFTER HÖR IHOP ──────────────────────────────────────────
+    # Lärarens dom över den första skarpa renderingen (2026-08-22): «Uppgift 1
+    # har deluppgift a och b men de är inte relaterade till varandra. Om det
+    # ska vara deluppgifter då ska det handla om samma sak. Kolla hur
+    # nationella provet är gjort.»
+    #
+    # Källa: NpMa2a vt 2017, delprov B, s. 2–7. Nio kortsvarsuppgifter med
+    # eget nummer; de fem som har a) och b) delar alla EN sak — samma graf,
+    # samma ekvationstyp, samma uttryck, samma ekvationssystem. Regeln kan
+    # inte tvingas av grammatiken (poängtripplar vet ingenting om innehåll),
+    # så den står här och mäts av nivådomaren och av läraren.
     "- deluppgifter: dela EN uppgift i a/b/c när den naturligt har flera steg "
-    "eller frågor. Föräldern bär då stammen i text och poang [0, 0, 0] — "
+    "eller frågor. DELUPPGIFTERNA HÖR ALLTID TILL SAMMA SAK — samma figur, "
+    "samma funktion, samma ekvationstyp, samma situation — och stammen i "
+    "uppgiftens text säger vad det är. Nationella provets form: «Figuren visar "
+    "grafen till andragradsfunktionen $f$. a) Bestäm funktionens nollställen. "
+    "b) Bestäm funktionens största värde.» eller «Lös ekvationerna och svara "
+    "exakt. a) … b) …». Två frågor som handlar om olika saker är TVÅ "
+    "numrerade uppgifter, aldrig a) och b) under samma nummer. "
+    "Föräldern bär då stammen i text och poang [0, 0, 0] — "
     "ALLTID [0, 0, 0], summera aldrig deluppgifternas poäng dit; varje "
     "deluppgift har egen poang, text, losning och bedomning (och får ha egen "
     "formaga/typ). Fälten innehall och elevlosningar står BARA på uppgiften, "
@@ -164,8 +247,10 @@ INSTRUCTION = (
     "  En deluppgift får BARA bära fälten poang, text, losning, bedomning, "
     "formaga, typ, enhet, notis, alternativ, ratt_alternativ, tabell, "
     "stegtabell, svarsrutor, figur och bild. Fälten del, innehall, sekundara, "
-    "elevlosningar och deluppgifter hör till UPPGIFTEN och får aldrig stå inne "
-    "i en deluppgift — de gäller hela uppgiften, inte en av dess frågor.\n"
+    "elevlosningar, scen och deluppgifter hör till UPPGIFTEN och får aldrig "
+    "stå inne i en deluppgift — de gäller hela uppgiften, inte en av dess "
+    "frågor. En scenariouppgift har EN situation, och deluppgifterna ställer "
+    "frågor om samma situation: scen sitter därför på uppgiften.\n"
     # Figuren flyttade IN i deluppgiften (exam_spec.SubItem). Lärarens förlaga
     # har grafen inne i sin 1(a) medan 1(b)–(e) är rena räknefrågor; låg
     # figuren på föräldern stod den ovanför hela samlingen och såg ut att gälla
@@ -178,6 +263,18 @@ INSTRUCTION = (
     "ratt_alternativ som 0-baserat index på det rätta — aldrig på en uppgift "
     "som redan har deluppgifter. Använd sparsamt, för begreppskoll; "
     "ratt_alternativ visas bara för läraren.\n"
+    # ── KORTSVAREN KRYSSAS INTE ────────────────────────────────────────
+    # Lärarens dom över den första skarpa renderingen (2026-08-22): hennes
+    # kortsvarssamling är fem frågor med var sin «Svar: ______»-linje, och
+    # appen satte kryssrutor på 1(a). En flervalsfråga mitt i en samling
+    # kortsvar är en annan sorts fråga — den prövar igenkänning i stället för
+    # räkning, och eleven som ser tre rutor slutar räkna. Regeln står både
+    # här och i mallen (exam_latex._build_view): pappret får inte kunna
+    # sätta en kryssruta där hon inte vill ha en.
+    "  ALDRIG I EN KORTSVARSSAMLING: en rutin-rad som delas i a), b), c) är "
+    "kortsvar, och varje sådan deluppgift ska besvaras på en «Svar: ______»-"
+    "linje. Sätt inga alternativ och inga svarsrutor på dem — frågan ska "
+    "räknas ut, inte kryssas i.\n"
     # Fältet ritade förr en LÅDA runt texten. På provet är det i stället en
     # kursiv rad — lärarens förlaga har «Tips: Gör en skiss och kalla bredden
     # för $x$ cm.» och «Börja gärna med att testa påståendet för något
@@ -199,6 +296,14 @@ INSTRUCTION = (
     '"figur": {"typ": "andragrad", "a": 1, "b": -4, "c": 3}. En uppgift kan ha '
     "figur ELLER bild, aldrig både. Använd figur där den prövar avläsning "
     "eller tolkning; referera den i texten (t.ex. 'Figuren visar …').\n"
+    # ── BILDSTÖDET: EN BESTÄLLNING, INTE EN BILD ──────────────────────
+    # Läraren: «Skit i nyckeln, ingen API. Prompt bara, så skapar jag bilden
+    # med min prenumeration.» Modellen skriver alltså en beställning i HENNES
+    # format (projektinstruktionen för plåtgeneratorn), och appen matchar den
+    # först mot de trettiosex plåtar som redan är målade (app/platar.py).
+    # Formkraven nedan är hennes ordagrant: tvålagersprincipen, ritbarheten
+    # och «Intended use:»-raden.
+    + SCEN_REGEL +
     "- enhet: enheten svaret ska anges i ('kr', 'laddpunkter/år', 'cm$^2$') "
     "eller ledet det skrivs efter ('$f'(x) =$'). Står på svarsraden. Sätt den "
     "när svaret HAR en enhet — en siffra utan enhet är inget svar.\n"
@@ -694,14 +799,19 @@ def _skelett_plan(skeleton: list[dict], last: bool = True) -> str:
              "dem). Skriv en uppgift vars innehåll matchar varje rad: ")
     # Kortsvarssamlingen förklaras bara när planen HAR en: en instruktion om en
     # form som inte finns på det här pappret är en instruktion att bryta mot.
+    # KORTSVARSRADEN, i nationella provets form. Se _dela_i_deluppgifter i
+    # exam_spec för lärarens dom och för källan (NpMa2a vt17 delprov B, s. 2–7).
     kort = any(s.get("delar") and s["typ"] == "rutin" for s in skeleton)
     kortrad = (
-        " En rutin-rad som delas i deluppgifter är en KORTSVARSSAMLING: varje "
-        "deluppgift är en egen fristående fråga värd en poäng — «Lös ekvationen "
-        "…», «Beräkna …», «Teckna …» — och de behöver inte handla om samma sak. "
-        "Skriv då ingen gemensam stam: lämna uppgiftens text TOM (\"\"), så "
-        "börjar pappret direkt på a). En stam som «Lös följande uppgifter» "
-        "säger ingenting och tar en rad."
+        " En rutin-rad som delas i deluppgifter är ETT KORTSVAR MED a) OCH b) — "
+        "inte en samling lösa frågor. Uppgiften har en STAM som säger vad de "
+        "delar («Figuren visar grafen till andragradsfunktionen $f$.», «Lös "
+        "ekvationerna och svara exakt.», «Fyll i de tomma parenteserna så att "
+        "likheterna gäller.»), och deluppgifterna frågar om SAMMA sak: samma "
+        "graf, samma ekvationstyp, samma uttryck. Handlar två frågor om olika "
+        "saker hör de inte ihop under samma nummer. Kortsvaren KRYSSAS INTE: "
+        "ingen deluppgift får alternativ eller svarsrutor, de besvaras på var "
+        "sin «Svar: ______»-linje."
         if kort else "")
     return (huvud +
             "en R-rad avgör/motiverar ('Avgör om … Motivera.'), en K-rad "
@@ -983,12 +1093,18 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
             "på uppgiften, poängen i högermarginalen, och kortsvaren får en "
             "«Svar: ______»-linje. Skriv innehållet så att det passar den "
             "formen:\n"
-            "- KORTSVAREN FÖRST, och de är samlade. Provets första uppgifter "
-            "är korta frågor med ett entydigt svar — en ekvation att lösa, ett "
-            "värde att beräkna, en formel att teckna. En rad text, ingen "
-            "berättelse. Uppgiftsplanen säger vilka som delas i a), b), c): "
-            "varje sådan bokstav är en EGEN fråga värd en poäng, precis som i "
-            "nationella provets räknarfria inledning.\n"
+            # NP:s delprov B är nio (vt17) respektive elva (vt22) EGNA
+            # numrerade kortsvarsuppgifter i följd — inte en samling under ett
+            # nummer. Fyra av vt17:s nio är enkla frågor; fem har a) och b),
+            # och de fem paren delar alla en graf, en ekvationstyp eller ett
+            # uttryck. Det är formen raden nedan ber om.
+            "- KORTSVAREN FÖRST, och de är EGNA NUMRERADE UPPGIFTER i följd. "
+            "Provets första uppgifter är korta frågor med ett entydigt svar — "
+            "en ekvation att lösa, ett värde att beräkna, en formel att "
+            "teckna. En rad text, ingen berättelse. Uppgiftsplanen säger vilka "
+            "som delas i a), b), c); en sådan uppgift har en stam och "
+            "deluppgifter som frågar om SAMMA sak, som i nationella provets "
+            "räknarfria inledning.\n"
             "- Ber en kortsvarsuppgift om TVÅ värden: skriv fältnamnen i "
             "svarsfalt (t.ex. [\"Svar $p =$\", \"Svar andra lösningen\"]) i "
             "stället för att be om båda på en enda svarsrad.\n"

@@ -613,6 +613,28 @@ def _build_view(doc: exam_spec.ExamDoc,
                         stegtabell=d.stegtabell, svarsfalt=d.svarsfalt,
                         facit=facit)
                     ev["bokstav"] = _BOKSTAV[j]
+                    # ── KORTSVAREN KRYSSAS INTE ────────────────────────
+                    # Lärarens dom över den första skarpa renderingen
+                    # (2026-08-22): hennes kortsvarssamling är fem frågor med
+                    # var sin «Svar: ______»-linje, och appen satte tre
+                    # kryssrutor på 1(a). Flervalet prövar igenkänning i
+                    # stället för räkning, och eleven som ser rutorna slutar
+                    # räkna. Prompten ber om det (exam_gen), men pappret får
+                    # inte KUNNA sätta rutan: gamla dokument ligger kvar i
+                    # basen med alternativ på sina kortsvar, och läraren
+                    # skriver ut dem i morgon.
+                    #
+                    # En kortsvarssamling är en rutin-uppgift som delats i
+                    # a), b), c) — samma form skelettet bygger
+                    # (exam_spec.balanced_skeleton) och samma som förlagans
+                    # uppgift 1. `endast_svar` är redan sann här (typen ärvs);
+                    # raden nedan säger det ändå, för mallen väljer svarsrad
+                    # först när både flerval och rutor är borta.
+                    if it.typ == "rutin":
+                        ev["flerval"] = None
+                        ev["ratt_bokstav"] = None
+                        ev["svarsrutor"] = None
+                        ev["endast_svar"] = True
                     # Figuren där den frågas om: förlagans 1(a) har grafen inne
                     # i deluppgiften medan b)–e) är rena räknefrågor. Rå TikZ,
                     # oescapad — samma regel som på uppgiften nedan.

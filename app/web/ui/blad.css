@@ -312,3 +312,32 @@
 .ankom{margin-top:auto;padding:13px 16px;background:#F2F1EF;border:1px solid #CDC8BD}
 .ankomrub{display:block;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
 .ankom p{margin:5px 0 0;font-size:15.5px;line-height:1.5}
+
+/* ── PLÅTEN OCH SCENEN ──
+   LÄRARENS BESLUT (2026-08-22): appen genererar ingen bild. Uppgiften bär
+   antingen en färdig plåt ur hennes katalog eller ett SCENE-stycke hon
+   klistrar in i sitt eget plåtprojekt. Båda ligger i samma bildplats
+   (.prbild), så den bild hon sedan släpper landar där de stod.
+
+   FOTEN ÄR INTE PAPPRET. Namnet, «Byt plåt» och «Kopiera scen» är lärarens
+   verktyg i granskningen — de trycks aldrig (provet sätts i LaTeX, se
+   app/templates/prov.tex.j2) och ska därför läsas som gränssnitt: mindre,
+   gråare, tydligt skilt från uppgiftstexten ovanför. */
+.prplat img{display:block;width:100%;height:auto}
+.prplatfot{display:flex;flex-wrap:wrap;align-items:center;gap:8px;
+  padding:6px 8px;background:#F4F4F2;border-top:1px solid #CFCFCF;
+  font-size:12px;color:#555}
+.prplatnamn{font-family:ui-monospace,Menlo,Consolas,monospace;letter-spacing:.01em}
+.prplatfot button{font:inherit;color:#333;background:#FFF;border:1px solid #CFCFCF;
+  border-radius:3px;padding:2px 8px;cursor:pointer}
+.prplatfot button:hover{background:#EDEDEA}
+.prplatvalj{font:inherit;max-width:100%;flex:1 1 180px}
+/* Scenen: stycket ska gå att LÄSA innan det kopieras — läraren ska kunna se
+   att bilden inte ber om text, siffror eller pilar. Därför bruten text i en
+   egen ruta och inte en avhuggen rad. */
+.prscen{padding:0;cursor:pointer}
+.prscenrub{margin:0;padding:8px 10px 0;font-size:12.5px;font-weight:700;color:#333}
+.prscentext{margin:6px 10px 8px;white-space:pre-wrap;font-size:12px;
+  line-height:1.5;color:#444;max-height:190px;overflow:auto}
+.prscenhint{margin:0;padding:6px 10px;font-size:11.5px;color:#777;
+  border-top:1px dashed #CFCFCF}
