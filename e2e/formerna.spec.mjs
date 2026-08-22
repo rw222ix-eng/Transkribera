@@ -669,3 +669,140 @@ test("ett bråk inuti ett rottecken spricker inte i röda TeX-fragment", async (
   expect(ut.synligt).not.toContain("\\");
   expect(ut.synligt).not.toContain("sf ");
 });
+
+/* ══════════ PROVETS PACKNING — INGEN UPPGIFT FÅR KLIPPAS ══════════
+ *
+ * LÄRARENS PROV 2026-08-22: uppgift 4 fanns i DOM:en («4.» och «2 p» stod där)
+ * men syntes inte på arket. Den låg under pappersskanten, och rakt ovanför den
+ * satt uppgift 3:s plåt.
+ *
+ * Kedjan: plåten hämtas ur /api/platar, och FÖRSTA gången skalar servern om en
+ * 2048 px-PNG innan den svarar. Det tar längre tid än vartenda mätsvep i
+ * blad.js (direkt, nästa bildruta, 260 ms, typsnitten). En <img> utan laddad
+ * fil är noll pixlar hög, så arket mättes som kortare än det blev — och när
+ * bilden landade växte den in i ett ark som redan paginerats. Ingen mätte om.
+ *
+ * Papprets motsvarighet är \pfbehov{92mm} (prov.tex.j2): en uppgift med bild
+ * begär plats INNAN den börjar, så uppgiften och dess bild alltid håller ihop.
+ * På skärmen gör pagineringen samma sak — bilden ligger inne i .pruppg och
+ * flyttas med den — men bara om den mäter ett ark som bär sina bilder.
+ *
+ * Testet fördröjer plåtarna med flit och kräver sedan att VARJE uppgift ligger
+ * helt inom sitt ark.
+ */
+/* En 16:9-plåt som bild — samma proportion som lärarens katalog, och oberoende
+   av att E:\Bildstil finns på maskinen som kör sviten. */
+const PLAT_16_9 = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAKAAAABaCAIAAACwpMoFAAAAoUlEQVR42u3RMQEAMAjAsDGF3Ch"
+  + "BPj4gldBEdT7t7VsAWIAFWIAFWIAFGLAAC7AAC7AACzBgARZgARZgARZgAQYswAIswAIswAIM"
+  + "WIAFWIAFWIAFGLAAC7AAC7AAC7AAAxZgARZgARZgAQYswAIswAIswAIMWIAFWIAFWIAFWIAB"
+  + "C7AAC7AAC7AAAxZgARZgARZgARZgwAIswAIswAIswLcauC0B1pGu/v8AAAAASUVORK5CYII=",
+  "base64");
+
+/** Ett prov med bilder på flera uppgifter — samma form som plan.js franProv
+ *  lämnar över till arket (nr, p, t, ut, avd, scen). */
+function provmedbilder() {
+  const lang = "Bestäm konstanten $a$ och motivera varje steg noga. ";
+  const uppg = (nr, plat) => ({
+    nr, p: 3, t: `Uppgift ${nr}. ` + lang.repeat(3),
+    niva: "C", ut: "rakna", formaga: "PL", avd: "B", peca: [1, 2, 0],
+    f: "Svar.", ...(plat ? { scen: { begrepp: "b", scene: "s",
+                                     filnamn: "f", plat } } : {}),
+  });
+  return {
+    typ: "Prov", moment: "potenser", klass: "NA25", kurs: "Matematik 1c",
+    datum: "2026-09-16", tid: "08:10–09:40", titel: "Prov — packningen",
+    provId: 4711, tid_min: 90, hjalpmedel: "Formelblad.",
+    gy: [], kalla: false, kallor: [], bilder: {}, referenser: [],
+    forlaga: null, resultat: null, andrat: [],
+    inst: { antal: 6, delprov: "En del", provminuter: 90 },
+    uppgifter: [uppg(1), uppg(2, "a-01"), uppg(3), uppg(4, "a-02"),
+                uppg(5), uppg(6, "a-03")],
+  };
+}
+
+test("ingen uppgift klipps när plåtarna kommer efter mätningen", async ({ page }) => {
+  await L.fejkatMoln(page);
+  /* Plåtarna dröjer — det är precis det som hände första gången servern
+     skalade om hennes 2048 px-bilder. */
+  await page.route("**/api/platar/**", async route => {
+    await new Promise(r => setTimeout(r, 1200));
+    await route.fulfill({ status: 200, contentType: "image/png", body: PLAT_16_9 });
+  });
+  await L.oppna(page);
+  await page.evaluate(v => {
+    const vard = document.createElement("div");
+    vard.id = "packprov";
+    vard.style.position = "relative";
+    document.body.appendChild(vard);
+    window.Blad.rita(vard, v);
+  }, provmedbilder());
+
+  /* Vänta in bilderna OCH mätsvepet de utlöser. */
+  await expect.poll(async () => page.evaluate(() =>
+    [...document.querySelectorAll("#packprov img")]
+      .filter(i => i.complete && i.naturalHeight).length),
+  { timeout: 20_000 }).toBe(3);
+  await page.waitForTimeout(600);
+
+  const matt = await page.evaluate(() => {
+    const ut = [];
+    document.querySelectorAll("#packprov .ark").forEach((ark, n) => {
+      const a = ark.getBoundingClientRect();
+      const cs = getComputedStyle(ark);
+      /* Satsytan: arket minus dess egen bottenmarginal. */
+      const botten = a.bottom - parseFloat(cs.paddingBottom);
+      ark.querySelectorAll(".pruppg").forEach(u => {
+        const r = u.getBoundingClientRect();
+        ut.push({
+          ark: n,
+          nr: parseInt(u.querySelector(".prnr").textContent, 10),
+          over: Math.round(a.top - r.top),
+          under: Math.round(r.bottom - botten),
+          bild: !!u.querySelector(".prbild img"),
+        });
+      });
+    });
+    return ut;
+  });
+
+  // Alla sex står kvar, i ordning, och ingen är dubblerad.
+  expect(matt.map(m => m.nr)).toEqual([1, 2, 3, 4, 5, 6]);
+  // Bilderna följde med sina uppgifter — de flyttas som EN enhet.
+  expect(matt.filter(m => m.bild).map(m => m.nr)).toEqual([2, 4, 6]);
+  for (const m of matt) {
+    expect(m.over, `uppgift ${m.nr} börjar ovanför arkets överkant`)
+      .toBeLessThanOrEqual(0);
+    expect(m.under, `uppgift ${m.nr} går ${m.under} px under arkets nederkant`)
+      .toBeLessThanOrEqual(0);
+  }
+  /* Och pappret ska inte bli fler blad än det behöver: pagineringen körs om vid
+     varje mätsvep, och utan återgången (blad.js atervandProv) la sig varje varv
+     ovanpå det förra — två uppgifter och en halv sida vitt papper per blad. */
+  const blad = new Set(matt.map(m => m.ark)).size;
+  expect(blad, "provet delades i fler blad än uppgifterna kräver")
+    .toBeLessThanOrEqual(3);
+});
+
+test("svarsraden står bara på de uppgifter som bara kräver ett svar", async ({ page }) => {
+  /* LÄRARENS DOM 2026-08-22: «Fullständig lösning krävs ⇒ eleven skriver på
+     lösblad ⇒ INGEN svarsrad på provpappret. Svar: ____ finns BARA på
+     uppgifter/deluppgifter med Endast svar krävs.» Hennes uppgift 7 — en
+     A-uppgift som ber om ett villkor OCH en motivering — fick en tom linje
+     under sig, och linjen säger raka motsatsen till kravraden ovanför. */
+  await L.fejkatMoln(page);
+  await L.oppna(page);
+  const html = await page.evaluate(() => window.BladBygg.provblad(
+    { typ: "Prov", moment: "potenser", kurs: "Matematik 1c", klass: "NA25" },
+    [{ nr: 1, p: 1, t: "Beräkna $2^5$.", ut: "kort", niva: "E", enhet: "kr" },
+     { nr: 2, p: 2, t: "Undersök vilka tal $a$ … Ange villkoret och förklara.",
+       ut: "rakna", niva: "A" }],
+    "B"));
+  await satt(page, html);
+  const uppg = page.locator("#formprov .pruppg");
+  await expect(uppg.nth(0).locator(".prkrav")).toHaveText("Endast svar krävs.");
+  await expect(uppg.nth(0).locator(".prsvar .prsvarnamn")).toHaveText("Svar:");
+  await expect(uppg.nth(1).locator(".prkrav"))
+    .toHaveText("Fullständig lösning krävs.");
+  await expect(uppg.nth(1).locator(".prsvar")).toHaveCount(0);
+});

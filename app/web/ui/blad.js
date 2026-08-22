@@ -1080,6 +1080,32 @@ window.Blad = (() => {
     });
   }
 
+  /* ── Provets delning måste också kunna ÅNGRAS ────────
+     Samma sak som `atervand` gör för arbetsbladets blad, och av samma skäl:
+     formge() körs om vid varje ny mätning — när typsnitten laddat, när figuren
+     kompilerats, när en plåt landat — och paginera DELAR bara. Utan
+     återgången la sig varje varv ovanpå det förra: lärarens prov 2026-08-22
+     blev sex uppgiftsblad med två uppgifter och en halv sida vitt papper på
+     var och en, därför att den sena bilden knuffade en uppgift framåt i ett
+     ark som redan var delat.
+
+     Slutraderna rivs med: `.prslut` bär `margin-top:auto` och äter all
+     restluft i ett flexark — hamnar en sådan mitt i traven mäts arket som
+     fullt. provfotter sätter dem igen sist i formge, när delningen är gjord. */
+  function atervandProv(trav) {
+    $$('.prslut', trav).forEach(p => p.remove());
+    for (let varv = 0; varv < 12; varv++) {
+      const del = $$('.ark[data-brytbar][data-forts]', trav)[0];
+      if (!del) break;
+      const alla = $$('.ark[data-brytbar]', trav);
+      const forra = alla[alla.indexOf(del) - 1];
+      /* Ingen föregångare: märket ljuger, och ett ark utan hem får stå kvar. */
+      if (!forra) { del.removeAttribute('data-forts'); continue; }
+      $$('.pruppg', del).forEach(u => forra.appendChild(u));
+      (del.closest('.blad') || del).remove();
+    }
+  }
+
   /* ── Provet: ett ark som svämmar över får ett till ───
      Uppgifterna är inte lika stora, så del B ryms ibland på ett blad och
      ibland inte. I stället för att gissa mäts arket, och de uppgifter som inte
@@ -1097,6 +1123,8 @@ window.Blad = (() => {
       const nytt = document.createElement('div');
       nytt.className = 'blad';
       const kopia = ark.cloneNode(false);
+      /* Märket som gör delningen ÅNGRINGSBAR — se atervandProv. */
+      kopia.dataset.forts = '';
       const huvudet = $('.prhuvud', ark) || $('.lohuvud', ark);
       if (huvudet) kopia.appendChild(huvudet.cloneNode(true));
       nytt.appendChild(kopia);
@@ -1114,6 +1142,27 @@ window.Blad = (() => {
       const kvar = $$('.pruppg', kopia).sort((x, z) => parseInt($('.prnr', x).textContent, 10) - parseInt($('.prnr', z).textContent, 10));
       kvar.forEach(el => kopia.appendChild(el));
     }
+  }
+
+  /* ── Bilder som inte hunnit fram till mätningen ──────
+     En <img> utan laddad fil är NOLL pixlar hög (.prbild img: width:100%,
+     height:auto — utan intrinsiska mått finns ingen höjd att räkna med). Ett
+     ark som mäts i det läget är alltså kortare än pappret blir, och den
+     uppgift som råkar ligga efter bilden hamnar under kanten när filen väl
+     landar. Lyssnaren nedan mäter om just då. `bevakade` gör den engångs: de
+     fyra formge-svepen skulle annars hänga fyra lyssnare på samma bild. */
+  const bevakade = new WeakSet();
+  function matOmNarBilderna(nod, formge) {
+    if (!nod) return;
+    $$('img', nod).forEach(img => {
+      if (bevakade.has(img)) return;
+      if (img.complete && img.naturalHeight) return;
+      bevakade.add(img);
+      /* Även `error`: en plåt som inte finns lämnar en tom ruta, och rutans
+         höjd är en annan än platshållarens. */
+      img.addEventListener('load', formge, { once: true });
+      img.addEventListener('error', formge, { once: true });
+    });
   }
 
   /* ── Facit ska fylla A4:an ───────────────────────────
@@ -1493,6 +1542,11 @@ window.Blad = (() => {
         return;
       }
       atervand(trav, v);
+      atervandProv(trav);
+      /* Bilder som lagts in sedan förra svepet (underlagets sidor, lärarens
+         egna) ska också få sitt eftersvep — annars gäller bevakningen bara de
+         bilder som fanns när traven ritades. */
+      matOmNarBilderna(trav, formge);
       /* Ratten nollas FÖRE pagineringen: den mäter i basgraden, aldrig i den
          uppskruvade från förra varvet. */
       nollskala(trav);
@@ -1516,6 +1570,23 @@ window.Blad = (() => {
     /* Kall cache: hämta, lägg in, mät om. Den som ska rita AV bladet väntar in
        `Blad.underlag` först (blad-bild.js) och hamnar aldrig här. */
     if (!komplett) underlag(v).then(() => { laggInUnderlag(trav, v); formge(); });
+    /* ── BILDEN SOM KOMMER EFTER MÄTNINGEN ──────────────
+       LÄRARENS PROV 2026-08-22: uppgift 4 fanns i DOM:en men syntes inte —
+       den låg under pappersskanten, med uppgift 3:s plåt ovanför sig.
+
+       Plåten (blad-bygg scenruta) hämtas ur /api/platar, och FÖRSTA gången
+       skalar servern om en 2048 px-PNG innan den svarar. Det tar längre tid än
+       varenda mätsvep ovan (direkt, nästa bildruta, 260 ms, typsnitten), och
+       bilden växte alltså in i ett ark som redan paginerats: ett par hundra
+       pixlar föll ner i ett blad som var fullt, och paginera fick aldrig veta
+       om det. Lärarens egna bilder hade redan sin `load`-lyssnare och
+       underlagets sidor sin omhämtning — plåtarna hade ingen.
+
+       Ett svep per bild när den landar, och pagineringen flyttar då hela
+       uppgiften (bilden ligger INNE i .pruppg) till nästa ark. Det är samma
+       regel som papprets \pfbehov: uppgiften och dess bild är EN enhet, och
+       ryms de inte börjar de på nästa sida. */
+    matOmNarBilderna(trav, formge);
     /* Bilderna läraren själv lagt in på en uppgift följer dokumentet, inte
        formen. Samma höjdtak som underlagssidorna (mallens 90 mm ≈ 340 px) —
        utan det tryckte ett 1200 px-foto innehållet under A4-kanten. Och ett

@@ -323,7 +323,11 @@
    verktyg i granskningen — de trycks aldrig (provet sätts i LaTeX, se
    app/templates/prov.tex.j2) och ska därför läsas som gränssnitt: mindre,
    gråare, tydligt skilt från uppgiftstexten ovanför. */
-.prplat img{display:block;width:100%;height:auto}
+/* SJUTTIO PROCENT, som på pappret — samma mått och samma skäl som
+   .prbild img i prov.css: mallen sätter \includegraphics[width=0,7\textwidth]
+   centrerat. Regeln står här också därför att den vinner på likhet i
+   specificitet, och blad.css läses sist. */
+.prplat img{display:block;width:70%;height:auto;margin:0 auto}
 .prplatfot{display:flex;flex-wrap:wrap;align-items:center;gap:8px;
   padding:6px 8px;background:#F4F4F2;border-top:1px solid #CFCFCF;
   font-size:12px;color:#555}

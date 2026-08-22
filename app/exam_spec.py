@@ -1004,6 +1004,51 @@ def ordna_delar(exam: dict) -> bool:
     return True
 
 
+def rensa_svarsfalt(exam: dict) -> list[int]:
+    """Ta bort svarsfälten på provets redovisningsuppgifter. Returnerar de
+    uppgiftsnummer som rensades (1-baserat, listans ordning).
+
+    LÄRARENS DOM 2026-08-22: «Fullständig lösning krävs ⇒ eleven skriver på
+    lösblad ⇒ INGEN svarsrad på provpappret. Svar: ____ finns BARA på
+    uppgifter/deluppgifter med Endast svar krävs.»
+
+    `svarsfalt` är gruppuppgiftens form — namngivna rader där BESLUTEN skrivs
+    på pappret och räkningen på lösblad (docs/forlagor/). Fältet ligger i den
+    delade uppgiftsbasen och modellen kan därför sätta det på vilken uppgift
+    som helst, och på ett PROV blir en sådan rad en svarsplats som säger emot
+    kravraden två rader ovanför. Det är en rad för mycket, inte ett fel
+    modellen behöver skriva om provet för — därför en tyst rättelse här
+    (samma sort som `ordna_delar`) och inte ett valideringsfel som kostar en
+    reparationsvända.
+
+    BARA PROVET. Arbetsbladet, gruppuppgiften och diagnosen bygger sin form på
+    fältet och har inte provets lösbladsregel."""
+    if not isinstance(exam, dict):
+        return []
+    rensade: list[int] = []
+    for nr, u in enumerate((exam.get("uppgifter") or []), 1):
+        if not isinstance(u, dict):
+            continue
+        rord = False
+        if u.get("typ") != "rutin" and u.get("svarsfalt"):
+            u.pop("svarsfalt", None)
+            rord = True
+        for d in (u.get("deluppgifter") or []):
+            # Deluppgiftens typ ärver förälderns när den är None (SubItem).
+            if not isinstance(d, dict) or not d.get("svarsfalt"):
+                continue
+            if (d.get("typ") or u.get("typ")) != "rutin":
+                d.pop("svarsfalt", None)
+                rord = True
+        if rord:
+            rensade.append(nr)
+    if rensade:
+        _LOG.info("svarsfalt borttaget på redovisningsuppgift %s "
+                  "(fullständig lösning krävs — svaret skrivs på lösblad)",
+                  ", ".join(str(n) for n in rensade))
+    return rensade
+
+
 # Under så här många FÖRMÅGEBÄRARE är det jämna bandet omöjligt: fem bärare kan
 # inte fördela poäng på sex förmågor, och en enda skulle behöva ligga på 100 %
 # av EN förmåga. Då gäller täckningsregeln i stället.

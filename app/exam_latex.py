@@ -368,7 +368,16 @@ def _enhet_vy(*, poang, typ, formaga, text, losning, bedomning,
         # och avsedda att sättas på EN rad (prov.tex.j2). Den gamla listan står
         # kvar för arbetsblad, gruppuppgift och diagnos — de sätter en rad per
         # etikett, och den formen är deras.
-        "svarsfalt_rad": _faltrad(svarsfalt),
+        #
+        # BARA PÅ KORTSVAREN. Lärarens dom 2026-08-22: «Fullständig lösning
+        # krävs ⇒ eleven skriver på lösblad ⇒ INGEN svarsrad på provpappret.»
+        # Provmallen väljer svarsplats i ordningen flerval → svarsfalt_rad →
+        # endast_svar, så ett svarsfält som modellen råkat lägga på en
+        # redovisningsuppgift smög förbi kravet och satte «Svar: ______» ändå
+        # — samma fel som canvas gjorde i andra änden. Fältet självt rörs inte
+        # (`svarsfalt` ovan): arbetsbladet, gruppuppgiften och diagnosen bygger
+        # sin form på det och har inte lärarens provregel.
+        "svarsfalt_rad": _faltrad(svarsfalt) if typ == "rutin" else None,
         "stycken": _stycken(text),
         "tabell": _tabell_vy(tabell),
         "svarsrutor": _svarsrutor_vy(svarsrutor, facit=facit),
@@ -662,7 +671,10 @@ def _build_view(doc: exam_spec.ExamDoc,
                     "stegtabell": _stegtabell_vy(it.stegtabell, facit=facit),
                     "svarsfalt": [escape_mixed(e) for e in it.svarsfalt]
                                  if it.svarsfalt else None,
-                    "svarsfalt_rad": _faltrad(it.svarsfalt),
+                    # Samma grind som i _enhet_vy: svarsraden hör till kravet
+                    # «Endast svar krävs», aldrig till en redovisningsuppgift.
+                    "svarsfalt_rad": (_faltrad(it.svarsfalt)
+                                      if it.typ == "rutin" else None),
                     "stycken": _stycken(it.text),
                     "notis": escape_mixed(it.notis) if it.notis else None,
                     "flerval": None, "ratt_bokstav": None,

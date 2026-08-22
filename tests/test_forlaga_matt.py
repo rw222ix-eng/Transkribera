@@ -78,11 +78,13 @@ def _prov() -> dict:
                      "Bestäm den största möjliga arean.",
              "losning": "36 cm$^2$.", "bedomning": "+1 E, +2 C."},
             # Två namngivna svarsrader på SAMMA uppgift — formen läraren dömde
-            # om (se test_ett_svar_per_rad). Typen är «redovisning» och inte
-            # «rutin» med flit: _y() sorterar träffarna på y utan att bry sig om
-            # sidan, så en tredje «Endast svar krävs» på sida 2 hade flyttat
-            # index åt de andra måtten.
-            {"del": "C", "formaga": "P", "typ": "redovisning",
+            # om (se test_ett_svar_per_rad). Typen är «rutin»: svarsplatsen
+            # hör till kravet «Endast svar krävs», och en uppgift som ska
+            # redovisas på lösblad får ingen (lärarens dom 2026-08-22, se
+            # test_ingen_svarsrad_pa_redovisningsuppgift). _y() tar därför en
+            # sida som argument — det tredje «Endast svar krävs» ligger på
+            # sida 2 och hade annars flyttat index åt de andra måtten.
+            {"del": "C", "formaga": "P", "typ": "rutin",
              "poang": [2, 0, 0],
              "text": "En andragradsekvation $x^2 + px - 15 = 0$ har lösningen "
                      "$x = 3$.",
@@ -122,15 +124,21 @@ def rader(tmp_path_factory):
     return rad, linjer
 
 
-def _y(rader, fras, n: int = 0, *, med_forsattsblad: bool = False):
+def _y(rader, fras, n: int = 0, *, med_forsattsblad: bool = False,
+       sida: int | None = None):
     """y för den n:te raden som bär `fras`, uppifrån räknat.
 
     Försättsbladet (sida 0) hoppas över: dess instruktionspunkt CITERAR
     «Endast svar krävs», och den citeringen är inte en uppgifts kravrad. Utan
     filtret mätte testet avståndet från en punktlista på sida 1 till en fråga
-    på sida 2 och rapporterade 207 pt."""
-    traffar = sorted(y for sida, _x, y, txt in rader
-                     if fras in txt and (med_forsattsblad or sida > 0))
+    på sida 2 och rapporterade 207 pt.
+
+    `sida` låser mätningen till EN sida. Träffarna sorteras bara på y, så en
+    fras som återkommer på nästa sida kan lägga sig mitt i indexserien — och
+    då mäter man två rader som aldrig stod på samma papper."""
+    traffar = sorted(y for s, _x, y, txt in rader
+                     if fras in txt and (med_forsattsblad or s > 0)
+                     and (sida is None or s == sida))
     assert len(traffar) > n, f"hittade inte {fras!r} (nr {n}) i provet"
     return traffar[n]
 
@@ -171,8 +179,8 @@ def test_lika_mycket_mellanrum_mellan_uppgifterna(rader):
     mellan sista raden i en uppgift och första raden i nästa."""
     rad, _ = rader
     # Sista svarslinjen i uppgift 1 (kortsvaren) → kravraden på uppgift 2.
-    sista_svaret_i_ett = _y(rad, "Svar:", 2)
-    krav_pa_tva = _y(rad, "Endast svar krävs", 1)
+    sista_svaret_i_ett = _y(rad, "Svar:", 2, sida=1)
+    krav_pa_tva = _y(rad, "Endast svar krävs", 1, sida=1)
     # Svarslinjen lägger 2 mm under sig (förlagans \svarsrad), så avståndet
     # från den till nästa uppgift är rytmen plus den luften.
     matt = krav_pa_tva - sista_svaret_i_ett
@@ -206,8 +214,8 @@ def test_kravraden_och_forsta_stycket(rader):
     den — ett styckeavstånd, precis som i förlagan."""
     rad, _ = rader
     # Uppgift 2 — den som bär BÅDE kravrad och egen frågetext.
-    krav = _y(rad, "Endast svar krävs", 1)
-    forsta = _y(rad, "Bestäm värdet av")
+    krav = _y(rad, "Endast svar krävs", 1, sida=1)
+    forsta = _y(rad, "Bestäm värdet av", sida=1)
     assert abs((forsta - krav) - FORSTA_RADEN_TILL_STYCKET) < TAL, (
         f"kravrad→fråga mäter {forsta - krav:.1f} pt")
 
@@ -259,6 +267,79 @@ def test_ett_svar_per_rad(rader):
     assert abs(x1 - x2) < TAL, (
         f"andra svarsraden börjar på x={x2:.1f}, inte vid vänsterkanten "
         f"{x1:.1f}")
+
+
+# ── SVARSRADEN HÖR TILL KRAVET ────────────────────────────────────────
+# LÄRARENS DOM 2026-08-22, om uppgift 7 på hennes prov («Undersök vilka tal a …
+# Ange villkoret och förklara varför övriga fall måste uteslutas», 2 p,
+# Fullständig lösning krävs): «Fullständig lösning krävs ⇒ eleven skriver på
+# lösblad ⇒ INGEN svarsrad på provpappret. Svar: ____ finns BARA på
+# uppgifter/deluppgifter med Endast svar krävs.»
+#
+# Mallen har alltid sagt det (prov.tex.j2: «\svarsrad{Svar:} under kortsvaren,
+# ingenting under de uppgifter som redovisas på lösblad»), men svarsfältet var
+# en väg förbi: mallen väljer svarsplats i ordningen flerval → svarsfalt_rad →
+# endast_svar, och `svarsfalt_rad` frågade inte efter typen.
+
+@pytest.mark.tectonic
+def test_ingen_svarsrad_pa_redovisningsuppgift(tmp_path):
+    """En redovisningsuppgift MED svarsfält ska ändå inte få en enda svarsrad
+    på pappret — varken mallens egen «Svar:» eller fältens namngivna rader."""
+    fitz = pytest.importorskip("fitz")
+    spec = {
+        "titel": "Prov", "kurs": "Matematik 2c", "klass": "NA25",
+        "tid_min": 90, "hjalpmedel": "Formelblad.",
+        "uppgifter": [
+            {"formaga": "P", "typ": "rutin", "poang": [1, 0, 0],
+             "text": "Beräkna $2^5$.", "losning": "32.", "bedomning": "+1 E."},
+            # Modellen har lagt svarsfält på en uppgift som ska redovisas.
+            {"formaga": "R", "typ": "redovisning", "poang": [0, 0, 2],
+             "text": "Undersök vilka tal $a$ som kan ges potensen "
+                     "$a^0 = 1$. Ange villkoret och förklara varför övriga "
+                     "fall måste uteslutas.",
+             "svarsfalt": ["Villkor", "Motivering"],
+             "enhet": "kr",
+             "losning": "$a \\neq 0$.", "bedomning": "+2 A."},
+        ],
+    }
+    doc, fel = exam_spec.validate_exam_json(spec, "prov")
+    assert doc is not None, fel
+    tex = exam_latex.render_prov(doc)
+    pdf, logg = exam_pdf.compile_pdf(tex, tmp_path, "krav", epoch=EPOK)
+    assert pdf is not None, logg
+    d = fitz.open(pdf)
+    # Sidan 0 är försättsbladet; uppgifterna står på sidan 1.
+    sidan = d[1].get_text()
+    d.close()
+    assert "Fullständig lösning krävs" in sidan
+    # Kortsvaret behåller sin rad — det är den ENA som ska finnas.
+    assert sidan.count("Svar:") == 1, sidan
+    assert "Villkor" not in sidan, "svarsfältet blev en svarsrad ändå"
+    assert "Motivering" not in sidan
+
+
+def test_valideringen_slanger_svarsfalt_pa_redovisningsuppgift():
+    """Mjuk normalisering före renderingen: fältet försvinner ur JSON:en, och
+    kortsvarens egna fält står kvar. Gruppuppgiften rörs inte — där ÄR de
+    namngivna raderna formen (docs/forlagor/)."""
+    exam = {"uppgifter": [
+        {"typ": "rutin", "svarsfalt": ["Svar"]},
+        {"typ": "redovisning", "svarsfalt": ["Villkor", "Motivering"]},
+        {"typ": "problem", "deluppgifter": [{"svarsfalt": ["Ekvation"]}]},
+        {"typ": "rutin", "deluppgifter": [{"svarsfalt": ["Svar"]},
+                                          {"typ": "resonemang",
+                                           "svarsfalt": ["Varför"]}]},
+    ]}
+    assert exam_spec.rensa_svarsfalt(exam) == [2, 3, 4]
+    assert exam["uppgifter"][0]["svarsfalt"] == ["Svar"]
+    assert "svarsfalt" not in exam["uppgifter"][1]
+    assert "svarsfalt" not in exam["uppgifter"][2]["deluppgifter"][0]
+    # Deluppgiften ärver förälderns «rutin» och behåller sitt fält …
+    assert exam["uppgifter"][3]["deluppgifter"][0]["svarsfalt"] == ["Svar"]
+    # … men den som bär en EGEN redovisningstyp gör inte det.
+    assert "svarsfalt" not in exam["uppgifter"][3]["deluppgifter"][1]
+    # Redan rensat → ingenting att rapportera.
+    assert exam_spec.rensa_svarsfalt(exam) == []
 
 
 # ── VÄNDMÄRKET ────────────────────────────────────────────────────────

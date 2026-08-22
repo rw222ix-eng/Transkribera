@@ -171,6 +171,13 @@ def test_ifyllnadsraderna_finns_pa_bade_uppgift_och_deluppgift():
     # precis som för \svarsradmed.)
     assert r"\svarsfaltrad{Ekvation}" not in tex["bedomning"]
     assert r"\svarsrad{Ekvation:}" not in tex["bedomning"]
+    # Uppgift 2 är ett PROBLEM och redovisas på lösblad. På provet får den
+    # därför ingen svarsrad alls, inte ens en namngiven — kravet avgör
+    # (lärarens dom 2026-08-22). Arbetsbladet har inte den regeln och sätter
+    # sin egen rad som förut; det är två papper med två former.
+    assert tex["prov"].count(r"\svarsrad{Ekvation:}") == 1, \
+        "deluppgiften i redovisningsuppgiften fick en svarsrad på provet"
+    assert tex["arbetsblad"].count(r"\svarsfaltrad{Ekvation}") == 2
 
 
 def test_ifyllnadsraden_star_efter_fragan_inte_fore():
@@ -178,7 +185,11 @@ def test_ifyllnadsraden_star_efter_fragan_inte_fore():
     till en uppgift med deluppgifter — vilket den gjorde i den första skarpa
     inspelningen — hamnade «Valt värde på c:» före den deluppgift som ber om
     värdet, och deluppgiften fick en tom skrivyta i stället."""
-    doc = _doc({"del": None, "formaga": "PL", "typ": "problem",
+    # Typen är «rutin»: svarsplatsen hör till kravet «Endast svar krävs»
+    # (lärarens dom 2026-08-22 — se test_forlaga_matt
+    # .test_ingen_svarsrad_pa_redovisningsuppgift), och det testet här mäter är
+    # VAR raden hamnar, inte vilken uppgift som får ha en.
+    doc = _doc({"del": None, "formaga": "PL", "typ": "rutin",
                 "poang": [0, 0, 0], "text": "En spelfigurs bana.",
                 "losning": "", "bedomning": "",
                 "svarsfalt": ["Valt värde", "Motivering"],

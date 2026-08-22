@@ -443,11 +443,24 @@ window.BladBygg = (() => {
        inramad ruta, och då lovade förhandsvisningen en form pappret inte har.
        Arbetsbladets .gunotis är kvar som ruta: det är dess egen form. */
     const notis = u.notis ? `<p class="prtips">${brodtext(u.notis)}</p>` : '';
-    /* SVARET står alltid i provet — på båda delarna, på varje uppgift. Förr
-       hängde raden på u.ut === 'kort', och en uppgift som saknade den märkningen
-       blev en fråga utan svarsplats mitt bland två som hade det. Alternativ
-       (kryssrutor) och deluppgifter bär sin egen plats. */
-    const behoverRad = !u.alt && !(u.del && u.del.length) && !u.rutor;
+    /* ── KRAVET AVGÖR SVARSRADEN, INGET ANNAT ──────────
+       LÄRARENS DOM (2026-08-22, om uppgift 7 på hennes prov): «Fullständig
+       lösning krävs ⇒ eleven skriver på lösblad ⇒ INGEN svarsrad på
+       provpappret. Svar: ____ finns BARA på uppgifter/deluppgifter med Endast
+       svar krävs.»
+
+       Här stod «SVARET står alltid i provet — på båda delarna, på varje
+       uppgift», och villkoret var bara «ingen annan svarsplats finns». En
+       A-uppgift som ber eleven UNDERSÖKA och FÖRKLARA fick då en tom linje
+       under sig, och linjen säger «skriv svaret här» — alltså raka motsatsen
+       till kravraden två rader ovanför. Två löften om samma uppgift, och det
+       eleven ser sist är linjen.
+
+       Samma regel i papprets ände: prov.tex.j2 sätter \svarsrad{Svar:} bara
+       under `endast_svar` (exam_latex: typ == "rutin"), och de namngivna
+       ifyllnadsraderna med den (exam_latex._enhet_vy). `delsvar` nedan bär
+       redan villkoret för deluppgifterna. */
+    const behoverRad = u.ut === 'kort' && !u.alt && !(u.del && u.del.length) && !u.rutor;
     /* Enheten står EFTER linjen på provet, som i förlagan: «………… laddpunkter/år».
        Kryssrutorna ersätter raden helt — den som kryssar skriver inte. */
     /* «Svar:» STÅR FRAMFÖR LINJEN. Pappret skriver den etiketten (förlagans
@@ -501,8 +514,16 @@ window.BladBygg = (() => {
        måla en egen. `null`/saknad betyder «appen hittade ingen». */
     const plat = s.plat || '';
     if (plat) {
+      /* INTE `loading="lazy"`. Plåten är inte en illustration bredvid texten
+         — den är ett par hundra pixlar av arkets höjd, och höjden styr var
+         pappret bryts (blad.js paginera). En lat bild laddas först när den
+         råkar närma sig fönstret, alltså långt efter mätningen, och ark tre
+         mättes utan sin bild så länge läraren inte hade rullat dit. Det som
+         klipptes var uppgiften EFTER bilden (lärarens prov 2026-08-22). Ett
+         prov bär två till fyra plåtar från den egna maskinen; de får hämtas
+         direkt. */
       return `<div class="prbild gufigur prplat" data-plat="${u.nr}">
-        <img src="/api/platar/${encodeURIComponent(plat)}" alt="" loading="lazy" />
+        <img src="/api/platar/${encodeURIComponent(plat)}" alt="" />
         <div class="prplatfot"><span class="prplatnamn">${esc(plat)}</span>
           <button type="button" class="prplatbyt" data-plat-byt="${u.nr}">Byt plåt</button>
           <button type="button" class="prplatbort" data-plat-bort="${u.nr}">Ta bort</button>

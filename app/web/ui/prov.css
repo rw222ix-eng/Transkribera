@@ -271,5 +271,12 @@
 #pr5 .prband,[data-form="pr5"] .prband{margin-top:auto;margin-left:0;margin-right:0}
 
 /* Bilduppgiftens fotografi: platsen är bildens, inte tvärtom — höjden följer
-   av bredden så att måtten i bilden aldrig beskärs. */
-.prbild img{display:block;width:100%;height:auto}
+   av bredden så att måtten i bilden aldrig beskärs.
+
+   SJUTTIO PROCENT, som på pappret. Mallen sätter \includegraphics[width=
+   0,7\textwidth] centrerat (prov.tex.j2), och skärmen drog ut bilden över hela
+   textspalten — en 16:9-plåt blev 333 px hög i stället för 233, alltså hundra
+   pixlar papper som inte finns. Det var med i det som sköt uppgift 4 under
+   kanten på lärarens prov 2026-08-22. Lärarens egna inlagda bilder och
+   underlagets sidor bär sina egna mått inline (blad.js) och rörs inte. */
+.prbild img{display:block;width:70%;height:auto;margin:0 auto}

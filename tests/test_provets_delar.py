@@ -401,3 +401,82 @@ def test_har_bild_raknas_i_python_och_inte_i_mallen():
     assert all("har_bild" in u for u in alla)
     assert alla[0]["har_bild"] is True
     assert any(u["har_bild"] is False for u in alla[1:])
+
+
+# ── 7. SVARSRADEN HÖR TILL KRAVET ──────────────────────────────────────
+#
+# LÄRARENS DOM 2026-08-22, om uppgift 7 på hennes nya prov («Undersök vilka tal
+# $a$ … Ange villkoret på $a$ och förklara varför övriga fall måste uteslutas»,
+# 2 p, Fullständig lösning krävs): «Fullständig lösning krävs ⇒ eleven skriver
+# på lösblad ⇒ INGEN svarsrad på provpappret. Svar: ____ finns BARA på
+# uppgifter/deluppgifter med Endast svar krävs.»
+#
+# Canvas satte raden på VARJE uppgift som inte redan hade en annan svarsplats
+# — villkoret frågade efter alternativ, deluppgifter och kryssrutor, aldrig
+# efter kravet. En tom linje under en fråga säger «skriv svaret här», alltså
+# raka motsatsen till kravraden två rader ovanför.
+#
+# Papprets ände mäts i tests/test_forlaga_matt.py
+# (test_ingen_svarsrad_pa_redovisningsuppgift).
+
+def test_svarsraden_star_bara_pa_kortsvaren():
+    html = _canvasprov([
+        _uppg(nr=1, ut="kort", enhet="kr"),
+        _uppg(nr=2, ut="rakna", t="Undersök vilka tal $a$ som kan ges "
+                                  "potensen $a^{0} = 1$. Ange villkoret."),
+    ])
+    assert html.count("prsvarnamn") == 1, "fel antal svarsrader i arket"
+    # Raden hör till uppgift 1 — den som säger «Endast svar krävs».
+    ett, tva = html.split('<span class="prnr">2.')
+    assert "prsvarnamn" in ett
+    assert "prsvar" not in tva
+    # Kravraden står kvar på båda och säger vilken som är vilken.
+    assert "Endast svar krävs." in ett
+    assert "Fullständig lösning krävs." in tva
+
+
+def test_svarsraden_uteblir_aven_nar_uppgiften_bar_en_enhet():
+    """Enheten är svarets FORM, inte ett löfte om en svarsplats. En
+    redovisningsuppgift med «kr» fick förut en linje med enheten efter."""
+    html = _canvasprov([_uppg(ut="rakna", enhet="kr")])
+    assert "prsvar" not in html
+    assert "prenhet" not in html
+
+
+def test_deluppgifternas_svarsrader_foljer_samma_krav():
+    # `del` är ett nyckelord i Python och går inte att skicka som kwarg —
+    # nyckeln sätts därför efteråt.
+    kort = _uppg(ut="kort")
+    kort["del"] = ["Beräkna $2^5$.", "Beräkna $3^2$."]
+    lang = _uppg(ut="rakna")
+    lang["del"] = ["Visa att …", "Motivera varför …"]
+    assert _canvasprov([kort]).count("prsvarnamn") == 2
+    assert "prsvar" not in _canvasprov([lang])
+
+
+def test_kryssrutorna_ar_kvar_som_egen_svarsplats():
+    """Kryssrutorna ÄR svarsplatsen (exam_spec.Svarsrutor) och sätts av mallen
+    oavsett krav — regeln ovan gäller den tomma linjen, inte rutorna."""
+    html = _canvasprov([_uppg(ut="rakna", rutor={"etikett": "Sats",
+                                                 "val": ["Randvinkeln",
+                                                         "Kordasatsen"]})])
+    assert html.count("guruta") == 2
+    assert "prlinje" not in html
+
+
+def test_latexvyn_slapper_svarsfaltet_pa_en_redovisningsuppgift():
+    """Andra änden av samma dom: `svarsfalt_rad` är provmallens svarsplats och
+    får bara finnas på kortsvaren. Listan `svarsfalt` står kvar — arbetsbladet,
+    gruppuppgiften och diagnosen bygger sin form på den."""
+    vy_kort = exam_latex._enhet_vy(
+        poang=(1, 0, 0), typ="rutin", formaga="P", text="t", losning="l",
+        bedomning="b", alternativ=None, ratt_alternativ=None, notis=None,
+        bild_fil=None, svarsfalt=["Villkor"])
+    vy_lang = exam_latex._enhet_vy(
+        poang=(0, 0, 2), typ="redovisning", formaga="R", text="t", losning="l",
+        bedomning="b", alternativ=None, ratt_alternativ=None, notis=None,
+        bild_fil=None, svarsfalt=["Villkor"])
+    assert vy_kort["svarsfalt_rad"] == ["Villkor:"]
+    assert vy_lang["svarsfalt_rad"] is None
+    assert vy_lang["svarsfalt"] == ["Villkor"]
+    assert vy_lang["endast_svar"] is False

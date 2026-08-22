@@ -1113,7 +1113,9 @@ def build_prompt(kurs: str, klass: str, punkter: list[str], *,
             "räknarfria inledning.\n"
             "- Ber en kortsvarsuppgift om TVÅ värden: skriv fältnamnen i "
             "svarsfalt (t.ex. [\"Svar $p =$\", \"Svar andra lösningen\"]) i "
-            "stället för att be om båda på en enda svarsrad.\n"
+            "stället för att be om båda på en enda svarsrad. Fältet hör BARA "
+            "till typen \"rutin\" — en uppgift som ska redovisas skrivs på "
+            "lösblad och får ingen svarsrad alls på provet.\n"
             "- BERÄTTELSEUPPGIFTERNA kommer sedan, och de är korta: ett till "
             "tre raders scenario och sedan en tydlig fråga. Namn och "
             "sammanhang gör dem levande — men ett sammanhang är en mening, "
@@ -1609,6 +1611,14 @@ def _validate(exam: dict, profil: str, koder: list[str] | None = None,
     # pappret. Rättas här i stället för att fällas som ett fel — det är en
     # sortering, inte något modellen behöver skriva om för.
     exam_spec.ordna_delar(exam)
+    # SVARSFÄLTEN PÅ REDOVISNINGSUPPGIFTERNA BORT. Lärarens dom 2026-08-22:
+    # «Fullständig lösning krävs ⇒ eleven skriver på lösblad ⇒ INGEN svarsrad
+    # på provpappret.» Fältet är gruppuppgiftens form och ligger i den delade
+    # uppgiftsbasen, så modellen kan sätta det var som helst — på provet blir
+    # det en svarsplats som säger emot uppgiftens egen kravrad. Tyst rättelse,
+    # av samma skäl som sorteringen ovan.
+    if profil == "prov":
+        exam_spec.rensa_svarsfalt(exam)
     doc, errors = exam_spec.validate_exam_json(exam, profil, niva_mal)
     if doc is not None and profil == "prov":
         errors = errors + exam_spec.validate_variation(doc)
