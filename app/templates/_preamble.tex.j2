@@ -191,6 +191,30 @@
 ((# ── Avstånd mellan uppgifter ────────────────────────────────────── #))
 \renewcommand{\questionshook}{\setlength{\itemsep}{8mm}}
 \renewcommand{\partshook}{\setlength{\itemsep}{4mm}}
+
+((# ── PLATS KVAR PÅ SIDAN ──────────────────────────────────────────
+    En bildstödsplåt sätts i 0,7·textbredd och är 16:9 — cirka 112 × 63 mm.
+    Faller uppgiften nära sidfoten hamnade rubriken och frågan sist på sidan
+    och bilden ensam överst på nästa: uppgiften hänvisade till en bild eleven
+    måste bläddra till. `\pfbehov{…}` begär utrymme FÖRE uppgiften i stället —
+    finns inte så mycket kvar bryts sidan där, mellan två uppgifter, och hela
+    uppgiften följs åt.
+
+    EGEN DEFINITION och inte paketet needspace: Tectonic-bunten är seedad
+    offline (bin/tectonic/cache) och needspace ligger inte i den. Innehållet är
+    needspace's egna fyra rader — en sträckbar nolltusch, en penalty som
+    lockar sidbrytaren dit när det är trångt, och sedan tillbaka. #))
+\makeatletter
+\newcommand{\pfbehov}[1]{%
+  \begingroup
+  \setlength{\dimen@}{#1}%
+  \vskip\z@\@plus\dimen@
+  \penalty-100\vskip\z@\@plus-\dimen@
+  \vskip\dimen@
+  \penalty9999\vskip-\dimen@
+  \vskip\z@skip
+  \endgroup}
+\makeatother
 ((* else *))
 \color{ink900}
 \setlength{\parindent}{0pt}

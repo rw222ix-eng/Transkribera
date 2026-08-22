@@ -141,10 +141,18 @@
    anteckning i vänsterkanten. */
 .prslut[data-slut]{text-align:center;font-size:17.5px;letter-spacing:.04em}
 .prslut+.prslut{margin-top:8px;padding-top:0}
-/* Vändpilen: en böjd pil som pekar högerut mot bladkanten — samma gest som
-   handen gör. Ritad som en enda rundad bana, ingen ikon och ingen dekor. */
-.prslut[data-vand]{display:flex;align-items:center;justify-content:center;gap:14px;font-size:17.5px;letter-spacing:.04em}
-.prslut[data-vand]::after{content:'';flex:0 0 auto;width:34px;height:14px;background:#000;-webkit-mask:var(--vandpil) center/contain no-repeat;mask:var(--vandpil) center/contain no-repeat;--vandpil:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 34 14'%3E%3Crect x='0' y='5.6' width='24' height='2.8' fill='%23000'/%3E%3Cpath d='M22 0.6 34 7 22 13.4Z' fill='%23000'/%3E%3C/svg%3E")}
+/* ── Vändmärket: PDF:ens, inte skärmens egen rad ──
+   Pappret sätter `\vandmarke` i sidfotens högra fält — {\small\itshape Vänd\,}
+   och en tunn rak pil, 12 pt kursiv i ett hörn (_preamble.tex.j2). Skärmen
+   hade i stället en centrerad versalrad i 17,5 px med en fet 34 px-pil: samma
+   ord, en helt annan gest, och den läste som en rubrik i stället för som en
+   diskret påminnelse. Nu står märket där det står på pappret — nedre högra
+   hörnet, kursivt, litet — och pilen är tunn som den ritade.
+
+   Slutraden («Slut på del A …») rörs inte: den ÄR en signal till hela sidan
+   och står kvar mitt på bladet. */
+.prslut[data-vand]{display:flex;align-items:center;justify-content:flex-end;gap:6px;font-size:13px;font-weight:400;font-style:italic;letter-spacing:0;color:#000}
+.prslut[data-vand]::after{content:'';flex:0 0 auto;width:22px;height:9px;background:#000;-webkit-mask:var(--vandpil) center/contain no-repeat;mask:var(--vandpil) center/contain no-repeat;--vandpil:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 34 14'%3E%3Crect x='0' y='6.3' width='26' height='1.4' fill='%23000'/%3E%3Cpath d='M24 2.6 34 7 24 11.4Z' fill='%23000'/%3E%3C/svg%3E")}
 
 /* ── Svarsraden ──
    Linjen och, för deluppgifter, poängen längst till höger. Uppgiftens totala

@@ -318,7 +318,7 @@ test("lösningsförslaget · kortsvarsfacit och kommenterad elevlösning",
     await expect(page.locator("#formprov .loparti[data-utan]")).toHaveCount(1);
   });
 
-test("provets försättsblad bär avtalet, och lösningsbladet sin OBS-ruta",
+test("provets försättsblad bär avtalet — och ingen OBS-ruta upprepar det",
   async ({ page }) => {
     /* Försättsbladet är en egen form: provtabell, poängsumma, betygsgränser
        och namnrad — inga uppgifter. Det fylls först när provet renderas, så
@@ -391,13 +391,18 @@ test("provets försättsblad bär avtalet, och lösningsbladet sin OBS-ruta",
     // Försättsbladet har inga uppgifter — det läses innan provtiden börjar.
     await expect(forsatt.locator(".pruppg")).toHaveCount(0);
 
-    // Uppgiftsbladen: OBS-rutan en gång per del, och foten som säger var delen
-    // slutar och vad den är värd — annars slutar bladet bara i tomt papper.
-    await expect(page.locator("#dokument .probs")).toHaveCount(2);
-    // OBS-rutan var en hårdkodad mall per del; nu står dokumentets regel där,
-    // så «tillåt räknare på del A» faktiskt syns över uppgifterna.
-    await expect(page.locator("#dokument .probs").first())
-      .toContainText("Hjälpmedel: Formelblad och linjal.");
+    /* OBS-RUTAN ÄR BORTA (läraren 2026-08-22: «det framgår redan på
+       försättsbladet vad som är tillåtet»). Den upprepade hjälpmedelsregeln,
+       redovisningsregeln och lösbladsregeln överst på varje dels första ark —
+       allt tre står på försättsbladet ovanför, och varje uppgift bär dessutom
+       sin egen kravrad. PDF:en har aldrig haft rutan. */
+    await expect(page.locator("#dokument .probs")).toHaveCount(0);
+    /* Delnamnet i huvudet står kvar: det är vilket papper man håller i. */
+    const delnamn = await page.locator("#dokument .prhuvud b:nth-child(2)")
+      .allTextContents();
+    expect(delnamn).toEqual(["Del A", "Del B"]);
+    // Foten säger var delen slutar och vad den är värd — annars slutar bladet
+    // bara i tomt papper.
     await expect(page.locator("#dokument .prslut[data-slut]").first())
       .toContainText("Slut på del");
 

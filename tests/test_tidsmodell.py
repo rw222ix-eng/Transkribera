@@ -183,6 +183,140 @@ def test_frontenden_raknar_med_samma_tal():
     assert float(u.group(1)) == exam_spec.MIN_PER_UPPGIFT
     assert float(u.group(2)) == exam_spec.MIN_START_OCH_SLUT
 
+    # TAKTEN ÄR DUBBLERAD PÅ SAMMA SÄTT och måste läsas med. Faktorn ligger på
+    # poängtermen i båda implementationerna; glider den isär får skärmen och
+    # servern olika provtid för samma papper.
+    for namn, varde in (("NP_TAKT", exam_spec.NP_MIN_PER_POANG),
+                        ("PROV_TAKT", exam_spec.PROV_MIN_PER_POANG)):
+        t = re.search(r"const %s = ([\d.]+);" % namn, js)
+        assert t, f"{namn} hittades inte i plan.js"
+        assert float(t.group(1)) == varde, f"plan.js {namn} har glidit"
+    # Faktorn räknas likadant: takt / NP, spärrad till [1, 2·NP].
+    assert "Math.min(Math.max(v, 1), 2 * NP_TAKT) / NP_TAKT" in js
+    # … och den ligger på POÄNGTERMEN, inte på uppgiftstermen eller overheaden.
+    assert "* taktfaktor(taktFor(v));" in js
+
+
+# ── takten: lärarens val, inte husets ─────────────────────────────────────
+
+def test_takten_ar_ett_mellanting_mellan_np_och_lararens_forlaga():
+    """Tre mätpunkter, alla 2026-08-22 (se exam_spec vid NP_MIN_PER_POANG):
+    NP 4,4 min/poäng (55 p på 240 min), lärarens egen förlaga 2,4 (Ma2c
+    kapitel 2, 37 p på 90 min) och hennes val 3,5 däremellan. «NP:s 4,4 är för
+    mycket, det hinner jag inte under en lektion. En bra avvägning att prova är
+    3,5.»"""
+    assert exam_spec.NP_MIN_PER_POANG == 4.4
+    assert exam_spec.FORLAGA_MIN_PER_POANG == 2.4
+    assert exam_spec.PROV_MIN_PER_POANG == 3.5
+    assert (exam_spec.FORLAGA_MIN_PER_POANG
+            < exam_spec.PROV_MIN_PER_POANG
+            < exam_spec.NP_MIN_PER_POANG)
+    # NP-talet är verkligen provens: 55 poäng på 240 minuter.
+    assert abs(240 / 55 - exam_spec.NP_MIN_PER_POANG) < 0.1
+    # Förlagans likaså: 37 poäng på 90 minuter.
+    assert abs(90 / 37 - exam_spec.FORLAGA_MIN_PER_POANG) < 0.1
+    # Faktorn på poängtermen: 3,5/4,4 ≈ 0,80.
+    assert abs(exam_spec.taktfaktor(exam_spec.PROV_MIN_PER_POANG) - 0.80) < 0.01
+
+
+def test_np_kalibreringen_ar_ororrd_utan_takt():
+    """Takten är ett PÅSLAG, inte en ändring av mätningen: utan `takt` räknar
+    modellen exakt som före väljaren, och det är det som håller NP-testerna
+    ovan giltiga."""
+    rad = DELPROV[0]
+    summor = {"e": rad["e"], "c": rad["c"], "a": rad["a"]}
+    vantat = round((_arbetstid(rad) + exam_spec.MIN_START_OCH_SLUT) / 5) * 5
+    assert exam_spec.tidsatgang(summor, rad["uppgifter"]) == vantat
+    assert exam_spec.tidsatgang(summor, rad["uppgifter"],
+                                takt=exam_spec.NP_MIN_PER_POANG) == vantat
+    assert exam_spec.taktfaktor(None) == 1.0
+    # Skräp i fältet får aldrig ge ett prov utan tid.
+    for skrap in ("", "abc", 0, -3, None):
+        assert exam_spec.taktfaktor(skrap) == 1.0
+    # Spärren: under en minut per poäng och över dubbla NP är skrivfel.
+    assert exam_spec.taktfaktor(0.2) == exam_spec.taktfaktor(1.0)
+    assert exam_spec.taktfaktor(99) == exam_spec.taktfaktor(2 * 4.4)
+
+
+def test_takten_ger_ett_tatare_prov_an_np():
+    """Utfallet läraren ville se: 80 minuter ska bära ~20 poäng med 3,5-takten,
+    inte 16–18 som NP-modellen gav. Räknat på det skelett som skulle byggas."""
+    np = exam_spec.foreslag_antal(80, "prov", takt=exam_spec.NP_MIN_PER_POANG)
+    hennes = exam_spec.foreslag_antal(80, "prov")
+    assert hennes["takt"] == exam_spec.PROV_MIN_PER_POANG
+    assert hennes["poang"] > np["poang"], (np, hennes)
+    assert 19 <= hennes["poang"] <= 25, hennes
+    assert hennes["antal"] > np["antal"]
+
+
+def test_diagnosen_behaller_np_takten():
+    """Diagnosen räknar UPPGIFTER ur en given lektion. Att pressa takten där
+    vore att fylla lektionen i stället för att mäta den."""
+    assert exam_spec.takt_for("diagnos") == exam_spec.NP_MIN_PER_POANG
+    assert exam_spec.takt_for("prov") == exam_spec.PROV_MIN_PER_POANG
+    assert exam_spec.takt_for("arbetsblad") == exam_spec.PROV_MIN_PER_POANG
+    js = PLAN_JS.read_text(encoding="utf-8")
+    assert "v.typ === 'Diagnos' ? NP_TAKT" in js
+
+
+def test_takten_reser_med_dokumentet():
+    """Valet är lärarens och ska gå att läsa av ett halvår senare — därför i
+    upplägget (inst.Prov.takt), som klonas in i dokumentet (nyVersion)."""
+    js = PLAN_JS.read_text(encoding="utf-8")
+    assert "formelblad: true, takt: 3.5 }" in js
+    assert 'class="taktfalt"' in js, "takten syns inte i panelen"
+    assert "Takt <input" in js
+
+
+# ── «Föreslå antal»: provtiden in, antalet uppgifter ut ───────────────────
+
+def test_foreslag_antal_landar_inom_fem_minuter_fran_provtiden():
+    """«Föreslå antal» följt av «Uppskatta tiden» ska landa på ingångstiden.
+
+    Det är hela poängen med att räkna på SKELETTET i stället för på en
+    snittkostnad per uppgift: poängsumman hoppar två och tre steg mellan
+    intilliggande antal, och snittet slog fel med upp till en kvart på små
+    papper."""
+    for tid in range(40, 125, 5):
+        r = exam_spec.foreslag_antal(tid, "prov")
+        assert abs(r["tid"] - tid) <= 5, (tid, r)
+        assert r["antal"] >= 1
+
+
+def test_foreslag_antal_raknar_samma_tid_som_uppskattningen():
+    """Talen får inte komma ur två modeller. Förslagets `tid` ska vara exakt
+    det tidsatgang() säger om samma skelett."""
+    for tid in (60, 80, 90, 120):
+        r = exam_spec.foreslag_antal(tid, "prov")
+        slots = exam_spec.balanced_skeleton(r["antal"], "prov", delar=True)
+        summor = exam_spec.poangsummor(exam_spec._skeleton_doc(slots))
+        assert summor["total"] == r["poang"]
+        assert exam_spec.tidsatgang(summor, len(slots),
+                                    takt=r["takt"]) == r["tid"]
+
+
+def test_lararens_exempel():
+    """Talen ur kommentaren, så att de inte kan glida: med 3,5-takten ger 80
+    minuter 9 uppgifter och 20 poäng, 90 ger 10 och 21, 100 ger 11 och 24 —
+    och 9 uppgifter på 20 poäng kostar ~80 minuter tillbaka."""
+    assert exam_spec.foreslag_antal(80, "prov")["antal"] == 9
+    assert exam_spec.foreslag_antal(80, "prov")["poang"] == 20
+    assert exam_spec.foreslag_antal(90, "prov")["antal"] == 10
+    assert exam_spec.foreslag_antal(100, "prov")["antal"] == 11
+    slots = exam_spec.balanced_skeleton(9, "prov", delar=True)
+    summor = exam_spec.poangsummor(exam_spec._skeleton_doc(slots))
+    assert exam_spec.tidsatgang(
+        summor, 9, takt=exam_spec.PROV_MIN_PER_POANG) == 80
+
+
+def test_knappen_finns_och_fragar_servern():
+    """Räkningen bor på ETT ställe (exam_spec.foreslag_antal) därför att den
+    behöver skelettet — skärmen har inget. Knappen frågar alltså rutten."""
+    js = PLAN_JS.read_text(encoding="utf-8")
+    assert "data-foreslag" in js
+    assert "/api/exams/foreslag-antal?tid=" in js
+    assert "foreslag: true," in js
+
 
 def test_tidsatgang_ar_arbetstiden_plus_overhead():
     """Det tidsatgang() lägger till utöver arbetstiden är exakt overheaden —

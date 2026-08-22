@@ -650,6 +650,16 @@
 .ghost.minitid{padding:6px 14px;font-size:.8rem;gap:7px}
 .ghost.minitid::after{display:none}
 .antalgrupp .stepper{margin-left:0}
+/* ── Takten: siffran bakom uppskattningen ──
+   «Uppskatta tiden» räknar med minuter per poäng, och utan att talet står
+   framme är knappen en svart låda: två prov på samma provtid får olika många
+   uppgifter och läraren ser inte varför. Etiketten är därför en LÄSBAR siffra
+   som också går att ändra — takten är hennes val (plan.js PROV_TAKT). Formen
+   är radens egen: samma höjd som knappen bredvid, men vilande i stället för
+   tryckbar. */
+.minitakt{display:inline-flex;align-items:center;gap:5px;font-size:.78rem;color:var(--ink-2);white-space:nowrap}
+.taktfalt{width:38px;padding:5px 4px;border:1px solid var(--line);border-radius:var(--r-input);background:var(--surface);font-family:var(--mono);font-size:.78rem;font-variant-numeric:tabular-nums;text-align:center;color:var(--ink)}
+.taktfalt:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .minutval{display:inline-flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end}
 .minutchips{display:inline-flex;gap:2px;padding:4px;background:var(--track);border-radius:var(--r-pill)}
 .minutchip{border:none;border-radius:var(--r-pill);padding:7px 13px;background:transparent;font-family:var(--mono);font-size:.8rem;font-variant-numeric:tabular-nums;color:var(--ink-2);cursor:pointer;transition:background-color var(--dur-2) var(--ease),color var(--dur-2) var(--ease),box-shadow var(--dur-2) var(--ease)}

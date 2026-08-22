@@ -256,3 +256,115 @@ test("gruppuppgiften går samma väg och bär sitt upplägg", async ({ page }) =
   // Fyra rutor är formen, inte en väljare.
   expect(gen.kropp.antal).toBe(4);
 });
+
+
+/* ══════ LÄRARENS SEX ANMÄRKNINGAR 2026-08-22 ══════
+   Hon läste igenom ett skarpt prov och hittade fyra saker där SKÄRMEN sa något
+   annat än PDF:en. Provet nedan är byggt för att fånga just dem: en C-uppgift
+   som ligger i Del A (nivå ≠ del), en enhet som bär TeX, och två delar som ska
+   numreras 1…k och k+1…n. */
+const EXAM_DELAR = {
+  titel: "Prov · Area och tillväxt",
+  kurs: "Matematik, nivå 2c", klass: "NA25", datum: "2026-09-03", tid_min: 80,
+  hjalpmedel: "Del B utan digitala verktyg. Del C med räknare.",
+  uppgifter: [
+    { del: "B", formaga: "B", typ: "rutin", poang: [2, 0, 0],
+      text: "Ange arean av en kvadrat med sidan $4$ cm.", enhet: "cm$^2$",
+      losning: "$16$", bedomning: "+2 E" },
+    { del: "B", formaga: "P", typ: "rutin", poang: [1, 0, 0],
+      text: "Derivera $f(x) = 5x$.", enhet: "$f'(x) =$",
+      losning: "$5$", bedomning: "+1 E" },
+    /* HÄR SATT BUGGEN: en C-tung uppgift i den räknarfria delen. Skärmen delade
+       på NIVÅN och sköt den till Del B, medan PDF:en (som grupperar på `del`)
+       lade den i Del A — «Del A: uppgift 1, 2 och 7». */
+    { del: "B", formaga: "R", typ: "resonemang", poang: [0, 2, 1],
+      text: "Har Jaana rätt? Motivera utan räknare.",
+      losning: "Nej.", bedomning: "+2 C, +1 A" },
+    { del: "C", formaga: "PL", typ: "problem", poang: [1, 2, 0],
+      text: "Bestäm största volymen med hjälp av ditt digitala verktyg.",
+      enhet: "cm$^3$", losning: "$2000$", bedomning: "+1 E, +2 C" },
+    { del: "C", formaga: "M", typ: "problem", poang: [0, 0, 2],
+      text: "Undersök modellens giltighet.",
+      losning: "Den bryter samman.", bedomning: "+2 A" },
+  ],
+};
+
+test("delarna är dokumentets, numreringen löper och enheten är matematik",
+  async ({ page }) => {
+    await fejka(page, { generate: strom([{ type: "done", result: {
+      id: 9, exam: EXAM_DELAR, typ: "prov", status: "utkast", errors: [],
+      rounds: 1, granser: { total: 8, E: { minst: 2 }, C: { minst: 4, varav_ca: 2 },
+                            A: { minst: 6, varav_a: 1 } },
+      summor: { total: 8, e: 4, c: 4, a: 3 } } }]) });
+    await page.goto("/");
+    await hydrerad(page);
+    await skriv(page, "Prov");
+    await expect(page.locator("#dokument")).toBeVisible({ timeout: 15_000 });
+
+    /* DELARNA. Del A ska bära uppgift 1–3 och Del B uppgift 4–5 — trots att
+       uppgift 3 är C/A-tung. Delen handlar om HJÄLPMEDEL, nivån om svårighet. */
+    const nrPa = form => page.locator(`#dokument .ark[data-form='${form}'] .prnr`)
+      .evaluateAll(el => el.map(e => e.firstChild.nodeValue.trim()));
+    expect(await nrPa("pr1b")).toEqual(["1.", "2.", "3."]);
+    expect(await nrPa("pr1c")).toEqual(["4.", "5."]);
+    // Provtabellen på försättsbladet säger samma spann.
+    const rader = await page.locator("#dokument .prmeta tr").allTextContents();
+    expect(rader.join(" ")).toContain("Uppgift 1–3");
+    expect(rader.join(" ")).toContain("Uppgift 4–5");
+
+    /* ENHETEN ÄR MATEMATIK. «cm$^2$» trycktes ordagrant på svarsraden, med
+       dollartecken och allt, medan PDF:en satte cm². */
+    const enheter = page.locator("#dokument .prenhet");
+    await expect(enheter.first()).toHaveText(/^cm/);
+    expect(await enheter.first().textContent()).not.toContain("$");
+    await expect(enheter.first().locator(".mat")).toHaveCount(1);
+    // KaTeX har renderat den — rutan är inte tom.
+    expect(await enheter.first().locator(".mat").innerHTML()).not.toBe("");
+
+    /* OBS-RUTAN ÄR BORTA och VÄNDMÄRKET är papprets: kursivt «Vänd» i nedre
+       högra hörnet, inte «Fortsätter på nästa sida» centrerat. */
+    await expect(page.locator("#dokument .probs")).toHaveCount(0);
+    const vand = page.locator("#dokument .prslut[data-vand]");
+    if (await vand.count()) {
+      await expect(vand.first()).toHaveText("Vänd");
+      const stil = await vand.first().evaluate(el => {
+        const s = getComputedStyle(el);
+        return { stil: s.fontStyle, just: s.justifyContent };
+      });
+      expect(stil.stil).toBe("italic");
+      expect(stil.just).toBe("flex-end");
+    }
+    // Delens sista ark bär slutraden i stället.
+    await expect(page.locator("#dokument .prslut[data-slut]").first())
+      .toContainText("Slut på del");
+  });
+
+test("«Föreslå antal» räknar antalet uppgifter ur provtiden", async ({ page }) => {
+  /* Lärarens beställning: diagnosen dimensioneras redan ur en lektion, och
+     provet ska kunna göra samma sak. Räkningen bor på servern (den behöver
+     skelettet); knappen sätter steppern och säger vad det kostar i poäng. */
+  await fejka(page);
+  await page.route("**/api/exams/foreslag-antal*", route => {
+    const u = new URL(route.request().url());
+    expect(u.searchParams.get("tid")).toBeTruthy();
+    expect(u.searchParams.get("typ")).toBe("prov");
+    return route.fulfill({ status: 200, contentType: "application/json",
+      body: JSON.stringify({ antal: 11, poang: 24, tid: 95, takt: 3.5 }) });
+  });
+  await page.goto("/");
+  await hydrerad(page);
+  await page.getByRole("tab", { name: "Planering" }).click();
+  await page.evaluate(() => {
+    window.SattLage("Prov");
+    window.PlanSteg.las(4, false);
+    window.PlanSteg.gaTill(4);
+  });
+  const antalrad = page.locator('.typrad[data-id="antal"]');
+  // Takten står framme, med lärarens tal.
+  await expect(page.locator('.typrad[data-id="nartid"] .taktfalt'))
+    .toHaveValue("3,5");
+  await expect(antalrad.locator(".steppervarde")).toHaveText("6");
+  await antalrad.locator("[data-foreslag]").click();
+  await expect(antalrad.locator(".steppervarde"))
+    .toHaveText("11", { timeout: 5_000 });
+});

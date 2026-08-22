@@ -520,15 +520,24 @@ def _forsatt_vy(doc: exam_spec.ExamDoc, delar: list[dict]) -> dict:
         delrader.append({"namn": escape_latex(d["rubrik"]),
                          "text": escape_latex(f"{spann} {vad}")})
 
-    # «Du lämnar in Del A innan du hämtar Del B.» — bara när det FINNS en del
-    # att lämna in innan nästa. Ett prov i en enda del har ingen sådan regel,
-    # och en rad som beskriver något som inte händer är en rad som lärs bort.
+    # INLÄMNINGSREGELN ÄR LÄRARENS PROVRUTIN, ordagrant (2026-08-22):
+    # «eleverna får båda delarna samtidigt; när de känner sig klara lämnar de in
+    # Del A och får då hämta räknare/dator och fortsätter med Del B». Raden löd
+    # förut «Du lämnar in Del A innan du hämtar Del B», och det beskrev en
+    # utdelning som inte sker — eleven har redan båda häftena i handen. Det som
+    # faktiskt är förbjudet är att röra räknaren innan Del A är inlämnad, och
+    # det är den meningen som ska stå.
+    #
+    # Bara när det FINNS en del att lämna in innan nästa. Ett prov i en enda del
+    # har ingen sådan regel, och en rad som beskriver något som inte händer är
+    # en rad som lärs bort.
     inlamning = None
     if len(delrader) >= 2:
         forsta = delar[0]["rubrik"]
         nasta = [d["rubrik"] for d in delar if d["rubrik"]][1]
         inlamning = escape_latex(
-            f"Du lämnar in {forsta} innan du hämtar {nasta}.")
+            f"Du lämnar in {forsta} innan du tar fram digitala verktyg och "
+            f"börjar på {nasta}.")
 
     g = exam_spec.kravgranser(doc)
     total = int(g["total"])
@@ -690,6 +699,15 @@ def _build_view(doc: exam_spec.ExamDoc,
                               "dom": escape_mixed(pa.dom)} for pa in e.partier]}
                 for e in (it.elevlosningar or [])] if facit else []
             item_vy["nummer"] = nummer
+            # BÄR UPPGIFTEN NÅGON BILD — sin egen eller en deluppgifts? Provets
+            # mall begär plats på sidan innan en sådan uppgift börjar
+            # (\pfbehov, se prov.tex.j2), och frågan räknas här därför att den
+            # inte går att ställa i mallen: en tom `selectattr`-kedja är
+            # Undefined, och Jinjas StrictUndefined fäller renderingen i stället
+            # för att svara «nej».
+            item_vy["har_bild"] = bool(
+                item_vy.get("bild_fil")
+                or any(d.get("bild_fil") for d in (item_vy.get("deluppgifter") or [])))
             # Gruppuppgiftens uppgifter heter 1, 2, 3 (lärarens val 2026-08-20)
             # — då kan deluppgifterna heta a) b) utan att två bokstavsserier
             # blandas på samma papper. Fältet heter `bokstav` av historiska

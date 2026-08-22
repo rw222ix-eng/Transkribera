@@ -37,6 +37,27 @@ window.Blad = (() => {
      samma moment lär ut samma sak. Rättningen, metaraderna och arket läser
      samma lista. */
   const arE = u => u.niva === 'E';
+  /* ── VILKEN DEL EN UPPGIFT LIGGER I ────────────────────
+     DOKUMENTETS DEL VINNER. Ett prov servern skrev bär delen på varje uppgift
+     (`avd`: 'B' = Del A, 'C' = Del B — exam_spec:s interna namn, se
+     blad-bygg.DELNAMN), och den är delad med PDF:en. Skärmen delade i stället
+     på NIVÅ — allt som var E-uppgift hamnade i Del A — och det är två olika
+     frågor: delen handlar om HJÄLPMEDEL, nivån om svårighet. Provet
+     2026-08-22 hade sex E-uppgifter varav en låg i räknardelen, och skärmen
+     satte «Del A: uppgift 1, 2 och 7» medan pappret sa 1–5. Numren kom ur
+     listans ordning och var alltså löpande; det var GRUPPERINGEN som ljög.
+
+     Nivåfallbacken står kvar för prototypens papper (provplock nedan väljer ur
+     avsnittspoolen och sätter ingen del) och för handskrivna dokument. Den
+     gäller bara när INGEN uppgift bär `avd` — ett halvt taggat prov ska inte
+     bli halvt nivådelat. */
+  const harAvd = lista => (lista || []).some(u => u && u.avd);
+  const iDelA = (u, avdelat) => (avdelat ? u.avd === 'B' : arE(u));
+  const delaProv = lista => {
+    const avdelat = harAvd(lista);
+    return [lista.filter(u => iDelA(u, avdelat)),
+            lista.filter(u => !iDelA(u, avdelat))];
+  };
   function varva(prim, sek, takt) {
     const ut = [];
     let a = 0, b = 0;
@@ -68,7 +89,7 @@ window.Blad = (() => {
     return ut.map((u, k) => ({ ...u, orig: u.nr, nr: k + 1 }));
   }
   const provval = provplock;
-  const delBAntal = v => uppgifter(v).filter(arE).length;
+  const delBAntal = v => delaProv(uppgifter(v))[0].length;
 
   /* Arbetsbladet och gruppuppgiften håller sig till dagens avsnitt — och till
      den nivå läraren valde. «Nivå» var förr en etikett på metaraden; nu väljer
@@ -143,12 +164,12 @@ window.Blad = (() => {
     if (v.typ === 'Prov') {
       const u = uppgifter(v);
       if (!u.length) return [];
-      const b = u.filter(arE), c = u.filter(x => !arE(x));
+      const [b, c] = delaProv(u);
       const enDel = (v.inst || {}).delprov === 'En del' || !b.length || !c.length;
       if (v.losningsblad) return bb.losning(v, u, enDel ? u.length : b.length);
       const ut = [bb.provforsatt(v)];
-      if (enDel) ut.push(bb.provblad(v, u, '-', true));
-      else { ut.push(bb.provblad(v, b, 'B', true)); ut.push(bb.provblad(v, c, 'C', true)); }
+      if (enDel) ut.push(bb.provblad(v, u, '-'));
+      else { ut.push(bb.provblad(v, b, 'B')); ut.push(bb.provblad(v, c, 'C')); }
       return ut;
     }
     const u = uppgifter(v);
@@ -229,9 +250,10 @@ window.Blad = (() => {
     const i = v.inst || {};
     const plock = uppgifter(v);
     const kvar = new Map(plock.map((u, k) => [u.nr, k + 1]));
-    const antalB = plock.filter(arE).length;
+    const [uppgA] = delaProv(plock);
+    const antalB = uppgA.length;
     const summa = plock.reduce((a, u) => a + u.p, 0);
-    const sumB = plock.filter(arE).reduce((a, u) => a + u.p, 0);
+    const sumB = uppgA.reduce((a, u) => a + u.p, 0);
     const enDel = i.delprov === 'En del' || !antalB || antalB === plock.length;
 
     $$('.pruppg', trav).forEach(el => {
@@ -449,9 +471,10 @@ window.Blad = (() => {
     if (!v || v.typ !== 'Prov' || v.losningsblad) return;
     const i = v.inst || {};
     const plock = uppgifter(v);
-    const antalB = plock.filter(arE).length;
+    const [uppgA] = delaProv(plock);
+    const antalB = uppgA.length;
     const summa = plock.reduce((a, u) => a + u.p, 0);
-    const sumB = plock.filter(arE).reduce((a, u) => a + u.p, 0);
+    const sumB = uppgA.reduce((a, u) => a + u.p, 0);
     const enDel = i.delprov === 'En del' || !antalB || antalB === plock.length;
     $$('.prslut', trav).forEach(p => p.remove());
     const rad = (ark, attr, text) => {
@@ -461,15 +484,22 @@ window.Blad = (() => {
       p.textContent = text;
       ark.appendChild(p);
     };
-    /* Vändpilen betyder «det finns mer»: varje uppgiftsblad utom det sista i
-       sin del får den, slutraden står på delens sista. Foten pinnas till
-       bladkanten och ramar in den tomma ytan i stället för att låta bladet
-       bara ta slut. */
+    /* VÄNDMÄRKET ÄR PDF:ENS, ORDAGRANT. Pappret sätter `\vandmarke` —
+       {\small\itshape Vänd\,} och en tunn pil, diskret i sidfotens HÖGRA
+       fält (_preamble.tex.j2). Skärmen skrev i stället «Fortsätter på nästa
+       sida» centrerat och stort mitt över bladets nederkant: samma budskap,
+       en helt annan form, och läraren såg två olika papper. Ordet och pilen
+       är desamma här; högerställningen och storleken sätts av
+       .prslut[data-vand] i prov.css.
+
+       Regeln är oförändrad: varje uppgiftsblad utom det SISTA i sin del får
+       märket — där lämnar eleven in — och slutraden står på delens sista. */
+    const VAND = 'Vänd';
     if (enDel) {
       const medUppg = $$('.blad', trav)
         .map(bl => $('.ark[data-form]', bl))
         .filter(a => a && $('.pruppg', a));
-      medUppg.slice(0, -1).forEach(a => rad(a, 'data-vand', 'Fortsätter på nästa sida'));
+      medUppg.slice(0, -1).forEach(a => rad(a, 'data-vand', VAND));
       const sist = medUppg.pop();
       if (sist) rad(sist, 'data-slut', 'Slut på provet');
       return;
@@ -478,7 +508,7 @@ window.Blad = (() => {
       const ark = $$('.blad', trav)
         .map(bl => $('.ark[data-form]', bl))
         .filter(a => a && a.dataset.form === form && $('.pruppg', a));
-      ark.slice(0, -1).forEach(a => rad(a, 'data-vand', 'Fortsätter på nästa sida'));
+      ark.slice(0, -1).forEach(a => rad(a, 'data-vand', VAND));
       const sist = ark.pop();
       if (sist) rad(sist, 'data-slut', `Slut på del ${namn} — delen ger högst ${po} poäng`);
     });

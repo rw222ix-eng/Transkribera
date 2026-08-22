@@ -198,10 +198,36 @@ def create_router(base: Path, arbiter) -> APIRouter:
             # har samma modell (plan.js uppskatta) men bara efter att arket
             # ritats; diagnosen behöver siffran med en gång, för den skrevs för
             # att rymmas på en lektion och läraren ska se om den gjorde det.
-            "tid": (exam_spec.tidsatgang(summor, len(doc.uppgifter))
-                    if doc else None),
+            # TAKTEN FÖLJER TYPEN. Provet räknas med lärarens kapiteltakt
+            # (exam_spec.PROV_MIN_PER_POANG, 3,5 min/poäng), diagnosen med
+            # NP:s — den räknar uppgifter ur en given lektion och ska inte
+            # pressas. Samma val som plan.js gör på skärmen.
+            "tid": (exam_spec.tidsatgang(
+                summor, len(doc.uppgifter),
+                takt=exam_spec.takt_for(view.get("typ") or "prov"))
+                if doc else None),
             "dubbletter": _dubbletter(view),
         }
+
+    # ----------------------------------------------------- föreslaget antal --
+
+    @router.get("/api/exams/foreslag-antal")
+    def foreslag_antal(tid: int, typ: str = "prov", nivamix: str | None = None):
+        """Hur många uppgifter provtiden rymmer — lärarens motsvarighet till
+        diagnosens dimensionering, fast åt andra hållet.
+
+        RÄKNAS HÄR OCH INTE PÅ SKÄRMEN, därför att svaret bygger på det
+        SKELETT som skulle byggas (exam_spec.foreslag_antal): poängsumman
+        hoppar mellan intilliggande antal, och en snittkostnad per uppgift
+        slår fel med upp till en kvart. Skärmen har inget skelett — den skulle
+        behöva en andra, ungefärlig modell, och två modeller för samma tal
+        glider isär. Med takten från exam_spec landar «Föreslå antal» följt av
+        «Uppskatta tiden» inom fem minuter från ingångstiden."""
+        profil = "diagnos" if str(typ).lower().startswith("diagnos") else "prov"
+        val = exam_spec.nivaval(profil, nivamix)
+        return exam_spec.foreslag_antal(
+            tid, profil,
+            mix=(val or {}).get("mix"), niva_mal=(val or {}).get("mal"))
 
     # ---------------------------------------------------- innehållsstatus --
 

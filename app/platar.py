@@ -371,13 +371,21 @@ def poang(post: dict, begrepp: str, text: str = "",
 
 
 def matcha(begrepp: str, text: str = "", *, base: Path | None = None,
-           poster: list[dict] | None = None) -> dict | None:
+           poster: list[dict] | None = None,
+           tagna: set[str] | frozenset[str] | None = None) -> dict | None:
     """Bästa plåten för ett begrepp, eller None när ingen passar.
 
     `poster` går att skicka in i test; annars läses katalogen (spegel +
-    scenfiler). Bara spår A matchas — se MATCHBARA_SPAR."""
+    scenfiler). Bara spår A matchas — se MATCHBARA_SPAR.
+
+    `tagna` är plåtar som redan ligger på ett annat uppslag i SAMMA prov. De
+    tas ur kandidatlistan, så andra träffen får näst bästa plåt i stället för
+    samma äng en gång till: två identiska bilder på ett prov läser som ett
+    tryckfel. Finns ingen annan som når över MIN_POANG blir det ingen bild —
+    då står SCENE-stycket framme och läraren målar en ny."""
     alla = poster if poster is not None else katalog(base)
-    kandidater = [p for p in alla if p.get("spar") in MATCHBARA_SPAR]
+    kandidater = [p for p in alla if p.get("spar") in MATCHBARA_SPAR
+                  and p.get("namn") not in (tagna or ())]
     if not kandidater:
         return None
     vikter = _vikter(kandidater)
@@ -405,14 +413,20 @@ def matcha_exam(exam: dict, *, base: Path | None = None) -> int:
         return 0
     poster = katalog(base)
     traffar = 0
+    # Plåtar som redan ligger på pappret — lärarens egna val medräknade. Ingen
+    # plåt sätts två gånger i samma prov (se `tagna` i matcha).
+    tagna = {str(u["scen"]["plat"]) for u in exam.get("uppgifter") or []
+             if isinstance(u, dict) and isinstance(u.get("scen"), dict)
+             and u["scen"].get("plat")}
     for u in exam.get("uppgifter") or []:
         scen = u.get("scen") if isinstance(u, dict) else None
         if not isinstance(scen, dict) or scen.get("plat"):
             continue
         träff = matcha(str(scen.get("begrepp") or ""),
-                       str(u.get("text") or ""), poster=poster)
+                       str(u.get("text") or ""), poster=poster, tagna=tagna)
         if träff:
             scen["plat"] = träff["namn"]
+            tagna.add(träff["namn"])
             traffar += 1
     return traffar
 

@@ -170,6 +170,14 @@ Provet kan ge totalt \textbf{((( forsatt.total ))) poäng}.
     Del B-fil («Numrering börjar på 7»). #))
 \setcounter{question}{((( del.forsta_nr_minus_ett )))}
 ((* for u in del.uppgifter *))
+((# Bär uppgiften en bild — en plåt ur lärarens katalog eller en sida ur
+    underlaget — begärs plats för den INNAN uppgiften börjar. Annars kunde
+    rubriken och frågan bli sista raderna på en sida och bilden första på
+    nästa. 92 mm = bildens ~63 mm plus frågan och kravraden ovanför. Se
+    \pfbehov i _preamble.tex.j2. #))
+((* if u.har_bild *))
+\pfbehov{92mm}
+((* endif *))
 
 ((( former.fraga(u) )))
 ((( former.stycken(u.stycken) )))

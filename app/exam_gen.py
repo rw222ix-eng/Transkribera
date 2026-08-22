@@ -54,13 +54,28 @@ SYSTEM = (
 # ställen i den här filen: en modell härmar ett exempel bättre än den följer
 # en regel.
 SCEN_REGEL = (
-    "- scen {begrepp, scene, filnamn}: BILDSTÖD till en berättelseuppgift — "
-    "en målad bild av situationen som trycks ovanför uppgiften. Sätt det BARA "
-    "där bilden tillför något: raketens bana, inhägnaden vid floden, dammen "
-    "som växer igen, skuggan från tallen. Rutinuppgifter, kortsvar, "
-    "ekvationer att lösa och rena räknefrågor får ALDRIG scen — en bild som "
-    "inte behövs stjäl plats på pappret. Högst ungefär var tredje uppgift, "
-    "och gärna färre.\n"
+    # HUR MÅNGA. Första skarpa provet fick EN bild på nio uppgifter, och
+    # läraren ville ha fler: «skulle kunna ha flera bilder bara för att det ska
+    # bli mer estetiskt snyggt — det behöver inte hjälpa» (2026-08-22). Regeln
+    # är alltså inte längre «bara där bilden tillför något» utan «på varje
+    # uppgift som utspelar sig någonstans». Gränsen som står kvar är den enda
+    # som betyder något: en uppgift utan situation — en ekvation, ett uttryck
+    # att förenkla — får ingen scen, för det finns ingenting att måla.
+    "- scen {begrepp, scene, filnamn}: BILDSTÖD till en uppgift som utspelar "
+    "sig NÅGONSTANS — en målad bild av situationen som trycks ovanför "
+    "uppgiften. Sätt det på VARJE berättelse- och situationsuppgift: raketens "
+    "bana, inhägnaden vid floden, dammen som växer igen, skuggan från tallen, "
+    "priset i affären, temperaturen som sjunker. Inte bara på "
+    "optimeringsuppgifterna. Sikta på minst två eller tre bilder per papper, "
+    "och sprid dem över BÅDA delarna — bilden får finnas för att pappret ska "
+    "bli vackert, den behöver inte vara nödvändig för att lösa uppgiften.\n"
+    "  Undantaget är rena räkneuppgifter UTAN situation: en ekvation att "
+    "lösa, ett uttryck att förenkla, en derivata att bestämma. De utspelar sig "
+    "ingenstans och får ALDRIG scen — det finns ingen situation att måla. Ett "
+    "kortsvar som däremot handlar om något (en resa, en åker, ett pris) får "
+    "gärna ha en.\n"
+    "  Låt inte två uppgifter på samma papper handla om samma sorts scen — "
+    "två ängar med kastbanor blir en bild i två exemplar.\n"
     "  begrepp: kort svensk nyckel, ett till tre ord — \"optimering "
     "inhägnad\", \"kast\", \"exponentiell tillväxt\", \"höjdbestämning med "
     "skugga\". Den är nyckeln appen slår upp i sin bildkatalog.\n"
@@ -1597,6 +1612,12 @@ def _validate(exam: dict, profil: str, koder: list[str] | None = None,
     genereras UTAN grammatiklås — se generate_exam. Diagnosen prövas dessutom
     på TÄCKNINGEN: en punkt utan uppgift gör hela pappret oläsbart som
     diagnos."""
+    # DELARNA LÄGGS I ORDNING FÖRST. Numreringen är listans ordning på skärmen
+    # och delgrupperingens i PDF:en; ligger delarna om varandra i JSON:en får
+    # eleven «Del A: uppgift 1, 2 och 7» på förhandsvisningen och något annat på
+    # pappret. Rättas här i stället för att fällas som ett fel — det är en
+    # sortering, inte något modellen behöver skriva om för.
+    exam_spec.ordna_delar(exam)
     doc, errors = exam_spec.validate_exam_json(exam, profil, niva_mal)
     if doc is not None and profil == "prov":
         errors = errors + exam_spec.validate_variation(doc)

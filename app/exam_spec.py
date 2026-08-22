@@ -945,6 +945,41 @@ def gruppera_per_del(uppgifter: list[ExamItem]
     return grupper
 
 
+def ordna_delar(exam: dict) -> bool:
+    """Lägg uppgifterna i delordning i JSON:en själv. True om något flyttades.
+
+    NUMRERINGEN FÖLJER LISTAN. PDF:en grupperar per del innan den numrerar
+    (exam_latex._build_view), men skärmen numrerar rakt av — den läser
+    `uppgifter` i den ordning de står. Ligger delarna om varandra i JSON:en
+    säger de två pappren olika saker om samma prov, och lärarens första skarpa
+    prov gjorde precis det: Del A blev uppgift 1, 2 och 7.
+
+    Grammatiken låser visserligen `del` per index (to_response_format), men det
+    gäller bara genereringen: `refine_exam` skriver om hela dokumentet utan
+    skelett, och ett handredigerat prov har ingen grammatik alls. Ordningen
+    säkras därför här, på JSON:en, en gång — inte som ett valideringsfel som
+    kostar en modellvända för något vi kan rätta själva.
+
+    Sorteringen är STABIL: uppgifternas inbördes ordning inom sin del rörs
+    inte, och det är den som bär den stigande svårigheten."""
+    if not isinstance(exam, dict):
+        return False
+    uppgifter = exam.get("uppgifter")
+    if not isinstance(uppgifter, list) or len(uppgifter) < 2:
+        return False
+    plats = {kod: i for i, kod in enumerate(DEL_ORDNING)}
+
+    def nyckel(u):
+        kod = u.get("del") if isinstance(u, dict) else None
+        return plats.get(kod, len(DEL_ORDNING))
+
+    ordnad = sorted(uppgifter, key=nyckel)
+    if all(a is b for a, b in zip(ordnad, uppgifter)):
+        return False
+    exam["uppgifter"] = ordnad
+    return True
+
+
 # Under så här många FÖRMÅGEBÄRARE är det jämna bandet omöjligt: fem bärare kan
 # inte fördela poäng på sex förmågor, och en enda skulle behöva ligga på 100 %
 # av EN förmåga. Då gäller täckningsregeln i stället.
@@ -1257,11 +1292,25 @@ def nivaval(profil: str, val: str | None) -> dict | None:
     «gör som före väljaren» — det är regeln som håller kassetterna giltiga."""
     return NIVAVAL.get(profil, {}).get((val or "").strip() or None)
 
-# Andel av uppgifterna som hamnar i Del B (utan räknare). NP lägger 54–62 % av
-# både uppgifterna och poängen i sin räknarfria del, och den delen är INTE
-# E-delen: alla tre nivåerna finns i båda delarna. Skelettet delade förut i «en
-# eller två rutinuppgifter» + «resten» — det är inte nationella provets form.
-DEL_B_ANDEL = 0.58
+# Andel av uppgifterna som hamnar i Del B (utan räknare, = lärarens Del A).
+#
+# RÄKNAT PÅ NP, inte satt (NpMa2a vt17 och vt22, uppgiftshäftena):
+#
+#   prov   utan verktyg (B+C)          med verktyg (D)          andel utan
+#   vt17   15 uppg / 28 p / 120 min     9 uppg / 27 p / 120 min  62,5 % / 51 %
+#   vt22   17 uppg / 34 p / 120 min    11 uppg / 21 p / 120 min  60,7 % / 62 %
+#
+# Alltså: FLER uppgifter i den räknarfria delen (~60 %), ungefär LIKA poäng
+# (~50–60 % där), samma tid. Delen utan verktyg är inte E-delen — alla tre
+# nivåerna finns i båda delarna.
+#
+# Lärarens första skarpa prov blev bakvänt (3 uppgifter i Del A, 6 i Del B).
+# Skevheten satt på två ställen: skärmen delade på NIVÅ i stället för på del
+# (blad.js), och andelen nedan lades ut per KARAKTÄRSGRUPP med var sin
+# avrundning — tre grupper som var för sig avrundar 58 % nedåt ger 50 % totalt.
+# Målet räknas därför på hela provet och fördelas sedan ut på grupperna med
+# största rest (_dela_del_b), så andelen håller för varje antal uppgifter.
+DEL_B_ANDEL = 0.60
 
 # Hur stor del av Del A som är kortsvar («Endast svar krävs»). MÄTT på NP:
 # NpMa2a vt17 delprov B+C har 9 kortsvarsuppgifter av 15 (60 %), vt22 11 av 17
@@ -1377,6 +1426,46 @@ def _skelett_typ(formaga: str, karaktar: str) -> str:
 # pappret.
 
 
+def _dela_del_b(grupper: list[list[dict]]) -> list[int]:
+    """Hur många av varje karaktärsgrupp som hamnar i Del B (utan verktyg).
+
+    MÅLET RÄKNAS PÅ HELA PROVET och fördelas sedan ut, inte tvärtom. Räknades
+    andelen per grupp — round(0,6 · len(grupp)) — avrundade tre små grupper var
+    för sig, och tre nedåtavrundningar i rad gav ett prov med hälften i varje
+    del i stället för 60/40. Det var så lärarens första skarpa prov blev
+    bakvänt.
+
+    Största rest: varje grupp får sin heltalsdel, och de platser som blir över
+    går till grupperna med störst decimalrest. Båda delarna får alltid minst en
+    uppgift när det finns minst två — ett «tvådelat» prov med en tom del är
+    inte tvådelat."""
+    antal = sum(len(g) for g in grupper)
+    if antal <= 1:
+        return [len(g) for g in grupper]
+    mal = min(antal - 1, max(1, round(DEL_B_ANDEL * antal)))
+    exakt = [DEL_B_ANDEL * len(g) for g in grupper]
+    ut = [min(len(g), int(v)) for g, v in zip(grupper, exakt)]
+    # Restplatserna delas ut i fallande restordning; grupper som redan är fulla
+    # hoppas över, och rundan görs om tills målet är nått eller inget rymmer.
+    rest = sorted(range(len(grupper)),
+                  key=lambda i: -(exakt[i] - int(exakt[i])))
+    while sum(ut) < mal:
+        for i in rest:
+            if sum(ut) >= mal:
+                break
+            if ut[i] < len(grupper[i]):
+                ut[i] += 1
+        else:
+            if all(ut[i] >= len(grupper[i]) for i in rest):
+                break
+    # Överskott (avrundningen uppåt i varje grupp) lämnas tillbaka bakifrån:
+    # A-gruppen är den som helst ligger i räknardelen, som NP:s delprov D.
+    for i in reversed(range(len(grupper))):
+        while sum(ut) > mal and ut[i] > 0:
+            ut[i] -= 1
+    return ut
+
+
 def balanced_skeleton(antal: int, profil: str = "prov",
                       delar: bool | None = None,
                       mix: tuple[float, float, float] | None = None,
@@ -1438,13 +1527,15 @@ def balanced_skeleton(antal: int, profil: str = "prov",
     if delar:
         del_b: list[dict] = []
         del_c: list[dict] = []
+        # KORTSVAREN FÖRST I GRUPPEN, och det är NP:s ordning och inte en
+        # smaksak: rutinraderna ska hamna i Del A (se NP:S DELORDNING).
+        # Sorteringen är stabil, så allt annat behåller sin plats.
+        grupper = []
         for kar in NIVAER_STORA:
-            # KORTSVAREN FÖRST I GRUPPEN, och det är NP:s ordning och inte en
-            # smaksak: rutinraderna ska hamna i Del A (se NP:S DELORDNING).
-            # Sorteringen är stabil, så allt annat behåller sin plats.
             grupp = [s for s in slots if s["karaktar"] == kar]
             grupp.sort(key=lambda s: s["typ"] != "rutin")
-            skiljelinje = round(DEL_B_ANDEL * len(grupp))
+            grupper.append(grupp)
+        for grupp, skiljelinje in zip(grupper, _dela_del_b(grupper)):
             del_b += grupp[:skiljelinje]
             del_c += grupp[skiljelinje:]
         for s in del_b:
@@ -1658,18 +1749,76 @@ DIAGNOS_TID_STANDARD = 60
 DIAGNOS_TID_TAK = 75
 
 
-def tidsatgang(summor: dict, antal: int) -> int:
+# ── TAKTEN: HUR TÄTT ETT KAPITELPROV FÅR SITTA ──────────────────────────
+# NP-kalibreringen ovan står FAST — den är mätt och testad (tests/
+# test_tidsmodell.py). Men den mäter ett nationellt prov, och läraren skriver
+# kapitelprov. Skillnaden är stor nog att ändra vad ett prov kan innehålla: med
+# NP-takten rymmer 80 minuter åtta uppgifter och 17 poäng, med hennes nio och
+# 20. På sjutton poäng ligger betygsgränserna så tätt att en enda uppgift
+# flyttar betyget — och kapitlet blir sämre täckt på köpet.
+#
+# TRE MÄTPUNKTER, alla 2026-08-22:
+#   4,4 min/poäng  NpMa2a vt17 och vt22: 55 poäng på 240 minuter (4,36).
+#   2,4 min/poäng  Lärarens EGEN förlaga, Ma2c kapitel 2: 37 poäng på 90
+#                  minuter. Klassen klarade provet — men hennes dom efteråt:
+#                  «lite för lite tid per uppgift, eleverna blev stressade
+#                  trots en duktig klass».
+#   3,5 min/poäng  HENNES VAL. «NP:s 4,4 är för mycket, det hinner jag inte
+#                  under en lektion. En bra avvägning att prova är 3,5 — ett
+#                  mellanting, en balans.»
+#
+# Takten är alltså EN inställning och inget val mellan lägen. Den ligger på
+# poängtermen som en faktor mot NP (3,5/4,4 ≈ 0,80); uppgiftstermen och
+# start/slut-overheaden rörs inte — de handlar om att bläddra och komma i gång,
+# inte om hur svårt provet är.
+NP_MIN_PER_POANG = 4.4          # NpMa2a: 55 p / 240 min
+FORLAGA_MIN_PER_POANG = 2.4     # lärarens Ma2c kapitel 2: 37 p / 90 min
+PROV_MIN_PER_POANG = 3.5        # lärarens takt för kapitelprov (2026-08-22)
+# Diagnosen behåller NP-takten: den räknar UPPGIFTER ur en given lektion, och
+# att pressa takten där vore att fylla lektionen i stället för att mäta den.
+DIAGNOS_MIN_PER_POANG = NP_MIN_PER_POANG
+
+
+def takt_for(profil: str) -> float:
+    """Papprets standardtakt i minuter per poäng. Provet och arbetsbladet
+    räknas med lärarens kapiteltakt, diagnosen med NP:s."""
+    return (DIAGNOS_MIN_PER_POANG if profil == "diagnos"
+            else PROV_MIN_PER_POANG)
+
+
+def taktfaktor(takt: float | None) -> float:
+    """Poängtermens faktor för en takt i minuter per poäng. None = NP-modellen
+    orörd (faktor 1,0), vilket är vad varje anropare fick före takten fanns.
+
+    Spärrat till ett rimligt spann: en takt på noll skulle ge ett prov utan
+    tid alls, och ett dubbelt NP är ingen takt utan ett skrivfel."""
+    if takt is None:
+        return 1.0
+    try:
+        v = float(takt)
+    except (TypeError, ValueError):
+        return 1.0
+    if not v > 0:
+        return 1.0
+    return min(max(v, 1.0), 2 * NP_MIN_PER_POANG) / NP_MIN_PER_POANG
+
+
+def tidsatgang(summor: dict, antal: int, takt: float | None = None) -> int:
     """Minuter ett papper med de här poängsummorna och det här antalet
     uppgifter tar, avrundat till närmaste fem. Samma modell som plan.js
     uppskatta() — ett tal som räknas på två ställen blir förr eller senare två
-    tal, så frontenden ska läsa den här."""
+    tal, så frontenden ska läsa den här.
+
+    `takt` är minuter per poäng (PROV_MIN_PER_POANG för ett kapitelprov);
+    utelämnad gäller NP-modellen rakt av."""
     rena = sum(MIN_PER_POANG[n] * int(summor.get(n) or 0)
-               for n in MIN_PER_POANG)
+               for n in MIN_PER_POANG) * taktfaktor(takt)
     return max(5, round((rena + antal * MIN_PER_UPPGIFT
                          + MIN_START_OCH_SLUT) / 5) * 5)
 
 
-def _minuter_per_uppgift(mix: tuple[float, float, float]) -> float:
+def _minuter_per_uppgift(mix: tuple[float, float, float],
+                         takt: float | None = None) -> float:
     """Vad EN uppgift kostar i snitt med en given karaktärsmix.
 
     Karaktären bestämmer vilken poängtrippel uppgiften får (NP_TRIPPLAR), och
@@ -1682,10 +1831,11 @@ def _minuter_per_uppgift(mix: tuple[float, float, float]) -> float:
                       for n, p in zip(("e", "c", "a"), trippel))
                   for trippel in tripplar) / len(tripplar)
         kostnad += mix[i] * per
-    return kostnad + MIN_PER_UPPGIFT
+    return kostnad * taktfaktor(takt) + MIN_PER_UPPGIFT
 
 
-def uppgifter_som_ryms(tid_min: int, profil: str = "diagnos") -> int:
+def uppgifter_som_ryms(tid_min: int, profil: str = "diagnos",
+                       takt: float | None = None) -> int:
     """Hur många uppgifter en given lektionstid rymmer. Minst en.
 
     NP-kalibreringen kostade här: en 60-minuterslektion rymde elva
@@ -1700,7 +1850,58 @@ def uppgifter_som_ryms(tid_min: int, profil: str = "diagnos") -> int:
     grupper med tak MAX_CI_PER_UPPGIFT, så ingen kurs spräcker sin lektion."""
     mix = KARAKTARSMIX.get(profil, KARAKTARSMIX["prov"])
     kvar = max(0.0, tid_min - MIN_START_OCH_SLUT)
-    return max(1, int(kvar // _minuter_per_uppgift(mix)))
+    return max(1, int(kvar // _minuter_per_uppgift(mix, takt)))
+
+
+# Största prov «Föreslå antal» får föreslå. Taket är papprets, inte tidens: ett
+# prov på tjugo uppgifter är inte ett kapitelprov längre.
+MAX_FORESLAGET_ANTAL = 20
+
+
+def foreslag_antal(tid_min: int, profil: str = "prov",
+                   takt: float | None = None,
+                   mix: tuple[float, float, float] | None = None,
+                   niva_mal: dict | None = None) -> dict:
+    """Hur många uppgifter en given provtid rymmer — räknat på det SKELETT som
+    faktiskt skulle byggas. {antal, poang, tid, takt}.
+
+    Skillnaden mot `uppgifter_som_ryms` är inte kosmetisk. Den räknar med en
+    SNITTKOSTNAD per uppgift (NP_TRIPPLAR vägda över mixen), och skelettet
+    cyklar genom tripplarna: fyra uppgifter blev 6 poäng och elva blev 24, så
+    snittet slog fel med upp till en kvart på små papper. Här byggs skelettet
+    för varje kandidat och tiden räknas med samma `tidsatgang` som «Uppskatta
+    tiden» sedan visar. Då säger de två knapparna samma sak — annars föreslår
+    den ena ett antal som den andra genast underkänner.
+
+    NÄRMAST vinner, inte «störst som ryms». Poängsumman hoppar två och tre steg
+    mellan intilliggande antal (skelettets tripplar), och den som väljer
+    närmast under kan hamna en kvart från ingångstiden medan nästa antal ligger
+    fem minuter över. Fem minuter över en provtid läraren själv satt är inget —
+    hon flyttar gränsen eller stryker en uppgift.
+
+    MED LÄRARENS TAKT (PROV_MIN_PER_POANG = 3,5 min/poäng, 2026-08-22):
+    80 minuter ger 9 uppgifter och 20 poäng, 90 ger 10 och 21, 100 ger 11 och
+    24. Med NP:s 4,4 gav samma 80 minuter 8 uppgifter och 17 poäng — och på 17
+    poäng ligger betygsgränserna tätare än läraren vill ha dem."""
+    takt = takt_for(profil) if takt is None else takt
+    tid_min = max(5, int(tid_min or 0))
+    bast: dict | None = None
+    for n in range(1, MAX_FORESLAGET_ANTAL + 1):
+        skelett = balanced_skeleton(n, profil, delar=(profil == "prov"),
+                                    mix=mix, niva_mal=niva_mal)
+        summor = poangsummor(_skeleton_doc(skelett))
+        tid = tidsatgang(summor, len(skelett), takt=takt)
+        kandidat = {"antal": len(skelett), "poang": summor["total"],
+                    "tid": tid, "takt": takt}
+        # Närmast vinner; står två lika nära vinner det MINDRE provet. Ett prov
+        # som ryms är alltid bättre än ett som spiller över lika mycket åt andra
+        # hållet — hon kan lägga till en uppgift, men inte lägga till en
+        # lektion. Sökningen går uppåt, så strikt < behåller det första.
+        if bast is None or abs(tid - tid_min) < abs(bast["tid"] - tid_min):
+            bast = kandidat
+        if tid > tid_min + 10:
+            break
+    return bast or {"antal": 1, "poang": 0, "tid": tid_min, "takt": takt}
 
 
 def _dela(lista: list, delar: int) -> list[list]:

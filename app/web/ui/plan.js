@@ -288,7 +288,11 @@
          lärarens: sträckan är prövad ända upp till 51 utan anmärkning, men ett
          prov på tjugo uppgifter är redan tre timmar långt. Noten under raden
          säger vilket som är vilket när man står vid kanten. */
+      /* `foreslag`: knappen som räknar antalet ur provtiden. Diagnosen har
+         redan den räkningen (servern dimensionerar den ur lektionen); provet
+         gick åt andra hållet och läraren fick gissa. Se foreslagAntal(). */
       { id: 'antal', namn: 'Antal uppgifter', typ: 'antal', min: 3, max: 20,
+        foreslag: true,
         vidMin: 'Färre än tre går inte att balansera — provet måste rymma både '
                 + 'en rutinuppgift och en med fullständig lösning, och nivåbanden '
                 + 'kräver en tredje.',
@@ -342,7 +346,12 @@
   };
   const inst = {
     Tavla: { langd: 45, starttid: '', exempel: 2 },
-    Prov: { nar: 'På lektionen', narDatum: '', narTid: '08:15', provminuter: 90, provtid: '90 min', antal: 6, nivamix: 'Balanserat', delprov: 'Del A + Del B', losningar: true, formelblad: true },
+    /* `takt` = minuter per poäng, lärarens egen (se PROV_TAKT nedan). Den
+       ligger i upplägget och inte i koden därför att den ÄR ett val: hon ska
+       kunna dra den mot NP:s 4,4 för ett tyngre prov eller mot sin gamla 2,4
+       för ett tätare, och valet ska följa med dokumentet så att ett prov går
+       att förstå ett halvår senare. */
+    Prov: { nar: 'På lektionen', narDatum: '', narTid: '08:15', provminuter: 90, provtid: '90 min', antal: 6, nivamix: 'Balanserat', delprov: 'Del A + Del B', losningar: true, formelblad: true, takt: 3.5 },
     Arbetsblad: { antal: 3, niva: 'Blandat', facit: 'Facit i bladet', illustration: true,
                   klassblad: true, elever: [], syfte: 'Stötta' },
     Gruppuppgift: { grupp: 3, langd: 60, redovisning: 'Muntligt' },
@@ -732,13 +741,17 @@
         /* Diagnosen går åt andra hållet: tiden är GIVEN och antalet uppgifter
            faller ut ur den (exam_spec.diagnosplan). Knappen sätter därför inget
            där — den kollar om diagnosen som ligger på skärmen ryms. */
-        ? `<span class="narfalt"><button class="ghost minitid" type="button" data-uppskatta data-tip="${typ === 'Diagnos' ? 'Räknar arbetstiden ur diagnosens uppgifter' : 'Räknar arbetstiden ur uppgifterna och sätter provtiden'}">${typ === 'Diagnos' ? 'Kolla tiden' : 'Uppskatta tiden'}</button><span class="valj nartidvalj"><button class="valjknapp" type="button" aria-haspopup="dialog" aria-expanded="false"><span class="valjtext"></span><span class="valjpil"></span></button></span><input type="hidden" class="nardatum" value="${s.narDatum || (($('#p-datum') || {}).value || '')}" /><input type="hidden" class="nartidstart" value="${s.narTid || (($('#p-tid') || {}).value || '').split('–')[0].trim() || '08:15'}" /></span>`
+        /* TAKTEN STÅR FRAMME. Knappen räknar med 3,5 minuter per poäng, och
+           utan siffran syns är det en svart låda: två prov på samma tid får
+           olika många uppgifter och läraren ser inte varför. Fältet är
+           redigerbart — takten är hennes val, inte husets (se PROV_TAKT). */
+        ? `<span class="narfalt">${typ === 'Diagnos' ? '' : `<label class="minitakt" data-tip="Minuter per poäng — provets täthet. NP ligger på 4,4, din egen förlaga på 2,4.">Takt <input type="text" inputmode="decimal" maxlength="4" class="taktfalt" value="${String(Number(s.takt) || 3.5).replace('.', ',')}" aria-label="Takt i minuter per poäng" /> min/p</label>`}<button class="ghost minitid" type="button" data-uppskatta data-tip="${typ === 'Diagnos' ? 'Räknar arbetstiden ur diagnosens uppgifter' : 'Räknar arbetstiden ur uppgifterna och sätter provtiden'}">${typ === 'Diagnos' ? 'Kolla tiden' : 'Uppskatta tiden'}</button><span class="valj nartidvalj"><button class="valjknapp" type="button" aria-haspopup="dialog" aria-expanded="false"><span class="valjtext"></span><span class="valjpil"></span></button></span><input type="hidden" class="nardatum" value="${s.narDatum || (($('#p-datum') || {}).value || '')}" /><input type="hidden" class="nartidstart" value="${s.narTid || (($('#p-tid') || {}).value || '').split('–')[0].trim() || '08:15'}" /></span>`
         : k.typ === 'minuter'
         ? `<span class="minutval"><span class="minutchips">${k.snabb.map(m => `<button class="minutchip" type="button" aria-pressed="${Number(s[k.id]) === m}">${m}</button>`).join('')}</span><span class="minutfalt"><input type="text" inputmode="numeric" maxlength="3" value="${s[k.id]}" aria-label="${k.namn} i minuter" /><span class="minutenhet">min</span></span></span>`
         : k.typ === 'seg'
         ? `<div class="seg" role="group" data-seg="tv-${k.id}">${k.val.map(v => `<button type="button" aria-pressed="${s[k.id] === v}">${v}</button>`).join('')}</div>`
         : k.typ === 'antal'
-          ? `<span class="antalgrupp"><span class="stepper"><button class="gzknapp" type="button" data-steg="-1" aria-label="Färre">−</button><span class="steppervarde">${s[k.id]}</span><button class="gzknapp" type="button" data-steg="1" aria-label="Fler">+</button></span></span>`
+          ? `<span class="antalgrupp">${k.foreslag ? '<button class="ghost minitid" type="button" data-foreslag data-tip="Räknar hur många uppgifter provtiden rymmer med din takt">Föreslå antal</button>' : ''}<span class="stepper"><button class="gzknapp" type="button" data-steg="-1" aria-label="Färre">−</button><span class="steppervarde">${s[k.id]}</span><button class="gzknapp" type="button" data-steg="1" aria-label="Fler">+</button></span></span>`
           : k.typ === 'kryss'
           ? `<span class="kryssval">${k.delar.map(d => `<button class="kryssknapp" type="button" data-del="${d.id}" aria-pressed="${!!s[d.id]}">${d.namn}</button>`).join('')}</span>`
           /* Fritext. Generisk kontrolltyp och inte anteckningarnas egen: en
@@ -979,6 +992,32 @@
       }
       const upp = $('[data-uppskatta]', rad);
       if (upp) upp.addEventListener('click', () => uppskattaNu());
+      /* Takten skrivs med komma eller punkt — läraren skriver «3,5». Spärren
+         är samma som serverns (exam_spec.taktfaktor): under en minut per poäng
+         är ingen takt utan ett skrivfel, och över dubbla NP likaså. Tomt fält
+         faller tillbaka på standardtakten i stället för att bli noll. */
+      const taktFalt = $('.taktfalt', rad);
+      if (taktFalt) {
+        const las = () => {
+          const v = Number(String(taktFalt.value).replace(',', '.'));
+          return v > 0 ? Math.min(Math.max(v, 1), 2 * NP_TAKT) : PROV_TAKT;
+        };
+        const skriv = () => {
+          s.takt = las();
+          taktFalt.value = String(s.takt).replace('.', ',');
+          planKoll();
+        };
+        taktFalt.addEventListener('change', skriv);
+        taktFalt.addEventListener('blur', skriv);
+      }
+      /* «Föreslå antal»: provtiden in, antalet uppgifter ut. Räkningen görs på
+         SERVERN (routes_exam foreslag-antal) därför att svaret bygger på det
+         skelett som skulle byggas — poängsumman hoppar mellan intilliggande
+         antal, och en snittkostnad per uppgift slår fel med upp till en
+         kvart. Två modeller för samma tal glider isär; den här bor på ett
+         ställe (exam_spec.foreslag_antal). */
+      const fore = $('[data-foreslag]', rad);
+      if (fore) fore.addEventListener('click', () => foreslagAntal(rad, k));
       if (k.typ === 'antal') {
         /* Ärvda uppägg kan bära ett antal som den här typen inte rymmer. */
         s[k.id] = Math.min(k.max, Math.max(k.min, Number(s[k.id]) || k.min));
@@ -1796,6 +1835,19 @@
            lösningen svaret, som förut. Tom `f` → arkfacit hoppar raden. */
         f: u.losning || '',
         formaga: u.formaga || '',
+        /* VILKEN DEL uppgiften hör till (exam_spec: 'B' = lärarens Del A,
+           'C' = Del B, null = ett odelat papper). Fältet gick aldrig hit, och
+           då hade skärmen inget annat att dela på än NIVÅN: blad.js lade alla
+           E-uppgifter i Del A och resten i Del B. Provet läraren skrev
+           2026-08-22 fick därför «Del A: 1, 2 och 7» på förhandsvisningen
+           medan PDF:en — som grupperar på det här fältet (exam_latex
+           gruppera_per_del) — hade delarna sammanhängande. Två papper, samma
+           prov, olika delar.
+
+           Heter `avd` och inte `del`: `del` är redan deluppgifternas texter
+           här nere, och två fält med samma namn i samma objekt är en bugg som
+           väntar. */
+        avd: u.del || null,
         /* Nivåvektorn följer med hel, inte bara som `niva`. Elevens betyg går
            inte att räkna ur en klumpsumma — C kräver sin andel av C- och
            A-poängen — och rättningen elev för elev (elever.js) är den enda
@@ -2883,6 +2935,35 @@
      räknas på två ställen blir förr eller senare två tal, så ändras det ena
      måste det andra ändras i samma andetag. */
   const PER_NIVA = { E: 2.8, C: 3.9, A: 5.5 };
+  /* ── TAKTEN: HUR TÄTT ETT KAPITELPROV FÅR SITTA ──────────────
+     Vikterna ovan är NP:s och står fast. Men NP är inte ett kapitelprov, och
+     skillnaden avgör vad ett prov kan innehålla: med NP-takten rymmer 80
+     minuter åtta uppgifter och 17 poäng, med hennes nio och 20. På sjutton
+     poäng ligger betygsgränserna så tätt att en enda uppgift flyttar betyget.
+
+     Tre mätpunkter, alla 2026-08-22:
+       4,4 min/p  NpMa2a vt17 och vt22 — 55 poäng på 240 minuter.
+       2,4 min/p  Lärarens EGEN förlaga, Ma2c kapitel 2: 37 poäng på 90
+                  minuter. Klassen klarade det, men «eleverna blev stressade
+                  trots en duktig klass».
+       3,5 min/p  Hennes val: «NP:s 4,4 är för mycket, det hinner jag inte
+                  under en lektion. En bra avvägning att prova är 3,5.»
+
+     Faktorn ligger på POÄNGTERMEN, inte på uppgiftstermen eller overheaden —
+     att bläddra och komma i gång tar lika lång tid hur svårt provet än är.
+     Samma tal och samma formel som exam_spec.PROV_MIN_PER_POANG /
+     taktfaktor(); tests/test_tidsmodell.py läser båda och jämför. */
+  const NP_TAKT = 4.4;
+  const PROV_TAKT = 3.5;
+  const taktfaktor = takt => {
+    const v = Number(takt);
+    if (!(v > 0)) return 1;
+    return Math.min(Math.max(v, 1), 2 * NP_TAKT) / NP_TAKT;
+  };
+  /* Provets takt ur upplägget; diagnosen räknas med NP:s (den mäter en given
+     lektion och ska inte pressas). Samma val som exam_spec.takt_for. */
+  const taktFor = v => (v && v.typ === 'Diagnos' ? NP_TAKT
+    : Number((v && v.inst || {}).takt) || PROV_TAKT);
   /* Samma poängfördelning som provet trycker i marginalen. */
   function ecaDel(poang, mix) {
     const p = Math.max(1, poang);
@@ -2910,7 +2991,8 @@
       e += p[0] || 0; c += p[1] || 0; a += p[2] || 0;
     });
     const antal = (v.uppgifter || []).length;
-    const rena = e * PER_NIVA.E + c * PER_NIVA.C + a * PER_NIVA.A;
+    const rena = (e * PER_NIVA.E + c * PER_NIVA.C + a * PER_NIVA.A)
+      * taktfaktor(taktFor(v));
     /* 1,1 och 8 står kvar orörda av NP-kalibreringen, med flit. NP-provens
        poängtäthet (2,0–2,3 poäng per uppgift) är för lik våra pappers för att
        skilja uppgiftstermen från poängtermen, och åttan är lärarens overhead
@@ -2952,10 +3034,53 @@
     sattProvtid(u.min);
     const skal = $('#tidsskal');
     if (skal) { skal.hidden = true; skal.textContent = ''; }
-    const text = `Provtiden satt till ${u.min} min — ${u.antal} uppgifter · ${u.poang} p · ${u.e}/${u.c}/${u.a} E/C/A.`;
+    /* Takten står i toasten av samma skäl som i panelen: samma prov ger olika
+       tid med olika takt, och siffran är det enda som förklarar varför. */
+    const text = `Provtiden satt till ${u.min} min — ${u.antal} uppgifter · ${u.poang} p · ${u.e}/${u.c}/${u.a} E/C/A · takt ${String(taktFor(v)).replace('.', ',')} min/p.`;
     if (!window.toast) return;
     if (forr !== u.min) window.toast(text, `Ångra (${forr} min)`, () => sattProvtid(forr));
     else window.toast(text);
+  }
+
+  /* ── FÖRESLÅ ANTAL ────────────────────────────────────────
+     Lärarens beställning: diagnosen räknar redan uppgifter ur en given
+     lektion, och provet ska kunna göra samma sak. Tiden är den som står i
+     upplägget — provminuter, eller lektionens längd ur schemat när provtiden
+     inte är satt, samma källa «Uppskatta tiden» skriver till.
+
+     MED TAKTEN 3,5 min/poäng: 80 minuter ger 9 uppgifter och 20 poäng, 90 ger
+     10 och 21, 100 ger 11 och 24. «Föreslå antal» följt av «Uppskatta tiden»
+     landar inom fem minuter från ingångstiden — samma modell räknar båda
+     (tests/test_tidsmodell.py låser det). */
+  function foreslagAntal(rad, k) {
+    const s = inst.Prov;
+    const tid = Number(s.provminuter) || schemaminuter()
+      || parseInt(s.provtid, 10) || 90;
+    const takt = Number(s.takt) || PROV_TAKT;
+    const forr = Number(s.antal) || k.min;
+    const satt = (n, ord) => {
+      s.antal = Math.min(k.max, Math.max(k.min, n));
+      const varde = $('.steppervarde', rad);
+      if (varde) varde.textContent = String(s.antal);
+      ritaTypval();
+      planKoll();
+      if (ord && window.toast) window.toast(ord, `Ångra (${forr} uppgifter)`,
+        () => satt(forr, ''));
+    };
+    window.API.json(`/api/exams/foreslag-antal?tid=${tid}`
+      + `&typ=prov&nivamix=${encodeURIComponent(s.nivamix || '')}`)
+      .then(r => {
+        const n = Number(r && r.antal);
+        if (!n) throw new Error('inget svar');
+        /* Taket är appens (20) och kan ligga under det tiden rymmer — då ska
+           toasten säga det, inte tyst leverera ett annat antal. */
+        const kapat = n > k.max;
+        satt(n, `${Math.min(n, k.max)} uppgifter ryms på ${tid} min · ca `
+          + `${r.poang} p · takt ${String(takt).replace('.', ',')} min/p`
+          + (kapat ? ` (${n} skulle rymmas, men tjugo är appens tak)` : ''));
+      })
+      .catch(() => window.toast && window.toast(
+        'Antalet räknas på servern — starta den och försök igen.'));
   }
 
   function ritaArv() {

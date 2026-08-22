@@ -837,7 +837,10 @@ def test_render_prov_golden_markers():
     assert "\\firstpageheader{}{}{}" in tex
     # försättsbladets ordning
     assert "Provtid:" in tex and "Hjälpmedel:" in tex
-    assert "Du lämnar in Del A innan du hämtar Del B." in tex
+    # Lärarens provrutin: båda delarna delas ut samtidigt, räknaren hämtas
+    # först när Del A är inlämnad (2026-08-22).
+    assert ("Du lämnar in Del A innan du tar fram digitala verktyg och "
+            "börjar på Del B." in tex)
     assert "Provet kan ge totalt \\textbf{20 poäng}" in tex
     assert "Instruktioner" in tex and "Poängen för varje uppgift anges" in tex
     assert "\\textbf{Namn:} \\hrulefill" in tex

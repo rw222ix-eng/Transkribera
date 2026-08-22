@@ -168,10 +168,18 @@ window.BladBygg = (() => {
     return f.map(e => `<div class="gurad"><span class="gunamn">${esc(e)}:</span>`
       + '<span class="gulinje"></span></div>').join('');
   }
-  /* Enheten på svarsraden: ledet före linjen, enheten efter den. */
+  /* Enheten på svarsraden: ledet före linjen, enheten efter den.
+
+     ENHETEN ÄR MATEMATIK och sätts som all annan matematik på pappret. Fältet
+     bär TeX inom dollartecken — «cm$^2$», «$f'(x) =$» (exam_spec.enhet,
+     samma sträng som LaTeX-mallen sätter i matteläge via escape_mixed) — och
+     esc() tryckte den ordagrant: läraren fick «cm$^2$» med dollartecken och
+     allt på svarsraden i förhandsvisningen medan PDF:en satte cm². mat() är
+     samma delning som resten av bladet gör, så enheten renderas av KaTeX. */
+  const enhetHtml = e => mat(e);
   function svarsradEnhet(enhet) {
     return `<div class="gurad gusvarsrad"><span class="gunamn">Svar:</span>`
-      + `<span class="gulinje"></span>${enhet ? `<span class="prenhet">${esc(enhet)}</span>` : ''}</div>`;
+      + `<span class="gulinje"></span>${enhet ? `<span class="prenhet">${enhetHtml(enhet)}</span>` : ''}</div>`;
   }
 
   /* ── Svarsutrymmet: en rad eller ett lösblad. Inget annat. ──
@@ -360,7 +368,7 @@ window.BladBygg = (() => {
     const post = (u, k) => `<div class="pruppg">
       <span class="prnr">${siffra ? k + 1 : (BOKSTAV[k] || k + 1)}.<span class="prvarde">${u.p} p</span></span>
       <div><p class="prtext" data-ref="">${ref(u.t)}</p>
-        ${u.f ? `<div class="losvar"><b class="losetikett">Svar</b><span>${mat(u.f)}</span>${u.enhet ? `<em>${esc(u.enhet)}</em>` : ''}</div>` : ''}
+        ${u.f ? `<div class="losvar"><b class="losetikett">Svar</b><span>${mat(u.f)}</span>${u.enhet ? `<em>${enhetHtml(u.enhet)}</em>` : ''}</div>` : ''}
         ${u.vag ? `<ul class="lovag">${u.vag.map(s => `<li><span class="losteg">${mat(s[0])}<em>${esc(s[1])}</em></span></li>`).join('')}</ul>` : ''}
       </div></div>`;
     /* data-brytbar: facit är lika långt som sina lösningar, och ett svar på
@@ -450,7 +458,7 @@ window.BladBygg = (() => {
           (u.rutor.val || []).map(v => `<span class="guruta">${mat(v)}</span>`).join('')}</span></div>`
       : behoverRad
         ? `<div class="prsvar"><b class="prsvarnamn">Svar:</b><span class="prlinje"></span>${
-            u.enhet ? `<span class="prenhet">${esc(u.enhet)}</span>` : ''}</div>`
+            u.enhet ? `<span class="prenhet">${enhetHtml(u.enhet)}</span>` : ''}</div>`
         : '';
     /* KRAVET STÅR SOM PÅ PAPPRET. Förlagan skriver «Endast svar krävs.» eller
        «Fullständig lösning krävs.» i kursiv på uppgiftens första rad — det är
@@ -562,7 +570,7 @@ window.BladBygg = (() => {
       .replace(/\b([Dd]el)\s+C\b/g, '$1 B')
       .replace(/\b([Dd]el)\s+D\b/g, '$1 C');
   };
-  function provblad(v, uppgifter, del, forsta) {
+  function provblad(v, uppgifter, del) {
     const medHjalp = del === 'C';
     /* HJÄLPMEDELSREGELN ÄR DOKUMENTETS (exam_spec.ExamDoc.hjalpmedel). Bandet
        var en hårdkodad mall per del, och därför hände ingenting när läraren bad
@@ -580,19 +588,23 @@ window.BladBygg = (() => {
        Del B/Del C) — pappret räknar från A. Samma översättning som
        exam_latex._delnamn_visning, så skärm och PDF säger samma namn. */
     const hjalp = delnamnVisning((v.hjalpmedel || '').trim());
-    const regel = hjalp
-      ? `Hjälpmedel: ${esc(hjalp)}${/[.!?»)]$/.test(hjalp) ? '' : '.'}`
-      : (medHjalp
-        ? 'Räknare och digitala hjälpmedel (t.ex. GeoGebra) är tillåtna.'
-        : 'Räknare och digitala hjälpmedel är inte tillåtna.');
-    const obs = forsta && del !== '-'
-      ? `<p class="probs"><b>OBS!</b> ${regel} Uppgifter märkta «Endast svar krävs» besvaras på raden här i provet. Övriga redovisas på separat rutat lösblad — en uppgift per sida, med uppgiftens nummer och ditt namn.</p>`
-      : '';
+    /* ── OBS-RUTAN ÄR BORTA ────────────────────────────
+       «Det framgår redan på försättsbladet vad som är tillåtet» (läraren,
+       2026-08-22). Rutan upprepade hjälpmedelsregeln, redovisningsregeln och
+       lösbladsregeln överst på varje dels första ark — allt tre står redan på
+       försättsbladet (prov.tex.j2: Hjälpmedel-raden, inlämningsraden och
+       Instruktioner-listan), och varje uppgift bär dessutom sin egen kravrad
+       «Endast svar krävs» / «Fullständig lösning krävs». En regel som står två
+       gånger är en regel som kan glida isär, och rutan tog dessutom plats som
+       en uppgift kunde haft. PDF:en har aldrig haft den.
+
+       Delnamnet i sidhuvudet står kvar: det är vilket papper man håller i,
+       inte en regel. */
     const etikett = del === '-' ? ''
       : hjalp ? DELNAMN[del]
         : `${DELNAMN[del]} · ${medHjalp ? 'räknare och digitala hjälpmedel' : 'utan digitala hjälpmedel'}`;
     return `<div class="ark" data-form="pr1${del.toLowerCase()}" data-brytbar="">
-      ${huvud(v, etikett)}${obs}${uppgifter.map(provuppg).join('')}
+      ${huvud(v, etikett)}${uppgifter.map(provuppg).join('')}
     </div>`;
   }
 
@@ -601,7 +613,7 @@ window.BladBygg = (() => {
     return `<div class="pruppg">
       <span class="prnr">${u.nr}.<span class="prvarde">${u.p} p</span></span>
       <div><p class="prtext" data-ref="">${ref(u.t)}</p>
-        <div class="losvar"><b class="losetikett">Svar</b><span>${mat(u.f)}</span>${u.enhet ? `<em>${esc(u.enhet)}</em>` : ''}</div>
+        <div class="losvar"><b class="losetikett">Svar</b><span>${mat(u.f)}</span>${u.enhet ? `<em>${enhetHtml(u.enhet)}</em>` : ''}</div>
       </div></div>`;
   }
   /* ── Kommenterad elevlösning (förlagans lo4) ──────

@@ -227,8 +227,16 @@ def test_scenregeln_bar_lararens_form():
     for krav in ("ENGELSKA", "Intended use:", "a-NN-slug", "SCENE",
                  "koordinataxlar", "pilar", "TOMT", "rakt från sidan"):
         assert krav in r, krav
-    # Bilden är ett STÖD, inte en dekoration: rutinuppgifter får ingen.
-    assert "Rutinuppgifter" in r and "ALDRIG scen" in r
+    # BILDEN FÅR VARA DEKORATION — lärarens dom 2026-08-22: «skulle kunna ha
+    # flera bilder bara för att det ska bli mer estetiskt snyggt, det behöver
+    # inte hjälpa». Regeln bad förut om «högst ungefär var tredje uppgift» och
+    # levererade EN bild på nio; nu ska den be om flera, spridda över båda
+    # delarna. Gränsen som står kvar är den enda som betyder något: en uppgift
+    # utan situation har ingenting att måla.
+    assert "minst två eller tre" in r and "BÅDA delarna" in r
+    assert "utan situation" in r.lower() and "ALDRIG scen" in r
+    assert "var tredje uppgift" not in r, \
+        "taket är borta — läraren bad om fler bilder, inte färre"
     # Och exemplen är lärarens egna scenfiler, inte påhittade.
     assert "cobalt" in r and "faceless" in r
 
