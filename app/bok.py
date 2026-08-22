@@ -437,18 +437,420 @@ def build_bok_block(bok: dict, fran: int, till: int, text: str,
         rader.append("Uppgiftsnummer på sidorna: " + ", ".join(nummer) + ".")
     # Förbudet ovan gäller uppgifternas INNEHÅLL. Numren är tvärtom det klassen
     # ska få se: står det «Arbetar i boken s. 2–4» på tavlan ska det stå VILKA.
-    valda = " ".join(str((urval or {}).get("remsa") or "").split())
-    bortvalda = " ".join(str((urval or {}).get("bortremsa") or "").split())
-    if valda:
-        rad = (f"LÄRARENS URVAL: klassen ska räkna uppg. {valda} på de här "
-               "sidorna. Skriv de numren precis så när tavlan säger vad klassen "
-               "ska arbeta med — de är lärarens beslut, inte något att räkna om "
-               "eller runda av. Uppgifternas TEXT skrivs fortfarande aldrig av.")
-        if bortvalda:
-            rad += (f" Uppg. {bortvalda} är medvetet överhoppade och ska inte "
-                    "nämnas som något klassen gör.")
+    rad = _lararens_urvalsrad(urval)
+    if rad:
         rader.append(rad)
     return "\n\n".join(rader)
+
+
+def _lararens_urvalsrad(urval: dict | None) -> str:
+    """Lärarens egen uppgiftsremsa som promptrad, eller "" när hon inte valt.
+
+    Delas av båda bokblocken — hela uppslaget (tavlan) och urvalet (provet).
+    Den är ÖVERORDNAD urvalsmaskineriet nedan: har läraren valt uppgifter är
+    det hennes nummer som gäller, oavsett vad den jämna spridningen råkade
+    plocka fram som måttstock."""
+    valda = " ".join(str((urval or {}).get("remsa") or "").split())
+    bortvalda = " ".join(str((urval or {}).get("bortremsa") or "").split())
+    if not valda:
+        return ""
+    rad = (f"LÄRARENS URVAL: klassen ska räkna uppg. {valda} på de här "
+           "sidorna. Skriv de numren precis så när tavlan säger vad klassen "
+           "ska arbeta med — de är lärarens beslut, inte något att räkna om "
+           "eller runda av. Uppgifternas TEXT skrivs fortfarande aldrig av.")
+    if bortvalda:
+        rad += (f" Uppg. {bortvalda} är medvetet överhoppade och ska inte "
+                "nämnas som något klassen gör.")
+    return rad
+
+
+# ── Urvalet: uppslaget i provstorlek ──────────────────────────────────────
+#
+# Provet spänner ett KAPITEL, inte en lektion: läraren väljer s. 2–40, och där
+# gick den gamla vägen sönder på två sätt samtidigt.
+#
+# 1. Väntan. `bok_las_text` läste TEXTPASSET på varje oläst sida i spannet —
+#    ett modellanrop per sida à ~96 sekunder (se modulens huvud). Trettionio
+#    sidor blev tre kvart innan skrivrundan ens började, och det var det
+#    läraren såg som «Läser s. 19 …» i statusraden.
+# 2. Innehållet. `uppslag_text` klipper vid 24 000 tecken och tar sidorna i
+#    ordning. Sidorna är ~6 200 tecken styck, så av trettionio sidor kom 2, 3
+#    och 4 med — resten föll bort tyst. Provet över hela kapitel 1 skrevs
+#    alltså ur tre sidor. (Uppmätt på Liber Ma 1c s. 2–40, 2026-08-22:
+#    uppslag_text 19 071 tecken, block 20 545, tre sidor.)
+#
+# Lärarens beslut: mata sidorna i förväg, i urval. «Provet ska bygga på det de
+# gått igenom i boken, men alla uppgifter i detalj behövs inte; några uppgifter
+# per sida på varje nivå är rimligt. Inte hela sidor.»
+#
+# Så urvalet är byggt: per AVSNITT (inte per sida — avsnittet är den enhet
+# boken själv delar in i, och trettionio sidrubriker hade blivit ett block av
+# rubriker) tas teorin i kortform och några uppgifter per nivå, jämnt spridda
+# över avsnittets sidor. Avläsningens sex sektioner gör det möjligt utan ett
+# enda modellanrop: RUBRIKER och BRÖDTEXT är teorin, FIGURER är figurerna,
+# EXEMPEL OCH UPPGIFTER bär uppgiftstexterna — och MATEMATIK (som upprepar
+# uttrycken en gång till, styckade per deluppgift) och OSÄKERT (avläsarens
+# egna tvivel) hör inte hemma i en provprompt alls. På s. 2–40 är de två
+# sektionerna 104 kB av 238 kB.
+#
+# Mätt på samma spann (Liber Ma 1c s. 2–40, 2026-08-22): blocket går från
+# 20 545 tecken som täcker 3 sidor till 8 924 tecken som täcker alla 39 — och
+# bokfasen från 423 sekunder för FEM sidor till noll för trettionio.
+URVAL_BUDGET = 20000       # tecken för HELA blocket, hur långt spannet än är
+URVAL_PER_NIVA = 3         # uppgifter per nivå och avsnitt — lärarens «2–3»
+URVAL_TEORI = 900          # tecken teori per avsnitt
+URVAL_RUBRIKER = 320       # tecken rubriker per avsnitt
+URVAL_FIGUR = 260          # tecken figurbeskrivning per avsnitt
+URVAL_UPPGIFT = 200        # tecken per vald uppgift
+
+# Budgetstegen: (uppgifter per nivå, teoritak). Första steget som ryms vinner.
+# Att snåla på UPPGIFTERNA först och teorin sedan är avsiktligt — teorin säger
+# vilka BEGREPP provet ska pröva, och den är billigare per tecken.
+_URVALSTEG = ((URVAL_PER_NIVA, URVAL_TEORI), (2, URVAL_TEORI),
+              (2, 600), (2, 350), (1, 350))
+
+_SEKTIONER = ("RUBRIKER", "BRÖDTEXT", "MATEMATIK", "FIGURER",
+              "EXEMPEL OCH UPPGIFTER", "OSÄKERT")
+_SEKTIONSRAD = re.compile(
+    r"(?m)^[ \t]*#{0,3}[ \t]*\**(" + "|".join(_SEKTIONER) + r")\**[ \t]*:?[ \t]*$")
+
+
+def sektioner(text: str) -> dict[str, str]:
+    """Avläsningens sex sektioner ur en sidtext (bok_ocr.SIDPROMPT).
+
+    Tom dict när sidan inte har den formen — en sida läst med en äldre prompt,
+    en avläsning som svarade i löptext. Anroparen tar då ingenting från sidan
+    alls: det var den råa sidtexten som sprängde budgeten från början."""
+    delar = _SEKTIONSRAD.split(text or "")
+    return {delar[i]: delar[i + 1].strip() for i in range(1, len(delar) - 1, 2)}
+
+
+# En rad som inleds med ett uppgiftsnummer är en uppgiftsinstruktion, inte
+# teori: «1201 Skriv som en potens» hör hemma i uppgiftsurvalet nedan.
+_UPPGIFTSRAD = re.compile(r"^\s*\d{3,5}\b")
+# Avläsarens egna anmärkningar OM sidan är inte bokens text: «Sidan innehåller
+# inga figurer», «Marginaltext till vänster (grå text):», «Uppgifterna
+# 1201–1208 står i vänsterspalten». De sista är lömska — de NÄMNER
+# uppgiftsnummer och blir därför långa träffar i _uppgiftstext, som annars
+# visar modellen en mening om sidlayout i stället för en uppgift.
+_METARAD = re.compile(r"(?i)^(sidan |bilden |marginaltext|kommentarer? till|"
+                      r"text i rutan|numrering|inga |uppgifterna |"
+                      r"mellan uppgift|här (finns|står)|det finns )")
+
+
+def _klipp(txt: str, tak: int) -> str:
+    """Klipp på ordgräns. «… står förmå» mitt i ett ord ser ut som en trasig
+    avläsning, och modellen ska inte behöva avgöra om det är boken som är
+    otydlig eller vi som klippte."""
+    if len(txt) <= tak:
+        return txt
+    kort = txt[:tak]
+    hugg = kort.rfind(" ")
+    return (kort[:hugg] if hugg > tak * 0.6 else kort).rstrip(" ,;·|-") + " …"
+
+
+def _rader(txt: str) -> list[str]:
+    """Punktlistans rader utan markdownskrot — «- **1.2 Tal i potensform**
+    (huvudrubrik)» blir «1.2 Tal i potensform (huvudrubrik)». Sidfoten hoppas
+    över: den bär kapitelbanderollen, inte vad sidan handlar om."""
+    ut = []
+    for rad in (txt or "").splitlines():
+        rad = re.sub(r"[*_`]+", "", rad).strip(" \t-–—•").strip()
+        if rad and not rad.lower().startswith(("sidfot", "---")) \
+                and not _METARAD.match(rad):
+            ut.append(rad)
+    return ut
+
+
+def _teori(sek: dict[str, str], tak: int) -> str:
+    """Teorin på en sida: definitionerna och reglerna, inte hela brödtexten.
+
+    Brödtexten på en läroboksida är två saker blandade — genomgången (som
+    provet ska pröva) och uppgiftsinstruktionerna (som står i urvalet nedan).
+    Styckena tas i sidans ordning, för genomgången står först; taket klipper
+    alltså bort SLUTET av brödtexten, som är uppgifterna."""
+    stycken, langd = [], 0
+    for st in re.split(r"\n\s*\n", sek.get("BRÖDTEXT", "")):
+        st = " ".join(re.sub(r"[*_`]+", "", st).split())
+        if not st or _UPPGIFTSRAD.match(st) or _METARAD.match(st):
+            continue
+        if langd + len(st) > tak and stycken:
+            break
+        stycken.append(st)
+        langd += len(st) + 1
+    return " ".join(stycken)[:tak]
+
+
+def _figurrad(sek: dict[str, str], tak: int) -> str:
+    """Figurerna i en mening.
+
+    Sidbilderna var aldrig skälet till att sidorna lästes — men frågan «hur ser
+    modellen figuren?» besvaras här: figuren beskrevs när sidan lästes, och
+    beskrivningen följer med i urvalet i stället för att sidan öppnas om."""
+    txt = " ".join((sek.get("FIGURER") or "").split())
+    txt = re.sub(r"[*_`#]+", "", txt).strip()
+    if not txt or txt.lower().startswith(("inga figurer", "sidan innehåller inga",
+                                          "det finns inga")):
+        return ""
+    return _klipp(txt, tak)
+
+
+def avsnittsgrupper(sidor: list[dict]) -> list[dict]:
+    """Sidorna grupperade per avsnitt, i sidordning.
+
+    Avsnittsnumret står i sidfoten och läses bara av på ungefär varannan sida —
+    uppslagets vänstersida bär det, högersidan bär kapitelbanderollen. Ett tomt
+    avsnitt ärver därför föregående sidas: sidan mitt i 1.2 hör till 1.2. Sidor
+    FÖRE det första avsnittsnumret hamnar i en grupp utan nummer, vilket är
+    sant (kapitelöppning, aktivitetssida)."""
+    grupper: list[dict] = []
+    nuvarande = ""
+    for s in sidor or []:
+        avs = str(s.get("avsnitt") or "").strip() or nuvarande
+        nuvarande = avs
+        if not grupper or grupper[-1]["avsnitt"] != avs:
+            grupper.append({"avsnitt": avs, "sidor": []})
+        grupper[-1]["sidor"].append(s)
+    return grupper
+
+
+def _etikett(grupp: dict) -> str:
+    """«1.2 Tal i potensform (s. 7–21)» — avsnittet så som läraren ser det.
+
+    Rubriken röstas fram bland gruppens sidor: högersidans sidfot bär ofta
+    kapitelbanderollen («KAPITEL 1 · ARITMETIK OCH ALGEBRA»), och den säger
+    ingenting om vad avsnittet handlar om."""
+    sidor = grupp["sidor"]
+    roster: dict[str, int] = {}
+    for s in sidor:
+        r = " ".join(str(s.get("rubrik") or "").split())
+        if r and not re.match(r"(?i)^kapitel\b", r):
+            roster[r] = roster.get(r, 0) + 1
+    rubrik = max(roster.items(), key=lambda kv: kv[1])[0] if roster else ""
+    namn = " ".join(x for x in (grupp["avsnitt"], rubrik) if x) \
+        or "Utan avsnittsnummer"
+    forsta, sista = sidor[0]["sida"], sidor[-1]["sida"]
+    spann = f"s. {forsta}" if forsta == sista else f"s. {forsta}–{sista}"
+    return f"{namn} ({spann})"
+
+
+def jamnt(rader: list, antal: int) -> list:
+    """`antal` element jämnt spridda över listan — första, sista och mellan.
+
+    Jämn spridning, inte de första: uppgifterna står i stigande svårighet inom
+    sin nivå, och «de tre första på nivå 2» är tre varianter av samma sak
+    medan «första, mittersta och sista» visar vad nivån SPÄNNER."""
+    n = len(rader)
+    if antal <= 0 or n == 0:
+        return []
+    if n <= antal:
+        return list(rader)
+    if antal == 1:
+        return [rader[0]]
+    return [rader[round(i * (n - 1) / (antal - 1))] for i in range(antal)]
+
+
+def _uppgiftstext(sek: dict[str, str], nr: int, tak: int) -> str:
+    """Uppgiftens text ur sidans avläsning, hittad på numret.
+
+    Bara TVÅ av de sex sektionerna får leverera. Det är inte en optimering
+    utan en riktighetsfråga: OSÄKERT och FIGURER nämner också uppgiftsnummer,
+    och de gör det i avläsarens röst — «1118 - Uppgift c): jag läser
+    kubikroten ur 81, siffran i nämnaren är liten i bilden». Söktes hela sidan
+    igenom vann de raderna på längd, och urvalet visade modellen avläsarens
+    tvivel i stället för bokens uppgift. MATEMATIK vinner på samma sätt med
+    sina «— i uppgift 1202 a)»-rader, som är uttrycken en gång till.
+
+    Kvar står EXEMPEL OCH UPPGIFTER (tabellraden «| 1201 | Skriv som en
+    potens | $2a^3 + a^3$ | …») och BRÖDTEXT (instruktionsraden «1201 Skriv
+    som en potens»), i den ordningen. Den längsta raden som nämner numret bär
+    mest av uppgiften.
+
+    Tom sträng när numret inte står där. Numret följer ändå med i avsnittets
+    nummerrad, och en påhittad uppgiftstext vore värre än ingen (samma regel
+    som hela avläsningen bygger på)."""
+    monster = re.compile(r"(?<!\d)" + str(int(nr)) + r"(?!\d)")
+    basta = ""
+    for nyckel in ("EXEMPEL OCH UPPGIFTER", "BRÖDTEXT"):
+        for rad in (sek.get(nyckel) or "").splitlines():
+            if not monster.search(rad) or _METARAD.match(rad.strip(" *-")):
+                continue
+            if len(rad) > len(basta):
+                basta = rad
+        if basta:
+            break
+    if not basta:
+        return ""
+    if basta.lstrip().startswith("|"):
+        falt = [f.strip() for f in basta.strip().strip("|").split("|")]
+        text = " · ".join(f for f in falt[1:] if f and not set(f) <= set("-: "))
+    else:
+        text = monster.sub("", basta, count=1)
+    text = " ".join(re.sub(r"[*_`]+", "", text).split()).lstrip("|·—–- ")
+    return _klipp(text, tak)
+
+
+def _nivaurval(grupp: dict, uppgifter: list[dict],
+               per_niva: int) -> list[tuple[object, list[dict], list[dict]]]:
+    """(nivå, avsnittets alla uppgifter på nivån, de valda) per nivå.
+
+    Exemplen räknas bort: boken löser dem själv i teoritexten, så de är
+    genomgång och inte prövning — och de har redan följt med i teorin ovan."""
+    sidnr = {s["sida"] for s in grupp["sidor"]}
+    per: dict = {}
+    for u in uppgifter or []:
+        if u.get("sida") in sidnr and not u.get("exempel"):
+            per.setdefault(u.get("niva"), []).append(u)
+    ut = []
+    for niva in sorted(per, key=lambda n: (n is None, n or 0)):
+        alla = sorted(per[niva], key=lambda u: u["nr"])
+        ut.append((niva, alla, jamnt(alla, per_niva)))
+    return ut
+
+
+def _grupptext(grupp: dict, uppgifter: list[dict], per_niva: int,
+               teoritak: int) -> str:
+    """Ett avsnitt i urvalet: rubriker, teori, figurer och valda uppgifter."""
+    sek = {s["sida"]: sektioner(s.get("text") or "") for s in grupp["sidor"]}
+    rubriker, teori, figurer = [], [], []
+    for s in grupp["sidor"]:
+        d = sek[s["sida"]]
+        if not d:
+            continue
+        rubriker += _rader(d.get("RUBRIKER", ""))
+        bit = _teori(d, teoritak)
+        if bit:
+            teori.append(bit)
+        fig = _figurrad(d, URVAL_FIGUR)
+        if fig:
+            figurer.append(f"s. {s['sida']}: {fig}")
+
+    rader = [f"— {_etikett(grupp)} —"]
+    sedda: list[str] = []
+    for r in rubriker:
+        if r not in sedda:
+            sedda.append(r)
+    if sedda:
+        rader.append("Rubriker: " + _klipp("; ".join(sedda), URVAL_RUBRIKER))
+    if teori:
+        rader.append("Teori: " + _klipp(" ".join(teori), teoritak))
+    if figurer:
+        rader.append("Figurer: " + _klipp(" | ".join(figurer), URVAL_FIGUR))
+
+    alla_nr: list[int] = []
+    for niva, alla, valda in _nivaurval(grupp, uppgifter, per_niva):
+        alla_nr += [u["nr"] for u in alla]
+        marken = sorted({str(u.get("nivamarke") or "").strip()
+                         for u in alla} - {""})
+        etikett = f"Nivå {niva}" if isinstance(niva, int) else "Omärkt nivå"
+        if marken:
+            etikett += f" (bokens beteckning: {marken[0]})"
+        bitar = [f"{u['nr']} {_uppgiftstext(sek.get(u.get('sida')) or {}, u['nr'], URVAL_UPPGIFT)}".strip()
+                 for u in valda]
+        rader.append(f"{etikett} — {len(alla)} uppgifter i avsnittet, urval: "
+                     + " | ".join(bitar))
+    if alla_nr:
+        rader.append(f"Alla uppgiftsnummer i avsnittet: {_nummerspann(alla_nr)} "
+                     f"({len(alla_nr)} st).")
+    return "\n".join(rader)
+
+
+def _nummerspann(nummer: list[int]) -> str:
+    """«1101–1119» — eller «1–46, 1301–1344» när avsnittet har flera serier.
+
+    Boken börjar om på 1 i Blandade uppgifter och Kapiteltest, och de sidorna
+    hamnar i samma grupp som avsnittet före dem. Ett enda «1–1344» hade sagt
+    att avsnittet har 1344 uppgifter i en följd, vilket är fel med bred
+    marginal. Serierna skiljs på hundratalet, precis som luckvakten gör."""
+    per_serie: dict[int, list[int]] = {}
+    for n in nummer:
+        per_serie.setdefault(n // 100, []).append(n)
+    spann: list[list[int]] = []
+    for serie in sorted(per_serie):
+        rad = sorted(per_serie[serie])
+        # Grannserier som hänger ihop (1256–1299 följt av 1300–1333) är ETT
+        # spann i boken; hundratalet är bara var numret råkar slå runt.
+        if spann and rad[0] - spann[-1][1] <= 1:
+            spann[-1][1] = rad[-1]
+        else:
+            spann.append([rad[0], rad[-1]])
+    return ", ".join(str(a) if a == b else f"{a}–{b}" for a, b in spann)
+
+
+def valda_uppgifter(sidor: list[dict], uppgifter: list[dict],
+                    per_niva: int = URVAL_PER_NIVA) -> list[dict]:
+    """Uppgifterna urvalet visar med text — samma val som `build_urval_block`.
+
+    Nivåblocket (build_niva_block) pekar ut «uppgift 1103, 1109» som måttstock
+    och säger att de står i uppslaget ovan. Med urvalet är det bara sant om det
+    är SAMMA uppgifter, och därför frågar nivåblocket här."""
+    ut: list[dict] = []
+    for grupp in avsnittsgrupper(sidor):
+        for _niva, _alla, valda in _nivaurval(grupp, uppgifter, per_niva):
+            ut += valda
+    return ut
+
+
+_URVAL_HUVUD = (
+    "UR LÄROBOKEN — {namn}, s. {fran}–{till} (URVAL). Pappret SKA bygga på de "
+    "här sidorna: använd samma begrepp och samma notation som eleverna har "
+    "framför sig. Sidorna är avlästa ur boken och sammandragna här per avsnitt "
+    "— teorin i kortform, figurerna beskrivna, och några uppgifter per nivå "
+    "jämnt spridda över avsnittet. Det är ett URVAL, inte hela sidor: "
+    "uppgifterna som visas är måttstocken för nivå och typ, och de som inte "
+    "visas är av samma slag. Skriv HELT EGNA uppgifter — kopiera aldrig bokens "
+    "uppgifter eller exempel, inte ens med utbytta tal. [oläsligt] betyder att "
+    "avläsningen inte kunde tyda något där, och sådant ska du inte fylla i "
+    "själv. Ett avsnitt som inte står här är inte läst — gissa inte vad som "
+    "stod i det.")
+
+
+def build_urval_block(bok: dict, fran: int, till: int, sidor: list[dict],
+                      uppgifter: list[dict] | None, urval: dict | None = None,
+                      budget: int = URVAL_BUDGET) -> str:
+    """Det kompakta bokblocket — provets och bladets väg in i boken.
+
+    Skillnaden mot `build_bok_block` är vad som ryms: den gamla tar sidorna i
+    ordning tills 24 000 tecken är slut (tre sidor av trettionio), den här tar
+    HELA spannet men bara det provet behöver ur varje avsnitt.
+
+    Budgeten hålls genom att först snåla på uppgifterna och sedan på teorin
+    (se _URVALSTEG). Ryms det ändå inte klipps hela avsnitt bort från slutet —
+    aldrig mitt i ett — och blocket säger då vilka sidor det faktiskt täcker,
+    så att modellen inte tror att kapitlet slutar där.
+
+    `urval` är LÄRARENS EGET urval ur uppgiftspanelen ({remsa, bortremsa}) och
+    är ÖVERORDNAT hela den här maskinen: har hon valt uppgifter är det hennes
+    nummer som gäller, oavsett vad den jämna spridningen plockade fram som
+    måttstock. Raden står sist och oavkortad, precis som i det hela blocket."""
+    grupper = [g for g in avsnittsgrupper(sidor) if g["sidor"]]
+    if not grupper:
+        return ""
+    huvud = _URVAL_HUVUD.format(namn=(bok or {}).get("namn") or "läroboken",
+                                fran=fran, till=till)
+    lararrad = _lararens_urvalsrad(urval)
+    fast = len(huvud) + len(lararrad) + 4
+
+    delar: list[str] = []
+    for per_niva, teoritak in _URVALSTEG:
+        delar = [_grupptext(g, uppgifter or [], per_niva, teoritak)
+                 for g in grupper]
+        if fast + sum(len(d) + 2 for d in delar) <= budget:
+            break
+    # Sista steget kan ändå spränga budgeten (ett spann på hundra sidor).
+    # Klipp på avsnittsgräns och säg det.
+    behallna, tecken = [], fast
+    for d in delar:
+        if behallna and tecken + len(d) + 2 > budget:
+            break
+        behallna.append(d)
+        tecken += len(d) + 2
+    svans = ""
+    if len(behallna) < len(delar):
+        sist = grupper[len(behallna) - 1]["sidor"][-1]["sida"]
+        svans = (f"(Urvalet räckte till och med s. {sist}. Sidorna därefter i "
+                 "spannet är lästa men fick inte plats — bygg inte på dem.)")
+    return "\n\n".join([huvud] + behallna + [x for x in (svans, lararrad) if x])
 
 
 # ── Bokens nivåskala ──────────────────────────────────────────────────────
@@ -477,7 +879,8 @@ def nivasystem(sidor: list[dict]) -> str:
 
 
 def build_niva_block(bok: dict, fran: int, till: int, sidor: list[dict],
-                     uppgifter: list[dict] | None, *, profil: str) -> str:
+                     uppgifter: list[dict] | None, *, profil: str,
+                     bland: set | None = None) -> str:
     """Promptblocket för bokens NIVÅSKALA (Del C, C2b).
 
     Läromedlet nivåmärker sina uppgifter, och för just den här klassen ÄR boken
@@ -490,7 +893,13 @@ def build_niva_block(bok: dict, fran: int, till: int, sidor: list[dict],
     Tomt block när uppslaget saknar nivåmärkning: då finns ingen skala att
     förankra i, och anroparen faller tillbaka på NP-rubriken
     (app/niva_rubrik.build_skala_utan_bok). Ett halvt block hade varit värre —
-    en skala med en enda nivå säger inte vad svårare betyder."""
+    en skala med en enda nivå säger inte vad svårare betyder.
+
+    `bland` är de nummer som FAKTISKT står i bokblocket ovan. Med hela
+    uppslaget stod alla där och frågan fanns inte; med urvalet
+    (build_urval_block) står bara ett fåtal, och «läs dem i uppslaget ovan» om
+    ett nummer som inte är med är en instruktion som inte går att följa. Utan
+    `bland` väljs som förut, alltså de lägsta numren på nivån."""
     per_niva: dict[int, list[dict]] = {}
     for u in uppgifter or []:
         n = u.get("niva")
@@ -502,7 +911,9 @@ def build_niva_block(bok: dict, fran: int, till: int, sidor: list[dict],
     namn = (bok or {}).get("namn") or "läroboken"
     rader = []
     for n in sorted(per_niva):
-        val = per_niva[n][:EXEMPEL_PER_NIVA]
+        # De som står i blocket först; räcker de inte fylls det på som förut.
+        i_blocket = [u for u in per_niva[n] if not bland or u["nr"] in bland]
+        val = (i_blocket or per_niva[n])[:EXEMPEL_PER_NIVA]
         marken = sorted({str(u.get("nivamarke") or "").strip()
                          for u in per_niva[n]} - {""})
         etikett = f"Nivå {n}"

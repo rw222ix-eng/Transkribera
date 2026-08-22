@@ -255,14 +255,66 @@ def bok_text(db_file: Path, body: dict) -> str:
     return bok.build_bok_block(rad, fran, till, text, uppg, bok_urval(body))
 
 
-def bok_nivaer(db_file: Path, body: dict, *, profil: str) -> str:
-    """Bokens nivåskala för det valda uppslaget (Del C, C2b) — arbetsbladets
-    och gruppuppgiftens förankring.
+# ── Provets väg in i boken ────────────────────────────────────────────────
+#
+# Provet spänner ett kapitel, tavlan en lektion, och det är hela skillnaden.
+# `bok_las_text` ovan läser textpasset på varje oläst sida — ~96 sekunder per
+# sida — och för en lektion på tre sidor är det rätt pris. För ett provspann på
+# trettionio sidor blev det tre kvart innan skrivrundan började (statusradens
+# «Läser s. 19 …», uppmätt hos läraren 2026-08-22), och prompten fick ändå bara
+# de tre första sidorna med sig (bok.uppslag_text klipper vid 24 000 tecken).
+#
+# Provrundan läser därför INGA sidor. Den tar faktapasset när det saknas —
+# uppgiftsnumren och nivåerna, åtta sidor per anrop, och det är dem urvalet
+# sprids över — och bygger sedan blocket ur de sidor som ÄR lästa
+# (bok.build_urval_block). Sidorna läses i stället där de hör hemma: i
+# uppgiftspanelen när läraren slår upp uppslaget, och på tavlan när lektionen
+# skrivs. Ett provspann utan lästa sidor ger ett magrare block — avsnitt,
+# rubriker, uppgiftsnummer och nivåer men ingen teoritext — och det är rätt
+# avvägning: läraren väntar minuter i stället för timmar, och kapitlet fylls på
+# av sig självt allteftersom lektionerna hålls.
+#
+# Skarpt mätt 2026-08-22, Liber Ma 1c, prov med åtta uppgifter:
+#   s. 2–6 med olästa sidor:  bokfas 423 s → 45 s (fem sidläsningar → noll,
+#                             ett faktaanrop kvar), hela körningen 14,1 → 8,4 min
+#   s. 2–40 med lästa sidor:  bokfas 0 s, hela körningen 8,5 min — mot lärarens
+#                             uppmätta tre kvart samma vecka
+PROV_TEXTSIDOR = 0     # sidor provrundan får textläsa; noll är standard
 
-    Läser bara vad som redan står i databasen: uppgiftsnivåerna kom med
-    faktapasset när spannet valdes. Tomt när bokdörren är stängd eller när
-    uppslaget saknar nivåmärkning; anroparen faller då tillbaka på NP-rubriken,
-    och skalan utelämnas aldrig tyst."""
+
+def bok_prov_text(base: Path, db_file: Path, body: dict, emit=None) -> str:
+    """Bokblocket för provroutern: faktapasset vid behov, sedan URVALET.
+
+    Höj `PROV_TEXTSIDOR` bara med tiden i handen: varje sida kostar ~96 s och
+    ger ~6 000 tecken avläsning som urvalet ändå kokar ned till några hundra.
+    Sidorna väljs då jämnt över de olästa, så att spannets alla avsnitt får
+    var sin läst sida i stället för att de första sidorna äter budgeten."""
+    val = bok_val(body)
+    if val is None:
+        return ""
+    bid, fran, till = val
+    conn = db.connect(db_file)
+    try:
+        if db.get_bok(conn, bid) is None:
+            return ""
+        if bok.olasta(conn, bid, fran, till, text=False):
+            bok.las_spann(base, conn, bid, fran, till, emit=emit, bara="fakta")
+        olasta = bok.olasta(conn, bid, fran, till)
+        if PROV_TEXTSIDOR and olasta:
+            for sida in bok.jamnt(olasta, PROV_TEXTSIDOR):
+                bok.las_spann(base, conn, bid, sida, sida, emit=emit,
+                              bara="text")
+    finally:
+        conn.close()
+    return bok_urval_text(db_file, body)
+
+
+def bok_urval_text(db_file: Path, body: dict) -> str:
+    """Samma urvalsblock som `bok_prov_text`, utan att läsa något alls.
+
+    Omskrivningen (routes_exam refine) ska se SAMMA bok som skrivningen såg:
+    fick modellen ett urval när provet skrevs och hela uppslaget när det skrivs
+    om, ändras förutsättningen mitt i lärarens arbetspass."""
     val = bok_val(body)
     if val is None:
         return ""
@@ -272,11 +324,42 @@ def bok_nivaer(db_file: Path, body: dict, *, profil: str) -> str:
         rad = db.get_bok(conn, bid)
         if rad is None:
             return ""
-        sidor = db.bok_sidor(conn, bid, fran, till, med_text=False)
+        sidor = db.bok_sidor(conn, bid, fran, till)
         uppg = db.bok_uppgifter(conn, bid, fran, till)
     finally:
         conn.close()
-    return bok.build_niva_block(rad, fran, till, sidor, uppg, profil=profil)
+    return bok.build_urval_block(rad, fran, till, sidor, uppg, bok_urval(body))
+
+
+def bok_nivaer(db_file: Path, body: dict, *, profil: str,
+               urval: bool = False) -> str:
+    """Bokens nivåskala för det valda uppslaget (Del C, C2b) — arbetsbladets
+    och gruppuppgiftens förankring.
+
+    Läser bara vad som redan står i databasen: uppgiftsnivåerna kom med
+    faktapasset när spannet valdes. Tomt när bokdörren är stängd eller när
+    uppslaget saknar nivåmärkning; anroparen faller då tillbaka på NP-rubriken,
+    och skalan utelämnas aldrig tyst.
+
+    `urval=True` när bokblocket är urvalet och inte hela uppslaget: måttstocken
+    måste då pekas ut bland de uppgifter som faktiskt STÅR i prompten."""
+    val = bok_val(body)
+    if val is None:
+        return ""
+    bid, fran, till = val
+    conn = db.connect(db_file)
+    try:
+        rad = db.get_bok(conn, bid)
+        if rad is None:
+            return ""
+        sidor = db.bok_sidor(conn, bid, fran, till, med_text=not urval)
+        uppg = db.bok_uppgifter(conn, bid, fran, till)
+    finally:
+        conn.close()
+    bland = ({u["nr"] for u in bok.valda_uppgifter(sidor, uppg)}
+             if urval else None)
+    return bok.build_niva_block(rad, fran, till, sidor, uppg, profil=profil,
+                                bland=bland)
 
 
 def _memory_text(prep: dict) -> str:

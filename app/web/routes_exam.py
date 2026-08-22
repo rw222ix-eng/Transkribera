@@ -430,16 +430,21 @@ def create_router(base: Path, arbiter) -> APIRouter:
                 if arbiter.ensure_llm() is None:
                     raise RuntimeError("Språkmodellen är inte installerad.")
                 # Bokdörren (Etapp 0.8): uppgifterna ska ansluta till de sidor
-                # klassen arbetar med. Sidor som ingen läst läses här — inne i
-                # jobbet, där väntan syns.
-                bok_block = routes_planning.bok_las_text(base, db_file, body,
-                                                         emit=emit)
+                # klassen arbetar med. Här går URVALET in, inte hela uppslaget:
+                # provspannet är ett kapitel, och den gamla vägen läste varje
+                # oläst sida à 96 sekunder för att sedan skicka de tre första.
+                # Se routes_planning.bok_prov_text. Faktapasset kan fortfarande
+                # köras (uppgiftsnumren finns inte utan det) och syns i loggen.
+                bok_block = routes_planning.bok_prov_text(base, db_file, body,
+                                                          emit=emit)
                 # Bokens nivåskala (Del C, C2b): läses efter sidorna, för
                 # faktapasset kan ha fyllt på nivåerna på vägen. Bara för blad
                 # och gruppuppgift — PROVET ska hålla nationell nivå, inte
-                # bokens, och där äger NP-rubriken nivåfrågan.
+                # bokens, och där äger NP-rubriken nivåfrågan. `urval=True`:
+                # måttstockens nummer måste vara de som står i blocket ovan.
                 nivaer_block = (
-                    routes_planning.bok_nivaer(db_file, body, profil=typ)
+                    routes_planning.bok_nivaer(db_file, body, profil=typ,
+                                               urval=True)
                     if typ in ("arbetsblad", "gruppuppgift") else "")
                 res = exam_gen.generate_exam(
                     kurs, klass or "klassen", punkter, model=_model_name(),
@@ -516,8 +521,9 @@ def create_router(base: Path, arbiter) -> APIRouter:
         # uppgiftsnummer är det numret som gäller — det är precisare.
         mal = body.get("mal") if isinstance(body.get("mal"), dict) else None
         # Bokdörren följer med omskrivningen som med genereringen: sidorna,
-        # uppgiftsnumren och lärarens urval. `bok_text` läser inga nya sidor.
-        bok_block = routes_planning.bok_text(db_file, body)
+        # uppgiftsnumren och lärarens urval — och SAMMA urval som skrivningen
+        # fick, annars byter modellen bok mitt i arbetspasset. Läser inga sidor.
+        bok_block = routes_planning.bok_urval_text(db_file, body)
         # Varvhistoriken följer med av samma skäl som boken: omskrivningen ska
         # veta vad läraren redan bett om, annars bryter varv tre villkoret från
         # varv ett utan att någon bett om det.

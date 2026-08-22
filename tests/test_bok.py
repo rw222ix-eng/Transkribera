@@ -1077,3 +1077,255 @@ def test_fetstil_stadas_helt_och_matten_lamnas_i_fred():
     assert stada("Beräkna $2*3*4 = 24$.") == "Beräkna $2*3*4 = 24$."
     # Markdown UTANFÖR matten städas fortfarande, med matten orörd bredvid.
     assert stada("*n* är udda när $2*k+1$") == "$n$ är udda när $2*k+1$"
+
+
+# ── URVALET: UPPSLAGET I PROVSTORLEK ────────────────────────────────────────
+# Provet spänner ett kapitel. Den gamla vägen läste varje oläst sida à 96 s
+# (tre kvart för s. 2–40) och skickade sedan de TRE FÖRSTA sidorna, för
+# uppslag_text klipper vid 24 000 tecken. Urvalet tar hela spannet men bara
+# det provet behöver: teorin i kortform och några uppgifter per nivå.
+
+BOKEN = {"namn": "Liber Ma 1c"}
+
+
+def _sidtext(sida, avsnitt, nummer, teori="Definition: ett tal a är ett tal."):
+    """En sidavläsning i bok_ocr.SIDPROMPT:s sex sektioner.
+
+    OSÄKERT och MATEMATIK fylls med rader som NÄMNER uppgiftsnumren — det är
+    precis den fällan urvalet gick i innan sektionerna skildes åt: de raderna
+    är långa och vann på längd, så prompten fick avläsarens tvivel i stället
+    för bokens uppgift."""
+    uppg = "\n".join(f"| {n} | Förenkla uttrycket nummer {n} | $x^{n}$ |"
+                     for n in nummer)
+    matte = "\n".join(f"{i}. $x^{n}$ — i uppgift {n} a)"
+                      for i, n in enumerate(nummer, 1))
+    osakert = "\n".join(
+        f"- Uppgift {n}: siffran i nämnaren är liten i bilden och kan vara en "
+        "trea eller en åtta; detta bör kontrolleras mot boken innan lektionen "
+        "eftersom avläsningen inte kan avgöra det säkert." for n in nummer)
+    return (f"## RUBRIKER\n- **{avsnitt} Rubriken**\n- Sidfot: KAPITEL 1\n\n"
+            f"## BRÖDTEXT\n{teori}\n\nEn andra mening om regeln.\n\n"
+            f"## MATEMATIK\n{matte}\n\n"
+            f"## FIGURER\nFigur 1 visar en kvadrat med sidan a på sida {sida}.\n\n"
+            f"## EXEMPEL OCH UPPGIFTER\n{uppg}\n\n"
+            f"## OSÄKERT\n{osakert}\n")
+
+
+def _kapitel(sidor=39, per_sida=6):
+    """Sidor och uppgifter som databasen ger dem: avsnittsnumret står bara på
+    varannan sida — högersidans sidfot bär kapitelbanderollen."""
+    rader, uppgifter = [], []
+    for i in range(sidor):
+        sida = 2 + i
+        avsnitt = f"1.{1 + i // 13}"
+        nummer = [1100 + i * per_sida + k for k in range(per_sida)]
+        rader.append({"sida": sida, "avsnitt": avsnitt if i % 2 == 0 else None,
+                      "rubrik": "Rubriken" if i % 2 == 0 else "KAPITEL 1",
+                      "text": _sidtext(sida, avsnitt, nummer)})
+        uppgifter += [{"nr": n, "sida": sida, "niva": 1 + (k % 3),
+                       "nivamarke": f"NIVÅ {1 + (k % 3)}", "exempel": 0}
+                      for k, n in enumerate(nummer)]
+    return rader, uppgifter
+
+
+def test_urvalet_haller_budgeten_och_tacker_hela_spannet():
+    """Den gamla vägen fick tre sidor av trettionio med sig — resten föll bort
+    tyst när taket slog i. Urvalet ska nämna varje avsnitt i spannet och ändå
+    ligga under budgeten."""
+    sidor, uppgifter = _kapitel()
+    block = bok.build_urval_block(BOKEN, 2, 40, sidor, uppgifter)
+    assert len(block) <= bok.URVAL_BUDGET
+    for avsnitt in ("1.1", "1.2", "1.3"):
+        assert avsnitt in block
+    assert "–40)" in block                 # sista sidan ligger i sitt avsnitt
+    # Och SISTA avsnittets uppgifter är med — det var de som föll bort tyst.
+    assert "1333" in block
+
+
+def test_urvalet_tar_nagra_uppgifter_per_niva_jamnt_spridda():
+    """«Några uppgifter per sida på varje nivå är rimligt. Inte hela sidor.»
+
+    Jämn spridning, inte de första: uppgifterna stiger i svårighet inom sin
+    nivå, och de tre första är tre varianter av samma sak."""
+    sidor, uppgifter = _kapitel(sidor=13, per_sida=6)
+    block = bok.build_urval_block(BOKEN, 2, 14, sidor, uppgifter)
+    per_niva: dict = {}
+    for u in bok.valda_uppgifter(sidor, uppgifter):
+        per_niva.setdefault(u["niva"], []).append(u["nr"])
+    assert sorted(per_niva) == [1, 2, 3]
+    for niva, nummer in per_niva.items():
+        assert len(nummer) == bok.URVAL_PER_NIVA, niva
+        allt = sorted(u["nr"] for u in uppgifter if u["niva"] == niva)
+        # Första och sista på nivån är med — det är spridningens hela poäng —
+        # och de är inte tre grannar i början.
+        assert nummer[0] == allt[0] and nummer[-1] == allt[-1]
+        assert nummer[-1] - nummer[0] > len(allt)
+        for nr in nummer:
+            assert f"{nr} Förenkla uttrycket nummer {nr}" in block
+    # Men INTE alla uppgifter: det är ett urval, och hela tabellraden med sin
+    # matematik hör till sidan, inte till prompten.
+    assert "| 1101 |" not in block
+    valda = {n for nn in per_niva.values() for n in nn}
+    assert len(valda) < len(uppgifter) / 4
+
+
+def test_urvalet_lamnar_avlasarens_tvivel_och_dubblettmatten():
+    """OSÄKERT är avläsarens egna tvivel och MATEMATIK är uttrycken en gång
+    till. På s. 2–40 är de två sektionerna 104 kB av 238 kB — och deras rader
+    NÄMNER uppgiftsnummer, så de vann på längd innan sektionerna skildes åt."""
+    sidor, uppgifter = _kapitel(sidor=4)
+    block = bok.build_urval_block(BOKEN, 2, 5, sidor, uppgifter)
+    assert "bör kontrolleras mot boken" not in block
+    assert "i uppgift" not in block
+    # Teorin och figurerna följer däremot med — figuren beskrevs när sidan
+    # lästes, och beskrivningen ersätter att sidan öppnas om.
+    assert "Definition: ett tal a är ett tal." in block
+    assert "Figur 1 visar en kvadrat" in block
+
+
+def test_lararens_remsa_ar_overordnad_urvalet():
+    """Har läraren valt uppgifter i panelen är det HENNES nummer som gäller,
+    oavsett vad den jämna spridningen plockade fram som måttstock."""
+    sidor, uppgifter = _kapitel(sidor=6)
+    block = bok.build_urval_block(BOKEN, 2, 7, sidor, uppgifter,
+                                  {"remsa": "1101–1103, 1105–1119",
+                                   "bortremsa": "1104"})
+    assert "LÄRARENS URVAL" in block
+    assert "uppg. 1101–1103, 1105–1119" in block
+    assert "1104 är medvetet överhoppade" in block
+    # Och den står SIST, efter avsnitten — den är domen över dem.
+    assert block.index("LÄRARENS URVAL") > block.rindex("— 1.")
+
+
+def test_urvalet_snalar_pa_uppgifterna_fore_teorin():
+    """Budgeten hålls i steg. Teorin säger vilka BEGREPP provet ska pröva och
+    är billigast per tecken — den offras sist."""
+    sidor, uppgifter = _kapitel(sidor=39, per_sida=12)
+    snalt = bok.build_urval_block(BOKEN, 2, 40, sidor, uppgifter, budget=6000)
+    assert len(snalt) <= 6000
+    assert "Definition: ett tal a är ett tal." in snalt
+
+
+def test_urvalet_sager_var_det_tog_slut():
+    """Ryms inte alla avsnitt klipps hela avsnitt bort från slutet — aldrig
+    mitt i ett — och blocket säger vilka sidor det täcker, så att modellen
+    inte tror att kapitlet slutar där."""
+    sidor, uppgifter = _kapitel(sidor=39, per_sida=12)
+    block = bok.build_urval_block(BOKEN, 2, 40, sidor, uppgifter, budget=2500)
+    assert "Urvalet räckte till och med s." in block
+    assert "bygg inte på dem" in block
+
+
+def test_avsnitten_arver_numret_fran_sidan_innan():
+    """Avsnittsnumret läses av på ungefär varannan sida. Utan arvet blev
+    varannan sida en egen grupp «utan avsnittsnummer»."""
+    sidor, _u = _kapitel(sidor=6)
+    grupper = bok.avsnittsgrupper(sidor)
+    assert [g["avsnitt"] for g in grupper] == ["1.1"]
+    assert [s["sida"] for s in grupper[0]["sidor"]] == [2, 3, 4, 5, 6, 7]
+
+
+def test_avsnittsraden_har_flera_nummerserier():
+    """Boken börjar om på 1 i Blandade uppgifter. Ett enda «1–1344» hade sagt
+    att avsnittet har 1344 uppgifter i en följd."""
+    assert bok._nummerspann([1, 5, 46, 1301, 1344]) == "1–46, 1301–1344"
+    assert bok._nummerspann([1101, 1119]) == "1101–1119"
+    assert bok._nummerspann([1101]) == "1101"
+
+
+def test_urvalet_ar_tomt_utan_lasta_sidor():
+    assert bok.build_urval_block(BOKEN, 2, 40, [], []) == ""
+
+
+def test_sidor_med_annan_form_ger_ingenting_ur_texten():
+    """En sida läst med en äldre prompt har inte de sex sektionerna. Hellre
+    ingenting därifrån än hela sidan — det var den råa sidtexten som sprängde
+    budgeten från början."""
+    sidor = [{"sida": 2, "avsnitt": "1.1", "rubrik": "R",
+              "text": "En lång löpande avläsning utan sektioner. " * 200}]
+    block = bok.build_urval_block(BOKEN, 2, 2, sidor, [])
+    assert "En lång löpande avläsning" not in block
+    assert "1.1" in block
+
+
+def test_nivablocket_pekar_pa_uppgifter_som_star_i_blocket():
+    """«Läs dem i uppslaget ovan» om ett nummer som inte är med är en
+    instruktion som inte går att följa."""
+    import re as _re
+    sidor, uppgifter = _kapitel(sidor=13)
+    valda = {u["nr"] for u in bok.valda_uppgifter(sidor, uppgifter)}
+    niva = bok.build_niva_block(BOKEN, 2, 14, sidor, uppgifter,
+                                profil="arbetsblad", bland=valda)
+    nummer = [int(n) for rad in niva.splitlines() if rad.startswith("- Nivå")
+              for n in _re.findall(r"\b1\d{3}\b", rad)]
+    assert nummer and set(nummer) <= valda
+
+
+# ── PROVRUNDAN BLÄDDRAR INTE I BOKEN ────────────────────────────────────────
+
+def test_provrundan_laser_inga_sidor(tmp_path, conn, ocr):
+    """Det var textpasset som kostade tre kvart: ett anrop per sida à 96 s,
+    och läraren såg dem gå förbi som «Läser s. 19 …».
+
+    Provrundan tar faktapasset — uppgiftsnumren och nivåerna finns inte utan
+    det, och de är vad urvalet sprids över — och stannar där."""
+    b = bok.importera(tmp_path, conn, pdf=pdf_fil(tmp_path / "d", sidor=60))
+    ocr.fakta.clear()
+    ocr.text.clear()
+    body = {"bok": {"id": b["id"], "fran": 10, "till": 40}}
+    block = routes_planning.bok_prov_text(tmp_path, tmp_path / "t.db", body)
+    assert ocr.text == []                       # INGA sidläsningar
+    assert ocr.fakta                            # men faktan hämtades
+    assert "UR LÄROBOKEN" in block and "(URVAL)" in block
+    # Uppgiftsnumren från hela spannet är med, fast ingen sidtext finns.
+    assert "Alla uppgiftsnummer i avsnittet" in block
+
+
+def test_provrundan_anvander_sidor_som_redan_lasts(tmp_path, conn, ocr):
+    """Sidorna läses där de hör hemma — i uppgiftspanelen och på tavlan — och
+    provet plockar upp dem gratis. Kapitlet fylls på av sig självt."""
+    b = bok.importera(tmp_path, conn, pdf=pdf_fil(tmp_path / "d", sidor=60))
+    bok.las_spann(tmp_path, conn, b["id"], 10, 11)      # tavlan har varit här
+    ocr.text.clear()
+    body = {"bok": {"id": b["id"], "fran": 10, "till": 20}}
+    block = routes_planning.bok_prov_text(tmp_path, tmp_path / "t.db", body)
+    assert ocr.text == []
+    assert "Text från" in block or "Teori:" in block
+
+
+def test_provets_modellanrop_far_varken_read_eller_add_dir(monkeypatch):
+    """Sidbläddringen syntes i argv: `--tools Read --add-dir …/bocker/5`.
+
+    Read tänds bara när claude_code får BILDER, och skrivrundan skickar inga
+    — bildunderlagen går in som beskrivningar (exam_gen.build_bilder). Vakten
+    står här för att en framtida «låt modellen kika i boken» ska falla på ett
+    test och inte på lärarens klocka."""
+    from app import claude_code, exam_gen, llm_client
+    monkeypatch.setattr(claude_code, "kravs", lambda: None)
+    monkeypatch.setattr(claude_code, "binar", lambda: "claude.exe")
+    fangat = {}
+
+    class _Proc:
+        returncode = 0
+        stdout = iter(())
+        stderr = iter(())
+        stdin = type("S", (), {"write": lambda *_a: None,
+                               "close": lambda *_a: None})()
+
+        def wait(self, timeout=None):
+            return 0
+
+    def fejk_popen(argv, **k):
+        fangat["argv"] = argv
+        return _Proc()
+    monkeypatch.setattr(claude_code.subprocess, "Popen", fejk_popen)
+    try:
+        llm_client.generate("", exam_gen.build_prompt(
+            "Matematik, nivå 1c", "TE25", ["Potenser"], antal=6,
+            bok=bok.build_urval_block(BOKEN, 2, 40, *_kapitel())),
+            system=exam_gen.SYSTEM)
+    except RuntimeError:
+        pass                                    # tomt svar — argv är poängen
+    argv = fangat["argv"]
+    assert "--add-dir" not in argv
+    assert argv[argv.index("--tools") + 1] == ""
